@@ -1,0 +1,11 @@
+Lock exchange problem
+
+Two bodies of water, represented by 21 layers in the classic lock exchange flow
+configuration. (c.f. Chapter 6.3 of Haidvogel's Numerical Ocean Circulation
+Modeling).
+
+This particular configuration is described in Figure 1 of:
+Mehmet Ilıcak, Alistair J. Adcroft, Stephen M. Griffies, Robert W. Hallberg,
+Spurious dianeutral mixing and the role of momentum closure,
+Ocean Modelling, Volumes 45–46, 2012, Pages 37-58, ISSN 1463-5003, 10.1016/j.ocemod.2011.10.003.
+(http://www.sciencedirect.com/science/article/pii/S1463500311001685)

@@ -1,0 +1,5 @@
+# Blank file in which we can put "overrides" for parameters
+#override define NXPROC 40
+#override define NYPROC 36
+#override define NXPROC_IO 10     
+#override define NYPROC_IO 6

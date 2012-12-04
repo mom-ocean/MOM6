@@ -1,0 +1,5 @@
+*.nc.*
+*.nc
+*.out
+CPU_stats
+exitcode

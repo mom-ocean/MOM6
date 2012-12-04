@@ -1,0 +1,205 @@
+<html>
+<head>
+<META http-equiv="Content-Type" content="text/html; charset=EUC-JP">
+<title>Module ocean_model_mod</title>
+<link type="text/css" href="http://www.gfdl.noaa.gov/~fms/style/doc.css" rel="stylesheet">
+<STYLE TYPE="text/css">
+          .fixed {
+            font-size:medium;
+            font-family:monospace;
+            border-style:none;
+            border-width:0.1em;
+            padding:0.1em;
+            color:#663366;
+          }
+        </STYLE>
+</head>
+<body>
+<a name="TOP"></a><font class="header" size="1"><a href="#PUBLIC INTERFACE">PUBLIC INTERFACE </a>~
+          <a href="#PUBLIC DATA">PUBLIC DATA </a>~
+          <a href="#PUBLIC ROUTINES">PUBLIC ROUTINES </a>~
+          <a href="#NAMELIST">NAMELIST </a>~
+          <a href="#DIAGNOSTIC FIELDS">DIAGNOSTIC FIELDS </a>~
+          <a href="#ERROR MESSAGES">ERROR MESSAGES </a>~
+          <a href="#REFERENCES">REFERENCES </a>~ 
+          <a href="#NOTES">NOTES</a></font>
+<hr>
+<h2>Module ocean_model_mod</h2>
+<a name="HEADER"></a>
+<!-- BEGIN HEADER -->
+<div>
+<b>Contact:&nbsp;</b><a href="mailto:Robert.Hallberg@noaa.gov">   Robert Hallberg </a>
+<br>
+<b>Reviewers:&nbsp;</b>
+<br>
+<b>Change History:&nbsp;</b><a href="http://www.gfdl.noaa.gov/fms-cgi-bin/cvsweb.cgi/FMS/ocean/MOM/ocean_drivers">WebCVS Log</a>
+<br>
+<br>
+</div>
+<!-- END HEADER -->
+<a name="OVERVIEW"></a>
+<hr>
+<h4>OVERVIEW</h4>
+<!-- BEGIN OVERVIEW -->
+<p class="text">   This code is a stop-gap wrapper of the MOM code to enable it to be called
+   in the same way as MOM4. </p>
+<!-- END OVERVIEW -->
+<a name="DESCRIPTION"></a>
+<!-- BEGIN DESCRIPTION -->
+<div></div>
+<br>
+<!-- END DESCRIPTION -->
+<a name="OTHER MODULES USED"></a>
+<hr>
+<h4>OTHER MODULES USED</h4>
+<!-- BEGIN OTHER MODULES USED -->
+<div>
+<pre>      MOM_constants<br>  MOM_diag_mediator<br>        MOM_domains<br>  MOM_error_handler<br>             MOM_io<br>                MOM<br>    MOM_file_parser<br>        MOM_restart<br>     MOM_sum_output<br>MOM_surface_forcing<br>   MOM_time_manager<br>      MOM_variables<br>  coupler_types_mod<br>            fms_mod<br>    mpp_domains_mod</pre>
+</div>
+<!-- END OTHER MODULES USED -->
+<!-- BEGIN PUBLIC INTERFACE -->
+<a name="PUBLIC INTERFACE"></a>
+<hr>
+<h4>PUBLIC INTERFACE</h4>
+<div>
+<dl>
+<dt>
+<a href="#ocean_model_init">ocean_model_init</a>:</dt>
+<dd></dd>
+<dt>
+<a href="#update_ocean_model">update_ocean_model</a>:</dt>
+<dd></dd>
+<dt>
+<a href="#ocean_model_end">ocean_model_end</a>:</dt>
+<dd></dd>
+<dt>
+<a href="#write_ice_ocean_boundary">write_ice_ocean_boundary</a>:</dt>
+<dd></dd>
+<dt>
+<a href="#read_ice_ocean_boundary">read_ice_ocean_boundary</a>:</dt>
+<dd></dd>
+<dt>
+<a href="#init_default_ice_ocean_boundary">init_default_ice_ocean_boundary</a>:</dt>
+<dd></dd>
+</dl>
+</div>
+<br>
+<!-- END PUBLIC INTERFACE -->
+<a name="PUBLIC DATA"></a>
+<hr>
+<h4>PUBLIC DATA</h4>
+<!-- BEGIN PUBLIC DATA -->
+<div>None.<br>
+<br>
+</div>
+<!-- END PUBLIC DATA -->
+<a name="PUBLIC ROUTINES"></a>
+<hr>
+<h4>PUBLIC ROUTINES</h4>
+<!-- BEGIN PUBLIC ROUTINES -->
+<ol type="a">
+<li>
+<a name="ocean_model_init"></a>
+<h4>ocean_model_init</h4>
+<dl>
+<dt>
+<b>DESCRIPTION</b>
+</dt>
+<dd>   Initialize the ocean model. </dd>
+<br>
+<br>
+</dl>
+</li>
+<li>
+<a name="update_ocean_model"></a>
+<h4>update_ocean_model</h4>
+<dl>
+<dt>
+<b>DESCRIPTION</b>
+</dt>
+<dd>   Update in time the ocean model fields.  This code wraps the call to step_MOM
+   with MOM4's call. </dd>
+<br>
+<br>
+</dl>
+</li>
+<li>
+<a name="ocean_model_end"></a>
+<h4>ocean_model_end</h4>
+<dl>
+<dt>
+<b>DESCRIPTION</b>
+</dt>
+<dd>   Close down the ocean model </dd>
+<br>
+<br>
+</dl>
+</li>
+<li>
+<a name="write_ice_ocean_boundary"></a>
+<h4>write_ice_ocean_boundary</h4>
+<dl>
+<dt>
+<b>DESCRIPTION</b>
+</dt>
+<dd>   Write the surface boundary conditions for use in coupled modeling. </dd>
+<br>
+<br>
+</dl>
+</li>
+<li>
+<a name="read_ice_ocean_boundary"></a>
+<h4>read_ice_ocean_boundary</h4>
+<dl>
+<dt>
+<b>DESCRIPTION</b>
+</dt>
+<dd>   Read the surface boundary conditions for use in coupled modeling. </dd>
+<br>
+<br>
+</dl>
+</li>
+<li>
+<a name="init_default_ice_ocean_boundary"></a>
+<h4>init_default_ice_ocean_boundary</h4>
+<dl>
+<dt>
+<b>DESCRIPTION</b>
+</dt>
+<dd>   Default surface boundary conditions for use in coupled modeling. </dd>
+<br>
+<br>
+</dl>
+</li>
+</ol>
+<!-- END PUBLIC ROUTINES -->
+<a name="PUBLIC TYPES"></a>
+<!-- BEGIN PUBLIC TYPES -->
+<!-- END PUBLIC TYPES --><a name="NAMELIST"></a>
+<!-- BEGIN NAMELIST -->
+<!-- END NAMELIST --><a name="DIAGNOSTIC FIELDS"></a>
+<!-- BEGIN DIAGNOSTIC FIELDS -->
+<!-- END DIAGNOSTIC FIELDS --><a name="DATA SETS"></a>
+<!-- BEGIN DATA SETS -->
+<hr>
+<h4>DATA SETS</h4>
+<div>None.<br>
+<br>
+</div>
+<!-- END DATA SETS -->
+<a name="PUBLIC CODE"></a>
+<!-- BEGIN PUBLIC CODE -->
+<!-- END PUBLIC CODE --><a name="ERROR MESSAGES"></a>
+<!-- BEGIN ERROR MESSAGES -->
+<hr>
+<h4>ERROR MESSAGES</h4>
+<div>None.<br>
+<br>
+</div>
+<!-- END ERROR MESSAGES -->
+<hr>
+<div align="right">
+<font size="-1"><a href="#TOP">top</a></font>
+</div>
+</body>
+</html>

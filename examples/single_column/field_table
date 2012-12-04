@@ -1,0 +1,11 @@
+
+ "TRACER", "atmos_mod", "sphum"
+           "longname",     "specific humidity"
+           "units",        "kg/kg"
+           "profile_type", "fixed", "surface_value=3.e-6" /
+
+# sphum must be present on land as well
+ "TRACER", "land_mod",     "sphum"
+           "longname",     "specific humidity"
+           "units",        "kg/kg" /
+
