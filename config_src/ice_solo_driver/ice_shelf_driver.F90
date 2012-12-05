@@ -21,7 +21,7 @@ program SHELF_main
 
 !********+*********+*********+*********+*********+*********+*********+**
 !*                                                                     *
-!*  By Daniel GOLDberg, Olga Sergienko, and Robert Hallberg            *
+!*  By Daniel Goldberg, Olga Sergienko, and Robert Hallberg            *
 !*                                                                     *
 !*    This file is the driver for the stand-alone ice-sheet model that *
 !*  is under development at GFDL.  When used in a mode that is coupled *
