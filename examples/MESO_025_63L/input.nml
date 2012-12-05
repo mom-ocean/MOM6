@@ -1,0 +1,37 @@
+ &MOM_input_nml
+         output_directory = './',
+         input_filename = 'n'
+         restart_input_dir = 'INPUT/',
+         restart_output_dir = 'RESTART/',
+         parameter_filename = 'MOM_input',
+                              'MOM_override' /
+
+ &diag_manager_nml
+ /
+
+ &fms_io_nml
+            fms_netcdf_restart=.true.
+            threading_read='multi'
+            threading_write='single'
+            fileset_write='single' 
+            max_files_r = 200
+            max_files_w = 200 /
+
+ &fms_nml
+            clock_grain='ROUTINE'
+            clock_flags='NONE'
+            domains_stack_size = 960000
+            stack_size =0 /
+
+ &mpp_domains_nml
+            stackmax =1500000 /
+
+ &ocean_solo_nml
+            months = 0
+            days   = 1
+            date_init = 1,1,1,0,0,0
+            hours = 0
+            minutes = 0
+            seconds = 0
+            calendar = 'julian' /
+
