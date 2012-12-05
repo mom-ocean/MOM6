@@ -391,6 +391,7 @@ use MOM_dynamics_split_RK2, only : step_MOM_dyn_split_RK2, register_restarts_dyn
 use MOM_dynamics_split_RK2, only : initialize_dyn_split_RK2
 use MOM_dynamics_unsplit_RK2, only : step_MOM_dyn_unsplit_RK2, register_restarts_dyn_unsplit_RK2
 use MOM_dynamics_unsplit_RK2, only : initialize_dyn_unsplit_RK2
+use MOM_regridding, only : initialize_regridding, end_regridding, regridding_main
 
 implicit none ; private
 
@@ -715,6 +716,19 @@ function step_MOM(fluxes, state, Time_start, time_interval, CS)
         call diabatic(u(:,:,:,m),v(:,:,:,m),h(:,:,:,m),CS%tv,fluxes,CS%visc,dtnt, &
                       grid, CS%diabatic_CSp)
         call cpu_clock_end(id_clock_diabatic)
+
+        ! Regridding is done here, at the end of the thermodynamical time step
+        ! (that may comprise several dynamical time steps)
+        ! The routine 'regridding_main' can be found in 'regridding.F90'.
+        if ( CS%regridding_opts%use_regridding ) then 
+          call regridding_main(grid, h(:,:,:,m), CS%h_aux(:,:,:), &
+                               u(:,:,:,m), v(:,:,:,m), CS%tv, CS%regridding_opts )
+!         call pass_vector(u(:,:,:,m), v(:,:,:,m), grid%Domain)
+!         call pass_var(CS%tv%T, grid%Domain, complete=.false.)
+!         call pass_var(CS%tv%S, grid%Domain, complete=.false.)
+!         call pass_var(h(:,:,:,m), grid%Domain)
+!         call pass_var(h_aux(:,:,:), grid%Domain)
+        end if   
 
         call cpu_clock_begin(id_clock_pass)
         if (grid%nonblocking_updates) then        
@@ -1432,6 +1446,8 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     call mixedlayer_restrat_init(Time, grid, param_file, diag, CS%mixedlayer_restrat_CSp)
   call MEKE_init(Time, grid, param_file, diag, CS%MEKE_CSp, CS%MEKE)
   call VarMix_init(Time, grid, param_file, diag, CS%VarMix)
+  call initialize_regridding(param_file, CS%regridding_opts, grid, &
+                             h(:,:,:,:), CS%h_aux(:,:,:), u(:,:,:,1), v(:,:,:,1), CS%tv)
   call MOM_diagnostics_init(MOM_internal_state, Time, grid, param_file, &
                              diag, CS%diagnostics_CSp)
 
@@ -2228,6 +2244,8 @@ end subroutine smooth_SSH
 
 subroutine MOM_end(CS)
   type(MOM_control_struct), pointer      :: CS
+
+  call end_regridding(CS%regridding_opts)
 
   DEALLOC(CS%u) ; DEALLOC(CS%v) ; DEALLOC(CS%h)
   DEALLOC(CS%uh) ; DEALLOC(CS%vh)

@@ -64,6 +64,7 @@ use MOM_tracer, only : advect_tracer_CS
 use MOM_tracer_flow_control, only : tracer_flow_control_CS
 use MOM_vert_friction, only : vertvisc_CS
 use MOM_set_visc, only : set_visc_CS
+use regrid_defs, only: regridding_opts_t
 
 implicit none ; private
 
@@ -83,6 +84,8 @@ type, public :: MOM_control_struct
   real PTR_, dimension(NXMEM_,NYMEM_,NZ_) :: &
     T, &      ! Potential temperature in C.
     S         ! Salinity in PSU.
+  real PTR_, dimension(NXMEM_,NYMEM_,NZ_) :: &
+    h_aux     ! Work array for remapping (same units as h).
   real PTR_, dimension(NXMEMQP_,NYMEM_,NZ_) :: &
     uh, &     ! uh = u * h * dy at u grid points in m3 s-1.
     CAu, &    ! CAu = f*v - u.grad(u) in m s-2.
@@ -311,6 +314,7 @@ type, public :: MOM_control_struct
   type(diagnostics_CS), pointer :: diagnostics_CSp => NULL()
   type(diag_to_Z_CS), pointer :: diag_to_Z_CSp => NULL()
   type(MOM_restart_CS),  pointer :: restart_CSp => NULL()
+  type(regridding_opts_t) :: regridding_opts ! Why is this not a pointer? - AJA
 end type MOM_control_struct
 
 contains
