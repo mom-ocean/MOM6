@@ -159,7 +159,7 @@ DAYMAX = 5.0                    !    The final day of the simulation.
 ENERGYSAVEDAYS = 1.0            !    The number of days between saves of the
                                 !  energies of the run.
 ENERGYFILE = "timestats"        !    The file to use to save the energies.
-RESTARTFILE = "GOLD.res"        !    The name of the restart file.
+RESTARTFILE = "MOM.res"         !    The name of the restart file.
 RESTINT = 365.0                 !    The number of days between saves of the
                                 !  restart file.  Use a value that is larger than
                                 !  DAYMAX not to save incremental restart files
