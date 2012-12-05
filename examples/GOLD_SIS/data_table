@@ -1,0 +1,49 @@
+"ATM", "cfc_11_flux_pcair_atm","CFC_11","INPUT/cfc.bc.nc",.false., 1.0e-12
+"ATM", "cfc_12_flux_pcair_atm","CFC_12","INPUT/cfc.bc.nc",.false., 1.0e-12
+"ATM" , "p_surf"        , "SLP" , "./INPUT/slp.clim.nc"                     , .false. ,  1.0
+"ATM" , "p_bot"         , "SLP" , "./INPUT/slp.clim.nc"                     , .false. ,  1.0
+"ATM" , "t_bot"         , "T_10_MOD"    , "./INPUT/t_10_mod.clim.nc"     , .false. ,  1.0
+"ATM" , "sphum_bot"     , "Q_10_MOD"    , "./INPUT/q_10_mod.clim.nc"     , .false. ,  1.0
+"ATM" , "u_bot"         , "U_10_MOD"    , "./INPUT/u_10_mod.clim.nc"     , .false. ,  1.0
+"ATM" , "v_bot"         , "V_10_MOD"    , "./INPUT/v_10_mod.clim.nc"     , .false. ,  1.0
+"ATM" , "z_bot"         , ""            , ""                             , .false. , 10.0
+"ATM" , "gust"          , ""            , ""                             , .false. ,  0.0
+"ICE" , "lw_flux_dn"    , "LWDN_MOD"    , "./INPUT/ncar_rad_clim.nc"     , .false. ,  1.0
+"ICE" , "sw_flux_vis_dir_dn", "SWDN_MOD", "./INPUT/ncar_rad_clim.nc", .false. , 0.285
+"ICE" , "sw_flux_vis_dif_dn", "SWDN_MOD", "./INPUT/ncar_rad_clim.nc", .false. , 0.285
+"ICE" , "sw_flux_nir_dir_dn", "SWDN_MOD", "./INPUT/ncar_rad_clim.nc", .false. , 0.215
+"ICE" , "sw_flux_nir_dif_dn", "SWDN_MOD", "./INPUT/ncar_rad_clim.nc", .false. , 0.215
+"ICE" , "lprec"         , "RAIN"        , "./INPUT/ncar_precip_clim.nc"  , .false. ,  0.9933
+"ICE" , "fprec"         , "SNOW"        , "./INPUT/ncar_precip_clim.nc"  , .false. ,  0.9933
+"ICE" , "runoff"        , "runoff"      , "./INPUT/runoff.nc"            , .true.  ,  1.0
+"ICE" , "calving"       , ""            , ""                             , .true.  ,  0.0
+"ICE" , "dhdt"          , ""            , ""                             , .true.  ,  80.0
+"ICE" , "dedt"          , ""            , ""                             , .true.  ,  2.0e-6
+"ICE" , "drdt"          , ""            , ""                             , .true.  , 10.0
+"ICE", "sic_obs"        , "SIC"         ,"./INPUT/sst_ice_clim.nc"       , .false. ,  0.00
+"ICE", "sit_obs"        , "SIT"         ,"./INPUT/sst_ice_clim.nc"       , .false. ,  0.00
+"ICE", "sst_obs"        , "SST"         ,"./INPUT/sst_ice_clim.nc"       , .false. ,  1.0
+"LND" , "t_surf"        , ""            , ""                             , .true.  ,  273.0
+"LND" , "t_ca"          , ""            , ""                             , .true.  ,  273.0
+"LND" , "q_ca"          , ""            , ""                             , .true.  ,  0.0
+"LND" , "rough_mom"     , ""            , ""                             , .true.  ,  0.01
+"LND" , "rough_heat"    , ""            , ""                             , .true.  ,  0.1
+"LND" , "albedo"        , ""            , ""                             , .true.  ,  0.1
+"LND" , "t_ca"          , ""            , ""                             , .true.  ,  273.0
+"LND" , "t_surf"        , ""            , ""                             , .true.  ,  273.0
+"LND" , "sphum_surf"    , ""            , ""                             , .true.  ,  0.0
+"LND" , "sphum_ca"      , ""            , ""                             , .true.  ,  0.0
+"LND" , "t_flux"        , ""            , ""                             , .true.  ,  0.0
+"LND" , "sphum_flux"    , ""            , ""                             , .true.  ,  0.0
+"LND" , "lw_flux"       , ""            , ""                             , .true.  ,  0.0
+"LND" , "sw_flux"       , ""            , ""                             , .true.  ,  0.0
+"LND" , "lprec"         , ""            , ""                             , .true.  ,  0.0
+"LND" , "fprec"         , ""            , ""                             , .true.  ,  0.0
+"LND" , "dhdt"          , ""            , ""                             , .true.  ,  5.0
+"LND" , "dedt"          , ""            , ""                             , .true.  ,  2e-6
+"LND" , "dedq"          , ""            , ""                             , .true.  ,  0.0
+"LND" , "drdt"          , ""            , ""                             , .true.  ,  5.0
+"LND" , "drag_q"        , ""            , ""                             , .true.  ,  0.0
+"LND" , "p_surf"        , ""            , ""                             , .true.  ,  1.e5
+
+
