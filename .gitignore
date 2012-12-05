@@ -3,3 +3,7 @@
 *.out
 CPU_stats
 exitcode
+MOM_parameter_doc
+available_diags.*
+INPUT
+RESTART
