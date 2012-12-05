@@ -1,6 +1,6 @@
 !********+*********+*********+*********+*********+*********+*********+*
-!*   This include file determines the compile-time settings for the   *
-!* Generalized Ocean Layered Dynamics (MOM) ocean model.             *
+!*   This include file determines the compile-time memory settings    *
+!*  for the Modular Ocean Model (MOM), versions 6 and later.          *
 !********+*********+*********+*********+*********+*********+*********+*
 
 !  Specify the appropriate dimensionality for the metrics.
