@@ -1490,7 +1490,7 @@ subroutine set_visc_init(Time, G, param_file, diag, visc, CS)
 ! Set default, read and log parameters
   call log_version(param_file, mod, version, tagname, "")
   CS%RiNo_mix = .false.
- !use_kappa_shear = .false. ; adiabatic = .false. ; double_diffusion = .false.  ! Needed? -AJA
+  use_kappa_shear = .false. ; double_diffusion = .false. !; adiabatic = .false.  ! Needed? -AJA
   call get_param(param_file, mod, "BOTTOMDRAGLAW", CS%bottomdraglaw, &
                  "If true, the bottom stress is calculated with a drag \n"//&
                  "law of the form c_drag*|u|*u. The velocity magnitude \n"//&
