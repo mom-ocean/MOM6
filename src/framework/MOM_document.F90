@@ -79,7 +79,7 @@ type, public :: doc_type ; private
   character(len=240) :: docfile = '' ! A file where all run-time parameters,
                                     ! their settings and defaults are documented.
   logical :: minimal = .false.      ! If true, only document non-default values.
-  logical :: defineSyntax = .true.  ! If true, use the a=b syntax
+  logical :: defineSyntax = .false. ! If true, use #def syntax instead of a=b syntax
   logical :: warnOnConflicts = .false. ! Cause a WARNING error if defaults differ.
   integer :: commentColumn = 32     ! Number of spaces before the comment marker.
   type(link_logical), pointer :: chain_logicals => NULL() ! Db of logicals
