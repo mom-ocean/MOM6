@@ -72,7 +72,7 @@ use MOM_checksums, only : hchksum, qchksum, uchksum, vchksum, chksum
 use MOM_domains, only : pass_var, pass_vector, sum_across_PEs, broadcast
 use MOM_domains, only : root_PE, To_All, SCALAR_PAIR, CGRID_NE
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
-use MOM_file_parser, only : read_param, get_param, open_param_file, param_file_type
+use MOM_file_parser, only : get_param, open_param_file, param_file_type
 use MOM_file_parser, only : uppercase, log_param, log_version
 use MOM_grid, only : ocean_grid_type
 use MOM_interface_heights, only : find_eta
@@ -105,6 +105,9 @@ use benchmark_initialization, only : benchmark_init_temperature_salinity
 use circle_obcs_initialization, only : circle_obcs_initialize_thickness
 use lock_exchange_initialization, only : lock_exchange_initialize_thickness
 use external_gwave_initialization, only : external_gwave_initialize_thickness
+use adjustment_initialization, only : adjustment_initialize_thickness
+use adjustment_initialization, only : adjustment_initialize_temperature_salinity
+
 use midas_vertmap, only : fill_miss_2d, find_interfaces, tracer_Z_init, meshgrid
 use midas_vertmap, only : determine_temperature
 
@@ -217,6 +220,7 @@ subroutine MOM_initialize(u, v, h, tv, Time, G, PF, dirs, &
                  "This specifies how layers are to be defined: \n"//&
                  " \t file - read coordinate information from the file \n"//&
                  " \t\t specified by (COORD_FILE).\n"//&
+                 " \t linear - linear based on interfaces not layers. \n"//&
                  " \t ts_ref - use reference temperature and salinity \n"//&
                  " \t ts_range - use range of temperature and salinity \n"//&
                  " \t\t (T_REF and S_REF) to determine surface density \n"//&
@@ -232,13 +236,14 @@ subroutine MOM_initialize(u, v, h, tv, Time, G, PF, dirs, &
       call set_coord_from_gprime(G%Rlay, G%g_prime, G, PF)
     case ("layer_ref")
       call set_coord_from_layer_density(G%Rlay, G%g_prime, G, PF)
+    case ("linear")
+      call set_coord_linear(G%Rlay, G%g_prime, G, PF)
     case ("ts_ref")
       call set_coord_from_ts_ref(G%Rlay, G%g_prime, G, PF, eos, tv%P_Ref)
     case ("ts_profile")
       call set_coord_from_TS_profile(G%Rlay, G%g_prime, G, PF, eos, tv%P_Ref)
     case ("ts_range")
       call set_coord_from_TS_range(G%Rlay, G%g_prime, G, PF, eos, tv%P_Ref)
-
     case ("file")
       call set_coord_from_file(G%Rlay, G%g_prime, G, PF)
     case ("USER")
@@ -359,20 +364,22 @@ subroutine MOM_initialize(u, v, h, tv, Time, G, PF, dirs, &
                " \t search - search a density profile for the interface \n"//&
                " \t\t densities. This is not yet implemented. \n"//&
                " \t circle_obcs - the circle_obcs test case is used. \n"//&
+               " \t adjustment2d - TBD AJA. \n"//&
                " \t USER - call a user modified routine.", &
                fail_if_missing=.true.)
       select case (trim(config))
-         case ("file");    call initialize_thickness_from_file(h, G, PF, .false.)
+         case ("file"); call initialize_thickness_from_file(h, G, PF, .false.)
          case ("thickness_file"); call initialize_thickness_from_file(h, G, PF, .true.)
          case ("uniform"); call initialize_thickness_uniform(h, G, PF)
-         case ("DOME");    call DOME_initialize_thickness(h, G, PF)
+         case ("DOME"); call DOME_initialize_thickness(h, G, PF)
          case ("benchmark"); call benchmark_initialize_thickness(h, G, PF, &
                                  tv%eqn_of_state, tv%P_Ref)
-         case ("search");  call initialize_thickness_search
+         case ("search"); call initialize_thickness_search
          case ("circle_obcs"); call circle_obcs_initialize_thickness(h, G, PF)
          case ("lock_exchange"); call lock_exchange_initialize_thickness(h, G, PF)
          case ("external_gwave"); call external_gwave_initialize_thickness(h, G, PF)
-         case ("USER");    call user_initialize_thickness(h, G, PF,tv%T)
+         case ("adjustment2d"); call adjustment_initialize_thickness(h, G, PF)
+         case ("USER"); call user_initialize_thickness(h, G, PF,tv%T)
          case default ; call MOM_error(FATAL,  "MOM_initialize: "//&
               "Unrecognized layer thickness configuration "//trim(config))
       end select
@@ -390,14 +397,17 @@ subroutine MOM_initialize(u, v, h, tv, Time, G, PF, dirs, &
                " \t TS_profile - use temperature and salinity profiles \n"//&
                " \t\t (read from TS_FILE) to set layer densities. \n"//&
                " \t benchmark - use the benchmark test case T & S. \n"//&
+               " \t adjustment2d - TBD AJA. \n"//&
                " \t USER - call a user modified routine.", &
                fail_if_missing=.true.)
         select case (trim(config))
           case ("fit"); call initialize_temp_salt_fit(tv%T, tv%S, G, PF, eos, tv%P_Ref)
           case ("file"); call initialize_temp_salt_from_file(tv%T, tv%S, G, PF)
           case ("benchmark"); call benchmark_init_temperature_salinity(tv%T, tv%S, &
-                                       G, PF, eos, tv%P_Ref)
+                                   G, PF, eos, tv%P_Ref)
           case ("TS_profile") ; call initialize_temp_salt_from_profile(tv%T, tv%S, G, PF)
+          case ("adjustment2d"); call adjustment_initialize_temperature_salinity ( tv%T, &
+                                      tv%S, h, G, PF, eos )
           case ("USER"); call user_init_temperature_salinity(tv%T, tv%S, G, PF, eos)
           case default ; call MOM_error(FATAL,  "MOM_initialize: "//&
                  "Unrecognized Temp & salt configuration "//trim(config))
@@ -782,9 +792,9 @@ subroutine set_coord_from_TS_range(Rlay, g_prime, G, param_file, &
   call get_param(param_file, mod, "TS_RANGE_S_DENSE", S_Dense, &
                  "The initial densest salinities when COORD_CONFIG \n"//&
                  "is set to ts_range.", default = S_Ref, units="PSU")
-		 
+ 
   call get_param(param_file, mod, "TS_RANGE_RESOLN_RATIO", res_rat, &
-  		           "The ratio of density space resolution in the densest \n"//&
+                 "The ratio of density space resolution in the densest \n"//&
                  "part of the range to that in the lightest part of the \n"//&
                  "range when COORD_CONFIG is set to ts_range. Values \n"//&
                  "greater than 1 increase the resolution of the denser water.",&
@@ -868,6 +878,56 @@ subroutine set_coord_from_file(Rlay, g_prime, G, param_file)
 end subroutine set_coord_from_file
 ! -----------------------------------------------------------------------------
 
+! -----------------------------------------------------------------------------
+subroutine set_coord_linear(Rlay, g_prime, G, param_file)
+  real, dimension(:), intent(out)   :: Rlay, g_prime
+  type(ocean_grid_type), intent(in) :: G
+  type(param_file_type), intent(in) :: param_file
+! Arguments: Rlay - the layers' target coordinate values (potential density).
+!  (out)     g_prime - the reduced gravity across the interfaces, in m s-2.
+!  (in)      G - The ocean's grid structure.
+!  (in)      param_file - A structure indicating the open file to parse for
+!                         model parameter values.
+
+! This subroutine sets the layer densities (Rlay) and the interface  
+! reduced gravities (g) according to a linear profile starting at a
+! reference surface layer density and spanning a range of densities 
+! defined by the parameter RLAY_RANGE (defaulted to 2 if not defined) 
+  character(len=40)  :: mod = "set_coord_from_layer_density" ! This subroutine
+  real :: Rlay_ref, Rlay_range, g_fs
+  integer :: k, nz
+  nz = G%ke
+
+  call MOM_mesg("  MOM_initialization.F90, set_coord_linear: setting coordinate")
+
+  call get_param(param_file, mod, "LIGHTEST_DENSITY", Rlay_Ref, &
+                 "The reference potential density used for layer 1.", &
+                 units="kg m-3", default=G%Rho0)
+  call get_param(param_file, mod, "DENSITY_RANGE", Rlay_range, &
+                 "The range of reference potential densities in the layers.", &
+                 units="kg m-3", default=2.0)
+  call get_param(param_file, mod, "GFS", g_fs, &
+                 "The reduced gravity at the free surface.", units="m s-2", &
+                 default=G%g_Earth)
+! Rlay(1) = Rlay_Ref
+! do k=2,nz
+!    Rlay(k) = Rlay(k-1) + Rlay_range/(real(nz-1))
+! enddo
+  ! This following sets the target layer densities such that a the
+  ! surface interface has density Rlay_ref and the bottom
+  ! is Rlay_range larger
+  do k=1,nz
+     Rlay(k) = Rlay_Ref + RLay_range*((real(k)-0.5)/real(nz))
+  enddo
+!    These statements set the interface reduced gravities.           !
+  g_prime(1) = g_fs
+  do k=2,nz 
+     g_prime(k) = (G%g_Earth/G%Rho0) * (Rlay(k) - Rlay(k-1))
+  enddo
+
+end subroutine set_coord_linear
+! -----------------------------------------------------------------------------
+
 subroutine MOM_initialize_rotation(f, G, PF)
   type(ocean_grid_type),            intent(in)  :: G
   real, dimension(G%Isdq:G%Iedq,G%Jsdq:G%Jedq), intent(out) :: f
@@ -902,7 +962,7 @@ subroutine MOM_initialize_rotation(f, G, PF)
 end subroutine MOM_initialize_rotation
 
 subroutine MOM_initialize_topography(D, G, PF)
-  real, intent(out), dimension(NXMEM_,NYMEM_) :: D
+  real, dimension(NXMEM_,NYMEM_), intent(out) :: D
   type(ocean_grid_type), intent(in)           :: G
   type(param_file_type), intent(in)           :: PF
 ! Arguments: D  - the bottom depth in m. Intent out.
@@ -1835,7 +1895,6 @@ subroutine initialize_temp_salt_fit(T, S, G, param_file, eqn_of_state, P_Ref)
 end subroutine initialize_temp_salt_fit
 ! -----------------------------------------------------------------------------
 
-
 ! -----------------------------------------------------------------------------
 subroutine initialize_sponges_file(G, use_temperature, tv, param_file, CSp)
   type(ocean_grid_type), intent(in) :: G
@@ -2291,7 +2350,7 @@ subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, advect_tracer_CSp)
 
   if (read_OBC_eta) then
     call read_data(filename, 'eta_outer_u', OBC%eta_outer_u, &
-                   domain=G%Domain%mpp_domain, position=EAST_FACE)	
+                   domain=G%Domain%mpp_domain, position=EAST_FACE)
     call read_data(filename, 'eta_outer_v', OBC%eta_outer_v, &
                    domain=G%Domain%mpp_domain, position=NORTH_FACE)
   endif

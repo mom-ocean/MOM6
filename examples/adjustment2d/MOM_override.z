@@ -1,0 +1,4 @@
+# Z* coordinate regridding + initialization
+#override USE_REGRIDDING = True
+#override REGRIDDING_SCHEME = 0
+#override ADJUSTMENT_IC = 0

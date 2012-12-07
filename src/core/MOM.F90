@@ -1446,6 +1446,8 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     call mixedlayer_restrat_init(Time, grid, param_file, diag, CS%mixedlayer_restrat_CSp)
   call MEKE_init(Time, grid, param_file, diag, CS%MEKE_CSp, CS%MEKE)
   call VarMix_init(Time, grid, param_file, diag, CS%VarMix)
+  ! Need an ALE CS !!!! -AJA
+  ALLOC(CS%h_aux(isd:ied,jsd:jed,nz)); CS%h_aux(:,:,:) = 0.
   call initialize_regridding(param_file, CS%regridding_opts, grid, &
                              h(:,:,:,:), CS%h_aux(:,:,:), u(:,:,:,1), v(:,:,:,1), CS%tv)
   call MOM_diagnostics_init(MOM_internal_state, Time, grid, param_file, &

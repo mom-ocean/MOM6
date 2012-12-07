@@ -1,0 +1,4 @@
+# Layered isopycnal mode + initialization
+#override USE_REGRIDDING = True
+#override REGRIDDING_SCHEME = 1 
+#override ADJUSTMENT_IC = 2
