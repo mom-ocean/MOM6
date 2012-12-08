@@ -107,6 +107,9 @@ use lock_exchange_initialization, only : lock_exchange_initialize_thickness
 use external_gwave_initialization, only : external_gwave_initialize_thickness
 use adjustment_initialization, only : adjustment_initialize_thickness
 use adjustment_initialization, only : adjustment_initialize_temperature_salinity
+use sloshing_initialization, only : sloshing_initialize_topography
+use sloshing_initialization, only : sloshing_initialize_thickness
+use sloshing_initialization, only : sloshing_initialize_temperature_salinity
 
 use midas_vertmap, only : fill_miss_2d, find_interfaces, tracer_Z_init, meshgrid
 use midas_vertmap, only : determine_temperature
@@ -365,6 +368,7 @@ subroutine MOM_initialize(u, v, h, tv, Time, G, PF, dirs, &
                " \t\t densities. This is not yet implemented. \n"//&
                " \t circle_obcs - the circle_obcs test case is used. \n"//&
                " \t adjustment2d - TBD AJA. \n"//&
+               " \t sloshing - TBD AJA. \n"//&
                " \t USER - call a user modified routine.", &
                fail_if_missing=.true.)
       select case (trim(config))
@@ -379,6 +383,7 @@ subroutine MOM_initialize(u, v, h, tv, Time, G, PF, dirs, &
          case ("lock_exchange"); call lock_exchange_initialize_thickness(h, G, PF)
          case ("external_gwave"); call external_gwave_initialize_thickness(h, G, PF)
          case ("adjustment2d"); call adjustment_initialize_thickness(h, G, PF)
+         case ("sloshing"); call sloshing_initialize_thickness(h, G, PF)
          case ("USER"); call user_initialize_thickness(h, G, PF,tv%T)
          case default ; call MOM_error(FATAL,  "MOM_initialize: "//&
               "Unrecognized layer thickness configuration "//trim(config))
@@ -398,6 +403,7 @@ subroutine MOM_initialize(u, v, h, tv, Time, G, PF, dirs, &
                " \t\t (read from TS_FILE) to set layer densities. \n"//&
                " \t benchmark - use the benchmark test case T & S. \n"//&
                " \t adjustment2d - TBD AJA. \n"//&
+               " \t sloshing - TBD AJA. \n"//&
                " \t USER - call a user modified routine.", &
                fail_if_missing=.true.)
         select case (trim(config))
@@ -408,6 +414,8 @@ subroutine MOM_initialize(u, v, h, tv, Time, G, PF, dirs, &
           case ("TS_profile") ; call initialize_temp_salt_from_profile(tv%T, tv%S, G, PF)
           case ("adjustment2d"); call adjustment_initialize_temperature_salinity ( tv%T, &
                                       tv%S, h, G, PF, eos )
+          case ("sloshing"); call sloshing_initialize_temperature_salinity(tv%T, &
+                                  tv%S, h, G, PF, eos )
           case ("USER"); call user_init_temperature_salinity(tv%T, tv%S, G, PF, eos)
           case default ; call MOM_error(FATAL,  "MOM_initialize: "//&
                  "Unrecognized Temp & salt configuration "//trim(config))
@@ -1001,6 +1009,7 @@ subroutine MOM_initialize_topography(D, G, PF)
     case ("halfpipe");  call initialize_topography_named(D, G, PF, config)
     case ("DOME");      call DOME_initialize_topography(D, G, PF)
     case ("benchmark"); call benchmark_initialize_topography(D, G, PF)
+    case ("sloshing");  call sloshing_initialize_topography(D, G, PF)
     case ("USER");      call user_initialize_topography(D, G, PF)
     case default ;      call MOM_error(FATAL,"MOM_initialize_topography: "// &
       "Unrecognized topography setup '"//trim(config)//"'")

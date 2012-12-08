@@ -1,0 +1,50 @@
+"MOM resting experiment"
+1 1 1 0 0 0
+"prog",     12,"hours",1,"days","Time"
+
+#This is the field section of the diag_table.
+
+# Prognostic Ocean fields:
+#=========================
+
+"ocean_model","u","u","prog","all",.false.,"none",2
+"ocean_model","v","v","prog","all",.false.,"none",2
+"ocean_model","h","h","prog","all",.false.,"none",1
+"ocean_model","e","e","prog","all",.false.,"none",2
+"ocean_model","temp","temp","prog","all",.false.,"none",2
+"ocean_model","salt","salt","prog","all",.false.,"none",2
+
+#=============================================================================================
+#
+#====> This file can be used with diag_manager/v2.0a (or higher) <====
+#
+#
+#  FORMATS FOR FILE ENTRIES (not all input values are used)
+#  ------------------------
+#
+#"file_name", output_freq, "output_units", format, "time_units", "time_long_name", ...
+#   (opt) new_file_frequecy, (opt) "new_file_freq_units", "new_file_start_date"
+#
+#
+#output_freq:  > 0  output frequency in "output_units"
+#              = 0  output frequency every time step
+#              =-1  output frequency at end of run
+#
+#output_units = units used for output frequency
+#               (years, months, days, minutes, hours, seconds)
+#
+#time_units   = units used to label the time axis
+#               (days, minutes, hours, seconds)
+#
+#
+#  FORMAT FOR FIELD ENTRIES (not all input values are used)
+#  ------------------------
+#
+#"module_name", "field_name", "output_name", "file_name" "time_sampling", time_avg, "other_opts", packing
+#
+#time_avg = .true. or .false.
+#
+#packing  = 1  double precision
+#         = 2  float
+#         = 4  packed 16-bit integers
+#         = 8  packed 1-byte (not tested?)
