@@ -223,7 +223,7 @@ subroutine MOM_initialize(u, v, h, tv, Time, G, PF, dirs, &
                  "This specifies how layers are to be defined: \n"//&
                  " \t file - read coordinate information from the file \n"//&
                  " \t\t specified by (COORD_FILE).\n"//&
-                 " \t linear - linear based on interfaces not layers. \n"//&
+                 " \t linear - linear based on interfaces not layesrs. \n"//&
                  " \t ts_ref - use reference temperature and salinity \n"//&
                  " \t ts_range - use range of temperature and salinity \n"//&
                  " \t\t (T_REF and S_REF) to determine surface density \n"//&
