@@ -1,6 +1,6 @@
 !********+*********+*********+*********+*********+*********+*********+*
-!*   This include file determines the compile-time settings for the   *
-!* Generalized Ocean Layered Dynamics (GOLD) ocean model.             *
+!*   This include file determines the compile-time memory settings    *
+!*  for the Modular Ocean Model (MOM), versions 6 and later.          *
 !********+*********+*********+*********+*********+*********+*********+*
 
 !  Specify the appropriate dimensionality for the metrics.
@@ -68,5 +68,5 @@
                                !   BT_HALO is the size of the memory halos in
                                ! the barotropic solver.
 
-#include <GOLD_memory_macros.h>
-#include <GOLD_grid_macros.h>
+#include <MOM_memory_macros.h>
+#include <MOM_grid_macros.h>

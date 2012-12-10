@@ -24,8 +24,8 @@
                                !  works, but the model will be slower.
 
 !  Specify the numerical domain.
-#define NXTOT 360
-#define NYTOT 210
+#define NXTOT 1440
+#define NYTOT 450
                                !    NXTOT and NYTOT are the number of thickness
                                !  grid points in the zonal and meridional
                                !  directions of the physical domain.
@@ -47,14 +47,14 @@
                                !  others, depending on where they are on the 
                                !  staggered grid.
 
-#define NXPROC 10
+#define NXPROC 16
                                !    NXPROC is the number of processors in the
                                !  x-direction.
-#define NYPROC 6
+#define NYPROC 18
                                !    NYPROC is the number of processors in the
                                !  y-direction.
 
-#define MAX_FIELDS 80
+#define MAX_FIELDS 50
                                !    The maximum permitted number (each) of
                                !  restart variables, time derivatives, etc.
                                !  This is mostly used for the size of pointer
