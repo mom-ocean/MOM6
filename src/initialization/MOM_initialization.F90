@@ -402,6 +402,7 @@ subroutine MOM_initialize(u, v, h, tv, Time, G, PF, dirs, &
                " \t TS_profile - use temperature and salinity profiles \n"//&
                " \t\t (read from TS_FILE) to set layer densities. \n"//&
                " \t benchmark - use the benchmark test case T & S. \n"//&
+               " \t linear - linear in logical layer space. \n"//&
                " \t adjustment2d - TBD AJA. \n"//&
                " \t sloshing - TBD AJA. \n"//&
                " \t USER - call a user modified routine.", &
@@ -412,6 +413,7 @@ subroutine MOM_initialize(u, v, h, tv, Time, G, PF, dirs, &
           case ("benchmark"); call benchmark_init_temperature_salinity(tv%T, tv%S, &
                                    G, PF, eos, tv%P_Ref)
           case ("TS_profile") ; call initialize_temp_salt_from_profile(tv%T, tv%S, G, PF)
+          case ("linear"); call initialize_temp_salt_linear(tv%T, tv%S, G, PF)
           case ("adjustment2d"); call adjustment_initialize_temperature_salinity ( tv%T, &
                                       tv%S, h, G, PF, eos )
           case ("sloshing"); call sloshing_initialize_temperature_salinity(tv%T, &
@@ -1902,6 +1904,58 @@ subroutine initialize_temp_salt_fit(T, S, G, param_file, eqn_of_state, P_Ref)
   enddo ; enddo ; enddo
 
 end subroutine initialize_temp_salt_fit
+! -----------------------------------------------------------------------------
+
+! -----------------------------------------------------------------------------
+subroutine initialize_temp_salt_linear(T, S, G, param_file)
+  real, dimension(NXMEM_,NYMEM_, NZ_), intent(out) :: T, S
+  type(ocean_grid_type),               intent(in)  :: G
+  type(param_file_type),               intent(in)  :: param_file
+  ! This subroutine initializes linear profiles for T and S according to
+  ! reference surface layer salinity and temperature and a specified range.
+  ! Note that the linear distribution is set up with respect to the layer
+  ! number, not the physical position).
+  integer :: k;                             
+  real  :: delta_S, delta_T
+  real  :: S_top, T_top ! Reference salinity and temerature within surface layer
+  real  :: S_range, T_range ! Range of salinities and temperatures over the vertical
+  real  :: delta
+  character(len=40)  :: mod = "initialize_temp_salt_linear" ! This subroutine's name.
+  
+  call get_param(param_file, mod, "T_TOP", T_top, &
+                 "Initial temperature of the top surface.", &
+                 units="degC", fail_if_missing=.true.)
+  call get_param(param_file, mod, "T_RANGE", T_range, &
+                 "Initial temperature difference (top-bottom).", &
+                 units="degC", fail_if_missing=.true.)
+  call get_param(param_file, mod, "S_TOP", S_top, &
+                 "Initial salinity of the top surface.", &
+                 units="PSU", fail_if_missing=.true.)
+  call get_param(param_file, mod, "S_RANGE", S_range, &
+                 "Initial salinity difference (top-bottom).", &
+                 units="PSU", fail_if_missing=.true.)
+  
+! ! Prescribe salinity
+! delta_S = S_range / ( G%ke - 1.0 );
+! S(:,:,1) = S_top;
+! do k = 2,G%ke
+!   S(:,:,k) = S(:,:,k-1) + delta_S;
+! end do  
+  do k = 1,G%ke
+    S(:,:,k) = S_top - S_range*((real(k)-0.5)/real(G%ke))
+    T(:,:,k) = T_top - T_range*((real(k)-0.5)/real(G%ke))
+  end do  
+  
+! ! Prescribe temperature
+! delta_T = T_range / ( G%ke - 1.0 );
+! T(:,:,1) = T_top;
+! do k = 2,G%ke
+!   T(:,:,k) = T(:,:,k-1) + delta_T;
+! end do  
+! delta = 1;
+! T(:,:,G%ke/2 - (delta-1):G%ke/2 + delta) = 1.0;
+  
+end subroutine initialize_temp_salt_linear
 ! -----------------------------------------------------------------------------
 
 ! -----------------------------------------------------------------------------
