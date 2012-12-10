@@ -45,12 +45,12 @@ subroutine solve_linear_system ( A, B, X, system_size )
   real                  :: factor;
   real                  :: pivot;
   real                  :: swap_a, swap_b;
-  integer               :: found_pivot;     ! boolean indicating whether
+  logical               :: found_pivot;     ! boolean indicating whether
                                             ! a pivot has been found
   ! Loop on rows
   do i = 1,system_size-1
 
-    found_pivot = 0;
+    found_pivot = .false.
 
     ! Start to look for a pivot in row i. If the pivot
     ! in row i -- which is the current row -- is not valid,
@@ -61,7 +61,7 @@ subroutine solve_linear_system ( A, B, X, system_size )
     do while ( ( .NOT. found_pivot ) .AND. ( k .LE. system_size ) )
         
         if ( abs( A(k,i) ) .GT. eps ) then  ! a valid pivot is found
-          found_pivot = 1;
+          found_pivot = .true.
         else                                ! Go to the next row to see 
                                             ! if there is a valid pivot there
           k = k + 1;    
