@@ -4,26 +4,6 @@
 !* ocean model.                                                       *
 !********+*********+*********+*********+*********+*********+*********+*
 
-!  Specify the appropriate dimensionality for the metrics.
-#undef  CARTESIAN
-                               !    Use a uniform cartesian grid if CARTESIAN
-                               !  is defined, otherwise use a latitude-longitude
-                               !  coordinate grid.
-#define XMETRIC_J
-#define XMETRIC_I
-#define YMETRIC_J
-#define YMETRIC_I
-                               !    Define XMETRIC_J if the x-direction metrics
-                               !  vary in the y- (or j^) direction.  Otherwise
-                               !  undefine XMETRIC_J.  XMETRIC_I, YMETRIC_J,
-                               !  and YMETRIC_I are used similarly.
-                               !  CARTESIAN overrides all of these choices.
-                               !    For example, on a regular latitude/longitude
-                               !  grid, define XMETRIC_J and undefine the rest.
-                               !  For a Mercator grid, define only XMETRIC_J and
-                               !  YMETRIC_J.  Defining all of these always
-                               !  works, but the model will be slower.
-
 !  Specify the numerical domain.
 #define NXTOT 360
 #define NYTOT 180
@@ -61,15 +41,9 @@
                                !  This is mostly used for the size of pointer
                                !  arrays, so it should be set generously.
 
-#define EPSILON 1.0e-10
-                               !    The default minimum layer thickness, in m.
-                               !  This is superseded by setting ANGSTROM in the
-                               !  MOM parameter file.
-
 #define NX_HALO 4
 #define NY_HALO 4
                                !   NX_HALO and NY_HALO are the sizes of the
                                ! memory halos on each side.
 
 #include <MOM_memory_macros.h>
-#include <MOM_grid_macros.h>

@@ -3,26 +3,6 @@
 !*  for the Modular Ocean Model (MOM), versions 6 and later.          *
 !********+*********+*********+*********+*********+*********+*********+*
 
-!  Specify the appropriate dimensionality for the metrics.
-#undef  CARTESIAN
-                               !    Use a uniform Cartesian grid if CARTESIAN
-                               !  is defined, otherwise use a latitude-longitude
-                               !  coordinate grid.
-#define XMETRIC_J
-#define XMETRIC_I
-#define YMETRIC_J
-#define YMETRIC_I
-                               !    Define XMETRIC_J if the x-direction metrics
-                               !  vary in the y- (or j^) direction.  Otherwise
-                               !  undefine XMETRIC_J.  XMETRIC_I, YMETRIC_J,
-                               !  and YMETRIC_I are used similarly.
-                               !  CARTESIAN overrides all of these choices.
-                               !    For example, on a regular latitude/longitude
-                               !  grid, define XMETRIC_J and undefine the rest.
-                               !  For a Mercator grid, define only XMETRIC_J and
-                               !  YMETRIC_J.  Defining all of these always
-                               !  works, but the model will be slower.
-
 !  Specify the numerical domain.
 #define NXTOT 1440
 #define NYTOT 450
@@ -69,4 +49,3 @@
                                ! the barotropic solver.
 
 #include <MOM_memory_macros.h>
-#include <MOM_grid_macros.h>

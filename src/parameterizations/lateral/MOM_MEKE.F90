@@ -339,7 +339,7 @@ subroutine MEKE_init(Time, G, param_file, diag, CS, MEKE)
 !   This subroutine allocates space for and claculates the static variables used
 ! by this module.  The metrics may be effectively 0, 1, or 2-D arrays,
 ! while fields like the background viscosities are 2-D arrays.
-! ALLOC is a macro defined in MOM_memory_macros.h for allocate or nothing with
+! ALLOC is a macro defined in MOM_memory.h for allocate or nothing with
 ! static memory.
 !
 ! Arguments:

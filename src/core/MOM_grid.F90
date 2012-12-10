@@ -52,57 +52,45 @@ type, public :: ocean_grid_type
                                 ! during the course of the run via calls to
                                 ! set_first_direction.
 
-  real PTR_, dimension(XMETRIC_NX_S, XMETRIC_NY_S) :: &
-    dxh, Idxh  ! dxh is delta x at h points, in m, and Idxh is 1/dxh in m-1.
-  real PTR_, dimension(XMETRICQ_NX_S, XMETRIC_NY_S) :: &
-    dxu, Idxu  ! dxu is delta x at u points, in m, and Idxu is 1/dxu in m-1.
-  real PTR_, dimension(XMETRIC_NX_S, XMETRICQ_NY_S) :: &
-    dxv, Idxv  ! dxv is delta x at v points, in m, and Idxv is 1/dxv in m-1.
-  real PTR_, dimension(XMETRICQ_NX_S, XMETRICQ_NY_S) :: &
-    dxq, Idxq  ! dxq is delta x at q points, in m, and Idxq is 1/dxq in m-1.
-
-  real PTR_, dimension(YMETRIC_NX_S, YMETRIC_NY_S) :: &
-    dyh, Idyh  ! dyh is delta y at h points, in m, and Idyh is 1/dyh in m-1.
-  real PTR_, dimension(YMETRICQ_NX_S, YMETRIC_NY_S) :: &
-    dyu, Idyu  ! dyu is delta y at u points, in m, and Idyu is 1/dyu in m-1.
-  real PTR_, dimension(YMETRIC_NX_S, YMETRICQ_NY_S) :: &
-    dyv, Idyv  ! dyv is delta y at v points, in m, and Idyv is 1/dyv in m-1.
-  real PTR_, dimension(YMETRICQ_NX_S, YMETRICQ_NY_S) :: &
-    dyq, Idyq  ! dyq is delta y at q points, in m, and Idyq is 1/dyq in m-1.
-
-  real PTR_,  dimension(XYMETRIC_NX_S, XYMETRIC_NY_S) :: &
-    dxdyh, &   ! dxdyh is the area of an h-cell, in m2.
-    Idxdyh     ! Idxdyh = 1/dxdyh, in m-2.
-  real PTR_,  dimension(XYMETRICQ_NX_S, XYMETRICQ_NY_S) :: &
-    dxdyq, &   ! dxdyq is the area of an q-cell, in m2
-    Idxdyq     ! Idxdyq = 1/dxdyq in m-2.
-
   real PTR_, dimension(NXMEM_,NYMEM_) :: &
     hmask, &   ! 0 for land points and 1 for ocean points on the h-grid. Nd.
     geolath, & ! The geographic latitude at q points in degrees of latitude or m.
-    geolonh    ! The geographic longitude at q points in degrees of longitude or m.
+    geolonh, & ! The geographic longitude at q points in degrees of longitude or m.
+    dxh, Idxh, & ! dxh is delta x at h points, in m, and Idxh is 1/dxh in m-1.
+    dyh, Idyh, & ! dyh is delta y at h points, in m, and Idyh is 1/dyh in m-1.
+    dxdyh, &     ! dxdyh is the area of an h-cell, in m2.
+    Idxdyh       ! Idxdyh = 1/dxdyh, in m-2.
+
   real PTR_, dimension(NXMEMQP_,NYMEM_) :: &
     umask, &   ! 0 for boundary points and 1 for ocean points on the u grid.  Nondim.
     geolatu, & ! The geographic latitude at u points in degrees of latitude or m.
     geolonu, & ! The geographic longitude at u points in degrees of longitude or m.
-    dy_u, &    ! The unblocked lengths of the u-faces of the h-cell in m.
+    dxu, Idxu, & ! dxu is delta x at u points, in m, and Idxu is 1/dxu in m-1.
+    dyu, Idyu, & ! dyu is delta y at u points, in m, and Idyu is 1/dyu in m-1.
+    dy_u, &      ! The unblocked lengths of the u-faces of the h-cell in m.
     dy_u_obc, &  ! The unblocked lengths of the u-faces of the h-cell in m for OBC.
-    Idxdy_u, & ! The masked inverse areas of u-grid cells in m2.
-    dxdy_u     ! The areas of the u-grid cells in m2.
+    Idxdy_u, &   ! The masked inverse areas of u-grid cells in m2.
+    dxdy_u       ! The areas of the u-grid cells in m2.
 
   real PTR_, dimension(NXMEM_,NYMEMQP_) :: &
     vmask, &   ! 0 for boundary points and 1 for ocean points on the v grid.  Nondim.
     geolatv, & ! The geographic latitude at v points in degrees of latitude or m.
     geolonv, & ! The geographic longitude at v points in degrees of longitude or m.
-    dx_v, &    ! The unblocked lengths of the v-faces of the h-cell in m.
+    dxv, Idxv, & ! dxv is delta x at v points, in m, and Idxv is 1/dxv in m-1.
+    dyv, Idyv, & ! dyv is delta y at v points, in m, and Idyv is 1/dyv in m-1.
+    dx_v, &      ! The unblocked lengths of the v-faces of the h-cell in m.
     dx_v_obc, &  ! The unblocked lengths of the v-faces of the h-cell in m for OBC.
-    Idxdy_v, & ! The masked inverse areas of v-grid cells in m2.
-    dxdy_v     ! The areas of the v-grid cells in m2.
+    Idxdy_v, &   ! The masked inverse areas of v-grid cells in m2.
+    dxdy_v       ! The areas of the v-grid cells in m2.
 
   real PTR_, dimension(NXMEMQP_,NYMEMQP_) :: &
     qmask, &   ! 0 for boundary points and 1 for ocean points on the q grid.  Nondim.
     geolatq, & ! The geographic latitude at q points in degrees of latitude or m.
-    geolonq    ! The geographic longitude at q points in degrees of longitude or m.
+    geolonq, & ! The geographic longitude at q points in degrees of longitude or m.
+    dxq, Idxq, & ! dxq is delta x at q points, in m, and Idxq is 1/dxq in m-1.
+    dyq, Idyq, & ! dyq is delta y at q points, in m, and Idyq is 1/dyq in m-1.
+    dxdyq, &     ! dxdyq is the area of a q-cell, in m2
+    Idxdyq       ! Idxdyq = 1/dxdyq in m-2.
 
   real, pointer, dimension(:) :: &
     gridlath => NULL(), gridlatq => NULL() ! The latitude of h or q points for

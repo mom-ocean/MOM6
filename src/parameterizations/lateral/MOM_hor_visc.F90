@@ -66,19 +66,6 @@ module MOM_hor_visc
 !*  These boundary conditions are largely dictated by the use of       *
 !*  a an Arakawa C-grid and by the varying layer thickness.            *
 !*                                                                     *
-!*   The macros in MOM_hor_visc.h allow the metric terms which are     *
-!* unique to this file to vary in 0, 1, or 2 horizontal dimensions     *
-!* without taking up more memory than is necessary.                    *
-!* The names of the 12 metric macros ( DX2h(i,j), DX2q(I,J),           *
-!* DY2h(i,j), DY2q(I,J), DX_DYh(i,j), DX_DYq(I,J), DY_DXh(i,j),        *
-!* DY_DXq(I,J), IDX2DYu(I,j), IDX2DYv(i,J), IDXDY2u(I,j), and          *
-!* IDXDY2v(i,J) ) should be a self-evident description of what they    *
-!* of what they are. These are very similar to the macros defined in   *
-!* MOM_grid_macros.h.  In addition, the macros LAPLAC_CONST_xx(i,j),   *
-!* LAPLAC_CONST_xy(I,J), BIHARM_CONST_xx(i,j), & BIHARM_CONST_xy(I,J)  *
-!* containing spatially varying metric-related constants for use with  *
-!* the Laplacian or biharmonic Smagorinsky viscosity.                  *
-!*                                                                     *
 !* Macros written all in capital letters are defined in MOM_memory.h.  *
 !*                                                                     *
 !*     A small fragment of the C-grid is shown below:                  *
@@ -108,7 +95,6 @@ use MOM_variables, only : OBC_FLATHER_N, OBC_FLATHER_S
 implicit none ; private
 
 #include <MOM_memory.h>
-#include <MOM_hor_visc.h>
 
 public horizontal_viscosity, hor_visc_init, hor_visc_end
 
@@ -174,28 +160,24 @@ type, public :: hor_visc_CS ; private
     reduction_xy      ! The amount by which stresses through q points are reduced
                       ! due to partial barriers. Nondimensional.
 
-! The following variables are of sizes determined by macros in MOM_hor_visc.h,
-! and when they are used, it is important that the names agree with the
-! capitilization of the macro names in MOM_hor_visc.h.  These are typically all
-! caps, except for the last variable, e.g. DX2h is the macro for dx2h.  These
-! macros allow the rank of these arrays to be reduced when running, which
-! dramatically improves the model's speed.
-  real PTR_, dimension(I_SZ,J_SZ) :: &
+! The following variables are precalculated combinations of metric terms.
+  real PTR_, dimension(NXMEM_,NYMEM_) :: &
     dx2h, dy2h, &              ! dx^2 or dy^2 at h points, in m-2.
     dx_dyh, dy_dxh             ! dx/dy or dy/dx at h points, nondim.
-  real PTR_, dimension(IQ_SZ,JQ_SZ) :: &
+  real PTR_, dimension(NXMEMQP_,NYMEMQP_) :: &
     dx2q, dy2q, &              ! dx^2 or dy^2 at q points, in m-2.
     dx_dyq, dy_dxq             ! dx/dy or dy/dx at q points, nondim.
-  real PTR_, dimension(IQ_SZ,J_SZ) :: &
+  real PTR_, dimension(NXMEMQP_,NYMEM_) :: &
     Idx2dyu, Idxdy2u           ! 1/(dx^2 dy) and 1/(dx dy^2) at u points, in m-3.
-  real PTR_, dimension(I_SZ,JQ_SZ) :: &
+  real PTR_, dimension(NXMEM_,NYMEMQP_) :: &
     Idx2dyv, Idxdy2v           ! 1/(dx^2 dy) and 1/(dx dy^2) at v points, in m-3.
 
-! The following variables map onto macros, located at h (_xx) or q (_xy) points.
-  real PTR_, dimension(I_SZ,J_SZ) :: &
+!   The following variables are precalculated time-invariant combinations of
+! parameters and metric terms.
+  real PTR_, dimension(NXMEM_,NYMEM_) :: &
     Laplac_Const_xx, & ! The Laplacian and biharmonic metric-dependent
     Biharm_Const_xx    ! constants, nondim.
-  real PTR_, dimension(IQ_SZ,JQ_SZ) :: &
+  real PTR_, dimension(NXMEMQP_,NYMEMQP_) :: &
     Laplac_Const_xy, & ! The Laplacian and biharmonic metric-dependent
     Biharm_Const_xy    ! constants, nondim.
 
@@ -582,7 +564,7 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
 !   This subroutine allocates space for and claculates the static variables used
 ! by this module.  The metrics may be effectively 0, 1, or 2-D arrays,
 ! while fields like the background viscosities are 2-D arrays.
-! ALLOC is a macro defined in MOM_memory_macros.h for allocate or nothing with
+! ALLOC is a macro defined in MOM_memory.h for allocate or nothing with
 ! static memory.
 !
 ! Arguments: Time - The current model time.
@@ -771,14 +753,14 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
     call MOM_error(FATAL,"ERROR: NOSLIP and BIHARMONIC cannot be defined "// &
                           "at the same time in MOM.")
 
-  ALLOC(CS%dx2h(I_METRIC_SZ,J_METRIC_SZ))     ; CS%dx2h(:,:) = 0.0
-  ALLOC(CS%dy2h(I_METRIC_SZ,J_METRIC_SZ))     ; CS%dy2h(:,:) = 0.0
-  ALLOC(CS%dx2q(I_METRICQ_SZ,J_METRICQ_SZ))   ; CS%dx2q(:,:) = 0.0
-  ALLOC(CS%dy2q(I_METRICQ_SZ,J_METRICQ_SZ))   ; CS%dy2q(:,:) = 0.0
-  ALLOC(CS%dx_dyh(I_METRIC_SZ,J_METRIC_SZ))   ; CS%dx_dyh(:,:) = 0.0
-  ALLOC(CS%dy_dxh(I_METRIC_SZ,J_METRIC_SZ))   ; CS%dy_dxh(:,:) = 0.0
-  ALLOC(CS%dx_dyq(I_METRICQ_SZ,J_METRICQ_SZ)) ; CS%dx_dyq(:,:) = 0.0
-  ALLOC(CS%dy_dxq(I_METRICQ_SZ,J_METRICQ_SZ)) ; CS%dy_dxq(:,:) = 0.0
+  ALLOC(CS%dx2h(isd:ied,jsd:jed))     ; CS%dx2h(:,:) = 0.0
+  ALLOC(CS%dy2h(isd:ied,jsd:jed))     ; CS%dy2h(:,:) = 0.0
+  ALLOC(CS%dx2q(Isdq:Iedq,Jsdq:Jedq))   ; CS%dx2q(:,:) = 0.0
+  ALLOC(CS%dy2q(Isdq:Iedq,Jsdq:Jedq))   ; CS%dy2q(:,:) = 0.0
+  ALLOC(CS%dx_dyh(isd:ied,jsd:jed))   ; CS%dx_dyh(:,:) = 0.0
+  ALLOC(CS%dy_dxh(isd:ied,jsd:jed))   ; CS%dy_dxh(:,:) = 0.0
+  ALLOC(CS%dx_dyq(Isdq:Iedq,Jsdq:Jedq)) ; CS%dx_dyq(:,:) = 0.0
+  ALLOC(CS%dy_dxq(Isdq:Iedq,Jsdq:Jedq)) ; CS%dy_dxq(:,:) = 0.0
 
   if (CS%Laplacian) then
     ALLOC(CS%Kh_bg_xx(isd:ied,jsd:jed))     ; CS%Kh_bg_xx(:,:) = 0.0
@@ -788,18 +770,18 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
       ALLOC(CS%Kh_Max_xy(Isdq:Iedq,Jsdq:Jedq)) ; CS%Kh_Max_xy(:,:) = 0.0
     endif
     if (CS%Smagorinsky_Kh) then
-      ALLOC(CS%Laplac_Const_xx(I_METRIC_SZ,J_METRIC_SZ))   ; CS%Laplac_Const_xx(:,:) = 0.0
-      ALLOC(CS%Laplac_Const_xy(I_METRICQ_SZ,J_METRICQ_SZ)) ; CS%Laplac_Const_xy(:,:) = 0.0
+      ALLOC(CS%Laplac_Const_xx(isd:ied,jsd:jed))   ; CS%Laplac_Const_xx(:,:) = 0.0
+      ALLOC(CS%Laplac_Const_xy(Isdq:Iedq,Jsdq:Jedq)) ; CS%Laplac_Const_xy(:,:) = 0.0
     endif
   endif
   ALLOC(CS%reduction_xx(isd:ied,jsd:jed))     ; CS%reduction_xx(:,:) = 0.0
   ALLOC(CS%reduction_xy(Isdq:Iedq,Jsdq:Jedq)) ; CS%reduction_xy(:,:) = 0.0
 
   if (CS%biharmonic) then
-    ALLOC(CS%Idx2dyu(I_METRICQ_SZ,J_METRIC_SZ)) ; CS%Idx2dyu(:,:) = 0.0
-    ALLOC(CS%Idx2dyv(I_METRIC_SZ,J_METRICQ_SZ)) ; CS%Idx2dyv(:,:) = 0.0
-    ALLOC(CS%Idxdy2u(I_METRICQ_SZ,J_METRIC_SZ)) ; CS%Idxdy2u(:,:) = 0.0
-    ALLOC(CS%Idxdy2v(I_METRIC_SZ,J_METRICQ_SZ)) ; CS%Idxdy2v(:,:) = 0.0
+    ALLOC(CS%Idx2dyu(Isdq:Iedq,jsd:jed)) ; CS%Idx2dyu(:,:) = 0.0
+    ALLOC(CS%Idx2dyv(isd:ied,Jsdq:Jedq)) ; CS%Idx2dyv(:,:) = 0.0
+    ALLOC(CS%Idxdy2u(Isdq:Iedq,jsd:jed)) ; CS%Idxdy2u(:,:) = 0.0
+    ALLOC(CS%Idxdy2v(isd:ied,Jsdq:Jedq)) ; CS%Idxdy2v(:,:) = 0.0
 
     ALLOC(CS%Ah_bg_xx(isd:ied,jsd:jed)) ; CS%Ah_bg_xx(:,:) = 0.0
     ALLOC(CS%Ah_bg_xy(Isdq:Iedq,Jsdq:Jedq)) ; CS%Ah_bg_xy(:,:) = 0.0
@@ -808,8 +790,8 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
       ALLOC(CS%Ah_Max_xy(Isdq:Iedq,Jsdq:Jedq)) ; CS%Ah_Max_xy(:,:) = 0.0
     endif
     if (CS%Smagorinsky_Ah) then
-      ALLOC(CS%Biharm_Const_xx(I_METRIC_SZ,J_METRIC_SZ)) ; CS%Biharm_Const_xx(:,:) = 0.0
-      ALLOC(CS%Biharm_Const_xy(I_METRICQ_SZ,J_METRICQ_SZ)) ; CS%Biharm_Const_xy(:,:) = 0.0
+      ALLOC(CS%Biharm_Const_xx(isd:ied,jsd:jed)) ; CS%Biharm_Const_xx(:,:) = 0.0
+      ALLOC(CS%Biharm_Const_xy(Isdq:Iedq,Jsdq:Jedq)) ; CS%Biharm_Const_xy(:,:) = 0.0
       if (CS%bound_Coriolis) then
         ALLOC(CS%Biharm_Const2_xx(isd:ied,jsd:jed)) ; CS%Biharm_Const2_xx(:,:) = 0.0
         ALLOC(CS%Biharm_Const2_xy(Isdq:Iedq,Jsdq:Jedq)) ; CS%Biharm_Const2_xy(:,:) = 0.0

@@ -40,11 +40,6 @@ module MOM_grid_initialize
 !*  that DXDYh is calculated analytically from the latitudes and       *
 !*  longitudes of the surrounding q points.                            *
 !*                                                                     *
-!*    All of the metric terms are actually macros which are defined    *
-!*  in MOM_grid_macros.h.  These macros allow the metrics to be        *
-!*  scalars, 1-D arrays, or 2-D arrays just by changing definitions    *
-!*  in MOM_memory.h.                                                   *
-!*                                                                     *
 !*    On a sphere, a variety of grids can be implemented by defining   *
 !*  analytic expressions for dx_di, dy_dj (where x and y are latitude  *
 !*  and longitude, and i and j are grid indices) and the expressions   *
@@ -632,8 +627,8 @@ subroutine set_grid_metrics_from_mosaic(G,param_file)
   real, dimension(G%Isdq:G%Iedq,G%Jsdq:G%Jedq) :: tempQ1, tempQ2, tempQ3, tempQ4
   real, dimension(G%Isdq:G%Iedq,G%jsd :G%jed ) :: tempE1, tempE2
   real, dimension(G%isd :G%ied ,G%Jsdq:G%Jedq) :: tempN1, tempN2
-  ! These arrays are needed because the arrays in G are macros and may have reduced
-  ! dimensions.  Since they share names with the macros, these must be lower case.
+  ! These arrays are a holdover from earlier code in which the arrays in G were
+  ! macros and may have had reduced dimensions.
   real, dimension(G%isd :G%ied ,G%jsd :G%jed ) :: dxh, dyh, dxdyh
   real, dimension(G%Isdq:G%Iedq,G%jsd :G%jed ) :: dxu, dyu
   real, dimension(G%isd :G%ied ,G%Jsdq:G%Jedq) :: dxv, dyv
@@ -806,9 +801,6 @@ subroutine set_grid_metrics_from_mosaic(G,param_file)
   call pass_var(dxdyh, G%Domain)
   call pass_var(dxdyq, G%Domain, position=CORNER)
 
-  ! Now copy the metrics from the local arrays into the arrays in the grid type.
-  ! Array syntax must not be used because the arrays in the grid type are often
-  ! macros with reduced dimensions.
   do i=G%isd,G%ied ; do j=G%jsd,G%jed
     G%DXh(i,j) = dxh(i,j) ; G%DYh(i,j) = dyh(i,j) ; G%DXDYh(i,j) = dxdyh(i,j)
   enddo ; enddo
@@ -925,8 +917,6 @@ subroutine set_grid_metrics_cartesian(G, param_file)
     G%gridlonh(i) = west_lon + len_lon*(REAL(i-nx_halo)-0.5)/REAL(nxtot)
   enddo
 
-!   On a cartesian grid, the various DX... and DY... macros all
-! point to the same scalars, covering all i and j and the 4 subgrids.
   do J=Jsdq,Jedq ; do I=Isdq,Iedq
     G%geolonq(i,j) = grid_lonq(i+X1off) ; G%geolatq(i,j) = grid_latq(j+Y1off)
 
@@ -1137,10 +1127,6 @@ subroutine set_grid_metrics_mercator(G, param_file)
 !   All of the metric terms should be defined over the domain from
 ! isd to ied.  Outside of the physical domain, both the metrics
 ! and their inverses may be set to zero.
-!   Any points that are outside of the computational domain should
-! have their values set to zero _BEFORE_ setting the other metric
-! terms, because these macros may or may not expand to 2-dimensional
-! arrays.
 
 !  The metric terms within the computational domain are set here.
   real :: y_q, y_h, jd, x_q, x_h, id
@@ -1324,26 +1310,6 @@ subroutine set_grid_metrics_mercator(G, param_file)
     G%DYv(i,j) = ds_dj(xv(i,j), yv(i,j), GP)
   enddo ; enddo
 
-# ifndef XMETRIC_J
-  do J=Jsdq+1,Jedq ; do I=Isdq+1,Iedq
-    if (ABS(cos(yq(I,J))-cos(yq(I,J-1))) > 1e-12) then
-      call MOM_error(FATAL,"ERROR setting metric terms: XMETRIC_J should be defined in MOM_memory.h!")
-    endif
-  enddo ; enddo
-# endif
-# ifndef XMETRIC_I
-  do J=Jsdq+1,Jedq ; do I=Isdq+1,Iedq
-    if (ABS(dx_di(xq(I,J),GP)-dx_di(xq(I-1,J),GP)) > 1e-12*dx_di(xq(I,J),GP)) &
-      call MOM_error(FATAL,"ERROR setting metric terms: XMETRIC_I should be defined in MOM_memory.h!")
-  enddo ; enddo
-# endif
-# ifndef YMETRIC_J
-  do J=Jsdq+1,Jedq ; do I=Isdq+1,Iedq
-    if (ABS(dy_dj(yq(I,J),GP)-dy_dj(yq(I,J-1),GP)) > 1e-12*dy_dj(yq(I,J),GP)) &
-      call MOM_error(FATAL,"ERROR setting metric terms: YMETRIC_J should be defined in MOM_memory.h!")
-  enddo ; enddo
-# endif
-
   if (.not.simple_area) then
     do j=Jsdq+1,jed ; do i=Isdq+1,ied
   !         The following test is to ensure parallel reproducibility.
@@ -1367,8 +1333,6 @@ subroutine set_grid_metrics_mercator(G, param_file)
       temp(isd,:) = temp(isd+1,:)     ; temp(:,jsd) = temp(:,jsd+1)
       call pass_var(temp,G%Domain)
     endif
-    ! Note that the following do not use the macros, so that there is not
-    ! replacement of either : with 1 when these are restricted arrays.
     do j=jsd,jed ; do i=isd,ied
       G%DXDYh(i,j) = temp(i,j)
       G%IDXDYh(i,j) = 1.0 / G%DXDYh(i,j)
@@ -1414,28 +1378,28 @@ subroutine allocate_metrics(G)
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   Isdq = G%Isdq ; Iedq = G%Iedq ; Jsdq = G%Jsdq ; Jedq = G%Jedq
 
-  ALLOC(G%dxh(XMETRIC_NX_D,XMETRIC_NY_D))
-  ALLOC(G%dxu(XMETRICQ_NX_D,XMETRIC_NY_D))
-  ALLOC(G%dxv(XMETRIC_NX_D,XMETRICQ_NY_D))
-  ALLOC(G%dxq(XMETRICQ_NX_D,XMETRICQ_NY_D))
-  ALLOC(G%Idxh(XMETRIC_NX_D,XMETRIC_NY_D))
-  ALLOC(G%Idxu(XMETRICQ_NX_D,XMETRIC_NY_D))
-  ALLOC(G%Idxv(XMETRIC_NX_D,XMETRICQ_NY_D))
-  ALLOC(G%Idxq(XMETRICQ_NX_D,XMETRICQ_NY_D))
+  ALLOC(G%dxh(isd:ied,jsd:jed)) ; G%dxh(:,:) = 0.0
+  ALLOC(G%dxu(Isdq:Iedq,jsd:jed)) ; G%dxu(:,:) = 0.0
+  ALLOC(G%dxv(isd:ied,Jsdq:Jedq)) ; G%dxv(:,:) = 0.0
+  ALLOC(G%dxq(Isdq:Iedq,Jsdq:Jedq)) ; G%dxq(:,:) = 0.0
+  ALLOC(G%Idxh(isd:ied,jsd:jed)) ; G%Idxh(:,:) = 0.0
+  ALLOC(G%Idxu(Isdq:Iedq,jsd:jed)) ; G%Idxu(:,:) = 0.0
+  ALLOC(G%Idxv(isd:ied,Jsdq:Jedq)) ; G%Idxv(:,:) = 0.0
+  ALLOC(G%Idxq(Isdq:Iedq,Jsdq:Jedq)) ; G%Idxq(:,:) = 0.0
 
-  ALLOC(G%dyh(YMETRIC_NX_D,YMETRIC_NY_D))
-  ALLOC(G%dyu(YMETRICQ_NX_D,YMETRIC_NY_D))
-  ALLOC(G%dyv(YMETRIC_NX_D,YMETRICQ_NY_D))
-  ALLOC(G%dyq(YMETRICQ_NX_D,YMETRICQ_NY_D))
-  ALLOC(G%Idyh(YMETRIC_NX_D,YMETRIC_NY_D))
-  ALLOC(G%Idyu(YMETRICQ_NX_D,YMETRIC_NY_D))
-  ALLOC(G%Idyv(YMETRIC_NX_D,YMETRICQ_NY_D))
-  ALLOC(G%Idyq(YMETRICQ_NX_D,YMETRICQ_NY_D))
+  ALLOC(G%dyh(isd:ied,jsd:jed)) ; G%dyh(:,:) = 0.0
+  ALLOC(G%dyu(Isdq:Iedq,jsd:jed)) ; G%dyu(:,:) = 0.0
+  ALLOC(G%dyv(isd:ied,Jsdq:Jedq)) ; G%dyv(:,:) = 0.0
+  ALLOC(G%dyq(Isdq:Iedq,Jsdq:Jedq)) ; G%dyq(:,:) = 0.0
+  ALLOC(G%Idyh(isd:ied,jsd:jed)) ; G%Idyh(:,:) = 0.0
+  ALLOC(G%Idyu(Isdq:Iedq,jsd:jed)) ; G%Idyu(:,:) = 0.0
+  ALLOC(G%Idyv(isd:ied,Jsdq:Jedq)) ; G%Idyv(:,:) = 0.0
+  ALLOC(G%Idyq(Isdq:Iedq,Jsdq:Jedq)) ; G%Idyq(:,:) = 0.0
 
-  ALLOC(G%dxdyh(XYMETRIC_NX_D,XYMETRIC_NY_D))
-  ALLOC(G%Idxdyh(XYMETRIC_NX_D,XYMETRIC_NY_D))
-  ALLOC(G%dxdyq(XYMETRICQ_NX_D,XYMETRICQ_NY_D))
-  ALLOC(G%Idxdyq(XYMETRICQ_NX_D,XYMETRICQ_NY_D))
+  ALLOC(G%dxdyh(isd:ied,jsd:jed)) ; G%dxdyh(:,:) = 0.0
+  ALLOC(G%Idxdyh(isd:ied,jsd:jed)) ; G%Idxdyh(:,:) = 0.0
+  ALLOC(G%dxdyq(Isdq:Iedq,Jsdq:Jedq)) ; G%dxdyq(:,:) = 0.0
+  ALLOC(G%Idxdyq(Isdq:Iedq,Jsdq:Jedq)) ; G%Idxdyq(:,:) = 0.0
 
   ALLOC(G%hmask(isd:ied,jsd:jed)) ; G%hmask(:,:) = 0.0
   ALLOC(G%umask(Isdq:Iedq,jsd:jed)) ; G%umask(:,:) = 0.0
