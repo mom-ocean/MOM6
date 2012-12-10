@@ -7,3 +7,4 @@ MOM_parameter_doc
 available_diags.*
 INPUT
 RESTART
+_read_error.nml
