@@ -8,3 +8,4 @@ available_diags.*
 INPUT
 RESTART
 _read_error.nml
+fort.*
