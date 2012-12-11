@@ -131,7 +131,7 @@ type, public :: ocean_grid_type
                         ! at the bit level, in thickness units.  If Angstrom is
                         ! 0 or exceedingly small, this is negligible compared to
                         ! a thickness of 1e-17 m.
-  real PTR_, dimension(NZp1_) :: &
+  real PTR_, dimension(NK_INTERFACE_) :: &
     g_prime, &          ! The reduced gravity at each interface, in m s-2.
     Rlay                ! The target coordinate value (potential density) in
                         ! in each layer in kg m-3.

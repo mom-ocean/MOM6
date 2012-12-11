@@ -60,7 +60,7 @@ end subroutine sloshing_initialize_topography
 !------------------------------------------------------------------------------
 subroutine sloshing_initialize_thickness ( h, G, param_file )
 
-  real, intent(out), dimension(NXMEM_,NYMEM_, NZ_) :: h
+  real, intent(out), dimension(NXMEM_,NYMEM_, NKMEM_) :: h
   type(ocean_grid_type), intent(in)                :: G
   type(param_file_type), intent(in)                :: param_file
 
@@ -183,8 +183,8 @@ end subroutine sloshing_initialize_thickness
 !------------------------------------------------------------------------------
 subroutine sloshing_initialize_temperature_salinity ( T, S, h, G, param_file, &
                                                       eqn_of_state)
-  real, dimension(NXMEM_,NYMEM_, NZ_), intent(out) :: T, S
-  real, dimension(NXMEM_,NYMEM_, NZ_), intent(in)  :: h
+  real, dimension(NXMEM_,NYMEM_, NKMEM_), intent(out) :: T, S
+  real, dimension(NXMEM_,NYMEM_, NKMEM_), intent(in)  :: h
   type(ocean_grid_type),               intent(in)  :: G
   type(param_file_type),               intent(in)  :: param_file
   type(EOS_type),                      pointer     :: eqn_of_state

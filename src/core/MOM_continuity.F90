@@ -75,26 +75,26 @@ contains
 subroutine continuity(u, v, hin, h, uh, vh, dt, G, CS, uhbt, vhbt, OBC, &
                       visc_rem_u, visc_rem_v, u_cor, v_cor, &
                       uhbt_aux, vhbt_aux, u_cor_aux, v_cor_aux, BT_cont)
-  real, intent(in),  dimension(NXMEMQ_,NYMEM_,NZ_) :: u
-  real, intent(in),  dimension(NXMEM_,NYMEMQ_,NZ_) :: v
-  real, intent(in),  dimension(NXMEM_,NYMEM_,NZ_)  :: hin
-  real, intent(out), dimension(NXMEM_,NYMEM_,NZ_)  :: h
-  real, intent(out), dimension(NXMEMQ_,NYMEM_,NZ_) :: uh
-  real, intent(out), dimension(NXMEM_,NYMEMQ_,NZ_) :: vh
-  real, intent(in)                                 :: dt
-  type(ocean_grid_type), intent(inout)             :: G
-  type(continuity_CS), pointer                     :: CS
+  real, intent(in),  dimension(NXMEMQ_,NYMEM_,NKMEM_) :: u
+  real, intent(in),  dimension(NXMEM_,NYMEMQ_,NKMEM_) :: v
+  real, intent(in),  dimension(NXMEM_,NYMEM_,NKMEM_)  :: hin
+  real, intent(out), dimension(NXMEM_,NYMEM_,NKMEM_)  :: h
+  real, intent(out), dimension(NXMEMQ_,NYMEM_,NKMEM_) :: uh
+  real, intent(out), dimension(NXMEM_,NYMEMQ_,NKMEM_) :: vh
+  real, intent(in)                                    :: dt
+  type(ocean_grid_type), intent(inout)                :: G
+  type(continuity_CS), pointer                        :: CS
   real, intent(in), optional, dimension(NXMEMQ_,NYMEM_) :: uhbt
   real, intent(in), optional, dimension(NXMEM_,NYMEMQ_) :: vhbt
-  type(ocean_OBC_type), pointer, optional          :: OBC
-  real, intent(in), optional, dimension(NXMEMQ_,NYMEM_,NZ_) :: visc_rem_u
-  real, intent(in), optional, dimension(NXMEM_,NYMEMQ_,NZ_) :: visc_rem_v
-  real, intent(out), optional, dimension(NXMEMQ_,NYMEM_,NZ_) :: u_cor
-  real, intent(out), optional, dimension(NXMEM_,NYMEMQ_,NZ_) :: v_cor
+  type(ocean_OBC_type), pointer, optional             :: OBC
+  real, intent(in), optional, dimension(NXMEMQ_,NYMEM_,NKMEM_) :: visc_rem_u
+  real, intent(in), optional, dimension(NXMEM_,NYMEMQ_,NKMEM_) :: visc_rem_v
+  real, intent(out), optional, dimension(NXMEMQ_,NYMEM_,NKMEM_) :: u_cor
+  real, intent(out), optional, dimension(NXMEM_,NYMEMQ_,NKMEM_) :: v_cor
   real, intent(in), optional, dimension(NXMEMQ_,NYMEM_) :: uhbt_aux
   real, intent(in), optional, dimension(NXMEM_,NYMEMQ_) :: vhbt_aux
-  real, intent(out), optional, dimension(NXMEMQ_,NYMEM_,NZ_) :: u_cor_aux
-  real, intent(out), optional, dimension(NXMEM_,NYMEMQ_,NZ_) :: v_cor_aux
+  real, intent(out), optional, dimension(NXMEMQ_,NYMEM_,NKMEM_) :: u_cor_aux
+  real, intent(out), optional, dimension(NXMEM_,NYMEMQ_,NKMEM_) :: v_cor_aux
   type(BT_cont_type),                  pointer,     optional :: BT_cont
 !    This subroutine time steps the layer thicknesses, using a monotonically
 !  limit, directionally split PPM scheme, based on Lin (1994).

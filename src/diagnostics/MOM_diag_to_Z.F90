@@ -97,9 +97,9 @@ integer, parameter :: NO_ZSPACE = -1
 contains
 
 subroutine calculate_Z_diag_fields(u, v, h, dt, G, CS)
-  real, dimension(NXMEMQ_,NYMEM_,NZ_),  intent(in)    :: u
-  real, dimension(NXMEM_,NYMEMQ_,NZ_),  intent(in)    :: v
-  real, dimension(NXMEM_,NYMEM_,NZ_),   intent(in)    :: h
+  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(in)  :: u
+  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(in)  :: v
+  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(in)  :: h
   real,                                 intent(in)    :: dt
   type(ocean_grid_type),                intent(inout) :: G
   type(diag_to_Z_CS),                   pointer       :: CS
@@ -375,9 +375,9 @@ subroutine calculate_Z_diag_fields(u, v, h, dt, G, CS)
 end subroutine calculate_Z_diag_fields
 
 subroutine calculate_Z_transport(uh_int, vh_int, h, dt, G, CS)
-  real, dimension(NXMEMQ_,NYMEM_,NZ_),  intent(in)    :: uh_int
-  real, dimension(NXMEM_,NYMEMQ_,NZ_),  intent(in)    :: vh_int
-  real, dimension(NXMEM_,NYMEM_,NZ_),   intent(in)    :: h
+  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(in)  :: uh_int
+  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(in)  :: vh_int
+  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(in)  :: h
   real,                                 intent(in)    :: dt
   type(ocean_grid_type),                intent(inout) :: G
   type(diag_to_Z_CS),                   pointer       :: CS
@@ -610,7 +610,7 @@ end subroutine find_limited_slope
 
 subroutine calc_Zint_diags(h, in_ptrs, ids, num_diags, &
                                        G, CS)
-  real, dimension(NXMEM_,NYMEM_,NZ_), intent(in) :: h
+  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(in) :: h
   type(p3d), dimension(:),            intent(in) :: in_ptrs
   integer,   dimension(:),            intent(in) :: ids
   integer,                            intent(in) :: num_diags
@@ -703,7 +703,7 @@ end subroutine calc_Zint_diags
 
                           
 subroutine register_Z_tracer(tr_ptr, name, long_name, units, Time, G, CS)
-  real, dimension(NXMEM_,NYMEM_,NZ_), target, intent(in) :: tr_ptr
+  real, dimension(NXMEM_,NYMEM_,NKMEM_), target, intent(in) :: tr_ptr
   character(len=*),                           intent(in) :: name
   character(len=*),                           intent(in) :: long_name
   character(len=*),                           intent(in) :: units
@@ -999,7 +999,7 @@ subroutine MOM_diag_to_Z_end(CS)
 end subroutine MOM_diag_to_Z_end
 
 function ocean_register_diag_with_z (tr_ptr, vardesc_tr, G, Time, CS)
-  real, dimension(NXMEM_,NYMEM_,NZ_), target, intent(in) :: tr_ptr
+  real, dimension(NXMEM_,NYMEM_,NKMEM_), target, intent(in) :: tr_ptr
   type(vardesc),                              intent(in) :: vardesc_tr
   type(ocean_grid_type),                      intent(in) :: G
   type(time_type),                            intent(in) :: Time

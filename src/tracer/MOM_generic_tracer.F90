@@ -278,14 +278,14 @@ contains
  ! </SUBROUTINE>
   subroutine initialize_MOM_generic_tracer(restart, day, G, h, OBC, CS, sponge_CSp, &
        diag_to_Z_CSp)
-    logical,                            intent(in) :: restart
-    type(time_type), target,            intent(in) :: day
-    type(ocean_grid_type),              intent(in) :: G
-    real, dimension(NXMEM_,NYMEM_,NZ_), intent(in) :: h
-    type(ocean_OBC_type),               pointer    :: OBC
-    type(MOM_generic_tracer_CS),                pointer    :: CS
-    type(sponge_CS),                    pointer    :: sponge_CSp
-    type(diag_to_Z_CS),                 pointer    :: diag_to_Z_CSp
+    logical,                               intent(in) :: restart
+    type(time_type), target,               intent(in) :: day
+    type(ocean_grid_type),                 intent(in) :: G
+    real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(in) :: h
+    type(ocean_OBC_type),                  pointer    :: OBC
+    type(MOM_generic_tracer_CS),           pointer    :: CS
+    type(sponge_CS),                       pointer    :: sponge_CSp
+    type(diag_to_Z_CS),                    pointer    :: diag_to_Z_CSp
     !   This subroutine initializes the NTR tracer fields in tr(:,:,:,:)
     ! and it sets up the tracer output.
 
@@ -448,13 +448,13 @@ contains
   ! </SUBROUTINE>
 
   subroutine MOM_generic_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, CS, tv, optics)
-    real, dimension(NXMEM_,NYMEM_,NZ_), intent(in) :: h_old, h_new, ea, eb
-    type(forcing),                      intent(in) :: fluxes
-    real,                               intent(in) :: dt
-    type(ocean_grid_type),              intent(in) :: G
-    type(MOM_generic_tracer_CS),       pointer    :: CS
-    type(thermo_var_ptrs),              intent(in) :: tv
-    type(optics_type),                  intent(in) :: optics
+    real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(in) :: h_old, h_new, ea, eb
+    type(forcing),                         intent(in) :: fluxes
+    real,                                  intent(in) :: dt
+    type(ocean_grid_type),                 intent(in) :: G
+    type(MOM_generic_tracer_CS),           pointer    :: CS
+    type(thermo_var_ptrs),                 intent(in) :: tv
+    type(optics_type),                     intent(in) :: optics
     !   This subroutine applies diapycnal diffusion and any other column
     ! tracer physics or chemistry to the tracers from this file.
     ! CFCs are relatively simple, as they are passive tracers. with only a surface
@@ -595,10 +595,10 @@ contains
   ! </SUBROUTINE>
 
   function MOM_generic_tracer_stock(h, stocks, G, CS, names, units, stock_index)
-    real, dimension(NXMEM_,NYMEM_,NZ_), intent(in)    :: h
+    real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(in)    :: h
     real, dimension(:),                 intent(out)   :: stocks
     type(ocean_grid_type),              intent(in)    :: G
-    type(MOM_generic_tracer_CS),       pointer       :: CS
+    type(MOM_generic_tracer_CS),        pointer       :: CS
     character(len=*), dimension(:),     intent(out)   :: names
     character(len=*), dimension(:),     intent(out)   :: units
     integer, optional,                  intent(in)    :: stock_index
@@ -775,10 +775,10 @@ contains
   ! </SUBROUTINE>
 
   subroutine MOM_generic_tracer_surface_state(state, h, G, CS)
-    type(surface),                      intent(inout) :: state
-    real, dimension(NXMEM_,NYMEM_,NZ_), intent(in) :: h
-    type(ocean_grid_type),              intent(in) :: G
-    type(MOM_generic_tracer_CS),                pointer    :: CS
+    type(surface),                         intent(inout) :: state
+    real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(in) :: h
+    type(ocean_grid_type),                 intent(in) :: G
+    type(MOM_generic_tracer_CS),           pointer    :: CS
     !   This subroutine sets up the fields that the coupler needs to calculate the
     ! CFC fluxes between the ocean and atmosphere.
     ! Arguments: state - A structure containing fields that describe the

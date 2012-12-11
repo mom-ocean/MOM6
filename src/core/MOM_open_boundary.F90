@@ -75,15 +75,15 @@ contains
 
 subroutine Radiation_Open_Bdry_Conds(OBC, u_new, u_old, v_new, v_old, &
                                      h_new, h_old, G, CS)
-  type(ocean_OBC_type),                pointer       :: OBC
-  real, dimension(NXMEMQ_,NYMEM_,NZ_), intent(inout) :: u_new
-  real, dimension(NXMEMQ_,NYMEM_,NZ_), intent(in)    :: u_old
-  real, dimension(NXMEM_,NYMEMQ_,NZ_), intent(inout) :: v_new
-  real, dimension(NXMEM_,NYMEMQ_,NZ_), intent(in)    :: v_old    
-  real, dimension(NXMEM_,NYMEM_,NZ_),  intent(inout) :: h_new
-  real, dimension(NXMEM_,NYMEM_,NZ_),  intent(in)    :: h_old
-  type(ocean_grid_type),               intent(inout) :: G
-  type(open_boundary_CS),              pointer       :: CS
+  type(ocean_OBC_type),                   pointer       :: OBC
+  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(inout) :: u_new
+  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(in)    :: u_old
+  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(inout) :: v_new
+  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(in)    :: v_old    
+  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(inout) :: h_new
+  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(in)    :: h_old
+  type(ocean_grid_type),                  intent(inout) :: G
+  type(open_boundary_CS),                 pointer       :: CS
 
   real :: dhdt, dhdx, gamma_u, gamma_h, gamma_v
   real :: rx_max, ry_max ! coefficients for radiation

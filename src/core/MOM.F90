@@ -942,14 +942,14 @@ end function step_MOM
 ! ============================================================================
 
 subroutine find_total_transport(u_in, v_in, h_in, uh_tot, vh_tot, dt, G, CS)
-  real, dimension(NXMEMQ_,NYMEM_,NZ_), intent(in)    :: u_in
-  real, dimension(NXMEM_,NYMEMQ_,NZ_), intent(in)    :: v_in
-  real,                                intent(in)    :: dt
-  real, dimension(NXMEMQ_,NYMEM_),     intent(out)   :: uh_tot
-  real, dimension(NXMEM_,NYMEMQ_),     intent(out)   :: vh_tot
-  real, dimension(NXMEM_,NYMEM_,NZ_),  intent(in)    :: h_in
-  type(ocean_grid_type),               intent(inout) :: G
-  type(MOM_control_struct),            pointer       :: CS
+  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(in)    :: u_in
+  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(in)    :: v_in
+  real,                                   intent(in)    :: dt
+  real, dimension(NXMEMQ_,NYMEM_),        intent(out)   :: uh_tot
+  real, dimension(NXMEM_,NYMEMQ_),        intent(out)   :: vh_tot
+  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(in)    :: h_in
+  type(ocean_grid_type),                  intent(inout) :: G
+  type(MOM_control_struct),               pointer       :: CS
 !   This subroutine determines the vertically summed transport based on input
 ! velocities and thicknesses.  The individual layers' transports are not retained.
 
@@ -1940,14 +1940,14 @@ end subroutine set_restart_fields
 ! ============================================================================
 
 subroutine calculate_surface_state(state, u, v, h, ssh, G, CS, p_atm)
-  type(surface),                               intent(inout) :: state
-  real, target, dimension(NXMEMQ_,NYMEM_,NZ_), intent(in)    :: u
-  real, target, dimension(NXMEM_,NYMEMQ_,NZ_), intent(in)    :: v
-  real, target, dimension(NXMEM_,NYMEM_,NZ_),  intent(in)    :: h
-  real, target, dimension(NXMEM_,NYMEM_),      intent(inout) :: ssh
-  type(ocean_grid_type),                       intent(inout) :: G
-  type(MOM_control_struct),                    intent(in)    :: CS
-  real, optional, pointer, dimension(:,:)                    :: p_atm
+  type(surface),                                  intent(inout) :: state
+  real, target, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(in)    :: u
+  real, target, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(in)    :: v
+  real, target, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(in)    :: h
+  real, target, dimension(NXMEM_,NYMEM_),         intent(inout) :: ssh
+  type(ocean_grid_type),                          intent(inout) :: G
+  type(MOM_control_struct),                       intent(in)    :: CS
+  real, optional, pointer, dimension(:,:)                       :: p_atm
 !   This subroutine sets the surface (return) properties of the ocean
 ! model by setting the appropriate pointers in state.  Unused fields
 ! are set to NULL.

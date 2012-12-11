@@ -164,15 +164,15 @@ integer :: id_clock_geothermal, id_clock_double_diff, id_clock_remap
 contains
 
 subroutine diabatic(u, v, h, tv, fluxes, visc, dt, G, CS)
-  real, dimension(NXMEMQ_,NYMEM_,NZ_), intent(inout) :: u
-  real, dimension(NXMEM_,NYMEMQ_,NZ_), intent(inout) :: v
-  real, dimension(NXMEM_,NYMEM_,NZ_),  intent(inout) :: h
-  type(thermo_var_ptrs),               intent(inout) :: tv
-  type(forcing),                       intent(inout) :: fluxes
-  type(vertvisc_type),                 intent(inout) :: visc
-  real,                                intent(in)    :: dt
-  type(ocean_grid_type),               intent(inout) :: G
-  type(diabatic_CS),                   pointer       :: CS
+  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(inout) :: u
+  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(inout) :: v
+  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(inout) :: h
+  type(thermo_var_ptrs),                  intent(inout) :: tv
+  type(forcing),                          intent(inout) :: fluxes
+  type(vertvisc_type),                    intent(inout) :: visc
+  real,                                   intent(in)    :: dt
+  type(ocean_grid_type),                  intent(inout) :: G
+  type(diabatic_CS),                      pointer       :: CS
 !    This subroutine imposes the diapycnal mass fluxes and the
 !  accompanying diapycnal advection of momentum and tracers.
 
@@ -894,12 +894,12 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, dt, G, CS)
 end subroutine diabatic
 
 subroutine adiabatic(h, tv, fluxes, dt, G, CS)
-  real, dimension(NXMEM_,NYMEM_,NZ_),  intent(inout) :: h
-  type(thermo_var_ptrs),               intent(inout) :: tv
-  type(forcing),                       intent(inout) :: fluxes
-  real,                                intent(in)    :: dt
-  type(ocean_grid_type),               intent(inout) :: G
-  type(diabatic_CS),                   pointer       :: CS
+  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(inout) :: h
+  type(thermo_var_ptrs),                  intent(inout) :: tv
+  type(forcing),                          intent(inout) :: fluxes
+  real,                                   intent(in)    :: dt
+  type(ocean_grid_type),                  intent(inout) :: G
+  type(diabatic_CS),                      pointer       :: CS
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
     zeros    ! An array of zeros.
@@ -912,10 +912,10 @@ subroutine adiabatic(h, tv, fluxes, dt, G, CS)
 end subroutine adiabatic
 
 subroutine make_frazil(h, tv, G, CS)
-  real, dimension(NXMEM_,NYMEM_,NZ_), intent(in)    :: h
-  type(thermo_var_ptrs),              intent(inout) :: tv
-  type(ocean_grid_type),              intent(in)    :: G
-  type(diabatic_CS),                  intent(in)    :: CS
+  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(in)    :: h
+  type(thermo_var_ptrs),                 intent(inout) :: tv
+  type(ocean_grid_type),                 intent(in)    :: G
+  type(diabatic_CS),                     intent(in)    :: CS
 
 !   Frazil formation keeps the temperature above the freezing point.
 ! This subroutine warms any water that is colder than the (currently
@@ -1023,11 +1023,11 @@ subroutine make_frazil(h, tv, G, CS)
 end subroutine make_frazil
 
 subroutine double_diffuse_T_S(h, tv, visc, dt, G)
-  real, dimension(NXMEM_,NYMEM_,NZ_), intent(in)    :: h
-  type(thermo_var_ptrs),              intent(inout) :: tv
-  type(vertvisc_type),                intent(in)    :: visc
-  real,                               intent(in)    :: dt
-  type(ocean_grid_type),              intent(in)    :: G
+  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(in)    :: h
+  type(thermo_var_ptrs),                 intent(inout) :: tv
+  type(vertvisc_type),                   intent(in)    :: visc
+  real,                                  intent(in)    :: dt
+  type(ocean_grid_type),                 intent(in)    :: G
 
 ! This subroutine applies double diffusion to T & S, assuming no diapycal mass
 ! fluxes, using a simple triadiagonal solver.
@@ -1127,10 +1127,10 @@ subroutine double_diffuse_T_S(h, tv, visc, dt, G)
 end subroutine double_diffuse_T_S
 
 subroutine adjust_salt(h, tv, G, CS)
-  real, dimension(NXMEM_,NYMEM_,NZ_), intent(in)    :: h
-  type(thermo_var_ptrs),              intent(inout) :: tv
-  type(ocean_grid_type),              intent(in)    :: G
-  type(diabatic_CS),                  intent(in)    :: CS
+  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(in)    :: h
+  type(thermo_var_ptrs),                 intent(inout) :: tv
+  type(ocean_grid_type),                 intent(in)    :: G
+  type(diabatic_CS),                     intent(in)    :: CS
   
 !  Keep salinity from falling below a small but positive threshold
 !  This occurs when the ice model attempts to extract more salt then
@@ -1439,12 +1439,12 @@ subroutine diabatic_driver_end(CS)
 end subroutine diabatic_driver_end
 
 subroutine find_uv_at_h(u, v, h, u_h, v_h, G, ea, eb)
-  real, dimension(NXMEMQ_,NYMEM_,NZ_), intent(in)  :: u
-  real, dimension(NXMEM_,NYMEMQ_,NZ_), intent(in)  :: v
-  real, dimension(NXMEM_,NYMEM_,NZ_),  intent(in)  :: h
-  real, dimension(NXMEM_,NYMEM_,NZ_),  intent(out) :: u_h, v_h
-  type(ocean_grid_type),               intent(in)  :: G
-  real, dimension(NXMEM_,NYMEM_,NZ_),  intent(in), optional  :: ea, eb
+  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(in)  :: u
+  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(in)  :: v
+  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(in)  :: h
+  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(out) :: u_h, v_h
+  type(ocean_grid_type),                  intent(in)  :: G
+  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(in), optional  :: ea, eb
 !   This subroutine calculates u_h and v_h (velocities at thickness
 ! points), optionally using the entrainments (in m) passed in as arguments.
 
@@ -1538,11 +1538,11 @@ subroutine find_uv_at_h(u, v, h, u_h, v_h, G, ea, eb)
 end subroutine find_uv_at_h
 
 subroutine MOM_state_chksum(mesg, u, v, h, G)
-  character(len=*),                    intent(in) :: mesg
-  real, dimension(NXMEMQ_,NYMEM_,NZ_), intent(in) :: u
-  real, dimension(NXMEM_,NYMEMQ_,NZ_), intent(in) :: v
-  real, dimension(NXMEM_,NYMEM_,NZ_),  intent(in) :: h
-  type(ocean_grid_type),               intent(in) :: G
+  character(len=*),                       intent(in) :: mesg
+  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(in) :: u
+  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(in) :: v
+  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(in) :: h
+  type(ocean_grid_type),                  intent(in) :: G
 !   This subroutine writes out chksums for the model's basic state variables.
 ! Arguments: mesg - A message that appears on the chksum lines.
 !  (in)      u - Zonal velocity, in m s-1.

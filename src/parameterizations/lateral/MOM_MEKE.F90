@@ -78,12 +78,12 @@ integer :: id_clock_pass
 contains
 
 subroutine step_forward_MEKE(MEKE, h, visc, dt, G, CS)
-  type(MEKE_type),                    pointer       :: MEKE 
-  real, dimension(NXMEM_,NYMEM_,NZ_), intent(in)    :: h
-  type(vertvisc_type),                intent(in)    :: visc
-  real,                               intent(in)    :: dt
-  type(ocean_grid_type),              intent(inout) :: G
-  type(MEKE_CS),                      pointer       :: CS
+  type(MEKE_type),                       pointer       :: MEKE 
+  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(in)    :: h
+  type(vertvisc_type),                   intent(in)    :: visc
+  real,                                  intent(in)    :: dt
+  type(ocean_grid_type),                 intent(inout) :: G
+  type(MEKE_CS),                         pointer       :: CS
 
 ! Arguments: MEKE - A structure with MEKE-related fields (intent in/out).
 !  (in)      h - Layer thickness, in m or kg m-2.

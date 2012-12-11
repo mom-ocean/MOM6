@@ -91,7 +91,7 @@ type, public :: sum_output_CS ; private
   type(Depth_List), pointer, dimension(:) :: DL => NULL() ! The sorted depth list.
   integer :: list_size          ! =nxtot*nytot length of sorting vector
 
-  integer PTR_, dimension(NZ_) :: lH
+  integer PTR_, dimension(NKMEM_) :: lH
                                 ! This saves the entry in DL with a volume just
                                 ! less than the volume of fluid below the
                                 ! interface.
@@ -286,15 +286,15 @@ subroutine MOM_sum_output_end(CS)
 end subroutine MOM_sum_output_end
 
 subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
-  real, dimension(NXMEMQ_,NYMEM_,NZ_), intent(in)    :: u
-  real, dimension(NXMEM_,NYMEMQ_,NZ_), intent(in)    :: v
-  real, dimension(NXMEM_,NYMEM_,NZ_),  intent(in)    :: h
-  type(thermo_var_ptrs),               intent(in)    :: tv
-  type(time_type),                     intent(inout) :: day
-  integer,                             intent(in)    :: n
-  type(ocean_grid_type),               intent(in)    :: G
-  type(Sum_output_CS),                 pointer       :: CS
-  type(tracer_flow_control_CS), optional, pointer    :: tracer_CSp
+  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(in)    :: u
+  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(in)    :: v
+  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(in)    :: h
+  type(thermo_var_ptrs),                  intent(in)    :: tv
+  type(time_type),                        intent(inout) :: day
+  integer,                                intent(in)    :: n
+  type(ocean_grid_type),                  intent(in)    :: G
+  type(Sum_output_CS),                    pointer       :: CS
+  type(tracer_flow_control_CS), optional, pointer       :: tracer_CSp
 
 
 !  This subroutine calculates and writes the total model energy, the

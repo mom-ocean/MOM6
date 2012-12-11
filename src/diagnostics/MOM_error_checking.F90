@@ -49,8 +49,8 @@ contains
 subroutine check_redundant_v3d(mesg, u_comp, v_comp, G, is, ie, js, je, &
                                direction, stagger)
   character(len=*),                    intent(in)    :: mesg
-  real, dimension(NXMEMQ_,NYMEM_,NZ_), intent(in)    :: u_comp
-  real, dimension(NXMEM_,NYMEMQ_,NZ_), intent(in)    :: v_comp
+  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(in) :: u_comp
+  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(in) :: v_comp
   type(ocean_grid_type),               intent(inout) :: G
   integer,                   optional, intent(in)    :: is, ie, js, je
   integer,                   optional, intent(in)    :: direction
@@ -149,7 +149,7 @@ end subroutine  check_redundant_v2d
 
 subroutine check_redundant_s3d(mesg, array, G, is, ie, js, je, stagger)
   character(len=*),                     intent(in)    :: mesg
-  real, dimension(NXMEMQ_,NYMEMQ_,NZ_), intent(in)   :: array
+  real, dimension(NXMEMQ_,NYMEMQ_,NKMEM_), intent(in) :: array
   type(ocean_grid_type),                intent(inout) :: G
   integer,                    optional, intent(in)    :: is, ie, js, je
   integer,                    optional, intent(in)    :: stagger

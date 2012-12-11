@@ -125,13 +125,13 @@ end type set_visc_CS
 contains
 
 subroutine set_viscous_BBL(u, v, h, tv, visc, G, CS)
-  real, dimension(NXMEMQ_,NYMEM_,NZ_), intent(in) :: u
-  real, dimension(NXMEM_,NYMEMQ_,NZ_), intent(in) :: v
-  real, dimension(NXMEM_,NYMEM_,NZ_),  intent(in) :: h
-  type(thermo_var_ptrs),               intent(in) :: tv
-  type(vertvisc_type),              intent(inout) :: visc
-  type(ocean_grid_type),            intent(inout) :: G
-  type(set_visc_CS),                   pointer    :: CS
+  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(in) :: u
+  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(in) :: v
+  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(in) :: h
+  type(thermo_var_ptrs),                  intent(in) :: tv
+  type(vertvisc_type),                 intent(inout) :: visc
+  type(ocean_grid_type),               intent(inout) :: G
+  type(set_visc_CS),                      pointer    :: CS
 !   The following subroutine calculates the thickness of the bottom
 ! boundary layer and the viscosity within that layer.  A drag law is
 ! used, either linearized about an assumed bottom velocity or using
@@ -773,11 +773,11 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, CS)
 end subroutine set_viscous_BBL
 
 function set_v_at_u(v, h, G, i, j, k)
-  real, dimension(NXMEM_,NYMEMQ_,NZ_), intent(in) :: v
-  real, dimension(NXMEM_,NYMEM_,NZ_),  intent(in) :: h
-  type(ocean_grid_type),               intent(in) :: G
-  integer,                             intent(in) :: i, j, k
-  real                                            :: set_v_at_u
+  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(in) :: v
+  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(in) :: h
+  type(ocean_grid_type),                  intent(in) :: G
+  integer,                                intent(in) :: i, j, k
+  real                                               :: set_v_at_u
   ! This subroutine finds a thickness-weighted value of v at the u-points.
   real :: hwt(4)           ! Masked weights used to average v onto u, in H.
   real :: hwt_tot          ! The sum of the masked thicknesses, in H.
@@ -794,11 +794,11 @@ function set_v_at_u(v, h, G, i, j, k)
 end function set_v_at_u
 
 function set_u_at_v(u, h, G, i, j, k)
-  real, dimension(NXMEMQ_,NYMEM_,NZ_), intent(in) :: u
-  real, dimension(NXMEM_,NYMEM_,NZ_),  intent(in) :: h
-  type(ocean_grid_type),               intent(in) :: G
-  integer,                             intent(in) :: i, j, k
-  real                                            :: set_u_at_v
+  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(in) :: u
+  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(in) :: h
+  type(ocean_grid_type),                  intent(in) :: G
+  integer,                                intent(in) :: i, j, k
+  real                                               :: set_u_at_v
   ! This subroutine finds a thickness-weighted value of u at the v-points.
   real :: hwt(4)           ! Masked weights used to average u onto v, in H.
   real :: hwt_tot          ! The sum of the masked thicknesses, in H.
@@ -815,15 +815,15 @@ function set_u_at_v(u, h, G, i, j, k)
 end function set_u_at_v
 
 subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
-  real, dimension(NXMEMQ_,NYMEM_,NZ_), intent(in) :: u
-  real, dimension(NXMEM_,NYMEMQ_,NZ_), intent(in) :: v
-  real, dimension(NXMEM_,NYMEM_,NZ_),  intent(in) :: h
-  type(thermo_var_ptrs),               intent(in) :: tv
-  type(forcing),                       intent(in) :: fluxes
-  type(vertvisc_type),              intent(inout) :: visc
-  real,                                intent(in) :: dt
-  type(ocean_grid_type),            intent(inout) :: G
-  type(set_visc_CS),                   pointer    :: CS
+  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(in) :: u
+  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(in) :: v
+  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(in) :: h
+  type(thermo_var_ptrs),               intent(in)    :: tv
+  type(forcing),                       intent(in)    :: fluxes
+  type(vertvisc_type),                 intent(inout) :: visc
+  real,                                intent(in)    :: dt
+  type(ocean_grid_type),               intent(inout) :: G
+  type(set_visc_CS),                   pointer       :: CS
 !   The following subroutine calculates the thickness of the surface boundary
 ! layer for applying an elevated viscosity.  A bulk Richardson criterion or
 ! the thickness of the topmost NKML layers (with a bulk mixed layer) are

@@ -71,14 +71,14 @@ end type user_change_diff_CS
 contains
 
 subroutine user_change_diff(h, tv, G, CS, Kd, Kd_int, T_f, S_f, Kd_int_add)
-  real, dimension(NXMEM_,NYMEM_,NZ_),   intent(in)    :: h
+  real, dimension(NXMEM_,NYMEM_,NKMEM_),   intent(in)    :: h
   type(thermo_var_ptrs),                intent(in)    :: tv
   type(ocean_grid_type),                intent(in)    :: G
   type(user_change_diff_CS),            pointer       :: CS
-  real, dimension(NXMEM_,NYMEM_,NZ_),   optional, intent(inout) :: Kd
-  real, dimension(NXMEM_,NYMEM_,NZp1_), optional, intent(inout) :: Kd_int
-  real, dimension(NXMEM_,NYMEM_,NZ_),   optional, intent(in)    :: T_f
-  real, dimension(NXMEM_,NYMEM_,NZ_),   optional, intent(in)    :: S_f
+  real, dimension(NXMEM_,NYMEM_,NKMEM_),   optional, intent(inout) :: Kd
+  real, dimension(NXMEM_,NYMEM_,NK_INTERFACE_), optional, intent(inout) :: Kd_int
+  real, dimension(NXMEM_,NYMEM_,NKMEM_),   optional, intent(in)    :: T_f
+  real, dimension(NXMEM_,NYMEM_,NKMEM_),   optional, intent(in)    :: S_f
   real, dimension(:,:,:),               optional, pointer       :: Kd_int_add
 !   This subroutine provides an interface for a user to use to modify the
 ! main code to alter the diffusivities as needed.  The specific example

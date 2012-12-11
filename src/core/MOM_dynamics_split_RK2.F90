@@ -158,29 +158,29 @@ subroutine step_MOM_dyn_split_RK2(u_in, v_in, h_in, eta_in, uhbt_in, vhbt_in, &
                  Time_local, dt, fluxes, p_surf_begin, p_surf_end, &
                  dt_since_flux, dt_therm, uh, vh, u_av, v_av, h_av, eta_av, &
                  u_out, v_out, h_out, eta_out, G, CS)
-  real, dimension(NXMEMQ_,NYMEM_,NZ_), target, intent(in) :: u_in
-  real, dimension(NXMEM_,NYMEMQ_,NZ_), target, intent(in) :: v_in
-  real, dimension(NXMEM_,NYMEM_,NZ_),  intent(in)    :: h_in
-  real, dimension(NXMEM_,NYMEM_),      intent(inout) :: eta_in
-  real, dimension(NXMEMQ_,NYMEM_),     intent(inout) :: uhbt_in
-  real, dimension(NXMEM_,NYMEMQ_),     intent(inout) :: vhbt_in
-  type(time_type),                     intent(in)    :: Time_local
-  real,                                intent(in)    :: dt
-  type(forcing),                       intent(in)    :: fluxes
-  real, dimension(:,:),                pointer       :: p_surf_begin, p_surf_end
-  real,                                intent(in)    :: dt_since_flux, dt_therm
-  real, dimension(NXMEMQ_,NYMEM_,NZ_), target, intent(inout) :: uh
-  real, dimension(NXMEM_,NYMEMQ_,NZ_), target, intent(inout) :: vh
-  real, dimension(NXMEMQ_,NYMEM_,NZ_), target, intent(inout) :: u_av
-  real, dimension(NXMEM_,NYMEMQ_,NZ_), target, intent(inout) :: v_av
-  real, dimension(NXMEM_,NYMEM_,NZ_),  intent(inout) :: h_av
-  real, dimension(NXMEM_,NYMEM_),      intent(out)   :: eta_av
-  real, dimension(NXMEMQ_,NYMEM_,NZ_), intent(out)   :: u_out
-  real, dimension(NXMEM_,NYMEMQ_,NZ_), intent(out)   :: v_out
-  real, dimension(NXMEM_,NYMEM_,NZ_),  intent(out)   :: h_out
-  real, dimension(NXMEM_,NYMEM_),      intent(out)   :: eta_out
-  type(ocean_grid_type),               intent(inout) :: G
-  type(MOM_control_struct),           pointer       :: CS
+  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), target, intent(in) :: u_in
+  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), target, intent(in) :: v_in
+  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(in)    :: h_in
+  real, dimension(NXMEM_,NYMEM_),         intent(inout) :: eta_in
+  real, dimension(NXMEMQ_,NYMEM_),        intent(inout) :: uhbt_in
+  real, dimension(NXMEM_,NYMEMQ_),        intent(inout) :: vhbt_in
+  type(time_type),                        intent(in)    :: Time_local
+  real,                                   intent(in)    :: dt
+  type(forcing),                          intent(in)    :: fluxes
+  real, dimension(:,:),                   pointer       :: p_surf_begin, p_surf_end
+  real,                                   intent(in)    :: dt_since_flux, dt_therm
+  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), target, intent(inout) :: uh
+  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), target, intent(inout) :: vh
+  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), target, intent(inout) :: u_av
+  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), target, intent(inout) :: v_av
+  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(inout) :: h_av
+  real, dimension(NXMEM_,NYMEM_),         intent(out)   :: eta_av
+  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(out)   :: u_out
+  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(out)   :: v_out
+  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(out)   :: h_out
+  real, dimension(NXMEM_,NYMEM_),         intent(out)   :: eta_out
+  type(ocean_grid_type),                  intent(inout) :: G
+  type(MOM_control_struct),               pointer       :: CS
 ! Arguments: u_in - The input zonal velocity, in m s-1.
 !  (in)      v_in - The input meridional velocity, in m s-1.
 !  (in)      h_in - The input layer thicknesses, in m or kg m-2, depending on
@@ -1040,15 +1040,15 @@ subroutine register_restarts_dyn_split_RK2(G, param_file, CS, restart_CS)
 end subroutine register_restarts_dyn_split_RK2
 
 subroutine initialize_dyn_split_RK2(u, v, h, Time, G, param_file, diag, CS, restart_CS)
-  real, dimension(NXMEMQ_,NYMEM_,NZ_), intent(inout) :: u
-  real, dimension(NXMEM_,NYMEMQ_,NZ_), intent(inout) :: v
-  real, dimension(NXMEM_,NYMEM_,NZ_) , intent(inout) :: h
-  type(time_type),             target, intent(in)    :: Time
-  type(ocean_grid_type),               intent(inout) :: G
-  type(param_file_type),               intent(in)    :: param_file
-  type(diag_ptrs),             target, intent(inout) :: diag
-  type(MOM_control_struct),           intent(inout) :: CS
-  type(MOM_restart_CS),               pointer       :: restart_CS
+  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(inout) :: u
+  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(inout) :: v
+  real, dimension(NXMEM_,NYMEM_,NKMEM_) , intent(inout) :: h
+  type(time_type),                target, intent(in)    :: Time
+  type(ocean_grid_type),                  intent(inout) :: G
+  type(param_file_type),                  intent(in)    :: param_file
+  type(diag_ptrs),                target, intent(inout) :: diag
+  type(MOM_control_struct),               intent(inout) :: CS
+  type(MOM_restart_CS),                   pointer       :: restart_CS
 
   !   This subroutine initializes any variables that are specific to this time
   ! stepping scheme, including the cpu clocks.

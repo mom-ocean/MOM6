@@ -100,18 +100,18 @@ contains
 
 subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, CS, ea, eb, &
                                  kb_out, Kd_Lay, Kd_int)
-  real, dimension(NXMEMQ_,NYMEM_,NZ_), intent(in)  :: u
-  real, dimension(NXMEM_,NYMEMQ_,NZ_), intent(in)  :: v
-  real, dimension(NXMEM_,NYMEM_,NZ_),  intent(in)  :: h
-  type(thermo_var_ptrs),               intent(in)  :: tv
-  type(forcing),                       intent(in)  :: fluxes
-  real,                                intent(in)  :: dt
-  type(ocean_grid_type),               intent(in)  :: G
-  type(entrain_diffusive_CS),          pointer     :: CS
-  real, dimension(NXMEM_,NYMEM_,NZ_),  intent(out) :: ea, eb
+  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(in)  :: u
+  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(in)  :: v
+  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(in)  :: h
+  type(thermo_var_ptrs),                  intent(in)  :: tv
+  type(forcing),                          intent(in)  :: fluxes
+  real,                                   intent(in)  :: dt
+  type(ocean_grid_type),                  intent(in)  :: G
+  type(entrain_diffusive_CS),             pointer     :: CS
+  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(out) :: ea, eb
   integer, dimension(NXMEM_,NYMEM_), optional, intent(inout) :: kb_out
-  real, dimension(NXMEM_,NYMEM_,NZ_),   optional, intent(in) :: Kd_Lay
-  real, dimension(NXMEM_,NYMEM_,NZp1_), optional, intent(in) :: Kd_int
+  real, dimension(NXMEM_,NYMEM_,NKMEM_),   optional, intent(in) :: Kd_Lay
+  real, dimension(NXMEM_,NYMEM_,NK_INTERFACE_), optional, intent(in) :: Kd_int
 
 !   This subroutine calculates ea and eb, the rates at which a layer
 ! entrains from the layers above and below.  The entrainment rates
@@ -901,17 +901,17 @@ end subroutine entrainment_diffusive
 
 
 subroutine F_to_ent(F, h, kb, kmb, j, G, CS, dsp1_ds, eakb, Ent_bl, ea, eb, do_i_in)
-  real, dimension(NXMEM_,NZ_),          intent(in)    :: F
-  real, dimension(NXMEM_,NYMEM_,NZ_),   intent(in)    :: h
-  integer, dimension(NXMEM_),           intent(in)    :: kb
-  integer,                              intent(in)    :: kmb, j
-  type(ocean_grid_type),                intent(in)    :: G
-  type(entrain_diffusive_CS),           intent(in)    :: CS
-  real, dimension(NXMEM_,NZ_),          intent(in)    :: dsp1_ds
-  real, dimension(NXMEM_),              intent(in)    :: eakb
-  real, dimension(NXMEM_,NZ_),          intent(in)    :: Ent_bl
-  real, dimension(NXMEM_,NYMEM_,NZ_),   intent(inout) :: ea, eb
-  logical, dimension(NXMEM_), optional, intent(in)    :: do_i_in
+  real, dimension(NXMEM_,NKMEM_),        intent(in)    :: F
+  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(in)    :: h
+  integer, dimension(NXMEM_),            intent(in)    :: kb
+  integer,                               intent(in)    :: kmb, j
+  type(ocean_grid_type),                 intent(in)    :: G
+  type(entrain_diffusive_CS),            intent(in)    :: CS
+  real, dimension(NXMEM_,NKMEM_),        intent(in)    :: dsp1_ds
+  real, dimension(NXMEM_),               intent(in)    :: eakb
+  real, dimension(NXMEM_,NKMEM_),        intent(in)    :: Ent_bl
+  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(inout) :: ea, eb
+  logical, dimension(NXMEM_),  optional, intent(in)    :: do_i_in
 !   This subroutine calculates the actual entrainments (ea and eb) and the
 ! amount of surface forcing that is applied to each layer if there is no bulk
 ! mixed layer.
@@ -1008,8 +1008,8 @@ subroutine F_to_ent(F, h, kb, kmb, j, G, CS, dsp1_ds, eakb, Ent_bl, ea, eb, do_i
 end subroutine F_to_ent
 
 subroutine set_Ent_bl(h, dtKd_int, tv, kb, kmb, do_i, G, CS, j, Ent_bl, Sref, h_bl)
-  real, dimension(NXMEM_,NYMEM_,NZ_),   intent(in)  :: h
-  real, dimension(NXMEM_,NZp1_),        intent(in)  :: dtKd_int
+  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(in)  :: h
+  real, dimension(NXMEM_,NK_INTERFACE_), intent(in)  :: dtKd_int
   type(thermo_var_ptrs),                intent(in)  :: tv
   integer, dimension(NXMEM_),           intent(inout) :: kb
   integer,                              intent(in)  :: kmb
@@ -1017,8 +1017,8 @@ subroutine set_Ent_bl(h, dtKd_int, tv, kb, kmb, do_i, G, CS, j, Ent_bl, Sref, h_
   type(ocean_grid_type),                intent(in)  :: G
   type(entrain_diffusive_CS),           pointer     :: CS
   integer,                              intent(in)  :: j
-  real, dimension(NXMEM_,NZp1_),        intent(out) :: Ent_bl
-  real, dimension(NXMEM_,NZ_),          intent(out) :: Sref, h_bl
+  real, dimension(NXMEM_,NK_INTERFACE_), intent(out) :: Ent_bl
+  real, dimension(NXMEM_,NKMEM_),       intent(out) :: Sref, h_bl
 ! Arguments: h - Layer thickness, in m or kg m-2 (abbreviated as H below).
 !  (in)      dtKd_int - The diapycnal diffusivity across each interface times
 !                       the time step, in H2.
@@ -1170,7 +1170,7 @@ end subroutine set_Ent_bl
 
 subroutine determine_dSkb(h_bl, Sref, Ent_bl, E_kb, is, ie, kmb, G, limit, &
                           dSkb, ddSkb_dE, dSlay, ddSlay_dE, dS_anom_lim, do_i_in)
-  real, dimension(NXMEM_,NZ_), intent(in)    :: h_bl, Sref, Ent_bl
+  real, dimension(NXMEM_,NKMEM_), intent(in) :: h_bl, Sref, Ent_bl
   real, dimension(NXMEM_),     intent(in)    :: E_kb
   integer,                     intent(in)    :: is, ie, kmb
   type(ocean_grid_type),       intent(in)    :: G
@@ -1398,7 +1398,7 @@ end subroutine determine_dSkb
 
 subroutine F_kb_to_ea_kb(h_bl, Sref, Ent_bl, I_dSkbp1, F_kb, kmb, i, &
                          G, CS, ea_kb, tol_in)
-  real, dimension(NXMEM_,NZ_), intent(in)    :: h_bl, Sref, Ent_bl
+  real, dimension(NXMEM_,NKMEM_), intent(in) :: h_bl, Sref, Ent_bl
   real, dimension(NXMEM_),     intent(in)    :: I_dSkbp1, F_kb
   integer,                     intent(in)    :: kmb, i
   type(ocean_grid_type),       intent(in)    :: G
@@ -1514,7 +1514,7 @@ end subroutine F_kb_to_ea_kb
 subroutine determine_Ea_kb(h_bl, dtKd_kb, Sref, I_dSkbp1, Ent_bl, ea_kbp1, &
                            min_eakb, max_eakb, kmb, is, ie, do_i, G, CS, Ent, &
                            error, err_min_eakb0, err_max_eakb0, F_kb, dFdfm_kb)
-  real, dimension(NXMEM_,NZ_), intent(in)  :: h_bl, Sref, Ent_bl
+  real, dimension(NXMEM_,NKMEM_), intent(in) :: h_bl, Sref, Ent_bl
   real, dimension(NXMEM_),     intent(in)  :: I_dSkbp1, dtKd_kb, ea_kbp1
   real, dimension(NXMEM_),     intent(in)  :: min_eakb, max_eakb
   integer,                     intent(in)  :: kmb, is, ie
@@ -1711,7 +1711,7 @@ end subroutine determine_Ea_kb
 subroutine find_maxF_kb(h_bl, Sref, Ent_bl, I_dSkbp1, min_ent_in, max_ent_in, &
                         kmb, is, ie, G, CS, maxF, ent_maxF, do_i_in, &
                         F_lim_maxent, F_thresh)
-  real, dimension(NXMEM_,NZ_), intent(in)  :: h_bl, Sref, Ent_bl
+  real, dimension(NXMEM_,NKMEM_), intent(in) :: h_bl, Sref, Ent_bl
   real, dimension(NXMEM_),     intent(in)  :: I_dSkbp1, min_ent_in, max_ent_in
   integer,                     intent(in)  :: kmb, is, ie
   type(ocean_grid_type),       intent(in)  :: G

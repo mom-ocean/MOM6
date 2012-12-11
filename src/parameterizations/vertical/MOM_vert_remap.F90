@@ -107,12 +107,12 @@ integer :: id_clock_pass, id_clock_EOS
 contains
 
 subroutine vert_remap(h, tv, dt, ea, eb, G, CS)
-  real, dimension(NXMEM_,NYMEM_,NZ_), intent(inout) :: h
-  type(thermo_var_ptrs),              intent(inout) :: tv
-  real,                               intent(in)    :: dt
-  real, dimension(NXMEM_,NYMEM_,NZ_), intent(inout) :: ea, eb
-  type(ocean_grid_type),              intent(inout) :: G
-  type(vert_remap_CS),                pointer       :: CS
+  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(inout) :: h
+  type(thermo_var_ptrs),                 intent(inout) :: tv
+  real,                                  intent(in)    :: dt
+  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(inout) :: ea, eb
+  type(ocean_grid_type),                 intent(inout) :: G
+  type(vert_remap_CS),                   pointer       :: CS
 
 !    This subroutine partially steps the bulk mixed layer model.
 !  The following processes are executed, in the order listed.
@@ -152,12 +152,12 @@ subroutine vert_remap(h, tv, dt, ea, eb, G, CS)
 end subroutine vert_remap
 
 subroutine regularize_surface(h, tv, dt, ea, eb, G, CS)
-  real, dimension(NXMEM_,NYMEM_,NZ_), intent(inout) :: h
-  type(thermo_var_ptrs),              intent(inout) :: tv
-  real,                               intent(in)    :: dt
-  real, dimension(NXMEM_,NYMEM_,NZ_), intent(inout) :: ea, eb
-  type(ocean_grid_type),              intent(inout) :: G
-  type(vert_remap_CS),                pointer       :: CS
+  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(inout) :: h
+  type(thermo_var_ptrs),                 intent(inout) :: tv
+  real,                                  intent(in)    :: dt
+  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(inout) :: ea, eb
+  type(ocean_grid_type),                 intent(inout) :: G
+  type(vert_remap_CS),                   pointer       :: CS
 
 !    This subroutine ensures that there is a degree of horizontal smoothness
 !  in the depths of the near-surface interfaces.
@@ -746,7 +746,7 @@ end subroutine regularize_surface
 
 subroutine find_deficit_ratios(e, def_rat_u, def_rat_v, G, CS, &
                                def_rat_u_2lay, def_rat_v_2lay, halo, h)
-  real, dimension(NXMEM_,NYMEM_,NZp1_),      intent(in)  :: e
+  real, dimension(NXMEM_,NYMEM_,NK_INTERFACE_), intent(in) :: e
   real, dimension(NXMEMQ_,NYMEM_),           intent(out) :: def_rat_u
   real, dimension(NXMEM_,NYMEMQ_),           intent(out) :: def_rat_v
   type(ocean_grid_type),                     intent(in)  :: G
@@ -754,7 +754,7 @@ subroutine find_deficit_ratios(e, def_rat_u, def_rat_v, G, CS, &
   real, dimension(NXMEMQ_,NYMEM_), optional, intent(out) :: def_rat_u_2lay
   real, dimension(NXMEM_,NYMEMQ_), optional, intent(out) :: def_rat_v_2lay
   integer,                         optional, intent(in)  :: halo
-  real, dimension(NXMEM_,NYMEM_,NZ_), optional, intent(in)  :: h
+  real, dimension(NXMEM_,NYMEM_,NKMEM_), optional, intent(in)  :: h
 ! Arguments: e - Interface depths, in m or kg m-2.
 !  (out)     def_rat_u - The thickness deficit ratio at u points, nondim.
 !  (out)     def_rat_v - The thickness deficit ratio at v points, nondim.

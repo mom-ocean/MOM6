@@ -149,7 +149,7 @@ contains
 
 subroutine register_tracer(tr1, name, param_file, CS, ad_x, ad_y, &
                            df_x, df_y, OBC_inflow, OBC_in_u, OBC_in_v)
-  real, dimension(NXMEM_,NYMEM_,NZ_), target :: tr1
+  real, dimension(NXMEM_,NYMEM_,NKMEM_), target :: tr1
   character(len=*), intent(in)               :: name
   type(param_file_type), intent(in)          :: param_file
   type(advect_tracer_CS), pointer            :: CS
@@ -333,13 +333,13 @@ end subroutine add_tracer_2d_diagnostics
 
 
 subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, CS)
-  real, dimension(NXMEM_,NYMEM_,NZ_),  intent(in)    :: h_end
-  real, dimension(NXMEMQ_,NYMEM_,NZ_), intent(in)    :: uhtr
-  real, dimension(NXMEM_,NYMEMQ_,NZ_), intent(in)    :: vhtr
-  type(ocean_OBC_type),                pointer       :: OBC
-  real,                                intent(in)    :: dt
-  type(ocean_grid_type),               intent(inout) :: G
-  type(advect_tracer_CS),              pointer       :: CS
+  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(in)    :: h_end
+  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(in)    :: uhtr
+  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(in)    :: vhtr
+  type(ocean_OBC_type),                   pointer       :: OBC
+  real,                                   intent(in)    :: dt
+  type(ocean_grid_type),                  intent(inout) :: G
+  type(advect_tracer_CS),                 pointer       :: CS
 !    This subroutine time steps the tracer concentration.
 !  A monotonic, conservative, weakly diffusive scheme is used.
 
@@ -546,15 +546,15 @@ end subroutine advect_tracer
 
 subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
                     is, ie, js, je, k, G)
-  type(tracer), dimension(ntr),        intent(inout) :: Tr
-  real, dimension(NXMEM_,NYMEM_,NZ_),  intent(inout) :: hprev
-  real, dimension(NXMEMQ_,NYMEM_,NZ_), intent(inout) :: uhr
-  real, dimension(NXMEMQ_,NYMEM_),     intent(inout) :: uh_neglect
-  type(ocean_OBC_type),                pointer       :: OBC
-  logical, dimension(NYMEM_,NZ_),      intent(inout) :: domore_u
-  real,                                intent(in)    :: Idt
-  integer,                             intent(in)    :: ntr, is, ie, js, je, k
-  type(ocean_grid_type),               intent(inout) :: G
+  type(tracer), dimension(ntr),           intent(inout) :: Tr
+  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(inout) :: hprev
+  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(inout) :: uhr
+  real, dimension(NXMEMQ_,NYMEM_),        intent(inout) :: uh_neglect
+  type(ocean_OBC_type),                   pointer       :: OBC
+  logical, dimension(NYMEM_,NKMEM_),      intent(inout) :: domore_u
+  real,                                   intent(in)    :: Idt
+  integer,                                intent(in)    :: ntr, is, ie, js, je,k
+  type(ocean_grid_type),                  intent(inout) :: G
   !   This subroutine does 1-d flux-form advection in the zonal direction using
   ! a monotonic piecewise linear scheme.
   real, dimension(SZIQ_(G),ntr) :: &
@@ -707,15 +707,15 @@ end subroutine advect_x
 
 subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
                     is, ie, js, je, k, G)
-  type(tracer), dimension(ntr),        intent(inout) :: Tr
-  real, dimension(NXMEM_,NYMEM_,NZ_),  intent(inout) :: hprev
-  real, dimension(NXMEM_,NYMEMQ_,NZ_), intent(inout) :: vhr
-  real, dimension(NXMEM_,NYMEMQ_),     intent(inout) :: vh_neglect
-  type(ocean_OBC_type),                pointer       :: OBC
-  logical, dimension(NYMEMQ_,NZ_),     intent(inout) :: domore_v
-  real,                                intent(in)    :: Idt
-  integer,                             intent(in)    :: ntr, is, ie, js, je, k
-  type(ocean_grid_type),               intent(inout) :: G
+  type(tracer), dimension(ntr),           intent(inout) :: Tr
+  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(inout) :: hprev
+  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(inout) :: vhr
+  real, dimension(NXMEM_,NYMEMQ_),        intent(inout) :: vh_neglect
+  type(ocean_OBC_type),                   pointer       :: OBC
+  logical, dimension(NYMEMQ_,NKMEM_),     intent(inout) :: domore_v
+  real,                                   intent(in)    :: Idt
+  integer,                                intent(in)    :: ntr, is, ie, js, je,k
+  type(ocean_grid_type),                  intent(inout) :: G
   !   This subroutine does 1-d flux-form advection using a monotonic piecewise
   ! linear scheme.
   real, dimension(SZI_(G),ntr,SZJQ_(G)) :: &
@@ -873,7 +873,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
 end subroutine advect_y
 
 subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, tv)
-  real, dimension(NXMEM_,NYMEM_,NZ_), intent(in)    :: h
+  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(in)    :: h
   real,                               intent(in)    :: dt
   type(MEKE_type),                    pointer       :: MEKE
   type(VarMix_CS),                    pointer       :: VarMix
@@ -1146,7 +1146,7 @@ end subroutine tracer_hordiff
 
 subroutine tracer_epipycnal_ML_diff(h, dt, Tr, khdt_epi_x, khdt_epi_y, G, CS, &
                                     tv, num_itts)
-  real, dimension(NXMEM_,NYMEM_,NZ_),  intent(in)    :: h
+  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(in)    :: h
   real,                                intent(in)    :: dt
   type(tracer),                        intent(inout) :: Tr(:)
   real, dimension(NXMEMQ_,NYMEM_),     intent(in)    :: khdt_epi_x
@@ -1958,10 +1958,10 @@ end subroutine tracer_epipycnal_ML_diff
 
 subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, &
                            sfc_flux, btm_flux, btm_reservoir, sink_rate)
-  real, dimension(NXMEM_,NYMEM_,NZ_), intent(in)    :: h_old, ea, eb
-  real, dimension(NXMEM_,NYMEM_,NZ_), intent(inout) :: tr
-  real,                               intent(in)    :: dt
-  type(ocean_grid_type),              intent(in)    :: G
+  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(in)    :: h_old, ea, eb
+  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(inout) :: tr
+  real,                                  intent(in)    :: dt
+  type(ocean_grid_type),                 intent(in)    :: G
   real, dimension(NXMEM_,NYMEM_), optional, intent(in) :: sfc_flux
   real, dimension(NXMEM_,NYMEM_), optional, intent(in) :: btm_flux
   real, dimension(NXMEM_,NYMEM_), optional, intent(inout) :: btm_reservoir

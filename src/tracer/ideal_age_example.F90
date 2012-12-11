@@ -280,7 +280,7 @@ subroutine initialize_ideal_age_tracer(restart, day, G, h, OBC, CS, sponge_CSp, 
   logical,                            intent(in) :: restart
   type(time_type), target,            intent(in) :: day
   type(ocean_grid_type),              intent(in) :: G
-  real, dimension(NXMEM_,NYMEM_,NZ_), intent(in) :: h
+  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(in) :: h
   type(ocean_OBC_type),               pointer    :: OBC
   type(ideal_age_tracer_CS),          pointer    :: CS
   type(sponge_CS),                    pointer    :: sponge_CSp
@@ -403,7 +403,7 @@ subroutine initialize_ideal_age_tracer(restart, day, G, h, OBC, CS, sponge_CSp, 
 end subroutine initialize_ideal_age_tracer
 
 subroutine ideal_age_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, CS)
-  real, dimension(NXMEM_,NYMEM_,NZ_), intent(in) :: h_old, h_new, ea, eb
+  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(in) :: h_old, h_new, ea, eb
   type(forcing),                      intent(in) :: fluxes
   real,                               intent(in) :: dt
   type(ocean_grid_type),              intent(in) :: G
@@ -504,7 +504,7 @@ subroutine ideal_age_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, 
 end subroutine ideal_age_tracer_column_physics
 
 function ideal_age_stock(h, stocks, G, CS, names, units, stock_index)
-  real, dimension(NXMEM_,NYMEM_,NZ_), intent(in)    :: h
+  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(in)    :: h
   real, dimension(:),                 intent(out)   :: stocks
   type(ocean_grid_type),              intent(in)    :: G
   type(ideal_age_tracer_CS),          pointer       :: CS
@@ -555,10 +555,10 @@ function ideal_age_stock(h, stocks, G, CS, names, units, stock_index)
 end function ideal_age_stock
 
 subroutine ideal_age_tracer_surface_state(state, h, G, CS)
-  type(surface),                      intent(inout) :: state
-  real, dimension(NXMEM_,NYMEM_,NZ_), intent(in)    :: h
-  type(ocean_grid_type),              intent(in)    :: G
-  type(ideal_age_tracer_CS),          pointer       :: CS
+  type(surface),                         intent(inout) :: state
+  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(in)    :: h
+  type(ocean_grid_type),                 intent(in)    :: G
+  type(ideal_age_tracer_CS),             pointer       :: CS
 !   This particular tracer package does not report anything back to the coupler.
 ! The code that is here is just a rough guide for packages that would.
 ! Arguments: state - A structure containing fields that describe the

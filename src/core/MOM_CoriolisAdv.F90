@@ -162,15 +162,15 @@ character*(20), parameter :: PV_ADV_UPWIND1_STRING = "PV_ADV_UPWIND1"
 contains
 
 subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, G, CS)
-  real, intent(in),  dimension(NXMEMQ_,NYMEM_,NZ_) :: u
-  real, intent(in),  dimension(NXMEM_,NYMEMQ_,NZ_) :: v
-  real, intent(in),  dimension(NXMEM_,NYMEM_,NZ_)  :: h
-  real, intent(in),  dimension(NXMEMQ_,NYMEM_,NZ_) :: uh
-  real, intent(in),  dimension(NXMEM_,NYMEMQ_,NZ_) :: vh
-  real, intent(out), dimension(NXMEMQ_,NYMEM_,NZ_) :: CAu
-  real, intent(out), dimension(NXMEM_,NYMEMQ_,NZ_) :: CAv
-  type(ocean_grid_type), intent(in)                :: G
-  type(CoriolisAdv_CS), pointer                    :: CS
+  real, intent(in),  dimension(NXMEMQ_,NYMEM_,NKMEM_) :: u
+  real, intent(in),  dimension(NXMEM_,NYMEMQ_,NKMEM_) :: v
+  real, intent(in),  dimension(NXMEM_,NYMEM_,NKMEM_)  :: h
+  real, intent(in),  dimension(NXMEMQ_,NYMEM_,NKMEM_) :: uh
+  real, intent(in),  dimension(NXMEM_,NYMEMQ_,NKMEM_) :: vh
+  real, intent(out), dimension(NXMEMQ_,NYMEM_,NKMEM_) :: CAu
+  real, intent(out), dimension(NXMEM_,NYMEMQ_,NKMEM_) :: CAv
+  type(ocean_grid_type), intent(in)                   :: G
+  type(CoriolisAdv_CS), pointer                       :: CS
 !    This subroutine calculates the Coriolis and momentum advection
 !  contributions to the acceleration.
 !
@@ -740,17 +740,17 @@ end subroutine CorAdCalc
 ! =========================================================================================
 
 subroutine gradKE(u, v, h, uh, vh, KE, KEx, KEy, k, G, CS)
-  real, intent(in),  dimension(NXMEMQ_,NYMEM_ ,NZ_) :: u
-  real, intent(in),  dimension(NXMEM_ ,NYMEMQ_,NZ_) :: v
-  real, intent(in),  dimension(NXMEM_ ,NYMEM_ ,NZ_) :: h
-  real, intent(in),  dimension(NXMEMQ_,NYMEM_ ,NZ_) :: uh
-  real, intent(in),  dimension(NXMEM_,NYMEMQ_ ,NZ_) :: vh
-  real, intent(out), dimension(NXMEM_ ,NYMEM_ )     :: KE
-  real, intent(out), dimension(NXMEMQ_,NYMEM_ )     :: KEx
-  real, intent(out), dimension(NXMEM_ ,NYMEMQ_)     :: KEy
-  integer, intent(in)                               :: k
-  type(ocean_grid_type), intent(in)                 :: G
-  type(CoriolisAdv_CS), pointer                     :: CS
+  real, intent(in),  dimension(NXMEMQ_,NYMEM_ ,NKMEM_) :: u
+  real, intent(in),  dimension(NXMEM_ ,NYMEMQ_,NKMEM_) :: v
+  real, intent(in),  dimension(NXMEM_ ,NYMEM_ ,NKMEM_) :: h
+  real, intent(in),  dimension(NXMEMQ_,NYMEM_ ,NKMEM_) :: uh
+  real, intent(in),  dimension(NXMEM_,NYMEMQ_ ,NKMEM_) :: vh
+  real, intent(out), dimension(NXMEM_ ,NYMEM_ )        :: KE
+  real, intent(out), dimension(NXMEMQ_,NYMEM_ )        :: KEx
+  real, intent(out), dimension(NXMEM_ ,NYMEMQ_)        :: KEy
+  integer, intent(in)                                  :: k
+  type(ocean_grid_type), intent(in)                    :: G
+  type(CoriolisAdv_CS), pointer                        :: CS
 !    This subroutine calculates the acceleration due to the gradient of kinetic energy.
 !
 ! Arguments: u   - Zonal velocity, in m s-1.

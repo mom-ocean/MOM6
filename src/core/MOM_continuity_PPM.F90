@@ -102,27 +102,27 @@ contains
 subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, CS, uhbt, vhbt, OBC, &
                           visc_rem_u, visc_rem_v, u_cor, v_cor, &
                           uhbt_aux, vhbt_aux, u_cor_aux, v_cor_aux, BT_cont)
-  real, dimension(NXMEMQ_,NYMEM_,NZ_), intent(in)    :: u
-  real, dimension(NXMEM_,NYMEMQ_,NZ_), intent(in)    :: v
-  real, dimension(NXMEM_,NYMEM_,NZ_),  intent(in)    :: hin
-  real, dimension(NXMEM_,NYMEM_,NZ_),  intent(out)   :: h
-  real, dimension(NXMEMQ_,NYMEM_,NZ_), intent(out)   :: uh
-  real, dimension(NXMEM_,NYMEMQ_,NZ_), intent(out)   :: vh
-  real,                                intent(in)    :: dt
-  type(ocean_grid_type),               intent(inout) :: G
-  type(continuity_PPM_CS),             pointer       :: CS
-  real, dimension(NXMEMQ_,NYMEM_),     intent(in),  optional :: uhbt
-  real, dimension(NXMEM_,NYMEMQ_),     intent(in),  optional :: vhbt
-  type(ocean_OBC_type),                pointer,     optional :: OBC
-  real, dimension(NXMEMQ_,NYMEM_,NZ_), intent(in),  optional :: visc_rem_u
-  real, dimension(NXMEM_,NYMEMQ_,NZ_), intent(in),  optional :: visc_rem_v
-  real, dimension(NXMEMQ_,NYMEM_,NZ_), intent(out), optional :: u_cor
-  real, dimension(NXMEM_,NYMEMQ_,NZ_), intent(out), optional :: v_cor
-  real, dimension(NXMEMQ_,NYMEM_),     intent(in),  optional :: uhbt_aux
-  real, dimension(NXMEM_,NYMEMQ_),     intent(in),  optional :: vhbt_aux
-  real, dimension(NXMEMQ_,NYMEM_,NZ_), intent(out), optional :: u_cor_aux
-  real, dimension(NXMEM_,NYMEMQ_,NZ_), intent(out), optional :: v_cor_aux
-  type(BT_cont_type),                  pointer,     optional :: BT_cont
+  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(in)    :: u
+  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(in)    :: v
+  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(in)    :: hin
+  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(out)   :: h
+  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(out)   :: uh
+  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(out)   :: vh
+  real,                                   intent(in)    :: dt
+  type(ocean_grid_type),                  intent(inout) :: G
+  type(continuity_PPM_CS),                pointer       :: CS
+  real, dimension(NXMEMQ_,NYMEM_),        intent(in),  optional :: uhbt
+  real, dimension(NXMEM_,NYMEMQ_),        intent(in),  optional :: vhbt
+  type(ocean_OBC_type),                   pointer,     optional :: OBC
+  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(in),  optional :: visc_rem_u
+  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(in),  optional :: visc_rem_v
+  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(out), optional :: u_cor
+  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(out), optional :: v_cor
+  real, dimension(NXMEMQ_,NYMEM_),        intent(in),  optional :: uhbt_aux
+  real, dimension(NXMEM_,NYMEMQ_),        intent(in),  optional :: vhbt_aux
+  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(out), optional :: u_cor_aux
+  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(out), optional :: v_cor_aux
+  type(BT_cont_type),                     pointer,     optional :: BT_cont
 !    This subroutine time steps the layer thicknesses, using a monotonically
 !  limit, directionally split PPM scheme, based on Lin (1994).  In the following
 !  documentation, H is used for the units of thickness (usually m or kg m-2.)
@@ -320,18 +320,18 @@ end subroutine continuity_PPM
 
 subroutine zonal_mass_flux(u, h_in, uh, dt, G, CS, LB, uhbt, OBC, &
                            visc_rem_u, u_cor, uhbt_aux, u_cor_aux, BT_cont)
-  real, dimension(NXMEMQ_,NYMEM_,NZ_), intent(in)    :: u
-  real,  dimension(NXMEM_,NYMEM_,NZ_), intent(in)    :: h_in
-  real, dimension(NXMEMQ_,NYMEM_,NZ_), intent(out)   :: uh
-  real,                                intent(in)    :: dt
-  type(ocean_grid_type),               intent(inout) :: G
-  type(continuity_PPM_CS),             pointer       :: CS
-  type(loop_bounds_type),              intent(in)    :: LB
-  type(ocean_OBC_type),                pointer,     optional :: OBC
-  real, dimension(NXMEMQ_,NYMEM_,NZ_), intent(in),  optional :: visc_rem_u
-  real, dimension(NXMEMQ_,NYMEM_),     intent(in),  optional :: uhbt, uhbt_aux
-  real, dimension(NXMEMQ_,NYMEM_,NZ_), intent(out), optional :: u_cor, u_cor_aux
-  type(BT_cont_type),                  pointer,     optional :: BT_cont
+  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(in)    :: u
+  real,  dimension(NXMEM_,NYMEM_,NKMEM_), intent(in)    :: h_in
+  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(out)   :: uh
+  real,                                   intent(in)    :: dt
+  type(ocean_grid_type),                  intent(inout) :: G
+  type(continuity_PPM_CS),                pointer       :: CS
+  type(loop_bounds_type),                 intent(in)    :: LB
+  type(ocean_OBC_type),                   pointer,     optional :: OBC
+  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(in),  optional :: visc_rem_u
+  real, dimension(NXMEMQ_,NYMEM_),        intent(in),  optional :: uhbt, uhbt_aux
+  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(out), optional :: u_cor, u_cor_aux
+  type(BT_cont_type),                     pointer,     optional :: BT_cont
 !   This subroutine calculates the mass or volume fluxes through the zonal
 ! faces, and other related quantities.
 ! Arguments: u - Zonal velocity, in m s-1.
@@ -657,14 +657,14 @@ subroutine zonal_flux_layer(u, h, hL, hR, uh, duhdu, visc_rem, dt, G, j, &
 end subroutine zonal_flux_layer
 
 subroutine zonal_face_thickness(u, h, hL, hR, h_u, dt, G, LB, vol_CFL, visc_rem_u)
-  real, dimension(NXMEMQ_,NYMEM_,NZ_), intent(in)    :: u
-  real, dimension(NXMEM_,NYMEM_,NZ_),  intent(in)    :: h, hL, hR
-  real, dimension(NXMEMQ_,NYMEM_,NZ_), intent(inout) :: h_u
-  real,                                intent(in)    :: dt
-  type(ocean_grid_type),               intent(inout) :: G
-  type(loop_bounds_type),              intent(in)    :: LB
-  logical,                             intent(in)    :: vol_CFL
-  real, dimension(NXMEMQ_,NYMEM_,NZ_), intent(in),  optional :: visc_rem_u
+  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(in)    :: u
+  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(in)    :: h, hL, hR
+  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(inout) :: h_u
+  real,                                   intent(in)    :: dt
+  type(ocean_grid_type),                  intent(inout) :: G
+  type(loop_bounds_type),                 intent(in)    :: LB
+  logical,                                intent(in)    :: vol_CFL
+  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(in),  optional :: visc_rem_u
 !   This subroutines sets the effective interface thickness at each zonal
 ! velocity point.
 !
@@ -723,9 +723,9 @@ end subroutine zonal_face_thickness
 subroutine zonal_flux_adjust(u, h_in, hL, hR, uhbt, uh_tot_0, duhdu_tot_0, &
                              du, du_max_CFL, du_min_CFL, dt, G, CS, visc_rem, &
                              j, ish, ieh, do_i_in, full_precision, uh_3d) 
-  real, dimension(NXMEMQ_,NYMEM_,NZ_), intent(in)    :: u
-  real, dimension(NXMEM_,NYMEM_,NZ_),  intent(in)    :: h_in, hL, hR
-  real, dimension(NXMEMQ_,NZ_),        intent(in)    :: visc_rem
+  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(in) :: u
+  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(in) :: h_in, hL, hR
+  real, dimension(NXMEMQ_,NKMEM_),        intent(in) :: visc_rem
   real, dimension(NXMEMQ_),            intent(in)    :: uhbt
   real, dimension(NXMEMQ_),            intent(in)    :: du_max_CFL, du_min_CFL
   real, dimension(NXMEMQ_),            intent(in)    :: uh_tot_0, duhdu_tot_0
@@ -736,7 +736,7 @@ subroutine zonal_flux_adjust(u, h_in, hL, hR, uhbt, uh_tot_0, duhdu_tot_0, &
   integer,                             intent(in)    :: j, ish, ieh
   logical, dimension(NXMEMQ_),         intent(in)    :: do_i_in
   logical,                             intent(in),    optional :: full_precision
-  real, dimension(NXMEMQ_,NYMEM_,NZ_), intent(inout), optional :: uh_3d
+  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(inout), optional :: uh_3d
 
 !   This subroutine returns the barotropic velocity adjustment that gives the
 ! desired barotropic (layer-summed) transport.
@@ -887,15 +887,15 @@ end subroutine zonal_flux_adjust
 subroutine set_zonal_BT_cont(u, h_in, hL, hR, BT_cont, uh_tot_0, duhdu_tot_0, &
                              du_max_CFL, du_min_CFL, dt, G, CS, visc_rem, &
                              visc_rem_max, j, ish, ieh, do_i)
-  real, dimension(NXMEMQ_,NYMEM_,NZ_), intent(in)    :: u
-  real, dimension(NXMEM_,NYMEM_,NZ_),  intent(in)    :: h_in, hL, hR
+  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(in) :: u
+  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(in) :: h_in, hL, hR
   type(BT_cont_type),                  intent(inout) :: BT_cont
   real, dimension(NXMEMQ_),            intent(in)    :: uh_tot_0, duhdu_tot_0
   real, dimension(NXMEMQ_),            intent(in)    :: du_max_CFL, du_min_CFL
   real,                                intent(in)    :: dt
   type(ocean_grid_type),               intent(inout) :: G
   type(continuity_PPM_CS),             pointer       :: CS
-  real, dimension(NXMEMQ_,NZ_),        intent(in)    :: visc_rem
+  real, dimension(NXMEMQ_,NKMEM_),     intent(in)    :: visc_rem
   real, dimension(NXMEMQ_),            intent(in)    :: visc_rem_max
   integer,                             intent(in)    :: j, ish, ieh
   logical, dimension(NXMEMQ_),         intent(in)    :: do_i
@@ -1056,18 +1056,18 @@ end subroutine set_zonal_BT_cont
 
 subroutine meridional_mass_flux(v, h_in, vh, dt, G, CS, LB, vhbt, OBC, &
                                 visc_rem_v, v_cor, vhbt_aux, v_cor_aux, BT_cont)
-  real, dimension(NXMEM_,NYMEMQ_,NZ_), intent(in)    :: v
-  real, dimension(NXMEM_,NYMEM_,NZ_),  intent(in)    :: h_in
-  real, dimension(NXMEM_,NYMEMQ_,NZ_), intent(out)   :: vh
-  real,                                intent(in)    :: dt
-  type(ocean_grid_type),               intent(inout) :: G
-  type(continuity_PPM_CS),             pointer       :: CS
-  type(loop_bounds_type),              intent(in)    :: LB
-  type(ocean_OBC_type),                pointer,     optional :: OBC
-  real, dimension(NXMEM_,NYMEMQ_,NZ_), intent(in),  optional :: visc_rem_v
-  real, dimension(NXMEM_,NYMEMQ_),     intent(in),  optional :: vhbt, vhbt_aux
-  real, dimension(NXMEM_,NYMEMQ_,NZ_), intent(out), optional :: v_cor, v_cor_aux
-  type(BT_cont_type),                  pointer,     optional :: BT_cont
+  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(in)    :: v
+  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(in)    :: h_in
+  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(out)   :: vh
+  real,                                   intent(in)    :: dt
+  type(ocean_grid_type),                  intent(inout) :: G
+  type(continuity_PPM_CS),                pointer       :: CS
+  type(loop_bounds_type),                 intent(in)    :: LB
+  type(ocean_OBC_type),                   pointer,     optional :: OBC
+  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(in),  optional :: visc_rem_v
+  real, dimension(NXMEM_,NYMEMQ_),        intent(in),  optional :: vhbt, vhbt_aux
+  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(out), optional :: v_cor, v_cor_aux
+  type(BT_cont_type),                     pointer,     optional :: BT_cont
 !   This subroutine calculates the mass or volume fluxes through the meridional
 ! faces, and other related quantities.
 ! Arguments: v - Meridional velocity, in m s-1.
@@ -1388,14 +1388,14 @@ subroutine merid_flux_layer(v, h, hL, hR, vh, dvhdv, visc_rem, dt, G, J, &
 end subroutine merid_flux_layer
 
 subroutine merid_face_thickness(v, h, hL, hR, h_v, dt, G, LB, vol_CFL, visc_rem_v)
-  real, dimension(NXMEM_,NYMEMQ_,NZ_), intent(in)    :: v
-  real, dimension(NXMEM_,NYMEM_,NZ_),  intent(in)    :: h, hL, hR
-  real, dimension(NXMEM_,NYMEMQ_,NZ_), intent(inout) :: h_v
-  real,                                intent(in)    :: dt
-  type(ocean_grid_type),               intent(inout) :: G
-  type(loop_bounds_type),              intent(in)    :: LB
-  logical,                             intent(in)    :: vol_CFL
-  real, dimension(NXMEM_,NYMEMQ_,NZ_), intent(in),  optional :: visc_rem_v
+  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(in)    :: v
+  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(in)    :: h, hL, hR
+  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(inout) :: h_v
+  real,                                   intent(in)    :: dt
+  type(ocean_grid_type),                  intent(inout) :: G
+  type(loop_bounds_type),                 intent(in)    :: LB
+  logical,                                intent(in)    :: vol_CFL
+  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(in),  optional :: visc_rem_v
 !   This subroutines sets the effective interface thickness at each meridional
 ! velocity point.
 !
@@ -1455,9 +1455,9 @@ end subroutine merid_face_thickness
 subroutine meridional_flux_adjust(v, h_in, hL, hR, vhbt, vh_tot_0, dvhdv_tot_0, &
                              dv, dv_max_CFL, dv_min_CFL, dt, G, CS, visc_rem, &
                              j, ish, ieh, do_i_in, full_precision, vh_3d) 
-  real, dimension(NXMEM_,NYMEMQ_,NZ_), intent(in)    :: v
-  real, dimension(NXMEM_,NYMEM_,NZ_),  intent(in)    :: h_in, hL, hR
-  real, dimension(NXMEM_,NZ_),         intent(in)    :: visc_rem
+  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(in) :: v
+  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(in) :: h_in, hL, hR
+  real, dimension(NXMEM_,NKMEM_),         intent(in) :: visc_rem
   real, dimension(NXMEM_),             intent(in)    :: vhbt, dv_max_CFL, dv_min_CFL
   real, dimension(NXMEM_),             intent(in)    :: vh_tot_0, dvhdv_tot_0
   real, dimension(NXMEM_),             intent(out)   :: dv
@@ -1467,7 +1467,7 @@ subroutine meridional_flux_adjust(v, h_in, hL, hR, vhbt, vh_tot_0, dvhdv_tot_0, 
   integer,                             intent(in)    :: j, ish, ieh
   logical, dimension(NXMEM_),          intent(in)    :: do_i_in
   logical,                             intent(in),    optional :: full_precision
-  real, dimension(NXMEM_,NYMEMQ_,NZ_), intent(inout), optional :: vh_3d
+  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(inout), optional :: vh_3d
 
 !   This subroutine returns the barotropic velocity adjustment that gives the
 ! desired barotropic (layer-summed) transport.
@@ -1617,15 +1617,15 @@ end subroutine meridional_flux_adjust
 subroutine set_merid_BT_cont(v, h_in, hL, hR, BT_cont, vh_tot_0, dvhdv_tot_0, &
                              dv_max_CFL, dv_min_CFL, dt, G, CS, visc_rem, &
                              visc_rem_max, j, ish, ieh, do_i) 
-  real, dimension(NXMEM_,NYMEMQ_,NZ_), intent(in)    :: v
-  real, dimension(NXMEM_,NYMEM_,NZ_),  intent(in)    :: h_in, hL, hR
+  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(in) :: v
+  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(in) :: h_in, hL, hR
   type(BT_cont_type),                  intent(inout) :: BT_cont
   real, dimension(NXMEM_),             intent(in)    :: vh_tot_0, dvhdv_tot_0
   real, dimension(NXMEM_),             intent(in)    :: dv_max_CFL, dv_min_CFL
   real,                                intent(in)    :: dt
   type(ocean_grid_type),               intent(inout) :: G
   type(continuity_PPM_CS),             pointer       :: CS
-  real, dimension(NXMEM_,NZ_),         intent(in)    :: visc_rem
+  real, dimension(NXMEM_,NKMEM_),      intent(in)    :: visc_rem
   real, dimension(NXMEM_),             intent(in)    :: visc_rem_max
   integer,                             intent(in)    :: j, ish, ieh
   logical, dimension(NXMEM_),          intent(in)    :: do_i

@@ -86,15 +86,15 @@ end type PressureForce_AFV_CS
 contains
 
 subroutine PressureForce_AFV(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
-  real, dimension(NXMEM_,NYMEM_,NZ_), intent(in)   :: h
-  type(thermo_var_ptrs), intent(inout)             :: tv
-  real, dimension(NXMEMQ_,NYMEM_,NZ_), intent(out) :: PFu
-  real, dimension(NXMEM_,NYMEMQ_,NZ_), intent(out) :: PFv
-  type(ocean_grid_type),               intent(in)  :: G
-  type(PressureForce_AFV_CS),              pointer     :: CS
-  real, dimension(:,:),               optional, pointer     :: p_atm
-  real, dimension(NXMEM_,NYMEM_,NZ_), optional, intent(out) :: pbce
-  real, dimension(NXMEM_,NYMEM_),     optional, intent(out) :: eta
+  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(in)  :: h
+  type(thermo_var_ptrs), intent(inout)                :: tv
+  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(out) :: PFu
+  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(out) :: PFv
+  type(ocean_grid_type),                  intent(in)  :: G
+  type(PressureForce_AFV_CS),             pointer     :: CS
+  real, dimension(:,:),                  optional, pointer     :: p_atm
+  real, dimension(NXMEM_,NYMEM_,NKMEM_), optional, intent(out) :: pbce
+  real, dimension(NXMEM_,NYMEM_),        optional, intent(out) :: eta
 
 !    This subroutine works as a temporary interface between the model and the
 ! Boussinesq and non-Boussinesq pressure force routines.
@@ -110,15 +110,15 @@ subroutine PressureForce_AFV(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
 end subroutine PressureForce_AFV
 
 subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
-  real, dimension(NXMEM_,NYMEM_,NZ_),  intent(in)    :: h
-  type(thermo_var_ptrs),               intent(inout) :: tv
-  real, dimension(NXMEMQ_,NYMEM_,NZ_), intent(out)  :: PFu
-  real, dimension(NXMEM_,NYMEMQ_,NZ_), intent(out)  :: PFv
-  type(ocean_grid_type),               intent(in)   :: G
-  type(PressureForce_AFV_CS),          pointer      :: CS
-  real, dimension(:,:),               optional, pointer     :: p_atm
-  real, dimension(NXMEM_,NYMEM_,NZ_), optional, intent(out) :: pbce
-  real, dimension(NXMEM_,NYMEM_),     optional, intent(out) :: eta
+  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(in)    :: h
+  type(thermo_var_ptrs),                  intent(inout) :: tv
+  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(out)  :: PFu
+  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(out)  :: PFv
+  type(ocean_grid_type),                  intent(in)   :: G
+  type(PressureForce_AFV_CS),             pointer      :: CS
+  real, dimension(:,:),                  optional, pointer     :: p_atm
+  real, dimension(NXMEM_,NYMEM_,NKMEM_), optional, intent(out) :: pbce
+  real, dimension(NXMEM_,NYMEM_),        optional, intent(out) :: eta
 
 !    This subroutine determines the acceleration due to hydrostatic pressure
 !  forces, using the analytic finite volume form of the Pressure gradient, and
@@ -397,15 +397,15 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
 end subroutine PressureForce_AFV_nonBouss
 
 subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
-  real, dimension(NXMEM_,NYMEM_,NZ_),  intent(in)    :: h
-  type(thermo_var_ptrs),               intent(inout) :: tv
-  real, dimension(NXMEMQ_,NYMEM_,NZ_), intent(out)   :: PFu
-  real, dimension(NXMEM_,NYMEMQ_,NZ_), intent(out)   :: PFv
-  type(ocean_grid_type),               intent(in)    :: G
-  type(PressureForce_AFV_CS),          pointer       :: CS
-  real, dimension(:,:),               optional, pointer     :: p_atm
-  real, dimension(NXMEM_,NYMEM_,NZ_), optional, intent(out) :: pbce
-  real, dimension(NXMEM_,NYMEM_),     optional, intent(out) :: eta
+  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(in)    :: h
+  type(thermo_var_ptrs),                  intent(inout) :: tv
+  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(out)   :: PFu
+  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(out)   :: PFv
+  type(ocean_grid_type),                  intent(in)    :: G
+  type(PressureForce_AFV_CS),             pointer       :: CS
+  real, dimension(:,:),                  optional, pointer     :: p_atm
+  real, dimension(NXMEM_,NYMEM_,NKMEM_), optional, intent(out) :: pbce
+  real, dimension(NXMEM_,NYMEM_),        optional, intent(out) :: eta
 
 !    This subroutine determines the acceleration due to pressure forces, using
 !  a finite volume form of the terms and analytic integrals in depth to avoid

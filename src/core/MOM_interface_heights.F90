@@ -65,11 +65,11 @@ end interface find_eta
 contains
 
 subroutine find_eta_3d(h, tv, G_Earth, G, eta, eta_bt, halo_size)
-  real, dimension(NXMEM_,NYMEM_,NZ_),       intent(in)  :: h
+  real, dimension(NXMEM_,NYMEM_,NKMEM_),    intent(in)  :: h
   type(thermo_var_ptrs),                    intent(in)  :: tv
   real,                                     intent(in)  :: G_Earth
   type(ocean_grid_type),                    intent(in)  :: G
-  real, dimension(NXMEM_,NYMEM_,NZp1_),     intent(out) :: eta
+  real, dimension(NXMEM_,NYMEM_,NK_INTERFACE_), intent(out) :: eta
   real, dimension(NXMEM_,NYMEM_), optional, intent(in)  :: eta_bt
   integer,                        optional, intent(in)  :: halo_size
 !   This subroutine determines the heights of all interfaces between layers,
@@ -162,7 +162,7 @@ subroutine find_eta_3d(h, tv, G_Earth, G, eta, eta_bt, halo_size)
 end subroutine find_eta_3d
 
 subroutine find_eta_2d(h, tv, G_Earth, G, eta, eta_bt, halo_size)
-  real, dimension(NXMEM_,NYMEM_,NZ_),       intent(in)  :: h
+  real, dimension(NXMEM_,NYMEM_,NKMEM_),    intent(in)  :: h
   type(thermo_var_ptrs),                    intent(in)  :: tv
   real,                                     intent(in)  :: G_Earth
   type(ocean_grid_type),                    intent(in)  :: G

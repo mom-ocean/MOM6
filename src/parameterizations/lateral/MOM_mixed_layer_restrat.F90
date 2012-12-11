@@ -88,14 +88,14 @@ end type mixedlayer_restrat_CS
 contains
 
 subroutine mixedlayer_restrat(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
-  real, dimension(NXMEM_,NYMEM_,NZ_),  intent(inout) :: h
-  real, dimension(NXMEMQ_,NYMEM_,NZ_), intent(inout) :: uhtr
-  real, dimension(NXMEM_,NYMEMQ_,NZ_), intent(inout) :: vhtr
-  type(thermo_var_ptrs),               intent(in)    :: tv
-  type(forcing),                       intent(in)    :: fluxes
-  real,                                intent(in)    :: dt
-  type(ocean_grid_type),               intent(in)    :: G
-  type(mixedlayer_restrat_CS),         pointer       :: CS
+  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(inout) :: h
+  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(inout) :: uhtr
+  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(inout) :: vhtr
+  type(thermo_var_ptrs),                  intent(in)    :: tv
+  type(forcing),                          intent(in)    :: fluxes
+  real,                                   intent(in)    :: dt
+  type(ocean_grid_type),                  intent(in)    :: G
+  type(mixedlayer_restrat_CS),            pointer       :: CS
 !    This subroutine does interface depth diffusion.  The fluxes are
 !  limited to give positive definiteness, and the diffusivities are
 !  limited to guarantee stability.

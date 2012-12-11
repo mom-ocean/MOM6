@@ -76,15 +76,15 @@ end type PressureForce_CS
 contains
 
 subroutine PressureForce(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
-  real, dimension(NXMEM_,NYMEM_,NZ_), intent(in)   :: h
-  type(thermo_var_ptrs), intent(inout)             :: tv
-  real, dimension(NXMEMQ_,NYMEM_,NZ_), intent(out) :: PFu
-  real, dimension(NXMEM_,NYMEMQ_,NZ_), intent(out) :: PFv
-  type(ocean_grid_type),               intent(in)  :: G
-  type(PressureForce_CS),              pointer     :: CS
-  real, dimension(:,:),               optional, pointer     :: p_atm
-  real, dimension(NXMEM_,NYMEM_,NZ_), optional, intent(out) :: pbce
-  real, dimension(NXMEM_,NYMEM_),     optional, intent(out) :: eta
+  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(in)   :: h
+  type(thermo_var_ptrs), intent(inout)                :: tv
+  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(out) :: PFu
+  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(out) :: PFv
+  type(ocean_grid_type),                  intent(in)  :: G
+  type(PressureForce_CS),                 pointer     :: CS
+  real, dimension(:,:),                  optional, pointer     :: p_atm
+  real, dimension(NXMEM_,NYMEM_,NKMEM_), optional, intent(out) :: pbce
+  real, dimension(NXMEM_,NYMEM_),        optional, intent(out) :: eta
 
 !    This subroutine works as a temporary interface between the model and the
 ! Boussinesq and non-Boussinesq pressure force routines.

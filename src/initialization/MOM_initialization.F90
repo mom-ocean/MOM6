@@ -139,9 +139,9 @@ contains
 ! -----------------------------------------------------------------------------
 subroutine MOM_initialize(u, v, h, tv, Time, G, PF, dirs, &
                               restart_CS, CS, Time_in)
-  real, dimension(NXMEMQ_,NYMEM_,NZ_), intent(out)   :: u
-  real, dimension(NXMEM_,NYMEMQ_,NZ_), intent(out)   :: v
-  real, dimension(NXMEM_,NYMEM_,NZ_),  intent(out)   :: h
+  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(out)   :: u
+  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(out)   :: v
+  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(out)   :: h
   type(thermo_var_ptrs),               intent(inout) :: tv
   type(time_type),                     intent(inout) :: Time
   type(ocean_grid_type),               intent(inout) :: G
@@ -1281,7 +1281,7 @@ end subroutine set_rotation_beta_plane
 
 ! -----------------------------------------------------------------------------
 subroutine initialize_thickness_from_file(h, G, param_file, file_has_thickness)
-  real, intent(out), dimension(NXMEM_,NYMEM_, NZ_) :: h
+  real, intent(out), dimension(NXMEM_,NYMEM_, NKMEM_) :: h
   type(ocean_grid_type), intent(in) :: G
   type(param_file_type), intent(in) :: param_file
   logical,               intent(in) :: file_has_thickness
@@ -1374,7 +1374,7 @@ end subroutine initialize_thickness_from_file
 
 ! -----------------------------------------------------------------------------
 subroutine initialize_thickness_uniform(h, G, param_file)
-  real, intent(out), dimension(NXMEM_,NYMEM_, NZ_) :: h
+  real, intent(out), dimension(NXMEM_,NYMEM_, NKMEM_) :: h
   type(ocean_grid_type), intent(in) :: G
   type(param_file_type), intent(in) :: param_file
 
@@ -1431,7 +1431,7 @@ end subroutine initialize_thickness_search
 ! -----------------------------------------------------------------------------
 
 subroutine convert_thickness(h, G, param_file, tv)
-  real, intent(inout), dimension(NXMEM_,NYMEM_, NZ_) :: h
+  real, intent(inout), dimension(NXMEM_,NYMEM_, NKMEM_) :: h
   type(ocean_grid_type), intent(in) :: G
   type(param_file_type), intent(in) :: param_file
   type(thermo_var_ptrs), intent(in) :: tv
@@ -1501,7 +1501,7 @@ subroutine convert_thickness(h, G, param_file, tv)
 end subroutine convert_thickness
 
 subroutine depress_surface(h, G, param_file, tv)
-  real, dimension(NXMEM_,NYMEM_, NZ_), intent(inout) :: h
+  real, dimension(NXMEM_,NYMEM_, NKMEM_), intent(inout) :: h
   type(ocean_grid_type),               intent(in)    :: G
   type(param_file_type),               intent(in)    :: param_file
   type(thermo_var_ptrs),               intent(in)    :: tv
@@ -1580,8 +1580,8 @@ end subroutine depress_surface
 
 ! -----------------------------------------------------------------------------
 subroutine initialize_velocity_from_file(u, v, G, param_file)
-  real, dimension(NXMEMQ_,NYMEM_, NZ_), intent(out) :: u
-  real, dimension(NXMEM_,NYMEMQ_, NZ_), intent(out) :: v
+  real, dimension(NXMEMQ_,NYMEM_, NKMEM_), intent(out) :: u
+  real, dimension(NXMEM_,NYMEMQ_, NKMEM_), intent(out) :: v
   type(ocean_grid_type),                intent(in)  :: G
   type(param_file_type),                intent(in)  :: param_file
 ! Arguments: u - The zonal velocity that is being initialized.
@@ -1616,8 +1616,8 @@ end subroutine initialize_velocity_from_file
 
 ! -----------------------------------------------------------------------------
 subroutine initialize_velocity_zero(u, v, G, param_file)
-  real, dimension(NXMEMQ_,NYMEM_, NZ_), intent(out) :: u
-  real, dimension(NXMEM_,NYMEMQ_, NZ_), intent(out) :: v
+  real, dimension(NXMEMQ_,NYMEM_, NKMEM_), intent(out) :: u
+  real, dimension(NXMEM_,NYMEMQ_, NKMEM_), intent(out) :: v
   type(ocean_grid_type),                intent(in)  :: G
   type(param_file_type),                intent(in)  :: param_file
 ! Arguments: u - The zonal velocity that is being initialized.
@@ -1643,8 +1643,8 @@ end subroutine initialize_velocity_zero
 
 ! -----------------------------------------------------------------------------
 subroutine initialize_velocity_uniform(u, v, G, param_file)
-  real, dimension(NXMEMQ_,NYMEM_, NZ_), intent(out) :: u
-  real, dimension(NXMEM_,NYMEMQ_, NZ_), intent(out) :: v
+  real, dimension(NXMEMQ_,NYMEM_, NKMEM_), intent(out) :: u
+  real, dimension(NXMEM_,NYMEMQ_, NKMEM_), intent(out) :: v
   type(ocean_grid_type),                intent(in)  :: G
   type(param_file_type),                intent(in)  :: param_file
 ! Arguments: u - The zonal velocity that is being initialized.
@@ -1678,8 +1678,8 @@ end subroutine initialize_velocity_uniform
 
 ! -----------------------------------------------------------------------------
 subroutine initialize_velocity_circular(u, v, G, param_file)
-  real, dimension(NXMEMQ_,NYMEM_, NZ_), intent(out) :: u
-  real, dimension(NXMEM_,NYMEMQ_, NZ_), intent(out) :: v
+  real, dimension(NXMEMQ_,NYMEM_, NKMEM_), intent(out) :: u
+  real, dimension(NXMEM_,NYMEMQ_, NKMEM_), intent(out) :: v
   type(ocean_grid_type),                intent(in)  :: G
   type(param_file_type),                intent(in)  :: param_file
 ! Arguments: u - The zonal velocity that is being initialized.
@@ -1744,7 +1744,7 @@ end subroutine initialize_velocity_circular
 
 ! -----------------------------------------------------------------------------
 subroutine initialize_temp_salt_from_file(T, S, G, param_file)
-  real, dimension(NXMEM_,NYMEM_, NZ_), intent(out) :: T, S
+  real, dimension(NXMEM_,NYMEM_, NKMEM_), intent(out) :: T, S
   type(ocean_grid_type),               intent(in)  :: G
   type(param_file_type),               intent(in)  :: param_file
 !  This function puts the initial layer temperatures and salinities  !
@@ -1797,7 +1797,7 @@ end subroutine initialize_temp_salt_from_file
 
 ! -----------------------------------------------------------------------------
 subroutine initialize_temp_salt_from_profile(T, S, G, param_file)
-  real, dimension(NXMEM_,NYMEM_, NZ_), intent(out) :: T, S
+  real, dimension(NXMEM_,NYMEM_, NKMEM_), intent(out) :: T, S
   type(ocean_grid_type),               intent(in)  :: G
   type(param_file_type),               intent(in)  :: param_file
 !  This function puts the initial layer temperatures and salinities  !
@@ -1842,7 +1842,7 @@ end subroutine initialize_temp_salt_from_profile
 
 ! -----------------------------------------------------------------------------
 subroutine initialize_temp_salt_fit(T, S, G, param_file, eqn_of_state, P_Ref)
-  real, dimension(NXMEM_,NYMEM_, NZ_), intent(out) :: T, S
+  real, dimension(NXMEM_,NYMEM_, NKMEM_), intent(out) :: T, S
   type(ocean_grid_type),               intent(in)  :: G
   type(param_file_type),               intent(in)  :: param_file
   type(EOS_type),                      pointer     :: eqn_of_state
@@ -1908,7 +1908,7 @@ end subroutine initialize_temp_salt_fit
 
 ! -----------------------------------------------------------------------------
 subroutine initialize_temp_salt_linear(T, S, G, param_file)
-  real, dimension(NXMEM_,NYMEM_, NZ_), intent(out) :: T, S
+  real, dimension(NXMEM_,NYMEM_, NKMEM_), intent(out) :: T, S
   type(ocean_grid_type),               intent(in)  :: G
   type(param_file_type),               intent(in)  :: param_file
   ! This subroutine initializes linear profiles for T and S according to
@@ -2269,7 +2269,7 @@ end subroutine set_Open_Bdry_Conds
 subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, advect_tracer_CSp)
   type(ocean_OBC_type),                pointer    :: OBC
   type(thermo_var_ptrs),               intent(inout) :: tv
-  real, dimension(NXMEM_,NYMEM_, NZ_), intent(inout) :: h
+  real, dimension(NXMEM_,NYMEM_, NKMEM_), intent(inout) :: h
   type(ocean_grid_type),               intent(inout) :: G
   type(param_file_type),               intent(in) :: PF
   type(advect_tracer_CS),              pointer    :: advect_tracer_CSp
@@ -3328,7 +3328,7 @@ end subroutine Get_MOM_Input
 ! -----------------------------------------------------------------------------
 
 subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
-  real, dimension(NXMEM_,NYMEM_,NZ_), intent(out)   :: h    
+  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(out)   :: h    
   type(thermo_var_ptrs),              intent(inout) :: tv
   type(ocean_grid_type),              intent(in)    :: G
   type(param_file_type),              intent(in)    :: PF

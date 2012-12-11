@@ -157,7 +157,7 @@ function register_OCMIP2_CFC(G, param_file, CS, diag, tr_adv_CSp, restart_CS)
   type(OCMIP2_CFC_CS),     pointer    :: CS
   type(diag_ptrs), target, intent(in) :: diag
   type(advect_tracer_CS),  pointer    :: tr_adv_CSp
-  type(MOM_restart_CS),   pointer    :: restart_CS
+  type(MOM_restart_CS),    pointer    :: restart_CS
 ! This subroutine is used to register tracer fields and subroutines
 ! to be used with MOM.
 ! Arguments: G - The ocean's grid structure.
@@ -368,14 +368,14 @@ end function register_OCMIP2_CFC
 
 subroutine initialize_OCMIP2_CFC(restart, day, G, h, OBC, CS, sponge_CSp, &
                                        diag_to_Z_CSp)
-  logical,                            intent(in) :: restart
-  type(time_type), target,            intent(in) :: day
-  type(ocean_grid_type),              intent(in) :: G
-  real, dimension(NXMEM_,NYMEM_,NZ_), intent(in) :: h
-  type(ocean_OBC_type),               pointer    :: OBC
-  type(OCMIP2_CFC_CS),                pointer    :: CS
-  type(sponge_CS),                    pointer    :: sponge_CSp
-  type(diag_to_Z_CS),                 pointer    :: diag_to_Z_CSp
+  logical,                               intent(in) :: restart
+  type(time_type), target,               intent(in) :: day
+  type(ocean_grid_type),                 intent(in) :: G
+  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(in) :: h
+  type(ocean_OBC_type),                  pointer    :: OBC
+  type(OCMIP2_CFC_CS),                   pointer    :: CS
+  type(sponge_CS),                       pointer    :: sponge_CSp
+  type(diag_to_Z_CS),                    pointer    :: diag_to_Z_CSp
 !   This subroutine initializes the NTR tracer fields in tr(:,:,:,:)
 ! and it sets up the tracer output.
 
@@ -485,12 +485,12 @@ subroutine initialize_OCMIP2_CFC(restart, day, G, h, OBC, CS, sponge_CSp, &
 end subroutine initialize_OCMIP2_CFC
   
 subroutine init_tracer_CFC(h, tr, tr_desc, land_val, IC_val, G, CS)
-  real, dimension(NXMEM_,NYMEM_,NZ_), intent(in)  :: h
-  real, dimension(NXMEM_,NYMEM_,NZ_), intent(out) :: tr
-  type(vardesc),                      intent(in)  :: tr_desc
-  real,                               intent(in)  :: land_val, IC_val
-  type(ocean_grid_type),              intent(in) :: G
-  type(OCMIP2_CFC_CS),                pointer    :: CS
+  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(in)  :: h
+  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(out) :: tr
+  type(vardesc),                         intent(in)  :: tr_desc
+  real,                                  intent(in)  :: land_val, IC_val
+  type(ocean_grid_type),                 intent(in) :: G
+  type(OCMIP2_CFC_CS),                   pointer    :: CS
 
   ! This subroutine initializes a tracer array.
 
@@ -526,7 +526,7 @@ subroutine init_tracer_CFC(h, tr, tr_desc, land_val, IC_val, G, CS)
 end subroutine init_tracer_CFC
 
 subroutine OCMIP2_CFC_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, CS)
-  real, dimension(NXMEM_,NYMEM_,NZ_), intent(in) :: h_old, h_new, ea, eb
+  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(in) :: h_old, h_new, ea, eb
   type(forcing),                      intent(in) :: fluxes
   real,                               intent(in) :: dt
   type(ocean_grid_type),              intent(in) :: G
@@ -612,7 +612,7 @@ subroutine OCMIP2_CFC_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, CS)
 end subroutine OCMIP2_CFC_column_physics
 
 function OCMIP2_CFC_stock(h, stocks, G, CS, names, units, stock_index)
-  real, dimension(NXMEM_,NYMEM_,NZ_), intent(in)    :: h
+  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(in)    :: h
   real, dimension(:),                 intent(out)   :: stocks
   type(ocean_grid_type),              intent(in)    :: G
   type(OCMIP2_CFC_CS),                pointer       :: CS
@@ -666,10 +666,10 @@ function OCMIP2_CFC_stock(h, stocks, G, CS, names, units, stock_index)
 end function OCMIP2_CFC_stock
 
 subroutine OCMIP2_CFC_surface_state(state, h, G, CS)
-  type(surface),                      intent(inout) :: state
-  real, dimension(NXMEM_,NYMEM_,NZ_), intent(in) :: h
-  type(ocean_grid_type),              intent(in) :: G
-  type(OCMIP2_CFC_CS),                pointer    :: CS
+  type(surface),                         intent(inout) :: state
+  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(in) :: h
+  type(ocean_grid_type),                 intent(in) :: G
+  type(OCMIP2_CFC_CS),                   pointer    :: CS
 !   This subroutine sets up the fields that the coupler needs to calculate the
 ! CFC fluxes between the ocean and atmosphere.
 ! Arguments: state - A structure containing fields that describe the

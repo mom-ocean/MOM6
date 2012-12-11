@@ -145,8 +145,8 @@ public btcalc, bt_mass_source, btstep, barotropic_init, barotropic_end
 public register_barotropic_restarts, set_dtbt
 
 type, public :: barotropic_CS ; private
-  real PTR_, dimension(NXMEMQP_,NYMEM_,NZ_) :: frhatu TO_NULL_
-  real PTR_, dimension(NXMEM_,NYMEMQP_,NZ_) :: frhatv TO_NULL_
+  real PTR_, dimension(NXMEMQP_,NYMEM_,NKMEM_) :: frhatu TO_NULL_
+  real PTR_, dimension(NXMEM_,NYMEMQP_,NKMEM_) :: frhatv TO_NULL_
       ! frhatu and frhatv are the fraction of the total column thickness
       ! interpolated to u or v grid points in each layer, nondimensional.
   real PTR_, dimension(NXMEMQP_,NYMEM_) :: &
@@ -394,27 +394,27 @@ subroutine btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
                   visc_rem_u, visc_rem_v, etaav, uhbt_out, vhbt_out, OBC, &
                   BT_cont, eta_PF_start, sum_u_dhdt, sum_v_dhdt, &
                   taux_bot, tauy_bot, uh0, vh0, u_uh0, v_vh0)
-  logical,                             intent(in)    :: use_fluxes
-  real, dimension(NXMEMQ_,NYMEM_,NZ_), intent(in)    :: U_in
-  real, dimension(NXMEM_,NYMEMQ_,NZ_), intent(in)    :: V_in
-  real, dimension(NXMEM_,NYMEM_),      intent(in)    :: eta_in
-  real,                                intent(in)    :: dt
-  real, dimension(NXMEMQ_,NYMEM_,NZ_), intent(in)    :: bc_accel_u
-  real, dimension(NXMEM_,NYMEMQ_,NZ_), intent(in)    :: bc_accel_v
-  type(forcing),                       intent(in)    :: fluxes
-  real, dimension(NXMEM_,NYMEM_,NZ_),  intent(in)    :: pbce
-  real, dimension(NXMEM_,NYMEM_),      intent(in)    :: eta_PF_in
-  real, dimension(NXMEMQ_,NYMEM_,NZ_), intent(in)    :: U_Cor
-  real, dimension(NXMEM_,NYMEMQ_,NZ_), intent(in)    :: V_Cor
-  real, dimension(NXMEMQ_,NYMEM_,NZ_), intent(out)   :: accel_layer_u
-  real, dimension(NXMEM_,NYMEMQ_,NZ_), intent(out)   :: accel_layer_v
-  real, dimension(NXMEM_,NYMEM_),      intent(out)   :: eta_out
-  real, dimension(NXMEMQ_,NYMEM_),     intent(out)   :: uhbtav
-  real, dimension(NXMEM_,NYMEMQ_),     intent(out)   :: vhbtav
-  type(ocean_grid_type),               intent(inout) :: G
-  type(barotropic_CS),                 pointer       :: CS
-  real, dimension(NXMEMQ_,NYMEM_,NZ_), intent(in),  optional :: visc_rem_u
-  real, dimension(NXMEM_,NYMEMQ_,NZ_), intent(in),  optional :: visc_rem_v
+  logical,                              intent(in)    :: use_fluxes
+  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(in)  :: U_in
+  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(in)  :: V_in
+  real, dimension(NXMEM_,NYMEM_),       intent(in)    :: eta_in
+  real,                                 intent(in)    :: dt
+  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(in)  :: bc_accel_u
+  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(in)  :: bc_accel_v
+  type(forcing),                        intent(in)    :: fluxes
+  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(in)   :: pbce
+  real, dimension(NXMEM_,NYMEM_),       intent(in)    :: eta_PF_in
+  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(in)  :: U_Cor
+  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(in)  :: V_Cor
+  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(out) :: accel_layer_u
+  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(out) :: accel_layer_v
+  real, dimension(NXMEM_,NYMEM_),       intent(out)   :: eta_out
+  real, dimension(NXMEMQ_,NYMEM_),      intent(out)   :: uhbtav
+  real, dimension(NXMEM_,NYMEMQ_),      intent(out)   :: vhbtav
+  type(ocean_grid_type),                intent(inout) :: G
+  type(barotropic_CS),                  pointer       :: CS
+  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(in), optional :: visc_rem_u
+  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(in), optional :: visc_rem_v
   real, dimension(NXMEMQ_,NYMEM_),     intent(in),  optional :: sum_u_dhdt
   real, dimension(NXMEM_,NYMEMQ_),     intent(in),  optional :: sum_v_dhdt
   real, dimension(NXMEM_,NYMEM_),      intent(out), optional :: etaav
@@ -423,10 +423,10 @@ subroutine btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   type(ocean_OBC_type),                pointer,     optional :: OBC
   type(BT_cont_type),                  pointer,     optional :: BT_cont
   real, dimension(:,:),                pointer,     optional :: eta_PF_start
-  real, dimension(:,:),             pointer,     optional :: taux_bot
-  real, dimension(:,:),             pointer,     optional :: tauy_bot
-  real, dimension(:,:,:),           pointer,     optional :: uh0, u_uh0
-  real, dimension(:,:,:),           pointer,     optional :: vh0, v_vh0
+  real, dimension(:,:),                pointer,     optional :: taux_bot
+  real, dimension(:,:),                pointer,     optional :: tauy_bot
+  real, dimension(:,:,:),              pointer,     optional :: uh0, u_uh0
+  real, dimension(:,:,:),              pointer,     optional :: vh0, v_vh0
 
 ! Arguments: use_fluxes - A logical indicating whether velocities (false) or
 !                         fluxes (true) are used to initialize the barotropic
@@ -2122,13 +2122,13 @@ subroutine btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
 end subroutine btstep
 
 subroutine set_dtbt(G, CS, eta, pbce, BT_cont, gtot_est, SSH_add)
-  type(ocean_grid_type),               intent(inout) :: G
-  type(barotropic_CS),                 pointer       :: CS
-  real, dimension(NXMEM_,NYMEM_),      intent(in), optional :: eta
-  real, dimension(NXMEM_,NYMEM_,NZ_),  intent(in), optional :: pbce
-  type(BT_cont_type),                  pointer,    optional :: BT_cont
-  real,                                intent(in), optional :: gtot_est
-  real,                                intent(in), optional :: SSH_add
+  type(ocean_grid_type),                 intent(inout) :: G
+  type(barotropic_CS),                   pointer       :: CS
+  real, dimension(NXMEM_,NYMEM_),        intent(in), optional :: eta
+  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(in), optional :: pbce
+  type(BT_cont_type),                    pointer,    optional :: BT_cont
+  real,                                  intent(in), optional :: gtot_est
+  real,                                  intent(in), optional :: SSH_add
 ! Arguments: G - The ocean's grid structure.
 !  (in)      CS - The control structure returned by a previous call to
 !                 barotropic_init.
@@ -2668,11 +2668,11 @@ end subroutine destroy_BT_OBC
 
 
 subroutine btcalc(h, G, CS, h_u, h_v, may_use_default)
-  real, dimension(NXMEM_,NYMEM_,NZ_),  intent(in)    :: h
+  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(in)  :: h
   type(ocean_grid_type),               intent(inout) :: G
   type(barotropic_CS),                 pointer       :: CS
-  real, dimension(NXMEMQ_,NYMEM_,NZ_), intent(in), optional :: h_u
-  real, dimension(NXMEM_,NYMEMQ_,NZ_), intent(in), optional :: h_v
+  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(in), optional :: h_u
+  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(in), optional :: h_v
   logical,                             intent(in), optional :: may_use_default
 !   btcalc calculates the barotropic velocities from the full velocity and
 ! thickness fields, determines the fraction of the total water column in each
@@ -3394,7 +3394,7 @@ end subroutine find_face_areas
 
 subroutine bt_mass_source(h, eta, fluxes, set_cor, dt_therm, dt_since_therm, &
                           G, CS)
-  real, dimension(NXMEM_,NYMEM_,NZ_), intent(in) :: h
+  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(in) :: h
   real, dimension(NXMEM_,NYMEM_),     intent(in) :: eta
   type(forcing),                      intent(in) :: fluxes
   logical,                            intent(in) :: set_cor
@@ -3496,16 +3496,16 @@ end subroutine bt_mass_source
 
 subroutine barotropic_init(u, v, h, eta, Time, G, param_file, diag, CS, &
                            restart_CS, BT_cont, tides_CSp)
-  real, intent(in), dimension(NXMEMQ_,NYMEM_,NZ_) :: u
-  real, intent(in), dimension(NXMEM_,NYMEMQ_,NZ_) :: v
-  real, intent(in), dimension(NXMEM_,NYMEM_,NZ_)  :: h
+  real, intent(in), dimension(NXMEMQ_,NYMEM_,NKMEM_) :: u
+  real, intent(in), dimension(NXMEM_,NYMEMQ_,NKMEM_) :: v
+  real, intent(in), dimension(NXMEM_,NYMEM_,NKMEM_)  :: h
   real, intent(in), dimension(NXMEM_,NYMEM_)      :: eta
   type(time_type), target,          intent(in)    :: Time
   type(ocean_grid_type),            intent(inout) :: G
   type(param_file_type),            intent(in)    :: param_file
   type(diag_ptrs), target,          intent(inout) :: diag
   type(barotropic_CS),              pointer       :: CS
-  type(MOM_restart_CS),            pointer       :: restart_CS
+  type(MOM_restart_CS),             pointer       :: restart_CS
   type(BT_cont_type),     optional, pointer       :: BT_cont
   type(tidal_forcing_CS), optional, pointer       :: tides_CSp
 !   barotropic_init initializes a number of time-invariant fields used in the

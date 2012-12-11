@@ -190,16 +190,16 @@ end type hor_visc_CS
 contains
 
 subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
-  real, dimension(NXMEMQ_,NYMEM_,NZ_), intent(in)  :: u
-  real, dimension(NXMEM_,NYMEMQ_,NZ_), intent(in)  :: v
-  real, dimension(NXMEM_,NYMEM_,NZ_),  intent(in)  :: h
-  real, dimension(NXMEMQ_,NYMEM_,NZ_), intent(out) :: diffu
-  real, dimension(NXMEM_,NYMEMQ_,NZ_), intent(out) :: diffv
-  type(MEKE_type),                     pointer     :: MEKE
-  type(VarMix_CS),                     pointer     :: VarMix
-  type(ocean_grid_type),               intent(in)  :: G
-  type(hor_visc_CS),                   pointer     :: CS
-  type(ocean_OBC_type), pointer, optional   :: OBC
+  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(in)  :: u
+  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(in)  :: v
+  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(in)  :: h
+  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(out) :: diffu
+  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(out) :: diffv
+  type(MEKE_type),                        pointer     :: MEKE
+  type(VarMix_CS),                        pointer     :: VarMix
+  type(ocean_grid_type),                  intent(in)  :: G
+  type(hor_visc_CS),                      pointer     :: CS
+  type(ocean_OBC_type),           pointer, optional   :: OBC
 
 ! Arguments: u - Zonal velocity, in m s-1.
 !  (in)      v - Meridional velocity, in m s-1.

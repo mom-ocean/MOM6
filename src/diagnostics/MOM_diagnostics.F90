@@ -126,11 +126,11 @@ end type diagnostics_CS
 contains
 
 subroutine calculate_diagnostic_fields(u, v, h, uh, vh, lev, tv, dt, G, CS, eta_bt)
-  real, dimension(NXMEMQ_,NYMEM_,NZ_),      intent(in)    :: u
-  real, dimension(NXMEM_,NYMEMQ_,NZ_),      intent(in)    :: v
-  real, dimension(NXMEM_,NYMEM_,NZ_),       intent(in)    :: h
-  real, dimension(NXMEMQ_,NYMEM_,NZ_),      intent(in)    :: uh
-  real, dimension(NXMEM_,NYMEMQ_,NZ_),      intent(in)    :: vh
+  real, dimension(NXMEMQ_,NYMEM_,NKMEM_),   intent(in)    :: u
+  real, dimension(NXMEM_,NYMEMQ_,NKMEM_),   intent(in)    :: v
+  real, dimension(NXMEM_,NYMEM_,NKMEM_),    intent(in)    :: h
+  real, dimension(NXMEMQ_,NYMEM_,NKMEM_),   intent(in)    :: uh
+  real, dimension(NXMEM_,NYMEMQ_,NKMEM_),   intent(in)    :: vh
   integer,                                  intent(in)    :: lev
   type(thermo_var_ptrs),                    intent(in)    :: tv
   real,                                     intent(in)    :: dt
@@ -386,7 +386,7 @@ subroutine find_weights(Rlist, R_in, k, nz, wt, wt_p)
 end subroutine find_weights
 
 subroutine calculate_vertical_integrals(h, tv, G, CS)
-  real, dimension(NXMEM_,NYMEM_,NZ_),       intent(in)    :: h
+  real, dimension(NXMEM_,NYMEM_,NKMEM_),    intent(in)    :: h
   type(thermo_var_ptrs),                    intent(in)    :: tv
   type(ocean_grid_type),                    intent(inout) :: G
   type(diagnostics_CS),                     pointer       :: CS
@@ -480,13 +480,13 @@ subroutine calculate_vertical_integrals(h, tv, G, CS)
 end subroutine calculate_vertical_integrals
 
 subroutine calculate_energy_diagnostics(u, v, h, uh, vh, lev, G, CS)
-  real, dimension(NXMEMQ_,NYMEM_,NZ_), intent(in)    :: u
-  real, dimension(NXMEM_,NYMEMQ_,NZ_), intent(in)    :: v
-  real, dimension(NXMEM_,NYMEM_,NZ_),  intent(in)    :: h
-  real, dimension(NXMEMQ_,NYMEM_,NZ_), intent(in)    :: uh
-  real, dimension(NXMEM_,NYMEMQ_,NZ_), intent(in)    :: vh
-  type(ocean_grid_type),               intent(inout) :: G
-  type(diagnostics_CS),                pointer       :: CS
+  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(in)    :: u
+  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(in)    :: v
+  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(in)    :: h
+  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(in)    :: uh
+  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(in)    :: vh
+  type(ocean_grid_type),                  intent(inout) :: G
+  type(diagnostics_CS),                   pointer       :: CS
 !   This subroutine calculates a series of terms in the energy
 ! balance equations.
 

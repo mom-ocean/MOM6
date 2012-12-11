@@ -152,18 +152,18 @@ contains
 
 subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, Time_local, dt, fluxes, &
                   p_surf_begin, p_surf_end, uh, vh, eta_av, G, CS)
-  real, dimension(NXMEMQ_,NYMEM_,NZ_), intent(inout) :: u_in
-  real, dimension(NXMEM_,NYMEMQ_,NZ_), intent(inout) :: v_in
-  real, dimension(NXMEM_,NYMEM_,NZ_),  intent(inout) :: h_in
-  type(time_type),                     intent(in)    :: Time_local
-  real,                                intent(in)    :: dt
-  type(forcing),                       intent(in)    :: fluxes
-  real, dimension(:,:),                pointer       :: p_surf_begin, p_surf_end
-  real, dimension(NXMEMQ_,NYMEM_,NZ_), intent(inout) :: uh
-  real, dimension(NXMEM_,NYMEMQ_,NZ_), intent(inout) :: vh
-  real, dimension(NXMEM_,NYMEM_),      intent(out)   :: eta_av
-  type(ocean_grid_type),               intent(inout) :: G
-  type(MOM_control_struct),            pointer      :: CS
+  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(inout) :: u_in
+  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(inout) :: v_in
+  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(inout) :: h_in
+  type(time_type),                        intent(in)    :: Time_local
+  real,                                   intent(in)    :: dt
+  type(forcing),                          intent(in)    :: fluxes
+  real, dimension(:,:),                   pointer       :: p_surf_begin, p_surf_end
+  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(inout) :: uh
+  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(inout) :: vh
+  real, dimension(NXMEM_,NYMEM_),         intent(out)   :: eta_av
+  type(ocean_grid_type),                  intent(inout) :: G
+  type(MOM_control_struct),               pointer      :: CS
 ! Arguments: u_in - The input and output zonal velocity, in m s-1.
 !  (in)      v_in - The input and output meridional velocity, in m s-1.
 !  (in)      h_in - The input and output layer thicknesses, in m or kg m-2,
@@ -488,15 +488,15 @@ subroutine register_restarts_dyn_unsplit_RK2(G, param_file, CS, restart_CS)
 end subroutine register_restarts_dyn_unsplit_RK2
 
 subroutine initialize_dyn_unsplit_RK2(u, v, h, Time, G, param_file, diag, CS, restart_CS)
-  real, dimension(NXMEMQ_,NYMEM_,NZ_), intent(inout) :: u
-  real, dimension(NXMEM_,NYMEMQ_,NZ_), intent(inout) :: v
-  real, dimension(NXMEM_,NYMEM_,NZ_) , intent(inout) :: h
-  type(time_type),             target, intent(in)    :: Time
-  type(ocean_grid_type),               intent(inout) :: G
-  type(param_file_type),               intent(in)    :: param_file
-  type(diag_ptrs),             target, intent(inout) :: diag
-  type(MOM_control_struct),           intent(inout) :: CS
-  type(MOM_restart_CS),               pointer       :: restart_CS
+  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(inout) :: u
+  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(inout) :: v
+  real, dimension(NXMEM_,NYMEM_,NKMEM_) , intent(inout) :: h
+  type(time_type),                target, intent(in)    :: Time
+  type(ocean_grid_type),                  intent(inout) :: G
+  type(param_file_type),                  intent(in)    :: param_file
+  type(diag_ptrs),                target, intent(inout) :: diag
+  type(MOM_control_struct),               intent(inout) :: CS
+  type(MOM_restart_CS),                   pointer       :: restart_CS
 
   !   This subroutine initializes any variables that are specific to this time
   ! stepping scheme, including the cpu clocks.

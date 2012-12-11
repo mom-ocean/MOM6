@@ -58,13 +58,13 @@ contains
 
 function tracer_Z_init(tr, h, filename, tr_name, G, missing_val, land_val)
   logical :: tracer_Z_init
-  real, dimension(NXMEM_,NYMEM_,NZ_),   intent(out)   :: tr
-  real, dimension(NXMEM_,NYMEM_,NZ_),   intent(in)    :: h
-  character(len=*),                     intent(in)    :: filename, tr_name
-  type(ocean_grid_type),                intent(in)    :: G
-! type(param_file_type),                intent(in)    :: param_file
-  real,                       optional, intent(in)    :: missing_val
-  real,                       optional, intent(in)    :: land_val
+  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(out)   :: tr
+  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(in)    :: h
+  character(len=*),                      intent(in)    :: filename, tr_name
+  type(ocean_grid_type),                 intent(in)    :: G
+! type(param_file_type),                 intent(in)    :: param_file
+  real,                        optional, intent(in)    :: missing_val
+  real,                        optional, intent(in)    :: land_val
 !   This function initializes a tracer by reading a Z-space file, returning
 ! .true. if this appears to have been successful, and false otherwise.
 ! Arguments: tr - The tracer to initialize.

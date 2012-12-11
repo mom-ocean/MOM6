@@ -113,13 +113,13 @@ type, public :: vertvisc_CS ; private
                             ! accelerations to be reported, nondim.  CFL_report
                             ! will often equal CFL_trunc.
 
-  real PTR_, dimension(NXMEMQP_,NYMEM_,NZp1_) :: &
+  real PTR_, dimension(NXMEMQP_,NYMEM_,NK_INTERFACE_) :: &
     a_u                ! The u-drag coefficient across an interface, in m s-1.
-  real PTR_, dimension(NXMEMQP_,NYMEM_,NZ_) :: &
+  real PTR_, dimension(NXMEMQP_,NYMEM_,NKMEM_) :: &
     h_u                ! The effective layer thickness at u-points, m or kg m-2.
-  real PTR_, dimension(NXMEM_,NYMEMQP_,NZp1_) :: &
+  real PTR_, dimension(NXMEM_,NYMEMQP_,NK_INTERFACE_) :: &
     a_v                ! The v-drag coefficient across an interface, in m s-1.
-  real PTR_, dimension(NXMEM_,NYMEMQP_,NZ_) :: &
+  real PTR_, dimension(NXMEM_,NYMEMQP_,NKMEM_) :: &
     h_v                ! The effective layer thickness at v-points, m or kg m-2.
   real, pointer, dimension(:,:) :: &
     a1_shelf_u => NULL(), & ! The surface coupling coefficients under ice
@@ -168,15 +168,15 @@ contains
 subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, G, CS, taux_bot, tauy_bot)
 !    This subroutine does a fully implicit vertical diffusion
 !  of momentum.  Stress top and bottom b.c.s are used.
-  real, intent(inout), dimension(NXMEMQ_,NYMEM_,NZ_) :: u
-  real, intent(inout), dimension(NXMEM_,NYMEMQ_,NZ_) :: v
-  real, intent(in),    dimension(NXMEM_,NYMEM_,NZ_)  :: h
-  type(forcing), intent(in)                          :: fluxes
-  type(vertvisc_type), intent(inout)                 :: visc
-  real, intent(in)                                   :: dt
-  type(ocean_OBC_type), pointer                      :: OBC
-  type(ocean_grid_type), intent(in)                  :: G
-  type(vertvisc_CS), pointer                         :: CS
+  real, intent(inout), dimension(NXMEMQ_,NYMEM_,NKMEM_) :: u
+  real, intent(inout), dimension(NXMEM_,NYMEMQ_,NKMEM_) :: v
+  real, intent(in),    dimension(NXMEM_,NYMEM_,NKMEM_)  :: h
+  type(forcing), intent(in)                             :: fluxes
+  type(vertvisc_type), intent(inout)                    :: visc
+  real, intent(in)                                      :: dt
+  type(ocean_OBC_type), pointer                         :: OBC
+  type(ocean_grid_type), intent(in)                     :: G
+  type(vertvisc_CS), pointer                            :: CS
   real, dimension(NXMEMQ_,NYMEM_), optional, intent(out) :: taux_bot
   real, dimension(NXMEM_,NYMEMQ_), optional, intent(out) :: tauy_bot
   
@@ -412,12 +412,12 @@ end subroutine vertvisc
 subroutine vertvisc_remnant(visc, visc_rem_u, visc_rem_v, dt, G, CS)
 !    This subroutine does a fully implicit vertical diffusion
 !  of momentum.  Stress top and bottom b.c.s are used.
-  type(vertvisc_type), intent(in)                    :: visc
-  real, intent(inout), dimension(NXMEMQ_,NYMEM_,NZ_) :: visc_rem_u
-  real, intent(inout), dimension(NXMEM_,NYMEMQ_,NZ_) :: visc_rem_v
-  real, intent(in)                                   :: dt
-  type(ocean_grid_type), intent(in)                  :: G
-  type(vertvisc_CS), pointer                         :: CS
+  type(vertvisc_type), intent(in)                       :: visc
+  real, intent(inout), dimension(NXMEMQ_,NYMEM_,NKMEM_) :: visc_rem_u
+  real, intent(inout), dimension(NXMEM_,NYMEMQ_,NKMEM_) :: visc_rem_v
+  real, intent(in)                                      :: dt
+  type(ocean_grid_type), intent(in)                     :: G
+  type(vertvisc_CS), pointer                            :: CS
 ! Arguments: visc - The vertical viscosity type, containing information about
 !                   viscosities and bottom drag-related quantities, intent in.
 !  (out)     visc_rem_u - Both the fraction of the momentum originally in a
@@ -521,14 +521,14 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
 !    This subroutine calculates the coupling coefficients (CS%a_u and CS%a_v)
 ! and effective layer thicknesses (CS%h_u and CS%h_v) for later use in the
 ! applying the implicit vertical viscosity via vertvisc.
-  real, intent(in),    dimension(NXMEMQ_,NYMEM_,NZ_) :: u
-  real, intent(in),    dimension(NXMEM_,NYMEMQ_,NZ_) :: v
-  real, intent(in),    dimension(NXMEM_,NYMEM_,NZ_)  :: h
-  type(forcing), intent(in)                          :: fluxes
-  type(vertvisc_type), intent(in)                    :: visc
-  real, intent(in)                                   :: dt
-  type(ocean_grid_type), intent(in)                  :: G
-  type(vertvisc_CS), pointer                         :: CS
+  real, intent(in),    dimension(NXMEMQ_,NYMEM_,NKMEM_) :: u
+  real, intent(in),    dimension(NXMEM_,NYMEMQ_,NKMEM_) :: v
+  real, intent(in),    dimension(NXMEM_,NYMEM_,NKMEM_)  :: h
+  type(forcing), intent(in)                             :: fluxes
+  type(vertvisc_type), intent(in)                       :: visc
+  real, intent(in)                                      :: dt
+  type(ocean_grid_type), intent(in)                     :: G
+  type(vertvisc_CS), pointer                            :: CS
 
 ! Arguments: u - Zonal velocity, in m s-1.  Intent in.
 !  (in)      v - Meridional velocity, in m s-1.
@@ -860,11 +860,11 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
 !    This subroutine calculates the 'coupling coefficient' (a[k]) at the
 !  interfaces. If BOTTOMDRAGLAW is defined, the minimum of Hbbl and half the
 !  adjacent layer thicknesses are used to calculate a[k] near the bottom.
-    real,    dimension(NXMEMQ_,NZp1_), intent(out) :: a
-    real,    dimension(NXMEMQ_,NZ_),   intent(in)  :: hvel
-    logical, dimension(NXMEMQ_),       intent(in)  :: do_i
-    logical,                           intent(in)  :: work_on_u
-    logical, optional,                 intent(in)  :: shelf
+    real,    dimension(NXMEMQ_,NK_INTERFACE_), intent(out) :: a
+    real,    dimension(NXMEMQ_,NKMEM_),   intent(in)  :: hvel
+    logical, dimension(NXMEMQ_),          intent(in)  :: do_i
+    logical,                              intent(in)  :: work_on_u
+    logical, optional,                    intent(in)  :: shelf
 ! Arguments: a - The coupling coefficent across interfaces, in m.  Intent out.
 !  (in)      hvel - The thickness at velocity points, in H.
 !  (in)      do_i - If true, determine the a for a column.
@@ -1045,14 +1045,14 @@ subroutine vertvisc_limit_vel(u, v, h, fluxes, visc, dt, G, CS)
 !  Within this subroutine, velocity components which exceed a threshold for
 ! physically reasonable values are truncated. Optionally, any column with
 ! excessive velocities may be sent to a diagnostic reporting subroutine.
-  real, intent(inout), dimension(NXMEMQ_,NYMEM_,NZ_) :: u
-  real, intent(inout), dimension(NXMEM_,NYMEMQ_,NZ_) :: v
-  real, intent(in),    dimension(NXMEM_,NYMEM_,NZ_)  :: h
-  type(forcing), intent(in)                          :: fluxes
-  type(vertvisc_type), intent(in)                    :: visc
-  real, intent(in)                                   :: dt
-  type(ocean_grid_type), intent(in)                  :: G
-  type(vertvisc_CS), pointer                         :: CS
+  real, intent(inout), dimension(NXMEMQ_,NYMEM_,NKMEM_) :: u
+  real, intent(inout), dimension(NXMEM_,NYMEMQ_,NKMEM_) :: v
+  real, intent(in),    dimension(NXMEM_,NYMEM_,NKMEM_)  :: h
+  type(forcing), intent(in)                             :: fluxes
+  type(vertvisc_type), intent(in)                       :: visc
+  real, intent(in)                                      :: dt
+  type(ocean_grid_type), intent(in)                     :: G
+  type(vertvisc_CS), pointer                            :: CS
 
   real :: maxvel           ! Velocities components greater than maxvel
   real :: truncvel         ! are truncated to truncvel, both in m s-1.

@@ -95,10 +95,10 @@ end interface calc_slope_function
 contains
 
 subroutine calc_resoln_function(h, tv, G, CS)
-  real, dimension(NXMEM_,NYMEM_,NZ_),  intent(in)    :: h
-  type(thermo_var_ptrs),               intent(in)    :: tv
-  type(ocean_grid_type),               intent(inout) :: G
-  type(VarMix_CS),                     pointer       :: CS
+  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(in)    :: h
+  type(thermo_var_ptrs),                 intent(in)    :: tv
+  type(ocean_grid_type),                 intent(inout) :: G
+  type(VarMix_CS),                       pointer       :: CS
 !    This subroutine determines a function of the ratio of the grid
 ! spacing to the deformation radius that is used to scale horizontal
 ! viscosities or diffusivities.
@@ -225,10 +225,10 @@ subroutine calc_resoln_function(h, tv, G, CS)
 end subroutine calc_resoln_function
 
 subroutine calc_slope_function_need_e(h, tv, G, CS)
-  real, dimension(NXMEM_,NYMEM_,NZ_),  intent(inout) :: h
-  type(thermo_var_ptrs),               intent(in)    :: tv
-  type(ocean_grid_type),               intent(inout) :: G
-  type(VarMix_CS),                     pointer       :: CS
+  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(inout) :: h
+  type(thermo_var_ptrs),                 intent(in)    :: tv
+  type(ocean_grid_type),                 intent(inout) :: G
+  type(VarMix_CS),                       pointer       :: CS
 !    This subroutine calls for the calculation of the interface heights, and
 !  then calls for the calculation of the slope function S*N for the Visbeck et
 !  al. style scaling for the various horizontal diffusivities.
@@ -242,11 +242,11 @@ subroutine calc_slope_function_need_e(h, tv, G, CS)
 end subroutine calc_slope_function_need_e
 
 subroutine calc_slope_function_(h, tv, G, CS, e)
-  real, dimension(NXMEM_,NYMEM_,NZ_),   intent(inout) :: h
-  type(thermo_var_ptrs),                intent(in)    :: tv
-  type(ocean_grid_type),                intent(inout) :: G
-  type(VarMix_CS),                      pointer       :: CS
-  real, dimension(NXMEM_,NYMEM_,NZp1_), intent(in)    :: e
+  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(inout) :: h
+  type(thermo_var_ptrs),                 intent(in)    :: tv
+  type(ocean_grid_type),                 intent(inout) :: G
+  type(VarMix_CS),                       pointer       :: CS
+  real, dimension(NXMEM_,NYMEM_,NK_INTERFACE_), intent(in) :: e
 !    This subroutine calculates the slope function S*N for the Visbeck et
 !  al. style scaling for the various horizontal diffusivities.
 

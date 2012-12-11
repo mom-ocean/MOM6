@@ -210,7 +210,7 @@ subroutine opacity_from_chl(optics, fluxes, G, CS, chl_in)
   type(forcing),                  intent(in)     :: fluxes  
   type(ocean_grid_type),          intent(in)     :: G
   type(opacity_CS),               pointer        :: CS
-  real, dimension(NXMEM_,NYMEM_,NZ_), intent(in), optional :: chl_in
+  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(in), optional :: chl_in
 ! Arguments: fluxes - A structure containing pointers to any possible
 !                     forcing fields.  Unused fields have NULL ptrs.
 !  (out)     opacity - The inverse of the vertical absorption decay

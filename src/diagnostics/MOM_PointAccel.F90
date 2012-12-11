@@ -99,14 +99,14 @@ contains
 
 subroutine write_u_accel(I, j, um, hin, dt, G, CS, maxvel, minvel, str, a, hv)
   integer,                                intent(in) :: I, j
-  real, dimension(NXMEMQ_,NYMEM_,NZ_),    intent(in) :: um
-  real, dimension(NXMEM_,NYMEM_,NZ_),     intent(in) :: hin
+  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(in) :: um
+  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(in) :: hin
   real,                                   intent(in) :: dt
   type(ocean_grid_type),                  intent(in) :: G
   type(PointAccel_CS),                    pointer    :: CS
   real,                                   intent(in) :: maxvel, minvel
   real, optional,                         intent(in) :: str
-  real, dimension(NXMEMQ_,NZ_), optional, intent(in) :: a, hv
+  real, dimension(NXMEMQ_,NKMEM_), optional, intent(in) :: a, hv
 ! This subroutine writes to an output file all of the accelerations
 ! that have been applied to a column of zonal velocities over the
 ! previous timestep.  This subroutine is called from vertvisc.
@@ -578,15 +578,15 @@ end subroutine write_u_accel
 
 
 subroutine write_v_accel(i, J, vm, hin, dt, G, CS, maxvel, minvel, str, a, hv)
-  integer,                               intent(in) :: i, J
-  real, dimension(NXMEM_,NYMEMQ_,NZ_),   intent(in) :: vm
-  real, dimension(NXMEM_,NYMEM_,NZ_),    intent(in) :: hin
-  real,                                  intent(in) :: dt
-  type(ocean_grid_type),                 intent(in) :: G
-  type(PointAccel_CS),                   pointer    :: CS
-  real,                                  intent(in) :: maxvel, minvel
-  real, optional,                        intent(in) :: str
-  real, dimension(NXMEM_,NZ_), optional, intent(in) :: a, hv
+  integer,                                intent(in) :: i, J
+  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(in) :: vm
+  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(in) :: hin
+  real,                                   intent(in) :: dt
+  type(ocean_grid_type),                  intent(in) :: G
+  type(PointAccel_CS),                    pointer    :: CS
+  real,                                   intent(in) :: maxvel, minvel
+  real, optional,                         intent(in) :: str
+  real, dimension(NXMEM_,NKMEM_), optional, intent(in) :: a, hv
 
 ! This subroutine writes to an output file all of the accelerations
 ! that have been applied to a column of meridional velocities over
