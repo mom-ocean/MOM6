@@ -64,9 +64,9 @@ end type wave_speed_CS
 contains
 
 subroutine wave_speed(h, tv, G, cg1, CS)
-  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(in)  :: h
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)  :: h
   type(thermo_var_ptrs),                 intent(in)  :: tv
-  real, dimension(NXMEM_,NYMEM_),        intent(out) :: cg1
+  real, dimension(NIMEM_,NJMEM_),        intent(out) :: cg1
   type(ocean_grid_type),                 intent(in)  :: G
   type(wave_speed_CS),                   pointer     :: CS
 !    This subroutine determines the first mode internal wave speed.

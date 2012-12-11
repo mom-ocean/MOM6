@@ -942,12 +942,12 @@ end function step_MOM
 ! ============================================================================
 
 subroutine find_total_transport(u_in, v_in, h_in, uh_tot, vh_tot, dt, G, CS)
-  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(in)    :: u_in
-  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(in)    :: v_in
+  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)    :: u_in
+  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)    :: v_in
   real,                                   intent(in)    :: dt
-  real, dimension(NXMEMQ_,NYMEM_),        intent(out)   :: uh_tot
-  real, dimension(NXMEM_,NYMEMQ_),        intent(out)   :: vh_tot
-  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(in)    :: h_in
+  real, dimension(NIMEMB_,NJMEM_),        intent(out)   :: uh_tot
+  real, dimension(NIMEM_,NJMEMB_),        intent(out)   :: vh_tot
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h_in
   type(ocean_grid_type),                  intent(inout) :: G
   type(MOM_control_struct),               pointer       :: CS
 !   This subroutine determines the vertically summed transport based on input
@@ -964,8 +964,8 @@ subroutine find_total_transport(u_in, v_in, h_in, uh_tot, vh_tot, dt, G, CS)
 !  (in)      CS - The control structure set up by initialize_MOM.
 
   ! Temporary arrays to contain layer thickness fluxes in m3 s-1 or kg s-1.
-  real, dimension(SZIQ_(G),SZJ_(G),SZK_(G)) :: uh_temp 
-  real, dimension(SZI_(G),SZJQ_(G),SZK_(G)) :: vh_temp
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: uh_temp 
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: vh_temp
   ! A temporary array to contain layer projected thicknesses in m or kg m-2.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G))  :: h_temp
   integer :: i, j, k, is, ie, js, je, nz
@@ -1298,21 +1298,21 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call advect_tracer_init(param_file, CS%tracer_CSp)
 
 ! Allocate and initialize space for the primary MOM variables.
-  ALLOC(CS%u(Isdq:Iedq,jsd:jed,nz,2)) ; CS%u(:,:,:,:) = 0.0
-  ALLOC(CS%v(isd:ied,Jsdq:Jedq,nz,2)) ; CS%v(:,:,:,:) = 0.0
-  ALLOC(CS%h(isd:ied,jsd:jed,nz,2))   ; CS%h(:,:,:,:) = grid%Angstrom
+  ALLOC_(CS%u(Isdq:Iedq,jsd:jed,nz,2)) ; CS%u(:,:,:,:) = 0.0
+  ALLOC_(CS%v(isd:ied,Jsdq:Jedq,nz,2)) ; CS%v(:,:,:,:) = 0.0
+  ALLOC_(CS%h(isd:ied,jsd:jed,nz,2))   ; CS%h(:,:,:,:) = grid%Angstrom
   u => CS%u ; v => CS%v ; h => CS%h
-  ALLOC(CS%uh(Isdq:Iedq,jsd:jed,nz))  ; CS%uh(:,:,:) = 0.0
-  ALLOC(CS%vh(isd:ied,Jsdq:Jedq,nz))  ; CS%vh(:,:,:) = 0.0
-  ALLOC(CS%diffu(Isdq:Iedq,jsd:jed,nz)) ; CS%diffu(:,:,:) = 0.0
-  ALLOC(CS%diffv(isd:ied,Jsdq:Jedq,nz)) ; CS%diffv(:,:,:) = 0.0
-  ALLOC(CS%CAu(Isdq:Iedq,jsd:jed,nz)) ; CS%CAu(:,:,:) = 0.0
-  ALLOC(CS%CAv(isd:ied,Jsdq:Jedq,nz)) ; CS%CAv(:,:,:) = 0.0
-  ALLOC(CS%PFu(Isdq:Iedq,jsd:jed,nz)) ; CS%PFu(:,:,:) = 0.0
-  ALLOC(CS%PFv(isd:ied,Jsdq:Jedq,nz)) ; CS%PFv(:,:,:) = 0.0
+  ALLOC_(CS%uh(Isdq:Iedq,jsd:jed,nz))  ; CS%uh(:,:,:) = 0.0
+  ALLOC_(CS%vh(isd:ied,Jsdq:Jedq,nz))  ; CS%vh(:,:,:) = 0.0
+  ALLOC_(CS%diffu(Isdq:Iedq,jsd:jed,nz)) ; CS%diffu(:,:,:) = 0.0
+  ALLOC_(CS%diffv(isd:ied,Jsdq:Jedq,nz)) ; CS%diffv(:,:,:) = 0.0
+  ALLOC_(CS%CAu(Isdq:Iedq,jsd:jed,nz)) ; CS%CAu(:,:,:) = 0.0
+  ALLOC_(CS%CAv(isd:ied,Jsdq:Jedq,nz)) ; CS%CAv(:,:,:) = 0.0
+  ALLOC_(CS%PFu(Isdq:Iedq,jsd:jed,nz)) ; CS%PFu(:,:,:) = 0.0
+  ALLOC_(CS%PFv(isd:ied,Jsdq:Jedq,nz)) ; CS%PFv(:,:,:) = 0.0
   if (CS%use_temperature) then
-    ALLOC(CS%T(isd:ied,jsd:jed,nz))   ; CS%T(:,:,:) = 0.0
-    ALLOC(CS%S(isd:ied,jsd:jed,nz))   ; CS%S(:,:,:) = 0.0
+    ALLOC_(CS%T(isd:ied,jsd:jed,nz))   ; CS%T(:,:,:) = 0.0
+    ALLOC_(CS%S(isd:ied,jsd:jed,nz))   ; CS%S(:,:,:) = 0.0
     CS%tv%T => CS%T ; CS%tv%S => CS%S
     call register_tracer(CS%tv%T, "T", param_file, CS%tracer_CSp)
     call register_tracer(CS%tv%S, "S", param_file, CS%tracer_CSp)
@@ -1335,8 +1335,8 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     grid%nkml = 0 ; grid%nk_rho_varies = 0
   endif
 
-  ALLOC(CS%uhtr(Isdq:Iedq,jsd:jed,nz)) ; CS%uhtr(:,:,:) = 0.0
-  ALLOC(CS%vhtr(isd:ied,Jsdq:Jedq,nz)) ; CS%vhtr(:,:,:) = 0.0
+  ALLOC_(CS%uhtr(Isdq:Iedq,jsd:jed,nz)) ; CS%uhtr(:,:,:) = 0.0
+  ALLOC_(CS%vhtr(isd:ied,Jsdq:Jedq,nz)) ; CS%vhtr(:,:,:) = 0.0
 
   if (CS%debug_truncations) then
     allocate(CS%u_prev(Isdq:Iedq,jsd:jed,nz)) ; CS%u_prev(:,:,:) = 0.0
@@ -1352,20 +1352,20 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     MOM_internal_state%T => CS%T ; MOM_internal_state%S => CS%S
   endif
   if (CS%split) then
-    ALLOC(CS%eta(isd:ied,jsd:jed))      ; CS%eta(:,:) = 0.0
-    ALLOC(CS%uhbt(Isdq:Iedq,jsd:jed))   ; CS%uhbt(:,:) = 0.0
-    ALLOC(CS%vhbt(isd:ied,Jsdq:Jedq))   ; CS%vhbt(:,:) = 0.0
-    ALLOC(CS%uhbt_in(Isdq:Iedq,jsd:jed)) ; CS%uhbt_in(:,:) = 0.0
-    ALLOC(CS%vhbt_in(isd:ied,Jsdq:Jedq)) ; CS%vhbt_in(:,:) = 0.0
-    ALLOC(CS%u_av(Isdq:Iedq,jsd:jed,nz)); CS%u_av(:,:,:) = 0.0
-    ALLOC(CS%v_av(isd:ied,Jsdq:Jedq,nz)); CS%v_av(:,:,:) = 0.0
-    ALLOC(CS%h_av(isd:ied,jsd:jed,nz))  ; CS%h_av(:,:,:) = grid%Angstrom
-    ALLOC(CS%eta_PF(isd:ied,jsd:jed))   ; CS%eta_PF(:,:) = 0.0
-    ALLOC(CS%pbce(isd:ied,jsd:jed,nz))  ; CS%pbce(:,:,:) = 0.0
-    ALLOC(CS%u_accel_bt(Isdq:Iedq,jsd:jed,nz)) ; CS%u_accel_bt(:,:,:) = 0.0
-    ALLOC(CS%v_accel_bt(isd:ied,Jsdq:Jedq,nz)) ; CS%v_accel_bt(:,:,:) = 0.0
-    ALLOC(CS%visc_rem_u(Isdq:Iedq,jsd:jed,nz)) ; CS%visc_rem_u(:,:,:) = 0.0
-    ALLOC(CS%visc_rem_v(isd:ied,Jsdq:Jedq,nz)) ; CS%visc_rem_v(:,:,:) = 0.0
+    ALLOC_(CS%eta(isd:ied,jsd:jed))      ; CS%eta(:,:) = 0.0
+    ALLOC_(CS%uhbt(Isdq:Iedq,jsd:jed))   ; CS%uhbt(:,:) = 0.0
+    ALLOC_(CS%vhbt(isd:ied,Jsdq:Jedq))   ; CS%vhbt(:,:) = 0.0
+    ALLOC_(CS%uhbt_in(Isdq:Iedq,jsd:jed)) ; CS%uhbt_in(:,:) = 0.0
+    ALLOC_(CS%vhbt_in(isd:ied,Jsdq:Jedq)) ; CS%vhbt_in(:,:) = 0.0
+    ALLOC_(CS%u_av(Isdq:Iedq,jsd:jed,nz)); CS%u_av(:,:,:) = 0.0
+    ALLOC_(CS%v_av(isd:ied,Jsdq:Jedq,nz)); CS%v_av(:,:,:) = 0.0
+    ALLOC_(CS%h_av(isd:ied,jsd:jed,nz))  ; CS%h_av(:,:,:) = grid%Angstrom
+    ALLOC_(CS%eta_PF(isd:ied,jsd:jed))   ; CS%eta_PF(:,:) = 0.0
+    ALLOC_(CS%pbce(isd:ied,jsd:jed,nz))  ; CS%pbce(:,:,:) = 0.0
+    ALLOC_(CS%u_accel_bt(Isdq:Iedq,jsd:jed,nz)) ; CS%u_accel_bt(:,:,:) = 0.0
+    ALLOC_(CS%v_accel_bt(isd:ied,Jsdq:Jedq,nz)) ; CS%v_accel_bt(:,:,:) = 0.0
+    ALLOC_(CS%visc_rem_u(Isdq:Iedq,jsd:jed,nz)) ; CS%visc_rem_u(:,:,:) = 0.0
+    ALLOC_(CS%visc_rem_v(isd:ied,Jsdq:Jedq,nz)) ; CS%visc_rem_v(:,:,:) = 0.0
 
     MOM_internal_state%u_accel_bt => CS%u_accel_bt
     MOM_internal_state%v_accel_bt => CS%v_accel_bt
@@ -1379,7 +1379,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   allocate(CS%taux_bot(Isdq:Iedq,jsd:jed)) ; CS%taux_bot(:,:) = 0.0
   allocate(CS%tauy_bot(isd:ied,Jsdq:Jedq)) ; CS%tauy_bot(:,:) = 0.0
 
-  ALLOC(CS%ave_ssh(isd:ied,jsd:jed)) ; CS%ave_ssh(:,:) = 0.0
+  ALLOC_(CS%ave_ssh(isd:ied,jsd:jed)) ; CS%ave_ssh(:,:) = 0.0
 
 ! Use the Wright equation of state by default, unless otherwise specified
 ! Note: this line and the following block ought to be in a separate
@@ -1447,7 +1447,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call MEKE_init(Time, grid, param_file, diag, CS%MEKE_CSp, CS%MEKE)
   call VarMix_init(Time, grid, param_file, diag, CS%VarMix)
   ! Need an ALE CS !!!! -AJA
-  ALLOC(CS%h_aux(isd:ied,jsd:jed,nz)); CS%h_aux(:,:,:) = 0.
+  ALLOC_(CS%h_aux(isd:ied,jsd:jed,nz)); CS%h_aux(:,:,:) = 0.
   call initialize_regridding(param_file, CS%regridding_opts, grid, &
                              h(:,:,:,:), CS%h_aux(:,:,:), u(:,:,:,1), v(:,:,:,1), CS%tv)
   call MOM_diagnostics_init(MOM_internal_state, Time, grid, param_file, &
@@ -1941,10 +1941,10 @@ end subroutine set_restart_fields
 
 subroutine calculate_surface_state(state, u, v, h, ssh, G, CS, p_atm)
   type(surface),                                  intent(inout) :: state
-  real, target, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(in)    :: u
-  real, target, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(in)    :: v
-  real, target, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(in)    :: h
-  real, target, dimension(NXMEM_,NYMEM_),         intent(inout) :: ssh
+  real, target, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)    :: u
+  real, target, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)    :: v
+  real, target, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h
+  real, target, dimension(NIMEM_,NJMEM_),         intent(inout) :: ssh
   type(ocean_grid_type),                          intent(inout) :: G
   type(MOM_control_struct),                       intent(in)    :: CS
   real, optional, pointer, dimension(:,:)                       :: p_atm
@@ -2183,7 +2183,7 @@ end subroutine calculate_surface_state
 ! ============================================================================
 
 subroutine smooth_SSH(ssh, G, smooth_passes)
-  real, dimension(NXMEM_,NYMEM_),      intent(inout) :: ssh
+  real, dimension(NIMEM_,NJMEM_),      intent(inout) :: ssh
   type(ocean_grid_type),               intent(inout) :: G
   real,                                intent(in)    :: smooth_passes
 !   This subroutine applies a number of 2-D smoothing passes, each of which
@@ -2194,8 +2194,8 @@ subroutine smooth_SSH(ssh, G, smooth_passes)
 ! Arguments: ssh - Time mean sea surface hieght, in m.  (Intent inout.)
 !  (in)      G - The ocean's grid structure.
 !  (in)      smooth_passes - the number of smoothing passes to apply.
-  real, dimension(SZIQ_(G), SZJ_(G)) :: flux_x, area_x
-  real, dimension(SZI_(G), SZJQ_(G)) :: flux_y, area_y
+  real, dimension(SZIB_(G), SZJ_(G)) :: flux_x, area_x
+  real, dimension(SZI_(G), SZJB_(G)) :: flux_y, area_y
   real :: wt
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed, isl, iel, jsl, jel, halo
   integer :: pass, tot_pass
@@ -2249,29 +2249,29 @@ subroutine MOM_end(CS)
 
   call end_regridding(CS%regridding_opts)
 
-  DEALLOC(CS%u) ; DEALLOC(CS%v) ; DEALLOC(CS%h)
-  DEALLOC(CS%uh) ; DEALLOC(CS%vh)
-  DEALLOC(CS%diffu) ; DEALLOC(CS%diffv)
-  DEALLOC(CS%CAu) ; DEALLOC(CS%CAv)
-  DEALLOC(CS%PFu) ; DEALLOC(CS%PFv)
+  DEALLOC_(CS%u) ; DEALLOC_(CS%v) ; DEALLOC_(CS%h)
+  DEALLOC_(CS%uh) ; DEALLOC_(CS%vh)
+  DEALLOC_(CS%diffu) ; DEALLOC_(CS%diffv)
+  DEALLOC_(CS%CAu) ; DEALLOC_(CS%CAv)
+  DEALLOC_(CS%PFu) ; DEALLOC_(CS%PFv)
   if (CS%use_temperature) then
-    DEALLOC(CS%tv%T) ; DEALLOC(CS%tv%S)
+    DEALLOC_(CS%tv%T) ; DEALLOC_(CS%tv%S)
   endif
   if (associated(CS%tv%frazil)) deallocate(CS%tv%frazil)
   if (associated(CS%tv%salt_deficit)) deallocate(CS%tv%salt_deficit)  
   if (associated(CS%tv%Hml)) deallocate(CS%tv%Hml)
 
-  DEALLOC(CS%uhtr) ; DEALLOC(CS%vhtr)
+  DEALLOC_(CS%uhtr) ; DEALLOC_(CS%vhtr)
   if (CS%split) then
-    DEALLOC(CS%eta) ; DEALLOC(CS%uhbt) ; DEALLOC(CS%vhbt)
-    DEALLOC(CS%uhbt_in) ; DEALLOC(CS%vhbt_in)
-    DEALLOC(CS%h_av) ; DEALLOC(CS%u_av) ; DEALLOC(CS%v_av)
-    DEALLOC(CS%eta_PF) ; DEALLOC(CS%pbce)
-    DEALLOC(CS%u_accel_bt) ; DEALLOC(CS%v_accel_bt)
-    DEALLOC(CS%visc_rem_u) ; DEALLOC(CS%visc_rem_v)
+    DEALLOC_(CS%eta) ; DEALLOC_(CS%uhbt) ; DEALLOC_(CS%vhbt)
+    DEALLOC_(CS%uhbt_in) ; DEALLOC_(CS%vhbt_in)
+    DEALLOC_(CS%h_av) ; DEALLOC_(CS%u_av) ; DEALLOC_(CS%v_av)
+    DEALLOC_(CS%eta_PF) ; DEALLOC_(CS%pbce)
+    DEALLOC_(CS%u_accel_bt) ; DEALLOC_(CS%v_accel_bt)
+    DEALLOC_(CS%visc_rem_u) ; DEALLOC_(CS%visc_rem_v)
     call dealloc_BT_cont_type(CS%BT_cont)
   endif
-  DEALLOC(CS%ave_ssh)
+  DEALLOC_(CS%ave_ssh)
 
   deallocate(CS)
 

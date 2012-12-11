@@ -155,16 +155,16 @@ contains
 
 subroutine step_MOM_dyn_unsplit(u, v, h, Time_local, dt, fluxes, &
                   p_surf_begin, p_surf_end, uh, vh, eta_av, G, CS)
-  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(inout) :: u
-  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(inout) :: v
-  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(inout) :: h
+  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(inout) :: u
+  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(inout) :: v
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(inout) :: h
   type(time_type),                        intent(in)    :: Time_local
   real,                                   intent(in)    :: dt
   type(forcing),                          intent(in)    :: fluxes
   real, dimension(:,:),                   pointer       :: p_surf_begin, p_surf_end
-  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(inout) :: uh
-  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(inout) :: vh
-  real, dimension(NXMEM_,NYMEM_),         intent(out)   :: eta_av
+  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(inout) :: uh
+  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(inout) :: vh
+  real, dimension(NIMEM_,NJMEM_),         intent(out)   :: eta_av
   type(ocean_grid_type),                  intent(inout) :: G
   type(MOM_control_struct),               pointer      :: CS
 ! Arguments: u - The input and output zonal velocity, in m s-1.
@@ -187,8 +187,8 @@ subroutine step_MOM_dyn_unsplit(u, v, h, Time_local, dt, fluxes, &
 !  (in)      CS - The control structure set up by initialize_MOM.
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_av, hp
-  real, dimension(SZIQ_(G),SZJ_(G),SZK_(G)) :: up, upp
-  real, dimension(SZI_(G),SZJQ_(G),SZK_(G)) :: vp, vpp
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: up, upp
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: vp, vpp
   real, dimension(:,:), pointer :: p_surf
   real :: dt_pred   ! The time step for the predictor part of the baroclinic
                     ! time stepping.
@@ -543,9 +543,9 @@ subroutine register_restarts_dyn_unsplit(G, param_file, CS, restart_CS)
 end subroutine register_restarts_dyn_unsplit
 
 subroutine initialize_dyn_unsplit(u, v, h, Time, G, param_file, diag, CS, restart_CS)
-  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(inout) :: u
-  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(inout) :: v
-  real, dimension(NXMEM_,NYMEM_,NKMEM_) , intent(inout) :: h
+  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(inout) :: u
+  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(inout) :: v
+  real, dimension(NIMEM_,NJMEM_,NKMEM_) , intent(inout) :: h
   type(time_type),                target, intent(in)    :: Time
   type(ocean_grid_type),                  intent(inout) :: G
   type(param_file_type),                  intent(in)    :: param_file

@@ -73,20 +73,20 @@ public MOM_state_chksum, MOM_thermo_chksum, MOM_accel_chksum
 #include <MOM_memory.h>
 
 type, public :: MOM_control_struct
-  real PTR_, dimension(NXMEMQP_,NYMEM_,NKMEM_,C2_) :: &
+  real PTR_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_,C2_) :: &
     u         ! Zonal velocity, in m s-1.
-  real PTR_, dimension(NXMEM_,NYMEMQP_,NKMEM_,C2_) :: &
+  real PTR_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_,C2_) :: &
     v         ! Meridional velocity, in m s-1.
-  real PTR_, dimension(NXMEM_,NYMEM_,NKMEM_,C2_) :: &
+  real PTR_, dimension(NIMEM_,NJMEM_,NKMEM_,C2_) :: &
     h         ! Layer thickness, in m or kg m-2 (H).
-  real PTR_, dimension(NXMEM_,NYMEM_) :: &
+  real PTR_, dimension(NIMEM_,NJMEM_) :: &
     eta       ! Instantaneous free surface height, in m.
-  real PTR_, dimension(NXMEM_,NYMEM_,NKMEM_) :: &
+  real PTR_, dimension(NIMEM_,NJMEM_,NKMEM_) :: &
     T, &      ! Potential temperature in C.
     S         ! Salinity in PSU.
-  real PTR_, dimension(NXMEM_,NYMEM_,NKMEM_) :: &
+  real PTR_, dimension(NIMEM_,NJMEM_,NKMEM_) :: &
     h_aux     ! Work array for remapping (same units as h).
-  real PTR_, dimension(NXMEMQP_,NYMEM_,NKMEM_) :: &
+  real PTR_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: &
     uh, &     ! uh = u * h * dy at u grid points in m3 s-1.
     CAu, &    ! CAu = f*v - u.grad(u) in m s-2.
     PFu, &    ! PFu = -dM/dx, in m s-2.
@@ -98,7 +98,7 @@ type, public :: MOM_control_struct
               ! that a layer experiences after viscosity is applied.
               ! Nondimensional between 0 (at the bottom) and 1 (far above).
     uhtr      ! Accumlated zonal thickness fluxes used to advect tracers, in m3.
-  real PTR_, dimension(NXMEM_,NYMEMQP_,NKMEM_) :: &
+  real PTR_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: &
     vh, &     ! vh = v * h * dx at v grid points in m3 s-1.
     CAv, &    ! CAv = -f*u - u.grad(v) in m s-2.
     PFv, &    ! PFv = -dM/dy, in m s-2.
@@ -110,34 +110,34 @@ type, public :: MOM_control_struct
               ! that a layer experiences after viscosity is applied.
               ! Nondimensional between 0 (at the bottom) and 1 (far above).
     vhtr      ! Accumlated meridional thickness fluxes used to advect tracers, in m3.
-  real PTR_, dimension(NXMEM_,NYMEM_) :: &
+  real PTR_, dimension(NIMEM_,NJMEM_) :: &
     ave_ssh, &! The time-averaged sea surface height in m.
     eta_PF    ! The instantaneous SSH used in calculating PFu and PFv, in m.
-  real PTR_, dimension(NXMEMQP_,NYMEM_) :: uhbt
-  real PTR_, dimension(NXMEM_,NYMEMQP_) :: vhbt
+  real PTR_, dimension(NIMEMB_PTR_,NJMEM_) :: uhbt
+  real PTR_, dimension(NIMEM_,NJMEMB_PTR_) :: vhbt
     ! uhbt and vhbt are the average volume or mass fluxes determined by the
     ! barotropic solver in m3 s-1 or kg s-1.  uhbt and vhbt should (roughly?) 
     ! equal the verticals sum of uh and vh, respectively.
-  real PTR_, dimension(NXMEMQP_,NYMEM_) :: uhbt_in
-  real PTR_, dimension(NXMEM_,NYMEMQP_) :: vhbt_in
+  real PTR_, dimension(NIMEMB_PTR_,NJMEM_) :: uhbt_in
+  real PTR_, dimension(NIMEM_,NJMEMB_PTR_) :: vhbt_in
     ! uhbt_in and vhbt_in are the vertically summed transports from based on
     ! the final thicknessses and velocities from the previous dynamics time
     ! step, both in units of m3 s-1 or kg s-1.
 ! The following 6 variables are only used with the split time stepping scheme.
-  real PTR_, dimension(NXMEM_,NYMEM_,NKMEM_) :: pbce
+  real PTR_, dimension(NIMEM_,NJMEM_,NKMEM_) :: pbce
       ! pbce times eta gives the baroclinic pressure anomaly in each layer due
       ! to free surface height anomalies.  pbce has units of m2 H-1 s-2.
-  real PTR_, dimension(NXMEMQP_,NYMEM_,NKMEM_) :: u_accel_bt
-  real PTR_, dimension(NXMEM_,NYMEMQP_,NKMEM_) :: v_accel_bt
+  real PTR_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: u_accel_bt
+  real PTR_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: v_accel_bt
     ! u_accel_bt and v_accel_bt are layers' accelerations due to
     ! the difference between the accelerations from the barotropic calculation
     ! baroclinic accelerations that were fed into the barotropic
     ! calculation, in m s-2.
-  real PTR_, dimension(NXMEMQP_,NYMEM_,NKMEM_) :: u_av
-  real PTR_, dimension(NXMEM_,NYMEMQP_,NKMEM_) :: v_av
+  real PTR_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: u_av
+  real PTR_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: v_av
     ! u_av and v_av are the layer velocities with the vertical mean replaced by
     ! the time-mean barotropic velocity over a baroclinic timestep, in m s-1.
-  real PTR_, dimension(NXMEM_,NYMEM_,NKMEM_)  :: h_av
+  real PTR_, dimension(NIMEM_,NJMEM_,NKMEM_)  :: h_av
     ! The arithmetic mean of two successive layer thicknesses, in m or kg m-2.
   real, pointer, dimension(:,:) :: taux_bot => NULL(), tauy_bot => NULL()
     ! The frictional bottom stresses from the ocean to the seafloor, in Pa.
@@ -323,11 +323,11 @@ contains
 
 subroutine MOM_state_chksum(mesg, u, v, h, uh, vh, G, haloshift)
   character(len=*),                       intent(in) :: mesg
-  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(in) :: u
-  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(in) :: v
-  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(in) :: h
-  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(in) :: uh
-  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(in) :: vh
+  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in) :: u
+  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in) :: v
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in) :: h
+  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in) :: uh
+  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in) :: vh
   type(ocean_grid_type),                  intent(in) :: G
   integer, optional,                      intent(in) :: haloshift
 !   This subroutine writes out chksums for the model's basic state variables.
@@ -381,16 +381,16 @@ end subroutine MOM_thermo_chksum
 subroutine MOM_accel_chksum(mesg, CAu, CAv, PFu, PFv, diffu, diffv, G, pbce, &
                             u_accel_bt, v_accel_bt)
   character(len=*),                       intent(in) :: mesg
-  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(in) :: CAu
-  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(in) :: CAv
-  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(in) :: PFu
-  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(in) :: PFv
-  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(in) :: diffu
-  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(in) :: diffv
+  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in) :: CAu
+  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in) :: CAv
+  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in) :: PFu
+  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in) :: PFv
+  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in) :: diffu
+  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in) :: diffv
   type(ocean_grid_type),                  intent(in) :: G
-  real, dimension(NXMEM_,NYMEM_,NKMEM_),  optional, intent(in) :: pbce
-  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), optional, intent(in) :: u_accel_bt
-  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), optional, intent(in) :: v_accel_bt
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  optional, intent(in) :: pbce
+  real, dimension(NIMEMB_,NJMEM_,NKMEM_), optional, intent(in) :: u_accel_bt
+  real, dimension(NIMEM_,NJMEMB_,NKMEM_), optional, intent(in) :: v_accel_bt
 !   This subroutine writes out chksums for the model's accelerations.
 ! Arguments: mesg - A message that appears on the chksum lines.
 !  (in)      CAu - Zonal acceleration due to Coriolis and momentum

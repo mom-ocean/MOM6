@@ -86,15 +86,15 @@ end type PressureForce_AFV_CS
 contains
 
 subroutine PressureForce_AFV(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
-  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(in)  :: h
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)  :: h
   type(thermo_var_ptrs), intent(inout)                :: tv
-  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(out) :: PFu
-  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(out) :: PFv
+  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(out) :: PFu
+  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(out) :: PFv
   type(ocean_grid_type),                  intent(in)  :: G
   type(PressureForce_AFV_CS),             pointer     :: CS
   real, dimension(:,:),                  optional, pointer     :: p_atm
-  real, dimension(NXMEM_,NYMEM_,NKMEM_), optional, intent(out) :: pbce
-  real, dimension(NXMEM_,NYMEM_),        optional, intent(out) :: eta
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), optional, intent(out) :: pbce
+  real, dimension(NIMEM_,NJMEM_),        optional, intent(out) :: eta
 
 !    This subroutine works as a temporary interface between the model and the
 ! Boussinesq and non-Boussinesq pressure force routines.
@@ -110,15 +110,15 @@ subroutine PressureForce_AFV(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
 end subroutine PressureForce_AFV
 
 subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
-  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(in)    :: h
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h
   type(thermo_var_ptrs),                  intent(inout) :: tv
-  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(out)  :: PFu
-  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(out)  :: PFv
+  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(out)  :: PFu
+  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(out)  :: PFv
   type(ocean_grid_type),                  intent(in)   :: G
   type(PressureForce_AFV_CS),             pointer      :: CS
   real, dimension(:,:),                  optional, pointer     :: p_atm
-  real, dimension(NXMEM_,NYMEM_,NKMEM_), optional, intent(out) :: pbce
-  real, dimension(NXMEM_,NYMEM_),        optional, intent(out) :: eta
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), optional, intent(out) :: pbce
+  real, dimension(NIMEM_,NJMEM_),        optional, intent(out) :: eta
 
 !    This subroutine determines the acceleration due to hydrostatic pressure
 !  forces, using the analytic finite volume form of the Pressure gradient, and
@@ -169,15 +169,15 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
                 ! density near-surface layer, in kg m-3.
     za          ! The geopotential anomaly (i.e. g*e + alpha_0*pressure) at the
                 ! interface atop a layer, in m2 s-2.
-  real, dimension(SZIQ_(G),SZJ_(G)) :: &
+  real, dimension(SZIB_(G),SZJ_(G)) :: &
     intx_za     ! The zonal integral of the geopotential anomaly along the
                 ! interface below a layer, divided by the grid spacing, m2 s-2.
-  real, dimension(SZIQ_(G),SZJ_(G),SZK_(G)) :: &
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: &
     intx_dza    ! The change in intx_za through a layer, in m2 s-2.
-  real, dimension(SZI_(G),SZJQ_(G)) :: &
+  real, dimension(SZI_(G),SZJB_(G)) :: &
     inty_za     ! The meridional integral of the geopotential anomaly along the
                 ! interface below a layer, divided by the grid spacing, m2 s-2.
-  real, dimension(SZI_(G),SZJQ_(G),SZK_(G)) :: &
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: &
     inty_dza    ! The change in inty_za through a layer, in m2 s-2.
   real :: p_ref(SZI_(G))     !   The pressure used to calculate the coordinate
                              ! density, in Pa (usually 2e7 Pa = 2000 dbar).
@@ -397,15 +397,15 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
 end subroutine PressureForce_AFV_nonBouss
 
 subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
-  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(in)    :: h
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h
   type(thermo_var_ptrs),                  intent(inout) :: tv
-  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(out)   :: PFu
-  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(out)   :: PFv
+  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(out)   :: PFu
+  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(out)   :: PFv
   type(ocean_grid_type),                  intent(in)    :: G
   type(PressureForce_AFV_CS),             pointer       :: CS
   real, dimension(:,:),                  optional, pointer     :: p_atm
-  real, dimension(NXMEM_,NYMEM_,NKMEM_), optional, intent(out) :: pbce
-  real, dimension(NXMEM_,NYMEM_),        optional, intent(out) :: eta
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), optional, intent(out) :: pbce
+  real, dimension(NIMEM_,NJMEM_),        optional, intent(out) :: eta
 
 !    This subroutine determines the acceleration due to pressure forces, using
 !  a finite volume form of the terms and analytic integrals in depth to avoid
@@ -451,11 +451,11 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
                 ! density near-surface layer, in kg m-3.
     intz_dpa    ! The vertical integral in depth of the pressure anomaly less
                 ! the pressure anomaly at the top of the layer, in m Pa.
-  real, dimension(SZIQ_(G),SZJ_(G)) :: &
+  real, dimension(SZIB_(G),SZJ_(G)) :: &
     intx_pa, &  ! The zonal integral of the pressure anomaly along the interface
                 ! atop a layer, divided by the grid spacing, in Pa.
     intx_dpa    ! The change in intx_pa through a layer, in Pa.
-  real, dimension(SZI_(G),SZJQ_(G)) :: &
+  real, dimension(SZI_(G),SZJB_(G)) :: &
     inty_pa, &  ! The meridional integral of the pressure anomaly along the
                 ! interface atop a layer, divided by the grid spacing, in Pa.
     inty_dpa    ! The change in inty_pa through a layer, in Pa.

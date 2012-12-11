@@ -281,7 +281,7 @@ contains
     logical,                               intent(in) :: restart
     type(time_type), target,               intent(in) :: day
     type(ocean_grid_type),                 intent(in) :: G
-    real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(in) :: h
+    real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h
     type(ocean_OBC_type),                  pointer    :: OBC
     type(MOM_generic_tracer_CS),           pointer    :: CS
     type(sponge_CS),                       pointer    :: sponge_CSp
@@ -448,7 +448,7 @@ contains
   ! </SUBROUTINE>
 
   subroutine MOM_generic_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, CS, tv, optics)
-    real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(in) :: h_old, h_new, ea, eb
+    real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h_old, h_new, ea, eb
     type(forcing),                         intent(in) :: fluxes
     real,                                  intent(in) :: dt
     type(ocean_grid_type),                 intent(in) :: G
@@ -595,7 +595,7 @@ contains
   ! </SUBROUTINE>
 
   function MOM_generic_tracer_stock(h, stocks, G, CS, names, units, stock_index)
-    real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(in)    :: h
+    real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h
     real, dimension(:),                 intent(out)   :: stocks
     type(ocean_grid_type),              intent(in)    :: G
     type(MOM_generic_tracer_CS),        pointer       :: CS
@@ -776,7 +776,7 @@ contains
 
   subroutine MOM_generic_tracer_surface_state(state, h, G, CS)
     type(surface),                         intent(inout) :: state
-    real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(in) :: h
+    real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h
     type(ocean_grid_type),                 intent(in) :: G
     type(MOM_generic_tracer_CS),           pointer    :: CS
     !   This subroutine sets up the fields that the coupler needs to calculate the

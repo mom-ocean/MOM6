@@ -86,10 +86,10 @@ end type geothermal_CS
 contains
 
 subroutine geothermal(h, tv, dt, ea, eb, G, CS)
-  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(inout) :: h
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: h
   type(thermo_var_ptrs),                 intent(inout) :: tv
   real,                                  intent(in)    :: dt
-  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(inout) :: ea, eb
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: ea, eb
   type(ocean_grid_type),                 intent(inout) :: G
   type(geothermal_CS),                   pointer       :: CS
 

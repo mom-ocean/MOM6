@@ -12,66 +12,66 @@
 #endif
 
 #ifdef STATIC_MEMORY
-!   NXMEM and NYMEM are the maximum number of grid points in the
+!   NIMEM and NJMEM are the maximum number of grid points in the
 ! x- and y-directions on each processsor.
-#  define NXMEM (((NXTOT-1)/NXPROC)+1+2*NX_HALO)
-#  define NYMEM (((NYTOT-1)/NYPROC)+1+2*NY_HALO)
+#  define NIMEM (((NXTOT-1)/NXPROC)+1+2*NX_HALO)
+#  define NJMEM (((NYTOT-1)/NYPROC)+1+2*NY_HALO)
 
-#  define DEALLOC(x)
-#  define ALLOC(x)
-#  define ALLOCABLE
+#  define DEALLOC_(x)
+#  define ALLOC_(x)
+#  define ALLOCABLE_
 #  define PTR_
 #  define TO_NULL_
-#  define NXMEM_     NXMEM
-#  define NYMEM_     NYMEM
+#  define NIMEM_     NIMEM
+#  define NJMEM_     NJMEM
 #  ifdef SYMMETRIC_MEMORY
-#    define NXMEMQ_    0:NXMEM
-#    define NYMEMQ_    0:NYMEM
+#    define NIMEMB_    0:NIMEM
+#    define NJMEMB_    0:NJMEM
 #  else
-#    define NXMEMQ_    NXMEM
-#    define NYMEMQ_    NYMEM
+#    define NIMEMB_    NIMEM
+#    define NJMEMB_    NJMEM
 #  endif
-#  define NXMEMQP_    NXMEMQ_
-#  define NYMEMQP_    NYMEMQ_
-#  define NXMEMQS_    0:NXMEM
-#  define NYMEMQS_    0:NYMEM
+#  define NIMEMB_PTR_  NIMEMB_
+#  define NJMEMB_PTR_  NJMEMB_
+#  define NIMEMB_SYM_  0:NIMEM
+#  define NJMEMB_SYM_  0:NJMEM
 #  define NKMEM_     NZ
 #  define NK_INTERFACE_ NZ+1
 #  define C1_        1
 #  define C2_        2
 #  define C3_        3
-#  define SZ1_(u)    NXMEM
-#  define SZ2_(u)    NYMEM
+#  define SZ1_(u)    NIMEM
+#  define SZ2_(u)    NJMEM
 #  define SZ3_(u)    NZ
-#  define SZI_(G)    NXMEM
-#  define SZJ_(G)    NYMEM
+#  define SZI_(G)    NIMEM
+#  define SZJ_(G)    NJMEM
 #  define SZK_(G)    NZ
-#  define SZIQ_(G)   NXMEMQ_
-#  define SZJQ_(G)   NYMEMQ_
-#  define SZIQS_(G)  0:NXMEM
-#  define SZJQS_(G)  0:NYMEM
+#  define SZIB_(G)   NIMEMB_
+#  define SZJB_(G)   NJMEMB_
+#  define SZIBS_(G)  0:NIMEM
+#  define SZJBS_(G)  0:NJMEM
 
 #else
 ! Dynamic memory allocation
 
-#  define DEALLOC(x) deallocate(x)
-#  define ALLOC(x)   allocate(x)
-#  define ALLOCABLE  ,allocatable
+#  define DEALLOC_(x) deallocate(x)
+#  define ALLOC_(x)   allocate(x)
+#  define ALLOCABLE_ ,allocatable
 #  define PTR_       ,pointer
 #  define TO_NULL_   =>NULL()
-#  define NXMEM_     :
-#  define NYMEM_     :
-#  define NXMEMQP_   :
-#  define NYMEMQP_   :
+#  define NIMEM_     :
+#  define NJMEM_     :
+#  define NIMEMB_PTR_   :
+#  define NJMEMB_PTR_   :
 #  ifdef SYMMETRIC_MEMORY
-#    define NXMEMQ_    0:
-#    define NYMEMQ_    0:
+#    define NIMEMB_    0:
+#    define NJMEMB_    0:
 #  else
-#    define NXMEMQ_    :
-#    define NYMEMQ_    :
+#    define NIMEMB_    :
+#    define NJMEMB_    :
 #  endif
-#  define NXMEMQS_    0:
-#  define NYMEMQS_    0:
+#  define NIMEMB_SYM_ 0:
+#  define NJMEMB_SYM_ 0:
 #  define NKMEM_     :
 #  define NK_INTERFACE_  :
 #  define C1_        :
@@ -83,9 +83,9 @@
 #  define SZI_(G)    G%isd:G%ied
 #  define SZJ_(G)    G%jsd:G%jed
 #  define SZK_(G)    G%ks:G%ke
-#  define SZIQ_(G)   G%Isdq:G%Iedq
-#  define SZJQ_(G)   G%Jsdq:G%Jedq
-#  define SZIQS_(G)  G%isd-1:G%ied
-#  define SZJQS_(G)  G%jsd-1:G%jed
+#  define SZIB_(G)   G%Isdq:G%Iedq
+#  define SZJB_(G)   G%Jsdq:G%Jedq
+#  define SZIBS_(G)  G%isd-1:G%ied
+#  define SZJBS_(G)  G%jsd-1:G%jed
 
 #endif

@@ -162,13 +162,13 @@ character*(20), parameter :: PV_ADV_UPWIND1_STRING = "PV_ADV_UPWIND1"
 contains
 
 subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, G, CS)
-  real, intent(in),  dimension(NXMEMQ_,NYMEM_,NKMEM_) :: u
-  real, intent(in),  dimension(NXMEM_,NYMEMQ_,NKMEM_) :: v
-  real, intent(in),  dimension(NXMEM_,NYMEM_,NKMEM_)  :: h
-  real, intent(in),  dimension(NXMEMQ_,NYMEM_,NKMEM_) :: uh
-  real, intent(in),  dimension(NXMEM_,NYMEMQ_,NKMEM_) :: vh
-  real, intent(out), dimension(NXMEMQ_,NYMEM_,NKMEM_) :: CAu
-  real, intent(out), dimension(NXMEM_,NYMEMQ_,NKMEM_) :: CAv
+  real, intent(in),  dimension(NIMEMB_,NJMEM_,NKMEM_) :: u
+  real, intent(in),  dimension(NIMEM_,NJMEMB_,NKMEM_) :: v
+  real, intent(in),  dimension(NIMEM_,NJMEM_,NKMEM_)  :: h
+  real, intent(in),  dimension(NIMEMB_,NJMEM_,NKMEM_) :: uh
+  real, intent(in),  dimension(NIMEM_,NJMEMB_,NKMEM_) :: vh
+  real, intent(out), dimension(NIMEMB_,NJMEM_,NKMEM_) :: CAu
+  real, intent(out), dimension(NIMEM_,NJMEMB_,NKMEM_) :: CAv
   type(ocean_grid_type), intent(in)                   :: G
   type(CoriolisAdv_CS), pointer                       :: CS
 !    This subroutine calculates the Coriolis and momentum advection
@@ -196,14 +196,14 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, G, CS)
 !   v[js-1,je+1], u[js-1,je+1,je+2], vh[js-1], uh[je+1], and
 !   h[js-1,je+1,je+2].
 
-  real, dimension(SZIQ_(G),SZJQ_(G)) :: &
+  real, dimension(SZIB_(G),SZJB_(G)) :: &
     q, &        ! Layer potential vorticity, in m-1 s-1.
     Ih_q, &     ! The inverse of thickness interpolated to q pointes, in
                 ! units of m-1 or m2 kg-1.
     Area_q      ! The sum of the ocean areas at the 4 adjacent thickness
                 ! points, in m2.
 
-  real, dimension(SZIQ_(G),SZJ_(G)) :: &
+  real, dimension(SZIB_(G),SZJ_(G)) :: &
     a, b, c, d  ! a, b, c, & d are combinations of the potential vorticities
                 ! surrounding an h grid point.  At small scales, a = q/4,
                 ! b = q/4, etc.  All are in units of m-1 s-1 or m2 kg-1 s-1,
@@ -213,10 +213,10 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, G, CS)
     Area_h, &   ! The ocean area at h points, in m2.  Area_h is used to find the
                 ! average thickness in the denominator of q.  0 for land points.
     KE          ! Kinetic energy per unit mass, KE = (u^2 + v^2)/2, in m2 s-2.
-  real, dimension(SZIQ_(G),SZJ_(G)) :: &
+  real, dimension(SZIB_(G),SZJ_(G)) :: &
     KEx         ! The zonal gradient of Kinetic energy per unit mass,
                 ! KEx = d/dx KE, in m s-2.
-  real, dimension(SZI_(G),SZJQ_(G)) :: &
+  real, dimension(SZI_(G),SZJB_(G)) :: &
     KEy         ! The meridonal gradient of Kinetic energy per unit mass,
                 ! KEy = d/dy KE, in m s-2.
   real, dimension(SZI_(G),SZJ_(G)) :: &
@@ -225,7 +225,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, G, CS)
                         ! in m3 s-1 or kg s-1.
     ep_u, ep_v  ! Additional pseudo-Coriolis terms in the Arakawa and Lamb
                 ! discretization, in m-1 s-1 or m2 kg-1 s-1.
-  real, dimension(SZIQ_(G),SZJQ_(G)) :: &
+  real, dimension(SZIB_(G),SZJB_(G)) :: &
     abs_vort, & ! Absolute vorticity at q-points, in s-1.
     q2, &       ! Relative vorticity over thickness.
     max_fvq, &  ! The maximum or minimum of the
@@ -740,14 +740,14 @@ end subroutine CorAdCalc
 ! =========================================================================================
 
 subroutine gradKE(u, v, h, uh, vh, KE, KEx, KEy, k, G, CS)
-  real, intent(in),  dimension(NXMEMQ_,NYMEM_ ,NKMEM_) :: u
-  real, intent(in),  dimension(NXMEM_ ,NYMEMQ_,NKMEM_) :: v
-  real, intent(in),  dimension(NXMEM_ ,NYMEM_ ,NKMEM_) :: h
-  real, intent(in),  dimension(NXMEMQ_,NYMEM_ ,NKMEM_) :: uh
-  real, intent(in),  dimension(NXMEM_,NYMEMQ_ ,NKMEM_) :: vh
-  real, intent(out), dimension(NXMEM_ ,NYMEM_ )        :: KE
-  real, intent(out), dimension(NXMEMQ_,NYMEM_ )        :: KEx
-  real, intent(out), dimension(NXMEM_ ,NYMEMQ_)        :: KEy
+  real, intent(in),  dimension(NIMEMB_,NJMEM_ ,NKMEM_) :: u
+  real, intent(in),  dimension(NIMEM_ ,NJMEMB_,NKMEM_) :: v
+  real, intent(in),  dimension(NIMEM_ ,NJMEM_ ,NKMEM_) :: h
+  real, intent(in),  dimension(NIMEMB_,NJMEM_ ,NKMEM_) :: uh
+  real, intent(in),  dimension(NIMEM_,NJMEMB_ ,NKMEM_) :: vh
+  real, intent(out), dimension(NIMEM_ ,NJMEM_ )        :: KE
+  real, intent(out), dimension(NIMEMB_,NJMEM_ )        :: KEx
+  real, intent(out), dimension(NIMEM_ ,NJMEMB_)        :: KEy
   integer, intent(in)                                  :: k
   type(ocean_grid_type), intent(in)                    :: G
   type(CoriolisAdv_CS), pointer                        :: CS

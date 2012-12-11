@@ -125,9 +125,9 @@ end type set_visc_CS
 contains
 
 subroutine set_viscous_BBL(u, v, h, tv, visc, G, CS)
-  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(in) :: u
-  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(in) :: v
-  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(in) :: h
+  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in) :: u
+  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in) :: v
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in) :: h
   type(thermo_var_ptrs),                  intent(in) :: tv
   type(vertvisc_type),                 intent(inout) :: visc
   type(ocean_grid_type),               intent(inout) :: G
@@ -153,7 +153,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, CS)
 !  (in)      G - The ocean's grid structure.
 !  (in)      CS - The control structure returned by a previous call to
 !                 vertvisc_init.
-  real, dimension(SZIQ_(G)) :: &
+  real, dimension(SZIB_(G)) :: &
     ustar, &    !   The bottom friction velocity, in m s-1.
     T_EOS, &    !   The temperature used to calculate the partial derivatives
                 ! of density with T and S, in deg C.
@@ -171,7 +171,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, CS)
 
   real :: Rhtot            ! Running sum of thicknesses times the
                            ! layer potential densities in H kg m-3.
-  real :: h_at_vel(SZIQ_(G),SZK_(G))! Layer thickness at a velocity point,
+  real :: h_at_vel(SZIB_(G),SZK_(G))! Layer thickness at a velocity point,
                            ! using an upwind-biased second order
                            ! accurate estimate based on the previous
                            ! velocity direction, in H.
@@ -268,7 +268,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, CS)
   real, parameter :: C1_3 = 1.0/3.0, C1_6 = 1.0/6.0, C1_12 = 1.0/12.0
   real :: C2pi_3           ! An irrational constant, 2/3 pi.
   real :: tmp              ! A temporary variable.
-  logical :: use_BBL_EOS, do_i(SZIQ_(G))
+  logical :: use_BBL_EOS, do_i(SZIB_(G))
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, m, K2, nkmb
   integer :: itt, maxitt=20
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -773,8 +773,8 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, CS)
 end subroutine set_viscous_BBL
 
 function set_v_at_u(v, h, G, i, j, k)
-  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(in) :: v
-  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(in) :: h
+  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in) :: v
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in) :: h
   type(ocean_grid_type),                  intent(in) :: G
   integer,                                intent(in) :: i, j, k
   real                                               :: set_v_at_u
@@ -794,8 +794,8 @@ function set_v_at_u(v, h, G, i, j, k)
 end function set_v_at_u
 
 function set_u_at_v(u, h, G, i, j, k)
-  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(in) :: u
-  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(in) :: h
+  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in) :: u
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in) :: h
   type(ocean_grid_type),                  intent(in) :: G
   integer,                                intent(in) :: i, j, k
   real                                               :: set_u_at_v
@@ -815,9 +815,9 @@ function set_u_at_v(u, h, G, i, j, k)
 end function set_u_at_v
 
 subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
-  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(in) :: u
-  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(in) :: v
-  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(in) :: h
+  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in) :: u
+  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in) :: v
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in) :: h
   type(thermo_var_ptrs),               intent(in)    :: tv
   type(forcing),                       intent(in)    :: fluxes
   type(vertvisc_type),                 intent(inout) :: visc
@@ -845,7 +845,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
 !  (in)      CS - The control structure returned by a previous call to
 !                 vertvisc_init.
 
-  real, dimension(SZIQ_(G)) :: &
+  real, dimension(SZIB_(G)) :: &
     htot, &     !   The total depth of the layers being that are within the
                 ! surface mixed layer, in H.
     Thtot, &    !   The integrated temperature of layers that are within the
@@ -868,10 +868,10 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
     press, &    ! The pressure at which dR_dT and dR_dS are evaluated, in Pa.
     T_EOS, &    ! T_EOS and S_EOS are the potential temperature and salnity at which dR_dT and dR_dS
     S_EOS       ! which dR_dT and dR_dS are evaluated, in degC and PSU.
-  real :: h_at_vel(SZIQ_(G),SZK_(G))! Layer thickness at velocity points,
+  real :: h_at_vel(SZIB_(G),SZK_(G))! Layer thickness at velocity points,
                 ! using an upwind-biased second order accurate estimate based
                 ! on the previous velocity direction, in H.
-  integer :: k_massive(SZIQ_(G)) ! The k-index of the deepest layer yet found
+  integer :: k_massive(SZIB_(G)) ! The k-index of the deepest layer yet found
                 ! that has more than h_tiny thickness and will be in the
                 ! viscous mixed layer.
   real :: Uh2   ! The squared magnitude of the difference between the velocity
@@ -927,7 +927,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
                     ! in roundoff and can be neglected, in H.
   real :: Rho0x400_G  ! 400*Rho0/G_Earth, in kg s2 m-4.  The 400 is a
                       ! constant proposed by Killworth and Edwards, 1999.
-  logical :: use_EOS, do_any, do_any_shelf, do_i(SZIQ_(G))
+  logical :: use_EOS, do_any, do_any_shelf, do_i(SZIB_(G))
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, K2, nkmb
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke

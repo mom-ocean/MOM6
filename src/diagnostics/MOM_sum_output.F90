@@ -257,7 +257,7 @@ subroutine MOM_sum_output_init(G, param_file, directory, ntrnc, &
         CS%depth_list_file = trim(slasher(directory))//trim(CS%depth_list_file)
     endif
 
-    ALLOC(CS%lH(G%ke))
+    ALLOC_(CS%lH(G%ke))
     call depth_list_setup(G, CS)
   else
     CS%list_size = 0
@@ -277,7 +277,7 @@ subroutine MOM_sum_output_end(CS)
 
   if (associated(CS)) then
     if (CS%do_APE_calc) then
-      DEALLOC(CS%lH)
+      DEALLOC_(CS%lH)
       deallocate(CS%DL)
     endif
     
@@ -286,9 +286,9 @@ subroutine MOM_sum_output_end(CS)
 end subroutine MOM_sum_output_end
 
 subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
-  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(in)    :: u
-  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(in)    :: v
-  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(in)    :: h
+  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)    :: u
+  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)    :: v
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h
   type(thermo_var_ptrs),                  intent(in)    :: tv
   type(time_type),                        intent(inout) :: day
   integer,                                intent(in)    :: n

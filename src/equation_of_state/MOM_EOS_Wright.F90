@@ -227,13 +227,13 @@ end subroutine calculate_2_densities_wright
 
 subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, G, dpa, intz_dpa, &
                           intx_dpa, inty_dpa)
-  real, dimension(NXMEM_,NYMEM_),  intent(in)  :: T, S, z_t, z_b
+  real, dimension(NIMEM_,NJMEM_),  intent(in)  :: T, S, z_t, z_b
   real,                            intent(in)  :: rho_ref, rho_0, G_e
   type(ocean_grid_type),           intent(in)  :: G
-  real, dimension(NXMEM_,NYMEM_),  intent(out) :: dpa
-  real, dimension(NXMEM_,NYMEM_),  optional, intent(out) :: intz_dpa
-  real, dimension(NXMEMQ_,NYMEM_), optional, intent(out) :: intx_dpa
-  real, dimension(NXMEM_,NYMEMQ_), optional, intent(out) :: inty_dpa
+  real, dimension(NIMEM_,NJMEM_),  intent(out) :: dpa
+  real, dimension(NIMEM_,NJMEM_),  optional, intent(out) :: intz_dpa
+  real, dimension(NIMEMB_,NJMEM_), optional, intent(out) :: intx_dpa
+  real, dimension(NIMEM_,NJMEMB_), optional, intent(out) :: inty_dpa
 !   This subroutine calculates analytical and nearly-analytical integrals of
 ! pressure anomalies across layers, which are required for calculating the
 ! finite-volume form pressure accelerations in a Boussinesq model.
@@ -353,13 +353,13 @@ end subroutine int_density_dz_wright
 
 subroutine int_spec_vol_dp_wright(T, S, p_t, p_b, alpha_ref, G, dza, &
                                   intp_dza, intx_dza, inty_dza, halo_size)
-  real, dimension(NXMEM_,NYMEM_),  intent(in)  :: T, S, p_t, p_b
+  real, dimension(NIMEM_,NJMEM_),  intent(in)  :: T, S, p_t, p_b
   real,                            intent(in)  :: alpha_ref
   type(ocean_grid_type),           intent(in)  :: G
-  real, dimension(NXMEM_,NYMEM_),  intent(out) :: dza
-  real, dimension(NXMEM_,NYMEM_),  optional, intent(out) :: intp_dza
-  real, dimension(NXMEMQ_,NYMEM_), optional, intent(out) :: intx_dza
-  real, dimension(NXMEM_,NYMEMQ_), optional, intent(out) :: inty_dza
+  real, dimension(NIMEM_,NJMEM_),  intent(out) :: dza
+  real, dimension(NIMEM_,NJMEM_),  optional, intent(out) :: intp_dza
+  real, dimension(NIMEMB_,NJMEM_), optional, intent(out) :: intx_dza
+  real, dimension(NIMEM_,NJMEMB_), optional, intent(out) :: inty_dza
   integer,                         optional, intent(in)  :: halo_size
 !   This subroutine calculates analytical and nearly-analytical integrals in
 ! pressure across layers of geopotential anomalies, which are required for

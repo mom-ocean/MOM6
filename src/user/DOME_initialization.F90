@@ -47,7 +47,7 @@ contains
 
 ! -----------------------------------------------------------------------------
 subroutine DOME_initialize_topography(D, G, param_file)
-  real, intent(out), dimension(NXMEM_,NYMEM_) :: D
+  real, intent(out), dimension(NIMEM_,NJMEM_) :: D
   type(ocean_grid_type), intent(in)           :: G
   type(param_file_type), intent(in)           :: param_file
 ! Arguments: D          - the bottom depth in m. Intent out.
@@ -97,7 +97,7 @@ end subroutine DOME_initialize_topography
 
 ! -----------------------------------------------------------------------------
 subroutine DOME_initialize_thickness(h, G, param_file)
-  real, intent(out), dimension(NXMEM_,NYMEM_, NKMEM_) :: h
+  real, intent(out), dimension(NIMEM_,NJMEM_, NKMEM_) :: h
   type(ocean_grid_type), intent(in) :: G
   type(param_file_type), intent(in) :: param_file
 ! Arguments: h - The thickness that is being initialized.

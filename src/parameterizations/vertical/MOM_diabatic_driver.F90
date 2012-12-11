@@ -164,9 +164,9 @@ integer :: id_clock_geothermal, id_clock_double_diff, id_clock_remap
 contains
 
 subroutine diabatic(u, v, h, tv, fluxes, visc, dt, G, CS)
-  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(inout) :: u
-  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(inout) :: v
-  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(inout) :: h
+  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(inout) :: u
+  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(inout) :: v
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(inout) :: h
   type(thermo_var_ptrs),                  intent(inout) :: tv
   type(forcing),                          intent(inout) :: fluxes
   type(vertvisc_type),                    intent(inout) :: visc
@@ -246,9 +246,9 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, dt, G, CS)
                        ! added to ensure positive definiteness, in m or kg m-2.
   real :: Tr_ea_BBL    ! The diffusive tracer thickness in the BBL that is
                        ! coupled to the bottom within a timestep, in m.
-  real :: htot(SZIQ_(G))  ! The summed thickness from the bottom, in m.
-  real :: b1(SZIQ_(G)), d1(SZIQ_(G)) ! b1, c1, and d1 are variables used by the
-  real :: c1(SZIQ_(G),SZK_(G))       ! tridiagonal solver.
+  real :: htot(SZIB_(G))  ! The summed thickness from the bottom, in m.
+  real :: b1(SZIB_(G)), d1(SZIB_(G)) ! b1, c1, and d1 are variables used by the
+  real :: c1(SZIB_(G),SZK_(G))       ! tridiagonal solver.
   real :: dt_mix       ! The amount of time over which to apply mixing, in s.
   real :: Idt          ! The inverse of the time step, in s-1.
   logical :: use_geothermal
@@ -894,7 +894,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, dt, G, CS)
 end subroutine diabatic
 
 subroutine adiabatic(h, tv, fluxes, dt, G, CS)
-  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(inout) :: h
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(inout) :: h
   type(thermo_var_ptrs),                  intent(inout) :: tv
   type(forcing),                          intent(inout) :: fluxes
   real,                                   intent(in)    :: dt
@@ -912,7 +912,7 @@ subroutine adiabatic(h, tv, fluxes, dt, G, CS)
 end subroutine adiabatic
 
 subroutine make_frazil(h, tv, G, CS)
-  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(in)    :: h
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h
   type(thermo_var_ptrs),                 intent(inout) :: tv
   type(ocean_grid_type),                 intent(in)    :: G
   type(diabatic_CS),                     intent(in)    :: CS
@@ -1023,7 +1023,7 @@ subroutine make_frazil(h, tv, G, CS)
 end subroutine make_frazil
 
 subroutine double_diffuse_T_S(h, tv, visc, dt, G)
-  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(in)    :: h
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h
   type(thermo_var_ptrs),                 intent(inout) :: tv
   type(vertvisc_type),                   intent(in)    :: visc
   real,                                  intent(in)    :: dt
@@ -1127,7 +1127,7 @@ subroutine double_diffuse_T_S(h, tv, visc, dt, G)
 end subroutine double_diffuse_T_S
 
 subroutine adjust_salt(h, tv, G, CS)
-  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(in)    :: h
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h
   type(thermo_var_ptrs),                 intent(inout) :: tv
   type(ocean_grid_type),                 intent(in)    :: G
   type(diabatic_CS),                     intent(in)    :: CS
@@ -1439,12 +1439,12 @@ subroutine diabatic_driver_end(CS)
 end subroutine diabatic_driver_end
 
 subroutine find_uv_at_h(u, v, h, u_h, v_h, G, ea, eb)
-  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(in)  :: u
-  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(in)  :: v
-  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(in)  :: h
-  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(out) :: u_h, v_h
+  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)  :: u
+  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)  :: v
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)  :: h
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(out) :: u_h, v_h
   type(ocean_grid_type),                  intent(in)  :: G
-  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(in), optional  :: ea, eb
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in), optional  :: ea, eb
 !   This subroutine calculates u_h and v_h (velocities at thickness
 ! points), optionally using the entrainments (in m) passed in as arguments.
 
@@ -1539,9 +1539,9 @@ end subroutine find_uv_at_h
 
 subroutine MOM_state_chksum(mesg, u, v, h, G)
   character(len=*),                       intent(in) :: mesg
-  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(in) :: u
-  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(in) :: v
-  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(in) :: h
+  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in) :: u
+  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in) :: v
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in) :: h
   type(ocean_grid_type),                  intent(in) :: G
 !   This subroutine writes out chksums for the model's basic state variables.
 ! Arguments: mesg - A message that appears on the chksum lines.

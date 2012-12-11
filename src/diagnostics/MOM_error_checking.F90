@@ -49,8 +49,8 @@ contains
 subroutine check_redundant_v3d(mesg, u_comp, v_comp, G, is, ie, js, je, &
                                direction, stagger)
   character(len=*),                    intent(in)    :: mesg
-  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(in) :: u_comp
-  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(in) :: v_comp
+  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in) :: u_comp
+  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in) :: v_comp
   type(ocean_grid_type),               intent(inout) :: G
   integer,                   optional, intent(in)    :: is, ie, js, je
   integer,                   optional, intent(in)    :: direction
@@ -80,8 +80,8 @@ end subroutine  check_redundant_v3d
 subroutine check_redundant_v2d(mesg, u_comp, v_comp, G, is, ie, js, je, &
                                direction, stagger)
   character(len=*),                intent(in)    :: mesg
-  real, dimension(NXMEMQ_,NYMEM_), intent(in)    :: u_comp
-  real, dimension(NXMEM_,NYMEMQ_), intent(in)    :: v_comp
+  real, dimension(NIMEMB_,NJMEM_), intent(in)    :: u_comp
+  real, dimension(NIMEM_,NJMEMB_), intent(in)    :: v_comp
   type(ocean_grid_type),           intent(inout) :: G
   integer,               optional, intent(in)    :: is, ie, js, je
   integer,               optional, intent(in)    :: direction
@@ -96,8 +96,8 @@ subroutine check_redundant_v2d(mesg, u_comp, v_comp, G, is, ie, js, je, &
 
   real :: u_nonsym(SZI_(G),SZJ_(G))
   real :: v_nonsym(SZI_(G),SZJ_(G))
-  real :: u_resym(SZIQ_(G),SZJ_(G))
-  real :: v_resym(SZI_(G),SZJQ_(G))
+  real :: u_resym(SZIB_(G),SZJ_(G))
+  real :: v_resym(SZI_(G),SZJB_(G))
   character(len=128) :: mesg2
  
   integer :: i, j, is_ch, ie_ch, js_ch, je_ch
@@ -149,7 +149,7 @@ end subroutine  check_redundant_v2d
 
 subroutine check_redundant_s3d(mesg, array, G, is, ie, js, je, stagger)
   character(len=*),                     intent(in)    :: mesg
-  real, dimension(NXMEMQ_,NYMEMQ_,NKMEM_), intent(in) :: array
+  real, dimension(NIMEMB_,NJMEMB_,NKMEM_), intent(in) :: array
   type(ocean_grid_type),                intent(inout) :: G
   integer,                    optional, intent(in)    :: is, ie, js, je
   integer,                    optional, intent(in)    :: stagger
@@ -177,7 +177,7 @@ end subroutine  check_redundant_s3d
 
 subroutine check_redundant_s2d(mesg, array, G, is, ie, js, je, stagger)
   character(len=*),                intent(in)    :: mesg
-  real, dimension(NXMEMQ_,NYMEMQ_), intent(in)   :: array
+  real, dimension(NIMEMB_,NJMEMB_), intent(in)   :: array
   type(ocean_grid_type),           intent(inout) :: G
   integer,               optional, intent(in)    :: is, ie, js, je
   integer,               optional, intent(in)    :: stagger
@@ -189,7 +189,7 @@ subroutine check_redundant_s2d(mesg, array, G, is, ie, js, je, stagger)
 !  (in/opt)  stagger - the stagger flag to be passed to pass_vector.
 
   real :: a_nonsym(SZI_(G),SZJ_(G))
-  real :: a_resym(SZIQ_(G),SZJQ_(G))
+  real :: a_resym(SZIB_(G),SZJB_(G))
   character(len=128) :: mesg2
  
   integer :: i, j, is_ch, ie_ch, js_ch, je_ch

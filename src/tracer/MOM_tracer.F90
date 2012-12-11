@@ -149,7 +149,7 @@ contains
 
 subroutine register_tracer(tr1, name, param_file, CS, ad_x, ad_y, &
                            df_x, df_y, OBC_inflow, OBC_in_u, OBC_in_v)
-  real, dimension(NXMEM_,NYMEM_,NKMEM_), target :: tr1
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), target :: tr1
   character(len=*), intent(in)               :: name
   type(param_file_type), intent(in)          :: param_file
   type(advect_tracer_CS), pointer            :: CS
@@ -333,9 +333,9 @@ end subroutine add_tracer_2d_diagnostics
 
 
 subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, CS)
-  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(in)    :: h_end
-  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(in)    :: uhtr
-  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(in)    :: vhtr
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h_end
+  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)    :: uhtr
+  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)    :: vhtr
   type(ocean_OBC_type),                   pointer       :: OBC
   real,                                   intent(in)    :: dt
   type(ocean_grid_type),                  intent(inout) :: G
@@ -359,18 +359,18 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, CS)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
     hprev           ! The cell volume at the end of the previous tracer
                     ! change, in m3.
-  real, dimension(SZIQ_(G),SZJ_(G),SZK_(G)) :: &
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: &
     uhr             ! The remaining zonal thickness flux, in m3.
-  real, dimension(SZI_(G),SZJQ_(G),SZK_(G)) :: &
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: &
     vhr             ! The remaining meridional thickness fluxes, in m3.
-  real :: uh_neglect(SZIQ_(G),SZJ_(G)) ! uh_neglect and vh_neglect are the
-  real :: vh_neglect(SZI_(G),SZJQ_(G)) ! magnitude of remaining transports that
+  real :: uh_neglect(SZIB_(G),SZJ_(G)) ! uh_neglect and vh_neglect are the
+  real :: vh_neglect(SZI_(G),SZJB_(G)) ! magnitude of remaining transports that
                                 ! can be simply discarded, in m3 or kg.
 
   real :: landvolfill         ! An arbitrary? nonzero cell volume, m3.
   real :: Idt                 ! 1/dt in s-1.
   logical :: domore_u(SZJ_(G),SZK_(G))  ! domore__ indicate whether there is more
-  logical :: domore_v(SZJQ_(G),SZK_(G)) ! advection to be done in the corresponding
+  logical :: domore_v(SZJB_(G),SZK_(G)) ! advection to be done in the corresponding
                                 ! row or column.
   logical :: x_first            ! If true, advect in the x-direction first.
   integer :: max_iter           ! The maximum number of iterations in
@@ -547,17 +547,17 @@ end subroutine advect_tracer
 subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
                     is, ie, js, je, k, G)
   type(tracer), dimension(ntr),           intent(inout) :: Tr
-  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(inout) :: hprev
-  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(inout) :: uhr
-  real, dimension(NXMEMQ_,NYMEM_),        intent(inout) :: uh_neglect
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(inout) :: hprev
+  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(inout) :: uhr
+  real, dimension(NIMEMB_,NJMEM_),        intent(inout) :: uh_neglect
   type(ocean_OBC_type),                   pointer       :: OBC
-  logical, dimension(NYMEM_,NKMEM_),      intent(inout) :: domore_u
+  logical, dimension(NJMEM_,NKMEM_),      intent(inout) :: domore_u
   real,                                   intent(in)    :: Idt
   integer,                                intent(in)    :: ntr, is, ie, js, je,k
   type(ocean_grid_type),                  intent(inout) :: G
   !   This subroutine does 1-d flux-form advection in the zonal direction using
   ! a monotonic piecewise linear scheme.
-  real, dimension(SZIQ_(G),ntr) :: &
+  real, dimension(SZIB_(G),ntr) :: &
     slope_x, &      ! The concentration slope per grid point in units of
                     ! concentration (nondim.).
     flux_x          ! The tracer flux across a boundary in m3*conc or kg*conc.
@@ -567,16 +567,16 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
                               ! part of that volume that might be lost
                               ! due to advection out the other side of
                               ! the grid box, both in m3 or kg.
-  real :: uhh(SZIQ_(G))       ! The zonal flux that occurs during the
+  real :: uhh(SZIB_(G))       ! The zonal flux that occurs during the
                               ! current iteration, in m3 or kg.
-  real, dimension(SZIQ_(G)) :: &
+  real, dimension(SZIB_(G)) :: &
     hlst, Ihnew, &      ! Work variables with units of m3 or kg and m-3 or kg-1.
     ts2                 ! A nondimensional work variable.
   real :: min_h         ! The minimum thickness that can be realized during
                         ! any of the passes, in m or kg m-2.
   real :: h_neglect     ! A thickness that is so small it is usually lost
                         ! in roundoff and can be neglected, in m.
-  logical :: do_i(SZIQ_(G))     ! If true, work on given points.
+  logical :: do_i(SZIB_(G))     ! If true, work on given points.
   logical :: do_any_i
   integer :: i, j, m
 
@@ -708,29 +708,29 @@ end subroutine advect_x
 subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
                     is, ie, js, je, k, G)
   type(tracer), dimension(ntr),           intent(inout) :: Tr
-  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(inout) :: hprev
-  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(inout) :: vhr
-  real, dimension(NXMEM_,NYMEMQ_),        intent(inout) :: vh_neglect
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(inout) :: hprev
+  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(inout) :: vhr
+  real, dimension(NIMEM_,NJMEMB_),        intent(inout) :: vh_neglect
   type(ocean_OBC_type),                   pointer       :: OBC
-  logical, dimension(NYMEMQ_,NKMEM_),     intent(inout) :: domore_v
+  logical, dimension(NJMEMB_,NKMEM_),     intent(inout) :: domore_v
   real,                                   intent(in)    :: Idt
   integer,                                intent(in)    :: ntr, is, ie, js, je,k
   type(ocean_grid_type),                  intent(inout) :: G
   !   This subroutine does 1-d flux-form advection using a monotonic piecewise
   ! linear scheme.
-  real, dimension(SZI_(G),ntr,SZJQ_(G)) :: &
+  real, dimension(SZI_(G),ntr,SZJB_(G)) :: &
     slope_y, &      ! The concentration slope per grid point in units of
                     ! concentration (nondim.).
     flux_y          ! The tracer flux across a boundary in m3 * conc or kg*conc.
   real :: maxslope            ! The maximum concentration slope per grid point
                               ! consistent with monotonicity, in conc. (nondim.).
-  real :: vhh(SZI_(G),SZJQ_(G)) ! The meridional flux that occurs during the
+  real :: vhh(SZI_(G),SZJB_(G)) ! The meridional flux that occurs during the
                               ! current iteration, in m3 or kg.
   real :: hup, hlos           ! hup is the upwind volume, hlos is the
                               ! part of that volume that might be lost
                               ! due to advection out the other side of
                               ! the grid box, both in m3 or kg.
-  real, dimension(SZIQ_(G)) :: &
+  real, dimension(SZIB_(G)) :: &
     hlst, Ihnew, &      ! Work variables with units of m3 or kg and m-3 or kg-1.
     ts2                 ! A nondimensional work variable.
   real :: min_h         ! The minimum thickness that can be realized during
@@ -738,7 +738,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
   real :: h_neglect     ! A thickness that is so small it is usually lost
                         ! in roundoff and can be neglected, in m.
   logical :: do_j_tr(SZJ_(G))   ! If true, calculate the tracer profiles.
-  logical :: do_i(SZIQ_(G))     ! If true, work on given points.
+  logical :: do_i(SZIB_(G))     ! If true, work on given points.
   logical :: do_any_i
   integer :: i, j, m
 
@@ -873,7 +873,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
 end subroutine advect_y
 
 subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, tv)
-  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(in)    :: h
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h
   real,                               intent(in)    :: dt
   type(MEKE_type),                    pointer       :: MEKE
   type(VarMix_CS),                    pointer       :: VarMix
@@ -907,13 +907,13 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, tv)
     CFL, &        ! A diffusive CFL number for each cell, nondim.
     dTr           ! The change in a tracer's concentration, in units of
                   ! concentration.
-  real, dimension(SZIQ_(G),SZJ_(G)) :: &
+  real, dimension(SZIB_(G),SZJ_(G)) :: &
     khdt_x, &     ! The value of Khtr*dt times the open face width divided by
                   ! the distance between adjacent tracer points, in m2.
     Coef_x, &     ! The coefficients relating zonal tracer differences
                   ! to time-integrated fluxes, in m3 or kg.
     Kh_u          ! Tracer mixing coefficient at u-points, in m2 s-1.
-  real, dimension(SZI_(G),SZJQ_(G)) :: &
+  real, dimension(SZI_(G),SZJB_(G)) :: &
     khdt_y, &     ! The value of Khtr*dt times the open face width divided by
                   ! the distance between adjacent tracer points, in m2.
     Coef_y, &     ! The coefficients relating meridional tracer differences
@@ -1146,11 +1146,11 @@ end subroutine tracer_hordiff
 
 subroutine tracer_epipycnal_ML_diff(h, dt, Tr, khdt_epi_x, khdt_epi_y, G, CS, &
                                     tv, num_itts)
-  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(in)    :: h
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h
   real,                                intent(in)    :: dt
   type(tracer),                        intent(inout) :: Tr(:)
-  real, dimension(NXMEMQ_,NYMEM_),     intent(in)    :: khdt_epi_x
-  real, dimension(NXMEM_,NYMEMQ_),     intent(in)    :: khdt_epi_y
+  real, dimension(NIMEMB_,NJMEM_),     intent(in)    :: khdt_epi_x
+  real, dimension(NIMEM_,NJMEMB_),     intent(in)    :: khdt_epi_y
   type(ocean_grid_type),               intent(inout) :: G
   type(advect_tracer_CS),              intent(in)    :: CS
   type(thermo_var_ptrs),               intent(in)    :: tv
@@ -1185,14 +1185,14 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, khdt_epi_x, khdt_epi_y, G, CS, &
     deep_wt_Lu, deep_wt_Ru, &  ! The relative weighting of the deeper of a pair, ND.
     hP_Lu, hP_Ru       ! The total thickness on each side for each pair, in m or kg m-2.
     
-  type(p2d), dimension(SZJQ_(G)) :: &
+  type(p2d), dimension(SZJB_(G)) :: &
     deep_wt_Lv, deep_wt_Rv, & ! The relative weighting of the deeper of a pair, ND.
     hP_Lv, hP_Rv       ! The total thickness on each side for each pair, in m or kg m-2.
 
   type(p2di), dimension(SZJ_(G)) :: &
     k0b_Lu, k0a_Lu, &  ! The original k-indices of the layers that participate
     k0b_Ru, k0a_Ru     ! in each pair of mixing at u-faces.
-  type(p2di), dimension(SZJQ_(G)) :: &
+  type(p2di), dimension(SZJB_(G)) :: &
     k0b_Lv, k0a_Lv, &  ! The original k-indices of the layers that participate
     k0b_Rv, k0a_Rv     ! in each pair of mixing at v-faces.
 
@@ -1225,9 +1225,9 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, khdt_epi_x, khdt_epi_y, G, CS, &
                  ! than the densest part of the mixed layer.
   integer, dimension(SZJ_(G))           :: &
     max_srt      ! The maximum value of num_srt in a k-row.
-  integer, dimension(SZIQ_(G), SZJ_(G)) :: &
+  integer, dimension(SZIB_(G), SZJ_(G)) :: &
     nPu          ! The number of epipycnal pairings at each u-point.
-  integer, dimension(SZI_(G), SZJQ_(G)) :: &
+  integer, dimension(SZI_(G), SZJB_(G)) :: &
     nPv          ! The number of epipycnal pairings at each v-point.
   real :: h_exclude    ! A thickness that layers must attain to be considered
                        ! for inclusion in mixing, in m.
@@ -1958,13 +1958,13 @@ end subroutine tracer_epipycnal_ML_diff
 
 subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, &
                            sfc_flux, btm_flux, btm_reservoir, sink_rate)
-  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(in)    :: h_old, ea, eb
-  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(inout) :: tr
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h_old, ea, eb
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: tr
   real,                                  intent(in)    :: dt
   type(ocean_grid_type),                 intent(in)    :: G
-  real, dimension(NXMEM_,NYMEM_), optional, intent(in) :: sfc_flux
-  real, dimension(NXMEM_,NYMEM_), optional, intent(in) :: btm_flux
-  real, dimension(NXMEM_,NYMEM_), optional, intent(inout) :: btm_reservoir
+  real, dimension(NIMEM_,NJMEM_), optional, intent(in) :: sfc_flux
+  real, dimension(NIMEM_,NJMEM_), optional, intent(in) :: btm_flux
+  real, dimension(NIMEM_,NJMEM_), optional, intent(inout) :: btm_reservoir
   real,                           optional, intent(in) :: sink_rate
 ! Arguments: h_old -  Layer thickness before entrainment, in m or kg m-2.
 !  (in)      ea - The amount of fluid entrained from the layer above, in the

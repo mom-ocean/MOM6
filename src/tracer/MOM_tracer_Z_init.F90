@@ -58,8 +58,8 @@ contains
 
 function tracer_Z_init(tr, h, filename, tr_name, G, missing_val, land_val)
   logical :: tracer_Z_init
-  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(out)   :: tr
-  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(in)    :: h
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(out)   :: tr
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h
   character(len=*),                      intent(in)    :: filename, tr_name
   type(ocean_grid_type),                 intent(in)    :: G
 ! type(param_file_type),                 intent(in)    :: param_file

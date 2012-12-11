@@ -102,10 +102,10 @@ subroutine initialize_regridding ( param_file, regridding_opts, G, h, h_aux, &
   type(param_file_type), intent(in)                      :: param_file
   type(regridding_opts_t), intent(inout)                 :: regridding_opts
   type(ocean_grid_type), intent(in)                      :: G
-  real, dimension(NXMEM_,NYMEM_, NKMEM_,C2_), intent(inout) :: h
-  real, dimension(NXMEM_,NYMEM_, NKMEM_), intent(inout)     :: h_aux
-  real, dimension(NXMEMQ_,NYMEM_, NKMEM_), intent(inout)    :: u
-  real, dimension(NXMEM_,NYMEMQ_, NKMEM_), intent(inout)    :: v
+  real, dimension(NIMEM_,NJMEM_, NKMEM_,C2_), intent(inout) :: h
+  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(inout)     :: h_aux
+  real, dimension(NIMEMB_,NJMEM_, NKMEM_), intent(inout)    :: u
+  real, dimension(NIMEM_,NJMEMB_, NKMEM_), intent(inout)    :: v
   type(thermo_var_ptrs), intent(inout)                   :: tv
 
   ! Local variables
@@ -268,13 +268,13 @@ subroutine regridding_main ( G, h, h_new, u, v, tv, regridding_opts )
   ! Arguments
   type(ocean_grid_type), intent(in)                    :: &
   G;     ! Ocean grid informations
-  real, dimension(NXMEM_,NYMEM_, NKMEM_), intent(inout)   :: &
+  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(inout)   :: &
   h;     ! Current 3D grid obtained after the last time step
-  real, dimension(NXMEM_,NYMEM_, NKMEM_), intent(inout)   :: &
+  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(inout)   :: &
   h_new; ! The new 3D grid obtained via regridding
-  real, dimension(NXMEMQ_,NYMEM_, NKMEM_), intent(inout)  :: &
+  real, dimension(NIMEMB_,NJMEM_, NKMEM_), intent(inout)  :: &
   u;     ! Zonal velocity field
-  real, dimension(NXMEM_,NYMEMQ_, NKMEM_), intent(inout)  :: &
+  real, dimension(NIMEM_,NJMEMB_, NKMEM_), intent(inout)  :: &
   v;     ! Meridional velocity field
   type(thermo_var_ptrs), intent(inout)                 :: &
   tv;    ! Thermodynamical variables (T, S, ...)  
@@ -325,13 +325,13 @@ subroutine pressure_gradient_plm ( S_t, S_b, T_t, T_b, G, tv, h )
 !------------------------------------------------------------------------------
 
   ! Arguments
-  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(inout) :: &
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: &
   S_t, S_b; ! Salinity at the top and bottom edges of each layer
-  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(inout) :: &
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: &
   T_t, T_b; ! Temperature at the top and bottom edges of each layer
   type(ocean_grid_type), intent(in)                 :: G
   type(thermo_var_ptrs), intent(in)                 :: tv
-  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(in)    :: &
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: &
   h;        ! Three-dimensional ocean grid
 
   ! Local variables
@@ -394,13 +394,13 @@ subroutine pressure_gradient_ppm ( S_t, S_b, T_t, T_b, G, tv, h )
 !------------------------------------------------------------------------------
 
   ! Arguments
-  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(inout) :: &
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: &
   S_t, S_b; ! Salinity at the top and bottom edges of each layer
-  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(inout) :: &
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: &
   T_t, T_b; ! Temperature at the top and bottom edges of each layer
   type(ocean_grid_type), intent(in)                 :: G
   type(thermo_var_ptrs), intent(in)                 :: tv
-  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(in)    :: &
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: &
   h;        ! Three-dimensional ocean grid
 
   ! Local variables
@@ -467,8 +467,8 @@ subroutine build_grid_uniform ( G, h, h_new, regridding_opts )
   
   ! Arguments
   type(ocean_grid_type), intent(in)                  :: G
-  real, dimension(NXMEM_,NYMEM_, NKMEM_), intent(in)    :: h
-  real, dimension(NXMEM_,NYMEM_, NKMEM_), intent(inout) :: h_new
+  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(in)    :: h
+  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(inout) :: h_new
   type(regridding_opts_t), intent(in)                :: regridding_opts
   
   ! Local variables
@@ -541,8 +541,8 @@ subroutine build_grid_sigma ( G, h, h_new )
   
   ! Arguments
   type(ocean_grid_type), intent(in)                  :: G
-  real, dimension(NXMEM_,NYMEM_, NKMEM_), intent(in)    :: h
-  real, dimension(NXMEM_,NYMEM_, NKMEM_), intent(inout) :: h_new
+  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(in)    :: h
+  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(inout) :: h_new
   
   ! Local variables
   integer   :: i, j, k
@@ -585,8 +585,8 @@ subroutine build_grid_arbitrary ( G, h, h_new, regridding_opts )
   
   ! Arguments
   type(ocean_grid_type), intent(in)                  :: G
-  real, dimension(NXMEM_,NYMEM_, NKMEM_), intent(in)    :: h
-  real, dimension(NXMEM_,NYMEM_, NKMEM_), intent(inout) :: h_new
+  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(in)    :: h
+  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(inout) :: h_new
   type(regridding_opts_t), intent(in)                :: regridding_opts
   
   ! Local variables
@@ -691,8 +691,8 @@ subroutine build_grid_target_densities ( G, h, h_new, tv, regridding_opts )
   
   ! Arguments
   type(ocean_grid_type), intent(in)                  :: G
-  real, dimension(NXMEM_,NYMEM_, NKMEM_), intent(in)    :: h
-  real, dimension(NXMEM_,NYMEM_, NKMEM_), intent(inout) :: h_new
+  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(in)    :: h
+  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(inout) :: h_new
   type(thermo_var_ptrs), intent(in)                  :: tv     
   type(regridding_opts_t), intent(in)                :: regridding_opts
   
@@ -1265,7 +1265,7 @@ subroutine check_grid_integrity ( G, h, regridding_opts )
 
   ! Arguments
   type(ocean_grid_type), intent(in)                    :: G
-  real, dimension(NXMEM_,NYMEM_, NKMEM_), intent(inout)   :: h
+  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(inout)   :: h
   type(regridding_opts_t), intent(in)                  :: regridding_opts
 
   ! Local variables
@@ -1386,7 +1386,7 @@ subroutine convective_adjustment ( G, h, tv )
 
   ! Arguments
   type(ocean_grid_type), intent(in)                  :: G
-  real, dimension(NXMEM_,NYMEM_, NKMEM_), intent(inout) :: h
+  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(inout) :: h
   type(thermo_var_ptrs), intent(inout)               :: tv     
   
   ! Local variables

@@ -209,7 +209,7 @@ subroutine USER_initialize_tracer(restart, day, G, h, OBC, CS, sponge_CSp, &
   logical,                            intent(in) :: restart
   type(time_type), target,            intent(in) :: day
   type(ocean_grid_type),              intent(in) :: G
-  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(in) :: h
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h
   type(ocean_OBC_type),               pointer    :: OBC
   type(USER_tracer_example_CS),       pointer    :: CS
   type(sponge_CS),                    pointer    :: sponge_CSp
@@ -375,7 +375,7 @@ subroutine USER_initialize_tracer(restart, day, G, h, OBC, CS, sponge_CSp, &
 end subroutine USER_initialize_tracer
 
 subroutine tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, CS)
-  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(in) :: h_old, h_new, ea, eb
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h_old, h_new, ea, eb
   type(forcing),                      intent(in) :: fluxes
   real,                               intent(in) :: dt
   type(ocean_grid_type),              intent(in) :: G
@@ -505,7 +505,7 @@ subroutine tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, CS)
 end subroutine tracer_column_physics
 
 function USER_tracer_stock(h, stocks, G, CS, names, units, stock_index)
-  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(in) :: h
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h
   real, dimension(:),                 intent(out)   :: stocks
   type(ocean_grid_type),              intent(in)    :: G
   type(USER_tracer_example_CS),       pointer       :: CS
@@ -556,7 +556,7 @@ end function USER_tracer_stock
 
 subroutine USER_tracer_surface_state(state, h, G, CS)
   type(surface),                      intent(inout) :: state
-  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(in)    :: h
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h
   type(ocean_grid_type),              intent(in)    :: G
   type(USER_tracer_example_CS),       pointer       :: CS
 !   This particular tracer package does not report anything back to the coupler.

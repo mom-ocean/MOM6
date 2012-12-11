@@ -223,7 +223,7 @@ subroutine initialize_advection_test_tracer(restart, day, G, h, OBC, CS, sponge_
   logical,                            intent(in) :: restart
   type(time_type), target,            intent(in) :: day
   type(ocean_grid_type),              intent(in) :: G
-  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(in) :: h
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h
   type(ocean_OBC_type),               pointer    :: OBC
   type(advection_test_tracer_CS),               pointer    :: CS
   type(sponge_CS),                    pointer    :: sponge_CSp
@@ -350,7 +350,7 @@ end subroutine initialize_advection_test_tracer
 
 
 subroutine advection_test_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, CS)
-  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(in) :: h_old, h_new, ea, eb
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h_old, h_new, ea, eb
   type(forcing),                         intent(in) :: fluxes
   real,                                  intent(in) :: dt
   type(ocean_grid_type),                 intent(in) :: G
@@ -421,7 +421,7 @@ end subroutine advection_test_tracer_column_physics
 
 subroutine advection_test_tracer_surface_state(state, h, G, CS)
   type(surface),                         intent(inout) :: state
-  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(in)    :: h
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h
   type(ocean_grid_type),                 intent(in)    :: G
   type(advection_test_tracer_CS),        pointer       :: CS
 !   This particular tracer package does not report anything back to the coupler.

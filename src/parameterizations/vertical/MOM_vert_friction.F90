@@ -113,13 +113,13 @@ type, public :: vertvisc_CS ; private
                             ! accelerations to be reported, nondim.  CFL_report
                             ! will often equal CFL_trunc.
 
-  real PTR_, dimension(NXMEMQP_,NYMEM_,NK_INTERFACE_) :: &
+  real PTR_, dimension(NIMEMB_PTR_,NJMEM_,NK_INTERFACE_) :: &
     a_u                ! The u-drag coefficient across an interface, in m s-1.
-  real PTR_, dimension(NXMEMQP_,NYMEM_,NKMEM_) :: &
+  real PTR_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: &
     h_u                ! The effective layer thickness at u-points, m or kg m-2.
-  real PTR_, dimension(NXMEM_,NYMEMQP_,NK_INTERFACE_) :: &
+  real PTR_, dimension(NIMEM_,NJMEMB_PTR_,NK_INTERFACE_) :: &
     a_v                ! The v-drag coefficient across an interface, in m s-1.
-  real PTR_, dimension(NXMEM_,NYMEMQP_,NKMEM_) :: &
+  real PTR_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: &
     h_v                ! The effective layer thickness at v-points, m or kg m-2.
   real, pointer, dimension(:,:) :: &
     a1_shelf_u => NULL(), & ! The surface coupling coefficients under ice
@@ -168,17 +168,17 @@ contains
 subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, G, CS, taux_bot, tauy_bot)
 !    This subroutine does a fully implicit vertical diffusion
 !  of momentum.  Stress top and bottom b.c.s are used.
-  real, intent(inout), dimension(NXMEMQ_,NYMEM_,NKMEM_) :: u
-  real, intent(inout), dimension(NXMEM_,NYMEMQ_,NKMEM_) :: v
-  real, intent(in),    dimension(NXMEM_,NYMEM_,NKMEM_)  :: h
+  real, intent(inout), dimension(NIMEMB_,NJMEM_,NKMEM_) :: u
+  real, intent(inout), dimension(NIMEM_,NJMEMB_,NKMEM_) :: v
+  real, intent(in),    dimension(NIMEM_,NJMEM_,NKMEM_)  :: h
   type(forcing), intent(in)                             :: fluxes
   type(vertvisc_type), intent(inout)                    :: visc
   real, intent(in)                                      :: dt
   type(ocean_OBC_type), pointer                         :: OBC
   type(ocean_grid_type), intent(in)                     :: G
   type(vertvisc_CS), pointer                            :: CS
-  real, dimension(NXMEMQ_,NYMEM_), optional, intent(out) :: taux_bot
-  real, dimension(NXMEM_,NYMEMQ_), optional, intent(out) :: tauy_bot
+  real, dimension(NIMEMB_,NJMEM_), optional, intent(out) :: taux_bot
+  real, dimension(NIMEM_,NJMEMB_), optional, intent(out) :: tauy_bot
   
 ! Arguments: u - Zonal velocity, in m s-1.  Intent in/out.
 !  (in/out)  v - Meridional velocity, in m s-1.
@@ -200,11 +200,11 @@ subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, G, CS, taux_bot, tauy_bot)
 !   taux: Zonal wind stress in Pa.
 !   tauy: Meridional wind stress in Pa.
 
-  real :: b1(SZIQ_(G))          ! b1 and c1 are variables used by the
-  real :: c1(SZIQ_(G),SZK_(G))  ! tridiagonal solver.  c1 is nondimensional,
+  real :: b1(SZIB_(G))          ! b1 and c1 are variables used by the
+  real :: c1(SZIB_(G),SZK_(G))  ! tridiagonal solver.  c1 is nondimensional,
                                 ! while b1 has units of inverse thickness.
-  real :: d1(SZIQ_(G))          ! d1=1-c1 is used by the tridiagonal solver, ND.
-  real :: Ray(SZIQ_(G),SZK_(G)) ! Ray is the Rayleigh-drag velocity times the
+  real :: d1(SZIB_(G))          ! d1=1-c1 is used by the tridiagonal solver, ND.
+  real :: Ray(SZIB_(G),SZK_(G)) ! Ray is the Rayleigh-drag velocity times the
                                 ! time step, in m.
   real :: b_denom_1   ! The first term in the denominator of b1, in m or kg m-2.
 
@@ -223,11 +223,11 @@ subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, G, CS, taux_bot, tauy_bot)
   real :: stress           !   The surface stress times the time step, divided
                            ! by the density, in units of m2 s-1.
   real :: zDS, hfr, h_a    ! Temporary variables used with direct_stress.
-  real :: surface_stress(SZIQ_(G))! The same as stress, unless the wind
+  real :: surface_stress(SZIB_(G))! The same as stress, unless the wind
                            ! stress is applied as a body force, in
                            ! units of m2 s-1.
 
-  logical :: do_i(SZIQ_(G))
+  logical :: do_i(SZIB_(G))
 
   integer :: i, j, k, is, ie, Isq, Ieq, Jsq, Jeq, nz
   is = G%isc ; ie = G%iec
@@ -413,8 +413,8 @@ subroutine vertvisc_remnant(visc, visc_rem_u, visc_rem_v, dt, G, CS)
 !    This subroutine does a fully implicit vertical diffusion
 !  of momentum.  Stress top and bottom b.c.s are used.
   type(vertvisc_type), intent(in)                       :: visc
-  real, intent(inout), dimension(NXMEMQ_,NYMEM_,NKMEM_) :: visc_rem_u
-  real, intent(inout), dimension(NXMEM_,NYMEMQ_,NKMEM_) :: visc_rem_v
+  real, intent(inout), dimension(NIMEMB_,NJMEM_,NKMEM_) :: visc_rem_u
+  real, intent(inout), dimension(NIMEM_,NJMEMB_,NKMEM_) :: visc_rem_v
   real, intent(in)                                      :: dt
   type(ocean_grid_type), intent(in)                     :: G
   type(vertvisc_CS), pointer                            :: CS
@@ -433,16 +433,16 @@ subroutine vertvisc_remnant(visc, visc_rem_u, visc_rem_v, dt, G, CS)
 !                 vertvisc_init.
 !
 
-  real :: b1(SZIQ_(G))          ! b1 and c1 are variables used by the
-  real :: c1(SZIQ_(G),SZK_(G))  ! tridiagonal solver.  c1 is nondimensional,
+  real :: b1(SZIB_(G))          ! b1 and c1 are variables used by the
+  real :: c1(SZIB_(G),SZK_(G))  ! tridiagonal solver.  c1 is nondimensional,
                                 ! while b1 has units of inverse thickness.
-  real :: d1(SZIQ_(G))          ! d1=1-c1 is used by the tridiagonal solver, ND.
-  real :: Ray(SZIQ_(G),SZK_(G)) ! Ray is the Rayleigh-drag velocity times the
+  real :: d1(SZIB_(G))          ! d1=1-c1 is used by the tridiagonal solver, ND.
+  real :: Ray(SZIB_(G),SZK_(G)) ! Ray is the Rayleigh-drag velocity times the
                                 ! time step, in m.
   real :: b_denom_1   ! The first term in the denominator of b1, in m or kg m-2.
   real :: dt_m_to_H        ! The time step times the conversion from m to the
                            ! units of thickness - either s or s m3 kg-1.
-  logical :: do_i(SZIQ_(G))
+  logical :: do_i(SZIB_(G))
 
   integer :: i, j, k, is, ie, Isq, Ieq, Jsq, Jeq, nz
   is = G%isc ; ie = G%iec
@@ -521,9 +521,9 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
 !    This subroutine calculates the coupling coefficients (CS%a_u and CS%a_v)
 ! and effective layer thicknesses (CS%h_u and CS%h_v) for later use in the
 ! applying the implicit vertical viscosity via vertvisc.
-  real, intent(in),    dimension(NXMEMQ_,NYMEM_,NKMEM_) :: u
-  real, intent(in),    dimension(NXMEM_,NYMEMQ_,NKMEM_) :: v
-  real, intent(in),    dimension(NXMEM_,NYMEM_,NKMEM_)  :: h
+  real, intent(in),    dimension(NIMEMB_,NJMEM_,NKMEM_) :: u
+  real, intent(in),    dimension(NIMEM_,NJMEMB_,NKMEM_) :: v
+  real, intent(in),    dimension(NIMEM_,NJMEM_,NKMEM_)  :: h
   type(forcing), intent(in)                             :: fluxes
   type(vertvisc_type), intent(in)                       :: visc
   real, intent(in)                                      :: dt
@@ -546,19 +546,19 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
 !   ustar: the friction velocity in m s-1, used here as the mixing
 !     velocity in the mixed layer if G%nkml > 1 in a bulk mixed layer.
 !
-  real, dimension(SZIQ_(G),SZK_(G)) :: &
+  real, dimension(SZIB_(G),SZK_(G)) :: &
     h_harm, &   ! Harmonic mean of the thicknesses around a velocity grid point,
                 ! given by 2*(h+ * h-)/(h+ + h-), in m or kg m-2 (H for short).
     hvel, &     ! hvel is the thickness used at a velocity grid point, in H.
     hvel_shelf  ! The equivalent of hvel under shelves, in H.
-  real, dimension(SZIQ_(G),SZK_(G)+1) :: &
+  real, dimension(SZIB_(G),SZK_(G)+1) :: &
     a, &        ! The drag coefficients across interfaces, in m s-1.  a times
                 ! the velocity difference gives the stress across an interface.
     a_shelf, &  ! The drag coefficients across interfaces in water columns under
                 ! ice shelves, in m s-1.
     z_i         ! An estimate of each interface's height above the bottom,
                 ! normalized by the bottom boundary layer thickness, nondim.
-  real, dimension(SZIQ_(G)) :: &
+  real, dimension(SZIB_(G)) :: &
     kv_bbl, &     ! The bottom boundary layer viscosity in m2 s-1.
     bbl_thick, &  ! The bottom boundary layer thickness in m or kg m-2.
     I_Hbbl, &     ! The inverse of the bottom boundary layer thickness, in units
@@ -584,7 +584,7 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
                         ! in roundoff and can be neglected, in H.
 
   real :: h_arith ! The arithmetic mean thickness, in m or kg m-2.
-  logical, dimension(SZIQ_(G)) :: do_i, do_i_shelf
+  logical, dimension(SZIB_(G)) :: do_i, do_i_shelf
   logical :: do_any_shelf
 
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
@@ -860,9 +860,9 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
 !    This subroutine calculates the 'coupling coefficient' (a[k]) at the
 !  interfaces. If BOTTOMDRAGLAW is defined, the minimum of Hbbl and half the
 !  adjacent layer thicknesses are used to calculate a[k] near the bottom.
-    real,    dimension(NXMEMQ_,NK_INTERFACE_), intent(out) :: a
-    real,    dimension(NXMEMQ_,NKMEM_),   intent(in)  :: hvel
-    logical, dimension(NXMEMQ_),          intent(in)  :: do_i
+    real,    dimension(NIMEMB_,NK_INTERFACE_), intent(out) :: a
+    real,    dimension(NIMEMB_,NKMEM_),   intent(in)  :: hvel
+    logical, dimension(NIMEMB_),          intent(in)  :: do_i
     logical,                              intent(in)  :: work_on_u
     logical, optional,                    intent(in)  :: shelf
 ! Arguments: a - The coupling coefficent across interfaces, in m.  Intent out.
@@ -872,7 +872,7 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
 !                        call is for v-points.
 !  (in)      shelf - If present and true, use a surface boundary condition
 !                    appropriate for an ice shelf.
-    real, dimension(SZIQ_(G)) :: &
+    real, dimension(SZIB_(G)) :: &
       u_star, &   ! ustar at a velocity point, in m s-1.
       absf, &     ! The average of the neighboring absolute values of f, in s-1.
       h_ml, &     ! The mixed layer depth, in m or kg m-2.
@@ -1045,9 +1045,9 @@ subroutine vertvisc_limit_vel(u, v, h, fluxes, visc, dt, G, CS)
 !  Within this subroutine, velocity components which exceed a threshold for
 ! physically reasonable values are truncated. Optionally, any column with
 ! excessive velocities may be sent to a diagnostic reporting subroutine.
-  real, intent(inout), dimension(NXMEMQ_,NYMEM_,NKMEM_) :: u
-  real, intent(inout), dimension(NXMEM_,NYMEMQ_,NKMEM_) :: v
-  real, intent(in),    dimension(NXMEM_,NYMEM_,NKMEM_)  :: h
+  real, intent(inout), dimension(NIMEMB_,NJMEM_,NKMEM_) :: u
+  real, intent(inout), dimension(NIMEM_,NJMEMB_,NKMEM_) :: v
+  real, intent(in),    dimension(NIMEM_,NJMEM_,NKMEM_)  :: h
   type(forcing), intent(in)                             :: fluxes
   type(vertvisc_type), intent(in)                       :: visc
   real, intent(in)                                      :: dt
@@ -1057,8 +1057,8 @@ subroutine vertvisc_limit_vel(u, v, h, fluxes, visc, dt, G, CS)
   real :: maxvel           ! Velocities components greater than maxvel
   real :: truncvel         ! are truncated to truncvel, both in m s-1.
   real :: CFL              ! The local CFL number.
-  real :: vel_report(SZIQ_(G))
-  logical :: trunc_any, dowrite(SZIQ_(G))
+  real :: vel_report(SZIB_(G))
+  logical :: trunc_any, dowrite(SZIB_(G))
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   Isq = G%Iscq ; Ieq = G%Iecq ; Jsq = G%Jscq ; Jeq = G%Jecq
@@ -1333,10 +1333,10 @@ subroutine vertvisc_init(HIS, Time, G, param_file, diag, dirs, ntrunc, CS)
                  "to be reported; the default is CFL_TRUNCATE.", &
                  units="nondim", default=CS%CFL_trunc)
 
-  ALLOC(CS%a_u(Isdq:Iedq,jsd:jed,nz+1)) ; CS%a_u(:,:,:) = 0.0
-  ALLOC(CS%h_u(Isdq:Iedq,jsd:jed,nz))   ; CS%h_u(:,:,:) = 0.0
-  ALLOC(CS%a_v(isd:ied,Jsdq:Jedq,nz+1)) ; CS%a_v(:,:,:) = 0.0
-  ALLOC(CS%h_v(isd:ied,Jsdq:Jedq,nz))   ; CS%h_v(:,:,:) = 0.0
+  ALLOC_(CS%a_u(Isdq:Iedq,jsd:jed,nz+1)) ; CS%a_u(:,:,:) = 0.0
+  ALLOC_(CS%h_u(Isdq:Iedq,jsd:jed,nz))   ; CS%h_u(:,:,:) = 0.0
+  ALLOC_(CS%a_v(isd:ied,Jsdq:Jedq,nz+1)) ; CS%a_v(:,:,:) = 0.0
+  ALLOC_(CS%h_v(isd:ied,Jsdq:Jedq,nz))   ; CS%h_v(:,:,:) = 0.0
 
   CS%id_au_vv = register_diag_field('ocean_model', 'au_visc', G%axesui, Time, &
      'Zonal Viscous Vertical Coupling Coefficient', 'meter second-1')
@@ -1371,8 +1371,8 @@ end subroutine vertvisc_init
 
 subroutine vertvisc_end(CS)
   type(vertvisc_CS),   pointer       :: CS
-  DEALLOC(CS%a_u) ; DEALLOC(CS%h_u)
-  DEALLOC(CS%a_v) ; DEALLOC(CS%h_v)
+  DEALLOC_(CS%a_u) ; DEALLOC_(CS%h_u)
+  DEALLOC_(CS%a_v) ; DEALLOC_(CS%h_v)
   if (associated(CS%a1_shelf_u)) deallocate(CS%a1_shelf_u)
   if (associated(CS%a1_shelf_v)) deallocate(CS%a1_shelf_v)
   deallocate(CS)

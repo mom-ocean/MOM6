@@ -46,7 +46,7 @@ contains
 
 ! -----------------------------------------------------------------------------
 subroutine benchmark_initialize_topography(D, G, param_file)
-  real, intent(out), dimension(NXMEM_,NYMEM_) :: D
+  real, intent(out), dimension(NIMEM_,NJMEM_) :: D
   type(ocean_grid_type), intent(in)           :: G
   type(param_file_type), intent(in)           :: param_file
 ! Arguments: D          - the bottom depth in m. Intent out.
@@ -109,7 +109,7 @@ end subroutine benchmark_initialize_topography
 
 ! -----------------------------------------------------------------------------
 subroutine benchmark_initialize_thickness(h, G, param_file, eqn_of_state, P_ref)
-  real, intent(out), dimension(NXMEM_,NYMEM_, NKMEM_) :: h
+  real, intent(out), dimension(NIMEM_,NJMEM_, NKMEM_) :: h
   type(ocean_grid_type), intent(in) :: G
   type(param_file_type), intent(in) :: param_file
   type(EOS_type),        pointer    :: eqn_of_state
@@ -248,7 +248,7 @@ end subroutine benchmark_initialize_thickness
 ! -----------------------------------------------------------------------------
 subroutine benchmark_init_temperature_salinity(T, S, G, param_file, &
                eqn_of_state, P_Ref)
-  real, dimension(NXMEM_,NYMEM_, NKMEM_), intent(out) :: T, S
+  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: T, S
   type(ocean_grid_type),               intent(in)  :: G
   type(param_file_type),               intent(in)  :: param_file
   type(EOS_type),                      pointer     :: eqn_of_state

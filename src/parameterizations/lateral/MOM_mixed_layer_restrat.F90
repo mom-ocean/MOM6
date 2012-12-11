@@ -88,9 +88,9 @@ end type mixedlayer_restrat_CS
 contains
 
 subroutine mixedlayer_restrat(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
-  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(inout) :: h
-  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(inout) :: uhtr
-  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(inout) :: vhtr
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(inout) :: h
+  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(inout) :: uhtr
+  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(inout) :: vhtr
   type(thermo_var_ptrs),                  intent(in)    :: tv
   type(forcing),                          intent(in)    :: fluxes
   real,                                   intent(in)    :: dt
@@ -112,8 +112,8 @@ subroutine mixedlayer_restrat(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
 !  (in)      CS - The control structure returned by a previous call to
 !                 mixedlayer_restrat_init.
 
-  real :: uhml(SZIQ_(G),SZJ_(G),SZK_(G)) ! The zonal and meridional mixed layer
-  real :: vhml(SZI_(G),SZJQ_(G),SZK_(G)) ! fluxes, in m3 s-1 or kg s-1.
+  real :: uhml(SZIB_(G),SZJ_(G),SZK_(G)) ! The zonal and meridional mixed layer
+  real :: vhml(SZI_(G),SZJB_(G),SZK_(G)) ! fluxes, in m3 s-1 or kg s-1.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
     h_avail       ! The volume available for diffusion out of each face of each
                   ! sublayer of the mixed layer, divided by dt, in units
@@ -145,10 +145,10 @@ subroutine mixedlayer_restrat(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
                         ! magnitudes (uDml & vDml) to the realized flux in a
                         ! layer.  The vertical sum of a() through the pieces of
                         ! the mixed layer must be 0.
-  real :: uDml(SZIQ_(G))  ! The zonal and meridional volume fluxes in the upper
+  real :: uDml(SZIB_(G))  ! The zonal and meridional volume fluxes in the upper
   real :: vDml(SZI_(G))   ! half of the mixed layer in H m2 s-1 (m3 s-1 or kg s-1).
-  real :: utimescale_diag(SZIQ_(G),SZJ_(G)) ! The restratification timescales
-  real :: vtimescale_diag(SZI_(G),SZJQ_(G)) ! in the zonal and meridional
+  real :: utimescale_diag(SZIB_(G),SZJ_(G)) ! The restratification timescales
+  real :: vtimescale_diag(SZI_(G),SZJB_(G)) ! in the zonal and meridional
                                             ! directions, in s, stored in 2-D
                                             ! arrays for diagnostic purposes.
   logical :: use_EOS    ! If true, density is calculated from T & S using an

@@ -115,13 +115,13 @@ contains
 
 subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
                                  dt, G, CS, initialize_all)
-  real, dimension(NXMEM_,NYMEM_,NKMEM_),        intent(in)    :: u_in
-  real, dimension(NXMEM_,NYMEM_,NKMEM_),        intent(in)    :: v_in
-  real, dimension(NXMEM_,NYMEM_,NKMEM_),        intent(in)    :: h
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),        intent(in)    :: u_in
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),        intent(in)    :: v_in
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),        intent(in)    :: h
   type(thermo_var_ptrs),                        intent(in)    :: tv
   real, dimension(:,:),                         pointer       :: p_surf
-  real, dimension(NXMEM_,NYMEM_,NK_INTERFACE_), intent(inout) :: kappa_io
-  real, dimension(NXMEM_,NYMEM_,NK_INTERFACE_), intent(inout) :: tke_io
+  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(inout) :: kappa_io
+  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(inout) :: tke_io
   real,                                         intent(in)    :: dt
   type(ocean_grid_type),                        intent(in)    :: G
   type(Kappa_shear_CS),                         pointer       :: CS

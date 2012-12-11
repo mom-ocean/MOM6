@@ -1378,50 +1378,50 @@ subroutine allocate_metrics(G)
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   Isdq = G%Isdq ; Iedq = G%Iedq ; Jsdq = G%Jsdq ; Jedq = G%Jedq
 
-  ALLOC(G%dxh(isd:ied,jsd:jed)) ; G%dxh(:,:) = 0.0
-  ALLOC(G%dxu(Isdq:Iedq,jsd:jed)) ; G%dxu(:,:) = 0.0
-  ALLOC(G%dxv(isd:ied,Jsdq:Jedq)) ; G%dxv(:,:) = 0.0
-  ALLOC(G%dxq(Isdq:Iedq,Jsdq:Jedq)) ; G%dxq(:,:) = 0.0
-  ALLOC(G%Idxh(isd:ied,jsd:jed)) ; G%Idxh(:,:) = 0.0
-  ALLOC(G%Idxu(Isdq:Iedq,jsd:jed)) ; G%Idxu(:,:) = 0.0
-  ALLOC(G%Idxv(isd:ied,Jsdq:Jedq)) ; G%Idxv(:,:) = 0.0
-  ALLOC(G%Idxq(Isdq:Iedq,Jsdq:Jedq)) ; G%Idxq(:,:) = 0.0
+  ALLOC_(G%dxh(isd:ied,jsd:jed)) ; G%dxh(:,:) = 0.0
+  ALLOC_(G%dxu(Isdq:Iedq,jsd:jed)) ; G%dxu(:,:) = 0.0
+  ALLOC_(G%dxv(isd:ied,Jsdq:Jedq)) ; G%dxv(:,:) = 0.0
+  ALLOC_(G%dxq(Isdq:Iedq,Jsdq:Jedq)) ; G%dxq(:,:) = 0.0
+  ALLOC_(G%Idxh(isd:ied,jsd:jed)) ; G%Idxh(:,:) = 0.0
+  ALLOC_(G%Idxu(Isdq:Iedq,jsd:jed)) ; G%Idxu(:,:) = 0.0
+  ALLOC_(G%Idxv(isd:ied,Jsdq:Jedq)) ; G%Idxv(:,:) = 0.0
+  ALLOC_(G%Idxq(Isdq:Iedq,Jsdq:Jedq)) ; G%Idxq(:,:) = 0.0
 
-  ALLOC(G%dyh(isd:ied,jsd:jed)) ; G%dyh(:,:) = 0.0
-  ALLOC(G%dyu(Isdq:Iedq,jsd:jed)) ; G%dyu(:,:) = 0.0
-  ALLOC(G%dyv(isd:ied,Jsdq:Jedq)) ; G%dyv(:,:) = 0.0
-  ALLOC(G%dyq(Isdq:Iedq,Jsdq:Jedq)) ; G%dyq(:,:) = 0.0
-  ALLOC(G%Idyh(isd:ied,jsd:jed)) ; G%Idyh(:,:) = 0.0
-  ALLOC(G%Idyu(Isdq:Iedq,jsd:jed)) ; G%Idyu(:,:) = 0.0
-  ALLOC(G%Idyv(isd:ied,Jsdq:Jedq)) ; G%Idyv(:,:) = 0.0
-  ALLOC(G%Idyq(Isdq:Iedq,Jsdq:Jedq)) ; G%Idyq(:,:) = 0.0
+  ALLOC_(G%dyh(isd:ied,jsd:jed)) ; G%dyh(:,:) = 0.0
+  ALLOC_(G%dyu(Isdq:Iedq,jsd:jed)) ; G%dyu(:,:) = 0.0
+  ALLOC_(G%dyv(isd:ied,Jsdq:Jedq)) ; G%dyv(:,:) = 0.0
+  ALLOC_(G%dyq(Isdq:Iedq,Jsdq:Jedq)) ; G%dyq(:,:) = 0.0
+  ALLOC_(G%Idyh(isd:ied,jsd:jed)) ; G%Idyh(:,:) = 0.0
+  ALLOC_(G%Idyu(Isdq:Iedq,jsd:jed)) ; G%Idyu(:,:) = 0.0
+  ALLOC_(G%Idyv(isd:ied,Jsdq:Jedq)) ; G%Idyv(:,:) = 0.0
+  ALLOC_(G%Idyq(Isdq:Iedq,Jsdq:Jedq)) ; G%Idyq(:,:) = 0.0
 
-  ALLOC(G%dxdyh(isd:ied,jsd:jed)) ; G%dxdyh(:,:) = 0.0
-  ALLOC(G%Idxdyh(isd:ied,jsd:jed)) ; G%Idxdyh(:,:) = 0.0
-  ALLOC(G%dxdyq(Isdq:Iedq,Jsdq:Jedq)) ; G%dxdyq(:,:) = 0.0
-  ALLOC(G%Idxdyq(Isdq:Iedq,Jsdq:Jedq)) ; G%Idxdyq(:,:) = 0.0
+  ALLOC_(G%dxdyh(isd:ied,jsd:jed)) ; G%dxdyh(:,:) = 0.0
+  ALLOC_(G%Idxdyh(isd:ied,jsd:jed)) ; G%Idxdyh(:,:) = 0.0
+  ALLOC_(G%dxdyq(Isdq:Iedq,Jsdq:Jedq)) ; G%dxdyq(:,:) = 0.0
+  ALLOC_(G%Idxdyq(Isdq:Iedq,Jsdq:Jedq)) ; G%Idxdyq(:,:) = 0.0
 
-  ALLOC(G%hmask(isd:ied,jsd:jed)) ; G%hmask(:,:) = 0.0
-  ALLOC(G%umask(Isdq:Iedq,jsd:jed)) ; G%umask(:,:) = 0.0
-  ALLOC(G%vmask(isd:ied,Jsdq:Jedq)) ; G%vmask(:,:) = 0.0
-  ALLOC(G%qmask(Isdq:Iedq,Jsdq:Jedq)) ; G%qmask(:,:) = 0.0
-  ALLOC(G%geolath(isd:ied,jsd:jed)) ; G%geolath(:,:) = 0.0
-  ALLOC(G%geolatu(Isdq:Iedq,jsd:jed)) ; G%geolatu(:,:) = 0.0
-  ALLOC(G%geolatv(isd:ied,Jsdq:Jedq)) ; G%geolatv(:,:) = 0.0
-  ALLOC(G%geolatq(Isdq:Iedq,Jsdq:Jedq)) ; G%geolatq(:,:) = 0.0
-  ALLOC(G%geolonh(isd:ied,jsd:jed)) ; G%geolonh(:,:) = 0.0
-  ALLOC(G%geolonu(Isdq:Iedq,jsd:jed)) ; G%geolonu(:,:) = 0.0
-  ALLOC(G%geolonv(isd:ied,Jsdq:Jedq)) ; G%geolonv(:,:) = 0.0
-  ALLOC(G%geolonq(Isdq:Iedq,Jsdq:Jedq)) ; G%geolonq(:,:) = 0.0
+  ALLOC_(G%hmask(isd:ied,jsd:jed)) ; G%hmask(:,:) = 0.0
+  ALLOC_(G%umask(Isdq:Iedq,jsd:jed)) ; G%umask(:,:) = 0.0
+  ALLOC_(G%vmask(isd:ied,Jsdq:Jedq)) ; G%vmask(:,:) = 0.0
+  ALLOC_(G%qmask(Isdq:Iedq,Jsdq:Jedq)) ; G%qmask(:,:) = 0.0
+  ALLOC_(G%geolath(isd:ied,jsd:jed)) ; G%geolath(:,:) = 0.0
+  ALLOC_(G%geolatu(Isdq:Iedq,jsd:jed)) ; G%geolatu(:,:) = 0.0
+  ALLOC_(G%geolatv(isd:ied,Jsdq:Jedq)) ; G%geolatv(:,:) = 0.0
+  ALLOC_(G%geolatq(Isdq:Iedq,Jsdq:Jedq)) ; G%geolatq(:,:) = 0.0
+  ALLOC_(G%geolonh(isd:ied,jsd:jed)) ; G%geolonh(:,:) = 0.0
+  ALLOC_(G%geolonu(Isdq:Iedq,jsd:jed)) ; G%geolonu(:,:) = 0.0
+  ALLOC_(G%geolonv(isd:ied,Jsdq:Jedq)) ; G%geolonv(:,:) = 0.0
+  ALLOC_(G%geolonq(Isdq:Iedq,Jsdq:Jedq)) ; G%geolonq(:,:) = 0.0
 
-  ALLOC(G%dx_v(isd:ied,Jsdq:Jedq)) ; G%dx_v(:,:) = 0.0
-  ALLOC(G%dy_u(Isdq:Iedq,jsd:jed)) ; G%dy_u(:,:) = 0.0
-  ALLOC(G%dx_v_obc(isd:ied,Jsdq:Jedq)) ; G%dx_v_obc(:,:) = 0.0
-  ALLOC(G%dy_u_obc(Isdq:Iedq,jsd:jed)) ; G%dy_u_obc(:,:) = 0.0  
-  ALLOC(G%dxdy_u(Isdq:Iedq,jsd:jed)) ; G%dxdy_u(:,:) = 0.0
-  ALLOC(G%dxdy_v(isd:ied,Jsdq:Jedq)) ; G%dxdy_v(:,:) = 0.0
-  ALLOC(G%Idxdy_u(Isdq:Iedq,jsd:jed)) ; G%Idxdy_u(:,:) = 0.0
-  ALLOC(G%Idxdy_v(isd:ied,Jsdq:Jedq)) ; G%Idxdy_v(:,:) = 0.0
+  ALLOC_(G%dx_v(isd:ied,Jsdq:Jedq)) ; G%dx_v(:,:) = 0.0
+  ALLOC_(G%dy_u(Isdq:Iedq,jsd:jed)) ; G%dy_u(:,:) = 0.0
+  ALLOC_(G%dx_v_obc(isd:ied,Jsdq:Jedq)) ; G%dx_v_obc(:,:) = 0.0
+  ALLOC_(G%dy_u_obc(Isdq:Iedq,jsd:jed)) ; G%dy_u_obc(:,:) = 0.0  
+  ALLOC_(G%dxdy_u(Isdq:Iedq,jsd:jed)) ; G%dxdy_u(:,:) = 0.0
+  ALLOC_(G%dxdy_v(isd:ied,Jsdq:Jedq)) ; G%dxdy_v(:,:) = 0.0
+  ALLOC_(G%Idxdy_u(Isdq:Iedq,jsd:jed)) ; G%Idxdy_u(:,:) = 0.0
+  ALLOC_(G%Idxdy_v(isd:ied,Jsdq:Jedq)) ; G%Idxdy_v(:,:) = 0.0
 
 end subroutine allocate_metrics
 

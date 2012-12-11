@@ -97,9 +97,9 @@ integer, parameter :: NO_ZSPACE = -1
 contains
 
 subroutine calculate_Z_diag_fields(u, v, h, dt, G, CS)
-  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(in)  :: u
-  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(in)  :: v
-  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(in)  :: h
+  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)  :: u
+  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)  :: v
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)  :: h
   real,                                 intent(in)    :: dt
   type(ocean_grid_type),                intent(inout) :: G
   type(diag_to_Z_CS),                   pointer       :: CS
@@ -115,14 +115,14 @@ subroutine calculate_Z_diag_fields(u, v, h, dt, G, CS)
 !                 diagnostics_init.
   real :: e(SZK_(G)+2)        ! The z-star interface heights in m.
   real :: h_f(SZK_(G)+1,SZI_(G)) ! The thicknesses of massive layers in m.
-  real :: u_f(SZK_(G)+1,SZIQ_(G))! The zonal and meridional velocities in any
+  real :: u_f(SZK_(G)+1,SZIB_(G))! The zonal and meridional velocities in any
   real :: v_f(SZK_(G)+1,SZI_(G)) ! massive layers.
   real :: tr_f(SZK_(G),max(CS%num_tr_used,1),SZI_(G)) ! The tracer
                                  ! concentrations in massive layers.
     ! Note the deliberately reversed axes in h_f, u_f, v_f, and tr_f.
-  integer :: nz_valid(SZIQ_(G))  ! The number of massive layers in a column.
+  integer :: nz_valid(SZIB_(G))  ! The number of massive layers in a column.
 
-  real :: D_pt(SZIQ_(G))       ! The bottom depth in m.
+  real :: D_pt(SZIB_(G))       ! The bottom depth in m.
   real :: htot                 ! The summed layer thicknesses in m.
   real :: dilate               ! The proportion by which to dilate every layer.
   real :: wt(SZK_(G)+1)        ! The fractional weight for each layer in the
@@ -375,9 +375,9 @@ subroutine calculate_Z_diag_fields(u, v, h, dt, G, CS)
 end subroutine calculate_Z_diag_fields
 
 subroutine calculate_Z_transport(uh_int, vh_int, h, dt, G, CS)
-  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(in)  :: uh_int
-  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(in)  :: vh_int
-  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(in)  :: h
+  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)  :: uh_int
+  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)  :: vh_int
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)  :: h
   real,                                 intent(in)    :: dt
   type(ocean_grid_type),                intent(inout) :: G
   type(diag_to_Z_CS),                   pointer       :: CS
@@ -397,7 +397,7 @@ subroutine calculate_Z_transport(uh_int, vh_int, h, dt, G, CS)
                    ! convert them into z* space.  (-G%D < z* < 0)
   real, dimension(SZI_(G), max(CS%nz_zspace,1)) :: &
     uh_Z           ! uh_int interpolated into depth space, in m3.
-  real, dimension(SZIQ_(G), max(CS%nz_zspace,1)) :: &
+  real, dimension(SZIB_(G), max(CS%nz_zspace,1)) :: &
     vh_Z           ! vh_int interpolated into depth space, in m3.
   real :: h_rem    ! The dilated thickness of a layer that has yet to be mapped
                    ! into depth space, in m.
@@ -414,8 +414,8 @@ subroutine calculate_Z_transport(uh_int, vh_int, h, dt, G, CS)
   real :: vh_here  ! The meridional transport of a layer that is attributed to
                    ! the current depth level, in m3.
   real :: Idt      ! The inverse of the time step in s.
-  real :: Z_int_above(SZIQ_(G)) ! The height of the interface atop a layer, m.
-  integer :: kz(SZIQ_(G)) ! The index of the depth level that is being
+  real :: Z_int_above(SZIB_(G)) ! The height of the interface atop a layer, m.
+  integer :: kz(SZIB_(G)) ! The index of the depth level that is being
                  ! contributed to.
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nz_z
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -610,7 +610,7 @@ end subroutine find_limited_slope
 
 subroutine calc_Zint_diags(h, in_ptrs, ids, num_diags, &
                                        G, CS)
-  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(in) :: h
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h
   type(p3d), dimension(:),            intent(in) :: in_ptrs
   integer,   dimension(:),            intent(in) :: ids
   integer,                            intent(in) :: num_diags
@@ -703,7 +703,7 @@ end subroutine calc_Zint_diags
 
                           
 subroutine register_Z_tracer(tr_ptr, name, long_name, units, Time, G, CS)
-  real, dimension(NXMEM_,NYMEM_,NKMEM_), target, intent(in) :: tr_ptr
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), target, intent(in) :: tr_ptr
   character(len=*),                           intent(in) :: name
   character(len=*),                           intent(in) :: long_name
   character(len=*),                           intent(in) :: units
@@ -999,7 +999,7 @@ subroutine MOM_diag_to_Z_end(CS)
 end subroutine MOM_diag_to_Z_end
 
 function ocean_register_diag_with_z (tr_ptr, vardesc_tr, G, Time, CS)
-  real, dimension(NXMEM_,NYMEM_,NKMEM_), target, intent(in) :: tr_ptr
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), target, intent(in) :: tr_ptr
   type(vardesc),                              intent(in) :: vardesc_tr
   type(ocean_grid_type),                      intent(in) :: G
   type(time_type),                            intent(in) :: Time

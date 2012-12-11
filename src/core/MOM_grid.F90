@@ -52,7 +52,7 @@ type, public :: ocean_grid_type
                                 ! during the course of the run via calls to
                                 ! set_first_direction.
 
-  real PTR_, dimension(NXMEM_,NYMEM_) :: &
+  real PTR_, dimension(NIMEM_,NJMEM_) :: &
     hmask, &   ! 0 for land points and 1 for ocean points on the h-grid. Nd.
     geolath, & ! The geographic latitude at q points in degrees of latitude or m.
     geolonh, & ! The geographic longitude at q points in degrees of longitude or m.
@@ -61,7 +61,7 @@ type, public :: ocean_grid_type
     dxdyh, &     ! dxdyh is the area of an h-cell, in m2.
     Idxdyh       ! Idxdyh = 1/dxdyh, in m-2.
 
-  real PTR_, dimension(NXMEMQP_,NYMEM_) :: &
+  real PTR_, dimension(NIMEMB_PTR_,NJMEM_) :: &
     umask, &   ! 0 for boundary points and 1 for ocean points on the u grid.  Nondim.
     geolatu, & ! The geographic latitude at u points in degrees of latitude or m.
     geolonu, & ! The geographic longitude at u points in degrees of longitude or m.
@@ -72,7 +72,7 @@ type, public :: ocean_grid_type
     Idxdy_u, &   ! The masked inverse areas of u-grid cells in m2.
     dxdy_u       ! The areas of the u-grid cells in m2.
 
-  real PTR_, dimension(NXMEM_,NYMEMQP_) :: &
+  real PTR_, dimension(NIMEM_,NJMEMB_PTR_) :: &
     vmask, &   ! 0 for boundary points and 1 for ocean points on the v grid.  Nondim.
     geolatv, & ! The geographic latitude at v points in degrees of latitude or m.
     geolonv, & ! The geographic longitude at v points in degrees of longitude or m.
@@ -83,7 +83,7 @@ type, public :: ocean_grid_type
     Idxdy_v, &   ! The masked inverse areas of v-grid cells in m2.
     dxdy_v       ! The areas of the v-grid cells in m2.
 
-  real PTR_, dimension(NXMEMQP_,NYMEMQP_) :: &
+  real PTR_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: &
     qmask, &   ! 0 for boundary points and 1 for ocean points on the q grid.  Nondim.
     geolatq, & ! The geographic latitude at q points in degrees of latitude or m.
     geolonq, & ! The geographic longitude at q points in degrees of longitude or m.
@@ -108,18 +108,18 @@ type, public :: ocean_grid_type
   real    :: Rho0       !   The density used in the Boussinesq approximation or
                         ! nominal density used to convert depths into mass
                         ! units, in kg m-3.
-  real PTR_, dimension(NXMEM_,NYMEM_)   :: D   ! Basin depth, in m.
+  real PTR_, dimension(NIMEM_,NJMEM_)   :: D   ! Basin depth, in m.
 
   logical :: bathymetry_at_vel  ! If true, there are separate values for the
                   ! basin depths at velocity points.  Otherwise the effects of
                   ! of topography are entirely determined from thickness points.
-  real PTR_, dimension(NXMEMQP_,NYMEM_) :: &
+  real PTR_, dimension(NIMEMB_PTR_,NJMEM_) :: &
     Dblock_u, &   ! Topographic depths at u-points at which the flow is blocked
     Dopen_u       ! (Dblock_u) and open at width dy_u (Dopen_u), both in m.
-  real PTR_, dimension(NXMEM_,NYMEMQP_) :: &
+  real PTR_, dimension(NIMEM_,NJMEMB_PTR_) :: &
     Dblock_v, &   ! Topographic depths at v-points at which the flow is blocked
     Dopen_v       ! (Dblock_v) and open at width dx_v (Dopen_v), both in m.
-  real PTR_, dimension(NXMEMQP_,NYMEMQP_) :: f ! The Coriolis parameter in s-1.
+  real PTR_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: f ! The Coriolis parameter in s-1.
 
   ! The following variables give information about the vertical grid.
   logical :: Boussinesq     ! If true, make the Boussinesq approximation.
@@ -243,16 +243,16 @@ subroutine MOM_grid_init(grid, param_file)
 
   isd = grid%isd ; ied = grid%ied ; jsd = grid%jsd ; jed = grid%jed
   Isdq = grid%Isdq ; Iedq = grid%Iedq ; Jsdq = grid%Jsdq ; Jedq = grid%Jedq
-  ALLOC(grid%D(isd:ied, jsd:jed))          ; grid%D(:,:) = grid%Angstrom_z
-  ALLOC(grid%f(Isdq:Iedq, Jsdq:Jedq))      ; grid%f(:,:) = 0.0
-  ALLOC(grid%g_prime(nz+1)) ; grid%g_prime(:) = 0.0
-  ALLOC(grid%Rlay(nz+1))    ; grid%Rlay(:) = 0.0
+  ALLOC_(grid%D(isd:ied, jsd:jed))          ; grid%D(:,:) = grid%Angstrom_z
+  ALLOC_(grid%f(Isdq:Iedq, Jsdq:Jedq))      ; grid%f(:,:) = 0.0
+  ALLOC_(grid%g_prime(nz+1)) ; grid%g_prime(:) = 0.0
+  ALLOC_(grid%Rlay(nz+1))    ; grid%Rlay(:) = 0.0
 
   if (grid%bathymetry_at_vel) then
-    ALLOC(grid%Dblock_u(Isdq:Iedq, jsd:jed)) ; grid%Dblock_u(:,:) = 0.0
-    ALLOC(grid%Dopen_u(Isdq:Iedq, jsd:jed))  ; grid%Dopen_u(:,:) = 0.0
-    ALLOC(grid%Dblock_v(isd:ied, Jsdq:Jedq)) ; grid%Dblock_v(:,:) = 0.0
-    ALLOC(grid%Dopen_v(isd:ied, Jsdq:Jedq))  ; grid%Dopen_v(:,:) = 0.0
+    ALLOC_(grid%Dblock_u(Isdq:Iedq, jsd:jed)) ; grid%Dblock_u(:,:) = 0.0
+    ALLOC_(grid%Dopen_u(Isdq:Iedq, jsd:jed))  ; grid%Dopen_u(:,:) = 0.0
+    ALLOC_(grid%Dblock_v(isd:ied, Jsdq:Jedq)) ; grid%Dblock_v(:,:) = 0.0
+    ALLOC_(grid%Dopen_v(isd:ied, Jsdq:Jedq))  ; grid%Dopen_v(:,:) = 0.0
   endif
 
   if (grid%Boussinesq) then
@@ -385,7 +385,7 @@ subroutine MOM_grid_end(grid)
 ! Arguments: grid - The ocean's grid structure.
   type(ocean_grid_type), intent(inout) :: grid
 
-  DEALLOC(grid%D) ; DEALLOC(grid%f) ; DEALLOC(grid%g_prime) ; DEALLOC(grid%Rlay)
+  DEALLOC_(grid%D) ; DEALLOC_(grid%f) ; DEALLOC_(grid%g_prime) ; DEALLOC_(grid%Rlay)
   deallocate(grid%gridlonh);   deallocate(grid%gridlath)
   deallocate(grid%gridlonq);   deallocate(grid%gridlatq)
 end subroutine MOM_grid_end

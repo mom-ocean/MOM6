@@ -158,27 +158,27 @@ subroutine step_MOM_dyn_split_RK2(u_in, v_in, h_in, eta_in, uhbt_in, vhbt_in, &
                  Time_local, dt, fluxes, p_surf_begin, p_surf_end, &
                  dt_since_flux, dt_therm, uh, vh, u_av, v_av, h_av, eta_av, &
                  u_out, v_out, h_out, eta_out, G, CS)
-  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), target, intent(in) :: u_in
-  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), target, intent(in) :: v_in
-  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(in)    :: h_in
-  real, dimension(NXMEM_,NYMEM_),         intent(inout) :: eta_in
-  real, dimension(NXMEMQ_,NYMEM_),        intent(inout) :: uhbt_in
-  real, dimension(NXMEM_,NYMEMQ_),        intent(inout) :: vhbt_in
+  real, dimension(NIMEMB_,NJMEM_,NKMEM_), target, intent(in) :: u_in
+  real, dimension(NIMEM_,NJMEMB_,NKMEM_), target, intent(in) :: v_in
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h_in
+  real, dimension(NIMEM_,NJMEM_),         intent(inout) :: eta_in
+  real, dimension(NIMEMB_,NJMEM_),        intent(inout) :: uhbt_in
+  real, dimension(NIMEM_,NJMEMB_),        intent(inout) :: vhbt_in
   type(time_type),                        intent(in)    :: Time_local
   real,                                   intent(in)    :: dt
   type(forcing),                          intent(in)    :: fluxes
   real, dimension(:,:),                   pointer       :: p_surf_begin, p_surf_end
   real,                                   intent(in)    :: dt_since_flux, dt_therm
-  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), target, intent(inout) :: uh
-  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), target, intent(inout) :: vh
-  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), target, intent(inout) :: u_av
-  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), target, intent(inout) :: v_av
-  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(inout) :: h_av
-  real, dimension(NXMEM_,NYMEM_),         intent(out)   :: eta_av
-  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(out)   :: u_out
-  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(out)   :: v_out
-  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(out)   :: h_out
-  real, dimension(NXMEM_,NYMEM_),         intent(out)   :: eta_out
+  real, dimension(NIMEMB_,NJMEM_,NKMEM_), target, intent(inout) :: uh
+  real, dimension(NIMEM_,NJMEMB_,NKMEM_), target, intent(inout) :: vh
+  real, dimension(NIMEMB_,NJMEM_,NKMEM_), target, intent(inout) :: u_av
+  real, dimension(NIMEM_,NJMEMB_,NKMEM_), target, intent(inout) :: v_av
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(inout) :: h_av
+  real, dimension(NIMEM_,NJMEM_),         intent(out)   :: eta_av
+  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(out)   :: u_out
+  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(out)   :: v_out
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(out)   :: h_out
+  real, dimension(NIMEM_,NJMEM_),         intent(out)   :: eta_out
   type(ocean_grid_type),                  intent(inout) :: G
   type(MOM_control_struct),               pointer       :: CS
 ! Arguments: u_in - The input zonal velocity, in m s-1.
@@ -217,30 +217,30 @@ subroutine step_MOM_dyn_split_RK2(u_in, v_in, h_in, eta_in, uhbt_in, vhbt_in, &
                     ! time stepping.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_tmp
     ! A temporary estimated thickness, in m.
-  real, dimension(SZIQ_(G),SZJ_(G),SZK_(G)) :: uh_tmp
-  real, dimension(SZI_(G),SZJQ_(G),SZK_(G)) :: vh_tmp
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: uh_tmp
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: vh_tmp
     ! Temporary transports, in m3 s-1 or kg s-1.
-  real, dimension(SZIQ_(G),SZJ_(G)) :: u_dhdt
-  real, dimension(SZI_(G),SZJQ_(G)) :: v_dhdt
+  real, dimension(SZIB_(G),SZJ_(G)) :: u_dhdt
+  real, dimension(SZI_(G),SZJB_(G)) :: v_dhdt
     ! Vertically summed transport tendencies in m3 s-2 or kg s-2.
 
-  real, dimension(SZIQ_(G),SZJ_(G),SZK_(G)) :: u_bc_accel
-  real, dimension(SZI_(G),SZJQ_(G),SZK_(G)) :: v_bc_accel
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: u_bc_accel
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: v_bc_accel
     ! u_bc_accel and v_bc_accel are the summed baroclinic accelerations of each
     ! layer calculated by the non-barotropic part of the model, both in m s-2.
-  real, dimension(SZIQ_(G),SZJ_(G),SZK_(G)), target :: uh_in
-  real, dimension(SZI_(G),SZJQ_(G),SZK_(G)), target :: vh_in
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), target :: uh_in
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), target :: vh_in
     ! uh_in and vh_in are the zonal or meridional mass transports that would be
     ! obtained using the velocities u_in and v_in, both in m3 s-1 or kg s-1.
-  real, dimension(SZIQ_(G),SZJ_(G)) :: uhbt_out
-  real, dimension(SZI_(G),SZJQ_(G)) :: vhbt_out
+  real, dimension(SZIB_(G),SZJ_(G)) :: uhbt_out
+  real, dimension(SZI_(G),SZJB_(G)) :: vhbt_out
     ! uhbt_out and vhbt_out are the vertically summed transports from the
     ! barotropic solver based on its final velocities, both in m3 s-1 or kg s-1.
   real, dimension(SZI_(G),SZJ_(G)) :: eta_pred
     ! eta_pred is the predictor value of the free surface height or column mass,
     ! in m or kg m-2.
-  real, dimension(SZIQ_(G),SZJ_(G),SZK_(G)), target :: u_adj
-  real, dimension(SZI_(G),SZJQ_(G),SZK_(G)), target :: v_adj
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), target :: u_adj
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), target :: v_adj
     ! u_adj and v_adj are the zonal or meridional velocities after u_in and v_in
     ! have been barotropically adjusted so the resulting transports match
     ! uhbt_out and vhbt_out, both in m s-1.
@@ -1040,9 +1040,9 @@ subroutine register_restarts_dyn_split_RK2(G, param_file, CS, restart_CS)
 end subroutine register_restarts_dyn_split_RK2
 
 subroutine initialize_dyn_split_RK2(u, v, h, Time, G, param_file, diag, CS, restart_CS)
-  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(inout) :: u
-  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(inout) :: v
-  real, dimension(NXMEM_,NYMEM_,NKMEM_) , intent(inout) :: h
+  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(inout) :: u
+  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(inout) :: v
+  real, dimension(NIMEM_,NJMEM_,NKMEM_) , intent(inout) :: h
   type(time_type),                target, intent(in)    :: Time
   type(ocean_grid_type),                  intent(inout) :: G
   type(param_file_type),                  intent(in)    :: param_file

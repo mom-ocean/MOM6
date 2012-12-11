@@ -79,7 +79,7 @@ contains
 
 subroutine step_forward_MEKE(MEKE, h, visc, dt, G, CS)
   type(MEKE_type),                       pointer       :: MEKE 
-  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(in)    :: h
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h
   type(vertvisc_type),                   intent(in)    :: visc
   real,                                  intent(in)    :: dt
   type(ocean_grid_type),                 intent(inout) :: G
@@ -107,12 +107,12 @@ subroutine step_forward_MEKE(MEKE, h, visc, dt, G, CS)
     MEKE_mom_src, & ! The MEKE source from momentum, in m2 s-3.
     drag_rate_visc, &
     drag_rate       ! The MEKE spindown timescale due to bottom drag, in s-1.
-  real, dimension(SZIQ_(G),SZJ_(G)) :: &
+  real, dimension(SZIB_(G),SZJ_(G)) :: &
     MEKE_uflux, &   ! The zonal diffusive flux of MEKE, in kg m2 s-3.
     Kh_u, &         ! The zonal diffusivity that is actually used, in m2 s-1.
     drag_vel_u      ! A (vertical) viscosity associated with bottom drag at
                     ! u-points, in m s-1.
-  real, dimension(SZIQ_(G),SZJQ_(G)) :: &
+  real, dimension(SZIB_(G),SZJB_(G)) :: &
     MEKE_vflux, &   ! The meridional diffusive flux of MEKE, in kg m2 s-3.
     Kh_v, &         ! The meridional diffusivity that is actually used, in m2 s-1.
     drag_vel_v      ! A (vertical) viscosity associated with bottom drag at

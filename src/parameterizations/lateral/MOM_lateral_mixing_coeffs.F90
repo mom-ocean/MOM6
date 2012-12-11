@@ -95,7 +95,7 @@ end interface calc_slope_function
 contains
 
 subroutine calc_resoln_function(h, tv, G, CS)
-  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(in)    :: h
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h
   type(thermo_var_ptrs),                 intent(in)    :: tv
   type(ocean_grid_type),                 intent(inout) :: G
   type(VarMix_CS),                       pointer       :: CS
@@ -225,7 +225,7 @@ subroutine calc_resoln_function(h, tv, G, CS)
 end subroutine calc_resoln_function
 
 subroutine calc_slope_function_need_e(h, tv, G, CS)
-  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(inout) :: h
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: h
   type(thermo_var_ptrs),                 intent(in)    :: tv
   type(ocean_grid_type),                 intent(inout) :: G
   type(VarMix_CS),                       pointer       :: CS
@@ -242,11 +242,11 @@ subroutine calc_slope_function_need_e(h, tv, G, CS)
 end subroutine calc_slope_function_need_e
 
 subroutine calc_slope_function_(h, tv, G, CS, e)
-  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(inout) :: h
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: h
   type(thermo_var_ptrs),                 intent(in)    :: tv
   type(ocean_grid_type),                 intent(inout) :: G
   type(VarMix_CS),                       pointer       :: CS
-  real, dimension(NXMEM_,NYMEM_,NK_INTERFACE_), intent(in) :: e
+  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(in) :: e
 !    This subroutine calculates the slope function S*N for the Visbeck et
 !  al. style scaling for the various horizontal diffusivities.
 
@@ -257,8 +257,8 @@ subroutine calc_slope_function_(h, tv, G, CS, e)
 !  (inout)   CS - The control structure returned by a previous call to
 !                 thickness_diffuse_init.
 !  (in)      e - The interface heights, in m.
-  real :: E_x(SZIQ_(G), SZJ_(G))  ! X-slope of interface at u points (for diagnostics)
-  real :: E_y(SZI_(G), SZJQ_(G))  ! Y-slope of interface at u points (for diagnostics)
+  real :: E_x(SZIB_(G), SZJ_(G))  ! X-slope of interface at u points (for diagnostics)
+  real :: E_y(SZI_(G), SZJB_(G))  ! Y-slope of interface at u points (for diagnostics)
   real :: Khth_Loc      ! Locally calculated thickness mixing coefficient (m2/s)
   real :: H_cutoff      ! Local estimate of a minimum thickness for masking (m)
   real :: h_neglect     ! A thickness that is so small it is usually lost

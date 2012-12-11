@@ -36,10 +36,10 @@ public :: global_i_mean, global_j_mean
 contains
 
 subroutine global_i_mean(array, i_mean, G, mask)
-  real, dimension(NXMEM_,NYMEM_), intent(in)    :: array
-  real, dimension(NYMEM_),        intent(out)   :: i_mean
+  real, dimension(NIMEM_,NJMEM_), intent(in)    :: array
+  real, dimension(NJMEM_),        intent(out)   :: i_mean
   type(ocean_grid_type),          intent(inout) :: G
-  real, dimension(NXMEM_,NYMEM_), optional, intent(in) :: mask
+  real, dimension(NIMEM_,NJMEM_), optional, intent(in) :: mask
 
 !    This subroutine determines the global mean of a field along rows of
 !  constant i, returning it in a 1-d array using the local indexing.
@@ -114,10 +114,10 @@ subroutine global_i_mean(array, i_mean, G, mask)
 end subroutine global_i_mean
 
 subroutine global_j_mean(array, j_mean, G, mask)
-  real, dimension(NXMEM_,NYMEM_), intent(in)    :: array
-  real, dimension(NXMEM_),        intent(out)   :: j_mean
+  real, dimension(NIMEM_,NJMEM_), intent(in)    :: array
+  real, dimension(NIMEM_),        intent(out)   :: j_mean
   type(ocean_grid_type),          intent(inout) :: G
-  real, dimension(NXMEM_,NYMEM_), optional, intent(in) :: mask
+  real, dimension(NIMEM_,NJMEM_), optional, intent(in) :: mask
 
 !    This subroutine determines the global mean of a field along rows of
 !  constant j, returning it in a 1-d array using the local indexing.

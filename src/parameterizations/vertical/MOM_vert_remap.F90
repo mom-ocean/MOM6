@@ -107,10 +107,10 @@ integer :: id_clock_pass, id_clock_EOS
 contains
 
 subroutine vert_remap(h, tv, dt, ea, eb, G, CS)
-  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(inout) :: h
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: h
   type(thermo_var_ptrs),                 intent(inout) :: tv
   real,                                  intent(in)    :: dt
-  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(inout) :: ea, eb
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: ea, eb
   type(ocean_grid_type),                 intent(inout) :: G
   type(vert_remap_CS),                   pointer       :: CS
 
@@ -152,10 +152,10 @@ subroutine vert_remap(h, tv, dt, ea, eb, G, CS)
 end subroutine vert_remap
 
 subroutine regularize_surface(h, tv, dt, ea, eb, G, CS)
-  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(inout) :: h
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: h
   type(thermo_var_ptrs),                 intent(inout) :: tv
   real,                                  intent(in)    :: dt
-  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(inout) :: ea, eb
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: ea, eb
   type(ocean_grid_type),                 intent(inout) :: G
   type(vert_remap_CS),                   pointer       :: CS
 
@@ -177,21 +177,21 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, CS)
 !  (in)      CS - The control structure returned by a previous call to
 !                 vert_remap_init.
 
-  real, dimension(SZIQ_(G),SZJ_(G)) :: &
+  real, dimension(SZIB_(G),SZJ_(G)) :: &
     def_rat_u   ! The ratio of the thickness deficit to the minimum depth, ND.
-  real, dimension(SZI_(G),SZJQ_(G)) :: &
+  real, dimension(SZI_(G),SZJB_(G)) :: &
     def_rat_v   ! The ratio of the thickness deficit to the minimum depth, ND.
-  real, dimension(SZI_(G),SZJQ_(G)) :: &
+  real, dimension(SZI_(G),SZJB_(G)) :: &
     def_rat_h   ! The ratio of the thickness deficit to the minimum depth, ND.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: &
     e           ! The interface depths, in H, positive upward.
 
 #ifdef DEBUG_CODE
-  real, dimension(SZIQ_(G),SZJ_(G)) :: &
+  real, dimension(SZIB_(G),SZJ_(G)) :: &
     def_rat_u_1b, def_rat_u_2, def_rat_u_2b, def_rat_u_3, def_rat_u_3b
-  real, dimension(SZI_(G),SZJQ_(G)) :: &
+  real, dimension(SZI_(G),SZJB_(G)) :: &
     def_rat_v_1b, def_rat_v_2, def_rat_v_2b, def_rat_v_3, def_rat_v_3b
-  real, dimension(SZI_(G),SZJQ_(G)) :: &
+  real, dimension(SZI_(G),SZJB_(G)) :: &
     def_rat_h2, def_rat_h3
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: &
     ef          ! The filtered interface depths, in H, positive upward.
@@ -746,15 +746,15 @@ end subroutine regularize_surface
 
 subroutine find_deficit_ratios(e, def_rat_u, def_rat_v, G, CS, &
                                def_rat_u_2lay, def_rat_v_2lay, halo, h)
-  real, dimension(NXMEM_,NYMEM_,NK_INTERFACE_), intent(in) :: e
-  real, dimension(NXMEMQ_,NYMEM_),           intent(out) :: def_rat_u
-  real, dimension(NXMEM_,NYMEMQ_),           intent(out) :: def_rat_v
+  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(in) :: e
+  real, dimension(NIMEMB_,NJMEM_),           intent(out) :: def_rat_u
+  real, dimension(NIMEM_,NJMEMB_),           intent(out) :: def_rat_v
   type(ocean_grid_type),                     intent(in)  :: G
   type(vert_remap_CS),                       pointer     :: CS
-  real, dimension(NXMEMQ_,NYMEM_), optional, intent(out) :: def_rat_u_2lay
-  real, dimension(NXMEM_,NYMEMQ_), optional, intent(out) :: def_rat_v_2lay
+  real, dimension(NIMEMB_,NJMEM_), optional, intent(out) :: def_rat_u_2lay
+  real, dimension(NIMEM_,NJMEMB_), optional, intent(out) :: def_rat_v_2lay
   integer,                         optional, intent(in)  :: halo
-  real, dimension(NXMEM_,NYMEM_,NKMEM_), optional, intent(in)  :: h
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), optional, intent(in)  :: h
 ! Arguments: e - Interface depths, in m or kg m-2.
 !  (out)     def_rat_u - The thickness deficit ratio at u points, nondim.
 !  (out)     def_rat_v - The thickness deficit ratio at v points, nondim.
@@ -767,12 +767,12 @@ subroutine find_deficit_ratios(e, def_rat_u, def_rat_v, G, CS, &
 !                 mixed and buffer layers are aggregated into 1 layer, nondim.
 !  (in,opt)  halo - An extra-wide halo size, 0 by default.
 !  (in,opt)  h - The layer thicknesse; if not present take vertical differences of e.
-  real, dimension(SZIQ_(G),SZJ_(G)) :: &
+  real, dimension(SZIB_(G),SZJ_(G)) :: &
     h_def_u, &  ! The vertically summed thickness deficits at u-points, in H.
     h_norm_u, & ! The vertically summed arithmetic mean thickness by which
                 ! h_def_u is normalized, in H.
     h_def2_u
-  real, dimension(SZI_(G),SZJQ_(G)) :: &
+  real, dimension(SZI_(G),SZJB_(G)) :: &
     h_def_v, &  ! The vertically summed thickness deficits at v-points, in H.
     h_norm_v, & ! The vertically summed arithmetic mean thickness by which
                 ! h_def_v is normalized, in H.

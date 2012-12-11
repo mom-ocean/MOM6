@@ -128,7 +128,7 @@ type, public :: hor_visc_CS ; private
                              ! viscosity is modified to include a term that
                              ! scales quadratically with the velocity shears.
 
-  real PTR_, dimension(NXMEM_,NYMEM_) :: &
+  real PTR_, dimension(NIMEM_,NJMEM_) :: &
     Kh_bg_xx, &       ! The background Laplacian viscosity at h points, in units
                       ! of m2 s-1. The actual viscosity may be the larger of this
                       ! viscosity and the Smagorinsky viscosity.
@@ -144,7 +144,7 @@ type, public :: hor_visc_CS ; private
 
     reduction_xx      ! The amount by which stresses through h points are reduced
                       ! due to partial barriers. Nondimensional.
-  real PTR_, dimension(NXMEMQP_,NYMEMQP_) :: &
+  real PTR_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: &
     Kh_bg_xy, &       ! The background Laplacian viscosity at q points, in units
                       ! of m2 s-1. The actual viscosity may be the larger of this
                       ! viscosity and the Smagorinsky viscosity.
@@ -161,23 +161,23 @@ type, public :: hor_visc_CS ; private
                       ! due to partial barriers. Nondimensional.
 
 ! The following variables are precalculated combinations of metric terms.
-  real PTR_, dimension(NXMEM_,NYMEM_) :: &
+  real PTR_, dimension(NIMEM_,NJMEM_) :: &
     dx2h, dy2h, &              ! dx^2 or dy^2 at h points, in m-2.
     dx_dyh, dy_dxh             ! dx/dy or dy/dx at h points, nondim.
-  real PTR_, dimension(NXMEMQP_,NYMEMQP_) :: &
+  real PTR_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: &
     dx2q, dy2q, &              ! dx^2 or dy^2 at q points, in m-2.
     dx_dyq, dy_dxq             ! dx/dy or dy/dx at q points, nondim.
-  real PTR_, dimension(NXMEMQP_,NYMEM_) :: &
+  real PTR_, dimension(NIMEMB_PTR_,NJMEM_) :: &
     Idx2dyu, Idxdy2u           ! 1/(dx^2 dy) and 1/(dx dy^2) at u points, in m-3.
-  real PTR_, dimension(NXMEM_,NYMEMQP_) :: &
+  real PTR_, dimension(NIMEM_,NJMEMB_PTR_) :: &
     Idx2dyv, Idxdy2v           ! 1/(dx^2 dy) and 1/(dx dy^2) at v points, in m-3.
 
 !   The following variables are precalculated time-invariant combinations of
 ! parameters and metric terms.
-  real PTR_, dimension(NXMEM_,NYMEM_) :: &
+  real PTR_, dimension(NIMEM_,NJMEM_) :: &
     Laplac_Const_xx, & ! The Laplacian and biharmonic metric-dependent
     Biharm_Const_xx    ! constants, nondim.
-  real PTR_, dimension(NXMEMQP_,NYMEMQP_) :: &
+  real PTR_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: &
     Laplac_Const_xy, & ! The Laplacian and biharmonic metric-dependent
     Biharm_Const_xy    ! constants, nondim.
 
@@ -190,11 +190,11 @@ end type hor_visc_CS
 contains
 
 subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
-  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(in)  :: u
-  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(in)  :: v
-  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(in)  :: h
-  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(out) :: diffu
-  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(out) :: diffv
+  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)  :: u
+  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)  :: v
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)  :: h
+  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(out) :: diffu
+  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(out) :: diffv
   type(MEKE_type),                        pointer     :: MEKE
   type(VarMix_CS),                        pointer     :: VarMix
   type(ocean_grid_type),                  intent(in)  :: G
@@ -225,18 +225,18 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
 !   v[is-2,is-1,ie+1,ie+2], u[is-2,is-1,ie+1,ie+2], and h[is-1,ie+1],
 !  with a similarly sized halo in the y-direction.
 
-  real, dimension(SZIQ_(G),SZJ_(G)) :: u0
-  real, dimension(SZI_(G),SZJQ_(G)) :: v0
+  real, dimension(SZIB_(G),SZJ_(G)) :: u0
+  real, dimension(SZI_(G),SZJB_(G)) :: v0
                 ! u0 and v0 are the Laplacian of the velocities, in m-1 s-1.
   real, dimension(SZI_(G),SZJ_(G)) :: &
     sh_xx, &    ! sh_xx is the horizontal tension (du/dx - dv/dy) including
                 ! all metric terms, in s-1.
     str_xx      ! str_xx is the diagonal term in the stress tensor, in H m2 s-2.
-  real, dimension(SZIQ_(G),SZJQ_(G)) :: &
+  real, dimension(SZIB_(G),SZJB_(G)) :: &
     sh_xy, &    ! sh_xy is the horizontal shearing strain (du/dy + dv/dx)
                 ! including all metric terms, in s-1.
     str_xy      ! str_xy is the cross term in the stress tensor, in H m2 s-2.
-  real, dimension(SZIQ_(G),SZJQ_(G), SZK_(G)) :: &
+  real, dimension(SZIB_(G),SZJB_(G), SZK_(G)) :: &
     FrictWork   ! Work released by lateral friction terms in W m-2.
   real :: Ah        ! Biharmonic viscosity in m4 s-1.
   real :: Kh        ! Laplacian viscosity in m2 s-1.
@@ -575,8 +575,8 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
 !  (in/out)  CS - A pointer that is set to point to the control structure
 !                 for this module
 
-  real, dimension(SZIQ_(G),SZJ_(G)) :: u0u, u0v
-  real, dimension(SZI_(G),SZJQ_(G)) :: v0u, v0v
+  real, dimension(SZIB_(G),SZJ_(G)) :: u0u, u0v
+  real, dimension(SZI_(G),SZJB_(G)) :: v0u, v0v
                 ! u0v is are the Laplacian sensitivities to the v velocities
                 ! at u points, in m-2, with u0u, v0u, and v0v defined similarly.
   real :: grid_sp_h2      ! Harmonic mean of the squares of the grid
@@ -753,48 +753,48 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
     call MOM_error(FATAL,"ERROR: NOSLIP and BIHARMONIC cannot be defined "// &
                           "at the same time in MOM.")
 
-  ALLOC(CS%dx2h(isd:ied,jsd:jed))     ; CS%dx2h(:,:) = 0.0
-  ALLOC(CS%dy2h(isd:ied,jsd:jed))     ; CS%dy2h(:,:) = 0.0
-  ALLOC(CS%dx2q(Isdq:Iedq,Jsdq:Jedq))   ; CS%dx2q(:,:) = 0.0
-  ALLOC(CS%dy2q(Isdq:Iedq,Jsdq:Jedq))   ; CS%dy2q(:,:) = 0.0
-  ALLOC(CS%dx_dyh(isd:ied,jsd:jed))   ; CS%dx_dyh(:,:) = 0.0
-  ALLOC(CS%dy_dxh(isd:ied,jsd:jed))   ; CS%dy_dxh(:,:) = 0.0
-  ALLOC(CS%dx_dyq(Isdq:Iedq,Jsdq:Jedq)) ; CS%dx_dyq(:,:) = 0.0
-  ALLOC(CS%dy_dxq(Isdq:Iedq,Jsdq:Jedq)) ; CS%dy_dxq(:,:) = 0.0
+  ALLOC_(CS%dx2h(isd:ied,jsd:jed))     ; CS%dx2h(:,:) = 0.0
+  ALLOC_(CS%dy2h(isd:ied,jsd:jed))     ; CS%dy2h(:,:) = 0.0
+  ALLOC_(CS%dx2q(Isdq:Iedq,Jsdq:Jedq))   ; CS%dx2q(:,:) = 0.0
+  ALLOC_(CS%dy2q(Isdq:Iedq,Jsdq:Jedq))   ; CS%dy2q(:,:) = 0.0
+  ALLOC_(CS%dx_dyh(isd:ied,jsd:jed))   ; CS%dx_dyh(:,:) = 0.0
+  ALLOC_(CS%dy_dxh(isd:ied,jsd:jed))   ; CS%dy_dxh(:,:) = 0.0
+  ALLOC_(CS%dx_dyq(Isdq:Iedq,Jsdq:Jedq)) ; CS%dx_dyq(:,:) = 0.0
+  ALLOC_(CS%dy_dxq(Isdq:Iedq,Jsdq:Jedq)) ; CS%dy_dxq(:,:) = 0.0
 
   if (CS%Laplacian) then
-    ALLOC(CS%Kh_bg_xx(isd:ied,jsd:jed))     ; CS%Kh_bg_xx(:,:) = 0.0
-    ALLOC(CS%Kh_bg_xy(Isdq:Iedq,Jsdq:Jedq)) ; CS%Kh_bg_xy(:,:) = 0.0
+    ALLOC_(CS%Kh_bg_xx(isd:ied,jsd:jed))     ; CS%Kh_bg_xx(:,:) = 0.0
+    ALLOC_(CS%Kh_bg_xy(Isdq:Iedq,Jsdq:Jedq)) ; CS%Kh_bg_xy(:,:) = 0.0
     if (CS%bound_Kh .or. CS%better_bound_Kh) then
-      ALLOC(CS%Kh_Max_xx(Isdq:Iedq,Jsdq:Jedq))   ; CS%Kh_Max_xx(:,:) = 0.0
-      ALLOC(CS%Kh_Max_xy(Isdq:Iedq,Jsdq:Jedq)) ; CS%Kh_Max_xy(:,:) = 0.0
+      ALLOC_(CS%Kh_Max_xx(Isdq:Iedq,Jsdq:Jedq))   ; CS%Kh_Max_xx(:,:) = 0.0
+      ALLOC_(CS%Kh_Max_xy(Isdq:Iedq,Jsdq:Jedq)) ; CS%Kh_Max_xy(:,:) = 0.0
     endif
     if (CS%Smagorinsky_Kh) then
-      ALLOC(CS%Laplac_Const_xx(isd:ied,jsd:jed))   ; CS%Laplac_Const_xx(:,:) = 0.0
-      ALLOC(CS%Laplac_Const_xy(Isdq:Iedq,Jsdq:Jedq)) ; CS%Laplac_Const_xy(:,:) = 0.0
+      ALLOC_(CS%Laplac_Const_xx(isd:ied,jsd:jed))   ; CS%Laplac_Const_xx(:,:) = 0.0
+      ALLOC_(CS%Laplac_Const_xy(Isdq:Iedq,Jsdq:Jedq)) ; CS%Laplac_Const_xy(:,:) = 0.0
     endif
   endif
-  ALLOC(CS%reduction_xx(isd:ied,jsd:jed))     ; CS%reduction_xx(:,:) = 0.0
-  ALLOC(CS%reduction_xy(Isdq:Iedq,Jsdq:Jedq)) ; CS%reduction_xy(:,:) = 0.0
+  ALLOC_(CS%reduction_xx(isd:ied,jsd:jed))     ; CS%reduction_xx(:,:) = 0.0
+  ALLOC_(CS%reduction_xy(Isdq:Iedq,Jsdq:Jedq)) ; CS%reduction_xy(:,:) = 0.0
 
   if (CS%biharmonic) then
-    ALLOC(CS%Idx2dyu(Isdq:Iedq,jsd:jed)) ; CS%Idx2dyu(:,:) = 0.0
-    ALLOC(CS%Idx2dyv(isd:ied,Jsdq:Jedq)) ; CS%Idx2dyv(:,:) = 0.0
-    ALLOC(CS%Idxdy2u(Isdq:Iedq,jsd:jed)) ; CS%Idxdy2u(:,:) = 0.0
-    ALLOC(CS%Idxdy2v(isd:ied,Jsdq:Jedq)) ; CS%Idxdy2v(:,:) = 0.0
+    ALLOC_(CS%Idx2dyu(Isdq:Iedq,jsd:jed)) ; CS%Idx2dyu(:,:) = 0.0
+    ALLOC_(CS%Idx2dyv(isd:ied,Jsdq:Jedq)) ; CS%Idx2dyv(:,:) = 0.0
+    ALLOC_(CS%Idxdy2u(Isdq:Iedq,jsd:jed)) ; CS%Idxdy2u(:,:) = 0.0
+    ALLOC_(CS%Idxdy2v(isd:ied,Jsdq:Jedq)) ; CS%Idxdy2v(:,:) = 0.0
 
-    ALLOC(CS%Ah_bg_xx(isd:ied,jsd:jed)) ; CS%Ah_bg_xx(:,:) = 0.0
-    ALLOC(CS%Ah_bg_xy(Isdq:Iedq,Jsdq:Jedq)) ; CS%Ah_bg_xy(:,:) = 0.0
+    ALLOC_(CS%Ah_bg_xx(isd:ied,jsd:jed)) ; CS%Ah_bg_xx(:,:) = 0.0
+    ALLOC_(CS%Ah_bg_xy(Isdq:Iedq,Jsdq:Jedq)) ; CS%Ah_bg_xy(:,:) = 0.0
     if (CS%bound_Ah .or. CS%better_bound_Ah) then
-      ALLOC(CS%Ah_Max_xx(isd:ied,jsd:jed))   ; CS%Ah_Max_xx(:,:) = 0.0
-      ALLOC(CS%Ah_Max_xy(Isdq:Iedq,Jsdq:Jedq)) ; CS%Ah_Max_xy(:,:) = 0.0
+      ALLOC_(CS%Ah_Max_xx(isd:ied,jsd:jed))   ; CS%Ah_Max_xx(:,:) = 0.0
+      ALLOC_(CS%Ah_Max_xy(Isdq:Iedq,Jsdq:Jedq)) ; CS%Ah_Max_xy(:,:) = 0.0
     endif
     if (CS%Smagorinsky_Ah) then
-      ALLOC(CS%Biharm_Const_xx(isd:ied,jsd:jed)) ; CS%Biharm_Const_xx(:,:) = 0.0
-      ALLOC(CS%Biharm_Const_xy(Isdq:Iedq,Jsdq:Jedq)) ; CS%Biharm_Const_xy(:,:) = 0.0
+      ALLOC_(CS%Biharm_Const_xx(isd:ied,jsd:jed)) ; CS%Biharm_Const_xx(:,:) = 0.0
+      ALLOC_(CS%Biharm_Const_xy(Isdq:Iedq,Jsdq:Jedq)) ; CS%Biharm_Const_xy(:,:) = 0.0
       if (CS%bound_Coriolis) then
-        ALLOC(CS%Biharm_Const2_xx(isd:ied,jsd:jed)) ; CS%Biharm_Const2_xx(:,:) = 0.0
-        ALLOC(CS%Biharm_Const2_xy(Isdq:Iedq,Jsdq:Jedq)) ; CS%Biharm_Const2_xy(:,:) = 0.0
+        ALLOC_(CS%Biharm_Const2_xx(isd:ied,jsd:jed)) ; CS%Biharm_Const2_xx(:,:) = 0.0
+        ALLOC_(CS%Biharm_Const2_xy(Isdq:Iedq,Jsdq:Jedq)) ; CS%Biharm_Const2_xy(:,:) = 0.0
       endif
     endif
   endif
@@ -1038,32 +1038,32 @@ subroutine hor_visc_end(CS)
 !                 hor_visc_init.
   type(hor_visc_CS), pointer :: CS
 
-  DEALLOC(CS%dx2h) ; DEALLOC(CS%dx2q) ; DEALLOC(CS%dy2h) ; DEALLOC(CS%dy2q)
-  DEALLOC(CS%dx_dyh) ; DEALLOC(CS%dy_dxh) ; DEALLOC(CS%dx_dyq) ; DEALLOC(CS%dy_dxq)
+  DEALLOC_(CS%dx2h) ; DEALLOC_(CS%dx2q) ; DEALLOC_(CS%dy2h) ; DEALLOC_(CS%dy2q)
+  DEALLOC_(CS%dx_dyh) ; DEALLOC_(CS%dy_dxh) ; DEALLOC_(CS%dx_dyq) ; DEALLOC_(CS%dy_dxq)
 
-  DEALLOC(CS%reduction_xx) ; DEALLOC(CS%reduction_xy)
+  DEALLOC_(CS%reduction_xx) ; DEALLOC_(CS%reduction_xy)
 
   if (CS%Laplacian) then
-    DEALLOC(CS%Kh_bg_xx) ; DEALLOC(CS%Kh_bg_xy)
+    DEALLOC_(CS%Kh_bg_xx) ; DEALLOC_(CS%Kh_bg_xy)
     if (CS%bound_Kh) then
-      DEALLOC(CS%Kh_Max_xx) ; DEALLOC(CS%Kh_Max_xy)
+      DEALLOC_(CS%Kh_Max_xx) ; DEALLOC_(CS%Kh_Max_xy)
     endif
     if (CS%Smagorinsky_Kh) then
-      DEALLOC(CS%Laplac_Const_xx) ; DEALLOC(CS%Laplac_Const_xy)
+      DEALLOC_(CS%Laplac_Const_xx) ; DEALLOC_(CS%Laplac_Const_xy)
     endif
   endif
 
   if (CS%biharmonic) then
-    DEALLOC(CS%Idx2dyu) ; DEALLOC(CS%Idx2dyv)
-    DEALLOC(CS%Idxdy2u) ; DEALLOC(CS%Idxdy2v)
-    DEALLOC(CS%Ah_bg_xx) ; DEALLOC(CS%Ah_bg_xy)
+    DEALLOC_(CS%Idx2dyu) ; DEALLOC_(CS%Idx2dyv)
+    DEALLOC_(CS%Idxdy2u) ; DEALLOC_(CS%Idxdy2v)
+    DEALLOC_(CS%Ah_bg_xx) ; DEALLOC_(CS%Ah_bg_xy)
     if (CS%bound_Ah) then
-      DEALLOC(CS%Ah_Max_xx) ; DEALLOC(CS%Ah_Max_xy)
+      DEALLOC_(CS%Ah_Max_xx) ; DEALLOC_(CS%Ah_Max_xy)
     endif
     if (CS%Smagorinsky_Ah) then
-      DEALLOC(CS%Biharm_Const_xx) ; DEALLOC(CS%Biharm_Const_xy)
+      DEALLOC_(CS%Biharm_Const_xx) ; DEALLOC_(CS%Biharm_Const_xy)
       if (CS%bound_Coriolis) then
-        DEALLOC(CS%Biharm_Const2_xx) ; DEALLOC(CS%Biharm_Const2_xy)
+        DEALLOC_(CS%Biharm_Const2_xx) ; DEALLOC_(CS%Biharm_Const2_xy)
       endif
     endif
   endif

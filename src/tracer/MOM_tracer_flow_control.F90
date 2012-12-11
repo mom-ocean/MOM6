@@ -192,7 +192,7 @@ subroutine tracer_flow_control_init(restart, day, G, h, OBC, CS, sponge_CSp, &
   logical,                               intent(in) :: restart
   type(time_type), target,               intent(in) :: day
   type(ocean_grid_type),                 intent(in) :: G
-  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(in) :: h
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h
   type(ocean_OBC_type),                  pointer    :: OBC
   type(tracer_flow_control_CS),          pointer    :: CS
   type(sponge_CS),                       pointer    :: sponge_CSp
@@ -244,7 +244,7 @@ subroutine tracer_flow_control_init(restart, day, G, h, OBC, CS, sponge_CSp, &
 end subroutine tracer_flow_control_init
 
 subroutine get_chl_from_model(Chl_array, G, CS)
-  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(out) :: Chl_array
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(out) :: Chl_array
   type(ocean_grid_type),                 intent(in)  :: G
   type(tracer_flow_control_CS),          pointer     :: CS
 ! Arguments: Chl_array - The array into which the model's Chlorophyll-A
@@ -300,7 +300,7 @@ subroutine call_tracer_set_forcing(state, fluxes, day_start, day_interval, G, CS
 end subroutine call_tracer_set_forcing
 
 subroutine call_tracer_column_fns(h_old, h_new, ea, eb, fluxes, dt, G, tv, optics, CS)
-  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(in) :: h_old, h_new, ea, eb
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h_old, h_new, ea, eb
   type(forcing),                         intent(in) :: fluxes
   real,                                  intent(in) :: dt
   type(ocean_grid_type),                 intent(in) :: G
@@ -361,7 +361,7 @@ end subroutine call_tracer_column_fns
 
 subroutine call_tracer_stocks(h, stock_values, G, CS, stock_names, stock_units, &
                               num_stocks, stock_index, got_min_max,global_min,  global_max,xgmin, ygmin, zgmin, xgmax, ygmax, zgmax)
-  real, dimension(NXMEM_,NYMEM_,NKMEM_),    intent(in)  :: h
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),    intent(in)  :: h
   real, dimension(:),                       intent(out) :: stock_values
   type(ocean_grid_type),                    intent(in)  :: G
   type(tracer_flow_control_CS),             pointer     :: CS
@@ -500,7 +500,7 @@ end subroutine store_stocks
 
 subroutine call_tracer_surface_state(state, h, G, CS)
   type(surface),                         intent(inout) :: state
-  real, dimension(NXMEM_,NYMEM_,NKMEM_), intent(in) :: h
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h
   type(ocean_grid_type),                 intent(in) :: G
   type(tracer_flow_control_CS),          pointer    :: CS
 !   This subroutine calls all registered tracer packages to enable them to

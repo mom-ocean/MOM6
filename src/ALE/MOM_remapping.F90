@@ -63,11 +63,11 @@ subroutine remapping_main ( G, regridding_opts, h, h_new, tv, u, v )
   ! Arguments
   type(ocean_grid_type), intent(in)                       :: G
   type(regridding_opts_t), intent(in)                     :: regridding_opts
-  real, dimension(NXMEM_,NYMEM_, NKMEM_), intent(in)      :: h
-  real, dimension(NXMEM_,NYMEM_, NKMEM_), intent(inout)   :: h_new
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)       :: h
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout)    :: h_new
   type(thermo_var_ptrs), intent(inout)                    :: tv       
-  real, dimension(NXMEMQ_,NYMEM_, NKMEM_), intent(inout), optional  :: u
-  real, dimension(NXMEM_,NYMEMQ_, NKMEM_), intent(inout), optional  :: v
+  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(inout), optional  :: u
+  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(inout), optional  :: v
   
   ! Local variables
   integer               :: i, j, k

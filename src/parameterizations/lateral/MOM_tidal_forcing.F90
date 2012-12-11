@@ -393,7 +393,7 @@ end subroutine tidal_forcing_init
 subroutine find_in_files(tidal_input_files,varname,array,G)
   character(len=*),                intent(in)  :: tidal_input_files(:)
   character(len=*),                intent(in)  :: varname
-  real, dimension(NXMEM_,NYMEM_),  intent(out) :: array
+  real, dimension(NIMEM_,NJMEM_),  intent(out) :: array
   type(ocean_grid_type),           intent(in)  :: G
 
   integer :: nf
@@ -443,8 +443,8 @@ end subroutine tidal_forcing_sensitivity
 
 subroutine calc_tidal_forcing(Time, eta, eta_tidal, G, CS, deta_tidal_deta)
   type(time_type),       intent(in) :: Time
-  real, intent(in),  dimension(NXMEM_,NYMEM_) :: eta
-  real, intent(out), dimension(NXMEM_,NYMEM_) :: eta_tidal
+  real, intent(in),  dimension(NIMEM_,NJMEM_) :: eta
+  real, intent(out), dimension(NIMEM_,NJMEM_) :: eta_tidal
   type(ocean_grid_type), intent(in) :: G
   type(tidal_forcing_CS), pointer   :: CS
   real, optional,       intent(out) :: deta_tidal_deta

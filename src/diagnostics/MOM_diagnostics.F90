@@ -126,17 +126,17 @@ end type diagnostics_CS
 contains
 
 subroutine calculate_diagnostic_fields(u, v, h, uh, vh, lev, tv, dt, G, CS, eta_bt)
-  real, dimension(NXMEMQ_,NYMEM_,NKMEM_),   intent(in)    :: u
-  real, dimension(NXMEM_,NYMEMQ_,NKMEM_),   intent(in)    :: v
-  real, dimension(NXMEM_,NYMEM_,NKMEM_),    intent(in)    :: h
-  real, dimension(NXMEMQ_,NYMEM_,NKMEM_),   intent(in)    :: uh
-  real, dimension(NXMEM_,NYMEMQ_,NKMEM_),   intent(in)    :: vh
+  real, dimension(NIMEMB_,NJMEM_,NKMEM_),   intent(in)    :: u
+  real, dimension(NIMEM_,NJMEMB_,NKMEM_),   intent(in)    :: v
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),    intent(in)    :: h
+  real, dimension(NIMEMB_,NJMEM_,NKMEM_),   intent(in)    :: uh
+  real, dimension(NIMEM_,NJMEMB_,NKMEM_),   intent(in)    :: vh
   integer,                                  intent(in)    :: lev
   type(thermo_var_ptrs),                    intent(in)    :: tv
   real,                                     intent(in)    :: dt
   type(ocean_grid_type),                    intent(inout) :: G
   type(diagnostics_CS),                     pointer       :: CS
-  real, dimension(NXMEM_,NYMEM_), optional, intent(in)    :: eta_bt
+  real, dimension(NIMEM_,NJMEM_), optional, intent(in)    :: eta_bt
 !   Any diagnostic quantities that are not more naturally calculated
 ! in the various other subroutines are calculated here.
 
@@ -386,7 +386,7 @@ subroutine find_weights(Rlist, R_in, k, nz, wt, wt_p)
 end subroutine find_weights
 
 subroutine calculate_vertical_integrals(h, tv, G, CS)
-  real, dimension(NXMEM_,NYMEM_,NKMEM_),    intent(in)    :: h
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),    intent(in)    :: h
   type(thermo_var_ptrs),                    intent(in)    :: tv
   type(ocean_grid_type),                    intent(inout) :: G
   type(diagnostics_CS),                     pointer       :: CS
@@ -480,11 +480,11 @@ subroutine calculate_vertical_integrals(h, tv, G, CS)
 end subroutine calculate_vertical_integrals
 
 subroutine calculate_energy_diagnostics(u, v, h, uh, vh, lev, G, CS)
-  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(in)    :: u
-  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(in)    :: v
-  real, dimension(NXMEM_,NYMEM_,NKMEM_),  intent(in)    :: h
-  real, dimension(NXMEMQ_,NYMEM_,NKMEM_), intent(in)    :: uh
-  real, dimension(NXMEM_,NYMEMQ_,NKMEM_), intent(in)    :: vh
+  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)    :: u
+  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)    :: v
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h
+  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)    :: uh
+  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)    :: vh
   type(ocean_grid_type),                  intent(inout) :: G
   type(diagnostics_CS),                   pointer       :: CS
 !   This subroutine calculates a series of terms in the energy
@@ -500,8 +500,8 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, lev, G, CS)
 !                 diagnostics_init.
 
   integer :: lev
-  real :: KE_u(SZIQ_(G),SZJ_(G))
-  real :: KE_v(SZI_(G),SZJQ_(G))
+  real :: KE_u(SZIB_(G),SZJ_(G))
+  real :: KE_v(SZI_(G),SZJB_(G))
   real :: KE_h(SZI_(G),SZJ_(G))
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
