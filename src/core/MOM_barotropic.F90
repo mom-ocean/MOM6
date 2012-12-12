@@ -117,11 +117,11 @@ implicit none ; private
 
 #include <MOM_memory.h>
 #ifdef STATIC_MEMORY
-#  ifndef BT_HALO
-#    define BT_HALO 0
+#  ifndef BTHALO_
+#    define BTHALO_ 0
 #  endif
-#  define WHALO_I MAX(BT_HALO-NX_HALO,0)
-#  define WHALO_J MAX(BT_HALO-NY_HALO,0)
+#  define WHALO_I MAX(BTHALO_-NIHALO_,0)
+#  define WHALO_J MAX(BTHALO_-NJHALO_,0)
 #  define NIMEMW_   1-WHALO_I:NIMEM+WHALO_I
 #  define NJMEMW_   1-WHALO_J:NJMEM+WHALO_J
 #  define NIMEMBW_  -WHALO_I:NIMEM+WHALO_I
@@ -3588,10 +3588,10 @@ CS%Nonlin_cont_update_period = 1
   call get_param(param_file, mod, "BTHALO", bt_halo_sz, &
                  "The minimum halo size for the barotropic solver.", default=0)
 #ifdef STATIC_MEMORY
-  if ((bt_halo_sz > 0) .and. (bt_halo_sz /= BT_HALO)) call MOM_error(FATAL, &
+  if ((bt_halo_sz > 0) .and. (bt_halo_sz /= BTHALO_)) call MOM_error(FATAL, &
       "barotropic_init: Run-time values of BTHALO must agree with the \n"//&
-      "macro BT_HALO with STATIC_MEMORY.")
-  wd_halos(1) = WHALO_I+NX_HALO ; wd_halos(2) = WHALO_J+NY_HALO
+      "macro BTHALO_ with STATIC_MEMORY.")
+  wd_halos(1) = WHALO_I+NIHALO_ ; wd_halos(2) = WHALO_J+NJHALO_
 #else
   wd_halos(1) = bt_halo_sz; wd_halos(2) =  bt_halo_sz
 #endif
@@ -3766,9 +3766,9 @@ CS%Nonlin_cont_update_period = 1
   ! Initialize a version of the MOM domain that is specific to the barotropic solver.
   call MOM_domains_init(CS%BT_Domain, param_file, min_halo=wd_halos, symmetric=.true.)
 #ifdef STATIC_MEMORY
-  if (wd_halos(1) /= WHALO_I+NX_HALO) call MOM_error(FATAL, "barotropic_init: "//&
+  if (wd_halos(1) /= WHALO_I+NIHALO_) call MOM_error(FATAL, "barotropic_init: "//&
           "Barotropic x-halo sizes are incorrectly resized with STATIC_MEMORY.")
-  if (wd_halos(2) /= WHALO_J+NY_HALO) call MOM_error(FATAL, "barotropic_init: "//&
+  if (wd_halos(2) /= WHALO_J+NJHALO_) call MOM_error(FATAL, "barotropic_init: "//&
           "Barotropic y-halo sizes are incorrectly resized with STATIC_MEMORY.")
 #else
   if (bt_halo_sz > 0) then

@@ -4,12 +4,12 @@
 !********+*********+*********+*********+*********+*********+*********+*
 
 !  Specify the numerical domain.
-#define NXTOT NONSENSE_NXTOT
-#define NYTOT NONSENSE_NYTOT
-                               !    NXTOT and NYTOT are the number of thickness
+#define NIGLOBAL_ NONSENSE_NIGLOBAL
+#define NJGLOBAL_ NONSENSE_NJGLOBAL
+                               !    NIGLOBAL_ and NJGLOBAL_ are the number of thickness
                                !  grid points in the zonal and meridional
                                !  directions of the physical domain.
-#define NZ NONSENSE_NZ
+#define NK_ NONSENSE_NK
                                !    The number of layers.
 
 #undef STATIC_MEMORY
@@ -27,22 +27,22 @@
                                !  others, depending on where they are on the 
                                !  staggered grid.
 
-#define NXPROC NONSENSE_NXPROC
-                               !    NXPROC is the number of processors in the
+#define NIPROC_ NONSENSE_NIPROC
+                               !    NIPROC_ is the number of processors in the
                                !  x-direction.
-#define NYPROC NONSENSE_NYPROC
-                               !    NYPROC is the number of processors in the
+#define NJPROC_ NONSENSE_NJPROC
+                               !    NJPROC_ is the number of processors in the
                                !  y-direction.
 
-#define MAX_FIELDS 50
+#define MAX_FIELDS_ 50
                                !    The maximum permitted number (each) of
                                !  restart variables, time derivatives, etc.
                                !  This is mostly used for the size of pointer
                                !  arrays, so it should be set generously.
 
-#define NX_HALO 2
-#define NY_HALO 2
-                               !   NX_HALO and NY_HALO are the sizes of the
+#define NIHALO_ 2
+#define NJHALO_ 2
+                               !   NIHALO_ and NJHALO_ are the sizes of the
                                ! memory halos on each side.
 
 #include <MOM_memory_macros.h>

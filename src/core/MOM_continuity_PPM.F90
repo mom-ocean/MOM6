@@ -2101,7 +2101,7 @@ subroutine continuity_PPM_init(Time, G, param_file, diag, CS)
                  "barotropic and baroclinic estimates of the sea surface \n"//&
                  "height due to the fluxes through each face.  The total \n"//&
                  "tolerance for SSH is 4 times this value.  The default \n"//&
-                 "is 0.5*NZ*ANGSTROM, and this should not be set less x\n"//&
+                 "is 0.5*NK*ANGSTROM, and this should not be set less x\n"//&
                  "than about 10^-15*MAXIMUM_DEPTH.", units="m", &
                  default=0.5*G%ke*G%Angstrom_z)
 

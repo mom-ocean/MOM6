@@ -128,7 +128,7 @@ type, public :: advect_tracer_CS ; private
                             ! to ensure that the diffusive equivalent of the CFL
                             ! limit is not violated.
   integer :: ntr = 0        ! The number of registered tracers.
-  type(tracer) :: Tr(MAX_FIELDS)  ! The array of registered tracers.
+  type(tracer) :: Tr(MAX_FIELDS_)  ! The array of registered tracers.
   type(diag_ptrs), pointer :: diag ! A pointer to a structure of shareable
                             ! ocean diagnostic fields and control variables.
   logical :: debug           ! If true, write verbose checksums for debugging purposes.
@@ -187,8 +187,8 @@ subroutine register_tracer(tr1, name, param_file, CS, ad_x, ad_y, &
 
   if (.not. associated(CS)) call advect_tracer_init(param_file, CS)
 
-  if (CS%ntr>=MAX_FIELDS) then
-    write(mesg,'("Increase MAX_FIELDS in MOM_memory.h to at least ",I3," to allow for &
+  if (CS%ntr>=MAX_FIELDS_) then
+    write(mesg,'("Increase MAX_FIELDS_ in MOM_memory.h to at least ",I3," to allow for &
         &all the tracers being registered via register_tracer.")') CS%ntr+1
     call MOM_error(FATAL,"MOM register_tracer: "//mesg)
   endif
@@ -355,7 +355,7 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, CS)
 !  (in)      CS - The control structure returned by a previous call to
 !                 advect_tracer_init.
 
-  type(tracer) :: Tr(MAX_FIELDS) ! The array of registered tracers.
+  type(tracer) :: Tr(MAX_FIELDS_) ! The array of registered tracers.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
     hprev           ! The cell volume at the end of the previous tracer
                     ! change, in m3.
@@ -899,7 +899,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, tv)
 !                 and these may (probably will) point to some of the same arrays
 !                 as Tr does.  tv is required for epipycnal mixing between the
 !                 mixed layer and the interior.
-  type(tracer) :: Tr(MAX_FIELDS) ! The array of registered tracers.
+  type(tracer) :: Tr(MAX_FIELDS_) ! The array of registered tracers.
   real, dimension(SZI_(G),SZJ_(G)) :: &
     Ihdxdy, &     ! The inverse of the volume or mass of fluid in a layer in a
                   ! grid cell, in m-3 or kg-1.

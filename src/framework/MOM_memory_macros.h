@@ -1,21 +1,14 @@
 !***********************************************************************
 ! This is a header file to define macros for static and dynamic memory *
-! allocation.  Define STATIC_MEMORY in MOM_memory.h for static memory *
+! allocation.  Define STATIC_MEMORY in MOM_memory.h for static memory  *
 ! allocation.  Otherwise dynamic memory allocation will be assumed.    *
 !***********************************************************************
-
-#if (defined(X1) && !defined(NX_HALO))
-#  define NX_HALO X1
-#endif
-#if (defined(Y1) && !defined(NY_HALO))
-#  define NY_HALO Y1
-#endif
 
 #ifdef STATIC_MEMORY
 !   NIMEM and NJMEM are the maximum number of grid points in the
 ! x- and y-directions on each processsor.
-#  define NIMEM (((NXTOT-1)/NXPROC)+1+2*NX_HALO)
-#  define NJMEM (((NYTOT-1)/NYPROC)+1+2*NY_HALO)
+#  define NIMEM (((NIGLOBAL_-1)/NIPROC_)+1+2*NIHALO_)
+#  define NJMEM (((NJGLOBAL_-1)/NJPROC_)+1+2*NJHALO_)
 
 #  define DEALLOC_(x)
 #  define ALLOC_(x)
@@ -35,17 +28,17 @@
 #  define NJMEMB_PTR_  NJMEMB_
 #  define NIMEMB_SYM_  0:NIMEM
 #  define NJMEMB_SYM_  0:NJMEM
-#  define NKMEM_     NZ
-#  define NK_INTERFACE_ NZ+1
+#  define NKMEM_     NK_
+#  define NK_INTERFACE_ NK_+1
 #  define C1_        1
 #  define C2_        2
 #  define C3_        3
 #  define SZ1_(u)    NIMEM
 #  define SZ2_(u)    NJMEM
-#  define SZ3_(u)    NZ
+#  define SZ3_(u)    NK_
 #  define SZI_(G)    NIMEM
 #  define SZJ_(G)    NJMEM
-#  define SZK_(G)    NZ
+#  define SZK_(G)    NK_
 #  define SZIB_(G)   NIMEMB_
 #  define SZJB_(G)   NJMEMB_
 #  define SZIBS_(G)  0:NIMEM

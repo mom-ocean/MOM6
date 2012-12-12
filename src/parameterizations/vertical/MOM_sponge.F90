@@ -114,8 +114,8 @@ type, public :: sponge_CS ; private
                              ! coordinate-density is being damped, in kg m-3.
   real, pointer :: Ref_eta(:,:) => NULL() ! The value toward which the interface
                              ! heights are being damped.
-  type(p3d) :: var(MAX_FIELDS)  ! Pointers to the fields that are being damped.
-  type(p2d) :: Ref_val(MAX_FIELDS)  ! The values to which the fields are damped.
+  type(p3d) :: var(MAX_FIELDS_)  ! Pointers to the fields that are being damped.
+  type(p2d) :: Ref_val(MAX_FIELDS_)  ! The values to which the fields are damped.
 
   logical :: do_i_mean_sponge     ! If true, apply sponges to the i-mean fields.
   real, pointer :: Iresttime_im(:) => NULL()  ! The inverse restoring time of
@@ -125,7 +125,7 @@ type, public :: sponge_CS ; private
                              ! in kg m-3.
   real, pointer :: Ref_eta_im(:,:) => NULL() ! The value toward which the i-mean
                              ! interface heights are being damped.
-  type(p2d) :: Ref_val_im(MAX_FIELDS)  ! The values toward which the i-means of
+  type(p2d) :: Ref_val_im(MAX_FIELDS_)  ! The values toward which the i-means of
                              ! fields are damped.
 
   type(diag_ptrs), pointer :: diag ! A pointer to a structure of shareable
@@ -286,8 +286,8 @@ subroutine set_up_sponge_field(sp_val, f_ptr, nlay, CS, sp_val_i_mean)
 
   CS%fldno = CS%fldno + 1
 
-  if (CS%fldno > MAX_FIELDS) then
-    write(mesg,'("Increase MAX_FIELDS to at least ",I3," in MOM_memory.h or decrease &
+  if (CS%fldno > MAX_FIELDS_) then
+    write(mesg,'("Increase MAX_FIELDS_ to at least ",I3," in MOM_memory.h or decrease &
            &the number of fields to be damped in the call to &
            &initialize_sponge." )') CS%fldno
     call MOM_error(FATAL,"set_up_sponge_field: "//mesg)

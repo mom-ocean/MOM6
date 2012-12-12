@@ -70,14 +70,14 @@ type, public :: diag_to_Z_CS ; private
     v_z => NULL(), &    ! The meridional velocity remapped to depth space, in m s-1.
     uh_z => NULL(), &   ! The zonal transport remapped to depth space, in m3 s-1.
     vh_z => NULL()      ! The meridional transport remapped to depth space, in m3 s-1.
-  type(p3d) :: tr_z(MAX_FIELDS)  ! An array of tracers, remapped to depth space.
-  type(p3d) :: tr_model(MAX_FIELDS) ! Pointers to an array of tracers.
+  type(p3d) :: tr_z(MAX_FIELDS_)  ! An array of tracers, remapped to depth space.
+  type(p3d) :: tr_model(MAX_FIELDS_) ! Pointers to an array of tracers.
   real    :: missing_vel = -1.0e34
   real    :: missing_trans = -1.0e34
   real    :: missing_value = -1.0e34
-  real    :: missing_tr(MAX_FIELDS) = -1.0e34
+  real    :: missing_tr(MAX_FIELDS_) = -1.0e34
   integer :: id_u_z = -1, id_v_z = -1
-  integer :: id_tr(MAX_FIELDS) = -1
+  integer :: id_tr(MAX_FIELDS_) = -1
   integer :: id_uh_Z = -1, id_vh_Z = -1
   integer :: num_tr_used = 0
   integer :: nz_zspace = -1
@@ -724,9 +724,9 @@ subroutine register_Z_tracer(tr_ptr, name, long_name, units, Time, G, CS)
   if (.not.associated(CS)) call MOM_error(FATAL, &
          "register_Z_tracer: Module must be initialized before it is used.")
 
-  if (CS%num_tr_used >= MAX_FIELDS) then
+  if (CS%num_tr_used >= MAX_FIELDS_) then
     call MOM_error(WARNING,"MOM_diag_to_Z:  Attempted to register and use "//&
-                   "more than MAX_FIELDS z-space tracers via register_Z_tracer.")
+                   "more than MAX_FIELDS_ z-space tracers via register_Z_tracer.")
     return
   endif
 
@@ -1018,9 +1018,9 @@ function ocean_register_diag_with_z (tr_ptr, vardesc_tr, G, Time, CS)
   if (.not.associated(CS)) call MOM_error(FATAL, &
          "register_Z_tracer: Module must be initialized before it is used.")
 
-  if (CS%num_tr_used >= MAX_FIELDS) then
+  if (CS%num_tr_used >= MAX_FIELDS_) then
     call MOM_error(WARNING,"ocean_register_diag_with_z:  Attempted to register and use "//&
-                   "more than MAX_FIELDS z-space tracers via ocean_register_diag_with_z.")
+                   "more than MAX_FIELDS_ z-space tracers via ocean_register_diag_with_z.")
     return
   endif
 

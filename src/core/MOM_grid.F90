@@ -212,11 +212,11 @@ subroutine MOM_grid_init(grid, param_file)
                  "topography are entirely determined from thickness points.", &
                  default=.false.)
 #ifdef STATIC_MEMORY
-  ! Here NZ is a macro, while nz is a variable.
+  ! Here NK_ is a macro, while nz is a variable.
   call get_param(param_file, "MOM_grid", "NZ", nz, &
-                 "The number of model layers.", units="nondim", default=NZ)
-  if (nz /= NZ) call MOM_error(FATAL, "MOM_grid_init: " // &
-       "Mismatched number of layers NZ between MOM_memory.h and param_file")
+                 "The number of model layers.", units="nondim", default=NK_)
+  if (nz /= NK_) call MOM_error(FATAL, "MOM_grid_init: " // &
+       "Mismatched number of layers NK_ between MOM_memory.h and param_file")
 
 #else
   call get_param(param_file, "MOM_grid", "NZ", nz, &

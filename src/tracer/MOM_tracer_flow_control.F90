@@ -387,9 +387,9 @@ subroutine call_tracer_stocks(h, stock_values, G, CS, stock_names, stock_units, 
 !  (in,opt)  stock_index - The integer stock index from stocks_constans_mod of
 !                          the stock to be returned.  If this is present and
 !                          greater than 0, only a single stock can be returned.
-  character(len=200), dimension(MAX_FIELDS) :: names, units
+  character(len=200), dimension(MAX_FIELDS_) :: names, units
   character(len=200) :: set_pkg_name
-  real, dimension(MAX_FIELDS) :: values
+  real, dimension(MAX_FIELDS_) :: values
   integer :: max_ns, ns_tot, ns, index, pkg, max_pkgs, nn
 
   if (.not. associated(CS)) call MOM_error(FATAL, "call_tracer_stocks: "// &

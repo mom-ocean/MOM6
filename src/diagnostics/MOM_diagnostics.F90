@@ -115,10 +115,10 @@ type, public :: diagnostics_CS ; private
 
   type(wave_speed_CS), pointer :: wave_speed_CSp => NULL()  
   ! The following pointers are used the calculation of time derivatives.
-  type(p3d) :: var_ptr(2,MAX_FIELDS)
-  type(p3d) :: deriv(MAX_FIELDS)
-  type(p3d) :: prev_val(MAX_FIELDS)
-  integer   :: nlay(MAX_FIELDS)
+  type(p3d) :: var_ptr(2,MAX_FIELDS_)
+  type(p3d) :: deriv(MAX_FIELDS_)
+  type(p3d) :: prev_val(MAX_FIELDS_)
+  integer   :: nlay(MAX_FIELDS_)
   integer   :: num_time_deriv = 0
   
 end type diagnostics_CS
@@ -681,9 +681,9 @@ subroutine register_time_deriv(f_ptr, f_ptr2, deriv_ptr, CS)
   if (.not.associated(CS)) call MOM_error(FATAL, &
          "register_time_deriv: Module must be initialized before it is used.")
 
-  if (CS%num_time_deriv >= MAX_FIELDS) then
+  if (CS%num_time_deriv >= MAX_FIELDS_) then
     call MOM_error(WARNING,"MOM_diagnostics:  Attempted to register more than " // &
-                   "MAX_FIELDS diagnostic time derivatives via register_time_deriv.")
+                   "MAX_FIELDS_ diagnostic time derivatives via register_time_deriv.")
     return
   endif
 

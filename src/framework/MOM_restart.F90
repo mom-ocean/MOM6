@@ -128,7 +128,7 @@ type, public :: MOM_restart_CS ; private
   type(p1d), pointer :: var_ptr1d(:,:) => NULL()
   type(p2d), pointer :: var_ptr2d(:,:) => NULL()
   type(p3d), pointer :: var_ptr3d(:,:) => NULL()
-  integer :: Max_fields
+  integer :: max_fields
 end type MOM_restart_CS
 
 interface register_restart_field
@@ -174,7 +174,7 @@ subroutine register_restart_field_ptr3d(f_ptr, f_ptr2, var_desc, mandatory, CS)
       "register_restart_field: Module must be initialized before it is used.")
 
   CS%novars = CS%novars+1
-  if (CS%novars > CS%Max_fields) return ! This is an error that will be reported
+  if (CS%novars > CS%max_fields) return ! This is an error that will be reported
                                      ! once the total number of fields is known.
 
   CS%restart_field(CS%novars)%vars = var_desc
@@ -213,7 +213,7 @@ subroutine register_restart_field_ptr2d(f_ptr, f_ptr2, var_desc, mandatory, CS)
       "register_restart_field: Module must be initialized before it is used.")
 
   CS%novars = CS%novars+1
-  if (CS%novars > CS%Max_fields) return ! This is an error that will be reported
+  if (CS%novars > CS%max_fields) return ! This is an error that will be reported
                                      ! once the total number of fields is known.
 
   CS%restart_field(CS%novars)%vars = var_desc
@@ -252,7 +252,7 @@ subroutine register_restart_field_ptr1d(f_ptr, f_ptr2, var_desc, mandatory, CS)
       "register_restart_field: Module must be initialized before it is used.")
 
   CS%novars = CS%novars+1
-  if (CS%novars > CS%Max_fields) return ! This is an error that will be reported
+  if (CS%novars > CS%max_fields) return ! This is an error that will be reported
                                      ! once the total number of fields is known.
 
   CS%restart_field(CS%novars)%vars = var_desc
@@ -291,7 +291,7 @@ subroutine register_restart_field_ptr0d(f_ptr, f_ptr2, var_desc, mandatory, CS)
       "register_restart_field: Module must be initialized before it is used.")
 
   CS%novars = CS%novars+1
-  if (CS%novars > CS%Max_fields) return ! This is an error that will be reported
+  if (CS%novars > CS%max_fields) return ! This is an error that will be reported
                                      ! once the total number of fields is known.
 
   CS%restart_field(CS%novars)%vars = var_desc
@@ -320,7 +320,7 @@ function query_initialized_name(name, CS) result(query_initialized)
   integer :: m,n
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "query_initialized: Module must be initialized before it is used.")
-  if (CS%novars > CS%Max_fields) call restart_error(CS)
+  if (CS%novars > CS%max_fields) call restart_error(CS)
 
   query_initialized = .false.
   n = CS%novars+1
@@ -356,7 +356,7 @@ function query_initialized_0d(f_ptr, CS) result(query_initialized)
   integer :: m,n
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "query_initialized: Module must be initialized before it is used.")
-  if (CS%novars > CS%Max_fields) call restart_error(CS)
+  if (CS%novars > CS%max_fields) call restart_error(CS)
 
   query_initialized = .false.
   n = CS%novars+1
@@ -385,7 +385,7 @@ function query_initialized_1d(f_ptr, CS) result(query_initialized)
   integer :: m,n
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "query_initialized: Module must be initialized before it is used.")
-  if (CS%novars > CS%Max_fields) call restart_error(CS)
+  if (CS%novars > CS%max_fields) call restart_error(CS)
 
   query_initialized = .false.
   n = CS%novars+1
@@ -414,7 +414,7 @@ function query_initialized_2d(f_ptr, CS) result(query_initialized)
   integer :: m,n
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "query_initialized: Module must be initialized before it is used.")
-  if (CS%novars > CS%Max_fields) call restart_error(CS)
+  if (CS%novars > CS%max_fields) call restart_error(CS)
 
   query_initialized = .false.
   n = CS%novars+1
@@ -443,7 +443,7 @@ function query_initialized_3d(f_ptr, CS) result(query_initialized)
   integer :: m,n
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "query_initialized: Module must be initialized before it is used.")
-  if (CS%novars > CS%Max_fields) call restart_error(CS)
+  if (CS%novars > CS%max_fields) call restart_error(CS)
 
   query_initialized = .false.
   n = CS%novars+1
@@ -474,7 +474,7 @@ function query_initialized_0d_name(f_ptr, name, CS) result(query_initialized)
   integer :: m,n
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "query_initialized: Module must be initialized before it is used.")
-  if (CS%novars > CS%Max_fields) call restart_error(CS)
+  if (CS%novars > CS%max_fields) call restart_error(CS)
 
   query_initialized = .false.
   n = CS%novars+1
@@ -511,7 +511,7 @@ function query_initialized_1d_name(f_ptr, name, CS) result(query_initialized)
   integer :: m,n
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "query_initialized: Module must be initialized before it is used.")
-  if (CS%novars > CS%Max_fields) call restart_error(CS)
+  if (CS%novars > CS%max_fields) call restart_error(CS)
 
   query_initialized = .false.
   n = CS%novars+1
@@ -548,7 +548,7 @@ function query_initialized_2d_name(f_ptr, name, CS) result(query_initialized)
   integer :: m,n
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "query_initialized: Module must be initialized before it is used.")
-  if (CS%novars > CS%Max_fields) call restart_error(CS)
+  if (CS%novars > CS%max_fields) call restart_error(CS)
 
   query_initialized = .false.
   n = CS%novars+1
@@ -585,7 +585,7 @@ function query_initialized_3d_name(f_ptr, name, CS) result(query_initialized)
   integer :: m, n
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "query_initialized: Module must be initialized before it is used.")
-  if (CS%novars > CS%Max_fields) call restart_error(CS)
+  if (CS%novars > CS%max_fields) call restart_error(CS)
 
   query_initialized = .false.
   n = CS%novars+1
@@ -626,9 +626,9 @@ subroutine save_restart(directory, time, lev, G, CS, time_stamped, filename)
 !                           a unique time stamp.  The default is false.
 !  (in, opt) filename - A filename that overrides the name in CS%restartfile.
 !
-  type(vardesc) :: vars(CS%Max_fields)  ! Descriptions of the fields that
+  type(vardesc) :: vars(CS%max_fields)  ! Descriptions of the fields that
                                         ! are to be read from the restart file.
-  type(fieldtype) :: fields(CS%Max_fields) !
+  type(fieldtype) :: fields(CS%max_fields) !
   character(len=200) :: restartpath     ! The restart file path (dir/file).
   character(len=80)  :: restartname     ! The restart file name (no dir).
   character(len=8)   :: suffix          ! A suffix (like _2) that is appended
@@ -648,7 +648,7 @@ subroutine save_restart(directory, time, lev, G, CS, time_stamped, filename)
 
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "save_restart: Module must be initialized before it is used.")
-  if (CS%novars > CS%Max_fields) call restart_error(CS)
+  if (CS%novars > CS%max_fields) call restart_error(CS)
 
   ! With parallel read & write, it is possible to disable the following...
 
@@ -800,9 +800,9 @@ subroutine restore_state(filename, directory, day, G, CS)
   integer :: fsize(4), sizes(7)
   integer :: ndim, nvar, natt, ntime, pos
   integer :: nz
-  integer :: unit(CS%Max_fields) ! The mpp unit of all open files.
-  logical :: unit_is_global(CS%Max_fields) ! True if the file is global.
-  character(len=200) :: unit_path(CS%Max_fields) ! The file names.
+  integer :: unit(CS%max_fields) ! The mpp unit of all open files.
+  logical :: unit_is_global(CS%max_fields) ! True if the file is global.
+  character(len=200) :: unit_path(CS%max_fields) ! The file names.
   logical :: fexists
   real, allocatable :: time_vals(:)
   type(fieldtype), allocatable :: fields(:)
@@ -813,7 +813,7 @@ subroutine restore_state(filename, directory, day, G, CS)
   num_restart = 0 ; n = 1 ; start_char = 1
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "restore_state: Module must be initialized before it is used.")
-  if (CS%novars > CS%Max_fields) call restart_error(CS)
+  if (CS%novars > CS%max_fields) call restart_error(CS)
 
 ! Get NetCDF ids for all of the restart files.
   do while (start_char <= len_trim(filename) )
@@ -1128,16 +1128,16 @@ subroutine restart_init(param_file, CS, restart_root)
                  "If true, use the file-size limits with NetCDF large \n"//&
                  "file support (4Gb), otherwise the limit is 2Gb.", &
                  default=.true.)
-  call get_param(param_file, mod, "MAX_FIELDS", CS%Max_fields, &
+  call get_param(param_file, mod, "MAX_FIELDS", CS%max_fields, &
                  "The maximum number of restart fields that can be used \n"//&
-                 "The default value is set in MOM_memory.h as MAX_FIELDS.", &
-                 default=MAX_FIELDS)
+                 "The default value is set in MOM_memory.h as MAX_FIELDS_.", &
+                 default=MAX_FIELDS_)
 
-  allocate(CS%restart_field(CS%Max_fields))
-  allocate(CS%var_ptr0d(2,CS%Max_fields))
-  allocate(CS%var_ptr1d(2,CS%Max_fields))
-  allocate(CS%var_ptr2d(2,CS%Max_fields))
-  allocate(CS%var_ptr3d(2,CS%Max_fields))
+  allocate(CS%restart_field(CS%max_fields))
+  allocate(CS%var_ptr0d(2,CS%max_fields))
+  allocate(CS%var_ptr1d(2,CS%max_fields))
+  allocate(CS%var_ptr2d(2,CS%max_fields))
+  allocate(CS%var_ptr3d(2,CS%max_fields))
 
 end subroutine restart_init
 
@@ -1168,10 +1168,10 @@ subroutine restart_error(CS)
 !                 for this module.  (Intent in.)
   character(len=16)  :: num  ! String for error messages
 
-  if (CS%novars > CS%Max_fields) then
+  if (CS%novars > CS%max_fields) then
     write(num,'(I0)') CS%novars
     call MOM_error(FATAL,"MOM_restart: Too many fields registered for " // &
-           "restart.  #define MAX_FIELDS to be at least " // &
+           "restart.  Set MAX_FIELDS to be at least " // &
            trim(adjustl(num)) // " in the MOM input file.")
   else
     call MOM_error(FATAL,"MOM_restart: Unspecified fatal error.")

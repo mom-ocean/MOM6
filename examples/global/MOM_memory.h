@@ -4,12 +4,12 @@
 !********+*********+*********+*********+*********+*********+*********+*
 
 !  Specify the numerical domain.
-#define NXTOT 360
-#define NYTOT 210
-                               !    NXTOT and NYTOT are the number of thickness
+#define NIGLOBAL_ 360
+#define NJGLOBAL_ 210
+                               !    NIGLOBAL_ and NJGLOBAL_ are the number of thickness
                                !  grid points in the zonal and meridional
                                !  directions of the physical domain.
-#define NZ 63
+#define NK_ 63
                                !    The number of layers.
 
 #define STATIC_MEMORY
@@ -27,25 +27,25 @@
                                !  others, depending on where they are on the 
                                !  staggered grid.
 
-#define NXPROC 10
-                               !    NXPROC is the number of processors in the
+#define NIPROC_ 10
+                               !    NIPROC_ is the number of processors in the
                                !  x-direction.
-#define NYPROC 6
-                               !    NYPROC is the number of processors in the
+#define NJPROC_ 6
+                               !    NJPROC_ is the number of processors in the
                                !  y-direction.
 
-#define MAX_FIELDS 80
+#define MAX_FIELDS_ 80
                                !    The maximum permitted number (each) of
                                !  restart variables, time derivatives, etc.
                                !  This is mostly used for the size of pointer
                                !  arrays, so it should be set generously.
 
-#define NX_HALO 4
-#define NY_HALO 4
-                               !   NX_HALO and NY_HALO are the sizes of the
+#define NIHALO_ 4
+#define NJHALO_ 4
+                               !   NIHALO_ and NJHALO_ are the sizes of the
                                ! memory halos on each side.
-#define BT_HALO 10
-                               !   BT_HALO is the size of the memory halos in
+#define BTHALO_ 10
+                               !   BTHALO_ is the size of the memory halos in
                                ! the barotropic solver.
 
 #include <MOM_memory_macros.h>

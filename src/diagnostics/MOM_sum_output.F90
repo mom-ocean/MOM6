@@ -149,7 +149,7 @@ type, public :: sum_output_CS ; private
   integer :: prev_n = 0         ! The value of n from the last call.
   integer :: fileenergy_nc      ! NetCDF id of the energy file.
   integer :: fileenergy_ascii   ! The unit number of the ascii version of the energy file.
-  type(fieldtype), dimension(NUM_FIELDS+MAX_FIELDS) :: &
+  type(fieldtype), dimension(NUM_FIELDS+MAX_FIELDS_) :: &
              fields             ! fieldtype variables for the output fields.
   character(len=200) :: energyfile  ! The name of the energy file with path.
 end type sum_output_CS
@@ -387,19 +387,19 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
   character(len=120) :: energypath_nc
   character(len=200) :: mesg
   character(len=32)  :: mesg_intro, time_units
-  real :: Tr_stocks(MAX_FIELDS)
-  real :: Tr_min(MAX_FIELDS),Tr_max(MAX_FIELDS)
-  real :: Tr_min_x(MAX_FIELDS), Tr_min_y(MAX_FIELDS), Tr_min_z(MAX_FIELDS)
-  real :: Tr_max_x(MAX_FIELDS), Tr_max_y(MAX_FIELDS), Tr_max_z(MAX_FIELDS)
-  logical :: Tr_minmax_got(MAX_FIELDS) = .false.
-  character(len=40), dimension(MAX_FIELDS) :: &
+  real :: Tr_stocks(MAX_FIELDS_)
+  real :: Tr_min(MAX_FIELDS_),Tr_max(MAX_FIELDS_)
+  real :: Tr_min_x(MAX_FIELDS_), Tr_min_y(MAX_FIELDS_), Tr_min_z(MAX_FIELDS_)
+  real :: Tr_max_x(MAX_FIELDS_), Tr_max_y(MAX_FIELDS_), Tr_max_z(MAX_FIELDS_)
+  logical :: Tr_minmax_got(MAX_FIELDS_) = .false.
+  character(len=40), dimension(MAX_FIELDS_) :: &
     Tr_names, Tr_units
   integer :: nTr_stocks
   real, allocatable :: toten_PE(:)
   integer :: pe_num
 
  ! A description for output of each of the fields.
-  type(vardesc) :: vars(NUM_FIELDS+MAX_FIELDS)
+  type(vardesc) :: vars(NUM_FIELDS+MAX_FIELDS_)
 
   num_nc_fields = 17
   if (.not.CS%use_temperature) num_nc_fields = 11

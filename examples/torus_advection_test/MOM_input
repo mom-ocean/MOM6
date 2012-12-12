@@ -90,7 +90,7 @@ NZ = 5                          !   The number of layers.
 NXHALO = 4                      !    NXHALO and NYHALO are the number of halo
 NYHALO = 4                      !  points on each side in the x- and y-directions.
                                 !  If static memory allocation is used, these
-                                !  must match the values of NX_HALO and NY_HALO
+                                !  must match the values of NIHALO_ and NJHALO_
                                 !  in MOM_memory.h.
 NXPROC_IO = 1                   !    The number of processors used for I/O in the
                                 !  x-direction, or 0 to equal NXPROC.  NXPROC_IO

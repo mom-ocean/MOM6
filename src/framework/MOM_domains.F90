@@ -676,14 +676,14 @@ subroutine MOM_domains_init(MOM_dom, param_file, min_halo, symmetric)
 
   call get_param(param_file, mod, "NXHALO", MOM_dom%nx_halo, &
                  "The number of halo points on each side in the \n"//&
-                 "x-direction.  With STATIC_MEMORY this is set as NX_HALO \n"//&
+                 "x-direction.  With STATIC_MEMORY this is set as NIHALO_ \n"//&
                  "in MOM_memory.h at compile time; without STATIC_MEMORY \n"//&
-                 "the default is NX_HALO in MOM_memory.h.", default=NX_HALO)
+                 "the default is NIHALO_ in MOM_memory.h.", default=NIHALO_)
   call get_param(param_file, mod, "NYHALO", MOM_dom%ny_halo, &
                  "The number of halo points on each side in the \n"//&
-                 "y-direction.  With STATIC_MEMORY this is set as NY_HALO \n"//&
+                 "y-direction.  With STATIC_MEMORY this is set as NJHALO_ \n"//&
                  "in MOM_memory.h at compile time; without STATIC_MEMORY \n"//&
-                 "the default is NY_HALO in MOM_memory.h.", default=NY_HALO)
+                 "the default is NJHALO_ in MOM_memory.h.", default=NJHALO_)
   if (present(min_halo)) then
     MOM_dom%nx_halo = max(MOM_dom%nx_halo, min_halo(1))
     min_halo(1) = MOM_dom%nx_halo
@@ -696,20 +696,20 @@ subroutine MOM_domains_init(MOM_dom, param_file, min_halo, symmetric)
   call get_param(param_file, mod, "NXTOT", MOM_dom%nxtot, &
                  "The total number of thickness grid points in the \n"//&
                  "x-direction in the physical domain. With STATIC_MEMORY \n"//&
-                 "this is set in MOM_memory.h at compile time.", default=NXTOT)
+                 "this is set in MOM_memory.h at compile time.", default=NIGLOBAL_)
   call get_param(param_file, mod, "NYTOT", MOM_dom%nytot, &
                  "The total number of thickness grid points in the \n"//&
                  "x-direction in the physical domain. With STATIC_MEMORY \n"//&
-                 "this is set in MOM_memory.h at compile time.", default=NYTOT)
-  if (MOM_dom%nxtot /= NXTOT) call MOM_error(FATAL,"MOM_domains_init: " // &
-   "static mismatch for NXTOT domain size. Header file does not match input namelist")
-  if (MOM_dom%nytot /= NYTOT) call MOM_error(FATAL,"MOM_domains_init: " // &
-   "static mismatch for NYTOT domain size. Header file does not match input namelist")
+                 "this is set in MOM_memory.h at compile time.", default=NJGLOBAL_)
+  if (MOM_dom%nxtot /= NIGLOBAL_) call MOM_error(FATAL,"MOM_domains_init: " // &
+   "static mismatch for NIGLOBAL_ domain size. Header file does not match input namelist")
+  if (MOM_dom%nytot /= NJGLOBAL_) call MOM_error(FATAL,"MOM_domains_init: " // &
+   "static mismatch for NJGLOBAL_ domain size. Header file does not match input namelist")
 
   if (.not.present(min_halo)) then
-    if (MOM_dom%nx_halo /= NX_HALO) call MOM_error(FATAL,"MOM_domains_init: " // &
+    if (MOM_dom%nx_halo /= NIHALO_) call MOM_error(FATAL,"MOM_domains_init: " // &
            "static mismatch for NXHALO domain size")
-    if (MOM_dom%ny_halo /= NY_HALO) call MOM_error(FATAL,"MOM_domains_init: " // &
+    if (MOM_dom%ny_halo /= NJHALO_) call MOM_error(FATAL,"MOM_domains_init: " // &
            "static mismatch for NYHALO domain size")
   endif
 #else
@@ -733,7 +733,7 @@ subroutine MOM_domains_init(MOM_dom, param_file, min_halo, symmetric)
   global_indices(4) = MOM_dom%nytot
 
 #ifdef STATIC_MEMORY
-  layout(1) = NXPROC ; layout(2) = NYPROC
+  layout(1) = NIPROC_ ; layout(2) = NJPROC_
 #else
   call mpp_define_layout(global_indices, proc_used, layout)
   call read_param(param_file,"NXPROC",layout(1))
@@ -752,11 +752,6 @@ subroutine MOM_domains_init(MOM_dom, param_file, min_halo, symmetric)
                  "The number of processors in the x-direction. With \n"//&
                  "STATIC_MEMORY this is set in MOM_memory.h at compile time.")
 !  write(*,*) 'layout is now ',layout, global_indices
-
-!if (layout(1) < NXPROC) &
-!  call MOM_error(FATAL,"MOM_domains: layout in zonal axis has too few processors.")
-!if (layout(2) < NYPROC) &
-!  call MOM_error(FATAL,"MOM_domains: layout in meridional axis has too few processors.")
 
   !   Set up the I/O lay-out, and check that it uses an even multiple of the
   ! number of PEs in each direction.
@@ -820,12 +815,12 @@ subroutine MOM_domains_init(MOM_dom, param_file, min_halo, symmetric)
   call mpp_get_compute_domain(MOM_dom%mpp_domain,isc,iec,jsc,jec)
   xsiz = iec - isc + 1
   ysiz = jec - jsc + 1
-  if (xsiz*NXPROC /= MOM_dom%nxtot .OR. ysiz*NYPROC /= MOM_dom%nytot) then
-     write( char_xsiz,'(i4)' ) NXPROC
-     write( char_ysiz,'(i4)' ) NYPROC
+  if (xsiz*NIPROC_ /= MOM_dom%nxtot .OR. ysiz*NJPROC_ /= MOM_dom%nytot) then
+     write( char_xsiz,'(i4)' ) NIPROC_
+     write( char_ysiz,'(i4)' ) NJPROC_
      write( char_NXTOT,'(i4)' ) MOM_dom%nxtot
      write( char_NYTOT,'(i4)' ) MOM_dom%nytot
-     call MOM_error(WARNING,'MOM_domains: Processor decomposition (NXPROC,NYPROC) = (' &
+     call MOM_error(WARNING,'MOM_domains: Processor decomposition (NIPROC_,NJPROC_) = (' &
          //trim(char_xsiz)//','//trim(char_ysiz)// &
          ') does not evenly divide size set by preprocessor macro ('&
          //trim(char_NXTOT)//','//trim(char_NYTOT)// '). ')
