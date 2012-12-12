@@ -3596,8 +3596,8 @@ subroutine mixedlayer_init(Time, G, param_file, diag, CS)
                  "before the mixed layer calculations.", default=.false.)
  !CS%ML_presort_nz_conv_adj = 0 ! Not needed AJA?
   if (CS%ML_resort) &
-    call get_param(param_file, mod, "ML_PRESORT_NZ_CONV_ADJ", CS%ML_presort_nz_conv_adj, &
-                 "Convectively mix the first ML_PRESORT_NZ_CONV_ADJ \n"//&
+    call get_param(param_file, mod, "ML_PRESORT_NK_CONV_ADJ", CS%ML_presort_nz_conv_adj, &
+                 "Convectively mix the first ML_PRESORT_NK_CONV_ADJ \n"//&
                  "layers before sorting when ML_RESORT is true.", &
                  units="nondim", default=0, fail_if_missing=.true.) ! Fail added by AJA??
   ! This gives a minimum decay scale that is typically much less than Angstrom.

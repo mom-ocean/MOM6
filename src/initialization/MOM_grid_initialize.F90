@@ -1188,7 +1188,7 @@ subroutine set_grid_metrics_mercator(G, param_file)
                  default=.false.)
   call get_param(param_file, mod, "EQUATOR_REFERENCE", GP%equator_reference, &
                  "If true, the grid is defined to have the equator at the \n"//&
-                 "nearest q- or h- grid point to (-LOWLAT*NYTOT/LENLAT).", &
+                 "nearest q- or h- grid point to (-LOWLAT*NJGLOBAL/LENLAT).", &
                  default=.true.)
   call get_param(param_file, mod, "LAT_ENHANCE_FACTOR", GP%Lat_enhance_factor, &
                  "The amount by which the meridional resolution is \n"//&

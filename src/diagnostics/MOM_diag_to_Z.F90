@@ -80,7 +80,7 @@ type, public :: diag_to_Z_CS ; private
   integer :: id_tr(MAX_FIELDS_) = -1
   integer :: id_uh_Z = -1, id_vh_Z = -1
   integer :: num_tr_used = 0
-  integer :: nz_zspace = -1
+  integer :: nk_zspace = -1
   real, pointer :: Z_int(:) => NULL()  ! The interface depths of the z-space file, in m.
 
   integer, dimension(3) :: axesqz, axeshz, axesuz, axesvz
@@ -120,7 +120,7 @@ subroutine calculate_Z_diag_fields(u, v, h, dt, G, CS)
   real :: tr_f(SZK_(G),max(CS%num_tr_used,1),SZI_(G)) ! The tracer
                                  ! concentrations in massive layers.
     ! Note the deliberately reversed axes in h_f, u_f, v_f, and tr_f.
-  integer :: nz_valid(SZIB_(G))  ! The number of massive layers in a column.
+  integer :: nk_valid(SZIB_(G))  ! The number of massive layers in a column.
 
   real :: D_pt(SZIB_(G))       ! The bottom depth in m.
   real :: htot                 ! The summed layer thicknesses in m.
@@ -137,8 +137,8 @@ subroutine calculate_Z_diag_fields(u, v, h, dt, G, CS)
   real :: slope ! A normalized slope of a variable within the cell.
   logical :: linear_velocity_profiles = .true.
   integer :: k_top, k_bot, k_bot_prev
-  integer :: i, j, k, k2, kz, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, m, nkml
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  integer :: i, j, k, k2, kz, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nk, m, nkml
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nk = G%ke
   Isq = G%Iscq ; Ieq = G%Iecq ; Jsq = G%Jscq ; Jeq = G%Jecq
   nkml = max(G%nkml, 1)
 
@@ -149,47 +149,47 @@ subroutine calculate_Z_diag_fields(u, v, h, dt, G, CS)
   if ((CS%id_u_z <= 0) .and. (CS%id_v_z <= 0) .and. (CS%num_tr_used < 1)) return
 
   if (CS%id_u_z > 0) then
-    do kz=1,CS%nz_zspace ; do j=js,je ; do I=Isq,Ieq
+    do kz=1,CS%nk_zspace ; do j=js,je ; do I=Isq,Ieq
       CS%u_z(I,j,kz) = CS%missing_vel
     enddo ; enddo ; enddo
 
     do j=js,je
       ! Remove all massless layers.
-      do I=Isq,Ieq ; nz_valid(I) = 0 ; D_pt(I) = 0.5*(G%D(i+1,j)+G%D(i,j)) ; enddo
-      do k=1,nz ; do I=Isq,Ieq
+      do I=Isq,Ieq ; nk_valid(I) = 0 ; D_pt(I) = 0.5*(G%D(i+1,j)+G%D(i,j)) ; enddo
+      do k=1,nk ; do I=Isq,Ieq
         if ((G%umask(I,j) > 0.5) .and. (h(i,j,k)+h(i+1,j,k) > 4.0*G%Angstrom)) then
-          nz_valid(I) = nz_valid(I) + 1 ; k2 = nz_valid(I)
+          nk_valid(I) = nk_valid(I) + 1 ; k2 = nk_valid(I)
           h_f(k2,I) = 0.5*(h(i,j,k)+h(i+1,j,k)) ; u_f(k2,I) = u(I,j,k)
         endif
       enddo ; enddo
       do I=Isq,Ieq ; if (G%umask(I,j) > 0.5) then
         ! Add an Angstrom thick layer at the bottom with 0 velocity to impose a
         ! no-slip BBC in the output, if anything but piecewise constant is used.
-        nz_valid(I) = nz_valid(I) + 1 ; k2 = nz_valid(I)
+        nk_valid(I) = nk_valid(I) + 1 ; k2 = nk_valid(I)
         h_f(k2,I) = G%Angstrom ; u_f(k2,I) = 0.0
       endif ; enddo
 
-      do I=Isq,Ieq ; if (nz_valid(I) > 0) then
+      do I=Isq,Ieq ; if (nk_valid(I) > 0) then
       ! Calculate the z* interface heights for tracers.
-        htot = 0.0 ; do k=1,nz_valid(i) ; htot = htot + h_f(k,i) ; enddo
+        htot = 0.0 ; do k=1,nk_valid(i) ; htot = htot + h_f(k,i) ; enddo
         dilate = 0.0 ; if (htot*G%H_to_m > 0.5) dilate = (D_pt(i) - 0.0) / htot
 
-        e(nz_valid(i)+1) = -D_pt(i)
-        do k=nz_valid(i),1,-1 ; e(K) = e(K+1) + h_f(k,i)*dilate ; enddo
+        e(nk_valid(i)+1) = -D_pt(i)
+        do k=nk_valid(i),1,-1 ; e(K) = e(K+1) + h_f(k,i)*dilate ; enddo
 
       ! Interpolate each variable into depth space.
         k_bot = 1 ; k_bot_prev = -1
-        do kz=1,CS%nz_zspace
-          call find_overlap(e, CS%Z_int(kz), CS%Z_int(kz+1), nz_valid(I), &
+        do kz=1,CS%nk_zspace
+          call find_overlap(e, CS%Z_int(kz), CS%Z_int(kz+1), nk_valid(I), &
                             k_bot, k_top, k_bot, wt, z1, z2)
-          if (k_top>nz_valid(I)) exit
+          if (k_top>nk_valid(I)) exit
 
           if (linear_velocity_profiles) then
             k = k_top
             if (k /= k_bot_prev) then
               ! Calculate the intra-cell profile.
               slope = 0.0 ! ; curv = 0.0
-              if ((k < nz_valid(I)) .and. (k > nkml)) call &
+              if ((k < nk_valid(I)) .and. (k > nkml)) call &
                 find_limited_slope(u_f(:,I), e, slope, k)
             endif
             ! This is the piecewise linear form.
@@ -202,7 +202,7 @@ subroutine calculate_Z_diag_fields(u, v, h, dt, G, CS)
             if (k_bot > k_top) then ; k = k_bot
               ! Calculate the intra-cell profile.
               slope = 0.0 ! ; curv = 0.0
-              if ((k < nz_valid(I)) .and. (k > nkml)) call &
+              if ((k < nk_valid(I)) .and. (k > nkml)) call &
                 find_limited_slope(u_f(:,I), e, slope, k)
                ! This is the piecewise linear form.
               CS%u_z(I,j,kz) = CS%u_z(I,j,kz) + wt(k) * &
@@ -225,47 +225,47 @@ subroutine calculate_Z_diag_fields(u, v, h, dt, G, CS)
   endif
 
   if (CS%id_v_z > 0) then
-    do kz=1,CS%nz_zspace ; do J=Jsq,Jeq ; do i=is,ie
+    do kz=1,CS%nk_zspace ; do J=Jsq,Jeq ; do i=is,ie
       CS%v_z(i,J,kz) = CS%missing_vel
     enddo ; enddo ; enddo
 
     do J=Jsq,Jeq
       ! Remove all massless layers.
-      do i=is,ie ; nz_valid(i) = 0 ; D_pt(i) = 0.5*(G%D(i,j)+G%D(i,j+1)) ; enddo
-      do k=1,nz ; do i=is,ie
+      do i=is,ie ; nk_valid(i) = 0 ; D_pt(i) = 0.5*(G%D(i,j)+G%D(i,j+1)) ; enddo
+      do k=1,nk ; do i=is,ie
         if ((G%vmask(i,j) > 0.5) .and. (h(i,j,k)+h(i,j+1,k) > 4.0*G%Angstrom)) then
-          nz_valid(i) = nz_valid(i) + 1 ; k2 = nz_valid(i)
+          nk_valid(i) = nk_valid(i) + 1 ; k2 = nk_valid(i)
           h_f(k2,i) = 0.5*(h(i,j,k)+h(i,j+1,k)) ; v_f(k2,i) = v(i,j,k)
         endif
       enddo ; enddo
       do i=is,ie ; if (G%vmask(i,j) > 0.5) then
         ! Add an Angstrom thick layer at the bottom with 0 velocity to impose a
         ! no-slip BBC in the output, if anything but piecewise constant is used.
-        nz_valid(i) = nz_valid(i) + 1 ; k2 = nz_valid(i)
+        nk_valid(i) = nk_valid(i) + 1 ; k2 = nk_valid(i)
         h_f(k2,i) = G%Angstrom ; v_f(k2,i) = 0.0
       endif ; enddo
 
-      do i=is,ie ; if (nz_valid(i) > 0) then
+      do i=is,ie ; if (nk_valid(i) > 0) then
       ! Calculate the z* interface heights for tracers.
-        htot = 0.0 ; do k=1,nz_valid(i) ; htot = htot + h_f(k,i) ; enddo
+        htot = 0.0 ; do k=1,nk_valid(i) ; htot = htot + h_f(k,i) ; enddo
         dilate = 0.0 ; if (htot > 0.5) dilate = (D_pt(i) - 0.0) / htot
 
-        e(nz_valid(i)+1) = -D_pt(i)
-        do k=nz_valid(i),1,-1 ; e(K) = e(K+1) + h_f(k,i)*dilate ; enddo
+        e(nk_valid(i)+1) = -D_pt(i)
+        do k=nk_valid(i),1,-1 ; e(K) = e(K+1) + h_f(k,i)*dilate ; enddo
 
       ! Interpolate each variable into depth space.
         k_bot = 1 ; k_bot_prev = -1
-        do kz=1,CS%nz_zspace
-          call find_overlap(e, CS%Z_int(kz), CS%Z_int(kz+1), nz_valid(i), &
+        do kz=1,CS%nk_zspace
+          call find_overlap(e, CS%Z_int(kz), CS%Z_int(kz+1), nk_valid(i), &
                             k_bot, k_top, k_bot, wt, z1, z2)
-          if (k_top>nz_valid(i)) exit
+          if (k_top>nk_valid(i)) exit
 
           if (linear_velocity_profiles) then
             k = k_top
             if (k /= k_bot_prev) then
               ! Calculate the intra-cell profile.
               slope = 0.0 ! ; curv = 0.0
-              if ((k < nz_valid(i)) .and. (k > nkml)) call &
+              if ((k < nk_valid(i)) .and. (k > nkml)) call &
                 find_limited_slope(v_f(:,i), e, slope, k)
             endif
             ! This is the piecewise linear form.
@@ -278,7 +278,7 @@ subroutine calculate_Z_diag_fields(u, v, h, dt, G, CS)
             if (k_bot > k_top) then ; k = k_bot
               ! Calculate the intra-cell profile.
               slope = 0.0 ! ; curv = 0.0
-              if ((k < nz_valid(i)) .and. (k > nkml)) call &
+              if ((k < nk_valid(i)) .and. (k > nkml)) call &
                 find_limited_slope(v_f(:,i), e, slope, k)
                ! This is the piecewise linear form.
               CS%v_z(i,J,kz) = CS%v_z(i,J,kz) + wt(k) * &
@@ -302,42 +302,42 @@ subroutine calculate_Z_diag_fields(u, v, h, dt, G, CS)
 
   if (CS%num_tr_used > 0) then
   
-    do m=1,CS%num_tr_used ; do kz=1,CS%nz_zspace ; do j=js,je ; do i=is,ie
+    do m=1,CS%num_tr_used ; do kz=1,CS%nk_zspace ; do j=js,je ; do i=is,ie
       CS%tr_z(m)%p(i,j,kz) = CS%missing_tr(m)
     enddo ; enddo ; enddo ; enddo
 
     do j=js,je
       ! Remove all massless layers.
-      do i=is,ie ; nz_valid(i) = 0 ; D_pt(i) = G%D(i,j) ; enddo
-      do k=1,nz ; do i=is,ie
+      do i=is,ie ; nk_valid(i) = 0 ; D_pt(i) = G%D(i,j) ; enddo
+      do k=1,nk ; do i=is,ie
         if ((G%hmask(i,j) > 0.5) .and. (h(i,j,k) > 2.0*G%Angstrom)) then
-          nz_valid(i) = nz_valid(i) + 1 ; k2 = nz_valid(i)
+          nk_valid(i) = nk_valid(i) + 1 ; k2 = nk_valid(i)
           h_f(k2,i) = h(i,j,k)
           do m=1,CS%num_tr_used ; tr_f(k2,m,i) = CS%tr_model(m)%p(i,j,k) ; enddo
         endif
       enddo ; enddo
 
-      do i=is,ie ; if (nz_valid(i) > 0) then
+      do i=is,ie ; if (nk_valid(i) > 0) then
       ! Calculate the z* interface heights for tracers.
-        htot = 0.0 ;  do k=1,nz_valid(i) ; htot = htot + h_f(k,i) ; enddo
+        htot = 0.0 ;  do k=1,nk_valid(i) ; htot = htot + h_f(k,i) ; enddo
         dilate = 0.0 ; if (htot > 0.5) dilate = (D_pt(i) - 0.0) / htot
 
-        e(nz_valid(i)+1) = -D_pt(i)
-        do k=nz_valid(i),1,-1 ; e(K) = e(K+1) + h_f(k,i)*dilate ; enddo
+        e(nk_valid(i)+1) = -D_pt(i)
+        do k=nk_valid(i),1,-1 ; e(K) = e(K+1) + h_f(k,i)*dilate ; enddo
 
       ! Interpolate each variable into depth space.
         k_bot = 1 ; k_bot_prev = -1
-        do kz=1,CS%nz_zspace
-          call find_overlap(e, CS%Z_int(kz), CS%Z_int(kz+1), nz_valid(i), &
+        do kz=1,CS%nk_zspace
+          call find_overlap(e, CS%Z_int(kz), CS%Z_int(kz+1), nk_valid(i), &
                             k_bot, k_top, k_bot, wt, z1, z2)
-          if (k_top>nz_valid(i)) exit
+          if (k_top>nk_valid(i)) exit
 
           do m=1,CS%num_tr_used
             k = k_top
             if (k /= k_bot_prev) then
               ! Calculate the intra-cell profile.
               sl_tr(m) = 0.0 ! ; cur_tr(m) = 0.0
-              if ((k < nz_valid(i)) .and. (k > nkml)) call &
+              if ((k < nk_valid(i)) .and. (k > nkml)) call &
                 find_limited_slope(tr_f(:,m,i), e, sl_tr(m), k)
             endif
             ! This is the piecewise linear form.
@@ -352,7 +352,7 @@ subroutine calculate_Z_diag_fields(u, v, h, dt, G, CS)
               k = k_bot
               ! Calculate the intra-cell profile.
               sl_tr(m) = 0.0 ! ; cur_tr(m) = 0.0
-              if ((k < nz_valid(i)) .and. (k > nkml)) call &
+              if ((k < nk_valid(i)) .and. (k > nkml)) call &
                 find_limited_slope(tr_f(:,m,i), e, sl_tr(m), k)
               ! This is the piecewise linear form.
               CS%tr_z(m)%p(i,j,kz) = CS%tr_z(m)%p(i,j,kz) + wt(k) * &
@@ -395,9 +395,9 @@ subroutine calculate_Z_transport(uh_int, vh_int, h, dt, G, CS)
     htot, &        ! The total layer thickness in m.
     dilate         ! A nondimensional factor by which to dilate layers to
                    ! convert them into z* space.  (-G%D < z* < 0)
-  real, dimension(SZI_(G), max(CS%nz_zspace,1)) :: &
+  real, dimension(SZI_(G), max(CS%nk_zspace,1)) :: &
     uh_Z           ! uh_int interpolated into depth space, in m3.
-  real, dimension(SZIB_(G), max(CS%nz_zspace,1)) :: &
+  real, dimension(SZIB_(G), max(CS%nk_zspace,1)) :: &
     vh_Z           ! vh_int interpolated into depth space, in m3.
   real :: h_rem    ! The dilated thickness of a layer that has yet to be mapped
                    ! into depth space, in m.
@@ -417,8 +417,8 @@ subroutine calculate_Z_transport(uh_int, vh_int, h, dt, G, CS)
   real :: Z_int_above(SZIB_(G)) ! The height of the interface atop a layer, m.
   integer :: kz(SZIB_(G)) ! The index of the depth level that is being
                  ! contributed to.
-  integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nz_z
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nk, nk_z
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nk = G%ke
   Isq = G%Iscq ; Ieq = G%Iecq ; Jsq = G%Jscq ; Jeq = G%Jecq
 
   if (.not.associated(CS)) call MOM_error(FATAL, &
@@ -426,16 +426,16 @@ subroutine calculate_Z_transport(uh_int, vh_int, h, dt, G, CS)
   if ((CS%id_uh_Z <= 0) .and. (CS%id_vh_Z <= 0)) return
 
   Idt = 1.0 ; if (dt > 0.0) Idt = 1.0 / dt
-  nz_z = CS%nz_zspace
+  nk_z = CS%nk_zspace
 
-  if (nz_z <= 0) return
+  if (nk_z <= 0) return
 
   ! Determine how much the layers will be dilated in recasting them into z*
   ! coordiantes.  (-G%D < z* < 0).
   do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
     htot(i,j) = G%H_subroundoff
   enddo ; enddo
-  do k=1,nz ; do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+  do k=1,nk ; do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
     htot(i,j) = htot(i,j) + h(i,j,k)
   enddo ; enddo ; enddo
   do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
@@ -444,13 +444,13 @@ subroutine calculate_Z_transport(uh_int, vh_int, h, dt, G, CS)
 
   if (CS%id_uh_Z > 0) then ; do j=js,je
     do I=Isq,Ieq
-      kz(I) = nz_z ; z_int_above(I) = -0.5*(G%D(i,j)+G%D(i+1,j))
+      kz(I) = nk_z ; z_int_above(I) = -0.5*(G%D(i,j)+G%D(i+1,j))
     enddo
-    do k=nz_z,1,-1 ; do I=Isq,Ieq
+    do k=nk_z,1,-1 ; do I=Isq,Ieq
       uh_Z(I,k) = 0.0
       if (CS%Z_int(k) < z_int_above(I)) kz(I) = k-1
     enddo ; enddo
-    do k=nz,1,-1 ; do I=Isq,Ieq
+    do k=nk,1,-1 ; do I=Isq,Ieq
       h_rem = 0.5*(dilate(i,j)*h(i,j,k) + dilate(i+1,j)*h(i+1,j,k))
       uh_rem = uh_int(I,j,k)
       z_int_above(I) = z_int_above(I) + h_rem
@@ -471,19 +471,19 @@ subroutine calculate_Z_transport(uh_int, vh_int, h, dt, G, CS)
         endif
       enddo ! End of loop through the target depth-space levels.
     enddo ; enddo
-    do k=1,nz_z ; do I=Isq,Ieq
+    do k=1,nk_z ; do I=Isq,Ieq
       CS%uh_z(I,j,k) = uh_Z(I,k)*Idt
     enddo ; enddo
   enddo ; endif
   if (CS%id_vh_Z > 0) then ; do J=Jsq,Jeq
     do i=is,ie
-      kz(i) = nz_z ; z_int_above(i) = -0.5*(G%D(i,j)+G%D(i,j+1))
+      kz(i) = nk_z ; z_int_above(i) = -0.5*(G%D(i,j)+G%D(i,j+1))
     enddo
-    do k=nz_z,1,-1 ; do i=is,ie
+    do k=nk_z,1,-1 ; do i=is,ie
       vh_Z(i,k) = 0.0
       if (CS%Z_int(k) < z_int_above(i)) kz(i) = k-1
     enddo ; enddo
-    do k=nz,1,-1 ; do i=is,ie
+    do k=nk,1,-1 ; do i=is,ie
       h_rem = 0.5*(dilate(i,j)*h(i,j,k) + dilate(i,j+1)*h(i,j+1,k))
       vh_rem = vh_int(i,J,k)
       z_int_above(i) = z_int_above(i) + h_rem
@@ -504,7 +504,7 @@ subroutine calculate_Z_transport(uh_int, vh_int, h, dt, G, CS)
         endif
       enddo ! End of loop through the target depth-space levels.
     enddo ; enddo
-    do k=1,nz_z ; do i=is,ie
+    do k=1,nk_z ; do i=is,ie
       CS%vh_z(i,J,k) = vh_Z(i,k)*Idt
     enddo ; enddo
   enddo ; endif
@@ -617,7 +617,7 @@ subroutine calc_Zint_diags(h, in_ptrs, ids, num_diags, &
   type(ocean_grid_type),              intent(in) :: G
   type(diag_to_Z_CS),                 pointer    :: CS
   
-  real, dimension(SZI_(G),SZJ_(G),max(CS%nz_zspace+1,1),max(num_diags,1)) :: &
+  real, dimension(SZI_(G),SZJ_(G),max(CS%nk_zspace+1,1),max(num_diags,1)) :: &
     diag_on_Z  ! The diagnostics interpolated to depth space.
   real, dimension(SZI_(G),SZK_(G)+1) :: e
   real, dimension(max(num_diags,1),SZI_(G),SZK_(G)+1) :: diag2d
@@ -628,8 +628,8 @@ subroutine calc_Zint_diags(h, in_ptrs, ids, num_diags, &
                          ! interpolation to the target depths.
   integer :: kL(SZI_(G)) ! The layer-space index of the shallowest interface
                          ! below the target depth.
-  integer :: i, j, k, k2, kz, is, ie, js, je, nz, m
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  integer :: i, j, k, k2, kz, is, ie, js, je, nk, m
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nk = G%ke
     
   if (num_diags < 1) return
   if (.not.associated(CS)) call MOM_error(FATAL, &
@@ -638,34 +638,34 @@ subroutine calc_Zint_diags(h, in_ptrs, ids, num_diags, &
   do j=js,je
     ! Calculate the stretched z* interface depths.
     do i=is,ie ; htot(i) = 0.0 ; kL(i) = 1 ; enddo
-    do k=1,nz ; do i=is,ie ; htot(i) = htot(i) + h(i,j,k) ; enddo ; enddo
+    do k=1,nk ; do i=is,ie ; htot(i) = htot(i) + h(i,j,k) ; enddo ; enddo
     do i=is,ie
       dilate(i) = 0.0
       if (htot(i)*G%H_to_m > 0.5) dilate(i) = (G%D(i,j) - 0.0) / htot(i)
-      e(i,nz+1) = -G%D(i,j)
+      e(i,nk+1) = -G%D(i,j)
     enddo
-    do k=nz,1,-1 ; do i=is,ie
+    do k=nk,1,-1 ; do i=is,ie
       e(i,k) = e(i,k+1) + h(i,j,k) * dilate(i)
     enddo ; enddo
     ! e(i,1) should be 0 as a consistency check.
 
-    do k=1,nz+1 ; do i=is,ie ; do m=1,num_diags
+    do k=1,nk+1 ; do i=is,ie ; do m=1,num_diags
       diag2d(m,i,k) = in_ptrs(m)%p(i,j,k)
     enddo ; enddo ; enddo
 
-    do kz=1,CS%nz_zspace+1 ; do i=is,ie
+    do kz=1,CS%nk_zspace+1 ; do i=is,ie
       ! Find the interface below the target Z-file depth, kL.
-      if (CS%Z_int(kz) < e(i,nz+1)) then
-        kL(i) = nz+2
+      if (CS%Z_int(kz) < e(i,nk+1)) then
+        kL(i) = nk+2
       else
-        do k=kL(i),nz+1 ; if (CS%Z_int(kz) > e(i,k)) exit ; enddo
+        do k=kL(i),nk+1 ; if (CS%Z_int(kz) > e(i,k)) exit ; enddo
         kL(i) = k
       endif
       if (kL(i)>1) then
         if (CS%Z_int(kz) > e(i,kL(i)-1)) call MOM_error(FATAL, &
         "calc_Zint_diags: Interface depth mapping is incorrect.")
       endif
-      if ((kL(i)>1) .and. (kL(i)<=nz+1)) then
+      if ((kL(i)>1) .and. (kL(i)<=nk+1)) then
         if (e(i,kL(i)-1) == e(i,kL(i))) call MOM_error(WARNING, &
           "calc_Zint_diags: Interface depths equal.", all_print=.true.)
         if (e(i,kL(i)-1) - e(i,kL(i)) < 0.0) call MOM_error(FATAL, &
@@ -676,7 +676,7 @@ subroutine calc_Zint_diags(h, in_ptrs, ids, num_diags, &
         do m=1,num_diags
           diag_on_Z(i,j,kz,m) = diag2d(m,i,1)
         enddo
-      elseif (kL(i) > nz+1) then
+      elseif (kL(i) > nk+1) then
         do m=1,num_diags
           diag_on_Z(i,j,kz,m) = CS%missing_value
         enddo
@@ -719,8 +719,8 @@ subroutine register_Z_tracer(tr_ptr, name, long_name, units, Time, G, CS)
 !  (in)      G - The ocean's grid structure.
 !  (in)      CS - The control structure returned by a previous call to
 !                 diagnostics_init.
-  integer :: isd, ied, jsd, jed, nz, m, id_test
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = G%ke
+  integer :: isd, ied, jsd, jed, nk, m, id_test
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nk = G%ke
   if (.not.associated(CS)) call MOM_error(FATAL, &
          "register_Z_tracer: Module must be initialized before it is used.")
 
@@ -733,7 +733,7 @@ subroutine register_Z_tracer(tr_ptr, name, long_name, units, Time, G, CS)
   m = CS%num_tr_used + 1
 
   CS%missing_tr(m) = CS%missing_value ! This could be changed later, if desired.
-  if (CS%nz_zspace > 0) then
+  if (CS%nk_zspace > 0) then
     CS%id_tr(m) = register_diag_field('ocean_model', name, CS%axeshz, Time, &
                                       long_name, units, missing_value=CS%missing_tr(m))
   else
@@ -747,7 +747,7 @@ subroutine register_Z_tracer(tr_ptr, name, long_name, units, Time, G, CS)
   if (CS%id_tr(m) <= 0) then ; CS%id_tr(m) = -1 ; return ; endif
 
   CS%num_tr_used = m  
-  call safe_alloc_ptr(CS%tr_z(m)%p,isd,ied,jsd,jed,CS%nz_zspace)
+  call safe_alloc_ptr(CS%tr_z(m)%p,isd,ied,jsd,jed,CS%nk_zspace)
   CS%tr_model(m)%p => tr_ptr
 
 end subroutine register_Z_tracer
@@ -771,8 +771,8 @@ subroutine MOM_diag_to_Z_init(Time, G, param_file, diag, CS)
   character(len=200) :: in_dir, zgrid_file   ! Strings for directory/file.
   character(len=48)  :: flux_units
   integer :: z_axis, zint_axis
-  integer :: isd, ied, jsd, jed, Isdq, Iedq, Jsdq, Jedq, nz, id_test
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = G%ke
+  integer :: isd, ied, jsd, jed, Isdq, Iedq, Jsdq, Jedq, nk, id_test
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nk = G%ke
   Isdq = G%Isdq ; Iedq = G%Iedq ; Jsdq = G%Jsdq ; Jedq = G%Jedq
 
   if (associated(CS)) then
@@ -799,18 +799,18 @@ subroutine MOM_diag_to_Z_init(Time, G, param_file, diag, CS)
                  "The directory in which input files are found.", default=".")
     in_dir = slasher(in_dir)  
     call get_Z_depths(trim(in_dir)//trim(zgrid_file), "zw", CS%Z_int, "zt", &
-                      z_axis, zint_axis, CS%nz_zspace)
+                      z_axis, zint_axis, CS%nk_zspace)
     call log_param(param_file, mod, "INPUTDIR/Z_OUTPUT_GRID_FILE", &
                    trim(in_dir)//trim(zgrid_file))
-    call log_param(param_file, mod, "NZ_ZSPACE (from file)", CS%nz_zspace, &
+    call log_param(param_file, mod, "NK_ZSPACE (from file)", CS%nk_zspace, &
                  "The number of depth-space levels.  This is determined \n"//&
                  "from the size of the variable zw in the output grid file.", &
                  units="nondim")
   else
-    in_dir = "" ; CS%nz_zspace = -1
+    in_dir = "" ; CS%nk_zspace = -1
   endif
 
-  if (CS%nz_zspace > 0) then
+  if (CS%nk_zspace > 0) then
     CS%axesqz = (/ G%axesq1(1), G%axesq1(2), z_axis /)
     CS%axeshz = (/ G%axesh1(1), G%axesh1(2), z_axis /)
     CS%axesuz = (/ G%axesu1(1), G%axesu1(2), z_axis /)
@@ -823,22 +823,22 @@ subroutine MOM_diag_to_Z_init(Time, G, param_file, diag, CS)
     CS%id_u_z = register_diag_field('ocean_model', 'u_z', CS%axesuz, Time, &
         'Zonal Velocity in Depth Space', 'meter second-1', &
         missing_value=CS%missing_vel)
-    if (CS%id_u_z>0) call safe_alloc_ptr(CS%u_z,Isdq,Iedq,jsd,jed,CS%nz_zspace)
+    if (CS%id_u_z>0) call safe_alloc_ptr(CS%u_z,Isdq,Iedq,jsd,jed,CS%nk_zspace)
 
     CS%id_v_z = register_diag_field('ocean_model', 'v_z', CS%axesvz, Time, &
         'Meridional Velocity in Depth Space', 'meter second-1', &
         missing_value=CS%missing_vel)
-    if (CS%id_v_z>0) call safe_alloc_ptr(CS%v_z,isd,ied,Jsdq,Jedq,CS%nz_zspace)
+    if (CS%id_v_z>0) call safe_alloc_ptr(CS%v_z,isd,ied,Jsdq,Jedq,CS%nk_zspace)
 
     CS%id_uh_z = register_diag_field('ocean_model', 'uh_z', CS%axesuz, Time, &
         'Zonal Volume Transport in Depth Space', flux_units, &
         missing_value=CS%missing_trans)
-    if (CS%id_uh_z>0) call safe_alloc_ptr(CS%uh_z,Isdq,Iedq,jsd,jed,CS%nz_zspace)
+    if (CS%id_uh_z>0) call safe_alloc_ptr(CS%uh_z,Isdq,Iedq,jsd,jed,CS%nk_zspace)
 
     CS%id_vh_z = register_diag_field('ocean_model', 'vh_z', CS%axesvz, Time, &
         'Meridional Volume Transport in Depth Space', flux_units, &
         missing_value=CS%missing_trans)
-    if (CS%id_vh_z>0) call safe_alloc_ptr(CS%vh_z,isd,ied,Jsdq,Jedq,CS%nz_zspace)
+    if (CS%id_vh_z>0) call safe_alloc_ptr(CS%vh_z,isd,ied,Jsdq,Jedq,CS%nk_zspace)
 
   else
     ! Check whether the diag-table is requesting any z-space files, and issue
@@ -871,13 +871,13 @@ subroutine MOM_diag_to_Z_init(Time, G, param_file, diag, CS)
 end subroutine MOM_diag_to_Z_init
 
 subroutine get_Z_depths(depth_file, int_depth_name, int_depth, cell_depth_name, &
-                        z_axis_index, edge_index, nz_out)
+                        z_axis_index, edge_index, nk_out)
   character(len=*), intent(in) :: depth_file
   character(len=*), intent(in) :: int_depth_name
   real, dimension(:), pointer  :: int_depth
   character(len=*), intent(in) :: cell_depth_name
   integer, intent(out) :: z_axis_index, edge_index
-  integer, intent(out) :: nz_out
+  integer, intent(out) :: nk_out
 !   This subroutine reads the depths of the interfaces bounding the intended
 ! layers from a NetCDF file.  If no appropriate file is found, -1 is returned
 ! as the number of layers in the output file.  Also, a diag_manager axis is set
@@ -886,14 +886,14 @@ subroutine get_Z_depths(depth_file, int_depth_name, int_depth, cell_depth_name, 
   character (len=200) :: units, long_name
   integer :: ncid, status, intid, intvid, layid, layvid, k, ni
 
-  nz_out = -1
+  nk_out = -1
   
   status = NF90_OPEN(depth_file, NF90_NOWRITE, ncid);
   if (status /= NF90_NOERR) then
     call MOM_error(WARNING,"MOM_diag_to_Z get_Z_depths: "//&
         " Difficulties opening "//trim(depth_file)//" - "//&
         trim(NF90_STRERROR(status)))
-    nz_out = -1 ; return
+    nk_out = -1 ; return
   endif
 
   status = NF90_INQ_DIMID(ncid, int_depth_name, intid)
@@ -901,39 +901,39 @@ subroutine get_Z_depths(depth_file, int_depth_name, int_depth, cell_depth_name, 
     call MOM_error(WARNING,"MOM_diag_to_Z get_Z_depths: "//&
       trim(NF90_STRERROR(status))//" Getting ID of dimension "//&
       trim(int_depth_name)//" in "//trim(depth_file))
-    nz_out = -1 ; return
+    nk_out = -1 ; return
   endif
   status = nf90_Inquire_Dimension(ncid, intid, len=ni)
   if (status /= NF90_NOERR) then
     call MOM_error(WARNING,"MOM_diag_to_Z get_Z_depths: "//&
       trim(NF90_STRERROR(status))//" Getting number of interfaces of "//&
       trim(int_depth_name)//" in "//trim(depth_file))
-    nz_out = -1 ; return
+    nk_out = -1 ; return
   endif
 
   if (ni < 2) then
     call MOM_error(WARNING,"MOM_diag_to_Z get_Z_depths: "//&
         "At least two interface depths must be specified in "//trim(depth_file))
-    nz_out = -1 ; return
+    nk_out = -1 ; return
   endif
 
   status = NF90_INQ_DIMID(ncid, cell_depth_name, layid)
   if (status /= NF90_NOERR) call MOM_error(WARNING,"MOM_diag_to_Z get_Z_depths: "//&
       trim(NF90_STRERROR(status))//" Getting ID of dimension "//&
       trim(cell_depth_name)//" in "//trim(depth_file))
-  status = nf90_Inquire_Dimension(ncid, layid, len=nz_out)
+  status = nf90_Inquire_Dimension(ncid, layid, len=nk_out)
   if (status /= NF90_NOERR) call MOM_error(WARNING,"MOM_diag_to_Z get_Z_depths: "//&
       trim(NF90_STRERROR(status))//" Getting number of interfaces of "//&
       trim(cell_depth_name)//" in "//trim(depth_file))
-  if (ni /= nz_out+1) then
+  if (ni /= nk_out+1) then
     call MOM_error(WARNING,"MOM_diag_to_Z get_Z_depths: "//&
         "The interface depths must have one more point than cell centers in "//&
         trim(depth_file))
-    nz_out = -1 ; return
+    nk_out = -1 ; return
   endif
 
-  allocate(int_depth(nz_out+1))
-  allocate(cell_depth(nz_out))
+  allocate(int_depth(nk_out+1))
+  allocate(cell_depth(nk_out))
 
   status = NF90_INQ_VARID(ncid, int_depth_name, intvid)
   if (status /= NF90_NOERR) call MOM_error(FATAL,"MOM_diag_to_Z get_Z_depths: "//&
@@ -973,14 +973,14 @@ subroutine get_Z_depths(depth_file, int_depth_name, int_depth, cell_depth_name, 
 
   ! Check the sign convention and change to the MOM "height" convention.
   if (int_depth(1) < int_depth(2)) then 
-    do k=1,nz_out+1 ; int_depth(k) = -1*int_depth(k) ; enddo
+    do k=1,nk_out+1 ; int_depth(k) = -1*int_depth(k) ; enddo
   endif
 
   ! Check for inversions in grid.
-  do k=1,nz_out ; if (int_depth(k) < int_depth(k+1)) then
+  do k=1,nk_out ; if (int_depth(k) < int_depth(k+1)) then
     call MOM_error(WARNING,"MOM_diag_to_Z get_Z_depths: "//&
         "Inverted interface depths in output grid in "//depth_file)
-    nz_out = -1 ; deallocate(int_depth) ; return
+    nk_out = -1 ; deallocate(int_depth) ; return
   endif ; enddo
 
 end subroutine get_Z_depths
@@ -1013,8 +1013,8 @@ function ocean_register_diag_with_z (tr_ptr, vardesc_tr, G, Time, CS)
 !  (in)      CS - The control structure returned by a previous call to
 !                 diagnostics_init.
   type(vardesc) :: vardesc_z
-  integer :: isd, ied, jsd, jed, nz, m, id_test
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = G%ke
+  integer :: isd, ied, jsd, jed, nk, m, id_test
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nk = G%ke
   if (.not.associated(CS)) call MOM_error(FATAL, &
          "register_Z_tracer: Module must be initialized before it is used.")
 
@@ -1036,13 +1036,13 @@ function ocean_register_diag_with_z (tr_ptr, vardesc_tr, G, Time, CS)
   CS%missing_tr(m) = CS%missing_value ! This could be changed later, if desired.
   CS%id_tr(m) =  register_Z_diag(vardesc_z, CS, Time, CS%missing_tr(m))
 
-  if (CS%nz_zspace > NO_ZSPACE) then
+  if (CS%nk_zspace > NO_ZSPACE) then
 ! There is a depth-space target file.
     if (CS%id_tr(m)>0) then
 ! Only allocate the tr_z field id there is a diag_table entry looking
 ! for it.
       CS%num_tr_used = m
-      call safe_alloc_ptr(CS%tr_z(m)%p,isd,ied,jsd,jed,CS%nz_zspace)
+      call safe_alloc_ptr(CS%tr_z(m)%p,isd,ied,jsd,jed,CS%nk_zspace)
 !Can we do the following at this point?
 ! tr_ptr might not be allocated yet
       CS%tr_model(m)%p => tr_ptr
@@ -1102,7 +1102,7 @@ function register_Zint_diag(var_desc, CS, day)
   type(time_type),     intent(in) :: day
   integer, dimension(3)  :: axes
 
-  if (CS%nz_zspace < 0) then
+  if (CS%nk_zspace < 0) then
     register_Zint_diag = -1 ; return
   endif
 

@@ -1,6 +1,6 @@
 !********+*********+*********+*********+*********+*********+*********+*
-!*   This include file determines the compile-time settings for the   *
-!* Generalized Ocean Layered Dynamics (MOM) ocean model.              *
+!*   This include file determines the compile-time memory settings    *
+!*  for the Modular Ocean Model (MOM), versions 6 and later.          *
 !********+*********+*********+*********+*********+*********+*********+*
 
 !  Specify the numerical domain.
@@ -12,8 +12,8 @@
 #define NK_ 63
                                !    The number of layers.
 
-#define STATIC_MEMORY
-                               !    If STATIC_MEMORY is defined, the principle
+#define STATIC_MEMORY_
+                               !    If STATIC_MEMORY_ is defined, the principle
                                !  variables will have sizes that are statically
                                !  determined at compile time.  Otherwise the
                                !  sizes are not determined until run time. The

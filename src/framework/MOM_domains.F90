@@ -20,8 +20,6 @@ module MOM_domains
 !* or see:   http://www.gnu.org/licenses/gpl.html                      *
 !***********************************************************************
 
-#undef  FORBID_NONBLOCKING_UPDATES
-
 use MOM_error_handler, only : MOM_error, NOTE, WARNING, FATAL, is_root_pe
 use MOM_file_parser, only : read_param, get_param, log_param, log_version
 use MOM_file_parser, only : param_file_type
@@ -35,9 +33,7 @@ use mpp_domains_mod, only : domain2D, domain1D, mpp_get_data_domain
 use mpp_domains_mod, only : mpp_get_compute_domain, mpp_get_global_domain
 use mpp_domains_mod, only : global_field_sum => mpp_global_sum
 use mpp_domains_mod, only : mpp_update_domains, CYCLIC_GLOBAL_DOMAIN, FOLD_NORTH_EDGE
-#ifndef FORBID_NONBLOCKING_UPDATES
 use mpp_domains_mod, only : mpp_start_update_domains, mpp_complete_update_domains
-#endif
 use mpp_parameter_mod, only : AGRID, BGRID_NE, CGRID_NE, SCALAR_PAIR, BITWISE_EXACT_SUM, CORNER
 use mpp_parameter_mod, only : To_East => WUPDATE, To_West => EUPDATE
 use mpp_parameter_mod, only : To_North => SUPDATE, To_South => NUPDATE
@@ -99,11 +95,11 @@ integer, parameter :: To_All = To_East + To_West + To_North + To_South
 contains
 
 subroutine pass_var_3d(array, MOM_dom, sideflag, complete, position)
-  real, intent(inout), dimension(:,:,:) :: array
-  type(MOM_domain_type), intent(inout) :: MOM_dom
-  integer, optional, intent(in) :: sideflag
-  logical, optional, intent(in) :: complete
-  integer, optional, intent(in) :: position
+  real, dimension(:,:,:), intent(inout) :: array
+  type(MOM_domain_type),  intent(inout) :: MOM_dom
+  integer,      optional, intent(in)    :: sideflag
+  logical,      optional, intent(in)    :: complete
+  integer,      optional, intent(in)    :: position
 ! Arguments: array - The array which is having its halos points exchanged.
 !  (in)      MOM_dom - The MOM_domain_type containing the mpp_domain needed to
 !                      determine where data should be sent.
@@ -133,11 +129,11 @@ end subroutine pass_var_3d
 
 
 subroutine pass_var_2d(array, MOM_dom, sideflag, complete, position)
-  real, intent(inout), dimension(:,:) :: array
+  real, dimension(:,:),  intent(inout) :: array
   type(MOM_domain_type), intent(inout) :: MOM_dom
-  integer, optional, intent(in) :: sideflag
-  logical, optional, intent(in) :: complete
-  integer, optional, intent(in) :: position
+  integer,     optional, intent(in)    :: sideflag
+  logical,     optional, intent(in)    :: complete
+  integer,     optional, intent(in)    :: position
 ! Arguments: array - The array which is having its halos points exchanged.
 !  (in)      MOM_dom - The MOM_domain_type containing the mpp_domain needed to
 !                      determine where data should be sent.
@@ -168,7 +164,7 @@ end subroutine pass_var_2d
 
 function pass_var_start_2d(array, MOM_dom, sideflag, position, complete)
   real, dimension(:,:),   intent(inout) :: array
-  type(MOM_domain_type), intent(inout) :: MOM_dom
+  type(MOM_domain_type),  intent(inout) :: MOM_dom
   integer,      optional, intent(in)    :: sideflag
   integer,      optional, intent(in)    :: position
   logical,      optional, intent(in)    :: complete
@@ -205,7 +201,7 @@ end function pass_var_start_2d
 
 function pass_var_start_3d(array, MOM_dom, sideflag, position, complete)
   real, dimension(:,:,:), intent(inout) :: array
-  type(MOM_domain_type), intent(inout) :: MOM_dom
+  type(MOM_domain_type),  intent(inout) :: MOM_dom
   integer,      optional, intent(in)    :: sideflag
   integer,      optional, intent(in)    :: position
   logical,      optional, intent(in)    :: complete
@@ -243,7 +239,7 @@ end function pass_var_start_3d
 subroutine pass_var_complete_2d(id_update, array, MOM_dom, sideflag, position)
   integer,                intent(in)    :: id_update
   real, dimension(:,:),   intent(inout) :: array
-  type(MOM_domain_type), intent(inout) :: MOM_dom
+  type(MOM_domain_type),  intent(inout) :: MOM_dom
   integer,      optional, intent(in)    :: sideflag
   integer,      optional, intent(in)    :: position
   integer :: pass_var_start_2d
@@ -276,7 +272,7 @@ end subroutine pass_var_complete_2d
 subroutine pass_var_complete_3d(id_update, array, MOM_dom, sideflag, position)
   integer,                intent(in)    :: id_update
   real, dimension(:,:,:), intent(inout) :: array
-  type(MOM_domain_type), intent(inout) :: MOM_dom
+  type(MOM_domain_type),  intent(inout) :: MOM_dom
   integer,      optional, intent(in)    :: sideflag
   integer,      optional, intent(in)    :: position
 ! Arguments: id_update - The integer id of this update which has been returned
@@ -396,7 +392,7 @@ end subroutine pass_vector_3d
 
 function pass_vector_start_2d(u_cmpt, v_cmpt, MOM_dom, direction, stagger, complete)
   real, dimension(:,:),   intent(inout) :: u_cmpt, v_cmpt
-  type(MOM_domain_type), intent(inout) :: MOM_dom
+  type(MOM_domain_type),  intent(inout) :: MOM_dom
   integer,      optional, intent(in)    :: direction
   integer,      optional, intent(in)    :: stagger
   logical,      optional, intent(in)    :: complete
@@ -445,7 +441,7 @@ end function pass_vector_start_2d
 
 function pass_vector_start_3d(u_cmpt, v_cmpt, MOM_dom, direction, stagger, complete)
   real, dimension(:,:,:), intent(inout) :: u_cmpt, v_cmpt
-  type(MOM_domain_type), intent(inout) :: MOM_dom
+  type(MOM_domain_type),  intent(inout) :: MOM_dom
   integer,      optional, intent(in)    :: direction
   integer,      optional, intent(in)    :: stagger
   logical,      optional, intent(in)    :: complete
@@ -495,7 +491,7 @@ end function pass_vector_start_3d
 subroutine pass_vector_complete_2d(id_update, u_cmpt, v_cmpt, MOM_dom, direction, stagger)
   integer,                intent(in)    :: id_update
   real, dimension(:,:),   intent(inout) :: u_cmpt, v_cmpt
-  type(MOM_domain_type), intent(inout) :: MOM_dom
+  type(MOM_domain_type),  intent(inout) :: MOM_dom
   integer,      optional, intent(in)    :: direction
   integer,      optional, intent(in)    :: stagger
   integer                               :: pass_vector_start_2d
@@ -541,7 +537,7 @@ end subroutine pass_vector_complete_2d
 subroutine pass_vector_complete_3d(id_update, u_cmpt, v_cmpt, MOM_dom, direction, stagger)
   integer,                intent(in)    :: id_update
   real, dimension(:,:,:), intent(inout) :: u_cmpt, v_cmpt
-  type(MOM_domain_type), intent(inout) :: MOM_dom
+  type(MOM_domain_type),  intent(inout) :: MOM_dom
   integer,      optional, intent(in)    :: direction
   integer,      optional, intent(in)    :: stagger
   integer                               :: pass_vector_start_2d
@@ -585,7 +581,7 @@ subroutine pass_vector_complete_3d(id_update, u_cmpt, v_cmpt, MOM_dom, direction
 end subroutine pass_vector_complete_3d
 
 subroutine MOM_domains_init(MOM_dom, param_file, min_halo, symmetric)
-  type(MOM_domain_type),          pointer       :: MOM_dom
+  type(MOM_domain_type),           pointer       :: MOM_dom
   type(param_file_type),           intent(in)    :: param_file
   integer, dimension(2), optional, intent(inout) :: min_halo
   logical, optional,               intent(in)    :: symmetric
@@ -595,9 +591,9 @@ subroutine MOM_domains_init(MOM_dom, param_file, min_halo, symmetric)
 !  (in,opt)  min_halo - If present, this sets the minimum halo size for this
 !                       domain in the x- and y- directions, and returns the
 !                       actual halo size used.
-!  (in,opt)  symmetric - If present, this specified whether this domain is
-!                        symmetric, regardless of whether SYMMETRIC_MEMORY is
-!                        defined.
+!  (in,opt)  symmetric - If present, this specified whether this domain
+!                        is symmetric, regardless of whether the macro
+!                        SYMMETRIC_MEMORY_ is defined.
 
   integer, dimension(2) :: layout = (/ 1, 1 /)
   integer, dimension(2) :: io_layout = (/ 0, 0 /)
@@ -609,7 +605,7 @@ subroutine MOM_domains_init(MOM_dom, param_file, min_halo, symmetric)
   integer :: i, xsiz, ysiz
   logical :: reentrant_x, reentrant_y, tripolar_N, is_static
   character(len=200) :: mesg
-  character(len=8) :: char_xsiz, char_ysiz, char_NXTOT, char_NYTOT
+  character(len=8) :: char_xsiz, char_ysiz, char_nxtot, char_nytot
   character(len=128) :: version = '$Id$'
   character(len=128) :: tagname = '$Name$'
   character(len=40)  :: mod ! This module's name.
@@ -628,7 +624,7 @@ subroutine MOM_domains_init(MOM_dom, param_file, min_halo, symmetric)
     else ; mod = "MOM_domains non-symmetric" ; endif
   else
     mod = "MOM_domains"
-#ifdef SYMMETRIC_MEMORY
+#ifdef SYMMETRIC_MEMORY_
     MOM_dom%symmetric = .true.
 #else
     MOM_dom%symmetric = .false.
@@ -645,10 +641,10 @@ subroutine MOM_domains_init(MOM_dom, param_file, min_halo, symmetric)
                  default=.false.)
   call get_param(param_file, mod, "TRIPOLAR_N", tripolar_N, &
                  "Use tripolar connectivity at the northern edge of the \n"//&
-                 "domain.  With TRIPOLAR_N, NXTOT must be even.", &
+                 "domain.  With TRIPOLAR_N, NIGLOBAL must be even.", &
                  default=.false.)
   
-  call log_param(param_file, mod, "SYMMETRIC_MEMORY", MOM_dom%symmetric, &
+  call log_param(param_file, mod, "SYMMETRIC_MEMORY_", MOM_dom%symmetric, &
                  "If defined, the velocity point data domain includes \n"//&
                  "every face of the thickness points. In other words, \n"//&
                  "some arrays are larger than others, depending on where \n"//&
@@ -663,43 +659,43 @@ subroutine MOM_domains_init(MOM_dom, param_file, min_halo, symmetric)
          "Non-blocking halo updates are not yet permitted.  Use #undef NONBLOCKING_UPDATES.")
 #endif
   is_static = .false.
-#ifdef STATIC_MEMORY
+#ifdef STATIC_MEMORY_
   is_static = .true.
 #endif
-  call log_param(param_file, mod, "STATIC_MEMORY", is_static, &
-                 "If STATIC_MEMORY is defined, the principle variables \n"//&
+  call log_param(param_file, mod, "STATIC_MEMORY_", is_static, &
+                 "If STATIC_MEMORY_ is defined, the principle variables \n"//&
                  "will have sizes that are statically determined at \n"//&
                  "compile time.  Otherwise the sizes are not determined \n"//&
                  "until run time. The STATIC option is substantially \n"//&
                  "faster, but does not allow the PE count to be changed \n"//&
                  "at run time.  This can only be set at compile time.")
 
-  call get_param(param_file, mod, "NXHALO", MOM_dom%nx_halo, &
+  call get_param(param_file, mod, "NIHALO", MOM_dom%nx_halo, &
                  "The number of halo points on each side in the \n"//&
-                 "x-direction.  With STATIC_MEMORY this is set as NIHALO_ \n"//&
-                 "in MOM_memory.h at compile time; without STATIC_MEMORY \n"//&
+                 "x-direction.  With STATIC_MEMORY_ this is set as NIHALO_ \n"//&
+                 "in MOM_memory.h at compile time; without STATIC_MEMORY_ \n"//&
                  "the default is NIHALO_ in MOM_memory.h.", default=NIHALO_)
-  call get_param(param_file, mod, "NYHALO", MOM_dom%ny_halo, &
+  call get_param(param_file, mod, "NJHALO", MOM_dom%ny_halo, &
                  "The number of halo points on each side in the \n"//&
-                 "y-direction.  With STATIC_MEMORY this is set as NJHALO_ \n"//&
-                 "in MOM_memory.h at compile time; without STATIC_MEMORY \n"//&
+                 "y-direction.  With STATIC_MEMORY_ this is set as NJHALO_ \n"//&
+                 "in MOM_memory.h at compile time; without STATIC_MEMORY_ \n"//&
                  "the default is NJHALO_ in MOM_memory.h.", default=NJHALO_)
   if (present(min_halo)) then
     MOM_dom%nx_halo = max(MOM_dom%nx_halo, min_halo(1))
     min_halo(1) = MOM_dom%nx_halo
     MOM_dom%ny_halo = max(MOM_dom%ny_halo, min_halo(2))
     min_halo(2) = MOM_dom%ny_halo
-    call log_param(param_file, mod, "NXHALO min_halo", MOM_dom%nx_halo)
-    call log_param(param_file, mod, "NYHALO min_halo", MOM_dom%nx_halo)
+    call log_param(param_file, mod, "NIHALO min_halo", MOM_dom%nx_halo)
+    call log_param(param_file, mod, "NJHALO min_halo", MOM_dom%nx_halo)
   endif
-#ifdef STATIC_MEMORY
-  call get_param(param_file, mod, "NXTOT", MOM_dom%nxtot, &
+#ifdef STATIC_MEMORY_
+  call get_param(param_file, mod, "NIGLOBAL", MOM_dom%nxtot, &
                  "The total number of thickness grid points in the \n"//&
-                 "x-direction in the physical domain. With STATIC_MEMORY \n"//&
+                 "x-direction in the physical domain. With STATIC_MEMORY_ \n"//&
                  "this is set in MOM_memory.h at compile time.", default=NIGLOBAL_)
-  call get_param(param_file, mod, "NYTOT", MOM_dom%nytot, &
+  call get_param(param_file, mod, "NJGLOBAL", MOM_dom%nytot, &
                  "The total number of thickness grid points in the \n"//&
-                 "x-direction in the physical domain. With STATIC_MEMORY \n"//&
+                 "x-direction in the physical domain. With STATIC_MEMORY_ \n"//&
                  "this is set in MOM_memory.h at compile time.", default=NJGLOBAL_)
   if (MOM_dom%nxtot /= NIGLOBAL_) call MOM_error(FATAL,"MOM_domains_init: " // &
    "static mismatch for NIGLOBAL_ domain size. Header file does not match input namelist")
@@ -708,19 +704,19 @@ subroutine MOM_domains_init(MOM_dom, param_file, min_halo, symmetric)
 
   if (.not.present(min_halo)) then
     if (MOM_dom%nx_halo /= NIHALO_) call MOM_error(FATAL,"MOM_domains_init: " // &
-           "static mismatch for NXHALO domain size")
+           "static mismatch for NIHALO domain size")
     if (MOM_dom%ny_halo /= NJHALO_) call MOM_error(FATAL,"MOM_domains_init: " // &
-           "static mismatch for NYHALO domain size")
+           "static mismatch for NJHALO domain size")
   endif
 #else
-  call get_param(param_file, mod, "NXTOT", MOM_dom%nxtot, &
+  call get_param(param_file, mod, "NIGLOBAL", MOM_dom%nxtot, &
                  "The total number of thickness grid points in the \n"//&
-                 "x-direction in the physical domain. With STATIC_MEMORY \n"//&
+                 "x-direction in the physical domain. With STATIC_MEMORY_ \n"//&
                  "this is set in MOM_memory.h at compile time.", &
                  fail_if_missing=.true.)
-  call get_param(param_file, mod, "NYTOT", MOM_dom%nytot, &
+  call get_param(param_file, mod, "NJGLOBAL", MOM_dom%nytot, &
                  "The total number of thickness grid points in the \n"//&
-                 "x-direction in the physical domain. With STATIC_MEMORY \n"//&
+                 "x-direction in the physical domain. With STATIC_MEMORY_ \n"//&
                  "this is set in MOM_memory.h at compile time.", &
                  fail_if_missing=.true.)
 #endif
@@ -732,12 +728,12 @@ subroutine MOM_domains_init(MOM_dom, param_file, min_halo, symmetric)
   global_indices(3) = 1
   global_indices(4) = MOM_dom%nytot
 
-#ifdef STATIC_MEMORY
+#ifdef STATIC_MEMORY_
   layout(1) = NIPROC_ ; layout(2) = NJPROC_
 #else
   call mpp_define_layout(global_indices, proc_used, layout)
-  call read_param(param_file,"NXPROC",layout(1))
-  call read_param(param_file,"NYPROC",layout(2))
+  call read_param(param_file,"NIPROC",layout(1))
+  call read_param(param_file,"NJPROC",layout(2))
   if (layout(1)*layout(2) /= proc_used) then
     write(mesg,'("MOM_domains_init: The product of the two components of layout, ", &
           &      2i4,", is not the number of PEs used, ",i5,".")') &
@@ -745,41 +741,41 @@ subroutine MOM_domains_init(MOM_dom, param_file, min_halo, symmetric)
     call MOM_error(FATAL, mesg)
   endif
 #endif
-  call log_param(param_file, mod, "NXPROC", layout(1), &
+  call log_param(param_file, mod, "NIPROC", layout(1), &
                  "The number of processors in the x-direction. With \n"//&
-                 "STATIC_MEMORY this is set in MOM_memory.h at compile time.")
-  call log_param(param_file, mod, "NYPROC", layout(2), &
+                 "STATIC_MEMORY_ this is set in MOM_memory.h at compile time.")
+  call log_param(param_file, mod, "NJPROC", layout(2), &
                  "The number of processors in the x-direction. With \n"//&
-                 "STATIC_MEMORY this is set in MOM_memory.h at compile time.")
+                 "STATIC_MEMORY_ this is set in MOM_memory.h at compile time.")
 !  write(*,*) 'layout is now ',layout, global_indices
 
   !   Set up the I/O lay-out, and check that it uses an even multiple of the
   ! number of PEs in each direction.
   io_layout(:) = (/ 0, 0 /)
-  call get_param(param_file, mod, "NXPROC_IO", io_layout(1), &
+  call get_param(param_file, mod, "NIPROC_IO", io_layout(1), &
                  "The number of processors used for I/O in the \n"//&
-                 "x-direction, or 0 to equal NXPROC.", default=0)
-  call get_param(param_file, mod, "NYPROC_IO", io_layout(2), &
+                 "x-direction, or 0 to equal NIPROC.", default=0)
+  call get_param(param_file, mod, "NJPROC_IO", io_layout(2), &
                  "The number of processors used for I/O in the \n"//&
-                 "y-direction, or 0 to equal NYPROC.", default=0)
+                 "y-direction, or 0 to equal NJPROC.", default=0)
   if (io_layout(1) < 0) then
-    write(mesg,'("MOM_domains_init: NXPROC_IO = ",i4,".  Negative values of "//&
-         &" of NXPROC_IO are not allowed.")') io_layout(1)
+    write(mesg,'("MOM_domains_init: NIPROC_IO = ",i4,".  Negative values of "//&
+         &" of NIPROC_IO are not allowed.")') io_layout(1)
     call MOM_error(FATAL, mesg)
   elseif (io_layout(1) > 0) then ; if (modulo(layout(1), io_layout(1)) /= 0) then
-    write(mesg,'("MOM_domains_init: The x-direction I/O-layout, NXPROC_IO=",i4, &
-         &", does not evenly divide the x-direction layout, NXPROC=,",i4,".")') &
+    write(mesg,'("MOM_domains_init: The x-direction I/O-layout, NIPROC_IO=",i4, &
+         &", does not evenly divide the x-direction layout, NIPROC=,",i4,".")') &
           io_layout(1),layout(1)
     call MOM_error(FATAL, mesg)
   endif ; endif
   
   if (io_layout(2) < 0) then
-    write(mesg,'("MOM_domains_init: NYPROC_IO = ",i4,".  Negative values of "//&
-         &" of NYPROC_IO are not allowed.")') io_layout(2)
+    write(mesg,'("MOM_domains_init: NJPROC_IO = ",i4,".  Negative values of "//&
+         &" of NJPROC_IO are not allowed.")') io_layout(2)
     call MOM_error(FATAL, mesg)
   elseif (io_layout(2) /= 0) then ; if (modulo(layout(2), io_layout(2)) /= 0) then
-    write(mesg,'("MOM_domains_init: The y-direction I/O-layout, NYPROC_IO=",i4, &
-         &", does not evenly divide the y-direction layout, NYPROC=,",i4,".")') &
+    write(mesg,'("MOM_domains_init: The y-direction I/O-layout, NJPROC_IO=",i4, &
+         &", does not evenly divide the y-direction layout, NJPROC=,",i4,".")') &
           io_layout(2),layout(2)
     call MOM_error(FATAL, mesg)
   endif ; endif
@@ -809,8 +805,8 @@ subroutine MOM_domains_init(MOM_dom, param_file, min_halo, symmetric)
   MOM_dom%io_layout = io_layout
   MOM_dom%use_io_layout = (io_layout(1) + io_layout(2) > 0)
 
-#ifdef STATIC_MEMORY
-!   A requirement of equal sized compute domains is necessary when STATIC_MEMORY
+#ifdef STATIC_MEMORY_
+!   A requirement of equal sized compute domains is necessary when STATIC_MEMORY_
 ! is used.
   call mpp_get_compute_domain(MOM_dom%mpp_domain,isc,iec,jsc,jec)
   xsiz = iec - isc + 1
@@ -818,13 +814,13 @@ subroutine MOM_domains_init(MOM_dom, param_file, min_halo, symmetric)
   if (xsiz*NIPROC_ /= MOM_dom%nxtot .OR. ysiz*NJPROC_ /= MOM_dom%nytot) then
      write( char_xsiz,'(i4)' ) NIPROC_
      write( char_ysiz,'(i4)' ) NJPROC_
-     write( char_NXTOT,'(i4)' ) MOM_dom%nxtot
-     write( char_NYTOT,'(i4)' ) MOM_dom%nytot
+     write( char_nxtot,'(i4)' ) MOM_dom%nxtot
+     write( char_nytot,'(i4)' ) MOM_dom%nytot
      call MOM_error(WARNING,'MOM_domains: Processor decomposition (NIPROC_,NJPROC_) = (' &
          //trim(char_xsiz)//','//trim(char_ysiz)// &
          ') does not evenly divide size set by preprocessor macro ('&
-         //trim(char_NXTOT)//','//trim(char_NYTOT)// '). ')
-     call MOM_error(FATAL,'MOM_domains:  #undef STATIC_MEMORY in MOM_memory.h to use &
+         //trim(char_nxtot)//','//trim(char_nytot)// '). ')
+     call MOM_error(FATAL,'MOM_domains:  #undef STATIC_MEMORY_ in MOM_memory.h to use &
          &dynamic allocation, or change processor decomposition to evenly divide the domain.')
   endif
 #endif

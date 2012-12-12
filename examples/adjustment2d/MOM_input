@@ -64,7 +64,7 @@
 #define GINT -5.e11            !    The nominal reduced gravity of the internal
                                !  interfaces for idealized models, in m s-2.
 #undef  TRIPOLAR_N             !    Use tripolar connectivity at the northern
-                               !  edge of the domain.  With TRIPOLAR_N, NXTOT
+                               !  edge of the domain.  With TRIPOLAR_N, NIGLOBAL
                                !  must be even.
 #define THICKNESS_CONFIG "adjustment2d"!  Method for defining initial layer thicknesses
                                !  file - read thickness information from file
@@ -88,20 +88,20 @@
                                !  USER - user defined.
 
 !  Specify the numerical domain.
-#define NXTOT 128              !    NXTOT and NYTOT are the number of thickness
-#define NYTOT 4                !  grid points in the zonal and meridional
+#define NIGLOBAL 128           !    NIGLOBAL and NJGLOBAL are the number of thickness
+#define NJGLOBAL 4             !  grid points in the zonal and meridional
                                !  directions of the physical domain.
-#define NZ 25                   !    The number of layers.
-#define NXHALO 4               !    NXHALO and NYHALO are the number of halo
-#define NYHALO 4               !  points on each side in the x- and y-directions.
+#define NK 25                  !    The number of layers.
+#define NIHALO 4               !    NIHALO and NJHALO are the number of halo
+#define NJHALO 4               !  points on each side in the x- and y-directions.
                                !  If static memory allocation is used, these
                                !  must match the values of X1 and Y1 in MOM_memory.h
-NXPROC_IO = 1                   !    The number of processors used for I/O in the
-                                !  x-direction, or 0 to equal NXPROC.  NXPROC_IO
-                                !  must be a factor of NXPROC.
-NYPROC_IO = 1                   !    The number of processors used for I/O in the
-                                !  y-direction, or 0 to equal NYPROC.  NYPROC_IO
-                                !  must be a factor of NYPROC.
+NIPROC_IO = 1                  !    The number of processors used for I/O in the
+                               !  x-direction, or 0 to equal NIPROC.  NIPROC_IO
+                               !  must be a factor of NIPROC.
+NJPROC_IO = 1                  !    The number of processors used for I/O in the
+                               !  y-direction, or 0 to equal NJPROC.  NJPROC_IO
+                               !  must be a factor of NJPROC.
 
 #define ANGSTROM 1.0e-15                               
 
@@ -182,7 +182,7 @@ NYPROC_IO = 1                   !    The number of processors used for I/O in th
                                !  reentrant.
 #undef EQUATOR_REFERENCE       !    If EQUATOR_REFERENCE is defined, the grid is
                                !  defined to have the equator at the nearest q
-                               !  or h grid point to (-LOWLAT*NYTOT/LENLAT).
+                               !  or h grid point to (-LOWLAT*NJGLOBAL/LENLAT).
 #undef  LAT_EQ_ENHANCE         !   The latitude (north and south) to which the
                                !  resolution is enhanced.
 #undef  LAT_ENHANCE_FACTOR     !   The amount by which the meridional resolution
@@ -223,7 +223,7 @@ NYPROC_IO = 1                   !    The number of processors used for I/O in th
 #define ETA_TOLERANCE 1e-12    !    The tolerance, in m, for the differences
                                !  between the barotropic and baroclinic
                                !  estimates of the sea surface height.  The
-                               !  default is 0.5*NZ*EPSILON, and this should not
+                               !  default is 0.5*NK*EPSILON, and this should not
                                !  be set less than about 10^-15*MAXIMUM_DEPTH.
 
 !  Specify properties of the I/O and length of the integration.

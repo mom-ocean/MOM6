@@ -12,15 +12,15 @@
 #define NK_ NONSENSE_NK
                                !    The number of layers.
 
-#undef STATIC_MEMORY
-                               !    If STATIC_MEMORY is defined, the principle
+#undef STATIC_MEMORY_
+                               !    If STATIC_MEMORY_ is defined, the principle
                                !  variables will have sizes that are statically
                                !  determined at compile time.  Otherwise the
                                !  sizes are not determined until run time. The
                                !  STATIC option is substantially faster, but
                                !  does not allow the PE count to be changed at
                                !  run time.
-#define SYMMETRIC_MEMORY
+#define SYMMETRIC_MEMORY_
                                !    If defined, the velocity point data domain
                                !  includes every face of the thickness points.
                                !  In other words, some arrays are larger than

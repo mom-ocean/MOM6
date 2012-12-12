@@ -108,6 +108,17 @@ subroutine find_obsolete_params(param_file)
           "USE_EOS to use an equation of state to calculate density.")
   endif
 
+  call test_obsolete_int(param_file, "NXTOT")
+  call test_obsolete_int(param_file, "NYTOT")
+  call test_obsolete_int(param_file, "NZ")
+  call test_obsolete_int(param_file, "NXPROC")
+  call test_obsolete_int(param_file, "NYPROC")
+  call test_obsolete_int(param_file, "NXPROC_IO")
+  call test_obsolete_int(param_file, "NYPROC_IO")
+  call test_obsolete_int(param_file, "NXHALO")
+  call test_obsolete_int(param_file, "NYHALO")
+  call test_obsolete_int(param_file, "ML_PRESORT_NZ_CONV_ADJ")
+
   call test_obsolete_real(param_file, "BT_COR_SLOW_RATE", 0.0)
   call test_obsolete_real(param_file, "BT_COR_FRAC", 1.0)
 

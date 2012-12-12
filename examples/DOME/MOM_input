@@ -66,21 +66,21 @@ VELOCITY_CONFIG = "zero"        !   Method for defining initial layer velocities
                                 !  USER - user defined.
 
 !  Specify the numerical domain.
-NXTOT = 150                     !   NXTOT and NYTOT are the number of thickness
-NYTOT = 70                      !  grid points in the zonal and meridional
+NIGLOBAL = 150                  !   NIGLOBAL and NJGLOBAL are the number of thickness
+NJGLOBAL = 70                   !  grid points in the zonal and meridional
                                 !  directions of the physical domain.
-NZ = 25                         !   The number of layers.
-NXHALO = 4                      !    NXHALO and NYHALO are the number of halo
-NYHALO = 4                      !  points on each side in the x- and y-directions.
+NK = 25                         !   The number of layers.
+NIHALO = 4                      !    NIHALO and NJHALO are the number of halo
+NJHALO = 4                      !  points on each side in the x- and y-directions.
                                 !  If static memory allocation is used, these
                                 !  must match the values of NIHALO_ and NJHALO_
                                 !  in MOM_memory.h.
-NXPROC_IO = 1                   !    The number of processors used for I/O in the
-                                !  x-direction, or 0 to equal NXPROC.  NXPROC_IO
-                                !  must be a factor of NXPROC.
-NYPROC_IO = 1                   !    The number of processors used for I/O in the
-                                !  y-direction, or 0 to equal NYPROC.  NYPROC_IO
-                                !  must be a factor of NYPROC.
+NIPROC_IO = 1                   !    The number of processors used for I/O in the
+                                !  x-direction, or 0 to equal NIPROC.  NIPROC_IO
+                                !  must be a factor of NIPROC.
+NJPROC_IO = 1                   !    The number of processors used for I/O in the
+                                !  y-direction, or 0 to equal NJPROC.  NJPROC_IO
+                                !  must be a factor of NJPROC.
 
 !  The following parameters only apply if the grid is internally generated.
 LENLAT = 700.0                  !    The length of the domain in units defined

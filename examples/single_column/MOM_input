@@ -88,12 +88,12 @@ VELOCITY_CONFIG = "zero"        !    Method for defining initial layer velocitie
                                 !  USER - user defined.
 
 !  Specify the numerical domain.
-NXTOT = 2                       !    NXTOT and NYTOT are the number of thickness
-NYTOT = 2                       !  grid points in the zonal and meridional
+NIGLOBAL = 2                    !    NIGLOBAL and NJGLOBAL are the number of thickness
+NJGLOBAL = 2                    !  grid points in the zonal and meridional
                                 !  directions of the physical domain.
-NZ = 48                         !    The number of layers.
-NXHALO = 2                      !    NXHALO and NYHALO are the number of halo
-NYHALO = 2                      !  points on each side in the x- and y-directions.
+NK = 48                         !    The number of layers.
+NIHALO = 2                      !    NIHALO and NJHALO are the number of halo
+NJHALO = 2                      !  points on each side in the x- and y-directions.
                                 !  If static memory allocation is used, these
                                 !  must match the values of NIHALO_ and NJHALO_
                                 !  in MOM_memory.h.
@@ -112,7 +112,7 @@ REENTRANT_X = True              !    If defined, the domain is zonally reentrant
 REENTRANT_Y = True              !    If defined, the domain is meridionally
                                 !  reentrant.
 TRIPOLAR_N = False              !    Use tripolar connectivity at the northern
-                                !  edge of the domain.  With TRIPOLAR_N, NXTOT
+                                !  edge of the domain.  With TRIPOLAR_N, NIGLOBAL
                                 !  must be even.
 
 DEBUG = False                   !    If true, write out verbose debugging data.
@@ -136,7 +136,7 @@ ETA_TOLERANCE = 1e-6            !    The tolerance, in m, for the differences
                                 !  estimates of the sea surface height due to
                                 !  the fluxes through each face.  The total
                                 !  tolerance for SSH is 4 times this value.  The
-                                !  default is 0.5*NZ*EPSILON, and this should not
+                                !  default is 0.5*NK*EPSILON, and this should not
                                 !  be set less than about 10^-15*MAXIMUM_DEPTH.
 ETA_TOLERANCE_AUX = 1e-3        !    The equivalent to ETA_TOLERANCE for the
                                 !  calculation of auxiliary velocities, in m.
@@ -148,7 +148,7 @@ DAYMAX = 730.0                  !    The final day of the simulation.
 ENERGYSAVEDAYS = 1.0            !    The number of days between saves of the
                                 !  energies of the run.
 ENERGYFILE = "timestats"        !    The file to use to save the energies.
-RESTARTFILE = "MOM.res"        !    The name of the restart file.
+RESTARTFILE = "MOM.res"         !    The name of the restart file.
 RESTINT = 3650.0                !    The number of days between saves of the
                                 !  restart file.  Use a value that is larger than
                                 !  DAYMAX not to save incremental restart files

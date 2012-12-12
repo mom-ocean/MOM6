@@ -168,7 +168,7 @@ subroutine MOM_grid_init(grid, param_file)
 !                         model parameter values.
   character(len=128) :: version = '$Id$'
   character(len=128) :: tagname = '$Name$'
-  integer :: isd, ied, jsd, jed, nz, idg_off, jdg_off
+  integer :: isd, ied, jsd, jed, nk, idg_off, jdg_off
   integer :: Isdq, Iedq, Jsdq, Jedq
 
   ! get_domain_extent ensures that domains start at 1 for compatibility between
@@ -211,20 +211,20 @@ subroutine MOM_grid_init(grid, param_file)
                  "at velocity points.  Otherwise the effects of of \n"//&
                  "topography are entirely determined from thickness points.", &
                  default=.false.)
-#ifdef STATIC_MEMORY
-  ! Here NK_ is a macro, while nz is a variable.
-  call get_param(param_file, "MOM_grid", "NZ", nz, &
+#ifdef STATIC_MEMORY_
+  ! Here NK_ is a macro, while nk is a variable.
+  call get_param(param_file, "MOM_grid", "NK", nk, &
                  "The number of model layers.", units="nondim", default=NK_)
-  if (nz /= NK_) call MOM_error(FATAL, "MOM_grid_init: " // &
+  if (nk /= NK_) call MOM_error(FATAL, "MOM_grid_init: " // &
        "Mismatched number of layers NK_ between MOM_memory.h and param_file")
 
 #else
-  call get_param(param_file, "MOM_grid", "NZ", nz, &
+  call get_param(param_file, "MOM_grid", "NK", nk, &
                  "The number of model layers.", units="nondim", fail_if_missing=.true.)
 #endif
 
 
-  grid%ks = 1 ; grid%ke = nz
+  grid%ks = 1 ; grid%ke = nk
 
   grid%nonblocking_updates = grid%Domain%nonblocking_updates
 
@@ -245,8 +245,8 @@ subroutine MOM_grid_init(grid, param_file)
   Isdq = grid%Isdq ; Iedq = grid%Iedq ; Jsdq = grid%Jsdq ; Jedq = grid%Jedq
   ALLOC_(grid%D(isd:ied, jsd:jed))          ; grid%D(:,:) = grid%Angstrom_z
   ALLOC_(grid%f(Isdq:Iedq, Jsdq:Jedq))      ; grid%f(:,:) = 0.0
-  ALLOC_(grid%g_prime(nz+1)) ; grid%g_prime(:) = 0.0
-  ALLOC_(grid%Rlay(nz+1))    ; grid%Rlay(:) = 0.0
+  ALLOC_(grid%g_prime(nk+1)) ; grid%g_prime(:) = 0.0
+  ALLOC_(grid%Rlay(nk+1))    ; grid%Rlay(:) = 0.0
 
   if (grid%bathymetry_at_vel) then
     ALLOC_(grid%Dblock_u(Isdq:Iedq, jsd:jed)) ; grid%Dblock_u(:,:) = 0.0

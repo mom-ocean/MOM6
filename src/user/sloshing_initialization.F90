@@ -93,7 +93,7 @@ subroutine sloshing_initialize_thickness ( h, G, param_file )
   ! Get maximum depth and uniformly-distributed thickness
   call read_param ( param_file, "MAXIMUM_DEPTH", max_depth );
   call read_param ( param_file, "LENLON", lenlon );
-  call read_param ( param_file, "NXTOT", nxtot );
+  call read_param ( param_file, "NIGLOBAL", nxtot );
   
   deltah = max_depth / nz;
 

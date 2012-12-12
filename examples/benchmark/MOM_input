@@ -75,21 +75,21 @@ VELOCITY_CONFIG = "zero"        !    Method for defining initial layer velocitie
                                 !  USER - user defined.
 
 !  Specify the numerical domain.
-NXTOT = 360                     !    NXTOT and NYTOT are the number of thickness
-NYTOT = 180                     !  grid points in the zonal and meridional
+NIGLOBAL = 360                  !    NIGLOBAL and NJGLOBAL are the number of thickness
+NJGLOBAL = 180                  !  grid points in the zonal and meridional
                                 !  directions of the physical domain.
-NZ = 22                         !    The number of layers.
-NXHALO = 4                      !    NXHALO and NYHALO are the number of halo
-NYHALO = 4                      !  points on each side in the x- and y-directions.
+NK = 22                         !    The number of layers.
+NIHALO = 4                      !    NIHALO and NJHALO are the number of halo
+NJHALO = 4                      !  points on each side in the x- and y-directions.
                                 !  If static memory allocation is used, these
                                 !  must match the values of NIHALO_ and NJHALO_
                                 !  in MOM_memory.h.
-NXPROC_IO = 1                   !    The number of processors used for I/O in the
-                                !  x-direction, or 0 to equal NXPROC.  NXPROC_IO
-                                !  must be a factor of NXPROC.
-NYPROC_IO = 1                   !    The number of processors used for I/O in the
-                                !  y-direction, or 0 to equal NYPROC.  NYPROC_IO
-                                !  must be a factor of NYPROC.
+NIPROC_IO = 1                   !    The number of processors used for I/O in the
+                                !  x-direction, or 0 to equal NIPROC.  NIPROC_IO
+                                !  must be a factor of NIPROC.
+NJPROC_IO = 1                   !    The number of processors used for I/O in the
+                                !  y-direction, or 0 to equal NJPROC.  NJPROC_IO
+                                !  must be a factor of NJPROC.
 
 !  The following parameters only apply if the grid is internally generated.
 LENLAT = 41.0                   !    The length of the domain in units defined
@@ -114,11 +114,11 @@ REENTRANT_X = True              !    If defined, the domain is zonally reentrant
 REENTRANT_Y = False             !    If defined, the domain is meridionally
                                 !  reentrant.
 TRIPOLAR_N = False              !    Use tripolar connectivity at the northern
-                                !  edge of the domain.  With TRIPOLAR_N, NXTOT
+                                !  edge of the domain.  With TRIPOLAR_N, NIGLOBAL
                                 !  must be even.
 EQUATOR_REFERENCE = True        !    If EQUATOR_REFERENCE is defined, the grid is
                                 !  defined to have the equator at the nearest q
-                                !  or h grid point to (-LOWLAT*NYTOT/LENLAT).
+                                !  or h grid point to (-LOWLAT*NJGLOBAL/LENLAT).
 LAT_EQ_ENHANCE = 0.0            !   The latitude (north and south) to which the
                                 !  resolution is enhanced.
 LAT_ENHANCE_FACTOR = 1.0        !   The amount by which the meridional resolution
@@ -348,7 +348,7 @@ ETA_TOLERANCE = 1e-6            !    The tolerance, in m, for the differences
                                 !  estimates of the sea surface height due to
                                 !  the fluxes through each face.  The total
                                 !  tolerance for SSH is 4 times this value.  The
-                                !  default is 0.5*NZ*EPSILON, and this should not
+                                !  default is 0.5*NK*EPSILON, and this should not
                                 !  be set less than about 10^-15*MAXIMUM_DEPTH.
 VELOCITY_TOLERANCE = 1.0e-3     ! The tolerance for barotropic velocity
                                 ! discrepancies between the barotropic solution
@@ -549,7 +549,7 @@ ML_MIX_FIRST = 0.0              !    The fraction of the mixed layer mixing that
 ML_RESORT = False               !    If defined, resort the topmost layers by
                                 !  potential density before the mixed layer
                                 !  calculations.
-ML_PRESORT_NZ_CONV_ADJ = 0      ! Convectively mix the first X layers before
+ML_PRESORT_NK_CONV_ADJ = 0      ! Convectively mix the first X layers before
                                 !  sorting when ML_RESORT is defined.
 LIMIT_BUFFER_DETRAIN = True     !   If defined, limit the detrainment from the
                                 ! buffer layers to not be too different from the
