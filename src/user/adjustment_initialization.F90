@@ -227,16 +227,17 @@ subroutine adjustment_initialize_temperature_salinity ( T, S, h, G, param_file, 
   ! Parameters specific to this experiment configuration BUT logged in previous s/r
   call get_param(param_file,mod,"MAXIMUM_DEPTH",max_depth,do_not_log=.true.)
   call get_param(param_file,mod,"ADJUSTMENT_IC",adjustment_ic,do_not_log=.true.)
-  call get_param (param_file,mod,"ADJUSTMENT_WIDTH",adjustment_width,do_not_log=.true.)
-  call get_param (param_file,mod,"ADJUSTMENT_DELTAS",adjustment_deltaS,do_not_log=.true.)
+  call get_param(param_file,mod,"ADJUSTMENT_WIDTH",adjustment_width,do_not_log=.true.)
+  call get_param(param_file,mod,"ADJUSTMENT_DELTAS",adjustment_deltaS,do_not_log=.true.)
   call get_param(param_file,mod,"DELTA_S_STRAT",delta_S_strat,do_not_log=.true.)
-  call get_param (param_file,mod,"FRONT_WAVE_AMP",front_wave_amp,do_not_log=.true.)
-  call get_param (param_file,mod,"FRONT_WAVE_LENGTH",front_wave_length,do_not_log=.true.)
-  call get_param (param_file,mod,"FRONT_WAVE_ASYM",front_wave_asym,do_not_log=.true.)
+  call get_param(param_file,mod,"FRONT_WAVE_AMP",front_wave_amp,do_not_log=.true.)
+  call get_param(param_file,mod,"FRONT_WAVE_LENGTH",front_wave_length,do_not_log=.true.)
+  call get_param(param_file,mod,"FRONT_WAVE_ASYM",front_wave_asym,do_not_log=.true.)
 
   dSdz = -delta_S_strat/max_depth
   T(:,:,:) = 0.0
   S(:,:,:) = 0.0
+  if (adjustment_ic>999) write(0,*) ' adjustment_ic=',adjustment_ic ! This line needed to fool the Gnu compiler!!!! -AJA
   
   ! Linear salinity profile
   select case ( adjustment_ic )
