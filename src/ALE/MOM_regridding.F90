@@ -16,7 +16,7 @@ module MOM_regridding
 !==============================================================================
 use MOM_error_handler, only : MOM_error, FATAL
 use MOM_variables,     only : ocean_grid_type, thermo_var_ptrs
-use MOM_file_parser,   only : read_param, param_file_type
+use MOM_file_parser,   only : get_param, param_file_type
 use MOM_EOS,           only : calculate_density
 
 use regrid_grid1d_class ! see 'regrid_grid.F90'
@@ -183,54 +183,96 @@ subroutine initialize_regridding_options ( param_file, regridding_opts )
   ! Arguments
   type(param_file_type), intent(in)        :: param_file
   type(regridding_opts_t), intent(inout)   :: regridding_opts
+  ! Local variables
+  character(len=40)  :: mod = "MOM_regridding" ! This module's name.
 
   ! This sets whether we want to use regridding or not. By default, 
   ! regridding is NOT used but this can be overridden in the input
   ! file
   regridding_opts%use_regridding = .false.
-  call read_param ( param_file, "USE_REGRIDDING", &
-                    regridding_opts%use_regridding , .false. )
+  call get_param(param_file, mod, "USE_REGRIDDING", &
+                 regridding_opts%use_regridding , &
+                 "If True, use the ALE algorithm (regridding/remapping).\n"//&
+                 "If False, use the layered isopycnal algorithm.", default=.false. )
 
+  if (regridding_opts%use_regridding) then
   ! The following options are only relevant when the property 'use_regridding'
   ! is true.
 
   ! --- TYPE OF VERTICAL GRID ---
   ! This sets which kind of grid we want to use in the vertical. If none
   ! is specified, target interface densities are used to build the grid
-  regridding_opts%regridding_scheme = REGRIDDING_RHO
-  call read_param ( param_file, "REGRIDDING_SCHEME", &
-                    regridding_opts%regridding_scheme, .false. )
+  call get_param(param_file, mod, "REGRIDDING_SCHEME", &
+                 regridding_opts%regridding_scheme, &
+                 "Type of grid to build in the vertical."//&
+                 "Choose among the following possibilities (must\n"//&
+                 "be an integer !):\n"//&
+                 " 0: z*.\n"//&
+                 " 1: target interface densities.\n"//&
+                 " 2: sigma.\n", fail_if_missing=.true.)
 
   ! --- REMAPPING SCHEME ---
   ! This sets which remapping scheme we want to use to remap all variables
   ! betwenn grids. If none is specified, PLM is used for remapping.
-  regridding_opts%remapping_scheme = REMAPPING_PLM
-  call read_param ( param_file, "REMAPPING_SCHEME", &
-                    regridding_opts%remapping_scheme, .false. )
+  call get_param(param_file, mod, "REMAPPING_SCHEME", &
+                 regridding_opts%remapping_scheme, &
+                 "This sets the remapping scheme to use to\n"//&
+                 "remap all variables between successive grids.\n"//&
+                 "It can be one of the following schemes (must be\n"//&
+                 "an integer !):\n"//&
+                 "0: PCM         (1st-order accurate)\n"//&
+                 "1: PLM         (2nd-order accurate)\n"//&
+                 "2: PPM_H4         (3rd-order accurate)\n"//&
+                 "3: PPM_IH4     (3rd-order accurate)\n"//&
+                 "4: PQM_IH4IH3     (4th-order accurate)\n"//&
+                 "5: PQM_IH6IH5     (5th-order accurate)\n", &
+                 default=REMAPPING_PLM)
   
   ! --- INTERPOLATION SCHEME ---
   ! This sets which interpolation scheme we want to use to define the new
   ! grid when regridding is based upon target interface densities. If none
   ! is specified, the p1m h2 interpolation scheme is used.
-  regridding_opts%interpolation_scheme = INTERPOLATION_P1M_H2
-  call read_param ( param_file, "INTERPOLATION_SCHEME", &
-                    regridding_opts%interpolation_scheme, .false. )
+  call get_param(param_file, mod, "INTERPOLATION_SCHEME", &
+                 regridding_opts%interpolation_scheme, &
+                 "This sets the interpolation scheme to use to\n"//&
+                 "determine the new grid. These parameters are\n"//&
+                 "only relevant when REGRIDDING_SCHEME is set to\n"//&
+                 "1. Otherwise, it is not used.\n"//&
+                 "It can be one of the following schemes (must be\n"//&
+                 "an integer !):\n"//&
+                 "0: P1M_H2         (2nd-order accurate)\n"//&
+                 "1: P1M_H4         (2nd-order accurate)\n"//&
+                 "2: P1M_IH4     (2nd-order accurate)\n"//&
+                 "3: PLM         (2nd-order accurate)\n"//&
+                 "4: PPM_H4        (3rd-order accurate)\n"//&
+                 "5: PPM_IH4        (3rd-order accurate)\n"//&
+                 "6: P3M_IH4IH3     (4th-order accurate)\n"//&
+                 "7: P3M_IH6IH5     (4th-order accurate)\n"//&
+                 "8: PQM_IH4IH3    (4th-order accurate)\n"//&
+                 "9: PQM_IH6IH5    (5th-order accurate)\n", &
+                 default=INTERPOLATION_P1M_H2)
   
   ! --- BOUNDARY EXTRAPOLATION --
   ! This sets whether high-order (rather than PCM) reconstruction schemes
   ! should be used within boundary cells
-  regridding_opts%boundary_extrapolation = .false.
-  call read_param ( param_file, "BOUNDARY_EXTRAPOLATION", &
-                    regridding_opts%boundary_extrapolation , .false. )
-
-  ! --- MAXIMUM DEPTH ---
-  call read_param ( param_file, "MAXIMUM_DEPTH", &
-                    regridding_opts%max_depth, .false. )
+  call get_param(param_file, mod, "BOUNDARY_EXTRAPOLATION", &
+                 regridding_opts%boundary_extrapolation, &
+                 "When defined, a proper high-order reconstruction\n"//&
+                 "scheme is used within boundary cells rather\n"//&
+                 "than PCM. E.g., if PPM is used for remapping, a\n"//&
+                 "PPM reconstruction will also be used within\n"//&
+                 "boundary cells.", default=.false.)
 
   ! --- MINIMUM THICKNESS ---
-  regridding_opts%min_thickness = 1.0e-3
-  call read_param ( param_file, "MIN_THICKNESS", &
-                    regridding_opts%min_thickness, .false. )
+  call get_param(param_file, mod, "MIN_THICKNESS", &
+                 regridding_opts%min_thickness, &
+                 "When regridding, this is the minimum layer\n"//&
+                 "thickness allowed.", default=1.e-3 )
+
+  ! --- MAXIMUM DEPTH ---
+  call get_param(param_file, mod, "MAXIMUM_DEPTH", &
+                 regridding_opts%max_depth, do_not_log=.true.)
+  endif
   
 end subroutine initialize_regridding_options
 
