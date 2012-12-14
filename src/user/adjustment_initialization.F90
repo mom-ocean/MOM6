@@ -1,7 +1,7 @@
 module adjustment_initialization
 
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, is_root_pe
-use MOM_file_parser, only : read_param, log_param, log_version, param_file_type
+use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : close_file, create_file, fieldtype, file_exists
 use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE
@@ -10,6 +10,8 @@ use MOM_variables, only : thermo_var_ptrs, directories, ocean_OBC_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
 
 implicit none ; private
+
+character(len=40) :: mod = "adjustment_initialization" ! This module's name.
 
 #include <MOM_memory.h>
 
@@ -62,20 +64,41 @@ subroutine adjustment_initialize_thickness ( h, G, param_file )
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
-  call MOM_mesg("MOM_initialization.F90, initialize_thickness_uniform: setting thickness")
+  call MOM_mesg("initialize_thickness_uniform: setting thickness")
 
-  call read_param(param_file,"MAXIMUM_DEPTH",max_depth,.true.)
-  call read_param (param_file,"LENLON",lenlon)
-  call read_param (param_file,"LENLAT",lenlat)
-  call read_param(param_file,"S_REF",S_ref,.true.)
-  min_thickness = 1.0e-3; call read_param (param_file,"MIN_THICKNESS",min_thickness)
-  adjustment_ic=-1; call read_param (param_file,"ADJUSTMENT_IC", adjustment_ic,.true.)
-  adjustment_width=0.; call read_param (param_file,"ADJUSTMENT_WIDTH",adjustment_width,.true.)
-  delta_S_strat = 0.0; call read_param(param_file,"DELTA_S_STRAT",delta_S_strat,.true.)
-  adjustment_deltaS=0.; call read_param (param_file,"ADJUSTMENT_DELTAS",adjustment_deltaS,.true.)
-  front_wave_amp=0.; call read_param (param_file,"FRONT_WAVE_AMP",front_wave_amp)
-  front_wave_length=0.; call read_param (param_file,"FRONT_WAVE_LENGTH",front_wave_length)
-  front_wave_asym=0.; call read_param (param_file,"FRONT_WAVE_ASYM",front_wave_asym)
+  ! Parameters used by main model initialization
+  call get_param(param_file,mod,"MAXIMUM_DEPTH",max_depth,fail_if_missing=.true.,do_not_log=.true.)
+  call get_param(param_file,mod,"LENLON",lenlon,fail_if_missing=.true.,do_not_log=.true.)
+  call get_param(param_file,mod,"LENLAT",lenlat,fail_if_missing=.true.,do_not_log=.true.)
+  call get_param(param_file,mod,"S_REF",S_ref,fail_if_missing=.true.,do_not_log=.true.)
+  call get_param(param_file,mod,"MIN_THICKNESS",min_thickness,default=1.0e-3,do_not_log=.true.)
+
+  ! Parameters specific to this experiment configuration
+  call get_param(param_file,mod,"ADJUSTMENT_IC",adjustment_ic,           &
+                 "Indicates the coordinate mode for initialization:\n"// &
+                 " 0 - z coordinates\n"//                                &
+                 " 1 - layered isopycnal coordinates\n"//                &
+                 " 2 - continuous isopycnal coordinates\n"//             &
+                 " 3 - terrain-following sigma coordinates\n",           &
+                 fail_if_missing=.true.)
+  call get_param(param_file,mod,"ADJUSTMENT_WIDTH",adjustment_width,     &
+                 "Width of frontal zone",                                &
+                 units="same as x,y",fail_if_missing=.true.)
+  call get_param(param_file,mod,"DELTA_S_STRAT",delta_S_strat,           &
+                 "Top-to-bottom salinity difference of stratification",  &
+                 units="PSU",fail_if_missing=.true.)
+  call get_param(param_file,mod,"ADJUSTMENT_DELTAS",adjustment_deltaS,   &
+                 "Salinity difference across front",                     &
+                 units="PSU",fail_if_missing=.true.)
+  call get_param(param_file,mod,"FRONT_WAVE_AMP",front_wave_amp,         &
+                 "Amplitude of trans-frontal wave perturbation",         &
+                 units="same as x,y",default=0.)
+  call get_param(param_file,mod,"FRONT_WAVE_LENGTH",front_wave_length,   &
+                 "Wave-length of trans-frontal wave perturbation",       &
+                 units="same as x,y",default=0.)
+  call get_param(param_file,mod,"FRONT_WAVE_ASYM",front_wave_asym,       &
+                 "Amplitude of frontal asymmetric perturbation",         &
+                 default=0.)
  
   ! WARNING: this routine specifies the interface heights so that the last layer
   !          is vanished, even at maximum depth. In order to have a uniform
@@ -192,20 +215,24 @@ subroutine adjustment_initialize_temperature_salinity ( T, S, h, G, param_file, 
   
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
-  call read_param(param_file,"LENLON",lenlon)
-  call read_param(param_file,"LENLAT",lenlat)
-  call read_param(param_file,"S_REF",S_ref,.true.)
-  call read_param(param_file,"T_REF",T_ref,.true.)
-  S_range = 2.0; call read_param(param_file,"S_RANGE",S_range,.false.)
-  T_range = 0.0; call read_param(param_file,"T_RANGE",T_range,.false.)
-  call read_param(param_file,"MAXIMUM_DEPTH",max_depth)
-  call read_param(param_file,"ADJUSTMENT_IC",adjustment_ic)
-  adjustment_width=0.; call read_param (param_file,"ADJUSTMENT_WIDTH",adjustment_width,.true.)
-  adjustment_deltaS=0.; call read_param (param_file,"ADJUSTMENT_DELTAS",adjustment_deltaS,.true.)
-  delta_S_strat = 0.0; call read_param(param_file,"DELTA_S_STRAT",delta_S_strat,.true.)
-  front_wave_amp=0.; call read_param (param_file,"FRONT_WAVE_AMP",front_wave_amp)
-  front_wave_length=0.; call read_param (param_file,"FRONT_WAVE_LENGTH",front_wave_length)
-  front_wave_asym=0.; call read_param (param_file,"FRONT_WAVE_ASYM",front_wave_asym)
+  ! Parameters used by main model initialization
+  call get_param(param_file,mod,"LENLON",lenlon,fail_if_missing=.true.,do_not_log=.true.)
+  call get_param(param_file,mod,"LENLAT",lenlat,fail_if_missing=.true.,do_not_log=.true.)
+  call get_param(param_file,mod,"S_REF",S_ref,fail_if_missing=.true.,do_not_log=.true.)
+  call get_param(param_file,mod,"T_REF",T_ref,fail_if_missing=.true.,do_not_log=.true.)
+  call get_param(param_file,mod,"S_RANGE",S_range, &
+                 default=2.0)
+  call get_param(param_file,mod,"T_RANGE",T_range, &
+                 default=0.0)
+  ! Parameters specific to this experiment configuration BUT logged in previous s/r
+  call get_param(param_file,mod,"MAXIMUM_DEPTH",max_depth,do_not_log=.true.)
+  call get_param(param_file,mod,"ADJUSTMENT_IC",adjustment_ic,do_not_log=.true.)
+  call get_param (param_file,mod,"ADJUSTMENT_WIDTH",adjustment_width,do_not_log=.true.)
+  call get_param (param_file,mod,"ADJUSTMENT_DELTAS",adjustment_deltaS,do_not_log=.true.)
+  call get_param(param_file,mod,"DELTA_S_STRAT",delta_S_strat,do_not_log=.true.)
+  call get_param (param_file,mod,"FRONT_WAVE_AMP",front_wave_amp,do_not_log=.true.)
+  call get_param (param_file,mod,"FRONT_WAVE_LENGTH",front_wave_length,do_not_log=.true.)
+  call get_param (param_file,mod,"FRONT_WAVE_ASYM",front_wave_asym,do_not_log=.true.)
 
   dSdz = -delta_S_strat/max_depth
   T(:,:,:) = 0.0
