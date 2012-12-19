@@ -225,24 +225,23 @@ subroutine adjustment_initialize_temperature_salinity ( T, S, h, G, param_file, 
   call get_param(param_file,mod,"T_RANGE",T_range, &
                  default=0.0)
   ! Parameters specific to this experiment configuration BUT logged in previous s/r
-  call get_param(param_file,mod,"MAXIMUM_DEPTH",max_depth,do_not_log=.true.)
-  call get_param(param_file,mod,"ADJUSTMENT_IC",adjustment_ic,do_not_log=.true.)
-  call get_param(param_file,mod,"ADJUSTMENT_WIDTH",adjustment_width,do_not_log=.true.)
-  call get_param(param_file,mod,"ADJUSTMENT_DELTAS",adjustment_deltaS,do_not_log=.true.)
-  call get_param(param_file,mod,"DELTA_S_STRAT",delta_S_strat,do_not_log=.true.)
-  call get_param(param_file,mod,"FRONT_WAVE_AMP",front_wave_amp,do_not_log=.true.)
-  call get_param(param_file,mod,"FRONT_WAVE_LENGTH",front_wave_length,do_not_log=.true.)
-  call get_param(param_file,mod,"FRONT_WAVE_ASYM",front_wave_asym,do_not_log=.true.)
+  call get_param(param_file,mod,"MAXIMUM_DEPTH",max_depth,fail_if_missing=.true.,do_not_log=.true.)
+  call get_param(param_file,mod,"ADJUSTMENT_IC",adjustment_ic,fail_if_missing=.true.,do_not_log=.true.)
+  call get_param(param_file,mod,"ADJUSTMENT_WIDTH",adjustment_width,fail_if_missing=.true.,do_not_log=.true.)
+  call get_param(param_file,mod,"ADJUSTMENT_DELTAS",adjustment_deltaS,fail_if_missing=.true.,do_not_log=.true.)
+  call get_param(param_file,mod,"DELTA_S_STRAT",delta_S_strat,fail_if_missing=.true.,do_not_log=.true.)
+  call get_param(param_file,mod,"FRONT_WAVE_AMP",front_wave_amp,default=0.,do_not_log=.true.)
+  call get_param(param_file,mod,"FRONT_WAVE_LENGTH",front_wave_length,default=0.,do_not_log=.true.)
+  call get_param(param_file,mod,"FRONT_WAVE_ASYM",front_wave_asym,default=0.,do_not_log=.true.)
 
-  dSdz = -delta_S_strat/max_depth
   T(:,:,:) = 0.0
   S(:,:,:) = 0.0
-  if (adjustment_ic>999) write(0,*) ' adjustment_ic=',adjustment_ic ! This line needed to fool the Gnu compiler!!!! -AJA
   
   ! Linear salinity profile
   select case ( adjustment_ic )
 
-    case ( IC_Z, IC_SIGMA, IC_RHO_C )
+    case ( IC_Z, IC_SIGMA )
+      dSdz = -delta_S_strat/max_depth
       do j=js,je ; do i=is,ie
           eta1d(nz+1)=-G%D(i,j)
           do k=nz,1,-1
@@ -271,7 +270,7 @@ subroutine adjustment_initialize_temperature_salinity ( T, S, h, G, param_file, 
    !     T(i,j,:)=T(i,j,:)/x*(max_depth*1.5/real(nz))
       enddo ; enddo
 
-    case ( IC_RHO_L ) 
+    case ( IC_RHO_L, IC_RHO_C ) 
       do k = 1,nz
         S(:,:,k) = S_ref + S_range * ( (real(k)-0.5) / real( nz ) )
    !    x = abs(S(1,1,k) - 0.5*real(nz-1)/real(nz)*S_range)/S_range*real(2*nz)
