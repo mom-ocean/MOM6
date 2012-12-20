@@ -417,7 +417,7 @@ NJPROC_IO = 1                  !    The number of processors used for I/O in the
                                !  tracer package is used.
 
 !  Specify the properties of the diapycnal viscosity and diffusion.
-#define ADIABATIC               !    There are no diapycnal mass fluxes if
+#undef  ADIABATIC               !    There are no diapycnal mass fluxes if
                                !  ADIABATIC is defined. This assumes that
                                !  KD = KDML = 0.0 and that there is no buoyancy
                                !  forcing, but makes the model faster by
@@ -563,7 +563,7 @@ NJPROC_IO = 1                  !    The number of processors used for I/O in the
 #undef  VARIABLE_BUOYFORCE     !    If VARIABLE_BUOYFORCE is defined the surface
                                !  fluxes of buoyancy or heat and fresh water
                                !  are recalculated every coupling time step.
-#define BUOY_CONFIG "zero"     !    Method for determining buoyancy forcing
+#define BUOY_CONFIG "NONE"     !    Method for determining buoyancy forcing
                                !  (can be file, zero or USER).
 
 #undef  VARIABLE_WINDS         !    If the wind stresses vary with time, define
