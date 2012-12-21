@@ -44,6 +44,8 @@ public calculate_compress, calculate_density, query_compressible
 public calculate_density_derivs, calculate_2_densities
 public select_eqn_of_state, deselect_eqn_of_state
 public int_density_dz, int_specific_vol_dp
+public int_density_dz_generic_plm, int_density_dz_generic_ppm
+public int_density_dz_generic_plm_analytic
 public calculate_TFreeze
 
 interface calculate_density
@@ -708,6 +710,1045 @@ subroutine int_density_dz_generic(T, S, z_t, z_b, rho_ref, rho_0, G_e, G, &
                            12.0*intz(3))
   enddo ; enddo ; endif
 end subroutine int_density_dz_generic
+
+
+! ==============================================================================
+subroutine int_density_dz_generic_cell (T_t_arg, T_b_arg, S_t_arg, S_b_arg, &
+                                        z_t_arg, z_b_arg, depth, rho_ref, &
+                                        rho_0, G_e, G, EOS, dpa, &
+                                        intz_dpa, intx_dpa, inty_dpa)
+  
+  ! Arguments
+  real, dimension(2), intent(in)     :: T_t_arg, T_b_arg, S_t_arg, S_b_arg
+  real, dimension(2), intent(inout)  :: z_t_arg, z_b_arg
+  real, dimension(2), intent(in)     :: depth
+  real, intent(in)                   :: rho_ref, rho_0, G_e
+  type(ocean_grid_type), intent(in)  :: G
+  type(EOS_type), pointer            :: EOS
+  real, dimension(2), intent(out)    :: dpa
+  real, dimension(2), intent(out)    :: intz_dpa
+  real, intent(out)                  :: intx_dpa
+  real, intent(out)                  :: inty_dpa
+  
+  ! Local variables
+  real    :: T_t(2), T_b(2)             ! top and bottom temperatures
+  real    :: S_t(2), S_b(2)             ! top and bottom salinities
+  real    :: z_t(2), z_b(2)             ! top and bottom heights
+  real    :: h1, h2                     ! cell thicknesses
+  real    :: T5(5), S5(5), p5(5), r5(5) ! temperature, salinity, pressure and
+                                        ! density at quadrature points
+  real    :: rho_anom
+  real    :: w_left, w_right, intz(5)
+  real    :: GxRho
+  real    :: dz
+  real    :: weight_t, weight_b
+  real    :: Dmin ! minimum depth
+  integer :: n, m
+  real, parameter :: C1_90 = 1.0/90.0 ! Rational constants
+  
+  GxRho = G_e * rho_0
+  
+  ! -------------------------------------------------------
+  ! 0. Modify cell geometry to take topography into account
+  ! -------------------------------------------------------
+  Dmin = min ( depth(1), depth(2) )
+
+  z_b(1) = max ( z_b_arg(1), -Dmin )
+  z_b(2) = max ( z_b_arg(2), -Dmin )
+  
+  if ( z_b(1) .GT. z_t_arg(1) ) z_b(1) = z_t_arg(1)
+  if ( z_b(2) .GT. z_t_arg(2) ) z_b(2) = z_t_arg(2)
+  
+  ! We do not modify the heights at the top of the cell
+  z_t = z_t_arg
+
+  h1 = z_t(1) - z_b(1)
+  h2 = z_t(2) - z_b(2)
+
+  ! Compute new salinities and temperatures at the bottom
+  S_b(1) = S_t_arg(1) + (S_b_arg(1)-S_t_arg(1)) * (h1 / (z_t_arg(1)-z_b_arg(1)))
+  S_b(2) = S_t_arg(2) + (S_b_arg(2)-S_t_arg(2)) * (h2 / (z_t_arg(2)-z_b_arg(2)))
+  
+  T_b(1) = T_t_arg(1) + (T_b_arg(1)-T_t_arg(1)) * (h1 / (z_t_arg(1)-z_b_arg(1)))
+  T_b(2) = T_t_arg(2) + (T_b_arg(2)-T_t_arg(2)) * (h2 / (z_t_arg(2)-z_b_arg(2)))
+  ! Temperatures and salinities at the top remain the same 
+  S_t = S_t_arg
+  T_t = T_t_arg
+  
+  ! Save layer bottom interface heights for use outside this routine
+  z_b_arg = z_b
+
+  ! ----------------------------------------
+  ! 1. Compute left side (vertical) integral
+  ! ----------------------------------------
+  dz = z_t(1) - z_b(1)
+  
+  do n = 1,5
+    weight_t = 0.25 * real(5-n)
+    weight_b = 1.0 - weight_t
+    S5(n) = weight_t * S_t(1) + weight_b * S_b(1)
+    T5(n) = weight_t * T_t(1) + weight_b * T_b(1)
+    p5(n) = -GxRho*(z_t(1) - 0.25*real(n-1)*dz)
+  enddo
+  
+  call calculate_density(T5, S5, p5, r5, 1, 5, EOS)
+    
+  ! Use Boole's rule to estimate the pressure anomaly change.
+  rho_anom = C1_90*(7.0*(r5(1)+r5(5)) + 32.0*(r5(2)+r5(4)) + 12.0*r5(3)) - rho_ref
+  dpa(1) = G_e*dz*rho_anom
+  
+  ! Use a Bode's-rule-like fifth-order accurate estimate of the 
+  ! double integral of the pressure anomaly.
+  r5 = r5 - rho_ref
+  intz_dpa(1) = 0.5*G_e*dz**2 * &
+  (rho_anom - C1_90*(16.0*(r5(4)-r5(2)) + 7.0*(r5(5)-r5(1))) )
+
+  ! -----------------------------------------
+  ! 2. Compute right side (vertical) integral
+  ! -----------------------------------------
+  dz = z_t(2) - z_b(2)
+  
+  do n = 1,5
+    weight_t = 0.25 * real(5-n)
+    weight_b = 1.0 - weight_t
+    S5(n) = weight_t * S_t(2) + weight_b * S_b(2)
+    T5(n) = weight_t * T_t(2) + weight_b * T_b(2)
+    p5(n) = -GxRho*(z_t(2) - 0.25*real(n-1)*dz)
+  enddo
+  
+  call calculate_density(T5, S5, p5, r5, 1, 5, EOS)
+    
+  ! Use Boole's rule to estimate the pressure anomaly change.
+  rho_anom = C1_90*(7.0*(r5(1)+r5(5)) + 32.0*(r5(2)+r5(4)) + 12.0*r5(3)) - rho_ref
+  dpa(2) = G_e*dz*rho_anom
+  
+  ! Use a Bode's-rule-like fifth-order accurate estimate of the 
+  ! double integral of the pressure anomaly.
+  r5 = r5 - rho_ref
+  intz_dpa(2) = 0.5*G_e*dz**2 * &
+  (rho_anom - C1_90*(16.0*(r5(4)-r5(2)) + 7.0*(r5(5)-r5(1))) )
+
+  ! ----------------------
+  ! 3. Compute x-intergral
+  ! ----------------------
+  !if (present(intx_dpa)) then
+
+    intz(1) = dpa(1)
+    intz(5) = dpa(2)
+
+    do m = 2,4
+      w_left = 0.25*real(5-m)
+      w_right = 1.0-w_left
+
+      dz = w_left*(z_t(1) - z_b(1)) + w_right*(z_t(2) - z_b(2))
+
+      T5(1) = w_left*T_t(1) + w_right*T_t(2)
+      T5(5) = w_left*T_b(1) + w_right*T_b(2)
+
+      S5(1) = w_left*S_t(1) + w_right*S_t(2)
+      S5(5) = w_left*S_b(1) + w_right*S_b(2)
+
+      p5(1) = -GxRho*(w_left*z_t(1) + w_right*z_t(2))
+      do n=2,5
+        p5(n) = p5(n-1) + GxRho*0.25*dz
+      enddo
+
+      do n = 1,5
+        weight_t = 0.25 * real(5-n)
+        weight_b = 1.0 - weight_t
+        S5(n) = weight_t * S5(1) + weight_b * S5(5)
+      enddo
+
+      call calculate_density (T5, S5, p5, r5, 1, 5, EOS)
+
+      ! Use Bode's rule to estimate the pressure anomaly change.
+      intz(m) = G_e*dz*( C1_90*(7.0*(r5(1)+r5(5)) + 32.0*(r5(2)+r5(4)) + &
+                                12.0*r5(3)) - rho_ref)
+    enddo
+
+    ! Use Bode's rule to integrate the bottom pressure anomaly values in x.
+    intx_dpa = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + &
+                      12.0*intz(3))
+  !end if ! check if intx_dpa is present
+
+  ! ---------------------
+  ! 4. Compute y-intergal
+  ! ---------------------
+  !if (present(inty_dpa)) then
+  
+    intz(1) = dpa(1)
+    intz(5) = dpa(2)
+
+    do m=2,4
+      w_left = 0.25*real(5-m)
+      w_right = 1.0-w_left
+
+      dz = w_left*(z_t(1) - z_b(2)) + w_right*(z_t(1) - z_b(2))
+
+      S5(1) = w_left*S_t(1) + w_right*S_t(2)
+      S5(5) = w_left*S_b(1) + w_right*S_b(2)
+      S5(1) = w_left*S_t(1) + w_right*S_t(2)
+      S5(5) = w_left*S_b(1) + w_right*S_b(2)
+      p5(1) = -GxRho*(w_left*z_t(1) + w_right*z_t(2))
+      do n=2,5
+        p5(n) = p5(n-1) + GxRho*0.25*dz
+      enddo
+      do n=1,5
+        weight_t = 0.25 * real(5-n)
+        weight_b = 1.0 - weight_t
+        S5(n) = weight_t * S5(1) + weight_b * S5(5)
+      enddo
+      call calculate_density(T5, S5, p5, r5, 1, 5, EOS)
+
+      ! Use Bode's rule to estimate the pressure anomaly change.
+      intz(m) = G_e*dz*( C1_90*(7.0*(r5(1)+r5(5)) + 32.0*(r5(2)+r5(4)) + &
+                         12.0*r5(3)) - rho_ref)
+      enddo
+
+      ! Use Bode's rule to integrate the values.
+      inty_dpa = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + &
+                        12.0*intz(3))
+  
+  !end if ! check if inty_dpa is present
+ 
+end subroutine int_density_dz_generic_cell
+! ============================================================================
+
+
+! ==========================================================================
+! Compute pressure gradient force integrals for the case where T and S
+! are linear profiles.
+! ==========================================================================
+subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, & 
+                                       rho_0, G_e, G, EOS, dpa, &
+                                       intz_dpa, intx_dpa, inty_dpa)
+  real, dimension(NIMEM_,NJMEM_),  intent(in)  :: T_t, T_b, S_t, S_b, z_t, z_b
+  real,                            intent(in)  :: rho_ref, rho_0, G_e
+  type(ocean_grid_type),           intent(in)  :: G
+  type(EOS_type), pointer                      :: EOS
+  real, dimension(NIMEM_,NJMEM_),  intent(out) :: dpa
+  real, dimension(NIMEM_,NJMEM_),  optional, intent(out) :: intz_dpa
+  real, dimension(NIMEMB_,NJMEM_), optional, intent(out) :: intx_dpa
+  real, dimension(NIMEM_,NJMEMB_), optional, intent(out) :: inty_dpa
+! This subroutine calculates (by numerical quadrature) integrals of
+! pressure anomalies across layers, which are required for calculating the
+! finite-volume form pressure accelerations in a Boussinesq model.  The one
+! potentially dodgy assumtion here is that rho_0 is used both in the denominator
+! of the accelerations, and in the pressure used to calculated density (the
+! latter being -z*rho_0*G_e).  These two uses could be separated if need be.
+!
+! It is assumed that the salinity and temperature profiles are linear in the
+! vertical. The top and bottom values within each layer are provided and
+! a linear interpolation is used to compute intermediate values.
+!
+! Arguments: T - potential temperature relative to the surface in C
+!                (the 't' and 'b' subscripts refer to the values at
+!                 the top and the bottom of each layer)
+!  (in)      S - salinity in PSU.                                    
+!                (the 't' and 'b' subscripts refer to the values at
+!                 the top and the bottom of each layer)
+!  (in)      z_t - height at the top of the layer in m.           
+!  (in)      z_b - height at the top of the layer in m.           
+!  (in)      rho_ref - A mean density, in kg m-3, that is subtracted out to reduce
+!                    the magnitude of each of the integrals.
+!                    (The pressure is calucated as p~=-z*rho_0*G_e.)
+!  (in)      rho_0 - A density, in kg m-3, that is used to calculate the pressure
+!                    (as p~=-z*rho_0*G_e) used in the equation of state.
+!  (in)      G_e - The Earth's gravitational acceleration, in m s-2. 
+!  (in)      G - The ocean's grid structure.
+!  (in)      form_of_eos - integer that selects the eqn of state.
+!  (out)     dpa - The change in the pressure anomaly across the layer, 
+!                  in Pa.                                  
+!  (out,opt) intz_dpa - The integral through the thickness of the layer of the
+!                       pressure anomaly relative to the anomaly at the top of
+!                       the layer, in Pa m. 
+!  (out,opt) intx_dpa - The integral in x of the difference between the
+!                       pressure anomaly at the top and bottom of the layer
+!                       divided by the x grid spacing, in Pa.
+!  (out,opt) inty_dpa - The integral in y of the difference between the
+!                       pressure anomaly at the top and bottom of the layer
+!                       divided by the y grid spacing, in Pa.
+
+  real :: T5(5), S5(5), p5(5), r5(5)
+  real :: rho_anom
+  real :: w_left, w_right, intz(5)
+  real, parameter :: C1_90 = 1.0/90.0  ! Rational constants.
+  real :: GxRho, I_Rho
+  real :: dz
+  real :: weight_t, weight_b
+  integer :: Isq, Ieq, Jsq, Jeq, i, j, m, n
+
+  Isq = G%Iscq ; Ieq = G%Iecq ; Jsq = G%Jscq ; Jeq = G%Jecq
+
+  GxRho = G_e * rho_0
+  I_Rho = 1.0 / rho_0
+
+  ! =============================
+  ! 1. Compute vertical integrals
+  ! =============================
+  do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+    dz = z_t(i,j) - z_b(i,j)
+    do n=1,5
+      weight_t = 0.25 * real(5-n)
+      weight_b = 1.0 - weight_t
+      
+      p5(n) = -GxRho*(z_t(i,j) - 0.25*real(n-1)*dz)
+      ! Salinity and temperature points are linearly interpolated
+      S5(n) = weight_t * S_t(i,j) + weight_b * S_b(i,j)
+      T5(n) = weight_t * T_t(i,j) + weight_b * T_b(i,j)
+    enddo
+    call calculate_density(T5, S5, p5, r5, 1, 5, EOS)
+    
+    ! Use Bode's rule to estimate the pressure anomaly change.
+    rho_anom = C1_90*(7.0*(r5(1)+r5(5)) + 32.0*(r5(2)+r5(4)) + 12.0*r5(3)) - &
+           rho_ref
+    dpa(i,j) = G_e*dz*rho_anom
+    ! Use a Bode's-rule-like fifth-order accurate estimate of 
+    ! the double integral of the pressure anomaly.
+    r5 = r5 - rho_ref
+    if (present(intz_dpa)) intz_dpa(i,j) = 0.5*G_e*dz**2 * &
+          (rho_anom - C1_90*(16.0*(r5(4)-r5(2)) + 7.0*(r5(5)-r5(1))) )
+  enddo ; enddo ! end loops on j and i
+
+  ! ==================================================
+  ! 2. Compute horizontal integrals in the x direction
+  ! ==================================================
+  if (present(intx_dpa)) then ; do j=G%jsc,G%jec ; do I=Isq,Ieq
+    intz(1) = dpa(i,j) ; intz(5) = dpa(i+1,j)
+    do m=2,4
+      w_left = 0.25*real(5-m) ; w_right = 1.0-w_left
+      dz = w_left*(z_t(i,j) - z_b(i,j)) + w_right*(z_t(i+1,j) - z_b(i+1,j))
+
+      ! Salinity and temperature points are linearly interpolated in
+      ! the horizontal. The subscript (1) refers to the top value in
+      ! the vertical profile while subscript (5) refers to the bottom
+      ! value in the vertical profile.
+      T5(1) = w_left*T_t(i,j) + w_right*T_t(i+1,j)
+      T5(5) = w_left*T_b(i,j) + w_right*T_b(i+1,j)
+
+      S5(1) = w_left*S_t(i,j) + w_right*S_t(i+1,j)
+      S5(5) = w_left*S_b(i,j) + w_right*S_b(i+1,j)
+      
+      p5(1) = -GxRho*(w_left*z_t(i,j) + w_right*z_t(i+1,j))
+
+      ! Pressure
+      do n=2,5
+        p5(n) = p5(n-1) + GxRho*0.25*dz
+      enddo
+      
+      ! Salinity and temperature (linear interpolation in the vertical)
+      do n=1,5
+        weight_t = 0.25 * real(5-n)
+        weight_b = 1.0 - weight_t
+        S5(n) = weight_t * S5(1) + weight_b * S5(5)
+        T5(n) = weight_t * T5(1) + weight_b * T5(5)
+      enddo
+
+      call calculate_density(T5, S5, p5, r5, 1, 5, EOS)
+    
+    ! Use Bode's rule to estimate the pressure anomaly change.
+      intz(m) = G_e*dz*( C1_90*(7.0*(r5(1)+r5(5)) + 32.0*(r5(2)+r5(4)) + &
+                            12.0*r5(3)) - rho_ref)
+    enddo
+    ! Use Bode's rule to integrate the bottom pressure anomaly values in x.
+    intx_dpa(i,j) = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + &
+                           12.0*intz(3))
+  enddo ; enddo ; endif
+
+  ! ==================================================
+  ! 3. Compute horizontal integrals in the y direction
+  ! ==================================================
+  if (present(inty_dpa)) then ; do J=Jsq,Jeq ; do i=G%isc,G%iec
+    intz(1) = dpa(i,j) ; intz(5) = dpa(i,j+1)
+    do m=2,4
+      w_left = 0.25*real(5-m) ; w_right = 1.0-w_left
+      dz = w_left*(z_t(i,j) - z_b(i,j)) + w_right*(z_t(i,j+1) - z_b(i,j+1))
+
+      ! Salinity and temperature points are linearly interpolated in
+      ! the horizontal. The subscript (1) refers to the top value in
+      ! the vertical profile while subscript (5) refers to the bottom
+      ! value in the vertical profile.
+      T5(1) = w_left*T_t(i,j) + w_right*T_t(i,j+1)
+      T5(5) = w_left*T_b(i,j) + w_right*T_b(i,j+1)
+      
+      S5(1) = w_left*S_t(i,j) + w_right*S_t(i,j+1)
+      S5(5) = w_left*S_b(i,j) + w_right*S_b(i,j+1)
+      
+      p5(1) = -GxRho*(w_left*z_t(i,j) + w_right*z_t(i,j+1))
+
+      ! Pressure
+      do n=2,5
+        p5(n) = p5(n-1) + GxRho*0.25*dz
+      enddo
+
+      ! Salinity and temperature (linear interpolation in the vertical)
+      do n=1,5
+        weight_t = 0.25 * real(5-n)
+        weight_b = 1.0 - weight_t
+        S5(n) = weight_t * S5(1) + weight_b * S5(5)
+        T5(n) = weight_t * T5(1) + weight_b * T5(5)
+      enddo
+      
+      call calculate_density(T5, S5, p5, r5, 1, 5, EOS)
+    
+    ! Use Bode's rule to estimate the pressure anomaly change.
+      intz(m) = G_e*dz*( C1_90*(7.0*(r5(1)+r5(5)) + 32.0*(r5(2)+r5(4)) + &
+                            12.0*r5(3)) - rho_ref)
+    enddo
+    ! Use Bode's rule to integrate the values.
+    inty_dpa(i,j) = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + &
+                           12.0*intz(3))
+  enddo ; enddo ; endif
+end subroutine int_density_dz_generic_plm
+! ==========================================================================
+! Above is the routine where only the S and T profiles are modified
+! The real topography is still used
+! ==========================================================================
+
+! ==========================================================================
+! Compute pressure gradient force integrals for the case where T and S
+! are parabolic profiles
+! ==========================================================================
+subroutine int_density_dz_generic_ppm (T, T_t, T_b, S, S_t, S_b, &
+                                       z_t, z_b, rho_ref, rho_0, G_e, G, &
+                                       EOS, dpa, intz_dpa, intx_dpa, inty_dpa)
+                                  
+  real, dimension(NIMEM_,NJMEM_),  intent(in)  :: T, T_t, T_b, S, S_t, S_b, &
+                                                  z_t, z_b
+  real,                            intent(in)  :: rho_ref, rho_0, G_e
+  type(ocean_grid_type),           intent(in)  :: G
+  type(EOS_type), pointer                      :: EOS
+  real, dimension(NIMEM_,NJMEM_),  intent(out) :: dpa
+  real, dimension(NIMEM_,NJMEM_),  optional, intent(out) :: intz_dpa
+  real, dimension(NIMEMB_,NJMEM_), optional, intent(out) :: intx_dpa
+  real, dimension(NIMEM_,NJMEMB_), optional, intent(out) :: inty_dpa
+! This subroutine calculates (by numerical quadrature) integrals of
+! pressure anomalies across layers, which are required for calculating the
+! finite-volume form pressure accelerations in a Boussinesq model.  The one
+! potentially dodgy assumtion here is that rho_0 is used both in the denominator
+! of the accelerations, and in the pressure used to calculated density (the
+! latter being -z*rho_0*G_e).  These two uses could be separated if need be.
+!
+! It is assumed that the salinity and temperature profiles are linear in the
+! vertical. The top and bottom values within each layer are provided and
+! a linear interpolation is used to compute intermediate values.
+!
+! Arguments: T - potential temperature relative to the surface in C
+!                (the 't' and 'b' subscripts refer to the values at
+!                 the top and the bottom of each layer)
+!  (in)      S - salinity in PSU.                                    
+!                (the 't' and 'b' subscripts refer to the values at
+!                 the top and the bottom of each layer)
+!  (in)      z_t - height at the top of the layer in m.           
+!  (in)      z_b - height at the top of the layer in m.           
+!  (in)      rho_ref - A mean density, in kg m-3, that is subtracted out to reduce
+!                    the magnitude of each of the integrals.
+!                    (The pressure is calucated as p~=-z*rho_0*G_e.)
+!  (in)      rho_0 - A density, in kg m-3, that is used to calculate the pressure
+!                    (as p~=-z*rho_0*G_e) used in the equation of state.
+!  (in)      G_e - The Earth's gravitational acceleration, in m s-2. 
+!  (in)      G - The ocean's grid structure.
+!  (in)      form_of_eos - integer that selects the eqn of state.
+!  (out)     dpa - The change in the pressure anomaly across the layer, 
+!                  in Pa.                                  
+!  (out,opt) intz_dpa - The integral through the thickness of the layer of the
+!                       pressure anomaly relative to the anomaly at the top of
+!                       the layer, in Pa m. 
+!  (out,opt) intx_dpa - The integral in x of the difference between the
+!                       pressure anomaly at the top and bottom of the layer
+!                       divided by the x grid spacing, in Pa.
+!  (out,opt) inty_dpa - The integral in y of the difference between the
+!                       pressure anomaly at the top and bottom of the layer
+!                       divided by the y grid spacing, in Pa.
+
+  real :: T5(5), S5(5), p5(5), r5(5)
+  real :: rho_anom
+  real :: w_left, w_right, intz(5)
+  real, parameter :: C1_90 = 1.0/90.0  ! Rational constants.
+  real :: GxRho, I_Rho
+  real :: dz
+  real :: weight_t, weight_b
+  real :: s0, s1, s2                   ! parabola coefficients for S
+  real :: t0, t1, t2                   ! parabola coefficients for T
+  real :: xi                           ! normalized coordinate
+  real :: T_top, T_mid, T_bot
+  real :: S_top, S_mid, S_bot
+  integer :: Isq, Ieq, Jsq, Jeq, i, j, m, n
+  real, dimension(4) :: x, y
+  real, dimension(9) :: S_node, T_node, p_node, r_node
+
+  Isq = G%Iscq ; Ieq = G%Iecq ; Jsq = G%Jscq ; Jeq = G%Jecq
+
+  GxRho = G_e * rho_0
+  I_Rho = 1.0 / rho_0
+
+  ! =============================
+  ! 1. Compute vertical integrals
+  ! =============================
+  do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+    dz = z_t(i,j) - z_b(i,j)
+    
+    ! Coefficients of the parabola for S
+    s0 = S_t(i,j)
+    s1 = 6.0 * S(i,j) - 4.0 * S_t(i,j) - 2.0 * S_b(i,j)
+    s2 = 3.0 * ( S_t(i,j) + S_b(i,j) - 2.0*S(i,j) )
+
+    ! Coefficients of the parabola for T
+    t0 = T_t(i,j)
+    t1 = 6.0 * T(i,j) - 4.0 * T_t(i,j) - 2.0 * T_b(i,j)
+    t2 = 3.0 * ( T_t(i,j) + T_b(i,j) - 2.0*T(i,j) )
+    
+    do n=1,5
+      p5(n) = -GxRho*(z_t(i,j) - 0.25*real(n-1)*dz)
+      
+      ! Parabolic reconstruction for T and S
+      xi = 0.25 * ( n - 1 )
+      S5(n) = s0 + s1 * xi + s2 * xi**2
+      T5(n) = t0 + t1 * xi + t2 * xi**2
+    enddo
+    
+    call calculate_density(T5, S5, p5, r5, 1, 5, EOS)
+    
+    ! Use Bode's rule to estimate the pressure anomaly change.
+    !rho_anom = C1_90*(7.0*(r5(1)+r5(5)) + 32.0*(r5(2)+r5(4)) + 12.0*r5(3)) - &
+    !       rho_ref
+           
+    rho_anom = 1000.0 + S(i,j) - rho_ref;   
+    dpa(i,j) = G_e*dz*rho_anom
+
+    ! Use a Bode's-rule-like fifth-order accurate estimate of 
+    ! the double integral of the pressure anomaly.
+    !r5 = r5 - rho_ref
+    !if (present(intz_dpa)) intz_dpa(i,j) = 0.5*G_e*dz**2 * &
+    !      (rho_anom - C1_90*(16.0*(r5(4)-r5(2)) + 7.0*(r5(5)-r5(1))) )
+
+    intz_dpa(i,j) = 0.5 * G_e * dz**2 * ( 1000.0 - rho_ref + s0 + s1/3.0 + &
+                                    s2/6.0 )
+  enddo ; enddo ! end loops on j and i
+
+  ! ==================================================
+  ! 2. Compute horizontal integrals in the x direction
+  ! ==================================================
+  if (present(intx_dpa)) then ; do j=G%jsc,G%jec ; do I=Isq,Ieq
+    intz(1) = dpa(i,j) ; intz(5) = dpa(i+1,j)
+    do m=2,4
+      w_left = 0.25*real(5-m) ; w_right = 1.0-w_left
+      dz = w_left*(z_t(i,j) - z_b(i,j)) + w_right*(z_t(i+1,j) - z_b(i+1,j))
+      
+      ! Salinity and temperature points are linearly interpolated in
+      ! the horizontal. The subscript (1) refers to the top value in
+      ! the vertical profile while subscript (5) refers to the bottom
+      ! value in the vertical profile.
+      T_top = w_left*T_t(i,j) + w_right*T_t(i+1,j)
+      T_mid = w_left*T(i,j)   + w_right*T(i+1,j)
+      T_bot = w_left*T_b(i,j) + w_right*T_b(i+1,j)
+      
+      S_top = w_left*S_t(i,j) + w_right*S_t(i+1,j)
+      S_mid = w_left*S(i,j)   + w_right*S(i+1,j)
+      S_bot = w_left*S_b(i,j) + w_right*S_b(i+1,j)
+      
+      p5(1) = -GxRho*(w_left*z_t(i,j) + w_right*z_t(i+1,j))
+      
+      ! Pressure
+      do n=2,5
+        p5(n) = p5(n-1) + GxRho*0.25*dz
+      enddo
+      
+      ! Coefficients of the parabola for S
+      s0 = S_top
+      s1 = 6.0 * S_mid - 4.0 * S_top - 2.0 * S_bot
+      s2 = 3.0 * ( S_top + S_bot - 2.0*S_mid )
+    
+      ! Coefficients of the parabola for T
+      t0 = T_top
+      t1 = 6.0 * T_mid - 4.0 * T_top - 2.0 * T_bot
+      t2 = 3.0 * ( T_top + T_bot - 2.0*T_mid )
+      
+      do n=1,5
+        ! Parabolic reconstruction for T and S
+        xi = 0.25 * ( n - 1 )
+        S5(n) = s0 + s1 * xi + s2 * xi**2
+        T5(n) = t0 + t1 * xi + t2 * xi**2
+      enddo
+
+      call calculate_density(T5, S5, p5, r5, 1, 5, EOS)
+    
+    ! Use Bode's rule to estimate the pressure anomaly change.
+      intz(m) = G_e*dz*( C1_90*(7.0*(r5(1)+r5(5)) + 32.0*(r5(2)+r5(4)) + &
+                            12.0*r5(3)) - rho_ref)
+    enddo
+    intx_dpa(i,j) = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + &
+                           12.0*intz(3))
+        
+    ! Use Gauss quadrature rule to compute integral
+
+    ! The following coordinates define the quadrilateral on which the integral
+    ! is computed
+    x(1) = 1.0
+    x(2) = 0.0
+    x(3) = 0.0
+    x(4) = 1.0
+    y(1) = z_t(i+1,j)   
+    y(2) = z_t(i,j) 
+    y(3) = z_b(i,j) 
+    y(4) = z_b(i+1,j)
+
+    T_node = 0.0
+    p_node = 0.0
+    
+    ! Nodal values for S
+
+    ! Parabolic reconstruction on the left
+    s0 = S_t(i,j)
+    s1 = 6.0 * S(i,j) - 4.0 * S_t(i,j) - 2.0 * S_b(i,j)
+    s2 = 3.0 * ( S_t(i,j) + S_b(i,j) - 2.0 * S(i,j) )
+    S_node(2) = s0
+    S_node(6) = s0 + 0.5 * s1 + 0.25 * s2
+    S_node(3) = s0 + s1 + s2
+    
+    ! Parabolic reconstruction on the left
+    s0 = S_t(i+1,j)
+    s1 = 6.0 * S(i+1,j) - 4.0 * S_t(i+1,j) - 2.0 * S_b(i+1,j)
+    s2 = 3.0 * ( S_t(i+1,j) + S_b(i+1,j) - 2.0 * S(i+1,j) )
+    S_node(1) = s0
+    S_node(8) = s0 + 0.5 * s1 + 0.25 * s2
+    S_node(4) = s0 + s1 + s2
+
+    S_node(5) = 0.5 * ( S_node(2) + S_node(1) )
+    S_node(9) = 0.5 * ( S_node(6) + S_node(8) )
+    S_node(7) = 0.5 * ( S_node(3) + S_node(4) )
+
+    call calculate_density ( T_node, S_node, p_node, r_node, 1, 9, EOS )
+    r_node = r_node - rho_ref
+
+    call compute_integral_quadratic ( x, y, r_node, intx_dpa(i,j) )
+
+    intx_dpa(i,j) = intx_dpa(i,j) * G_e
+    
+  enddo ; enddo ; endif
+
+  ! ==================================================
+  ! 3. Compute horizontal integrals in the y direction
+  ! ==================================================
+  if (present(inty_dpa)) then ; do J=Jsq,Jeq ; do i=G%isc,G%iec
+    
+    inty_dpa(i,j) = 0.0
+    
+  enddo ; enddo ; endif
+
+end subroutine int_density_dz_generic_ppm
+
+
+! ==========================================================================
+! Compute pressure gradient force integrals for the case where T and S
+! are linear profiles (analytical !!)
+! ==========================================================================
+subroutine int_density_dz_generic_plm_analytic (T_t, T_b, S_t, S_b, z_t, &
+            z_b, rho_ref, rho_0, G_e, G, EOS, dpa, intz_dpa, intx_dpa, inty_dpa)
+                                  
+  real, dimension(NIMEM_,NJMEM_),  intent(in)  :: T_t, T_b, S_t, S_b, z_t, z_b
+  real,                            intent(in)  :: rho_ref, rho_0, G_e
+  type(ocean_grid_type),           intent(in)  :: G
+  type(EOS_type), pointer                      :: EOS
+  real, dimension(NIMEM_,NJMEM_),  intent(out) :: dpa
+  real, dimension(NIMEM_,NJMEM_),  optional, intent(out) :: intz_dpa
+  real, dimension(NIMEMB_,NJMEM_), optional, intent(out) :: intx_dpa
+  real, dimension(NIMEM_,NJMEMB_), optional, intent(out) :: inty_dpa
+! This subroutine calculates (by numerical quadrature) integrals of
+! pressure anomalies across layers, which are required for calculating the
+! finite-volume form pressure accelerations in a Boussinesq model.  The one
+! potentially dodgy assumtion here is that rho_0 is used both in the denominator
+! of the accelerations, and in the pressure used to calculated density (the
+! latter being -z*rho_0*G_e).  These two uses could be separated if need be.
+!
+! It is assumed that the salinity and temperature profiles are linear in the
+! vertical. The top and bottom values within each layer are provided and
+! a linear interpolation is used to compute intermediate values.
+!
+! Arguments: T - potential temperature relative to the surface in C
+!                (the 't' and 'b' subscripts refer to the values at
+!                 the top and the bottom of each layer)
+!  (in)      S - salinity in PSU.                                    
+!                (the 't' and 'b' subscripts refer to the values at
+!                 the top and the bottom of each layer)
+!  (in)      z_t - height at the top of the layer in m.           
+!  (in)      z_b - height at the top of the layer in m.           
+!  (in)      rho_ref - A mean density, in kg m-3, that is subtracted out to reduce
+!                    the magnitude of each of the integrals.
+!                    (The pressure is calucated as p~=-z*rho_0*G_e.)
+!  (in)      rho_0 - A density, in kg m-3, that is used to calculate the pressure
+!                    (as p~=-z*rho_0*G_e) used in the equation of state.
+!  (in)      G_e - The Earth's gravitational acceleration, in m s-2. 
+!  (in)      G - The ocean's grid structure.
+!  (in)      form_of_eos - integer that selects the eqn of state.
+!  (out)     dpa - The change in the pressure anomaly across the layer, 
+!                  in Pa.                                  
+!  (out,opt) intz_dpa - The integral through the thickness of the layer of the
+!                       pressure anomaly relative to the anomaly at the top of
+!                       the layer, in Pa m. 
+!  (out,opt) intx_dpa - The integral in x of the difference between the
+!                       pressure anomaly at the top and bottom of the layer
+!                       divided by the x grid spacing, in Pa.
+!  (out,opt) inty_dpa - The integral in y of the difference between the
+!                       pressure anomaly at the top and bottom of the layer
+!                       divided by the y grid spacing, in Pa.
+
+  real :: T5(5), S5(5), p5(5), r5(5)
+  real :: rho_anom
+  real :: w_left, w_right, intz(5)
+  real, parameter :: C1_90 = 1.0/90.0  ! Rational constants.
+  real :: GxRho, I_Rho
+  real :: dz, dS
+  real :: weight_t, weight_b
+  integer :: Isq, Ieq, Jsq, Jeq, i, j, m, n
+  
+  real, dimension(4) :: x, y, f
+  
+  Isq = G%Iscq ; Ieq = G%Iecq ; Jsq = G%Jscq ; Jeq = G%Jecq
+
+  GxRho = G_e * rho_0
+  I_Rho = 1.0 / rho_0
+
+  ! =============================
+  ! 1. Compute vertical integrals
+  ! =============================
+  do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+    dz = z_t(i,j) - z_b(i,j)
+    dS = S_t(i,j) - S_b(i,j)
+    do n=1,5
+      weight_t = 0.25 * real(5-n)
+      weight_b = 1.0 - weight_t
+      
+      p5(n) = -GxRho*(z_t(i,j) - 0.25*real(n-1)*dz)
+      
+      ! Salinity and temperature points are linearly interpolated
+      S5(n) = weight_t * S_t(i,j) + weight_b * S_b(i,j)
+      T5(n) = weight_t * T_t(i,j) + weight_b * T_b(i,j)
+    enddo
+    
+    call calculate_density(T5, S5, p5, r5, 1, 5, EOS)
+    
+    ! Use Bode's rule to estimate the pressure anomaly change.
+    rho_anom = C1_90*(7.0*(r5(1)+r5(5)) + 32.0*(r5(2)+r5(4)) + 12.0*r5(3)) - &
+           rho_ref
+    dpa(i,j) = G_e*dz*rho_anom
+    
+    ! Pressure anomaly change (computed analytically based on linear EOS)      
+    rho_anom = 1000.0 + S_b(i,j) + 0.5 * dS - rho_ref
+    dpa(i,j) = G_e * dz * rho_anom
+    
+    ! Use a Bode's-rule-like fifth-order accurate estimate of 
+    ! the double integral of the pressure anomaly.
+    r5 = r5 - rho_ref
+    if (present(intz_dpa)) intz_dpa(i,j) = 0.5*G_e*dz**2 * &
+          (rho_anom - C1_90*(16.0*(r5(4)-r5(2)) + 7.0*(r5(5)-r5(1))) )
+
+    intz_dpa(i,j) = ( 0.5 * (S_b(i,j)+1000.0-rho_ref) + &
+                      (1.0/3.0) * dS ) * G_e * dz**2
+  
+  enddo ; enddo ! end loops on j and i
+
+  ! ==================================================
+  ! 2. Compute horizontal integrals in the x direction
+  ! ==================================================
+  if (present(intx_dpa)) then ; do j=G%jsc,G%jec ; do I=Isq,Ieq
+    
+    ! Use Gauss quadrature rule to compute integral
+    x(1) = 1.0
+    x(2) = 0.0
+    x(3) = 0.0
+    x(4) = 1.0
+    y(1) = z_t(i+1,j)   
+    y(2) = z_t(i,j) 
+    y(3) = z_b(i,j) 
+    y(4) = z_b(i+1,j)
+    f(1) = 1000.0 + S_t(i+1,j) - rho_ref
+    f(2) = 1000.0 + S_t(i,j) - rho_ref
+    f(3) = 1000.0 + S_b(i,j) - rho_ref
+    f(4) = 1000.0 + S_b(i+1,j) - rho_ref
+    
+    call compute_integral_bilinear ( x, y, f, intx_dpa(i,j) )
+
+    intx_dpa(i,j) = intx_dpa(i,j) * G_e
+    
+  enddo ; enddo ; endif
+
+  ! ==================================================
+  ! 3. Compute horizontal integrals in the y direction
+  ! ==================================================
+  if (present(inty_dpa)) then ; do J=Jsq,Jeq ; do i=G%isc,G%iec
+    
+    ! Use Gauss quadrature rule to compute integral
+    x(1) = 1.0
+    x(2) = 0.0
+    x(3) = 0.0
+    x(4) = 1.0
+    y(1) = z_t(i,j+1)   
+    y(2) = z_t(i,j) 
+    y(3) = z_b(i,j) 
+    y(4) = z_b(i,j+1)
+    f(1) = 1000.0 + S_t(i,j+1) - rho_ref
+    f(2) = 1000.0 + S_t(i,j) - rho_ref
+    f(3) = 1000.0 + S_b(i,j) - rho_ref
+    f(4) = 1000.0 + S_b(i,j+1) - rho_ref
+    
+    call compute_integral_bilinear ( x, y, f, inty_dpa(i,j) )
+
+    inty_dpa(i,j) = inty_dpa(i,j) * G_e
+
+  enddo ; enddo ; endif
+
+end subroutine int_density_dz_generic_plm_analytic
+
+
+! =============================================================================
+! Compute integral of bilinear function
+! =============================================================================
+subroutine compute_integral_bilinear ( x, y, f, integral )
+
+  ! Arguments
+  real, intent(in), dimension(4)    :: x, y, f
+  real, intent(out)                 :: integral
+
+  ! Local variables
+  integer               :: i, k
+  real, dimension(4)    :: weight, xi, eta          ! integration points
+  real                  :: f_k
+  real                  :: dxdxi, dxdeta
+  real                  :: dydxi, dydeta
+  real, dimension(4)    :: phi, dphidxi, dphideta
+  real                  :: jacobian_k
+
+  ! Quadrature rule
+  weight(:) = 1.0
+  xi(1) = - sqrt(3.0) / 3.0
+  xi(2) = sqrt(3.0) / 3.0
+  xi(3) = sqrt(3.0) / 3.0
+  xi(4) = - sqrt(3.0) / 3.0
+  eta(1) = - sqrt(3.0) / 3.0
+  eta(2) = - sqrt(3.0) / 3.0
+  eta(3) = sqrt(3.0) / 3.0
+  eta(4) = sqrt(3.0) / 3.0
+
+  integral = 0.0
+
+  ! Integration loop
+  do k = 1,4
+
+    ! Evaluate shape functions and gradients
+    call evaluate_shape_bilinear ( xi(k), eta(k), phi, dphidxi, dphideta )
+    
+    ! Determine gradient of global coordinate at integration point
+    dxdxi  = 0.0
+    dxdeta = 0.0
+    dydxi  = 0.0
+    dydeta = 0.0
+
+    do i = 1,4
+      dxdxi  = dxdxi  + x(i) * dphidxi(i)
+      dxdeta = dxdeta + x(i) * dphideta(i)
+      dydxi  = dydxi  + y(i) * dphidxi(i)
+      dydeta = dydeta + y(i) * dphideta(i)
+    enddo
+
+    ! Evaluate Jacobian at integration point
+    jacobian_k = dxdxi*dydeta - dydxi*dxdeta
+
+    ! Evaluate function at integration point
+    f_k = 0.0
+    do i = 1,4
+      f_k = f_k + f(i) * phi(i)
+    enddo
+
+    integral = integral + weight(k) * f_k * jacobian_k
+
+  enddo ! end integration loop
+
+end subroutine compute_integral_bilinear
+
+
+! =============================================================================
+! Compute integral of quadratic function
+! =============================================================================
+subroutine compute_integral_quadratic ( x, y, f, integral )
+
+  ! Arguments
+  real, intent(in), dimension(4)    :: x, y
+  real, intent(in), dimension(9)    :: f
+  real, intent(out)                 :: integral
+
+  ! Local variables
+  integer               :: i, k
+  real, dimension(9)    :: weight, xi, eta          ! integration points
+  real                  :: f_k
+  real                  :: dxdxi, dxdeta
+  real                  :: dydxi, dydeta
+  real, dimension(4)    :: phiiso, dphiisodxi, dphiisodeta
+  real, dimension(9)    :: phi, dphidxi, dphideta
+  real                  :: jacobian_k
+  real                  :: t
+
+  ! Quadrature rule (4 points)
+  !weight(:) = 1.0
+  !xi(1) = - sqrt(3.0) / 3.0
+  !xi(2) = sqrt(3.0) / 3.0
+  !xi(3) = sqrt(3.0) / 3.0
+  !xi(4) = - sqrt(3.0) / 3.0
+  !eta(1) = - sqrt(3.0) / 3.0
+  !eta(2) = - sqrt(3.0) / 3.0
+  !eta(3) = sqrt(3.0) / 3.0
+  !eta(4) = sqrt(3.0) / 3.0
+  
+  ! Quadrature rule (9 points)
+  t = sqrt(3.0/5.0)
+  weight(1) = 25.0/81.0 ; xi(1) = -t ; eta(1) = t
+  weight(2) = 40.0/81.0 ; xi(2) = .0 ; eta(2) = t
+  weight(3) = 25.0/81.0 ; xi(3) =  t ; eta(3) = t
+  weight(4) = 40.0/81.0 ; xi(4) = -t ; eta(4) = .0
+  weight(5) = 64.0/81.0 ; xi(5) = .0 ; eta(5) = .0
+  weight(6) = 40.0/81.0 ; xi(6) =  t ; eta(6) = .0
+  weight(7) = 25.0/81.0 ; xi(7) = -t ; eta(7) = -t
+  weight(8) = 40.0/81.0 ; xi(8) = .0 ; eta(8) = -t
+  weight(9) = 25.0/81.0 ; xi(9) =  t ; eta(9) = -t
+
+  integral = 0.0
+
+  ! Integration loop
+  do k = 1,9
+
+    ! Evaluate shape functions and gradients for isomorphism
+    call evaluate_shape_bilinear ( xi(k), eta(k), phiiso, &
+                                   dphiisodxi, dphiisodeta )
+    
+    ! Determine gradient of global coordinate at integration point
+    dxdxi  = 0.0
+    dxdeta = 0.0
+    dydxi  = 0.0
+    dydeta = 0.0
+
+    do i = 1,4
+      dxdxi  = dxdxi  + x(i) * dphiisodxi(i)
+      dxdeta = dxdeta + x(i) * dphiisodeta(i)
+      dydxi  = dydxi  + y(i) * dphiisodxi(i)
+      dydeta = dydeta + y(i) * dphiisodeta(i)
+    enddo
+
+    ! Evaluate Jacobian at integration point
+    jacobian_k = dxdxi*dydeta - dydxi*dxdeta
+
+    ! Evaluate shape functions for interpolation
+    call evaluate_shape_quadratic ( xi(k), eta(k), phi, dphidxi, dphideta )
+    
+    ! Evaluate function at integration point
+    f_k = 0.0
+    do i = 1,9
+      f_k = f_k + f(i) * phi(i)
+    enddo
+
+    integral = integral + weight(k) * f_k * jacobian_k
+
+  enddo ! end integration loop
+
+end subroutine compute_integral_quadratic
+
+
+! =============================================================================
+! Evaluation of the four bilinear shape fn and their gradients at (xi,eta)
+! =============================================================================
+subroutine evaluate_shape_bilinear ( xi, eta, phi, dphidxi, dphideta )
+
+  ! Arguments
+  real, intent(in)                  :: xi, eta
+  real, dimension(4), intent(out)   :: phi, dphidxi, dphideta
+
+  ! The shape functions within the parent element are defined as shown
+  ! here:
+  !
+  !    (-1,1) 2 o------------o 1 (1,1)
+  !             |            |
+  !             |            |
+  !             |            |
+  !             |            |
+  !   (-1,-1) 3 o------------o 4 (1,-1)
+  !
+  
+  phi(1) = 0.25 * ( 1 + xi ) * ( 1 + eta )
+  phi(2) = 0.25 * ( 1 - xi ) * ( 1 + eta )
+  phi(3) = 0.25 * ( 1 - xi ) * ( 1 - eta )
+  phi(4) = 0.25 * ( 1 + xi ) * ( 1 - eta )
+
+  dphidxi(1) = 0.25 * ( 1 + eta )
+  dphidxi(2) = - 0.25 * ( 1 + eta )
+  dphidxi(3) = - 0.25 * ( 1 - eta )
+  dphidxi(4) = 0.25 * ( 1 - eta )
+  
+  dphideta(1) = 0.25 * ( 1 + xi )
+  dphideta(2) = 0.25 * ( 1 - xi )
+  dphideta(3) = - 0.25 * ( 1 - xi )
+  dphideta(4) = - 0.25 * ( 1 + xi )
+
+end subroutine evaluate_shape_bilinear
+
+
+! =============================================================================
+! Evaluation of the nine quadratic shape fn and their gradients at (xi,eta)
+! =============================================================================
+subroutine evaluate_shape_quadratic ( xi, eta, phi, dphidxi, dphideta )
+
+  ! Arguments
+  real, intent(in)                  :: xi, eta
+  real, dimension(9), intent(out)   :: phi, dphidxi, dphideta
+
+  ! The quadratic shape functions within the parent element are 
+  ! defined as shown here:
+  !
+  !                 5 (0,1) 
+  !    (-1,1) 2 o------o------o 1 (1,1)
+  !             |             |
+  !             |   9 (0,0)   |
+  !    (-1,0) 6 o      o      o 8 (1,0) 
+  !             |             |
+  !             |             |
+  !   (-1,-1) 3 o------o------o 4 (1,-1)
+  !                 7 (0,-1)    
+  !                 
+  
+  phi      = 0.0
+  dphidxi  = 0.0
+  dphideta = 0.0
+  
+  phi(1) = 0.25 * xi * ( 1 + xi ) * eta * ( 1 + eta )
+  phi(2) = - 0.25 * xi * ( 1 - xi ) * eta * ( 1 + eta )
+  phi(3) = 0.25 * xi * ( 1 - xi ) * eta * ( 1 - eta )
+  phi(4) = - 0.25 * xi * ( 1 + xi ) * eta * ( 1 - eta )
+  phi(5) = 0.5 * ( 1 + xi ) * ( 1 - xi ) * eta * ( 1 + eta )
+  phi(6) = - 0.5 * xi * ( 1 - xi ) * ( 1 - eta ) * ( 1 + eta )
+  phi(7) = - 0.5 * ( 1 - xi ) * ( 1 + xi ) * eta * ( 1 - eta )
+  phi(8) = 0.5 * xi * ( 1 + xi ) * ( 1 - eta ) * ( 1 + eta )
+  phi(9) = ( 1 - xi ) * ( 1 + xi ) * ( 1 - eta ) * ( 1 + eta )
+
+  !dphidxi(1) = 0.25 * ( 1 + 2*xi ) * eta * ( 1 + eta )
+  !dphidxi(2) = - 0.25 * ( 1 - 2*xi ) * eta * ( 1 + eta )
+  !dphidxi(3) = 0.25 * ( 1 - 2*xi ) * eta * ( 1 - eta )
+  !dphidxi(4) = - 0.25 * ( 1 + 2*xi ) * eta * ( 1 - eta )
+  !dphidxi(5) = - xi * eta * ( 1 + eta )
+  !dphidxi(6) = - 0.5 * ( 1 - 2*xi ) * ( 1 - eta ) * ( 1 + eta )
+  !dphidxi(7) = xi * eta * ( 1 - eta )
+  !dphidxi(8) = 0.5 * ( 1 + 2*xi ) * ( 1 - eta ) * ( 1 + eta )
+  !dphidxi(9) = - 2 * xi * ( 1 - eta ) * ( 1 + eta )
+  
+  !dphideta(1) = 0.25 * xi * ( 1 + xi ) * ( 1 + 2*eta )
+  !dphideta(2) = - 0.25 * xi * ( 1 - xi ) * ( 1 + 2*eta )
+  !dphideta(3) = 0.25 * xi * ( 1 - xi ) * ( 1 - 2*eta )
+  !dphideta(4) = - 0.25 * xi * ( 1 + xi ) * ( 1 - 2*eta )
+  !dphideta(5) = 0.5 * ( 1 + xi ) * ( 1 - xi ) * ( 1 + 2*eta )
+  !dphideta(6) = xi * ( 1 - xi ) * eta
+  !dphideta(7) = - 0.5 * ( 1 - xi ) * ( 1 + xi ) * ( 1 - 2*eta )
+  !dphideta(8) = - xi * ( 1 + xi ) * eta
+  !dphideta(9) = - 2 * ( 1 - xi ) * ( 1 + xi ) * eta
+
+end subroutine evaluate_shape_quadratic
+! ==============================================================================
 
 subroutine int_spec_vol_dp_generic(T, S, p_t, p_b, alpha_ref, G, EOS, &
                                    dza, intp_dza, intx_dza, inty_dza, halo_size)

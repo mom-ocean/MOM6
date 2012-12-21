@@ -43,6 +43,15 @@ type, public :: regridding_opts_t
   ! Minimum thickness allowed when building the new grid through regridding
   real      :: min_thickness;
 
+  ! Indicates whether integrals for FV pressure gradient calculation will
+  ! use reconstruction of T/S.
+  ! By default, it is true when use_regridding=True
+  logical   :: reconstructForPressure
+
+  ! The form of the reconstruction of T/S for FV pressure gradient calculation.
+  ! By default, it is =1 (PLM)
+  integer   :: pressureReconstructionScheme
+
 end type regridding_opts_t
 
 ! -----------------------------------------------------------------------------
@@ -104,5 +113,13 @@ integer, parameter  :: INTEGRATION_PCM = 0  ! scope: global
 integer, parameter  :: INTEGRATION_PLM = 1  ! scope: global
 integer, parameter  :: INTEGRATION_PPM = 3  ! scope: global
 integer, parameter  :: INTEGRATION_PQM = 5  ! scope: global
+
+! -----------------------------------------------------------------------------
+! Reconstruction schemes for integrals in FV pressure gradient calculation 
+! -----------------------------------------------------------------------------
+
+! List of reconstruction schemes
+integer, parameter  :: PRESSURE_RECONSTRUCTION_PLM   = 1
+integer, parameter  :: PRESSURE_RECONSTRUCTION_PPM   = 2
 
 end module regrid_defs

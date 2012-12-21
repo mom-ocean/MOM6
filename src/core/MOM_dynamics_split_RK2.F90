@@ -328,7 +328,7 @@ subroutine step_MOM_dyn_split_RK2(u_in, v_in, h_in, eta_in, uhbt_in, vhbt_in, &
   if (CS%begw == 0.0) call enable_averaging(dt, Time_local, CS%diag)
   call cpu_clock_begin(id_clock_pres)
   call PressureForce(h_in, CS%tv, CS%PFu, CS%PFv, G, CS%PressureForce_CSp, &
-                     p_surf, CS%pbce, CS%eta_PF)
+                     CS%regridding_opts, p_surf, CS%pbce, CS%eta_PF)
   if (dyn_p_surf) then
     if (G%Boussinesq) then
       Pa_to_eta = 1.0 / (G%Rho0*G%g_Earth)
@@ -640,7 +640,8 @@ subroutine step_MOM_dyn_split_RK2(u_in, v_in, h_in, eta_in, uhbt_in, vhbt_in, &
 ! pbce = dM/deta
     call cpu_clock_begin(id_clock_pres)
     call PressureForce(h_out, CS%tv, CS%PFu, CS%PFv, G, &
-                       CS%PressureForce_CSp, p_surf, CS%pbce, CS%eta_PF)
+                       CS%PressureForce_CSp, CS%regridding_opts, &
+                       p_surf, CS%pbce, CS%eta_PF)
     call cpu_clock_end(id_clock_pres)
     call cpu_clock_begin(id_clock_pass)
     call pass_var(CS%eta_PF(:,:), G%Domain)

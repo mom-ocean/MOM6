@@ -189,11 +189,14 @@ subroutine initialize_regridding_options ( param_file, regridding_opts )
   ! This sets whether we want to use regridding or not. By default, 
   ! regridding is NOT used but this can be overridden in the input
   ! file
-  regridding_opts%use_regridding = .false.
   call get_param(param_file, mod, "USE_REGRIDDING", &
                  regridding_opts%use_regridding , &
                  "If True, use the ALE algorithm (regridding/remapping).\n"//&
                  "If False, use the layered isopycnal algorithm.", default=.false. )
+
+  ! When not using ALE, we always use the layer-wise constant integration of T/S
+  ! in the FV pressure gradient integrals.
+  regridding_opts%reconstructForPressure = .false.
 
   if (regridding_opts%use_regridding) then
   ! The following options are only relevant when the property 'use_regridding'
@@ -262,6 +265,22 @@ subroutine initialize_regridding_options ( param_file, regridding_opts )
                  "than PCM. E.g., if PPM is used for remapping, a\n"//&
                  "PPM reconstruction will also be used within\n"//&
                  "boundary cells.", default=.false.)
+
+  ! --- PRESSURE GRADIENT CALCULATION ---
+  call get_param(param_file, mod, "RECONSTRUCT_FOR_PRESSURE", &
+                 regridding_opts%reconstructForPressure , &
+                 "If True, use vertical reconstruction of T/S within\n"//&
+                 "the integrals of teh FV pressure gradient calculation.\n"//&
+                 "If False, use the constant-by-layer algorithm.\n"//&
+                 "By default, this is True when using ALE and False otherwise.", &
+                 default=.true. )
+
+  call get_param(param_file, mod, "PRESSURE_RECONSTRUCTION_SCHEME", &
+                 regridding_opts%pressureReconstructionScheme, &
+                 "Type of vertical reconstruction of T/S to use in integrals\n"//&
+                 "within the FV pressure gradient calculation."//&
+                 " 1: PLM reconstruction.\n"//&
+                 " 2: PPM reconstruction.", default=PRESSURE_RECONSTRUCTION_PLM)
 
   ! --- MINIMUM THICKNESS ---
   call get_param(param_file, mod, "MIN_THICKNESS", &

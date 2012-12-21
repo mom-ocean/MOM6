@@ -63,6 +63,12 @@ use MOM_tidal_forcing, only : calc_tidal_forcing, tidal_forcing_CS
 use MOM_variables, only : thermo_var_ptrs
 use MOM_EOS, only : calculate_density, calculate_density_derivs
 use MOM_EOS, only : int_density_dz, int_specific_vol_dp
+use MOM_EOS, only : int_density_dz_generic_plm, int_density_dz_generic_ppm
+use MOM_EOS, only : int_density_dz_generic_plm_analytic
+use MOM_regridding, only: pressure_gradient_plm, pressure_gradient_ppm
+use regrid_defs, only: regridding_opts_t
+use regrid_defs, only: PRESSURE_RECONSTRUCTION_PLM, PRESSURE_RECONSTRUCTION_PPM
+
 implicit none ; private
 
 #include <MOM_memory.h>
@@ -85,13 +91,14 @@ end type PressureForce_AFV_CS
 
 contains
 
-subroutine PressureForce_AFV(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
+subroutine PressureForce_AFV(h, tv, PFu, PFv, G, CS, regridding_opts, p_atm, pbce, eta)
   real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)  :: h
   type(thermo_var_ptrs), intent(inout)                :: tv
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(out) :: PFu
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(out) :: PFv
   type(ocean_grid_type),                  intent(in)  :: G
   type(PressureForce_AFV_CS),             pointer     :: CS
+  type(regridding_opts_t),                intent(in)  :: regridding_opts
   real, dimension(:,:),                  optional, pointer     :: p_atm
   real, dimension(NIMEM_,NJMEM_,NKMEM_), optional, intent(out) :: pbce
   real, dimension(NIMEM_,NJMEM_),        optional, intent(out) :: eta
@@ -102,7 +109,7 @@ subroutine PressureForce_AFV(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
 ! following conditional block.
 
   if (G%Boussinesq) then
-    call PressureForce_AFV_bouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
+    call PressureForce_AFV_bouss(h, tv, PFu, PFv, G, CS, regridding_opts, p_atm, pbce, eta)
   else
     call PressureForce_AFV_nonbouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
   endif
@@ -396,13 +403,14 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
 
 end subroutine PressureForce_AFV_nonBouss
 
-subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
+subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, regridding_opts, p_atm, pbce, eta)
   real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h
   type(thermo_var_ptrs),                  intent(inout) :: tv
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(out)   :: PFu
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(out)   :: PFv
   type(ocean_grid_type),                  intent(in)    :: G
   type(PressureForce_AFV_CS),             pointer       :: CS
+  type(regridding_opts_t),                intent(in)  :: regridding_opts
   real, dimension(:,:),                  optional, pointer     :: p_atm
   real, dimension(NIMEM_,NJMEM_,NKMEM_), optional, intent(out) :: pbce
   real, dimension(NIMEM_,NJMEM_),        optional, intent(out) :: eta
@@ -464,6 +472,9 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
                 ! than the mixed layer have the mixed layer's properties, in C.
     S_tmp       ! Temporary array of salinities where layers that are lighter
                 ! than the mixed layer have the mixed layer's properties, in psu.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
+    S_t, S_b, T_t, T_b ! Top and bottom edge values for linear reconstructions
+                       ! of salinity and temperature within each layer.
   real :: rho_in_situ(SZI_(G)) ! The in situ density, in kg m-3.
   real :: p_ref(SZI_(G))     !   The pressure used to calculate the coordinate
                              ! density, in Pa (usually 2e7 Pa = 2000 dbar).
@@ -605,6 +616,19 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
 
 ! Have checked that rho_0 drops out and that the 1-layer case is right. RWH.
 
+  ! If regridding is activated, do a linear reconstruction of salinity
+  ! and temperature across each layer. The subscripts 't' and 'b' refer
+  ! to top and bottom values within each layer (these are the only degrees
+  ! of freedeom needed to know the linear profile).
+  
+  if ( regridding_opts%reconstructForPressure ) then
+    if ( regridding_opts%pressureReconstructionScheme == PRESSURE_RECONSTRUCTION_PLM ) then
+      call pressure_gradient_plm ( S_t, S_b, T_t, T_b, G, tv, h );
+    elseif ( regridding_opts%pressureReconstructionScheme == PRESSURE_RECONSTRUCTION_PPM ) then
+      call pressure_gradient_ppm ( S_t, S_b, T_t, T_b, G, tv, h );
+    endif
+  endif
+
   do k=1,nz
     ! Calculate 4 integrals through the layer that are required in the
     ! subsequent calculation.
@@ -612,9 +636,32 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
       dz(i,j) = G%g_Earth*G%H_to_m*h(i,j,k)
     enddo ; enddo
     if (use_EOS) then
-      call int_density_dz(tv_tmp%T(:,:,k), tv_tmp%S(:,:,k), e(:,:,K), e(:,:,K+1), &
-                          rho_ref, CS%Rho0, G%g_Earth, G, tv%eqn_of_state, &
-                          dpa, intz_dpa, intx_dpa, inty_dpa)
+      ! The following routine computes the integrals that are needed to
+      ! calculate the pressure gradient force. Linear profiles for T and S are
+      ! assumed when regridding is activated. Otherwise, the previous version
+      ! is used, whereby densities within each layer are constant no matter
+      ! where the layers are located.
+      if ( regridding_opts%reconstructForPressure ) then
+        if ( regridding_opts%pressureReconstructionScheme == PRESSURE_RECONSTRUCTION_PLM ) then
+          call int_density_dz_generic_plm ( T_t(:,:,k), T_b(:,:,k), S_t(:,:,k), &
+                                            S_b(:,:,k), &
+                                            e(:,:,K), e(:,:,K+1), rho_ref, &
+                                            CS%Rho0, G%g_Earth, &
+                                            G, tv%eqn_of_state, dpa, intz_dpa, &
+                                            intx_dpa, inty_dpa)
+        elseif ( regridding_opts%pressureReconstructionScheme == PRESSURE_RECONSTRUCTION_PPM ) then
+          call int_density_dz_generic_ppm ( tv%T(:,:,k), T_t(:,:,k), T_b(:,:,k), &
+                                            tv%S(:,:,k), S_t(:,:,k), S_b(:,:,k), &
+                                            e(:,:,K), e(:,:,K+1), rho_ref, &
+                                            CS%Rho0, G%G_Earth, &
+                                            G, tv%eqn_of_state, dpa, intz_dpa, &
+                                            intx_dpa, inty_dpa)
+        endif
+      else
+        call int_density_dz(tv_tmp%T(:,:,k), tv_tmp%S(:,:,k), e(:,:,K), e(:,:,K+1), &
+                            rho_ref, CS%Rho0, G%g_Earth, G, tv%eqn_of_state, &
+                            dpa, intz_dpa, intx_dpa, inty_dpa)
+      endif
     else
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
         dpa(i,j) = (G%Rlay(k) - rho_ref)*dz(i,j)
@@ -628,6 +675,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
       enddo ; enddo
     endif
 
+    ! Compute pressure gradient in x direction
     do j=js,je ; do I=Isq,Ieq
       PFu(I,j,k) = (((pa(i,j)*h(i,j,k) + intz_dpa(i,j)) - &
                      (pa(i+1,j)*h(i+1,j,k) + intz_dpa(i+1,j))) + &
@@ -637,6 +685,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
                     ((h(i,j,k) + h(i+1,j,k)) + h_neglect))
       intx_pa(I,j) = intx_pa(I,j) + intx_dpa(I,j)
     enddo ; enddo
+    ! Compute pressure gradient in y direction
     do J=Jsq,Jeq ; do i=is,ie
       PFv(i,J,k) = (((pa(i,j)*h(i,j,k) + intz_dpa(i,j)) - &
                      (pa(i,j+1)*h(i,j+1,k) + intz_dpa(i,j+1))) + &

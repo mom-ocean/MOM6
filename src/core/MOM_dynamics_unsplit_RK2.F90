@@ -258,7 +258,7 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, Time_local, dt, fluxes, &
     p_surf(i,j) = 0.5*p_surf_begin(i,j) + 0.5*p_surf_end(i,j)
   enddo ; enddo ; endif
   call PressureForce(h_in, CS%tv, CS%PFu, CS%PFv, G, &
-                     CS%PressureForce_CSp, p_surf)
+                     CS%PressureForce_CSp, CS%regridding_opts, p_surf)
   call cpu_clock_end(id_clock_pres)
   call cpu_clock_begin(id_clock_pass)
   call pass_vector(CS%PFu, CS%PFv, G%Domain)

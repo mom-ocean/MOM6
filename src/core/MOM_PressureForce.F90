@@ -60,6 +60,7 @@ use MOM_PressureForce_Mont, only : PressureForce_Mont_Bouss, PressureForce_Mont_
 use MOM_PressureForce_Mont, only : PressureForce_Mont_init, PressureForce_Mont_CS
 use MOM_tidal_forcing, only : calc_tidal_forcing, tidal_forcing_CS
 use MOM_variables, only : thermo_var_ptrs
+use regrid_defs, only: regridding_opts_t
 implicit none ; private
 
 #include <MOM_memory.h>
@@ -75,13 +76,14 @@ end type PressureForce_CS
 
 contains
 
-subroutine PressureForce(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
+subroutine PressureForce(h, tv, PFu, PFv, G, CS, regridding_opts, p_atm, pbce, eta)
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)   :: h
   type(thermo_var_ptrs), intent(inout)                :: tv
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(out) :: PFu
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(out) :: PFv
   type(ocean_grid_type),                  intent(in)  :: G
   type(PressureForce_CS),                 pointer     :: CS
+  type(regridding_opts_t),                intent(in)  :: regridding_opts
   real, dimension(:,:),                  optional, pointer     :: p_atm
   real, dimension(NIMEM_,NJMEM_,NKMEM_), optional, intent(out) :: pbce
   real, dimension(NIMEM_,NJMEM_),        optional, intent(out) :: eta
@@ -93,7 +95,7 @@ subroutine PressureForce(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
 
   if (CS%Analytic_FV_PGF) then
     if (G%Boussinesq) then
-      call PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS%PressureForce_AFV_CSp, p_atm, pbce, eta)
+      call PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS%PressureForce_AFV_CSp, regridding_opts, p_atm, pbce, eta)
     else
       call PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, CS%PressureForce_AFV_CSp, p_atm, pbce, eta)
     endif
