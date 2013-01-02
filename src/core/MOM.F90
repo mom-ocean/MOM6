@@ -2255,7 +2255,7 @@ subroutine MOM_end(CS)
   DEALLOC_(CS%CAu) ; DEALLOC_(CS%CAv)
   DEALLOC_(CS%PFu) ; DEALLOC_(CS%PFv)
   if (CS%use_temperature) then
-    DEALLOC_(CS%tv%T) ; DEALLOC_(CS%tv%S)
+    DEALLOC_(CS%T) ; CS%tv%T => NULL() ; DEALLOC_(CS%S) ; CS%tv%S => NULL()
   endif
   if (associated(CS%tv%frazil)) deallocate(CS%tv%frazil)
   if (associated(CS%tv%salt_deficit)) deallocate(CS%tv%salt_deficit)  
