@@ -128,7 +128,7 @@ type, public :: hor_visc_CS ; private
                              ! viscosity is modified to include a term that
                              ! scales quadratically with the velocity shears.
 
-  real PTR_, dimension(NIMEM_,NJMEM_) :: &
+  real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
     Kh_bg_xx, &       ! The background Laplacian viscosity at h points, in units
                       ! of m2 s-1. The actual viscosity may be the larger of this
                       ! viscosity and the Smagorinsky viscosity.
@@ -144,7 +144,7 @@ type, public :: hor_visc_CS ; private
 
     reduction_xx      ! The amount by which stresses through h points are reduced
                       ! due to partial barriers. Nondimensional.
-  real PTR_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: &
+  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: &
     Kh_bg_xy, &       ! The background Laplacian viscosity at q points, in units
                       ! of m2 s-1. The actual viscosity may be the larger of this
                       ! viscosity and the Smagorinsky viscosity.
@@ -161,23 +161,23 @@ type, public :: hor_visc_CS ; private
                       ! due to partial barriers. Nondimensional.
 
 ! The following variables are precalculated combinations of metric terms.
-  real PTR_, dimension(NIMEM_,NJMEM_) :: &
+  real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
     dx2h, dy2h, &              ! dx^2 or dy^2 at h points, in m-2.
     dx_dyh, dy_dxh             ! dx/dy or dy/dx at h points, nondim.
-  real PTR_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: &
+  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: &
     dx2q, dy2q, &              ! dx^2 or dy^2 at q points, in m-2.
     dx_dyq, dy_dxq             ! dx/dy or dy/dx at q points, nondim.
-  real PTR_, dimension(NIMEMB_PTR_,NJMEM_) :: &
+  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_) :: &
     Idx2dyu, Idxdy2u           ! 1/(dx^2 dy) and 1/(dx dy^2) at u points, in m-3.
-  real PTR_, dimension(NIMEM_,NJMEMB_PTR_) :: &
+  real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_) :: &
     Idx2dyv, Idxdy2v           ! 1/(dx^2 dy) and 1/(dx dy^2) at v points, in m-3.
 
 !   The following variables are precalculated time-invariant combinations of
 ! parameters and metric terms.
-  real PTR_, dimension(NIMEM_,NJMEM_) :: &
+  real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
     Laplac_Const_xx, & ! The Laplacian and biharmonic metric-dependent
     Biharm_Const_xx    ! constants, nondim.
-  real PTR_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: &
+  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: &
     Laplac_Const_xy, & ! The Laplacian and biharmonic metric-dependent
     Biharm_Const_xy    ! constants, nondim.
 

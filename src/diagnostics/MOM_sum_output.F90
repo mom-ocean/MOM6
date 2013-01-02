@@ -91,7 +91,7 @@ type, public :: sum_output_CS ; private
   type(Depth_List), pointer, dimension(:) :: DL => NULL() ! The sorted depth list.
   integer :: list_size          ! =nxtot*nytot length of sorting vector
 
-  integer PTR_, dimension(NKMEM_) :: lH
+  integer ALLOCABLE_, dimension(NKMEM_) :: lH
                                 ! This saves the entry in DL with a volume just
                                 ! less than the volume of fluid below the
                                 ! interface.

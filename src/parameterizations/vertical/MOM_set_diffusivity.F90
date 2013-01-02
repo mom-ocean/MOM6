@@ -1893,7 +1893,7 @@ subroutine set_BBL_diffusivity(u, v, h, fluxes, visc, G, CS)
     ! Determine ustar and the square magnitude of the velocity in the
     ! bottom boundary layer. Together these give the TKE source and
     ! vertical decay scale.
-    do i=is,ie ; if (G%vmask(i,J) > 0.5) then
+    do i=is,ie ; if ((G%vmask(i,J) > 0.5) .and. (cdrag_sqrt > 0.0)) then
       do_i(i) = .true. ; vhtot(i) = 0.0 ; htot(i) = 0.0
       vstar(i,J) = visc%kv_bbl_v(i,J)/(cdrag_sqrt*visc%bbl_thick_v(i,J))
     else
@@ -1923,7 +1923,7 @@ subroutine set_BBL_diffusivity(u, v, h, fluxes, visc, G, CS)
   enddo
 
   do j=js,je
-    do I=is-1,ie ; if (G%umask(I,j) > 0.5) then
+    do I=is-1,ie ; if ((G%umask(I,j) > 0.5) .and. (cdrag_sqrt > 0.0))  then
       do_i(I) = .true. ; uhtot(I) = 0.0 ; htot(I) = 0.0
       ustar(I) = visc%kv_bbl_u(I,j)/(cdrag_sqrt*visc%bbl_thick_u(I,j))
     else

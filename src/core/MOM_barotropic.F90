@@ -145,66 +145,66 @@ public btcalc, bt_mass_source, btstep, barotropic_init, barotropic_end
 public register_barotropic_restarts, set_dtbt
 
 type, public :: barotropic_CS ; private
-  real PTR_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: frhatu TO_NULL_
-  real PTR_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: frhatv TO_NULL_
+  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: frhatu
+  real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: frhatv
       ! frhatu and frhatv are the fraction of the total column thickness
       ! interpolated to u or v grid points in each layer, nondimensional.
-  real PTR_, dimension(NIMEMB_PTR_,NJMEM_) :: &
-    IDatu TO_NULL_, & ! Inverse of the basin depth at u grid points, in m-1.
-    uhbt_IC TO_NULL_, & ! The barotropic solver's estimate of the zonal
-                      ! transport as the initla condition for the next call
-                      ! to btstep, in H m2 s-1.
-    ubt_IC TO_NULL_, & ! The barotropic solver's estimate of the zonal velocity
-                      ! that will be the initial condition for the next call
-                      ! to btstep, in m s-1.
-    ubtav TO_NULL_    ! The barotropic zonal velocity averaged over the
-                      ! baroclinic time step, m s-1.
-  real PTR_, dimension(NIMEM_,NJMEMB_PTR_) :: &
-    IDatv TO_NULL_, & ! Inverse of the basin depth at v grid points, in m-1.
-    vhbt_IC TO_NULL_, & ! The barotropic solver's estimate of the zonal
-                      ! transport as the initla condition for the next call
-                      ! to btstep, in H m2 s-1.
-    vbt_IC TO_NULL_, & ! The barotropic solver's estimate of the zonal velocity
-                      ! that will be the initial condition for the next call
-                      ! to btstep, in m s-1.
-    vbtav TO_NULL_    ! The barotropic meridional velocity averaged over the
-                      ! baroclinic time step, m s-1.
-  real PTR_, dimension(NIMEM_,NJMEM_) :: &
-    eta_source TO_NULL_, & ! The net mass source to be applied within the
-                       ! barotropic solver, in H s-1.
-    eta_cor TO_NULL_, &! The difference between the free surface height from
-                       ! the barotropic calculation and the sum of the layer
-                       ! thicknesses. This difference is imposed as a forcing
-                       ! term in the barotropic calculation over a baroclinic
-                       ! timestep, in H (m or kg m-2).
-    eta_cor_bound TO_NULL_ ! A limit on the rate at which eta_cor can be applied
-                       ! while avoiding instability, in units of H s-1. This
-                       ! is only used if CS%bound_BT_corr is true.
-  real PTR_, dimension(NIMEMW_,NJMEMW_) :: &
-    ua_polarity TO_NULL_, & ! Test vector components for checking grid polarity.
-    va_polarity TO_NULL_, & ! Test vector components for checking grid polarity.
-    D TO_NULL_         !   A copy of D with wide halos.
-  real PTR_, dimension(NIMEMW_,NJMEMW_) :: &
-    Idxdyh TO_NULL_    !   This is a copy of G%IDXDYh with wide halos, but will
-                       ! still utilize the macro IDXDYh when referenced, m-2.              
-  real PTR_, dimension(NIMEMBW_,NJMEMW_) :: &
-    Datu_res TO_NULL_, &! A nondimensional factor by which the zonal face areas
-                       ! are to be rescaled to account for the effective face
-                       ! areas of the layers, if rescale_D_bt is true.
-                       ! Datu_res is set in btcalc.
-    D_u_Cor, &         !   A simply averaged depth at u points, in m.
-    dy_u TO_NULL_, &   !   A copy of G%dy_u with wide halos, in m.
-    Idxu TO_NULL_      !   A copy of G%IDXu with wide halos, in m-1.
-  real PTR_, dimension(NIMEMW_,NJMEMBW_) :: &
-    Datv_res TO_NULL_, &! A nondimensional factor by which the meridional face
-                       ! areas are to be rescaled to account for the effective
-                       ! face areas of the layers, if rescale_D_bt is true.
-                       ! Datv_res is set in btcalc.
-    D_v_Cor, &         !   A simply averaged depth at v points, in m.
-    dx_v TO_NULL_, &   !   A copy of G%dx_v with wide halos, in m.
-    Idyv TO_NULL_      !   A copy of G%IDYv with wide halos, in m-1.
-  real PTR_, dimension(NIMEMBW_,NJMEMBW_) :: &
-    q_D                ! f / D at PV points, in m-1 s-1.
+  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_) :: &
+    IDatu, &        ! Inverse of the basin depth at u grid points, in m-1.
+    uhbt_IC, &      ! The barotropic solver's estimate of the zonal
+                    ! transport as the initla condition for the next call
+                    ! to btstep, in H m2 s-1.
+    ubt_IC, &       ! The barotropic solver's estimate of the zonal velocity
+                    ! that will be the initial condition for the next call
+                    ! to btstep, in m s-1.
+    ubtav           ! The barotropic zonal velocity averaged over the
+                    ! baroclinic time step, m s-1.
+  real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_) :: &
+    IDatv, &        ! Inverse of the basin depth at v grid points, in m-1.
+    vhbt_IC, &      ! The barotropic solver's estimate of the zonal
+                    ! transport as the initla condition for the next call
+                    ! to btstep, in H m2 s-1.
+    vbt_IC, &       ! The barotropic solver's estimate of the zonal velocity
+                    ! that will be the initial condition for the next call
+                    ! to btstep, in m s-1.
+    vbtav           ! The barotropic meridional velocity averaged over the
+                    ! baroclinic time step, m s-1.
+  real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
+    eta_source, &   ! The net mass source to be applied within the
+                    ! barotropic solver, in H s-1.
+    eta_cor, &      ! The difference between the free surface height from
+                    ! the barotropic calculation and the sum of the layer
+                    ! thicknesses. This difference is imposed as a forcing
+                    ! term in the barotropic calculation over a baroclinic
+                    ! timestep, in H (m or kg m-2).
+    eta_cor_bound   ! A limit on the rate at which eta_cor can be applied
+                    ! while avoiding instability, in units of H s-1. This
+                    ! is only used if CS%bound_BT_corr is true.
+  real ALLOCABLE_, dimension(NIMEMW_,NJMEMW_) :: &
+    ua_polarity, &  ! Test vector components for checking grid polarity.
+    va_polarity, &  ! Test vector components for checking grid polarity.
+    D               !   A copy of D with wide halos.
+  real ALLOCABLE_, dimension(NIMEMW_,NJMEMW_) :: &
+    Idxdyh          !   This is a copy of G%IDXDYh with wide halos, but will
+                    ! still utilize the macro IDXDYh when referenced, m-2.              
+  real ALLOCABLE_, dimension(NIMEMBW_,NJMEMW_) :: &
+    Datu_res, &     ! A nondimensional factor by which the zonal face areas
+                    ! are to be rescaled to account for the effective face
+                    ! areas of the layers, if rescale_D_bt is true.
+                    ! Datu_res is set in btcalc.
+    D_u_Cor, &      !   A simply averaged depth at u points, in m.
+    dy_u, &         !   A copy of G%dy_u with wide halos, in m.
+    Idxu            !   A copy of G%IDXu with wide halos, in m-1.
+  real ALLOCABLE_, dimension(NIMEMW_,NJMEMBW_) :: &
+    Datv_res, &     ! A nondimensional factor by which the meridional face
+                    ! areas are to be rescaled to account for the effective
+                    ! face areas of the layers, if rescale_D_bt is true.
+                    ! Datv_res is set in btcalc.
+    D_v_Cor, &      !   A simply averaged depth at v points, in m.
+    dx_v, &         !   A copy of G%dx_v with wide halos, in m.
+    Idyv            !   A copy of G%IDYv with wide halos, in m-1.
+  real ALLOCABLE_, dimension(NIMEMBW_,NJMEMBW_) :: &
+    q_D             ! f / D at PV points, in m-1 s-1.
 
   real, pointer, dimension(:,:,:) :: frhatu1, frhatv1 ! Predictor values.
 

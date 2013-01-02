@@ -52,7 +52,7 @@ type, public :: ocean_grid_type
                                 ! during the course of the run via calls to
                                 ! set_first_direction.
 
-  real PTR_, dimension(NIMEM_,NJMEM_) :: &
+  real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
     hmask, &   ! 0 for land points and 1 for ocean points on the h-grid. Nd.
     geolath, & ! The geographic latitude at q points in degrees of latitude or m.
     geolonh, & ! The geographic longitude at q points in degrees of longitude or m.
@@ -61,7 +61,7 @@ type, public :: ocean_grid_type
     dxdyh, &     ! dxdyh is the area of an h-cell, in m2.
     Idxdyh       ! Idxdyh = 1/dxdyh, in m-2.
 
-  real PTR_, dimension(NIMEMB_PTR_,NJMEM_) :: &
+  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_) :: &
     umask, &   ! 0 for boundary points and 1 for ocean points on the u grid.  Nondim.
     geolatu, & ! The geographic latitude at u points in degrees of latitude or m.
     geolonu, & ! The geographic longitude at u points in degrees of longitude or m.
@@ -72,7 +72,7 @@ type, public :: ocean_grid_type
     Idxdy_u, &   ! The masked inverse areas of u-grid cells in m2.
     dxdy_u       ! The areas of the u-grid cells in m2.
 
-  real PTR_, dimension(NIMEM_,NJMEMB_PTR_) :: &
+  real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_) :: &
     vmask, &   ! 0 for boundary points and 1 for ocean points on the v grid.  Nondim.
     geolatv, & ! The geographic latitude at v points in degrees of latitude or m.
     geolonv, & ! The geographic longitude at v points in degrees of longitude or m.
@@ -83,7 +83,7 @@ type, public :: ocean_grid_type
     Idxdy_v, &   ! The masked inverse areas of v-grid cells in m2.
     dxdy_v       ! The areas of the v-grid cells in m2.
 
-  real PTR_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: &
+  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: &
     qmask, &   ! 0 for boundary points and 1 for ocean points on the q grid.  Nondim.
     geolatq, & ! The geographic latitude at q points in degrees of latitude or m.
     geolonq, & ! The geographic longitude at q points in degrees of longitude or m.
@@ -108,18 +108,20 @@ type, public :: ocean_grid_type
   real    :: Rho0       !   The density used in the Boussinesq approximation or
                         ! nominal density used to convert depths into mass
                         ! units, in kg m-3.
-  real PTR_, dimension(NIMEM_,NJMEM_)   :: D   ! Basin depth, in m.
+  real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
+    D             ! Basin depth, in m.
 
   logical :: bathymetry_at_vel  ! If true, there are separate values for the
                   ! basin depths at velocity points.  Otherwise the effects of
                   ! of topography are entirely determined from thickness points.
-  real PTR_, dimension(NIMEMB_PTR_,NJMEM_) :: &
+  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_) :: &
     Dblock_u, &   ! Topographic depths at u-points at which the flow is blocked
     Dopen_u       ! (Dblock_u) and open at width dy_u (Dopen_u), both in m.
-  real PTR_, dimension(NIMEM_,NJMEMB_PTR_) :: &
+  real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_) :: &
     Dblock_v, &   ! Topographic depths at v-points at which the flow is blocked
     Dopen_v       ! (Dblock_v) and open at width dx_v (Dopen_v), both in m.
-  real PTR_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: f ! The Coriolis parameter in s-1.
+  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: &
+    f             ! The Coriolis parameter in s-1.
 
   ! The following variables give information about the vertical grid.
   logical :: Boussinesq     ! If true, make the Boussinesq approximation.
@@ -131,7 +133,7 @@ type, public :: ocean_grid_type
                         ! at the bit level, in thickness units.  If Angstrom is
                         ! 0 or exceedingly small, this is negligible compared to
                         ! a thickness of 1e-17 m.
-  real PTR_, dimension(NK_INTERFACE_) :: &
+  real ALLOCABLE_, dimension(NK_INTERFACE_) :: &
     g_prime, &          ! The reduced gravity at each interface, in m s-2.
     Rlay                ! The target coordinate value (potential density) in
                         ! in each layer in kg m-3.
