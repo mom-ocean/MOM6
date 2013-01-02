@@ -113,13 +113,13 @@ type, public :: vertvisc_CS ; private
                             ! accelerations to be reported, nondim.  CFL_report
                             ! will often equal CFL_trunc.
 
-  real PTR_, dimension(NIMEMB_PTR_,NJMEM_,NK_INTERFACE_) :: &
+  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NK_INTERFACE_) :: &
     a_u                ! The u-drag coefficient across an interface, in m s-1.
-  real PTR_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: &
+  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: &
     h_u                ! The effective layer thickness at u-points, m or kg m-2.
-  real PTR_, dimension(NIMEM_,NJMEMB_PTR_,NK_INTERFACE_) :: &
+  real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NK_INTERFACE_) :: &
     a_v                ! The v-drag coefficient across an interface, in m s-1.
-  real PTR_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: &
+  real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: &
     h_v                ! The effective layer thickness at v-points, m or kg m-2.
   real, pointer, dimension(:,:) :: &
     a1_shelf_u => NULL(), & ! The surface coupling coefficients under ice
