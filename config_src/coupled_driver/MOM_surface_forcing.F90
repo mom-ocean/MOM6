@@ -183,6 +183,7 @@ type, public :: ice_ocean_boundary_type
   real, pointer, dimension(:,:) :: calving_hflx =>NULL()! heat flux associated with frozen runoff (w/m2)
   real, pointer, dimension(:,:) :: p =>NULL()        ! pressure of overlying ice and atmosphere
                                                      ! on ocean surface (Pa)
+  real, pointer, dimension(:,:) :: mi =>NULL()       ! mass of ice (kg/m2)
   integer :: xtype                                   ! REGRID, REDIST or DIRECT
   type(coupler_2d_bc_type)      :: fluxes            ! A structure that may contain an
                                                      ! array of named fields used for
