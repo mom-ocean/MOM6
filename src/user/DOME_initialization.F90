@@ -302,13 +302,13 @@ subroutine DOME_set_Open_Bdry_Conds(OBC, tv, G, param_file, advect_tracer_CSp)
   real :: Ri_trans=1.0/3.0  ! The shear Richardson number in the transition
                             ! region of the specified shear profile.
   character(len=40)  :: mod = "DOME_set_Open_Bdry_Conds" ! This subroutine's name.
-  integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, nz, yhalo
+  integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, nz, njhalo
   integer :: Isdq, Iedq, Jsdq, Jedq
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   Isdq = G%Isdq ; Iedq = G%Iedq ; Jsdq = G%Jsdq ; Jedq = G%Jedq
-  yhalo = G%jsc-G%jsd
+  njhalo = G%jsc-G%jsd
 
   call get_param(param_file, mod, "APPLY_OBC_U", apply_OBC_u, &
                  "If true, open boundary conditions may be set at some \n"//&
@@ -341,7 +341,7 @@ subroutine DOME_set_Open_Bdry_Conds(OBC, tv, G, param_file, advect_tracer_CSp)
     any_OBC = .false.
     do J=Jsdq,Jedq ; do i=isd,ied
       if ((G%geolonv(i,J) > 1000.0) .and. (G%geolonv(i,J)  < 1100.0) .and. &
-          (abs(G%geolatv(i,J) - G%gridlatq(G%Domain%nytot+yhalo)) < 0.1)) then
+          (abs(G%geolatv(i,J) - G%gridlatq(G%Domain%njglobal+njhalo)) < 0.1)) then
         OBC_mask_v(i,J) = .true. ; any_OBC = .true.
       endif
     enddo ; enddo

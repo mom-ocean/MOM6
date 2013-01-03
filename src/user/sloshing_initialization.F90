@@ -39,15 +39,15 @@ subroutine sloshing_initialize_topography ( D, G, param_file )
   
   ! Local variables 
   integer   :: i, j
-  real      :: max_depth;
+  real      :: max_depth
   
   ! Maximum depth
-  call read_param ( param_file, "MAXIMUM_DEPTH", max_depth );
+  call read_param ( param_file, "MAXIMUM_DEPTH", max_depth )
   
   do i=G%isc,G%iec 
     do j=G%jsc,G%jec 
     
-      D(i,j) = max_depth;
+      D(i,j) = max_depth
 
     enddo
   enddo
@@ -74,60 +74,60 @@ subroutine sloshing_initialize_thickness ( h, G, param_file )
   real    :: displ(SZK_(G)+1)  
   real    :: z_unif(SZK_(G)+1)
   real    :: z_inter(SZK_(G)+1)
-  real    :: x;
-  real    :: a0;
-  real    :: deltah;
-  real    :: max_depth;
-  real    :: lenlon;
-  real    :: total_height;
-  real    :: weight_z;
-  real    :: x1, y1, x2, y2;
-  real    :: t;
-  integer :: n;
-  integer :: nxtot;
+  real    :: x
+  real    :: a0
+  real    :: deltah
+  real    :: max_depth
+  real    :: lenlon
+  real    :: total_height
+  real    :: weight_z
+  real    :: x1, y1, x2, y2
+  real    :: t
+  integer :: n
+  integer :: niglobal
   
   integer :: i, j, k, is, ie, js, je, nx, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   
   ! Get maximum depth and uniformly-distributed thickness
-  call read_param ( param_file, "MAXIMUM_DEPTH", max_depth );
-  call read_param ( param_file, "LENLON", lenlon );
-  call read_param ( param_file, "NIGLOBAL", nxtot );
+  call read_param ( param_file, "MAXIMUM_DEPTH", max_depth )
+  call read_param ( param_file, "LENLON", lenlon )
+  call read_param ( param_file, "NIGLOBAL", niglobal )
   
-  deltah = max_depth / nz;
+  deltah = max_depth / nz
 
   ! Define thicknesses
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
   
     ! Define uniform interfaces
     do k = 0,nz
-      z_unif(k+1) = -real(k)/real(nz);
+      z_unif(k+1) = -real(k)/real(nz)
     end do
 
     ! 1. Define stratification
-    n = 3;
+    n = 3
     do k = 1,nz+1
       
       ! Thin pycnocline in the middle
       !z_inter(k) = (2.0**(n-1)) * (z_unif(k) + 0.5)**n - 0.5
 
       ! Thin pycnocline in the middle (piecewise linear profile)
-      x1 = 0.30; y1 = 0.48; x2 = 0.70; y2 = 0.52;
+      x1 = 0.30; y1 = 0.48; x2 = 0.70; y2 = 0.52
     
-      x = -z_unif(k);
+      x = -z_unif(k)
       
       if ( x .le. x1 ) then
         t = y1*x/x1;    
       else if ( (x .gt. x1 ) .and. ( x .lt. x2 )) then
-        t = y1 + (y2-y1) * (x-x1) / (x2-x1);
+        t = y1 + (y2-y1) * (x-x1) / (x2-x1)
       else  
-        t = y2 + (1.0-y2) * (x-x2) / (1.0-x2);
+        t = y2 + (1.0-y2) * (x-x2) / (1.0-x2)
       end if
       
-      t = - z_unif(k);
+      t = - z_unif(k)
 
-      z_inter(k) = -t * max_depth;
+      z_inter(k) = -t * max_depth
       
     end do
     
@@ -135,42 +135,42 @@ subroutine sloshing_initialize_thickness ( h, G, param_file )
     a0 = 75.0;      ! Displacement amplitude (meters)
     do k = 1,nz+1
       
-      weight_z = - 4.0 * ( z_unif(k) + 0.5 )**2 + 1;
+      weight_z = - 4.0 * ( z_unif(k) + 0.5 )**2 + 1
       
-      x = G%geolonh(i,j) / lenlon;
+      x = G%geolonh(i,j) / lenlon
       displ(k) = a0 * cos(acos(-1.0)*x) + weight_z; 
       
       if ( k .EQ. 1 ) then
-        displ(k) = 0.0;
+        displ(k) = 0.0
       end if
       
       if ( k .EQ. nz+1 ) then
-        displ(k) = 0.0;
+        displ(k) = 0.0
       end if
       
-      z_inter(k) = z_inter(k) + displ(k);
+      z_inter(k) = z_inter(k) + displ(k)
       
     end do
     
     ! 3. The last interface must coincide with the seabed
-    z_inter(nz+1) = -G%bathyT(i,j);
+    z_inter(nz+1) = -G%bathyT(i,j)
 
     ! Modify interface heights to make sure all thicknesses 
     ! are strictly positive
     do k = nz,1,-1
       
       if ( z_inter(k) .LT. (z_inter(k+1) + G%Angstrom) ) then
-        z_inter(k) = z_inter(k+1) + G%Angstrom;
+        z_inter(k) = z_inter(k+1) + G%Angstrom
       end if
       
     end do
     
     ! 4. Define layers
-    total_height = 0.0;
+    total_height = 0.0
     do k = 1,nz
-      h(i,j,k) = z_inter(k) - z_inter(k+1);
+      h(i,j,k) = z_inter(k) - z_inter(k+1)
       
-      total_height = total_height + h(i,j,k);
+      total_height = total_height + h(i,j,k)
     end do
  
   enddo ; enddo
@@ -194,15 +194,15 @@ subroutine sloshing_initialize_temperature_salinity ( T, S, h, G, param_file, &
   ! Note that the linear distribution is set up with respect to the layer
   ! number, not the physical position).
   integer :: i, j, k, is, ie, js, je, nz
-  real    :: delta_S, delta_T;
+  real    :: delta_S, delta_T
   real    :: S_ref, T_ref;      ! Reference salinity and temerature within
                                 ! surface layer
   real    :: S_range, T_range;  ! Range of salinities and temperatures over the
                                 ! vertical
   real    :: delta;                             
   real    :: deltah;                                
-  real    :: max_depth;
-  real    :: xi0, xi1;
+  real    :: max_depth
+  real    :: xi0, xi1
   character(len=40)  :: mod = "initialize_temp_salt_linear" ! This subroutine's 
                                                             ! name.
   
@@ -214,35 +214,35 @@ subroutine sloshing_initialize_temperature_salinity ( T, S, h, G, param_file, &
   ! temperature
   S_range = 2.0; call read_param(param_file,"S_RANGE",S_range,.false.)
   T_range = 0.0; call read_param(param_file,"T_RANGE",T_range,.false.)
-  call read_param ( param_file, "MAXIMUM_DEPTH", max_depth );
+  call read_param ( param_file, "MAXIMUM_DEPTH", max_depth )
 
   ! Prescribe salinity
-  !delta_S = S_range / ( G%ke - 1.0 );
+  !delta_S = S_range / ( G%ke - 1.0 )
   
-  !S(:,:,1) = S_ref;
+  !S(:,:,1) = S_ref
   !do k = 2,G%ke
-  !  S(:,:,k) = S(:,:,k-1) + delta_S;
+  !  S(:,:,k) = S(:,:,k-1) + delta_S
   !end do  
     
   deltah = max_depth / nz;  
   do j=js,je ; do i=is,ie
-    xi0 = 0.0;
+    xi0 = 0.0
     do k = 1,nz
-      xi1 = xi0 + deltah / max_depth;
-      S(i,j,k) = 34.0 + 0.5 * S_range * (xi0 + xi1);
-      xi0 = xi1;
+      xi1 = xi0 + deltah / max_depth
+      S(i,j,k) = 34.0 + 0.5 * S_range * (xi0 + xi1)
+      xi0 = xi1
     enddo
   enddo ; enddo
   
   ! Prescribe temperature
-  delta_T = T_range / ( G%ke - 1.0 );
+  delta_T = T_range / ( G%ke - 1.0 )
   
-  T(:,:,1) = T_ref;
+  T(:,:,1) = T_ref
   do k = 2,G%ke
-    T(:,:,k) = T(:,:,k-1) + delta_T;
+    T(:,:,k) = T(:,:,k-1) + delta_T
   end do  
-  delta = 2;
-  T(:,:,G%ke/2 - (delta-1):G%ke/2 + delta) = 1.0;
+  delta = 2
+  T(:,:,G%ke/2 - (delta-1):G%ke/2 + delta) = 1.0
   
   call log_param(param_file, mod, "S_REF", S_ref)
   call log_param(param_file, mod, "T_REF", T_ref)

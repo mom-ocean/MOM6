@@ -684,13 +684,13 @@ subroutine save_restart(directory, time, lev, G, CS, time_stamped, filename)
   next_var = 1
   do while (next_var <= CS%novars )
     start_var = next_var
-    size_in_file = 8*(2*G%Domain%nxtot+2*G%Domain%nytot+2*nz+1000)
+    size_in_file = 8*(2*G%Domain%niglobal+2*G%Domain%njglobal+2*nz+1000)
 
     do m=start_var,CS%novars
       if (CS%restart_field(m)%vars%hor_grid == '1') then
         var_sz = 8
       else
-        var_sz = 8*(G%Domain%nxtot+1)*(G%Domain%nytot+1)
+        var_sz = 8*(G%Domain%niglobal+1)*(G%Domain%njglobal+1)
       endif
       select case (CS%restart_field(m)%vars%z_grid)
         case ('L') ; var_sz = var_sz * nz

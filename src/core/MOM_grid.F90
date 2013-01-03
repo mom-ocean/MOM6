@@ -276,10 +276,12 @@ subroutine MOM_grid_init(grid, param_file)
   grid%H_subroundoff = 1e-20 * max(grid%Angstrom,grid%m_to_H*1e-17)
   grid%H_to_Pa = grid%g_Earth * grid%H_to_kg_m2
 
-  allocate(grid%gridlath(grid%Domain%nytot+2*grid%Domain%ny_halo)) ; grid%gridlath(:) = 0.0
-  allocate(grid%gridlatq(grid%Domain%nytot+2*grid%Domain%ny_halo)) ; grid%gridlatq(:) = 0.0
-  allocate(grid%gridlonh(grid%Domain%nxtot+2*grid%Domain%nx_halo)) ; grid%gridlonh(:) = 0.0
-  allocate(grid%gridlonq(grid%Domain%nxtot+2*grid%Domain%nx_halo)) ; grid%gridlonq(:) = 0.0
+  allocate(grid%gridlath(grid%Domain%njglobal+2*grid%Domain%njhalo))
+  allocate(grid%gridlatq(grid%Domain%njglobal+2*grid%Domain%njhalo))
+  grid%gridlath(:) = 0.0 ; grid%gridlatq(:) = 0.0
+  allocate(grid%gridlonh(grid%Domain%niglobal+2*grid%Domain%nihalo))
+  allocate(grid%gridlonq(grid%Domain%niglobal+2*grid%Domain%nihalo))
+  grid%gridlonh(:) = 0.0 ; grid%gridlonq(:) = 0.0
 
 ! Log derivative values.
   call log_param(param_file, "MOM_grid", "M to THICKNESS", grid%m_to_H)

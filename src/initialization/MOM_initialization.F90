@@ -1100,8 +1100,8 @@ subroutine initialize_topography_named(D, G, param_file, topog_config)
   xhalo = G%isc-G%isd ; yhalo = G%jsc-G%jsd
   southlat0 = ANInt(G%gridlatq(yhalo)*1024.0)/1024.0
   westlon0 = ANInt(G%gridlonq(xhalo)*1024.0)/1024.0
-  lenlon0 = ANInt((G%gridlonq(G%Domain%nxtot+xhalo)-G%gridlonq(xhalo))*1024.0)/1024.0
-  lenlat0 = ANInt((G%gridlatq(G%Domain%nytot+yhalo)-G%gridlatq(yhalo))*1024.0)/1024.0
+  lenlon0 = ANInt((G%gridlonq(G%Domain%niglobal+xhalo)-G%gridlonq(xhalo))*1024.0)/1024.0
+  lenlat0 = ANInt((G%gridlatq(G%Domain%njglobal+yhalo)-G%gridlatq(yhalo))*1024.0)/1024.0
 
   if (trim(topog_config) /= "flat") then
     call get_param(param_file, mod, "EDGE_DEPTH", Dedge, &
@@ -2303,8 +2303,8 @@ subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, advect_tracer_CSp)
   character(len=40)  :: mod = "set_Flather_Bdry_Conds" ! This subroutine's name.
   character(len=200) :: filename, OBC_file, inputdir ! Strings for file/path
 
-  real :: temp_u(G%domain%nxtot+1,G%domain%nytot)
-  real :: temp_v(G%domain%nxtot,G%domain%nytot+1)
+  real :: temp_u(G%domain%niglobal+1,G%domain%njglobal)
+  real :: temp_v(G%domain%niglobal,G%domain%njglobal+1)
 
   real, pointer, dimension(:,:,:) :: &
     OBC_T_u => NULL(), &    ! These arrays should be allocated and set to
@@ -2365,15 +2365,15 @@ subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, advect_tracer_CSp)
   endif
 
   if (G%symmetric) then
-    east_boundary = G%domain%nxtot+G%domain%nx_halo
-    west_boundary = G%domain%nx_halo
-    north_boundary = G%domain%nytot+G%domain%ny_halo
-    south_boundary = G%domain%ny_halo
+    east_boundary = G%domain%niglobal+G%domain%nihalo
+    west_boundary = G%domain%nihalo
+    north_boundary = G%domain%njglobal+G%domain%njhalo
+    south_boundary = G%domain%njhalo
   else
-    east_boundary = G%domain%nxtot+G%domain%nx_halo-1
-    west_boundary = G%domain%nx_halo+1
-    north_boundary = G%domain%nytot+G%domain%ny_halo-1
-    south_boundary = G%domain%ny_halo+1
+    east_boundary = G%domain%niglobal+G%domain%nihalo-1
+    west_boundary = G%domain%nihalo+1
+    north_boundary = G%domain%njglobal+G%domain%njhalo-1
+    south_boundary = G%domain%njhalo+1
   endif
 
   if (.not.associated(OBC%OBC_mask_u)) then

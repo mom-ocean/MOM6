@@ -89,7 +89,7 @@ end type Depth_List
 
 type, public :: sum_output_CS ; private
   type(Depth_List), pointer, dimension(:) :: DL => NULL() ! The sorted depth list.
-  integer :: list_size          ! =nxtot*nytot length of sorting vector
+  integer :: list_size          ! =niglobal*njglobal length of sorting vector
 
   integer ALLOCABLE_, dimension(NKMEM_) :: lH
                                 ! This saves the entry in DL with a volume just
@@ -1106,13 +1106,13 @@ subroutine depth_list_setup(G, CS)
     else
       if (is_root_pe()) call MOM_error(WARNING, "depth_list_setup: "// &
         trim(CS%depth_list_file)//" does not exist.  Creating a new file.")
-      max_list_size = G%Domain%nxtot*G%Domain%nytot
+      max_list_size = G%Domain%niglobal*G%Domain%njglobal
       call create_depth_list(G, CS, max_list_size)
 
       call write_depth_list(G, CS, CS%depth_list_file, CS%list_size+1)
     endif
   else
-    max_list_size = G%Domain%nxtot*G%Domain%nytot
+    max_list_size = G%Domain%niglobal*G%Domain%njglobal
     call create_depth_list(G, CS, max_list_size)
   endif
 
@@ -1134,7 +1134,7 @@ subroutine create_depth_list(G, CS, max_list_size)
 !                 which the ordered depth list is stored.
 
   real    :: Dprev, vol, area
-  real    :: Dlist((G%Domain%nxtot+1)*(G%Domain%nytot+1))
+  real    :: Dlist((G%Domain%niglobal+1)*(G%Domain%njglobal+1))
   real, dimension(max_list_size+1) :: AreaList
   real    :: temp(SZI_(G),SZJ_(G))
   real    :: Dnow, D_list_next
@@ -1179,7 +1179,7 @@ subroutine create_depth_list(G, CS, max_list_size)
     Arealist(offset1D + (j-js)*xsize(this_pe)+(i-is)+1) = temp(i,j)
   enddo ; enddo
 
-  call sum_across_PEs(Dlist, (G%Domain%nxtot+1)*(G%Domain%nytot+1))
+  call sum_across_PEs(Dlist, (G%Domain%niglobal+1)*(G%Domain%njglobal+1))
   call sum_across_PEs(Arealist, max_list_size+1)
 
   do j=1,n+1 ; indx2(j) = j ; enddo
@@ -1221,7 +1221,7 @@ subroutine create_depth_list(G, CS, max_list_size)
     endif
   enddo
  
-!   CS%list_size = G%Domain%nxtot*G%Domain%nytot
+!   CS%list_size = G%Domain%niglobal*G%Domain%njglobal
   CS%list_size = list_size
   allocate(CS%DL(CS%list_size+1))
 

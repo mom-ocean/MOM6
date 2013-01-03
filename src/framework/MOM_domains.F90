@@ -78,8 +78,8 @@ end interface pass_vector_complete
 type, public :: MOM_domain_type
   type(domain2D), pointer :: mpp_domain => NULL() ! The domain with halos on
                                         ! this processor, centered at h points.
-  integer :: nxtot, nytot               ! total horizontal domain sizes
-  integer :: nx_halo, ny_halo           ! X- and Y- halo sizes in memory.
+  integer :: niglobal, njglobal            ! total horizontal domain sizes
+  integer :: nihalo, njhalo           ! X- and Y- halo sizes in memory.
   logical :: symmetric                  ! True if symmetric memory is used with
                                         ! this domain.
   logical :: nonblocking_updates        ! If true, non-blocking halo updates are
@@ -190,13 +190,8 @@ function pass_var_start_2d(array, MOM_dom, sideflag, position, complete)
   dirflag = To_All ! 60
   if (PRESENT(sideflag)) then ; if (sideflag > 0) dirflag = sideflag ; endif
 
-#ifdef FORBID_NONBLOCKING_UPDATES
-  call MOM_error(FATAL, "pass_var_start: This call is not yet available.")
-  pass_var_start_2d = -1
-#else
   pass_var_start_2d = mpp_start_update_domains(array, MOM_dom%mpp_domain, &
                           flags=dirflag, position=position)
-#endif
 end function pass_var_start_2d
 
 function pass_var_start_3d(array, MOM_dom, sideflag, position, complete)
@@ -227,13 +222,8 @@ function pass_var_start_3d(array, MOM_dom, sideflag, position, complete)
   dirflag = To_All ! 60
   if (PRESENT(sideflag)) then ; if (sideflag > 0) dirflag = sideflag ; endif
 
-#ifdef FORBID_NONBLOCKING_UPDATES
-  call MOM_error(FATAL, "pass_var_start: This call is not yet available.")
-  pass_var_start_3d = -1
-#else
   pass_var_start_3d = mpp_start_update_domains(array, MOM_dom%mpp_domain, &
                           flags=dirflag, position=position)
-#endif
 end function pass_var_start_3d
 
 subroutine pass_var_complete_2d(id_update, array, MOM_dom, sideflag, position)
@@ -261,12 +251,8 @@ subroutine pass_var_complete_2d(id_update, array, MOM_dom, sideflag, position)
   dirflag = To_All ! 60
   if (PRESENT(sideflag)) then ; if (sideflag > 0) dirflag = sideflag ; endif
 
-#ifdef FORBID_NONBLOCKING_UPDATES
-  call MOM_error(FATAL, "pass_var_complete: This call is not yet available.")
-#else
   call mpp_complete_update_domains(id_update, array, MOM_dom%mpp_domain, &
                                    flags=dirflag, position=position)
-#endif
 end subroutine pass_var_complete_2d
 
 subroutine pass_var_complete_3d(id_update, array, MOM_dom, sideflag, position)
@@ -293,12 +279,8 @@ subroutine pass_var_complete_3d(id_update, array, MOM_dom, sideflag, position)
   dirflag = To_All ! 60
   if (PRESENT(sideflag)) then ; if (sideflag > 0) dirflag = sideflag ; endif
 
-#ifdef FORBID_NONBLOCKING_UPDATES
-  call MOM_error(FATAL, "pass_var_complete: This call is not yet available.")
-#else
   call mpp_complete_update_domains(id_update, array, MOM_dom%mpp_domain, &
                                    flags=dirflag, position=position)
-#endif
 end subroutine pass_var_complete_3d
 
 
@@ -429,13 +411,8 @@ function pass_vector_start_2d(u_cmpt, v_cmpt, MOM_dom, direction, stagger, compl
   dirflag = To_All ! 60
   if (PRESENT(direction)) then ; if (direction > 0) dirflag = direction ; endif
 
-#ifdef FORBID_NONBLOCKING_UPDATES
-  call MOM_error(FATAL, "pass_vector_start: This call is not yet available.")
-  pass_vector_start_2d = -1
-#else
   pass_vector_start_2d = mpp_start_update_domains(u_cmpt, v_cmpt, &
       MOM_dom%mpp_domain, flags=dirflag, gridtype=stagger_local)
-#endif
 
 end function pass_vector_start_2d
 
@@ -478,13 +455,8 @@ function pass_vector_start_3d(u_cmpt, v_cmpt, MOM_dom, direction, stagger, compl
   dirflag = To_All ! 60
   if (PRESENT(direction)) then ; if (direction > 0) dirflag = direction ; endif
 
-#ifdef FORBID_NONBLOCKING_UPDATES
-  call MOM_error(FATAL, "pass_vector_start: This call is not yet available.")
-  pass_vector_start_3d = -1
-#else
   pass_vector_start_3d = mpp_start_update_domains(u_cmpt, v_cmpt, &
       MOM_dom%mpp_domain, flags=dirflag, gridtype=stagger_local)
-#endif
 
 end function pass_vector_start_3d
 
@@ -525,12 +497,8 @@ subroutine pass_vector_complete_2d(id_update, u_cmpt, v_cmpt, MOM_dom, direction
   dirflag = To_All ! 60
   if (PRESENT(direction)) then ; if (direction > 0) dirflag = direction ; endif
 
-#ifdef FORBID_NONBLOCKING_UPDATES
-  call MOM_error(FATAL, "pass_vector_complete: This call is not yet available.")
-#else
   call mpp_complete_update_domains(id_update, u_cmpt, v_cmpt, &
            MOM_dom%mpp_domain, flags=dirflag, gridtype=stagger_local)
-#endif
 
 end subroutine pass_vector_complete_2d
 
@@ -571,12 +539,8 @@ subroutine pass_vector_complete_3d(id_update, u_cmpt, v_cmpt, MOM_dom, direction
   dirflag = To_All ! 60
   if (PRESENT(direction)) then ; if (direction > 0) dirflag = direction ; endif
 
-#ifdef FORBID_NONBLOCKING_UPDATES
-  call MOM_error(FATAL, "pass_vector_complete: This call is not yet available.")
-#else
   call mpp_complete_update_domains(id_update, u_cmpt, v_cmpt, &
            MOM_dom%mpp_domain, flags=dirflag, gridtype=stagger_local)
-#endif
 
 end subroutine pass_vector_complete_3d
 
@@ -598,14 +562,14 @@ subroutine MOM_domains_init(MOM_dom, param_file, min_halo, symmetric)
   integer, dimension(2) :: layout = (/ 1, 1 /)
   integer, dimension(2) :: io_layout = (/ 0, 0 /)
   integer, dimension(4) :: global_indices
-  integer :: x_halo, y_halo
+  integer :: nihalo, njhalo, nihalo_dflt, njhalo_dflt
   integer :: pe, proc_used
   integer :: isc,iec,jsc,jec ! The bounding indices of the computational domain.
   integer :: X_FLAGS, Y_FLAGS
   integer :: i, xsiz, ysiz
   logical :: reentrant_x, reentrant_y, tripolar_N, is_static
   character(len=200) :: mesg
-  character(len=8) :: char_xsiz, char_ysiz, char_nxtot, char_nytot
+  character(len=8) :: char_xsiz, char_ysiz, char_niglobal, char_njglobal
   character(len=128) :: version = '$Id$'
   character(len=128) :: tagname = '$Name$'
   character(len=40)  :: mod ! This module's name.
@@ -654,13 +618,19 @@ subroutine MOM_domains_init(MOM_dom, param_file, min_halo, symmetric)
   call get_param(param_file, mod, "NONBLOCKING_UPDATES", MOM_dom%nonblocking_updates, &
                  "If true, non-blocking halo updates may be used.", &
                  default=.false.)
-#ifdef FORBID_NONBLOCKING_UPDATES
-  if (MOM_dom%nonblocking_updates) call MOM_error(FATAL, "MOM_domains_init: "//&
-         "Non-blocking halo updates are not yet permitted.  Use #undef NONBLOCKING_UPDATES.")
-#endif
+
   is_static = .false.
+  nihalo_dflt = 2 ; njhalo_dflt = 2
 #ifdef STATIC_MEMORY_
   is_static = .true.
+  nihalo_dflt = NIHALO_ ; njhalo_dflt = NJHALO_
+#else
+# ifdef NIHALO_
+  nihalo_dflt = NIHALO_
+# endif
+# ifdef NJHALO_
+  njhalo_dflt = NJHALO_
+# endif
 #endif
   call log_param(param_file, mod, "STATIC_MEMORY_", is_static, &
                  "If STATIC_MEMORY_ is defined, the principle variables \n"//&
@@ -670,63 +640,65 @@ subroutine MOM_domains_init(MOM_dom, param_file, min_halo, symmetric)
                  "faster, but does not allow the PE count to be changed \n"//&
                  "at run time.  This can only be set at compile time.")
 
-  call get_param(param_file, mod, "NIHALO", MOM_dom%nx_halo, &
+  call get_param(param_file, mod, "NIHALO", MOM_dom%nihalo, &
                  "The number of halo points on each side in the \n"//&
                  "x-direction.  With STATIC_MEMORY_ this is set as NIHALO_ \n"//&
                  "in MOM_memory.h at compile time; without STATIC_MEMORY_ \n"//&
-                 "the default is NIHALO_ in MOM_memory.h.", default=NIHALO_)
-  call get_param(param_file, mod, "NJHALO", MOM_dom%ny_halo, &
+                 "the default is NIHALO_ in MOM_memory.h (if defined) or 2.", &
+                 default=nihalo_dflt)
+  call get_param(param_file, mod, "NJHALO", MOM_dom%njhalo, &
                  "The number of halo points on each side in the \n"//&
                  "y-direction.  With STATIC_MEMORY_ this is set as NJHALO_ \n"//&
                  "in MOM_memory.h at compile time; without STATIC_MEMORY_ \n"//&
-                 "the default is NJHALO_ in MOM_memory.h.", default=NJHALO_)
+                 "the default is NJHALO_ in MOM_memory.h (if defined) or 2.", &
+                 default=njhalo_dflt)
   if (present(min_halo)) then
-    MOM_dom%nx_halo = max(MOM_dom%nx_halo, min_halo(1))
-    min_halo(1) = MOM_dom%nx_halo
-    MOM_dom%ny_halo = max(MOM_dom%ny_halo, min_halo(2))
-    min_halo(2) = MOM_dom%ny_halo
-    call log_param(param_file, mod, "NIHALO min_halo", MOM_dom%nx_halo)
-    call log_param(param_file, mod, "NJHALO min_halo", MOM_dom%nx_halo)
+    MOM_dom%nihalo = max(MOM_dom%nihalo, min_halo(1))
+    min_halo(1) = MOM_dom%nihalo
+    MOM_dom%njhalo = max(MOM_dom%njhalo, min_halo(2))
+    min_halo(2) = MOM_dom%njhalo
+    call log_param(param_file, mod, "NIHALO min_halo", MOM_dom%nihalo)
+    call log_param(param_file, mod, "NJHALO min_halo", MOM_dom%nihalo)
   endif
 #ifdef STATIC_MEMORY_
-  call get_param(param_file, mod, "NIGLOBAL", MOM_dom%nxtot, &
+  call get_param(param_file, mod, "NIGLOBAL", MOM_dom%niglobal, &
                  "The total number of thickness grid points in the \n"//&
                  "x-direction in the physical domain. With STATIC_MEMORY_ \n"//&
                  "this is set in MOM_memory.h at compile time.", default=NIGLOBAL_)
-  call get_param(param_file, mod, "NJGLOBAL", MOM_dom%nytot, &
+  call get_param(param_file, mod, "NJGLOBAL", MOM_dom%njglobal, &
                  "The total number of thickness grid points in the \n"//&
                  "x-direction in the physical domain. With STATIC_MEMORY_ \n"//&
                  "this is set in MOM_memory.h at compile time.", default=NJGLOBAL_)
-  if (MOM_dom%nxtot /= NIGLOBAL_) call MOM_error(FATAL,"MOM_domains_init: " // &
+  if (MOM_dom%niglobal /= NIGLOBAL_) call MOM_error(FATAL,"MOM_domains_init: " // &
    "static mismatch for NIGLOBAL_ domain size. Header file does not match input namelist")
-  if (MOM_dom%nytot /= NJGLOBAL_) call MOM_error(FATAL,"MOM_domains_init: " // &
+  if (MOM_dom%njglobal /= NJGLOBAL_) call MOM_error(FATAL,"MOM_domains_init: " // &
    "static mismatch for NJGLOBAL_ domain size. Header file does not match input namelist")
 
   if (.not.present(min_halo)) then
-    if (MOM_dom%nx_halo /= NIHALO_) call MOM_error(FATAL,"MOM_domains_init: " // &
+    if (MOM_dom%nihalo /= NIHALO_) call MOM_error(FATAL,"MOM_domains_init: " // &
            "static mismatch for NIHALO domain size")
-    if (MOM_dom%ny_halo /= NJHALO_) call MOM_error(FATAL,"MOM_domains_init: " // &
+    if (MOM_dom%njhalo /= NJHALO_) call MOM_error(FATAL,"MOM_domains_init: " // &
            "static mismatch for NJHALO domain size")
   endif
 #else
-  call get_param(param_file, mod, "NIGLOBAL", MOM_dom%nxtot, &
+  call get_param(param_file, mod, "NIGLOBAL", MOM_dom%niglobal, &
                  "The total number of thickness grid points in the \n"//&
                  "x-direction in the physical domain. With STATIC_MEMORY_ \n"//&
                  "this is set in MOM_memory.h at compile time.", &
                  fail_if_missing=.true.)
-  call get_param(param_file, mod, "NJGLOBAL", MOM_dom%nytot, &
+  call get_param(param_file, mod, "NJGLOBAL", MOM_dom%njglobal, &
                  "The total number of thickness grid points in the \n"//&
                  "x-direction in the physical domain. With STATIC_MEMORY_ \n"//&
                  "this is set in MOM_memory.h at compile time.", &
                  fail_if_missing=.true.)
 #endif
-  x_halo = MOM_dom%nx_halo
-  y_halo = MOM_dom%ny_halo
+  nihalo = MOM_dom%nihalo
+  njhalo = MOM_dom%njhalo
 
   global_indices(1) = 1
-  global_indices(2) = MOM_dom%nxtot
+  global_indices(2) = MOM_dom%niglobal
   global_indices(3) = 1
-  global_indices(4) = MOM_dom%nytot
+  global_indices(4) = MOM_dom%njglobal
 
 #ifdef STATIC_MEMORY_
   layout(1) = NIPROC_ ; layout(2) = NJPROC_
@@ -789,9 +761,9 @@ subroutine MOM_domains_init(MOM_dom, param_file, min_halo, symmetric)
       "TRIPOLAR_N and REENTRANT_Y may not be defined together.")
   endif
   
-  call MOM_define_domain((/1+x_halo,MOM_dom%nxtot+x_halo,1+y_halo, &
-                 MOM_dom%nytot+y_halo/), layout, MOM_dom%mpp_domain, &
-                 xflags=X_FLAGS, yflags=Y_FLAGS, xhalo=x_halo, yhalo=y_halo, &
+  call MOM_define_domain((/1+nihalo,MOM_dom%niglobal+nihalo,1+njhalo, &
+                 MOM_dom%njglobal+njhalo/), layout, MOM_dom%mpp_domain, &
+                 xflags=X_FLAGS, yflags=Y_FLAGS, xhalo=nihalo, yhalo=njhalo, &
                  symmetry = MOM_dom%symmetric, name="MOM")
 
   if ((io_layout(1) + io_layout(2) > 0)) then
@@ -811,15 +783,15 @@ subroutine MOM_domains_init(MOM_dom, param_file, min_halo, symmetric)
   call mpp_get_compute_domain(MOM_dom%mpp_domain,isc,iec,jsc,jec)
   xsiz = iec - isc + 1
   ysiz = jec - jsc + 1
-  if (xsiz*NIPROC_ /= MOM_dom%nxtot .OR. ysiz*NJPROC_ /= MOM_dom%nytot) then
+  if (xsiz*NIPROC_ /= MOM_dom%niglobal .OR. ysiz*NJPROC_ /= MOM_dom%njglobal) then
      write( char_xsiz,'(i4)' ) NIPROC_
      write( char_ysiz,'(i4)' ) NJPROC_
-     write( char_nxtot,'(i4)' ) MOM_dom%nxtot
-     write( char_nytot,'(i4)' ) MOM_dom%nytot
+     write( char_niglobal,'(i4)' ) MOM_dom%niglobal
+     write( char_njglobal,'(i4)' ) MOM_dom%njglobal
      call MOM_error(WARNING,'MOM_domains: Processor decomposition (NIPROC_,NJPROC_) = (' &
          //trim(char_xsiz)//','//trim(char_ysiz)// &
          ') does not evenly divide size set by preprocessor macro ('&
-         //trim(char_nxtot)//','//trim(char_nytot)// '). ')
+         //trim(char_niglobal)//','//trim(char_njglobal)// '). ')
      call MOM_error(FATAL,'MOM_domains:  #undef STATIC_MEMORY_ in MOM_memory.h to use &
          &dynamic allocation, or change processor decomposition to evenly divide the domain.')
   endif
