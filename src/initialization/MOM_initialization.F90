@@ -3297,7 +3297,7 @@ subroutine Get_MOM_Input(param_file, dirs, check_params)
     restart_output_dir = ' ', & ! Directory into which to write restart files.
     input_filename  = ' '       ! A string that indicates the input files or how
                                 ! the run segment should be started.
-  integer :: unit, io, ierr
+  integer :: unit, io, ierr, valid_param_files
 
   namelist /MOM_input_nml/ output_directory, input_filename, parameter_filename, &
                            restart_input_dir, restart_output_dir
@@ -3320,10 +3320,18 @@ subroutine Get_MOM_Input(param_file, dirs, check_params)
     dirs%input_filename = input_filename
   endif
 
-  if (present(param_file)) then ; do io = 1, npf
-    if (len_trim(trim(parameter_filename(io))) > 0) &
-      call open_param_file(trim(parameter_filename(io)), param_file, check_params)
-  enddo ; endif
+  if (present(param_file)) then
+    valid_param_files = 0
+    do io = 1, npf
+      if (len_trim(trim(parameter_filename(io))) > 0) then
+        call open_param_file(trim(parameter_filename(io)), param_file, &
+                             check_params)
+        valid_param_files = valid_param_files + 1
+      endif
+    enddo
+    if (valid_param_files == 0) call MOM_error(FATAL, "There must be at "//&
+         "least 1 valid entry in input_filename in MOM_input_nml in input.nml.")
+  endif
 
 end subroutine Get_MOM_Input
 ! -----------------------------------------------------------------------------
