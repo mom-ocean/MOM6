@@ -41,10 +41,10 @@ module MOM_PressureForce_AFV
 !*                                                                     *
 !*     A small fragment of the grid is shown below:                    *
 !*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q, f                                     *
+!*    j+1  x ^ x ^ x   At x:  q, CoriolisBu                            *
 !*    j+1  > o > o >   At ^:  v, PFv                                   *
 !*    j    x ^ x ^ x   At >:  u, PFu                                   *
-!*    j    > o > o >   At o:  h, D, M, e, p, pbce, gtot, T, S, rho_st  *
+!*    j    > o > o >   At o:  h, bathyT, M, e, p, pbce, T, S           *
 !*    j-1  x ^ x ^ x                                                   *
 !*        i-1  i  i+1                                                  *
 !*           i  i+1                                                    *
@@ -410,7 +410,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, regridding_opts, p_at
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(out)   :: PFv
   type(ocean_grid_type),                  intent(in)    :: G
   type(PressureForce_AFV_CS),             pointer       :: CS
-  type(regridding_opts_t),                intent(in)  :: regridding_opts
+  type(regridding_opts_t),                intent(in)    :: regridding_opts
   real, dimension(:,:),                  optional, pointer     :: p_atm
   real, dimension(NIMEM_,NJMEM_,NKMEM_), optional, intent(out) :: pbce
   real, dimension(NIMEM_,NJMEM_),        optional, intent(out) :: eta
@@ -441,9 +441,6 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, regridding_opts, p_at
 !  (out)     eta - the free surface height used to calculate PFu and PFv, in m,
 !                  with any tidal contributions or compressibility compensation.
 
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
-    rho_star    ! In-situ density divided by the derivative with depth of the
-                ! corrected e times (G_Earth/Rho0).  In units of m s-2.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: e ! Interface height in m.
   real, dimension(SZI_(G),SZJ_(G))  :: &
     dz, &       ! The change in geopotential thickness through a layer, m2 s-2.

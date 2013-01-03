@@ -32,10 +32,10 @@ module MOM_diagnostics
 !*                                                                     *
 !*     A small fragment of the grid is shown below:                    *
 !*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q, f                                     *
+!*    j+1  x ^ x ^ x   At x:  q, CoriolisBu                            *
 !*    j+1  > o > o >   At ^:  v                                        *
 !*    j    x ^ x ^ x   At >:  u                                        *
-!*    j    > o > o >   At o:  h, D                                     *
+!*    j    > o > o >   At o:  h, bathyT                                *
 !*    j-1  x ^ x ^ x                                                   *
 !*        i-1  i  i+1  At x & ^:                                       *
 !*           i  i+1    At > & o:                                       *
@@ -303,12 +303,13 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, lev, tv, dt, G, CS, eta_
       do j=js,je ; do i=is,ie
         ! Blend the equatorial deformation radius with the standard one.
         f2_h = absurdly_small_freq2 + 0.25 * &
-            ((G%f(I,J)**2 + G%f(I-1,J-1)**2) + (G%f(I-1,J)**2 + G%f(I,J-1)**2))
+            ((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
+             (G%CoriolisBu(I-1,J)**2 + G%CoriolisBu(I,J-1)**2))
         mag_beta = sqrt(0.5 * ( &
-            (((G%f(I,J)-G%f(I-1,J)) * G%IDXv(i,J))**2 + &
-             ((G%f(I,J-1)-G%f(I-1,J-1)) * G%IDXv(i,J-1))**2) + &
-            (((G%f(I,J)-G%f(I,J-1)) * G%IDYu(I,j))**2 + &
-             ((G%f(I-1,J)-G%f(I-1,J-1)) * G%IDYu(I-1,j))**2) ))
+            (((G%CoriolisBu(I,J)-G%CoriolisBu(I-1,J)) * G%IDXv(i,J))**2 + &
+             ((G%CoriolisBu(I,J-1)-G%CoriolisBu(I-1,J-1)) * G%IDXv(i,J-1))**2) + &
+            (((G%CoriolisBu(I,J)-G%CoriolisBu(I,J-1)) * G%IDYu(I,j))**2 + &
+             ((G%CoriolisBu(I-1,J)-G%CoriolisBu(I-1,J-1)) * G%IDYu(I-1,j))**2) ))
         CS%Rd1(i,j) = CS%cg1(i,j) / sqrt(f2_h + CS%cg1(i,j) * mag_beta)
 
       enddo ; enddo

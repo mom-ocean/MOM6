@@ -27,14 +27,14 @@ module MOM_PointAccel
 !*  threshold, in order to determine which term is culpable.           *
 !*  often this is done for debugging purposes.                         *
 !*                                                                     *
-!*  Macros written all in capital letters are defined in MOM_memory.h *
+!*  Macros written all in capital letters are defined in MOM_memory.h  *
 !*                                                                     *
 !*     A small fragment of the grid is shown below:                    *
 !*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q, f                                     *
+!*    j+1  x ^ x ^ x   At x:  q, CoriolisBu                            *
 !*    j+1  > o > o >   At ^:  v, PFv, CAv, vh, diffv, vbt, vhtr        *
 !*    j    x ^ x ^ x   At >:  u, PFu, CAu, uh, diffu, ubt, uhtr        *
-!*    j    > o > o >   At o:  h, D, s, tr, T, S                        *
+!*    j    > o > o >   At o:  h, bathyT, tr, T, S                      *
 !*    j-1  x ^ x ^ x                                                   *
 !*        i-1  i  i+1  At x & ^:                                       *
 !*           i  i+1    At > & o:                                       *
@@ -493,13 +493,13 @@ subroutine write_u_accel(I, j, um, hin, dt, G, CS, maxvel, minvel, str, a, hv)
 
     if (ASSOCIATED(CS%diag%q)) then
       write(file,'(/,"v-eff: ",$)')
-      f_eff = G%f(I,J-1)
+      f_eff = G%CoriolisBu(I,J-1)
       if (abs(f_eff) < 1e-10) f_eff = 1e-10
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') 0.5*(CS%diag%q(I,J-1,k) * &
         (CS%vh(i,J-1,k) + CS%vh(i+1,J-1,k)) * G%IDXu(I,j) / f_eff); enddo
 
       write(file,'(/,"v+eff: ",$)')
-      f_eff = G%f(I,J)
+      f_eff = G%CoriolisBu(I,J)
       if (abs(f_eff) < 1e-10) f_eff = 1e-10
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') 0.5*(CS%diag%q(I,J,k) * &
         (CS%vh(i+1,J,k) + CS%vh(i,J,k)) * G%IDXu(I,j) / f_eff); enddo
@@ -978,13 +978,13 @@ subroutine write_v_accel(i, J, vm, hin, dt, G, CS, maxvel, minvel, str, a, hv)
 
     if (ASSOCIATED(CS%diag%q)) then
       write(file,'(/,"u-eff: ",$)')
-      f_eff = G%F(I-1,J)
+      f_eff = G%CoriolisBu(I-1,J)
       if (abs(f_eff) < 1e-10) f_eff = 1e-10
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (0.5*(CS%diag%q(I-1,J,k)* &
         (CS%uh(I-1,j,k) + CS%uh(I-1,j+1,k))) * G%IDYv(i,J) / f_eff); enddo
 
       write(file,'(/,"u+eff: ",$)')
-      f_eff = G%F(I,J)
+      f_eff = G%CoriolisBu(I,J)
       if (abs(f_eff) < 1e-10) f_eff = 1e-10
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (0.5*(CS%diag%q(I,J,k)* &
         (CS%uh(I,j,k) + CS%uh(I,j+1,k))) * G%IDYv(i,J) / f_eff); enddo

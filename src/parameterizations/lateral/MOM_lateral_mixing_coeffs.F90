@@ -515,23 +515,24 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
     ! Pre-calculate several static expressions for later use.
     do j=js-1,je+1 ; do i=is-1,ie+1
       CS%f2_dx2_h(i,j) = (G%DXh(i,j)**2 + G%DYh(i,j)**2) * &
-          max(0.25 * ((G%f(I,J)**2 + G%f(I-1,J-1)**2) + &
-                      (G%f(I-1,J)**2 + G%f(I,J-1)**2)), absurdly_small_freq2)
+          max(0.25 * ((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
+                      (G%CoriolisBu(I-1,J)**2 + G%CoriolisBu(I,J-1)**2)), &
+              absurdly_small_freq2)
       CS%beta_dx2_h(i,j) = (G%DXh(i,j)**2 + G%DYh(i,j)**2) * (sqrt(0.5 * &
-          ( (((G%f(I,J)-G%f(I-1,J)) * G%IDXv(i,J))**2 + &
-             ((G%f(I,J-1)-G%f(I-1,J-1)) * G%IDXv(i,J-1))**2) + &
-            (((G%f(I,J)-G%f(I,J-1)) * G%IDYu(I,j))**2 + &
-             ((G%f(I-1,J)-G%f(I-1,J-1)) * G%IDYu(I-1,j))**2) ) ))
+          ( (((G%CoriolisBu(I,J)-G%CoriolisBu(I-1,J)) * G%IDXv(i,J))**2 + &
+             ((G%CoriolisBu(I,J-1)-G%CoriolisBu(I-1,J-1)) * G%IDXv(i,J-1))**2) + &
+            (((G%CoriolisBu(I,J)-G%CoriolisBu(I,J-1)) * G%IDYu(I,j))**2 + &
+             ((G%CoriolisBu(I-1,J)-G%CoriolisBu(I-1,J-1)) * G%IDYu(I-1,j))**2) ) ))
     enddo ; enddo
 
     do J=js-1,Jeq ; do I=is-1,Ieq
       CS%f2_dx2_q(I,J) = (G%DXq(i,j)**2 + G%DYq(i,j)**2) * &
-                         max(G%f(I,J)**2, absurdly_small_freq2)
+                         max(G%CoriolisBu(I,J)**2, absurdly_small_freq2)
       CS%beta_dx2_q(I,J) = (G%DXq(i,j)**2 + G%DYq(i,j)**2) * (sqrt(0.5 * &
-          ( (((G%f(I,J)-G%f(I-1,J)) * G%IDXv(i,J))**2 + &
-             ((G%f(I+1,J)-G%f(I,J)) * G%IDXv(i+1,J))**2) + &
-            (((G%f(I,J)-G%f(I,J-1)) * G%IDYu(I,j))**2 + &
-             ((G%f(I,J+1)-G%f(I,J)) * G%IDYu(I,j+1))**2) ) ))
+          ( (((G%CoriolisBu(I,J)-G%CoriolisBu(I-1,J)) * G%IDXv(i,J))**2 + &
+             ((G%CoriolisBu(I+1,J)-G%CoriolisBu(I,J)) * G%IDXv(i+1,J))**2) + &
+            (((G%CoriolisBu(I,J)-G%CoriolisBu(I,J-1)) * G%IDYu(I,j))**2 + &
+             ((G%CoriolisBu(I,J+1)-G%CoriolisBu(I,J)) * G%IDYu(I,j+1))**2) ) ))
     enddo ; enddo
 
   endif

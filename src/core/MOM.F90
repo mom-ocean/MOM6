@@ -300,10 +300,10 @@ module MOM
 !*                                                                     *
 !*     A small fragment of the grid is shown below:                    *
 !*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q, f                                     *
+!*    j+1  x ^ x ^ x   At x:  q, CoriolisBu                            *
 !*    j+1  > o > o >   At ^:  v, PFv, CAv, vh, diffv, tauy, vbt, vhtr  *
 !*    j    x ^ x ^ x   At >:  u, PFu, CAu, uh, diffu, taux, ubt, uhtr  *
-!*    j    > o > o >   At o:  h, D, eta, T, S, tr                      *
+!*    j    > o > o >   At o:  h, bathyT, eta, T, S, tr                 *
 !*    j-1  x ^ x ^ x                                                   *
 !*        i-1  i  i+1                                                  *
 !*           i  i+1                                                    *
@@ -1815,39 +1815,39 @@ subroutine write_static_fields(G, diag)
   out_h(:,:) = 0.0
 
   id = register_static_field('ocean_model', 'geolat', G%axesh1, &
-        'Latitude of tracer (h) points', 'degrees_N')
+        'Latitude of tracer (T) points', 'degrees_N')
   if (id > 0) call post_data(id, G%geolath, diag, .true.)
 
   id = register_static_field('ocean_model', 'geolon', G%axesh1, &
-        'Longitude of tracer (h) points', 'degrees_E')
+        'Longitude of tracer (T) points', 'degrees_E')
   if (id > 0) call post_data(id, G%geolonh, diag, .true.)
 
   id = register_static_field('ocean_model', 'geolat_c', G%axesq1, &
-        'Latitude of corner (q) points', 'degrees_N')
+        'Latitude of corner (Bu) points', 'degrees_N')
   if (id > 0) call post_data(id, G%geolatq, diag, .true.)
 
   id = register_static_field('ocean_model', 'geolon_c', G%axesq1, &
-        'Longitude of corner (q) points', 'degrees_E')
+        'Longitude of corner (Bu) points', 'degrees_E')
   if (id > 0) call post_data(id, G%geolonq, diag, .true.)
 
   id = register_static_field('ocean_model', 'geolat_v', G%axesv1, &
-        'Latitude of meridional velocity (v) points', 'degrees_N')
+        'Latitude of meridional velocity (Cv) points', 'degrees_N')
   if (id > 0) call post_data(id, G%geolatv, diag, .true.)
 
   id = register_static_field('ocean_model', 'geolon_v', G%axesv1, &
-        'Longitude of meridional velocity (v) points', 'degrees_E')
+        'Longitude of meridional velocity (Cv) points', 'degrees_E')
   if (id > 0) call post_data(id, G%geolonv, diag, .true.)
 
   id = register_static_field('ocean_model', 'geolat_u', G%axesu1, &
-        'Latitude of zonal velocity (u) points', 'degrees_N')
+        'Latitude of zonal velocity (Cu) points', 'degrees_N')
   if (id > 0) call post_data(id, G%geolatu, diag, .true.)
 
   id = register_static_field('ocean_model', 'geolon_u', G%axesu1, &
-        'Longitude of zonal velocity (u) points', 'degrees_E')
+        'Longitude of zonal velocity (Cu) points', 'degrees_E')
   if (id > 0) call post_data(id, G%geolonu, diag, .true.)
 
   id = register_static_field('ocean_model', 'area_t', G%axesh1, &
-        'Surface area of tracer (h) cells', 'degrees_E')
+        'Surface area of tracer (T) cells', 'degrees_E')
   if (id > 0) then
     do j=js,je ; do i=is,ie ; out_h(i,j) = G%DXDYh(i,j) ; enddo ; enddo
     call post_data(id, out_h, diag, .true.)
@@ -1863,20 +1863,20 @@ subroutine write_static_fields(G, diag)
   if (id > 0) call post_data(id, G%hmask, diag, .true.)
 
   id = register_static_field('ocean_model', 'wet_c', G%axesq1, &
-        '0 if land, 1 if ocean at corner (q) points', 'none')
+        '0 if land, 1 if ocean at corner (Bu) points', 'none')
   if (id > 0) call post_data(id, G%qmask, diag, .true.)
 
   id = register_static_field('ocean_model', 'wet_u', G%axesu1, &
-        '0 if land, 1 if ocean at zonal velocity (u) points', 'none')
+        '0 if land, 1 if ocean at zonal velocity (Cu) points', 'none')
   if (id > 0) call post_data(id, G%umask, diag, .true.)
 
   id = register_static_field('ocean_model', 'wet_v', G%axesv1, &
-        '0 if land, 1 if ocean at meridional velocity (v) points', 'none')
+        '0 if land, 1 if ocean at meridional velocity (Cv) points', 'none')
   if (id > 0) call post_data(id, G%vmask, diag, .true.)
 
   id = register_static_field('ocean_model', 'Coriolis', G%axesq1, &
-        'Coriolis parameter at corner (q) points', 's-1')
-  if (id > 0) call post_data(id, G%f, diag, .true.)
+        'Coriolis parameter at corner (Bu) points', 's-1')
+  if (id > 0) call post_data(id, G%CoriolisBu, diag, .true.)
 
 end subroutine write_static_fields
 

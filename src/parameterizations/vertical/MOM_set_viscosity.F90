@@ -515,8 +515,8 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, CS)
 ! The  bottom boundary layer thickness is found by solving the same
 ! equation as in Killworth and Edwards:    (h/h_f)^2 + h/h_N = 1.
 
-      if (m==1) then ; C2f = (G%f(i,j-1)+G%f(i,j))
-      else ; C2f = (G%f(i-1,j)+G%f(i,j)) ; endif
+      if (m==1) then ; C2f = (G%CoriolisBu(i,j-1)+G%CoriolisBu(i,j))
+      else ; C2f = (G%CoriolisBu(i-1,j)+G%CoriolisBu(i,j)) ; endif
 
       if (CS%cdrag * U_bg_sq <= 0.0) then
         ! This avoids NaNs and overflows, and could be used in all cases, 
@@ -1005,7 +1005,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
                                        (fluxes%tauy(i,J-1) + fluxes%tauy(i+1,J)))
 
           if (CS%use_omega) then ; absf = 2.0*CS%omega
-          else ; absf = 0.5*(abs(G%f(I,J)) + abs(G%f(I,J-1))) ; endif
+          else ; absf = 0.5*(abs(G%CoriolisBu(I,J)) + abs(G%CoriolisBu(I,J-1))) ; endif
           U_Star = max(CS%ustar_min, 0.5 * (fluxes%ustar(i,j) + fluxes%ustar(i+1,j)))
           Idecay_len_TKE(I) = ((absf / U_Star) * CS%TKE_decay) * G%H_to_m
         endif
@@ -1199,12 +1199,14 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
             htot(i) = htot(i) + Dh
             Rhtot(i) = Rhtot(i) + Rlay*Dh
           enddo
-          if (G%Rlay(nz)*htot(i) - Rhtot(i) < ustarsq) htot(i) = htot(i) + h_at_vel(i,nz)
+          if (G%Rlay(nz)*htot(i) - Rhtot(i) < ustarsq) &
+            htot(i) = htot(i) + h_at_vel(i,nz)
         endif ! use_EOS
 
         visc%tbl_thick_shelf_u(I,j) = max(CS%Htbl_shelf_min, &
-            htot(I) / (0.5 + sqrt(0.25 + (htot(i)*(G%f(I,J-1)+G%f(I,J)))**2 / &
-                                      (ustar(i)*G%m_to_H)**2 )) )
+            htot(I) / (0.5 + sqrt(0.25 + &
+                         (htot(i)*(G%CoriolisBu(I,J-1)+G%CoriolisBu(I,J)))**2 / &
+                         (ustar(i)*G%m_to_H)**2 )) )
         visc%kv_tbl_shelf_u(I,j) = max(CS%KV_TBL_min, &
                        cdrag_sqrt*ustar(I)*visc%tbl_thick_shelf_u(I,j))
       endif ; enddo ! I-loop
@@ -1231,7 +1233,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
                                        (fluxes%taux(I-1,j) + fluxes%tauy(I,j+1)))
 
          if (CS%use_omega) then ; absf = 2.0*CS%omega
-         else ; absf = 0.5*(abs(G%f(I-1,J)) + abs(G%f(I,J))) ; endif
+         else ; absf = 0.5*(abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J))) ; endif
          U_Star = max(CS%ustar_min, 0.5 * (fluxes%ustar(i,j) + fluxes%ustar(i,j+1)))
          Idecay_len_TKE(i) = ((absf / U_Star) * CS%TKE_decay) * G%H_to_m
 
@@ -1426,12 +1428,14 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
             htot(i) = htot(i) + Dh
             Rhtot = Rhtot + Rlay*Dh
           enddo
-          if (G%Rlay(nz)*htot(i) - Rhtot(i) < ustarsq) htot(i) = htot(i) + h_at_vel(i,nz)
+          if (G%Rlay(nz)*htot(i) - Rhtot(i) < ustarsq) &
+            htot(i) = htot(i) + h_at_vel(i,nz)
         endif ! use_EOS
 
         visc%tbl_thick_shelf_v(i,J) = max(CS%Htbl_shelf_min, &
-            htot(i) / (0.5 + sqrt(0.25 + (htot(i)*(G%f(I-1,J)+G%f(I,J)))**2 / &
-                                         (ustar(i)*G%m_to_H)**2 )) )
+            htot(i) / (0.5 + sqrt(0.25 + &
+                (htot(i)*(G%CoriolisBu(I-1,J)+G%CoriolisBu(I,J)))**2 / &
+                (ustar(i)*G%m_to_H)**2 )) )
         visc%kv_tbl_shelf_v(i,J) = max(CS%KV_TBL_min, &
                        cdrag_sqrt*ustar(i)*visc%tbl_thick_shelf_v(i,J))
       endif ; enddo ! i-loop

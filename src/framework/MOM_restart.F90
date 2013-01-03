@@ -50,10 +50,10 @@ module MOM_restart
 !*                                                                     *
 !*     A small fragment of the grid is shown below:                    *
 !*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q, f                                     *
+!*    j+1  x ^ x ^ x   At x:  q, CoriolisBu                            *
 !*    j+1  > o > o >   At ^:  v                                        *
 !*    j    x ^ x ^ x   At >:  u                                        *
-!*    j    > o > o >   At o:  h, D, tr                                 *
+!*    j    > o > o >   At o:  h, bathyT, tr                            *
 !*    j-1  x ^ x ^ x                                                   *
 !*        i-1  i  i+1                                                  *
 !*           i  i+1                                                    *

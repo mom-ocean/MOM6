@@ -79,10 +79,10 @@ module MOM_barotropic
 !*                                                                     *
 !*     A small fragment of the grid is shown below:                    *
 !*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q, f                                     *
+!*    j+1  x ^ x ^ x   At x:  q, CoriolisBu                            *
 !*    j+1  > o > o >   At ^:  v_in, vbt, accel_layer_v, vbtav          *
 !*    j    x ^ x ^ x   At >:  u_in, ubt, accel_layer_u, ubtav, amer    *
-!*    j    > o > o >   At o:  eta, h, D, pbce                          *
+!*    j    > o > o >   At o:  eta, h, bathyT, pbce                     *
 !*    j-1  x ^ x ^ x                                                   *
 !*        i-1  i  i+1                                                  *
 !*           i  i+1                                                    *
@@ -802,7 +802,7 @@ subroutine btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
     enddo ; enddo
 !GOMP(parallel do default(shared) private(i, j))
     do J=js-1,je ; do I=is-1,ie
-      q(I,J) = 0.25 * G%f(I,J) * &
+      q(I,J) = 0.25 * G%CoriolisBu(I,J) * &
            ((G%DXDYh(i,j) + G%DXDYh(i+1,j+1)) + (G%DXDYh(i+1,j) + G%DXDYh(i,j+1))) / &
            ((G%DXDYh(i,j) * G%bathyT(i,j) + G%DXDYh(i+1,j+1) * G%bathyT(i+1,j+1)) + &
             (G%DXDYh(i+1,j) * G%bathyT(i+1,j) + G%DXDYh(i,j+1) * G%bathyT(i,j+1)))
@@ -1416,7 +1416,8 @@ subroutine btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
               gtot_W(i,j) * (Datu(I-1,j)*G%IDXu(I-1,j))) + &
              (gtot_N(i,j) * (Datv(i,J)*G%IDYv(i,J)) + &
               gtot_S(i,j) * (Datv(i,J-1)*G%IDYv(i,J-1)))) + &
-            ((G%f(I,J)**2 + G%f(I-1,J-1)**2) + (G%f(I-1,J)**2 + G%f(I,J-1)**2)))
+            ((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
+             (G%CoriolisBu(I-1,J)**2 + G%CoriolisBu(I,J-1)**2)))
       H_eff_dx2 = max(H_min_dyn * (G%IDXh(i,j)**2 + G%IDYh(i,j)**2), &
                       G%IDXDYh(i,j) * &
                         ((Datu(I,j)*G%IDXu(I,j) + Datu(I-1,j)*G%IDXu(I-1,j)) + &
@@ -2223,7 +2224,8 @@ subroutine set_dtbt(G, CS, eta, pbce, BT_cont, gtot_est, SSH_add)
     Idt_max2 = 0.5 * (1.0 + 2.0*CS%bebt) * (G%IDXDYh(i,j) * &
       ((gtot_E(i,j)*Datu(I,j)*G%IDXu(I,j) + gtot_W(i,j)*Datu(I-1,j)*G%IDXu(I-1,j)) + &
        (gtot_N(i,j)*Datv(i,J)*G%IDYv(i,J) + gtot_S(i,j)*Datv(i,J-1)*G%IDYv(i,J-1))) + &
-      ((G%f(I,J)**2 + G%f(I-1,J-1)**2) + (G%f(I-1,J)**2 + G%f(I,J-1)**2)))
+      ((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
+       (G%CoriolisBu(I-1,J)**2 + G%CoriolisBu(I,J-1)**2)))
     if (Idt_max2 * min_max_dt2 > 1.0) min_max_dt2 = 1.0 / Idt_max2
   enddo ; enddo
   dtbt_max = sqrt(min_max_dt2 / dgeo_de)
@@ -3868,7 +3870,7 @@ CS%Nonlin_cont_update_period = 1
       CS%D_v_Cor(i,J) = 0.5 * (G%bathyT(i,j+1) + G%bathyT(i,j))
     enddo ; enddo
     do J=js-1,je ; do I=is-1,ie
-      CS%q_D(I,J) = 0.25 * G%f(I,J) * &
+      CS%q_D(I,J) = 0.25 * G%CoriolisBu(I,J) * &
            ((G%DXDYh(i,j) + G%DXDYh(i+1,j+1)) + (G%DXDYh(i+1,j) + G%DXDYh(i,j+1))) / &
            ((G%DXDYh(i,j) * G%bathyT(i,j) + G%DXDYh(i+1,j+1) * G%bathyT(i+1,j+1)) + &
             (G%DXDYh(i+1,j) * G%bathyT(i+1,j) + G%DXDYh(i,j+1) * G%bathyT(i,j+1)))

@@ -30,10 +30,10 @@ module user_initialization
 !*    u - Zonal velocity in m s-1.                                     *
 !*    v - Meridional velocity in m s-1.                                *
 !*    h - Layer thickness in m.  (Must be positive.)                   *
-!*    D - Basin depth in m.  (Must be positive.)                       *
-!*    f - The Coriolis parameter, in s-1.                              *
-!*    g - The reduced gravity at each interface, in m s-2.             *
-!*    Rlay - Layer potential density (coordinate variable) in kg m-3.  *
+!*    G%bathyT - Basin depth in m.  (Must be positive.)                *
+!*    G%CoriolisBu - The Coriolis parameter, in s-1.                   *
+!*    G%g_prime - The reduced gravity at each interface, in m s-2.     *
+!*    G%Rlay - Layer potential density (coordinate variable) in kg m-3.*
 !*  If ENABLE_THERMODYNAMICS is defined:                               *
 !*    T - Temperature in C.                                            *
 !*    S - Salinity in psu.                                             *
@@ -69,10 +69,10 @@ module user_initialization
 !*                                                                     *
 !*     A small fragment of the grid is shown below:                    *
 !*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q, f                                     *
+!*    j+1  x ^ x ^ x   At x:  q, CoriolisBu                            *
 !*    j+1  > o > o >   At ^:  v, tauy                                  *
 !*    j    x ^ x ^ x   At >:  u, taux                                  *
-!*    j    > o > o >   At o:  h, D, buoy, tr, T, S, Rml, ustar         *
+!*    j    > o > o >   At o:  h, bathyT, buoy, tr, T, S, Rml, ustar    *
 !*    j-1  x ^ x ^ x                                                   *
 !*        i-1  i  i+1  At x & ^:                                       *
 !*           i  i+1    At > & o:                                       *

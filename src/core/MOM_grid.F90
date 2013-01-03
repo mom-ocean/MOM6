@@ -121,7 +121,7 @@ type, public :: ocean_grid_type
     Dblock_v, &   ! Topographic depths at v-points at which the flow is blocked
     Dopen_v       ! (Dblock_v) and open at width dx_v (Dopen_v), both in m.
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: &
-    f             ! The Coriolis parameter in s-1.
+    CoriolisBu    ! The Coriolis parameter at corner points, in s-1.
 
   ! The following variables give information about the vertical grid.
   logical :: Boussinesq     ! If true, make the Boussinesq approximation.
@@ -246,7 +246,7 @@ subroutine MOM_grid_init(grid, param_file)
   isd = grid%isd ; ied = grid%ied ; jsd = grid%jsd ; jed = grid%jed
   Isdq = grid%Isdq ; Iedq = grid%Iedq ; Jsdq = grid%Jsdq ; Jedq = grid%Jedq
   ALLOC_(grid%bathyT(isd:ied, jsd:jed)) ; grid%bathyT(:,:) = grid%Angstrom_z
-  ALLOC_(grid%f(Isdq:Iedq, Jsdq:Jedq))      ; grid%f(:,:) = 0.0
+  ALLOC_(grid%CoriolisBu(Isdq:Iedq, Jsdq:Jedq)) ; grid%CoriolisBu(:,:) = 0.0
   ALLOC_(grid%g_prime(nk+1)) ; grid%g_prime(:) = 0.0
   ALLOC_(grid%Rlay(nk+1))    ; grid%Rlay(:) = 0.0
 
@@ -387,10 +387,10 @@ subroutine MOM_grid_end(grid)
 ! Arguments: grid - The ocean's grid structure.
   type(ocean_grid_type), intent(inout) :: grid
 
-  DEALLOC_(grid%bathyT) ; DEALLOC_(grid%f)
+  DEALLOC_(grid%bathyT)  ; DEALLOC_(grid%CoriolisBu)
   DEALLOC_(grid%g_prime) ; DEALLOC_(grid%Rlay)
-  deallocate(grid%gridlonh);   deallocate(grid%gridlath)
-  deallocate(grid%gridlonq);   deallocate(grid%gridlatq)
+  deallocate(grid%gridlonh) ; deallocate(grid%gridlath)
+  deallocate(grid%gridlonq) ; deallocate(grid%gridlatq)
 end subroutine MOM_grid_end
 
 end module MOM_grid

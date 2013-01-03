@@ -55,10 +55,10 @@ module MOM_dynamics_unsplit
 !*                                                                     *
 !*     A small fragment of the grid is shown below:                    *
 !*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q, f                                     *
+!*    j+1  x ^ x ^ x   At x:  q, CoriolisBu                            *
 !*    j+1  > o > o >   At ^:  v, PFv, CAv, vh, diffv, tauy, vbt, vhtr  *
 !*    j    x ^ x ^ x   At >:  u, PFu, CAu, uh, diffu, taux, ubt, uhtr  *
-!*    j    > o > o >   At o:  h, D, eta, T, S, tr                      *
+!*    j    > o > o >   At o:  h, bathyT, eta, T, S, tr                 *
 !*    j-1  x ^ x ^ x                                                   *
 !*        i-1  i  i+1                                                  *
 !*           i  i+1                                                    *

@@ -1300,8 +1300,8 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, &
     ustar_h = visc%ustar_BBL(i,j)
     if (ASSOCIATED(fluxes%ustar_tidal)) &
       ustar_h = ustar_h + fluxes%ustar_tidal(i,j)
-    absf = 0.25*((abs(G%f(i-1,j-1))+abs(G%f(i,j))) + &
-                 (abs(G%f(i-1,j))+abs(G%f(i,j-1))))
+    absf = 0.25*((abs(G%CoriolisBu(i-1,j-1)) + abs(G%CoriolisBu(i,j))) + &
+                 (abs(G%CoriolisBu(i-1,j)) + abs(G%CoriolisBu(i,j-1))))
     if ((ustar_h > 0.0) .and. (absf > 0.5*CS%IMax_decay*ustar_h))  then
       I2decay(i) = absf / ustar_h
     else
@@ -1478,8 +1478,8 @@ subroutine add_MLrad_diffusivity(h, fluxes, j, G, CS, Kd, TKE_to_Kd, Kd_int)
     if (CS%ML_use_omega) then
       f_sq = 4.0*Omega2
     else
-      f_sq = 0.25*((G%f(i,j)**2 + G%f(i-1,j-1)**2) + &
-                   (G%f(i,j-1)**2 + G%f(i-1,j)**2))
+      f_sq = 0.25*((G%CoriolisBu(i,j)**2 + G%CoriolisBu(i-1,j-1)**2) + &
+                   (G%CoriolisBu(i,j-1)**2 + G%CoriolisBu(i-1,j)**2))
     endif
 
     ustar_sq = max(fluxes%ustar(i,j), CS%ustar_min)**2

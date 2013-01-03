@@ -41,10 +41,10 @@ module MOM_PressureForce_Mont
 !*                                                                     *
 !*     A small fragment of the grid is shown below:                    *
 !*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q, f                                     *
+!*    j+1  x ^ x ^ x   At x:  q, CoriolisBu                            *
 !*    j+1  > o > o >   At ^:  v, PFv                                   *
 !*    j    x ^ x ^ x   At >:  u, PFu                                   *
-!*    j    > o > o >   At o:  h, D, M, e, p, pbce, gtot, T, S, rho_st  *
+!*    j    > o > o >   At o:  h, bathyT, M, e, p, pbce, T, S, rho_star *
 !*    j-1  x ^ x ^ x                                                   *
 !*        i-1  i  i+1                                                  *
 !*           i  i+1                                                    *

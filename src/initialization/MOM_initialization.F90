@@ -30,13 +30,13 @@ module MOM_initialization
 !*    u - Zonal velocity in m s-1.                                     *
 !*    v - Meridional velocity in m s-1.                                *
 !*    h - Layer thickness in m.  (Must be positive.)                   *
-!*    D - Basin depth in m.  (Must be positive.)                       *
-!*    f - The Coriolis parameter, in s-1.                              *
-!*    g - The reduced gravity at each interface, in m s-2.             *
-!*    Rlay - Layer potential density (coordinate variable) in kg m-3.  *
+!*    G%bathyT - Basin depth in m.  (Must be positive.)                *
+!*    G%CoriolisBu - The Coriolis parameter, in s-1.                   *
+!*    G%g_prime - The reduced gravity at each interface, in m s-2.     *
+!*    G%Rlay - Layer potential density (coordinate variable) in kg m-3.*
 !*  If ENABLE_THERMODYNAMICS is defined:                               *
-!*    T - Temperature in C.                                            *
-!*    S - Salinity in psu.                                             *
+!*    tv%T - Temperature in C.                                         *
+!*    tv%S - Salinity in psu.                                          *
 !*  If SPONGE is defined:                                              *
 !*    A series of subroutine calls are made to set up the damping      *
 !*    rates and reference profiles for all variables that are damped   *
@@ -56,10 +56,10 @@ module MOM_initialization
 !*                                                                     *
 !*     A small fragment of the grid is shown below:                    *
 !*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q, f                                     *
+!*    j+1  x ^ x ^ x   At x:  q, CoriolisBu                            *
 !*    j+1  > o > o >   At ^:  v, tauy                                  *
 !*    j    x ^ x ^ x   At >:  u, taux                                  *
-!*    j    > o > o >   At o:  h, D, buoy, tr, T, S, Rml, ustar         *
+!*    j    > o > o >   At o:  h, bathyT, buoy, tr, T, S, Rml, ustar    *
 !*    j-1  x ^ x ^ x                                                   *
 !*        i-1  i  i+1  At x & ^:                                       *
 !*           i  i+1    At > & o:                                       *
@@ -312,9 +312,9 @@ subroutine MOM_initialize(u, v, h, tv, Time, G, PF, dirs, &
 
 !    Calculate the value of the Coriolis parameter at the latitude   !
 !  of the q grid points, in s-1.
-  call MOM_initialize_rotation(G%f, G, PF)
+  call MOM_initialize_rotation(G%CoriolisBu, G, PF)
   if (debug) then
-    call qchksum(G%f, "MOM_initialize: f ", G)
+    call qchksum(G%CoriolisBu, "MOM_initialize: f ", G)
   endif
 
 ! Write out all of the grid data used by this run.
@@ -950,7 +950,7 @@ subroutine MOM_initialize_rotation(f, G, PF)
 !   This subroutine makes the appropriate call to set up the Coriolis parameter.
 ! This is a separate subroutine so that it can be made public and shared with
 ! the ice-sheet code or other components.
-! Set up the Coriolis parameter, G%f, either analytically or from file
+! Set up the Coriolis parameter, f, either analytically or from file.
   character(len=40)  :: mod = "MOM_initialize_rotation" ! This subroutine's name.
   character(len=200) :: config
 
@@ -3200,7 +3200,7 @@ subroutine write_ocean_geometry_file(G, param_file, directory)
   call write_field(unit, fields(4), G%Domain%mpp_domain, G%geolonh)
 
   call write_field(unit, fields(5), G%Domain%mpp_domain, G%bathyT)
-  call write_field(unit, fields(6), G%Domain%mpp_domain, G%f)
+  call write_field(unit, fields(6), G%Domain%mpp_domain, G%CoriolisBu)
 
   do J=Jsq,Jeq; do i=is,ie; out_v(i,J) = G%DXv(i,J); enddo; enddo
   call write_field(unit, fields(7), G%Domain%mpp_domain, out_v)

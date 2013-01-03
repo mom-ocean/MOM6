@@ -46,7 +46,7 @@ module MOM_sum_output
 !*    j+1  x ^ x ^ x   At x:  q                                        *
 !*    j+1  > o > o >   At ^:  v                                        *
 !*    j    x ^ x ^ x   At >:  u                                        *
-!*    j    > o > o >   At o:  h, D,                                    *
+!*    j    > o > o >   At o:  h, bathyT                                *
 !*    j-1  x ^ x ^ x                                                   *
 !*        i-1  i  i+1  At x & ^:                                       *
 !*           i  i+1    At > & o:                                       *

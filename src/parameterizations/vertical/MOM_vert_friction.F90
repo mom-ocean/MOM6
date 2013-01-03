@@ -998,11 +998,11 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
         if (G%nkml>0) nk_visc(i) = real(G%nkml+1)
         if (work_on_u) then
           u_star(I) = 0.5*(fluxes%ustar(i,j) + fluxes%ustar(i+1,j))
-          absf(I) = 0.5*(abs(G%f(I,J-1)) + abs(G%f(I,J)))
+          absf(I) = 0.5*(abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I,J)))
           if (CS%dynamic_viscous_ML) nk_visc(I) = visc%nkml_visc_u(I,j) + 1
         else
           u_star(i) = 0.5*(fluxes%ustar(i,j) + fluxes%ustar(i,j+1))
-          absf(i) = 0.5*(abs(G%f(I-1,J)) + abs(G%f(I,J)))
+          absf(i) = 0.5*(abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J)))
           if (CS%dynamic_viscous_ML) nk_visc(i) = visc%nkml_visc_v(i,J) + 1
         endif
         h_ml(i) = h_neglect ; z_t(i) = 0.0

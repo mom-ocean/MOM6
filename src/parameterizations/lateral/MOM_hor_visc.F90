@@ -70,7 +70,7 @@ module MOM_hor_visc
 !*                                                                     *
 !*     A small fragment of the C-grid is shown below:                  *
 !*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q, f, hq, str_xy, sh_xy                  *
+!*    j+1  x ^ x ^ x   At x:  q, CoriolisBu, hq, str_xy, sh_xy         *
 !*    j+1  > o > o >   At ^:  v, diffv, v0                             *
 !*    j    x ^ x ^ x   At >:  u, diffu, u0                             *
 !*    j    > o > o >   At o:  h, str_xx, sh_xx                         *
@@ -889,8 +889,8 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
       if (CS%Smagorinsky_Ah) then
         CS%BIHARM_CONST_xx(i,j) = Smag_bi_const * (grid_sp_h2 * grid_sp_h2)
         if (CS%bound_Coriolis) then
-          fmax = MAX(abs(G%f(I-1,J-1)), abs(G%f(I,J-1)), abs(G%f(I-1,J)), &
-                     abs(G%f(I,J)))
+          fmax = MAX(abs(G%CoriolisBu(I-1,J-1)), abs(G%CoriolisBu(I,J-1)), &
+                     abs(G%CoriolisBu(I-1,J)),   abs(G%CoriolisBu(I,J)))
           CS%Biharm_Const2_xx(i,j) = (grid_sp_h2 * grid_sp_h2 * grid_sp_h2) * &
                                   (fmax * BoundCorConst)
         endif
@@ -907,7 +907,7 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
         CS%BIHARM_CONST_xy(I,J) = Smag_bi_const * (grid_sp_q2 * grid_sp_q2)
         if (CS%bound_Coriolis) then
           CS%Biharm_Const2_xy(I,J) = (grid_sp_q2 * grid_sp_q2 * grid_sp_q2) * &
-                                      (abs(G%f(I,J)) * BoundCorConst)
+                                      (abs(G%CoriolisBu(I,J)) * BoundCorConst)
         endif
       endif
       CS%Ah_bg_xy(I,J) = MAX(Ah, Ah_vel_scale * grid_sp_q2 * sqrt(grid_sp_q2))

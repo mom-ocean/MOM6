@@ -205,7 +205,7 @@ subroutine mixedlayer_restrat(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
     h_vel = 0.5*(htot(i,j) + htot(i+1,j)) * G%H_to_m
 
     u_star = 0.5*(fluxes%ustar(i,j) + fluxes%ustar(i+1,j))
-    absf = 0.5*(abs(G%f(I,J-1)) + abs(G%f(I,J)))
+    absf = 0.5*(abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I,J)))
     ! peak ML visc: u_star * 0.41 * (h_ml*u_star)/(absf*h_ml + 4.0*u_star)
     ! momentum mixing rate: pi^2*visc/h_ml^2 
     ! 0.41 is the von Karmen constant, 9.8696 = pi^2.
@@ -250,7 +250,7 @@ subroutine mixedlayer_restrat(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
     h_vel = 0.5*(htot(i,j) + htot(i,j+1)) * G%H_to_m
 
     u_star = 0.5*(fluxes%ustar(i,j) + fluxes%ustar(i,j+1))
-    absf = 0.5*(abs(G%f(I-1,J)) + abs(G%f(I,J)))
+    absf = 0.5*(abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J)))
     ! peak ML visc: u_star * 0.41 * (h_ml*u_star)/(absf*h_ml + 4.0*u_star)
     ! momentum mixing rate: pi^2*visc/h_ml^2 
     ! 0.41 is the von Karmen constant, 9.8696 = pi^2.

@@ -50,7 +50,7 @@ module MOM_CoriolisAdv
 !*                                                                     *
 !*     A small fragment of the grid is shown below:                    *
 !*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q, f                                     *
+!*    j+1  x ^ x ^ x   At x:  q, CoriolisBu                            *
 !*    j+1  > o > o >   At ^:  v, CAv, vh                               *
 !*    j    x ^ x ^ x   At >:  u, CAu, uh, a, b, c, d                   *
 !*    j    > o > o >   At o:  h, KE                                    *
@@ -303,7 +303,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, G, CS)
            ((v(i+1,J,k)*G%DYv(i+1,J) - v(i,J,k)*G%DYv(i,J)) - &
             (u(I,j+1,k)*G%DXu(I,j+1) - u(I,j,k)*G%DXu(I,j)))* G%IDXDYq(I,J)
       endif
-      absolute_vorticity = G%f(I,J) + relative_vorticity
+      absolute_vorticity = G%CoriolisBu(I,J) + relative_vorticity
       Ih = 0.0
       if (Area_q(i,j) > 0.0) then
         hArea_q = ((Area_h(i,j) * h(i,j,k) + Area_h(i+1,j+1) * h(i+1,j+1,k)) + &

@@ -647,8 +647,9 @@ subroutine mixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, optics, &
             kU_Star = (1.0 - fluxes%frac_shelf_h(i,j)) * kU_star + &
                       fluxes%frac_shelf_h(i,j) * (0.41*fluxes%ustar_shelf(i,j))
         endif
-        absf_x_H = 0.25*htot(i)*((abs(G%f(i,j)) + abs(G%f(i-1,j-1))) + &
-                                 (abs(G%f(i,j-1)) + abs(G%f(i-1,j))))
+        absf_x_H = 0.25 * htot(i) * &
+            ((abs(G%CoriolisBu(i,j)) + abs(G%CoriolisBu(i-1,j-1))) + &
+             (abs(G%CoriolisBu(i,j-1)) + abs(G%CoriolisBu(i-1,j))))
         ! If the mixed layer vertical viscosity specification is changed in
         ! MOM_vert_friction.F90, this line will have to be modified accordingly.
         h_3d(i,j,1) = htot(i) / (3.0 + sqrt(absf_x_H*(absf_x_H + 2.0*kU_star) / &
@@ -1388,8 +1389,8 @@ subroutine mixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, optics, &
 
       if (U_Star < CS%ustar_min) U_Star = CS%ustar_min
       if (.not.CS%use_omega) &
-        absf = 0.25*((abs(G%f(I,J)) + abs(G%f(I-1,J-1))) + &
-                     (abs(G%f(I,J-1)) + abs(G%f(I-1,J))))
+        absf = 0.25*((abs(G%CoriolisBu(I,J)) + abs(G%CoriolisBu(I-1,J-1))) + &
+                     (abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I-1,J))))
       absf_Ustar = absf / U_Star
       Idecay_len_TKE(i) = (absf_Ustar * CS%TKE_decay) * G%H_to_m
 
