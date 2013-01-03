@@ -187,12 +187,12 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, lev, tv, dt, G, CS, eta_
   if (ASSOCIATED(CS%e_D)) then
     if (ASSOCIATED(CS%e)) then
       do k=1,nz+1 ; do j=js,je ; do i=is,ie
-        CS%e_D(i,j,k) = CS%e(i,j,k) + G%D(i,j)
+        CS%e_D(i,j,k) = CS%e(i,j,k) + G%bathyT(i,j)
       enddo ; enddo ; enddo
     else
       call find_eta(h, tv, G%g_Earth, G, CS%e_D, eta_bt)
       do k=1,nz+1 ; do j=js,je ; do i=is,ie
-        CS%e_D(i,j,k) = CS%e_D(i,j,k) + G%D(i,j)
+        CS%e_D(i,j,k) = CS%e_D(i,j,k) + G%bathyT(i,j)
       enddo ; enddo ; enddo
     endif
 
@@ -441,7 +441,7 @@ subroutine calculate_vertical_integrals(h, tv, G, CS)
   if (CS%id_col_ht > 0) then
     call find_eta(h, tv, G%g_Earth, G, z_top)
     do j=js,je ; do i=is,ie
-      z_bot(i,j) = z_top(i,j) + G%D(i,j)
+      z_bot(i,j) = z_top(i,j) + G%bathyT(i,j)
     enddo ; enddo
     call post_data(CS%id_col_ht, z_bot, CS%diag)
   endif

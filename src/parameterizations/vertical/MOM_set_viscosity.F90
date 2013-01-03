@@ -545,16 +545,16 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, CS)
         ! an enhanced bottom viscosity, while above this the drag is applied
         ! directly to the layers in question as a Rayleigh drag term.
         if (m==1) then
-          D_vel = 0.5*(G%D(i,j)+G%D(i+1,j))
-          tmp = G%umask(i,j+1)*0.5*(G%D(i,j+1)+G%D(i+1,j+1))
+          D_vel = 0.5*(G%bathyT(i,j) + G%bathyT(i+1,j))
+          tmp = G%umask(i,j+1) * 0.5*(G%bathyT(i,j+1) + G%bathyT(i+1,j+1))
           Dp = 2.0 * D_vel * tmp / (D_vel + tmp)
-          tmp = G%umask(i,j-1)*0.5*(G%D(i,j-1)+G%D(i+1,j-1))
+          tmp = G%umask(i,j-1) * 0.5*(G%bathyT(i,j-1) + G%bathyT(i+1,j-1))
           Dm = 2.0 * D_vel * tmp / (D_vel + tmp)
         else
-          D_vel = 0.5*(G%D(i,j)+G%D(i,j+1))
-          tmp = G%vmask(i+1,j)*0.5*(G%D(i+1,j)+G%D(i+1,j+1))
+          D_vel = 0.5*(G%bathyT(i,j) + G%bathyT(i,j+1))
+          tmp = G%vmask(i+1,j) * 0.5*(G%bathyT(i+1,j) + G%bathyT(i+1,j+1))
           Dp = 2.0 * D_vel * tmp / (D_vel + tmp)
-          tmp = G%vmask(i,j-1)*0.5*(G%D(i-1,j)+G%D(i-1,j+1))
+          tmp = G%vmask(i,j-1) * 0.5*(G%bathyT(i-1,j) + G%bathyT(i-1,j+1))
           Dm = 2.0 * D_vel * tmp / (D_vel + tmp)
         endif
         if (Dm > Dp) then ; tmp = Dp ; Dp = Dm ; Dm = tmp ; endif

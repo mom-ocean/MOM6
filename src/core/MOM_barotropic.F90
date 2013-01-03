@@ -183,7 +183,7 @@ type, public :: barotropic_CS ; private
   real ALLOCABLE_, dimension(NIMEMW_,NJMEMW_) :: &
     ua_polarity, &  ! Test vector components for checking grid polarity.
     va_polarity, &  ! Test vector components for checking grid polarity.
-    D               !   A copy of D with wide halos.
+    bathyT          !   A copy of bathyT (ocean bottom depth) with wide halos.
   real ALLOCABLE_, dimension(NIMEMW_,NJMEMW_) :: &
     Idxdyh          !   This is a copy of G%IDXDYh with wide halos, but will
                     ! still utilize the macro IDXDYh when referenced, m-2.              
@@ -794,18 +794,18 @@ subroutine btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
     !  D here should be replaced with D+eta(Bous) or eta(non-Bous).
 !GOMP(parallel do default(shared) private(i, j))
     do j=js,je ; do I=is-1,ie
-      DCor_u(I,j) = 0.5 * (G%D(i+1,j) + G%D(i,j))
+      DCor_u(I,j) = 0.5 * (G%bathyT(i+1,j) + G%bathyT(i,j))
     enddo ; enddo
 !GOMP(parallel do default(shared) private(i, j))
     do J=js-1,je ; do i=is,ie
-      DCor_v(i,J) = 0.5 * (G%D(i,j+1) + G%D(i,j))
+      DCor_v(i,J) = 0.5 * (G%bathyT(i,j+1) + G%bathyT(i,j))
     enddo ; enddo
 !GOMP(parallel do default(shared) private(i, j))
     do J=js-1,je ; do I=is-1,ie
       q(I,J) = 0.25 * G%f(I,J) * &
            ((G%DXDYh(i,j) + G%DXDYh(i+1,j+1)) + (G%DXDYh(i+1,j) + G%DXDYh(i,j+1))) / &
-           ((G%DXDYh(i,j) * G%D(i,j) + G%DXDYh(i+1,j+1) * G%D(i+1,j+1)) + &
-            (G%DXDYh(i+1,j) * G%D(i+1,j) + G%DXDYh(i,j+1) * G%D(i,j+1)))
+           ((G%DXDYh(i,j) * G%bathyT(i,j) + G%DXDYh(i+1,j+1) * G%bathyT(i+1,j+1)) + &
+            (G%DXDYh(i+1,j) * G%bathyT(i+1,j) + G%DXDYh(i,j+1) * G%bathyT(i,j+1)))
     enddo ; enddo
     ! With very wide halos, q and D need to be calculated on the available data
     ! domain and then updated onto the full computational domain.
@@ -2585,9 +2585,11 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, G, MS, halo, use_BT_cont, Datu, Datv,
           if (Datu(I,j) > 0.0) BT_OBC%ubt_outer(I,j) = BT_OBC%uhbt(I,j) / Datu(I,j)
         endif
       else
-        BT_OBC%Cg_u(I,j) = SQRT(G%g_prime(1)*(0.5*(G%D(i,j)+G%D(i+1,j))))
+        BT_OBC%Cg_u(I,j) = SQRT(G%g_prime(1)*(0.5* &
+                                (G%bathyT(i,j) + G%bathyT(i+1,j))))
         if (G%Boussinesq) then
-          BT_OBC%H_u(I,j) = 0.5*((G%D(i,j)+eta(i,j)) + (G%D(i+1,j)+eta(i+1,j)))
+          BT_OBC%H_u(I,j) = 0.5*((G%bathyT(i,j) + eta(i,j)) + &
+                                 (G%bathyT(i+1,j) + eta(i+1,j)))
         else
           BT_OBC%H_u(I,j) = 0.5*(eta(i,j) + eta(i+1,j))
         endif
@@ -2619,9 +2621,11 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, G, MS, halo, use_BT_cont, Datu, Datv,
           if (Datv(i,J) > 0.0) BT_OBC%vbt_outer(i,J) = BT_OBC%vhbt(i,J) / Datv(i,J)
         endif
       else
-        BT_OBC%Cg_v(i,J) = SQRT(G%g_prime(1)*(0.5*(G%D(i,j)+G%D(i,j+1))))
+        BT_OBC%Cg_v(i,J) = SQRT(G%g_prime(1)*(0.5* &
+                                (G%bathyT(i,j) + G%bathyT(i,j+1))))
         if (G%Boussinesq) then
-          BT_OBC%H_v(i,J) = 0.5*((G%D(i,j)+eta(i,j)) + (G%D(i,j+1)+eta(i,j+1)))
+          BT_OBC%H_v(i,J) = 0.5*((G%bathyT(i,j) + eta(i,j)) + &
+                                 (G%bathyT(i,j+1) + eta(i,j+1)))
         else
           BT_OBC%H_v(i,J) = 0.5*(eta(i,j) + eta(i,j+1))
         endif
@@ -2758,8 +2762,8 @@ subroutine btcalc(h, G, CS, h_u, h_v, may_use_default)
         enddo ; enddo
       elseif (CS%hvel_scheme == HYBRID .or. use_default) then
         do I=is-2,ie+1
-          e_u(I,nz+1) = -0.5 * G%m_to_H * (G%D(i+1,j) + G%D(i,j))
-          D_shallow_u(I) = -G%m_to_H * min(G%D(i+1,j),G%D(i,j))
+          e_u(I,nz+1) = -0.5 * G%m_to_H * (G%bathyT(i+1,j) + G%bathyT(i,j))
+          D_shallow_u(I) = -G%m_to_H * min(G%bathyT(i+1,j), G%bathyT(i,j))
           hatutot(I) = 0.0
         enddo
         do k=nz,1,-1 ; do I=is-2,ie+1
@@ -2821,8 +2825,8 @@ subroutine btcalc(h, G, CS, h_u, h_v, may_use_default)
         enddo ; enddo
       elseif (CS%hvel_scheme == HYBRID .or. use_default) then
         do i=is-1,ie+1
-          e_v(i,nz+1) = -0.5 * G%m_to_H * (G%D(i,j+1) + G%D(i,j))
-          D_shallow_v(I) = -G%m_to_H * min(G%D(i,j+1),G%D(i,j))
+          e_v(i,nz+1) = -0.5 * G%m_to_H * (G%bathyT(i,j+1) + G%bathyT(i,j))
+          D_shallow_v(I) = -G%m_to_H * min(G%bathyT(i,j+1), G%bathyT(i,j))
           hatvtot(I) = 0.0
         enddo
         do k=nz,1,-1 ; do i=is-1,ie+1
@@ -3331,14 +3335,14 @@ subroutine find_face_areas(Datu, Datv, G, CS, MS, rescale_faces, eta, halo, add_
     if (G%Boussinesq) then
 !GOMP(parallel do default(shared) private(i, j, H1, H2))
       do j=js-hs,je+hs ; do I=is-1-hs,ie+hs
-        H1 = CS%D(i,j) + eta(i,j) ; H2 = CS%D(i+1,j) + eta(i+1,j)
+        H1 = CS%bathyT(i,j) + eta(i,j) ; H2 = CS%bathyT(i+1,j) + eta(i+1,j)
         Datu(I,j) = 0.0 ; if ((H1 > 0.0) .and. (H2 > 0.0)) &
         Datu(I,j) = CS%dy_u(I,j) * (2.0 * H1 * H2) / (H1 + H2)
 !       Datu(I,j) = CS%dy_u(I,j) * 0.5 * (H1 + H2)
       enddo; enddo
 !GOMP(parallel do default(shared) private(i, j, H1, H2))
       do J=js-1-hs,je+hs ; do i=is-hs,ie+hs
-        H1 = CS%D(i,j) + eta(i,j) ; H2 = CS%D(i,j+1) + eta(i,j+1)
+        H1 = CS%bathyT(i,j) + eta(i,j) ; H2 = CS%bathyT(i,j+1) + eta(i,j+1)
         Datv(i,J) = 0.0 ; if ((H1 > 0.0) .and. (H2 > 0.0)) &
         Datv(i,J) = CS%dx_v(i,J) * (2.0 * H1 * H2) / (H1 + H2)
 !       Datv(i,J) = CS%dy_v(i,J) * 0.5 * (H1 + H2)
@@ -3362,20 +3366,26 @@ subroutine find_face_areas(Datu, Datv, G, CS, MS, rescale_faces, eta, halo, add_
   elseif (present(add_max)) then
 !GOMP(parallel do default(shared) private(i, j))
     do j=js-hs,je+hs ; do I=is-1-hs,ie+hs
-      Datu(I,j) = CS%dy_u(I,j) * G%m_to_H * (max(CS%D(i+1,j),CS%D(i,j)) + add_max)
+      Datu(I,j) = CS%dy_u(I,j) * G%m_to_H * &
+                  (max(CS%bathyT(i+1,j), CS%bathyT(i,j)) + add_max)
     enddo ; enddo
 !GOMP(parallel do default(shared) private(i, j))
     do J=js-1-hs,je+hs ; do i=is-hs,ie+hs
-      Datv(i,J) = CS%dx_v(i,J) * G%m_to_H * (max(CS%D(i,j+1),CS%D(i,j)) + add_max)
+      Datv(i,J) = CS%dx_v(i,J) * G%m_to_H * &
+                  (max(CS%bathyT(i,j+1), CS%bathyT(i,j)) + add_max)
     enddo ; enddo
   else
 !GOMP(parallel do default(shared) private(i, j))
     do j=js-hs,je+hs ; do I=is-1-hs,ie+hs
-      Datu(I,j) = 2.0*CS%dy_u(I,j) * G%m_to_H * (CS%D(i+1,j)*CS%D(i,j)) / (CS%D(i+1,j)+CS%D(i,j))
+      Datu(I,j) = 2.0*CS%dy_u(I,j) * G%m_to_H * &
+                  (CS%bathyT(i+1,j) * CS%bathyT(i,j)) / &
+                  (CS%bathyT(i+1,j) + CS%bathyT(i,j))
     enddo ; enddo
 !GOMP(parallel do default(shared) private(i, j))
     do J=js-1-hs,je+hs ; do i=is-hs,ie+hs
-      Datv(i,J) = 2.0*CS%dx_v(i,J) * G%m_to_H * (CS%D(i,j+1)*CS%D(i,j)) / (CS%D(i,j+1)+CS%D(i,j))
+      Datv(i,J) = 2.0*CS%dx_v(i,J) * G%m_to_H * &
+                  (CS%bathyT(i,j+1) * CS%bathyT(i,j)) / &
+                  (CS%bathyT(i,j+1) + CS%bathyT(i,j))
     enddo ; enddo
   endif
 
@@ -3439,7 +3449,7 @@ subroutine bt_mass_source(h, eta, fluxes, set_cor, dt_therm, dt_since_therm, &
   do j=js,je
     do i=is,ie ; h_tot(i) = h(i,j,1) ; enddo
     if (G%Boussinesq) then
-      do i=is,ie ; eta_h(i) = h(i,j,1) - G%D(i,j) ; enddo
+      do i=is,ie ; eta_h(i) = h(i,j,1) - G%bathyT(i,j) ; enddo
     else
       do i=is,ie ; eta_h(i) = h(i,j,1) ; enddo
     endif
@@ -3824,14 +3834,14 @@ CS%Nonlin_cont_update_period = 1
 
   ! Idxdyh, Idxu, and Idyv need to be allocated with wide halos.
   ALLOC_(CS%Idxdyh(CS%isdw:CS%iedw,CS%jsdw:CS%jedw)) ; CS%Idxdyh(:,:) = 0.0
-  ALLOC_(CS%D(CS%isdw:CS%iedw,CS%jsdw:CS%jedw)) ; CS%D(:,:) = G%Angstrom_z
+  ALLOC_(CS%bathyT(CS%isdw:CS%iedw,CS%jsdw:CS%jedw)) ; CS%bathyT(:,:) = G%Angstrom_z
   ALLOC_(CS%Idxu(CS%isdw-1:CS%iedw,CS%jsdw:CS%jedw)) ; CS%Idxu(:,:) = 0.0
   ALLOC_(CS%Idyv(CS%isdw:CS%iedw,CS%jsdw-1:CS%jedw)) ; CS%Idyv(:,:) = 0.0
   ALLOC_(CS%dy_u(CS%isdw-1:CS%iedw,CS%jsdw:CS%jedw)) ; CS%dy_u(:,:) = 0.0
   ALLOC_(CS%dx_v(CS%isdw:CS%iedw,CS%jsdw-1:CS%jedw)) ; CS%dx_v(:,:) = 0.0
   do j=G%jsd,G%jed ; do i=G%isd,G%ied
     CS%Idxdyh(i,j) = G%IDXDYh(i,j)
-    CS%D(i,j) = G%D(i,j)
+    CS%bathyT(i,j) = G%bathyT(i,j)
   enddo ; enddo
   ! Note: G%IDXu & G%IDYv may be smaller than CS%Idxu & CS%Idyv, even without
   !   wide halos.
@@ -3842,7 +3852,7 @@ CS%Nonlin_cont_update_period = 1
     CS%Idyv(I,j) = G%IDYv(I,j) ; CS%dx_v(i,J) = G%dx_v(i,J)
   enddo ; enddo
   call pass_var(CS%Idxdyh, CS%BT_domain, To_All)
-  call pass_var(CS%D, CS%BT_domain, To_All)
+  call pass_var(CS%bathyT, CS%BT_domain, To_All)
   call pass_vector(CS%Idxu, CS%Idyv, CS%BT_domain, To_All+Scalar_Pair)
   call pass_vector(CS%dy_u, CS%dx_v, CS%BT_domain, To_All+Scalar_Pair)
 
@@ -3852,16 +3862,16 @@ CS%Nonlin_cont_update_period = 1
     ALLOC_(CS%D_v_Cor(CS%isdw:CS%iedw,CS%jsdw-1:CS%jedw))
     CS%q_D(:,:) = 0.0 ; CS%D_u_Cor(:,:) = 0.0 ; CS%D_v_Cor(:,:) = 0.0
     do j=js,je ; do I=is-1,ie
-      CS%D_u_Cor(I,j) = 0.5 * (G%D(i+1,j) + G%D(i,j))
+      CS%D_u_Cor(I,j) = 0.5 * (G%bathyT(i+1,j) + G%bathyT(i,j))
     enddo ; enddo
     do J=js-1,je ; do i=is,ie
-      CS%D_v_Cor(i,J) = 0.5 * (G%D(i,j+1) + G%D(i,j))
+      CS%D_v_Cor(i,J) = 0.5 * (G%bathyT(i,j+1) + G%bathyT(i,j))
     enddo ; enddo
     do J=js-1,je ; do I=is-1,ie
       CS%q_D(I,J) = 0.25 * G%f(I,J) * &
            ((G%DXDYh(i,j) + G%DXDYh(i+1,j+1)) + (G%DXDYh(i+1,j) + G%DXDYh(i,j+1))) / &
-           ((G%DXDYh(i,j) * G%D(i,j) + G%DXDYh(i+1,j+1) * G%D(i+1,j+1)) + &
-            (G%DXDYh(i+1,j) * G%D(i+1,j) + G%DXDYh(i,j+1) * G%D(i,j+1)))
+           ((G%DXDYh(i,j) * G%bathyT(i,j) + G%DXDYh(i+1,j+1) * G%bathyT(i+1,j+1)) + &
+            (G%DXDYh(i+1,j) * G%bathyT(i+1,j) + G%DXDYh(i,j+1) * G%bathyT(i,j+1)))
     enddo ; enddo
     ! With very wide halos, q and D need to be calculated on the available data
     ! domain and then updated onto the full computational domain.
@@ -4009,17 +4019,17 @@ CS%Nonlin_cont_update_period = 1
   ! The following is only valid with the Boussinesq approximation.
 ! if (G%Boussinesq) then
     do j=js,je ; do I=is-1,ie
-      CS%IDatu(I,j) = G%umask(i,j) * 2.0 / (G%D(i+1,j) + G%D(i,j))
+      CS%IDatu(I,j) = G%umask(i,j) * 2.0 / (G%bathyT(i+1,j) + G%bathyT(i,j))
     enddo ; enddo
     do J=js-1,je ; do i=is,ie
-      CS%IDatv(i,J) = G%vmask(i,j) * 2.0 / (G%D(i,j+1) + G%D(i,j))
+      CS%IDatv(i,J) = G%vmask(i,j) * 2.0 / (G%bathyT(i,j+1) + G%bathyT(i,j))
     enddo ; enddo
 ! else
 !   do j=js,je ; do I=is-1,ie
-!     CS%IDatu(I,j) = G%umask(i,j) * 2.0 / (G%Rho0*(G%D(i+1,j) + G%D(i,j)))
+!     CS%IDatu(I,j) = G%umask(i,j) * 2.0 / (G%Rho0*(G%bathyT(i+1,j) + G%bathyT(i,j)))
 !   enddo ; enddo
 !   do J=js-1,je ; do i=is,ie
-!     CS%IDatv(i,J) = G%vmask(i,j) * 2.0 / (G%Rho0*(G%D(i,j+1) + G%D(i,j)))
+!     CS%IDatv(i,J) = G%vmask(i,j) * 2.0 / (G%Rho0*(G%bathyT(i,j+1) + G%bathyT(i,j)))
 !   enddo ; enddo
 ! endif
 

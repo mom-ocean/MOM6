@@ -155,7 +155,9 @@ subroutine calculate_Z_diag_fields(u, v, h, dt, G, CS)
 
     do j=js,je
       ! Remove all massless layers.
-      do I=Isq,Ieq ; nk_valid(I) = 0 ; D_pt(I) = 0.5*(G%D(i+1,j)+G%D(i,j)) ; enddo
+      do I=Isq,Ieq
+        nk_valid(I) = 0 ; D_pt(I) = 0.5*(G%bathyT(i+1,j)+G%bathyT(i,j))
+      enddo
       do k=1,nk ; do I=Isq,Ieq
         if ((G%umask(I,j) > 0.5) .and. (h(i,j,k)+h(i+1,j,k) > 4.0*G%Angstrom)) then
           nk_valid(I) = nk_valid(I) + 1 ; k2 = nk_valid(I)
@@ -231,7 +233,9 @@ subroutine calculate_Z_diag_fields(u, v, h, dt, G, CS)
 
     do J=Jsq,Jeq
       ! Remove all massless layers.
-      do i=is,ie ; nk_valid(i) = 0 ; D_pt(i) = 0.5*(G%D(i,j)+G%D(i,j+1)) ; enddo
+      do i=is,ie
+        nk_valid(i) = 0 ; D_pt(i) = 0.5*(G%bathyT(i,j)+G%bathyT(i,j+1))
+      enddo
       do k=1,nk ; do i=is,ie
         if ((G%vmask(i,j) > 0.5) .and. (h(i,j,k)+h(i,j+1,k) > 4.0*G%Angstrom)) then
           nk_valid(i) = nk_valid(i) + 1 ; k2 = nk_valid(i)
@@ -308,7 +312,7 @@ subroutine calculate_Z_diag_fields(u, v, h, dt, G, CS)
 
     do j=js,je
       ! Remove all massless layers.
-      do i=is,ie ; nk_valid(i) = 0 ; D_pt(i) = G%D(i,j) ; enddo
+      do i=is,ie ; nk_valid(i) = 0 ; D_pt(i) = G%bathyT(i,j) ; enddo
       do k=1,nk ; do i=is,ie
         if ((G%hmask(i,j) > 0.5) .and. (h(i,j,k) > 2.0*G%Angstrom)) then
           nk_valid(i) = nk_valid(i) + 1 ; k2 = nk_valid(i)
@@ -439,12 +443,12 @@ subroutine calculate_Z_transport(uh_int, vh_int, h, dt, G, CS)
     htot(i,j) = htot(i,j) + h(i,j,k)
   enddo ; enddo ; enddo
   do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-    dilate(i,j) = G%D(i,j) / htot(i,j)
+    dilate(i,j) = G%bathyT(i,j) / htot(i,j)
   enddo ; enddo
 
   if (CS%id_uh_Z > 0) then ; do j=js,je
     do I=Isq,Ieq
-      kz(I) = nk_z ; z_int_above(I) = -0.5*(G%D(i,j)+G%D(i+1,j))
+      kz(I) = nk_z ; z_int_above(I) = -0.5*(G%bathyT(i,j)+G%bathyT(i+1,j))
     enddo
     do k=nk_z,1,-1 ; do I=Isq,Ieq
       uh_Z(I,k) = 0.0
@@ -477,7 +481,7 @@ subroutine calculate_Z_transport(uh_int, vh_int, h, dt, G, CS)
   enddo ; endif
   if (CS%id_vh_Z > 0) then ; do J=Jsq,Jeq
     do i=is,ie
-      kz(i) = nk_z ; z_int_above(i) = -0.5*(G%D(i,j)+G%D(i,j+1))
+      kz(i) = nk_z ; z_int_above(i) = -0.5*(G%bathyT(i,j)+G%bathyT(i,j+1))
     enddo
     do k=nk_z,1,-1 ; do i=is,ie
       vh_Z(i,k) = 0.0
@@ -641,8 +645,8 @@ subroutine calc_Zint_diags(h, in_ptrs, ids, num_diags, &
     do k=1,nk ; do i=is,ie ; htot(i) = htot(i) + h(i,j,k) ; enddo ; enddo
     do i=is,ie
       dilate(i) = 0.0
-      if (htot(i)*G%H_to_m > 0.5) dilate(i) = (G%D(i,j) - 0.0) / htot(i)
-      e(i,nk+1) = -G%D(i,j)
+      if (htot(i)*G%H_to_m > 0.5) dilate(i) = (G%bathyT(i,j) - 0.0) / htot(i)
+      e(i,nk+1) = -G%bathyT(i,j)
     enddo
     do k=nk,1,-1 ; do i=is,ie
       e(i,k) = e(i,k+1) + h(i,j,k) * dilate(i)

@@ -301,7 +301,7 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
 
   ! Sum vertically to determine the surface geopotential anomaly.
   do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-    za(i,j) = alpha_ref*p(i,j,nz+1) - G%g_Earth*G%D(i,j)
+    za(i,j) = alpha_ref*p(i,j,nz+1) - G%g_Earth*G%bathyT(i,j)
   enddo ; enddo
   do k=nz,1,-1 ; do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
     za(i,j) = za(i,j) + dza(i,j,k)
@@ -520,7 +520,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, regridding_opts, p_at
     ! but that is not yet implemented, and the current form is correct for
     ! barotropic tides.
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      e(i,j,1) = -1.0*G%D(i,j)
+      e(i,j,1) = -1.0*G%bathyT(i,j)
     enddo ; enddo
     do k=1,nz ; do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       e(i,j,1) = e(i,j,1) + G%H_to_m*h(i,j,k)
@@ -531,11 +531,11 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, regridding_opts, p_at
 !    Here layer interface heights, e, are calculated.
   if (CS%tides) then
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      e(i,j,nz+1) = -1.0*G%D(i,j) - e_tidal(i,j)
+      e(i,j,nz+1) = -1.0*G%bathyT(i,j) - e_tidal(i,j)
     enddo ; enddo
   else
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      e(i,j,nz+1) = -1.0*G%D(i,j)
+      e(i,j,nz+1) = -1.0*G%bathyT(i,j)
     enddo ; enddo
   endif
   do k=nz,1,-1 ; do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1

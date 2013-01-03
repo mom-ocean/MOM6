@@ -109,7 +109,7 @@ type, public :: ocean_grid_type
                         ! nominal density used to convert depths into mass
                         ! units, in kg m-3.
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
-    D             ! Basin depth, in m.
+    bathyT        ! Ocean bottom depth at tracer points, in m.
 
   logical :: bathymetry_at_vel  ! If true, there are separate values for the
                   ! basin depths at velocity points.  Otherwise the effects of
@@ -245,7 +245,7 @@ subroutine MOM_grid_init(grid, param_file)
 
   isd = grid%isd ; ied = grid%ied ; jsd = grid%jsd ; jed = grid%jed
   Isdq = grid%Isdq ; Iedq = grid%Iedq ; Jsdq = grid%Jsdq ; Jedq = grid%Jedq
-  ALLOC_(grid%D(isd:ied, jsd:jed))          ; grid%D(:,:) = grid%Angstrom_z
+  ALLOC_(grid%bathyT(isd:ied, jsd:jed)) ; grid%bathyT(:,:) = grid%Angstrom_z
   ALLOC_(grid%f(Isdq:Iedq, Jsdq:Jedq))      ; grid%f(:,:) = 0.0
   ALLOC_(grid%g_prime(nk+1)) ; grid%g_prime(:) = 0.0
   ALLOC_(grid%Rlay(nk+1))    ; grid%Rlay(:) = 0.0
@@ -387,7 +387,8 @@ subroutine MOM_grid_end(grid)
 ! Arguments: grid - The ocean's grid structure.
   type(ocean_grid_type), intent(inout) :: grid
 
-  DEALLOC_(grid%D) ; DEALLOC_(grid%f) ; DEALLOC_(grid%g_prime) ; DEALLOC_(grid%Rlay)
+  DEALLOC_(grid%bathyT) ; DEALLOC_(grid%f)
+  DEALLOC_(grid%g_prime) ; DEALLOC_(grid%Rlay)
   deallocate(grid%gridlonh);   deallocate(grid%gridlath)
   deallocate(grid%gridlonq);   deallocate(grid%gridlatq)
 end subroutine MOM_grid_end

@@ -261,13 +261,13 @@ subroutine MOM_initialize(u, v, h, tv, Time, G, PF, dirs, &
   call set_grid_metrics(G, PF)
 
 ! Set up the bottom depth, G%D either analytically or from file
-  call MOM_initialize_topography(G%D, G, PF)
+  call MOM_initialize_topography(G%bathyT, G, PF)
 
 !    This call sets seamasks that prohibit flow over any point with  !
 !  a bottom that is shallower than min_depth from PF.                !
   call initialize_masks(G, PF)
   if (debug) then
-    call hchksum(G%D, 'MOM_initialize: depth ', G, haloshift=1)
+    call hchksum(G%bathyT, 'MOM_initialize: depth ', G, haloshift=1)
     call hchksum(G%hmask, 'MOM_initialize: hmask ', G)
     call uchksum(G%umask, 'MOM_initialize: umask ', G)
     call vchksum(G%vmask, 'MOM_initialize: vmask ', G)
@@ -1329,10 +1329,10 @@ subroutine initialize_thickness_from_file(h, G, param_file, file_has_thickness)
 
     if (correct_thickness) then
       ! All mass below the bottom removed if the topography is shallower than
-      ! the input file would indicate.  G%D is positive downward,
+      ! the input file would indicate.  G%bathyT is positive downward,
       ! eta is negative downward.
       do j=js,je ; do i=is,ie
-        if (-eta(i,j,nz+1) > G%D(i,j) + 0.1) eta(i,j,nz+1) = -G%D(i,j)
+        if (-eta(i,j,nz+1) > G%bathyT(i,j) + 0.1) eta(i,j,nz+1) = -G%bathyT(i,j)
       enddo ; enddo
     endif
 
@@ -1350,14 +1350,15 @@ subroutine initialize_thickness_from_file(h, G, param_file, file_has_thickness)
       do j=js,je ; do i=is,ie
         !   The whole column is dilated to accomodate deeper topography than
         ! the input file would indicate.
-        if (-eta(i,j,nz+1) < G%D(i,j) - 0.1) then
-          dilate = (eta(i,j,1)+G%D(i,j)) / (eta(i,j,1)-eta(i,j,nz+1))
+        if (-eta(i,j,nz+1) < G%bathyT(i,j) - 0.1) then
+          dilate = (eta(i,j,1)+G%bathyT(i,j)) / (eta(i,j,1)-eta(i,j,nz+1))
           do k=1,nz ; h(i,j,k) = h(i,j,k) * dilate ; enddo
         endif
       enddo ; enddo
     else
       do j=js,je ; do i=is,ie
-        if (abs(eta(i,j,nz+1) + G%D(i,j)) > 1.0) inconsistent = inconsistent + 1
+        if (abs(eta(i,j,nz+1) + G%bathyT(i,j)) > 1.0) &
+          inconsistent = inconsistent + 1
       enddo ; enddo
       call sum_across_PEs(inconsistent)
 
@@ -1408,7 +1409,7 @@ subroutine initialize_thickness_uniform(h, G, param_file)
 !  Angstrom thick, and 2.  the interfaces are where they should be   !
 !  based on the resting depths and interface height perturbations,   !
 !  as long at this doesn't interfere with 1.                         !
-    eta1D(nz+1) = -1.0*G%D(i,j)
+    eta1D(nz+1) = -1.0*G%bathyT(i,j)
     do k=nz,1,-1
       eta1D(K) = e0(K)
       if (eta1D(K) < (eta1D(K+1) + G%Angstrom_z)) then
@@ -2049,7 +2050,7 @@ subroutine initialize_sponges_file(G, use_temperature, tv, param_file, CSp)
   call read_data(filename, eta_var, eta(:,:,:), domain=G%Domain%mpp_domain)
 
   do j=js,je ; do i=is,ie
-    eta(i,j,nz+1) = -G%D(i,j)
+    eta(i,j,nz+1) = -G%bathyT(i,j)
   enddo ; enddo
   do k=nz,1,-1 ; do j=js,je ; do i=is,ie
     if (eta(i,j,K) < (eta(i,j,K+1) + G%Angstrom_z)) &
@@ -3074,11 +3075,11 @@ subroutine set_velocity_depth_max(G)
   integer :: i, j
 
   do I=G%isd,G%ied-1 ; do j=G%jsd,G%jed
-    G%Dblock_u(I,j) = G%umask(I,j)*max(G%D(i,j),G%D(i+1,j))
+    G%Dblock_u(I,j) = G%umask(I,j) * max(G%bathyT(i,j), G%bathyT(i+1,j))
     G%Dopen_u(I,j) = G%Dblock_u(I,j)
   enddo ; enddo
   do i=G%isd,G%ied ; do J=G%jsd,G%jed-1
-    G%Dblock_v(I,J) = G%vmask(i,J)*max(G%D(i,j),G%D(i,j+1))
+    G%Dblock_v(I,J) = G%vmask(i,J) * max(G%bathyT(i,j), G%bathyT(i,j+1))
     G%Dopen_v(I,J) = G%Dblock_v(I,J)
   enddo ; enddo
 end subroutine set_velocity_depth_max
@@ -3092,11 +3093,11 @@ subroutine set_velocity_depth_min(G)
   integer :: i, j
 
   do I=G%isd,G%ied-1 ; do j=G%jsd,G%jed
-    G%Dblock_u(I,j) = G%umask(I,j)*min(G%D(i,j),G%D(i+1,j))
+    G%Dblock_u(I,j) = G%umask(I,j) * min(G%bathyT(i,j), G%bathyT(i+1,j))
     G%Dopen_u(I,j) = G%Dblock_u(I,j)
   enddo ; enddo
   do i=G%isd,G%ied ; do J=G%jsd,G%jed-1
-    G%Dblock_v(I,J) = G%vmask(i,J)*min(G%D(i,j),G%D(i,j+1))
+    G%Dblock_v(I,J) = G%vmask(i,J) * min(G%bathyT(i,j), G%bathyT(i,j+1))
     G%Dopen_v(I,J) = G%Dblock_v(I,J)
   enddo ; enddo
 end subroutine set_velocity_depth_min
@@ -3198,7 +3199,7 @@ subroutine write_ocean_geometry_file(G, param_file, directory)
   call write_field(unit, fields(3), G%Domain%mpp_domain, G%geolath)
   call write_field(unit, fields(4), G%Domain%mpp_domain, G%geolonh)
 
-  call write_field(unit, fields(5), G%Domain%mpp_domain, G%D)
+  call write_field(unit, fields(5), G%Domain%mpp_domain, G%bathyT)
   call write_field(unit, fields(6), G%Domain%mpp_domain, G%f)
 
   do J=Jsq,Jeq; do i=is,ie; out_v(i,J) = G%DXv(i,J); enddo; enddo
@@ -3572,8 +3573,8 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
   temp_prev=0.0; salt_prev=0.0
 
 ! get the global wet mask and depth arrays
-  call mpp_global_field(G%domain%mpp_domain,G%hmask,hmask)
-  call mpp_global_field(G%domain%mpp_domain,G%D,Depth)    
+  call mpp_global_field(G%domain%mpp_domain, G%hmask, hmask)
+  call mpp_global_field(G%domain%mpp_domain, G%bathyT, Depth)    
 
 
 ! loop through each data level and interpolate to model grid.
@@ -3718,7 +3719,8 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
   Rb(1)=0.0
   Rb(nz+1)=2.0*G%Rlay(nz) - G%Rlay(nz-1)
 
-  zi = find_interfaces(rho_z(is:ie,js:je,:),z_in,Rb,G%D(is:ie,js:je),nlevs,nkml,nkbl,min_depth)
+  zi = find_interfaces(rho_z(is:ie,js:je,:), z_in, Rb, G%bathyT(is:ie,js:je), &
+                       nlevs, nkml, nkbl, min_depth)
 
   call get_param(PF,mod,"ADJUST_THICKNESS",correct_thickness,default=.false.)
 
@@ -3727,7 +3729,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
     ! the input file would indicate.  G%D is positive downward,
     ! eta is negative downward.
     do j=js,je ; do i=is,ie
-      if (-zi(i,j,nz+1) > G%D(i,j) + 0.1) zi(i,j,nz+1) = -G%D(i,j)
+      if (-zi(i,j,nz+1) > G%bathyT(i,j) + 0.1) zi(i,j,nz+1) = -G%bathyT(i,j)
     enddo ; enddo
   endif
 
@@ -3746,15 +3748,16 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
     do j=js,je ; do i=is,ie
       !   The whole column is dilated to accomodate deeper topography than
       ! the input file would indicate.
-      if (-zi(i,j,nz+1) < G%D(i,j) - 0.1) then
-        dilate = (zi(i,j,1)+G%D(i,j)) / (zi(i,j,1)-zi(i,j,nz+1))
+      if (-zi(i,j,nz+1) < G%bathyT(i,j) - 0.1) then
+        dilate = (zi(i,j,1)+G%bathyT(i,j)) / (zi(i,j,1)-zi(i,j,nz+1))
         do k=1,nz ; h(i,j,k) = h(i,j,k) * dilate ; enddo
       endif
     enddo ; enddo
   else
     inconsistent=0
     do j=js,je ; do i=is,ie
-      if (abs(zi(i,j,nz+1) + G%D(i,j)) > 1.0) inconsistent = inconsistent + 1
+      if (abs(zi(i,j,nz+1) + G%bathyT(i,j)) > 1.0) &
+        inconsistent = inconsistent + 1
     enddo ; enddo
     call sum_across_PEs(inconsistent)
 

@@ -1081,7 +1081,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, Time, G, param_file, diag, CS, rest
     ! dimensions as h, either m or kg m-3.  
     !   CS%eta(:,:) = 0.0 already from initialization.
     if (G%Boussinesq) then
-      do j=js,je ; do i=is,ie ; CS%eta(i,j) = -G%D(i,j) ; enddo ; enddo
+      do j=js,je ; do i=is,ie ; CS%eta(i,j) = -G%bathyT(i,j) ; enddo ; enddo
     endif
     do k=1,nz ; do j=js,je ; do i=is,ie
       CS%eta(i,j) = CS%eta(i,j) + h(i,j,k)

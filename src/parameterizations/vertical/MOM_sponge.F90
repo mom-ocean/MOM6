@@ -450,23 +450,23 @@ subroutine apply_sponge(h, dt, G, ea, eb, CS, Rcv_ml)
     if (CS%bulkmixedlayer) call MOM_error(FATAL, "apply_sponge is not yet set up to "//&
                   "work properly with i-mean sponges and a bulk mixed layer.") 
 
-    do j=js,je ; do i=is,ie ; e_D(i,j,nz+1) = -G%D(i,j) ; enddo ; enddo
+    do j=js,je ; do i=is,ie ; e_D(i,j,nz+1) = -G%bathyT(i,j) ; enddo ; enddo
     do k=nz,1,-1 ; do j=js,je ; do i=is,ie
       e_D(i,j,K) = e_D(i,j,K+1) + h(i,j,k)
     enddo ; enddo ; enddo
     do j=js,je
       do i=is,ie
-        dilate(i) = G%D(i,j) / (e_D(i,j,1) + G%D(i,j))
+        dilate(i) = G%bathyT(i,j) / (e_D(i,j,1) + G%bathyT(i,j))
       enddo
       do k=1,nz+1 ; do i=is,ie
-        e_D(i,j,K) = dilate(i) * (e_D(i,j,K) + G%D(i,j)) - G%D(i,j)
+        e_D(i,j,K) = dilate(i) * (e_D(i,j,K) + G%bathyT(i,j)) - G%bathyT(i,j)
       enddo ; enddo
     enddo
 
     do k=2,nz
       do j=js,je ; do i=is,ie
         eta_anom(i,j) = e_D(i,j,k) - CS%Ref_eta_im(j,k)
-        if (CS%Ref_eta_im(j,K) < -G%D(i,j)) eta_anom(i,j) = 0.0
+        if (CS%Ref_eta_im(j,K) < -G%bathyT(i,j)) eta_anom(i,j) = 0.0
       enddo ; enddo
       call global_i_mean(eta_anom(:,:), eta_mean_anom(:,K), G)
     enddo

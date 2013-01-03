@@ -646,8 +646,8 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
         hbelow = 0.0
         do k=nz,1,-1
           hbelow = hbelow + h(i,j,k)
-          hint = (H_0APE(K) + hbelow - G%D(i,j))
-          hbot = H_0APE(K) - G%D(i,j)
+          hint = (H_0APE(K) + hbelow - G%bathyT(i,j))
+          hbot = H_0APE(K) - G%bathyT(i,j)
           hbot = (hbot + ABS(hbot)) * 0.5
           PE_pt(i,j,K) = 0.5 * G%DXDYh(i,j) * (G%Rho0*G%g_prime(K)) * &
                   (hint * hint - hbot * hbot)
@@ -658,7 +658,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
         hbelow = 0.0
         do k=nz,1,-1
           hint = H_0APE(K) + eta(i,j,K)  ! eta and H_0 have opposite signs.
-          hbot = max(H_0APE(K) - G%D(i,j), 0.0)
+          hbot = max(H_0APE(K) - G%bathyT(i,j), 0.0)
           PE_pt(i,j,K) = 0.5 * (G%DXDYh(i,j) * (G%Rho0*G%g_prime(K))) * &
                   (hint * hint - hbot * hbot)
         enddo
@@ -1175,7 +1175,7 @@ subroutine create_depth_list(G, CS, max_list_size)
   Dlist(:) = 0.0
   Arealist(:) = 0.0
   do j=js,je ; do i=is,ie
-    Dlist(offset1D + (j-js)*xsize(this_pe)+(i-is)+1) = G%D(i,j)
+    Dlist(offset1D + (j-js)*xsize(this_pe)+(i-is)+1) = G%bathyT(i,j)
     Arealist(offset1D + (j-js)*xsize(this_pe)+(i-is)+1) = temp(i,j)
   enddo ; enddo
 

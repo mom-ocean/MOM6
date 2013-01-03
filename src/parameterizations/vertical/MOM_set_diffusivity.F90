@@ -2467,10 +2467,10 @@ subroutine set_diffusivity_init(Time, G, param_file, diag, CS, diag_to_Z_CSp)
                    timelevel=1)
 
     do j=js, je; do i=is, ie
-      if (G%D(i,j) < CS%min_zbot_itides) CS%mask_itidal(i,j) = 0.0
+      if (G%bathyT(i,j) < CS%min_zbot_itides) CS%mask_itidal(i,j) = 0.0
 
       ! Restrict rms topo to 10 percent of column depth.
-      zbot = G%D(i,j)
+      zbot = G%bathyT(i,j)
       hamp = sqrt(CS%h2(i,j))
       hamp = min(0.1*zbot,hamp)
       CS%h2(i,j) = hamp*hamp

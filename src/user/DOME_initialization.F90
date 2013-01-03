@@ -133,7 +133,7 @@ subroutine DOME_initialize_thickness(h, G, param_file)
 !  Angstrom thick, and 2.  the interfaces are where they should be   !
 !  based on the resting depths and interface height perturbations,   !
 !  as long at this doesn't interfere with 1.                         !
-    eta1D(nz+1) = -1.0*G%D(i,j)
+    eta1D(nz+1) = -1.0*G%bathyT(i,j)
     do k=nz,1,-1
       eta1D(K) = e0(K)
       if (eta1D(K) < (eta1D(K+1) + G%Angstrom_z)) then
@@ -217,16 +217,16 @@ subroutine DOME_initialize_sponges(G, tv, PF, CSp)
     ! depth space for Boussinesq or non-Boussinesq models.
     eta(i,j,1) = 0.0
     do k=2,nz
-!     eta(i,j,K)=max(H0(k), -G%D(i,j), G%Angstrom_z*(nz-k+1)-G%D(i,j))
-      e_dense = -G%D(i,j)
+!     eta(i,j,K)=max(H0(k), -G%bathyT(i,j), G%Angstrom_z*(nz-k+1)-G%bathyT(i,j))
+      e_dense = -G%bathyT(i,j)
       if (e_dense >= H0(k)) then ; eta(i,j,K) = e_dense
       else ; eta(i,j,K) = H0(k) ; endif
-      if (eta(i,j,K) < G%Angstrom_z*(nz-k+1)-G%D(i,j)) &
-          eta(i,j,K) = G%Angstrom_z*(nz-k+1)-G%D(i,j)
+      if (eta(i,j,K) < G%Angstrom_z*(nz-k+1)-G%bathyT(i,j)) &
+          eta(i,j,K) = G%Angstrom_z*(nz-k+1)-G%bathyT(i,j)
     enddo
-    eta(i,j,nz+1) = -G%D(i,j)
+    eta(i,j,nz+1) = -G%bathyT(i,j)
 
-    if (G%D(i,j) > min_depth) then
+    if (G%bathyT(i,j) > min_depth) then
       Idamp(i,j) = damp/86400.0
     else ; Idamp(i,j) = 0.0 ; endif
   enddo ; enddo

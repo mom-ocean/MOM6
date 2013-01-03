@@ -243,7 +243,7 @@ subroutine adjustment_initialize_temperature_salinity ( T, S, h, G, param_file, 
     case ( IC_Z, IC_SIGMA )
       dSdz = -delta_S_strat/max_depth
       do j=js,je ; do i=is,ie
-          eta1d(nz+1)=-G%D(i,j)
+          eta1d(nz+1)=-G%bathyT(i,j)
           do k=nz,1,-1
             eta1d(k)=eta1d(k+1)+h(i,j,k)
           enddo

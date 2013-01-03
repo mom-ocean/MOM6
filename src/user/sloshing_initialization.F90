@@ -153,7 +153,7 @@ subroutine sloshing_initialize_thickness ( h, G, param_file )
     end do
     
     ! 3. The last interface must coincide with the seabed
-    z_inter(nz+1) = -G%D(i,j);
+    z_inter(nz+1) = -G%bathyT(i,j);
 
     ! Modify interface heights to make sure all thicknesses 
     ! are strictly positive

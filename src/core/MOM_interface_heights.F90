@@ -107,7 +107,7 @@ subroutine find_eta_3d(h, tv, G_Earth, G, eta, eta_bt, halo_size)
 
   I_gEarth = 1.0 / G_Earth
 
-  do j=jsv,jev ; do i=isv,iev ; eta(i,j,nz+1) = -G%D(i,j) ; enddo ; enddo
+  do j=jsv,jev ; do i=isv,iev ; eta(i,j,nz+1) = -G%bathyT(i,j) ; enddo ; enddo
 
   if (G%Boussinesq) then
     do k=nz,1,-1 ; do j=jsv,jev ; do i=isv,iev
@@ -118,10 +118,10 @@ subroutine find_eta_3d(h, tv, G_Earth, G, eta, eta_bt, halo_size)
       ! that is used for the dynamics.
       do j=jsv,jev
         do i=isv,iev
-          dilate(i) = (eta_bt(i,j) + G%D(i,j)) / (eta(i,j,1) + G%D(i,j))
+          dilate(i) = (eta_bt(i,j)+G%bathyT(i,j)) / (eta(i,j,1)+G%bathyT(i,j))
         enddo
         do k=1,nz ; do i=isv,iev
-          eta(i,j,K) = dilate(i) * (eta(i,j,K) + G%D(i,j)) - G%D(i,j)
+          eta(i,j,K) = dilate(i) * (eta(i,j,K) + G%bathyT(i,j)) - G%bathyT(i,j)
         enddo ; enddo
       enddo
     endif
@@ -153,7 +153,7 @@ subroutine find_eta_3d(h, tv, G_Earth, G, eta, eta_bt, halo_size)
         do k=1,nz ; do i=isv,iev ; htot(i) = htot(i) + h(i,j,k) ; enddo ; enddo
         do i=isv,iev ; dilate(i) = eta_bt(i,j) / htot(i) ; enddo
         do k=1,nz ; do i=isv,iev
-          eta(i,j,K) = dilate(i) * (eta(i,j,K) + G%D(i,j)) - G%D(i,j)
+          eta(i,j,K) = dilate(i) * (eta(i,j,K) + G%bathyT(i,j)) - G%bathyT(i,j)
         enddo ; enddo
       enddo
     endif
@@ -198,7 +198,7 @@ subroutine find_eta_2d(h, tv, G_Earth, G, eta, eta_bt, halo_size)
 
   I_gEarth = 1.0 / G_Earth
 
-  do j=js,je ; do i=is,ie ; eta(i,j) = -G%D(i,j) ; enddo ; enddo
+  do j=js,je ; do i=is,ie ; eta(i,j) = -G%bathyT(i,j) ; enddo ; enddo
 
   if (G%Boussinesq) then
     if (present(eta_bt)) then
@@ -238,7 +238,8 @@ subroutine find_eta_2d(h, tv, G_Earth, G, eta, eta_bt, halo_size)
         do i=is,ie ; htot(i) = G%H_subroundoff ; enddo
         do k=1,nz ; do i=is,ie ; htot(i) = htot(i) + h(i,j,k) ; enddo ; enddo
         do i=is,ie
-          eta(i,j) = (eta_bt(i,j) / htot(i)) * (eta(i,j) + G%D(i,j)) - G%D(i,j)
+          eta(i,j) = (eta_bt(i,j) / htot(i)) * (eta(i,j) + G%bathyT(i,j)) - &
+                     G%bathyT(i,j)
         enddo
       enddo
     endif

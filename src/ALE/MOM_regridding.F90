@@ -552,7 +552,7 @@ subroutine build_grid_uniform ( G, h, h_new, regridding_opts )
     do i = G%isc,G%iec+1
 
       ! Local depth
-      local_depth = G%D(i,j)
+      local_depth = G%bathyT(i,j)
       
       ! Determine water column height
       total_height = 0.0
@@ -672,7 +672,7 @@ subroutine build_grid_arbitrary ( G, h, h_new, regridding_opts )
     do i = G%isc,G%iec+1
 
       ! Local depth
-      local_depth = G%D(i,j)
+      local_depth = G%bathyT(i,j)
       
       ! Determine water column height
       total_height = 0.0

@@ -644,9 +644,9 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
     else ! Not harmonic_visc
       do I=Isq,Ieq
         zh(I) = 0.0 ; z_i(I,nz+1) = 0.0
-        Dmin(I) = min(G%D(i,j), G%D(i+1,j)) * G%m_to_H
+        Dmin(I) = min(G%bathyT(i,j), G%bathyT(i+1,j)) * G%m_to_H
       enddo
-      do i=Isq,Ieq+1 ; zcol(i) = -G%D(i,j) * G%m_to_H ; enddo
+      do i=Isq,Ieq+1 ; zcol(i) = -G%bathyT(i,j) * G%m_to_H ; enddo
       do k=nz,1,-1
         do i=Isq,Ieq+1 ; zcol(i) = zcol(i) + h(i,j,k) ; enddo
         do I=Isq,Ieq ; if (do_i(I)) then
@@ -756,8 +756,9 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
     else ! Not harmonic_visc
       do i=is,ie
         zh(i) = 0.0 ; z_i(i,nz+1) = 0.0
-        Dmin(i) = min(G%D(i,j), G%D(i,j+1)) * G%m_to_H
-        zcol1(i) = -G%D(i,j) * G%m_to_H ; zcol2(i) = -G%D(i,j+1) * G%m_to_H
+        Dmin(i) = min(G%bathyT(i,j), G%bathyT(i,j+1)) * G%m_to_H
+        zcol1(i) = -G%bathyT(i,j) * G%m_to_H
+        zcol2(i) = -G%bathyT(i,j+1) * G%m_to_H
       enddo
       do k=nz,1,-1 ; do i=is,ie ; if (do_i(i)) then
         h_harm(i,k) = 2.0*h(i,j,k)*h(i,j+1,k) / (h(i,j,k)+h(i,j+1,k)+h_neglect)

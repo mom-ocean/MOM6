@@ -345,19 +345,19 @@ subroutine calc_slope_function_(h, tv, G, CS, e)
 
   ! SN above contains S^2*N^2*H, convert to vertical average of S*N
   do j=js,je ; do I=is-1,ie
-   !SN_u(I,j) = sqrt( SN_u(I,j) / ( max( G%D(I,j), G%D(I+1,j) ) + G%Angstrom ) )
+   !SN_u(I,j) = sqrt( SN_u(I,j) / ( max(G%bathyT(I,j), G%bathyT(I+1,j)) + G%Angstrom ) )
    !The code below behaves better than the line above. Not sure why? AJA
-    if (min( G%D(I,j), G%D(I+1,j) ) > H_cutoff ) then
-      CS%SN_u(I,j) = sqrt( CS%SN_u(I,j) / max( G%D(I,j), G%D(I+1,j) ) )
+    if ( min(G%bathyT(I,j), G%bathyT(I+1,j)) > H_cutoff ) then
+      CS%SN_u(I,j) = sqrt( CS%SN_u(I,j) / max(G%bathyT(I,j), G%bathyT(I+1,j)) )
     else
       CS%SN_u(I,j) = 0.0
     endif
   enddo ; enddo
   do J=js-1,je ; do i=is,ie
-   !SN_v(i,J) = sqrt( SN_v(i,J) / ( max( G%D(i,J), G%D(i,J+1) ) + G%Angstrom ) )
+   !SN_v(i,J) = sqrt( SN_v(i,J) / ( max(G%bathyT(i,J), G%bathyT(i,J+1)) + G%Angstrom ) )
    !The code below behaves better than the line above. Not sure why? AJA
-    if (min( G%D(I,j), G%D(I+1,j) ) > H_cutoff ) then
-      CS%SN_v(i,J) = sqrt( CS%SN_v(i,J) / max( G%D(i,J), G%D(i,J+1) ) )
+    if ( min(G%bathyT(I,j), G%bathyT(I+1,j)) > H_cutoff ) then
+      CS%SN_v(i,J) = sqrt( CS%SN_v(i,J) / max(G%bathyT(i,J), G%bathyT(i,J+1)) )
     else
       CS%SN_v(I,j) = 0.0
     endif

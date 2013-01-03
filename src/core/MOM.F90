@@ -1856,7 +1856,7 @@ subroutine write_static_fields(G, diag)
   id = register_static_field('ocean_model', 'depth_ocean', G%axesh1, &
         'Depth of the ocean at tracer points', 'm', &
         standard_name='sea_floor_depth_below_geoid')
-  if (id > 0) call post_data(id, G%D, diag, .true.)
+  if (id > 0) call post_data(id, G%bathyT, diag, .true.)
 
   id = register_static_field('ocean_model', 'wet', G%axesh1, &
         '0 if land, 1 if ocean at tracer points', 'none')
@@ -2132,39 +2132,45 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, CS, p_atm)
       if (num_errs>99) exit ! If things get really bad, stop filling up the tty
       k=0 ! Num errors at this point
       if (G%hmask(i,j)>0.) then
-        if (state%sea_lev(i,j)<=-G%D(i,j)) then
+        if (state%sea_lev(i,j)<=-G%bathyT(i,j)) then
           k=k+1
           write(msg(1:128),'(2(a,i4,x),2(a,f8.3,x),a,es12.3)') &
-             'Sea level < bathymetry at i=',i,'j=',j,'x=',G%geolonh(i,j),'y=',G%geolath(i,j),'SSH=',state%sea_lev(i,j)
+              'Sea level < bathymetry at i=',i,'j=',j,'x=',G%geolonh(i,j),&
+              'y=',G%geolath(i,j),'SSH=',state%sea_lev(i,j)
           call MOM_error(WARNING, trim(msg), all_print=.true.)
         endif
         if (state%sea_lev(i,j)>=CS%bad_val_ssh_max) then
           k=k+1
           write(msg(1:128),'(2(a,i4,x),2(a,f8.3,x),a,es12.3)') &
-             'Very high sea level at i=',i,'j=',j,'x=',G%geolonh(i,j),'y=',G%geolath(i,j),'SSH=',state%sea_lev(i,j)
+              'Very high sea level at i=',i,'j=',j,'x=',G%geolonh(i,j),&
+              'y=',G%geolath(i,j),'SSH=',state%sea_lev(i,j)
           call MOM_error(WARNING, trim(msg), all_print=.true.)
         endif
         if (CS%use_temperature) then
           if (state%SSS(i,j)<0.) then
             k=k+1
             write(msg(1:128),'(2(a,i4,x),2(a,f8.3,x),a,es12.3)') &
-               'Negative salinity at i=',i,'j=',j,'x=',G%geolonh(i,j),'y=',G%geolath(i,j),'SSS=',state%SSS(i,j)
+                'Negative salinity at i=',i,'j=',j,'x=',G%geolonh(i,j),&
+                'y=',G%geolath(i,j),'SSS=',state%SSS(i,j)
             call MOM_error(WARNING, trim(msg), all_print=.true.)
           elseif (state%SSS(i,j)>=CS%bad_val_sss_max) then
             k=k+1
             write(msg(1:128),'(2(a,i4,x),2(a,f8.3,x),a,es12.3)') &
-               'Very high salinity at i=',i,'j=',j,'x=',G%geolonh(i,j),'y=',G%geolath(i,j),'SSS=',state%SSS(i,j)
+                'Very high salinity at i=',i,'j=',j,'x=',G%geolonh(i,j),&
+                'y=',G%geolath(i,j),'SSS=',state%SSS(i,j)
             call MOM_error(WARNING, trim(msg), all_print=.true.)
           endif
           if (state%SST(i,j)<CS%bad_val_sst_min) then
             k=k+1
             write(msg(1:128),'(2(a,i4,x),2(a,f8.3,x),a,es12.3)') &
-               'Very cold SST at i=',i,'j=',j,'x=',G%geolonh(i,j),'y=',G%geolath(i,j),'SST=',state%SST(i,j)
+                'Very cold SST at i=',i,'j=',j,'x=',G%geolonh(i,j),&
+                'y=',G%geolath(i,j),'SST=',state%SST(i,j)
             call MOM_error(WARNING, trim(msg), all_print=.true.)
           elseif (state%SST(i,j)>=CS%bad_val_sst_max) then
             k=k+1
             write(msg(1:128),'(2(a,i4,x),2(a,f8.3,x),a,es12.3)') &
-               'Very hot SST at i=',i,'j=',j,'x=',G%geolonh(i,j),'y=',G%geolath(i,j),'SST=',state%SST(i,j)
+                'Very hot SST at i=',i,'j=',j,'x=',G%geolonh(i,j),&
+                'y=',G%geolath(i,j),'SST=',state%SST(i,j)
             call MOM_error(WARNING, trim(msg), all_print=.true.)
           endif
         endif ! use_temperature
@@ -2173,7 +2179,8 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, CS, p_atm)
       endif ! hmask
     enddo; enddo
     if (num_errs>0) then
-      write(msg(1:128),'(3(a,i4,x))') 'There were',num_errs,'errors involving',num_pnts,'points'
+      write(msg(1:128),'(3(a,i4,x))') 'There were',num_errs, &
+          'errors involving',num_pnts,'points'
       call MOM_error(FATAL, trim(msg))
     endif
   endif

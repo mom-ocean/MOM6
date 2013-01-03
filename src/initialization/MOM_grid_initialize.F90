@@ -1473,7 +1473,7 @@ subroutine initialize_masks(G, PF)
 
   Dmin = MAX(min_depth,2.0*G%Angstrom_z)
 
-  call pass_var(G%D,G%Domain)
+  call pass_var(G%bathyT, G%Domain)
   G%umask(:,:) = 0.0 ; G%vmask(:,:) = 0.0 ; G%qmask(:,:) = 0.0
 
   ! Extrapolate the bottom depths at any points that are subject to Flather
@@ -1482,7 +1482,7 @@ subroutine initialize_masks(G, PF)
   if (apply_OBC_u_flather_west) then
     do j=G%jsd,G%jed ; do I=G%isd+1,G%ied
       if ((I+G%isd_global-G%isd) == G%domain%nx_halo+1) then
-        G%D(i-1,j) = G%D(i,j)
+        G%bathyT(i-1,j) = G%bathyT(i,j)
       endif
     enddo; enddo       
   endif
@@ -1490,7 +1490,7 @@ subroutine initialize_masks(G, PF)
   if (apply_OBC_u_flather_east) then
     do j=G%jsd,G%jed ; do I=G%isd,G%ied-1
       if ((i+G%isd_global-G%isd) == G%domain%nxtot+G%domain%nx_halo) then
-        G%D(i+1,j) = G%D(i,j)
+        G%bathyT(i+1,j) = G%bathyT(i,j)
       endif
     enddo; enddo    
   endif
@@ -1498,7 +1498,7 @@ subroutine initialize_masks(G, PF)
   if (apply_OBC_v_flather_north) then
     do J=G%jsd,G%jed-1 ; do i=G%isd,G%ied
       if ((j+G%jsd_global-G%jsd) == G%domain%nytot+G%domain%ny_halo) then
-        G%D(i,j+1) = G%D(i,j)
+        G%bathyT(i,j+1) = G%bathyT(i,j)
       endif
     enddo; enddo    
   endif
@@ -1506,13 +1506,13 @@ subroutine initialize_masks(G, PF)
   if (apply_OBC_v_flather_south) then
     do J=G%jsd+1,G%jed ; do i=G%isd,G%ied
       if ((J+G%jsd_global-G%jsd) == G%domain%ny_halo+1) then
-        G%D(i,j-1) = G%D(i,j)
+        G%bathyT(i,j-1) = G%bathyT(i,j)
       endif
     enddo; enddo
   endif
 
   do j=G%jsd,G%jed ; do i=G%isd,G%ied
-    if (G%D(i,j) <= Dmin) then
+    if (G%bathyT(i,j) <= Dmin) then
       G%hmask(i,j) = 0.0
     else
       G%hmask(i,j) = 1.0
@@ -1520,7 +1520,7 @@ subroutine initialize_masks(G, PF)
   enddo ; enddo
 
   do j=G%jsd,G%jed ; do I=G%isd,G%ied-1
-    if ((G%D(i,j) <= Dmin) .or. (G%D(i+1,j) <= Dmin)) then
+    if ((G%bathyT(i,j) <= Dmin) .or. (G%bathyT(i+1,j) <= Dmin)) then
       G%umask(I,j) = 0.0
     else
       G%umask(I,j) = 1.0
@@ -1528,7 +1528,7 @@ subroutine initialize_masks(G, PF)
   enddo ; enddo
 
   do J=G%jsd,G%jed-1 ; do i=G%isd,G%ied
-    if ((G%D(i,j) <= Dmin) .or. (G%D(i,j+1) <= Dmin)) then
+    if ((G%bathyT(i,j) <= Dmin) .or. (G%bathyT(i,j+1) <= Dmin)) then
       G%vmask(i,J) = 0.0
     else
       G%vmask(i,J) = 1.0
@@ -1536,8 +1536,8 @@ subroutine initialize_masks(G, PF)
   enddo ; enddo
 
   do J=G%jsd,G%jed-1 ; do I=G%isd,G%ied-1
-    if ((G%D(i+1,j) <= Dmin) .or. (G%D(i+1,j+1) <= Dmin) .or. &
-        (G%D(i,j) <= Dmin) .or. (G%D(i,j+1) <= Dmin)) then
+    if ((G%bathyT(i+1,j) <= Dmin) .or. (G%bathyT(i+1,j+1) <= Dmin) .or. &
+        (G%bathyT(i,j) <= Dmin) .or. (G%bathyT(i,j+1) <= Dmin)) then
       G%qmask(I,J) = 0.0
     else
       G%qmask(I,J) = 1.0

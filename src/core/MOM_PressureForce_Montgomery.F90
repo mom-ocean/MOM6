@@ -215,7 +215,7 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
     !   Determine the sea surface height anomalies, to enable the calculation
     ! of self-attraction and loading.
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      SSH(i,j) = -G%D(i,j)
+      SSH(i,j) = -G%bathyT(i,j)
     enddo ; enddo
     if (use_EOS) then
       do k=1,nz
@@ -233,11 +233,11 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
 
     call calc_tidal_forcing(CS%Time, SSH, e_tidal, G, CS%tides_CSp)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      geopot_bot(i,j) = -G%g_Earth*(e_tidal(i,j) + G%D(i,j))
+      geopot_bot(i,j) = -G%g_Earth*(e_tidal(i,j) + G%bathyT(i,j))
     enddo ; enddo
   else
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      geopot_bot(i,j) = -G%g_Earth*G%D(i,j)
+      geopot_bot(i,j) = -G%g_Earth*G%bathyT(i,j)
     enddo ; enddo
   endif
 
@@ -469,7 +469,7 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
     ! but that is not yet implemented, and the current form is correct for
     ! barotropic tides.
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      e(i,j,1) = -1.0*G%D(i,j)
+      e(i,j,1) = -1.0*G%bathyT(i,j)
     enddo ; enddo
     do k=1,nz ; do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       e(i,j,1) = e(i,j,1) + h(i,j,k)
@@ -480,11 +480,11 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
 !    Here layer interface heights, e, are calculated.
   if (CS%tides) then
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      e(i,j,nz+1) = -1.0*G%D(i,j) - e_tidal(i,j)
+      e(i,j,nz+1) = -1.0*G%bathyT(i,j) - e_tidal(i,j)
     enddo ; enddo
   else
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      e(i,j,nz+1) = -1.0*G%D(i,j)
+      e(i,j,nz+1) = -1.0*G%bathyT(i,j)
     enddo ; enddo
   endif
   do k=nz,1,-1 ; do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1

@@ -167,8 +167,8 @@ function tracer_Z_init(tr, h, filename, tr_name, G, missing_val, land_val)
 
       do i=is,ie ; if (G%hmask(i,j)*htot(i) > 0.0) then
         ! Determine the z* heights of the model interfaces.
-        dilate = (G%D(i,j) - 0.0) / htot(i)
-        e(nz+1) = -G%D(i,j)
+        dilate = (G%bathyT(i,j) - 0.0) / htot(i)
+        e(nz+1) = -G%bathyT(i,j)
         do k=nz,1,-1 ; e(K) = e(K+1) + dilate * h(i,j,k) ; enddo
 
         ! Create a single-column copy of tr_in.  ### CHANGE THIS LATER?
@@ -242,8 +242,8 @@ function tracer_Z_init(tr, h, filename, tr_name, G, missing_val, land_val)
 
       do i=is,ie ; if (G%hmask(i,j)*htot(i) > 0.0) then
         ! Determine the z* heights of the model interfaces.
-        dilate = (G%D(i,j) - 0.0) / htot(i)
-        e(nz+1) = -G%D(i,j)
+        dilate = (G%bathyT(i,j) - 0.0) / htot(i)
+        e(nz+1) = -G%bathyT(i,j)
         do k=nz,1,-1 ; e(K) = e(K+1) + dilate * h(i,j,k) ; enddo
 
         ! Create a single-column copy of tr_in.  ### CHANGE THIS LATER?

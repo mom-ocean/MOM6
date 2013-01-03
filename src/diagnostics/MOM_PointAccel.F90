@@ -348,13 +348,13 @@ subroutine write_u_accel(I, j, um, hin, dt, G, CS, maxvel, minvel, str, a, hv)
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (hin(i+1,j+1,k)); enddo
 
 
-    e(nz+1) = -G%D(i,j)
+    e(nz+1) = -G%bathyT(i,j)
     do k=nz,1,-1 ; e(K) = e(K+1) + hin(i,j,k) ; enddo
     write(file,'(/,"e-:    ",$)')
     write(file,'(ES10.3," ",$)') e(ks)
     do K=ks+1,ke+1 ; if (do_k(k-1)) write(file,'(ES10.3," ",$)') e(K); enddo
 
-    e(nz+1) = -G%D(i+1,j)
+    e(nz+1) = -G%bathyT(i+1,j)
     do k=nz,1,-1 ; e(K) = e(K+1) + hin(i+1,j,k) ; enddo
     write(file,'(/,"e+:    ",$)')
     write(file,'(ES10.3," ",$)') e(ks)
@@ -505,7 +505,7 @@ subroutine write_u_accel(I, j, um, hin, dt, G, CS, maxvel, minvel, str, a, hv)
         (CS%vh(i+1,J,k) + CS%vh(i,J,k)) * G%IDXu(I,j) / f_eff); enddo
     endif
 
-    write(file,'(/,"D:     ",2(ES10.3))') G%D(i,j),G%D(i+1,j)
+    write(file,'(/,"D:     ",2(ES10.3))') G%bathyT(i,j),G%bathyT(i+1,j)
 
   !  From here on, the normalized accelerations are written.
 
@@ -835,13 +835,13 @@ subroutine write_v_accel(i, J, vm, hin, dt, G, CS, maxvel, minvel, str, a, hv)
     write(file,'(/,"h++:   ",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') hin(i+1,j+1,k); enddo
 
-    e(nz+1) = -G%D(i,j)
+    e(nz+1) = -G%bathyT(i,j)
     do k=nz,1,-1 ; e(K) = e(K+1) + hin(i,j,k); enddo
     write(file,'(/,"e-:    ",$)')
     write(file,'(ES10.3," ",$)') e(ks)
     do K=ks+1,ke+1 ; if (do_k(k-1)) write(file,'(ES10.3," ",$)') e(K); enddo
 
-    e(nz+1) = -G%D(i,j+1)
+    e(nz+1) = -G%bathyT(i,j+1)
     do k=nz,1,-1 ; e(K) = e(K+1) + hin(i,j+1,k) ; enddo
     write(file,'(/,"e+:    ",$)')
     write(file,'(ES10.3," ",$)') e(ks)
@@ -990,7 +990,7 @@ subroutine write_v_accel(i, J, vm, hin, dt, G, CS, maxvel, minvel, str, a, hv)
         (CS%uh(I,j,k) + CS%uh(I,j+1,k))) * G%IDYv(i,J) / f_eff); enddo
     endif
 
-    write(file,'(/,"D:     ",2(ES10.3))') G%D(i,j),G%D(i,j+1)
+    write(file,'(/,"D:     ",2(ES10.3))') G%bathyT(i,j),G%bathyT(i,j+1)
 
   !  From here on, the normalized accelerations are written.
 
