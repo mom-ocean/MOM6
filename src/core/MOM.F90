@@ -1849,7 +1849,7 @@ subroutine write_static_fields(G, diag)
   id = register_static_field('ocean_model', 'area_t', G%axesh1, &
         'Surface area of tracer (T) cells', 'degrees_E')
   if (id > 0) then
-    do j=js,je ; do i=is,ie ; out_h(i,j) = G%DXDYh(i,j) ; enddo ; enddo
+    do j=js,je ; do i=is,ie ; out_h(i,j) = G%areaT(i,j) ; enddo ; enddo
     call post_data(id, out_h, diag, .true.)
   endif
 
@@ -2217,11 +2217,11 @@ subroutine smooth_SSH(ssh, G, smooth_passes)
   halo = -1
 
   do j=jsd+1,jed-1 ; do I=isd,ied-1
-    area_x(I,j) = min(G%dy_u(I,j)*G%dxu(I,j), G%dxdyh(i,j), G%dxdyh(i+1,j))
+    area_x(I,j) = min(G%dy_u(I,j)*G%dxu(I,j), G%areaT(i,j), G%areaT(i+1,j))
   enddo ; enddo
 
   do J=jsd,jed-1 ; do i=isd+1,ied-1
-    area_y(i,J) = min(G%dx_v(i,J)*G%dyv(i,J), G%dxdyh(i,j), G%dxdyh(i,j+1))
+    area_y(i,J) = min(G%dx_v(i,J)*G%dyv(i,J), G%areaT(i,j), G%areaT(i,j+1))
   enddo ; enddo
 
   do pass=1,tot_pass
@@ -2241,7 +2241,7 @@ subroutine smooth_SSH(ssh, G, smooth_passes)
   
     do j=jsl,jel ; do i=isl,iel
       ssh(i,j) = ssh(i,j) + ((flux_x(I-1,j) - flux_x(I,j)) + &
-                             (flux_y(i,J-1) - flux_y(i,J))) * G%Idxdyh(i,j)
+                             (flux_y(i,J-1) - flux_y(i,J))) * G%IareaT(i,j)
     enddo ; enddo
 
     halo = halo - 1

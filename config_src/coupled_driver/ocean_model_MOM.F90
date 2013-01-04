@@ -537,7 +537,7 @@ subroutine convert_state_to_ocean_type(state, Ocean_sfc, G, patm, press_to_z)
     if (present(patm)) &
       Ocean_sfc%sea_lev(i,j) = Ocean_sfc%sea_lev(i,j) + patm(i,j) * press_to_z
     Ocean_sfc%frazil(i,j) = state%frazil(i+i0,j+j0)
-    Ocean_sfc%area(i,j)   =  G%DXDYh(i+i0,j+j0)  
+    Ocean_sfc%area(i,j)   =  G%areaT(i+i0,j+j0)  
   enddo ; enddo
 
   if (.not.associated(state%tr_fields,Ocean_sfc%fields)) &
@@ -667,14 +667,14 @@ subroutine Ocean_stock_pe(OS, index, value, time_index)
       to_mass = OS%grid%H_to_kg_m2
       if (OS%grid%Boussinesq) then
         do k=1,nz ; do j=js,je ; do i=is,ie ; if (OS%grid%hmask(i,j) > 0.5) then
-          value = value + to_mass*(OS%MOM_CSp%h(i,j,k,m) * OS%grid%DXDYh(i,j))
+          value = value + to_mass*(OS%MOM_CSp%h(i,j,k,m) * OS%grid%areaT(i,j))
         endif ; enddo ; enddo ; enddo
       else
         ! In non-Boussinesq mode, the mass of salt needs to be subtracted.
         PSU_to_kg = 1.0e-3
         do k=1,nz ; do j=js,je ; do i=is,ie ; if (OS%grid%hmask(i,j) > 0.5) then
           value = value + to_mass * ((1.0 - PSU_to_kg*OS%MOM_CSp%tv%S(i,j,k))*&
-                                  (OS%MOM_CSp%h(i,j,k,m) * OS%grid%DXDYh(i,j)))
+                                  (OS%MOM_CSp%h(i,j,k,m) * OS%grid%areaT(i,j)))
         endif ; enddo ; enddo ; enddo
       endif
     case (ISTOCK_HEAT)
@@ -682,7 +682,7 @@ subroutine Ocean_stock_pe(OS, index, value, time_index)
       to_heat = OS%grid%H_to_kg_m2 * OS%C_p
       do k=1,nz ; do j=js,je ; do i=is,ie ; if (OS%grid%hmask(i,j) > 0.5) then
         value = value + (to_heat * OS%MOM_CSp%tv%T(i,j,k)) * &
-                        (OS%MOM_CSp%h(i,j,k,m)*OS%grid%DXDYh(i,j))
+                        (OS%MOM_CSp%h(i,j,k,m)*OS%grid%areaT(i,j))
       endif ; enddo ; enddo ; enddo
     case (ISTOCK_SALT)
       ! Return the mass of the salt in the ocean on this PE in kg.
@@ -690,7 +690,7 @@ subroutine Ocean_stock_pe(OS, index, value, time_index)
       to_salt = OS%grid%H_to_kg_m2 / 1000.0
       do k=1,nz ; do j=js,je ; do i=is,ie ; if (OS%grid%hmask(i,j) > 0.5) then
         value = value + (to_salt * OS%MOM_CSp%tv%S(i,j,k)) * &
-                        (OS%MOM_CSp%h(i,j,k,m)*OS%grid%DXDYh(i,j))
+                        (OS%MOM_CSp%h(i,j,k,m)*OS%grid%areaT(i,j))
       endif ; enddo ; enddo ; enddo
     case default ; value = 0.0
   end select
@@ -710,7 +710,7 @@ subroutine ocean_model_data2D_get(OS,Ocean, name, array2D,isc,jsc)
   if (.not.associated(OS)) return
   if (.not.OS%is_ocean_pe) return
   
-! The problem is %DXDYh is on MOM domain but Ice_Ocean_Boundary%... is on mpp domain.
+! The problem is %areaT is on MOM domain but Ice_Ocean_Boundary%... is on mpp domain.
 ! We want to return the MOM data on the mpp (compute) domain
 ! Get MOM domain extents 
   call mpp_get_compute_domain(OS%grid%Domain%mpp_domain, g_isc, g_iec, g_jsc, g_jec)
@@ -721,7 +721,7 @@ subroutine ocean_model_data2D_get(OS,Ocean, name, array2D,isc,jsc)
 
   select case(name)
   case('area')
-     array2D(isc:,jsc:) = OS%grid%DXDYh(g_isc:g_iec,g_jsc:g_jec)
+     array2D(isc:,jsc:) = OS%grid%areaT(g_isc:g_iec,g_jsc:g_jec)
   case('mask')     
      array2D(isc:,jsc:) = OS%grid%hmask(g_isc:g_iec,g_jsc:g_jec)
 !OR same result

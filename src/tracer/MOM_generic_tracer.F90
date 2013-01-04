@@ -561,7 +561,7 @@ contains
     !
 
     call generic_tracer_source(tv%T,tv%S,rho_dzt,dzt,hblt_depth,G%isd,G%jsd,1,dt,&
-         G%dxdyh,CS%diag%time_end,&
+         G%areaT,CS%diag%time_end,&
          optics%nbands, optics%max_wavelength_band, optics%sw_pen_band, optics%opacity_band)
 
     !
@@ -648,7 +648,7 @@ contains
       tr_ptr => tr_field(:,:,:,1)
       do k=1,nz ; do j=js,je ; do i=is,ie
         stocks(m) = stocks(m) + tr_ptr(i,j,k) * &
-                               (G%hmask(i,j) * G%DXDYh(i,j) * h(i,j,k))
+                               (G%hmask(i,j) * G%areaT(i,j) * h(i,j,k))
       enddo ; enddo ; enddo
       stocks(m) = G%H_to_kg_m2 * stocks(m)
 

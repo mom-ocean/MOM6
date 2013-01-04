@@ -244,7 +244,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, MEKE, VarMix, CS)
       if (ASSOCIATED(CS%diag%vhGM)) CS%diag%vhGM(i,J,k) = vhD(i,J,k)
     enddo ; enddo
     do j=js,je ; do i=is,ie
-      h(i,j,k) = h(i,j,k) - dt * G%IDXDYh(i,j) * &
+      h(i,j,k) = h(i,j,k) - dt * G%IareaT(i,j) * &
           ((uhD(I,j,k) - uhD(I-1,j,k)) + (vhD(i,J,k) - vhD(i,J-1,k)))
       if (h(i,j,k) < G%Angstrom) h(i,j,k) = G%Angstrom
     enddo ; enddo
@@ -417,14 +417,14 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
     h_avail_rsum(i,j,1) = 0.0
     pres(i,j,1) = 0.0  ! ### This should be atmospheric pressure.
 
-    h_avail(i,j,1) = max(I4dt*G%DXDYh(i,j)*(h(i,j,1)-G%Angstrom),0.0)
+    h_avail(i,j,1) = max(I4dt*G%areaT(i,j)*(h(i,j,1)-G%Angstrom),0.0)
     h_avail_rsum(i,j,2) = h_avail(i,j,1)
     h_frac(i,j,1) = 1.0
     pres(i,j,2) = pres(i,j,1) + G%H_to_Pa*h(i,j,1)
   enddo ; enddo
   do k=2,nz
     do j=js-1,je+1 ; do i=is-1,ie+1
-      h_avail(i,j,k) = max(I4dt*G%DXDYh(i,j)*(h(i,j,k)-G%Angstrom),0.0)
+      h_avail(i,j,k) = max(I4dt*G%areaT(i,j)*(h(i,j,k)-G%Angstrom),0.0)
       h_avail_rsum(i,j,k+1) = h_avail_rsum(i,j,k) + h_avail(i,j,k)
       h_frac(i,j,k) = 0.0 ; if (h_avail(i,j,k) > 0.0) &
         h_frac(i,j,k) = h_avail(i,j,k) / h_avail_rsum(i,j,k+1)
@@ -817,7 +817,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
 
   if (find_work) then ; do j=js,je ; do i=is,ie
     ! Note that the units of Work_v and Work_u are W, while Work_h is W m-2.
-    Work_h = 0.5 * G%IDXDYh(i,j) * &
+    Work_h = 0.5 * G%IareaT(i,j) * &
       ((Work_u(I-1,j) + Work_u(I,j)) + (Work_v(i,J-1) + Work_v(i,J)))
     if (ASSOCIATED(CS%GMwork)) CS%GMwork(i,j) = Work_h
     if (ASSOCIATED(MEKE)) then ; if (ASSOCIATED(MEKE%GM_src)) then
@@ -1033,7 +1033,7 @@ subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, CS
       do k=k_top,nz ; do i=ish,ie ; if (do_i(i)) then
         if (n==1) then ! This is a u-column.
           dH = 0.0
-          denom = ((G%IDXDYh(i+1,j) + G%IDXDYh(i,j))*G%dy_u(I,j))
+          denom = ((G%IareaT(i+1,j) + G%IareaT(i,j))*G%dy_u(I,j))
           !   This expression uses differences in e in place of h for better
           ! consistency with the slopes.
           if (denom > 0.0) &
@@ -1058,7 +1058,7 @@ subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, CS
           Kh_detangle(I,K+1) = Kh_detangle(I,K+1) + wt2*Kh_lay_u(I,j,k)
         else ! This is a v-column.
           dH = 0.0
-          denom = ((G%IDXDYh(i,j+1) + G%IDXDYh(i,j))*G%dx_v(I,j))
+          denom = ((G%IareaT(i,j+1) + G%IareaT(i,j))*G%dx_v(I,j))
           if (denom > 0.0) &
             dH = I_4t * ((e(i,j+1,K) - e(i,j+1,K+1)) - &
                          (e(i,j,K) - e(i,j,K+1))) / denom
@@ -1191,14 +1191,14 @@ subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, CS
 !               Sfn(K) = -Kh(i,K) * (e(i+1,j,K)-e(i,j,K)) * G%IDXu(I,j)
 !               Sfn(K+1) = -Kh(i,K+1) * (e(i+1,j,K+1)-e(i,j,K+1)) * G%IDXu(I,j)
 !               uh_here(k) = (Sfn(K) - Sfn(K+1))*G%dy_u(I,j)
-!               if (abs(uh_here(k))*min(G%IDXDYh(i,j), G%IDXDYh(i+1,j)) > &
+!               if (abs(uh_here(k))*min(G%IareaT(i,j), G%IareaT(i+1,j)) > &
 !                   (1e-10*G%m_to_H)) then
 !                 if (uh_here(k) * (h(i+1,j,k) - h(i,j,k)) > 0.0) then
 !                   call MOM_error(WARNING, &
 !                          "Corrective u-transport is up the thickness gradient.", .true.)
 !                 endif
-!                 if (((h(i,j,k) - 4.0*dt*G%IDXDYh(i,j)*uh_here(k)) - &
-!                      (h(i+1,j,k) + 4.0*dt*G%IDXDYh(i+1,j)*uh_here(k))) * &
+!                 if (((h(i,j,k) - 4.0*dt*G%IareaT(i,j)*uh_here(k)) - &
+!                      (h(i+1,j,k) + 4.0*dt*G%IareaT(i+1,j)*uh_here(k))) * &
 !                     (h(i,j,k) - h(i+1,j,k)) < 0.0) then
 !                   call MOM_error(WARNING, &
 !                          "Corrective u-transport is too large.", .true.)
@@ -1211,14 +1211,14 @@ subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, CS
 !               Sfn(K) = -Kh(i,K) * (e(i,j+1,K)-e(i,j,K)) * G%IDYv(i,J)
 !               Sfn(K+1) = -Kh(i,K+1) * (e(i,j+1,K+1)-e(i,j,K+1)) * G%IDYv(i,J)
 !               uh_here(k) = (Sfn(K) - Sfn(K+1))*G%dx_v(i,J)
-!               if (abs(uh_here(K))*min(G%IDXDYh(i,j), G%IDXDYh(i,j+1)) > &
+!               if (abs(uh_here(K))*min(G%IareaT(i,j), G%IareaT(i,j+1)) > &
 !                   (1e-10*G%m_to_H)) then
 !                 if (uh_here(K) * (h(i,j+1,k) - h(i,j,k)) > 0.0) then
 !                   call MOM_error(WARNING, &
 !                          "Corrective v-transport is up the thickness gradient.", .true.)
 !                 endif
-!                 if (((h(i,j,k) - 4.0*dt*G%IDXDYh(i,j)*uh_here(K)) - &
-!                      (h(i,j+1,k) + 4.0*dt*G%IDXDYh(i,j+1)*uh_here(K))) * &
+!                 if (((h(i,j,k) - 4.0*dt*G%IareaT(i,j)*uh_here(K)) - &
+!                      (h(i,j+1,k) + 4.0*dt*G%IareaT(i,j+1)*uh_here(K))) * &
 !                     (h(i,j,k) - h(i,j+1,k)) < 0.0) then
 !                   call MOM_error(WARNING, &
 !                          "Corrective v-transport is too large.", .true.)

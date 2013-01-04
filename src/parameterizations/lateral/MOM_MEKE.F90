@@ -200,11 +200,11 @@ subroutine step_forward_MEKE(MEKE, h, visc, dt, G, CS)
 
       cdrag2 = CS%MEKE_Cd_scale * CS%cdrag**2
       do j=js,je ; do i=is,ie
-        drag_rate_visc(i,j) = (0.25*G%IDXDYh(i,j) * &
-                ((G%dxdy_u(I-1,j)*drag_vel_u(I-1,j) + &
-                  G%dxdy_u(I,j)*drag_vel_u(I,j)) + &
-                 (G%dxdy_v(i,J-1)*drag_vel_v(i,J-1) + &
-                  G%dxdy_v(i,J)*drag_vel_v(i,J)) ) )
+        drag_rate_visc(i,j) = (0.25*G%IareaT(i,j) * &
+                ((G%areaCu(I-1,j)*drag_vel_u(I-1,j) + &
+                  G%areaCu(I,j)*drag_vel_u(I,j)) + &
+                 (G%areaCv(i,J-1)*drag_vel_v(i,J-1) + &
+                  G%areaCv(i,J)*drag_vel_v(i,J)) ) )
         drag_rate(i,j) = (Rho0 * I_mass(i,j)) * &
             sqrt(drag_rate_visc(i,j)**2 + 2.0*cdrag2 * max(0.0,MEKE%MEKE(i,j)))
       enddo ; enddo
@@ -238,7 +238,7 @@ subroutine step_forward_MEKE(MEKE, h, visc, dt, G, CS)
         if (associated(MEKE%Kh)) &
           Kh_here = CS%MEKE_Kh + CS%KhMEKE_Fac*0.5*(MEKE%Kh(i,j)+MEKE%Kh(i+1,j))
         Inv_Kh_max = 2.0*sdt * ((G%dy_u(I,j)*G%IDXu(I,j)) * &
-                     max(G%IDXDYh(i,j),G%IDXDYh(i+1,j)))
+                     max(G%IareaT(i,j),G%IareaT(i+1,j)))
         if (Kh_here*Inv_Kh_max > 0.25) Kh_here = 0.25 / Inv_Kh_max
         Kh_u(I,j) = Kh_here
 
@@ -250,7 +250,7 @@ subroutine step_forward_MEKE(MEKE, h, visc, dt, G, CS)
         if (associated(MEKE%Kh)) &
           Kh_here = CS%MEKE_Kh + CS%KhMEKE_Fac*0.5*(MEKE%Kh(i,j)+MEKE%Kh(i,j+1))
         Inv_Kh_max = 2.0*sdt * ((G%dx_v(i,J)*G%IDYv(i,J)) * &
-                     max(G%IDXDYh(i,j),G%IDXDYh(i,j+1)))
+                     max(G%IareaT(i,j),G%IareaT(i,j+1)))
         if (Kh_here*Inv_Kh_max > 0.25) Kh_here = 0.25 / Inv_Kh_max
         Kh_v(i,J) = Kh_here
 
@@ -259,7 +259,7 @@ subroutine step_forward_MEKE(MEKE, h, visc, dt, G, CS)
             (MEKE%MEKE(i,j) - MEKE%MEKE(i,j+1))
       enddo ; enddo
       do j=js,je ; do i=is,ie
-        MEKE%MEKE(i,j) = MEKE%MEKE(i,j) + (sdt*(G%IDXDYh(i,j)*I_mass(i,j))) * &
+        MEKE%MEKE(i,j) = MEKE%MEKE(i,j) + (sdt*(G%IareaT(i,j)*I_mass(i,j))) * &
             ((MEKE_uflux(I-1,j) - MEKE_uflux(I,j)) + &
              (MEKE_vflux(i,J-1) - MEKE_vflux(i,J)))
       enddo ; enddo
@@ -295,12 +295,12 @@ subroutine step_forward_MEKE(MEKE, h, visc, dt, G, CS)
 
     if (CS%MEKE_KhCoeff>0.) then ; if (CS%Rd_as_max_scale) then
       do j=js-1,je+1 ; do i=is-1,ie+1
-        MEKE%Kh(i,j) = (CS%MEKE_KhCoeff*sqrt(2.*max(0.,MEKE%MEKE(i,j))*G%dxdyh(i,j))) * &
+        MEKE%Kh(i,j) = (CS%MEKE_KhCoeff*sqrt(2.*max(0.,MEKE%MEKE(i,j))*G%areaT(i,j))) * &
                        min(MEKE%Rd_dx_h(i,j), 1.0)
       enddo ; enddo
     else
       do j=js-1,je+1 ; do i=is-1,ie+1
-        MEKE%Kh(i,j) = CS%MEKE_KhCoeff*sqrt(2.*max(0.,MEKE%MEKE(i,j))*G%dxdyh(i,j))
+        MEKE%Kh(i,j) = CS%MEKE_KhCoeff*sqrt(2.*max(0.,MEKE%MEKE(i,j))*G%areaT(i,j))
       enddo ; enddo
     endif ; endif
     call cpu_clock_begin(id_clock_pass)

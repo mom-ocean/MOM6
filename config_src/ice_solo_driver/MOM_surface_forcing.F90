@@ -772,12 +772,12 @@ subroutine buoyancy_forcing_from_files(state, fluxes, day, dt, G, CS)
     call read_data(trim(CS%inputdir)//trim(CS%freshdischarge_file), "disch_w", &
              temp(:,:), domain=G%Domain%mpp_domain, timelevel=time_lev_monthly)
     do j=js,je ; do i=is,ie
-      fluxes%liq_runoff(i,j) = temp(i,j)*G%IDXDYh(i,j)
+      fluxes%liq_runoff(i,j) = temp(i,j)*G%IareaT(i,j)
     enddo ; enddo
     call read_data(trim(CS%inputdir)//trim(CS%freshdischarge_file), "disch_s", &
               temp(:,:), domain=G%Domain%mpp_domain, timelevel=time_lev_monthly)
     do j=js,je ; do i=is,ie
-      fluxes%froz_runoff(i,j) = temp(i,j)*G%IDXDYh(i,j)
+      fluxes%froz_runoff(i,j) = temp(i,j)*G%IareaT(i,j)
     enddo ; enddo
 
 !     Read the SST and SSS fields for damping.

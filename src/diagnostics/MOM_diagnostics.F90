@@ -537,7 +537,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, lev, G, CS)
       if (.not.G%symmetric) &      
          call pass_vector(KE_u, KE_v, G%Domain, To_North+To_East)     
       do j=js,je ; do i=is,ie
-        CS%dKE_dt(i,j,k) = KE_h(i,j) + 0.5 * G%IDXDYh(i,j) * &
+        CS%dKE_dt(i,j,k) = KE_h(i,j) + 0.5 * G%IareaT(i,j) * &
             (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1))
       enddo ; enddo
     enddo
@@ -555,7 +555,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, lev, G, CS)
       if (.not.G%symmetric) &
          call pass_vector(KE_u, KE_v, G%Domain, To_North+To_East)
       do j=js,je ; do i=is,ie
-        CS%PE_to_KE(i,j,k) = 0.5 * G%IDXDYh(i,j) * &
+        CS%PE_to_KE(i,j,k) = 0.5 * G%IareaT(i,j) * &
             (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1))
       enddo ; enddo
     enddo
@@ -571,13 +571,13 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, lev, G, CS)
         KE_v(i,J) = vh(i,J,k)*G%DYv(i,J)*CS%diag%CAv(i,J,k)
       enddo ; enddo
       do j=js,je ; do i=is,ie
-        KE_h(i,j) = -CS%KE(i,j,k) * G%IDXDYh(i,j) * &
+        KE_h(i,j) = -CS%KE(i,j,k) * G%IareaT(i,j) * &
             (uh(I,j,k) - uh(I-1,j,k) + vh(i,J,k) - vh(i,J-1,k))
       enddo ; enddo
       if (.not.G%symmetric) &
          call pass_vector(KE_u, KE_v, G%Domain, To_North+To_East)
       do j=js,je ; do i=is,ie
-        CS%KE_CorAdv(i,j,k) = KE_h(i,j) + 0.5 * G%IDXDYh(i,j) * &
+        CS%KE_CorAdv(i,j,k) = KE_h(i,j) + 0.5 * G%IareaT(i,j) * &
             (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1))
       enddo ; enddo
     enddo
@@ -593,13 +593,13 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, lev, G, CS)
         KE_v(i,J) = vh(i,J,k)*G%DYv(i,J)*CS%diag%gradKEv(i,J,k)
       enddo ; enddo
       do j=js,je ; do i=is,ie
-        KE_h(i,j) = -CS%KE(i,j,k) * G%IDXDYh(i,j) * &
+        KE_h(i,j) = -CS%KE(i,j,k) * G%IareaT(i,j) * &
             (uh(I,j,k) - uh(I-1,j,k) + vh(i,J,k) - vh(i,J-1,k))
       enddo ; enddo
       if (.not.G%symmetric) &
          call pass_vector(KE_u, KE_v, G%Domain, To_North+To_East)
       do j=js,je ; do i=is,ie
-        CS%KE_adv(i,j,k) = KE_h(i,j) + 0.5 * G%IDXDYh(i,j) * &
+        CS%KE_adv(i,j,k) = KE_h(i,j) + 0.5 * G%IareaT(i,j) * &
             (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1))
       enddo ; enddo
     enddo
@@ -617,7 +617,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, lev, G, CS)
       if (.not.G%symmetric) &
          call pass_vector(KE_u, KE_v, G%Domain, To_North+To_East)
       do j=js,je ; do i=is,ie
-        CS%KE_visc(i,j,k) = 0.5 * G%IDXDYh(i,j) * &
+        CS%KE_visc(i,j,k) = 0.5 * G%IareaT(i,j) * &
             (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1))
       enddo ; enddo
     enddo
@@ -635,7 +635,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, lev, G, CS)
       if (.not.G%symmetric) &
          call pass_vector(KE_u, KE_v, G%Domain, To_North+To_East)
       do j=js,je ; do i=is,ie
-        CS%KE_horvisc(i,j,k) = 0.5 * G%IDXDYh(i,j) * &
+        CS%KE_horvisc(i,j,k) = 0.5 * G%IareaT(i,j) * &
             (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1))
       enddo ; enddo
     enddo
@@ -657,7 +657,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, lev, G, CS)
       if (.not.G%symmetric) &
          call pass_vector(KE_u, KE_v, G%Domain, To_North+To_East) 
       do j=js,je ; do i=is,ie
-        CS%KE_dia(i,j,k) = KE_h(i,j) + 0.5 * G%IDXDYh(i,j) * &
+        CS%KE_dia(i,j,k) = KE_h(i,j) + 0.5 * G%IareaT(i,j) * &
             (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1))
       enddo ; enddo
     enddo

@@ -1371,11 +1371,11 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, &
       else ; TKE_to_layer = 0.0 ; endif
 
       ! TKE_Ray has been initialized to 0 above.
-      if (Rayleigh_drag) TKE_Ray = 0.5*CS%BBL_effic * G%IDXDYh(i,j) * &
-            ((G%dxdy_u(i-1,j) * visc%Ray_u(i-1,j,k) * u(i-1,j,k)**2 + &
-              G%dxdy_u(i,j)   * visc%Ray_u(i,j,k)   * u(i,j,k)**2) + &
-             (G%dxdy_v(i,j-1) * visc%Ray_v(i,j-1,k) * v(i,j-1,k)**2 + &
-              G%dxdy_v(i,j)   * visc%Ray_v(i,j,k)   * v(i,j,k)**2))
+      if (Rayleigh_drag) TKE_Ray = 0.5*CS%BBL_effic * G%IareaT(i,j) * &
+            ((G%areaCu(i-1,j) * visc%Ray_u(i-1,j,k) * u(i-1,j,k)**2 + &
+              G%areaCu(i,j)   * visc%Ray_u(i,j,k)   * u(i,j,k)**2) + &
+             (G%areaCv(i,j-1) * visc%Ray_v(i,j-1,k) * v(i,j-1,k)**2 + &
+              G%areaCv(i,j)   * visc%Ray_v(i,j,k)   * v(i,j,k)**2))
 
       if (TKE_to_layer + TKE_Ray > 0.0) then
         if (CS%BBL_mixing_as_max) then
@@ -1951,15 +1951,15 @@ subroutine set_BBL_diffusivity(u, v, h, fluxes, visc, G, CS)
     endif ; enddo
 
     do i=is,ie
-      visc%ustar_BBL(i,j) = sqrt(0.5*G%IDXDYh(i,j) * &
-                ((G%dxdy_u(I-1,j)*(ustar(I-1)*ustar(I-1)) + &
-                  G%dxdy_u(I,j)*(ustar(I)*ustar(I))) + &
-                 (G%dxdy_v(i,J-1)*(vstar(i,J-1)*vstar(i,J-1)) + &
-                  G%dxdy_v(i,J)*(vstar(i,J)*vstar(i,J))) ) )
-      visc%TKE_BBL(i,j) = (((G%dxdy_u(I-1,j)*(ustar(I-1)*u2_bbl(I-1)) + &
-                    G%dxdy_u(I,j) * (ustar(I)*u2_bbl(I))) + &
-                   (G%dxdy_v(i,J-1)*(vstar(i,J-1)*v2_bbl(i,J-1)) + &
-                    G%dxdy_v(i,J) * (vstar(i,J)*v2_bbl(i,J))))*G%IDXDYh(i,j))
+      visc%ustar_BBL(i,j) = sqrt(0.5*G%IareaT(i,j) * &
+                ((G%areaCu(I-1,j)*(ustar(I-1)*ustar(I-1)) + &
+                  G%areaCu(I,j)*(ustar(I)*ustar(I))) + &
+                 (G%areaCv(i,J-1)*(vstar(i,J-1)*vstar(i,J-1)) + &
+                  G%areaCv(i,J)*(vstar(i,J)*vstar(i,J))) ) )
+      visc%TKE_BBL(i,j) = (((G%areaCu(I-1,j)*(ustar(I-1)*u2_bbl(I-1)) + &
+                    G%areaCu(I,j) * (ustar(I)*u2_bbl(I))) + &
+                   (G%areaCv(i,J-1)*(vstar(i,J-1)*v2_bbl(i,J-1)) + &
+                    G%areaCv(i,J) * (vstar(i,J)*v2_bbl(i,J))))*G%IareaT(i,j))
     enddo
   enddo
 

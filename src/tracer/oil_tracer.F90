@@ -486,7 +486,7 @@ subroutine oil_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, CS, tv
       if (k>0) then
         k=min(k,k_max) ! Only insert k or first layer with interface 10 m above bottom
         CS%tr(i,j,k,m) = CS%tr(i,j,k,m) + CS%oil_source_rate*dt/((h_new(i,j,k)+G%h_subroundoff) &
-                                           * G%DXDYh(i,j) )
+                                           * G%areaT(i,j) )
       elseif (k<0) then
         h_total=G%h_subroundoff
         do k=1, nz
@@ -494,7 +494,7 @@ subroutine oil_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, CS, tv
         enddo
         do k=1, nz
           CS%tr(i,j,k,m) = CS%tr(i,j,k,m) + CS%oil_source_rate*dt/(h_total &
-                                           * G%DXDYh(i,j) )
+                                           * G%areaT(i,j) )
         enddo
       endif
     enddo
@@ -574,7 +574,7 @@ function oil_stock(h, stocks, G, CS, names, units, stock_index)
     stocks(m) = 0.0
     do k=1,nz ; do j=js,je ; do i=is,ie
       stocks(m) = stocks(m) + CS%tr(i,j,k,m) * &
-                             (G%hmask(i,j) * G%DXDYh(i,j) * h(i,j,k))
+                             (G%hmask(i,j) * G%areaT(i,j) * h(i,j,k))
     enddo ; enddo ; enddo
     stocks(m) = G%H_to_kg_m2 * stocks(m)
   enddo

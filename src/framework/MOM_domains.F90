@@ -78,8 +78,8 @@ end interface pass_vector_complete
 type, public :: MOM_domain_type
   type(domain2D), pointer :: mpp_domain => NULL() ! The domain with halos on
                                         ! this processor, centered at h points.
-  integer :: niglobal, njglobal            ! total horizontal domain sizes
-  integer :: nihalo, njhalo           ! X- and Y- halo sizes in memory.
+  integer :: niglobal, njglobal         ! The total horizontal domain sizes.
+  integer :: nihalo, njhalo             ! The X- and Y- halo sizes in memory.
   logical :: symmetric                  ! True if symmetric memory is used with
                                         ! this domain.
   logical :: nonblocking_updates        ! If true, non-blocking halo updates are

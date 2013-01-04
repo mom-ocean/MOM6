@@ -184,7 +184,7 @@ subroutine mixedlayer_restrat(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
       do i=is-1,ie+1
         Rml_av(i,j) = Rml_av(i,j) + h(i,j,k)*Rho0(i)
         htot(i,j) = htot(i,j) + h(i,j,k)
-        h_avail(i,j,k) = max(I4dt*G%DXDYh(i,j)*(h(i,j,k)-G%Angstrom),0.0)
+        h_avail(i,j,k) = max(I4dt*G%areaT(i,j)*(h(i,j,k)-G%Angstrom),0.0)
       enddo
     enddo
 
@@ -290,7 +290,7 @@ subroutine mixedlayer_restrat(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
   enddo ; enddo
 
   do k=1,G%nkml ; do j=js,je ; do i=is,ie
-    h(i,j,k) = h(i,j,k) - dt*G%IDXDYh(i,j) * &
+    h(i,j,k) = h(i,j,k) - dt*G%IareaT(i,j) * &
         ((uhml(I,j,k) - uhml(I-1,j,k)) + (vhml(i,J,k) - vhml(i,J-1,k)))
   enddo ; enddo ; enddo
 

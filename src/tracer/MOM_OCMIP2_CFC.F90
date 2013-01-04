@@ -654,7 +654,7 @@ function OCMIP2_CFC_stock(h, stocks, G, CS, names, units, stock_index)
 
   stocks(1) = 0.0 ; stocks(2) = 0.0
   do k=1,nz ; do j=js,je ; do i=is,ie
-    mass = G%hmask(i,j) * G%DXDYh(i,j) * h(i,j,k)
+    mass = G%hmask(i,j) * G%areaT(i,j) * h(i,j,k)
     stocks(1) = stocks(1) + CS%CFC11(i,j,k) * mass
     stocks(2) = stocks(2) + CS%CFC12(i,j,k) * mass
   enddo ; enddo ; enddo

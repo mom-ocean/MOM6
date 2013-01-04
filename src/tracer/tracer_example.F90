@@ -546,7 +546,7 @@ function USER_tracer_stock(h, stocks, G, CS, names, units, stock_index)
     stocks(m) = 0.0
     do k=1,nz ; do j=js,je ; do i=is,ie
       stocks(m) = stocks(m) + CS%tr(i,j,k,m) * &
-                             (G%hmask(i,j) * G%DXDYh(i,j) * h(i,j,k))
+                             (G%hmask(i,j) * G%areaT(i,j) * h(i,j,k))
     enddo ; enddo ; enddo
     stocks(m) = G%H_to_kg_m2 * stocks(m)
   enddo

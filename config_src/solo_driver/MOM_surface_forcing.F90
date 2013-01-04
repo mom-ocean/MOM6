@@ -883,12 +883,12 @@ subroutine buoyancy_forcing_from_files(state, fluxes, day, dt, G, CS)
       call read_data(CS%runoff_file, CS%liq_runoff_var, temp(:,:), &
                      domain=G%Domain%mpp_domain, timelevel=time_lev)
       do j=js,je ; do i=is,ie
-        fluxes%liq_runoff(i,j) = temp(i,j)*G%IDXDYh(i,j)
+        fluxes%liq_runoff(i,j) = temp(i,j)*G%IareaT(i,j)
       enddo ; enddo
       call read_data(CS%runoff_file, CS%froz_runoff_var, temp(:,:), &
                      domain=G%Domain%mpp_domain, timelevel=time_lev)
       do j=js,je ; do i=is,ie
-        fluxes%froz_runoff(i,j) = temp(i,j)*G%IDXDYh(i,j)
+        fluxes%froz_runoff(i,j) = temp(i,j)*G%IareaT(i,j)
       enddo ; enddo
     else
       call read_data(CS%runoff_file, CS%liq_runoff_var, fluxes%liq_runoff(:,:), &

@@ -1485,20 +1485,20 @@ subroutine find_uv_at_h(u, v, h, u_h, v_h, G, ea, eb)
 
   do j=js,je
     do i=is,ie
-      s = G%dxdy_u(i-1,j)+G%dxdy_u(i,j)
+      s = G%areaCu(i-1,j)+G%areaCu(i,j)
       if (s>0.0) then
-        Idenom = sqrt(0.5*G%IDXDYh(i,j)/s)
-        a_w(i) = G%dxdy_u(i-1,j)*Idenom
-        a_e(i) = G%dxdy_u(i,j)*Idenom
+        Idenom = sqrt(0.5*G%IareaT(i,j)/s)
+        a_w(i) = G%areaCu(i-1,j)*Idenom
+        a_e(i) = G%areaCu(i,j)*Idenom
       else
         a_w(i) = 0.0 ; a_e(i) = 0.0
       endif
 
-      s = G%dxdy_v(i,j-1)+G%dxdy_v(i,j)
+      s = G%areaCv(i,j-1)+G%areaCv(i,j)
       if (s>0.0) then
-        Idenom = sqrt(0.5*G%IDXDYh(i,j)/s)
-        a_s(i) = G%dxdy_v(i,j-1)*Idenom
-        a_n(i) = G%dxdy_v(i,j)*Idenom
+        Idenom = sqrt(0.5*G%IareaT(i,j)/s)
+        a_s(i) = G%areaCv(i,j-1)*Idenom
+        a_n(i) = G%areaCv(i,j)*Idenom
       else
         a_s(i) = 0.0 ; a_n(i) = 0.0
       endif

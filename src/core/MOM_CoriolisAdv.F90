@@ -276,7 +276,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, G, CS)
          "MOM_CoriolisAdv: Module must be initialized before it is used.")
 
   do j=Jsq-1,Jeq+2 ; do I=Isq-1,Ieq+2
-    Area_h(i,j) = G%hmask(i,j) * G%DXDYh(i,j)
+    Area_h(i,j) = G%hmask(i,j) * G%areaT(i,j)
   enddo ; enddo
   do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
     Area_q(i,j) = (Area_h(i,j) + Area_h(i+1,j+1)) + &
@@ -297,11 +297,11 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, G, CS)
       if (CS%no_slip ) then
         relative_vorticity = (2.0-G%qmask(I,J)) * &
            ((v(i+1,J,k)*G%DYv(i+1,J) - v(i,J,k)*G%DYv(i,J)) - &
-            (u(I,j+1,k)*G%DXu(I,j+1) - u(I,j,k)*G%DXu(I,j)))* G%IDXDYq(I,J)
+            (u(I,j+1,k)*G%DXu(I,j+1) - u(I,j,k)*G%DXu(I,j)))* G%IareaBu(I,J)
       else
         relative_vorticity = G%qmask(I,J) * &
            ((v(i+1,J,k)*G%DYv(i+1,J) - v(i,J,k)*G%DYv(i,J)) - &
-            (u(I,j+1,k)*G%DXu(I,j+1) - u(I,j,k)*G%DXu(I,j)))* G%IDXDYq(I,J)
+            (u(I,j+1,k)*G%DXu(I,j+1) - u(I,j,k)*G%DXu(I,j)))* G%IareaBu(I,J)
       endif
       absolute_vorticity = G%CoriolisBu(I,J) + relative_vorticity
       Ih = 0.0
@@ -783,11 +783,11 @@ subroutine gradKE(u, v, h, uh, vh, KE, KEx, KEy, k, G, CS)
 ! identified in Arakawa & Lamb 1982 as important for KE conservation.  It
 ! also includes the possibility of partially-blocked tracer cell faces.
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      KE(i,j) = ( ( G%dxdy_u( I ,j)*(u( I ,j,k)*u( I ,j,k))   &
-                   +G%dxdy_u(I-1,j)*(u(I-1,j,k)*u(I-1,j,k)) ) &
-                 +( G%dxdy_v(i, J )*(v(i, J ,k)*v(i, J ,k))   &
-                   +G%dxdy_v(i,J-1)*(v(i,J-1,k)*v(i,J-1,k)) ) &
-                )*0.25*G%IDXDYh(i,j)
+      KE(i,j) = ( ( G%areaCu( I ,j)*(u( I ,j,k)*u( I ,j,k))   &
+                   +G%areaCu(I-1,j)*(u(I-1,j,k)*u(I-1,j,k)) ) &
+                 +( G%areaCv(i, J )*(v(i, J ,k)*v(i, J ,k))   &
+                   +G%areaCv(i,J-1)*(v(i,J-1,k)*v(i,J-1,k)) ) &
+                )*0.25*G%IareaT(i,j)
     enddo ; enddo
   elseif (CS%KE_Scheme.eq.KE_SIMPLE_GUDONOV) then
 ! The following discretization of KE is based on the one-dimensinal Gudonov
@@ -803,11 +803,11 @@ subroutine gradKE(u, v, h, uh, vh, KE, KEx, KEy, k, G, CS)
 ! The following discretization of KE is based on the one-dimensinal Gudonov
 ! scheme but has been adapted to take horizontal grid factors into account
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      up = 0.5*( u(I-1,j,k) + ABS( u(I-1,j,k) ) ) ; up2a = up*up*G%dxdy_u(I-1,j)
-      um = 0.5*( u( I ,j,k) - ABS( u( I ,j,k) ) ) ; um2a = um*um*G%dxdy_u( I ,j)
-      vp = 0.5*( v(i,J-1,k) + ABS( v(i,J-1,k) ) ) ; vp2a = vp*vp*G%dxdy_v(i,J-1)
-      vm = 0.5*( v(i, J ,k) - ABS( v(i, J ,k) ) ) ; vm2a = vm*vm*G%dxdy_v(i, J )
-      KE(i,j) = ( max(um2a,up2a) + max(vm2a,vp2a) )*0.5*G%IDXDYh(i,j)
+      up = 0.5*( u(I-1,j,k) + ABS( u(I-1,j,k) ) ) ; up2a = up*up*G%areaCu(I-1,j)
+      um = 0.5*( u( I ,j,k) - ABS( u( I ,j,k) ) ) ; um2a = um*um*G%areaCu( I ,j)
+      vp = 0.5*( v(i,J-1,k) + ABS( v(i,J-1,k) ) ) ; vp2a = vp*vp*G%areaCv(i,J-1)
+      vm = 0.5*( v(i, J ,k) - ABS( v(i, J ,k) ) ) ; vm2a = vm*vm*G%areaCv(i, J )
+      KE(i,j) = ( max(um2a,up2a) + max(vm2a,vp2a) )*0.5*G%IareaT(i,j)
     enddo ; enddo
   endif
 

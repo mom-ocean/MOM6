@@ -1077,9 +1077,9 @@ subroutine vertvisc_limit_vel(u, v, h, fluxes, visc, dt, G, CS)
         do I=Isq,Ieq ; vel_report(:) = 3.0e8 ; enddo ! Speed of light default.
         do k=1,nz ; do I=Isq,Ieq
           if (u(I,j,k) < 0.0) then
-            CFL = (-u(I,j,k) * dt) * (G%dy_u(I,j) * G%IDXDYh(i+1,j))
+            CFL = (-u(I,j,k) * dt) * (G%dy_u(I,j) * G%IareaT(i+1,j))
           else
-            CFL = (u(I,j,k) * dt) * (G%dy_u(I,j) * G%IDXDYh(i,j))
+            CFL = (u(I,j,k) * dt) * (G%dy_u(I,j) * G%IareaT(i,j))
           endif
           if (CFL > CS%CFL_trunc) trunc_any = .true.
           if (CFL > CS%CFL_report) then
@@ -1102,11 +1102,11 @@ subroutine vertvisc_limit_vel(u, v, h, fluxes, visc, dt, G, CS)
       endif ; enddo
       if (trunc_any) then ; if (CS%CFL_based_trunc) then
         do k=1,nz ; do I=Isq,Ieq
-          if ((u(I,j,k) * (dt * G%dy_u(I,j))) * G%IDXDYh(i+1,j) < -CS%CFL_trunc) then
-            u(I,j,k) = (-0.9*CS%CFL_trunc) * (G%DXDYh(i+1,j) / (dt * G%dy_u(I,j)))
+          if ((u(I,j,k) * (dt * G%dy_u(I,j))) * G%IareaT(i+1,j) < -CS%CFL_trunc) then
+            u(I,j,k) = (-0.9*CS%CFL_trunc) * (G%areaT(i+1,j) / (dt * G%dy_u(I,j)))
             if (h(i,j,k) + h(i+1,j,k) > 6.0*G%Angstrom) CS%ntrunc = CS%ntrunc + 1
-          elseif ((u(I,j,k) * (dt * G%dy_u(I,j))) * G%IDXDYh(i,j) > CS%CFL_trunc) then
-            u(I,j,k) = (0.9*CS%CFL_trunc) * (G%DXDYh(i,j) / (dt * G%dy_u(I,j)))
+          elseif ((u(I,j,k) * (dt * G%dy_u(I,j))) * G%IareaT(i,j) > CS%CFL_trunc) then
+            u(I,j,k) = (0.9*CS%CFL_trunc) * (G%areaT(i,j) / (dt * G%dy_u(I,j)))
             if (h(i,j,k) + h(i+1,j,k) > 6.0*G%Angstrom) CS%ntrunc = CS%ntrunc + 1
           endif
         enddo ; enddo
@@ -1120,11 +1120,11 @@ subroutine vertvisc_limit_vel(u, v, h, fluxes, visc, dt, G, CS)
   else
     if (CS%CFL_based_trunc) then
       do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-        if ((u(I,j,k) * (dt * G%dy_u(I,j))) * G%IDXDYh(i+1,j) < -CS%CFL_trunc) then
-          u(I,j,k) = (-0.9*CS%CFL_trunc) * (G%DXDYh(i+1,j) / (dt * G%dy_u(I,j)))
+        if ((u(I,j,k) * (dt * G%dy_u(I,j))) * G%IareaT(i+1,j) < -CS%CFL_trunc) then
+          u(I,j,k) = (-0.9*CS%CFL_trunc) * (G%areaT(i+1,j) / (dt * G%dy_u(I,j)))
           if (h(i,j,k) + h(i+1,j,k) > 6.0*G%Angstrom) CS%ntrunc = CS%ntrunc + 1
-        elseif ((u(I,j,k) * (dt * G%dy_u(I,j))) * G%IDXDYh(i,j) > CS%CFL_trunc) then
-          u(I,j,k) = (0.9*CS%CFL_trunc) * (G%DXDYh(i,j) / (dt * G%dy_u(I,j)))
+        elseif ((u(I,j,k) * (dt * G%dy_u(I,j))) * G%IareaT(i,j) > CS%CFL_trunc) then
+          u(I,j,k) = (0.9*CS%CFL_trunc) * (G%areaT(i,j) / (dt * G%dy_u(I,j)))
           if (h(i,j,k) + h(i+1,j,k) > 6.0*G%Angstrom) CS%ntrunc = CS%ntrunc + 1
         endif
       enddo ; enddo ; enddo
@@ -1146,9 +1146,9 @@ subroutine vertvisc_limit_vel(u, v, h, fluxes, visc, dt, G, CS)
         do i=is,ie ; vel_report(:) = 3.0e8 ; enddo ! Speed of light default.
         do k=1,nz ; do i=is,ie
           if (v(i,J,k) < 0.0) then
-            CFL = (-v(i,J,k) * dt) * (G%dx_v(i,J) * G%IDXDYh(i,j+1))
+            CFL = (-v(i,J,k) * dt) * (G%dx_v(i,J) * G%IareaT(i,j+1))
           else
-            CFL = (v(i,J,k) * dt) * (G%dx_v(i,J) * G%IDXDYh(i,j))
+            CFL = (v(i,J,k) * dt) * (G%dx_v(i,J) * G%IareaT(i,j))
           endif
           if (CFL > CS%CFL_trunc) trunc_any = .true.
           if (CFL > CS%CFL_report) then
@@ -1171,11 +1171,11 @@ subroutine vertvisc_limit_vel(u, v, h, fluxes, visc, dt, G, CS)
       endif ; enddo
       if (trunc_any) then ; if (CS%CFL_based_trunc) then
         do k=1,nz; do i=is,ie
-          if ((v(i,J,k) * (dt * G%dx_v(i,J))) * G%IDXDYh(i,j+1) < -CS%CFL_trunc) then
-            v(i,J,k) = (-0.9*CS%CFL_trunc) * (G%DXDYh(i,j+1) / (dt * G%dx_v(i,J)))
+          if ((v(i,J,k) * (dt * G%dx_v(i,J))) * G%IareaT(i,j+1) < -CS%CFL_trunc) then
+            v(i,J,k) = (-0.9*CS%CFL_trunc) * (G%areaT(i,j+1) / (dt * G%dx_v(i,J)))
             if (h(i,j,k) + h(i,j+1,k) > 6.0*G%Angstrom) CS%ntrunc = CS%ntrunc + 1
-          elseif ((v(i,J,k) * (dt * G%dx_v(i,J))) * G%IDXDYh(i,j) > CS%CFL_trunc) then
-            v(i,J,k) = (0.9*CS%CFL_trunc) * (G%DXDYh(i,j) / (dt * G%dx_v(i,J)))
+          elseif ((v(i,J,k) * (dt * G%dx_v(i,J))) * G%IareaT(i,j) > CS%CFL_trunc) then
+            v(i,J,k) = (0.9*CS%CFL_trunc) * (G%areaT(i,j) / (dt * G%dx_v(i,J)))
             if (h(i,j,k) + h(i,j+1,k) > 6.0*G%Angstrom) CS%ntrunc = CS%ntrunc + 1
           endif
         enddo ; enddo
@@ -1189,11 +1189,11 @@ subroutine vertvisc_limit_vel(u, v, h, fluxes, visc, dt, G, CS)
   else
     if (CS%CFL_based_trunc) then
       do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-        if ((v(i,J,k) * (dt * G%dx_v(i,J))) * G%IDXDYh(i,j+1) < -CS%CFL_trunc) then
-          v(i,J,k) = (-0.9*CS%CFL_trunc) * (G%DXDYh(i,j+1) / (dt * G%dx_v(i,J)))
+        if ((v(i,J,k) * (dt * G%dx_v(i,J))) * G%IareaT(i,j+1) < -CS%CFL_trunc) then
+          v(i,J,k) = (-0.9*CS%CFL_trunc) * (G%areaT(i,j+1) / (dt * G%dx_v(i,J)))
           if (h(i,j,k) + h(i,j+1,k) > 6.0*G%Angstrom) CS%ntrunc = CS%ntrunc + 1
-        elseif ((v(i,J,k) * (dt * G%dx_v(i,J))) * G%IDXDYh(i,j) > CS%CFL_trunc) then
-          v(i,J,k) = (0.9*CS%CFL_trunc) * (G%DXDYh(i,j) / (dt * G%dx_v(i,J)))
+        elseif ((v(i,J,k) * (dt * G%dx_v(i,J))) * G%IareaT(i,j) > CS%CFL_trunc) then
+          v(i,J,k) = (0.9*CS%CFL_trunc) * (G%areaT(i,j) / (dt * G%dx_v(i,J)))
           if (h(i,j,k) + h(i,j+1,k) > 6.0*G%Angstrom) CS%ntrunc = CS%ntrunc + 1
         endif
       enddo ; enddo ; enddo

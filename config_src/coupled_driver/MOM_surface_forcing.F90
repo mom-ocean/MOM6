@@ -317,7 +317,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
     CS%first_call = .false.
 
     do j=js,je ; do i=is,ie
-      work_sum(i,j) = G%DXDYh(i,j) * G%hmask(i,j)
+      work_sum(i,j) = G%areaT(i,j) * G%hmask(i,j)
     enddo ; enddo
     CS%area_surf = reproducing_sum(work_sum, isr, ier, jsr, jer)
 
@@ -342,7 +342,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
           delta_sss = sign(1.0,delta_sss)*min(abs(delta_sss),CS%max_delta_srestore)
           fluxes%salt_flux(i,j) = 1.e-3*G%hmask(i,j) * (CS%Rho0*CS%Flux_const)* &
                     (CS%basin_mask(i,j)*open_ocn_mask(i,j)) *delta_sss  ! kg Salt m-2 s-1
-          work_sum(i,j) = G%DXDYh(i,j)*fluxes%salt_flux(i,j)
+          work_sum(i,j) = G%areaT(i,j)*fluxes%salt_flux(i,j)
         enddo; enddo
         Sflux_adj_total = reproducing_sum(work_sum(:,:), isr,ier, jsr,jer) / &
                           CS%area_surf
@@ -357,7 +357,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
           else
             pme_adj(i,j) = 0.0
           endif
-          work_sum(i,j) = G%DXDYh(i,j) * pme_adj(i,j)
+          work_sum(i,j) = G%areaT(i,j) * pme_adj(i,j)
         enddo; enddo
         PmE_adj_total = reproducing_sum(work_sum(:,:), isr, ier, jsr, jer) / &
                            CS%area_surf
@@ -457,9 +457,9 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
     do j=js,je ; do i=is,ie
       net_FW(i,j) = (((fluxes%liq_precip(i,j) + fluxes%froz_precip(i,j)) + &
                       (fluxes%liq_runoff(i,j) + fluxes%froz_runoff(i,j))) + &
-                      (fluxes%evap(i,j) + fluxes%virt_precip(i,j)) ) * G%DXDYh(i,j)
+                      (fluxes%evap(i,j) + fluxes%virt_precip(i,j)) ) * G%areaT(i,j)
       if (ASSOCIATED(IOB%salt_flux) .and. (CS%ice_salt_concentration>0.0)) &
-        net_FW(i,j) = net_FW(i,j) - G%DXDYh(i,j) * &
+        net_FW(i,j) = net_FW(i,j) - G%areaT(i,j) * &
                      (IOB%salt_flux(i-i0,j-j0) / CS%ice_salt_concentration)
      
     enddo ; enddo

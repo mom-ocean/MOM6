@@ -494,7 +494,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
                                     CS%DY2h(i+1,j)*str_xx(i+1,j)) + &
                        G%IDXu(I,j)*(CS%DX2q(I,J-1)*str_xy(I,J-1) - &
                                     CS%DX2q(I,J) *str_xy(I,J))) * &
-                     G%Idxdy_u(I,j)) / (0.5*(h(i+1,j,k) + h(i,j,k)) + h_neglect)
+                     G%IareaCu(I,j)) / (0.5*(h(i+1,j,k) + h(i,j,k)) + h_neglect)
 
       if (apply_OBC) then ; if (OBC%OBC_mask_u(I,j)) then
         if ((OBC%OBC_kind_u(I,j) == OBC_FLATHER_E) .or. &
@@ -508,7 +508,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
                                     CS%DY2q(I,J) *str_xy(I,J)) - &
                        G%IDXv(i,J)*(CS%DX2h(i,j) *str_xx(i,j) - &
                                     CS%DX2h(i,j+1)*str_xx(i,j+1))) * &
-                     G%Idxdy_v(i,J)) / (0.5*(h(i,j+1,k) + h(i,j,k)) + h_neglect)
+                     G%IareaCv(i,J)) / (0.5*(h(i,j+1,k) + h(i,j,k)) + h_neglect)
       if (apply_OBC) then ; if (OBC%OBC_mask_v(i,J)) then
         if ((OBC%OBC_kind_v(i,J) == OBC_FLATHER_N) .or. &
             (OBC%OBC_kind_v(i,J) == OBC_FLATHER_S)) diffv(I,j,k) = 0.0 
@@ -924,9 +924,9 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       denom = max( &
          (CS%DY2h(i,j) * CS%DY_DXh(i,j) * (G%IDYu(I,j) + G%IDYu(I-1,j)) * &
-          max(G%IDYu(I,j)*G%Idxdy_u(I,j), G%IDYu(I-1,j)*G%Idxdy_u(I-1,j)) ), &
+          max(G%IDYu(I,j)*G%IareaCu(I,j), G%IDYu(I-1,j)*G%IareaCu(I-1,j)) ), &
          (CS%DX2h(i,j) * CS%DX_DYh(i,j) * (G%IDXv(i,J) + G%IDXv(i,J-1)) * &
-          max(G%IDXv(i,J)*G%Idxdy_v(i,J), G%IDXv(i,J-1)*G%Idxdy_v(i,J-1)) ) )
+          max(G%IDXv(i,J)*G%IareaCv(i,J), G%IDXv(i,J-1)*G%IareaCv(i,J-1)) ) )
       CS%Kh_Max_xx(i,j) = 0.0
       if (denom > 0.0) &
         CS%Kh_Max_xx(i,j) = CS%bound_coef * 0.25 * Idt / denom
@@ -934,9 +934,9 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
     do J=js-1,Jeq ; do I=is-1,Ieq
       denom = max( &
          (CS%DX2q(I,J) * CS%DX_DYq(I,J) * (G%IDXu(I,j+1) + G%IDXu(I,j)) * &
-          max(G%IDXu(I,j)*G%Idxdy_u(I,j), G%IDXu(I,j+1)*G%Idxdy_u(I,j+1)) ), &
+          max(G%IDXu(I,j)*G%IareaCu(I,j), G%IDXu(I,j+1)*G%IareaCu(I,j+1)) ), &
          (CS%DY2q(I,J) * CS%DY_DXq(I,J) * (G%IDYv(i+1,J) + G%IDYv(i,J)) * &
-          max(G%IDYv(i,J)*G%Idxdy_v(i,J), G%IDYv(i+1,J)*G%Idxdy_v(i+1,J)) ) )
+          max(G%IDYv(i,J)*G%IareaCv(i,J), G%IDYv(i+1,J)*G%IareaCv(i+1,J)) ) )
       CS%Kh_Max_xy(I,J) = 0.0
       if (denom > 0.0) &
         CS%Kh_Max_xy(I,J) = CS%bound_coef * 0.25 * Idt / denom
@@ -974,11 +974,11 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
          (CS%DY2h(i,j) * &
           (CS%DY_DXh(i,j)*(G%IDYu(I,j)*u0u(I,j) + G%IDYu(I-1,j)*u0u(I-1,j)) + &
            CS%DX_DYh(i,j)*(G%IDXv(i,J)*v0u(i,J) + G%IDXv(i,J-1)*v0u(i,J-1))) * &
-          max(G%IDYu(I,j)*G%Idxdy_u(I,j), G%IDYu(I-1,j)*G%Idxdy_u(I-1,j)) ), &
+          max(G%IDYu(I,j)*G%IareaCu(I,j), G%IDYu(I-1,j)*G%IareaCu(I-1,j)) ), &
          (CS%DX2h(i,j) * &
           (CS%DY_DXh(i,j)*(G%IDYu(I,j)*u0v(I,j) + G%IDYu(I-1,j)*u0v(I-1,j)) + &
            CS%DX_DYh(i,j)*(G%IDXv(i,J)*v0v(i,J) + G%IDXv(i,J-1)*v0v(i,J-1))) * &
-          max(G%IDXv(i,J)*G%Idxdy_v(i,J), G%IDXv(i,J-1)*G%Idxdy_v(i,J-1)) ) )
+          max(G%IDXv(i,J)*G%IareaCv(i,J), G%IDXv(i,J-1)*G%IareaCv(i,J-1)) ) )
       CS%Ah_Max_xx(I,J) = 0.0
       if (denom > 0.0) &
         CS%Ah_Max_xx(I,J) = CS%bound_coef * 0.5 * Idt / denom
@@ -989,11 +989,11 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
          (CS%DX2q(I,J) * &
           (CS%DX_DYq(I,J)*(u0u(I,j+1)*G%IDXu(I,j+1) + u0u(I,j)*G%IDXu(I,j)) + &
            CS%DY_DXq(I,J)*(v0u(i+1,J)*G%IDYv(i+1,J) + v0u(i,J)*G%IDYv(i,J))) * &
-          max(G%IDXu(I,j)*G%Idxdy_u(I,j), G%IDXu(I,j+1)*G%Idxdy_u(I,j+1)) ), &
+          max(G%IDXu(I,j)*G%IareaCu(I,j), G%IDXu(I,j+1)*G%IareaCu(I,j+1)) ), &
          (CS%DY2q(I,J) * &
           (CS%DX_DYq(I,J)*(u0v(I,j+1)*G%IDXu(I,j+1) + u0v(I,j)*G%IDXu(I,j)) + &
            CS%DY_DXq(I,J)*(v0v(i+1,J)*G%IDYv(i+1,J) + v0v(i,J)*G%IDYv(i,J))) * &
-          max(G%IDYv(i,J)*G%Idxdy_v(i,J), G%IDYv(i+1,J)*G%Idxdy_v(i+1,J)) ) )
+          max(G%IDYv(i,J)*G%IareaCv(i,J), G%IDYv(i+1,J)*G%IareaCv(i+1,J)) ) )
       CS%Ah_Max_xy(I,J) = 0.0
       if (denom > 0.0) &
         CS%Ah_Max_xy(I,J) = CS%bound_coef * 0.5 * Idt / denom

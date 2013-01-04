@@ -58,8 +58,8 @@ type, public :: ocean_grid_type
     geolonh, & ! The geographic longitude at q points in degrees of longitude or m.
     dxh, Idxh, & ! dxh is delta x at h points, in m, and Idxh is 1/dxh in m-1.
     dyh, Idyh, & ! dyh is delta y at h points, in m, and Idyh is 1/dyh in m-1.
-    dxdyh, &     ! dxdyh is the area of an h-cell, in m2.
-    Idxdyh       ! Idxdyh = 1/dxdyh, in m-2.
+    areaT, &     ! areaT is the area of an h-cell, in m2.
+    IareaT       ! IareaT = 1/areaT, in m-2.
 
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_) :: &
     umask, &   ! 0 for boundary points and 1 for ocean points on the u grid.  Nondim.
@@ -69,8 +69,8 @@ type, public :: ocean_grid_type
     dyu, Idyu, & ! dyu is delta y at u points, in m, and Idyu is 1/dyu in m-1.
     dy_u, &      ! The unblocked lengths of the u-faces of the h-cell in m.
     dy_u_obc, &  ! The unblocked lengths of the u-faces of the h-cell in m for OBC.
-    Idxdy_u, &   ! The masked inverse areas of u-grid cells in m2.
-    dxdy_u       ! The areas of the u-grid cells in m2.
+    IareaCu, &   ! The masked inverse areas of u-grid cells in m2.
+    areaCu       ! The areas of the u-grid cells in m2.
 
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_) :: &
     vmask, &   ! 0 for boundary points and 1 for ocean points on the v grid.  Nondim.
@@ -80,8 +80,8 @@ type, public :: ocean_grid_type
     dyv, Idyv, & ! dyv is delta y at v points, in m, and Idyv is 1/dyv in m-1.
     dx_v, &      ! The unblocked lengths of the v-faces of the h-cell in m.
     dx_v_obc, &  ! The unblocked lengths of the v-faces of the h-cell in m for OBC.
-    Idxdy_v, &   ! The masked inverse areas of v-grid cells in m2.
-    dxdy_v       ! The areas of the v-grid cells in m2.
+    IareaCv, &   ! The masked inverse areas of v-grid cells in m2.
+    areaCv       ! The areas of the v-grid cells in m2.
 
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: &
     qmask, &   ! 0 for boundary points and 1 for ocean points on the q grid.  Nondim.
@@ -89,8 +89,8 @@ type, public :: ocean_grid_type
     geolonq, & ! The geographic longitude at q points in degrees of longitude or m.
     dxq, Idxq, & ! dxq is delta x at q points, in m, and Idxq is 1/dxq in m-1.
     dyq, Idyq, & ! dyq is delta y at q points, in m, and Idyq is 1/dyq in m-1.
-    dxdyq, &     ! dxdyq is the area of a q-cell, in m2
-    Idxdyq       ! Idxdyq = 1/dxdyq in m-2.
+    areaBu, &     ! areaBu is the area of a q-cell, in m2
+    IareaBu       ! IareaBu = 1/areaBu in m-2.
 
   real, pointer, dimension(:) :: &
     gridlath => NULL(), gridlatq => NULL() ! The latitude of h or q points for

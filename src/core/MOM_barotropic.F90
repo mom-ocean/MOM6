@@ -185,8 +185,8 @@ type, public :: barotropic_CS ; private
     va_polarity, &  ! Test vector components for checking grid polarity.
     bathyT          !   A copy of bathyT (ocean bottom depth) with wide halos.
   real ALLOCABLE_, dimension(NIMEMW_,NJMEMW_) :: &
-    Idxdyh          !   This is a copy of G%IDXDYh with wide halos, but will
-                    ! still utilize the macro IDXDYh when referenced, m-2.              
+    IareaT          !   This is a copy of G%IareaT with wide halos, but will
+                    ! still utilize the macro IareaT when referenced, m-2.              
   real ALLOCABLE_, dimension(NIMEMBW_,NJMEMW_) :: &
     Datu_res, &     ! A nondimensional factor by which the zonal face areas
                     ! are to be rescaled to account for the effective face
@@ -803,9 +803,9 @@ subroutine btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
 !GOMP(parallel do default(shared) private(i, j))
     do J=js-1,je ; do I=is-1,ie
       q(I,J) = 0.25 * G%CoriolisBu(I,J) * &
-           ((G%DXDYh(i,j) + G%DXDYh(i+1,j+1)) + (G%DXDYh(i+1,j) + G%DXDYh(i,j+1))) / &
-           ((G%DXDYh(i,j) * G%bathyT(i,j) + G%DXDYh(i+1,j+1) * G%bathyT(i+1,j+1)) + &
-            (G%DXDYh(i+1,j) * G%bathyT(i+1,j) + G%DXDYh(i,j+1) * G%bathyT(i,j+1)))
+           ((G%areaT(i,j) + G%areaT(i+1,j+1)) + (G%areaT(i+1,j) + G%areaT(i,j+1))) / &
+           ((G%areaT(i,j) * G%bathyT(i,j) + G%areaT(i+1,j+1) * G%bathyT(i+1,j+1)) + &
+            (G%areaT(i+1,j) * G%bathyT(i+1,j) + G%areaT(i,j+1) * G%bathyT(i,j+1)))
     enddo ; enddo
     ! With very wide halos, q and D need to be calculated on the available data
     ! domain and then updated onto the full computational domain.
@@ -1411,7 +1411,7 @@ subroutine btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
       !   This estimate of the maximum stable time step is pretty accurate for
       ! gravity waves, but it is a conservative estimate since it ignores the
       ! stabilizing effect of the bottom drag.
-      Idt_max2 = 0.5 * (dgeo_de * (1.0 + 2.0*bebt)) * (G%IDXDYh(i,j) * &
+      Idt_max2 = 0.5 * (dgeo_de * (1.0 + 2.0*bebt)) * (G%IareaT(i,j) * &
             ((gtot_E(i,j) * (Datu(I,j)*G%IDXu(I,j)) + &
               gtot_W(i,j) * (Datu(I-1,j)*G%IDXu(I-1,j))) + &
              (gtot_N(i,j) * (Datv(i,J)*G%IDYv(i,J)) + &
@@ -1419,7 +1419,7 @@ subroutine btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
             ((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
              (G%CoriolisBu(I-1,J)**2 + G%CoriolisBu(I,J-1)**2)))
       H_eff_dx2 = max(H_min_dyn * (G%IDXh(i,j)**2 + G%IDYh(i,j)**2), &
-                      G%IDXDYh(i,j) * &
+                      G%IareaT(i,j) * &
                         ((Datu(I,j)*G%IDXu(I,j) + Datu(I-1,j)*G%IDXu(I-1,j)) + &
                          (Datv(i,J)*G%IDYv(i,J) + Datv(i,J-1)*G%IDYv(i,J-1)) ) )
       dyn_coef_max = CS%const_dyn_psurf * max(0.0, 1.0 - dtbt**2 * Idt_max2) / &
@@ -1671,13 +1671,13 @@ subroutine btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
           vhbt(i,J) = find_vhbt(vbt(i,J),BTCL_v(i,J)) + vhbt0(i,J)
         enddo ; enddo
         do j=jsv-1,jev+1 ; do i=isv-1,iev+1
-          eta_pred(i,j) = (eta(i,j) + eta_src(i,j)) + (dtbt * CS%IDXDYh(i,j)) * &
+          eta_pred(i,j) = (eta(i,j) + eta_src(i,j)) + (dtbt * CS%IareaT(i,j)) * &
                      ((uhbt(I-1,j) - uhbt(I,j)) + (vhbt(i,J-1) - vhbt(i,J)))
         enddo ; enddo
       else
 !GOMP(parallel do default(shared) private(i, j))
         do j=jsv-1,jev+1 ; do i=isv-1,iev+1
-          eta_pred(i,j) = (eta(i,j) + eta_src(i,j)) + (dtbt * CS%IDXDYh(i,j)) * &
+          eta_pred(i,j) = (eta(i,j) + eta_src(i,j)) + (dtbt * CS%IareaT(i,j)) * &
               (((Datu(I-1,j)*ubt(I-1,j) + uhbt0(I-1,j)) - &
                 (Datu(I,j)*ubt(I,j) + uhbt0(I,j))) + &
                ((Datv(i,J-1)*vbt(i,J-1) + vhbt0(i,J-1)) - &
@@ -1884,7 +1884,7 @@ subroutine btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
 
 !GOMP(parallel do default(shared) private(i, j))
     do j=jsv,jev ; do i=isv,iev
-      eta(i,j) = (eta(i,j) + eta_src(i,j)) + (dtbt * CS%IDXDYh(i,j)) * &
+      eta(i,j) = (eta(i,j) + eta_src(i,j)) + (dtbt * CS%IareaT(i,j)) * &
                  ((uhbt(I-1,j) - uhbt(I,j)) + (vhbt(i,J-1) - vhbt(i,J)))
       eta_wtd(i,j) = eta_wtd(i,j) + eta(i,j) * wt_eta(n)
     enddo ; enddo
@@ -2221,7 +2221,7 @@ subroutine set_dtbt(G, CS, eta, pbce, BT_cont, gtot_est, SSH_add)
   do j=js,je ; do i=is,ie
     !   This is pretty accurate for gravity waves, but it is a conservative
     ! estimate since it ignores the stabilizing effect of the bottom drag.
-    Idt_max2 = 0.5 * (1.0 + 2.0*CS%bebt) * (G%IDXDYh(i,j) * &
+    Idt_max2 = 0.5 * (1.0 + 2.0*CS%bebt) * (G%IareaT(i,j) * &
       ((gtot_E(i,j)*Datu(I,j)*G%IDXu(I,j) + gtot_W(i,j)*Datu(I-1,j)*G%IDXu(I-1,j)) + &
        (gtot_N(i,j)*Datv(i,J)*G%IDYv(i,J) + gtot_S(i,j)*Datv(i,J-1)*G%IDYv(i,J-1))) + &
       ((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
@@ -3834,15 +3834,15 @@ CS%Nonlin_cont_update_period = 1
     CS%debug_BT_G%Jedq=CS%jedw
   endif
 
-  ! Idxdyh, Idxu, and Idyv need to be allocated with wide halos.
-  ALLOC_(CS%Idxdyh(CS%isdw:CS%iedw,CS%jsdw:CS%jedw)) ; CS%Idxdyh(:,:) = 0.0
+  ! IareaT, Idxu, and Idyv need to be allocated with wide halos.
+  ALLOC_(CS%IareaT(CS%isdw:CS%iedw,CS%jsdw:CS%jedw)) ; CS%IareaT(:,:) = 0.0
   ALLOC_(CS%bathyT(CS%isdw:CS%iedw,CS%jsdw:CS%jedw)) ; CS%bathyT(:,:) = G%Angstrom_z
   ALLOC_(CS%Idxu(CS%isdw-1:CS%iedw,CS%jsdw:CS%jedw)) ; CS%Idxu(:,:) = 0.0
   ALLOC_(CS%Idyv(CS%isdw:CS%iedw,CS%jsdw-1:CS%jedw)) ; CS%Idyv(:,:) = 0.0
   ALLOC_(CS%dy_u(CS%isdw-1:CS%iedw,CS%jsdw:CS%jedw)) ; CS%dy_u(:,:) = 0.0
   ALLOC_(CS%dx_v(CS%isdw:CS%iedw,CS%jsdw-1:CS%jedw)) ; CS%dx_v(:,:) = 0.0
   do j=G%jsd,G%jed ; do i=G%isd,G%ied
-    CS%Idxdyh(i,j) = G%IDXDYh(i,j)
+    CS%IareaT(i,j) = G%IareaT(i,j)
     CS%bathyT(i,j) = G%bathyT(i,j)
   enddo ; enddo
   ! Note: G%IDXu & G%IDYv may be smaller than CS%Idxu & CS%Idyv, even without
@@ -3853,7 +3853,7 @@ CS%Nonlin_cont_update_period = 1
   do J=G%Jsdq,G%Jedq ; do i=G%isd,G%ied
     CS%Idyv(I,j) = G%IDYv(I,j) ; CS%dx_v(i,J) = G%dx_v(i,J)
   enddo ; enddo
-  call pass_var(CS%Idxdyh, CS%BT_domain, To_All)
+  call pass_var(CS%IareaT, CS%BT_domain, To_All)
   call pass_var(CS%bathyT, CS%BT_domain, To_All)
   call pass_vector(CS%Idxu, CS%Idyv, CS%BT_domain, To_All+Scalar_Pair)
   call pass_vector(CS%dy_u, CS%dx_v, CS%BT_domain, To_All+Scalar_Pair)
@@ -3871,9 +3871,9 @@ CS%Nonlin_cont_update_period = 1
     enddo ; enddo
     do J=js-1,je ; do I=is-1,ie
       CS%q_D(I,J) = 0.25 * G%CoriolisBu(I,J) * &
-           ((G%DXDYh(i,j) + G%DXDYh(i+1,j+1)) + (G%DXDYh(i+1,j) + G%DXDYh(i,j+1))) / &
-           ((G%DXDYh(i,j) * G%bathyT(i,j) + G%DXDYh(i+1,j+1) * G%bathyT(i+1,j+1)) + &
-            (G%DXDYh(i+1,j) * G%bathyT(i+1,j) + G%DXDYh(i,j+1) * G%bathyT(i,j+1)))
+           ((G%areaT(i,j) + G%areaT(i+1,j+1)) + (G%areaT(i+1,j) + G%areaT(i,j+1))) / &
+           ((G%areaT(i,j) * G%bathyT(i,j) + G%areaT(i+1,j+1) * G%bathyT(i+1,j+1)) + &
+            (G%areaT(i+1,j) * G%bathyT(i+1,j) + G%areaT(i,j+1) * G%bathyT(i,j+1)))
     enddo ; enddo
     ! With very wide halos, q and D need to be calculated on the available data
     ! domain and then updated onto the full computational domain.
@@ -4038,7 +4038,7 @@ CS%Nonlin_cont_update_period = 1
   call find_face_areas(Datu, Datv, G, CS, MS, halo=1)
   if (CS%bound_BT_corr) then
     do j=js,je ; do i=is,ie
-      CS%eta_cor_bound(i,j) = G%m_to_H * G%IDXDYh(i,j) * 0.1 * CS%maxvel * &
+      CS%eta_cor_bound(i,j) = G%m_to_H * G%IareaT(i,j) * 0.1 * CS%maxvel * &
          ((Datu(I-1,j) + Datu(I,j)) + (Datv(i,J) + Datv(i,J-1)))
     enddo ; enddo
   endif

@@ -2719,9 +2719,9 @@ subroutine reset_face_lengths_named(G, param_file, name)
                    G%geolonu(I,j), G%geolatu(I,j)
       call MOM_error(FATAL,"reset_face_lengths_named "//mesg)
     endif
-    G%dxdy_u(I,j) = G%DXu(I,j)*G%dy_u(I,j)
-    G%Idxdy_u(I,j) = 0.0
-    if (G%dxdy_u(I,j) > 0.0) G%Idxdy_u(I,j) = G%umask(I,j) / G%dxdy_u(I,j)
+    G%areaCu(I,j) = G%DXu(I,j)*G%dy_u(I,j)
+    G%IareaCu(I,j) = 0.0
+    if (G%areaCu(I,j) > 0.0) G%IareaCu(I,j) = G%umask(I,j) / G%areaCu(I,j)
   enddo ; enddo
 
   do J=Jsdq,Jedq ; do i=isd,ied
@@ -2733,9 +2733,9 @@ subroutine reset_face_lengths_named(G, param_file, name)
 
       call MOM_error(FATAL,"reset_face_lengths_named "//mesg)
     endif
-    G%dxdy_v(i,J) = G%DYv(i,J)*G%dx_v(i,J)
-    G%Idxdy_v(i,J) = 0.0
-    if (G%dxdy_v(i,J) > 0.0) G%Idxdy_v(i,J) = G%vmask(i,J) / G%dxdy_v(i,J)
+    G%areaCv(i,J) = G%DYv(i,J)*G%dx_v(i,J)
+    G%IareaCv(i,J) = 0.0
+    if (G%areaCv(i,J) > 0.0) G%IareaCv(i,J) = G%vmask(i,J) / G%areaCv(i,J)
   enddo ; enddo
 
 end subroutine reset_face_lengths_named
@@ -2788,9 +2788,9 @@ subroutine reset_face_lengths_file(G, param_file)
                    G%geolonu(I,j), G%geolatu(I,j)
       call MOM_error(FATAL,"reset_face_lengths_file "//mesg)
     endif
-    G%dxdy_u(I,j) = G%DXu(I,j)*G%dy_u(I,j)
-    G%Idxdy_u(I,j) = 0.0
-    if (G%dxdy_u(I,j) > 0.0) G%Idxdy_u(I,j) = G%umask(I,j) / G%dxdy_u(I,j)
+    G%areaCu(I,j) = G%DXu(I,j)*G%dy_u(I,j)
+    G%IareaCu(I,j) = 0.0
+    if (G%areaCu(I,j) > 0.0) G%IareaCu(I,j) = G%umask(I,j) / G%areaCu(I,j)
   enddo ; enddo
 
   do J=Jsdq,Jedq ; do i=isd,ied
@@ -2802,9 +2802,9 @@ subroutine reset_face_lengths_file(G, param_file)
 
       call MOM_error(FATAL,"reset_face_lengths_file "//mesg)
     endif
-    G%dxdy_v(i,J) = G%DYv(i,J)*G%dx_v(i,J)
-    G%Idxdy_v(i,J) = 0.0
-    if (G%dxdy_v(i,J) > 0.0) G%Idxdy_v(i,J) = G%vmask(i,J) / G%dxdy_v(i,J)
+    G%areaCv(i,J) = G%DYv(i,J)*G%dx_v(i,J)
+    G%IareaCv(i,J) = 0.0
+    if (G%areaCv(i,J) > 0.0) G%IareaCv(i,J) = G%vmask(i,J) / G%areaCv(i,J)
   enddo ; enddo
 
 end subroutine reset_face_lengths_file
@@ -2985,9 +2985,9 @@ subroutine reset_face_lengths_list(G, param_file)
         G%dy_u(I,j) = G%umask(I,j) * min(G%DYu(I,j), max(u_width(npt), 0.0))
     enddo
 
-    G%dxdy_u(I,j) = G%DXu(I,j)*G%dy_u(I,j)
-    G%Idxdy_u(I,j) = 0.0
-    if (G%dxdy_u(I,j) > 0.0) G%Idxdy_u(I,j) = G%umask(I,j) / G%dxdy_u(I,j)
+    G%areaCu(I,j) = G%DXu(I,j)*G%dy_u(I,j)
+    G%IareaCu(I,j) = 0.0
+    if (G%areaCu(I,j) > 0.0) G%IareaCu(I,j) = G%umask(I,j) / G%areaCu(I,j)
   enddo ; enddo
 
   do J=Jsdq,Jedq ; do i=isd,ied
@@ -3003,9 +3003,9 @@ subroutine reset_face_lengths_list(G, param_file)
         G%dx_v(i,J) = G%vmask(i,J) * min(G%DXv(i,J), max(v_width(npt), 0.0))
     enddo
 
-    G%dxdy_v(i,J) = G%DYv(i,J)*G%dx_v(i,J)
-    G%Idxdy_v(i,J) = 0.0
-    if (G%dxdy_v(i,J) > 0.0) G%Idxdy_v(i,J) = G%vmask(i,J) / G%dxdy_v(i,J)
+    G%areaCv(i,J) = G%DYv(i,J)*G%dx_v(i,J)
+    G%IareaCv(i,J) = 0.0
+    if (G%areaCv(i,J) > 0.0) G%IareaCv(i,J) = G%vmask(i,J) / G%areaCv(i,J)
   enddo ; enddo
 
   if (num_lines > 0) then
@@ -3222,9 +3222,9 @@ subroutine write_ocean_geometry_file(G, param_file, directory)
   do j=js,je; do I=Isq,Ieq; out_q(I,j) = G%DYq(I,j); enddo; enddo
   call write_field(unit, fields(14), G%Domain%mpp_domain, out_q)
 
-  do j=js,je; do i=is,ie; out_h(i,j) = G%DXDYh(i,j); enddo; enddo
+  do j=js,je; do i=is,ie; out_h(i,j) = G%areaT(i,j); enddo; enddo
   call write_field(unit, fields(15), G%Domain%mpp_domain, out_h)
-  do j=js,je; do i=is,ie; out_q(i,j) = G%DXDYq(i,j); enddo; enddo
+  do j=js,je; do i=is,ie; out_q(i,j) = G%areaBu(i,j); enddo; enddo
   call write_field(unit, fields(16), G%Domain%mpp_domain, out_q)
 
 !  do J=Jsq,Jeq; do i=is,ie; out_v(i,J) = G%dx_v(i,J); enddo; enddo

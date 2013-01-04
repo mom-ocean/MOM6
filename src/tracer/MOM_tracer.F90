@@ -412,20 +412,20 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, CS)
 ! tracers were updated, probably just after the diabatic forcing.  A useful
 ! diagnostic could be to compare this reconstruction with that older value.
     do i=is,ie ; do j=js,je
-      hprev(i,j,k) = max(0.0, G%DXDYh(i,j)*h_end(i,j,k) + &
+      hprev(i,j,k) = max(0.0, G%areaT(i,j)*h_end(i,j,k) + &
            ((uhr(I,j,k) - uhr(I-1,j,k)) + (vhr(i,J,k) - vhr(i,J-1,k))))
 ! In the case that the layer is now dramatically thinner than it was previously,
 ! add a bit of mass to avoid truncation errors.  This will lead to
 ! non-conservation of tracers 
       hprev(i,j,k) = hprev(i,j,k) + &
-                     max(0.0, 1.0e-13*hprev(i,j,k) - G%DXDYh(i,j)*h_end(i,j,k))
+                     max(0.0, 1.0e-13*hprev(i,j,k) - G%areaT(i,j)*h_end(i,j,k))
     enddo ; enddo
   enddo
   do j=jsd,jed ; do I=isd,ied-1
-    uh_neglect(I,j) = G%H_subroundoff*MIN(G%DXDYh(i,j),G%DXDYh(i+1,j))
+    uh_neglect(I,j) = G%H_subroundoff*MIN(G%areaT(i,j),G%areaT(i+1,j))
   enddo ; enddo
   do J=jsd,jed-1 ; do i=isd,ied
-    vh_neglect(i,J) = G%H_subroundoff*MIN(G%DXDYh(i,j),G%DXDYh(i,j+1))
+    vh_neglect(i,J) = G%H_subroundoff*MIN(G%areaT(i,j),G%areaT(i,j+1))
   enddo ; enddo
 
   do m=1,ntr
@@ -615,7 +615,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
       if (uhr(I,j,k) == 0.0) then
         uhh(I) = 0.0
       elseif (uhr(I,j,k) < 0.0) then
-        hup = (hprev(i+1,j,k)-G%DXDYh(i+1,j)*G%Angstrom*0.1)
+        hup = (hprev(i+1,j,k)-G%areaT(i+1,j)*G%Angstrom*0.1)
         hlos = MAX(0.0,uhr(I+1,j,k))
         if (((hup + uhr(I,j,k) - hlos) < 0.0) .and. &
             ((0.5*hup + uhr(I,j,k)) < 0.0)) then
@@ -626,7 +626,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
         endif
         ts2(I) = 0.5*(1.0 + uhh(I)/(hprev(i+1,j,k)+h_neglect))
       else
-        hup = (hprev(i,j,k)-G%DXDYh(i,j)*G%Angstrom*0.1)
+        hup = (hprev(i,j,k)-G%areaT(i,j)*G%Angstrom*0.1)
         hlos = MAX(0.0,-uhr(I-1,j,k))
         if (((hup - uhr(I,j,k) - hlos) < 0.0) .and. &
             ((0.5*hup - uhr(I,j,k)) < 0.0)) then
@@ -680,9 +680,9 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
         hlst(i) = hprev(i,j,k)
         hprev(i,j,k) = hprev(i,j,k) - (uhh(I) - uhh(I-1))
         if (hprev(i,j,k) <= 0.0) then ; do_i(i) = .false.
-        elseif (hprev(i,j,k) < h_neglect*G%DXDYh(i,j)) then
-          hlst(i) = hlst(i) + (h_neglect*G%DXDYh(i,j) - hprev(i,j,k))
-          Ihnew(i) = 1.0 / (h_neglect*G%DXDYh(i,j))
+        elseif (hprev(i,j,k) < h_neglect*G%areaT(i,j)) then
+          hlst(i) = hlst(i) + (h_neglect*G%areaT(i,j) - hprev(i,j,k))
+          Ihnew(i) = 1.0 / (h_neglect*G%areaT(i,j))
         else ;  Ihnew(i) = 1.0 / hprev(i,j,k) ; endif
       else
         do_i(i) = .false.
@@ -778,7 +778,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
       if (vhr(i,J,k) == 0.0) then
         vhh(i,J) = 0.0
       elseif (vhr(i,J,k) < 0.0) then
-        hup = (hprev(i,j+1,k)-G%DXDYh(i,j+1)*G%Angstrom*0.1)
+        hup = (hprev(i,j+1,k)-G%areaT(i,j+1)*G%Angstrom*0.1)
         hlos = MAX(0.0,vhr(i,J+1,k))
         if ((((hup - hlos) + vhr(i,J,k)) < 0.0) .and. &
             ((0.5*hup + vhr(i,J,k)) < 0.0)) then
@@ -789,7 +789,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
         endif
         ts2(i) = 0.5*(1.0 + vhh(i,J) / (hprev(i,j+1,k)+h_neglect))
       else
-        hup = (hprev(i,j,k)-G%DXDYh(i,j)*G%Angstrom*0.1)
+        hup = (hprev(i,j,k)-G%areaT(i,j)*G%Angstrom*0.1)
         hlos = MAX(0.0,-vhr(i,J-1,k))
         if ((((hup - hlos) - vhr(i,J,k)) < 0.0) .and. &
             ((0.5*hup - vhr(i,J,k)) < 0.0)) then
@@ -850,9 +850,9 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
         hlst(i) = hprev(i,j,k)
         hprev(i,j,k) = max(hprev(i,j,k) - (vhh(i,J) - vhh(i,J-1)), 0.0)
         if (hprev(i,j,k) <= 0.0) then ; do_i(i) = .false.
-        elseif (hprev(i,j,k) < h_neglect*G%DXDYh(i,j)) then
-          hlst(i) = hlst(i) + (h_neglect*G%DXDYh(i,j) - hprev(i,j,k))
-          Ihnew(i) = 1.0 / (h_neglect*G%DXDYh(i,j))
+        elseif (hprev(i,j,k) < h_neglect*G%areaT(i,j)) then
+          hlst(i) = hlst(i) + (h_neglect*G%areaT(i,j) - hprev(i,j,k))
+          Ihnew(i) = 1.0 / (h_neglect*G%areaT(i,j))
         else ;  Ihnew(i) = 1.0 / hprev(i,j,k) ; endif
       else ; do_i(i) = .false. ; endif
     enddo
@@ -1020,7 +1020,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, tv)
     max_CFL = 0.0
     do j=js,je ; do i=is,ie
       CFL(i,j) = 2.0*((khdt_x(I-1,j) + khdt_x(I,j)) + &
-                      (khdt_y(i,J-1) + khdt_y(i,J))) * G%IDXDYh(i,j)
+                      (khdt_y(i,J-1) + khdt_y(i,J))) * G%IareaT(i,j)
       if (max_CFL < CFL(i,j)) max_CFL = CFL(i,j)
     enddo ; enddo
     call cpu_clock_begin(id_clock_sync)
@@ -1081,7 +1081,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, tv)
         enddo
 
         do i=is,ie
-          Ihdxdy(i,j) = G%IDXDYh(i,j) / (h(i,j,k)+h_neglect)
+          Ihdxdy(i,j) = G%IareaT(i,j) / (h(i,j,k)+h_neglect)
         enddo
       enddo
 
@@ -1734,7 +1734,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, khdt_epi_x, khdt_epi_y, G, CS, &
           else
             Tr_adj_vert = 0.0
             wt_b = deep_wt_Lu(j)%p(I,k) ; wt_a = 1.0 - wt_b
-            vol = hP_Lu(j)%p(I,k) * G%DXDYh(i,j)
+            vol = hP_Lu(j)%p(I,k) * G%areaT(i,j)
 
             !   Ensure that the tracer flux does not drive the tracer values
             ! outside of the range Tr_min_face <= Tr <= Tr_max_face, or if it
@@ -1769,7 +1769,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, khdt_epi_x, khdt_epi_y, G, CS, &
           else
             Tr_adj_vert = 0.0
             wt_b = deep_wt_Ru(j)%p(I,k) ; wt_a = 1.0 - wt_b
-            vol = hP_Ru(j)%p(I,k) * G%DXDYh(i+1,j)
+            vol = hP_Ru(j)%p(I,k) * G%areaT(i+1,j)
 
             !   Ensure that the tracer flux does not drive the tracer values
             ! outside of the range Tr_min_face <= Tr <= Tr_max_face, or if it
@@ -1865,7 +1865,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, khdt_epi_x, khdt_epi_y, G, CS, &
           else
             Tr_adj_vert = 0.0
             wt_b = deep_wt_Lv(J)%p(i,k) ; wt_a = 1.0 - wt_b
-            vol = hP_Lv(J)%p(i,k) * G%DXDYh(i,j)
+            vol = hP_Lv(J)%p(i,k) * G%areaT(i,j)
 
             !   Ensure that the tracer flux does not drive the tracer values
             ! outside of the range Tr_min_face <= Tr <= Tr_max_face.
@@ -1896,7 +1896,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, khdt_epi_x, khdt_epi_y, G, CS, &
           else
             Tr_adj_vert = 0.0
             wt_b = deep_wt_Rv(J)%p(i,k) ; wt_a = 1.0 - wt_b
-            vol = hP_Rv(J)%p(i,k) * G%DXDYh(i,j+1)
+            vol = hP_Rv(J)%p(i,k) * G%areaT(i,j+1)
 
             !   Ensure that the tracer flux does not drive the tracer values
             ! outside of the range Tr_min_face <= Tr <= Tr_max_face.
@@ -1932,7 +1932,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, khdt_epi_x, khdt_epi_y, G, CS, &
       do k=1,PEmax_kRho ; do j=js,je ; do i=is,ie
         if ((G%hmask(i,j) > 0.5) .and. (h(i,j,k) > 0.0)) then
           Tr(m)%t(i,j,k) = Tr(m)%t(i,j,k) + tr_flux_conv(i,j,k) / &
-                                            (h(i,j,k)*G%DXDYh(i,j))
+                                            (h(i,j,k)*G%areaT(i,j))
           tr_flux_conv(i,j,k) = 0.0
         endif
       enddo ; enddo ; enddo

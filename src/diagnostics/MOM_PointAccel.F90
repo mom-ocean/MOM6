@@ -226,8 +226,8 @@ subroutine write_u_accel(I, j, um, hin, dt, G, CS, maxvel, minvel, str, a, hv)
     write(file,'(/,"CFL u: ",$)')
     do k=ks,ke ; if (do_k(k)) then
       CFL = abs(um(I,j,k)) * dt * G%dy_u(I,j)
-      if (um(I,j,k) < 0.0) then ; CFL = CFL * G%IDXDYh(i+1,j)
-      else ; CFL = CFL * G%IDXDYh(i,j) ; endif
+      if (um(I,j,k) < 0.0) then ; CFL = CFL * G%IareaT(i+1,j)
+      else ; CFL = CFL * G%IareaT(i,j) ; endif
       write(file,'(ES10.3," ",$)') CFL
     endif ; enddo
     write(file,'(/,"CFL0 u:",$)')
@@ -706,8 +706,8 @@ subroutine write_v_accel(i, J, vm, hin, dt, G, CS, maxvel, minvel, str, a, hv)
     write(file,'(/,"CFL v: ",$)')
     do k=ks,ke ; if (do_k(k)) then
       CFL = abs(vm(i,J,k)) * dt * G%dx_v(i,J)
-      if (vm(i,J,k) < 0.0) then ; CFL = CFL * G%IDXDYh(i,j+1)
-      else ; CFL = CFL * G%IDXDYh(i,j) ; endif
+      if (vm(i,J,k) < 0.0) then ; CFL = CFL * G%IareaT(i,j+1)
+      else ; CFL = CFL * G%IareaT(i,j) ; endif
       write(file,'(ES10.3," ",$)') CFL
     endif ; enddo
     write(file,'(/,"CFL0 v:",$)')
