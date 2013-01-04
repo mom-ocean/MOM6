@@ -83,8 +83,8 @@ type, public :: diag_to_Z_CS ; private
   integer :: nk_zspace = -1
   real, pointer :: Z_int(:) => NULL()  ! The interface depths of the z-space file, in m.
 
-  integer, dimension(3) :: axesqz, axeshz, axesuz, axesvz
-  integer, dimension(3) :: axesqzi, axeshzi, axesuzi, axesvzi
+  integer, dimension(3) :: axesBz, axesTz, axesCuz, axesCvz
+  integer, dimension(3) :: axesBzi, axesTzi, axesCuzi, axesCvzi
   integer, dimension(1) :: axesz_out
 
   type(diag_ptrs), pointer :: diag ! A pointer to a structure of shareable
@@ -738,10 +738,10 @@ subroutine register_Z_tracer(tr_ptr, name, long_name, units, Time, G, CS)
 
   CS%missing_tr(m) = CS%missing_value ! This could be changed later, if desired.
   if (CS%nk_zspace > 0) then
-    CS%id_tr(m) = register_diag_field('ocean_model', name, CS%axeshz, Time, &
+    CS%id_tr(m) = register_diag_field('ocean_model', name, CS%axesTz, Time, &
                                       long_name, units, missing_value=CS%missing_tr(m))
   else
-    id_test = register_diag_field('ocean_model', name, G%axesh1, Time, &
+    id_test = register_diag_field('ocean_model', name, G%axesT1, Time, &
                                   long_name, units, missing_value=CS%missing_tr(m))
     if (id_test>0) call MOM_error(WARNING, &
         "MOM_diag_to_Z_init: "//trim(name)// &
@@ -815,31 +815,31 @@ subroutine MOM_diag_to_Z_init(Time, G, param_file, diag, CS)
   endif
 
   if (CS%nk_zspace > 0) then
-    CS%axesqz = (/ G%axesq1(1), G%axesq1(2), z_axis /)
-    CS%axeshz = (/ G%axesh1(1), G%axesh1(2), z_axis /)
-    CS%axesuz = (/ G%axesu1(1), G%axesu1(2), z_axis /)
-    CS%axesvz = (/ G%axesv1(1), G%axesv1(2), z_axis /)
-    CS%axesqzi = (/ G%axesq1(1), G%axesq1(2), zint_axis /)
-    CS%axeshzi = (/ G%axesh1(1), G%axesh1(2), zint_axis /)
-    CS%axesuzi = (/ G%axesu1(1), G%axesu1(2), zint_axis /)
-    CS%axesvzi = (/ G%axesv1(1), G%axesv1(2), zint_axis /)
+    CS%axesBz = (/ G%axesB1(1), G%axesB1(2), z_axis /)
+    CS%axesTz = (/ G%axesT1(1), G%axesT1(2), z_axis /)
+    CS%axesCuz = (/ G%axesCu1(1), G%axesCu1(2), z_axis /)
+    CS%axesCvz = (/ G%axesCv1(1), G%axesCv1(2), z_axis /)
+    CS%axesBzi = (/ G%axesB1(1), G%axesB1(2), zint_axis /)
+    CS%axesTzi = (/ G%axesT1(1), G%axesT1(2), zint_axis /)
+    CS%axesCuzi = (/ G%axesCu1(1), G%axesCu1(2), zint_axis /)
+    CS%axesCvzi = (/ G%axesCv1(1), G%axesCv1(2), zint_axis /)
 
-    CS%id_u_z = register_diag_field('ocean_model', 'u_z', CS%axesuz, Time, &
+    CS%id_u_z = register_diag_field('ocean_model', 'u_z', CS%axesCuz, Time, &
         'Zonal Velocity in Depth Space', 'meter second-1', &
         missing_value=CS%missing_vel)
     if (CS%id_u_z>0) call safe_alloc_ptr(CS%u_z,Isdq,Iedq,jsd,jed,CS%nk_zspace)
 
-    CS%id_v_z = register_diag_field('ocean_model', 'v_z', CS%axesvz, Time, &
+    CS%id_v_z = register_diag_field('ocean_model', 'v_z', CS%axesCvz, Time, &
         'Meridional Velocity in Depth Space', 'meter second-1', &
         missing_value=CS%missing_vel)
     if (CS%id_v_z>0) call safe_alloc_ptr(CS%v_z,isd,ied,Jsdq,Jedq,CS%nk_zspace)
 
-    CS%id_uh_z = register_diag_field('ocean_model', 'uh_z', CS%axesuz, Time, &
+    CS%id_uh_z = register_diag_field('ocean_model', 'uh_z', CS%axesCuz, Time, &
         'Zonal Volume Transport in Depth Space', flux_units, &
         missing_value=CS%missing_trans)
     if (CS%id_uh_z>0) call safe_alloc_ptr(CS%uh_z,Isdq,Iedq,jsd,jed,CS%nk_zspace)
 
-    CS%id_vh_z = register_diag_field('ocean_model', 'vh_z', CS%axesvz, Time, &
+    CS%id_vh_z = register_diag_field('ocean_model', 'vh_z', CS%axesCvz, Time, &
         'Meridional Volume Transport in Depth Space', flux_units, &
         missing_value=CS%missing_trans)
     if (CS%id_vh_z>0) call safe_alloc_ptr(CS%vh_z,isd,ied,Jsdq,Jedq,CS%nk_zspace)
@@ -847,25 +847,25 @@ subroutine MOM_diag_to_Z_init(Time, G, param_file, diag, CS)
   else
     ! Check whether the diag-table is requesting any z-space files, and issue
     ! a warning if it is.
-    id_test = register_diag_field('ocean_model', 'u_z', G%axesu1, Time, &
+    id_test = register_diag_field('ocean_model', 'u_z', G%axesCu1, Time, &
         'Zonal Velocity in Depth Space', 'meter second-1')
     if (id_test>0) call MOM_error(WARNING, &
         "MOM_diag_to_Z_init: u_z cannot be output without "//&
         "an appropriate depth-space target file.")
 
-    id_test = register_diag_field('ocean_model', 'v_z', G%axesv1, Time, &
+    id_test = register_diag_field('ocean_model', 'v_z', G%axesCv1, Time, &
         'Meridional Velocity in Depth Space', 'meter second-1')
     if (id_test>0) call MOM_error(WARNING, &
         "MOM_diag_to_Z_init: v_z cannot be output without "//&
         "an appropriate depth-space target file.")
 
-    id_test = register_diag_field('ocean_model', 'uh_z', G%axesu1, Time, &
+    id_test = register_diag_field('ocean_model', 'uh_z', G%axesCu1, Time, &
         'Meridional Volume Transport in Depth Space', flux_units)
     if (id_test>0) call MOM_error(WARNING, &
         "MOM_diag_to_Z_init: uh_z cannot be output without "//&
         "an appropriate depth-space target file.")
 
-    id_test = register_diag_field('ocean_model', 'vh_z', G%axesv1, Time, &
+    id_test = register_diag_field('ocean_model', 'vh_z', G%axesCv1, Time, &
         'Meridional Volume Transport in Depth Space', flux_units)
     if (id_test>0) call MOM_error(WARNING, &
         "MOM_diag_to_Z_init: vh_z cannot be output without "//&
@@ -1077,13 +1077,13 @@ function register_Z_diag(var_desc, CS, day, missing)
     case ("z")
       select case (var_desc%hor_grid)
         case ("q")
-          axes = CS%axesqz
+          axes = CS%axesBz
         case ("h")
-          axes = CS%axeshz
+          axes = CS%axesTz
         case ("u")
-          axes = CS%axesuz
+          axes = CS%axesCuz
         case ("v")
-          axes = CS%axesvz
+          axes = CS%axesCvz
         case default
           call MOM_error(FATAL,&
             "register_Z_diag: unknown hor_grid component "//trim(var_desc%hor_grid))
@@ -1114,13 +1114,13 @@ function register_Zint_diag(var_desc, CS, day)
   ! desired axes to register the diagnostic field for.
   select case (var_desc%hor_grid)
     case ("h")
-      axes = CS%axeshzi
+      axes = CS%axesTzi
     case ("q")
-      axes = CS%axesqzi
+      axes = CS%axesBzi
     case ("u")
-      axes = CS%axesuzi
+      axes = CS%axesCuzi
     case ("v")
-      axes = CS%axesvzi
+      axes = CS%axesCvzi
     case default
       call MOM_error(FATAL,&
         "register_Z_diag: unknown hor_grid component "//trim(var_desc%hor_grid))

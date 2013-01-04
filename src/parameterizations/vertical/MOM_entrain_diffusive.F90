@@ -2047,10 +2047,10 @@ subroutine entrain_diffusive_init(Time, G, param_file, diag, CS)
                  "The tolerance with which to solve for entrainment values.", &
                  units="m", default=MAX(100.0*G%Angstrom,1.0e-4*sqrt(dt*Kd)))
 
-  CS%id_Kd = register_diag_field('ocean_model', 'Kd', G%axeshl, Time, &
+  CS%id_Kd = register_diag_field('ocean_model', 'Kd', G%axesTL, Time, &
       'Diapycnal diffusivity', 'meter2 second-1')
   if (CS%id_Kd > 0) call safe_alloc_ptr(diag%Kd,G%isd,G%ied,G%jsd,G%jed,G%ke)
-  CS%id_diff_work = register_diag_field('ocean_model', 'diff_work', G%axeshi, Time, &
+  CS%id_diff_work = register_diag_field('ocean_model', 'diff_work', G%axesTi, Time, &
       'Work actually done by diapycnal diffusion across each interface', 'W m-2')
 
 end subroutine entrain_diffusive_init

@@ -2511,54 +2511,54 @@ subroutine set_diffusivity_init(Time, G, param_file, diag, CS, diag_to_Z_CSp)
                  "dissipation of lee waves dissipation.", units="nondim", &
                  default=1.0)
 
-    CS%id_TKE_leewave = register_diag_field('ocean_model','TKE_leewave',G%axesh1,Time, &
+    CS%id_TKE_leewave = register_diag_field('ocean_model','TKE_leewave',G%axesT1,Time, &
         'Lee wave Driven Turbulent Kinetic Energy', 'Watt meter-2')
-    CS%id_Kd_Niku = register_diag_field('ocean_model','Kd_Nikurashin',G%axeshi,Time, &
+    CS%id_Kd_Niku = register_diag_field('ocean_model','Kd_Nikurashin',G%axesTi,Time, &
          'Lee Wave Driven Diffusivity', 'meter2 sec-1')
   endif
 
-  CS%id_TKE_itidal = register_diag_field('ocean_model','TKE_itidal',G%axesh1,Time, &
+  CS%id_TKE_itidal = register_diag_field('ocean_model','TKE_itidal',G%axesT1,Time, &
       'Internal Tide Driven Turbulent Kinetic Energy', 'Watt meter-2')
-  CS%id_maxTKE = register_diag_field('ocean_model','maxTKE',G%axeshL,Time, &
+  CS%id_maxTKE = register_diag_field('ocean_model','maxTKE',G%axesTL,Time, &
          'Maximum layer TKE', 'meter3 second-3')
-  CS%id_TKE_to_Kd = register_diag_field('ocean_model','TKE_to_Kd',G%axeshL,Time, &
+  CS%id_TKE_to_Kd = register_diag_field('ocean_model','TKE_to_Kd',G%axesTL,Time, &
          'Convert TKE to Kd', 'second2 meter')
 
-  CS%id_Nb = register_diag_field('ocean_model','Nb',G%axesh1,Time, &
+  CS%id_Nb = register_diag_field('ocean_model','Nb',G%axesT1,Time, &
        'Bottom Buoyancy Frequency', 'sec-1')
 
-  CS%id_Kd_itidal = register_diag_field('ocean_model','Kd_itides',G%axeshi,Time, &
+  CS%id_Kd_itidal = register_diag_field('ocean_model','Kd_itides',G%axesTi,Time, &
        'Internal Tide Driven Diffusivity', 'meter2 sec-1')
 
-  CS%id_Fl_itidal = register_diag_field('ocean_model','Fl_itides',G%axeshi,Time, &
+  CS%id_Fl_itidal = register_diag_field('ocean_model','Fl_itides',G%axesTi,Time, &
        'Vertical flux of tidal turbulent dissipation', 'meter3 sec-3')
 
-  CS%id_Polzin_decay_scale = register_diag_field('ocean_model','Polzin_decay_scale',G%axesh1,Time, &
+  CS%id_Polzin_decay_scale = register_diag_field('ocean_model','Polzin_decay_scale',G%axesT1,Time, &
        'Vertical decay scale for the tidal turbulent dissipation with Polzin scheme', 'meter')
 
-  CS%id_Polzin_decay_scale_scaled = register_diag_field('ocean_model','Polzin_decay_scale_scaled',G%axesh1,Time, &
+  CS%id_Polzin_decay_scale_scaled = register_diag_field('ocean_model','Polzin_decay_scale_scaled',G%axesT1,Time, &
        'Vertical decay scale for the tidal turbulent dissipation with Polzin scheme, scaled by N2_bot/N2_meanz', 'meter')
 
-  CS%id_N2_bot = register_diag_field('ocean_model','N2_b',G%axesh1,Time, &
+  CS%id_N2_bot = register_diag_field('ocean_model','N2_b',G%axesT1,Time, &
        'Bottom Buoyancy frequency squared', 's-2')
 
-  CS%id_N2_meanz = register_diag_field('ocean_model','N2_meanz',G%axesh1,Time, &
+  CS%id_N2_meanz = register_diag_field('ocean_model','N2_meanz',G%axesT1,Time, &
        'Buoyancy frequency squared averaged over the water column', 's-2')
 
-  CS%id_Kd_Work = register_diag_field('ocean_model','Kd_Work',G%axeshL,Time, &
+  CS%id_Kd_Work = register_diag_field('ocean_model','Kd_Work',G%axesTL,Time, &
        'Work done by Diapycnal Mixing', 'Watts m-2')
 
-  CS%id_Kd_Itidal_Work = register_diag_field('ocean_model','Kd_Itidal_Work',G%axeshL,Time, &
+  CS%id_Kd_Itidal_Work = register_diag_field('ocean_model','Kd_Itidal_Work',G%axesTL,Time, &
        'Work done by Internal Tide Diapycnal Mixing', 'Watts m-2')
 
-  CS%id_Kd_Niku_Work = register_diag_field('ocean_model','Kd_Nikurashin_Work',G%axeshL,Time, &
+  CS%id_Kd_Niku_Work = register_diag_field('ocean_model','Kd_Nikurashin_Work',G%axesTL,Time, &
        'Work done by Nikurashin Lee Wave Drag Scheme', 'Watts m-2')
 
-  CS%id_N2 = register_diag_field('ocean_model','N2',G%axeshi,Time, &
+  CS%id_N2 = register_diag_field('ocean_model','N2',G%axesTi,Time, &
        'Buoyancy frequency squared', 'sec-2')
 
   if (CS%user_change_diff) &
-    CS%id_Kd_user = register_diag_field('ocean_model','Kd_user',G%axeshi,Time, &
+    CS%id_Kd_user = register_diag_field('ocean_model','Kd_user',G%axesTi,Time, &
          'User-specified Extra Diffusivity', 'meter2 sec-1')
 
   if (associated(diag_to_Z_CSp)) then
@@ -2593,10 +2593,10 @@ subroutine set_diffusivity_init(Time, G, param_file, diag, CS, diag_to_Z_CSp)
                  "double-diffusive convection.", default=1.5e-6, units="m2 s-1")
     ! The default molecular viscosity follows the CCSM4.0 and MOM4p1 defaults.
 
-    CS%id_KT_extra = register_diag_field('ocean_model','KT_extra',G%axeshi,Time, &
+    CS%id_KT_extra = register_diag_field('ocean_model','KT_extra',G%axesTi,Time, &
          'Double-diffusive diffusivity for temperature', 'meter2 sec-1')
 
-    CS%id_KS_extra = register_diag_field('ocean_model','KS_extra',G%axeshi,Time, &
+    CS%id_KS_extra = register_diag_field('ocean_model','KS_extra',G%axesTi,Time, &
          'Double-diffusive diffusivity for salinity', 'meter2 sec-1')
 
     if (associated(diag_to_Z_CSp)) then

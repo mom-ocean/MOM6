@@ -1077,9 +1077,9 @@ subroutine vertvisc_limit_vel(u, v, h, fluxes, visc, dt, G, CS)
         do I=Isq,Ieq ; vel_report(:) = 3.0e8 ; enddo ! Speed of light default.
         do k=1,nz ; do I=Isq,Ieq
           if (u(I,j,k) < 0.0) then
-            CFL = (-u(I,j,k) * dt) * (G%dy_u(I,j) * G%IareaT(i+1,j))
+            CFL = (-u(I,j,k) * dt) * (G%dy_Cu(I,j) * G%IareaT(i+1,j))
           else
-            CFL = (u(I,j,k) * dt) * (G%dy_u(I,j) * G%IareaT(i,j))
+            CFL = (u(I,j,k) * dt) * (G%dy_Cu(I,j) * G%IareaT(i,j))
           endif
           if (CFL > CS%CFL_trunc) trunc_any = .true.
           if (CFL > CS%CFL_report) then
@@ -1102,11 +1102,11 @@ subroutine vertvisc_limit_vel(u, v, h, fluxes, visc, dt, G, CS)
       endif ; enddo
       if (trunc_any) then ; if (CS%CFL_based_trunc) then
         do k=1,nz ; do I=Isq,Ieq
-          if ((u(I,j,k) * (dt * G%dy_u(I,j))) * G%IareaT(i+1,j) < -CS%CFL_trunc) then
-            u(I,j,k) = (-0.9*CS%CFL_trunc) * (G%areaT(i+1,j) / (dt * G%dy_u(I,j)))
+          if ((u(I,j,k) * (dt * G%dy_Cu(I,j))) * G%IareaT(i+1,j) < -CS%CFL_trunc) then
+            u(I,j,k) = (-0.9*CS%CFL_trunc) * (G%areaT(i+1,j) / (dt * G%dy_Cu(I,j)))
             if (h(i,j,k) + h(i+1,j,k) > 6.0*G%Angstrom) CS%ntrunc = CS%ntrunc + 1
-          elseif ((u(I,j,k) * (dt * G%dy_u(I,j))) * G%IareaT(i,j) > CS%CFL_trunc) then
-            u(I,j,k) = (0.9*CS%CFL_trunc) * (G%areaT(i,j) / (dt * G%dy_u(I,j)))
+          elseif ((u(I,j,k) * (dt * G%dy_Cu(I,j))) * G%IareaT(i,j) > CS%CFL_trunc) then
+            u(I,j,k) = (0.9*CS%CFL_trunc) * (G%areaT(i,j) / (dt * G%dy_Cu(I,j)))
             if (h(i,j,k) + h(i+1,j,k) > 6.0*G%Angstrom) CS%ntrunc = CS%ntrunc + 1
           endif
         enddo ; enddo
@@ -1120,11 +1120,11 @@ subroutine vertvisc_limit_vel(u, v, h, fluxes, visc, dt, G, CS)
   else
     if (CS%CFL_based_trunc) then
       do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-        if ((u(I,j,k) * (dt * G%dy_u(I,j))) * G%IareaT(i+1,j) < -CS%CFL_trunc) then
-          u(I,j,k) = (-0.9*CS%CFL_trunc) * (G%areaT(i+1,j) / (dt * G%dy_u(I,j)))
+        if ((u(I,j,k) * (dt * G%dy_Cu(I,j))) * G%IareaT(i+1,j) < -CS%CFL_trunc) then
+          u(I,j,k) = (-0.9*CS%CFL_trunc) * (G%areaT(i+1,j) / (dt * G%dy_Cu(I,j)))
           if (h(i,j,k) + h(i+1,j,k) > 6.0*G%Angstrom) CS%ntrunc = CS%ntrunc + 1
-        elseif ((u(I,j,k) * (dt * G%dy_u(I,j))) * G%IareaT(i,j) > CS%CFL_trunc) then
-          u(I,j,k) = (0.9*CS%CFL_trunc) * (G%areaT(i,j) / (dt * G%dy_u(I,j)))
+        elseif ((u(I,j,k) * (dt * G%dy_Cu(I,j))) * G%IareaT(i,j) > CS%CFL_trunc) then
+          u(I,j,k) = (0.9*CS%CFL_trunc) * (G%areaT(i,j) / (dt * G%dy_Cu(I,j)))
           if (h(i,j,k) + h(i+1,j,k) > 6.0*G%Angstrom) CS%ntrunc = CS%ntrunc + 1
         endif
       enddo ; enddo ; enddo
@@ -1146,9 +1146,9 @@ subroutine vertvisc_limit_vel(u, v, h, fluxes, visc, dt, G, CS)
         do i=is,ie ; vel_report(:) = 3.0e8 ; enddo ! Speed of light default.
         do k=1,nz ; do i=is,ie
           if (v(i,J,k) < 0.0) then
-            CFL = (-v(i,J,k) * dt) * (G%dx_v(i,J) * G%IareaT(i,j+1))
+            CFL = (-v(i,J,k) * dt) * (G%dx_Cv(i,J) * G%IareaT(i,j+1))
           else
-            CFL = (v(i,J,k) * dt) * (G%dx_v(i,J) * G%IareaT(i,j))
+            CFL = (v(i,J,k) * dt) * (G%dx_Cv(i,J) * G%IareaT(i,j))
           endif
           if (CFL > CS%CFL_trunc) trunc_any = .true.
           if (CFL > CS%CFL_report) then
@@ -1171,11 +1171,11 @@ subroutine vertvisc_limit_vel(u, v, h, fluxes, visc, dt, G, CS)
       endif ; enddo
       if (trunc_any) then ; if (CS%CFL_based_trunc) then
         do k=1,nz; do i=is,ie
-          if ((v(i,J,k) * (dt * G%dx_v(i,J))) * G%IareaT(i,j+1) < -CS%CFL_trunc) then
-            v(i,J,k) = (-0.9*CS%CFL_trunc) * (G%areaT(i,j+1) / (dt * G%dx_v(i,J)))
+          if ((v(i,J,k) * (dt * G%dx_Cv(i,J))) * G%IareaT(i,j+1) < -CS%CFL_trunc) then
+            v(i,J,k) = (-0.9*CS%CFL_trunc) * (G%areaT(i,j+1) / (dt * G%dx_Cv(i,J)))
             if (h(i,j,k) + h(i,j+1,k) > 6.0*G%Angstrom) CS%ntrunc = CS%ntrunc + 1
-          elseif ((v(i,J,k) * (dt * G%dx_v(i,J))) * G%IareaT(i,j) > CS%CFL_trunc) then
-            v(i,J,k) = (0.9*CS%CFL_trunc) * (G%areaT(i,j) / (dt * G%dx_v(i,J)))
+          elseif ((v(i,J,k) * (dt * G%dx_Cv(i,J))) * G%IareaT(i,j) > CS%CFL_trunc) then
+            v(i,J,k) = (0.9*CS%CFL_trunc) * (G%areaT(i,j) / (dt * G%dx_Cv(i,J)))
             if (h(i,j,k) + h(i,j+1,k) > 6.0*G%Angstrom) CS%ntrunc = CS%ntrunc + 1
           endif
         enddo ; enddo
@@ -1189,11 +1189,11 @@ subroutine vertvisc_limit_vel(u, v, h, fluxes, visc, dt, G, CS)
   else
     if (CS%CFL_based_trunc) then
       do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-        if ((v(i,J,k) * (dt * G%dx_v(i,J))) * G%IareaT(i,j+1) < -CS%CFL_trunc) then
-          v(i,J,k) = (-0.9*CS%CFL_trunc) * (G%areaT(i,j+1) / (dt * G%dx_v(i,J)))
+        if ((v(i,J,k) * (dt * G%dx_Cv(i,J))) * G%IareaT(i,j+1) < -CS%CFL_trunc) then
+          v(i,J,k) = (-0.9*CS%CFL_trunc) * (G%areaT(i,j+1) / (dt * G%dx_Cv(i,J)))
           if (h(i,j,k) + h(i,j+1,k) > 6.0*G%Angstrom) CS%ntrunc = CS%ntrunc + 1
-        elseif ((v(i,J,k) * (dt * G%dx_v(i,J))) * G%IareaT(i,j) > CS%CFL_trunc) then
-          v(i,J,k) = (0.9*CS%CFL_trunc) * (G%areaT(i,j) / (dt * G%dx_v(i,J)))
+        elseif ((v(i,J,k) * (dt * G%dx_Cv(i,J))) * G%IareaT(i,j) > CS%CFL_trunc) then
+          v(i,J,k) = (0.9*CS%CFL_trunc) * (G%areaT(i,j) / (dt * G%dx_Cv(i,J)))
           if (h(i,j,k) + h(i,j+1,k) > 6.0*G%Angstrom) CS%ntrunc = CS%ntrunc + 1
         endif
       enddo ; enddo ; enddo
@@ -1339,30 +1339,30 @@ subroutine vertvisc_init(HIS, Time, G, param_file, diag, dirs, ntrunc, CS)
   ALLOC_(CS%a_v(isd:ied,Jsdq:Jedq,nz+1)) ; CS%a_v(:,:,:) = 0.0
   ALLOC_(CS%h_v(isd:ied,Jsdq:Jedq,nz))   ; CS%h_v(:,:,:) = 0.0
 
-  CS%id_au_vv = register_diag_field('ocean_model', 'au_visc', G%axesui, Time, &
+  CS%id_au_vv = register_diag_field('ocean_model', 'au_visc', G%axesCui, Time, &
      'Zonal Viscous Vertical Coupling Coefficient', 'meter second-1')
-  CS%id_av_vv = register_diag_field('ocean_model', 'av_visc', G%axesvi, Time, &
+  CS%id_av_vv = register_diag_field('ocean_model', 'av_visc', G%axesCvi, Time, &
      'Meridional Viscous Vertical Coupling Coefficient', 'meter second-1')
 
-  CS%id_h_u = register_diag_field('ocean_model', 'Hu_visc', G%axesuL, Time, &
+  CS%id_h_u = register_diag_field('ocean_model', 'Hu_visc', G%axesCuL, Time, &
      'Thickness at Zonal Velocity Points for Viscosity', thickness_units)
-  CS%id_h_v = register_diag_field('ocean_model', 'Hv_visc', G%axesvL, Time, &
+  CS%id_h_v = register_diag_field('ocean_model', 'Hv_visc', G%axesCvL, Time, &
      'Thickness at Meridional Velocity Points for Viscosity', thickness_units)
-  CS%id_hML_u = register_diag_field('ocean_model', 'HMLu_visc', G%axesu1, Time, &
+  CS%id_hML_u = register_diag_field('ocean_model', 'HMLu_visc', G%axesCu1, Time, &
      'Mixed Layer Thickness at Zonal Velocity Points for Viscosity', thickness_units)
-  CS%id_hML_v = register_diag_field('ocean_model', 'HMLv_visc', G%axesv1, Time, &
+  CS%id_hML_v = register_diag_field('ocean_model', 'HMLv_visc', G%axesCv1, Time, &
      'Mixed Layer Thickness at Meridional Velocity Points for Viscosity', thickness_units)
 
-  CS%id_du_dt_visc = register_diag_field('ocean_model', 'du_dt_visc', G%axesul, &
+  CS%id_du_dt_visc = register_diag_field('ocean_model', 'du_dt_visc', G%axesCuL, &
      Time, 'Zonal Acceleration from Vertical Viscosity', 'meter second-2')
   if (CS%id_du_dt_visc > 0) call safe_alloc_ptr(diag%du_dt_visc,Isdq,Iedq,jsd,jed,nz)
-  CS%id_dv_dt_visc = register_diag_field('ocean_model', 'dv_dt_visc', G%axesvl, &
+  CS%id_dv_dt_visc = register_diag_field('ocean_model', 'dv_dt_visc', G%axesCvL, &
      Time, 'Meridional Acceleration from Vertical Viscosity', 'meter second-2')
   if (CS%id_dv_dt_visc > 0) call safe_alloc_ptr(diag%dv_dt_visc,isd,ied,Jsdq,Jedq,nz)
 
-  CS%id_taux_bot = register_diag_field('ocean_model', 'taux_bot', G%axesu1, &
+  CS%id_taux_bot = register_diag_field('ocean_model', 'taux_bot', G%axesCu1, &
      Time, 'Zonal Bottom Stress from Ocean to Earth', 'Pa')
-  CS%id_tauy_bot = register_diag_field('ocean_model', 'tauy_bot', G%axesv1, &
+  CS%id_tauy_bot = register_diag_field('ocean_model', 'tauy_bot', G%axesCv1, &
      Time, 'Meridional Bottom Stress from Ocean to Earth', 'Pa')
 
   if ((len_trim(CS%v_trunc_file) > 0) .or. (len_trim(CS%v_trunc_file) > 0)) &

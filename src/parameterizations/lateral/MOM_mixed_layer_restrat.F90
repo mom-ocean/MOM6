@@ -214,12 +214,12 @@ subroutine mixedlayer_restrat(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
     timescale = 0.0625 * (absf + 2.0*mom_mixrate) / (absf**2 + mom_mixrate**2)
 
     timescale = timescale * CS%ml_restrat_coef
-!        timescale = timescale*(2?)*(L_def/L_MLI)*min(EKE/MKE,1.0 + G%DYv(i,j)**2/L_def**2))
+!        timescale = timescale*(2?)*(L_def/L_MLI)*min(EKE/MKE,1.0 + G%dyCv(i,j)**2/L_def**2))
 
     utimescale_diag(I,j) = timescale
 
-    uDml(I) = timescale * G%umask(I,j)*G%DYu(I,j)* &
-        G%IDXu(I,j)*(Rml_av(i+1,j)-Rml_av(i,j)) * (h_vel**2 * G%m_to_H)
+    uDml(I) = timescale * G%umask(I,j)*G%dyCu(I,j)* &
+        G%IdxCu(I,j)*(Rml_av(i+1,j)-Rml_av(i,j)) * (h_vel**2 * G%m_to_H)
 
     if (uDml(i) == 0) then
       do k=1,G%nkml ; uhml(I,j,k) = 0.0 ; enddo
@@ -259,12 +259,12 @@ subroutine mixedlayer_restrat(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
     timescale = 0.0625 * (absf + 2.0*mom_mixrate) / (absf**2 + mom_mixrate**2)
 
     timescale = timescale * CS%ml_restrat_coef
-!        timescale = timescale*(2?)*(L_def/L_MLI)*min(EKE/MKE,1.0 + G%DYv(i,j)**2/L_def**2))
+!        timescale = timescale*(2?)*(L_def/L_MLI)*min(EKE/MKE,1.0 + G%dyCv(i,j)**2/L_def**2))
 
     vtimescale_diag(i,J) = timescale
 
-    vDml(i) = timescale * G%vmask(i,J)*G%DXv(i,J)* &
-        G%IDYv(i,J)*(Rml_av(i,j+1)-Rml_av(i,j)) * (h_vel**2 * G%m_to_H)
+    vDml(i) = timescale * G%vmask(i,J)*G%dxCv(i,J)* &
+        G%IdyCv(i,J)*(Rml_av(i,j+1)-Rml_av(i,j)) * (h_vel**2 * G%m_to_H)
     if (vDml(i) == 0) then
       do k=1,G%nkml ; vhml(i,J,k) = 0.0 ; enddo
     else
@@ -354,13 +354,13 @@ subroutine mixedlayer_restrat_init(Time, G, param_file, diag, CS)
              "grid spacing over the deformation radius, as detailed \n"//&
              "by Fox-Kemper et al. (2010)", units="nondim", default=0.0)
 
-  CS%id_uhml = register_diag_field('ocean_model', 'uhml', G%axesul, Time, &
+  CS%id_uhml = register_diag_field('ocean_model', 'uhml', G%axesCuL, Time, &
       'Zonal Thickness Flux to Restratify Mixed Layer', flux_units)
-  CS%id_vhml = register_diag_field('ocean_model', 'vhml', G%axesvl, Time, &
+  CS%id_vhml = register_diag_field('ocean_model', 'vhml', G%axesCvL, Time, &
       'Meridional Thickness Flux to Restratify Mixed Layer', flux_units)
-  CS%id_urestrat_time = register_diag_field('ocean_model', 'MLu_restrat_time', G%axesu1, Time, &
+  CS%id_urestrat_time = register_diag_field('ocean_model', 'MLu_restrat_time', G%axesCu1, Time, &
       'Mixed Layer Zonal Restratification Timescale', 'second')
-  CS%id_vrestrat_time = register_diag_field('ocean_model', 'MLv_restrat_time', G%axesu1, Time, &
+  CS%id_vrestrat_time = register_diag_field('ocean_model', 'MLv_restrat_time', G%axesCu1, Time, &
       'Mixed Layer Meridional Restratification Timescale', 'second')
 
 end subroutine mixedlayer_restrat_init

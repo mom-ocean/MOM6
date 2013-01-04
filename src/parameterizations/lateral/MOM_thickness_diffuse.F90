@@ -185,7 +185,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, MEKE, VarMix, CS)
     else
       Khth_Loc = max(CS%Khth_min, Khth_Loc)
     endif
-    KH_u_CFL(I,j) = 0.2/(dt*(G%IDXu(I,j)*G%IDXu(I,j) + G%IDYu(I,j)*G%IDYu(I,j)))
+    KH_u_CFL(I,j) = 0.2/(dt*(G%IdxCu(I,j)*G%IdxCu(I,j) + G%IdyCu(I,j)*G%IdyCu(I,j)))
     KH_u(I,j,1) = min(KH_u_CFL(I,j), Khth_Loc)
   enddo ; enddo
   do K=2,nz+1 ; do j=js,je ; do I=is-1,ie
@@ -207,7 +207,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, MEKE, VarMix, CS)
     else
       Khth_Loc = max(CS%Khth_min, Khth_Loc)
     endif
-    KH_v_CFL(i,J) = 0.2/(dt*(G%IDXv(i,J)*G%IDXv(i,J) + G%IDYv(i,J)*G%IDYv(i,J)))
+    KH_v_CFL(i,J) = 0.2/(dt*(G%IdxCv(i,J)*G%IdxCv(i,J) + G%IdyCv(i,J)*G%IdyCv(i,J)))
     KH_v(i,J,1) = min(KH_v_CFL(i,J), Khth_Loc)
   enddo ; enddo
   do K=2,nz+1 ; do J=js-1,je ; do i=is,ie
@@ -506,7 +506,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
           !          ((hg2L/haL) + (hg2R/haR))
           ! This is the gradient of density along geopotentials.
           drdx = ((wtA * drdiA + wtB * drdiB) / (wtA + wtB) - &
-                  drdz * (e(i,j,K)-e(i+1,j,K))) * G%IDXu(I,j)
+                  drdz * (e(i,j,K)-e(i+1,j,K))) * G%IdxCu(I,j)
 
           ! This estimate of slope is accurate for small slopes, but bounded
           ! to be between -1 and 1.
@@ -521,12 +521,12 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
 
           if (present(int_slope_u)) then
             Slope = (1.0 - int_slope_u(I,j,K)) * Slope + &
-                    int_slope_u(I,j,K) * ((e(i+1,j,K)-e(i,j,K)) * G%IDXu(I,j))
+                    int_slope_u(I,j,K) * ((e(i+1,j,K)-e(i,j,K)) * G%IdxCu(I,j))
             slope2_Ratio = (1.0 - int_slope_u(I,j,K)) * slope2_Ratio
           endif
 
           ! Estimate the streamfunction at each interface.
-          Sfn_unlim = -((KH_u(I,j,K)*G%dy_u(I,j))*Slope) * G%m_to_H
+          Sfn_unlim = -((KH_u(I,j,K)*G%dy_Cu(I,j))*Slope) * G%m_to_H
           if (uhtot(I,j) <= 0.0) then
             ! The transport that must balance the transport below is positive.
             Sfn_safe = uhtot(I,j) * (1.0 - h_frac(i,j,k))
@@ -556,8 +556,8 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
 
           Sfn_est = (Sfn_unlim + slope2_Ratio*Sfn_safe) / (1.0 + slope2_Ratio)
         else  ! With .not.use_EOS, the layers are constant density.
-          Sfn_est = ((KH_u(I,j,K)*G%dy_u(I,j)) * &
-                     ((e(i,j,K)-e(i+1,j,K))*G%IDXu(I,j))) * G%m_to_H
+          Sfn_est = ((KH_u(I,j,K)*G%dy_Cu(I,j)) * &
+                     ((e(i,j,K)-e(i+1,j,K))*G%IdxCu(I,j))) * G%m_to_H
         endif
 
         ! Make sure that there is enough mass above to allow the streamfunction
@@ -574,7 +574,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
  !       sfn_slope_x(I,j,K) = max(uhtot(I,j)-h_avail(i+1,j,k), &
  !                                min(uhtot(I,j)+h_avail(i,j,k), &
  !             min(h_avail_rsum(i+1,j,K), max(-h_avail_rsum(i,j,K), &
- !             (KH_u(I,j,K)*G%dy_u(I,j)) * ((e(i,j,K)-e(i+1,j,K))*G%IDXu(I,j)) )) ))
+ !             (KH_u(I,j,K)*G%dy_Cu(I,j)) * ((e(i,j,K)-e(i+1,j,K))*G%IdxCu(I,j)) )) ))
       else ! k <= nk_linear
         ! Balance the deeper flow with a return flow uniformly distributed
         ! though the remaining near-surface layers.  This is the same as
@@ -665,7 +665,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
           !          ((hg2L/haL) + (hg2R/haR))
           ! This is the gradient of density along geopotentials.
           drdy = ((wtA * drdjA + wtB * drdjB) / (wtA + wtB) - &
-                  drdz * (e(i,j,K)-e(i,j+1,K))) * G%IDYv(i,J)
+                  drdz * (e(i,j,K)-e(i,j+1,K))) * G%IdyCv(i,J)
 
           ! This estimate of slope is accurate for small slopes, but bounded
           ! to be between -1 and 1.
@@ -680,12 +680,12 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
 
           if (present(int_slope_v)) then
             Slope = (1.0 - int_slope_v(i,J,K)) * Slope + &
-                    int_slope_v(i,J,K) * ((e(i,j+1,K)-e(i,j,K)) * G%IDYv(i,J))
+                    int_slope_v(i,J,K) * ((e(i,j+1,K)-e(i,j,K)) * G%IdyCv(i,J))
             slope2_Ratio = (1.0 - int_slope_v(i,J,K)) * slope2_Ratio
           endif
 
           ! Estimate the streamfunction at each interface.
-          Sfn_unlim = -((KH_v(i,J,K)*G%dx_v(i,J))*Slope) * G%m_to_H
+          Sfn_unlim = -((KH_v(i,J,K)*G%dx_Cv(i,J))*Slope) * G%m_to_H
           if (vhtot(i,J) <= 0.0) then
             Sfn_safe = vhtot(i,J) * (1.0 - h_frac(i,j,k))
           else !  (vhtot(I,j) > 0.0)
@@ -715,8 +715,8 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
           ! Estimate the streamfunction at each interface.
           Sfn_est = (Sfn_unlim + slope2_Ratio*Sfn_safe) / (1.0 + slope2_Ratio)
         else      ! With .not.use_EOS, the layers are constant density.
-          Sfn_est = ((KH_v(i,J,K)*G%dx_v(i,J)) * &
-                     ((e(i,j,K)-e(i,j+1,K))*G%IDYv(i,J))) * G%m_to_H
+          Sfn_est = ((KH_v(i,J,K)*G%dx_Cv(i,J)) * &
+                     ((e(i,j,K)-e(i,j+1,K))*G%IdyCv(i,J))) * G%m_to_H
         endif
 
         ! Make sure that there is enough mass above to allow the streamfunction
@@ -733,7 +733,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
   !      sfn_slope_y(i,J,K) = max(vhtot(i,J)-h_avail(i,j+1,k), &
   !                               min(vhtot(i,J)+h_avail(i,j,k), &
   !            min(h_avail_rsum(i,j+1,K), max(-h_avail_rsum(i,j,K), &
-  !            (KH_v(i,J,K)*G%dx_v(i,J)) * ((e(i,j,K)-e(i,j+1,K))*G%IDYv(i,J)) )) ))
+  !            (KH_v(i,J,K)*G%dx_Cv(i,J)) * ((e(i,j,K)-e(i,j+1,K))*G%IdyCv(i,J)) )) ))
       else  ! k <= nk_linear
         ! Balance the deeper flow with a return flow uniformly distributed
         ! though the remaining near-surface layers.
@@ -1033,7 +1033,7 @@ subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, CS
       do k=k_top,nz ; do i=ish,ie ; if (do_i(i)) then
         if (n==1) then ! This is a u-column.
           dH = 0.0
-          denom = ((G%IareaT(i+1,j) + G%IareaT(i,j))*G%dy_u(I,j))
+          denom = ((G%IareaT(i+1,j) + G%IareaT(i,j))*G%dy_Cu(I,j))
           !   This expression uses differences in e in place of h for better
           ! consistency with the slopes.
           if (denom > 0.0) &
@@ -1043,8 +1043,8 @@ subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, CS
 
           adH = abs(dH)
           sign = 1.0 ; if (dH < 0) sign = -1.0
-          sl_K = sign * (e(i+1,j,K)-e(i,j,K)) * G%IDXu(I,j)
-          sl_Kp1 = sign * (e(i+1,j,K+1)-e(i,j,K+1)) * G%IDXu(I,j)
+          sl_K = sign * (e(i+1,j,K)-e(i,j,K)) * G%IdxCu(I,j)
+          sl_Kp1 = sign * (e(i+1,j,K+1)-e(i,j,K+1)) * G%IdxCu(I,j)
 
           ! Add the incremental diffusivites to the surrounding interfaces.
           ! Adding more to the more steeply sloping layers (as below) makes
@@ -1058,7 +1058,7 @@ subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, CS
           Kh_detangle(I,K+1) = Kh_detangle(I,K+1) + wt2*Kh_lay_u(I,j,k)
         else ! This is a v-column.
           dH = 0.0
-          denom = ((G%IareaT(i,j+1) + G%IareaT(i,j))*G%dx_v(I,j))
+          denom = ((G%IareaT(i,j+1) + G%IareaT(i,j))*G%dx_Cv(I,j))
           if (denom > 0.0) &
             dH = I_4t * ((e(i,j+1,K) - e(i,j+1,K+1)) - &
                          (e(i,j,K) - e(i,j,K+1))) / denom
@@ -1066,8 +1066,8 @@ subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, CS
 
           adH = abs(dH)
           sign = 1.0 ; if (dH < 0) sign = -1.0
-          sl_K = sign * (e(i,j+1,K)-e(i,j,K)) * G%IDYv(i,J)
-          sl_Kp1 = sign * (e(i,j+1,K+1)-e(i,j,K+1)) * G%IDYv(i,J)
+          sl_K = sign * (e(i,j+1,K)-e(i,j,K)) * G%IdyCv(i,J)
+          sl_Kp1 = sign * (e(i,j+1,K+1)-e(i,j,K+1)) * G%IdyCv(i,J)
 
           ! Add the incremental diffusviites to the surrounding interfaces.
           ! Adding more to the more steeply sloping layers (as below) makes
@@ -1188,9 +1188,9 @@ subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, CS
 !           if (n==1) then ! u-point.
 !             if ((h(i+1,j,k) - h(i,j,k)) * &
 !                 ((e(i+1,j,K)-e(i+1,j,K+1)) - (e(i,j,K)-e(i,j,K+1))) > 0.0) then
-!               Sfn(K) = -Kh(i,K) * (e(i+1,j,K)-e(i,j,K)) * G%IDXu(I,j)
-!               Sfn(K+1) = -Kh(i,K+1) * (e(i+1,j,K+1)-e(i,j,K+1)) * G%IDXu(I,j)
-!               uh_here(k) = (Sfn(K) - Sfn(K+1))*G%dy_u(I,j)
+!               Sfn(K) = -Kh(i,K) * (e(i+1,j,K)-e(i,j,K)) * G%IdxCu(I,j)
+!               Sfn(K+1) = -Kh(i,K+1) * (e(i+1,j,K+1)-e(i,j,K+1)) * G%IdxCu(I,j)
+!               uh_here(k) = (Sfn(K) - Sfn(K+1))*G%dy_Cu(I,j)
 !               if (abs(uh_here(k))*min(G%IareaT(i,j), G%IareaT(i+1,j)) > &
 !                   (1e-10*G%m_to_H)) then
 !                 if (uh_here(k) * (h(i+1,j,k) - h(i,j,k)) > 0.0) then
@@ -1208,9 +1208,9 @@ subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, CS
 !           else ! v-point
 !             if ((h(i,j+1,k) - h(i,j,k)) * &
 !                 ((e(i,j+1,K)-e(i,j+1,K+1)) - (e(i,j,K)-e(i,j,K+1))) > 0.0) then
-!               Sfn(K) = -Kh(i,K) * (e(i,j+1,K)-e(i,j,K)) * G%IDYv(i,J)
-!               Sfn(K+1) = -Kh(i,K+1) * (e(i,j+1,K+1)-e(i,j,K+1)) * G%IDYv(i,J)
-!               uh_here(k) = (Sfn(K) - Sfn(K+1))*G%dx_v(i,J)
+!               Sfn(K) = -Kh(i,K) * (e(i,j+1,K)-e(i,j,K)) * G%IdyCv(i,J)
+!               Sfn(K+1) = -Kh(i,K+1) * (e(i,j+1,K+1)-e(i,j,K+1)) * G%IdyCv(i,J)
+!               uh_here(k) = (Sfn(K) - Sfn(K+1))*G%dx_Cv(i,J)
 !               if (abs(uh_here(K))*min(G%IareaT(i,j), G%IareaT(i,j+1)) > &
 !                   (1e-10*G%m_to_H)) then
 !                 if (uh_here(K) * (h(i,j+1,k) - h(i,j,k)) > 0.0) then
@@ -1226,7 +1226,7 @@ subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, CS
 !               endif
 !             endif
 !           endif ! u- or v- selection.
-!          !  de_dx(I,K) = (e(i+1,j,K)-e(i,j,K)) * G%IDXu(I,j)
+!          !  de_dx(I,K) = (e(i+1,j,K)-e(i,j,K)) * G%IdxCu(I,j)
 !         endif
 !       enddo
 !     enddo
@@ -1404,31 +1404,31 @@ subroutine thickness_diffuse_init(Time, G, param_file, diag, CS)
   if (G%Boussinesq) then ; flux_units = "meter3 second-1"
   else ; flux_units = "kilogram second-1" ; endif
 
-  CS%id_uhGM = register_diag_field('ocean_model', 'uhGM', G%axesul, Time, &
+  CS%id_uhGM = register_diag_field('ocean_model', 'uhGM', G%axesCuL, Time, &
            'Time Mean Diffusive Zonal Thickness Flux', flux_units)
   if (CS%id_uhGM > 0) call safe_alloc_ptr(diag%uhGM,G%Isdq,G%Iedq,G%jsd,G%jed,G%ke)
-  CS%id_vhGM = register_diag_field('ocean_model', 'vhGM', G%axesvl, Time, &
+  CS%id_vhGM = register_diag_field('ocean_model', 'vhGM', G%axesCvL, Time, &
            'Time Mean Diffusive Meridional Thickness Flux', flux_units)
   if (CS%id_vhGM > 0) call safe_alloc_ptr(diag%vhGM,G%isd,G%ied,G%Jsdq,G%Jedq,G%ke)
-  CS%id_GMwork = register_diag_field('ocean_model', 'GMwork', G%axesh1, Time, &
+  CS%id_GMwork = register_diag_field('ocean_model', 'GMwork', G%axesT1, Time, &
            'Time Mean Integral Work done by Diffusive Thickness Flux', 'Watt meter-2')
   if (CS%id_GMwork > 0) call safe_alloc_ptr(CS%GMwork,G%isd,G%ied,G%jsd,G%jed)
-  CS%id_KH_u = register_diag_field('ocean_model', 'KHTH_u', G%axesui, Time, &
+  CS%id_KH_u = register_diag_field('ocean_model', 'KHTH_u', G%axesCui, Time, &
            'Thickness Diffusivity at U-point', 'meter second-2')
-  CS%id_KH_v = register_diag_field('ocean_model', 'KHTH_v', G%axesvi, Time, &
+  CS%id_KH_v = register_diag_field('ocean_model', 'KHTH_v', G%axesCvi, Time, &
            'Thickness Diffusivity at V-point', 'meter second-2')
-  CS%id_KH_u1 = register_diag_field('ocean_model', 'KHTH_u1', G%axesu1, Time, &
+  CS%id_KH_u1 = register_diag_field('ocean_model', 'KHTH_u1', G%axesCu1, Time, &
            'Thickness Diffusivity at U-points (2-D)', 'meter second-2')
-  CS%id_KH_v1 = register_diag_field('ocean_model', 'KHTH_v1', G%axesv1, Time, &
+  CS%id_KH_v1 = register_diag_field('ocean_model', 'KHTH_v1', G%axesCv1, Time, &
            'Thickness Diffusivity at V-points (2-D)', 'meter second-2')
 
- ! CS%id_sfn_x =  register_diag_field('ocean_model', 'sfn_x', G%axesui, Time, &
+ ! CS%id_sfn_x =  register_diag_field('ocean_model', 'sfn_x', G%axesCui, Time, &
  !          'Parameterized Zonal Overturning Streamfunction', 'meter3 second-1')
- ! CS%id_sfn_y =  register_diag_field('ocean_model', 'sfn_y', G%axesvi, Time, &
+ ! CS%id_sfn_y =  register_diag_field('ocean_model', 'sfn_y', G%axesCvi, Time, &
  !          'Parameterized Meridional Overturning Streamfunction', 'meter3 second-1')
- ! CS%id_sfn_slope_x =  register_diag_field('ocean_model', 'sfn_sl_x', G%axesui, Time, &
+ ! CS%id_sfn_slope_x =  register_diag_field('ocean_model', 'sfn_sl_x', G%axesCui, Time, &
  !          'Parameterized Zonal Overturning Streamfunction from Interface Slopes', 'meter3 second-1')
- ! CS%id_sfn_slope_y =  register_diag_field('ocean_model', 'sfn_sl_y', G%axesvi, Time, &
+ ! CS%id_sfn_slope_y =  register_diag_field('ocean_model', 'sfn_sl_y', G%axesCvi, Time, &
  !          'Parameterized Meridional Overturning Streamfunction from Interface Slopes', 'meter3 second-1')
 
 end subroutine thickness_diffuse_init

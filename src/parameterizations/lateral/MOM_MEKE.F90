@@ -237,24 +237,24 @@ subroutine step_forward_MEKE(MEKE, h, visc, dt, G, CS)
         ! Limit Kh to avoid CFL violations.
         if (associated(MEKE%Kh)) &
           Kh_here = CS%MEKE_Kh + CS%KhMEKE_Fac*0.5*(MEKE%Kh(i,j)+MEKE%Kh(i+1,j))
-        Inv_Kh_max = 2.0*sdt * ((G%dy_u(I,j)*G%IDXu(I,j)) * &
+        Inv_Kh_max = 2.0*sdt * ((G%dy_Cu(I,j)*G%IdxCu(I,j)) * &
                      max(G%IareaT(i,j),G%IareaT(i+1,j)))
         if (Kh_here*Inv_Kh_max > 0.25) Kh_here = 0.25 / Inv_Kh_max
         Kh_u(I,j) = Kh_here
 
-        MEKE_uflux(I,j) = ((Kh_here * (G%dy_u(I,j)*G%IDXu(I,j))) * &
+        MEKE_uflux(I,j) = ((Kh_here * (G%dy_Cu(I,j)*G%IdxCu(I,j))) * &
             ((2.0*mass(i,j)*mass(i+1,j)) / ((mass(i,j)+mass(i+1,j)) + mass_neglect)) ) * &
             (MEKE%MEKE(i,j) - MEKE%MEKE(i+1,j))
       enddo ; enddo
       do J=js-1,je ; do i=is,ie
         if (associated(MEKE%Kh)) &
           Kh_here = CS%MEKE_Kh + CS%KhMEKE_Fac*0.5*(MEKE%Kh(i,j)+MEKE%Kh(i,j+1))
-        Inv_Kh_max = 2.0*sdt * ((G%dx_v(i,J)*G%IDYv(i,J)) * &
+        Inv_Kh_max = 2.0*sdt * ((G%dx_Cv(i,J)*G%IdyCv(i,J)) * &
                      max(G%IareaT(i,j),G%IareaT(i,j+1)))
         if (Kh_here*Inv_Kh_max > 0.25) Kh_here = 0.25 / Inv_Kh_max
         Kh_v(i,J) = Kh_here
 
-        MEKE_vflux(i,J) = ((Kh_here * (G%dx_v(i,J)*G%IDYv(i,J))) * &
+        MEKE_vflux(i,J) = ((Kh_here * (G%dx_Cv(i,J)*G%IdyCv(i,J))) * &
             ((2.0*mass(i,j)*mass(i,j+1)) / ((mass(i,j)+mass(i,j+1)) + mass_neglect)) ) * &
             (MEKE%MEKE(i,j) - MEKE%MEKE(i,j+1))
       enddo ; enddo
@@ -442,23 +442,23 @@ subroutine MEKE_init(Time, G, param_file, diag, CS, MEKE)
   if (associated(MEKE%Kh)) call pass_var(MEKE%Kh, G%Domain)
 
 ! Register fields for output from this module.
-  CS%id_MEKE = register_diag_field('ocean_model', 'MEKE', G%axesh1, Time, &
+  CS%id_MEKE = register_diag_field('ocean_model', 'MEKE', G%axesT1, Time, &
      'Mesoscale Eddy Kinetic Energy', 'meter2 second-2')
-  CS%id_Kh = register_diag_field('ocean_model', 'MEKE_KH', G%axesh1, Time, &
+  CS%id_Kh = register_diag_field('ocean_model', 'MEKE_KH', G%axesT1, Time, &
      'MEKE derived diffusivity', 'meter2 second-1')
-  CS%id_src = register_diag_field('ocean_model', 'MEKE_src', G%axesh1, Time, &
+  CS%id_src = register_diag_field('ocean_model', 'MEKE_src', G%axesT1, Time, &
      'MEKE energy source', 'meter2 second-3')
-  CS%id_decay = register_diag_field('ocean_model', 'MEKE_decay', G%axesh1, Time, &
+  CS%id_decay = register_diag_field('ocean_model', 'MEKE_decay', G%axesT1, Time, &
      'MEKE decay rate', 'second-1')
-  CS%id_KhMEKE_u = register_diag_field('ocean_model', 'KHMEKE_u', G%axesu1, Time, &
+  CS%id_KhMEKE_u = register_diag_field('ocean_model', 'KHMEKE_u', G%axesCu1, Time, &
      'Zonal diffusivity of MEKE', 'meter2 second-1')
-  CS%id_KhMEKE_v = register_diag_field('ocean_model', 'KHMEKE_v', G%axesv1, Time, &
+  CS%id_KhMEKE_v = register_diag_field('ocean_model', 'KHMEKE_v', G%axesCv1, Time, &
      'Meridional diffusivity of MEKE', 'meter2 second-1')
   if (associated(MEKE%GM_src)) &
-    CS%id_GM_src = register_diag_field('ocean_model', 'MEKE_GM_src', G%axesh1, &
+    CS%id_GM_src = register_diag_field('ocean_model', 'MEKE_GM_src', G%axesT1, &
         Time, 'MEKE energy available from thickness mixing', 'Watt meter-2')
   if (associated(MEKE%mom_src)) &
-    CS%id_mom_src = register_diag_field('ocean_model', 'MEKE_mom_src',G%axesh1,&
+    CS%id_mom_src = register_diag_field('ocean_model', 'MEKE_mom_src',G%axesT1,&
         Time, 'MEKE energy available from momentum', 'Watt meter-2')
 
   id_clock_pass = cpu_clock_id('(Ocean continuity halo updates)', grain=CLOCK_ROUTINE)

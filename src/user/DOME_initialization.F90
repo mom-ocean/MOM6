@@ -341,7 +341,7 @@ subroutine DOME_set_Open_Bdry_Conds(OBC, tv, G, param_file, advect_tracer_CSp)
     any_OBC = .false.
     do J=Jsdq,Jedq ; do i=isd,ied
       if ((G%geoLonCv(i,J) > 1000.0) .and. (G%geoLonCv(i,J)  < 1100.0) .and. &
-          (abs(G%geoLatCv(i,J) - G%gridlatq(G%Domain%njglobal+njhalo)) < 0.1)) then
+          (abs(G%geoLatCv(i,J) - G%gridLatB(G%Domain%njglobal+njhalo)) < 0.1)) then
         OBC_mask_v(i,J) = .true. ; any_OBC = .true.
       endif
     enddo ; enddo

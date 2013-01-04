@@ -296,12 +296,12 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, G, CS)
     do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
       if (CS%no_slip ) then
         relative_vorticity = (2.0-G%qmask(I,J)) * &
-           ((v(i+1,J,k)*G%DYv(i+1,J) - v(i,J,k)*G%DYv(i,J)) - &
-            (u(I,j+1,k)*G%DXu(I,j+1) - u(I,j,k)*G%DXu(I,j)))* G%IareaBu(I,J)
+           ((v(i+1,J,k)*G%dyCv(i+1,J) - v(i,J,k)*G%dyCv(i,J)) - &
+            (u(I,j+1,k)*G%dxCu(I,j+1) - u(I,j,k)*G%dxCu(I,j)))* G%IareaBu(I,J)
       else
         relative_vorticity = G%qmask(I,J) * &
-           ((v(i+1,J,k)*G%DYv(i+1,J) - v(i,J,k)*G%DYv(i,J)) - &
-            (u(I,j+1,k)*G%DXu(I,j+1) - u(I,j,k)*G%DXu(I,j)))* G%IareaBu(I,J)
+           ((v(i+1,J,k)*G%dyCv(i+1,J) - v(i,J,k)*G%dyCv(i,J)) - &
+            (u(I,j+1,k)*G%dxCu(I,j+1) - u(I,j,k)*G%dxCu(I,j)))* G%IareaBu(I,J)
       endif
       absolute_vorticity = G%CoriolisBu(I,J) + relative_vorticity
       Ih = 0.0
@@ -413,10 +413,10 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, G, CS)
       c1 = 1.0-1.5*0.5 ; c2 = 1.0-0.5 ; c3 = 2.0 ; slope = 0.5
 
       do J=Jsq,Jeq+1 ; do i=is-1,ie
-        uhc = 0.5 * (G%dy_u(I,j) * u(I,j,k)) * (h(i,j,k) + h(i+1,j,k))
+        uhc = 0.5 * (G%dy_Cu(I,j) * u(I,j,k)) * (h(i,j,k) + h(i+1,j,k))
         uhm = uh(I,j,k)
         ! This sometimes matters with some types of open boundary conditions.
-        if (G%dy_u(I,j) == 0.0) uhc = uhm
+        if (G%dy_Cu(I,j) == 0.0) uhc = uhm
 
         if (ASSOCIATED(CS%diag%uh_cent)) CS%diag%uh_cent(i,j,k) = uhc
 
@@ -438,10 +438,10 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, G, CS)
         if (ASSOCIATED(CS%diag%uh_min)) CS%diag%uh_min(i,j,k) = uh_min(i,j)
       enddo ; enddo
       do j=js-1,je ; do I=Isq,Ieq+1
-        vhc = 0.5 * (G%dx_v(i,J) * v(i,J,k)) * (h(i,j,k) + h(i,j+1,k))
+        vhc = 0.5 * (G%dx_Cv(i,J) * v(i,J,k)) * (h(i,j,k) + h(i,j+1,k))
         vhm = vh(i,J,k)
         ! This sometimes matters with some types of open boundary conditions.
-        if (G%dx_v(i,J) == 0.0) vhc = vhm
+        if (G%dx_Cv(i,J) == 0.0) vhc = vhm
 
         if (ASSOCIATED(CS%diag%vh_cent)) CS%diag%vh_cent(i,j,k) = vhc
 
@@ -490,19 +490,19 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, G, CS)
           else
             temp2 = q(I,J-1) * (vh_min(i,j-1)+vh_min(i+1,j-1))
           endif
-          CAu(I,j,k) = 0.25 * G%IDXu(I,j) * (temp1 + temp2)
+          CAu(I,j,k) = 0.25 * G%IdxCu(I,j) * (temp1 + temp2)
         enddo ; enddo
       else
         ! Energy conserving scheme, Sadourny 1975
         do j=js,je ; do I=Isq,Ieq
           CAu(I,j,k) = 0.25 * &
             (q(I,J) * (vh(i+1,J,k) + vh(i,J,k)) + &
-             q(I,J-1) * (vh(i,J-1,k) + vh(i+1,J-1,k))) * G%IDXu(i,j)
+             q(I,J-1) * (vh(i,J-1,k) + vh(i+1,J-1,k))) * G%IdxCu(i,j)
         enddo ; enddo
       endif
     elseif (CS%Coriolis_Scheme == SADOURNY75_ENSTRO) then
       do j=js,je ; do I=Isq,Ieq
-        CAu(I,j,k) = 0.125 * (G%IDXu(i,j) * (q(I,J) + q(I,J-1))) * &
+        CAu(I,j,k) = 0.125 * (G%IdxCu(i,j) * (q(I,J) + q(I,J-1))) * &
                      ((vh(i+1,J,k) + vh(i,J,k)) + (vh(i,J-1,k) + vh(i+1,J-1,k)))
       enddo ; enddo
     elseif ((CS%Coriolis_Scheme == ARAKAWA_HSU90) .or. &
@@ -513,37 +513,37 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, G, CS)
         CAu(i,j,k) = ((a(I,j) * vh(i+1,J,k) + &
                        c(I,j) * vh(i,J-1,k))  &
                     + (b(I,j) * vh(i,J,k) +   &
-                       d(I,j) * vh(i+1,J-1,k))) * G%IDXu(i,j)
+                       d(I,j) * vh(i+1,J-1,k))) * G%IdxCu(i,j)
       enddo ; enddo
     elseif (CS%Coriolis_Scheme == ROBUST_ENSTRO) then
       ! An enstrophy conserving scheme robust to vanishing layers
       ! Note: Heffs are in lieu of h_at_v that should be returned by the
       !       continuity solver. AJA
       do j=js,je ; do I=Isq,Ieq
-        Heff1 = abs(vh(i,J,k)*G%IDXv(i,J))/(eps_vel+abs(v(i,J,k)))
+        Heff1 = abs(vh(i,J,k)*G%IdxCv(i,J))/(eps_vel+abs(v(i,J,k)))
         Heff1 = max(Heff1,min(h(i,j,k),h(i,j+1,k)))
         Heff1 = min(Heff1,max(h(i,j,k),h(i,j+1,k)))
-        Heff2 = abs(vh(i,J-1,k)*G%IDXv(i,J-1))/(eps_vel+abs(v(i,J-1,k)))
+        Heff2 = abs(vh(i,J-1,k)*G%IdxCv(i,J-1))/(eps_vel+abs(v(i,J-1,k)))
         Heff2 = max(Heff2,min(h(i,j-1,k),h(i,j,k)))
         Heff2 = min(Heff2,max(h(i,j-1,k),h(i,j,k)))
-        Heff3 = abs(vh(i+1,J,k)*G%IDXv(i+1,J))/(eps_vel+abs(v(i+1,J,k)))
+        Heff3 = abs(vh(i+1,J,k)*G%IdxCv(i+1,J))/(eps_vel+abs(v(i+1,J,k)))
         Heff3 = max(Heff3,min(h(i+1,j,k),h(i+1,j+1,k)))
         Heff3 = min(Heff3,max(h(i+1,j,k),h(i+1,j+1,k)))
-        Heff4 = abs(vh(i+1,J-1,k)*G%IDXv(i+1,J-1))/(eps_vel+abs(v(i+1,J-1,k)))
+        Heff4 = abs(vh(i+1,J-1,k)*G%IdxCv(i+1,J-1))/(eps_vel+abs(v(i+1,J-1,k)))
         Heff4 = max(Heff4,min(h(i+1,j-1,k),h(i+1,j,k)))
         Heff4 = min(Heff4,max(h(i+1,j-1,k),h(i+1,j,k)))
         if (CS%PV_Adv_Scheme == PV_ADV_CENTERED) then
           CAu(I,j,k) = 0.5*(abs_vort(I,J)+abs_vort(I,J-1)) * &
                        ((vh(i  ,J  ,k)+vh(i+1,J-1,k)) +      &
                         (vh(i  ,J-1,k)+vh(i+1,J  ,k)) ) /    &
-                       (G%Angstrom +((Heff1+Heff4) +(Heff2+Heff3)) ) * G%IDXu(i,j)
+                       (G%Angstrom +((Heff1+Heff4) +(Heff2+Heff3)) ) * G%IdxCu(i,j)
         elseif (CS%PV_Adv_Scheme == PV_ADV_UPWIND1) then
           VHeff = ((vh(i  ,J  ,k)+vh(i+1,J-1,k)) +      &
                    (vh(i  ,J-1,k)+vh(i+1,J  ,k)) )
           QVHeff = 0.5*( (abs_vort(I,J)+abs_vort(I,J-1))*VHeff &
                         -(abs_vort(I,J)-abs_vort(I,J-1))*abs(VHeff) )
           CAu(I,j,k) = QVHeff / &
-                     (G%Angstrom +((Heff1+Heff4) +(Heff2+Heff3)) ) * G%IDXu(i,j)
+                     (G%Angstrom +((Heff1+Heff4) +(Heff2+Heff3)) ) * G%IdxCu(i,j)
         endif
       enddo ; enddo
     endif
@@ -551,7 +551,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, G, CS)
     if ((CS%Coriolis_Scheme == ARAKAWA_LAMB81) .or. &
         (CS%Coriolis_Scheme == AL_BLEND)) then ; do j=js,je ; do I=Isq,Ieq
       CAu(I,j,k) = CAu(I,j,k) + &
-            (ep_u(i,j)*uh(I-1,j,k) - ep_u(i+1,j)*uh(I+1,j,k)) * G%IDXu(I,j)
+            (ep_u(i,j)*uh(I-1,j,k) - ep_u(i+1,j)*uh(I+1,j,k)) * G%IdxCu(I,j)
     enddo ; enddo ; endif
 
 
@@ -599,19 +599,19 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, G, CS)
           else
             temp2 = q(I,J) * (uh_min(i,j)+uh_min(i,j+1))
           endif
-          CAv(i,J,k) = - 0.25 * G%IDYv(i,J) * (temp1 + temp2)
+          CAv(i,J,k) = - 0.25 * G%IdyCv(i,J) * (temp1 + temp2)
         enddo ; enddo
       else
         ! Energy conserving scheme, Sadourny 1975
         do J=Jsq,Jeq ; do i=is,ie
           CAv(i,J,k) = - 0.25* &
               (q(I-1,J)*(uh(I-1,j,k) + uh(I-1,j+1,k)) + &
-               q(I,J)*(uh(I,j,k) + uh(I,j+1,k))) * G%IDYv(i,J)
+               q(I,J)*(uh(I,j,k) + uh(I,j+1,k))) * G%IdyCv(i,J)
         enddo ; enddo
       endif
     elseif (CS%Coriolis_Scheme == SADOURNY75_ENSTRO) then
       do J=Jsq,Jeq ; do i=is,ie
-        CAv(i,J,k) = -0.125 * (G%IDYv(i,J) * (q(I-1,J) + q(I,J))) * &
+        CAv(i,J,k) = -0.125 * (G%IdyCv(i,J) * (q(I-1,J) + q(I,J))) * &
                      ((uh(I-1,j,k) + uh(I-1,j+1,k)) + (uh(I,j,k) + uh(I,j+1,k)))
       enddo ; enddo
     elseif ((CS%Coriolis_Scheme == ARAKAWA_HSU90) .or. &
@@ -622,37 +622,37 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, G, CS)
         CAv(i,J,k) = - ((a(I-1,j)   * uh(I-1,j,k) + &
                          c(I,j+1)   * uh(I,j+1,k))  &
                       + (b(I,j)     * uh(I,j,k) +   &
-                         d(I-1,j+1) * uh(I-1,j+1,k))) * G%IDYv(i,J)
+                         d(I-1,j+1) * uh(I-1,j+1,k))) * G%IdyCv(i,J)
       enddo ; enddo
     elseif (CS%Coriolis_Scheme == ROBUST_ENSTRO) then
       ! An enstrophy conserving scheme robust to vanishing layers
       ! Note: Heffs are in lieu of h_at_u that should be returned by the
       !       continuity solver. AJA
       do J=Jsq,Jeq ; do i=is,ie
-        Heff1 = abs(uh(I,j,k)*G%IDYu(I,j))/(eps_vel+abs(u(I,j,k)))
+        Heff1 = abs(uh(I,j,k)*G%IdyCu(I,j))/(eps_vel+abs(u(I,j,k)))
         Heff1 = max(Heff1,min(h(i,j,k),h(i+1,j,k)))
         Heff1 = min(Heff1,max(h(i,j,k),h(i+1,j,k)))
-        Heff2 = abs(uh(I-1,j,k)*G%IDYu(I-1,j))/(eps_vel+abs(u(I-1,j,k)))
+        Heff2 = abs(uh(I-1,j,k)*G%IdyCu(I-1,j))/(eps_vel+abs(u(I-1,j,k)))
         Heff2 = max(Heff2,min(h(i-1,j,k),h(i,j,k)))
         Heff2 = min(Heff2,max(h(i-1,j,k),h(i,j,k)))
-        Heff3 = abs(uh(I,j+1,k)*G%IDYu(I,j+1))/(eps_vel+abs(u(I,j+1,k)))
+        Heff3 = abs(uh(I,j+1,k)*G%IdyCu(I,j+1))/(eps_vel+abs(u(I,j+1,k)))
         Heff3 = max(Heff3,min(h(i,j+1,k),h(i+1,j+1,k)))
         Heff3 = min(Heff3,max(h(i,j+1,k),h(i+1,j+1,k)))
-        Heff4 = abs(uh(I-1,j+1,k)*G%IDYu(I-1,j+1))/(eps_vel+abs(u(I-1,j+1,k)))
+        Heff4 = abs(uh(I-1,j+1,k)*G%IdyCu(I-1,j+1))/(eps_vel+abs(u(I-1,j+1,k)))
         Heff4 = max(Heff4,min(h(i-1,j+1,k),h(i,j+1,k)))
         Heff4 = min(Heff4,max(h(i-1,j+1,k),h(i,j+1,k)))
         if (CS%PV_Adv_Scheme == PV_ADV_CENTERED) then
           CAv(i,J,k) = - 0.5*(abs_vort(I,J)+abs_vort(I-1,J)) * &
                          ((uh(I  ,j  ,k)+uh(I-1,j+1,k)) +      &
                           (uh(I-1,j  ,k)+uh(I  ,j+1,k)) ) /    &
-                      (G%Angstrom + ((Heff1+Heff4) +(Heff2+Heff3)) ) * G%IDYv(i,J)
+                      (G%Angstrom + ((Heff1+Heff4) +(Heff2+Heff3)) ) * G%IdyCv(i,J)
         elseif (CS%PV_Adv_Scheme == PV_ADV_UPWIND1) then
           UHeff = ((uh(I  ,j  ,k)+uh(I-1,j+1,k)) +      &
                    (uh(I-1,j  ,k)+uh(I  ,j+1,k)) )
           QUHeff = 0.5*( (abs_vort(I,J)+abs_vort(I-1,J))*UHeff &
                         -(abs_vort(I,J)-abs_vort(I-1,J))*abs(UHeff) )
           CAv(i,J,k) = - QUHeff / &
-                       (G%Angstrom + ((Heff1+Heff4) +(Heff2+Heff3)) ) * G%IDYv(i,J)
+                       (G%Angstrom + ((Heff1+Heff4) +(Heff2+Heff3)) ) * G%IdyCv(i,J)
         endif
       enddo ; enddo
     endif
@@ -660,7 +660,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, G, CS)
     if ((CS%Coriolis_Scheme == ARAKAWA_LAMB81) .or. &
         (CS%Coriolis_Scheme == AL_BLEND)) then ; do J=Jsq,Jeq ; do i=is,ie
       CAv(i,J,k) = CAv(i,J,k) + &
-            (ep_v(i,j)*vh(i,J-1,k) - ep_v(i,j+1)*vh(i,J+1,k)) * G%IDYv(i,J)
+            (ep_v(i,j)*vh(i,J-1,k) - ep_v(i,j+1)*vh(i,J+1,k)) * G%IdyCv(i,J)
     enddo ; enddo ; endif
 
     if (CS%bound_Coriolis) then
@@ -688,7 +688,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, G, CS)
           do J=Jsq,Jeq ; do i=is,ie
             CS%diag%rv_x_u(i,j,k) = - 0.25* &
               (q2(I-1,j)*(uh(I-1,j,k) + uh(I-1,j+1,k)) + &
-               q2(I,j)*(uh(I,j,k) + uh(I,j+1,k))) * G%IDYv(i,J)
+               q2(I,j)*(uh(I,j,k) + uh(I,j+1,k))) * G%IdyCv(i,J)
           enddo ; enddo
         endif
 
@@ -696,13 +696,13 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, G, CS)
           do j=js,je ; do I=Isq,Ieq
             CS%diag%rv_x_v(I,j,k) = 0.25 * &
               (q2(I,j) * (vh(i+1,J,k) + vh(i,J,k)) + &
-               q2(I,j-1) * (vh(i,J-1,k) + vh(i+1,J-1,k))) * G%IDXu(I,j)
+               q2(I,j-1) * (vh(i,J-1,k) + vh(i+1,J-1,k))) * G%IdxCu(I,j)
           enddo ; enddo
         endif
       else
         if (ASSOCIATED(CS%diag%rv_x_u)) then
           do J=Jsq,Jeq ; do i=is,ie
-            CS%diag%rv_x_u(i,J,k) = -G%IDYv(i,J) * C1_12 * &
+            CS%diag%rv_x_u(i,J,k) = -G%IdyCv(i,J) * C1_12 * &
               ((q2(I,J) + q2(I-1,J) + q2(I-1,J-1)) * uh(I-1,j,k) + &
                (q2(I-1,J) + q2(I,J) + q2(I,J-1)) * uh(I,j,k) + &
                (q2(I-1,J) + q2(I,J+1) + q2(I,J)) * uh(I,j+1,k) + &
@@ -712,7 +712,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, G, CS)
 
         if (ASSOCIATED(CS%diag%rv_x_v)) then
           do j=js,je ; do I=Isq,Ieq
-            CS%diag%rv_x_v(I,j,k) = G%IDXu(I,j) * C1_12 * &
+            CS%diag%rv_x_v(I,j,k) = G%IdxCu(I,j) * C1_12 * &
               ((q2(I+1,J) + q2(I,J) + q2(I,J-1)) * vh(i+1,J,k) + &
                (q2(I-1,J) + q2(I,J) + q2(I,J-1)) * vh(i,J,k) + &
                (q2(I-1,J-1) + q2(I,J) + q2(I,J-1)) * vh(i,J-1,k) + &
@@ -813,12 +813,12 @@ subroutine gradKE(u, v, h, uh, vh, KE, KEx, KEy, k, G, CS)
 
 ! Term - d(KE)/dx.
   do j=js,je ; do I=Isq,Ieq
-    KEx(I,j) = (KE(i+1,j) - KE(i,j)) * G%IDXu(i,j)
+    KEx(I,j) = (KE(i+1,j) - KE(i,j)) * G%IdxCu(i,j)
   enddo ; enddo
 
 ! Term - d(KE)/dy.
   do J=Jsq,Jeq ; do i=is,ie
-    KEy(i,J) = (KE(i,j+1) - KE(i,j)) * G%IDYv(i,J)
+    KEy(i,J) = (KE(i,j+1) - KE(i,j)) * G%IdyCv(i,J)
   enddo ; enddo
 
 end subroutine gradKE
@@ -976,27 +976,27 @@ subroutine CoriolisAdv_init(Time, G, param_file, diag, CS)
                      "#DEFINE PV_ADV_SCHEME in input file is invalid.")
   end select
 
-  CS%id_rv = register_diag_field('ocean_model', 'RV', G%axesql, Time, &
+  CS%id_rv = register_diag_field('ocean_model', 'RV', G%axesBL, Time, &
      'Relative Vorticity', 'second-1')
   if (CS%id_rv > 0) call safe_alloc_ptr(diag%rv,Isdq,Iedq,Jsdq,Jedq,nz)
 
-  CS%id_PV = register_diag_field('ocean_model', 'PV', G%axesql, Time, &
+  CS%id_PV = register_diag_field('ocean_model', 'PV', G%axesBL, Time, &
      'Potential Vorticity', 'meter-1 second-1')
   if (CS%id_PV > 0) call safe_alloc_ptr(diag%q,Isdq,Iedq,Jsdq,Jedq,nz)
 
-  CS%id_gKEu = register_diag_field('ocean_model', 'gKEu', G%axesul, Time, &
+  CS%id_gKEu = register_diag_field('ocean_model', 'gKEu', G%axesCuL, Time, &
      'Zonal Acceleration from Grad. Kinetic Energy', 'meter-1 second-2')
   if (CS%id_gKEu > 0) call safe_alloc_ptr(diag%gradKEu,Isdq,Iedq,jsd,jed,nz)
 
-  CS%id_gKEv = register_diag_field('ocean_model', 'gKEv', G%axesvl, Time, &
+  CS%id_gKEv = register_diag_field('ocean_model', 'gKEv', G%axesCvL, Time, &
      'Meridional Acceleration from Grad. Kinetic Energy', 'meter-1 second-2')
   if (CS%id_gKEv > 0) call safe_alloc_ptr(diag%gradKEv,isd,ied,Jsdq,Jedq,nz)
 
-  CS%id_rvxu = register_diag_field('ocean_model', 'rvxu', G%axesvl, Time, &
+  CS%id_rvxu = register_diag_field('ocean_model', 'rvxu', G%axesCvL, Time, &
      'Meridional Acceleration from Relative Vorticity', 'meter-1 second-2')
   if (CS%id_rvxu > 0) call safe_alloc_ptr(diag%rv_x_u,isd,ied,Jsdq,Jedq,nz)
 
-  CS%id_rvxv = register_diag_field('ocean_model', 'rvxv', G%axesul, Time, &
+  CS%id_rvxv = register_diag_field('ocean_model', 'rvxv', G%axesCuL, Time, &
      'Zonal Acceleration from Relative Vorticity', 'meter-1 second-2')
   if (CS%id_rvxv > 0) call safe_alloc_ptr(diag%rv_x_v,Isdq,Iedq,jsd,jed,nz)
 

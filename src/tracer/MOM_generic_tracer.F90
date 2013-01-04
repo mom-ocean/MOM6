@@ -201,7 +201,7 @@ contains
     ntau=1 ! MOM needs the fields at only one time step
 
 
-    !   At this point G%hmask and G%axeshl are not allocated.
+    !   At this point G%hmask and G%axesTL are not allocated.
     ! postpone diag_registeration to initialize_MOM_generic_tracer
 
     !Fields cannot be diag registered as they are allocated and have to registered later.
@@ -382,7 +382,7 @@ contains
        endif
     enddo ; enddo
 
-    call g_tracer_set_common(G%isc,G%iec,G%jsc,G%jec,G%isd,G%ied,G%jsd,G%jed,G%ke,1,G%axeshl,grid_tmask,grid_kmt,day)
+    call g_tracer_set_common(G%isc,G%iec,G%jsc,G%jec,G%isd,G%ied,G%jsd,G%jed,G%ke,1,G%axesTL,grid_tmask,grid_kmt,day)
 
     ! Register generic tracer modules diagnostics
 

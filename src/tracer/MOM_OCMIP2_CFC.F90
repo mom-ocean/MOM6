@@ -428,14 +428,14 @@ subroutine initialize_OCMIP2_CFC(restart, day, G, h, OBC, CS, sponge_CSp, &
   ! Register CFC11 for potential diagnostic output.
   name = CS%CFC11_desc%name ; longname = CS%CFC11_desc%longname
   units = CS%CFC11_desc%units
-  CS%id_CFC11 = register_diag_field("ocean_model", trim(name), G%axeshl, &
+  CS%id_CFC11 = register_diag_field("ocean_model", trim(name), G%axesTL, &
       day, trim(longname) , trim(units))
   call register_Z_tracer(CS%CFC11, trim(name)//"_z", longname, units, &
                          day, G, diag_to_Z_CSp)
   ! Register CFC12 for potential diagnostic output.
   name = CS%CFC12_desc%name ; longname = CS%CFC12_desc%longname
   units = CS%CFC12_desc%units
-  CS%id_CFC12 = register_diag_field("ocean_model", trim(name), G%axeshl, &
+  CS%id_CFC12 = register_diag_field("ocean_model", trim(name), G%axesTL, &
       day, trim(longname) , trim(units))
   call register_Z_tracer(CS%CFC12, trim(name)//"_z", longname, units, &
                          day, G, diag_to_Z_CSp)
@@ -459,16 +459,16 @@ subroutine initialize_OCMIP2_CFC(restart, day, G, h, OBC, CS, sponge_CSp, &
     endif
 
     CS%id_tr_adx(m) = register_diag_field("ocean_model", trim(name)//"_adx", &
-        G%axesul, day, trim(longname)//" advective zonal flux" , &
+        G%axesCuL, day, trim(longname)//" advective zonal flux" , &
         trim(flux_units))
     CS%id_tr_ady(m) = register_diag_field("ocean_model", trim(name)//"_ady", &
-        G%axesvl, day, trim(longname)//" advective meridional flux" , &
+        G%axesCvL, day, trim(longname)//" advective meridional flux" , &
         trim(flux_units))
     CS%id_tr_dfx(m) = register_diag_field("ocean_model", trim(name)//"_dfx", &
-        G%axesul, day, trim(longname)//" diffusive zonal flux" , &
+        G%axesCuL, day, trim(longname)//" diffusive zonal flux" , &
         trim(flux_units))
     CS%id_tr_dfy(m) = register_diag_field("ocean_model", trim(name)//"_dfy", &
-        G%axesvl, day, trim(longname)//" diffusive zonal flux" , &
+        G%axesCvL, day, trim(longname)//" diffusive zonal flux" , &
         trim(flux_units))
     if (CS%id_tr_adx(m) > 0) call safe_alloc_ptr(CS%tr_adx(m)%p,Isdq,Iedq,jsd,jed,nz)
     if (CS%id_tr_ady(m) > 0) call safe_alloc_ptr(CS%tr_ady(m)%p,isd,ied,Jsdq,Jedq,nz)

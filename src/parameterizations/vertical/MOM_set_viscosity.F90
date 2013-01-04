@@ -695,8 +695,8 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, CS)
               BBL_frac = 0.0
             endif
 
-            if (m==1) then ; Cell_width = G%dy_u(i,j)
-            else ; Cell_width = G%dx_v(i,j) ; endif
+            if (m==1) then ; Cell_width = G%dy_Cu(i,j)
+            else ; Cell_width = G%dx_Cv(i,j) ; endif
             gam = 1.0 - L(K+1)/L(K)
             Rayleigh = CS%cdrag * (L(K)-L(K+1)) * (1.0-BBL_frac) * &
                 (12.0*CS%c_Smag*h_vel) /  (12.0*CS%c_Smag*h_vel + G%m_to_H * &
@@ -1633,20 +1633,20 @@ subroutine set_visc_init(Time, G, param_file, diag, visc, CS)
     allocate(visc%TKE_bbl(isd:ied,jsd:jed)) ; visc%TKE_bbl = 0.0
 
     CS%id_bbl_thick_u = register_diag_field('ocean_model', 'bbl_thick_u', &
-       G%axesu1, Time, 'BBL thickness at u points', 'meter')
-    CS%id_kv_bbl_u = register_diag_field('ocean_model', 'kv_bbl_u', G%axesu1, &
+       G%axesCu1, Time, 'BBL thickness at u points', 'meter')
+    CS%id_kv_bbl_u = register_diag_field('ocean_model', 'kv_bbl_u', G%axesCu1, &
        Time, 'BBL viscosity at u points', 'meter2 second-1')
     CS%id_bbl_thick_v = register_diag_field('ocean_model', 'bbl_thick_v', &
-       G%axesv1, Time, 'BBL thickness at v points', 'meter')
-    CS%id_kv_bbl_v = register_diag_field('ocean_model', 'kv_bbl_v', G%axesv1, &
+       G%axesCv1, Time, 'BBL thickness at v points', 'meter')
+    CS%id_kv_bbl_v = register_diag_field('ocean_model', 'kv_bbl_v', G%axesCv1, &
        Time, 'BBL viscosity at v points', 'meter2 second-1')
   endif
   if (CS%Channel_drag) then
     allocate(visc%Ray_u(Isdq:Iedq,jsd:jed,nz)) ; visc%Ray_u = 0.0
     allocate(visc%Ray_v(isd:ied,Jsdq:Jedq,nz)) ; visc%Ray_v = 0.0
-    CS%id_Ray_u = register_diag_field('ocean_model', 'Rayleigh_u', G%axesuL, &
+    CS%id_Ray_u = register_diag_field('ocean_model', 'Rayleigh_u', G%axesCuL, &
        Time, 'Rayleigh drag velocity at u points', 'meter second-1')
-    CS%id_Ray_v = register_diag_field('ocean_model', 'Rayleigh_v', G%axesvL, &
+    CS%id_Ray_v = register_diag_field('ocean_model', 'Rayleigh_v', G%axesCvL, &
        Time, 'Rayleigh drag velocity at v points', 'meter second-1')
   endif
 
@@ -1663,9 +1663,9 @@ subroutine set_visc_init(Time, G, param_file, diag, visc, CS)
     allocate(visc%nkml_visc_u(Isdq:Iedq,jsd:jed)) ; visc%nkml_visc_u = 0.0
     allocate(visc%nkml_visc_v(isd:ied,Jsdq:Jedq)) ; visc%nkml_visc_v = 0.0
     CS%id_nkml_visc_u = register_diag_field('ocean_model', 'nkml_visc_u', &
-       G%axesu1, Time, 'Number of layers in viscous mixed layer at u points', 'meter')
+       G%axesCu1, Time, 'Number of layers in viscous mixed layer at u points', 'meter')
     CS%id_nkml_visc_v = register_diag_field('ocean_model', 'nkml_visc_v', &
-       G%axesv1, Time, 'Number of layers in viscous mixed layer at v points', 'meter')
+       G%axesCv1, Time, 'Number of layers in viscous mixed layer at v points', 'meter')
   endif
 
   CS%Hbbl = CS%Hbbl * G%m_to_H

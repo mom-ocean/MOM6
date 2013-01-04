@@ -948,45 +948,45 @@ subroutine vert_remap_init(Time, G, param_file, diag, CS)
 
   call get_param(param_file, mod, "DEBUG", CS%debug, default=.false.)
    
-  CS%id_def_rat = register_diag_field('ocean_model', 'deficit_ratio', G%axesh1, &
+  CS%id_def_rat = register_diag_field('ocean_model', 'deficit_ratio', G%axesT1, &
       Time, 'Max face thickness deficit ratio', 'Nondim')
 
 #ifdef DEBUG_CODE
-  CS%id_def_rat_2 = register_diag_field('ocean_model', 'deficit_rat2', G%axesh1, &
+  CS%id_def_rat_2 = register_diag_field('ocean_model', 'deficit_rat2', G%axesT1, &
       Time, 'Corrected thickness deficit ratio', 'Nondim')
-  CS%id_def_rat_3 = register_diag_field('ocean_model', 'deficit_rat3', G%axesh1, &
+  CS%id_def_rat_3 = register_diag_field('ocean_model', 'deficit_rat3', G%axesT1, &
       Time, 'Filtered thickness deficit ratio', 'Nondim')
-  CS%id_e1 = register_diag_field('ocean_model', 'er_1', G%axeshi, &
+  CS%id_e1 = register_diag_field('ocean_model', 'er_1', G%axesTi, &
       Time, 'Intial interface depths before remapping', 'm')
-  CS%id_e2 = register_diag_field('ocean_model', 'er_2', G%axeshi, &
+  CS%id_e2 = register_diag_field('ocean_model', 'er_2', G%axesTi, &
       Time, 'Intial interface depths after remapping', 'm')
-  CS%id_e3 = register_diag_field('ocean_model', 'er_3', G%axeshi, &
+  CS%id_e3 = register_diag_field('ocean_model', 'er_3', G%axesTi, &
       Time, 'Intial interface depths filtered', 'm')
 
-  CS%id_def_rat_u = register_diag_field('ocean_model', 'defrat_u', G%axesu1, &
+  CS%id_def_rat_u = register_diag_field('ocean_model', 'defrat_u', G%axesCu1, &
       Time, 'U-point thickness deficit ratio', 'Nondim')
-  CS%id_def_rat_u_1b = register_diag_field('ocean_model', 'defrat_u_1b', G%axesu1, &
+  CS%id_def_rat_u_1b = register_diag_field('ocean_model', 'defrat_u_1b', G%axesCu1, &
       Time, 'U-point 2-layer thickness deficit ratio', 'Nondim')
-  CS%id_def_rat_u_2 = register_diag_field('ocean_model', 'defrat_u_2', G%axesu1, &
+  CS%id_def_rat_u_2 = register_diag_field('ocean_model', 'defrat_u_2', G%axesCu1, &
       Time, 'U-point corrected thickness deficit ratio', 'Nondim')
-  CS%id_def_rat_u_2b = register_diag_field('ocean_model', 'defrat_u_2b', G%axesu1, &
+  CS%id_def_rat_u_2b = register_diag_field('ocean_model', 'defrat_u_2b', G%axesCu1, &
       Time, 'U-point corrected 2-layer thickness deficit ratio', 'Nondim')
-  CS%id_def_rat_u_3 = register_diag_field('ocean_model', 'defrat_u_3', G%axesu1, &
+  CS%id_def_rat_u_3 = register_diag_field('ocean_model', 'defrat_u_3', G%axesCu1, &
       Time, 'U-point filtered thickness deficit ratio', 'Nondim')
-  CS%id_def_rat_u_3b = register_diag_field('ocean_model', 'defrat_u_3b', G%axesu1, &
+  CS%id_def_rat_u_3b = register_diag_field('ocean_model', 'defrat_u_3b', G%axesCu1, &
       Time, 'U-point filtered 2-layer thickness deficit ratio', 'Nondim')
 
-  CS%id_def_rat_v = register_diag_field('ocean_model', 'defrat_v', G%axesv1, &
+  CS%id_def_rat_v = register_diag_field('ocean_model', 'defrat_v', G%axesCv1, &
       Time, 'V-point thickness deficit ratio', 'Nondim')
-  CS%id_def_rat_v_1b = register_diag_field('ocean_model', 'defrat_v_1b', G%axesv1, &
+  CS%id_def_rat_v_1b = register_diag_field('ocean_model', 'defrat_v_1b', G%axesCv1, &
       Time, 'V-point 2-layer thickness deficit ratio', 'Nondim')
-  CS%id_def_rat_v_2 = register_diag_field('ocean_model', 'defrat_v_2', G%axesv1, &
+  CS%id_def_rat_v_2 = register_diag_field('ocean_model', 'defrat_v_2', G%axesCv1, &
       Time, 'V-point corrected thickness deficit ratio', 'Nondim')
-  CS%id_def_rat_v_2b = register_diag_field('ocean_model', 'defrat_v_2b', G%axesv1, &
+  CS%id_def_rat_v_2b = register_diag_field('ocean_model', 'defrat_v_2b', G%axesCv1, &
       Time, 'V-point corrected 2-layer thickness deficit ratio', 'Nondim')
-  CS%id_def_rat_v_3 = register_diag_field('ocean_model', 'defrat_v_3', G%axesv1, &
+  CS%id_def_rat_v_3 = register_diag_field('ocean_model', 'defrat_v_3', G%axesCv1, &
       Time, 'V-point filtered thickness deficit ratio', 'Nondim')
-  CS%id_def_rat_v_3b = register_diag_field('ocean_model', 'defrat_v_3b', G%axesv1, &
+  CS%id_def_rat_v_3b = register_diag_field('ocean_model', 'defrat_v_3b', G%axesCv1, &
       Time, 'V-point filtered 2-layer thickness deficit ratio', 'Nondim')
 #endif
  

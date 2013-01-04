@@ -193,16 +193,16 @@ type, public :: barotropic_CS ; private
                     ! areas of the layers, if rescale_D_bt is true.
                     ! Datu_res is set in btcalc.
     D_u_Cor, &      !   A simply averaged depth at u points, in m.
-    dy_u, &         !   A copy of G%dy_u with wide halos, in m.
-    Idxu            !   A copy of G%IDXu with wide halos, in m-1.
+    dy_Cu, &         !   A copy of G%dy_Cu with wide halos, in m.
+    IdxCu            !   A copy of G%IdxCu with wide halos, in m-1.
   real ALLOCABLE_, dimension(NIMEMW_,NJMEMBW_) :: &
     Datv_res, &     ! A nondimensional factor by which the meridional face
                     ! areas are to be rescaled to account for the effective
                     ! face areas of the layers, if rescale_D_bt is true.
                     ! Datv_res is set in btcalc.
     D_v_Cor, &      !   A simply averaged depth at v points, in m.
-    dx_v, &         !   A copy of G%dx_v with wide halos, in m.
-    Idyv            !   A copy of G%IDYv with wide halos, in m-1.
+    dx_Cv, &         !   A copy of G%dx_Cv with wide halos, in m.
+    IdyCv            !   A copy of G%IdyCv with wide halos, in m-1.
   real ALLOCABLE_, dimension(NIMEMBW_,NJMEMBW_) :: &
     q_D             ! f / D at PV points, in m-1 s-1.
 
@@ -1125,16 +1125,16 @@ subroutine btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
         dvel_cont = uhbt_to_ubt(dt*sum_u_dhdt(I,j), BTCL_u(I,j))
         ! dvel_cont = (uhbt_to_ubt(dt*sum_u_dhdt(I,j) + uhbt(I,j), &
         !                          BTCL_u(I,j)) - ubt_Cor(I,j))
-        if (abs(dvel_cont) > CS%maxCFL_BT_cont*G%DXu(I,j)) &
-          dvel_cont = SIGN(CS%maxCFL_BT_cont*G%DXu(I,j), dvel_cont)
+        if (abs(dvel_cont) > CS%maxCFL_BT_cont*G%dxCu(I,j)) &
+          dvel_cont = SIGN(CS%maxCFL_BT_cont*G%dxCu(I,j), dvel_cont)
         BT_force_u(I,j) = BT_force_u(I,j) + dvel_cont * Idt
       endif ; enddo ; enddo
       do J=js-1,je ; do i=is,ie ; if (G%vmask(i,J)>0.0) then
         dvel_cont = vhbt_to_vbt(dt*sum_v_dhdt(i,J), BTCL_v(i,J))
         ! dvel_cont = (vhbt_to_vbt(dt*sum_v_dhdt(i,J) + vhbt(i,J), &
         !                          BTCL_v(i,J)) - vbt_Cor(i,J))
-        if (abs(dvel_cont) > CS%maxCFL_BT_cont*G%DYv(i,J)) &
-          dvel_cont = SIGN(CS%maxCFL_BT_cont*G%DYv(i,J), dvel_cont)
+        if (abs(dvel_cont) > CS%maxCFL_BT_cont*G%dyCv(i,J)) &
+          dvel_cont = SIGN(CS%maxCFL_BT_cont*G%dyCv(i,J), dvel_cont)
         BT_force_v(i,J) = BT_force_v(i,J) + dvel_cont * Idt
       endif ; enddo ; enddo
     else
@@ -1301,16 +1301,16 @@ subroutine btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
 !#       ! dvel_cont = uhbt_to_ubt(dt*sum_u_dhdt(I,j), BTCL_u(I,j))
 !#       dvel_cont = (uhbt_to_ubt(dt*sum_u_dhdt(I,j) + uhbt(I,j), &
 !#                                BTCL_u(I,j)) - ubt_Cor(I,j))
-!#       if (abs(dvel_cont) > CS%maxCFL_BT_cont*G%DXu(I,j)) &
-!#         dvel_cont = SIGN(CS%maxCFL_BT_cont*G%DXu(I,j), dvel_cont)
+!#       if (abs(dvel_cont) > CS%maxCFL_BT_cont*G%dxCu(I,j)) &
+!#         dvel_cont = SIGN(CS%maxCFL_BT_cont*G%dxCu(I,j), dvel_cont)
 !#       BT_force_u(I,j) = BT_force_u(I,j) + dvel_cont * Idt
 !#     endif ; enddo ; enddo
 !#     do J=js-1,je ; do i=is,ie ; if (G%vmask(i,J)>0.0) then
 !#       ! dvel_cont = vhbt_to_vbt(dt*sum_v_dhdt(i,J), BTCL_v(i,J))
 !#       dvel_cont = (vhbt_to_vbt(dt*sum_v_dhdt(i,J) + vhbt(i,J), &
 !#                                BTCL_v(i,J)) - vbt_Cor(i,J))
-!#       if (abs(dvel_cont) > CS%maxCFL_BT_cont*G%DYv(i,J)) &
-!#         dvel_cont = SIGN(CS%maxCFL_BT_cont*G%DYv(i,J), dvel_cont)
+!#       if (abs(dvel_cont) > CS%maxCFL_BT_cont*G%dyCv(i,J)) &
+!#         dvel_cont = SIGN(CS%maxCFL_BT_cont*G%dyCv(i,J), dvel_cont)
 !#       BT_force_v(i,J) = BT_force_v(i,J) + dvel_cont * Idt
 !#     endif ; enddo ; enddo
 !#   else
@@ -1412,16 +1412,16 @@ subroutine btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
       ! gravity waves, but it is a conservative estimate since it ignores the
       ! stabilizing effect of the bottom drag.
       Idt_max2 = 0.5 * (dgeo_de * (1.0 + 2.0*bebt)) * (G%IareaT(i,j) * &
-            ((gtot_E(i,j) * (Datu(I,j)*G%IDXu(I,j)) + &
-              gtot_W(i,j) * (Datu(I-1,j)*G%IDXu(I-1,j))) + &
-             (gtot_N(i,j) * (Datv(i,J)*G%IDYv(i,J)) + &
-              gtot_S(i,j) * (Datv(i,J-1)*G%IDYv(i,J-1)))) + &
+            ((gtot_E(i,j) * (Datu(I,j)*G%IdxCu(I,j)) + &
+              gtot_W(i,j) * (Datu(I-1,j)*G%IdxCu(I-1,j))) + &
+             (gtot_N(i,j) * (Datv(i,J)*G%IdyCv(i,J)) + &
+              gtot_S(i,j) * (Datv(i,J-1)*G%IdyCv(i,J-1)))) + &
             ((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
              (G%CoriolisBu(I-1,J)**2 + G%CoriolisBu(I,J-1)**2)))
-      H_eff_dx2 = max(H_min_dyn * (G%IDXh(i,j)**2 + G%IDYh(i,j)**2), &
+      H_eff_dx2 = max(H_min_dyn * (G%IdxT(i,j)**2 + G%IdyT(i,j)**2), &
                       G%IareaT(i,j) * &
-                        ((Datu(I,j)*G%IDXu(I,j) + Datu(I-1,j)*G%IDXu(I-1,j)) + &
-                         (Datv(i,J)*G%IDYv(i,J) + Datv(i,J-1)*G%IDYv(i,J-1)) ) )
+                        ((Datu(I,j)*G%IdxCu(I,j) + Datu(I-1,j)*G%IdxCu(I-1,j)) + &
+                         (Datv(i,J)*G%IdyCv(i,J) + Datv(i,J-1)*G%IdyCv(i,J-1)) ) )
       dyn_coef_max = CS%const_dyn_psurf * max(0.0, 1.0 - dtbt**2 * Idt_max2) / &
                      (dtbt**2 * H_eff_dx2)
 
@@ -1723,9 +1723,9 @@ subroutine btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
                (bmer(I,j) * ubt(I,j) + dmer(I-1,j+1) * ubt(I-1,j+1))) - Cor_ref_v(i,J)
         gradP = ((eta_PF_BT(i,j)-eta_PF(i,j))*gtot_N(i,j) - &
                  (eta_PF_BT(i,j+1)-eta_PF(i,j+1))*gtot_S(i,j+1)) * &
-                dgeo_de * CS%IDYv(i,J)
+                dgeo_de * CS%IdyCv(i,J)
         if (CS%dynamic_psurf) &
-          gradP = gradP + (p_surf_dyn(i,j) - p_surf_dyn(i,j+1)) * CS%IDYv(i,J)
+          gradP = gradP + (p_surf_dyn(i,j) - p_surf_dyn(i,j+1)) * CS%IdyCv(i,J)
         v_accel_bt(i,J) = v_accel_bt(i,J) + wt_accel(n) * (Cor + gradP)
         if (find_PF)  PFv_bt_sum(i,J)  = PFv_bt_sum(i,J) + wt_accel2(n) * gradP
         if (find_Cor) Corv_bt_sum(i,J) = Corv_bt_sum(i,J) + wt_accel2(n) * Cor
@@ -1757,9 +1757,9 @@ subroutine btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
                (bzon(I,j) * vbt(i,J) + dzon(I,j) * vbt(i+1,J-1))) - Cor_ref_u(I,j)
         gradP = ((eta_PF_BT(i,j)-eta_PF(i,j))*gtot_E(i,j) - &
                  (eta_PF_BT(i+1,j)-eta_PF(i+1,j))*gtot_W(i+1,j)) * &
-                dgeo_de * CS%IDXu(I,j)
+                dgeo_de * CS%IdxCu(I,j)
         if (CS%dynamic_psurf) &
-          gradP = gradP + (p_surf_dyn(i,j) - p_surf_dyn(i+1,j)) * CS%IDXu(I,j)
+          gradP = gradP + (p_surf_dyn(i,j) - p_surf_dyn(i+1,j)) * CS%IdxCu(I,j)
         u_accel_bt(I,j) = u_accel_bt(I,j) + wt_accel(n) * (Cor + gradP)
         if (find_PF)  PFu_bt_sum(I,j)  = PFu_bt_sum(I,j) + wt_accel2(n) * gradP
         if (find_Cor) Coru_bt_sum(I,j) = Coru_bt_sum(I,j) + wt_accel2(n) * Cor
@@ -1793,9 +1793,9 @@ subroutine btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
                (bzon(I,j) * vbt(i,J) +  dzon(I,j) * vbt(i+1,J-1))) - Cor_ref_u(I,j)
         gradP = ((eta_PF_BT(i,j)-eta_PF(i,j))*gtot_E(i,j) - &
                  (eta_PF_BT(i+1,j)-eta_PF(i+1,j))*gtot_W(i+1,j)) * &
-                dgeo_de * CS%IDXu(I,j)
+                dgeo_de * CS%IdxCu(I,j)
         if (CS%dynamic_psurf) &
-          gradP = gradP + (p_surf_dyn(i,j) - p_surf_dyn(i+1,j)) * CS%IDXu(I,j)
+          gradP = gradP + (p_surf_dyn(i,j) - p_surf_dyn(i+1,j)) * CS%IdxCu(I,j)
         u_accel_bt(I,j) = u_accel_bt(I,j) + wt_accel(n) * (Cor + gradP)
         if (find_PF)  PFu_bt_sum(I,j)  = PFu_bt_sum(I,j) + wt_accel2(n) * gradP
         if (find_Cor) Coru_bt_sum(I,j) = Coru_bt_sum(I,j) + wt_accel2(n) * Cor
@@ -1827,9 +1827,9 @@ subroutine btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
                 (cmer(I,j+1) * ubt(I,j+1) + dmer(I-1,j+1) * ubt(I-1,j+1))) - Cor_ref_v(i,J)
         gradP = ((eta_PF_BT(i,j)-eta_PF(i,j))*gtot_N(i,j) - &
                  (eta_PF_BT(i,j+1)-eta_PF(i,j+1))*gtot_S(i,j+1)) * &
-                dgeo_de * CS%IDYv(i,J)
+                dgeo_de * CS%IdyCv(i,J)
         if (CS%dynamic_psurf) &
-          gradP = gradP + (p_surf_dyn(i,j) - p_surf_dyn(i,j+1)) * CS%IDYv(i,J)
+          gradP = gradP + (p_surf_dyn(i,j) - p_surf_dyn(i,j+1)) * CS%IdyCv(i,J)
         v_accel_bt(I,j) = v_accel_bt(I,j) + wt_accel(n) * (Cor + gradP)
         if (find_PF)  PFv_bt_sum(i,J)  = PFv_bt_sum(i,J) + wt_accel2(n) * gradP
         if (find_Cor) Corv_bt_sum(i,J) = Corv_bt_sum(i,J) + wt_accel2(n) * Cor
@@ -2001,12 +2001,12 @@ subroutine btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
     do j=js,je ; do I=is-1,ie
       accel_layer_u(I,j,k) = u_accel_bt(I,j) - &
            ((pbce(i+1,j,k) - gtot_W(i+1,j)) * e_anom(i+1,j) - &
-            (pbce(i,j,k) - gtot_E(i,j)) * e_anom(i,j)) * CS%IDXu(I,j)
+            (pbce(i,j,k) - gtot_E(i,j)) * e_anom(i,j)) * CS%IdxCu(I,j)
     enddo ; enddo
     do J=js-1,je ; do i=is,ie
       accel_layer_v(i,J,k) = v_accel_bt(i,J) - &
            ((pbce(i,j+1,k) - gtot_S(i,j+1))*e_anom(i,j+1) - &
-            (pbce(i,j,k) - gtot_N(i,j))*e_anom(i,j)) * CS%IDYv(i,J)
+            (pbce(i,j,k) - gtot_N(i,j))*e_anom(i,j)) * CS%IdyCv(i,J)
     enddo ; enddo
   enddo
 
@@ -2222,8 +2222,8 @@ subroutine set_dtbt(G, CS, eta, pbce, BT_cont, gtot_est, SSH_add)
     !   This is pretty accurate for gravity waves, but it is a conservative
     ! estimate since it ignores the stabilizing effect of the bottom drag.
     Idt_max2 = 0.5 * (1.0 + 2.0*CS%bebt) * (G%IareaT(i,j) * &
-      ((gtot_E(i,j)*Datu(I,j)*G%IDXu(I,j) + gtot_W(i,j)*Datu(I-1,j)*G%IDXu(I-1,j)) + &
-       (gtot_N(i,j)*Datv(i,J)*G%IDYv(i,J) + gtot_S(i,j)*Datv(i,J-1)*G%IDYv(i,J-1))) + &
+      ((gtot_E(i,j)*Datu(I,j)*G%IdxCu(I,j) + gtot_W(i,j)*Datu(I-1,j)*G%IdxCu(I-1,j)) + &
+       (gtot_N(i,j)*Datv(i,J)*G%IdyCv(i,J) + gtot_S(i,j)*Datv(i,J-1)*G%IdyCv(i,J-1))) + &
       ((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
        (G%CoriolisBu(I-1,J)**2 + G%CoriolisBu(I,J-1)**2)))
     if (Idt_max2 * min_max_dt2 > 1.0) min_max_dt2 = 1.0 / Idt_max2
@@ -2306,7 +2306,7 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
         ubt(I,j) = BT_OBC%ubt_outer(I,j)
         vel_trans = ubt(I,j)
       elseif (BT_OBC%OBC_kind_u(I,j) == OBC_FLATHER_E) then
-        cfl = dtbt * BT_OBC%Cg_u(I,j) * G%IDXu(I,j)            ! CFL
+        cfl = dtbt * BT_OBC%Cg_u(I,j) * G%IdxCu(I,j)            ! CFL
         u_inlet = cfl*ubt_old(I-1,j) + (1.0-cfl)*ubt_old(I,j)  ! Valid for cfl<1
       !  h_in = 2.0*cfl*eta(i,j) + (1.0-2.0*cfl)*eta(i+1,j)    ! external
         h_in = eta(i,j) + (0.5-cfl)*(eta(i,j)-eta(i-1,j))      ! internal
@@ -2318,7 +2318,7 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
 
         vel_trans = (1.0-bebt)*vel_prev + bebt*ubt(I,j)
       elseif (BT_OBC%OBC_kind_u(I,j) == OBC_FLATHER_W) then
-        cfl = dtbt * BT_OBC%Cg_u(I,j) * G%IDXu(I,j)            ! CFL
+        cfl = dtbt * BT_OBC%Cg_u(I,j) * G%IdxCu(I,j)            ! CFL
         u_inlet = cfl*ubt_old(I+1,j) + (1.0-cfl)*ubt_old(I,j)  ! Valid for cfl<1
       !  h_in = 2.0*cfl*eta(i+1,j) + (1.0-2.0*cfl)*eta(i,j)    ! external
         h_in = eta(i+1,j) + (0.5-cfl)*(eta(i+1,j)-eta(i+2,j))  ! internal
@@ -2364,7 +2364,7 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
         vbt(i,J) = BT_OBC%vbt_outer(i,J)
         vel_trans = vbt(i,J)
       elseif (BT_OBC%OBC_kind_v(i,J) == OBC_FLATHER_N) then
-        cfl = dtbt * BT_OBC%Cg_v(i,J) * G%IDYv(I,j)            ! CFL
+        cfl = dtbt * BT_OBC%Cg_v(i,J) * G%IdyCv(I,j)            ! CFL
         v_inlet = cfl*vbt_old(i,J-1) + (1.0-cfl)*vbt_old(i,J)  ! Valid for cfl<1
       !  h_in = 2.0*cfl*eta(i,j) + (1.0-2.0*cfl)*eta(i,j+1)    ! external
         h_in = eta(i,j) + (0.5-cfl)*(eta(i,j)-eta(i,j-1))      ! internal
@@ -2376,7 +2376,7 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
 
         vel_trans = (1.0-bebt)*vel_prev + bebt*vbt(i,J)
       elseif (BT_OBC%OBC_kind_v(i,J) == OBC_FLATHER_S) then
-        cfl = dtbt * BT_OBC%Cg_v(i,J) * G%IDYv(I,j)            ! CFL
+        cfl = dtbt * BT_OBC%Cg_v(i,J) * G%IdyCv(I,j)            ! CFL
         v_inlet = cfl*vbt_old(i,J+1) + (1.0-cfl)*vbt_old(i,J)  ! Valid for cfl <1
       !  h_in = 2.0*cfl*eta(i,j+1) + (1.0-2.0*cfl)*eta(i,j)    ! external
         h_in = eta(i,j+1) + (0.5-cfl)*(eta(i,j+1)-eta(i,j+2))  ! internal
@@ -2395,7 +2395,7 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
         endif
         vel_trans = vbt(i,J)
 !!!!!!!!!!!!!!!!!!! CLAMPED !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-!       cfl = dtbt * BT_OBC%Cg_v(i,J) * G%IDYv(i,J)           !
+!       cfl = dtbt * BT_OBC%Cg_v(i,J) * G%IdyCv(i,J)           !
 !       vbt(i,J) = (vbt(i-1,J) + CFL*vbt(i,J)) / (1.0 + CFL)  !
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
       elseif (BT_OBC%OBC_kind_v(i,J) == OBC_FLATHER_W) then
@@ -2406,7 +2406,7 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
         endif
         vel_trans = vbt(i,J)
 !!!!!!!!!!!!!!!!!! CLAMPED !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-!       cfl = dtbt * BT_OBC%Cg_v(i,J) * G%IDYv(i,J)           !
+!       cfl = dtbt * BT_OBC%Cg_v(i,J) * G%IdyCv(i,J)           !
 !       vbt(i,J) = (vbt(i-1,J) + CFL*vbt(i,J)) / (1.0 + CFL)  !
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
       endif
@@ -2461,7 +2461,7 @@ subroutine apply_eta_OBCs(OBC, eta, ubt, vbt, BT_OBC, G, MS, halo, dtbt)
       associated(BT_OBC%OBC_mask_u)) then
     do j=js,je ; do I=is-1,ie ; if (BT_OBC%OBC_mask_u(I,j)) then
       if (BT_OBC%OBC_kind_u(I,j) == OBC_FLATHER_E) then
-        cfl = dtbt * BT_OBC%Cg_u(I,j) * G%IDXu(I,j)            ! CFL
+        cfl = dtbt * BT_OBC%Cg_u(I,j) * G%IdxCu(I,j)            ! CFL
         u_inlet = cfl*ubt(I-1,j) + (1.0-cfl)*ubt(I,j)          ! Valid for cfl <1
 !        h_in = 2.0*cfl*eta(i,j) + (1.0-2.0*cfl)*eta(i+1,j)    ! external
         h_in = eta(i,j) + (0.5-cfl)*(eta(i,j)-eta(i-1,j))      ! internal
@@ -2470,7 +2470,7 @@ subroutine apply_eta_OBCs(OBC, eta, ubt, vbt, BT_OBC, G, MS, halo, dtbt)
         eta(i+1,j) = 2.0 * 0.5*((BT_OBC%eta_outer_u(I,j)+h_in) + &
             (H_u/BT_OBC%Cg_u(I,j))*(u_inlet-BT_OBC%ubt_outer(I,j))) - eta(i,j)
       elseif (BT_OBC%OBC_kind_u(I,j) == OBC_FLATHER_W) then
-        cfl = dtbt*BT_OBC%Cg_u(I,j)*G%IDXu(I,j)                ! CFL
+        cfl = dtbt*BT_OBC%Cg_u(I,j)*G%IdxCu(I,j)                ! CFL
         u_inlet = cfl*ubt(I+1,j) + (1.0-cfl)*ubt(I,j)          ! Valid for cfl <1
 !        h_in = 2.0*cfl*eta(i+1,j) + (1.0-2.0*cfl)*eta(i,j)    ! external
         h_in = eta(i+1,j) + (0.5-cfl)*(eta(i+1,j)-eta(i+2,j))  ! internal
@@ -2486,7 +2486,7 @@ subroutine apply_eta_OBCs(OBC, eta, ubt, vbt, BT_OBC, G, MS, halo, dtbt)
     associated(BT_OBC%OBC_mask_v)) then
     do J=js-1,je ; do i=is,ie ; if (BT_OBC%OBC_mask_v(i,J)) then
       if (BT_OBC%OBC_kind_v(i,J) == OBC_FLATHER_N) then
-        cfl = dtbt*BT_OBC%Cg_v(i,J)*G%IDYv(i,J)                ! CFL
+        cfl = dtbt*BT_OBC%Cg_v(i,J)*G%IdyCv(i,J)                ! CFL
         v_inlet = cfl*vbt(i,J-1) + (1.0-cfl)*vbt(i,J)          ! Valid for cfl <1
 !        h_in = 2.0*cfl*eta(i,j) + (1.0-2.0*cfl)*eta(i,j+1)    ! external
         h_in = eta(i,j) + (0.5-cfl)*(eta(i,j)-eta(i,j-1))      ! internal
@@ -2495,7 +2495,7 @@ subroutine apply_eta_OBCs(OBC, eta, ubt, vbt, BT_OBC, G, MS, halo, dtbt)
         eta(i,j+1) = 2.0 * 0.5*((BT_OBC%eta_outer_v(i,J)+h_in) + &
             (H_v/BT_OBC%Cg_v(i,J))*(v_inlet-BT_OBC%vbt_outer(i,J))) - eta(i,j)
       elseif (BT_OBC%OBC_kind_v(i,J) == OBC_FLATHER_S) then
-        cfl = dtbt*BT_OBC%Cg_v(i,J)*G%IDYv(i,J)                ! CFL
+        cfl = dtbt*BT_OBC%Cg_v(i,J)*G%IdyCv(i,J)                ! CFL
         v_inlet = cfl*vbt(i,J+1) + (1.0-cfl)*vbt(i,J)          ! Valid for cfl <1
 !        h_in = 2.0*cfl*eta(i,j+1) + (1.0-2.0*cfl)*eta(i,j)    ! external
         h_in = eta(i,j+1) + (0.5-cfl)*(eta(i,j+1)-eta(i,j+2))  ! internal
@@ -3339,28 +3339,28 @@ subroutine find_face_areas(Datu, Datv, G, CS, MS, rescale_faces, eta, halo, add_
       do j=js-hs,je+hs ; do I=is-1-hs,ie+hs
         H1 = CS%bathyT(i,j) + eta(i,j) ; H2 = CS%bathyT(i+1,j) + eta(i+1,j)
         Datu(I,j) = 0.0 ; if ((H1 > 0.0) .and. (H2 > 0.0)) &
-        Datu(I,j) = CS%dy_u(I,j) * (2.0 * H1 * H2) / (H1 + H2)
-!       Datu(I,j) = CS%dy_u(I,j) * 0.5 * (H1 + H2)
+        Datu(I,j) = CS%dy_Cu(I,j) * (2.0 * H1 * H2) / (H1 + H2)
+!       Datu(I,j) = CS%dy_Cu(I,j) * 0.5 * (H1 + H2)
       enddo; enddo
 !GOMP(parallel do default(shared) private(i, j, H1, H2))
       do J=js-1-hs,je+hs ; do i=is-hs,ie+hs
         H1 = CS%bathyT(i,j) + eta(i,j) ; H2 = CS%bathyT(i,j+1) + eta(i,j+1)
         Datv(i,J) = 0.0 ; if ((H1 > 0.0) .and. (H2 > 0.0)) &
-        Datv(i,J) = CS%dx_v(i,J) * (2.0 * H1 * H2) / (H1 + H2)
+        Datv(i,J) = CS%dx_Cv(i,J) * (2.0 * H1 * H2) / (H1 + H2)
 !       Datv(i,J) = CS%dy_v(i,J) * 0.5 * (H1 + H2)
       enddo; enddo
     else
 !GOMP(parallel do default(shared) private(i, j))
       do j=js-hs,je+hs ; do I=is-1-hs,ie+hs
         Datu(I,j) = 0.0 ; if ((eta(i,j) > 0.0) .and. (eta(i+1,j) > 0.0)) &
-        Datu(I,j) = CS%dy_u(I,j) * (2.0 * eta(i,j) * eta(i+1,j)) / &
+        Datu(I,j) = CS%dy_Cu(I,j) * (2.0 * eta(i,j) * eta(i+1,j)) / &
                                   (eta(i,j) + eta(i+1,j))
-        ! Datu(I,j) = CS%dy_u(I,j) * 0.5 * (eta(i,j) + eta(i+1,j))
+        ! Datu(I,j) = CS%dy_Cu(I,j) * 0.5 * (eta(i,j) + eta(i+1,j))
       enddo; enddo
 !GOMP(parallel do default(shared) private(i, j))
       do J=js-1-hs,je+hs ; do i=is-hs,ie+hs
         Datv(i,J) = 0.0 ; if ((eta(i,j) > 0.0) .and. (eta(i,j+1) > 0.0)) &
-        Datv(i,J) = CS%dx_v(i,J) * (2.0 * eta(i,j) * eta(i,j+1)) / &
+        Datv(i,J) = CS%dx_Cv(i,J) * (2.0 * eta(i,j) * eta(i,j+1)) / &
                                   (eta(i,j) + eta(i,j+1))
         ! Datv(i,J) = CS%dy_v(i,J) * 0.5 * (eta(i,j) + eta(i,j+1))
       enddo; enddo
@@ -3368,24 +3368,24 @@ subroutine find_face_areas(Datu, Datv, G, CS, MS, rescale_faces, eta, halo, add_
   elseif (present(add_max)) then
 !GOMP(parallel do default(shared) private(i, j))
     do j=js-hs,je+hs ; do I=is-1-hs,ie+hs
-      Datu(I,j) = CS%dy_u(I,j) * G%m_to_H * &
+      Datu(I,j) = CS%dy_Cu(I,j) * G%m_to_H * &
                   (max(CS%bathyT(i+1,j), CS%bathyT(i,j)) + add_max)
     enddo ; enddo
 !GOMP(parallel do default(shared) private(i, j))
     do J=js-1-hs,je+hs ; do i=is-hs,ie+hs
-      Datv(i,J) = CS%dx_v(i,J) * G%m_to_H * &
+      Datv(i,J) = CS%dx_Cv(i,J) * G%m_to_H * &
                   (max(CS%bathyT(i,j+1), CS%bathyT(i,j)) + add_max)
     enddo ; enddo
   else
 !GOMP(parallel do default(shared) private(i, j))
     do j=js-hs,je+hs ; do I=is-1-hs,ie+hs
-      Datu(I,j) = 2.0*CS%dy_u(I,j) * G%m_to_H * &
+      Datu(I,j) = 2.0*CS%dy_Cu(I,j) * G%m_to_H * &
                   (CS%bathyT(i+1,j) * CS%bathyT(i,j)) / &
                   (CS%bathyT(i+1,j) + CS%bathyT(i,j))
     enddo ; enddo
 !GOMP(parallel do default(shared) private(i, j))
     do J=js-1-hs,je+hs ; do i=is-hs,ie+hs
-      Datv(i,J) = 2.0*CS%dx_v(i,J) * G%m_to_H * &
+      Datv(i,J) = 2.0*CS%dx_Cv(i,J) * G%m_to_H * &
                   (CS%bathyT(i,j+1) * CS%bathyT(i,j)) / &
                   (CS%bathyT(i,j+1) + CS%bathyT(i,j))
     enddo ; enddo
@@ -3834,29 +3834,29 @@ CS%Nonlin_cont_update_period = 1
     CS%debug_BT_G%Jedq=CS%jedw
   endif
 
-  ! IareaT, Idxu, and Idyv need to be allocated with wide halos.
+  ! IareaT, IdxCu, and IdyCv need to be allocated with wide halos.
   ALLOC_(CS%IareaT(CS%isdw:CS%iedw,CS%jsdw:CS%jedw)) ; CS%IareaT(:,:) = 0.0
   ALLOC_(CS%bathyT(CS%isdw:CS%iedw,CS%jsdw:CS%jedw)) ; CS%bathyT(:,:) = G%Angstrom_z
-  ALLOC_(CS%Idxu(CS%isdw-1:CS%iedw,CS%jsdw:CS%jedw)) ; CS%Idxu(:,:) = 0.0
-  ALLOC_(CS%Idyv(CS%isdw:CS%iedw,CS%jsdw-1:CS%jedw)) ; CS%Idyv(:,:) = 0.0
-  ALLOC_(CS%dy_u(CS%isdw-1:CS%iedw,CS%jsdw:CS%jedw)) ; CS%dy_u(:,:) = 0.0
-  ALLOC_(CS%dx_v(CS%isdw:CS%iedw,CS%jsdw-1:CS%jedw)) ; CS%dx_v(:,:) = 0.0
+  ALLOC_(CS%IdxCu(CS%isdw-1:CS%iedw,CS%jsdw:CS%jedw)) ; CS%IdxCu(:,:) = 0.0
+  ALLOC_(CS%IdyCv(CS%isdw:CS%iedw,CS%jsdw-1:CS%jedw)) ; CS%IdyCv(:,:) = 0.0
+  ALLOC_(CS%dy_Cu(CS%isdw-1:CS%iedw,CS%jsdw:CS%jedw)) ; CS%dy_Cu(:,:) = 0.0
+  ALLOC_(CS%dx_Cv(CS%isdw:CS%iedw,CS%jsdw-1:CS%jedw)) ; CS%dx_Cv(:,:) = 0.0
   do j=G%jsd,G%jed ; do i=G%isd,G%ied
     CS%IareaT(i,j) = G%IareaT(i,j)
     CS%bathyT(i,j) = G%bathyT(i,j)
   enddo ; enddo
-  ! Note: G%IDXu & G%IDYv may be smaller than CS%Idxu & CS%Idyv, even without
+  ! Note: G%IdxCu & G%IdyCv may be smaller than CS%IdxCu & CS%IdyCv, even without
   !   wide halos.
   do j=G%jsd,G%jed ; do I=G%Isdq,G%Iedq
-    CS%Idxu(I,j) = G%IDXu(I,j) ; CS%dy_u(I,j) = G%dy_u(I,j)
+    CS%IdxCu(I,j) = G%IdxCu(I,j) ; CS%dy_Cu(I,j) = G%dy_Cu(I,j)
   enddo ; enddo
   do J=G%Jsdq,G%Jedq ; do i=G%isd,G%ied
-    CS%Idyv(I,j) = G%IDYv(I,j) ; CS%dx_v(i,J) = G%dx_v(i,J)
+    CS%IdyCv(I,j) = G%IdyCv(I,j) ; CS%dx_Cv(i,J) = G%dx_Cv(i,J)
   enddo ; enddo
   call pass_var(CS%IareaT, CS%BT_domain, To_All)
   call pass_var(CS%bathyT, CS%BT_domain, To_All)
-  call pass_vector(CS%Idxu, CS%Idyv, CS%BT_domain, To_All+Scalar_Pair)
-  call pass_vector(CS%dy_u, CS%dx_v, CS%BT_domain, To_All+Scalar_Pair)
+  call pass_vector(CS%IdxCu, CS%IdyCv, CS%BT_domain, To_All+Scalar_Pair)
+  call pass_vector(CS%dy_Cu, CS%dx_Cv, CS%BT_domain, To_All+Scalar_Pair)
 
   if (CS%linearized_BT_PV) then
     ALLOC_(CS%q_D(CS%isdw-1:CS%iedw,CS%jsdw-1:CS%jedw))
@@ -3901,90 +3901,90 @@ CS%Nonlin_cont_update_period = 1
     thickness_units = "kilogram meter-2" ; flux_units = "kilogram second-1"
   endif
 
-  CS%id_PFu_bt = register_diag_field('ocean_model', 'PFuBT', G%axesu1, Time, &
+  CS%id_PFu_bt = register_diag_field('ocean_model', 'PFuBT', G%axesCu1, Time, &
       'Zonal Anomalous Barotropic Pressure Force Force Acceleration', 'meter second-2')
-  CS%id_PFv_bt = register_diag_field('ocean_model', 'PFvBT', G%axesv1, Time, &
+  CS%id_PFv_bt = register_diag_field('ocean_model', 'PFvBT', G%axesCv1, Time, &
       'Meridional Anomalous Barotropic Pressure Force Acceleration', 'meter second-2')
-  CS%id_Coru_bt = register_diag_field('ocean_model', 'CoruBT', G%axesu1, Time, &
+  CS%id_Coru_bt = register_diag_field('ocean_model', 'CoruBT', G%axesCu1, Time, &
       'Zonal Barotropic Coriolis Acceleration', 'meter second-2')
-  CS%id_Corv_bt = register_diag_field('ocean_model', 'CorvBT', G%axesv1, Time, &
+  CS%id_Corv_bt = register_diag_field('ocean_model', 'CorvBT', G%axesCv1, Time, &
       'Meridional Barotropic Coriolis Acceleration', 'meter second-2')
-  CS%id_Nonlnu_bt = register_diag_field('ocean_model', 'NluBT', G%axesu1, Time, &
+  CS%id_Nonlnu_bt = register_diag_field('ocean_model', 'NluBT', G%axesCu1, Time, &
       'Zonal Barotropic Nonlinear Acceleration', 'meter second-2')
-  CS%id_Nonlnv_bt = register_diag_field('ocean_model', 'NlvBT', G%axesv1, Time, &
+  CS%id_Nonlnv_bt = register_diag_field('ocean_model', 'NlvBT', G%axesCv1, Time, &
       'Meridional Barotropic Nonlinear Acceleration', 'meter second-2')
-  CS%id_ubt_flux = register_diag_field('ocean_model', 'uhbt', G%axesu1, Time, &
+  CS%id_ubt_flux = register_diag_field('ocean_model', 'uhbt', G%axesCu1, Time, &
       'Zonal Barotropic Mass Flux', flux_units)
-  CS%id_vbt_flux = register_diag_field('ocean_model', 'vhbt', G%axesv1, Time, &
+  CS%id_vbt_flux = register_diag_field('ocean_model', 'vhbt', G%axesCv1, Time, &
       'Meridional Barotropic Mass Flux', flux_units)
-  CS%id_uaccel = register_diag_field('ocean_model', 'u_accel_bt', G%axesu1, Time, &
+  CS%id_uaccel = register_diag_field('ocean_model', 'u_accel_bt', G%axesCu1, Time, &
       'Barotropic zonal acceleration', 'meter second-2')
-  CS%id_vaccel = register_diag_field('ocean_model', 'v_accel_bt', G%axesv1, Time, &
+  CS%id_vaccel = register_diag_field('ocean_model', 'v_accel_bt', G%axesCv1, Time, &
       'Barotropic meridional acceleration', 'meter second-2')
-  CS%id_ubtforce = register_diag_field('ocean_model', 'ubtforce', G%axesu1, Time, &
+  CS%id_ubtforce = register_diag_field('ocean_model', 'ubtforce', G%axesCu1, Time, &
       'Barotropic zonal acceleration from baroclinic terms', 'meter second-2')
-  CS%id_vbtforce = register_diag_field('ocean_model', 'vbtforce', G%axesv1, Time, &
+  CS%id_vbtforce = register_diag_field('ocean_model', 'vbtforce', G%axesCv1, Time, &
       'Barotropic meridional acceleration from baroclinic terms', 'meter second-2')
 
-  CS%id_eta_bt = register_diag_field('ocean_model', 'eta_bt', G%axesh1, Time, &
+  CS%id_eta_bt = register_diag_field('ocean_model', 'eta_bt', G%axesT1, Time, &
       'Barotropic end SSH', thickness_units)
-  CS%id_ubt = register_diag_field('ocean_model', 'ubt', G%axesu1, Time, &
+  CS%id_ubt = register_diag_field('ocean_model', 'ubt', G%axesCu1, Time, &
       'Barotropic end zonal velocity', 'meter second-1')
-  CS%id_vbt = register_diag_field('ocean_model', 'vbt', G%axesv1, Time, &
+  CS%id_vbt = register_diag_field('ocean_model', 'vbt', G%axesCv1, Time, &
       'Barotropic end meridional velocity', 'meter second-1')
-  CS%id_eta_st = register_diag_field('ocean_model', 'eta_st', G%axesh1, Time, &
+  CS%id_eta_st = register_diag_field('ocean_model', 'eta_st', G%axesT1, Time, &
       'Barotropic start SSH', thickness_units)
-  CS%id_ubt_st = register_diag_field('ocean_model', 'ubt_st', G%axesu1, Time, &
+  CS%id_ubt_st = register_diag_field('ocean_model', 'ubt_st', G%axesCu1, Time, &
       'Barotropic start zonal velocity', 'meter second-1')
-  CS%id_vbt_st = register_diag_field('ocean_model', 'vbt_st', G%axesv1, Time, &
+  CS%id_vbt_st = register_diag_field('ocean_model', 'vbt_st', G%axesCv1, Time, &
       'Barotropic start meridional velocity', 'meter second-1')
-  CS%id_ubtav = register_diag_field('ocean_model', 'ubtav', G%axesu1, Time, &
+  CS%id_ubtav = register_diag_field('ocean_model', 'ubtav', G%axesCu1, Time, &
       'Barotropic time-average zonal velocity', 'meter second-1')
-  CS%id_vbtav = register_diag_field('ocean_model', 'vbtav', G%axesv1, Time, &
+  CS%id_vbtav = register_diag_field('ocean_model', 'vbtav', G%axesCv1, Time, &
       'Barotropic time-average meridional velocity', 'meter second-1')
-  CS%id_eta_cor = register_diag_field('ocean_model', 'eta_cor', G%axesh1, Time, &
+  CS%id_eta_cor = register_diag_field('ocean_model', 'eta_cor', G%axesT1, Time, &
       'Corrective mass flux', 'meter second-1')
-  CS%id_visc_rem_u = register_diag_field('ocean_model', 'visc_rem_u', G%axesuL, Time, &
+  CS%id_visc_rem_u = register_diag_field('ocean_model', 'visc_rem_u', G%axesCuL, Time, &
       'Viscous remnant at u', 'Nondim')
-  CS%id_visc_rem_v = register_diag_field('ocean_model', 'visc_rem_v', G%axesvL, Time, &
+  CS%id_visc_rem_v = register_diag_field('ocean_model', 'visc_rem_v', G%axesCvL, Time, &
       'Viscous remnant at v', 'Nondim')
-  CS%id_gtotn = register_diag_field('ocean_model', 'gtot_n', G%axesh1, Time, &
+  CS%id_gtotn = register_diag_field('ocean_model', 'gtot_n', G%axesT1, Time, &
       'gtot to North', 'm s-2')
-  CS%id_gtots = register_diag_field('ocean_model', 'gtot_s', G%axesh1, Time, &
+  CS%id_gtots = register_diag_field('ocean_model', 'gtot_s', G%axesT1, Time, &
       'gtot to South', 'm s-2')
-  CS%id_gtote = register_diag_field('ocean_model', 'gtot_e', G%axesh1, Time, &
+  CS%id_gtote = register_diag_field('ocean_model', 'gtot_e', G%axesT1, Time, &
       'gtot to East', 'm s-2')
-  CS%id_gtotw = register_diag_field('ocean_model', 'gtot_w', G%axesh1, Time, &
+  CS%id_gtotw = register_diag_field('ocean_model', 'gtot_w', G%axesT1, Time, &
       'gtot to West', 'm s-2')
-  CS%id_eta_hifreq = register_diag_field('ocean_model', 'eta_hifreq', G%axesh1, Time, &
+  CS%id_eta_hifreq = register_diag_field('ocean_model', 'eta_hifreq', G%axesT1, Time, &
       'High Frequency Barotropic SSH', thickness_units)
-  CS%id_ubt_hifreq = register_diag_field('ocean_model', 'ubt_hifreq', G%axesu1, Time, &
+  CS%id_ubt_hifreq = register_diag_field('ocean_model', 'ubt_hifreq', G%axesCu1, Time, &
       'High Frequency Barotropic zonal velocity', 'meter second-1')
-  CS%id_vbt_hifreq = register_diag_field('ocean_model', 'vbt_hifreq', G%axesv1, Time, &
+  CS%id_vbt_hifreq = register_diag_field('ocean_model', 'vbt_hifreq', G%axesCv1, Time, &
       'High Frequency Barotropic meridional velocity', 'meter second-1')
-  CS%id_eta_pred_hifreq = register_diag_field('ocean_model', 'eta_pred_hifreq', G%axesh1, Time, &
+  CS%id_eta_pred_hifreq = register_diag_field('ocean_model', 'eta_pred_hifreq', G%axesT1, Time, &
       'High Frequency Predictor Barotropic SSH', thickness_units)
-  CS%id_uhbt_hifreq = register_diag_field('ocean_model', 'uhbt_hifreq', G%axesu1, Time, &
+  CS%id_uhbt_hifreq = register_diag_field('ocean_model', 'uhbt_hifreq', G%axesCu1, Time, &
       'High Frequency Barotropic zonal transport', 'meter3 second-1')
-  CS%id_vhbt_hifreq = register_diag_field('ocean_model', 'vhbt_hifreq', G%axesv1, Time, &
+  CS%id_vhbt_hifreq = register_diag_field('ocean_model', 'vhbt_hifreq', G%axesCv1, Time, &
       'High Frequency Barotropic meridional transport', 'meter3 second-1')
   if (CS%rescale_D_bt) then
-    CS%id_Datu_res = register_diag_field('ocean_model', 'Datu_res', G%axesu1, Time, &
+    CS%id_Datu_res = register_diag_field('ocean_model', 'Datu_res', G%axesCu1, Time, &
       'Rescaling for zonal face area in barotropic continuity', 'Nondimensional')
-    CS%id_Datv_res = register_diag_field('ocean_model', 'Datv_res', G%axesv1, Time, &
+    CS%id_Datv_res = register_diag_field('ocean_model', 'Datv_res', G%axesCv1, Time, &
       'Rescaling for meridional face area in barotropic continuity', 'Nondimensional')
   endif
-  CS%id_frhatu = register_diag_field('ocean_model', 'frhatu', G%axesuL, Time, &
+  CS%id_frhatu = register_diag_field('ocean_model', 'frhatu', G%axesCuL, Time, &
       'Fractional thickness of layers in u-columns', 'Nondim')
-  CS%id_frhatv = register_diag_field('ocean_model', 'frhatv', G%axesvL, Time, &
+  CS%id_frhatv = register_diag_field('ocean_model', 'frhatv', G%axesCvL, Time, &
       'Fractional thickness of layers in v-columns', 'Nondim')
-  CS%id_frhatu1 = register_diag_field('ocean_model', 'frhatu1', G%axesuL, Time, &
+  CS%id_frhatu1 = register_diag_field('ocean_model', 'frhatu1', G%axesCuL, Time, &
       'Predictor Fractional thickness of layers in u-columns', 'Nondim')
-  CS%id_frhatv1 = register_diag_field('ocean_model', 'frhatv1', G%axesvL, Time, &
+  CS%id_frhatv1 = register_diag_field('ocean_model', 'frhatv1', G%axesCvL, Time, &
       'Predictor Fractional thickness of layers in v-columns', 'Nondim')
-  CS%id_uhbtav = register_diag_field('ocean_model', 'uhbtav', G%axesu1, Time, &
+  CS%id_uhbtav = register_diag_field('ocean_model', 'uhbtav', G%axesCu1, Time, &
       'Barotropic zonal transport averaged over a baroclinic step', 'meter3 second-1')
-  CS%id_vhbtav = register_diag_field('ocean_model', 'vhbtav', G%axesv1, Time, &
+  CS%id_vhbtav = register_diag_field('ocean_model', 'vhbtav', G%axesCv1, Time, &
       'Barotropic meridional transport averaged over a baroclinic step', 'meter3 second-1')
 
   if (CS%id_PFu_bt > 0)    call safe_alloc_ptr(diag%PFu_bt, Isdq,Iedq,jsd,jed)

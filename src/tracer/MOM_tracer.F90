@@ -985,34 +985,34 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, tv)
       endif
     enddo ; enddo
     do j=js,je ; do I=is-1,ie
-      khdt_x(I,j) = dt*(Kh_u(I,j)*(G%dy_u(I,j)*G%IDXu(I,j)))
+      khdt_x(I,j) = dt*(Kh_u(I,j)*(G%dy_Cu(I,j)*G%IdxCu(I,j)))
     enddo ; enddo
     do J=js-1,je ; do i=is,ie
-      khdt_y(i,J) = dt*(Kh_v(i,J)*(G%dx_v(i,J)*G%IDYv(i,J)))
+      khdt_y(i,J) = dt*(Kh_v(i,J)*(G%dx_Cv(i,J)*G%IdyCv(i,J)))
     enddo ; enddo
   elseif (Resoln_scaled) then
     do j=js,je ; do I=is-1,ie
       Res_fn = 0.5 * (VarMix%Res_fn_h(i,j) + VarMix%Res_fn_h(i+1,j))
       Kh_u(I,j) = max(CS%KhTr * Res_fn, CS%KhTr_min)
-      khdt_x(I,j) = dt*(CS%KhTr*(G%dy_u(I,j)*G%IDXu(I,j))) * Res_fn
+      khdt_x(I,j) = dt*(CS%KhTr*(G%dy_Cu(I,j)*G%IdxCu(I,j))) * Res_fn
     enddo ; enddo
     do J=js-1,je ;  do i=is,ie
       Res_fn = 0.5*(VarMix%Res_fn_h(i,j) + VarMix%Res_fn_h(i,j+1))
       Kh_v(i,J) = max(CS%KhTr * Res_fn, CS%KhTr_min)
-      khdt_y(i,J) = dt*(CS%KhTr*(G%dx_v(i,J)*G%IDYv(i,J))) * Res_fn
+      khdt_y(i,J) = dt*(CS%KhTr*(G%dx_Cv(i,J)*G%IdyCv(i,J))) * Res_fn
     enddo ; enddo
   else
     if (CS%id_KhTr_u > 0) then ; do j=js,je ; do I=is-1,ie
       Kh_u(I,j) = CS%KhTr
-      khdt_x(I,j) = dt*(CS%KhTr*(G%dy_u(I,j)*G%IDXu(I,j)))
+      khdt_x(I,j) = dt*(CS%KhTr*(G%dy_Cu(I,j)*G%IdxCu(I,j)))
     enddo ; enddo ; else ; do j=js,je ; do I=is-1,ie
-      khdt_x(I,j) = dt*(CS%KhTr*(G%dy_u(I,j)*G%IDXu(I,j)))
+      khdt_x(I,j) = dt*(CS%KhTr*(G%dy_Cu(I,j)*G%IdxCu(I,j)))
     enddo ; enddo ; endif
     if (CS%id_KhTr_v > 0) then ; do J=js-1,je ;  do i=is,ie
       Kh_v(i,J) = CS%KhTr
-      khdt_y(i,J) = dt*(CS%KhTr*(G%dx_v(i,J)*G%IDYv(i,J)))
+      khdt_y(i,J) = dt*(CS%KhTr*(G%dx_Cv(i,J)*G%IdyCv(i,J)))
     enddo ; enddo ; else ; do J=js-1,je ;  do i=is,ie
-      khdt_y(i,J) = dt*(CS%KhTr*(G%dx_v(i,J)*G%IDYv(i,J)))
+      khdt_y(i,J) = dt*(CS%KhTr*(G%dx_Cv(i,J)*G%IdyCv(i,J)))
     enddo ; enddo ; endif
   endif
 
@@ -2238,9 +2238,9 @@ subroutine advect_tracer_diag_init(Time, G, diag, CS)
   if (.not.associated(CS)) return
 
   CS%diag => diag
-  CS%id_KhTr_u = register_diag_field('ocean_model', 'KhTr_u', G%axesu1, Time, &
+  CS%id_KhTr_u = register_diag_field('ocean_model', 'KhTr_u', G%axesCu1, Time, &
      'Epipycnal tracer diffusivity at zonal faces of tracer cell', 'meter2 second-1')
-  CS%id_KhTr_v = register_diag_field('ocean_model', 'KhTr_v', G%axesv1, Time, &
+  CS%id_KhTr_v = register_diag_field('ocean_model', 'KhTr_v', G%axesCv1, Time, &
      'Epipycnal tracer diffusivity at meridional faces of tracer cell', 'meter2 second-1')
 
 end subroutine advect_tracer_diag_init

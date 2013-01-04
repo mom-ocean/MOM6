@@ -225,14 +225,14 @@ subroutine write_u_accel(I, j, um, hin, dt, G, CS, maxvel, minvel, str, a, hv)
 
     write(file,'(/,"CFL u: ",$)')
     do k=ks,ke ; if (do_k(k)) then
-      CFL = abs(um(I,j,k)) * dt * G%dy_u(I,j)
+      CFL = abs(um(I,j,k)) * dt * G%dy_Cu(I,j)
       if (um(I,j,k) < 0.0) then ; CFL = CFL * G%IareaT(i+1,j)
       else ; CFL = CFL * G%IareaT(i,j) ; endif
       write(file,'(ES10.3," ",$)') CFL
     endif ; enddo
     write(file,'(/,"CFL0 u:",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                    abs(um(I,j,k)) * dt * G%IDXu(I,j) ; enddo
+                                    abs(um(I,j,k)) * dt * G%IdxCu(I,j) ; enddo
 
     write(file,'(/,"du:    ",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
@@ -384,26 +384,26 @@ subroutine write_u_accel(I, j, um, hin, dt, G, CS, maxvel, minvel, str, a, hv)
 
     write(file,'(/,"vh--:  ",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                    (CS%vh(i,J-1,k)*G%IDXv(i,J-1)); enddo
+                                    (CS%vh(i,J-1,k)*G%IdxCv(i,J-1)); enddo
     if (ASSOCIATED(CS%diag%vh_max)) then
       write(file,'(/," vh^--: ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                      (CS%diag%vh_max(i,J-1,k)*G%IDXv(i,J-1)); enddo
+                                      (CS%diag%vh_max(i,J-1,k)*G%IdxCv(i,J-1)); enddo
     endif
     if (ASSOCIATED(CS%diag%vh_min)) then
       write(file,'(/," vh_--: ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                      (CS%diag%vh_min(i,J-1,k)*G%IDXv(i,J-1)); enddo
+                                      (CS%diag%vh_min(i,J-1,k)*G%IdxCv(i,J-1)); enddo
     endif
     if (ASSOCIATED(CS%diag%vh_lay)) then
       write(file,'(/," vhL--: ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                      (CS%diag%vh_lay(i,J-1,k)*G%IDXv(i,J-1)); enddo
+                                      (CS%diag%vh_lay(i,J-1,k)*G%IdxCv(i,J-1)); enddo
     endif
     if (ASSOCIATED(CS%diag%vh_cent)) then
       write(file,'(/," vhC--: ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                      (CS%diag%vh_cent(i,J-1,k)*G%IDXv(i,J-1)); enddo
+                                      (CS%diag%vh_cent(i,J-1,k)*G%IdxCv(i,J-1)); enddo
     endif
     write(file,'(/," vhCp--:",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
@@ -411,26 +411,26 @@ subroutine write_u_accel(I, j, um, hin, dt, G, CS, maxvel, minvel, str, a, hv)
 
     write(file,'(/,"vh-+:  ",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                    (CS%vh(i,J,k)*G%IDXv(i,J)); enddo
+                                    (CS%vh(i,J,k)*G%IdxCv(i,J)); enddo
     if (ASSOCIATED(CS%diag%vh_max)) then
       write(file,'(/," vh^-+: ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                      (CS%diag%vh_max(i,J,k)*G%IDXv(i,J)); enddo
+                                      (CS%diag%vh_max(i,J,k)*G%IdxCv(i,J)); enddo
     endif
     if (ASSOCIATED(CS%diag%vh_min)) then
       write(file,'(/," vh_-+: ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                      (CS%diag%vh_min(i,J,k)*G%IDXv(i,J)); enddo
+                                      (CS%diag%vh_min(i,J,k)*G%IdxCv(i,J)); enddo
     endif
     if (ASSOCIATED(CS%diag%vh_lay)) then
       write(file,'(/," vhL-+: ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                      (CS%diag%vh_lay(i,J,k)*G%IDXv(i,J)); enddo
+                                      (CS%diag%vh_lay(i,J,k)*G%IdxCv(i,J)); enddo
     endif
     if (ASSOCIATED(CS%diag%vh_cent)) then
       write(file,'(/," vhC-+: ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                      (CS%diag%vh_cent(i,J,k)*G%IDXv(i,J)); enddo
+                                      (CS%diag%vh_cent(i,J,k)*G%IdxCv(i,J)); enddo
     endif
     write(file,'(/," vhCp-+:",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
@@ -438,26 +438,26 @@ subroutine write_u_accel(I, j, um, hin, dt, G, CS, maxvel, minvel, str, a, hv)
 
     write(file,'(/,"vh+-:  ",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                      (CS%vh(i+1,J-1,k)*G%IDXv(i+1,J-1)); enddo
+                                      (CS%vh(i+1,J-1,k)*G%IdxCv(i+1,J-1)); enddo
     if (ASSOCIATED(CS%diag%vh_max)) then
       write(file,'(/," vh^+-: ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                          (CS%diag%vh_max(i+1,J-1,k)*G%IDXv(i+1,J-1)); enddo
+                          (CS%diag%vh_max(i+1,J-1,k)*G%IdxCv(i+1,J-1)); enddo
     endif
     if (ASSOCIATED(CS%diag%vh_min)) then
       write(file,'(/," vh_+-: ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                          (CS%diag%vh_min(i+1,J-1,k)*G%IDXv(i+1,J-1)); enddo
+                          (CS%diag%vh_min(i+1,J-1,k)*G%IdxCv(i+1,J-1)); enddo
     endif
     if (ASSOCIATED(CS%diag%vh_lay)) then
       write(file,'(/," vhL+-: ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                          (CS%diag%vh_lay(i+1,J-1,k)*G%IDXv(i+1,J-1)); enddo
+                          (CS%diag%vh_lay(i+1,J-1,k)*G%IdxCv(i+1,J-1)); enddo
     endif
     if (ASSOCIATED(CS%diag%vh_cent)) then
       write(file,'(/," vhC+-: ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                          (CS%diag%vh_cent(i+1,J-1,k)*G%IDXv(i+1,J-1)); enddo
+                          (CS%diag%vh_cent(i+1,J-1,k)*G%IdxCv(i+1,J-1)); enddo
     endif
     write(file,'(/," vhCp+-:",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
@@ -465,26 +465,26 @@ subroutine write_u_accel(I, j, um, hin, dt, G, CS, maxvel, minvel, str, a, hv)
 
     write(file,'(/,"vh++:  ",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                          (CS%vh(i+1,J,k)*G%IDXv(i+1,J)); enddo
+                          (CS%vh(i+1,J,k)*G%IdxCv(i+1,J)); enddo
     if (ASSOCIATED(CS%diag%vh_max)) then
       write(file,'(/," vh^++: ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                          (CS%diag%vh_max(i+1,J,k)*G%IDXv(i+1,J)); enddo
+                          (CS%diag%vh_max(i+1,J,k)*G%IdxCv(i+1,J)); enddo
     endif
     if (ASSOCIATED(CS%diag%vh_min)) then
       write(file,'(/," vh_++: ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                          (CS%diag%vh_min(i+1,J,k)*G%IDXv(i+1,J)); enddo
+                          (CS%diag%vh_min(i+1,J,k)*G%IdxCv(i+1,J)); enddo
     endif
     if (ASSOCIATED(CS%diag%vh_lay)) then
       write(file,'(/," vhL++: ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                          (CS%diag%vh_lay(i+1,J,k)*G%IDXv(i+1,J)); enddo
+                          (CS%diag%vh_lay(i+1,J,k)*G%IdxCv(i+1,J)); enddo
     endif
     if (ASSOCIATED(CS%diag%vh_cent)) then
       write(file,'(/," vhC++: ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                          (CS%diag%vh_cent(i+1,J,k)*G%IDXv(i+1,J)); enddo
+                          (CS%diag%vh_cent(i+1,J,k)*G%IdxCv(i+1,J)); enddo
     endif
     write(file,'(/," vhCp++:",$)')
          do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
@@ -496,13 +496,13 @@ subroutine write_u_accel(I, j, um, hin, dt, G, CS, maxvel, minvel, str, a, hv)
       f_eff = G%CoriolisBu(I,J-1)
       if (abs(f_eff) < 1e-10) f_eff = 1e-10
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') 0.5*(CS%diag%q(I,J-1,k) * &
-        (CS%vh(i,J-1,k) + CS%vh(i+1,J-1,k)) * G%IDXu(I,j) / f_eff); enddo
+        (CS%vh(i,J-1,k) + CS%vh(i+1,J-1,k)) * G%IdxCu(I,j) / f_eff); enddo
 
       write(file,'(/,"v+eff: ",$)')
       f_eff = G%CoriolisBu(I,J)
       if (abs(f_eff) < 1e-10) f_eff = 1e-10
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') 0.5*(CS%diag%q(I,J,k) * &
-        (CS%vh(i+1,J,k) + CS%vh(i,J,k)) * G%IDXu(I,j) / f_eff); enddo
+        (CS%vh(i+1,J,k) + CS%vh(i,J,k)) * G%IdxCu(I,j) / f_eff); enddo
     endif
 
     write(file,'(/,"D:     ",2(ES10.3))') G%bathyT(i,j),G%bathyT(i+1,j)
@@ -705,14 +705,14 @@ subroutine write_v_accel(i, J, vm, hin, dt, G, CS, maxvel, minvel, str, a, hv)
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (CS%v_av(i,J,k)); enddo
     write(file,'(/,"CFL v: ",$)')
     do k=ks,ke ; if (do_k(k)) then
-      CFL = abs(vm(i,J,k)) * dt * G%dx_v(i,J)
+      CFL = abs(vm(i,J,k)) * dt * G%dx_Cv(i,J)
       if (vm(i,J,k) < 0.0) then ; CFL = CFL * G%IareaT(i,j+1)
       else ; CFL = CFL * G%IareaT(i,j) ; endif
       write(file,'(ES10.3," ",$)') CFL
     endif ; enddo
     write(file,'(/,"CFL0 v:",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                    abs(vm(i,J,k)) * dt * G%IDYv(i,J) ; enddo
+                                    abs(vm(i,J,k)) * dt * G%IdyCv(i,J) ; enddo
 
     write(file,'(/,"dv:    ",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
@@ -870,26 +870,26 @@ subroutine write_v_accel(i, J, vm, hin, dt, G, CS, maxvel, minvel, str, a, hv)
 
     write(file,'(/,"uh--:  ",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                    (CS%uh(I-1,j,k)*G%IDYu(I-1,j)); enddo
+                                    (CS%uh(I-1,j,k)*G%IdyCu(I-1,j)); enddo
     if (ASSOCIATED(CS%diag%uh_max)) then
       write(file,'(/," uh^--: ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                    (CS%diag%uh_max(I-1,j,k)*G%IDYu(I-1,j)); enddo
+                                    (CS%diag%uh_max(I-1,j,k)*G%IdyCu(I-1,j)); enddo
     endif
     if (ASSOCIATED(CS%diag%uh_min)) then
       write(file,'(/," uh_--: ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                    (CS%diag%uh_min(I-1,j,k)*G%IDYu(I-1,j)); enddo
+                                    (CS%diag%uh_min(I-1,j,k)*G%IdyCu(I-1,j)); enddo
     endif
     if (ASSOCIATED(CS%diag%uh_lay)) then
       write(file,'(/," uhL--: ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                    (CS%diag%uh_lay(I-1,j,k)*G%IDYu(I-1,j)); enddo
+                                    (CS%diag%uh_lay(I-1,j,k)*G%IdyCu(I-1,j)); enddo
     endif
     if (ASSOCIATED(CS%diag%uh_cent)) then
       write(file,'(/," uhC--: ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                   (CS%diag%uh_cent(I-1,j,k)*G%IDYu(I-1,j)); enddo
+                                   (CS%diag%uh_cent(I-1,j,k)*G%IdyCu(I-1,j)); enddo
     endif
     write(file,'(/," uhCp--:",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
@@ -897,26 +897,26 @@ subroutine write_v_accel(i, J, vm, hin, dt, G, CS, maxvel, minvel, str, a, hv)
 
     write(file,'(/,"uh-+:  ",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                    (CS%uh(I-1,j+1,k)*G%IDYu(I-1,j+1)); enddo
+                                    (CS%uh(I-1,j+1,k)*G%IdyCu(I-1,j+1)); enddo
     if (ASSOCIATED(CS%diag%uh_max)) then
       write(file,'(/," uh^-+: ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                (CS%diag%uh_max(I-1,j+1,k)*G%IDYu(I-1,j+1)); enddo
+                                (CS%diag%uh_max(I-1,j+1,k)*G%IdyCu(I-1,j+1)); enddo
     endif
     if (ASSOCIATED(CS%diag%uh_min)) then
       write(file,'(/," uh_-+: ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                (CS%diag%uh_min(I-1,j+1,k)*G%IDYu(I-1,j+1)); enddo
+                                (CS%diag%uh_min(I-1,j+1,k)*G%IdyCu(I-1,j+1)); enddo
     endif
     if (ASSOCIATED(CS%diag%uh_lay)) then
       write(file,'(/," uhL-+: ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                (CS%diag%uh_lay(I-1,j+1,k)*G%IDYu(I-1,j+1)); enddo
+                                (CS%diag%uh_lay(I-1,j+1,k)*G%IdyCu(I-1,j+1)); enddo
     endif
     if (ASSOCIATED(CS%diag%uh_cent)) then
       write(file,'(/," uhC-+: ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                              (CS%diag%uh_cent(I-1,j+1,k)*G%IDYu(I-1,j+1)); enddo
+                              (CS%diag%uh_cent(I-1,j+1,k)*G%IdyCu(I-1,j+1)); enddo
     endif
     write(file,'(/," uhCp-+:",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
@@ -924,26 +924,26 @@ subroutine write_v_accel(i, J, vm, hin, dt, G, CS, maxvel, minvel, str, a, hv)
 
     write(file,'(/,"uh+-:  ",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                    (CS%uh(I,j,k)*G%IDYu(I,j)); enddo
+                                    (CS%uh(I,j,k)*G%IdyCu(I,j)); enddo
     if (ASSOCIATED(CS%diag%uh_max)) then
       write(file,'(/," uh^+-: ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                    (CS%diag%uh_max(I,j,k)*G%IDYu(I,j)); enddo
+                                    (CS%diag%uh_max(I,j,k)*G%IdyCu(I,j)); enddo
     endif
     if (ASSOCIATED(CS%diag%uh_min)) then
       write(file,'(/," uh_+-: ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                    (CS%diag%uh_min(I,j,k)*G%IDYu(I,j)); enddo
+                                    (CS%diag%uh_min(I,j,k)*G%IdyCu(I,j)); enddo
     endif
     if (ASSOCIATED(CS%diag%uh_lay)) then
       write(file,'(/," uhL+-: ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                    (CS%diag%uh_lay(I,j,k)*G%IDYu(I,j)); enddo
+                                    (CS%diag%uh_lay(I,j,k)*G%IdyCu(I,j)); enddo
     endif
     if (ASSOCIATED(CS%diag%uh_cent)) then
       write(file,'(/," uhC+-: ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                    (CS%diag%uh_cent(I,j,k)*G%IDYu(I,j)); enddo
+                                    (CS%diag%uh_cent(I,j,k)*G%IdyCu(I,j)); enddo
     endif
     write(file,'(/," uhCp+-:",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
@@ -951,26 +951,26 @@ subroutine write_v_accel(i, J, vm, hin, dt, G, CS, maxvel, minvel, str, a, hv)
 
     write(file,'(/,"uh++:  ",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                    (CS%uh(I,j+1,k)*G%IDYu(I,j+1)); enddo
+                                    (CS%uh(I,j+1,k)*G%IdyCu(I,j+1)); enddo
     if (ASSOCIATED(CS%diag%uh_max)) then
       write(file,'(/," uh^++: ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                    (CS%diag%uh_max(I,j+1,k)*G%IDYu(I,j+1)); enddo
+                                    (CS%diag%uh_max(I,j+1,k)*G%IdyCu(I,j+1)); enddo
     endif
     if (ASSOCIATED(CS%diag%uh_min)) then
       write(file,'(/," uh_++: ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                    (CS%diag%uh_min(I,j+1,k)*G%IDYu(I,j+1)); enddo
+                                    (CS%diag%uh_min(I,j+1,k)*G%IdyCu(I,j+1)); enddo
     endif
     if (ASSOCIATED(CS%diag%uh_lay)) then
       write(file,'(/," uhL++: ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                    (CS%diag%uh_lay(I,j+1,k)*G%IDYu(I,j+1)); enddo
+                                    (CS%diag%uh_lay(I,j+1,k)*G%IdyCu(I,j+1)); enddo
     endif
     if (ASSOCIATED(CS%diag%uh_cent)) then
       write(file,'(/," uhC++: ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                  (CS%diag%uh_cent(I,j+1,k)*G%IDYu(I,j+1)); enddo
+                                  (CS%diag%uh_cent(I,j+1,k)*G%IdyCu(I,j+1)); enddo
     endif
     write(file,'(/," uhCp++:",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
@@ -981,13 +981,13 @@ subroutine write_v_accel(i, J, vm, hin, dt, G, CS, maxvel, minvel, str, a, hv)
       f_eff = G%CoriolisBu(I-1,J)
       if (abs(f_eff) < 1e-10) f_eff = 1e-10
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (0.5*(CS%diag%q(I-1,J,k)* &
-        (CS%uh(I-1,j,k) + CS%uh(I-1,j+1,k))) * G%IDYv(i,J) / f_eff); enddo
+        (CS%uh(I-1,j,k) + CS%uh(I-1,j+1,k))) * G%IdyCv(i,J) / f_eff); enddo
 
       write(file,'(/,"u+eff: ",$)')
       f_eff = G%CoriolisBu(I,J)
       if (abs(f_eff) < 1e-10) f_eff = 1e-10
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (0.5*(CS%diag%q(I,J,k)* &
-        (CS%uh(I,j,k) + CS%uh(I,j+1,k))) * G%IDYv(i,J) / f_eff); enddo
+        (CS%uh(I,j,k) + CS%uh(I,j+1,k))) * G%IdyCv(i,J) / f_eff); enddo
     endif
 
     write(file,'(/,"D:     ",2(ES10.3))') G%bathyT(i,j),G%bathyT(i,j+1)

@@ -236,19 +236,19 @@ subroutine create_file(unit, filename, vars, novars, G, fields, threading, &
 
   if (use_lath) &
     call mpp_write_meta(unit, axis_lath, "lath", G%y_axis_units, "Latitude", &
-                   'Y', domain = y_domain, data=G%gridlath(G%jsg:G%jeg))
+                   'Y', domain = y_domain, data=G%gridLatT(G%jsg:G%jeg))
 
   if (use_lonh) &
     call mpp_write_meta(unit, axis_lonh, "lonh", G%x_axis_units, "Longitude", &
-                   'X', domain = x_domain, data=G%gridlonh(G%isg:G%ieg))
+                   'X', domain = x_domain, data=G%gridLonT(G%isg:G%ieg))
 
   if (use_latq) &
     call mpp_write_meta(unit, axis_latq, "latq", G%y_axis_units, "Latitude", &
-                   'Y', domain = y_domain, data=G%gridlatq(G%Jsgq:G%Jegq))
+                   'Y', domain = y_domain, data=G%gridLatB(G%Jsgq:G%Jegq))
 
   if (use_lonq) &
     call mpp_write_meta(unit, axis_lonq, "lonq", G%x_axis_units, "Longitude", &
-                   'X', domain = x_domain, data=G%gridlonq(G%Isgq:G%Iegq))
+                   'X', domain = x_domain, data=G%gridLonB(G%Isgq:G%Iegq))
 
   if (use_layer) &
     call mpp_write_meta(unit, axis_layer, "Layer", "kg m-3", &

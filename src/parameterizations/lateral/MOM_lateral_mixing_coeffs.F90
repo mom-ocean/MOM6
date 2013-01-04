@@ -307,12 +307,12 @@ subroutine calc_slope_function_(h, tv, G, CS, e)
 
     ! Calculate the interface slopes E_x and E_y and u- and v- points respectively
     do j=js-1,je+1 ; do I=is-1,ie
-      E_x(I,j) = (e(i+1,j,K)-e(i,j,K))*G%IDXu(I,j)
+      E_x(I,j) = (e(i+1,j,K)-e(i,j,K))*G%IdxCu(I,j)
       ! Mask slopes where interface intersects topography
       if (min(h(I,j,k),h(I+1,j,k)) < H_cutoff) E_x(I,j) = 0.
     enddo ; enddo
     do J=js-1,je ; do i=is-1,ie+1
-      E_y(i,J) = (e(i,j+1,K)-e(i,j,K))*G%IDYv(i,J)
+      E_y(i,J) = (e(i,j+1,K)-e(i,j,K))*G%IdyCv(i,J)
       ! Mask slopes where interface intersects topography
       if (min(h(i,J,k),h(i,J+1,k)) < H_cutoff) E_y(I,j) = 0.
     enddo ; enddo
@@ -471,13 +471,13 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
                  default=0.0)
 
   ! Register fields for output from this module.
-    CS%id_SN_u = register_diag_field('ocean_model', 'SN_u', G%axesu1, Time, &
+    CS%id_SN_u = register_diag_field('ocean_model', 'SN_u', G%axesCu1, Time, &
        'Inverse eddy time-scale, S*N, at u-points', 's^-1')
-    CS%id_SN_v = register_diag_field('ocean_model', 'SN_v', G%axesv1, Time, &
+    CS%id_SN_v = register_diag_field('ocean_model', 'SN_v', G%axesCv1, Time, &
        'Inverse eddy time-scale, S*N, at v-points', 's^-1')
-    CS%id_L2u = register_diag_field('ocean_model', 'L2u', G%axesu1, Time, &
+    CS%id_L2u = register_diag_field('ocean_model', 'L2u', G%axesCu1, Time, &
        'Length scale squared for mixing coefficient, at u-points', 'm^2')
-    CS%id_L2v = register_diag_field('ocean_model', 'L2v', G%axesv1, Time, &
+    CS%id_L2v = register_diag_field('ocean_model', 'L2v', G%axesCv1, Time, &
        'Length scale squared for mixing coefficient, at v-points', 'm^2')
   endif
 
@@ -495,9 +495,9 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
     allocate(CS%Rd_dx_h(isd:ied,jsd:jed))        ; CS%Rd_dx_h(:,:) = 0.0
 
 
-    CS%id_Res_fn = register_diag_field('ocean_model', 'Res_fn', G%axesh1, Time, &
+    CS%id_Res_fn = register_diag_field('ocean_model', 'Res_fn', G%axesT1, Time, &
        'Resolution function for scaling diffusivities', 'Nondim')
-    CS%id_Rd_dx = register_diag_field('ocean_model', 'Rd_dx', G%axesh1, Time, &
+    CS%id_Rd_dx = register_diag_field('ocean_model', 'Rd_dx', G%axesT1, Time, &
        'Ratio between deformation radius and grid spacing', 'Nondim')
 
     call get_param(param_file, mod, "KH_RES_SCALE_COEF", CS%Res_coef, &
@@ -514,25 +514,25 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
 
     ! Pre-calculate several static expressions for later use.
     do j=js-1,je+1 ; do i=is-1,ie+1
-      CS%f2_dx2_h(i,j) = (G%DXh(i,j)**2 + G%DYh(i,j)**2) * &
+      CS%f2_dx2_h(i,j) = (G%dxT(i,j)**2 + G%dyT(i,j)**2) * &
           max(0.25 * ((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
                       (G%CoriolisBu(I-1,J)**2 + G%CoriolisBu(I,J-1)**2)), &
               absurdly_small_freq2)
-      CS%beta_dx2_h(i,j) = (G%DXh(i,j)**2 + G%DYh(i,j)**2) * (sqrt(0.5 * &
-          ( (((G%CoriolisBu(I,J)-G%CoriolisBu(I-1,J)) * G%IDXv(i,J))**2 + &
-             ((G%CoriolisBu(I,J-1)-G%CoriolisBu(I-1,J-1)) * G%IDXv(i,J-1))**2) + &
-            (((G%CoriolisBu(I,J)-G%CoriolisBu(I,J-1)) * G%IDYu(I,j))**2 + &
-             ((G%CoriolisBu(I-1,J)-G%CoriolisBu(I-1,J-1)) * G%IDYu(I-1,j))**2) ) ))
+      CS%beta_dx2_h(i,j) = (G%dxT(i,j)**2 + G%dyT(i,j)**2) * (sqrt(0.5 * &
+          ( (((G%CoriolisBu(I,J)-G%CoriolisBu(I-1,J)) * G%IdxCv(i,J))**2 + &
+             ((G%CoriolisBu(I,J-1)-G%CoriolisBu(I-1,J-1)) * G%IdxCv(i,J-1))**2) + &
+            (((G%CoriolisBu(I,J)-G%CoriolisBu(I,J-1)) * G%IdyCu(I,j))**2 + &
+             ((G%CoriolisBu(I-1,J)-G%CoriolisBu(I-1,J-1)) * G%IdyCu(I-1,j))**2) ) ))
     enddo ; enddo
 
     do J=js-1,Jeq ; do I=is-1,Ieq
-      CS%f2_dx2_q(I,J) = (G%DXq(i,j)**2 + G%DYq(i,j)**2) * &
+      CS%f2_dx2_q(I,J) = (G%dxBu(i,j)**2 + G%dyBu(i,j)**2) * &
                          max(G%CoriolisBu(I,J)**2, absurdly_small_freq2)
-      CS%beta_dx2_q(I,J) = (G%DXq(i,j)**2 + G%DYq(i,j)**2) * (sqrt(0.5 * &
-          ( (((G%CoriolisBu(I,J)-G%CoriolisBu(I-1,J)) * G%IDXv(i,J))**2 + &
-             ((G%CoriolisBu(I+1,J)-G%CoriolisBu(I,J)) * G%IDXv(i+1,J))**2) + &
-            (((G%CoriolisBu(I,J)-G%CoriolisBu(I,J-1)) * G%IDYu(I,j))**2 + &
-             ((G%CoriolisBu(I,J+1)-G%CoriolisBu(I,J)) * G%IDYu(I,j+1))**2) ) ))
+      CS%beta_dx2_q(I,J) = (G%dxBu(i,j)**2 + G%dyBu(i,j)**2) * (sqrt(0.5 * &
+          ( (((G%CoriolisBu(I,J)-G%CoriolisBu(I-1,J)) * G%IdxCv(i,J))**2 + &
+             ((G%CoriolisBu(I+1,J)-G%CoriolisBu(I,J)) * G%IdxCv(i+1,J))**2) + &
+            (((G%CoriolisBu(I,J)-G%CoriolisBu(I,J-1)) * G%IdyCu(I,j))**2 + &
+             ((G%CoriolisBu(I,J+1)-G%CoriolisBu(I,J)) * G%IdyCu(I,j+1))**2) ) ))
     enddo ; enddo
 
   endif

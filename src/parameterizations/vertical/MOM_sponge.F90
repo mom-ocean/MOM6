@@ -255,7 +255,7 @@ subroutine init_sponge_diags(Time, G, diag, CS)
   if (.not.associated(CS)) return
 
   CS%diag => diag
-  CS%id_w_sponge = register_diag_field('ocean_model', 'w_sponge', G%axeshi, Time, &
+  CS%id_w_sponge = register_diag_field('ocean_model', 'w_sponge', G%axesTi, Time, &
       'The diapycnal motion due to the sponges', 'meter second-1')
   
 end subroutine init_sponge_diags

@@ -556,19 +556,19 @@ subroutine opacity_init(Time, G, param_file, diag, tracer_flow, CS, optics)
     allocate(optics%sw_pen_band(optics%nbands,isd:ied,jsd:jed))
   allocate(CS%id_opacity(optics%nbands)) ; CS%id_opacity(:) = -1
 
-  CS%id_sw_pen = register_diag_field('ocean_model', 'SW_pen', G%axesh1, Time, &
+  CS%id_sw_pen = register_diag_field('ocean_model', 'SW_pen', G%axesT1, Time, &
       'Penetrating shortwave radiation flux into ocean', 'Watt meter-2')
-  CS%id_sw_vis_pen = register_diag_field('ocean_model', 'SW_vis_pen', G%axesh1, Time, &
+  CS%id_sw_vis_pen = register_diag_field('ocean_model', 'SW_vis_pen', G%axesT1, Time, &
       'Visible penetrating shortwave radiation flux into ocean', 'Watt meter-2')
   do n=1,optics%nbands
     write(bandnum,'(i3)') n
     shortname = 'opac_'//trim(adjustl(bandnum))
     longname = 'Opacity for shortwave radiation in band '//trim(adjustl(bandnum))
-    CS%id_opacity(n) = register_diag_field('ocean_model', shortname, G%axeshL, Time, &
+    CS%id_opacity(n) = register_diag_field('ocean_model', shortname, G%axesTL, Time, &
       longname, 'meter-1')
   enddo
   if (CS%var_pen_sw) &
-    CS%id_chl = register_diag_field('ocean_model', 'Chl_opac', G%axesh1, Time, &
+    CS%id_chl = register_diag_field('ocean_model', 'Chl_opac', G%axesT1, Time, &
         'Surface chlorophyll A concentration used to find opacity', 'mg meter-3')
 
 

@@ -425,7 +425,7 @@ subroutine geothermal_init(Time, G, param_file, diag, CS)
     enddo ; enddo
   endif
 
-  id = register_static_field('ocean_model', 'geo_heat', G%axesh1, &
+  id = register_static_field('ocean_model', 'geo_heat', G%axesT1, &
         'Geothermal heat flux into ocean', 'W m-2')
   if (id > 0) call post_data(id, CS%geo_heat, diag, .true.)
 

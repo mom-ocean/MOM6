@@ -306,10 +306,10 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, lev, tv, dt, G, CS, eta_
             ((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
              (G%CoriolisBu(I-1,J)**2 + G%CoriolisBu(I,J-1)**2))
         mag_beta = sqrt(0.5 * ( &
-            (((G%CoriolisBu(I,J)-G%CoriolisBu(I-1,J)) * G%IDXv(i,J))**2 + &
-             ((G%CoriolisBu(I,J-1)-G%CoriolisBu(I-1,J-1)) * G%IDXv(i,J-1))**2) + &
-            (((G%CoriolisBu(I,J)-G%CoriolisBu(I,J-1)) * G%IDYu(I,j))**2 + &
-             ((G%CoriolisBu(I-1,J)-G%CoriolisBu(I-1,J-1)) * G%IDYu(I-1,j))**2) ))
+            (((G%CoriolisBu(I,J)-G%CoriolisBu(I-1,J)) * G%IdxCv(i,J))**2 + &
+             ((G%CoriolisBu(I,J-1)-G%CoriolisBu(I-1,J-1)) * G%IdxCv(i,J-1))**2) + &
+            (((G%CoriolisBu(I,J)-G%CoriolisBu(I,J-1)) * G%IdyCu(I,j))**2 + &
+             ((G%CoriolisBu(I-1,J)-G%CoriolisBu(I-1,J-1)) * G%IdyCu(I-1,j))**2) ))
         CS%Rd1(i,j) = CS%cg1(i,j) / sqrt(f2_h + CS%cg1(i,j) * mag_beta)
 
       enddo ; enddo
@@ -526,10 +526,10 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, lev, G, CS)
   if (ASSOCIATED(CS%dKE_dt)) then
     do k=1,nz
       do j=js,je ; do I=Isq,Ieq
-        KE_u(I,j) = uh(I,j,k)*G%DXu(I,j)*CS%du_dt(I,j,k)
+        KE_u(I,j) = uh(I,j,k)*G%dxCu(I,j)*CS%du_dt(I,j,k)
       enddo ; enddo
       do J=Jsq,Jeq ; do i=is,ie
-        KE_v(i,J) = vh(i,J,k)*G%DYv(i,J)*CS%dv_dt(i,J,k)
+        KE_v(i,J) = vh(i,J,k)*G%dyCv(i,J)*CS%dv_dt(i,J,k)
       enddo ; enddo
       do j=js,je ; do i=is,ie
         KE_h(i,j) = CS%KE(i,j,k)*CS%dh_dt(i,j,k)
@@ -547,10 +547,10 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, lev, G, CS)
   if (ASSOCIATED(CS%PE_to_KE)) then
     do k=1,nz
       do j=js,je ; do I=Isq,Ieq
-        KE_u(I,j) = uh(I,j,k)*G%DXu(I,j)*CS%diag%PFu(I,j,k)
+        KE_u(I,j) = uh(I,j,k)*G%dxCu(I,j)*CS%diag%PFu(I,j,k)
       enddo ; enddo
       do J=Jsq,Jeq ; do i=is,ie
-        KE_v(i,J) = vh(i,J,k)*G%DYv(i,J)*CS%diag%PFv(i,J,k)
+        KE_v(i,J) = vh(i,J,k)*G%dyCv(i,J)*CS%diag%PFv(i,J,k)
       enddo ; enddo
       if (.not.G%symmetric) &
          call pass_vector(KE_u, KE_v, G%Domain, To_North+To_East)
@@ -565,10 +565,10 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, lev, G, CS)
   if (ASSOCIATED(CS%KE_CorAdv)) then
     do k=1,nz
       do j=js,je ; do I=Isq,Ieq
-        KE_u(I,j) = uh(I,j,k)*G%DXu(I,j)*CS%diag%CAu(I,j,k)
+        KE_u(I,j) = uh(I,j,k)*G%dxCu(I,j)*CS%diag%CAu(I,j,k)
       enddo ; enddo
       do J=Jsq,Jeq ; do i=is,ie
-        KE_v(i,J) = vh(i,J,k)*G%DYv(i,J)*CS%diag%CAv(i,J,k)
+        KE_v(i,J) = vh(i,J,k)*G%dyCv(i,J)*CS%diag%CAv(i,J,k)
       enddo ; enddo
       do j=js,je ; do i=is,ie
         KE_h(i,j) = -CS%KE(i,j,k) * G%IareaT(i,j) * &
@@ -587,10 +587,10 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, lev, G, CS)
   if (ASSOCIATED(CS%KE_adv)) then
     do k=1,nz
       do j=js,je ; do I=Isq,Ieq
-        KE_u(I,j) = uh(I,j,k)*G%DXu(I,j)*CS%diag%gradKEu(I,j,k)
+        KE_u(I,j) = uh(I,j,k)*G%dxCu(I,j)*CS%diag%gradKEu(I,j,k)
       enddo ; enddo
       do J=Jsq,Jeq ; do i=is,ie
-        KE_v(i,J) = vh(i,J,k)*G%DYv(i,J)*CS%diag%gradKEv(i,J,k)
+        KE_v(i,J) = vh(i,J,k)*G%dyCv(i,J)*CS%diag%gradKEv(i,J,k)
       enddo ; enddo
       do j=js,je ; do i=is,ie
         KE_h(i,j) = -CS%KE(i,j,k) * G%IareaT(i,j) * &
@@ -609,10 +609,10 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, lev, G, CS)
   if (ASSOCIATED(CS%KE_visc)) then
     do k=1,nz
       do j=js,je ; do I=Isq,Ieq
-        KE_u(I,j) = uh(I,j,k)*G%DXu(I,j)*CS%diag%du_dt_visc(I,j,k)
+        KE_u(I,j) = uh(I,j,k)*G%dxCu(I,j)*CS%diag%du_dt_visc(I,j,k)
       enddo ; enddo
       do J=Jsq,Jeq ; do i=is,ie
-        KE_v(i,J) = vh(i,J,k)*G%DYv(i,J)*CS%diag%dv_dt_visc(i,J,k)
+        KE_v(i,J) = vh(i,J,k)*G%dyCv(i,J)*CS%diag%dv_dt_visc(i,J,k)
       enddo ; enddo
       if (.not.G%symmetric) &
          call pass_vector(KE_u, KE_v, G%Domain, To_North+To_East)
@@ -627,10 +627,10 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, lev, G, CS)
   if (ASSOCIATED(CS%KE_horvisc)) then
     do k=1,nz
       do j=js,je ; do I=Isq,Ieq
-        KE_u(I,j) = uh(I,j,k)*G%DXu(I,j)*CS%diag%diffu(I,j,k)
+        KE_u(I,j) = uh(I,j,k)*G%dxCu(I,j)*CS%diag%diffu(I,j,k)
       enddo ; enddo
       do J=Jsq,Jeq ; do i=is,ie
-        KE_v(i,J) = vh(i,J,k)*G%DYv(i,J)*CS%diag%diffv(i,J,k)
+        KE_v(i,J) = vh(i,J,k)*G%dyCv(i,J)*CS%diag%diffv(i,J,k)
       enddo ; enddo
       if (.not.G%symmetric) &
          call pass_vector(KE_u, KE_v, G%Domain, To_North+To_East)
@@ -645,10 +645,10 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, lev, G, CS)
   if (ASSOCIATED(CS%KE_dia)) then
     do k=1,nz
       do j=js,je ; do I=Isq,Ieq
-        KE_u(I,j) = uh(I,j,k)*G%DXu(I,j)*CS%diag%du_dt_dia(I,j,k)
+        KE_u(I,j) = uh(I,j,k)*G%dxCu(I,j)*CS%diag%du_dt_dia(I,j,k)
       enddo ; enddo
       do J=Jsq,Jeq ; do i=is,ie
-        KE_v(i,J) = vh(i,J,k)*G%DYv(i,J)*CS%diag%dv_dt_dia(i,J,k)
+        KE_v(i,J) = vh(i,J,k)*G%dyCv(i,J)*CS%diag%dv_dt_dia(i,J,k)
       enddo ; enddo
       do j=js,je ; do i=is,ie
         KE_h(i,j) = CS%KE(i,j,k) * &
@@ -776,34 +776,34 @@ subroutine MOM_diagnostics_init(HIS, Time, G, param_file, diag, CS)
     thickness_units = "kilogram meter-2" ; flux_units = "kilogram second-1"
   endif
 
-  CS%id_e = register_diag_field('ocean_model', 'e', G%axeshi, Time, &
+  CS%id_e = register_diag_field('ocean_model', 'e', G%axesTi, Time, &
       'Interface Height Relative to Mean Sea Level', 'meter')
   if (CS%id_e>0) call safe_alloc_ptr(CS%e,isd,ied,jsd,jed,nz+1)
 
-  CS%id_e_D = register_diag_field('ocean_model', 'e_D', G%axeshi, Time, &
+  CS%id_e_D = register_diag_field('ocean_model', 'e_D', G%axesTi, Time, &
       'Interface Height above the Seafloor', 'meter')
   if (CS%id_e_D>0) call safe_alloc_ptr(CS%e_D,isd,ied,jsd,jed,nz+1)
 
-  CS%id_Rml = register_diag_field('ocean_model', 'Rml', G%axeshL, Time, &
+  CS%id_Rml = register_diag_field('ocean_model', 'Rml', G%axesTL, Time, &
       'Mixed Layer Coordinate Potential Density', 'kg meter-3')
-  CS%id_Rcv = register_diag_field('ocean_model', 'Rho_cv', G%axeshL, Time, &
+  CS%id_Rcv = register_diag_field('ocean_model', 'Rho_cv', G%axesTL, Time, &
       'Coordinate Potential Density', 'kg meter-3')
 
-  CS%id_du_dt = register_diag_field('ocean_model', 'dudt', G%axesul, Time, &
+  CS%id_du_dt = register_diag_field('ocean_model', 'dudt', G%axesCuL, Time, &
       'Zonal Acceleration', 'meter second-2')
   if ((CS%id_du_dt>0) .and. .not.ASSOCIATED(CS%du_dt)) then
     call safe_alloc_ptr(CS%du_dt,Isdq,Iedq,jsd,jed,nz)
     call register_time_deriv(HIS%u(:,:,:,1), HIS%u(:,:,:,2), CS%du_dt, CS)
   endif
 
-  CS%id_dv_dt = register_diag_field('ocean_model', 'dvdt', G%axesvl, Time, &
+  CS%id_dv_dt = register_diag_field('ocean_model', 'dvdt', G%axesCvL, Time, &
       'Meridional Acceleration', 'meter second-2')
   if ((CS%id_dv_dt>0) .and. .not.ASSOCIATED(CS%dv_dt)) then
     call safe_alloc_ptr(CS%dv_dt,isd,ied,Jsdq,Jedq,nz)
     call register_time_deriv(HIS%v(:,:,:,1), HIS%v(:,:,:,2), CS%dv_dt, CS)
   endif
 
-  CS%id_dh_dt = register_diag_field('ocean_model', 'dhdt', G%axeshl, Time, &
+  CS%id_dh_dt = register_diag_field('ocean_model', 'dhdt', G%axesTL, Time, &
       'Thickness tendency', trim(thickness_units)//" second-1")
   if ((CS%id_dh_dt>0) .and. .not.ASSOCIATED(CS%dh_dt)) then
     call safe_alloc_ptr(CS%dh_dt,isd,ied,jsd,jed,nz)
@@ -811,24 +811,24 @@ subroutine MOM_diagnostics_init(HIS, Time, G, param_file, diag, CS)
   endif
 
   if (G%nk_rho_varies > 0) then
-    CS%id_h_Rlay = register_diag_field('ocean_model', 'h_rho', G%axeshL, Time, &
+    CS%id_h_Rlay = register_diag_field('ocean_model', 'h_rho', G%axesTL, Time, &
         'Layer thicknesses in pure potential density coordinates', thickness_units)
     if (CS%id_h_Rlay>0) call safe_alloc_ptr(CS%h_Rlay,isd,ied,jsd,jed,nz)
 
-    CS%id_uh_Rlay = register_diag_field('ocean_model', 'uh_rho', G%axesuL, Time, &
+    CS%id_uh_Rlay = register_diag_field('ocean_model', 'uh_rho', G%axesCuL, Time, &
         'Zonal volume transport in pure potential density coordinates', flux_units)
     if (CS%id_uh_Rlay>0) call safe_alloc_ptr(CS%uh_Rlay,Isdq,Iedq,jsd,jed,nz)
 
-    CS%id_vh_Rlay = register_diag_field('ocean_model', 'vh_rho', G%axesvL, Time, &
+    CS%id_vh_Rlay = register_diag_field('ocean_model', 'vh_rho', G%axesCvL, Time, &
         'Meridional volume transport in pure potential density coordinates', flux_units)
     if (CS%id_vh_Rlay>0) call safe_alloc_ptr(CS%vh_Rlay,isd,ied,Jsdq,Jedq,nz)
 
-    CS%id_uhGM_Rlay = register_diag_field('ocean_model', 'uhGM_rho', G%axesuL, Time, &
+    CS%id_uhGM_Rlay = register_diag_field('ocean_model', 'uhGM_rho', G%axesCuL, Time, &
         'Zonal volume transport due to interface height diffusion in pure potential &
         &density coordinates', flux_units)
     if (CS%id_uhGM_Rlay>0) call safe_alloc_ptr(CS%uhGM_Rlay,Isdq,Iedq,jsd,jed,nz)
 
-    CS%id_vhGM_Rlay = register_diag_field('ocean_model', 'vhGM_rho', G%axesvL, Time, &
+    CS%id_vhGM_Rlay = register_diag_field('ocean_model', 'vhGM_rho', G%axesCvL, Time, &
         'Meridional volume transport due to interface height diffusion in pure &
         &potential density coordinates', flux_units)
     if (CS%id_vhGM_Rlay>0) call safe_alloc_ptr(CS%vhGM_Rlay,isd,ied,Jsdq,Jedq,nz)
@@ -836,41 +836,41 @@ subroutine MOM_diagnostics_init(HIS, Time, G, param_file, diag, CS)
 
 ! The next variables are terms in the kinetic energy balance.
 
-  CS%id_KE = register_diag_field('ocean_model', 'KE', G%axeshl, Time, &
+  CS%id_KE = register_diag_field('ocean_model', 'KE', G%axesTL, Time, &
       'Layer kinetic energy per unit mass', 'meter2 second-2')
   if (CS%id_KE>0) call safe_alloc_ptr(CS%KE,isd,ied,jsd,jed,nz)
 
-  CS%id_dKEdt = register_diag_field('ocean_model', 'dKE_dt', G%axeshl, Time, &
+  CS%id_dKEdt = register_diag_field('ocean_model', 'dKE_dt', G%axesTL, Time, &
       'Kinetic Energy Tendency of Layer', 'meter3 second-3')
   if (CS%id_dKEdt>0) call safe_alloc_ptr(CS%dKE_dt,isd,ied,jsd,jed,nz)
 
-  CS%id_PE_to_KE = register_diag_field('ocean_model', 'PE_to_KE', G%axeshl, Time, &
+  CS%id_PE_to_KE = register_diag_field('ocean_model', 'PE_to_KE', G%axesTL, Time, &
       'Potential to Kinetic Energy Conversion of Layer', 'meter3 second-3')
   if (CS%id_PE_to_KE>0) call safe_alloc_ptr(CS%PE_to_KE,isd,ied,jsd,jed,nz)
 
-  CS%id_KE_Coradv = register_diag_field('ocean_model', 'KE_Coradv', G%axeshl, Time, &
+  CS%id_KE_Coradv = register_diag_field('ocean_model', 'KE_Coradv', G%axesTL, Time, &
       'Kinetic Energy Source from Coriolis and Advection', 'meter3 second-3')
   if (CS%id_KE_Coradv>0) call safe_alloc_ptr(CS%KE_Coradv,isd,ied,jsd,jed,nz)
 
-  CS%id_KE_adv = register_diag_field('ocean_model', 'KE_adv', G%axeshl, Time, &
+  CS%id_KE_adv = register_diag_field('ocean_model', 'KE_adv', G%axesTL, Time, &
       'Kinetic Energy Source from Advection', 'meter3 second-3')
   if (CS%id_KE_adv>0) call safe_alloc_ptr(CS%KE_adv,isd,ied,jsd,jed,nz)
 
-  CS%id_KE_visc = register_diag_field('ocean_model', 'KE_visc', G%axeshl, Time, &
+  CS%id_KE_visc = register_diag_field('ocean_model', 'KE_visc', G%axesTL, Time, &
       'Kinetic Energy Source from Vertical Viscosity and Stresses', 'meter3 second-3')
   if (CS%id_KE_visc>0) call safe_alloc_ptr(CS%KE_visc,isd,ied,jsd,jed,nz)
 
-  CS%id_KE_horvisc = register_diag_field('ocean_model', 'KE_horvisc', G%axeshl, Time, &
+  CS%id_KE_horvisc = register_diag_field('ocean_model', 'KE_horvisc', G%axesTL, Time, &
       'Kinetic Energy Source from Horizontal Viscosity', 'meter3 second-3')
   if (CS%id_KE_horvisc>0) call safe_alloc_ptr(CS%KE_horvisc,isd,ied,jsd,jed,nz)
 
-  CS%id_KE_dia = register_diag_field('ocean_model', 'KE_dia', G%axeshl, Time, &
+  CS%id_KE_dia = register_diag_field('ocean_model', 'KE_dia', G%axesTL, Time, &
       'Kinetic Energy Source from Diapycnal Diffusion', 'meter3 second-3')
   if (CS%id_KE_dia>0) call safe_alloc_ptr(CS%KE_dia,isd,ied,jsd,jed,nz)
 
-  CS%id_cg1 = register_diag_field('ocean_model', 'cg1', G%axesh1, Time, &
+  CS%id_cg1 = register_diag_field('ocean_model', 'cg1', G%axesT1, Time, &
       'First baroclinic gravity wave speed', 'meter second-1')
-  CS%id_Rd1 = register_diag_field('ocean_model', 'Rd1', G%axesh1, Time, &
+  CS%id_Rd1 = register_diag_field('ocean_model', 'Rd1', G%axesT1, Time, &
       'First baroclinic deformation radius', 'meter')
   if ((CS%id_cg1>0) .or. (CS%id_Rd1>0)) then
     call safe_alloc_ptr(CS%cg1,isd,ied,jsd,jed)
@@ -878,15 +878,15 @@ subroutine MOM_diagnostics_init(HIS, Time, G, param_file, diag, CS)
     if (CS%id_Rd1>0) call safe_alloc_ptr(CS%Rd1,isd,ied,jsd,jed)
   endif
 
-  CS%id_mass_wt = register_diag_field('ocean_model', 'mass_wt', G%axesh1, Time, &
+  CS%id_mass_wt = register_diag_field('ocean_model', 'mass_wt', G%axesT1, Time, &
       'The column mass for calculating mass-weighted average properties', 'kg m-2')
-  CS%id_temp_int = register_diag_field('ocean_model', 'temp_int', G%axesh1, Time, &
+  CS%id_temp_int = register_diag_field('ocean_model', 'temp_int', G%axesT1, Time, &
       'The mass weighted column integrated temperature', 'degC kg m-2')
-  CS%id_salt_int = register_diag_field('ocean_model', 'salt_int', G%axesh1, Time, &
+  CS%id_salt_int = register_diag_field('ocean_model', 'salt_int', G%axesT1, Time, &
       'The mass weighted column integrated salinity', 'PSU kg m-2')
-  CS%id_col_mass = register_diag_field('ocean_model', 'col_mass', G%axesh1, Time, &
+  CS%id_col_mass = register_diag_field('ocean_model', 'col_mass', G%axesT1, Time, &
       'The column integrated in situ density', 'kg m-2')
-  CS%id_col_ht = register_diag_field('ocean_model', 'col_height', G%axesh1, Time, &
+  CS%id_col_ht = register_diag_field('ocean_model', 'col_height', G%axesT1, Time, &
       'The height of the water column', 'm')
 
   call set_dependent_diagnostics(HIS, G, CS)

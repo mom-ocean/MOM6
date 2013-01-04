@@ -47,17 +47,17 @@ type, public :: ocean_grid_type
   logical :: nonblocking_updates  ! If true, non-blocking halo updates are
                                   ! allowed.  The default is .false. (for now).
   integer :: first_direction ! An integer that indicates which direction is
-                                ! to be updated first in directionally split
-                                ! parts of the calculation.  This can be altered
-                                ! during the course of the run via calls to
-                                ! set_first_direction.
+                             ! to be updated first in directionally split
+                             ! parts of the calculation.  This can be altered
+                             ! during the course of the run via calls to
+                             ! set_first_direction.
 
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
     hmask, &   ! 0 for land points and 1 for ocean points on the h-grid. Nd.
     geoLatT, & ! The geographic latitude at q points in degrees of latitude or m.
     geoLonT, & ! The geographic longitude at q points in degrees of longitude or m.
-    dxh, Idxh, & ! dxh is delta x at h points, in m, and Idxh is 1/dxh in m-1.
-    dyh, Idyh, & ! dyh is delta y at h points, in m, and Idyh is 1/dyh in m-1.
+    dxT, IdxT, & ! dxT is delta x at h points, in m, and IdxT is 1/dxT in m-1.
+    dyT, IdyT, & ! dyT is delta y at h points, in m, and IdyT is 1/dyT in m-1.
     areaT, &     ! areaT is the area of an h-cell, in m2.
     IareaT       ! IareaT = 1/areaT, in m-2.
 
@@ -65,10 +65,10 @@ type, public :: ocean_grid_type
     umask, &   ! 0 for boundary points and 1 for ocean points on the u grid.  Nondim.
     geoLatCu, &  ! The geographic latitude at u points in degrees of latitude or m.
     geoLonCu, &  ! The geographic longitude at u points in degrees of longitude or m.
-    dxu, Idxu, & ! dxu is delta x at u points, in m, and Idxu is 1/dxu in m-1.
-    dyu, Idyu, & ! dyu is delta y at u points, in m, and Idyu is 1/dyu in m-1.
-    dy_u, &      ! The unblocked lengths of the u-faces of the h-cell in m.
-    dy_u_obc, &  ! The unblocked lengths of the u-faces of the h-cell in m for OBC.
+    dxCu, IdxCu, & ! dxCu is delta x at u points, in m, and IdxCu is 1/dxCu in m-1.
+    dyCu, IdyCu, & ! dyCu is delta y at u points, in m, and IdyCu is 1/dyCu in m-1.
+    dy_Cu, &     ! The unblocked lengths of the u-faces of the h-cell in m.
+    dy_Cu_obc, & ! The unblocked lengths of the u-faces of the h-cell in m for OBC.
     IareaCu, &   ! The masked inverse areas of u-grid cells in m2.
     areaCu       ! The areas of the u-grid cells in m2.
 
@@ -76,10 +76,10 @@ type, public :: ocean_grid_type
     vmask, &   ! 0 for boundary points and 1 for ocean points on the v grid.  Nondim.
     geoLatCv, &  ! The geographic latitude at v points in degrees of latitude or m.
     geoLonCv, &  !  The geographic longitude at v points in degrees of longitude or m.
-    dxv, Idxv, & ! dxv is delta x at v points, in m, and Idxv is 1/dxv in m-1.
-    dyv, Idyv, & ! dyv is delta y at v points, in m, and Idyv is 1/dyv in m-1.
-    dx_v, &      ! The unblocked lengths of the v-faces of the h-cell in m.
-    dx_v_obc, &  ! The unblocked lengths of the v-faces of the h-cell in m for OBC.
+    dxCv, IdxCv, & ! dxCv is delta x at v points, in m, and IdxCv is 1/dxCv in m-1.
+    dyCv, IdyCv, & ! dyCv is delta y at v points, in m, and IdyCv is 1/dyCv in m-1.
+    dx_Cv, &     ! The unblocked lengths of the v-faces of the h-cell in m.
+    dx_Cv_obc, & ! The unblocked lengths of the v-faces of the h-cell in m for OBC.
     IareaCv, &   ! The masked inverse areas of v-grid cells in m2.
     areaCv       ! The areas of the v-grid cells in m2.
 
@@ -87,17 +87,17 @@ type, public :: ocean_grid_type
     qmask, &   ! 0 for boundary points and 1 for ocean points on the q grid.  Nondim.
     geoLatBu, &  ! The geographic latitude at q points in degrees of latitude or m.
     geoLonBu, &  ! The geographic longitude at q points in degrees of longitude or m.
-    dxq, Idxq, & ! dxq is delta x at q points, in m, and Idxq is 1/dxq in m-1.
-    dyq, Idyq, & ! dyq is delta y at q points, in m, and Idyq is 1/dyq in m-1.
+    dxBu, IdxBu, & ! dxBu is delta x at q points, in m, and IdxBu is 1/dxBu in m-1.
+    dyBu, IdyBu, & ! dyBu is delta y at q points, in m, and IdyBu is 1/dyBu in m-1.
     areaBu, &    ! areaBu is the area of a q-cell, in m2
     IareaBu      ! IareaBu = 1/areaBu in m-2.
 
   real, pointer, dimension(:) :: &
-    gridlath => NULL(), gridlatq => NULL() ! The latitude of h or q points for
+    gridLatT => NULL(), gridLatB => NULL() ! The latitude of T or B points for
                         ! the purpose of labeling the output axes.
                         ! On many grids these are the same as geoLatT & geoLatBu.
   real, pointer, dimension(:) :: &
-    gridlonh => NULL(), gridlonq => NULL() ! The longitude of h or q points for
+    gridLonT => NULL(), gridLonB => NULL() ! The longitude of T or B points for
                         ! the purpose of labeling the output axes.
                         ! On many grids these are the same as geoLonT & geoLonBu.
   character(len=40) :: &
@@ -116,10 +116,10 @@ type, public :: ocean_grid_type
                   ! of topography are entirely determined from thickness points.
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_) :: &
     Dblock_u, &   ! Topographic depths at u-points at which the flow is blocked
-    Dopen_u       ! (Dblock_u) and open at width dy_u (Dopen_u), both in m.
+    Dopen_u       ! (Dblock_u) and open at width dy_Cu (Dopen_u), both in m.
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_) :: &
     Dblock_v, &   ! Topographic depths at v-points at which the flow is blocked
-    Dopen_v       ! (Dblock_v) and open at width dx_v (Dopen_v), both in m.
+    Dopen_v       ! (Dblock_v) and open at width dx_Cv (Dopen_v), both in m.
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: &
     CoriolisBu    ! The Coriolis parameter at corner points, in s-1.
 
@@ -153,9 +153,9 @@ type, public :: ocean_grid_type
                         ! to pressure in Pa.
 
   ! The following are axis types defined for output.
-  integer, dimension(3) :: axesqL, axeshL, axesuL, axesvL
-  integer, dimension(3) :: axesqi, axeshi, axesui, axesvi
-  integer, dimension(2) :: axesq1, axesh1, axesu1, axesv1
+  integer, dimension(3) :: axesBL, axesTL, axesCuL, axesCvL
+  integer, dimension(3) :: axesBi, axesTi, axesCui, axesCvi
+  integer, dimension(2) :: axesB1, axesT1, axesCu1, axesCv1
   integer, dimension(1) :: axeszi, axeszL
 
 end type ocean_grid_type
@@ -276,12 +276,12 @@ subroutine MOM_grid_init(grid, param_file)
   grid%H_subroundoff = 1e-20 * max(grid%Angstrom,grid%m_to_H*1e-17)
   grid%H_to_Pa = grid%g_Earth * grid%H_to_kg_m2
 
-  allocate(grid%gridlath(grid%Domain%njglobal+2*grid%Domain%njhalo))
-  allocate(grid%gridlatq(grid%Domain%njglobal+2*grid%Domain%njhalo))
-  grid%gridlath(:) = 0.0 ; grid%gridlatq(:) = 0.0
-  allocate(grid%gridlonh(grid%Domain%niglobal+2*grid%Domain%nihalo))
-  allocate(grid%gridlonq(grid%Domain%niglobal+2*grid%Domain%nihalo))
-  grid%gridlonh(:) = 0.0 ; grid%gridlonq(:) = 0.0
+  allocate(grid%gridLatT(grid%Domain%njglobal+2*grid%Domain%njhalo))
+  allocate(grid%gridLatB(grid%Domain%njglobal+2*grid%Domain%njhalo))
+  grid%gridLatT(:) = 0.0 ; grid%gridLatB(:) = 0.0
+  allocate(grid%gridLonT(grid%Domain%niglobal+2*grid%Domain%nihalo))
+  allocate(grid%gridLonB(grid%Domain%niglobal+2*grid%Domain%nihalo))
+  grid%gridLonT(:) = 0.0 ; grid%gridLonB(:) = 0.0
 
 ! Log derivative values.
   call log_param(param_file, "MOM_grid", "M to THICKNESS", grid%m_to_H)
@@ -391,8 +391,8 @@ subroutine MOM_grid_end(grid)
 
   DEALLOC_(grid%bathyT)  ; DEALLOC_(grid%CoriolisBu)
   DEALLOC_(grid%g_prime) ; DEALLOC_(grid%Rlay)
-  deallocate(grid%gridlonh) ; deallocate(grid%gridlath)
-  deallocate(grid%gridlonq) ; deallocate(grid%gridlatq)
+  deallocate(grid%gridLonT) ; deallocate(grid%gridLatT)
+  deallocate(grid%gridLonB) ; deallocate(grid%gridLatB)
 end subroutine MOM_grid_end
 
 end module MOM_grid

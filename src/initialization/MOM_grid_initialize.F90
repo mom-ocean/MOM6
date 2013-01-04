@@ -54,10 +54,10 @@ module MOM_grid_initialize
 !*                                                                     *
 !*     A small fragment of the C-grid is shown below:                  *
 !*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q, DXq, IDXq, DYq, IDYq, etc.            *
-!*    j+1  > o > o >   At ^:  v, DXv, IDXv, DYv, IDYv, etc.            *
-!*    j    x ^ x ^ x   At >:  u, DXu, IDXu, DYu, IDYu, etc.            *
-!*    j    > o > o >   At o:  h, DXh, IDXh, DYh, IDYh, areaT, etc.     *
+!*    j+1  x ^ x ^ x   At x:  q, dxBu, IdxBu, dyBu, IdyBu, etc.            *
+!*    j+1  > o > o >   At ^:  v, dxCv, IdxCv, dyCv, IdyCv, etc.            *
+!*    j    x ^ x ^ x   At >:  u, dxCu, IdxCu, dyCu, IdyCu, etc.            *
+!*    j    > o > o >   At o:  h, dxT, IdxT, dyT, IdyT, areaT, etc.     *
 !*    j-1  x ^ x ^ x                                                   *
 !*        i-1  i  i+1  At x & ^:                                       *
 !*           i  i+1    At > & o:                                       *
@@ -404,7 +404,7 @@ subroutine set_grid_metrics(G, param_file, set_vertical)
   call set_grid_derived_metrics(G, param_file)
 
 ! This call sets up the diagnostic axes.
-  call set_axes_info(G%gridlatq, G%gridlath, G%gridlonq, G%gridlonh, G, &
+  call set_axes_info(G%gridLatB, G%gridLatT, G%gridLonB, G%gridLonT, G, &
                      param_file, set_vertical=set_vertical)
 
   if (debug) call grid_metrics_chksum('MOM_grid_init/set_grid_metrics',G)
@@ -439,67 +439,67 @@ subroutine set_grid_derived_metrics(G, param_file)
   call MOM_mesg("  MOM_grid_init.F90, set_grid_derived_metrics: deriving metrics", 5)
  
   do j=jsd,jed ; do i=isd,ied
-    if (G%DXh(i,j) <= 0.0) then
-      write(warnmesg,68)  pe_here(),"DXh",i,j,G%DXh(i,j),Epsln
+    if (G%dxT(i,j) <= 0.0) then
+      write(warnmesg,68)  pe_here(),"dxT",i,j,G%dxT(i,j),Epsln
       call MOM_error(NOTE, warnmesg, all_print=.true.)
-      G%DXh(i,j) = Epsln
+      G%dxT(i,j) = Epsln
     endif
-    if (G%DYh(i,j) <= 0.0) then
-      write(warnmesg,68)  pe_here(),"DYh",i,j,G%DYh(i,j),Epsln
+    if (G%dyT(i,j) <= 0.0) then
+      write(warnmesg,68)  pe_here(),"dyT",i,j,G%dyT(i,j),Epsln
       call MOM_error(NOTE, warnmesg, all_print=.true.)
-      G%DYh(i,j) = Epsln
+      G%dyT(i,j) = Epsln
     endif
-    G%IDXh(i,j) = 1.0 / G%DXh(i,j)
-    G%IDYh(i,j) = 1.0 / G%DYh(i,j)
+    G%IdxT(i,j) = 1.0 / G%dxT(i,j)
+    G%IdyT(i,j) = 1.0 / G%dyT(i,j)
     G%IareaT(i,j) = 1.0 / G%areaT(i,j)
   enddo ; enddo
 
   do j=jsd,jed ; do I=Isdq,Iedq
-    if (G%DXu(I,j) <= 0.0) then
-      write(warnmesg,68)  pe_here(),"DXu",I,j,G%DXu(I,j),Epsln
+    if (G%dxCu(I,j) <= 0.0) then
+      write(warnmesg,68)  pe_here(),"dxCu",I,j,G%dxCu(I,j),Epsln
       call MOM_error(NOTE, warnmesg, all_print=.true.)
-      G%DXu(I,j) = Epsln
+      G%dxCu(I,j) = Epsln
     endif
-    if (G%DYu(I,j) <= 0.0) then
-      write(warnmesg,68)  pe_here(),"DYu",I,j,G%DYu(I,j),Epsln
+    if (G%dyCu(I,j) <= 0.0) then
+      write(warnmesg,68)  pe_here(),"dyCu",I,j,G%dyCu(I,j),Epsln
       call MOM_error(NOTE, warnmesg, all_print=.true.)
-      G%DYu(I,j) = Epsln
+      G%dyCu(I,j) = Epsln
     endif
-    G%IDXu(i,j) = 1.0 / G%DXu(i,j)
-    G%IDYu(i,j) = 1.0 / G%DYu(i,j)
+    G%IdxCu(i,j) = 1.0 / G%dxCu(i,j)
+    G%IdyCu(i,j) = 1.0 / G%dyCu(i,j)
   enddo ; enddo
 
   do J=Jsdq,Jedq ; do i=isd,ied
-    if (G%DXv(i,j) <= 0.0) then
-      write(warnmesg,68)  pe_here(),"DXv",i,j,G%DXv(i,j),Epsln
+    if (G%dxCv(i,j) <= 0.0) then
+      write(warnmesg,68)  pe_here(),"dxCv",i,j,G%dxCv(i,j),Epsln
       call MOM_error(NOTE, warnmesg, all_print=.true.)
-      G%DXv(i,j) = Epsln
+      G%dxCv(i,j) = Epsln
     endif
-    if (G%DYv(i,j) <= 0.0) then
-      write(warnmesg,68)  pe_here(),"DYv",i,j,G%DYv(i,j),Epsln
+    if (G%dyCv(i,j) <= 0.0) then
+      write(warnmesg,68)  pe_here(),"dyCv",i,j,G%dyCv(i,j),Epsln
       call MOM_error(NOTE, warnmesg, all_print=.true.)
-      G%DYv(i,j) = Epsln
+      G%dyCv(i,j) = Epsln
     endif
-    G%IDXv(i,j) = 1.0 / G%DXv(i,j)
-    G%IDYv(i,j) = 1.0 / G%DYv(i,j)
+    G%IdxCv(i,j) = 1.0 / G%dxCv(i,j)
+    G%IdyCv(i,j) = 1.0 / G%dyCv(i,j)
   enddo ; enddo
 
   do J=Jsdq,Jedq ; do I=Isdq,Iedq
-    if (G%DXq(I,J) <= 0.0) then
-      write(warnmesg,68)  pe_here(),"DXq",I,J,G%DXq(I,J),Epsln
+    if (G%dxBu(I,J) <= 0.0) then
+      write(warnmesg,68)  pe_here(),"dxBu",I,J,G%dxBu(I,J),Epsln
       call MOM_error(NOTE, warnmesg, all_print=.true.)
-      G%DXq(I,J) = Epsln
+      G%dxBu(I,J) = Epsln
     endif
-    if (G%DYq(I,J) <= 0.0) then
-      write(warnmesg,68)  pe_here(),"DYq",I,J,G%DYq(I,J),Epsln
+    if (G%dyBu(I,J) <= 0.0) then
+      write(warnmesg,68)  pe_here(),"dyBu",I,J,G%dyBu(I,J),Epsln
       call MOM_error(NOTE, warnmesg, all_print=.true.)
-      G%DYq(I,J) = Epsln
+      G%dyBu(I,J) = Epsln
     endif
 
-    G%IDXq(I,J) = 1.0 / G%DXq(I,J)
-    G%IDYq(I,J) = 1.0 / G%DYq(I,J)
-    G%areaBu(I,J) = G%DXq(I,J) * G%DYq(I,J)
-    G%IareaBu(I,J) = G%IDXq(I,J) * G%IDYq(I,J)
+    G%IdxBu(I,J) = 1.0 / G%dxBu(I,J)
+    G%IdyBu(I,J) = 1.0 / G%dyBu(I,J)
+    G%areaBu(I,J) = G%dxBu(I,J) * G%dyBu(I,J)
+    G%IareaBu(I,J) = G%IdxBu(I,J) * G%IdyBu(I,J)
   enddo ; enddo
 
 68 FORMAT ("WARNING: PE ",I4," ",a3,"(",I4,",",I4,") = ",ES10.4, &
@@ -529,53 +529,53 @@ subroutine grid_metrics_chksum(parent, G)
   halo = min(ied-ie, jed-je)
 halo=1 ! AJA
 
-  do i=isd,ied ; do j=jsd,jed ; tempH(i,j) = G%DXh(i,j) ; enddo ; enddo
-  call hchksum(tempH,trim(parent)//': DXh',G,haloshift=halo)
+  do i=isd,ied ; do j=jsd,jed ; tempH(i,j) = G%dxT(i,j) ; enddo ; enddo
+  call hchksum(tempH,trim(parent)//': dxT',G,haloshift=halo)
 
-  do I=Isdq,Iedq ; do j=jsd,jed ; tempE(I,j) = G%DXu(I,j) ; enddo ; enddo
-  call uchksum(tempE,trim(parent)//': DXu',G,haloshift=halo)
+  do I=Isdq,Iedq ; do j=jsd,jed ; tempE(I,j) = G%dxCu(I,j) ; enddo ; enddo
+  call uchksum(tempE,trim(parent)//': dxCu',G,haloshift=halo)
 
-  do i=isd,ied ; do J=Jsdq,Jedq ; tempN(i,J) = G%DXv(i,J) ; enddo ; enddo
-  call vchksum(tempN,trim(parent)//': DXv',G,haloshift=halo)
+  do i=isd,ied ; do J=Jsdq,Jedq ; tempN(i,J) = G%dxCv(i,J) ; enddo ; enddo
+  call vchksum(tempN,trim(parent)//': dxCv',G,haloshift=halo)
  
-  do I=Isdq,Iedq ; do J=Jsdq,Jedq ; tempQ(I,J) = G%DXq(I,J) ; enddo ; enddo
-  call qchksum(tempQ,trim(parent)//': DXq',G,haloshift=halo)
+  do I=Isdq,Iedq ; do J=Jsdq,Jedq ; tempQ(I,J) = G%dxBu(I,J) ; enddo ; enddo
+  call qchksum(tempQ,trim(parent)//': dxBu',G,haloshift=halo)
  
-  do i=isd,ied ; do j=jsd,jed ; tempH(i,j) = G%DYh(i,j) ; enddo ; enddo
-  call hchksum(tempH,trim(parent)//': DYh',G,haloshift=halo)
+  do i=isd,ied ; do j=jsd,jed ; tempH(i,j) = G%dyT(i,j) ; enddo ; enddo
+  call hchksum(tempH,trim(parent)//': dyT',G,haloshift=halo)
  
-  do I=Isdq,Iedq ; do j=jsd,jed ; tempE(I,j) = G%DYu(I,j) ; enddo ; enddo
-  call uchksum(tempE,trim(parent)//': DYu',G,haloshift=halo)
+  do I=Isdq,Iedq ; do j=jsd,jed ; tempE(I,j) = G%dyCu(I,j) ; enddo ; enddo
+  call uchksum(tempE,trim(parent)//': dyCu',G,haloshift=halo)
  
-  do i=isd,ied ; do J=Jsdq,Jedq ; tempN(i,J) = G%DYv(i,J) ; enddo ; enddo
-  call vchksum(tempN,trim(parent)//': DYv',G,haloshift=halo)
+  do i=isd,ied ; do J=Jsdq,Jedq ; tempN(i,J) = G%dyCv(i,J) ; enddo ; enddo
+  call vchksum(tempN,trim(parent)//': dyCv',G,haloshift=halo)
  
-  do I=Isdq,Iedq ; do J=Jsdq,Jedq ; tempQ(I,J) = G%DYq(I,J) ; enddo ; enddo
-  call qchksum(tempQ,trim(parent)//': DYq',G,haloshift=halo)
+  do I=Isdq,Iedq ; do J=Jsdq,Jedq ; tempQ(I,J) = G%dyBu(I,J) ; enddo ; enddo
+  call qchksum(tempQ,trim(parent)//': dyBu',G,haloshift=halo)
 
-  do i=isd,ied ; do j=jsd,jed ; tempH(i,j) = G%IDXh(i,j) ; enddo ; enddo
-  call hchksum(tempH,trim(parent)//': IDXh',G,haloshift=halo)
+  do i=isd,ied ; do j=jsd,jed ; tempH(i,j) = G%IdxT(i,j) ; enddo ; enddo
+  call hchksum(tempH,trim(parent)//': IdxT',G,haloshift=halo)
 
-  do I=Isdq,Iedq ; do j=jsd,jed ; tempE(I,j) = G%IDXu(I,j) ; enddo ; enddo
-  call uchksum(tempE,trim(parent)//': IDXu',G,haloshift=halo)
+  do I=Isdq,Iedq ; do j=jsd,jed ; tempE(I,j) = G%IdxCu(I,j) ; enddo ; enddo
+  call uchksum(tempE,trim(parent)//': IdxCu',G,haloshift=halo)
  
-  do i=isd,ied ; do J=Jsdq,Jedq ; tempN(i,J) = G%IDXv(i,J) ; enddo ; enddo
-  call vchksum(tempN,trim(parent)//': IDXv',G,haloshift=halo)
+  do i=isd,ied ; do J=Jsdq,Jedq ; tempN(i,J) = G%IdxCv(i,J) ; enddo ; enddo
+  call vchksum(tempN,trim(parent)//': IdxCv',G,haloshift=halo)
  
-  do I=Isdq,Iedq ; do J=Jsdq,Jedq ; tempQ(I,J) = G%IDXq(I,J) ; enddo ; enddo
-  call qchksum(tempQ,trim(parent)//': IDXq',G,haloshift=halo)
+  do I=Isdq,Iedq ; do J=Jsdq,Jedq ; tempQ(I,J) = G%IdxBu(I,J) ; enddo ; enddo
+  call qchksum(tempQ,trim(parent)//': IdxBu',G,haloshift=halo)
 
-  do i=isd,ied ; do j=jsd,jed ; tempH(i,j) = G%IDYh(i,j) ; enddo ; enddo
-  call hchksum(tempH,trim(parent)//': IDYh',G,haloshift=halo)
+  do i=isd,ied ; do j=jsd,jed ; tempH(i,j) = G%IdyT(i,j) ; enddo ; enddo
+  call hchksum(tempH,trim(parent)//': IdyT',G,haloshift=halo)
  
-  do I=Isdq,Iedq ; do j=jsd,jed ; tempE(I,j) = G%IDYu(I,j) ; enddo ; enddo
-  call uchksum(tempE,trim(parent)//': IDYu',G,haloshift=halo)
+  do I=Isdq,Iedq ; do j=jsd,jed ; tempE(I,j) = G%IdyCu(I,j) ; enddo ; enddo
+  call uchksum(tempE,trim(parent)//': IdyCu',G,haloshift=halo)
  
-  do i=isd,ied ; do J=Jsdq,Jedq ; tempN(i,J) = G%IDYv(i,J) ; enddo ; enddo
-  call vchksum(tempN,trim(parent)//': IDYv',G,haloshift=halo)
+  do i=isd,ied ; do J=Jsdq,Jedq ; tempN(i,J) = G%IdyCv(i,J) ; enddo ; enddo
+  call vchksum(tempN,trim(parent)//': IdyCv',G,haloshift=halo)
  
-  do I=Isdq,Iedq ; do J=Jsdq,Jedq ; tempQ(I,J) = G%IDYq(I,J) ; enddo ; enddo
-  call qchksum(tempQ,trim(parent)//': IDYq',G,haloshift=halo)
+  do I=Isdq,Iedq ; do J=Jsdq,Jedq ; tempQ(I,J) = G%IdyBu(I,J) ; enddo ; enddo
+  call qchksum(tempQ,trim(parent)//': IdyBu',G,haloshift=halo)
 
   do i=isd,ied ; do j=jsd,jed ; tempH(i,j) = G%areaT(i,j) ; enddo ; enddo
   call hchksum(tempH,trim(parent)//': areaT',G,haloshift=halo)
@@ -629,10 +629,10 @@ subroutine set_grid_metrics_from_mosaic(G,param_file)
   real, dimension(G%isd :G%ied ,G%Jsdq:G%Jedq) :: tempN1, tempN2
   ! These arrays are a holdover from earlier code in which the arrays in G were
   ! macros and may have had reduced dimensions.
-  real, dimension(G%isd :G%ied ,G%jsd :G%jed ) :: dxh, dyh, areaT
-  real, dimension(G%Isdq:G%Iedq,G%jsd :G%jed ) :: dxu, dyu
-  real, dimension(G%isd :G%ied ,G%Jsdq:G%Jedq) :: dxv, dyv
-  real, dimension(G%Isdq:G%Iedq,G%Jsdq:G%Jedq) :: dxq, dyq, areaBu
+  real, dimension(G%isd :G%ied ,G%jsd :G%jed ) :: dxT, dyT, areaT
+  real, dimension(G%Isdq:G%Iedq,G%jsd :G%jed ) :: dxCu, dyCu
+  real, dimension(G%isd :G%ied ,G%Jsdq:G%Jedq) :: dxCv, dyCv
+  real, dimension(G%Isdq:G%Iedq,G%Jsdq:G%Jedq) :: dxBu, dyBu, areaBu
   ! This are symmetric arrays, corresponding to the data in the mosaic file
   real, dimension(2*G%isd-1:2*G%ied,2*G%jsd-1:2*G%jed) :: tmpT
   real, dimension(2*G%isd-2:2*G%ied,2*G%jsd-1:2*G%jed) :: tmpU
@@ -665,9 +665,9 @@ subroutine set_grid_metrics_from_mosaic(G,param_file)
                            trim(filename))
 
 ! Initialize everything to a small number
-  dxu(:,:)=Epsln; dyu(:,:)=Epsln
-  dxv(:,:)=Epsln; dyv(:,:)=Epsln
-  dxq(:,:)=Epsln; dyq(:,:)=Epsln; areaBu(:,:)=Epsln
+  dxCu(:,:)=Epsln; dyCu(:,:)=Epsln
+  dxCv(:,:)=Epsln; dyCv(:,:)=Epsln
+  dxBu(:,:)=Epsln; dyBu(:,:)=Epsln; areaBu(:,:)=Epsln
 
 !<MISSING CODE TO READ REFINEMENT LEVEL>
   ni=2*(G%iec-G%isc+1) ! i size of supergrid
@@ -763,17 +763,17 @@ subroutine set_grid_metrics_from_mosaic(G,param_file)
   call pass_vector(tmpU,tmpV,SGdom,To_All+Scalar_Pair,CGRID_NE)
   call extrapolate_metric(tmpV,jsc-jsd+1)
   call extrapolate_metric(tmpU,jsc-jsd+1)
-  dxh(G%isd:G%ied,G%jsd:G%jed)=tmpV(isd:ied:2,jsd:jed:2)+tmpV(isd+1:ied:2,jsd:jed:2)
-  dyh(G%isd:G%ied,G%jsd:G%jed)=tmpU(isd:ied:2,jsd:jed:2)+tmpU(isd:ied:2,jsd+1:jed:2)
+  dxT(G%isd:G%ied,G%jsd:G%jed)=tmpV(isd:ied:2,jsd:jed:2)+tmpV(isd+1:ied:2,jsd:jed:2)
+  dyT(G%isd:G%ied,G%jsd:G%jed)=tmpU(isd:ied:2,jsd:jed:2)+tmpU(isd:ied:2,jsd+1:jed:2)
 
-  dxv(G%isd:G%ied,G%jsd:G%jed)=tmpV(isd:ied:2,jsd+1:jed:2)+tmpV(isd+1:ied:2,jsd+1:jed:2)
-  dyu(G%isd:G%ied,G%jsd:G%jed)=tmpU(isd+1:ied:2,jsd:jed:2)+tmpU(isd+1:ied:2,jsd+1:jed:2)
+  dxCv(G%isd:G%ied,G%jsd:G%jed)=tmpV(isd:ied:2,jsd+1:jed:2)+tmpV(isd+1:ied:2,jsd+1:jed:2)
+  dyCu(G%isd:G%ied,G%jsd:G%jed)=tmpU(isd+1:ied:2,jsd:jed:2)+tmpU(isd+1:ied:2,jsd+1:jed:2)
 
-  dxu(G%isd:G%ied-1,G%jsd:G%jed)=tmpV(isd+1:ied-2:2,jsd:jed:2)+tmpV(isd+2:ied-1:2,jsd:jed:2)
-  dyv(G%isd:G%ied,G%jsd:G%jed-1)=tmpU(isd:ied:2,jsd+1:jed-2:2)+tmpU(isd:ied:2,jsd+2:jed-1:2)
+  dxCu(G%isd:G%ied-1,G%jsd:G%jed)=tmpV(isd+1:ied-2:2,jsd:jed:2)+tmpV(isd+2:ied-1:2,jsd:jed:2)
+  dyCv(G%isd:G%ied,G%jsd:G%jed-1)=tmpU(isd:ied:2,jsd+1:jed-2:2)+tmpU(isd:ied:2,jsd+2:jed-1:2)
 
-  dxq(G%isd:G%ied-1,G%jsd:G%jed-1)=tmpV(isd+1:ied-2:2,jsd+1:jed-2:2)+tmpV(isd+2:ied-1:2,jsd+1:jed-2:2)
-  dyq(G%isd:G%ied-1,G%jsd:G%jed-1)=tmpU(isd+1:ied-2:2,jsd+1:jed-2:2)+tmpU(isd+1:ied-2:2,jsd+2:jed-1:2)
+  dxBu(G%isd:G%ied-1,G%jsd:G%jed-1)=tmpV(isd+1:ied-2:2,jsd+1:jed-2:2)+tmpV(isd+2:ied-1:2,jsd+1:jed-2:2)
+  dyBu(G%isd:G%ied-1,G%jsd:G%jed-1)=tmpU(isd+1:ied-2:2,jsd+1:jed-2:2)+tmpU(isd+1:ied-2:2,jsd+2:jed-1:2)
 
 ! Read AREA from the supergrid
   tmpT(:,:)=0.
@@ -795,23 +795,23 @@ subroutine set_grid_metrics_from_mosaic(G,param_file)
   nj=SGdom%njglobal
   deallocate(SGdom%mpp_domain)
 
-  call pass_vector(dyu, dxv, G%Domain, To_All+Scalar_Pair, CGRID_NE)
-  call pass_vector(dxu, dyv, G%Domain, To_All+Scalar_Pair, CGRID_NE)
-  call pass_vector(dxq, dyq, G%Domain, To_All+Scalar_Pair, BGRID_NE)
+  call pass_vector(dyCu, dxCv, G%Domain, To_All+Scalar_Pair, CGRID_NE)
+  call pass_vector(dxCu, dyCv, G%Domain, To_All+Scalar_Pair, CGRID_NE)
+  call pass_vector(dxBu, dyBu, G%Domain, To_All+Scalar_Pair, BGRID_NE)
   call pass_var(areaT, G%Domain)
   call pass_var(areaBu, G%Domain, position=CORNER)
 
   do i=G%isd,G%ied ; do j=G%jsd,G%jed
-    G%DXh(i,j) = dxh(i,j) ; G%DYh(i,j) = dyh(i,j) ; G%areaT(i,j) = areaT(i,j)
+    G%dxT(i,j) = dxT(i,j) ; G%dyT(i,j) = dyT(i,j) ; G%areaT(i,j) = areaT(i,j)
   enddo ; enddo
   do I=G%Isdq,G%Iedq ; do j=G%jsd,G%jed
-    G%DXu(I,j) = dxu(I,j) ; G%DYu(I,j) = dyu(I,j)
+    G%dxCu(I,j) = dxCu(I,j) ; G%dyCu(I,j) = dyCu(I,j)
   enddo ; enddo
   do i=G%isd,G%ied ; do J=G%Jsdq,G%Jedq
-    G%DXv(i,J) = dxv(i,J) ; G%DYv(i,J) = dyv(i,J)
+    G%dxCv(i,J) = dxCv(i,J) ; G%dyCv(i,J) = dyCv(i,J)
   enddo ; enddo
   do I=G%Isdq,G%Iedq ; do J=G%Jsdq,G%Jedq
-    G%DXq(I,J) = dxq(I,J) ; G%DYq(I,J) = dyq(I,J) ; G%areaBu(I,J) = areaBu(I,J)
+    G%dxBu(I,J) = dxBu(I,J) ; G%dyBu(I,J) = dyBu(I,J) ; G%areaBu(I,J) = areaBu(I,J)
   enddo ; enddo
 
   ! Construct axes for diagnostic output (only necessary because "ferret" uses
@@ -823,9 +823,9 @@ subroutine set_grid_metrics_from_mosaic(G,param_file)
     call read_data(filename, "x", tmpGlbl, start, nread, no_domain=.TRUE.)
   call broadcast(tmpGlbl, 2*(ni+1), root_PE())
   
-  G%gridlonh(G%domain%nihalo+1:G%domain%nihalo+G%domain%niglobal) = &
+  G%gridLonT(G%domain%nihalo+1:G%domain%nihalo+G%domain%niglobal) = &
     tmpGlbl(2:ni:2,2)
-  G%gridlonq(G%domain%nihalo+0:G%domain%nihalo+G%domain%niglobal) = &
+  G%gridLonB(G%domain%nihalo+0:G%domain%nihalo+G%domain%niglobal) = &
     tmpGlbl(1:ni+1:2,1)
   deallocate( tmpGlbl )
 
@@ -836,9 +836,9 @@ subroutine set_grid_metrics_from_mosaic(G,param_file)
     call read_data(filename, "y", tmpGlbl, start, nread, no_domain=.TRUE.)
   call broadcast(tmpGlbl, nj+1, root_PE())
 
-  G%gridlath(G%domain%njhalo+1:G%domain%njhalo+G%domain%njglobal) = &
+  G%gridLatT(G%domain%njhalo+1:G%domain%njhalo+G%domain%njglobal) = &
     tmpGlbl(1,2:nj:2)
-  G%gridlatq(G%domain%njhalo+0:G%domain%njhalo+G%domain%njglobal) = &
+  G%gridLatB(G%domain%njhalo+0:G%domain%njhalo+G%domain%njglobal) = &
     tmpGlbl(1,1:nj+1:2)
   deallocate( tmpGlbl )
 
@@ -909,56 +909,56 @@ subroutine set_grid_metrics_cartesian(G, param_file)
     grid_lonq(I) = west_lon + len_lon*REAL(I-nihalo)/REAL(niglobal)
   enddo
   do j=1,njglobal+2*njhalo
-    G%gridlatq(j) = south_lat + len_lat* REAL(j-njhalo)/REAL(njglobal)
-    G%gridlath(j) = south_lat + len_lat*(REAL(j-njhalo)-0.5)/REAL(njglobal)
+    G%gridLatB(j) = south_lat + len_lat* REAL(j-njhalo)/REAL(njglobal)
+    G%gridLatT(j) = south_lat + len_lat*(REAL(j-njhalo)-0.5)/REAL(njglobal)
   enddo
   do i=1,niglobal+2*nihalo
-    G%gridlonq(i) = west_lon + len_lon*REAL(i-nihalo)/REAL(niglobal)
-    G%gridlonh(i) = west_lon + len_lon*(REAL(i-nihalo)-0.5)/REAL(niglobal)
+    G%gridLonB(i) = west_lon + len_lon*REAL(i-nihalo)/REAL(niglobal)
+    G%gridLonT(i) = west_lon + len_lon*(REAL(i-nihalo)-0.5)/REAL(niglobal)
   enddo
 
   do J=Jsdq,Jedq ; do I=Isdq,Iedq
     G%geoLonBu(i,j) = grid_lonq(i+X1off) ; G%geoLatBu(i,j) = grid_latq(j+Y1off)
 
-    G%DXq(I,J) = Rad_Earth * len_lon * PI / (180.0 * niglobal)
-    G%DYq(I,J) = Rad_Earth * len_lat * PI / (180.0 * njglobal)
+    G%dxBu(I,J) = Rad_Earth * len_lon * PI / (180.0 * niglobal)
+    G%dyBu(I,J) = Rad_Earth * len_lat * PI / (180.0 * njglobal)
 
     if (axis_units(1:1) == 'k') then ! Axes are measured in km.
-      G%DXq(I,J) = 1000.0 * len_lon / (REAL(niglobal))
-      G%DYq(I,J) = 1000.0 * len_lat / (REAL(njglobal))
+      G%dxBu(I,J) = 1000.0 * len_lon / (REAL(niglobal))
+      G%dyBu(I,J) = 1000.0 * len_lat / (REAL(njglobal))
     else if (axis_units(1:1) == 'm') then ! Axes are measured in m.
-      G%DXq(I,J) = len_lon / (REAL(niglobal))
-      G%DYq(I,J) = len_lat / (REAL(njglobal))
+      G%dxBu(I,J) = len_lon / (REAL(niglobal))
+      G%dyBu(I,J) = len_lat / (REAL(njglobal))
     else ! Axes are measured in degrees of latitude and longitude.
-      G%DXq(I,J) = Rad_Earth * len_lon * PI / (180.0 * niglobal)
-      G%DYq(I,J) = Rad_Earth * len_lat * PI / (180.0 * njglobal)
+      G%dxBu(I,J) = Rad_Earth * len_lon * PI / (180.0 * niglobal)
+      G%dyBu(I,J) = Rad_Earth * len_lat * PI / (180.0 * njglobal)
     endif
 
-    G%IDXq(I,J) = 1.0 / G%DXq(I,J)
-    G%IDYq(I,J) = 1.0 / G%DYq(I,J)
-    G%areaBu(I,J) = G%DXq(I,J) * G%DYq(I,J)
-    G%IareaBu(I,J) = G%IDXq(I,J) * G%IDYq(I,J)
+    G%IdxBu(I,J) = 1.0 / G%dxBu(I,J)
+    G%IdyBu(I,J) = 1.0 / G%dyBu(I,J)
+    G%areaBu(I,J) = G%dxBu(I,J) * G%dyBu(I,J)
+    G%IareaBu(I,J) = G%IdxBu(I,J) * G%IdyBu(I,J)
   enddo ; enddo
 
   do j=jsd,jed ; do i=isd,ied
-    G%geoLonT(i,j) = G%gridlonh(i+X1off) ; G%geoLatT(i,j) = G%gridlath(j+Y1off)
-    G%DXh(i,j) = G%DXq(I,J) ; G%IDXh(i,j) = G%IDXq(I,J)
-    G%DYh(i,j) = G%DYq(I,J) ; G%IDYh(i,j) = G%IDYq(I,J)
+    G%geoLonT(i,j) = G%gridLonT(i+X1off) ; G%geoLatT(i,j) = G%gridLatT(j+Y1off)
+    G%dxT(i,j) = G%dxBu(I,J) ; G%IdxT(i,j) = G%IdxBu(I,J)
+    G%dyT(i,j) = G%dyBu(I,J) ; G%IdyT(i,j) = G%IdyBu(I,J)
     G%areaT(i,j) = G%areaBu(I,J) ; G%IareaT(i,j) = G%IareaBu(I,J)
   enddo ; enddo
 
   do j=jsd,jed ; do I=Isdq,Iedq
-    G%geoLonCu(i,j) = grid_lonq(i+X1off) ; G%geoLatCu(i,j) = G%gridlath(j+Y1off)
+    G%geoLonCu(i,j) = grid_lonq(i+X1off) ; G%geoLatCu(i,j) = G%gridLatT(j+Y1off)
 
-    G%DXu(I,j) = G%DXq(I,J) ; G%IDXu(I,j) = G%IDXq(I,J)
-    G%DYu(I,j) = G%DYq(I,J) ; G%IDYu(I,j) = G%IDYq(I,J)
+    G%dxCu(I,j) = G%dxBu(I,J) ; G%IdxCu(I,j) = G%IdxBu(I,J)
+    G%dyCu(I,j) = G%dyBu(I,J) ; G%IdyCu(I,j) = G%IdyBu(I,J)
   enddo ; enddo
 
   do J=Jsdq,Jedq ; do i=isd,ied
-    G%geoLonCv(i,j) = G%gridlonh(i+X1off) ; G%geoLatCv(i,j) = grid_latq(j+Y1off)
+    G%geoLonCv(i,j) = G%gridLonT(i+X1off) ; G%geoLatCv(i,j) = grid_latq(j+Y1off)
 
-    G%DXv(i,J) = G%DXq(I,J) ; G%IDXv(i,J) = G%IDXq(I,J)
-    G%DYv(i,J) = G%DYq(I,J) ; G%IDYv(i,J) = G%IDYq(I,J)
+    G%dxCv(i,J) = G%dxBu(I,J) ; G%IdxCv(i,J) = G%IdxBu(I,J)
+    G%dyCv(i,J) = G%dyBu(I,J) ; G%IdyCv(i,J) = G%IdyBu(I,J)
   enddo ; enddo
 
 end subroutine set_grid_metrics_cartesian
@@ -1036,13 +1036,13 @@ subroutine set_grid_metrics_spherical(G, param_file)
   enddo
 
   do j=1,G%Domain%njglobal+2*G%Domain%njhalo
-    G%gridlatq(J) = grid_latq(J)
+    G%gridLatB(J) = grid_latq(J)
     latitude = south_lat + dLat*(REAL(j-G%Domain%njhalo)-0.5)
-    G%gridlath(j) = MIN(MAX(latitude,-90.),90.)
+    G%gridLatT(j) = MIN(MAX(latitude,-90.),90.)
   enddo
   do i=1,G%Domain%niglobal+2*G%Domain%nihalo
-    G%gridlonq(I) = grid_lonq(I)
-    G%gridlonh(i) = west_lon + dLon*(REAL(i-G%Domain%nihalo)-0.5)
+    G%gridLonB(I) = grid_lonq(I)
+    G%gridLonT(i) = west_lon + dLon*(REAL(i-G%Domain%nihalo)-0.5)
   enddo
 
   dL_di = (len_lon * 4.0*atan(1.0)) / (180.0 * G%Domain%niglobal)
@@ -1052,48 +1052,48 @@ subroutine set_grid_metrics_spherical(G, param_file)
 
 ! The following line is needed to reproduce the solution from
 ! set_grid_metrics_mercator when used to generate a simple spherical grid.
-    G%DXq(I,J) = Rad_Earth * COS( G%geoLatBu(I,J)*PI_180 ) * dL_di
-!   G%DXq(I,J) = Rad_Earth * dLon*PI_180 * COS( G%geoLatBu(I,J)*PI_180 )
-    G%DYq(I,J) = Rad_Earth * dLat*PI_180
-    G%areaBu(I,J) = G%DXq(I,J) * G%DYq(I,J)
+    G%dxBu(I,J) = Rad_Earth * COS( G%geoLatBu(I,J)*PI_180 ) * dL_di
+!   G%dxBu(I,J) = Rad_Earth * dLon*PI_180 * COS( G%geoLatBu(I,J)*PI_180 )
+    G%dyBu(I,J) = Rad_Earth * dLat*PI_180
+    G%areaBu(I,J) = G%dxBu(I,J) * G%dyBu(I,J)
   enddo; enddo
 
   do J=Jsdq,Jedq ; do i=isd,ied
-    G%geoLonCv(i,J) = G%gridlonh(i+i_offset)
+    G%geoLonCv(i,J) = G%gridLonT(i+i_offset)
     G%geoLatCv(i,J) = grid_latq(j+j_offset)
 
 ! The following line is needed to reproduce the solution from
 ! set_grid_metrics_mercator when used to generate a simple spherical grid.
-    G%DXv(i,J) = Rad_Earth * COS( G%geoLatCv(i,J)*PI_180 ) * dL_di
-!   G%DXv(i,J) = Rad_Earth * (dLon*PI_180) * COS( G%geoLatCv(i,J)*PI_180 )
-    G%DYv(i,J) = Rad_Earth * dLat*PI_180
+    G%dxCv(i,J) = Rad_Earth * COS( G%geoLatCv(i,J)*PI_180 ) * dL_di
+!   G%dxCv(i,J) = Rad_Earth * (dLon*PI_180) * COS( G%geoLatCv(i,J)*PI_180 )
+    G%dyCv(i,J) = Rad_Earth * dLat*PI_180
   enddo; enddo
 
   do j=jsd,jed ; do I=Isdq,Iedq
     G%geoLonCu(I,j) = grid_lonq(i+i_offset)
-    G%geoLatCu(I,j) = G%gridlath(j+j_offset)
+    G%geoLatCu(I,j) = G%gridLatT(j+j_offset)
 
 ! The following line is needed to reproduce the solution from
 ! set_grid_metrics_mercator when used to generate a simple spherical grid.
-    G%DXu(I,j) = Rad_Earth * COS( G%geoLatCu(I,j)*PI_180 ) * dL_di
-!   G%DXu(I,j) = Rad_Earth * dLon*PI_180 * COS( latitude )
-    G%DYu(I,j) = Rad_Earth * dLat*PI_180
+    G%dxCu(I,j) = Rad_Earth * COS( G%geoLatCu(I,j)*PI_180 ) * dL_di
+!   G%dxCu(I,j) = Rad_Earth * dLon*PI_180 * COS( latitude )
+    G%dyCu(I,j) = Rad_Earth * dLat*PI_180
   enddo; enddo
 
   do j=jsd,jed ; do i=isd,ied
-    G%geoLonT(i,j) = G%gridlonh(i+i_offset)
-    G%geoLatT(i,j) = G%gridlath(j+j_offset)
+    G%geoLonT(i,j) = G%gridLonT(i+i_offset)
+    G%geoLatT(i,j) = G%gridLatT(j+j_offset)
 
 ! The following line is needed to reproduce the solution from
 ! set_grid_metrics_mercator when used to generate a simple spherical grid.
-    G%DXh(i,j) = Rad_Earth * COS( G%geoLatT(i,j)*PI_180 ) * dL_di
-!   G%DXh(i,j) = Rad_Earth * dLon*PI_180 * COS( latitude )
-    G%DYh(i,j) = Rad_Earth * dLat*PI_180
+    G%dxT(i,j) = Rad_Earth * COS( G%geoLatT(i,j)*PI_180 ) * dL_di
+!   G%dxT(i,j) = Rad_Earth * dLon*PI_180 * COS( latitude )
+    G%dyT(i,j) = Rad_Earth * dLat*PI_180
 
 !   latitude = G%geoLatCv(i,J)*PI_180             ! In radians
 !   dL_di    = G%geoLatCv(i,max(jsd,J-1))*PI_180  ! In radians
 !   G%areaT(i,j) = Rad_Earth**2*dLon*dLat*ABS(SIN(latitude)-SIN(dL_di))
-    G%areaT(i,j) = G%DXh(i,j) * G%DYh(i,j)
+    G%areaT(i,j) = G%dxT(i,j) * G%dyT(i,j)
   enddo; enddo
 
 end subroutine set_grid_metrics_spherical
@@ -1228,8 +1228,8 @@ subroutine set_grid_metrics_mercator(G, param_file)
     jd = fnRef + (j -1 - jRef)
     y_q = find_root(Int_dj_dy,dy_dj,GP,jd,y_h,-1.0*PI_2,PI_2,itt2)
 
-    G%gridlatq(j) = y_q*180.0/PI
-    G%gridlath(j) = y_h*180.0/PI
+    G%gridLatB(j) = y_q*180.0/PI
+    G%gridLatT(j) = y_h*180.0/PI
 
     if ((j >= jsd+Y1off) .and. (j <= jed+Y1off)) then
       do i=isd,ied ; yh(i,j-Y1off) = y_h ; enddo
@@ -1263,8 +1263,8 @@ subroutine set_grid_metrics_mercator(G, param_file)
     x_q = find_root(Int_di_dx,dx_di,GP,id,x_h,-4.0*PI,4.0*PI,itt2)
     if(i == G%isc) dx_q = x_q - x_q_west
 
-    G%gridlonq(i) = x_q*180.0/PI
-    G%gridlonh(i) = x_h*180.0/PI
+    G%gridLonB(i) = x_q*180.0/PI
+    G%gridLonT(i) = x_h*180.0/PI
 
     if ((i >= isd+X1off) .and. (i <= ied+X1off)) then
       do j=jsd,jed ; xh(i-X1off,j) = x_h ; enddo
@@ -1279,35 +1279,35 @@ subroutine set_grid_metrics_mercator(G, param_file)
   do J=Jsdq,Jedq ; do I=Isdq,Iedq
     G%geoLonBu(i,j) = xq(i,j)*180.0/PI
     G%geoLatBu(i,j) = yq(i,j)*180.0/PI
-    G%DXq(i,j) = ds_di(xq(i,j), yq(i,j), GP)
-    G%DYq(i,j) = ds_dj(xq(i,j), yq(i,j), GP)
+    G%dxBu(i,j) = ds_di(xq(i,j), yq(i,j), GP)
+    G%dyBu(i,j) = ds_dj(xq(i,j), yq(i,j), GP)
 
-    G%areaBu(i,j) = G%DXq(i,j) * G%DYq(i,j)
+    G%areaBu(i,j) = G%dxBu(i,j) * G%dyBu(i,j)
     G%IareaBu(i,j) = 1.0 / G%areaBu(i,j)
   enddo ; enddo
 
   do j=jsd,jed ; do i=isd,ied
     G%geoLonT(i,j) = xh(i,j)*180.0/PI
     G%geoLatT(i,j) = yh(i,j)*180.0/PI
-    G%DXh(i,j) = ds_di(xh(i,j), yh(i,j), GP)
-    G%DYh(i,j) = ds_dj(xh(i,j), yh(i,j), GP)
+    G%dxT(i,j) = ds_di(xh(i,j), yh(i,j), GP)
+    G%dyT(i,j) = ds_dj(xh(i,j), yh(i,j), GP)
 
-    G%areaT(i,j) = G%DXh(i,j)*G%DYh(i,j)
+    G%areaT(i,j) = G%dxT(i,j)*G%dyT(i,j)
     G%IareaT(i,j) = 1.0 / G%areaT(i,j)
   enddo ; enddo
 
   do j=jsd,jed ; do I=Isdq,Iedq
     G%geoLonCu(i,j) = xu(i,j)*180.0/PI
     G%geoLatCu(i,j) = yu(i,j)*180.0/PI
-    G%DXu(i,j) = ds_di(xu(i,j), yu(i,j), GP)
-    G%DYu(i,j) = ds_dj(xu(i,j), yu(i,j), GP)
+    G%dxCu(i,j) = ds_di(xu(i,j), yu(i,j), GP)
+    G%dyCu(i,j) = ds_dj(xu(i,j), yu(i,j), GP)
   enddo ; enddo
 
   do J=Jsdq,Jedq ; do i=isd,ied
     G%geoLonCv(i,j) = xv(i,j)*180.0/PI
     G%geoLatCv(i,j) = yv(i,j)*180.0/PI
-    G%DXv(i,j) = ds_di(xv(i,j), yv(i,j), GP)
-    G%DYv(i,j) = ds_dj(xv(i,j), yv(i,j), GP)
+    G%dxCv(i,j) = ds_di(xv(i,j), yv(i,j), GP)
+    G%dyCv(i,j) = ds_dj(xv(i,j), yv(i,j), GP)
   enddo ; enddo
 
   if (.not.simple_area) then
@@ -1378,23 +1378,23 @@ subroutine allocate_metrics(G)
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   Isdq = G%Isdq ; Iedq = G%Iedq ; Jsdq = G%Jsdq ; Jedq = G%Jedq
 
-  ALLOC_(G%dxh(isd:ied,jsd:jed)) ; G%dxh(:,:) = 0.0
-  ALLOC_(G%dxu(Isdq:Iedq,jsd:jed)) ; G%dxu(:,:) = 0.0
-  ALLOC_(G%dxv(isd:ied,Jsdq:Jedq)) ; G%dxv(:,:) = 0.0
-  ALLOC_(G%dxq(Isdq:Iedq,Jsdq:Jedq)) ; G%dxq(:,:) = 0.0
-  ALLOC_(G%Idxh(isd:ied,jsd:jed)) ; G%Idxh(:,:) = 0.0
-  ALLOC_(G%Idxu(Isdq:Iedq,jsd:jed)) ; G%Idxu(:,:) = 0.0
-  ALLOC_(G%Idxv(isd:ied,Jsdq:Jedq)) ; G%Idxv(:,:) = 0.0
-  ALLOC_(G%Idxq(Isdq:Iedq,Jsdq:Jedq)) ; G%Idxq(:,:) = 0.0
+  ALLOC_(G%dxT(isd:ied,jsd:jed)) ; G%dxT(:,:) = 0.0
+  ALLOC_(G%dxCu(Isdq:Iedq,jsd:jed)) ; G%dxCu(:,:) = 0.0
+  ALLOC_(G%dxCv(isd:ied,Jsdq:Jedq)) ; G%dxCv(:,:) = 0.0
+  ALLOC_(G%dxBu(Isdq:Iedq,Jsdq:Jedq)) ; G%dxBu(:,:) = 0.0
+  ALLOC_(G%IdxT(isd:ied,jsd:jed)) ; G%IdxT(:,:) = 0.0
+  ALLOC_(G%IdxCu(Isdq:Iedq,jsd:jed)) ; G%IdxCu(:,:) = 0.0
+  ALLOC_(G%IdxCv(isd:ied,Jsdq:Jedq)) ; G%IdxCv(:,:) = 0.0
+  ALLOC_(G%IdxBu(Isdq:Iedq,Jsdq:Jedq)) ; G%IdxBu(:,:) = 0.0
 
-  ALLOC_(G%dyh(isd:ied,jsd:jed)) ; G%dyh(:,:) = 0.0
-  ALLOC_(G%dyu(Isdq:Iedq,jsd:jed)) ; G%dyu(:,:) = 0.0
-  ALLOC_(G%dyv(isd:ied,Jsdq:Jedq)) ; G%dyv(:,:) = 0.0
-  ALLOC_(G%dyq(Isdq:Iedq,Jsdq:Jedq)) ; G%dyq(:,:) = 0.0
-  ALLOC_(G%Idyh(isd:ied,jsd:jed)) ; G%Idyh(:,:) = 0.0
-  ALLOC_(G%Idyu(Isdq:Iedq,jsd:jed)) ; G%Idyu(:,:) = 0.0
-  ALLOC_(G%Idyv(isd:ied,Jsdq:Jedq)) ; G%Idyv(:,:) = 0.0
-  ALLOC_(G%Idyq(Isdq:Iedq,Jsdq:Jedq)) ; G%Idyq(:,:) = 0.0
+  ALLOC_(G%dyT(isd:ied,jsd:jed)) ; G%dyT(:,:) = 0.0
+  ALLOC_(G%dyCu(Isdq:Iedq,jsd:jed)) ; G%dyCu(:,:) = 0.0
+  ALLOC_(G%dyCv(isd:ied,Jsdq:Jedq)) ; G%dyCv(:,:) = 0.0
+  ALLOC_(G%dyBu(Isdq:Iedq,Jsdq:Jedq)) ; G%dyBu(:,:) = 0.0
+  ALLOC_(G%IdyT(isd:ied,jsd:jed)) ; G%IdyT(:,:) = 0.0
+  ALLOC_(G%IdyCu(Isdq:Iedq,jsd:jed)) ; G%IdyCu(:,:) = 0.0
+  ALLOC_(G%IdyCv(isd:ied,Jsdq:Jedq)) ; G%IdyCv(:,:) = 0.0
+  ALLOC_(G%IdyBu(Isdq:Iedq,Jsdq:Jedq)) ; G%IdyBu(:,:) = 0.0
 
   ALLOC_(G%areaT(isd:ied,jsd:jed)) ; G%areaT(:,:) = 0.0
   ALLOC_(G%IareaT(isd:ied,jsd:jed)) ; G%IareaT(:,:) = 0.0
@@ -1414,10 +1414,10 @@ subroutine allocate_metrics(G)
   ALLOC_(G%geoLonCv(isd:ied,Jsdq:Jedq)) ; G%geoLonCv(:,:) = 0.0
   ALLOC_(G%geoLonBu(Isdq:Iedq,Jsdq:Jedq)) ; G%geoLonBu(:,:) = 0.0
 
-  ALLOC_(G%dx_v(isd:ied,Jsdq:Jedq)) ; G%dx_v(:,:) = 0.0
-  ALLOC_(G%dy_u(Isdq:Iedq,jsd:jed)) ; G%dy_u(:,:) = 0.0
-  ALLOC_(G%dx_v_obc(isd:ied,Jsdq:Jedq)) ; G%dx_v_obc(:,:) = 0.0
-  ALLOC_(G%dy_u_obc(Isdq:Iedq,jsd:jed)) ; G%dy_u_obc(:,:) = 0.0  
+  ALLOC_(G%dx_Cv(isd:ied,Jsdq:Jedq)) ; G%dx_Cv(:,:) = 0.0
+  ALLOC_(G%dy_Cu(Isdq:Iedq,jsd:jed)) ; G%dy_Cu(:,:) = 0.0
+  ALLOC_(G%dx_Cv_obc(isd:ied,Jsdq:Jedq)) ; G%dx_Cv_obc(:,:) = 0.0
+  ALLOC_(G%dy_Cu_obc(Isdq:Iedq,jsd:jed)) ; G%dy_Cu_obc(:,:) = 0.0  
   ALLOC_(G%areaCu(Isdq:Iedq,jsd:jed)) ; G%areaCu(:,:) = 0.0
   ALLOC_(G%areaCv(isd:ied,Jsdq:Jedq)) ; G%areaCv(:,:) = 0.0
   ALLOC_(G%IareaCu(Isdq:Iedq,jsd:jed)) ; G%IareaCu(:,:) = 0.0
@@ -1547,16 +1547,16 @@ subroutine initialize_masks(G, PF)
   call pass_vector(G%umask, G%vmask, G%Domain, To_All+Scalar_Pair, CGRID_NE)
 
   do j=G%Jsdq,G%Jedq ; do i=G%isd,G%ied
-    G%dx_v(i,j) = G%vmask(i,j)*G%DXv(i,j)
-    G%dx_v_obc(i,j) = G%vmask(i,j)*G%DXv(i,j)
-    G%areaCv(i,j) = G%DYv(i,j)*G%dx_v(i,j)
+    G%dx_Cv(i,j) = G%vmask(i,j)*G%dxCv(i,j)
+    G%dx_Cv_obc(i,j) = G%vmask(i,j)*G%dxCv(i,j)
+    G%areaCv(i,j) = G%dyCv(i,j)*G%dx_Cv(i,j)
     G%IareaCv(i,j) = 0.0
     if (G%areaCv(i,j) > 0.0) G%IareaCv(i,j) = G%vmask(i,j) / G%areaCv(i,j)
   enddo ; enddo
   do j=G%jsd,G%jed ; do i=G%Isdq,G%Iedq  
-    G%dy_u(i,j) = G%umask(i,j)*G%DYu(i,j)
-    G%dy_u_obc(i,j) = G%umask(i,j)*G%DYu(i,j)  
-    G%areaCu(i,j) = G%DXu(i,j)*G%dy_u(i,j)
+    G%dy_Cu(i,j) = G%umask(i,j)*G%dyCu(i,j)
+    G%dy_Cu_obc(i,j) = G%umask(i,j)*G%dyCu(i,j)  
+    G%areaCu(i,j) = G%dxCu(i,j)*G%dy_Cu(i,j)
     G%IareaCu(i,j) = 0.0
     if (G%areaCu(i,j) > 0.0) G%IareaCu(i,j) = G%umask(i,j) / G%areaCu(i,j)
   enddo ; enddo

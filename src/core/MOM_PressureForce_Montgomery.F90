@@ -335,27 +335,27 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
       enddo ; enddo
       do j=js,je ; do I=Isq,Ieq
         ! PFu_bc = p* grad alpha*
-        PFu_bc = (alpha_star(i+1,j,k) - alpha_star(i,j,k)) * (G%IDXu(I,j) * &
+        PFu_bc = (alpha_star(i+1,j,k) - alpha_star(i,j,k)) * (G%IdxCu(I,j) * &
           ((dp_star(i,j) * dp_star(i+1,j) + (p(i,j,K) * dp_star(i+1,j) + &
            p(i+1,j,K) * dp_star(i,j))) / (dp_star(i,j) + dp_star(i+1,j))))
-        PFu(I,j,k) = -(M(i+1,j,k) - M(i,j,k)) * G%IDXu(I,j) + PFu_bc
+        PFu(I,j,k) = -(M(i+1,j,k) - M(i,j,k)) * G%IdxCu(I,j) + PFu_bc
         if (ASSOCIATED(CS%diag%PFu_bc)) CS%diag%PFu_bc(i,j,k) = PFu_bc
       enddo ; enddo
       do J=Jsq,Jeq ; do i=is,ie
-        PFv_bc = (alpha_star(i,j+1,k) - alpha_star(i,j,k)) * (G%IDYv(i,J) * &
+        PFv_bc = (alpha_star(i,j+1,k) - alpha_star(i,j,k)) * (G%IdyCv(i,J) * &
           ((dp_star(i,j) * dp_star(i,j+1) + (p(i,j,K) * dp_star(i,j+1) + &
           p(i,j+1,K) * dp_star(i,j))) / (dp_star(i,j) + dp_star(i,j+1))))
-        PFv(i,J,k) = -(M(i,j+1,k) - M(i,j,k)) * G%IDYv(i,J) + PFv_bc
+        PFv(i,J,k) = -(M(i,j+1,k) - M(i,j,k)) * G%IdyCv(i,J) + PFv_bc
         if (ASSOCIATED(CS%diag%PFv_bc)) CS%diag%PFv_bc(i,j,k) = PFv_bc
       enddo ; enddo
     enddo ! k-loop
   else ! .not. use_EOS
     do k=1,nz
       do j=js,je ; do I=Isq,Ieq
-        PFu(I,j,k) = -(M(i+1,j,k) - M(i,j,k)) * G%IDXu(I,j)
+        PFu(I,j,k) = -(M(i+1,j,k) - M(i,j,k)) * G%IdxCu(I,j)
       enddo ; enddo
       do J=Jsq,Jeq ; do i=is,ie
-        PFv(i,J,k) = -(M(i,j+1,k) - M(i,j,k)) * G%IDYv(i,J)
+        PFv(i,J,k) = -(M(i,j+1,k) - M(i,j,k)) * G%IdyCv(i,J)
       enddo ; enddo
     enddo
   endif ! use_EOS
@@ -563,27 +563,27 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
         h_star(i,j) = (e(i,j,K) - e(i,j,K+1)) + h_neglect
       enddo ; enddo
       do j=js,je ; do I=Isq,Ieq
-        PFu_bc = -1.0*(rho_star(i+1,j,k) - rho_star(i,j,k)) * (G%IDXu(I,j) * &
+        PFu_bc = -1.0*(rho_star(i+1,j,k) - rho_star(i,j,k)) * (G%IdxCu(I,j) * &
           ((h_star(i,j) * h_star(i+1,j) - (e(i,j,K) * h_star(i+1,j) + &
           e(i+1,j,K) * h_star(i,j))) / (h_star(i,j) + h_star(i+1,j))))
-        PFu(I,j,k) = -(M(i+1,j,k) - M(i,j,k)) * G%IDXu(I,j) + PFu_bc
+        PFu(I,j,k) = -(M(i+1,j,k) - M(i,j,k)) * G%IdxCu(I,j) + PFu_bc
         if (ASSOCIATED(CS%diag%PFu_bc)) CS%diag%PFu_bc(i,j,k) = PFu_bc
       enddo ; enddo
       do J=Jsq,Jeq ; do i=is,ie
-        PFv_bc = -1.0*(rho_star(i,j+1,k) - rho_star(i,j,k)) * (G%IDYv(i,J) * &
+        PFv_bc = -1.0*(rho_star(i,j+1,k) - rho_star(i,j,k)) * (G%IdyCv(i,J) * &
           ((h_star(i,j) * h_star(i,j+1) - (e(i,j,K) * h_star(i,j+1) + &
           e(i,j+1,K) * h_star(i,j))) / (h_star(i,j) + h_star(i,j+1))))
-        PFv(i,J,k) = -(M(i,j+1,k) - M(i,j,k)) * G%IDYv(i,J) + PFv_bc
+        PFv(i,J,k) = -(M(i,j+1,k) - M(i,j,k)) * G%IdyCv(i,J) + PFv_bc
         if (ASSOCIATED(CS%diag%PFv_bc)) CS%diag%PFv_bc(i,j,k) = PFv_bc
       enddo ; enddo
     enddo ! k-loop
   else ! .not. use_EOS
     do k=1,nz
       do j=js,je ; do I=Isq,Ieq
-        PFu(I,j,k) = -(M(i+1,j,k) - M(i,j,k)) * G%IDXu(I,j)
+        PFu(I,j,k) = -(M(i+1,j,k) - M(i,j,k)) * G%IdxCu(I,j)
       enddo ; enddo
       do J=Jsq,Jeq ; do i=is,ie
-        PFv(i,J,k) = -(M(i,j+1,k) - M(i,j,k)) * G%IDYv(i,J)
+        PFv(i,J,k) = -(M(i,j+1,k) - M(i,j,k)) * G%IdyCv(i,J)
       enddo ; enddo
     enddo
   endif ! use_EOS
@@ -879,9 +879,9 @@ subroutine PressureForce_Mont_init(Time, G, param_file, diag, CS, tides_CSp)
                  do_not_log=.true.) ! Input for diagnostic use only.
 
   if (use_EOS) then
-    CS%id_PFu_bc = register_diag_field('ocean_model', 'PFu_bc', G%axesul, Time, &
+    CS%id_PFu_bc = register_diag_field('ocean_model', 'PFu_bc', G%axesCuL, Time, &
          'Density Gradient Zonal Pressure Force Accel.', "meter second-2")
-    CS%id_PFv_bc = register_diag_field('ocean_model', 'PFv_bc', G%axesvl, Time, &
+    CS%id_PFv_bc = register_diag_field('ocean_model', 'PFv_bc', G%axesCvL, Time, &
          'Density Gradient Meridional Pressure Force Accel.', "meter second-2")
     if (CS%id_PFu_bc > 0) then
       call safe_alloc_ptr(diag%PFu_bc,G%Isdq,G%Iedq,G%jsd,G%jed,G%ke)
@@ -894,7 +894,7 @@ subroutine PressureForce_Mont_init(Time, G, param_file, diag, CS, tides_CSp)
   endif
 
   if (CS%tides) then
-    CS%id_e_tidal = register_diag_field('ocean_model', 'e_tidal', G%axesh1, &
+    CS%id_e_tidal = register_diag_field('ocean_model', 'e_tidal', G%axesT1, &
         Time, 'Tidal Forcing Astronomical and SAL Height Anomaly', 'meter')
   endif
 
