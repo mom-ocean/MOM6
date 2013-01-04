@@ -74,14 +74,14 @@ subroutine DOME_initialize_topography(D, G, param_file)
                  fail_if_missing=.true.)
 
   do j=js,je ; do i=is,ie
-    if (G%geolath(i,j) < 600.0) then
-      if (G%geolath(i,j) < 300.0) then
+    if (G%geoLatT(i,j) < 600.0) then
+      if (G%geoLatT(i,j) < 300.0) then
         D(i,j)=max_depth
       else
-        D(i,j)=max_depth-10.0*(G%geolath(i,j)-300.0)
+        D(i,j)=max_depth-10.0*(G%geoLatT(i,j)-300.0)
       endif
     else
-      if ((G%geolonh(i,j) > 1000.0).AND.(G%geolonh(i,j) < 1100.0)) then
+      if ((G%geoLonT(i,j) > 1000.0).AND.(G%geoLonT(i,j) < 1100.0)) then
         D(i,j)=600.0
       else
         D(i,j)=0.5*min_depth
@@ -199,15 +199,15 @@ subroutine DOME_initialize_sponges(G, tv, PF, CSp)
   H0(1) = 0.0
   do k=2,nz ; H0(k) = -(real(k-1)-0.5)*max_depth/real(nz-1) ; enddo
   do i=is,ie; do j=js,je
-    if (G%geolonh(i,j) < 100.0) then ; damp = 10.0
-    elseif (G%geolonh(i,j) < 200.0) then
-      damp = 10.0*(200.0-G%geolonh(i,j))/100.0
+    if (G%geoLonT(i,j) < 100.0) then ; damp = 10.0
+    elseif (G%geoLonT(i,j) < 200.0) then
+      damp = 10.0*(200.0-G%geoLonT(i,j))/100.0
     else ; damp=0.0
     endif
 
-    if (G%geolonh(i,j) > 1400.0) then ; damp_new = 10.0
-    elseif (G%geolonh(i,j) > 1300.0) then
-       damp_new = 10.0*(G%geolonh(i,j)-1300.0)/100.0
+    if (G%geoLonT(i,j) > 1400.0) then ; damp_new = 10.0
+    elseif (G%geoLonT(i,j) > 1300.0) then
+       damp_new = 10.0*(G%geoLonT(i,j)-1300.0)/100.0
     else ; damp_new = 0.0
     endif
 
@@ -340,8 +340,8 @@ subroutine DOME_set_Open_Bdry_Conds(OBC, tv, G, param_file, advect_tracer_CSp)
     allocate(OBC_mask_v(isd:ied,Jsdq:Jedq)) ; OBC_mask_v(:,:) = .false.
     any_OBC = .false.
     do J=Jsdq,Jedq ; do i=isd,ied
-      if ((G%geolonv(i,J) > 1000.0) .and. (G%geolonv(i,J)  < 1100.0) .and. &
-          (abs(G%geolatv(i,J) - G%gridlatq(G%Domain%njglobal+njhalo)) < 0.1)) then
+      if ((G%geoLonCv(i,J) > 1000.0) .and. (G%geoLonCv(i,J)  < 1100.0) .and. &
+          (abs(G%geoLatCv(i,J) - G%gridlatq(G%Domain%njglobal+njhalo)) < 0.1)) then
         OBC_mask_v(i,J) = .true. ; any_OBC = .true.
       endif
     enddo ; enddo
@@ -403,11 +403,11 @@ subroutine DOME_set_Open_Bdry_Conds(OBC, tv, G, param_file, advect_tracer_CSp)
       do J=Jsdq,Jedq ; do i=isd,ied
         if (OBC_mask_v(i,J)) then
           ! This needs to be unneccesarily complicated without symmetric memory.
-          lon_im1 = 2.0*G%geolonv(i,J) - G%geolonq(I,J)
-          ! if (isd > Isdq) lon_im1 = G%geolonq(I-1,J)
+          lon_im1 = 2.0*G%geoLonCv(i,J) - G%geoLonBu(I,J)
+          ! if (isd > Isdq) lon_im1 = G%geoLonBu(I-1,J)
           OBC%vh(i,J,k) = tr_k * (exp(-2.0*(lon_im1 - 1000.0)/Def_Rad) -&
-                                exp(-2.0*(G%geolonq(I,J) - 1000.0)/Def_Rad))
-          OBC%v(i,J,k) = v_k * exp(-2.0*(G%geolonv(i,J) - 1000.0)/Def_Rad)
+                                exp(-2.0*(G%geoLonBu(I,J) - 1000.0)/Def_Rad))
+          OBC%v(i,J,k) = v_k * exp(-2.0*(G%geoLonCv(i,J) - 1000.0)/Def_Rad)
         else
           OBC%vh(i,J,k) = 0.0 ; OBC%v(i,J,k) = 0.0
         endif

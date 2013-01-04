@@ -589,27 +589,27 @@ halo=1 ! AJA
   do I=Isdq,Iedq ; do J=Jsdq,Jedq ; tempQ(I,J) = G%IareaBu(I,J) ; enddo ; enddo
   call qchksum(tempQ,trim(parent)//': IareaBu',G,haloshift=halo)
 
-  call hchksum(G%geolonh,trim(parent)//': geolonh',G,haloshift=halo)
+  call hchksum(G%geoLonT,trim(parent)//': geoLonT',G,haloshift=halo)
 
-  call hchksum(G%geolath,trim(parent)//': geolath',G,haloshift=halo)
+  call hchksum(G%geoLatT,trim(parent)//': geoLatT',G,haloshift=halo)
 
-  do I=Isdq,Iedq ; do J=Jsdq,Jedq ; tempQ(I,J) = G%geolonq(I,J) ; enddo ; enddo
-  call qchksum(tempQ,trim(parent)//': geolonq',G,haloshift=halo)
+  do I=Isdq,Iedq ; do J=Jsdq,Jedq ; tempQ(I,J) = G%geoLonBu(I,J) ; enddo ; enddo
+  call qchksum(tempQ,trim(parent)//': geoLonBu',G,haloshift=halo)
 
-  do I=Isdq,Iedq ; do J=Jsdq,Jedq ; tempQ(I,J) = G%geolatq(I,J) ; enddo ; enddo
-  call qchksum(tempQ,trim(parent)//': geolatq',G,haloshift=halo)
+  do I=Isdq,Iedq ; do J=Jsdq,Jedq ; tempQ(I,J) = G%geoLatBu(I,J) ; enddo ; enddo
+  call qchksum(tempQ,trim(parent)//': geoLatBu',G,haloshift=halo)
 
-  do I=Isdq,Iedq ; do j=jsd,jed ; tempE(I,J) = G%geolonu(I,J) ; enddo ; enddo
-  call uchksum(tempE,trim(parent)//': geolonu',G,haloshift=halo)
+  do I=Isdq,Iedq ; do j=jsd,jed ; tempE(I,J) = G%geoLonCu(I,J) ; enddo ; enddo
+  call uchksum(tempE,trim(parent)//': geoLonCu',G,haloshift=halo)
 
-  do I=Isdq,Iedq ; do j=jsd,jed ; tempE(I,J) = G%geolatu(I,J) ; enddo ; enddo
-  call uchksum(tempE,trim(parent)//': geolatu',G,haloshift=halo)
+  do I=Isdq,Iedq ; do j=jsd,jed ; tempE(I,J) = G%geoLatCu(I,J) ; enddo ; enddo
+  call uchksum(tempE,trim(parent)//': geoLatCu',G,haloshift=halo)
 
-  do i=isd,ied ; do J=Jsdq,Jedq ; tempN(I,J) = G%geolonv(I,J) ; enddo ; enddo
-  call vchksum(tempN,trim(parent)//': geolonv',G,haloshift=halo)
+  do i=isd,ied ; do J=Jsdq,Jedq ; tempN(I,J) = G%geoLonCv(I,J) ; enddo ; enddo
+  call vchksum(tempN,trim(parent)//': geoLonCv',G,haloshift=halo)
 
-  do i=isd,ied ; do J=Jsdq,Jedq ; tempN(I,J) = G%geolatv(I,J) ; enddo ; enddo
-  call vchksum(tempN,trim(parent)//': geolatv',G,haloshift=halo)
+  do i=isd,ied ; do J=Jsdq,Jedq ; tempN(I,J) = G%geoLatCv(I,J) ; enddo ; enddo
+  call vchksum(tempN,trim(parent)//': geoLatCv',G,haloshift=halo)
 
 end subroutine grid_metrics_chksum
 
@@ -730,11 +730,11 @@ subroutine set_grid_metrics_from_mosaic(G,param_file)
 
   call pass_var(tmpZ, SGdom, position=CORNER)
   call extrapolate_metric(tmpZ,jsc-jsd+1)
-  G%geolonh(G%isd:G%ied,G%jsd:G%jed)=tmpZ(isd:ied:2,jsd:jed:2)
-  G%geolonq(G%isd:G%ied,G%jsd:G%jed)=tmpZ(isd+1:ied:2,jsd+1:jed:2)
-  G%geolonu(G%isd:G%ied,G%jsd:G%jed)=tmpZ(isd+1:ied:2,jsd:jed:2)
-  G%geolonv(G%isd:G%ied,G%jsd:G%jed)=tmpZ(isd:ied:2,jsd+1:jed:2)
- ! call pass_var(G%geolonq, G%domain, position=CORNER)
+  G%geoLonT(G%isd:G%ied,G%jsd:G%jed)=tmpZ(isd:ied:2,jsd:jed:2)
+  G%geoLonBu(G%isd:G%ied,G%jsd:G%jed)=tmpZ(isd+1:ied:2,jsd+1:jed:2)
+  G%geoLonCu(G%isd:G%ied,G%jsd:G%jed)=tmpZ(isd+1:ied:2,jsd:jed:2)
+  G%geoLonCv(G%isd:G%ied,G%jsd:G%jed)=tmpZ(isd:ied:2,jsd+1:jed:2)
+ ! call pass_var(G%geoLonBu, G%domain, position=CORNER)
 
 ! Read Y from the supergrid
   tmpZ(:,:)=999.
@@ -745,10 +745,10 @@ subroutine set_grid_metrics_from_mosaic(G,param_file)
 
   call pass_var(tmpZ, SGdom, position=CORNER)
   call extrapolate_metric(tmpZ,jsc-jsd+1)
-  G%geolath(G%isd:G%ied,G%jsd:G%jed)=tmpZ(isd:ied:2,jsd:jed:2)
-  G%geolatq(G%isd:G%ied,G%jsd:G%jed)=tmpZ(isd+1:ied:2,jsd+1:jed:2)
-  G%geolatu(G%isd:G%ied,G%jsd:G%jed)=tmpZ(isd+1:ied:2,jsd:jed:2)
-  G%geolatv(G%isd:G%ied,G%jsd:G%jed)=tmpZ(isd:ied:2,jsd+1:jed:2)
+  G%geoLatT(G%isd:G%ied,G%jsd:G%jed)=tmpZ(isd:ied:2,jsd:jed:2)
+  G%geoLatBu(G%isd:G%ied,G%jsd:G%jed)=tmpZ(isd+1:ied:2,jsd+1:jed:2)
+  G%geoLatCu(G%isd:G%ied,G%jsd:G%jed)=tmpZ(isd+1:ied:2,jsd:jed:2)
+  G%geoLatCv(G%isd:G%ied,G%jsd:G%jed)=tmpZ(isd:ied:2,jsd+1:jed:2)
 
 ! Read DX,DY from the supergrid
   tmpU(:,:)=0.; tmpV(:,:)=0.
@@ -918,7 +918,7 @@ subroutine set_grid_metrics_cartesian(G, param_file)
   enddo
 
   do J=Jsdq,Jedq ; do I=Isdq,Iedq
-    G%geolonq(i,j) = grid_lonq(i+X1off) ; G%geolatq(i,j) = grid_latq(j+Y1off)
+    G%geoLonBu(i,j) = grid_lonq(i+X1off) ; G%geoLatBu(i,j) = grid_latq(j+Y1off)
 
     G%DXq(I,J) = Rad_Earth * len_lon * PI / (180.0 * niglobal)
     G%DYq(I,J) = Rad_Earth * len_lat * PI / (180.0 * njglobal)
@@ -941,21 +941,21 @@ subroutine set_grid_metrics_cartesian(G, param_file)
   enddo ; enddo
 
   do j=jsd,jed ; do i=isd,ied
-    G%geolonh(i,j) = G%gridlonh(i+X1off) ; G%geolath(i,j) = G%gridlath(j+Y1off)
+    G%geoLonT(i,j) = G%gridlonh(i+X1off) ; G%geoLatT(i,j) = G%gridlath(j+Y1off)
     G%DXh(i,j) = G%DXq(I,J) ; G%IDXh(i,j) = G%IDXq(I,J)
     G%DYh(i,j) = G%DYq(I,J) ; G%IDYh(i,j) = G%IDYq(I,J)
     G%areaT(i,j) = G%areaBu(I,J) ; G%IareaT(i,j) = G%IareaBu(I,J)
   enddo ; enddo
 
   do j=jsd,jed ; do I=Isdq,Iedq
-    G%geolonu(i,j) = grid_lonq(i+X1off) ; G%geolatu(i,j) = G%gridlath(j+Y1off)
+    G%geoLonCu(i,j) = grid_lonq(i+X1off) ; G%geoLatCu(i,j) = G%gridlath(j+Y1off)
 
     G%DXu(I,j) = G%DXq(I,J) ; G%IDXu(I,j) = G%IDXq(I,J)
     G%DYu(I,j) = G%DYq(I,J) ; G%IDYu(I,j) = G%IDYq(I,J)
   enddo ; enddo
 
   do J=Jsdq,Jedq ; do i=isd,ied
-    G%geolonv(i,j) = G%gridlonh(i+X1off) ; G%geolatv(i,j) = grid_latq(j+Y1off)
+    G%geoLonCv(i,j) = G%gridlonh(i+X1off) ; G%geoLatCv(i,j) = grid_latq(j+Y1off)
 
     G%DXv(i,J) = G%DXq(I,J) ; G%IDXv(i,J) = G%IDXq(I,J)
     G%DYv(i,J) = G%DYq(I,J) ; G%IDYv(i,J) = G%IDYq(I,J)
@@ -1047,51 +1047,51 @@ subroutine set_grid_metrics_spherical(G, param_file)
 
   dL_di = (len_lon * 4.0*atan(1.0)) / (180.0 * G%Domain%niglobal)
   do J=Jsdq,Jedq ; do I=Isdq,Iedq
-    G%geolonq(I,J) = grid_lonq(I+I_offset)
-    G%geolatq(I,J) = grid_latq(J+J_offset)
+    G%geoLonBu(I,J) = grid_lonq(I+I_offset)
+    G%geoLatBu(I,J) = grid_latq(J+J_offset)
 
 ! The following line is needed to reproduce the solution from
 ! set_grid_metrics_mercator when used to generate a simple spherical grid.
-    G%DXq(I,J) = Rad_Earth * COS( G%geolatq(I,J)*PI_180 ) * dL_di
-!   G%DXq(I,J) = Rad_Earth * dLon*PI_180 * COS( G%geolatq(I,J)*PI_180 )
+    G%DXq(I,J) = Rad_Earth * COS( G%geoLatBu(I,J)*PI_180 ) * dL_di
+!   G%DXq(I,J) = Rad_Earth * dLon*PI_180 * COS( G%geoLatBu(I,J)*PI_180 )
     G%DYq(I,J) = Rad_Earth * dLat*PI_180
     G%areaBu(I,J) = G%DXq(I,J) * G%DYq(I,J)
   enddo; enddo
 
   do J=Jsdq,Jedq ; do i=isd,ied
-    G%geolonv(i,J) = G%gridlonh(i+i_offset)
-    G%geolatv(i,J) = grid_latq(j+j_offset)
+    G%geoLonCv(i,J) = G%gridlonh(i+i_offset)
+    G%geoLatCv(i,J) = grid_latq(j+j_offset)
 
 ! The following line is needed to reproduce the solution from
 ! set_grid_metrics_mercator when used to generate a simple spherical grid.
-    G%DXv(i,J) = Rad_Earth * COS( G%geolatv(i,J)*PI_180 ) * dL_di
-!   G%DXv(i,J) = Rad_Earth * (dLon*PI_180) * COS( G%geolatv(i,J)*PI_180 )
+    G%DXv(i,J) = Rad_Earth * COS( G%geoLatCv(i,J)*PI_180 ) * dL_di
+!   G%DXv(i,J) = Rad_Earth * (dLon*PI_180) * COS( G%geoLatCv(i,J)*PI_180 )
     G%DYv(i,J) = Rad_Earth * dLat*PI_180
   enddo; enddo
 
   do j=jsd,jed ; do I=Isdq,Iedq
-    G%geolonu(I,j) = grid_lonq(i+i_offset)
-    G%geolatu(I,j) = G%gridlath(j+j_offset)
+    G%geoLonCu(I,j) = grid_lonq(i+i_offset)
+    G%geoLatCu(I,j) = G%gridlath(j+j_offset)
 
 ! The following line is needed to reproduce the solution from
 ! set_grid_metrics_mercator when used to generate a simple spherical grid.
-    G%DXu(I,j) = Rad_Earth * COS( G%geolatu(I,j)*PI_180 ) * dL_di
+    G%DXu(I,j) = Rad_Earth * COS( G%geoLatCu(I,j)*PI_180 ) * dL_di
 !   G%DXu(I,j) = Rad_Earth * dLon*PI_180 * COS( latitude )
     G%DYu(I,j) = Rad_Earth * dLat*PI_180
   enddo; enddo
 
   do j=jsd,jed ; do i=isd,ied
-    G%geolonh(i,j) = G%gridlonh(i+i_offset)
-    G%geolath(i,j) = G%gridlath(j+j_offset)
+    G%geoLonT(i,j) = G%gridlonh(i+i_offset)
+    G%geoLatT(i,j) = G%gridlath(j+j_offset)
 
 ! The following line is needed to reproduce the solution from
 ! set_grid_metrics_mercator when used to generate a simple spherical grid.
-    G%DXh(i,j) = Rad_Earth * COS( G%geolath(i,j)*PI_180 ) * dL_di
+    G%DXh(i,j) = Rad_Earth * COS( G%geoLatT(i,j)*PI_180 ) * dL_di
 !   G%DXh(i,j) = Rad_Earth * dLon*PI_180 * COS( latitude )
     G%DYh(i,j) = Rad_Earth * dLat*PI_180
 
-!   latitude = G%geolatv(i,J)*PI_180             ! In radians
-!   dL_di    = G%geolatv(i,max(jsd,J-1))*PI_180  ! In radians
+!   latitude = G%geoLatCv(i,J)*PI_180             ! In radians
+!   dL_di    = G%geoLatCv(i,max(jsd,J-1))*PI_180  ! In radians
 !   G%areaT(i,j) = Rad_Earth**2*dLon*dLat*ABS(SIN(latitude)-SIN(dL_di))
     G%areaT(i,j) = G%DXh(i,j) * G%DYh(i,j)
   enddo; enddo
@@ -1277,8 +1277,8 @@ subroutine set_grid_metrics_mercator(G, param_file)
   enddo
 
   do J=Jsdq,Jedq ; do I=Isdq,Iedq
-    G%geolonq(i,j) = xq(i,j)*180.0/PI
-    G%geolatq(i,j) = yq(i,j)*180.0/PI
+    G%geoLonBu(i,j) = xq(i,j)*180.0/PI
+    G%geoLatBu(i,j) = yq(i,j)*180.0/PI
     G%DXq(i,j) = ds_di(xq(i,j), yq(i,j), GP)
     G%DYq(i,j) = ds_dj(xq(i,j), yq(i,j), GP)
 
@@ -1287,8 +1287,8 @@ subroutine set_grid_metrics_mercator(G, param_file)
   enddo ; enddo
 
   do j=jsd,jed ; do i=isd,ied
-    G%geolonh(i,j) = xh(i,j)*180.0/PI
-    G%geolath(i,j) = yh(i,j)*180.0/PI
+    G%geoLonT(i,j) = xh(i,j)*180.0/PI
+    G%geoLatT(i,j) = yh(i,j)*180.0/PI
     G%DXh(i,j) = ds_di(xh(i,j), yh(i,j), GP)
     G%DYh(i,j) = ds_dj(xh(i,j), yh(i,j), GP)
 
@@ -1297,15 +1297,15 @@ subroutine set_grid_metrics_mercator(G, param_file)
   enddo ; enddo
 
   do j=jsd,jed ; do I=Isdq,Iedq
-    G%geolonu(i,j) = xu(i,j)*180.0/PI
-    G%geolatu(i,j) = yu(i,j)*180.0/PI
+    G%geoLonCu(i,j) = xu(i,j)*180.0/PI
+    G%geoLatCu(i,j) = yu(i,j)*180.0/PI
     G%DXu(i,j) = ds_di(xu(i,j), yu(i,j), GP)
     G%DYu(i,j) = ds_dj(xu(i,j), yu(i,j), GP)
   enddo ; enddo
 
   do J=Jsdq,Jedq ; do i=isd,ied
-    G%geolonv(i,j) = xv(i,j)*180.0/PI
-    G%geolatv(i,j) = yv(i,j)*180.0/PI
+    G%geoLonCv(i,j) = xv(i,j)*180.0/PI
+    G%geoLatCv(i,j) = yv(i,j)*180.0/PI
     G%DXv(i,j) = ds_di(xv(i,j), yv(i,j), GP)
     G%DYv(i,j) = ds_dj(xv(i,j), yv(i,j), GP)
   enddo ; enddo
@@ -1405,14 +1405,14 @@ subroutine allocate_metrics(G)
   ALLOC_(G%umask(Isdq:Iedq,jsd:jed)) ; G%umask(:,:) = 0.0
   ALLOC_(G%vmask(isd:ied,Jsdq:Jedq)) ; G%vmask(:,:) = 0.0
   ALLOC_(G%qmask(Isdq:Iedq,Jsdq:Jedq)) ; G%qmask(:,:) = 0.0
-  ALLOC_(G%geolath(isd:ied,jsd:jed)) ; G%geolath(:,:) = 0.0
-  ALLOC_(G%geolatu(Isdq:Iedq,jsd:jed)) ; G%geolatu(:,:) = 0.0
-  ALLOC_(G%geolatv(isd:ied,Jsdq:Jedq)) ; G%geolatv(:,:) = 0.0
-  ALLOC_(G%geolatq(Isdq:Iedq,Jsdq:Jedq)) ; G%geolatq(:,:) = 0.0
-  ALLOC_(G%geolonh(isd:ied,jsd:jed)) ; G%geolonh(:,:) = 0.0
-  ALLOC_(G%geolonu(Isdq:Iedq,jsd:jed)) ; G%geolonu(:,:) = 0.0
-  ALLOC_(G%geolonv(isd:ied,Jsdq:Jedq)) ; G%geolonv(:,:) = 0.0
-  ALLOC_(G%geolonq(Isdq:Iedq,Jsdq:Jedq)) ; G%geolonq(:,:) = 0.0
+  ALLOC_(G%geoLatT(isd:ied,jsd:jed)) ; G%geoLatT(:,:) = 0.0
+  ALLOC_(G%geoLatCu(Isdq:Iedq,jsd:jed)) ; G%geoLatCu(:,:) = 0.0
+  ALLOC_(G%geoLatCv(isd:ied,Jsdq:Jedq)) ; G%geoLatCv(:,:) = 0.0
+  ALLOC_(G%geoLatBu(Isdq:Iedq,Jsdq:Jedq)) ; G%geoLatBu(:,:) = 0.0
+  ALLOC_(G%geoLonT(isd:ied,jsd:jed)) ; G%geoLonT(:,:) = 0.0
+  ALLOC_(G%geoLonCu(Isdq:Iedq,jsd:jed)) ; G%geoLonCu(:,:) = 0.0
+  ALLOC_(G%geoLonCv(isd:ied,Jsdq:Jedq)) ; G%geoLonCv(:,:) = 0.0
+  ALLOC_(G%geoLonBu(Isdq:Iedq,Jsdq:Jedq)) ; G%geoLonBu(:,:) = 0.0
 
   ALLOC_(G%dx_v(isd:ied,Jsdq:Jedq)) ; G%dx_v(:,:) = 0.0
   ALLOC_(G%dy_u(Isdq:Iedq,jsd:jed)) ; G%dy_u(:,:) = 0.0

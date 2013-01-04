@@ -140,7 +140,7 @@ subroutine check_redundant_v2d(mesg, u_comp, v_comp, G, is, ie, js, je, &
       write(mesg2,'(" redundant v-comps",2(1pe12.4)," differ by ", &
                     & 1pe12.4," at i,j = ",2i4," x,y = ",2(1pe12.4)" on pe ",i4)') &
            v_comp(i,j), v_resym(i,j),v_comp(i,j)-v_resym(i,j),i,j, &
-           G%geolonq(i,j), G%geolatq(i,j), pe_here()
+           G%geoLonBu(i,j), G%geoLatBu(i,j), pe_here()
       write(*,'(A155)') trim(mesg)//trim(mesg2)
     endif
   enddo ; enddo

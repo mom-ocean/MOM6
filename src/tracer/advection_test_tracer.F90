@@ -278,31 +278,31 @@ subroutine initialize_advection_test_tracer(restart, day, G, h, OBC, CS, sponge_
       enddo ; enddo ; enddo
       k=1 ! Square wave
       do j=js,je ; do i=is,ie
-        if (abs(G%geolonh(i,j)-CS%x_origin)<0.5*CS%x_width .and. &
-            abs(G%geolath(i,j)-CS%y_origin)<0.5*CS%y_width) CS%tr(i,j,k,m) = 1.0
+        if (abs(G%geoLonT(i,j)-CS%x_origin)<0.5*CS%x_width .and. &
+            abs(G%geoLatT(i,j)-CS%y_origin)<0.5*CS%y_width) CS%tr(i,j,k,m) = 1.0
       enddo ; enddo
       k=2 ! Triangle wave
       do j=js,je ; do i=is,ie
-        locx=abs(G%geolonh(i,j)-CS%x_origin)/CS%x_width
-        locy=abs(G%geolath(i,j)-CS%y_origin)/CS%y_width
+        locx=abs(G%geoLonT(i,j)-CS%x_origin)/CS%x_width
+        locy=abs(G%geoLatT(i,j)-CS%y_origin)/CS%y_width
         CS%tr(i,j,k,m) = max(0.0, 1.0-locx)*max(0.0, 1.0-locy)
       enddo ; enddo
       k=3 ! Cosine bell
       do j=js,je ; do i=is,ie
-        locx=min(1.0, abs(G%geolonh(i,j)-CS%x_origin)/CS%x_width)*(acos(0.0)*2.)
-        locy=min(1.0, abs(G%geolath(i,j)-CS%y_origin)/CS%y_width)*(acos(0.0)*2.)
+        locx=min(1.0, abs(G%geoLonT(i,j)-CS%x_origin)/CS%x_width)*(acos(0.0)*2.)
+        locy=min(1.0, abs(G%geoLatT(i,j)-CS%y_origin)/CS%y_width)*(acos(0.0)*2.)
         CS%tr(i,j,k,m) = (1.0+cos(locx))*(1.0+cos(locy))*0.25
       enddo ; enddo
       k=4 ! Cylinder
       do j=js,je ; do i=is,ie
-        locx=abs(G%geolonh(i,j)-CS%x_origin)/CS%x_width
-        locy=abs(G%geolath(i,j)-CS%y_origin)/CS%y_width
+        locx=abs(G%geoLonT(i,j)-CS%x_origin)/CS%x_width
+        locy=abs(G%geoLatT(i,j)-CS%y_origin)/CS%y_width
         if (locx**2+locy**2<=1.0) CS%tr(i,j,k,m) = 1.0
       enddo ; enddo
       k=5 ! Cut cylinder
       do j=js,je ; do i=is,ie
-        locx=(G%geolonh(i,j)-CS%x_origin)/CS%x_width
-        locy=(G%geolath(i,j)-CS%y_origin)/CS%y_width
+        locx=(G%geoLonT(i,j)-CS%x_origin)/CS%x_width
+        locy=(G%geoLatT(i,j)-CS%y_origin)/CS%y_width
         if (locx**2+locy**2<=1.0) CS%tr(i,j,k,m) = 1.0
         if (locx>0.0.and.abs(locy)<0.2) CS%tr(i,j,k,m) = 0.0
       enddo ; enddo

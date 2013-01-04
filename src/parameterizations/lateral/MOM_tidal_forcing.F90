@@ -160,8 +160,8 @@ subroutine tidal_forcing_init(Time, G, param_file, CS)
   allocate(CS%cos_struct(isd:ied,jsd:jed,3)) ; CS%cos_struct(:,:,:) = 0.0
   deg_to_rad = 4.0*ATAN(1.0)/180.0
   do j=js-1,je+1 ; do i=is-1,ie+1
-    lat_rad(i,j) = G%geolath(i,j)*deg_to_rad
-    lon_rad(i,j) = G%geolonh(i,j)*deg_to_rad
+    lat_rad(i,j) = G%geoLatT(i,j)*deg_to_rad
+    lon_rad(i,j) = G%geoLonT(i,j)*deg_to_rad
   enddo ; enddo
   do j=js-1,je+1 ; do i=is-1,ie+1
     CS%sin_struct(i,j,1) = -sin(2.0*lat_rad(i,j)) * cos(lon_rad(i,j))

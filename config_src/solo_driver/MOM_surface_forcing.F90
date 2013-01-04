@@ -384,7 +384,7 @@ subroutine wind_forcing_2gyre(state, fluxes, day, G, CS)
 !   Set the steady surface wind stresses, in units of Pa.
   PI = 4.0*atan(1.0)
   do j=js,je ; do I=Isq,Ieq
-    fluxes%taux(I,j) = 0.1*(1.0 - cos(2.0*PI*(G%geolatu(I,j)-CS%South_lat) / &
+    fluxes%taux(I,j) = 0.1*(1.0 - cos(2.0*PI*(G%geoLatCu(I,j)-CS%South_lat) / &
                                       CS%len_lat))
   enddo ; enddo
   do J=Jsq,Jeq ; do i=is,ie
@@ -431,7 +431,7 @@ subroutine wind_forcing_1gyre(state, fluxes, day, G, CS)
 !   Set the steady surface wind stresses, in units of Pa.
   PI = 4.0*atan(1.0)
   do j=js,je ; do I=Isq,Ieq
-    fluxes%taux(I,j) =-0.2*cos(PI*(G%geolatu(I,j)-CS%South_lat)/CS%len_lat)
+    fluxes%taux(I,j) =-0.2*cos(PI*(G%geoLatCu(I,j)-CS%South_lat)/CS%len_lat)
   enddo ; enddo
   do J=Jsq,Jeq ; do i=is,ie
     fluxes%tauy(i,J) = 0.0
@@ -477,7 +477,7 @@ subroutine wind_forcing_gyres(state, fluxes, day, G, CS)
 !   Set the steady surface wind stresses, in units of Pa.
   PI = 4.0*atan(1.0)
   do j=jsd,jed ; do I=Isdq,Iedq
-    y = (G%geolatu(I,j)-CS%South_lat)/CS%len_lat
+    y = (G%geoLatCu(I,j)-CS%South_lat)/CS%len_lat
     fluxes%taux(I,j) = CS%gyres_taux_const +                            &
              (   CS%gyres_taux_sin_amp*sin(CS%gyres_taux_n_pis*PI*y)    &
                + CS%gyres_taux_cos_amp*cos(CS%gyres_taux_n_pis*PI*y) )
@@ -1178,7 +1178,7 @@ subroutine buoyancy_forcing_linear(state, fluxes, day, dt, G, CS)
   if (CS%restorebuoy) then
     if (CS%use_temperature) then
       do j=js,je ; do i=is,ie
-        y = (G%geolatu(I,j)-CS%South_lat)/CS%len_lat
+        y = (G%geoLatCu(I,j)-CS%South_lat)/CS%len_lat
         T_restore = CS%T_south + (CS%T_north-CS%T_south)*y
         S_restore = CS%S_south + (CS%S_north-CS%S_south)*y
         if (G%hmask(i,j) > 0) then

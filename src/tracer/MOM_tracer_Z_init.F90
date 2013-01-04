@@ -137,7 +137,7 @@ function tracer_Z_init(tr, h, filename, tr_name, G, missing_val, land_val)
       if (G%hmask(i,j) == 0.0) then
         tr_in(i,j,1) = landval
       elseif (abs(tr_in(i,j,1) - missing_val) <= 1e-6*abs(missing_val)) then
-        write(loc_msg,'(f7.2," N ",f7.2," E")') G%geolath(i,j), G%geolonh(i,j)
+        write(loc_msg,'(f7.2," N ",f7.2," E")') G%geoLatT(i,j), G%geoLonT(i,j)
         if (zero_surface) then
           call MOM_error(WARNING, "tracer_Z_init: Missing value of "// &
                 trim(tr_name)//" found in an ocean point at "//trim(loc_msg)// &

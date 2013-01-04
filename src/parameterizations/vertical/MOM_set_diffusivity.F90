@@ -495,7 +495,7 @@ subroutine set_diffusivity(u, v, h, tv, fluxes, visc, dt, G, CS, &
   if (CS%Henyey_IGW_background) then
     I_x30 = 2.0 / invcosh(CS%N0_2Omega*2.0) ! This is evaluated at 30 deg.
     do j=js,je ; do i=is,ie
-      abs_sin = abs(sin(G%geolath(i,j)*deg_to_rad))
+      abs_sin = abs(sin(G%geoLatT(i,j)*deg_to_rad))
       Kd_sfc(i,j) = max(CS%Kd_min, Kd_sfc(i,j) * &
            ((abs_sin * invcosh(CS%N0_2Omega/max(epsilon,abs_sin))) * I_x30) )
     enddo ; enddo
@@ -505,7 +505,7 @@ subroutine set_diffusivity(u, v, h, tv, fluxes, visc, dt, G, CS, &
       ! this is not really intended for wide-spread use, but rather for
       ! comparison with CM2M / CM2.1 settings.
       Kd_sfc(i,j) = max(CS%Kd_min, Kd_sfc(i,j) * (1.0 + &
-          CS%Kd_tanh_lat_scale * 0.5*tanh((abs(G%geolath(i,j)) - 35.0)/5.0) ))
+          CS%Kd_tanh_lat_scale * 0.5*tanh((abs(G%geoLatT(i,j)) - 35.0)/5.0) ))
     enddo ; enddo
   endif
 
@@ -549,7 +549,7 @@ subroutine set_diffusivity(u, v, h, tv, fluxes, visc, dt, G, CS, &
     elseif (CS%Henyey_IGW_background_new) then
       I_x30 = 2.0 / invcosh(CS%N0_2Omega*2.0) ! This is evaluated at 30 deg.
       do k=1,nz ; do i=is,ie
-        abs_sin = max(epsilon,abs(sin(G%geolath(i,j)*deg_to_rad)))
+        abs_sin = max(epsilon,abs(sin(G%geoLatT(i,j)*deg_to_rad)))
         N_2Omega = max(abs_sin,sqrt(N2_lay(i,k))*I_2Omega)
         N02_N2 = (CS%N0_2Omega/N_2Omega)**2
         Kd(i,j,k) = max(CS%Kd_min, Kd_sfc(i,j) * &

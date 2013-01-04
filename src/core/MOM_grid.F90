@@ -54,8 +54,8 @@ type, public :: ocean_grid_type
 
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
     hmask, &   ! 0 for land points and 1 for ocean points on the h-grid. Nd.
-    geolath, & ! The geographic latitude at q points in degrees of latitude or m.
-    geolonh, & ! The geographic longitude at q points in degrees of longitude or m.
+    geoLatT, & ! The geographic latitude at q points in degrees of latitude or m.
+    geoLonT, & ! The geographic longitude at q points in degrees of longitude or m.
     dxh, Idxh, & ! dxh is delta x at h points, in m, and Idxh is 1/dxh in m-1.
     dyh, Idyh, & ! dyh is delta y at h points, in m, and Idyh is 1/dyh in m-1.
     areaT, &     ! areaT is the area of an h-cell, in m2.
@@ -63,8 +63,8 @@ type, public :: ocean_grid_type
 
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_) :: &
     umask, &   ! 0 for boundary points and 1 for ocean points on the u grid.  Nondim.
-    geolatu, & ! The geographic latitude at u points in degrees of latitude or m.
-    geolonu, & ! The geographic longitude at u points in degrees of longitude or m.
+    geoLatCu, &  ! The geographic latitude at u points in degrees of latitude or m.
+    geoLonCu, &  ! The geographic longitude at u points in degrees of longitude or m.
     dxu, Idxu, & ! dxu is delta x at u points, in m, and Idxu is 1/dxu in m-1.
     dyu, Idyu, & ! dyu is delta y at u points, in m, and Idyu is 1/dyu in m-1.
     dy_u, &      ! The unblocked lengths of the u-faces of the h-cell in m.
@@ -74,8 +74,8 @@ type, public :: ocean_grid_type
 
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_) :: &
     vmask, &   ! 0 for boundary points and 1 for ocean points on the v grid.  Nondim.
-    geolatv, & ! The geographic latitude at v points in degrees of latitude or m.
-    geolonv, & ! The geographic longitude at v points in degrees of longitude or m.
+    geoLatCv, &  ! The geographic latitude at v points in degrees of latitude or m.
+    geoLonCv, &  !  The geographic longitude at v points in degrees of longitude or m.
     dxv, Idxv, & ! dxv is delta x at v points, in m, and Idxv is 1/dxv in m-1.
     dyv, Idyv, & ! dyv is delta y at v points, in m, and Idyv is 1/dyv in m-1.
     dx_v, &      ! The unblocked lengths of the v-faces of the h-cell in m.
@@ -85,21 +85,21 @@ type, public :: ocean_grid_type
 
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: &
     qmask, &   ! 0 for boundary points and 1 for ocean points on the q grid.  Nondim.
-    geolatq, & ! The geographic latitude at q points in degrees of latitude or m.
-    geolonq, & ! The geographic longitude at q points in degrees of longitude or m.
+    geoLatBu, &  ! The geographic latitude at q points in degrees of latitude or m.
+    geoLonBu, &  ! The geographic longitude at q points in degrees of longitude or m.
     dxq, Idxq, & ! dxq is delta x at q points, in m, and Idxq is 1/dxq in m-1.
     dyq, Idyq, & ! dyq is delta y at q points, in m, and Idyq is 1/dyq in m-1.
-    areaBu, &     ! areaBu is the area of a q-cell, in m2
-    IareaBu       ! IareaBu = 1/areaBu in m-2.
+    areaBu, &    ! areaBu is the area of a q-cell, in m2
+    IareaBu      ! IareaBu = 1/areaBu in m-2.
 
   real, pointer, dimension(:) :: &
     gridlath => NULL(), gridlatq => NULL() ! The latitude of h or q points for
                         ! the purpose of labeling the output axes.
-                        ! On many grids these are the same as geolath & geolatq.
+                        ! On many grids these are the same as geoLatT & geoLatBu.
   real, pointer, dimension(:) :: &
     gridlonh => NULL(), gridlonq => NULL() ! The longitude of h or q points for
                         ! the purpose of labeling the output axes.
-                        ! On many grids these are the same as geolonh & geolonq.
+                        ! On many grids these are the same as geoLonT & geoLonBu.
   character(len=40) :: &
     x_axis_units, &     !   The units that are used in labeling the coordinate
     y_axis_units        ! axes.

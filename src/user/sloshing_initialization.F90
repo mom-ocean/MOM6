@@ -137,7 +137,7 @@ subroutine sloshing_initialize_thickness ( h, G, param_file )
       
       weight_z = - 4.0 * ( z_unif(k) + 0.5 )**2 + 1
       
-      x = G%geolonh(i,j) / lenlon
+      x = G%geoLonT(i,j) / lenlon
       displ(k) = a0 * cos(acos(-1.0)*x) + weight_z; 
       
       if ( k .EQ. 1 ) then

@@ -744,7 +744,7 @@ contains
 
 
       call mpp_array_global_min_max(tr_ptr, grid_tmask,isd,jsd,isc,iec,jsc,jec,nk , gmin(m), gmax(m), &
-                                    G%geolonh,G%geolath,geo_z,xgmin(m), ygmin(m), zgmin(m), xgmax(m), ygmax(m), zgmax(m))
+                                    G%geoLonT,G%geoLatT,geo_z,xgmin(m), ygmin(m), zgmin(m), xgmax(m), ygmax(m), zgmax(m))
 
       got_minmax(m) = .true.
 

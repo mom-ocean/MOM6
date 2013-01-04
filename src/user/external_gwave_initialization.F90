@@ -85,7 +85,7 @@ subroutine external_gwave_initialize_thickness(h, G, param_file)
                  fail_if_missing=.true.)
   PI = 4.0*atan(1.0)
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
-    Xnondim = (G%geolonh(i,j)-west_lon-0.5*len_lon) / ssh_anomaly_width
+    Xnondim = (G%geoLonT(i,j)-west_lon-0.5*len_lon) / ssh_anomaly_width
     Xnondim = min(1., abs(Xnondim))
     eta1D(1) = ssh_anomaly_height * 0.5 * ( 1. + cos(PI*Xnondim) ) ! Cosine bell
     do k=2,nz

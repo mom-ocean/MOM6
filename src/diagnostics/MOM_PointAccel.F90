@@ -207,7 +207,7 @@ subroutine write_u_accel(I, j, um, hin, dt, G, CS, maxvel, minvel, str, a, hv)
     write (file,'(/,"Time ",i5,i4,F6.2," U-velocity violation at ",I4,": ",2(I3), &
         & " (",F7.2," E "F7.2," N) Layers ",I3," to ",I3,". dt = ",1PG10.4)') &
         yr, yearday, (REAL(sec)/3600.0), pe_here(), I, j, &
-        G%geolonu(I,j), G%geolatu(I,j), ks, ke, dt
+        G%geoLonCu(I,j), G%geoLatCu(I,j), ks, ke, dt
 
     if (ks <= G%nk_rho_varies) ks = 1
     do k=ks,ke
@@ -686,7 +686,7 @@ subroutine write_v_accel(i, J, vm, hin, dt, G, CS, maxvel, minvel, str, a, hv)
     write (file,'(/,"Time ",i5,i4,F6.2," V-velocity violation at ",I4,": ",2(I3), &
         & " (",F7.2," E ",F7.2," N) Layers ",I3," to ",I3,". dt = ",1PG10.4)') &
         yr, yearday, (REAL(sec)/3600.0), pe_here(), i, J, &
-        G%geolonv(i,J), G%geolatv(i,J), ks, ke, dt
+        G%geoLonCv(i,J), G%geoLatCv(i,J), ks, ke, dt
 
     if (ks <= G%nk_rho_varies) ks = 1
     do k=ks,ke

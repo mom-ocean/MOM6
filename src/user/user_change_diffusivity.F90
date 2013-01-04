@@ -152,9 +152,9 @@ subroutine user_change_diff(h, tv, G, CS, Kd, Kd_int, T_f, S_f, Kd_int_add)
     if (present(Kd)) then
       do k=1,nz ; do i=is,ie
         if (CS%use_abs_lat) then
-          lat_fn = val_weights(abs(G%geolath(i,j)), CS%lat_range)
+          lat_fn = val_weights(abs(G%geoLatT(i,j)), CS%lat_range)
         else
-          lat_fn = val_weights(G%geolath(i,j), CS%lat_range)
+          lat_fn = val_weights(G%geoLatT(i,j), CS%lat_range)
         endif
         rho_fn = val_weights(Rcv(i,k), CS%rho_range)
         if (rho_fn * lat_fn > 0.0) &
@@ -164,9 +164,9 @@ subroutine user_change_diff(h, tv, G, CS, Kd, Kd_int, T_f, S_f, Kd_int_add)
     if (present(Kd_int)) then
       do K=2,nz ; do i=is,ie
         if (CS%use_abs_lat) then
-          lat_fn = val_weights(abs(G%geolath(i,j)), CS%lat_range)
+          lat_fn = val_weights(abs(G%geoLatT(i,j)), CS%lat_range)
         else
-          lat_fn = val_weights(G%geolath(i,j), CS%lat_range)
+          lat_fn = val_weights(G%geoLatT(i,j), CS%lat_range)
         endif
         !   rho_int = 0.5*(Rcv(i,k-1) + Rcv(i,k))
         rho_fn = val_weights( 0.5*(Rcv(i,k-1) + Rcv(i,k)), CS%rho_range)

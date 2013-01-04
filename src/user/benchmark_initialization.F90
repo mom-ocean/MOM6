@@ -94,8 +94,8 @@ subroutine benchmark_initialize_topography(D, G, param_file)
 
 !  Calculate the depth of the bottom.
   do i=is,ie ; do j=js,je
-    x=(G%geolonh(i,j)-west_lon)/len_lon
-    y=(G%geolath(i,j)-south_lat)/len_lat
+    x=(G%geoLonT(i,j)-west_lon)/len_lon
+    y=(G%geoLatT(i,j)-south_lat)/len_lat
 !  This sets topography that has a reentrant channel to the south.
     D(i,j) = -D0 * ( y*(1.0 + 0.6*cos(4.0*PI*x)) &
                    + 0.75*exp(-6.0*y) &
@@ -203,7 +203,7 @@ subroutine benchmark_initialize_thickness(h, G, param_file, eqn_of_state, P_ref)
   I_md = 1.0 / max_depth
   do j=js,je ; do i=is,ie
     SST = 0.5*(T0(k1)+T0(nz)) - 0.9*0.5*(T0(k1)-T0(nz)) * &
-                               cos(pi*(G%geolath(i,j)-south_lat)/(len_lat))
+                               cos(pi*(G%geoLatT(i,j)-south_lat)/(len_lat))
 
     do k=1,nz ; e_pert(K) = 0.0 ; enddo
 
@@ -317,7 +317,7 @@ subroutine benchmark_init_temperature_salinity(T, S, G, param_file, &
   PI = 4.0*atan(1.0)
   do i=is,ie ; do j=js,je
     SST = 0.5*(T0(k1)+T0(nz)) - 0.9*0.5*(T0(k1)-T0(nz)) * &
-                               cos(PI*(G%geolath(i,j)-south_lat)/(len_lat))
+                               cos(PI*(G%geoLatT(i,j)-south_lat)/(len_lat))
     do k=1,k1-1
       T(i,j,k) = SST
     enddo

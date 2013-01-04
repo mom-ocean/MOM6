@@ -1816,35 +1816,35 @@ subroutine write_static_fields(G, diag)
 
   id = register_static_field('ocean_model', 'geolat', G%axesh1, &
         'Latitude of tracer (T) points', 'degrees_N')
-  if (id > 0) call post_data(id, G%geolath, diag, .true.)
+  if (id > 0) call post_data(id, G%geoLatT, diag, .true.)
 
   id = register_static_field('ocean_model', 'geolon', G%axesh1, &
         'Longitude of tracer (T) points', 'degrees_E')
-  if (id > 0) call post_data(id, G%geolonh, diag, .true.)
+  if (id > 0) call post_data(id, G%geoLonT, diag, .true.)
 
   id = register_static_field('ocean_model', 'geolat_c', G%axesq1, &
         'Latitude of corner (Bu) points', 'degrees_N')
-  if (id > 0) call post_data(id, G%geolatq, diag, .true.)
+  if (id > 0) call post_data(id, G%geoLatBu, diag, .true.)
 
   id = register_static_field('ocean_model', 'geolon_c', G%axesq1, &
         'Longitude of corner (Bu) points', 'degrees_E')
-  if (id > 0) call post_data(id, G%geolonq, diag, .true.)
+  if (id > 0) call post_data(id, G%geoLonBu, diag, .true.)
 
   id = register_static_field('ocean_model', 'geolat_v', G%axesv1, &
         'Latitude of meridional velocity (Cv) points', 'degrees_N')
-  if (id > 0) call post_data(id, G%geolatv, diag, .true.)
+  if (id > 0) call post_data(id, G%geoLatCv, diag, .true.)
 
   id = register_static_field('ocean_model', 'geolon_v', G%axesv1, &
         'Longitude of meridional velocity (Cv) points', 'degrees_E')
-  if (id > 0) call post_data(id, G%geolonv, diag, .true.)
+  if (id > 0) call post_data(id, G%geoLonCv, diag, .true.)
 
   id = register_static_field('ocean_model', 'geolat_u', G%axesu1, &
         'Latitude of zonal velocity (Cu) points', 'degrees_N')
-  if (id > 0) call post_data(id, G%geolatu, diag, .true.)
+  if (id > 0) call post_data(id, G%geoLatCu, diag, .true.)
 
   id = register_static_field('ocean_model', 'geolon_u', G%axesu1, &
         'Longitude of zonal velocity (Cu) points', 'degrees_E')
-  if (id > 0) call post_data(id, G%geolonu, diag, .true.)
+  if (id > 0) call post_data(id, G%geoLonCu, diag, .true.)
 
   id = register_static_field('ocean_model', 'area_t', G%axesh1, &
         'Surface area of tracer (T) cells', 'degrees_E')
@@ -2135,42 +2135,42 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, CS, p_atm)
         if (state%sea_lev(i,j)<=-G%bathyT(i,j)) then
           k=k+1
           write(msg(1:128),'(2(a,i4,x),2(a,f8.3,x),a,es12.3)') &
-              'Sea level < bathymetry at i=',i,'j=',j,'x=',G%geolonh(i,j),&
-              'y=',G%geolath(i,j),'SSH=',state%sea_lev(i,j)
+              'Sea level < bathymetry at i=',i,'j=',j,'x=',G%geoLonT(i,j),&
+              'y=',G%geoLatT(i,j),'SSH=',state%sea_lev(i,j)
           call MOM_error(WARNING, trim(msg), all_print=.true.)
         endif
         if (state%sea_lev(i,j)>=CS%bad_val_ssh_max) then
           k=k+1
           write(msg(1:128),'(2(a,i4,x),2(a,f8.3,x),a,es12.3)') &
-              'Very high sea level at i=',i,'j=',j,'x=',G%geolonh(i,j),&
-              'y=',G%geolath(i,j),'SSH=',state%sea_lev(i,j)
+              'Very high sea level at i=',i,'j=',j,'x=',G%geoLonT(i,j),&
+              'y=',G%geoLatT(i,j),'SSH=',state%sea_lev(i,j)
           call MOM_error(WARNING, trim(msg), all_print=.true.)
         endif
         if (CS%use_temperature) then
           if (state%SSS(i,j)<0.) then
             k=k+1
             write(msg(1:128),'(2(a,i4,x),2(a,f8.3,x),a,es12.3)') &
-                'Negative salinity at i=',i,'j=',j,'x=',G%geolonh(i,j),&
-                'y=',G%geolath(i,j),'SSS=',state%SSS(i,j)
+                'Negative salinity at i=',i,'j=',j,'x=',G%geoLonT(i,j),&
+                'y=',G%geoLatT(i,j),'SSS=',state%SSS(i,j)
             call MOM_error(WARNING, trim(msg), all_print=.true.)
           elseif (state%SSS(i,j)>=CS%bad_val_sss_max) then
             k=k+1
             write(msg(1:128),'(2(a,i4,x),2(a,f8.3,x),a,es12.3)') &
-                'Very high salinity at i=',i,'j=',j,'x=',G%geolonh(i,j),&
-                'y=',G%geolath(i,j),'SSS=',state%SSS(i,j)
+                'Very high salinity at i=',i,'j=',j,'x=',G%geoLonT(i,j),&
+                'y=',G%geoLatT(i,j),'SSS=',state%SSS(i,j)
             call MOM_error(WARNING, trim(msg), all_print=.true.)
           endif
           if (state%SST(i,j)<CS%bad_val_sst_min) then
             k=k+1
             write(msg(1:128),'(2(a,i4,x),2(a,f8.3,x),a,es12.3)') &
-                'Very cold SST at i=',i,'j=',j,'x=',G%geolonh(i,j),&
-                'y=',G%geolath(i,j),'SST=',state%SST(i,j)
+                'Very cold SST at i=',i,'j=',j,'x=',G%geoLonT(i,j),&
+                'y=',G%geoLatT(i,j),'SST=',state%SST(i,j)
             call MOM_error(WARNING, trim(msg), all_print=.true.)
           elseif (state%SST(i,j)>=CS%bad_val_sst_max) then
             k=k+1
             write(msg(1:128),'(2(a,i4,x),2(a,f8.3,x),a,es12.3)') &
-                'Very hot SST at i=',i,'j=',j,'x=',G%geolonh(i,j),&
-                'y=',G%geolath(i,j),'SST=',state%SST(i,j)
+                'Very hot SST at i=',i,'j=',j,'x=',G%geoLonT(i,j),&
+                'y=',G%geoLatT(i,j),'SST=',state%SST(i,j)
             call MOM_error(WARNING, trim(msg), all_print=.true.)
           endif
         endif ! use_temperature

@@ -272,7 +272,7 @@ subroutine opacity_from_chl(optics, fluxes, G, CS, chl_in)
         if ((G%hmask(i,j) > 0.5) .and. (chl_data(i,j) < 0.0)) then
           write(mesg,'(" Negative chl_in of ",(1pe12.4)," found at i,j,k = ", &
                     & 3(1x,i3), " lon/lat = ",(1pe12.4)," E ", (1pe12.4), " N.")') &
-                     chl_data(i,j), i, j, k, G%geolonh(i,j), G%geolath(i,j)
+                     chl_data(i,j), i, j, k, G%geoLonT(i,j), G%geoLatT(i,j)
           call MOM_error(FATAL,"MOM_opacity opacity_from_chl: "//trim(mesg))
         endif
       enddo ; enddo
@@ -286,7 +286,7 @@ subroutine opacity_from_chl(optics, fluxes, G, CS, chl_in)
         if ((G%hmask(i,j) > 0.5) .and. (chl_data(i,j) < 0.0)) then
           write(mesg,'(" Time_interp negative chl of ",(1pe12.4)," at i,j = ",&
                     & 2(i3), "lon/lat = ",(1pe12.4)," E ", (1pe12.4), " N.")') &
-                     chl_data(i,j), i, j, G%geolonh(i,j), G%geolath(i,j)
+                     chl_data(i,j), i, j, G%geoLonT(i,j), G%geoLatT(i,j)
           call MOM_error(FATAL,"MOM_opacity opacity_from_chl: "//trim(mesg))
         endif
       enddo ; enddo

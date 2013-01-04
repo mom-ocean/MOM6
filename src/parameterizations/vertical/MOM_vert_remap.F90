@@ -697,7 +697,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, CS)
           fatal_error = .true.
         endif
         if (fatal_error) then
-          write(mesg,'("Error at lat/lon ",2(ES11.4))') G%geolath(i,j), G%geolonh(i,j)
+          write(mesg,'("Error at lat/lon ",2(ES11.4))') G%geoLatT(i,j), G%geoLonT(i,j)
           call MOM_error(FATAL, "regularize_surface: Terminating with fatal error.  "//&
                           trim(mesg))
         endif

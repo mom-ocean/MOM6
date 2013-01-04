@@ -276,7 +276,7 @@ subroutine USER_initialize_tracer(restart, day, G, h, OBC, CS, sponge_CSp, &
       PI = 4.0*atan(1.0)
       do j=js,je
         dist2 = (CS%Rad_Earth * PI / 180.0)**2 * &
-               (G%geolath(i,j) - 40.0) * (G%geolath(i,j) - 40.0)
+               (G%geoLatT(i,j) - 40.0) * (G%geoLatT(i,j) - 40.0)
         tr_y = 0.5*exp(-dist2/(1.0e5*1.0e5))
 
         do k=1,nz ; do i=is,ie
@@ -298,7 +298,7 @@ subroutine USER_initialize_tracer(restart, day, G, h, OBC, CS, sponge_CSp, &
 
     allocate(temp(G%isd:G%ied,G%jsd:G%jed,nz))
     do k=1,nz ; do j=js,je ; do i=is,ie
-      if (G%geolath(i,j) > 700.0 .and. (k > nz/2)) then
+      if (G%geoLatT(i,j) > 700.0 .and. (k > nz/2)) then
         temp(i,j,k) = 1.0
       else
         temp(i,j,k) = 0.0

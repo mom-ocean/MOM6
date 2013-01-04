@@ -132,15 +132,15 @@ subroutine adjustment_initialize_thickness ( h, G, param_file )
       target_values = target_values - 1000.
       do j=js,je ; do i=is,ie
           if (front_wave_length.ne.0.) then
-            y = ( 0.125 + G%geolath(i,j) / front_wave_length ) * ( 4. * acos(0.) )
-            yy = 2. * ( G%geolath(i,j) - 0.5 * lenlat ) / adjustment_width
+            y = ( 0.125 + G%geoLatT(i,j) / front_wave_length ) * ( 4. * acos(0.) )
+            yy = 2. * ( G%geoLatT(i,j) - 0.5 * lenlat ) / adjustment_width
             yy = min(1.0, yy); yy = max(-1.0, yy)
             yy = yy * 2. * acos( 0. )
             y = front_wave_amp*sin(y) + front_wave_asym*sin(yy)
           else
             y = 0.
           endif
-          x = ( ( G%geolonh(i,j) - 0.5 * lenlon ) + y ) / adjustment_width
+          x = ( ( G%geoLonT(i,j) - 0.5 * lenlon ) + y ) / adjustment_width
           x = min(1.0, x); x = max(-1.0, x)
           x = x * acos( 0. )
           delta_S = adjustment_deltaS * 0.5 * (1. - sin( x ) )
@@ -248,15 +248,15 @@ subroutine adjustment_initialize_temperature_salinity ( T, S, h, G, param_file, 
             eta1d(k)=eta1d(k+1)+h(i,j,k)
           enddo
           if (front_wave_length.ne.0.) then
-            y = ( 0.125 + G%geolath(i,j) / front_wave_length ) * ( 4. * acos(0.) )
-            yy = 2. * ( G%geolath(i,j) - 0.5 * lenlat ) / front_wave_length
+            y = ( 0.125 + G%geoLatT(i,j) / front_wave_length ) * ( 4. * acos(0.) )
+            yy = 2. * ( G%geoLatT(i,j) - 0.5 * lenlat ) / front_wave_length
             yy = min(1.0, yy); yy = max(-1.0, yy)
             yy = yy * 2. * acos( 0. )
             y = front_wave_amp*sin(y) + front_wave_asym*sin(yy)
           else
             y = 0.
           endif
-          x = ( ( G%geolonh(i,j) - 0.5 * lenlon ) + y ) / adjustment_width
+          x = ( ( G%geoLonT(i,j) - 0.5 * lenlon ) + y ) / adjustment_width
           x = min(1.0, x); x = max(-1.0, x)
           x = x * acos( 0. )
           delta_S = adjustment_deltaS * 0.5 * (1. - sin( x ) )

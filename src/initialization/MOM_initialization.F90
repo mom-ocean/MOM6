@@ -1139,8 +1139,8 @@ subroutine initialize_topography_named(D, G, param_file, topog_config)
   !  This sets a bowl shaped (sort of) bottom topography, with a       !
   !  maximum depth of max_depth.                                   !
       D(i,j) =  Dedge + D0 * &
-             (sin(PI * (G%geolonh(i,j) - (west_lon)) / len_lon) * &
-           (1.0 - exp((G%geolath(i,j) - (south_lat+len_lat))*Rad_earth*PI / &
+             (sin(PI * (G%geoLonT(i,j) - (west_lon)) / len_lon) * &
+           (1.0 - exp((G%geoLatT(i,j) - (south_lat+len_lat))*Rad_earth*PI / &
                       (180.0*expdecay)) ))
     enddo ; enddo
   elseif (trim(topog_config) == "bowl") then
@@ -1152,16 +1152,16 @@ subroutine initialize_topography_named(D, G, param_file, topog_config)
   !  maximum depth of max_depth.
     do i=is,ie ; do j=js,je
       D(i,j) =  Dedge + D0 * &
-             (sin(PI * (G%geolonh(i,j) - west_lon) / len_lon) * &
-             ((1.0 - exp(-(G%geolath(i,j) - south_lat)*Rad_Earth*PI/ &
+             (sin(PI * (G%geoLonT(i,j) - west_lon) / len_lon) * &
+             ((1.0 - exp(-(G%geoLatT(i,j) - south_lat)*Rad_Earth*PI/ &
                           (180.0*expdecay))) * &
-             (1.0 - exp((G%geolath(i,j) - (south_lat+len_lat))* &
+             (1.0 - exp((G%geoLatT(i,j) - (south_lat+len_lat))* &
                          Rad_Earth*PI/(180.0*expdecay)))))
     enddo ; enddo
   elseif (trim(topog_config) == "halfpipe") then
     D0 = max_depth - Dedge
     do i=is,ie ; do j=js,je
-      D(i,j) =  Dedge + D0 * ABS(sin(PI*(G%geolath(i,j) - south_lat)/len_lat))
+      D(i,j) =  Dedge + D0 * ABS(sin(PI*(G%geoLatT(i,j) - south_lat)/len_lat))
     enddo ; enddo
   else
     call MOM_error(FATAL,"initialize_topography_named: "// &
@@ -1228,7 +1228,7 @@ subroutine set_rotation_planetary(f, G, param_file)
   PI = 4.0*atan(1.0)
 
   do I=G%Isdq,G%Iedq ; do J=G%Jsdq,G%Jedq
-    f(I,J) = ( 2.0 * omega ) * sin( ( PI * G%geolatq(I,J) ) / 180.)
+    f(I,J) = ( 2.0 * omega ) * sin( ( PI * G%geoLatBu(I,J) ) / 180.)
   enddo ; enddo
 
 end subroutine set_rotation_planetary
@@ -1273,7 +1273,7 @@ subroutine set_rotation_beta_plane(f, G, param_file)
   end select
 
   do I=G%Isdq,G%Iedq ; do J=G%Jsdq,G%Jedq
-    f(I,J) = f_0 + beta * ( G%geolatq(I,J) * y_scl )
+    f(I,J) = f_0 + beta * ( G%geoLatBu(I,J) * y_scl )
   enddo ; enddo
 
 end subroutine set_rotation_beta_plane
@@ -1732,8 +1732,8 @@ subroutine initialize_velocity_circular(u, v, G, param_file)
   real function my_psi(ig,jg) ! in-line function
     integer :: ig, jg
     real :: x, y, r
-    x = 2.0*(G%geolonq(ig,jg)-west_lon)/len_lon-1.0  ! -1<x<1
-    y = 2.0*(G%geolatq(ig,jg)-south_lat)/len_lat-1.0 ! -1<y<1
+    x = 2.0*(G%geoLonBu(ig,jg)-west_lon)/len_lon-1.0  ! -1<x<1
+    y = 2.0*(G%geoLatBu(ig,jg)-south_lat)/len_lat-1.0 ! -1<y<1
     r = sqrt( x**2 + y**2 ) ! Circulat stream fn nis fn of radius only
     r = min(1.0,r) ! Flatten stream function in corners of box
     my_psi = 0.5*(1.0 - cos(dpi*r))
@@ -2645,65 +2645,65 @@ subroutine reset_face_lengths_named(G, param_file, name)
 
   if (option==1) then ! 1-degree settings.
     do j=jsd,jed ; do I=Isdq,Iedq  ! Change any u-face lengths within this loop.
-      dy_2 = dx_2 * G%dyu(I,j)*G%Idxu(I,j) * cos(pi_180 * G%geolatu(I,j))
+      dy_2 = dx_2 * G%dyu(I,j)*G%Idxu(I,j) * cos(pi_180 * G%geoLatCu(I,j))
 
-      if ((abs(G%geolatu(I,j)-35.5) < dy_2) .and. (G%geolonu(I,j) < -4.5) .and. &
-          (G%geolonu(I,j) > -6.5)) &
+      if ((abs(G%geoLatCu(I,j)-35.5) < dy_2) .and. (G%geoLonCu(I,j) < -4.5) .and. &
+          (G%geoLonCu(I,j) > -6.5)) &
         G%dy_u(I,j) = G%umask(I,j)*12000.0   ! Gibraltar
 
-      if ((abs(G%geolatu(I,j)-12.5) < dy_2) .and. (abs(G%geolonu(I,j)-43.0) < dx_2)) &
+      if ((abs(G%geoLatCu(I,j)-12.5) < dy_2) .and. (abs(G%geoLonCu(I,j)-43.0) < dx_2)) &
         G%dy_u(I,j) = G%umask(I,j)*10000.0   ! Red Sea
 
-      if ((abs(G%geolatu(i,j)-40.5) < dy_2) .and. (abs(G%geolonu(i,j)-26.0) < dx_2)) &
+      if ((abs(G%geoLatCu(i,j)-40.5) < dy_2) .and. (abs(G%geoLonCu(i,j)-26.0) < dx_2)) &
         G%dy_u(i,j) = G%umask(i,j)*5000.0   ! Dardanelles
 
-      if ((abs(G%geolatu(I,j)-41.5) < dy_2) .and. (abs(G%geolonu(I,j)+220.0) < dx_2)) &
+      if ((abs(G%geoLatCu(I,j)-41.5) < dy_2) .and. (abs(G%geoLonCu(I,j)+220.0) < dx_2)) &
         G%dy_u(I,j) = G%umask(I,j)*35000.0   ! Tsugaru strait at 140.0e
 
-      if ((abs(G%geolatu(I,j)-45.5) < dy_2) .and. (abs(G%geolonu(I,j)+217.5) < 0.9)) &
+      if ((abs(G%geoLatCu(I,j)-45.5) < dy_2) .and. (abs(G%geoLonCu(I,j)+217.5) < 0.9)) &
         G%dy_u(I,j) = G%umask(I,j)*15000.0   ! Betw Hokkaido and Sakhalin at 217&218 = 142e
 
 
       ! Greater care needs to be taken in the tripolar region.
-      if ((abs(G%geolatu(I,j)-80.84) < 0.2) .and. (abs(G%geolonu(I,j)+64.9) < 0.8)) &
+      if ((abs(G%geoLatCu(I,j)-80.84) < 0.2) .and. (abs(G%geoLonCu(I,j)+64.9) < 0.8)) &
         G%dy_u(I,j) = G%umask(I,j)*38000.0   ! Smith Sound in Canadian Arch - tripolar region
 
     enddo ; enddo
 
     do J=Jsdq,Jedq ; do i=isd,ied  ! Change any v-face lengths within this loop.
-      dy_2 = dx_2 * G%dyv(i,J)*G%Idxv(i,J) * cos(pi_180 * G%geolatv(i,J))
-      if ((abs(G%geolatv(i,J)-41.0) < dy_2) .and. (abs(G%geolonv(i,J)-28.5) < dx_2)) &
+      dy_2 = dx_2 * G%dyv(i,J)*G%Idxv(i,J) * cos(pi_180 * G%geoLatCv(i,J))
+      if ((abs(G%geoLatCv(i,J)-41.0) < dy_2) .and. (abs(G%geoLonCv(i,J)-28.5) < dx_2)) &
         G%dx_v(i,J) = G%vmask(i,J)*2500.0   ! Bosporus - should be 1000.0 m wide.
 
-      if ((abs(G%geolatv(i,J)-13.0) < dy_2) .and. (abs(G%geolonv(i,J)-42.5) < dx_2)) &
+      if ((abs(G%geoLatCv(i,J)-13.0) < dy_2) .and. (abs(G%geoLonCv(i,J)-42.5) < dx_2)) &
         G%dx_v(i,J) = G%vmask(i,J)*10000.0   ! Red Sea
 
-      if ((abs(G%geolatv(i,J)+2.8) < 0.8) .and. (abs(G%geolonv(i,J)+241.5) < dx_2)) &
+      if ((abs(G%geoLatCv(i,J)+2.8) < 0.8) .and. (abs(G%geoLonCv(i,J)+241.5) < dx_2)) &
         G%dx_v(i,J) = G%vmask(i,J)*40000.0   ! Makassar Straits at 241.5 W = 118.5 E
 
-      if ((abs(G%geolatv(i,J)-0.56) < 0.5) .and. (abs(G%geolonv(i,J)+240.5) < dx_2)) &
+      if ((abs(G%geoLatCv(i,J)-0.56) < 0.5) .and. (abs(G%geoLonCv(i,J)+240.5) < dx_2)) &
         G%dx_v(i,J) = G%vmask(i,J)*80000.0   ! entry to Makassar Straits at 240.5 W = 119.5 E
 
-      if ((abs(G%geolatv(i,J)-0.19) < 0.5) .and. (abs(G%geolonv(i,J)+230.5) < dx_2)) &
+      if ((abs(G%geoLatCv(i,J)-0.19) < 0.5) .and. (abs(G%geoLonCv(i,J)+230.5) < dx_2)) &
         G%dx_v(i,J) = G%vmask(i,J)*25000.0   ! Channel betw N Guinea and Halmahara 230.5 W = 129.5 E
 
-      if ((abs(G%geolatv(i,J)-0.19) < 0.5) .and. (abs(G%geolonv(i,J)+229.5) < dx_2)) &
+      if ((abs(G%geoLatCv(i,J)-0.19) < 0.5) .and. (abs(G%geoLonCv(i,J)+229.5) < dx_2)) &
         G%dx_v(i,J) = G%vmask(i,J)*25000.0   ! Channel betw N Guinea and Halmahara 229.5 W = 130.5 E
 
-      if ((abs(G%geolatv(i,J)-0.0) < 0.25) .and. (abs(G%geolonv(i,J)+228.5) < dx_2)) &
+      if ((abs(G%geoLatCv(i,J)-0.0) < 0.25) .and. (abs(G%geoLonCv(i,J)+228.5) < dx_2)) &
         G%dx_v(i,J) = G%vmask(i,J)*25000.0   ! Channel betw N Guinea and Halmahara 228.5 W = 131.5 E
 
-      if ((abs(G%geolatv(i,J)+8.5) < 0.5) .and. (abs(G%geolonv(i,J)+244.5) < dx_2)) &
+      if ((abs(G%geoLatCv(i,J)+8.5) < 0.5) .and. (abs(G%geoLonCv(i,J)+244.5) < dx_2)) &
         G%dx_v(i,J) = G%vmask(i,J)*20000.0   ! Lombok Straits at 244.5 W = 115.5 E
 
-      if ((abs(G%geolatv(i,J)+8.5) < 0.5) .and. (abs(G%geolonv(i,J)+235.5) < dx_2)) &
+      if ((abs(G%geoLatCv(i,J)+8.5) < 0.5) .and. (abs(G%geoLonCv(i,J)+235.5) < dx_2)) &
         G%dx_v(i,J) = G%vmask(i,J)*20000.0   ! Timor Straits at 235.5 W = 124.5 E
 
-      if ((abs(G%geolatv(i,J)-52.5) < dy_2) .and. (abs(G%geolonv(i,J)+218.5) < dx_2)) &
+      if ((abs(G%geoLatCv(i,J)-52.5) < dy_2) .and. (abs(G%geoLonCv(i,J)+218.5) < dx_2)) &
         G%dx_v(i,J) = G%vmask(i,J)*2500.0    ! Russia and Sakhalin Straits at 218.5 W = 141.5 E
 
       ! Greater care needs to be taken in the tripolar region.
-      if ((abs(G%geolatv(i,J)-76.8) < 0.06) .and. (abs(G%geolonv(i,J)+88.7) < dx_2)) &
+      if ((abs(G%geoLatCv(i,J)-76.8) < 0.06) .and. (abs(G%geoLonCv(i,J)+88.7) < dx_2)) &
         G%dx_v(i,J) = G%vmask(i,J)*8400.0    ! Jones Sound in Canadian Arch - tripolar region
 
     enddo ; enddo
@@ -2716,7 +2716,7 @@ subroutine reset_face_lengths_named(G, param_file, name)
       write(mesg,'("dy_u of ",ES11.4," exceeds unrestricted width of ",ES11.4,&
                    &" by ",ES11.4," at lon/lat of ", ES11.4, ES11.4)') &
                    G%dy_u(I,j), G%DYu(I,j), G%dy_u(I,j)-G%DYu(I,j), &
-                   G%geolonu(I,j), G%geolatu(I,j)
+                   G%geoLonCu(I,j), G%geoLatCu(I,j)
       call MOM_error(FATAL,"reset_face_lengths_named "//mesg)
     endif
     G%areaCu(I,j) = G%DXu(I,j)*G%dy_u(I,j)
@@ -2729,7 +2729,7 @@ subroutine reset_face_lengths_named(G, param_file, name)
       write(mesg,'("dx_v of ",ES11.4," exceeds unrestricted width of ",ES11.4,&
                    &" by ",ES11.4, " at lon/lat of ", ES11.4, ES11.4)') &
                    G%dx_v(i,J), G%DXv(i,J), G%dx_v(i,J)-G%DXv(i,J), &
-                   G%geolonv(i,J), G%geolatv(i,J)
+                   G%geoLonCv(i,J), G%geoLatCv(i,J)
 
       call MOM_error(FATAL,"reset_face_lengths_named "//mesg)
     endif
@@ -2785,7 +2785,7 @@ subroutine reset_face_lengths_file(G, param_file)
       write(mesg,'("dy_u of ",ES11.4," exceeds unrestricted width of ",ES11.4,&
                    &" by ",ES11.4," at lon/lat of ", ES11.4, ES11.4)') &
                    G%dy_u(I,j), G%DYu(I,j), G%dy_u(I,j)-G%DYu(I,j), &
-                   G%geolonu(I,j), G%geolatu(I,j)
+                   G%geoLonCu(I,j), G%geoLatCu(I,j)
       call MOM_error(FATAL,"reset_face_lengths_file "//mesg)
     endif
     G%areaCu(I,j) = G%DXu(I,j)*G%dy_u(I,j)
@@ -2798,7 +2798,7 @@ subroutine reset_face_lengths_file(G, param_file)
       write(mesg,'("dx_v of ",ES11.4," exceeds unrestricted width of ",ES11.4,&
                    &" by ",ES11.4, " at lon/lat of ", ES11.4, ES11.4)') &
                    G%dx_v(i,J), G%DXv(i,J), G%dx_v(i,J)-G%DXv(i,J), &
-                   G%geolonv(i,J), G%geolatv(i,J)
+                   G%geoLonCv(i,J), G%geoLatCv(i,J)
 
       call MOM_error(FATAL,"reset_face_lengths_file "//mesg)
     endif
@@ -2973,7 +2973,7 @@ subroutine reset_face_lengths_list(G, param_file)
   endif
 
   do j=jsd,jed ; do I=Isdq,Iedq
-    lat = G%geolatu(I,j) ; lon = G%geolonu(I,j)
+    lat = G%geoLatCu(I,j) ; lon = G%geoLonCu(I,j)
     if (check_360) then ; lon_p = lon+360.0 ; lon_m = lon-360.0
     else ; lon_p = lon ; lon_m = lon ; endif
 
@@ -2991,7 +2991,7 @@ subroutine reset_face_lengths_list(G, param_file)
   enddo ; enddo
 
   do J=Jsdq,Jedq ; do i=isd,ied
-    lat = G%geolatv(i,J) ; lon = G%geolonv(i,J)
+    lat = G%geoLatCv(i,J) ; lon = G%geoLonCv(i,J)
     if (check_360) then ; lon_p = lon+360.0 ; lon_m = lon-360.0
     else ; lon_p = lon ; lon_m = lon ; endif
 
@@ -3148,10 +3148,10 @@ subroutine write_ocean_geometry_file(G, param_file, directory)
 ! (6) the variable's units
 ! (7) a character indicating the size in memory to write, which may be
 !     'd' (8-byte) or 'f' (4-byte).
-  vars(1) = vardesc("geolatb","latitude at q points",'q','1','1',"degree",'d')
-  vars(2) = vardesc("geolonb","longitude at q points",'q','1','1',"degree",'d')
-  vars(3) = vardesc("geolat", "latitude at h points", 'h','1','1',"degree",'d')
-  vars(4) = vardesc("geolon","longitude at h points",'h','1','1',"degree",'d')
+  vars(1) = vardesc("geolatb","latitude at corner (Bu) points",'q','1','1',"degree",'d')
+  vars(2) = vardesc("geolonb","longitude at corner (Bu) points",'q','1','1',"degree",'d')
+  vars(3) = vardesc("geolat", "latitude at tracer (T) points", 'h','1','1',"degree",'d')
+  vars(4) = vardesc("geolon","longitude at tracer (T) points",'h','1','1',"degree",'d')
   vars(5) = vardesc("D","Basin Depth",'h','1','1',"meter",'d')
   vars(6) = vardesc("f","Coriolis Parameter",'q','1','1',"second-1", 'd')
   vars(7) = vardesc("dxv","Zonal grid spacing at v points",'v','1','1',"m",'d')
@@ -3192,12 +3192,12 @@ subroutine write_ocean_geometry_file(G, param_file, directory)
 
   call create_file(unit, trim(filepath), vars, nFlds_used, G, fields, file_threading)
 
-  do J=Jsq,Jeq; do I=Isq,Ieq; out_q(I,J) = G%geolatq(I,J); enddo; enddo
+  do J=Jsq,Jeq; do I=Isq,Ieq; out_q(I,J) = G%geoLatBu(I,J); enddo; enddo
   call write_field(unit, fields(1), G%Domain%mpp_domain, out_q)
-  do J=Jsq,Jeq; do I=Isq,Ieq; out_q(I,J) = G%geolonq(I,J); enddo; enddo
+  do J=Jsq,Jeq; do I=Isq,Ieq; out_q(I,J) = G%geoLonBu(I,J); enddo; enddo
   call write_field(unit, fields(2), G%Domain%mpp_domain, out_q)
-  call write_field(unit, fields(3), G%Domain%mpp_domain, G%geolath)
-  call write_field(unit, fields(4), G%Domain%mpp_domain, G%geolonh)
+  call write_field(unit, fields(3), G%Domain%mpp_domain, G%geoLatT)
+  call write_field(unit, fields(4), G%Domain%mpp_domain, G%geoLonT)
 
   call write_field(unit, fields(5), G%Domain%mpp_domain, G%bathyT)
   call write_field(unit, fields(6), G%Domain%mpp_domain, G%CoriolisBu)
@@ -3558,8 +3558,8 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
   call meshgrid(lon_in,lat_in, x_in, y_in)
 
   allocate(lon_out(isd:ied,jsd:jed),lat_out(isd:ied,jsd:jed))
-  lon_out(is:ie,js:je) = G%geolonh(is:ie,js:je)*PI_180
-  lat_out(is:ie,js:je) = G%geolath(is:ie,js:je)*PI_180
+  lon_out(is:ie,js:je) = G%geoLonT(is:ie,js:je)*PI_180
+  lat_out(is:ie,js:je) = G%geoLatT(is:ie,js:je)*PI_180
 
 ! get the global model grid
   ni=ieg-isg+1 ; nj = jeg-jsg+1
@@ -3786,7 +3786,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
 
   if (debug_point) then
     do j=js,je ; do i=is,ie
-      if (abs(G%geolonh(i,j)-debug_lon).lt.0.25 .and. abs(G%geolath(i,j)-debug_lat) .lt. 0.25) then
+      if (abs(G%geoLonT(i,j)-debug_lon).lt.0.25 .and. abs(G%geoLatT(i,j)-debug_lat) .lt. 0.25) then
         do k=1,kd
           print *,'i,j,klev,T,S,rho=',i,j,temp_z(i,j,k),salt_z(i,j,k),rho_z(i,j,k)
         enddo

@@ -90,9 +90,9 @@ subroutine lock_exchange_initialize_thickness(h, G, param_file)
     do k=2,nz
       eta1D(K) = -0.5 * max_depth & ! Middle of column
               - thermocline_thickness * ( (real(k-1))/real(nz) -0.5 ) ! Stratification
-      if (G%geolonh(i,j)-west_lon < 0.5 * len_lon) then
+      if (G%geoLonT(i,j)-west_lon < 0.5 * len_lon) then
         eta1D(K)=eta1D(K) + 0.5 * front_displacement
-      elseif (G%geolonh(i,j)-west_lon > 0.5 * len_lon) then
+      elseif (G%geoLonT(i,j)-west_lon > 0.5 * len_lon) then
         eta1D(K)=eta1D(K) - 0.5 * front_displacement
       endif
     enddo

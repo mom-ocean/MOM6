@@ -1015,7 +1015,7 @@ subroutine mixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, optics, &
                       &" exceeds total shortwave of ",1pe17.10,&
                       &" at ",1pg11.4,"E, "1pg11.4,"N.")') &
                  Pen_SW_tot(i),Irho_cp*scale*dt*fluxes%sw(i,j),&
-                 G%geolonh(i,j),G%geolath(i,j)
+                 G%geoLonT(i,j),G%geoLatT(i,j)
           call MOM_error(WARNING,mesg) 
         endif
       endif
@@ -2772,7 +2772,7 @@ subroutine mixedlayer_detrain_2(h, R0, h_ml, R0_ml, dt, dt_diag, d_ea, j, G, &
 !               write(mesg,'("Low temperature limits det to ", &
 !                    & 1pe12.5, " from ", 1pe12.5, " at ", 1pg11.4,"E, ",1pg11.4,"N. T=", &
 !                    & 5(1pe12.5))') &
-!                    h2_to_k1_lim, h2_to_k1, G%geolonh(i,j), G%geolath(i,j), &
+!                    h2_to_k1_lim, h2_to_k1, G%geoLonT(i,j), G%geoLatT(i,j), &
 !                    T_new, T(i,kb2), T(i,kb1), T_det, T_new-T_min
 !               call MOM_error(WARNING, mesg)
               h2_to_k1 = h2_to_k1_lim
@@ -2782,7 +2782,7 @@ subroutine mixedlayer_detrain_2(h, R0, h_ml, R0_ml, dt, dt_diag, d_ea, j, G, &
 !               write(mesg,'("High temperature limits det to ", &
 !                    & 1pe12.5, " from ", 1pe12.5, " at ", 1pg11.4,"E, ",1pg11.4,"N. T=", &
 !                    & 5(1pe12.5))') &
-!                    h2_to_k1_lim, h2_to_k1, G%geolonh(i,j), G%geolath(i,j), &
+!                    h2_to_k1_lim, h2_to_k1, G%geoLonT(i,j), G%geoLatT(i,j), &
 !                    T_new, T(i,kb2), T(i,kb1), T_det, T_new-T_max
 !               call MOM_error(WARNING, mesg)
               h2_to_k1 = h2_to_k1_lim
@@ -2796,7 +2796,7 @@ subroutine mixedlayer_detrain_2(h, R0, h_ml, R0_ml, dt, dt_diag, d_ea, j, G, &
 !               write(mesg,'("Low salinity limits det to ", &
 !                    & 1pe12.5, " from ", 1pe12.5, " at ", 1pg11.4,"E, ",1pg11.4,"N. S=", &
 !                    & 5(1pe12.5))') &
-!                    h2_to_k1_lim, h2_to_k1, G%geolonh(i,j), G%geolath(i,j), &
+!                    h2_to_k1_lim, h2_to_k1, G%geoLonT(i,j), G%geoLatT(i,j), &
 !                    S_new, S(i,kb2), S(i,kb1), S_det, S_new-S_min
 !               call MOM_error(WARNING, mesg)
               h2_to_k1 = h2_to_k1_lim
@@ -2806,7 +2806,7 @@ subroutine mixedlayer_detrain_2(h, R0, h_ml, R0_ml, dt, dt_diag, d_ea, j, G, &
 !               write(mesg,'("High salinity limits det to ", &
 !                    & 1pe12.5, " from ", 1pe12.5, " at ", 1pg11.4,"E, ",1pg11.4,"N. S=", &
 !                    & 5(1pe12.5))') &
-!                    h2_to_k1_lim, h2_to_k1, G%geolonh(i,j), G%geolath(i,j), &
+!                    h2_to_k1_lim, h2_to_k1, G%geoLonT(i,j), G%geoLatT(i,j), &
 !                    S_new, S(i,kb2), S(i,kb1), S_det, S_new-S_max
 !               call MOM_error(WARNING, mesg)
               h2_to_k1 = h2_to_k1_lim
