@@ -116,7 +116,7 @@ subroutine calc_resoln_function(h, tv, G, CS)
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   integer :: i, j, k
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-  Isq = G%Iscq ; Ieq = G%Iecq ; Jsq = G%Jscq ; Jeq = G%Jecq
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
   if (.not. ASSOCIATED(CS)) call MOM_error(FATAL, "calc_resoln_function:"// &
          "Module must be initialized before it is used.")
@@ -396,11 +396,11 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
   character(len=128) :: tagname = '$Name$'
   character(len=40)  :: mod = "MOM_lateral_mixing_coeffs" ! This module's name.
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, i, j
-  integer :: isd, ied, jsd, jed, Isdq, Iedq, Jsdq, Jedq
+  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
-  Isq = G%Iscq ; Ieq = G%Iecq ; Jsq = G%Jscq ; Jeq = G%Jecq
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  Isdq = G%Isdq ; Iedq = G%Iedq ; Jsdq = G%Jsdq ; Jedq = G%Jedq
+  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   if (associated(CS)) then
     call MOM_error(WARNING, "VarMix_init called with an associated "// &
@@ -455,10 +455,10 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
 
 ! Allocate CS and memory
   if (CS%use_variable_mixing) then
-    allocate(CS%SN_u(Isdq:Iedq,jsd:jed)) ; CS%SN_u(:,:) = 0.0
-    allocate(CS%SN_v(isd:ied,Jsdq:Jedq)) ; CS%SN_v(:,:) = 0.0
-    allocate(CS%L2u(Isdq:Iedq,jsd:jed)) ; CS%L2u(:,:) = 0.0
-    allocate(CS%L2v(isd:ied,Jsdq:Jedq)) ; CS%L2v(:,:) = 0.0
+    allocate(CS%SN_u(IsdB:IedB,jsd:jed)) ; CS%SN_u(:,:) = 0.0
+    allocate(CS%SN_v(isd:ied,JsdB:JedB)) ; CS%SN_v(:,:) = 0.0
+    allocate(CS%L2u(IsdB:IedB,jsd:jed)) ; CS%L2u(:,:) = 0.0
+    allocate(CS%L2v(isd:ied,JsdB:JedB)) ; CS%L2v(:,:) = 0.0
     call MOM_mesg("VarMix_init: memory allocated for use_variable_mixing", 5)
 
   ! More run-time parameters
@@ -486,12 +486,12 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
 
     ! Allocate and initialize various arrays.
     allocate(CS%Res_fn_h(isd:ied,jsd:jed))       ; CS%Res_fn_h(:,:) = 0.0
-    allocate(CS%Res_fn_q(Isdq:Iedq,Jsdq:Jedq))   ; CS%Res_fn_q(:,:) = 0.0
+    allocate(CS%Res_fn_q(IsdB:IedB,JsdB:JedB))   ; CS%Res_fn_q(:,:) = 0.0
     allocate(CS%cg1(isd:ied,jsd:jed))            ; CS%cg1(:,:) = 0.0
     allocate(CS%beta_dx2_h(isd:ied,jsd:jed))     ; CS%beta_dx2_h(:,:) = 0.0
-    allocate(CS%beta_dx2_q(Isdq:Iedq,Jsdq:Jedq)) ; CS%beta_dx2_q(:,:) = 0.0
+    allocate(CS%beta_dx2_q(IsdB:IedB,JsdB:JedB)) ; CS%beta_dx2_q(:,:) = 0.0
     allocate(CS%f2_dx2_h(isd:ied,jsd:jed))       ; CS%f2_dx2_h(:,:) = 0.0
-    allocate(CS%f2_dx2_q(Isdq:Iedq,Jsdq:Jedq))   ; CS%f2_dx2_q(:,:) = 0.0
+    allocate(CS%f2_dx2_q(IsdB:IedB,JsdB:JedB))   ; CS%f2_dx2_q(:,:) = 0.0
     allocate(CS%Rd_dx_h(isd:ied,jsd:jed))        ; CS%Rd_dx_h(:,:) = 0.0
 
 

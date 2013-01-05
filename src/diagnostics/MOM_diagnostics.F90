@@ -170,7 +170,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, lev, tv, dt, G, CS, eta_
              ! value is roughly (pi / (the age of the universe) )^2.
   integer :: k_list
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
-  Isq = G%Iscq ; Ieq = G%Iecq ; Jsq = G%Jscq ; Jeq = G%Jecq
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   nz = G%ke ; nkmb = G%nk_rho_varies
 
   if (.not.associated(CS)) call MOM_error(FATAL, &
@@ -506,7 +506,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, lev, G, CS)
   real :: KE_h(SZI_(G),SZJ_(G))
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-  Isq = G%Iscq ; Ieq = G%Iecq ; Jsq = G%Jscq ; Jeq = G%Jecq
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
   do j=js-1,je ; do i=is-1,ie
     KE_u(I,j) = 0.0 ; KE_v(i,J) = 0.0
@@ -748,12 +748,12 @@ subroutine MOM_diagnostics_init(HIS, Time, G, param_file, diag, CS)
   character(len=40)  :: mod = "MOM_diagnostics" ! This module's name.
   real :: omega, f2_min
   character(len=48) :: thickness_units, flux_units
-  integer :: isd, ied, jsd, jed, Isdq, Iedq, Jsdq, Jedq, nz, nkml, nkbl
+  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz, nkml, nkbl
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, i, j
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
-  Isq = G%Iscq ; Ieq = G%Iecq ; Jsq = G%Jscq ; Jeq = G%Jecq
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = G%ke
-  Isdq = G%Isdq ; Iedq = G%Iedq ; Jsdq = G%Jsdq ; Jedq = G%Jedq
+  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   if (associated(CS)) then
     call MOM_error(WARNING, "MOM_diagnostics_init called with an associated "// &
@@ -792,14 +792,14 @@ subroutine MOM_diagnostics_init(HIS, Time, G, param_file, diag, CS)
   CS%id_du_dt = register_diag_field('ocean_model', 'dudt', G%axesCuL, Time, &
       'Zonal Acceleration', 'meter second-2')
   if ((CS%id_du_dt>0) .and. .not.ASSOCIATED(CS%du_dt)) then
-    call safe_alloc_ptr(CS%du_dt,Isdq,Iedq,jsd,jed,nz)
+    call safe_alloc_ptr(CS%du_dt,IsdB,IedB,jsd,jed,nz)
     call register_time_deriv(HIS%u(:,:,:,1), HIS%u(:,:,:,2), CS%du_dt, CS)
   endif
 
   CS%id_dv_dt = register_diag_field('ocean_model', 'dvdt', G%axesCvL, Time, &
       'Meridional Acceleration', 'meter second-2')
   if ((CS%id_dv_dt>0) .and. .not.ASSOCIATED(CS%dv_dt)) then
-    call safe_alloc_ptr(CS%dv_dt,isd,ied,Jsdq,Jedq,nz)
+    call safe_alloc_ptr(CS%dv_dt,isd,ied,JsdB,JedB,nz)
     call register_time_deriv(HIS%v(:,:,:,1), HIS%v(:,:,:,2), CS%dv_dt, CS)
   endif
 
@@ -817,21 +817,21 @@ subroutine MOM_diagnostics_init(HIS, Time, G, param_file, diag, CS)
 
     CS%id_uh_Rlay = register_diag_field('ocean_model', 'uh_rho', G%axesCuL, Time, &
         'Zonal volume transport in pure potential density coordinates', flux_units)
-    if (CS%id_uh_Rlay>0) call safe_alloc_ptr(CS%uh_Rlay,Isdq,Iedq,jsd,jed,nz)
+    if (CS%id_uh_Rlay>0) call safe_alloc_ptr(CS%uh_Rlay,IsdB,IedB,jsd,jed,nz)
 
     CS%id_vh_Rlay = register_diag_field('ocean_model', 'vh_rho', G%axesCvL, Time, &
         'Meridional volume transport in pure potential density coordinates', flux_units)
-    if (CS%id_vh_Rlay>0) call safe_alloc_ptr(CS%vh_Rlay,isd,ied,Jsdq,Jedq,nz)
+    if (CS%id_vh_Rlay>0) call safe_alloc_ptr(CS%vh_Rlay,isd,ied,JsdB,JedB,nz)
 
     CS%id_uhGM_Rlay = register_diag_field('ocean_model', 'uhGM_rho', G%axesCuL, Time, &
         'Zonal volume transport due to interface height diffusion in pure potential &
         &density coordinates', flux_units)
-    if (CS%id_uhGM_Rlay>0) call safe_alloc_ptr(CS%uhGM_Rlay,Isdq,Iedq,jsd,jed,nz)
+    if (CS%id_uhGM_Rlay>0) call safe_alloc_ptr(CS%uhGM_Rlay,IsdB,IedB,jsd,jed,nz)
 
     CS%id_vhGM_Rlay = register_diag_field('ocean_model', 'vhGM_rho', G%axesCvL, Time, &
         'Meridional volume transport due to interface height diffusion in pure &
         &potential density coordinates', flux_units)
-    if (CS%id_vhGM_Rlay>0) call safe_alloc_ptr(CS%vhGM_Rlay,isd,ied,Jsdq,Jedq,nz)
+    if (CS%id_vhGM_Rlay>0) call safe_alloc_ptr(CS%vhGM_Rlay,isd,ied,JsdB,JedB,nz)
   endif
 
 ! The next variables are terms in the kinetic energy balance.
@@ -904,9 +904,9 @@ subroutine set_dependent_diagnostics(HIS, G, CS)
 !  (in)      G - The ocean's grid structure.
 !  (in)      CS - A pointer that is set to point to the control structure
 !                 for this module.
-  integer :: isd, ied, jsd, jed, Isdq, Iedq, Jsdq, Jedq, nz
+  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = G%ke
-  Isdq = G%Isdq ; Iedq = G%Iedq ; Jsdq = G%Jsdq ; Jedq = G%Jedq
+  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   if (ASSOCIATED(CS%dKE_dt) .or. ASSOCIATED(CS%PE_to_KE) .or. &
       ASSOCIATED(CS%KE_CorAdv) .or. ASSOCIATED(CS%KE_adv) .or. &
@@ -916,11 +916,11 @@ subroutine set_dependent_diagnostics(HIS, G, CS)
 
   if (ASSOCIATED(CS%dKE_dt)) then
     if (.not.ASSOCIATED(CS%du_dt)) then
-      call safe_alloc_ptr(CS%du_dt,Isdq,Iedq,jsd,jed,nz)
+      call safe_alloc_ptr(CS%du_dt,IsdB,IedB,jsd,jed,nz)
       call register_time_deriv(HIS%u(:,:,:,1), HIS%u(:,:,:,2), CS%du_dt, CS)
     endif
     if (.not.ASSOCIATED(CS%dv_dt)) then
-      call safe_alloc_ptr(CS%dv_dt,isd,ied,Jsdq,Jedq,nz)
+      call safe_alloc_ptr(CS%dv_dt,isd,ied,JsdB,JedB,nz)
       call register_time_deriv(HIS%v(:,:,:,1), HIS%v(:,:,:,2), CS%dv_dt, CS)
     endif
     if (.not.ASSOCIATED(CS%dh_dt)) then
@@ -932,7 +932,7 @@ subroutine set_dependent_diagnostics(HIS, G, CS)
   if (ASSOCIATED(CS%PE_to_KE)) then
     if (.not.ASSOCIATED(CS%diag%PFu)) then
       if (CS%split) then
-        call safe_alloc_ptr(CS%diag%PFu_tot,Isdq,Iedq,jsd,jed,nz)
+        call safe_alloc_ptr(CS%diag%PFu_tot,IsdB,IedB,jsd,jed,nz)
         CS%diag%PFu => CS%diag%PFu_tot
       else
         CS%diag%PFu => HIS%PFu
@@ -940,7 +940,7 @@ subroutine set_dependent_diagnostics(HIS, G, CS)
     endif
     if (.not.ASSOCIATED(CS%diag%PFv)) then
       if (CS%split) then
-        call safe_alloc_ptr(CS%diag%PFv_tot,isd,ied,Jsdq,Jedq,nz)
+        call safe_alloc_ptr(CS%diag%PFv_tot,isd,ied,JsdB,JedB,nz)
         CS%diag%PFv => CS%diag%PFv_tot
       else
         CS%diag%PFv => HIS%PFv
@@ -951,7 +951,7 @@ subroutine set_dependent_diagnostics(HIS, G, CS)
   if (ASSOCIATED(CS%KE_CorAdv)) then
     if (.not.ASSOCIATED(CS%diag%CAu)) then
       if (CS%split) then
-        call safe_alloc_ptr(CS%diag%CAu_tot,Isdq,Iedq,jsd,jed,nz)
+        call safe_alloc_ptr(CS%diag%CAu_tot,IsdB,IedB,jsd,jed,nz)
         CS%diag%CAu => CS%diag%CAu_tot
       else
         CS%diag%CAu => HIS%CAu
@@ -959,7 +959,7 @@ subroutine set_dependent_diagnostics(HIS, G, CS)
     endif
     if (.not.ASSOCIATED(CS%diag%CAv)) then
       if (CS%split) then
-        call safe_alloc_ptr(CS%diag%CAv_tot,isd,ied,Jsdq,Jedq,nz)
+        call safe_alloc_ptr(CS%diag%CAv_tot,isd,ied,JsdB,JedB,nz)
         CS%diag%CAv => CS%diag%CAv_tot
       else
         CS%diag%CAv => HIS%CAv
@@ -968,13 +968,13 @@ subroutine set_dependent_diagnostics(HIS, G, CS)
   endif
 
   if (ASSOCIATED(CS%KE_adv)) then
-    call safe_alloc_ptr(CS%diag%gradKEu,Isdq,Iedq,jsd,jed,nz)
-    call safe_alloc_ptr(CS%diag%gradKEv,isd,ied,Jsdq,Jedq,nz)
+    call safe_alloc_ptr(CS%diag%gradKEu,IsdB,IedB,jsd,jed,nz)
+    call safe_alloc_ptr(CS%diag%gradKEv,isd,ied,JsdB,JedB,nz)
   endif
 
   if (ASSOCIATED(CS%KE_visc)) then
-    call safe_alloc_ptr(CS%diag%du_dt_visc,Isdq,Iedq,jsd,jed,nz)
-    call safe_alloc_ptr(CS%diag%dv_dt_visc,isd,ied,Jsdq,Jedq,nz)
+    call safe_alloc_ptr(CS%diag%du_dt_visc,IsdB,IedB,jsd,jed,nz)
+    call safe_alloc_ptr(CS%diag%dv_dt_visc,isd,ied,JsdB,JedB,nz)
   endif
 
   if (ASSOCIATED(CS%KE_horvisc)) then
@@ -983,19 +983,19 @@ subroutine set_dependent_diagnostics(HIS, G, CS)
   endif
 
   if (ASSOCIATED(CS%KE_dia)) then
-    call safe_alloc_ptr(CS%diag%du_dt_dia,Isdq,Iedq,jsd,jed,nz)
-    call safe_alloc_ptr(CS%diag%dv_dt_dia,isd,ied,Jsdq,Jedq,nz)
+    call safe_alloc_ptr(CS%diag%du_dt_dia,IsdB,IedB,jsd,jed,nz)
+    call safe_alloc_ptr(CS%diag%dv_dt_dia,isd,ied,JsdB,JedB,nz)
   endif
 
   if (CS%split) then
     if (ASSOCIATED(CS%diag%PFu_tot) .or. ASSOCIATED(CS%diag%CAu_tot)) &
-      call safe_alloc_ptr(CS%diag%PFu_bt,Isdq,Iedq,jsd,jed)
+      call safe_alloc_ptr(CS%diag%PFu_bt,IsdB,IedB,jsd,jed)
     if (ASSOCIATED(CS%diag%PFv_tot) .or. ASSOCIATED(CS%diag%CAv_tot)) &
-      call safe_alloc_ptr(CS%diag%PFv_bt,isd,ied,Jsdq,Jedq)
+      call safe_alloc_ptr(CS%diag%PFv_bt,isd,ied,JsdB,JedB)
   endif
 
-  if (ASSOCIATED(CS%uhGM_Rlay)) call safe_alloc_ptr(CS%diag%uhGM,Isdq,Iedq,jsd,jed,nz)
-  if (ASSOCIATED(CS%vhGM_Rlay)) call safe_alloc_ptr(CS%diag%vhGM,isd,ied,Jsdq,Jedq,nz)
+  if (ASSOCIATED(CS%uhGM_Rlay)) call safe_alloc_ptr(CS%diag%uhGM,IsdB,IedB,jsd,jed,nz)
+  if (ASSOCIATED(CS%vhGM_Rlay)) call safe_alloc_ptr(CS%diag%vhGM,isd,ied,JsdB,JedB,nz)
 
 end subroutine set_dependent_diagnostics
 

@@ -135,7 +135,7 @@ subroutine MESO_wind_forcing(state, fluxes, day, G, CS)
 !                 call to MESO_surface_forcing_init
 
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
-  integer :: isd, ied, jsd, jed, Isdq, Iedq, Jsdq, Jedq
+  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
 
   !   When modifying the code, comment out this error message.  It is here
   ! so that the original (unmodified) version is not accidentally used.
@@ -143,13 +143,13 @@ subroutine MESO_wind_forcing(state, fluxes, day, G, CS)
      "User forcing routine called without modification." )
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
-  Isq = G%Iscq ; Ieq = G%Iecq ; Jsq = G%Jscq ; Jeq = G%Jecq
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  Isdq = G%Isdq ; Iedq = G%Iedq ; Jsdq = G%Jsdq ; Jedq = G%Jedq
+  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   ! Allocate the forcing arrays, if necessary.
-  call alloc_if_needed(fluxes%taux, Isdq, Iedq, jsd, jed)
-  call alloc_if_needed(fluxes%tauy, isd, ied, Jsdq, Jedq)
+  call alloc_if_needed(fluxes%taux, IsdB, IedB, jsd, jed)
+  call alloc_if_needed(fluxes%tauy, isd, ied, JsdB, JedB)
   call alloc_if_needed(fluxes%ustar, isd, ied, jsd, jed)
 
   !  Set the surface wind stresses, in units of Pa.  A positive taux
@@ -158,17 +158,17 @@ subroutine MESO_wind_forcing(state, fluxes, day, G, CS)
   !  The i-loop extends to is-1 so that taux can be used later in the
   ! calculation of ustar - otherwise the lower bound would be Isq.
   do j=js,je ; do I=is-1,Ieq
-    fluxes%taux(I,j) = G%umask(I,j) * 0.0  ! Change this to the desired expression.
+    fluxes%taux(I,j) = G%mask2dCu(I,j) * 0.0  ! Change this to the desired expression.
   enddo ; enddo
   do J=js-1,Jeq ; do i=is,ie
-    fluxes%tauy(i,J) = G%vmask(i,J) * 0.0  ! Change this to the desired expression.
+    fluxes%tauy(i,J) = G%mask2dCv(i,J) * 0.0  ! Change this to the desired expression.
   enddo ; enddo
 
   !    Set the surface friction velocity, in units of m s-1.  ustar
   !  is always positive.
   if (associated(fluxes%ustar)) then ; do j=js,je ; do i=is,ie
     !  This expression can be changed if desired, but need not be.
-    fluxes%ustar(i,j) = G%hmask(i,j) * sqrt(CS%gust_const/CS%Rho0 + &
+    fluxes%ustar(i,j) = G%mask2dT(i,j) * sqrt(CS%gust_const/CS%Rho0 + &
        sqrt(0.5*(fluxes%taux(I-1,j)**2 + fluxes%taux(I,j)**2) + &
             0.5*(fluxes%tauy(i,J-1)**2 + fluxes%tauy(i,J)**2))/CS%Rho0)
   enddo ; enddo ; endif
@@ -271,23 +271,23 @@ subroutine MESO_buoyancy_forcing(state, fluxes, day, dt, G, CS)
     do j=js,je ; do i=is,ie
       ! Fluxes of fresh water through the surface are in units of kg m-2 s-1
       ! and are positive downward - i.e. evaporation should be negative.
-      fluxes%evap(i,j) = -0.0 * G%hmask(i,j)
-      fluxes%liq_precip(i,j) = CS%PmE(i,j) * CS%Rho0 * G%hmask(i,j)
+      fluxes%evap(i,j) = -0.0 * G%mask2dT(i,j)
+      fluxes%liq_precip(i,j) = CS%PmE(i,j) * CS%Rho0 * G%mask2dT(i,j)
 
       ! virt_precip will be set later, if it is needed for salinity restoring.
       fluxes%virt_precip(i,j) = 0.0
 
       !   Heat fluxes are in units of W m-2 and are positive into the ocean.
-      fluxes%lw(i,j) = 0.0 * G%hmask(i,j)
-      fluxes%latent(i,j) = 0.0 * G%hmask(i,j)
-      fluxes%sens(i,j) = CS%Heat(i,j) * G%hmask(i,j)
-      fluxes%sw(i,j) = CS%Solar(i,j) * G%hmask(i,j)
+      fluxes%lw(i,j) = 0.0 * G%mask2dT(i,j)
+      fluxes%latent(i,j) = 0.0 * G%mask2dT(i,j)
+      fluxes%sens(i,j) = CS%Heat(i,j) * G%mask2dT(i,j)
+      fluxes%sw(i,j) = CS%Solar(i,j) * G%mask2dT(i,j)
     enddo ; enddo
   else ! This is the buoyancy only mode.
     do j=js,je ; do i=is,ie
       !   fluxes%buoy is the buoyancy flux into the ocean in m2 s-3.  A positive
       ! buoyancy flux is of the same sign as heating the ocean.
-      fluxes%buoy(i,j) = 0.0 * G%hmask(i,j)
+      fluxes%buoy(i,j) = 0.0 * G%mask2dT(i,j)
     enddo ; enddo
   endif
 
@@ -303,8 +303,8 @@ subroutine MESO_buoyancy_forcing(state, fluxes, day, dt, G, CS)
       do j=js,je ; do i=is,ie
         !   Set Temp_restore and Salin_restore to the temperature (in C) and
         ! salinity (in PSU) that are being restored toward.
-        if (G%hmask(i,j) > 0) then
-          fluxes%heat_restore(i,j) = G%hmask(i,j) * &
+        if (G%mask2dT(i,j) > 0) then
+          fluxes%heat_restore(i,j) = G%mask2dT(i,j) * &
               ((CS%T_Restore(i,j) - state%SST(i,j)) * rhoXcp * CS%Flux_const)
           fluxes%virt_precip(i,j) = - (CS%Rho0*CS%Flux_const) * &
               (CS%S_Restore(i,j) - state%SSS(i,j)) / &
@@ -327,7 +327,7 @@ subroutine MESO_buoyancy_forcing(state, fluxes, day, dt, G, CS)
        ! density in kg m-3 that is being restored toward.
         density_restore = 1030.0
 
-        fluxes%buoy(i,j) = G%hmask(i,j) * buoy_rest_const * &
+        fluxes%buoy(i,j) = G%mask2dT(i,j) * buoy_rest_const * &
                           (density_restore - state%sfc_density(i,j))
       enddo ; enddo
     endif

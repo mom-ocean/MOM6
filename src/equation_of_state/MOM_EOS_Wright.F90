@@ -271,7 +271,7 @@ subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, G, dpa, in
   real :: dz, p_ave, I_al0, I_Lzz
   integer :: Isq, Ieq, Jsq, Jeq, i, j, m
 
-  Isq = G%Iscq ; Ieq = G%Iecq ; Jsq = G%Jscq ; Jeq = G%Jecq
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
   GxRho = G_e * rho_0
   I_Rho = 1.0 / rho_0
@@ -400,7 +400,7 @@ subroutine int_spec_vol_dp_wright(T, S, p_t, p_b, alpha_ref, G, dza, &
   real, parameter :: C1_9 = 1.0/9.0, C1_90 = 1.0/90.0  ! Rational constants.
   integer :: Isq, Ieq, Jsq, Jeq, ish, ieh, jsh, jeh, i, j, m, halo
 
-  Isq = G%Iscq ; Ieq = G%Iecq ; Jsq = G%Jscq ; Jeq = G%Jecq
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   halo = 0 ; if (present(halo_size)) halo = MAX(halo_size,0)
   ish = G%isc-halo ; ieh = G%iec+halo ; jsh = G%jsc-halo ; jeh = G%jec+halo
   if (present(intx_dza)) then ; ish = MIN(Isq,ish) ; ieh = MAX(Ieq+1,ieh); endif

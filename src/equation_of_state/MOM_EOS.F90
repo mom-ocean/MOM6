@@ -641,7 +641,7 @@ subroutine int_density_dz_generic(T, S, z_t, z_b, rho_ref, rho_0, G_e, G, &
   real :: dz
   integer :: Isq, Ieq, Jsq, Jeq, i, j, m, n
 
-  Isq = G%Iscq ; Ieq = G%Iecq ; Jsq = G%Jscq ; Jeq = G%Jecq
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
   GxRho = G_e * rho_0
   I_Rho = 1.0 / rho_0
@@ -978,7 +978,7 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
   real :: weight_t, weight_b
   integer :: Isq, Ieq, Jsq, Jeq, i, j, m, n
 
-  Isq = G%Iscq ; Ieq = G%Iecq ; Jsq = G%Jscq ; Jeq = G%Jecq
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
   GxRho = G_e * rho_0
   I_Rho = 1.0 / rho_0
@@ -1177,7 +1177,7 @@ subroutine int_density_dz_generic_ppm (T, T_t, T_b, S, S_t, S_b, &
   real, dimension(4) :: x, y
   real, dimension(9) :: S_node, T_node, p_node, r_node
 
-  Isq = G%Iscq ; Ieq = G%Iecq ; Jsq = G%Jscq ; Jeq = G%Jecq
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
   GxRho = G_e * rho_0
   I_Rho = 1.0 / rho_0
@@ -1404,7 +1404,7 @@ subroutine int_density_dz_generic_plm_analytic (T_t, T_b, S_t, S_b, z_t, &
   
   real, dimension(4) :: x, y, f
   
-  Isq = G%Iscq ; Ieq = G%Iecq ; Jsq = G%Jscq ; Jeq = G%Jecq
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
   GxRho = G_e * rho_0
   I_Rho = 1.0 / rho_0
@@ -1798,7 +1798,7 @@ subroutine int_spec_vol_dp_generic(T, S, p_t, p_b, alpha_ref, G, EOS, &
   real :: dp         ! The pressure change through each layer, in Pa.
   integer :: Isq, Ieq, Jsq, Jeq, ish, ieh, jsh, jeh, i, j, m, n, halo
 
-  Isq = G%Iscq ; Ieq = G%Iecq ; Jsq = G%Jscq ; Jeq = G%Jecq
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   halo = 0 ; if (present(halo_size)) halo = MAX(halo_size,0)
   ish = G%isc-halo ; ieh = G%iec+halo ; jsh = G%jsc-halo ; jeh = G%jec+halo
   if (present(intx_dza)) then ; ish = MIN(Isq,ish) ; ieh = MAX(Ieq+1,ieh); endif

@@ -139,7 +139,7 @@ subroutine calculate_Z_diag_fields(u, v, h, dt, G, CS)
   integer :: k_top, k_bot, k_bot_prev
   integer :: i, j, k, k2, kz, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nk, m, nkml
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nk = G%ke
-  Isq = G%Iscq ; Ieq = G%Iecq ; Jsq = G%Jscq ; Jeq = G%Jecq
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   nkml = max(G%nkml, 1)
 
   if (.not.associated(CS)) call MOM_error(FATAL, &
@@ -159,12 +159,12 @@ subroutine calculate_Z_diag_fields(u, v, h, dt, G, CS)
         nk_valid(I) = 0 ; D_pt(I) = 0.5*(G%bathyT(i+1,j)+G%bathyT(i,j))
       enddo
       do k=1,nk ; do I=Isq,Ieq
-        if ((G%umask(I,j) > 0.5) .and. (h(i,j,k)+h(i+1,j,k) > 4.0*G%Angstrom)) then
+        if ((G%mask2dCu(I,j) > 0.5) .and. (h(i,j,k)+h(i+1,j,k) > 4.0*G%Angstrom)) then
           nk_valid(I) = nk_valid(I) + 1 ; k2 = nk_valid(I)
           h_f(k2,I) = 0.5*(h(i,j,k)+h(i+1,j,k)) ; u_f(k2,I) = u(I,j,k)
         endif
       enddo ; enddo
-      do I=Isq,Ieq ; if (G%umask(I,j) > 0.5) then
+      do I=Isq,Ieq ; if (G%mask2dCu(I,j) > 0.5) then
         ! Add an Angstrom thick layer at the bottom with 0 velocity to impose a
         ! no-slip BBC in the output, if anything but piecewise constant is used.
         nk_valid(I) = nk_valid(I) + 1 ; k2 = nk_valid(I)
@@ -237,12 +237,12 @@ subroutine calculate_Z_diag_fields(u, v, h, dt, G, CS)
         nk_valid(i) = 0 ; D_pt(i) = 0.5*(G%bathyT(i,j)+G%bathyT(i,j+1))
       enddo
       do k=1,nk ; do i=is,ie
-        if ((G%vmask(i,j) > 0.5) .and. (h(i,j,k)+h(i,j+1,k) > 4.0*G%Angstrom)) then
+        if ((G%mask2dCv(i,j) > 0.5) .and. (h(i,j,k)+h(i,j+1,k) > 4.0*G%Angstrom)) then
           nk_valid(i) = nk_valid(i) + 1 ; k2 = nk_valid(i)
           h_f(k2,i) = 0.5*(h(i,j,k)+h(i,j+1,k)) ; v_f(k2,i) = v(i,j,k)
         endif
       enddo ; enddo
-      do i=is,ie ; if (G%vmask(i,j) > 0.5) then
+      do i=is,ie ; if (G%mask2dCv(i,j) > 0.5) then
         ! Add an Angstrom thick layer at the bottom with 0 velocity to impose a
         ! no-slip BBC in the output, if anything but piecewise constant is used.
         nk_valid(i) = nk_valid(i) + 1 ; k2 = nk_valid(i)
@@ -314,7 +314,7 @@ subroutine calculate_Z_diag_fields(u, v, h, dt, G, CS)
       ! Remove all massless layers.
       do i=is,ie ; nk_valid(i) = 0 ; D_pt(i) = G%bathyT(i,j) ; enddo
       do k=1,nk ; do i=is,ie
-        if ((G%hmask(i,j) > 0.5) .and. (h(i,j,k) > 2.0*G%Angstrom)) then
+        if ((G%mask2dT(i,j) > 0.5) .and. (h(i,j,k) > 2.0*G%Angstrom)) then
           nk_valid(i) = nk_valid(i) + 1 ; k2 = nk_valid(i)
           h_f(k2,i) = h(i,j,k)
           do m=1,CS%num_tr_used ; tr_f(k2,m,i) = CS%tr_model(m)%p(i,j,k) ; enddo
@@ -423,7 +423,7 @@ subroutine calculate_Z_transport(uh_int, vh_int, h, dt, G, CS)
                  ! contributed to.
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nk, nk_z
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nk = G%ke
-  Isq = G%Iscq ; Ieq = G%Iecq ; Jsq = G%Jscq ; Jeq = G%Jecq
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
   if (.not.associated(CS)) call MOM_error(FATAL, &
          "calculate_Z_transport: Module must be initialized before it is used.")
@@ -775,9 +775,9 @@ subroutine MOM_diag_to_Z_init(Time, G, param_file, diag, CS)
   character(len=200) :: in_dir, zgrid_file   ! Strings for directory/file.
   character(len=48)  :: flux_units
   integer :: z_axis, zint_axis
-  integer :: isd, ied, jsd, jed, Isdq, Iedq, Jsdq, Jedq, nk, id_test
+  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nk, id_test
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nk = G%ke
-  Isdq = G%Isdq ; Iedq = G%Iedq ; Jsdq = G%Jsdq ; Jedq = G%Jedq
+  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   if (associated(CS)) then
     call MOM_error(WARNING, "MOM_diag_to_Z_init called with an associated "// &
@@ -827,22 +827,22 @@ subroutine MOM_diag_to_Z_init(Time, G, param_file, diag, CS)
     CS%id_u_z = register_diag_field('ocean_model', 'u_z', CS%axesCuz, Time, &
         'Zonal Velocity in Depth Space', 'meter second-1', &
         missing_value=CS%missing_vel)
-    if (CS%id_u_z>0) call safe_alloc_ptr(CS%u_z,Isdq,Iedq,jsd,jed,CS%nk_zspace)
+    if (CS%id_u_z>0) call safe_alloc_ptr(CS%u_z,IsdB,IedB,jsd,jed,CS%nk_zspace)
 
     CS%id_v_z = register_diag_field('ocean_model', 'v_z', CS%axesCvz, Time, &
         'Meridional Velocity in Depth Space', 'meter second-1', &
         missing_value=CS%missing_vel)
-    if (CS%id_v_z>0) call safe_alloc_ptr(CS%v_z,isd,ied,Jsdq,Jedq,CS%nk_zspace)
+    if (CS%id_v_z>0) call safe_alloc_ptr(CS%v_z,isd,ied,JsdB,JedB,CS%nk_zspace)
 
     CS%id_uh_z = register_diag_field('ocean_model', 'uh_z', CS%axesCuz, Time, &
         'Zonal Volume Transport in Depth Space', flux_units, &
         missing_value=CS%missing_trans)
-    if (CS%id_uh_z>0) call safe_alloc_ptr(CS%uh_z,Isdq,Iedq,jsd,jed,CS%nk_zspace)
+    if (CS%id_uh_z>0) call safe_alloc_ptr(CS%uh_z,IsdB,IedB,jsd,jed,CS%nk_zspace)
 
     CS%id_vh_z = register_diag_field('ocean_model', 'vh_z', CS%axesCvz, Time, &
         'Meridional Volume Transport in Depth Space', flux_units, &
         missing_value=CS%missing_trans)
-    if (CS%id_vh_z>0) call safe_alloc_ptr(CS%vh_z,isd,ied,Jsdq,Jedq,CS%nk_zspace)
+    if (CS%id_vh_z>0) call safe_alloc_ptr(CS%vh_z,isd,ied,JsdB,JedB,CS%nk_zspace)
 
   else
     ! Check whether the diag-table is requesting any z-space files, and issue

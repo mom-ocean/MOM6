@@ -201,7 +201,7 @@ contains
     ntau=1 ! MOM needs the fields at only one time step
 
 
-    !   At this point G%hmask and G%axesTL are not allocated.
+    !   At this point G%mask2dT and G%axesTL are not allocated.
     ! postpone diag_registeration to initialize_MOM_generic_tracer
 
     !Fields cannot be diag registered as they are allocated and have to registered later.
@@ -376,7 +376,7 @@ contains
     grid_tmask(:,:,:) = 0.0
     grid_kmt(:,:) = 0
     do j = G%jsd, G%jed ; do i = G%isd, G%ied
-       if (G%hmask(i,j) .gt. 0) then
+       if (G%mask2dT(i,j) .gt. 0) then
           grid_tmask(i,j,:) = 1.0
           grid_kmt(i,j) = G%ke ! Tell the code that a layer thicker than 1m is the bottom layer.
        endif
@@ -648,7 +648,7 @@ contains
       tr_ptr => tr_field(:,:,:,1)
       do k=1,nz ; do j=js,je ; do i=is,ie
         stocks(m) = stocks(m) + tr_ptr(i,j,k) * &
-                               (G%hmask(i,j) * G%areaT(i,j) * h(i,j,k))
+                               (G%mask2dT(i,j) * G%areaT(i,j) * h(i,j,k))
       enddo ; enddo ; enddo
       stocks(m) = G%H_to_kg_m2 * stocks(m)
 

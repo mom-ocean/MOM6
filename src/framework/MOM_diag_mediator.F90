@@ -222,9 +222,9 @@ subroutine set_axes_info(latq, lath, lonq, lonh, G, param_file, set_vertical)
 !  do i=1,nz ; zlev(i) = real(i) ; enddo
 !  do i=1,nz+1 ; zinter(i) = real(i) - 0.5 ; enddo
   if(G%symmetric) then 
-    id_xq = diag_axis_init('xq', lonq(G%isgq:G%iegq), G%x_axis_units, 'x', &
+    id_xq = diag_axis_init('xq', lonq(G%isgB:G%iegB), G%x_axis_units, 'x', &
               'q point nominal longitude', Domain2=G%Domain%mpp_domain)
-    id_yq = diag_axis_init('yq', latq(G%jsgq:G%jegq), G%y_axis_units, 'y', &
+    id_yq = diag_axis_init('yq', latq(G%jsgB:G%jegB), G%y_axis_units, 'y', &
               'q point nominal latitude', Domain2=G%Domain%mpp_domain)
   else
     id_xq = diag_axis_init('xq', lonq(G%isg:G%ieg), G%x_axis_units, 'x', &

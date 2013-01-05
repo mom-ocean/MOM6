@@ -935,7 +935,7 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, CS, TKE_to_Kd, maxT
 
   do i=is,ie
     htot(i) = G%H_to_m*(h(i,j,nz) - G%Angstrom) ; maxEnt(i,nz) = 0.0
-    do_i(i) = (G%hmask(i,j) > 0.5)
+    do_i(i) = (G%mask2dT(i,j) > 0.5)
   enddo
   do k=nz-1,kb_min,-1
     i_rem = 0
@@ -1068,7 +1068,7 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, CS, dRho_int, N2_lay, N2_int, 
   do i=is,ie
     hb(i) = 0.0 ; dRho_bot(i) = 0.0
     z_from_bot(i) = 0.5*G%H_to_m*h(i,j,nz)
-    do_i(i) = (G%hmask(i,j) > 0.5)
+    do_i(i) = (G%mask2dT(i,j) > 0.5)
 
     if (CS%Int_tide_dissipation .or. CS%Lee_wave_dissipation) then
       h_amp(i) = sqrt(CS%h2(i,j)) ! for computing Nb
@@ -1105,7 +1105,7 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, CS, dRho_int, N2_lay, N2_int, 
       N2_bot(i) = (G_Rho0 * dRho_bot(i)) / hb(i)
     else ;  N2_bot(i) = 0.0 ; endif
     z_from_bot(i) = 0.5*G%H_to_m*h(i,j,nz)
-    do_i(i) = (G%hmask(i,j) > 0.5)
+    do_i(i) = (G%mask2dT(i,j) > 0.5)
   enddo
 
   do k=nz,2,-1
@@ -1324,7 +1324,7 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, &
 
     gh_sum_top(i) = R0_g * 400.0 * ustar_h**2
 
-    do_i(i) = (G%hmask(i,j) > 0.5)
+    do_i(i) = (G%mask2dT(i,j) > 0.5)
     htot(i) = G%H_to_m*h(i,j,nz)
     rho_htot(i) = G%Rlay(nz)*(G%H_to_m*h(i,j,nz))
     Rho_top(i) = G%Rlay(1)
@@ -1345,7 +1345,7 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, &
     if (.not.domore) exit
   enddo ! k-loop
 
-  do i=is,ie ; do_i(i) = (G%hmask(i,j) > 0.5) ; enddo
+  do i=is,ie ; do_i(i) = (G%mask2dT(i,j) > 0.5) ; enddo
   do k=nz-1,kb_min,-1
     i_rem = 0
     do i=is,ie ; if (do_i(i)) then
@@ -1471,7 +1471,7 @@ subroutine add_MLrad_diffusivity(h, fluxes, j, G, CS, Kd, TKE_to_Kd, Kd_int)
 
   ! This adds the effects of mixed layer radiation to the layer diffusivities.
 
-  do i=is,ie ; h_ml(i) = 0.0 ; do_i(i) = (G%hmask(i,j) > 0.5) ; enddo
+  do i=is,ie ; h_ml(i) = 0.0 ; do_i(i) = (G%mask2dT(i,j) > 0.5) ; enddo
   do k=1,kml ; do i=is,ie ; h_ml(i) = h_ml(i) + G%H_to_m*h(i,j,k) ; enddo ; enddo
 
   do i=is,ie ; if (do_i(i)) then
@@ -1893,7 +1893,7 @@ subroutine set_BBL_diffusivity(u, v, h, fluxes, visc, G, CS)
     ! Determine ustar and the square magnitude of the velocity in the
     ! bottom boundary layer. Together these give the TKE source and
     ! vertical decay scale.
-    do i=is,ie ; if ((G%vmask(i,J) > 0.5) .and. (cdrag_sqrt > 0.0)) then
+    do i=is,ie ; if ((G%mask2dCv(i,J) > 0.5) .and. (cdrag_sqrt > 0.0)) then
       do_i(i) = .true. ; vhtot(i) = 0.0 ; htot(i) = 0.0
       vstar(i,J) = visc%kv_bbl_v(i,J)/(cdrag_sqrt*visc%bbl_thick_v(i,J))
     else
@@ -1915,7 +1915,7 @@ subroutine set_BBL_diffusivity(u, v, h, fluxes, visc, G, CS)
       endif ; enddo
       if (.not.domore) exit
     enddo
-    do i=is,ie ; if ((G%vmask(i,J) > 0.5) .and. (htot(i) > 0.0)) then
+    do i=is,ie ; if ((G%mask2dCv(i,J) > 0.5) .and. (htot(i) > 0.0)) then
       v2_bbl(i,J) = (vhtot(i)*vhtot(i))/(htot(i)*htot(i))
     else
       v2_bbl(i,J) = 0.0
@@ -1923,7 +1923,7 @@ subroutine set_BBL_diffusivity(u, v, h, fluxes, visc, G, CS)
   enddo
 
   do j=js,je
-    do I=is-1,ie ; if ((G%umask(I,j) > 0.5) .and. (cdrag_sqrt > 0.0))  then
+    do I=is-1,ie ; if ((G%mask2dCu(I,j) > 0.5) .and. (cdrag_sqrt > 0.0))  then
       do_i(I) = .true. ; uhtot(I) = 0.0 ; htot(I) = 0.0
       ustar(I) = visc%kv_bbl_u(I,j)/(cdrag_sqrt*visc%bbl_thick_u(I,j))
     else
@@ -1944,7 +1944,7 @@ subroutine set_BBL_diffusivity(u, v, h, fluxes, visc, G, CS)
       endif ; enddo
       if (.not.domore) exit
     enddo
-    do I=is-1,ie ; if ((G%umask(I,j) > 0.5) .and. (htot(i) > 0.0)) then
+    do I=is-1,ie ; if ((G%mask2dCu(I,j) > 0.5) .and. (htot(i) > 0.0)) then
       u2_bbl(I) = (uhtot(I)*uhtot(I))/(htot(I)*htot(I))
     else
       u2_bbl(I) = 0.0
@@ -2477,7 +2477,7 @@ subroutine set_diffusivity_init(Time, G, param_file, diag, CS, diag_to_Z_CSp)
 
       utide = CS%tideamp(i,j)
       ! Compute the fixed part of internal tidal forcing; units are [kg s-2] here.
-      CS%TKE_itidal(i,j) = 0.5*CS%kappa_h2_factor*G%hmask(i,j)*G%Rho0*&
+      CS%TKE_itidal(i,j) = 0.5*CS%kappa_h2_factor*G%mask2dT(i,j)*G%Rho0*&
            CS%kappa_itides*CS%h2(i,j)*utide*utide*CS%mask_itidal(i,j)
     enddo; enddo
 

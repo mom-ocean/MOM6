@@ -398,12 +398,12 @@ subroutine initialize_OCMIP2_CFC(restart, day, G, h, OBC, CS, sponge_CSp, &
   character(len=48) :: units    ! The dimensions of the variable.
   character(len=48) :: flux_units ! The units for tracer fluxes.
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz, m
-  integer :: Isdq, Iedq, Jsdq, Jedq
+  integer :: IsdB, IedB, JsdB, JedB
 
   if (.not.associated(CS)) return
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  Isdq = G%Isdq ; Iedq = G%Iedq ; Jsdq = G%Jsdq ; Jedq = G%Jedq
+  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   CS%Time => day
 
@@ -470,10 +470,10 @@ subroutine initialize_OCMIP2_CFC(restart, day, G, h, OBC, CS, sponge_CSp, &
     CS%id_tr_dfy(m) = register_diag_field("ocean_model", trim(name)//"_dfy", &
         G%axesCvL, day, trim(longname)//" diffusive zonal flux" , &
         trim(flux_units))
-    if (CS%id_tr_adx(m) > 0) call safe_alloc_ptr(CS%tr_adx(m)%p,Isdq,Iedq,jsd,jed,nz)
-    if (CS%id_tr_ady(m) > 0) call safe_alloc_ptr(CS%tr_ady(m)%p,isd,ied,Jsdq,Jedq,nz)
-    if (CS%id_tr_dfx(m) > 0) call safe_alloc_ptr(CS%tr_dfx(m)%p,Isdq,Iedq,jsd,jed,nz)
-    if (CS%id_tr_dfy(m) > 0) call safe_alloc_ptr(CS%tr_dfy(m)%p,isd,ied,Jsdq,Jedq,nz)
+    if (CS%id_tr_adx(m) > 0) call safe_alloc_ptr(CS%tr_adx(m)%p,IsdB,IedB,jsd,jed,nz)
+    if (CS%id_tr_ady(m) > 0) call safe_alloc_ptr(CS%tr_ady(m)%p,isd,ied,JsdB,JedB,nz)
+    if (CS%id_tr_dfx(m) > 0) call safe_alloc_ptr(CS%tr_dfx(m)%p,IsdB,IedB,jsd,jed,nz)
+    if (CS%id_tr_dfy(m) > 0) call safe_alloc_ptr(CS%tr_dfy(m)%p,isd,ied,JsdB,JedB,nz)
 
 !    Register the tracer for horizontal advection & diffusion.
     if ((CS%id_tr_adx(m) > 0) .or. (CS%id_tr_ady(m) > 0) .or. &
@@ -515,7 +515,7 @@ subroutine init_tracer_CFC(h, tr, tr_desc, land_val, IC_val, G, CS)
     endif
   else
     do k=1,nz ; do j=js,je ; do i=is,ie
-      if (G%hmask(i,j) < 0.5) then
+      if (G%mask2dT(i,j) < 0.5) then
         tr(i,j,k) = land_val
       else
         tr(i,j,k) = IC_val
@@ -654,7 +654,7 @@ function OCMIP2_CFC_stock(h, stocks, G, CS, names, units, stock_index)
 
   stocks(1) = 0.0 ; stocks(2) = 0.0
   do k=1,nz ; do j=js,je ; do i=is,ie
-    mass = G%hmask(i,j) * G%areaT(i,j) * h(i,j,k)
+    mass = G%mask2dT(i,j) * G%areaT(i,j) * h(i,j,k)
     stocks(1) = stocks(1) + CS%CFC11(i,j,k) * mass
     stocks(2) = stocks(2) + CS%CFC12(i,j,k) * mass
   enddo ; enddo ; enddo
@@ -706,16 +706,16 @@ subroutine OCMIP2_CFC_surface_state(state, h, G, CS)
     ! The factor 1.e-09 converts from mol/(l * atm) to mol/(m3 * pptv).
     alpha_11 = exp(CS%d1_11 + CS%d2_11/ta + CS%d3_11*log(ta) + CS%d4_11*ta**2 +&
                    sal * ((CS%e3_11 * ta + CS%e2_11) * ta + CS%e1_11)) * &
-               1.0e-09 * G%hmask(i,j)
+               1.0e-09 * G%mask2dT(i,j)
     alpha_12 = exp(CS%d1_12 + CS%d2_12/ta + CS%d3_12*log(ta) + CS%d4_12*ta**2 +&
                    sal * ((CS%e3_12 * ta + CS%e2_12) * ta + CS%e1_12)) * &
-               1.0e-09 * G%hmask(i,j)
+               1.0e-09 * G%mask2dT(i,j)
     !   Calculate Schmidt numbers using coefficients given by 
     ! Zheng et al (1998), JGR vol 103, C1.
     sc_11 = CS%a1_11 + SST * (CS%a2_11 + SST * (CS%a3_11 + SST * CS%a4_11)) * &
-            G%hmask(i,j)
+            G%mask2dT(i,j)
     sc_12 = CS%a1_12 + SST * (CS%a2_12 + SST * (CS%a3_12 + SST * CS%a4_12)) * &
-            G%hmask(i,j)
+            G%mask2dT(i,j)
     sc_no_term = sqrt(660.0 / (sc_11 + 1.0e-30))
     CFC11_alpha(i,j) = alpha_11 * sc_no_term
     CFC11_Csurf(i,j) = CS%CFC11(i,j,1) * sc_no_term

@@ -531,8 +531,8 @@ subroutine convert_state_to_ocean_type(state, Ocean_sfc, G, patm, press_to_z)
   do j=jsc_bnd,jec_bnd ; do i=isc_bnd,iec_bnd
     Ocean_sfc%t_surf(i,j) = state%SST(i+i0,j+j0) + CELSIUS_KELVIN_OFFSET
     Ocean_sfc%s_surf(i,j) = state%SSS(i+i0,j+j0)
-    Ocean_sfc%u_surf(i,j) = G%qmask(i+i0,j+j0)*0.5*(state%u(i+i0,j+j0)+state%u(i+i0,j+j0+1))
-    Ocean_sfc%v_surf(i,j) = G%qmask(i+i0,j+j0)*0.5*(state%v(i+i0,j+j0)+state%v(i+i0+1,j+j0))
+    Ocean_sfc%u_surf(i,j) = G%mask2dBu(i+i0,j+j0)*0.5*(state%u(i+i0,j+j0)+state%u(i+i0,j+j0+1))
+    Ocean_sfc%v_surf(i,j) = G%mask2dBu(i+i0,j+j0)*0.5*(state%v(i+i0,j+j0)+state%v(i+i0+1,j+j0))
     Ocean_sfc%sea_lev(i,j) = state%sea_lev(i+i0,j+j0)
     if (present(patm)) &
       Ocean_sfc%sea_lev(i,j) = Ocean_sfc%sea_lev(i,j) + patm(i,j) * press_to_z
@@ -666,13 +666,13 @@ subroutine Ocean_stock_pe(OS, index, value, time_index)
       ! Return the mass of fresh water in the ocean on this PE in kg.
       to_mass = OS%grid%H_to_kg_m2
       if (OS%grid%Boussinesq) then
-        do k=1,nz ; do j=js,je ; do i=is,ie ; if (OS%grid%hmask(i,j) > 0.5) then
+        do k=1,nz ; do j=js,je ; do i=is,ie ; if (OS%grid%mask2dT(i,j) > 0.5) then
           value = value + to_mass*(OS%MOM_CSp%h(i,j,k,m) * OS%grid%areaT(i,j))
         endif ; enddo ; enddo ; enddo
       else
         ! In non-Boussinesq mode, the mass of salt needs to be subtracted.
         PSU_to_kg = 1.0e-3
-        do k=1,nz ; do j=js,je ; do i=is,ie ; if (OS%grid%hmask(i,j) > 0.5) then
+        do k=1,nz ; do j=js,je ; do i=is,ie ; if (OS%grid%mask2dT(i,j) > 0.5) then
           value = value + to_mass * ((1.0 - PSU_to_kg*OS%MOM_CSp%tv%S(i,j,k))*&
                                   (OS%MOM_CSp%h(i,j,k,m) * OS%grid%areaT(i,j)))
         endif ; enddo ; enddo ; enddo
@@ -680,7 +680,7 @@ subroutine Ocean_stock_pe(OS, index, value, time_index)
     case (ISTOCK_HEAT)
       ! Return the heat content of the ocean on this PE in J.
       to_heat = OS%grid%H_to_kg_m2 * OS%C_p
-      do k=1,nz ; do j=js,je ; do i=is,ie ; if (OS%grid%hmask(i,j) > 0.5) then
+      do k=1,nz ; do j=js,je ; do i=is,ie ; if (OS%grid%mask2dT(i,j) > 0.5) then
         value = value + (to_heat * OS%MOM_CSp%tv%T(i,j,k)) * &
                         (OS%MOM_CSp%h(i,j,k,m)*OS%grid%areaT(i,j))
       endif ; enddo ; enddo ; enddo
@@ -688,7 +688,7 @@ subroutine Ocean_stock_pe(OS, index, value, time_index)
       ! Return the mass of the salt in the ocean on this PE in kg.
       ! The 1000 converts salinity in PSU to salt in kg kg-1.
       to_salt = OS%grid%H_to_kg_m2 / 1000.0
-      do k=1,nz ; do j=js,je ; do i=is,ie ; if (OS%grid%hmask(i,j) > 0.5) then
+      do k=1,nz ; do j=js,je ; do i=is,ie ; if (OS%grid%mask2dT(i,j) > 0.5) then
         value = value + (to_salt * OS%MOM_CSp%tv%S(i,j,k)) * &
                         (OS%MOM_CSp%h(i,j,k,m)*OS%grid%areaT(i,j))
       endif ; enddo ; enddo ; enddo
@@ -723,10 +723,10 @@ subroutine ocean_model_data2D_get(OS,Ocean, name, array2D,isc,jsc)
   case('area')
      array2D(isc:,jsc:) = OS%grid%areaT(g_isc:g_iec,g_jsc:g_jec)
   case('mask')     
-     array2D(isc:,jsc:) = OS%grid%hmask(g_isc:g_iec,g_jsc:g_jec)
+     array2D(isc:,jsc:) = OS%grid%mask2dT(g_isc:g_iec,g_jsc:g_jec)
 !OR same result
 !     do j=g_jsc,g_jec; do i=g_isc,g_iec
-!        array2D(isc+i-g_isc,jsc+j-g_jsc) = OS%grid%hmask(i,j)
+!        array2D(isc+i-g_isc,jsc+j-g_jsc) = OS%grid%mask2dT(i,j)
 !     enddo; enddo
   case('t_surf')
      array2D(isc:,jsc:) = Ocean%t_surf(isc:,jsc:)-CELSIUS_KELVIN_OFFSET

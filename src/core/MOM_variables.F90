@@ -376,31 +376,31 @@ subroutine alloc_BT_cont_type(BT_cont, G, alloc_faces)
   type(ocean_grid_type), intent(in) :: G
   logical,     optional, intent(in) :: alloc_faces
 
-  integer :: isd, ied, jsd, jed, Isdq, Iedq, Jsdq, Jedq
+  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  Isdq = G%Isdq ; Iedq = G%Iedq ; Jsdq = G%Jsdq ; Jedq = G%Jedq
+  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   if (associated(BT_cont)) call MOM_error(FATAL, &
     "alloc_BT_cont_type called with an associated BT_cont_type pointer.")
 
   allocate(BT_cont)
-  allocate(BT_cont%FA_u_WW(Isdq:Iedq,jsd:jed)) ; BT_cont%FA_u_WW(:,:) = 0.0
-  allocate(BT_cont%FA_u_W0(Isdq:Iedq,jsd:jed)) ; BT_cont%FA_u_W0(:,:) = 0.0
-  allocate(BT_cont%FA_u_E0(Isdq:Iedq,jsd:jed)) ; BT_cont%FA_u_E0(:,:) = 0.0
-  allocate(BT_cont%FA_u_EE(Isdq:Iedq,jsd:jed)) ; BT_cont%FA_u_EE(:,:) = 0.0
-  allocate(BT_cont%uBT_WW(Isdq:Iedq,jsd:jed))  ; BT_cont%uBT_WW(:,:) = 0.0
-  allocate(BT_cont%uBT_EE(Isdq:Iedq,jsd:jed))  ; BT_cont%uBT_EE(:,:) = 0.0
+  allocate(BT_cont%FA_u_WW(IsdB:IedB,jsd:jed)) ; BT_cont%FA_u_WW(:,:) = 0.0
+  allocate(BT_cont%FA_u_W0(IsdB:IedB,jsd:jed)) ; BT_cont%FA_u_W0(:,:) = 0.0
+  allocate(BT_cont%FA_u_E0(IsdB:IedB,jsd:jed)) ; BT_cont%FA_u_E0(:,:) = 0.0
+  allocate(BT_cont%FA_u_EE(IsdB:IedB,jsd:jed)) ; BT_cont%FA_u_EE(:,:) = 0.0
+  allocate(BT_cont%uBT_WW(IsdB:IedB,jsd:jed))  ; BT_cont%uBT_WW(:,:) = 0.0
+  allocate(BT_cont%uBT_EE(IsdB:IedB,jsd:jed))  ; BT_cont%uBT_EE(:,:) = 0.0
 
-  allocate(BT_cont%FA_v_SS(isd:ied,Jsdq:Jedq)) ; BT_cont%FA_v_SS(:,:) = 0.0
-  allocate(BT_cont%FA_v_S0(isd:ied,Jsdq:Jedq)) ; BT_cont%FA_v_S0(:,:) = 0.0
-  allocate(BT_cont%FA_v_N0(isd:ied,Jsdq:Jedq)) ; BT_cont%FA_v_N0(:,:) = 0.0
-  allocate(BT_cont%FA_v_NN(isd:ied,Jsdq:Jedq)) ; BT_cont%FA_v_NN(:,:) = 0.0
-  allocate(BT_cont%vBT_SS(isd:ied,Jsdq:Jedq))  ; BT_cont%vBT_SS(:,:) = 0.0
-  allocate(BT_cont%vBT_NN(isd:ied,Jsdq:Jedq))  ; BT_cont%vBT_NN(:,:) = 0.0
+  allocate(BT_cont%FA_v_SS(isd:ied,JsdB:JedB)) ; BT_cont%FA_v_SS(:,:) = 0.0
+  allocate(BT_cont%FA_v_S0(isd:ied,JsdB:JedB)) ; BT_cont%FA_v_S0(:,:) = 0.0
+  allocate(BT_cont%FA_v_N0(isd:ied,JsdB:JedB)) ; BT_cont%FA_v_N0(:,:) = 0.0
+  allocate(BT_cont%FA_v_NN(isd:ied,JsdB:JedB)) ; BT_cont%FA_v_NN(:,:) = 0.0
+  allocate(BT_cont%vBT_SS(isd:ied,JsdB:JedB))  ; BT_cont%vBT_SS(:,:) = 0.0
+  allocate(BT_cont%vBT_NN(isd:ied,JsdB:JedB))  ; BT_cont%vBT_NN(:,:) = 0.0
 
   if (present(alloc_faces)) then ; if (alloc_faces) then
-    allocate(BT_cont%h_u(Isdq:Iedq,jsd:jed,1:G%ke)) ; BT_cont%h_u(:,:,:) = 0.0
-    allocate(BT_cont%h_v(isd:ied,Jsdq:Jedq,1:G%ke)) ; BT_cont%h_v(:,:,:) = 0.0
+    allocate(BT_cont%h_u(IsdB:IedB,jsd:jed,1:G%ke)) ; BT_cont%h_u(:,:,:) = 0.0
+    allocate(BT_cont%h_v(isd:ied,JsdB:JedB,1:G%ke)) ; BT_cont%h_v(:,:,:) = 0.0
   endif ; endif
 
 end subroutine alloc_BT_cont_type

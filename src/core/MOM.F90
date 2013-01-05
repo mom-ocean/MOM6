@@ -440,7 +440,7 @@ function step_MOM(fluxes, state, Time_start, time_interval, CS)
   integer :: m = 1  ! The current time level (1, 2, or 3).
   integer :: mp     ! The previous value of m.
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, n
-  integer :: isd, ied, jsd, jed, Isdq, Iedq, Jsdq, Jedq
+  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   real :: dt        ! The baroclinic time step in s.
   real :: dtth      ! The time step used for thickness diffusion, in s.
   real :: dtnt      ! The elapsed time since updating the tracers and applying
@@ -475,9 +475,9 @@ function step_MOM(fluxes, state, Time_start, time_interval, CS)
 
   grid => CS%grid
   is = grid%isc ; ie = grid%iec ; js = grid%jsc ; je = grid%jec ; nz = grid%ke
-  Isq = grid%Iscq ; Ieq = grid%Iecq ; Jsq = grid%Jscq ; Jeq = grid%Jecq
+  Isq = grid%IscB ; Ieq = grid%IecB ; Jsq = grid%JscB ; Jeq = grid%JecB
   isd = grid%isd ; ied = grid%ied ; jsd = grid%jsd ; jed = grid%jed
-  Isdq = grid%Isdq ; Iedq = grid%Iedq ; Jsdq = grid%Jsdq ; Jedq = grid%Jedq
+  IsdB = grid%IsdB ; IedB = grid%IedB ; JsdB = grid%JsdB ; JedB = grid%JedB
   u => CS%u ; v => CS%v ; h => CS%h
 
   call cpu_clock_begin(id_clock_ocean)
@@ -604,10 +604,10 @@ function step_MOM(fluxes, state, Time_start, time_interval, CS)
 
     if (associated(CS%u_prev) .and. associated(CS%v_prev)) then
       mp = 1 ; if (CS%split) mp = MOD(nt,2) + 1
-      do k=1,nz ; do j=jsd,jed ; do I=Isdq,Iedq
+      do k=1,nz ; do j=jsd,jed ; do I=IsdB,IedB
         CS%u_prev(I,j,k) = u(I,j,k,mp)
       enddo ; enddo ; enddo
-      do k=1,nz ; do J=Jsdq,Jedq ; do i=isd,ied
+      do k=1,nz ; do J=JsdB,JedB ; do i=isd,ied
         CS%v_prev(I,j,k) = u(I,j,k,mp)
       enddo ; enddo ; enddo
     endif
@@ -866,13 +866,13 @@ function step_MOM(fluxes, state, Time_start, time_interval, CS)
   call enable_averaging(dt*n_max,Time_local, CS%diag)
     I_time_int = 1.0/(dt*n_max)
     if (CS%id_ssh > 0) &
-      call post_data(CS%id_ssh, CS%ave_ssh, CS%diag, mask=grid%hmask)
+      call post_data(CS%id_ssh, CS%ave_ssh, CS%diag, mask=grid%mask2dT)
     if (ASSOCIATED(CS%tv%frazil) .and. (CS%id_fraz > 0)) then
       allocate(frazil_ave(grid%isd:grid%ied,grid%jsd:grid%jed))
       do j=js,je ; do i=is,ie
         frazil_ave(i,j) = CS%tv%frazil(i,j) * I_time_int
       enddo ; enddo
-      call post_data(CS%id_fraz, frazil_ave, CS%diag, mask=grid%hmask)
+      call post_data(CS%id_fraz, frazil_ave, CS%diag, mask=grid%mask2dT)
       deallocate(frazil_ave)
     endif
     if (ASSOCIATED(CS%tv%salt_deficit) .and. (CS%id_salt_deficit > 0)) then
@@ -880,7 +880,7 @@ function step_MOM(fluxes, state, Time_start, time_interval, CS)
       do j=js,je ; do i=is,ie
         salt_deficit_ave(i,j) = CS%tv%salt_deficit(i,j) * I_time_int
       enddo ; enddo
-      call post_data(CS%id_salt_deficit, salt_deficit_ave, CS%diag, mask=grid%hmask)
+      call post_data(CS%id_salt_deficit, salt_deficit_ave, CS%diag, mask=grid%mask2dT)
       deallocate(salt_deficit_ave)
     endif
     if (ASSOCIATED(CS%tv%TempxPmE) .and. (CS%id_Heat_PmE > 0)) then
@@ -888,7 +888,7 @@ function step_MOM(fluxes, state, Time_start, time_interval, CS)
       do j=js,je ; do i=is,ie
         Heat_PmE_ave(i,j) = CS%tv%TempxPmE(i,j) * (CS%tv%C_p * I_time_int)
       enddo ; enddo
-      call post_data(CS%id_Heat_PmE, Heat_PmE_ave, CS%diag, mask=grid%hmask)      
+      call post_data(CS%id_Heat_PmE, Heat_PmE_ave, CS%diag, mask=grid%mask2dT)      
       deallocate(Heat_PmE_ave)
     endif
     if (ASSOCIATED(CS%tv%internal_heat) .and. (CS%id_intern_heat > 0)) then
@@ -896,7 +896,7 @@ function step_MOM(fluxes, state, Time_start, time_interval, CS)
       do j=js,je ; do i=is,ie
         intern_heat_ave(i,j) = CS%tv%internal_heat(i,j) * (CS%tv%C_p * I_time_int)
       enddo ; enddo
-      call post_data(CS%id_intern_heat, intern_heat_ave, CS%diag, mask=grid%hmask)
+      call post_data(CS%id_intern_heat, intern_heat_ave, CS%diag, mask=grid%mask2dT)
       deallocate(intern_heat_ave)
     endif
   call disable_averaging(CS%diag)
@@ -906,26 +906,26 @@ function step_MOM(fluxes, state, Time_start, time_interval, CS)
 
   call enable_averaging(dt*n_max,Time_local, CS%diag)
     if (CS%id_sst > 0) &
-      call post_data(CS%id_sst, state%SST, CS%diag, mask=grid%hmask)
+      call post_data(CS%id_sst, state%SST, CS%diag, mask=grid%mask2dT)
     if (CS%id_sst_sq > 0) then
       do j=js,je ; do i=is,ie
         CS%SST_sq(i,j) = state%SST(i,j)*state%SST(i,j)
       enddo ; enddo
-      call post_data(CS%id_sst_sq, CS%SST_sq, CS%diag, mask=grid%hmask)
+      call post_data(CS%id_sst_sq, CS%SST_sq, CS%diag, mask=grid%mask2dT)
     endif
     if (CS%id_sss > 0) &
-      call post_data(CS%id_sss, state%SSS, CS%diag, mask=grid%hmask)
+      call post_data(CS%id_sss, state%SSS, CS%diag, mask=grid%mask2dT)
     if (CS%id_ssu > 0) &
-      call post_data(CS%id_ssu, state%u, CS%diag, mask=grid%umask)
+      call post_data(CS%id_ssu, state%u, CS%diag, mask=grid%mask2dCu)
     if (CS%id_ssv > 0) &
-      call post_data(CS%id_ssv, state%v, CS%diag, mask=grid%umask)
+      call post_data(CS%id_ssv, state%v, CS%diag, mask=grid%mask2dCu)
     if (CS%id_speed > 0) then
       allocate(sfc_speed(grid%isd:grid%ied,grid%jsd:grid%jed))
       do j=js,je ; do i=is,ie
         sfc_speed(i,j) = sqrt(0.5*(state%u(I-1,j)**2 + state%u(I,j)**2) + &
                               0.5*(state%v(i,J-1)**2 + state%v(i,J)**2))
       enddo ; enddo
-      call post_data(CS%id_speed, sfc_speed, CS%diag, mask=grid%hmask)
+      call post_data(CS%id_speed, sfc_speed, CS%diag, mask=grid%mask2dT)
       deallocate(sfc_speed)
     endif
   call disable_averaging(CS%diag)
@@ -1009,7 +1009,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   character(len=128) :: version = '$Id$'
   character(len=128) :: tagname = '$Name$'
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
-  integer :: Isdq, Iedq, Jsdq, Jedq
+  integer :: IsdB, IedB, JsdB, JedB
   real    :: dtbt
   real    :: Z_diag_int      ! The minimum interval between calculations of
                              ! Depth-space diagnostic quantities, in s.
@@ -1062,7 +1062,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call MOM_grid_init(grid, param_file)
   is = grid%isc ; ie = grid%iec ; js = grid%jsc ; je = grid%jec ; nz = grid%ke
   isd = grid%isd ; ied = grid%ied ; jsd = grid%jsd ; jed = grid%jed
-  Isdq = grid%Isdq ; Iedq = grid%Iedq ; Jsdq = grid%Jsdq ; Jedq = grid%Jedq
+  IsdB = grid%IsdB ; IedB = grid%IedB ; JsdB = grid%JsdB ; JedB = grid%JedB
   call set_diag_mediator_grid(grid, diag)
 
   ! Read all relevant parameters and write them to the model log.
@@ -1298,18 +1298,18 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call advect_tracer_init(param_file, CS%tracer_CSp)
 
 ! Allocate and initialize space for the primary MOM variables.
-  ALLOC_(CS%u(Isdq:Iedq,jsd:jed,nz,2)) ; CS%u(:,:,:,:) = 0.0
-  ALLOC_(CS%v(isd:ied,Jsdq:Jedq,nz,2)) ; CS%v(:,:,:,:) = 0.0
+  ALLOC_(CS%u(IsdB:IedB,jsd:jed,nz,2)) ; CS%u(:,:,:,:) = 0.0
+  ALLOC_(CS%v(isd:ied,JsdB:JedB,nz,2)) ; CS%v(:,:,:,:) = 0.0
   ALLOC_(CS%h(isd:ied,jsd:jed,nz,2))   ; CS%h(:,:,:,:) = grid%Angstrom
   u => CS%u ; v => CS%v ; h => CS%h
-  ALLOC_(CS%uh(Isdq:Iedq,jsd:jed,nz))  ; CS%uh(:,:,:) = 0.0
-  ALLOC_(CS%vh(isd:ied,Jsdq:Jedq,nz))  ; CS%vh(:,:,:) = 0.0
-  ALLOC_(CS%diffu(Isdq:Iedq,jsd:jed,nz)) ; CS%diffu(:,:,:) = 0.0
-  ALLOC_(CS%diffv(isd:ied,Jsdq:Jedq,nz)) ; CS%diffv(:,:,:) = 0.0
-  ALLOC_(CS%CAu(Isdq:Iedq,jsd:jed,nz)) ; CS%CAu(:,:,:) = 0.0
-  ALLOC_(CS%CAv(isd:ied,Jsdq:Jedq,nz)) ; CS%CAv(:,:,:) = 0.0
-  ALLOC_(CS%PFu(Isdq:Iedq,jsd:jed,nz)) ; CS%PFu(:,:,:) = 0.0
-  ALLOC_(CS%PFv(isd:ied,Jsdq:Jedq,nz)) ; CS%PFv(:,:,:) = 0.0
+  ALLOC_(CS%uh(IsdB:IedB,jsd:jed,nz))  ; CS%uh(:,:,:) = 0.0
+  ALLOC_(CS%vh(isd:ied,JsdB:JedB,nz))  ; CS%vh(:,:,:) = 0.0
+  ALLOC_(CS%diffu(IsdB:IedB,jsd:jed,nz)) ; CS%diffu(:,:,:) = 0.0
+  ALLOC_(CS%diffv(isd:ied,JsdB:JedB,nz)) ; CS%diffv(:,:,:) = 0.0
+  ALLOC_(CS%CAu(IsdB:IedB,jsd:jed,nz)) ; CS%CAu(:,:,:) = 0.0
+  ALLOC_(CS%CAv(isd:ied,JsdB:JedB,nz)) ; CS%CAv(:,:,:) = 0.0
+  ALLOC_(CS%PFu(IsdB:IedB,jsd:jed,nz)) ; CS%PFu(:,:,:) = 0.0
+  ALLOC_(CS%PFv(isd:ied,JsdB:JedB,nz)) ; CS%PFv(:,:,:) = 0.0
   if (CS%use_temperature) then
     ALLOC_(CS%T(isd:ied,jsd:jed,nz))   ; CS%T(:,:,:) = 0.0
     ALLOC_(CS%S(isd:ied,jsd:jed,nz))   ; CS%S(:,:,:) = 0.0
@@ -1335,12 +1335,12 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     grid%nkml = 0 ; grid%nk_rho_varies = 0
   endif
 
-  ALLOC_(CS%uhtr(Isdq:Iedq,jsd:jed,nz)) ; CS%uhtr(:,:,:) = 0.0
-  ALLOC_(CS%vhtr(isd:ied,Jsdq:Jedq,nz)) ; CS%vhtr(:,:,:) = 0.0
+  ALLOC_(CS%uhtr(IsdB:IedB,jsd:jed,nz)) ; CS%uhtr(:,:,:) = 0.0
+  ALLOC_(CS%vhtr(isd:ied,JsdB:JedB,nz)) ; CS%vhtr(:,:,:) = 0.0
 
   if (CS%debug_truncations) then
-    allocate(CS%u_prev(Isdq:Iedq,jsd:jed,nz)) ; CS%u_prev(:,:,:) = 0.0
-    allocate(CS%v_prev(isd:ied,Jsdq:Jedq,nz)) ; CS%u_prev(:,:,:) = 0.0
+    allocate(CS%u_prev(IsdB:IedB,jsd:jed,nz)) ; CS%u_prev(:,:,:) = 0.0
+    allocate(CS%v_prev(isd:ied,JsdB:JedB,nz)) ; CS%u_prev(:,:,:) = 0.0
   endif
 
   MOM_internal_state%u => u ; MOM_internal_state%v => v ; MOM_internal_state%h =>h
@@ -1353,19 +1353,19 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   endif
   if (CS%split) then
     ALLOC_(CS%eta(isd:ied,jsd:jed))      ; CS%eta(:,:) = 0.0
-    ALLOC_(CS%uhbt(Isdq:Iedq,jsd:jed))   ; CS%uhbt(:,:) = 0.0
-    ALLOC_(CS%vhbt(isd:ied,Jsdq:Jedq))   ; CS%vhbt(:,:) = 0.0
-    ALLOC_(CS%uhbt_in(Isdq:Iedq,jsd:jed)) ; CS%uhbt_in(:,:) = 0.0
-    ALLOC_(CS%vhbt_in(isd:ied,Jsdq:Jedq)) ; CS%vhbt_in(:,:) = 0.0
-    ALLOC_(CS%u_av(Isdq:Iedq,jsd:jed,nz)); CS%u_av(:,:,:) = 0.0
-    ALLOC_(CS%v_av(isd:ied,Jsdq:Jedq,nz)); CS%v_av(:,:,:) = 0.0
+    ALLOC_(CS%uhbt(IsdB:IedB,jsd:jed))   ; CS%uhbt(:,:) = 0.0
+    ALLOC_(CS%vhbt(isd:ied,JsdB:JedB))   ; CS%vhbt(:,:) = 0.0
+    ALLOC_(CS%uhbt_in(IsdB:IedB,jsd:jed)) ; CS%uhbt_in(:,:) = 0.0
+    ALLOC_(CS%vhbt_in(isd:ied,JsdB:JedB)) ; CS%vhbt_in(:,:) = 0.0
+    ALLOC_(CS%u_av(IsdB:IedB,jsd:jed,nz)); CS%u_av(:,:,:) = 0.0
+    ALLOC_(CS%v_av(isd:ied,JsdB:JedB,nz)); CS%v_av(:,:,:) = 0.0
     ALLOC_(CS%h_av(isd:ied,jsd:jed,nz))  ; CS%h_av(:,:,:) = grid%Angstrom
     ALLOC_(CS%eta_PF(isd:ied,jsd:jed))   ; CS%eta_PF(:,:) = 0.0
     ALLOC_(CS%pbce(isd:ied,jsd:jed,nz))  ; CS%pbce(:,:,:) = 0.0
-    ALLOC_(CS%u_accel_bt(Isdq:Iedq,jsd:jed,nz)) ; CS%u_accel_bt(:,:,:) = 0.0
-    ALLOC_(CS%v_accel_bt(isd:ied,Jsdq:Jedq,nz)) ; CS%v_accel_bt(:,:,:) = 0.0
-    ALLOC_(CS%visc_rem_u(Isdq:Iedq,jsd:jed,nz)) ; CS%visc_rem_u(:,:,:) = 0.0
-    ALLOC_(CS%visc_rem_v(isd:ied,Jsdq:Jedq,nz)) ; CS%visc_rem_v(:,:,:) = 0.0
+    ALLOC_(CS%u_accel_bt(IsdB:IedB,jsd:jed,nz)) ; CS%u_accel_bt(:,:,:) = 0.0
+    ALLOC_(CS%v_accel_bt(isd:ied,JsdB:JedB,nz)) ; CS%v_accel_bt(:,:,:) = 0.0
+    ALLOC_(CS%visc_rem_u(IsdB:IedB,jsd:jed,nz)) ; CS%visc_rem_u(:,:,:) = 0.0
+    ALLOC_(CS%visc_rem_v(isd:ied,JsdB:JedB,nz)) ; CS%visc_rem_v(:,:,:) = 0.0
 
     MOM_internal_state%u_accel_bt => CS%u_accel_bt
     MOM_internal_state%v_accel_bt => CS%v_accel_bt
@@ -1376,8 +1376,8 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   if (CS%interp_p_surf) then
     allocate(CS%p_surf_prev(isd:ied,jsd:jed)) ; CS%p_surf_prev(:,:) = 0.0
   endif
-  allocate(CS%taux_bot(Isdq:Iedq,jsd:jed)) ; CS%taux_bot(:,:) = 0.0
-  allocate(CS%tauy_bot(isd:ied,Jsdq:Jedq)) ; CS%tauy_bot(:,:) = 0.0
+  allocate(CS%taux_bot(IsdB:IedB,jsd:jed)) ; CS%taux_bot(:,:) = 0.0
+  allocate(CS%tauy_bot(isd:ied,JsdB:JedB)) ; CS%tauy_bot(:,:) = 0.0
 
   ALLOC_(CS%ave_ssh(isd:ied,jsd:jed)) ; CS%ave_ssh(:,:) = 0.0
 
@@ -1583,9 +1583,9 @@ subroutine register_diags(Time, G, CS)
 !  (in)      G - The ocean's grid structure.
 !  (in)      CS - The control structure set up by initialize_MOM.
   character(len=48) :: thickness_units, flux_units, T_flux_units, S_flux_units
-  integer :: isd, ied, jsd, jed, Isdq, Iedq, Jsdq, Jedq, nz
+  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = G%ke
-  Isdq = G%Isdq ; Iedq = G%Iedq ; Jsdq = G%Jsdq ; Jedq = G%Jedq
+  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   thickness_units = get_thickness_units(G)
   flux_units = get_flux_units(G)
@@ -1643,10 +1643,10 @@ subroutine register_diags(Time, G, CS)
   CS%id_PFv = register_diag_field('ocean_model', 'PFv', G%axesCvL, Time, &
       'Meridional Pressure Force Acceleration', 'meter second-2')
   if (CS%split) then
-    if (CS%id_PFu > 0) call safe_alloc_ptr(CS%diag%PFu_tot,Isdq,Iedq,jsd,jed,nz)
-    if (CS%id_PFv > 0) call safe_alloc_ptr(CS%diag%PFv_tot,isd,ied,Jsdq,Jedq,nz)
-    if (CS%id_CAu > 0) call safe_alloc_ptr(CS%diag%CAu_tot,Isdq,Iedq,jsd,jed,nz)
-    if (CS%id_CAv > 0) call safe_alloc_ptr(CS%diag%CAv_tot,isd,ied,Jsdq,Jedq,nz)
+    if (CS%id_PFu > 0) call safe_alloc_ptr(CS%diag%PFu_tot,IsdB,IedB,jsd,jed,nz)
+    if (CS%id_PFv > 0) call safe_alloc_ptr(CS%diag%PFv_tot,isd,ied,JsdB,JedB,nz)
+    if (CS%id_CAu > 0) call safe_alloc_ptr(CS%diag%CAu_tot,IsdB,IedB,jsd,jed,nz)
+    if (CS%id_CAv > 0) call safe_alloc_ptr(CS%diag%CAv_tot,isd,ied,JsdB,JedB,nz)
   endif
   CS%id_u_BT_accel = register_diag_field('ocean_model', 'u_BT_accel', G%axesCuL, Time, &
     'Barotropic Anomaly Zonal Acceleration', 'meter second-1')
@@ -1661,10 +1661,10 @@ subroutine register_diags(Time, G, CS)
       'Diffusive Zonal Flux of Potential Temperature', T_flux_units)
   CS%id_Tdiffy = register_diag_field('ocean_model', 'T_diffy', G%axesCvL, Time, &
       'Diffusive Meridional Flux of Potential Temperature', T_flux_units)
-  if (CS%id_Tadx > 0)   call safe_alloc_ptr(CS%T_adx,Isdq,Iedq,jsd,jed,nz)
-  if (CS%id_Tady > 0)   call safe_alloc_ptr(CS%T_ady,isd,ied,Jsdq,Jedq,nz)
-  if (CS%id_Tdiffx > 0) call safe_alloc_ptr(CS%T_diffx,Isdq,Iedq,jsd,jed,nz)
-  if (CS%id_Tdiffy > 0) call safe_alloc_ptr(CS%T_diffy,isd,ied,Jsdq,Jedq,nz)
+  if (CS%id_Tadx > 0)   call safe_alloc_ptr(CS%T_adx,IsdB,IedB,jsd,jed,nz)
+  if (CS%id_Tady > 0)   call safe_alloc_ptr(CS%T_ady,isd,ied,JsdB,JedB,nz)
+  if (CS%id_Tdiffx > 0) call safe_alloc_ptr(CS%T_diffx,IsdB,IedB,jsd,jed,nz)
+  if (CS%id_Tdiffy > 0) call safe_alloc_ptr(CS%T_diffy,isd,ied,JsdB,JedB,nz)
 
   CS%id_Sadx = register_diag_field('ocean_model', 'S_adx', G%axesCuL, Time, &
       'Advective Zonal Flux of Salinity', S_flux_units)
@@ -1674,10 +1674,10 @@ subroutine register_diags(Time, G, CS)
       'Diffusive Zonal Flux of Salinity', S_flux_units)
   CS%id_Sdiffy = register_diag_field('ocean_model', 'S_diffy', G%axesCvL, Time, &
       'Diffusive Meridional Flux of Salinity', S_flux_units)
-  if (CS%id_Sadx > 0)   call safe_alloc_ptr(CS%S_adx,Isdq,Iedq,jsd,jed,nz)
-  if (CS%id_Sady > 0)   call safe_alloc_ptr(CS%S_ady,isd,ied,Jsdq,Jedq,nz)
-  if (CS%id_Sdiffx > 0) call safe_alloc_ptr(CS%S_diffx,Isdq,Iedq,jsd,jed,nz)
-  if (CS%id_Sdiffy > 0) call safe_alloc_ptr(CS%S_diffy,isd,ied,Jsdq,Jedq,nz)
+  if (CS%id_Sadx > 0)   call safe_alloc_ptr(CS%S_adx,IsdB,IedB,jsd,jed,nz)
+  if (CS%id_Sady > 0)   call safe_alloc_ptr(CS%S_ady,isd,ied,JsdB,JedB,nz)
+  if (CS%id_Sdiffx > 0) call safe_alloc_ptr(CS%S_diffx,IsdB,IedB,jsd,jed,nz)
+  if (CS%id_Sdiffy > 0) call safe_alloc_ptr(CS%S_diffy,isd,ied,JsdB,JedB,nz)
 
   CS%id_Tadx_2d = register_diag_field('ocean_model', 'T_adx_2d', G%axesCu1, Time, &
       'Vertically Integrated Advective Zonal Flux of Potential Temperature', T_flux_units)
@@ -1687,10 +1687,10 @@ subroutine register_diags(Time, G, CS)
       'Vertically Integrated Diffusive Zonal Flux of Potential Temperature', T_flux_units)
   CS%id_Tdiffy_2d = register_diag_field('ocean_model', 'T_diffy_2d', G%axesCv1, Time, &
       'Vertically Integrated Diffusive Meridional Flux of Potential Temperature', T_flux_units)
-  if (CS%id_Tadx_2d > 0)   call safe_alloc_ptr(CS%T_adx_2d,Isdq,Iedq,jsd,jed)
-  if (CS%id_Tady_2d > 0)   call safe_alloc_ptr(CS%T_ady_2d,isd,ied,Jsdq,Jedq)
-  if (CS%id_Tdiffx_2d > 0) call safe_alloc_ptr(CS%T_diffx_2d,Isdq,Iedq,jsd,jed)
-  if (CS%id_Tdiffy_2d > 0) call safe_alloc_ptr(CS%T_diffy_2d,isd,ied,Jsdq,Jedq)
+  if (CS%id_Tadx_2d > 0)   call safe_alloc_ptr(CS%T_adx_2d,IsdB,IedB,jsd,jed)
+  if (CS%id_Tady_2d > 0)   call safe_alloc_ptr(CS%T_ady_2d,isd,ied,JsdB,JedB)
+  if (CS%id_Tdiffx_2d > 0) call safe_alloc_ptr(CS%T_diffx_2d,IsdB,IedB,jsd,jed)
+  if (CS%id_Tdiffy_2d > 0) call safe_alloc_ptr(CS%T_diffy_2d,isd,ied,JsdB,JedB)
 
   CS%id_Sadx_2d = register_diag_field('ocean_model', 'S_adx_2d', G%axesCu1, Time, &
       'Vertically Integrated Advective Zonal Flux of Salinity', S_flux_units)
@@ -1700,10 +1700,10 @@ subroutine register_diags(Time, G, CS)
       'Vertically Integrated Diffusive Zonal Flux of Salinity', S_flux_units)
   CS%id_Sdiffy_2d = register_diag_field('ocean_model', 'S_diffy_2d', G%axesCv1, Time, &
       'Vertically Integrated Diffusive Meridional Flux of Salinity', S_flux_units)
-  if (CS%id_Sadx_2d > 0)   call safe_alloc_ptr(CS%S_adx_2d,Isdq,Iedq,jsd,jed)
-  if (CS%id_Sady_2d > 0)   call safe_alloc_ptr(CS%S_ady_2d,isd,ied,Jsdq,Jedq)
-  if (CS%id_Sdiffx_2d > 0) call safe_alloc_ptr(CS%S_diffx_2d,Isdq,Iedq,jsd,jed)
-  if (CS%id_Sdiffy_2d > 0) call safe_alloc_ptr(CS%S_diffy_2d,isd,ied,Jsdq,Jedq)
+  if (CS%id_Sadx_2d > 0)   call safe_alloc_ptr(CS%S_adx_2d,IsdB,IedB,jsd,jed)
+  if (CS%id_Sady_2d > 0)   call safe_alloc_ptr(CS%S_ady_2d,isd,ied,JsdB,JedB)
+  if (CS%id_Sdiffx_2d > 0) call safe_alloc_ptr(CS%S_diffx_2d,IsdB,IedB,jsd,jed)
+  if (CS%id_Sdiffy_2d > 0) call safe_alloc_ptr(CS%S_diffy_2d,isd,ied,JsdB,JedB)
 
   CS%id_uh = register_diag_field('ocean_model', 'uh', G%axesCuL, Time, &
       'Zonal Thickness Flux', flux_units)
@@ -1716,18 +1716,18 @@ subroutine register_diags(Time, G, CS)
 
   if (CS%debug_truncations) then
     if (CS%split .and. CS%flux_BT_coupling) then
-      call safe_alloc_ptr(CS%diag%du_adj,Isdq,Iedq,jsd,jed,nz)
-      call safe_alloc_ptr(CS%diag%dv_adj,isd,ied,Jsdq,Jedq,nz)
+      call safe_alloc_ptr(CS%diag%du_adj,IsdB,IedB,jsd,jed,nz)
+      call safe_alloc_ptr(CS%diag%dv_adj,isd,ied,JsdB,JedB,nz)
     endif
     if (CS%split .and. CS%flux_BT_coupling .and. CS%readjust_BT_trans) then
-      call safe_alloc_ptr(CS%diag%du_adj2,Isdq,Iedq,jsd,jed,nz)
-      call safe_alloc_ptr(CS%diag%dv_adj2,isd,ied,Jsdq,Jedq,nz)
+      call safe_alloc_ptr(CS%diag%du_adj2,IsdB,IedB,jsd,jed,nz)
+      call safe_alloc_ptr(CS%diag%dv_adj2,isd,ied,JsdB,JedB,nz)
     endif
-    call safe_alloc_ptr(CS%diag%du_dt_visc,Isdq,Iedq,jsd,jed,nz)
-    call safe_alloc_ptr(CS%diag%dv_dt_visc,isd,ied,Jsdq,Jedq,nz)
+    call safe_alloc_ptr(CS%diag%du_dt_visc,IsdB,IedB,jsd,jed,nz)
+    call safe_alloc_ptr(CS%diag%dv_dt_visc,isd,ied,JsdB,JedB,nz)
     if (.not.CS%adiabatic) then
-      call safe_alloc_ptr(CS%diag%du_dt_dia,Isdq,Iedq,jsd,jed,nz)
-      call safe_alloc_ptr(CS%diag%dv_dt_dia,isd,ied,Jsdq,Jedq,nz)
+      call safe_alloc_ptr(CS%diag%du_dt_dia,IsdB,IedB,jsd,jed,nz)
+      call safe_alloc_ptr(CS%diag%dv_dt_dia,isd,ied,JsdB,JedB,nz)
     endif
   endif
 
@@ -1736,15 +1736,15 @@ subroutine register_diags(Time, G, CS)
         'Zonal velocity Adjustment 1', 'meter second-1')
     CS%id_dv_adj = register_diag_field('ocean_model', 'dv_adj', G%axesCvL, Time, &
         'Meridional velocity Adjustment 1', 'meter second-1')
-    if (CS%id_du_adj > 0) call safe_alloc_ptr(CS%diag%du_adj,Isdq,Iedq,jsd,jed,nz)
-    if (CS%id_dv_adj > 0) call safe_alloc_ptr(CS%diag%dv_adj,isd,ied,Jsdq,Jedq,nz)
+    if (CS%id_du_adj > 0) call safe_alloc_ptr(CS%diag%du_adj,IsdB,IedB,jsd,jed,nz)
+    if (CS%id_dv_adj > 0) call safe_alloc_ptr(CS%diag%dv_adj,isd,ied,JsdB,JedB,nz)
     if (CS%readjust_BT_trans) then
       CS%id_du_adj2 = register_diag_field('ocean_model', 'du_adj2', G%axesCuL, Time, &
           'Zonal velocity Adjustment 2', 'meter second-1')
       CS%id_dv_adj2 = register_diag_field('ocean_model', 'dv_adj2', G%axesCvL, Time, &
           'Meridional velocity Adjustment 2', 'meter second-1')
-      if (CS%id_du_adj2 > 0) call safe_alloc_ptr(CS%diag%du_adj2,Isdq,Iedq,jsd,jed,nz)
-      if (CS%id_dv_adj2 > 0) call safe_alloc_ptr(CS%diag%dv_adj2,isd,ied,Jsdq,Jedq,nz)
+      if (CS%id_du_adj2 > 0) call safe_alloc_ptr(CS%diag%du_adj2,IsdB,IedB,jsd,jed,nz)
+      if (CS%id_dv_adj2 > 0) call safe_alloc_ptr(CS%diag%dv_adj2,isd,ied,JsdB,JedB,nz)
     endif
     if (CS%BT_include_udhdt) then
       CS%id_h_dudt = register_diag_field('ocean_model', 'BT_u_dhdt', G%axesCu1, Time, &
@@ -1860,19 +1860,19 @@ subroutine write_static_fields(G, diag)
 
   id = register_static_field('ocean_model', 'wet', G%axesT1, &
         '0 if land, 1 if ocean at tracer points', 'none')
-  if (id > 0) call post_data(id, G%hmask, diag, .true.)
+  if (id > 0) call post_data(id, G%mask2dT, diag, .true.)
 
   id = register_static_field('ocean_model', 'wet_c', G%axesB1, &
         '0 if land, 1 if ocean at corner (Bu) points', 'none')
-  if (id > 0) call post_data(id, G%qmask, diag, .true.)
+  if (id > 0) call post_data(id, G%mask2dBu, diag, .true.)
 
   id = register_static_field('ocean_model', 'wet_u', G%axesCu1, &
         '0 if land, 1 if ocean at zonal velocity (Cu) points', 'none')
-  if (id > 0) call post_data(id, G%umask, diag, .true.)
+  if (id > 0) call post_data(id, G%mask2dCu, diag, .true.)
 
   id = register_static_field('ocean_model', 'wet_v', G%axesCv1, &
         '0 if land, 1 if ocean at meridional velocity (Cv) points', 'none')
-  if (id > 0) call post_data(id, G%vmask, diag, .true.)
+  if (id > 0) call post_data(id, G%mask2dCv, diag, .true.)
 
   id = register_static_field('ocean_model', 'Coriolis', G%axesB1, &
         'Coriolis parameter at corner (Bu) points', 's-1')
@@ -2131,7 +2131,7 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, CS, p_atm)
     do j=js,je; do i=is,ie
       if (num_errs>99) exit ! If things get really bad, stop filling up the tty
       k=0 ! Num errors at this point
-      if (G%hmask(i,j)>0.) then
+      if (G%mask2dT(i,j)>0.) then
         if (state%sea_lev(i,j)<=-G%bathyT(i,j)) then
           k=k+1
           write(msg(1:128),'(2(a,i4,x),2(a,f8.3,x),a,es12.3)') &
@@ -2176,7 +2176,7 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, CS, p_atm)
         endif ! use_temperature
         num_pnts=num_pnts+min(1,k)
         num_errs=num_errs+k
-      endif ! hmask
+      endif ! mask2dT
     enddo; enddo
     if (num_errs>0) then
       write(msg(1:128),'(3(a,i4,x))') 'There were',num_errs, &

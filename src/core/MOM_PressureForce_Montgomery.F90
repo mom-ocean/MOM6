@@ -173,7 +173,7 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
   integer :: i, j, k
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   nkmb=G%nk_rho_varies
-  Isq = G%Iscq ; Ieq = G%Iecq ; Jsq = G%Jscq ; Jeq = G%Jecq
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
   use_p_atm = .false.
   if (present(p_atm)) then ; if (associated(p_atm)) use_p_atm = .true. ; endif
@@ -444,7 +444,7 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   nkmb=G%nk_rho_varies
-  Isq = G%Iscq ; Ieq = G%Iecq ; Jsq = G%Jscq ; Jeq = G%Jecq
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
   use_p_atm = .false.
   if (present(p_atm)) then ; if (associated(p_atm)) use_p_atm = .true. ; endif
@@ -656,7 +656,7 @@ subroutine Set_pbce_Bouss(e, tv, G, g_Earth, Rho0, GFS_scale, pbce, rho_star)
                              ! in roundoff and can be neglected, in m.
   integer :: Isq, Ieq, Jsq, Jeq, nz, i, j, k
     
-  Isq = G%Iscq ; Ieq = G%Iecq ; Jsq = G%Jscq ; Jeq = G%Jecq ; nz = G%ke
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB ; nz = G%ke
  
   Rho0xG = Rho0*g_Earth
   G_Rho0 = g_Earth/Rho0
@@ -765,7 +765,7 @@ subroutine Set_pbce_nonBouss(p, tv, G, g_Earth, GFS_scale, pbce, alpha_star)
                              ! an equation of state.
   integer :: Isq, Ieq, Jsq, Jeq, nz, i, j, k
     
-  Isq = G%Iscq ; Ieq = G%Iecq ; Jsq = G%Jscq ; Jeq = G%Jecq ; nz = G%ke
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB ; nz = G%ke
 
   use_EOS = associated(tv%eqn_of_state)
 
@@ -884,11 +884,11 @@ subroutine PressureForce_Mont_init(Time, G, param_file, diag, CS, tides_CSp)
     CS%id_PFv_bc = register_diag_field('ocean_model', 'PFv_bc', G%axesCvL, Time, &
          'Density Gradient Meridional Pressure Force Accel.', "meter second-2")
     if (CS%id_PFu_bc > 0) then
-      call safe_alloc_ptr(diag%PFu_bc,G%Isdq,G%Iedq,G%jsd,G%jed,G%ke)
+      call safe_alloc_ptr(diag%PFu_bc,G%IsdB,G%IedB,G%jsd,G%jed,G%ke)
       diag%PFu_bc(:,:,:) = 0.0
     endif
     if (CS%id_PFv_bc > 0) then
-      call safe_alloc_ptr(diag%PFv_bc,G%isd,G%ied,G%Jsdq,G%Jedq,G%ke)
+      call safe_alloc_ptr(diag%PFv_bc,G%isd,G%ied,G%JsdB,G%JedB,G%ke)
       diag%PFv_bc(:,:,:) = 0.0
     endif
   endif

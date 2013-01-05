@@ -260,7 +260,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   integer :: i, j, k
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-  Isq = G%Iscq ; Ieq = G%Iecq ; Jsq = G%Jscq ; Jeq = G%Jecq
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   h_neglect = G%H_subroundoff
   h_neglect3 = h_neglect**3
   
@@ -314,13 +314,13 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
 
     if (CS%no_slip) then
       do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
-        sh_xy(I,J) = (2.0-G%qmask(I,J)) * &
+        sh_xy(I,J) = (2.0-G%mask2dBu(I,J)) * &
             (CS%DX_dyBu(I,J)*(u(I,j+1,k)*G%IdxCu(I,j+1) - u(I,j,k)*G%IdxCu(I,j)) + &
              CS%DY_dxBu(I,J)*(v(i+1,J,k)*G%IdyCv(i+1,J) - v(i,J,k)*G%IdyCv(i,J)))
       enddo ; enddo
     else
       do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
-        sh_xy(I,J) = G%qmask(I,J) * &
+        sh_xy(I,J) = G%mask2dBu(I,J) * &
             (CS%DX_dyBu(I,J)*(u(I,j+1,k)*G%IdxCu(I,j+1) - u(I,j,k)*G%IdxCu(I,j)) + &
              CS%DY_dxBu(I,J)*(v(i+1,J,k)*G%IdyCv(i+1,J) - v(i,J,k)*G%IdyCv(i,J)))
       enddo ; enddo
@@ -485,7 +485,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
 
       endif  ! biharmonic
 
-      str_xy(I,J) = str_xy(I,J) * (hq * G%qmask(I,J) * CS%reduction_xy(I,J))
+      str_xy(I,J) = str_xy(I,J) * (hq * G%mask2dBu(I,J) * CS%reduction_xy(I,J))
     enddo ; enddo
 
     do j=js,je ; do i=isq,ieq
@@ -608,16 +608,16 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
                           ! whether they are used, to enable spell-checking of
                           ! valid parameters.
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
-  integer :: isd, ied, jsd, jed, Isdq, Iedq, Jsdq, Jedq
+  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   integer :: i, j
   character(len=128) :: version = '$Id$'
   character(len=128) :: tagname = '$Name$'
   character(len=40)  :: mod = "MOM_hor_visc"  ! This module's name.
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-  Isq = G%Iscq ; Ieq = G%Iecq ; Jsq = G%Jscq ; Jeq = G%Jecq
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  Isdq = G%Isdq ; Iedq = G%Iedq ; Jsdq = G%Jsdq ; Jedq = G%Jedq
+  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   if (associated(CS)) then
     call MOM_error(WARNING, "hor_visc_init called with an associated "// &
@@ -755,46 +755,46 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
 
   ALLOC_(CS%dx2h(isd:ied,jsd:jed))     ; CS%dx2h(:,:) = 0.0
   ALLOC_(CS%dy2h(isd:ied,jsd:jed))     ; CS%dy2h(:,:) = 0.0
-  ALLOC_(CS%dx2q(Isdq:Iedq,Jsdq:Jedq))   ; CS%dx2q(:,:) = 0.0
-  ALLOC_(CS%dy2q(Isdq:Iedq,Jsdq:Jedq))   ; CS%dy2q(:,:) = 0.0
+  ALLOC_(CS%dx2q(IsdB:IedB,JsdB:JedB))   ; CS%dx2q(:,:) = 0.0
+  ALLOC_(CS%dy2q(IsdB:IedB,JsdB:JedB))   ; CS%dy2q(:,:) = 0.0
   ALLOC_(CS%dx_dyT(isd:ied,jsd:jed))   ; CS%dx_dyT(:,:) = 0.0
   ALLOC_(CS%dy_dxT(isd:ied,jsd:jed))   ; CS%dy_dxT(:,:) = 0.0
-  ALLOC_(CS%dx_dyBu(Isdq:Iedq,Jsdq:Jedq)) ; CS%dx_dyBu(:,:) = 0.0
-  ALLOC_(CS%dy_dxBu(Isdq:Iedq,Jsdq:Jedq)) ; CS%dy_dxBu(:,:) = 0.0
+  ALLOC_(CS%dx_dyBu(IsdB:IedB,JsdB:JedB)) ; CS%dx_dyBu(:,:) = 0.0
+  ALLOC_(CS%dy_dxBu(IsdB:IedB,JsdB:JedB)) ; CS%dy_dxBu(:,:) = 0.0
 
   if (CS%Laplacian) then
     ALLOC_(CS%Kh_bg_xx(isd:ied,jsd:jed))     ; CS%Kh_bg_xx(:,:) = 0.0
-    ALLOC_(CS%Kh_bg_xy(Isdq:Iedq,Jsdq:Jedq)) ; CS%Kh_bg_xy(:,:) = 0.0
+    ALLOC_(CS%Kh_bg_xy(IsdB:IedB,JsdB:JedB)) ; CS%Kh_bg_xy(:,:) = 0.0
     if (CS%bound_Kh .or. CS%better_bound_Kh) then
-      ALLOC_(CS%Kh_Max_xx(Isdq:Iedq,Jsdq:Jedq))   ; CS%Kh_Max_xx(:,:) = 0.0
-      ALLOC_(CS%Kh_Max_xy(Isdq:Iedq,Jsdq:Jedq)) ; CS%Kh_Max_xy(:,:) = 0.0
+      ALLOC_(CS%Kh_Max_xx(IsdB:IedB,JsdB:JedB))   ; CS%Kh_Max_xx(:,:) = 0.0
+      ALLOC_(CS%Kh_Max_xy(IsdB:IedB,JsdB:JedB)) ; CS%Kh_Max_xy(:,:) = 0.0
     endif
     if (CS%Smagorinsky_Kh) then
       ALLOC_(CS%Laplac_Const_xx(isd:ied,jsd:jed))   ; CS%Laplac_Const_xx(:,:) = 0.0
-      ALLOC_(CS%Laplac_Const_xy(Isdq:Iedq,Jsdq:Jedq)) ; CS%Laplac_Const_xy(:,:) = 0.0
+      ALLOC_(CS%Laplac_Const_xy(IsdB:IedB,JsdB:JedB)) ; CS%Laplac_Const_xy(:,:) = 0.0
     endif
   endif
   ALLOC_(CS%reduction_xx(isd:ied,jsd:jed))     ; CS%reduction_xx(:,:) = 0.0
-  ALLOC_(CS%reduction_xy(Isdq:Iedq,Jsdq:Jedq)) ; CS%reduction_xy(:,:) = 0.0
+  ALLOC_(CS%reduction_xy(IsdB:IedB,JsdB:JedB)) ; CS%reduction_xy(:,:) = 0.0
 
   if (CS%biharmonic) then
-    ALLOC_(CS%Idx2dyCu(Isdq:Iedq,jsd:jed)) ; CS%Idx2dyCu(:,:) = 0.0
-    ALLOC_(CS%Idx2dyCv(isd:ied,Jsdq:Jedq)) ; CS%Idx2dyCv(:,:) = 0.0
-    ALLOC_(CS%Idxdy2u(Isdq:Iedq,jsd:jed)) ; CS%Idxdy2u(:,:) = 0.0
-    ALLOC_(CS%Idxdy2v(isd:ied,Jsdq:Jedq)) ; CS%Idxdy2v(:,:) = 0.0
+    ALLOC_(CS%Idx2dyCu(IsdB:IedB,jsd:jed)) ; CS%Idx2dyCu(:,:) = 0.0
+    ALLOC_(CS%Idx2dyCv(isd:ied,JsdB:JedB)) ; CS%Idx2dyCv(:,:) = 0.0
+    ALLOC_(CS%Idxdy2u(IsdB:IedB,jsd:jed)) ; CS%Idxdy2u(:,:) = 0.0
+    ALLOC_(CS%Idxdy2v(isd:ied,JsdB:JedB)) ; CS%Idxdy2v(:,:) = 0.0
 
     ALLOC_(CS%Ah_bg_xx(isd:ied,jsd:jed)) ; CS%Ah_bg_xx(:,:) = 0.0
-    ALLOC_(CS%Ah_bg_xy(Isdq:Iedq,Jsdq:Jedq)) ; CS%Ah_bg_xy(:,:) = 0.0
+    ALLOC_(CS%Ah_bg_xy(IsdB:IedB,JsdB:JedB)) ; CS%Ah_bg_xy(:,:) = 0.0
     if (CS%bound_Ah .or. CS%better_bound_Ah) then
       ALLOC_(CS%Ah_Max_xx(isd:ied,jsd:jed))   ; CS%Ah_Max_xx(:,:) = 0.0
-      ALLOC_(CS%Ah_Max_xy(Isdq:Iedq,Jsdq:Jedq)) ; CS%Ah_Max_xy(:,:) = 0.0
+      ALLOC_(CS%Ah_Max_xy(IsdB:IedB,JsdB:JedB)) ; CS%Ah_Max_xy(:,:) = 0.0
     endif
     if (CS%Smagorinsky_Ah) then
       ALLOC_(CS%Biharm_Const_xx(isd:ied,jsd:jed)) ; CS%Biharm_Const_xx(:,:) = 0.0
-      ALLOC_(CS%Biharm_Const_xy(Isdq:Iedq,Jsdq:Jedq)) ; CS%Biharm_Const_xy(:,:) = 0.0
+      ALLOC_(CS%Biharm_Const_xy(IsdB:IedB,JsdB:JedB)) ; CS%Biharm_Const_xy(:,:) = 0.0
       if (CS%bound_Coriolis) then
         ALLOC_(CS%Biharm_Const2_xx(isd:ied,jsd:jed)) ; CS%Biharm_Const2_xx(:,:) = 0.0
-        ALLOC_(CS%Biharm_Const2_xy(Isdq:Iedq,Jsdq:Jedq)) ; CS%Biharm_Const2_xy(:,:) = 0.0
+        ALLOC_(CS%Biharm_Const2_xy(IsdB:IedB,JsdB:JedB)) ; CS%Biharm_Const2_xy(:,:) = 0.0
       endif
     endif
   endif
@@ -1014,7 +1014,7 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
 
   CS%id_Ah_q = register_diag_field('ocean_model', 'Ahq', G%axesBL, Time, &
       'Biharmonic Horizontal Viscosity at q Points', 'meter4 second-1')
-  if (CS%id_Ah_q>0) call safe_alloc_ptr(diag%Ah_q,Isdq,Iedq,Jsdq,Jedq,nz)
+  if (CS%id_Ah_q>0) call safe_alloc_ptr(diag%Ah_q,IsdB,IedB,JsdB,JedB,nz)
 
   CS%id_Kh_h = register_diag_field('ocean_model', 'Khh', G%axesTL, Time, &
       'Laplacian Horizontal Viscosity at h Points', 'meter2 second-1')
@@ -1022,7 +1022,7 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
 
   CS%id_Kh_q = register_diag_field('ocean_model', 'Khq', G%axesBL, Time, &
       'Laplacian Horizontal Viscosity at q Points', 'meter2 second-1')
-  if (CS%id_Kh_q > 0) call safe_alloc_ptr(diag%Kh_q,Isdq,Iedq,Jsdq,Jedq,nz)
+  if (CS%id_Kh_q > 0) call safe_alloc_ptr(diag%Kh_q,IsdB,IedB,JsdB,JedB,nz)
 
   CS%id_FrictWork =register_diag_field('ocean_model','FrictWork',G%axesTL,Time,&
       'Integral work done by lateral friction terms', 'Watt meter-2')

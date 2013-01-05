@@ -155,7 +155,7 @@ subroutine mixedlayer_restrat(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
                         ! equation of state.
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-  Isq = G%Iscq ; Ieq = G%Iecq ; Jsq = G%Jscq ; Jeq = G%Jecq
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_mixedlayer_restrat: "// &
          "Module must be initialized before it is used.")
@@ -218,7 +218,7 @@ subroutine mixedlayer_restrat(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
 
     utimescale_diag(I,j) = timescale
 
-    uDml(I) = timescale * G%umask(I,j)*G%dyCu(I,j)* &
+    uDml(I) = timescale * G%mask2dCu(I,j)*G%dyCu(I,j)* &
         G%IdxCu(I,j)*(Rml_av(i+1,j)-Rml_av(i,j)) * (h_vel**2 * G%m_to_H)
 
     if (uDml(i) == 0) then
@@ -263,7 +263,7 @@ subroutine mixedlayer_restrat(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
 
     vtimescale_diag(i,J) = timescale
 
-    vDml(i) = timescale * G%vmask(i,J)*G%dxCv(i,J)* &
+    vDml(i) = timescale * G%mask2dCv(i,J)*G%dxCv(i,J)* &
         G%IdyCv(i,J)*(Rml_av(i,j+1)-Rml_av(i,j)) * (h_vel**2 * G%m_to_H)
     if (vDml(i) == 0) then
       do k=1,G%nkml ; vhml(i,J,k) = 0.0 ; enddo

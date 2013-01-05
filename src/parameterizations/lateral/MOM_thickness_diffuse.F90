@@ -390,9 +390,9 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
  ! real, dimension(SZIB_(G), SZJ_(G), SZK_(G)+1) :: sfn_x, sfn_slope_x
  ! real, dimension(SZI_(G), SZJB_(G), SZK_(G)+1) :: sfn_y, sfn_slope_y
 
-  integer :: is, ie, js, je, nz, Isdq
+  integer :: is, ie, js, je, nz, IsdB
   integer :: i, j, k
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke ; Isdq = G%Isdq
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke ; IsdB = G%IsdB
 
   I4dt = 0.25 / dt
   I_slope_max2 = 1.0 / (CS%slope_max**2)
@@ -459,7 +459,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
           S_u(I) = 0.25*((S(i,j,k) + S(i+1,j,k)) + (S(i,j,k-1) + S(i+1,j,k-1)))
         enddo
         call calculate_density_derivs(T_u, S_u, pres_u, drho_dT_u(:,j), &
-                     drho_dS_u(:,j), (is-Isdq+1)-1, ie-is+2, tv%eqn_of_state)
+                     drho_dS_u(:,j), (is-IsdB+1)-1, ie-is+2, tv%eqn_of_state)
       enddo
     endif
 
@@ -780,7 +780,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
         S_u(I) = 0.5*(S(i,j,1) + S(i+1,j,1))
       enddo
       call calculate_density_derivs(T_u, S_u, pres_u, drho_dT_u(:,j), &
-                   drho_dS_u(:,j), (is-Isdq+1)-1, ie-is+2, tv%eqn_of_state)
+                   drho_dS_u(:,j), (is-IsdB+1)-1, ie-is+2, tv%eqn_of_state)
     enddo ; endif
     do j=js,je ; do I=is-1,ie
       uhD(I,j,1) = -uhtot(I,j)
@@ -972,7 +972,7 @@ subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, CS
       de_bot(i,j) = de_bot(i,j) + h(i,j,k+1)
     enddo ; enddo
 
-    do j=js,je ; do I=is-1,ie ; if (G%umask(I,j) > 0.0) then
+    do j=js,je ; do I=is-1,ie ; if (G%mask2dCu(I,j) > 0.0) then
       if (h(i,j,k) > h(i+1,j,k)) then
         h2 = h(i,j,k)
         h1 = max( h(i+1,j,k), h2 - min(de_bot(i+1,j), de_top(i+1,j,k)) )
@@ -984,7 +984,7 @@ subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, CS
       Kh_lay_u(I,j,k) = (Kh_scale * Kh_u_CFL(I,j)) * jag_Rat**2
     endif ; enddo ; enddo
 
-    do J=js-1,je ; do i=is,ie ; if (G%vmask(i,J) > 0.0) then
+    do J=js-1,je ; do i=is,ie ; if (G%mask2dCv(i,J) > 0.0) then
       if (h(i,j,k) > h(i,j+1,k)) then
         h2 = h(i,j,k)
         h1 = max( h(i,j+1,k), h2 - min(de_bot(i,j+1), de_top(i,j+1,k)) )
@@ -1010,7 +1010,7 @@ subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, CS
       ! First, populate the diffusivities
       if (n==1) then ! This is a u-column.
         do i=ish,ie
-          do_i(I) = (G%umask(I,j) > 0.0)
+          do_i(I) = (G%mask2dCu(I,j) > 0.0)
           Kh_max_max(I) = Kh_u_CFL(I,j)
         enddo
         do K=1,nz+1 ; do i=ish,ie
@@ -1020,7 +1020,7 @@ subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, CS
         enddo ; enddo
       else ! This is a v-column.
         do i=ish,ie
-          do_i(i) = (G%vmask(i,J) > 0.0) ; Kh_max_max(I) = Kh_v_CFL(i,J)
+          do_i(i) = (G%mask2dCv(i,J) > 0.0) ; Kh_max_max(I) = Kh_v_CFL(i,J)
         enddo
         do K=1,nz+1 ; do i=ish,ie
           Kh_bg(I,K) = Kh_v(I,j,K) ; Kh(I,K) = Kh_bg(I,K)
@@ -1406,10 +1406,10 @@ subroutine thickness_diffuse_init(Time, G, param_file, diag, CS)
 
   CS%id_uhGM = register_diag_field('ocean_model', 'uhGM', G%axesCuL, Time, &
            'Time Mean Diffusive Zonal Thickness Flux', flux_units)
-  if (CS%id_uhGM > 0) call safe_alloc_ptr(diag%uhGM,G%Isdq,G%Iedq,G%jsd,G%jed,G%ke)
+  if (CS%id_uhGM > 0) call safe_alloc_ptr(diag%uhGM,G%IsdB,G%IedB,G%jsd,G%jed,G%ke)
   CS%id_vhGM = register_diag_field('ocean_model', 'vhGM', G%axesCvL, Time, &
            'Time Mean Diffusive Meridional Thickness Flux', flux_units)
-  if (CS%id_vhGM > 0) call safe_alloc_ptr(diag%vhGM,G%isd,G%ied,G%Jsdq,G%Jedq,G%ke)
+  if (CS%id_vhGM > 0) call safe_alloc_ptr(diag%vhGM,G%isd,G%ied,G%JsdB,G%JedB,G%ke)
   CS%id_GMwork = register_diag_field('ocean_model', 'GMwork', G%axesT1, Time, &
            'Time Mean Integral Work done by Diffusive Thickness Flux', 'Watt meter-2')
   if (CS%id_GMwork > 0) call safe_alloc_ptr(CS%GMwork,G%isd,G%ied,G%jsd,G%jed)

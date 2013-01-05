@@ -262,13 +262,13 @@ subroutine initialize_advection_test_tracer(restart, day, G, h, OBC, CS, sponge_
   real :: h_neglect         ! A thickness that is so small it is usually lost
                             ! in roundoff and can be neglected, in m.
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz, m
-  integer :: Isdq, Iedq, Jsdq, Jedq
+  integer :: IsdB, IedB, JsdB, JedB
   real :: tmpx, tmpy, locx, locy
 
   if (.not.associated(CS)) return
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  Isdq = G%Isdq ; Iedq = G%Iedq ; Jsdq = G%Jsdq ; Jedq = G%Jedq
+  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
   h_neglect = G%H_subroundoff
 
   if (.not.restart) then
@@ -331,10 +331,10 @@ subroutine initialize_advection_test_tracer(restart, day, G, h, OBC, CS, sponge_
     CS%id_tr_dfy(m) = register_diag_field("ocean_model", trim(name)//"_dfy", &
         G%axesCvL, day, trim(longname)//" diffusive zonal flux" , &
         trim(flux_units))
-    if (CS%id_tr_adx(m) > 0) call safe_alloc_ptr(CS%tr_adx(m)%p,Isdq,Iedq,jsd,jed,nz)
-    if (CS%id_tr_ady(m) > 0) call safe_alloc_ptr(CS%tr_ady(m)%p,isd,ied,Jsdq,Jedq,nz)
-    if (CS%id_tr_dfx(m) > 0) call safe_alloc_ptr(CS%tr_dfx(m)%p,Isdq,Iedq,jsd,jed,nz)
-    if (CS%id_tr_dfy(m) > 0) call safe_alloc_ptr(CS%tr_dfy(m)%p,isd,ied,Jsdq,Jedq,nz)
+    if (CS%id_tr_adx(m) > 0) call safe_alloc_ptr(CS%tr_adx(m)%p,IsdB,IedB,jsd,jed,nz)
+    if (CS%id_tr_ady(m) > 0) call safe_alloc_ptr(CS%tr_ady(m)%p,isd,ied,JsdB,JedB,nz)
+    if (CS%id_tr_dfx(m) > 0) call safe_alloc_ptr(CS%tr_dfx(m)%p,IsdB,IedB,jsd,jed,nz)
+    if (CS%id_tr_dfy(m) > 0) call safe_alloc_ptr(CS%tr_dfy(m)%p,isd,ied,JsdB,JedB,nz)
 
 !    Register the tracer for horizontal advection & diffusion.
     if ((CS%id_tr_adx(m) > 0) .or. (CS%id_tr_ady(m) > 0) .or. &

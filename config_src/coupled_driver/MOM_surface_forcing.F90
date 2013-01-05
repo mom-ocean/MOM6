@@ -253,7 +253,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
   real :: mass_ice      ! The mass of sea ice at a face, in kg m-2.
   real :: mass_eff      ! The effective mass of sea ice for rigidity, in kg m-2.
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq, i0, j0
-  integer :: isd, ied, jsd, jed, Isdq, Iedq, Jsdq, Jedq, isr, ier, jsr, jer
+  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, isr, ier, jsr, jer
   integer :: isc_bnd, iec_bnd, jsc_bnd, jec_bnd
   logical :: restore_salinity ! A local copy of the argument restore_salt, if it
                               ! is present, or false (no restoring) otherwise.
@@ -264,9 +264,9 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
   isc_bnd = index_bounds(1) ; iec_bnd = index_bounds(2)
   jsc_bnd = index_bounds(3) ; jec_bnd = index_bounds(4)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
-  Isq = G%Iscq ; Ieq = G%Iecq ; Jsq = G%Jscq ; Jeq = G%Jecq
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  Isdq = G%Isdq ; Iedq = G%Iedq ; Jsdq = G%Jsdq ; Jedq = G%Jedq
+  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
   isr = is-isd+1 ; ier = ie-isd+1 ; jsr = js-jsd+1 ; jer = je-jsd+1
 
   Irho0 = 1.0/CS%Rho0
@@ -280,8 +280,8 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
   if (present(restore_salt)) restore_salinity = restore_salt
 
   if (CS%first_call) then
-    call safe_alloc_ptr(fluxes%taux,Isdq,Iedq,jsd,jed)      ; fluxes%taux(:,:) = 0.0
-    call safe_alloc_ptr(fluxes%tauy,isd,ied,Jsdq,Jedq)      ; fluxes%tauy(:,:) = 0.0
+    call safe_alloc_ptr(fluxes%taux,IsdB,IedB,jsd,jed)      ; fluxes%taux(:,:) = 0.0
+    call safe_alloc_ptr(fluxes%tauy,isd,ied,JsdB,JedB)      ; fluxes%tauy(:,:) = 0.0
     call safe_alloc_ptr(fluxes%ustar,isd,ied,jsd,jed)       ; fluxes%ustar(:,:) = 0.0
     call safe_alloc_ptr(fluxes%evap,isd,ied,jsd,jed)        ; fluxes%evap(:,:) = 0.0
     call safe_alloc_ptr(fluxes%liq_precip,isd,ied,jsd,jed)  ; fluxes%liq_precip(:,:) = 0.0
@@ -309,15 +309,15 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
       call safe_alloc_ptr(fluxes%runoff_hflx,isd,ied,jsd,jed) ; fluxes%runoff_hflx(:,:) = 0.0        
     endif
     if (CS%rigid_sea_ice) then
-      call safe_alloc_ptr(fluxes%rigidity_ice_u,Isdq,Iedq,jsd,jed)
-      call safe_alloc_ptr(fluxes%rigidity_ice_v,isd,ied,Jsdq,Jedq)
+      call safe_alloc_ptr(fluxes%rigidity_ice_u,IsdB,IedB,jsd,jed)
+      call safe_alloc_ptr(fluxes%rigidity_ice_v,isd,ied,JsdB,JedB)
       fluxes%rigidity_ice_u(:,:) = 0.0 ; fluxes%rigidity_ice_v(:,:) = 0.0  
     endif
 
     CS%first_call = .false.
 
     do j=js,je ; do i=is,ie
-      work_sum(i,j) = G%areaT(i,j) * G%hmask(i,j)
+      work_sum(i,j) = G%areaT(i,j) * G%mask2dT(i,j)
     enddo ; enddo
     CS%area_surf = reproducing_sum(work_sum, isr, ier, jsr, jer)
 
@@ -340,7 +340,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
         do j=js,je ; do i=is,ie
           delta_sss = data_srestore(i,j)- state%SSS(i,j)
           delta_sss = sign(1.0,delta_sss)*min(abs(delta_sss),CS%max_delta_srestore)
-          fluxes%salt_flux(i,j) = 1.e-3*G%hmask(i,j) * (CS%Rho0*CS%Flux_const)* &
+          fluxes%salt_flux(i,j) = 1.e-3*G%mask2dT(i,j) * (CS%Rho0*CS%Flux_const)* &
                     (CS%basin_mask(i,j)*open_ocn_mask(i,j)) *delta_sss  ! kg Salt m-2 s-1
           work_sum(i,j) = G%areaT(i,j)*fluxes%salt_flux(i,j)
         enddo; enddo
@@ -348,7 +348,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
                           CS%area_surf
       else
         do j=js,je ; do i=is,ie
-          if (G%hmask(i,j) > 0.5) then
+          if (G%mask2dT(i,j) > 0.5) then
             delta_sss = state%SSS(i,j) - data_srestore(i,j)
             delta_sss = sign(1.0,delta_sss)*min(abs(delta_sss),CS%max_delta_srestore)
             pme_adj(i,j) = (CS%basin_mask(i,j)*open_ocn_mask(i,j))* &
@@ -384,34 +384,34 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
     endif
 
     if (ASSOCIATED(IOB%lprec)) &
-      fluxes%liq_precip(i,j) =  IOB%lprec(i-i0,j-j0) * G%hmask(i,j)
+      fluxes%liq_precip(i,j) =  IOB%lprec(i-i0,j-j0) * G%mask2dT(i,j)
 
     if (ASSOCIATED(IOB%fprec)) &
-      fluxes%froz_precip(i,j) = IOB%fprec(i-i0,j-j0) * G%hmask(i,j)
+      fluxes%froz_precip(i,j) = IOB%fprec(i-i0,j-j0) * G%mask2dT(i,j)
 
     if (ASSOCIATED(IOB%q_flux)) &
-      fluxes%evap(i,j) = - IOB%q_flux(i-i0,j-j0) * G%hmask(i,j)
+      fluxes%evap(i,j) = - IOB%q_flux(i-i0,j-j0) * G%mask2dT(i,j)
 
     if (ASSOCIATED(IOB%runoff)) &
-      fluxes%liq_runoff(i,j) = IOB%runoff(i-i0,j-j0) * G%hmask(i,j)
+      fluxes%liq_runoff(i,j) = IOB%runoff(i-i0,j-j0) * G%mask2dT(i,j)
 
     if (ASSOCIATED(IOB%calving)) &
-      fluxes%froz_runoff(i,j) = IOB%calving(i-i0,j-j0) * G%hmask(i,j)
+      fluxes%froz_runoff(i,j) = IOB%calving(i-i0,j-j0) * G%mask2dT(i,j)
 
     if (restore_salinity) &
-      fluxes%virt_precip(i,j) = (pme_adj(i,j) - PmE_adj_total) * G%hmask(i,j)
+      fluxes%virt_precip(i,j) = (pme_adj(i,j) - PmE_adj_total) * G%mask2dT(i,j)
 
     if (ASSOCIATED(IOB%calving_hflx)) &
-      fluxes%calving_hflx(i,j) = IOB%calving_hflx(i-i0,j-j0) * G%hmask(i,j)
+      fluxes%calving_hflx(i,j) = IOB%calving_hflx(i-i0,j-j0) * G%mask2dT(i,j)
 
     if (ASSOCIATED(IOB%runoff_hflx)) &
-      fluxes%runoff_hflx(i,j) = IOB%runoff_hflx(i-i0,j-j0) * G%hmask(i,j)
+      fluxes%runoff_hflx(i,j) = IOB%runoff_hflx(i-i0,j-j0) * G%mask2dT(i,j)
 
     if (ASSOCIATED(IOB%lw_flux)) &
-      fluxes%LW(i,j) = IOB%lw_flux(i-i0,j-j0) * G%hmask(i,j)
+      fluxes%LW(i,j) = IOB%lw_flux(i-i0,j-j0) * G%mask2dT(i,j)
 
     if (ASSOCIATED(IOB%t_flux)) &
-      fluxes%sens(i,j) = - IOB%t_flux(i-i0,j-j0) * G%hmask(i,j)
+      fluxes%sens(i,j) = - IOB%t_flux(i-i0,j-j0) * G%mask2dT(i,j)
 
     fluxes%latent(i,j) = 0.0
     if (ASSOCIATED(IOB%fprec)) &
@@ -420,25 +420,25 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
       fluxes%latent(i,j) = fluxes%latent(i,j) - IOB%calving(i-i0,j-j0)*hlf
     if (ASSOCIATED(IOB%q_flux)) &
       fluxes%latent(i,j) = fluxes%latent(i,j) - IOB%q_flux(i-i0,j-j0)*hlv
-    fluxes%latent(i,j) = G%hmask(i,j) * fluxes%latent(i,j)
+    fluxes%latent(i,j) = G%mask2dT(i,j) * fluxes%latent(i,j)
 
     if (ASSOCIATED(IOB%sw_flux_vis_dir)) &
-      fluxes%sw_vis_dir(i,j) = G%hmask(i,j) * IOB%sw_flux_vis_dir(i-i0,j-j0)
-      fluxes%sw_vis_dif(i,j) = G%hmask(i,j) * IOB%sw_flux_vis_dif(i-i0,j-j0)
-      fluxes%sw_nir_dir(i,j) = G%hmask(i,j) * IOB%sw_flux_nir_dir(i-i0,j-j0)
-      fluxes%sw_nir_dif(i,j) = G%hmask(i,j) * IOB%sw_flux_nir_dif(i-i0,j-j0)
+      fluxes%sw_vis_dir(i,j) = G%mask2dT(i,j) * IOB%sw_flux_vis_dir(i-i0,j-j0)
+      fluxes%sw_vis_dif(i,j) = G%mask2dT(i,j) * IOB%sw_flux_vis_dif(i-i0,j-j0)
+      fluxes%sw_nir_dir(i,j) = G%mask2dT(i,j) * IOB%sw_flux_nir_dir(i-i0,j-j0)
+      fluxes%sw_nir_dif(i,j) = G%mask2dT(i,j) * IOB%sw_flux_nir_dif(i-i0,j-j0)
     fluxes%sw(i,j) = fluxes%sw_vis_dir(i,j) + fluxes%sw_vis_dif(i,j) + &
                      fluxes%sw_nir_dir(i,j) + fluxes%sw_nir_dif(i,j)
 
 
     if (restore_salinity .and. CS%salt_restore_as_sflux) then
-      fluxes%salt_flux(i,j) = G%hmask(i,j)*(fluxes%salt_flux(i,j)-Sflux_adj_total)
+      fluxes%salt_flux(i,j) = G%mask2dT(i,j)*(fluxes%salt_flux(i,j)-Sflux_adj_total)
     else
       fluxes%salt_flux(i,j) = 0.0
     endif
 
     if (ASSOCIATED(IOB%salt_flux)) then
-      fluxes%salt_flux(i,j) = G%hmask(i,j)*(fluxes%salt_flux(i,j) - IOB%salt_flux(i-i0,j-j0))
+      fluxes%salt_flux(i,j) = G%mask2dT(i,j)*(fluxes%salt_flux(i,j) - IOB%salt_flux(i-i0,j-j0))
     endif
   enddo ; enddo
 
@@ -467,7 +467,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
     net_FW_avg = reproducing_sum(net_FW(:,:), isr, ier, jsr, jer) / &
                  CS%area_surf
     do j=js,je ; do i=is,ie
-      if (G%hmask(i,j) > 0.5) fluxes%virt_precip(i,j) = &
+      if (G%mask2dT(i,j) > 0.5) fluxes%virt_precip(i,j) = &
              fluxes%virt_precip(i,j) - net_FW_avg
     enddo; enddo
   endif
@@ -475,18 +475,18 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
   if (ASSOCIATED(IOB%p) .and. (CS%max_p_surf >= 0.0)) then
     if (CS%use_limited_P_SSH) then
       do j=js,je ; do i=is,ie
-        fluxes%p_surf(i,j) = G%hmask(i,j) * MIN(IOB%p(i-i0,j-j0),CS%max_p_surf)
+        fluxes%p_surf(i,j) = G%mask2dT(i,j) * MIN(IOB%p(i-i0,j-j0),CS%max_p_surf)
         fluxes%p_surf_full(i,j) = fluxes%p_surf(i,j)
       enddo ; enddo
     else
       do j=js,je ; do i=is,ie
-        fluxes%p_surf_full(i,j) = G%hmask(i,j) * IOB%p(i-i0,j-j0)
+        fluxes%p_surf_full(i,j) = G%mask2dT(i,j) * IOB%p(i-i0,j-j0)
         fluxes%p_surf(i,j) = MIN(fluxes%p_surf_full(i,j),CS%max_p_surf)
       enddo ; enddo
     endif
   elseif (ASSOCIATED(IOB%p)) then
     do j=js,je ; do i=is,ie
-      fluxes%p_surf_full(i,j) = G%hmask(i,j) * IOB%p(i-i0,j-j0)
+      fluxes%p_surf_full(i,j) = G%mask2dT(i,j) * IOB%p(i-i0,j-j0)
       fluxes%p_surf(i,j) = fluxes%p_surf_full(i,j)
     enddo ; enddo
   endif
@@ -496,16 +496,16 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
 
     do j=js,je ; do I=Isq,Ieq
       fluxes%taux(I,j) = 0.0
-      If ((G%qmask(I,J) + G%qmask(I,J-1)) > 0) &
-        fluxes%taux(I,j) = (G%qmask(I,J)*taux_at_q(I,J) + G%qmask(I,J-1)*taux_at_q(I,J-1)) / &
-            (G%qmask(I,J) + G%qmask(I,J-1))
+      If ((G%mask2dBu(I,J) + G%mask2dBu(I,J-1)) > 0) &
+        fluxes%taux(I,j) = (G%mask2dBu(I,J)*taux_at_q(I,J) + G%mask2dBu(I,J-1)*taux_at_q(I,J-1)) / &
+            (G%mask2dBu(I,J) + G%mask2dBu(I,J-1))
     enddo ; enddo
 
     do J=Jsq,Jeq ; do i=is,ie
       fluxes%tauy(i,J) = 0.0
-      if ((G%qmask(I,J) + G%qmask(I-1,J)) > 0) &
-        fluxes%tauy(i,J) = (G%qmask(I,J)*tauy_at_q(I,J) + G%qmask(I-1,J)*tauy_at_q(I-1,J)) / &
-            (G%qmask(I,J) + G%qmask(I-1,J))
+      if ((G%mask2dBu(I,J) + G%mask2dBu(I-1,J)) > 0) &
+        fluxes%tauy(i,J) = (G%mask2dBu(I,J)*tauy_at_q(I,J) + G%mask2dBu(I-1,J)*tauy_at_q(I-1,J)) / &
+            (G%mask2dBu(I,J) + G%mask2dBu(I-1,J))
     enddo ; enddo
 
     ! ustar is required for MOM's mixed layer formulation.  The background value
@@ -514,12 +514,12 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
 
     do j=js,je ; do i=is,ie
       tau_mag = 0.0 ; gustiness = CS%gust_const
-      if (((G%qmask(I,J) + G%qmask(I-1,J-1)) + (G%qmask(I,J-1) + G%qmask(I-1,J))) > 0) then
-        tau_mag = sqrt(((G%qmask(I,J)*(taux_at_q(I,J)**2 + tauy_at_q(I,J)**2) + &
-            G%qmask(I-1,J-1)*(taux_at_q(I-1,J-1)**2 + tauy_at_q(I-1,J-1)**2)) + &
-           (G%qmask(I,J-1)*(taux_at_q(I,J-1)**2 + tauy_at_q(I,J-1)**2) + &
-            G%qmask(I-1,J)*(taux_at_q(I-1,J)**2 + tauy_at_q(I-1,J)**2)) ) / &
-          ((G%qmask(I,J) + G%qmask(I-1,J-1)) + (G%qmask(I,J-1) + G%qmask(I-1,J))) )
+      if (((G%mask2dBu(I,J) + G%mask2dBu(I-1,J-1)) + (G%mask2dBu(I,J-1) + G%mask2dBu(I-1,J))) > 0) then
+        tau_mag = sqrt(((G%mask2dBu(I,J)*(taux_at_q(I,J)**2 + tauy_at_q(I,J)**2) + &
+            G%mask2dBu(I-1,J-1)*(taux_at_q(I-1,J-1)**2 + tauy_at_q(I-1,J-1)**2)) + &
+           (G%mask2dBu(I,J-1)*(taux_at_q(I,J-1)**2 + tauy_at_q(I,J-1)**2) + &
+            G%mask2dBu(I-1,J)*(taux_at_q(I-1,J)**2 + tauy_at_q(I-1,J)**2)) ) / &
+          ((G%mask2dBu(I,J) + G%mask2dBu(I-1,J-1)) + (G%mask2dBu(I,J-1) + G%mask2dBu(I-1,J))) )
         if (CS%read_gust_2d) gustiness = CS%gust(i,j)
       endif
       fluxes%ustar(i,j) = sqrt(gustiness*Irho0 + Irho0*tau_mag)
@@ -528,14 +528,14 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
     call pass_vector(fluxes%taux, fluxes%tauy, G%Domain)
     do j=js,je ; do i=is,ie
       taux2 = 0.0
-      if ((G%umask(I-1,j) + G%umask(I,j)) > 0) &
-        taux2 = (G%umask(I-1,j)*fluxes%taux(I-1,j)**2 + &
-                 G%umask(I,j)*fluxes%taux(I,j)**2) / (G%umask(I-1,j) + G%umask(I,j))
+      if ((G%mask2dCu(I-1,j) + G%mask2dCu(I,j)) > 0) &
+        taux2 = (G%mask2dCu(I-1,j)*fluxes%taux(I-1,j)**2 + &
+                 G%mask2dCu(I,j)*fluxes%taux(I,j)**2) / (G%mask2dCu(I-1,j) + G%mask2dCu(I,j))
 
       tauy2 = 0.0
-      if ((G%vmask(i,J-1) + G%vmask(i,J)) > 0) &
-        tauy2 = (G%vmask(i,J-1)*fluxes%tauy(i,J-1)**2 + &
-                 G%vmask(i,J)*fluxes%tauy(i,J)**2) / (G%vmask(i,J-1) + G%vmask(i,J))
+      if ((G%mask2dCv(i,J-1) + G%mask2dCv(i,J)) > 0) &
+        tauy2 = (G%mask2dCv(i,J-1)*fluxes%tauy(i,J-1)**2 + &
+                 G%mask2dCv(i,J)*fluxes%tauy(i,J)**2) / (G%mask2dCv(i,J-1) + G%mask2dCv(i,J))
 
       if (CS%read_gust_2d) then
         fluxes%ustar(i,j) = sqrt(CS%gust(i,j)*Irho0 + Irho0*sqrt(taux2 + tauy2))
@@ -875,7 +875,7 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt)
     call read_data(TideAmp_file,'tideamp',CS%TKE_tidal,domain=G%domain%mpp_domain,timelevel=1)
     do j=jsd, jed; do i=isd, ied
       utide = CS%TKE_tidal(i,j)
-      CS%TKE_tidal(i,j) = G%hmask(i,j)*CS%Rho0*CS%cd_tides*(utide*utide*utide)
+      CS%TKE_tidal(i,j) = G%mask2dT(i,j)*CS%Rho0*CS%cd_tides*(utide*utide*utide)
       CS%ustar_tidal(i,j)=sqrt(CS%cd_tides)*utide
     enddo ; enddo
   else

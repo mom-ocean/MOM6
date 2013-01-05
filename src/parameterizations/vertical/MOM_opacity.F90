@@ -269,7 +269,7 @@ subroutine opacity_from_chl(optics, fluxes, G, CS, chl_in)
     if (present(chl_in)) then
       do j=js,je ; do i=is,ie ; chl_data(i,j) = chl_in(i,j,k) ; enddo ; enddo
       do j=js,je ; do i=is,ie
-        if ((G%hmask(i,j) > 0.5) .and. (chl_data(i,j) < 0.0)) then
+        if ((G%mask2dT(i,j) > 0.5) .and. (chl_data(i,j) < 0.0)) then
           write(mesg,'(" Negative chl_in of ",(1pe12.4)," found at i,j,k = ", &
                     & 3(1x,i3), " lon/lat = ",(1pe12.4)," E ", (1pe12.4), " N.")') &
                      chl_data(i,j), i, j, k, G%geoLonT(i,j), G%geoLatT(i,j)
@@ -283,7 +283,7 @@ subroutine opacity_from_chl(optics, fluxes, G, CS, chl_in)
       do j=js,je ; do i=is,ie ; chl_data(i,j) = 0.0 ; enddo ; enddo
       call time_interp_external(CS%sbc_chl, CS%Time, chl_data)
       do j=js,je ; do i=is,ie
-        if ((G%hmask(i,j) > 0.5) .and. (chl_data(i,j) < 0.0)) then
+        if ((G%mask2dT(i,j) > 0.5) .and. (chl_data(i,j) < 0.0)) then
           write(mesg,'(" Time_interp negative chl of ",(1pe12.4)," at i,j = ",&
                     & 2(i3), "lon/lat = ",(1pe12.4)," E ", (1pe12.4), " N.")') &
                      chl_data(i,j), i, j, G%geoLonT(i,j), G%geoLatT(i,j)
@@ -296,7 +296,7 @@ subroutine opacity_from_chl(optics, fluxes, G, CS, chl_in)
       case (MANIZZA_05)
         if (k==1) then ; do j=js,je ; do i=is,ie
           SW_vis_tot = 0.0 ; SW_nir_tot = 0.0
-          if (G%hmask(i,j) > 0.5) then
+          if (G%mask2dT(i,j) > 0.5) then
             if (multiband_vis_input) then
               SW_vis_tot = fluxes%sw_vis_dir(i,j) + fluxes%sw_vis_dif(i,j)
             else  ! Follow Manizza 05 in assuming that 42% of SW is visible.
@@ -321,7 +321,7 @@ subroutine opacity_from_chl(optics, fluxes, G, CS, chl_in)
         enddo ; enddo ; endif
 
         do j=js,je ; do i=is,ie
-          if (G%hmask(i,j) <= 0.5) then
+          if (G%mask2dT(i,j) <= 0.5) then
             do n=1,optics%nbands
               optics%opacity_band(n,i,j,k) = CS%opacity_land_value
             enddo
@@ -339,7 +339,7 @@ subroutine opacity_from_chl(optics, fluxes, G, CS, chl_in)
         if (k==1) then ! Set up the surface fluxes.
           do j=js,je ; do i=is,ie
             SW_pen_tot = 0.0
-            if (G%hmask(i,j) > 0.5) then ; if (multiband_vis_input) then
+            if (G%mask2dT(i,j) > 0.5) then ; if (multiband_vis_input) then
                 SW_pen_tot = SW_pen_frac_morel(chl_data(i,j)) * &
                     (fluxes%sw_vis_dir(i,j) + fluxes%sw_vis_dif(i,j))
               else
@@ -355,7 +355,7 @@ subroutine opacity_from_chl(optics, fluxes, G, CS, chl_in)
 
         do j=js,je ; do i=is,ie
           optics%opacity_band(1,i,j,k) = CS%opacity_land_value
-          if (G%hmask(i,j) > 0.5) &
+          if (G%mask2dT(i,j) > 0.5) &
             optics%opacity_band(1,i,j,k) = opacity_morel(chl_data(i,j))
 
           do n=2,optics%nbands

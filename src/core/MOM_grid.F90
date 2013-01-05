@@ -37,9 +37,9 @@ type, public :: ocean_grid_type
   integer :: isc, iec, jsc, jec ! The range of the computational domain indicies
   integer :: isd, ied, jsd, jed ! and data domain indicies at tracer cell centers.
   integer :: isg, ieg, jsg, jeg ! The range of the global domain tracer cell indicies.
-  integer :: Iscq, Iecq, Jscq, Jecq ! The range of the computational domain indicies
-  integer :: Isdq, Iedq, Jsdq, Jedq ! and data domain indicies at tracer cell vertices.
-  integer :: Isgq, Iegq, Jsgq, Jegq ! The range of the global domain vertex indicies.
+  integer :: IscB, IecB, JscB, JecB ! The range of the computational domain indicies
+  integer :: IsdB, IedB, JsdB, JedB ! and data domain indicies at tracer cell vertices.
+  integer :: IsgB, IegB, JsgB, JegB ! The range of the global domain vertex indicies.
   integer :: isd_global         ! The values of isd and jsd in the global
   integer :: jsd_global         ! (decomposition invariant) index space.
   integer :: ks, ke             ! The range of layer's vertical indicies.
@@ -53,7 +53,7 @@ type, public :: ocean_grid_type
                              ! set_first_direction.
 
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
-    hmask, &   ! 0 for land points and 1 for ocean points on the h-grid. Nd.
+    mask2dT, &   ! 0 for land points and 1 for ocean points on the h-grid. Nd.
     geoLatT, & ! The geographic latitude at q points in degrees of latitude or m.
     geoLonT, & ! The geographic longitude at q points in degrees of longitude or m.
     dxT, IdxT, & ! dxT is delta x at h points, in m, and IdxT is 1/dxT in m-1.
@@ -62,7 +62,7 @@ type, public :: ocean_grid_type
     IareaT       ! IareaT = 1/areaT, in m-2.
 
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_) :: &
-    umask, &   ! 0 for boundary points and 1 for ocean points on the u grid.  Nondim.
+    mask2dCu, &  ! 0 for boundary points and 1 for ocean points on the u grid.  Nondim.
     geoLatCu, &  ! The geographic latitude at u points in degrees of latitude or m.
     geoLonCu, &  ! The geographic longitude at u points in degrees of longitude or m.
     dxCu, IdxCu, & ! dxCu is delta x at u points, in m, and IdxCu is 1/dxCu in m-1.
@@ -73,7 +73,7 @@ type, public :: ocean_grid_type
     areaCu       ! The areas of the u-grid cells in m2.
 
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_) :: &
-    vmask, &   ! 0 for boundary points and 1 for ocean points on the v grid.  Nondim.
+    mask2dCv, &  ! 0 for boundary points and 1 for ocean points on the v grid.  Nondim.
     geoLatCv, &  ! The geographic latitude at v points in degrees of latitude or m.
     geoLonCv, &  !  The geographic longitude at v points in degrees of longitude or m.
     dxCv, IdxCv, & ! dxCv is delta x at v points, in m, and IdxCv is 1/dxCv in m-1.
@@ -84,7 +84,7 @@ type, public :: ocean_grid_type
     areaCv       ! The areas of the v-grid cells in m2.
 
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: &
-    qmask, &   ! 0 for boundary points and 1 for ocean points on the q grid.  Nondim.
+    mask2dBu, &  ! 0 for boundary points and 1 for ocean points on the q grid.  Nondim.
     geoLatBu, &  ! The geographic latitude at q points in degrees of latitude or m.
     geoLonBu, &  ! The geographic longitude at q points in degrees of longitude or m.
     dxBu, IdxBu, & ! dxBu is delta x at q points, in m, and IdxBu is 1/dxBu in m-1.
@@ -171,7 +171,7 @@ subroutine MOM_grid_init(grid, param_file)
   character(len=128) :: version = '$Id$'
   character(len=128) :: tagname = '$Name$'
   integer :: isd, ied, jsd, jed, nk, idg_off, jdg_off
-  integer :: Isdq, Iedq, Jsdq, Jedq
+  integer :: IsdB, IedB, JsdB, JedB
 
   ! get_domain_extent ensures that domains start at 1 for compatibility between
   ! static and dynamically allocated arrays.
@@ -230,31 +230,31 @@ subroutine MOM_grid_init(grid, param_file)
 
   grid%nonblocking_updates = grid%Domain%nonblocking_updates
 
-  grid%Iscq = grid%isc ; grid%Jscq = grid%jsc
-  grid%Isdq = grid%isd ; grid%Jsdq = grid%jsd
-  grid%Isgq = grid%isg ; grid%Jsgq = grid%jsg
+  grid%IscB = grid%isc ; grid%JscB = grid%jsc
+  grid%IsdB = grid%isd ; grid%JsdB = grid%jsd
+  grid%IsgB = grid%isg ; grid%JsgB = grid%jsg
   if (grid%symmetric) then
-    grid%Iscq = grid%isc-1 ; grid%Jscq = grid%jsc-1
-    grid%Isdq = grid%isd-1 ; grid%Jsdq = grid%jsd-1
-    grid%Isgq = grid%isg-1 ; grid%Jsgq = grid%jsg-1
+    grid%IscB = grid%isc-1 ; grid%JscB = grid%jsc-1
+    grid%IsdB = grid%isd-1 ; grid%JsdB = grid%jsd-1
+    grid%IsgB = grid%isg-1 ; grid%JsgB = grid%jsg-1
   endif
-  grid%Iecq = grid%iec ; grid%Jecq = grid%jec
-  grid%Iedq = grid%ied ; grid%Jedq = grid%jed
-  grid%Iegq = grid%ieg ; grid%Jegq = grid%jeg
+  grid%IecB = grid%iec ; grid%JecB = grid%jec
+  grid%IedB = grid%ied ; grid%JedB = grid%jed
+  grid%IegB = grid%ieg ; grid%JegB = grid%jeg
 
 
   isd = grid%isd ; ied = grid%ied ; jsd = grid%jsd ; jed = grid%jed
-  Isdq = grid%Isdq ; Iedq = grid%Iedq ; Jsdq = grid%Jsdq ; Jedq = grid%Jedq
+  IsdB = grid%IsdB ; IedB = grid%IedB ; JsdB = grid%JsdB ; JedB = grid%JedB
   ALLOC_(grid%bathyT(isd:ied, jsd:jed)) ; grid%bathyT(:,:) = grid%Angstrom_z
-  ALLOC_(grid%CoriolisBu(Isdq:Iedq, Jsdq:Jedq)) ; grid%CoriolisBu(:,:) = 0.0
+  ALLOC_(grid%CoriolisBu(IsdB:IedB, JsdB:JedB)) ; grid%CoriolisBu(:,:) = 0.0
   ALLOC_(grid%g_prime(nk+1)) ; grid%g_prime(:) = 0.0
   ALLOC_(grid%Rlay(nk+1))    ; grid%Rlay(:) = 0.0
 
   if (grid%bathymetry_at_vel) then
-    ALLOC_(grid%Dblock_u(Isdq:Iedq, jsd:jed)) ; grid%Dblock_u(:,:) = 0.0
-    ALLOC_(grid%Dopen_u(Isdq:Iedq, jsd:jed))  ; grid%Dopen_u(:,:) = 0.0
-    ALLOC_(grid%Dblock_v(isd:ied, Jsdq:Jedq)) ; grid%Dblock_v(:,:) = 0.0
-    ALLOC_(grid%Dopen_v(isd:ied, Jsdq:Jedq))  ; grid%Dopen_v(:,:) = 0.0
+    ALLOC_(grid%Dblock_u(IsdB:IedB, jsd:jed)) ; grid%Dblock_u(:,:) = 0.0
+    ALLOC_(grid%Dopen_u(IsdB:IedB, jsd:jed))  ; grid%Dopen_u(:,:) = 0.0
+    ALLOC_(grid%Dblock_v(isd:ied, JsdB:JedB)) ; grid%Dblock_v(:,:) = 0.0
+    ALLOC_(grid%Dopen_v(isd:ied, JsdB:JedB))  ; grid%Dopen_v(:,:) = 0.0
   endif
 
   if (grid%Boussinesq) then

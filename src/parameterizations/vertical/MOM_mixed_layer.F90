@@ -559,7 +559,7 @@ subroutine mixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, optics, &
       CS%diag%ML_depth(i,j) = htot(i) * G%H_to_m
     enddo ; endif
     if (ASSOCIATED(tv%Hml)) then ; do i=is,ie
-      tv%Hml(i,j) = G%hmask(i,j) * (htot(i) * G%H_to_m)
+      tv%Hml(i,j) = G%mask2dT(i,j) * (htot(i) * G%H_to_m)
     enddo ; endif
 
 ! At this point, return water to the original layers, but constrained to

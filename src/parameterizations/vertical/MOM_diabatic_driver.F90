@@ -261,7 +261,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, dt, G, CS)
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkmb
   real, pointer :: T(:,:,:), S(:,:,:)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-  Isq = G%Iscq ; Ieq = G%Iecq ; Jsq = G%Jscq ; Jeq = G%Jecq
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   nkmb = G%nk_rho_varies
   h_neglect = G%H_subroundoff ; h_neglect2 = h_neglect*h_neglect
 
@@ -645,7 +645,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, dt, G, CS)
       do i=is,ie
         ebtr(i,j,nz) = eb(i,j,nz)
         htot(i) = 0.0
-        in_boundary(i) = (G%hmask(i,j) > 0.0)
+        in_boundary(i) = (G%mask2dT(i,j) > 0.0)
       enddo
       do k=nz,2,-1 ; do i=is,ie
         if (in_boundary(i)) then
@@ -987,7 +987,7 @@ subroutine make_frazil(h, tv, G, CS)
     do k=nz,1,-1
       T_fr_set = .false.
       do i=is,ie
-        if ((G%hmask(i,j) > 0.0) .and. &
+        if ((G%mask2dT(i,j) > 0.0) .and. &
             ((tv%T(i,j,k) < 0.0) .or. (fraz_col(i) > 0.0))) then
           if (.not.T_fr_set) then
             call calculate_TFreeze(tv%S(i:,j,k), pressure(i:,k), T_freeze(i:), &
@@ -1155,7 +1155,7 @@ subroutine adjust_salt(h, tv, G, CS)
   salt_add_col(:,:) = 0.0
 
   do k=nz,1,-1 ; do j=js,je ; do i=is,ie
-    if ((G%hmask(i,j) > 0.0) .and. &
+    if ((G%mask2dT(i,j) > 0.0) .and. &
          ((tv%S(i,j,k) < S_min) .or. (salt_add_col(i,j) > 0.0))) then
       mc = G%H_to_kg_m2 * h(i,j,k)
       if (h(i,j,k) <= 10.0*G%Angstrom) then
@@ -1253,9 +1253,9 @@ subroutine diabatic_driver_init(Time, G, param_file, diag, CS, &
   character(len=128) :: tagname = '$Name$'
   character(len=40)  :: mod  = "MOM_diabatic_driver" ! This module's name.
   character(len=48)  :: thickness_units
-  integer :: isd, ied, jsd, jed, Isdq, Iedq, Jsdq, Jedq, nz, nbands
+  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz, nbands
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = G%ke
-  Isdq = G%Isdq ; Iedq = G%Iedq ; Jsdq = G%Jsdq ; Jedq = G%Jedq
+  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   if (associated(CS)) then
     call MOM_error(WARNING, "diabatic_driver_init called with an "// &
@@ -1378,8 +1378,8 @@ subroutine diabatic_driver_init(Time, G, param_file, diag, CS, &
     CS%id_Sadv_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
   endif
 
-  if (CS%id_dudt_dia > 0) call safe_alloc_ptr(diag%du_dt_dia,Isdq,Iedq,jsd,jed,nz)
-  if (CS%id_dvdt_dia > 0) call safe_alloc_ptr(diag%dv_dt_dia,isd,ied,Jsdq,Jedq,nz)
+  if (CS%id_dudt_dia > 0) call safe_alloc_ptr(diag%du_dt_dia,IsdB,IedB,jsd,jed,nz)
+  if (CS%id_dvdt_dia > 0) call safe_alloc_ptr(diag%dv_dt_dia,isd,ied,JsdB,JedB,nz)
   if (CS%id_wd > 0) call safe_alloc_ptr(diag%diapyc_vel,isd,ied,jsd,jed,nz+1)
 
   call set_diffusivity_init(Time, G, param_file, diag, CS%set_diff_CSp, diag_to_Z_CSp)

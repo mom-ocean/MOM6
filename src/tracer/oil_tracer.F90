@@ -302,16 +302,16 @@ subroutine initialize_oil_tracer(restart, day, G, h, OBC, CS, sponge_CSp, &
                                 ! years m3 s-1 or years kg s-1.
   logical :: OK
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz, m
-  integer :: Isdq, Iedq, Jsdq, Jedq
+  integer :: IsdB, IedB, JsdB, JedB
 
   if (.not.associated(CS)) return
   if (CS%ntr < 1) return
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  Isdq = G%Isdq ; Iedq = G%Iedq ; Jsdq = G%Jsdq ; Jedq = G%Jedq
+  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   ! Establish location of source
-  do j=G%jsdq+1,G%jed ; do i=G%isdq+1,G%ied
+  do j=G%jsdB+1,G%jed ; do i=G%isdB+1,G%ied
     ! This test for i,j index is specific to a lat/lon (non-rotated grid).
     ! and needs to be generalized to work properly on the tri-polar grid.
     if (CS%oil_source_longitude<G%geoLonBu(i,j) .and. &
@@ -351,7 +351,7 @@ subroutine initialize_oil_tracer(restart, day, G, h, OBC, CS, sponge_CSp, &
         endif
       else
         do k=1,nz ; do j=js,je ; do i=is,ie
-          if (G%hmask(i,j) < 0.5) then
+          if (G%mask2dT(i,j) < 0.5) then
             CS%tr(i,j,k,m) = CS%land_val(m)
           else
             CS%tr(i,j,k,m) = CS%IC_val(m)
@@ -392,10 +392,10 @@ subroutine initialize_oil_tracer(restart, day, G, h, OBC, CS, sponge_CSp, &
     CS%id_tr_dfy(m) = register_diag_field("ocean_model", trim(name)//"_dfy", &
         G%axesCvL, day, trim(longname)//" diffusive zonal flux" , &
         trim(flux_units))
-    if (CS%id_tr_adx(m) > 0) call safe_alloc_ptr(CS%tr_adx(m)%p,Isdq,Iedq,jsd,jed,nz)
-    if (CS%id_tr_ady(m) > 0) call safe_alloc_ptr(CS%tr_ady(m)%p,isd,ied,Jsdq,Jedq,nz)
-    if (CS%id_tr_dfx(m) > 0) call safe_alloc_ptr(CS%tr_dfx(m)%p,Isdq,Iedq,jsd,jed,nz)
-    if (CS%id_tr_dfy(m) > 0) call safe_alloc_ptr(CS%tr_dfy(m)%p,isd,ied,Jsdq,Jedq,nz)
+    if (CS%id_tr_adx(m) > 0) call safe_alloc_ptr(CS%tr_adx(m)%p,IsdB,IedB,jsd,jed,nz)
+    if (CS%id_tr_ady(m) > 0) call safe_alloc_ptr(CS%tr_ady(m)%p,isd,ied,JsdB,JedB,nz)
+    if (CS%id_tr_dfx(m) > 0) call safe_alloc_ptr(CS%tr_dfx(m)%p,IsdB,IedB,jsd,jed,nz)
+    if (CS%id_tr_dfy(m) > 0) call safe_alloc_ptr(CS%tr_dfy(m)%p,isd,ied,JsdB,JedB,nz)
 
 !    Register the tracer for horizontal advection & diffusion.
     if ((CS%id_tr_adx(m) > 0) .or. (CS%id_tr_ady(m) > 0) .or. &
@@ -463,11 +463,11 @@ subroutine oil_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, CS, tv
       !CS%tr(i,j,k,m) = CS%tr(i,j,k,m) - dt*CS%oil_decay_rate(m)*CS%tr(i,j,k,m) ! Simple
       !CS%tr(i,j,k,m) = CS%tr(i,j,k,m) - min(dt*CS%oil_decay_rate(m),1.)*CS%tr(i,j,k,m) ! Safer
       if (CS%oil_decay_rate(m)>0.) then
-        CS%tr(i,j,k,m) = G%hmask(i,j)*max(1.-dt*CS%oil_decay_rate(m),0.)*CS%tr(i,j,k,m) ! Safest
+        CS%tr(i,j,k,m) = G%mask2dT(i,j)*max(1.-dt*CS%oil_decay_rate(m),0.)*CS%tr(i,j,k,m) ! Safest
       elseif (CS%oil_decay_rate(m)<0.) then
         ldecay = 12.*(3.0**(-(tv%T(i,j,k)-20.)/10.)) ! Timescale in days
         ldecay = 1./(86400.*ldecay) ! Rate in s^-1
-        CS%tr(i,j,k,m) = G%hmask(i,j)*max(1.-dt*ldecay,0.)*CS%tr(i,j,k,m)
+        CS%tr(i,j,k,m) = G%mask2dT(i,j)*max(1.-dt*ldecay,0.)*CS%tr(i,j,k,m)
       endif
     enddo ; enddo ; enddo
   enddo
@@ -574,7 +574,7 @@ function oil_stock(h, stocks, G, CS, names, units, stock_index)
     stocks(m) = 0.0
     do k=1,nz ; do j=js,je ; do i=is,ie
       stocks(m) = stocks(m) + CS%tr(i,j,k,m) * &
-                             (G%hmask(i,j) * G%areaT(i,j) * h(i,j,k))
+                             (G%mask2dT(i,j) * G%areaT(i,j) * h(i,j,k))
     enddo ; enddo ; enddo
     stocks(m) = G%H_to_kg_m2 * stocks(m)
   enddo

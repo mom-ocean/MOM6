@@ -294,18 +294,18 @@ subroutine wind_forcing_zero(state, fluxes, day, G, CS)
 !                 call to surface_forcing_init.
   real :: PI
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
-  integer :: isd, ied, jsd, jed, Isdq, Iedq, Jsdq, Jedq
+  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
-  Isq = G%Iscq ; Ieq = G%Iecq ; Jsq = G%Jscq ; Jeq = G%Jecq
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  Isdq = G%Isdq ; Iedq = G%Iedq ; Jsdq = G%Jsdq ; Jedq = G%Jedq
+  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   if (.not.associated(fluxes%taux)) then
-    allocate(fluxes%taux(Isdq:Iedq,jsd:jed)) ; fluxes%taux(:,:) = 0.0
+    allocate(fluxes%taux(IsdB:IedB,jsd:jed)) ; fluxes%taux(:,:) = 0.0
   endif
   if (.not.associated(fluxes%tauy)) then
-    allocate(fluxes%tauy(isd:ied,Jsdq:Jedq)) ; fluxes%tauy(:,:) = 0.0
+    allocate(fluxes%tauy(isd:ied,JsdB:JedB)) ; fluxes%tauy(:,:) = 0.0
   endif
   if (.not.associated(fluxes%ustar)) then
     allocate(fluxes%ustar(isd:ied,jsd:jed)) ; fluxes%ustar(:,:) = 0.0
@@ -348,18 +348,18 @@ subroutine wind_forcing_2gyre(state, fluxes, day, G, CS)
 !                 call to surface_forcing_init.
   real :: PI
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
-  integer :: isd, ied, jsd, jed, Isdq, Iedq, Jsdq, Jedq
+  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
-  Isq = G%Iscq ; Ieq = G%Iecq ; Jsq = G%Jscq ; Jeq = G%Jecq
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  Isdq = G%Isdq ; Iedq = G%Iedq ; Jsdq = G%Jsdq ; Jedq = G%Jedq
+  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   if (.not.associated(fluxes%taux)) then
-    allocate(fluxes%taux(Isdq:Iedq,jsd:jed)) ; fluxes%taux(:,:) = 0.0
+    allocate(fluxes%taux(IsdB:IedB,jsd:jed)) ; fluxes%taux(:,:) = 0.0
   endif
   if (.not.associated(fluxes%tauy)) then
-    allocate(fluxes%tauy(isd:ied,Jsdq:Jedq)) ; fluxes%tauy(:,:) = 0.0
+    allocate(fluxes%tauy(isd:ied,JsdB:JedB)) ; fluxes%tauy(:,:) = 0.0
   endif
   if (.not.associated(fluxes%ustar)) then
     allocate(fluxes%ustar(isd:ied,jsd:jed)) ; fluxes%ustar(:,:) = 0.0
@@ -395,18 +395,18 @@ subroutine wind_forcing_1gyre(state, fluxes, day, G, CS)
 !                 call to surface_forcing_init.
   real :: PI
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
-  integer :: isd, ied, jsd, jed, Isdq, Iedq, Jsdq, Jedq
+  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
-  Isq = G%Iscq ; Ieq = G%Iecq ; Jsq = G%Jscq ; Jeq = G%Jecq
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  Isdq = G%Isdq ; Iedq = G%Iedq ; Jsdq = G%Jsdq ; Jedq = G%Jedq
+  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   if (.not.associated(fluxes%taux)) then
-    allocate(fluxes%taux(Isdq:Iedq,jsd:jed)) ; fluxes%taux(:,:) = 0.0
+    allocate(fluxes%taux(IsdB:IedB,jsd:jed)) ; fluxes%taux(:,:) = 0.0
   endif
   if (.not.associated(fluxes%tauy)) then
-    allocate(fluxes%tauy(isd:ied,Jsdq:Jedq)) ; fluxes%tauy(:,:) = 0.0
+    allocate(fluxes%tauy(isd:ied,JsdB:JedB)) ; fluxes%tauy(:,:) = 0.0
   endif
   if (.not.associated(fluxes%ustar)) then
     allocate(fluxes%ustar(isd:ied,jsd:jed)) ; fluxes%ustar(:,:) = 0.0
@@ -441,18 +441,18 @@ subroutine wind_forcing_gyres(state, fluxes, day, G, CS)
 !                 call to surface_forcing_init.
   real :: PI, y
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
-  integer :: isd, ied, jsd, jed, Isdq, Iedq, Jsdq, Jedq
+  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
-  Isq = G%Iscq ; Ieq = G%Iecq ; Jsq = G%Jscq ; Jeq = G%Jecq
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  Isdq = G%Isdq ; Iedq = G%Iedq ; Jsdq = G%Jsdq ; Jedq = G%Jedq
+  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   if (.not.associated(fluxes%taux)) then
-    allocate(fluxes%taux(Isdq:Iedq,jsd:jed)) ; fluxes%taux(:,:) = 0.0
+    allocate(fluxes%taux(IsdB:IedB,jsd:jed)) ; fluxes%taux(:,:) = 0.0
   endif
   if (.not.associated(fluxes%tauy)) then
-    allocate(fluxes%tauy(isd:ied,Jsdq:Jedq)) ; fluxes%tauy(:,:) = 0.0
+    allocate(fluxes%tauy(isd:ied,JsdB:JedB)) ; fluxes%tauy(:,:) = 0.0
   endif
   if (.not.associated(fluxes%ustar)) then
     allocate(fluxes%ustar(isd:ied,jsd:jed)) ; fluxes%ustar(:,:) = 0.0
@@ -460,13 +460,13 @@ subroutine wind_forcing_gyres(state, fluxes, day, G, CS)
 
 !   Set the steady surface wind stresses, in units of Pa.
   PI = 4.0*atan(1.0)
-  do j=jsd,jed ; do I=Isdq,Iedq
+  do j=jsd,jed ; do I=IsdB,IedB
     y = (G%geoLatCu(I,j)-CS%South_lat)/CS%len_lat
     fluxes%taux(I,j) = CS%gyres_taux_const +                            &
              (   CS%gyres_taux_sin_amp*sin(CS%gyres_taux_n_pis*PI*y)    &
                + CS%gyres_taux_cos_amp*cos(CS%gyres_taux_n_pis*PI*y) )
   enddo ; enddo
-  do J=Jsdq,Jedq ; do i=isd,ied
+  do J=JsdB,JedB ; do i=isd,ied
     fluxes%tauy(i,J) = 0.0
   enddo ; enddo
 
@@ -497,7 +497,7 @@ subroutine wind_forcing_from_file(state, fluxes, day, G, CS)
 !  (in)      CS - A pointer to the control structure returned by a previous
 !                 call to surface_forcing_init.
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
-  integer :: isd, ied, jsd, jed, Isdq, Iedq, Jsdq, Jedq
+  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   integer :: time_lev = 0          ! With fields from a file, this must
                                    ! be reset, depending on the time.
   character(len=200) :: filename   ! The name of the input file.
@@ -506,15 +506,15 @@ subroutine wind_forcing_from_file(state, fluxes, day, G, CS)
   integer :: days, seconds
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
-  Isq = G%Iscq ; Ieq = G%Iecq ; Jsq = G%Jscq ; Jeq = G%Jecq
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  Isdq = G%Isdq ; Iedq = G%Iedq ; Jsdq = G%Jsdq ; Jedq = G%Jedq
+  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   if (.not.associated(fluxes%taux)) then
-    allocate(fluxes%taux(Isdq:Iedq,jsd:jed)) ; fluxes%taux(:,:) = 0.0
+    allocate(fluxes%taux(IsdB:IedB,jsd:jed)) ; fluxes%taux(:,:) = 0.0
   endif
   if (.not.associated(fluxes%tauy)) then
-    allocate(fluxes%tauy(isd:ied,Jsdq:Jedq)) ; fluxes%tauy(:,:) = 0.0
+    allocate(fluxes%tauy(isd:ied,JsdB:JedB)) ; fluxes%tauy(:,:) = 0.0
   endif
   if (.not.associated(fluxes%ustar)) then
     allocate(fluxes%ustar(isd:ied,jsd:jed)) ; fluxes%ustar(:,:) = 0.0
@@ -791,23 +791,23 @@ subroutine buoyancy_forcing_from_files(state, fluxes, day, dt, G, CS)
 
 !   Mask out land points.
     do j=js,je ; do i=is,ie
-      fluxes%evap(i,j) = fluxes%evap(i,j) * G%hmask(i,j)
-      fluxes%liq_precip(i,j)  = fluxes%liq_precip(i,j)  * G%hmask(i,j)
-      fluxes%froz_precip(i,j) = fluxes%froz_precip(i,j) * G%hmask(i,j)
-      fluxes%liq_runoff(i,j)  = fluxes%liq_runoff(i,j)  * G%hmask(i,j)
-      fluxes%froz_runoff(i,j) = fluxes%froz_runoff(i,j) * G%hmask(i,j)
-      fluxes%LW(i,j) = fluxes%LW(i,j) * G%hmask(i,j)
-      fluxes%latent(i,j) = fluxes%latent(i,j) * G%hmask(i,j)
-      fluxes%sens(i,j) = fluxes%sens(i,j) * G%hmask(i,j)
-      fluxes%sw(i,j) = fluxes%sw(i,j) * G%hmask(i,j)
+      fluxes%evap(i,j) = fluxes%evap(i,j) * G%mask2dT(i,j)
+      fluxes%liq_precip(i,j)  = fluxes%liq_precip(i,j)  * G%mask2dT(i,j)
+      fluxes%froz_precip(i,j) = fluxes%froz_precip(i,j) * G%mask2dT(i,j)
+      fluxes%liq_runoff(i,j)  = fluxes%liq_runoff(i,j)  * G%mask2dT(i,j)
+      fluxes%froz_runoff(i,j) = fluxes%froz_runoff(i,j) * G%mask2dT(i,j)
+      fluxes%LW(i,j) = fluxes%LW(i,j) * G%mask2dT(i,j)
+      fluxes%latent(i,j) = fluxes%latent(i,j) * G%mask2dT(i,j)
+      fluxes%sens(i,j) = fluxes%sens(i,j) * G%mask2dT(i,j)
+      fluxes%sw(i,j) = fluxes%sw(i,j) * G%mask2dT(i,j)
     enddo ; enddo
   endif ! time_lev /= CS%buoy_last_lev_read
 
   if (CS%restorebuoy) then
     if (CS%use_temperature) then
       do j=js,je ; do i=is,ie
-        if (G%hmask(i,j) > 0) then
-          fluxes%heat_restore(i,j) = G%hmask(i,j) * &
+        if (G%mask2dT(i,j) > 0) then
+          fluxes%heat_restore(i,j) = G%mask2dT(i,j) * &
               ((CS%T_Restore(i,j) - state%SST(i,j)) * rhoXcp * CS%Flux_const)
           fluxes%virt_precip(i,j) = - (CS%Rho0*CS%Flux_const) * &
               (CS%S_Restore(i,j) - state%SSS(i,j)) / &
@@ -819,7 +819,7 @@ subroutine buoyancy_forcing_from_files(state, fluxes, day, dt, G, CS)
       enddo ; enddo
     else
       do j=js,je ; do i=is,ie
-        if (G%hmask(i,j) > 0) then
+        if (G%mask2dT(i,j) > 0) then
           fluxes%buoy(i,j) = (CS%Dens_Restore(i,j) - state%sfc_density(i,j)) * &
                              (CS%G_Earth*CS%Flux_const/CS%Rho0)
         else
@@ -1050,8 +1050,8 @@ subroutine buoyancy_forcing_linear(state, fluxes, day, dt, G, CS)
         y = (G%geoLatCu(I,j)-CS%South_lat)/CS%len_lat
         T_restore = CS%T_south + (CS%T_north-CS%T_south)*y
         S_restore = CS%S_south + (CS%S_north-CS%S_south)*y
-        if (G%hmask(i,j) > 0) then
-          fluxes%heat_restore(i,j) = G%hmask(i,j) * &
+        if (G%mask2dT(i,j) > 0) then
+          fluxes%heat_restore(i,j) = G%mask2dT(i,j) * &
               ((T_Restore - state%SST(i,j)) * ((CS%Rho0 * fluxes%C_p) * CS%Flux_const))
           fluxes%virt_precip(i,j) = - (CS%Rho0*CS%Flux_const) * &
               (S_Restore - state%SSS(i,j)) / &
@@ -1065,7 +1065,7 @@ subroutine buoyancy_forcing_linear(state, fluxes, day, dt, G, CS)
       call MOM_error(FATAL, "buoyancy_forcing_linear in MOM_surface_forcing: "// &
                      "RESTOREBUOY to linear not written yet.")
      !do j=js,je ; do i=is,ie
-     !  if (G%hmask(i,j) > 0) then
+     !  if (G%mask2dT(i,j) > 0) then
      !    fluxes%buoy(i,j) = (CS%Dens_Restore(i,j) - state%sfc_density(i,j)) * &
      !                       (CS%G_Earth*CS%Flux_const/CS%Rho0)
      !  else

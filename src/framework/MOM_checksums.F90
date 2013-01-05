@@ -133,7 +133,7 @@ end subroutine chksum_h_2d
 
 subroutine chksum_q_2d(array, mesg, G, haloshift)
   type(ocean_grid_type), intent(in) :: G
-  real, dimension(G%Isdq:,G%Jsdq:), intent(in) :: array
+  real, dimension(G%IsdB:,G%JsdB:), intent(in) :: array
   character(len=*), intent(in) :: mesg
   integer, intent(in), optional :: haloshift
 
@@ -171,7 +171,7 @@ subroutine chksum_q_2d(array, mesg, G, haloshift)
 
   integer function subchk(array, G, di, dj)
     type(ocean_grid_type), intent(in) :: G
-    real, dimension(G%Isdq:,G%Jsdq:), intent(in) :: array
+    real, dimension(G%IsdB:,G%JsdB:), intent(in) :: array
     integer, intent(in) :: di, dj
     integer :: bitcount, i, j, bc
     subchk = 0
@@ -189,7 +189,7 @@ end subroutine chksum_q_2d
 
 subroutine chksum_u_2d(array, mesg, G, haloshift)
   type(ocean_grid_type), intent(in) :: G
-  real, dimension(G%Isdq:,G%jsd:), intent(in) :: array
+  real, dimension(G%IsdB:,G%jsd:), intent(in) :: array
   character(len=*), intent(in) :: mesg
   integer, intent(in), optional :: haloshift
 
@@ -227,7 +227,7 @@ subroutine chksum_u_2d(array, mesg, G, haloshift)
 
   integer function subchk(array, G, di, dj)
     type(ocean_grid_type), intent(in) :: G
-    real, dimension(G%Isdq:,G%jsd:), intent(in) :: array
+    real, dimension(G%IsdB:,G%jsd:), intent(in) :: array
     integer, intent(in) :: di, dj
     integer :: bitcount, i, j, bc
     subchk = 0
@@ -245,7 +245,7 @@ end subroutine chksum_u_2d
 
 subroutine chksum_v_2d(array, mesg, G, haloshift)
   type(ocean_grid_type), intent(in) :: G
-  real, dimension(G%isd:,G%Jsdq:), intent(in) :: array
+  real, dimension(G%isd:,G%JsdB:), intent(in) :: array
   character(len=*), intent(in) :: mesg
   integer, intent(in), optional :: haloshift
 
@@ -283,7 +283,7 @@ subroutine chksum_v_2d(array, mesg, G, haloshift)
 
   integer function subchk(array, G, di, dj)
     type(ocean_grid_type), intent(in) :: G
-    real, dimension(G%isd:,G%Jsdq:), intent(in) :: array
+    real, dimension(G%isd:,G%JsdB:), intent(in) :: array
     integer, intent(in) :: di, dj
     integer :: bitcount, i, j, bc
     subchk = 0
@@ -357,7 +357,7 @@ end subroutine chksum_h_3d
 
 subroutine chksum_q_3d(array, mesg, G, haloshift)
   type(ocean_grid_type), intent(in) :: G
-  real, dimension(G%Isdq:,G%Jsdq:,:), intent(in) :: array
+  real, dimension(G%IsdB:,G%JsdB:,:), intent(in) :: array
   character(len=*), intent(in) :: mesg
   integer, intent(in), optional :: haloshift
 
@@ -395,7 +395,7 @@ subroutine chksum_q_3d(array, mesg, G, haloshift)
 
   integer function subchk(array, G, di, dj)
     type(ocean_grid_type), intent(in) :: G
-    real, dimension(G%Isdq:,G%Jsdq:,:), intent(in) :: array
+    real, dimension(G%IsdB:,G%JsdB:,:), intent(in) :: array
     integer, intent(in) :: di, dj
     integer :: bitcount, i, j, k, bc
     subchk = 0
@@ -413,7 +413,7 @@ end subroutine chksum_q_3d
 
 subroutine chksum_u_3d(array, mesg, G, haloshift)
   type(ocean_grid_type), intent(in) :: G
-  real, dimension(G%Isdq:,G%jsd:,:), intent(in) :: array
+  real, dimension(G%IsdB:,G%jsd:,:), intent(in) :: array
   character(len=*), intent(in) :: mesg
   integer, intent(in), optional :: haloshift
 
@@ -451,7 +451,7 @@ subroutine chksum_u_3d(array, mesg, G, haloshift)
 
   integer function subchk(array, G, di, dj)
     type(ocean_grid_type), intent(in) :: G
-    real, dimension(G%Isdq:,G%jsd:,:), intent(in) :: array
+    real, dimension(G%IsdB:,G%jsd:,:), intent(in) :: array
     integer, intent(in) :: di, dj
     integer :: bitcount, i, j, k, bc
     subchk = 0
@@ -469,7 +469,7 @@ end subroutine chksum_u_3d
 
 subroutine chksum_v_3d(array, mesg, G, haloshift)
   type(ocean_grid_type), intent(in) :: G
-  real, dimension(G%isd:,G%Jsdq:,:), intent(in) :: array
+  real, dimension(G%isd:,G%JsdB:,:), intent(in) :: array
   character(len=*), intent(in) :: mesg
   integer, intent(in), optional :: haloshift
 
@@ -507,7 +507,7 @@ subroutine chksum_v_3d(array, mesg, G, haloshift)
 
   integer function subchk(array, G, di, dj)
     type(ocean_grid_type), intent(in) :: G
-    real, dimension(G%isd:,G%Jsdq:,:), intent(in) :: array
+    real, dimension(G%isd:,G%JsdB:,:), intent(in) :: array
     integer, intent(in) :: di, dj
     integer :: bitcount, i, j, k, bc
     subchk = 0

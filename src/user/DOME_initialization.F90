@@ -187,7 +187,7 @@ subroutine DOME_initialize_sponges(G, tv, PF, CSp)
 !  Here the inverse damping time, in s-1, is set. Set Idamp to 0     !
 !  wherever there is no sponge, and the subroutines that are called  !
 !  will automatically set up the sponges only where Idamp is positive!
-!  and hmask is 1.                                                   !
+!  and mask2dT is 1.                                                   !
 
 !   Set up sponges for DOME configuration
   call get_param(PF, mod, "MINIMUM_DEPTH", min_depth, &
@@ -303,11 +303,11 @@ subroutine DOME_set_Open_Bdry_Conds(OBC, tv, G, param_file, advect_tracer_CSp)
                             ! region of the specified shear profile.
   character(len=40)  :: mod = "DOME_set_Open_Bdry_Conds" ! This subroutine's name.
   integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, nz, njhalo
-  integer :: Isdq, Iedq, Jsdq, Jedq
+  integer :: IsdB, IedB, JsdB, JedB
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  Isdq = G%Isdq ; Iedq = G%Iedq ; Jsdq = G%Jsdq ; Jedq = G%Jedq
+  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
   njhalo = G%jsc-G%jsd
 
   call get_param(param_file, mod, "APPLY_OBC_U", apply_OBC_u, &
@@ -321,9 +321,9 @@ subroutine DOME_set_Open_Bdry_Conds(OBC, tv, G, param_file, advect_tracer_CSp)
 
   if (apply_OBC_u) then
     ! Determine where u points are applied.
-    allocate(OBC_mask_u(Isdq:Iedq,jsd:jed)) ; OBC_mask_u(:,:) = .false.
+    allocate(OBC_mask_u(IsdB:IedB,jsd:jed)) ; OBC_mask_u(:,:) = .false.
     any_OBC = .false.
-    do j=jsd,jed ; do I=Isdq,Iedq
+    do j=jsd,jed ; do I=IsdB,IedB
     ! if (SOME_TEST_FOR_U_OPEN_BCS) then
     !   OBC_mask_u(I,j) = .true. ; any_OBC = .true.
     ! endif
@@ -337,9 +337,9 @@ subroutine DOME_set_Open_Bdry_Conds(OBC, tv, G, param_file, advect_tracer_CSp)
   endif
   if (apply_OBC_v) then
     ! Determine where v points are applied.
-    allocate(OBC_mask_v(isd:ied,Jsdq:Jedq)) ; OBC_mask_v(:,:) = .false.
+    allocate(OBC_mask_v(isd:ied,JsdB:JedB)) ; OBC_mask_v(:,:) = .false.
     any_OBC = .false.
-    do J=Jsdq,Jedq ; do i=isd,ied
+    do J=JsdB,JedB ; do i=isd,ied
       if ((G%geoLonCv(i,J) > 1000.0) .and. (G%geoLonCv(i,J)  < 1100.0) .and. &
           (abs(G%geoLatCv(i,J) - G%gridLatB(G%Domain%njglobal+njhalo)) < 0.1)) then
         OBC_mask_v(i,J) = .true. ; any_OBC = .true.
@@ -360,20 +360,20 @@ subroutine DOME_set_Open_Bdry_Conds(OBC, tv, G, param_file, advect_tracer_CSp)
   if (apply_OBC_u) then
     OBC%apply_OBC_u = .true.
     OBC%OBC_mask_u => OBC_mask_u
-    allocate(OBC%u(Isdq:Iedq,jsd:jed,nz)) ; OBC%u(:,:,:) = 0.0
-    allocate(OBC%uh(Isdq:Iedq,jsd:jed,nz)) ; OBC%uh(:,:,:) = 0.0
-    allocate(OBC%OBC_kind_u(Isdq:Iedq,jsd:jed)) ; OBC%OBC_kind_u(:,:) = OBC_NONE
-    do j=jsd,jed ; do I=Isdq,Iedq
+    allocate(OBC%u(IsdB:IedB,jsd:jed,nz)) ; OBC%u(:,:,:) = 0.0
+    allocate(OBC%uh(IsdB:IedB,jsd:jed,nz)) ; OBC%uh(:,:,:) = 0.0
+    allocate(OBC%OBC_kind_u(IsdB:IedB,jsd:jed)) ; OBC%OBC_kind_u(:,:) = OBC_NONE
+    do j=jsd,jed ; do I=IsdB,IedB
       if (OBC%OBC_mask_u(I,j)) OBC%OBC_kind_u(I,j) = OBC_SIMPLE
     enddo ; enddo
   endif
   if (apply_OBC_v) then
     OBC%apply_OBC_v = .true.
     OBC%OBC_mask_v => OBC_mask_v
-    allocate(OBC%v(isd:ied,Jsdq:Jedq,nz)) ; OBC%v(:,:,:) = 0.0
-    allocate(OBC%vh(isd:ied,Jsdq:Jedq,nz)) ; OBC%vh(:,:,:) = 0.0
-    allocate(OBC%OBC_kind_v(isd:ied,Jsdq:Jedq)) ; OBC%OBC_kind_v(:,:) = OBC_NONE
-    do J=Jsdq,Jedq ; do i=isd,ied
+    allocate(OBC%v(isd:ied,JsdB:JedB,nz)) ; OBC%v(:,:,:) = 0.0
+    allocate(OBC%vh(isd:ied,JsdB:JedB,nz)) ; OBC%vh(:,:,:) = 0.0
+    allocate(OBC%OBC_kind_v(isd:ied,JsdB:JedB)) ; OBC%OBC_kind_v(:,:) = OBC_NONE
+    do J=JsdB,JedB ; do i=isd,ied
       if (OBC%OBC_mask_v(i,J)) OBC%OBC_kind_v(i,J) = OBC_SIMPLE
     enddo ; enddo
   endif
@@ -400,11 +400,11 @@ subroutine DOME_set_Open_Bdry_Conds(OBC, tv, G, param_file, advect_tracer_CSp)
                                           (2.0 - Ri_trans))
       if (k == nz)  tr_k = tr_k + tr_0 * (2.0/(Ri_trans*(2.0+Ri_trans))) * &
                                          log((2.0+Ri_trans)/(2.0-Ri_trans))
-      do J=Jsdq,Jedq ; do i=isd,ied
+      do J=JsdB,JedB ; do i=isd,ied
         if (OBC_mask_v(i,J)) then
           ! This needs to be unneccesarily complicated without symmetric memory.
           lon_im1 = 2.0*G%geoLonCv(i,J) - G%geoLonBu(I,J)
-          ! if (isd > Isdq) lon_im1 = G%geoLonBu(I-1,J)
+          ! if (isd > IsdB) lon_im1 = G%geoLonBu(I-1,J)
           OBC%vh(i,J,k) = tr_k * (exp(-2.0*(lon_im1 - 1000.0)/Def_Rad) -&
                                 exp(-2.0*(G%geoLonBu(I,J) - 1000.0)/Def_Rad))
           OBC%v(i,J,k) = v_k * exp(-2.0*(G%geoLonCv(i,J) - 1000.0)/Def_Rad)
@@ -416,7 +416,7 @@ subroutine DOME_set_Open_Bdry_Conds(OBC, tv, G, param_file, advect_tracer_CSp)
   endif
 
   if (apply_OBC_u) then
-    do k=1,nz ; do j=jsd,jed ; do I=Isdq,Iedq
+    do k=1,nz ; do j=jsd,jed ; do I=IsdB,IedB
       if (OBC_mask_u(I,j)) then
         ! An appropriate expression for the zonal inflow velocities and
         ! transports should go here.
@@ -450,14 +450,14 @@ subroutine DOME_set_Open_Bdry_Conds(OBC, tv, G, param_file, advect_tracer_CSp)
       enddo
 
       if (apply_OBC_u) then
-        allocate(OBC_T_u(Isdq:Iedq,jsd:jed,nz))
-        do k=1,nz ; do j=jsd,jed ; do I=Isdq,Iedq
+        allocate(OBC_T_u(IsdB:IedB,jsd:jed,nz))
+        do k=1,nz ; do j=jsd,jed ; do I=IsdB,IedB
           OBC_T_u(I,j,k) = T0(k)
         enddo ; enddo ; enddo
       endif
       if (apply_OBC_v) then
-        allocate(OBC_T_v(isd:ied,Jsdq:Jedq,nz))
-        do k=1,nz ; do J=Jsdq,Jedq ; do i=isd,ied
+        allocate(OBC_T_v(isd:ied,JsdB:JedB,nz))
+        do k=1,nz ; do J=JsdB,JedB ; do i=isd,ied
           OBC_T_v(i,J,k) = T0(k)
         enddo ; enddo ; enddo
       endif

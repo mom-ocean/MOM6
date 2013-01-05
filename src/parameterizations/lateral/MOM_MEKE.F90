@@ -126,7 +126,7 @@ subroutine step_forward_MEKE(MEKE, h, visc, dt, G, CS)
   real :: sdt_damp  ! dt for damping (sdt could be split).
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-  Isq = G%Iscq ; Ieq = G%Iecq ; Jsq = G%Jscq ; Jeq = G%Jecq
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
   if (.not.associated(CS)) call MOM_error(FATAL, &
          "MOM_MEKE: Module must be initialized before it is used.")
@@ -179,7 +179,7 @@ subroutine step_forward_MEKE(MEKE, h, visc, dt, G, CS)
     endif
 
     do j=js,je ; do i=is,ie
-      MEKE%MEKE(i,j) = max(0.0,MEKE%MEKE(i,j) + (sdt*CS%MEKE_BGsrc)*G%hmask(i,j))
+      MEKE%MEKE(i,j) = max(0.0,MEKE%MEKE(i,j) + (sdt*CS%MEKE_BGsrc)*G%mask2dT(i,j))
     enddo ; enddo
 
     ! With a depth-dependent (and possibly strong) damping, it seems
@@ -189,12 +189,12 @@ subroutine step_forward_MEKE(MEKE, h, visc, dt, G, CS)
     if (CS%visc_drag) then
       do j=js,je ; do I=is-1,ie
         drag_vel_u(I,j) = 0.0
-        if ((G%umask(I,j) > 0.0) .and. (visc%bbl_thick_u(I,j) > 0.0)) &
+        if ((G%mask2dCu(I,j) > 0.0) .and. (visc%bbl_thick_u(I,j) > 0.0)) &
           drag_vel_u(I,j) = visc%kv_bbl_u(I,j) / visc%bbl_thick_u(I,j)
       enddo ; enddo
       do J=js-1,je ; do i=is,ie
         drag_vel_v(i,J) = 0.0
-        if ((G%umask(i,J) > 0.0) .and. (visc%bbl_thick_v(i,J) > 0.0)) &
+        if ((G%mask2dCu(i,J) > 0.0) .and. (visc%bbl_thick_v(i,J) > 0.0)) &
           drag_vel_v(i,J) = visc%kv_bbl_v(i,J) / visc%bbl_thick_v(i,J)
       enddo ; enddo
 
@@ -222,7 +222,7 @@ subroutine step_forward_MEKE(MEKE, h, visc, dt, G, CS)
           ldamping = CS%MEKE_damping + CS%MEKE_Cd_scale * drag_rate(i,j)
 
         MEKE%MEKE(i,j) = MEKE%MEKE(i,j) / (1.0 + sdt_damp*ldamping)
-        MEKE_decay(i,j) = ldamping*G%hmask(i,j)
+        MEKE_decay(i,j) = ldamping*G%mask2dT(i,j)
       enddo ; enddo
     endif
 
@@ -284,7 +284,7 @@ subroutine step_forward_MEKE(MEKE, h, visc, dt, G, CS)
             ldamping = CS%MEKE_damping + CS%MEKE_Cd_scale * drag_rate(i,j)
 
           MEKE%MEKE(i,j) = MEKE%MEKE(i,j) / (1.0 + sdt_damp*ldamping)
-          MEKE_decay(i,j) = 0.5 * G%hmask(i,j) * (MEKE_decay(i,j) + ldamping)
+          MEKE_decay(i,j) = 0.5 * G%mask2dT(i,j) * (MEKE_decay(i,j) + ldamping)
         enddo ; enddo
       endif
     endif

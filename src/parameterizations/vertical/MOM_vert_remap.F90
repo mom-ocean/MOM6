@@ -306,16 +306,16 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, CS)
       ef(i,j,1) = 0.0
     enddo ; enddo
     do K=2,nz+1 ; do j=js,je ; do i=is,ie
-      if (G%umask(I,j) <= 0.0) then ; e_e = e(i,j,K) ; else 
+      if (G%mask2dCu(I,j) <= 0.0) then ; e_e = e(i,j,K) ; else 
         e_e = max(e(i+1,j,K) + min(e(i,j,K) - e(i+1,j,nz+1), 0.0), e(i,j,nz+1))
       endif
-      if (G%umask(I-1,j) <= 0.0) then ; e_w = e(i,j,K) ; else 
+      if (G%mask2dCu(I-1,j) <= 0.0) then ; e_w = e(i,j,K) ; else 
         e_w = max(e(i-1,j,K) + min(e(i,j,K) - e(i-1,j,nz+1), 0.0), e(i,j,nz+1))
       endif
-      if (G%vmask(i,J) <= 0.0) then ; e_n = e(i,j,K) ; else 
+      if (G%mask2dCv(i,J) <= 0.0) then ; e_n = e(i,j,K) ; else 
         e_n = max(e(i,j+1,K) + min(e(i,j,K) - e(i,j+1,nz+1), 0.0), e(i,j,nz+1))
       endif
-      if (G%vmask(i,J-1) <= 0.0) then ; e_s = e(i,j,K) ; else 
+      if (G%mask2dCv(i,J-1) <= 0.0) then ; e_s = e(i,j,K) ; else 
         e_s = max(e(i,j-1,K) + min(e(i,j,K) - e(i,j-1,nz+1), 0.0), e(i,j,nz+1))
       endif
 
@@ -362,20 +362,20 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, CS)
     ! deliberately omitted here.  This is slightly more complicated than a
     ! simple filter so that the effects of topography are eliminated.
     do K=1,nz_filt ; do i=is,ie ; if (do_i(i)) then
-      if (G%umask(I,j) <= 0.0) then ; e_e = e(i,j,K) ; else 
+      if (G%mask2dCu(I,j) <= 0.0) then ; e_e = e(i,j,K) ; else 
         e_e = max(e(i+1,j,K) + min(e(i,j,K) - e(i+1,j,nz+1), 0.0), &
                   e(i,j,nz+1) + (nz+1-k)*G%Angstrom)
 
       endif
-      if (G%umask(I-1,j) <= 0.0) then ; e_w = e(i,j,K) ; else 
+      if (G%mask2dCu(I-1,j) <= 0.0) then ; e_w = e(i,j,K) ; else 
         e_w = max(e(i-1,j,K) + min(e(i,j,K) - e(i-1,j,nz+1), 0.0), &
                   e(i,j,nz+1) + (nz+1-k)*G%Angstrom)
       endif
-      if (G%vmask(i,J) <= 0.0) then ; e_n = e(i,j,K) ; else 
+      if (G%mask2dCv(i,J) <= 0.0) then ; e_n = e(i,j,K) ; else 
         e_n = max(e(i,j+1,K) + min(e(i,j,K) - e(i,j+1,nz+1), 0.0), &
                   e(i,j,nz+1) + (nz+1-k)*G%Angstrom)
       endif
-      if (G%vmask(i,J-1) <= 0.0) then ; e_s = e(i,j,K) ; else 
+      if (G%mask2dCv(i,J-1) <= 0.0) then ; e_s = e(i,j,K) ; else 
         e_s = max(e(i,j-1,K) + min(e(i,j,K) - e(i,j-1,nz+1), 0.0), &
                   e(i,j,nz+1) + (nz+1-k)*G%Angstrom)
       endif
@@ -829,12 +829,12 @@ subroutine find_deficit_ratios(e, def_rat_u, def_rat_v, G, CS, &
     h_norm_u(I,j) = h_norm_u(I,j) + 0.5*(h1+h2)
   enddo ; enddo ; enddo
   if (present(def_rat_u_2lay)) then ; do j=js,je ; do I=is-1,ie
-    def_rat_u(I,j) = G%umask(I,j) * h_def_u(I,j) / &
+    def_rat_u(I,j) = G%mask2dCu(I,j) * h_def_u(I,j) / &
                      (max(CS%Hmix_min, h_norm_u(I,j)) + h_neglect)
-    def_rat_u_2lay(I,j) = G%umask(I,j) * h_def2_u(I,j) / &
+    def_rat_u_2lay(I,j) = G%mask2dCu(I,j) * h_def2_u(I,j) / &
                           (max(CS%Hmix_min, h_norm_u(I,j)) + h_neglect)
   enddo ; enddo ; else ; do j=js,je ; do I=is-1,ie
-    def_rat_u(I,j) = G%umask(I,j) * h_def_u(I,j) / &
+    def_rat_u(I,j) = G%mask2dCu(I,j) * h_def_u(I,j) / &
                      (max(CS%Hmix_min, h_norm_u(I,j)) + h_neglect)
   enddo ; enddo ; endif
 
@@ -878,12 +878,12 @@ subroutine find_deficit_ratios(e, def_rat_u, def_rat_v, G, CS, &
     h_norm_v(i,J) = h_norm_v(i,J) + 0.5*(h1+h2)
   enddo ; enddo ; enddo
   if (present(def_rat_v_2lay)) then ; do J=js-1,je ; do i=is,ie
-    def_rat_v(i,J) = G%vmask(i,J) * h_def_v(i,J) / &
+    def_rat_v(i,J) = G%mask2dCv(i,J) * h_def_v(i,J) / &
                       (max(CS%Hmix_min, h_norm_v(i,J)) + h_neglect)
-    def_rat_v_2lay(i,J) = G%vmask(i,J) * h_def2_v(i,J) / &
+    def_rat_v_2lay(i,J) = G%mask2dCv(i,J) * h_def2_v(i,J) / &
                       (max(CS%Hmix_min, h_norm_v(i,J)) + h_neglect)
   enddo ; enddo ; else ; do J=js-1,je ; do i=is,ie
-    def_rat_v(i,J) = G%vmask(i,J) * h_def_v(i,J) / &
+    def_rat_v(i,J) = G%mask2dCv(i,J) * h_def_v(i,J) / &
                       (max(CS%Hmix_min, h_norm_v(i,J)) + h_neglect)
   enddo ; enddo ; endif
 

@@ -600,10 +600,10 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
       if ((Tr(m)%t(i+1,j,k)-Tr(m)%t(i,j,k)) * (Tr(m)%t(i,j,k)-Tr(m)%t(i-1,j,k)) < 0.0) then
         slope_x(i,m) = 0.0
       elseif (ABS(Tr(m)%t(i+1,j,k)-Tr(m)%t(i-1,j,k))<ABS(maxslope)) then
-        slope_x(i,m) = G%umask(I,j)*G%umask(I-1,j) * &
+        slope_x(i,m) = G%mask2dCu(I,j)*G%mask2dCu(I-1,j) * &
                        0.5*(Tr(m)%t(i+1,j,k)-Tr(m)%t(i-1,j,k))
       else
-        slope_x(i,m) = G%umask(I,j)*G%umask(I-1,j) * 0.5*maxslope
+        slope_x(i,m) = G%mask2dCu(I,j)*G%mask2dCu(I-1,j) * 0.5*maxslope
       endif
     enddo ; enddo
 
@@ -652,9 +652,9 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
         if (OBC%OBC_mask_u(I,j) .and. uhr(I,j,k) /= 0.0) then
           ! Tracer fluxes are set to prescribed values only for inflows
           ! from masked areas.
-          if (((uhr(I,j,k) > 0.0) .and. ((G%hmask(i,j) < 0.5) .or. &
+          if (((uhr(I,j,k) > 0.0) .and. ((G%mask2dT(i,j) < 0.5) .or. &
                   (OBC%OBC_kind_u(I,j) == OBC_FLATHER_W))) .or. &
-              ((uhr(I,j,k) < 0.0) .and. ((G%hmask(i+1,j) < 0.5) .or. &
+              ((uhr(I,j,k) < 0.0) .and. ((G%mask2dT(i+1,j) < 0.5) .or. &
                   (OBC%OBC_kind_u(I,j) == OBC_FLATHER_E))) ) then
             do_i(I) = .true. ; do_any_i = .true.
             uhh(I) = uhr(I,j,k)
@@ -761,10 +761,10 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
     if ((Tr(m)%t(i,j+1,k)-Tr(m)%t(i,j,k))*(Tr(m)%t(i,j,k)-Tr(m)%t(i,j-1,k)) < 0.0) then
       slope_y(i,m,j) = 0.0
     elseif (ABS(Tr(m)%t(i,j+1,k)-Tr(m)%t(i,j-1,k))<ABS(maxslope)) then
-      slope_y(i,m,j) = G%vmask(i,J) * G%vmask(i,J-1) * &
+      slope_y(i,m,j) = G%mask2dCv(i,J) * G%mask2dCv(i,J-1) * &
                      0.5*(Tr(m)%t(i,j+1,k)-Tr(m)%t(i,j-1,k))
     else
-      slope_y(i,m,j) = G%vmask(i,J) * G%vmask(i,J-1) * 0.5*maxslope
+      slope_y(i,m,j) = G%mask2dCv(i,J) * G%mask2dCv(i,J-1) * 0.5*maxslope
     endif
   enddo ; enddo ; endif ; enddo ! End of i-, m-, & j- loops.
 
@@ -816,9 +816,9 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
         if (OBC%OBC_mask_v(i,J) .and. vhr(i,J,k) /= 0.0) then
         ! Tracer fluxes are set to prescribed values only for inflows
         ! from masked areas.
-          if (((vhr(i,J,k) > 0.0) .and. ((G%hmask(i,j) < 0.5) .or. &
+          if (((vhr(i,J,k) > 0.0) .and. ((G%mask2dT(i,j) < 0.5) .or. &
                   (OBC%OBC_kind_v(i,J) == OBC_FLATHER_S))) .or. &
-              ((vhr(i,J,k) < 0.0) .and. ((G%hmask(i,j+1) < 0.5) .or. &
+              ((vhr(i,J,k) < 0.0) .and. ((G%mask2dT(i,j+1) < 0.5) .or. &
                   (OBC%OBC_kind_v(i,J) == OBC_FLATHER_N))) ) then
             do_i(i) = .true. ; do_any_i = .true.
             vhh(i,J) = vhr(i,J,k)
@@ -1093,19 +1093,19 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, tv)
              (Coef_y(i,J-1) * (Tr(m)%t(i,j-1,k) - Tr(m)%t(i,j,k)) - &
               Coef_y(i,J) * (Tr(m)%t(i,j,k) - Tr(m)%t(i,j+1,k))))
         enddo ; enddo
-        if (associated(Tr(m)%df_x)) then ; do j=js,je ; do I=G%Iscq,G%Iecq
+        if (associated(Tr(m)%df_x)) then ; do j=js,je ; do I=G%IscB,G%IecB
           Tr(m)%df_x(I,j,k) = Tr(m)%df_x(I,j,k) + Coef_x(I,j) * &
                               (Tr(m)%t(i,j,k) - Tr(m)%t(i+1,j,k))*Idt
         enddo ; enddo ; endif
-        if (associated(Tr(m)%df_y)) then ; do J=G%Jscq,G%Jecq ; do i=is,ie
+        if (associated(Tr(m)%df_y)) then ; do J=G%JscB,G%JecB ; do i=is,ie
           Tr(m)%df_y(i,J,k) = Tr(m)%df_y(i,J,k) + Coef_y(i,J) * &
                               (Tr(m)%t(i,j,k) - Tr(m)%t(i,j+1,k))*Idt
         enddo ; enddo ; endif
-        if (associated(Tr(m)%df2d_x)) then ; do j=js,je ; do I=G%Iscq,G%Iecq
+        if (associated(Tr(m)%df2d_x)) then ; do j=js,je ; do I=G%IscB,G%IecB
           Tr(m)%df2d_x(I,j) = Tr(m)%df2d_x(I,j) + Coef_x(I,j) * &
                               (Tr(m)%t(i,j,k) - Tr(m)%t(i+1,j,k))*Idt
         enddo ; enddo ; endif
-        if (associated(Tr(m)%df2d_y)) then ; do J=G%Jscq,G%Jecq ; do i=is,ie
+        if (associated(Tr(m)%df2d_y)) then ; do J=G%JscB,G%JecB ; do i=is,ie
           Tr(m)%df2d_y(i,J) = Tr(m)%df2d_y(i,J) + Coef_y(i,J) * &
                               (Tr(m)%t(i,j,k) - Tr(m)%t(i,j+1,k))*Idt
         enddo ; enddo ; endif
@@ -1131,13 +1131,13 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, tv)
 
   if (CS%id_KhTr_u > 0) then
     do j=js,je ; do I=is-1,ie
-      Kh_u(I,j) = G%umask(I,j)*Kh_u(I,j)
+      Kh_u(I,j) = G%mask2dCu(I,j)*Kh_u(I,j)
     enddo ; enddo
     call post_data(CS%id_KhTr_u, Kh_u, CS%diag)
   endif
   if (CS%id_KhTr_v > 0) then
     do J=js-1,je ; do i=is,ie
-      Kh_v(i,J) = G%vmask(i,J)*Kh_v(i,J)
+      Kh_v(i,J) = G%mask2dCv(i,J)*Kh_v(i,J)
     enddo ; enddo
     call post_data(CS%id_KhTr_v, Kh_v, CS%diag)
   endif
@@ -1254,14 +1254,14 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, khdt_epi_x, khdt_epi_y, G, CS, &
 
   integer :: k_max, k_min, k_test, itmp
   integer :: i, j, k, k2, m, is, ie, js, je, nz, ntr, nkmb
-  integer :: isd, ied, jsd, jed, Isdq, Iedq, k_size
+  integer :: isd, ied, jsd, jed, IsdB, IedB, k_size
   integer :: kL, kR, kLa, kLb, kRa, kRb, nP, itt, ns, max_itt
   integer :: PEmax_kRho
   integer :: isv, iev, jsv, jev ! The valid range of the indices.
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  Isdq = G%Isdq ; Iedq = G%Iedq
+  IsdB = G%IsdB ; IedB = G%IedB
   ntr = CS%ntr
   Idt = 1.0/dt
   nkmb = G%nk_rho_varies
@@ -1298,7 +1298,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, khdt_epi_x, khdt_epi_y, G, CS, &
   !   Use bracketing and bisection to find the k-level that the densest of the
   ! mixed and buffer layer corresponds to, such that:
   !     G%Rlay(max_kRho-1) < Rml_max <= G%Rlay(max_kRho)
-  do j=js-2,je+2 ; do i=is-2,ie+2 ; if (G%hmask(i,j) > 0.5) then
+  do j=js-2,je+2 ; do i=is-2,ie+2 ; if (G%mask2dT(i,j) > 0.5) then
     if (Rml_max(i,j) > G%Rlay(nz)) then ; max_kRho(i,j) = nz+1
     elseif (Rml_max(i,j) <= G%Rlay(nkmb+1)) then ; max_kRho(i,j) = nkmb+1
     else
@@ -1324,7 +1324,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, khdt_epi_x, khdt_epi_y, G, CS, &
 
   h_exclude = 10.0*(G%Angstrom + G%H_subroundoff)
 
-  do k=1,nkmb ; do j=js-1,je+1 ; do i=is-1,ie+1 ; if (G%hmask(i,j) > 0.5) then
+  do k=1,nkmb ; do j=js-1,je+1 ; do i=is-1,ie+1 ; if (G%mask2dT(i,j) > 0.5) then
     if (h(i,j,k) > h_exclude) then
       num_srt(i,j) = num_srt(i,j) + 1 ; ns = num_srt(i,j)
       k0_srt(i,ns,j) = k
@@ -1332,7 +1332,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, khdt_epi_x, khdt_epi_y, G, CS, &
       h_srt(i,ns,j) = h(i,j,k)
     endif
   endif ; enddo ; enddo ; enddo
-  do k=nkmb+1,PEmax_kRho ; do j=js-1,je+1 ; do i=is-1,ie+1 ; if (G%hmask(i,j) > 0.5) then
+  do k=nkmb+1,PEmax_kRho ; do j=js-1,je+1 ; do i=is-1,ie+1 ; if (G%mask2dT(i,j) > 0.5) then
     if ((k<=k_end_srt(i,j)) .and. (h(i,j,k) > h_exclude)) then
       num_srt(i,j) = num_srt(i,j) + 1 ; ns = num_srt(i,j)
       k0_srt(i,ns,j) = k
@@ -1361,17 +1361,17 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, khdt_epi_x, khdt_epi_y, G, CS, &
 
   do j=js,je
     k_size = max(2*max_srt(j),1)
-    allocate(deep_wt_Lu(j)%p(Isdq:Iedq,k_size))
-    allocate(deep_wt_Ru(j)%p(Isdq:Iedq,k_size))
-    allocate(hP_Lu(j)%p(Isdq:Iedq,k_size))
-    allocate(hP_Ru(j)%p(Isdq:Iedq,k_size))
-    allocate(k0a_Lu(j)%p(Isdq:Iedq,k_size))
-    allocate(k0a_Ru(j)%p(Isdq:Iedq,k_size))
-    allocate(k0b_Lu(j)%p(Isdq:Iedq,k_size))
-    allocate(k0b_Ru(j)%p(Isdq:Iedq,k_size))
+    allocate(deep_wt_Lu(j)%p(IsdB:IedB,k_size))
+    allocate(deep_wt_Ru(j)%p(IsdB:IedB,k_size))
+    allocate(hP_Lu(j)%p(IsdB:IedB,k_size))
+    allocate(hP_Ru(j)%p(IsdB:IedB,k_size))
+    allocate(k0a_Lu(j)%p(IsdB:IedB,k_size))
+    allocate(k0a_Ru(j)%p(IsdB:IedB,k_size))
+    allocate(k0b_Lu(j)%p(IsdB:IedB,k_size))
+    allocate(k0b_Ru(j)%p(IsdB:IedB,k_size))
   enddo
 
-  do j=js,je ; do I=is-1,ie ; if (G%umask(I,j) > 0.5) then
+  do j=js,je ; do I=is-1,ie ; if (G%mask2dCu(I,j) > 0.5) then
     ! Set up the pairings for fluxes through the zonal faces.
 
     do k=1,num_srt(i,j)   ; h_demand_L(k) = 0.0 ; h_used_L(k) = 0.0 ; enddo
@@ -1517,7 +1517,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, khdt_epi_x, khdt_epi_y, G, CS, &
     allocate(k0b_Rv(J)%p(isd:ied,k_size))
   enddo
 
-  do J=js-1,je ; do i=is,ie ; if (G%vmask(i,J) > 0.5) then
+  do J=js-1,je ; do i=is,ie ; if (G%mask2dCv(i,J) > 0.5) then
     ! Set up the pairings for fluxes through the meridional faces.
 
     do k=1,num_srt(i,j)   ; h_demand_L(k) = 0.0 ; h_used_L(k) = 0.0 ; enddo
@@ -1672,7 +1672,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, khdt_epi_x, khdt_epi_y, G, CS, &
 
     do m=1,ntr
     
-      do j=js,je ; do I=is-1,ie ; if (G%umask(I,j) > 0.5) then
+      do j=js,je ; do I=is-1,ie ; if (G%mask2dCu(I,j) > 0.5) then
         ! Determine the fluxes through the zonal faces.
 
         ! Find the acceptable range of tracer concentration around this face.
@@ -1805,7 +1805,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, khdt_epi_x, khdt_epi_y, G, CS, &
         enddo ! Loop over pairings at faces.
       endif ; enddo ; enddo ! i- & j- loops over zonal faces.
 
-      do J=js-1,je ; do i=is,ie ; if (G%vmask(i,J) > 0.5) then
+      do J=js-1,je ; do i=is,ie ; if (G%mask2dCv(i,J) > 0.5) then
         ! Determine the fluxes through the meridional faces.
 
         ! Find the acceptable range of tracer concentration around this face.
@@ -1930,7 +1930,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, khdt_epi_x, khdt_epi_y, G, CS, &
 
 
       do k=1,PEmax_kRho ; do j=js,je ; do i=is,ie
-        if ((G%hmask(i,j) > 0.5) .and. (h(i,j,k) > 0.0)) then
+        if ((G%mask2dT(i,j) > 0.5) .and. (h(i,j,k) > 0.0)) then
           Tr(m)%t(i,j,k) = Tr(m)%t(i,j,k) + tr_flux_conv(i,j,k) / &
                                             (h(i,j,k)*G%areaT(i,j))
           tr_flux_conv(i,j,k) = 0.0
@@ -2047,7 +2047,7 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, &
       enddo
 
       ! Now solve the tridiagonal equation for the tracer concentrations.
-      do i=is,ie ; if (G%hmask(i,j) > 0.5) then
+      do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
         b_denom_1 = h_minus_dsink(i,1) + ea(i,j,1) + h_neglect
         b1(i) = 1.0 / (b_denom_1 + eb(i,j,1))
         d1(i) = b_denom_1 * b1(i)
@@ -2055,7 +2055,7 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, &
         h_tr = h_old(i,j,1) + h_neglect
         tr(i,j,1) = b1(i)*(h_tr*tr(i,j,1) + sfc_src(i))
       endif ; enddo
-      do k=2,nz-1 ; do i=is,ie ; if (G%hmask(i,j) > 0.5) then
+      do k=2,nz-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
         c1(i,k) = eb(i,j,k-1) * b1(i)
         b_denom_1 = h_minus_dsink(i,k) + d1(i) * (ea(i,j,k) + sink(i,K)) + &
                     h_neglect
@@ -2065,7 +2065,7 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, &
         tr(i,j,k) = b1(i) * (h_tr * tr(i,j,k) + &
                              (ea(i,j,k) + sink(i,K)) * tr(i,j,k-1))
       endif ; enddo ; enddo
-      do i=is,ie ; if (G%hmask(i,j) > 0.5) then
+      do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
         c1(i,nz) = eb(i,j,nz-1) * b1(i)
         b_denom_1 = h_minus_dsink(i,nz) + d1(i) * (ea(i,j,nz) + sink(i,nz)) + &
                     h_neglect
@@ -2075,18 +2075,18 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, &
         tr(i,j,nz) = b1(i) * ((h_tr * tr(i,j,nz) + btm_src(i)) + &
                               (ea(i,j,nz) + sink(i,nz)) * tr(i,j,nz-1))
       endif ; enddo
-      if (present(btm_reservoir)) then ; do i=is,ie ; if (G%hmask(i,j)>0.5) then
+      if (present(btm_reservoir)) then ; do i=is,ie ; if (G%mask2dT(i,j)>0.5) then
         btm_reservoir(i,j) = btm_reservoir(i,j) + &
                              (sink(i,nz+1)*tr(i,j,nz)) * G%H_to_kg_m2
       endif ; enddo ; endif
 
-      do k=nz-1,1,-1 ; do i=is,ie ; if (G%hmask(i,j) > 0.5) then
+      do k=nz-1,1,-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
         tr(i,j,k) = tr(i,j,k) + c1(i,k+1)*tr(i,j,k+1)
       endif ; enddo ; enddo
     enddo
   else
     do j=js,je
-      do i=is,ie ; if (G%hmask(i,j) > 0.5) then
+      do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
         h_tr = h_old(i,j,1) + h_neglect
         b_denom_1 = h_tr + ea(i,j,1)
         b1(i) = 1.0 / (b_denom_1 + eb(i,j,1))
@@ -2094,7 +2094,7 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, &
         if (present(sfc_flux)) sfc_src(i) = (sfc_flux(i,j)*dt) * G%kg_m2_to_H
         tr(i,j,1) = b1(i)*(h_tr*tr(i,j,1) + sfc_src(i))
       endif ; enddo
-      do k=2,nz-1 ; do i=is,ie ; if (G%hmask(i,j) > 0.5) then
+      do k=2,nz-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
         c1(i,k) = eb(i,j,k-1) * b1(i)
         h_tr = h_old(i,j,k) + h_neglect
         b_denom_1 = h_tr + d1(i) * ea(i,j,k)
@@ -2102,7 +2102,7 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, &
         d1(i) = b_denom_1 * b1(i)
         tr(i,j,k) = b1(i) * (h_tr * tr(i,j,k) + ea(i,j,k) * tr(i,j,k-1))
       endif ; enddo ; enddo
-      do i=is,ie ; if (G%hmask(i,j) > 0.5) then
+      do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
         c1(i,nz) = eb(i,j,nz-1) * b1(i)
         h_tr = h_old(i,j,nz) + h_neglect
         b1(i) = 1.0 / (h_tr + d1(i) * ea(i,j,nz) + eb(i,j,nz))
@@ -2110,7 +2110,7 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, &
         tr(i,j,nz) = b1(i) * ((h_tr * tr(i,j,nz) + btm_src(i)) + &
                               ea(i,j,nz) * tr(i,j,nz-1))
       endif ; enddo
-      do k=nz-1,1,-1 ; do i=is,ie ; if (G%hmask(i,j) > 0.5) then
+      do k=nz-1,1,-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
         tr(i,j,k) = tr(i,j,k) + c1(i,k+1)*tr(i,j,k+1)
       endif ; enddo ; enddo
     enddo

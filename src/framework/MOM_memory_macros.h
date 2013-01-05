@@ -75,8 +75,8 @@
 #  define SZI_(G)     G%isd:G%ied
 #  define SZJ_(G)     G%jsd:G%jed
 #  define SZK_(G)     G%ks:G%ke
-#  define SZIB_(G)    G%Isdq:G%Iedq
-#  define SZJB_(G)    G%Jsdq:G%Jedq
+#  define SZIB_(G)    G%IsdB:G%IedB
+#  define SZJB_(G)    G%JsdB:G%JedB
 #  define SZIBS_(G)   G%isd-1:G%ied
 #  define SZJBS_(G)   G%jsd-1:G%jed
 

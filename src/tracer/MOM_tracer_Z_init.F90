@@ -134,7 +134,7 @@ function tracer_Z_init(tr, h, filename, tr_name, G, missing_val, land_val)
   ! from type-conversion rounoff.
   if (present(missing_val)) then
     do j=js,je ; do i=is,ie
-      if (G%hmask(i,j) == 0.0) then
+      if (G%mask2dT(i,j) == 0.0) then
         tr_in(i,j,1) = landval
       elseif (abs(tr_in(i,j,1) - missing_val) <= 1e-6*abs(missing_val)) then
         write(loc_msg,'(f7.2," N ",f7.2," E")') G%geoLatT(i,j), G%geoLonT(i,j)
@@ -165,7 +165,7 @@ function tracer_Z_init(tr, h, filename, tr_name, G, missing_val, land_val)
       do i=is,ie ; htot(i) = 0.0 ; enddo
       do k=1,nz ; do i=is,ie ; htot(i) = htot(i) + h(i,j,k) ; enddo ; enddo
 
-      do i=is,ie ; if (G%hmask(i,j)*htot(i) > 0.0) then
+      do i=is,ie ; if (G%mask2dT(i,j)*htot(i) > 0.0) then
         ! Determine the z* heights of the model interfaces.
         dilate = (G%bathyT(i,j) - 0.0) / htot(i)
         e(nz+1) = -G%bathyT(i,j)
@@ -240,7 +240,7 @@ function tracer_Z_init(tr, h, filename, tr_name, G, missing_val, land_val)
       do i=is,ie ; htot(i) = 0.0 ; enddo
       do k=1,nz ; do i=is,ie ; htot(i) = htot(i) + h(i,j,k) ; enddo ; enddo
 
-      do i=is,ie ; if (G%hmask(i,j)*htot(i) > 0.0) then
+      do i=is,ie ; if (G%mask2dT(i,j)*htot(i) > 0.0) then
         ! Determine the z* heights of the model interfaces.
         dilate = (G%bathyT(i,j) - 0.0) / htot(i)
         e(nz+1) = -G%bathyT(i,j)

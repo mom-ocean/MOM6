@@ -260,7 +260,7 @@ subroutine step_MOM_dyn_split_RK2(u_in, v_in, h_in, eta_in, uhbt_in, vhbt_in, &
   integer :: pid_h, pid_u, pid_u_av, pid_uh, pid_uhbt_in
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-  Isq = G%Iscq ; Ieq = G%Iecq ; Jsq = G%Jscq ; Jeq = G%Jecq
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   Idt = 1.0 / dt
 
   if (CS%debug) then
@@ -399,10 +399,10 @@ subroutine step_MOM_dyn_split_RK2(u_in, v_in, h_in, eta_in, uhbt_in, vhbt_in, &
 
   call cpu_clock_begin(id_clock_vertvisc)
   do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-    u_out(i,j,k) = G%umask(i,j) * (u_in(i,j,k) + dt * u_bc_accel(I,j,k))
+    u_out(i,j,k) = G%mask2dCu(i,j) * (u_in(i,j,k) + dt * u_bc_accel(I,j,k))
   enddo ; enddo ;  enddo
   do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-    v_out(i,j,k) = G%vmask(i,j) * (v_in(i,j,k) + dt * v_bc_accel(i,J,k))
+    v_out(i,j,k) = G%mask2dCv(i,j) * (v_in(i,j,k) + dt * v_bc_accel(i,J,k))
   enddo ; enddo ;  enddo
   call enable_averaging(dt, Time_local, CS%diag)
   call set_viscous_ML(u_in, v_in, h_in, CS%tv, fluxes, CS%visc, dt, G, &
@@ -523,12 +523,12 @@ subroutine step_MOM_dyn_split_RK2(u_in, v_in, h_in, eta_in, uhbt_in, vhbt_in, &
   dt_pred = dt * CS%be
   call cpu_clock_begin(id_clock_mom_update)
   do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-    v_out(i,J,k) = G%vmask(i,J) * (v_init(i,J,k) + dt_pred * &
+    v_out(i,J,k) = G%mask2dCv(i,J) * (v_init(i,J,k) + dt_pred * &
                     (v_bc_accel(i,J,k) + CS%v_accel_bt(i,J,k)))
   enddo ; enddo ;  enddo
 
   do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-    u_out(i,j,k) = G%umask(i,j) * (u_init(i,j,k) + dt_pred  * &
+    u_out(i,j,k) = G%mask2dCu(i,j) * (u_init(i,j,k) + dt_pred  * &
                     (u_bc_accel(I,j,k) + CS%u_accel_bt(I,j,k)))
   enddo ; enddo ;  enddo
   call cpu_clock_end(id_clock_mom_update)
@@ -746,7 +746,7 @@ subroutine step_MOM_dyn_split_RK2(u_in, v_in, h_in, eta_in, uhbt_in, vhbt_in, &
 ! u_out = u_in + dt*( u_bc_accel + u_accel_bt )
   call cpu_clock_begin(id_clock_mom_update)
   do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-    u_out(i,j,k) = G%umask(i,j) * (u_init(i,j,k) + dt * &
+    u_out(i,j,k) = G%mask2dCu(i,j) * (u_init(i,j,k) + dt * &
                     (u_bc_accel(I,j,k) + CS%u_accel_bt(I,j,k)))
   enddo ; enddo ; enddo
   if (ASSOCIATED(CS%diag%PFu_tot)) then ; do k=1,nz ; do j=js,je ; do I=Isq,Ieq
@@ -757,7 +757,7 @@ subroutine step_MOM_dyn_split_RK2(u_in, v_in, h_in, eta_in, uhbt_in, vhbt_in, &
   enddo ; enddo ; enddo ; endif
 
   do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-    v_out(i,j,k) = G%vmask(i,j) * (v_init(i,j,k) + dt * &
+    v_out(i,j,k) = G%mask2dCv(i,j) * (v_init(i,j,k) + dt * &
                     (v_bc_accel(i,J,k) + CS%v_accel_bt(i,J,k)))
   enddo ; enddo ; enddo
   if (ASSOCIATED(CS%diag%PFv_tot)) then ; do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie

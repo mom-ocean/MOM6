@@ -332,7 +332,7 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
 !---------------------------------------
 ! Work on each column.
 !---------------------------------------
-    do i=is,ie ; if (G%hmask(i,j) > 0.5) then
+    do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
     ! call cpu_clock_begin(id_clock_setup)
       ! Store a transposed version of the initial arrays.
       ! Any elimination of massless layers would occur here.
@@ -846,8 +846,8 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
     endif ; enddo ! i-loop
 
     do K=1,nz+1 ; do i=is,ie
-      kappa_io(i,j,K) = G%hmask(i,j) * kappa_2d(i,K)
-      tke_io(i,j,K) = G%hmask(i,j) * tke_2d(i,K)
+      kappa_io(i,j,K) = G%mask2dT(i,j) * kappa_2d(i,K)
+      tke_io(i,j,K) = G%mask2dT(i,j) * tke_2d(i,K)
 #ifdef ADD_DIAGNOSTICS
       I_Ld2_3d(i,j,K) = I_Ld2_2d(i,K)
       dz_Int_3d(i,j,K) = dz_Int_2d(i,K)

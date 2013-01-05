@@ -101,12 +101,12 @@ subroutine check_redundant_v2d(mesg, u_comp, v_comp, G, is, ie, js, je, &
   character(len=128) :: mesg2
  
   integer :: i, j, is_ch, ie_ch, js_ch, je_ch
-  integer :: Isq, Ieq, Jsq, Jeq, isd, ied, jsd, jed, Isdq, Iedq, Jsdq, Jedq
-  Isq = G%Iscq ; Ieq = G%Iecq ; Jsq = G%Jscq ; Jeq = G%Jecq
+  integer :: Isq, Ieq, Jsq, Jeq, isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  Isdq = G%Isdq ; Iedq = G%Iedq ; Jsdq = G%Jsdq ; Jedq = G%Jedq
+  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
-  if ((isd == Isdq) .and. (jsd == Jsdq)) return
+  if ((isd == IsdB) .and. (jsd == JsdB)) return
 
   do i=isd,ied ; do j=jsd,jed
     u_nonsym(i,j) = u_comp(i,j) ; v_nonsym(i,j) = v_comp(i,j)
@@ -116,8 +116,8 @@ subroutine check_redundant_v2d(mesg, u_comp, v_comp, G, is, ie, js, je, &
     " called with a non-associated auxiliary domain the grid type.")
   call pass_vector(u_nonsym, v_nonsym, G%Domain_aux, direction, stagger)
 
-  do I=Isdq,Iedq ; do j=jsd,jed ; u_resym(I,j) = u_comp(I,j) ; enddo ; enddo
-  do i=isd,ied ; do J=Jsdq,Jedq ; v_resym(i,J) = v_comp(i,J) ; enddo ; enddo
+  do I=IsdB,IedB ; do j=jsd,jed ; u_resym(I,j) = u_comp(I,j) ; enddo ; enddo
+  do i=isd,ied ; do J=JsdB,JedB ; v_resym(i,J) = v_comp(i,J) ; enddo ; enddo
   do i=isd,ied ; do j=jsd,jed
     u_resym(i,j) = u_nonsym(i,j) ; v_resym(i,j) = v_nonsym(i,j)
   enddo ; enddo
@@ -193,12 +193,12 @@ subroutine check_redundant_s2d(mesg, array, G, is, ie, js, je, stagger)
   character(len=128) :: mesg2
  
   integer :: i, j, is_ch, ie_ch, js_ch, je_ch
-  integer :: Isq, Ieq, Jsq, Jeq, isd, ied, jsd, jed, Isdq, Iedq, Jsdq, Jedq
-  Isq = G%Iscq ; Ieq = G%Iecq ; Jsq = G%Jscq ; Jeq = G%Jecq
+  integer :: Isq, Ieq, Jsq, Jeq, isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  Isdq = G%Isdq ; Iedq = G%Iedq ; Jsdq = G%Jsdq ; Jedq = G%Jedq
+  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
-  if ((isd == Isdq) .and. (jsd == Jsdq)) return
+  if ((isd == IsdB) .and. (jsd == JsdB)) return
 
   do i=isd,ied ; do j=jsd,jed
     a_nonsym(i,j) = array(i,j)
@@ -209,7 +209,7 @@ subroutine check_redundant_s2d(mesg, array, G, is, ie, js, je, stagger)
   call pass_vector(a_nonsym, a_nonsym, G%Domain_aux, &
                    direction=To_All+Scalar_Pair, stagger=BGRID_NE)
 
-  do I=Isdq,Iedq ; do J=Jsdq,Jedq ; a_resym(I,J) = array(I,J) ; enddo ; enddo
+  do I=IsdB,IedB ; do J=JsdB,JedB ; a_resym(I,J) = array(I,J) ; enddo ; enddo
   do i=isd,ied ; do j=jsd,jed
     a_resym(i,j) = a_nonsym(i,j)
   enddo ; enddo

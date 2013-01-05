@@ -192,7 +192,7 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, Time_local, dt, fluxes, &
   logical :: dyn_p_surf
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-  Isq = G%Iscq ; Ieq = G%Iecq ; Jsq = G%Jscq ; Jeq = G%Jecq
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   dt_pred = dt * CS%BE
 
   h_av(:,:,:) = 0; hp(:,:,:) = 0
@@ -268,11 +268,11 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, Time_local, dt, fluxes, &
 ! up+[n-1/2] = u[n-1] + dt_pred * (PFu + CAu)
   call cpu_clock_begin(id_clock_mom_update)
   do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-    up(i,j,k) = G%umask(i,j) * (u_in(i,j,k) + dt_pred * &
+    up(i,j,k) = G%mask2dCu(i,j) * (u_in(i,j,k) + dt_pred * &
                    ((CS%PFu(i,j,k) + CS%CAu(i,j,k)) + CS%diffu(I,j,k)))
   enddo ; enddo ; enddo
   do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-    vp(i,j,k) = G%vmask(i,j) * (v_in(i,j,k) + dt_pred * &
+    vp(i,j,k) = G%mask2dCv(i,j) * (v_in(i,j,k) + dt_pred * &
                    ((CS%PFv(i,j,k) + CS%CAv(i,j,k)) + CS%diffv(i,J,k)))
   enddo ; enddo ; enddo
   call cpu_clock_end(id_clock_mom_update)
@@ -345,15 +345,15 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, Time_local, dt, fluxes, &
 ! up* = u[n] + (1+gamma) * dt * ( PFu + CAu )  Extrapolated for damping
 ! u*[n+1] = u[n] + dt * ( PFu + CAu )
   do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-    up(i,j,k) = G%umask(i,j) * (u_in(i,j,k) + dt * (1.+CS%begw) * &
+    up(i,j,k) = G%mask2dCu(i,j) * (u_in(i,j,k) + dt * (1.+CS%begw) * &
             ((CS%PFu(i,j,k) + CS%CAu(i,j,k)) + CS%diffu(I,j,k)))
-    u_in(i,j,k) = G%umask(i,j) * (u_in(i,j,k) + dt * &
+    u_in(i,j,k) = G%mask2dCu(i,j) * (u_in(i,j,k) + dt * &
             ((CS%PFu(i,j,k) + CS%CAu(i,j,k)) + CS%diffu(I,j,k)))
   enddo ; enddo ; enddo
   do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-    vp(i,j,k) = G%vmask(i,j) * (v_in(i,j,k) + dt * (1.+CS%begw) * &
+    vp(i,j,k) = G%mask2dCv(i,j) * (v_in(i,j,k) + dt * (1.+CS%begw) * &
             ((CS%PFv(i,j,k) + CS%CAv(i,j,k)) + CS%diffv(i,J,k)))
-    v_in(i,j,k) = G%vmask(i,j) * (v_in(i,j,k) + dt * &
+    v_in(i,j,k) = G%mask2dCv(i,j) * (v_in(i,j,k) + dt * &
             ((CS%PFv(i,j,k) + CS%CAv(i,j,k)) + CS%diffv(i,J,k)))
   enddo ; enddo ; enddo
 

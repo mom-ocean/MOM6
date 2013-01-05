@@ -678,15 +678,15 @@ subroutine btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   integer :: isvf, ievf, jsvf, jevf, num_cycles
   integer :: i, j, k, n
   integer :: is, ie, js, je, nz, Isq, Ieq, Jsq, Jeq
-  integer :: isd, ied, jsd, jed, Isdq, Iedq, Jsdq, Jedq
+  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
 
   if (.not.associated(CS)) call MOM_error(FATAL, &
       "btstep: Module MOM_barotropic must be initialized before it is used.")
   if (.not.CS%split) return
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-  Isq = G%Iscq ; Ieq = G%Iecq ; Jsq = G%Jscq ; Jeq = G%Jecq
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  Isdq = G%Isdq ; Iedq = G%Iedq ; Jsdq = G%Jsdq ; Jedq = G%Jedq
+  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
   MS%isdw = CS%isdw ; MS%iedw = CS%iedw ; MS%jsdw = CS%jsdw ; MS%jedw = CS%jedw
   Idt = 1.0 / dt
 
@@ -1121,7 +1121,7 @@ subroutine btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   if (use_fluxes .and. present(sum_u_dhdt) .and. present(sum_v_dhdt)) then
     ! Add the effective accelerations from u dh/dt and v dh/dt.
     if (use_BT_cont) then
-      do j=js,je ; do I=is-1,ie ; if (G%umask(I,j)>0.0) then
+      do j=js,je ; do I=is-1,ie ; if (G%mask2dCu(I,j)>0.0) then
         dvel_cont = uhbt_to_ubt(dt*sum_u_dhdt(I,j), BTCL_u(I,j))
         ! dvel_cont = (uhbt_to_ubt(dt*sum_u_dhdt(I,j) + uhbt(I,j), &
         !                          BTCL_u(I,j)) - ubt_Cor(I,j))
@@ -1129,7 +1129,7 @@ subroutine btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
           dvel_cont = SIGN(CS%maxCFL_BT_cont*G%dxCu(I,j), dvel_cont)
         BT_force_u(I,j) = BT_force_u(I,j) + dvel_cont * Idt
       endif ; enddo ; enddo
-      do J=js-1,je ; do i=is,ie ; if (G%vmask(i,J)>0.0) then
+      do J=js-1,je ; do i=is,ie ; if (G%mask2dCv(i,J)>0.0) then
         dvel_cont = vhbt_to_vbt(dt*sum_v_dhdt(i,J), BTCL_v(i,J))
         ! dvel_cont = (vhbt_to_vbt(dt*sum_v_dhdt(i,J) + vhbt(i,J), &
         !                          BTCL_v(i,J)) - vbt_Cor(i,J))
@@ -1159,8 +1159,8 @@ subroutine btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
       pid_tmp_u = pass_vector_start(tmp_u, tmp_v, G%Domain)
     else
       call pass_vector(tmp_u, tmp_v, G%Domain, complete=.true.)
-      do j=jsd,jed ; do I=Isdq,Iedq ; BT_force_u(I,j) = tmp_u(I,j) ; enddo ; enddo
-      do J=Jsdq,Jedq ; do i=isd,ied ; BT_force_v(i,J) = tmp_v(i,J) ; enddo ; enddo
+      do j=jsd,jed ; do I=IsdB,IedB ; BT_force_u(I,j) = tmp_u(I,j) ; enddo ; enddo
+      do J=JsdB,JedB ; do i=isd,ied ; BT_force_v(i,J) = tmp_v(i,J) ; enddo ; enddo
     endif
     if (id_clock_pass_pre > 0) call cpu_clock_end(id_clock_pass_pre)
     if (id_clock_calc_pre > 0) call cpu_clock_begin(id_clock_calc_pre)
@@ -1272,8 +1272,8 @@ subroutine btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   if (nonblock_setup) then
     if ((Isq > is-1) .or. (Jsq > js-1)) then
       call pass_vector_complete(pid_tmp_u, tmp_u, tmp_v, G%Domain)
-      do j=jsd,jed ; do I=Isdq,Iedq ; BT_force_u(I,j) = tmp_u(I,j) ; enddo ; enddo
-      do J=Jsdq,Jedq ; do i=isd,ied ; BT_force_v(i,J) = tmp_v(i,J) ; enddo ; enddo
+      do j=jsd,jed ; do I=IsdB,IedB ; BT_force_u(I,j) = tmp_u(I,j) ; enddo ; enddo
+      do J=JsdB,JedB ; do i=isd,ied ; BT_force_v(i,J) = tmp_v(i,J) ; enddo ; enddo
     endif
     call pass_vector_complete(pid_gtot_E, gtot_E, gtot_N, CS%BT_Domain, To_All+Scalar_Pair, AGRID)
     call pass_vector_complete(pid_gtot_W, gtot_W, gtot_S, CS%BT_Domain, To_All+Scalar_Pair, AGRID)
@@ -1297,7 +1297,7 @@ subroutine btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
 !# if (use_fluxes .and. present(sum_u_dhdt) .and. present(sum_v_dhdt)) then
 !#   ! Add the effective accelerations from u dh/dt and v dh/dt.
 !#   if (use_BT_cont) then
-!#     do j=js,je ; do I=is-1,ie ; if (G%umask(I,j)>0.0) then
+!#     do j=js,je ; do I=is-1,ie ; if (G%mask2dCu(I,j)>0.0) then
 !#       ! dvel_cont = uhbt_to_ubt(dt*sum_u_dhdt(I,j), BTCL_u(I,j))
 !#       dvel_cont = (uhbt_to_ubt(dt*sum_u_dhdt(I,j) + uhbt(I,j), &
 !#                                BTCL_u(I,j)) - ubt_Cor(I,j))
@@ -1305,7 +1305,7 @@ subroutine btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
 !#         dvel_cont = SIGN(CS%maxCFL_BT_cont*G%dxCu(I,j), dvel_cont)
 !#       BT_force_u(I,j) = BT_force_u(I,j) + dvel_cont * Idt
 !#     endif ; enddo ; enddo
-!#     do J=js-1,je ; do i=is,ie ; if (G%vmask(i,J)>0.0) then
+!#     do J=js-1,je ; do i=is,ie ; if (G%mask2dCv(i,J)>0.0) then
 !#       ! dvel_cont = vhbt_to_vbt(dt*sum_v_dhdt(i,J), BTCL_v(i,J))
 !#       dvel_cont = (vhbt_to_vbt(dt*sum_v_dhdt(i,J) + vhbt(i,J), &
 !#                                BTCL_v(i,J)) - vbt_Cor(i,J))
@@ -1338,8 +1338,8 @@ subroutine btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   if (id_clock_pass_pre > 0) call cpu_clock_end(id_clock_pass_pre)
   if (id_clock_calc_pre > 0) call cpu_clock_begin(id_clock_calc_pre)
 
-  do j=js-1,je+1 ; do I=is-1,ie ; bt_rem_u(I,j) = G%umask(I,j) ; enddo ; enddo
-  do J=js-1,je ; do i=is-1,ie+1 ; bt_rem_v(i,J) = G%vmask(i,J) ; enddo ; enddo
+  do j=js-1,je+1 ; do I=is-1,ie ; bt_rem_u(I,j) = G%mask2dCu(I,j) ; enddo ; enddo
+  do J=js-1,je ; do i=is-1,ie+1 ; bt_rem_v(i,J) = G%mask2dCv(i,J) ; enddo ; enddo
   if ((use_visc_rem) .and. (CS%drag_amp > 0.0)) then
     do j=js-1,je+1 ; do I=is-1,ie ; av_rem_u(I,j) = 0.0 ; enddo ; enddo
     do J=js-1,je ; do i=is-1,ie+1 ; av_rem_v(i,J) = 0.0 ; enddo ; enddo
@@ -1351,23 +1351,23 @@ subroutine btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
     enddo ; enddo ; enddo
     if (CS%strong_drag) then
       do j=js-1,je+1 ; do I=is-1,ie
-        bt_rem_u(I,j) = G%umask(I,j) * CS%drag_amp * &
+        bt_rem_u(I,j) = G%mask2dCu(I,j) * CS%drag_amp * &
            ((nstep * av_rem_u(I,j)) / (1.0 + (nstep-1)*av_rem_u(I,j)))
       enddo ; enddo
       do J=js-1,je ; do i=is-1,ie+1
-        bt_rem_v(i,J) = G%vmask(i,J) * CS%drag_amp * &
+        bt_rem_v(i,J) = G%mask2dCv(i,J) * CS%drag_amp * &
            ((nstep * av_rem_v(i,J)) / (1.0 + (nstep-1)*av_rem_v(i,J)))
       enddo ; enddo
     else
       do j=js-1,je+1 ; do I=is-1,ie
         bt_rem_u(I,j) = 0.0
-        if (G%umask(I,j) * av_rem_u(I,j) > 0.0) &
-          bt_rem_u(I,j) = G%umask(I,j) * CS%drag_amp * (av_rem_u(I,j)**Instep)
+        if (G%mask2dCu(I,j) * av_rem_u(I,j) > 0.0) &
+          bt_rem_u(I,j) = G%mask2dCu(I,j) * CS%drag_amp * (av_rem_u(I,j)**Instep)
       enddo ; enddo
       do J=js-1,je ; do i=is-1,ie+1
         bt_rem_v(i,J) = 0.0
-        if (G%vmask(i,J) * av_rem_v(i,J) > 0.0) &
-          bt_rem_v(i,J) = G%vmask(i,J) * CS%drag_amp * (av_rem_v(i,J)**Instep)
+        if (G%mask2dCv(i,J) * av_rem_v(i,J) > 0.0) &
+          bt_rem_v(i,J) = G%mask2dCv(i,J) * CS%drag_amp * (av_rem_v(i,J)**Instep)
       enddo ; enddo
     endif
   endif
@@ -1396,7 +1396,7 @@ subroutine btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
       CS%eta_cor(i,j) = sign(dt*CS%eta_cor_bound(i,j),CS%eta_cor(i,j))
   enddo ; enddo ; endif
   do j=js,je ; do i=is,ie
-    eta_src(i,j) = G%hmask(i,j) * (Instep * CS%eta_cor(i,j) + dtbt * CS%eta_source(i,j))
+    eta_src(i,j) = G%mask2dT(i,j) * (Instep * CS%eta_cor(i,j) + dtbt * CS%eta_source(i,j))
   enddo ; enddo
 
   if (CS%dynamic_psurf) then
@@ -1555,8 +1555,8 @@ subroutine btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
 
   if (query_averaging_enabled(CS%diag)) then
     if (CS%id_eta_st > 0) call post_data(CS%id_eta_st, eta(isd:ied,jsd:jed), CS%diag)
-    if (CS%id_ubt_st > 0) call post_data(CS%id_ubt_st, ubt(Isdq:Iedq,jsd:jed), CS%diag)
-    if (CS%id_vbt_st > 0) call post_data(CS%id_vbt_st, vbt(isd:ied,Jsdq:Jedq), CS%diag)
+    if (CS%id_ubt_st > 0) call post_data(CS%id_ubt_st, ubt(IsdB:IedB,jsd:jed), CS%diag)
+    if (CS%id_vbt_st > 0) call post_data(CS%id_vbt_st, vbt(isd:ied,JsdB:JedB), CS%diag)
   endif
 
   if (id_clock_calc_pre > 0) call cpu_clock_end(id_clock_calc_pre)
@@ -1894,11 +1894,11 @@ subroutine btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
     if (do_hifreq_output) then
       time_step_end = time_bt_start + set_time(int(floor(n*dtbt+0.5)))
       call enable_averaging(dtbt, time_step_end, CS%diag)
-      if (CS%id_ubt_hifreq > 0) call post_data(CS%id_ubt_hifreq, ubt(Isdq:Iedq,jsd:jed), CS%diag)
-      if (CS%id_vbt_hifreq > 0) call post_data(CS%id_vbt_hifreq, vbt(isd:ied,Jsdq:Jedq), CS%diag)
+      if (CS%id_ubt_hifreq > 0) call post_data(CS%id_ubt_hifreq, ubt(IsdB:IedB,jsd:jed), CS%diag)
+      if (CS%id_vbt_hifreq > 0) call post_data(CS%id_vbt_hifreq, vbt(isd:ied,JsdB:JedB), CS%diag)
       if (CS%id_eta_hifreq > 0) call post_data(CS%id_eta_hifreq, eta(isd:ied,jsd:jed), CS%diag)
-      if (CS%id_uhbt_hifreq > 0) call post_data(CS%id_uhbt_hifreq, uhbt(Isdq:Iedq,jsd:jed), CS%diag)
-      if (CS%id_vhbt_hifreq > 0) call post_data(CS%id_vhbt_hifreq, vhbt(isd:ied,Jsdq:Jedq), CS%diag)
+      if (CS%id_uhbt_hifreq > 0) call post_data(CS%id_uhbt_hifreq, uhbt(IsdB:IedB,jsd:jed), CS%diag)
+      if (CS%id_vhbt_hifreq > 0) call post_data(CS%id_vhbt_hifreq, vhbt(isd:ied,JsdB:JedB), CS%diag)
       if (CS%id_eta_pred_hifreq > 0) call post_data(CS%id_eta_pred_hifreq, eta_PF_BT(isd:ied,jsd:jed), CS%diag)
     endif
 
@@ -2078,12 +2078,12 @@ subroutine btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
     if (CS%id_Nonlnv_bt > 0) call post_data(CS%id_Nonlnv_bt, CS%diag%Nonlnv_bt, CS%diag)
     if (CS%id_ubt_flux > 0) call post_data(CS%id_ubt_flux, CS%diag%ubt_flux, CS%diag)
     if (CS%id_vbt_flux > 0) call post_data(CS%id_vbt_flux, CS%diag%vbt_flux, CS%diag)
-    if (CS%id_ubtforce > 0) call post_data(CS%id_ubtforce, BT_force_u(Isdq:Iedq,jsd:jed), CS%diag)
-    if (CS%id_vbtforce > 0) call post_data(CS%id_vbtforce, BT_force_v(isd:ied,Jsdq:Jedq), CS%diag)
-    if (CS%id_uaccel > 0) call post_data(CS%id_uaccel, u_accel_bt(Isdq:Iedq,jsd:jed), CS%diag)
-    if (CS%id_vaccel > 0) call post_data(CS%id_vaccel, v_accel_bt(isd:ied,Jsdq:Jedq), CS%diag)
-    if (CS%id_Datu_res > 0) call post_data(CS%id_Datu_res, CS%Datu_res(Isdq:Iedq,jsd:jed), CS%diag)
-    if (CS%id_Datv_res > 0) call post_data(CS%id_Datv_res, CS%Datv_res(isd:ied,Jsdq:Jedq), CS%diag)
+    if (CS%id_ubtforce > 0) call post_data(CS%id_ubtforce, BT_force_u(IsdB:IedB,jsd:jed), CS%diag)
+    if (CS%id_vbtforce > 0) call post_data(CS%id_vbtforce, BT_force_v(isd:ied,JsdB:JedB), CS%diag)
+    if (CS%id_uaccel > 0) call post_data(CS%id_uaccel, u_accel_bt(IsdB:IedB,jsd:jed), CS%diag)
+    if (CS%id_vaccel > 0) call post_data(CS%id_vaccel, v_accel_bt(isd:ied,JsdB:JedB), CS%diag)
+    if (CS%id_Datu_res > 0) call post_data(CS%id_Datu_res, CS%Datu_res(IsdB:IedB,jsd:jed), CS%diag)
+    if (CS%id_Datv_res > 0) call post_data(CS%id_Datv_res, CS%Datv_res(isd:ied,JsdB:JedB), CS%diag)
 
     if (CS%id_eta_cor > 0) call post_data(CS%id_eta_cor, CS%eta_cor, CS%diag)
     if (CS%id_eta_bt > 0) call post_data(CS%id_eta_bt, eta_out, CS%diag)
@@ -2091,8 +2091,8 @@ subroutine btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
     if (CS%id_gtots > 0) call post_data(CS%id_gtots, gtot_S(isd:ied,jsd:jed), CS%diag)
     if (CS%id_gtote > 0) call post_data(CS%id_gtote, gtot_E(isd:ied,jsd:jed), CS%diag)
     if (CS%id_gtotw > 0) call post_data(CS%id_gtotw, gtot_W(isd:ied,jsd:jed), CS%diag)
-    if (CS%id_ubt > 0) call post_data(CS%id_ubt, ubt_wtd(Isdq:Iedq,jsd:jed), CS%diag)
-    if (CS%id_vbt > 0) call post_data(CS%id_vbt, vbt_wtd(isd:ied,Jsdq:Jedq), CS%diag)
+    if (CS%id_ubt > 0) call post_data(CS%id_ubt, ubt_wtd(IsdB:IedB,jsd:jed), CS%diag)
+    if (CS%id_vbt > 0) call post_data(CS%id_vbt, vbt_wtd(isd:ied,JsdB:JedB), CS%diag)
     if (CS%id_ubtav > 0) call post_data(CS%id_ubtav, CS%ubtav, CS%diag)
     if (CS%id_vbtav > 0) call post_data(CS%id_vbtav, CS%vbtav, CS%diag)
     if (use_visc_rem) then
@@ -2540,12 +2540,12 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, G, MS, halo, use_BT_cont, Datu, Datv,
 !  (in)      BCTL_v - of the face areas at u- and v- points.
 
   integer :: i, j, k, is, ie, js, je, nz, Isq, Ieq, Jsq, Jeq
-  integer :: isd, ied, jsd, jed, Isdq, Iedq, Jsdq, Jedq
+  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   integer :: isdw, iedw, jsdw, jedw
   logical :: OBC_used
   is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = G%ke
-  Isdq = G%Isdq ; Iedq = G%Iedq ; Jsdq = G%Jsdq ; Jedq = G%Jedq
+  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
   isdw = MS%isdw ; iedw = MS%iedw ; jsdw = MS%jsdw ; jedw = MS%jedw
 
   if ((isdw < isd) .or. (jsdw < jsd)) then
@@ -2735,7 +2735,7 @@ subroutine btcalc(h, G, CS, h_u, h_v, may_use_default)
   endif
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-  Isq = G%Iscq ; Ieq = G%Iecq ; Jsq = G%Jscq ; Jeq = G%Jecq
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   h_neglect = G%H_subroundoff
 
   !   This estimates the fractional thickness of each layer at the velocity
@@ -3552,14 +3552,14 @@ subroutine barotropic_init(u, v, h, eta, Time, G, param_file, diag, CS, &
   character(len=48) :: thickness_units, flux_units
   character*(40) :: hvel_str
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
-  integer :: isd, ied, jsd, jed, Isdq, Iedq, Jsdq, Jedq
+  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   integer :: isdw, iedw, jsdw, jedw
   integer :: i, j, k
   integer :: wd_halos(2), bt_halo_sz
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  Isdq = G%Isdq ; Iedq = G%Iedq ; Jsdq = G%Jsdq ; Jedq = G%Jedq
+  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-  Isq = G%Iscq ; Ieq = G%Iecq ; Jsq = G%Jscq ; Jeq = G%Jecq
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   MS%isdw = G%isd ; MS%iedw = G%ied ; MS%jsdw = G%jsd ; MS%jedw = G%jed
 
   if (CS%module_is_initialized) then
@@ -3795,12 +3795,12 @@ CS%Nonlin_cont_update_period = 1
   CS%jsdw = G%jsc-wd_halos(2) ; CS%jedw = G%jec+wd_halos(2)
   isdw = CS%isdw ; iedw = CS%iedw ; jsdw = CS%jsdw ; jedw = CS%jedw
 
-  ALLOC_(CS%frhatu(Isdq:Iedq,jsd:jed,nz)) ; ALLOC_(CS%frhatv(isd:ied,Jsdq:Jedq,nz))
+  ALLOC_(CS%frhatu(IsdB:IedB,jsd:jed,nz)) ; ALLOC_(CS%frhatv(isd:ied,JsdB:JedB,nz))
   ALLOC_(CS%eta_source(isd:ied,jsd:jed)) ; ALLOC_(CS%eta_cor(isd:ied,jsd:jed))
   if (CS%bound_BT_corr) then
     ALLOC_(CS%eta_cor_bound(isd:ied,jsd:jed)) ; CS%eta_cor_bound(:,:) = 0.0
   endif
-  ALLOC_(CS%IDatu(Isdq:Iedq,jsd:jed)) ; ALLOC_(CS%IDatv(isd:ied,Jsdq:Jedq))
+  ALLOC_(CS%IDatu(IsdB:IedB,jsd:jed)) ; ALLOC_(CS%IDatv(isd:ied,JsdB:JedB))
 
   ALLOC_(CS%Datu_res(isdw-1:iedw,jsdw:jedw))
   ALLOC_(CS%Datv_res(isdw:iedw,jsdw-1:jedw))
@@ -3828,10 +3828,10 @@ CS%Nonlin_cont_update_period = 1
     CS%debug_BT_G%ied=CS%iedw
     CS%debug_BT_G%jsd=CS%jsdw
     CS%debug_BT_G%jed=CS%jedw
-    CS%debug_BT_G%Isdq=CS%isdw-1
-    CS%debug_BT_G%Iedq=CS%iedw
-    CS%debug_BT_G%Jsdq=CS%jsdw-1
-    CS%debug_BT_G%Jedq=CS%jedw
+    CS%debug_BT_G%IsdB=CS%isdw-1
+    CS%debug_BT_G%IedB=CS%iedw
+    CS%debug_BT_G%JsdB=CS%jsdw-1
+    CS%debug_BT_G%JedB=CS%jedw
   endif
 
   ! IareaT, IdxCu, and IdyCv need to be allocated with wide halos.
@@ -3847,10 +3847,10 @@ CS%Nonlin_cont_update_period = 1
   enddo ; enddo
   ! Note: G%IdxCu & G%IdyCv may be smaller than CS%IdxCu & CS%IdyCv, even without
   !   wide halos.
-  do j=G%jsd,G%jed ; do I=G%Isdq,G%Iedq
+  do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
     CS%IdxCu(I,j) = G%IdxCu(I,j) ; CS%dy_Cu(I,j) = G%dy_Cu(I,j)
   enddo ; enddo
-  do J=G%Jsdq,G%Jedq ; do i=G%isd,G%ied
+  do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
     CS%IdyCv(I,j) = G%IdyCv(I,j) ; CS%dx_Cv(i,J) = G%dx_Cv(i,J)
   enddo ; enddo
   call pass_var(CS%IareaT, CS%BT_domain, To_All)
@@ -3987,16 +3987,16 @@ CS%Nonlin_cont_update_period = 1
   CS%id_vhbtav = register_diag_field('ocean_model', 'vhbtav', G%axesCv1, Time, &
       'Barotropic meridional transport averaged over a baroclinic step', 'meter3 second-1')
 
-  if (CS%id_PFu_bt > 0)    call safe_alloc_ptr(diag%PFu_bt, Isdq,Iedq,jsd,jed)
-  if (CS%id_PFv_bt > 0)    call safe_alloc_ptr(diag%PFv_bt, isd,ied,Jsdq,Jedq)
-  if (CS%id_Coru_bt > 0)   call safe_alloc_ptr(diag%Coru_bt, Isdq,Iedq,jsd,jed)
-  if (CS%id_Corv_bt > 0)   call safe_alloc_ptr(diag%Corv_bt, isd,ied,Jsdq,Jedq)
-  if (CS%id_Nonlnu_bt > 0) call safe_alloc_ptr(diag%Nonlnu_bt, Isdq,Iedq,jsd,jed)
-  if (CS%id_Nonlnv_bt > 0) call safe_alloc_ptr(diag%Nonlnv_bt, isd,ied,Jsdq,Jedq)
-  if (CS%id_ubt_flux > 0)  call safe_alloc_ptr(diag%ubt_flux, Isdq,Iedq,jsd,jed)
-  if (CS%id_vbt_flux > 0)  call safe_alloc_ptr(diag%vbt_flux, isd,ied,Jsdq,Jedq)
-  if (CS%id_frhatu1 > 0) call safe_alloc_ptr(CS%frhatu1, Isdq,Iedq,jsd,jed,nz)
-  if (CS%id_frhatv1 > 0) call safe_alloc_ptr(CS%frhatv1, isd,ied,Jsdq,Jedq,nz)
+  if (CS%id_PFu_bt > 0)    call safe_alloc_ptr(diag%PFu_bt, IsdB,IedB,jsd,jed)
+  if (CS%id_PFv_bt > 0)    call safe_alloc_ptr(diag%PFv_bt, isd,ied,JsdB,JedB)
+  if (CS%id_Coru_bt > 0)   call safe_alloc_ptr(diag%Coru_bt, IsdB,IedB,jsd,jed)
+  if (CS%id_Corv_bt > 0)   call safe_alloc_ptr(diag%Corv_bt, isd,ied,JsdB,JedB)
+  if (CS%id_Nonlnu_bt > 0) call safe_alloc_ptr(diag%Nonlnu_bt, IsdB,IedB,jsd,jed)
+  if (CS%id_Nonlnv_bt > 0) call safe_alloc_ptr(diag%Nonlnv_bt, isd,ied,JsdB,JedB)
+  if (CS%id_ubt_flux > 0)  call safe_alloc_ptr(diag%ubt_flux, IsdB,IedB,jsd,jed)
+  if (CS%id_vbt_flux > 0)  call safe_alloc_ptr(diag%vbt_flux, isd,ied,JsdB,JedB)
+  if (CS%id_frhatu1 > 0) call safe_alloc_ptr(CS%frhatu1, IsdB,IedB,jsd,jed,nz)
+  if (CS%id_frhatv1 > 0) call safe_alloc_ptr(CS%frhatv1, isd,ied,JsdB,JedB,nz)
 
   if (.NOT.query_initialized(CS%ubtav,"ubtav",restart_CS) .or. &
       .NOT.query_initialized(CS%vbtav,"vbtav",restart_CS)) then
@@ -4021,17 +4021,17 @@ CS%Nonlin_cont_update_period = 1
   ! The following is only valid with the Boussinesq approximation.
 ! if (G%Boussinesq) then
     do j=js,je ; do I=is-1,ie
-      CS%IDatu(I,j) = G%umask(i,j) * 2.0 / (G%bathyT(i+1,j) + G%bathyT(i,j))
+      CS%IDatu(I,j) = G%mask2dCu(i,j) * 2.0 / (G%bathyT(i+1,j) + G%bathyT(i,j))
     enddo ; enddo
     do J=js-1,je ; do i=is,ie
-      CS%IDatv(i,J) = G%vmask(i,j) * 2.0 / (G%bathyT(i,j+1) + G%bathyT(i,j))
+      CS%IDatv(i,J) = G%mask2dCv(i,j) * 2.0 / (G%bathyT(i,j+1) + G%bathyT(i,j))
     enddo ; enddo
 ! else
 !   do j=js,je ; do I=is-1,ie
-!     CS%IDatu(I,j) = G%umask(i,j) * 2.0 / (G%Rho0*(G%bathyT(i+1,j) + G%bathyT(i,j)))
+!     CS%IDatu(I,j) = G%mask2dCu(i,j) * 2.0 / (G%Rho0*(G%bathyT(i+1,j) + G%bathyT(i,j)))
 !   enddo ; enddo
 !   do J=js-1,je ; do i=is,ie
-!     CS%IDatv(i,J) = G%vmask(i,j) * 2.0 / (G%Rho0*(G%bathyT(i,j+1) + G%bathyT(i,j)))
+!     CS%IDatv(i,J) = G%mask2dCv(i,j) * 2.0 / (G%Rho0*(G%bathyT(i,j+1) + G%bathyT(i,j)))
 !   enddo ; enddo
 ! endif
 
@@ -4094,9 +4094,9 @@ subroutine register_barotropic_restarts(G, param_file, CS, restart_CS)
 !  (in)      restart_CS - A pointer to the restart control structure.
   type(vardesc) :: vd(3)
   real :: slow_rate
-  integer :: isd, ied, jsd, jed, Isdq, Iedq, Jsdq, Jedq
+  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  Isdq = G%Isdq ; Iedq = G%Iedq ; Jsdq = G%Jsdq ; Jedq = G%Jedq
+  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   if (associated(CS)) then
     call MOM_error(WARNING, "register_barotropic_restarts called with an associated "// &
@@ -4105,12 +4105,12 @@ subroutine register_barotropic_restarts(G, param_file, CS, restart_CS)
   endif
   allocate(CS)
 
-  ALLOC_(CS%ubtav(Isdq:Iedq,jsd:jed))      ; CS%ubtav(:,:) = 0.0
-  ALLOC_(CS%vbtav(isd:ied,Jsdq:Jedq))      ; CS%vbtav(:,:) = 0.0
-  ALLOC_(CS%ubt_IC(Isdq:Iedq,jsd:jed))     ; CS%ubt_IC(:,:) = 0.0
-  ALLOC_(CS%vbt_IC(isd:ied,Jsdq:Jedq))     ; CS%vbt_IC(:,:) = 0.0
-  ALLOC_(CS%uhbt_IC(Isdq:Iedq,jsd:jed))    ; CS%uhbt_IC(:,:) = 0.0
-  ALLOC_(CS%vhbt_IC(isd:ied,Jsdq:Jedq))    ; CS%vhbt_IC(:,:) = 0.0
+  ALLOC_(CS%ubtav(IsdB:IedB,jsd:jed))      ; CS%ubtav(:,:) = 0.0
+  ALLOC_(CS%vbtav(isd:ied,JsdB:JedB))      ; CS%vbtav(:,:) = 0.0
+  ALLOC_(CS%ubt_IC(IsdB:IedB,jsd:jed))     ; CS%ubt_IC(:,:) = 0.0
+  ALLOC_(CS%vbt_IC(isd:ied,JsdB:JedB))     ; CS%vbt_IC(:,:) = 0.0
+  ALLOC_(CS%uhbt_IC(IsdB:IedB,jsd:jed))    ; CS%uhbt_IC(:,:) = 0.0
+  ALLOC_(CS%vhbt_IC(isd:ied,JsdB:JedB))    ; CS%vhbt_IC(:,:) = 0.0
 
   vd(2) = vardesc("ubtav","Time mean barotropic zonal velocity",'u','1','s', &
           "meter second-1", 'd')

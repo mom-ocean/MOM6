@@ -211,7 +211,7 @@ subroutine wave_speed(h, tv, G, cg1, CS)
 
     ! From this point, we can work on individual columns without causing memory
     ! to have page faults.
-    do i=is,ie ; if (G%hmask(i,j) > 0.5) then
+    do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
       if (use_EOS) then
         pres(1) = 0.0
         do k=2,kf(i)

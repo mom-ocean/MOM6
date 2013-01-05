@@ -228,7 +228,7 @@ subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, G, &
   real :: C1_6
   integer :: Isq, Ieq, Jsq, Jeq, i, j
 
-  Isq = G%Iscq ; Ieq = G%Iecq ; Jsq = G%Jscq ; Jeq = G%Jecq
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   C1_6 = 1.0 / 6.0
 
   do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
@@ -302,7 +302,7 @@ subroutine int_spec_vol_dp_linear(T, S, p_t, p_b, alpha_ref, G, Rho_T0_S0, &
   real :: C1_6
   integer :: Isq, Ieq, Jsq, Jeq, ish, ieh, jsh, jeh, i, j, halo
 
-  Isq = G%Iscq ; Ieq = G%Iecq ; Jsq = G%Jscq ; Jeq = G%Jecq
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   halo = 0 ; if (present(halo_size)) halo = MAX(halo_size,0)
   ish = G%isc-halo ; ieh = G%iec+halo ; jsh = G%jsc-halo ; jeh = G%jec+halo
   if (present(intx_dza)) then ; ish = MIN(Isq,ish) ; ieh = MAX(Ieq+1,ieh); endif

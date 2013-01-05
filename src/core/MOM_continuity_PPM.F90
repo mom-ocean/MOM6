@@ -306,12 +306,12 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, CS, uhbt, vhbt, OBC, &
   endif
 
   if (ASSOCIATED(CS%diag%uh_lay)) then
-    do k=1,nz ; do j=G%jsc,G%jec ; do I=G%Iscq,G%Iecq
+    do k=1,nz ; do j=G%jsc,G%jec ; do I=G%IscB,G%IecB
       CS%diag%uh_lay(I,j,k) = uh(I,j,k)
     enddo ; enddo ; enddo
   endif
   if (ASSOCIATED(CS%diag%vh_lay)) then
-    do k=1,nz ; do J=G%Jscq,G%Jecq ; do i=G%isc,G%iec
+    do k=1,nz ; do J=G%JscB,G%JecB ; do i=G%isc,G%iec
       CS%diag%vh_lay(i,J,k) = vh(i,J,k)
     enddo ; enddo ; enddo
   endif
@@ -1832,14 +1832,14 @@ subroutine PPM_reconstruction_x(h_in, h_l, h_r, G, LB, h_min, monotonic, simple_
 
   if (use_2nd) then
     do j=jsl,jel ; do i=isl,iel
-      h_im1 = G%hmask(i-1,j) * h_in(i-1,j) + (1.0-G%hmask(i-1,j)) * h_in(i,j)
-      h_ip1 = G%hmask(i+1,j) * h_in(i+1,j) + (1.0-G%hmask(i+1,j)) * h_in(i,j)
+      h_im1 = G%mask2dT(i-1,j) * h_in(i-1,j) + (1.0-G%mask2dT(i-1,j)) * h_in(i,j)
+      h_ip1 = G%mask2dT(i+1,j) * h_in(i+1,j) + (1.0-G%mask2dT(i+1,j)) * h_in(i,j)
       h_l(i,j) = 0.5*( h_im1 + h_in(i,j) )
       h_r(i,j) = 0.5*( h_ip1 + h_in(i,j) )
     enddo ; enddo
   else
     do j=jsl,jel ; do i=isl-1,iel+1
-      if ((G%hmask(i-1,j) * G%hmask(i,j) * G%hmask(i+1,j)) == 0.0) then
+      if ((G%mask2dT(i-1,j) * G%mask2dT(i,j) * G%mask2dT(i+1,j)) == 0.0) then
         slp(i,j) = 0.0
       else
         ! This uses a simple 2nd order slope.
@@ -1848,17 +1848,17 @@ subroutine PPM_reconstruction_x(h_in, h_l, h_r, G, LB, h_min, monotonic, simple_
         dMx = max(h_in(i+1,j), h_in(i-1,j), h_in(i,j)) - h_in(i,j)
         dMn = h_in(i,j) - min(h_in(i+1,j), h_in(i-1,j), h_in(i,j))
         slp(i,j) = sign(1.,slp(i,j)) * min(abs(slp(i,j)), 2. * min(dMx, dMn))
-                ! * (G%hmask(i-1,j) * G%hmask(i,j) * G%hmask(i+1,j))
+                ! * (G%mask2dT(i-1,j) * G%mask2dT(i,j) * G%mask2dT(i+1,j))
       endif
     enddo; enddo
 
     do j=jsl,jel ; do i=isl,iel
       ! Neighboring values should take into account any boundaries.  The 3
       ! following sets of expressions are equivalent.
-    ! h_im1 = h_in(i-1,j,k) ; if (G%hmask(i-1,j) < 0.5) h_im1 = h_in(i,j)
-    ! h_ip1 = h_in(i+1,j,k) ; if (G%hmask(i+1,j) < 0.5) h_ip1 = h_in(i,j)
-      h_im1 = G%hmask(i-1,j) * h_in(i-1,j) + (1.0-G%hmask(i-1,j)) * h_in(i,j)
-      h_ip1 = G%hmask(i+1,j) * h_in(i+1,j) + (1.0-G%hmask(i+1,j)) * h_in(i,j)
+    ! h_im1 = h_in(i-1,j,k) ; if (G%mask2dT(i-1,j) < 0.5) h_im1 = h_in(i,j)
+    ! h_ip1 = h_in(i+1,j,k) ; if (G%mask2dT(i+1,j) < 0.5) h_ip1 = h_in(i,j)
+      h_im1 = G%mask2dT(i-1,j) * h_in(i-1,j) + (1.0-G%mask2dT(i-1,j)) * h_in(i,j)
+      h_ip1 = G%mask2dT(i+1,j) * h_in(i+1,j) + (1.0-G%mask2dT(i+1,j)) * h_in(i,j)
       ! Left/right values following Eq. B2 in Lin 1994, MWR (132)
       h_l(i,j) = 0.5*( h_im1 + h_in(i,j) ) + oneSixth*( slp(i-1,j) - slp(i,j) )
       h_r(i,j) = 0.5*( h_ip1 + h_in(i,j) ) + oneSixth*( slp(i,j) - slp(i+1,j) )
@@ -1925,14 +1925,14 @@ subroutine PPM_reconstruction_y(h_in, h_l, h_r, G, LB, h_min, monotonic, simple_
 
   if (use_2nd) then
     do j=jsl,jel ; do i=isl,iel
-      h_jm1 = G%hmask(i,j-1) * h_in(i,j-1) + (1.0-G%hmask(i,j-1)) * h_in(i,j)
-      h_jp1 = G%hmask(i,j+1) * h_in(i,j+1) + (1.0-G%hmask(i,j+1)) * h_in(i,j)
+      h_jm1 = G%mask2dT(i,j-1) * h_in(i,j-1) + (1.0-G%mask2dT(i,j-1)) * h_in(i,j)
+      h_jp1 = G%mask2dT(i,j+1) * h_in(i,j+1) + (1.0-G%mask2dT(i,j+1)) * h_in(i,j)
       h_l(i,j) = 0.5*( h_jm1 + h_in(i,j) )
       h_r(i,j) = 0.5*( h_jp1 + h_in(i,j) )
     enddo ; enddo
   else
     do j=jsl-1,jel+1 ; do i=isl,iel
-      if ((G%hmask(i,j-1) * G%hmask(i,j) * G%hmask(i,j+1)) == 0.0) then
+      if ((G%mask2dT(i,j-1) * G%mask2dT(i,j) * G%mask2dT(i,j+1)) == 0.0) then
         slp(i,j) = 0.0
       else
         ! This uses a simple 2nd order slope.
@@ -1941,15 +1941,15 @@ subroutine PPM_reconstruction_y(h_in, h_l, h_r, G, LB, h_min, monotonic, simple_
         dMx = max(h_in(i,j+1), h_in(i,j-1), h_in(i,j)) - h_in(i,j)
         dMn = h_in(i,j) - min(h_in(i,j+1), h_in(i,j-1), h_in(i,j))
         slp(i,j) = sign(1.,slp(i,j)) * min(abs(slp(i,j)), 2. * min(dMx, dMn))
-                ! * (G%hmask(i,j-1) * G%hmask(i,j) * G%hmask(i,j+1))
+                ! * (G%mask2dT(i,j-1) * G%mask2dT(i,j) * G%mask2dT(i,j+1))
       endif
     enddo ; enddo
 
     do j=jsl,jel ; do i=isl,iel
       ! Neighboring values should take into account any boundaries.  The 3
       ! following sets of expressions are equivalent.
-      h_jm1 = G%hmask(i,j-1) * h_in(i,j-1) + (1.0-G%hmask(i,j-1)) * h_in(i,j)
-      h_jp1 = G%hmask(i,j+1) * h_in(i,j+1) + (1.0-G%hmask(i,j+1)) * h_in(i,j)
+      h_jm1 = G%mask2dT(i,j-1) * h_in(i,j-1) + (1.0-G%mask2dT(i,j-1)) * h_in(i,j)
+      h_jp1 = G%mask2dT(i,j+1) * h_in(i,j+1) + (1.0-G%mask2dT(i,j+1)) * h_in(i,j)
       ! Left/right values following Eq. B2 in Lin 1994, MWR (132)
       h_l(i,j) = 0.5*( h_jm1 + h_in(i,j) ) + oneSixth*( slp(i,j-1) - slp(i,j) )
       h_r(i,j) = 0.5*( h_jp1 + h_in(i,j) ) + oneSixth*( slp(i,j) - slp(i,j+1) )

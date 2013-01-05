@@ -189,12 +189,12 @@ subroutine MOM_initialize(u, v, h, tv, Time, G, PF, dirs, &
   character(len=128) :: tagname = '$Name$'
   character(len=40)  :: mod = "MOM_initialization" ! This module's name.
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
-  integer :: isd, ied, jsd, jed, Isdq, Iedq, Jsdq, Jedq
+  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-  Isq = G%Iscq ; Ieq = G%Iecq ; Jsq = G%Jscq ; Jeq = G%Jecq
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  Isdq = G%Isdq ; Iedq = G%Iedq ; Jsdq = G%Jsdq ; Jedq = G%Jedq
+  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   call MOM_mesg(" MOM_initialization.F90, MOM_initialize: subroutine entered", 3)
   call log_version(PF, mod, version, tagname)
@@ -268,10 +268,10 @@ subroutine MOM_initialize(u, v, h, tv, Time, G, PF, dirs, &
   call initialize_masks(G, PF)
   if (debug) then
     call hchksum(G%bathyT, 'MOM_initialize: depth ', G, haloshift=1)
-    call hchksum(G%hmask, 'MOM_initialize: hmask ', G)
-    call uchksum(G%umask, 'MOM_initialize: umask ', G)
-    call vchksum(G%vmask, 'MOM_initialize: vmask ', G)
-    call qchksum(G%qmask, 'MOM_initialize: qmask ', G)
+    call hchksum(G%mask2dT, 'MOM_initialize: mask2dT ', G)
+    call uchksum(G%mask2dCu, 'MOM_initialize: mask2dCu ', G)
+    call vchksum(G%mask2dCv, 'MOM_initialize: mask2dCv ', G)
+    call qchksum(G%mask2dBu, 'MOM_initialize: mask2dBu ', G)
   endif
 
 ! Modulate geometric scales according to geography.
@@ -940,7 +940,7 @@ end subroutine set_coord_linear
 
 subroutine MOM_initialize_rotation(f, G, PF)
   type(ocean_grid_type),            intent(in)  :: G
-  real, dimension(G%Isdq:G%Iedq,G%Jsdq:G%Jedq), intent(out) :: f
+  real, dimension(G%IsdB:G%IedB,G%JsdB:G%JedB), intent(out) :: f
   type(param_file_type),            intent(in)  :: PF
 ! Arguments: f  - the Coriolis parameter in s-1. Intent out.
 !  (in)      G  - The ocean's grid structure.
@@ -1210,7 +1210,7 @@ end subroutine limit_topography
 ! -----------------------------------------------------------------------------
 subroutine set_rotation_planetary(f, G, param_file)
   type(ocean_grid_type),            intent(in)  :: G
-  real, dimension(G%Isdq:G%Iedq,G%Jsdq:G%Jedq), intent(out) :: f
+  real, dimension(G%IsdB:G%IedB,G%JsdB:G%JedB), intent(out) :: f
   type(param_file_type),            intent(in)  :: param_file
 ! Arguments: f          - Coriolis parameter (vertical component) in s^-1
 !     (in)   G          - grid type
@@ -1227,7 +1227,7 @@ subroutine set_rotation_planetary(f, G, param_file)
                  default=7.2921e-5)
   PI = 4.0*atan(1.0)
 
-  do I=G%Isdq,G%Iedq ; do J=G%Jsdq,G%Jedq
+  do I=G%IsdB,G%IedB ; do J=G%JsdB,G%JedB
     f(I,J) = ( 2.0 * omega ) * sin( ( PI * G%geoLatBu(I,J) ) / 180.)
   enddo ; enddo
 
@@ -1237,7 +1237,7 @@ end subroutine set_rotation_planetary
 ! -----------------------------------------------------------------------------
 subroutine set_rotation_beta_plane(f, G, param_file)
   type(ocean_grid_type),            intent(in)  :: G
-  real, dimension(G%Isdq:G%Iedq,G%Jsdq:G%Jedq), intent(out) :: f
+  real, dimension(G%IsdB:G%IedB,G%JsdB:G%JedB), intent(out) :: f
   type(param_file_type),            intent(in)  :: param_file
 ! Arguments: f          - Coriolis parameter (vertical component) in s^-1
 !     (in)   G          - grid type
@@ -1272,7 +1272,7 @@ subroutine set_rotation_beta_plane(f, G, param_file)
       " set_rotation_beta_plane: unknown AXIS_UNITS = "//trim(axis_units))
   end select
 
-  do I=G%Isdq,G%Iedq ; do J=G%Jsdq,G%Jedq
+  do I=G%IsdB,G%IedB ; do J=G%JsdB,G%JedB
     f(I,J) = f_0 + beta * ( G%geoLatBu(I,J) * y_scl )
   enddo ; enddo
 
@@ -1451,7 +1451,7 @@ subroutine convert_thickness(h, G, param_file, tv)
   integer :: itt, max_itt
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-  Isq = G%Iscq ; Ieq = G%Iecq ; Jsq = G%Jscq ; Jeq = G%Jecq
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   max_itt = 10
   Boussinesq = G%Boussinesq
   I_gEarth = 1.0 / G%g_Earth
@@ -1549,7 +1549,7 @@ subroutine depress_surface(h, G, param_file, tv)
   ! Convert thicknesses to interface heights.
   call find_eta(h, tv, G%g_Earth, G, eta)
   
-  do j=js,je ; do i=is,ie ; if (G%hmask(i,j) > 0.0) then
+  do j=js,je ; do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
 !    if (eta_sfc(i,j) < eta(i,j,nz+1)) then
       ! Issue a warning?
 !    endif
@@ -1629,7 +1629,7 @@ subroutine initialize_velocity_zero(u, v, G, param_file)
 !   This subroutine sets the initial velocity components to zero
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-  Isq = G%Iscq ; Ieq = G%Iecq ; Jsq = G%Jscq ; Jeq = G%Jecq
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
 
   do k=1,nz ; do j=js,je ; do I=Isq,Ieq
@@ -1658,7 +1658,7 @@ subroutine initialize_velocity_uniform(u, v, G, param_file)
   real    :: initial_u_const, initial_v_const
   character(len=200) :: mod = "initialize_velocity_uniform" ! This subroutine's name.
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-  Isq = G%Iscq ; Ieq = G%Iecq ; Jsq = G%Jscq ; Jeq = G%Jecq
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
   call get_param(param_file, mod, "INITIAL_U_CONST", initial_u_const, &
                  "A initial uniform value for the zonal flow.", &
@@ -1695,7 +1695,7 @@ subroutine initialize_velocity_circular(u, v, G, param_file)
   real :: dpi, psi1, psi2
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-  Isq = G%Iscq ; Ieq = G%Iecq ; Jsq = G%Jscq ; Jeq = G%Jecq
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
   call get_param(param_file, mod, "SOUTHLAT", south_lat, &
                  "The southern latitude of the domain.", units="degrees", &
@@ -2132,11 +2132,11 @@ subroutine set_Open_Bdry_Conds(OBC, tv, G, param_file, advect_tracer_CSp)
   real :: rho_guess(SZK_(G)) ! Potential density at T0 & S0 in kg m-3.
   character(len=40) :: mod = "set_Open_Bdry_Conds"
   integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, nz, yhalo
-  integer :: Isdq, Iedq, Jsdq, Jedq
+  integer :: IsdB, IedB, JsdB, JedB
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  Isdq = G%Isdq ; Iedq = G%Iedq ; Jsdq = G%Jsdq ; Jedq = G%Jedq
+  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
   yhalo = G%jsc-G%jsd
 
   call get_param(param_file, mod, "APPLY_OBC_U", apply_OBC_u, default=.false.)
@@ -2144,9 +2144,9 @@ subroutine set_Open_Bdry_Conds(OBC, tv, G, param_file, advect_tracer_CSp)
 
   if (apply_OBC_u) then
     ! Determine where u points are applied.
-    allocate(OBC_mask_u(Isdq:Iedq,jsd:jed)) ; OBC_mask_u(:,:) = .false.
+    allocate(OBC_mask_u(IsdB:IedB,jsd:jed)) ; OBC_mask_u(:,:) = .false.
     any_OBC = .false.
-    do j=jsd,jed ; do I=Isdq,Iedq
+    do j=jsd,jed ; do I=IsdB,IedB
     ! if (SOME_TEST_FOR_U_OPEN_BCS) then
     !   OBC_mask_u(I,j) = .true. ; any_OBC = .true.
     ! endif
@@ -2160,9 +2160,9 @@ subroutine set_Open_Bdry_Conds(OBC, tv, G, param_file, advect_tracer_CSp)
   endif
   if (apply_OBC_v) then
     ! Determine where v points are applied.
-    allocate(OBC_mask_v(isd:ied,Jsdq:Jedq)) ; OBC_mask_v(:,:) = .false.
+    allocate(OBC_mask_v(isd:ied,JsdB:JedB)) ; OBC_mask_v(:,:) = .false.
     any_OBC = .false.
-    do J=Jsdq,Jedq ; do i=isd,ied
+    do J=JsdB,JedB ; do i=isd,ied
     ! if (SOME_TEST_FOR_V_OPEN_BCS) then
     !   OBC_mask_v(i,J) = .true. ; any_OBC = .true.
     ! endif
@@ -2182,20 +2182,20 @@ subroutine set_Open_Bdry_Conds(OBC, tv, G, param_file, advect_tracer_CSp)
   if (apply_OBC_u) then
     OBC%apply_OBC_u = .true.
     OBC%OBC_mask_u => OBC_mask_u
-    allocate(OBC%u(Isdq:Iedq,jsd:jed,nz)) ; OBC%u(:,:,:) = 0.0
-    allocate(OBC%uh(Isdq:Iedq,jsd:jed,nz)) ; OBC%uh(:,:,:) = 0.0
-    allocate(OBC%OBC_kind_u(Isdq:Iedq,jsd:jed)) ; OBC%OBC_kind_u(:,:) = OBC_NONE
-    do j=jsd,jed ; do I=Isdq,Iedq
+    allocate(OBC%u(IsdB:IedB,jsd:jed,nz)) ; OBC%u(:,:,:) = 0.0
+    allocate(OBC%uh(IsdB:IedB,jsd:jed,nz)) ; OBC%uh(:,:,:) = 0.0
+    allocate(OBC%OBC_kind_u(IsdB:IedB,jsd:jed)) ; OBC%OBC_kind_u(:,:) = OBC_NONE
+    do j=jsd,jed ; do I=IsdB,IedB
       if (OBC%OBC_mask_u(I,j)) OBC%OBC_kind_u(I,j) = OBC_SIMPLE
     enddo ; enddo
   endif
   if (apply_OBC_v) then
     OBC%apply_OBC_v = .true.
     OBC%OBC_mask_v => OBC_mask_v
-    allocate(OBC%v(isd:ied,Jsdq:Jedq,nz)) ; OBC%v(:,:,:) = 0.0
-    allocate(OBC%vh(isd:ied,Jsdq:Jedq,nz)) ; OBC%vh(:,:,:) = 0.0
-    allocate(OBC%OBC_kind_v(isd:ied,Jsdq:Jedq)) ; OBC%OBC_kind_v(:,:) = OBC_NONE
-    do J=Jsdq,Jedq ; do i=isd,ied
+    allocate(OBC%v(isd:ied,JsdB:JedB,nz)) ; OBC%v(:,:,:) = 0.0
+    allocate(OBC%vh(isd:ied,JsdB:JedB,nz)) ; OBC%vh(:,:,:) = 0.0
+    allocate(OBC%OBC_kind_v(isd:ied,JsdB:JedB)) ; OBC%OBC_kind_v(:,:) = OBC_NONE
+    do J=JsdB,JedB ; do i=isd,ied
       if (OBC%OBC_mask_v(i,J)) OBC%OBC_kind_v(i,J) = OBC_SIMPLE
     enddo ; enddo
   endif
@@ -2213,7 +2213,7 @@ subroutine set_Open_Bdry_Conds(OBC, tv, G, param_file, advect_tracer_CSp)
   endif
 
   if (apply_OBC_u) then
-    do k=1,nz ; do j=jsd,jed ; do I=Isdq,Iedq
+    do k=1,nz ; do j=jsd,jed ; do I=IsdB,IedB
       if (OBC_mask_u(I,j)) then
         ! An appropriate expression for the zonal inflow velocities and
         ! transports should go here.
@@ -2247,14 +2247,14 @@ subroutine set_Open_Bdry_Conds(OBC, tv, G, param_file, advect_tracer_CSp)
       enddo
 
       if (apply_OBC_u) then
-        allocate(OBC_T_u(Isdq:Iedq,jsd:jed,nz))
-        do k=1,nz ; do j=jsd,jed ; do I=Isdq,Iedq
+        allocate(OBC_T_u(IsdB:IedB,jsd:jed,nz))
+        do k=1,nz ; do j=jsd,jed ; do I=IsdB,IedB
           OBC_T_u(I,j,k) = T0(k)
         enddo ; enddo ; enddo
       endif
       if (apply_OBC_v) then
-        allocate(OBC_T_v(isd:ied,Jsdq:Jedq,nz))
-        do k=1,nz ; do J=Jsdq,Jedq ; do i=isd,ied
+        allocate(OBC_T_v(isd:ied,JsdB:JedB,nz))
+        do k=1,nz ; do J=JsdB,JedB ; do i=isd,ied
           OBC_T_v(i,J,k) = T0(k)
         enddo ; enddo ; enddo
       endif
@@ -2298,7 +2298,7 @@ subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, advect_tracer_CSp)
   integer :: isd_global, jsd_global
   integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, nz, yhalo
   integer :: isd_off, jsd_off
-  integer :: Isdq, Iedq, Jsdq, Jedq
+  integer :: IsdB, IedB, JsdB, JedB
   integer :: east_boundary, west_boundary, north_boundary, south_boundary
   character(len=40)  :: mod = "set_Flather_Bdry_Conds" ! This subroutine's name.
   character(len=200) :: filename, OBC_file, inputdir ! Strings for file/path
@@ -2314,7 +2314,7 @@ subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, advect_tracer_CSp)
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  Isdq = G%Isdq ; Iedq = G%Iedq ; Jsdq = G%Jsdq ; Jedq = G%Jedq
+  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
   yhalo = G%jsc-G%jsd 
   
   isd_global = G%isd_global
@@ -2377,32 +2377,32 @@ subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, advect_tracer_CSp)
   endif
 
   if (.not.associated(OBC%OBC_mask_u)) then
-    allocate(OBC%OBC_mask_u(Isdq:Iedq,jsd:jed)) ; OBC%OBC_mask_u(:,:) = .false.
+    allocate(OBC%OBC_mask_u(IsdB:IedB,jsd:jed)) ; OBC%OBC_mask_u(:,:) = .false.
   endif
   if (.not.associated(OBC%OBC_kind_u)) then
-    allocate(OBC%OBC_kind_u(Isdq:Iedq,jsd:jed)) ; OBC%OBC_kind_u(:,:) = OBC_NONE
+    allocate(OBC%OBC_kind_u(IsdB:IedB,jsd:jed)) ; OBC%OBC_kind_u(:,:) = OBC_NONE
   endif
   if (.not.associated(OBC%OBC_mask_v)) then
-    allocate(OBC%OBC_mask_v(isd:ied,Jsdq:Jedq)) ; OBC%OBC_mask_v(:,:) = .false.
+    allocate(OBC%OBC_mask_v(isd:ied,JsdB:JedB)) ; OBC%OBC_mask_v(:,:) = .false.
   endif
   if (.not.associated(OBC%OBC_kind_v)) then
-    allocate(OBC%OBC_kind_v(isd:ied,Jsdq:Jedq)) ; OBC%OBC_kind_v(:,:) = OBC_NONE
+    allocate(OBC%OBC_kind_v(isd:ied,JsdB:JedB)) ; OBC%OBC_kind_v(:,:) = OBC_NONE
   endif
 
   if (.not.associated(OBC%vbt_outer)) then
-    allocate(OBC%vbt_outer(isd:ied,Jsdq:Jedq)) ; OBC%vbt_outer(:,:) = 0.0
+    allocate(OBC%vbt_outer(isd:ied,JsdB:JedB)) ; OBC%vbt_outer(:,:) = 0.0
   endif
 
   if (.not.associated(OBC%ubt_outer)) then
-    allocate(OBC%ubt_outer(Isdq:Iedq,jsd:jed)) ; OBC%ubt_outer(:,:) = 0.0
+    allocate(OBC%ubt_outer(IsdB:IedB,jsd:jed)) ; OBC%ubt_outer(:,:) = 0.0
   endif
 
   if (.not.associated(OBC%eta_outer_u)) then
-    allocate(OBC%eta_outer_u(Isdq:Iedq,jsd:jed)) ; OBC%eta_outer_u(:,:) = 0.0
+    allocate(OBC%eta_outer_u(IsdB:IedB,jsd:jed)) ; OBC%eta_outer_u(:,:) = 0.0
   endif
 
   if (.not.associated(OBC%eta_outer_v)) then
-    allocate(OBC%eta_outer_v(isd:ied,Jsdq:Jedq)) ; OBC%eta_outer_v(:,:) = 0.0
+    allocate(OBC%eta_outer_v(isd:ied,JsdB:JedB)) ; OBC%eta_outer_v(:,:) = 0.0
   endif
   
   if (read_OBC_uv) then
@@ -2426,15 +2426,15 @@ subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, advect_tracer_CSp)
 
   if (apply_OBC_u_flather_east) then
     ! Determine where u points are applied at east side 
-    do j=jsd,jed ; do I=Isdq,Iedq
+    do j=jsd,jed ; do I=IsdB,IedB
       if ((I+isd_global-isd) .eq. east_boundary) then !eastern side
         OBC%OBC_mask_u(I,j) = .true.
         OBC%OBC_kind_u(I,j) = OBC_FLATHER_E
-        if ((i+1>isd) .and. (i+1<ied) .and. (J>Jsdq) .and. (J<Jedq)) then
+        if ((i+1>isd) .and. (i+1<ied) .and. (J>JsdB) .and. (J<JedB)) then
           OBC%OBC_mask_v(i+1,J) = .true.
           if (OBC%OBC_kind_v(i+1,J) == OBC_NONE) OBC%OBC_kind_v(i+1,J) = OBC_FLATHER_E
         endif
-        if ((i+1>isd) .and. (i+1<ied) .and. (J-1>Jsdq) .and. (J-1<Jedq)) then
+        if ((i+1>isd) .and. (i+1<ied) .and. (J-1>JsdB) .and. (J-1<JedB)) then
           OBC%OBC_mask_v(i+1,J-1) = .true.
           if (OBC%OBC_kind_v(i+1,J-1) == OBC_NONE) OBC%OBC_kind_v(i+1,J-1) = OBC_FLATHER_E
         endif
@@ -2444,15 +2444,15 @@ subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, advect_tracer_CSp)
 
   if (apply_OBC_u_flather_west) then
     ! Determine where u points are applied at west side 
-    do j=jsd,jed ; do I=Isdq,Iedq
+    do j=jsd,jed ; do I=IsdB,IedB
       if ((I+isd_global-isd) .eq. west_boundary) then !western side
         OBC%OBC_mask_u(I,j) = .true.
         OBC%OBC_kind_u(I,j) = OBC_FLATHER_W
-        if ((i>isd) .and. (i<ied) .and. (J>Jsdq) .and. (J<Jedq)) then
+        if ((i>isd) .and. (i<ied) .and. (J>JsdB) .and. (J<JedB)) then
           OBC%OBC_mask_v(i,J) = .true.
           if (OBC%OBC_kind_v(i,J) == OBC_NONE) OBC%OBC_kind_v(i,J) = OBC_FLATHER_W
         endif
-        if ((i>isd) .and. (i<ied) .and. (J-1>Jsdq) .and. (J-1<Jedq)) then
+        if ((i>isd) .and. (i<ied) .and. (J-1>JsdB) .and. (J-1<JedB)) then
           OBC%OBC_mask_v(i,J-1) = .true.
           if (OBC%OBC_kind_v(i,J-1) == OBC_NONE) OBC%OBC_kind_v(i,J-1) = OBC_FLATHER_W
         endif
@@ -2463,15 +2463,15 @@ subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, advect_tracer_CSp)
 
   if (apply_OBC_v_flather_north) then
     ! Determine where v points are applied at north side 
-    do J=Jsdq,Jedq ; do i=isd,ied
+    do J=JsdB,JedB ; do i=isd,ied
       if ((J+jsd_global-jsd) .eq. north_boundary) then         !northern side
         OBC%OBC_mask_v(i,J) = .true.
         OBC%OBC_kind_v(i,J) = OBC_FLATHER_N
-        if ((I>Isdq) .and. (I<Iedq) .and. (j+1>jsd) .and. (j+1<jed)) then
+        if ((I>IsdB) .and. (I<IedB) .and. (j+1>jsd) .and. (j+1<jed)) then
           OBC%OBC_mask_u(I,j+1) = .true.
           if (OBC%OBC_kind_u(I,j+1) == OBC_NONE) OBC%OBC_kind_u(I,j+1) = OBC_FLATHER_N
         endif
-        if ((I-1>Isdq) .and. (I-1<Iedq) .and. (j+1>jsd) .and. (j+1<jed)) then
+        if ((I-1>IsdB) .and. (I-1<IedB) .and. (j+1>jsd) .and. (j+1<jed)) then
           OBC%OBC_mask_u(I-1,j+1) = .true.
           if (OBC%OBC_kind_u(I-1,j+1) == OBC_NONE) OBC%OBC_kind_u(I-1,j+1) = OBC_FLATHER_N
         endif
@@ -2481,15 +2481,15 @@ subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, advect_tracer_CSp)
   
   if (apply_OBC_v_flather_south) then
     ! Determine where v points are applied at south side 
-    do J=Jsdq,Jedq ; do i=isd,ied
+    do J=JsdB,JedB ; do i=isd,ied
       if ((J+jsd_global-jsd) .eq. south_boundary) then         !southern side
         OBC%OBC_mask_v(i,J) = .true.
         OBC%OBC_kind_v(i,J) = OBC_FLATHER_S
-        if ((I>Isdq) .and. (I<Iedq) .and. (j>jsd) .and. (j<jed)) then
+        if ((I>IsdB) .and. (I<IedB) .and. (j>jsd) .and. (j<jed)) then
           OBC%OBC_mask_u(I,j) = .true.
           if (OBC%OBC_kind_u(I,j) == OBC_NONE) OBC%OBC_kind_u(I,j) = OBC_FLATHER_S
         endif
-        if ((I-1>Isdq) .and. (I-1<Iedq) .and. (j>jsd) .and. (j<jed)) then
+        if ((I-1>IsdB) .and. (I-1<IedB) .and. (j>jsd) .and. (j<jed)) then
           OBC%OBC_mask_u(I-1,j) = .true.
           if (OBC%OBC_kind_u(I-1,j) == OBC_NONE) OBC%OBC_kind_u(I-1,j) = OBC_FLATHER_S
         endif
@@ -2506,20 +2506,20 @@ subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, advect_tracer_CSp)
   ! might not be physically motivated.  Instead, sponges should be used to
   ! enforce the near-boundary layer structure.
   if (apply_OBC_u_flather_west .or. apply_OBC_u_flather_east) then
-    allocate(OBC%rx_old_u(Isdq:Iedq,jsd:jed,nz)) ; OBC%rx_old_u(:,:,:) = 0.0
+    allocate(OBC%rx_old_u(IsdB:IedB,jsd:jed,nz)) ; OBC%rx_old_u(:,:,:) = 0.0
  !   allocate(OBC%rx_old_h(Isd:Ied,jsd:jed,nz))   ; OBC%rx_old_h(:,:,:) = 0.0
   endif
   if (apply_OBC_v_flather_south .or. apply_OBC_v_flather_north) then
-    allocate(OBC%ry_old_v(isd:ied,Jsdq:Jedq,nz)) ; OBC%ry_old_v(:,:,:) = 0.0
+    allocate(OBC%ry_old_v(isd:ied,JsdB:JedB,nz)) ; OBC%ry_old_v(:,:,:) = 0.0
  !   allocate(OBC%ry_old_h(isd:ied,Jsd:Jed,nz))   ; OBC%ry_old_h(:,:,:) = 0.0
   endif
 
 
   if (associated(tv%T)) then
-    allocate(OBC_T_u(Isdq:Iedq,jsd:jed,nz)) ; OBC_T_u(:,:,:) = 0.0
-    allocate(OBC_S_u(Isdq:Iedq,jsd:jed,nz)) ; OBC_S_u(:,:,:) = 0.0
-    allocate(OBC_T_v(isd:ied,Jsdq:Jedq,nz)) ; OBC_T_v(:,:,:) = 0.0
-    allocate(OBC_S_v(isd:ied,Jsdq:Jedq,nz)) ; OBC_S_v(:,:,:) = 0.0
+    allocate(OBC_T_u(IsdB:IedB,jsd:jed,nz)) ; OBC_T_u(:,:,:) = 0.0
+    allocate(OBC_S_u(IsdB:IedB,jsd:jed,nz)) ; OBC_S_u(:,:,:) = 0.0
+    allocate(OBC_T_v(isd:ied,JsdB:JedB,nz)) ; OBC_T_v(:,:,:) = 0.0
+    allocate(OBC_S_v(isd:ied,JsdB:JedB,nz)) ; OBC_S_v(:,:,:) = 0.0
 
     if (read_OBC_TS) then
       call read_data(filename, 'OBC_T_u', OBC_T_u, &
@@ -2542,11 +2542,11 @@ subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, advect_tracer_CSp)
           elseif (OBC%OBC_kind_u(I,j) == OBC_FLATHER_W) then
             OBC_T_u(I,j,k) = tv%T(i+1,j,k)
             OBC_S_u(I,j,k) = tv%S(i+1,j,k)
-          elseif (G%hmask(i,j) + G%hmask(i+1,j) > 0) then
-            OBC_T_u(I,j,k) = (G%hmask(i,j)*tv%T(i,j,k) + G%hmask(i+1,j)*tv%T(i+1,j,k)) / &
-                             (G%hmask(i,j) + G%hmask(i+1,j))
-            OBC_S_u(I,j,k) = (G%hmask(i,j)*tv%S(i,j,k) + G%hmask(i+1,j)*tv%S(i+1,j,k)) / &
-                             (G%hmask(i,j) + G%hmask(i+1,j))
+          elseif (G%mask2dT(i,j) + G%mask2dT(i+1,j) > 0) then
+            OBC_T_u(I,j,k) = (G%mask2dT(i,j)*tv%T(i,j,k) + G%mask2dT(i+1,j)*tv%T(i+1,j,k)) / &
+                             (G%mask2dT(i,j) + G%mask2dT(i+1,j))
+            OBC_S_u(I,j,k) = (G%mask2dT(i,j)*tv%S(i,j,k) + G%mask2dT(i+1,j)*tv%S(i+1,j,k)) / &
+                             (G%mask2dT(i,j) + G%mask2dT(i+1,j))
           else ! This probably shouldn't happen or maybe it doesn't matter?
             OBC_T_u(I,j,k) = 0.5*(tv%T(i,j,k)+tv%T(i+1,j,k))
             OBC_S_u(I,j,k) = 0.5*(tv%S(i,j,k)+tv%S(i+1,j,k))
@@ -2565,11 +2565,11 @@ subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, advect_tracer_CSp)
           elseif (OBC%OBC_kind_v(i,J) == OBC_FLATHER_S) then
             OBC_T_v(i,J,k) = tv%T(i,j+1,k)
             OBC_S_v(i,J,k) = tv%S(i,j+1,k)
-          elseif (G%hmask(i,j) + G%hmask(i,j+1) > 0) then
-            OBC_T_v(i,J,k) = (G%hmask(i,j)*tv%T(i,j,k) + G%hmask(i,j+1)*tv%T(i,j+1,k)) / &
-                             (G%hmask(i,j) + G%hmask(i,j+1))
-            OBC_S_v(i,J,k) = (G%hmask(i,j)*tv%S(i,j,k) + G%hmask(i,j+1)*tv%S(i,j+1,k)) / &
-                             (G%hmask(i,j) + G%hmask(i,j+1))
+          elseif (G%mask2dT(i,j) + G%mask2dT(i,j+1) > 0) then
+            OBC_T_v(i,J,k) = (G%mask2dT(i,j)*tv%T(i,j,k) + G%mask2dT(i,j+1)*tv%T(i,j+1,k)) / &
+                             (G%mask2dT(i,j) + G%mask2dT(i,j+1))
+            OBC_S_v(i,J,k) = (G%mask2dT(i,j)*tv%S(i,j,k) + G%mask2dT(i,j+1)*tv%S(i,j+1,k)) / &
+                             (G%mask2dT(i,j) + G%mask2dT(i,j+1))
           else ! This probably shouldn't happen or maybe it doesn't matter?
             OBC_T_v(i,J,k) = 0.5*(tv%T(i,j,k)+tv%T(i,j+1,k))
             OBC_S_v(i,J,k) = 0.5*(tv%S(i,j,k)+tv%S(i,j+1,k))
@@ -2632,9 +2632,9 @@ subroutine reset_face_lengths_named(G, param_file, name)
   real    :: dx_2 = -1.0, dy_2 = -1.0
   real    :: pi_180
   integer :: option = -1
-  integer :: i, j, isd, ied, jsd, jed, Isdq, Iedq, Jsdq, Jedq
+  integer :: i, j, isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  Isdq = G%Isdq ; Iedq = G%Iedq ; Jsdq = G%Jsdq ; Jedq = G%Jedq
+  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
   pi_180 = (4.0*atan(1.0))/180.0
 
   select case ( trim(name) )
@@ -2644,74 +2644,74 @@ subroutine reset_face_lengths_named(G, param_file, name)
   end select
 
   if (option==1) then ! 1-degree settings.
-    do j=jsd,jed ; do I=Isdq,Iedq  ! Change any u-face lengths within this loop.
+    do j=jsd,jed ; do I=IsdB,IedB  ! Change any u-face lengths within this loop.
       dy_2 = dx_2 * G%dyCu(I,j)*G%IdxCu(I,j) * cos(pi_180 * G%geoLatCu(I,j))
 
       if ((abs(G%geoLatCu(I,j)-35.5) < dy_2) .and. (G%geoLonCu(I,j) < -4.5) .and. &
           (G%geoLonCu(I,j) > -6.5)) &
-        G%dy_Cu(I,j) = G%umask(I,j)*12000.0   ! Gibraltar
+        G%dy_Cu(I,j) = G%mask2dCu(I,j)*12000.0   ! Gibraltar
 
       if ((abs(G%geoLatCu(I,j)-12.5) < dy_2) .and. (abs(G%geoLonCu(I,j)-43.0) < dx_2)) &
-        G%dy_Cu(I,j) = G%umask(I,j)*10000.0   ! Red Sea
+        G%dy_Cu(I,j) = G%mask2dCu(I,j)*10000.0   ! Red Sea
 
       if ((abs(G%geoLatCu(i,j)-40.5) < dy_2) .and. (abs(G%geoLonCu(i,j)-26.0) < dx_2)) &
-        G%dy_Cu(i,j) = G%umask(i,j)*5000.0   ! Dardanelles
+        G%dy_Cu(i,j) = G%mask2dCu(i,j)*5000.0   ! Dardanelles
 
       if ((abs(G%geoLatCu(I,j)-41.5) < dy_2) .and. (abs(G%geoLonCu(I,j)+220.0) < dx_2)) &
-        G%dy_Cu(I,j) = G%umask(I,j)*35000.0   ! Tsugaru strait at 140.0e
+        G%dy_Cu(I,j) = G%mask2dCu(I,j)*35000.0   ! Tsugaru strait at 140.0e
 
       if ((abs(G%geoLatCu(I,j)-45.5) < dy_2) .and. (abs(G%geoLonCu(I,j)+217.5) < 0.9)) &
-        G%dy_Cu(I,j) = G%umask(I,j)*15000.0   ! Betw Hokkaido and Sakhalin at 217&218 = 142e
+        G%dy_Cu(I,j) = G%mask2dCu(I,j)*15000.0   ! Betw Hokkaido and Sakhalin at 217&218 = 142e
 
 
       ! Greater care needs to be taken in the tripolar region.
       if ((abs(G%geoLatCu(I,j)-80.84) < 0.2) .and. (abs(G%geoLonCu(I,j)+64.9) < 0.8)) &
-        G%dy_Cu(I,j) = G%umask(I,j)*38000.0   ! Smith Sound in Canadian Arch - tripolar region
+        G%dy_Cu(I,j) = G%mask2dCu(I,j)*38000.0   ! Smith Sound in Canadian Arch - tripolar region
 
     enddo ; enddo
 
-    do J=Jsdq,Jedq ; do i=isd,ied  ! Change any v-face lengths within this loop.
+    do J=JsdB,JedB ; do i=isd,ied  ! Change any v-face lengths within this loop.
       dy_2 = dx_2 * G%dyCv(i,J)*G%IdxCv(i,J) * cos(pi_180 * G%geoLatCv(i,J))
       if ((abs(G%geoLatCv(i,J)-41.0) < dy_2) .and. (abs(G%geoLonCv(i,J)-28.5) < dx_2)) &
-        G%dx_Cv(i,J) = G%vmask(i,J)*2500.0   ! Bosporus - should be 1000.0 m wide.
+        G%dx_Cv(i,J) = G%mask2dCv(i,J)*2500.0   ! Bosporus - should be 1000.0 m wide.
 
       if ((abs(G%geoLatCv(i,J)-13.0) < dy_2) .and. (abs(G%geoLonCv(i,J)-42.5) < dx_2)) &
-        G%dx_Cv(i,J) = G%vmask(i,J)*10000.0   ! Red Sea
+        G%dx_Cv(i,J) = G%mask2dCv(i,J)*10000.0   ! Red Sea
 
       if ((abs(G%geoLatCv(i,J)+2.8) < 0.8) .and. (abs(G%geoLonCv(i,J)+241.5) < dx_2)) &
-        G%dx_Cv(i,J) = G%vmask(i,J)*40000.0   ! Makassar Straits at 241.5 W = 118.5 E
+        G%dx_Cv(i,J) = G%mask2dCv(i,J)*40000.0   ! Makassar Straits at 241.5 W = 118.5 E
 
       if ((abs(G%geoLatCv(i,J)-0.56) < 0.5) .and. (abs(G%geoLonCv(i,J)+240.5) < dx_2)) &
-        G%dx_Cv(i,J) = G%vmask(i,J)*80000.0   ! entry to Makassar Straits at 240.5 W = 119.5 E
+        G%dx_Cv(i,J) = G%mask2dCv(i,J)*80000.0   ! entry to Makassar Straits at 240.5 W = 119.5 E
 
       if ((abs(G%geoLatCv(i,J)-0.19) < 0.5) .and. (abs(G%geoLonCv(i,J)+230.5) < dx_2)) &
-        G%dx_Cv(i,J) = G%vmask(i,J)*25000.0   ! Channel betw N Guinea and Halmahara 230.5 W = 129.5 E
+        G%dx_Cv(i,J) = G%mask2dCv(i,J)*25000.0   ! Channel betw N Guinea and Halmahara 230.5 W = 129.5 E
 
       if ((abs(G%geoLatCv(i,J)-0.19) < 0.5) .and. (abs(G%geoLonCv(i,J)+229.5) < dx_2)) &
-        G%dx_Cv(i,J) = G%vmask(i,J)*25000.0   ! Channel betw N Guinea and Halmahara 229.5 W = 130.5 E
+        G%dx_Cv(i,J) = G%mask2dCv(i,J)*25000.0   ! Channel betw N Guinea and Halmahara 229.5 W = 130.5 E
 
       if ((abs(G%geoLatCv(i,J)-0.0) < 0.25) .and. (abs(G%geoLonCv(i,J)+228.5) < dx_2)) &
-        G%dx_Cv(i,J) = G%vmask(i,J)*25000.0   ! Channel betw N Guinea and Halmahara 228.5 W = 131.5 E
+        G%dx_Cv(i,J) = G%mask2dCv(i,J)*25000.0   ! Channel betw N Guinea and Halmahara 228.5 W = 131.5 E
 
       if ((abs(G%geoLatCv(i,J)+8.5) < 0.5) .and. (abs(G%geoLonCv(i,J)+244.5) < dx_2)) &
-        G%dx_Cv(i,J) = G%vmask(i,J)*20000.0   ! Lombok Straits at 244.5 W = 115.5 E
+        G%dx_Cv(i,J) = G%mask2dCv(i,J)*20000.0   ! Lombok Straits at 244.5 W = 115.5 E
 
       if ((abs(G%geoLatCv(i,J)+8.5) < 0.5) .and. (abs(G%geoLonCv(i,J)+235.5) < dx_2)) &
-        G%dx_Cv(i,J) = G%vmask(i,J)*20000.0   ! Timor Straits at 235.5 W = 124.5 E
+        G%dx_Cv(i,J) = G%mask2dCv(i,J)*20000.0   ! Timor Straits at 235.5 W = 124.5 E
 
       if ((abs(G%geoLatCv(i,J)-52.5) < dy_2) .and. (abs(G%geoLonCv(i,J)+218.5) < dx_2)) &
-        G%dx_Cv(i,J) = G%vmask(i,J)*2500.0    ! Russia and Sakhalin Straits at 218.5 W = 141.5 E
+        G%dx_Cv(i,J) = G%mask2dCv(i,J)*2500.0    ! Russia and Sakhalin Straits at 218.5 W = 141.5 E
 
       ! Greater care needs to be taken in the tripolar region.
       if ((abs(G%geoLatCv(i,J)-76.8) < 0.06) .and. (abs(G%geoLonCv(i,J)+88.7) < dx_2)) &
-        G%dx_Cv(i,J) = G%vmask(i,J)*8400.0    ! Jones Sound in Canadian Arch - tripolar region
+        G%dx_Cv(i,J) = G%mask2dCv(i,J)*8400.0    ! Jones Sound in Canadian Arch - tripolar region
 
     enddo ; enddo
   endif
 
   ! These checks apply regardless of the chosen option.
 
-  do j=jsd,jed ; do I=Isdq,Iedq
+  do j=jsd,jed ; do I=IsdB,IedB
     if (G%dy_Cu(I,j) > G%dyCu(I,j)) then
       write(mesg,'("dy_Cu of ",ES11.4," exceeds unrestricted width of ",ES11.4,&
                    &" by ",ES11.4," at lon/lat of ", ES11.4, ES11.4)') &
@@ -2721,10 +2721,10 @@ subroutine reset_face_lengths_named(G, param_file, name)
     endif
     G%areaCu(I,j) = G%dxCu(I,j)*G%dy_Cu(I,j)
     G%IareaCu(I,j) = 0.0
-    if (G%areaCu(I,j) > 0.0) G%IareaCu(I,j) = G%umask(I,j) / G%areaCu(I,j)
+    if (G%areaCu(I,j) > 0.0) G%IareaCu(I,j) = G%mask2dCu(I,j) / G%areaCu(I,j)
   enddo ; enddo
 
-  do J=Jsdq,Jedq ; do i=isd,ied
+  do J=JsdB,JedB ; do i=isd,ied
     if (G%dx_Cv(i,J) > G%dxCv(i,J)) then
       write(mesg,'("dx_Cv of ",ES11.4," exceeds unrestricted width of ",ES11.4,&
                    &" by ",ES11.4, " at lon/lat of ", ES11.4, ES11.4)') &
@@ -2735,7 +2735,7 @@ subroutine reset_face_lengths_named(G, param_file, name)
     endif
     G%areaCv(i,J) = G%dyCv(i,J)*G%dx_Cv(i,J)
     G%IareaCv(i,J) = 0.0
-    if (G%areaCv(i,J) > 0.0) G%IareaCv(i,J) = G%vmask(i,J) / G%areaCv(i,J)
+    if (G%areaCv(i,J) > 0.0) G%IareaCv(i,J) = G%mask2dCv(i,J) / G%areaCv(i,J)
   enddo ; enddo
 
 end subroutine reset_face_lengths_named
@@ -2755,9 +2755,9 @@ subroutine reset_face_lengths_file(G, param_file)
   character(len=40)  :: mod = "reset_face_lengths_file" ! This subroutine's name.
   character(len=256) :: mesg    ! Message for error messages.
   character(len=200) :: filename, chan_file, inputdir ! Strings for file/path
-  integer :: i, j, isd, ied, jsd, jed, Isdq, Iedq, Jsdq, Jedq
+  integer :: i, j, isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  Isdq = G%Isdq ; Iedq = G%Iedq ; Jsdq = G%Jsdq ; Jedq = G%Jedq
+  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
   ! These checks apply regardless of the chosen option.
 
   call MOM_mesg("  MOM_initialization.F90, reset_face_lengths_file: "//&
@@ -2780,7 +2780,7 @@ subroutine reset_face_lengths_file(G, param_file)
   call read_data(filename,"dxCvo",G%dx_Cv,domain=G%Domain%mpp_domain)
   call pass_vector(G%dy_Cu, G%dx_Cv, G%Domain, To_All+SCALAR_PAIR, CGRID_NE)
 
-  do j=jsd,jed ; do I=Isdq,Iedq
+  do j=jsd,jed ; do I=IsdB,IedB
     if (G%dy_Cu(I,j) > G%dyCu(I,j)) then
       write(mesg,'("dy_Cu of ",ES11.4," exceeds unrestricted width of ",ES11.4,&
                    &" by ",ES11.4," at lon/lat of ", ES11.4, ES11.4)') &
@@ -2790,10 +2790,10 @@ subroutine reset_face_lengths_file(G, param_file)
     endif
     G%areaCu(I,j) = G%dxCu(I,j)*G%dy_Cu(I,j)
     G%IareaCu(I,j) = 0.0
-    if (G%areaCu(I,j) > 0.0) G%IareaCu(I,j) = G%umask(I,j) / G%areaCu(I,j)
+    if (G%areaCu(I,j) > 0.0) G%IareaCu(I,j) = G%mask2dCu(I,j) / G%areaCu(I,j)
   enddo ; enddo
 
-  do J=Jsdq,Jedq ; do i=isd,ied
+  do J=JsdB,JedB ; do i=isd,ied
     if (G%dx_Cv(i,J) > G%dxCv(i,J)) then
       write(mesg,'("dx_Cv of ",ES11.4," exceeds unrestricted width of ",ES11.4,&
                    &" by ",ES11.4, " at lon/lat of ", ES11.4, ES11.4)') &
@@ -2804,7 +2804,7 @@ subroutine reset_face_lengths_file(G, param_file)
     endif
     G%areaCv(i,J) = G%dyCv(i,J)*G%dx_Cv(i,J)
     G%IareaCv(i,J) = 0.0
-    if (G%areaCv(i,J) > 0.0) G%IareaCv(i,J) = G%vmask(i,J) / G%areaCv(i,J)
+    if (G%areaCv(i,J) > 0.0) G%IareaCv(i,J) = G%mask2dCv(i,J) / G%areaCv(i,J)
   enddo ; enddo
 
 end subroutine reset_face_lengths_file
@@ -2836,9 +2836,9 @@ subroutine reset_face_lengths_list(G, param_file)
   logical :: unit_in_use
   integer :: ios, iounit, isu, isv
   integer :: last, num_lines, nl_read, ln, npt, u_pt, v_pt
-  integer :: i, j, isd, ied, jsd, jed, Isdq, Iedq, Jsdq, Jedq
+  integer :: i, j, isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  Isdq = G%Isdq ; Iedq = G%Iedq ; Jsdq = G%Jsdq ; Jedq = G%Jedq
+  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   call MOM_mesg("  MOM_initialization.F90, reset_face_lengths_list: "//&
                  " setting channel configurations from list", 5)
@@ -2972,7 +2972,7 @@ subroutine reset_face_lengths_list(G, param_file)
     deallocate(lines)
   endif
 
-  do j=jsd,jed ; do I=Isdq,Iedq
+  do j=jsd,jed ; do I=IsdB,IedB
     lat = G%geoLatCu(I,j) ; lon = G%geoLonCu(I,j)
     if (check_360) then ; lon_p = lon+360.0 ; lon_m = lon-360.0
     else ; lon_p = lon ; lon_m = lon ; endif
@@ -2982,15 +2982,15 @@ subroutine reset_face_lengths_list(G, param_file)
           (((lon >= u_lon(1,npt)) .and. (lon <= u_lon(2,npt))) .or. &
            ((lon_p >= u_lon(1,npt)) .and. (lon_p <= u_lon(2,npt))) .or. &
            ((lon_m >= u_lon(1,npt)) .and. (lon_m <= u_lon(2,npt)))) ) &
-        G%dy_Cu(I,j) = G%umask(I,j) * min(G%dyCu(I,j), max(u_width(npt), 0.0))
+        G%dy_Cu(I,j) = G%mask2dCu(I,j) * min(G%dyCu(I,j), max(u_width(npt), 0.0))
     enddo
 
     G%areaCu(I,j) = G%dxCu(I,j)*G%dy_Cu(I,j)
     G%IareaCu(I,j) = 0.0
-    if (G%areaCu(I,j) > 0.0) G%IareaCu(I,j) = G%umask(I,j) / G%areaCu(I,j)
+    if (G%areaCu(I,j) > 0.0) G%IareaCu(I,j) = G%mask2dCu(I,j) / G%areaCu(I,j)
   enddo ; enddo
 
-  do J=Jsdq,Jedq ; do i=isd,ied
+  do J=JsdB,JedB ; do i=isd,ied
     lat = G%geoLatCv(i,J) ; lon = G%geoLonCv(i,J)
     if (check_360) then ; lon_p = lon+360.0 ; lon_m = lon-360.0
     else ; lon_p = lon ; lon_m = lon ; endif
@@ -3000,12 +3000,12 @@ subroutine reset_face_lengths_list(G, param_file)
           (((lon >= v_lon(1,npt)) .and. (lon <= v_lon(2,npt))) .or. &
            ((lon_p >= v_lon(1,npt)) .and. (lon_p <= v_lon(2,npt))) .or. &
            ((lon_m >= v_lon(1,npt)) .and. (lon_m <= v_lon(2,npt)))) ) &
-        G%dx_Cv(i,J) = G%vmask(i,J) * min(G%dxCv(i,J), max(v_width(npt), 0.0))
+        G%dx_Cv(i,J) = G%mask2dCv(i,J) * min(G%dxCv(i,J), max(v_width(npt), 0.0))
     enddo
 
     G%areaCv(i,J) = G%dyCv(i,J)*G%dx_Cv(i,J)
     G%IareaCv(i,J) = 0.0
-    if (G%areaCv(i,J) > 0.0) G%IareaCv(i,J) = G%vmask(i,J) / G%areaCv(i,J)
+    if (G%areaCv(i,J) > 0.0) G%IareaCv(i,J) = G%mask2dCv(i,J) / G%areaCv(i,J)
   enddo ; enddo
 
   if (num_lines > 0) then
@@ -3075,11 +3075,11 @@ subroutine set_velocity_depth_max(G)
   integer :: i, j
 
   do I=G%isd,G%ied-1 ; do j=G%jsd,G%jed
-    G%Dblock_u(I,j) = G%umask(I,j) * max(G%bathyT(i,j), G%bathyT(i+1,j))
+    G%Dblock_u(I,j) = G%mask2dCu(I,j) * max(G%bathyT(i,j), G%bathyT(i+1,j))
     G%Dopen_u(I,j) = G%Dblock_u(I,j)
   enddo ; enddo
   do i=G%isd,G%ied ; do J=G%jsd,G%jed-1
-    G%Dblock_v(I,J) = G%vmask(i,J) * max(G%bathyT(i,j), G%bathyT(i,j+1))
+    G%Dblock_v(I,J) = G%mask2dCv(i,J) * max(G%bathyT(i,j), G%bathyT(i,j+1))
     G%Dopen_v(I,J) = G%Dblock_v(I,J)
   enddo ; enddo
 end subroutine set_velocity_depth_max
@@ -3093,11 +3093,11 @@ subroutine set_velocity_depth_min(G)
   integer :: i, j
 
   do I=G%isd,G%ied-1 ; do j=G%jsd,G%jed
-    G%Dblock_u(I,j) = G%umask(I,j) * min(G%bathyT(i,j), G%bathyT(i+1,j))
+    G%Dblock_u(I,j) = G%mask2dCu(I,j) * min(G%bathyT(i,j), G%bathyT(i+1,j))
     G%Dopen_u(I,j) = G%Dblock_u(I,j)
   enddo ; enddo
   do i=G%isd,G%ied ; do J=G%jsd,G%jed-1
-    G%Dblock_v(I,J) = G%vmask(i,J) * min(G%bathyT(i,j), G%bathyT(i,j+1))
+    G%Dblock_v(I,J) = G%mask2dCv(i,J) * min(G%bathyT(i,j), G%bathyT(i,j+1))
     G%Dopen_v(I,J) = G%Dblock_v(I,J)
   enddo ; enddo
 end subroutine set_velocity_depth_min
@@ -3123,16 +3123,16 @@ subroutine write_ocean_geometry_file(G, param_file, directory)
   integer :: file_threading
   integer :: nFlds_used
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
-  integer :: isd, ied, jsd, jed, Isdq, Iedq, Jsdq, Jedq
+  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   logical :: multiple_files
   real :: out_h(SZI_(G),SZJ_(G))
   real :: out_u(SZIB_(G),SZJ_(G))
   real :: out_v(SZI_(G),SZJB_(G))
   real :: out_q(SZIB_(G),SZJB_(G))
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
-  Isq = G%Iscq ; Ieq = G%Iecq ; Jsq = G%Jscq ; Jeq = G%Jecq
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  Isdq = G%Isdq ; Iedq = G%Iedq ; Jsdq = G%Jsdq ; Jedq = G%Jedq
+  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
 !   vardesc is a structure defined in MOM_io.F90.  The elements of
 ! this structure, in order, are:
@@ -3231,7 +3231,7 @@ subroutine write_ocean_geometry_file(G, param_file, directory)
   call write_field(unit, fields(17), G%Domain%mpp_domain, G%dx_Cv)
 !  do j=js,je; do I=Isq,Ieq; out_u(I,j) = G%dy_Cu(I,j); enddo; enddo
   call write_field(unit, fields(18), G%Domain%mpp_domain, G%dy_Cu)
-  call write_field(unit, fields(19), G%Domain%mpp_domain, G%hmask)
+  call write_field(unit, fields(19), G%Domain%mpp_domain, G%mask2dT)
 
   if (G%bathymetry_at_vel) then
     call write_field(unit, fields(20), G%Domain%mpp_domain, G%Dblock_u)
@@ -3404,7 +3404,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
   !global arrays 
   real, dimension(:,:), allocatable :: temp_prev, salt_prev, mask_prev    
   real, dimension(:,:), allocatable :: temp_out, salt_out, rho_out, mask_out
-  real, dimension(:,:), allocatable :: hmask, Depth
+  real, dimension(:,:), allocatable :: mask2dT, Depth
   real, dimension(:,:), allocatable :: lon_out, lat_out, x_out, y_out
   integer, dimension(:,:), allocatable :: good, fill
   real, dimension(:), allocatable   :: press
@@ -3575,13 +3575,13 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
   allocate(last_row(id))    ; last_row(:)=0.0
   allocate(temp_out(ni,nj),salt_out(ni,nj),mask_out(ni,nj))
   allocate(temp_prev(ni,nj),salt_prev(ni,nj),rho_out(ni,nj))
-  allocate(fill(ni,nj),hmask(ni,nj),good(ni,nj), Depth(ni,nj))
+  allocate(fill(ni,nj),mask2dT(ni,nj),good(ni,nj), Depth(ni,nj))
   allocate(press(ni)) ; press(:)=tv%p_ref
 
   temp_prev=0.0; salt_prev=0.0
 
 ! get the global wet mask and depth arrays
-  call mpp_global_field(G%domain%mpp_domain, G%hmask, hmask)
+  call mpp_global_field(G%domain%mpp_domain, G%mask2dT, mask2dT)
   call mpp_global_field(G%domain%mpp_domain, G%bathyT, Depth)    
 
 
@@ -3674,7 +3674,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
         else
           good(i,j)=1
         endif
-        if (hmask(i,j) .eq. 1.0 .and. z_edges_in(k) <= Depth(i,j) .and. mask_out(i,j) .lt. 1.0) fill(i,j)=1
+        if (mask2dT(i,j) .eq. 1.0 .and. z_edges_in(k) <= Depth(i,j) .and. mask_out(i,j) .lt. 1.0) fill(i,j)=1
       enddo
     enddo
 
@@ -3687,8 +3687,8 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
 
     good=good+fill
 
-    temp_out=temp_out*hmask
-    salt_out=salt_out*hmask
+    temp_out=temp_out*mask2dT
+    salt_out=salt_out*mask2dT
 
     temp_prev=temp_out
     salt_prev=salt_out
@@ -3779,8 +3779,8 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
 ! and remap temperature and salinity to layers
 
 
-  tv%T(is:ie,js:je,:) = tracer_z_init(temp_z(is:ie,js:je,:),-1.0*z_edges_in,zi,nkml,nkbl,missing_value,G%hmask(is:ie,js:je),nz,nlevs)
-  tv%S(is:ie,js:je,:) = tracer_z_init(salt_z(is:ie,js:je,:),-1.0*z_edges_in,zi,nkml,nkbl,missing_value,G%hmask(is:ie,js:je),nz,nlevs)
+  tv%T(is:ie,js:je,:) = tracer_z_init(temp_z(is:ie,js:je,:),-1.0*z_edges_in,zi,nkml,nkbl,missing_value,G%mask2dT(is:ie,js:je),nz,nlevs)
+  tv%S(is:ie,js:je,:) = tracer_z_init(salt_z(is:ie,js:je,:),-1.0*z_edges_in,zi,nkml,nkbl,missing_value,G%mask2dT(is:ie,js:je),nz,nlevs)
 
 ! In case of a problem , use this.
 
@@ -3820,7 +3820,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
   deallocate(temp_z,salt_z,rho_z,mask_z)
   deallocate(tmp_in,temp_in,salt_in,mask_in,last_row)
   deallocate(temp_out,salt_out,mask_out,temp_prev,salt_prev)
-  deallocate(rho_out,fill,hmask,good,Depth)
+  deallocate(rho_out,fill,mask2dT,good,Depth)
 
   return
 

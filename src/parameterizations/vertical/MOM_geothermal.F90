@@ -195,7 +195,7 @@ subroutine geothermal(h, tv, dt, ea, eb, G, CS)
     
     num_start = 0
     do i=is,ie
-      heat_rem(i) = G%hmask(i,j) * (CS%geo_heat(i,j) * (dt*Irho_cp))
+      heat_rem(i) = G%mask2dT(i,j) * (CS%geo_heat(i,j) * (dt*Irho_cp))
       do_i(i) = .true. ; if (heat_rem(i) <= 0.0) do_i(i) = .false.
       if (do_i(i)) num_start = num_start + 1
       h_geo_rem(i) = CS%Geothermal_thick * G%m_to_H
@@ -339,13 +339,13 @@ subroutine geothermal(h, tv, dt, ea, eb, G, CS)
 
     if (associated(tv%internal_heat)) then ; do i=is,ie
       tv%internal_heat(i,j) = tv%internal_heat(i,j) + G%H_to_kg_m2 * &
-           (G%hmask(i,j) * (CS%geo_heat(i,j) * (dt*Irho_cp)) - heat_rem(i))
+           (G%mask2dT(i,j) * (CS%geo_heat(i,j) * (dt*Irho_cp)) - heat_rem(i))
     enddo ; endif
   enddo ! j-loop
 
   do i=is,ie ; do j=js,je
     resid(i,j) = tv%internal_heat(i,j) - resid(i,j) - G%H_to_kg_m2 * &
-           (G%hmask(i,j) * (CS%geo_heat(i,j) * (dt*Irho_cp)))
+           (G%mask2dT(i,j) * (CS%geo_heat(i,j) * (dt*Irho_cp)))
   enddo ; enddo
 
 end subroutine geothermal
@@ -417,11 +417,11 @@ subroutine geothermal_init(Time, G, param_file, diag, CS)
     call read_data(filename, trim(geotherm_var), CS%geo_heat, &
                    domain=G%Domain%mpp_domain)
     do j=jsd,jed ; do i=isd,ied
-      CS%geo_heat(i,j) = (G%hmask(i,j) * scale) * CS%geo_heat(i,j)
+      CS%geo_heat(i,j) = (G%mask2dT(i,j) * scale) * CS%geo_heat(i,j)
     enddo ; enddo
   else
     do j=jsd,jed ; do i=isd,ied
-      CS%geo_heat(i,j) = G%hmask(i,j) * scale
+      CS%geo_heat(i,j) = G%mask2dT(i,j) * scale
     enddo ; enddo
   endif
 

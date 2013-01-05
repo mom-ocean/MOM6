@@ -148,7 +148,7 @@ subroutine initialize_sponge(Iresttime, int_height, G, param_file, CS, &
   
 !   This subroutine determines the number of points which are within
 ! sponges in this computational domain.  Only points that have
-! positive values of Iresttime and which hmask indicates are ocean
+! positive values of Iresttime and which mask2dT indicates are ocean
 ! points are included in the sponges.  It also stores the target interface
 ! heights.
 
@@ -196,7 +196,7 @@ subroutine initialize_sponge(Iresttime, int_height, G, param_file, CS, &
 
   CS%num_col = 0 ; CS%fldno = 0
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
-    if ((Iresttime(i,j)>0.0) .and. (G%hmask(i,j)>0)) &
+    if ((Iresttime(i,j)>0.0) .and. (G%mask2dT(i,j)>0)) &
       CS%num_col = CS%num_col + 1
   enddo ; enddo
 
@@ -208,7 +208,7 @@ subroutine initialize_sponge(Iresttime, int_height, G, param_file, CS, &
 
     col = 1
     do j=G%jsc,G%jec ; do i=G%isc,G%iec
-      if ((Iresttime(i,j)>0.0) .and. (G%hmask(i,j)>0)) then
+      if ((Iresttime(i,j)>0.0) .and. (G%mask2dT(i,j)>0)) then
         CS%col_i(col) = i ; CS%col_j(col) = j
         CS%Iresttime_col(col) = Iresttime(i,j)
         col = col +1

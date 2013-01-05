@@ -270,13 +270,13 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, G, CS)
   real :: QUHeff,QVHeff ! More temporary variables, in m3 s-2 or kg s-2.
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
 
-  Isq = G%Iscq ; Ieq = G%Iecq ; Jsq = G%Jscq ; Jeq = G%Jecq ; nz = G%ke
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB ; nz = G%ke
 
   if (.not.associated(CS)) call MOM_error(FATAL, &
          "MOM_CoriolisAdv: Module must be initialized before it is used.")
 
   do j=Jsq-1,Jeq+2 ; do I=Isq-1,Ieq+2
-    Area_h(i,j) = G%hmask(i,j) * G%areaT(i,j)
+    Area_h(i,j) = G%mask2dT(i,j) * G%areaT(i,j)
   enddo ; enddo
   do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
     Area_q(i,j) = (Area_h(i,j) + Area_h(i+1,j+1)) + &
@@ -286,7 +286,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, G, CS)
 !GOMP(parallel do default(private) shared(u,v,h,uh,vh,CAu,CAv,G,CS,Area_h,Area_q,nz))
   do k=1,nz
     is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
-    Isq = G%Iscq ; Ieq = G%Iecq ; Jsq = G%Jscq ; Jeq = G%Jecq
+    Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
     h_neglect = G%H_subroundoff
 
 !    Here the second order accurate layer potential vorticities, q,
@@ -295,11 +295,11 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, G, CS)
 ! but only first order accurate at boundaries with no slip b.c.s.
     do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
       if (CS%no_slip ) then
-        relative_vorticity = (2.0-G%qmask(I,J)) * &
+        relative_vorticity = (2.0-G%mask2dBu(I,J)) * &
            ((v(i+1,J,k)*G%dyCv(i+1,J) - v(i,J,k)*G%dyCv(i,J)) - &
             (u(I,j+1,k)*G%dxCu(I,j+1) - u(I,j,k)*G%dxCu(I,j)))* G%IareaBu(I,J)
       else
-        relative_vorticity = G%qmask(I,J) * &
+        relative_vorticity = G%mask2dBu(I,J) * &
            ((v(i+1,J,k)*G%dyCv(i+1,J) - v(i,J,k)*G%dyCv(i,J)) - &
             (u(I,j+1,k)*G%dxCu(I,j+1) - u(I,j,k)*G%dxCu(I,j)))* G%IareaBu(I,J)
       endif
@@ -774,7 +774,7 @@ subroutine gradKE(u, v, h, uh, vh, KE, KEx, KEy, k, G, CS)
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-  Isq = G%Iscq ; Ieq = G%Iecq ; Jsq = G%Jscq ; Jeq = G%Jecq
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
 
 ! Calculate KE (Kinetic energy for use in the -grad(KE) acceleration term).
@@ -845,9 +845,9 @@ subroutine CoriolisAdv_init(Time, G, param_file, diag, CS)
   character(len=20)  :: tmpstr
   character(len=400) :: mesg
   logical :: debug_truncations
-  integer :: isd, ied, jsd, jed, Isdq, Iedq, Jsdq, Jedq, nz
+  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = G%ke
-  Isdq = G%Isdq ; Iedq = G%Iedq ; Jsdq = G%Jsdq ; Jedq = G%Jedq
+  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   if (associated(CS)) then
     call MOM_error(WARNING, "CoriolisAdv_init called with associated control structure.")
@@ -978,44 +978,44 @@ subroutine CoriolisAdv_init(Time, G, param_file, diag, CS)
 
   CS%id_rv = register_diag_field('ocean_model', 'RV', G%axesBL, Time, &
      'Relative Vorticity', 'second-1')
-  if (CS%id_rv > 0) call safe_alloc_ptr(diag%rv,Isdq,Iedq,Jsdq,Jedq,nz)
+  if (CS%id_rv > 0) call safe_alloc_ptr(diag%rv,IsdB,IedB,JsdB,JedB,nz)
 
   CS%id_PV = register_diag_field('ocean_model', 'PV', G%axesBL, Time, &
      'Potential Vorticity', 'meter-1 second-1')
-  if (CS%id_PV > 0) call safe_alloc_ptr(diag%q,Isdq,Iedq,Jsdq,Jedq,nz)
+  if (CS%id_PV > 0) call safe_alloc_ptr(diag%q,IsdB,IedB,JsdB,JedB,nz)
 
   CS%id_gKEu = register_diag_field('ocean_model', 'gKEu', G%axesCuL, Time, &
      'Zonal Acceleration from Grad. Kinetic Energy', 'meter-1 second-2')
-  if (CS%id_gKEu > 0) call safe_alloc_ptr(diag%gradKEu,Isdq,Iedq,jsd,jed,nz)
+  if (CS%id_gKEu > 0) call safe_alloc_ptr(diag%gradKEu,IsdB,IedB,jsd,jed,nz)
 
   CS%id_gKEv = register_diag_field('ocean_model', 'gKEv', G%axesCvL, Time, &
      'Meridional Acceleration from Grad. Kinetic Energy', 'meter-1 second-2')
-  if (CS%id_gKEv > 0) call safe_alloc_ptr(diag%gradKEv,isd,ied,Jsdq,Jedq,nz)
+  if (CS%id_gKEv > 0) call safe_alloc_ptr(diag%gradKEv,isd,ied,JsdB,JedB,nz)
 
   CS%id_rvxu = register_diag_field('ocean_model', 'rvxu', G%axesCvL, Time, &
      'Meridional Acceleration from Relative Vorticity', 'meter-1 second-2')
-  if (CS%id_rvxu > 0) call safe_alloc_ptr(diag%rv_x_u,isd,ied,Jsdq,Jedq,nz)
+  if (CS%id_rvxu > 0) call safe_alloc_ptr(diag%rv_x_u,isd,ied,JsdB,JedB,nz)
 
   CS%id_rvxv = register_diag_field('ocean_model', 'rvxv', G%axesCuL, Time, &
      'Zonal Acceleration from Relative Vorticity', 'meter-1 second-2')
-  if (CS%id_rvxv > 0) call safe_alloc_ptr(diag%rv_x_v,Isdq,Iedq,jsd,jed,nz)
+  if (CS%id_rvxv > 0) call safe_alloc_ptr(diag%rv_x_v,IsdB,IedB,jsd,jed,nz)
 
 ! These are hard-wired diagnostics.
   call get_param(param_file, mod, "DEBUG_TRUNCATIONS", debug_truncations, &
                  default=.false.)
   if (debug_truncations) then
-    call safe_alloc_ptr(diag%uh_min,Isdq,Iedq,jsd,jed,nz)
-    call safe_alloc_ptr(diag%uh_max,Isdq,Iedq,jsd,jed,nz)
-    call safe_alloc_ptr(diag%uh_lay,Isdq,Iedq,jsd,jed,nz)
-    call safe_alloc_ptr(diag%uh_cent,Isdq,Iedq,jsd,jed,nz)
+    call safe_alloc_ptr(diag%uh_min,IsdB,IedB,jsd,jed,nz)
+    call safe_alloc_ptr(diag%uh_max,IsdB,IedB,jsd,jed,nz)
+    call safe_alloc_ptr(diag%uh_lay,IsdB,IedB,jsd,jed,nz)
+    call safe_alloc_ptr(diag%uh_cent,IsdB,IedB,jsd,jed,nz)
 
-    call safe_alloc_ptr(diag%vh_min,isd,ied,Jsdq,Jedq,nz)
-    call safe_alloc_ptr(diag%vh_max,isd,ied,Jsdq,Jedq,nz)
-    call safe_alloc_ptr(diag%vh_lay,isd,ied,Jsdq,Jedq,nz)
-    call safe_alloc_ptr(diag%vh_cent,isd,ied,Jsdq,Jedq,nz)
+    call safe_alloc_ptr(diag%vh_min,isd,ied,JsdB,JedB,nz)
+    call safe_alloc_ptr(diag%vh_max,isd,ied,JsdB,JedB,nz)
+    call safe_alloc_ptr(diag%vh_lay,isd,ied,JsdB,JedB,nz)
+    call safe_alloc_ptr(diag%vh_cent,isd,ied,JsdB,JedB,nz)
   endif
 
-  call safe_alloc_ptr(diag%q,Isdq,Iedq,Jsdq,Jedq,nz)
+  call safe_alloc_ptr(diag%q,IsdB,IedB,JsdB,JedB,nz)
 
 end subroutine CoriolisAdv_init
 

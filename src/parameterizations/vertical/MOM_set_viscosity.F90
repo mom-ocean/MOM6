@@ -272,7 +272,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, CS)
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, m, K2, nkmb
   integer :: itt, maxitt=20
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-  Isq = G%Iscq ; Ieq = G%Iecq ; Jsq = G%Jscq ; Jeq = G%Jecq
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   nkmb = G%nk_rho_varies
   h_neglect = G%H_subroundoff
   Rho0x400_G = 400.0*(G%Rho0/G%g_Earth)*G%m_to_H
@@ -293,7 +293,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, CS)
 !  if (CS%linear_drag) ustar(:) = cdrag_sqrt*CS%drag_bg_vel
 
   if ((G%nkml>0) .and. .not.use_BBL_EOS) then
-    do i=G%Iscq,G%Iecq+1 ; p_ref(i) = tv%P_ref ; enddo
+    do i=G%IscB,G%IecB+1 ; p_ref(i) = tv%P_ref ; enddo
     do k=1,nkmb ; do j=Jsq,Jeq+1
       call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p_ref, &
                       Rml(:,j,k), Isq, Ieq-Isq+2, tv%eqn_of_state)
@@ -303,20 +303,20 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, CS)
 !GOMP(parallel do default(private) shared(u, v, h, tv, visc, G, CS, Rml, is, ie, js, je, nz, &)
 !GOMP(                                    Isq, Ieq, Jsq, Jeq, nkmb, h_neglect, Rho0x400_G,   &)
 !GOMP(                                    Vol_quit, C2pi_3, U_bg_sq, cdrag_sqrt, K2 ))
-  do j=G%Jscq,G%Jecq ; do m=1,2
+  do j=G%JscB,G%JecB ; do m=1,2
 
     if (m==1) then
       if (j<G%Jsc) cycle
-      is = G%Iscq ; ie = G%Iecq
+      is = G%IscB ; ie = G%IecB
       do i=is,ie
         do_i(i) = .false.
-        if (G%umask(i,j) > 0) do_i(i) = .true.
+        if (G%mask2dCu(i,j) > 0) do_i(i) = .true.
       enddo
     else
       is = G%isc ; ie = G%iec
       do i=is,ie
         do_i(i) = .false.
-        if (G%vmask(i,j) > 0) do_i(i) = .true.
+        if (G%mask2dCv(i,j) > 0) do_i(i) = .true.
       enddo
     endif
 
@@ -403,7 +403,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, CS)
         press(i) = press(i) + G%H_to_Pa * 0.5 * (h(i,j,k) + h(i,j+1,k))
       enddo ; enddo ; endif
       call calculate_density_derivs(T_EOS, S_EOS, press, dR_dT, dR_dS, &
-                                    is-G%Isdq+1, ie-is+1, tv%eqn_of_state)      
+                                    is-G%IsdB+1, ie-is+1, tv%eqn_of_state)      
     endif
 
     do i=is,ie ; if (do_i(i)) then
@@ -546,15 +546,15 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, CS)
         ! directly to the layers in question as a Rayleigh drag term.
         if (m==1) then
           D_vel = 0.5*(G%bathyT(i,j) + G%bathyT(i+1,j))
-          tmp = G%umask(i,j+1) * 0.5*(G%bathyT(i,j+1) + G%bathyT(i+1,j+1))
+          tmp = G%mask2dCu(i,j+1) * 0.5*(G%bathyT(i,j+1) + G%bathyT(i+1,j+1))
           Dp = 2.0 * D_vel * tmp / (D_vel + tmp)
-          tmp = G%umask(i,j-1) * 0.5*(G%bathyT(i,j-1) + G%bathyT(i+1,j-1))
+          tmp = G%mask2dCu(i,j-1) * 0.5*(G%bathyT(i,j-1) + G%bathyT(i+1,j-1))
           Dm = 2.0 * D_vel * tmp / (D_vel + tmp)
         else
           D_vel = 0.5*(G%bathyT(i,j) + G%bathyT(i,j+1))
-          tmp = G%vmask(i+1,j) * 0.5*(G%bathyT(i+1,j) + G%bathyT(i+1,j+1))
+          tmp = G%mask2dCv(i+1,j) * 0.5*(G%bathyT(i+1,j) + G%bathyT(i+1,j+1))
           Dp = 2.0 * D_vel * tmp / (D_vel + tmp)
-          tmp = G%vmask(i,j-1) * 0.5*(G%bathyT(i-1,j) + G%bathyT(i-1,j+1))
+          tmp = G%mask2dCv(i,j-1) * 0.5*(G%bathyT(i-1,j) + G%bathyT(i-1,j+1))
           Dm = 2.0 * D_vel * tmp / (D_vel + tmp)
         endif
         if (Dm > Dp) then ; tmp = Dp ; Dp = Dm ; Dm = tmp ; endif
@@ -782,10 +782,10 @@ function set_v_at_u(v, h, G, i, j, k)
   real :: hwt(4)           ! Masked weights used to average v onto u, in H.
   real :: hwt_tot          ! The sum of the masked thicknesses, in H.
   
-  hwt(1) = (h(i,j-1,k) + h(i,j,k)) * G%vmask(i,j-1)
-  hwt(2) = (h(i+1,j-1,k) + h(i+1,j,k)) * G%vmask(i+1,j-1)
-  hwt(3) = (h(i,j,k) + h(i,j+1,k)) * G%vmask(i,j)
-  hwt(4) = (h(i+1,j,k) + h(i+1,j+1,k)) * G%vmask(i+1,j)
+  hwt(1) = (h(i,j-1,k) + h(i,j,k)) * G%mask2dCv(i,j-1)
+  hwt(2) = (h(i+1,j-1,k) + h(i+1,j,k)) * G%mask2dCv(i+1,j-1)
+  hwt(3) = (h(i,j,k) + h(i,j+1,k)) * G%mask2dCv(i,j)
+  hwt(4) = (h(i+1,j,k) + h(i+1,j+1,k)) * G%mask2dCv(i+1,j)
   hwt_tot = (hwt(1) + hwt(4)) + (hwt(2) + hwt(3))
   set_v_at_u = 0.0
   if (hwt_tot > 0.0) set_v_at_u = &
@@ -803,10 +803,10 @@ function set_u_at_v(u, h, G, i, j, k)
   real :: hwt(4)           ! Masked weights used to average u onto v, in H.
   real :: hwt_tot          ! The sum of the masked thicknesses, in H.
   
-  hwt(1) = (h(i-1,j,k) + h(i,j,k)) * G%umask(i-1,j)
-  hwt(2) = (h(i,j,k) + h(i+1,j,k)) * G%umask(i,j)
-  hwt(3) = (h(i-1,j+1,k) + h(i,j+1,k)) * G%umask(i-1,j+1)
-  hwt(4) = (h(i,j+1,k) + h(i+1,j+1,k)) * G%umask(i,j+1)
+  hwt(1) = (h(i-1,j,k) + h(i,j,k)) * G%mask2dCu(i-1,j)
+  hwt(2) = (h(i,j,k) + h(i+1,j,k)) * G%mask2dCu(i,j)
+  hwt(3) = (h(i-1,j+1,k) + h(i,j+1,k)) * G%mask2dCu(i-1,j+1)
+  hwt(4) = (h(i,j+1,k) + h(i+1,j+1,k)) * G%mask2dCu(i,j+1)
   hwt_tot = (hwt(1) + hwt(4)) + (hwt(2) + hwt(3))
   set_u_at_v = 0.0
   if (hwt_tot > 0.0) set_u_at_v = &
@@ -931,7 +931,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, K2, nkmb
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-  Isq = G%Iscq ; Ieq = G%Iecq ; Jsq = G%Jscq ; Jeq = G%Jecq
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   nkmb = G%nk_rho_varies
 
   if (.not.associated(CS)) call MOM_error(FATAL,"MOM_vert_friction(visc_ML): "//&
@@ -958,27 +958,27 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
       "set_viscous_ML: fluxes%frac_shelf_h is associated, but " // &
       "fluxes%frac_shelf_v is not.")
     if (.not.associated(visc%taux_shelf)) then
-      allocate(visc%taux_shelf(G%Isdq:G%Iedq,G%jsd:G%jed))
+      allocate(visc%taux_shelf(G%IsdB:G%IedB,G%jsd:G%jed))
       visc%taux_shelf(:,:) = 0.0
     endif
     if (.not.associated(visc%tauy_shelf)) then
-      allocate(visc%tauy_shelf(G%isd:G%ied,G%Jsdq:G%Jedq))
+      allocate(visc%tauy_shelf(G%isd:G%ied,G%JsdB:G%JedB))
       visc%tauy_shelf(:,:) = 0.0
     endif
     if (.not.associated(visc%tbl_thick_shelf_u)) then
-      allocate(visc%tbl_thick_shelf_u(G%Isdq:G%Iedq,G%jsd:G%jed))
+      allocate(visc%tbl_thick_shelf_u(G%IsdB:G%IedB,G%jsd:G%jed))
       visc%tbl_thick_shelf_u(:,:) = 0.0
     endif
     if (.not.associated(visc%tbl_thick_shelf_v)) then
-      allocate(visc%tbl_thick_shelf_v(G%isd:G%ied,G%Jsdq:G%Jedq))
+      allocate(visc%tbl_thick_shelf_v(G%isd:G%ied,G%JsdB:G%JedB))
       visc%tbl_thick_shelf_v(:,:) = 0.0
     endif
     if (.not.associated(visc%kv_tbl_shelf_u)) then
-      allocate(visc%kv_tbl_shelf_u(G%Isdq:G%Iedq,G%jsd:G%jed))
+      allocate(visc%kv_tbl_shelf_u(G%IsdB:G%IedB,G%jsd:G%jed))
       visc%kv_tbl_shelf_u(:,:) = 0.0
     endif
     if (.not.associated(visc%kv_tbl_shelf_v)) then
-      allocate(visc%kv_tbl_shelf_v(G%isd:G%ied,G%Jsdq:G%Jedq))
+      allocate(visc%kv_tbl_shelf_v(G%isd:G%ied,G%JsdB:G%JedB))
       visc%kv_tbl_shelf_v(:,:) = 0.0
     endif
 
@@ -994,7 +994,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
       do_any = .false.
       do I=Isq,Ieq
         htot(I) = 0.0
-        if (G%umask(I,j) < 0.5) then
+        if (G%mask2dCu(I,j) < 0.5) then
           do_i(I) = .false. ; visc%nkml_visc_u(I,j) = G%nkml
         else
           do_i(I) = .true. ; do_any = .true.
@@ -1024,7 +1024,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
               S_EOS(I) = (h(i,j,k2)*tv%S(i,j,k2) + h(i+1,j,k2)*tv%S(i+1,j,k2)) * I_2hlay
             enddo
             call calculate_density_derivs(T_EOS, S_EOS, press, dR_dT, dR_dS, &
-                                          Isq-G%Isdq+1, Ieq-Isq+1, tv%eqn_of_state)
+                                          Isq-G%IsdB+1, Ieq-Isq+1, tv%eqn_of_state)
           endif
 
           do I=Isq,Ieq ; if (do_i(I)) then
@@ -1087,7 +1087,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
     do_any_shelf = .false.
     if (associated(fluxes%frac_shelf_h)) then
       do I=Isq,Ieq
-        if (fluxes%frac_shelf_u(I,j)*G%umask(I,j) == 0.0) then
+        if (fluxes%frac_shelf_u(I,j)*G%mask2dCu(I,j) == 0.0) then
           do_i(I) = .false.
           visc%tbl_thick_shelf_u(I,j) = 0.0 ; visc%kv_tbl_shelf_u(I,j) = 0.0
         else
@@ -1145,7 +1145,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
 
       if (use_EOS) then
         call calculate_density_derivs(T_EOS, S_EOS, fluxes%p_surf(:,j), &
-                     dR_dT, dR_dS, Isq-G%Isdq+1, Ieq-Isq+1, tv%eqn_of_state)
+                     dR_dT, dR_dS, Isq-G%IsdB+1, Ieq-Isq+1, tv%eqn_of_state)
       endif
 
       do I=Isq,Ieq ; if (do_i(I)) then
@@ -1222,7 +1222,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
       do_any = .false.
       do i=is,ie
         htot(i) = 0.0
-        if (G%vmask(i,J) < 0.5) then
+        if (G%mask2dCv(i,J) < 0.5) then
           do_i(i) = .false. ; visc%nkml_visc_v(i,J) = G%nkml
         else
           do_i(i) = .true. ; do_any = .true.
@@ -1253,7 +1253,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
               S_EOS(i) = (h(i,j,k2)*tv%S(i,j,k2) + h(i,j+1,k2)*tv%S(i,j+1,k2)) * I_2hlay
             enddo
             call calculate_density_derivs(T_EOS, S_EOS, press, dR_dT, dR_dS, &
-                                          is-G%Isdq+1, ie-is+1, tv%eqn_of_state)
+                                          is-G%IsdB+1, ie-is+1, tv%eqn_of_state)
           endif
 
           do i=is,ie ; if (do_i(i)) then
@@ -1316,7 +1316,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
     do_any_shelf = .false.
     if (associated(fluxes%frac_shelf_h)) then
       do I=Isq,Ieq
-        if (fluxes%frac_shelf_v(i,J)*G%vmask(i,J) == 0.0) then
+        if (fluxes%frac_shelf_v(i,J)*G%mask2dCv(i,J) == 0.0) then
           do_i(I) = .false.
           visc%tbl_thick_shelf_v(i,J) = 0.0 ; visc%kv_tbl_shelf_v(i,J) = 0.0
         else
@@ -1374,7 +1374,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
 
       if (use_EOS) then
         call calculate_density_derivs(T_EOS, S_EOS, fluxes%p_surf(:,j), &
-                     dR_dT, dR_dS, is-G%Isdq+1, ie-is+1, tv%eqn_of_state)      
+                     dR_dT, dR_dS, is-G%IsdB+1, ie-is+1, tv%eqn_of_state)      
       endif
 
       do i=is,ie ; if (do_i(i)) then
@@ -1473,7 +1473,7 @@ subroutine set_visc_init(Time, G, param_file, diag, visc, CS)
 !  (in/out)  CS - A pointer that is set to point to the control structure
 !                 for this module
   real    :: Csmag_chan_dflt, smag_const1, TKE_decay_dflt, bulk_Ri_ML_dflt
-  integer :: isd, ied, jsd, jed, Isdq, Iedq, Jsdq, Jedq, nz
+  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz
   logical :: use_kappa_shear, adiabatic, double_diffusion
   character(len=128) :: version = '$Id$'
   character(len=128) :: tagname = '$Name$'
@@ -1487,7 +1487,7 @@ subroutine set_visc_init(Time, G, param_file, diag, visc, CS)
   allocate(CS)
 
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = G%ke
-  Isdq = G%Isdq ; Iedq = G%Iedq ; Jsdq = G%Jsdq ; Jedq = G%Jedq
+  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   CS%diag => diag
 
@@ -1625,10 +1625,10 @@ subroutine set_visc_init(Time, G, param_file, diag, visc, CS)
   endif
 
   if (CS%bottomdraglaw) then
-    allocate(visc%bbl_thick_u(Isdq:Iedq,jsd:jed)) ; visc%bbl_thick_u = 0.0
-    allocate(visc%kv_bbl_u(Isdq:Iedq,jsd:jed)) ; visc%kv_bbl_u = 0.0
-    allocate(visc%bbl_thick_v(isd:ied,Jsdq:Jedq)) ; visc%bbl_thick_v = 0.0
-    allocate(visc%kv_bbl_v(isd:ied,Jsdq:Jedq)) ; visc%kv_bbl_v = 0.0
+    allocate(visc%bbl_thick_u(IsdB:IedB,jsd:jed)) ; visc%bbl_thick_u = 0.0
+    allocate(visc%kv_bbl_u(IsdB:IedB,jsd:jed)) ; visc%kv_bbl_u = 0.0
+    allocate(visc%bbl_thick_v(isd:ied,JsdB:JedB)) ; visc%bbl_thick_v = 0.0
+    allocate(visc%kv_bbl_v(isd:ied,JsdB:JedB)) ; visc%kv_bbl_v = 0.0
     allocate(visc%ustar_bbl(isd:ied,jsd:jed)) ; visc%ustar_bbl = 0.0
     allocate(visc%TKE_bbl(isd:ied,jsd:jed)) ; visc%TKE_bbl = 0.0
 
@@ -1642,8 +1642,8 @@ subroutine set_visc_init(Time, G, param_file, diag, visc, CS)
        Time, 'BBL viscosity at v points', 'meter2 second-1')
   endif
   if (CS%Channel_drag) then
-    allocate(visc%Ray_u(Isdq:Iedq,jsd:jed,nz)) ; visc%Ray_u = 0.0
-    allocate(visc%Ray_v(isd:ied,Jsdq:Jedq,nz)) ; visc%Ray_v = 0.0
+    allocate(visc%Ray_u(IsdB:IedB,jsd:jed,nz)) ; visc%Ray_u = 0.0
+    allocate(visc%Ray_v(isd:ied,JsdB:JedB,nz)) ; visc%Ray_v = 0.0
     CS%id_Ray_u = register_diag_field('ocean_model', 'Rayleigh_u', G%axesCuL, &
        Time, 'Rayleigh drag velocity at u points', 'meter second-1')
     CS%id_Ray_v = register_diag_field('ocean_model', 'Rayleigh_v', G%axesCvL, &
@@ -1660,8 +1660,8 @@ subroutine set_visc_init(Time, G, param_file, diag, visc, CS)
   endif
 
   if (CS%dynamic_viscous_ML) then
-    allocate(visc%nkml_visc_u(Isdq:Iedq,jsd:jed)) ; visc%nkml_visc_u = 0.0
-    allocate(visc%nkml_visc_v(isd:ied,Jsdq:Jedq)) ; visc%nkml_visc_v = 0.0
+    allocate(visc%nkml_visc_u(IsdB:IedB,jsd:jed)) ; visc%nkml_visc_u = 0.0
+    allocate(visc%nkml_visc_v(isd:ied,JsdB:JedB)) ; visc%nkml_visc_v = 0.0
     CS%id_nkml_visc_u = register_diag_field('ocean_model', 'nkml_visc_u', &
        G%axesCu1, Time, 'Number of layers in viscous mixed layer at u points', 'meter')
     CS%id_nkml_visc_v = register_diag_field('ocean_model', 'nkml_visc_v', &

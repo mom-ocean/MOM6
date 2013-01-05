@@ -121,7 +121,7 @@ subroutine remapping_main ( G, regridding_opts, h, h_new, tv, u, v )
   ! Remap u velocity component
   if ( present(u) ) then
   do j = G%jsc,G%jec
-    do i = G%iscq,G%iecq
+    do i = G%iscB,G%iecB
     
       ! Build initial grid
       grid_start%h(:) = 0.5 * ( h(i,j,:) + h(i+1,j,:) )
@@ -155,7 +155,7 @@ subroutine remapping_main ( G, regridding_opts, h, h_new, tv, u, v )
   
   ! Remap v velocity component
   if ( present(v) ) then
-  do j = G%jscq,G%jecq
+  do j = G%jscB,G%jecB
     do i = G%isc,G%iec
 
       ! Build initial grid

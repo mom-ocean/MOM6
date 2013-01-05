@@ -1010,13 +1010,13 @@ subroutine restore_state(filename, directory, day, G, CS)
             !   NOTE: The index ranges f var_ptrs always start with 1, so with
             ! symmetric memory the staggering is swapped from NE to SW!
             is0 = 1-G%isd
-            if ((pos == EAST_FACE) .or. (pos == CORNER)) is0 = 1-G%Isdq
+            if ((pos == EAST_FACE) .or. (pos == CORNER)) is0 = 1-G%IsdB
             if (sizes(1) == G%iec-G%isc+1) then
               isL = G%isc+is0 ; ieL = G%iec+is0
-            elseif (sizes(1) == G%Iecq-G%Iscq+1) then
-              isL = G%Iscq+is0 ; ieL = G%Iecq+is0
+            elseif (sizes(1) == G%IecB-G%IscB+1) then
+              isL = G%IscB+is0 ; ieL = G%IecB+is0
             elseif (((pos == EAST_FACE) .or. (pos == CORNER)) .and. &
-                    (G%Iscq == G%isc) .and. (sizes(1) == G%iec-G%isc+2)) then
+                    (G%IscB == G%isc) .and. (sizes(1) == G%iec-G%isc+2)) then
               ! This is reading a symmetric file in a non-symmetric model.
               isL = G%isc-1+is0 ; ieL = G%iec+is0
             else
@@ -1026,13 +1026,13 @@ subroutine restore_state(filename, directory, day, G, CS)
             endif
 
             js0 = 1-G%jsd
-            if ((pos == NORTH_FACE) .or. (pos == CORNER)) js0 = 1-G%Jsdq
+            if ((pos == NORTH_FACE) .or. (pos == CORNER)) js0 = 1-G%JsdB
             if (sizes(2) == G%jec-G%jsc+1) then
               jsL = G%jsc+js0 ; jeL = G%jec+js0
-            elseif (sizes(2) == G%jecq-G%jscq+1) then
-              jsL = G%jscq+js0 ; jeL = G%jecq+js0
+            elseif (sizes(2) == G%jecB-G%jscB+1) then
+              jsL = G%jscB+js0 ; jeL = G%jecB+js0
             elseif (((pos == NORTH_FACE) .or. (pos == CORNER)) .and. &
-                    (G%Jscq == G%jsc) .and. (sizes(2) == G%jec-G%jsc+2)) then
+                    (G%JscB == G%jsc) .and. (sizes(2) == G%jec-G%jsc+2)) then
               ! This is reading a symmetric file in a non-symmetric model.
               jsL = G%jsc-1+js0 ; jeL = G%jec+js0
             else

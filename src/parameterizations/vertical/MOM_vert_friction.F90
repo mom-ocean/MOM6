@@ -231,7 +231,7 @@ subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, G, CS, taux_bot, tauy_bot)
 
   integer :: i, j, k, is, ie, Isq, Ieq, Jsq, Jeq, nz
   is = G%isc ; ie = G%iec
-  Isq = G%Iscq ; Ieq = G%Iecq ; Jsq = G%Jscq ; Jeq = G%Jecq ; nz = G%ke
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB ; nz = G%ke
 
   if (.not.associated(CS)) call MOM_error(FATAL,"MOM_vert_friction(visc): "// &
          "Module must be initialized before it is used.")
@@ -248,7 +248,7 @@ subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, G, CS, taux_bot, tauy_bot)
   !   Update the zonal velocity component using a modification of a standard
   ! tridagonal solver.
   do j=G%jsc,G%jec
-    do I=Isq,Ieq ; do_i(I) = (G%umask(I,j) > 0) ; enddo
+    do I=Isq,Ieq ; do_i(I) = (G%mask2dCu(I,j) > 0) ; enddo
 
     if (ASSOCIATED(CS%diag%du_dt_visc)) then ; do k=1,nz ; do I=Isq,Ieq
       CS%diag%du_dt_visc(I,j,k) = u(I,j,k)
@@ -270,7 +270,7 @@ subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, G, CS, taux_bot, tauy_bot)
         enddo
       endif ; enddo ! end of i loop
     else ; do I=Isq,Ieq
-      surface_stress(I) = dt_Rho0 * (G%umask(I,j)*fluxes%taux(I,j))
+      surface_stress(I) = dt_Rho0 * (G%mask2dCu(I,j)*fluxes%taux(I,j))
     enddo ; endif ! direct_stress
 
     if (CS%Channel_drag) then ; do k=1,nz ; do I=Isq,Ieq
@@ -315,7 +315,7 @@ subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, G, CS, taux_bot, tauy_bot)
 
   ! Now work on the meridional velocity component.
   do J=Jsq,Jeq
-    do i=is,ie ; do_i(i) = (G%vmask(i,J) > 0) ; enddo
+    do i=is,ie ; do_i(i) = (G%mask2dCv(i,J) > 0) ; enddo
 
     if (ASSOCIATED(CS%diag%dv_dt_visc)) then ; do k=1,nz ; do i=is,ie
       CS%diag%dv_dt_visc(i,J,k) = v(i,J,k)
@@ -337,7 +337,7 @@ subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, G, CS, taux_bot, tauy_bot)
         enddo
       endif ; enddo ! end of i loop
     else ; do i=is,ie
-      surface_stress(i) = dt_Rho0 * (G%vmask(i,J)*fluxes%tauy(i,J))
+      surface_stress(i) = dt_Rho0 * (G%mask2dCv(i,J)*fluxes%tauy(i,J))
     enddo ; endif ! direct_stress
 
     if (CS%Channel_drag) then ; do k=1,nz ; do i=is,ie
@@ -446,7 +446,7 @@ subroutine vertvisc_remnant(visc, visc_rem_u, visc_rem_v, dt, G, CS)
 
   integer :: i, j, k, is, ie, Isq, Ieq, Jsq, Jeq, nz
   is = G%isc ; ie = G%iec
-  Isq = G%Iscq ; Ieq = G%Iecq ; Jsq = G%Jscq ; Jeq = G%Jecq ; nz = G%ke
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB ; nz = G%ke
 
   if (.not.associated(CS)) call MOM_error(FATAL,"MOM_vert_friction(visc): "// &
          "Module must be initialized before it is used.")
@@ -457,7 +457,7 @@ subroutine vertvisc_remnant(visc, visc_rem_u, visc_rem_v, dt, G, CS)
 
   ! Find the zonal viscous using a modification of a standard tridagonal solver.
   do j=G%jsc,G%jec
-    do I=Isq,Ieq ; do_i(I) = (G%umask(I,j) > 0) ; enddo
+    do I=Isq,Ieq ; do_i(I) = (G%mask2dCu(I,j) > 0) ; enddo
 
     if (CS%Channel_drag) then ; do k=1,nz ; do I=Isq,Ieq
       Ray(I,k) = visc%Ray_u(I,j,k)
@@ -484,7 +484,7 @@ subroutine vertvisc_remnant(visc, visc_rem_u, visc_rem_v, dt, G, CS)
 
   ! Now find the meridional viscous using a modification.
   do J=Jsq,Jeq
-    do i=is,ie ; do_i(i) = (G%vmask(i,J) > 0) ; enddo
+    do i=is,ie ; do_i(i) = (G%mask2dCv(i,J) > 0) ; enddo
 
     if (CS%Channel_drag) then ; do k=1,nz ; do i=is,ie
       Ray(i,k) = visc%Ray_v(i,J,k)
@@ -589,7 +589,7 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
 
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
-  Isq = G%Iscq ; Ieq = G%Iecq ; Jsq = G%Jscq ; Jeq = G%Jecq ; nz = G%ke
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB ; nz = G%ke
 
   if (.not.associated(CS)) call MOM_error(FATAL,"MOM_vert_friction(coef): "// &
          "Module must be initialized before it is used.")
@@ -599,23 +599,23 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
   I_Hbbl(:) = 1.0 / (CS%Hbbl * G%m_to_H + h_neglect)
 
   if (CS%debug .or. (CS%id_hML_u > 0)) then
-    allocate(hML_u(G%Isdq:G%Iedq,G%jsd:G%jed)) ; hML_u(:,:) = 0.0
+    allocate(hML_u(G%IsdB:G%IedB,G%jsd:G%jed)) ; hML_u(:,:) = 0.0
   endif
   if (CS%debug .or. (CS%id_hML_v > 0)) then
-    allocate(hML_v(G%isd:G%ied,G%Jsdq:G%Jedq)) ; hML_v(:,:) = 0.0
+    allocate(hML_v(G%isd:G%ied,G%JsdB:G%JedB)) ; hML_v(:,:) = 0.0
   endif
 
   if ((associated(visc%taux_shelf) .or. associated(fluxes%frac_shelf_u)) .and. &
       .not.associated(CS%a1_shelf_u)) then
-    allocate(CS%a1_shelf_u(G%Isdq:G%Iedq,G%jsd:G%jed)) ; CS%a1_shelf_u(:,:)=0.0
+    allocate(CS%a1_shelf_u(G%IsdB:G%IedB,G%jsd:G%jed)) ; CS%a1_shelf_u(:,:)=0.0
   endif
   if ((associated(visc%tauy_shelf) .or. associated(fluxes%frac_shelf_u)) .and. &
       .not.associated(CS%a1_shelf_v)) then
-    allocate(CS%a1_shelf_v(G%isd:G%ied,G%Jsdq:G%Jedq)) ; CS%a1_shelf_v(:,:)=0.0
+    allocate(CS%a1_shelf_v(G%isd:G%ied,G%JsdB:G%JedB)) ; CS%a1_shelf_v(:,:)=0.0
   endif
 
   do j=G%Jsc,G%Jec
-    do I=Isq,Ieq ; do_i(I) = (G%umask(I,j) > 0) ; enddo
+    do I=Isq,Ieq ; do_i(I) = (G%mask2dCu(I,j) > 0) ; enddo
 
     if (CS%bottomdraglaw) then ; do I=Isq,Ieq
       kv_bbl(I) = visc%kv_bbl_u(I,j)
@@ -726,7 +726,7 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
 
   ! Now work on v-points.
   do J=Jsq,Jeq
-    do i=is,ie ; do_i(i) = (G%vmask(i,J) > 0) ; enddo
+    do i=is,ie ; do_i(i) = (G%mask2dCv(i,J) > 0) ; enddo
 
     if (CS%bottomdraglaw) then ; do i=is,ie
       kv_bbl(i) = visc%kv_bbl_v(i,J)
@@ -898,7 +898,7 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
     logical :: do_shelf
     integer :: i, k, is, ie, max_nk
 
-    if (work_on_u) then ; is = G%Iscq ; ie = G%Iecq
+    if (work_on_u) then ; is = G%IscB ; ie = G%IecB
     else ; is = G%isc ; ie = G%iec ; endif
     h_neglect = G%H_subroundoff
     dz_neglect = G%H_subroundoff*G%H_to_m
@@ -1062,7 +1062,7 @@ subroutine vertvisc_limit_vel(u, v, h, fluxes, visc, dt, G, CS)
   logical :: trunc_any, dowrite(SZIB_(G))
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-  Isq = G%Iscq ; Ieq = G%Iecq ; Jsq = G%Jscq ; Jeq = G%Jecq
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
   maxvel = CS%maxvel
   truncvel = 0.9*maxvel
@@ -1230,7 +1230,7 @@ subroutine vertvisc_init(HIS, Time, G, param_file, diag, dirs, ntrunc, CS)
 !                 for this module
 
   real :: hmix_str_dflt
-  integer :: isd, ied, jsd, jed, Isdq, Iedq, Jsdq, Jedq, nz
+  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz
   character(len=128) :: version = '$Id$'
   character(len=128) :: tagname = '$Name$'
   character(len=40)  :: mod = "MOM_vert_friction" ! This module's name.
@@ -1244,7 +1244,7 @@ subroutine vertvisc_init(HIS, Time, G, param_file, diag, dirs, ntrunc, CS)
   allocate(CS)
 
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = G%ke
-  Isdq = G%Isdq ; Iedq = G%Iedq ; Jsdq = G%Jsdq ; Jedq = G%Jedq
+  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   CS%diag => diag ; CS%ntrunc => ntrunc ; ntrunc = 0
 
@@ -1334,10 +1334,10 @@ subroutine vertvisc_init(HIS, Time, G, param_file, diag, dirs, ntrunc, CS)
                  "to be reported; the default is CFL_TRUNCATE.", &
                  units="nondim", default=CS%CFL_trunc)
 
-  ALLOC_(CS%a_u(Isdq:Iedq,jsd:jed,nz+1)) ; CS%a_u(:,:,:) = 0.0
-  ALLOC_(CS%h_u(Isdq:Iedq,jsd:jed,nz))   ; CS%h_u(:,:,:) = 0.0
-  ALLOC_(CS%a_v(isd:ied,Jsdq:Jedq,nz+1)) ; CS%a_v(:,:,:) = 0.0
-  ALLOC_(CS%h_v(isd:ied,Jsdq:Jedq,nz))   ; CS%h_v(:,:,:) = 0.0
+  ALLOC_(CS%a_u(IsdB:IedB,jsd:jed,nz+1)) ; CS%a_u(:,:,:) = 0.0
+  ALLOC_(CS%h_u(IsdB:IedB,jsd:jed,nz))   ; CS%h_u(:,:,:) = 0.0
+  ALLOC_(CS%a_v(isd:ied,JsdB:JedB,nz+1)) ; CS%a_v(:,:,:) = 0.0
+  ALLOC_(CS%h_v(isd:ied,JsdB:JedB,nz))   ; CS%h_v(:,:,:) = 0.0
 
   CS%id_au_vv = register_diag_field('ocean_model', 'au_visc', G%axesCui, Time, &
      'Zonal Viscous Vertical Coupling Coefficient', 'meter second-1')
@@ -1355,10 +1355,10 @@ subroutine vertvisc_init(HIS, Time, G, param_file, diag, dirs, ntrunc, CS)
 
   CS%id_du_dt_visc = register_diag_field('ocean_model', 'du_dt_visc', G%axesCuL, &
      Time, 'Zonal Acceleration from Vertical Viscosity', 'meter second-2')
-  if (CS%id_du_dt_visc > 0) call safe_alloc_ptr(diag%du_dt_visc,Isdq,Iedq,jsd,jed,nz)
+  if (CS%id_du_dt_visc > 0) call safe_alloc_ptr(diag%du_dt_visc,IsdB,IedB,jsd,jed,nz)
   CS%id_dv_dt_visc = register_diag_field('ocean_model', 'dv_dt_visc', G%axesCvL, &
      Time, 'Meridional Acceleration from Vertical Viscosity', 'meter second-2')
-  if (CS%id_dv_dt_visc > 0) call safe_alloc_ptr(diag%dv_dt_visc,isd,ied,Jsdq,Jedq,nz)
+  if (CS%id_dv_dt_visc > 0) call safe_alloc_ptr(diag%dv_dt_visc,isd,ied,JsdB,JedB,nz)
 
   CS%id_taux_bot = register_diag_field('ocean_model', 'taux_bot', G%axesCu1, &
      Time, 'Zonal Bottom Stress from Ocean to Earth', 'Pa')
