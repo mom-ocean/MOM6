@@ -337,6 +337,7 @@ subroutine populate_param_data(iounit, filename, param_data)
     inMultiLineComment = .false.
     do while(.true.)
       read(iounit, '(a)', end=8, err=9) line
+      line = replaceTabs(line)
       if (inMultiLineComment) then
         if (closeMultiLineComment(line)) inMultiLineComment=.false.
       else
@@ -375,6 +376,7 @@ subroutine populate_param_data(iounit, filename, param_data)
     num_lines = 0
     do while(.true.)
       read(iounit, '(a)', end=18, err=9) line
+      line = replaceTabs(line)
       if (inMultiLineComment) then
         if (closeMultiLineComment(line)) inMultiLineComment=.false.
       else
@@ -449,11 +451,25 @@ function lastNonCommentNonBlank(string)
   lastNonCommentNonBlank = len_trim(string(:lastNonCommentIndex(string))) ! Ignore remaining trailing blanks
 end function lastNonCommentNonBlank
 
+function replaceTabs(string)
+  character(len=*), intent(in) :: string
+  character(len=len(string))   :: replaceTabs
+! Returns string with tabs replaced by a ablank
+  integer :: i
+  do i=1, len(string)
+    if (string(i:i)==achar(9)) then
+      replaceTabs(i:i)=" "
+    else
+      replaceTabs(i:i)=string(i:i)
+    endif
+  enddo
+end function replaceTabs
+
 function removeComments(string)
   character(len=*), intent(in) :: string
   character(len=len(string))   :: removeComments
 ! Trims comments and leading blanks from string
-  integer :: icom, last
+  integer :: last
   removeComments=repeat(" ",len(string))
   last = lastNonCommentNonBlank(string)
   removeComments(:last)=adjustl(string(:last)) ! Copy only the non-comment part of string
