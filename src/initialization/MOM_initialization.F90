@@ -113,6 +113,9 @@ use adjustment_initialization, only : adjustment_initialize_temperature_salinity
 use sloshing_initialization, only : sloshing_initialize_topography
 use sloshing_initialization, only : sloshing_initialize_thickness
 use sloshing_initialization, only : sloshing_initialize_temperature_salinity
+use seamount_initialization, only : seamount_initialize_topography
+use seamount_initialization, only : seamount_initialize_thickness
+use seamount_initialization, only : seamount_initialize_temperature_salinity
 
 use midas_vertmap, only : fill_miss_2d, find_interfaces, tracer_Z_init, meshgrid
 use midas_vertmap, only : determine_temperature
@@ -373,6 +376,7 @@ subroutine MOM_initialize(u, v, h, tv, Time, G, PF, dirs, &
                " \t DOME2D - 2D version of DOME initialization. \n"//&
                " \t adjustment2d - TBD AJA. \n"//&
                " \t sloshing - TBD AJA. \n"//&
+               " \t seamount - TBD AJA. \n"//&
                " \t USER - call a user modified routine.", &
                fail_if_missing=.true.)
       select case (trim(config))
@@ -389,6 +393,7 @@ subroutine MOM_initialize(u, v, h, tv, Time, G, PF, dirs, &
          case ("DOME2D"); call DOME2d_initialize_thickness(h, G, PF)
          case ("adjustment2d"); call adjustment_initialize_thickness(h, G, PF)
          case ("sloshing"); call sloshing_initialize_thickness(h, G, PF)
+         case ("seamount"); call seamount_initialize_thickness(h, G, PF)
          case ("USER"); call user_initialize_thickness(h, G, PF,tv%T)
          case default ; call MOM_error(FATAL,  "MOM_initialize: "//&
               "Unrecognized layer thickness configuration "//trim(config))
@@ -411,6 +416,7 @@ subroutine MOM_initialize(u, v, h, tv, Time, G, PF, dirs, &
                " \t DOME2D - 2D DOME initialization. \n"//&
                " \t adjustment2d - TBD AJA. \n"//&
                " \t sloshing - TBD AJA. \n"//&
+               " \t seamount - TBD AJA. \n"//&
                " \t USER - call a user modified routine.", &
                fail_if_missing=.true.)
         select case (trim(config))
@@ -425,6 +431,8 @@ subroutine MOM_initialize(u, v, h, tv, Time, G, PF, dirs, &
           case ("adjustment2d"); call adjustment_initialize_temperature_salinity ( tv%T, &
                                       tv%S, h, G, PF, eos )
           case ("sloshing"); call sloshing_initialize_temperature_salinity(tv%T, &
+                                  tv%S, h, G, PF, eos )
+          case ("seamount"); call seamount_initialize_temperature_salinity(tv%T, &
                                   tv%S, h, G, PF, eos )
           case ("USER"); call user_init_temperature_salinity(tv%T, tv%S, G, PF, eos)
           case default ; call MOM_error(FATAL,  "MOM_initialize: "//&
@@ -1006,9 +1014,12 @@ subroutine MOM_initialize_topography(D, G, PF)
                  " \t\t wall at the southern face. \n"//&
                  " \t halfpipe - a zonally uniform channel with a half-sine \n"//&
                  " \t\t profile in the meridional direction. \n"//&
+                 " \t benchmark - use the benchmark test case topography. \n"//&
                  " \t DOME - use a slope and channel configuration for the \n"//&
                  " \t\t DOME sill-overflow test case. \n"//&
-                 " \t benchmark - use the benchmark test case topography. \n"//&
+                 " \t DOME2D - use a shelf and slope configuration for the \n"//&
+                 " \t\t DOME2D gravity current/overflow test case. \n"//&
+                 " \t seamount - Gaussian bump for spontaneous motion test case.\n"//&
                  " \t USER - call a user modified routine.", &
                  fail_if_missing=.true.)
   select case ( trim(config) )
@@ -1021,6 +1032,7 @@ subroutine MOM_initialize_topography(D, G, PF)
     case ("benchmark"); call benchmark_initialize_topography(D, G, PF)
     case ("DOME2D");    call DOME2d_initialize_topography(D, G, PF)
     case ("sloshing");  call sloshing_initialize_topography(D, G, PF)
+    case ("seamount");  call seamount_initialize_topography(D, G, PF)
     case ("USER");      call user_initialize_topography(D, G, PF)
     case default ;      call MOM_error(FATAL,"MOM_initialize_topography: "// &
       "Unrecognized topography setup '"//trim(config)//"'")
