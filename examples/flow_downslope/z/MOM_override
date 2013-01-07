@@ -1,0 +1,4 @@
+# Z* coordinate regridding + initialization
+#override DOME2D_IC=1
+#override USE_REGRIDDING=True
+#override define REGRIDDING_SCHEME 0

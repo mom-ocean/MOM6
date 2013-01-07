@@ -105,6 +105,9 @@ use benchmark_initialization, only : benchmark_init_temperature_salinity
 use circle_obcs_initialization, only : circle_obcs_initialize_thickness
 use lock_exchange_initialization, only : lock_exchange_initialize_thickness
 use external_gwave_initialization, only : external_gwave_initialize_thickness
+use DOME2d_initialization, only : DOME2d_initialize_topography
+use DOME2d_initialization, only : DOME2d_initialize_thickness
+use DOME2d_initialization, only : DOME2d_initialize_temperature_salinity
 use adjustment_initialization, only : adjustment_initialize_thickness
 use adjustment_initialization, only : adjustment_initialize_temperature_salinity
 use sloshing_initialization, only : sloshing_initialize_topography
@@ -260,7 +263,7 @@ subroutine MOM_initialize(u, v, h, tv, Time, G, PF, dirs, &
 ! Set up the parameters of the physical domain (i.e. the grid), G
   call set_grid_metrics(G, PF)
 
-! Set up the bottom depth, G%D either analytically or from file
+! Set up the bottom depth, G%bathyT either analytically or from file
   call MOM_initialize_topography(G%bathyT, G, PF)
 
 !    This call sets seamasks that prohibit flow over any point with  !
@@ -367,6 +370,7 @@ subroutine MOM_initialize(u, v, h, tv, Time, G, PF, dirs, &
                " \t search - search a density profile for the interface \n"//&
                " \t\t densities. This is not yet implemented. \n"//&
                " \t circle_obcs - the circle_obcs test case is used. \n"//&
+               " \t DOME2D - 2D version of DOME initialization. \n"//&
                " \t adjustment2d - TBD AJA. \n"//&
                " \t sloshing - TBD AJA. \n"//&
                " \t USER - call a user modified routine.", &
@@ -382,6 +386,7 @@ subroutine MOM_initialize(u, v, h, tv, Time, G, PF, dirs, &
          case ("circle_obcs"); call circle_obcs_initialize_thickness(h, G, PF)
          case ("lock_exchange"); call lock_exchange_initialize_thickness(h, G, PF)
          case ("external_gwave"); call external_gwave_initialize_thickness(h, G, PF)
+         case ("DOME2D"); call DOME2d_initialize_thickness(h, G, PF)
          case ("adjustment2d"); call adjustment_initialize_thickness(h, G, PF)
          case ("sloshing"); call sloshing_initialize_thickness(h, G, PF)
          case ("USER"); call user_initialize_thickness(h, G, PF,tv%T)
@@ -403,6 +408,7 @@ subroutine MOM_initialize(u, v, h, tv, Time, G, PF, dirs, &
                " \t\t (read from TS_FILE) to set layer densities. \n"//&
                " \t benchmark - use the benchmark test case T & S. \n"//&
                " \t linear - linear in logical layer space. \n"//&
+               " \t DOME2D - 2D DOME initialization. \n"//&
                " \t adjustment2d - TBD AJA. \n"//&
                " \t sloshing - TBD AJA. \n"//&
                " \t USER - call a user modified routine.", &
@@ -414,6 +420,8 @@ subroutine MOM_initialize(u, v, h, tv, Time, G, PF, dirs, &
                                    G, PF, eos, tv%P_Ref)
           case ("TS_profile") ; call initialize_temp_salt_from_profile(tv%T, tv%S, G, PF)
           case ("linear"); call initialize_temp_salt_linear(tv%T, tv%S, G, PF)
+          case ("DOME2D"); call DOME2d_initialize_temperature_salinity ( tv%T, &
+                                tv%S, h, G, PF, eos )
           case ("adjustment2d"); call adjustment_initialize_temperature_salinity ( tv%T, &
                                       tv%S, h, G, PF, eos )
           case ("sloshing"); call sloshing_initialize_temperature_salinity(tv%T, &
@@ -983,7 +991,7 @@ subroutine MOM_initialize_topography(D, G, PF)
 !  This subroutine makes the appropriate call to set up the bottom depth.
 !  This is a separate subroutine so that it can be made public and shared with
 !  the ice-sheet code or other components.
-! Set up the bottom depth, G%D either analytically or from file
+! Set up the bottom depth, G%bathyT either analytically or from file
   character(len=40)  :: mod = "MOM_initialize_topography" ! This subroutine's name.
   character(len=200) :: config
 
@@ -1011,6 +1019,7 @@ subroutine MOM_initialize_topography(D, G, PF)
     case ("halfpipe");  call initialize_topography_named(D, G, PF, config)
     case ("DOME");      call DOME_initialize_topography(D, G, PF)
     case ("benchmark"); call benchmark_initialize_topography(D, G, PF)
+    case ("DOME2D");    call DOME2d_initialize_topography(D, G, PF)
     case ("sloshing");  call sloshing_initialize_topography(D, G, PF)
     case ("USER");      call user_initialize_topography(D, G, PF)
     case default ;      call MOM_error(FATAL,"MOM_initialize_topography: "// &
@@ -3734,7 +3743,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
 
   if (correct_thickness) then
     ! All mass below the bottom removed if the topography is shallower than
-    ! the input file would indicate.  G%D is positive downward,
+    ! the input file would indicate.  G%bathyT is positive downward,
     ! eta is negative downward.
     do j=js,je ; do i=is,ie
       if (-zi(i,j,nz+1) > G%bathyT(i,j) + 0.1) zi(i,j,nz+1) = -G%bathyT(i,j)
