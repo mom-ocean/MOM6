@@ -382,9 +382,12 @@ TOPO_CONFIG = "DOME2D"          !
                                 !       wall at the southern face.
                                 !     halfpipe - a zonally uniform channel with a half-sine
                                 !       profile in the meridional direction.
+                                !     benchmark - use the benchmark test case topography.
                                 !     DOME - use a slope and channel configuration for the
                                 !       DOME sill-overflow test case.
-                                !     benchmark - use the benchmark test case topography.
+                                !     DOME2D - use a shelf and slope configuration for the
+                                !       DOME2D gravity current/overflow test case.
+                                !     seamount - Gaussian bump for spontaneous motion test case.
                                 !     USER - call a user modified routine.
 MINIMUM_DEPTH = 1.0             !   [m] default = 0.0
                                 ! The minimum depth of the ocean.
@@ -453,6 +456,7 @@ THICKNESS_CONFIG = "DOME2D"     !
                                 !     DOME2D - 2D version of DOME initialization.
                                 !     adjustment2d - TBD AJA.
                                 !     sloshing - TBD AJA.
+                                !     seamount - TBD AJA.
                                 !     USER - call a user modified routine.
 TS_CONFIG = "DOME2D"            !
                                 ! A string that determines how the initial tempertures
@@ -468,6 +472,7 @@ TS_CONFIG = "DOME2D"            !
                                 !     DOME2D - 2D DOME initialization.
                                 !     adjustment2d - TBD AJA.
                                 !     sloshing - TBD AJA.
+                                !     seamount - TBD AJA.
                                 !     USER - call a user modified routine.
 VELOCITY_CONFIG = "zero"        ! default = "zero"
                                 ! A string that determines how the initial velocities
