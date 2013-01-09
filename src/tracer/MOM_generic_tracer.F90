@@ -235,7 +235,7 @@ contains
        call g_tracer_get_values(g_tracer,g_tracer_name,'units',units )
 
        !nnz: Hard coded stuff. Need get/set routines
-       var_desc = vardesc(g_tracer_name,longname,'h','L','s',units,'f')
+       var_desc = vardesc(g_tracer_name,longname,'h','L','s',units)
        !!nnz: MOM field is 3D. Does this affect performance? Need it be override field?
        tr_ptr => tr_field(:,:,:,1)
        ! Register tracer for restart file.

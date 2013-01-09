@@ -75,7 +75,7 @@ use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_file_parser, only : uppercase
 use MOM_grid, only : ocean_grid_type
 use MOM_initialization, only : Get_MOM_Input
-use MOM_io, only : file_exists, read_data, slasher, vardesc
+use MOM_io, only : file_exists, read_data, slasher
 use MOM_restart, only : register_restart_field, restart_init, MOM_restart_CS
 use MOM_restart, only : restart_init_end, save_restart, restore_state
 use MOM_time_manager, only : time_type, operator(+), operator(/), get_time, set_time

@@ -32,7 +32,7 @@ use MOM_domains, only : pass_var, pass_vector, AGRID
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe
 use MOM_file_parser, only : read_param, log_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : file_exists, read_data, vardesc
+use MOM_io, only : file_exists, read_data
 use MOM_restart, only : register_restart_field, MOM_restart_CS
 use MOM_time_manager, only : time_type, operator(+), operator(/), get_time
 use MOM_tracer_flow_control, only : call_tracer_set_forcing

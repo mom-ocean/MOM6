@@ -1557,7 +1557,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     restart_CSp_tmp = CS%restart_CSp
     allocate(e(SZI_(grid),SZJ_(grid),SZK_(grid)+1))
     call find_eta(h(:,:,:,1), CS%tv, grid%g_Earth, grid, e)
-    vd = vardesc("eta","Interface heights",'h','i','1',"meter", 'd')
+    vd = vardesc("eta","Interface heights",'h','i','1',"meter")
     call register_restart_field(e, e, vd, .true., restart_CSp_tmp)
     
     call save_restart(dirs%output_directory, Time, 1, grid, &
@@ -1905,34 +1905,34 @@ subroutine set_restart_fields(grid, param_file, CS)
   thickness_units = get_thickness_units(grid)
   flux_units = get_flux_units(grid)
 
-  vd = vardesc("u","Zonal velocity",'u','L','s',"meter second-1", 'd')
+  vd = vardesc("u","Zonal velocity",'u','L','s',"meter second-1")
   call register_restart_field(CS%u(:,:,:,1), CS%u(:,:,:,2), vd, .true., CS%restart_CSp)
 
-  vd = vardesc("v","Meridional velocity",'v','L','s',"meter second-1", 'd')
+  vd = vardesc("v","Meridional velocity",'v','L','s',"meter second-1")
   call register_restart_field(CS%v(:,:,:,1), CS%v(:,:,:,2), vd, .true., CS%restart_CSp)
 
-  vd = vardesc("h","Layer Thickness",'h','L','s',thickness_units, 'd')
+  vd = vardesc("h","Layer Thickness",'h','L','s',thickness_units)
   call register_restart_field(CS%h(:,:,:,1), CS%h(:,:,:,2), vd, .true., CS%restart_CSp)
 
   if (CS%use_temperature) then
-    vd = vardesc("Temp","Potential Temperature",'h','L','s',"degC", 'd')
+    vd = vardesc("Temp","Potential Temperature",'h','L','s',"degC")
     call register_restart_field(CS%tv%T, CS%tv%T, vd, .true., CS%restart_CSp)
 
-    vd = vardesc("Salt","Salinity",'h','L','s',"PSU", 'd')
+    vd = vardesc("Salt","Salinity",'h','L','s',"PSU")
     call register_restart_field(CS%tv%S, CS%tv%S, vd, .true., CS%restart_CSp)
   endif
 
   if (CS%use_frazil) then
-    vd = vardesc("frazil","Frazil heat flux into ocean",'h','1','s',"J m-2", 'd')
+    vd = vardesc("frazil","Frazil heat flux into ocean",'h','1','s',"J m-2")
     call register_restart_field(CS%tv%frazil, CS%tv%frazil, vd, .false., CS%restart_CSp)
   endif
 
   if (CS%interp_p_surf) then
-    vd = vardesc("p_surf_prev","Previous ocean surface pressure",'h','1','s',"Pa", 'd')
+    vd = vardesc("p_surf_prev","Previous ocean surface pressure",'h','1','s',"Pa")
     call register_restart_field(CS%p_surf_prev, CS%p_surf_prev, vd, .false., CS%restart_CSp)
   endif
 
-  vd = vardesc("ave_ssh","Time average sea surface height",'h','1','s',"meter", 'd')
+  vd = vardesc("ave_ssh","Time average sea surface height",'h','1','s',"meter")
   call register_restart_field(CS%ave_ssh, CS%ave_ssh, vd, .false., CS%restart_CSp)
 
 end subroutine set_restart_fields

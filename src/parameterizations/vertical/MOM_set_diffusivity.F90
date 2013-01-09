@@ -2563,14 +2563,14 @@ subroutine set_diffusivity_init(Time, G, param_file, diag, CS, diag_to_Z_CSp)
 
   if (associated(diag_to_Z_CSp)) then
     vd = vardesc("N2_z","Buoyancy frequency, interpolated to z",&
-                 'h','z','s',"second-2", 'd')
+                 'h','z','s',"second-2")
     CS%id_N2_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
     vd = vardesc("Kd_itides_z","Internal Tide Driven Diffusivity, interpolated to z",&
-                 'h','z','s',"meter2 second-1", 'd')
+                 'h','z','s',"meter2 second-1")
     CS%id_Kd_itidal_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
     if (CS%Lee_wave_dissipation) then
        vd = vardesc("Kd_Nikurashin_z","Lee Wave Driven Diffusivity, interpolated to z",&
-                 'h','z','s',"meter2 second-1", 'd')
+                 'h','z','s',"meter2 second-1")
        CS%id_Kd_Niku_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
     endif
     if (CS%user_change_diff) &
@@ -2601,10 +2601,10 @@ subroutine set_diffusivity_init(Time, G, param_file, diag, CS, diag_to_Z_CSp)
 
     if (associated(diag_to_Z_CSp)) then
       vd = vardesc("KT_extra_z","Double-Diffusive Temperature Diffusivity, interpolated to z",&
-           'h','z','s',"meter2 second-1", 'd')
+           'h','z','s',"meter2 second-1")
       CS%id_KT_extra_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
       vd = vardesc("KS_extra_z","Double-Diffusive Salinity Diffusivity, interpolated to z",&
-           'h','z','s',"meter2 second-1", 'd')
+           'h','z','s',"meter2 second-1")
       CS%id_KS_extra_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
     endif
   endif

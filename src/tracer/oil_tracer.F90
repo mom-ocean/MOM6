@@ -232,7 +232,7 @@ function register_oil_tracer(G, param_file, CS, diag, tr_adv_CSp, &
     if (CS%oil_source_k(m)/=0) then
       write(name_tag(1:3),'("_",I2.2)') m
       CS%ntr = CS%ntr + 1
-      CS%tr_desc(m) = vardesc("oil"//trim(name_tag),"Oil Tracer",'h','L','s',"kg/m3", 'f')
+      CS%tr_desc(m) = vardesc("oil"//trim(name_tag),"Oil Tracer",'h','L','s',"kg/m3")
       CS%IC_val(m) = 0.0
       if (CS%oil_decay_days(m)>0.) then
         CS%oil_decay_rate(m)=1./(86400.0*CS%oil_decay_days(m))

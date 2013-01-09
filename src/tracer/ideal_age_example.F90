@@ -220,7 +220,7 @@ function register_ideal_age_tracer(G, param_file, CS, diag, tr_adv_CSp, &
   CS%ntr = 0
   if (do_ideal_age) then
     CS%ntr = CS%ntr + 1 ; m = CS%ntr
-    CS%tr_desc(m) = vardesc("age","Ideal Age Tracer",'h','L','s',"years", 'f')
+    CS%tr_desc(m) = vardesc("age","Ideal Age Tracer",'h','L','s',"years")
     CS%tracer_ages(m) = .true. ; CS%sfc_growth_rate(m) = 0.0
     CS%IC_val(m) = 0.0 ; CS%young_val(m) = 0.0 ; CS%tracer_start_year(m) = 0.0
   endif
@@ -228,7 +228,7 @@ function register_ideal_age_tracer(G, param_file, CS, diag, tr_adv_CSp, &
   if (do_vintage) then
     CS%ntr = CS%ntr + 1 ; m = CS%ntr
     CS%tr_desc(m) = vardesc("vintage","Exponential Vintage Tracer",'h','L','s',&
-                            "years", 'f')
+                            "years")
     CS%tracer_ages(m) = .false. ; CS%sfc_growth_rate(m) = 1.0/30.0
     CS%IC_val(m) = 0.0 ; CS%young_val(m) = 1e-20 ; CS%tracer_start_year(m) = 0.0
     call get_param(param_file, mod, "IDEAL_VINTAGE_START_YEAR", CS%tracer_start_year(m), &
@@ -239,7 +239,7 @@ function register_ideal_age_tracer(G, param_file, CS, diag, tr_adv_CSp, &
   if (do_ideal_age_dated) then
     CS%ntr = CS%ntr + 1 ; m = CS%ntr
     CS%tr_desc(m) = vardesc("age_dated","Ideal Age Tracer with a Start Date",&
-                            'h','L','s',"years", 'f')
+                            'h','L','s',"years")
     CS%tracer_ages(m) = .true. ; CS%sfc_growth_rate(m) = 0.0
     CS%IC_val(m) = 0.0 ; CS%young_val(m) = 0.0 ; CS%tracer_start_year(m) = 0.0
     call get_param(param_file, mod, "IDEAL_AGE_DATED_START_YEAR", CS%tracer_start_year(m), &

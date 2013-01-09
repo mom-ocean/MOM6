@@ -179,7 +179,7 @@ function register_DOME_tracer(G, param_file, CS, diag, tr_adv_CSp, &
   endif
 
   do m=1,NTR
-    CS%tr_desc(m) = vardesc("tr","Tracer",'h','L','s',"kg kg-1", 'd')
+    CS%tr_desc(m) = vardesc("tr","Tracer",'h','L','s',"kg kg-1")
     if (m < 10) then ; write(name,'("tr_D",I1.1)') m
     else ; write(name,'("tr_D",I2.2)') m ; endif
     write(longname,'("Concentration of DOME Tracer ",I2.2)') m

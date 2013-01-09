@@ -94,13 +94,12 @@ public :: READONLY_FILE, SINGLE_FILE, WRITEONLY_FILE
 public :: CENTER, CORNER, NORTH_FACE, EAST_FACE
 
 type, public :: vardesc
-  character(len=64) :: name     ! The variable name in a NetCDF file.
-  character(len=72) :: longname ! The long name of that variable.
-  character(len=1)  :: hor_grid ! The hor. grid:  u, v, h, q, or 1.
-  character(len=1)  :: z_grid   ! The vert. grid:  L, i, or 1.
-  character(len=8)  :: t_grid   ! The time description: s, a, m, p, or 1.
-  character(len=48) :: units    ! The dimensions of the variable.
-  character(len=1)  :: mem_size ! The size in memory: d or f.
+  character(len=64)  :: name     ! The variable name in a NetCDF file.
+  character(len=240) :: longname ! The long name of the variable.
+  character(len=8)   :: hor_grid ! The hor. grid:  u, v, h, q, Cu, Cv, T, Bu, or 1.
+  character(len=8)   :: z_grid   ! The vert. grid:  L, i, or 1.
+  character(len=8)   :: t_grid   ! The time description: s, p, or 1.
+  character(len=48)  :: units    ! The dimensions of the variable.
 end type vardesc
 
 interface file_exists
@@ -188,6 +187,10 @@ subroutine create_file(unit, filename, vars, novars, G, fields, threading, &
       case ('q') ; use_latq = .true. ; use_lonq = .true.
       case ('u') ; use_lath = .true. ; use_lonq = .true.
       case ('v') ; use_latq = .true. ; use_lonh = .true.
+      case ('T')  ; use_lath = .true. ; use_lonh = .true.
+      case ('Bu') ; use_latq = .true. ; use_lonq = .true.
+      case ('Cu') ; use_lath = .true. ; use_lonq = .true.
+      case ('Cv') ; use_latq = .true. ; use_lonh = .true.
       case ('1') ! Do nothing.
       case default
         call MOM_error(WARNING, "MOM_io create_file: "//trim(vars(k)%name)//&
@@ -297,6 +300,10 @@ subroutine create_file(unit, filename, vars, novars, G, fields, threading, &
       case ('q') ; numaxes = 2 ; axes(1) = axis_lonq ; axes(2) = axis_latq
       case ('u') ; numaxes = 2 ; axes(1) = axis_lonq ; axes(2) = axis_lath
       case ('v') ; numaxes = 2 ; axes(1) = axis_lonh ; axes(2) = axis_latq
+      case ('T')  ; numaxes = 2 ; axes(1) = axis_lonh ; axes(2) = axis_lath
+      case ('Bu') ; numaxes = 2 ; axes(1) = axis_lonq ; axes(2) = axis_latq
+      case ('Cu') ; numaxes = 2 ; axes(1) = axis_lonq ; axes(2) = axis_lath
+      case ('Cv') ; numaxes = 2 ; axes(1) = axis_lonh ; axes(2) = axis_latq
       case ('1') ! Do nothing.
       case default
         call MOM_error(WARNING, "MOM_io create_file: "//trim(vars(k)%name)//&
@@ -319,11 +326,7 @@ subroutine create_file(unit, filename, vars, novars, G, fields, threading, &
         call MOM_error(WARNING, "MOM_io create_file: "//trim(vars(k)%name)//&
                         " has unrecognized t_grid "//trim(vars(k)%t_grid))
     end select
-    select case (vars(k)%mem_size)
-      case ('d') ; pack = 1
-      case ('f') ; pack = 2
-      case default ; pack = 1 ! Should this write an error message?
-    end select
+    pack = 1
 
     call mpp_write_meta(unit, fields(k), axes(1:numaxes), vars(k)%name, vars(k)%units, &
            vars(k)%longname, pack = pack)

@@ -192,7 +192,7 @@ function register_advection_test_tracer(G, param_file, CS, diag, tr_adv_CSp, &
   endif
 
   do m=1,NTR
-    CS%tr_desc(m) = vardesc("tr","Tracer",'h','L','s',"kg kg-1", 'd')
+    CS%tr_desc(m) = vardesc("tr","Tracer",'h','L','s',"kg kg-1")
     if (m < 10) then ; write(name,'("tr",I1.1)') m
     else ; write(name,'("tr",I2.2)') m ; endif
     write(longname,'("Concentration of Tracer ",I2.2)') m

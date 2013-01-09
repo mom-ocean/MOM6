@@ -249,8 +249,8 @@ function register_OCMIP2_CFC(G, param_file, CS, diag, tr_adv_CSp, restart_CS)
   ! and precision in non-restart output files ('f' for 32-bit float or 'd' for
   ! 64-bit doubles). For most tracers, only the name, longname and units should
   ! be changed.  See MOM_variables for the full type description.
-  CS%CFC11_desc = vardesc("CFC11","CFC-11 Concentration",'h','L','s',"mol m-3",'f')
-  CS%CFC12_desc = vardesc("CFC12","CFC-12 Concentration",'h','L','s',"mol m-3",'f')
+  CS%CFC11_desc = vardesc("CFC11","CFC-11 Concentration",'h','L','s',"mol m-3")
+  CS%CFC12_desc = vardesc("CFC12","CFC-12 Concentration",'h','L','s',"mol m-3")
 
   allocate(CS%CFC11(isd:ied,jsd:jed,nz)) ; CS%CFC11(:,:,:) = 0.0
   allocate(CS%CFC12(isd:ied,jsd:jed,nz)) ; CS%CFC12(:,:,:) = 0.0

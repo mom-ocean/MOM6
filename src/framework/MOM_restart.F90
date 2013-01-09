@@ -178,7 +178,6 @@ subroutine register_restart_field_ptr3d(f_ptr, f_ptr2, var_desc, mandatory, CS)
                                      ! once the total number of fields is known.
 
   CS%restart_field(CS%novars)%vars = var_desc
-  CS%restart_field(CS%novars)%vars%mem_size = 'd'
   CS%restart_field(CS%novars)%mand_var = mandatory
   CS%restart_field(CS%novars)%initialized = .false.
   CS%restart_field(CS%novars)%var_name = trim(CS%restart_field(CS%novars)%vars%name)
@@ -217,7 +216,6 @@ subroutine register_restart_field_ptr2d(f_ptr, f_ptr2, var_desc, mandatory, CS)
                                      ! once the total number of fields is known.
 
   CS%restart_field(CS%novars)%vars = var_desc
-  CS%restart_field(CS%novars)%vars%mem_size = 'd'
   CS%restart_field(CS%novars)%mand_var = mandatory
   CS%restart_field(CS%novars)%initialized = .false.
   CS%restart_field(CS%novars)%var_name = trim(CS%restart_field(CS%novars)%vars%name)
@@ -256,7 +254,6 @@ subroutine register_restart_field_ptr1d(f_ptr, f_ptr2, var_desc, mandatory, CS)
                                      ! once the total number of fields is known.
 
   CS%restart_field(CS%novars)%vars = var_desc
-  CS%restart_field(CS%novars)%vars%mem_size = 'd'
   CS%restart_field(CS%novars)%mand_var = mandatory
   CS%restart_field(CS%novars)%initialized = .false.
   CS%restart_field(CS%novars)%var_name = trim(CS%restart_field(CS%novars)%vars%name)
@@ -295,7 +292,6 @@ subroutine register_restart_field_ptr0d(f_ptr, f_ptr2, var_desc, mandatory, CS)
                                      ! once the total number of fields is known.
 
   CS%restart_field(CS%novars)%vars = var_desc
-  CS%restart_field(CS%novars)%vars%mem_size = 'd'
   CS%restart_field(CS%novars)%mand_var = mandatory
   CS%restart_field(CS%novars)%initialized = .false.
   CS%restart_field(CS%novars)%var_name = trim(CS%restart_field(CS%novars)%vars%name)
@@ -962,6 +958,10 @@ subroutine restore_state(filename, directory, day, G, CS)
         case ('h') ; pos = CENTER
         case ('u') ; pos = EAST_FACE
         case ('v') ; pos = NORTH_FACE
+        case ('Bu') ; pos = CORNER
+        case ('T')  ; pos = CENTER
+        case ('Cu') ; pos = EAST_FACE
+        case ('Cv') ; pos = NORTH_FACE
         case ('1') ; pos = 0
         case default ; pos = 0
       end select

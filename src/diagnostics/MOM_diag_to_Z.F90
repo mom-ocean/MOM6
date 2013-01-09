@@ -1084,6 +1084,14 @@ function register_Z_diag(var_desc, CS, day, missing)
           axes = CS%axesCuz
         case ("v")
           axes = CS%axesCvz
+        case ("Bu")
+          axes = CS%axesBz
+        case ("T")
+          axes = CS%axesTz
+        case ("Cu")
+          axes = CS%axesCuz
+        case ("Cv")
+          axes = CS%axesCvz
         case default
           call MOM_error(FATAL,&
             "register_Z_diag: unknown hor_grid component "//trim(var_desc%hor_grid))

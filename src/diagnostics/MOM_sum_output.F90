@@ -403,24 +403,24 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
 
   num_nc_fields = 17
   if (.not.CS%use_temperature) num_nc_fields = 11
-  vars(1) = vardesc("Ntrunc","Number of Velocity Truncations",'1','1','s',"Nondim", 'f')
-  vars(2) = vardesc("En","Total Energy",'1','1','s',"Joules",'d')
-  vars(3) = vardesc("APE","Total Interface APE",'1','i','s',"Joules",'d')
-  vars(4) = vardesc("KE","Total Layer KE",'1','L','s',"Joules",'d')
-  vars(5) = vardesc("H0","Zero APE Depth of Interface",'1','i','s',"meter",'d')
-  vars(6) = vardesc("Mass_lay","Total Layer Mass",'1','L','s',"kg",'d')
-  vars(7) = vardesc("Mass","Total Mass",'1','1','s',"kg",'d')
-  vars(8) = vardesc("Mass_chg","Total Mass Change between Entries",'1','1','s',"kg",'d')
-  vars(9) = vardesc("Mass_anom","Anomalous Total Mass Change",'1','1','s',"kg",'d')
-  vars(10) = vardesc("max_CFL_trans","Maximum finite-volume CFL",'1','1','s',"Nondim",'d')
-  vars(11) = vardesc("max_CFL_lin","Maximum finite-difference CFL",'1','1','s',"Nondim",'d')
+  vars(1) = vardesc("Ntrunc","Number of Velocity Truncations",'1','1','s',"Nondim")
+  vars(2) = vardesc("En","Total Energy",'1','1','s',"Joules")
+  vars(3) = vardesc("APE","Total Interface APE",'1','i','s',"Joules")
+  vars(4) = vardesc("KE","Total Layer KE",'1','L','s',"Joules")
+  vars(5) = vardesc("H0","Zero APE Depth of Interface",'1','i','s',"meter")
+  vars(6) = vardesc("Mass_lay","Total Layer Mass",'1','L','s',"kg")
+  vars(7) = vardesc("Mass","Total Mass",'1','1','s',"kg")
+  vars(8) = vardesc("Mass_chg","Total Mass Change between Entries",'1','1','s',"kg")
+  vars(9) = vardesc("Mass_anom","Anomalous Total Mass Change",'1','1','s',"kg")
+  vars(10) = vardesc("max_CFL_trans","Maximum finite-volume CFL",'1','1','s',"Nondim")
+  vars(11) = vardesc("max_CFL_lin","Maximum finite-difference CFL",'1','1','s',"Nondim")
   if (CS%use_temperature) then
-    vars(12) = vardesc("Salt","Total Salt",'1','1','s',"kg",'d')
-    vars(13) = vardesc("Salt_chg","Total Salt Change between Entries",'1','1','s',"kg",'d')
-    vars(14) = vardesc("Salt_anom","Anomalous Total Salt Change",'1','1','s',"kg",'d')
-    vars(15) = vardesc("Heat","Total Heat",'1','1','s',"Joules",'d')
-    vars(16) = vardesc("Heat_chg","Total Heat Change between Entries",'1','1','s',"Joules",'d')
-    vars(17) = vardesc("Heat_anom","Anomalous Total Heat Change",'1','1','s',"Joules",'d')
+    vars(12) = vardesc("Salt","Total Salt",'1','1','s',"kg")
+    vars(13) = vardesc("Salt_chg","Total Salt Change between Entries",'1','1','s',"kg")
+    vars(14) = vardesc("Salt_anom","Anomalous Total Salt Change",'1','1','s',"kg")
+    vars(15) = vardesc("Heat","Total Heat",'1','1','s',"Joules")
+    vars(16) = vardesc("Heat_chg","Total Heat Change between Entries",'1','1','s',"Joules")
+    vars(17) = vardesc("Heat_anom","Anomalous Total Heat Change",'1','1','s',"Joules")
   endif
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -507,7 +507,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
     if (nTr_stocks > 0) then
       do m=1,nTr_stocks
         vars(num_nc_fields+m) = &
-          vardesc(Tr_names(m), Tr_names(m),'1','1','s',Tr_units(m),'d')
+          vardesc(Tr_names(m), Tr_names(m),'1','1','s',Tr_units(m))
       enddo
       num_nc_fields = num_nc_fields + nTr_stocks
     endif

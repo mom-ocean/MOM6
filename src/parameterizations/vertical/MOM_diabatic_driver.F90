@@ -1362,19 +1362,19 @@ subroutine diabatic_driver_init(Time, G, param_file, diag, CS, &
 
   if (associated(diag_to_Z_CSp)) then
     vd = vardesc("Kd_z","Diapycnal diffusivity at interfaces, interpolated to z",&
-                 'h','z','s',"meter2 second-1", 'd')
+                 'h','z','s',"meter2 second-1")
     CS%id_Kd_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
     vd = vardesc("Tflx_dia_dif_z","Diffusive diapycnal temperature flux across interfaces, interpolated to z",&
-                 'h','z','s',"degC meter second-1", 'd')
+                 'h','z','s',"degC meter second-1")
     CS%id_Tdif_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
     vd = vardesc("Tflx_dia_adv_z","Advective diapycnal temperature flux across interfaces, interpolated to z",&
-                 'h','z','s',"degC meter second-1", 'd')
+                 'h','z','s',"degC meter second-1")
     CS%id_Tadv_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
     vd = vardesc("Sflx_dia_dif_z","Diffusive diapycnal salinity flux across interfaces, interpolated to z",&
-                 'h','z','s',"PSU meter second-1", 'd')
+                 'h','z','s',"PSU meter second-1")
     CS%id_Sdif_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
     vd = vardesc("Sflx_dia_adv_z","Advective diapycnal salinity flux across interfaces, interpolated to z",&
-                 'h','z','s',"PSU meter second-1", 'd')
+                 'h','z','s',"PSU meter second-1")
     CS%id_Sadv_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
   endif
 

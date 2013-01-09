@@ -6,7 +6,7 @@ use MOM_file_parser, only : read_param, log_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : close_file, create_file, fieldtype, file_exists
 use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE
-use MOM_io, only : write_field, slasher, vardesc
+use MOM_io, only : write_field, slasher
 use MOM_sponge, only : set_up_sponge_field, initialize_sponge, sponge_CS
 use MOM_tracer, only : add_tracer_OBC_values, advect_tracer_CS
 use MOM_variables, only : thermo_var_ptrs, directories, ocean_OBC_type
