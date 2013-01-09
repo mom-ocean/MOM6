@@ -3396,32 +3396,43 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
   integer :: isd, ied, jsd, jed ! data domain indices
   integer :: rcode, no_fill
   integer :: ndims                 
+  integer :: i, j, k, ks, np, ni, nj
+  integer :: idbg, jdbg
+  real :: max_depth
+
 
   integer :: nkml, nkbl         ! number of mixed and buffer layers
   integer :: xhalo,yhalo        ! halo widths
+  integer :: ncid, varid_t, varid_s
+  integer :: id, jd, kd, jdp, inconsistent
   real    :: PI_180             ! for conversion from degrees to radians
-
+  real    :: npole, pole
+  real    :: max_lat, min_depth
+  real    :: dilate
+  real    :: missing_value_temp, missing_value_salt    
   type(horiz_interp_type) :: Interp
   logical :: new_sim
   logical :: correct_thickness
 
   character(len=40) :: potemp_var, salin_var
   character(len=8)  :: laynum
-  integer, parameter :: niter=10   ! number of iterations for t/s adjustment to layer density
 
-  real, parameter    :: missing_value=-1.e34
-  real, parameter    :: temp_land_fill = 0.0, salt_land_fill=35.0
+  integer, parameter :: niter=10   ! number of iterations for t/s adjustment to layer density
+  logical, parameter :: adjust_temperature = .true.  ! fit t/s to target densities
+  real, parameter    :: missing_value = -1.e34
+  real, parameter    :: temp_land_fill = 0.0, salt_land_fill = 35.0
 
   !data arrays
   real, dimension(:,:), allocatable :: x_in, y_in, nlevs
   real, dimension(:), allocatable :: lon_in, lon_in_p, lat_in, lat_in_p, last_row
   real, dimension(:), allocatable :: z_in, z_edges_in, Rb
   real, dimension(:,:), allocatable :: temp_in, salt_in, mask_in
-  real :: npole, pole, max_lat, min_depth, dilate
-  integer :: ncid, id, jd, kd, varid_t, varid_s, jdp, inconsistent
+
+
   integer, dimension(4) :: start, count, dims    
-  real :: missing_value_temp, missing_value_salt    
+
   real, dimension(:,:), allocatable :: tmp_in ! A 2-d array for holding input data.  
+
   !global arrays 
   real, dimension(:,:), allocatable :: temp_prev, salt_prev, mask_prev    
   real, dimension(:,:), allocatable :: temp_out, salt_out, rho_out, mask_out
@@ -3435,16 +3446,14 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
   real, dimension(:,:,:), allocatable :: temp_z, salt_z, mask_z, rho_z
   real, dimension(:,:,:), allocatable :: zi
 
-  integer ::  i, j, k, ks, np, ni, nj
 
-  logical :: reentrant_x, tripolar_n, add_np
+  logical :: reentrant_x, tripolar_n, add_np,dbg
   logical :: debug_point = .false.  ! manually set this to true and adjust the locations below
-                                    ! if you want to track down a problem with a particular
-                                    ! location.
-  logical, parameter :: adjust_temperature = .true.
+                                   ! if you want to track down a problem with a particular
+                                   ! location.
+  integer, parameter :: i_debug=1, j_debug=28
 
-  real, parameter :: debug_lon=-180.5, debug_lat=0.125
-  real, dimension(:,:,:), allocatable :: zip    
+  real, dimension(:,:,:), allocatable :: tmp1
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -3566,10 +3575,14 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
 
 ! construct level cell boundaries as the mid-point between adjacent centers
 
+  z_edges_in(1) = 0.0
   do k=2,kd
    z_edges_in(k)=0.5*(z_in(k-1)+z_in(k))
   enddo
   z_edges_in(kd+1)=2.0*z_in(kd) - z_in(kd-1)
+
+
+
 
   call horiz_interp_init()
 
@@ -3604,6 +3617,9 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
 ! get the global wet mask and depth arrays
   call mpp_global_field(G%domain%mpp_domain, G%mask2dT, mask2dT)
   call mpp_global_field(G%domain%mpp_domain, G%bathyT, Depth)    
+
+  max_depth = maxval(Depth)
+  if (z_edges_in(kd+1)<max_depth) z_edges_in(kd+1)=max_depth
 
 
 ! loop through each data level and interpolate to model grid.
@@ -3724,7 +3740,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
     xhalo=is-isd;yhalo=js-jsd
     temp_z(is:ie,js:je,k) = temp_out(isc-xhalo:iec-xhalo,jsc-yhalo:jec-yhalo)
     salt_z(is:ie,js:je,k) = salt_out(isc-xhalo:iec-xhalo,jsc-yhalo:jec-yhalo)
-    mask_z(is:ie,js:je,k) = good(isc-xhalo:iec-xhalo,jsc-yhalo:jec-yhalo)
+    mask_z(is:ie,js:je,k) = float(good(isc-xhalo:iec-xhalo,jsc-yhalo:jec-yhalo))
     rho_z(is:ie,js:je,k) = rho_out(isc-xhalo:iec-xhalo,jsc-yhalo:jec-yhalo)       
 
   enddo
@@ -3737,6 +3753,9 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
 
   allocate(zi(is:ie,js:je,nz+1))
   allocate(nlevs(is:ie,js:je))
+
+  nlevs(:,:)=0.0
+
   nlevs = sum(mask_z(is:ie,js:je,:),dim=3)
 
 ! Rb contains the layer interface densities
@@ -3748,8 +3767,9 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
   Rb(1)=0.0
   Rb(nz+1)=2.0*G%Rlay(nz) - G%Rlay(nz-1)
 
-  zi = find_interfaces(rho_z(is:ie,js:je,:), z_in, Rb, G%bathyT(is:ie,js:je), &
+  zi(is:ie,js:je,:) = find_interfaces(rho_z(is:ie,js:je,:), z_in, Rb, G%bathyT(is:ie,js:je), &
                        nlevs, nkml, nkbl, min_depth)
+
 
   call get_param(PF,mod,"ADJUST_THICKNESS",correct_thickness,default=.false.)
 
@@ -3799,21 +3819,37 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
 
 ! and remap temperature and salinity to layers
 
+  dbg=.false.
+  if (debug_point) then
+     if (isc-xhalo.le.i_debug .and. ie-is+isc-xhalo .ge. i_debug) then
+       if (jsc-yhalo.le.j_debug .and. je-js+jsc-yhalo .ge. j_debug) then
+         dbg=.true.
+         idbg=i_debug+is-isc
+         jdbg=j_debug+js-jsc
+       endif
+     endif
+  endif
 
-  tv%T(is:ie,js:je,:) = tracer_z_init(temp_z(is:ie,js:je,:),-1.0*z_edges_in,zi,nkml,nkbl,missing_value,G%mask2dT(is:ie,js:je),nz,nlevs)
-  tv%S(is:ie,js:je,:) = tracer_z_init(salt_z(is:ie,js:je,:),-1.0*z_edges_in,zi,nkml,nkbl,missing_value,G%mask2dT(is:ie,js:je),nz,nlevs)
+
+  tv%T(is:ie,js:je,:) = tracer_z_init(temp_z(is:ie,js:je,:),-1.0*z_edges_in,zi(is:ie,js:je,:),nkml,nkbl,missing_value,G%mask2dT(is:ie,js:je),nz,nlevs(is:ie,js:je),dbg,idbg,jdbg)
+  tv%S(is:ie,js:je,:) = tracer_z_init(salt_z(is:ie,js:je,:),-1.0*z_edges_in,zi(is:ie,js:je,:),nkml,nkbl,missing_value,G%mask2dT(is:ie,js:je),nz,nlevs(is:ie,js:je))
+
 
 ! In case of a problem , use this.
 
-  if (debug_point) then
+  if (dbg) then
     do j=js,je ; do i=is,ie
-      if (abs(G%geoLonT(i,j)-debug_lon).lt.0.25 .and. abs(G%geoLatT(i,j)-debug_lat) .lt. 0.25) then
+      if (i-is+isc-xhalo.eq.i_debug.and. j-js+jsc-yhalo.eq.j_debug) then
         do k=1,kd
-          print *,'i,j,klev,T,S,rho=',i,j,temp_z(i,j,k),salt_z(i,j,k),rho_z(i,j,k)
+          print *,'klev,T,S,rho=',k,temp_z(i,j,k),salt_z(i,j,k),rho_z(i,j,k)
         enddo
         do k=1,nz
-          print *,'i,j,klay,T,S,z=',i,j,k,tv%T(i,j,k),tv%S(i,j,k),zi(i,j,k)
+          print *,'klay,T,S,z=',k,tv%T(i,j,k),tv%S(i,j,k),zi(i,j,k)
         enddo
+	allocate(tmp1(1,1,nz))
+	tmp1=tracer_z_init(temp_z(i:i,j:j,:),-1.0*z_edges_in,zi(i:i,j:j,:),nkml,nkbl,missing_value,G%mask2dT(i:i,j:j),nz,nlevs(i:i,j:j),debug=.true.)
+	print *,'tmp= ',tmp1
+	deallocate(tmp1)
       endif
     enddo ; enddo
   endif
@@ -3834,6 +3870,16 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
   if (adjust_temperature) then
     call determine_temperature(tv%T(is:ie,js:je,:), tv%S(is:ie,js:je,:), &
             G%Rlay(1:nz), tv%p_ref, niter, missing_value, h(is:ie,js:je,:), ks, eos)
+    if (debug_point) then
+       do j=js,je ; do i=is,ie
+       	  if (i-is+isc-xhalo.eq.i_debug.and. j-js+jsc-yhalo.eq.j_debug) then
+             do k=1,nz
+		print *,'after adj klay,T,S,z=',k,tv%T(i,j,k),tv%S(i,j,k),zi(i,j,k)
+             enddo	
+      	  endif
+       enddo ; enddo
+    endif
+
   endif
 
   deallocate(lon_in,lat_in,lon_out,lat_out,x_in,y_in,x_out,y_out)

@@ -43,7 +43,7 @@ module midas_vertmap
 !#    T=S.horiz_interp('SALT',target=grid,src_modulo=True,method='bilinear',PrevState=T)
 !#    T.remap_Z_to_layers('PTEMP','SALT',R,p_ref,grid.wet,nkml,nkbl,hml,fit_target)
 !#
-!#  MIDAS === Modular Isopycnal Data Analysis Software  
+!#  MIDAS === Modular Isosurface Data Analysis Software  
 !# ==================================================================  
   
 #ifndef PY_SOLO  
@@ -65,7 +65,12 @@ module midas_vertmap
   
 contains
 
+
+
+
 #ifdef PY_SOLO
+!#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+!# These EOS routines are needed only for the stand-alone version of the code
 
 function wright_eos_2d(T,S,p) result(rho)
 !
@@ -200,9 +205,12 @@ enddo
 
 return
 end function beta_wright_eos_2d
+
+!# END STAND-ALONE ROUTINES
+!#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 #endif
   
-function tracer_z_init(tr_in,z_edges,e,nkml,nkbl,land_fill,wet,nlay,nlevs,debug) result(tr)
+function tracer_z_init(tr_in,z_edges,e,nkml,nkbl,land_fill,wet,nlay,nlevs,debug,i_debug,j_debug) result(tr)
 !
 ! Adopted from R. Hallberg    
 ! Arguments: 
@@ -226,48 +234,49 @@ function tracer_z_init(tr_in,z_edges,e,nkml,nkbl,land_fill,wet,nlay,nlevs,debug)
 !               center and normalized by the cell thickness, nondim.
 !               Note that -1/2 <= z1 <= z2 <= 1/2.
 !
-real, dimension(:,:,:), intent(in) :: tr_in
+real, dimension(:,:,:), intent(in)           :: tr_in
 real, dimension(size(tr_in,3)+1), intent(in) :: z_edges
-integer, intent(in) :: nlay
+integer, intent(in)                          :: nlay
 real, dimension(size(tr_in,1),size(tr_in,2),nlay+1), intent(in) :: e
-integer, intent(in) :: nkml,nkbl
-real, intent(in) :: land_fill
+integer, intent(in)                          :: nkml,nkbl
+real, intent(in)                             :: land_fill
 real, dimension(size(tr_in,1),size(tr_in,2)), intent(in) :: wet
 real, dimension(size(tr_in,1),size(tr_in,2)), optional, intent(in) ::nlevs
-logical, intent(in), optional :: debug
+logical, intent(in), optional                :: debug
+integer, intent(in), optional                :: i_debug, j_debug
     
 real, dimension(size(tr_in,1),size(tr_in,2),nlay) :: tr
-
 real, dimension(size(tr_in,3)) :: tr_1d
-real, dimension(size(tr_in,3)+1) :: z_edges_
 real, dimension(nlay+1) :: e_1d
 real, dimension(nlay) :: tr_
-integer, dimension(size(tr_in,1),size(tr_in,2)) :: nlevs_
+integer, dimension(size(tr_in,1),size(tr_in,2)) :: nlevs_data
     
 integer :: n,i,j,k,l,nx,ny,nz,nt,kz
-integer :: k_top,k_bot,k_bot_prev,kk
+integer :: k_top,k_bot,k_bot_prev,kk,kstart
 real    :: sl_tr
-real, dimension(size(tr_in,3)+1) :: wt,z1,z2
+real, dimension(size(tr_in,3)) :: wt,z1,z2
 logical :: debug_msg = .false.,debug_=.false.
     
 nx = size(tr_in,1); ny=size(tr_in,2); nz = size(tr_in,3) 
 
-nlevs_ = size(tr_in,3)
+nlevs_data = size(tr_in,3)
 
 if (PRESENT(nlevs)) then
-  nlevs_  = nlevs
+  nlevs_data  = anint(nlevs)
 endif
 
 if (PRESENT(debug)) then
   debug_=debug
 endif
 
-z_edges_ = z_edges
-z_edges_(nz+1)=minval(e)
+if (debug_) then
+  debug_msg=.true.
+endif
+
 
 do j=1,ny
   i_loop: do i=1,nx
-    if (nlevs_(i,j) .eq. 0 .or. wet(i,j) .eq. 0.) then
+    if (nlevs_data(i,j) .eq. 0 .or. wet(i,j) .eq. 0.) then
       tr(i,j,:) = land_fill
       cycle i_loop
     endif
@@ -281,60 +290,104 @@ do j=1,ny
     enddo
     k_bot = 1 ; k_bot_prev = -1
     do k=1,nlay
-      if (e_1d(k+1) > z_edges_(1)) then
+      if (e_1d(k+1) > z_edges(1)) then
         tr(i,j,k) = tr_1d(1)
-      elseif (e_1d(k) < z_edges_(nlevs_(i,j)+1)) then
+      elseif (e_1d(k) < z_edges(nlevs_data(i,j)+1)) then
         if (debug_msg) then
           print *,'*** WARNING : Found interface below valid range of z data '
           print *,'(i,j,z_bottom,interface)= ',&
-               i,j,z_edges_(nlevs_(i,j)+1),e_1d(k)
-          print *,'z_edges= ',z_edges_
+               i,j,z_edges(nlevs_data(i,j)+1),e_1d(k)
+          print *,'z_edges= ',z_edges
           print *,'e=',e_1d
           print *,'*** I will extrapolate below using the bottom-most valid values'
           debug_msg = .false.
         endif
-        tr(i,j,k) = tr_1d(nlevs_(i,j))
+        tr(i,j,k) = tr_1d(nlevs_data(i,j))
+
       else
-        call find_overlap(z_edges_, e_1d(k), e_1d(k+1), nlevs_(i,j), &
-             k_bot, k_top, k_bot, wt, z1, z2)
+        kstart=k_bot
+        call find_overlap(z_edges, e_1d(k), e_1d(k+1), nlevs_data(i,j), &
+             kstart, k_top, k_bot, wt, z1, z2)
+
+        if (debug_) then
+           if (PRESENT(i_debug)) then
+             if (i.eq.i_debug.and.j.eq.j_debug) then
+                print *,'0001 k,k_top,k_bot,sum(wt),sum(z2-z1) = ',k,k_top,k_bot,sum(wt),sum(z2-z1)
+             endif
+           endif
+        endif
         kz = k_top
+        sl_tr=0.0; ! cur_tr=0.0
         if (kz /= k_bot_prev) then
 ! Calculate the intra-cell profile.
-          sl_tr = 0.0 ! ; cur_tr = 0.0
-          if ((kz < nlevs_(i,j)) .and. (kz > 1)) then
-            sl_tr = find_limited_slope(tr_1d, z_edges_, kz)
+          if ((kz < nlevs_data(i,j)) .and. (kz > 1)) then
+            sl_tr = find_limited_slope(tr_1d, z_edges, kz)
           endif
         endif
-        if (kz > nlevs_(i,j)) kz = nlevs_(i,j)
+        if (kz > nlevs_data(i,j)) kz = nlevs_data(i,j)
 ! This is the piecewise linear form.
         tr(i,j,k) = wt(kz) * &
              (tr_1d(kz) + 0.5*sl_tr*(z2(kz) + z1(kz)))
 ! For the piecewise parabolic form add the following...
 !     + C1_3*cur_tr*(z2(kz)**2 + z2(kz)*z1(kz) + z1(kz)**2))
+!        if (debug_) then
+! 	   print *,'k,k_top,k_bot= ',k,k_top,k_bot
+!        endif
+        if (debug_) then
+           if (PRESENT(i_debug)) then
+             if (i.eq.i_debug.and.j.eq.j_debug) then
+                print *,'0002 k,k_top,k_bot,k_bot_prev,sl_tr = ',k,k_top,k_bot,k_bot_prev,sl_tr
+             endif
+           endif
+        endif
+
         do kz=k_top+1,k_bot-1
           tr(i,j,k) = tr(i,j,k) + wt(kz)*tr_1d(kz)
         enddo
+
+        if (debug_) then
+           if (PRESENT(i_debug)) then
+             if (i.eq.i_debug.and.j.eq.j_debug) then
+                print *,'0003 k,tr = ',k,tr(i,j,k)
+             endif
+           endif
+        endif
+
         if (k_bot > k_top) then
           kz = k_bot
 ! Calculate the intra-cell profile.
           sl_tr = 0.0 ! ; cur_tr = 0.0
-          if ((kz < nlevs_(i,j)) .and. (kz > 1)) then
-            sl_tr = find_limited_slope(tr_1d, z_edges_, kz)
+          if ((kz < nlevs_data(i,j)) .and. (kz > 1)) then
+            sl_tr = find_limited_slope(tr_1d, z_edges, kz)
+!	    if (debug_) then
+!              print *,'002 sl_tr,k,kz,nlevs= ',sl_tr,k,kz,nlevs_data(i,j),nlevs(i,j)
+!            endif
           endif
 ! This is the piecewise linear form.
           tr(i,j,k) = tr(i,j,k) + wt(kz) * &
                (tr_1d(kz) + 0.5*sl_tr*(z2(kz) + z1(kz)))
 ! For the piecewise parabolic form add the following...
 !     + C1_3*cur_tr*(z2(kz)**2 + z2(kz)*z1(kz) + z1(kz)**2))
+
+          if (debug_) then
+             if (PRESENT(i_debug)) then
+               if (i.eq.i_debug.and.j.eq.j_debug) then
+                  print *,'0004 k,kz,nlevs,sl_tr,tr = ',k,kz,nlevs_data(i,j),sl_tr,tr(i,j,k)
+                  print *,'0005 k,kz,tr(kz),tr(kz-1),tr(kz+1) = ',k,kz,tr_1d(kz),tr_1d(kz-1),tr_1d(kz+1),z_edges(kz+2)
+               endif
+             endif
+          endif
+
         endif
         k_bot_prev = k_bot
 
       endif
     enddo ! k-loop
-
+    
     do k=2,nlay  ! simply fill vanished layers with adjacent value
       if (e_1d(k)-e_1d(k+1) .le. epsln) tr(i,j,k)=tr(i,j,k-1)
     enddo
+
   enddo i_loop
 enddo
 
@@ -747,7 +800,10 @@ real, dimension(:), intent(out) :: wt, z1, z2
 real :: Ih, e_c, tot_wt, I_totwt
 integer :: k
   
-do k=k_start,k_max ; if (e(k+1)<Z_top) exit ; enddo
+wt(:)=0.0; z1(:)=0.0; z2(:)=0.0
+k_top = k_start; k_bot= k_start; wt(1) = 1.0; z1(1)=-0.5; z2(1) = 0.5
+
+do k=k_start,k_max ;if (e(k+1)<Z_top) exit ; enddo
 k_top = k
 if (k>k_max) return
 
@@ -799,7 +855,7 @@ function find_limited_slope(val, e, k) result(slope)
 real, dimension(:), intent(in) :: val
 real, dimension(:), intent(in) :: e
 integer, intent(in) :: k
-real :: slope,amax,bmax,amin,bmin,cmin,dmin
+real :: slope,amx,bmx,amn,bmn,cmn,dmn
 
 real :: d1, d2
     
@@ -811,13 +867,13 @@ else
        (e(k) - e(k+1)) / (d1*d2*(d1+d2))
 ! slope = 0.5*(val(k+1) - val(k-1))
 ! This is S.J. Lin's form of the PLM limiter.
-  amax=max(val(k-1),val(k))
-  bmax = max(amax,val(k+1))
-  amin = min(abs(slope),2.0*(bmax-val(k)))
-  bmin = min(val(k-1),val(k))
-  cmin = 2.0*(val(k)-min(bmin,val(k+1)))
-  dmin = min(amin,cmin)
-  slope = sign(1.0,slope) * dmin
+  amx=max(val(k-1),val(k))
+  bmx = max(amx,val(k+1))
+  amn = min(abs(slope),2.0*(bmx-val(k)))
+  bmn = min(val(k-1),val(k))
+  cmn = 2.0*(val(k)-min(bmn,val(k+1)))
+  dmn = min(amn,cmn)
+  slope = sign(1.0,slope) * dmn
 
 ! min(abs(slope), &             
 !             2.0*(max(val(k-1),val(k),val(k+1)) - val(k)), &
@@ -857,7 +913,7 @@ logical :: unstable
 integer :: dir
 integer, dimension(size(rho,1),size(Rb,1)) :: ki_
 real, dimension(size(rho,1),size(Rb,1)) :: zi_
-integer, dimension(size(rho,1),size(rho,2)) :: nlevs_
+integer, dimension(size(rho,1),size(rho,2)) :: nlevs_data
 integer, dimension(size(rho,1)) :: lo,hi        
 real :: slope,rsm,drhodz,hml_
 integer :: n,i,j,k,l,nx,ny,nz,nt
@@ -874,7 +930,7 @@ zi=0.0
 if (PRESENT(debug)) debug_=debug
     
 nx = size(rho,1); ny=size(rho,2); nz = size(rho,3) 
-nlevs_(:,:) = size(rho,3)
+nlevs_data(:,:) = size(rho,3)
 
 nkml_=0;nkbl_=0;hml_=0.0
 if (PRESENT(nkml)) nkml_=nkml
@@ -882,14 +938,14 @@ if (PRESENT(nkbl)) nkbl_=nkbl
 if (PRESENT(hml)) hml_=hml    
     
 if (PRESENT(nlevs)) then
-  nlevs_(:,:) = nlevs(:,:)
+  nlevs_data(:,:) = nlevs(:,:)
 endif
 
 do j=1,ny
   rho_(:,:) = rho(:,j,:)
   i_loop: do i=1,nx
     if (debug_) then
-      print *,'looking for interfaces, i,j,nlevs= ',i,j,nlevs_(i,j)
+      print *,'looking for interfaces, i,j,nlevs= ',i,j,nlevs_data(i,j)
       print *,'initial density profile= ', rho_(i,:)
     endif
     unstable=.true.
@@ -897,7 +953,7 @@ do j=1,ny
     do while (unstable)
       unstable=.false.
       if (dir == 1) then
-        do k=2,nlevs_(i,j)-1
+        do k=2,nlevs_data(i,j)-1
           if (rho_(i,k) - rho_(i,k-1) < 0.0 ) then
             if (k.eq.2) then
               rho_(i,k-1)=rho_(i,k)-epsln
@@ -912,9 +968,9 @@ do j=1,ny
         enddo
         dir=-1*dir
       else
-        do k=nlevs_(i,j)-1,2,-1
+        do k=nlevs_data(i,j)-1,2,-1
           if (rho_(i,k+1) - rho_(i,k) < 0.0) then
-            if (k .eq. nlevs_(i,j)-1) then
+            if (k .eq. nlevs_data(i,j)-1) then
               rho_(i,k+1)=rho_(i,k-1)+epsln
             else
               drhodz = (rho_(i,k+1)-rho_(i,k-1))/(zin(k+1)-zin(k-1))
@@ -937,7 +993,7 @@ do j=1,ny
   zi_(:,:) = 0.0          
   depth_(:)=-1.0*depth(:,j)
   lo(:)=1
-  hi(:)=nlevs_(:,j)
+  hi(:)=nlevs_data(:,j)
   ki_ = bisect_fast(rho_,Rb,lo,hi)
   ki_(:,:) = max(1,ki_(:,:)-1)
   do i=1,nx
