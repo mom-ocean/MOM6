@@ -137,8 +137,6 @@ type, public :: ocean_state_type ; private
   ! necessary that this is implemented with all models.
   logical :: is_ocean_PE = .false.  ! True if this is an ocean PE.
   type(time_type) :: Time    ! The ocean model's time and master clock.
-  type(time_type) :: restint ! The time between saves of the restart file.
-  type(time_type) :: restart_time ! The next time to write restart files.
   integer :: Restart_control ! An integer that is bit-tested to determine whether
                              ! incremental restart files are saved and whether they
                              ! have a time stamped name.  +1 (bit 0) for generic
@@ -195,7 +193,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in)
 !                    information about the ocean's interior state.
 !  (in)      Time_init - The start time for the coupled model's calendar.
 !  (in)      Time_in - The time at which to initialize the ocean model.
-  real :: Time_unit   ! The time unit in seconds for RESTINT and ENERGYSAVEDAYS.
+  real :: Time_unit   ! The time unit in seconds for ENERGYSAVEDAYS.
   real :: Rho0        ! The Boussinesq ocean density, in kg m-3.
   real :: G_Earth     ! The gravitational acceleration in m s-2.
   character(len=128) :: version = '$Id$'
@@ -230,15 +228,8 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in)
                  "will be saved at the end of the run segment for any \n"//&
                  "non-negative value.", default=1)
   call get_param(param_file, mod, "TIMEUNIT", Time_unit, &
-                 "The time unit for DAYMAX, ENERGYSAVEDAYS, and RESTINT.", &
+                 "The time unit for ENERGYSAVEDAYS.", &
                  units="s", default=86400.0)
-  call get_param(param_file, mod, "RESTINT", OS%restint, &
-                 "The interval between saves of the restart file in units \n"//&
-                 "of TIMEUNIT.  Use a value that is larger than DAYMAX to \n"//&
-                 "not save incremental restart files  within a run.  Use \n"//&
-                 "0 not to save restart files at all.  The default is to \n"//&
-                 "use a larger value than DAYMAX.", timeunit=Time_unit, &
-                 default = (Time_in + set_time(0, 2000000000)))
   call get_param(param_file, mod, "ENERGYSAVEDAYS",OS%energysavedays, &
                  "The interval in units of TIMEUNIT between saves of the \n"//&
                  "energies of the run and other globally summed diagnostics.", &
@@ -266,10 +257,6 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in)
   call write_energy(OS%MOM_CSp%u(:,:,:,1), OS%MOM_CSp%v(:,:,:,1), OS%MOM_CSp%h(:,:,:,1), &
                     OS%MOM_CSp%tv, OS%Time, 0, OS%grid, OS%sum_output_CSp, &
                     OS%MOM_CSp%tracer_flow_CSp)
-
-  ! restart_time is the next integral multiple of restint.
-  OS%restart_time = Time_init + OS%restint * &
-      (1 + (OS%Time - Time_init) / OS%restint)
 
   ! write_energy_time is the next integral multiple of energysavedays.
   OS%write_energy_time = Time_init + OS%energysavedays * &

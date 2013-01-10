@@ -80,7 +80,8 @@ program SHELF_main
                                   ! metrics and related information.
   logical :: use_ice_shelf = .false. ! If .true., use the ice shelf model for
                                   ! part of the domain.
-  logical :: permit_restart = .true. ! .true. if restart files are to be saved.
+  logical :: permit_restart = .true. ! This is .true. if incremental restart
+                                  ! files may be saved.
   integer :: m, n
 
   integer :: nmax=2000000000;   ! nmax is the number of iterations
@@ -285,16 +286,14 @@ program SHELF_main
   call get_param(param_file, mod, "RESTART_CONTROL", Restart_control, &
                  "An integer whose bits encode which restart files are \n"//&
                  "written. Add 2 (bit 1) for a time-stamped file, and odd \n"//&
-                 "(bit 0) for a non-time-stamped file.  A restart file \n"//&
-                 "will be saved at the end of the run segment for any \n"//&
-                 "non-negative value.", default=1)
+                 "(bit 0) for a non-time-stamped file. A non-time-stamped \n"//&
+                 "restart file is saved at the end of the run segment \n"//&
+                 "for any non-negative value.", default=1)
   call get_param(param_file, mod, "RESTINT", restint, &
                  "The interval between saves of the restart file in units \n"//&
-                 "of TIMEUNIT.  Use a value that is larger than DAYMAX to \n"//&
-                 "not save incremental restart files  within a run.  Use \n"//&
-                 "0 not to save restart files at all.  The default is to \n"//&
-                 "use a larger value than DAYMAX.", timeunit=Time_unit, &
-                 default=(Time_end + Time_step_shelf))
+                 "of TIMEUNIT.  Use 0 (the default) to not save \n"//&
+                 "incremental restart files at all.", default=set_time(0), &
+                 timeunit=Time_unit)
   call log_param(param_file, mod, "ELAPSED TIME AS MASTER", elapsed_time_master)
 
 !   i don't think we'll use this...
@@ -322,25 +321,27 @@ program SHELF_main
 
   call write_cputime(Time, 0, nmax, write_CPU_CSp)
 
-! restart_time is the next integral multiple of restint.
-  restart_time = Start_time + restint * &
-      (1 + ((Time + Time_step_shelf) - Start_time) / restint)
+  if (((.not.BTEST(Restart_control,1)) .and. (.not.BTEST(Restart_control,0))) &
+      .or. (Restart_control < 0)) permit_restart = .false.
 
-
-  if ((.not.BTEST(Restart_control,1)) .and. &
-      (.not.BTEST(Restart_control,0))) permit_restart = .false.
+  if (restint > set_time(0)) then
+    ! restart_time is the next integral multiple of restint.
+    restart_time = Start_time + restint * &
+        (1 + ((Time + Time_step_ocean) - Start_time) / restint)
+  else
+    ! Set the time so late that there is no intermediate restart.
+    restart_time = Time_end + Time_step_ocean
+    permit_restart = .false.
+  endif
 
   call cpu_clock_end(initClock) !end initialization
 
   call cpu_clock_begin(mainClock) !begin main loop
 
-
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! MAIN LOOP !!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
 
   n = 1 ; m = 1
   do while ((n < nmax) .and. (Time < Time_end))
-
 
     ! This call steps the model over a time time_step.
     Time1 = Master_Time ; Time = Master_Time
@@ -367,22 +368,19 @@ program SHELF_main
     Time = Master_Time
 
 !  See if it is time to write out a restart file - timestamped or not.
-    if (Time + (Time_step_shelf/2) > restart_time) then
-      if (permit_restart) then
+    if (permit_restart) then
+      if (Time + (Time_step_shelf/2) > restart_time) then
         if (BTEST(Restart_control,1)) then
           call ice_shelf_save_restart(ice_shelf_CSp, Time, dirs%restart_output_dir, .true.)
         endif
         if (BTEST(Restart_control,0)) then
-	  call ice_shelf_save_restart(ice_shelf_CSp, Time, dirs%restart_output_dir)
+	        call ice_shelf_save_restart(ice_shelf_CSp, Time, dirs%restart_output_dir)
         endif
+        restart_time = restart_time + restint
       endif
-      restart_time = restart_time + restint
     endif
 
   enddo  !!!!!!! end loop
-
-
-
 
   call cpu_clock_end(mainClock)
   call cpu_clock_begin(termClock)
