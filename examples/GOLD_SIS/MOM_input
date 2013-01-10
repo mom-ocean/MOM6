@@ -1,6 +1,6 @@
 !********+*********+*********+*********+*********+*********+*********+*
 !*   This file determines the adjustable run-time parameters for the  *
-!* Generalized Ocean Layer Dynamics (MOM) ocean model.  Where         *
+!* Modular Ocean Model (MOM), versions 6 and later.  Where            *
 !* appropriate, MKS units are used.                                   *
 !********+*********+*********+*********+*********+*********+*********+*
 ! >>> Global coupled ice-ocean GOLD-SIS 63 Layer test case.
@@ -129,6 +129,9 @@ DTBT = 60.0                     !    The barotropic time step, in s. DTBT is onl
                                 !  value gives the fraction of the stable value.
                                 !  The value of DTBT that will actually be used
                                 !  is an integer fraction of DT, rounding down.
+DT_BT_FILTER = 0.0              !    A time-scale for filtering BT variables,
+                                !  in s if positive, or as a fraction of DT if
+                                !  negative.
 DTBT_RESET_PERIOD = -1.0        !    The period between recalculations of DTBT
                                 !  of DTBT (if DTBT <= 0), in seconds.  If
                                 !  DTBT_RESET_PERIOD is negative, DTBT is set

@@ -3735,7 +3735,7 @@ CS%Nonlin_cont_update_period = 1
                  "are filtered, in seconds if positive, or as a fraction \n"//&
                  "of DT if negative. When used this can never be taken to \n"//&
                  "be longer than 2*dt.  Set this to 0 to apply no filtering.", &
-                 units="sec or nondim", default=0.0)
+                 units="sec or nondim", default=-0.25)
   call get_param(param_file, mod, "G_BT_EXTRA", CS%G_extra, &
                  "A nondimensional factor by which gtot is enhanced.", &
                  units="nondim", default=0.0)

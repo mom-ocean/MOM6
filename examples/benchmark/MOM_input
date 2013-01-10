@@ -1,6 +1,6 @@
 !********+*********+*********+*********+*********+*********+*********+*
 !*   This file determines the adjustable run-time parameters for the  *
-!* Generalized Ocean Layer Dynamics (MOM) ocean model.  Where        *
+!* Modular Ocean Model (MOM), versions 6 and later.  Where            *
 !* appropriate, MKS units are used.                                   *
 !********+*********+*********+*********+*********+*********+*********+*
 ! >>> benchmark test case <<<

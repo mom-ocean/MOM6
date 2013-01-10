@@ -1,10 +1,9 @@
 !********+*********+*********+*********+*********+*********+*********+*
-!*   This include file determines many of the adjustable parameters   *
-!* for the Hallberg Isopycnal Model (HIM).  Where appropriate, MKS    *
-!* units are used.  The program param_suggest.c will analyze this     *
-!* include file to suggest appropriate values for DT, DTBT, and AH.   *
+!*   This file determines the adjustable run-time parameters for the  *
+!* Modular Ocean Model (MOM), versions 6 and later.  Where            *
+!* appropriate, MKS units are used.                                   *
 !********+*********+*********+*********+*********+*********+*********+*
-! >>> 2gyre test case <<<
+! >>> resting test case <<<
 
 !  Specify properties of the physical domain.
 #define OMEGA 7.2921e-5        !    The rotation rate of the earth in s-1 (std=7.2921e-5).
@@ -188,18 +187,21 @@ NJPROC_IO = 1                  !    The number of processors used for I/O in the
 #undef DEBUG                   !    If true, write out verbose debugging data.
 
 !  Specify the time integration scheme.
-#define SPLIT                   !    Use the split time stepping if defined.
-#define DT_FORCING 1200.0       !    The time step for changing forcing or
+#define SPLIT                  !    Use the split time stepping if defined.
+#define DT_FORCING 1200.0      !    The time step for changing forcing or
                                !  writing certain diagnostics, in s.
-#define DT_THERM 1200.0         !    The thermodynamic time step, in s.  DT_THERM
+#define DT_THERM 1200.0        !    The thermodynamic time step, in s.  DT_THERM
                                !  should be an integer multiple of DT and less
                                !  than or equal to DT_FORCING.
-#define DT 1200.0               !    The (baroclinic) dynamics time step, in s.
+#define DT 1200.0              !    The (baroclinic) dynamics time step, in s.
                                !  DT should be an integer fraction of DT_FORCING.
 #define DTBT 60.0              !    The barotropic time step, in s. DTBT is only
                                !  used with the split explicit time stepping.
                                !  DTBT should be an integer fraction of DT.
                                !  used with the split explicit time stepping.
+DT_BT_FILTER = 0.0             !    A time-scale for filtering BT variables,
+                               !  in s if positive, or as a fraction of DT if
+                               !  negative.
 #define BE 0.7                 !    BE determines whether the neutral baroclinic
                                !  time stepping scheme (0.5) or a backward Euler
                                !  scheme (1) is used.  BE may be from 0.5 to 1,
