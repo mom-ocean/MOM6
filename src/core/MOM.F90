@@ -1162,7 +1162,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call get_param(param_file, "MOM", "FLUX_BT_COUPLING", CS%flux_BT_coupling, &
                  "If true, use mass fluxes to ensure consistency between \n"//&
                  "the baroclinic and barotropic modes. This is only used \n"//&
-                 "if SPLIT is true.", default=.true.)
+                 "if SPLIT is true.", default=.false.)
   call get_param(param_file, "MOM", "INTERPOLATE_P_SURF", CS%interp_p_surf, &
                  "If true, linearly interpolate the surface pressure \n"//&
                  "over the coupling time step, using the specified value \n"//&
@@ -1198,7 +1198,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     call get_param(param_file, "MOM", "BT_USE_LAYER_FLUXES", CS%BT_use_layer_fluxes, &
                  "If true, use the summed layered fluxes plus an \n"//&
                  "adjustment due to the change in the barotropic velocity \n"//&
-                 "in the barotropic continuity equation.", default=.false.)
+                 "in the barotropic continuity equation.", default=.true.)
   endif
 
   if (CS%split .and. CS%flux_BT_coupling) then

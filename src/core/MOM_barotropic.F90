@@ -3617,7 +3617,7 @@ CS%Nonlin_cont_update_period = 1
                "effective face areas from the summed continuity solver \n"//&
                "as a function the barotropic flow in coupling between \n"//&
                "the barotropic and baroclinic flow.  This is only used \n"//&
-               "if SPLIT and FLUX_BT_COUPLING are true. \n", default=.false.)
+               "if SPLIT is true. \n", default=.true.)
   call get_param(param_file, mod, "NONLINEAR_BT_CONTINUITY", &
                                 CS%Nonlinear_continuity, &
                  "If true, use nonlinear transports in the barotropic \n"//&
