@@ -215,15 +215,8 @@ subroutine step_MOM_dyn_split_RK2(u_in, v_in, h_in, eta_in, uhbt_in, vhbt_in, &
 
   real :: dt_pred   ! The time step for the predictor part of the baroclinic
                     ! time stepping.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_tmp
-    ! A temporary estimated thickness, in m.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: uh_tmp
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: vh_tmp
-    ! Temporary transports, in m3 s-1 or kg s-1.
-  real, dimension(SZIB_(G),SZJ_(G)) :: u_dhdt
-  real, dimension(SZI_(G),SZJB_(G)) :: v_dhdt
-    ! Vertically summed transport tendencies in m3 s-2 or kg s-2.
 
+    ! Vertically summed transport tendencies in m3 s-2 or kg s-2.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: u_bc_accel
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: v_bc_accel
     ! u_bc_accel and v_bc_accel are the summed baroclinic accelerations of each
@@ -595,22 +588,6 @@ subroutine step_MOM_dyn_split_RK2(u_in, v_in, h_in, eta_in, uhbt_in, vhbt_in, &
                                    h_out, h_in, G, CS%open_boundary_CSp)
   endif
 
-  if (CS%BT_include_udhdt) then
-    call cpu_clock_begin(id_clock_continuity)
-    ! Estimate u dh_dt for driving the barotropic solver.
-    call continuity(u_av, v_av, h_out, h_tmp, uh_tmp, vh_tmp, dt, G, &
-                    CS%continuity_CSp, OBC=CS%OBC)
-    do j=js,je ; do I=Isq,Ieq ; u_dhdt(I,j) = 0.0 ; enddo ; enddo
-    do J=Jsq,Jeq ; do i=is,ie ; v_dhdt(i,J) = 0.0 ; enddo ; enddo
-    do k=1,nz ; do j=js,je ; do I=is-1,ie
-      u_dhdt(I,j) = u_dhdt(I,j) + (uh_tmp(I,j,k) - uh(I,j,k)) * Idt
-    enddo ; enddo ; enddo
-    do k=1,nz ; do J=js-1,je ; do i=is,ie
-      v_dhdt(i,J) = v_dhdt(i,J) + (vh_tmp(i,J,k) - vh(i,J,k)) * Idt
-    enddo ; enddo ; enddo
-    call cpu_clock_end(id_clock_continuity)
-  endif
-
 ! h_av = (h_in + h_out)/2
   do k=1,nz ; do j=js-2,je+2 ; do i=is-2,ie+2
     h_av(i,j,k) = 0.5*(h_in(i,j,k) + h_out(i,j,k))
@@ -706,16 +683,7 @@ subroutine step_MOM_dyn_split_RK2(u_in, v_in, h_in, eta_in, uhbt_in, vhbt_in, &
 ! u_accel_bt = layer accelerations due to barotropic solver
 ! pbce = dM/deta
   call cpu_clock_begin(id_clock_btstep)
-  if (CS%flux_BT_coupling .and. CS%BT_include_udhdt) then
-    call btstep(.true., uh_in, vh_in, eta_in, dt, u_bc_accel, v_bc_accel, &
-                fluxes, CS%pbce, CS%eta_PF, uh, vh, CS%u_accel_bt, &
-                CS%v_accel_bt, eta_out, CS%uhbt, CS%vhbt, G, &
-                CS%barotropic_CSp, CS%visc_rem_u, CS%visc_rem_v, etaav=eta_av, &
-                uhbt_out = uhbt_out, vhbt_out = vhbt_out, OBC=CS%OBC, &
-                BT_cont = CS%BT_cont, eta_PF_start = eta_PF_start, &
-                sum_u_dhdt=u_dhdt, sum_v_dhdt=v_dhdt, &
-                taux_bot=taux_bot, tauy_bot=tauy_bot)
-  elseif (CS%flux_BT_coupling) then
+  if (CS%flux_BT_coupling) then
     call btstep(.true., uh_in, vh_in, eta_in, dt, u_bc_accel, v_bc_accel, &
                 fluxes, CS%pbce, CS%eta_PF, uh, vh, CS%u_accel_bt, &
                 CS%v_accel_bt, eta_out, CS%uhbt, CS%vhbt, G, &
@@ -815,11 +783,6 @@ subroutine step_MOM_dyn_split_RK2(u_in, v_in, h_in, eta_in, uhbt_in, vhbt_in, &
     if (ASSOCIATED(CS%diag%dv_adj)) then ; do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
       CS%diag%dv_adj(i,J,k) = v_out(i,J,k)
     enddo ; enddo ; enddo ; endif
-    if (CS%BT_include_udhdt) then
-      do j=js,je ; do I=is-1,ie ; uhbt_in(I,j) = uhbt_out(I,j) ; enddo ; enddo
-      do J=js-1,je ; do i=is,ie ; vhbt_in(i,J) = vhbt_out(i,J) ; enddo ; enddo
-      CS%readjust_velocity = .true.
-    endif
     call cpu_clock_begin(id_clock_continuity)
     call continuity(u_out, v_out, h_in, h_out, uh, vh, dt, G, &
                     CS%continuity_CSp, CS%uhbt, CS%vhbt, CS%OBC, &
@@ -950,10 +913,6 @@ subroutine step_MOM_dyn_split_RK2(u_in, v_in, h_in, eta_in, uhbt_in, vhbt_in, &
   if (CS%id_dv_adj > 0) call post_data(CS%id_dv_adj, CS%diag%dv_adj, CS%diag)
   if (CS%id_du_adj2 > 0) call post_data(CS%id_du_adj2, CS%diag%du_adj2, CS%diag)
   if (CS%id_dv_adj2 > 0) call post_data(CS%id_dv_adj2, CS%diag%dv_adj2, CS%diag)
-  if (CS%BT_include_udhdt) then
-    if (CS%id_h_dudt > 0) call post_data(CS%id_h_dudt, u_dhdt, CS%diag)
-    if (CS%id_h_dvdt > 0) call post_data(CS%id_h_dvdt, v_dhdt, CS%diag)
-  endif
   if (CS%debug) then
     call MOM_state_chksum("Corrector ", u_out, v_out, h_out, uh, vh, G)
     call uchksum(u_av,"Corrector avg u",G,haloshift=1)
@@ -1119,7 +1078,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, Time, G, param_file, diag, CS, rest
   !   Determine whether there is a barotropic transport that is to be used
   ! to adjust the layers' velocities.
   CS%readjust_velocity = .false.
-  if (CS%readjust_BT_trans .or. CS%BT_include_udhdt) then
+  if (CS%readjust_BT_trans) then
     if (query_initialized(CS%uhbt_in,"uhbt_in",restart_CS) .and. &
         query_initialized(CS%vhbt_in,"vhbt_in",restart_CS)) then
       CS%readjust_velocity = .true.

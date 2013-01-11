@@ -236,8 +236,6 @@ type, public :: MOM_control_struct
   logical :: readjust_BT_trans ! If true, readjust the barotropic transport of
                                ! the input velocities to agree with CS%uhbt_in
                                ! and CS%vhbt_in after the diabatic step.
-  logical :: BT_include_udhdt  ! If true, estimate the sum of u dh/dt and v dh/dt
-                               ! and provide them to the barotropic solver.
   logical :: BT_use_layer_fluxes ! If true, use the summed layered fluxes plus
                                ! an adjustment due to a changed barotropic
                                ! velocity in the barotropic continuity equation.
@@ -251,7 +249,7 @@ type, public :: MOM_control_struct
                                ! whether the velocities currently need to be
                                ! readjusted to agree with CS%uhbt_in and
                                ! CS%vhbt_in.  This is only used if 
-                               ! CS%readjust_BT_trans or BT_include_udhdt are true.
+                               ! CS%readjust_BT_trans is true.
   logical :: check_bad_surface_vals ! If true, scans the surface state for
                                     ! ridiculous values
   real    :: bad_val_ssh_max   ! Maximum SSH before triggering bad value message
@@ -282,7 +280,6 @@ type, public :: MOM_control_struct
   integer :: id_T = -1, id_S = -1, id_ssh = -1, id_fraz = -1
   integer :: id_salt_deficit = -1, id_Heat_PmE = -1, id_intern_heat = -1
   integer :: id_du_adj = -1, id_dv_adj = -1, id_du_adj2 = -1, id_dv_adj2 = -1
-  integer :: id_h_dudt = -1, id_h_dvdt = -1
   integer :: id_sst = -1, id_sst_sq = -1, id_sss = -1, id_ssu = -1, id_ssv = -1
   integer :: id_speed = -1, id_ssh_inst = -1
 

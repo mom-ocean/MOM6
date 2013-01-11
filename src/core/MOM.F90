@@ -706,7 +706,7 @@ function step_MOM(fluxes, state, Time_start, time_interval, CS)
           call check_redundant("Pre-diabatic ", u(:,:,:,m), v(:,:,:,m), grid)
         endif
 
-        if (CS%readjust_BT_trans .and. .not.CS%BT_include_udhdt) then
+        if (CS%readjust_BT_trans) then
           call find_total_transport(u(:,:,:,m), v(:,:,:,m), h(:,:,:,m), &
                                     CS%uhbt_in, CS%vhbt_in, dt, grid, CS)
           CS%readjust_velocity = .true.
@@ -840,7 +840,7 @@ function step_MOM(fluxes, state, Time_start, time_interval, CS)
       dtnt = 0.0
       CS%calc_bbl = .true.
     else  ! It is not time to do thermodynamics.
-      if (.not.CS%BT_include_udhdt) CS%readjust_velocity = .false.
+      CS%readjust_velocity = .false.
     endif
 
     call enable_averaging(dt,Time_local, CS%diag)
@@ -1201,12 +1201,6 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
                  "in the barotropic continuity equation.", default=.true.)
   endif
 
-  if (CS%split .and. CS%flux_BT_coupling) then
-    call get_param(param_file, "MOM", "BT_INCLUDE_UDHDT", CS%BT_include_udhdt, &
-                 "If true, include the barotropic transport tendancies \n"//&
-                 "from sum(u dhdt) and sum(v dhdt) in the barotropic \n"//&
-                 "solver.", default=.false.)
-  endif
   if (.not.(CS%split .and. CS%flux_BT_coupling) .or. CS%adiabatic) &
     CS%readjust_BT_trans = .false.
 
@@ -1745,12 +1739,6 @@ subroutine register_diags(Time, G, CS)
           'Meridional velocity Adjustment 2', 'meter second-1')
       if (CS%id_du_adj2 > 0) call safe_alloc_ptr(CS%diag%du_adj2,IsdB,IedB,jsd,jed,nz)
       if (CS%id_dv_adj2 > 0) call safe_alloc_ptr(CS%diag%dv_adj2,isd,ied,JsdB,JedB,nz)
-    endif
-    if (CS%BT_include_udhdt) then
-      CS%id_h_dudt = register_diag_field('ocean_model', 'BT_u_dhdt', G%axesCu1, Time, &
-          'Barotropic zonal transport tendancy from sum(h du_dt)', 'meter3 second-2')
-      CS%id_h_dvdt = register_diag_field('ocean_model', 'BT_v_dhdt', G%axesCv1, Time, &
-          'Barotropic meridional transport tendancy from sum(h du_dt)', 'meter3 second-2')
     endif
   endif
 

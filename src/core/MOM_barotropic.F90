@@ -392,7 +392,7 @@ subroutine btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
                   fluxes, pbce, eta_PF_in, U_Cor, V_Cor, &
                   accel_layer_u, accel_layer_v, eta_out, uhbtav, vhbtav, G, CS, &
                   visc_rem_u, visc_rem_v, etaav, uhbt_out, vhbt_out, OBC, &
-                  BT_cont, eta_PF_start, sum_u_dhdt, sum_v_dhdt, &
+                  BT_cont, eta_PF_start, &
                   taux_bot, tauy_bot, uh0, vh0, u_uh0, v_vh0)
   logical,                              intent(in)    :: use_fluxes
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)  :: U_in
@@ -415,8 +415,6 @@ subroutine btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   type(barotropic_CS),                  pointer       :: CS
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in), optional :: visc_rem_u
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in), optional :: visc_rem_v
-  real, dimension(NIMEMB_,NJMEM_),     intent(in),  optional :: sum_u_dhdt
-  real, dimension(NIMEM_,NJMEMB_),     intent(in),  optional :: sum_v_dhdt
   real, dimension(NIMEM_,NJMEM_),      intent(out), optional :: etaav
   real, dimension(NIMEMB_,NJMEM_),     intent(out), optional :: uhbt_out
   real, dimension(NIMEM_,NJMEMB_),     intent(out), optional :: vhbt_out
@@ -470,12 +468,6 @@ subroutine btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
 !                         after viscosity is applied, in the zonal (_u) and
 !                         meridional (_v) directions.  Nondimensional between
 !                         0 (at the bottom) and 1 (far above the bottom).
-!  (in,opt)  sum_u_dhdt - The summed zonal volume or mass flux tendancy due to
-!                         thickness changes (dy u dh/dt), in H m2 s-2
-!                         (usually m3 s-2 or kg s-2).
-!  (in,opt)  sum_v_dhdt - The summed meridional volume or mass flux tendancy due
-!                         to thickness changes (dx v dh/dt), in H m2 s-2
-!                         (usually m3 s-2 or kg s-2).
 !  (out,opt) etaav - The free surface height or column mass averaged over the
 !                    barotropic integration, in m or kg m-2.
 !  (out,opt) uhbt_out - The barotropic zonal volume or mass fluxes at the end
@@ -623,7 +615,6 @@ subroutine btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
                       ! when project_velocity is true. For now be_proj is set
                       ! to equal bebt, as they have similar roles and meanings.
   real :: Idt         ! The inverse of dt, in s-1.
-  real :: dvel_cont   ! The velocity change due to sum(u dh/dt) or sum(v dh_dt), in m s-2.
   real :: det_de      ! The partial derivative due to self-attraction and loading
                       ! of the reference geopotential with the sea surface height.
                       ! This is typically ~0.09 or less.
@@ -1118,35 +1109,6 @@ subroutine btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
     endif
   endif
 
-  if (use_fluxes .and. present(sum_u_dhdt) .and. present(sum_v_dhdt)) then
-    ! Add the effective accelerations from u dh/dt and v dh/dt.
-    if (use_BT_cont) then
-      do j=js,je ; do I=is-1,ie ; if (G%mask2dCu(I,j)>0.0) then
-        dvel_cont = uhbt_to_ubt(dt*sum_u_dhdt(I,j), BTCL_u(I,j))
-        ! dvel_cont = (uhbt_to_ubt(dt*sum_u_dhdt(I,j) + uhbt(I,j), &
-        !                          BTCL_u(I,j)) - ubt_Cor(I,j))
-        if (abs(dvel_cont) > CS%maxCFL_BT_cont*G%dxCu(I,j)) &
-          dvel_cont = SIGN(CS%maxCFL_BT_cont*G%dxCu(I,j), dvel_cont)
-        BT_force_u(I,j) = BT_force_u(I,j) + dvel_cont * Idt
-      endif ; enddo ; enddo
-      do J=js-1,je ; do i=is,ie ; if (G%mask2dCv(i,J)>0.0) then
-        dvel_cont = vhbt_to_vbt(dt*sum_v_dhdt(i,J), BTCL_v(i,J))
-        ! dvel_cont = (vhbt_to_vbt(dt*sum_v_dhdt(i,J) + vhbt(i,J), &
-        !                          BTCL_v(i,J)) - vbt_Cor(i,J))
-        if (abs(dvel_cont) > CS%maxCFL_BT_cont*G%dyCv(i,J)) &
-          dvel_cont = SIGN(CS%maxCFL_BT_cont*G%dyCv(i,J), dvel_cont)
-        BT_force_v(i,J) = BT_force_v(i,J) + dvel_cont * Idt
-      endif ; enddo ; enddo
-    else
-      do j=js,je ; do I=is-1,ie ; if (Datu(I,j)>0.0) then
-        BT_force_u(I,j) = BT_force_u(I,j) + sum_u_dhdt(I,j) / Datu(i,j)
-      endif ; enddo ; enddo
-      do J=js-1,je ; do i=is,ie ; if (Datv(i,J)>0.0) then
-        BT_force_v(i,J) = BT_force_v(i,J) + sum_v_dhdt(i,J) / Datv(i,J)
-      endif ; enddo ; enddo
-    endif
-  endif
-
   if ((Isq > is-1) .or. (Jsq > js-1)) then
     ! Non-symmetric memory is being used, so the edge values need to be
     ! filled in with a halo update of a non-symmetric array.
@@ -1287,42 +1249,6 @@ subroutine btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
     if (CS%ua_polarity(i,j) < 0.0) call swap(gtot_E(i,j), gtot_W(i,j))
     if (CS%va_polarity(i,j) < 0.0) call swap(gtot_N(i,j), gtot_S(i,j))
   enddo ; enddo
-
-  ! The thickness-tendancy derived accelerations are always known at the edges,
-  ! and so do not need to added before the double halo update.  ubt_Cor and
-  ! vbt_Cor are good estimates of the time-mean velocity, and good for
-  ! estimating the requried accelerations.
-  !   This is where I think that this calculation should be done, but it
-  ! is not working yet (probably a parallelization problem).
-!# if (use_fluxes .and. present(sum_u_dhdt) .and. present(sum_v_dhdt)) then
-!#   ! Add the effective accelerations from u dh/dt and v dh/dt.
-!#   if (use_BT_cont) then
-!#     do j=js,je ; do I=is-1,ie ; if (G%mask2dCu(I,j)>0.0) then
-!#       ! dvel_cont = uhbt_to_ubt(dt*sum_u_dhdt(I,j), BTCL_u(I,j))
-!#       dvel_cont = (uhbt_to_ubt(dt*sum_u_dhdt(I,j) + uhbt(I,j), &
-!#                                BTCL_u(I,j)) - ubt_Cor(I,j))
-!#       if (abs(dvel_cont) > CS%maxCFL_BT_cont*G%dxCu(I,j)) &
-!#         dvel_cont = SIGN(CS%maxCFL_BT_cont*G%dxCu(I,j), dvel_cont)
-!#       BT_force_u(I,j) = BT_force_u(I,j) + dvel_cont * Idt
-!#     endif ; enddo ; enddo
-!#     do J=js-1,je ; do i=is,ie ; if (G%mask2dCv(i,J)>0.0) then
-!#       ! dvel_cont = vhbt_to_vbt(dt*sum_v_dhdt(i,J), BTCL_v(i,J))
-!#       dvel_cont = (vhbt_to_vbt(dt*sum_v_dhdt(i,J) + vhbt(i,J), &
-!#                                BTCL_v(i,J)) - vbt_Cor(i,J))
-!#       if (abs(dvel_cont) > CS%maxCFL_BT_cont*G%dyCv(i,J)) &
-!#         dvel_cont = SIGN(CS%maxCFL_BT_cont*G%dyCv(i,J), dvel_cont)
-!#       BT_force_v(i,J) = BT_force_v(i,J) + dvel_cont * Idt
-!#     endif ; enddo ; enddo
-!#   else
-!#     do j=js,je ; do I=is-1,ie ; if (Datu(I,j)>0.0) then
-!#       BT_force_u(I,j) = BT_force_u(I,j) + sum_u_dhdt(I,j) / Datu(i,j)
-!#     endif ; enddo ; enddo
-!#     do J=js-1,je ; do i=is,ie ; if (Datv(i,J)>0.0) then
-!#       BT_force_v(i,J) = BT_force_v(i,J) + sum_v_dhdt(i,J) / Datv(i,J)
-!#     endif ; enddo ; enddo
-!#   endif
-!# endif
-
   
   ! Now start new halo updates.
   if (nonblock_setup) then
@@ -3580,8 +3506,6 @@ subroutine barotropic_init(u, v, h, eta, Time, G, param_file, diag, CS, &
                  "Use the split time stepping if true.", default=.true.)
   if (.not.CS%split) return
   
-CS%Nonlin_cont_update_period = 1
-
   ! ### USE SOMETHING OTHER THAN MAXVEL FOR THIS...
   call get_param(param_file, mod, "BOUND_BT_CORRECTION", CS%bound_BT_corr, &
                  "If true, the corrective pseudo mass-fluxes into the \n"//&
@@ -3623,6 +3547,7 @@ CS%Nonlin_cont_update_period = 1
                  "If true, use nonlinear transports in the barotropic \n"//&
                  "continuity equation.  This does not apply if \n"//&
                  "USE_BT_CONT_TYPE is true.", default=.false.)
+  CS%Nonlin_cont_update_period = 1
   if (CS%Nonlinear_continuity) &
     call get_param(param_file, mod, "NONLIN_BT_CONT_UPDATE_PERIOD", &
                                   CS%Nonlin_cont_update_period, &
@@ -3739,7 +3664,8 @@ CS%Nonlin_cont_update_period = 1
   call get_param(param_file, mod, "G_BT_EXTRA", CS%G_extra, &
                  "A nondimensional factor by which gtot is enhanced.", &
                  units="nondim", default=0.0)
-  call get_param(param_file, mod, "MAXIMUM_DEPTH", max_depth, default=1.0e6)
+  call get_param(param_file, mod, "MAXIMUM_DEPTH", max_depth, default=1.0e6, &
+                 do_not_log=.true.)
   call get_param(param_file, mod, "SSH_EXTRA", SSH_extra, &
                  "An estimate of how much higher SSH might get, for use \n"//&
                  "in calculating the safe external wave speed. The \n"//&
