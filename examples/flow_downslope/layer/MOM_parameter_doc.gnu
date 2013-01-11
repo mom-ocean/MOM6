@@ -157,7 +157,7 @@ MIN_Z_DIAG_INTERVAL = 0.0       !   [s] default = 0.0
                                 ! calculations of depth-space diagnostics. Making this
                                 ! larger than DT_THERM reduces the  performance penalty
                                 ! of regridding to depth online.
-FLUX_BT_COUPLING = True         !   [Boolean] default = True
+FLUX_BT_COUPLING = False        !   [Boolean] default = False
                                 ! If true, use mass fluxes to ensure consistency between
                                 ! the baroclinic and barotropic modes. This is only used
                                 ! if SPLIT is true.
@@ -185,14 +185,10 @@ READJUST_BT_TRANS = False       !   [Boolean] default = False
 SPLIT_BOTTOM_STRESS = False     !   [Boolean] default = False
                                 ! If true, provide the bottom stress calculated by the
                                 ! vertical viscosity to the barotropic solver.
-BT_USE_LAYER_FLUXES = False     !   [Boolean] default = False
+BT_USE_LAYER_FLUXES = True      !   [Boolean] default = True
                                 ! If true, use the summed layered fluxes plus an
                                 ! adjustment due to the change in the barotropic velocity
                                 ! in the barotropic continuity equation.
-BT_INCLUDE_UDHDT = False        !   [Boolean] default = False
-                                ! If true, include the barotropic transport tendancies
-                                ! from sum(u dhdt) and sum(v dhdt) in the barotropic
-                                ! solver.
 FRAZIL = False                  !   [Boolean] default = False
                                 ! If true, water freezes if it gets too cold, and the
                                 ! the accumulated heat deficit is returned in the
@@ -1090,12 +1086,12 @@ BT x-halo = 0                   !
                                 ! The barotropic x-halo size that is actually used.
 BT y-halo = 0                   !
                                 ! The barotropic y-halo size that is actually used.
-USE_BT_CONT_TYPE = False        !   [Boolean] default = False
+USE_BT_CONT_TYPE = True         !   [Boolean] default = True
                                 ! If true, use a structure with elements that describe
                                 ! effective face areas from the summed continuity solver
                                 ! as a function the barotropic flow in coupling between
                                 ! the barotropic and baroclinic flow.  This is only used
-                                ! if SPLIT and FLUX_BT_COUPLING are true.
+                                ! if SPLIT is true.
 NONLINEAR_BT_CONTINUITY = False !   [Boolean] default = False
                                 ! If true, use nonlinear transports in the barotropic
                                 ! continuity equation.  This does not apply if
@@ -1159,7 +1155,7 @@ MAXCFL_BT_CONT = 0.1            !   [nondim] default = 0.1
                                 ! The maximum permitted CFL number associated with the
                                 ! barotropic accelerations from the summed velocities
                                 ! times the time-derivatives of thicknesses.
-DT_BT_FILTER = 0.0              !   [sec or nondim] default = 0.0
+DT_BT_FILTER = -0.25            !   [sec or nondim] default = -0.25
                                 ! A time-scale over which the barotropic mode solutions
                                 ! are filtered, in seconds if positive, or as a fraction
                                 ! of DT if negative. When used this can never be taken to
@@ -1325,15 +1321,13 @@ DAYMAX = 10.0                   !   [hours] default = 24.0
 RESTART_CONTROL = -1            ! default = 1
                                 ! An integer whose bits encode which restart files are
                                 ! written. Add 2 (bit 1) for a time-stamped file, and odd
-                                ! (bit 0) for a non-time-stamped file.  A restart file
-                                ! will be saved at the end of the run segment for any
-                                ! non-negative value.
-RESTINT = 240.0                 !   [hours] default = 24.5
+                                ! (bit 0) for a non-time-stamped file. A non-time-stamped
+                                ! restart file is saved at the end of the run segment
+                                ! for any non-negative value.
+RESTINT = 240.0                 !   [hours] default = 0.0
                                 ! The interval between saves of the restart file in units
-                                ! of TIMEUNIT.  Use a value that is larger than DAYMAX to
-                                ! not save incremental restart files  within a run.  Use
-                                ! 0 not to save restart files at all.  The default is to
-                                ! use a larger value than DAYMAX.
+                                ! of TIMEUNIT.  Use 0 (the default) to not save
+                                ! incremental restart files at all.
 ENERGYSAVEDAYS = 1.0            !   [hours] default = 4.32E+04
                                 ! The interval in units of TIMEUNIT between saves of the
                                 ! energies of the run and other globally summed diagnostics.
