@@ -47,7 +47,8 @@ logical :: all_PEs_read = .false.
 logical, parameter :: report_unused_default = .false.
 logical, parameter :: unused_params_fatal_default = .false.
 logical, parameter :: log_to_stdout_default = .false.
-logical, parameter :: minimal_doc_default = .false.
+logical, parameter :: complete_doc_default = .true.
+logical, parameter :: minimal_doc_default = .true.
 
 type, private :: file_data_type ; private
   integer :: num_lines = 0
@@ -85,6 +86,8 @@ type, public :: param_file_type ; private
   integer  :: stdout, stdlog        ! The units from stdout() and stdlog().
   character(len=240) :: doc_file    ! A file where all run-time parameters, their
                                     ! settings and defaults are documented.
+  logical  :: complete_doc = complete_doc_default ! If true, document all
+                                    ! run-time parameters.
   logical  :: minimal_doc = minimal_doc_default ! If true, document only those
                                     ! run-time parameters that differ from defaults.
   type(doc_type), pointer :: doc => NULL() ! A structure that contains information
@@ -215,10 +218,15 @@ subroutine open_param_file(filename, CS, checkable, component)
   CS%log_open = (stdlog() > 0)
 
   if (len_trim(CS%doc_file) > 0) then
+    CS%complete_doc = complete_doc_default
+    call read_param(CS, "COMPLETE_DOCUMENTATION", CS%complete_doc)
     CS%minimal_doc = minimal_doc_default
     call read_param(CS, "MINIMAL_DOCUMENTATION", CS%minimal_doc)
-    call doc_init(CS%doc_file, CS%doc, CS%minimal_doc)
+  else
+    CS%complete_doc = .false.
+    CS%minimal_doc = .false.
   endif
+  call doc_init(CS%doc_file, CS%doc, CS%minimal_doc, CS%complete_doc)
 
 end subroutine open_param_file
 
@@ -266,14 +274,21 @@ subroutine close_param_file(CS, quiet_close, component)
   docfile_default = "MOM_parameter_doc"
   if (present(component)) docfile_default = trim(component)//"_parameter_doc"
   call log_param(CS, mod, "DOCUMENT_FILE", CS%doc_file, &
-                 "A file where all run-time parameters, their settings \n"//&
-                 "and defaults are documented, or blank for no such file.", &
-                 default=docfile_default)
-  if (len_trim(CS%doc_file) > 0) &
+                 "The basename for files where run-time parameters, their\n"//&
+                 "settings, units and defaults are documented. Blank will\n"//&
+                 "disable all parameter documentation.", default=docfile_default)
+  if (len_trim(CS%doc_file) > 0) then
+    call log_param(CS, mod, "COMPLETE_DOCUMENTATION", &
+                   CS%complete_doc, &
+                  "If true, all run-time parameters are\n"//&
+                  "documented in "//trim(CS%doc_file)//&
+                  ".all .", default=complete_doc_default)
     call log_param(CS, mod, "MINIMAL_DOCUMENTATION", &
                    CS%minimal_doc, &
-                  "If true, document only those run-time parameters that \n"//&
-                  "differ from their defaults.", default=minimal_doc_default)
+                  "If true, non-default run-time parameters are\n"//&
+                  "documented in "//trim(CS%doc_file)//&
+                  ".short .", default=minimal_doc_default)
+  endif
 
   num_unused = 0
   do i = 1, CS%nfiles
