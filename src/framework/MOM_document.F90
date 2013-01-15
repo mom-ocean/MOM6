@@ -42,44 +42,6 @@ interface doc_param
                    doc_param_time
 end interface
 
-type :: link_logical ; private
-  type(link_logical), pointer :: next => NULL() ! Facilitates linked list
-  character(len=80) :: name                        ! Parameter name
-  logical :: default                            ! Parameter value and default
-  logical :: hasAdefaultValue = .false.         ! Has a default value
-  logical :: hasBeenDocumented = .false.        ! Has been written to documentation
-end type link_logical
-
-type :: link_int ; private
-  type(link_int), pointer :: next => NULL()  ! Facilitates linked list
-  character(len=80) :: name                     ! Parameter name
-  integer :: default                         ! Parameter value and default
-  logical :: hasAdefaultValue = .false.      ! Has a default value
-  logical :: hasBeenDocumented = .false.     ! Has been written to documentation
-end type link_int
-
-type :: link_real ; private
-  type(link_real), pointer :: next => NULL() ! Facilitates linked list
-  character(len=80) :: name                     ! Parameter name
-  real :: default                            ! Parameter value and default
-  logical :: hasAdefaultValue = .false.      ! Has a default value
-  logical :: hasBeenDocumented = .false.     ! Has been written to documentation
-end type link_real
-
-type :: link_char ; private
-  type(link_char), pointer :: next => NULL() ! Facilitates linked list
-  character(len=80) :: name                  ! Parameter name
-  character(len=120) :: default              ! Parameter value and default
-  logical :: hasAdefaultValue = .false.      ! Has a default value
-  logical :: hasBeenDocumented = .false.     ! Has been written to documentation
-end type link_char
-
-type :: link_msg ; private
-  type(link_msg), pointer :: next => NULL()  ! Facilitates linked list
-  character(len=80) :: varname               ! Parameter name
-  character(len=240) :: msg                  ! Parameter value and default
-end type link_msg
-
 type, public :: doc_type ; private
   integer :: unitAll = -1           ! The open unit number for docFileBase (.all).
   integer :: unitShort = -1         ! The open unit number for docFileBase (.short).
@@ -90,11 +52,14 @@ type, public :: doc_type ; private
   logical :: defineSyntax = .false. ! If true, use #def syntax instead of a=b syntax
   logical :: warnOnConflicts = .false. ! Cause a WARNING error if defaults differ.
   integer :: commentColumn = 32     ! Number of spaces before the comment marker.
-  type(link_logical), pointer :: chain_logicals => NULL() ! Db of logicals
-  type(link_int),     pointer :: chain_ints => NULL()     ! Db of integers
-  type(link_real),    pointer :: chain_reals => NULL()    ! Db of reals
-  type(link_char),    pointer :: chain_chars => NULL()    ! Db of characters
+  type(link_msg), pointer :: chain_msg => NULL() ! Db of messages
 end type doc_type
+
+type :: link_msg ; private
+  type(link_msg), pointer :: next => NULL()  ! Facilitates linked list
+  character(len=80) :: name                  ! Parameter name
+  character(len=240) :: msg                  ! Parameter value and default
+end type link_msg
 
 character(len=4), parameter :: STRING_TRUE = 'True'
 character(len=5), parameter :: STRING_FALSE = 'False'
@@ -118,6 +83,7 @@ subroutine doc_param_none(doc, varname, desc, units)
     mesg = "#define "//trim(varname)//repeat(" ",numspc)//"!"
     if (len_trim(units) > 0) mesg = trim(mesg)//"   ["//trim(units)//"]"
 
+    if (mesgHasBeenDocumented(doc, varName, mesg)) return ! Avoid duplicates
     call writeMessageAndDesc(doc, mesg, desc)
   endif 
 end subroutine doc_param_none
@@ -135,10 +101,6 @@ subroutine doc_param_logical(doc, varname, desc, units, val, default)
   call open_doc_file(doc)
 
   if (doc%unitAll > 0 .or. doc%unitShort > 0) then
-    ! If documentation has already been written and has the
-    ! same defaults then skip re-writing it.
-!AJAif (logicalHasBeenDocumented(doc,varname,default)) return
-
     if (val) then
       mesg = define_string(doc,varname,STRING_TRUE,units)
     else
@@ -155,6 +117,7 @@ subroutine doc_param_logical(doc, varname, desc, units, val, default)
       endif
     endif
 
+    if (mesgHasBeenDocumented(doc, varName, mesg)) return ! Avoid duplicates
     call writeMessageAndDesc(doc, mesg, desc, equalsDefault)
   endif
 end subroutine doc_param_logical
@@ -174,10 +137,6 @@ subroutine doc_param_logical_array(doc, varname, desc, units, vals, default)
   call open_doc_file(doc)
 
   if (doc%unitAll > 0 .or. doc%unitShort > 0) then
-    ! If documentation has already been written and has the
-    ! same defaults then skip re-writing it.
-    if (logicalHasBeenDocumented(doc,varname,default)) return
-
     if (vals(1)) then ; valstring = STRING_TRUE ; else ; valstring = STRING_FALSE ; endif
     do i=2,min(size(vals),128)
       if (vals(i)) then
@@ -200,6 +159,7 @@ subroutine doc_param_logical_array(doc, varname, desc, units, vals, default)
       endif
     endif
 
+    if (mesgHasBeenDocumented(doc, varName, mesg)) return ! Avoid duplicates
     call writeMessageAndDesc(doc, mesg, desc, equalsDefault)
   endif
 end subroutine doc_param_logical_array
@@ -218,10 +178,6 @@ subroutine doc_param_int(doc, varname, desc, units, val, default)
   call open_doc_file(doc)
 
   if (doc%unitAll > 0 .or. doc%unitShort > 0) then
-    ! If documentation has already been written and has the
-    ! same defaults then skip re-writing it.
-    if (intHasBeenDocumented(doc,varname,default)) return
-
     valstring = int_string(val)
     mesg = define_string(doc,varname,valstring,units)
 
@@ -231,6 +187,7 @@ subroutine doc_param_int(doc, varname, desc, units, val, default)
       mesg = trim(mesg)//" default = "//(trim(int_string(default)))
     endif
 
+    if (mesgHasBeenDocumented(doc, varName, mesg)) return ! Avoid duplicates
     call writeMessageAndDesc(doc, mesg, desc, equalsDefault)
   endif
 end subroutine doc_param_int
@@ -264,6 +221,7 @@ subroutine doc_param_int_array(doc, varname, desc, units, vals, default)
       mesg = trim(mesg)//" default = "//(trim(int_string(default)))
     endif
 
+    if (mesgHasBeenDocumented(doc, varName, mesg)) return ! Avoid duplicates
     call writeMessageAndDesc(doc, mesg, desc, equalsDefault)
   endif
 
@@ -283,10 +241,6 @@ subroutine doc_param_real(doc, varname, desc, units, val, default)
   call open_doc_file(doc)
 
   if (doc%unitAll > 0 .or. doc%unitShort > 0) then
-    ! If documentation has already been written and has the
-    ! same defaults then skip re-writing it.
-    if (realHasBeenDocumented(doc,varname,default)) return
-    
     valstring = real_string(val)
     mesg = define_string(doc,varname,valstring,units)
 
@@ -296,6 +250,7 @@ subroutine doc_param_real(doc, varname, desc, units, val, default)
       mesg = trim(mesg)//" default = "//trim(real_string(default))
     endif
 
+    if (mesgHasBeenDocumented(doc, varName, mesg)) return ! Avoid duplicates
     call writeMessageAndDesc(doc, mesg, desc, equalsDefault)
   endif
 end subroutine doc_param_real
@@ -329,6 +284,7 @@ subroutine doc_param_real_array(doc, varname, desc, units, vals, default)
       mesg = trim(mesg)//" default = "//trim(real_string(default))
     endif
 
+    if (mesgHasBeenDocumented(doc, varName, mesg)) return ! Avoid duplicates
     call writeMessageAndDesc(doc, mesg, desc, equalsDefault)
   endif
 
@@ -347,10 +303,6 @@ subroutine doc_param_char(doc, varname, desc, units, val, default)
   call open_doc_file(doc)
 
   if (doc%unitAll > 0 .or. doc%unitShort > 0) then
-    ! If documentation has already been written and has the
-    ! same defaults then skip re-writing it.
-    if (charHasBeenDocumented(doc,varname,default)) return
-    
     mesg = define_string(doc,varname,'"'//trim(val)//'"',units)
 
     equalsDefault = .false.
@@ -359,6 +311,7 @@ subroutine doc_param_char(doc, varname, desc, units, val, default)
       mesg = trim(mesg)//' default = "'//trim(adjustl(default))//'"'
     endif
 
+    if (mesgHasBeenDocumented(doc, varName, mesg)) return ! Avoid duplicates
     call writeMessageAndDesc(doc, mesg, desc, equalsDefault)
   endif
 
@@ -384,6 +337,7 @@ subroutine doc_param_time(doc, varname, desc, units, val, default)
     mesg = "#define "//trim(varname)//" Time-type"//repeat(" ",numspc)//"!"
     if (len_trim(units) > 0) mesg = trim(mesg)//"   ["//trim(units)//"]"
 
+    if (mesgHasBeenDocumented(doc, varName, mesg)) return ! Avoid duplicates
     call writeMessageAndDesc(doc, mesg, desc, equalsDefault)
   endif 
 
@@ -655,200 +609,44 @@ end subroutine doc_end
 
 ! -----------------------------------------------------------------------------
 
-function logicalHasBeenDocumented(doc,varName,defaultValue)
+function mesgHasBeenDocumented(doc,varName,mesg)
   type(doc_type),   pointer     :: doc
-  character(len=*), intent(in)  :: varName
-  logical, optional, intent(in) :: defaultValue
-  logical                       :: logicalHasBeenDocumented
-! Returns true is documentation has been written and current arguments are
-! consistent with previous documentation
-  type(link_logical), pointer :: newRealLink, this
+  character(len=*), intent(in)  :: varName, mesg
+  logical                       :: mesgHasBeenDocumented
+! Returns true if documentation has lready been written
+  type(link_msg), pointer :: newLink, this, last
 
-  allocate(newRealLink)
-  newRealLink%name = varName
-  if (present(defaultValue)) then
-    newRealLink%default = defaultValue
-    newRealLink%hasAdefaultValue = .true.
+  mesgHasBeenDocumented = .false.
+
+  ! Search through list for this parameter
+  last => NULL()
+  this => doc%chain_msg
+  do while( associated(this) )
+    if (trim(varName) == trim(this%name)) then
+      mesgHasBeenDocumented = .true.
+      if (trim(mesg) == trim(this%msg)) return
+      ! If we fail the above test then cause an error
+      call MOM_error(WARNING, "Previous msg:"//trim(this%msg))
+      call MOM_error(WARNING, "New message :"//trim(mesg))
+      call MOM_error(WARNING, "Encountered inconsistent documentation line for parameter "&
+                     //trim(varName)//"!")
+    endif
+    last => this
+    this => this%next
+  enddo
+
+  ! Allocate a new link
+  allocate(newLink)
+  newLink%name = varName
+  newLink%msg = trim(mesg)
+  newLink%next => NULL()
+  if (.not. associated(doc%chain_msg)) then
+    doc%chain_msg => newLink
   else
-    newRealLink%hasAdefaultValue = .false.
+    if (.not. associated(last)) call MOM_error(FATAL, &
+         "Unassociated LINK in mesgHasBeenDocumented: "//trim(mesg))
+    last%next => newLink
   endif
-  newRealLink%next => NULL()
-
-  ! Now search through list for this parameter
-  logicalHasBeenDocumented = .false.
-  if (.not. associated(doc%chain_logicals)) then
-    newRealLink%hasBeenDocumented = .true.
-    doc%chain_logicals => newRealLink
-  else
-    this => doc%chain_logicals
-    do while( associated(this) )
-      if (trim(varName) == trim(this%name)) then
-        deallocate(newRealLink)
-        if (this%hasAdefaultValue) then
-          if (present(defaultValue)) then
-            if (defaultValue .eqv. this%default) then
-             logicalHasBeenDocumented = .true.
-            else
-             if (doc%warnOnConflicts) call MOM_error(WARNING,   &
-               'Conflicting default: '//trim(varName)//' '//     &
-               trim(logical_string(defaultValue))//' '//trim(logical_string(this%default)))
-            endif
-          endif
-        endif
-        return
-      endif
-      this => this%next
-    enddo
-    newRealLink%next => doc%chain_logicals ! If not encountered in the linked list, add it
-    doc%chain_logicals => newRealLink
-  endif
-end function logicalHasBeenDocumented
-
-function intHasBeenDocumented(doc,varName,defaultValue)
-  type(doc_type),   pointer       :: doc
-  character(len=*), intent(in)    :: varName
-  integer, optional,   intent(in) :: defaultValue
-  logical                         :: intHasBeenDocumented
-! Returns true is documentation has been written and current arguments are
-! consistent with previous documentation
-  type(link_int), pointer :: newRealLink, this
-
-  allocate(newRealLink)
-  newRealLink%name = varName
-  if (present(defaultValue)) then
-    newRealLink%default = defaultValue
-    newRealLink%hasAdefaultValue = .true.
-  else
-    newRealLink%hasAdefaultValue = .false.
-  endif
-  newRealLink%next => NULL()
-
-  ! Now search through list for this parameter
-  intHasBeenDocumented = .false.
-  if (.not. associated(doc%chain_ints)) then
-    newRealLink%hasBeenDocumented = .true.
-    doc%chain_ints => newRealLink
-  else
-    this => doc%chain_ints
-    do while( associated(this) )
-      if (trim(varName) == trim(this%name)) then
-        deallocate(newRealLink)
-        if (this%hasAdefaultValue) then
-          if (present(defaultValue)) then
-            if (defaultValue==this%default) then
-             intHasBeenDocumented = .true.
-            else
-             if (doc%warnOnConflicts) call MOM_error(WARNING,   &
-               'Conflicting default: '//trim(varName)//' '//     &
-               trim(int_string(defaultValue))//' '//trim(int_string(this%default)))
-            endif
-          endif
-        endif
-        return
-      endif
-      this => this%next
-    enddo
-    newRealLink%next => doc%chain_ints ! If not encountered in the linked list, add it
-    doc%chain_ints => newRealLink
-  endif
-end function intHasBeenDocumented
-
-function realHasBeenDocumented(doc,varName,defaultValue)
-  type(doc_type),   pointer    :: doc
-  character(len=*), intent(in) :: varName
-  real, optional,   intent(in) :: defaultValue
-  logical                      :: realHasBeenDocumented
-! Returns true is documentation has been written and current arguments are
-! consistent with previous documentation
-  type(link_real), pointer :: newRealLink, this
-
-  allocate(newRealLink)
-  newRealLink%name = varName
-  if (present(defaultValue)) then
-    newRealLink%default = defaultValue
-    newRealLink%hasAdefaultValue = .true.
-  else
-    newRealLink%hasAdefaultValue = .false.
-  endif
-  newRealLink%next => NULL()
-
-  ! Now search through list for this parameter
-  realHasBeenDocumented = .false.
-  if (.not. associated(doc%chain_reals)) then
-    newRealLink%hasBeenDocumented = .true.
-    doc%chain_reals => newRealLink
-  else
-    this => doc%chain_reals
-    do while( associated(this) )
-      if (trim(varName) == trim(this%name)) then
-        deallocate(newRealLink)
-        if (this%hasAdefaultValue) then
-          if (present(defaultValue)) then
-            if (defaultValue==this%default) then
-             realHasBeenDocumented = .true.
-            else
-             if (doc%warnOnConflicts) call MOM_error(WARNING,   &
-               'Conflicting default: '//trim(varName)//' '//     &
-               trim(real_string(defaultValue))//' '//trim(real_string(this%default)))
-            endif
-          endif
-        endif
-        return
-      endif
-      this => this%next
-    enddo
-    newRealLink%next => doc%chain_reals ! If not encountered in the linked list, add it
-    doc%chain_reals => newRealLink
-  endif
-end function realHasBeenDocumented
-
-function charHasBeenDocumented(doc,varName,defaultValue)
-  type(doc_type),             pointer    :: doc
-  character(len=*),           intent(in) :: varName
-  character(len=*), optional, intent(in) :: defaultValue
-  logical                                :: charHasBeenDocumented
-! Returns true is documentation has been written and current arguments are
-! consistent with previous documentation
-  type(link_char), pointer :: newRealLink, this
-
-  allocate(newRealLink)
-  newRealLink%name = varName
-  if (present(defaultValue)) then
-    newRealLink%default = defaultValue
-    newRealLink%hasAdefaultValue = .true.
-  else
-    newRealLink%hasAdefaultValue = .false.
-  endif
-  newRealLink%next => NULL()
-
-  ! Now search through list for this parameter
-  charHasBeenDocumented = .false.
-  if (.not. associated(doc%chain_chars)) then
-    newRealLink%hasBeenDocumented = .true.
-    doc%chain_chars => newRealLink
-  else
-    this => doc%chain_chars
-    do while( associated(this) )
-      if (trim(varName) == trim(this%name)) then
-        deallocate(newRealLink)
-        if (this%hasAdefaultValue) then
-          if (present(defaultValue)) then
-            if (trim(defaultValue)==trim(this%default)) then
-             charHasBeenDocumented = .true.
-            else
-             if (doc%warnOnConflicts) call MOM_error(WARNING,    &
-               'Conflicting default: '//trim(varName)//' "'//     &
-               trim(defaultValue)//'" "'//trim(this%default)//'"')
-            endif
-          endif
-        endif
-        return
-      endif
-      this => this%next
-    enddo
-    newRealLink%next => doc%chain_chars ! If not encountered in the linked list, add it
-    doc%chain_chars => newRealLink
-  endif
-end function charHasBeenDocumented
+end function mesgHasBeenDocumented
 
 end module MOM_document

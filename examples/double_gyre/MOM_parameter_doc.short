@@ -83,8 +83,6 @@ DTBT_RESET_PERIOD = -1.0        !   [s] default = 2400.0
                                 ! step, and if 0, every dynamics time step.  The default is
                                 ! set by DT_THERM.  This is only used if SPLIT is true.
     !  Parameters of module MOM_tracer
-DT = 1200.0                     !   [s]
-                                ! The (baroclinic) dynamics time step.
     !  Parameters of module MOM_tracer_flow_control
 INPUTDIR = "INPUT"              ! default = "."
                                 ! The directory in which input files are found.
@@ -121,14 +119,6 @@ LENLAT = 20.0                   !   [degrees]
                                 ! The latitudinal length of the domain.
 LENLON = 22.0                   !   [degrees]
                                 ! The longitudinal length of the domain.
-GRID_CONFIG = "spherical"       !
-                                ! The method for defining the horizontal grid.  Valid
-                                ! entries include:
-                                !    file - read the grid from GRID_FILE
-                                !    mosaic - read the grid from a mosaic grid file
-                                !    cartesian - a Cartesian grid
-                                !    spherical - a spherical grid
-                                !    mercator  - a Mercator grid
 TOPO_CONFIG = "spoon"           !
                                 ! This specifies how bathymetry is specified:
                                 !     file - read bathymetric information from the file
@@ -150,8 +140,6 @@ TOPO_CONFIG = "spoon"           !
 MINIMUM_DEPTH = 1.0             !   [m] default = 0.0
                                 ! The minimum depth of the ocean.
 MAXIMUM_DEPTH = 2000.0          !   [m]
-                                ! The maximum depth of the ocean.
-MAXIMUM_DEPTH = 2000.0          !   [m] default = 1.0E+06
                                 ! The maximum depth of the ocean.
 ALWAYS_WRITE_GEOM = False       !   [Boolean] default = True
                                 ! If true, write the geometry and vertical grid files
@@ -176,8 +164,6 @@ THICKNESS_CONFIG = "uniform"    !
                                 !     sloshing - TBD AJA.
                                 !     seamount - TBD AJA.
                                 !     USER - call a user modified routine.
-MAXIMUM_DEPTH = 2000.0          !   [m]
-                                ! The maximum depth of the ocean.
 ETA_TOLERANCE = 1.0E-12         !   [m] default = 1.0E-10
                                 ! The tolerance for the differences between the
                                 ! barotropic and baroclinic estimates of the sea surface
@@ -209,8 +195,6 @@ SMAGORINSKY_KH = True           !   [Boolean] default = False
 SMAG_LAP_CONST = 0.15           !   [nondim] default = 0.0
                                 ! The nondimensional Laplacian Smagorinsky constant,
                                 ! often 0.15.
-DT = 1200.0                     !   [s]
-                                ! The (baroclinic) dynamics time step.
     !  Parameters of module MOM_vert_friction
 DIRECT_STRESS = True            !   [Boolean] default = False
                                 ! If true, the wind stress is distributed over the
@@ -219,9 +203,6 @@ DIRECT_STRESS = True            !   [Boolean] default = False
 HARMONIC_VISC = True            !   [Boolean] default = False
                                 ! If true, use the harmonic mean thicknesses for
                                 ! calculating the vertical viscosity.
-HMIX = 20.0                     !   [m] default = -1.0E+06
-                                ! The depth over which the near-surface viscosity is
-                                ! elevated if BULKMIXEDLAYER is false.
 KV = 1.0E-04                    !   [m2 s-1]
                                 ! The background kinematic viscosity in the interior.
                                 ! The molecular value, ~1e-6 m2 s-1, may be used.
@@ -242,17 +223,6 @@ MAXVEL = 6.0                    !   [m s-1] default = 3.0E+08
 LINEAR_DRAG = True              !   [Boolean] default = False
                                 ! If LINEAR_DRAG and BOTTOMDRAGLAW are defined the drag
                                 ! law is cdrag*DRAG_BG_VEL*u.
-ADIABATIC = True                !   [Boolean] default = False
-                                ! There are no diapycnal mass fluxes if ADIABATIC is
-                                ! true. This assumes that KD = KDML = 0.0 and that
-                                ! there is no buoyancy forcing, but makes the model
-                                ! faster by eliminating subroutine calls.
-HBBL = 10.0                     !   [m]
-                                ! The thickness of a bottom boundary layer with a
-                                ! viscosity of KVBBL if BOTTOMDRAGLAW is not defined, or
-                                ! the thickness over which near-bottom velocities are
-                                ! averaged for the drag law if BOTTOMDRAGLAW is defined
-                                ! but LINEAR_DRAG is not.
 DRAG_BG_VEL = 0.1               !   [m s-1] default = 0.0
                                 ! DRAG_BG_VEL is either the assumed bottom velocity (with
                                 ! LINEAR_DRAG) or an unresolved  velocity that is
@@ -313,45 +283,7 @@ DTBT = -0.9                     !   [s or nondim] default = -0.98
                                 ! Setting DTBT to 0 is the same as setting it to -0.98.
                                 ! The value of DTBT that will actually be used is an
                                 ! integer fraction of DT, rounding down.
-REENTRANT_X = False             !   [Boolean] default = True
-                                ! If true, the domain is zonally reentrant.
-SYMMETRIC_MEMORY_ = True        !   [Boolean]
-                                ! If defined, the velocity point data domain includes
-                                ! every face of the thickness points. In other words,
-                                ! some arrays are larger than others, depending on where
-                                ! they are on the staggered grid.  Also, the starting
-                                ! index of the velocity-point arrays is usually 0, not 1.
-                                ! This can only be set at compile time.
-STATIC_MEMORY_ = False          !   [Boolean]
-                                ! If STATIC_MEMORY_ is defined, the principle variables
-                                ! will have sizes that are statically determined at
-                                ! compile time.  Otherwise the sizes are not determined
-                                ! until run time. The STATIC option is substantially
-                                ! faster, but does not allow the PE count to be changed
-                                ! at run time.  This can only be set at compile time.
-NIGLOBAL = 44                   !
-                                ! The total number of thickness grid points in the
-                                ! x-direction in the physical domain. With STATIC_MEMORY_
-                                ! this is set in MOM_memory.h at compile time.
-NJGLOBAL = 40                   !
-                                ! The total number of thickness grid points in the
-                                ! x-direction in the physical domain. With STATIC_MEMORY_
-                                ! this is set in MOM_memory.h at compile time.
-NIPROC = 2                      !
-                                ! The number of processors in the x-direction. With
-                                ! STATIC_MEMORY_ this is set in MOM_memory.h at compile time.
-NJPROC = 4                      !
-                                ! The number of processors in the x-direction. With
-                                ! STATIC_MEMORY_ this is set in MOM_memory.h at compile time.
     !  Parameters of module MOM_surface_forcing
-ENABLE_THERMODYNAMICS = False   !   [Boolean] default = True
-                                ! If true, Temperature and salinity are used as state
-                                ! variables.
-ADIABATIC = True                !   [Boolean] default = False
-                                ! There are no diapycnal mass fluxes if ADIABATIC is
-                                ! true. This assumes that KD = KDML = 0.0 and that
-                                ! there is no buoyancy forcing, but makes the model
-                                ! faster by eliminating subroutine calls.
 VARIABLE_WINDS = False          !   [Boolean] default = True
                                 ! If true, the winds vary in time after the initialization.
 VARIABLE_BUOYFORCE = False      !   [Boolean] default = True
@@ -365,17 +297,7 @@ WIND_CONFIG = "2gyre"           !
                                 ! The character string that indicates how wind forcing
                                 ! is specified. Valid options include (file), (2gyre),
                                 ! (1gyre), (gyres), (zero), and (USER).
-SOUTHLAT = 30.0                 !   [degrees] default = 0.0
-                                ! The southern latitude of the domain or the equivalent
-                                ! starting value for the y-axis.
-LENLAT = 20.0                   !   [degrees]
-                                ! The latitudinal or y-direction length of the domain.
     !  Parameters of module MOM_sum_output
-ENABLE_THERMODYNAMICS = False   !   [Boolean] default = True
-                                ! If true, Temperature and salinity are used as state
-                                ! variables.
-DT = 1200.0                     !   [s]
-                                ! The (baroclinic) dynamics time step.
 READ_DEPTH_LIST = True          !   [Boolean] default = False
                                 ! Read the depth list from a file if it exists or
                                 ! create that file otherwise.

@@ -76,8 +76,6 @@ IC_OUTPUT_FILE = "GOLD_IC"      ! default = "MOM_IC"
     !  Parameters of module MOM_tracer
 KHTR = 600.0                    !   [m2 s-1] default = 0.0
                                 ! The background along-isopycnal tracer diffusivity.
-DT = 3600.0                     !   [s]
-                                ! The (baroclinic) dynamics time step.
     !  Parameters of module MOM_tracer_flow_control
 INPUTDIR = "INPUT/BATS"         ! default = "."
                                 ! The directory in which input files are found.
@@ -113,14 +111,6 @@ LENLAT = 1.0                    !   [degrees]
                                 ! The latitudinal or y-direction length of the domain.
 LENLON = 1.0                    !   [degrees]
                                 ! The longitudinal or x-direction length of the domain.
-GRID_CONFIG = "cartesian"       !
-                                ! The method for defining the horizontal grid.  Valid
-                                ! entries include:
-                                !    file - read the grid from GRID_FILE
-                                !    mosaic - read the grid from a mosaic grid file
-                                !    cartesian - a Cartesian grid
-                                !    spherical - a spherical grid
-                                !    mercator  - a Mercator grid
 TOPO_CONFIG = "flat"            !
                                 ! This specifies how bathymetry is specified:
                                 !     file - read bathymetric information from the file
@@ -142,8 +132,6 @@ TOPO_CONFIG = "flat"            !
 MINIMUM_DEPTH = 0.5             !   [m] default = 0.0
                                 ! The minimum depth of the ocean.
 MAXIMUM_DEPTH = 5500.0          !   [m]
-                                ! The maximum depth of the ocean.
-MAXIMUM_DEPTH = 5500.0          !   [m] default = 1.0E+06
                                 ! The maximum depth of the ocean.
 ROTATION = "betaplane"          ! default = "2omegasinlat"
                                 ! This specifies how the Coriolis parameter is specified:
@@ -248,8 +236,6 @@ SMAGORINSKY_AH = True           !   [Boolean] default = False
 SMAG_BI_CONST = 0.06            !   [nondim] default = 0.0
                                 ! The nondimensional biharmonic Smagorinsky constant,
                                 ! typically 0.015 - 0.06.
-DT = 3600.0                     !   [s]
-                                ! The (baroclinic) dynamics time step.
     !  Parameters of module MOM_vert_friction
 U_TRUNC_FILE = "U_velocity_truncations" ! default = ""
                                 ! The absolute path to a file into which the accelerations
@@ -277,18 +263,10 @@ MAXVEL = 6.0                    !   [m s-1] default = 3.0E+08
                                 ! The maximum velocity allowed before the velocity
                                 ! components are truncated.
     !  Parameters of module MOM_PointAccel
-SPLIT = False                   !   [Boolean] default = True
-                                ! Use the split time stepping if true.
     !  Parameters of module MOM_set_visc
 USE_JACKSON_PARAM = True        !   [Boolean] default = False
                                 ! If true, use the Jackson-Hallberg-Legg (JPO 2008)
                                 ! shear mixing parameterization.
-HBBL = 10.0                     !   [m]
-                                ! The thickness of a bottom boundary layer with a
-                                ! viscosity of KVBBL if BOTTOMDRAGLAW is not defined, or
-                                ! the thickness over which near-bottom velocities are
-                                ! averaged for the drag law if BOTTOMDRAGLAW is defined
-                                ! but LINEAR_DRAG is not.
 CDRAG = 0.0                     !   [nondim] default = 0.003
                                 ! CDRAG is the drag coefficient relating the magnitude of
                                 ! the velocity field to the bottom stress. CDRAG is only
@@ -307,8 +285,6 @@ BBL_THICK_MIN = 0.1             !   [m] default = 0.0
     !  Parameters of module MOM_thickness_diffuse
     !  Parameters of module MOM_MEKE
     !  Parameters of module MOM_lateral_mixing_coeffs
-SPLIT = False                   !   [Boolean] default = True
-                                ! Use the split time stepping if true.
 Z_OUTPUT_GRID_FILE = "../zgrid.nc" ! default = ""
                                 ! The file that specifies the vertical grid for
                                 ! depth-space diagnostics, or blank to disable
@@ -318,9 +294,6 @@ NK_ZSPACE (from file) = 50      !   [nondim]
                                 ! from the size of the variable zw in the output grid file.
     !  Parameters of module MOM_diabatic_driver
         ! The following parameters are used for diabatic processes.
-USE_JACKSON_PARAM = True        !   [Boolean] default = False
-                                ! If true, use the Jackson-Hallberg-Legg (JPO 2008)
-                                ! shear mixing parameterization.
 RECLAIM_FRAZIL = False          !   [Boolean] default = True
                                 ! If true, try to use any frazil heat deficit to cool any
                                 ! overlying layers down to the freezing point, thereby
@@ -339,12 +312,6 @@ ML_USE_OMEGA = True             !   [Boolean] default = False
                                 ! vertical component of rotation when setting the decay
                                 ! scale for turbulence in the mixed layer.
                                 ! This is only used if ML_RADIATION is true.
-USE_JACKSON_PARAM = True        !   [Boolean] default = False
-                                ! If true, use the Jackson-Hallberg-Legg (JPO 2008)
-                                ! shear mixing parameterization.
-KV = 1.0E-04                    !   [m2 s-1]
-                                ! The background kinematic viscosity in the interior.
-                                ! The molecular value, ~1e-6 m2 s-1, may be used.
 KD = 2.0E-05                    !   [m2 s-1]
                                 ! The background diapycnal diffusivity of density in the
                                 ! interior. Zero or the molecular value, ~1e-7 m2 s-1,
@@ -355,23 +322,12 @@ KD_MIN = 2.0E-06                !   [m2 s-1] default = 2.0E-07
 MAX_ENT_IT = 20                 ! default = 5
                                 ! The maximum number of iterations that may be used to
                                 ! calculate the interior diapycnal entrainment.
-KD = 2.0E-05                    !   [m2 s-1]
-                                ! The background diapycnal diffusivity of density.
-                                ! Zero or the molecular value, ~1e-7 m2 s-1, may be used.
-                                ! In this module, KD is only used to set the default for
-                                ! TOLERANCE_ENT.
-DT = 3600.0                     !   [s]
-                                ! The (baroclinic) dynamics time step.
 TOLERANCE_ENT = 1.0E-05         !   [m] default = 2.683281572999748E-05
                                 ! The tolerance with which to solve for entrainment values.
     !  Parameters of module MOM_kappa_shear
 MAX_RINO_IT = 25                !   [nondim] default = 50
                                 ! The maximum number of iterations that may be used to
                                 ! estimate the Richardson number driven mixing.
-KD = 2.0E-05                    !   [m2 s-1] default = 1.0E-07
-                                ! The background diffusivity that is used to smooth the
-                                ! density and shear profiles before solving for the
-                                ! diffusvities.
     !  Parameters of module MOM_mixed_layer
 BULK_RI_ML = 0.05               !   [nondim]
                                 ! The efficiency with which mean kinetic energy released
@@ -383,10 +339,6 @@ ABSORB_ALL_SW = True            !   [Boolean] default = False
 DEPTH_LIMIT_FLUXES = 0.1        !   [m] default = 0.2
                                 ! The surface fluxes are scaled away when the total ocean
                                 ! depth is less than DEPTH_LIMIT_FLUXES.
-ML_USE_OMEGA = True             !   [Boolean] default = False
-                                ! If true, use the absolute rotation rate instead of the
-                                ! vertical component of rotation when setting the decay
-                                ! scale for turbulence.
 CORRECT_ABSORPTION_DEPTH = True !   [Boolean] default = False
                                 ! If true, the depth at which penetrating shortwave
                                 ! radiation is absorbed is corrected by moving some of
@@ -453,8 +405,6 @@ GUST_2D_FILE = "forcing_monthly.nc" !
                                 ! The file in which the wind gustiness is found in
                                 ! variable gustiness.
     !  Parameters of module MOM_sum_output
-DT = 3600.0                     !   [s]
-                                ! The (baroclinic) dynamics time step.
 MAXTRUNC = 5000                 !   [truncations save_interval-1] default = 0
                                 ! The run will be stopped, and the day set to a very
                                 ! large value if the velocity is truncated more than

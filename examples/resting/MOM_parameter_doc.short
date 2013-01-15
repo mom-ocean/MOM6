@@ -85,8 +85,6 @@ SAVE_INITIAL_CONDS = True       !   [Boolean] default = False
                                 ! If true, write the initial conditions to a file given
                                 ! by IC_OUTPUT_FILE.
     !  Parameters of module MOM_tracer
-DT = 1200.0                     !   [s]
-                                ! The (baroclinic) dynamics time step.
 EQN_OF_STATE = "LINEAR"         ! default = "WRIGHT"
                                 ! EQN_OF_STATE determines which ocean equation of state
                                 ! should be used.  Currently, the valid choices are
@@ -144,14 +142,6 @@ LENLAT = 20.0                   !   [k]
                                 ! The latitudinal or y-direction length of the domain.
 LENLON = 200.0                  !   [k]
                                 ! The longitudinal or x-direction length of the domain.
-GRID_CONFIG = "cartesian"       !
-                                ! The method for defining the horizontal grid.  Valid
-                                ! entries include:
-                                !    file - read the grid from GRID_FILE
-                                !    mosaic - read the grid from a mosaic grid file
-                                !    cartesian - a Cartesian grid
-                                !    spherical - a spherical grid
-                                !    mercator  - a Mercator grid
 TOPO_CONFIG = "flat"            !
                                 ! This specifies how bathymetry is specified:
                                 !     file - read bathymetric information from the file
@@ -173,8 +163,6 @@ TOPO_CONFIG = "flat"            !
 MINIMUM_DEPTH = 1.0             !   [m] default = 0.0
                                 ! The minimum depth of the ocean.
 MAXIMUM_DEPTH = 1000.0          !   [m]
-                                ! The maximum depth of the ocean.
-MAXIMUM_DEPTH = 1000.0          !   [m] default = 1.0E+06
                                 ! The maximum depth of the ocean.
 ROTATION = "betaplane"          ! default = "2omegasinlat"
                                 ! This specifies how the Coriolis parameter is specified:
@@ -201,8 +189,6 @@ THICKNESS_CONFIG = "uniform"    !
                                 !     sloshing - TBD AJA.
                                 !     seamount - TBD AJA.
                                 !     USER - call a user modified routine.
-MAXIMUM_DEPTH = 1000.0          !   [m]
-                                ! The maximum depth of the ocean.
 TS_CONFIG = "linear"            !
                                 ! A string that determines how the initial tempertures
                                 ! and salinities are specified for a new run:
@@ -257,8 +243,6 @@ KH_VEL_SCALE = 0.003            !   [m s-1] default = 0.0
                                 ! spacing to calculate the Laplacian viscosity.
                                 ! The final viscosity is the largest of this scaled
                                 ! viscosity, the Smagorinsky viscosity and KH.
-DT = 1200.0                     !   [s]
-                                ! The (baroclinic) dynamics time step.
     !  Parameters of module MOM_vert_friction
 DIRECT_STRESS = True            !   [Boolean] default = False
                                 ! If true, the wind stress is distributed over the
@@ -274,9 +258,6 @@ V_TRUNC_FILE = "V_velocity_truncations" ! default = ""
                                 ! leading to meridional velocity truncations are written.
                                 ! Undefine this for efficiency if this diagnostic is not
                                 ! needed.
-HMIX = 20.0                     !   [m] default = -1.0E+06
-                                ! The depth over which the near-surface viscosity is
-                                ! elevated if BULKMIXEDLAYER is false.
 KV = 0.0                        !   [m2 s-1]
                                 ! The background kinematic viscosity in the interior.
                                 ! The molecular value, ~1e-6 m2 s-1, may be used.
@@ -298,12 +279,6 @@ MAXVEL = 6.0                    !   [m s-1] default = 3.0E+08
 LINEAR_DRAG = True              !   [Boolean] default = False
                                 ! If LINEAR_DRAG and BOTTOMDRAGLAW are defined the drag
                                 ! law is cdrag*DRAG_BG_VEL*u.
-HBBL = 10.0                     !   [m]
-                                ! The thickness of a bottom boundary layer with a
-                                ! viscosity of KVBBL if BOTTOMDRAGLAW is not defined, or
-                                ! the thickness over which near-bottom velocities are
-                                ! averaged for the drag law if BOTTOMDRAGLAW is defined
-                                ! but LINEAR_DRAG is not.
 CDRAG = 0.0                     !   [nondim] default = 0.003
                                 ! CDRAG is the drag coefficient relating the magnitude of
                                 ! the velocity field to the bottom stress. CDRAG is only
@@ -352,9 +327,6 @@ INTERPOLATION_SCHEME = 3        ! default = 0
                                 ! 9: PQM_IH6IH5    (5th-order accurate)
     !  Parameters of module MOM_diabatic_driver
         ! The following parameters are used for diabatic processes.
-KV = 0.0                        !   [m2 s-1]
-                                ! The background kinematic viscosity in the interior.
-                                ! The molecular value, ~1e-6 m2 s-1, may be used.
 KD = 0.0                        !   [m2 s-1]
                                 ! The background diapycnal diffusivity of density in the
                                 ! interior. Zero or the molecular value, ~1e-7 m2 s-1,
@@ -363,22 +335,11 @@ KDML = 1.0E-04                  !   [m2 s-1] default = 0.0
                                 ! If BULKMIXEDLAYER is false, KDML is the elevated
                                 ! diapycnal diffusivity in the topmost HMIX of fluid.
                                 ! KDML is only used if BULKMIXEDLAYER is false.
-HMIX = 20.0                     !   [m]
-                                ! If BULKMIXEDLAYER is false, HMIX is the depth over
-                                ! which the diapycnal diffusivity is elevated.  HMIX
-                                ! is only used directly if BULKMIXEDLAYER is false.
     !  Parameters of module MOM_entrain_diffusive
 CORRECT_DENSITY = False         !   [Boolean] default = True
                                 ! If true, and USE_EOS is true, the layer densities are
                                 ! restored toward their target values by the diapycnal
                                 ! mixing, as described in Hallberg (MWR, 2000).
-KD = 0.0                        !   [m2 s-1]
-                                ! The background diapycnal diffusivity of density.
-                                ! Zero or the molecular value, ~1e-7 m2 s-1, may be used.
-                                ! In this module, KD is only used to set the default for
-                                ! TOLERANCE_ENT.
-DT = 1200.0                     !   [s]
-                                ! The (baroclinic) dynamics time step.
     !  Parameters of module MOM_vert_remap
     !  Parameters of module MOM_opacity
 PEN_SW_SCALE = 15.0             !   [m] default = 0.0
@@ -416,36 +377,6 @@ DTBT = 60.0                     !   [s or nondim] default = -0.98
                                 ! Setting DTBT to 0 is the same as setting it to -0.98.
                                 ! The value of DTBT that will actually be used is an
                                 ! integer fraction of DT, rounding down.
-REENTRANT_X = False             !   [Boolean] default = True
-                                ! If true, the domain is zonally reentrant.
-SYMMETRIC_MEMORY_ = True        !   [Boolean]
-                                ! If defined, the velocity point data domain includes
-                                ! every face of the thickness points. In other words,
-                                ! some arrays are larger than others, depending on where
-                                ! they are on the staggered grid.  Also, the starting
-                                ! index of the velocity-point arrays is usually 0, not 1.
-                                ! This can only be set at compile time.
-STATIC_MEMORY_ = False          !   [Boolean]
-                                ! If STATIC_MEMORY_ is defined, the principle variables
-                                ! will have sizes that are statically determined at
-                                ! compile time.  Otherwise the sizes are not determined
-                                ! until run time. The STATIC option is substantially
-                                ! faster, but does not allow the PE count to be changed
-                                ! at run time.  This can only be set at compile time.
-NIGLOBAL = 20                   !
-                                ! The total number of thickness grid points in the
-                                ! x-direction in the physical domain. With STATIC_MEMORY_
-                                ! this is set in MOM_memory.h at compile time.
-NJGLOBAL = 2                    !
-                                ! The total number of thickness grid points in the
-                                ! x-direction in the physical domain. With STATIC_MEMORY_
-                                ! this is set in MOM_memory.h at compile time.
-NIPROC = 2                      !
-                                ! The number of processors in the x-direction. With
-                                ! STATIC_MEMORY_ this is set in MOM_memory.h at compile time.
-NJPROC = 1                      !
-                                ! The number of processors in the x-direction. With
-                                ! STATIC_MEMORY_ this is set in MOM_memory.h at compile time.
     !  Parameters of module MOM_surface_forcing
 VARIABLE_WINDS = False          !   [Boolean] default = True
                                 ! If true, the winds vary in time after the initialization.
@@ -461,8 +392,6 @@ WIND_CONFIG = "zero"            !
                                 ! is specified. Valid options include (file), (2gyre),
                                 ! (1gyre), (gyres), (zero), and (USER).
     !  Parameters of module MOM_sum_output
-DT = 1200.0                     !   [s]
-                                ! The (baroclinic) dynamics time step.
 MAXTRUNC = 5000                 !   [truncations save_interval-1] default = 0
                                 ! The run will be stopped, and the day set to a very
                                 ! large value if the velocity is truncated more than

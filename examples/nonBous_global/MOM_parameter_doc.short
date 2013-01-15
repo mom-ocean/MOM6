@@ -131,8 +131,6 @@ KHTR_PASSIVITY_COEFF = 3.0      !   [nondim] default = 0.0
                                 ! grid-spacing in passivity, where passiviity is the ratio
                                 ! between along isopycnal mxiing of tracers to thickness mixing.
                                 ! A non-zero value enables this parameterization.
-DT = 3600.0                     !   [s]
-                                ! The (baroclinic) dynamics time step.
 DIFFUSE_ML_TO_INTERIOR = True   !   [Boolean] default = False
                                 ! If true, enable epipycnal mixing between the surface
                                 ! boundary layer and the interior.
@@ -173,14 +171,6 @@ GRID_CONFIG = "mosaic"          !
                                 !     mercator - use a Mercator spherical grid.
 GRID_FILE = "ocean_hgrid.nc"    !
                                 ! Name of the file from which to read horizontal grid data.
-GRID_CONFIG = "mosaic"          !
-                                ! The method for defining the horizontal grid.  Valid
-                                ! entries include:
-                                !    file - read the grid from GRID_FILE
-                                !    mosaic - read the grid from a mosaic grid file
-                                !    cartesian - a Cartesian grid
-                                !    spherical - a spherical grid
-                                !    mercator  - a Mercator grid
 TOPO_CONFIG = "file"            !
                                 ! This specifies how bathymetry is specified:
                                 !     file - read bathymetric information from the file
@@ -267,8 +257,6 @@ CONVERT_THICKNESS_UNITS = True  !   [Boolean] default = False
                                 ! BOUSSINESQ is defined. This does not apply if a restart
                                 ! file is read.
     !  Parameters of module MOM_tidal_forcing
-TIDES = True                    !   [Boolean]
-                                ! If true, apply tidal momentum forcing.
 TIDE_M2 = True                  !   [Boolean] default = False
                                 ! If true, apply tidal momentum forcing at the M2
                                 ! frequency. This is only used if TIDES is true.
@@ -294,8 +282,6 @@ BOUND_CORIOLIS = True           !   [Boolean] default = False
                                 ! v-points, and similarly at v-points.  This option would
                                 ! have no effect on the SADOURNY Coriolis scheme if it
                                 ! were possible to use centered difference thickness fluxes.
-TIDES = True                    !   [Boolean] default = False
-                                ! If true, apply tidal momentum forcing.
     !  Parameters of module MOM_hor_visc
 LAPLACIAN = True                !   [Boolean] default = False
                                 ! If true, use a Laplacian horizontal viscosity.
@@ -315,8 +301,6 @@ SMAGORINSKY_AH = True           !   [Boolean] default = False
 SMAG_BI_CONST = 0.06            !   [nondim] default = 0.0
                                 ! The nondimensional biharmonic Smagorinsky constant,
                                 ! typically 0.015 - 0.06.
-DT = 3600.0                     !   [s]
-                                ! The (baroclinic) dynamics time step.
     !  Parameters of module MOM_vert_friction
 CHANNEL_DRAG = True             !   [Boolean] default = False
                                 ! If true, the bottom drag is exerted directly on each
@@ -349,28 +333,13 @@ MAXVEL = 6.0                    !   [m s-1] default = 3.0E+08
                                 ! components are truncated.
     !  Parameters of module MOM_PointAccel
     !  Parameters of module MOM_set_visc
-CHANNEL_DRAG = True             !   [Boolean] default = False
-                                ! If true, the bottom stress is calculated with a drag
-                                ! law of the form c_drag*|u|*u. The velocity magnitude
-                                ! may be an assumed value or it may be based on the
-                                ! actual velocity in the bottommost HBBL, depending on
-                                ! LINEAR_DRAG.
 USE_JACKSON_PARAM = True        !   [Boolean] default = False
                                 ! If true, use the Jackson-Hallberg-Legg (JPO 2008)
                                 ! shear mixing parameterization.
-DYNAMIC_VISCOUS_ML = True       !   [Boolean] default = False
-                                ! If true, use a bulk Richardson number criterion to
-                                ! determine the mixed layer thickness for viscosity.
 ML_USE_OMEGA = True             !   [Boolean] default = False
                                 ! If true, use the absolute rotation rate instead of the
                                 ! vertical component of rotation when setting the decay
                                 ! scale for turbulence.
-HBBL = 10.0                     !   [m]
-                                ! The thickness of a bottom boundary layer with a
-                                ! viscosity of KVBBL if BOTTOMDRAGLAW is not defined, or
-                                ! the thickness over which near-bottom velocities are
-                                ! averaged for the drag law if BOTTOMDRAGLAW is defined
-                                ! but LINEAR_DRAG is not.
 DRAG_BG_VEL = 0.1               !   [m s-1] default = 0.0
                                 ! DRAG_BG_VEL is either the assumed bottom velocity (with
                                 ! LINEAR_DRAG) or an unresolved  velocity that is
@@ -383,9 +352,6 @@ BBL_THICK_MIN = 0.1             !   [m] default = 0.0
                                 ! Kv / (cdrag * drag_bg_vel) to give Kv as the minimum
                                 ! near-bottom viscosity.
     !  Parameters of module MOM_thickness_diffuse
-THICKNESSDIFFUSE = True         !   [Boolean] default = False
-                                ! If true, interfaces heights are diffused with a
-                                ! coefficient of KHTH.
 KHTH = 10.0                     !   [m2 s-1] default = 0.0
                                 ! The background horizontal thickness diffusivity.
 KHTH_SLOPE_CFF = 0.25           !   [nondim] default = 0.0
@@ -434,11 +400,6 @@ NK_ZSPACE (from file) = 50      !   [nondim]
                                 ! from the size of the variable zw in the output grid file.
     !  Parameters of module MOM_diabatic_driver
         ! The following parameters are used for diabatic processes.
-USE_JACKSON_PARAM = True        !   [Boolean] default = False
-                                ! If true, use the Jackson-Hallberg-Legg (JPO 2008)
-                                ! shear mixing parameterization.
-DO_GEOTHERMAL = True            !   [Boolean] default = False
-                                ! If true, apply geothermal heating.
 ML_RADIATION = True             !   [Boolean] default = False
                                 ! If true, allow a fraction of TKE available from wind
                                 ! work to penetrate below the base of the mixed layer
@@ -451,11 +412,6 @@ ML_RAD_COEFF = 0.1              !   [nondim] default = 0.2
                                 ! mixed layer. This is only used if ML_RADIATION is true.
 TKE_DECAY = 10.0                !   [nondim] default = 2.5
                                 ! The ratio of the natural Ekman depth to the TKE decay scale.
-ML_USE_OMEGA = True             !   [Boolean] default = False
-                                ! If true, use the absolute rotation rate instead of the
-                                ! vertical component of rotation when setting the decay
-                                ! scale for turbulence in the mixed layer.
-                                ! This is only used if ML_RADIATION is true.
 BBL_MIXING_AS_MAX = False       !   [Boolean] default = True
                                 ! If true, take the maximum of the diffusivity from the
                                 ! BBL mixing and the other diffusivities. Otherwise,
@@ -468,12 +424,6 @@ N2_FLOOR_IOMEGA2 = 0.0          !   [nondim] default = 1.0
                                 ! The floor applied to N2(k) scaled by Omega^2:
                                 !   If =0., N2(k) is simply positive definite.
                                 !   If =1., N2(k) > Omega^2 everywhere.
-USE_JACKSON_PARAM = True        !   [Boolean] default = False
-                                ! If true, use the Jackson-Hallberg-Legg (JPO 2008)
-                                ! shear mixing parameterization.
-KV = 1.0E-04                    !   [m2 s-1]
-                                ! The background kinematic viscosity in the interior.
-                                ! The molecular value, ~1e-6 m2 s-1, may be used.
 KD = 2.0E-05                    !   [m2 s-1]
                                 ! The background diapycnal diffusivity of density in the
                                 ! interior. Zero or the molecular value, ~1e-7 m2 s-1,
@@ -513,13 +463,6 @@ H2_FILE = "sgs_h2.nc"           !
 MAX_ENT_IT = 20                 ! default = 5
                                 ! The maximum number of iterations that may be used to
                                 ! calculate the interior diapycnal entrainment.
-KD = 2.0E-05                    !   [m2 s-1]
-                                ! The background diapycnal diffusivity of density.
-                                ! Zero or the molecular value, ~1e-7 m2 s-1, may be used.
-                                ! In this module, KD is only used to set the default for
-                                ! TOLERANCE_ENT.
-DT = 3600.0                     !   [s]
-                                ! The (baroclinic) dynamics time step.
 TOLERANCE_ENT = 1.0E-05         !   [m] default = 2.683281572999748E-05
                                 ! The tolerance with which to solve for entrainment values.
     !  Parameters of module MOM_geothermal
@@ -534,10 +477,6 @@ GEOTHERMAL_FILE = "geothermal_heating_cm2g.nc" ! default = ""
 MAX_RINO_IT = 25                !   [nondim] default = 50
                                 ! The maximum number of iterations that may be used to
                                 ! estimate the Richardson number driven mixing.
-KD = 2.0E-05                    !   [m2 s-1] default = 1.0E-07
-                                ! The background diffusivity that is used to smooth the
-                                ! density and shear profiles before solving for the
-                                ! diffusvities.
     !  Parameters of module MOM_mixed_layer
 BULK_RI_ML = 0.05               !   [nondim]
                                 ! The efficiency with which mean kinetic energy released
@@ -552,10 +491,6 @@ LIMIT_BUFFER_DETRAIN = True     !   [Boolean] default = False
 DEPTH_LIMIT_FLUXES = 0.1        !   [m] default = 0.2
                                 ! The surface fluxes are scaled away when the total ocean
                                 ! depth is less than DEPTH_LIMIT_FLUXES.
-ML_USE_OMEGA = True             !   [Boolean] default = False
-                                ! If true, use the absolute rotation rate instead of the
-                                ! vertical component of rotation when setting the decay
-                                ! scale for turbulence.
 ML_RESORT = True                !   [Boolean] default = False
                                 ! If true, resort the topmost layers by potential density
                                 ! before the mixed layer calculations.
@@ -602,8 +537,6 @@ BT_PROJECT_VELOCITY = True      !   [Boolean] default = False
                                 ! to do a corrector continuity step using a weighted
                                 ! average of the old and new velocities, with weights
                                 ! of (1-BEBT) and BEBT.
-TIDES = True                    !   [Boolean] default = False
-                                ! If true, apply tidal momentum forcing.
 BT_THICK_SCHEME = "FROM_BT_CONT" ! default = "HYBRID"
                                 ! A string describing the scheme that is used to set the
                                 ! open face areas used for barotropic transport and the
@@ -637,37 +570,6 @@ DTBT = -0.95                    !   [s or nondim] default = -0.98
                                 ! Setting DTBT to 0 is the same as setting it to -0.98.
                                 ! The value of DTBT that will actually be used is an
                                 ! integer fraction of DT, rounding down.
-TRIPOLAR_N = True               !   [Boolean] default = False
-                                ! Use tripolar connectivity at the northern edge of the
-                                ! domain.  With TRIPOLAR_N, NIGLOBAL must be even.
-SYMMETRIC_MEMORY_ = True        !   [Boolean]
-                                ! If defined, the velocity point data domain includes
-                                ! every face of the thickness points. In other words,
-                                ! some arrays are larger than others, depending on where
-                                ! they are on the staggered grid.  Also, the starting
-                                ! index of the velocity-point arrays is usually 0, not 1.
-                                ! This can only be set at compile time.
-STATIC_MEMORY_ = False          !   [Boolean]
-                                ! If STATIC_MEMORY_ is defined, the principle variables
-                                ! will have sizes that are statically determined at
-                                ! compile time.  Otherwise the sizes are not determined
-                                ! until run time. The STATIC option is substantially
-                                ! faster, but does not allow the PE count to be changed
-                                ! at run time.  This can only be set at compile time.
-NIGLOBAL = 360                  !
-                                ! The total number of thickness grid points in the
-                                ! x-direction in the physical domain. With STATIC_MEMORY_
-                                ! this is set in MOM_memory.h at compile time.
-NJGLOBAL = 210                  !
-                                ! The total number of thickness grid points in the
-                                ! x-direction in the physical domain. With STATIC_MEMORY_
-                                ! this is set in MOM_memory.h at compile time.
-NIPROC = 8                      !
-                                ! The number of processors in the x-direction. With
-                                ! STATIC_MEMORY_ this is set in MOM_memory.h at compile time.
-NJPROC = 8                      !
-                                ! The number of processors in the x-direction. With
-                                ! STATIC_MEMORY_ this is set in MOM_memory.h at compile time.
     !  Parameters of module MOM_surface_forcing
 BUOY_CONFIG = "file"            !
                                 ! The character string that indicates how buoyancy forcing
@@ -738,8 +640,6 @@ GUST_2D_FILE = "gustiness_qscat.nc" !
                                 ! The file in which the wind gustiness is found in
                                 ! variable gustiness.
     !  Parameters of module MOM_sum_output
-DT = 3600.0                     !   [s]
-                                ! The (baroclinic) dynamics time step.
 MAXTRUNC = 5000                 !   [truncations save_interval-1] default = 0
                                 ! The run will be stopped, and the day set to a very
                                 ! large value if the velocity is truncated more than
