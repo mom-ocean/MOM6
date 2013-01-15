@@ -268,8 +268,6 @@ KH = 0.01                       !   [m2 s-1] default = 0.0
 BOUND_KH = False                !   [Boolean] default = True
                                 ! If true, the Laplacian coefficient is locally limited
                                 ! to be stable.
-DT = 3600.0                     !   [s]
-                                ! The (baroclinic) dynamics time step.
     !  Parameters of module MOM_vert_friction
 BOTTOMDRAGLAW = False           !   [Boolean] default = True
                                 ! If true, the bottom stress is calculated with a drag

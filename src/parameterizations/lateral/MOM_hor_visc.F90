@@ -644,8 +644,9 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
 
   !   It is not clear whether these initialization lines are needed for the
   ! cases where the corresponding parameters are not read.
-  CS%bound_Kh = .true. ; CS%Smagorinsky_Kh = .false.
-  CS%bound_Ah = .true. ; CS%Smagorinsky_Ah = .false. ; CS%bound_Coriolis = .false.
+  CS%bound_Kh = .false. ; CS%better_bound_Kh = .false. ; CS%Smagorinsky_Kh = .false.
+  CS%bound_Ah = .false. ; CS%better_bound_Ah = .false. ; CS%Smagorinsky_Ah = .false.
+  CS%bound_Coriolis = .false.
   Kh = 0.0 ; Ah = 0.0
 
   !   If GET_ALL_PARAMS is true, all parameters are read in all cases to enable
