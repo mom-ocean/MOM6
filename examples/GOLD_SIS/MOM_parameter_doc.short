@@ -522,9 +522,9 @@ BOUND_BT_CORRECTION = True      !   [Boolean] default = False
                                 ! If true, the corrective pseudo mass-fluxes into the
                                 ! barotropic solver are limited to values that require
                                 ! less than 0.1*MAXVEL to be accommodated.
-BT x-halo = 0                   !
+!BT x-halo = 0                  !
                                 ! The barotropic x-halo size that is actually used.
-BT y-halo = 0                   !
+!BT y-halo = 0                  !
                                 ! The barotropic y-halo size that is actually used.
 BT_STRONG_DRAG = True           !   [Boolean] default = False
                                 ! If true, use a stronger estimate of the retarding

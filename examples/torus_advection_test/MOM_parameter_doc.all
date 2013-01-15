@@ -956,9 +956,9 @@ BT_USE_WIDE_HALOS = True        !   [Boolean] default = True
                                 ! barotropic time stepping for efficiency.
 BTHALO = 0                      ! default = 0
                                 ! The minimum halo size for the barotropic solver.
-BT x-halo = 0                   !
+!BT x-halo = 0                  !
                                 ! The barotropic x-halo size that is actually used.
-BT y-halo = 0                   !
+!BT y-halo = 0                  !
                                 ! The barotropic y-halo size that is actually used.
 USE_BT_CONT_TYPE = True         !   [Boolean] default = True
                                 ! If true, use a structure with elements that describe

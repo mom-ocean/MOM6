@@ -3531,9 +3531,9 @@ subroutine barotropic_init(u, v, h, eta, Time, G, param_file, diag, CS, &
 #else
   wd_halos(1) = bt_halo_sz; wd_halos(2) =  bt_halo_sz
 #endif
-  call log_param(param_file, mod, "BT x-halo", wd_halos(1), &
+  call log_param(param_file, mod, "!BT x-halo", wd_halos(1), &
                  "The barotropic x-halo size that is actually used.")
-  call log_param(param_file, mod, "BT y-halo", wd_halos(2), &
+  call log_param(param_file, mod, "!BT y-halo", wd_halos(2), &
                  "The barotropic y-halo size that is actually used.")
 
   call get_param(param_file, mod, "USE_BT_CONT_TYPE", use_BT_cont_type, &
