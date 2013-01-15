@@ -608,7 +608,7 @@ subroutine MOM_domains_init(MOM_dom, param_file, min_halo, symmetric)
                  "domain.  With TRIPOLAR_N, NIGLOBAL must be even.", &
                  default=.false.)
   
-  call log_param(param_file, mod, "SYMMETRIC_MEMORY_", MOM_dom%symmetric, &
+  call log_param(param_file, mod, "!SYMMETRIC_MEMORY_", MOM_dom%symmetric, &
                  "If defined, the velocity point data domain includes \n"//&
                  "every face of the thickness points. In other words, \n"//&
                  "some arrays are larger than others, depending on where \n"//&

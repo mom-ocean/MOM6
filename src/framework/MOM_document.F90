@@ -618,6 +618,8 @@ function mesgHasBeenDocumented(doc,varName,mesg)
 
   mesgHasBeenDocumented = .false.
 
+  if (mesg(1:1) == '!') return ! Ignore commented parameters
+
   ! Search through list for this parameter
   last => NULL()
   this => doc%chain_msg
