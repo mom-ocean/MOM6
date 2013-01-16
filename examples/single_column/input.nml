@@ -25,7 +25,7 @@
  /
 
  &coupler_nml
-            months = 12
+            months = 1
             days   =  0
             current_date = 1982,1,1,0,0,0,
             calendar = 'julian',

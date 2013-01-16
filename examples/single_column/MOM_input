@@ -144,7 +144,7 @@ ETA_TOLERANCE_AUX = 1e-3        !    The equivalent to ETA_TOLERANCE for the
 !  Specify properties of the I/O and length of the integration.
 TIMEUNIT = 86400.0              !    The time unit in seconds for the following
                                 !  fields.
-DAYMAX = 730.0                  !    The final day of the simulation.
+DAYMAX = 30.0                   !    The final day of the simulation.
 ENERGYSAVEDAYS = 1.0            !    The number of days between saves of the
                                 !  energies of the run.
 ENERGYFILE = "timestats"        !    The file to use to save the energies.

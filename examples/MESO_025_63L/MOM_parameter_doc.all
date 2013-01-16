@@ -1386,7 +1386,7 @@ ENERGYFILE = "timestats"        ! default = "timestats"
 NORMALIZED_SUM_OUT = True       !   [Boolean] default = True
                                 ! If true, normalize the summed diagnostic output values
                                 ! by the totals
-TIMEUNIT = 8.64E+04             !   [s] default = 8.64E+04
+TIMEUNIT = 3600.0               !   [s] default = 8.64E+04
                                 ! The time unit in seconds a number of input fields
 READ_DEPTH_LIST = False         !   [Boolean] default = False
                                 ! Read the depth list from a file if it exists or
@@ -1410,7 +1410,7 @@ DT_FORCING = 3600.0             !   [s] default = 600.0
                                 ! The time step for changing forcing, coupling with other
                                 ! components, or potentially writing certain diagnostics.
                                 ! The default value is given by DT.
-DAYMAX = 1.0                    !   [days] default = 1.0
+DAYMAX = 6.0                    !   [hours] default = 6.0
                                 ! The final time of the whole simulation, in units of
                                 ! TIMEUNIT seconds.  This also sets the potential end
                                 ! time of the present run segment if the end time is
@@ -1421,11 +1421,11 @@ RESTART_CONTROL = 3             ! default = 1
                                 ! (bit 0) for a non-time-stamped file. A non-time-stamped
                                 ! restart file is saved at the end of the run segment
                                 ! for any non-negative value.
-RESTINT = 365.0                 !   [days] default = 0.0
+RESTINT = 0.0                   !   [hours] default = 0.0
                                 ! The interval between saves of the restart file in units
                                 ! of TIMEUNIT.  Use 0 (the default) to not save
                                 ! incremental restart files at all.
-ENERGYSAVEDAYS = 0.25           !   [days] default = 3600.0
+ENERGYSAVEDAYS = 1.0            !   [hours] default = 8.64E+04
                                 ! The interval in units of TIMEUNIT between saves of the
                                 ! energies of the run and other globally summed diagnostics.
 ICE_SHELF = False               !   [Boolean] default = False

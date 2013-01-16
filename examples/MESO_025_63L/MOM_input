@@ -200,13 +200,13 @@ REGULARIZE_SURFACE_LAYERS = False !  If true, vertically restructure the near-
                                 ! barotropic transports.
 
 !  Specify properties of the I/O and length of the integration.
-TIMEUNIT = 86400.0              !    The time unit in seconds for the following
+TIMEUNIT = 3600.0               !    The time unit in seconds for the following
                                 !  fields.
-ENERGYSAVEDAYS = 0.25           !    The number of days between saves of the
+ENERGYSAVEDAYS = 1.0            !    The number of days between saves of the
                                 !  energies of the run.
 ENERGYFILE = "timestats"        !    The file to use to save the energies.
 RESTARTFILE = "MOM.res"         !    The name of the restart file.
-RESTINT = 365.0                 !    The number of days between saves of the
+RESTINT = 0.0                   !    The number of days between saves of the
                                 !  restart file.  Use a value that is larger than
                                 !  DAYMAX not to save incremental restart files
                                 !  within a run.  Use 0 not to save restart files

@@ -215,7 +215,7 @@ NJPROC_IO = 1                  !    The number of processors used for I/O in the
 #define TIMEUNIT 3600.0        !    The time unit in seconds for the following
                                !  fields.
 #define DAYMAX 10.0            !    The final day of the simulation.
-#define ENERGYSAVEDAYS 1.0     !    The number of days between saves of the
+#define ENERGYSAVEDAYS 0.5     !    The number of days between saves of the
                                !  energies of the run.
 #define ENERGYFILE "timestats" !    The file to use to save the energies.
 #define RESTARTFILE "MOM.res"  !    The name of the restart file.

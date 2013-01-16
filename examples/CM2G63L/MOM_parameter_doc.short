@@ -563,6 +563,9 @@ DTBT = 60.0                     !   [s or nondim] default = -0.98
                                 ! index of the velocity-point arrays is usually 0, not 1.
                                 ! This can only be set at compile time.
     !  Parameters of module ocean_model_init
+ENERGYSAVEDAYS = 0.25           !   [days] default = 1.0
+                                ! The interval in units of TIMEUNIT between saves of the
+                                ! energies of the run and other globally summed diagnostics.
     !  Parameters of module MOM_surface_forcing
 MAX_P_SURF = 7.0E+04            !   [Pa] default = -1.0
                                 ! The maximum surface pressure that can be exerted by the

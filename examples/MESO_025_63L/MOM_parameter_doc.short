@@ -518,6 +518,8 @@ MAXTRUNC = 5000                 !   [truncations save_interval-1] default = 0
                                 ! large value if the velocity is truncated more than
                                 ! MAXTRUNC times between energy saves.  Set MAXTRUNC to 0
                                 ! to stop if there is any truncation of velocities.
+TIMEUNIT = 3600.0               !   [s] default = 8.64E+04
+                                ! The time unit in seconds a number of input fields
 MAXCPU = 8.64E+04               !   [wall-clock seconds] default = -1.0
                                 ! The maximum amount of cpu time per processor for which
                                 ! MOM should run before saving a restart file and
@@ -538,10 +540,6 @@ RESTART_CONTROL = 3             ! default = 1
                                 ! (bit 0) for a non-time-stamped file. A non-time-stamped
                                 ! restart file is saved at the end of the run segment
                                 ! for any non-negative value.
-RESTINT = 365.0                 !   [days] default = 0.0
-                                ! The interval between saves of the restart file in units
-                                ! of TIMEUNIT.  Use 0 (the default) to not save
-                                ! incremental restart files at all.
-ENERGYSAVEDAYS = 0.25           !   [days] default = 3600.0
+ENERGYSAVEDAYS = 1.0            !   [hours] default = 8.64E+04
                                 ! The interval in units of TIMEUNIT between saves of the
                                 ! energies of the run and other globally summed diagnostics.

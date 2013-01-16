@@ -11,7 +11,7 @@
 
  &coupler_nml
             months = 0,
-            days   = 5,
+            days   = 1,
             current_date = 1,1,1,0,0,0,
             hours = 0
             minutes = 0

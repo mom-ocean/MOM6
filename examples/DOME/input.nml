@@ -21,7 +21,7 @@
  
  &ocean_solo_nml
             months = 0
-            days   = 5
+            days   = 2
             date_init = 1,1,1,0,0,0
             hours = 0
             minutes = 0

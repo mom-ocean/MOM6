@@ -1413,7 +1413,7 @@ RESTART_CONTROL = 1             ! default = 1
                                 ! non-negative value.
 TIMEUNIT = 8.64E+04             !   [s] default = 8.64E+04
                                 ! The time unit for ENERGYSAVEDAYS.
-ENERGYSAVEDAYS = 1.0            !   [days] default = 1.0
+ENERGYSAVEDAYS = 0.25           !   [days] default = 1.0
                                 ! The interval in units of TIMEUNIT between saves of the
                                 ! energies of the run and other globally summed diagnostics.
 RESTORE_SALINITY = False        !   [Boolean] default = False

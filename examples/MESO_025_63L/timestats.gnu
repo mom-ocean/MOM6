@@ -1,7 +1,9 @@
-  Step,       Day,  Truncs,      Energy/Mass,      Maximum CFL,  Mean Sea Level,  Total Mass,  Mean Salin, Mean Temp, Frac Mass Err,   Salin Err,    Temp Err
-            [days]                 [m2 s-2]           [Nondim]       [m]             [kg]         [PSU]      [degC]       [Nondim]        [PSU]        [degC]
+  Step,       Time, Truncs,      Energy/Mass,      Maximum CFL,  Mean Sea Level,  Total Mass,  Mean Salin, Mean Temp, Frac Mass Err,   Salin Err,    Temp Err
+            [hours]                [m2 s-2]           [Nondim]       [m]             [kg]         [PSU]      [degC]       [Nondim]        [PSU]      [degC]
      0,       0.000,     0, En 5.997018675617E-01, CFL  0.15158, SL -3.5273E-03, M 8.17845E+20, S 34.6892, T  3.6979, Me  0.00E+00, Se  0.00E+00, Te  0.00E+00
-    36,       0.250,     0, En 6.028207714844E-01, CFL  0.13588, SL -3.6170E-03, M 8.17845E+20, S 34.6892, T  3.6979, Me  2.21E-15, Se -2.06E-07, Te -1.68E-05
-    72,       0.500,     0, En 6.035727889180E-01, CFL  0.13748, SL -3.7069E-03, M 8.17845E+20, S 34.6892, T  3.6979, Me  2.33E-15, Se  2.20E-07, Te -8.69E-06
-   108,       0.750,     0, En 6.040749963451E-01, CFL  0.13783, SL -3.7969E-03, M 8.17845E+20, S 34.6892, T  3.6979, Me  2.38E-15, Se  7.40E-07, Te  1.36E-05
-   144,       1.000,     0, En 6.044493488701E-01, CFL  0.13888, SL -3.8872E-03, M 8.17845E+20, S 34.6892, T  3.6980, Me  2.39E-15, Se  1.17E-06, Te  2.84E-05
+     6,       1.000,     0, En 6.010669925702E-01, CFL  0.14936, SL -3.5422E-03, M 8.17845E+20, S 34.6892, T  3.6979, Me  3.66E-16, Se -7.27E-08, Te -2.26E-06
+    12,       2.000,     0, En 6.022186411454E-01, CFL  0.14352, SL -3.5571E-03, M 8.17845E+20, S 34.6892, T  3.6979, Me  3.60E-16, Se -5.67E-08, Te -2.66E-06
+    18,       3.000,     0, En 6.024129318176E-01, CFL  0.13477, SL -3.5721E-03, M 8.17845E+20, S 34.6892, T  3.6979, Me  3.65E-16, Se -4.04E-08, Te -2.89E-06
+    24,       4.000,     0, En 6.025202450867E-01, CFL  0.13287, SL -3.5871E-03, M 8.17845E+20, S 34.6892, T  3.6979, Me  3.69E-16, Se -2.37E-08, Te -3.03E-06
+    30,       5.000,     0, En 6.026506418882E-01, CFL  0.13388, SL -3.6020E-03, M 8.17845E+20, S 34.6892, T  3.6979, Me  3.73E-16, Se -1.22E-08, Te -3.03E-06
+    36,       6.000,     0, En 6.028207714844E-01, CFL  0.13588, SL -3.6170E-03, M 8.17845E+20, S 34.6892, T  3.6979, Me  3.77E-16, Se -8.47E-10, Te -2.89E-06
