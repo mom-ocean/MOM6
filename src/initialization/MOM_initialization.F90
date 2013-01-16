@@ -131,7 +131,6 @@ implicit none ; private
 #include <MOM_memory.h>
 
 public MOM_initialize, Get_MOM_Input
-public MOM_initialize_topography, MOM_initialize_rotation
 
 ! This structure is to simplify communication with the calling code.
 type, public :: MOM_initialization_struct
