@@ -186,10 +186,10 @@ TOPO_CONFIG = "benchmark"       !
                                 !     seamount - Gaussian bump for spontaneous motion test case.
                                 !     USER - call a user modified routine.
     !  Parameters of module benchmark_initialize_topography
-MAXIMUM_DEPTH = 5500.0          !   [m]
-                                ! The maximum depth of the ocean.
 MINIMUM_DEPTH = 1.0             !   [m] default = 0.0
                                 ! The minimum depth of the ocean.
+MAXIMUM_DEPTH = 5500.0          !   [m]
+                                ! The maximum depth of the ocean.
 ALWAYS_WRITE_GEOM = False       !   [Boolean] default = True
                                 ! If true, write the geometry and vertical grid files
                                 ! every time the model is run.  Otherwise, only write

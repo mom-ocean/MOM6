@@ -50,41 +50,32 @@ contains
 !------------------------------------------------------------------------------
 ! Initialization of topography
 !------------------------------------------------------------------------------
-subroutine seamount_initialize_topography ( D, G, param_file )
+subroutine seamount_initialize_topography ( D, G, param_file, max_depth )
   ! Arguments 
   real, dimension(NIMEM_,NJMEM_), intent(out) :: D
   type(ocean_grid_type), intent(in) :: G
   type(param_file_type), intent(in) :: param_file
+  real,                  intent(in) :: max_depth
   
   ! Local variables 
   integer   :: i, j
-  real      :: x;
-  real      :: max_depth;
-  real      :: delta;
-  real      :: L;
+  real      :: x, delta, L
   
-  ! Maximum depth
-  call read_param ( param_file, "MAXIMUM_DEPTH", max_depth );
-
   ! Domain extent in kilometers
   
-  delta = seamount_delta;
-  L = seamount_length_scale; 
-  L = L / G%len_lon;
+  delta = seamount_delta
+  L = seamount_length_scale;
+  L = L / G%len_lon
     
   do i=G%isc,G%iec 
     do j=G%jsc,G%jec 
-    
       ! Compute normalized zonal coordinate (x=0 at center of domain)
-      x = G%geoLonT(i,j) / G%len_lon - 0.5;
-        
-      D(i,j) = max_depth * ( 1.0 - delta * exp(-(x/L)**2) );
-
+      x = G%geoLonT(i,j) / G%len_lon - 0.5
+      D(i,j) = G%max_depth * ( 1.0 - delta * exp(-(x/L)**2) )
     enddo
   enddo
 
 end subroutine seamount_initialize_topography
-
 
 !------------------------------------------------------------------------------
 ! Initialization of thicknesses
@@ -105,7 +96,6 @@ subroutine seamount_initialize_thickness ( h, G, param_file )
                           ! negative because it is positive upward.      !
   real :: eta1D(SZK_(G)+1)! Interface height relative to the sea surface !
                           ! positive upward, in m.                       !
-  real :: max_depth ! The maximum depths in m.
   integer :: i, j, k, is, ie, js, je, nz
   real    :: x;
   real    :: delta_h;
@@ -115,20 +105,18 @@ subroutine seamount_initialize_thickness ( h, G, param_file )
 
   call MOM_mesg("MOM_initialization.F90, initialize_thickness_uniform: setting thickness")
 
-  call read_param(param_file,"MAXIMUM_DEPTH",max_depth,.true.)
-  
   min_thickness = 1.0e-3; 
   call read_param ( param_file, "MIN_THICKNESS", min_thickness );
  
   ! WARNING: this routine specifies the interface heights so that the last layer
   !          is vanished, even at maximum depth. In order to have a uniform
   !          layer distribution, use this line of code within the loop:
-  !          e0(k) = -max_depth * real(k-1) / real(nz)
+  !          e0(k) = -G%max_depth * real(k-1) / real(nz)
   !          To obtain a thickness distribution where the last layer is 
   !          vanished and the other thicknesses uniformly distributed, use:
-  !          e0(k) = -max_depth * real(k-1) / real(nz-1)
+  !          e0(k) = -G%max_depth * real(k-1) / real(nz-1)
   do k=1,nz
-    e0(k) = -max_depth * real(k-1) / real(nz)
+    e0(k) = -G%max_depth * real(k-1) / real(nz)
   enddo
 
     
@@ -169,9 +157,6 @@ subroutine seamount_initialize_thickness ( h, G, param_file )
     end do ; end do 
 end select
     
-
-  call log_param(param_file, "seamount_uniform", "MAXIMUM_DEPTH",max_depth)
-
 end subroutine seamount_initialize_thickness
 
 !------------------------------------------------------------------------------
@@ -187,19 +172,16 @@ subroutine seamount_initialize_temperature_salinity ( T, S, h, G, param_file, &
   type(EOS_type),                      pointer     :: eqn_of_state
 
   integer   :: i, j, k, is, ie, js, je, nz
-  real      :: max_depth
   real      :: xi0, xi1, dxi;
   real      :: r;
   
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   
-  call read_param ( param_file, "MAXIMUM_DEPTH", max_depth );
- 
   do j=js,je ; do i=is,ie
     
     xi0 = 0.0;
     do k = 1,nz
-      xi1 = xi0 + h(i,j,k) / max_depth;
+      xi1 = xi0 + h(i,j,k) / G%max_depth;
     
       if ( density_profile .eq. RHO_LINEAR ) then 
         ! ---------------------------

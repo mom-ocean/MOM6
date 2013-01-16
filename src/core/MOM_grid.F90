@@ -110,7 +110,8 @@ type, public :: ocean_grid_type
           west_lon,    &! The longitude (or x-coordinate) of the first u-line
           len_lat = 0.,&! The latitudinal (or y-coord) extent of physical domain
           len_lon = 0.,&! The longitudinal (or x-coord) extent of physical domain
-          Rad_Earth = 6.378e6 ! The radius of the planet in metres.
+          Rad_Earth = 6.378e6 ! The radius of the planet in meters.
+  real :: max_depth     ! The maximum depth of the ocean in meters.
   character(len=40) :: axis_units = ' '! Units for the horizontal coordinates.
 
   real :: g_Earth !   The gravitational acceleration in m s-2.

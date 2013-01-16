@@ -45,17 +45,18 @@ public benchmark_init_temperature_salinity
 contains
 
 ! -----------------------------------------------------------------------------
-subroutine benchmark_initialize_topography(D, G, param_file)
+subroutine benchmark_initialize_topography(D, G, param_file, max_depth)
   real, intent(out), dimension(NIMEM_,NJMEM_) :: D
   type(ocean_grid_type), intent(in)           :: G
   type(param_file_type), intent(in)           :: param_file
+  real,                  intent(in)           :: max_depth
 ! Arguments: D          - the bottom depth in m. Intent out.
 !  (in)      G          - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
 
 ! This subroutine sets up the benchmark test case topography
-  real :: min_depth, max_depth ! The minimum and maximum depths in m.
+  real :: min_depth            ! The minimum and maximum depths in m.
   real :: PI                   ! 3.1415926... calculated as 4*atan(1)
   real :: D0                   ! A constant to make the maximum     !
                                ! basin depth MAXIMUM_DEPTH.         !
@@ -70,9 +71,6 @@ subroutine benchmark_initialize_topography(D, G, param_file)
   call MOM_mesg("  benchmark_initialization.F90, benchmark_initialize_topography: setting topography", 5)
 
   call log_version(param_file, mod, version, tagname, "")
-  call get_param(param_file, mod, "MAXIMUM_DEPTH", max_depth, &
-                 "The maximum depth of the ocean.", units="m", &
-                 fail_if_missing=.true.)
   call get_param(param_file, mod, "MINIMUM_DEPTH", min_depth, &
                  "The minimum depth of the ocean.", units="m", default=0.0)
 
@@ -123,7 +121,6 @@ subroutine benchmark_initialize_thickness(h, G, param_file, eqn_of_state, P_ref)
   real :: ML_depth  !  The specified initial mixed layer depth, in m.
   real :: thermocline_scale ! The e-folding scale of the thermocline, in m.
   real, dimension(SZK_(G)) :: T0, pres, S0, rho_guess, drho, drho_dT, drho_dS
-  real :: max_depth  ! The maximum ocean depth in m.
   real :: a_exp      ! The fraction of the overall stratification that is exponential.
   real :: I_ts, I_md ! Inverse lengthscales in m-1.
   real :: T_frac     ! A ratio of the interface temperature to the range
@@ -140,10 +137,6 @@ subroutine benchmark_initialize_thickness(h, G, param_file, eqn_of_state, P_ref)
   call MOM_mesg("  benchmark_initialization.F90, benchmark_initialize_thickness: setting thickness", 5)
 
   k1 = G%nk_rho_varies + 1
-
-  call get_param(param_file, mod, "MAXIMUM_DEPTH", max_depth, &
-                 "The maximum depth of the ocean.", units="m", &
-                 fail_if_missing=.true.)
 
   ML_depth = 50.0
   thermocline_scale = 500.0
@@ -174,7 +167,7 @@ subroutine benchmark_initialize_thickness(h, G, param_file, eqn_of_state, P_ref)
 
   pi = 4.0*atan(1.0)
   I_ts = 1.0 / thermocline_scale
-  I_md = 1.0 / max_depth
+  I_md = 1.0 / G%max_depth
   do j=js,je ; do i=is,ie
     SST = 0.5*(T0(k1)+T0(nz)) - 0.9*0.5*(T0(k1)-T0(nz)) * &
                                cos(pi*(G%geoLatT(i,j)-G%south_lat)/(G%len_lat))

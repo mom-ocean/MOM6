@@ -195,10 +195,10 @@ TOPO_CONFIG = "file"            !
                                 !       DOME2D gravity current/overflow test case.
                                 !     seamount - Gaussian bump for spontaneous motion test case.
                                 !     USER - call a user modified routine.
+MAXIMUM_DEPTH = 6000.0          !   [m]
+                                ! The maximum depth of the ocean.
 MINIMUM_DEPTH = 0.5             !   [m] default = 0.0
                                 ! The minimum depth of the ocean.
-MAXIMUM_DEPTH = 6000.0          !   [m] default = 1.0E+06
-                                ! The maximum depth of the ocean.
 CHANNEL_CONFIG = "global_1deg"  ! default = "none"
                                 ! A parameter that determines which set of channels are
                                 ! restricted to specific  widths.  Options are:

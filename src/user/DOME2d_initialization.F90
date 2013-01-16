@@ -41,31 +41,24 @@ contains
 !------------------------------------------------------------------------------
 ! Initialization of topography
 !------------------------------------------------------------------------------
-subroutine DOME2d_initialize_topography ( D, G, param_file )
+subroutine DOME2d_initialize_topography ( D, G, param_file, max_depth )
   ! Arguments 
   real, dimension(NIMEM_,NJMEM_), intent(out) :: D
   type(ocean_grid_type), intent(in) :: G
   type(param_file_type), intent(in) :: param_file
+  real,                  intent(in) :: max_depth
   
   ! Local variables 
   integer   :: i, j
-  integer   :: nxtot;
-  real      :: x;
-  real      :: max_depth;
-  real      :: bay_depth;
-  real      :: l1, l2;
-  
-  ! Get maximum depth, domain zonal length and zonal resolution
-  call read_param ( param_file, "MAXIMUM_DEPTH", max_depth );
-  call read_param ( param_file, "NXTOT", nxtot );
+  real      :: x, bay_depth, l1, l2
   
   ! location where downslope starts
-  l1 = dome2d_width_bay;            
+  l1 = dome2d_width_bay
   
   ! location where downslope reaches maximum depth 
-  l2 = 1.0 - dome2d_width_bottom;   
+  l2 = 1.0 - dome2d_width_bottom
   
-  bay_depth = dome2d_depth_bay;
+  bay_depth = dome2d_depth_bay
 
   do i=G%isc,G%iec 
     do j=G%jsc,G%jec 
@@ -74,19 +67,17 @@ subroutine DOME2d_initialize_topography ( D, G, param_file )
       x = G%geoLonT(i,j) / G%len_lon;
     
       if ( x .le. l1 ) then
-        D(i,j) = bay_depth * max_depth;
+        D(i,j) = bay_depth * max_depth
       else if (( x .gt. l1 ) .and. ( x .lt. l2 )) then
         D(i,j) = bay_depth * max_depth + (1.0-bay_depth) * max_depth * &
-                 ( x - l1 ) / (l2 - l1);
+                 ( x - l1 ) / (l2 - l1)
       else
-        D(i,j) = max_depth;
+        D(i,j) = max_depth
       end if         
       
     enddo
   enddo
-
 end subroutine DOME2d_initialize_topography
-
 
 !------------------------------------------------------------------------------
 ! Initialization of thicknesses
@@ -107,7 +98,6 @@ subroutine DOME2d_initialize_thickness ( h, G, param_file )
                           ! negative because it is positive upward.      !
   real :: eta1D(SZK_(G)+1)! Interface height relative to the sea surface !
                           ! positive upward, in m.                       !
-  real :: max_depth ! The maximum depths in m.
   integer :: i, j, k, is, ie, js, je, nz
   real    :: x
   real    :: delta_h
@@ -118,7 +108,6 @@ subroutine DOME2d_initialize_thickness ( h, G, param_file )
 
   call MOM_mesg("MOM_initialization.F90, initialize_thickness_uniform: setting thickness")
 
-  call read_param(param_file,"MAXIMUM_DEPTH",max_depth,.true.)
   min_thickness = 1.0e-3; 
   call read_param ( param_file, "MIN_THICKNESS", min_thickness );
   dome2d_ic=-1; call read_param ( param_file, "DOME2D_IC", dome2d_ic );
@@ -126,12 +115,12 @@ subroutine DOME2d_initialize_thickness ( h, G, param_file )
   ! WARNING: this routine specifies the interface heights so that the last layer
   !          is vanished, even at maximum depth. In order to have a uniform
   !          layer distribution, use this line of code within the loop:
-  !          e0(k) = -max_depth * real(k-1) / real(nz)
+  !          e0(k) = -G%max_depth * real(k-1) / real(nz)
   !          To obtain a thickness distribution where the last layer is 
   !          vanished and the other thicknesses uniformly distributed, use:
-  !          e0(k) = -max_depth * real(k-1) / real(nz-1)
+  !          e0(k) = -G%max_depth * real(k-1) / real(nz-1)
   do k=1,nz
-    e0(k) = -max_depth * real(k-1) / real(nz)
+    e0(k) = -G%max_depth * real(k-1) / real(nz)
   enddo
   
   select case ( dome2d_ic )
@@ -153,7 +142,7 @@ subroutine DOME2d_initialize_thickness ( h, G, param_file )
          x = G%geoLonT(i,j) / G%len_lon;
          if ( x .le. dome2d_width_bay ) then
            h(i,j,1:nz-1) = G%Angstrom;
-           h(i,j,nz) = dome2d_depth_bay * max_depth - (nz-1) * G%Angstrom;
+           h(i,j,nz) = dome2d_depth_bay * G%max_depth - (nz-1) * G%Angstrom;
          end if
       
       end do ; end do   
@@ -175,7 +164,7 @@ subroutine DOME2d_initialize_thickness ( h, G, param_file )
  !       x = G%geoLonT(i,j) / G%len_lon;
  !       if ( x .le. dome2d_width_bay ) then
  !         h(i,j,1:nz-1) = min_thickness;
- !         h(i,j,nz) = dome2d_depth_bay * max_depth - (nz-1) * min_thickness;
+ !         h(i,j,nz) = dome2d_depth_bay * G%max_depth - (nz-1) * min_thickness;
  !       end if
  !   
  !    enddo ; enddo
@@ -223,7 +212,6 @@ subroutine DOME2d_initialize_temperature_salinity ( T, S, h, G, param_file, &
 
   integer   :: i, j, k, is, ie, js, je, nz
   real      :: x;
-  real      :: max_depth
   integer   :: index_bay_z;
   real      :: delta_S, delta_T;
   real      :: S_ref, T_ref;        ! Reference salinity and temerature within
@@ -237,7 +225,6 @@ subroutine DOME2d_initialize_temperature_salinity ( T, S, h, G, param_file, &
 
   call read_param(param_file,"S_REF",S_ref,.true.)
   call read_param(param_file,"T_REF",T_ref,.true.)
-  call read_param ( param_file, "MAXIMUM_DEPTH", max_depth );
   call read_param ( param_file, "DOME2D_IC", dome2d_ic );
   S_range = 2.0; call read_param(param_file,"S_RANGE",S_range,.false.)
   T_range = 0.0; call read_param(param_file,"T_RANGE",T_range,.false.)
@@ -253,7 +240,7 @@ subroutine DOME2d_initialize_temperature_salinity ( T, S, h, G, param_file, &
       do j=js,je ; do i=is,ie
         xi0 = 0.0;
         do k = 1,nz
-          xi1 = xi0 + h(i,j,k) / max_depth;
+          xi1 = xi0 + h(i,j,k) / G%max_depth;
           S(i,j,k) = 34.0 + 0.5 * S_range * (xi0 + xi1);
           xi0 = xi1;
         enddo
@@ -264,7 +251,7 @@ subroutine DOME2d_initialize_temperature_salinity ( T, S, h, G, param_file, &
       do j=js,je ; do i=is,ie
         xi0 = 0.0;
         do k = 1,nz
-          xi1 = xi0 + h(i,j,k) / max_depth;
+          xi1 = xi0 + h(i,j,k) / G%max_depth;
           S(i,j,k) = 34.0 + 0.5 * S_range * (xi0 + xi1);
           xi0 = xi1;
         enddo

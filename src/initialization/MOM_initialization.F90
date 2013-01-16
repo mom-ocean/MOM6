@@ -68,11 +68,14 @@ module MOM_initialization
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 
+
 use MOM_checksums, only : hchksum, qchksum, uchksum, vchksum, chksum
+use MOM_coms, only : max_across_PEs
 use MOM_domains, only : pass_var, pass_vector, sum_across_PEs, broadcast
 use MOM_domains, only : root_PE, To_All, SCALAR_PAIR, CGRID_NE
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_file_parser, only : get_param, open_param_file, param_file_type
+use MOM_file_parser, only : read_param, log_param
 use MOM_file_parser, only : uppercase, log_param, log_version
 use MOM_grid, only : ocean_grid_type
 use MOM_interface_heights, only : find_eta
@@ -266,7 +269,7 @@ subroutine MOM_initialize(u, v, h, tv, Time, G, PF, dirs, &
   call set_grid_metrics(G, PF)
 
 ! Set up the bottom depth, G%bathyT either analytically or from file
-  call MOM_initialize_topography(G%bathyT, G, PF)
+  call MOM_initialize_topography(G%bathyT, G%max_depth, G, PF)
 
 !    This call sets seamasks that prohibit flow over any point with  !
 !  a bottom that is shallower than min_depth from PF.                !
@@ -986,8 +989,9 @@ subroutine MOM_initialize_rotation(f, G, PF)
   end select
 end subroutine MOM_initialize_rotation
 
-subroutine MOM_initialize_topography(D, G, PF)
+subroutine MOM_initialize_topography(D, max_depth, G, PF)
   real, dimension(NIMEM_,NJMEM_), intent(out) :: D
+  real,                  intent(out)          :: max_depth
   type(ocean_grid_type), intent(in)           :: G
   type(param_file_type), intent(in)           :: PF
 ! Arguments: D  - the bottom depth in m. Intent out.
@@ -1021,26 +1025,52 @@ subroutine MOM_initialize_topography(D, G, PF)
                  " \t seamount - Gaussian bump for spontaneous motion test case.\n"//&
                  " \t USER - call a user modified routine.", &
                  fail_if_missing=.true.)
+  max_depth = -1.e9; call read_param(PF, "MAXIMUM_DEPTH", max_depth)
   select case ( trim(config) )
     case ("file");      call initialize_topography_from_file(D, G, PF)
-    case ("flat");      call initialize_topography_named(D, G, PF, config)
-    case ("spoon");     call initialize_topography_named(D, G, PF, config)
-    case ("bowl");      call initialize_topography_named(D, G, PF, config)
-    case ("halfpipe");  call initialize_topography_named(D, G, PF, config)
-    case ("DOME");      call DOME_initialize_topography(D, G, PF)
-    case ("benchmark"); call benchmark_initialize_topography(D, G, PF)
-    case ("DOME2D");    call DOME2d_initialize_topography(D, G, PF)
-    case ("sloshing");  call sloshing_initialize_topography(D, G, PF)
-    case ("seamount");  call seamount_initialize_topography(D, G, PF)
+    case ("flat");      call initialize_topography_named(D, G, PF, config, max_depth)
+    case ("spoon");     call initialize_topography_named(D, G, PF, config, max_depth)
+    case ("bowl");      call initialize_topography_named(D, G, PF, config, max_depth)
+    case ("halfpipe");  call initialize_topography_named(D, G, PF, config, max_depth)
+    case ("DOME");      call DOME_initialize_topography(D, G, PF, max_depth)
+    case ("benchmark"); call benchmark_initialize_topography(D, G, PF, max_depth)
+    case ("DOME2D");    call DOME2d_initialize_topography(D, G, PF, max_depth)
+    case ("sloshing");  call sloshing_initialize_topography(D, G, PF, max_depth)
+    case ("seamount");  call seamount_initialize_topography(D, G, PF, max_depth)
     case ("USER");      call user_initialize_topography(D, G, PF)
     case default ;      call MOM_error(FATAL,"MOM_initialize_topography: "// &
       "Unrecognized topography setup '"//trim(config)//"'")
   end select
+  if (max_depth>0.) then
+    call log_param(PF, mod, "MAXIMUM_DEPTH", max_depth, &
+                   "The maximum depth of the ocean.", units="m")
+  else
+    max_depth = diagnoseMaximumDepth(D,G)
+    call log_param(PF, mod, "!MAXIMUM_DEPTH", max_depth, &
+                   "The (diagnosed) maximum depth of the ocean.", units="m")
+  endif
   if (trim(config) .ne. "DOME") then
-    call limit_topography(D, G, PF)
+    call limit_topography(D, G, PF, max_depth)
   endif
   
 end subroutine MOM_initialize_topography
+
+! -----------------------------------------------------------------------------
+function diagnoseMaximumDepth(D,G)
+  real, intent(in), dimension(NIMEM_,NJMEM_) :: D
+  type(ocean_grid_type), intent(in)           :: G
+  real :: diagnoseMaximumDepth
+  ! Local variables
+  integer :: i,j
+  diagnoseMaximumDepth=D(G%isc,G%jsc)
+  do j=G%jsc, G%jec
+    do i=G%isc, G%iec
+      diagnoseMaximumDepth=max(diagnoseMaximumDepth,D(i,j))
+    enddo
+  enddo
+  call max_across_PEs(diagnoseMaximumDepth)
+end function diagnoseMaximumDepth
+! -----------------------------------------------------------------------------
 
 ! -----------------------------------------------------------------------------
 subroutine initialize_topography_from_file(D, G, param_file )
@@ -1080,19 +1110,21 @@ end subroutine initialize_topography_from_file
 ! -----------------------------------------------------------------------------
 
 ! -----------------------------------------------------------------------------
-subroutine initialize_topography_named(D, G, param_file, topog_config)
+subroutine initialize_topography_named(D, G, param_file, topog_config, max_depth)
   real, intent(out), dimension(NIMEM_,NJMEM_) :: D
   type(ocean_grid_type), intent(in)           :: G
   type(param_file_type), intent(in)           :: param_file
   character(len=*),      intent(in)           :: topog_config
+  real,                  intent(in)           :: max_depth
 ! Arguments: D          - the bottom depth in m. Intent out.
 !  (in)      G          - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
 !  (in)      topog_config - The name of an idealized topographic configuration.
+!  (in)      max_depth  - The maximum depth in m.
 
 ! This subroutine places the bottom depth in m into D(:,:), shaped in a spoon
-  real :: min_depth, max_depth ! The minimum and maximum depths in m.
+  real :: min_depth            ! The minimum depth in m.
   real :: PI                   ! 3.1415926... calculated as 4*atan(1)
   real :: D0                   ! A constant to make the maximum     !
                                ! basin depth MAXIMUM_DEPTH.         !
@@ -1111,9 +1143,8 @@ subroutine initialize_topography_named(D, G, param_file, topog_config)
 
   call get_param(param_file, mod, "MINIMUM_DEPTH", min_depth, &
                  "The minimum depth of the ocean.", units="m", default=0.0)
-  call get_param(param_file, mod, "MAXIMUM_DEPTH", max_depth, &
-                 "The maximum depth of the ocean.", units="m", &
-                 fail_if_missing=.true.)
+  if (max_depth<=0.) call MOM_error(FATAL,"initialize_topography_named: "// &
+      "MAXIMUM_DEPTH has a non-sensical value! Was it set?")
 
   ! These expressions force rounding of approximate values in a
   ! consistent way.
@@ -1198,26 +1229,26 @@ end subroutine initialize_topography_named
 ! -----------------------------------------------------------------------------
 
 ! -----------------------------------------------------------------------------
-subroutine limit_topography(D, G, param_file)
+subroutine limit_topography(D, G, param_file, max_depth)
   real, intent(inout), dimension(NIMEM_,NJMEM_) :: D
   type(ocean_grid_type), intent(in)             :: G
   type(param_file_type), intent(in)             :: param_file
+  real,                  intent(in)             :: max_depth
 ! Arguments: D          - the bottom depth in m. Intent in/out.
 !  (in)      G          - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
+!  (in)      max_depth  - The maximum depth in m.
 
 ! This subroutine ensures that    min_depth < D(x,y) < max_depth
   integer :: i, j
   character(len=40)  :: mod = "limit_topography" ! This subroutine's name.
-  real :: min_depth, max_depth
+  real :: min_depth
 
   call MOM_mesg("  MOM_initialization.F90, limit_topography: limiting topography", 5)
 
   call get_param(param_file, mod, "MINIMUM_DEPTH", min_depth, &
                  "The minimum depth of the ocean.", units="m", default=0.0)
-  call get_param(param_file, mod, "MAXIMUM_DEPTH", max_depth, &
-                 "The maximum depth of the ocean.", units="m", default=1.0e6)
 
 ! Make sure that min_depth < D(x,y) < max_depth
   do j=G%jsd,G%jed ; do i=G%isd,G%ied
@@ -1409,18 +1440,17 @@ subroutine initialize_thickness_uniform(h, G, param_file)
                           ! negative because it is positive upward.      !
   real :: eta1D(SZK_(G)+1)! Interface height relative to the sea surface !
                           ! positive upward, in m.                       !
-  real :: max_depth ! The maximum depths in m.
   integer :: i, j, k, is, ie, js, je, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   call MOM_mesg("  MOM_initialization.F90, initialize_thickness_uniform: setting thickness", 5)
 
-  call get_param(param_file, "initialize_thickness_uniform", "MAXIMUM_DEPTH", &
-                 max_depth, "The maximum depth of the ocean.", units="m", &
-                 fail_if_missing=.true.)
+  if (G%max_depth<=0.) call MOM_error(FATAL,"initialize_thickness_uniform: "// &
+      "MAXIMUM_DEPTH has a non-sensical value! Was it set?")
+
   do k=1,nz
-    e0(K) = -max_depth * real(k-1) / real(nz)
+    e0(K) = -G%max_depth * real(k-1) / real(nz)
   enddo
 
   do j=js,je ; do i=is,ie

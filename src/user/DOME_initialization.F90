@@ -46,17 +46,18 @@ public DOME_set_Open_Bdry_Conds
 contains
 
 ! -----------------------------------------------------------------------------
-subroutine DOME_initialize_topography(D, G, param_file)
+subroutine DOME_initialize_topography(D, G, param_file, max_depth)
   real, intent(out), dimension(NIMEM_,NJMEM_) :: D
   type(ocean_grid_type), intent(in)           :: G
   type(param_file_type), intent(in)           :: param_file
+  real,                  intent(in)           :: max_depth
 ! Arguments: D          - the bottom depth in m. Intent out.
 !  (in)      G          - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
 
 ! This subroutine sets up the DOME topography
-  real :: min_depth, max_depth ! The minimum and maximum depths in m.
+  real :: min_depth ! The minimum and maximum depths in m.
   character(len=128) :: version = '$Id$'
   character(len=128) :: tagname = '$Name$'
   character(len=40)  :: mod = "DOME_initialize_topography" ! This subroutine's name.
@@ -69,9 +70,6 @@ subroutine DOME_initialize_topography(D, G, param_file)
   call log_version(param_file, mod, version, tagname, "")
   call get_param(param_file, mod, "MINIMUM_DEPTH", min_depth, &
                  "The minimum depth of the ocean.", units="m", default=0.0)
-  call get_param(param_file, mod, "MAXIMUM_DEPTH", max_depth, &
-                 "The maximum depth of the ocean.", units="m", &
-                 fail_if_missing=.true.)
 
   do j=js,je ; do i=is,ie
     if (G%geoLatT(i,j) < 600.0) then
@@ -110,7 +108,6 @@ subroutine DOME_initialize_thickness(h, G, param_file)
                             ! negative because it is positive upward.      !
   real :: eta1D(SZK_(G)+1)  ! Interface height relative to the sea surface !
                             ! positive upward, in m.                       !
-  real :: max_depth         ! The minimum depth in m.
   character(len=40)  :: mod = "DOME_initialize_thickness" ! This subroutine's name.
   integer :: i, j, k, is, ie, js, je, nz
 
@@ -118,13 +115,9 @@ subroutine DOME_initialize_thickness(h, G, param_file)
 
   call MOM_mesg("  DOME_initialization.F90, DOME_initialize_thickness: setting thickness", 5)
 
-  call get_param(param_file, mod, "MAXIMUM_DEPTH", max_depth, &
-                 "The maximum depth of the ocean.", units="m", &
-                 fail_if_missing=.true.)
-
   e0(1)=0.0
   do k=2,nz
-    e0(K) = -max_depth * (real(k-1)-0.5)/real(nz-1)
+    e0(K) = -G%max_depth * (real(k-1)-0.5)/real(nz-1)
   enddo
 
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
@@ -174,7 +167,7 @@ subroutine DOME_initialize_sponges(G, tv, PF, CSp)
   real :: Idamp(SZI_(G),SZJ_(G))    ! The inverse damping rate, in s-1.
 
   real :: H0(SZK_(G))
-  real :: max_depth, min_depth
+  real :: min_depth
   real :: damp, e_dense, damp_new
   character(len=40)  :: mod = "DOME_initialize_sponges" ! This subroutine's name.
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
@@ -192,12 +185,9 @@ subroutine DOME_initialize_sponges(G, tv, PF, CSp)
 !   Set up sponges for DOME configuration
   call get_param(PF, mod, "MINIMUM_DEPTH", min_depth, &
                  "The minimum depth of the ocean.", units="m", default=0.0)
-  call get_param(PF, mod, "MAXIMUM_DEPTH", max_depth, &
-                 "The maximum depth of the ocean.", units="m", &
-                 fail_if_missing=.true.)
 
   H0(1) = 0.0
-  do k=2,nz ; H0(k) = -(real(k-1)-0.5)*max_depth/real(nz-1) ; enddo
+  do k=2,nz ; H0(k) = -(real(k-1)-0.5)*G%max_depth/real(nz-1) ; enddo
   do i=is,ie; do j=js,je
     if (G%geoLonT(i,j) < 100.0) then ; damp = 10.0
     elseif (G%geoLonT(i,j) < 200.0) then

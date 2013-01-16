@@ -310,13 +310,13 @@ TOPO_CONFIG = "spoon"           !
                                 !     USER - call a user modified routine.
 MINIMUM_DEPTH = 1.0             !   [m] default = 0.0
                                 ! The minimum depth of the ocean.
-MAXIMUM_DEPTH = 2000.0          !   [m]
-                                ! The maximum depth of the ocean.
 EDGE_DEPTH = 100.0              !   [m] default = 100.0
                                 ! The depth at the edge of one of the named topographies.
 TOPOG_SLOPE_SCALE = 4.0E+05     !   [m] default = 4.0E+05
                                 ! The exponential decay scale used in defining some of
                                 ! the named topographies.
+MAXIMUM_DEPTH = 2000.0          !   [m]
+                                ! The maximum depth of the ocean.
 APPLY_OBC_U_FLATHER_EAST = False !   [Boolean] default = False
                                 ! Apply a Flather open boundary condition on the eastern
                                 ! side of the global domain

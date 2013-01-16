@@ -72,11 +72,8 @@ subroutine remapping_main ( G, regridding_opts, h, h_new, tv, u, v )
   ! Local variables
   integer               :: i, j, k
   integer               :: nz
-  real                  :: max_depth
   real                  :: val, new_val
   integer               :: problem
-
-  max_depth = regridding_opts%max_depth
 
   nz = G%ke
 

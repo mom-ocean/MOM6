@@ -288,9 +288,6 @@ subroutine initialize_regridding_options ( param_file, regridding_opts )
                  "When regridding, this is the minimum layer\n"//&
                  "thickness allowed.", default=1.e-3 )
 
-  ! --- MAXIMUM DEPTH ---
-  call get_param(param_file, mod, "MAXIMUM_DEPTH", &
-                 regridding_opts%max_depth, do_not_log=.true.)
   endif
   
 end subroutine initialize_regridding_options
@@ -545,7 +542,7 @@ subroutine build_grid_uniform ( G, h, h_new, regridding_opts )
 
   nz = G%ke
   
-  max_depth = regridding_opts%max_depth
+  max_depth = G%max_depth
   min_thickness = regridding_opts%min_thickness
 
   do j = G%jsc,G%jec+1
@@ -665,7 +662,7 @@ subroutine build_grid_arbitrary ( G, h, h_new, regridding_opts )
 
   nz = G%ke
   
-  max_depth = regridding_opts%max_depth
+  max_depth = G%max_depth
   min_thickness = regridding_opts%min_thickness
 
   do j = G%jsc,G%jec+1

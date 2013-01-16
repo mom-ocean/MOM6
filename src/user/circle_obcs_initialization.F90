@@ -55,7 +55,6 @@ subroutine circle_obcs_initialize_thickness(h, G, param_file)
                           ! negative because it is positive upward.      !
   real :: eta1D(SZK_(G)+1)! Interface height relative to the sea surface !
                           ! positive upward, in m.                       !
-  real :: max_depth  ! The minimum depth in m.
   character(len=128) :: version = '$Id$'
   character(len=128) :: tagname = '$Name$'
   character(len=40)  :: mod = "circle_obcs_initialize_thickness"   ! This module's name.
@@ -68,16 +67,13 @@ subroutine circle_obcs_initialize_thickness(h, G, param_file)
 
   ! Parameters read by cartesian grid initialization
   call log_version(param_file, mod, version, tagname, "")
-  call get_param(param_file, mod, "MAXIMUM_DEPTH", max_depth, &
-                 "The maximum depth of the ocean.", units="m", &
-                 fail_if_missing=.true.)
   call get_param(param_file, mod, "DISK_RADIUS", diskrad, &
                  "The radius of the initially elevated disk in the \n"//&
                  "circle_obcs test case.", units=G%axis_units, &
                  fail_if_missing=.true.)
 
   do k=1,nz
-    e0(K) = -max_depth * real(k-1) / real(nz)
+    e0(K) = -G%max_depth * real(k-1) / real(nz)
   enddo
 
   ! Uniform thicknesses for base state

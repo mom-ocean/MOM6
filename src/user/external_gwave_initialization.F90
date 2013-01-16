@@ -56,7 +56,6 @@ subroutine external_gwave_initialize_thickness(h, G, param_file)
                           ! upward, in m.                                !
   real :: eta1D(SZK_(G)+1)! Interface height relative to the sea surface !
                           ! positive upward, in m.                       !
-  real :: max_depth  ! The minimum depth in m.
   real :: ssh_anomaly_height ! Vertical height of ssh anomaly
   real :: ssh_anomaly_width ! Lateral width of anomaly
   character(len=40)  :: mod = "external_gwave_initialize_thickness" ! This subroutine's name.
@@ -67,9 +66,6 @@ subroutine external_gwave_initialize_thickness(h, G, param_file)
 
   call MOM_mesg("  external_gwave_initialization.F90, external_gwave_initialize_thickness: setting thickness", 5)
 
-  call get_param(param_file, mod, "MAXIMUM_DEPTH", max_depth, &
-                 "The maximum depth of the ocean.", units="m", &
-                 fail_if_missing=.true.)
   call get_param(param_file, mod, "SSH_ANOMALY_HEIGHT", ssh_anomaly_height, &
                  "The vertical displacement of the SSH anomaly. ", units="m", &
                  fail_if_missing=.true.)
@@ -82,10 +78,10 @@ subroutine external_gwave_initialize_thickness(h, G, param_file)
     Xnondim = min(1., abs(Xnondim))
     eta1D(1) = ssh_anomaly_height * 0.5 * ( 1. + cos(PI*Xnondim) ) ! Cosine bell
     do k=2,nz
-      eta1D(K) = -max_depth & ! Stretch interior interfaces with SSH
-              + (eta1D(1)+max_depth) * ( real(nz+1-k)/real(nz) ) ! Stratification
+      eta1D(K) = -G%max_depth & ! Stretch interior interfaces with SSH
+              + (eta1D(1)+G%max_depth) * ( real(nz+1-k)/real(nz) ) ! Stratification
     enddo
-    eta1D(nz+1) = -max_depth ! Force bottom interface to bottom
+    eta1D(nz+1) = -G%max_depth ! Force bottom interface to bottom
     do k=1,nz
       h(i,j,k) = eta1D(K) - eta1D(K+1)
     enddo

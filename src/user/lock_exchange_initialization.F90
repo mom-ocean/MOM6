@@ -56,7 +56,6 @@ subroutine lock_exchange_initialize_thickness(h, G, param_file)
                           ! upward, in m.                                !
   real :: eta1D(SZK_(G)+1)! Interface height relative to the sea surface !
                           ! positive upward, in m.                       !
-  real :: max_depth  ! The minimum depth in m.
   real :: front_displacement ! Vertical displacement acrodd front
   real :: thermocline_thickness ! Thickness of stratified region
   character(len=40)  :: mod = "lock_exchange_initialize_thickness" ! This subroutine's name.
@@ -66,9 +65,6 @@ subroutine lock_exchange_initialize_thickness(h, G, param_file)
 
   call MOM_mesg("  lock_exchange_initialization.F90, lock_exchange_initialize_thickness: setting thickness", 5)
 
-  call get_param(param_file, mod, "MAXIMUM_DEPTH", max_depth, &
-                 "The maximum depth of the ocean.", units="m", &
-                 fail_if_missing=.true.)
   call get_param(param_file, mod, "FRONT_DISPLACEMENT", front_displacement, &
                  "The vertical displacement of interfaces across the front. \n"//&
                  "A value larger in magnitude that MAX_DEPTH is truncated,", &
@@ -81,7 +77,7 @@ subroutine lock_exchange_initialize_thickness(h, G, param_file)
 
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
     do k=2,nz
-      eta1D(K) = -0.5 * max_depth & ! Middle of column
+      eta1D(K) = -0.5 * G%max_depth & ! Middle of column
               - thermocline_thickness * ( (real(k-1))/real(nz) -0.5 ) ! Stratification
       if (G%geoLonT(i,j)-G%west_lon < 0.5 * G%len_lon) then
         eta1D(K)=eta1D(K) + 0.5 * front_displacement
@@ -89,7 +85,7 @@ subroutine lock_exchange_initialize_thickness(h, G, param_file)
         eta1D(K)=eta1D(K) - 0.5 * front_displacement
       endif
     enddo
-    eta1D(nz+1) = -max_depth ! Force bottom interface to bottom
+    eta1D(nz+1) = -G%max_depth ! Force bottom interface to bottom
     do k=nz,2,-1 ! Make sure interfaces increase upwards
       eta1D(K) = max( eta1D(K), eta1D(K+1) + G%Angstrom )
     enddo

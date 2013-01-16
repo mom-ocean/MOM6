@@ -388,10 +388,10 @@ TOPO_FILE = "topog.nc"          ! default = "topog.nc"
                                 ! The file from which the bathymetry is read.
 TOPO_VARNAME = "depth"          ! default = "depth"
                                 ! The name of the bathymetry variable in TOPO_FILE.
+MAXIMUM_DEPTH = 6000.0          !   [m]
+                                ! The maximum depth of the ocean.
 MINIMUM_DEPTH = 0.5             !   [m] default = 0.0
                                 ! The minimum depth of the ocean.
-MAXIMUM_DEPTH = 6000.0          !   [m] default = 1.0E+06
-                                ! The maximum depth of the ocean.
 APPLY_OBC_U_FLATHER_EAST = False !   [Boolean] default = False
                                 ! Apply a Flather open boundary condition on the eastern
                                 ! side of the global domain

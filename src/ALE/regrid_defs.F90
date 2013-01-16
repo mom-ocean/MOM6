@@ -37,9 +37,6 @@ type, public :: regridding_opts_t
   ! boundary cells
   logical   :: boundary_extrapolation;
 
-  ! Maximum domain depth
-  real      :: max_depth;
-
   ! Minimum thickness allowed when building the new grid through regridding
   real      :: min_thickness;
 

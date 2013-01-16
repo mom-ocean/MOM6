@@ -53,7 +53,6 @@ subroutine adjustment_initialize_thickness ( h, G, param_file )
                           ! negative because it is positive upward.      !
   real :: eta1D(SZK_(G)+1)! Interface height relative to the sea surface !
                           ! positive upward, in m.                       !
-  real :: max_depth ! The maximum depths in m.
   integer :: i, j, k, is, ie, js, je, nz
   real    :: x, y, yy, delta_S_strat, dSdz, delta_S, S_ref
   real    :: min_thickness, adjustment_width, adjustment_delta, adjustment_deltaS
@@ -66,7 +65,6 @@ subroutine adjustment_initialize_thickness ( h, G, param_file )
   call MOM_mesg("initialize_thickness_uniform: setting thickness")
 
   ! Parameters used by main model initialization
-  call get_param(param_file,mod,"MAXIMUM_DEPTH",max_depth,fail_if_missing=.true.,do_not_log=.true.)
   call get_param(param_file,mod,"S_REF",S_ref,fail_if_missing=.true.,do_not_log=.true.)
   call get_param(param_file,mod,"MIN_THICKNESS",min_thickness,default=1.0e-3,do_not_log=.true.)
 
@@ -100,25 +98,25 @@ subroutine adjustment_initialize_thickness ( h, G, param_file )
   ! WARNING: this routine specifies the interface heights so that the last layer
   !          is vanished, even at maximum depth. In order to have a uniform
   !          layer distribution, use this line of code within the loop:
-  !          e0(k) = -max_depth * real(k-1) / real(nz)
+  !          e0(k) = -G%max_depth * real(k-1) / real(nz)
   !          To obtain a thickness distribution where the last layer is 
   !          vanished and the other thicknesses uniformly distributed, use:
-  !          e0(k) = -max_depth * real(k-1) / real(nz-1)
+  !          e0(k) = -G%max_depth * real(k-1) / real(nz-1)
 
-  dSdz = -delta_S_strat/max_depth
+  dSdz = -delta_S_strat/G%max_depth
 
   select case ( adjustment_ic )
 
     case ( IC_RHO_L, IC_RHO_C )
       if (delta_S_strat.ne.0.) then
-        adjustment_delta = adjustment_deltaS / delta_S_strat * max_depth
+        adjustment_delta = adjustment_deltaS / delta_S_strat * G%max_depth
         do k=1,nz+1
-          e0(k) = adjustment_delta-(max_depth+2*adjustment_delta) * (real(k-1) / real(nz))
+          e0(k) = adjustment_delta-(G%max_depth+2*adjustment_delta) * (real(k-1) / real(nz))
         enddo
       else
-        adjustment_delta = 2.*max_depth
+        adjustment_delta = 2.*G%max_depth
         do k=1,nz+1
-          e0(k) = -(max_depth) * (real(k-1) / real(nz))
+          e0(k) = -(G%max_depth) * (real(k-1) / real(nz))
         enddo
       endif
       target_values(1)    = G%Rlay(1)+0.5*(G%Rlay(1)-G%Rlay(2))
@@ -147,10 +145,10 @@ subroutine adjustment_initialize_thickness ( h, G, param_file )
             else
               eta1D(k) = e0(k) - (0.5*adjustment_delta) * sin( x )
             endif
-            eta1D(k) = max( eta1D(k), -max_depth )
+            eta1D(k) = max( eta1D(k), -G%max_depth )
             eta1D(k) = min( eta1D(k), 0. )
           enddo
-          eta1D(1)=0.; eta1D(nz+1)=-max_depth
+          eta1D(1)=0.; eta1D(nz+1)=-G%max_depth
           do k=nz,1,-1
             if (eta1D(k) > 0.) then
               eta1D(k) = max( eta1D(k+1) + min_thickness, 0. )
@@ -166,8 +164,8 @@ subroutine adjustment_initialize_thickness ( h, G, param_file )
 
     case ( IC_Z, IC_SIGMA )
       do k=1,nz+1
-        eta1D(k) = -(max_depth) * (real(k-1) / real(nz))
-        eta1D(k) = max(min(eta1D(k),0.),-max_depth)
+        eta1D(k) = -(G%max_depth) * (real(k-1) / real(nz))
+        eta1D(k) = max(min(eta1D(k),0.),-G%max_depth)
       enddo
       do j=js,je ; do i=is,ie
         do k=nz,1,-1
@@ -197,7 +195,6 @@ subroutine adjustment_initialize_temperature_salinity ( T, S, h, G, param_file, 
 
   integer   :: i, j, k, is, ie, js, je, nz
   real      :: x, y, yy
-  real      :: max_depth
   integer   :: index_bay_z
   real      :: S_ref, T_ref         ! Reference salinity and temerature within
                                     ! surface layer
@@ -219,7 +216,6 @@ subroutine adjustment_initialize_temperature_salinity ( T, S, h, G, param_file, 
   call get_param(param_file,mod,"T_RANGE",T_range, &
                  default=0.0)
   ! Parameters specific to this experiment configuration BUT logged in previous s/r
-  call get_param(param_file,mod,"MAXIMUM_DEPTH",max_depth,fail_if_missing=.true.,do_not_log=.true.)
   call get_param(param_file,mod,"ADJUSTMENT_IC",adjustment_ic,fail_if_missing=.true.,do_not_log=.true.)
   call get_param(param_file,mod,"ADJUSTMENT_WIDTH",adjustment_width,fail_if_missing=.true.,do_not_log=.true.)
   call get_param(param_file,mod,"ADJUSTMENT_DELTAS",adjustment_deltaS,fail_if_missing=.true.,do_not_log=.true.)
@@ -235,7 +231,7 @@ subroutine adjustment_initialize_temperature_salinity ( T, S, h, G, param_file, 
   select case ( adjustment_ic )
 
     case ( IC_Z, IC_SIGMA )
-      dSdz = -delta_S_strat/max_depth
+      dSdz = -delta_S_strat/G%max_depth
       do j=js,je ; do i=is,ie
           eta1d(nz+1)=-G%bathyT(i,j)
           do k=nz,1,-1
@@ -261,7 +257,7 @@ subroutine adjustment_initialize_temperature_salinity ( T, S, h, G, param_file, 
             T(i,j,k) = x
          enddo
    !     x=sum(T(i,j,:)*h(i,j,:))
-   !     T(i,j,:)=T(i,j,:)/x*(max_depth*1.5/real(nz))
+   !     T(i,j,:)=T(i,j,:)/x*(G%max_depth*1.5/real(nz))
       enddo ; enddo
 
     case ( IC_RHO_L, IC_RHO_C ) 

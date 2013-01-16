@@ -31,18 +31,15 @@ contains
 !------------------------------------------------------------------------------
 ! Initialization of topography
 !------------------------------------------------------------------------------
-subroutine sloshing_initialize_topography ( D, G, param_file )
+subroutine sloshing_initialize_topography ( D, G, param_file, max_depth )
   ! Arguments 
   real, dimension(NIMEM_,NJMEM_), intent(out) :: D
   type(ocean_grid_type), intent(in) :: G
   type(param_file_type), intent(in) :: param_file
+  real,                  intent(in) :: max_depth
   
   ! Local variables 
   integer   :: i, j
-  real      :: max_depth
-  
-  ! Maximum depth
-  call read_param ( param_file, "MAXIMUM_DEPTH", max_depth )
   
   do i=G%isc,G%iec 
     do j=G%jsc,G%jec 
@@ -77,23 +74,17 @@ subroutine sloshing_initialize_thickness ( h, G, param_file )
   real    :: x
   real    :: a0
   real    :: deltah
-  real    :: max_depth
   real    :: total_height
   real    :: weight_z
   real    :: x1, y1, x2, y2
   real    :: t
   integer :: n
-  integer :: niglobal
   
   integer :: i, j, k, is, ie, js, je, nx, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   
-  ! Get maximum depth and uniformly-distributed thickness
-  call read_param ( param_file, "MAXIMUM_DEPTH", max_depth )
-  call read_param ( param_file, "NIGLOBAL", niglobal )
-  
-  deltah = max_depth / nz
+  deltah = G%max_depth / nz
 
   ! Define thicknesses
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
@@ -125,7 +116,7 @@ subroutine sloshing_initialize_thickness ( h, G, param_file )
       
       t = - z_unif(k)
 
-      z_inter(k) = -t * max_depth
+      z_inter(k) = -t * G%max_depth
       
     end do
     
@@ -197,9 +188,8 @@ subroutine sloshing_initialize_temperature_salinity ( T, S, h, G, param_file, &
                                 ! surface layer
   real    :: S_range, T_range;  ! Range of salinities and temperatures over the
                                 ! vertical
-  real    :: delta;                             
-  real    :: deltah;                                
-  real    :: max_depth
+  real    :: delta
+  real    :: deltah
   real    :: xi0, xi1
   character(len=40)  :: mod = "initialize_temp_salt_linear" ! This subroutine's 
                                                             ! name.
@@ -212,7 +202,6 @@ subroutine sloshing_initialize_temperature_salinity ( T, S, h, G, param_file, &
   ! temperature
   S_range = 2.0; call read_param(param_file,"S_RANGE",S_range,.false.)
   T_range = 0.0; call read_param(param_file,"T_RANGE",T_range,.false.)
-  call read_param ( param_file, "MAXIMUM_DEPTH", max_depth )
 
   ! Prescribe salinity
   !delta_S = S_range / ( G%ke - 1.0 )
@@ -222,11 +211,11 @@ subroutine sloshing_initialize_temperature_salinity ( T, S, h, G, param_file, &
   !  S(:,:,k) = S(:,:,k-1) + delta_S
   !end do  
     
-  deltah = max_depth / nz;  
+  deltah = G%max_depth / nz;  
   do j=js,je ; do i=is,ie
     xi0 = 0.0
     do k = 1,nz
-      xi1 = xi0 + deltah / max_depth
+      xi1 = xi0 + deltah / G%max_depth
       S(i,j,k) = 34.0 + 0.5 * S_range * (xi0 + xi1)
       xi0 = xi1
     enddo

@@ -3472,7 +3472,7 @@ subroutine barotropic_init(u, v, h, eta, Time, G, param_file, diag, CS, &
   real :: gtot_estimate ! Summing G%g_prime gives an upper-bound estimate for pbce.
   real :: SSH_extra     ! An estimate of how much higher SSH might get, for use
                         ! in calculating the safe external wave speed.
-  real :: max_depth, dtbt_input
+  real :: dtbt_input
   type(memory_size_type) :: MS
   logical :: apply_bt_drag, use_BT_cont_type
   character(len=48) :: thickness_units, flux_units
@@ -3664,13 +3664,11 @@ subroutine barotropic_init(u, v, h, eta, Time, G, param_file, diag, CS, &
   call get_param(param_file, mod, "G_BT_EXTRA", CS%G_extra, &
                  "A nondimensional factor by which gtot is enhanced.", &
                  units="nondim", default=0.0)
-  call get_param(param_file, mod, "MAXIMUM_DEPTH", max_depth, default=1.0e6, &
-                 do_not_log=.true.)
   call get_param(param_file, mod, "SSH_EXTRA", SSH_extra, &
                  "An estimate of how much higher SSH might get, for use \n"//&
                  "in calculating the safe external wave speed. The \n"//&
                  "default is the minimum of 10 m or 5% of MAXIMUM_DEPTH.", &
-                 units="m", default=min(10.0,0.05*max_depth))
+                 units="m", default=min(10.0,0.05*G%max_depth))
 
   call get_param(param_file, mod, "DEBUG", CS%debug, &
                  "If true, write out verbose debugging data.", default=.false.)
