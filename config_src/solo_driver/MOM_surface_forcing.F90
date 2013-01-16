@@ -1364,7 +1364,6 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, tracer_flow_CSp)
   character(len=128) :: version = '$Id$'
   character(len=128) :: tagname = '$Name$'
   character(len=40)  :: mod = "MOM_surface_forcing" ! This module's name.
-  character(len=60)  :: axis_units
   character(len=200) :: filename, gust_file ! The name of the gustiness input file.
 
   if (associated(CS)) then
@@ -1588,17 +1587,12 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, tracer_flow_CSp)
                  "  n in taux = A + B*sin(n*pi*y/L) + C*cos(n*pi*y/L).", &
                  units="nondim", default=0.0)
   endif
-  call get_param(param_file, mod, "AXIS_UNITS", axis_units, default="degrees")
   if ((trim(CS%wind_config) == "2gyre") .or. &
       (trim(CS%wind_config) == "1gyre") .or. &
       (trim(CS%wind_config) == "gyres") .or. &
       (trim(CS%buoy_config) == "linear")) then
-    call get_param(param_file, mod, "SOUTHLAT", CS%south_lat, &
-                 "The southern latitude of the domain or the equivalent \n"//&
-                 "starting value for the y-axis.", units=axis_units, default=0.)
-    call get_param(param_file, mod, "LENLAT", CS%len_lat, &
-                 "The latitudinal or y-direction length of the domain.", &
-                 units=axis_units, fail_if_missing=.true.)
+    CS%south_lat = G%south_lat
+    CS%len_lat = G%len_lat
   endif
   call get_param(param_file, mod, "RHO_0", CS%Rho0, &
                  "The mean ocean density used with BOUSSINESQ true to \n"//&

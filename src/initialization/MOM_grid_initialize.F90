@@ -866,8 +866,7 @@ subroutine set_grid_metrics_cartesian(G, param_file)
   integer :: niglobal, njglobal, nihalo, njhalo
   real :: grid_latq(0:G%Domain%njglobal+2*G%Domain%njhalo)
   real :: grid_lonq(0:G%Domain%niglobal+2*G%Domain%nihalo)
-  real :: len_lon, len_lat, west_lon, south_lat, Rad_Earth, PI
-  character(len=60) :: axis_units
+  real :: PI
   character(len=48)  :: mod  = "MOM_grid_init set_grid_metrics_cartesian"
 
   niglobal = G%Domain%niglobal ; njglobal = G%Domain%njglobal
@@ -880,58 +879,58 @@ subroutine set_grid_metrics_cartesian(G, param_file)
  
   PI = 4.0*atan(1.0) ;
 
-  call get_param(param_file, mod, "AXIS_UNITS", axis_units, &
+  call get_param(param_file, mod, "AXIS_UNITS", G%axis_units, &
                  "The units for the Cartesian axes. Valid entries are: \n"//&
                  " \t degrees - degrees of latitude and longitude \n"//&
                  " \t m - meters \n \t k - kilometers", default="degrees")
-  call get_param(param_file, mod, "SOUTHLAT", south_lat, &
+  call get_param(param_file, mod, "SOUTHLAT", G%south_lat, &
                  "The southern latitude of the domain or the equivalent \n"//&
-                 "starting value for the y-axis.", units=axis_units, &
+                 "starting value for the y-axis.", units=G%axis_units, &
                  fail_if_missing=.true.)
-  call get_param(param_file, mod, "LENLAT", len_lat, &
+  call get_param(param_file, mod, "LENLAT", G%len_lat, &
                  "The latitudinal or y-direction length of the domain.", &
-                 units=axis_units, fail_if_missing=.true.)
-  call get_param(param_file, mod, "WESTLON", west_lon, &
+                 units=G%axis_units, fail_if_missing=.true.)
+  call get_param(param_file, mod, "WESTLON", G%west_lon, &
                  "The western longitude of the domain or the equivalent \n"//&
-                 "starting value for the x-axis.", units=axis_units, &
+                 "starting value for the x-axis.", units=G%axis_units, &
                  default=0.0)
-  call get_param(param_file, mod, "LENLON", len_lon, &
+  call get_param(param_file, mod, "LENLON", G%len_lon, &
                  "The longitudinal or x-direction length of the domain.", &
-                 units=axis_units, fail_if_missing=.true.)
-  call get_param(param_file, mod, "RAD_EARTH", Rad_Earth, &
+                 units=G%axis_units, fail_if_missing=.true.)
+  call get_param(param_file, mod, "RAD_EARTH", G%Rad_Earth, &
                  "The radius of the Earth.", units="m", default=6.378e6)
 
   ! These are larger in case symmetric memory is being used.
   do J=0,njglobal+2*njhalo
-    grid_latq(J) = south_lat + len_lat* REAL(J-njhalo)/REAL(njglobal)
+    grid_latq(J) = G%south_lat + G%len_lat* REAL(J-njhalo)/REAL(njglobal)
   enddo 
   do I=0,niglobal+2*nihalo
-    grid_lonq(I) = west_lon + len_lon*REAL(I-nihalo)/REAL(niglobal)
+    grid_lonq(I) = G%west_lon + G%len_lon*REAL(I-nihalo)/REAL(niglobal)
   enddo
   do j=1,njglobal+2*njhalo
-    G%gridLatB(j) = south_lat + len_lat* REAL(j-njhalo)/REAL(njglobal)
-    G%gridLatT(j) = south_lat + len_lat*(REAL(j-njhalo)-0.5)/REAL(njglobal)
+    G%gridLatB(j) = G%south_lat + G%len_lat* REAL(j-njhalo)/REAL(njglobal)
+    G%gridLatT(j) = G%south_lat + G%len_lat*(REAL(j-njhalo)-0.5)/REAL(njglobal)
   enddo
   do i=1,niglobal+2*nihalo
-    G%gridLonB(i) = west_lon + len_lon*REAL(i-nihalo)/REAL(niglobal)
-    G%gridLonT(i) = west_lon + len_lon*(REAL(i-nihalo)-0.5)/REAL(niglobal)
+    G%gridLonB(i) = G%west_lon + G%len_lon*REAL(i-nihalo)/REAL(niglobal)
+    G%gridLonT(i) = G%west_lon + G%len_lon*(REAL(i-nihalo)-0.5)/REAL(niglobal)
   enddo
 
   do J=JsdB,JedB ; do I=IsdB,IedB
     G%geoLonBu(i,j) = grid_lonq(i+X1off) ; G%geoLatBu(i,j) = grid_latq(j+Y1off)
 
-    G%dxBu(I,J) = Rad_Earth * len_lon * PI / (180.0 * niglobal)
-    G%dyBu(I,J) = Rad_Earth * len_lat * PI / (180.0 * njglobal)
+    G%dxBu(I,J) = G%Rad_Earth * G%len_lon * PI / (180.0 * niglobal)
+    G%dyBu(I,J) = G%Rad_Earth * G%len_lat * PI / (180.0 * njglobal)
 
-    if (axis_units(1:1) == 'k') then ! Axes are measured in km.
-      G%dxBu(I,J) = 1000.0 * len_lon / (REAL(niglobal))
-      G%dyBu(I,J) = 1000.0 * len_lat / (REAL(njglobal))
-    else if (axis_units(1:1) == 'm') then ! Axes are measured in m.
-      G%dxBu(I,J) = len_lon / (REAL(niglobal))
-      G%dyBu(I,J) = len_lat / (REAL(njglobal))
+    if (G%axis_units(1:1) == 'k') then ! Axes are measured in km.
+      G%dxBu(I,J) = 1000.0 * G%len_lon / (REAL(niglobal))
+      G%dyBu(I,J) = 1000.0 * G%len_lat / (REAL(njglobal))
+    else if (G%axis_units(1:1) == 'm') then ! Axes are measured in m.
+      G%dxBu(I,J) = G%len_lon / (REAL(niglobal))
+      G%dyBu(I,J) = G%len_lat / (REAL(njglobal))
     else ! Axes are measured in degrees of latitude and longitude.
-      G%dxBu(I,J) = Rad_Earth * len_lon * PI / (180.0 * niglobal)
-      G%dyBu(I,J) = Rad_Earth * len_lat * PI / (180.0 * njglobal)
+      G%dxBu(I,J) = G%Rad_Earth * G%len_lon * PI / (180.0 * niglobal)
+      G%dyBu(I,J) = G%Rad_Earth * G%len_lat * PI / (180.0 * njglobal)
     endif
 
     G%IdxBu(I,J) = 1.0 / G%dxBu(I,J)
@@ -982,12 +981,10 @@ subroutine set_grid_metrics_spherical(G, param_file)
   real :: PI, PI_180! PI = 3.1415926... as 4*atan(1)
   integer :: i,j, isd, ied, jsd, jed
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, IsdB, IedB, JsdB, JedB
-  character(len=200) :: axis_units
   integer :: i_offset, j_offset
   real :: grid_latq(0:G%Domain%njglobal+2*G%Domain%njhalo)
   real :: grid_lonq(0:G%Domain%niglobal+2*G%Domain%nihalo)
   real :: dLon,dLat,latitude,longitude,dL_di
-  real :: south_lat,len_lat,west_lon,len_lon,Rad_Earth
   character(len=48)  :: mod  = "MOM_grid_init set_grid_metrics_spherical"
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
@@ -1003,58 +1000,58 @@ subroutine set_grid_metrics_spherical(G, param_file)
 !  and save them in arrays.
   PI = 4.0*atan(1.0); PI_180 = atan(1.0)/45.
  
-  call get_param(param_file, mod, "AXIS_UNITS", axis_units, default="degrees")
-  if (trim(axis_units) == "") axis_units = "degrees"
-  if (trim(axis_units) .ne. "degrees") call MOM_error(FATAL, &
+  call get_param(param_file, mod, "AXIS_UNITS", G%axis_units, default="degrees")
+  if (trim(G%axis_units) == "") G%axis_units = "degrees"
+  if (trim(G%axis_units) .ne. "degrees") call MOM_error(FATAL, &
     "MOM_grid_init.F90, set_grid_metrics_simple_spherical: "// &
     "axis_units must be degrees")
 
-  call get_param(param_file, mod, "SOUTHLAT", south_lat, &
+  call get_param(param_file, mod, "SOUTHLAT", G%south_lat, &
                  "The southern latitude of the domain.", units="degrees", &
                  fail_if_missing=.true.)
-  call get_param(param_file, mod, "LENLAT", len_lat, &
+  call get_param(param_file, mod, "LENLAT", G%len_lat, &
                  "The latitudinal length of the domain.", units="degrees", &
                  fail_if_missing=.true.)
-  call get_param(param_file, mod, "WESTLON", west_lon, &
+  call get_param(param_file, mod, "WESTLON", G%west_lon, &
                  "The western longitude of the domain.", units="degrees", &
                  default=0.0)
-  call get_param(param_file, mod, "LENLON", len_lon, &
+  call get_param(param_file, mod, "LENLON", G%len_lon, &
                  "The longitudinal length of the domain.", units="degrees", &
                  fail_if_missing=.true.)
-  call get_param(param_file, mod, "RAD_EARTH", Rad_Earth, &
+  call get_param(param_file, mod, "RAD_EARTH", G%Rad_Earth, &
                  "The radius of the Earth.", units="m", default=6.378e6)
 
-  dLon = len_lon/G%Domain%niglobal
-  dLat = len_lat/G%Domain%njglobal
+  dLon = G%len_lon/G%Domain%niglobal
+  dLat = G%len_lat/G%Domain%njglobal
 
   do J=0,G%Domain%njglobal+2*G%Domain%njhalo
-    latitude = south_lat + dLat* REAL(J-G%Domain%njhalo)
+    latitude = G%south_lat + dLat* REAL(J-G%Domain%njhalo)
     grid_latq(J) = MIN(MAX(latitude,-90.),90.)
   enddo
   do I=1,G%Domain%niglobal+2*G%Domain%nihalo
-    grid_lonq(I) = west_lon + dLon*REAL(I-G%Domain%nihalo)
+    grid_lonq(I) = G%west_lon + dLon*REAL(I-G%Domain%nihalo)
   enddo
 
   do j=1,G%Domain%njglobal+2*G%Domain%njhalo
     G%gridLatB(J) = grid_latq(J)
-    latitude = south_lat + dLat*(REAL(j-G%Domain%njhalo)-0.5)
+    latitude = G%south_lat + dLat*(REAL(j-G%Domain%njhalo)-0.5)
     G%gridLatT(j) = MIN(MAX(latitude,-90.),90.)
   enddo
   do i=1,G%Domain%niglobal+2*G%Domain%nihalo
     G%gridLonB(I) = grid_lonq(I)
-    G%gridLonT(i) = west_lon + dLon*(REAL(i-G%Domain%nihalo)-0.5)
+    G%gridLonT(i) = G%west_lon + dLon*(REAL(i-G%Domain%nihalo)-0.5)
   enddo
 
-  dL_di = (len_lon * 4.0*atan(1.0)) / (180.0 * G%Domain%niglobal)
+  dL_di = (G%len_lon * 4.0*atan(1.0)) / (180.0 * G%Domain%niglobal)
   do J=JsdB,JedB ; do I=IsdB,IedB
     G%geoLonBu(I,J) = grid_lonq(I+I_offset)
     G%geoLatBu(I,J) = grid_latq(J+J_offset)
 
 ! The following line is needed to reproduce the solution from
 ! set_grid_metrics_mercator when used to generate a simple spherical grid.
-    G%dxBu(I,J) = Rad_Earth * COS( G%geoLatBu(I,J)*PI_180 ) * dL_di
-!   G%dxBu(I,J) = Rad_Earth * dLon*PI_180 * COS( G%geoLatBu(I,J)*PI_180 )
-    G%dyBu(I,J) = Rad_Earth * dLat*PI_180
+    G%dxBu(I,J) = G%Rad_Earth * COS( G%geoLatBu(I,J)*PI_180 ) * dL_di
+!   G%dxBu(I,J) = G%Rad_Earth * dLon*PI_180 * COS( G%geoLatBu(I,J)*PI_180 )
+    G%dyBu(I,J) = G%Rad_Earth * dLat*PI_180
     G%areaBu(I,J) = G%dxBu(I,J) * G%dyBu(I,J)
   enddo; enddo
 
@@ -1064,9 +1061,9 @@ subroutine set_grid_metrics_spherical(G, param_file)
 
 ! The following line is needed to reproduce the solution from
 ! set_grid_metrics_mercator when used to generate a simple spherical grid.
-    G%dxCv(i,J) = Rad_Earth * COS( G%geoLatCv(i,J)*PI_180 ) * dL_di
-!   G%dxCv(i,J) = Rad_Earth * (dLon*PI_180) * COS( G%geoLatCv(i,J)*PI_180 )
-    G%dyCv(i,J) = Rad_Earth * dLat*PI_180
+    G%dxCv(i,J) = G%Rad_Earth * COS( G%geoLatCv(i,J)*PI_180 ) * dL_di
+!   G%dxCv(i,J) = G%Rad_Earth * (dLon*PI_180) * COS( G%geoLatCv(i,J)*PI_180 )
+    G%dyCv(i,J) = G%Rad_Earth * dLat*PI_180
   enddo; enddo
 
   do j=jsd,jed ; do I=IsdB,IedB
@@ -1075,9 +1072,9 @@ subroutine set_grid_metrics_spherical(G, param_file)
 
 ! The following line is needed to reproduce the solution from
 ! set_grid_metrics_mercator when used to generate a simple spherical grid.
-    G%dxCu(I,j) = Rad_Earth * COS( G%geoLatCu(I,j)*PI_180 ) * dL_di
-!   G%dxCu(I,j) = Rad_Earth * dLon*PI_180 * COS( latitude )
-    G%dyCu(I,j) = Rad_Earth * dLat*PI_180
+    G%dxCu(I,j) = G%Rad_Earth * COS( G%geoLatCu(I,j)*PI_180 ) * dL_di
+!   G%dxCu(I,j) = G%Rad_Earth * dLon*PI_180 * COS( latitude )
+    G%dyCu(I,j) = G%Rad_Earth * dLat*PI_180
   enddo; enddo
 
   do j=jsd,jed ; do i=isd,ied
@@ -1086,9 +1083,9 @@ subroutine set_grid_metrics_spherical(G, param_file)
 
 ! The following line is needed to reproduce the solution from
 ! set_grid_metrics_mercator when used to generate a simple spherical grid.
-    G%dxT(i,j) = Rad_Earth * COS( G%geoLatT(i,j)*PI_180 ) * dL_di
-!   G%dxT(i,j) = Rad_Earth * dLon*PI_180 * COS( latitude )
-    G%dyT(i,j) = Rad_Earth * dLat*PI_180
+    G%dxT(i,j) = G%Rad_Earth * COS( G%geoLatT(i,j)*PI_180 ) * dL_di
+!   G%dxT(i,j) = G%Rad_Earth * dLon*PI_180 * COS( latitude )
+    G%dyT(i,j) = G%Rad_Earth * dLat*PI_180
 
 !   latitude = G%geoLatCv(i,J)*PI_180             ! In radians
 !   dL_di    = G%geoLatCv(i,max(jsd,J-1))*PI_180  ! In radians
@@ -1177,6 +1174,9 @@ subroutine set_grid_metrics_mercator(G, param_file)
                  fail_if_missing=.true.)
   call get_param(param_file, mod, "RAD_EARTH", GP%Rad_Earth, &
                  "The radius of the Earth.", units="m", default=6.378e6)
+  G%south_lat = GP%south_lat ; G%len_lat = GP%len_lat
+  G%west_lon = GP%west_lon ; G%len_lon = GP%len_lon
+  G%Rad_Earth = GP%Rad_Earth
   call get_param(param_file, mod, "ISOTROPIC", GP%isotropic, &
                  "If true, an isotropic grid on a sphere (also known as \n"//&
                  "a Mercator grid) is used. With an isotropic grid, the \n"//&

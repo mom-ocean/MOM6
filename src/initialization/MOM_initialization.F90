@@ -1099,8 +1099,8 @@ subroutine initialize_topography_named(D, G, param_file, topog_config)
   real :: expdecay             ! A decay scale of associated with   !
                                ! the sloping boundaries, in m.      !
   real :: Dedge                ! The depth in m at the basin edge.  !
-  real :: southlat0, westlon0, lenlon0, lenlat0
-  real :: south_lat, west_lon, len_lon, len_lat, Rad_earth
+! real :: southlat0, westlon0, lenlon0, lenlat0
+! real :: south_lat, west_lon, len_lon, len_lat, Rad_earth
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed, xhalo, yhalo
   character(len=40)  :: mod = "initialize_topography_named" ! This subroutine's name.
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
@@ -1118,29 +1118,29 @@ subroutine initialize_topography_named(D, G, param_file, topog_config)
   ! These expressions force rounding of approximate values in a
   ! consistent way.
   xhalo = G%isc-G%isd ; yhalo = G%jsc-G%jsd
-  southlat0 = ANInt(G%gridLatB(yhalo)*1024.0)/1024.0
-  westlon0 = ANInt(G%gridLonB(xhalo)*1024.0)/1024.0
-  lenlon0 = ANInt((G%gridLonB(G%Domain%niglobal+xhalo)-G%gridLonB(xhalo))*1024.0)/1024.0
-  lenlat0 = ANInt((G%gridLatB(G%Domain%njglobal+yhalo)-G%gridLatB(yhalo))*1024.0)/1024.0
+! southlat0 = ANInt(G%gridLatB(yhalo)*1024.0)/1024.0
+! westlon0 = ANInt(G%gridLonB(xhalo)*1024.0)/1024.0
+! lenlon0 = ANInt((G%gridLonB(G%Domain%niglobal+xhalo)-G%gridLonB(xhalo))*1024.0)/1024.0
+! lenlat0 = ANInt((G%gridLatB(G%Domain%njglobal+yhalo)-G%gridLatB(yhalo))*1024.0)/1024.0
 
   if (trim(topog_config) /= "flat") then
     call get_param(param_file, mod, "EDGE_DEPTH", Dedge, &
                    "The depth at the edge of one of the named topographies.", &
                    units="m", default=100.0)
-    call get_param(param_file, mod, "SOUTHLAT", south_lat, &
-                   "The southern latitude of the domain.", units="degrees", &
-                   default=southlat0)
-    call get_param(param_file, mod, "LENLAT", len_lat, &
-                   "The latitudinal length of the domain.", units="degrees", &
-                   default=lenlat0)
-    call get_param(param_file, mod, "WESTLON", west_lon, &
-                   "The western longitude of the domain.", units="degrees", &
-                   default=westlon0)
-    call get_param(param_file, mod, "LENLON", len_lon, &
-                   "The longitudinal length of the domain.", units="degrees", &
-                   default=lenlon0)
-    call get_param(param_file, mod, "RAD_EARTH", Rad_Earth, &
-                   "The radius of the Earth.", units="m", default=6.378e6)
+!   call get_param(param_file, mod, "SOUTHLAT", south_lat, &
+!                  "The southern latitude of the domain.", units="degrees", &
+!                  default=southlat0)
+!   call get_param(param_file, mod, "LENLAT", len_lat, &
+!                  "The latitudinal length of the domain.", units="degrees", &
+!                  default=lenlat0)
+!   call get_param(param_file, mod, "WESTLON", west_lon, &
+!                  "The western longitude of the domain.", units="degrees", &
+!                  default=westlon0)
+!   call get_param(param_file, mod, "LENLON", len_lon, &
+!                  "The longitudinal length of the domain.", units="degrees", &
+!                  default=lenlon0)
+!   call get_param(param_file, mod, "RAD_EARTH", Rad_Earth, &
+!                  "The radius of the Earth.", units="m", default=6.378e6)
     call get_param(param_file, mod, "TOPOG_SLOPE_SCALE", expdecay, &
                    "The exponential decay scale used in defining some of \n"//&
                    "the named topographies.", units="m", default=400000.0)
@@ -1153,35 +1153,35 @@ subroutine initialize_topography_named(D, G, param_file, topog_config)
     do i=is,ie ; do j=js,je ; D(i,j) = max_depth ; enddo ; enddo
   elseif (trim(topog_config) == "spoon") then
     D0 = (max_depth - Dedge) / &
-             ((1.0 - exp(-0.5*len_lat*Rad_earth*PI/(180.0 *expdecay))) * &
-              (1.0 - exp(-0.5*len_lat*Rad_earth*PI/(180.0 *expdecay))))
+             ((1.0 - exp(-0.5*G%len_lat*G%Rad_earth*PI/(180.0 *expdecay))) * &
+              (1.0 - exp(-0.5*G%len_lat*G%Rad_earth*PI/(180.0 *expdecay))))
     do i=is,ie ; do j=js,je
   !  This sets a bowl shaped (sort of) bottom topography, with a       !
   !  maximum depth of max_depth.                                   !
       D(i,j) =  Dedge + D0 * &
-             (sin(PI * (G%geoLonT(i,j) - (west_lon)) / len_lon) * &
-           (1.0 - exp((G%geoLatT(i,j) - (south_lat+len_lat))*Rad_earth*PI / &
+             (sin(PI * (G%geoLonT(i,j) - (G%west_lon)) / G%len_lon) * &
+           (1.0 - exp((G%geoLatT(i,j) - (G%south_lat+G%len_lat))*G%Rad_earth*PI / &
                       (180.0*expdecay)) ))
     enddo ; enddo
   elseif (trim(topog_config) == "bowl") then
     D0 = (max_depth - Dedge) / &
-             ((1.0 - exp(-0.5*len_lat*Rad_earth*PI/(180.0 *expdecay))) * &
-              (1.0 - exp(-0.5*len_lat*Rad_earth*PI/(180.0 *expdecay))))
+             ((1.0 - exp(-0.5*G%len_lat*G%Rad_earth*PI/(180.0 *expdecay))) * &
+              (1.0 - exp(-0.5*G%len_lat*G%Rad_earth*PI/(180.0 *expdecay))))
 
   !  This sets a bowl shaped (sort of) bottom topography, with a
   !  maximum depth of max_depth.
     do i=is,ie ; do j=js,je
       D(i,j) =  Dedge + D0 * &
-             (sin(PI * (G%geoLonT(i,j) - west_lon) / len_lon) * &
-             ((1.0 - exp(-(G%geoLatT(i,j) - south_lat)*Rad_Earth*PI/ &
+             (sin(PI * (G%geoLonT(i,j) - G%west_lon) / G%len_lon) * &
+             ((1.0 - exp(-(G%geoLatT(i,j) - G%south_lat)*G%Rad_Earth*PI/ &
                           (180.0*expdecay))) * &
-             (1.0 - exp((G%geoLatT(i,j) - (south_lat+len_lat))* &
-                         Rad_Earth*PI/(180.0*expdecay)))))
+             (1.0 - exp((G%geoLatT(i,j) - (G%south_lat+G%len_lat))* &
+                         G%Rad_Earth*PI/(180.0*expdecay)))))
     enddo ; enddo
   elseif (trim(topog_config) == "halfpipe") then
     D0 = max_depth - Dedge
     do i=is,ie ; do j=js,je
-      D(i,j) =  Dedge + D0 * ABS(sin(PI*(G%geoLatT(i,j) - south_lat)/len_lat))
+      D(i,j) =  Dedge + D0 * ABS(sin(PI*(G%geoLatT(i,j) - G%south_lat)/G%len_lat))
     enddo ; enddo
   else
     call MOM_error(FATAL,"initialize_topography_named: "// &
@@ -1711,24 +1711,11 @@ subroutine initialize_velocity_circular(u, v, G, param_file)
 !   This subroutine sets the initial velocity components to be circular with
 ! no flow at edges of domain and center.
   character(len=200) :: mod = "initialize_velocity_circular"
-  real :: south_lat, len_lat, west_lon, len_lon, circular_max_u
+  real :: circular_max_u
   real :: dpi, psi1, psi2
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
-
-  call get_param(param_file, mod, "SOUTHLAT", south_lat, &
-                 "The southern latitude of the domain.", units="degrees", &
-                 fail_if_missing=.true.)
-  call get_param(param_file, mod, "LENLAT", len_lat, &
-                 "The latitudinal length of the domain.", units="degrees", &
-                 fail_if_missing=.true.)
-  call get_param(param_file, mod, "WESTLON", west_lon, &
-                 "The western longitude of the domain.", units="degrees", &
-                 default=0.0)
-  call get_param(param_file, mod, "LENLON", len_lon, &
-                 "The longitudinal length of the domain.", units="degrees", &
-                 fail_if_missing=.true.)
 
   call get_param(param_file, mod, "CIRCULAR_MAX_U", circular_max_u, &
                  "The amplitude of zonal flow from which to scale the\n"// &
@@ -1739,12 +1726,12 @@ subroutine initialize_velocity_circular(u, v, G, param_file)
   do k=1,nz ; do j=js,je ; do I=Isq,Ieq
     psi1 = my_psi(I,j)
     psi2 = my_psi(I,j-1)
-    u(I,j,k) = (psi1-psi2)/G%dy_Cu(I,j)! *(circular_max_u*len_lon/(2.0*dpi))
+    u(I,j,k) = (psi1-psi2)/G%dy_Cu(I,j)! *(circular_max_u*G%len_lon/(2.0*dpi))
   enddo ; enddo ; enddo
   do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
     psi1 = my_psi(i,J)
     psi2 = my_psi(i-1,J)
-    v(i,J,k) = (psi2-psi1)/G%dx_Cv(i,J)! *(circular_max_u*len_lon/(2.0*dpi))
+    v(i,J,k) = (psi2-psi1)/G%dx_Cv(i,J)! *(circular_max_u*G%len_lon/(2.0*dpi))
   enddo ; enddo ; enddo
 
   contains
@@ -1752,12 +1739,12 @@ subroutine initialize_velocity_circular(u, v, G, param_file)
   real function my_psi(ig,jg) ! in-line function
     integer :: ig, jg
     real :: x, y, r
-    x = 2.0*(G%geoLonBu(ig,jg)-west_lon)/len_lon-1.0  ! -1<x<1
-    y = 2.0*(G%geoLatBu(ig,jg)-south_lat)/len_lat-1.0 ! -1<y<1
+    x = 2.0*(G%geoLonBu(ig,jg)-G%west_lon)/G%len_lon-1.0  ! -1<x<1
+    y = 2.0*(G%geoLatBu(ig,jg)-G%south_lat)/G%len_lat-1.0 ! -1<y<1
     r = sqrt( x**2 + y**2 ) ! Circulat stream fn nis fn of radius only
     r = min(1.0,r) ! Flatten stream function in corners of box
     my_psi = 0.5*(1.0 - cos(dpi*r))
-    my_psi = my_psi * (circular_max_u*len_lon*1e3/dpi) ! len_lon is in km
+    my_psi = my_psi * (circular_max_u*G%len_lon*1e3/dpi) ! len_lon is in km
   end function my_psi
 
 end subroutine initialize_velocity_circular

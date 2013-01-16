@@ -57,7 +57,6 @@ subroutine external_gwave_initialize_thickness(h, G, param_file)
   real :: eta1D(SZK_(G)+1)! Interface height relative to the sea surface !
                           ! positive upward, in m.                       !
   real :: max_depth  ! The minimum depth in m.
-  real :: len_lon, west_lon ! Length of domain, position of western boundary
   real :: ssh_anomaly_height ! Vertical height of ssh anomaly
   real :: ssh_anomaly_width ! Lateral width of anomaly
   character(len=40)  :: mod = "external_gwave_initialize_thickness" ! This subroutine's name.
@@ -71,12 +70,6 @@ subroutine external_gwave_initialize_thickness(h, G, param_file)
   call get_param(param_file, mod, "MAXIMUM_DEPTH", max_depth, &
                  "The maximum depth of the ocean.", units="m", &
                  fail_if_missing=.true.)
-  call get_param(param_file, mod, "WESTLON", west_lon, &
-                 "The western longitude of the domain.", units="degrees", &
-                 default=0.0)
-  call get_param(param_file, mod, "LENLON", len_lon, &
-                 "The longitudinal length of the domain.", units="degrees", &
-                 fail_if_missing=.true.)
   call get_param(param_file, mod, "SSH_ANOMALY_HEIGHT", ssh_anomaly_height, &
                  "The vertical displacement of the SSH anomaly. ", units="m", &
                  fail_if_missing=.true.)
@@ -85,7 +78,7 @@ subroutine external_gwave_initialize_thickness(h, G, param_file)
                  fail_if_missing=.true.)
   PI = 4.0*atan(1.0)
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
-    Xnondim = (G%geoLonT(i,j)-west_lon-0.5*len_lon) / ssh_anomaly_width
+    Xnondim = (G%geoLonT(i,j)-G%west_lon-0.5*G%len_lon) / ssh_anomaly_width
     Xnondim = min(1., abs(Xnondim))
     eta1D(1) = ssh_anomaly_height * 0.5 * ( 1. + cos(PI*Xnondim) ) ! Cosine bell
     do k=2,nz

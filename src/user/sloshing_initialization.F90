@@ -78,7 +78,6 @@ subroutine sloshing_initialize_thickness ( h, G, param_file )
   real    :: a0
   real    :: deltah
   real    :: max_depth
-  real    :: lenlon
   real    :: total_height
   real    :: weight_z
   real    :: x1, y1, x2, y2
@@ -92,7 +91,6 @@ subroutine sloshing_initialize_thickness ( h, G, param_file )
   
   ! Get maximum depth and uniformly-distributed thickness
   call read_param ( param_file, "MAXIMUM_DEPTH", max_depth )
-  call read_param ( param_file, "LENLON", lenlon )
   call read_param ( param_file, "NIGLOBAL", niglobal )
   
   deltah = max_depth / nz
@@ -137,7 +135,7 @@ subroutine sloshing_initialize_thickness ( h, G, param_file )
       
       weight_z = - 4.0 * ( z_unif(k) + 0.5 )**2 + 1
       
-      x = G%geoLonT(i,j) / lenlon
+      x = G%geoLonT(i,j) / G%len_lon
       displ(k) = a0 * cos(acos(-1.0)*x) + weight_z; 
       
       if ( k .EQ. 1 ) then

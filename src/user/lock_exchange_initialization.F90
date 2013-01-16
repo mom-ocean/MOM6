@@ -57,7 +57,6 @@ subroutine lock_exchange_initialize_thickness(h, G, param_file)
   real :: eta1D(SZK_(G)+1)! Interface height relative to the sea surface !
                           ! positive upward, in m.                       !
   real :: max_depth  ! The minimum depth in m.
-  real :: len_lon, west_lon ! Length of domain, position of western boundary
   real :: front_displacement ! Vertical displacement acrodd front
   real :: thermocline_thickness ! Thickness of stratified region
   character(len=40)  :: mod = "lock_exchange_initialize_thickness" ! This subroutine's name.
@@ -69,12 +68,6 @@ subroutine lock_exchange_initialize_thickness(h, G, param_file)
 
   call get_param(param_file, mod, "MAXIMUM_DEPTH", max_depth, &
                  "The maximum depth of the ocean.", units="m", &
-                 fail_if_missing=.true.)
-  call get_param(param_file, mod, "WESTLON", west_lon, &
-                 "The western longitude of the domain.", units="degrees", &
-                 default=0.0)
-  call get_param(param_file, mod, "LENLON", len_lon, &
-                 "The longitudinal length of the domain.", units="degrees", &
                  fail_if_missing=.true.)
   call get_param(param_file, mod, "FRONT_DISPLACEMENT", front_displacement, &
                  "The vertical displacement of interfaces across the front. \n"//&
@@ -90,9 +83,9 @@ subroutine lock_exchange_initialize_thickness(h, G, param_file)
     do k=2,nz
       eta1D(K) = -0.5 * max_depth & ! Middle of column
               - thermocline_thickness * ( (real(k-1))/real(nz) -0.5 ) ! Stratification
-      if (G%geoLonT(i,j)-west_lon < 0.5 * len_lon) then
+      if (G%geoLonT(i,j)-G%west_lon < 0.5 * G%len_lon) then
         eta1D(K)=eta1D(K) + 0.5 * front_displacement
-      elseif (G%geoLonT(i,j)-west_lon > 0.5 * len_lon) then
+      elseif (G%geoLonT(i,j)-G%west_lon > 0.5 * G%len_lon) then
         eta1D(K)=eta1D(K) - 0.5 * front_displacement
       endif
     enddo

@@ -53,12 +53,10 @@ subroutine DOME2d_initialize_topography ( D, G, param_file )
   real      :: x;
   real      :: max_depth;
   real      :: bay_depth;
-  real      :: lenlon;
   real      :: l1, l2;
   
   ! Get maximum depth, domain zonal length and zonal resolution
   call read_param ( param_file, "MAXIMUM_DEPTH", max_depth );
-  call read_param ( param_file, "LENLON", lenlon );
   call read_param ( param_file, "NXTOT", nxtot );
   
   ! location where downslope starts
@@ -73,7 +71,7 @@ subroutine DOME2d_initialize_topography ( D, G, param_file )
     do j=G%jsc,G%jec 
     
       ! Compute normalized zonal coordinate
-      x = G%geoLonT(i,j) / lenlon;
+      x = G%geoLonT(i,j) / G%len_lon;
     
       if ( x .le. l1 ) then
         D(i,j) = bay_depth * max_depth;
@@ -111,7 +109,6 @@ subroutine DOME2d_initialize_thickness ( h, G, param_file )
                           ! positive upward, in m.                       !
   real :: max_depth ! The maximum depths in m.
   integer :: i, j, k, is, ie, js, je, nz
-  real    :: lenlon
   real    :: x
   real    :: delta_h
   real    :: min_thickness
@@ -122,7 +119,6 @@ subroutine DOME2d_initialize_thickness ( h, G, param_file )
   call MOM_mesg("MOM_initialization.F90, initialize_thickness_uniform: setting thickness")
 
   call read_param(param_file,"MAXIMUM_DEPTH",max_depth,.true.)
-  call read_param ( param_file, "LENLON", lenlon );
   min_thickness = 1.0e-3; 
   call read_param ( param_file, "MIN_THICKNESS", min_thickness );
   dome2d_ic=-1; call read_param ( param_file, "DOME2D_IC", dome2d_ic );
@@ -154,7 +150,7 @@ subroutine DOME2d_initialize_thickness ( h, G, param_file )
           endif
         enddo
      
-         x = G%geoLonT(i,j) / lenlon;
+         x = G%geoLonT(i,j) / G%len_lon;
          if ( x .le. dome2d_width_bay ) then
            h(i,j,1:nz-1) = G%Angstrom;
            h(i,j,nz) = dome2d_depth_bay * max_depth - (nz-1) * G%Angstrom;
@@ -176,7 +172,7 @@ subroutine DOME2d_initialize_thickness ( h, G, param_file )
  !          endif
  !       enddo
  !   
- !       x = G%geoLonT(i,j) / lenlon;
+ !       x = G%geoLonT(i,j) / G%len_lon;
  !       if ( x .le. dome2d_width_bay ) then
  !         h(i,j,1:nz-1) = min_thickness;
  !         h(i,j,nz) = dome2d_depth_bay * max_depth - (nz-1) * min_thickness;
@@ -227,7 +223,6 @@ subroutine DOME2d_initialize_temperature_salinity ( T, S, h, G, param_file, &
 
   integer   :: i, j, k, is, ie, js, je, nz
   real      :: x;
-  real      :: lenlon;
   real      :: max_depth
   integer   :: index_bay_z;
   real      :: delta_S, delta_T;
@@ -240,7 +235,6 @@ subroutine DOME2d_initialize_temperature_salinity ( T, S, h, G, param_file, &
   
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
-  call read_param ( param_file, "LENLON", lenlon );
   call read_param(param_file,"S_REF",S_ref,.true.)
   call read_param(param_file,"T_REF",T_ref,.true.)
   call read_param ( param_file, "MAXIMUM_DEPTH", max_depth );
@@ -274,7 +268,7 @@ subroutine DOME2d_initialize_temperature_salinity ( T, S, h, G, param_file, &
           S(i,j,k) = 34.0 + 0.5 * S_range * (xi0 + xi1);
           xi0 = xi1;
         enddo
-        x = G%geoLonT(i,j) / lenlon;
+        x = G%geoLonT(i,j) / G%len_lon;
         if ( x .le. dome2d_width_bay ) then
           S(i,j,nz) = 34.0 + S_range;
         end if  
@@ -298,7 +292,7 @@ subroutine DOME2d_initialize_temperature_salinity ( T, S, h, G, param_file, &
   if ( dome2d_ic .eq. IC_Z ) then
     index_bay_z = Nint ( dome2d_depth_bay * G%ke );
     do j = G%jsc,G%jec ; do i = G%isc,G%iec 
-      x = G%geoLonT(i,j) / lenlon;
+      x = G%geoLonT(i,j) / G%len_lon;
       if ( x .le. dome2d_width_bay ) then
         S(i,j,1:index_bay_z) = S_ref + S_range; ! Use for z coordinates
         T(i,j,1:index_bay_z) = 1.0;             ! Use for z coordinates
@@ -309,7 +303,7 @@ subroutine DOME2d_initialize_temperature_salinity ( T, S, h, G, param_file, &
   ! Modify salinity and temperature when sigma coordinates are used  
   if ( dome2d_ic .eq. IC_SIGMA ) then
     do i = G%isc,G%iec ; do j = G%jsc,G%jec
-      x = G%geoLonT(i,j) / lenlon;
+      x = G%geoLonT(i,j) / G%len_lon;
       if ( x .le. dome2d_width_bay ) then
         S(i,j,1:G%ke) = S_ref + S_range;    ! Use for sigma coordinates
         T(i,j,1:G%ke) = 1.0;                ! Use for sigma coordinates
@@ -321,7 +315,7 @@ subroutine DOME2d_initialize_temperature_salinity ( T, S, h, G, param_file, &
   T(G%isc:G%iec,G%jsc:G%jec,1:G%ke) = 0.0;
   if (( dome2d_ic .eq. IC_RHO_L ) .or. ( dome2d_ic .eq. IC_RHO_C )) then 
     do i = G%isc,G%iec ; do j = G%jsc,G%jec
-      x = G%geoLonT(i,j) / lenlon;
+      x = G%geoLonT(i,j) / G%len_lon;
       if ( x .le. dome2d_width_bay ) then
         T(i,j,G%ke) = 1.0;
       end if    

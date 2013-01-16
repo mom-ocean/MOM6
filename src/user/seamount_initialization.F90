@@ -60,7 +60,6 @@ subroutine seamount_initialize_topography ( D, G, param_file )
   integer   :: i, j
   real      :: x;
   real      :: max_depth;
-  real      :: lenlon;
   real      :: delta;
   real      :: L;
   
@@ -68,17 +67,16 @@ subroutine seamount_initialize_topography ( D, G, param_file )
   call read_param ( param_file, "MAXIMUM_DEPTH", max_depth );
 
   ! Domain extent in kilometers
-  call read_param ( param_file, "LENLON", lenlon );
   
   delta = seamount_delta;
   L = seamount_length_scale; 
-  L = L / lenlon;
+  L = L / G%len_lon;
     
   do i=G%isc,G%iec 
     do j=G%jsc,G%jec 
     
       ! Compute normalized zonal coordinate (x=0 at center of domain)
-      x = G%geoLonT(i,j) / lenlon - 0.5;
+      x = G%geoLonT(i,j) / G%len_lon - 0.5;
         
       D(i,j) = max_depth * ( 1.0 - delta * exp(-(x/L)**2) );
 
@@ -109,7 +107,6 @@ subroutine seamount_initialize_thickness ( h, G, param_file )
                           ! positive upward, in m.                       !
   real :: max_depth ! The maximum depths in m.
   integer :: i, j, k, is, ie, js, je, nz
-  real    :: lenlon;
   real    :: x;
   real    :: delta_h;
   real    :: min_thickness;
@@ -119,7 +116,6 @@ subroutine seamount_initialize_thickness ( h, G, param_file )
   call MOM_mesg("MOM_initialization.F90, initialize_thickness_uniform: setting thickness")
 
   call read_param(param_file,"MAXIMUM_DEPTH",max_depth,.true.)
-  call read_param ( param_file, "LENLON", lenlon );
   
   min_thickness = 1.0e-3; 
   call read_param ( param_file, "MIN_THICKNESS", min_thickness );

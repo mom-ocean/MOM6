@@ -82,7 +82,6 @@ type p3d
 end type p3d
 
 type, public :: USER_tracer_example_CS ; private
-  real :: Rad_Earth
   logical :: coupled_tracers = .false.  ! These tracers are not offered to the
                                         ! coupler.
   character(len = 200) :: tracer_IC_file ! The full path to the IC file, or " "
@@ -169,8 +168,6 @@ function USER_register_tracer_example(G, param_file, CS, diag, tr_adv_CSp, &
                  "If true, sponges may be applied anywhere in the domain. \n"//&
                  "The exact location and properties of those sponges are \n"//&
                  "specified from MOM_initialization.F90.", default=.false.)
-  call get_param(param_file, mod, "RAD_EARTH", CS%Rad_Earth, &
-                 "The radius of the Earth.", units="m", default=6.378e6)
 
   allocate(CS%tr(isd:ied,jsd:jed,nz,NTR)) ; CS%tr(:,:,:,:) = 0.0
   if (CS%mask_tracers) then
@@ -275,7 +272,7 @@ subroutine USER_initialize_tracer(restart, day, G, h, OBC, CS, sponge_CSp, &
 !    This sets a stripe of tracer across the basin.
       PI = 4.0*atan(1.0)
       do j=js,je
-        dist2 = (CS%Rad_Earth * PI / 180.0)**2 * &
+        dist2 = (G%Rad_Earth * PI / 180.0)**2 * &
                (G%geoLatT(i,j) - 40.0) * (G%geoLatT(i,j) - 40.0)
         tr_y = 0.5*exp(-dist2/(1.0e5*1.0e5))
 

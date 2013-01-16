@@ -55,7 +55,6 @@ subroutine adjustment_initialize_thickness ( h, G, param_file )
                           ! positive upward, in m.                       !
   real :: max_depth ! The maximum depths in m.
   integer :: i, j, k, is, ie, js, je, nz
-  real    :: lenlon, lenlat
   real    :: x, y, yy, delta_S_strat, dSdz, delta_S, S_ref
   real    :: min_thickness, adjustment_width, adjustment_delta, adjustment_deltaS
   real    :: front_wave_amp, front_wave_length, front_wave_asym
@@ -68,8 +67,6 @@ subroutine adjustment_initialize_thickness ( h, G, param_file )
 
   ! Parameters used by main model initialization
   call get_param(param_file,mod,"MAXIMUM_DEPTH",max_depth,fail_if_missing=.true.,do_not_log=.true.)
-  call get_param(param_file,mod,"LENLON",lenlon,fail_if_missing=.true.,do_not_log=.true.)
-  call get_param(param_file,mod,"LENLAT",lenlat,fail_if_missing=.true.,do_not_log=.true.)
   call get_param(param_file,mod,"S_REF",S_ref,fail_if_missing=.true.,do_not_log=.true.)
   call get_param(param_file,mod,"MIN_THICKNESS",min_thickness,default=1.0e-3,do_not_log=.true.)
 
@@ -133,14 +130,14 @@ subroutine adjustment_initialize_thickness ( h, G, param_file )
       do j=js,je ; do i=is,ie
           if (front_wave_length.ne.0.) then
             y = ( 0.125 + G%geoLatT(i,j) / front_wave_length ) * ( 4. * acos(0.) )
-            yy = 2. * ( G%geoLatT(i,j) - 0.5 * lenlat ) / adjustment_width
+            yy = 2. * ( G%geoLatT(i,j) - 0.5 * G%len_lat ) / adjustment_width
             yy = min(1.0, yy); yy = max(-1.0, yy)
             yy = yy * 2. * acos( 0. )
             y = front_wave_amp*sin(y) + front_wave_asym*sin(yy)
           else
             y = 0.
           endif
-          x = ( ( G%geoLonT(i,j) - 0.5 * lenlon ) + y ) / adjustment_width
+          x = ( ( G%geoLonT(i,j) - 0.5 * G%len_lon ) + y ) / adjustment_width
           x = min(1.0, x); x = max(-1.0, x)
           x = x * acos( 0. )
           delta_S = adjustment_deltaS * 0.5 * (1. - sin( x ) )
@@ -200,7 +197,6 @@ subroutine adjustment_initialize_temperature_salinity ( T, S, h, G, param_file, 
 
   integer   :: i, j, k, is, ie, js, je, nz
   real      :: x, y, yy
-  real      :: lenlon, lenlat
   real      :: max_depth
   integer   :: index_bay_z
   real      :: S_ref, T_ref         ! Reference salinity and temerature within
@@ -216,8 +212,6 @@ subroutine adjustment_initialize_temperature_salinity ( T, S, h, G, param_file, 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   ! Parameters used by main model initialization
-  call get_param(param_file,mod,"LENLON",lenlon,fail_if_missing=.true.,do_not_log=.true.)
-  call get_param(param_file,mod,"LENLAT",lenlat,fail_if_missing=.true.,do_not_log=.true.)
   call get_param(param_file,mod,"S_REF",S_ref,fail_if_missing=.true.,do_not_log=.true.)
   call get_param(param_file,mod,"T_REF",T_ref,fail_if_missing=.true.,do_not_log=.true.)
   call get_param(param_file,mod,"S_RANGE",S_range, &
@@ -249,14 +243,14 @@ subroutine adjustment_initialize_temperature_salinity ( T, S, h, G, param_file, 
           enddo
           if (front_wave_length.ne.0.) then
             y = ( 0.125 + G%geoLatT(i,j) / front_wave_length ) * ( 4. * acos(0.) )
-            yy = 2. * ( G%geoLatT(i,j) - 0.5 * lenlat ) / front_wave_length
+            yy = 2. * ( G%geoLatT(i,j) - 0.5 * G%len_lat ) / front_wave_length
             yy = min(1.0, yy); yy = max(-1.0, yy)
             yy = yy * 2. * acos( 0. )
             y = front_wave_amp*sin(y) + front_wave_asym*sin(yy)
           else
             y = 0.
           endif
-          x = ( ( G%geoLonT(i,j) - 0.5 * lenlon ) + y ) / adjustment_width
+          x = ( ( G%geoLonT(i,j) - 0.5 * G%len_lon ) + y ) / adjustment_width
           x = min(1.0, x); x = max(-1.0, x)
           x = x * acos( 0. )
           delta_S = adjustment_deltaS * 0.5 * (1. - sin( x ) )

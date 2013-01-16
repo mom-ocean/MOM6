@@ -104,10 +104,19 @@ type, public :: ocean_grid_type
     x_axis_units, &     !   The units that are used in labeling the coordinate
     y_axis_units        ! axes.
 
-  real    :: g_Earth    !   The gravitational acceleration in m s-2.
-  real    :: Rho0       !   The density used in the Boussinesq approximation or
-                        ! nominal density used to convert depths into mass
-                        ! units, in kg m-3.
+  ! These parameters are run-time parameters that are used during some
+  ! initialization routines (but not all)
+  real :: south_lat,   &! The latitude (or y-coordinate) of the first v-line
+          west_lon,    &! The longitude (or x-coordinate) of the first u-line
+          len_lat = 0.,&! The latitudinal (or y-coord) extent of physical domain
+          len_lon = 0.,&! The longitudinal (or x-coord) extent of physical domain
+          Rad_Earth = 6.378e6 ! The radius of the planet in metres.
+  character(len=40) :: axis_units = ' '! Units for the horizontal coordinates.
+
+  real :: g_Earth !   The gravitational acceleration in m s-2.
+  real :: Rho0    !   The density used in the Boussinesq approximation or
+                  ! nominal density used to convert depths into mass
+                  ! units, in kg m-3.
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
     bathyT        ! Ocean bottom depth at tracer points, in m.
 

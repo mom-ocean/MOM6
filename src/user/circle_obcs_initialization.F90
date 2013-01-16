@@ -61,7 +61,7 @@ subroutine circle_obcs_initialize_thickness(h, G, param_file)
   character(len=40)  :: mod = "circle_obcs_initialize_thickness"   ! This module's name.
   character(len=60) :: axis_units
   integer :: i, j, k, is, ie, js, je, nz
-  real :: diskrad, rad, xCenter, xRadius, south_lat, west_lon, len_lat, len_lon, lonC, latC
+  real :: diskrad, rad, xCenter, xRadius, lonC, latC
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
@@ -73,19 +73,6 @@ subroutine circle_obcs_initialize_thickness(h, G, param_file)
   call get_param(param_file, mod, "MAXIMUM_DEPTH", max_depth, &
                  "The maximum depth of the ocean.", units="m", &
                  fail_if_missing=.true.)
-  call get_param(param_file, mod, "SOUTHLAT", south_lat, &
-                 "The southern latitude of the domain or the equivalent \n"//&
-                 "starting value for the y-axis.", units=axis_units, default=0.)
-  call get_param(param_file, mod, "LENLAT", len_lat, &
-                 "The latitudinal or y-direction length of the domain.", &
-                 units=axis_units,  fail_if_missing=.true.)
-  call get_param(param_file, mod, "WESTLON", west_lon, &
-                 "The western longitude of the domain or the equivalent \n"//&
-                 "starting value for the x-axis.", units=axis_units, &
-                 default=0.0)
-  call get_param(param_file, mod, "LENLON", len_lon, &
-                 "The longitudinal or x-direction length of the domain.", &
-                 units=axis_units,  fail_if_missing=.true.)
   call get_param(param_file, mod, "DISK_RADIUS", diskrad, &
                  "The radius of the initially elevated disk in the \n"//&
                  "circle_obcs test case.", units=axis_units, &
@@ -111,8 +98,8 @@ subroutine circle_obcs_initialize_thickness(h, G, param_file)
 
   ! Perturb base state by circular anomaly in center
   k=Nz
-  latC = south_lat + 0.5*len_lat
-  lonC = west_lon + 0.5*len_lon
+  latC = G%south_lat + 0.5*G%len_lat
+  lonC = G%west_lon + 0.5*G%len_lon
   do j=js,je ; do i=is,ie
     rad = sqrt((G%geoLonT(i,j)-lonC)**2+(G%geoLatT(i,j)-latC)**2)/(diskrad)
     ! if (rad <= 6.*diskrad) h(i,j,k) = h(i,j,k)+10.0*exp( -0.5*( rad**2 ) )

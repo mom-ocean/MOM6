@@ -59,7 +59,7 @@ subroutine benchmark_initialize_topography(D, G, param_file)
   real :: PI                   ! 3.1415926... calculated as 4*atan(1)
   real :: D0                   ! A constant to make the maximum     !
                                ! basin depth MAXIMUM_DEPTH.         !
-  real :: south_lat, west_lon, len_lon, len_lat, x, y
+  real :: x, y
   character(len=128) :: version = '$Id$'
   character(len=128) :: tagname = '$Name$'
   character(len=40)  :: mod = "benchmark_initialize_topography" ! This subroutine's name.
@@ -75,27 +75,14 @@ subroutine benchmark_initialize_topography(D, G, param_file)
                  fail_if_missing=.true.)
   call get_param(param_file, mod, "MINIMUM_DEPTH", min_depth, &
                  "The minimum depth of the ocean.", units="m", default=0.0)
-  call get_param(param_file, mod, "SOUTHLAT", south_lat, &
-                 "The southern latitude of the domain or the equivalent \n"//&
-                 "starting value for the y-axis.", units='degrees', default=0.0)
-  call get_param(param_file, mod, "LENLAT", len_lat, &
-                 "The latitudinal or y-direction length of the domain.", &
-                 units='degrees', fail_if_missing=.true.)
-  call get_param(param_file, mod, "WESTLON", west_lon, &
-                 "The western longitude of the domain or the equivalent \n"//&
-                 "starting value for the x-axis.", units='degrees', &
-                 default=0.0)
-  call get_param(param_file, mod, "LENLON", len_lon, &
-                 "The longitudinal or x-direction length of the domain.", &
-                 units='degrees', fail_if_missing=.true.)
 
   PI = 4.0*atan(1.0)
   D0 = max_depth / 0.5;
 
 !  Calculate the depth of the bottom.
   do i=is,ie ; do j=js,je
-    x=(G%geoLonT(i,j)-west_lon)/len_lon
-    y=(G%geoLatT(i,j)-south_lat)/len_lat
+    x=(G%geoLonT(i,j)-G%west_lon)/G%len_lon
+    y=(G%geoLatT(i,j)-G%south_lat)/G%len_lat
 !  This sets topography that has a reentrant channel to the south.
     D(i,j) = -D0 * ( y*(1.0 + 0.6*cos(4.0*PI*x)) &
                    + 0.75*exp(-6.0*y) &
@@ -143,7 +130,7 @@ subroutine benchmark_initialize_thickness(h, G, param_file, eqn_of_state, P_ref)
                      ! between SST and the bottom temperature.
   real :: err, derr_dz  ! The error between the profile's temperature and the
                      ! interface temperature for a given z and its derivative.
-  real :: south_lat, west_lon, len_lon, len_lat, pi, z
+  real :: pi, z
   character(len=40)  :: mod = "benchmark_initialize_thickness" ! This subroutine's name.
   logical :: bulkmixedlayer
   integer :: i, j, k, k1, is, ie, js, je, nz, itt
@@ -157,19 +144,6 @@ subroutine benchmark_initialize_thickness(h, G, param_file, eqn_of_state, P_ref)
   call get_param(param_file, mod, "MAXIMUM_DEPTH", max_depth, &
                  "The maximum depth of the ocean.", units="m", &
                  fail_if_missing=.true.)
-  call get_param(param_file, mod, "SOUTHLAT", south_lat, &
-                 "The southern latitude of the domain or the equivalent \n"//&
-                 "starting value for the y-axis.", units='degrees', default=0.0)
-  call get_param(param_file, mod, "LENLAT", len_lat, &
-                 "The latitudinal or y-direction length of the domain.", &
-                 units='degrees', fail_if_missing=.true.)
-  call get_param(param_file, mod, "WESTLON", west_lon, &
-                 "The western longitude of the domain or the equivalent \n"//&
-                 "starting value for the x-axis.", units='degrees', &
-                 default=0.0)
-  call get_param(param_file, mod, "LENLON", len_lon, &
-                 "The longitudinal or x-direction length of the domain.", &
-                 units='degrees', fail_if_missing=.true.)
 
   ML_depth = 50.0
   thermocline_scale = 500.0
@@ -203,7 +177,7 @@ subroutine benchmark_initialize_thickness(h, G, param_file, eqn_of_state, P_ref)
   I_md = 1.0 / max_depth
   do j=js,je ; do i=is,ie
     SST = 0.5*(T0(k1)+T0(nz)) - 0.9*0.5*(T0(k1)-T0(nz)) * &
-                               cos(pi*(G%geoLatT(i,j)-south_lat)/(len_lat))
+                               cos(pi*(G%geoLatT(i,j)-G%south_lat)/(G%len_lat))
 
     do k=1,nz ; e_pert(K) = 0.0 ; enddo
 
@@ -272,19 +246,12 @@ subroutine benchmark_init_temperature_salinity(T, S, G, param_file, &
   real :: rho_guess(SZK_(G)) ! Potential density at T0 & S0 in kg m-3.   !
   real :: PI        ! 3.1415926... calculated as 4*atan(1)
   real :: SST       !  The initial sea surface temperature, in deg C.
-  real :: lat, len_lat, south_lat
+  real :: lat
   character(len=40)  :: mod = "benchmark_init_temperature_salinity" ! This subroutine's name.
   logical :: bulkmixedlayer
   integer :: i, j, k, k1, is, ie, js, je, nz, itt
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-
-  call get_param(param_file, mod, "SOUTHLAT", south_lat, &
-                 "The southern latitude of the domain or the equivalent \n"//&
-                 "starting value for the y-axis.", units='degrees', default=0.0)
-  call get_param(param_file, mod, "LENLAT", len_lat, &
-                 "The latitudinal or y-direction length of the domain.", &
-                 units='degrees', fail_if_missing=.true.)
 
   k1 = G%nk_rho_varies + 1
 
@@ -317,7 +284,7 @@ subroutine benchmark_init_temperature_salinity(T, S, G, param_file, &
   PI = 4.0*atan(1.0)
   do i=is,ie ; do j=js,je
     SST = 0.5*(T0(k1)+T0(nz)) - 0.9*0.5*(T0(k1)-T0(nz)) * &
-                               cos(PI*(G%geoLatT(i,j)-south_lat)/(len_lat))
+                               cos(PI*(G%geoLatT(i,j)-G%south_lat)/(G%len_lat))
     do k=1,k1-1
       T(i,j,k) = SST
     enddo
