@@ -148,7 +148,7 @@ subroutine tidal_forcing_init(Time, G, param_file, CS)
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mod, version, tagname, "")
   call get_param(param_file, mod, "TIDES", tides, &
-                 "If true, apply tidal momentum forcing.")
+                 "If true, apply tidal momentum forcing.", default=.false.)
 
   if (.not.tides) return
 
