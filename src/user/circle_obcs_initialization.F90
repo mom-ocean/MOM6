@@ -59,7 +59,6 @@ subroutine circle_obcs_initialize_thickness(h, G, param_file)
   character(len=128) :: version = '$Id$'
   character(len=128) :: tagname = '$Name$'
   character(len=40)  :: mod = "circle_obcs_initialize_thickness"   ! This module's name.
-  character(len=60) :: axis_units
   integer :: i, j, k, is, ie, js, je, nz
   real :: diskrad, rad, xCenter, xRadius, lonC, latC
 
@@ -69,13 +68,12 @@ subroutine circle_obcs_initialize_thickness(h, G, param_file)
 
   ! Parameters read by cartesian grid initialization
   call log_version(param_file, mod, version, tagname, "")
-  call get_param(param_file, mod, "AXIS_UNITS", axis_units, default="degrees")
   call get_param(param_file, mod, "MAXIMUM_DEPTH", max_depth, &
                  "The maximum depth of the ocean.", units="m", &
                  fail_if_missing=.true.)
   call get_param(param_file, mod, "DISK_RADIUS", diskrad, &
                  "The radius of the initially elevated disk in the \n"//&
-                 "circle_obcs test case.", units=axis_units, &
+                 "circle_obcs test case.", units=G%axis_units, &
                  fail_if_missing=.true.)
 
   do k=1,nz
