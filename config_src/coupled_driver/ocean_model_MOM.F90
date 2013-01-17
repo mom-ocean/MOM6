@@ -575,16 +575,14 @@ end subroutine ocean_model_init_sfc
 !WGA
 
 subroutine ocean_model_flux_init(OS)
-  type(ocean_state_type),  pointer       :: OS
+  type(ocean_state_type),  pointer :: OS
   integer :: dummy
-  character(len=128) :: default_ice_restart_file = 'ice_ocmip2_cfc.res.nc'
-  character(len=128) :: default_ocean_restart_file = 'ocmip2_cfc.res.nc'
+  character(len=128) :: default_ice_restart_file, default_ocean_restart_file
   character(len=40)  :: mod = "ocean_model_flux_init"  ! This module's name.
 
   type(param_file_type) :: param_file
   type(directories) :: dirs_tmp  ! A structure containing several relevant directory paths.
-  logical :: use_OCMIP_CFCs = .false.
-  logical :: use_MOM_generic_tracer = .false.
+  logical :: use_OCMIP_CFCs, use_MOM_generic_tracer
 
   call get_MOM_Input(param_file, dirs_tmp, check_params=.false.)
 
@@ -597,6 +595,9 @@ subroutine ocean_model_flux_init(OS)
 
   if(.not.associated(OS)) then
     if (use_OCMIP_CFCs)then
+      default_ice_restart_file = 'ice_ocmip2_cfc.res.nc'
+      default_ocean_restart_file = 'ocmip2_cfc.res.nc'
+
       dummy = aof_set_coupler_flux('cfc_11_flux', &
         flux_type = 'air_sea_gas_flux', implementation = 'ocmip2', &
         param = (/ 9.36e-07, 9.7561e-06 /), &

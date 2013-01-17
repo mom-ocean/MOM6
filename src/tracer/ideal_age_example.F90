@@ -431,9 +431,9 @@ subroutine ideal_age_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, 
 !     h_new[k] = h_old[k] + ea[k] - eb[k-1] + eb[k] - ea[k+1]
 
   real :: sfc_val  ! The surface value for the tracers.
-  real :: Isecs_per_year = 1.0 / (365.0*86400.0)
-  real :: year
-  integer :: secs, days
+  real :: Isecs_per_year  ! The number of seconds in a year.
+  real :: year            ! The time in years.
+  integer :: secs, days   ! Integer components of the time type.
   integer :: i, j, k, is, ie, js, je, nz, m
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
@@ -444,6 +444,7 @@ subroutine ideal_age_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, 
     call tracer_vertdiff(h_old, ea, eb, dt, CS%tr(:,:,:,m), G)
   enddo
 
+  Isecs_per_year = 1.0 / (365.0*86400.0)
   !   Set the surface value of tracer 1 to increase exponentially
   ! with a 30 year time scale.
   call get_time(CS%Time, secs, days)

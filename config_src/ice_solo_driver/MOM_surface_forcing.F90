@@ -498,9 +498,9 @@ subroutine wind_forcing_from_file(state, fluxes, day, G, CS)
 !                 call to surface_forcing_init.
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
-  integer :: time_lev = 0          ! With fields from a file, this must
-                                   ! be reset, depending on the time.
-  character(len=200) :: filename   ! The name of the input file.
+  integer :: time_lev             ! With fields from a file, this must
+                                  ! be reset, depending on the time.
+  character(len=200) :: filename  ! The name of the input file.
   real :: temp_x(SZI_(G),SZJ_(G)) ! Pseudo-zonal and psuedo-meridional
   real :: temp_y(SZI_(G),SZJ_(G)) ! wind stresses at h-points, in Pa.
   integer :: days, seconds

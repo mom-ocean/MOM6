@@ -275,7 +275,7 @@ subroutine DOME_set_Open_Bdry_Conds(OBC, tv, G, param_file, advect_tracer_CSp)
     OBC_T_v => NULL(), &    ! specify the values of T and S that should come
     OBC_S_u => NULL(), &    ! in through u- and v- points through the open
     OBC_S_v => NULL()       ! boundary conditions, in C and psu.
-  logical :: apply_OBC_u = .false., apply_OBC_v = .false.
+  logical :: apply_OBC_u, apply_OBC_v
   ! The following variables are used to set the target temperature and salinity.
   real :: T0(SZK_(G)), S0(SZK_(G))
   real :: pres(SZK_(G))      ! An array of the reference pressure in Pa.
@@ -284,12 +284,12 @@ subroutine DOME_set_Open_Bdry_Conds(OBC, tv, G, param_file, advect_tracer_CSp)
   real :: rho_guess(SZK_(G)) ! Potential density at T0 & S0 in kg m-3.
   ! The following variables are used to set up the transport in the DOME example.
   real :: tr_0, y1, y2, tr_k, rst, rsb, rc, v_k, lon_im1
-  real :: D_edge = 300.0    ! The thickness in m of the dense fluid at the
+  real :: D_edge            ! The thickness in m of the dense fluid at the
                             ! inner edge of the inflow.
   real :: g_prime_tot       ! The reduced gravity across all layers, m s-2.
   real :: Def_Rad           ! The deformation radius, based on fluid of
                             ! thickness D_edge, in the same units as lat.
-  real :: Ri_trans=1.0/3.0  ! The shear Richardson number in the transition
+  real :: Ri_trans          ! The shear Richardson number in the transition
                             ! region of the specified shear profile.
   character(len=40)  :: mod = "DOME_set_Open_Bdry_Conds" ! This subroutine's name.
   integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, nz, njhalo
@@ -300,6 +300,11 @@ subroutine DOME_set_Open_Bdry_Conds(OBC, tv, G, param_file, advect_tracer_CSp)
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
   njhalo = G%jsc-G%jsd
 
+  ! The following variables should be transformed into runtime parameters.
+  D_edge = 300.0  ! The thickness of dense fluid in the inflow.
+  Ri_trans = 1.0/3.0 ! The shear Richardson number in the transition region
+                     ! region of the specified shear profile.
+                        
   call get_param(param_file, mod, "APPLY_OBC_U", apply_OBC_u, &
                  "If true, open boundary conditions may be set at some \n"//&
                  "u-points, with the configuration controlled by OBC_CONFIG", &
