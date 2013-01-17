@@ -251,7 +251,6 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, dt, G, CS)
   real :: c1(SZIB_(G),SZK_(G))       ! tridiagonal solver.
   real :: dt_mix       ! The amount of time over which to apply mixing, in s.
   real :: Idt          ! The inverse of the time step, in s-1.
-  logical :: use_geothermal
   type(p3d) :: z_ptrs(7) ! Pointers to the diagnostics that are to be
                        ! interpolated into depth space.
   integer :: num_z_diags  ! The number of diagnostics that are to be
@@ -291,13 +290,12 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, dt, G, CS)
 ! the end of the diabatic processes.
   if (ASSOCIATED(T) .AND. ASSOCIATED(tv%frazil)) call make_frazil(h,tv,G,CS)
 
-  use_geothermal = (ASSOCIATED(T) .and. CS%use_geothermal)
-  if ((CS%ML_mix_first > 0.0) .or. use_geothermal) then
+  if ((CS%ML_mix_first > 0.0) .or. CS%use_geothermal) then
     do k=1,nz ; do j=js,je ; do i=is,ie
       h_orig(i,j,k) = h(i,j,k) ; eaml(i,j,k) = 0.0 ; ebml(i,j,k) = 0.0
     enddo ; enddo ; enddo
   endif
-  if (use_geothermal) then
+  if (CS%use_geothermal) then
     call cpu_clock_begin(id_clock_geothermal)
     call geothermal(h, tv, dt, eaml, ebml, G, CS%geothermal_CSp)
     call cpu_clock_end(id_clock_geothermal)
@@ -353,7 +351,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, dt, G, CS)
     call MOM_state_chksum("before use_kappa_shear ", u(:,:,:), v(:,:,:), h(:,:,:), G)
   endif
   if (CS%use_kappa_shear) then
-    if ((CS%ML_mix_first > 0.0) .or. use_geothermal) then
+    if ((CS%ML_mix_first > 0.0) .or. CS%use_geothermal) then
       call find_uv_at_h(u, v, h_orig, u_h, v_h, G, eaml, ebml)
       if (CS%debug) then
         call hchksum(eaml, "aft find_uv_at_h eaml",G)
@@ -537,7 +535,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, dt, G, CS)
       call cpu_clock_end(id_clock_tridiag)
     endif ! end of ASSOCIATED(T)
 
-    if ((CS%ML_mix_first > 0.0) .or. use_geothermal) then
+    if ((CS%ML_mix_first > 0.0) .or. CS%use_geothermal) then
       ! The mixed layer code has already been called, but there is some needed
       ! bookkeeping.
       do k=1,nz ; do j=js,je ; do i=is,ie
@@ -1288,14 +1286,20 @@ subroutine diabatic_driver_init(Time, G, param_file, diag, CS, &
   call get_param(param_file, mod, "USE_JACKSON_PARAM", CS%use_kappa_shear, &
                  "If true, use the Jackson-Hallberg-Legg (JPO 2008) \n"//& 
                  "shear mixing parameterization.", default=.false.)
-  if (CS%bulkmixedlayer) &
+  if (CS%bulkmixedlayer) then
     call get_param(param_file, mod, "ML_MIX_FIRST", CS%ML_mix_first, &
                  "The fraction of the mixed layer mixing that is applied \n"//&
                  "before interior diapycnal mixing.  0 by default.", &
                  units="nondim", default=0.0)
-  if (use_temperature) &
+  else
+    CS%ML_mix_first = 0.0
+  endif
+  if (use_temperature) then
     call get_param(param_file, mod, "DO_GEOTHERMAL", CS%use_geothermal, &
                  "If true, apply geothermal heating.", default=.false.)
+  else
+    CS%use_geothermal = .false.
+  endif
   call get_param(param_file, mod, "MASSLESS_MATCH_TARGETS", &
                                 CS%massless_match_targets, &
                  "If true, the temperature and salinity of massless layers \n"//&
