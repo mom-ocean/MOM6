@@ -129,7 +129,7 @@ ETA_TOLERANCE = 1e-12           !    The tolerance, in m, for the differences
                                 !  be set less than about 10^-15*MAXIMUM_DEPTH.
 
 !  Specify properties of the I/O and length of the integration.
-DAYMAX = 50.0                   !    The final day of the simulation.
+DAYMAX = 10.0                   !    The final day of the simulation.
 ENERGYSAVEDAYS = 1.0            !    The number of days between saves of the
                                 !  energies of the run.
 ENERGYFILE = "timestats"        !    The file to use to save the energies.
@@ -137,7 +137,7 @@ READ_DEPTH_LIST = True          !    If true, write out the depth list file.
 DEPTH_LIST_MIN_INC = 1e-6       !   The minimum depth increment in m between
                                 !  elements of the depth list file.
 DEPTH_LIST_FILE = "Depth_list.nc" ! The name of the depth list file.
-RESTARTFILE = "MOM.res"        !    The name of the restart file.
+RESTARTFILE = "MOM.res"         !    The name of the restart file.
 RESTINT = 110.0                 !    The number of days between saves of the
                                 !  restart file.  Use a value that is larger than
                                 !  DAYMAX not to save incremental restart files

@@ -155,7 +155,7 @@ BEBT = 0.2                      !    BEBT determines whether the barotropic time
 !  Specify properties of the I/O and length of the integration.
 TIMEUNIT = 86400.0              !    The time unit in seconds for the following
                                 !  fields.
-DAYMAX = 5.0                    !    The final day of the simulation.
+DAYMAX = 1.0                    !    The final day of the simulation.
 ENERGYSAVEDAYS = 0.25           !    The number of days between saves of the
                                 !  energies of the run.
 ENERGYFILE = "timestats"        !    The file to use to save the energies.
