@@ -1300,8 +1300,8 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, &
     ustar_h = visc%ustar_BBL(i,j)
     if (ASSOCIATED(fluxes%ustar_tidal)) &
       ustar_h = ustar_h + fluxes%ustar_tidal(i,j)
-    absf = 0.25*((abs(G%CoriolisBu(i-1,j-1)) + abs(G%CoriolisBu(i,j))) + &
-                 (abs(G%CoriolisBu(i-1,j)) + abs(G%CoriolisBu(i,j-1))))
+    absf = 0.25*((abs(G%CoriolisBu(I-1,J-1)) + abs(G%CoriolisBu(I,J))) + &
+                 (abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J-1))))
     if ((ustar_h > 0.0) .and. (absf > 0.5*CS%IMax_decay*ustar_h))  then
       I2decay(i) = absf / ustar_h
     else
@@ -1478,8 +1478,8 @@ subroutine add_MLrad_diffusivity(h, fluxes, j, G, CS, Kd, TKE_to_Kd, Kd_int)
     if (CS%ML_use_omega) then
       f_sq = 4.0*Omega2
     else
-      f_sq = 0.25*((G%CoriolisBu(i,j)**2 + G%CoriolisBu(i-1,j-1)**2) + &
-                   (G%CoriolisBu(i,j-1)**2 + G%CoriolisBu(i-1,j)**2))
+      f_sq = 0.25*((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
+                   (G%CoriolisBu(I,J-1)**2 + G%CoriolisBu(I-1,J)**2))
     endif
 
     ustar_sq = max(fluxes%ustar(i,j), CS%ustar_min)**2
@@ -1617,8 +1617,8 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, CS, &
     Izeta_lee = 1.0 / max(CS%Int_tide_decay_scale*CS%Decay_scale_factor_lee, &
                           G%H_subroundoff*G%H_to_m)
     do i=is,ie
-      CS%Nb(i,j) = sqrt(N2_bot(i))*CS%mask_itidal(i,j)
-      if (associated(dd%N2_bot))    dd%N2_bot(i,j) = CS%Nb(i,j)*CS%Nb(i,j)
+      CS%Nb(i,j) = sqrt(N2_bot(i))
+      if (associated(dd%N2_bot)) dd%N2_bot(i,j) = N2_bot(i)
       if ( CS%Int_tide_dissipation ) then
         if (Izeta*htot(i) > 1.0e-14) then ! L'Hospital's version of Adcroft's reciprocal rule.
           Inv_int(i) = 1.0 / (1.0 - exp(-Izeta*htot(i)))
@@ -1655,10 +1655,11 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, CS, &
     ! htot_WKB(i) = htot(i) ! Nearly equivalent and simpler
 
     do i=is,ie
-      CS%Nb(i,j) = sqrt(N2_bot(i))*CS%mask_itidal(i,j)
-      if (CS%kappa_itides**2 * CS%h2(i,j) * CS%Nb(i,j)**3 > 1.0e-14 ) then
+      CS%Nb(i,j) = sqrt(N2_bot(i))
+      if ((CS%tideamp(i,j) > 0.0) .and. &
+          (CS%kappa_itides**2 * CS%h2(i,j) * CS%Nb(i,j)**3 > 1.0e-14) ) then
         z0_polzin(i) = CS%Polzin_decay_scale_factor * CS%Nu_Polzin * &
-                       CS%Nbotref_Polzin**2 * CS%tideamp(i,j) * CS%mask_itidal(i,j) / &
+                       CS%Nbotref_Polzin**2 * CS%tideamp(i,j) / &
                      ( CS%kappa_itides**2 * CS%h2(i,j) * CS%Nb(i,j)**3 )
         if (z0_polzin(i) < CS%Polzin_min_decay_scale) &
           z0_polzin(i) = CS%Polzin_min_decay_scale
@@ -2466,8 +2467,9 @@ subroutine set_diffusivity_init(Time, G, param_file, diag, CS, diag_to_Z_CSp)
     call read_data(filename, 'h2', CS%h2, domain=G%domain%mpp_domain, &
                    timelevel=1)
 
-    do j=js, je; do i=is, ie
+    do j=js,je ; do i=is,ie
       if (G%bathyT(i,j) < CS%min_zbot_itides) CS%mask_itidal(i,j) = 0.0
+      CS%tideamp(i,j) = CS%tideamp(i,j) * CS%mask_itidal(i,j) * G%mask2dT(i,j)
 
       ! Restrict rms topo to 10 percent of column depth.
       zbot = G%bathyT(i,j)
@@ -2477,8 +2479,8 @@ subroutine set_diffusivity_init(Time, G, param_file, diag, CS, diag_to_Z_CSp)
 
       utide = CS%tideamp(i,j)
       ! Compute the fixed part of internal tidal forcing; units are [kg s-2] here.
-      CS%TKE_itidal(i,j) = 0.5*CS%kappa_h2_factor*G%mask2dT(i,j)*G%Rho0*&
-           CS%kappa_itides*CS%h2(i,j)*utide*utide*CS%mask_itidal(i,j)
+      CS%TKE_itidal(i,j) = 0.5*CS%kappa_h2_factor*G%Rho0*&
+           CS%kappa_itides*CS%h2(i,j)*utide*utide
     enddo; enddo
 
   endif
