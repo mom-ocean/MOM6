@@ -512,14 +512,16 @@ subroutine wind_forcing_from_file(state, fluxes, day, G, CS)
 !  (in)      G - The ocean's grid structure.
 !  (in)      CS - A pointer to the control structure returned by a previous
 !                 call to surface_forcing_init.
-  integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
-  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
-  integer :: time_lev = 0          ! With fields from a file, this must
-                                   ! be reset, depending on the time.
-  character(len=200) :: filename   ! The name of the input file.
+
+  character(len=200) :: filename  ! The name of the input file.
   real :: temp_x(SZI_(G),SZJ_(G)) ! Pseudo-zonal and psuedo-meridional
   real :: temp_y(SZI_(G),SZJ_(G)) ! wind stresses at h-points, in Pa.
+  integer :: time_lev_daily     ! The time levels to read for fields with
+  integer :: time_lev_monthly   ! daily and montly cycles.
+  integer :: time_lev           ! The time level that is used for a field.
   integer :: days, seconds
+  integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
+  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   logical :: read_Ustar
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
@@ -538,7 +540,30 @@ subroutine wind_forcing_from_file(state, fluxes, day, G, CS)
   endif
 
   call get_time(day,seconds,days)
-  time_lev = days - 365*floor(real(days) / 365.0) +1
+  time_lev_daily = days - 365*floor(real(days) / 365.0)
+
+  if (time_lev_daily < 31) then ; time_lev_monthly = 0
+  else if (time_lev_daily < 59)  then ; time_lev_monthly = 1
+  else if (time_lev_daily < 90)  then ; time_lev_monthly = 2
+  else if (time_lev_daily < 120) then ; time_lev_monthly = 3
+  else if (time_lev_daily < 151) then ; time_lev_monthly = 4
+  else if (time_lev_daily < 181) then ; time_lev_monthly = 5
+  else if (time_lev_daily < 212) then ; time_lev_monthly = 6
+  else if (time_lev_daily < 243) then ; time_lev_monthly = 7
+  else if (time_lev_daily < 273) then ; time_lev_monthly = 8
+  else if (time_lev_daily < 304) then ; time_lev_monthly = 9
+  else if (time_lev_daily < 334) then ; time_lev_monthly = 10
+  else ; time_lev_monthly = 11
+  endif
+
+  time_lev_daily = time_lev_daily+1
+  time_lev_monthly = time_lev_monthly+1
+
+  select case (CS%wind_nlev)
+    case (12) ; time_lev = time_lev_monthly
+    case (365) ; time_lev = time_lev_daily
+    case default ; time_lev = 1
+  end select
 
   if (time_lev /= CS%wind_last_lev) then
     filename = trim(CS%wind_file)
@@ -666,15 +691,6 @@ subroutine buoyancy_forcing_from_files(state, fluxes, day, dt, G, CS)
 !  (in)      CS - A pointer to the control structure returned by a previous
 !                 call to surface_forcing_init.
 
-  real :: rhoXcp ! The mean density times the heat capacity, in J m-3 K-1.
-  real :: Irho0  ! The inverse of the Boussinesq density, in m3 kg-1.
-  integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
-
-  integer :: time_lev_daily     ! The time levels to read for fields with
-  integer :: time_lev_monthly   ! daily and montly cycles.
-  integer :: time_lev
-
-  integer :: days, seconds
   real, dimension(SZI_(G),SZJ_(G)) :: &
     temp, &       ! A 2-d temporary work array with various units.
     SST_anom, &   ! Instantaneous sea surface temperature anomalies from a
@@ -684,6 +700,15 @@ subroutine buoyancy_forcing_from_files(state, fluxes, day, dt, G, CS)
     SSS_mean      ! A (mean?) salinity about which to normalize local salinity
                   ! anomalies when calculating restorative precipitation
                   ! anomalies, in g kg-1.
+  real :: rhoXcp ! The mean density times the heat capacity, in J m-3 K-1.
+  real :: Irho0  ! The inverse of the Boussinesq density, in m3 kg-1.
+
+  integer :: time_lev_daily     ! The time levels to read for fields with
+  integer :: time_lev_monthly   ! daily and montly cycles.
+  integer :: time_lev           ! The time level that is used for a field.
+
+  integer :: days, seconds
+  integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
 
 !    Latent heat of vaporization at 15 deg C according to appendix of Gill
   real :: latent_heat_evap=2.4663e6
@@ -763,7 +788,7 @@ subroutine buoyancy_forcing_from_files(state, fluxes, day, dt, G, CS)
   ! Read the file containing the buoyancy forcing.
   call get_time(day,seconds,days)
 
-   time_lev_daily = days - 365*floor(real(days) / 365.0)
+  time_lev_daily = days - 365*floor(real(days) / 365.0)
 
   if (time_lev_daily < 31) then ; time_lev_monthly = 0
   else if (time_lev_daily < 59)  then ; time_lev_monthly = 1
@@ -1155,7 +1180,6 @@ subroutine buoyancy_forcing_linear(state, fluxes, day, dt, G, CS)
   endif
 
   ! This case has no surface buoyancy forcing.
-
   if (CS%use_temperature) then
     do j=js,je ; do i=is,ie
       fluxes%sw(i,j) = 0.0
@@ -1210,7 +1234,6 @@ subroutine buoyancy_forcing_linear(state, fluxes, day, dt, G, CS)
                      "The fluxes need to be defined without RESTOREBUOY.")
     endif
   endif                                             ! end RESTOREBUOY
-
 
 end subroutine buoyancy_forcing_linear
 
