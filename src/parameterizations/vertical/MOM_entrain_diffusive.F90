@@ -2034,11 +2034,8 @@ subroutine entrain_diffusive_init(Time, G, param_file, diag, CS)
   call get_param(param_file, mod, "MAX_ENT_IT", CS%max_ent_it, &
                  "The maximum number of iterations that may be used to \n"//&
                  "calculate the interior diapycnal entrainment.", default=5)
-  call get_param(param_file, mod, "KD", Kd, &
-                 "The background diapycnal diffusivity of density. \n"//&
-                 "Zero or the molecular value, ~1e-7 m2 s-1, may be used. \n"//&
-                 "In this module, KD is only used to set the default for \n"//&
-                 "TOLERANCE_ENT.", units="m2 s-1", fail_if_missing=.true.)
+! In this module, KD is only used to set the default for TOLERANCE_ENT. (m2 s-1)
+  call get_param(param_file, mod, "KD", Kd, fail_if_missing=.true.)
   call get_param(param_file, mod, "DT", dt, &
                  "The (baroclinic) dynamics time step.", units = "s", &
                  fail_if_missing=.true.)

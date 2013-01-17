@@ -1631,6 +1631,8 @@ subroutine kappa_shear_init(Time, G, param_file, diag, CS)
   character(len=128) :: version = '$Id$'
   character(len=128) :: tagname = '$Name$'
   character(len=40)  :: mod = "MOM_kappa_shear"  ! This module's name.
+  real :: KD_normal ! The KD of the main model, read here only as a parameter
+                    ! for setting the default of KD_SMOOTH
   if (associated(CS)) then
     call MOM_error(WARNING, "kappa_shear_init called with an associated "// &
                             "control structure.")
@@ -1660,10 +1662,11 @@ subroutine kappa_shear_init(Time, G, param_file, diag, CS)
                  "The maximum number of iterations that may be used to \n"//&
                  "estimate the Richardson number driven mixing.", &
                  units="nondim", default=50)
-  call get_param(param_file, mod, "KD", CS%kappa_0, &
+  call get_param(param_file, mod, "KD", KD_normal, default=1.0e-7, do_not_log=.true.)
+  call get_param(param_file, mod, "KD_KAPPA_SHEAR_0", CS%kappa_0, &
                  "The background diffusivity that is used to smooth the \n"//&
                  "density and shear profiles before solving for the \n"//&
-                 "diffusvities.", units="m2 s-1", default=1.0e-7)
+                 "diffusivities. Defaults to value of KD.", units="m2 s-1", default=KD_normal)
   call get_param(param_file, mod, "FRI_CURVATURE", CS%FRi_curvature, &
                  "The nondimensional curvature of the function of the \n"//&
                  "Richardson number in the kappa source term in the \n"//&
