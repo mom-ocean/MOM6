@@ -1600,7 +1600,7 @@ DT_FORCING = 7200.0             !   [s] default = 3600.0
                                 ! The time step for changing forcing, coupling with other
                                 ! components, or potentially writing certain diagnostics.
                                 ! The default value is given by DT.
-DAYMAX = 5.0                    !   [days] default = 1.0
+DAYMAX = 1.0                    !   [days] default = 1.0
                                 ! The final time of the whole simulation, in units of
                                 ! TIMEUNIT seconds.  This also sets the potential end
                                 ! time of the present run segment if the end time is
