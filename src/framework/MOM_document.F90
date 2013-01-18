@@ -618,7 +618,7 @@ function mesgHasBeenDocumented(doc,varName,mesg)
 
   mesgHasBeenDocumented = .false.
 
-  if (mesg(1:1) == '!') return ! Ignore commented parameters
+!!if (mesg(1:1) == '!') return ! Ignore commented parameters
 
   ! Search through list for this parameter
   last => NULL()
@@ -628,6 +628,7 @@ function mesgHasBeenDocumented(doc,varName,mesg)
       mesgHasBeenDocumented = .true.
       if (trim(mesg) == trim(this%msg)) return
       ! If we fail the above test then cause an error
+      if (mesg(1:1) == '!') return ! Do not cause error for commented parameters
       call MOM_error(WARNING, "Previous msg:"//trim(this%msg))
       call MOM_error(WARNING, "New message :"//trim(mesg))
       call MOM_error(WARNING, "Encountered inconsistent documentation line for parameter "&
