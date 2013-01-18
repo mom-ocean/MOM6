@@ -1167,7 +1167,7 @@ MAX_RINO_IT = 25                !   [nondim] default = 50
 KD_KAPPA_SHEAR_0 = 2.0E-05      !   [m2 s-1] default = 2.0E-05
                                 ! The background diffusivity that is used to smooth the
                                 ! density and shear profiles before solving for the
-                                ! diffusvities.
+                                ! diffusivities. Defaults to value of KD.
 FRI_CURVATURE = -0.97           !   [nondim] default = -0.97
                                 ! The nondimensional curvature of the function of the
                                 ! Richardson number in the kappa source term in the
