@@ -438,11 +438,11 @@ DISSIPATION_N0 = 1.0E-07        !   [W m-3] default = 0.0
                                 ! The intercept when N=0 of the N-dependent expression
                                 ! used to set a minimum dissipation by which to determine
                                 ! a lower bound of Kd (a floor): A in eps_min = A + B*N.
-DISSIPATION_N1 = 5.999999999999999E-04 !   [J m-3] default = 0.0
+DISSIPATION_N1 = 6.0E-04        !   [J m-3] default = 0.0
                                 ! The coefficient multiplying N, following Gargett, used to
                                 ! set a minimum dissipation by which to determine a lower
                                 ! bound of Kd (a floor): B in eps_min = A + B*N
-INT_TIDE_DECAY_SCALE = 300.3003003003 !   [m] default = 0.0
+INT_TIDE_DECAY_SCALE = 300.3003003003003 !   [m] default = 0.0
                                 ! The decay scale away from the bottom for tidal TKE with
                                 ! the new coding when INT_TIDE_DISSIPATION is used.
 KAPPA_ITIDES = 6.28319E-04      !   [m-1] default = 6.283185307179586E-04

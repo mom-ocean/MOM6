@@ -404,17 +404,35 @@ function real_string(val)
   integer :: len, ind
 
   if ((abs(val) < 1.0e4) .and. (abs(val) >= 1.0e-3)) then
-    write(real_string, '(F30.12)') val
+    write(real_string, '(F30.11)') val
+    if (.not.testFormattedFloatIsReal(real_string,val)) then
+      write(real_string, '(F30.12)') val
+      if (.not.testFormattedFloatIsReal(real_string,val)) then
+        write(real_string, '(F30.13)') val
+        if (.not.testFormattedFloatIsReal(real_string,val)) then
+          write(real_string, '(F30.14)') val
+          if (.not.testFormattedFloatIsReal(real_string,val)) then
+            write(real_string, '(F30.15)') val
+            if (.not.testFormattedFloatIsReal(real_string,val)) then
+              write(real_string, '(F30.16)') val
+            endif
+          endif
+        endif
+      endif
+    endif
     do
       len = len_trim(real_string)
       if ((len<2) .or. (real_string(len-1:len) == ".0") .or. &
           (real_string(len:len) /= "0")) exit
       real_string(len:len) = " "
     enddo
-  elseif (val == 0) then
+  elseif (val == 0.) then
     real_string = "0.0"
   else
-    write(real_string(1:32), '(ES23.15)') val
+    write(real_string(1:32), '(ES23.14)') val
+    if (.not.testFormattedFloatIsReal(real_string,val)) then
+     write(real_string(1:32), '(ES23.15)') val
+    endif
     do
       ind = index(real_string,"0E")
       if (ind == 0) exit
@@ -423,8 +441,22 @@ function real_string(val)
     enddo
   endif
   real_string = adjustl(real_string)
-  
 end function real_string
+
+function testFormattedFloatIsReal(str, val)
+  character(len=*), intent(in) :: str
+  real,             intent(in) :: val
+  logical                      :: testFormattedFloatIsReal
+  ! Local variables
+  real :: scannedVal
+
+  read(str(1:),*) scannedVal
+  if (scannedVal == val) then
+    testFormattedFloatIsReal=.true.
+  else
+    testFormattedFloatIsReal=.false.
+  endif
+end function testFormattedFloatIsReal
 
 function int_string(val)
   integer, intent(in)  :: val
