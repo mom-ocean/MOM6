@@ -3780,8 +3780,10 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
   zi(is:ie,js:je,:) = find_interfaces(rho_z(is:ie,js:je,:), z_in, Rb, G%bathyT(is:ie,js:je), &
                        nlevs, nkml, nkbl, min_depth)
 
-
-  call get_param(PF,mod,"ADJUST_THICKNESS",correct_thickness,default=.false.)
+  call get_param(PF, mod, "ADJUST_THICKNESS", correct_thickness, &
+               "If true, all mass below the bottom removed if the \n"//&
+               "topography is shallower than the thickness input file \n"//&
+               "would indicate.", default=.false.)
 
   if (correct_thickness) then
     ! All mass below the bottom removed if the topography is shallower than
@@ -3856,10 +3858,10 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
         do k=1,nz
           print *,'klay,T,S,z=',k,tv%T(i,j,k),tv%S(i,j,k),zi(i,j,k)
         enddo
-	allocate(tmp1(1,1,nz))
-	tmp1=tracer_z_init(temp_z(i:i,j:j,:),-1.0*z_edges_in,zi(i:i,j:j,:),nkml,nkbl,missing_value,G%mask2dT(i:i,j:j),nz,nlevs(i:i,j:j),debug=.true.)
-	print *,'tmp= ',tmp1
-	deallocate(tmp1)
+        allocate(tmp1(1,1,nz))
+        tmp1=tracer_z_init(temp_z(i:i,j:j,:),-1.0*z_edges_in,zi(i:i,j:j,:),nkml,nkbl,missing_value,G%mask2dT(i:i,j:j),nz,nlevs(i:i,j:j),debug=.true.)
+        print *,'tmp= ',tmp1
+        deallocate(tmp1)
       endif
     enddo ; enddo
   endif
@@ -3882,11 +3884,11 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
             G%Rlay(1:nz), tv%p_ref, niter, missing_value, h(is:ie,js:je,:), ks, eos)
     if (debug_point) then
        do j=js,je ; do i=is,ie
-       	  if (i-is+isc-xhalo.eq.i_debug.and. j-js+jsc-yhalo.eq.j_debug) then
+          if (i-is+isc-xhalo.eq.i_debug.and. j-js+jsc-yhalo.eq.j_debug) then
              do k=1,nz
-		print *,'after adj klay,T,S,z=',k,tv%T(i,j,k),tv%S(i,j,k),zi(i,j,k)
-             enddo	
-      	  endif
+                print *,'after adj klay,T,S,z=',k,tv%T(i,j,k),tv%S(i,j,k),zi(i,j,k)
+             enddo
+          endif
        enddo ; enddo
     endif
 

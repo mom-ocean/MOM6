@@ -490,6 +490,10 @@ Z_INIT_FILE_PTEMP_VAR = "PTEMP" ! default = "ptemp"
 Z_INIT_FILE_SALT_VAR = "SALT"   ! default = "salt"
                                 ! The name of the salinity variable in
                                 ! TEMP_SALT_Z_INIT_FILE.
+ADJUST_THICKNESS = True         !   [Boolean] default = False
+                                ! If true, all mass below the bottom removed if the
+                                ! topography is shallower than the thickness input file
+                                ! would indicate.
 VELOCITY_CONFIG = "zero"        ! default = "zero"
                                 ! A string that determines how the initial velocities
                                 ! are specified for a new run:
