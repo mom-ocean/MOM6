@@ -14,7 +14,7 @@ TRIPOLAR_N = True               !   [Boolean] default = False
                                 ! This can only be set at compile time.
 NONBLOCKING_UPDATES = False     !   [Boolean] default = False
                                 ! If true, non-blocking halo updates may be used.
-STATIC_MEMORY_ = False          !   [Boolean]
+!STATIC_MEMORY_ = False         !   [Boolean]
                                 ! If STATIC_MEMORY_ is defined, the principle variables
                                 ! will have sizes that are statically determined at
                                 ! compile time.  Otherwise the sizes are not determined
@@ -39,10 +39,10 @@ NJGLOBAL = 210                  !
                                 ! The total number of thickness grid points in the
                                 ! x-direction in the physical domain. With STATIC_MEMORY_
                                 ! this is set in MOM_memory.h at compile time.
-NIPROC = 10                     !
+!NIPROC = 10                    !
                                 ! The number of processors in the x-direction. With
                                 ! STATIC_MEMORY_ this is set in MOM_memory.h at compile time.
-NJPROC = 6                      !
+!NJPROC = 6                     !
                                 ! The number of processors in the x-direction. With
                                 ! STATIC_MEMORY_ this is set in MOM_memory.h at compile time.
 NIPROC_IO = 1                   ! default = 0

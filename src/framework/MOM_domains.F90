@@ -632,7 +632,7 @@ subroutine MOM_domains_init(MOM_dom, param_file, min_halo, symmetric)
   njhalo_dflt = NJHALO_
 # endif
 #endif
-  call log_param(param_file, mod, "STATIC_MEMORY_", is_static, &
+  call log_param(param_file, mod, "!STATIC_MEMORY_", is_static, &
                  "If STATIC_MEMORY_ is defined, the principle variables \n"//&
                  "will have sizes that are statically determined at \n"//&
                  "compile time.  Otherwise the sizes are not determined \n"//&
@@ -657,8 +657,8 @@ subroutine MOM_domains_init(MOM_dom, param_file, min_halo, symmetric)
     min_halo(1) = MOM_dom%nihalo
     MOM_dom%njhalo = max(MOM_dom%njhalo, min_halo(2))
     min_halo(2) = MOM_dom%njhalo
-    call log_param(param_file, mod, "NIHALO min_halo", MOM_dom%nihalo)
-    call log_param(param_file, mod, "NJHALO min_halo", MOM_dom%nihalo)
+    call log_param(param_file, mod, "!NIHALO min_halo", MOM_dom%nihalo)
+    call log_param(param_file, mod, "!NJHALO min_halo", MOM_dom%nihalo)
   endif
 #ifdef STATIC_MEMORY_
   call get_param(param_file, mod, "NIGLOBAL", MOM_dom%niglobal, &
@@ -713,10 +713,10 @@ subroutine MOM_domains_init(MOM_dom, param_file, min_halo, symmetric)
     call MOM_error(FATAL, mesg)
   endif
 #endif
-  call log_param(param_file, mod, "NIPROC", layout(1), &
+  call log_param(param_file, mod, "!NIPROC", layout(1), &
                  "The number of processors in the x-direction. With \n"//&
                  "STATIC_MEMORY_ this is set in MOM_memory.h at compile time.")
-  call log_param(param_file, mod, "NJPROC", layout(2), &
+  call log_param(param_file, mod, "!NJPROC", layout(2), &
                  "The number of processors in the x-direction. With \n"//&
                  "STATIC_MEMORY_ this is set in MOM_memory.h at compile time.")
 !  write(*,*) 'layout is now ',layout, global_indices
