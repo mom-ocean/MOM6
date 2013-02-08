@@ -63,12 +63,13 @@ end type wave_speed_CS
 
 contains
 
-subroutine wave_speed(h, tv, G, cg1, CS)
+subroutine wave_speed(h, tv, G, cg1, CS, full_halos)
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)  :: h
   type(thermo_var_ptrs),                 intent(in)  :: tv
   real, dimension(NIMEM_,NJMEM_),        intent(out) :: cg1
   type(ocean_grid_type),                 intent(in)  :: G
-  type(wave_speed_CS),                   pointer     :: CS
+  type(wave_speed_CS), optional,         pointer     :: CS
+  logical,             optional,         intent(in)  :: full_halos
 !    This subroutine determines the first mode internal wave speed.
 ! Arguments: h - Layer thickness, in m or kg m-2.
 !  (in)      tv - A structure containing the thermobaric variables.
@@ -76,6 +77,8 @@ subroutine wave_speed(h, tv, G, cg1, CS)
 !  (in)      G - The ocean's grid structure.
 !  (in)      CS - The control structure returned by a previous call to
 !                 wave_speed_init.
+!  (in,opt)  full_halos - If true, do the calculation over the entire
+!                         computational domain.
 
 !   This subroutine solves for the first baroclinic mode wave speed.  (It could
 ! solve for all the wave speeds, but the iterative approach taken here means
@@ -144,8 +147,13 @@ subroutine wave_speed(h, tv, G, cg1, CS)
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
-  if (.not. associated(CS)) call MOM_error(FATAL, "MOM_wave_speed: "// &
-         "Module must be initialized before it is used.")
+  if (present(CS)) then
+    if (.not. associated(CS)) call MOM_error(FATAL, "MOM_wave_speed: "// &
+           "Module must be initialized before it is used.")
+  endif
+  if (present(full_halos)) then ; if (full_halos) then
+    is = G%isd ; ie = G%ied ; js = G%jsd ; je = G%jed
+  endif ; endif
 
   S => tv%S ; T => tv%T
   g_Rho0 = G%g_Earth/G%Rho0
