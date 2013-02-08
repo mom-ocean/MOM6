@@ -1459,6 +1459,7 @@ subroutine add_MLrad_diffusivity(h, fluxes, j, G, CS, Kd, TKE_to_Kd, Kd_int)
   real :: dzL         ! The thickness converted to m.
   real :: I_decay_len2_TKE  ! The squared inverse decay lengthscale for
                             ! TKE, as used in the mixed layer code, in m-2.
+  real :: h_neglect ! A negligibly small thickness, in m.
 
   logical :: do_any, do_i(SZI_(G))
   integer :: i, k, is, ie, nz, kml
@@ -1466,6 +1467,7 @@ subroutine add_MLrad_diffusivity(h, fluxes, j, G, CS, Kd, TKE_to_Kd, Kd_int)
   Omega2 = CS%Omega**2
   C1_6 = 1.0 / 6.0
   kml = G%nkml
+  h_neglect = G%H_subroundoff*G%H_to_m
 
   if (.not.CS%ML_radiation) return
 
@@ -1491,7 +1493,7 @@ subroutine add_MLrad_diffusivity(h, fluxes, j, G, CS, Kd, TKE_to_Kd, Kd_int)
       TKE_ml_flux(i) = TKE_ml_flux(i) * exp(-h_ml(i) * sqrt(I_decay_len2_TKE))
 
     ! Calculate the inverse decay scale
-    h_ml_sq = (CS%ML_rad_efold_coeff * h_ml(i))**2
+    h_ml_sq = (CS%ML_rad_efold_coeff * (h_ml(i)+h_neglect))**2
     I_decay(i) = sqrt((I_decay_len2_TKE * h_ml_sq + 1.0) / h_ml_sq)
 
     ! Average the dissipation layer kml+1, using
