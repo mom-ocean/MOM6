@@ -1,9 +1,10 @@
 !********+*********+*********+*********+*********+*********+*********+*
-!*   This file determines the adjustable run-time parameters for the  *
-!* Generalized Ocean Layer Dynamics (MOM) ocean model.  Where        *
-!* appropriate, MKS units are used.                                   *
+!*   This file specifies the adjustable run-time parameters for the   *
+!* Modular Ocean Model (MOM), version 6 or later.  Where appropriate, *
+!* MKS units are used.                                                *
 !********+*********+*********+*********+*********+*********+*********+*
-! >>> CM2G Global coupled model - like CM2G63L with the dynamic core.
+! >>> AM2_MOM6i_1deg Global coupled model - like CM2G63L with the newer
+! >>> dynamic core.
 
 !  Specify properties of the physical domain.
 OMEGA = 7.2921e-5               !   The rotation rate of the earth in s-1.
