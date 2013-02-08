@@ -79,6 +79,10 @@ use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_geothermal, only : geothermal, geothermal_init, geothermal_end, geothermal_CS
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : vardesc
+use MOM_int_tide_input, only : set_int_tide_input, int_tide_input_init
+use MOM_int_tide_input, only : int_tide_input_end, int_tide_input_CS, int_tide_input_type
+use MOM_internal_tides, only : propagate_int_tide, register_int_tide_restarts
+use MOM_internal_tides, only : internal_tides_init, internal_tides_end, int_tide_CS
 use MOM_kappa_shear, only : Calculate_kappa_shear, kappa_shear_init, Kappa_shear_CS
 use MOM_mixed_layer, only : mixedlayer, mixedlayer_init, mixedlayer_CS
 use MOM_opacity, only : opacity_init, set_opacity, opacity_end, opacity_CS
@@ -90,6 +94,7 @@ use MOM_tracer_flow_control, only : call_tracer_column_fns, tracer_flow_control_
 use MOM_variables, only : forcing, thermo_var_ptrs, vertvisc_type, optics_type
 use MOM_variables, only : MOM_forcing_chksum, MOM_thermovar_chksum, p3d
 use MOM_vert_remap, only : vert_remap, vert_remap_init, vert_remap_CS
+use MOM_wave_speed, only : wave_speed
 use MOM_EOS, only : calculate_density, calculate_2_densities, calculate_TFreeze
 
 implicit none ; private
@@ -109,6 +114,7 @@ type, public :: diabatic_CS ; private
                              ! those sponges are set by calls to
                              ! initialize_sponge and set_up_sponge_field.
   logical :: use_geothermal  ! If true, apply geothermal heating.
+  logical :: use_int_tides
   real :: ML_mix_first       !   The nondimensional fraction of the mixed layer
                              ! algorithm that is applied before diffusive mixing.
                              ! The default is 0, while 0.5 gives Strang splitting
@@ -144,16 +150,19 @@ type, public :: diabatic_CS ; private
   integer :: id_Tdif = -1, id_Tadv = -1, id_Sdif = -1, id_Sadv = -1
 
   type(entrain_diffusive_CS), pointer :: entrain_diffusive_CSp => NULL()
-  type(mixedlayer_CS), pointer :: mixedlayer_CSp => NULL()
-  type(vert_remap_CS), pointer :: vert_remap_CSp => NULL()
-  type(geothermal_CS), pointer :: geothermal_CSp => NULL()
-  type(Kappa_shear_CS), pointer :: kappa_shear_CSp => NULL()
-  type(opacity_CS), pointer :: opacity_CSp => NULL()
-  type(set_diffusivity_CS), pointer :: set_diff_CSp => NULL()
-  type(sponge_CS), pointer     :: sponge_CSp => NULL()
+  type(mixedlayer_CS),        pointer :: mixedlayer_CSp => NULL()
+  type(vert_remap_CS),        pointer :: vert_remap_CSp => NULL()
+  type(geothermal_CS),        pointer :: geothermal_CSp => NULL()
+  type(Kappa_shear_CS),       pointer :: kappa_shear_CSp => NULL()
+  type(int_tide_CS),          pointer :: int_tide_CSp => NULL()
+  type(int_tide_input_CS),    pointer :: int_tide_input_CSp => NULL()
+  type(int_tide_input_type),  pointer :: int_tide_input => NULL()
+  type(opacity_CS),           pointer :: opacity_CSp => NULL()
+  type(set_diffusivity_CS),   pointer :: set_diff_CSp => NULL()
+  type(sponge_CS),            pointer :: sponge_CSp => NULL()
   type(tracer_flow_control_CS), pointer :: tracer_flow_CSp => NULL()
-  type(optics_type),            pointer :: optics => NULL()
-  type(diag_to_Z_CS),           pointer :: diag_to_Z_CSp => NULL()
+  type(optics_type),          pointer :: optics => NULL()
+  type(diag_to_Z_CS),         pointer :: diag_to_Z_CSp => NULL()
 end type diabatic_CS
 
 integer :: id_clock_entrain, id_clock_mixedlayer, id_clock_set_diffusivity
@@ -203,6 +212,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, dt, G, CS)
     u_h, &   ! Zonal and meridional velocities at thickness points after
     v_h      ! entrainment, in m s-1.
   real, dimension(SZI_(G),SZJ_(G)) :: &
+    cg1, &   ! The first baroclinic gravity wave speed.
     Rcv_ml   ! The coordinate density of the mixed layer, used only for applying
              ! sponges.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), target :: &
@@ -379,6 +389,15 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, dt, G, CS)
       call hchksum(visc%Kd_turb, "after calc_KS visc%Kd_turb",G)
       call hchksum(visc%TKE_turb, "after calc_KS visc%TKE_turb",G)
     endif
+  endif
+
+  if (CS%use_int_tides) then
+    call set_int_tide_input(u, v, h, tv, fluxes, CS%int_tide_input, dt, G, &
+                            CS%int_tide_input_CSp)
+    cg1(:,:) = 0.0
+    call wave_speed(h, tv, G, cg1, full_halos=.true.)
+    call propagate_int_tide(cg1, CS%int_tide_input%TKE_itidal_input, &
+                            CS%int_tide_input%tideamp, dt, G, CS%int_tide_CSp)
   endif
 
   call cpu_clock_begin(id_clock_set_diffusivity)
@@ -1300,6 +1319,9 @@ subroutine diabatic_driver_init(Time, G, param_file, diag, CS, &
   else
     CS%use_geothermal = .false.
   endif
+  call get_param(param_file, mod, "INTERNAL_TIDES", CS%use_int_tides, &
+                 "If true, use the code that advances as separate set of \n"//&
+                 "equations for the internal tide energy density.", default=.false.)
   call get_param(param_file, mod, "MASSLESS_MATCH_TARGETS", &
                                 CS%massless_match_targets, &
                  "If true, the temperature and salinity of massless layers \n"//&
@@ -1392,6 +1414,12 @@ subroutine diabatic_driver_init(Time, G, param_file, diag, CS, &
     call geothermal_init(Time, G, param_file, diag, CS%geothermal_CSp)
   if (CS%use_kappa_shear) &
     call kappa_shear_init(Time, G, param_file, diag, CS%kappa_shear_CSp)
+
+  if (CS%use_int_tides) then
+    call int_tide_input_init(Time, G, param_file, diag, CS%int_tide_input_CSp, &
+                             CS%int_tide_input)
+    call internal_tides_init(Time, G, param_file, diag, CS%int_tide_CSp)
+  endif
 
   id_clock_entrain = cpu_clock_id('(Ocean diabatic entrain)', grain=CLOCK_MODULE)
   if (CS%bulkmixedlayer) &
