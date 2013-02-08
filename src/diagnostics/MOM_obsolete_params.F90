@@ -160,6 +160,7 @@ subroutine find_obsolete_params(param_file)
   call test_obsolete_logical(param_file, "USE_LOCAL_PREF_CORRECT", .true.)
   test_logic = .false. ; call read_param(param_file, "USE_JACKSON_PARAM", test_logic)
   call test_obsolete_logical(param_file, "RINOMIX", test_logic)
+  call test_obsolete_logical(param_file, "NORMALIZED_SUM_OUT", .true.)
 
   call test_obsolete_real(param_file, "RLAY_RANGE")
   call test_obsolete_real(param_file, "RLAY_REF")

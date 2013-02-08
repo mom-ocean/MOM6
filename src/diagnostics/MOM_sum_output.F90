@@ -142,7 +142,6 @@ type, public :: sum_output_CS ; private
                                 ! should stop, in m2 s-2.
   integer :: maxtrunc           ! The number of truncations per energy save
                                 ! interval at which the run is stopped.
-  logical :: norm               ! If true, normalize the output values by total mass.
   logical :: write_stocks       ! If true, write the integrated tracer amounts
                                 ! to stdout when the energy files are written.
   integer :: previous_calls = 0 ! The number of times write_energy has been called.
@@ -232,9 +231,6 @@ subroutine MOM_sum_output_init(G, param_file, directory, ntrnc, &
   CS%energyfile = trim(slasher(directory))//trim(energyfile)
   call log_param(param_file, mod, "output_path/ENERGYFILE", CS%energyfile)
 
-  call get_param(param_file, mod, "NORMALIZED_SUM_OUT", CS%norm, &
-                 "If true, normalize the summed diagnostic output values \n"//&
-                 "by the totals", default=.true.)
   call get_param(param_file, mod, "TIMEUNIT", CS%Timeunit, &
                  "The time unit in seconds a number of input fields", &
                  units="s", default=86400.0)
@@ -386,7 +382,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
   real    :: reday, var
   character(len=120) :: energypath_nc
   character(len=200) :: mesg
-  character(len=32)  :: mesg_intro, time_units
+  character(len=32)  :: mesg_intro, time_units, day_str, n_str
   real :: Tr_stocks(MAX_FIELDS_)
   real :: Tr_min(MAX_FIELDS_),Tr_max(MAX_FIELDS_)
   real :: Tr_min_x(MAX_FIELDS_), Tr_min_y(MAX_FIELDS_), Tr_min_z(MAX_FIELDS_)
@@ -528,7 +524,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
       else
         call open_file(CS%fileenergy_ascii, trim(CS%energyfile), &
                        action=WRITEONLY_FILE, form=ASCII_FILE, nohdrs=.true.)
-        if (CS%norm .and. (abs(CS%timeunit - 86400.0) < 1.0)) then
+        if (abs(CS%timeunit - 86400.0) < 1.0) then
           if (CS%use_temperature) then
             write(CS%fileenergy_ascii,'("  Step,",7x,"Day,  Truncs,      &
                 &Energy/Mass,      Maximum CFL,  Mean Sea Level,  Total Mass,  Mean Salin, &
@@ -541,7 +537,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
             write(CS%fileenergy_ascii,'(12x,"[days]",17x,"[m2 s-2]",11x,"[Nondim]",8x,"[m]",13x,&
                 &"[kg]",11x,"[Nondim]")')
           endif
-        elseif (CS%norm) then
+        else
           if ((CS%timeunit >= 0.99) .and. (CS%timeunit < 1.01)) then
             time_units = "           [seconds]     "
           else if ((CS%timeunit >= 3599.0) .and. (CS%timeunit < 3601.0)) then
@@ -567,17 +563,6 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
             write(CS%fileenergy_ascii,'(A25,10x,"[m2 s-2]",11x,"[Nondim]",8x,"[m]",13x,&
                 &"[kg]",11x,"[Nondim]")') time_units
           endif
-        else
-          if (CS%use_temperature) then
-            write(CS%fileenergy_ascii,'("Fields line 1: Steps, Day, Truncations, &
-                &Total Energy, Total Volume, Total Salt, Total Heat, &
-                &Volume Anomaly, Salt Anomaly, Heat Anomaly")')
-          else
-            write(CS%fileenergy_ascii,'("Fields line 1: Steps, Day, Truncations, &
-                &Total Energy, Total Volume, Volume Error")')
-          endif
-          write(CS%fileenergy_ascii,'("Fields lines 2-4: APE of each interface, &
-              &KE of each layer, 0 APE depth of each interface")')
         endif
       endif
     endif
@@ -806,81 +791,47 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
             REAL(start_of_day)/abs(CS%timeunit)
     mesg_intro = "MOM Time "
   endif
+  if (reday < 1.0e8) then ;      write(day_str, '(F12.3)') reday
+  elseif (reday < 1.0e11) then ; write(day_str, '(F15.3)') reday
+  else ;                         write(day_str, '(ES15.9)') reday ; endif
+
+  if     (n < 1000000)   then ; write(n_str, '(I6)')  n
+  elseif (n < 10000000)  then ; write(n_str, '(I7)')  n
+  elseif (n < 100000000) then ; write(n_str, '(I8)')  n
+  else                        ; write(n_str, '(I10)') n ; endif
+  
   if (is_root_pe()) then
     if (CS%use_temperature) then
-      if (reday .lt. 1.e5) then
-        write(*,'(A,F9.3," ",I6,": En ",ES12.6, ", MaxCFL ", F8.5, ", Mass ", &
-               & ES18.12, ", Salt ", F15.11,", Temp ", F15.11)') &
-          trim(mesg_intro), reday, n, En_mass, max_CFL(1), mass_tot, salin, temp
-      else
-        write(*,'(A,F15.3," ",I6,": En ",ES12.6, ", MaxCFL ", F8.5, ", Mass ", &
-               & ES18.12, ", Salt ", F15.11,", Heat ", F15.11)') &
-          trim(mesg_intro), reday, n, En_mass, max_CFL(1), mass_tot, salin, temp
-      endif
+      write(*,'(A,A," ",A,": En ",ES12.6, ", MaxCFL ", F8.5, ", Mass ", &
+              & ES18.12, ", Salt ", F15.11,", Temp ", F15.11)') &
+        trim(mesg_intro), trim(day_str(1:3))//trim(day_str(4:)), trim(n_str), &
+        En_mass, max_CFL(1), mass_tot, salin, temp
     else
-      if (reday .lt. 1.e5) then
-        write(*,'(A,F9.3," ",I6,": En ",ES12.6, ", MaxCFL ", F8.5, ", Mass ", &
-               & ES18.12)') &
-          trim(mesg_intro), reday, n, En_mass, max_CFL(1), mass_tot
-      else
-        write(*,'(A,F15.3," ",I6,": En ",ES12.6, ", MaxCFL ", F8.5, ", Mass ", &
-               & ES18.12)') &
-          trim(mesg_intro), reday, n, En_mass, max_CFL(1), mass_tot
-      endif
+      write(*,'(A,A," ",A,": En ",ES12.6, ", MaxCFL ", F8.5, ", Mass ", &
+              & ES18.12)') &
+        trim(mesg_intro), trim(day_str(1:3))//trim(day_str(4:)), trim(n_str), &
+        En_mass, max_CFL(1), mass_tot
     endif
 
-    if (CS%norm) then
-      if (CS%use_temperature) then
-        write(CS%fileenergy_ascii,'(I6,",",F12.3,",", I6,", En ",ES18.12, &
-                                 &", CFL ", F8.5, ", SL ",&
-                                 &es11.4,", M ",ES11.5,", S",f8.4,", T",f8.4,&
-                                 &", Me ",ES9.2,", Se ",ES9.2,", Te ",ES9.2)') &
-              n, reday, CS%ntrunc, En_mass, max_CFL(1), -H_0APE(1), mass_tot, &
-              salin, temp, mass_anom/mass_tot, salin_anom, temp_anom
-      else
-        write(CS%fileenergy_ascii,'(I6,",",F12.3,",", I6,", En ",ES18.12, &
-                                  &", CFL ", F8.5, ", SL ",&
-                                    &ES11.4,", Mass ",ES11.5,", Me ",ES9.2)') &
-              n, reday, CS%ntrunc, En_mass, max_CFL(1), -H_0APE(1), mass_tot, &
-              mass_anom/mass_tot
-      endif
+    if (CS%use_temperature) then
+      write(CS%fileenergy_ascii,'(A,",",A,",", I6,", En ",ES18.12, &
+                               &", CFL ", F8.5, ", SL ",&
+                               &es11.4,", M ",ES11.5,", S",f8.4,", T",f8.4,&
+                               &", Me ",ES9.2,", Se ",ES9.2,", Te ",ES9.2)') &
+            trim(n_str), trim(day_str), CS%ntrunc, En_mass, max_CFL(1), &
+            -H_0APE(1), mass_tot, salin, temp, mass_anom/mass_tot, salin_anom, &
+            temp_anom
     else
-      if (CS%use_temperature) then
-       write(CS%fileenergy_ascii,'(I6,",",F12.3,",", I6,", En ",ES18.12,&
-                                 &", CFL ", F8.5,", Vol",ES11.4,", S",ES11.4,", Ht ",ES11.4,&
-                                 &", Va ",ES11.4,", Sa ",ES11.4,", Hta ",ES11.4)') &
-              n, reday, CS%ntrunc, toten*Irho0, max_CFL(1), mass_tot*Irho0, &
-              Salt*Irho0, Heat, mass_anom*Irho0, salt_anom*Irho0, heat_anom
-      else
-        write(CS%fileenergy_ascii,'(I6,",",F12.3,",", I5,", En ",ES18.12, &
-                                    &", CFL ", F8.5, ", Vol",ES11.4,", Va ",ES11.4)') &
-              n, reday, CS%ntrunc, toten*Irho0, max_CFL(1), mass_tot*Irho0, &
-              mass_anom*Irho0
-      endif
-
-      if (CS%do_APE_calc) then
-        write(CS%fileenergy_ascii,'("PE: ",$)')
-        do k=1,nz-1 ; write(CS%fileenergy_ascii,'(ES11.4,",",$)') PE(K)*Irho0 ; enddo
-        write(CS%fileenergy_ascii,'(ES11.4)') PE(nz)*Irho0
-      endif
-      write(CS%fileenergy_ascii,'("KE: ",$)')
-      do k=1,nz-1 ; write(CS%fileenergy_ascii,'(ES11.4,",",$)') KE(k)*Irho0 ; enddo
-      write(CS%fileenergy_ascii,'(ES11.4)') KE(nz)*Irho0
-      if (CS%do_APE_calc) then
-        write(CS%fileenergy_ascii,'("H0: ",$)')
-        do k=1,nz-1 ; write(CS%fileenergy_ascii,'(F11.4,",",$)') H_0APE(K) ; enddo
-        write(CS%fileenergy_ascii,'(F11.4)') H_0APE(nz)
-      endif
+      write(CS%fileenergy_ascii,'(A,",",A,",", I6,", En ",ES18.12, &
+                                &", CFL ", F8.5, ", SL ",&
+                                  &ES11.4,", Mass ",ES11.5,", Me ",ES9.2)') &
+            trim(n_str), trim(day_str), CS%ntrunc, En_mass, max_CFL(1), &
+            -H_0APE(1), mass_tot, mass_anom/mass_tot
     endif
 
     if (CS%ntrunc > 0) then
-      if (reday .lt. 1.e5) then
-        write(*,'(A,F9.3," Energy/Mass:",ES12.5," Truncations ",I0)') &
-          trim(mesg_intro), reday, En_mass, CS%ntrunc
-      else
-        write(*,'(A,F15.3," Energy/Mass:",ES12.5," Truncations ",I0)') &
-          trim(mesg_intro), reday, En_mass, CS%ntrunc
-      endif
+      write(*,'(A," Energy/Mass:",ES12.5," Truncations ",I0)') &
+        trim(mesg_intro)//trim(day_str), En_mass, CS%ntrunc
     endif
 
     if (CS%write_stocks) then
