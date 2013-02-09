@@ -951,6 +951,9 @@ NK_ZSPACE (from file) = 50      !   [nondim]
 ML_MIX_FIRST = 0.0              !   [nondim] default = 0.0
                                 ! The fraction of the mixed layer mixing that is applied
                                 ! before interior diapycnal mixing.  0 by default.
+INTERNAL_TIDES = False          !   [Boolean] default = False
+                                ! If true, use the code that advances as separate set of
+                                ! equations for the internal tide energy density.
 MASSLESS_MATCH_TARGETS = True   !   [Boolean] default = True
                                 ! If true, the temperature and salinity of massless layers
                                 ! are kept consistent with their target densities.
@@ -1525,9 +1528,6 @@ MAX_ENERGY = 0.0                !   [m2 s-2] default = 0.0
 ENERGYFILE = "timestats"        ! default = "timestats"
                                 ! The file to use to write the energies and globally
                                 ! summed diagnostics.
-NORMALIZED_SUM_OUT = True       !   [Boolean] default = True
-                                ! If true, normalize the summed diagnostic output values
-                                ! by the totals
 READ_DEPTH_LIST = False         !   [Boolean] default = False
                                 ! Read the depth list from a file if it exists or
                                 ! create that file otherwise.

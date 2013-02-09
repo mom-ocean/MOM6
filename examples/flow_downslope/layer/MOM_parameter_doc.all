@@ -801,6 +801,9 @@ Z_OUTPUT_GRID_FILE = ""         ! default = ""
                                 ! depth-space output.
     !  Parameters of module MOM_diabatic_driver
         ! The following parameters are used for diabatic processes.
+INTERNAL_TIDES = False          !   [Boolean] default = False
+                                ! If true, use the code that advances as separate set of
+                                ! equations for the internal tide energy density.
 MASSLESS_MATCH_TARGETS = True   !   [Boolean] default = True
                                 ! If true, the temperature and salinity of massless layers
                                 ! are kept consistent with their target densities.
@@ -1108,9 +1111,6 @@ MAX_ENERGY = 0.0                !   [m2 s-2] default = 0.0
 ENERGYFILE = "timestats"        ! default = "timestats"
                                 ! The file to use to write the energies and globally
                                 ! summed diagnostics.
-NORMALIZED_SUM_OUT = True       !   [Boolean] default = True
-                                ! If true, normalize the summed diagnostic output values
-                                ! by the totals
 TIMEUNIT = 3600.0               !   [s] default = 8.64E+04
                                 ! The time unit in seconds a number of input fields
 READ_DEPTH_LIST = False         !   [Boolean] default = False
