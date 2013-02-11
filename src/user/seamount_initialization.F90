@@ -2,7 +2,7 @@ module seamount_initialization
 
 use MOM_domains, only : sum_across_PEs
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, is_root_pe
-use MOM_file_parser, only : read_param, log_param, log_version, param_file_type
+use MOM_file_parser, only : get_param, param_file_type
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : close_file, create_file, fieldtype, file_exists
 use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE
@@ -11,29 +11,24 @@ use MOM_sponge, only : set_up_sponge_field, initialize_sponge, sponge_CS
 use MOM_tracer, only : add_tracer_OBC_values, advect_tracer_CS
 use MOM_variables, only : thermo_var_ptrs, directories, ocean_OBC_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
+use regrid_defs, only : coordinateMode, DEFAULT_COORDINATE_MODE
+use regrid_defs, only : REGRIDDING_LAYER, REGRIDDING_ZSTAR
+use regrid_defs, only : REGRIDDING_RHO, REGRIDDING_SIGMA
 
 implicit none ; private
 
 #include <MOM_memory.h>
 
+character(len=40) :: mod = "seamount_initialization" ! This module's name.
+
 ! -----------------------------------------------------------------------------
 ! Private (module-wise) parameters
 ! -----------------------------------------------------------------------------
-real, parameter :: seamount_delta = 0.5;
-real, parameter :: seamount_length_scale = 20;  ! [km]
-
-integer, parameter :: IC_Z     = 0; 
-integer, parameter :: IC_RHO_L = 1;
-integer, parameter :: IC_RHO_C = 2;
-integer, parameter :: IC_SIGMA = 3;
-
 integer, parameter :: RHO_LINEAR = 0;
 integer, parameter :: RHO_EXP = 1;
 integer, parameter :: RHO_PARABOLIC = 2;
 
-integer, parameter :: seamount_ic = IC_SIGMA;
 integer, parameter :: density_profile = RHO_LINEAR;
-
 
 ! -----------------------------------------------------------------------------
 ! The following routines are visible to the outside world
@@ -60,17 +55,21 @@ subroutine seamount_initialize_topography ( D, G, param_file, max_depth )
   ! Local variables 
   integer   :: i, j
   real      :: x, delta, L
+
+  call get_param(param_file,mod,"SEAMOUNT_DELTA",delta, &
+                 "Non-dimensional height of seamount.", &
+                 units="non-dim", default=0.5)
+  call get_param(param_file,mod,"SEAMOUNT_LENGTH_SCALE",L, &
+                 "Length scale of seamount.", &
+                 units="Same as x,y", default=20.)
   
   ! Domain extent in kilometers
   
-  delta = seamount_delta
-  L = seamount_length_scale;
   L = L / G%len_lon
-    
   do i=G%isc,G%iec 
     do j=G%jsc,G%jec 
       ! Compute normalized zonal coordinate (x=0 at center of domain)
-      x = G%geoLonT(i,j) / G%len_lon - 0.5
+      x = ( G%geoLonT(i,j) - G%west_lon ) / G%len_lon - 0.5
       D(i,j) = G%max_depth * ( 1.0 - delta * exp(-(x/L)**2) )
     enddo
   enddo
@@ -100,13 +99,16 @@ subroutine seamount_initialize_thickness ( h, G, param_file )
   real    :: x;
   real    :: delta_h;
   real    :: min_thickness;
+  character(len=20) :: verticalCoordinate
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   call MOM_mesg("MOM_initialization.F90, initialize_thickness_uniform: setting thickness")
 
-  min_thickness = 1.0e-3; 
-  call read_param ( param_file, "MIN_THICKNESS", min_thickness );
+  call get_param(param_file,mod,"MIN_THICKNESS",min_thickness,default=1.0e-3)
+  call get_param(param_file,mod,"REGRIDDING_COORDINATE_MODE",verticalCoordinate, &
+                 default=DEFAULT_COORDINATE_MODE)
+
  
   ! WARNING: this routine specifies the interface heights so that the last layer
   !          is vanished, even at maximum depth. In order to have a uniform
@@ -120,9 +122,9 @@ subroutine seamount_initialize_thickness ( h, G, param_file )
   enddo
 
     
-  select case ( seamount_ic )
+  select case ( coordinateMode(verticalCoordinate) )
     
-  case ( IC_RHO_L )                 ! Initial thicknesses for isopycnal coordinates
+  case ( REGRIDDING_LAYER, REGRIDDING_RHO ) ! Initial thicknesses for isopycnal coordinates
     do j=js,je ; do i=is,ie
       eta1D(nz+1) = -1.0*G%bathyT(i,j)
       do k=nz,1,-1
@@ -136,7 +138,7 @@ subroutine seamount_initialize_thickness ( h, G, param_file )
       enddo
     enddo ; enddo
 
-  case ( IC_Z, IC_RHO_C )                       ! Initial thicknesses for z coordinates
+  case ( REGRIDDING_ZSTAR )                       ! Initial thicknesses for z coordinates
     do j=js,je ; do i=is,ie
       eta1D(nz+1) = -1.0*G%bathyT(i,j)
       do k=nz,1,-1
@@ -150,9 +152,9 @@ subroutine seamount_initialize_thickness ( h, G, param_file )
       enddo
    enddo ; enddo
 
-  case ( IC_SIGMA )             ! Initial thicknesses for sigma coordinates
+  case ( REGRIDDING_SIGMA )             ! Initial thicknesses for sigma coordinates
     do j=js,je ; do i=is,ie
-      delta_h = G%bathyT(i,j) / nz;
+      delta_h = G%bathyT(i,j) / dfloat(nz);
       h(i,j,:) = delta_h;
     end do ; end do 
 end select
@@ -171,41 +173,47 @@ subroutine seamount_initialize_temperature_salinity ( T, S, h, G, param_file, &
   type(param_file_type),               intent(in)  :: param_file
   type(EOS_type),                      pointer     :: eqn_of_state
 
-  integer   :: i, j, k, is, ie, js, je, nz
-  real      :: xi0, xi1, dxi;
-  real      :: r;
+  integer :: i, j, k, is, ie, js, je, nz
+  real    :: xi0, xi1, dxi, r
+  character(len=20) :: verticalCoordinate
   
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-  
-  do j=js,je ; do i=is,ie
-    
-    xi0 = 0.0;
-    do k = 1,nz
-      xi1 = xi0 + h(i,j,k) / G%max_depth;
-    
-      if ( density_profile .eq. RHO_LINEAR ) then 
-        ! ---------------------------
-        ! Linear density profile
-        ! ---------------------------
-        S(i,j,k) = 34.0 + (xi0 + xi1);
-      else if ( density_profile .eq. RHO_PARABOLIC ) then
-        ! ---------------------------
-        ! Parabolic density profile
-        ! ---------------------------
-        S(i,j,k) = 34.0 + (2.0 / 3.0) * (xi1**3 - xi0**3) / (xi1 - xi0);
-      else if ( density_profile .eq. RHO_EXP ) then
-        ! ---------------------------
-        ! Exponential density profile
-        ! ---------------------------
-        r = 0.8;    ! small values give sharp profiles
-        S(i,j,k) = 34.0 + r * (exp(xi1/r)-exp(xi0/r)) / (xi1 - xi0);
-      end if    
-      
-      xi0 = xi1;
 
-    enddo
+  call get_param(param_file,mod,"REGRIDDING_COORDINATE_MODE",verticalCoordinate, &
+                 default=DEFAULT_COORDINATE_MODE)
   
-  enddo ; enddo
+  select case ( coordinateMode(verticalCoordinate) )
+    case ( REGRIDDING_LAYER ) ! Initial thicknesses for layer isopycnal coordinates
+      do k=1,nz ; do j=js,je ; do i=is,ie
+        xi1 = dfloat(k)/dfloat(nz)
+        S(i,j,k) = 34.0 + (xi1);
+      enddo ; enddo ; enddo
+    case ( REGRIDDING_SIGMA, REGRIDDING_ZSTAR, REGRIDDING_RHO ) ! All other coordinate use FV initialization
+      do j=js,je ; do i=is,ie
+        xi0 = 0.0;
+        do k = 1,nz
+          xi1 = xi0 + h(i,j,k) / G%max_depth;
+          if ( density_profile .eq. RHO_LINEAR ) then 
+            ! ---------------------------
+            ! Linear density profile
+            ! ---------------------------
+            S(i,j,k) = 34.0 + (xi0 + xi1);
+          else if ( density_profile .eq. RHO_PARABOLIC ) then
+            ! ---------------------------
+            ! Parabolic density profile
+            ! ---------------------------
+            S(i,j,k) = 34.0 + (2.0 / 3.0) * (xi1**3 - xi0**3) / (xi1 - xi0);
+          else if ( density_profile .eq. RHO_EXP ) then
+            ! ---------------------------
+            ! Exponential density profile
+            ! ---------------------------
+            r = 0.8;    ! small values give sharp profiles
+            S(i,j,k) = 34.0 + r * (exp(xi1/r)-exp(xi0/r)) / (xi1 - xi0);
+          end if    
+          xi0 = xi1;
+        enddo
+      enddo ; enddo
+  end select
   
 end subroutine seamount_initialize_temperature_salinity
 

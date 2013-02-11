@@ -1,0 +1,3 @@
+# Terrain-following coordinates
+USE_REGRIDDING = True
+REGRIDDING_COORDINATE_MODE = "SIGMA" 
