@@ -195,12 +195,6 @@ THICKNESS_CONFIG = "adjustment2d" !
                                 !     sloshing - TBD AJA.
                                 !     seamount - TBD AJA.
                                 !     USER - call a user modified routine.
-ADJUSTMENT_IC = 2               !
-                                ! Indicates the coordinate mode for initialization:
-                                !  0 - z coordinates
-                                !  1 - layered isopycnal coordinates
-                                !  2 - continuous isopycnal coordinates
-                                !  3 - terrain-following sigma coordinates
 ADJUSTMENT_WIDTH = 0.01         !   [same as x,y]
                                 ! Width of frontal zone
 DELTA_S_STRAT = 0.0             !   [PSU]
@@ -301,12 +295,13 @@ KHTH = 1.0E-04                  !   [m2 s-1] default = 0.0
 USE_REGRIDDING = True           !   [Boolean] default = False
                                 ! If True, use the ALE algorithm (regridding/remapping).
                                 ! If False, use the layered isopycnal algorithm.
-REGRIDDING_SCHEME = 1           !
-                                ! Type of grid to build in the vertical.Choose among the following possibilities (must
-                                ! be an integer !):
-                                !  0: z*.
-                                !  1: target interface densities.
-                                !  2: sigma.
+REGRIDDING_COORDINATE_MODE = "RHO" ! default = "LAYER"
+                                ! Coordinate mode for vertical regridding.
+                                ! Choose among the following possibilities:
+                                !  LAYER - Isopycnal or stacked shallow water layers
+                                !  Z*    - stetched geopotential z*
+                                !  SIGMA - terrain following coordinates
+                                !  RHO   - continuous isopycnal
 REMAPPING_SCHEME = 3            ! default = 1
                                 ! This sets the remapping scheme to use to
                                 ! remap all variables between successive grids.

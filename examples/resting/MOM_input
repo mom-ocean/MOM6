@@ -111,7 +111,7 @@ NJPROC_IO = 1                  !    The number of processors used for I/O in the
                                ! set in order for the T&S reconstructions within
                                ! each water column to be identical, which gives
                                ! motionless evolution.
-#define REGRIDDING_SCHEME 1       !   Type of grid to build in the vertical.
+#define REGRIDDING_COORDINATE_MODE "RHO"       !   Type of grid to build in the vertical.
                                ! Choose among the following possibilities (must
                                ! be an integer !):
                                ! 0: z*.

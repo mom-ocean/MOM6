@@ -1,6 +1,1 @@
 # Layer isopycnal mode + initialization
-ADJUSTMENT_IC = 1   ! Initial condition method. Default is to fail.
-                    ! 0: z coordinates
-                    ! 1: layered isopycnal
-                    ! 2: continuous isopycnal
-                    ! 3: sigma isopycnal

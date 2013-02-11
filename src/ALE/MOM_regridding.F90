@@ -30,7 +30,7 @@ use regrid_ppm          ! see 'regrid_ppm.F90'
 use regrid_pqm          ! see 'regrid_pqm.F90'
 use regrid_p1m          ! see 'regrid_p1m.F90'
 use regrid_p3m          ! see 'regrid_p3m.F90'
-use MOM_remapping      ! see 'MOM_remapping.F90'
+use MOM_remapping       ! see 'MOM_remapping.F90'
 use regrid_defs         ! see 'regrid_defs.F90' (contains types and parameters)
 
 implicit none ; private
@@ -185,6 +185,7 @@ subroutine initialize_regridding_options ( param_file, regridding_opts )
   type(regridding_opts_t), intent(inout)   :: regridding_opts
   ! Local variables
   character(len=40)  :: mod = "MOM_regridding" ! This module's name.
+  character(len=40)  :: string ! Temporary string
 
   ! This sets whether we want to use regridding or not. By default, 
   ! regridding is NOT used but this can be overridden in the input
@@ -205,14 +206,15 @@ subroutine initialize_regridding_options ( param_file, regridding_opts )
   ! --- TYPE OF VERTICAL GRID ---
   ! This sets which kind of grid we want to use in the vertical. If none
   ! is specified, target interface densities are used to build the grid
-  call get_param(param_file, mod, "REGRIDDING_SCHEME", &
-                 regridding_opts%regridding_scheme, &
-                 "Type of grid to build in the vertical."//&
-                 "Choose among the following possibilities (must\n"//&
-                 "be an integer !):\n"//&
-                 " 0: z*.\n"//&
-                 " 1: target interface densities.\n"//&
-                 " 2: sigma.\n", fail_if_missing=.true.)
+  call get_param(param_file, mod, "REGRIDDING_COORDINATE_MODE", string, &
+                 "Coordinate mode for vertical regridding.\n"//&
+                 "Choose among the following possibilities:\n"//&
+                 " LAYER - Isopycnal or stacked shallow water layers\n"//&
+                 " Z*    - stetched geopotential z*\n"//&
+                 " SIGMA - terrain following coordinates\n"//&
+                 " RHO   - continuous isopycnal\n",&
+                 default=DEFAULT_COORDINATE_MODE, fail_if_missing=.true.)
+  regridding_opts%regridding_scheme = coordinateMode(string)
 
   ! --- REMAPPING SCHEME ---
   ! This sets which remapping scheme we want to use to remap all variables
@@ -346,7 +348,7 @@ subroutine regridding_main ( G, h, h_new, u, v, tv, regridding_opts )
   ! Both are needed for the subsequent remapping of variables.
   select case ( regridding_opts%regridding_scheme )
 
-    case ( REGRIDDING_Z )
+    case ( REGRIDDING_ZSTAR )
       call build_grid_uniform ( G, h, h_new, regridding_opts )
 
     case ( REGRIDDING_RHO )  

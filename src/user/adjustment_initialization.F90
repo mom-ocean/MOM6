@@ -8,20 +8,15 @@ use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE
 use MOM_io, only : write_field, slasher
 use MOM_variables, only : thermo_var_ptrs, directories, ocean_OBC_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
+use regrid_defs, only : coordinateMode, DEFAULT_COORDINATE_MODE
+use regrid_defs, only : REGRIDDING_LAYER, REGRIDDING_ZSTAR
+use regrid_defs, only : REGRIDDING_RHO, REGRIDDING_SIGMA
 
 implicit none ; private
 
 character(len=40) :: mod = "adjustment_initialization" ! This module's name.
 
 #include <MOM_memory.h>
-
-! -----------------------------------------------------------------------------
-! Private (module-wise) parameters
-! -----------------------------------------------------------------------------
-integer, parameter :: IC_Z     = 0;     ! z coordinates
-integer, parameter :: IC_RHO_L = 1;     ! layered isopycnals    
-integer, parameter :: IC_RHO_C = 2;     ! continuous isopycnals
-integer, parameter :: IC_SIGMA = 3;     ! sigma coordinates
 
 ! -----------------------------------------------------------------------------
 ! The following routines are visible to the outside world
@@ -57,8 +52,8 @@ subroutine adjustment_initialize_thickness ( h, G, param_file )
   real    :: x, y, yy, delta_S_strat, dSdz, delta_S, S_ref
   real    :: min_thickness, adjustment_width, adjustment_delta, adjustment_deltaS
   real    :: front_wave_amp, front_wave_length, front_wave_asym
-  integer :: adjustment_ic
   real    :: target_values(SZK_(G)+1)
+  character(len=20) :: verticalCoordinate
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
@@ -69,13 +64,8 @@ subroutine adjustment_initialize_thickness ( h, G, param_file )
   call get_param(param_file,mod,"MIN_THICKNESS",min_thickness,default=1.0e-3,do_not_log=.true.)
 
   ! Parameters specific to this experiment configuration
-  call get_param(param_file,mod,"ADJUSTMENT_IC",adjustment_ic,           &
-                 "Indicates the coordinate mode for initialization:\n"// &
-                 " 0 - z coordinates\n"//                                &
-                 " 1 - layered isopycnal coordinates\n"//                &
-                 " 2 - continuous isopycnal coordinates\n"//             &
-                 " 3 - terrain-following sigma coordinates\n",           &
-                 fail_if_missing=.true.)
+  call get_param(param_file,mod,"REGRIDDING_COORDINATE_MODE",verticalCoordinate, &
+                 default=DEFAULT_COORDINATE_MODE)
   call get_param(param_file,mod,"ADJUSTMENT_WIDTH",adjustment_width,     &
                  "Width of frontal zone",                                &
                  units="same as x,y",fail_if_missing=.true.)
@@ -105,9 +95,9 @@ subroutine adjustment_initialize_thickness ( h, G, param_file )
 
   dSdz = -delta_S_strat/G%max_depth
 
-  select case ( adjustment_ic )
+  select case ( coordinateMode(verticalCoordinate) )
 
-    case ( IC_RHO_L, IC_RHO_C )
+    case ( REGRIDDING_LAYER, REGRIDDING_RHO )
       if (delta_S_strat.ne.0.) then
         adjustment_delta = adjustment_deltaS / delta_S_strat * G%max_depth
         do k=1,nz+1
@@ -162,7 +152,7 @@ subroutine adjustment_initialize_thickness ( h, G, param_file )
           enddo
       enddo ; enddo
 
-    case ( IC_Z, IC_SIGMA )
+    case ( REGRIDDING_ZSTAR, REGRIDDING_SIGMA )
       do k=1,nz+1
         eta1D(k) = -(G%max_depth) * (real(k-1) / real(nz))
         eta1D(k) = max(min(eta1D(k),0.),-G%max_depth)
@@ -203,8 +193,8 @@ subroutine adjustment_initialize_temperature_salinity ( T, S, h, G, param_file, 
   real      :: xi0, xi1, dSdz, delta_S, delta_S_strat
   real      :: adjustment_width, adjustment_deltaS
   real       :: front_wave_amp, front_wave_length, front_wave_asym
-  integer   :: adjustment_ic
   real      :: eta1d(SZK_(G)+1)
+  character(len=20) :: verticalCoordinate
   
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
@@ -216,7 +206,8 @@ subroutine adjustment_initialize_temperature_salinity ( T, S, h, G, param_file, 
   call get_param(param_file,mod,"T_RANGE",T_range, &
                  default=0.0)
   ! Parameters specific to this experiment configuration BUT logged in previous s/r
-  call get_param(param_file,mod,"ADJUSTMENT_IC",adjustment_ic,fail_if_missing=.true.,do_not_log=.true.)
+  call get_param(param_file,mod,"REGRIDDING_COORDINATE_MODE",verticalCoordinate, &
+                 default=DEFAULT_COORDINATE_MODE)
   call get_param(param_file,mod,"ADJUSTMENT_WIDTH",adjustment_width,fail_if_missing=.true.,do_not_log=.true.)
   call get_param(param_file,mod,"ADJUSTMENT_DELTAS",adjustment_deltaS,fail_if_missing=.true.,do_not_log=.true.)
   call get_param(param_file,mod,"DELTA_S_STRAT",delta_S_strat,fail_if_missing=.true.,do_not_log=.true.)
@@ -228,9 +219,9 @@ subroutine adjustment_initialize_temperature_salinity ( T, S, h, G, param_file, 
   S(:,:,:) = 0.0
   
   ! Linear salinity profile
-  select case ( adjustment_ic )
+  select case ( coordinateMode(verticalCoordinate) )
 
-    case ( IC_Z, IC_SIGMA )
+    case ( REGRIDDING_ZSTAR, REGRIDDING_SIGMA )
       dSdz = -delta_S_strat/G%max_depth
       do j=js,je ; do i=is,ie
           eta1d(nz+1)=-G%bathyT(i,j)
@@ -260,7 +251,7 @@ subroutine adjustment_initialize_temperature_salinity ( T, S, h, G, param_file, 
    !     T(i,j,:)=T(i,j,:)/x*(G%max_depth*1.5/real(nz))
       enddo ; enddo
 
-    case ( IC_RHO_L, IC_RHO_C ) 
+    case ( REGRIDDING_LAYER, REGRIDDING_RHO )
       do k = 1,nz
         S(:,:,k) = S_ref + S_range * ( (real(k)-0.5) / real( nz ) )
    !    x = abs(S(1,1,k) - 0.5*real(nz-1)/real(nz)*S_range)/S_range*real(2*nz)

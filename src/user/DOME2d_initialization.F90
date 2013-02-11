@@ -1,13 +1,16 @@
 module DOME2d_initialization
 
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, is_root_pe
-use MOM_file_parser, only : read_param, log_param, log_version, param_file_type
+use MOM_file_parser, only : get_param, read_param, log_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : close_file, create_file, fieldtype, file_exists
 use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE
 use MOM_io, only : write_field, slasher, vardesc
 use MOM_variables, only : thermo_var_ptrs, directories, ocean_OBC_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
+use regrid_defs, only : coordinateMode, DEFAULT_COORDINATE_MODE
+use regrid_defs, only : REGRIDDING_LAYER, REGRIDDING_ZSTAR
+use regrid_defs, only : REGRIDDING_RHO, REGRIDDING_SIGMA
 
 implicit none ; private
 
@@ -20,11 +23,7 @@ real, parameter :: dome2d_width_bay = 0.1;      ! width of bay
 real, parameter :: dome2d_width_bottom = 0.3;   ! width of deepest part
 real, parameter :: dome2d_depth_bay = 0.2;      ! normalized bay depth
 
-integer, parameter :: IC_RHO_L = 0;     ! layered isopycnals    
-integer, parameter :: IC_Z     = 1;     ! z coordinates
-integer, parameter :: IC_RHO_C = 2;     ! continuous isopycnals
-integer, parameter :: IC_SIGMA = 3;     ! sigma coordinates
-!integer, parameter :: dome2d_ic = IC_RHO_L;
+character(len=40) :: mod = "DOEM2D_initialization" ! This module's name.
 
 ! -----------------------------------------------------------------------------
 ! The following routines are visible to the outside world
@@ -102,7 +101,7 @@ subroutine DOME2d_initialize_thickness ( h, G, param_file )
   real    :: x
   real    :: delta_h
   real    :: min_thickness
-  integer :: dome2d_ic
+  character(len=40) :: verticalCoordinate
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
@@ -110,7 +109,8 @@ subroutine DOME2d_initialize_thickness ( h, G, param_file )
 
   min_thickness = 1.0e-3; 
   call read_param ( param_file, "MIN_THICKNESS", min_thickness );
-  dome2d_ic=-1; call read_param ( param_file, "DOME2D_IC", dome2d_ic );
+  call get_param(param_file,mod,"REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
+            default=DEFAULT_COORDINATE_MODE)
  
   ! WARNING: this routine specifies the interface heights so that the last layer
   !          is vanished, even at maximum depth. In order to have a uniform
@@ -123,9 +123,9 @@ subroutine DOME2d_initialize_thickness ( h, G, param_file )
     e0(k) = -G%max_depth * real(k-1) / real(nz)
   enddo
   
-  select case ( dome2d_ic )
+  select case ( coordinateMode(verticalCoordinate) )
 
-    case ( IC_RHO_L, IC_RHO_C )
+    case ( REGRIDDING_LAYER, REGRIDDING_RHO )
   
       do j=js,je ; do i=is,ie
         eta1D(nz+1) = -1.0*G%bathyT(i,j)
@@ -169,7 +169,7 @@ subroutine DOME2d_initialize_thickness ( h, G, param_file )
  !   
  !    enddo ; enddo
 
-    case ( IC_Z )
+    case ( REGRIDDING_ZSTAR )
     
       do j=js,je ; do i=is,ie
           eta1D(nz+1) = -1.0*G%bathyT(i,j)
@@ -184,7 +184,7 @@ subroutine DOME2d_initialize_thickness ( h, G, param_file )
          enddo
       enddo ; enddo
 
-    case ( IC_SIGMA )
+    case ( REGRIDDING_SIGMA )
       do j=js,je ; do i=is,ie
         delta_h = G%bathyT(i,j) / nz;
         h(i,j,:) = delta_h;
@@ -192,7 +192,7 @@ subroutine DOME2d_initialize_thickness ( h, G, param_file )
 
     case default
       call MOM_error(FATAL,"dome2d_initialize: "// &
-      "Unrecognized i.c. setup - set DOME2D_IC")
+      "Unrecognized i.c. setup - set REGRIDDING_COORDINATE_MODE")
 
   end select
 
@@ -219,13 +219,14 @@ subroutine DOME2d_initialize_temperature_salinity ( T, S, h, G, param_file, &
   real      :: S_range, T_range;    ! Range of salinities and temperatures over the
                                     ! vertical
   real      :: xi0, xi1;
-  integer   :: dome2d_ic
+  character(len=40) :: verticalCoordinate
   
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
+  call get_param(param_file,mod,"REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
+            default=DEFAULT_COORDINATE_MODE)
   call read_param(param_file,"S_REF",S_ref,.true.)
   call read_param(param_file,"T_REF",T_ref,.true.)
-  call read_param ( param_file, "DOME2D_IC", dome2d_ic );
   S_range = 2.0; call read_param(param_file,"S_RANGE",S_range,.false.)
   T_range = 0.0; call read_param(param_file,"T_RANGE",T_range,.false.)
   
@@ -233,9 +234,10 @@ subroutine DOME2d_initialize_temperature_salinity ( T, S, h, G, param_file, &
   S(:,:,:) = 0.0
   
   ! Linear salinity profile
-  select case ( dome2d_ic )
 
-    case ( IC_Z, IC_SIGMA )
+  select case ( coordinateMode(verticalCoordinate) )
+
+    case ( REGRIDDING_ZSTAR, REGRIDDING_SIGMA )
 
       do j=js,je ; do i=is,ie
         xi0 = 0.0;
@@ -246,7 +248,7 @@ subroutine DOME2d_initialize_temperature_salinity ( T, S, h, G, param_file, &
         enddo
       enddo ; enddo
     
-    case ( IC_RHO_C )
+    case ( REGRIDDING_RHO )
 
       do j=js,je ; do i=is,ie
         xi0 = 0.0;
@@ -261,7 +263,7 @@ subroutine DOME2d_initialize_temperature_salinity ( T, S, h, G, param_file, &
         end if  
       enddo ; enddo
 
-    case ( IC_RHO_L ) 
+    case ( REGRIDDING_LAYER )
 
       delta_S = S_range / ( G%ke - 1.0 );
       S(:,:,1) = S_ref;
@@ -271,12 +273,12 @@ subroutine DOME2d_initialize_temperature_salinity ( T, S, h, G, param_file, &
     
     case default
       call MOM_error(FATAL,"dome2d_initialize: "// &
-      "Unrecognized i.c. setup - set DOME2D_IC")
+      "Unrecognized i.c. setup - set REGRIDDING_COORDINATE_MODE")
 
   end select
 
   ! Modify salinity and temperature when z coordinates are used  
-  if ( dome2d_ic .eq. IC_Z ) then
+  if ( coordinateMode(verticalCoordinate) .eq. REGRIDDING_ZSTAR ) then
     index_bay_z = Nint ( dome2d_depth_bay * G%ke );
     do j = G%jsc,G%jec ; do i = G%isc,G%iec 
       x = G%geoLonT(i,j) / G%len_lon;
@@ -288,7 +290,7 @@ subroutine DOME2d_initialize_temperature_salinity ( T, S, h, G, param_file, &
   end if ! Z initial conditions
 
   ! Modify salinity and temperature when sigma coordinates are used  
-  if ( dome2d_ic .eq. IC_SIGMA ) then
+  if ( coordinateMode(verticalCoordinate) .eq. REGRIDDING_SIGMA ) then
     do i = G%isc,G%iec ; do j = G%jsc,G%jec
       x = G%geoLonT(i,j) / G%len_lon;
       if ( x .le. dome2d_width_bay ) then
@@ -300,7 +302,7 @@ subroutine DOME2d_initialize_temperature_salinity ( T, S, h, G, param_file, &
   
   ! Modify temperature when rho coordinates are used
   T(G%isc:G%iec,G%jsc:G%jec,1:G%ke) = 0.0;
-  if (( dome2d_ic .eq. IC_RHO_L ) .or. ( dome2d_ic .eq. IC_RHO_C )) then 
+  if (( coordinateMode(verticalCoordinate) .eq. REGRIDDING_RHO ) .or. ( coordinateMode(verticalCoordinate) .eq. REGRIDDING_LAYER )) then 
     do i = G%isc,G%iec ; do j = G%jsc,G%jec
       x = G%geoLonT(i,j) / G%len_lon;
       if ( x .le. dome2d_width_bay ) then

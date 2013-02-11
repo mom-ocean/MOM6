@@ -109,18 +109,8 @@ NJPROC_IO = 1                  !    The number of processors used for I/O in the
 #define ANGSTROM 1.0e-10                               
 
 ! The following parameters apply to the regridding/remapping schemes
-#define USE_REGRIDDING            !   If defined, regridding is activated and
-                               ! parameters below should be properly defined.
 #define MIN_THICKNESS 1.0e-3   !   When regridding, this is the minimum layer
                                ! thickness allowed.                                   
-#define REGRIDDING_SCHEME 1       !   Type of grid to build in the vertical.
-                               ! Choose among the following possibilities (must
-                               ! be an integer !):
-                               ! 0: z*.
-                               ! 1: target interface densities.
-                               ! 2: sigma.
-                               ! 3: arbitrary.
-                               ! Default is set to 1 (target densities).
 #define INTERPOLATION_SCHEME 8 !   This sets the interpolation scheme to use to
                                ! determine the new grid. These parameters are
                                ! only relevant when REGRIDDING_SCHEME is set to
