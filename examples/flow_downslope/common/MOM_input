@@ -114,7 +114,7 @@ NJPROC_IO = 1                   !    The number of processors used for I/O in th
                                ! 1: z coordinates
                                ! 2: continuous isopycnal
                                ! 3: sigma isopycnal
-#define INTERPOLATION_SCHEME 8 !   This sets the interpolation scheme to use to
+#define INTERPOLATION_SCHEME "PQM_IH4IH3" !   This sets the interpolation scheme to use to
                                ! determine the new grid. These parameters are
                                ! only relevant when REGRIDDING_SCHEME is set to
                                ! 1. Otherwise, it is not used.

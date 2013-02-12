@@ -110,7 +110,7 @@ NJPROC_IO = 1                  !    The number of processors used for I/O in the
 ! The following parameters apply to the regridding/remapping schemes
 #define MIN_THICKNESS 1.0e-1  !   When regridding, this is the minimum layer
 							   ! thickness allowed.								   
-#define INTERPOLATION_SCHEME 5 !   This sets the interpolation scheme to use to
+#define INTERPOLATION_SCHEME "PPM_IH4" !   This sets the interpolation scheme to use to
 							   ! determine the new grid. These parameters are
 							   ! only relevant when REGRIDDING_SCHEME is set to
 							   ! 1. Otherwise, it is not used.

@@ -129,7 +129,7 @@ NJPROC_IO = 1                  !    The number of processors used for I/O in the
                                ! 4: PQM_IH4IH3     (4th-order accurate)
                                ! 5: PQM_IH6IH5     (5th-order accurate)
                                ! Default is set to 1 (PLM).
-#define INTERPOLATION_SCHEME 3 !   This sets the interpolation scheme to use to
+#define INTERPOLATION_SCHEME "PLM" !   This sets the interpolation scheme to use to
                                ! determine the new grid. These parameters are
                                ! only relevant when REGRIDDING_SCHEME is set to
                                ! 1. Otherwise, it is not used.

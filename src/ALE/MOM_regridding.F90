@@ -237,26 +237,38 @@ subroutine initialize_regridding_options ( param_file, regridding_opts )
   ! This sets which interpolation scheme we want to use to define the new
   ! grid when regridding is based upon target interface densities. If none
   ! is specified, the p1m h2 interpolation scheme is used.
-  call get_param(param_file, mod, "INTERPOLATION_SCHEME", &
-                 regridding_opts%interpolation_scheme, &
+  call get_param(param_file, mod, "INTERPOLATION_SCHEME", string, &
                  "This sets the interpolation scheme to use to\n"//&
                  "determine the new grid. These parameters are\n"//&
-                 "only relevant when REGRIDDING_SCHEME is set to\n"//&
-                 "1. Otherwise, it is not used.\n"//&
-                 "It can be one of the following schemes (must be\n"//&
-                 "an integer !):\n"//&
-                 "0: P1M_H2         (2nd-order accurate)\n"//&
-                 "1: P1M_H4         (2nd-order accurate)\n"//&
-                 "2: P1M_IH4     (2nd-order accurate)\n"//&
-                 "3: PLM         (2nd-order accurate)\n"//&
-                 "4: PPM_H4        (3rd-order accurate)\n"//&
-                 "5: PPM_IH4        (3rd-order accurate)\n"//&
-                 "6: P3M_IH4IH3     (4th-order accurate)\n"//&
-                 "7: P3M_IH6IH5     (4th-order accurate)\n"//&
-                 "8: PQM_IH4IH3    (4th-order accurate)\n"//&
-                 "9: PQM_IH6IH5    (5th-order accurate)\n", &
-                 default=INTERPOLATION_P1M_H2)
-  
+                 "only relevant when REGRIDDING_COORDINATE_MODE is\n"//&
+                 "set to a function of state. Otherwise, it is not\n"//&
+                 "used. It can be one of the following schemes:\n"//&
+                 " P1M_H2     (2nd-order accurate)\n"//&
+                 " P1M_H4     (2nd-order accurate)\n"//&
+                 " P1M_IH4    (2nd-order accurate)\n"//&
+                 " PLM        (2nd-order accurate)\n"//&
+                 " PPM_H4     (3rd-order accurate)\n"//&
+                 " PPM_IH4    (3rd-order accurate)\n"//&
+                 " P3M_IH4IH3 (4th-order accurate)\n"//&
+                 " P3M_IH6IH5 (4th-order accurate)\n"//&
+                 " PQM_IH4IH3 (4th-order accurate)\n"//&
+                 " PQM_IH6IH5 (5th-order accurate)", &
+                 default="P1M_H2")
+  select case ( uppercase(trim(string)) )
+    case ("P1M_H2");     regridding_opts%interpolation_scheme = INTERPOLATION_P1M_H2
+    case ("P1M_H4");     regridding_opts%interpolation_scheme = INTERPOLATION_P1M_H4
+    case ("P1M_IH2");    regridding_opts%interpolation_scheme = INTERPOLATION_P1M_IH4
+    case ("PLM");        regridding_opts%interpolation_scheme = INTERPOLATION_PLM
+    case ("PPM_H4");     regridding_opts%interpolation_scheme = INTERPOLATION_PPM_H4
+    case ("PPM_IH4");    regridding_opts%interpolation_scheme = INTERPOLATION_PPM_IH4
+    case ("P3M_IH4IH3"); regridding_opts%interpolation_scheme = INTERPOLATION_P3M_IH4IH3
+    case ("P3M_IH6IH5"); regridding_opts%interpolation_scheme = INTERPOLATION_P3M_IH6IH5
+    case ("PQM_IH4IH3"); regridding_opts%interpolation_scheme = INTERPOLATION_PQM_IH4IH3
+    case ("PQM_IH6IH5"); regridding_opts%interpolation_scheme = INTERPOLATION_PQM_IH6IH5
+    case default ; call MOM_error(FATAL, "initialize_regridding_options: "//&
+       "Unrecognized choice for INTERPOLATION_SCHEME ("//trim(string)//").")
+  end select
+
   ! --- BOUNDARY EXTRAPOLATION --
   ! This sets whether high-order (rather than PCM) reconstruction schemes
   ! should be used within boundary cells
