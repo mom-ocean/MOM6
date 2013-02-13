@@ -11,9 +11,9 @@ use MOM_sponge, only : set_up_sponge_field, initialize_sponge, sponge_CS
 use MOM_tracer, only : add_tracer_OBC_values, advect_tracer_CS
 use MOM_variables, only : thermo_var_ptrs, directories, ocean_OBC_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
-use regrid_defs, only : coordinateMode, DEFAULT_COORDINATE_MODE
-use regrid_defs, only : REGRIDDING_LAYER, REGRIDDING_ZSTAR
-use regrid_defs, only : REGRIDDING_RHO, REGRIDDING_SIGMA
+use regrid_consts, only : coordinateMode, DEFAULT_COORDINATE_MODE
+use regrid_consts, only : REGRIDDING_LAYER, REGRIDDING_ZSTAR
+use regrid_consts, only : REGRIDDING_RHO, REGRIDDING_SIGMA
 
 implicit none ; private
 

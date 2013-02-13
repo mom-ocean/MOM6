@@ -8,9 +8,9 @@ use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE
 use MOM_io, only : write_field, slasher, vardesc
 use MOM_variables, only : thermo_var_ptrs, directories, ocean_OBC_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
-use regrid_defs, only : coordinateMode, DEFAULT_COORDINATE_MODE
-use regrid_defs, only : REGRIDDING_LAYER, REGRIDDING_ZSTAR
-use regrid_defs, only : REGRIDDING_RHO, REGRIDDING_SIGMA
+use regrid_consts, only : coordinateMode, DEFAULT_COORDINATE_MODE
+use regrid_consts, only : REGRIDDING_LAYER, REGRIDDING_ZSTAR
+use regrid_consts, only : REGRIDDING_RHO, REGRIDDING_SIGMA
 
 implicit none ; private
 

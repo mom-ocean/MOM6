@@ -16,7 +16,7 @@ module MOM_regridding
 !==============================================================================
 use MOM_error_handler, only : MOM_error, FATAL
 use MOM_variables,     only : ocean_grid_type, thermo_var_ptrs
-use MOM_file_parser,   only : get_param, param_file_type
+use MOM_file_parser,   only : get_param, param_file_type, uppercase
 use MOM_EOS,           only : calculate_density
 
 use regrid_grid1d_class ! see 'regrid_grid.F90'
@@ -32,6 +32,10 @@ use regrid_p1m          ! see 'regrid_p1m.F90'
 use regrid_p3m          ! see 'regrid_p3m.F90'
 use MOM_remapping       ! see 'MOM_remapping.F90'
 use regrid_defs         ! see 'regrid_defs.F90' (contains types and parameters)
+use regrid_consts, only : coordinateMode, DEFAULT_COORDINATE_MODE
+use regrid_consts, only : REGRIDDING_LAYER, REGRIDDING_ZSTAR
+use regrid_consts, only : REGRIDDING_RHO, REGRIDDING_SIGMA
+use regrid_consts, only : REGRIDDING_ARBITRARY
 
 implicit none ; private
 
