@@ -131,7 +131,7 @@ NJPROC_IO = 1                   !    The number of processors used for I/O in th
                                ! 8: PQM_IH4IH3    (4th-order accurate)
                                ! 9: PQM_IH6IH5    (5th-order accurate)
                                ! Default is set to 0 (P1M_H2).
-#define REMAPPING_SCHEME 4     !   This sets the remapping scheme to use to
+REMAPPING_SCHEME = "PQM_IH4IH3"     !   This sets the remapping scheme to use to
                                ! remap all variables between successive grids.
                                ! It can be one of the following schemes (must be
                                ! an integer !):

@@ -52,24 +52,6 @@ type, public :: regridding_opts_t
 end type regridding_opts_t
 
 ! -----------------------------------------------------------------------------
-! Remapping parameters 
-! -----------------------------------------------------------------------------
-
-! List of remapping schemes
-integer, parameter  :: REMAPPING_PCM        = 0; ! O(h^1)
-integer, parameter  :: REMAPPING_PLM        = 1; ! O(h^2)
-integer, parameter  :: REMAPPING_PPM_H4     = 2; ! O(h^3)
-integer, parameter  :: REMAPPING_PPM_IH4    = 3; ! O(h^3)
-integer, parameter  :: REMAPPING_PQM_IH4IH3 = 4; ! O(h^4)
-integer, parameter  :: REMAPPING_PQM_IH6IH5 = 5; ! O(h^5)
-
-! These control what routine to use for the remapping integration
-integer, parameter  :: INTEGRATION_PCM = 0  ! scope: global
-integer, parameter  :: INTEGRATION_PLM = 1  ! scope: global
-integer, parameter  :: INTEGRATION_PPM = 3  ! scope: global
-integer, parameter  :: INTEGRATION_PQM = 5  ! scope: global
-
-! -----------------------------------------------------------------------------
 ! Reconstruction schemes for integrals in FV pressure gradient calculation 
 ! -----------------------------------------------------------------------------
 

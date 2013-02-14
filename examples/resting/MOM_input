@@ -118,7 +118,7 @@ NJPROC_IO = 1                  !    The number of processors used for I/O in the
                                ! 1: target interface densities.
                                ! 2: sigma.
                                ! Default is set to 1 (target densities).
-#define REMAPPING_SCHEME 1       !   This sets the remapping scheme to use to
+#define REMAPPING_SCHEME "PLM"       !   This sets the remapping scheme to use to
                                ! remap all variables between successive grids.
                                ! It can be one of the following schemes (must be
                                ! an integer !):

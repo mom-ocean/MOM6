@@ -30,7 +30,7 @@ use regrid_ppm          ! see 'regrid_ppm.F90'
 use regrid_pqm          ! see 'regrid_pqm.F90'
 use regrid_p1m          ! see 'regrid_p1m.F90'
 use regrid_p3m          ! see 'regrid_p3m.F90'
-use MOM_remapping       ! see 'MOM_remapping.F90'
+use MOM_remapping, only : remapping_init, remapping_main, remapping_core, remapping_end
 use regrid_defs         ! see 'regrid_defs.F90' (contains types and parameters)
 use regrid_consts, only : coordinateMode, DEFAULT_COORDINATE_MODE
 use regrid_consts, only : REGRIDDING_LAYER, REGRIDDING_ZSTAR
@@ -161,6 +161,8 @@ subroutine initialize_regridding ( param_file, regridding_opts, G, h, h_aux, &
     ! Memory allocation for regridding
     call regridding_memory_allocation ( G, regridding_opts )
 
+    call remapping_init(param_file, G, regridding_opts)
+
     ! Check grid integrity with respect to minimum allowed thickness
     do m = 1,size(h,4)
       call check_grid_integrity ( G, h(:,:,:,m), regridding_opts )
@@ -253,23 +255,6 @@ subroutine initialize_regridding_options ( param_file, regridding_opts )
                  default=DEFAULT_COORDINATE_MODE, fail_if_missing=.true.)
   regridding_opts%regridding_scheme = coordinateMode(string)
 
-  ! --- REMAPPING SCHEME ---
-  ! This sets which remapping scheme we want to use to remap all variables
-  ! betwenn grids. If none is specified, PLM is used for remapping.
-  call get_param(param_file, mod, "REMAPPING_SCHEME", &
-                 regridding_opts%remapping_scheme, &
-                 "This sets the remapping scheme to use to\n"//&
-                 "remap all variables between successive grids.\n"//&
-                 "It can be one of the following schemes (must be\n"//&
-                 "an integer !):\n"//&
-                 "0: PCM         (1st-order accurate)\n"//&
-                 "1: PLM         (2nd-order accurate)\n"//&
-                 "2: PPM_H4         (3rd-order accurate)\n"//&
-                 "3: PPM_IH4     (3rd-order accurate)\n"//&
-                 "4: PQM_IH4IH3     (4th-order accurate)\n"//&
-                 "5: PQM_IH6IH5     (5th-order accurate)\n", &
-                 default=REMAPPING_PLM)
-  
   ! --- INTERPOLATION SCHEME ---
   ! This sets which interpolation scheme we want to use to define the new
   ! grid when regridding is based upon target interface densities. If none
@@ -1615,9 +1600,6 @@ subroutine regridding_memory_allocation ( G, regridding_opts )
   allocate ( p_column(nz) ); p_column = 0.0
   allocate ( densities(nz) ); densities = 0.0
 
-  ! Remapping
-  call remapping_memory_allocation ( G, regridding_opts )
-
 end subroutine regridding_memory_allocation
 
 
@@ -1658,7 +1640,7 @@ subroutine regridding_memory_deallocation ( regridding_opts )
   deallocate ( densities )
 
   ! Remapping
-  call remapping_memory_deallocation ( )
+  call remapping_end( )
 
 end subroutine regridding_memory_deallocation
 

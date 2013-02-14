@@ -10,6 +10,7 @@ module MOM_remapping
 !
 !==============================================================================
 use MOM_error_handler, only : MOM_error, FATAL
+use MOM_file_parser,   only : get_param, param_file_type, uppercase
 use MOM_variables,     only : ocean_grid_type, thermo_var_ptrs
 use regrid_grid1d_class ! see 'regrid_grid1d_class.F90'
 use regrid_ppoly_class  ! see 'regrid_ppoly.F90'
@@ -40,10 +41,26 @@ real, dimension(:), allocatable :: u_column;        ! generic variable used for
 ! -----------------------------------------------------------------------------
 ! The following routines are visible to the outside world
 ! -----------------------------------------------------------------------------
-public remapping_main
-public remapping_core
-public remapping_memory_allocation
-public remapping_memory_deallocation
+public remapping_main, remapping_core, remapping_init, remapping_end
+
+! -----------------------------------------------------------------------------
+! The following are private parameter constants
+! -----------------------------------------------------------------------------
+! List of remapping schemes
+integer, parameter  :: REMAPPING_PCM        = 0 ! O(h^1)
+integer, parameter  :: REMAPPING_PLM        = 1 ! O(h^2)
+integer, parameter  :: REMAPPING_PPM_H4     = 2 ! O(h^3)
+integer, parameter  :: REMAPPING_PPM_IH4    = 3 ! O(h^3)
+integer, parameter  :: REMAPPING_PQM_IH4IH3 = 4 ! O(h^4)
+integer, parameter  :: REMAPPING_PQM_IH6IH5 = 5 ! O(h^5)
+
+! These control what routine to use for the remapping integration
+integer, parameter  :: INTEGRATION_PCM = 0  ! scope: global
+integer, parameter  :: INTEGRATION_PLM = 1  ! scope: global
+integer, parameter  :: INTEGRATION_PPM = 3  ! scope: global
+integer, parameter  :: INTEGRATION_PQM = 5  ! scope: global
+
+character(len=40)  :: mod = "MOM_remapping" ! This module's name.
 
 ! -----------------------------------------------------------------------------
 ! This module contains the following routines
@@ -354,26 +371,16 @@ subroutine remapping_integration ( grid0, u0, ppoly0, grid1, u1, method )
         xi0 = x0 / grid0%h(j0) - grid0%x(j0) / grid0%h(j0)
     
         select case ( method )
-        
           case ( INTEGRATION_PCM )   
             u1(i) = ppoly0%coefficients(j0,1)
-            
           case ( INTEGRATION_PLM )  
-            
             u1(i) = evaluation_polynomial ( ppoly0%coefficients(j0,:), 2, xi0 )
-        
           case ( INTEGRATION_PPM )
-            
             u1(i) = evaluation_polynomial ( ppoly0%coefficients(j0,:), 3, xi0 )
-        
           case ( INTEGRATION_PQM )
-            
             u1(i) = evaluation_polynomial ( ppoly0%coefficients(j0,:), 5, xi0 )
-            
           case default
-        
-          call MOM_error( FATAL,'The selected integration method is invalid' )
-        
+            call MOM_error( FATAL,'The selected integration method is invalid' )
         end select   
         
       end if ! end checking whether source cell is vanished
@@ -435,22 +442,17 @@ subroutine remapping_integration ( grid0, u0, ppoly0, grid1, u1, method )
       ! between x0 and xi1. Integration is carried out in normalized
       ! coordinates, hence: \int_x0^x1 p(x) dx = h \int_xi0^xi1 p(xi) dxi
       select case ( method )
-    
         case ( INTEGRATION_PCM )     
           q = ppoly0%coefficients(j0,1) * ( x1 - x0 )
-        
         case ( INTEGRATION_PLM )    
           q = grid0%h(j0) * &
               integration_polynomial ( xi0, xi1, ppoly0%coefficients(j0,:), 1 )
-        
         case ( INTEGRATION_PPM )
           q = grid0%h(j0) * &
               integration_polynomial ( xi0, xi1, ppoly0%coefficients(j0,:), 2 )
-    
         case ( INTEGRATION_PQM )
           q = grid0%h(j0) * &
               integration_polynomial ( xi0, xi1, ppoly0%coefficients(j0,:), 4 )
-
         case default
           call MOM_error( FATAL,'The selected integration method is invalid' )
       end select     
@@ -475,22 +477,17 @@ subroutine remapping_integration ( grid0, u0, ppoly0, grid1, u1, method )
       xi0 = (x0 - grid0%x(j0)) / grid0%h(j0)
       xi1 = 1.0
       select case ( method )
-    
         case ( INTEGRATION_PCM )     
           q = q + ppoly0%coefficients(j0,1) * ( grid0%x(j0+1) - x0 )
-        
         case ( INTEGRATION_PLM )    
           q = q + grid0%h(j0) * &
               integration_polynomial ( xi0, xi1, ppoly0%coefficients(j0,:), 1 )
-    
         case ( INTEGRATION_PPM )
           q = q + grid0%h(j0) * &
               integration_polynomial ( xi0, xi1, ppoly0%coefficients(j0,:), 2 )
-    
         case ( INTEGRATION_PQM )
           q = q + grid0%h(j0) * &
               integration_polynomial ( xi0, xi1, ppoly0%coefficients(j0,:), 4 )
-
         case default
           call MOM_error( FATAL, 'The selected integration method is invalid' )
       end select     
@@ -508,22 +505,17 @@ subroutine remapping_integration ( grid0, u0, ppoly0, grid1, u1, method )
       xi1 = (x1 - grid0%x(j1)) / grid0%h(j1)
       
       select case ( method )
-    
         case ( INTEGRATION_PCM )     
           q = q + ppoly0%coefficients(j1,1) * ( x1 - grid0%x(j1) )
-        
         case ( INTEGRATION_PLM )    
           q = q + grid0%h(j1) * &
               integration_polynomial ( xi0, xi1, ppoly0%coefficients(j1,:), 1 )
-    
         case ( INTEGRATION_PPM )
           q = q + grid0%h(j1) * &
               integration_polynomial ( xi0, xi1, ppoly0%coefficients(j1,:), 2 )
-    
         case ( INTEGRATION_PQM )
           q = q + grid0%h(j1) * &
               integration_polynomial ( xi0, xi1, ppoly0%coefficients(j1,:), 4 )
-
         case default
           call MOM_error( FATAL,'The selected integration method is invalid' )
       end select     
@@ -543,15 +535,15 @@ end subroutine remapping_integration
 !------------------------------------------------------------------------------
 ! Memory allocation for remapping
 !------------------------------------------------------------------------------
-subroutine remapping_memory_allocation ( G, regridding_opts )
-
+subroutine remapping_init( param_file, G, regridding_opts)
   ! Arguments
-  type(ocean_grid_type), intent(in)   :: G
-  type(regridding_opts_t), intent(in) :: regridding_opts
-  
+  type(param_file_type),   intent(in)    :: param_file
+  type(ocean_grid_type),   intent(in)    :: G
+  type(regridding_opts_t), intent(inout) :: regridding_opts
   ! Local variables
-  integer   :: nz
-  integer   :: degree;      ! Degree of polynomials used for the reconstruction 
+  integer   :: degree         ! Degree of polynomials used for the reconstruction 
+  integer   :: nz             ! Number of levels/layers to allocate for
+  character(len=40) :: string ! Temporary string
   
   nz = G%ke
   
@@ -559,31 +551,55 @@ subroutine remapping_memory_allocation ( G, regridding_opts )
   call grid1d_init ( grid_start, nz )
   call grid1d_init ( grid_final, nz )
   
-  ! Piecewise polynomials used for remapping
-  select case ( regridding_opts%remapping_scheme )
-    case ( REMAPPING_PCM )   
+  ! --- REMAPPING SCHEME ---
+  ! This sets which remapping scheme we want to use to remap all variables
+  ! betwenn grids. If none is specified, PLM is used for remapping.
+  call get_param(param_file, mod, "REMAPPING_SCHEME", string, &
+                 "This sets the reconstruction scheme used\n"//&
+                 "for vertical remapping for all variables.\n"//&
+                 "It can be one of the following schemes:\n"//&
+                 "PCM         (1st-order accurate)\n"//&
+                 "PLM         (2nd-order accurate)\n"//&
+                 "PPM_H4      (3rd-order accurate)\n"//&
+                 "PPM_IH4     (3rd-order accurate)\n"//&
+                 "PQM_IH4IH3  (4th-order accurate)\n"//&
+                 "PQM_IH6IH5  (5th-order accurate)\n", &
+                 default="PLM")
+  select case ( uppercase(trim(string)) )
+    case ("PCM")
+      regridding_opts%remapping_scheme = REMAPPING_PCM
       degree = 0
-    case ( REMAPPING_PLM )   
+    case ("PLM")
+      regridding_opts%remapping_scheme = REMAPPING_PLM
       degree = 1
-    case ( REMAPPING_PPM_H4, REMAPPING_PPM_IH4 )  
+    case ("PPM_H4")
+      regridding_opts%remapping_scheme = REMAPPING_PPM_H4
       degree = 2
-    case ( REMAPPING_PQM_IH4IH3, REMAPPING_PQM_IH6IH5 )
+    case ("PPM_IH4")
+      regridding_opts%remapping_scheme = REMAPPING_PPM_IH4
+      degree = 2
+    case ("PQM_IH4IH3")
+      regridding_opts%remapping_scheme = REMAPPING_PQM_IH4IH3
+      degree = 4
+    case ("PQM_IH6IH5")
+      regridding_opts%remapping_scheme = REMAPPING_PQM_IH6IH5
       degree = 4
     case default
-      call MOM_error ( FATAL, 'The selected remapping scheme is invalid' )
+      call MOM_error(FATAL, "remapping_init: "//&
+       "Unrecognized choice for REMAPPING_SCHEME ("//trim(string)//").")
   end select
-  
+
   call ppoly_init ( ppoly_r, nz, degree )
   
   allocate ( u_column(nz) ); u_column = 0.0
 
-end subroutine remapping_memory_allocation
+end subroutine remapping_init
 
 
 !------------------------------------------------------------------------------
 ! Memory deallocation for remapping
 !------------------------------------------------------------------------------
-subroutine remapping_memory_deallocation ( )
+subroutine remapping_end()
 
   ! Deallocate memory for grid
   call grid1d_destroy ( grid_start )
@@ -594,7 +610,6 @@ subroutine remapping_memory_deallocation ( )
 
   deallocate ( u_column )
 
-end subroutine remapping_memory_deallocation
-
+end subroutine remapping_end
 
 end module MOM_remapping

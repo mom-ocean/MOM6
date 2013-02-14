@@ -302,17 +302,6 @@ REGRIDDING_COORDINATE_MODE = "RHO" ! default = "LAYER"
                                 !  Z*    - stetched geopotential z*
                                 !  SIGMA - terrain following coordinates
                                 !  RHO   - continuous isopycnal
-REMAPPING_SCHEME = 3            ! default = 1
-                                ! This sets the remapping scheme to use to
-                                ! remap all variables between successive grids.
-                                ! It can be one of the following schemes (must be
-                                ! an integer !):
-                                ! 0: PCM         (1st-order accurate)
-                                ! 1: PLM         (2nd-order accurate)
-                                ! 2: PPM_H4         (3rd-order accurate)
-                                ! 3: PPM_IH4     (3rd-order accurate)
-                                ! 4: PQM_IH4IH3     (4th-order accurate)
-                                ! 5: PQM_IH6IH5     (5th-order accurate)
 INTERPOLATION_SCHEME = "P3M_IH4IH3" ! default = "P1M_H2"
                                 ! This sets the interpolation scheme to use to
                                 ! determine the new grid. These parameters are
@@ -338,6 +327,16 @@ BOUNDARY_EXTRAPOLATION = True   !   [Boolean] default = False
 MIN_THICKNESS = 1.0E-04         !   [not defined] default = 0.001
                                 ! When regridding, this is the minimum layer
                                 ! thickness allowed.
+REMAPPING_SCHEME = "PPM_IH4"    ! default = "PLM"
+                                ! This sets the reconstruction scheme used
+                                ! for vertical remapping for all variables.
+                                ! It can be one of the following schemes:
+                                ! PCM         (1st-order accurate)
+                                ! PLM         (2nd-order accurate)
+                                ! PPM_H4      (3rd-order accurate)
+                                ! PPM_IH4     (3rd-order accurate)
+                                ! PQM_IH4IH3  (4th-order accurate)
+                                ! PQM_IH6IH5  (5th-order accurate)
     !  Parameters of module MOM_diabatic_driver
         ! The following parameters are used for diabatic processes.
 BBL_EFFIC = 0.0                 !   [nondim] default = 0.2
