@@ -31,6 +31,7 @@ use regrid_pqm          ! see 'regrid_pqm.F90'
 use regrid_p1m          ! see 'regrid_p1m.F90'
 use regrid_p3m          ! see 'regrid_p3m.F90'
 use MOM_remapping, only : remapping_init, remapping_main, remapping_core, remapping_end
+use MOM_remapping, only : remapping_CS
 use regrid_defs         ! see 'regrid_defs.F90' (contains types and parameters)
 use regrid_consts, only : coordinateMode, DEFAULT_COORDINATE_MODE
 use regrid_consts, only : REGRIDDING_LAYER, REGRIDDING_ZSTAR
@@ -75,6 +76,8 @@ real, dimension(:), allocatable :: u_column
 real, dimension(:), allocatable :: T_column
 real, dimension(:), allocatable :: S_column
 real, dimension(:), allocatable :: p_column
+
+type(remapping_CS) :: remapCS ! Remapping parameters and dwork arrays
 
 ! -----------------------------------------------------------------------------
 ! The following routines are visible to the outside world
@@ -161,7 +164,7 @@ subroutine initialize_regridding ( param_file, regridding_opts, G, h, h_aux, &
     ! Memory allocation for regridding
     call regridding_memory_allocation ( G, regridding_opts )
 
-    call remapping_init(param_file, G, regridding_opts)
+    call remapping_init(param_file, G, remapCS)
 
     ! Check grid integrity with respect to minimum allowed thickness
     do m = 1,size(h,4)
@@ -398,7 +401,7 @@ subroutine regridding_main ( G, h, h_new, u, v, tv, regridding_opts )
   end select ! type of grid 
   
   ! Remap all variables from old grid h onto new grid h_new
-  call remapping_main ( G, regridding_opts, h, h_new, tv, u, v )
+  call remapping_main(remapCS, G, h, h_new, tv, u, v )
   
   ! Override old grid with new one. The new grid 'h_new' is built in
   ! one of the 'build_...' routines above.
@@ -905,11 +908,11 @@ subroutine build_grid_target_densities ( G, h, h_new, tv, regridding_opts )
           grid_final%h(k) = grid_final%x(k+1) - grid_final%x(k)
         end do
         
-        call remapping_core ( grid_start, S_column, grid_final,& 
-                              S_column, ppoly_r, regridding_opts )
+        call remapping_core(remapCS, grid_start, S_column, grid_final,& 
+                            S_column, ppoly_r)
         
-        call remapping_core ( grid_start, T_column, grid_final,& 
-                              T_column, ppoly_r, regridding_opts )
+        call remapping_core(remapCS, grid_start, T_column, grid_final,& 
+                            T_column, ppoly_r)
 
         ! Compute the deviation between two successive grids
         deviation = 0.0
@@ -1640,7 +1643,7 @@ subroutine regridding_memory_deallocation ( regridding_opts )
   deallocate ( densities )
 
   ! Remapping
-  call remapping_end( )
+  call remapping_end(remapCS)
 
 end subroutine regridding_memory_deallocation
 

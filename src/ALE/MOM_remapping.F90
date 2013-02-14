@@ -23,20 +23,25 @@ use regrid_ppm          ! see 'regrid_ppm.F90'
 use regrid_pqm          ! see 'regrid_pqm.F90'
 use regrid_p1m          ! see 'regrid_p1m.F90'
 use regrid_p3m          ! see 'regrid_p3m.F90'
-use regrid_defs         ! see 'regrid_defs.F90' (contains types and parameters)
-            
+
 implicit none ; private
 
 #include <MOM_memory.h>
 
 ! -----------------------------------------------------------------------------
-! Private (module-wise) variables
+! Container for private (module-wise) variables and parameters
 ! -----------------------------------------------------------------------------
-type(grid1d_t)                  :: grid_start;      ! starting grid
-type(grid1d_t)                  :: grid_final;      ! final grid
-type(ppoly_t)                   :: ppoly_r;         ! reconstruction ppoly
-real, dimension(:), allocatable :: u_column;        ! generic variable used for
-                                                    ! remapping
+type, public :: remapping_CS
+  private
+  ! Work arrays
+  type(grid1d_t)                  :: grid_start ! starting grid
+  type(grid1d_t)                  :: grid_final ! final grid
+  type(ppoly_t)                   :: ppoly_r    ! reconstruction ppoly
+  real, dimension(:), allocatable :: u_column   ! generic variable
+  ! Parameters
+  integer :: remapping_scheme = -911   ! Determines which reconstruction to use
+  logical :: boundary_extrapolation = .true.  ! If true, extrapolate boundaries
+end type
 
 ! -----------------------------------------------------------------------------
 ! The following routines are visible to the outside world
@@ -70,7 +75,7 @@ contains
 !------------------------------------------------------------------------------
 ! General remapping routine 
 !------------------------------------------------------------------------------
-subroutine remapping_main ( G, regridding_opts, h, h_new, tv, u, v )
+subroutine remapping_main ( CS, G, h, h_new, tv, u, v )
 !------------------------------------------------------------------------------
 ! This routine takes care of remapping all variable between the old and the
 ! new grids. When velocity components need to be remapped, thicknesses at
@@ -78,8 +83,8 @@ subroutine remapping_main ( G, regridding_opts, h, h_new, tv, u, v )
 !------------------------------------------------------------------------------
   
   ! Arguments
-  type(ocean_grid_type), intent(in)                       :: G
-  type(regridding_opts_t), intent(in)                     :: regridding_opts
+  type(remapping_CS),                    intent(inout)    :: CS
+  type(ocean_grid_type),                 intent(in)       :: G
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)       :: h
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout)    :: h_new
   type(thermo_var_ptrs), intent(inout)                    :: tv       
@@ -99,35 +104,35 @@ subroutine remapping_main ( G, regridding_opts, h, h_new, tv, u, v )
     do i = G%isc,G%iec
     
       ! Build initial grid
-      grid_start%h(:) = h(i,j,:)
+      CS%grid_start%h(:) = h(i,j,:)
       
-      grid_start%x(1) = 0.0
+      CS%grid_start%x(1) = 0.0
       do k = 1,nz
-        grid_start%x(k+1) = grid_start%x(k) + grid_start%h(k)
+        CS%grid_start%x(k+1) = CS%grid_start%x(k) + CS%grid_start%h(k)
       end do
 
       ! Build new grid
-      grid_final%h(:) = h_new(i,j,:)
+      CS%grid_final%h(:) = h_new(i,j,:)
       
-      grid_final%x(1) = 0.0
+      CS%grid_final%x(1) = 0.0
       do k = 1,nz
-        grid_final%x(k+1) = grid_final%x(k) + grid_final%h(k)
+        CS%grid_final%x(k+1) = CS%grid_final%x(k) + CS%grid_final%h(k)
       end do
       
       do k = 1,nz
-        grid_start%h(k) = grid_start%x(k+1) - grid_start%x(k)
-        grid_final%h(k) = grid_final%x(k+1) - grid_final%x(k)
+        CS%grid_start%h(k) = CS%grid_start%x(k+1) - CS%grid_start%x(k)
+        CS%grid_final%h(k) = CS%grid_final%x(k+1) - CS%grid_final%x(k)
       end do
       
-      call remapping_core ( grid_start, tv%S(i,j,:), grid_final, u_column, &
-                            ppoly_r, regridding_opts )
+      call remapping_core(CS, CS%grid_start, tv%S(i,j,:), CS%grid_final, CS%u_column, &
+                          CS%ppoly_r)
       
-      tv%S(i,j,:) = u_column(:)
+      tv%S(i,j,:) = CS%u_column(:)
       
-      call remapping_core ( grid_start, tv%T(i,j,:), grid_final, u_column, &
-                            ppoly_r, regridding_opts )
+      call remapping_core(CS, CS%grid_start, tv%T(i,j,:), CS%grid_final, CS%u_column, &
+                          CS%ppoly_r)
      
-      tv%T(i,j,:) = u_column(:)
+      tv%T(i,j,:) = CS%u_column(:)
 
     end do
   end do
@@ -138,30 +143,30 @@ subroutine remapping_main ( G, regridding_opts, h, h_new, tv, u, v )
     do i = G%iscB,G%iecB
     
       ! Build initial grid
-      grid_start%h(:) = 0.5 * ( h(i,j,:) + h(i+1,j,:) )
+      CS%grid_start%h(:) = 0.5 * ( h(i,j,:) + h(i+1,j,:) )
 
-      grid_start%x(1) = 0.0
+      CS%grid_start%x(1) = 0.0
       do k = 1,nz
-        grid_start%x(k+1) = grid_start%x(k) + grid_start%h(k)
+        CS%grid_start%x(k+1) = CS%grid_start%x(k) + CS%grid_start%h(k)
       end do
       
       ! Build final grid
-      grid_final%h(:) = 0.5 * ( h_new(i,j,:) + h_new(i+1,j,:) )
+      CS%grid_final%h(:) = 0.5 * ( h_new(i,j,:) + h_new(i+1,j,:) )
       
-      grid_final%x(1) = 0.0
+      CS%grid_final%x(1) = 0.0
       do k = 1,nz
-        grid_final%x(k+1) = grid_final%x(k) + grid_final%h(k)
+        CS%grid_final%x(k+1) = CS%grid_final%x(k) + CS%grid_final%h(k)
       end do
       
       do k = 1,nz
-        grid_start%h(k) = grid_start%x(k+1) - grid_start%x(k)
-        grid_final%h(k) = grid_final%x(k+1) - grid_final%x(k)
+        CS%grid_start%h(k) = CS%grid_start%x(k+1) - CS%grid_start%x(k)
+        CS%grid_final%h(k) = CS%grid_final%x(k+1) - CS%grid_final%x(k)
       end do
   
-      call remapping_core ( grid_start, u(i,j,:), grid_final, u_column, &
-                            ppoly_r, regridding_opts )
+      call remapping_core(CS, CS%grid_start, u(i,j,:), CS%grid_final, CS%u_column, &
+                          CS%ppoly_r)
      
-      u(i,j,:) = u_column(:)
+      u(i,j,:) = CS%u_column(:)
       
     end do
   end do
@@ -173,28 +178,28 @@ subroutine remapping_main ( G, regridding_opts, h, h_new, tv, u, v )
     do i = G%isc,G%iec
 
       ! Build initial grid
-      grid_start%h(:) = 0.5 * ( h(i,j,:) + h(i,j+1,:) )
-      grid_start%x(1) = 0.0
+      CS%grid_start%h(:) = 0.5 * ( h(i,j,:) + h(i,j+1,:) )
+      CS%grid_start%x(1) = 0.0
       do k = 1,nz
-        grid_start%x(k+1) = grid_start%x(k) + grid_start%h(k)
+        CS%grid_start%x(k+1) = CS%grid_start%x(k) + CS%grid_start%h(k)
       end do
       
       ! Build final grid
-      grid_final%h(:) = 0.5 * ( h_new(i,j,:) + h_new(i,j+1,:) )
-      grid_final%x(1) = 0.0
+      CS%grid_final%h(:) = 0.5 * ( h_new(i,j,:) + h_new(i,j+1,:) )
+      CS%grid_final%x(1) = 0.0
       do k = 1,nz
-        grid_final%x(k+1) = grid_final%x(k) + grid_final%h(k)
+        CS%grid_final%x(k+1) = CS%grid_final%x(k) + CS%grid_final%h(k)
       end do
 
       do k = 1,nz
-        grid_start%h(k) = grid_start%x(k+1) - grid_start%x(k)
-        grid_final%h(k) = grid_final%x(k+1) - grid_final%x(k)
+        CS%grid_start%h(k) = CS%grid_start%x(k+1) - CS%grid_start%x(k)
+        CS%grid_final%h(k) = CS%grid_final%x(k+1) - CS%grid_final%x(k)
       end do
 
-      call remapping_core ( grid_start, v(i,j,:), grid_final, u_column, &
-                            ppoly_r, regridding_opts )
+      call remapping_core(CS, CS%grid_start, v(i,j,:), CS%grid_final, CS%u_column, &
+                          CS%ppoly_r)
      
-      v(i,j,:) = u_column(:)
+      v(i,j,:) = CS%u_column(:)
       
     end do
   end do
@@ -206,89 +211,74 @@ end subroutine remapping_main
 !------------------------------------------------------------------------------
 ! Remapping core routine
 !------------------------------------------------------------------------------
-subroutine remapping_core ( grid0, u0, grid1, u1, ppoly, regridding_opts )
+subroutine remapping_core ( CS, grid0, u0, grid1, u1, ppoly )
 !------------------------------------------------------------------------------
 ! This routine is basic in that it simply takes two grids and remaps the
 ! field known on the first grid onto the second grid, following the rules
-! stored in the structure regridding_opts.
+! stored in the structure CS.
 !------------------------------------------------------------------------------
 
   ! Arguments
+  type(remapping_CS), intent(in)      :: CS
   type(grid1d_t), intent(in)          :: grid0
   real, dimension(:), intent(in)      :: u0
   type(ppoly_t), intent(inout)        :: ppoly
   type(grid1d_t), intent(in)          :: grid1
   real, dimension(:), intent(inout)   :: u1
-  type(regridding_opts_t), intent(in) :: regridding_opts
   
   ! Reset polynomial
   ppoly%E(:,:) = 0.0
   ppoly%S(:,:) = 0.0
   ppoly%coefficients(:,:) = 0.0
 
-  select case ( regridding_opts%remapping_scheme )
-
+  select case ( CS%remapping_scheme )
     case ( REMAPPING_PCM )
-      
       call pcm_reconstruction ( grid0, ppoly, u0 )
       call remapping_integration ( grid0, u0, ppoly, grid1, u1, &
                                    INTEGRATION_PCM )
-    
     case ( REMAPPING_PLM )
-      
       call plm_reconstruction ( grid0, ppoly, u0 )
-      if ( regridding_opts%boundary_extrapolation) then
+      if ( CS%boundary_extrapolation) then
         call plm_boundary_extrapolation ( grid0, ppoly, u0 )
       end if    
       call remapping_integration ( grid0, u0, ppoly, grid1, u1, &
                                    INTEGRATION_PLM )
-    
     case ( REMAPPING_PPM_H4 )
-      
       call edge_values_explicit_h4 ( grid0, u0, ppoly%E )
       call ppm_reconstruction ( grid0, ppoly, u0 )
-      if ( regridding_opts%boundary_extrapolation) then
+      if ( CS%boundary_extrapolation) then
         call ppm_boundary_extrapolation ( grid0, ppoly, u0 )
       end if    
       call remapping_integration ( grid0, u0, ppoly, grid1, u1, &
                                    INTEGRATION_PPM )
-    
     case ( REMAPPING_PPM_IH4 )
-    
       call edge_values_implicit_h4 ( grid0, u0, ppoly%E )
       call ppm_reconstruction ( grid0, ppoly, u0 )
-      if ( regridding_opts%boundary_extrapolation) then
+      if ( CS%boundary_extrapolation) then
         call ppm_boundary_extrapolation ( grid0, ppoly, u0 )
       end if    
       call remapping_integration ( grid0, u0, ppoly, grid1, u1, &
                                    INTEGRATION_PPM )
-      
     case ( REMAPPING_PQM_IH4IH3 )
-      
       call edge_values_implicit_h4 ( grid0, u0, ppoly%E )
       call edge_slopes_implicit_h3 ( grid0, u0, ppoly%S )
       call pqm_reconstruction ( grid0, ppoly, u0 )
-      if ( regridding_opts%boundary_extrapolation) then
+      if ( CS%boundary_extrapolation) then
         call pqm_boundary_extrapolation_v1 ( grid0, ppoly, u0 )
       end if    
       call remapping_integration ( grid0, u0, ppoly, grid1, u1, &
                                    INTEGRATION_PQM )
-    
     case ( REMAPPING_PQM_IH6IH5 )
-      
       call edge_values_implicit_h6 ( grid0, u0, ppoly%E )
       call edge_slopes_implicit_h5 ( grid0, u0, ppoly%S )
       call pqm_reconstruction ( grid0, ppoly, u0 )
-      if ( regridding_opts%boundary_extrapolation) then
+      if ( CS%boundary_extrapolation) then
         call pqm_boundary_extrapolation_v1 ( grid0, ppoly, u0 )
       end if    
       call remapping_integration ( grid0, u0, ppoly, grid1, u1, &
                                    INTEGRATION_PQM )
-
     case default
-
       call MOM_error ( FATAL, 'The selected remapping method is invalid' )
-      
   end select
 
 end subroutine remapping_core
@@ -535,11 +525,11 @@ end subroutine remapping_integration
 !------------------------------------------------------------------------------
 ! Memory allocation for remapping
 !------------------------------------------------------------------------------
-subroutine remapping_init( param_file, G, regridding_opts)
+subroutine remapping_init( param_file, G, CS)
   ! Arguments
   type(param_file_type),   intent(in)    :: param_file
   type(ocean_grid_type),   intent(in)    :: G
-  type(regridding_opts_t), intent(inout) :: regridding_opts
+  type(remapping_CS),      intent(inout) :: CS
   ! Local variables
   integer   :: degree         ! Degree of polynomials used for the reconstruction 
   integer   :: nz             ! Number of levels/layers to allocate for
@@ -548,8 +538,8 @@ subroutine remapping_init( param_file, G, regridding_opts)
   nz = G%ke
   
   ! Allocate memory for grids
-  call grid1d_init ( grid_start, nz )
-  call grid1d_init ( grid_final, nz )
+  call grid1d_init ( CS%grid_start, nz )
+  call grid1d_init ( CS%grid_final, nz )
   
   ! --- REMAPPING SCHEME ---
   ! This sets which remapping scheme we want to use to remap all variables
@@ -567,31 +557,31 @@ subroutine remapping_init( param_file, G, regridding_opts)
                  default="PLM")
   select case ( uppercase(trim(string)) )
     case ("PCM")
-      regridding_opts%remapping_scheme = REMAPPING_PCM
+      CS%remapping_scheme = REMAPPING_PCM
       degree = 0
     case ("PLM")
-      regridding_opts%remapping_scheme = REMAPPING_PLM
+      CS%remapping_scheme = REMAPPING_PLM
       degree = 1
     case ("PPM_H4")
-      regridding_opts%remapping_scheme = REMAPPING_PPM_H4
+      CS%remapping_scheme = REMAPPING_PPM_H4
       degree = 2
     case ("PPM_IH4")
-      regridding_opts%remapping_scheme = REMAPPING_PPM_IH4
+      CS%remapping_scheme = REMAPPING_PPM_IH4
       degree = 2
     case ("PQM_IH4IH3")
-      regridding_opts%remapping_scheme = REMAPPING_PQM_IH4IH3
+      CS%remapping_scheme = REMAPPING_PQM_IH4IH3
       degree = 4
     case ("PQM_IH6IH5")
-      regridding_opts%remapping_scheme = REMAPPING_PQM_IH6IH5
+      CS%remapping_scheme = REMAPPING_PQM_IH6IH5
       degree = 4
     case default
       call MOM_error(FATAL, "remapping_init: "//&
        "Unrecognized choice for REMAPPING_SCHEME ("//trim(string)//").")
   end select
 
-  call ppoly_init ( ppoly_r, nz, degree )
+  call ppoly_init ( CS%ppoly_r, nz, degree )
   
-  allocate ( u_column(nz) ); u_column = 0.0
+  allocate ( CS%u_column(nz) ); CS%u_column = 0.0
 
 end subroutine remapping_init
 
@@ -599,16 +589,17 @@ end subroutine remapping_init
 !------------------------------------------------------------------------------
 ! Memory deallocation for remapping
 !------------------------------------------------------------------------------
-subroutine remapping_end()
+subroutine remapping_end(CS)
+  type(remapping_CS), intent(inout) :: CS
 
   ! Deallocate memory for grid
-  call grid1d_destroy ( grid_start )
-  call grid1d_destroy ( grid_final )
+  call grid1d_destroy ( CS%grid_start )
+  call grid1d_destroy ( CS%grid_final )
   
   ! Piecewise polynomials
-  call ppoly_destroy ( ppoly_r )
+  call ppoly_destroy ( CS%ppoly_r )
 
-  deallocate ( u_column )
+  deallocate ( CS%u_column )
 
 end subroutine remapping_end
 
