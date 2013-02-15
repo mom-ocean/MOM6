@@ -392,6 +392,7 @@ use MOM_dynamics_split_RK2, only : initialize_dyn_split_RK2
 use MOM_dynamics_unsplit_RK2, only : step_MOM_dyn_unsplit_RK2, register_restarts_dyn_unsplit_RK2
 use MOM_dynamics_unsplit_RK2, only : initialize_dyn_unsplit_RK2
 use MOM_regridding, only : initialize_regridding, end_regridding, regridding_main
+use MOM_regridding, only : useRegridding
 
 implicit none ; private
 
@@ -720,7 +721,7 @@ function step_MOM(fluxes, state, Time_start, time_interval, CS)
         ! Regridding is done here, at the end of the thermodynamical time step
         ! (that may comprise several dynamical time steps)
         ! The routine 'regridding_main' can be found in 'regridding.F90'.
-        if ( CS%regridding_opts%use_regridding ) then 
+        if ( useRegridding(CS%regridding_opts) ) then 
           call regridding_main(grid, h(:,:,:,m), CS%h_aux(:,:,:), &
                                u(:,:,:,m), v(:,:,:,m), CS%tv, CS%regridding_opts )
 !         call pass_vector(u(:,:,:,m), v(:,:,:,m), grid%Domain)
@@ -1442,8 +1443,8 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call VarMix_init(Time, grid, param_file, diag, CS%VarMix)
   ! Need an ALE CS !!!! -AJA
   ALLOC_(CS%h_aux(isd:ied,jsd:jed,nz)); CS%h_aux(:,:,:) = 0.
-  call initialize_regridding(param_file, CS%regridding_opts, grid, &
-                             h(:,:,:,:), CS%h_aux(:,:,:), u(:,:,:,1), v(:,:,:,1), CS%tv)
+  call initialize_regridding(param_file, grid, h(:,:,:,:), CS%h_aux(:,:,:), &
+                             u(:,:,:,1), v(:,:,:,1), CS%tv, CS%regridding_opts)
   call MOM_diagnostics_init(MOM_internal_state, Time, grid, param_file, &
                              diag, CS%diagnostics_CSp)
 

@@ -66,7 +66,8 @@ use MOM_EOS, only : int_density_dz, int_specific_vol_dp
 use MOM_EOS, only : int_density_dz_generic_plm, int_density_dz_generic_ppm
 use MOM_EOS, only : int_density_dz_generic_plm_analytic
 use MOM_regridding, only: pressure_gradient_plm, pressure_gradient_ppm
-use regrid_defs, only: regridding_opts_t
+use MOM_regridding, only: usePressureReconstruction, pressureReconstructionScheme
+use MOM_regridding, only: regridding_CS
 use regrid_defs, only: PRESSURE_RECONSTRUCTION_PLM, PRESSURE_RECONSTRUCTION_PPM
 
 implicit none ; private
@@ -98,7 +99,7 @@ subroutine PressureForce_AFV(h, tv, PFu, PFv, G, CS, regridding_opts, p_atm, pbc
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(out) :: PFv
   type(ocean_grid_type),                  intent(in)  :: G
   type(PressureForce_AFV_CS),             pointer     :: CS
-  type(regridding_opts_t),                intent(in)  :: regridding_opts
+  type(regridding_CS),                    intent(inout) :: regridding_opts
   real, dimension(:,:),                  optional, pointer     :: p_atm
   real, dimension(NIMEM_,NJMEM_,NKMEM_), optional, intent(out) :: pbce
   real, dimension(NIMEM_,NJMEM_),        optional, intent(out) :: eta
@@ -410,7 +411,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, regridding_opts, p_at
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(out)   :: PFv
   type(ocean_grid_type),                  intent(in)    :: G
   type(PressureForce_AFV_CS),             pointer       :: CS
-  type(regridding_opts_t),                intent(in)    :: regridding_opts
+  type(regridding_CS),                    intent(inout) :: regridding_opts
   real, dimension(:,:),                  optional, pointer     :: p_atm
   real, dimension(NIMEM_,NJMEM_,NKMEM_), optional, intent(out) :: pbce
   real, dimension(NIMEM_,NJMEM_),        optional, intent(out) :: eta
@@ -618,11 +619,11 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, regridding_opts, p_at
   ! to top and bottom values within each layer (these are the only degrees
   ! of freedeom needed to know the linear profile).
   
-  if ( regridding_opts%reconstructForPressure ) then
-    if ( regridding_opts%pressureReconstructionScheme == PRESSURE_RECONSTRUCTION_PLM ) then
-      call pressure_gradient_plm ( S_t, S_b, T_t, T_b, G, tv, h );
-    elseif ( regridding_opts%pressureReconstructionScheme == PRESSURE_RECONSTRUCTION_PPM ) then
-      call pressure_gradient_ppm ( S_t, S_b, T_t, T_b, G, tv, h );
+  if ( usePressureReconstruction(regridding_opts) ) then
+    if ( pressureReconstructionScheme(regridding_opts) == PRESSURE_RECONSTRUCTION_PLM ) then
+      call pressure_gradient_plm (regridding_opts, S_t, S_b, T_t, T_b, G, tv, h );
+    elseif ( pressureReconstructionScheme(regridding_opts) == PRESSURE_RECONSTRUCTION_PPM ) then
+      call pressure_gradient_ppm (regridding_opts, S_t, S_b, T_t, T_b, G, tv, h );
     endif
   endif
 
@@ -638,15 +639,15 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, regridding_opts, p_at
       ! assumed when regridding is activated. Otherwise, the previous version
       ! is used, whereby densities within each layer are constant no matter
       ! where the layers are located.
-      if ( regridding_opts%reconstructForPressure ) then
-        if ( regridding_opts%pressureReconstructionScheme == PRESSURE_RECONSTRUCTION_PLM ) then
+      if ( usePressureReconstruction(regridding_opts) ) then
+        if ( pressureReconstructionScheme(regridding_opts) == PRESSURE_RECONSTRUCTION_PLM ) then
           call int_density_dz_generic_plm ( T_t(:,:,k), T_b(:,:,k), S_t(:,:,k), &
                                             S_b(:,:,k), &
                                             e(:,:,K), e(:,:,K+1), rho_ref, &
                                             CS%Rho0, G%g_Earth, &
                                             G, tv%eqn_of_state, dpa, intz_dpa, &
                                             intx_dpa, inty_dpa)
-        elseif ( regridding_opts%pressureReconstructionScheme == PRESSURE_RECONSTRUCTION_PPM ) then
+        elseif ( pressureReconstructionScheme(regridding_opts) == PRESSURE_RECONSTRUCTION_PPM ) then
           call int_density_dz_generic_ppm ( tv%T(:,:,k), T_t(:,:,k), T_b(:,:,k), &
                                             tv%S(:,:,k), S_t(:,:,k), S_b(:,:,k), &
                                             e(:,:,K), e(:,:,K+1), rho_ref, &
