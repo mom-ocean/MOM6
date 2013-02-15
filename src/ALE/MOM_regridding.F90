@@ -73,7 +73,7 @@ type, public :: regridding_CS
   ! component.
   real, dimension(:), allocatable :: target_values
   real, dimension(:), allocatable :: densities
-  real, dimension(:), allocatable :: mapping
+  integer, dimension(:), allocatable :: mapping
   real, dimension(:), allocatable :: u_column
   real, dimension(:), allocatable :: T_column
   real, dimension(:), allocatable :: S_column
@@ -1633,7 +1633,7 @@ subroutine regridding_memory_allocation ( G, CS )
   call ppoly_init ( CS%ppoly_parab, nz, 2 )
   
   ! Memory allocation for one column
-  allocate ( CS%mapping(nz) ); CS%mapping = 0.0
+  allocate ( CS%mapping(nz) ); CS%mapping = 0
   allocate ( CS%u_column(nz) ); CS%u_column = 0.0
   allocate ( CS%T_column(nz) ); CS%T_column = 0.0
   allocate ( CS%S_column(nz) ); CS%S_column = 0.0
