@@ -134,6 +134,7 @@ implicit none ; private
 #include <MOM_memory.h>
 
 public MOM_initialize, Get_MOM_Input
+public MOM_initialize_rotation, MOM_initialize_topography
 
 ! This structure is to simplify communication with the calling code.
 type, public :: MOM_initialization_struct
@@ -150,14 +151,14 @@ subroutine MOM_initialize(u, v, h, tv, Time, G, PF, dirs, &
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(out)   :: u
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(out)   :: v
   real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(out)   :: h
-  type(thermo_var_ptrs),               intent(inout) :: tv
-  type(time_type),                     intent(inout) :: Time
-  type(ocean_grid_type),               intent(inout) :: G
-  type(param_file_type),               intent(in)    :: PF
-  type(directories),                   intent(in)    :: dirs
-  type(MOM_restart_CS),                pointer       :: restart_CS
-  type(MOM_initialization_struct),     intent(inout) :: CS
-  type(time_type), optional,           intent(in) :: Time_in
+  type(thermo_var_ptrs),                  intent(inout) :: tv
+  type(time_type),                        intent(inout) :: Time
+  type(ocean_grid_type),                  intent(inout) :: G
+  type(param_file_type),                  intent(in)    :: PF
+  type(directories),                      intent(in)    :: dirs
+  type(MOM_restart_CS),                   pointer       :: restart_CS
+  type(MOM_initialization_struct),        intent(inout) :: CS
+  type(time_type), optional,              intent(in)    :: Time_in
 ! Arguments: u  - Zonal velocity, in m s-1.
 !  (out)     v  - Meridional velocity, in m s-1.
 !  (out)     h  - Layer thickness, in m.
@@ -581,9 +582,9 @@ end subroutine MOM_initialize
 
 ! -----------------------------------------------------------------------------
 subroutine set_coord_from_gprime(Rlay, g_prime, G, param_file)
-  real, dimension(:), intent(out)   :: Rlay, g_prime
-  type(ocean_grid_type), intent(in) :: G
-  type(param_file_type), intent(in) :: param_file
+  real, dimension(:),    intent(out) :: Rlay, g_prime
+  type(ocean_grid_type), intent(in)  :: G
+  type(param_file_type), intent(in)  :: param_file
 ! Arguments: Rlay - the layers' target coordinate values (potential density).
 !  (out)     g_prime - the reduced gravity across the interfaces, in m s-2.
 !  (in)      G - The ocean's grid structure.
@@ -618,9 +619,9 @@ end subroutine set_coord_from_gprime
 
 ! -----------------------------------------------------------------------------
 subroutine set_coord_from_layer_density(Rlay, g_prime, G, param_file)
-  real, dimension(:), intent(out)   :: Rlay, g_prime
-  type(ocean_grid_type), intent(in) :: G
-  type(param_file_type), intent(in) :: param_file
+  real, dimension(:),    intent(out) :: Rlay, g_prime
+  type(ocean_grid_type), intent(in)  :: G
+  type(param_file_type), intent(in)  :: param_file
 ! Arguments: Rlay - the layers' target coordinate values (potential density).
 !  (out)     g_prime - the reduced gravity across the interfaces, in m s-2.
 !  (in)      G - The ocean's grid structure.
@@ -858,9 +859,9 @@ end subroutine set_coord_from_TS_range
 
 ! -----------------------------------------------------------------------------
 subroutine set_coord_from_file(Rlay, g_prime, G, param_file)
-  real, dimension(:), intent(out)   :: Rlay, g_prime
-  type(ocean_grid_type), intent(in) :: G
-  type(param_file_type), intent(in) :: param_file
+  real, dimension(:),    intent(out) :: Rlay, g_prime
+  type(ocean_grid_type), intent(in)  :: G
+  type(param_file_type), intent(in)  :: param_file
 ! Arguments: Rlay - the layers' target coordinate values (potential density).
 !  (out)     g_prime - the reduced gravity across the interfaces, in m s-2.
 !  (in)      G - The ocean's grid structure.
@@ -908,9 +909,9 @@ end subroutine set_coord_from_file
 
 ! -----------------------------------------------------------------------------
 subroutine set_coord_linear(Rlay, g_prime, G, param_file)
-  real, dimension(:), intent(out)   :: Rlay, g_prime
-  type(ocean_grid_type), intent(in) :: G
-  type(param_file_type), intent(in) :: param_file
+  real, dimension(:),    intent(out) :: Rlay, g_prime
+  type(ocean_grid_type), intent(in)  :: G
+  type(param_file_type), intent(in)  :: param_file
 ! Arguments: Rlay - the layers' target coordinate values (potential density).
 !  (out)     g_prime - the reduced gravity across the interfaces, in m s-2.
 !  (in)      G - The ocean's grid structure.
@@ -957,9 +958,9 @@ end subroutine set_coord_linear
 ! -----------------------------------------------------------------------------
 
 subroutine MOM_initialize_rotation(f, G, PF)
-  type(ocean_grid_type),            intent(in)  :: G
+  type(ocean_grid_type),                        intent(in)  :: G
   real, dimension(G%IsdB:G%IedB,G%JsdB:G%JedB), intent(out) :: f
-  type(param_file_type),            intent(in)  :: PF
+  type(param_file_type),                        intent(in)  :: PF
 ! Arguments: f  - the Coriolis parameter in s-1. Intent out.
 !  (in)      G  - The ocean's grid structure.
 !  (in)      PF - A structure indicating the open file to parse for
@@ -991,9 +992,9 @@ end subroutine MOM_initialize_rotation
 
 subroutine MOM_initialize_topography(D, max_depth, G, PF)
   real, dimension(NIMEM_,NJMEM_), intent(out) :: D
-  real,                  intent(out)          :: max_depth
-  type(ocean_grid_type), intent(in)           :: G
-  type(param_file_type), intent(in)           :: PF
+  real,                           intent(out) :: max_depth
+  type(ocean_grid_type),          intent(in)  :: G
+  type(param_file_type),          intent(in)  :: PF
 ! Arguments: D  - the bottom depth in m. Intent out.
 !  (in)      G  - The ocean's grid structure.
 !  (in)      PF - A structure indicating the open file to parse for
@@ -1057,8 +1058,8 @@ end subroutine MOM_initialize_topography
 
 ! -----------------------------------------------------------------------------
 function diagnoseMaximumDepth(D,G)
-  real, intent(in), dimension(NIMEM_,NJMEM_) :: D
-  type(ocean_grid_type), intent(in)           :: G
+  real, dimension(NIMEM_,NJMEM_), intent(in) :: D
+  type(ocean_grid_type),          intent(in) :: G
   real :: diagnoseMaximumDepth
   ! Local variables
   integer :: i,j
@@ -1074,9 +1075,9 @@ end function diagnoseMaximumDepth
 
 ! -----------------------------------------------------------------------------
 subroutine initialize_topography_from_file(D, G, param_file )
-  real, intent(out), dimension(NIMEM_,NJMEM_) :: D
-  type(ocean_grid_type), intent(in)           :: G
-  type(param_file_type), intent(in)           :: param_file
+  real, dimension(NIMEM_,NJMEM_), intent(out) :: D
+  type(ocean_grid_type),          intent(in)  :: G
+  type(param_file_type),          intent(in)  :: param_file
 ! Arguments: D          - the bottom depth in m. Intent out.
 !  (in)      G          - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
@@ -1111,11 +1112,11 @@ end subroutine initialize_topography_from_file
 
 ! -----------------------------------------------------------------------------
 subroutine initialize_topography_named(D, G, param_file, topog_config, max_depth)
-  real, intent(out), dimension(NIMEM_,NJMEM_) :: D
-  type(ocean_grid_type), intent(in)           :: G
-  type(param_file_type), intent(in)           :: param_file
-  character(len=*),      intent(in)           :: topog_config
-  real,                  intent(in)           :: max_depth
+  real, dimension(NIMEM_,NJMEM_), intent(out) :: D
+  type(ocean_grid_type),          intent(in)  :: G
+  type(param_file_type),          intent(in)  :: param_file
+  character(len=*),               intent(in)  :: topog_config
+  real,                           intent(in)  :: max_depth
 ! Arguments: D          - the bottom depth in m. Intent out.
 !  (in)      G          - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
@@ -1230,10 +1231,10 @@ end subroutine initialize_topography_named
 
 ! -----------------------------------------------------------------------------
 subroutine limit_topography(D, G, param_file, max_depth)
-  real, intent(inout), dimension(NIMEM_,NJMEM_) :: D
-  type(ocean_grid_type), intent(in)             :: G
-  type(param_file_type), intent(in)             :: param_file
-  real,                  intent(in)             :: max_depth
+  real, dimension(NIMEM_,NJMEM_), intent(inout) :: D
+  type(ocean_grid_type),          intent(in)    :: G
+  type(param_file_type),          intent(in)    :: param_file
+  real,                           intent(in)    :: max_depth
 ! Arguments: D          - the bottom depth in m. Intent in/out.
 !  (in)      G          - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
@@ -1260,9 +1261,9 @@ end subroutine limit_topography
 
 ! -----------------------------------------------------------------------------
 subroutine set_rotation_planetary(f, G, param_file)
-  type(ocean_grid_type),            intent(in)  :: G
+  type(ocean_grid_type),                        intent(in)  :: G
   real, dimension(G%IsdB:G%IedB,G%JsdB:G%JedB), intent(out) :: f
-  type(param_file_type),            intent(in)  :: param_file
+  type(param_file_type),                        intent(in)  :: param_file
 ! Arguments: f          - Coriolis parameter (vertical component) in s^-1
 !     (in)   G          - grid type
 !     (in)   param_file - parameter file type
@@ -1287,9 +1288,9 @@ end subroutine set_rotation_planetary
 
 ! -----------------------------------------------------------------------------
 subroutine set_rotation_beta_plane(f, G, param_file)
-  type(ocean_grid_type),            intent(in)  :: G
+  type(ocean_grid_type),                        intent(in)  :: G
   real, dimension(G%IsdB:G%IedB,G%JsdB:G%JedB), intent(out) :: f
-  type(param_file_type),            intent(in)  :: param_file
+  type(param_file_type),                        intent(in)  :: param_file
 ! Arguments: f          - Coriolis parameter (vertical component) in s^-1
 !     (in)   G          - grid type
 !     (in)   param_file - parameter file type
@@ -1332,10 +1333,10 @@ end subroutine set_rotation_beta_plane
 
 ! -----------------------------------------------------------------------------
 subroutine initialize_thickness_from_file(h, G, param_file, file_has_thickness)
-  real, intent(out), dimension(NIMEM_,NJMEM_, NKMEM_) :: h
-  type(ocean_grid_type), intent(in) :: G
-  type(param_file_type), intent(in) :: param_file
-  logical,               intent(in) :: file_has_thickness
+  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: h
+  type(ocean_grid_type),                  intent(in)  :: G
+  type(param_file_type),                  intent(in)  :: param_file
+  logical,                                intent(in)  :: file_has_thickness
 ! Arguments: h - The thickness that is being initialized.
 !  (in)      G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
@@ -1426,9 +1427,9 @@ end subroutine initialize_thickness_from_file
 
 ! -----------------------------------------------------------------------------
 subroutine initialize_thickness_uniform(h, G, param_file)
-  real, intent(out), dimension(NIMEM_,NJMEM_, NKMEM_) :: h
-  type(ocean_grid_type), intent(in) :: G
-  type(param_file_type), intent(in) :: param_file
+  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: h
+  type(ocean_grid_type),                  intent(in)  :: G
+  type(param_file_type),                  intent(in)  :: param_file
 
 ! Arguments: h - The thickness that is being initialized.
 !  (in)      G - The ocean's grid structure.
@@ -1482,10 +1483,10 @@ end subroutine initialize_thickness_search
 ! -----------------------------------------------------------------------------
 
 subroutine convert_thickness(h, G, param_file, tv)
-  real, intent(inout), dimension(NIMEM_,NJMEM_, NKMEM_) :: h
-  type(ocean_grid_type), intent(in) :: G
-  type(param_file_type), intent(in) :: param_file
-  type(thermo_var_ptrs), intent(in) :: tv
+  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(inout) :: h
+  type(ocean_grid_type),                  intent(in)    :: G
+  type(param_file_type),                  intent(in)    :: param_file
+  type(thermo_var_ptrs),                  intent(in)    :: tv
 ! Arguments: h - The thickness that is being initialized.
 !  (in)      G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
@@ -1553,9 +1554,9 @@ end subroutine convert_thickness
 
 subroutine depress_surface(h, G, param_file, tv)
   real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(inout) :: h
-  type(ocean_grid_type),               intent(in)    :: G
-  type(param_file_type),               intent(in)    :: param_file
-  type(thermo_var_ptrs),               intent(in)    :: tv
+  type(ocean_grid_type),                  intent(in)    :: G
+  type(param_file_type),                  intent(in)    :: param_file
+  type(thermo_var_ptrs),                  intent(in)    :: tv
 ! Arguments: h - The thickness that is being initialized.
 !  (in)      G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
@@ -1633,8 +1634,8 @@ end subroutine depress_surface
 subroutine initialize_velocity_from_file(u, v, G, param_file)
   real, dimension(NIMEMB_,NJMEM_, NKMEM_), intent(out) :: u
   real, dimension(NIMEM_,NJMEMB_, NKMEM_), intent(out) :: v
-  type(ocean_grid_type),                intent(in)  :: G
-  type(param_file_type),                intent(in)  :: param_file
+  type(ocean_grid_type),                   intent(in)  :: G
+  type(param_file_type),                   intent(in)  :: param_file
 ! Arguments: u - The zonal velocity that is being initialized.
 !  (out)     v - The meridional velocity that is being initialized.
 !  (in)      G - The ocean's grid structure.
@@ -1669,8 +1670,8 @@ end subroutine initialize_velocity_from_file
 subroutine initialize_velocity_zero(u, v, G, param_file)
   real, dimension(NIMEMB_,NJMEM_, NKMEM_), intent(out) :: u
   real, dimension(NIMEM_,NJMEMB_, NKMEM_), intent(out) :: v
-  type(ocean_grid_type),                intent(in)  :: G
-  type(param_file_type),                intent(in)  :: param_file
+  type(ocean_grid_type),                   intent(in)  :: G
+  type(param_file_type),                   intent(in)  :: param_file
 ! Arguments: u - The zonal velocity that is being initialized.
 !  (out)     v - The meridional velocity that is being initialized.
 !  (in)      G - The ocean's grid structure.
@@ -1696,8 +1697,8 @@ end subroutine initialize_velocity_zero
 subroutine initialize_velocity_uniform(u, v, G, param_file)
   real, dimension(NIMEMB_,NJMEM_, NKMEM_), intent(out) :: u
   real, dimension(NIMEM_,NJMEMB_, NKMEM_), intent(out) :: v
-  type(ocean_grid_type),                intent(in)  :: G
-  type(param_file_type),                intent(in)  :: param_file
+  type(ocean_grid_type),                   intent(in)  :: G
+  type(param_file_type),                   intent(in)  :: param_file
 ! Arguments: u - The zonal velocity that is being initialized.
 !  (out)     v - The meridional velocity that is being initialized.
 !  (in)      G - The ocean's grid structure.
@@ -1731,8 +1732,8 @@ end subroutine initialize_velocity_uniform
 subroutine initialize_velocity_circular(u, v, G, param_file)
   real, dimension(NIMEMB_,NJMEM_, NKMEM_), intent(out) :: u
   real, dimension(NIMEM_,NJMEMB_, NKMEM_), intent(out) :: v
-  type(ocean_grid_type),                intent(in)  :: G
-  type(param_file_type),                intent(in)  :: param_file
+  type(ocean_grid_type),                   intent(in)  :: G
+  type(param_file_type),                   intent(in)  :: param_file
 ! Arguments: u - The zonal velocity that is being initialized.
 !  (out)     v - The meridional velocity that is being initialized.
 !  (in)      G - The ocean's grid structure.
@@ -1783,8 +1784,8 @@ end subroutine initialize_velocity_circular
 ! -----------------------------------------------------------------------------
 subroutine initialize_temp_salt_from_file(T, S, G, param_file)
   real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: T, S
-  type(ocean_grid_type),               intent(in)  :: G
-  type(param_file_type),               intent(in)  :: param_file
+  type(ocean_grid_type),                  intent(in)  :: G
+  type(param_file_type),                  intent(in)  :: param_file
 !  This function puts the initial layer temperatures and salinities  !
 ! into T(:,:,:) and S(:,:,:).                                        !
 
@@ -1836,8 +1837,8 @@ end subroutine initialize_temp_salt_from_file
 ! -----------------------------------------------------------------------------
 subroutine initialize_temp_salt_from_profile(T, S, G, param_file)
   real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: T, S
-  type(ocean_grid_type),               intent(in)  :: G
-  type(param_file_type),               intent(in)  :: param_file
+  type(ocean_grid_type),                  intent(in)  :: G
+  type(param_file_type),                  intent(in)  :: param_file
 !  This function puts the initial layer temperatures and salinities  !
 ! into T(:,:,:) and S(:,:,:).                                        !
 
@@ -1881,10 +1882,10 @@ end subroutine initialize_temp_salt_from_profile
 ! -----------------------------------------------------------------------------
 subroutine initialize_temp_salt_fit(T, S, G, param_file, eqn_of_state, P_Ref)
   real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: T, S
-  type(ocean_grid_type),               intent(in)  :: G
-  type(param_file_type),               intent(in)  :: param_file
-  type(EOS_type),                      pointer     :: eqn_of_state
-  real,                                intent(in)  :: P_Ref
+  type(ocean_grid_type),                  intent(in)  :: G
+  type(param_file_type),                  intent(in)  :: param_file
+  type(EOS_type),                         pointer     :: eqn_of_state
+  real,                                   intent(in)  :: P_Ref
 !  This function puts the initial layer temperatures and salinities  !
 ! into T(:,:,:) and S(:,:,:).                                        !
 
@@ -1947,8 +1948,8 @@ end subroutine initialize_temp_salt_fit
 ! -----------------------------------------------------------------------------
 subroutine initialize_temp_salt_linear(T, S, G, param_file)
   real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: T, S
-  type(ocean_grid_type),               intent(in)  :: G
-  type(param_file_type),               intent(in)  :: param_file
+  type(ocean_grid_type),                  intent(in)  :: G
+  type(param_file_type),                  intent(in)  :: param_file
   ! This subroutine initializes linear profiles for T and S according to
   ! reference surface layer salinity and temperature and a specified range.
   ! Note that the linear distribution is set up with respect to the layer
@@ -1999,7 +2000,7 @@ end subroutine initialize_temp_salt_linear
 ! -----------------------------------------------------------------------------
 subroutine initialize_sponges_file(G, use_temperature, tv, param_file, CSp)
   type(ocean_grid_type), intent(in) :: G
-  logical, intent(in) :: use_temperature
+  logical,               intent(in) :: use_temperature
   type(thermo_var_ptrs), intent(in) :: tv
   type(param_file_type), intent(in) :: param_file
   type(sponge_CS),       pointer    :: CSp
@@ -2132,11 +2133,11 @@ end subroutine initialize_sponges_file
 
 ! -----------------------------------------------------------------------------
 subroutine set_Open_Bdry_Conds(OBC, tv, G, param_file, advect_tracer_CSp)
-  type(ocean_OBC_type),  pointer    :: OBC
-  type(thermo_var_ptrs), intent(in) :: tv
-  type(ocean_grid_type), intent(in) :: G
-  type(param_file_type), intent(in) :: param_file
-  type(advect_tracer_CS), pointer   :: advect_tracer_CSp
+  type(ocean_OBC_type),   pointer    :: OBC
+  type(thermo_var_ptrs),  intent(in) :: tv
+  type(ocean_grid_type),  intent(in) :: G
+  type(param_file_type),  intent(in) :: param_file
+  type(advect_tracer_CS), pointer    :: advect_tracer_CSp
 !   This subroutine sets the properties of flow at open boundary conditions.
 ! This particular example is for the DOME inflow describe in Legg et al. 2006.
 
@@ -2305,12 +2306,12 @@ end subroutine set_Open_Bdry_Conds
 
 ! -----------------------------------------------------------------------------
 subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, advect_tracer_CSp)
-  type(ocean_OBC_type),                pointer    :: OBC
-  type(thermo_var_ptrs),               intent(inout) :: tv
+  type(ocean_OBC_type),                   pointer    :: OBC
+  type(thermo_var_ptrs),                  intent(inout) :: tv
   real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(inout) :: h
-  type(ocean_grid_type),               intent(inout) :: G
-  type(param_file_type),               intent(in) :: PF
-  type(advect_tracer_CS),              pointer    :: advect_tracer_CSp
+  type(ocean_grid_type),                  intent(inout) :: G
+  type(param_file_type),                  intent(in) :: PF
+  type(advect_tracer_CS),                 pointer    :: advect_tracer_CSp
 !   This subroutine sets the initial definitions of the characteristic open boundary
 !   conditions. Written by Mehmet Ilicak
 
@@ -2656,8 +2657,8 @@ end subroutine set_Flather_Bdry_Conds
 ! -----------------------------------------------------------------------------
 subroutine reset_face_lengths_named(G, param_file, name)
   type(ocean_grid_type), intent(inout) :: G
-  type(param_file_type), intent(in) :: param_file
-  character(len=*),      intent(in) :: name
+  type(param_file_type), intent(in)    :: param_file
+  character(len=*),      intent(in)    :: name
 !   This subroutine sets the open face lengths at selected points to restrict
 ! passages to their observed widths.
 
@@ -2782,7 +2783,7 @@ end subroutine reset_face_lengths_named
 
 subroutine reset_face_lengths_file(G, param_file)
   type(ocean_grid_type), intent(inout) :: G
-  type(param_file_type), intent(in) :: param_file
+  type(param_file_type), intent(in)    :: param_file
 !   This subroutine sets the open face lengths at selected points to restrict
 ! passages to their observed widths.
 
@@ -2850,7 +2851,7 @@ end subroutine reset_face_lengths_file
 ! -----------------------------------------------------------------------------
 subroutine reset_face_lengths_list(G, param_file)
   type(ocean_grid_type), intent(inout) :: G
-  type(param_file_type), intent(in) :: param_file
+  type(param_file_type), intent(in)    :: param_file
 !   This subroutine sets the open face lengths at selected points to restrict
 ! passages to their observed widths.
 
@@ -3053,10 +3054,10 @@ subroutine reset_face_lengths_list(G, param_file)
 end subroutine reset_face_lengths_list
 
 subroutine read_face_length_list(iounit, filename, num_lines, lines)
-  integer,               intent(in)  :: iounit
-  character(len=*),      intent(in)  :: filename
-  integer,               intent(out) :: num_lines
-  character(len=120), pointer, dimension(:) :: lines
+  integer,                          intent(in)  :: iounit
+  character(len=*),                 intent(in)  :: filename
+  integer,                          intent(out) :: num_lines
+  character(len=120), dimension(:), pointer     :: lines
 
   !   This subroutine reads and counts the non-blank lines in the face length
   ! list file, after removing comments.
@@ -3143,8 +3144,8 @@ end subroutine set_velocity_depth_min
 ! -----------------------------------------------------------------------------
 subroutine write_ocean_geometry_file(G, param_file, directory)
   type(ocean_grid_type), intent(inout) :: G
-  type(param_file_type), intent(in) :: param_file
-  character(len=*),      intent(in) :: directory
+  type(param_file_type), intent(in)    :: param_file
+  character(len=*),      intent(in)    :: directory
 !   This subroutine writes out a file containing all of the ocean geometry
 ! and grid data uses by the MOM ocean model.
 ! Arguments: G - The ocean's grid structure.  Effectively intent in.
@@ -3282,8 +3283,8 @@ end subroutine write_ocean_geometry_file
 ! -----------------------------------------------------------------------------
 subroutine write_vertgrid_file(G, param_file, directory)
   type(ocean_grid_type), intent(inout) :: G
-  type(param_file_type), intent(in) :: param_file
-  character(len=*),      intent(in) :: directory
+  type(param_file_type), intent(in)    :: param_file
+  character(len=*),      intent(in)    :: directory
 !   This subroutine writes out a file containing any available data related
 ! to the vertical grid used by the MOM ocean model.
 ! Arguments: G - The ocean's grid structure.  Effectively intent in.
@@ -3372,10 +3373,10 @@ end subroutine Get_MOM_Input
 
 subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(out)   :: h    
-  type(thermo_var_ptrs),              intent(inout) :: tv
-  type(ocean_grid_type),              intent(in)    :: G
-  type(param_file_type),              intent(in)    :: PF
-  type(directories),                  intent(in)    :: dirs
+  type(thermo_var_ptrs),                 intent(inout) :: tv
+  type(ocean_grid_type),                 intent(in)    :: G
+  type(param_file_type),                 intent(in)    :: PF
+  type(directories),                     intent(in)    :: dirs
 !   This subroutine determines the isopycnal interfaces and layer potential
 ! temperatures and salinities directly from a z-space file on a latitude-
 ! longitude grid.
