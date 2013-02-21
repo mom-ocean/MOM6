@@ -447,7 +447,8 @@ subroutine tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, CS)
   !   hold0(i) = h_old(i,j,1) + ea(i,j,1)
       b_denom_1 = h_old(i,j,1) + ea(i,j,1) + h_neglect
       b1(i) = 1.0 / (b_denom_1 + eb(i,j,1))
-      d1(i) = b_denom_1 * b1(i)
+!       d1(i) = b_denom_1 * b1(i)
+      d1(i) = trdc(1) * (b_denom_1 * b1(i)) + (1.0 - trdc(1))
       do m=1,NTR
         CS%tr(i,j,1,m) = b1(i)*(hold0(i)*CS%tr(i,j,1,m) + trdc(3)*eb(i,j,1))
  !      Add any surface tracer fluxes to the preceding line.
@@ -457,7 +458,7 @@ subroutine tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, CS)
       c1(i,k) = trdc(1) * eb(i,j,k-1) * b1(i)
       b_denom_1 = h_old(i,j,k) + d1(i)*ea(i,j,k) + h_neglect
       b1(i) = 1.0 / (b_denom_1 + eb(i,j,k))
-      d1(i) = b_denom_1 * b1(i)
+      d1(i) = trdc(1) * (b_denom_1 * b1(i)) + (1.0 - trdc(1))
       do m=1,NTR
         CS%tr(i,j,k,m) = b1(i) * (h_old(i,j,k)*CS%tr(i,j,k,m) + &
                  ea(i,j,k)*(trdc(1)*CS%tr(i,j,k-1,m)+trdc(2)) + &
