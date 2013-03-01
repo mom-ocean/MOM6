@@ -106,7 +106,7 @@ public adiabatic, adiabatic_driver_init
 
 type, public :: diabatic_CS ; private
   logical :: bulkmixedlayer  ! If true, a refined bulk mixed layer is used with
-                             ! nkml sublayers and nkbl buffer layer.
+                             ! nkml sublayers (and additional buffer layers).
   logical :: use_kappa_shear ! If true, use the kappa_shear module to find the
                              ! shear-driven diapycnal diffusivity.
   logical :: use_sponge      ! If true, sponges may be applied anywhere in the

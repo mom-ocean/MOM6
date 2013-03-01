@@ -1346,7 +1346,6 @@ subroutine thickness_diffuse_init(Time, G, param_file, diag, CS)
 !  (in)      diag - A structure containing pointers to common diagnostic fields.
 !  (in/out)  CS - A pointer that is set to point to the control structure
 !                 for this module
-  integer :: nkbl
 
   character(len=128) :: version = '$Id$'
   character(len=128) :: tagname = '$Name$'
