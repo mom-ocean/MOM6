@@ -84,7 +84,7 @@ use MOM_int_tide_input, only : int_tide_input_end, int_tide_input_CS, int_tide_i
 use MOM_internal_tides, only : propagate_int_tide, register_int_tide_restarts
 use MOM_internal_tides, only : internal_tides_init, internal_tides_end, int_tide_CS
 use MOM_kappa_shear, only : Calculate_kappa_shear, kappa_shear_init, Kappa_shear_CS
-use MOM_mixed_layer, only : mixedlayer, mixedlayer_init, mixedlayer_CS
+use MOM_bulk_mixed_layer, only : bulkmixedlayer, bulkmixedlayer_init, bulkmixedlayer_CS
 use MOM_opacity, only : opacity_init, set_opacity, opacity_end, opacity_CS
 use MOM_set_diffusivity, only : set_diffusivity, set_BBL_diffusivity
 use MOM_set_diffusivity, only : set_diffusivity_init, set_diffusivity_end
@@ -150,7 +150,7 @@ type, public :: diabatic_CS ; private
   integer :: id_Tdif = -1, id_Tadv = -1, id_Sdif = -1, id_Sadv = -1
 
   type(entrain_diffusive_CS), pointer :: entrain_diffusive_CSp => NULL()
-  type(mixedlayer_CS),        pointer :: mixedlayer_CSp => NULL()
+  type(bulkmixedlayer_CS),    pointer :: bulkmixedlayer_CSp => NULL()
   type(regularize_layers_CS), pointer :: regularize_layers_CSp => NULL()
   type(geothermal_CS),        pointer :: geothermal_CSp => NULL()
   type(Kappa_shear_CS),       pointer :: kappa_shear_CSp => NULL()
@@ -329,11 +329,12 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, dt, G, CS)
 
       call cpu_clock_begin(id_clock_mixedlayer)
       if (CS%ML_mix_first < 1.0) then
-        call mixedlayer(h, u_h, v_h, tv, fluxes, dt*CS%ML_mix_first, eaml,ebml,&
-                        G, CS%mixedlayer_CSp, CS%optics, dt, last_call=.false.)
+        call bulkmixedlayer(h, u_h, v_h, tv, fluxes, dt*CS%ML_mix_first, &
+                            eaml,ebml, G, CS%bulkmixedlayer_CSp, CS%optics, dt, &
+                            last_call=.false.)
       else
-        call mixedlayer(h, u_h, v_h, tv, fluxes, dt, eaml, ebml, &
-                        G, CS%mixedlayer_CSp, CS%optics, dt, last_call=.true.)
+        call bulkmixedlayer(h, u_h, v_h, tv, fluxes, dt, eaml, ebml, &
+                        G, CS%bulkmixedlayer_CSp, CS%optics, dt, last_call=.true.)
       endif
 !  Keep salinity from falling below a small but positive threshold.
 !  This occurs when the ice model attempts to extract more salt than
@@ -578,8 +579,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, dt, G, CS)
 
       dt_mix = min(dt,dt*(1.0 - CS%ML_mix_first))
       call cpu_clock_begin(id_clock_mixedlayer)
-      call mixedlayer(h, u_h, v_h, tv, fluxes, dt_mix, ea, eb, &
-                      G, CS%mixedlayer_CSp, CS%optics, dt, last_call = .true.)
+      call bulkmixedlayer(h, u_h, v_h, tv, fluxes, dt_mix, ea, eb, &
+                      G, CS%bulkmixedlayer_CSp, CS%optics, dt, last_call=.true.)
 
 !  Keep salinity from falling below a small but positive threshold.
 !  This occurs when the ice model attempts to extract more salt than
@@ -1442,7 +1443,7 @@ subroutine diabatic_driver_init(Time, G, param_file, diag, CS, &
     id_clock_double_diff = cpu_clock_id('(Ocean double diffusion)', grain=CLOCK_ROUTINE)
 
   if (CS%bulkmixedlayer) &
-    call mixedlayer_init(Time, G, param_file, diag, CS%mixedlayer_CSp)
+    call bulkmixedlayer_init(Time, G, param_file, diag, CS%bulkmixedlayer_CSp)
 
   call regularize_layers_init(Time, G, param_file, diag, CS%regularize_layers_CSp)
 

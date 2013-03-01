@@ -1,4 +1,4 @@
-module MOM_mixed_layer
+module MOM_bulk_mixed_layer
 !***********************************************************************
 !*                   GNU General Public License                        *
 !* This file is a part of MOM.                                         *
@@ -21,18 +21,21 @@ module MOM_mixed_layer
 
 !********+*********+*********+*********+*********+*********+*********+**
 !*                                                                     *
-!*  By Robert Hallberg, 1997 - 2002.                                   *
+!*  By Robert Hallberg, 1997 - 2005.                                   *
 !*                                                                     *
-!*    This file contains the subroutine (mixedlayer) that implements   *
-!*  a Kraus-Turner-like bulk mixed layer, based on the work of         *
-!*  Oberhuber (JPO, 1993, 808-829).   Physical processes portrayed in  *
-!*  this subroutine include convective adjustment and mixed layer      *
-!*  entrainment and detrainment.  Penetrating shortwave radiation and  *
-!*  an exponential decay of TKE fluxes are also supported by this      *
-!*  subroutine.  Several constants can alternately be set to give a    *
-!*  traditional Kraus-Turner mixed layer scheme, although that is not  *
-!*  the preferred option.  The physical processes and arguments are    *
-!*  described in more detail below.                                    *
+!*    This file contains the subroutine (bulkmixedlayer) that          *
+!*  implements a Kraus-Turner-like bulk mixed layer, based on the work *
+!*  of various people, as described in the review paper by Niiler and  *
+!*  Kraus (1979), with particular attention to the form proposed by    *
+!*  Oberhuber (JPO, 1993, 808-829), with an extension to a refied bulk *
+!*  mixed layer as described in Hallberg (Aha Huliko'a, 2003).  The    *
+!*  physical processes portrayed in this subroutine include convective *
+!*  adjustment and mixed layer entrainment and detrainment.            *
+!*  Penetrating shortwave radiation and an exponential decay of TKE    *
+!*  fluxes are also supported by this subroutine.  Several constants   *
+!*  can alternately be set to give a traditional Kraus-Turner mixed    *
+!*  layer scheme, although that is not the preferred option.  The      *
+!*  physical processes and arguments are described in detail below.    *
 !*                                                                     *
 !*  Macros written all in capital letters are defined in MOM_memory.h. *
 !*                                                                     *
@@ -65,9 +68,9 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public mixedlayer, mixedlayer_init
+public bulkmixedlayer, bulkmixedlayer_init
 
-type, public :: mixedlayer_CS ; private
+type, public :: bulkmixedlayer_CS ; private
   integer :: nkml            ! The number of layers in the mixed layer.
   integer :: nkbl            ! The number of buffer layers.
   real    :: mstar           ! The ratio of the friction velocity cubed to the
@@ -147,7 +150,7 @@ type, public :: mixedlayer_CS ; private
   integer :: id_TKE_mech_decay = -1, id_TKE_conv_decay = -1, id_TKE_conv_s2 = -1
   integer :: id_PE_detrain = -1, id_PE_detrain2 = -1, id_h_mismatch = -1
   integer :: id_Hsfc_used = -1, id_Hsfc_max = -1, id_Hsfc_min = -1
-end type mixedlayer_CS
+end type bulkmixedlayer_CS
 
 integer :: id_clock_detrain, id_clock_mech, id_clock_conv, id_clock_adjustment
 integer :: id_clock_EOS, id_clock_resort, id_clock_pass
@@ -156,8 +159,8 @@ integer :: num_msg = 0, max_msg = 2
 
 contains
 
-subroutine mixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, optics, &
-                      dt_diag, last_call)
+subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
+                          optics, dt_diag, last_call)
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: h_3d
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: u_3d, v_3d
   type(thermo_var_ptrs),                 intent(inout) :: tv
@@ -165,7 +168,7 @@ subroutine mixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, optics, &
   real,                                  intent(in)    :: dt
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: ea, eb
   type(ocean_grid_type),                 intent(inout) :: G
-  type(mixedlayer_CS),                   pointer       :: CS
+  type(bulkmixedlayer_CS),               pointer       :: CS
   type(optics_type),                     pointer       :: optics
   real,                        optional, intent(in)    :: dt_diag
   logical,                     optional, intent(in)    :: last_call
@@ -769,7 +772,7 @@ subroutine mixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, optics, &
     real, dimension(NIMEM_,NKMEM_), intent(out)   :: dKE_CA, cTKE
     integer,                        intent(in)    :: j
     type(ocean_grid_type),          intent(in)    :: G
-    type(mixedlayer_CS),            pointer       :: CS
+    type(bulkmixedlayer_CS),        pointer       :: CS
     integer,              optional, intent(in)    :: nz_conv
   !   This subroutine does instantaneous convective entrainment into the buffer
   ! layers and mixed layers to remove hydrostatic instabilities.  Any water that
@@ -893,7 +896,7 @@ subroutine mixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, optics, &
     real,                        intent(in)  :: dt
     integer,                     intent(in)  :: j
     type(ocean_grid_type),       intent(in)  :: G
-    type(mixedlayer_CS),         pointer     :: CS
+    type(bulkmixedlayer_CS),     pointer     :: CS
   !   This subroutine extracts the relevant buoyancy fluxes from the surface
   ! fluxes type.
     
@@ -1043,7 +1046,7 @@ subroutine mixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, optics, &
     integer,                        intent(in)    :: j
     integer, dimension(NIMEM_,NKMEM_), intent(in) :: ksort
     type(ocean_grid_type),          intent(in)    :: G
-    type(mixedlayer_CS),            pointer       :: CS
+    type(bulkmixedlayer_CS),        pointer       :: CS
 !   This subroutine causes the mixed layer to entrain to the depth of free
 ! convection.  The depth of free convection is the shallowest depth at which the
 ! fluid is the denser than the average of the fluid above.
@@ -1327,7 +1330,7 @@ subroutine mixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, optics, &
     integer,                        intent(in)    :: j
     integer, dimension(NIMEM_,NKMEM_), intent(in) :: ksort
     type(ocean_grid_type),          intent(in)    :: G
-    type(mixedlayer_CS),            pointer       :: CS
+    type(bulkmixedlayer_CS),        pointer       :: CS
   !   This subroutine determines the TKE available at the depth of free
   ! convection to drive mechanical entrainment.
 
@@ -1502,7 +1505,7 @@ subroutine mixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, optics, &
     integer,                        intent(in)    :: j
     integer, dimension(NIMEM_,NKMEM_), intent(in) :: ksort
     type(ocean_grid_type),          intent(in)    :: G
-    type(mixedlayer_CS),            pointer       :: CS
+    type(bulkmixedlayer_CS),        pointer       :: CS
 
   ! This subroutine calculates mechanically driven entrainment.
   ! Arguments: h - Layer thickness, in m or kg m-2. (Intent in/out)  The units
@@ -1805,7 +1808,7 @@ subroutine mixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, optics, &
     integer,                        intent(in)    :: j
     integer, dimension(NIMEM_,NKMEM_), intent(in) :: ksort
     type(ocean_grid_type),          intent(in)    :: G
-    type(mixedlayer_CS),            pointer       :: CS
+    type(bulkmixedlayer_CS),        pointer       :: CS
   !   This subroutine applies shortwave heating below the mixed layer.  In
   ! addition, it causes all of the remaining SW radiation to be absorbed,
   ! provided that the total water column thickness is greater than
@@ -1968,12 +1971,12 @@ subroutine mixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, optics, &
 
   end subroutine absorb_remaining_SW
 
-end subroutine mixedlayer
+end subroutine bulkmixedlayer
 
 subroutine sort_ML(h, R0, eps, G, CS, ksort)
   real, dimension(NIMEM_,NKMEM_),    intent(in)  :: h, R0, eps
   type(ocean_grid_type),             intent(in)  :: G
-  type(mixedlayer_CS),               pointer     :: CS
+  type(bulkmixedlayer_CS),           pointer     :: CS
   integer, dimension(NIMEM_,NKMEM_), intent(out) :: ksort
 
 !   This subroutine generates an array of indices that are sorted by layer
@@ -2032,7 +2035,7 @@ subroutine resort_ML(h, eps, d_ea, d_eb, R0, Rcv, T, S, ksort, G, CS, &
   real, dimension(NIMEM_,NKMEM_),    intent(inout) :: T, S, R0, Rcv
   integer, dimension(NIMEM_,NKMEM_), intent(in)    :: ksort
   type(ocean_grid_type),             intent(in)    :: G
-  type(mixedlayer_CS),               pointer       :: CS
+  type(bulkmixedlayer_CS),           pointer       :: CS
   real, dimension(NIMEM_),           intent(in)    :: dRcv_dT, dRcv_dS
   real, dimension(NIMEM_),           intent(in)    :: dR0_dT, dR0_dS
   real, dimension(NIMEM_),           intent(in)    :: Rcv_ml, R0_ml
@@ -2350,7 +2353,7 @@ subroutine mixedlayer_detrain_2(h, R0, h_ml, R0_ml, dt, dt_diag, d_ea, j, G, &
   real, dimension(NIMEM_,NKMEM_), intent(inout) :: d_ea
   integer,                        intent(in)    :: j
   type(ocean_grid_type),          intent(in)    :: G
-  type(mixedlayer_CS),            pointer       :: CS
+  type(bulkmixedlayer_CS),        pointer       :: CS
   real, dimension(NIMEM_,NKMEM_), intent(inout) :: T, S
   real, dimension(NIMEM_,NKMEM_), intent(inout) :: Rcv
   real, dimension(NIMEM_),        intent(in)    :: T_ml, S_ml, Rcv_ml
@@ -3198,7 +3201,7 @@ subroutine mixedlayer_detrain_1(h, R0, h_ml, R0_ml, dt, dt_diag, d_ea, d_eb, &
   real, dimension(NIMEM_,NKMEM_), intent(inout) :: d_ea, d_eb
   integer,                        intent(in)    :: j
   type(ocean_grid_type),          intent(in)    :: G
-  type(mixedlayer_CS),            pointer       :: CS
+  type(bulkmixedlayer_CS),        pointer       :: CS
   real, dimension(NIMEM_,NKMEM_), intent(inout) :: T, S, Rcv
   real, dimension(NIMEM_),        intent(inout) :: T_ml, S_ml, Rcv_ml
   real, dimension(NIMEM_),        intent(in)    :: dRcv_dT, dRcv_dS, max_BL_det
@@ -3482,12 +3485,12 @@ subroutine mixedlayer_detrain_1(h, R0, h_ml, R0_ml, dt, dt_diag, d_ea, d_eb, &
 
 end subroutine mixedlayer_detrain_1
 
-subroutine mixedlayer_init(Time, G, param_file, diag, CS)
+subroutine bulkmixedlayer_init(Time, G, param_file, diag, CS)
   type(time_type), target, intent(in)    :: Time
   type(ocean_grid_type),   intent(in)    :: G
   type(param_file_type),   intent(in)    :: param_file
   type(diag_ptrs), target, intent(inout) :: diag
-  type(mixedlayer_CS),     pointer       :: CS
+  type(bulkmixedlayer_CS), pointer       :: CS
 ! Arguments: Time - The current model time.
 !  (in)      G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
@@ -3706,7 +3709,7 @@ subroutine mixedlayer_init(Time, G, param_file, diag, CS)
   if (CS%limit_det) then
   endif
 
-end subroutine mixedlayer_init
+end subroutine bulkmixedlayer_init
 
 function EF4(H, E, L, dR_de)
 real, intent(in) :: H, E, L
@@ -3737,4 +3740,4 @@ real :: EF4
 
 end function EF4
 
-end module MOM_mixed_layer
+end module MOM_bulk_mixed_layer
