@@ -391,7 +391,7 @@ CORRECT_ABSORPTION_DEPTH = True !   [Boolean] default = False
                                 ! If true, the depth at which penetrating shortwave
                                 ! radiation is absorbed is corrected by moving some of
                                 ! the heating upward in the water column.
-    !  Parameters of module MOM_vert_remap
+    !  Parameters of module MOM_regularize_layers
     !  Parameters of module MOM_opacity
 PEN_SW_SCALE = 15.0             !   [m] default = 0.0
                                 ! The vertical absorption e-folding depth of the

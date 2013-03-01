@@ -316,7 +316,7 @@ MAX_ENT_IT = 20                 ! default = 5
                                 ! calculate the interior diapycnal entrainment.
 TOLERANCE_ENT = 1.0E-05         !   [m] default = 0.0
                                 ! The tolerance with which to solve for entrainment values.
-    !  Parameters of module MOM_vert_remap
+    !  Parameters of module MOM_regularize_layers
     !  Parameters of module MOM_opacity
     !  Parameters of module MOM_barotropic
 BOUND_BT_CORRECTION = True      !   [Boolean] default = False

@@ -501,7 +501,7 @@ DO_RIVERMIX = True              !   [Boolean] default = False
 RIVERMIX_DEPTH = 40.0           !   [m] default = 0.0
                                 ! The depth to which rivers are mixed if DO_RIVERMIX is
                                 ! defined.
-    !  Parameters of module MOM_vert_remap
+    !  Parameters of module MOM_regularize_layers
     !  Parameters of module MOM_opacity
 VAR_PEN_SW = True               !   [Boolean] default = False
                                 ! If true, use one of the CHL_A schemes specified by

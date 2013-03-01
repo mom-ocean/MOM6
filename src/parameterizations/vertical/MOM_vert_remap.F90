@@ -1,4 +1,4 @@
-module MOM_vert_remap
+module MOM_regularize_layers
 !***********************************************************************
 !*                   GNU General Public License                        *
 !* This file is a part of MOM.                                         *
@@ -64,9 +64,9 @@ implicit none ; private
 #include <MOM_memory.h>
 #undef  DEBUG_CODE
 
-public vert_remap, vert_remap_init
+public regularize_layers, regularize_layers_init
 
-type, public :: vert_remap_CS ; private
+type, public :: regularize_layers_CS ; private
   logical :: regularize_surface_layers ! If true, vertically restructure the
                              ! near-surface layers when they have too much
                              ! lateral variations to allow for sensible lateral
@@ -100,19 +100,19 @@ type, public :: vert_remap_CS ; private
   integer :: id_def_rat_u_3 = -1, id_def_rat_u_3b = -1
   integer :: id_def_rat_v_3 = -1, id_def_rat_v_3b = -1
 #endif
-end type vert_remap_CS
+end type regularize_layers_CS
 
 integer :: id_clock_pass, id_clock_EOS
 
 contains
 
-subroutine vert_remap(h, tv, dt, ea, eb, G, CS)
+subroutine regularize_layers(h, tv, dt, ea, eb, G, CS)
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: h
   type(thermo_var_ptrs),                 intent(inout) :: tv
   real,                                  intent(in)    :: dt
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: ea, eb
   type(ocean_grid_type),                 intent(inout) :: G
-  type(vert_remap_CS),                   pointer       :: CS
+  type(regularize_layers_CS),            pointer       :: CS
 
 !    This subroutine partially steps the bulk mixed layer model.
 !  The following processes are executed, in the order listed.
@@ -130,13 +130,13 @@ subroutine vert_remap(h, tv, dt, ea, eb, G, CS)
 !                 as h - usually m or kg m-2 (i.e., H).
 !  (in)      G - The ocean's grid structure.
 !  (in)      CS - The control structure returned by a previous call to
-!                 vert_remap_init.
+!                 regularize_layers_init.
 
   integer :: i, j, k, is, ie, js, je, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
-  if (.not. associated(CS)) call MOM_error(FATAL, "MOM_vert_remap: "//&
+  if (.not. associated(CS)) call MOM_error(FATAL, "MOM_regularize_layers: "//&
          "Module must be initialized before it is used.")
 
   if (CS%regularize_surface_layers) then
@@ -149,7 +149,7 @@ subroutine vert_remap(h, tv, dt, ea, eb, G, CS)
     call regularize_surface(h, tv, dt, ea, eb, G, CS)
   endif
 
-end subroutine vert_remap
+end subroutine regularize_layers
 
 subroutine regularize_surface(h, tv, dt, ea, eb, G, CS)
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: h
@@ -157,7 +157,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, CS)
   real,                                  intent(in)    :: dt
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: ea, eb
   type(ocean_grid_type),                 intent(inout) :: G
-  type(vert_remap_CS),                   pointer       :: CS
+  type(regularize_layers_CS),            pointer       :: CS
 
 !    This subroutine ensures that there is a degree of horizontal smoothness
 !  in the depths of the near-surface interfaces.
@@ -175,7 +175,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, CS)
 !                 as h - usually m or kg m-2 (i.e., H).
 !  (in)      G - The ocean's grid structure.
 !  (in)      CS - The control structure returned by a previous call to
-!                 vert_remap_init.
+!                 regularize_layers_init.
 
   real, dimension(SZIB_(G),SZJ_(G)) :: &
     def_rat_u   ! The ratio of the thickness deficit to the minimum depth, ND.
@@ -255,13 +255,13 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, CS)
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
-  if (.not. associated(CS)) call MOM_error(FATAL, "MOM_vert_remap: "//&
+  if (.not. associated(CS)) call MOM_error(FATAL, "MOM_regularize_layers: "//&
          "Module must be initialized before it is used.")
 
   if (G%nkml<1) return
   nkmb = G%nk_rho_varies
   if (.not.ASSOCIATED(tv%eqn_of_state)) call MOM_error(FATAL, &
-    "MOM_vert_remap: This module now requires the use of temperature and "//&
+    "MOM_regularize_layers: This module now requires the use of temperature and "//&
     "an equation of state.")
 
   h_neglect = G%H_subroundoff
@@ -750,7 +750,7 @@ subroutine find_deficit_ratios(e, def_rat_u, def_rat_v, G, CS, &
   real, dimension(NIMEMB_,NJMEM_),           intent(out) :: def_rat_u
   real, dimension(NIMEM_,NJMEMB_),           intent(out) :: def_rat_v
   type(ocean_grid_type),                     intent(in)  :: G
-  type(vert_remap_CS),                       pointer     :: CS
+  type(regularize_layers_CS),                pointer     :: CS
   real, dimension(NIMEMB_,NJMEM_), optional, intent(out) :: def_rat_u_2lay
   real, dimension(NIMEM_,NJMEMB_), optional, intent(out) :: def_rat_v_2lay
   integer,                         optional, intent(in)  :: halo
@@ -760,7 +760,7 @@ subroutine find_deficit_ratios(e, def_rat_u, def_rat_v, G, CS, &
 !  (out)     def_rat_v - The thickness deficit ratio at v points, nondim.
 !  (in)      G - The ocean's grid structure.
 !  (in)      CS - The control structure returned by a previous call to
-!                 vert_remap_init.
+!                 regularize_layers_init.
 !  (out,opt) def_rat_u_2lay - The thickness deficit ratio at u points when the
 !                 mixed and buffer layers are aggregated into 1 layer, nondim.
 !  (out,opt) def_rat_v_2lay - The thickness deficit ratio at v pointswhen the
@@ -889,12 +889,12 @@ subroutine find_deficit_ratios(e, def_rat_u, def_rat_v, G, CS, &
 
 end subroutine find_deficit_ratios
 
-subroutine vert_remap_init(Time, G, param_file, diag, CS)
+subroutine regularize_layers_init(Time, G, param_file, diag, CS)
   type(time_type), target, intent(in)    :: Time
   type(ocean_grid_type),   intent(in)    :: G
   type(param_file_type),   intent(in)    :: param_file
   type(diag_ptrs), target, intent(inout) :: diag
-  type(vert_remap_CS),     pointer       :: CS
+  type(regularize_layers_CS), pointer    :: CS
 ! Arguments: Time - The current model time.
 !  (in)      G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
@@ -904,13 +904,13 @@ subroutine vert_remap_init(Time, G, param_file, diag, CS)
 !                  for this module
   character(len=128) :: version = '$Id$'
   character(len=128) :: tagname = '$Name$'
-  character(len=40)  :: mod = "MOM_vert_remap"  ! This module's name.
+  character(len=40)  :: mod = "MOM_regularize_layers"  ! This module's name.
   logical :: use_temperature
   integer :: isd, ied, jsd, jed
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
  
   if (associated(CS)) then
-    call MOM_error(WARNING, "vert_remap_init called with an associated"// &
+    call MOM_error(WARNING, "regularize_layers_init called with an associated"// &
                             "associated control structure.")
     return
   else ; allocate(CS) ; endif
@@ -990,9 +990,9 @@ subroutine vert_remap_init(Time, G, param_file, diag, CS)
       Time, 'V-point filtered 2-layer thickness deficit ratio', 'Nondim')
 #endif
  
-  id_clock_EOS = cpu_clock_id('(Ocean vert_remap EOS)', grain=CLOCK_ROUTINE)
-  id_clock_pass = cpu_clock_id('(Ocean vert_remap halo updates)', grain=CLOCK_ROUTINE)
+  id_clock_EOS = cpu_clock_id('(Ocean regularize_layers EOS)', grain=CLOCK_ROUTINE)
+  id_clock_pass = cpu_clock_id('(Ocean regularize_layers halo updates)', grain=CLOCK_ROUTINE)
 
-end subroutine vert_remap_init
+end subroutine regularize_layers_init
 
-end module MOM_vert_remap
+end module MOM_regularize_layers

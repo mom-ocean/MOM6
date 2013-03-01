@@ -355,7 +355,7 @@ CORRECT_DENSITY = False         !   [Boolean] default = True
                                 ! If true, and USE_EOS is true, the layer densities are
                                 ! restored toward their target values by the diapycnal
                                 ! mixing, as described in Hallberg (MWR, 2000).
-    !  Parameters of module MOM_vert_remap
+    !  Parameters of module MOM_regularize_layers
     !  Parameters of module MOM_opacity
 PEN_SW_SCALE = 15.0             !   [m] default = 0.0
                                 ! The vertical absorption e-folding depth of the

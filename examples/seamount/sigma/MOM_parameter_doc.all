@@ -979,7 +979,7 @@ MAX_ENT_IT = 5                  ! default = 5
                                 ! calculate the interior diapycnal entrainment.
 TOLERANCE_ENT = 1.0E-08         !   [m] default = 1.0E-08
                                 ! The tolerance with which to solve for entrainment values.
-    !  Parameters of module MOM_vert_remap
+    !  Parameters of module MOM_regularize_layers
 REGULARIZE_SURFACE_LAYERS = False !   [Boolean] default = False
                                 ! If defined, vertically restructure the near-surface
                                 ! layers when they have too much lateral variations to

@@ -410,7 +410,7 @@ ML_RESORT = True                !   [Boolean] default = False
 ML_PRESORT_NK_CONV_ADJ = 4      !   [nondim] default = 0
                                 ! Convectively mix the first ML_PRESORT_NK_CONV_ADJ
                                 ! layers before sorting when ML_RESORT is true.
-    !  Parameters of module MOM_vert_remap
+    !  Parameters of module MOM_regularize_layers
     !  Parameters of module MOM_opacity
 PEN_SW_SCALE = 15.0             !   [m] default = 0.0
                                 ! The vertical absorption e-folding depth of the

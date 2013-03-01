@@ -93,7 +93,7 @@ use MOM_sponge, only : apply_sponge, sponge_CS
 use MOM_tracer_flow_control, only : call_tracer_column_fns, tracer_flow_control_CS
 use MOM_variables, only : forcing, thermo_var_ptrs, vertvisc_type, optics_type
 use MOM_variables, only : MOM_forcing_chksum, MOM_thermovar_chksum, p3d
-use MOM_vert_remap, only : vert_remap, vert_remap_init, vert_remap_CS
+use MOM_regularize_layers, only : regularize_layers, regularize_layers_init, regularize_layers_CS
 use MOM_wave_speed, only : wave_speed
 use MOM_EOS, only : calculate_density, calculate_2_densities, calculate_TFreeze
 
@@ -151,7 +151,7 @@ type, public :: diabatic_CS ; private
 
   type(entrain_diffusive_CS), pointer :: entrain_diffusive_CSp => NULL()
   type(mixedlayer_CS),        pointer :: mixedlayer_CSp => NULL()
-  type(vert_remap_CS),        pointer :: vert_remap_CSp => NULL()
+  type(regularize_layers_CS), pointer :: regularize_layers_CSp => NULL()
   type(geothermal_CS),        pointer :: geothermal_CSp => NULL()
   type(Kappa_shear_CS),       pointer :: kappa_shear_CSp => NULL()
   type(int_tide_CS),          pointer :: int_tide_CSp => NULL()
@@ -624,7 +624,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, dt, G, CS)
   endif                                          ! end BULKMIXEDLAYER
 
   call cpu_clock_begin(id_clock_remap)
-  call vert_remap(h, tv, dt, ea, eb, G, CS%vert_remap_CSp)
+  call regularize_layers(h, tv, dt, ea, eb, G, CS%regularize_layers_CSp)
   call cpu_clock_end(id_clock_remap)
 
   if ((CS%id_Tdif > 0) .or. (CS%id_Tdif_z > 0) .or. &
@@ -1444,7 +1444,7 @@ subroutine diabatic_driver_init(Time, G, param_file, diag, CS, &
   if (CS%bulkmixedlayer) &
     call mixedlayer_init(Time, G, param_file, diag, CS%mixedlayer_CSp)
 
-  call vert_remap_init(Time, G, param_file, diag, CS%vert_remap_CSp)
+  call regularize_layers_init(Time, G, param_file, diag, CS%regularize_layers_CSp)
 
   if (use_temperature) then
     call get_param(param_file, mod, "PEN_SW_NBANDS", nbands, default=1)
