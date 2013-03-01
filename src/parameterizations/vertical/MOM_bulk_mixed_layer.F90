@@ -283,7 +283,6 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
     T_ml, &     ! The mixed layer temperature, in C.
     S_ml, &     ! The salinity of the mixed layer, PSU.
 
-    Bforce, &   ! The buoyancy forcing over one time step, in H m s-2.
     Net_H, &    !   The net mass flux (if non-Boussinsq) or volume flux (if
                 ! Boussinesq - i.e. the fresh water flux (P+R-E)) into the
                 ! ocean over a time step, in H.
@@ -314,7 +313,6 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
  
   real :: cMKE1(SZI_(G))! Coefficients of HpE and HpE^2 in calculating
   real :: cMKE2(SZI_(G))! the denominator of MKE_rate, in m-1 and m-2.
-  real :: Irho_cp       !  1.0 / rho_0 * c_p.
   real :: Irho0         ! 1.0 / rho_0
   real :: Inkml, Inkmlm1!  1.0 / REAL(nkml) and  1.0 / REAL(nkml-1)
   real :: Ih            !   The inverse of a thickness, in H-1.
@@ -374,7 +372,6 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
   Inkml = 1.0 / REAL(CS%nkml)
   if (CS%nkml > 1) Inkmlm1 = 1.0 / REAL(CS%nkml-1)
 
-  Irho_cp = 1.0 / (G%H_to_kg_m2 * fluxes%C_p)
   Irho0 = 1.0 / G%Rho0
   dt__diag = dt ; if (present(dt_diag)) dt__diag = dt_diag
   Idt = 1.0/dt
@@ -514,7 +511,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
     call cpu_clock_begin(id_clock_conv)
 
     call extract_fluxes(fluxes, optics, Net_H, Net_heat, Net_salt, nsw, &
-                        Pen_SW_bnd, Bforce, dt, j, G, CS)
+                        Pen_SW_bnd, dt, j, G, CS, h, T, tv)
 
 !   This subroutine causes the mixed layer to entrain to the depth of
 ! free convection.    
@@ -541,8 +538,8 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
                                 R0_tot, Rcv_tot, nsw, Pen_SW_bnd, TKE, &
                                 j, ksort, G, CS)
 
-    call absorb_remaining_SW(h, htot, T, Ttot, nsw, Pen_SW_bnd, &
-                             j, ksort, G, CS)
+    call absorb_remaining_SW(h, eps, htot, T, Ttot, nsw, Pen_SW_bnd, &
+                             opacity_band, j, ksort, dt, G, CS)
 
     if (CS%TKE_diagnostics) then ; do i=is,ie
       CS%diag%TKE_mech_decay(i,j) = CS%diag%TKE_mech_decay(i,j) - Idt_diag*TKE(i)
@@ -884,155 +881,6 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
     endif ; enddo ; enddo
 
   end subroutine convective_adjustment
-
-  subroutine extract_fluxes(fluxes, optics, Net_H, Net_heat, Net_salt, nsw, &
-                            Pen_SW_bnd, Bforce, dt, j, G, CS)
-    type(forcing),               intent(in)  :: fluxes
-    type(optics_type),           pointer     :: optics
-    real, dimension(NIMEM_),     intent(out) :: Net_H, Net_heat, Net_salt
-    integer,                     intent(in)  :: nsw
-    real, dimension(:,:),        intent(out) :: Pen_SW_bnd
-    real, dimension(NIMEM_),     intent(out) :: Bforce
-    real,                        intent(in)  :: dt
-    integer,                     intent(in)  :: j
-    type(ocean_grid_type),       intent(in)  :: G
-    type(bulkmixedlayer_CS),     pointer     :: CS
-  !   This subroutine extracts the relevant buoyancy fluxes from the surface
-  ! fluxes type.
-    
-  !  (in)      fluxes - A structure containing pointers to any possible
-  !                     forcing fields.  Unused fields have NULL ptrs.
-  !  (out)     Net_H - The net mass flux (if non-Boussinsq) or volume flux (if
-  !                    Boussinesq - i.e. the fresh water flux (P+R-E)) into the
-  !                    ocean over a time step, in H.
-  !  (out)     Net_heat - The net heating at the surface over a time step,
-  !                       exclusive of heating that appears in Pen_SW, in K H.
-  !  (out)     Net_salt - The surface salt flux into the ocean over a time step, psu H.
-  !  (in)      nsw - The number of bands of penetrating shortwave radiation.
-  !  (out)     Pen_SW_bnd - The penetrating shortwave heating at the sea surface
-  !                         in each penetrating band, in K H, size nsw x NIMEM_.
-  !  (out)     Bforce - The buoyancy forcing over one time step, in H m s-2.
-  !  (in)      dt - The time step in s.
-  !  (in)      j - The j-index to work on.
-  !  (in)      G - The ocean's grid structure.
-  !  (in)      CS - The control structure for this module.
-    real :: htot(SZI_(G))  ! The total depth of the ocean in m or kg m-2.
-    real :: Pen_sw_tot(SZI_(G))  ! The sum across all bands of Pen_SW, K H.
-    real :: Ih_limit  !   The inverse of the total depth at which the
-                      ! surface fluxes start to be limited, in H-1.
-    real :: scale     !   Scale scales away the fluxes when the total depth is
-                      ! thinner than H_limit_fluxes.
-    real :: Irho0, I_Cp
-    character(len=200) :: mesg
-    integer :: i, k, n
-    Ih_limit = 1.0 / (CS%H_limit_fluxes * G%m_to_H)
-    Irho0 = 1.0 / G%Rho0 ; I_Cp = 1.0 / fluxes%C_p
-
-    if (nsw > 0) then ; if (nsw /= optics%nbands) call MOM_error(WARNING, &
-      "mismatch in the number of bands of shortwave radiation in mixed_layer extract_fluxes.")
-    endif
-
-    if (.not.ASSOCIATED(fluxes%sw)) call MOM_error(FATAL, &
-      "MOM_mixed_layer: fluxes%sw is not associated.")
-    if (.not.ASSOCIATED(fluxes%lw)) call MOM_error(FATAL, &
-      "MOM_mixed_layer: fluxes%lw is not associated.")
-    if (.not.ASSOCIATED(fluxes%latent)) call MOM_error(FATAL, &
-      "MOM_mixed_layer: fluxes%latent is not associated.")
-    if (.not.ASSOCIATED(fluxes%sens)) call MOM_error(FATAL, &
-      "MOM_mixed_layer: fluxes%sens is not associated.")
-
-    if (.not.ASSOCIATED(fluxes%evap)) call MOM_error(FATAL, &
-      "MOM_mixed_layer: No evaporation defined in mixedlayer.")
-    if (.not.ASSOCIATED(fluxes%virt_precip)) call MOM_error(FATAL, &
-      "MOM_mixed_layer: fluxes%virt_precip not defined in mixedlayer.")
-
-    if ((.not.ASSOCIATED(fluxes%liq_precip)) .or. &
-        (.not.ASSOCIATED(fluxes%froz_precip))) call MOM_error(FATAL, &
-      "MOM_mixed_layer: No precipitation defined in mixedlayer.")
-
-    do i=is,ie ; htot(i) = h(i,1) ; enddo
-    do k=2,nz ; do i=is,ie ; htot(i) = htot(i) + h(i,k) ; enddo ; enddo
-
-    do i=is,ie
-      scale = 1.0
-      if (htot(i)*Ih_limit < 1.0) scale = htot(i)*Ih_limit
-
-!  Convert the penetrating shortwave forcing to K m.
-      Pen_sw_tot(i) = 0.0
-      if (nsw >= 1) then
-        do n=1,nsw
-          Pen_SW_bnd(n,i) = Irho_cp*scale*dt * &
-              max(0.0, optics%sw_pen_band(n,i,j))
-          Pen_sw_tot(i) = Pen_sw_tot(i) + Pen_SW_bnd(n,i)
-        enddo
-      else
-        Pen_SW_bnd(1,i) = 0.0
-      endif
-
-      Net_H(i) = dt * (scale * ((((( fluxes%liq_precip(i,j)    &
-                                   + fluxes%froz_precip(i,j) ) &
-                                   + fluxes%evap(i,j)        ) &
-                                   + fluxes%liq_runoff(i,j)  ) &
-                                   + fluxes%virt_precip(i,j) ) &
-                                   + fluxes%froz_runoff(i,j) ) )
-      Net_H(i) = G%kg_m2_to_H * Net_H(i)
-      if (.not.G%Boussinesq .and. associated(fluxes%salt_flux)) &
-        Net_H(i) = Net_H(i) + (dt * G%kg_m2_to_H) * &
-                      (scale * fluxes%salt_flux(i,j))
-
-      Net_heat(i) = scale * dt * Irho_cp * ( fluxes%sw(i,j) + &
-           ((fluxes%lw(i,j) + fluxes%latent(i,j)) + fluxes%sens(i,j)) )
-
-      if (ASSOCIATED(fluxes%heat_restore)) Net_heat(i) = Net_heat(i) + &
-           (scale * (dt * Irho_cp)) * fluxes%heat_restore(i,j)
-
-      if (CS%use_river_heat_content) then
-        if (.not.ASSOCIATED(fluxes%runoff_hflx)) call MOM_error(FATAL, &
-          "mixed layer extract fluxes: fluxes%runoff_hflx must be "//&
-          "assocated if USE_RIVER_HEAT_CONTENT is true.")
-
-        Net_heat(i) = (Net_heat(i) + (scale*(dt*Irho_cp)) * fluxes%runoff_hflx(i,j)) - &
-                       (G%kg_m2_to_H * (scale * dt)) * fluxes%liq_runoff(i,j) * T(i,1)
-        if (ASSOCIATED(tv%TempxPmE)) then
-          tv%TempxPmE(i,j) = tv%TempxPmE(i,j) + (scale * dt) * &
-              (I_Cp*fluxes%runoff_hflx(i,j) - fluxes%liq_runoff(i,j)*T(i,1))
-        endif    
-      endif
-      if (CS%use_calving_heat_content) then
-        if (.not.ASSOCIATED(fluxes%calving_hflx)) call MOM_error(FATAL, &
-          "mixed layer extract fluxes: fluxes%calving_hflx must be "//&
-          "assocated if USE_CALVING_HEAT_CONTENT is true.")
-
-        Net_heat(i) = Net_heat(i) + (scale*(dt*Irho_cp)) * fluxes%calving_hflx(i,j) - &
-                      (G%kg_m2_to_H * (scale * dt)) * fluxes%froz_runoff(i,j) * T(i,1)
-        if (ASSOCIATED(tv%TempxPmE)) then
-          tv%TempxPmE(i,j) = tv%TempxPmE(i,j) + (scale * dt) * &
-              (I_Cp*fluxes%calving_hflx(i,j) - fluxes%froz_runoff(i,j)*T(i,1))
-        endif    
-      endif
-
-      if (num_msg<max_msg) then
-        if (Pen_SW_tot(i) > 1.000001*Irho_cp*scale*dt*fluxes%sw(i,j)) then
-          num_msg = num_msg + 1
-          write(mesg,'("Penetrating shortwave of ",1pe17.10, &
-                      &" exceeds total shortwave of ",1pe17.10,&
-                      &" at ",1pg11.4,"E, "1pg11.4,"N.")') &
-                 Pen_SW_tot(i),Irho_cp*scale*dt*fluxes%sw(i,j),&
-                 G%geoLonT(i,j),G%geoLatT(i,j)
-          call MOM_error(WARNING,mesg) 
-        endif
-      endif
-
-      Net_heat(i) = Net_heat(i) - Pen_SW_tot(i)
-
-      Net_salt(i) = 0.0
-      ! Convert salt_flux from kg (salt) m-2 s-1 to PSU m s-1.
-      if (associated(fluxes%salt_flux)) &
-        Net_salt(i) = (scale * dt * (1000.0 * fluxes%salt_flux(i,j))) * G%kg_m2_to_H
-
-    enddo
- 
-  end subroutine extract_fluxes
 
   subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
                                    R0_tot, Rcv_tot, nsw, Pen_SW_bnd, Conv_en, &
@@ -1492,6 +1340,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
 
   end subroutine find_starting_TKE
 
+
   subroutine mechanical_entrainment(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
                                     R0_tot, Rcv_tot, nsw, Pen_SW_bnd, TKE, &
                                     j, ksort, G, CS)
@@ -1577,12 +1426,13 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
     real :: Hmix_min  ! The minimum mixed layer depth in H.
     real :: opacity
     real :: C1_3, C1_6, C1_24   !  1/3, 1/6, and 1/24.
-    integer :: i, k, ks, itt, n
+    integer :: is, ie, nz, i, k, ks, itt, n
 
     C1_3 = 1.0/3.0 ; C1_6 = 1.0/6.0 ; C1_24 = 1.0/24.0
     g_H_2Rho0 = (G%g_Earth * G%H_to_m) / (2.0 * G%Rho0)
     Hmix_min = CS%Hmix_min * G%m_to_H
     h_neglect = G%H_subroundoff
+    is = G%isc ; ie = G%iec ; nz = G%ke
 
     do ks=1,nz
 
@@ -1796,182 +1646,349 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
 
   end subroutine mechanical_entrainment
 
+end subroutine bulkmixedlayer
 
-  subroutine absorb_remaining_SW(h, htot, T, Ttot, nsw, Pen_SW_bnd, j, ksort, &
-                                 G, CS)
-    real, dimension(NIMEM_,NKMEM_), intent(in)    :: h
-    real, dimension(NIMEM_),        intent(in)    :: htot
-    real, dimension(NIMEM_,NKMEM_), intent(inout) :: T
-    real, dimension(NIMEM_),        intent(inout) :: Ttot
-    integer,                        intent(in)    :: nsw
-    real, dimension(:,:),           intent(inout) :: Pen_SW_bnd
-    integer,                        intent(in)    :: j
-    integer, dimension(NIMEM_,NKMEM_), intent(in) :: ksort
-    type(ocean_grid_type),          intent(in)    :: G
-    type(bulkmixedlayer_CS),        pointer       :: CS
-  !   This subroutine applies shortwave heating below the mixed layer.  In
-  ! addition, it causes all of the remaining SW radiation to be absorbed,
-  ! provided that the total water column thickness is greater than
-  ! CS%H_limit_fluxes.  For thinner water columns, the heating is scaled down
-  ! proportionately, the assumption being that the remaining heating (which is
-  ! left in Pen_SW) should go into an (unincluded) ocean bottom sediment layer.
 
-  ! Arguments: h - Layer thickness, in m or kg m-2. (Intent in)  The units
-  !                of h are referred to as H below.
-  !  (in)      htot - The total mixed layer thickness, in H.
-  !  (inout)   T - The layer potential temperatures, in deg C.
-  !  (inout)   Ttot - The depth integrated mixed layer temperature, in K H.
-  !  (in)      nsw - The number of bands of penetrating shortwave radiation.
-  !  (inout)   Pen_SW_bnd - The penetrating shortwave heating in each band that
-  !                         hits the bottom and will be redistributed through
-  !                         the water column, in K H, size nsw x NIMEM_.
-  !  (in)      j - The j-index to work on.
-  !  (in)      ksort - The density-sorted k-indicies.
-  !  (in)      G - The ocean's grid structure.
-  !  (in)      CS - The control structure for this module.
-   
-    real :: h_heat(SZI_(G)) !   The thickness of the water column that receives
-                            ! the remaining shortwave radiation, in H.
-    real :: T_chg_above(SZI_(G),SZK_(G)) !  The temperature change of all the
-                            ! thick layers above a given layer, in K.  The net
-                            ! change in the heat of a layer is the sum of
-                            ! T_chg_above from all the layers below, plus any
-                            ! contribution from absorbing radiation that hits
-                            ! the bottom.
-    real :: T_chg(SZI_(G))  !   The temperature change of thick layers due to
-                            ! the remaining shortwave radiation, in K.
-    real :: Pen_SW_rem(SZI_(G)) ! The sum across all wavelength bands of the
-                            ! penetrating shortwave heating that hits the bottom
-                            ! and will be redistributed through the water column
-                            ! in units of K H.
-    real :: SW_trans  !   The fraction of shortwave radiation that is not
-                      ! absorbed in a layer, nondimensional.
-    real :: unabsorbed      !   The fraction of the shortwave radiation that
-                            ! is not absorbed because the layers are too thin.
-    real :: Ih_limit        !   The inverse of the total depth at which the
-                            ! surface fluxes start to be limited, in H-1.
-    real :: h_min_heat      !   The minimum thickness layer that should get
-                            ! heated, in H.
-    real :: opt_depth       !   The optical depth of a layer, non-dim.
-    real :: exp_OD          !   exp(-opt_depth), non-dim.
-    real :: heat_bnd        !   The heating due to absorption in the current
-                            ! layer by the current band, including any piece that
-                            ! is moved upward, in K H.
-    real :: SWa             !   The fraction of the absorbed shortwave that is
-                            ! moved to layers above with correct_absorption, ND.
-    logical :: SW_Remains   ! If true, some column has shortwave radiation that
-                            ! was not entirely absorbed.
-    integer :: i, k, ks, n
-    SW_Remains = .false.
+subroutine extract_fluxes(fluxes, optics, Net_H, Net_heat, Net_salt, nsw, &
+                          Pen_SW_bnd, dt, j, G, CS, h, T, tv)
+  type(forcing),               intent(in)  :: fluxes
+  type(optics_type),           pointer     :: optics
+  real, dimension(NIMEM_),     intent(out) :: Net_H, Net_heat, Net_salt
+  integer,                     intent(in)  :: nsw
+  real, dimension(:,:),        intent(out) :: Pen_SW_bnd
+  real,                        intent(in)  :: dt
+  integer,                     intent(in)  :: j
+  type(ocean_grid_type),       intent(in)  :: G
+  type(bulkmixedlayer_CS),     pointer     :: CS
+  real, dimension(NIMEM_,NKMEM_), intent(in) :: h, T
+  type(thermo_var_ptrs),          intent(inout) :: tv
+!   This subroutine extracts the relevant buoyancy fluxes from the surface
+! fluxes type.
 
-    h_min_heat = 2.0*G%Angstrom + G%H_subroundoff
+!  (in)      fluxes - A structure containing pointers to any possible
+!                     forcing fields.  Unused fields have NULL ptrs.
+!  (out)     Net_H - The net mass flux (if non-Boussinsq) or volume flux (if
+!                    Boussinesq - i.e. the fresh water flux (P+R-E)) into the
+!                    ocean over a time step, in H.
+!  (out)     Net_heat - The net heating at the surface over a time step,
+!                       exclusive of heating that appears in Pen_SW, in K H.
+!  (out)     Net_salt - The surface salt flux into the ocean over a time step, psu H.
+!  (in)      nsw - The number of bands of penetrating shortwave radiation.
+!  (out)     Pen_SW_bnd - The penetrating shortwave heating at the sea surface
+!                         in each penetrating band, in K H, size nsw x NIMEM_.
+!  (in)      dt - The time step in s.
+!  (in)      j - The j-index to work on.
+!  (in)      G - The ocean's grid structure.
+!  (in)      CS - The control structure for this module.
+!  (in)      h - Layer thickness, in m or kg m-2.
+!  (in)      T - Layer temperatures, in deg C.
+!  (inout)   tv - A structure containing pointers to any available
+!                 thermodynamic fields. Here it is used to keep track of the
+!                 actual heat flux associated with net mass fluxes into the
+!                 ocean.
 
-    do i=is,ie ; h_heat(i) = htot(i) ; enddo
+  real :: htot(SZI_(G))  ! The total depth of the ocean in m or kg m-2.
+  real :: Pen_sw_tot(SZI_(G))  ! The sum across all bands of Pen_SW, K H.
+  real :: Ih_limit  !   The inverse of the total depth at which the
+                    ! surface fluxes start to be limited, in H-1.
+  real :: scale     !   Scale scales away the fluxes when the total depth is
+                    ! thinner than H_limit_fluxes.
+  real :: Irho_cp       !  1.0 / rho_0 * c_p.
+  real :: Irho0, I_Cp
+  character(len=200) :: mesg
+  integer :: is, ie, nz, i, k, n
+  Ih_limit = 1.0 / (CS%H_limit_fluxes * G%m_to_H)
+  Irho0 = 1.0 / G%Rho0 ; I_Cp = 1.0 / fluxes%C_p
+  Irho_cp = 1.0 / (G%H_to_kg_m2 * fluxes%C_p)
+  is = G%isc ; ie = G%iec ; nz = G%ke
+
+  if (nsw > 0) then ; if (nsw /= optics%nbands) call MOM_error(WARNING, &
+    "mismatch in the number of bands of shortwave radiation in mixed_layer extract_fluxes.")
+  endif
+
+  if (.not.ASSOCIATED(fluxes%sw)) call MOM_error(FATAL, &
+    "MOM_mixed_layer: fluxes%sw is not associated.")
+  if (.not.ASSOCIATED(fluxes%lw)) call MOM_error(FATAL, &
+    "MOM_mixed_layer: fluxes%lw is not associated.")
+  if (.not.ASSOCIATED(fluxes%latent)) call MOM_error(FATAL, &
+    "MOM_mixed_layer: fluxes%latent is not associated.")
+  if (.not.ASSOCIATED(fluxes%sens)) call MOM_error(FATAL, &
+    "MOM_mixed_layer: fluxes%sens is not associated.")
+
+  if (.not.ASSOCIATED(fluxes%evap)) call MOM_error(FATAL, &
+    "MOM_mixed_layer: No evaporation defined in mixedlayer.")
+  if (.not.ASSOCIATED(fluxes%virt_precip)) call MOM_error(FATAL, &
+    "MOM_mixed_layer: fluxes%virt_precip not defined in mixedlayer.")
+
+  if ((.not.ASSOCIATED(fluxes%liq_precip)) .or. &
+      (.not.ASSOCIATED(fluxes%froz_precip))) call MOM_error(FATAL, &
+    "MOM_mixed_layer: No precipitation defined in mixedlayer.")
+
+  do i=is,ie ; htot(i) = h(i,1) ; enddo
+  do k=2,nz ; do i=is,ie ; htot(i) = htot(i) + h(i,k) ; enddo ; enddo
+
+  do i=is,ie
+    scale = 1.0
+    if (htot(i)*Ih_limit < 1.0) scale = htot(i)*Ih_limit
+
+!  Convert the penetrating shortwave forcing to K m.
+    Pen_sw_tot(i) = 0.0
+    if (nsw >= 1) then
+      do n=1,nsw
+        Pen_SW_bnd(n,i) = Irho_cp*scale*dt * &
+            max(0.0, optics%sw_pen_band(n,i,j))
+        Pen_sw_tot(i) = Pen_sw_tot(i) + Pen_SW_bnd(n,i)
+      enddo
+    else
+      Pen_SW_bnd(1,i) = 0.0
+    endif
+
+    Net_H(i) = dt * (scale * ((((( fluxes%liq_precip(i,j)    &
+                                 + fluxes%froz_precip(i,j) ) &
+                                 + fluxes%evap(i,j)        ) &
+                                 + fluxes%liq_runoff(i,j)  ) &
+                                 + fluxes%virt_precip(i,j) ) &
+                                 + fluxes%froz_runoff(i,j) ) )
+    Net_H(i) = G%kg_m2_to_H * Net_H(i)
+    if (.not.G%Boussinesq .and. associated(fluxes%salt_flux)) &
+      Net_H(i) = Net_H(i) + (dt * G%kg_m2_to_H) * &
+                    (scale * fluxes%salt_flux(i,j))
+
+    Net_heat(i) = scale * dt * Irho_cp * ( fluxes%sw(i,j) + &
+         ((fluxes%lw(i,j) + fluxes%latent(i,j)) + fluxes%sens(i,j)) )
+
+    if (ASSOCIATED(fluxes%heat_restore)) Net_heat(i) = Net_heat(i) + &
+         (scale * (dt * Irho_cp)) * fluxes%heat_restore(i,j)
+
+    if (CS%use_river_heat_content) then
+      if (.not.ASSOCIATED(fluxes%runoff_hflx)) call MOM_error(FATAL, &
+        "mixed layer extract fluxes: fluxes%runoff_hflx must be "//&
+        "assocated if USE_RIVER_HEAT_CONTENT is true.")
+
+      Net_heat(i) = (Net_heat(i) + (scale*(dt*Irho_cp)) * fluxes%runoff_hflx(i,j)) - &
+                     (G%kg_m2_to_H * (scale * dt)) * fluxes%liq_runoff(i,j) * T(i,1)
+      if (ASSOCIATED(tv%TempxPmE)) then
+        tv%TempxPmE(i,j) = tv%TempxPmE(i,j) + (scale * dt) * &
+            (I_Cp*fluxes%runoff_hflx(i,j) - fluxes%liq_runoff(i,j)*T(i,1))
+      endif    
+    endif
+    if (CS%use_calving_heat_content) then
+      if (.not.ASSOCIATED(fluxes%calving_hflx)) call MOM_error(FATAL, &
+        "mixed layer extract fluxes: fluxes%calving_hflx must be "//&
+        "assocated if USE_CALVING_HEAT_CONTENT is true.")
+
+      Net_heat(i) = Net_heat(i) + (scale*(dt*Irho_cp)) * fluxes%calving_hflx(i,j) - &
+                    (G%kg_m2_to_H * (scale * dt)) * fluxes%froz_runoff(i,j) * T(i,1)
+      if (ASSOCIATED(tv%TempxPmE)) then
+        tv%TempxPmE(i,j) = tv%TempxPmE(i,j) + (scale * dt) * &
+            (I_Cp*fluxes%calving_hflx(i,j) - fluxes%froz_runoff(i,j)*T(i,1))
+      endif    
+    endif
+
+    if (num_msg<max_msg) then
+      if (Pen_SW_tot(i) > 1.000001*Irho_cp*scale*dt*fluxes%sw(i,j)) then
+        num_msg = num_msg + 1
+        write(mesg,'("Penetrating shortwave of ",1pe17.10, &
+                    &" exceeds total shortwave of ",1pe17.10,&
+                    &" at ",1pg11.4,"E, "1pg11.4,"N.")') &
+               Pen_SW_tot(i),Irho_cp*scale*dt*fluxes%sw(i,j),&
+               G%geoLonT(i,j),G%geoLatT(i,j)
+        call MOM_error(WARNING,mesg) 
+      endif
+    endif
+
+    Net_heat(i) = Net_heat(i) - Pen_SW_tot(i)
+
+    Net_salt(i) = 0.0
+    ! Convert salt_flux from kg (salt) m-2 s-1 to PSU m s-1.
+    if (associated(fluxes%salt_flux)) &
+      Net_salt(i) = (scale * dt * (1000.0 * fluxes%salt_flux(i,j))) * G%kg_m2_to_H
+
+  enddo
+
+end subroutine extract_fluxes
+
+subroutine absorb_remaining_SW(h, eps, htot, T, Ttot, nsw, Pen_SW_bnd, &
+                               opacity_band, j, ksort, dt, G, CS)
+  real, dimension(NIMEM_,NKMEM_), intent(in)    :: h, eps
+  real, dimension(NIMEM_),        intent(in)    :: htot
+  real, dimension(NIMEM_,NKMEM_), intent(inout) :: T
+  real, dimension(NIMEM_),        intent(inout) :: Ttot
+  integer,                        intent(in)    :: nsw
+  real, dimension(:,:),           intent(inout) :: Pen_SW_bnd
+  real, dimension(:,:,:),         intent(in)    :: opacity_band
+  integer,                        intent(in)    :: j
+  integer, dimension(NIMEM_,NKMEM_), intent(in) :: ksort
+  real,                           intent(in)    :: dt
+  type(ocean_grid_type),          intent(in)    :: G
+  type(bulkmixedlayer_CS),        pointer       :: CS
+!   This subroutine applies shortwave heating below the mixed layer.  In
+! addition, it causes all of the remaining SW radiation to be absorbed,
+! provided that the total water column thickness is greater than
+! CS%H_limit_fluxes.  For thinner water columns, the heating is scaled down
+! proportionately, the assumption being that the remaining heating (which is
+! left in Pen_SW) should go into an (unincluded) ocean bottom sediment layer.
+
+! Arguments: h - Layer thickness, in m or kg m-2. (Intent in)  The units
+!                of h are referred to as H below.
+!  (in)      eps - The (small) thickness that must remain in each layer, and
+!                  which will not be subject to heating, in H.
+!  (in)      htot - The total mixed layer thickness, in H.
+!  (inout)   T - The layer potential temperatures, in deg C.
+!  (inout)   Ttot - The depth integrated mixed layer temperature, in K H.
+!  (in)      nsw - The number of bands of penetrating shortwave radiation.
+!  (inout)   Pen_SW_bnd - The penetrating shortwave heating in each band that
+!                         hits the bottom and will be redistributed through
+!                         the water column, in K H, size nsw x NIMEM_.
+!  (in)      opacity_band - The opacity in each band of penetrating shortwave
+!                           radiation, in H-1. The indicies are band, i, k.
+!  (in)      j - The j-index to work on.
+!  (in)      ksort - The density-sorted k-indicies.
+!  (in)      dt - The time step in s.
+!  (in)      G - The ocean's grid structure.
+!  (in)      CS - The control structure for this module.
+
+  real :: h_heat(SZI_(G)) !   The thickness of the water column that receives
+                          ! the remaining shortwave radiation, in H.
+  real :: T_chg_above(SZI_(G),SZK_(G)) !  The temperature change of all the
+                          ! thick layers above a given layer, in K.  The net
+                          ! change in the heat of a layer is the sum of
+                          ! T_chg_above from all the layers below, plus any
+                          ! contribution from absorbing radiation that hits
+                          ! the bottom.
+  real :: T_chg(SZI_(G))  !   The temperature change of thick layers due to
+                          ! the remaining shortwave radiation, in K.
+  real :: Pen_SW_rem(SZI_(G)) ! The sum across all wavelength bands of the
+                          ! penetrating shortwave heating that hits the bottom
+                          ! and will be redistributed through the water column
+                          ! in units of K H.
+  real :: SW_trans  !   The fraction of shortwave radiation that is not
+                    ! absorbed in a layer, nondimensional.
+  real :: unabsorbed      !   The fraction of the shortwave radiation that
+                          ! is not absorbed because the layers are too thin.
+  real :: Ih_limit        !   The inverse of the total depth at which the
+                          ! surface fluxes start to be limited, in H-1.
+  real :: h_min_heat      !   The minimum thickness layer that should get
+                          ! heated, in H.
+  real :: opt_depth       !   The optical depth of a layer, non-dim.
+  real :: exp_OD          !   exp(-opt_depth), non-dim.
+  real :: heat_bnd        !   The heating due to absorption in the current
+                          ! layer by the current band, including any piece that
+                          ! is moved upward, in K H.
+  real :: SWa             !   The fraction of the absorbed shortwave that is
+                          ! moved to layers above with correct_absorption, ND.
+  logical :: SW_Remains   ! If true, some column has shortwave radiation that
+                          ! was not entirely absorbed.
+  integer :: is, ie, nz, i, k, ks, n
+  SW_Remains = .false.
+
+  h_min_heat = 2.0*G%Angstrom + G%H_subroundoff
+  is = G%isc ; ie = G%iec ; nz = G%ke
+
+  do i=is,ie ; h_heat(i) = htot(i) ; enddo
 
 ! Apply penetrating SW radiation to remaining parts of layers.  Excessively thin
 ! isopycnal layers are not heated.
-    do ks=1,nz
+  do ks=1,nz
 
-      do i=is,ie ; if (ksort(i,ks) > 0) then
-        k = ksort(i,ks)
+    do i=is,ie ; if (ksort(i,ks) > 0) then
+      k = ksort(i,ks)
 
-        T_chg_above(i,k) = 0.0
+      T_chg_above(i,k) = 0.0
 
-        if (h(i,k) > 1.5*eps(i,k)) then
-          do n=1,nsw ; if (Pen_SW_bnd(n,i) > 0.0) then
-            opt_depth = h(i,k) * opacity_band(n,i,k)
-            exp_OD = exp(-opt_depth)
-            SW_trans = exp_OD
-  ! Heating at a rate of less than 10-4 W m-2 = 10-3 K m / Century,
-  ! and of the layer in question less than 1 K / Century, can be
-  ! absorbed without further penetration.
-            if ((nsw*Pen_SW_bnd(n,i)*SW_trans < G%m_to_H*2.5e-11*dt) .and. &
-                (nsw*Pen_SW_bnd(n,i)*SW_trans < h(i,k)*dt*2.5e-8)) &
-              SW_trans = 0.0
+      if (h(i,k) > 1.5*eps(i,k)) then
+        do n=1,nsw ; if (Pen_SW_bnd(n,i) > 0.0) then
+          opt_depth = h(i,k) * opacity_band(n,i,k)
+          exp_OD = exp(-opt_depth)
+          SW_trans = exp_OD
+! Heating at a rate of less than 10-4 W m-2 = 10-3 K m / Century,
+! and of the layer in question less than 1 K / Century, can be
+! absorbed without further penetration.
+          if ((nsw*Pen_SW_bnd(n,i)*SW_trans < G%m_to_H*2.5e-11*dt) .and. &
+              (nsw*Pen_SW_bnd(n,i)*SW_trans < h(i,k)*dt*2.5e-8)) &
+            SW_trans = 0.0
 
-            if (CS%correct_absorption .and. (h_heat(i) > 0.0)) then
-              if (opt_depth > 1e-5) then
-                SWa = ((opt_depth + (opt_depth + 2.0)*exp_OD) - 2.0) / &
-                  ((opt_depth + opacity_band(n,i,k) * h_heat(i)) * &
-                   (1.0 - exp_OD))
-              else
-                ! Use a Taylor's series expansion of the expression above for a
-                ! more accurate form with very small layer optical depths.
-                SWa = h(i,k) * (opt_depth * (1.0 - opt_depth)) / &
-                  ((h_heat(i) + h(i,k)) * (6.0 - 3.0*opt_depth))
-              endif
-              Heat_bnd = Pen_SW_bnd(n,i) * (1.0 - SW_trans)
-              T_chg_above(i,k) = T_chg_above(i,k) + (SWa * Heat_bnd) / h_heat(i)
-              T(i,k) = T(i,k) + ((1.0 - SWa) * Heat_bnd) / h(i,k)
+          if (CS%correct_absorption .and. (h_heat(i) > 0.0)) then
+            if (opt_depth > 1e-5) then
+              SWa = ((opt_depth + (opt_depth + 2.0)*exp_OD) - 2.0) / &
+                ((opt_depth + opacity_band(n,i,k) * h_heat(i)) * &
+                 (1.0 - exp_OD))
             else
-              T(i,k) = T(i,k) + Pen_SW_bnd(n,i) * (1.0 - SW_trans) / h(i,k)
+              ! Use a Taylor's series expansion of the expression above for a
+              ! more accurate form with very small layer optical depths.
+              SWa = h(i,k) * (opt_depth * (1.0 - opt_depth)) / &
+                ((h_heat(i) + h(i,k)) * (6.0 - 3.0*opt_depth))
             endif
+            Heat_bnd = Pen_SW_bnd(n,i) * (1.0 - SW_trans)
+            T_chg_above(i,k) = T_chg_above(i,k) + (SWa * Heat_bnd) / h_heat(i)
+            T(i,k) = T(i,k) + ((1.0 - SWa) * Heat_bnd) / h(i,k)
+          else
+            T(i,k) = T(i,k) + Pen_SW_bnd(n,i) * (1.0 - SW_trans) / h(i,k)
+          endif
 
-            Pen_SW_bnd(n,i) = Pen_SW_bnd(n,i) * SW_trans
-          endif ; enddo
-        endif
+          Pen_SW_bnd(n,i) = Pen_SW_bnd(n,i) * SW_trans
+        endif ; enddo
+      endif
 
-        ! Add to the accumulated thickness above that could be heated.
-        ! Only layers greater than h_min_heat thick should get heated.
-        if (h(i,k) >= 2.0*h_min_heat) then
-          h_heat(i) = h_heat(i) + h(i,k)
-        elseif (h(i,k) > h_min_heat) then
-          h_heat(i) = h_heat(i) + (2.0*h(i,k) - 2.0*h_min_heat)
-        endif
-      endif ; enddo ! i loop
-    enddo ! k loop
+      ! Add to the accumulated thickness above that could be heated.
+      ! Only layers greater than h_min_heat thick should get heated.
+      if (h(i,k) >= 2.0*h_min_heat) then
+        h_heat(i) = h_heat(i) + h(i,k)
+      elseif (h(i,k) > h_min_heat) then
+        h_heat(i) = h_heat(i) + (2.0*h(i,k) - 2.0*h_min_heat)
+      endif
+    endif ; enddo ! i loop
+  enddo ! k loop
 
-    ! Apply heating above the layers in which it should have occurred to get the
-    ! correct mean depth of the shortwave that should be absorbed by each layer.
+  ! Apply heating above the layers in which it should have occurred to get the
+  ! correct mean depth of the shortwave that should be absorbed by each layer.
 !    if (CS%correct_absorption) then
 !    endif
 
-    if (.not.CS%absorb_all_SW .and. .not.CS%correct_absorption) return
+  if (.not.CS%absorb_all_SW .and. .not.CS%correct_absorption) return
 
-    ! Unless modified, there is no temperature change due to fluxes from the
-    ! bottom.
-    do i=is,ie ; T_chg(i) = 0.0 ; enddo
+  ! Unless modified, there is no temperature change due to fluxes from the
+  ! bottom.
+  do i=is,ie ; T_chg(i) = 0.0 ; enddo
 
-    ! If there is still shortwave radiation at this point, it could go into
-    ! the bottom (with a bottom mud model), or it could be redistributed back
-    ! through the water column.
-    if (CS%absorb_all_SW) then
-      do i=is,ie
-        Pen_SW_rem(i) = Pen_SW_bnd(1,i)
-        do n=2,nsw ; Pen_SW_rem(i) = Pen_SW_rem(i) + Pen_SW_bnd(n,i) ; enddo
-      enddo
-      do i=is,ie ; if (Pen_SW_rem(i) > 0.0) SW_Remains = .true. ; enddo
-   !  if (.not.SW_Remains) return
+  ! If there is still shortwave radiation at this point, it could go into
+  ! the bottom (with a bottom mud model), or it could be redistributed back
+  ! through the water column.
+  if (CS%absorb_all_SW) then
+    do i=is,ie
+      Pen_SW_rem(i) = Pen_SW_bnd(1,i)
+      do n=2,nsw ; Pen_SW_rem(i) = Pen_SW_rem(i) + Pen_SW_bnd(n,i) ; enddo
+    enddo
+    do i=is,ie ; if (Pen_SW_rem(i) > 0.0) SW_Remains = .true. ; enddo
+ !  if (.not.SW_Remains) return
 
-      Ih_limit = 1.0 / (CS%H_limit_fluxes * G%m_to_H)
-      do i=is,ie ; if ((Pen_SW_rem(i) > 0.0) .and. (h_heat(i) > 0.0)) then
-        if (h_heat(i)*Ih_limit >= 1.0) then
-          T_chg(i) = Pen_SW_rem(i) / h_heat(i) ; unabsorbed = 0.0
-        else
-          T_chg(i) = Pen_SW_rem(i) * Ih_limit
-          unabsorbed = 1.0 - h_heat(i)*Ih_limit
-        endif
-        do n=1,nsw ; Pen_SW_bnd(n,i) = unabsorbed * Pen_SW_bnd(n,i) ; enddo
-      endif ; enddo
-    endif
-
-    do ks=nz,1,-1 ; do i=is,ie ; if (ksort(i,ks) > 0) then
-      k = ksort(i,ks)
-      if (T_chg(i) > 0.0) then
-        ! Only layers greater than h_min_heat thick should get heated.
-        if (h(i,k) >= 2.0*h_min_heat) then ; T(i,k) = T(i,k) + T_chg(i)
-        elseif (h(i,k) > h_min_heat) then
-          T(i,k) = T(i,k) + T_chg(i) * (2.0 - 2.0*h_min_heat/h(i,k))
-        endif
+    Ih_limit = 1.0 / (CS%H_limit_fluxes * G%m_to_H)
+    do i=is,ie ; if ((Pen_SW_rem(i) > 0.0) .and. (h_heat(i) > 0.0)) then
+      if (h_heat(i)*Ih_limit >= 1.0) then
+        T_chg(i) = Pen_SW_rem(i) / h_heat(i) ; unabsorbed = 0.0
+      else
+        T_chg(i) = Pen_SW_rem(i) * Ih_limit
+        unabsorbed = 1.0 - h_heat(i)*Ih_limit
       endif
-      ! Increase the heating for layers above.
-      T_chg(i) = T_chg(i) + T_chg_above(i,k)
-    endif ; enddo ; enddo
-    do i=is,ie ; Ttot(i) = Ttot(i) + T_chg(i) * htot(i) ; enddo
+      do n=1,nsw ; Pen_SW_bnd(n,i) = unabsorbed * Pen_SW_bnd(n,i) ; enddo
+    endif ; enddo
+  endif
 
-  end subroutine absorb_remaining_SW
+  do ks=nz,1,-1 ; do i=is,ie ; if (ksort(i,ks) > 0) then
+    k = ksort(i,ks)
+    if (T_chg(i) > 0.0) then
+      ! Only layers greater than h_min_heat thick should get heated.
+      if (h(i,k) >= 2.0*h_min_heat) then ; T(i,k) = T(i,k) + T_chg(i)
+      elseif (h(i,k) > h_min_heat) then
+        T(i,k) = T(i,k) + T_chg(i) * (2.0 - 2.0*h_min_heat/h(i,k))
+      endif
+    endif
+    ! Increase the heating for layers above.
+    T_chg(i) = T_chg(i) + T_chg_above(i,k)
+  endif ; enddo ; enddo
+  do i=is,ie ; Ttot(i) = Ttot(i) + T_chg(i) * htot(i) ; enddo
 
-end subroutine bulkmixedlayer
+end subroutine absorb_remaining_SW
 
 subroutine sort_ML(h, R0, eps, G, CS, ksort)
   real, dimension(NIMEM_,NKMEM_),    intent(in)  :: h, R0, eps
