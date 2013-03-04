@@ -37,7 +37,8 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public set_axes_info, post_data, safe_alloc_ptr, register_diag_field, time_type
+public set_axes_info, post_data, register_diag_field, time_type
+public safe_alloc_ptr, safe_alloc_alloc
 public enable_averaging, disable_averaging, query_averaging_enabled
 public diag_mediator_init, diag_mediator_end, set_diag_mediator_grid
 public diag_mediator_close_registration
@@ -47,6 +48,10 @@ interface safe_alloc_ptr
   module procedure safe_alloc_ptr_3d_2arg, safe_alloc_ptr_2d_2arg
   module procedure safe_alloc_ptr_3d, safe_alloc_ptr_2d, safe_alloc_ptr_1d
 end interface safe_alloc_ptr
+
+interface safe_alloc_alloc
+  module procedure safe_alloc_allocatable_3d, safe_alloc_allocatable_2d
+end interface safe_alloc_alloc
 
 interface post_data
   module procedure post_data_3d, post_data_2d
@@ -112,26 +117,6 @@ type, public :: diag_ptrs
   real, pointer :: Nonlnv_bt(:,:) => NULL()  ! erations, in m s-2.
   real, pointer :: ubt_flux(:,:) => NULL()   ! Barotropic mass fluxes across
   real, pointer :: vbt_flux(:,:) => NULL()   ! cell faces, in m3 s-1.
-
-  real, pointer :: ML_depth(:,:) => NULL()   ! The mixed layer depth in m.
-! These are terms in the mixed layer TKE budget, all in m3 s-2.
-  real, pointer :: TKE_wind(:,:) => NULL()   ! The wind source of TKE.
-  real, pointer :: TKE_RiBulk(:,:) => NULL() ! The resolved KE source of TKE.
-  real, pointer :: TKE_conv(:,:) => NULL()   ! The convective source of TKE.
-  real, pointer :: TKE_pen_SW(:,:) => NULL() ! The TKE sink required to mix
-                                             ! penetrating shortwave heating.
-  real, pointer :: TKE_mech_decay(:,:) => NULL() ! The decay of mechanical TKE.
-  real, pointer :: TKE_conv_decay(:,:) => NULL() ! The decay of convective TKE.
-  real, pointer :: TKE_mixing(:,:) => NULL() ! The work done by TKE to deepen
-                                             ! the mixed layer.
-  real, pointer :: TKE_conv_s2(:,:) => NULL()! The convective source of TKE due to
-                                             ! to mixing in sigma2.
-  real, pointer :: PE_detrain(:,:) => NULL() ! The spurious source of potential
-                                             ! energy due to mixed layer
-                                             ! detrainment, W m-2.
-  real, pointer :: PE_detrain2(:,:) => NULL()! The spurious source of potential
-                                             ! energy due to mixed layer only
-                                             ! detrainment, W m-2.
 
 ! The following are a number of estimates of the thickness fluxes, in m3 s-1.
   real, pointer :: uh_min(:,:,:) => NULL()
@@ -510,6 +495,24 @@ subroutine safe_alloc_ptr_3d(ptr, is, ie, js, je, nk)
     ptr(:,:,:) = 0.0
   endif
 end subroutine safe_alloc_ptr_3d
+
+subroutine safe_alloc_allocatable_2d(ptr, is, ie, js, je)
+  real, allocatable :: ptr(:,:)
+  integer, intent(in) :: is, ie, js, je
+  if (.not.ALLOCATED(ptr)) then
+    allocate(ptr(is:ie,js:je))
+    ptr(:,:) = 0.0
+  endif
+end subroutine safe_alloc_allocatable_2d
+
+subroutine safe_alloc_allocatable_3d(ptr, is, ie, js, je, nk)
+  real, allocatable :: ptr(:,:,:)
+  integer, intent(in) :: is, ie, js, je, nk
+  if (.not.ALLOCATED(ptr)) then
+    allocate(ptr(is:ie,js:je,nk))
+    ptr(:,:,:) = 0.0
+  endif
+end subroutine safe_alloc_allocatable_3d
 
 function register_diag_field(module_name, field_name, axes, init_time, &
              long_name, units, missing_value, range, mask_variant, standard_name, &
