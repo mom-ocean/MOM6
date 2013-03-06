@@ -890,7 +890,7 @@ KD_MAX = -1.0                   !   [m2 s-1] default = -1.0
 KD_ADD = 0.0                    !   [m2 s-1] default = 0.0
                                 ! A uniform diapycnal diffusivity that is added
                                 ! everywhere without any filtering or scaling.
-KDML = 1.0E-04                  !   [m2 s-1] default = 0.0
+KDML = 0.0                      !   [m2 s-1] default = 0.0
                                 ! If BULKMIXEDLAYER is false, KDML is the elevated
                                 ! diapycnal diffusivity in the topmost HMIX of fluid.
                                 ! KDML is only used if BULKMIXEDLAYER is false.

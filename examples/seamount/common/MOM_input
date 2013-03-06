@@ -480,9 +480,6 @@ REMAPPING_SCHEME = "PPM_IH4"	   !   This sets the remapping scheme to use to
 #define KVML 1.00e-2           !    The kinematic viscosity in the mixed layer,
                                !  in m2 s-1.  A typical value is ~1e-2 m2 s-1.
                                !  KVML is not used if BULKMIXEDLAYER is defined.
-#define KDML 1.00e-4           !    The diapycnal diffusivity of density in the
-                               !  mixed layer, in m2 s-1.  This value may be 0.
-                               !  KDML is not used if BULKMIXEDLAYER is defined.
 #define DIRECT_STRESS          !    If DIRECT_STRESS is defined, the wind stress
                                !  is distributed over the topmost HMIX of fluid,
                                !  and KVML may be set to a very small value.

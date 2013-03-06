@@ -2286,9 +2286,15 @@ subroutine set_diffusivity_init(Time, G, param_file, diag, CS, diag_to_Z_CSp)
                  "everywhere without any filtering or scaling.", &
                  units="m2 s-1", default=0.0)
 
-  CS%Kdml = CS%Kd ! This is not used with a bulk mixed layer, but also
-                  ! cannot be a NaN.
-  if (.not.CS%bulkmixedlayer) then
+  if (CS%bulkmixedlayer) then
+    ! Check that Kdml is not set when using bulk mixed layer
+    call get_param(param_file, mod, "KDML", CS%Kdml, default=-1.)
+    if (CS%Kdml>0.) call MOM_error(FATAL, &
+                 "set_diffusivity_init: KDML cannot be set when using"// &
+                 "bulk mixed layer.")
+    CS%Kdml = CS%Kd ! This is not used with a bulk mixed layer, but also
+                    ! cannot be a NaN.
+  else
     call get_param(param_file, mod, "KDML", CS%Kdml, &
                  "If BULKMIXEDLAYER is false, KDML is the elevated \n"//&
                  "diapycnal diffusivity in the topmost HMIX of fluid. \n"//&
