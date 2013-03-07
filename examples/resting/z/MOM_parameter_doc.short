@@ -302,7 +302,7 @@ KHTH = 500.0                    !   [m2 s-1] default = 0.0
 USE_REGRIDDING = True           !   [Boolean] default = False
                                 ! If True, use the ALE algorithm (regridding/remapping).
                                 ! If False, use the layered isopycnal algorithm.
-REGRIDDING_COORDINATE_MODE = "RHO" ! default = "LAYER"
+REGRIDDING_COORDINATE_MODE = "Z*" ! default = "LAYER"
                                 ! Coordinate mode for vertical regridding.
                                 ! Choose among the following possibilities:
                                 !  LAYER - Isopycnal or stacked shallow water layers
@@ -327,14 +327,14 @@ INTERPOLATION_SCHEME = "PLM"    ! default = "P1M_H2"
                                 !  PQM_IH6IH5 (5th-order accurate)
     !  Parameters of module MOM_diabatic_driver
         ! The following parameters are used for diabatic processes.
+BBL_EFFIC = 0.0                 !   [nondim] default = 0.2
+                                ! The efficiency with which the energy extracted by
+                                ! bottom drag drives BBL diffusion.  This is only
+                                ! used if BOTTOMDRAGLAW is true.
 KD = 0.0                        !   [m2 s-1]
                                 ! The background diapycnal diffusivity of density in the
                                 ! interior. Zero or the molecular value, ~1e-7 m2 s-1,
                                 ! may be used.
-KDML = 1.0E-04                  !   [m2 s-1] default = 0.0
-                                ! If BULKMIXEDLAYER is false, KDML is the elevated
-                                ! diapycnal diffusivity in the topmost HMIX of fluid.
-                                ! KDML is only used if BULKMIXEDLAYER is false.
     !  Parameters of module MOM_entrain_diffusive
 CORRECT_DENSITY = False         !   [Boolean] default = True
                                 ! If true, and USE_EOS is true, the layer densities are

@@ -105,19 +105,6 @@ NJPROC_IO = 1                  !    The number of processors used for I/O in the
 #define ANGSTROM 1.0e-10                               
 
 ! The following parameters apply to the regridding/remapping schemes
-#define USE_REGRIDDING            !   If defined, regridding is activated and
-                               ! parameters below should be properly defined.
-#define RESTING_IC                !   If defined, the initial layer T&S are
-                               ! set in order for the T&S reconstructions within
-                               ! each water column to be identical, which gives
-                               ! motionless evolution.
-#define REGRIDDING_COORDINATE_MODE "RHO"       !   Type of grid to build in the vertical.
-                               ! Choose among the following possibilities (must
-                               ! be an integer !):
-                               ! 0: z*.
-                               ! 1: target interface densities.
-                               ! 2: sigma.
-                               ! Default is set to 1 (target densities).
 #define REMAPPING_SCHEME "PLM"       !   This sets the remapping scheme to use to
                                ! remap all variables between successive grids.
                                ! It can be one of the following schemes (must be
@@ -481,7 +468,7 @@ DT_BT_FILTER = 0.0             !    A time-scale for filtering BT variables,
 #define KVML 1.00e-2           !    The kinematic viscosity in the mixed layer,
                                !  in m2 s-1.  A typical value is ~1e-2 m2 s-1.
                                !  KVML is not used if BULKMIXEDLAYER is defined.
-#define KDML 1.00e-4           !    The diapycnal diffusivity of density in the
+#define KDML 0.00e-4           !    The diapycnal diffusivity of density in the
                                !  mixed layer, in m2 s-1.  This value may be 0.
                                !  KDML is not used if BULKMIXEDLAYER is defined.
 #define DIRECT_STRESS          !    If DIRECT_STRESS is defined, the wind stress
@@ -556,7 +543,7 @@ DT_BT_FILTER = 0.0             !    A time-scale for filtering BT variables,
                                !  in m, that can be used with BOTTOMDRAGLAW.
                                !  This might be Kv / (cdrag * drag_bg_vel) to
                                !  give Kv as the minimum near-bottom viscosity.
-#define BBL_EFFIC 0.20         !    BBL_EFFIC is the efficiency with which the
+#define BBL_EFFIC 0.00         !    BBL_EFFIC is the efficiency with which the
                                !  energy extracted by  bottom drag drives BBL
                                !  diffusion.  Nondimensional.  BBL_EFFIC only
                                !  applies when BOTTOMDRAGLAW is defined.
