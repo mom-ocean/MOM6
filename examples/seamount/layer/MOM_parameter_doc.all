@@ -848,7 +848,7 @@ ML_RADIATION = False            !   [Boolean] default = False
                                 ! with a vertical decay scale determined by the minimum
                                 ! of: (1) The depth of the mixed layer, (2) an Ekman
                                 ! length scale.
-BBL_EFFIC = 0.2                 !   [nondim] default = 0.2
+BBL_EFFIC = 0.0                 !   [nondim] default = 0.2
                                 ! The efficiency with which the energy extracted by
                                 ! bottom drag drives BBL diffusion.  This is only
                                 ! used if BOTTOMDRAGLAW is true.

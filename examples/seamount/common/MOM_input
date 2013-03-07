@@ -552,7 +552,7 @@ REMAPPING_SCHEME = "PPM_IH4"	   !   This sets the remapping scheme to use to
                                !  in m, that can be used with BOTTOMDRAGLAW.
                                !  This might be Kv / (cdrag * drag_bg_vel) to
                                !  give Kv as the minimum near-bottom viscosity.
-#define BBL_EFFIC 0.20         !    BBL_EFFIC is the efficiency with which the
+#define BBL_EFFIC 0.00         !    BBL_EFFIC is the efficiency with which the
                                !  energy extracted by  bottom drag drives BBL
                                !  diffusion.  Nondimensional.  BBL_EFFIC only
                                !  applies when BOTTOMDRAGLAW is defined.

@@ -295,6 +295,10 @@ KHTH = 500.0                    !   [m2 s-1] default = 0.0
     !  Parameters of module MOM_lateral_mixing_coeffs
     !  Parameters of module MOM_diabatic_driver
         ! The following parameters are used for diabatic processes.
+BBL_EFFIC = 0.0                 !   [nondim] default = 0.2
+                                ! The efficiency with which the energy extracted by
+                                ! bottom drag drives BBL diffusion.  This is only
+                                ! used if BOTTOMDRAGLAW is true.
 KD = 0.0                        !   [m2 s-1]
                                 ! The background diapycnal diffusivity of density in the
                                 ! interior. Zero or the molecular value, ~1e-7 m2 s-1,
