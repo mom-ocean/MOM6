@@ -76,7 +76,7 @@ BATHYMETRY_AT_VEL = False       !   [Boolean] default = False
                                 ! If true, there are separate values for the basin depths
                                 ! at velocity points.  Otherwise the effects of of
                                 ! topography are entirely determined from thickness points.
-NK = 2                          !   [nondim]
+NK = 9                          !   [nondim]
                                 ! The number of model layers.
     !  Parameters of module MOM
 VERBOSITY = 2                   ! default = 2
@@ -512,7 +512,7 @@ UPWIND_1ST_CONTINUITY = False   !   [Boolean] default = False
                                 ! continuity solver.  This scheme is highly diffusive
                                 ! but may be useful for debugging or in single-column
                                 ! mode where its minimal stensil is useful.
-ETA_TOLERANCE = 1.0E-12         !   [m] default = 1.0E-10
+ETA_TOLERANCE = 1.0E-12         !   [m] default = 4.5E-10
                                 ! The tolerance for the differences between the
                                 ! barotropic and baroclinic estimates of the sea surface
                                 ! height due to the fluxes through each face.  The total

@@ -93,7 +93,7 @@
 #define NIGLOBAL 20            !    NIGLOBAL and NJGLOBAL are the number of thickness
 #define NJGLOBAL 2             !  grid points in the zonal and meridional
                                !  directions of the physical domain.
-#define NK 2                   !    The number of layers.
+#define NK 9                   !    The number of layers.
 #define NIHALO 3               !    NIHALO and NJHALO are the number of halo
 #define NJHALO 3               !  points on each side in the x- and y-directions.
                                !  If static memory allocation is used, these
@@ -468,9 +468,6 @@ DT_BT_FILTER = 0.0             !    A time-scale for filtering BT variables,
 #define KVML 1.00e-2           !    The kinematic viscosity in the mixed layer,
                                !  in m2 s-1.  A typical value is ~1e-2 m2 s-1.
                                !  KVML is not used if BULKMIXEDLAYER is defined.
-#define KDML 0.00e-4           !    The diapycnal diffusivity of density in the
-                               !  mixed layer, in m2 s-1.  This value may be 0.
-                               !  KDML is not used if BULKMIXEDLAYER is defined.
 #define DIRECT_STRESS          !    If DIRECT_STRESS is defined, the wind stress
                                !  is distributed over the topmost HMIX of fluid,
                                !  and KVML may be set to a very small value.
@@ -478,7 +475,7 @@ DT_BT_FILTER = 0.0             !    A time-scale for filtering BT variables,
 #define KV 0.00e-4             !    The kinematic viscosity in the interior, in
                                !  m2 s-1.  The molecular value, ~1e-6 m2 s-1,
                                !  may be used.
-#define KD 0.00e-2             !    The diapycnal diffusivity of density in the
+#define KD 0.00e-5             !    The diapycnal diffusivity of density in the
                                !  interior, in m2 s-1.  Zero or the molecular
                                !  value, ~1e-7 m2 s-1, may be used.
 #define MAX_ENT_IT 5           !    The maximum number of iterations that may be

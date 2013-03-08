@@ -13,6 +13,8 @@
 "ocean_model","e","e","prog","all",.false.,"none",2
 "ocean_model","temp","temp","prog","all",.false.,"none",2
 "ocean_model","salt","salt","prog","all",.false.,"none",2
+"ocean_model","ea","ea","prog","all",.false.,"none",2
+"ocean_model","eb","eb","prog","all",.false.,"none",2
 
 #=============================================================================================
 #

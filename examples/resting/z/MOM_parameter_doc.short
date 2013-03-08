@@ -46,7 +46,7 @@ NJPROC_IO = 1                   ! default = 0
                                 ! y-direction, or 0 to equal NJPROC.
     !  Parameters of module MOM_grid
         ! Parameters providing information about the vertical grid.
-NK = 2                          !   [nondim]
+NK = 9                          !   [nondim]
                                 ! The number of model layers.
     !  Parameters of module MOM
 BULKMIXEDLAYER = False          !   [Boolean] default = True
@@ -213,7 +213,7 @@ S_TOP = 34.0                    !   [PSU]
                                 ! Initial salinity of the top surface.
 S_RANGE = 2.0                   !   [PSU]
                                 ! Initial salinity difference (top-bottom).
-ETA_TOLERANCE = 1.0E-12         !   [m] default = 1.0E-10
+ETA_TOLERANCE = 1.0E-12         !   [m] default = 4.5E-10
                                 ! The tolerance for the differences between the
                                 ! barotropic and baroclinic estimates of the sea surface
                                 ! height due to the fluxes through each face.  The total
