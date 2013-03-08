@@ -15,6 +15,7 @@
 "ocean_model","salt","salt","prog","all",.false.,"none",2
 "ocean_model","ea","ea","prog","all",.false.,"none",2
 "ocean_model","eb","eb","prog","all",.false.,"none",2
+"ocean_model","wd","wd","prog","all",.false.,"none",2
 
 #=============================================================================================
 #

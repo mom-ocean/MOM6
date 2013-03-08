@@ -331,7 +331,7 @@ BBL_EFFIC = 0.0                 !   [nondim] default = 0.2
                                 ! The efficiency with which the energy extracted by
                                 ! bottom drag drives BBL diffusion.  This is only
                                 ! used if BOTTOMDRAGLAW is true.
-KD = 0.0                        !   [m2 s-1]
+KD = 0.1                        !   [m2 s-1]
                                 ! The background diapycnal diffusivity of density in the
                                 ! interior. Zero or the molecular value, ~1e-7 m2 s-1,
                                 ! may be used.
