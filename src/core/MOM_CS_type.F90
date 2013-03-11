@@ -187,6 +187,10 @@ type, public :: MOM_control_struct
   logical :: debug_truncations  ! If true, make sure that all diagnostics that
                              ! could be useful for debugging any truncations are
                              ! calculated.
+  logical :: useALEalgorithm ! If true, use the ALE algorithm rather than layered
+                             ! isopycnal/stacked shallow water mode. This logical is
+                             ! set by calling the function useRegridding() from the
+                             ! MOM_regridding module.
 
   real    :: dt              ! The (baroclinic) dynamics time step, in s.
   real    :: dt_therm        ! The thermodynamics time step, in s.

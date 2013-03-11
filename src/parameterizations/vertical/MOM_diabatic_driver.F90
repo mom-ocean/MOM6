@@ -115,6 +115,9 @@ type, public :: diabatic_CS ; private
                              ! initialize_sponge and set_up_sponge_field.
   logical :: use_geothermal  ! If true, apply geothermal heating.
   logical :: use_int_tides
+  logical :: useALEalgorithm ! If true, use the ALE algorithm rather than layered
+                             ! isopycnal/stacked shallow water mode. This logical
+                             ! passed by argument to diabatic_driver_init.
   real :: ML_mix_first       !   The nondimensional fraction of the mixed layer
                              ! algorithm that is applied before diffusive mixing.
                              ! The default is 0, while 0.5 gives Strang splitting
@@ -419,17 +422,41 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, dt, G, CS)
     call cpu_clock_end(id_clock_double_diff)
   endif
 
-  call cpu_clock_begin(id_clock_entrain)
-  call Entrainment_diffusive(u, v, h, tv, fluxes, dt, G, CS%entrain_diffusive_CSp, &
-                             ea, eb, kb, Kd_Lay=Kd, Kd_int=Kd_int)
-  call cpu_clock_end(id_clock_entrain)
-  if (CS%debug) then
-    call MOM_forcing_chksum("after calc_entrain ", fluxes, G, haloshift=0)
-    call MOM_thermovar_chksum("after calc_entrain ", tv, G)
-    call MOM_state_chksum("after calc_entrain ", u(:,:,:), v(:,:,:), h(:,:,:), G)
-    call hchksum(G%H_to_m*ea, "after calc_entrain ea",G,haloshift=0)
-    call hchksum(G%H_to_m*eb, "after calc_entrain eb",G,haloshift=0)
-  endif
+  if (CS%useALEalgorithm) then
+    do j=js,je ; do i=is,ie
+      ea(i,j,1) = 0.
+    enddo ; enddo
+    do k=2,nz ; do j=js,je ; do i=is,ie
+      hval=1.0/(h_neglect + 0.5*(h(i,j,k-1) + h(i,j,k)))
+      ea(i,j,k) = (G%m_to_H**2) * dt * hval * Kd_int(i,j,k) 
+    ! Alternative to use Kd rather than Kd_int:
+    ! ea(i,j,k) = (G%m_to_H**2) * dt * hval * &
+    !      0.5*(h(i,j,k)*Kd(i,j,k-1)+h(i,j,k-1)*Kd(i,j,k))*hval
+      eb(i,j,k-1) = ea(i,j,k)
+    enddo ; enddo ; enddo
+    do j=js,je ; do i=is,ie
+      eb(i,j,nz) = 0.
+    enddo ; enddo
+!   This block could replace the more general block below ... - AJA ?
+!   do k=1,nz ; do j=js,je ; do i=is,ie
+!     hold(i,j,k) = h(i,j,k)
+!     if (h(i,j,k) <= 0.0) h(i,j,k) = G%Angstrom
+!   enddo ; enddo ; enddo
+  else ! .not. CS%useALEalgorithm
+    ! If not useing ALE, then calculate layer entrainments/detrainments from
+    ! diffusivities and differences between layer and target densities
+    call cpu_clock_begin(id_clock_entrain)
+    call Entrainment_diffusive(u, v, h, tv, fluxes, dt, G, CS%entrain_diffusive_CSp, &
+                               ea, eb, kb, Kd_Lay=Kd, Kd_int=Kd_int)
+    call cpu_clock_end(id_clock_entrain)
+    if (CS%debug) then
+      call MOM_forcing_chksum("after calc_entrain ", fluxes, G, haloshift=0)
+      call MOM_thermovar_chksum("after calc_entrain ", tv, G)
+      call MOM_state_chksum("after calc_entrain ", u(:,:,:), v(:,:,:), h(:,:,:), G)
+      call hchksum(G%H_to_m*ea, "after calc_entrain ea",G,haloshift=0)
+      call hchksum(G%H_to_m*eb, "after calc_entrain eb",G,haloshift=0)
+    endif
+  endif ! (CS%useALEalgorithm)
 
   ! In the following, the checks for negative values are to guard
   ! against against unforeseen instances where the entrainment
@@ -1243,11 +1270,12 @@ subroutine adiabatic_driver_init(Time, G, param_file, diag, CS, &
 
 end subroutine adiabatic_driver_init
 
-subroutine diabatic_driver_init(Time, G, param_file, diag, CS, &
+subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, CS, &
                                 tracer_flow_CSp, sponge_CSp, diag_to_Z_CSp)
   type(time_type),         intent(in)    :: Time
   type(ocean_grid_type),   intent(in)    :: G
   type(param_file_type),   intent(in)    :: param_file
+  logical,                 intent(in)    :: useALEalgorithm
   type(diag_ptrs), target, intent(inout) :: diag
   type(diabatic_CS),       pointer       :: CS
   type(tracer_flow_control_CS), pointer  :: tracer_flow_CSp
@@ -1286,6 +1314,7 @@ subroutine diabatic_driver_init(Time, G, param_file, diag, CS, &
   if (associated(sponge_CSp)) CS%sponge_CSp => sponge_CSp
   if (associated(diag_to_Z_CSp)) CS%diag_to_Z_CSp => diag_to_Z_CSp
 
+  CS%useALEalgorithm = useALEalgorithm
   CS%bulkmixedlayer = (G%nkml > 0)
 
 ! Set default, read and log parameters

@@ -721,7 +721,7 @@ function step_MOM(fluxes, state, Time_start, time_interval, CS)
         ! Regridding is done here, at the end of the thermodynamical time step
         ! (that may comprise several dynamical time steps)
         ! The routine 'regridding_main' can be found in 'regridding.F90'.
-        if ( useRegridding(CS%regridding_opts) ) then 
+        if ( CS%useALEalgorithm ) then 
           call regridding_main(grid, h(:,:,:,m), CS%h_aux(:,:,:), &
                                u(:,:,:,m), v(:,:,:,m), CS%tv, CS%regridding_opts )
 !         call pass_vector(u(:,:,:,m), v(:,:,:,m), grid%Domain)
@@ -1445,6 +1445,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   ALLOC_(CS%h_aux(isd:ied,jsd:jed,nz)); CS%h_aux(:,:,:) = 0.
   call initialize_regridding(param_file, grid, h(:,:,:,:), CS%h_aux(:,:,:), &
                              u(:,:,:,1), v(:,:,:,1), CS%tv, CS%regridding_opts)
+  CS%useALEalgorithm = useRegridding(CS%regridding_opts)
   call MOM_diagnostics_init(MOM_internal_state, Time, grid, param_file, &
                              diag, CS%diagnostics_CSp)
 
@@ -1460,8 +1461,9 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     call adiabatic_driver_init(Time, grid, param_file, diag, CS%diabatic_CSp, &
                                CS%tracer_flow_CSp, CS%diag_to_Z_CSp)
   else
-    call diabatic_driver_init(Time, grid, param_file, diag, CS%diabatic_CSp, &
-                     CS%tracer_flow_CSp, init_CS%sponge_CSp, CS%diag_to_Z_CSp)
+    call diabatic_driver_init(Time, grid, param_file, CS%useALEalgorithm, diag, &
+                              CS%diabatic_CSp, CS%tracer_flow_CSp, &
+                              init_CS%sponge_CSp, CS%diag_to_Z_CSp)
   endif
 
   call register_diags(Time, grid, CS)
