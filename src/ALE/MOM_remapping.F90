@@ -347,8 +347,8 @@ subroutine remapping_integration ( grid0, u0, ppoly0, grid1, u1, method )
       ! and there is something very wrong !
       if ( j0 .EQ. -1 ) then
         write(*,*) i 
-        call MOM_error ( FATAL, 'The location of the vanished cell could &
-                                  not be found in "remapping_integration"' )
+        call MOM_error(FATAL, 'The location of the vanished cell could '//&
+                              'not be found in "remapping_integration"' )
       end if
 
       ! We check whether the source cell (i.e. the cell in which the

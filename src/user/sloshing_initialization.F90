@@ -188,7 +188,7 @@ subroutine sloshing_initialize_temperature_salinity ( T, S, h, G, param_file, &
                                 ! surface layer
   real    :: S_range, T_range;  ! Range of salinities and temperatures over the
                                 ! vertical
-  real    :: delta
+  integer :: kdelta
   real    :: deltah
   real    :: xi0, xi1
   character(len=40)  :: mod = "initialize_temp_salt_linear" ! This subroutine's 
@@ -228,8 +228,8 @@ subroutine sloshing_initialize_temperature_salinity ( T, S, h, G, param_file, &
   do k = 2,G%ke
     T(:,:,k) = T(:,:,k-1) + delta_T
   end do  
-  delta = 2
-  T(:,:,G%ke/2 - (delta-1):G%ke/2 + delta) = 1.0
+  kdelta = 2
+  T(:,:,G%ke/2 - (kdelta-1):G%ke/2 + kdelta) = 1.0
   
   call log_param(param_file, mod, "S_REF", S_ref)
   call log_param(param_file, mod, "T_REF", T_ref)
