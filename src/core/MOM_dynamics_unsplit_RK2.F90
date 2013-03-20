@@ -67,10 +67,11 @@ module MOM_dynamics_unsplit_RK2
 
 use MOM_variables, only : directories, vertvisc_type, ocean_OBC_type
 use MOM_variables, only : BT_cont_type, alloc_bt_cont_type, dealloc_bt_cont_type
-use MOM_variables, only : &
-  forcing, &      ! A structure containing pointers to the forcing fields
+use MOM_forcing_type, only : &
+  forcing         ! A structure containing pointers to the forcing fields
                   ! which may be used to drive MOM.  All fluxes are
                   ! positive downward.
+use MOM_variables, only : &
   thermo_var_ptrs ! A structure containing pointers to an assortment of
                   ! thermodynamic fields that may be available, including
                   ! potential temperature, salinity and mixed layer density.

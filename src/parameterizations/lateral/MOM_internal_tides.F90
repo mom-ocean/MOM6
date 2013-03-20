@@ -53,7 +53,7 @@ use MOM_restart, only : register_restart_field, MOM_restart_CS
 use MOM_time_manager, only : time_type, operator(+), operator(/), operator(-)
 use MOM_time_manager, only : get_time, get_date, set_time, set_date
 use MOM_time_manager, only : time_type_to_real
-use MOM_variables, only : forcing, surface
+use MOM_variables, only : surface
 !   Forcing is a structure containing pointers to the forcing fields
 ! which may be used to drive MOM.  All fluxes are positive downward.
 !   Surface is a structure containing pointers to various fields that

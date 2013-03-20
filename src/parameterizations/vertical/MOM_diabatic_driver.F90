@@ -76,6 +76,7 @@ use MOM_domains, only : pass_var, To_West, To_South
 use MOM_checksums, only : hchksum, uchksum, vchksum
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_version, param_file_type
+use MOM_forcing_type, only : forcing, optics_type, MOM_forcing_chksum
 use MOM_geothermal, only : geothermal, geothermal_init, geothermal_end, geothermal_CS
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : vardesc
@@ -91,8 +92,8 @@ use MOM_set_diffusivity, only : set_diffusivity_init, set_diffusivity_end
 use MOM_set_diffusivity, only : set_diffusivity_CS
 use MOM_sponge, only : apply_sponge, sponge_CS
 use MOM_tracer_flow_control, only : call_tracer_column_fns, tracer_flow_control_CS
-use MOM_variables, only : forcing, thermo_var_ptrs, vertvisc_type, optics_type
-use MOM_variables, only : MOM_forcing_chksum, MOM_thermovar_chksum, p3d
+use MOM_variables, only : thermo_var_ptrs, vertvisc_type
+use MOM_variables, only : MOM_thermovar_chksum, p3d
 use MOM_regularize_layers, only : regularize_layers, regularize_layers_init, regularize_layers_CS
 use MOM_wave_speed, only : wave_speed
 use MOM_EOS, only : calculate_density, calculate_2_densities, calculate_TFreeze

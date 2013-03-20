@@ -28,11 +28,12 @@ module MOM_ice_shelf
 
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
 use MOM_file_parser, only : read_param, param_file_type, log_param, log_version
+use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_initialization, only : Get_MOM_Input
 use MOM_io, only : write_version_number
 use MOM_time_manager, only : time_type, set_time, time_type_to_real
-use MOM_variables, only : directories, forcing, surface
+use MOM_variables, only : directories, surface
 
 implicit none ; private
 

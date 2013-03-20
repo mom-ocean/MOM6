@@ -49,13 +49,14 @@ use MOM_diag_mediator, only : register_diag_field, diag_ptrs, safe_alloc_ptr
 use MOM_domains, only : pass_var, pass_vector, AGRID, To_South, To_West, To_All
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
 use MOM_file_parser, only : read_param, get_param, log_param, log_version, param_file_type
+use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : vardesc
 use MOM_restart, only : register_restart_field, MOM_restart_CS
 use MOM_time_manager, only : time_type, operator(+), operator(/), operator(-)
 use MOM_time_manager, only : get_time, get_date, set_time, set_date
 use MOM_time_manager, only : time_type_to_real
-use MOM_variables, only : forcing, surface
+use MOM_variables, only : surface
 !   Forcing is a structure containing pointers to the forcing fields
 ! which may be used to drive MOM.  All fluxes are positive downward.
 !   Surface is a structure containing pointers to various fields that

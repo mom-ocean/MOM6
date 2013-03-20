@@ -42,6 +42,7 @@ use MOM_diag_mediator, only : diag_mediator_close_registration
 use MOM_domains, only : pass_vector, AGRID, BGRID_NE, CGRID_NE
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe
 use MOM_file_parser, only : get_param, log_version, close_param_file, param_file_type
+use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_initialization, only : get_MOM_Input
 use MOM_io, only : close_file, file_exists, read_data, write_version_number
@@ -56,7 +57,7 @@ use MOM_time_manager, only : time_type, get_time, set_time, operator(>)
 use MOM_time_manager, only : operator(+), operator(-), operator(*), operator(/)
 use MOM_time_manager, only : operator(/=)
 use MOM_tracer_flow_control, only : call_tracer_register, tracer_flow_control_init
-use MOM_variables, only : forcing, surface, directories
+use MOM_variables, only : surface, directories
 
 use coupler_types_mod, only : coupler_2d_bc_type
 use mpp_domains_mod, only : domain2d, mpp_get_layout, mpp_get_global_domain

@@ -103,12 +103,13 @@ use MOM_domains, only : pass_var_start, pass_var_complete
 use MOM_domains, only : pass_vector_start, pass_vector_complete
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
 use MOM_file_parser, only : get_param, read_param, log_param, log_version, param_file_type
+use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : vardesc
 use MOM_restart, only : register_restart_field, query_initialized, MOM_restart_CS
 use MOM_tidal_forcing, only : tidal_forcing_sensitivity, tidal_forcing_CS
 use MOM_time_manager, only : time_type, set_time, operator(+), operator(-)
-use MOM_variables, only : forcing, BT_cont_type, alloc_bt_cont_type
+use MOM_variables, only : BT_cont_type, alloc_bt_cont_type
 use MOM_variables, only : ocean_OBC_type, OBC_SIMPLE, OBC_NONE
 use MOM_variables, only : OBC_FLATHER_E, OBC_FLATHER_W
 use MOM_variables, only : OBC_FLATHER_N, OBC_FLATHER_S

@@ -56,7 +56,7 @@ use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_io, only : read_data, slasher
 use MOM_grid, only : ocean_grid_type
-use MOM_variables, only : forcing, thermo_var_ptrs, optics_type
+use MOM_variables, only : thermo_var_ptrs
 use MOM_EOS, only : calculate_density, calculate_density_derivs
 use MOM_EOS, only : calculate_2_densities
 

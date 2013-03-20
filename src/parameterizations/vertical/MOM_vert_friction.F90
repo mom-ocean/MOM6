@@ -79,10 +79,11 @@ use MOM_diag_mediator, only : diag_ptrs, time_type
 use MOM_checksums, only : uchksum, vchksum
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_version, param_file_type
+use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_PointAccel, only : write_u_accel, write_v_accel, PointAccel_init
 use MOM_PointAccel, only : PointAccel_CS
-use MOM_variables, only : forcing, thermo_var_ptrs, directories, vertvisc_type
+use MOM_variables, only : thermo_var_ptrs, directories, vertvisc_type
 use MOM_variables, only : ocean_internal_state, ocean_OBC_type, OBC_SIMPLE
 
 implicit none ; private

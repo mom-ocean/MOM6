@@ -63,8 +63,9 @@ use MOM_diag_mediator, only : post_data, query_averaging_enabled, diag_ptrs
 use MOM_diag_mediator, only : register_diag_field, safe_alloc_ptr, time_type
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_version, param_file_type
+use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
-use MOM_variables, only : thermo_var_ptrs, forcing
+use MOM_variables, only : thermo_var_ptrs
 use MOM_EOS, only : calculate_density
 
 implicit none ; private

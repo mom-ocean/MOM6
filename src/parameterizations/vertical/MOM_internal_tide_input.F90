@@ -49,10 +49,11 @@ use MOM_checksums, only : hchksum, uchksum, vchksum
 use MOM_error_handler, only : MOM_error, is_root_pe, FATAL, WARNING, NOTE
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_file_parser, only : uppercase
+use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : slasher, vardesc
 use MOM_thickness_diffuse, only : vert_fill_TS
-use MOM_variables, only : forcing, thermo_var_ptrs, vertvisc_type, p3d
+use MOM_variables, only : thermo_var_ptrs, vertvisc_type, p3d
 use MOM_EOS, only : calculate_density, calculate_density_derivs
 
 use fms_mod, only : read_data

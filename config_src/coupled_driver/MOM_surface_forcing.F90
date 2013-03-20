@@ -53,12 +53,13 @@ use MOM_diag_mediator, only : register_diag_field, safe_alloc_ptr, time_type
 use MOM_domains, only : pass_vector, pass_var, global_field_sum, BITWISE_EXACT_SUM
 use MOM_error_handler, only : MOM_error, WARNING, FATAL, is_root_pe, MOM_mesg
 use MOM_file_parser, only : get_param, log_version, param_file_type
+use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_initialization, only : Get_MOM_Input
 use MOM_io, only : slasher, write_version_number
 use MOM_restart, only : register_restart_field, restart_init, MOM_restart_CS
 use MOM_restart, only : restart_init_end, save_restart, restore_state
-use MOM_variables, only : forcing, surface, directories
+use MOM_variables, only : surface, directories
 use user_revise_forcing, only : user_alter_forcing, user_revise_forcing_init, &
                                 user_revise_forcing_CS
 !   Forcing is a structure containing pointers to the forcing fields

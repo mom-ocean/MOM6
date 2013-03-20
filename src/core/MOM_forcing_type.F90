@@ -19,6 +19,7 @@ module MOM_forcing_type
 !* or see:   http://www.gnu.org/licenses/gpl.html                      *
 !***********************************************************************
 
+use MOM_checksums, only : hchksum, qchksum, uchksum, vchksum
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_alloc
 use MOM_diag_mediator, only : time_type, diag_ptrs
@@ -26,15 +27,111 @@ use MOM_domains, only : pass_var
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
-use MOM_variables, only : forcing, thermo_var_ptrs, optics_type
+use MOM_variables, only : thermo_var_ptrs
+
+use coupler_types_mod, only : coupler_2d_bc_type
 
 implicit none ; private
 
 #include <MOM_memory.h>
 
-public extractFluxes1d
+public extractFluxes1d, MOM_forcing_chksum
 
 integer :: num_msg = 0, max_msg = 2
+
+!   The following structure contains pointers to the forcing fields
+! which may be used to drive MOM.  All fluxes are positive downward.
+! Pointers to unused fluxes should be set to NULL.
+type, public :: forcing
+  real, pointer, dimension(:,:) :: &
+    taux => NULL(), &       ! The zonal wind stress, in Pa.
+    tauy => NULL(), &       ! The meridional wind stress, in Pa.
+    ustar => NULL(), &      ! The surface friction velocity, in units of m s-1.
+    buoy => NULL(), &       ! The buoyancy flux into the ocean in m2 s-3.
+
+    sw => NULL(), &         ! The shortwave heat flux into the ocean, in W m-2.
+    sw_vis_dir => NULL(), & ! The visible, direct shortwave heat flux into the
+                            ! ocean, in W m-2.
+    sw_vis_dif => NULL(), & ! The visible, diffuse shortwave heat flux into the
+                            ! ocean, in W m-2.
+    sw_nir_dir => NULL(), & ! The near-IR, direct shortwave heat flux into the
+                            ! ocean, in W m-2.
+    sw_nir_dif => NULL(), & ! The near-IR, diffuse shortwave heat
+                            ! flux into the ocean, in W m-2.
+    lw => NULL(), &         ! The longwave heat flux into the ocean, in W m-2.
+                            ! This field is typically negative.
+    latent => NULL(), &     ! The latent heat flux into the ocean, in W m-2.
+                            ! This field is typically negative.
+    sens => NULL(), &       ! The sensible heat flux into the ocean, in W m-2.
+                            ! This field is typically negative.
+    heat_restore => NULL(), & ! The heat flux into the ocean from temperature
+                            ! restoring, in W m-2.
+                            ! This field is typically negative.
+
+    evap => NULL(), &       ! The negative of the fresh water flux out of the
+                            ! ocean, in kg m-2 s-1.
+    liq_precip => NULL(), & ! The liquid water flux into the ocean, in
+                            ! kg m-2 s-1.
+    froz_precip => NULL(), &  ! The frozen water flux into the ocean,
+                            ! in kg m-2 s-1.
+    virt_precip => NULL(), & ! The virtual water flux into the ocean associated
+                            ! with salinity restoring, in kg m-2 s-1.
+    runoff_hflx => NULL(), & ! Heat flux associated with liq_runoff in W m-2.
+    calving_hflx => NULL(), & ! Heat flux associated with froz_runoff in W m-2.
+
+    p_surf_full => NULL(), & ! The pressure at the top ocean interface, in Pa.
+                             ! If there is sea-ice, this is at the interface
+                             ! between the ice and ocean.
+    p_surf => NULL(), &      ! The pressure at the top ocean interface, in Pa,
+                             ! as used to drive the ocean model.  If p_surf is
+                             ! limited, this may be smaller than p_surf_full,
+                             ! otherwise they are the same.
+    salt_flux => NULL(), &   ! The net salt flux into the ocean in kg Salt m-2 s-1.
+    TKE_tidal => NULL(), &   ! The tidal source of energy driving mixing in the
+                             ! bottom boundary layer, in W m-2.
+    ustar_tidal => NULL(), & ! The tidal contribution to bottom ustar, in m s-1.
+    liq_runoff => NULL(), &  ! Mass of river runoff in units of kg m-2 s-1.
+    froz_runoff => NULL(), & ! Mass of calving in units of kg m-2 s-1.
+
+    ustar_shelf => NULL(), & ! The friction velocity under ice-shelves in m s-1.
+                             ! This was calculated by the ocean the previous
+                             ! time step.
+    frac_shelf_h => NULL(), &! Fractional ice shelf coverage of h-, u-, and v-
+    frac_shelf_u => NULL(), &! cells, nondimensional from 0 to 1. These are only
+    frac_shelf_v => NULL(), &! associated if ice shelves are enabled, and are
+                             ! exactly 0 away from shelves or on land.
+    rigidity_ice_u => NULL(),& ! The depth-integrated lateral viscosity of
+    rigidity_ice_v => NULL()   ! ice shelves at u- or v-points, in m3 s-1.
+  real :: C_p            !   The heat capacity of seawater, in J K-1 kg-1.
+                         ! This is always set to the same value as is found in
+                         ! the thermovar_ptrs_type.
+  type(coupler_2d_bc_type), pointer :: tr_fluxes  => NULL()
+                                            ! A structure that may contain an
+                                            ! array of named fields used for
+                                            ! passive tracer fluxes.
+       !!! NOTE: ALL OF THE ARRAYS IN TR_FLUXES USE THE COUPLER'S INDEXING
+       !!!       CONVENTION AND HAVE NO HALOS!  THIS IS DONE TO CONFORM TO
+       !!!       THE TREATMENT IN MOM4, BUT I DON'T LIKE IT!
+end type forcing
+
+
+type, public :: optics_type
+  integer :: nbands    ! The number of penetrating bands of SW radiation.
+  real, pointer, dimension(:,:,:,:) :: &
+    opacity_band => NULL()  ! The SW optical depth per unit thickness, m-1.
+                       ! The number of bands of radiation is the most rapidly
+                       ! varying (first) index.
+  real, pointer, dimension(:,:,:) :: &
+    SW_pen_band => NULL()  ! The shortwave radiation at the surface in each of
+                       ! the nbands bands that penetrates beyond the surface,
+                       ! in W m-2. The most rapidly varying dimension is the
+                       ! band.
+  real, pointer, dimension(:) :: &
+    min_wavelength_band => NULL(), & ! The range of wavelengths in each band of
+    max_wavelength_band => NULL()    ! penetrating shortwave radiation, in nm.
+end type optics_type
+
+
 
 contains
 
@@ -203,5 +300,72 @@ subroutine extractFluxes1d(G, fluxes, optics, nsw, j, dt, &
   enddo
 
 end subroutine extractFluxes1d
+
+subroutine MOM_forcing_chksum(mesg, fluxes, G, haloshift)
+  character(len=*),                    intent(in) :: mesg
+  type(forcing),                       intent(in) :: fluxes
+  type(ocean_grid_type),               intent(in) :: G
+  integer, optional,                   intent(in) :: haloshift
+!   This subroutine writes out chksums for the model's basic state variables.
+! Arguments: mesg - A message that appears on the chksum lines.
+!  (in)      u - Zonal velocity, in m s-1.
+!  (in)      v - Meridional velocity, in m s-1.
+!  (in)      h - Layer thickness, in m.
+!  (in)      uh - Volume flux through zonal faces = u*h*dy, m3 s-1.
+!  (in)      vh - Volume flux through meridional faces = v*h*dx, in m3 s-1.
+!  (in)      G - The ocean's grid structure.
+  integer :: is, ie, js, je, nz, hshift
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+
+  hshift=1; if (present(haloshift)) hshift=haloshift
+
+  ! Note that for the chksum calls to be useful for reproducing across PE
+  ! counts, there must be no redundant points, so all variables use is..ie
+  ! and js...je as their extent.
+  if (associated(fluxes%taux)) &
+    call uchksum(fluxes%taux, mesg//" fluxes%taux",G,haloshift=1)
+  if (associated(fluxes%tauy)) &
+    call vchksum(fluxes%tauy, mesg//" fluxes%tauy",G,haloshift=1)
+  if (associated(fluxes%ustar)) &
+    call hchksum(fluxes%ustar, mesg//" fluxes%ustar",G,haloshift=1)
+  if (associated(fluxes%buoy)) &
+    call hchksum(fluxes%buoy, mesg//" fluxes%buoy ",G,haloshift=hshift)
+  if (associated(fluxes%sw)) &
+    call hchksum(fluxes%sw, mesg//" fluxes%sw",G,haloshift=hshift)
+  if (associated(fluxes%sw_vis_dir)) &
+    call hchksum(fluxes%sw_vis_dir, mesg//" fluxes%sw_vis_dir",G,haloshift=hshift)
+  if (associated(fluxes%sw_vis_dif)) &
+    call hchksum(fluxes%sw_vis_dif, mesg//" fluxes%sw_vis_dif",G,haloshift=hshift)
+  if (associated(fluxes%sw_nir_dir)) &
+    call hchksum(fluxes%sw_nir_dir, mesg//" fluxes%sw_nir_dir",G,haloshift=hshift)
+  if (associated(fluxes%sw_nir_dif)) &
+    call hchksum(fluxes%sw_nir_dif, mesg//" fluxes%sw_nir_dif",G,haloshift=hshift)
+  if (associated(fluxes%lw)) &
+    call hchksum(fluxes%lw, mesg//" fluxes%lw",G,haloshift=hshift)
+  if (associated(fluxes%latent)) &
+    call hchksum(fluxes%latent, mesg//" fluxes%latent",G,haloshift=hshift)
+  if (associated(fluxes%sens)) &
+    call hchksum(fluxes%sens, mesg//" fluxes%sens",G,haloshift=hshift)
+  if (associated(fluxes%evap)) &
+    call hchksum(fluxes%evap, mesg//" fluxes%evap",G,haloshift=hshift)
+  if (associated(fluxes%liq_precip)) &
+    call hchksum(fluxes%liq_precip, mesg//" fluxes%liq_precip",G,haloshift=hshift)
+  if (associated(fluxes%froz_precip)) &
+    call hchksum(fluxes%froz_precip, mesg//" fluxes%froz_precip",G,haloshift=hshift)
+  if (associated(fluxes%virt_precip)) &
+    call hchksum(fluxes%virt_precip, mesg//" fluxes%virt_precip",G,haloshift=hshift)
+  if (associated(fluxes%p_surf)) &
+    call hchksum(fluxes%p_surf, mesg//" fluxes%p_surf",G,haloshift=hshift)
+  if (associated(fluxes%salt_flux)) &
+    call hchksum(fluxes%salt_flux, mesg//" fluxes%salt_flux",G,haloshift=hshift)
+  if (associated(fluxes%TKE_tidal)) &
+    call hchksum(fluxes%TKE_tidal, mesg//" fluxes%TKE_tidal",G,haloshift=hshift)
+  if (associated(fluxes%ustar_tidal)) &
+    call hchksum(fluxes%ustar_tidal, mesg//" fluxes%ustar_tidal",G,haloshift=hshift)
+  if (associated(fluxes%liq_runoff)) &
+    call hchksum(fluxes%liq_runoff, mesg//" fluxes%liq_runoff",G,haloshift=hshift)
+  if (associated(fluxes%froz_runoff)) &
+    call hchksum(fluxes%froz_runoff, mesg//" fluxes%froz_runoff",G,haloshift=hshift)
+end subroutine MOM_forcing_chksum
 
 end module MOM_forcing_type

@@ -314,10 +314,11 @@ module MOM
 
 use MOM_variables, only : directories, vertvisc_type, ocean_OBC_type
 use MOM_variables, only : BT_cont_type, alloc_bt_cont_type, dealloc_bt_cont_type
-use MOM_variables, only : &
-  forcing, &      ! A structure containing pointers to the forcing fields
+use MOM_forcing_type, only : &
+  forcing         ! A structure containing pointers to the forcing fields
                   ! which may be used to drive MOM.  All fluxes are
                   ! positive downward.
+use MOM_variables, only : &
   surface, &      ! A structure containing pointers to various fields which
                   ! may be used describe the surface state of MOM, and
                   ! which will be returned to the calling program

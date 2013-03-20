@@ -60,6 +60,7 @@ use MOM_coms, only : reproducing_sum
 use MOM_coms, only : EFP_type, operator(+), operator(-), assignment(=), EFP_to_real, real_to_EFP
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
+use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_interface_heights, only : find_eta
 use MOM_io, only : create_file, fieldtype, flush_file, open_file, reopen_file
@@ -67,7 +68,7 @@ use MOM_io, only : file_exists, slasher, vardesc, write_field
 use MOM_io, only : APPEND_FILE, ASCII_FILE, SINGLE_FILE, WRITEONLY_FILE
 use MOM_time_manager, only : time_type, get_time, set_time, operator(>), operator(-)
 use MOM_tracer_flow_control, only : tracer_flow_control_CS, call_tracer_stocks
-use MOM_variables, only : forcing, surface, thermo_var_ptrs
+use MOM_variables, only : surface, thermo_var_ptrs
 
 use netcdf
 

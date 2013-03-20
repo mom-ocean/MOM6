@@ -58,10 +58,11 @@ use MOM_time_manager, only :  get_time
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_file_parser, only : uppercase
+use MOM_forcing_type, only : forcing, optics_type
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : slasher
 use MOM_tracer_flow_control, only : get_chl_from_model, tracer_flow_control_CS
-use MOM_variables, only : forcing, thermo_var_ptrs, optics_type
+use MOM_variables, only : thermo_var_ptrs
 use time_interp_external_mod, only : init_external_field, time_interp_external
 use time_interp_external_mod, only : time_interp_external_init
 implicit none ; private

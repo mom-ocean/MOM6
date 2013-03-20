@@ -55,6 +55,7 @@ module MOM_generic_tracer
   use MOM_diag_to_Z, only : register_Z_tracer, diag_to_Z_CS
   use MOM_error_handler, only : MOM_error, FATAL, WARNING, NOTE, is_root_pe
   use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
+  use MOM_forcing_type, only : forcing, optics_type
   use MOM_grid, only : ocean_grid_type
   use MOM_io, only : file_exists, read_data, slasher, vardesc
   use MOM_restart, only : register_restart_field, query_initialized, MOM_restart_CS
@@ -63,8 +64,7 @@ module MOM_generic_tracer
   use MOM_tracer, only : register_tracer, advect_tracer_CS, tracer_vertdiff
   use MOM_tracer, only : add_tracer_diagnostics, add_tracer_OBC_values
   use MOM_tracer_Z_init, only : tracer_Z_init
-  use MOM_variables, only : forcing, surface, ocean_OBC_type, thermo_var_ptrs
-  use MOM_variables, only : optics_type
+  use MOM_variables, only : surface, ocean_OBC_type, thermo_var_ptrs
 
 
   implicit none ; private

@@ -33,12 +33,12 @@ use MOM_diag_mediator, only : time_type, diag_ptrs
 use MOM_diag_to_Z, only : diag_to_Z_CS
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_version, param_file_type
+use MOM_forcing_type, only : forcing, optics_type
 use MOM_grid, only : ocean_grid_type
 use MOM_restart, only : MOM_restart_CS
 use MOM_sponge, only : sponge_CS
 use MOM_tracer, only : advect_tracer_CS
-use MOM_variables, only : forcing, surface, ocean_OBC_type, thermo_var_ptrs
-use MOM_variables, only : optics_type
+use MOM_variables, only : surface, ocean_OBC_type, thermo_var_ptrs
 
 #include <MOM_memory.h>
 
