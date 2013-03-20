@@ -59,6 +59,7 @@ use MOM_diag_mediator, only : time_type, diag_ptrs
 use MOM_domains, only : pass_var
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
+use MOM_forcing_type, only : extractFluxes1d
 use MOM_grid, only : ocean_grid_type
 use MOM_variables, only : forcing, thermo_var_ptrs, optics_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs
@@ -531,8 +532,11 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
      
     call cpu_clock_begin(id_clock_conv)
 
-    call extract_fluxes(fluxes, optics, Net_H, Net_heat, Net_salt, nsw, &
-                        Pen_SW_bnd, dt, j, G, CS, h, T, tv)
+  ! call extract_fluxes(fluxes, optics, Net_H, Net_heat, Net_salt, nsw, &
+  !                     Pen_SW_bnd, dt, j, G, CS, h, T, tv)
+    call extractFluxes1d(G, fluxes, optics, nsw, j, dt, &
+                  CS%H_limit_fluxes, CS%use_river_heat_content, CS%use_calving_heat_content, &
+                  h, T, Net_H, Net_heat, Net_salt, Pen_SW_bnd, tv)
 
 !   This subroutine causes the mixed layer to entrain to the depth of
 ! free convection.    
