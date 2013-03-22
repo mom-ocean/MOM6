@@ -532,33 +532,34 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
      
     call cpu_clock_begin(id_clock_conv)
 
-  ! call extract_fluxes(fluxes, optics, Net_H, Net_heat, Net_salt, nsw, &
-  !                     Pen_SW_bnd, dt, j, G, CS, h, T, tv)
+    ! The surface forcing is contained in the fluxes type.
+    ! Here, we "unpack" it and aggregate all the thermodynamic forcing into
+    ! Net_H, Net_heat, Net_salt and the SW penetrative componennts, Pen_SW_bnd.
     call extractFluxes1d(G, fluxes, optics, nsw, j, dt, &
                   CS%H_limit_fluxes, CS%use_river_heat_content, CS%use_calving_heat_content, &
                   h, T, Net_H, Net_heat, Net_salt, Pen_SW_bnd, tv)
 
-!   This subroutine causes the mixed layer to entrain to the depth of
-! free convection.    
+    !   This subroutine causes the mixed layer to entrain to the depth of
+    ! free convection.    
     call mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
                                R0_tot, Rcv_tot, nsw, Pen_SW_bnd, Conv_en, &
                                dKE_FC, j, ksort, G, CS)
 
     call cpu_clock_end(id_clock_conv)
 
-!   Now the mixed layer undergoes mechanically forced entrainment.
-! The mixed layer may entrain down to the Monin-Obukhov depth if the
-! surface is becoming lighter, and is effectively detraining.
+    !   Now the mixed layer undergoes mechanically forced entrainment.
+    ! The mixed layer may entrain down to the Monin-Obukhov depth if the
+    ! surface is becoming lighter, and is effectively detraining.
 
-!    First the TKE at the depth of free convection that is available
-!  to drive mixing is calculated.
+    !    First the TKE at the depth of free convection that is available
+    !  to drive mixing is calculated.
     call cpu_clock_begin(id_clock_mech)
 
     call find_starting_TKE(htot, h_CA, fluxes, Conv_En, cTKE, dKE_FC, dKE_CA, &
                            TKE, TKE_river, Idecay_len_TKE, cMKE1, cMKE2, dt, &
                            j, ksort, G, CS)
 
-! Here the mechanically driven entrainment occurs.
+    ! Here the mechanically driven entrainment occurs.
     call mechanical_entrainment(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
                                 R0_tot, Rcv_tot, nsw, Pen_SW_bnd, TKE, &
                                 j, ksort, G, CS)
@@ -571,7 +572,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
     enddo ; endif
     call cpu_clock_end(id_clock_mech)
 
-! Calculate the homogeneous mixed layer properties.
+    ! Calculate the homogeneous mixed layer properties.
     do i=is,ie ; if (htot(i) > 0.0) then
       Ih = 1.0 / htot(i)
       R0_ml(i) = R0_tot(i) * Ih ; Rcv_ml(i) = Rcv_tot(i) * Ih
@@ -1678,165 +1679,6 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
 
 end subroutine bulkmixedlayer
 
-
-subroutine extract_fluxes(fluxes, optics, Net_H, Net_heat, Net_salt, nsw, &
-                          Pen_SW_bnd, dt, j, G, CS, h, T, tv)
-  type(forcing),               intent(in)  :: fluxes
-  type(optics_type),           pointer     :: optics
-  real, dimension(NIMEM_),     intent(out) :: Net_H, Net_heat, Net_salt
-  integer,                     intent(in)  :: nsw
-  real, dimension(:,:),        intent(out) :: Pen_SW_bnd
-  real,                        intent(in)  :: dt
-  integer,                     intent(in)  :: j
-  type(ocean_grid_type),       intent(in)  :: G
-  type(bulkmixedlayer_CS),     pointer     :: CS
-  real, dimension(NIMEM_,NKMEM_), intent(in) :: h, T
-  type(thermo_var_ptrs),          intent(inout) :: tv
-!   This subroutine extracts the relevant buoyancy fluxes from the surface
-! fluxes type.
-
-!  (in)      fluxes - A structure containing pointers to any possible
-!                     forcing fields.  Unused fields have NULL ptrs.
-!  (out)     Net_H - The net mass flux (if non-Boussinsq) or volume flux (if
-!                    Boussinesq - i.e. the fresh water flux (P+R-E)) into the
-!                    ocean over a time step, in H.
-!  (out)     Net_heat - The net heating at the surface over a time step,
-!                       exclusive of heating that appears in Pen_SW, in K H.
-!  (out)     Net_salt - The surface salt flux into the ocean over a time step, psu H.
-!  (in)      nsw - The number of bands of penetrating shortwave radiation.
-!  (out)     Pen_SW_bnd - The penetrating shortwave heating at the sea surface
-!                         in each penetrating band, in K H, size nsw x NIMEM_.
-!  (in)      dt - The time step in s.
-!  (in)      j - The j-index to work on.
-!  (in)      G - The ocean's grid structure.
-!  (in)      CS - The control structure for this module.
-!  (in)      h - Layer thickness, in m or kg m-2.
-!  (in)      T - Layer temperatures, in deg C.
-!  (inout)   tv - A structure containing pointers to any available
-!                 thermodynamic fields. Here it is used to keep track of the
-!                 actual heat flux associated with net mass fluxes into the
-!                 ocean.
-
-  real :: htot(SZI_(G))  ! The total depth of the ocean in m or kg m-2.
-  real :: Pen_sw_tot(SZI_(G))  ! The sum across all bands of Pen_SW, K H.
-  real :: Ih_limit  !   The inverse of the total depth at which the
-                    ! surface fluxes start to be limited, in H-1.
-  real :: scale     !   Scale scales away the fluxes when the total depth is
-                    ! thinner than H_limit_fluxes.
-  real :: Irho_cp       !  1.0 / rho_0 * c_p.
-  real :: Irho0, I_Cp
-  character(len=200) :: mesg
-  integer :: is, ie, nz, i, k, n
-  Ih_limit = 1.0 / (CS%H_limit_fluxes * G%m_to_H)
-  Irho0 = 1.0 / G%Rho0 ; I_Cp = 1.0 / fluxes%C_p
-  Irho_cp = 1.0 / (G%H_to_kg_m2 * fluxes%C_p)
-  is = G%isc ; ie = G%iec ; nz = G%ke
-
-  if (nsw > 0) then ; if (nsw /= optics%nbands) call MOM_error(WARNING, &
-    "mismatch in the number of bands of shortwave radiation in mixed_layer extract_fluxes.")
-  endif
-
-  if (.not.ASSOCIATED(fluxes%sw)) call MOM_error(FATAL, &
-    "MOM_mixed_layer: fluxes%sw is not associated.")
-  if (.not.ASSOCIATED(fluxes%lw)) call MOM_error(FATAL, &
-    "MOM_mixed_layer: fluxes%lw is not associated.")
-  if (.not.ASSOCIATED(fluxes%latent)) call MOM_error(FATAL, &
-    "MOM_mixed_layer: fluxes%latent is not associated.")
-  if (.not.ASSOCIATED(fluxes%sens)) call MOM_error(FATAL, &
-    "MOM_mixed_layer: fluxes%sens is not associated.")
-
-  if (.not.ASSOCIATED(fluxes%evap)) call MOM_error(FATAL, &
-    "MOM_mixed_layer: No evaporation defined in mixedlayer.")
-  if (.not.ASSOCIATED(fluxes%virt_precip)) call MOM_error(FATAL, &
-    "MOM_mixed_layer: fluxes%virt_precip not defined in mixedlayer.")
-
-  if ((.not.ASSOCIATED(fluxes%liq_precip)) .or. &
-      (.not.ASSOCIATED(fluxes%froz_precip))) call MOM_error(FATAL, &
-    "MOM_mixed_layer: No precipitation defined in mixedlayer.")
-
-  do i=is,ie ; htot(i) = h(i,1) ; enddo
-  do k=2,nz ; do i=is,ie ; htot(i) = htot(i) + h(i,k) ; enddo ; enddo
-
-  do i=is,ie
-    scale = 1.0
-    if (htot(i)*Ih_limit < 1.0) scale = htot(i)*Ih_limit
-
-!  Convert the penetrating shortwave forcing to K m.
-    Pen_sw_tot(i) = 0.0
-    if (nsw >= 1) then
-      do n=1,nsw
-        Pen_SW_bnd(n,i) = Irho_cp*scale*dt * &
-            max(0.0, optics%sw_pen_band(n,i,j))
-        Pen_sw_tot(i) = Pen_sw_tot(i) + Pen_SW_bnd(n,i)
-      enddo
-    else
-      Pen_SW_bnd(1,i) = 0.0
-    endif
-
-    Net_H(i) = dt * (scale * ((((( fluxes%liq_precip(i,j)    &
-                                 + fluxes%froz_precip(i,j) ) &
-                                 + fluxes%evap(i,j)        ) &
-                                 + fluxes%liq_runoff(i,j)  ) &
-                                 + fluxes%virt_precip(i,j) ) &
-                                 + fluxes%froz_runoff(i,j) ) )
-    Net_H(i) = G%kg_m2_to_H * Net_H(i)
-    if (.not.G%Boussinesq .and. associated(fluxes%salt_flux)) &
-      Net_H(i) = Net_H(i) + (dt * G%kg_m2_to_H) * &
-                    (scale * fluxes%salt_flux(i,j))
-
-    Net_heat(i) = scale * dt * Irho_cp * ( fluxes%sw(i,j) + &
-         ((fluxes%lw(i,j) + fluxes%latent(i,j)) + fluxes%sens(i,j)) )
-
-    if (ASSOCIATED(fluxes%heat_restore)) Net_heat(i) = Net_heat(i) + &
-         (scale * (dt * Irho_cp)) * fluxes%heat_restore(i,j)
-
-    if (CS%use_river_heat_content) then
-      if (.not.ASSOCIATED(fluxes%runoff_hflx)) call MOM_error(FATAL, &
-        "mixed layer extract fluxes: fluxes%runoff_hflx must be "//&
-        "assocated if USE_RIVER_HEAT_CONTENT is true.")
-
-      Net_heat(i) = (Net_heat(i) + (scale*(dt*Irho_cp)) * fluxes%runoff_hflx(i,j)) - &
-                     (G%kg_m2_to_H * (scale * dt)) * fluxes%liq_runoff(i,j) * T(i,1)
-      if (ASSOCIATED(tv%TempxPmE)) then
-        tv%TempxPmE(i,j) = tv%TempxPmE(i,j) + (scale * dt) * &
-            (I_Cp*fluxes%runoff_hflx(i,j) - fluxes%liq_runoff(i,j)*T(i,1))
-      endif    
-    endif
-    if (CS%use_calving_heat_content) then
-      if (.not.ASSOCIATED(fluxes%calving_hflx)) call MOM_error(FATAL, &
-        "mixed layer extract fluxes: fluxes%calving_hflx must be "//&
-        "assocated if USE_CALVING_HEAT_CONTENT is true.")
-
-      Net_heat(i) = Net_heat(i) + (scale*(dt*Irho_cp)) * fluxes%calving_hflx(i,j) - &
-                    (G%kg_m2_to_H * (scale * dt)) * fluxes%froz_runoff(i,j) * T(i,1)
-      if (ASSOCIATED(tv%TempxPmE)) then
-        tv%TempxPmE(i,j) = tv%TempxPmE(i,j) + (scale * dt) * &
-            (I_Cp*fluxes%calving_hflx(i,j) - fluxes%froz_runoff(i,j)*T(i,1))
-      endif    
-    endif
-
-    if (num_msg<max_msg) then
-      if (Pen_SW_tot(i) > 1.000001*Irho_cp*scale*dt*fluxes%sw(i,j)) then
-        num_msg = num_msg + 1
-        write(mesg,'("Penetrating shortwave of ",1pe17.10, &
-                    &" exceeds total shortwave of ",1pe17.10,&
-                    &" at ",1pg11.4,"E, "1pg11.4,"N.")') &
-               Pen_SW_tot(i),Irho_cp*scale*dt*fluxes%sw(i,j),&
-               G%geoLonT(i,j),G%geoLatT(i,j)
-        call MOM_error(WARNING,mesg) 
-      endif
-    endif
-
-    Net_heat(i) = Net_heat(i) - Pen_SW_tot(i)
-
-    Net_salt(i) = 0.0
-    ! Convert salt_flux from kg (salt) m-2 s-1 to PSU m s-1.
-    if (associated(fluxes%salt_flux)) &
-      Net_salt(i) = (scale * dt * (1000.0 * fluxes%salt_flux(i,j))) * G%kg_m2_to_H
-
-  enddo
-
-end subroutine extract_fluxes
 
 subroutine absorb_remaining_SW(h, eps, htot, T, Ttot, nsw, Pen_SW_bnd, &
                                opacity_band, j, ksort, dt, G, CS)
