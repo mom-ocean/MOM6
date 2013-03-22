@@ -301,6 +301,58 @@ subroutine extractFluxes1d(G, fluxes, optics, nsw, j, dt, &
 
 end subroutine extractFluxes1d
 
+
+subroutine extractFluxes2d(G, fluxes, optics, nsw, dt, &
+                  DepthBeforeScalingFluxes, useRiverHeatContent, useCalvingHeatContent, &
+                  h, T, Net_H, Net_heat, Net_salt, Pen_SW_bnd, tv)
+  type(ocean_grid_type),         intent(in)  :: G
+  type(forcing),                 intent(in)  :: fluxes
+  type(optics_type),             pointer     :: optics
+  integer,                       intent(in)  :: nsw
+  real,                          intent(in)  :: dt, DepthBeforeScalingFluxes
+  logical,                       intent(in)  :: useRiverHeatContent, &
+                                                useCalvingHeatContent
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h, T
+  real, dimension(NIMEM_,NJMEM_),       intent(out) :: Net_H, Net_heat, Net_salt
+  real, dimension(:,:,:),        intent(out) :: Pen_SW_bnd
+  type(thermo_var_ptrs),       intent(inout) :: tv
+!   This subroutine extracts the relevant buoyancy fluxes from the surface
+! fluxes type.
+
+!  (in)      G - The ocean's grid structure.
+!  (in)      fluxes - A structure containing pointers to any possible
+!                     forcing fields.  Unused fields have NULL ptrs.
+!  (in)      nsw - The number of bands of penetrating shortwave radiation.
+!  (in)      j - The j-index to work on.
+!  (in)      dt - The time step in s.
+!  (in)      DepthBeforeScalingFluxes - Minimum ocean thickness to allow before scaling away fluxes
+!  (in)      useRiverHeatContent - If true, apply river heat content
+!  (in)      useCalvingHeatContent& - If true, apply calving heat content
+!  (in)      h - Layer thickness, in m or kg m-2.
+!  (in)      T - Layer temperatures, in deg C.
+!  (out)     Net_H - The net mass flux (if non-Boussinsq) or volume flux (if
+!                    Boussinesq - i.e. the fresh water flux (P+R-E)) into the
+!                    ocean over a time step, in H.
+!  (out)     Net_heat - The net heating at the surface over a time step,
+!                       exclusive of heating that appears in Pen_SW, in K H.
+!  (out)     Net_salt - The surface salt flux into the ocean over a time step, psu H.
+!  (out)     Pen_SW_bnd - The penetrating shortwave heating at the sea surface
+!                         in each penetrating band, in K H, size nsw x NIMEM_.
+!  (inout)   tv - A structure containing pointers to any available
+!                 thermodynamic fields. Here it is used to keep track of the
+!                 actual heat flux associated with net mass fluxes into the
+!                 ocean.
+  integer :: j
+
+  do j=G%jsc, G%jec
+    call extractFluxes1d(G, fluxes, optics, nsw, j, dt, &
+            DepthBeforeScalingFluxes, useRiverHeatContent, useCalvingHeatContent, &
+            h(:,j,:), T(:,j,:), Net_H(:,j), Net_heat(:,j), Net_salt(:,j), Pen_SW_bnd(:,:,j), tv)
+  enddo
+
+end subroutine extractFluxes2d
+
+
 subroutine MOM_forcing_chksum(mesg, fluxes, G, haloshift)
   character(len=*),                    intent(in) :: mesg
   type(forcing),                       intent(in) :: fluxes
