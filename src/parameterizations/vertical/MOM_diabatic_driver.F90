@@ -77,6 +77,7 @@ use MOM_checksums, only : hchksum, uchksum, vchksum
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing, optics_type, MOM_forcing_chksum
+use MOM_forcing_type, only : extractFluxes1d, absorbRemainingSW
 use MOM_geothermal, only : geothermal, geothermal_init, geothermal_end, geothermal_CS
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : vardesc
@@ -299,9 +300,9 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, dt, G, CS)
   call set_BBL_diffusivity(u, v, h, fluxes, visc, G, CS%set_diff_CSp)
   call cpu_clock_end(id_clock_set_diffusivity)
 
-!   Frazil formation keeps the temperature above the freezing point.
-! make_frazil is deliberately called at both the beginning and at
-! the end of the diabatic processes.
+  !   Frazil formation keeps the temperature above the freezing point.
+  ! make_frazil is deliberately called at both the beginning and at
+  ! the end of the diabatic processes.
   if (ASSOCIATED(T) .AND. ASSOCIATED(tv%frazil)) call make_frazil(h,tv,G,CS)
 
   if ((CS%ML_mix_first > 0.0) .or. CS%use_geothermal) then
@@ -315,13 +316,13 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, dt, G, CS)
     call cpu_clock_end(id_clock_geothermal)
   endif
 
-  if (CS%bulkmixedlayer) then
-! Set_opacity estimates the optical properties of the water column.
-!   It will need to be modified later to include information about the
-! biological properties and layer thicknesses.
-    if (associated(CS%optics)) &
-      call set_opacity(CS%optics, fluxes, G, CS%opacity_CSp)
+  ! Set_opacity estimates the optical properties of the water column.
+  !   It will need to be modified later to include information about the
+  ! biological properties and layer thicknesses.
+  if (associated(CS%optics)) &
+    call set_opacity(CS%optics, fluxes, G, CS%opacity_CSp)
   
+  if (CS%bulkmixedlayer) then
     if (CS%ML_mix_first > 0.0) then
 !  This subroutine (1)  Cools the mixed layer.
 !    (2) Performs convective adjustment by mixed layer entrainment.
@@ -423,6 +424,10 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, dt, G, CS)
     call cpu_clock_end(id_clock_double_diff)
   endif
 
+  ! If using the ALE algorithm, set ea=eb=Kd on interfaces for
+  ! use in the tri-diagonal solver.
+  ! Otherwise, call entrainment_diffusive() which sets ea and eb
+  ! based on KD and target densities (ie. does remapping as well).
   if (CS%useALEalgorithm) then
     do j=js,je ; do i=is,ie
       ea(i,j,1) = 0.
@@ -450,15 +455,18 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, dt, G, CS)
     call Entrainment_diffusive(u, v, h, tv, fluxes, dt, G, CS%entrain_diffusive_CSp, &
                                ea, eb, kb, Kd_Lay=Kd, Kd_int=Kd_int)
     call cpu_clock_end(id_clock_entrain)
-    if (CS%debug) then
-      call MOM_forcing_chksum("after calc_entrain ", fluxes, G, haloshift=0)
-      call MOM_thermovar_chksum("after calc_entrain ", tv, G)
-      call MOM_state_chksum("after calc_entrain ", u(:,:,:), v(:,:,:), h(:,:,:), G)
-      call hchksum(G%H_to_m*ea, "after calc_entrain ea",G,haloshift=0)
-      call hchksum(G%H_to_m*eb, "after calc_entrain eb",G,haloshift=0)
-    endif
   endif ! (CS%useALEalgorithm)
 
+  if (CS%debug) then
+    call MOM_forcing_chksum("after calc_entrain ", fluxes, G, haloshift=0)
+    call MOM_thermovar_chksum("after calc_entrain ", tv, G)
+    call MOM_state_chksum("after calc_entrain ", u(:,:,:), v(:,:,:), h(:,:,:), G)
+    call hchksum(G%H_to_m*ea, "after calc_entrain ea",G,haloshift=0)
+    call hchksum(G%H_to_m*eb, "after calc_entrain eb",G,haloshift=0)
+  endif
+
+  ! Update h according to divergence of the difference between
+  ! ea and eb. We keep a record of the original h in hold.
   ! In the following, the checks for negative values are to guard
   ! against against unforeseen instances where the entrainment
   ! drives a layer to negative thickness.  This will never happen if
@@ -485,13 +493,23 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, dt, G, CS)
     call MOM_state_chksum("after negative check ", u(:,:,:), v(:,:,:), h(:,:,:), G)
   endif
 
+  ! Apply forcing when using the ALE algorithm
+  if (CS%useALEalgorithm) then
+    call cpu_clock_begin(id_clock_remap)
+    call applyBoundaryFluxes(G, dt, fluxes, CS%optics, ea, eb, h, tv)
+    call cpu_clock_end(id_clock_remap)
+  endif
+  
+  ! Here, T and S are updated according to ea and eb.
+  ! If using the bulk mixed layer, T and S are also updated
+  ! by surface fluxes (in fluxes%*).
   if (CS%bulkmixedlayer) then
     if (ASSOCIATED(T)) then
       call cpu_clock_begin(id_clock_tridiag)
-! Temperature and salinity (as state variables) are treated slightly
-! differently from other tracers to insure that massless layers that
-! are lighter than the mixed layer have temperatures and salinities
-! that correspond to their prescribed densities.
+      ! Temperature and salinity (as state variables) are treated slightly
+      ! differently from other tracers to insure that massless layers that
+      ! are lighter than the mixed layer have temperatures and salinities
+      ! that correspond to their prescribed densities.
       do j=js,je
 
         if (CS%massless_match_targets) then
@@ -652,9 +670,11 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, dt, G, CS)
 
   endif                                          ! end BULKMIXEDLAYER
 
-  call cpu_clock_begin(id_clock_remap)
-  call regularize_layers(h, tv, dt, ea, eb, G, CS%regularize_layers_CSp)
-  call cpu_clock_end(id_clock_remap)
+  if (.not. CS%useALEalgorithm) then
+    call cpu_clock_begin(id_clock_remap)
+    call regularize_layers(h, tv, dt, ea, eb, G, CS%regularize_layers_CSp)
+    call cpu_clock_end(id_clock_remap)
+  endif
 
   if ((CS%id_Tdif > 0) .or. (CS%id_Tdif_z > 0) .or. &
       (CS%id_Tadv > 0) .or. (CS%id_Tadv_z > 0)) then
@@ -1624,5 +1644,127 @@ subroutine MOM_state_chksum(mesg, u, v, h, G)
   call vchksum(v,mesg//" v",G,haloshift=0)
   call hchksum(G%H_to_m*h, mesg//" h",G,haloshift=0)
 end subroutine MOM_state_chksum
+
+subroutine applyBoundaryFluxes(G, dt, fluxes, optics, ea, eb, h, tv)
+  type(ocean_grid_type),                 intent(in)    :: G
+  real,                                  intent(in)    :: dt
+  type(forcing),                         intent(in)    :: fluxes
+  type(optics_type),                     pointer       :: optics
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: ea, eb, h
+  type(thermo_var_ptrs),                 intent(inout) :: tv
+  !   This subroutine applies thermodynamic forcing (contained in fluxes type)
+  ! to h, tv%T and tv%S. If the event the P-E+R is negatively in excess of the
+  ! available layer thickness, ea and eb might be adjusted to exchange (entrain)
+  ! volume between layers to maintain non-negative values.
+  real :: Irho0, I_Cp, Irho_cp, H_limit_fluxes, IforcingDepthScale
+  real :: dThickness, dTemp, dSalt, fractionOfForcing, hOld, Ithickness
+  real, dimension(SZI_(G)) :: netThickness, netHeat, netSalt, htot, Ttot
+  real, dimension(SZI_(G), SZK_(G)) :: h2d, T2d, eps
+  integer, dimension(SZI_(G), SZK_(G)) :: ksort
+  real, allocatable, dimension(:,:) :: Pen_SW_bnd
+  real, allocatable, dimension(:,:,:) :: opacityBand
+  logical :: use_riverHeatContent, useCalvingHeatContent
+  integer :: i, j, is, ie, js, je, k, nz, n, nsw
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+
+  ! Skip applying forcing if fluxes%sw is not associated.
+  if (.not.ASSOCIATED(fluxes%sw)) return
+
+  nsw = 0
+  if (ASSOCIATED(optics)) nsw = optics%nbands
+  allocate(Pen_SW_bnd(max(nsw,1),SZI_(G)))
+  allocate(opacityBand(max(nsw,1),SZI_(G),SZK_(G)))
+
+  Irho0 = 1.0 / G%Rho0
+  I_Cp = 1.0 / fluxes%C_p
+  Irho_cp = 1.0 / (G%H_to_kg_m2 * fluxes%C_p)
+  ! H_limit_fluxes is used by extractFluxes1d to scale away fluxes if the total
+  ! depth of the ocean is vanishing. It does not (yet) handle a value of zero!
+  H_limit_fluxes = max(G%Angstrom, 1.E-30) ! This is a hack to avoid division by zero
+  ! To accomodate vanishing upper layers, we need to allow for an instantaneous
+  ! distribution of forcing over some finite vertical extent. The bulk mixed layer
+  ! code handled this properly. The inverse scale, IforcingDepthScale, is a hack which 
+  ! should not be tickled in Eulerian mode. It stops all the forcing going into a
+  ! vanish(ed/ing) layer.
+  IforcingDepthScale = 1000. ! Use 1 mm to distribute the surface fluxes uniformly
+
+  use_riverHeatContent = .false.
+  useCalvingHeatContent = .false.
+
+  ! s/r aborbRemaining uses an indirect indexing in the vertical, a hold over for use
+  ! with the bulk mixed layer
+  do k=1,nz ; do i=is,ie
+      ksort(i,k) = k
+  enddo ; enddo
+
+  do j=js,je ! Work in vertical slices (this is a hold over from the routines called with a j argument)
+    ! Copy state into 2D-slice arrays
+    do k=1,nz
+      do i=is,ie
+        h2d(i,k) = h(i,j,k)
+        T2d(i,k) = tv%T(i,j,k)
+        do n=1,nsw
+          opacityBand(n,i,k) = G%H_to_m*optics%opacity_band(n,i,j,k)
+        enddo
+        eps(i,k) = 0.
+      enddo
+    enddo
+    do i=is,ie ; htot(i) = 0. ; enddo
+
+    ! The surface forcing is contained in the fluxes type.
+    ! Here, we "unpack" it and aggregate all the thermodynamic forcing into
+    ! netThickness, netHeat, netSalt and the SW penetrative componennts, Pen_SW_bnd.
+    call extractFluxes1d(G, fluxes, optics, nsw, j, dt, &
+                  H_limit_fluxes, use_riverHeatContent, useCalvingHeatContent, &
+                  h2d, T2d, netThickness, netHeat, netSalt, Pen_SW_bnd, tv)
+ 
+    do i=is,ie
+      do k=1,nz
+        ! Fraction of forcing that we put into this layer is normally 100%, unless the
+        ! layer is thin relative to 1/IforcingDepthScale
+        fractionOfForcing = min(1.0, h2d(i,k)*IforcingDepthScale)
+
+        ! Change in state due to forcing
+        ! (Limit mass loss to the available mass in layer)
+        dThickness = max( fractionOfForcing*netThickness(i), -h2d(i,k) )
+        dTemp = fractionOfForcing*netHeat(i)
+        dSalt = fractionOfForcing*netSalt(i)
+
+        ! Update the forcing by the part to be consumed
+        netThickness(i) = netThickness(i) - dThickness
+        netHeat(i) = netHeat(i) - dTemp
+        netSalt(i) = netSalt(i) - dSalt
+
+        ! Adjust heating by the temperature of rain/water vapor
+        dTemp = dTemp + dThickness*tv%T(i,j,k)
+
+        ! Update state by the appropriate delta (change in state calculated above)
+        hOld = h2d(i,k) ! Need to keep original thickness in hand
+        h2d(i,k) = h2d(i,k) + dThickness
+        Ithickness = 1./h2d(i,k)
+        tv%T(i,j,k) = (hOld*tv%T(i,j,k) + dTemp)*Ithickness
+        tv%S(i,j,k) = (hOld*tv%S(i,j,k) + dSalt)*Ithickness
+
+      enddo ! k
+    enddo ! i
+
+    ! Heat by the divergence of penetrating SW (this uses the updated thicknesses)
+    call absorbRemainingSW(G, h2d, eps, htot, opacityBand, nsw, j, dt, &
+                           H_limit_fluxes, .true., .true., &
+                           ksort, T2d, Ttot, Pen_SW_bnd)
+
+    ! Copy slice back into model state
+    do k=1,nz
+      do i=is,ie
+        h(i,j,k) = h2d(i,k)
+        tv%T(i,j,k) = T2d(i,k)
+      enddo
+    enddo
+  enddo ! j
+
+  deallocate(Pen_SW_bnd)
+  deallocate(opacityBand)
+  
+end subroutine applyBoundaryFluxes
 
 end module MOM_diabatic_driver
