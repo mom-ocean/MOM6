@@ -231,7 +231,7 @@ subroutine extractFluxes1d(G, fluxes, optics, nsw, j, dt, &
     scale = 1.0
     if (htot(i)*Ih_limit < 1.0) scale = htot(i)*Ih_limit
 
-!  Convert the penetrating shortwave forcing to K m.
+    ! Convert the penetrating shortwave forcing to K m.
     Pen_sw_tot(i) = 0.0
     if (nsw >= 1) then
       do n=1,nsw
@@ -243,6 +243,7 @@ subroutine extractFluxes1d(G, fluxes, optics, nsw, j, dt, &
       Pen_SW_bnd(1,i) = 0.0
     endif
 
+    ! Volume/mass fluxes
     Net_H(i) = dt * (scale * ((((( fluxes%liq_precip(i,j)    &
                                  + fluxes%froz_precip(i,j) ) &
                                  + fluxes%evap(i,j)        ) &
@@ -250,10 +251,11 @@ subroutine extractFluxes1d(G, fluxes, optics, nsw, j, dt, &
                                  + fluxes%virt_precip(i,j) ) &
                                  + fluxes%froz_runoff(i,j) ) )
     Net_H(i) = G%kg_m2_to_H * Net_H(i)
-    if (.not.G%Boussinesq .and. associated(fluxes%salt_flux)) &
+    if (.not.G%Boussinesq .and. ASSOCIATED(fluxes%salt_flux)) &
       Net_H(i) = Net_H(i) + (dt * G%kg_m2_to_H) * &
                     (scale * fluxes%salt_flux(i,j))
 
+    ! Heat fluxes
     Net_heat(i) = scale * dt * Irho_cp * ( fluxes%sw(i,j) + &
          ((fluxes%lw(i,j) + fluxes%latent(i,j)) + fluxes%sens(i,j)) )
 
@@ -261,7 +263,6 @@ subroutine extractFluxes1d(G, fluxes, optics, nsw, j, dt, &
          (scale * (dt * Irho_cp)) * fluxes%heat_restore(i,j)
 
     if (useRiverHeatContent) then
-
       Net_heat(i) = (Net_heat(i) + (scale*(dt*Irho_cp)) * fluxes%runoff_hflx(i,j)) - &
                      (G%kg_m2_to_H * (scale * dt)) * fluxes%liq_runoff(i,j) * T(i,1)
       if (ASSOCIATED(tv%TempxPmE)) then
@@ -269,8 +270,8 @@ subroutine extractFluxes1d(G, fluxes, optics, nsw, j, dt, &
             (I_Cp*fluxes%runoff_hflx(i,j) - fluxes%liq_runoff(i,j)*T(i,1))
       endif    
     endif
-    if (useCalvingHeatContent) then
 
+    if (useCalvingHeatContent) then
       Net_heat(i) = Net_heat(i) + (scale*(dt*Irho_cp)) * fluxes%calving_hflx(i,j) - &
                     (G%kg_m2_to_H * (scale * dt)) * fluxes%froz_runoff(i,j) * T(i,1)
       if (ASSOCIATED(tv%TempxPmE)) then
@@ -293,12 +294,13 @@ subroutine extractFluxes1d(G, fluxes, optics, nsw, j, dt, &
 
     Net_heat(i) = Net_heat(i) - Pen_SW_tot(i)
 
+    ! Salt fluxes
     Net_salt(i) = 0.0
     ! Convert salt_flux from kg (salt) m-2 s-1 to PSU m s-1.
-    if (associated(fluxes%salt_flux)) &
+    if (ASSOCIATED(fluxes%salt_flux)) &
       Net_salt(i) = (scale * dt * (1000.0 * fluxes%salt_flux(i,j))) * G%kg_m2_to_H
 
-  enddo
+  enddo ! i-loop
 
 end subroutine extractFluxes1d
 
@@ -495,22 +497,21 @@ subroutine absorbRemainingSW(G, h, eps, htot, opacity_band, nsw, j, dt, &
 !    if (correctAbsorption) then
 !    endif
 
-  if (.not.absorbAllSW .and. .not.correctAbsorption) return
-
-  ! Unless modified, there is no temperature change due to fluxes from the
-  ! bottom.
-  do i=is,ie ; T_chg(i) = 0.0 ; enddo
-
-  ! If there is still shortwave radiation at this point, it could go into
-  ! the bottom (with a bottom mud model), or it could be redistributed back
-  ! through the water column.
+! if (.not.absorbAllSW .and. .not.correctAbsorption) return
   if (absorbAllSW) then
+
+    ! Unless modified, there is no temperature change due to fluxes from the
+    ! bottom.
+    do i=is,ie ; T_chg(i) = 0.0 ; enddo
+
+    ! If there is still shortwave radiation at this point, it could go into
+    ! the bottom (with a bottom mud model), or it could be redistributed back
+    ! through the water column.
     do i=is,ie
       Pen_SW_rem(i) = Pen_SW_bnd(1,i)
       do n=2,nsw ; Pen_SW_rem(i) = Pen_SW_rem(i) + Pen_SW_bnd(n,i) ; enddo
     enddo
     do i=is,ie ; if (Pen_SW_rem(i) > 0.0) SW_Remains = .true. ; enddo
- !  if (.not.SW_Remains) return
 
     Ih_limit = 1.0 / (H_limit_fluxes * G%m_to_H)
     do i=is,ie ; if ((Pen_SW_rem(i) > 0.0) .and. (h_heat(i) > 0.0)) then
@@ -522,21 +523,21 @@ subroutine absorbRemainingSW(G, h, eps, htot, opacity_band, nsw, j, dt, &
       endif
       do n=1,nsw ; Pen_SW_bnd(n,i) = unabsorbed * Pen_SW_bnd(n,i) ; enddo
     endif ; enddo
-  endif
 
-  do ks=nz,1,-1 ; do i=is,ie ; if (ksort(i,ks) > 0) then
-    k = ksort(i,ks)
-    if (T_chg(i) > 0.0) then
-      ! Only layers greater than h_min_heat thick should get heated.
-      if (h(i,k) >= 2.0*h_min_heat) then ; T(i,k) = T(i,k) + T_chg(i)
-      elseif (h(i,k) > h_min_heat) then
-        T(i,k) = T(i,k) + T_chg(i) * (2.0 - 2.0*h_min_heat/h(i,k))
+    do ks=nz,1,-1 ; do i=is,ie ; if (ksort(i,ks) > 0) then
+      k = ksort(i,ks)
+      if (T_chg(i) > 0.0) then
+        ! Only layers greater than h_min_heat thick should get heated.
+        if (h(i,k) >= 2.0*h_min_heat) then ; T(i,k) = T(i,k) + T_chg(i)
+        elseif (h(i,k) > h_min_heat) then
+          T(i,k) = T(i,k) + T_chg(i) * (2.0 - 2.0*h_min_heat/h(i,k))
+        endif
       endif
-    endif
-    ! Increase the heating for layers above.
-    T_chg(i) = T_chg(i) + T_chg_above(i,k)
-  endif ; enddo ; enddo
-  do i=is,ie ; Ttot(i) = Ttot(i) + T_chg(i) * htot(i) ; enddo
+      ! Increase the heating for layers above.
+      T_chg(i) = T_chg(i) + T_chg_above(i,k)
+    endif ; enddo ; enddo
+    do i=is,ie ; Ttot(i) = Ttot(i) + T_chg(i) * htot(i) ; enddo
+  endif ! absorbAllSW
 
 end subroutine absorbRemainingSW
 
