@@ -38,6 +38,8 @@ type, public :: remapping_CS
   type(grid1d_t)                  :: grid_final ! final grid
   type(ppoly_t)                   :: ppoly_r    ! reconstruction ppoly
   real, dimension(:), allocatable :: u_column   ! generic variable
+  type(edgeValueArrays)           :: edgeValueWrk ! Work space for edge values
+  type(edgeSlopeArrays)           :: edgeSlopeWrk ! Work space for edge slopes
   ! Parameters
   integer :: remapping_scheme = -911   ! Determines which reconstruction to use
   logical :: boundary_extrapolation = .true.  ! If true, extrapolate boundaries
@@ -219,7 +221,7 @@ subroutine remapping_core ( CS, grid0, u0, grid1, u1, ppoly )
 !------------------------------------------------------------------------------
 
   ! Arguments
-  type(remapping_CS), intent(in)      :: CS
+  type(remapping_CS), intent(inout)   :: CS
   type(grid1d_t), intent(in)          :: grid0
   real, dimension(:), intent(in)      :: u0
   type(ppoly_t), intent(inout)        :: ppoly
@@ -252,7 +254,7 @@ subroutine remapping_core ( CS, grid0, u0, grid1, u1, ppoly )
       call remapping_integration ( grid0, u0, ppoly, grid1, u1, &
                                    INTEGRATION_PPM )
     case ( REMAPPING_PPM_IH4 )
-      call edge_values_implicit_h4 ( grid0, u0, ppoly%E )
+      call edge_values_implicit_h4 ( grid0, CS%edgeValueWrk, u0, ppoly%E )
       call ppm_reconstruction ( grid0, ppoly, u0 )
       if ( CS%boundary_extrapolation) then
         call ppm_boundary_extrapolation ( grid0, ppoly, u0 )
@@ -260,8 +262,8 @@ subroutine remapping_core ( CS, grid0, u0, grid1, u1, ppoly )
       call remapping_integration ( grid0, u0, ppoly, grid1, u1, &
                                    INTEGRATION_PPM )
     case ( REMAPPING_PQM_IH4IH3 )
-      call edge_values_implicit_h4 ( grid0, u0, ppoly%E )
-      call edge_slopes_implicit_h3 ( grid0, u0, ppoly%S )
+      call edge_values_implicit_h4 ( grid0, CS%edgeValueWrk, u0, ppoly%E )
+      call edge_slopes_implicit_h3 ( grid0, CS%edgeSlopeWrk, u0, ppoly%S )
       call pqm_reconstruction ( grid0, ppoly, u0 )
       if ( CS%boundary_extrapolation) then
         call pqm_boundary_extrapolation_v1 ( grid0, ppoly, u0 )
@@ -269,8 +271,8 @@ subroutine remapping_core ( CS, grid0, u0, grid1, u1, ppoly )
       call remapping_integration ( grid0, u0, ppoly, grid1, u1, &
                                    INTEGRATION_PQM )
     case ( REMAPPING_PQM_IH6IH5 )
-      call edge_values_implicit_h6 ( grid0, u0, ppoly%E )
-      call edge_slopes_implicit_h5 ( grid0, u0, ppoly%S )
+      call edge_values_implicit_h6 ( grid0, CS%edgeValueWrk, u0, ppoly%E )
+      call edge_slopes_implicit_h5 ( grid0, CS%edgeSlopeWrk, u0, ppoly%S )
       call pqm_reconstruction ( grid0, ppoly, u0 )
       if ( CS%boundary_extrapolation) then
         call pqm_boundary_extrapolation_v1 ( grid0, ppoly, u0 )
@@ -583,6 +585,9 @@ subroutine remapping_init( param_file, G, CS)
   
   allocate ( CS%u_column(nz) ); CS%u_column = 0.0
 
+  call tridiagonal_system_0_memory_allocation ( nz, CS%edgeValueWrk )
+  call tridiagonal_system_1_memory_allocation ( nz, CS%edgeSlopeWrk )
+
 end subroutine remapping_init
 
 
@@ -600,6 +605,9 @@ subroutine remapping_end(CS)
   call ppoly_destroy ( CS%ppoly_r )
 
   deallocate ( CS%u_column )
+
+  call tridiagonal_system_0_memory_deallocation ( CS%edgeValueWrk )
+  call tridiagonal_system_1_memory_deallocation ( CS%edgeSlopeWrk )
 
 end subroutine remapping_end
 

@@ -109,6 +109,8 @@ type, public :: regridding_CS
   integer   :: pressureReconstructionScheme
 
   type(remapping_CS) :: remapCS ! Remapping parameters and dwork arrays
+  type(edgeValueArrays) :: edgeValueWrk ! Work space for edge values
+  type(edgeSlopeArrays) :: edgeSlopeWrk ! Work space for edge slopes
 end type
 
 ! -----------------------------------------------------------------------------
@@ -557,7 +559,7 @@ subroutine pressure_gradient_ppm (CS, S_t, S_b, T_t, T_b, G, tv, h )
       ! Reconstruct salinity profile    
       CS%ppoly_parab%E = 0.0
       CS%ppoly_parab%coefficients = 0.0
-      call edge_values_implicit_h4 ( CS%grid_generic, tv%S(i,j,:), CS%ppoly_parab%E )
+      call edge_values_implicit_h4 ( CS%grid_generic, CS%edgeValueWrk, tv%S(i,j,:), CS%ppoly_parab%E )
       call ppm_reconstruction ( CS%grid_generic, CS%ppoly_parab, tv%S(i,j,:) )
       call ppm_boundary_extrapolation ( CS%grid_generic, CS%ppoly_parab, &
                                         tv%S(i,j,:) )
@@ -570,7 +572,7 @@ subroutine pressure_gradient_ppm (CS, S_t, S_b, T_t, T_b, G, tv, h )
       ! Reconstruct temperature profile 
       CS%ppoly_parab%E = 0.0
       CS%ppoly_parab%coefficients = 0.0
-      call edge_values_implicit_h4 ( CS%grid_generic, tv%T(i,j,:), CS%ppoly_parab%E )
+      call edge_values_implicit_h4 ( CS%grid_generic, CS%edgeValueWrk, tv%T(i,j,:), CS%ppoly_parab%E )
       call ppm_reconstruction ( CS%grid_generic, CS%ppoly_parab, tv%T(i,j,:) )
       call ppm_boundary_extrapolation ( CS%grid_generic, CS%ppoly_parab, &
                                         tv%T(i,j,:) )
@@ -1003,7 +1005,7 @@ subroutine regridding_iteration ( densities, target_values, CS, &
   ppoly0;           ! Piecewise polynomial for density interpolation
   type(grid1d_t), intent(inout)       :: &
   grid1;            ! The new grid based on target interface densities          
-  type(regridding_CS), intent(in) :: &
+  type(regridding_CS), intent(inout) :: &
   CS;  ! Parameters used for regridding
 
   ! Local variables
@@ -1040,7 +1042,7 @@ subroutine regridding_iteration ( densities, target_values, CS, &
     case ( INTERPOLATION_P1M_IH4 )
       degree = DEGREE_1
       if ( grid0%nb_cells .ge. 4 ) then
-        call edge_values_implicit_h4 ( grid0, densities, ppoly0%E )
+        call edge_values_implicit_h4 ( grid0, CS%edgeValueWrk, densities, ppoly0%E )
       else
         call edge_values_explicit_h2 ( grid0, densities, ppoly0%E )
       end if
@@ -1077,7 +1079,7 @@ subroutine regridding_iteration ( densities, target_values, CS, &
 
       if ( grid0%nb_cells .ge. 4 ) then
         degree = DEGREE_2
-        call edge_values_implicit_h4 ( grid0, densities, ppoly0%E )
+        call edge_values_implicit_h4 ( grid0, CS%edgeValueWrk, densities, ppoly0%E )
         call ppm_reconstruction ( grid0, ppoly0, densities )
         if ( CS%boundary_extrapolation) then
           call ppm_boundary_extrapolation ( grid0, ppoly0, densities )
@@ -1095,8 +1097,8 @@ subroutine regridding_iteration ( densities, target_values, CS, &
       
       if ( grid0%nb_cells .ge. 4 ) then
         degree = DEGREE_3
-        call edge_values_implicit_h4 ( grid0, densities, ppoly0%E )
-        call edge_slopes_implicit_h3 ( grid0, densities, ppoly0%S )
+        call edge_values_implicit_h4 ( grid0, CS%edgeValueWrk, densities, ppoly0%E )
+        call edge_slopes_implicit_h3 ( grid0, CS%edgeSlopeWrk, densities, ppoly0%S )
         call p3m_interpolation ( grid0, ppoly0, densities )
         if ( CS%boundary_extrapolation) then
           call p3m_boundary_extrapolation ( grid0, ppoly0, densities )
@@ -1113,8 +1115,8 @@ subroutine regridding_iteration ( densities, target_values, CS, &
     case ( INTERPOLATION_P3M_IH6IH5 )
       if ( grid0%nb_cells .ge. 6 ) then
         degree = DEGREE_3
-        call edge_values_implicit_h6 ( grid0, densities, ppoly0%E )
-        call edge_slopes_implicit_h5 ( grid0, densities, ppoly0%S )
+        call edge_values_implicit_h6 ( grid0, CS%edgeValueWrk, densities, ppoly0%E )
+        call edge_slopes_implicit_h5 ( grid0, CS%edgeSlopeWrk, densities, ppoly0%S )
         call p3m_interpolation ( grid0, ppoly0, densities )
         if ( CS%boundary_extrapolation) then
           call p3m_boundary_extrapolation ( grid0, ppoly0, densities )
@@ -1132,8 +1134,8 @@ subroutine regridding_iteration ( densities, target_values, CS, &
     
       if ( grid0%nb_cells .ge. 4 ) then
         degree = DEGREE_4
-        call edge_values_implicit_h4 ( grid0, densities, ppoly0%E )
-        call edge_slopes_implicit_h3 ( grid0, densities, ppoly0%S )
+        call edge_values_implicit_h4 ( grid0, CS%edgeValueWrk, densities, ppoly0%E )
+        call edge_slopes_implicit_h3 ( grid0, CS%edgeSlopeWrk, densities, ppoly0%S )
         call pqm_reconstruction ( grid0, ppoly0, densities )
         if ( CS%boundary_extrapolation) then
           call pqm_boundary_extrapolation_v1 ( grid0, ppoly0, densities )
@@ -1150,8 +1152,8 @@ subroutine regridding_iteration ( densities, target_values, CS, &
     case ( INTERPOLATION_PQM_IH6IH5 )
       if ( grid0%nb_cells .ge. 6 ) then
         degree = DEGREE_4
-        call edge_values_implicit_h6 ( grid0, densities, ppoly0%E )
-        call edge_slopes_implicit_h5 ( grid0, densities, ppoly0%S )
+        call edge_values_implicit_h6 ( grid0, CS%edgeValueWrk, densities, ppoly0%E )
+        call edge_slopes_implicit_h5 ( grid0, CS%edgeSlopeWrk, densities, ppoly0%S )
         call pqm_reconstruction ( grid0, ppoly0, densities )
         if ( CS%boundary_extrapolation) then
           call pqm_boundary_extrapolation_v1 ( grid0, ppoly0, densities )
@@ -1608,8 +1610,8 @@ subroutine regridding_memory_allocation ( G, CS )
   nz = G%ke
 
   ! Allocate memory for the tridiagonal system
-  call tridiagonal_system_0_memory_allocation ( nz )
-  call tridiagonal_system_1_memory_allocation ( nz )
+  call tridiagonal_system_0_memory_allocation ( nz, CS%edgeValueWrk )
+  call tridiagonal_system_1_memory_allocation ( nz, CS%edgeSlopeWrk )
 
   ! Target values
   allocate ( CS%target_values(nz+1) )
@@ -1654,8 +1656,8 @@ subroutine regridding_memory_deallocation ( CS )
   type(regridding_CS), intent(inout) :: CS
   
   ! Reclaim memory for the tridiagonal system
-  call tridiagonal_system_0_memory_deallocation ( )
-  call tridiagonal_system_1_memory_deallocation ( )
+  call tridiagonal_system_0_memory_deallocation ( CS%edgeValueWrk )
+  call tridiagonal_system_1_memory_deallocation ( CS%edgeSlopeWrk )
   
   ! Target values
   deallocate ( CS%target_values )

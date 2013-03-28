@@ -19,11 +19,14 @@ implicit none ; private
 ! -----------------------------------------------------------------------------
 ! Private variables used only in this module
 ! -----------------------------------------------------------------------------
-real, dimension(:), allocatable :: tri_l;   ! trid. system (lower diagonal)
-real, dimension(:), allocatable :: tri_d;   ! trid. system (middle diagonal)
-real, dimension(:), allocatable :: tri_u;   ! trid. system (upper diagonal)
-real, dimension(:), allocatable :: tri_x;   ! trid. system (unknowns vector)
-real, dimension(:), allocatable :: tri_b;   ! trid. system (rhs)
+type, public :: edgeSlopeArrays
+  private
+  real, dimension(:), allocatable :: tri_l;   ! trid. system (lower diagonal)
+  real, dimension(:), allocatable :: tri_d;   ! trid. system (middle diagonal)
+  real, dimension(:), allocatable :: tri_u;   ! trid. system (upper diagonal)
+  real, dimension(:), allocatable :: tri_x;   ! trid. system (unknowns vector)
+  real, dimension(:), allocatable :: tri_b;   ! trid. system (rhs)
+end type edgeSlopeArrays
 
 ! -----------------------------------------------------------------------------
 ! The following routines are visible to the outside world
@@ -39,7 +42,7 @@ contains
 !------------------------------------------------------------------------------
 ! Compute ih4 edge slopes (implicit third order accurate)
 !------------------------------------------------------------------------------
-subroutine edge_slopes_implicit_h3 ( grid, u, edge_slopes )
+subroutine edge_slopes_implicit_h3 ( grid, work, u, edge_slopes )
 ! -----------------------------------------------------------------------------
 ! Compute edge slopes based on third-order implicit estimates. Note that
 ! the estimates are fourth-order accurate on uniform grids
@@ -68,6 +71,7 @@ subroutine edge_slopes_implicit_h3 ( grid, u, edge_slopes )
 
   ! Arguments
   type(grid1d_t), intent(in)            :: grid             
+  type(edgeSlopeArrays), intent(inout)  :: work
   real, dimension(:), intent(in)        :: u            ! cell averages
   real, dimension(:,:), intent(inout)   :: edge_slopes      
 
@@ -110,11 +114,11 @@ subroutine edge_slopes_implicit_h3 ( grid, u, edge_slopes )
     a = -12.0 * h0h1 / d
     b = -a
     
-    tri_l(i+1) = alpha
-    tri_d(i+1) = 1.0
-    tri_u(i+1) = beta
+    work%tri_l(i+1) = alpha
+    work%tri_d(i+1) = 1.0
+    work%tri_u(i+1) = beta
     
-    tri_b(i+1) = a * u(i) + b * u(i+1)
+    work%tri_b(i+1) = a * u(i) + b * u(i+1)
     
   end do ! end loop on cells
 
@@ -140,9 +144,9 @@ subroutine edge_slopes_implicit_h3 ( grid, u, edge_slopes )
   Dsys(2) = 2.0 * Csys(3)
   Dsys(3) = 3.0 * Csys(4)
   
-  tri_d(1) = 1.0
-  tri_u(1) = 0.0
-  tri_b(1) = evaluation_polynomial ( Dsys, 3, x(1) );       ! first edge slope
+  work%tri_d(1) = 1.0
+  work%tri_u(1) = 0.0
+  work%tri_b(1) = evaluation_polynomial ( Dsys, 3, x(1) );       ! first edge slope
   
   ! Boundary conditions: right boundary
   x(1) = 0.0
@@ -166,19 +170,19 @@ subroutine edge_slopes_implicit_h3 ( grid, u, edge_slopes )
   Dsys(2) = 2.0 * Csys(3)
   Dsys(3) = 3.0 * Csys(4)
   
-  tri_l(N+1) = 0.0
-  tri_d(N+1) = 1.0
-  tri_b(N+1) = evaluation_polynomial ( Dsys, 3, x(5) );     ! last edge slope
+  work%tri_l(N+1) = 0.0
+  work%tri_d(N+1) = 1.0
+  work%tri_b(N+1) = evaluation_polynomial ( Dsys, 3, x(5) );     ! last edge slope
 
   ! Solve tridiagonal system and assign edge values
-  call solve_tridiagonal_system ( tri_l, tri_d, tri_u, tri_b, tri_x, N+1 )
+  call solve_tridiagonal_system ( work%tri_l, work%tri_d, work%tri_u, work%tri_b, work%tri_x, N+1 )
 
   do i = 2,N
-    edge_slopes(i,1)   = tri_x(i)
-    edge_slopes(i-1,2) = tri_x(i)
+    edge_slopes(i,1)   = work%tri_x(i)
+    edge_slopes(i-1,2) = work%tri_x(i)
   end do
-  edge_slopes(1,1) = tri_x(1)
-  edge_slopes(N,2) = tri_x(N+1)
+  edge_slopes(1,1) = work%tri_x(1)
+  edge_slopes(N,2) = work%tri_x(N+1)
 
 end subroutine edge_slopes_implicit_h3
 
@@ -186,7 +190,7 @@ end subroutine edge_slopes_implicit_h3
 !------------------------------------------------------------------------------
 ! Compute ih5 edge values (implicit fifth order accurate)
 !------------------------------------------------------------------------------
-subroutine edge_slopes_implicit_h5 ( grid, u, edge_slopes )
+subroutine edge_slopes_implicit_h5 ( grid, work, u, edge_slopes )
 ! -----------------------------------------------------------------------------
 ! Fifth-order implicit estimates of edge values are based on a four-cell, 
 ! three-edge stencil. A tridiagonal system is set up and is based on 
@@ -222,6 +226,7 @@ subroutine edge_slopes_implicit_h5 ( grid, u, edge_slopes )
 
   ! Arguments
   type(grid1d_t), intent(in)            :: grid
+  type(edgeSlopeArrays), intent(inout)  :: work
   real, dimension(:), intent(in)        :: u;           ! cell averages
   real, dimension(:,:), intent(inout)   :: edge_slopes
 
@@ -355,10 +360,10 @@ subroutine edge_slopes_implicit_h5 ( grid, u, edge_slopes )
     c = Csys(5)
     d = Csys(6)
 
-    tri_l(k+1) = alpha
-    tri_d(k+1) = 1.0
-    tri_u(k+1) = beta
-    tri_b(k+1) = a * u(k-1) + b * u(k) + c * u(k+1) + d * u(k+2)
+    work%tri_l(k+1) = alpha
+    work%tri_d(k+1) = 1.0
+    work%tri_u(k+1) = beta
+    work%tri_b(k+1) = a * u(k-1) + b * u(k) + c * u(k+1) + d * u(k+2)
     
   end do ! end loop on cells
 
@@ -468,10 +473,10 @@ subroutine edge_slopes_implicit_h5 ( grid, u, edge_slopes )
   c = Csys(5)
   d = Csys(6)
 
-  tri_l(2) = alpha
-  tri_d(2) = 1.0
-  tri_u(2) = beta
-  tri_b(2) = a * u(1) + b * u(2) + c * u(3) + d * u(4)
+  work%tri_l(2) = alpha
+  work%tri_d(2) = 1.0
+  work%tri_u(2) = beta
+  work%tri_b(2) = a * u(1) + b * u(2) + c * u(3) + d * u(4)
   
   ! Boundary conditions: left boundary
   x(1) = 0.0
@@ -497,10 +502,10 @@ subroutine edge_slopes_implicit_h5 ( grid, u, edge_slopes )
   Dsys(4) = 4.0 * Csys(5)
   Dsys(5) = 5.0 * Csys(6)
   
-  tri_d(1) = 0.0
-  tri_d(1) = 1.0
-  tri_u(1) = 0.0
-  tri_b(1) = evaluation_polynomial ( Dsys, 5, x(1) );       ! first edge value
+  work%tri_d(1) = 0.0
+  work%tri_d(1) = 1.0
+  work%tri_u(1) = 0.0
+  work%tri_b(1) = evaluation_polynomial ( Dsys, 5, x(1) );       ! first edge value
   
   ! Use a left-biased stencil for the second to last row
   
@@ -608,10 +613,10 @@ subroutine edge_slopes_implicit_h5 ( grid, u, edge_slopes )
   c = Csys(5)
   d = Csys(6)
 
-  tri_l(N) = alpha
-  tri_d(N) = 1.0
-  tri_u(N) = beta
-  tri_b(N) = a * u(N-3) + b * u(N-2) + c * u(N-1) + d * u(N)
+  work%tri_l(N) = alpha
+  work%tri_d(N) = 1.0
+  work%tri_u(N) = beta
+  work%tri_b(N) = a * u(N-3) + b * u(N-2) + c * u(N-1) + d * u(N)
   
   ! Boundary conditions: right boundary
   x(1) = 0.0
@@ -637,20 +642,20 @@ subroutine edge_slopes_implicit_h5 ( grid, u, edge_slopes )
   Dsys(4) = 4.0 * Csys(5)
   Dsys(5) = 5.0 * Csys(6)
   
-  tri_l(N+1) = 0.0
-  tri_d(N+1) = 1.0
-  tri_u(N+1) = 0.0
-  tri_b(N+1) = evaluation_polynomial ( Dsys, 5, x(7) );     ! last edge value
+  work%tri_l(N+1) = 0.0
+  work%tri_d(N+1) = 1.0
+  work%tri_u(N+1) = 0.0
+  work%tri_b(N+1) = evaluation_polynomial ( Dsys, 5, x(7) );     ! last edge value
 
   ! Solve tridiagonal system and assign edge values
-  call solve_tridiagonal_system ( tri_l, tri_d, tri_u, tri_b, tri_x, N+1 )
+  call solve_tridiagonal_system ( work%tri_l, work%tri_d, work%tri_u, work%tri_b, work%tri_x, N+1 )
 
   do i = 2,N
-    edge_slopes(i,1)   = tri_x(i)
-    edge_slopes(i-1,2) = tri_x(i)
+    edge_slopes(i,1)   = work%tri_x(i)
+    edge_slopes(i-1,2) = work%tri_x(i)
   end do
-  edge_slopes(1,1) = tri_x(1)
-  edge_slopes(N,2) = tri_x(N+1)
+  edge_slopes(1,1) = work%tri_x(1)
+  edge_slopes(N,2) = work%tri_x(N+1)
 
 end subroutine edge_slopes_implicit_h5
 
@@ -658,7 +663,7 @@ end subroutine edge_slopes_implicit_h5
 !------------------------------------------------------------------------------
 ! Allocate memory for tridiagonal system used to compute edge values
 !------------------------------------------------------------------------------
-subroutine tridiagonal_system_1_memory_allocation ( N )
+subroutine tridiagonal_system_1_memory_allocation ( N, work )
 !------------------------------------------------------------------------------
 ! In this routine, we allocate memory for the tridiagonal system that will
 ! be used to compute implicit edge-value estimates. The argument 'N' is the
@@ -667,25 +672,27 @@ subroutine tridiagonal_system_1_memory_allocation ( N )
 
   ! Argument
   integer, intent(in)   :: N
+  type(edgeSlopeArrays), intent(inout) :: work
 
-  allocate ( tri_l(N+1) )
-  allocate ( tri_d(N+1) )
-  allocate ( tri_u(N+1) )
-  allocate ( tri_b(N+1) )
-  allocate ( tri_x(N+1) )
+  allocate ( work%tri_l(N+1) )
+  allocate ( work%tri_d(N+1) )
+  allocate ( work%tri_u(N+1) )
+  allocate ( work%tri_b(N+1) )
+  allocate ( work%tri_x(N+1) )
 
 end subroutine tridiagonal_system_1_memory_allocation
 
 !------------------------------------------------------------------------------
 ! Deallocate memory for tridiagonal system used to compute edge values
 !------------------------------------------------------------------------------
-subroutine tridiagonal_system_1_memory_deallocation ( )
+subroutine tridiagonal_system_1_memory_deallocation ( work )
+  type(edgeSlopeArrays), intent(inout) :: work
 
-  deallocate ( tri_l )
-  deallocate ( tri_d )
-  deallocate ( tri_u )
-  deallocate ( tri_b )
-  deallocate ( tri_x )
+  deallocate ( work%tri_l )
+  deallocate ( work%tri_d )
+  deallocate ( work%tri_u )
+  deallocate ( work%tri_b )
+  deallocate ( work%tri_x )
 
 end subroutine tridiagonal_system_1_memory_deallocation
 
