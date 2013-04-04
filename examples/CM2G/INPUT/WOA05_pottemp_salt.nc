@@ -1,1 +1,0 @@
-/lustre/fs/pdata/gfdl_O/datasets/obs/WOA05_pottemp_salt.nc
