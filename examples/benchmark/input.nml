@@ -17,9 +17,6 @@
         stack_size =0
  /
 
- &mpp_domains_nml
-         stackmax = 1500000 /
-
  &ocean_domains_nml
  /
  

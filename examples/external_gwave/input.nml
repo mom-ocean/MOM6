@@ -13,9 +13,6 @@
          domains_stack_size = 910000,
          stack_size = 0 /
 
- &mpp_domains_nml
-         stackmax = 6500000 /
-
  &ocean_domains_nml
  /
  
