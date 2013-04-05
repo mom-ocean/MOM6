@@ -1,0 +1,1 @@
+.datasets/CM2G63L/siena/INPUT/cover_type_field.nc

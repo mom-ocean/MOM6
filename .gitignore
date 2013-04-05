@@ -4,7 +4,6 @@
 CPU_stats
 exitcode
 available_diags.*
-INPUT
 RESTART
 _read_error.nml
 fort.*
