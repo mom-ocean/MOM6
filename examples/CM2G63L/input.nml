@@ -103,6 +103,7 @@
 
  &cloud_spec_nml
        cloud_type_form = 'strat'
+       do_legacy_seed_generation = .true.
 /
 
  &cloudrad_package_nml
@@ -524,6 +525,7 @@
        eros_scale_t = 5.e-5,
        super_choice = .true.,
        tracer_advec = .true.
+       retain_cm3_bug = .true.
 /
 
  &time_manager_nml
