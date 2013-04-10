@@ -119,6 +119,10 @@ use sloshing_initialization, only : sloshing_initialize_temperature_salinity
 use seamount_initialization, only : seamount_initialize_topography
 use seamount_initialization, only : seamount_initialize_thickness
 use seamount_initialization, only : seamount_initialize_temperature_salinity
+use Phillips_initialization, only : Phillips_initialize_thickness
+use Phillips_initialization, only : Phillips_initialize_velocity
+use Phillips_initialization, only : Phillips_initialize_sponges
+
 
 use midas_vertmap, only : fill_miss_2d, find_interfaces, tracer_Z_init, meshgrid
 use midas_vertmap, only : determine_temperature
@@ -397,7 +401,8 @@ subroutine MOM_initialize(u, v, h, tv, Time, G, PF, dirs, &
          case ("adjustment2d"); call adjustment_initialize_thickness(h, G, PF)
          case ("sloshing"); call sloshing_initialize_thickness(h, G, PF)
          case ("seamount"); call seamount_initialize_thickness(h, G, PF)
-         case ("USER"); call user_initialize_thickness(h, G, PF,tv%T)
+         case ("phillips"); call Phillips_initialize_thickness(h, G, PF)
+         case ("USER"); call user_initialize_thickness(h, G, PF, tv%T)
          case default ; call MOM_error(FATAL,  "MOM_initialize: "//&
               "Unrecognized layer thickness configuration "//trim(config))
       end select
@@ -465,6 +470,7 @@ subroutine MOM_initialize(u, v, h, tv, Time, G, PF, dirs, &
        case ("zero"); call initialize_velocity_zero(u, v, G, PF)
        case ("uniform"); call initialize_velocity_uniform(u, v, G, PF)
        case ("circular"); call initialize_velocity_circular(u, v, G, PF)
+       case ("phillips"); call Phillips_initialize_velocity(u, v, G, PF)
        case ("USER"); call user_initialize_velocity(u, v, G, PF)
        case default ; call MOM_error(FATAL,  "MOM_initialize: "//&
             "Unrecognized velocity configuration "//trim(config))
@@ -521,6 +527,8 @@ subroutine MOM_initialize(u, v, h, tv, Time, G, PF, dirs, &
     select case (trim(config))
       case ("DOME"); call DOME_initialize_sponges(G, tv, PF, CS%sponge_CSp)
       case ("USER"); call user_initialize_sponges(G, use_temperature, tv, &
+                                                  PF, CS%sponge_CSp, h)
+      case ("phillips"); call Phillips_initialize_sponges(G, use_temperature, tv, &
                                                   PF, CS%sponge_CSp, h)
       case ("file"); call initialize_sponges_file(G, use_temperature, tv, &
                                                   PF, CS%sponge_CSp)
