@@ -1447,6 +1447,9 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call initialize_regridding(param_file, grid, h(:,:,:,:), CS%h_aux(:,:,:), &
                              u(:,:,:,1), v(:,:,:,1), CS%tv, CS%regridding_opts)
   CS%useALEalgorithm = useRegridding(CS%regridding_opts)
+  if (CS%useALEalgorithm .and. CS%bulkmixedlayer) call MOM_error(FATAL, &
+    "MOM:  BULKMIXEDLAYER can not currently be used with the ALE algotihrm.")
+
   call MOM_diagnostics_init(MOM_internal_state, Time, grid, param_file, &
                              diag, CS%diagnostics_CSp)
 
