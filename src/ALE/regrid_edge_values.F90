@@ -10,9 +10,9 @@ module regrid_edge_values
 ! high-order reconstruction schemes.
 !
 !==============================================================================
-use regrid_grid1d_class, only : grid1d_t
+use regrid_grid1d_class, only : grid1D_t
 use regrid_solvers, only : solve_linear_system, solve_tridiagonal_system
-use regrid_polynomial, only : evaluation_polynomial
+use polynomial_functions, only : evaluation_polynomial
 
 implicit none ; private
 
@@ -59,7 +59,7 @@ subroutine bound_edge_values ( grid, u, edge_values )
 ! ------------------------------------------------------------------------------
 
   ! Arguments
-  type(grid1d_t), intent(in)            :: grid             
+  type(grid1D_t), intent(in)            :: grid             
   real, dimension(:), intent(in)        :: u            ! cell averages
   real, dimension(:,:), intent(inout)   :: edge_values      
 
@@ -153,7 +153,7 @@ subroutine average_discontinuous_edge_values ( grid, u, edge_values )
 ! ------------------------------------------------------------------------------
   
   ! Arguments
-  type(grid1d_t), intent(in)            :: grid             
+  type(grid1D_t), intent(in)            :: grid             
   real, dimension(:), intent(in)        :: u            ! cell averages
   real, dimension(:,:), intent(inout)   :: edge_values      
 
@@ -196,7 +196,7 @@ subroutine check_discontinuous_edge_values ( grid, u, edge_values )
 ! ------------------------------------------------------------------------------
   
   ! Arguments
-  type(grid1d_t), intent(in)            :: grid             
+  type(grid1D_t), intent(in)            :: grid             
   real, dimension(:), intent(in)        :: u            ! cell averages
   real, dimension(:,:), intent(inout)   :: edge_values      
 
@@ -255,7 +255,7 @@ subroutine edge_values_explicit_h2 ( grid, u, edge_values )
 ! ------------------------------------------------------------------------------
 
   ! Arguments
-  type(grid1d_t), intent(in)            :: grid             
+  type(grid1D_t), intent(in)            :: grid             
   real, dimension(:), intent(in)        :: u            ! cell averages
   real, dimension(:,:), intent(inout)   :: edge_values      
 
@@ -316,7 +316,7 @@ subroutine edge_values_explicit_h4 ( grid, u, edge_values )
 ! -----------------------------------------------------------------------------
 
   ! Arguments
-  type(grid1d_t), intent(in)            :: grid             
+  type(grid1D_t), intent(in)            :: grid             
   real, dimension(:), intent(in)        :: u            ! cell averages
   real, dimension(:,:), intent(inout)   :: edge_values      
 
@@ -453,7 +453,7 @@ subroutine edge_values_implicit_h4 ( grid, work, u, edge_values )
 ! -----------------------------------------------------------------------------
 
   ! Arguments
-  type(grid1d_t), intent(in)            :: grid             
+  type(grid1D_t), intent(in)            :: grid             
   type(edgeValueArrays), intent(inout)  :: work         ! Work space
   real, dimension(:), intent(in)        :: u            ! cell averages
   real, dimension(:,:), intent(inout)   :: edge_values      
@@ -596,7 +596,7 @@ subroutine edge_values_implicit_h6 ( grid, work, u, edge_values )
 ! -----------------------------------------------------------------------------
 
   ! Arguments
-  type(grid1d_t), intent(in)            :: grid             
+  type(grid1D_t), intent(in)            :: grid             
   type(edgeValueArrays), intent(inout)  :: work         ! Work space
   real, dimension(:), intent(in)        :: u            ! cell averages
   real, dimension(:,:), intent(inout)   :: edge_values      

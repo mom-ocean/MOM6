@@ -1,4 +1,4 @@
-module regrid_ppm
+module PPM_functions
 !==============================================================================
 !
 ! This file is part of MOM.
@@ -10,7 +10,7 @@ module regrid_ppm
 ! reconstruction using the piecewise parabolic method (PPM).
 !
 !==============================================================================
-use regrid_grid1d_class, only : grid1d_t
+use regrid_grid1d_class, only : grid1D_t
 use regrid_ppoly_class, only : ppoly_t
 use regrid_edge_values, only : bound_edge_values, check_discontinuous_edge_values
 
@@ -38,7 +38,7 @@ subroutine PPM_reconstruction( grid, u, ppoly )
 !------------------------------------------------------------------------------
 
   ! Arguments
-  type(grid1d_t), intent(in)     :: grid
+  type(grid1D_t), intent(in)     :: grid
   real, dimension(:), intent(in) :: u
   type(ppoly_t), intent(inout)   :: ppoly
 
@@ -89,7 +89,7 @@ subroutine PPM_limiter_standard( grid, u, ppoly )
 !------------------------------------------------------------------------------
 
   ! Arguments
-  type(grid1d_t), intent(in)     :: grid
+  type(grid1D_t), intent(in)     :: grid
   real, dimension(:), intent(in) :: u
   type(ppoly_t), intent(inout)   :: ppoly
 
@@ -177,7 +177,7 @@ subroutine PPM_boundary_extrapolation( grid, u, ppoly )
 !------------------------------------------------------------------------------
 
   ! Arguments
-  type(grid1d_t), intent(in)      :: grid
+  type(grid1D_t), intent(in)      :: grid
   real, dimension(:), intent(in)  :: u
   type(ppoly_t), intent(inout)    :: ppoly
   
@@ -303,4 +303,4 @@ subroutine PPM_boundary_extrapolation( grid, u, ppoly )
 
 end subroutine PPM_boundary_extrapolation
 
-end module regrid_ppm
+end module PPM_functions

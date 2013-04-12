@@ -1,4 +1,4 @@
-module regrid_p1m
+module P1M_functions
 !==============================================================================
 !
 ! This file is part of MOM.
@@ -25,7 +25,7 @@ module regrid_p1m
 ! P1M_boundary_extrapolation (public)
 !
 !==============================================================================
-use regrid_grid1d_class, only : grid1d_t
+use regrid_grid1d_class, only : grid1D_t
 use regrid_ppoly_class, only : ppoly_t
 use regrid_edge_values, only : bound_edge_values, average_discontinuous_edge_values
 
@@ -58,7 +58,7 @@ subroutine P1M_interpolation( grid, u, ppoly )
 ! ------------------------------------------------------------------------------
 
   ! Arguments
-  type(grid1d_t), intent(in)      :: grid
+  type(grid1D_t), intent(in)      :: grid
   real, dimension(:), intent(in)  :: u
   type(ppoly_t), intent(inout)    :: ppoly
 
@@ -108,7 +108,7 @@ subroutine P1M_boundary_extrapolation( grid, u, ppoly )
 !------------------------------------------------------------------------------
 
   ! Arguments
-  type(grid1d_t), intent(in)      :: grid
+  type(grid1D_t), intent(in)      :: grid
   real, dimension(:), intent(in)  :: u
   type(ppoly_t), intent(inout)    :: ppoly
 
@@ -186,4 +186,4 @@ subroutine P1M_boundary_extrapolation( grid, u, ppoly )
 
 end subroutine P1M_boundary_extrapolation
 
-end module regrid_p1m
+end module P1M_functions

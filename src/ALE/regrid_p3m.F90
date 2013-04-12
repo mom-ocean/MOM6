@@ -1,4 +1,4 @@
-module regrid_p3m
+module P3M_functions
 !==============================================================================
 !
 ! This file is part of MOM.
@@ -14,7 +14,7 @@ module regrid_p3m
 ! cubic curve.
 !
 !==============================================================================
-use regrid_grid1d_class, only : grid1d_t
+use regrid_grid1d_class, only : grid1D_t
 use regrid_ppoly_class, only : ppoly_t
 use regrid_edge_values, only : bound_edge_values, average_discontinuous_edge_values
 
@@ -40,7 +40,7 @@ subroutine P3M_interpolation( grid, u, ppoly )
 !------------------------------------------------------------------------------
 
   ! Arguments
-  type(grid1d_t), intent(in)      :: grid
+  type(grid1D_t), intent(in)      :: grid
   real, dimension(:), intent(in)  :: u
   type(ppoly_t), intent(inout)    :: ppoly
 
@@ -73,7 +73,7 @@ subroutine P3M_limiter( grid, u, ppoly )
 !------------------------------------------------------------------------------
 
   ! Arguments
-  type(grid1d_t), intent(in)      :: grid
+  type(grid1D_t), intent(in)      :: grid
   type(ppoly_t), intent(inout)    :: ppoly
   real, dimension(:), intent(in)  :: u
 
@@ -209,7 +209,7 @@ subroutine P3M_boundary_extrapolation( grid, u, ppoly )
 !------------------------------------------------------------------------------
 
   ! Arguments
-  type(grid1d_t), intent(in)      :: grid
+  type(grid1D_t), intent(in)      :: grid
   real, dimension(:), intent(in)  :: u
   type(ppoly_t), intent(inout)    :: ppoly
 
@@ -361,7 +361,7 @@ subroutine build_cubic_interpolant( grid, k, ppoly )
 !------------------------------------------------------------------------------
 
   ! Arguments
-  type(grid1d_t), intent(in)      :: grid
+  type(grid1D_t), intent(in)      :: grid
   integer                         :: k
   type(ppoly_t), intent(inout)    :: ppoly
 
@@ -640,4 +640,4 @@ subroutine monotonize_cubic( h, u0_l, u0_r, sigma_l, sigma_r, slope, u1_l, u1_r 
 
 end subroutine monotonize_cubic
 
-end module regrid_p3m
+end module P3M_functions

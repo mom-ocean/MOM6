@@ -1,4 +1,4 @@
-module regrid_pqm
+module PQM_functions
 !==============================================================================
 !
 ! This file is part of MOM.
@@ -10,7 +10,7 @@ module regrid_pqm
 ! reconstruction using the piecewise quartic method (PQM).
 !
 !==============================================================================
-use regrid_grid1d_class, only : grid1d_t
+use regrid_grid1d_class, only : grid1D_t
 use regrid_ppoly_class, only : ppoly_t
 use regrid_edge_values, only : bound_edge_values, check_discontinuous_edge_values
 
@@ -36,7 +36,7 @@ subroutine PQM_reconstruction( grid, u, ppoly )
 !------------------------------------------------------------------------------
 
   ! Arguments
-  type(grid1d_t), intent(in)     :: grid
+  type(grid1D_t), intent(in)     :: grid
   real, dimension(:), intent(in) :: u
   type(ppoly_t), intent(inout)   :: ppoly
   
@@ -98,7 +98,7 @@ subroutine PQM_limiter( grid, u, ppoly )
 !------------------------------------------------------------------------------
 
   ! Arguments
-  type(grid1d_t), intent(in)     :: grid
+  type(grid1D_t), intent(in)     :: grid
   real, dimension(:), intent(in) :: u
   type(ppoly_t), intent(inout)   :: ppoly
 
@@ -386,7 +386,7 @@ subroutine PQM_boundary_extrapolation( grid, u, ppoly )
 !------------------------------------------------------------------------------
 
   ! Arguments
-  type(grid1d_t), intent(in)      :: grid
+  type(grid1D_t), intent(in)      :: grid
   real, dimension(:), intent(in)  :: u
   type(ppoly_t), intent(inout)    :: ppoly
   
@@ -548,7 +548,7 @@ subroutine PQM_boundary_extrapolation_v1( grid, u, ppoly )
 !------------------------------------------------------------------------------
 
   ! Arguments
-  type(grid1d_t), intent(in)      :: grid
+  type(grid1D_t), intent(in)      :: grid
   real, dimension(:), intent(in)  :: u
   type(ppoly_t), intent(inout)    :: ppoly
   
@@ -876,4 +876,4 @@ subroutine PQM_boundary_extrapolation_v1( grid, u, ppoly )
   
 end subroutine PQM_boundary_extrapolation_v1
 
-end module regrid_pqm
+end module PQM_functions

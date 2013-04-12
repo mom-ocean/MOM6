@@ -10,9 +10,9 @@ module regrid_edge_slopes
 ! high-order reconstruction schemes.
 !
 !==============================================================================
-use regrid_grid1d_class, only : grid1d_t
+use regrid_grid1d_class, only : grid1D_t
 use regrid_solvers, only : solve_linear_system, solve_tridiagonal_system
-use regrid_polynomial, only : evaluation_polynomial
+use polynomial_functions, only : evaluation_polynomial
 
 
 implicit none ; private
@@ -71,7 +71,7 @@ subroutine edge_slopes_implicit_h3 ( grid, work, u, edge_slopes )
 ! -----------------------------------------------------------------------------
 
   ! Arguments
-  type(grid1d_t), intent(in)            :: grid             
+  type(grid1D_t), intent(in)            :: grid             
   type(edgeSlopeArrays), intent(inout)  :: work
   real, dimension(:), intent(in)        :: u            ! cell averages
   real, dimension(:,:), intent(inout)   :: edge_slopes      
@@ -226,7 +226,7 @@ subroutine edge_slopes_implicit_h5 ( grid, work, u, edge_slopes )
 ! -----------------------------------------------------------------------------
 
   ! Arguments
-  type(grid1d_t), intent(in)            :: grid
+  type(grid1D_t), intent(in)            :: grid
   type(edgeSlopeArrays), intent(inout)  :: work
   real, dimension(:), intent(in)        :: u            ! cell averages
   real, dimension(:,:), intent(inout)   :: edge_slopes

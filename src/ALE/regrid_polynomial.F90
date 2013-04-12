@@ -1,4 +1,4 @@
-module regrid_polynomial
+module polynomial_functions
 !==============================================================================
 !
 ! This file is part of MOM.
@@ -80,4 +80,4 @@ real function integration_polynomial ( xi0, xi1, C, n )
   
 end function integration_polynomial
 
-end module regrid_polynomial
+end module polynomial_functions

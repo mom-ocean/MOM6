@@ -1,4 +1,4 @@
-module regrid_plm
+module PLM_functions
 !==============================================================================
 !
 ! This file is part of MOM.
@@ -10,7 +10,7 @@ module regrid_plm
 ! reconstruction using the piecewise linear method (PLM).
 !
 !==============================================================================
-use regrid_grid1d_class, only : grid1d_t
+use regrid_grid1d_class, only : grid1D_t
 use regrid_ppoly_class, only : ppoly_t
 
 implicit none ; private
@@ -35,7 +35,7 @@ subroutine PLM_reconstruction( grid, u, ppoly )
 !------------------------------------------------------------------------------
 
   ! Arguments
-  type(grid1d_t), intent(in)      :: grid
+  type(grid1D_t), intent(in)      :: grid
   real, dimension(:), intent(in)  :: u
   type(ppoly_t), intent(inout)    :: ppoly
 
@@ -182,7 +182,7 @@ subroutine PLM_boundary_extrapolation ( grid, u, ppoly )
 !------------------------------------------------------------------------------
 
   ! Arguments
-  type(grid1d_t), intent(in)      :: grid
+  type(grid1D_t), intent(in)      :: grid
   real, dimension(:), intent(in)  :: u
   type(ppoly_t), intent(inout)    :: ppoly
 
@@ -242,4 +242,4 @@ subroutine PLM_boundary_extrapolation ( grid, u, ppoly )
 
 end subroutine PLM_boundary_extrapolation
 
-end module regrid_plm
+end module PLM_functions

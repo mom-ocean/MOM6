@@ -19,7 +19,7 @@ use MOM_variables,     only : ocean_grid_type, thermo_var_ptrs
 use MOM_file_parser,   only : get_param, param_file_type, uppercase
 use MOM_EOS,           only : calculate_density
 
-use regrid_grid1d_class, only : grid1d_t, grid1d_init, grid1d_destroy
+use regrid_grid1d_class, only : grid1D_t, grid1Dconstruct, grid1Ddestroy
 use regrid_ppoly_class, only : ppoly_t, ppoly_init, ppoly_destroy
 use regrid_edge_values, only : edgeValueArrays
 use regrid_edge_values, only : edge_values_explicit_h2, edge_values_explicit_h4
@@ -29,12 +29,12 @@ use regrid_edge_slopes, only : edgeSlopeArrays
 use regrid_edge_slopes, only : edge_slopes_implicit_h3, edge_slopes_implicit_h5
 use regrid_edge_slopes, only : triDiagSlopeWorkAllocate, triDiagSlopeWorkDeallocate
 
-use regrid_plm, only : PLM_reconstruction, PLM_boundary_extrapolation
-use regrid_ppm, only : PPM_reconstruction, PPM_boundary_extrapolation
-use regrid_pqm, only : PQM_reconstruction, PQM_boundary_extrapolation_v1
+use PLM_functions, only : PLM_reconstruction, PLM_boundary_extrapolation
+use PPM_functions, only : PPM_reconstruction, PPM_boundary_extrapolation
+use PQM_functions, only : PQM_reconstruction, PQM_boundary_extrapolation_v1
 
-use regrid_p1m, only : P1M_interpolation, P1M_boundary_extrapolation
-use regrid_p3m, only : P3M_interpolation, P3M_boundary_extrapolation
+use P1M_functions, only : P1M_interpolation, P1M_boundary_extrapolation
+use P3M_functions, only : P3M_interpolation, P3M_boundary_extrapolation
 use MOM_remapping, only : remapping_init, remapping_main, remapping_core, remapping_end
 use MOM_remapping, only : remapping_CS
 use regrid_defs, only : PRESSURE_RECONSTRUCTION_PLM, PRESSURE_RECONSTRUCTION_PPM
@@ -55,7 +55,7 @@ type, public :: regridding_CS
   private
   ! Generic grid used for various purposes throughout the code (the same 
   ! grid is used to avoid having dynamical memory allocation)
-  type(grid1d_t)                  :: grid_generic
+  type(grid1D_t)                  :: grid_generic
 
   ! Generic linear piecewise polynomial used for various purposes throughout 
   ! the code (the same ppoly is used to avoid having dynamical memory allocation)
@@ -66,9 +66,9 @@ type, public :: regridding_CS
   ! memory allocation)
   type(ppoly_t)                   :: ppoly_parab
 
-  type(grid1d_t)                  :: grid_start      ! starting grid
-  type(grid1d_t)                  :: grid_trans      ! transition/iterated grid
-  type(grid1d_t)                  :: grid_final      ! final grid
+  type(grid1D_t)                  :: grid_start      ! starting grid
+  type(grid1D_t)                  :: grid_trans      ! transition/iterated grid
+  type(grid1D_t)                  :: grid_final      ! final grid
   type(ppoly_t)                   :: ppoly_i         ! interpolation ppoly
   type(ppoly_t)                   :: ppoly_r         ! reconstruction ppoly
                                                     
@@ -1000,11 +1000,11 @@ subroutine regridding_iteration ( densities, target_values, CS, &
   densities         ! Actual cell densities
   real, dimension(:), intent(in)      :: &
   target_values     ! Target interface densities
-  type(grid1d_t), intent(in)          :: &
+  type(grid1D_t), intent(in)          :: &
   grid0             ! The grid on which cell densities are known                
   type(ppoly_t), intent(inout)        :: &
   ppoly0            ! Piecewise polynomial for density interpolation
-  type(grid1d_t), intent(inout)       :: &
+  type(grid1D_t), intent(inout)       :: &
   grid1             ! The new grid based on target interface densities          
   type(regridding_CS), intent(inout) :: &
   CS   ! Parameters used for regridding
@@ -1189,9 +1189,9 @@ subroutine interpolate_grid ( grid0, ppoly0, grid1, target_values, degree )
 ! ------------------------------------------------------------------------------
   
   ! Arguments
-  type(grid1d_t), intent(in)      :: grid0              
+  type(grid1D_t), intent(in)      :: grid0              
   type(ppoly_t), intent(in)       :: ppoly0
-  type(grid1d_t), intent(inout)   :: grid1              
+  type(grid1D_t), intent(inout)   :: grid1              
   real, dimension(:), intent(in)  :: target_values
   integer, intent(in)             :: degree
     
@@ -1248,7 +1248,7 @@ real function get_polynomial_coordinate ( grid, ppoly, target_value, degree )
 ! ------------------------------------------------------------------------------
 
   ! Arguments
-  type(grid1d_t), intent(in)  :: grid               
+  type(grid1D_t), intent(in)  :: grid               
   type(ppoly_t),  intent(in)  :: ppoly
   real,           intent(in)  :: target_value
   integer,        intent(in)  :: degree
@@ -1406,10 +1406,10 @@ subroutine check_grid_integrity ( G, h, CS )
 
   ! Local variables
   integer           :: i, j, k
-  type(grid1d_t)    :: grid
+  type(grid1D_t)    :: grid
 
   ! Initialize grid 
-  call grid1d_init ( grid, G%ke )
+  call grid1Dconstruct ( grid, G%ke )
 
   do i = G%isc,G%iec+1
     do j = G%jsc,G%jec+1
@@ -1434,7 +1434,7 @@ subroutine check_grid_integrity ( G, h, CS )
     end do
   end do
 
-  call grid1d_destroy ( grid )
+  call grid1Ddestroy( grid )
 
 end subroutine check_grid_integrity
 
@@ -1445,7 +1445,7 @@ end subroutine check_grid_integrity
 subroutine inflate_vanished_layers ( grid, CS )
 
   ! Argument
-  type(grid1d_t), intent(inout)       :: grid
+  type(grid1D_t), intent(inout)       :: grid
   type(regridding_CS), intent(in) :: CS
     
   ! Local variable
@@ -1618,10 +1618,10 @@ subroutine regridding_memory_allocation ( G, CS )
   allocate ( CS%target_values(nz+1) )
 
   ! Allocate memory for grids
-  call grid1d_init ( CS%grid_generic, nz )
-  call grid1d_init ( CS%grid_start, nz )
-  call grid1d_init ( CS%grid_trans, nz )
-  call grid1d_init ( CS%grid_final, nz )
+  call grid1Dconstruct ( CS%grid_generic, nz )
+  call grid1Dconstruct ( CS%grid_start, nz )
+  call grid1Dconstruct ( CS%grid_trans, nz )
+  call grid1Dconstruct ( CS%grid_final, nz )
 
   ! Piecewise polynomials used for remapping
   call ppoly_init ( CS%ppoly_r, nz, 4 )
@@ -1664,10 +1664,10 @@ subroutine regridding_memory_deallocation ( CS )
   deallocate ( CS%target_values )
 
   ! Deallocate memory for grid
-  call grid1d_destroy ( CS%grid_generic )
-  call grid1d_destroy ( CS%grid_start )
-  call grid1d_destroy ( CS%grid_trans )
-  call grid1d_destroy ( CS%grid_final )
+  call grid1Ddestroy( CS%grid_generic )
+  call grid1Ddestroy( CS%grid_start )
+  call grid1Ddestroy( CS%grid_trans )
+  call grid1Ddestroy( CS%grid_final )
   
   ! Piecewise polynomials
   call ppoly_destroy ( CS%ppoly_i )

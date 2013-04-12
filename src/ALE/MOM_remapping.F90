@@ -12,9 +12,9 @@ module MOM_remapping
 use MOM_error_handler, only : MOM_error, FATAL
 use MOM_file_parser,   only : get_param, param_file_type, uppercase
 use MOM_variables,     only : ocean_grid_type, thermo_var_ptrs
-use regrid_grid1d_class, only : grid1d_t, grid1d_init, grid1d_destroy
+use regrid_grid1d_class, only : grid1D_t, grid1Dconstruct, grid1Ddestroy
 use regrid_ppoly_class, only : ppoly_t, ppoly_init, ppoly_destroy
-use regrid_polynomial, only : evaluation_polynomial, integration_polynomial
+use polynomial_functions, only : evaluation_polynomial, integration_polynomial
 use regrid_edge_values, only : edgeValueArrays
 use regrid_edge_values, only : edge_values_explicit_h4, edge_values_implicit_h4
 use regrid_edge_values, only : edge_values_implicit_h4, edge_values_implicit_h6
@@ -22,10 +22,10 @@ use regrid_edge_values, only : triDiagEdgeWorkAllocate, triDiagEdgeWorkDeallocat
 use regrid_edge_slopes, only : edgeSlopeArrays
 use regrid_edge_slopes, only : edge_slopes_implicit_h3, edge_slopes_implicit_h5
 use regrid_edge_slopes, only : triDiagSlopeWorkAllocate, triDiagSlopeWorkDeallocate
-use regrid_pcm, only : PCM_reconstruction
-use regrid_plm, only : PLM_reconstruction, PLM_boundary_extrapolation
-use regrid_ppm, only : PPM_reconstruction, PPM_boundary_extrapolation
-use regrid_pqm, only : PQM_reconstruction, PQM_boundary_extrapolation_v1
+use PCM_functions, only : PCM_reconstruction
+use PLM_functions, only : PLM_reconstruction, PLM_boundary_extrapolation
+use PPM_functions, only : PPM_reconstruction, PPM_boundary_extrapolation
+use PQM_functions, only : PQM_reconstruction, PQM_boundary_extrapolation_v1
 
 implicit none ; private
 
@@ -37,8 +37,8 @@ implicit none ; private
 type, public :: remapping_CS
   private
   ! Work arrays
-  type(grid1d_t)                  :: grid_start ! starting grid
-  type(grid1d_t)                  :: grid_final ! final grid
+  type(grid1D_t)                  :: grid_start ! starting grid
+  type(grid1D_t)                  :: grid_final ! final grid
   type(ppoly_t)                   :: ppoly_r    ! reconstruction ppoly
   real, dimension(:), allocatable :: u_column   ! generic variable
   type(edgeValueArrays)           :: edgeValueWrk ! Work space for edge values
@@ -225,10 +225,10 @@ subroutine remapping_core ( CS, grid0, u0, grid1, u1, ppoly )
 
   ! Arguments
   type(remapping_CS), intent(inout)   :: CS
-  type(grid1d_t), intent(in)          :: grid0
+  type(grid1D_t), intent(in)          :: grid0
   real, dimension(:), intent(in)      :: u0
   type(ppoly_t), intent(inout)        :: ppoly
-  type(grid1d_t), intent(in)          :: grid1
+  type(grid1D_t), intent(in)          :: grid1
   real, dimension(:), intent(inout)   :: u1
   
   ! Reset polynomial
@@ -294,10 +294,10 @@ end subroutine remapping_core
 ! -----------------------------------------------------------------------------
 subroutine remapping_integration ( grid0, u0, ppoly0, grid1, u1, method )
   ! Arguments
-  type(grid1d_t), intent(in)        :: grid0    ! source grid
+  type(grid1D_t), intent(in)        :: grid0    ! source grid
   real, dimension(:), intent(in)    :: u0       ! source cell averages
   type(ppoly_t), intent(in)         :: ppoly0   ! source piecewise polynomial
-  type(grid1d_t), intent(in)        :: grid1    ! target grid
+  type(grid1D_t), intent(in)        :: grid1    ! target grid
   real, dimension(:), intent(inout) :: u1       ! target cell averages
   integer                           :: method   ! remapping scheme to use
   
@@ -543,8 +543,8 @@ subroutine remapping_init( param_file, G, CS)
   nz = G%ke
   
   ! Allocate memory for grids
-  call grid1d_init ( CS%grid_start, nz )
-  call grid1d_init ( CS%grid_final, nz )
+  call grid1Dconstruct ( CS%grid_start, nz )
+  call grid1Dconstruct ( CS%grid_final, nz )
   
   ! --- REMAPPING SCHEME ---
   ! This sets which remapping scheme we want to use to remap all variables
@@ -601,8 +601,8 @@ subroutine remapping_end(CS)
   type(remapping_CS), intent(inout) :: CS
 
   ! Deallocate memory for grid
-  call grid1d_destroy ( CS%grid_start )
-  call grid1d_destroy ( CS%grid_final )
+  call grid1Ddestroy( CS%grid_start )
+  call grid1Ddestroy( CS%grid_final )
   
   ! Piecewise polynomials
   call ppoly_destroy ( CS%ppoly_r )
