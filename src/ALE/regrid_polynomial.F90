@@ -73,7 +73,7 @@ real function integration_polynomial ( xi0, xi1, C, n )
   integral = 0.0
   
   do k = 1,(n+1) 
-    integral = integral + C(k) * (xi1**k - xi0**k) / real(k);
+    integral = integral + C(k) * (xi1**k - xi0**k) / real(k)
   end do
 
   integration_polynomial = integral

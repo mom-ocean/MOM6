@@ -10,19 +10,19 @@ module regrid_pcm
 ! reconstruction using the piecewise constant method (PCM).
 !
 !==============================================================================
-use regrid_grid1d_class    ! see 'regrid_grid1d_class.F90'
-use regrid_ppoly_class     ! see 'regrid_ppoly.F90'
+use regrid_grid1d_class, only : grid1d_t
+use regrid_ppoly_class, only : ppoly_t
 
 implicit none ; private
 
-public pcm_reconstruction
+public PCM_reconstruction
 
 contains
 
 !------------------------------------------------------------------------------
 ! pcm_reconstruction
 !------------------------------------------------------------------------------
-subroutine pcm_reconstruction ( grid, ppoly, u )
+subroutine PCM_reconstruction( grid, u, ppoly )
 !------------------------------------------------------------------------------
 ! Reconstruction by constant polynomials within each cell. There is nothing to
 ! do but this routine is provided to ensure a homogeneous interface
@@ -39,8 +39,8 @@ subroutine pcm_reconstruction ( grid, ppoly, u )
 
   ! Arguments
   type(grid1d_t), intent(in)     :: grid
-  type(ppoly_t), intent(inout)   :: ppoly
   real, dimension(:), intent(in) :: u
+  type(ppoly_t), intent(inout)   :: ppoly
 
   ! Local variables
   integer   :: k
@@ -54,6 +54,6 @@ subroutine pcm_reconstruction ( grid, ppoly, u )
     ppoly%E(k,:) = u(k)
   end do
 
-end subroutine pcm_reconstruction
+end subroutine PCM_reconstruction
 
 end module regrid_pcm

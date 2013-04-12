@@ -10,20 +10,19 @@ module regrid_plm
 ! reconstruction using the piecewise linear method (PLM).
 !
 !==============================================================================
-use regrid_grid1d_class    ! see 'regrid_grid1d_class.F90'
-use regrid_ppoly_class     ! see 'regrid_ppoly.F90'
+use regrid_grid1d_class, only : grid1d_t
+use regrid_ppoly_class, only : ppoly_t
 
 implicit none ; private
 
-public plm_reconstruction
-public plm_boundary_extrapolation
+public PLM_reconstruction, PLM_boundary_extrapolation
 
 contains
 
 !------------------------------------------------------------------------------
-! plm_reconstruction
+! PLM_reconstruction
 ! -----------------------------------------------------------------------------
-subroutine plm_reconstruction ( grid, ppoly, u )
+subroutine PLM_reconstruction( grid, u, ppoly )
 !------------------------------------------------------------------------------
 ! Reconstruction by linear polynomials within each cell.
 !
@@ -37,18 +36,18 @@ subroutine plm_reconstruction ( grid, ppoly, u )
 
   ! Arguments
   type(grid1d_t), intent(in)      :: grid
-  type(ppoly_t), intent(inout)    :: ppoly
   real, dimension(:), intent(in)  :: u
+  type(ppoly_t), intent(inout)    :: ppoly
 
   ! Local variables
-  integer       :: k;                   ! loop index
-  integer       :: N;                   ! number of cells
-  real          :: u_l, u_c, u_r;       ! left, center and right cell averages
-  real          :: h_l, h_c, h_r;       ! left, center and right cell widths
-  real          :: sigma_l, sigma_c, sigma_r;   ! left, center and right 
+  integer       :: k                    ! loop index
+  integer       :: N                    ! number of cells
+  real          :: u_l, u_c, u_r        ! left, center and right cell averages
+  real          :: h_l, h_c, h_r        ! left, center and right cell widths
+  real          :: sigma_l, sigma_c, sigma_r    ! left, center and right 
                                                 ! van Leer slopes   
-  real          :: slope;               ! retained PLM slope
-  real          :: a, b;                ! auxiliary variables
+  real          :: slope                ! retained PLM slope
+  real          :: a, b                 ! auxiliary variables
   real, dimension(:,:), allocatable :: E_old
 
   N = grid%nb_cells
@@ -95,7 +94,7 @@ subroutine plm_reconstruction ( grid, ppoly, u )
 
   ! In both boundary cells, a piecewise constant approximation is used.
   ! Extrapolation -- if any -- to increase the accuracy is considered
-  ! in another routine, namely 'plm_boundary_extrapolation'
+  ! in another routine, namely 'PLM_boundary_extrapolation'
   
   ! Left (top) boundary cell
   slope = u(2) - u(1)
@@ -160,13 +159,13 @@ subroutine plm_reconstruction ( grid, ppoly, u )
 
   deallocate ( E_old )
   
-end subroutine plm_reconstruction
+end subroutine PLM_reconstruction
 
 
 !------------------------------------------------------------------------------
 ! plm boundary extrapolation
 ! -----------------------------------------------------------------------------
-subroutine plm_boundary_extrapolation ( grid, ppoly, u )
+subroutine PLM_boundary_extrapolation ( grid, u, ppoly )
 !------------------------------------------------------------------------------
 ! Reconstruction by linear polynomials within boundary cells.
 ! The left and right edge values in the left and right boundary cells,
@@ -184,16 +183,16 @@ subroutine plm_boundary_extrapolation ( grid, ppoly, u )
 
   ! Arguments
   type(grid1d_t), intent(in)      :: grid
-  type(ppoly_t), intent(inout)    :: ppoly
   real, dimension(:), intent(in)  :: u
+  type(ppoly_t), intent(inout)    :: ppoly
 
   ! Local variables
-  integer       :: k;                   ! loop index
-  integer       :: N;                   ! number of cells
-  real          :: u0, u1;              ! cell averages
-  real          :: h0, h1;              ! corresponding cell widths
-  real          :: slope;               ! retained PLM slope
-  real          :: u0_l, u0_r;          ! edge values
+  integer       :: k                    ! loop index
+  integer       :: N                    ! number of cells
+  real          :: u0, u1               ! cell averages
+  real          :: h0, h1               ! corresponding cell widths
+  real          :: slope                ! retained PLM slope
+  real          :: u0_l, u0_r           ! edge values
 
   N = grid%nb_cells
 
@@ -241,6 +240,6 @@ subroutine plm_boundary_extrapolation ( grid, ppoly, u )
   ppoly%coefficients(N,1) = ppoly%E(N,1)
   ppoly%coefficients(N,2) = ppoly%E(N,2) - ppoly%E(N,1)
 
-end subroutine plm_boundary_extrapolation
+end subroutine PLM_boundary_extrapolation
 
 end module regrid_plm

@@ -12,17 +12,20 @@ module MOM_remapping
 use MOM_error_handler, only : MOM_error, FATAL
 use MOM_file_parser,   only : get_param, param_file_type, uppercase
 use MOM_variables,     only : ocean_grid_type, thermo_var_ptrs
-use regrid_grid1d_class ! see 'regrid_grid1d_class.F90'
-use regrid_ppoly_class  ! see 'regrid_ppoly.F90'
-use regrid_polynomial   ! see 'regrid_polynomial.F90'
-use regrid_edge_values  ! see 'regrid_edge_values.F90'
-use regrid_edge_slopes  ! see 'regrid_edge_slopes.F90'
-use regrid_pcm          ! see 'regrid_pcm.F90'
-use regrid_plm          ! see 'regrid_plm.F90'
-use regrid_ppm          ! see 'regrid_ppm.F90'
-use regrid_pqm          ! see 'regrid_pqm.F90'
-use regrid_p1m          ! see 'regrid_p1m.F90'
-use regrid_p3m          ! see 'regrid_p3m.F90'
+use regrid_grid1d_class, only : grid1d_t, grid1d_init, grid1d_destroy
+use regrid_ppoly_class, only : ppoly_t, ppoly_init, ppoly_destroy
+use regrid_polynomial, only : evaluation_polynomial, integration_polynomial
+use regrid_edge_values, only : edgeValueArrays
+use regrid_edge_values, only : edge_values_explicit_h4, edge_values_implicit_h4
+use regrid_edge_values, only : edge_values_implicit_h4, edge_values_implicit_h6
+use regrid_edge_values, only : triDiagEdgeWorkAllocate, triDiagEdgeWorkDeallocate
+use regrid_edge_slopes, only : edgeSlopeArrays
+use regrid_edge_slopes, only : edge_slopes_implicit_h3, edge_slopes_implicit_h5
+use regrid_edge_slopes, only : triDiagSlopeWorkAllocate, triDiagSlopeWorkDeallocate
+use regrid_pcm, only : PCM_reconstruction
+use regrid_plm, only : PLM_reconstruction, PLM_boundary_extrapolation
+use regrid_ppm, only : PPM_reconstruction, PPM_boundary_extrapolation
+use regrid_pqm, only : PQM_reconstruction, PQM_boundary_extrapolation_v1
 
 implicit none ; private
 
@@ -235,47 +238,47 @@ subroutine remapping_core ( CS, grid0, u0, grid1, u1, ppoly )
 
   select case ( CS%remapping_scheme )
     case ( REMAPPING_PCM )
-      call pcm_reconstruction ( grid0, ppoly, u0 )
+      call PCM_reconstruction( grid0, u0, ppoly )
       call remapping_integration ( grid0, u0, ppoly, grid1, u1, &
                                    INTEGRATION_PCM )
     case ( REMAPPING_PLM )
-      call plm_reconstruction ( grid0, ppoly, u0 )
+      call PLM_reconstruction( grid0, u0, ppoly )
       if ( CS%boundary_extrapolation) then
-        call plm_boundary_extrapolation ( grid0, ppoly, u0 )
+        call PLM_boundary_extrapolation( grid0, u0, ppoly )
       end if    
       call remapping_integration ( grid0, u0, ppoly, grid1, u1, &
                                    INTEGRATION_PLM )
     case ( REMAPPING_PPM_H4 )
       call edge_values_explicit_h4 ( grid0, u0, ppoly%E )
-      call ppm_reconstruction ( grid0, ppoly, u0 )
+      call PPM_reconstruction( grid0, u0, ppoly )
       if ( CS%boundary_extrapolation) then
-        call ppm_boundary_extrapolation ( grid0, ppoly, u0 )
+        call PPM_boundary_extrapolation( grid0, u0, ppoly )
       end if    
       call remapping_integration ( grid0, u0, ppoly, grid1, u1, &
                                    INTEGRATION_PPM )
     case ( REMAPPING_PPM_IH4 )
       call edge_values_implicit_h4 ( grid0, CS%edgeValueWrk, u0, ppoly%E )
-      call ppm_reconstruction ( grid0, ppoly, u0 )
+      call PPM_reconstruction( grid0, u0, ppoly )
       if ( CS%boundary_extrapolation) then
-        call ppm_boundary_extrapolation ( grid0, ppoly, u0 )
+        call PPM_boundary_extrapolation( grid0, u0, ppoly )
       end if    
       call remapping_integration ( grid0, u0, ppoly, grid1, u1, &
                                    INTEGRATION_PPM )
     case ( REMAPPING_PQM_IH4IH3 )
       call edge_values_implicit_h4 ( grid0, CS%edgeValueWrk, u0, ppoly%E )
       call edge_slopes_implicit_h3 ( grid0, CS%edgeSlopeWrk, u0, ppoly%S )
-      call pqm_reconstruction ( grid0, ppoly, u0 )
+      call PQM_reconstruction( grid0, u0, ppoly )
       if ( CS%boundary_extrapolation) then
-        call pqm_boundary_extrapolation_v1 ( grid0, ppoly, u0 )
+        call PQM_boundary_extrapolation_v1( grid0, u0, ppoly )
       end if    
       call remapping_integration ( grid0, u0, ppoly, grid1, u1, &
                                    INTEGRATION_PQM )
     case ( REMAPPING_PQM_IH6IH5 )
       call edge_values_implicit_h6 ( grid0, CS%edgeValueWrk, u0, ppoly%E )
       call edge_slopes_implicit_h5 ( grid0, CS%edgeSlopeWrk, u0, ppoly%S )
-      call pqm_reconstruction ( grid0, ppoly, u0 )
+      call PQM_reconstruction( grid0, u0, ppoly )
       if ( CS%boundary_extrapolation) then
-        call pqm_boundary_extrapolation_v1 ( grid0, ppoly, u0 )
+        call PQM_boundary_extrapolation_v1( grid0, u0, ppoly )
       end if    
       call remapping_integration ( grid0, u0, ppoly, grid1, u1, &
                                    INTEGRATION_PQM )
@@ -291,24 +294,24 @@ end subroutine remapping_core
 ! -----------------------------------------------------------------------------
 subroutine remapping_integration ( grid0, u0, ppoly0, grid1, u1, method )
   ! Arguments
-  type(grid1d_t), intent(in)        :: grid0;   ! source grid
-  real, dimension(:), intent(in)    :: u0;      ! source cell averages
-  type(ppoly_t), intent(in)         :: ppoly0;  ! source piecewise polynomial
-  type(grid1d_t), intent(in)        :: grid1;   ! target grid
-  real, dimension(:), intent(inout) :: u1;      ! target cell averages
-  integer                           :: method;  ! remapping scheme to use
+  type(grid1d_t), intent(in)        :: grid0    ! source grid
+  real, dimension(:), intent(in)    :: u0       ! source cell averages
+  type(ppoly_t), intent(in)         :: ppoly0   ! source piecewise polynomial
+  type(grid1d_t), intent(in)        :: grid1    ! target grid
+  real, dimension(:), intent(inout) :: u1       ! target cell averages
+  integer                           :: method   ! remapping scheme to use
   
   ! Local variables
   integer       :: i, j, k
-  integer       :: n0, n1;      ! nb of cells in grid0 and grid1, respectively
-  integer       :: j0, j1;      ! indexes of source cells containing target 
+  integer       :: n0, n1       ! nb of cells in grid0 and grid1, respectively
+  integer       :: j0, j1       ! indexes of source cells containing target 
                                 ! cell edges
-  real          :: x0, x1;      ! coordinates of target cell edges  
-  real          :: q0, q1;      ! partially integrated quantities in source 
+  real          :: x0, x1       ! coordinates of target cell edges  
+  real          :: q0, q1       ! partially integrated quantities in source 
                                 ! cells j0 and j1
-  real          :: q;           ! complete integration
-  real          :: a, b;        ! interval of integration (global coordinates)
-  real          :: xi0, xi1;    ! interval of integration (local -- normalized 
+  real          :: q            ! complete integration
+  real          :: a, b         ! interval of integration (global coordinates)
+  real          :: xi0, xi1     ! interval of integration (local -- normalized 
                                 ! -- coordinates)
 
   ! A priori, both grids contains the same number of cells but, who knows...
@@ -339,7 +342,7 @@ subroutine remapping_integration ( grid0, u0, ppoly0, grid1, u1, method )
         ! Left edge is found in cell j
         if ( ( x0 .GE. grid0%x(j) ) .AND. ( x0 .LE. grid0%x(j+1) ) ) then
           j0 = j
-          exit; ! once target grid cell is found, exit loop
+          exit ! once target grid cell is found, exit loop
         end if
       end do
 
@@ -389,7 +392,7 @@ subroutine remapping_integration ( grid0, u0, ppoly0, grid1, u1, method )
         ! Left edge is found in cell j
         if ( ( x0 .GE. grid0%x(j) ) .AND. ( x0 .LE. grid0%x(j+1) ) ) then
             j0 = j
-            exit;   ! once target grid cell is found, exit loop
+            exit   ! once target grid cell is found, exit loop
         end if
         
     end do  
@@ -399,7 +402,7 @@ subroutine remapping_integration ( grid0, u0, ppoly0, grid1, u1, method )
         ! Right edge is found in cell j
         if ( ( x1 .GE. grid0%x(j) ) .AND. ( x1 .LE. grid0%x(j+1) ) ) then
             j1 = j
-            exit;   ! once target grid cell is found, exit loop
+            exit  ! once target grid cell is found, exit loop
         end if
         
     end do ! end loop on source grid cells
@@ -585,8 +588,8 @@ subroutine remapping_init( param_file, G, CS)
   
   allocate ( CS%u_column(nz) ); CS%u_column = 0.0
 
-  call tridiagonal_system_0_memory_allocation ( nz, CS%edgeValueWrk )
-  call tridiagonal_system_1_memory_allocation ( nz, CS%edgeSlopeWrk )
+  call triDiagEdgeWorkAllocate( nz, CS%edgeValueWrk )
+  call triDiagSlopeWorkAllocate( nz, CS%edgeSlopeWrk )
 
 end subroutine remapping_init
 
@@ -606,8 +609,8 @@ subroutine remapping_end(CS)
 
   deallocate ( CS%u_column )
 
-  call tridiagonal_system_0_memory_deallocation ( CS%edgeValueWrk )
-  call tridiagonal_system_1_memory_deallocation ( CS%edgeSlopeWrk )
+  call triDiagEdgeWorkDeallocate( CS%edgeValueWrk )
+  call triDiagSlopeWorkDeallocate ( CS%edgeSlopeWrk )
 
 end subroutine remapping_end
 

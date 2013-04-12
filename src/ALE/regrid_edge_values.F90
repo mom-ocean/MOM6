@@ -10,9 +10,9 @@ module regrid_edge_values
 ! high-order reconstruction schemes.
 !
 !==============================================================================
-use regrid_grid1d_class    ! see 'regrid_grid1d_class.F90'
-use regrid_solvers         ! see 'regrid_solvers.F90'
-use regrid_polynomial      ! see 'regrid_solvers.F90'
+use regrid_grid1d_class, only : grid1d_t
+use regrid_solvers, only : solve_linear_system, solve_tridiagonal_system
+use regrid_polynomial, only : evaluation_polynomial
 
 implicit none ; private
 
@@ -21,11 +21,11 @@ implicit none ; private
 ! -----------------------------------------------------------------------------
 type, public :: edgeValueArrays
   private
-  real, dimension(:), allocatable :: tri_l;   ! trid. system (lower diagonal)
-  real, dimension(:), allocatable :: tri_d;   ! trid. system (middle diagonal)
-  real, dimension(:), allocatable :: tri_u;   ! trid. system (upper diagonal)
-  real, dimension(:), allocatable :: tri_x;   ! trid. system (unknowns vector)
-  real, dimension(:), allocatable :: tri_b;   ! trid. system (rhs)
+  real, dimension(:), allocatable :: tri_l    ! trid. system (lower diagonal)
+  real, dimension(:), allocatable :: tri_d    ! trid. system (middle diagonal)
+  real, dimension(:), allocatable :: tri_u    ! trid. system (upper diagonal)
+  real, dimension(:), allocatable :: tri_x    ! trid. system (unknowns vector)
+  real, dimension(:), allocatable :: tri_b    ! trid. system (rhs)
 end type edgeValueArrays
 
 ! -----------------------------------------------------------------------------
@@ -38,8 +38,8 @@ public edge_values_explicit_h2
 public edge_values_explicit_h4
 public edge_values_implicit_h4
 public edge_values_implicit_h6
-public tridiagonal_system_0_memory_allocation
-public tridiagonal_system_0_memory_deallocation
+public triDiagEdgeWorkAllocate
+public triDiagEdgeWorkDeallocate
 
 contains
 
@@ -64,15 +64,15 @@ subroutine bound_edge_values ( grid, u, edge_values )
   real, dimension(:,:), intent(inout)   :: edge_values      
 
   ! Local variables
-  integer       :: k;           ! loop index
-  integer       :: N;           ! number of cells
+  integer       :: k            ! loop index
+  integer       :: N            ! number of cells
   integer       :: k0, k1, k2
   real          :: h_l, h_c, h_r
   real          :: u_l, u_c, u_r
   real          :: u0_l, u0_r
-  real          :: sigma_l, sigma_c, sigma_r;   ! left, center and right 
+  real          :: sigma_l, sigma_c, sigma_r    ! left, center and right 
                                                 ! van Leer slopes   
-  real          :: slope;               ! retained PLM slope
+  real          :: slope                ! retained PLM slope
 
   N = grid%nb_cells
 
@@ -158,11 +158,11 @@ subroutine average_discontinuous_edge_values ( grid, u, edge_values )
   real, dimension(:,:), intent(inout)   :: edge_values      
 
   ! Local variables
-  integer       :: k;           ! loop index
-  integer       :: N;           ! number of cells
-  real          :: u0_minus;    ! left value at given edge
-  real          :: u0_plus;     ! right value at given edge
-  real          :: u0_avg;      ! avg value at given edge
+  integer       :: k            ! loop index
+  integer       :: N            ! number of cells
+  real          :: u0_minus     ! left value at given edge
+  real          :: u0_plus      ! right value at given edge
+  real          :: u0_avg       ! avg value at given edge
 
   N = grid%nb_cells
 
@@ -201,13 +201,13 @@ subroutine check_discontinuous_edge_values ( grid, u, edge_values )
   real, dimension(:,:), intent(inout)   :: edge_values      
 
   ! Local variables
-  integer       :: k;           ! loop index
-  integer       :: N;           ! number of cells
-  real          :: u0_minus;    ! left value at given edge
-  real          :: u0_plus;     ! right value at given edge
-  real          :: um_minus;    ! left cell average
-  real          :: um_plus;     ! right cell average
-  real          :: u0_avg;      ! avg value at given edge
+  integer       :: k            ! loop index
+  integer       :: N            ! number of cells
+  real          :: u0_minus     ! left value at given edge
+  real          :: u0_plus      ! right value at given edge
+  real          :: um_minus     ! left cell average
+  real          :: um_plus      ! right cell average
+  real          :: u0_avg       ! avg value at given edge
 
   N = grid%nb_cells
 
@@ -260,10 +260,10 @@ subroutine edge_values_explicit_h2 ( grid, u, edge_values )
   real, dimension(:,:), intent(inout)   :: edge_values      
 
   ! Local variables
-  integer   :: k;       ! loop index
-  integer   :: N;       ! number of cells
-  real      :: h0, h1;  ! cell widths
-  real      :: u0, u1;  ! cell averages
+  integer   :: k        ! loop index
+  integer   :: N        ! number of cells
+  real      :: h0, h1   ! cell widths
+  real      :: u0, u1   ! cell averages
   
   N = grid%nb_cells
   
@@ -322,14 +322,14 @@ subroutine edge_values_explicit_h4 ( grid, u, edge_values )
 
   ! Local variables
   integer               :: i, j
-  integer               :: N;               ! number of grid cells
+  integer               :: N                ! number of grid cells
   real                  :: u0, u1, u2, u3
   real                  :: h0, h1, h2, h3
   real                  :: href
-  real                  :: f1, f2, f3;      ! auxiliary variables
-  real                  :: e;               ! edge value    
-  real, dimension(5)    :: x;               ! used to compute edge
-  real, dimension(4,4)  :: A;               ! values near the boundaries
+  real                  :: f1, f2, f3       ! auxiliary variables
+  real                  :: e                ! edge value    
+  real, dimension(5)    :: x                ! used to compute edge
+  real, dimension(4,4)  :: A                ! values near the boundaries
   real, dimension(4)    :: B, C
   
   N = grid%nb_cells
@@ -459,15 +459,15 @@ subroutine edge_values_implicit_h4 ( grid, work, u, edge_values )
   real, dimension(:,:), intent(inout)   :: edge_values      
 
   ! Local variables
-  integer               :: i, j;                ! loop indexes
-  integer               :: N;                   ! number of cells
-  real                  :: h0, h1;              ! cell widths
+  integer               :: i, j                 ! loop indexes
+  integer               :: N                    ! number of cells
+  real                  :: h0, h1               ! cell widths
   real                  :: h0_2, h1_2, h0h1
   real                  :: d2, d4
-  real                  :: alpha, beta;         ! stencil coefficients
+  real                  :: alpha, beta          ! stencil coefficients
   real                  :: a, b
-  real, dimension(5)    :: x;                   ! system used to enforce
-  real, dimension(4,4)  :: Asys;                ! boundary conditions
+  real, dimension(5)    :: x                    ! system used to enforce
+  real, dimension(4,4)  :: Asys                 ! boundary conditions
   real, dimension(4)    :: Bsys, Csys
 
   ! Get number of cells (there are N+1 edge values to estimate)
@@ -521,7 +521,7 @@ subroutine edge_values_implicit_h4 ( grid, work, u, edge_values )
   
   work%tri_d(1) = 1.0
   work%tri_u(1) = 0.0
-  work%tri_b(1) = evaluation_polynomial ( Csys, 4, x(1) );       ! first edge value
+  work%tri_b(1) = evaluation_polynomial ( Csys, 4, x(1) )        ! first edge value
   
   ! Boundary conditions: right boundary
   x(1) = 0.0
@@ -543,7 +543,7 @@ subroutine edge_values_implicit_h4 ( grid, work, u, edge_values )
   
   work%tri_l(N+1) = 0.0
   work%tri_d(N+1) = 1.0
-  work%tri_b(N+1) = evaluation_polynomial ( Csys, 4, x(5) );     ! last edge value
+  work%tri_b(N+1) = evaluation_polynomial ( Csys, 4, x(5) )      ! last edge value
 
   ! Solve tridiagonal system and assign edge values
   call solve_tridiagonal_system ( work%tri_l, work%tri_d, work%tri_u, work%tri_b, work%tri_x, N+1 )
@@ -602,28 +602,28 @@ subroutine edge_values_implicit_h6 ( grid, work, u, edge_values )
   real, dimension(:,:), intent(inout)   :: edge_values      
 
   ! Local variables
-  integer               :: i, j, k;             ! loop indexes
-  integer               :: N;                   ! number of cells
-  real                  :: h0, h1, h2, h3;      ! cell widths
-  real                  :: g, g_2, g_3;         ! the following are 
-  real                  :: g_4, g_5, g_6;       ! auxiliary variables
-  real                  :: d2, d3, d4, d5, d6;  ! to set up the systems
-  real                  :: n2, n3, n4, n5, n6;  ! used to compute the
-  real                  :: h1_2, h2_2;          ! the coefficients of the
-  real                  :: h1_3, h2_3;          ! tridiagonal system
-  real                  :: h1_4, h2_4;          ! ...
-  real                  :: h1_5, h2_5;          ! ...
-  real                  :: h1_6, h2_6;          ! ...
-  real                  :: h0ph1, h0ph1_2;      ! ...
-  real                  :: h0ph1_3, h0ph1_4;    ! ...
-  real                  :: h2ph3, h2ph3_2;      ! ...
-  real                  :: h2ph3_3, h2ph3_4;    ! ...
-  real                  :: h0ph1_5, h2ph3_5;    ! ...
-  real                  :: alpha, beta;         ! stencil coefficients
-  real                  :: a, b, c, d;          ! "
-  real, dimension(7)    :: x;                   ! system used to enforce
-  real, dimension(6,6)  :: Asys;                ! boundary conditions
-  real, dimension(6)    :: Bsys, Csys;          ! ...
+  integer               :: i, j, k              ! loop indexes
+  integer               :: N                    ! number of cells
+  real                  :: h0, h1, h2, h3       ! cell widths
+  real                  :: g, g_2, g_3          ! the following are 
+  real                  :: g_4, g_5, g_6        ! auxiliary variables
+  real                  :: d2, d3, d4, d5, d6   ! to set up the systems
+  real                  :: n2, n3, n4, n5, n6   ! used to compute the
+  real                  :: h1_2, h2_2           ! the coefficients of the
+  real                  :: h1_3, h2_3           ! tridiagonal system
+  real                  :: h1_4, h2_4           ! ...
+  real                  :: h1_5, h2_5           ! ...
+  real                  :: h1_6, h2_6           ! ...
+  real                  :: h0ph1, h0ph1_2       ! ...
+  real                  :: h0ph1_3, h0ph1_4     ! ...
+  real                  :: h2ph3, h2ph3_2       ! ...
+  real                  :: h2ph3_3, h2ph3_4     ! ...
+  real                  :: h0ph1_5, h2ph3_5     ! ...
+  real                  :: alpha, beta          ! stencil coefficients
+  real                  :: a, b, c, d           ! "
+  real, dimension(7)    :: x                    ! system used to enforce
+  real, dimension(6,6)  :: Asys                 ! boundary conditions
+  real, dimension(6)    :: Bsys, Csys           ! ...
 
   ! Get number of cells (there are N+1 edge values to estimate)
   N = grid%nb_cells
@@ -870,7 +870,7 @@ subroutine edge_values_implicit_h6 ( grid, work, u, edge_values )
   work%tri_l(1) = 0.0
   work%tri_d(1) = 1.0
   work%tri_u(1) = 0.0
-  work%tri_b(1) = evaluation_polynomial ( Csys, 6, x(1) );       ! first edge value
+  work%tri_b(1) = evaluation_polynomial ( Csys, 6, x(1) )        ! first edge value
   
   ! Use a left-biased stencil for the second to last row
   
@@ -1005,7 +1005,7 @@ subroutine edge_values_implicit_h6 ( grid, work, u, edge_values )
   work%tri_l(N+1) = 0.0
   work%tri_d(N+1) = 1.0
   work%tri_u(N+1) = 0.0
-  work%tri_b(N+1) = evaluation_polynomial ( Csys, 6, x(7) );     ! last edge value
+  work%tri_b(N+1) = evaluation_polynomial ( Csys, 6, x(7) )      ! last edge value
   
   ! Solve tridiagonal system and assign edge values
   call solve_tridiagonal_system ( work%tri_l, work%tri_d, work%tri_u, work%tri_b, work%tri_x, N+1 )
@@ -1023,7 +1023,7 @@ end subroutine edge_values_implicit_h6
 !------------------------------------------------------------------------------
 ! Allocate memory for tridiagonal system used to compute edge values
 !------------------------------------------------------------------------------
-subroutine tridiagonal_system_0_memory_allocation ( N, work )
+subroutine triDiagEdgeWorkAllocate( N, work )
 !------------------------------------------------------------------------------
 ! In this routine, we allocate memory for the tridiagonal system that will
 ! be used to compute implicit edge-value estimates. The argument 'N' is the
@@ -1040,12 +1040,12 @@ subroutine tridiagonal_system_0_memory_allocation ( N, work )
   allocate ( work%tri_b(N+1) )
   allocate ( work%tri_x(N+1) )
 
-end subroutine tridiagonal_system_0_memory_allocation
+end subroutine triDiagEdgeWorkAllocate
 
 !------------------------------------------------------------------------------
 ! Deallocate memory for tridiagonal system used to compute edge values
 !------------------------------------------------------------------------------
-subroutine tridiagonal_system_0_memory_deallocation ( work )
+subroutine triDiagEdgeWorkDeallocate( work )
   type(edgeValueArrays), intent(inout)  :: work          ! Work space
 
   deallocate ( work%tri_l )
@@ -1054,7 +1054,7 @@ subroutine tridiagonal_system_0_memory_deallocation ( work )
   deallocate ( work%tri_b )
   deallocate ( work%tri_x )
 
-end subroutine tridiagonal_system_0_memory_deallocation
+end subroutine triDiagEdgeWorkDeallocate
 
 
 end module regrid_edge_values

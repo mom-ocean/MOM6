@@ -10,9 +10,10 @@ module regrid_edge_slopes
 ! high-order reconstruction schemes.
 !
 !==============================================================================
-use regrid_grid1d_class    ! see 'regrid_grid1d_class.F90'
-use regrid_solvers         ! see 'regrid_solvers.F90'
-use regrid_polynomial      ! see 'regrid_polynomial.F90'
+use regrid_grid1d_class, only : grid1d_t
+use regrid_solvers, only : solve_linear_system, solve_tridiagonal_system
+use regrid_polynomial, only : evaluation_polynomial
+
 
 implicit none ; private
 
@@ -21,11 +22,11 @@ implicit none ; private
 ! -----------------------------------------------------------------------------
 type, public :: edgeSlopeArrays
   private
-  real, dimension(:), allocatable :: tri_l;   ! trid. system (lower diagonal)
-  real, dimension(:), allocatable :: tri_d;   ! trid. system (middle diagonal)
-  real, dimension(:), allocatable :: tri_u;   ! trid. system (upper diagonal)
-  real, dimension(:), allocatable :: tri_x;   ! trid. system (unknowns vector)
-  real, dimension(:), allocatable :: tri_b;   ! trid. system (rhs)
+  real, dimension(:), allocatable :: tri_l    ! trid. system (lower diagonal)
+  real, dimension(:), allocatable :: tri_d    ! trid. system (middle diagonal)
+  real, dimension(:), allocatable :: tri_u    ! trid. system (upper diagonal)
+  real, dimension(:), allocatable :: tri_x    ! trid. system (unknowns vector)
+  real, dimension(:), allocatable :: tri_b    ! trid. system (rhs)
 end type edgeSlopeArrays
 
 ! -----------------------------------------------------------------------------
@@ -33,8 +34,8 @@ end type edgeSlopeArrays
 ! -----------------------------------------------------------------------------
 public edge_slopes_implicit_h3
 public edge_slopes_implicit_h5
-public tridiagonal_system_1_memory_allocation
-public tridiagonal_system_1_memory_deallocation
+public triDiagSlopeWorkAllocate
+public triDiagSlopeWorkDeallocate
 
 contains
 
@@ -76,16 +77,16 @@ subroutine edge_slopes_implicit_h3 ( grid, work, u, edge_slopes )
   real, dimension(:,:), intent(inout)   :: edge_slopes      
 
   ! Local variables
-  integer               :: i, j;                ! loop indexes
-  integer               :: N;                   ! number of cells
-  real                  :: h0, h1;              ! cell widths
+  integer               :: i, j                 ! loop indexes
+  integer               :: N                    ! number of cells
+  real                  :: h0, h1               ! cell widths
   real                  :: h0_2, h1_2, h0h1
   real                  :: h0_3, h1_3
   real                  :: d
-  real                  :: alpha, beta;         ! stencil coefficients
+  real                  :: alpha, beta          ! stencil coefficients
   real                  :: a, b
-  real, dimension(5)    :: x;                   ! system used to enforce
-  real, dimension(4,4)  :: Asys;                ! boundary conditions
+  real, dimension(5)    :: x                    ! system used to enforce
+  real, dimension(4,4)  :: Asys                 ! boundary conditions
   real, dimension(4)    :: Bsys, Csys
   real, dimension(3)    :: Dsys
 
@@ -146,7 +147,7 @@ subroutine edge_slopes_implicit_h3 ( grid, work, u, edge_slopes )
   
   work%tri_d(1) = 1.0
   work%tri_u(1) = 0.0
-  work%tri_b(1) = evaluation_polynomial ( Dsys, 3, x(1) );       ! first edge slope
+  work%tri_b(1) = evaluation_polynomial ( Dsys, 3, x(1) )        ! first edge slope
   
   ! Boundary conditions: right boundary
   x(1) = 0.0
@@ -172,7 +173,7 @@ subroutine edge_slopes_implicit_h3 ( grid, work, u, edge_slopes )
   
   work%tri_l(N+1) = 0.0
   work%tri_d(N+1) = 1.0
-  work%tri_b(N+1) = evaluation_polynomial ( Dsys, 3, x(5) );     ! last edge slope
+  work%tri_b(N+1) = evaluation_polynomial ( Dsys, 3, x(5) )      ! last edge slope
 
   ! Solve tridiagonal system and assign edge values
   call solve_tridiagonal_system ( work%tri_l, work%tri_d, work%tri_u, work%tri_b, work%tri_x, N+1 )
@@ -227,32 +228,32 @@ subroutine edge_slopes_implicit_h5 ( grid, work, u, edge_slopes )
   ! Arguments
   type(grid1d_t), intent(in)            :: grid
   type(edgeSlopeArrays), intent(inout)  :: work
-  real, dimension(:), intent(in)        :: u;           ! cell averages
+  real, dimension(:), intent(in)        :: u            ! cell averages
   real, dimension(:,:), intent(inout)   :: edge_slopes
 
   ! Local variables
-  integer               :: i, j, k;             ! loop indexes
-  integer               :: N;                   ! number of cells
-  real                  :: h0, h1, h2, h3;      ! cell widths
-  real                  :: g, g_2, g_3;         ! the following are 
-  real                  :: g_4, g_5, g_6;       ! auxiliary variables
-  real                  :: d2, d3, d4, d5, d6;  ! to set up the systems
-  real                  :: n2, n3, n4, n5, n6;  ! used to compute the
-  real                  :: h1_2, h2_2;          ! the coefficients of the
-  real                  :: h1_3, h2_3;          ! tridiagonal system
-  real                  :: h1_4, h2_4;          ! ...
-  real                  :: h1_5, h2_5;          ! ...
-  real                  :: h1_6, h2_6;          ! ...
-  real                  :: h0ph1, h0ph1_2;      ! ...
-  real                  :: h0ph1_3, h0ph1_4;    ! ...
-  real                  :: h2ph3, h2ph3_2;      ! ...
-  real                  :: h2ph3_3, h2ph3_4;    ! ...
-  real                  :: alpha, beta;         ! stencil coefficients
-  real                  :: a, b, c, d;          ! "
-  real, dimension(7)    :: x;                   ! system used to enforce
-  real, dimension(6,6)  :: Asys;                ! boundary conditions
-  real, dimension(6)    :: Bsys, Csys;          ! ...
-  real, dimension(5)    :: Dsys;                ! derivative        
+  integer               :: i, j, k              ! loop indexes
+  integer               :: N                    ! number of cells
+  real                  :: h0, h1, h2, h3       ! cell widths
+  real                  :: g, g_2, g_3          ! the following are 
+  real                  :: g_4, g_5, g_6        ! auxiliary variables
+  real                  :: d2, d3, d4, d5, d6   ! to set up the systems
+  real                  :: n2, n3, n4, n5, n6   ! used to compute the
+  real                  :: h1_2, h2_2           ! the coefficients of the
+  real                  :: h1_3, h2_3           ! tridiagonal system
+  real                  :: h1_4, h2_4           ! ...
+  real                  :: h1_5, h2_5           ! ...
+  real                  :: h1_6, h2_6           ! ...
+  real                  :: h0ph1, h0ph1_2       ! ...
+  real                  :: h0ph1_3, h0ph1_4     ! ...
+  real                  :: h2ph3, h2ph3_2       ! ...
+  real                  :: h2ph3_3, h2ph3_4     ! ...
+  real                  :: alpha, beta          ! stencil coefficients
+  real                  :: a, b, c, d           ! "
+  real, dimension(7)    :: x                    ! system used to enforce
+  real, dimension(6,6)  :: Asys                 ! boundary conditions
+  real, dimension(6)    :: Bsys, Csys           ! ...
+  real, dimension(5)    :: Dsys                 ! derivative        
 
 
   ! Get number of cells (there are N+1 edge values to estimate)
@@ -505,7 +506,7 @@ subroutine edge_slopes_implicit_h5 ( grid, work, u, edge_slopes )
   work%tri_d(1) = 0.0
   work%tri_d(1) = 1.0
   work%tri_u(1) = 0.0
-  work%tri_b(1) = evaluation_polynomial ( Dsys, 5, x(1) );       ! first edge value
+  work%tri_b(1) = evaluation_polynomial ( Dsys, 5, x(1) )        ! first edge value
   
   ! Use a left-biased stencil for the second to last row
   
@@ -645,7 +646,7 @@ subroutine edge_slopes_implicit_h5 ( grid, work, u, edge_slopes )
   work%tri_l(N+1) = 0.0
   work%tri_d(N+1) = 1.0
   work%tri_u(N+1) = 0.0
-  work%tri_b(N+1) = evaluation_polynomial ( Dsys, 5, x(7) );     ! last edge value
+  work%tri_b(N+1) = evaluation_polynomial ( Dsys, 5, x(7) )      ! last edge value
 
   ! Solve tridiagonal system and assign edge values
   call solve_tridiagonal_system ( work%tri_l, work%tri_d, work%tri_u, work%tri_b, work%tri_x, N+1 )
@@ -663,7 +664,7 @@ end subroutine edge_slopes_implicit_h5
 !------------------------------------------------------------------------------
 ! Allocate memory for tridiagonal system used to compute edge values
 !------------------------------------------------------------------------------
-subroutine tridiagonal_system_1_memory_allocation ( N, work )
+subroutine triDiagSlopeWorkAllocate( N, work )
 !------------------------------------------------------------------------------
 ! In this routine, we allocate memory for the tridiagonal system that will
 ! be used to compute implicit edge-value estimates. The argument 'N' is the
@@ -680,12 +681,12 @@ subroutine tridiagonal_system_1_memory_allocation ( N, work )
   allocate ( work%tri_b(N+1) )
   allocate ( work%tri_x(N+1) )
 
-end subroutine tridiagonal_system_1_memory_allocation
+end subroutine triDiagSlopeWorkAllocate
 
 !------------------------------------------------------------------------------
 ! Deallocate memory for tridiagonal system used to compute edge values
 !------------------------------------------------------------------------------
-subroutine tridiagonal_system_1_memory_deallocation ( work )
+subroutine triDiagSlopeWorkDeallocate( work )
   type(edgeSlopeArrays), intent(inout) :: work
 
   deallocate ( work%tri_l )
@@ -694,7 +695,7 @@ subroutine tridiagonal_system_1_memory_deallocation ( work )
   deallocate ( work%tri_b )
   deallocate ( work%tri_x )
 
-end subroutine tridiagonal_system_1_memory_deallocation
+end subroutine triDiagSlopeWorkDeallocate
 
 
 end module regrid_edge_slopes

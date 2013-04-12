@@ -21,21 +21,20 @@ module regrid_p1m
 !
 ! The module contains the following routines:
 !
-! p1m_interpolation (public)
-! p1m_boundary_extrapolation (public)
+! P1M_interpolation (public)
+! P1M_boundary_extrapolation (public)
 !
 !==============================================================================
-use regrid_grid1d_class   ! see 'regrid_grid1d_class.F90'
-use regrid_ppoly_class    ! see 'regrid_ppoly.F90'
-use regrid_edge_values    ! see 'regrid_edge_values.F90'
+use regrid_grid1d_class, only : grid1d_t
+use regrid_ppoly_class, only : ppoly_t
+use regrid_edge_values, only : bound_edge_values, average_discontinuous_edge_values
 
 implicit none ; private
 
 ! -----------------------------------------------------------------------------
 ! The following routines are visible to the outside world
 ! -----------------------------------------------------------------------------
-public p1m_interpolation 
-public p1m_boundary_extrapolation
+public P1M_interpolation, P1M_boundary_extrapolation
 
 contains
 
@@ -43,7 +42,7 @@ contains
 !------------------------------------------------------------------------------
 ! p1m interpolation
 !------------------------------------------------------------------------------
-subroutine  p1m_interpolation ( grid, ppoly, u )
+subroutine P1M_interpolation( grid, u, ppoly )
 ! ------------------------------------------------------------------------------
 ! Linearly interpolate between edge values. 
 ! The resulting piecewise interpolant is stored in 'ppoly'.
@@ -60,13 +59,13 @@ subroutine  p1m_interpolation ( grid, ppoly, u )
 
   ! Arguments
   type(grid1d_t), intent(in)      :: grid
-  type(ppoly_t), intent(inout)    :: ppoly
   real, dimension(:), intent(in)  :: u
+  type(ppoly_t), intent(inout)    :: ppoly
 
   ! Local variables
-  integer   :: k;           ! loop index
-  integer   :: N;           ! number of cells
-  real      :: u0_l, u0_r;  ! edge values (left and right)
+  integer   :: k            ! loop index
+  integer   :: N            ! number of cells
+  real      :: u0_l, u0_r   ! edge values (left and right)
 
   N = grid%nb_cells
 
@@ -88,13 +87,13 @@ subroutine  p1m_interpolation ( grid, ppoly, u )
   
   end do ! end loop on interior cells
 
-end subroutine p1m_interpolation
+end subroutine P1M_interpolation
 
 
 !------------------------------------------------------------------------------
 ! p1m boundary extrapolation
 ! -----------------------------------------------------------------------------
-subroutine p1m_boundary_extrapolation ( grid, ppoly, u )
+subroutine P1M_boundary_extrapolation( grid, u, ppoly )
 !------------------------------------------------------------------------------
 ! Interpolation by linear polynomials within boundary cells.
 ! The left and right edge values in the left and right boundary cells,
@@ -110,17 +109,17 @@ subroutine p1m_boundary_extrapolation ( grid, ppoly, u )
 
   ! Arguments
   type(grid1d_t), intent(in)      :: grid
-  type(ppoly_t), intent(inout)    :: ppoly
   real, dimension(:), intent(in)  :: u
+  type(ppoly_t), intent(inout)    :: ppoly
 
   ! Local variables
-  integer       :: k;                   ! loop index
-  integer       :: N;                   ! number of cells
-  real          :: u0, u1;              ! cell averages
-  real          :: h0, h1;              ! corresponding cell widths
-  real          :: slope;               ! retained PLM slope
-  real          :: a, b;                ! auxiliary variables
-  real          :: u0_l, u0_r;          ! edge values
+  integer       :: k                    ! loop index
+  integer       :: N                    ! number of cells
+  real          :: u0, u1               ! cell averages
+  real          :: h0, h1               ! corresponding cell widths
+  real          :: slope                ! retained PLM slope
+  real          :: a, b                 ! auxiliary variables
+  real          :: u0_l, u0_r           ! edge values
 
   N = grid%nb_cells
 
@@ -185,6 +184,6 @@ subroutine p1m_boundary_extrapolation ( grid, ppoly, u )
   ppoly%coefficients(N,1) = ppoly%E(N,1)
   ppoly%coefficients(N,2) = ppoly%E(N,2) - ppoly%E(N,1)
 
-end subroutine p1m_boundary_extrapolation
+end subroutine P1M_boundary_extrapolation
 
 end module regrid_p1m

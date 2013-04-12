@@ -10,22 +10,20 @@ module regrid_pqm
 ! reconstruction using the piecewise quartic method (PQM).
 !
 !==============================================================================
-use regrid_grid1d_class    ! see 'regrid_grid1d_class.F90'
-use regrid_ppoly_class     ! see 'regrid_ppoly.F90'
-use regrid_edge_values     ! see 'regrid_edge_values.F90'
+use regrid_grid1d_class, only : grid1d_t
+use regrid_ppoly_class, only : ppoly_t
+use regrid_edge_values, only : bound_edge_values, check_discontinuous_edge_values
 
 implicit none ; private
 
-public pqm_reconstruction
-public pqm_boundary_extrapolation
-public pqm_boundary_extrapolation_v1
+public PQM_reconstruction, PQM_boundary_extrapolation, PQM_boundary_extrapolation_v1
 
 contains
 
 !------------------------------------------------------------------------------
-! pqm_reconstruction
+! PQM_reconstruction
 ! -----------------------------------------------------------------------------
-subroutine pqm_reconstruction ( grid, ppoly, u )
+subroutine PQM_reconstruction( grid, u, ppoly )
 !------------------------------------------------------------------------------
 ! Reconstruction by quartic polynomials within each cell.
 !
@@ -39,21 +37,21 @@ subroutine pqm_reconstruction ( grid, ppoly, u )
 
   ! Arguments
   type(grid1d_t), intent(in)     :: grid
-  type(ppoly_t), intent(inout)   :: ppoly
   real, dimension(:), intent(in) :: u
+  type(ppoly_t), intent(inout)   :: ppoly
   
   ! Local variables
-  integer   :: k;               ! loop index
-  integer   :: N;               ! number of cells
-  real      :: h;               ! cell width
-  real      :: u0_l, u0_r;      ! edge values (left and right)
-  real      :: u1_l, u1_r;      ! edge slopes (left and right)
-  real      :: a, b, c, d, e;   ! parabola coefficients
+  integer   :: k                ! loop index
+  integer   :: N                ! number of cells
+  real      :: h                ! cell width
+  real      :: u0_l, u0_r       ! edge values (left and right)
+  real      :: u1_l, u1_r       ! edge slopes (left and right)
+  real      :: a, b, c, d, e    ! parabola coefficients
   
   N = grid%nb_cells
 
   ! PQM limiter
-  call pqm_limiter ( grid, ppoly, u )
+  call PQM_limiter( grid, u, ppoly )
 
   ! Loop on cells to construct the cubic within each cell
   do k = 1,N
@@ -81,13 +79,13 @@ subroutine pqm_reconstruction ( grid, ppoly, u )
     
   end do ! end loop on cells
 
-end subroutine pqm_reconstruction
+end subroutine PQM_reconstruction
 
 
 !------------------------------------------------------------------------------
 ! Limit pqm
 ! -----------------------------------------------------------------------------
-subroutine pqm_limiter ( grid, ppoly, u )
+subroutine PQM_limiter( grid, u, ppoly )
 !------------------------------------------------------------------------------
 ! Standard PQM limiter (White & Adcroft, JCP 2008).
 !
@@ -101,22 +99,22 @@ subroutine pqm_limiter ( grid, ppoly, u )
 
   ! Arguments
   type(grid1d_t), intent(in)     :: grid
-  type(ppoly_t), intent(inout)   :: ppoly
   real, dimension(:), intent(in) :: u
+  type(ppoly_t), intent(inout)   :: ppoly
 
   ! Local variables
-  integer   :: k;           ! loop index
-  integer   :: N;           ! number of cells
-  integer   :: monotonic;   ! boolean indicating whether the cubic is monotonic
+  integer   :: k            ! loop index
+  integer   :: N            ! number of cells
+  integer   :: monotonic    ! boolean indicating whether the cubic is monotonic
   integer   :: inflexion_l
   integer   :: inflexion_r
-  real      :: u0_l, u0_r;  ! edge values
-  real      :: u1_l, u1_r;  ! edge slopes
-  real      :: u_l, u_c, u_r;       ! left, center and right cell averages
-  real      :: h_l, h_c, h_r;       ! left, center and right cell widths
-  real      :: sigma_l, sigma_c, sigma_r;   ! left, center and right 
+  real      :: u0_l, u0_r   ! edge values
+  real      :: u1_l, u1_r   ! edge slopes
+  real      :: u_l, u_c, u_r        ! left, center and right cell averages
+  real      :: h_l, h_c, h_r        ! left, center and right cell widths
+  real      :: sigma_l, sigma_c, sigma_r    ! left, center and right 
                                             ! van Leer slopes   
-  real      :: slope;       ! retained PLM slope
+  real      :: slope        ! retained PLM slope
   real      :: a, b, c, d, e
   real      :: alpha1, alpha2, alpha3
   real      :: rho, sqrt_rho
@@ -358,13 +356,13 @@ subroutine pqm_limiter ( grid, ppoly, u )
   ppoly%E(N,:) = u(N)
   ppoly%S(N,:) = 0.0
   
-end subroutine pqm_limiter
+end subroutine PQM_limiter
 
 
 !------------------------------------------------------------------------------
 ! pqm boundary extrapolation
 ! -----------------------------------------------------------------------------
-subroutine pqm_boundary_extrapolation ( grid, ppoly, u )
+subroutine PQM_boundary_extrapolation( grid, u, ppoly )
 !------------------------------------------------------------------------------
 ! Reconstruction by parabolas within boundary cells.
 !
@@ -389,12 +387,12 @@ subroutine pqm_boundary_extrapolation ( grid, ppoly, u )
 
   ! Arguments
   type(grid1d_t), intent(in)      :: grid
-  type(ppoly_t), intent(inout)    :: ppoly
   real, dimension(:), intent(in)  :: u
+  type(ppoly_t), intent(inout)    :: ppoly
   
   ! Local variables
-  integer       :: k;       ! loop index
-  integer       :: N;       ! number of cells
+  integer       :: k        ! loop index
+  integer       :: N        ! number of cells
   integer       :: i0, i1
   integer       :: monotonic
   real          :: u0, u1
@@ -418,7 +416,7 @@ subroutine pqm_boundary_extrapolation ( grid, ppoly, u )
   ! Compute the left edge slope in neighboring cell and express it in
   ! the global coordinate system
   b = ppoly%coefficients(i1,2)
-  u1_r = b *(h0/h1);    ! derivative evaluated at xi = 0.0, 
+  u1_r = b *(h0/h1)     ! derivative evaluated at xi = 0.0, 
                         ! expressed w.r.t. xi (local coord. system)
   
   ! Limit the right slope by the PLM limited slope
@@ -476,7 +474,7 @@ subroutine pqm_boundary_extrapolation ( grid, ppoly, u )
   c = ppoly%coefficients(i0,3)
   d = ppoly%coefficients(i0,4)
   e = ppoly%coefficients(i0,5)
-  u1_l = (b + 2*c + 3*d + 4*e);     ! derivative evaluated at xi = 1.0
+  u1_l = (b + 2*c + 3*d + 4*e)      ! derivative evaluated at xi = 1.0
   u1_l = u1_l * (h1/h0)
   
   ! Limit the left slope by the PLM limited slope
@@ -520,13 +518,13 @@ subroutine pqm_boundary_extrapolation ( grid, ppoly, u )
   ppoly%coefficients(i1,4) = 0.0
   ppoly%coefficients(i1,5) = 0.0
   
-end subroutine pqm_boundary_extrapolation
+end subroutine PQM_boundary_extrapolation
 
 
 !------------------------------------------------------------------------------
 ! pqm boundary extrapolation using rational function
 ! -----------------------------------------------------------------------------
-subroutine pqm_boundary_extrapolation_v1 ( grid, ppoly, u )
+subroutine PQM_boundary_extrapolation_v1( grid, u, ppoly )
 !------------------------------------------------------------------------------
 ! Reconstruction by parabolas within boundary cells.
 !
@@ -551,12 +549,12 @@ subroutine pqm_boundary_extrapolation_v1 ( grid, ppoly, u )
 
   ! Arguments
   type(grid1d_t), intent(in)      :: grid
-  type(ppoly_t), intent(inout)    :: ppoly
   real, dimension(:), intent(in)  :: u
+  type(ppoly_t), intent(inout)    :: ppoly
   
   ! Local variables
-  integer       :: k;       ! loop index
-  integer       :: N;       ! number of cells
+  integer       :: k        ! loop index
+  integer       :: N        ! number of cells
   integer       :: i0, i1
   integer       :: monotonic
   integer       :: inflexion_l
@@ -596,8 +594,8 @@ subroutine pqm_boundary_extrapolation_v1 ( grid, ppoly, u )
   a = ppoly%coefficients(i1,1)
   b = ppoly%coefficients(i1,2)
   
-  u0_r = a;         ! edge value
-  u1_r = b / h1;    ! edge slope (w.r.t. global coord.)
+  u0_r = a          ! edge value
+  u1_r = b / h1     ! edge slope (w.r.t. global coord.)
 
   ! Compute coefficient for rational function based on mean and right
   ! edge value and slope
@@ -745,8 +743,8 @@ subroutine pqm_boundary_extrapolation_v1 ( grid, ppoly, u )
   c = ppoly%coefficients(i0,3)
   d = ppoly%coefficients(i0,4)
   e = ppoly%coefficients(i0,5)
-  u0_l = a + b + c + d + e;                 ! edge value
-  u1_l = (b + 2*c + 3*d + 4*e) / h0;        ! edge slope (w.r.t. global coord.)
+  u0_l = a + b + c + d + e                  ! edge value
+  u1_l = (b + 2*c + 3*d + 4*e) / h0         ! edge slope (w.r.t. global coord.)
  
   ! Compute coefficient for rational function based on mean and left
   ! edge value and slope
@@ -876,6 +874,6 @@ subroutine pqm_boundary_extrapolation_v1 ( grid, ppoly, u )
   ppoly%coefficients(i1,4) = d
   ppoly%coefficients(i1,5) = e
   
-end subroutine pqm_boundary_extrapolation_v1
+end subroutine PQM_boundary_extrapolation_v1
 
 end module regrid_pqm

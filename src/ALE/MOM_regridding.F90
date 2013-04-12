@@ -19,20 +19,25 @@ use MOM_variables,     only : ocean_grid_type, thermo_var_ptrs
 use MOM_file_parser,   only : get_param, param_file_type, uppercase
 use MOM_EOS,           only : calculate_density
 
-use regrid_grid1d_class ! see 'regrid_grid.F90'
-use regrid_ppoly_class  ! see 'regrid_ppoly.F90'
-use regrid_polynomial   ! see 'regrid_polynomial.F90'
-use regrid_edge_values  ! see 'regrid_edge_values.F90'
-use regrid_edge_slopes  ! see 'regrid_edge_slopes.F90'
-use regrid_pcm          ! see 'regrid_pcm.F90'
-use regrid_plm          ! see 'regrid_plm.F90'
-use regrid_ppm          ! see 'regrid_ppm.F90'
-use regrid_pqm          ! see 'regrid_pqm.F90'
-use regrid_p1m          ! see 'regrid_p1m.F90'
-use regrid_p3m          ! see 'regrid_p3m.F90'
+use regrid_grid1d_class, only : grid1d_t, grid1d_init, grid1d_destroy
+use regrid_ppoly_class, only : ppoly_t, ppoly_init, ppoly_destroy
+use regrid_edge_values, only : edgeValueArrays
+use regrid_edge_values, only : edge_values_explicit_h2, edge_values_explicit_h4
+use regrid_edge_values, only : edge_values_implicit_h4, edge_values_implicit_h6
+use regrid_edge_values, only : triDiagEdgeWorkAllocate, triDiagEdgeWorkDeallocate
+use regrid_edge_slopes, only : edgeSlopeArrays
+use regrid_edge_slopes, only : edge_slopes_implicit_h3, edge_slopes_implicit_h5
+use regrid_edge_slopes, only : triDiagSlopeWorkAllocate, triDiagSlopeWorkDeallocate
+
+use regrid_plm, only : PLM_reconstruction, PLM_boundary_extrapolation
+use regrid_ppm, only : PPM_reconstruction, PPM_boundary_extrapolation
+use regrid_pqm, only : PQM_reconstruction, PQM_boundary_extrapolation_v1
+
+use regrid_p1m, only : P1M_interpolation, P1M_boundary_extrapolation
+use regrid_p3m, only : P3M_interpolation, P3M_boundary_extrapolation
 use MOM_remapping, only : remapping_init, remapping_main, remapping_core, remapping_end
 use MOM_remapping, only : remapping_CS
-use regrid_defs         ! see 'regrid_defs.F90' (contains types and parameters)
+use regrid_defs, only : PRESSURE_RECONSTRUCTION_PLM, PRESSURE_RECONSTRUCTION_PPM
 use regrid_consts, only : coordinateMode, DEFAULT_COORDINATE_MODE
 use regrid_consts, only : REGRIDDING_LAYER, REGRIDDING_ZSTAR
 use regrid_consts, only : REGRIDDING_RHO, REGRIDDING_SIGMA
@@ -81,23 +86,23 @@ type, public :: regridding_CS
 
   ! Indicates whether regridding/remapping capabilities should be used at all
   ! (it should be true to use regridding and false to NOT use regridding).
-  logical   :: use_regridding;
+  logical   :: use_regridding
 
   ! Indicates which grid to use in the vertical (z*, sigma, target interface
   ! densities)
-  integer   :: regridding_scheme;
+  integer   :: regridding_scheme
 
   ! The following parameter is only relevant when used with the target
   ! interface densities regridding scheme. It indicates which interpolation
   ! to use to determine the grid.
-  integer   :: interpolation_scheme;
+  integer   :: interpolation_scheme
 
   ! Indicate whether high-order boundary extrapolation should be used within
   ! boundary cells
-  logical   :: boundary_extrapolation;
+  logical   :: boundary_extrapolation
 
   ! Minimum thickness allowed when building the new grid through regridding
-  real      :: min_thickness;
+  real      :: min_thickness
 
   ! Indicates whether integrals for FV pressure gradient calculation will
   ! use reconstruction of T/S.
@@ -401,17 +406,17 @@ subroutine regridding_main ( G, h, h_new, u, v, tv, CS )
   
   ! Arguments
   type(ocean_grid_type), intent(in)                    :: &
-  G;     ! Ocean grid informations
+  G      ! Ocean grid informations
   real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(inout)   :: &
-  h;     ! Current 3D grid obtained after the last time step
+  h      ! Current 3D grid obtained after the last time step
   real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(inout)   :: &
-  h_new; ! The new 3D grid obtained via regridding
+  h_new  ! The new 3D grid obtained via regridding
   real, dimension(NIMEMB_,NJMEM_, NKMEM_), intent(inout)  :: &
-  u;     ! Zonal velocity field
+  u      ! Zonal velocity field
   real, dimension(NIMEM_,NJMEMB_, NKMEM_), intent(inout)  :: &
-  v;     ! Meridional velocity field
+  v      ! Meridional velocity field
   type(thermo_var_ptrs), intent(inout)                 :: &
-  tv;    ! Thermodynamical variables (T, S, ...)  
+  tv     ! Thermodynamical variables (T, S, ...)  
   type(regridding_CS), intent(inout) :: CS ! Regridding parameters and options
 
   ! Local variables
@@ -460,13 +465,13 @@ subroutine pressure_gradient_plm (CS, S_t, S_b, T_t, T_b, G, tv, h )
   ! Arguments
   type(regridding_CS), intent(inout) :: CS ! Regridding parameters and options
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: &
-  S_t, S_b; ! Salinity at the top and bottom edges of each layer
+  S_t, S_b  ! Salinity at the top and bottom edges of each layer
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: &
-  T_t, T_b; ! Temperature at the top and bottom edges of each layer
+  T_t, T_b  ! Temperature at the top and bottom edges of each layer
   type(ocean_grid_type), intent(in)                 :: G
   type(thermo_var_ptrs), intent(in)                 :: tv
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: &
-  h;        ! Three-dimensional ocean grid
+  h         ! Three-dimensional ocean grid
 
   ! Local variables
   integer           :: i, j, k
@@ -489,9 +494,8 @@ subroutine pressure_gradient_plm (CS, S_t, S_b, T_t, T_b, G, tv, h )
       ! Reconstruct salinity profile    
       CS%ppoly_linear%E = 0.0
       CS%ppoly_linear%coefficients = 0.0
-      call plm_reconstruction ( CS%grid_generic, CS%ppoly_linear, tv%S(i,j,:) )
-      call plm_boundary_extrapolation ( CS%grid_generic, CS%ppoly_linear, &
-                                        tv%S(i,j,:) )
+      call PLM_reconstruction( CS%grid_generic, tv%S(i,j,:), CS%ppoly_linear )
+      call PLM_boundary_extrapolation( CS%grid_generic, tv%S(i,j,:), CS%ppoly_linear )
       
       do k = 1,G%ke
         S_t(i,j,k) = CS%ppoly_linear%E(k,1)
@@ -501,9 +505,8 @@ subroutine pressure_gradient_plm (CS, S_t, S_b, T_t, T_b, G, tv, h )
       ! Reconstruct temperature profile 
       CS%ppoly_linear%E = 0.0
       CS%ppoly_linear%coefficients = 0.0
-      call plm_reconstruction ( CS%grid_generic, CS%ppoly_linear, tv%T(i,j,:) )
-      call plm_boundary_extrapolation ( CS%grid_generic, CS%ppoly_linear, &
-                                        tv%T(i,j,:) )
+      call PLM_reconstruction( CS%grid_generic, tv%T(i,j,:), CS%ppoly_linear )
+      call PLM_boundary_extrapolation( CS%grid_generic, tv%T(i,j,:), CS%ppoly_linear )
       
       do k = 1,G%ke
         T_t(i,j,k) = CS%ppoly_linear%E(k,1)
@@ -530,13 +533,13 @@ subroutine pressure_gradient_ppm (CS, S_t, S_b, T_t, T_b, G, tv, h )
   ! Arguments
   type(regridding_CS), intent(inout) :: CS
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: &
-  S_t, S_b; ! Salinity at the top and bottom edges of each layer
+  S_t, S_b  ! Salinity at the top and bottom edges of each layer
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: &
-  T_t, T_b; ! Temperature at the top and bottom edges of each layer
+  T_t, T_b  ! Temperature at the top and bottom edges of each layer
   type(ocean_grid_type), intent(in)                 :: G
   type(thermo_var_ptrs), intent(in)                 :: tv
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: &
-  h;        ! Three-dimensional ocean grid
+  h         ! Three-dimensional ocean grid
 
   ! Local variables
   integer           :: i, j, k
@@ -560,9 +563,8 @@ subroutine pressure_gradient_ppm (CS, S_t, S_b, T_t, T_b, G, tv, h )
       CS%ppoly_parab%E = 0.0
       CS%ppoly_parab%coefficients = 0.0
       call edge_values_implicit_h4 ( CS%grid_generic, CS%edgeValueWrk, tv%S(i,j,:), CS%ppoly_parab%E )
-      call ppm_reconstruction ( CS%grid_generic, CS%ppoly_parab, tv%S(i,j,:) )
-      call ppm_boundary_extrapolation ( CS%grid_generic, CS%ppoly_parab, &
-                                        tv%S(i,j,:) )
+      call PPM_reconstruction( CS%grid_generic, tv%S(i,j,:), CS%ppoly_parab )
+      call PPM_boundary_extrapolation( CS%grid_generic, tv%S(i,j,:), CS%ppoly_parab )
       
       do k = 1,G%ke
         S_t(i,j,k) = CS%ppoly_parab%E(k,1)
@@ -573,9 +575,8 @@ subroutine pressure_gradient_ppm (CS, S_t, S_b, T_t, T_b, G, tv, h )
       CS%ppoly_parab%E = 0.0
       CS%ppoly_parab%coefficients = 0.0
       call edge_values_implicit_h4 ( CS%grid_generic, CS%edgeValueWrk, tv%T(i,j,:), CS%ppoly_parab%E )
-      call ppm_reconstruction ( CS%grid_generic, CS%ppoly_parab, tv%T(i,j,:) )
-      call ppm_boundary_extrapolation ( CS%grid_generic, CS%ppoly_parab, &
-                                        tv%T(i,j,:) )
+      call PPM_reconstruction( CS%grid_generic, tv%T(i,j,:), CS%ppoly_parab )
+      call PPM_boundary_extrapolation( CS%grid_generic, tv%T(i,j,:), CS%ppoly_parab )
       
       do k = 1,G%ke
         T_t(i,j,k) = CS%ppoly_parab%E(k,1)
@@ -614,7 +615,7 @@ subroutine build_grid_uniform ( G, h, h_new, CS )
   real      :: delta_h
   real      :: max_depth
   real      :: min_thickness
-  real      :: eta;             ! local elevation
+  real      :: eta              ! local elevation
   real      :: local_depth
 
   nz = G%ke
@@ -732,7 +733,7 @@ subroutine build_grid_arbitrary ( G, h, h_new, CS )
   real      :: delta_h
   real      :: max_depth
   real      :: min_thickness
-  real      :: eta;             ! local elevation
+  real      :: eta              ! local elevation
   real      :: local_depth
   real      :: x1, y1, x2, y2
   real      :: x, t
@@ -837,7 +838,7 @@ subroutine build_grid_target_densities ( G, h, h_new, tv, CS )
   integer   :: nz
   integer   :: k_found
   integer   :: count_nonzero_layers
-  real      :: deviation;           ! When iterating to determine the final 
+  real      :: deviation            ! When iterating to determine the final 
                                     ! grid, this is the deviation between two
                                     ! successive grids.
   real      :: threshold
@@ -973,8 +974,8 @@ subroutine build_grid_target_densities ( G, h, h_new, tv, CS )
         h_new(i,j,k) = CS%grid_final%h(k)
       end do
         
-    end do; ! end loop on j 
-  end do; ! end loop on i
+    end do  ! end loop on j 
+  end do  ! end loop on i
       
 end subroutine build_grid_target_densities
 
@@ -996,17 +997,17 @@ subroutine regridding_iteration ( densities, target_values, CS, &
   
   ! Arguments
   real, dimension(:), intent(in)      :: &
-  densities;        ! Actual cell densities
+  densities         ! Actual cell densities
   real, dimension(:), intent(in)      :: &
-  target_values;    ! Target interface densities
+  target_values     ! Target interface densities
   type(grid1d_t), intent(in)          :: &
   grid0             ! The grid on which cell densities are known                
   type(ppoly_t), intent(inout)        :: &
-  ppoly0;           ! Piecewise polynomial for density interpolation
+  ppoly0            ! Piecewise polynomial for density interpolation
   type(grid1d_t), intent(inout)       :: &
-  grid1;            ! The new grid based on target interface densities          
+  grid1             ! The new grid based on target interface densities          
   type(regridding_CS), intent(inout) :: &
-  CS;  ! Parameters used for regridding
+  CS   ! Parameters used for regridding
 
   ! Local variables
   integer        :: degree
@@ -1022,9 +1023,9 @@ subroutine regridding_iteration ( densities, target_values, CS, &
     case ( INTERPOLATION_P1M_H2 )
       degree = DEGREE_1
       call edge_values_explicit_h2 ( grid0, densities, ppoly0%E )
-      call p1m_interpolation ( grid0, ppoly0, densities )
+      call P1M_interpolation( grid0, densities, ppoly0 )
       if ( CS%boundary_extrapolation) then
-        call p1m_boundary_extrapolation ( grid0, ppoly0, densities )
+        call P1M_boundary_extrapolation( grid0, densities, ppoly0 )
       end if    
     
     case ( INTERPOLATION_P1M_H4 )
@@ -1034,9 +1035,9 @@ subroutine regridding_iteration ( densities, target_values, CS, &
       else
         call edge_values_explicit_h2 ( grid0, densities, ppoly0%E )
       end if
-      call p1m_interpolation ( grid0, ppoly0, densities )
+      call P1M_interpolation( grid0, densities, ppoly0 )
       if ( CS%boundary_extrapolation) then
-        call p1m_boundary_extrapolation ( grid0, ppoly0, densities )
+        call P1M_boundary_extrapolation( grid0, densities, ppoly0 )
       end if    
     
     case ( INTERPOLATION_P1M_IH4 )
@@ -1046,32 +1047,32 @@ subroutine regridding_iteration ( densities, target_values, CS, &
       else
         call edge_values_explicit_h2 ( grid0, densities, ppoly0%E )
       end if
-      call p1m_interpolation ( grid0, ppoly0, densities )
+      call P1M_interpolation( grid0, densities, ppoly0 )
       if ( CS%boundary_extrapolation) then
-        call p1m_boundary_extrapolation ( grid0, ppoly0, densities )
+        call P1M_boundary_extrapolation( grid0, densities, ppoly0 )
       end if    
     
     case ( INTERPOLATION_PLM )   
       degree = DEGREE_1
-      call plm_reconstruction ( grid0, ppoly0, densities )
+      call PLM_reconstruction( grid0, densities, ppoly0 )
       if ( CS%boundary_extrapolation) then
-        call plm_boundary_extrapolation ( grid0, ppoly0, densities )
+        call PLM_boundary_extrapolation( grid0, densities, ppoly0 )
       end if    
     
     case ( INTERPOLATION_PPM_H4 )
       if ( grid0%nb_cells .ge. 4 ) then
         degree = DEGREE_2
         call edge_values_explicit_h4 ( grid0, densities, ppoly0%E )
-        call ppm_reconstruction ( grid0, ppoly0, densities )
+        call PPM_reconstruction( grid0, densities, ppoly0 )
         if ( CS%boundary_extrapolation) then
-          call ppm_boundary_extrapolation ( grid0, ppoly0, densities )
+          call PPM_boundary_extrapolation( grid0, densities, ppoly0 )
         end if  
       else
         degree = DEGREE_1
         call edge_values_explicit_h2 ( grid0, densities, ppoly0%E )
-        call p1m_interpolation ( grid0, ppoly0, densities )
+        call P1M_interpolation( grid0, densities, ppoly0 )
         if ( CS%boundary_extrapolation) then
-          call p1m_boundary_extrapolation ( grid0, ppoly0, densities )
+          call P1M_boundary_extrapolation( grid0, densities, ppoly0 )
         end if
       end if
     
@@ -1080,16 +1081,16 @@ subroutine regridding_iteration ( densities, target_values, CS, &
       if ( grid0%nb_cells .ge. 4 ) then
         degree = DEGREE_2
         call edge_values_implicit_h4 ( grid0, CS%edgeValueWrk, densities, ppoly0%E )
-        call ppm_reconstruction ( grid0, ppoly0, densities )
+        call PPM_reconstruction( grid0, densities, ppoly0 )
         if ( CS%boundary_extrapolation) then
-          call ppm_boundary_extrapolation ( grid0, ppoly0, densities )
+          call PPM_boundary_extrapolation( grid0, densities, ppoly0 )
         end if  
       else
         degree = DEGREE_1
         call edge_values_explicit_h2 ( grid0, densities, ppoly0%E )
-        call p1m_interpolation ( grid0, ppoly0, densities )
+        call P1M_interpolation( grid0, densities, ppoly0 )
         if ( CS%boundary_extrapolation) then
-          call p1m_boundary_extrapolation ( grid0, ppoly0, densities )
+          call P1M_boundary_extrapolation( grid0, densities, ppoly0 )
         end if  
       end if
     
@@ -1099,16 +1100,16 @@ subroutine regridding_iteration ( densities, target_values, CS, &
         degree = DEGREE_3
         call edge_values_implicit_h4 ( grid0, CS%edgeValueWrk, densities, ppoly0%E )
         call edge_slopes_implicit_h3 ( grid0, CS%edgeSlopeWrk, densities, ppoly0%S )
-        call p3m_interpolation ( grid0, ppoly0, densities )
+        call P3m_interpolation( grid0, densities, ppoly0 )
         if ( CS%boundary_extrapolation) then
-          call p3m_boundary_extrapolation ( grid0, ppoly0, densities )
+          call P3M_boundary_extrapolation( grid0, densities, ppoly0 )
         end if  
       else
         degree = DEGREE_1
         call edge_values_explicit_h2 ( grid0, densities, ppoly0%E )
-        call p1m_interpolation ( grid0, ppoly0, densities )
+        call P1M_interpolation( grid0, densities, ppoly0 )
         if ( CS%boundary_extrapolation) then
-          call p1m_boundary_extrapolation ( grid0, ppoly0, densities )
+          call P1M_boundary_extrapolation( grid0, densities, ppoly0 )
         end if  
       end if
       
@@ -1117,16 +1118,16 @@ subroutine regridding_iteration ( densities, target_values, CS, &
         degree = DEGREE_3
         call edge_values_implicit_h6 ( grid0, CS%edgeValueWrk, densities, ppoly0%E )
         call edge_slopes_implicit_h5 ( grid0, CS%edgeSlopeWrk, densities, ppoly0%S )
-        call p3m_interpolation ( grid0, ppoly0, densities )
+        call P3m_interpolation( grid0, densities, ppoly0 )
         if ( CS%boundary_extrapolation) then
-          call p3m_boundary_extrapolation ( grid0, ppoly0, densities )
+          call P3M_boundary_extrapolation( grid0, densities, ppoly0 )
         end if  
       else
         degree = DEGREE_1
         call edge_values_explicit_h2 ( grid0, densities, ppoly0%E )
-        call p1m_interpolation ( grid0, ppoly0, densities )
+        call P1M_interpolation( grid0, densities, ppoly0 )
         if ( CS%boundary_extrapolation) then
-          call p1m_boundary_extrapolation ( grid0, ppoly0, densities )
+          call P1M_boundary_extrapolation( grid0, densities, ppoly0 )
         end if  
       end if
     
@@ -1136,16 +1137,16 @@ subroutine regridding_iteration ( densities, target_values, CS, &
         degree = DEGREE_4
         call edge_values_implicit_h4 ( grid0, CS%edgeValueWrk, densities, ppoly0%E )
         call edge_slopes_implicit_h3 ( grid0, CS%edgeSlopeWrk, densities, ppoly0%S )
-        call pqm_reconstruction ( grid0, ppoly0, densities )
+        call PQM_reconstruction( grid0, densities, ppoly0 )
         if ( CS%boundary_extrapolation) then
-          call pqm_boundary_extrapolation_v1 ( grid0, ppoly0, densities )
+          call PQM_boundary_extrapolation_v1( grid0, densities, ppoly0 )
         end if  
       else
         degree = DEGREE_1
         call edge_values_explicit_h2 ( grid0, densities, ppoly0%E )
-        call p1m_interpolation ( grid0, ppoly0, densities )
+        call P1M_interpolation( grid0, densities, ppoly0 )
         if ( CS%boundary_extrapolation) then
-          call p1m_boundary_extrapolation ( grid0, ppoly0, densities )
+          call P1M_boundary_extrapolation( grid0, densities, ppoly0 )
         end if  
       end if
     
@@ -1154,16 +1155,16 @@ subroutine regridding_iteration ( densities, target_values, CS, &
         degree = DEGREE_4
         call edge_values_implicit_h6 ( grid0, CS%edgeValueWrk, densities, ppoly0%E )
         call edge_slopes_implicit_h5 ( grid0, CS%edgeSlopeWrk, densities, ppoly0%S )
-        call pqm_reconstruction ( grid0, ppoly0, densities )
+        call PQM_reconstruction( grid0, densities, ppoly0 )
         if ( CS%boundary_extrapolation) then
-          call pqm_boundary_extrapolation_v1 ( grid0, ppoly0, densities )
+          call PQM_boundary_extrapolation_v1( grid0, densities, ppoly0 )
         end if  
       else
         degree = DEGREE_1
         call edge_values_explicit_h2 ( grid0, densities, ppoly0%E )
-        call p1m_interpolation ( grid0, ppoly0, densities )
+        call P1M_interpolation( grid0, densities, ppoly0 )
         if ( CS%boundary_extrapolation) then
-          call p1m_boundary_extrapolation ( grid0, ppoly0, densities )
+          call P1M_boundary_extrapolation( grid0, densities, ppoly0 )
         end if  
       end if
     
@@ -1195,11 +1196,11 @@ subroutine interpolate_grid ( grid0, ppoly0, grid1, target_values, degree )
   integer, intent(in)             :: degree
     
   ! Local variables
-  integer        :: k;  ! loop index
+  integer        :: k   ! loop index
   integer        :: m
-  integer        :: N;  ! number of grid cells
-  integer        :: nz; ! number of layers
-  real           :: t;  ! current interface target density
+  integer        :: N   ! number of grid cells
+  integer        :: nz  ! number of layers
+  real           :: t   ! current interface target density
   integer        :: count_nonzero_layers
   real           :: delta_h
   
@@ -1253,20 +1254,20 @@ real function get_polynomial_coordinate ( grid, ppoly, target_value, degree )
   integer,        intent(in)  :: degree
 
   ! Local variables
-  integer            :: i, k;           ! loop indices
+  integer            :: i, k            ! loop indices
   integer            :: N
-  integer            :: k_found;        ! index of target cell
+  integer            :: k_found         ! index of target cell
   integer            :: iter
-  real               :: x_l, x_r;       ! end coordinates of target cell
-  real               :: xi0;            ! normalized target coordinate
-  real, dimension(5) :: a;              ! polynomial coefficients
+  real               :: x_l, x_r        ! end coordinates of target cell
+  real               :: xi0             ! normalized target coordinate
+  real, dimension(5) :: a               ! polynomial coefficients
   real               :: numerator
   real               :: denominator
-  real               :: delta;          ! Newton-Raphson increment
-  real               :: x;              ! global target coordinate
-  real               :: eps;                ! offset used to get away from
+  real               :: delta           ! Newton-Raphson increment
+  real               :: x               ! global target coordinate
+  real               :: eps                 ! offset used to get away from
                                         ! boundaries
-  real               :: g;              ! gradient during N-R iterations
+  real               :: g               ! gradient during N-R iterations
 
   N = grid%nb_cells
   eps = NR_OFFSET
@@ -1279,13 +1280,13 @@ real function get_polynomial_coordinate ( grid, ppoly, target_value, degree )
   if ( target_value .LE. ppoly%E(1,1) ) then
     x = grid%x(1)
     get_polynomial_coordinate = x
-    return; ! return because there is no need to look further
+    return  ! return because there is no need to look further
   end if
   
   if ( target_value .GE. ppoly%E(N,2) ) then
     x = grid%x(N+1)
     get_polynomial_coordinate = x
-    return; ! return because there is no need to look further
+    return  ! return because there is no need to look further
   end if
   
   ! Since discontinuous edge values are allowed, we check whether the target
@@ -1295,7 +1296,7 @@ real function get_polynomial_coordinate ( grid, ppoly, target_value, degree )
        ( target_value .LE. ppoly%E(k,1) ) ) then
        x = grid%x(k)
        get_polynomial_coordinate = x
-       return;  ! return because there is no need to look further
+       return   ! return because there is no need to look further
        exit
     end if   
   end do
@@ -1527,9 +1528,9 @@ subroutine convective_adjustment(CS, G, h, tv)
   
   ! Local variables
   integer   :: i, j, k
-  real      :: T0, T1;      ! temperatures
-  real      :: S0, S1;      ! salinities
-  real      :: r0, r1;      ! densities
+  real      :: T0, T1       ! temperatures
+  real      :: S0, S1       ! salinities
+  real      :: r0, r1       ! densities
   real      :: h0, h1
   logical   :: stratified
   
@@ -1574,14 +1575,14 @@ subroutine convective_adjustment(CS, G, h, tv)
                                      CS%densities(k+1), 1, 1, tv%eqn_of_state )
             stratified = .false.
           end if
-        end do; ! k 
+        end do  ! k 
     
         if ( stratified ) exit        
 
       end do    
 
-    end do; ! i
-  end do; ! j   
+    end do  ! i
+  end do  ! j   
 
 end subroutine convective_adjustment
 
@@ -1605,13 +1606,13 @@ subroutine regridding_memory_allocation ( G, CS )
 
   ! Local variables
   integer   :: nz
-  integer   :: degree;      ! Degree of polynomials used for the reconstruction 
+  integer   :: degree       ! Degree of polynomials used for the reconstruction 
   
   nz = G%ke
 
   ! Allocate memory for the tridiagonal system
-  call tridiagonal_system_0_memory_allocation ( nz, CS%edgeValueWrk )
-  call tridiagonal_system_1_memory_allocation ( nz, CS%edgeSlopeWrk )
+  call triDiagEdgeWorkAllocate( nz, CS%edgeValueWrk )
+  call triDiagSlopeWorkAllocate( nz, CS%edgeSlopeWrk )
 
   ! Target values
   allocate ( CS%target_values(nz+1) )
@@ -1656,8 +1657,8 @@ subroutine regridding_memory_deallocation ( CS )
   type(regridding_CS), intent(inout) :: CS
   
   ! Reclaim memory for the tridiagonal system
-  call tridiagonal_system_0_memory_deallocation ( CS%edgeValueWrk )
-  call tridiagonal_system_1_memory_deallocation ( CS%edgeSlopeWrk )
+  call triDiagEdgeWorkDeallocate( CS%edgeValueWrk )
+  call triDiagSlopeWorkDeallocate( CS%edgeSlopeWrk )
   
   ! Target values
   deallocate ( CS%target_values )
