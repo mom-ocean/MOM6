@@ -84,10 +84,6 @@ type, public :: regridding_CS
   real, dimension(:), allocatable :: S_column
   real, dimension(:), allocatable :: p_column
 
-  ! Indicates whether regridding/remapping capabilities should be used at all
-  ! (it should be true to use regridding and false to NOT use regridding).
-  logical   :: use_regridding
-
   ! Indicates which grid to use in the vertical (z*, sigma, target interface
   ! densities)
   integer   :: regridding_scheme
@@ -106,8 +102,8 @@ type, public :: regridding_CS
 
   ! Indicates whether integrals for FV pressure gradient calculation will
   ! use reconstruction of T/S.
-  ! By default, it is true when use_regridding=True
-  logical   :: reconstructForPressure
+  ! By default, it is true if regridding has been initialized, otherwise false.
+  logical   :: reconstructForPressure = .false.
 
   ! The form of the reconstruction of T/S for FV pressure gradient calculation.
   ! By default, it is =1 (PLM)
@@ -128,7 +124,6 @@ public pressure_gradient_plm
 public pressure_gradient_ppm
 public usePressureReconstruction
 public pressureReconstructionScheme
-public useRegridding
 
 ! -----------------------------------------------------------------------------
 ! The following are private constants
@@ -196,61 +191,56 @@ subroutine initialize_regridding( param_file, G, h, h_aux, &
   integer       :: i, j
 
   verbose = .false.
-   
+ 
   ! Read regridding/remapping parameters from MOM_input file
   call initialize_regridding_options( param_file, CS )
+
+  ! Memory allocation for regridding
+  call regridding_memory_allocation( G, CS )
+
+  call remapping_init(param_file, G, CS%remapCS)
+
+  ! Check grid integrity with respect to minimum allowed thickness
+  do m = 1,size(h,4)
+    call check_grid_integrity( G, h(:,:,:,m), CS )
+  end do  
+
+  if ( verbose ) then
+      i = 20
+      j = 4
+      write(*,*) 'Before regridding/remapping', i, j
+      do k = 1,G%ke
+        write(*,*) h(i,j,k,1), tv%T(i,j,k)
+      end do
+      i = 22
+      j = 4
+      write(*,*) 'Before regridding/remapping', i, j
+      do k = 1,G%ke
+        write(*,*) h(i,j,k,1), tv%T(i,j,k)
+      end do
+  end if
+
+  ! Perform one regridding/remapping step -- This should NOT modify
+  ! neither the initial grid nor the initial cell averages. This
+  ! step is therefore not strictly necessary but is included for historical
+  ! reasons when I needed to check whether the combination 'initial 
+  ! conditions - regridding/remapping' was consistently implemented.
+  call regridding_main( G, h(:,:,:,1), h_aux, u, v, tv, CS )
   
-  ! If regridding must be used, the following steps are performed
-  if ( CS%use_regridding ) then 
-    
-    ! Memory allocation for regridding
-    call regridding_memory_allocation( G, CS )
-
-    call remapping_init(param_file, G, CS%remapCS)
-
-    ! Check grid integrity with respect to minimum allowed thickness
-    do m = 1,size(h,4)
-      call check_grid_integrity( G, h(:,:,:,m), CS )
-    end do  
-
-    if ( verbose ) then
-        i = 20
-        j = 4
-        write(*,*) 'Before regridding/remapping', i, j
-        do k = 1,G%ke
-          write(*,*) h(i,j,k,1), tv%T(i,j,k)
-        end do
-        i = 22
-        j = 4
-        write(*,*) 'Before regridding/remapping', i, j
-        do k = 1,G%ke
-          write(*,*) h(i,j,k,1), tv%T(i,j,k)
-        end do
-    end if
-
-    ! Perform one regridding/remapping step -- This should NOT modify
-    ! neither the initial grid nor the initial cell averages. This
-    ! step is therefore not strictly necessary but is included for historical
-    ! reasons when I needed to check whether the combination 'initial 
-    ! conditions - regridding/remapping' was consistently implemented.
-    call regridding_main( G, h(:,:,:,1), h_aux, u, v, tv, CS )
-    
-    if ( verbose ) then
-        i = 20
-        j = 4
-        write(*,*) 'After regridding/remapping', i, j
-        do k = 1,G%ke
-          write(*,*) h(i,j,k,1), tv%T(i,j,k)
-        end do
-        i = 22
-        j = 4
-        write(*,*) 'After regridding/remapping', i, j
-        do k = 1,G%ke
-          write(*,*) h(i,j,k,1), tv%T(i,j,k)
-        end do
-    end if
-  
-  end if ! use_regridding
+  if ( verbose ) then
+      i = 20
+      j = 4
+      write(*,*) 'After regridding/remapping', i, j
+      do k = 1,G%ke
+        write(*,*) h(i,j,k,1), tv%T(i,j,k)
+      end do
+      i = 22
+      j = 4
+      write(*,*) 'After regridding/remapping', i, j
+      do k = 1,G%ke
+        write(*,*) h(i,j,k,1), tv%T(i,j,k)
+      end do
+  end if
 
 end subroutine initialize_regridding
 
@@ -270,22 +260,6 @@ subroutine initialize_regridding_options( param_file, CS )
   ! Local variables
   character(len=40)  :: mod = "MOM_regridding" ! This module's name.
   character(len=40)  :: string ! Temporary string
-
-  ! This sets whether we want to use regridding or not. By default, 
-  ! regridding is NOT used but this can be overridden in the input
-  ! file
-  call get_param(param_file, mod, "USE_REGRIDDING", &
-                 CS%use_regridding , &
-                 "If True, use the ALE algorithm (regridding/remapping).\n"//&
-                 "If False, use the layered isopycnal algorithm.", default=.false. )
-
-  ! When not using ALE, we always use the layer-wise constant integration of T/S
-  ! in the FV pressure gradient integrals.
-  CS%reconstructForPressure = .false.
-
-  if (CS%use_regridding) then
-  ! The following options are only relevant when the property 'use_regridding'
-  ! is true.
 
   ! --- TYPE OF VERTICAL GRID ---
   ! This sets which kind of grid we want to use in the vertical. If none
@@ -368,8 +342,6 @@ subroutine initialize_regridding_options( param_file, CS )
                  CS%min_thickness, &
                  "When regridding, this is the minimum layer\n"//&
                  "thickness allowed.", default=1.e-3 )
-
-  endif
   
 end subroutine initialize_regridding_options
 
@@ -386,9 +358,7 @@ subroutine end_regridding(CS)
   type(regridding_CS), intent(inout) :: CS
   
   ! Deallocate memory used for the regridding
-  if ( CS%use_regridding ) then
-       call regridding_memory_deallocation( CS )
-  end if
+  call regridding_memory_deallocation( CS )
 
 end subroutine end_regridding
 
@@ -1686,11 +1656,6 @@ subroutine regridding_memory_deallocation( CS )
   call remapping_end(CS%remapCS)
 
 end subroutine regridding_memory_deallocation
-
-logical function useRegridding(CS)
-  type(regridding_CS), intent(in) :: CS
-  useRegridding=CS%use_regridding
-end function useRegridding
 
 logical function usePressureReconstruction(CS)
   type(regridding_CS), intent(in) :: CS

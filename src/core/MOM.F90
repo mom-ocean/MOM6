@@ -393,7 +393,6 @@ use MOM_dynamics_split_RK2, only : initialize_dyn_split_RK2
 use MOM_dynamics_unsplit_RK2, only : step_MOM_dyn_unsplit_RK2, register_restarts_dyn_unsplit_RK2
 use MOM_dynamics_unsplit_RK2, only : initialize_dyn_unsplit_RK2
 use MOM_regridding, only : initialize_regridding, end_regridding, regridding_main
-use MOM_regridding, only : useRegridding
 
 implicit none ; private
 
@@ -1100,6 +1099,12 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
                  "least NKML+NKBL+1 layers if BULKMIXEDLAYER is true. \n"//&
                  "The default is the same setting as ENABLE_THERMODYNAMICS.", &
                  default=CS%use_temperature)
+  call get_param(param_file, "MOM", "USE_REGRIDDING", &
+                 CS%useALEalgorithm , &
+                 "If True, use the ALE algorithm (regridding/remapping).\n"//&
+                 "If False, use the layered isopycnal algorithm.", default=.false. )
+  if (CS%useALEalgorithm .and. CS%bulkmixedlayer) call MOM_error(FATAL, &
+                 "MOM: BULKMIXEDLAYER can not currently be used with the ALE algotihrm.")
   call get_param(param_file, "MOM", "THICKNESSDIFFUSE", CS%thickness_diffuse, &
                  "If true, interfaces or isopycnal surfaces are diffused, \n"//&
                  "depending on the value of FULL_THICKNESSDIFFUSE.", &
@@ -1443,12 +1448,11 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call MEKE_init(Time, grid, param_file, diag, CS%MEKE_CSp, CS%MEKE)
   call VarMix_init(Time, grid, param_file, diag, CS%VarMix)
   ! Need an ALE CS !!!! -AJA
-  ALLOC_(CS%h_aux(isd:ied,jsd:jed,nz)); CS%h_aux(:,:,:) = 0.
-  call initialize_regridding(param_file, grid, h(:,:,:,:), CS%h_aux(:,:,:), &
+  if (CS%useALEalgorithm) then
+    ALLOC_(CS%h_aux(isd:ied,jsd:jed,nz)); CS%h_aux(:,:,:) = 0.
+    call initialize_regridding(param_file, grid, h(:,:,:,:), CS%h_aux(:,:,:), &
                              u(:,:,:,1), v(:,:,:,1), CS%tv, CS%regridding_opts)
-  CS%useALEalgorithm = useRegridding(CS%regridding_opts)
-  if (CS%useALEalgorithm .and. CS%bulkmixedlayer) call MOM_error(FATAL, &
-    "MOM:  BULKMIXEDLAYER can not currently be used with the ALE algotihrm.")
+  endif
 
   call MOM_diagnostics_init(MOM_internal_state, Time, grid, param_file, &
                              diag, CS%diagnostics_CSp)
@@ -2249,7 +2253,10 @@ end subroutine smooth_SSH
 subroutine MOM_end(CS)
   type(MOM_control_struct), pointer      :: CS
 
-  call end_regridding(CS%regridding_opts)
+  if (CS%useALEalgorithm) then
+    DEALLOC_(CS%h_aux)
+    call end_regridding(CS%regridding_opts)
+  endif
 
   DEALLOC_(CS%u) ; DEALLOC_(CS%v) ; DEALLOC_(CS%h)
   DEALLOC_(CS%uh) ; DEALLOC_(CS%vh)
