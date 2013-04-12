@@ -32,7 +32,7 @@ NIGLOBAL = 128                  !
                                 ! this is set in MOM_memory.h at compile time.
 NJGLOBAL = 4                    !
                                 ! The total number of thickness grid points in the
-                                ! x-direction in the physical domain. With STATIC_MEMORY_
+                                ! y-direction in the physical domain. With STATIC_MEMORY_
                                 ! this is set in MOM_memory.h at compile time.
 !NIPROC = 2                     !
                                 ! The number of processors in the x-direction. With
@@ -66,6 +66,9 @@ BULKMIXEDLAYER = False          !   [Boolean] default = True
                                 ! NKML+NKBL have variable densities. There must be at
                                 ! least NKML+NKBL+1 layers if BULKMIXEDLAYER is true.
                                 ! The default is the same setting as ENABLE_THERMODYNAMICS.
+USE_REGRIDDING = True           !   [Boolean] default = False
+                                ! If True, use the ALE algorithm (regridding/remapping).
+                                ! If False, use the layered isopycnal algorithm.
 DT = 150.0                      !   [s]
                                 ! The (baroclinic) dynamics time step.  The time-step that
                                 ! is actually used will be an integer fraction of the
@@ -292,9 +295,6 @@ KHTH = 1.0E-04                  !   [m2 s-1] default = 0.0
                                 ! The background horizontal thickness diffusivity.
     !  Parameters of module MOM_MEKE
     !  Parameters of module MOM_lateral_mixing_coeffs
-USE_REGRIDDING = True           !   [Boolean] default = False
-                                ! If True, use the ALE algorithm (regridding/remapping).
-                                ! If False, use the layered isopycnal algorithm.
 REGRIDDING_COORDINATE_MODE = "RHO" ! default = "LAYER"
                                 ! Coordinate mode for vertical regridding.
                                 ! Choose among the following possibilities:

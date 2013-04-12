@@ -37,7 +37,7 @@ NIGLOBAL = 360                  !
                                 ! this is set in MOM_memory.h at compile time.
 NJGLOBAL = 210                  !
                                 ! The total number of thickness grid points in the
-                                ! x-direction in the physical domain. With STATIC_MEMORY_
+                                ! y-direction in the physical domain. With STATIC_MEMORY_
                                 ! this is set in MOM_memory.h at compile time.
 !NIPROC = 8                     !
                                 ! The number of processors in the x-direction. With
@@ -104,6 +104,9 @@ BULKMIXEDLAYER = True           !   [Boolean] default = True
                                 ! NKML+NKBL have variable densities. There must be at
                                 ! least NKML+NKBL+1 layers if BULKMIXEDLAYER is true.
                                 ! The default is the same setting as ENABLE_THERMODYNAMICS.
+USE_REGRIDDING = False          !   [Boolean] default = False
+                                ! If True, use the ALE algorithm (regridding/remapping).
+                                ! If False, use the layered isopycnal algorithm.
 THICKNESSDIFFUSE = True         !   [Boolean] default = False
                                 ! If true, interfaces or isopycnal surfaces are diffused,
                                 ! depending on the value of FULL_THICKNESSDIFFUSE.
@@ -942,9 +945,6 @@ KH_RES_FN_POWER = 2             !   [nondim] default = 2
                                 ! positive integer may be used, although even integers
                                 ! are more efficient to calculate.  Setting this greater
                                 ! than 100 results in a step-function being used.
-USE_REGRIDDING = False          !   [Boolean] default = False
-                                ! If True, use the ALE algorithm (regridding/remapping).
-                                ! If False, use the layered isopycnal algorithm.
 Z_OUTPUT_GRID_FILE = "OM3_zgrid.nc" ! default = ""
                                 ! The file that specifies the vertical grid for
                                 ! depth-space diagnostics, or blank to disable

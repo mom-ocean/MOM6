@@ -667,7 +667,7 @@ subroutine MOM_domains_init(MOM_dom, param_file, min_halo, symmetric)
                  "this is set in MOM_memory.h at compile time.", default=NIGLOBAL_)
   call get_param(param_file, mod, "NJGLOBAL", MOM_dom%njglobal, &
                  "The total number of thickness grid points in the \n"//&
-                 "x-direction in the physical domain. With STATIC_MEMORY_ \n"//&
+                 "y-direction in the physical domain. With STATIC_MEMORY_ \n"//&
                  "this is set in MOM_memory.h at compile time.", default=NJGLOBAL_)
   if (MOM_dom%niglobal /= NIGLOBAL_) call MOM_error(FATAL,"MOM_domains_init: " // &
    "static mismatch for NIGLOBAL_ domain size. Header file does not match input namelist")
@@ -688,7 +688,7 @@ subroutine MOM_domains_init(MOM_dom, param_file, min_halo, symmetric)
                  fail_if_missing=.true.)
   call get_param(param_file, mod, "NJGLOBAL", MOM_dom%njglobal, &
                  "The total number of thickness grid points in the \n"//&
-                 "x-direction in the physical domain. With STATIC_MEMORY_ \n"//&
+                 "y-direction in the physical domain. With STATIC_MEMORY_ \n"//&
                  "this is set in MOM_memory.h at compile time.", &
                  fail_if_missing=.true.)
 #endif

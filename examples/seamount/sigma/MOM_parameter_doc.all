@@ -37,7 +37,7 @@ NIGLOBAL = 40                   !
                                 ! this is set in MOM_memory.h at compile time.
 NJGLOBAL = 2                    !
                                 ! The total number of thickness grid points in the
-                                ! x-direction in the physical domain. With STATIC_MEMORY_
+                                ! y-direction in the physical domain. With STATIC_MEMORY_
                                 ! this is set in MOM_memory.h at compile time.
 !NIPROC = 4                     !
                                 ! The number of processors in the x-direction. With
@@ -104,6 +104,9 @@ BULKMIXEDLAYER = False          !   [Boolean] default = True
                                 ! NKML+NKBL have variable densities. There must be at
                                 ! least NKML+NKBL+1 layers if BULKMIXEDLAYER is true.
                                 ! The default is the same setting as ENABLE_THERMODYNAMICS.
+USE_REGRIDDING = True           !   [Boolean] default = False
+                                ! If True, use the ALE algorithm (regridding/remapping).
+                                ! If False, use the layered isopycnal algorithm.
 THICKNESSDIFFUSE = False        !   [Boolean] default = False
                                 ! If true, interfaces or isopycnal surfaces are diffused,
                                 ! depending on the value of FULL_THICKNESSDIFFUSE.
@@ -796,9 +799,6 @@ RESOLN_SCALED_KHTR = False      !   [Boolean] default = False
                                 ! If true, the epipycnal tracer diffusivity is scaled
                                 ! away when the first baroclinic deformation radius is
                                 ! well resolved.
-USE_REGRIDDING = True           !   [Boolean] default = False
-                                ! If True, use the ALE algorithm (regridding/remapping).
-                                ! If False, use the layered isopycnal algorithm.
 REGRIDDING_COORDINATE_MODE = "SIGMA" ! default = "LAYER"
                                 ! Coordinate mode for vertical regridding.
                                 ! Choose among the following possibilities:

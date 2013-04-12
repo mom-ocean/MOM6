@@ -30,7 +30,7 @@ NIGLOBAL = 40                   !
                                 ! this is set in MOM_memory.h at compile time.
 NJGLOBAL = 2                    !
                                 ! The total number of thickness grid points in the
-                                ! x-direction in the physical domain. With STATIC_MEMORY_
+                                ! y-direction in the physical domain. With STATIC_MEMORY_
                                 ! this is set in MOM_memory.h at compile time.
 !NIPROC = 4                     !
                                 ! The number of processors in the x-direction. With
