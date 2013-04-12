@@ -70,11 +70,11 @@ subroutine P1M_interpolation( grid, u, ppoly )
   N = grid%nb_cells
 
   ! Bound edge values (routine found in 'edge_values.F90')
-  call bound_edge_values ( grid, u, ppoly%E )
+  call bound_edge_values( grid, u, ppoly%E )
   
   ! Systematically average discontinuous edge values (routine found in
   ! 'edge_values.F90')
-  call average_discontinuous_edge_values ( grid, u, ppoly%E )
+  call average_discontinuous_edge_values( grid, u, ppoly%E )
   
   ! Loop on interior cells to build interpolants
   do k = 1,N

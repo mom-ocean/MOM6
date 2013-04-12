@@ -22,7 +22,7 @@ contains
 ! -----------------------------------------------------------------------------
 ! Pointwise evaluation of a polynomial
 ! -----------------------------------------------------------------------------
-real function evaluation_polynomial ( coefficients, nb_coefficients, x )
+real function evaluation_polynomial( coefficients, nb_coefficients, x )
 ! -----------------------------------------------------------------------------
 ! The polynomial is defined by the coefficients contained in the 
 ! array of the same name, as follows: C(1) + C(2)x + C(3)x^2 + C(4)x^3 + ... 
@@ -54,7 +54,7 @@ end function evaluation_polynomial
 ! -----------------------------------------------------------------------------
 ! Exact integration of polynomial of degree n
 ! -----------------------------------------------------------------------------
-real function integration_polynomial ( xi0, xi1, C, n )
+real function integration_polynomial( xi0, xi1, C, n )
 ! -----------------------------------------------------------------------------
 ! Exact integration of a polynomial of degree n over the interval [xi0,xi1].
 ! The array of coefficients (C) must be of size n+1, where n is the degree of

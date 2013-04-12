@@ -46,7 +46,7 @@ contains
 !------------------------------------------------------------------------------
 ! Bound edge values by neighboring cell averages
 !------------------------------------------------------------------------------
-subroutine bound_edge_values ( grid, u, edge_values )
+subroutine bound_edge_values( grid, u, edge_values )
 ! ------------------------------------------------------------------------------
 ! In this routine, we loop on all cells to bound their left and right
 ! edge values by the cell averages. That is, the left edge value must lie
@@ -115,7 +115,7 @@ subroutine bound_edge_values ( grid, u, edge_values )
     sigma_r = 2.0 * ( u_r - u_c ) / h_c
     
     if ( (sigma_l * sigma_r) .GT. 0.0 ) then
-      slope = sign ( min (abs(sigma_l),abs(sigma_c),abs(sigma_r)), sigma_c )
+      slope = sign( min(abs(sigma_l),abs(sigma_c),abs(sigma_r)), sigma_c )
     else
       slope = 0.0
     end if
@@ -127,11 +127,11 @@ subroutine bound_edge_values ( grid, u, edge_values )
     slope = slope * h_c * 0.5
     
     if ( (u_l-u0_l)*(u0_l-u_c) .LT. 0.0 ) then
-      u0_l = u_c - sign ( min ( abs(slope), abs(u0_l-u_c) ), slope )
+      u0_l = u_c - sign( min( abs(slope), abs(u0_l-u_c) ), slope )
     end if
     
     if ( (u_r-u0_r)*(u0_r-u_c) .LT. 0.0 ) then
-      u0_r = u_c + sign ( min ( abs(slope), abs(u0_r-u_c) ), slope )
+      u0_r = u_c + sign( min( abs(slope), abs(u0_r-u_c) ), slope )
     end if
 
     ! Store edge values
@@ -146,7 +146,7 @@ end subroutine bound_edge_values
 !------------------------------------------------------------------------------
 ! Average discontinuous edge values (systematically)
 !------------------------------------------------------------------------------
-subroutine average_discontinuous_edge_values ( grid, u, edge_values )
+subroutine average_discontinuous_edge_values( grid, u, edge_values )
 ! ------------------------------------------------------------------------------
 ! For each interior edge, check whether the edge values are discontinuous.
 ! If so, compute the average and replace the edge values by the average.!
@@ -189,7 +189,7 @@ end subroutine average_discontinuous_edge_values
 !------------------------------------------------------------------------------
 ! Check discontinuous edge values and take average is not monotonic
 !------------------------------------------------------------------------------
-subroutine check_discontinuous_edge_values ( grid, u, edge_values )
+subroutine check_discontinuous_edge_values( grid, u, edge_values )
 ! ------------------------------------------------------------------------------
 ! For each interior edge, check whether the edge values are discontinuous.
 ! If so and if they are not monotonic, replace each edge value by their average.
@@ -240,7 +240,7 @@ end subroutine check_discontinuous_edge_values
 !------------------------------------------------------------------------------
 ! Compute h2 edge values (explicit second order accurate)
 !------------------------------------------------------------------------------
-subroutine edge_values_explicit_h2 ( grid, u, edge_values )
+subroutine edge_values_explicit_h2( grid, u, edge_values )
 ! ------------------------------------------------------------------------------
 ! Compute edge values based on second-order explicit estimates.
 ! These estimates are based on a straight line spanning two cells and evaluated
@@ -295,7 +295,7 @@ end subroutine edge_values_explicit_h2
 !------------------------------------------------------------------------------
 ! Compute h4 edge values (explicit fourth order accurate)
 !------------------------------------------------------------------------------
-subroutine edge_values_explicit_h4 ( grid, u, edge_values )
+subroutine edge_values_explicit_h4( grid, u, edge_values )
 ! -----------------------------------------------------------------------------
 ! Compute edge values based on fourth-order explicit estimates.
 ! These estimates are based on a cubic interpolant spanning four cells 
@@ -386,13 +386,13 @@ subroutine edge_values_explicit_h4 ( grid, u, edge_values )
     
   end do    
 
-  call solve_linear_system ( A, B, C, 4 )
+  call solve_linear_system( A, B, C, 4 )
 
   ! First edge value
-  edge_values(1,1) = evaluation_polynomial ( C, 4, x(1) )
+  edge_values(1,1) = evaluation_polynomial( C, 4, x(1) )
   
   ! Second edge value
-  edge_values(1,2) = evaluation_polynomial ( C, 4, x(2) )
+  edge_values(1,2) = evaluation_polynomial( C, 4, x(2) )
   edge_values(2,1) = edge_values(1,2)
 
   ! Determine last two edge values
@@ -411,13 +411,13 @@ subroutine edge_values_explicit_h4 ( grid, u, edge_values )
     
   end do    
 
-  call solve_linear_system ( A, B, C, 4 )
+  call solve_linear_system( A, B, C, 4 )
   
   ! Last edge value
-  edge_values(N,2) = evaluation_polynomial ( C, 4, x(5) )
+  edge_values(N,2) = evaluation_polynomial( C, 4, x(5) )
   
   ! Second to last edge value
-  edge_values(N,1) = evaluation_polynomial ( C, 4, x(4) )
+  edge_values(N,1) = evaluation_polynomial( C, 4, x(4) )
   
   edge_values(N-1,2) = edge_values(N,1)
 
@@ -427,7 +427,7 @@ end subroutine edge_values_explicit_h4
 !------------------------------------------------------------------------------
 ! Compute ih4 edge values (implicit fourth order accurate)
 !------------------------------------------------------------------------------
-subroutine edge_values_implicit_h4 ( grid, work, u, edge_values )
+subroutine edge_values_implicit_h4( grid, work, u, edge_values )
 ! -----------------------------------------------------------------------------
 ! Compute edge values based on fourth-order implicit estimates.
 !
@@ -517,11 +517,11 @@ subroutine edge_values_implicit_h4 ( grid, work, u, edge_values )
     
   end do    
 
-  call solve_linear_system ( Asys, Bsys, Csys, 4 )
+  call solve_linear_system( Asys, Bsys, Csys, 4 )
   
   work%tri_d(1) = 1.0
   work%tri_u(1) = 0.0
-  work%tri_b(1) = evaluation_polynomial ( Csys, 4, x(1) )        ! first edge value
+  work%tri_b(1) = evaluation_polynomial( Csys, 4, x(1) )        ! first edge value
   
   ! Boundary conditions: right boundary
   x(1) = 0.0
@@ -539,14 +539,14 @@ subroutine edge_values_implicit_h4 ( grid, work, u, edge_values )
     
   end do    
 
-  call solve_linear_system ( Asys, Bsys, Csys, 4 )
+  call solve_linear_system( Asys, Bsys, Csys, 4 )
   
   work%tri_l(N+1) = 0.0
   work%tri_d(N+1) = 1.0
-  work%tri_b(N+1) = evaluation_polynomial ( Csys, 4, x(5) )      ! last edge value
+  work%tri_b(N+1) = evaluation_polynomial( Csys, 4, x(5) )      ! last edge value
 
   ! Solve tridiagonal system and assign edge values
-  call solve_tridiagonal_system ( work%tri_l, work%tri_d, work%tri_u, work%tri_b, work%tri_x, N+1 )
+  call solve_tridiagonal_system( work%tri_l, work%tri_d, work%tri_u, work%tri_b, work%tri_x, N+1 )
 
   do i = 2,N
     edge_values(i,1)   = work%tri_x(i)
@@ -561,7 +561,7 @@ end subroutine edge_values_implicit_h4
 !------------------------------------------------------------------------------
 ! Compute ih6 edge values (implicit sixth order accurate)
 !------------------------------------------------------------------------------
-subroutine edge_values_implicit_h6 ( grid, work, u, edge_values )
+subroutine edge_values_implicit_h6( grid, work, u, edge_values )
 ! -----------------------------------------------------------------------------
 ! Sixth-order implicit estimates of edge values are based on a four-cell, 
 ! three-edge stencil. A tridiagonal system is set up and is based on 
@@ -721,7 +721,7 @@ subroutine edge_values_implicit_h6 ( grid, work, u, edge_values )
     
     Bsys(:) = (/ -1.0, 0.0, 0.0, 0.0, 0.0, 0.0 /)
   
-    call solve_linear_system ( Asys, Bsys, Csys, 6 )
+    call solve_linear_system( Asys, Bsys, Csys, 6 )
 
     alpha = Csys(1)
     beta  = Csys(2)
@@ -835,7 +835,7 @@ subroutine edge_values_implicit_h6 ( grid, work, u, edge_values )
     
   Bsys(:) = (/ -1.0, h1, -0.5*h1_2, h1_3/6.0, -h1_4/24.0, h1_5/120.0 /)
 
-  call solve_linear_system ( Asys, Bsys, Csys, 6 )
+  call solve_linear_system( Asys, Bsys, Csys, 6 )
 
   alpha = Csys(1)
   beta  = Csys(2)
@@ -865,12 +865,12 @@ subroutine edge_values_implicit_h6 ( grid, work, u, edge_values )
     
   end do    
 
-  call solve_linear_system ( Asys, Bsys, Csys, 6 )
+  call solve_linear_system( Asys, Bsys, Csys, 6 )
   
   work%tri_l(1) = 0.0
   work%tri_d(1) = 1.0
   work%tri_u(1) = 0.0
-  work%tri_b(1) = evaluation_polynomial ( Csys, 6, x(1) )        ! first edge value
+  work%tri_b(1) = evaluation_polynomial( Csys, 6, x(1) )        ! first edge value
   
   ! Use a left-biased stencil for the second to last row
   
@@ -970,7 +970,7 @@ subroutine edge_values_implicit_h6 ( grid, work, u, edge_values )
 
   Bsys(:) = (/ -1.0, -h2, -0.5*h2_2, -h2_3/6.0, -h2_4/24.0, -h2_5/120.0 /)
 
-  call solve_linear_system ( Asys, Bsys, Csys, 6 )
+  call solve_linear_system( Asys, Bsys, Csys, 6 )
 
   alpha = Csys(1)
   beta  = Csys(2)
@@ -1000,15 +1000,15 @@ subroutine edge_values_implicit_h6 ( grid, work, u, edge_values )
     
   end do    
 
-  call solve_linear_system ( Asys, Bsys, Csys, 6 )
+  call solve_linear_system( Asys, Bsys, Csys, 6 )
   
   work%tri_l(N+1) = 0.0
   work%tri_d(N+1) = 1.0
   work%tri_u(N+1) = 0.0
-  work%tri_b(N+1) = evaluation_polynomial ( Csys, 6, x(7) )      ! last edge value
+  work%tri_b(N+1) = evaluation_polynomial( Csys, 6, x(7) )      ! last edge value
   
   ! Solve tridiagonal system and assign edge values
-  call solve_tridiagonal_system ( work%tri_l, work%tri_d, work%tri_u, work%tri_b, work%tri_x, N+1 )
+  call solve_tridiagonal_system( work%tri_l, work%tri_d, work%tri_u, work%tri_b, work%tri_x, N+1 )
 
   do i = 2,N
     edge_values(i,1)   = work%tri_x(i)
@@ -1034,11 +1034,11 @@ subroutine triDiagEdgeWorkAllocate( N, work )
   integer, intent(in)   :: N
   type(edgeValueArrays), intent(inout)  :: work          ! Work space
 
-  allocate ( work%tri_l(N+1) )
-  allocate ( work%tri_d(N+1) )
-  allocate ( work%tri_u(N+1) )
-  allocate ( work%tri_b(N+1) )
-  allocate ( work%tri_x(N+1) )
+  allocate( work%tri_l(N+1) )
+  allocate( work%tri_d(N+1) )
+  allocate( work%tri_u(N+1) )
+  allocate( work%tri_b(N+1) )
+  allocate( work%tri_x(N+1) )
 
 end subroutine triDiagEdgeWorkAllocate
 
@@ -1048,11 +1048,11 @@ end subroutine triDiagEdgeWorkAllocate
 subroutine triDiagEdgeWorkDeallocate( work )
   type(edgeValueArrays), intent(inout)  :: work          ! Work space
 
-  deallocate ( work%tri_l )
-  deallocate ( work%tri_d )
-  deallocate ( work%tri_u )
-  deallocate ( work%tri_b )
-  deallocate ( work%tri_x )
+  deallocate( work%tri_l )
+  deallocate( work%tri_d )
+  deallocate( work%tri_u )
+  deallocate( work%tri_b )
+  deallocate( work%tri_x )
 
 end subroutine triDiagEdgeWorkDeallocate
 

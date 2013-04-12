@@ -24,7 +24,7 @@ contains
 !------------------------------------------------------------------------------
 ! grid1Dinit
 ! -----------------------------------------------------------------------------
-subroutine grid1Dconstruct ( grid, nb_cells )
+subroutine grid1Dconstruct( grid, nb_cells )
 !------------------------------------------------------------------------------
 ! Initialization (memory allocation) of a grid
 !------------------------------------------------------------------------------
@@ -36,8 +36,8 @@ subroutine grid1Dconstruct ( grid, nb_cells )
   grid%nb_cells = nb_cells
 
   ! Memory allocation
-  allocate ( grid%h(nb_cells) )
-  allocate ( grid%x(nb_cells+1) )
+  allocate( grid%h(nb_cells) )
+  allocate( grid%x(nb_cells+1) )
 
   ! Set all entries to zero
   grid%h(:) = 0.0
@@ -55,8 +55,8 @@ subroutine grid1Ddestroy( grid )
 
   type(grid1D_t), intent(inout) :: grid
 
-  deallocate ( grid%h )
-  deallocate ( grid%x )
+  deallocate( grid%h )
+  deallocate( grid%x )
 
 end subroutine grid1Ddestroy
 

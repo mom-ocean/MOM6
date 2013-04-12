@@ -31,7 +31,7 @@ contains
 !------------------------------------------------------------------------------
 ! ppoly_init
 ! -----------------------------------------------------------------------------
-subroutine ppoly_init ( ppoly, nb_cells, degree )
+subroutine ppoly_init( ppoly, nb_cells, degree )
 !------------------------------------------------------------------------------
 ! Initialization (memory allocation) for a piecewise polynomial ppoly.
 !------------------------------------------------------------------------------
@@ -40,9 +40,9 @@ subroutine ppoly_init ( ppoly, nb_cells, degree )
   integer, intent(in)          :: nb_cells
   integer, intent(in)          :: degree
 
-  allocate ( ppoly%E(nb_cells,2) )
-  allocate ( ppoly%S(nb_cells,2) )
-  allocate ( ppoly%coefficients(nb_cells,degree+1) )
+  allocate( ppoly%E(nb_cells,2) )
+  allocate( ppoly%S(nb_cells,2) )
+  allocate( ppoly%coefficients(nb_cells,degree+1) )
   ppoly%nb_cells = nb_cells
 
 end subroutine ppoly_init
@@ -50,16 +50,16 @@ end subroutine ppoly_init
 !------------------------------------------------------------------------------
 ! ppoly_destroy
 ! -----------------------------------------------------------------------------
-subroutine ppoly_destroy ( ppoly )
+subroutine ppoly_destroy( ppoly )
 !------------------------------------------------------------------------------
 ! Reclaim previously allocated memory for a piecewise polynomial ppoly.
 !------------------------------------------------------------------------------
 
   type(ppoly_t), intent(inout) :: ppoly
 
-  deallocate ( ppoly%E )
-  deallocate ( ppoly%S )
-  deallocate ( ppoly%coefficients )
+  deallocate( ppoly%E )
+  deallocate( ppoly%S )
+  deallocate( ppoly%coefficients )
 
 end subroutine ppoly_destroy
 

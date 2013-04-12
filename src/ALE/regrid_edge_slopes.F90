@@ -43,7 +43,7 @@ contains
 !------------------------------------------------------------------------------
 ! Compute ih4 edge slopes (implicit third order accurate)
 !------------------------------------------------------------------------------
-subroutine edge_slopes_implicit_h3 ( grid, work, u, edge_slopes )
+subroutine edge_slopes_implicit_h3( grid, work, u, edge_slopes )
 ! -----------------------------------------------------------------------------
 ! Compute edge slopes based on third-order implicit estimates. Note that
 ! the estimates are fourth-order accurate on uniform grids
@@ -139,7 +139,7 @@ subroutine edge_slopes_implicit_h3 ( grid, work, u, edge_slopes )
     
   end do    
 
-  call solve_linear_system ( Asys, Bsys, Csys, 4 )
+  call solve_linear_system( Asys, Bsys, Csys, 4 )
   
   Dsys(1) = Csys(2)
   Dsys(2) = 2.0 * Csys(3)
@@ -147,7 +147,7 @@ subroutine edge_slopes_implicit_h3 ( grid, work, u, edge_slopes )
   
   work%tri_d(1) = 1.0
   work%tri_u(1) = 0.0
-  work%tri_b(1) = evaluation_polynomial ( Dsys, 3, x(1) )        ! first edge slope
+  work%tri_b(1) = evaluation_polynomial( Dsys, 3, x(1) )        ! first edge slope
   
   ! Boundary conditions: right boundary
   x(1) = 0.0
@@ -165,7 +165,7 @@ subroutine edge_slopes_implicit_h3 ( grid, work, u, edge_slopes )
     
   end do    
 
-  call solve_linear_system ( Asys, Bsys, Csys, 4 )
+  call solve_linear_system( Asys, Bsys, Csys, 4 )
   
   Dsys(1) = Csys(2)
   Dsys(2) = 2.0 * Csys(3)
@@ -173,10 +173,10 @@ subroutine edge_slopes_implicit_h3 ( grid, work, u, edge_slopes )
   
   work%tri_l(N+1) = 0.0
   work%tri_d(N+1) = 1.0
-  work%tri_b(N+1) = evaluation_polynomial ( Dsys, 3, x(5) )      ! last edge slope
+  work%tri_b(N+1) = evaluation_polynomial( Dsys, 3, x(5) )      ! last edge slope
 
   ! Solve tridiagonal system and assign edge values
-  call solve_tridiagonal_system ( work%tri_l, work%tri_d, work%tri_u, work%tri_b, work%tri_x, N+1 )
+  call solve_tridiagonal_system( work%tri_l, work%tri_d, work%tri_u, work%tri_b, work%tri_x, N+1 )
 
   do i = 2,N
     edge_slopes(i,1)   = work%tri_x(i)
@@ -191,7 +191,7 @@ end subroutine edge_slopes_implicit_h3
 !------------------------------------------------------------------------------
 ! Compute ih5 edge values (implicit fifth order accurate)
 !------------------------------------------------------------------------------
-subroutine edge_slopes_implicit_h5 ( grid, work, u, edge_slopes )
+subroutine edge_slopes_implicit_h5( grid, work, u, edge_slopes )
 ! -----------------------------------------------------------------------------
 ! Fifth-order implicit estimates of edge values are based on a four-cell, 
 ! three-edge stencil. A tridiagonal system is set up and is based on 
@@ -352,7 +352,7 @@ subroutine edge_slopes_implicit_h5 ( grid, work, u, edge_slopes )
     
     Bsys(:) = (/ 0.0, -1.0, 0.0, 0.0, 0.0, 0.0 /)
   
-    call solve_linear_system ( Asys, Bsys, Csys, 6 )
+    call solve_linear_system( Asys, Bsys, Csys, 6 )
 
     alpha = Csys(1)
     beta  = Csys(2)
@@ -465,7 +465,7 @@ subroutine edge_slopes_implicit_h5 ( grid, work, u, edge_slopes )
 
   Bsys(:) = (/ 0.0, -1.0, -h1, h1_2/2.0, -h1_3/6.0, h1_4/24.0 /)
 
-  call solve_linear_system ( Asys, Bsys, Csys, 6 )
+  call solve_linear_system( Asys, Bsys, Csys, 6 )
 
   alpha = Csys(1)
   beta  = Csys(2)
@@ -495,7 +495,7 @@ subroutine edge_slopes_implicit_h5 ( grid, work, u, edge_slopes )
     
   end do    
 
-  call solve_linear_system ( Asys, Bsys, Csys, 6 )
+  call solve_linear_system( Asys, Bsys, Csys, 6 )
   
   Dsys(1) = Csys(2)
   Dsys(2) = 2.0 * Csys(3)
@@ -506,7 +506,7 @@ subroutine edge_slopes_implicit_h5 ( grid, work, u, edge_slopes )
   work%tri_d(1) = 0.0
   work%tri_d(1) = 1.0
   work%tri_u(1) = 0.0
-  work%tri_b(1) = evaluation_polynomial ( Dsys, 5, x(1) )        ! first edge value
+  work%tri_b(1) = evaluation_polynomial( Dsys, 5, x(1) )        ! first edge value
   
   ! Use a left-biased stencil for the second to last row
   
@@ -605,7 +605,7 @@ subroutine edge_slopes_implicit_h5 ( grid, work, u, edge_slopes )
 
   Bsys(:) = (/ 0.0, -1.0, h2, h2_2/2.0, h2_3/6.0, h2_4/24.0 /)
 
-  call solve_linear_system ( Asys, Bsys, Csys, 6 )
+  call solve_linear_system( Asys, Bsys, Csys, 6 )
 
   alpha = Csys(1)
   beta  = Csys(2)
@@ -635,7 +635,7 @@ subroutine edge_slopes_implicit_h5 ( grid, work, u, edge_slopes )
     
   end do    
 
-  call solve_linear_system ( Asys, Bsys, Csys, 6 )
+  call solve_linear_system( Asys, Bsys, Csys, 6 )
   
   Dsys(1) = Csys(2)
   Dsys(2) = 2.0 * Csys(3)
@@ -646,10 +646,10 @@ subroutine edge_slopes_implicit_h5 ( grid, work, u, edge_slopes )
   work%tri_l(N+1) = 0.0
   work%tri_d(N+1) = 1.0
   work%tri_u(N+1) = 0.0
-  work%tri_b(N+1) = evaluation_polynomial ( Dsys, 5, x(7) )      ! last edge value
+  work%tri_b(N+1) = evaluation_polynomial( Dsys, 5, x(7) )      ! last edge value
 
   ! Solve tridiagonal system and assign edge values
-  call solve_tridiagonal_system ( work%tri_l, work%tri_d, work%tri_u, work%tri_b, work%tri_x, N+1 )
+  call solve_tridiagonal_system( work%tri_l, work%tri_d, work%tri_u, work%tri_b, work%tri_x, N+1 )
 
   do i = 2,N
     edge_slopes(i,1)   = work%tri_x(i)
@@ -675,11 +675,11 @@ subroutine triDiagSlopeWorkAllocate( N, work )
   integer, intent(in)   :: N
   type(edgeSlopeArrays), intent(inout) :: work
 
-  allocate ( work%tri_l(N+1) )
-  allocate ( work%tri_d(N+1) )
-  allocate ( work%tri_u(N+1) )
-  allocate ( work%tri_b(N+1) )
-  allocate ( work%tri_x(N+1) )
+  allocate( work%tri_l(N+1) )
+  allocate( work%tri_d(N+1) )
+  allocate( work%tri_u(N+1) )
+  allocate( work%tri_b(N+1) )
+  allocate( work%tri_x(N+1) )
 
 end subroutine triDiagSlopeWorkAllocate
 
@@ -689,11 +689,11 @@ end subroutine triDiagSlopeWorkAllocate
 subroutine triDiagSlopeWorkDeallocate( work )
   type(edgeSlopeArrays), intent(inout) :: work
 
-  deallocate ( work%tri_l )
-  deallocate ( work%tri_d )
-  deallocate ( work%tri_u )
-  deallocate ( work%tri_b )
-  deallocate ( work%tri_x )
+  deallocate( work%tri_l )
+  deallocate( work%tri_d )
+  deallocate( work%tri_u )
+  deallocate( work%tri_b )
+  deallocate( work%tri_x )
 
 end subroutine triDiagSlopeWorkDeallocate
 

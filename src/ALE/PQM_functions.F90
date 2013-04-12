@@ -124,10 +124,10 @@ subroutine PQM_limiter( grid, u, ppoly )
   N = grid%nb_cells
 
   ! Bound edge values
-  call bound_edge_values ( grid, u, ppoly%E )
+  call bound_edge_values( grid, u, ppoly%E )
 
   ! Make discontinuous edge values monotonic (thru averaging)
-  call check_discontinuous_edge_values ( grid, u, ppoly%E )
+  call check_discontinuous_edge_values( grid, u, ppoly%E )
 
   ! Loop on interior cells to apply the PQM limiter
   do k = 2,N-1
@@ -158,7 +158,7 @@ subroutine PQM_limiter( grid, u, ppoly )
     sigma_r = 2.0 * ( u_r - u_c ) / h_c
 
     if ( (sigma_l * sigma_r) .GT. 0.0 ) then
-      slope = sign ( min (abs(sigma_l),abs(sigma_c),abs(sigma_r)), sigma_c )
+      slope = sign( min(abs(sigma_l),abs(sigma_c),abs(sigma_r)), sigma_c )
     else
       slope = 0.0
     end if
@@ -201,7 +201,7 @@ subroutine PQM_limiter( grid, u, ppoly )
       ! Check whether inflexion points exist
       if (( alpha1 .ne. 0.0 ) .and. ( rho .ge. 0.0 )) then
       
-        sqrt_rho = sqrt ( rho )
+        sqrt_rho = sqrt( rho )
     
         x1 = 0.5 * ( - alpha2 - sqrt_rho ) / alpha1
         x2 = 0.5 * ( - alpha2 + sqrt_rho ) / alpha1
@@ -644,7 +644,7 @@ subroutine PQM_boundary_extrapolation_v1( grid, u, ppoly )
   ! so that both inflexion points coalesce on the left edge.
   if (( alpha1 .ne. 0.0 ) .and. ( rho .ge. 0.0 )) then
     
-    sqrt_rho = sqrt ( rho )
+    sqrt_rho = sqrt( rho )
     
     x1 = 0.5 * ( - alpha2 - sqrt_rho ) / alpha1
     if ( (x1 .gt. 0.0) .and. (x1 .lt. 1.0) ) then
@@ -797,7 +797,7 @@ subroutine PQM_boundary_extrapolation_v1( grid, u, ppoly )
   ! so that both inflexion points coalesce on the right edge.
   if (( alpha1 .ne. 0.0 ) .and. ( rho .ge. 0.0 )) then
     
-    sqrt_rho = sqrt ( rho )
+    sqrt_rho = sqrt( rho )
     
     x1 = 0.5 * ( - alpha2 - sqrt_rho ) / alpha1
     if ( (x1 .gt. 0.0) .and. (x1 .lt. 1.0) ) then

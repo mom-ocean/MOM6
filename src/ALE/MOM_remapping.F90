@@ -80,7 +80,7 @@ contains
 !------------------------------------------------------------------------------
 ! General remapping routine 
 !------------------------------------------------------------------------------
-subroutine remapping_main ( CS, G, h, h_new, tv, u, v )
+subroutine remapping_main( CS, G, h, h_new, tv, u, v )
 !------------------------------------------------------------------------------
 ! This routine takes care of remapping all variable between the old and the
 ! new grids. When velocity components need to be remapped, thicknesses at
@@ -216,7 +216,7 @@ end subroutine remapping_main
 !------------------------------------------------------------------------------
 ! Remapping core routine
 !------------------------------------------------------------------------------
-subroutine remapping_core ( CS, grid0, u0, grid1, u1, ppoly )
+subroutine remapping_core( CS, grid0, u0, grid1, u1, ppoly )
 !------------------------------------------------------------------------------
 ! This routine is basic in that it simply takes two grids and remaps the
 ! field known on the first grid onto the second grid, following the rules
@@ -239,51 +239,51 @@ subroutine remapping_core ( CS, grid0, u0, grid1, u1, ppoly )
   select case ( CS%remapping_scheme )
     case ( REMAPPING_PCM )
       call PCM_reconstruction( grid0, u0, ppoly )
-      call remapping_integration ( grid0, u0, ppoly, grid1, u1, &
+      call remapping_integration( grid0, u0, ppoly, grid1, u1, &
                                    INTEGRATION_PCM )
     case ( REMAPPING_PLM )
       call PLM_reconstruction( grid0, u0, ppoly )
       if ( CS%boundary_extrapolation) then
         call PLM_boundary_extrapolation( grid0, u0, ppoly )
       end if    
-      call remapping_integration ( grid0, u0, ppoly, grid1, u1, &
+      call remapping_integration( grid0, u0, ppoly, grid1, u1, &
                                    INTEGRATION_PLM )
     case ( REMAPPING_PPM_H4 )
-      call edge_values_explicit_h4 ( grid0, u0, ppoly%E )
+      call edge_values_explicit_h4( grid0, u0, ppoly%E )
       call PPM_reconstruction( grid0, u0, ppoly )
       if ( CS%boundary_extrapolation) then
         call PPM_boundary_extrapolation( grid0, u0, ppoly )
       end if    
-      call remapping_integration ( grid0, u0, ppoly, grid1, u1, &
+      call remapping_integration( grid0, u0, ppoly, grid1, u1, &
                                    INTEGRATION_PPM )
     case ( REMAPPING_PPM_IH4 )
-      call edge_values_implicit_h4 ( grid0, CS%edgeValueWrk, u0, ppoly%E )
+      call edge_values_implicit_h4( grid0, CS%edgeValueWrk, u0, ppoly%E )
       call PPM_reconstruction( grid0, u0, ppoly )
       if ( CS%boundary_extrapolation) then
         call PPM_boundary_extrapolation( grid0, u0, ppoly )
       end if    
-      call remapping_integration ( grid0, u0, ppoly, grid1, u1, &
+      call remapping_integration( grid0, u0, ppoly, grid1, u1, &
                                    INTEGRATION_PPM )
     case ( REMAPPING_PQM_IH4IH3 )
-      call edge_values_implicit_h4 ( grid0, CS%edgeValueWrk, u0, ppoly%E )
-      call edge_slopes_implicit_h3 ( grid0, CS%edgeSlopeWrk, u0, ppoly%S )
+      call edge_values_implicit_h4( grid0, CS%edgeValueWrk, u0, ppoly%E )
+      call edge_slopes_implicit_h3( grid0, CS%edgeSlopeWrk, u0, ppoly%S )
       call PQM_reconstruction( grid0, u0, ppoly )
       if ( CS%boundary_extrapolation) then
         call PQM_boundary_extrapolation_v1( grid0, u0, ppoly )
       end if    
-      call remapping_integration ( grid0, u0, ppoly, grid1, u1, &
+      call remapping_integration( grid0, u0, ppoly, grid1, u1, &
                                    INTEGRATION_PQM )
     case ( REMAPPING_PQM_IH6IH5 )
-      call edge_values_implicit_h6 ( grid0, CS%edgeValueWrk, u0, ppoly%E )
-      call edge_slopes_implicit_h5 ( grid0, CS%edgeSlopeWrk, u0, ppoly%S )
+      call edge_values_implicit_h6( grid0, CS%edgeValueWrk, u0, ppoly%E )
+      call edge_slopes_implicit_h5( grid0, CS%edgeSlopeWrk, u0, ppoly%S )
       call PQM_reconstruction( grid0, u0, ppoly )
       if ( CS%boundary_extrapolation) then
         call PQM_boundary_extrapolation_v1( grid0, u0, ppoly )
       end if    
-      call remapping_integration ( grid0, u0, ppoly, grid1, u1, &
+      call remapping_integration( grid0, u0, ppoly, grid1, u1, &
                                    INTEGRATION_PQM )
     case default
-      call MOM_error ( FATAL, 'The selected remapping method is invalid' )
+      call MOM_error( FATAL, 'The selected remapping method is invalid' )
   end select
 
 end subroutine remapping_core
@@ -292,7 +292,7 @@ end subroutine remapping_core
 ! -----------------------------------------------------------------------------
 ! remapping_integration (integration of reconstructed profile)
 ! -----------------------------------------------------------------------------
-subroutine remapping_integration ( grid0, u0, ppoly0, grid1, u1, method )
+subroutine remapping_integration( grid0, u0, ppoly0, grid1, u1, method )
   ! Arguments
   type(grid1D_t), intent(in)        :: grid0    ! source grid
   real, dimension(:), intent(in)    :: u0       ! source cell averages
@@ -369,11 +369,11 @@ subroutine remapping_integration ( grid0, u0, ppoly0, grid1, u1, method )
           case ( INTEGRATION_PCM )   
             u1(i) = ppoly0%coefficients(j0,1)
           case ( INTEGRATION_PLM )  
-            u1(i) = evaluation_polynomial ( ppoly0%coefficients(j0,:), 2, xi0 )
+            u1(i) = evaluation_polynomial( ppoly0%coefficients(j0,:), 2, xi0 )
           case ( INTEGRATION_PPM )
-            u1(i) = evaluation_polynomial ( ppoly0%coefficients(j0,:), 3, xi0 )
+            u1(i) = evaluation_polynomial( ppoly0%coefficients(j0,:), 3, xi0 )
           case ( INTEGRATION_PQM )
-            u1(i) = evaluation_polynomial ( ppoly0%coefficients(j0,:), 5, xi0 )
+            u1(i) = evaluation_polynomial( ppoly0%coefficients(j0,:), 5, xi0 )
           case default
             call MOM_error( FATAL,'The selected integration method is invalid' )
         end select   
@@ -441,13 +441,13 @@ subroutine remapping_integration ( grid0, u0, ppoly0, grid1, u1, method )
           q = ppoly0%coefficients(j0,1) * ( x1 - x0 )
         case ( INTEGRATION_PLM )    
           q = grid0%h(j0) * &
-              integration_polynomial ( xi0, xi1, ppoly0%coefficients(j0,:), 1 )
+              integration_polynomial( xi0, xi1, ppoly0%coefficients(j0,:), 1 )
         case ( INTEGRATION_PPM )
           q = grid0%h(j0) * &
-              integration_polynomial ( xi0, xi1, ppoly0%coefficients(j0,:), 2 )
+              integration_polynomial( xi0, xi1, ppoly0%coefficients(j0,:), 2 )
         case ( INTEGRATION_PQM )
           q = grid0%h(j0) * &
-              integration_polynomial ( xi0, xi1, ppoly0%coefficients(j0,:), 4 )
+              integration_polynomial( xi0, xi1, ppoly0%coefficients(j0,:), 4 )
         case default
           call MOM_error( FATAL,'The selected integration method is invalid' )
       end select     
@@ -476,13 +476,13 @@ subroutine remapping_integration ( grid0, u0, ppoly0, grid1, u1, method )
           q = q + ppoly0%coefficients(j0,1) * ( grid0%x(j0+1) - x0 )
         case ( INTEGRATION_PLM )    
           q = q + grid0%h(j0) * &
-              integration_polynomial ( xi0, xi1, ppoly0%coefficients(j0,:), 1 )
+              integration_polynomial( xi0, xi1, ppoly0%coefficients(j0,:), 1 )
         case ( INTEGRATION_PPM )
           q = q + grid0%h(j0) * &
-              integration_polynomial ( xi0, xi1, ppoly0%coefficients(j0,:), 2 )
+              integration_polynomial( xi0, xi1, ppoly0%coefficients(j0,:), 2 )
         case ( INTEGRATION_PQM )
           q = q + grid0%h(j0) * &
-              integration_polynomial ( xi0, xi1, ppoly0%coefficients(j0,:), 4 )
+              integration_polynomial( xi0, xi1, ppoly0%coefficients(j0,:), 4 )
         case default
           call MOM_error( FATAL, 'The selected integration method is invalid' )
       end select     
@@ -504,13 +504,13 @@ subroutine remapping_integration ( grid0, u0, ppoly0, grid1, u1, method )
           q = q + ppoly0%coefficients(j1,1) * ( x1 - grid0%x(j1) )
         case ( INTEGRATION_PLM )    
           q = q + grid0%h(j1) * &
-              integration_polynomial ( xi0, xi1, ppoly0%coefficients(j1,:), 1 )
+              integration_polynomial( xi0, xi1, ppoly0%coefficients(j1,:), 1 )
         case ( INTEGRATION_PPM )
           q = q + grid0%h(j1) * &
-              integration_polynomial ( xi0, xi1, ppoly0%coefficients(j1,:), 2 )
+              integration_polynomial( xi0, xi1, ppoly0%coefficients(j1,:), 2 )
         case ( INTEGRATION_PQM )
           q = q + grid0%h(j1) * &
-              integration_polynomial ( xi0, xi1, ppoly0%coefficients(j1,:), 4 )
+              integration_polynomial( xi0, xi1, ppoly0%coefficients(j1,:), 4 )
         case default
           call MOM_error( FATAL,'The selected integration method is invalid' )
       end select     
@@ -543,8 +543,8 @@ subroutine remapping_init( param_file, G, CS)
   nz = G%ke
   
   ! Allocate memory for grids
-  call grid1Dconstruct ( CS%grid_start, nz )
-  call grid1Dconstruct ( CS%grid_final, nz )
+  call grid1Dconstruct( CS%grid_start, nz )
+  call grid1Dconstruct( CS%grid_final, nz )
   
   ! --- REMAPPING SCHEME ---
   ! This sets which remapping scheme we want to use to remap all variables
@@ -584,9 +584,9 @@ subroutine remapping_init( param_file, G, CS)
        "Unrecognized choice for REMAPPING_SCHEME ("//trim(string)//").")
   end select
 
-  call ppoly_init ( CS%ppoly_r, nz, degree )
+  call ppoly_init( CS%ppoly_r, nz, degree )
   
-  allocate ( CS%u_column(nz) ); CS%u_column = 0.0
+  allocate( CS%u_column(nz) ); CS%u_column = 0.0
 
   call triDiagEdgeWorkAllocate( nz, CS%edgeValueWrk )
   call triDiagSlopeWorkAllocate( nz, CS%edgeSlopeWrk )
@@ -605,12 +605,12 @@ subroutine remapping_end(CS)
   call grid1Ddestroy( CS%grid_final )
   
   ! Piecewise polynomials
-  call ppoly_destroy ( CS%ppoly_r )
+  call ppoly_destroy( CS%ppoly_r )
 
-  deallocate ( CS%u_column )
+  deallocate( CS%u_column )
 
   call triDiagEdgeWorkDeallocate( CS%edgeValueWrk )
-  call triDiagSlopeWorkDeallocate ( CS%edgeSlopeWrk )
+  call triDiagSlopeWorkDeallocate( CS%edgeSlopeWrk )
 
 end subroutine remapping_end
 

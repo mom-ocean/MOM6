@@ -198,19 +198,19 @@ subroutine initialize_regridding( param_file, G, h, h_aux, &
   verbose = .false.
    
   ! Read regridding/remapping parameters from MOM_input file
-  call initialize_regridding_options ( param_file, CS )
+  call initialize_regridding_options( param_file, CS )
   
   ! If regridding must be used, the following steps are performed
   if ( CS%use_regridding ) then 
     
     ! Memory allocation for regridding
-    call regridding_memory_allocation ( G, CS )
+    call regridding_memory_allocation( G, CS )
 
     call remapping_init(param_file, G, CS%remapCS)
 
     ! Check grid integrity with respect to minimum allowed thickness
     do m = 1,size(h,4)
-      call check_grid_integrity ( G, h(:,:,:,m), CS )
+      call check_grid_integrity( G, h(:,:,:,m), CS )
     end do  
 
     if ( verbose ) then
@@ -233,7 +233,7 @@ subroutine initialize_regridding( param_file, G, h, h_aux, &
     ! step is therefore not strictly necessary but is included for historical
     ! reasons when I needed to check whether the combination 'initial 
     ! conditions - regridding/remapping' was consistently implemented.
-    call regridding_main ( G, h(:,:,:,1), h_aux, u, v, tv, CS )
+    call regridding_main( G, h(:,:,:,1), h_aux, u, v, tv, CS )
     
     if ( verbose ) then
         i = 20
@@ -258,7 +258,7 @@ end subroutine initialize_regridding
 !------------------------------------------------------------------------------
 ! Initialization of regridding options
 !------------------------------------------------------------------------------
-subroutine initialize_regridding_options ( param_file, CS )
+subroutine initialize_regridding_options( param_file, CS )
 !------------------------------------------------------------------------------
 ! Read the regridding/remapping parameters in the MOM_input file and
 ! update the structure that is passed as argument all over the place.
@@ -387,7 +387,7 @@ subroutine end_regridding(CS)
   
   ! Deallocate memory used for the regridding
   if ( CS%use_regridding ) then
-       call regridding_memory_deallocation ( CS )
+       call regridding_memory_deallocation( CS )
   end if
 
 end subroutine end_regridding
@@ -396,7 +396,7 @@ end subroutine end_regridding
 !------------------------------------------------------------------------------
 ! Dispatching regridding routine: regridding & remapping
 !------------------------------------------------------------------------------
-subroutine regridding_main ( G, h, h_new, u, v, tv, CS )
+subroutine regridding_main( G, h, h_new, u, v, tv, CS )
 !------------------------------------------------------------------------------
 ! This routine takes care of (1) building a new grid and (2) remapping between
 ! the old grid and the new grid. The creation of the new grid can be based
@@ -427,17 +427,17 @@ subroutine regridding_main ( G, h, h_new, u, v, tv, CS )
   select case ( CS%regridding_scheme )
 
     case ( REGRIDDING_ZSTAR )
-      call build_grid_uniform ( G, h, h_new, CS )
+      call build_grid_uniform( G, h, h_new, CS )
 
     case ( REGRIDDING_RHO )  
       call convective_adjustment(CS, G, h, tv)
-      call build_grid_target_densities ( G, h, h_new, tv, CS )
+      call build_grid_target_densities( G, h, h_new, tv, CS )
 
     case ( REGRIDDING_SIGMA )
-      call build_grid_sigma ( G, h, h_new )
+      call build_grid_sigma( G, h, h_new )
     
     case ( REGRIDDING_ARBITRARY )
-      call build_grid_arbitrary ( G, h, h_new, CS )
+      call build_grid_arbitrary( G, h, h_new, CS )
 
   end select ! type of grid 
   
@@ -454,7 +454,7 @@ end subroutine regridding_main
 !------------------------------------------------------------------------------
 ! Use plm reconstruction for pressure gradient (determine edge values)
 !------------------------------------------------------------------------------
-subroutine pressure_gradient_plm (CS, S_t, S_b, T_t, T_b, G, tv, h )
+subroutine pressure_gradient_plm(CS, S_t, S_b, T_t, T_b, G, tv, h )
 !------------------------------------------------------------------------------
 ! By using a PLM (limited piecewise linear method) reconstruction, this 
 ! routine determines the edge values for the salinity and temperature 
@@ -522,7 +522,7 @@ end subroutine pressure_gradient_plm
 !------------------------------------------------------------------------------
 ! Use ppm reconstruction for pressure gradient (determine edge values)
 !------------------------------------------------------------------------------
-subroutine pressure_gradient_ppm (CS, S_t, S_b, T_t, T_b, G, tv, h )
+subroutine pressure_gradient_ppm(CS, S_t, S_b, T_t, T_b, G, tv, h )
 !------------------------------------------------------------------------------
 ! By using a PPM (limited piecewise linear method) reconstruction, this 
 ! routine determines the edge values for the salinity and temperature 
@@ -562,7 +562,7 @@ subroutine pressure_gradient_ppm (CS, S_t, S_b, T_t, T_b, G, tv, h )
       ! Reconstruct salinity profile    
       CS%ppoly_parab%E = 0.0
       CS%ppoly_parab%coefficients = 0.0
-      call edge_values_implicit_h4 ( CS%grid_generic, CS%edgeValueWrk, tv%S(i,j,:), CS%ppoly_parab%E )
+      call edge_values_implicit_h4( CS%grid_generic, CS%edgeValueWrk, tv%S(i,j,:), CS%ppoly_parab%E )
       call PPM_reconstruction( CS%grid_generic, tv%S(i,j,:), CS%ppoly_parab )
       call PPM_boundary_extrapolation( CS%grid_generic, tv%S(i,j,:), CS%ppoly_parab )
       
@@ -574,7 +574,7 @@ subroutine pressure_gradient_ppm (CS, S_t, S_b, T_t, T_b, G, tv, h )
       ! Reconstruct temperature profile 
       CS%ppoly_parab%E = 0.0
       CS%ppoly_parab%coefficients = 0.0
-      call edge_values_implicit_h4 ( CS%grid_generic, CS%edgeValueWrk, tv%T(i,j,:), CS%ppoly_parab%E )
+      call edge_values_implicit_h4( CS%grid_generic, CS%edgeValueWrk, tv%T(i,j,:), CS%ppoly_parab%E )
       call PPM_reconstruction( CS%grid_generic, tv%T(i,j,:), CS%ppoly_parab )
       call PPM_boundary_extrapolation( CS%grid_generic, tv%T(i,j,:), CS%ppoly_parab )
       
@@ -592,7 +592,7 @@ end subroutine pressure_gradient_ppm
 !------------------------------------------------------------------------------
 ! Build uniform z*-ccordinate grid with partial steps
 !------------------------------------------------------------------------------
-subroutine build_grid_uniform ( G, h, h_new, CS )
+subroutine build_grid_uniform( G, h, h_new, CS )
 !------------------------------------------------------------------------------
 ! This routine builds a grid where the distribution of levels is based on a
 ! z* coordinate system with partial steps. Within each water column, a uniform
@@ -670,7 +670,7 @@ end subroutine build_grid_uniform
 !------------------------------------------------------------------------------
 ! Build sigma grid
 !------------------------------------------------------------------------------
-subroutine build_grid_sigma ( G, h, h_new )
+subroutine build_grid_sigma( G, h, h_new )
 !------------------------------------------------------------------------------
 ! This routine builds a grid based on terrain-following coordinates.
 !------------------------------------------------------------------------------
@@ -714,7 +714,7 @@ end subroutine build_grid_sigma
 !------------------------------------------------------------------------------
 ! Build arbitrary grid
 !------------------------------------------------------------------------------
-subroutine build_grid_arbitrary ( G, h, h_new, CS )
+subroutine build_grid_arbitrary( G, h, h_new, CS )
 !------------------------------------------------------------------------------
 ! This routine builds a grid based on arbitrary rules
 !------------------------------------------------------------------------------
@@ -809,7 +809,7 @@ end subroutine build_grid_arbitrary
 !------------------------------------------------------------------------------
 ! Build grid based on target interface densities
 !------------------------------------------------------------------------------
-subroutine build_grid_target_densities ( G, h, h_new, tv, CS )
+subroutine build_grid_target_densities( G, h, h_new, tv, CS )
 !------------------------------------------------------------------------------
 ! This routine builds a new grid based on a given set of target interface
 ! densities (these target densities are computed by taking the mean value
@@ -930,7 +930,7 @@ subroutine build_grid_target_densities ( G, h, h_new, tv, CS )
 
 
         ! Compute densities within current water column
-        call calculate_density ( CS%T_column, CS%S_column, CS%p_column, CS%densities,&
+        call calculate_density( CS%T_column, CS%S_column, CS%p_column, CS%densities,&
                                  1, nz, tv%eqn_of_state )
 
         do k = 1,count_nonzero_layers
@@ -938,7 +938,7 @@ subroutine build_grid_target_densities ( G, h, h_new, tv, CS )
         end do
 
         ! One regridding iteration
-        call regridding_iteration ( CS%densities, CS%target_values, CS,&
+        call regridding_iteration( CS%densities, CS%target_values, CS,&
                                     CS%grid_trans, CS%ppoly_i, CS%grid_final )
         
         ! Remap T and S from previous grid to new grid
@@ -958,7 +958,7 @@ subroutine build_grid_target_densities ( G, h, h_new, tv, CS )
         do k = 2,nz
           deviation = deviation + (CS%grid_start%x(k)-CS%grid_final%x(k))**2
         end do
-        deviation = sqrt ( deviation / (nz-1) )
+        deviation = sqrt( deviation / (nz-1) )
 
     
         m = m + 1
@@ -983,7 +983,7 @@ end subroutine build_grid_target_densities
 !------------------------------------------------------------------------------
 ! Regridding iterations
 !------------------------------------------------------------------------------
-subroutine regridding_iteration ( densities, target_values, CS, &
+subroutine regridding_iteration( densities, target_values, CS, &
                                   grid0, ppoly0, grid1 )
 ! ------------------------------------------------------------------------------
 ! This routine performs one single iteration of the regridding based on target
@@ -1022,7 +1022,7 @@ subroutine regridding_iteration ( densities, target_values, CS, &
   
     case ( INTERPOLATION_P1M_H2 )
       degree = DEGREE_1
-      call edge_values_explicit_h2 ( grid0, densities, ppoly0%E )
+      call edge_values_explicit_h2( grid0, densities, ppoly0%E )
       call P1M_interpolation( grid0, densities, ppoly0 )
       if ( CS%boundary_extrapolation) then
         call P1M_boundary_extrapolation( grid0, densities, ppoly0 )
@@ -1031,9 +1031,9 @@ subroutine regridding_iteration ( densities, target_values, CS, &
     case ( INTERPOLATION_P1M_H4 )
       degree = DEGREE_1
       if ( grid0%nb_cells .ge. 4 ) then
-        call edge_values_explicit_h4 ( grid0, densities, ppoly0%E )
+        call edge_values_explicit_h4( grid0, densities, ppoly0%E )
       else
-        call edge_values_explicit_h2 ( grid0, densities, ppoly0%E )
+        call edge_values_explicit_h2( grid0, densities, ppoly0%E )
       end if
       call P1M_interpolation( grid0, densities, ppoly0 )
       if ( CS%boundary_extrapolation) then
@@ -1043,9 +1043,9 @@ subroutine regridding_iteration ( densities, target_values, CS, &
     case ( INTERPOLATION_P1M_IH4 )
       degree = DEGREE_1
       if ( grid0%nb_cells .ge. 4 ) then
-        call edge_values_implicit_h4 ( grid0, CS%edgeValueWrk, densities, ppoly0%E )
+        call edge_values_implicit_h4( grid0, CS%edgeValueWrk, densities, ppoly0%E )
       else
-        call edge_values_explicit_h2 ( grid0, densities, ppoly0%E )
+        call edge_values_explicit_h2( grid0, densities, ppoly0%E )
       end if
       call P1M_interpolation( grid0, densities, ppoly0 )
       if ( CS%boundary_extrapolation) then
@@ -1062,14 +1062,14 @@ subroutine regridding_iteration ( densities, target_values, CS, &
     case ( INTERPOLATION_PPM_H4 )
       if ( grid0%nb_cells .ge. 4 ) then
         degree = DEGREE_2
-        call edge_values_explicit_h4 ( grid0, densities, ppoly0%E )
+        call edge_values_explicit_h4( grid0, densities, ppoly0%E )
         call PPM_reconstruction( grid0, densities, ppoly0 )
         if ( CS%boundary_extrapolation) then
           call PPM_boundary_extrapolation( grid0, densities, ppoly0 )
         end if  
       else
         degree = DEGREE_1
-        call edge_values_explicit_h2 ( grid0, densities, ppoly0%E )
+        call edge_values_explicit_h2( grid0, densities, ppoly0%E )
         call P1M_interpolation( grid0, densities, ppoly0 )
         if ( CS%boundary_extrapolation) then
           call P1M_boundary_extrapolation( grid0, densities, ppoly0 )
@@ -1080,14 +1080,14 @@ subroutine regridding_iteration ( densities, target_values, CS, &
 
       if ( grid0%nb_cells .ge. 4 ) then
         degree = DEGREE_2
-        call edge_values_implicit_h4 ( grid0, CS%edgeValueWrk, densities, ppoly0%E )
+        call edge_values_implicit_h4( grid0, CS%edgeValueWrk, densities, ppoly0%E )
         call PPM_reconstruction( grid0, densities, ppoly0 )
         if ( CS%boundary_extrapolation) then
           call PPM_boundary_extrapolation( grid0, densities, ppoly0 )
         end if  
       else
         degree = DEGREE_1
-        call edge_values_explicit_h2 ( grid0, densities, ppoly0%E )
+        call edge_values_explicit_h2( grid0, densities, ppoly0%E )
         call P1M_interpolation( grid0, densities, ppoly0 )
         if ( CS%boundary_extrapolation) then
           call P1M_boundary_extrapolation( grid0, densities, ppoly0 )
@@ -1098,15 +1098,15 @@ subroutine regridding_iteration ( densities, target_values, CS, &
       
       if ( grid0%nb_cells .ge. 4 ) then
         degree = DEGREE_3
-        call edge_values_implicit_h4 ( grid0, CS%edgeValueWrk, densities, ppoly0%E )
-        call edge_slopes_implicit_h3 ( grid0, CS%edgeSlopeWrk, densities, ppoly0%S )
+        call edge_values_implicit_h4( grid0, CS%edgeValueWrk, densities, ppoly0%E )
+        call edge_slopes_implicit_h3( grid0, CS%edgeSlopeWrk, densities, ppoly0%S )
         call P3m_interpolation( grid0, densities, ppoly0 )
         if ( CS%boundary_extrapolation) then
           call P3M_boundary_extrapolation( grid0, densities, ppoly0 )
         end if  
       else
         degree = DEGREE_1
-        call edge_values_explicit_h2 ( grid0, densities, ppoly0%E )
+        call edge_values_explicit_h2( grid0, densities, ppoly0%E )
         call P1M_interpolation( grid0, densities, ppoly0 )
         if ( CS%boundary_extrapolation) then
           call P1M_boundary_extrapolation( grid0, densities, ppoly0 )
@@ -1116,15 +1116,15 @@ subroutine regridding_iteration ( densities, target_values, CS, &
     case ( INTERPOLATION_P3M_IH6IH5 )
       if ( grid0%nb_cells .ge. 6 ) then
         degree = DEGREE_3
-        call edge_values_implicit_h6 ( grid0, CS%edgeValueWrk, densities, ppoly0%E )
-        call edge_slopes_implicit_h5 ( grid0, CS%edgeSlopeWrk, densities, ppoly0%S )
+        call edge_values_implicit_h6( grid0, CS%edgeValueWrk, densities, ppoly0%E )
+        call edge_slopes_implicit_h5( grid0, CS%edgeSlopeWrk, densities, ppoly0%S )
         call P3m_interpolation( grid0, densities, ppoly0 )
         if ( CS%boundary_extrapolation) then
           call P3M_boundary_extrapolation( grid0, densities, ppoly0 )
         end if  
       else
         degree = DEGREE_1
-        call edge_values_explicit_h2 ( grid0, densities, ppoly0%E )
+        call edge_values_explicit_h2( grid0, densities, ppoly0%E )
         call P1M_interpolation( grid0, densities, ppoly0 )
         if ( CS%boundary_extrapolation) then
           call P1M_boundary_extrapolation( grid0, densities, ppoly0 )
@@ -1135,15 +1135,15 @@ subroutine regridding_iteration ( densities, target_values, CS, &
     
       if ( grid0%nb_cells .ge. 4 ) then
         degree = DEGREE_4
-        call edge_values_implicit_h4 ( grid0, CS%edgeValueWrk, densities, ppoly0%E )
-        call edge_slopes_implicit_h3 ( grid0, CS%edgeSlopeWrk, densities, ppoly0%S )
+        call edge_values_implicit_h4( grid0, CS%edgeValueWrk, densities, ppoly0%E )
+        call edge_slopes_implicit_h3( grid0, CS%edgeSlopeWrk, densities, ppoly0%S )
         call PQM_reconstruction( grid0, densities, ppoly0 )
         if ( CS%boundary_extrapolation) then
           call PQM_boundary_extrapolation_v1( grid0, densities, ppoly0 )
         end if  
       else
         degree = DEGREE_1
-        call edge_values_explicit_h2 ( grid0, densities, ppoly0%E )
+        call edge_values_explicit_h2( grid0, densities, ppoly0%E )
         call P1M_interpolation( grid0, densities, ppoly0 )
         if ( CS%boundary_extrapolation) then
           call P1M_boundary_extrapolation( grid0, densities, ppoly0 )
@@ -1153,15 +1153,15 @@ subroutine regridding_iteration ( densities, target_values, CS, &
     case ( INTERPOLATION_PQM_IH6IH5 )
       if ( grid0%nb_cells .ge. 6 ) then
         degree = DEGREE_4
-        call edge_values_implicit_h6 ( grid0, CS%edgeValueWrk, densities, ppoly0%E )
-        call edge_slopes_implicit_h5 ( grid0, CS%edgeSlopeWrk, densities, ppoly0%S )
+        call edge_values_implicit_h6( grid0, CS%edgeValueWrk, densities, ppoly0%E )
+        call edge_slopes_implicit_h5( grid0, CS%edgeSlopeWrk, densities, ppoly0%S )
         call PQM_reconstruction( grid0, densities, ppoly0 )
         if ( CS%boundary_extrapolation) then
           call PQM_boundary_extrapolation_v1( grid0, densities, ppoly0 )
         end if  
       else
         degree = DEGREE_1
-        call edge_values_explicit_h2 ( grid0, densities, ppoly0%E )
+        call edge_values_explicit_h2( grid0, densities, ppoly0%E )
         call P1M_interpolation( grid0, densities, ppoly0 )
         if ( CS%boundary_extrapolation) then
           call P1M_boundary_extrapolation( grid0, densities, ppoly0 )
@@ -1172,8 +1172,8 @@ subroutine regridding_iteration ( densities, target_values, CS, &
   
   ! Based on global density profile, interpolate new grid and 
   ! inflate vanished layers    
-  call interpolate_grid ( grid0, ppoly0, grid1, target_values, degree )
-  call inflate_vanished_layers ( grid1, CS )
+  call interpolate_grid( grid0, ppoly0, grid1, target_values, degree )
+  call inflate_vanished_layers( grid1, CS )
     
 end subroutine regridding_iteration
 
@@ -1181,7 +1181,7 @@ end subroutine regridding_iteration
 !------------------------------------------------------------------------------
 ! Given target values (e.g., density), build new grid based on polynomial 
 !------------------------------------------------------------------------------
-subroutine interpolate_grid ( grid0, ppoly0, grid1, target_values, degree )
+subroutine interpolate_grid( grid0, ppoly0, grid1, target_values, degree )
 ! ------------------------------------------------------------------------------
 ! Given the grid 'grid0' and the piecewise polynomial interpolant 
 ! 'ppoly0' (possibly discontinuous), the coordinates of the new grid 'grid1' 
@@ -1325,7 +1325,7 @@ real function get_polynomial_coordinate ( grid, ppoly, target_value, degree )
                  '"get_polynomial_coordinate". This is caused by an '//&
                  'inconsistent interpolant (perhaps not monotonically '//&
                  'increasing)'
-      call MOM_error ( FATAL, 'Aborting execution' )
+      call MOM_error( FATAL, 'Aborting execution' )
   end if
 
   ! Reset all polynomial coefficients to 0 and copy those pertaining to 
@@ -1390,7 +1390,7 @@ end function get_polynomial_coordinate
 !------------------------------------------------------------------------------
 ! Check grid integrity
 !------------------------------------------------------------------------------
-subroutine check_grid_integrity ( G, h, CS )
+subroutine check_grid_integrity( G, h, CS )
 !------------------------------------------------------------------------------
 ! This routine is called when initializing the regridding options. The 
 ! objective is to make sure all layers are at least as thick as the minimum
@@ -1409,7 +1409,7 @@ subroutine check_grid_integrity ( G, h, CS )
   type(grid1D_t)    :: grid
 
   ! Initialize grid 
-  call grid1Dconstruct ( grid, G%ke )
+  call grid1Dconstruct( grid, G%ke )
 
   do i = G%isc,G%iec+1
     do j = G%jsc,G%jec+1
@@ -1424,7 +1424,7 @@ subroutine check_grid_integrity ( G, h, CS )
         grid%x(k+1) = grid%x(k) + grid%h(k)
       end do
       
-      call inflate_vanished_layers ( grid, CS )
+      call inflate_vanished_layers( grid, CS )
 
       ! Save modified grid
       do k = 1,G%ke
@@ -1442,7 +1442,7 @@ end subroutine check_grid_integrity
 !------------------------------------------------------------------------------
 ! Inflate vanished layers to finite (nonzero) width
 !------------------------------------------------------------------------------
-subroutine inflate_vanished_layers ( grid, CS )
+subroutine inflate_vanished_layers( grid, CS )
 
   ! Argument
   type(grid1D_t), intent(inout)       :: grid
@@ -1567,10 +1567,10 @@ subroutine convective_adjustment(CS, G, h, tv)
             h(i,j,k)      = h1
             h(i,j,k+1)    = h0
             ! Recompute densities at levels k and k+1
-            call calculate_density ( tv%T(i,j,k), tv%S(i,j,k), &
+            call calculate_density( tv%T(i,j,k), tv%S(i,j,k), &
                                      CS%p_column(k), &
                                      CS%densities(k), 1, 1, tv%eqn_of_state )
-            call calculate_density ( tv%T(i,j,k+1), tv%S(i,j,k+1), &
+            call calculate_density( tv%T(i,j,k+1), tv%S(i,j,k+1), &
                                      CS%p_column(k+1), &
                                      CS%densities(k+1), 1, 1, tv%eqn_of_state )
             stratified = .false.
@@ -1590,7 +1590,7 @@ end subroutine convective_adjustment
 !------------------------------------------------------------------------------
 ! Allocate memory for regridding
 !------------------------------------------------------------------------------
-subroutine regridding_memory_allocation ( G, CS )
+subroutine regridding_memory_allocation( G, CS )
 !------------------------------------------------------------------------------
 ! In this routine, we allocate the memory needed to carry out regridding
 ! steps in the course of the simulation. 
@@ -1615,33 +1615,33 @@ subroutine regridding_memory_allocation ( G, CS )
   call triDiagSlopeWorkAllocate( nz, CS%edgeSlopeWrk )
 
   ! Target values
-  allocate ( CS%target_values(nz+1) )
+  allocate( CS%target_values(nz+1) )
 
   ! Allocate memory for grids
-  call grid1Dconstruct ( CS%grid_generic, nz )
-  call grid1Dconstruct ( CS%grid_start, nz )
-  call grid1Dconstruct ( CS%grid_trans, nz )
-  call grid1Dconstruct ( CS%grid_final, nz )
+  call grid1Dconstruct( CS%grid_generic, nz )
+  call grid1Dconstruct( CS%grid_start, nz )
+  call grid1Dconstruct( CS%grid_trans, nz )
+  call grid1Dconstruct( CS%grid_final, nz )
 
   ! Piecewise polynomials used for remapping
-  call ppoly_init ( CS%ppoly_r, nz, 4 )
+  call ppoly_init( CS%ppoly_r, nz, 4 )
   
   ! Piecewise polynomials used for interpolation
-  call ppoly_init ( CS%ppoly_i, nz, 4 )
+  call ppoly_init( CS%ppoly_i, nz, 4 )
   
   ! Generic linear piecewise polynomial
-  call ppoly_init ( CS%ppoly_linear, nz, 1 )
+  call ppoly_init( CS%ppoly_linear, nz, 1 )
   
   ! Generic parabolic piecewise polynomial
-  call ppoly_init ( CS%ppoly_parab, nz, 2 )
+  call ppoly_init( CS%ppoly_parab, nz, 2 )
   
   ! Memory allocation for one column
-  allocate ( CS%mapping(nz) ); CS%mapping = 0
-  allocate ( CS%u_column(nz) ); CS%u_column = 0.0
-  allocate ( CS%T_column(nz) ); CS%T_column = 0.0
-  allocate ( CS%S_column(nz) ); CS%S_column = 0.0
-  allocate ( CS%p_column(nz) ); CS%p_column = 0.0
-  allocate ( CS%densities(nz) ); CS%densities = 0.0
+  allocate( CS%mapping(nz) ); CS%mapping = 0
+  allocate( CS%u_column(nz) ); CS%u_column = 0.0
+  allocate( CS%T_column(nz) ); CS%T_column = 0.0
+  allocate( CS%S_column(nz) ); CS%S_column = 0.0
+  allocate( CS%p_column(nz) ); CS%p_column = 0.0
+  allocate( CS%densities(nz) ); CS%densities = 0.0
 
 end subroutine regridding_memory_allocation
 
@@ -1649,7 +1649,7 @@ end subroutine regridding_memory_allocation
 !------------------------------------------------------------------------------
 ! Deallocate memory for regridding
 !------------------------------------------------------------------------------
-subroutine regridding_memory_deallocation ( CS )
+subroutine regridding_memory_deallocation( CS )
 !------------------------------------------------------------------------------
 ! In this routine, we reclaim the memory that was allocated for the regridding. 
 !------------------------------------------------------------------------------
@@ -1661,7 +1661,7 @@ subroutine regridding_memory_deallocation ( CS )
   call triDiagSlopeWorkDeallocate( CS%edgeSlopeWrk )
   
   ! Target values
-  deallocate ( CS%target_values )
+  deallocate( CS%target_values )
 
   ! Deallocate memory for grid
   call grid1Ddestroy( CS%grid_generic )
@@ -1670,17 +1670,17 @@ subroutine regridding_memory_deallocation ( CS )
   call grid1Ddestroy( CS%grid_final )
   
   ! Piecewise polynomials
-  call ppoly_destroy ( CS%ppoly_i )
-  call ppoly_destroy ( CS%ppoly_r )
-  call ppoly_destroy ( CS%ppoly_linear )
-  call ppoly_destroy ( CS%ppoly_parab )
+  call ppoly_destroy( CS%ppoly_i )
+  call ppoly_destroy( CS%ppoly_r )
+  call ppoly_destroy( CS%ppoly_linear )
+  call ppoly_destroy( CS%ppoly_parab )
 
-  deallocate ( CS%mapping )
-  deallocate ( CS%u_column )
-  deallocate ( CS%T_column )
-  deallocate ( CS%S_column )
-  deallocate ( CS%p_column )
-  deallocate ( CS%densities )
+  deallocate( CS%mapping )
+  deallocate( CS%u_column )
+  deallocate( CS%T_column )
+  deallocate( CS%S_column )
+  deallocate( CS%p_column )
+  deallocate( CS%densities )
 
   ! Remapping
   call remapping_end(CS%remapCS)

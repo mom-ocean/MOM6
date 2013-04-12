@@ -71,7 +71,7 @@ subroutine PLM_reconstruction( grid, u, ppoly )
     sigma_r = 2.0 * ( u_r - u_c ) / h_c
 
     if ( (sigma_l * sigma_r) .GT. 0.0 ) then
-      slope = sign ( min (abs(sigma_l),abs(sigma_c),abs(sigma_r)), sigma_c )
+      slope = sign( min(abs(sigma_l),abs(sigma_c),abs(sigma_r)), sigma_c )
     else
       slope = 0.0
     end if
@@ -119,7 +119,7 @@ subroutine PLM_reconstruction( grid, u, ppoly )
   ! Second pass: we need to check for nonmonotonic discontinuous edge values.
   ! When this occurs, the PLM slope is redefined so as to ensure monotonic edge
   ! values across edges.
-  allocate ( E_old(N,2) )
+  allocate( E_old(N,2) )
   E_old = ppoly%E
   
   do k = 2,N-1
@@ -145,7 +145,7 @@ subroutine PLM_reconstruction( grid, u, ppoly )
 
     ! Take the minimum of both new slopes. If all edge values are 
     ! monotonic, the new slope is simply equal to the old one.
-    slope = sign ( min( abs(sigma_l), abs(sigma_r) ), slope )
+    slope = sign( min( abs(sigma_l), abs(sigma_r) ), slope )
     
     a = u(k) - 0.5 * slope
     b = slope
@@ -157,7 +157,7 @@ subroutine PLM_reconstruction( grid, u, ppoly )
     
   end do ! end loop on interior cells
 
-  deallocate ( E_old )
+  deallocate( E_old )
   
 end subroutine PLM_reconstruction
 
@@ -165,7 +165,7 @@ end subroutine PLM_reconstruction
 !------------------------------------------------------------------------------
 ! plm boundary extrapolation
 ! -----------------------------------------------------------------------------
-subroutine PLM_boundary_extrapolation ( grid, u, ppoly )
+subroutine PLM_boundary_extrapolation( grid, u, ppoly )
 !------------------------------------------------------------------------------
 ! Reconstruction by linear polynomials within boundary cells.
 ! The left and right edge values in the left and right boundary cells,

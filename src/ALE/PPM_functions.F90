@@ -103,10 +103,10 @@ subroutine PPM_limiter_standard( grid, u, ppoly )
   N = grid%nb_cells
 
   ! Bound edge values
-  call bound_edge_values ( grid, u, ppoly%E )
+  call bound_edge_values( grid, u, ppoly%E )
 
   ! Make discontinuous edge values monotonic
-  call check_discontinuous_edge_values ( grid, u, ppoly%E )
+  call check_discontinuous_edge_values( grid, u, ppoly%E )
 
   ! Loop on interior cells to apply the standard 
   ! PPM limiter (Colella & Woodward, JCP 84)

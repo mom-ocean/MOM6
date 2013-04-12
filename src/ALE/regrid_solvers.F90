@@ -26,7 +26,7 @@ contains
 ! -----------------------------------------------------------------------------
 ! Solve the linear system AX = B
 ! -----------------------------------------------------------------------------
-subroutine solve_linear_system ( A, B, X, system_size )
+subroutine solve_linear_system( A, B, X, system_size )
 ! -----------------------------------------------------------------------------
 ! This routine uses Gauss's algorithm to transform the system's original 
 ! matrix into an upper triangular matrix. Back substitution yields the answer.
@@ -72,7 +72,7 @@ subroutine solve_linear_system ( A, B, X, system_size )
     ! If no pivot could be found, the system is singular and we need
     ! to end the execution
     if ( .NOT. found_pivot ) then
-      call MOM_error ( FATAL, 'The linear system is singular !' )
+      call MOM_error( FATAL, 'The linear system is singular !' )
     end if
 
     ! If the pivot is in a row that is different than row i, that is if
@@ -127,7 +127,7 @@ end subroutine solve_linear_system
 ! -----------------------------------------------------------------------------
 ! Solve the tridiagonal system AX = B 
 ! -----------------------------------------------------------------------------
-subroutine solve_tridiagonal_system ( Al, Ad, Au, B, X, system_size )
+subroutine solve_tridiagonal_system( Al, Ad, Au, B, X, system_size )
 ! -----------------------------------------------------------------------------
 ! This routine uses Thomas's algorithm to solve the tridiagonal system AX = B.
 ! (A is made up of lower, middle and upper diagonals)

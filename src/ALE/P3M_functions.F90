@@ -95,10 +95,10 @@ subroutine P3M_limiter( grid, u, ppoly )
   N = grid%nb_cells
 
   ! 1. Bound edge values (boundary cells are assumed to be local extrema)
-  call bound_edge_values ( grid, u, ppoly%E )
+  call bound_edge_values( grid, u, ppoly%E )
 
   ! 2. Systematically average discontinuous edge values
-  call average_discontinuous_edge_values ( grid, u, ppoly%E )
+  call average_discontinuous_edge_values( grid, u, ppoly%E )
   
 
   ! 3. Loop on cells and do the following
@@ -140,7 +140,7 @@ subroutine P3M_limiter( grid, u, ppoly )
     sigma_r = 2.0 * ( u_r - u_c ) / h_c
 
     if ( (sigma_l * sigma_r) .GT. 0.0 ) then
-      slope = sign ( min (abs(sigma_l),abs(sigma_c),abs(sigma_r)), sigma_c )
+      slope = sign( min(abs(sigma_l),abs(sigma_c),abs(sigma_r)), sigma_c )
     else
       slope = 0.0
     end if
@@ -170,7 +170,7 @@ subroutine P3M_limiter( grid, u, ppoly )
     call build_cubic_interpolant( grid, k, ppoly )
 
     ! Check whether cubic is monotonic
-    monotonic = is_cubic_monotonic ( ppoly, k )
+    monotonic = is_cubic_monotonic( ppoly, k )
 
     ! If cubic is not monotonic, monotonize it by modifiying the 
     ! edge slopes, store the new edge slopes and recompute the
@@ -275,7 +275,7 @@ subroutine P3M_boundary_extrapolation( grid, u, ppoly )
 
   ! Store edge values and slope, build cubic and check monotonicity
   call build_cubic_interpolant( grid, i0, ppoly )
-  monotonic = is_cubic_monotonic ( ppoly, i0 )
+  monotonic = is_cubic_monotonic( ppoly, i0 )
     
   if ( monotonic .EQ. 0 ) then
     call monotonize_cubic( h0, u0_l, u0_r, 0.0, slope, slope, u1_l, u1_r )
@@ -334,7 +334,7 @@ subroutine P3M_boundary_extrapolation( grid, u, ppoly )
   ppoly%S(i1,2) = u1_r
   
   call build_cubic_interpolant( grid, i1, ppoly )
-  monotonic = is_cubic_monotonic ( ppoly, i1 )
+  monotonic = is_cubic_monotonic( ppoly, i1 )
     
   if ( monotonic .EQ. 0 ) then
     call monotonize_cubic( h1, u0_l, u0_r, slope, 0.0, slope, u1_l, u1_r )
@@ -395,7 +395,7 @@ end subroutine build_cubic_interpolant
 !------------------------------------------------------------------------------
 ! Check whether cubic is monotonic
 ! -----------------------------------------------------------------------------
-integer function is_cubic_monotonic ( ppoly, k )
+integer function is_cubic_monotonic( ppoly, k )
 !------------------------------------------------------------------------------
 ! This function checks whether the cubic curve in cell k is monotonic.
 ! If so, returns 1. Otherwise, returns 0.
@@ -437,8 +437,8 @@ integer function is_cubic_monotonic ( ppoly, k )
 
   if ( rho .GE. 0.0 ) then
     if ( abs(c) .GT. 1e-15 ) then
-      xi_0 = 0.5 * ( -b - sqrt ( rho ) ) / c
-      xi_1 = 0.5 * ( -b + sqrt ( rho ) ) / c
+      xi_0 = 0.5 * ( -b - sqrt( rho ) ) / c
+      xi_1 = 0.5 * ( -b + sqrt( rho ) ) / c
     else if ( abs(b) .GT. 1e-15 ) then
       xi_0 = - a / b
       xi_1 = - a / b
