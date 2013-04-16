@@ -208,7 +208,7 @@ subroutine Phillips_initialize_velocity(u, v, G, param_file)
 
   ! Use thermal wind shear to give a geostrophically balanced flow.
   do k=nz-1,1 ; do j=js,je ; do I=is-1,ie
-    y_2 = G%geoLonCu(I,j) - G%south_lat - 0.5*G%len_lat
+    y_2 = G%geoLatCu(I,j) - G%south_lat - 0.5*G%len_lat
 ! This uses d/d y_2 atan(y_2 / jet_width)
 !    u(I,j,k) = u(i,j,k+1) + (1e-3 * jet_height / &
 !           (jet_width * (1.0 + (y_2 / jet_width)**2))) * &
@@ -220,7 +220,7 @@ subroutine Phillips_initialize_velocity(u, v, G, param_file)
   enddo ; enddo ; enddo
 
   do k=1,nz ; do j=js,je ; do I=is-1,ie
-    y_2 = (G%geoLonCu(I,j) - G%south_lat - 0.5*G%len_lat) / G%len_lat
+    y_2 = (G%geoLatCu(I,j) - G%south_lat - 0.5*G%len_lat) / G%len_lat
     x_2 = (G%geoLonCu(I,j) - G%west_lon - 0.5*G%len_lon) / G%len_lon
     u(i,j,k) = u(i,j,k) + velocity_amplitude * ((real(k)-0.5)/real(nz)) * &
            (0.5 - abs(2.0*x_2) + 0.1*abs(cos(10.0*pi*x_2)) - abs(sin(5.0*pi*y_2)))
