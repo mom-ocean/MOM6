@@ -392,7 +392,7 @@ use MOM_dynamics_split_RK2, only : step_MOM_dyn_split_RK2, register_restarts_dyn
 use MOM_dynamics_split_RK2, only : initialize_dyn_split_RK2
 use MOM_dynamics_unsplit_RK2, only : step_MOM_dyn_unsplit_RK2, register_restarts_dyn_unsplit_RK2
 use MOM_dynamics_unsplit_RK2, only : initialize_dyn_unsplit_RK2
-use MOM_regridding, only : initialize_regridding, end_regridding, regridding_main
+use MOM_ALE, only : initialize_ALE, end_ALE, ALE_main
 
 implicit none ; private
 
@@ -718,12 +718,12 @@ function step_MOM(fluxes, state, Time_start, time_interval, CS)
                       grid, CS%diabatic_CSp)
         call cpu_clock_end(id_clock_diabatic)
 
-        ! Regridding is done here, at the end of the thermodynamical time step
+        ! Regridding/remapping is done here, at the end of the thermodynamical time step
         ! (that may comprise several dynamical time steps)
-        ! The routine 'regridding_main' can be found in 'regridding.F90'.
+        ! The routine 'ALE_main' can be found in 'MOM_ALE.F90'.
         if ( CS%useALEalgorithm ) then 
-          call regridding_main(grid, h(:,:,:,m), CS%h_aux(:,:,:), &
-                               u(:,:,:,m), v(:,:,:,m), CS%tv, CS%regridding_opts )
+          call ALE_main(grid, h(:,:,:,m), CS%h_aux(:,:,:), &
+                        u(:,:,:,m), v(:,:,:,m), CS%tv, CS%regridding_opts )
 !         call pass_vector(u(:,:,:,m), v(:,:,:,m), grid%Domain)
 !         call pass_var(CS%tv%T, grid%Domain, complete=.false.)
 !         call pass_var(CS%tv%S, grid%Domain, complete=.false.)
@@ -1450,8 +1450,8 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   ! Need an ALE CS !!!! -AJA
   if (CS%useALEalgorithm) then
     ALLOC_(CS%h_aux(isd:ied,jsd:jed,nz)); CS%h_aux(:,:,:) = 0.
-    call initialize_regridding(param_file, grid, h(:,:,:,:), CS%h_aux(:,:,:), &
-                             u(:,:,:,1), v(:,:,:,1), CS%tv, CS%regridding_opts)
+    call initialize_ALE(param_file, grid, h(:,:,:,:), CS%h_aux(:,:,:), &
+                        u(:,:,:,1), v(:,:,:,1), CS%tv, CS%regridding_opts)
   endif
 
   call MOM_diagnostics_init(MOM_internal_state, Time, grid, param_file, &
@@ -2255,7 +2255,7 @@ subroutine MOM_end(CS)
 
   if (CS%useALEalgorithm) then
     DEALLOC_(CS%h_aux)
-    call end_regridding(CS%regridding_opts)
+    call end_ALE(CS%regridding_opts)
   endif
 
   DEALLOC_(CS%u) ; DEALLOC_(CS%v) ; DEALLOC_(CS%h)

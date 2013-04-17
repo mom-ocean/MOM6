@@ -60,7 +60,7 @@ use MOM_PressureForce_Mont, only : PressureForce_Mont_Bouss, PressureForce_Mont_
 use MOM_PressureForce_Mont, only : PressureForce_Mont_init, PressureForce_Mont_CS
 use MOM_tidal_forcing, only : calc_tidal_forcing, tidal_forcing_CS
 use MOM_variables, only : thermo_var_ptrs
-use MOM_regridding, only: regridding_CS
+use MOM_ALE, only: ALE_CS
 implicit none ; private
 
 #include <MOM_memory.h>
@@ -83,7 +83,7 @@ subroutine PressureForce(h, tv, PFu, PFv, G, CS, regridding_opts, p_atm, pbce, e
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(out) :: PFv
   type(ocean_grid_type),                  intent(in)  :: G
   type(PressureForce_CS),                 pointer     :: CS
-  type(regridding_CS),                  intent(inout) :: regridding_opts
+  type(ALE_CS),                         intent(inout) :: regridding_opts
   real, dimension(:,:),                  optional, pointer     :: p_atm
   real, dimension(NIMEM_,NJMEM_,NKMEM_), optional, intent(out) :: pbce
   real, dimension(NIMEM_,NJMEM_),        optional, intent(out) :: eta

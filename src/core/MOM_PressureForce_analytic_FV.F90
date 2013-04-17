@@ -65,9 +65,9 @@ use MOM_EOS, only : calculate_density, calculate_density_derivs
 use MOM_EOS, only : int_density_dz, int_specific_vol_dp
 use MOM_EOS, only : int_density_dz_generic_plm, int_density_dz_generic_ppm
 use MOM_EOS, only : int_density_dz_generic_plm_analytic
-use MOM_regridding, only: pressure_gradient_plm, pressure_gradient_ppm
-use MOM_regridding, only: usePressureReconstruction, pressureReconstructionScheme
-use MOM_regridding, only: regridding_CS
+use MOM_ALE, only : pressure_gradient_plm, pressure_gradient_ppm
+use MOM_ALE, only : usePressureReconstruction, pressureReconstructionScheme
+use MOM_ALE, only : ALE_CS
 use regrid_defs, only: PRESSURE_RECONSTRUCTION_PLM, PRESSURE_RECONSTRUCTION_PPM
 
 implicit none ; private
@@ -99,7 +99,7 @@ subroutine PressureForce_AFV(h, tv, PFu, PFv, G, CS, regridding_opts, p_atm, pbc
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(out) :: PFv
   type(ocean_grid_type),                  intent(in)  :: G
   type(PressureForce_AFV_CS),             pointer     :: CS
-  type(regridding_CS),                    intent(inout) :: regridding_opts
+  type(ALE_CS),                           intent(inout) :: regridding_opts
   real, dimension(:,:),                  optional, pointer     :: p_atm
   real, dimension(NIMEM_,NJMEM_,NKMEM_), optional, intent(out) :: pbce
   real, dimension(NIMEM_,NJMEM_),        optional, intent(out) :: eta
@@ -411,7 +411,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, regridding_opts, p_at
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(out)   :: PFv
   type(ocean_grid_type),                  intent(in)    :: G
   type(PressureForce_AFV_CS),             pointer       :: CS
-  type(regridding_CS),                    intent(inout) :: regridding_opts
+  type(ALE_CS),                           intent(inout) :: regridding_opts
   real, dimension(:,:),                  optional, pointer     :: p_atm
   real, dimension(NIMEM_,NJMEM_,NKMEM_), optional, intent(out) :: pbce
   real, dimension(NIMEM_,NJMEM_),        optional, intent(out) :: eta

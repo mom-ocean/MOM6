@@ -1,4 +1,4 @@
-module MOM_regridding
+module MOM_ALE
 !==============================================================================
 !
 ! This file is part of MOM.
@@ -51,7 +51,7 @@ implicit none ; private
 ! Private (module-wise) variables
 ! -----------------------------------------------------------------------------
 
-type, public :: regridding_CS
+type, public :: ALE_CS
   private
   ! Generic grid used for various purposes throughout the code (the same 
   ! grid is used to avoid having dynamical memory allocation)
@@ -117,9 +117,9 @@ end type
 ! -----------------------------------------------------------------------------
 ! The following routines are visible to the outside world
 ! -----------------------------------------------------------------------------
-public initialize_regridding
-public end_regridding
-public regridding_main 
+public initialize_ALE
+public end_ALE
+public ALE_main 
 public pressure_gradient_plm
 public pressure_gradient_ppm
 public usePressureReconstruction
@@ -166,7 +166,7 @@ contains
 !------------------------------------------------------------------------------
 ! Initialization of regridding
 !------------------------------------------------------------------------------
-subroutine initialize_regridding( param_file, G, h, h_aux, &
+subroutine initialize_ALE( param_file, G, h, h_aux, &
                                   u, v, tv, CS )
 !------------------------------------------------------------------------------
 ! This routine is typically called (from initialize_MOM in file MOM.F90)
@@ -183,7 +183,7 @@ subroutine initialize_regridding( param_file, G, h, h_aux, &
   real, dimension(NIMEMB_,NJMEM_, NKMEM_), intent(inout)    :: u
   real, dimension(NIMEM_,NJMEMB_, NKMEM_), intent(inout)    :: v
   type(thermo_var_ptrs), intent(inout)                   :: tv
-  type(regridding_CS), intent(inout)                     :: CS
+  type(ALE_CS), intent(inout)                     :: CS
 
   ! Local variables
   logical       :: verbose
@@ -225,7 +225,7 @@ subroutine initialize_regridding( param_file, G, h, h_aux, &
   ! step is therefore not strictly necessary but is included for historical
   ! reasons when I needed to check whether the combination 'initial 
   ! conditions - regridding/remapping' was consistently implemented.
-  call regridding_main( G, h(:,:,:,1), h_aux, u, v, tv, CS )
+  call ALE_main( G, h(:,:,:,1), h_aux, u, v, tv, CS )
   
   if ( verbose ) then
       i = 20
@@ -242,7 +242,7 @@ subroutine initialize_regridding( param_file, G, h, h_aux, &
       end do
   end if
 
-end subroutine initialize_regridding
+end subroutine initialize_ALE
 
 
 !------------------------------------------------------------------------------
@@ -256,9 +256,9 @@ subroutine initialize_regridding_options( param_file, CS )
 
   ! Arguments
   type(param_file_type), intent(in)        :: param_file
-  type(regridding_CS), intent(inout)   :: CS
+  type(ALE_CS), intent(inout)   :: CS
   ! Local variables
-  character(len=40)  :: mod = "MOM_regridding" ! This module's name.
+  character(len=40)  :: mod = "MOM_ALE" ! This module's name.
   character(len=40)  :: string ! Temporary string
 
   ! --- TYPE OF VERTICAL GRID ---
@@ -350,23 +350,23 @@ end subroutine initialize_regridding_options
 !------------------------------------------------------------------------------
 ! End of regridding (memory deallocation)
 !------------------------------------------------------------------------------
-subroutine end_regridding(CS)
+subroutine end_ALE(CS)
 !------------------------------------------------------------------------------
 ! This routine is typically called (from MOM_end in file MOM.F90)
 ! after the main time integration loop to deallocate the regridding stuff.
 !------------------------------------------------------------------------------
-  type(regridding_CS), intent(inout) :: CS
+  type(ALE_CS), intent(inout) :: CS
   
   ! Deallocate memory used for the regridding
   call regridding_memory_deallocation( CS )
 
-end subroutine end_regridding
+end subroutine end_ALE
 
 
 !------------------------------------------------------------------------------
 ! Dispatching regridding routine: regridding & remapping
 !------------------------------------------------------------------------------
-subroutine regridding_main( G, h, h_new, u, v, tv, CS )
+subroutine ALE_main( G, h, h_new, u, v, tv, CS )
 !------------------------------------------------------------------------------
 ! This routine takes care of (1) building a new grid and (2) remapping between
 ! the old grid and the new grid. The creation of the new grid can be based
@@ -387,7 +387,7 @@ subroutine regridding_main( G, h, h_new, u, v, tv, CS )
   v      ! Meridional velocity field
   type(thermo_var_ptrs), intent(inout)                 :: &
   tv     ! Thermodynamical variables (T, S, ...)  
-  type(regridding_CS), intent(inout) :: CS ! Regridding parameters and options
+  type(ALE_CS), intent(inout) :: CS ! Regridding parameters and options
 
   ! Local variables
   integer   :: i, j, k
@@ -418,7 +418,7 @@ subroutine regridding_main( G, h, h_new, u, v, tv, CS )
   ! one of the 'build_...' routines above.
   h(:,:,:) = h_new(:,:,:)
 
-end subroutine regridding_main
+end subroutine ALE_main
 
 
 !------------------------------------------------------------------------------
@@ -433,7 +433,7 @@ subroutine pressure_gradient_plm(CS, S_t, S_b, T_t, T_b, G, tv, h )
 !------------------------------------------------------------------------------
 
   ! Arguments
-  type(regridding_CS), intent(inout) :: CS ! Regridding parameters and options
+  type(ALE_CS), intent(inout) :: CS ! Regridding parameters and options
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: &
   S_t, S_b  ! Salinity at the top and bottom edges of each layer
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: &
@@ -501,7 +501,7 @@ subroutine pressure_gradient_ppm(CS, S_t, S_b, T_t, T_b, G, tv, h )
 !------------------------------------------------------------------------------
 
   ! Arguments
-  type(regridding_CS), intent(inout) :: CS
+  type(ALE_CS), intent(inout) :: CS
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: &
   S_t, S_b  ! Salinity at the top and bottom edges of each layer
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: &
@@ -575,7 +575,7 @@ subroutine build_grid_uniform( G, h, h_new, CS )
   type(ocean_grid_type), intent(in)                  :: G
   real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(in)    :: h
   real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(inout) :: h_new
-  type(regridding_CS), intent(in)                :: CS
+  type(ALE_CS), intent(in)                :: CS
   
   ! Local variables
   integer   :: i, j, k
@@ -693,7 +693,7 @@ subroutine build_grid_arbitrary( G, h, h_new, CS )
   type(ocean_grid_type), intent(in)                  :: G
   real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(in)    :: h
   real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(inout) :: h_new
-  type(regridding_CS), intent(in)                :: CS
+  type(ALE_CS), intent(in)                :: CS
   
   ! Local variables
   integer   :: i, j, k
@@ -800,7 +800,7 @@ subroutine build_grid_target_densities( G, h, h_new, tv, CS )
   real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(in)    :: h
   real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(inout) :: h_new
   type(thermo_var_ptrs), intent(in)                  :: tv     
-  type(regridding_CS), intent(inout)                :: CS
+  type(ALE_CS), intent(inout)                :: CS
   
   ! Local variables
   integer   :: i, j, k, m
@@ -976,7 +976,7 @@ subroutine regridding_iteration( densities, target_values, CS, &
   ppoly0            ! Piecewise polynomial for density interpolation
   type(grid1D_t), intent(inout)       :: &
   grid1             ! The new grid based on target interface densities          
-  type(regridding_CS), intent(inout) :: &
+  type(ALE_CS), intent(inout) :: &
   CS   ! Parameters used for regridding
 
   ! Local variables
@@ -1372,7 +1372,7 @@ subroutine check_grid_integrity( G, h, CS )
   ! Arguments
   type(ocean_grid_type), intent(in)                    :: G
   real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(inout)   :: h
-  type(regridding_CS), intent(in)                  :: CS
+  type(ALE_CS), intent(in)                  :: CS
 
   ! Local variables
   integer           :: i, j, k
@@ -1416,7 +1416,7 @@ subroutine inflate_vanished_layers( grid, CS )
 
   ! Argument
   type(grid1D_t), intent(inout)       :: grid
-  type(regridding_CS), intent(in) :: CS
+  type(ALE_CS), intent(in) :: CS
     
   ! Local variable
   integer   :: N
@@ -1491,7 +1491,7 @@ subroutine convective_adjustment(CS, G, h, tv)
 !------------------------------------------------------------------------------
 
   ! Arguments
-  type(regridding_CS), intent(inout) :: CS
+  type(ALE_CS), intent(inout) :: CS
   type(ocean_grid_type), intent(in)                  :: G
   real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(inout) :: h
   type(thermo_var_ptrs), intent(inout)               :: tv     
@@ -1572,7 +1572,7 @@ subroutine regridding_memory_allocation( G, CS )
 
   ! Arguments
   type(ocean_grid_type), intent(in)   :: G
-  type(regridding_CS), intent(inout) :: CS
+  type(ALE_CS), intent(inout) :: CS
 
   ! Local variables
   integer   :: nz
@@ -1624,7 +1624,7 @@ subroutine regridding_memory_deallocation( CS )
 ! In this routine, we reclaim the memory that was allocated for the regridding. 
 !------------------------------------------------------------------------------
   
-  type(regridding_CS), intent(inout) :: CS
+  type(ALE_CS), intent(inout) :: CS
   
   ! Reclaim memory for the tridiagonal system
   call triDiagEdgeWorkDeallocate( CS%edgeValueWrk )
@@ -1658,13 +1658,13 @@ subroutine regridding_memory_deallocation( CS )
 end subroutine regridding_memory_deallocation
 
 logical function usePressureReconstruction(CS)
-  type(regridding_CS), intent(in) :: CS
+  type(ALE_CS), intent(in) :: CS
   usePressureReconstruction=CS%reconstructForPressure
 end function usePressureReconstruction
 
 integer function pressureReconstructionScheme(CS)
-  type(regridding_CS), intent(in) :: CS
+  type(ALE_CS), intent(in) :: CS
   pressureReconstructionScheme=CS%pressureReconstructionScheme
 end function pressureReconstructionScheme
 
-end module MOM_regridding
+end module MOM_ALE
