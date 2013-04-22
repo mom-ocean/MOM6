@@ -67,14 +67,6 @@ DT_THERM = 3600.0               !   [s] default = 900.0
                                 ! Ideally DT_THERM should be an integer multiple of DT
                                 ! and less than the forcing or coupling time-step.
                                 ! By default DT_THERM is set to DT.
-HMIX = 2.0                      !   [m] default = 1.0
-                                ! If BULKMIXEDLAYER is false, HMIX is the depth over
-                                ! which to average to find surface properties like SST
-                                ! and SSS, and over which the vertical viscosity and
-                                ! diapycnal diffusivity are elevated.  HMIX is only used
-                                ! directly if BULKMIXEDLAYER is false, but provides a
-                                ! default value for other variables if BULKMIXEDLAYER is
-                                ! true.
 DTBT_RESET_PERIOD = 0.0         !   [s] default = 3600.0
                                 ! The period between recalculations of DTBT (if DTBT <= 0).
                                 ! If DTBT_RESET_PERIOD is negative, DTBT is set based
@@ -381,6 +373,8 @@ TKE_DECAY = 10.0                !   [nondim] default = 2.5
                                 ! TKE_DECAY relates the vertical rate of decay of the
                                 ! TKE available for mechanical entrainment to the natural
                                 ! Ekman depth.
+HMIX_MIN = 2.0                  !   [m] default = 0.0
+                                ! The minimum mixed layer depth if BULKMIXEDLAYER is true.
 LIMIT_BUFFER_DETRAIN = True     !   [Boolean] default = False
                                 ! If true, limit the detrainment from the buffer layers
                                 ! to not be too different from the neighbors.

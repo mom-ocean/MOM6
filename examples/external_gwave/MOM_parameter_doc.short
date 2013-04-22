@@ -74,14 +74,6 @@ DT_THERM = 120.0                !   [s] default = 60.0
                                 ! Ideally DT_THERM should be an integer multiple of DT
                                 ! and less than the forcing or coupling time-step.
                                 ! By default DT_THERM is set to DT.
-HMIX = 1.0E-10                  !   [m] default = 1.0
-                                ! If BULKMIXEDLAYER is false, HMIX is the depth over
-                                ! which to average to find surface properties like SST
-                                ! and SSS, and over which the vertical viscosity and
-                                ! diapycnal diffusivity are elevated.  HMIX is only used
-                                ! directly if BULKMIXEDLAYER is false, but provides a
-                                ! default value for other variables if BULKMIXEDLAYER is
-                                ! true.
 C_P = 3925.0                    !   [J kg-1 K-1] default = 3991.86795711963
                                 ! The heat capacity of sea water, approximated as a
                                 ! constant. This is only used if ENABLE_THERMODYNAMICS is
@@ -248,6 +240,10 @@ V_TRUNC_FILE = "V_velocity_truncations" ! default = ""
                                 ! leading to meridional velocity truncations are written.
                                 ! Undefine this for efficiency if this diagnostic is not
                                 ! needed.
+HMIX_FIXED = 1.0E-10            !   [m]
+                                ! The prescribed depth over which the near-surface
+                                ! viscosity and diffusivity are elevated when the bulk
+                                ! mixed layer is not used.
 KV = 1.0E-04                    !   [m2 s-1]
                                 ! The background kinematic viscosity in the interior.
                                 ! The molecular value, ~1e-6 m2 s-1, may be used.

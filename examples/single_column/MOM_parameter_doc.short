@@ -45,14 +45,6 @@ DT_THERM = 7200.0               !   [s] default = 3600.0
                                 ! Ideally DT_THERM should be an integer multiple of DT
                                 ! and less than the forcing or coupling time-step.
                                 ! By default DT_THERM is set to DT.
-HMIX = 2.0                      !   [m] default = 1.0
-                                ! If BULKMIXEDLAYER is false, HMIX is the depth over
-                                ! which to average to find surface properties like SST
-                                ! and SSS, and over which the vertical viscosity and
-                                ! diapycnal diffusivity are elevated.  HMIX is only used
-                                ! directly if BULKMIXEDLAYER is false, but provides a
-                                ! default value for other variables if BULKMIXEDLAYER is
-                                ! true.
 MIN_Z_DIAG_INTERVAL = 2.16E+04  !   [s] default = 0.0
                                 ! The minimum amount of time in seconds between
                                 ! calculations of depth-space diagnostics. Making this
@@ -336,6 +328,8 @@ BULK_RI_ML = 0.05               !   [nondim]
 ABSORB_ALL_SW = True            !   [Boolean] default = False
                                 ! If true,  all shortwave radiation is absorbed by the
                                 ! ocean, instead of passing through to the bottom mud.
+HMIX_MIN = 2.0                  !   [m] default = 0.0
+                                ! The minimum mixed layer depth if BULKMIXEDLAYER is true.
 DEPTH_LIMIT_FLUXES = 0.1        !   [m] default = 0.2
                                 ! The surface fluxes are scaled away when the total ocean
                                 ! depth is less than DEPTH_LIMIT_FLUXES.
