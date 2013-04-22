@@ -1,0 +1,362 @@
+GOLD_SIS
+1 1 1 0 0 0 
+#output files
+# "ice_day",      1,  "months", 1, "days", "time",
+# "ocean_day",    1,  "months", 1, "days", "time",
+# "ocean_day_z",  1,  "months", 1, "days", "time",
+# "flux_day",     1,  "months", 1, "days", "time"
+
+"ice_day",      1,  "days", 1, "days", "time",
+"icebergs_day", 1,  "days", 1, "days", "time",
+"ocean_day",    1,  "days", 1, "days", "time",
+"ocean_sfc",    1,  "days", 1, "days", "time",
+"ocean_day_z",  1,  "days", 1, "days", "time",
+# "flux_day",    5,  "days", 1, "days", "time"
+"ocean_static",-1,  "months", 1, "days", "time",
+#"ocean_scalar", 1,  "months", 1, "days", "time"
+#
+#output variables
+#
+# OCEAN DIAGNOSTICS:
+#===================
+#===================
+#
+# Surface Ocean fields:
+#=========================
+"ocean_model","SSH","SSH","ocean_sfc","all",.false.,"none",2
+"ocean_model","SSU","SSU","ocean_sfc","all",.false.,"none",2
+"ocean_model","SSV","SSV","ocean_sfc","all",.false.,"none",2
+"ocean_model","SST","SST","ocean_sfc","all",.false.,"none",2
+"ocean_model","SSS","SSS","ocean_sfc","all",.false.,"none",2
+"ocean_model","speed","speed","ocean_sfc","all",.false.,"none",2
+
+# Prognostic Ocean fields:
+#=========================
+"ocean_model","u","u","ocean_day","all",.true.,"none",2
+"ocean_model","v","v","ocean_day","all",.true.,"none",2
+"ocean_model","h","h","ocean_day","all",.true.,"none",1
+"ocean_model","e","e","ocean_day","all",.true.,"none",2
+"ocean_model","temp","temp","ocean_day","all",.true.,"none",2
+"ocean_model","salt","salt","ocean_day","all",.true.,"none",2
+#"ocean_model","e","e","ocean_daily","all",.false.,"none",2
+#
+# Auxilary Tracers:
+#==================
+#"ocean_model","vintage","vintage","ocean_day","all",.true.,"none",2
+#"ocean_model","age","age","ocean_day","all",.true.,"none",2
+#
+# Z-space fields:
+#==================
+"ocean_model","u_z","u","ocean_day_z","all",.true.,"none",2
+"ocean_model","v_z","v","ocean_day_z","all",.true.,"none",2
+"ocean_model","temp_z","temp","ocean_day_z","all",.true.,"none",2
+"ocean_model","salt_z","salt","ocean_day_z","all",.true.,"none",2
+#"ocean_model","vintage_z","vintage","ocean_day_z","all",.true.,"none",2
+"ocean_model","age_z","age","ocean_day_z","all",.true.,"none",2
+
+# Continuity Equation Terms:
+#===========================
+#"ocean_model","wd","wd","ocean_day","all",.true.,"none",2
+"ocean_model","uh","uh","ocean_day","all",.true.,"none",2
+"ocean_model","vh","vh","ocean_day","all",.true.,"none",2
+#"ocean_model","h_rho","h_rho","ocean_day","all",.true.,"none",2
+#"ocean_model","uh_rho","uh_rho","ocean_day","all",.true.,"none",2
+#"ocean_model","vh_rho","vh_rho","ocean_day","all",.true.,"none",2
+#"ocean_model","uhGM_rho","uhGM_rho","ocean_day","all",.true.,"none",2
+#"ocean_model","vhGM_rho","vhGM_rho","ocean_day","all",.true.,"none",2
+"ocean_model","GMwork","GMwork","ocean_day","all",.true.,"none",2
+#
+# Mixed Layer TKE Budget Terms:
+#===========================
+#"ocean_model","TKE_wind","TKE_wind","ocean_day","all",.true.,"none",2
+#"ocean_model","TKE_RiBulk","TKE_RiBulk","ocean_day","all",.true.,"none",2
+#"ocean_model","TKE_conv","TKE_conv","ocean_day","all",.true.,"none",2
+#"ocean_model","TKE_pen_SW","TKE_pen_SW","ocean_day","all",.true.,"none",2
+#"ocean_model","TKE_mixing","TKE_mixing","ocean_day","all",.true.,"none",2
+#"ocean_model","TKE_mech_decay","TKE_mech_decay","ocean_day","all",.true.,"none",2
+#"ocean_model","TKE_conv_decay","TKE_conv_decay","ocean_day","all",.true.,"none",2
+#"ocean_model","TKE_conv_s2","TKE_conv_s2","ocean_day","all",.true.,"none",2
+#"ocean_model","TKE_tidal","TKE_tidal","ocean_day","all",.true.,"none",2
+#"ocean_model","h_ML","h_ML","ocean_day","all",.true.,"none",2
+#"ocean_model","Kd","Kd","ocean_day","all",.true.,"none",2
+#
+# Tracer Fluxes:
+#==================
+#"ocean_model","T_adx",  "T_adx",  "ave_prog_%4yr_%3dy","all",.true.,"none",2
+#"ocean_model","T_ady",  "T_ady",  "ave_prog_%4yr_%3dy","all",.true.,"none",2
+#"ocean_model","T_diffx","T_diffx","ave_prog_%4yr_%3dy","all",.true.,"none",2
+#"ocean_model","T_diffy","T_diffy","ave_prog_%4yr_%3dy","all",.true.,"none",2
+#"ocean_model","S_adx",  "S_adx",  "ave_prog_%4yr_%3dy","all",.true.,"none",2
+#"ocean_model","S_ady",  "S_ady",  "ave_prog_%4yr_%3dy","all",.true.,"none",2
+#"ocean_model","S_diffx","S_diffx","ave_prog_%4yr_%3dy","all",.true.,"none",2
+#"ocean_model","S_diffy","S_diffy","ave_prog_%4yr_%3dy","all",.true.,"none",2
+
+
+# Momentum Balance Terms:
+#=======================
+#"ocean_model","dudt","dudt","ocean_day","all",.true.,"none",2
+#"ocean_model","dvdt","dvdt","ocean_day","all",.true.,"none",2
+#"ocean_model","CAu","CAu","ocean_day","all",.true.,"none",2
+#"ocean_model","CAv","CAv","ocean_day","all",.true.,"none",2
+#"ocean_model","PFu","PFu","ocean_day","all",.true.,"none",2
+#"ocean_model","PFv","PFv","ocean_day","all",.true.,"none",2
+#"ocean_model","du_dt_visc","du_dt_visc","ocean_day","all",.true.,"none",2
+#"ocean_model","dv_dt_visc","dv_dt_visc","ocean_day","all",.true.,"none",2
+#"ocean_model","diffu","diffu","ocean_day","all",.true.,"none",2
+#"ocean_model","diffv","diffv","ocean_day","all",.true.,"none",2
+#"ocean_model","dudt_dia","dudt_dia","ocean_day","all",.true.,"none",2
+#"ocean_model","dvdt_dia","dvdt_dia","ocean_day","all",.true.,"none",2
+# Subterms that should not be added to a closed budget.
+#"ocean_model","gKEu","gKEu","ocean_day","all",.true.,"none",2
+#"ocean_model","gKEv","gKEv","ocean_day","all",.true.,"none",2
+#"ocean_model","rvxu","rvxu","ocean_day","all",.true.,"none",2
+#"ocean_model","rvxv","rvxv","ocean_day","all",.true.,"none",2
+#"ocean_model","PFu_bc","PFu_bc","ocean_day","all",.true.,"none",2
+#"ocean_model","PFv_bc","PFv_bc","ocean_day","all",.true.,"none",2
+
+# Barotropic Momentum Balance Terms:
+# (only available with split time stepping.)
+#===========================================
+#"ocean_model","PFuBT","PFuBT","ocean_day","all",.true.,"none",2
+#"ocean_model","PFvBT","PFvBT","ocean_day","all",.true.,"none",2
+#"ocean_model","CoruBT","CoruBT","ocean_day","all",.true.,"none",2
+#"ocean_model","CorvBT","CorvBT","ocean_day","all",.true.,"none",2
+#"ocean_model","NluBT","NluBT","ocean_day","all",.true.,"none",2
+#"ocean_model","NlvBT","NlvBT","ocean_day","all",.true.,"none",2
+#"ocean_model","ubtforce","ubtforce","ocean_day","all",.true.,"none",2
+#"ocean_model","vbtforce","vbtforce","ocean_day","all",.true.,"none",2
+#"ocean_model","u_accel_bt","u_accel_bt","ocean_day","all",.true.,"none",2
+#"ocean_model","v_accel_bt","v_accel_bt","ocean_day","all",.true.,"none",2
+#
+# Viscosities and diffusivities:
+#===============================
+#"ocean_model","Kd","Kd","visc_%4yr_%3dy","all",.true.,"none",2
+#"ocean_model","Ahh","Ahh","visc_%4yr_%3dy","all",.true.,"none",2
+#"ocean_model","Ahq","Ahq","visc_%4yr_%3dy","all",.true.,"none",2
+#"ocean_model","Khh","Khh","visc_%4yr_%3dy","all",.true.,"none",2
+#"ocean_model","Khq","Khq","visc_%4yr_%3dy","all",.true.,"none",2
+#"ocean_model","bbl_thick_u","bbl_thick_u","visc_%4yr_%3dy","all",.true.,"none",2
+#"ocean_model","kv_bbl_u","kv_bbl_u","visc_%4yr_%3dy","all",.true.,"none",2
+#"ocean_model","bbl_thick_v","bbl_thick_v","visc_%4yr_%3dy","all",.true.,"none",2
+#"ocean_model","kv_bbl_v","kv_bbl_v","visc_%4yr_%3dy","all",.true.,"none",2
+#"ocean_model","av_visc","av_visc","visc_%4yr_%3dy","all",.true.,"none",2
+#"ocean_model","au_visc","au_visc","visc_%4yr_%3dy","all",.true.,"none",2
+#"ocean_model","FrictWork","FrictWork","ocean_day","all",.true.,"none",2
+#"ocean_model","SN_u","SN_u","ocean_day","all",.true.,"none",2
+#"ocean_model","SN_v","SN_v","ocean_day","all",.true.,"none",2
+#"ocean_model","NH","NH","ocean_day","all",.true.,"none",2
+#"ocean_model","Ld","Ld","ocean_day","all",.true.,"none",2
+#"ocean_model","Le","Le","ocean_day","all",.true.,"none",2
+#"ocean_model","L2u","L2u","ocean_day","all",.true.,"none",2
+#"ocean_model","L2v","L2v","ocean_day","all",.true.,"none",2
+#"ocean_model","S2u","S2u","ocean_day","all",.true.,"none",2
+#"ocean_model","S2v","S2v","ocean_day","all",.true.,"none",2
+#"ocean_model","eff_beta","eff_beta","ocean_day","all",.true.,"none",2
+"ocean_model","KHTH_u","KHTH_u","ocean_day","all",.true.,"none",2
+"ocean_model","KHTH_v","KHTH_v","ocean_day","all",.true.,"none",2
+"ocean_model","KHTR_u","KHTR_u","ocean_day","all",.true.,"none",2
+"ocean_model","KHTR_v","KHTR_v","ocean_day","all",.true.,"none",2
+
+# MEKE:
+#======
+# "ocean_model","MEKE","MEKE","ocean_day","all",.true.,"none",2
+# "ocean_model","MEKE_src","MEKE_src","ocean_day","all",.true.,"none",2
+# "ocean_model","MEKE_Kh","MEKE_Kh","ocean_day","all",.true.,"none",2
+#
+# Kinetic Energy Balance Terms:
+#=============================
+#"ocean_model","KE","KE","energy_%4yr_%3dy","all",.true.,"none",2
+#"ocean_model","dKE_dt","dKE_dt","energy_%4yr_%3dy","all",.true.,"none",2
+#"ocean_model","PE_to_KE","PE_to_KE","energy_%4yr_%3dy","all",.true.,"none",2
+#"ocean_model","KE_Coradv","KE_Coradv","energy_%4yr_%3dy","all",.true.,"none",2
+#"ocean_model","KE_adv","KE_adv","energy_%4yr_%3dy","all",.true.,"none",2
+#"ocean_model","KE_visc","KE_visc","energy_%4yr_%3dy","all",.true.,"none",2
+#"ocean_model","KE_horvisc","KE_horvisc","energy_%4yr_%3dy","all",.true.,"none",2
+#"ocean_model","KE_dia","KE_dia","energy_%4yr_%3dy","all",.true.,"none",2
+#
+# Surface Forcing:
+#=================
+"ocean_model","taux",     "taux",     "ocean_day","all",.true.,"none",2
+"ocean_model","tauy",     "tauy",     "ocean_day","all",.true.,"none",2
+"ocean_model","ustar",    "ustar",    "ocean_day","all",.true.,"none",2
+"ocean_model","PmE",      "PmE",      "ocean_day","all",.true.,"none",2
+"ocean_model","SW",       "SW",       "ocean_day","all",.true.,"none",2
+"ocean_model","LwLatSens","LwLatSens","ocean_day","all",.true.,"none",2
+"ocean_model","p_surf",   "p_surf",   "ocean_day","all",.true.,"none",2
+"ocean_model","salt_flux","salt_flux","ocean_day","all",.true.,"none",2
+
+# Static ocean fields:
+#=====================
+"ocean_model", "geolon",      "geolon",      "ocean_static", "all", .false., "none", 2
+"ocean_model", "geolat",      "geolat",      "ocean_static", "all", .false., "none", 2
+"ocean_model", "geolon_c",    "geolon_c",    "ocean_static", "all", .false., "none", 2
+"ocean_model", "geolat_c",    "geolat_c",    "ocean_static", "all", .false., "none", 2
+"ocean_model", "geolon_u",    "geolon_u",    "ocean_static", "all", .false., "none", 2
+"ocean_model", "geolat_u",    "geolat_u",    "ocean_static", "all", .false., "none", 2
+"ocean_model", "geolon_v",    "geolon_v",    "ocean_static", "all", .false., "none", 2
+"ocean_model", "geolat_v",    "geolat_v",    "ocean_static", "all", .false., "none", 2
+"ocean_model", "area_t",      "area_t",      "ocean_static", "all", .false., "none", 2
+"ocean_model", "depth_ocean", "depth_ocean", "ocean_static", "all", .false., "none", 2
+"ocean_model", "wet",         "wet",         "ocean_static", "all", .false., "none", 2
+"ocean_model", "wet_c",       "wet_c",       "ocean_static", "all", .false., "none", 2
+"ocean_model", "wet_u",       "wet_u",       "ocean_static", "all", .false., "none", 2
+"ocean_model", "wet_v",       "wet_v",       "ocean_static", "all", .false., "none", 2
+"ocean_model", "Coriolis",    "Coriolis",    "ocean_static", "all", .false., "none", 2
+
+#
+# ICE DIAGNOSTICS:
+#=================
+#=================
+"ice_model", "FRAZIL",     "FRAZIL",     "ice_day", "all", .true., "none", 2,
+"ice_model", "HI",         "HI",         "ice_day", "all", .true., "none", 2,
+"ice_model", "HS",         "HS",         "ice_day", "all", .true., "none", 2,
+"ice_model", "TS",         "TS",         "ice_day", "all", .true., "none", 2,
+"ice_model", "T1",         "T1",         "ice_day", "all", .true., "none", 2,
+"ice_model", "T2",         "T2",         "ice_day", "all", .true., "none", 2,
+"ice_model", "CN",         "CN",         "ice_day", "all", .true., "none", 2,
+"ice_model", "EXT",        "EXT",        "ice_day", "all", .true., "none", 2,
+"ice_model", "MI",         "MI",         "ice_day", "all", .true., "none", 2,
+"ice_model", "XPRT",       "XPRT",       "ice_day", "all", .true., "none", 2,
+"ice_model", "LSRC",       "LSRC",       "ice_day", "all", .true., "none", 2,
+"ice_model", "LSNK",       "LSNK",       "ice_day", "all", .true., "none", 2,
+"ice_model", "BSNK",       "BSNK",       "ice_day", "all", .true., "none", 2,
+"ice_model", "SN2IC",      "SN2IC",      "ice_day", "all", .true., "none", 2,
+"ice_model", "ALB",        "ALB",        "ice_day", "all", .true., "none", 2,
+"ice_model", "SW",         "SW",         "ice_day", "all", .true., "none", 2,
+"ice_model", "LW",         "LW",         "ice_day", "all", .true., "none", 2,
+"ice_model", "SH",         "SH",         "ice_day", "all", .true., "none", 2,
+"ice_model", "LH",         "LH",         "ice_day", "all", .true., "none", 2,
+"ice_model", "TMELT",      "TMELT",      "ice_day", "all", .true., "none", 2,
+"ice_model", "BMELT",      "BMELT",      "ice_day", "all", .true., "none", 2,
+"ice_model", "BHEAT",      "BHEAT",      "ice_day", "all", .true., "none", 2,
+"ice_model", "UI",         "UI",         "ice_day", "all", .true., "none", 2,
+"ice_model", "VI",         "VI",         "ice_day", "all", .true., "none", 2,
+"ice_model", "FA_X",       "FA_X",       "ice_day", "all", .true., "none", 2,
+"ice_model", "FA_Y",       "FA_Y",       "ice_day", "all", .true., "none", 2,
+"ice_model", "FI_X",       "FI_X",       "ice_day", "all", .true., "none", 2,
+"ice_model", "FI_Y",       "FI_Y",       "ice_day", "all", .true., "none", 2,
+"ice_model", "SST",        "SST",        "ice_day", "all", .true., "none", 2,
+"ice_model", "SSS",        "SSS",        "ice_day", "all", .true., "none", 2,
+"ice_model", "SSH",        "SSH",        "ice_day", "all", .true., "none", 2,
+"ice_model", "UO",         "UO",         "ice_day", "all", .true., "none", 2,
+"ice_model", "VO",         "VO",         "ice_day", "all", .true., "none", 2,
+"ice_model", "SNOWFL",     "SNOWFL",     "ice_day", "all", .true., "none", 2,
+"ice_model", "RAIN",       "RAIN",       "ice_day", "all", .true., "none", 2,
+"ice_model", "CALVING",    "CALVING",    "ice_day", "all", .true., "none", 2,
+"ice_model", "RUNOFF",     "RUNOFF",     "ice_day", "all", .true., "none", 2,
+"ice_model", "CELL_AREA",  "CELL_AREA",  "ice_day", "all", .false., "none", 2,
+"ice_model", "GEOLON",     "GEOLON",     "ice_day", "all", .false., "none", 2,
+"ice_model", "GEOLAT",     "GEOLAT",     "ice_day", "all", .false., "none", 2,
+"ice_model", "SINROT",     "SINROT",     "ice_day", "all", .false., "none", 2,
+"ice_model", "COSROT",     "COSROT",     "ice_day", "all", .false., "none", 2,
+"ice_model", "SALTF",      "SALTF",      "ice_day", "all", .true., "none", 2,
+"ice_model", "IX_TRANS",   "IX_TRANS",   "ice_day", "all", .true., "none", 2,
+"ice_model", "IY_TRANS",   "IY_TRANS",   "ice_day", "all", .true., "none", 2,
+
+# ICEBERG DIAGNOSTICS:
+#=====================
+#=====================
+"icebergs", "calving",        "calving",        "icebergs_day", "all", .true., "none", 2,
+"icebergs", "accum_calving",  "accum_calving",  "icebergs_day", "all", .true., "none", 2,
+"icebergs", "unused_calving", "unused_calving", "icebergs_day", "all", .true., "none", 2,
+"icebergs", "real_calving",   "real_calving",   "icebergs_day", "all", .true., "none", 2,
+"icebergs", "stored_ice",     "stored_ice",     "icebergs_day", "all", .true., "none", 2,
+"icebergs", "hi",             "hi",             "icebergs_day", "all", .true., "none", 2,
+"icebergs", "cn",             "cn",             "icebergs_day", "all", .true., "none", 2,
+"icebergs", "ui",             "ui",             "icebergs_day", "all", .true., "none", 2,
+"icebergs", "vi",             "vi",             "icebergs_day", "all", .true., "none", 2,
+"icebergs", "ua",             "ua",             "icebergs_day", "all", .true., "none", 2,
+"icebergs", "va",             "va",             "icebergs_day", "all", .true., "none", 2,
+"icebergs", "uo",             "uo",             "icebergs_day", "all", .true., "none", 2,
+"icebergs", "vo",             "vo",             "icebergs_day", "all", .true., "none", 2,
+"icebergs", "sst",            "sst",            "icebergs_day", "all", .true., "none", 2,
+"icebergs", "mass",           "mass",           "icebergs_day", "all", .true., "none", 2,
+"icebergs", "virtual_area",   "virtual_area",   "icebergs_day", "all", .true., "none", 2,
+"icebergs", "melt",           "melt",           "icebergs_day", "all", .true., "none", 2,
+"icebergs", "berg_melt",      "berg_melt",      "icebergs_day", "all", .true., "none", 2,
+"icebergs", "melt_buoy",      "melt_buoy",      "icebergs_day", "all", .true., "none", 2,
+"icebergs", "melt_eros",      "melt_eros",      "icebergs_day", "all", .true., "none", 2,
+"icebergs", "melt_conv",      "melt_conv",      "icebergs_day", "all", .true., "none", 2,
+"icebergs", "mask",           "mask",           "icebergs_day", "all", .false., "none", 2,
+"icebergs", "area",           "area",           "icebergs_day", "all", .false., "none", 2,
+"icebergs", "lon",            "lon",            "icebergs_day", "all", .false., "none", 2,
+"icebergs", "lat",            "lat",            "icebergs_day", "all", .false., "none", 2,
+
+#
+#========================
+# ATMOSPHERE DIAGNOSTICS:
+#========================
+#========================
+# "flux",      "land_mask",   "land_mask",   "flux_day", "all", .false., "none", 2,
+# "flux",      "ice_mask",    "ice_mask",    "flux_day", "all", .true.,  "none", 2,
+# "flux",      "drag_moist",  "drag_moist",  "flux_day", "all", .true.,  "none", 2,
+# "flux",      "drag_heat",   "drag_heat",   "flux_day", "all", .true.,  "none", 2,
+# "flux",      "drag_mom",    "drag_mom",    "flux_day", "all", .true.,  "none", 2,
+# "flux",      "wind",        "wind",        "flux_day", "all", .true.,  "none", 2,
+# # "flux" forcing fields for land model: wind, q_ref atmos_8xdaily
+# #"flux",      "wind",        "wind",        "atmos_8xdaily", "all", .true., "none", 2,
+# #"flux",      "q_ref",       "q_ref",       "atmos_8xdaily", "all", .true., "none", 2,
+# "flux",      "tau_x",       "tau_x",       "flux_day", "all", .true.,  "none", 2,
+# "flux",      "tau_y",       "tau_y",       "flux_day", "all", .true.,  "none", 2,
+# "flux",      "shflx",       "shflx",       "flux_day", "all", .true.,  "none", 2,
+# "flux",      "evap",        "evap",        "flux_day", "all", .true.,  "none", 2,
+# "flux",      "lwflx",       "lwflx",       "flux_day", "all", .true.,  "none", 2,
+# "flux",      "rh_ref",      "rh_ref",      "flux_day", "all", .true.,  "none", 2,
+# "flux",      "u_ref",       "u_ref",       "flux_day", "all", .true.,  "none", 2,
+# "flux",      "v_ref",       "v_ref",       "flux_day", "all", .true.,  "none", 2,
+# "flux",      "u_atm",       "u_atm",       "flux_day", "all", .true.,"none", 2,
+# "flux",      "v_atm",       "v_atm",       "flux_day", "all", .true.,"none", 2,
+# "flux",      "t_atm",       "t_atm",       "flux_day", "all", .true.,"none", 2,
+# "flux",      "t_surf",      "t_surf",      "flux_day", "all", .true.,"none", 2,
+# "flux",      "q_atm",       "q_atm",       "flux_day", "all", .true.,"none", 2,
+#
+# For these "_col" fields, set do_cmip_diagnostics=.true. in &shortwave_driver_nml, and uncomment
+#"radiation", "organic_carbon_exopdep_col","org_crb_exdep_c", "atmos_day", "all", .true., "none", 2,
+#"radiation", "organic_carbon_abopdep_col","org_crb_abdep_c", "atmos_day", "all", .true., "none", 2,
+#"radiation", "black_carbon_exopdep_col",  "blk_crb_exdep_c", "atmos_day", "all", .true., "none", 2,
+#"radiation", "black_carbon_abopdep_col",  "blk_crb_abdep_c", "atmos_day", "all", .true., "none", 2,
+#"radiation", "sea_salt_exopdep_col",      "salt_exdep_c",    "atmos_day", "all", .true., "none", 2,
+#"radiation", "sea_salt_abopdep_col",      "salt_abdep_c",    "atmos_day", "all", .true., "none", 2,
+#"radiation", "so4_anthro_col",            "so4_ant_col",     "atmos_day", "all", .true., "none", 2,
+#"radiation", "so4_natural_col",           "so4_nat_col",     "atmos_day", "all", .true., "none", 2,
+#"radiation", "small_dust_exopdep_col",    "sm_dust_exdep_c", "atmos_day", "all", .true., "none", 2,
+#"radiation", "small_dust_abopdep_col",    "sm_dust_abdep_c", "atmos_day", "all", .true., "none", 2,
+#"radiation", "large_dust_exopdep_col",    "lg_dust_exdep_c", "atmos_day", "all", .true., "none", 2,
+#"radiation", "large_dust_abopdep_col",    "lg_dust_abdep_c", "atmos_day", "all", .true., "none", 2,
+#
+
+
+#=============================================================================================
+#
+#====> This file can be used with diag_manager/v2.0a (or higher) <====
+#
+#
+#  FORMATS FOR FILE ENTRIES (not all input values are used)
+#  ------------------------
+#
+#"file_name", output_freq, "output_units", format, "time_units", "long_name",
+#
+#
+#output_freq:  > 0  output frequency in "output_units"
+#              = 0  output frequency every time step
+#              =-1  output frequency at end of run
+#
+#output_units = units used for output frequency
+#               (years, months, days, minutes, hours, seconds)
+#
+#time_units   = units used to label the time axis
+#               (days, minutes, hours, seconds)
+#
+#
+#  FORMAT FOR FIELD ENTRIES (not all input values are used)
+#  ------------------------
+#
+#"module_name", "field_name", "output_name", "file_name" "time_sampling", time_avg, "other_opts", packing
+#
+#time_avg = .true. or .false.
+#
+#packing  = 1  double precision
+#         = 2  float
+#         = 4  packed 16-bit integers
+#         = 8  packed 1-byte (not tested?)
+
