@@ -685,10 +685,10 @@ subroutine build_grid_target_densities( G, h, h_new, tv, remaPCS, CS )
         end do
         
         call remapping_core(remapCS, CS%grid_start, CS%S_column, CS%grid_final,& 
-                            CS%S_column, CS%ppoly_r)
+                            CS%S_column)
         
         call remapping_core(remapCS, CS%grid_start, CS%T_column, CS%grid_final,& 
-                            CS%T_column, CS%ppoly_r)
+                            CS%T_column)
 
         ! Compute the deviation between two successive grids
         deviation = 0.0

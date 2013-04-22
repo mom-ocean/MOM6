@@ -130,13 +130,11 @@ subroutine remapping_main( CS, G, h, h_new, tv, u, v )
         CS%grid_final%h(k) = CS%grid_final%x(k+1) - CS%grid_final%x(k)
       end do
       
-      call remapping_core(CS, CS%grid_start, tv%S(i,j,:), CS%grid_final, CS%u_column, &
-                          CS%ppoly_r)
+      call remapping_core(CS, CS%grid_start, tv%S(i,j,:), CS%grid_final, CS%u_column)
       
       tv%S(i,j,:) = CS%u_column(:)
       
-      call remapping_core(CS, CS%grid_start, tv%T(i,j,:), CS%grid_final, CS%u_column, &
-                          CS%ppoly_r)
+      call remapping_core(CS, CS%grid_start, tv%T(i,j,:), CS%grid_final, CS%u_column)
      
       tv%T(i,j,:) = CS%u_column(:)
 
@@ -169,8 +167,7 @@ subroutine remapping_main( CS, G, h, h_new, tv, u, v )
         CS%grid_final%h(k) = CS%grid_final%x(k+1) - CS%grid_final%x(k)
       end do
   
-      call remapping_core(CS, CS%grid_start, u(i,j,:), CS%grid_final, CS%u_column, &
-                          CS%ppoly_r)
+      call remapping_core(CS, CS%grid_start, u(i,j,:), CS%grid_final, CS%u_column)
      
       u(i,j,:) = CS%u_column(:)
       
@@ -202,8 +199,7 @@ subroutine remapping_main( CS, G, h, h_new, tv, u, v )
         CS%grid_final%h(k) = CS%grid_final%x(k+1) - CS%grid_final%x(k)
       end do
 
-      call remapping_core(CS, CS%grid_start, v(i,j,:), CS%grid_final, CS%u_column, &
-                          CS%ppoly_r)
+      call remapping_core(CS, CS%grid_start, v(i,j,:), CS%grid_final, CS%u_column)
      
       v(i,j,:) = CS%u_column(:)
       
@@ -217,7 +213,7 @@ end subroutine remapping_main
 !------------------------------------------------------------------------------
 ! Remapping core routine
 !------------------------------------------------------------------------------
-subroutine remapping_core( CS, grid0, u0, grid1, u1, ppoly )
+subroutine remapping_core( CS, grid0, u0, grid1, u1 )
 !------------------------------------------------------------------------------
 ! This routine is basic in that it simply takes two grids and remaps the
 ! field known on the first grid onto the second grid, following the rules
@@ -228,60 +224,59 @@ subroutine remapping_core( CS, grid0, u0, grid1, u1, ppoly )
   type(remapping_CS), intent(inout)   :: CS
   type(grid1D_t), intent(in)          :: grid0
   real, dimension(:), intent(in)      :: u0
-  type(ppoly_t), intent(inout)        :: ppoly
   type(grid1D_t), intent(in)          :: grid1
   real, dimension(:), intent(inout)   :: u1
   
   ! Reset polynomial
-  ppoly%E(:,:) = 0.0
-  ppoly%S(:,:) = 0.0
-  ppoly%coefficients(:,:) = 0.0
+  CS%ppoly_r%E(:,:) = 0.0
+  CS%ppoly_r%S(:,:) = 0.0
+  CS%ppoly_r%coefficients(:,:) = 0.0
 
   select case ( CS%remapping_scheme )
     case ( REMAPPING_PCM )
-      call PCM_reconstruction( grid0, u0, ppoly )
-      call remapping_integration( grid0, u0, ppoly, grid1, u1, &
+      call PCM_reconstruction( grid0, u0, CS%ppoly_r )
+      call remapping_integration( grid0, u0, CS%ppoly_r, grid1, u1, &
                                    INTEGRATION_PCM )
     case ( REMAPPING_PLM )
-      call PLM_reconstruction( grid0, u0, ppoly )
+      call PLM_reconstruction( grid0, u0, CS%ppoly_r )
       if ( CS%boundary_extrapolation) then
-        call PLM_boundary_extrapolation( grid0, u0, ppoly )
+        call PLM_boundary_extrapolation( grid0, u0, CS%ppoly_r )
       end if    
-      call remapping_integration( grid0, u0, ppoly, grid1, u1, &
+      call remapping_integration( grid0, u0, CS%ppoly_r, grid1, u1, &
                                    INTEGRATION_PLM )
     case ( REMAPPING_PPM_H4 )
-      call edge_values_explicit_h4( grid0, u0, ppoly%E )
-      call PPM_reconstruction( grid0, u0, ppoly )
+      call edge_values_explicit_h4( grid0, u0, CS%ppoly_r%E )
+      call PPM_reconstruction( grid0, u0, CS%ppoly_r )
       if ( CS%boundary_extrapolation) then
-        call PPM_boundary_extrapolation( grid0, u0, ppoly )
+        call PPM_boundary_extrapolation( grid0, u0, CS%ppoly_r )
       end if    
-      call remapping_integration( grid0, u0, ppoly, grid1, u1, &
+      call remapping_integration( grid0, u0, CS%ppoly_r, grid1, u1, &
                                    INTEGRATION_PPM )
     case ( REMAPPING_PPM_IH4 )
-      call edge_values_implicit_h4( grid0, CS%edgeValueWrk, u0, ppoly%E )
-      call PPM_reconstruction( grid0, u0, ppoly )
+      call edge_values_implicit_h4( grid0, CS%edgeValueWrk, u0, CS%ppoly_r%E )
+      call PPM_reconstruction( grid0, u0, CS%ppoly_r )
       if ( CS%boundary_extrapolation) then
-        call PPM_boundary_extrapolation( grid0, u0, ppoly )
+        call PPM_boundary_extrapolation( grid0, u0, CS%ppoly_r )
       end if    
-      call remapping_integration( grid0, u0, ppoly, grid1, u1, &
+      call remapping_integration( grid0, u0, CS%ppoly_r, grid1, u1, &
                                    INTEGRATION_PPM )
     case ( REMAPPING_PQM_IH4IH3 )
-      call edge_values_implicit_h4( grid0, CS%edgeValueWrk, u0, ppoly%E )
-      call edge_slopes_implicit_h3( grid0, CS%edgeSlopeWrk, u0, ppoly%S )
-      call PQM_reconstruction( grid0, u0, ppoly )
+      call edge_values_implicit_h4( grid0, CS%edgeValueWrk, u0, CS%ppoly_r%E )
+      call edge_slopes_implicit_h3( grid0, CS%edgeSlopeWrk, u0, CS%ppoly_r%S )
+      call PQM_reconstruction( grid0, u0, CS%ppoly_r )
       if ( CS%boundary_extrapolation) then
-        call PQM_boundary_extrapolation_v1( grid0, u0, ppoly )
+        call PQM_boundary_extrapolation_v1( grid0, u0, CS%ppoly_r )
       end if    
-      call remapping_integration( grid0, u0, ppoly, grid1, u1, &
+      call remapping_integration( grid0, u0, CS%ppoly_r, grid1, u1, &
                                    INTEGRATION_PQM )
     case ( REMAPPING_PQM_IH6IH5 )
-      call edge_values_implicit_h6( grid0, CS%edgeValueWrk, u0, ppoly%E )
-      call edge_slopes_implicit_h5( grid0, CS%edgeSlopeWrk, u0, ppoly%S )
-      call PQM_reconstruction( grid0, u0, ppoly )
+      call edge_values_implicit_h6( grid0, CS%edgeValueWrk, u0, CS%ppoly_r%E )
+      call edge_slopes_implicit_h5( grid0, CS%edgeSlopeWrk, u0, CS%ppoly_r%S )
+      call PQM_reconstruction( grid0, u0, CS%ppoly_r )
       if ( CS%boundary_extrapolation) then
-        call PQM_boundary_extrapolation_v1( grid0, u0, ppoly )
+        call PQM_boundary_extrapolation_v1( grid0, u0, CS%ppoly_r )
       end if    
-      call remapping_integration( grid0, u0, ppoly, grid1, u1, &
+      call remapping_integration( grid0, u0, CS%ppoly_r, grid1, u1, &
                                    INTEGRATION_PQM )
     case default
       call MOM_error( FATAL, 'The selected remapping method is invalid' )
