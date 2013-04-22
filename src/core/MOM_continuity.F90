@@ -78,7 +78,7 @@ subroutine continuity(u, v, hin, h, uh, vh, dt, G, CS, uhbt, vhbt, OBC, &
   real, intent(in),  dimension(NIMEMB_,NJMEM_,NKMEM_) :: u
   real, intent(in),  dimension(NIMEM_,NJMEMB_,NKMEM_) :: v
   real, intent(in),  dimension(NIMEM_,NJMEM_,NKMEM_)  :: hin
-  real, intent(out), dimension(NIMEM_,NJMEM_,NKMEM_)  :: h
+  real, intent(inout), dimension(NIMEM_,NJMEM_,NKMEM_)  :: h
   real, intent(out), dimension(NIMEMB_,NJMEM_,NKMEM_) :: uh
   real, intent(out), dimension(NIMEM_,NJMEMB_,NKMEM_) :: vh
   real, intent(in)                                    :: dt
@@ -93,8 +93,8 @@ subroutine continuity(u, v, hin, h, uh, vh, dt, G, CS, uhbt, vhbt, OBC, &
   real, intent(out), optional, dimension(NIMEM_,NJMEMB_,NKMEM_) :: v_cor
   real, intent(in), optional, dimension(NIMEMB_,NJMEM_) :: uhbt_aux
   real, intent(in), optional, dimension(NIMEM_,NJMEMB_) :: vhbt_aux
-  real, intent(out), optional, dimension(NIMEMB_,NJMEM_,NKMEM_) :: u_cor_aux
-  real, intent(out), optional, dimension(NIMEM_,NJMEMB_,NKMEM_) :: v_cor_aux
+  real, intent(inout), optional, dimension(NIMEMB_,NJMEM_,NKMEM_) :: u_cor_aux
+  real, intent(inout), optional, dimension(NIMEM_,NJMEMB_,NKMEM_) :: v_cor_aux
   type(BT_cont_type),                  pointer,     optional :: BT_cont
 !    This subroutine time steps the layer thicknesses, using a monotonically
 !  limit, directionally split PPM scheme, based on Lin (1994).
