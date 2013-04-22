@@ -1,6 +1,6 @@
 !********+*********+*********+*********+*********+*********+*********+*
 !*   This file determines the adjustable run-time parameters for the  *
-!* Generalized Ocean Layer Dynamics (MOM) ocean model.  Where        *
+!* Modular Ocean Model (MOM), versions 6 and later.  Where            *
 !* appropriate, MKS units are used.                                   *
 !********+*********+*********+*********+*********+*********+*********+*
 ! >>> double_gyre test case <<<
@@ -251,17 +251,17 @@ ADIABATIC = True                !    There are no diapycnal mass fluxes if
                                 ! eliminating subroutine calls.
 
 
-HMIX = 20.0                     !    The depth of the assumed mixed layer for
-                                !  distribution of wind forcing, in m.  If
-                                !  BULKMIXEDLAYER is defined, the buoyancy fluxes
-                                !  are scaled away when the total depth is less
-                                !  than HMIX/2.
+HMIX_FIXED = 20.0               !    The prescribed depth over which the near-
+                                !  surface viscosity and diffusivity are elevated
+                                !  when the bulk mixed layer is not used.
 KVML = 1.00e-2                  !    The kinematic viscosity in the mixed layer,
                                 !  in m2 s-1.  A typical value is ~1e-2 m2 s-1.
                                 !  KVML is not used if BULKMIXEDLAYER is defined.
 DIRECT_STRESS = True            !    If DIRECT_STRESS is defined, the wind stress
-                                !  is distributed over the topmost HMIX of fluid,
-                                !  and KVML may be set to a very small value.
+                                !  is distributed over the topmost HMIX_STRESS
+                                !  of fluid, and KVML need not be elevated.
+HMIX_STRESS = 20.0              !    The depth over which to apply the wind
+                                !  stress when DIRECT_STRESS is true.
 
 KV = 1.00e-4                    !    The kinematic viscosity in the interior, in
                                 !  m2 s-1.  The molecular value, ~1e-6 m2 s-1,

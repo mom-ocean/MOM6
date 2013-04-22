@@ -1,9 +1,9 @@
 !********+*********+*********+*********+*********+*********+*********+*
 !*   This file determines the adjustable run-time parameters for the  *
-!* Generalized Ocean Layer Dynamics (MOM) ocean model.  Where        *
+!* Modular Ocean Model (MOM), versions 6 and later.  Where            *
 !* appropriate, MKS units are used.                                   *
 !********+*********+*********+*********+*********+*********+*********+*
-! >>> lock exchange test case <<<
+! >>> external_gwave test case <<<
 
 !  Specify properties of the physical domain.
 OMEGA = 7.2921e-5               !   The rotation rate of the earth in s-1.
@@ -381,11 +381,9 @@ NKML = 2                        !    NKML is the number of sublayers within the
 NKBL = 1                        !    NKBL is the number of layers used as
                                 !  variable density buffer layers.
 
-HMIX = 1.0e-10                  !    The depth of the assumed mixed layer for
-                                !  distribution of wind forcing, in m.  If
-                                !  BULKMIXEDLAYER is defined, the buoyancy fluxes
-                                !  are scaled away when the total depth is less
-                                !  than HMIX/2.
+HMIX_FIXED = 1.0e-10            !    The prescribed depth over which the near-
+                                !  surface viscosity and diffusivity are elevated
+                                !  when the bulk mixed layer is not used.
 KVML = 1.00e-4                  !    The kinematic viscosity in the mixed layer,
                                 !  in m2 s-1.  A typical value is ~1e-2 m2 s-1.
                                 !  KVML is not used if BULKMIXEDLAYER is defined.
@@ -393,8 +391,8 @@ KDML = 0.0e-5                   !    The diapycnal diffusivity of density in the
                                 !  mixed layer, in m2 s-1.  This value may be 0.
                                 !  KDML is not used if BULKMIXEDLAYER is defined.
 DIRECT_STRESS = False           !    If DIRECT_STRESS is defined, the wind stress
-                                !  is distributed over the topmost HMIX of fluid,
-                                !  and KVML may be set to a very small value.
+                                !  is distributed over the topmost HMIX_STRESS
+                                !  of fluid, and KVML need not be elevated.
 KV_BBL_MIN = 1.0e-6
 KV = 1.00e-4                    !    The kinematic viscosity in the interior, in
                                 !  m2 s-1.  The molecular value, ~1e-6 m2 s-1,

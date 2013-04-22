@@ -2301,11 +2301,10 @@ subroutine set_diffusivity_init(Time, G, param_file, diag, CS, diag_to_Z_CSp)
                  "diapycnal diffusivity in the topmost HMIX of fluid. \n"//&
                  "KDML is only used if BULKMIXEDLAYER is false.", &
                  units="m2 s-1", default=CS%Kd)
-    call get_param(param_file, mod, "HMIX", CS%Hmix, &
-                 "If BULKMIXEDLAYER is false, HMIX is the depth over \n"//&
-                 "which the diapycnal diffusivity is elevated.  HMIX \n"//&
-                 "is only used directly if BULKMIXEDLAYER is false.", &
-                 units="m", fail_if_missing=.true.)
+    call get_param(param_file, mod, "HMIX_FIXED", CS%Hmix, &
+                 "The prescribed depth over which the near-surface \n"//&
+                 "viscosity and diffusivity are elevated when the bulk \n"//&
+                 "mixed layer is not used.", units="m", fail_if_missing=.true.)
   endif
   call get_param(param_file, mod, "DEBUG", CS%debug, &
                  "If true, write out verbose debugging data.", default=.false.)

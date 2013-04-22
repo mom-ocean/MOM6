@@ -165,6 +165,8 @@ subroutine find_obsolete_params(param_file)
   call test_obsolete_real(param_file, "RLAY_RANGE")
   call test_obsolete_real(param_file, "RLAY_REF")
 
+  call test_obsolete_real(param_file, "HMIX")
+
   test_int = -1 ; call read_param(param_file,"ML_RADIATION_CODING",test_int)
   if (test_int == 1) call MOM_ERROR(FATAL, "find_obsolete_params: "// &
     "ML_RADIATION_CODING is an obsolete option and the code previously "//&

@@ -1,6 +1,6 @@
 !********+*********+*********+*********+*********+*********+*********+*
 !*   This file determines the adjustable run-time parameters for the  *
-!* Generalized Ocean Layer Dynamics (MOM) ocean model.  Where         *
+!* Modular Ocean Model (MOM), versions 6 and later.  Where            *
 !* appropriate, MKS units are used.                                   *
 !********+*********+*********+*********+*********+*********+*********+*
 ! >>> global test case <<<
@@ -566,8 +566,8 @@ HMIX_MIN = 2.0                  !   The minimum mixed layer depth, in m.
 DEPTH_LIMIT_FLUXES = 0.1        !    The surface fluxes are scaled away when the
                                 !  total ocean depth is less than this, in m.
 DIRECT_STRESS = False           !    If DIRECT_STRESS is defined, the wind stress
-                                !  is distributed over the topmost HMIX of fluid,
-                                !  and KVML may be set to a very small value.
+                                !  is distributed over the topmost HMIX_STRESS
+                                !  of fluid, and KVML need not be elevated.
 
 KV = 1.00e-4                    !    The kinematic viscosity in the interior, in
                                 !  m2 s-1.  The molecular value, ~1e-6 m2 s-1,

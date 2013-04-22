@@ -1,6 +1,6 @@
 !********+*********+*********+*********+*********+*********+*********+*
 !*   This file determines the adjustable run-time parameters for the  *
-!* Generalized Ocean Layer Dynamics (MOM) ocean model.  Where        *
+!* Modular Ocean Model (MOM), versions 6 and later.  Where            *
 !* appropriate, MKS units are used.                                   *
 !********+*********+*********+*********+*********+*********+*********+*
 ! >>> HiRes_025_SIS Global coupled model.
@@ -596,8 +596,8 @@ KDML = 1.00e-4                  !    The diapycnal diffusivity of density in the
                                 !  mixed layer, in m2 s-1.  This value may be 0.
                                 !  KDML is not used if BULKMIXEDLAYER is defined.
 DIRECT_STRESS = False           !    If DIRECT_STRESS is defined, the wind stress
-                                !  is distributed over the topmost HMIX of fluid,
-                                !  and KVML may be set to a very small value.
+                                !  is distributed over the topmost HMIX_STRESS
+                                !  of fluid, and KVML need not be elevated.
 
 KV = 1.00e-3                    !    The kinematic viscosity in the interior, in
                                 !  m2 s-1.  The molecular value, ~1e-6 m2 s-1,

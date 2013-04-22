@@ -237,8 +237,10 @@ subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, G, CS, taux_bot, tauy_bot)
   if (.not.associated(CS)) call MOM_error(FATAL,"MOM_vert_friction(visc): "// &
          "Module must be initialized before it is used.")
 
-  Hmix = CS%Hmix_stress*G%m_to_H
-  I_Hmix = 1.0 / Hmix
+  if (CS%direct_stress) then
+    Hmix = CS%Hmix_stress*G%m_to_H
+    I_Hmix = 1.0 / Hmix
+  endif
   dt_Rho0 = dt/G%H_to_kg_m2
   dt_m_to_H = dt*G%m_to_H
   h_neglect = G%H_subroundoff
@@ -575,7 +577,6 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
                   ! based on harmonic mean thicknesses, in m or kg m-2.
   real, allocatable, dimension(:,:) :: hML_u, hML_v
   real :: zcol(SZI_(G)) ! The height of an interface at h-points, in m or kg m-2.
-  real :: I_Hmix  ! The inverse of the mixed layer thickness, in m-1 or m2 kg-1.
   real :: botfn   ! A function which goes from 1 at the bottom to 0 much more
                   ! than Hbbl into the interior.
   real :: topfn   ! A function which goes from 1 at the top to 0 much more
@@ -596,7 +597,6 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
          "Module must be initialized before it is used.")
 
   h_neglect = G%H_subroundoff
-  I_Hmix = 1.0 / (CS%Hmix * G%m_to_H + h_neglect)
   I_Hbbl(:) = 1.0 / (CS%Hbbl * G%m_to_H + h_neglect)
 
   if (CS%debug .or. (CS%id_hML_u > 0)) then
@@ -886,6 +886,7 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
     real :: h_shear ! The distance over which shears occur, m or kg m-2.
     real :: r       ! A thickness to compare with Hbbl, in m or kg m-2.
     real :: visc_ml ! The mixed layer viscosity, in m2 s-1.
+    real :: I_Hmix  ! The inverse of the mixed layer thickness, in m-1 or m2 kg-1.
     real :: a_ml    ! The layer coupling coefficient across an interface in
                     ! the mixed layer, in m s-1.
     real :: temp1   ! A temporary variable in m2 s-1.
@@ -912,6 +913,7 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
     if ((G%nkml>0) .or. do_shelf) then ; do k=2,nz ; do i=is,ie
       if (do_i(i)) a(i,K) = 2.0*CS%Kv
     enddo ; enddo ; else
+      I_Hmix = 1.0 / (CS%Hmix * G%m_to_H + h_neglect)
       do i=is,ie ; z_t(i) = h_neglect*I_Hmix ; enddo
       do K=2,nz ; do i=is,ie ; if (do_i(i)) then
         z_t(i) = z_t(i) + h_harm(i,k-1)*I_Hmix
@@ -1263,8 +1265,8 @@ subroutine vertvisc_init(HIS, Time, G, param_file, diag, dirs, ntrunc, CS)
                  "overlies.", default=.false.)
   call get_param(param_file, mod, "DIRECT_STRESS", CS%direct_stress, &
                  "If true, the wind stress is distributed over the \n"//&
-                 "topmost HMIX of fluid (like in HYCOM), and KVML may be \n"//&
-                 "set to a very small value.", default=.false.)
+                 "topmost HMIX_STRESS of fluid (like in HYCOM), and KVML \n"//&
+                 "may be set to a very small value.", default=.false.)
   call get_param(param_file, mod, "DYNAMIC_VISCOUS_ML", CS%dynamic_viscous_ML, &
                  "If true, use a bulk Richardson number criterion to \n"//&
                  "determine the mixed layer thickness for viscosity.", &
@@ -1284,17 +1286,21 @@ subroutine vertvisc_init(HIS, Time, G, param_file, diag, dirs, ntrunc, CS)
                  "calculating the vertical viscosity.", default=.false.)
   call get_param(param_file, mod, "DEBUG", CS%debug, default=.false.)
 
-  CS%Hmix_stress = -1.0e6
   if (G%nkml < 1) &
-    call get_param(param_file, mod, "HMIX", CS%Hmix, &
-                 "The depth over which the near-surface viscosity is \n"//&
-                 "elevated if BULKMIXEDLAYER is false.", units="m", &
-                 default=-1.0e6, fail_if_missing=.true.)
+    call get_param(param_file, mod, "HMIX_FIXED", CS%Hmix, &
+                 "The prescribed depth over which the near-surface \n"//&
+                 "viscosity and diffusivity are elevated when the bulk \n"//&
+                 "mixed layer is not used.", units="m", fail_if_missing=.true.)
   if (CS%direct_stress) then
-    call get_param(param_file, mod, "HMIX", hmix_str_dflt, default=-1.0e6)
-    call get_param(param_file, mod, "HMIX_STRESS", CS%Hmix_stress, &
+    if (G%nkml < 1) then
+      call get_param(param_file, mod, "HMIX_STRESS", CS%Hmix_stress, &
                  "The depth over which the wind stress is applied if \n"//&
-                 "DIRECT_STRESS is true.", units="m", default=hmix_str_dflt)
+                 "DIRECT_STRESS is true.", units="m", default=CS%Hmix)
+    else
+      call get_param(param_file, mod, "HMIX_STRESS", CS%Hmix_stress, &
+                 "The depth over which the wind stress is applied if \n"//&
+                 "DIRECT_STRESS is true.", units="m", fail_if_missing=.true.)
+    endif
     if (CS%Hmix_stress <= 0.0) call MOM_error(FATAL, "vertvisc_init: " // &
        "HMIX_STRESS must be set to a positive value if DIRECT_STRESS is true.")
   endif

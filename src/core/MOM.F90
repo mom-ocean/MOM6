@@ -1153,14 +1153,13 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
                  "If SPLIT is false and USE_RK2 is true, BEGW can be \n"//&
                  "between 0 and 0.5 to damp gravity waves.", &
                  units="nondim", default=0.0)
-  call get_param(param_file, "MOM", "HMIX", CS%Hmix, &
-                 "If BULKMIXEDLAYER is false, HMIX is the depth over \n"//&
-                 "which to average to find surface properties like SST \n"//&
-                 "and SSS, and over which the vertical viscosity and \n"//&
-                 "diapycnal diffusivity are elevated.  HMIX is only used \n"//&
-                 "directly if BULKMIXEDLAYER is false, but provides a \n"//&
-                 "default value for other variables if BULKMIXEDLAYER is \n"//&
-                 "true.", units="m", default=1.0)
+  if (.not.CS%bulkmixedlayer) then
+    call get_param(param_file, "MOM", "HMIX_SFC_PROP", CS%Hmix, &
+                 "If BULKMIXEDLAYER is false, HMIX_SFC_PROP is the depth \n"//&
+                 "over which to average to find surface properties like \n"//&
+                 "SST and SSS or density (but not surface velocities).", &
+                 units="m", default=1.0)
+  endif
   call get_param(param_file, "MOM", "MIN_Z_DIAG_INTERVAL", Z_diag_int, &
                  "The minimum amount of time in seconds between \n"//&
                  "calculations of depth-space diagnostics. Making this \n"//&
