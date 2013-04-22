@@ -52,6 +52,7 @@ end type
 ! The following routines are visible to the outside world
 ! -----------------------------------------------------------------------------
 public remapping_main, remapping_core, initialize_remapping, end_remapping
+public enableBoundaryExtrapolation, disableBoundaryExtrapolation
 
 ! -----------------------------------------------------------------------------
 ! The following are private parameter constants
@@ -530,21 +531,18 @@ end subroutine remapping_integration
 !------------------------------------------------------------------------------
 ! Memory allocation for remapping
 !------------------------------------------------------------------------------
-subroutine initialize_remapping( param_file, G, CS)
+subroutine initialize_remapping( param_file, nk, CS)
   ! Arguments
-  type(param_file_type),   intent(in)    :: param_file
-  type(ocean_grid_type),   intent(in)    :: G
-  type(remapping_CS),      intent(inout) :: CS
+  type(param_file_type), intent(in)    :: param_file
+  integer,               intent(in)    :: nk
+  type(remapping_CS),    intent(inout) :: CS
   ! Local variables
-  integer   :: degree         ! Degree of polynomials used for the reconstruction 
-  integer   :: nz             ! Number of levels/layers to allocate for
   character(len=40) :: string ! Temporary string
-  
-  nz = G%ke
+  integer :: degree         ! Degree of polynomials used for the reconstruction 
   
   ! Allocate memory for grids
-  call grid1Dconstruct( CS%grid_start, nz )
-  call grid1Dconstruct( CS%grid_final, nz )
+  call grid1Dconstruct( CS%grid_start, nk )
+  call grid1Dconstruct( CS%grid_final, nk )
   
   ! --- REMAPPING SCHEME ---
   ! This sets which remapping scheme we want to use to remap all variables
@@ -560,39 +558,63 @@ subroutine initialize_remapping( param_file, G, CS)
                  "PQM_IH4IH3  (4th-order accurate)\n"//&
                  "PQM_IH6IH5  (5th-order accurate)\n", &
                  default="PLM")
-  select case ( uppercase(trim(string)) )
-    case ("PCM")
-      CS%remapping_scheme = REMAPPING_PCM
-      degree = 0
-    case ("PLM")
-      CS%remapping_scheme = REMAPPING_PLM
-      degree = 1
-    case ("PPM_H4")
-      CS%remapping_scheme = REMAPPING_PPM_H4
-      degree = 2
-    case ("PPM_IH4")
-      CS%remapping_scheme = REMAPPING_PPM_IH4
-      degree = 2
-    case ("PQM_IH4IH3")
-      CS%remapping_scheme = REMAPPING_PQM_IH4IH3
-      degree = 4
-    case ("PQM_IH6IH5")
-      CS%remapping_scheme = REMAPPING_PQM_IH6IH5
-      degree = 4
-    case default
-      call MOM_error(FATAL, "initialize_remapping: "//&
-       "Unrecognized choice for REMAPPING_SCHEME ("//trim(string)//").")
-  end select
+  degree = setReconstructionType( string, CS )
 
-  call ppoly_init( CS%ppoly_r, nz, degree )
+  call ppoly_init( CS%ppoly_r, nk, degree )
   
-  allocate( CS%u_column(nz) ); CS%u_column = 0.0
+  allocate( CS%u_column(nk) ); CS%u_column = 0.0
 
-  call triDiagEdgeWorkAllocate( nz, CS%edgeValueWrk )
-  call triDiagSlopeWorkAllocate( nz, CS%edgeSlopeWrk )
+  call triDiagEdgeWorkAllocate( nk, CS%edgeValueWrk )
+  call triDiagSlopeWorkAllocate( nk, CS%edgeSlopeWrk )
 
 end subroutine initialize_remapping
 
+
+!------------------------------------------------------------------------------
+! Functions for setting parameters within the CS
+!------------------------------------------------------------------------------
+function setReconstructionType(string,CS)
+! Use this function to parse a string parameter specifying the reconstruction 
+! and returns the polynomial degree of representation
+  integer :: setReconstructionType
+  character(len=*), intent(in) :: string
+  type(remapping_CS), intent(inout) :: CS
+  select case ( uppercase(trim(string)) )
+    case ("PCM")
+      CS%remapping_scheme = REMAPPING_PCM
+      setReconstructionType = 0
+    case ("PLM")
+      CS%remapping_scheme = REMAPPING_PLM
+      setReconstructionType = 1
+    case ("PPM_H4")
+      CS%remapping_scheme = REMAPPING_PPM_H4
+      setReconstructionType = 2
+    case ("PPM_IH4")
+      CS%remapping_scheme = REMAPPING_PPM_IH4
+      setReconstructionType = 2
+    case ("PQM_IH4IH3")
+      CS%remapping_scheme = REMAPPING_PQM_IH4IH3
+      setReconstructionType = 4
+    case ("PQM_IH6IH5")
+      CS%remapping_scheme = REMAPPING_PQM_IH6IH5
+      setReconstructionType = 4
+    case default
+      call MOM_error(FATAL, "setReconstructionType: "//&
+       "Unrecognized choice for REMAPPING_SCHEME ("//trim(string)//").")
+  end select
+end function setReconstructionType
+
+subroutine enableBoundaryExtrapolation(CS)
+! Use this to enable extrapolation at boundaries
+  type(remapping_CS), intent(inout) :: CS
+  CS%boundary_extrapolation = .true.
+end subroutine enableBoundaryExtrapolation
+
+subroutine disableBoundaryExtrapolation(CS)
+! Use this to disable extrapolation at boundaries
+  type(remapping_CS), intent(inout) :: CS
+  CS%boundary_extrapolation = .false.
+end subroutine disableBoundaryExtrapolation
 
 !------------------------------------------------------------------------------
 ! Memory deallocation for remapping
