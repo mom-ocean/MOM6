@@ -523,13 +523,9 @@ BULK_RI_CONVECTIVE = 0.1        !    BULK_RI_CONVECTIVE is the efficiency with
                                 !  which convectively released mean kinetic
                                 !  energy is converted to turbulent kinetic
                                 !  energy.  Nondimensional.
+HMIX_MIN = 10.0                 !   The minimum mixed layer depth, in m.
 !  End of the BULKMIXEDLAYER parameters.
 
-HMIX = 10.0                     !    The depth of the assumed mixed layer for
-                                !  distribution of wind forcing, in m.  If
-                                !  BULKMIXEDLAYER is defined, the buoyancy fluxes
-                                !  are scaled away when the total depth is less
-                                !  than HMIX/2.
 KVML = 1.00e-2                  !    The kinematic viscosity in the mixed layer,
                                 !  in m2 s-1.  A typical value is ~1e-2 m2 s-1.
                                 !  KVML is not used if BULKMIXEDLAYER is defined.

@@ -3269,11 +3269,9 @@ subroutine bulkmixedlayer_init(Time, G, param_file, diag, CS)
                  "kinetic energy is converted to turbulent kinetic \n"//&
                  "energy.  By default BULK_RI_CONVECTIVE=BULK_RI_ML.", &
                  units="nondim", default=CS%bulk_Ri_ML)
-  ! This allows for mix-up of obselete and new names  ### ELIMINATE THIS?
-  call get_param(param_file, mod, "HMIX", CS%Hmix_min, default=0.0)
   call get_param(param_file, mod, "HMIX_MIN", CS%Hmix_min, &
                  "The minimum mixed layer depth if BULKMIXEDLAYER is true.", &
-                 units="m", default=CS%Hmix_min)
+                 units="m", default=0.0)
 
   call get_param(param_file, mod, "LIMIT_BUFFER_DETRAIN", CS%limit_det, &
                  "If true, limit the detrainment from the buffer layers \n"//&

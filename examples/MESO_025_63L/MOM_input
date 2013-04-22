@@ -550,17 +550,11 @@ ML_PRESORT_NK_CONV_ADJ = 4      ! Convectively mix the first X layers before
 LIMIT_BUFFER_DETRAIN = True     !   If defined, limit the detrainment from the
                                 ! buffer layers to not be too different from the
                                 ! neighbors.
-HMIX_MIN = 2.0                  !   The minimum mixed layer depth, in m.
-
 DYNAMIC_VISCOUS_ML = True       !   If defined, use a bulk Richardson number criteria
                                 ! to determine the mixed layer thickness for viscosity.
+HMIX_MIN = 2.0                  !   The minimum mixed layer depth, in m.
 !  End of the BULKMIXEDLAYER parameters.
 
-HMIX = 2.0                      !    The depth of the assumed mixed layer for
-                                !  distribution of wind forcing, in m.  If
-                                !  BULKMIXEDLAYER is defined, the buoyancy fluxes
-                                !  are scaled away when the total depth is less
-                                !  than HMIX/2.
 DEPTH_LIMIT_FLUXES = 0.1        !    The surface fluxes are scaled away when the
                                 !  total ocean depth is less than this, in m.
 DIRECT_STRESS = False           !    If DIRECT_STRESS is defined, the wind stress

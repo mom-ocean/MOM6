@@ -932,11 +932,9 @@ subroutine regularize_layers_init(Time, G, param_file, diag, CS)
                  "REGULARIZE_SURFACE_LAYERS is true.", default=.true.)
   endif
 
-  ! This allows for mix-up of obselete and new names  ### ELIMINATE THIS?
-  call get_param(param_file, mod, "HMIX", CS%Hmix_min, default=0.0)
   call get_param(param_file, mod, "HMIX_MIN", CS%Hmix_min, &
                  "The minimum mixed layer depth if BULKMIXEDLAYER is true.", &
-                 units="m", default=CS%Hmix_min)
+                 units="m", default=0.0)
   call get_param(param_file, mod, "REG_SFC_DEFICIT_TOLERANCE", CS%h_def_tol1, &
                  "The value of the relative thickness deficit at which \n"//&
                  "to start modifying the layer structure when \n"//&
