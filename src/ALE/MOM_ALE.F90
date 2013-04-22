@@ -179,7 +179,7 @@ subroutine initialize_ALE( param_file, G, h, h_aux, &
 
   call initialize_regridding( param_file, G, CS%regridCS )
 
-  call initialize_remapping( param_file, G, CS%remapCS )
+  call initialize_remapping( param_file, G%ke, CS%remapCS )
 
   ! Check grid integrity with respect to minimum allowed thickness
   do m = 1,size(h,4)

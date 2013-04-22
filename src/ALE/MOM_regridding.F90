@@ -176,7 +176,7 @@ subroutine initialize_regridding( param_file, G, CS )
 
   call read_regridding_options( param_file, CS )
 
-  call initialize_remapping( param_file, G, CS%remapCS )
+  call initialize_remapping( param_file, G%ke, CS%remapCS )
 
 end subroutine initialize_regridding
 
