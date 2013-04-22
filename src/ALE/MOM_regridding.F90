@@ -99,7 +99,6 @@ type, public :: regridding_CS
   ! Minimum thickness allowed when building the new grid through regridding
   real      :: min_thickness
 
-  type(remapping_CS) :: remapCS ! Remapping parameters and work arrays
   type(edgeValueArrays) :: edgeValueWrk ! Work space for edge values
   type(edgeSlopeArrays) :: edgeSlopeWrk ! Work space for edge slopes
 end type
@@ -175,8 +174,6 @@ subroutine initialize_regridding( param_file, G, CS )
   call regridding_memory_allocation( G, CS )
 
   call read_regridding_options( param_file, CS )
-
-  call initialize_remapping( param_file, G%ke, CS%remapCS )
 
 end subroutine initialize_regridding
 
@@ -278,7 +275,6 @@ subroutine end_regridding(CS)
   type(regridding_CS), intent(inout) :: CS
   
   ! Deallocate memory used for the regridding
-  call end_remapping( CS%remapCS )
   call regridding_memory_deallocation( CS )
 
 end subroutine end_regridding
@@ -287,7 +283,7 @@ end subroutine end_regridding
 !------------------------------------------------------------------------------
 ! Dispatching regridding routine: regridding & remapping
 !------------------------------------------------------------------------------
-subroutine regridding_main( CS, G, h, u, v, tv, h_new )
+subroutine regridding_main( remapCS, CS, G, h, u, v, tv, h_new )
 !------------------------------------------------------------------------------
 ! This routine takes care of (1) building a new grid and (2) remapping between
 ! the old grid and the new grid. The creation of the new grid can be based
@@ -296,6 +292,7 @@ subroutine regridding_main( CS, G, h, u, v, tv, h_new )
 !------------------------------------------------------------------------------
   
   ! Arguments
+  type(remapping_CS),                      intent(inout) :: remapCS ! Remapping parameters and options
   type(regridding_CS),                     intent(inout) :: CS     ! Regridding parameters and options
   type(ocean_grid_type),                   intent(in)    :: G      ! Ocean grid informations
   real, dimension(NIMEM_,NJMEM_, NKMEM_),  intent(inout) :: h      ! Current 3D grid obtained after the last time step
@@ -315,7 +312,7 @@ subroutine regridding_main( CS, G, h, u, v, tv, h_new )
 
     case ( REGRIDDING_RHO )  
       call convective_adjustment(CS, G, h, tv)
-      call build_grid_target_densities( G, h, h_new, tv, CS )
+      call build_grid_target_densities( G, h, h_new, tv, remapCS, CS )
 
     case ( REGRIDDING_SIGMA )
       call build_grid_sigma( G, h, h_new )
@@ -548,7 +545,7 @@ end subroutine build_grid_arbitrary
 !------------------------------------------------------------------------------
 ! Build grid based on target interface densities
 !------------------------------------------------------------------------------
-subroutine build_grid_target_densities( G, h, h_new, tv, CS )
+subroutine build_grid_target_densities( G, h, h_new, tv, remaPCS, CS )
 !------------------------------------------------------------------------------
 ! This routine builds a new grid based on a given set of target interface
 ! densities (these target densities are computed by taking the mean value
@@ -565,11 +562,12 @@ subroutine build_grid_target_densities( G, h, h_new, tv, CS )
 !------------------------------------------------------------------------------
   
   ! Arguments
-  type(ocean_grid_type), intent(in)                  :: G
+  type(ocean_grid_type), intent(in)                     :: G
   real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(in)    :: h
   real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(inout) :: h_new
-  type(thermo_var_ptrs), intent(in)                  :: tv     
-  type(regridding_CS), intent(inout)                :: CS
+  type(thermo_var_ptrs), intent(in)                     :: tv     
+  type(remapping_CS), intent(inout)                     :: remapCS
+  type(regridding_CS), intent(inout)                    :: CS
   
   ! Local variables
   integer   :: i, j, k, m
@@ -686,10 +684,10 @@ subroutine build_grid_target_densities( G, h, h_new, tv, CS )
           CS%grid_final%h(k) = CS%grid_final%x(k+1) - CS%grid_final%x(k)
         end do
         
-        call remapping_core(CS%remapCS, CS%grid_start, CS%S_column, CS%grid_final,& 
+        call remapping_core(remapCS, CS%grid_start, CS%S_column, CS%grid_final,& 
                             CS%S_column, CS%ppoly_r)
         
-        call remapping_core(CS%remapCS, CS%grid_start, CS%T_column, CS%grid_final,& 
+        call remapping_core(remapCS, CS%grid_start, CS%T_column, CS%grid_final,& 
                             CS%T_column, CS%ppoly_r)
 
         ! Compute the deviation between two successive grids

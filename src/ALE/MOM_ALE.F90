@@ -206,7 +206,7 @@ subroutine initialize_ALE( param_file, G, h, h_aux, &
   ! step is therefore not strictly necessary but is included for historical
   ! reasons when I needed to check whether the combination 'initial 
   ! conditions - regridding/remapping' was consistently implemented.
-  call regridding_main( CS%regridCS, G, h(:,:,:,1), u, v, tv, h_aux )
+  call regridding_main( CS%remapCS, CS%regridCS, G, h(:,:,:,1), u, v, tv, h_aux )
   call remapping_main( CS%remapCS, G, h(:,:,:,1), h_aux, tv, u, v )
   h(:,:,:,1) = h_aux(:,:,:)
   
@@ -378,7 +378,7 @@ subroutine ALE_main( G, h, h_new, u, v, tv, CS )
   
   ! Build new grid. The new grid is stored in h_new. The old grid is h.
   ! Both are needed for the subsequent remapping of variables.
-  call regridding_main( CS%regridCS, G, h, u, v, tv, h_new )
+  call regridding_main( CS%remapCS, CS%regridCS, G, h, u, v, tv, h_new )
   
   ! Remap all variables from old grid h onto new grid h_new
   call remapping_main( CS%remapCS, G, h, h_new, tv, u, v )
