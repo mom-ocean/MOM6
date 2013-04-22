@@ -68,7 +68,7 @@ BE = 0.7                        !   [nondim] default = 0.6
                                 ! from 0.5 to 1, but instability may occur near 0.5.
                                 ! BE is also applicable if SPLIT is false and USE_RK2
                                 ! is true.
-HMIX = 20.0                     !   [m] default = 1.0
+HMIX_FIXED = 20.0                     !   [m] default = 1.0
                                 ! If BULKMIXEDLAYER is false, HMIX is the depth over
                                 ! which to average to find surface properties like SST
                                 ! and SSS, and over which the vertical viscosity and
