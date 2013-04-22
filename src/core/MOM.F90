@@ -1449,9 +1449,20 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call VarMix_init(Time, grid, param_file, diag, CS%VarMix)
   ! Need an ALE CS !!!! -AJA
   if (CS%useALEalgorithm) then
+    if (CS%debug) then
+      call uchksum(u(:,:,:,1),"Pre initialize_ALE u",grid,haloshift=1)
+      call vchksum(v(:,:,:,1),"Pre initialize_ALE v",grid,haloshift=1)
+      call hchksum(h(:,:,:,1), "Pre initialize_ALE h",grid,haloshift=1)
+    endif
     ALLOC_(CS%h_aux(isd:ied,jsd:jed,nz)); CS%h_aux(:,:,:) = 0.
     call initialize_ALE(param_file, grid, h(:,:,:,:), CS%h_aux(:,:,:), &
                         u(:,:,:,1), v(:,:,:,1), CS%tv, CS%regridding_opts)
+    if (CS%debug) then
+      call uchksum(u(:,:,:,1),"Post initialize_ALE u",grid,haloshift=1)
+      call vchksum(v(:,:,:,1),"Post initialize_ALE v",grid,haloshift=1)
+      call hchksum(h(:,:,:,1), "Post initialize_ALE h",grid,haloshift=1)
+      call hchksum(CS%h_aux, "Post initialize_ALE h_aux",grid,haloshift=1)
+    endif
   endif
 
   call MOM_diagnostics_init(MOM_internal_state, Time, grid, param_file, &

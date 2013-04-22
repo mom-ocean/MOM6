@@ -51,7 +51,7 @@ end type
 ! -----------------------------------------------------------------------------
 ! The following routines are visible to the outside world
 ! -----------------------------------------------------------------------------
-public remapping_main, remapping_core, remapping_init, remapping_end
+public remapping_main, remapping_core, initialize_remapping, end_remapping
 
 ! -----------------------------------------------------------------------------
 ! The following are private parameter constants
@@ -88,11 +88,11 @@ subroutine remapping_main( CS, G, h, h_new, tv, u, v )
 !------------------------------------------------------------------------------
   
   ! Arguments
-  type(remapping_CS),                    intent(inout)    :: CS
-  type(ocean_grid_type),                 intent(in)       :: G
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)       :: h
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout)    :: h_new
-  type(thermo_var_ptrs), intent(inout)                    :: tv       
+  type(remapping_CS),                     intent(inout) :: CS
+  type(ocean_grid_type),                  intent(in)    :: G
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h_new
+  type(thermo_var_ptrs),                  intent(inout) :: tv       
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(inout), optional  :: u
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(inout), optional  :: v
   
@@ -530,7 +530,7 @@ end subroutine remapping_integration
 !------------------------------------------------------------------------------
 ! Memory allocation for remapping
 !------------------------------------------------------------------------------
-subroutine remapping_init( param_file, G, CS)
+subroutine initialize_remapping( param_file, G, CS)
   ! Arguments
   type(param_file_type),   intent(in)    :: param_file
   type(ocean_grid_type),   intent(in)    :: G
@@ -580,7 +580,7 @@ subroutine remapping_init( param_file, G, CS)
       CS%remapping_scheme = REMAPPING_PQM_IH6IH5
       degree = 4
     case default
-      call MOM_error(FATAL, "remapping_init: "//&
+      call MOM_error(FATAL, "initialize_remapping: "//&
        "Unrecognized choice for REMAPPING_SCHEME ("//trim(string)//").")
   end select
 
@@ -591,13 +591,13 @@ subroutine remapping_init( param_file, G, CS)
   call triDiagEdgeWorkAllocate( nz, CS%edgeValueWrk )
   call triDiagSlopeWorkAllocate( nz, CS%edgeSlopeWrk )
 
-end subroutine remapping_init
+end subroutine initialize_remapping
 
 
 !------------------------------------------------------------------------------
 ! Memory deallocation for remapping
 !------------------------------------------------------------------------------
-subroutine remapping_end(CS)
+subroutine end_remapping(CS)
   type(remapping_CS), intent(inout) :: CS
 
   ! Deallocate memory for grid
@@ -612,6 +612,6 @@ subroutine remapping_end(CS)
   call triDiagEdgeWorkDeallocate( CS%edgeValueWrk )
   call triDiagSlopeWorkDeallocate( CS%edgeSlopeWrk )
 
-end subroutine remapping_end
+end subroutine end_remapping
 
 end module MOM_remapping
