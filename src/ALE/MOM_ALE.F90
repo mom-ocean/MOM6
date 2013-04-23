@@ -34,7 +34,7 @@ use P1M_functions, only : P1M_interpolation, P1M_boundary_extrapolation
 use P3M_functions, only : P3M_interpolation, P3M_boundary_extrapolation
 use MOM_regridding, only : initialize_regridding, regridding_main , end_regridding
 use MOM_regridding, only : regridding_CS
-use MOM_remapping, only : initialize_remapping, remapping_main, end_remapping
+use MOM_remapping, only : initialize_remapping, allocate_remapping, remapping_main, end_remapping
 use MOM_remapping, only : remapping_CS
 use regrid_defs, only : PRESSURE_RECONSTRUCTION_PLM, PRESSURE_RECONSTRUCTION_PPM
 use regrid_consts, only : coordinateMode, DEFAULT_COORDINATE_MODE
@@ -180,6 +180,7 @@ subroutine initialize_ALE( param_file, G, h, h_aux, &
   call initialize_regridding( param_file, G, CS%regridCS )
 
   call initialize_remapping( param_file, G%ke, CS%remapCS )
+  call allocate_remapping( CS%remapCS )
 
   ! Check grid integrity with respect to minimum allowed thickness
   do m = 1,size(h,4)

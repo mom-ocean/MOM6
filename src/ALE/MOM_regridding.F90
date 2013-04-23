@@ -35,7 +35,7 @@ use PQM_functions, only : PQM_reconstruction, PQM_boundary_extrapolation_v1
 
 use P1M_functions, only : P1M_interpolation, P1M_boundary_extrapolation
 use P3M_functions, only : P3M_interpolation, P3M_boundary_extrapolation
-use MOM_remapping, only : initialize_remapping, remapping_core, end_remapping
+use MOM_remapping, only : remapping_core
 use MOM_remapping, only : remapping_CS
 use regrid_consts, only : coordinateMode, DEFAULT_COORDINATE_MODE
 use regrid_consts, only : REGRIDDING_LAYER, REGRIDDING_ZSTAR
@@ -156,7 +156,7 @@ subroutine initialize_regridding( param_file, G, CS )
 ! This routine is typically called (from initialize_MOM in file MOM.F90)
 ! before the main time integration loop to initialize the regridding stuff.
 ! We read the MOM_input file to register the values of different
-! regridding/remapping parameters.
+! regridding  parameters.
 !------------------------------------------------------------------------------
   
   ! Arguments
@@ -183,7 +183,7 @@ end subroutine initialize_regridding
 !------------------------------------------------------------------------------
 subroutine read_regridding_options( param_file, CS )
 !------------------------------------------------------------------------------
-! Read the regridding/remapping parameters in the MOM_input file and
+! Read the regridding parameters in the MOM_input file and
 ! update the structure that is passed as argument all over the place.
 !------------------------------------------------------------------------------
 

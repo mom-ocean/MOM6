@@ -44,14 +44,17 @@ type, public :: remapping_CS
   type(edgeValueArrays)           :: edgeValueWrk ! Work space for edge values
   type(edgeSlopeArrays)           :: edgeSlopeWrk ! Work space for edge slopes
   ! Parameters
+  integer :: nk = 0                    ! Number of layers/levels in vertical
   integer :: remapping_scheme = -911   ! Determines which reconstruction to use
+  integer :: degree                    ! Degree of polynomical reconstruction
   logical :: boundary_extrapolation = .true.  ! If true, extrapolate boundaries
 end type
 
 ! -----------------------------------------------------------------------------
 ! The following routines are visible to the outside world
 ! -----------------------------------------------------------------------------
-public remapping_main, remapping_core, initialize_remapping, end_remapping
+public remapping_main, remapping_core
+public initialize_remapping, allocate_remapping, end_remapping
 public enableBoundaryExtrapolation, disableBoundaryExtrapolation
 
 ! -----------------------------------------------------------------------------
@@ -524,21 +527,19 @@ end subroutine remapping_integration
 
 
 !------------------------------------------------------------------------------
-! Memory allocation for remapping
+! Configure parameters for remapping
 !------------------------------------------------------------------------------
 subroutine initialize_remapping( param_file, nk, CS)
   ! Arguments
   type(param_file_type), intent(in)    :: param_file
-  integer,               intent(in)    :: nk
+  integer, intent(in)                  :: nk
   type(remapping_CS),    intent(inout) :: CS
   ! Local variables
   character(len=40) :: string ! Temporary string
   integer :: degree         ! Degree of polynomials used for the reconstruction 
   
-  ! Allocate memory for grids
-  call grid1Dconstruct( CS%grid_start, nk )
-  call grid1Dconstruct( CS%grid_final, nk )
-  
+  CS%nk = nk
+
   ! --- REMAPPING SCHEME ---
   ! This sets which remapping scheme we want to use to remap all variables
   ! betwenn grids. If none is specified, PLM is used for remapping.
@@ -553,51 +554,65 @@ subroutine initialize_remapping( param_file, nk, CS)
                  "PQM_IH4IH3  (4th-order accurate)\n"//&
                  "PQM_IH6IH5  (5th-order accurate)\n", &
                  default="PLM")
-  degree = setReconstructionType( string, CS )
-
-  call ppoly_init( CS%ppoly_r, nk, degree )
-  
-  allocate( CS%u_column(nk) ); CS%u_column = 0.0
-
-  call triDiagEdgeWorkAllocate( nk, CS%edgeValueWrk )
-  call triDiagSlopeWorkAllocate( nk, CS%edgeSlopeWrk )
+  call setReconstructionType( string, CS )
 
 end subroutine initialize_remapping
 
 
 !------------------------------------------------------------------------------
+! Memory allocation for remapping
+!------------------------------------------------------------------------------
+subroutine allocate_remapping( CS )
+  ! Arguments
+  type(remapping_CS),    intent(inout) :: CS
+  ! Local variables
+  
+  ! Allocate memory for grids
+  call grid1Dconstruct( CS%grid_start, CS%nk )
+  call grid1Dconstruct( CS%grid_final, CS%nk )
+  
+  call ppoly_init( CS%ppoly_r, CS%nk, CS%degree )
+  
+  allocate( CS%u_column(CS%nk) ); CS%u_column = 0.0
+
+  call triDiagEdgeWorkAllocate( CS%nk, CS%edgeValueWrk )
+  call triDiagSlopeWorkAllocate( CS%nk, CS%edgeSlopeWrk )
+
+end subroutine allocate_remapping
+
+
+!------------------------------------------------------------------------------
 ! Functions for setting parameters within the CS
 !------------------------------------------------------------------------------
-function setReconstructionType(string,CS)
+subroutine setReconstructionType(string,CS)
 ! Use this function to parse a string parameter specifying the reconstruction 
 ! and returns the polynomial degree of representation
-  integer :: setReconstructionType
   character(len=*), intent(in) :: string
   type(remapping_CS), intent(inout) :: CS
   select case ( uppercase(trim(string)) )
     case ("PCM")
       CS%remapping_scheme = REMAPPING_PCM
-      setReconstructionType = 0
+      CS%degree = 0
     case ("PLM")
       CS%remapping_scheme = REMAPPING_PLM
-      setReconstructionType = 1
+      CS%degree = 1
     case ("PPM_H4")
       CS%remapping_scheme = REMAPPING_PPM_H4
-      setReconstructionType = 2
+      CS%degree = 2
     case ("PPM_IH4")
       CS%remapping_scheme = REMAPPING_PPM_IH4
-      setReconstructionType = 2
+      CS%degree = 2
     case ("PQM_IH4IH3")
       CS%remapping_scheme = REMAPPING_PQM_IH4IH3
-      setReconstructionType = 4
+      CS%degree = 4
     case ("PQM_IH6IH5")
       CS%remapping_scheme = REMAPPING_PQM_IH6IH5
-      setReconstructionType = 4
+      CS%degree = 4
     case default
       call MOM_error(FATAL, "setReconstructionType: "//&
        "Unrecognized choice for REMAPPING_SCHEME ("//trim(string)//").")
   end select
-end function setReconstructionType
+end subroutine setReconstructionType
 
 subroutine enableBoundaryExtrapolation(CS)
 ! Use this to enable extrapolation at boundaries
