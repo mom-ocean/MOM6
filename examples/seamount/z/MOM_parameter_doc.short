@@ -292,6 +292,9 @@ KHTH = 500.0                    !   [m2 s-1] default = 0.0
                                 ! The background horizontal thickness diffusivity.
     !  Parameters of module MOM_MEKE
     !  Parameters of module MOM_lateral_mixing_coeffs
+MIN_THICKNESS = 0.1             !   [not defined] default = 0.001
+                                ! When regridding, this is the minimum layer
+                                ! thickness allowed.
 REGRIDDING_COORDINATE_MODE = "Z*" ! default = "LAYER"
                                 ! Coordinate mode for vertical regridding.
                                 ! Choose among the following possibilities:
@@ -321,9 +324,6 @@ BOUNDARY_EXTRAPOLATION = True   !   [Boolean] default = False
                                 ! than PCM. E.g., if PPM is used for remapping, a
                                 ! PPM reconstruction will also be used within
                                 ! boundary cells.
-MIN_THICKNESS = 0.1             !   [not defined] default = 0.001
-                                ! When regridding, this is the minimum layer
-                                ! thickness allowed.
 REMAPPING_SCHEME = "PPM_IH4"    ! default = "PLM"
                                 ! This sets the reconstruction scheme used
                                 ! for vertical remapping for all variables.
