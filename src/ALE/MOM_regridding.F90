@@ -83,6 +83,8 @@ type, public :: regridding_CS
   real, dimension(:), allocatable :: S_column
   real, dimension(:), allocatable :: p_column
 
+  integer   :: nk ! Number of layers/levels
+
   ! Indicates which grid to use in the vertical (z*, sigma, target interface
   ! densities)
   integer   :: regridding_scheme
@@ -107,6 +109,7 @@ end type
 ! The following routines are visible to the outside world
 ! -----------------------------------------------------------------------------
 public initialize_regridding
+public allocate_regridding
 public end_regridding
 public regridding_main 
 
@@ -149,9 +152,9 @@ real, parameter    :: NR_OFFSET = 1e-6
 contains
 
 !------------------------------------------------------------------------------
-! Initialization of regridding
+! Initialization of regridding options
 !------------------------------------------------------------------------------
-subroutine initialize_regridding( param_file, G, CS )
+subroutine initialize_regridding( param_file, nk, CS )
 !------------------------------------------------------------------------------
 ! This routine is typically called (from initialize_MOM in file MOM.F90)
 ! before the main time integration loop to initialize the regridding stuff.
@@ -160,39 +163,15 @@ subroutine initialize_regridding( param_file, G, CS )
 !------------------------------------------------------------------------------
   
   ! Arguments
-  type(param_file_type), intent(in)                      :: param_file
-  type(ocean_grid_type), intent(in)                      :: G
-  type(regridding_CS), intent(inout)                     :: CS
+  type(param_file_type), intent(in)  :: param_file
+  integer, intent(in)                :: nk
+  type(regridding_CS), intent(inout) :: CS
 
-  ! Local variables
-  logical       :: verbose
-  integer       :: k, m
-  integer       :: i, j
-
-  verbose = .false.
- 
-  call regridding_memory_allocation( G, CS )
-
-  call read_regridding_options( param_file, CS )
-
-end subroutine initialize_regridding
-
-
-!------------------------------------------------------------------------------
-! Initialization of regridding options
-!------------------------------------------------------------------------------
-subroutine read_regridding_options( param_file, CS )
-!------------------------------------------------------------------------------
-! Read the regridding parameters in the MOM_input file and
-! update the structure that is passed as argument all over the place.
-!------------------------------------------------------------------------------
-
-  ! Arguments
-  type(param_file_type), intent(in)        :: param_file
-  type(regridding_CS), intent(inout)   :: CS
   ! Local variables
   character(len=40)  :: mod = "MOM_regridding" ! This module's name.
   character(len=40)  :: string ! Temporary string
+
+  CS%nk = nk
 
   ! --- TYPE OF VERTICAL GRID ---
   ! This sets which kind of grid we want to use in the vertical. If none
@@ -260,7 +239,7 @@ subroutine read_regridding_options( param_file, CS )
                  "When regridding, this is the minimum layer\n"//&
                  "thickness allowed.", default=1.e-3 )
   
-end subroutine read_regridding_options
+end subroutine initialize_regridding
 
 
 
@@ -1327,7 +1306,7 @@ end subroutine convective_adjustment
 !------------------------------------------------------------------------------
 ! Allocate memory for regridding
 !------------------------------------------------------------------------------
-subroutine regridding_memory_allocation( G, CS )
+subroutine allocate_regridding( CS )
 !------------------------------------------------------------------------------
 ! In this routine, we allocate the memory needed to carry out regridding
 ! steps in the course of the simulation. 
@@ -1338,49 +1317,44 @@ subroutine regridding_memory_allocation( G, CS )
 !------------------------------------------------------------------------------
 
   ! Arguments
-  type(ocean_grid_type), intent(in)   :: G
   type(regridding_CS), intent(inout) :: CS
 
   ! Local variables
-  integer   :: nz
-  integer   :: degree       ! Degree of polynomials used for the reconstruction 
-  
-  nz = G%ke
 
   ! Allocate memory for the tridiagonal system
-  call triDiagEdgeWorkAllocate( nz, CS%edgeValueWrk )
-  call triDiagSlopeWorkAllocate( nz, CS%edgeSlopeWrk )
+  call triDiagEdgeWorkAllocate( CS%nk, CS%edgeValueWrk )
+  call triDiagSlopeWorkAllocate( CS%nk, CS%edgeSlopeWrk )
 
   ! Target values
-  allocate( CS%target_values(nz+1) )
+  allocate( CS%target_values(CS%nk+1) )
 
   ! Allocate memory for grids
-  call grid1Dconstruct( CS%grid_generic, nz )
-  call grid1Dconstruct( CS%grid_start, nz )
-  call grid1Dconstruct( CS%grid_trans, nz )
-  call grid1Dconstruct( CS%grid_final, nz )
+  call grid1Dconstruct( CS%grid_generic, CS%nk )
+  call grid1Dconstruct( CS%grid_start, CS%nk )
+  call grid1Dconstruct( CS%grid_trans, CS%nk )
+  call grid1Dconstruct( CS%grid_final, CS%nk )
 
   ! Piecewise polynomials used for remapping
-  call ppoly_init( CS%ppoly_r, nz, 4 )
+  call ppoly_init( CS%ppoly_r, CS%nk, 4 )
   
   ! Piecewise polynomials used for interpolation
-  call ppoly_init( CS%ppoly_i, nz, 4 )
+  call ppoly_init( CS%ppoly_i, CS%nk, 4 )
   
   ! Generic linear piecewise polynomial
-  call ppoly_init( CS%ppoly_linear, nz, 1 )
+  call ppoly_init( CS%ppoly_linear, CS%nk, 1 )
   
   ! Generic parabolic piecewise polynomial
-  call ppoly_init( CS%ppoly_parab, nz, 2 )
+  call ppoly_init( CS%ppoly_parab, CS%nk, 2 )
   
   ! Memory allocation for one column
-  allocate( CS%mapping(nz) ); CS%mapping = 0
-  allocate( CS%u_column(nz) ); CS%u_column = 0.0
-  allocate( CS%T_column(nz) ); CS%T_column = 0.0
-  allocate( CS%S_column(nz) ); CS%S_column = 0.0
-  allocate( CS%p_column(nz) ); CS%p_column = 0.0
-  allocate( CS%densities(nz) ); CS%densities = 0.0
+  allocate( CS%mapping(CS%nk) ); CS%mapping = 0
+  allocate( CS%u_column(CS%nk) ); CS%u_column = 0.0
+  allocate( CS%T_column(CS%nk) ); CS%T_column = 0.0
+  allocate( CS%S_column(CS%nk) ); CS%S_column = 0.0
+  allocate( CS%p_column(CS%nk) ); CS%p_column = 0.0
+  allocate( CS%densities(CS%nk) ); CS%densities = 0.0
 
-end subroutine regridding_memory_allocation
+end subroutine allocate_regridding
 
 
 !------------------------------------------------------------------------------

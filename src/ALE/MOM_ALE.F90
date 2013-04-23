@@ -32,7 +32,7 @@ use PPM_functions, only : PPM_reconstruction, PPM_boundary_extrapolation
 
 use P1M_functions, only : P1M_interpolation, P1M_boundary_extrapolation
 use P3M_functions, only : P3M_interpolation, P3M_boundary_extrapolation
-use MOM_regridding, only : initialize_regridding, regridding_main , end_regridding
+use MOM_regridding, only : initialize_regridding, allocate_regridding, regridding_main , end_regridding
 use MOM_regridding, only : regridding_CS
 use MOM_remapping, only : initialize_remapping, allocate_remapping, remapping_main, end_remapping
 use MOM_remapping, only : remapping_CS
@@ -177,7 +177,8 @@ subroutine initialize_ALE( param_file, G, h, h_aux, &
 
   call read_ALE_options( param_file, CS )
 
-  call initialize_regridding( param_file, G, CS%regridCS )
+  call initialize_regridding( param_file, G%ke, CS%regridCS )
+  call allocate_regridding( CS%regridCS )
 
   call initialize_remapping( param_file, G%ke, CS%remapCS )
   call allocate_remapping( CS%remapCS )
