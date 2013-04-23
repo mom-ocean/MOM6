@@ -25,7 +25,7 @@ module MOM_CS_type
 ! MOM.F90) and is shared between the variants on the algorithm (e.g. split RK2
 ! and unsplit RK3).
 
-use MOM_variables, only : directories, vertvisc_type, ocean_OBC_type
+use MOM_variables, only : vertvisc_type, ocean_OBC_type
 use MOM_variables, only : BT_cont_type
 use MOM_variables, only : &
   forcing, &      ! A structure containing pointers to the forcing fields

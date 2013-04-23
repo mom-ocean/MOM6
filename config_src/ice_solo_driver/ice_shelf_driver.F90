@@ -47,6 +47,7 @@ program SHELF_main
   use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
   use MOM_file_parser, only : close_param_file
 !   use MOM_grid, only : ocean_grid_type
+  use MOM_get_input, only : Get_MOM_Input, directories
   use MOM_io, only : file_exists, open_file, close_file
   use MOM_io, only : check_nml_error, io_infra_init, io_infra_end
   use MOM_io, only : APPEND_FILE, ASCII_FILE, READONLY_FILE, SINGLE_FILE
@@ -60,10 +61,8 @@ program SHELF_main
   use MOM_time_manager, only : operator(>), operator(<), operator(>=)
   use MOM_time_manager, only : increment_date, set_calendar_type, month_name
   use MOM_time_manager, only : JULIAN, NOLEAP, THIRTY_DAY_MONTHS, NO_CALENDAR
-  use MOM_variables, only : directories
   use MOM_write_cputime, only : write_cputime, MOM_write_cputime_init
   use MOM_write_cputime, only : write_cputime_start_clock, write_cputime_CS
-  use MOM_initialization, only : Get_MOM_Input
 
   use MOM_ice_shelf, only : initialize_ice_shelf, ice_shelf_end, ice_shelf_CS
   use MOM_ice_shelf, only : ice_shelf_save_restart, solo_time_step

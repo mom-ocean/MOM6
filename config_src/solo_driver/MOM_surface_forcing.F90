@@ -74,7 +74,7 @@ use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_file_parser, only : uppercase
 use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
-use MOM_initialization, only : Get_MOM_Input
+use MOM_get_input, only : Get_MOM_Input, directories
 use MOM_io, only : file_exists, read_data, slasher, num_timelevels
 use MOM_io, only : EAST_FACE, NORTH_FACE
 use MOM_restart, only : register_restart_field, restart_init, MOM_restart_CS
@@ -82,7 +82,7 @@ use MOM_restart, only : restart_init_end, save_restart, restore_state
 use MOM_time_manager, only : time_type, operator(+), operator(/), get_time, set_time
 use MOM_tracer_flow_control, only : call_tracer_set_forcing
 use MOM_tracer_flow_control, only : tracer_flow_control_CS
-use MOM_variables, only : surface, directories
+use MOM_variables, only : surface
 use MESO_surface_forcing, only : MESO_wind_forcing, MESO_buoyancy_forcing
 use MESO_surface_forcing, only : MESO_surface_forcing_init, MESO_surface_forcing_CS
 use user_surface_forcing, only : USER_wind_forcing, USER_buoyancy_forcing

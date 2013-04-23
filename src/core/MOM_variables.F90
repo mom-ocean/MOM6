@@ -44,15 +44,6 @@ type, public :: p2d
   real, dimension(:,:), pointer :: p => NULL()
 end type p2d
 
-type, public :: directories
-  character(len=120) :: &
-    restart_input_dir = ' ',& ! The directory to read restart and input files.
-    restart_output_dir = ' ',&! The directory into which to write restart files.
-    output_directory = ' ', & ! The directory to use to write the model output.
-    input_filename  = ' '     ! A string that indicates the input files or how
-                              ! the run segment should be started.
-end type directories
-
 !   The following structure contains pointers to the forcing fields
 ! which may be used to drive MOM.  All fluxes are positive downward.
 ! Pointers to unused fluxes should be set to NULL.

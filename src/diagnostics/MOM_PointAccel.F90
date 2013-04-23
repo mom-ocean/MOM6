@@ -47,11 +47,12 @@ use MOM_diag_mediator, only : diag_ptrs
 use MOM_domains, only : pe_here
 use MOM_error_handler, only : MOM_error, NOTE
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
+use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : create_file, open_file, reopen_file
 use MOM_io, only : APPEND_FILE, ASCII_FILE, MULTIPLE, SINGLE_FILE
 use MOM_time_manager, only : time_type, get_time, get_date, set_date, operator(-)
-use MOM_variables, only : directories, ocean_internal_state
+use MOM_variables, only : ocean_internal_state
 
 implicit none ; private
 

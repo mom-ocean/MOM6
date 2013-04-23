@@ -312,7 +312,7 @@ module MOM
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 
-use MOM_variables, only : directories, vertvisc_type, ocean_OBC_type
+use MOM_variables, only : vertvisc_type, ocean_OBC_type
 use MOM_variables, only : BT_cont_type, alloc_bt_cont_type, dealloc_bt_cont_type
 use MOM_forcing_type, only : &
   forcing         ! A structure containing pointers to the forcing fields
@@ -342,14 +342,14 @@ use MOM_checksums, only : MOM_checksums_init, hchksum, uchksum, vchksum
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
 use MOM_error_handler, only : MOM_set_verbosity
 use MOM_file_parser, only : read_param, get_param, log_version, param_file_type
+use MOM_get_input, only : Get_MOM_Input, directories
 use MOM_io, only : MOM_io_init, vardesc
 use MOM_obsolete_params, only : find_obsolete_params
 use MOM_restart, only : register_restart_field, query_initialized, save_restart
 use MOM_restart, only : restart_init, MOM_restart_CS
 use MOM_time_manager, only : time_type, set_time, time_type_to_real, operator(+)
 use MOM_time_manager, only : operator(-), operator(>), operator(*), operator(/)
-use MOM_initialization, only : MOM_initialize, Get_MOM_Input
-use MOM_initialization, only : MOM_initialization_struct
+use MOM_initialization, only : MOM_initialize, MOM_initialization_struct
 
 use MOM_continuity, only : continuity, continuity_init, continuity_CS
 use MOM_CoriolisAdv, only : CorAdCalc, CoriolisAdv_init, CoriolisAdv_CS

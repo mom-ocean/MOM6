@@ -52,6 +52,7 @@ program MOM_main
   use MOM_file_parser, only : read_param, get_param, log_param, log_version, param_file_type
   use MOM_file_parser, only : close_param_file
   use MOM_forcing_type, only : forcing
+  use MOM_get_input, only : directories
   use MOM_grid, only : ocean_grid_type
   use MOM_io, only : file_exists, open_file, close_file
   use MOM_io, only : check_nml_error, io_infra_init, io_infra_end
@@ -66,7 +67,7 @@ program MOM_main
   use MOM_time_manager, only : operator(>), operator(<), operator(>=)
   use MOM_time_manager, only : increment_date, set_calendar_type, month_name
   use MOM_time_manager, only : JULIAN, NOLEAP, THIRTY_DAY_MONTHS, NO_CALENDAR
-  use MOM_variables, only : surface, directories
+  use MOM_variables, only : surface
   use MOM_write_cputime, only : write_cputime, MOM_write_cputime_init
   use MOM_write_cputime, only : write_cputime_start_clock, write_cputime_CS
 

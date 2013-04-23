@@ -74,9 +74,9 @@ use MOM_coms, only : max_across_PEs
 use MOM_domains, only : pass_var, pass_vector, sum_across_PEs, broadcast
 use MOM_domains, only : root_PE, To_All, SCALAR_PAIR, CGRID_NE
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
-use MOM_file_parser, only : get_param, open_param_file, param_file_type
-use MOM_file_parser, only : read_param, log_param
-use MOM_file_parser, only : uppercase, log_param, log_version
+use MOM_file_parser, only : get_param, read_param, log_param, param_file_type
+use MOM_file_parser, only : uppercase, log_version
+use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
 use MOM_interface_heights, only : find_eta
 use MOM_io, only : close_file, create_file, fieldtype, file_exists
@@ -89,7 +89,7 @@ use MOM_sponge, only : set_up_sponge_field, set_up_sponge_ML_density
 use MOM_sponge, only : initialize_sponge, sponge_CS
 use MOM_time_manager, only : time_type, set_time
 use MOM_tracer, only : add_tracer_OBC_values, advect_tracer_CS
-use MOM_variables, only : thermo_var_ptrs, directories, ocean_OBC_type
+use MOM_variables, only : thermo_var_ptrs, ocean_OBC_type
 use MOM_variables, only : OBC_NONE, OBC_SIMPLE, OBC_FLATHER_E, OBC_FLATHER_W
 use MOM_variables, only : OBC_FLATHER_N, OBC_FLATHER_S
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
@@ -137,8 +137,7 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public MOM_initialize, Get_MOM_Input
-public MOM_initialize_rotation, MOM_initialize_topography
+public MOM_initialize, MOM_initialize_rotation, MOM_initialize_topography
 
 ! This structure is to simplify communication with the calling code.
 type, public :: MOM_initialization_struct
@@ -3317,66 +3316,6 @@ subroutine write_vertgrid_file(G, param_file, directory)
   call close_file(unit)
 
 end subroutine write_vertgrid_file
-! -----------------------------------------------------------------------------
-
-! -----------------------------------------------------------------------------
-subroutine Get_MOM_Input(param_file, dirs, check_params)
-  use MOM_io, only : open_namelist_file, check_nml_error
-  type(param_file_type), optional, intent(out) :: param_file
-  type(directories),     optional, intent(out) :: dirs
-  logical,               optional, intent(in)  :: check_params
-
-!    See if the run is to be started from saved conditions, and get  !
-!  the names of the I/O directories and initialization file.  This   !
-!  subroutine also calls the subroutine that allows run-time changes !
-!  in parameters.                                                    !
-!    Read from a namelist instead of getting strings from the command line as
-!  in the C-version of MOM.
-  integer, parameter :: npf = 5 ! Maximum number of parameter files
-  character(len=120) :: &
-    parameter_filename(npf) = ' ', & ! List of files containing parameters.
-    output_directory = ' ', &   ! Directory to use to write the model output.
-    restart_input_dir = ' ', &  ! Directory for reading restart and input files.
-    restart_output_dir = ' ', & ! Directory into which to write restart files.
-    input_filename  = ' '       ! A string that indicates the input files or how
-                                ! the run segment should be started.
-  integer :: unit, io, ierr, valid_param_files
-
-  namelist /MOM_input_nml/ output_directory, input_filename, parameter_filename, &
-                           restart_input_dir, restart_output_dir
-
-  if (file_exists('input.nml')) then
-    unit = open_namelist_file(file='input.nml')
-  else
-    call MOM_error(FATAL,'Required namelist file input.nml does not exist.')
-  endif
-
-  ierr=1 ; do while (ierr /= 0)
-    read(unit, nml=MOM_input_nml, iostat=io, end=10)
-    ierr = check_nml_error(io, 'MOM_input_nml')
-  enddo
-10 call close_file(unit)
-  if (present(dirs)) then
-    dirs%output_directory = slasher(output_directory)
-    dirs%restart_output_dir = slasher(restart_output_dir)
-    dirs%restart_input_dir = slasher(restart_input_dir)
-    dirs%input_filename = input_filename
-  endif
-
-  if (present(param_file)) then
-    valid_param_files = 0
-    do io = 1, npf
-      if (len_trim(trim(parameter_filename(io))) > 0) then
-        call open_param_file(trim(parameter_filename(io)), param_file, &
-                             check_params)
-        valid_param_files = valid_param_files + 1
-      endif
-    enddo
-    if (valid_param_files == 0) call MOM_error(FATAL, "There must be at "//&
-         "least 1 valid entry in input_filename in MOM_input_nml in input.nml.")
-  endif
-
-end subroutine Get_MOM_Input
 ! -----------------------------------------------------------------------------
 
 subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)

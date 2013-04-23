@@ -65,7 +65,7 @@ module MOM_dynamics_unsplit_RK2
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 
-use MOM_variables, only : directories, vertvisc_type, ocean_OBC_type
+use MOM_variables, only : vertvisc_type, ocean_OBC_type
 use MOM_variables, only : BT_cont_type, alloc_bt_cont_type, dealloc_bt_cont_type
 use MOM_forcing_type, only : &
   forcing         ! A structure containing pointers to the forcing fields
@@ -97,8 +97,6 @@ use MOM_restart, only : register_restart_field, query_initialized, save_restart
 use MOM_restart, only : restart_init, MOM_restart_CS
 use MOM_time_manager, only : time_type, set_time, time_type_to_real, operator(+)
 use MOM_time_manager, only : operator(-), operator(>), operator(*), operator(/)
-use MOM_initialization, only : MOM_initialize, Get_MOM_Input
-use MOM_initialization, only : MOM_initialization_struct
 
 use MOM_continuity, only : continuity, continuity_init, continuity_CS
 use MOM_CoriolisAdv, only : CorAdCalc, CoriolisAdv_init, CoriolisAdv_CS

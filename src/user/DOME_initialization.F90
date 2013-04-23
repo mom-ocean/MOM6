@@ -22,17 +22,17 @@ module DOME_initialization
 !***********************************************************************
 !*                                                                     *
 !*  The module configures the model for the "DOME" experiment.         *
-!*  DOME = Dense Overflow and Mixing Experiment?                       *
+!*  DOME = Dynamics of Overflows and Mixing Experiment                 *
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 
 use MOM_sponge, only : sponge_CS, set_up_sponge_field, initialize_sponge
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, is_root_pe
 use MOM_file_parser, only : get_param, log_version, param_file_type
+use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
 use MOM_tracer, only : add_tracer_OBC_values, advect_tracer_CS
-use MOM_variables, only : thermo_var_ptrs, directories
-use MOM_variables, only : ocean_OBC_type, OBC_NONE, OBC_SIMPLE
+use MOM_variables, only : thermo_var_ptrs, ocean_OBC_type, OBC_NONE, OBC_SIMPLE
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
 implicit none ; private
 

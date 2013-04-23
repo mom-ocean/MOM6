@@ -22,15 +22,16 @@ module external_gwave_initialization
 !**************************************************************************
 !*                                                                        *
 !*  The module configures the model for the "external_gwave" experiment.  *
-!*  external_gwave = Dense Overflow and Mixing Experiment?                *
+!*  external_gwave = External Gravity Wave                                *
 !*                                                                        *
 !********+*********+*********+*********+*********+*********+*********+*****
 
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, is_root_pe
 use MOM_file_parser, only : get_param, log_version, param_file_type
+use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
 use MOM_tracer, only : add_tracer_OBC_values, advect_tracer_CS
-use MOM_variables, only : thermo_var_ptrs, directories
+use MOM_variables, only : thermo_var_ptrs
 implicit none ; private
 
 #include <MOM_memory.h>
