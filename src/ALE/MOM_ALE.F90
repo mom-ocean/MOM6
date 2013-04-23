@@ -33,6 +33,7 @@ use PPM_functions, only : PPM_reconstruction, PPM_boundary_extrapolation
 use P1M_functions, only : P1M_interpolation, P1M_boundary_extrapolation
 use P3M_functions, only : P3M_interpolation, P3M_boundary_extrapolation
 use MOM_regridding, only : initialize_regridding, allocate_regridding, regridding_main , end_regridding
+use MOM_regridding, only : check_grid_integrity
 use MOM_regridding, only : regridding_CS
 use MOM_remapping, only : initialize_remapping, allocate_remapping, remapping_main, end_remapping
 use MOM_remapping, only : remapping_CS
@@ -81,18 +82,9 @@ type, public :: ALE_CS
   real, dimension(:), allocatable :: S_column
   real, dimension(:), allocatable :: p_column
 
-  ! Indicates which grid to use in the vertical (z*, sigma, target interface
-  ! densities)
-  integer   :: regridding_scheme
-
-  ! The following parameter is only relevant when used with the target
-  ! interface densities regridding scheme. It indicates which interpolation
-  ! to use to determine the grid.
-  integer   :: interpolation_scheme
-
   ! Indicate whether high-order boundary extrapolation should be used within
   ! boundary cells
-  logical   :: boundary_extrapolation
+  logical   :: boundary_extrapolation_for_pressure
 
   ! Minimum thickness allowed when building the new grid through regridding
   real      :: min_thickness
@@ -185,7 +177,7 @@ subroutine initialize_ALE( param_file, G, h, h_aux, &
 
   ! Check grid integrity with respect to minimum allowed thickness
   do m = 1,size(h,4)
-    call check_grid_integrity( G, h(:,:,:,m), CS )
+    call check_grid_integrity( CS%regridCS, G, h(:,:,:,m) )
   end do  
 
   if ( verbose ) then
@@ -246,65 +238,16 @@ subroutine read_ALE_options( param_file, CS )
   character(len=40)  :: mod = "MOM_ALE" ! This module's name.
   character(len=40)  :: string ! Temporary string
 
-  ! --- TYPE OF VERTICAL GRID ---
-  ! This sets which kind of grid we want to use in the vertical. If none
-  ! is specified, target interface densities are used to build the grid
-  call get_param(param_file, mod, "REGRIDDING_COORDINATE_MODE", string, &
-                 "Coordinate mode for vertical regridding.\n"//&
-                 "Choose among the following possibilities:\n"//&
-                 " LAYER - Isopycnal or stacked shallow water layers\n"//&
-                 " Z*    - stetched geopotential z*\n"//&
-                 " SIGMA - terrain following coordinates\n"//&
-                 " RHO   - continuous isopycnal\n",&
-                 default=DEFAULT_COORDINATE_MODE, fail_if_missing=.true.)
-  CS%regridding_scheme = coordinateMode(string)
-
-  ! --- INTERPOLATION SCHEME ---
-  ! This sets which interpolation scheme we want to use to define the new
-  ! grid when regridding is based upon target interface densities. If none
-  ! is specified, the p1m h2 interpolation scheme is used.
-  call get_param(param_file, mod, "INTERPOLATION_SCHEME", string, &
-                 "This sets the interpolation scheme to use to\n"//&
-                 "determine the new grid. These parameters are\n"//&
-                 "only relevant when REGRIDDING_COORDINATE_MODE is\n"//&
-                 "set to a function of state. Otherwise, it is not\n"//&
-                 "used. It can be one of the following schemes:\n"//&
-                 " P1M_H2     (2nd-order accurate)\n"//&
-                 " P1M_H4     (2nd-order accurate)\n"//&
-                 " P1M_IH4    (2nd-order accurate)\n"//&
-                 " PLM        (2nd-order accurate)\n"//&
-                 " PPM_H4     (3rd-order accurate)\n"//&
-                 " PPM_IH4    (3rd-order accurate)\n"//&
-                 " P3M_IH4IH3 (4th-order accurate)\n"//&
-                 " P3M_IH6IH5 (4th-order accurate)\n"//&
-                 " PQM_IH4IH3 (4th-order accurate)\n"//&
-                 " PQM_IH6IH5 (5th-order accurate)", &
-                 default="P1M_H2")
-  select case ( uppercase(trim(string)) )
-    case ("P1M_H2");     CS%interpolation_scheme = INTERPOLATION_P1M_H2
-    case ("P1M_H4");     CS%interpolation_scheme = INTERPOLATION_P1M_H4
-    case ("P1M_IH2");    CS%interpolation_scheme = INTERPOLATION_P1M_IH4
-    case ("PLM");        CS%interpolation_scheme = INTERPOLATION_PLM
-    case ("PPM_H4");     CS%interpolation_scheme = INTERPOLATION_PPM_H4
-    case ("PPM_IH4");    CS%interpolation_scheme = INTERPOLATION_PPM_IH4
-    case ("P3M_IH4IH3"); CS%interpolation_scheme = INTERPOLATION_P3M_IH4IH3
-    case ("P3M_IH6IH5"); CS%interpolation_scheme = INTERPOLATION_P3M_IH6IH5
-    case ("PQM_IH4IH3"); CS%interpolation_scheme = INTERPOLATION_PQM_IH4IH3
-    case ("PQM_IH6IH5"); CS%interpolation_scheme = INTERPOLATION_PQM_IH6IH5
-    case default ; call MOM_error(FATAL, "read_ALE_options: "//&
-       "Unrecognized choice for INTERPOLATION_SCHEME ("//trim(string)//").")
-  end select
-
   ! --- BOUNDARY EXTRAPOLATION --
   ! This sets whether high-order (rather than PCM) reconstruction schemes
   ! should be used within boundary cells
-  call get_param(param_file, mod, "BOUNDARY_EXTRAPOLATION", &
-                 CS%boundary_extrapolation, &
-                 "When defined, a proper high-order reconstruction\n"//&
-                 "scheme is used within boundary cells rather\n"//&
-                 "than PCM. E.g., if PPM is used for remapping, a\n"//&
+  call get_param(param_file, mod, "BOUNDARY_EXTRAPOLATION_PRESSURE", &
+                 CS%boundary_extrapolation_for_pressure, &
+                 "When defined, the reconstruction is extrapolated\n"//&
+                 "within boundary cells rather than assume PCM for the.\n"//&
+                 "calculation of pressure. e.g. if PPM is used, a\n"//&
                  "PPM reconstruction will also be used within\n"//&
-                 "boundary cells.", default=.false.)
+                 "boundary cells.", default=.true.)
 
   ! --- PRESSURE GRADIENT CALCULATION ---
   call get_param(param_file, mod, "RECONSTRUCT_FOR_PRESSURE", &
@@ -436,7 +379,8 @@ subroutine pressure_gradient_plm( CS, S_t, S_b, T_t, T_b, G, tv, h )
       CS%ppoly_linear%E = 0.0
       CS%ppoly_linear%coefficients = 0.0
       call PLM_reconstruction( CS%grid_generic, tv%S(i,j,:), CS%ppoly_linear )
-      call PLM_boundary_extrapolation( CS%grid_generic, tv%S(i,j,:), CS%ppoly_linear )
+      if (CS%boundary_extrapolation_for_pressure) call &
+        PLM_boundary_extrapolation( CS%grid_generic, tv%S(i,j,:), CS%ppoly_linear )
       
       do k = 1,G%ke
         S_t(i,j,k) = CS%ppoly_linear%E(k,1)
@@ -447,7 +391,8 @@ subroutine pressure_gradient_plm( CS, S_t, S_b, T_t, T_b, G, tv, h )
       CS%ppoly_linear%E = 0.0
       CS%ppoly_linear%coefficients = 0.0
       call PLM_reconstruction( CS%grid_generic, tv%T(i,j,:), CS%ppoly_linear )
-      call PLM_boundary_extrapolation( CS%grid_generic, tv%T(i,j,:), CS%ppoly_linear )
+      if (CS%boundary_extrapolation_for_pressure) call &
+        PLM_boundary_extrapolation( CS%grid_generic, tv%T(i,j,:), CS%ppoly_linear )
       
       do k = 1,G%ke
         T_t(i,j,k) = CS%ppoly_linear%E(k,1)
@@ -505,7 +450,8 @@ subroutine pressure_gradient_ppm( CS, S_t, S_b, T_t, T_b, G, tv, h )
       CS%ppoly_parab%coefficients = 0.0
       call edge_values_implicit_h4( CS%grid_generic, CS%edgeValueWrk, tv%S(i,j,:), CS%ppoly_parab%E )
       call PPM_reconstruction( CS%grid_generic, tv%S(i,j,:), CS%ppoly_parab )
-      call PPM_boundary_extrapolation( CS%grid_generic, tv%S(i,j,:), CS%ppoly_parab )
+      if (CS%boundary_extrapolation_for_pressure) call &
+        PPM_boundary_extrapolation( CS%grid_generic, tv%S(i,j,:), CS%ppoly_parab )
       
       do k = 1,G%ke
         S_t(i,j,k) = CS%ppoly_parab%E(k,1)
@@ -517,7 +463,8 @@ subroutine pressure_gradient_ppm( CS, S_t, S_b, T_t, T_b, G, tv, h )
       CS%ppoly_parab%coefficients = 0.0
       call edge_values_implicit_h4( CS%grid_generic, CS%edgeValueWrk, tv%T(i,j,:), CS%ppoly_parab%E )
       call PPM_reconstruction( CS%grid_generic, tv%T(i,j,:), CS%ppoly_parab )
-      call PPM_boundary_extrapolation( CS%grid_generic, tv%T(i,j,:), CS%ppoly_parab )
+      if (CS%boundary_extrapolation_for_pressure) call &
+        PPM_boundary_extrapolation( CS%grid_generic, tv%T(i,j,:), CS%ppoly_parab )
       
       do k = 1,G%ke
         T_t(i,j,k) = CS%ppoly_parab%E(k,1)
@@ -528,206 +475,6 @@ subroutine pressure_gradient_ppm( CS, S_t, S_b, T_t, T_b, G, tv, h )
   end do
 
 end subroutine pressure_gradient_ppm
-
-
-!------------------------------------------------------------------------------
-! Check grid integrity
-!------------------------------------------------------------------------------
-subroutine check_grid_integrity( G, h, CS )
-!------------------------------------------------------------------------------
-! This routine is called when initializing the regridding options. The 
-! objective is to make sure all layers are at least as thick as the minimum
-! thickness allowed for regridding purposes (this parameter is set in the
-! MOM_input file or defaulted to 1.0e-3). When layers are too thin, they
-! are inflated up to the minmum thickness.
-!------------------------------------------------------------------------------
-
-  ! Arguments
-  type(ocean_grid_type), intent(in)                    :: G
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(inout)   :: h
-  type(ALE_CS), intent(in)                  :: CS
-
-  ! Local variables
-  integer           :: i, j, k
-  type(grid1D_t)    :: grid
-
-  ! Initialize grid 
-  call grid1Dconstruct( grid, G%ke )
-
-  do i = G%isc,G%iec+1
-    do j = G%jsc,G%jec+1
-    
-      ! Build grid for current column
-      do k = 1,G%ke
-        grid%h(k) = h(i,j,k)
-      end do
-
-      grid%x(1) = 0.0
-      do k = 1,G%ke
-        grid%x(k+1) = grid%x(k) + grid%h(k)
-      end do
-      
-      call inflate_vanished_layers( grid, CS )
-
-      ! Save modified grid
-      do k = 1,G%ke
-        h(i,j,k) = grid%h(k)
-      end do
-    
-    end do
-  end do
-
-  call grid1Ddestroy( grid )
-
-end subroutine check_grid_integrity
-
-
-!------------------------------------------------------------------------------
-! Inflate vanished layers to finite (nonzero) width
-!------------------------------------------------------------------------------
-subroutine inflate_vanished_layers( grid, CS )
-
-  ! Argument
-  type(grid1D_t), intent(inout)       :: grid
-  type(ALE_CS), intent(in) :: CS
-    
-  ! Local variable
-  integer   :: N
-  integer   :: k
-  integer   :: k_found
-  integer   :: count_nonzero_layers
-  real      :: delta
-  real      :: correction
-  real      :: min_thickness
-  real      :: max_thickness
-
-  N = grid%nb_cells
-  min_thickness = CS%min_thickness
-  
-  ! Count number of nonzero layers
-  count_nonzero_layers = 0
-  do k = 1,N
-    if ( grid%h(k) .GT. min_thickness ) then
-      count_nonzero_layers = count_nonzero_layers + 1
-    end if
-  end do
-
-  ! If all layer thicknesses are greater than the threshold, exit routine
-  if ( count_nonzero_layers .eq. N ) return
-
-  ! If all thicknesses are zero, inflate them all and exit
-  if ( count_nonzero_layers .eq. 0 ) then  
-    do k = 1,N
-      grid%h(k) = min_thickness
-    end do
-    return
-  end if    
-  
-  ! Inflate zero layers
-  correction = 0.0
-  do k = 1,N
-    if ( grid%h(k) .le. min_thickness ) then
-      delta = min_thickness - grid%h(k)
-      correction = correction + delta
-      grid%h(k) = grid%h(k) + delta
-    end if  
-  end do
-  
-  ! Modify thicknesses of nonzero layers to ensure volume conservation
-  max_thickness = grid%h(1)
-  k_found = 1
-  do k = 1,grid%nb_cells
-    if ( grid%h(k) .gt. max_thickness ) then
-      max_thickness = grid%h(k)
-      k_found = k
-    end if  
-  end do
-  
-  grid%h(k_found) = grid%h(k_found) - correction
-  
-  ! Redefine grid coordinates according to new layer thicknesses
-  grid%x(1) = 0.0
-  do k = 1,N
-    grid%x(k+1) = grid%x(k) + grid%h(k)
-  end do    
-  
-end subroutine inflate_vanished_layers
-
-
-!------------------------------------------------------------------------------
-! Convective adjustment by swapping layers
-!------------------------------------------------------------------------------
-subroutine convective_adjustment( CS, G, h, tv )
-!------------------------------------------------------------------------------
-! Check each water column to see whether it is stratified. If not, sort the
-! layers by successive swappings of water masses (bubble sort algorithm)
-!------------------------------------------------------------------------------
-
-  ! Arguments
-  type(ALE_CS), intent(inout) :: CS
-  type(ocean_grid_type), intent(in)                  :: G
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(inout) :: h
-  type(thermo_var_ptrs), intent(inout)               :: tv     
-  
-  ! Local variables
-  integer   :: i, j, k
-  real      :: T0, T1       ! temperatures
-  real      :: S0, S1       ! salinities
-  real      :: r0, r1       ! densities
-  real      :: h0, h1
-  logical   :: stratified
-  
-  ! Loop on columns 
-  do j = G%jsc,G%jec+1
-    do i = G%isc,G%iec+1
-        
-      ! Compute densities within current water column
-      call calculate_density( tv%T(i,j,:), tv%S(i,j,:), CS%p_column, &
-                              CS%densities, 1, G%ke, tv%eqn_of_state )
-     
-      ! Repeat restratification until complete  
-      do
-
-        stratified = .true.
-        do k = 1,G%ke-1
-          ! Gather information of current and next cells
-          T0 = tv%T(i,j,k)
-          T1 = tv%T(i,j,k+1)
-          S0 = tv%S(i,j,k)
-          S1 = tv%S(i,j,k+1)
-          r0 = CS%densities(k)
-          r1 = CS%densities(k+1)
-          h0 = h(i,j,k)
-          h1 = h(i,j,k+1)
-          ! If the density of the current cell is larger than the density
-          ! below it, we swap the cells and recalculate the densitiies
-          ! within the swapped cells    
-          if ( r0 .gt. r1 ) then
-            tv%T(i,j,k)   = T1
-            tv%T(i,j,k+1) = T0
-            tv%S(i,j,k)   = S1
-            tv%S(i,j,k+1) = S0
-            h(i,j,k)      = h1
-            h(i,j,k+1)    = h0
-            ! Recompute densities at levels k and k+1
-            call calculate_density( tv%T(i,j,k), tv%S(i,j,k), &
-                                     CS%p_column(k), &
-                                     CS%densities(k), 1, 1, tv%eqn_of_state )
-            call calculate_density( tv%T(i,j,k+1), tv%S(i,j,k+1), &
-                                     CS%p_column(k+1), &
-                                     CS%densities(k+1), 1, 1, tv%eqn_of_state )
-            stratified = .false.
-          end if
-        end do  ! k 
-    
-        if ( stratified ) exit        
-
-      end do    
-
-    end do  ! i
-  end do  ! j   
-
-end subroutine convective_adjustment
 
 
 !------------------------------------------------------------------------------

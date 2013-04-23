@@ -112,6 +112,7 @@ public initialize_regridding
 public allocate_regridding
 public end_regridding
 public regridding_main 
+public check_grid_integrity
 
 ! -----------------------------------------------------------------------------
 ! The following are private constants
@@ -287,7 +288,7 @@ subroutine regridding_main( remapCS, CS, G, h, u, v, tv, h_new )
   select case ( CS%regridding_scheme )
 
     case ( REGRIDDING_ZSTAR )
-      call build_grid_uniform( G, h, h_new, CS )
+      call build_grid_zstar( CS, G, h, h_new )
 
     case ( REGRIDDING_RHO )  
       call convective_adjustment(CS, G, h, tv)
@@ -307,7 +308,7 @@ end subroutine regridding_main
 !------------------------------------------------------------------------------
 ! Build uniform z*-ccordinate grid with partial steps
 !------------------------------------------------------------------------------
-subroutine build_grid_uniform( G, h, h_new, CS )
+subroutine build_grid_zstar( CS, G, h, h_new )
 !------------------------------------------------------------------------------
 ! This routine builds a grid where the distribution of levels is based on a
 ! z* coordinate system with partial steps. Within each water column, a uniform
@@ -317,10 +318,10 @@ subroutine build_grid_uniform( G, h, h_new, CS )
 !------------------------------------------------------------------------------
   
   ! Arguments
-  type(ocean_grid_type), intent(in)                  :: G
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(in)    :: h
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(inout) :: h_new
-  type(regridding_CS), intent(in)                :: CS
+  type(regridding_CS),                   intent(in)    :: CS
+  type(ocean_grid_type),                 intent(in)    :: G
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: h_new
   
   ! Local variables
   integer   :: i, j, k
@@ -379,7 +380,7 @@ subroutine build_grid_uniform( G, h, h_new, CS )
     end do
   end do
 
-end subroutine build_grid_uniform
+end subroutine build_grid_zstar
 
 
 !------------------------------------------------------------------------------
@@ -1106,7 +1107,7 @@ end function get_polynomial_coordinate
 !------------------------------------------------------------------------------
 ! Check grid integrity
 !------------------------------------------------------------------------------
-subroutine check_grid_integrity( G, h, CS )
+subroutine check_grid_integrity( CS, G, h )
 !------------------------------------------------------------------------------
 ! This routine is called when initializing the regridding options. The 
 ! objective is to make sure all layers are at least as thick as the minimum
@@ -1116,9 +1117,9 @@ subroutine check_grid_integrity( G, h, CS )
 !------------------------------------------------------------------------------
 
   ! Arguments
-  type(ocean_grid_type), intent(in)                    :: G
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(inout)   :: h
-  type(regridding_CS), intent(in)                  :: CS
+  type(regridding_CS),                    intent(in)    :: CS
+  type(ocean_grid_type),                  intent(in)    :: G
+  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(inout) :: h
 
   ! Local variables
   integer           :: i, j, k
