@@ -45,7 +45,7 @@ use MOM_continuity_PPM, only : continuity_PPM_end, continuity_PPM_CS
 use MOM_diag_mediator, only : time_type, diag_ptrs
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
 use MOM_file_parser, only : get_param, log_version, param_file_type
-use MOM_file_parser, only : uppercase
+use MOM_string_functions, only : uppercase
 use MOM_grid, only : ocean_grid_type
 use MOM_variables, only : ocean_OBC_type, BT_cont_type
 

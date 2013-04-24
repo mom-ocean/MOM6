@@ -75,7 +75,7 @@ use MOM_domains, only : pass_var, pass_vector, sum_across_PEs, broadcast
 use MOM_domains, only : root_PE, To_All, SCALAR_PAIR, CGRID_NE
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_file_parser, only : get_param, read_param, log_param, param_file_type
-use MOM_file_parser, only : uppercase, log_version
+use MOM_file_parser, only : log_version
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
 use MOM_interface_heights, only : find_eta
@@ -87,6 +87,7 @@ use MOM_grid_initialize, only : initialize_masks, set_grid_metrics
 use MOM_restart, only : restore_state, MOM_restart_CS
 use MOM_sponge, only : set_up_sponge_field, set_up_sponge_ML_density
 use MOM_sponge, only : initialize_sponge, sponge_CS
+use MOM_string_functions, only : uppercase
 use MOM_time_manager, only : time_type, set_time
 use MOM_tracer, only : add_tracer_OBC_values, advect_tracer_CS
 use MOM_variables, only : thermo_var_ptrs, ocean_OBC_type

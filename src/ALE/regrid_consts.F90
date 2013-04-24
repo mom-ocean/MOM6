@@ -1,6 +1,6 @@
 module regrid_consts
 use MOM_error_handler, only : MOM_error, FATAL
-use MOM_file_parser, only : uppercase
+use MOM_string_functions, only : uppercase
 !==============================================================================
 !
 ! This file is part of MOM.

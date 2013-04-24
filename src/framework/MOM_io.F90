@@ -56,7 +56,7 @@ module MOM_io
 use MOM_error_handler, only : MOM_error, NOTE, FATAL, WARNING
 use MOM_domains, only : MOM_domain_type
 use MOM_file_parser, only : read_param, log_param, log_version, param_file_type
-use MOM_file_parser, only : lowercase
+use MOM_string_functions, only : lowercase
 use MOM_grid, only : ocean_grid_type
 
 use fms_mod, only : write_version_number, open_namelist_file, check_nml_error

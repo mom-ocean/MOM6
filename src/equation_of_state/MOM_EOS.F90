@@ -33,7 +33,7 @@ use MOM_EOS_UNESCO
 use MOM_TFreeze, only : calculate_TFreeze_linear, calculate_TFreeze_Millero
 use MOM_error_handler, only : MOM_error, FATAL, MOM_mesg
 use MOM_file_parser, only : get_param, log_version, param_file_type
-use MOM_file_parser, only : uppercase
+use MOM_string_functions, only : uppercase
 use MOM_grid, only : ocean_grid_type
 
 implicit none ; private

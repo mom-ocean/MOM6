@@ -10,7 +10,8 @@ module MOM_remapping
 !
 !==============================================================================
 use MOM_error_handler, only : MOM_error, FATAL
-use MOM_file_parser,   only : get_param, param_file_type, uppercase
+use MOM_file_parser,   only : get_param, param_file_type
+use MOM_string_functions, only : uppercase
 use MOM_variables,     only : ocean_grid_type, thermo_var_ptrs
 use regrid_grid1d_class, only : grid1D_t, grid1Dconstruct, grid1Ddestroy
 use regrid_ppoly_class, only : ppoly_t, ppoly_init, ppoly_destroy

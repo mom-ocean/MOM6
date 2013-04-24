@@ -57,7 +57,7 @@ use MOM_diag_mediator, only : query_averaging_enabled, register_diag_field
 use MOM_time_manager, only :  get_time
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
-use MOM_file_parser, only : uppercase
+use MOM_string_functions, only : uppercase
 use MOM_forcing_type, only : forcing, optics_type
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : slasher

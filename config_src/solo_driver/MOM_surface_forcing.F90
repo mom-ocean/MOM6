@@ -71,7 +71,7 @@ use MOM_diag_mediator, only : register_diag_field, diag_ptrs, safe_alloc_ptr
 use MOM_domains, only : pass_var, pass_vector, AGRID, To_South, To_West, To_All
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
 use MOM_file_parser, only : get_param, log_version, param_file_type
-use MOM_file_parser, only : uppercase
+use MOM_string_functions, only : uppercase
 use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_get_input, only : Get_MOM_Input, directories

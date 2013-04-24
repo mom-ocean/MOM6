@@ -34,6 +34,8 @@ use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg
 use MOM_error_handler, only : is_root_pe, stdlog, stdout
 use MOM_time_manager, only : set_time, get_time, time_type, get_ticks_per_second
 use MOM_document, only : doc_param, doc_module, doc_init, doc_end, doc_type
+use MOM_string_functions, only : left_int, left_ints
+use MOM_string_functions, only : left_real, left_reals
 
 implicit none ; private
 
@@ -98,7 +100,6 @@ end type param_file_type
 
 public read_param, open_param_file, close_param_file, log_param, log_version
 public doc_param, get_param
-public lowercase, uppercase
 public clearParameterBlock, openParameterBlock, closeParameterBlock
 
 interface read_param
@@ -1080,36 +1081,6 @@ subroutine flag_line_as_read(line_used,count)
   line_used(count) = .true.
 end subroutine flag_line_as_read
 
-function lowercase(input_string)
-  character(len=*),     intent(in) :: input_string
-  character(len=len(input_string)) :: lowercase
-  integer, parameter :: co=iachar('a')-iachar('A') ! case offset
-  integer :: k
-!   This function returns a string in which all uppercase letters have been
-! replaced by their lowercase counterparts.  It is loosely based on the
-! lowercase function in mpp_util.F90.
-  lowercase = input_string
-  do k=1, len_trim(input_string)
-    if (lowercase(k:k) >= 'A' .and. lowercase(k:k) <= 'Z') &
-        lowercase(k:k) = achar(ichar(lowercase(k:k))+co)
-  end do
-end function lowercase
-
-function uppercase(input_string)
-  character(len=*),     intent(in) :: input_string
-  character(len=len(input_string)) :: uppercase
-  integer, parameter :: co=iachar('A')-iachar('a') ! case offset
-  integer :: k
-!   This function returns a string in which all lowercase letters have been
-! replaced by their uppercase counterparts.  It is loosely based on the
-! uppercase function in mpp_util.F90.
-  uppercase = input_string
-  do k=1, len_trim(input_string)
-    if (uppercase(k:k) >= 'a' .and. uppercase(k:k) <= 'z') &
-        uppercase(k:k) = achar(ichar(uppercase(k:k))+co)
-  end do
-end function uppercase
-
 function overrideWarningHasBeenIssued(chain, varName)
   type(link_parameter), pointer    :: chain
   character(len=*),     intent(in) :: varName
@@ -1205,31 +1176,6 @@ subroutine log_param_int_array(CS, modulename, varname, value, desc, &
 
 end subroutine log_param_int_array
 
-function left_int(i)
-  character(len=19) :: left_int
-  integer, intent(in) :: i
-! Returns a character string of a left-formatted integer
-! e.g. "123       "  (assumes 19 digit maximum)
-  character(len=19) :: tmp
-  write(tmp(1:19),'(I19)') i
-  write(left_int(1:19),'(A)') adjustl(tmp)
-end function left_int
-
-function left_ints(i)
-  integer, intent(in) :: i(:)
-! Returns a character string of a comma-separated, compact formatted, integers
-! e.g. "1, 2, 3, 4"
-  character(len=1320) :: left_ints,tmp
-  integer :: j
-  write(left_ints(1:1320),'(A)') trim(left_int(i(1)))
-  if (size(i)>1) then
-    do j=2,size(i)
-      tmp=left_ints
-      write(left_ints(1:1320),'(A,", ",A)') trim(tmp),trim(left_int(i(j)))
-    enddo
-  endif
-end function left_ints
-
 subroutine log_param_real(CS, modulename, varname, value, desc, units, &
                           default)
   type(param_file_type),      intent(in) :: CS
@@ -1282,55 +1228,6 @@ subroutine log_param_real_array(CS, modulename, varname, value, desc, &
     call doc_param(CS%doc, varname, desc, myunits, value, default)
 
 end subroutine log_param_real_array
-
-function left_real(r)
-  character(len=30) :: left_real
-  real, intent(in) :: r
-! Returns a character string of a left-formatted real
-! using either F or E format with trailing 0s removed
-! e.g. "12.345    "
-  character(len=30) :: tmp,expon
-  integer :: i
- !write(0,*) 'In left_real, r=',r
-! if ((abs(r)<1.e4.and.abs(r)>=1.e-3).or.r.eq.0.) then
-!   write(tmp(1:30),'(F,X)') r
-! else
-!   write(tmp(1:30),'(ES,X)') r
-! endif
-  write(tmp(1:30),*) r," "
-  i=index(tmp,'E')
-  ! Save exponent
-  if (i>0) then
-    write(expon(1:30),'(A)') trim(tmp(i:len_trim(tmp)))
-    tmp(i:len_trim(tmp))=' '
-  else
-    expon=' '
-  endif
-  ! Left justify
-  write(left_real(1:30),'(A)') adjustl(tmp)
-  ! Strip trailing zeros
-  do i=len_trim(left_real),2,-1
-    if (left_real(i:i).ne.'0') exit
-    left_real(i:i)=' '
-  enddo
-  ! Re-attach exponent
-  write(left_real(i+1:len(left_real)),'(A)') trim(expon)
-end function left_real
-
-function left_reals(r)
-  real, intent(in) :: r(:)
-! Returns a character string of a comma-separated, compact formatted, reals
-! e.g. "1., 2., 3., 5.E2"
-  character(len=1320) :: left_reals,tmp
-  integer :: j
-  write(left_reals(1:1320),'(A)') trim(left_real(r(1)))
-  if (size(r)>1) then
-    do j=2,size(r)
-      tmp=left_reals
-      write(left_reals(1:1320),'(A,", ",A)') trim(tmp),trim(left_real(r(j)))
-    enddo
-  endif
-end function left_reals
 
 subroutine log_param_logical(CS, modulename, varname, value, desc, &
                              units, default)

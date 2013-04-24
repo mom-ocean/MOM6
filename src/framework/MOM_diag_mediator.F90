@@ -23,7 +23,7 @@ module MOM_diag_mediator
 use MOM_coms, only : PE_here
 use MOM_error_handler, only : MOM_error, FATAL, is_root_pe
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
-use MOM_file_parser, only : lowercase
+use MOM_string_functions, only : lowercase
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : vardesc
 use MOM_time_manager, only : time_type
