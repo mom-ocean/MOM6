@@ -405,7 +405,7 @@ public MOM_control_struct ! This is exported for MOM_driver.F90 to use. We could
 integer :: id_clock_ocean, id_clock_dynamics, id_clock_thermo
 integer :: id_clock_tracer, id_clock_diabatic
 integer :: id_clock_continuity ! Also in dynamics s/r
-integer :: id_clock_thick_diff ! Also in dynamics s/r
+integer :: id_clock_thick_diff, id_clock_ml_restrat
 integer :: id_clock_diagnostics, id_clock_Z_diag
 integer :: id_clock_init, id_clock_MOM_init
 integer :: id_clock_pass, id_clock_pass_init ! Also in dynamics d/r
@@ -647,6 +647,32 @@ function step_MOM(fluxes, state, Time_start, time_interval, CS)
       endif
 
     endif ! -------------------------------------------------- end SPLIT
+
+    if (CS%thickness_diffuse .and. .not.CS%thickness_diffuse_first) then
+      call cpu_clock_begin(id_clock_thick_diff)
+      if (associated(CS%VarMix)) &
+        call calc_slope_function(h(:,:,:,m), CS%tv, grid, CS%VarMix)
+      call thickness_diffuse(h(:,:,:,m), CS%uhtr, CS%vhtr, CS%tv, dt, grid, &
+                             CS%MEKE, CS%VarMix, CS%thickness_diffuse_CSp)
+      call cpu_clock_end(id_clock_thick_diff)
+      call cpu_clock_begin(id_clock_pass)
+      call pass_var(h(:,:,:,m), grid%Domain)
+      call cpu_clock_end(id_clock_pass)
+    endif
+
+    if (CS%mixedlayer_restrat) then
+      call cpu_clock_begin(id_clock_ml_restrat)
+      call mixedlayer_restrat(h(:,:,:,m), CS%uhtr ,CS%vhtr, CS%tv, fluxes, dt, &
+                              grid, CS%mixedlayer_restrat_CSp)
+      call cpu_clock_end(id_clock_ml_restrat)
+      call cpu_clock_begin(id_clock_pass)
+      call pass_var(h(:,:,:,m), grid%Domain)
+      call cpu_clock_end(id_clock_pass)
+    endif
+
+    if (associated(CS%MEKE)) then
+      call step_forward_MEKE(CS%MEKE, h(:,:,:,m), CS%visc, dt, grid, CS%MEKE_CSp)
+    endif
 
     call disable_averaging(CS%diag)
     call cpu_clock_end(id_clock_dynamics)
@@ -1800,6 +1826,8 @@ subroutine MOM_timing_init(CS)
  id_clock_pass_init = cpu_clock_id('(Ocean init message passing *)', grain=CLOCK_ROUTINE)
  if (CS%thickness_diffuse) &
    id_clock_thick_diff = cpu_clock_id('(Ocean thickness diffusion *)', grain=CLOCK_MODULE)
+ if (CS%mixedlayer_restrat) &
+   id_clock_ml_restrat = cpu_clock_id('(Ocean mixed layer restrat)', grain=CLOCK_MODULE)
  id_clock_diagnostics = cpu_clock_id('(Ocean collective diagnostics)', grain=CLOCK_MODULE)
  id_clock_Z_diag = cpu_clock_id('(Ocean Z-space diagnostics)', grain=CLOCK_MODULE)
 

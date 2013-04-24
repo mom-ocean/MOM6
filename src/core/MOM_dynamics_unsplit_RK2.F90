@@ -92,7 +92,6 @@ use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
 use MOM_error_handler, only : MOM_set_verbosity
 use MOM_file_parser, only : read_param, log_param, log_version, param_file_type
 use MOM_io, only : MOM_io_init, vardesc
-use MOM_obsolete_params, only : find_obsolete_params
 use MOM_restart, only : register_restart_field, query_initialized, save_restart
 use MOM_restart, only : restart_init, MOM_restart_CS
 use MOM_time_manager, only : time_type, set_time, time_type_to_real, operator(+)
@@ -111,16 +110,10 @@ use MOM_error_checking, only : check_redundant
 use MOM_grid, only : MOM_grid_init, ocean_grid_type, get_thickness_units
 use MOM_grid, only : get_flux_units, get_tr_flux_units
 use MOM_hor_visc, only : horizontal_viscosity, hor_visc_init, hor_visc_CS
-use MOM_lateral_mixing_coeffs, only : calc_slope_function, VarMix_init
-use MOM_lateral_mixing_coeffs, only : calc_resoln_function, VarMix_CS
 use MOM_interface_heights, only : find_eta
-use MOM_MEKE, only : MEKE_init, MEKE_alloc_register_restart, step_forward_MEKE, MEKE_CS
-use MOM_MEKE_types, only : MEKE_type
-use MOM_mixed_layer_restrat, only : mixedlayer_restrat, mixedlayer_restrat_init, mixedlayer_restrat_CS
 use MOM_open_boundary, only : Radiation_Open_Bdry_Conds, open_boundary_init
 use MOM_open_boundary, only : open_boundary_CS
 use MOM_PressureForce, only : PressureForce, PressureForce_init, PressureForce_CS
-use MOM_thickness_diffuse, only : thickness_diffuse, thickness_diffuse_init, thickness_diffuse_CS
 use MOM_tidal_forcing, only : tidal_forcing_init, tidal_forcing_CS
 use MOM_tracer, only : advect_tracer, register_tracer, add_tracer_diagnostics
 use MOM_tracer, only : add_tracer_2d_diagnostics, tracer_hordiff
@@ -141,8 +134,7 @@ public step_MOM_dyn_unsplit_RK2, register_restarts_dyn_unsplit_RK2
 public initialize_dyn_unsplit_RK2
 
 integer :: id_clock_Cor, id_clock_pres, id_clock_vertvisc
-integer :: id_clock_horvisc, id_clock_mom_update
-integer :: id_clock_continuity, id_clock_thick_diff, id_clock_ml_restrat
+integer :: id_clock_horvisc, id_clock_continuity, id_clock_mom_update
 integer :: id_clock_pass, id_clock_pass_init
 
 contains
@@ -392,39 +384,6 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, Time_local, dt, fluxes, &
     enddo ; enddo
   enddo
 
-  call enable_averaging(dt, Time_local, CS%diag)
-!   Here the thickness fluxes are offered for averaging.
-!              As a sacrifice? -AJA
-  if (CS%id_uh > 0) call post_data(CS%id_uh, uh, CS%diag)
-  if (CS%id_vh > 0) call post_data(CS%id_vh, vh, CS%diag)
-  call disable_averaging(CS%diag)
-
-  if (CS%thickness_diffuse .and. .not.CS%thickness_diffuse_first) then
-    call cpu_clock_begin(id_clock_thick_diff)
-    if (associated(CS%VarMix)) &
-      call calc_slope_function(h_in, CS%tv, G, CS%VarMix)
-    call thickness_diffuse(h_in, CS%uhtr, CS%vhtr, CS%tv, dt, G, &
-                           CS%MEKE, CS%VarMix, CS%thickness_diffuse_CSp)
-    call cpu_clock_end(id_clock_thick_diff)
-    call cpu_clock_begin(id_clock_pass)
-    call pass_var(h_in, G%Domain)
-    call cpu_clock_end(id_clock_pass)
-  endif
-
-  if (CS%mixedlayer_restrat) then
-    call cpu_clock_begin(id_clock_ml_restrat)
-    call mixedlayer_restrat(h_in, CS%uhtr ,CS%vhtr, CS%tv, fluxes, dt, &
-                            G, CS%mixedlayer_restrat_CSp)
-    call cpu_clock_end(id_clock_ml_restrat)
-    call cpu_clock_begin(id_clock_pass)
-    call pass_var(h_in, G%Domain)
-    call cpu_clock_end(id_clock_pass)
-  endif
-
-  if (associated(CS%MEKE)) then
-    call step_forward_MEKE(CS%MEKE, h_in, CS%visc, dt, G, CS%MEKE_CSp)
-  endif
-
   if (CS%debug) then
     call MOM_state_chksum("Corrector", u_in, v_in, h_in, uh, vh, G)
     call MOM_accel_chksum("Corrector accel", CS%CAu, CS%CAv, CS%PFu, CS%PFv, &
@@ -448,6 +407,10 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, Time_local, dt, fluxes, &
   if (CS%id_PFv > 0) call post_data(CS%id_PFv, CS%PFv, CS%diag)
   if (CS%id_CAu > 0) call post_data(CS%id_CAu, CS%CAu, CS%diag)
   if (CS%id_CAv > 0) call post_data(CS%id_CAv, CS%CAv, CS%diag)
+
+!   Here the thickness fluxes are offered for averaging.
+  if (CS%id_uh > 0) call post_data(CS%id_uh, uh, CS%diag)
+  if (CS%id_vh > 0) call post_data(CS%id_vh, vh, CS%diag)
 
 end subroutine step_MOM_dyn_unsplit_RK2
 
@@ -508,10 +471,6 @@ subroutine initialize_dyn_unsplit_RK2(u, v, h, Time, G, param_file, diag, CS, re
   id_clock_mom_update = cpu_clock_id('(Ocean momentum increments)', grain=CLOCK_MODULE)
   id_clock_pass = cpu_clock_id('(Ocean message passing)', grain=CLOCK_MODULE)
   id_clock_pass_init = cpu_clock_id('(Ocean init message passing)', grain=CLOCK_ROUTINE)
-  if (CS%thickness_diffuse) &
-    id_clock_thick_diff = cpu_clock_id('(Ocean thickness diffusion)', grain=CLOCK_MODULE)
-  if (CS%mixedlayer_restrat) &
-    id_clock_ml_restrat = cpu_clock_id('(Ocean mixed layer restrat)', grain=CLOCK_MODULE)
 
 end subroutine initialize_dyn_unsplit_RK2
 
