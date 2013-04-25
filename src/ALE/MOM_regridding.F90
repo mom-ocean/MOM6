@@ -84,6 +84,9 @@ type, public :: regridding_CS
   real, dimension(:), allocatable :: S_column
   real, dimension(:), allocatable :: p_column
 
+  ! This array is set by function setTargetFixedResolution
+  real, dimension(:), allocatable :: targetFixedResolution
+
   integer   :: nk ! Number of layers/levels
 
   ! Indicates which grid to use in the vertical (z*, sigma, target interface
@@ -114,6 +117,7 @@ public allocate_regridding
 public end_regridding
 public regridding_main 
 public check_grid_integrity
+public setTargetFixedResolution
 
 ! -----------------------------------------------------------------------------
 ! The following are private constants
@@ -328,12 +332,8 @@ subroutine build_grid_zstar( CS, G, h, h_new )
   integer   :: i, j, k
   integer   :: nz
   real      :: z_inter(SZK_(G)+1)
-  real      :: total_height
-  real      :: delta_h
-  real      :: max_depth
-  real      :: min_thickness
-  real      :: eta              ! local elevation
-  real      :: local_depth
+  real      :: total_height, max_depth, delta_h, eta
+  real      :: min_thickness, local_depth, stretching
 
   nz = G%ke
   
@@ -355,12 +355,15 @@ subroutine build_grid_zstar( CS, G, h, h_new )
       eta = total_height - local_depth
       
       ! Compute new thicknesses based on stretched water column
-      delta_h = (max_depth + eta) / nz
+      delta_h = max_depth + eta
+      stretching = delta_h / max_depth !!!!!! AJA THIS IS NOT Z* COORDINATES. OOOOPS
+      stretching = total_height / local_depth !!!!!! THIS IS Z* COORDINATES.
       
       ! Define interfaces
       z_inter(1) = eta
       do k = 1,nz
-        z_inter(k+1) = z_inter(k) - delta_h
+        z_inter(k+1) = z_inter(k) - delta_h / nz ! This is the original uniform coordinate from Laurent
+!       z_inter(k+1) = z_inter(k) - ( stretching * CS%targetFixedResolution(k) )
       end do
     
       ! Modify interface heights to account for topography
@@ -382,6 +385,21 @@ subroutine build_grid_zstar( CS, G, h, h_new )
   end do
 
 end subroutine build_grid_zstar
+
+
+!------------------------------------------------------------------------------
+! Set the fixed resolution data
+!------------------------------------------------------------------------------
+subroutine setTargetFixedResolution( dz, CS )
+  real, dimension(:),  intent(in)    :: dz
+  type(regridding_CS), intent(inout) :: CS
+
+  if (size(dz)/=CS%nk) call MOM_error( FATAL, &
+      'setTargetFixedResolution: inconsistent number of levels' )
+
+  CS%targetFixedResolution(:) = dz(:)
+  
+end subroutine setTargetFixedResolution
 
 
 !------------------------------------------------------------------------------
@@ -1350,11 +1368,14 @@ subroutine allocate_regridding( CS )
   
   ! Memory allocation for one column
   allocate( CS%mapping(CS%nk) ); CS%mapping = 0
-  allocate( CS%u_column(CS%nk) ); CS%u_column = 0.0
-  allocate( CS%T_column(CS%nk) ); CS%T_column = 0.0
-  allocate( CS%S_column(CS%nk) ); CS%S_column = 0.0
-  allocate( CS%p_column(CS%nk) ); CS%p_column = 0.0
-  allocate( CS%densities(CS%nk) ); CS%densities = 0.0
+  allocate( CS%u_column(CS%nk) ); CS%u_column(:) = 0.0
+  allocate( CS%T_column(CS%nk) ); CS%T_column(:) = 0.0
+  allocate( CS%S_column(CS%nk) ); CS%S_column(:) = 0.0
+  allocate( CS%p_column(CS%nk) ); CS%p_column(:) = 0.0
+  allocate( CS%densities(CS%nk) ); CS%densities(:) = 0.0
+
+  ! Target resolution (for fixed coordinates)
+  allocate( CS%targetFixedResolution(CS%nk) ); CS%targetFixedResolution(:) = -1.E30
 
 end subroutine allocate_regridding
 

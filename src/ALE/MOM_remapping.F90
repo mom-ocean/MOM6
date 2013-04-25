@@ -10,7 +10,6 @@ module MOM_remapping
 !
 !==============================================================================
 use MOM_error_handler, only : MOM_error, FATAL
-use MOM_file_parser,   only : get_param, param_file_type
 use MOM_string_functions, only : uppercase
 use MOM_variables,     only : ocean_grid_type, thermo_var_ptrs
 use regrid_grid1d_class, only : grid1D_t, grid1Dconstruct, grid1Ddestroy
@@ -55,8 +54,9 @@ end type
 ! The following routines are visible to the outside world
 ! -----------------------------------------------------------------------------
 public remapping_main, remapping_core
-public initialize_remapping, allocate_remapping, end_remapping
+public initialize_remapping, end_remapping
 public enableBoundaryExtrapolation, disableBoundaryExtrapolation
+public setReconstructionType
 
 ! -----------------------------------------------------------------------------
 ! The following are private parameter constants
@@ -76,6 +76,17 @@ integer, parameter  :: INTEGRATION_PPM = 3  ! scope: global
 integer, parameter  :: INTEGRATION_PQM = 5  ! scope: global
 
 character(len=40)  :: mod = "MOM_remapping" ! This module's name.
+
+! Documentation for external callers
+character(len=256), public :: remappingSchemesDoc = &
+                 "It can be one of the following schemes:\n"//&
+                 "PCM         (1st-order accurate)\n"//&
+                 "PLM         (2nd-order accurate)\n"//&
+                 "PPM_H4      (3rd-order accurate)\n"//&
+                 "PPM_IH4     (3rd-order accurate)\n"//&
+                 "PQM_IH4IH3  (4th-order accurate)\n"//&
+                 "PQM_IH6IH5  (5th-order accurate)\n"
+character(len=3), public :: remappingDefaultScheme = "PLM"
 
 ! -----------------------------------------------------------------------------
 ! This module contains the following routines
@@ -528,99 +539,80 @@ end subroutine remapping_integration
 
 
 !------------------------------------------------------------------------------
-! Configure parameters for remapping
+! Constructor for remapping
 !------------------------------------------------------------------------------
-subroutine initialize_remapping( param_file, nk, CS)
+subroutine initialize_remapping( nk, remappingScheme, CS)
   ! Arguments
-  type(param_file_type), intent(in)    :: param_file
   integer, intent(in)                  :: nk
+  character(len=40),     intent(in)    :: remappingScheme
   type(remapping_CS),    intent(inout) :: CS
-  ! Local variables
-  character(len=40) :: string ! Temporary string
-  integer :: degree         ! Degree of polynomials used for the reconstruction 
   
   CS%nk = nk
 
-  ! --- REMAPPING SCHEME ---
-  ! This sets which remapping scheme we want to use to remap all variables
-  ! betwenn grids. If none is specified, PLM is used for remapping.
-  call get_param(param_file, mod, "REMAPPING_SCHEME", string, &
-                 "This sets the reconstruction scheme used\n"//&
-                 "for vertical remapping for all variables.\n"//&
-                 "It can be one of the following schemes:\n"//&
-                 "PCM         (1st-order accurate)\n"//&
-                 "PLM         (2nd-order accurate)\n"//&
-                 "PPM_H4      (3rd-order accurate)\n"//&
-                 "PPM_IH4     (3rd-order accurate)\n"//&
-                 "PQM_IH4IH3  (4th-order accurate)\n"//&
-                 "PQM_IH6IH5  (5th-order accurate)\n", &
-                 default="PLM")
-  call setReconstructionType( string, CS )
+  call setReconstructionType( remappingScheme, CS )
 
 end subroutine initialize_remapping
 
 
 !------------------------------------------------------------------------------
-! Memory allocation for remapping
-!------------------------------------------------------------------------------
-subroutine allocate_remapping( CS )
-  ! Arguments
-  type(remapping_CS),    intent(inout) :: CS
-  ! Local variables
-  
-  ! Allocate memory for grids
-  call grid1Dconstruct( CS%grid_start, CS%nk )
-  call grid1Dconstruct( CS%grid_final, CS%nk )
-  
-  call ppoly_init( CS%ppoly_r, CS%nk, CS%degree )
-  
-  allocate( CS%u_column(CS%nk) ); CS%u_column = 0.0
-
-  call triDiagEdgeWorkAllocate( CS%nk, CS%edgeValueWrk )
-  call triDiagSlopeWorkAllocate( CS%nk, CS%edgeSlopeWrk )
-
-end subroutine allocate_remapping
-
-
-!------------------------------------------------------------------------------
-! Functions for setting parameters within the CS
+! Set the type of reconstruction
+! Use this routine to parse a string parameter specifying the reconstruction 
+! and re-allocates work arrays appropriately. It is called from
+! initialize_remapping but can be called from an external module too.
 !------------------------------------------------------------------------------
 subroutine setReconstructionType(string,CS)
-! Use this function to parse a string parameter specifying the reconstruction 
-! and returns the polynomial degree of representation
+  ! Arguments
   character(len=*), intent(in) :: string
   type(remapping_CS), intent(inout) :: CS
+  ! Local variables
+  integer :: degree
   select case ( uppercase(trim(string)) )
     case ("PCM")
       CS%remapping_scheme = REMAPPING_PCM
-      CS%degree = 0
+      degree = 0
     case ("PLM")
       CS%remapping_scheme = REMAPPING_PLM
-      CS%degree = 1
+      degree = 1
     case ("PPM_H4")
       CS%remapping_scheme = REMAPPING_PPM_H4
-      CS%degree = 2
+      degree = 2
     case ("PPM_IH4")
       CS%remapping_scheme = REMAPPING_PPM_IH4
-      CS%degree = 2
+      degree = 2
     case ("PQM_IH4IH3")
       CS%remapping_scheme = REMAPPING_PQM_IH4IH3
-      CS%degree = 4
+      degree = 4
     case ("PQM_IH6IH5")
       CS%remapping_scheme = REMAPPING_PQM_IH6IH5
-      CS%degree = 4
+      degree = 4
     case default
       call MOM_error(FATAL, "setReconstructionType: "//&
        "Unrecognized choice for REMAPPING_SCHEME ("//trim(string)//").")
   end select
+
+  if (allocated(CS%u_column) .and. degree/=CS%degree) then
+    ! If the degree has changed then deallocate to force a re-allocation
+    call end_remapping(CS)
+  endif
+  CS%degree = degree
+  if (.not. allocated(CS%u_column)) then
+    call allocate_remapping( CS )
+  endif
+  
 end subroutine setReconstructionType
 
+!------------------------------------------------------------------------------
+! Functino to enable extraplation in boundary cells
+!------------------------------------------------------------------------------
 subroutine enableBoundaryExtrapolation(CS)
 ! Use this to enable extrapolation at boundaries
   type(remapping_CS), intent(inout) :: CS
   CS%boundary_extrapolation = .true.
 end subroutine enableBoundaryExtrapolation
 
+!------------------------------------------------------------------------------
+! Functino to disable extraplation in boundary cells
+!------------------------------------------------------------------------------
 subroutine disableBoundaryExtrapolation(CS)
 ! Use this to disable extrapolation at boundaries
   type(remapping_CS), intent(inout) :: CS
@@ -628,20 +620,34 @@ subroutine disableBoundaryExtrapolation(CS)
 end subroutine disableBoundaryExtrapolation
 
 !------------------------------------------------------------------------------
+! Memory allocation for remapping
+!------------------------------------------------------------------------------
+subroutine allocate_remapping( CS )
+  ! Arguments
+  type(remapping_CS),    intent(inout) :: CS
+  
+  call grid1Dconstruct( CS%grid_start, CS%nk )
+  call grid1Dconstruct( CS%grid_final, CS%nk )
+  call ppoly_init( CS%ppoly_r, CS%nk, CS%degree )
+  allocate( CS%u_column(CS%nk) ); CS%u_column = 0.0
+  call triDiagEdgeWorkAllocate( CS%nk, CS%edgeValueWrk )
+  call triDiagSlopeWorkAllocate( CS%nk, CS%edgeSlopeWrk )
+
+end subroutine allocate_remapping
+
+
+!------------------------------------------------------------------------------
 ! Memory deallocation for remapping
 !------------------------------------------------------------------------------
 subroutine end_remapping(CS)
+  ! Arguments
   type(remapping_CS), intent(inout) :: CS
 
   ! Deallocate memory for grid
   call grid1Ddestroy( CS%grid_start )
   call grid1Ddestroy( CS%grid_final )
-  
-  ! Piecewise polynomials
   call ppoly_destroy( CS%ppoly_r )
-
   deallocate( CS%u_column )
-
   call triDiagEdgeWorkDeallocate( CS%edgeValueWrk )
   call triDiagSlopeWorkDeallocate( CS%edgeSlopeWrk )
 

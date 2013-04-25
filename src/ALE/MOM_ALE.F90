@@ -34,9 +34,10 @@ use PPM_functions, only : PPM_reconstruction, PPM_boundary_extrapolation
 use P1M_functions, only : P1M_interpolation, P1M_boundary_extrapolation
 use P3M_functions, only : P3M_interpolation, P3M_boundary_extrapolation
 use MOM_regridding, only : initialize_regridding, allocate_regridding, regridding_main , end_regridding
-use MOM_regridding, only : check_grid_integrity
+use MOM_regridding, only : check_grid_integrity, setTargetFixedResolution
 use MOM_regridding, only : regridding_CS
-use MOM_remapping, only : initialize_remapping, allocate_remapping, remapping_main, end_remapping
+use MOM_remapping, only : initialize_remapping, remapping_main, end_remapping
+use MOM_remapping, only : remappingSchemesDoc, remappingDefaultScheme
 use MOM_remapping, only : remapping_CS
 use regrid_defs, only : PRESSURE_RECONSTRUCTION_PLM, PRESSURE_RECONSTRUCTION_PPM
 use regrid_consts, only : coordinateMode, DEFAULT_COORDINATE_MODE
@@ -160,21 +161,62 @@ subroutine initialize_ALE( param_file, G, h, h_aux, &
 
   ! Local variables
   logical       :: verbose
-  integer       :: k, m
-  integer       :: i, j
+  integer       :: i, j, k, m
+  real, dimension(:), allocatable :: dz
+  character(len=40)  :: mod = "MOM_ALE" ! This module's name.
+  character(len=40) :: string ! Temporary string
 
   verbose = .false.
  
   ! Memory allocation for regridding
   call ALE_memory_allocation( G, CS )
 
-  call read_ALE_options( param_file, CS )
+  ! --- BOUNDARY EXTRAPOLATION --
+  ! This sets whether high-order (rather than PCM) reconstruction schemes
+  ! should be used within boundary cells
+  call get_param(param_file, mod, "BOUNDARY_EXTRAPOLATION_PRESSURE", &
+                 CS%boundary_extrapolation_for_pressure, &
+                 "When defined, the reconstruction is extrapolated\n"//&
+                 "within boundary cells rather than assume PCM for the.\n"//&
+                 "calculation of pressure. e.g. if PPM is used, a\n"//&
+                 "PPM reconstruction will also be used within\n"//&
+                 "boundary cells.", default=.true.)
 
+  ! --- PRESSURE GRADIENT CALCULATION ---
+  call get_param(param_file, mod, "RECONSTRUCT_FOR_PRESSURE", &
+                 CS%reconstructForPressure , &
+                 "If True, use vertical reconstruction of T/S within\n"//&
+                 "the integrals of teh FV pressure gradient calculation.\n"//&
+                 "If False, use the constant-by-layer algorithm.\n"//&
+                 "By default, this is True when using ALE and False otherwise.", &
+                 default=.true. )
+
+  call get_param(param_file, mod, "PRESSURE_RECONSTRUCTION_SCHEME", &
+                 CS%pressureReconstructionScheme, &
+                 "Type of vertical reconstruction of T/S to use in integrals\n"//&
+                 "within the FV pressure gradient calculation."//&
+                 " 1: PLM reconstruction.\n"//&
+                 " 2: PPM reconstruction.", default=PRESSURE_RECONSTRUCTION_PLM)
+
+  ! --- MINIMUM THICKNESS ---
+  call get_param(param_file, mod, "MIN_THICKNESS", &
+                 CS%min_thickness, &
+                 "When regridding, this is the minimum layer\n"//&
+                 "thickness allowed.", default=1.e-3 )
+  
   call initialize_regridding( param_file, G%ke, CS%regridCS )
   call allocate_regridding( CS%regridCS )
+  allocate( dz(G%ke) )
+  dz(:) = G%max_depth / dfloat( G%ke )
+  call setTargetFixedResolution( dz, CS%regridCS )
+  deallocate( dz )
 
-  call initialize_remapping( param_file, G%ke, CS%remapCS )
-  call allocate_remapping( CS%remapCS )
+  ! Allocate and configure remapping
+  call get_param(param_file, mod, "REMAPPING_SCHEME", string, &
+                 "This sets the reconstruction scheme used\n"//&
+                 "for vertical remapping for all variables.\n"//&
+                 trim(remappingSchemesDoc), default=remappingDefaultScheme)
+  call initialize_remapping( G%ke, string, CS%remapCS )
 
   ! Check grid integrity with respect to minimum allowed thickness
   do m = 1,size(h,4)
@@ -221,59 +263,6 @@ subroutine initialize_ALE( param_file, G, h, h_aux, &
   end if
 
 end subroutine initialize_ALE
-
-
-!------------------------------------------------------------------------------
-! Initialization of regridding options
-!------------------------------------------------------------------------------
-subroutine read_ALE_options( param_file, CS )
-!------------------------------------------------------------------------------
-! Read the regridding/remapping parameters in the MOM_input file and
-! update the structure that is passed as argument all over the place.
-!------------------------------------------------------------------------------
-
-  ! Arguments
-  type(param_file_type), intent(in)        :: param_file
-  type(ALE_CS), intent(inout)   :: CS
-  ! Local variables
-  character(len=40)  :: mod = "MOM_ALE" ! This module's name.
-  character(len=40)  :: string ! Temporary string
-
-  ! --- BOUNDARY EXTRAPOLATION --
-  ! This sets whether high-order (rather than PCM) reconstruction schemes
-  ! should be used within boundary cells
-  call get_param(param_file, mod, "BOUNDARY_EXTRAPOLATION_PRESSURE", &
-                 CS%boundary_extrapolation_for_pressure, &
-                 "When defined, the reconstruction is extrapolated\n"//&
-                 "within boundary cells rather than assume PCM for the.\n"//&
-                 "calculation of pressure. e.g. if PPM is used, a\n"//&
-                 "PPM reconstruction will also be used within\n"//&
-                 "boundary cells.", default=.true.)
-
-  ! --- PRESSURE GRADIENT CALCULATION ---
-  call get_param(param_file, mod, "RECONSTRUCT_FOR_PRESSURE", &
-                 CS%reconstructForPressure , &
-                 "If True, use vertical reconstruction of T/S within\n"//&
-                 "the integrals of teh FV pressure gradient calculation.\n"//&
-                 "If False, use the constant-by-layer algorithm.\n"//&
-                 "By default, this is True when using ALE and False otherwise.", &
-                 default=.true. )
-
-  call get_param(param_file, mod, "PRESSURE_RECONSTRUCTION_SCHEME", &
-                 CS%pressureReconstructionScheme, &
-                 "Type of vertical reconstruction of T/S to use in integrals\n"//&
-                 "within the FV pressure gradient calculation."//&
-                 " 1: PLM reconstruction.\n"//&
-                 " 2: PPM reconstruction.", default=PRESSURE_RECONSTRUCTION_PLM)
-
-  ! --- MINIMUM THICKNESS ---
-  call get_param(param_file, mod, "MIN_THICKNESS", &
-                 CS%min_thickness, &
-                 "When regridding, this is the minimum layer\n"//&
-                 "thickness allowed.", default=1.e-3 )
-  
-end subroutine read_ALE_options
-
 
 
 !------------------------------------------------------------------------------
