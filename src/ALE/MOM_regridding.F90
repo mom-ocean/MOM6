@@ -293,7 +293,7 @@ subroutine regridding_main( remapCS, CS, G, h, u, v, tv, h_new )
   select case ( CS%regridding_scheme )
 
     case ( REGRIDDING_ZSTAR )
-      call build_grid_zstar( CS, G, h, h_new )
+      call buildGridZstar( CS, G, h, h_new )
 
     case ( REGRIDDING_RHO )  
       call convective_adjustment(CS, G, h, tv)
@@ -313,13 +313,12 @@ end subroutine regridding_main
 !------------------------------------------------------------------------------
 ! Build uniform z*-ccordinate grid with partial steps
 !------------------------------------------------------------------------------
-subroutine build_grid_zstar( CS, G, h, h_new )
+subroutine buildGridZstar( CS, G, h, h_new )
 !------------------------------------------------------------------------------
 ! This routine builds a grid where the distribution of levels is based on a
 ! z* coordinate system with partial steps. Within each water column, a uniform
 ! layer thickness is determined based on the local free-surface elevation and
-! the global maximum depth. Layers are then distributed vertically, modulated by
-! topography.
+! the local maximum depth.
 !------------------------------------------------------------------------------
   
   ! Arguments
@@ -332,47 +331,45 @@ subroutine build_grid_zstar( CS, G, h, h_new )
   integer   :: i, j, k
   integer   :: nz
   real      :: z_inter(SZK_(G)+1)
-  real      :: total_height, max_depth, delta_h, eta
-  real      :: min_thickness, local_depth, stretching
+  real      :: localDepth, stretching
+  real      :: totalThickness, eta
 
   nz = G%ke
   
-  max_depth = G%max_depth
-  min_thickness = CS%min_thickness
 
   do j = G%jsc,G%jec+1
     do i = G%isc,G%iec+1
 
-      ! Local depth
-      local_depth = G%bathyT(i,j)
+      ! Local depth (G%bathyT is positive)
+      localDepth = G%bathyT(i,j)
       
       ! Determine water column height
-      total_height = 0.0
+      totalThickness = 0.0
       do k = 1,nz
-        total_height = total_height + h(i,j,k)
+        totalThickness = totalThickness + h(i,j,k)
       end do
           
-      eta = total_height - local_depth
+      eta = totalThickness - localDepth
       
       ! Compute new thicknesses based on stretched water column
-      delta_h = max_depth + eta
-      stretching = delta_h / max_depth !!!!!! AJA THIS IS NOT Z* COORDINATES. OOOOPS
-      stretching = total_height / local_depth !!!!!! THIS IS Z* COORDINATES.
+!     delta_h = G%max_depth + eta
+      stretching = totalThickness / localDepth !!!!!! THIS IS Z* COORDINATES.
       
       ! Define interfaces
       z_inter(1) = eta
       do k = 1,nz
-        z_inter(k+1) = z_inter(k) - delta_h / nz ! This is the original uniform coordinate from Laurent
-!       z_inter(k+1) = z_inter(k) - ( stretching * CS%targetFixedResolution(k) )
+!       z_inter(k+1) = z_inter(k) - delta_h / nz ! This is the original uniform
+                         ! coordinate from Laurent White which was not quite z*
+        z_inter(k+1) = z_inter(k) - ( stretching * CS%targetFixedResolution(k) )
       end do
     
       ! Modify interface heights to account for topography
-      z_inter(nz+1) = - local_depth
+      z_inter(nz+1) = - localDepth
 
       ! Modify interface heights to avoid layers of zero thicknesses
       do k = nz,1,-1
-        if ( z_inter(k) .LT. (z_inter(k+1) + min_thickness) ) then
-          z_inter(k) = z_inter(k+1) + min_thickness
+        if ( z_inter(k) .LT. (z_inter(k+1) + CS%min_thickness) ) then
+          z_inter(k) = z_inter(k+1) + CS%min_thickness
         end if
       end do
     
@@ -384,7 +381,7 @@ subroutine build_grid_zstar( CS, G, h, h_new )
     end do
   end do
 
-end subroutine build_grid_zstar
+end subroutine buildGridZstar
 
 
 !------------------------------------------------------------------------------
