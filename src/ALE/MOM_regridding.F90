@@ -16,7 +16,6 @@ module MOM_regridding
 !==============================================================================
 use MOM_error_handler, only : MOM_error, FATAL
 use MOM_variables,     only : ocean_grid_type, thermo_var_ptrs
-use MOM_file_parser,   only : get_param, param_file_type
 use MOM_EOS,           only : calculate_density
 use MOM_string_functions,only : uppercase
 
@@ -113,11 +112,33 @@ end type
 ! The following routines are visible to the outside world
 ! -----------------------------------------------------------------------------
 public initialize_regridding
-public allocate_regridding
 public end_regridding
 public regridding_main 
 public check_grid_integrity
 public setTargetFixedResolution
+public setRegriddingBoundaryExtrapolation
+public setRegriddingMinimumThickness
+
+public DEFAULT_COORDINATE_MODE
+character(len=158), parameter, public :: regriddingCoordinateModeDoc = &
+                 " LAYER - Isopycnal or stacked shallow water layers\n"//&
+                 " Z*    - stetched geopotential z*\n"//&
+                 " SIGMA - terrain following coordinates\n"//&
+                 " RHO   - continuous isopycnal\n"
+character(len=338), parameter, public :: regriddingInterpSchemeDoc = &
+                 " P1M_H2     (2nd-order accurate)\n"//&
+                 " P1M_H4     (2nd-order accurate)\n"//&
+                 " P1M_IH4    (2nd-order accurate)\n"//&
+                 " PLM        (2nd-order accurate)\n"//&
+                 " PPM_H4     (3rd-order accurate)\n"//&
+                 " PPM_IH4    (3rd-order accurate)\n"//&
+                 " P3M_IH4IH3 (4th-order accurate)\n"//&
+                 " P3M_IH6IH5 (4th-order accurate)\n"//&
+                 " PQM_IH4IH3 (4th-order accurate)\n"//&
+                 " PQM_IH6IH5 (5th-order accurate)"
+character(len=6), parameter, public :: regriddingDefaultInterpScheme = "P1M_H2"
+logical, parameter, public :: regriddingDefaultBoundaryExtrapolation = .false.
+real, parameter, public :: regriddingDefaultMinThickness = 1.e-3
 
 ! -----------------------------------------------------------------------------
 ! The following are private constants
@@ -160,7 +181,7 @@ contains
 !------------------------------------------------------------------------------
 ! Initialization of regridding options
 !------------------------------------------------------------------------------
-subroutine initialize_regridding( param_file, nk, CS )
+subroutine initialize_regridding( nk, coordMode, interpScheme, CS )
 !------------------------------------------------------------------------------
 ! This routine is typically called (from initialize_MOM in file MOM.F90)
 ! before the main time integration loop to initialize the regridding stuff.
@@ -169,51 +190,19 @@ subroutine initialize_regridding( param_file, nk, CS )
 !------------------------------------------------------------------------------
   
   ! Arguments
-  type(param_file_type), intent(in)  :: param_file
-  integer, intent(in)                :: nk
-  type(regridding_CS), intent(inout) :: CS
+  integer,               intent(in)    :: nk
+  character(len=*),      intent(in)    :: coordMode
+  character(len=*),      intent(in)    :: interpScheme
+  type(regridding_CS),   intent(inout) :: CS
 
   ! Local variables
-  character(len=40)  :: mod = "MOM_regridding" ! This module's name.
   character(len=40)  :: string ! Temporary string
 
   CS%nk = nk
 
-  ! --- TYPE OF VERTICAL GRID ---
-  ! This sets which kind of grid we want to use in the vertical. If none
-  ! is specified, target interface densities are used to build the grid
-  call get_param(param_file, mod, "REGRIDDING_COORDINATE_MODE", string, &
-                 "Coordinate mode for vertical regridding.\n"//&
-                 "Choose among the following possibilities:\n"//&
-                 " LAYER - Isopycnal or stacked shallow water layers\n"//&
-                 " Z*    - stetched geopotential z*\n"//&
-                 " SIGMA - terrain following coordinates\n"//&
-                 " RHO   - continuous isopycnal\n",&
-                 default=DEFAULT_COORDINATE_MODE, fail_if_missing=.true.)
-  CS%regridding_scheme = coordinateMode(string)
+  CS%regridding_scheme = coordinateMode(coordMode)
 
-  ! --- INTERPOLATION SCHEME ---
-  ! This sets which interpolation scheme we want to use to define the new
-  ! grid when regridding is based upon target interface densities. If none
-  ! is specified, the p1m h2 interpolation scheme is used.
-  call get_param(param_file, mod, "INTERPOLATION_SCHEME", string, &
-                 "This sets the interpolation scheme to use to\n"//&
-                 "determine the new grid. These parameters are\n"//&
-                 "only relevant when REGRIDDING_COORDINATE_MODE is\n"//&
-                 "set to a function of state. Otherwise, it is not\n"//&
-                 "used. It can be one of the following schemes:\n"//&
-                 " P1M_H2     (2nd-order accurate)\n"//&
-                 " P1M_H4     (2nd-order accurate)\n"//&
-                 " P1M_IH4    (2nd-order accurate)\n"//&
-                 " PLM        (2nd-order accurate)\n"//&
-                 " PPM_H4     (3rd-order accurate)\n"//&
-                 " PPM_IH4    (3rd-order accurate)\n"//&
-                 " P3M_IH4IH3 (4th-order accurate)\n"//&
-                 " P3M_IH6IH5 (4th-order accurate)\n"//&
-                 " PQM_IH4IH3 (4th-order accurate)\n"//&
-                 " PQM_IH6IH5 (5th-order accurate)", &
-                 default="P1M_H2")
-  select case ( uppercase(trim(string)) )
+  select case ( uppercase(trim(interpScheme)) )
     case ("P1M_H2");     CS%interpolation_scheme = INTERPOLATION_P1M_H2
     case ("P1M_H4");     CS%interpolation_scheme = INTERPOLATION_P1M_H4
     case ("P1M_IH2");    CS%interpolation_scheme = INTERPOLATION_P1M_IH4
@@ -228,22 +217,11 @@ subroutine initialize_regridding( param_file, nk, CS )
        "Unrecognized choice for INTERPOLATION_SCHEME ("//trim(string)//").")
   end select
 
-  ! --- BOUNDARY EXTRAPOLATION --
-  ! This sets whether high-order (rather than PCM) reconstruction schemes
-  ! should be used within boundary cells
-  call get_param(param_file, mod, "BOUNDARY_EXTRAPOLATION", &
-                 CS%boundary_extrapolation, &
-                 "When defined, a proper high-order reconstruction\n"//&
-                 "scheme is used within boundary cells rather\n"//&
-                 "than PCM. E.g., if PPM is used for remapping, a\n"//&
-                 "PPM reconstruction will also be used within\n"//&
-                 "boundary cells.", default=.false.)
+  CS%boundary_extrapolation = regriddingDefaultBoundaryExtrapolation
 
-  ! --- MINIMUM THICKNESS ---
-  call get_param(param_file, mod, "MIN_THICKNESS", &
-                 CS%min_thickness, &
-                 "When regridding, this is the minimum layer\n"//&
-                 "thickness allowed.", default=1.e-3 )
+  CS%min_thickness = regriddingDefaultMinThickness
+
+  call allocate_regridding( CS )
   
 end subroutine initialize_regridding
 
@@ -397,6 +375,28 @@ subroutine setTargetFixedResolution( dz, CS )
   CS%targetFixedResolution(:) = dz(:)
   
 end subroutine setTargetFixedResolution
+
+!------------------------------------------------------------------------------
+! Control the extrapolation of boundary data
+!------------------------------------------------------------------------------
+subroutine setRegriddingBoundaryExtrapolation( onOff, CS )
+  logical,             intent(in)    :: onOff
+  type(regridding_CS), intent(inout) :: CS
+
+  CS%boundary_extrapolation = onOff
+  
+end subroutine setRegriddingBoundaryExtrapolation
+
+!------------------------------------------------------------------------------
+! Control the minimum thickness permitted in regridding
+!------------------------------------------------------------------------------
+subroutine setRegriddingMinimumThickness( minThickness, CS )
+  real   ,             intent(in)    :: minThickness
+  type(regridding_CS), intent(inout) :: CS
+
+  CS%min_thickness = minThickness
+  
+end subroutine setRegriddingMinimumThickness
 
 
 !------------------------------------------------------------------------------

@@ -33,8 +33,13 @@ use PPM_functions, only : PPM_reconstruction, PPM_boundary_extrapolation
 
 use P1M_functions, only : P1M_interpolation, P1M_boundary_extrapolation
 use P3M_functions, only : P3M_interpolation, P3M_boundary_extrapolation
-use MOM_regridding, only : initialize_regridding, allocate_regridding, regridding_main , end_regridding
+use MOM_regridding, only : initialize_regridding, regridding_main , end_regridding
 use MOM_regridding, only : check_grid_integrity, setTargetFixedResolution
+use MOM_regridding, only : regriddingCoordinateModeDoc, DEFAULT_COORDINATE_MODE
+use MOM_regridding, only : regriddingInterpSchemeDoc, regriddingDefaultInterpScheme
+use MOM_regridding, only : setRegriddingBoundaryExtrapolation
+use MOM_regridding, only : regriddingDefaultBoundaryExtrapolation
+use MOM_regridding, only : setRegriddingMinimumThickness, regriddingDefaultMinThickness
 use MOM_regridding, only : regridding_CS
 use MOM_remapping, only : initialize_remapping, remapping_main, end_remapping
 use MOM_remapping, only : remappingSchemesDoc, remappingDefaultScheme
@@ -160,11 +165,12 @@ subroutine initialize_ALE( param_file, G, h, h_aux, &
   type(ALE_CS), intent(inout)                     :: CS
 
   ! Local variables
-  logical       :: verbose
-  integer       :: i, j, k, m
+  logical :: verbose, tmpLogical
+  integer :: i, j, k, m
+  real :: tmpReal
   real, dimension(:), allocatable :: dz
   character(len=40)  :: mod = "MOM_ALE" ! This module's name.
-  character(len=40) :: string ! Temporary string
+  character(len=40) :: string, coordMode, interpScheme ! Temporary strings
 
   verbose = .false.
  
@@ -204,17 +210,46 @@ subroutine initialize_ALE( param_file, G, h, h_aux, &
                  "When regridding, this is the minimum layer\n"//&
                  "thickness allowed.", default=1.e-3 )
   
-  call initialize_regridding( param_file, G%ke, CS%regridCS )
-  call allocate_regridding( CS%regridCS )
+  ! Initialize and configure regridding
+  call get_param(param_file, mod, "REGRIDDING_COORDINATE_MODE", coordMode, &
+                 "Coordinate mode for vertical regridding.\n"//&
+                 "Choose among the following possibilities:\n"//&
+                 trim(regriddingCoordinateModeDoc),&
+                 default=DEFAULT_COORDINATE_MODE, fail_if_missing=.true.)
+
+  call get_param(param_file, mod, "INTERPOLATION_SCHEME", interpScheme, &
+                 "This sets the interpolation scheme to use to\n"//&
+                 "determine the new grid. These parameters are\n"//&
+                 "only relevant when REGRIDDING_COORDINATE_MODE is\n"//&
+                 "set to a function of state. Otherwise, it is not\n"//&
+                 "used. It can be one of the following schemes:\n"//&
+                 trim(regriddingInterpSchemeDoc),&
+                 default=regriddingDefaultInterpScheme)
+  call initialize_regridding( G%ke, coordMode, interpScheme, CS%regridCS )
   allocate( dz(G%ke) )
   dz(:) = G%max_depth / dfloat( G%ke )
   call setTargetFixedResolution( dz, CS%regridCS )
   deallocate( dz )
 
-  ! Allocate and configure remapping
+  call get_param(param_file, mod, "BOUNDARY_EXTRAPOLATION", tmpLogical, &
+                 "When defined, a proper high-order reconstruction\n"//&
+                 "scheme is used within boundary cells rather\n"//&
+                 "than PCM. E.g., if PPM is used for remapping, a\n"//&
+                 "PPM reconstruction will also be used within\n"//&
+                 "boundary cells.", default=regriddingDefaultBoundaryExtrapolation)
+  call setRegriddingBoundaryExtrapolation( tmpLogical, CS%regridCS )
+
+  call get_param(param_file, mod, "MIN_THICKNESS", tmpReal, &
+                 "When regridding, this is the minimum layer\n"//&
+                 "thickness allowed.", default=regriddingDefaultMinThickness )
+  call setRegriddingMinimumThickness( tmpReal, CS%regridCS )
+
+
+  ! Initialize and configure remapping
   call get_param(param_file, mod, "REMAPPING_SCHEME", string, &
                  "This sets the reconstruction scheme used\n"//&
                  "for vertical remapping for all variables.\n"//&
+                 "It can be one of the following schemes:\n"//&
                  trim(remappingSchemesDoc), default=remappingDefaultScheme)
   call initialize_remapping( G%ke, string, CS%remapCS )
 

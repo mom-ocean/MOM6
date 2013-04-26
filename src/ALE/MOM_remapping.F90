@@ -55,7 +55,7 @@ end type
 ! -----------------------------------------------------------------------------
 public remapping_main, remapping_core
 public initialize_remapping, end_remapping
-public enableBoundaryExtrapolation, disableBoundaryExtrapolation
+public rempaEnableBoundaryExtrapolation, remapDisableBoundaryExtrapolation
 public setReconstructionType
 
 ! -----------------------------------------------------------------------------
@@ -79,7 +79,6 @@ character(len=40)  :: mod = "MOM_remapping" ! This module's name.
 
 ! Documentation for external callers
 character(len=256), public :: remappingSchemesDoc = &
-                 "It can be one of the following schemes:\n"//&
                  "PCM         (1st-order accurate)\n"//&
                  "PLM         (2nd-order accurate)\n"//&
                  "PPM_H4      (3rd-order accurate)\n"//&
@@ -604,20 +603,20 @@ end subroutine setReconstructionType
 !------------------------------------------------------------------------------
 ! Functino to enable extraplation in boundary cells
 !------------------------------------------------------------------------------
-subroutine enableBoundaryExtrapolation(CS)
+subroutine rempaEnableBoundaryExtrapolation(CS)
 ! Use this to enable extrapolation at boundaries
   type(remapping_CS), intent(inout) :: CS
   CS%boundary_extrapolation = .true.
-end subroutine enableBoundaryExtrapolation
+end subroutine rempaEnableBoundaryExtrapolation
 
 !------------------------------------------------------------------------------
 ! Functino to disable extraplation in boundary cells
 !------------------------------------------------------------------------------
-subroutine disableBoundaryExtrapolation(CS)
+subroutine remapDisableBoundaryExtrapolation(CS)
 ! Use this to disable extrapolation at boundaries
   type(remapping_CS), intent(inout) :: CS
   CS%boundary_extrapolation = .false.
-end subroutine disableBoundaryExtrapolation
+end subroutine remapDisableBoundaryExtrapolation
 
 !------------------------------------------------------------------------------
 ! Memory allocation for remapping
