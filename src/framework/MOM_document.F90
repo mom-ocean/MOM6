@@ -60,7 +60,7 @@ end type doc_type
 type :: link_msg ; private
   type(link_msg), pointer :: next => NULL()  ! Facilitates linked list
   character(len=80) :: name                  ! Parameter name
-  character(len=mLen) :: msg                 ! Parameter value and default
+  character(len=620) :: msg                  ! Parameter value and default
 end type link_msg
 
 character(len=4), parameter :: STRING_TRUE = 'True'
@@ -626,6 +626,7 @@ end function find_unused_unit_number
 
 subroutine doc_end(doc)
   type(doc_type), pointer :: doc
+  type(link_msg), pointer :: this, next
 
   if (.not.associated(doc)) return
 
@@ -639,6 +640,12 @@ subroutine doc_end(doc)
     doc%unitShort = -2
   endif
 
+  this => doc%chain_msg
+  do while( associated(this) )
+    next => this%next
+    deallocate(this)
+    this => next
+  enddo
 end subroutine doc_end
 
 ! -----------------------------------------------------------------------------
