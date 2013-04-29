@@ -105,7 +105,7 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, CS, uhbt, vhbt, OBC, &
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)    :: u
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)    :: v
   real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: hin
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(out)   :: h
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(inout) :: h
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(out)   :: uh
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(out)   :: vh
   real,                                   intent(in)    :: dt
@@ -161,6 +161,8 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, CS, uhbt, vhbt, OBC, &
 !  (out, opt) BT_cont - A structure with elements that describe the effective
 !                       open face areas as a function of barotropic flow.
 
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
+    h_input      ! Left and right face thicknesses, in H.
   type(loop_bounds_type) :: LB
   integer :: is, ie, js, je, nz, stensil
   integer :: i, j, k
@@ -184,6 +186,11 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, CS, uhbt, vhbt, OBC, &
     apply_OBC_u_flather_west = OBC%apply_OBC_u_flather_west
     apply_OBC_v_flather_north = OBC%apply_OBC_v_flather_north
     apply_OBC_v_flather_south = OBC%apply_OBC_v_flather_south
+    !   If an OBC is being applied, copy the input thicknesses so that the 
+    ! OBC code works even if hin == h.
+    if (apply_OBC_u_flather_east .or. apply_OBC_u_flather_west .or. &
+        apply_OBC_v_flather_north .or. apply_OBC_v_flather_south) &
+      h_input(:,:,:) = hin(:,:,:)
   endif ; endif
 
   if (present(visc_rem_u) .neqv. present(visc_rem_v)) call MOM_error(FATAL, &
@@ -210,13 +217,13 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, CS, uhbt, vhbt, OBC, &
 
     if (apply_OBC_u_flather_east .or. apply_OBC_u_flather_west) then
       do k=1,nz ; do j=LB%jsh,LB%jeh
-        do I=LB%ish,LB%ieh+1 ; if (OBC%OBC_mask_u(I-1,j) .and. &
-          (OBC%OBC_kind_u(I-1,j) == OBC_FLATHER_E)) &
-            h(i,j,k) = hin(i-1,j,k) 
+        do I=LB%ish,LB%ieh+1
+          if (OBC%OBC_mask_u(I-1,j) .and. (OBC%OBC_kind_u(I-1,j) == OBC_FLATHER_E)) &
+            h(i,j,k) = h_input(i-1,j,k) 
         enddo
-        do i=LB%ish-1,LB%ieh ; if (OBC%OBC_mask_u(I,j) .and. &
-          (OBC%OBC_kind_u(I,j) == OBC_FLATHER_W)) &
-             h(i,j,k) = hin(i+1,j,k)
+        do i=LB%ish-1,LB%ieh
+          if (OBC%OBC_mask_u(I,j) .and. (OBC%OBC_kind_u(I,j) == OBC_FLATHER_W)) &
+            h(i,j,k) = h_input(i+1,j,k)
         enddo
       enddo ; enddo       
     endif
@@ -240,11 +247,11 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, CS, uhbt, vhbt, OBC, &
       do k=1,nz
         do J=LB%jsh,LB%jeh+1 ; do i=LB%ish-1,LB%ieh+1
           if (OBC%OBC_mask_v(i,J-1) .and. (OBC%OBC_kind_v(i,J-1) == OBC_FLATHER_N)) &
-            h(i,j,k) = hin(i,j-1,k)
+            h(i,j,k) = h_input(i,j-1,k)
         enddo ; enddo
         do J=LB%jsh-1,LB%jeh ; do i=LB%ish-1,LB%ieh+1
           if (OBC%OBC_mask_v(i,J) .and. (OBC%OBC_kind_v(i,J) == OBC_FLATHER_S)) &
-            h(i,j,k) = hin(i,j+1,k)
+            h(i,j,k) = h_input(i,j+1,k)
         enddo ; enddo
       enddo       
     endif
@@ -267,11 +274,11 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, CS, uhbt, vhbt, OBC, &
       do k=1,nz
         do J=LB%jsh,LB%jeh+1 ; do i=LB%ish-1,LB%ieh+1
           if (OBC%OBC_mask_v(i,J-1) .and. (OBC%OBC_kind_v(i,J-1) == OBC_FLATHER_N)) &
-            h(i,j,k) = hin(i,j-1,k)
+            h(i,j,k) = h_input(i,j-1,k)
         enddo ; enddo
         do J=LB%jsh-1,LB%jeh ; do i=LB%ish-1,LB%ieh+1
           if (OBC%OBC_mask_v(i,J) .and. (OBC%OBC_kind_v(i,J) == OBC_FLATHER_S)) &
-            h(i,j,k) = hin(i,j+1,k)
+            h(i,j,k) = h_input(i,j+1,k)
         enddo ; enddo
       enddo       
     endif
@@ -293,13 +300,13 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, CS, uhbt, vhbt, OBC, &
 
     if (apply_OBC_u_flather_east .or. apply_OBC_u_flather_west) then
       do k=1,nz ; do j=LB%jsh,LB%jeh
-        do I=LB%ish,LB%ieh+1 ; if (OBC%OBC_mask_u(I-1,j) .and. &
-          (OBC%OBC_kind_u(I-1,j) == OBC_FLATHER_E)) &
-            h(i,j,k) = hin(i-1,j,k) 
+        do I=LB%ish,LB%ieh+1
+          if (OBC%OBC_mask_u(I-1,j) .and. (OBC%OBC_kind_u(I-1,j) == OBC_FLATHER_E)) &
+            h(i,j,k) = h_input(i-1,j,k) 
         enddo
-        do i=LB%ish-1,LB%ieh ; if (OBC%OBC_mask_u(I,j) .and. &
-          (OBC%OBC_kind_u(I,j) == OBC_FLATHER_W)) &
-             h(i,j,k) = hin(i+1,j,k)
+        do i=LB%ish-1,LB%ieh
+          if (OBC%OBC_mask_u(I,j) .and. (OBC%OBC_kind_u(I,j) == OBC_FLATHER_W)) &
+            h(i,j,k) = h_input(i+1,j,k)
         enddo
       enddo ; enddo       
     endif
