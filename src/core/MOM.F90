@@ -536,7 +536,7 @@ function step_MOM(fluxes, state, Time_start, time_interval, CS)
     CS%p_surf_end  => fluxes%p_surf
   endif
 
-  mp = 1 ; if (CS%split) mp = MOD(nt+1,2) + 1
+  mp = 1 !### ; if (CS%split) mp = MOD(nt+1,2) + 1
   if (CS%debug) then
     call MOM_state_chksum("Before steps ", u(:,:,:,mp), v(:,:,:,mp), &
                           h(:,:,:,mp), CS%uh, CS%vh, grid)
@@ -575,7 +575,7 @@ function step_MOM(fluxes, state, Time_start, time_interval, CS)
       if (MOD(n-1,ntstep) == 0) then
         dtth = dt*min(ntstep,n_max-n+1)
         call enable_averaging(dtth,Time_local+set_time(int(floor(dtth-dt+0.5))), CS%diag)
-        mp = 1 ; if (CS%split) mp = MOD(nt,2) + 1
+        mp = 1 !### ; if (CS%split) mp = MOD(nt,2) + 1
         call cpu_clock_begin(id_clock_thick_diff)
         if (associated(CS%VarMix)) &
           call calc_slope_function(h(:,:,:,mp), CS%tv, grid, CS%VarMix)
@@ -604,7 +604,7 @@ function step_MOM(fluxes, state, Time_start, time_interval, CS)
       CS%bbl_calc_time_interval = dt*real(1+MIN(ntstep-MOD(n,ntstep),n_max-n))
 
     if (associated(CS%u_prev) .and. associated(CS%v_prev)) then
-      mp = 1 ; if (CS%split) mp = MOD(nt,2) + 1
+      mp = 1 !### ; if (CS%split) mp = MOD(nt,2) + 1
       do k=1,nz ; do j=jsd,jed ; do I=IsdB,IedB
         CS%u_prev(I,j,k) = u(I,j,k,mp)
       enddo ; enddo ; enddo
@@ -617,8 +617,9 @@ function step_MOM(fluxes, state, Time_start, time_interval, CS)
 !   This section uses a predictor corrector scheme, that is somewhere
 ! (determined by be) between the forward-backward (be=0.5) scheme and
 ! the backward Euler scheme (be=1.0) to time step the dynamic equations.
-      mp = MOD(nt,2) + 1
-      m  = 3 - mp
+      !### mp = MOD(nt,2) + 1
+      !### m  = 3 - mp
+      mp = 1 ; m = 1
 
       CS%calc_dtbt = .false.
       if ((CS%dtbt_reset_period >= 0.0) .and. &
@@ -631,8 +632,7 @@ function step_MOM(fluxes, state, Time_start, time_interval, CS)
       call step_MOM_dyn_split_RK2(u(:,:,:,mp), v(:,:,:,mp), h(:,:,:,mp), &
                     CS%eta, CS%uhbt_in, CS%vhbt_in, Time_local, dt, &
                     fluxes, CS%p_surf_begin, CS%p_surf_end, dtnt, dt*ntstep, &
-                    CS%uh, CS%vh, CS%u_av, CS%v_av, CS%h_av, eta_av, &
-                    u(:,:,:,m), v(:,:,:,m), h(:,:,:,m), CS%eta, grid, CS)
+                    CS%uh, CS%vh, CS%u_av, CS%v_av, CS%h_av, eta_av, grid, CS)
 
     else ! --------------------------------------------------- not SPLIT
 
@@ -1943,13 +1943,13 @@ subroutine set_restart_fields(grid, param_file, CS)
   flux_units = get_flux_units(grid)
 
   vd = vardesc("u","Zonal velocity",'u','L','s',"meter second-1")
-  call register_restart_field(CS%u(:,:,:,1), CS%u(:,:,:,2), vd, .true., CS%restart_CSp)
+  call register_restart_field(CS%u(:,:,:,1), CS%u(:,:,:,1), vd, .true., CS%restart_CSp)
 
   vd = vardesc("v","Meridional velocity",'v','L','s',"meter second-1")
-  call register_restart_field(CS%v(:,:,:,1), CS%v(:,:,:,2), vd, .true., CS%restart_CSp)
+  call register_restart_field(CS%v(:,:,:,1), CS%v(:,:,:,1), vd, .true., CS%restart_CSp)
 
   vd = vardesc("h","Layer Thickness",'h','L','s',thickness_units)
-  call register_restart_field(CS%h(:,:,:,1), CS%h(:,:,:,2), vd, .true., CS%restart_CSp)
+  call register_restart_field(CS%h(:,:,:,1), CS%h(:,:,:,1), vd, .true., CS%restart_CSp)
 
   if (CS%use_temperature) then
     vd = vardesc("Temp","Potential Temperature",'h','L','s',"degC")
