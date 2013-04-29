@@ -42,10 +42,12 @@ interface doc_param
                    doc_param_time
 end interface
 
+integer, parameter :: mLen = 1240 ! Length of interface/message strings
+
 type, public :: doc_type ; private
   integer :: unitAll = -1           ! The open unit number for docFileBase (.all).
   integer :: unitShort = -1         ! The open unit number for docFileBase (.short).
-  character(len=240) :: docFileBase = '' ! The basename of the files where run-time
+  character(len=mLen) :: docFileBase = '' ! The basename of the files where run-time
                                     ! parameters, settings and defaults are documented.
   logical :: complete = .true.      ! If true, document  non-default parameters.
   logical :: minimal = .true.       ! If true, document  non-default parameters.
@@ -58,7 +60,7 @@ end type doc_type
 type :: link_msg ; private
   type(link_msg), pointer :: next => NULL()  ! Facilitates linked list
   character(len=80) :: name                  ! Parameter name
-  character(len=240) :: msg                  ! Parameter value and default
+  character(len=mLen) :: msg                 ! Parameter value and default
 end type link_msg
 
 character(len=4), parameter :: STRING_TRUE = 'True'
@@ -73,7 +75,7 @@ subroutine doc_param_none(doc, varname, desc, units)
   character(len=*), intent(in) :: varname, desc, units
 ! This subroutine handles parameter documentation with no value.
   integer :: numspc
-  character(len=240) :: mesg
+  character(len=mLen) :: mesg
 
   if (.not. (is_root_pe() .and. associated(doc))) return
   call open_doc_file(doc)
@@ -94,7 +96,7 @@ subroutine doc_param_logical(doc, varname, desc, units, val, default)
   logical,          intent(in) :: val
   logical,          optional, intent(in) :: default
 ! This subroutine handles parameter documentation for logicals.
-  character(len=240) :: mesg
+  character(len=mLen) :: mesg
   logical :: equalsDefault
 
   if (.not. (is_root_pe() .and. associated(doc))) return
@@ -129,8 +131,8 @@ subroutine doc_param_logical_array(doc, varname, desc, units, vals, default)
   logical,          optional, intent(in) :: default
 ! This subroutine handles parameter documentation for arrays of logicals.
   integer :: i
-  character(len=1280) :: mesg
-  character(len=1240)  :: valstring
+  character(len=mLen) :: mesg
+  character(len=mLen) :: valstring
   logical :: equalsDefault
 
   if (.not. (is_root_pe() .and. associated(doc))) return
@@ -170,7 +172,7 @@ subroutine doc_param_int(doc, varname, desc, units, val, default)
   integer,          intent(in) :: val
   integer,          optional, intent(in) :: default
 ! This subroutine handles parameter documentation for integers.
-  character(len=240) :: mesg
+  character(len=mLen) :: mesg
   character(len=doc%commentColumn)  :: valstring
   logical :: equalsDefault
 
@@ -199,8 +201,8 @@ subroutine doc_param_int_array(doc, varname, desc, units, vals, default)
   integer,          optional, intent(in) :: default
 ! This subroutine handles parameter documentation for arrays of integers.
   integer :: i
-  character(len=1280) :: mesg
-  character(len=1240)  :: valstring
+  character(len=mLen) :: mesg
+  character(len=mLen)  :: valstring
   logical :: equalsDefault
 
   if (.not. (is_root_pe() .and. associated(doc))) return
@@ -233,7 +235,7 @@ subroutine doc_param_real(doc, varname, desc, units, val, default)
   real,             intent(in) :: val
   real,             optional, intent(in) :: default
 ! This subroutine handles parameter documentation for reals.
-  character(len=240) :: mesg
+  character(len=mLen) :: mesg
   character(len=doc%commentColumn)  :: valstring
   logical :: equalsDefault
 
@@ -262,8 +264,8 @@ subroutine doc_param_real_array(doc, varname, desc, units, vals, default)
   real,             optional, intent(in) :: default
 ! This subroutine handles parameter documentation for arrays of reals.
   integer :: i
-  character(len=1280) :: mesg
-  character(len=1240)  :: valstring
+  character(len=mLen) :: mesg
+  character(len=mLen) :: valstring
   logical :: equalsDefault
 
   if (.not. (is_root_pe() .and. associated(doc))) return
@@ -296,7 +298,7 @@ subroutine doc_param_char(doc, varname, desc, units, val, default)
   character(len=*), intent(in) :: val
   character(len=*), optional, intent(in) :: default
 ! This subroutine handles parameter documentation for character strings.
-  character(len=240) :: mesg
+  character(len=mLen) :: mesg
   logical :: equalsDefault
 
   if (.not. (is_root_pe() .and. associated(doc))) return
@@ -325,7 +327,7 @@ subroutine doc_param_time(doc, varname, desc, units, val, default)
 ! This subroutine handles parameter documentation for time-type variables.
 !  ### This needs to be written properly!
   integer :: numspc
-  character(len=240) :: mesg
+  character(len=mLen) :: mesg
   logical :: equalsDefault
 
   if (.not. (is_root_pe() .and. associated(doc))) return
@@ -348,7 +350,7 @@ subroutine writeMessageAndDesc(doc, vmesg, desc, valueWasDefault, indent)
   character(len=*),           intent(in) :: vmesg, desc
   logical,          optional, intent(in) :: valueWasDefault
   integer,          optional, intent(in) :: indent
-  character(len=240) :: mesg
+  character(len=mLen) :: mesg
   integer :: start_ind = 1, end_ind, indnt, tab, len_tab, len_nl
   logical :: all, short
 
@@ -477,10 +479,10 @@ end function logical_string
 function define_string(doc,varName,valString,units)
   type(doc_type),   pointer    :: doc
   character(len=*), intent(in) :: varName, valString, units
-  character(len=240) :: define_string
+  character(len=mLen) :: define_string
 ! This function returns a string for formatted parameter assignment
   integer :: numSpaces
-  define_string = repeat(" ",240) ! Blank everything for safety
+  define_string = repeat(" ",mLen) ! Blank everything for safety
   if (doc%defineSyntax) then
     define_string = "#define "//trim(varName)//" "//valString
   else
@@ -494,7 +496,7 @@ end function define_string
 function undef_string(doc,varName,units)
   type(doc_type),   pointer    :: doc
   character(len=*), intent(in) :: varName, units
-  character(len=240) :: undef_string
+  character(len=mLen) :: undef_string
 ! This function returns a string for formatted false logicals
   integer :: numSpaces
   undef_string = repeat(" ",240) ! Blank everything for safety
@@ -515,7 +517,7 @@ subroutine doc_module(doc, modname, desc)
   type(doc_type),   pointer    :: doc
   character(len=*), intent(in) :: modname, desc
 ! This subroutine handles the module documentation
-  character(len=240) :: mesg
+  character(len=mLen) :: mesg
 
   if (.not. (is_root_pe() .and. associated(doc))) return
   call open_doc_file(doc)

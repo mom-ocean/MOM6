@@ -1111,7 +1111,7 @@ subroutine log_version(CS, modulename, version, tagname, desc)
   character(len=*),           intent(in) :: version
   character(len=*), optional, intent(in) :: tagname, desc
 ! This subroutine writes the version of a module to a log file.
-  character(len=240) :: mesg, myunits
+  character(len=240) :: mesg
 
 !  write(mesg, '(a,": ",a)') trim(modulename), trim(version)
   if (present(tagname)) then
@@ -1162,7 +1162,8 @@ subroutine log_param_int_array(CS, modulename, varname, value, desc, &
   integer,          optional, intent(in) :: default
 ! This subroutine writes the value of an integer parameter to a log file,
 ! along with its name and the module it came from.
-  character(len=1320) :: mesg, myunits
+  character(len=1320) :: mesg
+  character(len=240) :: myunits
 
   write(mesg, '("  ",a," ",a,": ",A)') trim(modulename), trim(varname), trim(left_ints(value))
   if (is_root_pe()) then
@@ -1211,7 +1212,8 @@ subroutine log_param_real_array(CS, modulename, varname, value, desc, &
   real,             optional, intent(in) :: default
 ! This subroutine writes the value of a real parameter to a log file,
 ! along with its name and the module it came from.
-  character(len=1320) :: mesg, myunits
+  character(len=1320) :: mesg
+  character(len=240) :: myunits
 
  !write(mesg, '("  ",a," ",a,": ",ES19.12,99(",",ES19.12))') &
  !write(mesg, '("  ",a," ",a,": ",G,99(",",G))') &
@@ -1358,7 +1360,6 @@ subroutine get_param_int(CS, modulename, varname, value, desc, units, &
 ! This subroutine writes the value of a real parameter to a log file,
 ! along with its name and the module it came from.
   logical :: do_read, do_log
-  character(len=240) :: mesg, myunits
 
   do_read = .true. ; if (present(do_not_read)) do_read = .not.do_not_read
   do_log  = .true. ; if (present(do_not_log))  do_log  = .not.do_not_log
@@ -1388,7 +1389,6 @@ subroutine get_param_int_array(CS, modulename, varname, value, desc, units, &
 ! This subroutine writes the value of a real parameter to a log file,
 ! along with its name and the module it came from.
   logical :: do_read, do_log
-  character(len=240) :: mesg, myunits
 
   do_read = .true. ; if (present(do_not_read)) do_read = .not.do_not_read
   do_log  = .true. ; if (present(do_not_log))  do_log  = .not.do_not_log
@@ -1418,7 +1418,6 @@ subroutine get_param_real(CS, modulename, varname, value, desc, units, &
 ! This subroutine writes the value of a real parameter to a log file,
 ! along with its name and the module it came from.
   logical :: do_read, do_log
-  character(len=240) :: mesg, myunits
 
   do_read = .true. ; if (present(do_not_read)) do_read = .not.do_not_read
   do_log  = .true. ; if (present(do_not_log))  do_log  = .not.do_not_log
@@ -1448,7 +1447,6 @@ subroutine get_param_real_array(CS, modulename, varname, value, desc, units, &
 ! This subroutine writes the value of a real parameter to a log file,
 ! along with its name and the module it came from.
   logical :: do_read, do_log
-  character(len=240) :: mesg, myunits
 
   do_read = .true. ; if (present(do_not_read)) do_read = .not.do_not_read
   do_log  = .true. ; if (present(do_not_log))  do_log  = .not.do_not_log
@@ -1478,7 +1476,6 @@ subroutine get_param_char(CS, modulename, varname, value, desc, units, &
 ! This subroutine writes the value of a real parameter to a log file,
 ! along with its name and the module it came from.
   logical :: do_read, do_log
-  character(len=240) :: mesg, myunits
 
   do_read = .true. ; if (present(do_not_read)) do_read = .not.do_not_read
   do_log  = .true. ; if (present(do_not_log))  do_log  = .not.do_not_log
@@ -1509,7 +1506,6 @@ subroutine get_param_char_array(CS, modulename, varname, value, desc, units, &
 ! along with its name and the module it came from.
   logical :: do_read, do_log
   integer :: i, len_tot, len_val
-  character(len=240) :: mesg, myunits
   character(len=240) :: cat_val
 
   do_read = .true. ; if (present(do_not_read)) do_read = .not.do_not_read
@@ -1548,7 +1544,6 @@ subroutine get_param_logical(CS, modulename, varname, value, desc, units, &
 ! This subroutine writes the value of a real parameter to a log file,
 ! along with its name and the module it came from.
   logical :: do_read, do_log
-  character(len=240) :: mesg, myunits
 
   do_read = .true. ; if (present(do_not_read)) do_read = .not.do_not_read
   do_log  = .true. ; if (present(do_not_log))  do_log  = .not.do_not_log
@@ -1579,7 +1574,6 @@ subroutine get_param_time(CS, modulename, varname, value, desc, units, &
 ! This subroutine writes the value of a real parameter to a log file,
 ! along with its name and the module it came from.
   logical :: do_read, do_log
-  character(len=240) :: mesg, myunits
 
   do_read = .true. ; if (present(do_not_read)) do_read = .not.do_not_read
   do_log  = .true. ; if (present(do_not_log))  do_log  = .not.do_not_log
