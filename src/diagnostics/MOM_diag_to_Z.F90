@@ -174,7 +174,7 @@ subroutine calculate_Z_diag_fields(u, v, h, dt, G, CS)
       do I=Isq,Ieq ; if (nk_valid(I) > 0) then
       ! Calculate the z* interface heights for tracers.
         htot = 0.0 ; do k=1,nk_valid(i) ; htot = htot + h_f(k,i) ; enddo
-        dilate = 0.0 ; if (htot*G%H_to_m > 0.5) dilate = (D_pt(i) - 0.0) / htot
+        dilate = 0.0 ; if (htot*G%H_to_m > 2.0*G%Angstrom) dilate = (D_pt(i) - 0.0) / htot
 
         e(nk_valid(i)+1) = -D_pt(i)
         do k=nk_valid(i),1,-1 ; e(K) = e(K+1) + h_f(k,i)*dilate ; enddo
@@ -252,7 +252,7 @@ subroutine calculate_Z_diag_fields(u, v, h, dt, G, CS)
       do i=is,ie ; if (nk_valid(i) > 0) then
       ! Calculate the z* interface heights for tracers.
         htot = 0.0 ; do k=1,nk_valid(i) ; htot = htot + h_f(k,i) ; enddo
-        dilate = 0.0 ; if (htot > 0.5) dilate = (D_pt(i) - 0.0) / htot
+        dilate = 0.0 ; if (htot > 2.0*G%Angstrom) dilate = (D_pt(i) - 0.0) / htot
 
         e(nk_valid(i)+1) = -D_pt(i)
         do k=nk_valid(i),1,-1 ; e(K) = e(K+1) + h_f(k,i)*dilate ; enddo
@@ -324,7 +324,7 @@ subroutine calculate_Z_diag_fields(u, v, h, dt, G, CS)
       do i=is,ie ; if (nk_valid(i) > 0) then
       ! Calculate the z* interface heights for tracers.
         htot = 0.0 ;  do k=1,nk_valid(i) ; htot = htot + h_f(k,i) ; enddo
-        dilate = 0.0 ; if (htot > 0.5) dilate = (D_pt(i) - 0.0) / htot
+        dilate = 0.0 ; if (htot > 2.0*G%Angstrom) dilate = (D_pt(i) - 0.0) / htot
 
         e(nk_valid(i)+1) = -D_pt(i)
         do k=nk_valid(i),1,-1 ; e(K) = e(K+1) + h_f(k,i)*dilate ; enddo
