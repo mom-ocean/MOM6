@@ -206,7 +206,7 @@ type, public :: ocean_internal_state
 ! here and in MOM.F90.  It is useful for sending them for diagnostics, and for
 ! preparation for ensembles later on.  All variables have the same names as the
 ! local (public) variables they refer to in MOM.F90.
-  real, pointer, dimension(:,:,:,:) :: &
+  real, pointer, dimension(:,:,:) :: &
     u => NULL(), v => NULL(), h => NULL()
   real, pointer, dimension(:,:,:) :: &
     uh => NULL(), vh => NULL(), CAu => NULL(), CAv => NULL(), &

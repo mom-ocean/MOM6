@@ -254,9 +254,8 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in)
   call MOM_sum_output_init(OS%grid, param_file, OS%dirs%output_directory, &
                             OS%MOM_CSp%ntrunc, Time_init, OS%sum_output_CSp)
 
-  call write_energy(OS%MOM_CSp%u(:,:,:,1), OS%MOM_CSp%v(:,:,:,1), OS%MOM_CSp%h(:,:,:,1), &
-                    OS%MOM_CSp%tv, OS%Time, 0, OS%grid, OS%sum_output_CSp, &
-                    OS%MOM_CSp%tracer_flow_CSp)
+  call write_energy(OS%MOM_CSp%u, OS%MOM_CSp%v, OS%MOM_CSp%h, OS%MOM_CSp%tv, &
+             OS%Time, 0, OS%grid, OS%sum_output_CSp, OS%MOM_CSp%tracer_flow_CSp)
 
   ! write_energy_time is the next integral multiple of energysavedays.
   OS%write_energy_time = Time_init + OS%energysavedays * &
@@ -355,9 +354,9 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
 
 !  See if it is time to write out the energy.
   if (OS%Time + ((Ocean_coupling_time_step)/2) > OS%write_energy_time) then
-    call write_energy(OS%MOM_CSp%u(:,:,:,1), OS%MOM_CSp%v(:,:,:,1), &
-                      OS%MOM_CSp%h(:,:,:,1), OS%MOM_CSp%tv, OS%Time, OS%nstep, &
-                      OS%grid, OS%sum_output_CSp, OS%MOM_CSp%tracer_flow_CSp)
+    call write_energy(OS%MOM_CSp%u, OS%MOM_CSp%v, OS%MOM_CSp%h, OS%MOM_CSp%tv, &
+                      OS%Time, OS%nstep, OS%grid, OS%sum_output_CSp, &
+                      OS%MOM_CSp%tracer_flow_CSp)
     OS%write_energy_time = OS%write_energy_time + OS%energysavedays
   endif
 
@@ -546,8 +545,8 @@ subroutine ocean_model_init_sfc(OS, Ocean_sfc)
   type(ocean_state_type),  pointer       :: OS
   type(ocean_public_type), intent(inout) :: Ocean_sfc
 
-  call calculate_surface_state(OS%state, OS%MOM_CSp%u(:,:,:,1), &
-           OS%MOM_CSp%v(:,:,:,1), OS%MOM_CSp%h(:,:,:,1), OS%MOM_CSp%ave_ssh,&
+  call calculate_surface_state(OS%state, OS%MOM_CSp%u, &
+           OS%MOM_CSp%v, OS%MOM_CSp%h, OS%MOM_CSp%ave_ssh,&
            OS%grid, OS%MOM_CSp)
 
   call convert_state_to_ocean_type(OS%state, Ocean_sfc, OS%grid)
@@ -638,7 +637,7 @@ subroutine Ocean_stock_pe(OS, index, value, time_index)
 !  (in,opt)  time_index - Index for time level to use if this is necessary.
 
   real :: to_heat, to_mass, to_salt, PSU_to_kg ! Conversion constants.
-  integer :: i, j, k, m, is, ie, js, je, nz, ind
+  integer :: i, j, k, is, ie, js, je, nz, ind
 
   value = 0.0
   if (.not.associated(OS)) return
@@ -646,7 +645,6 @@ subroutine Ocean_stock_pe(OS, index, value, time_index)
   
   is = OS%grid%isc ; ie = OS%grid%iec
   js = OS%grid%jsc ; je = OS%grid%jec ; nz = OS%grid%ke
-  m = 1
 
   select case (index)
     case (ISTOCK_WATER)
@@ -654,14 +652,14 @@ subroutine Ocean_stock_pe(OS, index, value, time_index)
       to_mass = OS%grid%H_to_kg_m2
       if (OS%grid%Boussinesq) then
         do k=1,nz ; do j=js,je ; do i=is,ie ; if (OS%grid%mask2dT(i,j) > 0.5) then
-          value = value + to_mass*(OS%MOM_CSp%h(i,j,k,m) * OS%grid%areaT(i,j))
+          value = value + to_mass*(OS%MOM_CSp%h(i,j,k) * OS%grid%areaT(i,j))
         endif ; enddo ; enddo ; enddo
       else
         ! In non-Boussinesq mode, the mass of salt needs to be subtracted.
         PSU_to_kg = 1.0e-3
         do k=1,nz ; do j=js,je ; do i=is,ie ; if (OS%grid%mask2dT(i,j) > 0.5) then
           value = value + to_mass * ((1.0 - PSU_to_kg*OS%MOM_CSp%tv%S(i,j,k))*&
-                                  (OS%MOM_CSp%h(i,j,k,m) * OS%grid%areaT(i,j)))
+                                  (OS%MOM_CSp%h(i,j,k) * OS%grid%areaT(i,j)))
         endif ; enddo ; enddo ; enddo
       endif
     case (ISTOCK_HEAT)
@@ -669,7 +667,7 @@ subroutine Ocean_stock_pe(OS, index, value, time_index)
       to_heat = OS%grid%H_to_kg_m2 * OS%C_p
       do k=1,nz ; do j=js,je ; do i=is,ie ; if (OS%grid%mask2dT(i,j) > 0.5) then
         value = value + (to_heat * OS%MOM_CSp%tv%T(i,j,k)) * &
-                        (OS%MOM_CSp%h(i,j,k,m)*OS%grid%areaT(i,j))
+                        (OS%MOM_CSp%h(i,j,k)*OS%grid%areaT(i,j))
       endif ; enddo ; enddo ; enddo
     case (ISTOCK_SALT)
       ! Return the mass of the salt in the ocean on this PE in kg.
@@ -677,7 +675,7 @@ subroutine Ocean_stock_pe(OS, index, value, time_index)
       to_salt = OS%grid%H_to_kg_m2 / 1000.0
       do k=1,nz ; do j=js,je ; do i=is,ie ; if (OS%grid%mask2dT(i,j) > 0.5) then
         value = value + (to_salt * OS%MOM_CSp%tv%S(i,j,k)) * &
-                        (OS%MOM_CSp%h(i,j,k,m)*OS%grid%areaT(i,j))
+                        (OS%MOM_CSp%h(i,j,k)*OS%grid%areaT(i,j))
       endif ; enddo ; enddo ; enddo
     case default ; value = 0.0
   end select

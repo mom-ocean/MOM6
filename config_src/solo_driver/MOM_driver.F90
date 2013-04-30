@@ -232,8 +232,8 @@ program MOM_main
 
   Master_Time = Time
   grid => MOM_CSp%grid
-  call calculate_surface_state(state, MOM_CSp%u(:,:,:,1), MOM_CSp%v(:,:,:,1), &
-           MOM_CSp%h(:,:,:,1), MOM_CSp%ave_ssh, grid, MOM_CSp)
+  call calculate_surface_state(state, MOM_CSp%u, MOM_CSp%v, MOM_CSp%h, &
+                               MOM_CSp%ave_ssh, grid, MOM_CSp)
 
   use_ice_shelf=.false. ; call read_param(param_file,"ICE_SHELF",use_ice_shelf)
   if (use_ice_shelf) then
@@ -330,7 +330,7 @@ program MOM_main
   if (is_root_pe()) write(unit,'(6i4,2x,a3)') date, month(1:3)
   call close_file(unit)
 
-  call write_energy(MOM_CSp%u(:,:,:,1), MOM_CSp%v(:,:,:,1), MOM_CSp%h(:,:,:,1), &
+  call write_energy(MOM_CSp%u, MOM_CSp%v, MOM_CSp%h, &
                     MOM_CSp%tv, Time, 0, grid, sum_output_CSp, MOM_CSp%tracer_flow_CSp)
   call write_cputime(Time, 0, nmax, write_CPU_CSp)
 
@@ -399,7 +399,7 @@ program MOM_main
 
 !  See if it is time to write out the energy.
     if (Time + (Time_step_ocean/2) > write_energy_time) then
-      call write_energy(MOM_CSp%u(:,:,:,1), MOM_CSp%v(:,:,:,1), MOM_CSp%h(:,:,:,1), &
+      call write_energy(MOM_CSp%u, MOM_CSp%v, MOM_CSp%h, &
                         MOM_CSp%tv, Time, n+ntstep-1, grid, sum_output_CSp, &
                         MOM_CSp%tracer_flow_CSp)
       call write_cputime(Time, n+ntstep-1, nmax, write_CPU_CSp)

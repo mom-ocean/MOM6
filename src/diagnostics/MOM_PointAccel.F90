@@ -77,8 +77,6 @@ type, public :: PointAccel_CS ; private
 ! The following are pointers to many of the state variables and accelerations
 ! that are used to step the physical model forward.  They all use the same
 ! names as the variables they point to in MOM.F90
-  real, pointer, dimension(:,:,:,:) :: &
-    u => NULL(), v => NULL()     ! Velocities in m s-1.
   real, pointer, dimension(:,:,:) :: &
     u_av => NULL(), v_av => NULL(), & ! Time average velocities in m s-1.
     u_prev => NULL(), v_prev => NULL(), & ! Previous velocities in m s-1.
@@ -1058,14 +1056,14 @@ subroutine PointAccel_init(HIS, Time, G, param_file, diag, dirs, CS)
 
   CS%diag => diag ; CS%Time => Time
 
-  CS%u => HIS%u ; CS%v => HIS%v ; CS%uh => HIS%uh ; CS%vh => HIS%vh
+  CS%uh => HIS%uh ; CS%vh => HIS%vh
   CS%CAu => HIS%CAu ; CS%CAv => HIS%CAv ; CS%PFu => HIS%PFu ; CS%PFv => HIS%PFv
   CS%diffu => HIS%diffu ; CS%diffv => HIS%diffv
   CS%T => HIS%T ; CS%S => HIS%S ; CS%pbce => HIS%pbce
   CS%u_accel_bt => HIS%u_accel_bt ; CS%v_accel_bt => HIS%v_accel_bt
   CS%u_prev => HIS%u_prev ; CS%v_prev => HIS%v_prev
-  CS%u_av => HIS%u_av; if (.not.associated(HIS%u_av)) CS%u_av => HIS%u(:,:,:,1)
-  CS%v_av => HIS%v_av; if (.not.associated(HIS%v_av)) CS%v_av => HIS%v(:,:,:,1)
+  CS%u_av => HIS%u_av; if (.not.associated(HIS%u_av)) CS%u_av => HIS%u(:,:,:)
+  CS%v_av => HIS%v_av; if (.not.associated(HIS%v_av)) CS%v_av => HIS%v(:,:,:)
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mod, version, tagname, "")

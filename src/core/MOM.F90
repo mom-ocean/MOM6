@@ -462,7 +462,7 @@ function step_MOM(fluxes, state, Time_start, time_interval, CS)
                     ! heat capacity of water, in W m-2.   
     intern_heat_ave !   The average heat flux into the ocean from geothermal or
                     ! other internal heat sources, in W m-2.   
-  real, pointer, dimension(:,:,:,:) :: &
+  real, pointer, dimension(:,:,:) :: &
     u, &                     ! u : Zonal velocity, in m s-1.
     v, &                     ! v : Meridional velocity, in m s-1.
     h                        ! h : Layer thickness, in m.
@@ -535,15 +535,14 @@ function step_MOM(fluxes, state, Time_start, time_interval, CS)
   endif
 
   if (CS%debug) then
-    call MOM_state_chksum("Before steps ", u(:,:,:,1), v(:,:,:,1), &
-                          h(:,:,:,1), CS%uh, CS%vh, grid)
-    call check_redundant("Before steps ", u(:,:,:,1), v(:,:,:,1), grid)
+    call MOM_state_chksum("Before steps ", u, v, h, CS%uh, CS%vh, grid)
+    call check_redundant("Before steps ", u, v, grid)
   endif
 
   if (associated(CS%VarMix)) then
     call enable_averaging(time_interval, Time_start+set_time(int(time_interval)), &
                           CS%diag)
-    call calc_resoln_function(h(:,:,:,1), CS%tv, grid, CS%VarMix)
+    call calc_resoln_function(h, CS%tv, grid, CS%VarMix)
     call disable_averaging(CS%diag)
   endif
 
@@ -574,12 +573,12 @@ function step_MOM(fluxes, state, Time_start, time_interval, CS)
         call enable_averaging(dtth,Time_local+set_time(int(floor(dtth-dt+0.5))), CS%diag)
         call cpu_clock_begin(id_clock_thick_diff)
         if (associated(CS%VarMix)) &
-          call calc_slope_function(h(:,:,:,1), CS%tv, grid, CS%VarMix)
-        call thickness_diffuse(h(:,:,:,1), CS%uhtr, CS%vhtr, CS%tv, dtth, grid, &
+          call calc_slope_function(h, CS%tv, grid, CS%VarMix)
+        call thickness_diffuse(h, CS%uhtr, CS%vhtr, CS%tv, dtth, grid, &
                                CS%MEKE, CS%VarMix, CS%thickness_diffuse_CSp)
         call cpu_clock_end(id_clock_thick_diff)
         call cpu_clock_begin(id_clock_pass)
-        call pass_var(h(:,:,:,1), grid%Domain)
+        call pass_var(h, grid%Domain)
         call cpu_clock_end(id_clock_pass)
         call disable_averaging(CS%diag)
       endif
@@ -601,10 +600,10 @@ function step_MOM(fluxes, state, Time_start, time_interval, CS)
 
     if (associated(CS%u_prev) .and. associated(CS%v_prev)) then
       do k=1,nz ; do j=jsd,jed ; do I=IsdB,IedB
-        CS%u_prev(I,j,k) = u(I,j,k,1)
+        CS%u_prev(I,j,k) = u(I,j,k)
       enddo ; enddo ; enddo
       do k=1,nz ; do J=JsdB,JedB ; do i=isd,ied
-        CS%v_prev(I,j,k) = u(I,j,k,1)
+        CS%v_prev(I,j,k) = u(I,j,k)
       enddo ; enddo ; enddo
     endif
 
@@ -620,10 +619,10 @@ function step_MOM(fluxes, state, Time_start, time_interval, CS)
         dtbt_reset_time = CS%rel_time
       endif
 
-      call step_MOM_dyn_split_RK2(u(:,:,:,1), v(:,:,:,1), h(:,:,:,1), &
-                    CS%eta, CS%uhbt_in, CS%vhbt_in, Time_local, dt, &
-                    fluxes, CS%p_surf_begin, CS%p_surf_end, dtnt, dt*ntstep, &
-                    CS%uh, CS%vh, CS%u_av, CS%v_av, CS%h_av, eta_av, grid, CS)
+      call step_MOM_dyn_split_RK2(u, v, h, CS%eta, CS%uhbt_in, CS%vhbt_in, &
+                    Time_local, dt, fluxes, CS%p_surf_begin, CS%p_surf_end, &
+                    dtnt, dt*ntstep, CS%uh, CS%vh, CS%u_av, CS%v_av, CS%h_av, &
+                    eta_av, grid, CS)
 
     else ! --------------------------------------------------- not SPLIT
       !   This section uses a simple unsplit stepping scheme for the dynamic
@@ -634,13 +633,11 @@ function step_MOM(fluxes, state, Time_start, time_interval, CS)
       ! purposes.
 
       if (CS%use_RK2) then
-        call step_MOM_dyn_unsplit_RK2(u(:,:,:,1), v(:,:,:,1), h(:,:,:,1), &
-                    Time_local, dt, fluxes, CS%p_surf_begin, CS%p_surf_end, &
-                    CS%uh, CS%vh, eta_av, grid, CS)
+        call step_MOM_dyn_unsplit_RK2(u, v, h, Time_local, dt, fluxes, &
+                 CS%p_surf_begin, CS%p_surf_end, CS%uh, CS%vh, eta_av, grid, CS)
       else
-        call step_MOM_dyn_unsplit(u(:,:,:,1), v(:,:,:,1), h(:,:,:,1), &
-                    Time_local, dt, fluxes, CS%p_surf_begin, CS%p_surf_end, &
-                    CS%uh, CS%vh, eta_av, grid, CS)
+        call step_MOM_dyn_unsplit(u, v, h, Time_local, dt, fluxes, &
+                 CS%p_surf_begin, CS%p_surf_end, CS%uh, CS%vh, eta_av, grid, CS)
       endif
 
     endif ! -------------------------------------------------- end SPLIT
@@ -648,27 +645,27 @@ function step_MOM(fluxes, state, Time_start, time_interval, CS)
     if (CS%thickness_diffuse .and. .not.CS%thickness_diffuse_first) then
       call cpu_clock_begin(id_clock_thick_diff)
       if (associated(CS%VarMix)) &
-        call calc_slope_function(h(:,:,:,1), CS%tv, grid, CS%VarMix)
-      call thickness_diffuse(h(:,:,:,1), CS%uhtr, CS%vhtr, CS%tv, dt, grid, &
+        call calc_slope_function(h, CS%tv, grid, CS%VarMix)
+      call thickness_diffuse(h, CS%uhtr, CS%vhtr, CS%tv, dt, grid, &
                              CS%MEKE, CS%VarMix, CS%thickness_diffuse_CSp)
       call cpu_clock_end(id_clock_thick_diff)
       call cpu_clock_begin(id_clock_pass)
-      call pass_var(h(:,:,:,1), grid%Domain)
+      call pass_var(h, grid%Domain)
       call cpu_clock_end(id_clock_pass)
     endif
 
     if (CS%mixedlayer_restrat) then
       call cpu_clock_begin(id_clock_ml_restrat)
-      call mixedlayer_restrat(h(:,:,:,1), CS%uhtr ,CS%vhtr, CS%tv, fluxes, dt, &
+      call mixedlayer_restrat(h, CS%uhtr ,CS%vhtr, CS%tv, fluxes, dt, &
                               grid, CS%mixedlayer_restrat_CSp)
       call cpu_clock_end(id_clock_ml_restrat)
       call cpu_clock_begin(id_clock_pass)
-      call pass_var(h(:,:,:,1), grid%Domain)
+      call pass_var(h, grid%Domain)
       call cpu_clock_end(id_clock_pass)
     endif
 
     if (associated(CS%MEKE)) then
-      call step_forward_MEKE(CS%MEKE, h(:,:,:,1), CS%visc, dt, grid, CS%MEKE_CSp)
+      call step_forward_MEKE(CS%MEKE, h, CS%visc, dt, grid, CS%MEKE_CSp)
     endif
 
     call disable_averaging(CS%diag)
@@ -677,67 +674,65 @@ function step_MOM(fluxes, state, Time_start, time_interval, CS)
     dtnt = dtnt + dt
     if ((MOD(n,ntstep) == 0) .or. (n==n_max)) then
       if (CS%debug) then
-        call uchksum(u(:,:,:,1),"Pre-advection u",grid,haloshift=2)
-        call vchksum(v(:,:,:,1),"Pre-advection v",grid,haloshift=2)
-        call hchksum(h(:,:,:,1),"Pre-advection h",grid,haloshift=1)
+        call uchksum(u,"Pre-advection u",grid,haloshift=2)
+        call vchksum(v,"Pre-advection v",grid,haloshift=2)
+        call hchksum(h,"Pre-advection h",grid,haloshift=1)
         call uchksum(CS%uhtr,"Pre-advection uh",grid,haloshift=0)
         call vchksum(CS%vhtr,"Pre-advection vh",grid,haloshift=0)
-      ! call MOM_state_chksum("Pre-advection ", u(:,:,:,1), v(:,:,:,1), &
-      !                       h(:,:,:,1), CS%uhtr, CS%vhtr, grid, haloshift=1)
+      ! call MOM_state_chksum("Pre-advection ", u, v, &
+      !                       h, CS%uhtr, CS%vhtr, grid, haloshift=1)
           if (associated(CS%tv%T)) call hchksum(CS%tv%T, "Pre-advection T",grid,haloshift=1)
           if (associated(CS%tv%S)) call hchksum(CS%tv%S, "Pre-advection S",grid,haloshift=1)
           if (associated(CS%tv%frazil)) call hchksum(CS%tv%frazil, "Pre-advection frazil",grid,haloshift=0)
           if (associated(CS%tv%salt_deficit)) call hchksum(CS%tv%salt_deficit, "Pre-advection salt deficit",grid,haloshift=0)
       ! call MOM_thermo_chksum("Pre-advection ", CS%tv, grid)
-        call check_redundant("Pre-advection ", u(:,:,:,1), v(:,:,:,1), grid)
+        call check_redundant("Pre-advection ", u, v, grid)
       endif
 
       call cpu_clock_begin(id_clock_thermo)
       call enable_averaging(dtnt,Time_local, CS%diag)
 
       call cpu_clock_begin(id_clock_tracer)
-      call advect_tracer(h(:,:,:,1), CS%uhtr, CS%vhtr, CS%OBC, dtnt, grid, &
+      call advect_tracer(h, CS%uhtr, CS%vhtr, CS%OBC, dtnt, grid, &
                          CS%tracer_CSp)
-      call tracer_hordiff(h(:,:,:,1), dtnt, CS%MEKE, CS%VarMix, grid, CS%tracer_CSp, &
+      call tracer_hordiff(h, dtnt, CS%MEKE, CS%VarMix, grid, CS%tracer_CSp, &
                           CS%tv)
       call cpu_clock_end(id_clock_tracer)
 
       call cpu_clock_begin(id_clock_Z_diag)
-      call calculate_Z_transport(CS%uhtr, CS%vhtr, h(:,:,:,1), dtnt, grid, &
+      call calculate_Z_transport(CS%uhtr, CS%vhtr, h, dtnt, grid, &
                                  CS%diag_to_Z_CSp)
       call cpu_clock_end(id_clock_Z_diag)
 
-      if (CS%id_u_predia > 0) call post_data(CS%id_u_predia, u(:,:,:,1), CS%diag)
-      if (CS%id_v_predia > 0) call post_data(CS%id_v_predia, v(:,:,:,1), CS%diag)
-      if (CS%id_h_predia > 0) call post_data(CS%id_h_predia, h(:,:,:,1), CS%diag)
+      if (CS%id_u_predia > 0) call post_data(CS%id_u_predia, u, CS%diag)
+      if (CS%id_v_predia > 0) call post_data(CS%id_v_predia, v, CS%diag)
+      if (CS%id_h_predia > 0) call post_data(CS%id_h_predia, h, CS%diag)
       if (CS%id_T_predia > 0) call post_data(CS%id_T_predia, CS%tv%T, CS%diag)
       if (CS%id_S_predia > 0) call post_data(CS%id_S_predia, CS%tv%S, CS%diag)
       if (CS%id_e_predia > 0) then
-        call find_eta(h(:,:,:,1), CS%tv, grid%g_Earth, grid, eta_predia)
+        call find_eta(h, CS%tv, grid%g_Earth, grid, eta_predia)
         call post_data(CS%id_e_predia, eta_predia, CS%diag)
       endif
 
       if (.not.CS%adiabatic) then
         if (CS%debug) then
-          call uchksum(u(:,:,:,1),"Pre-diabatic u",grid,haloshift=2)
-          call vchksum(v(:,:,:,1),"Pre-diabatic v",grid,haloshift=2)
-          call hchksum(h(:,:,:,1),"Pre-diabatic h",grid,haloshift=1)
+          call uchksum(u,"Pre-diabatic u",grid,haloshift=2)
+          call vchksum(v,"Pre-diabatic v",grid,haloshift=2)
+          call hchksum(h,"Pre-diabatic h",grid,haloshift=1)
           call uchksum(CS%uhtr,"Pre-diabatic uh",grid,haloshift=0)
           call vchksum(CS%vhtr,"Pre-diabatic vh",grid,haloshift=0)
-        ! call MOM_state_chksum("Pre-diabatic ", u(:,:,:,1), v(:,:,:,1), &
-        !                       h(:,:,:,1), CS%uhtr, CS%vhtr, grid)
+        ! call MOM_state_chksum("Pre-diabatic ",u, v, h, CS%uhtr, CS%vhtr, grid)
           call MOM_thermo_chksum("Pre-diabatic ", CS%tv, grid,haloshift=0)
-          call check_redundant("Pre-diabatic ", u(:,:,:,1), v(:,:,:,1), grid)
+          call check_redundant("Pre-diabatic ", u, v, grid)
         endif
 
         if (CS%readjust_BT_trans) then
-          call find_total_transport(u(:,:,:,1), v(:,:,:,1), h(:,:,:,1), &
-                                    CS%uhbt_in, CS%vhbt_in, dt, grid, CS)
+          call find_total_transport(u, v, h, CS%uhbt_in, CS%vhbt_in, dt, grid, CS)
           CS%readjust_velocity = .true.
         endif
 
         call cpu_clock_begin(id_clock_diabatic)
-        call diabatic(u(:,:,:,1),v(:,:,:,1),h(:,:,:,1),CS%tv,fluxes,CS%visc,dtnt, &
+        call diabatic(u, v, h, CS%tv, fluxes, CS%visc, dtnt, &
                       grid, CS%diabatic_CSp)
         call cpu_clock_end(id_clock_diabatic)
 
@@ -745,59 +740,58 @@ function step_MOM(fluxes, state, Time_start, time_interval, CS)
         ! (that may comprise several dynamical time steps)
         ! The routine 'ALE_main' can be found in 'MOM_ALE.F90'.
         if ( CS%useALEalgorithm ) then 
-          call ALE_main(grid, h(:,:,:,1), CS%h_aux(:,:,:), &
-                        u(:,:,:,1), v(:,:,:,1), CS%tv, CS%regridding_opts )
-!         call pass_vector(u(:,:,:,1), v(:,:,:,1), grid%Domain)
+          call ALE_main(grid, h, CS%h_aux, u, v, CS%tv, CS%regridding_opts )
+!         call pass_vector(u, v, grid%Domain)
 !         call pass_var(CS%tv%T, grid%Domain, complete=.false.)
 !         call pass_var(CS%tv%S, grid%Domain, complete=.false.)
-!         call pass_var(h(:,:,:,1), grid%Domain)
-!         call pass_var(h_aux(:,:,:), grid%Domain)
+!         call pass_var(h, grid%Domain)
+!         call pass_var(h_aux, grid%Domain)
         end if   
 
         call cpu_clock_begin(id_clock_pass)
         if (grid%nonblocking_updates) then        
-          pid_u = pass_vector_start(u(:,:,:,1), v(:,:,:,1), grid%Domain)
+          pid_u = pass_vector_start(u, v, grid%Domain)
           if (CS%use_temperature) then
             pid_T = pass_var_start(CS%tv%T, grid%Domain)
             pid_S = pass_var_start(CS%tv%S, grid%Domain)
           endif
-          pid_h = pass_var_start(h(:,:,:,1), grid%Domain)
+          pid_h = pass_var_start(h, grid%Domain)
 
-          call pass_vector_complete(pid_u, u(:,:,:,1), v(:,:,:,1), grid%Domain)
+          call pass_vector_complete(pid_u, u, v, grid%Domain)
           if (CS%use_temperature) then
             call pass_var_complete(pid_T, CS%tv%T, grid%Domain)
             call pass_var_complete(pid_S, CS%tv%S, grid%Domain)
           endif
-          call pass_var_complete(pid_h, h(:,:,:,1), grid%Domain)
+          call pass_var_complete(pid_h, h, grid%Domain)
         else 
-          call pass_vector(u(:,:,:,1), v(:,:,:,1), grid%Domain)
+          call pass_vector(u, v, grid%Domain)
           if (CS%use_temperature) then
             call pass_var(CS%tv%T, grid%Domain, complete=.false.)
             call pass_var(CS%tv%S, grid%Domain, complete=.false.)
           endif
-          call pass_var(h(:,:,:,1), grid%Domain)
+          call pass_var(h, grid%Domain)
         endif
         call cpu_clock_end(id_clock_pass)
 
         if (CS%debug) then
-          call uchksum(u(:,:,:,1),"Post-diabatic u",grid,haloshift=2)
-          call vchksum(v(:,:,:,1),"Post-diabatic v",grid,haloshift=2)
-          call hchksum(h(:,:,:,1),"Post-diabatic h",grid,haloshift=1)
+          call uchksum(u,"Post-diabatic u",grid,haloshift=2)
+          call vchksum(v,"Post-diabatic v",grid,haloshift=2)
+          call hchksum(h,"Post-diabatic h",grid,haloshift=1)
           call uchksum(CS%uhtr,"Post-diabatic uh",grid,haloshift=0)
           call vchksum(CS%vhtr,"Post-diabatic vh",grid,haloshift=0)
-        ! call MOM_state_chksum("Post-diabatic ", u(:,:,:,1), v(:,:,:,1), &
-        !                       h(:,:,:,1), CS%uhtr, CS%vhtr, grid, haloshift=1)
+        ! call MOM_state_chksum("Post-diabatic ", u, v, &
+        !                       h, CS%uhtr, CS%vhtr, grid, haloshift=1)
           if (associated(CS%tv%T)) call hchksum(CS%tv%T, "Post-diabatic T",grid,haloshift=1)
           if (associated(CS%tv%S)) call hchksum(CS%tv%S, "Post-diabatic S",grid,haloshift=1)
           if (associated(CS%tv%frazil)) call hchksum(CS%tv%frazil, "Post-diabatic frazil",grid,haloshift=0)
           if (associated(CS%tv%salt_deficit)) call hchksum(CS%tv%salt_deficit, "Post-diabatic salt deficit",grid,haloshift=0)
         ! call MOM_thermo_chksum("Post-diabatic ", CS%tv, grid)
-          call check_redundant("Post-diabatic ", u(:,:,:,1), v(:,:,:,1), grid)
+          call check_redundant("Post-diabatic ", u, v, grid)
         endif
       else
 
         call cpu_clock_begin(id_clock_diabatic)
-        call adiabatic(h(:,:,:,1), CS%tv, fluxes, dtnt, grid, CS%diabatic_CSp)
+        call adiabatic(h, CS%tv, fluxes, dtnt, grid, CS%diabatic_CSp)
         call cpu_clock_end(id_clock_diabatic)
 
         if (CS%use_temperature) then
@@ -815,12 +809,11 @@ function step_MOM(fluxes, state, Time_start, time_interval, CS)
 
       call cpu_clock_begin(id_clock_diagnostics)
       if (CS%split) then
-        call calculate_diagnostic_fields(u(:,:,:,1),v(:,:,:,1),h(:,:,:,1), &
-                 CS%uh, CS%vh, 1, CS%tv, dtnt, grid, CS%diagnostics_CSp, &
-                 CS%eta)
+        call calculate_diagnostic_fields(u, v, h, CS%uh, CS%vh, 1, CS%tv, &
+                                         dtnt, grid, CS%diagnostics_CSp, CS%eta)
       else
-        call calculate_diagnostic_fields(u(:,:,:,1),v(:,:,:,1),h(:,:,:,1), &
-                 CS%uh, CS%vh, 1, CS%tv, dtnt, grid, CS%diagnostics_CSp)
+        call calculate_diagnostic_fields(u, v, h, CS%uh, CS%vh, 1, CS%tv, &
+                                         dtnt, grid, CS%diagnostics_CSp)
       endif
       call cpu_clock_end(id_clock_diagnostics)
 
@@ -854,7 +847,7 @@ function step_MOM(fluxes, state, Time_start, time_interval, CS)
       if (Time_local + set_time(int(0.5*CS%dt_therm)) > CS%Z_diag_time) then
         call enable_averaging(real(time_type_to_real(CS%Z_diag_interval)), &
                               CS%Z_diag_time, CS%diag)
-        call calculate_Z_diag_fields(u(:,:,:,1),v(:,:,:,1),h(:,:,:,1), dtnt, &
+        call calculate_Z_diag_fields(u,v,h, dtnt, &
                                      grid, CS%diag_to_Z_CSp)
         CS%Z_diag_time = CS%Z_diag_time + CS%Z_diag_interval
         call disable_averaging(CS%diag)
@@ -868,12 +861,12 @@ function step_MOM(fluxes, state, Time_start, time_interval, CS)
     endif
 
     call enable_averaging(dt,Time_local, CS%diag)
-    if (CS%id_u > 0) call post_data(CS%id_u, u(:,:,:,1), CS%diag)
-    if (CS%id_v > 0) call post_data(CS%id_v, v(:,:,:,1), CS%diag)
-    if (CS%id_h > 0) call post_data(CS%id_h, h(:,:,:,1), CS%diag)
+    if (CS%id_u > 0) call post_data(CS%id_u, u, CS%diag)
+    if (CS%id_v > 0) call post_data(CS%id_v, v, CS%diag)
+    if (CS%id_h > 0) call post_data(CS%id_h, h, CS%diag)
 
     tot_wt_ssh = tot_wt_ssh + dt
-    call find_eta(h(:,:,:,1), CS%tv, grid%g_Earth, grid, ssh, eta_av)
+    call find_eta(h, CS%tv, grid%g_Earth, grid, ssh, eta_av)
     do j=js,je ; do i=is,ie
       CS%ave_ssh(i,j) = CS%ave_ssh(i,j) + dt*ssh(i,j)
     enddo ; enddo
@@ -925,8 +918,8 @@ function step_MOM(fluxes, state, Time_start, time_interval, CS)
     endif
   call disable_averaging(CS%diag)
 
-  call calculate_surface_state(state, u(:,:,:,1), v(:,:,:,1), h(:,:,:,1), &
-                               CS%ave_ssh, grid, CS, fluxes%p_surf_full)
+  call calculate_surface_state(state, u, v, h, CS%ave_ssh, grid, CS, &
+                               fluxes%p_surf_full)
 
   call enable_averaging(dt*n_max,Time_local, CS%diag)
     if (CS%id_sst > 0) &
@@ -1037,10 +1030,6 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   real    :: dtbt
   real    :: Z_diag_int      ! The minimum interval between calculations of
                              ! Depth-space diagnostic quantities, in s.
-  real, pointer, dimension(:,:,:,:) :: &
-    u, &                     ! u : Zonal velocity, in m s-1.
-    v, &                     ! v : Meridional velocity, in m s-1.
-    h                        ! h : Layer thickness, in m or kg m-2.
   real, allocatable, dimension(:,:,:) :: e ! The interface heights in m.
   type(MOM_restart_CS),  pointer :: restart_CSp_tmp => NULL()
   integer :: nkml, nkbl, verbosity
@@ -1321,10 +1310,9 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call advect_tracer_init(param_file, CS%tracer_CSp)
 
 ! Allocate and initialize space for the primary MOM variables.
-  ALLOC_(CS%u(IsdB:IedB,jsd:jed,nz,2)) ; CS%u(:,:,:,:) = 0.0
-  ALLOC_(CS%v(isd:ied,JsdB:JedB,nz,2)) ; CS%v(:,:,:,:) = 0.0
-  ALLOC_(CS%h(isd:ied,jsd:jed,nz,2))   ; CS%h(:,:,:,:) = grid%Angstrom
-  u => CS%u ; v => CS%v ; h => CS%h
+  ALLOC_(CS%u(IsdB:IedB,jsd:jed,nz))   ; CS%u(:,:,:) = 0.0
+  ALLOC_(CS%v(isd:ied,JsdB:JedB,nz))   ; CS%v(:,:,:) = 0.0
+  ALLOC_(CS%h(isd:ied,jsd:jed,nz))     ; CS%h(:,:,:) = grid%Angstrom
   ALLOC_(CS%uh(IsdB:IedB,jsd:jed,nz))  ; CS%uh(:,:,:) = 0.0
   ALLOC_(CS%vh(isd:ied,JsdB:JedB,nz))  ; CS%vh(:,:,:) = 0.0
   ALLOC_(CS%diffu(IsdB:IedB,jsd:jed,nz)) ; CS%diffu(:,:,:) = 0.0
@@ -1366,7 +1354,8 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     allocate(CS%v_prev(isd:ied,JsdB:JedB,nz)) ; CS%u_prev(:,:,:) = 0.0
   endif
 
-  MOM_internal_state%u => u ; MOM_internal_state%v => v ; MOM_internal_state%h =>h
+  MOM_internal_state%u => CS%u ; MOM_internal_state%v => CS%v
+  MOM_internal_state%h => CS%h
   MOM_internal_state%uh => CS%uh ; MOM_internal_state%vh => CS%vh
   MOM_internal_state%diffu => CS%diffu ; MOM_internal_state%diffv => CS%diffv
   MOM_internal_state%PFu => CS%PFu ; MOM_internal_state%PFv => CS%PFv
@@ -1441,8 +1430,8 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     init_CS%advect_tracer_CSp => CS%tracer_CSp
 
   call cpu_clock_begin(id_clock_MOM_init)
-  call MOM_initialize(u(:,:,:,1), v(:,:,:,1), h(:,:,:,1), CS%tv, Time, &
-                       grid, param_file, dirs, CS%restart_CSp, init_CS, Time_in)
+  call MOM_initialize(CS%u, CS%v, CS%h, CS%tv, Time, grid, param_file, dirs, &
+                      CS%restart_CSp, init_CS, Time_in)
   call cpu_clock_end(id_clock_MOM_init)
 
   if (associated(init_CS%advect_tracer_CSp)) &
@@ -1472,17 +1461,17 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   ! Need an ALE CS !!!! -AJA
   if (CS%useALEalgorithm) then
     if (CS%debug) then
-      call uchksum(u(:,:,:,1),"Pre initialize_ALE u",grid,haloshift=1)
-      call vchksum(v(:,:,:,1),"Pre initialize_ALE v",grid,haloshift=1)
-      call hchksum(h(:,:,:,1), "Pre initialize_ALE h",grid,haloshift=1)
+      call uchksum(CS%u,"Pre initialize_ALE u",grid,haloshift=1)
+      call vchksum(CS%v,"Pre initialize_ALE v",grid,haloshift=1)
+      call hchksum(CS%h, "Pre initialize_ALE h",grid,haloshift=1)
     endif
     ALLOC_(CS%h_aux(isd:ied,jsd:jed,nz)); CS%h_aux(:,:,:) = 0.
-    call initialize_ALE(param_file, grid, h(:,:,:,:), CS%h_aux(:,:,:), &
-                        u(:,:,:,1), v(:,:,:,1), CS%tv, CS%regridding_opts)
+    call initialize_ALE(param_file, grid, CS%h, CS%h_aux, &
+                        CS%u, CS%v, CS%tv, CS%regridding_opts)
     if (CS%debug) then
-      call uchksum(u(:,:,:,1),"Post initialize_ALE u",grid,haloshift=1)
-      call vchksum(v(:,:,:,1),"Post initialize_ALE v",grid,haloshift=1)
-      call hchksum(h(:,:,:,1), "Post initialize_ALE h",grid,haloshift=1)
+      call uchksum(CS%u,"Post initialize_ALE u",grid,haloshift=1)
+      call vchksum(CS%v,"Post initialize_ALE v",grid,haloshift=1)
+      call hchksum(CS%h, "Post initialize_ALE h",grid,haloshift=1)
       call hchksum(CS%h_aux, "Post initialize_ALE h_aux",grid,haloshift=1)
     endif
   endif
@@ -1529,12 +1518,12 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   ! This subroutine initializes any tracer packages.
   new_sim = ((dirs%input_filename(1:1) == 'n') .and. &
              (LEN_TRIM(dirs%input_filename) == 1))
-  call tracer_flow_control_init(.not.new_sim, Time, grid, h(:,:,:,1), CS%OBC, &
+  call tracer_flow_control_init(.not.new_sim, Time, grid, CS%h, CS%OBC, &
            CS%tracer_flow_CSp, init_CS%sponge_CSp, CS%diag_to_Z_CSp)
 
   call cpu_clock_begin(id_clock_pass_init)
-  call pass_vector(u(:,:,:,1),v(:,:,:,1), grid%Domain)
-  call pass_var(h(:,:,:,1), grid%Domain)
+  call pass_vector(CS%u, CS%v, grid%Domain)
+  call pass_var(CS%h, grid%Domain)
 
   if (CS%use_temperature) then
     call pass_var(CS%tv%T, grid%Domain)
@@ -1543,27 +1532,26 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call cpu_clock_end(id_clock_pass_init)
 
   if (CS%split) then
-    call initialize_dyn_split_RK2(u(:,:,:,1), v(:,:,:,1), h(:,:,:,1), Time, &
+    call initialize_dyn_split_RK2(CS%u, CS%v, CS%h, Time, &
                                   grid, param_file, diag, CS, CS%restart_CSp)
   else
     if (CS%use_RK2) then
-      call initialize_dyn_unsplit_RK2(u(:,:,:,1), v(:,:,:,1), h(:,:,:,1), Time, &
+      call initialize_dyn_unsplit_RK2(CS%u, CS%v, CS%h, Time, &
                                   grid, param_file, diag, CS, CS%restart_CSp)
     else
-      call initialize_dyn_unsplit(u(:,:,:,1), v(:,:,:,1), h(:,:,:,1), Time, &
+      call initialize_dyn_unsplit(CS%u, CS%v, CS%h, Time, &
                                   grid, param_file, diag, CS, CS%restart_CSp)
     endif
   endif
 
   call write_static_fields(grid, CS%diag)
-  call enable_averaging(0.0,Time, CS%diag)
+  call enable_averaging(0.0, Time, CS%diag)
 
-!  call calculate_diagnostic_fields(u(:,:,:,1),v(:,:,:,1),h(:,:,:,1), &
-!            uh, vh, 1, CS%tv, 0.0, grid, CS%diagnostics_CSp)
+!  call calculate_diagnostic_fields(CS%u, CS%v, CS%h, uh, vh, 1, CS%tv, 0.0, grid, CS%diagnostics_CSp)
 
-!  if (CS%id_u > 0) call post_data(CS%id_u, CS%u(:,:,:,1), CS%diag)
-!  if (CS%id_v > 0) call post_data(CS%id_v, CS%v(:,:,:,1), CS%diag)
-!  if (CS%id_h > 0) call post_data(CS%id_h, CS%h(:,:,:,1), CS%diag)
+!  if (CS%id_u > 0) call post_data(CS%id_u, CS%u, CS%diag)
+!  if (CS%id_v > 0) call post_data(CS%id_v, CS%v, CS%diag)
+!  if (CS%id_h > 0) call post_data(CS%id_h, CS%h, CS%diag)
 !  if (CS%id_T > 0) call post_data(CS%id_T, CS%tv%T, CS%diag)
 !  if (CS%id_S > 0) call post_data(CS%id_S, CS%tv%S, CS%diag)
 
@@ -1583,9 +1571,9 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   
   if (.not.query_initialized(CS%ave_ssh,"ave_ssh",CS%restart_CSp)) then
     if (CS%split) then
-      call find_eta(h(:,:,:,1), CS%tv, grid%g_Earth, grid, CS%ave_ssh, CS%eta(:,:))
+      call find_eta(CS%h, CS%tv, grid%g_Earth, grid, CS%ave_ssh, CS%eta(:,:))
     else
-      call find_eta(h(:,:,:,1), CS%tv, grid%g_Earth, grid, CS%ave_ssh)
+      call find_eta(CS%h, CS%tv, grid%g_Earth, grid, CS%ave_ssh)
     endif
   endif
 
@@ -1594,7 +1582,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     allocate(restart_CSp_tmp)
     restart_CSp_tmp = CS%restart_CSp
     allocate(e(SZI_(grid),SZJ_(grid),SZK_(grid)+1))
-    call find_eta(h(:,:,:,1), CS%tv, grid%g_Earth, grid, e)
+    call find_eta(CS%h, CS%tv, grid%g_Earth, grid, e)
     vd = vardesc("eta","Interface heights",'h','i','1',"meter")
     call register_restart_field(e, e, vd, .true., restart_CSp_tmp)
     
@@ -1604,8 +1592,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     deallocate(restart_CSp_tmp)
   endif
 
-!  call calculate_surface_state(state, u(:,:,:,1), v(:,:,:,1), h(:,:,:,1), &
-!                               CS%ave_ssh, grid, CS)
+!  call calculate_surface_state(state, CS%u, CS%v, CS%h, CS%ave_ssh, grid, CS)
 
   call cpu_clock_end(id_clock_init)
 
@@ -1940,13 +1927,13 @@ subroutine set_restart_fields(grid, param_file, CS)
   flux_units = get_flux_units(grid)
 
   vd = vardesc("u","Zonal velocity",'u','L','s',"meter second-1")
-  call register_restart_field(CS%u(:,:,:,1), CS%u(:,:,:,1), vd, .true., CS%restart_CSp)
+  call register_restart_field(CS%u, CS%u, vd, .true., CS%restart_CSp)
 
   vd = vardesc("v","Meridional velocity",'v','L','s',"meter second-1")
-  call register_restart_field(CS%v(:,:,:,1), CS%v(:,:,:,1), vd, .true., CS%restart_CSp)
+  call register_restart_field(CS%v, CS%v, vd, .true., CS%restart_CSp)
 
   vd = vardesc("h","Layer Thickness",'h','L','s',thickness_units)
-  call register_restart_field(CS%h(:,:,:,1), CS%h(:,:,:,1), vd, .true., CS%restart_CSp)
+  call register_restart_field(CS%h, CS%h, vd, .true., CS%restart_CSp)
 
   if (CS%use_temperature) then
     vd = vardesc("Temp","Potential Temperature",'h','L','s',"degC")

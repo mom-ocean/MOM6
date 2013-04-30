@@ -793,21 +793,21 @@ subroutine MOM_diagnostics_init(HIS, Time, G, param_file, diag, CS)
       'Zonal Acceleration', 'meter second-2')
   if ((CS%id_du_dt>0) .and. .not.ASSOCIATED(CS%du_dt)) then
     call safe_alloc_ptr(CS%du_dt,IsdB,IedB,jsd,jed,nz)
-    call register_time_deriv(HIS%u(:,:,:,1), HIS%u(:,:,:,2), CS%du_dt, CS)
+    call register_time_deriv(HIS%u, HIS%u, CS%du_dt, CS)
   endif
 
   CS%id_dv_dt = register_diag_field('ocean_model', 'dvdt', G%axesCvL, Time, &
       'Meridional Acceleration', 'meter second-2')
   if ((CS%id_dv_dt>0) .and. .not.ASSOCIATED(CS%dv_dt)) then
     call safe_alloc_ptr(CS%dv_dt,isd,ied,JsdB,JedB,nz)
-    call register_time_deriv(HIS%v(:,:,:,1), HIS%v(:,:,:,2), CS%dv_dt, CS)
+    call register_time_deriv(HIS%v, HIS%v, CS%dv_dt, CS)
   endif
 
   CS%id_dh_dt = register_diag_field('ocean_model', 'dhdt', G%axesTL, Time, &
       'Thickness tendency', trim(thickness_units)//" second-1")
   if ((CS%id_dh_dt>0) .and. .not.ASSOCIATED(CS%dh_dt)) then
     call safe_alloc_ptr(CS%dh_dt,isd,ied,jsd,jed,nz)
-    call register_time_deriv(HIS%h(:,:,:,1), HIS%h(:,:,:,2), CS%dh_dt, CS)
+    call register_time_deriv(HIS%h, HIS%h, CS%dh_dt, CS)
   endif
 
   if (G%nk_rho_varies > 0) then
@@ -917,15 +917,15 @@ subroutine set_dependent_diagnostics(HIS, G, CS)
   if (ASSOCIATED(CS%dKE_dt)) then
     if (.not.ASSOCIATED(CS%du_dt)) then
       call safe_alloc_ptr(CS%du_dt,IsdB,IedB,jsd,jed,nz)
-      call register_time_deriv(HIS%u(:,:,:,1), HIS%u(:,:,:,2), CS%du_dt, CS)
+      call register_time_deriv(HIS%u, HIS%u, CS%du_dt, CS)
     endif
     if (.not.ASSOCIATED(CS%dv_dt)) then
       call safe_alloc_ptr(CS%dv_dt,isd,ied,JsdB,JedB,nz)
-      call register_time_deriv(HIS%v(:,:,:,1), HIS%v(:,:,:,2), CS%dv_dt, CS)
+      call register_time_deriv(HIS%v, HIS%v, CS%dv_dt, CS)
     endif
     if (.not.ASSOCIATED(CS%dh_dt)) then
       call safe_alloc_ptr(CS%dh_dt,isd,ied,jsd,jed,nz)
-      call register_time_deriv(HIS%h(:,:,:,1), HIS%h(:,:,:,2), CS%dh_dt, CS)
+      call register_time_deriv(HIS%h, HIS%h, CS%dh_dt, CS)
     endif
   endif
 

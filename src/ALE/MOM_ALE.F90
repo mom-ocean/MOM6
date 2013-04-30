@@ -157,16 +157,16 @@ subroutine initialize_ALE( param_file, G, h, h_aux, &
   ! Arguments
   type(param_file_type), intent(in)                      :: param_file
   type(ocean_grid_type), intent(in)                      :: G
-  real, dimension(NIMEM_,NJMEM_, NKMEM_,C2_), intent(inout) :: h
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(inout)     :: h_aux
-  real, dimension(NIMEMB_,NJMEM_, NKMEM_), intent(inout)    :: u
-  real, dimension(NIMEM_,NJMEMB_, NKMEM_), intent(inout)    :: v
+  real, dimension(NIMEM_,NJMEM_, NKMEM_),  intent(inout) :: h
+  real, dimension(NIMEM_,NJMEM_, NKMEM_),  intent(inout) :: h_aux
+  real, dimension(NIMEMB_,NJMEM_, NKMEM_), intent(inout) :: u
+  real, dimension(NIMEM_,NJMEMB_, NKMEM_), intent(inout) :: v
   type(thermo_var_ptrs), intent(inout)                   :: tv
-  type(ALE_CS), intent(inout)                     :: CS
+  type(ALE_CS), intent(inout)                            :: CS
 
   ! Local variables
   logical :: verbose, tmpLogical
-  integer :: i, j, k, m
+  integer :: i, j, k
   real :: tmpReal
   real, dimension(:), allocatable :: dz
   character(len=40)  :: mod = "MOM_ALE" ! This module's name.
@@ -254,46 +254,44 @@ subroutine initialize_ALE( param_file, G, h, h_aux, &
   call initialize_remapping( G%ke, string, CS%remapCS )
 
   ! Check grid integrity with respect to minimum allowed thickness
-  do m = 1,size(h,4)
-    call check_grid_integrity( CS%regridCS, G, h(:,:,:,m) )
-  end do  
+  call check_grid_integrity( CS%regridCS, G, h(:,:,:) )
 
   if ( verbose ) then
       i = 20
       j = 4
       write(*,*) 'Before regridding/remapping', i, j
       do k = 1,G%ke
-        write(*,*) h(i,j,k,1), tv%T(i,j,k)
+        write(*,*) h(i,j,k), tv%T(i,j,k)
       end do
       i = 22
       j = 4
       write(*,*) 'Before regridding/remapping', i, j
       do k = 1,G%ke
-        write(*,*) h(i,j,k,1), tv%T(i,j,k)
+        write(*,*) h(i,j,k), tv%T(i,j,k)
       end do
   end if
 
   ! Perform one regridding/remapping step -- This should NOT modify
-  ! neither the initial grid nor the initial cell averages. This
+  ! either the initial grid or the initial cell averages. This
   ! step is therefore not strictly necessary but is included for historical
   ! reasons when I needed to check whether the combination 'initial 
   ! conditions - regridding/remapping' was consistently implemented.
-  call regridding_main( CS%remapCS, CS%regridCS, G, h(:,:,:,1), u, v, tv, h_aux )
-  call remapping_main( CS%remapCS, G, h(:,:,:,1), h_aux, tv, u, v )
-  h(:,:,:,1) = h_aux(:,:,:)
+  call regridding_main( CS%remapCS, CS%regridCS, G, h, u, v, tv, h_aux )
+  call remapping_main( CS%remapCS, G, h, h_aux, tv, u, v )
+  h(:,:,:) = h_aux(:,:,:)
   
   if ( verbose ) then
       i = 20
       j = 4
       write(*,*) 'After regridding/remapping', i, j
       do k = 1,G%ke
-        write(*,*) h(i,j,k,1), tv%T(i,j,k)
+        write(*,*) h(i,j,k), tv%T(i,j,k)
       end do
       i = 22
       j = 4
       write(*,*) 'After regridding/remapping', i, j
       do k = 1,G%ke
-        write(*,*) h(i,j,k,1), tv%T(i,j,k)
+        write(*,*) h(i,j,k), tv%T(i,j,k)
       end do
   end if
 

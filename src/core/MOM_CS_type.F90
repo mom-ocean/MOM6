@@ -73,20 +73,15 @@ public MOM_state_chksum, MOM_thermo_chksum, MOM_accel_chksum
 #include <MOM_memory.h>
 
 type, public :: MOM_control_struct
-  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_,C2_) :: &
-    u         ! Zonal velocity, in m s-1.
-  real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_,C2_) :: &
-    v         ! Meridional velocity, in m s-1.
-  real ALLOCABLE_, dimension(NIMEM_,NJMEM_,NKMEM_,C2_) :: &
-    h         ! Layer thickness, in m or kg m-2 (H).
+  real ALLOCABLE_, dimension(NIMEM_,NJMEM_,NKMEM_) :: &
+    h, &      ! Layer thickness, in m or kg m-2 (H).
+    T, &      ! Potential temperature in C.
+    S, &      ! Salinity in PSU.
+    h_aux     ! Work array for remapping (same units as h).
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
     eta       ! Instantaneous free surface height, in m.
-  real ALLOCABLE_, dimension(NIMEM_,NJMEM_,NKMEM_) :: &
-    T, &      ! Potential temperature in C.
-    S         ! Salinity in PSU.
-  real ALLOCABLE_, dimension(NIMEM_,NJMEM_,NKMEM_) :: &
-    h_aux     ! Work array for remapping (same units as h).
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: &
+    u, &      ! Zonal velocity, in m s-1.
     uh, &     ! uh = u * h * dy at u grid points in m3 s-1.
     CAu, &    ! CAu = f*v - u.grad(u) in m s-2.
     PFu, &    ! PFu = -dM/dx, in m s-2.
@@ -99,6 +94,7 @@ type, public :: MOM_control_struct
               ! Nondimensional between 0 (at the bottom) and 1 (far above).
     uhtr      ! Accumlated zonal thickness fluxes used to advect tracers, in m3.
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: &
+    v, &      ! Meridional velocity, in m s-1.
     vh, &     ! vh = v * h * dx at v grid points in m3 s-1.
     CAv, &    ! CAv = -f*u - u.grad(v) in m s-2.
     PFv, &    ! PFv = -dM/dy, in m s-2.
