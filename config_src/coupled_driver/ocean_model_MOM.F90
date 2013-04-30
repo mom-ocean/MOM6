@@ -149,7 +149,6 @@ type, public :: ocean_state_type ; private
   type(time_type) :: write_energy_time ! The next time to write to the energy file.
 
   integer :: nstep = 0        ! The number of calls to update_ocean.
-  integer :: m_last           ! The last time level calculated by step_MOM.
 
   logical :: restore_salinity ! If true, the coupled MOM driver adds a term to
                               ! restore salinity to a specified value.
@@ -273,8 +272,6 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in)
   if (is_root_pe()) &
     write(*,'(/12x,a/)') '======== COMPLETED MOM INITIALIZATION ========'
 
-  OS%m_last = 1
-
 end subroutine ocean_model_init
 ! </SUBROUTINE> NAME="ocean_model_init"
 
@@ -323,6 +320,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
 
   real :: time_step         ! The time step of a call to step_MOM in seconds.
   integer :: secs, days
+  integer :: discard_me
 
   call get_time(Ocean_coupling_time_step, secs, days)
   time_step = 86400.0*real(days) + real(secs)
@@ -345,7 +343,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
                              OS%grid, OS%forcing_CSp, OS%state, OS%restore_salinity)
   Master_time = OS%Time ; Time1 = OS%Time
 
-  OS%m_last = step_MOM(OS%fluxes, OS%state, Time1, time_step, OS%MOM_CSp)
+  discard_me = step_MOM(OS%fluxes, OS%state, Time1, time_step, OS%MOM_CSp)
 
   OS%Time = Master_time + Ocean_coupling_time_step
   OS%nstep = OS%nstep + 1
@@ -357,8 +355,8 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
 
 !  See if it is time to write out the energy.
   if (OS%Time + ((Ocean_coupling_time_step)/2) > OS%write_energy_time) then
-    call write_energy(OS%MOM_CSp%u(:,:,:,OS%m_last), OS%MOM_CSp%v(:,:,:,OS%m_last), &
-                      OS%MOM_CSp%h(:,:,:,OS%m_last), OS%MOM_CSp%tv, OS%Time, OS%nstep, &
+    call write_energy(OS%MOM_CSp%u(:,:,:,1), OS%MOM_CSp%v(:,:,:,1), &
+                      OS%MOM_CSp%h(:,:,:,1), OS%MOM_CSp%tv, OS%Time, OS%nstep, &
                       OS%grid, OS%sum_output_CSp, OS%MOM_CSp%tracer_flow_CSp)
     OS%write_energy_time = OS%write_energy_time + OS%energysavedays
   endif
@@ -387,13 +385,13 @@ subroutine ocean_model_restart(OS, timestamp)
    character(len=*), intent(in), optional :: timestamp
 
    if (BTEST(OS%Restart_control,1)) then
-     call save_restart(OS%dirs%restart_output_dir,OS%Time,OS%m_last, OS%grid, &
+     call save_restart(OS%dirs%restart_output_dir,OS%Time,1, OS%grid, &
                        OS%MOM_CSp%restart_CSp, .true.)
      call forcing_save_restart(OS%forcing_CSp, OS%grid, OS%Time, &
                                OS%dirs%restart_output_dir, .true.)
    endif
    if (BTEST(OS%Restart_control,0)) then
-     call save_restart(OS%dirs%restart_output_dir,OS%Time,OS%m_last, OS%grid, &
+     call save_restart(OS%dirs%restart_output_dir,OS%Time,1, OS%grid, &
                        OS%MOM_CSp%restart_CSp)
      call forcing_save_restart(OS%forcing_CSp, OS%grid, OS%Time, &
                                OS%dirs%restart_output_dir)
@@ -447,7 +445,7 @@ subroutine ocean_model_save_restart(OS, Time, directory, filename_suffix)
   if (present(directory)) then ; restart_dir = directory
   else ; restart_dir = OS%dirs%restart_output_dir ; endif
 
-  call save_restart(restart_dir, Time, OS%m_last, OS%grid, &
+  call save_restart(restart_dir, Time, 1, OS%grid, &
                     OS%MOM_CSp%restart_CSp)
   call forcing_save_restart(OS%forcing_CSp, OS%grid, Time, &
                             restart_dir)
@@ -648,7 +646,7 @@ subroutine Ocean_stock_pe(OS, index, value, time_index)
   
   is = OS%grid%isc ; ie = OS%grid%iec
   js = OS%grid%jsc ; je = OS%grid%jec ; nz = OS%grid%ke
-  m = OS%m_last
+  m = 1
 
   select case (index)
     case (ISTOCK_WATER)

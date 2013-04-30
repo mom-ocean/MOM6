@@ -88,7 +88,7 @@ program MOM_main
                                   ! part of the domain.
   logical :: permit_incr_restart = .true. ! This is .true. if incremental
                                   ! restart files may be saved.
-  integer :: m, n
+  integer :: n
 
   integer :: nmax=2000000000;   ! nmax is the number of iterations
                                 ! after which to stop so that the
@@ -147,7 +147,7 @@ program MOM_main
 
   integer :: unit, io_status, ierr
   logical :: unit_in_use
-
+  integer :: discard_me
   integer :: initClock, mainClock, termClock
 
   type(MOM_control_struct), pointer :: MOM_CSp => NULL()
@@ -354,7 +354,7 @@ program MOM_main
 
   call cpu_clock_begin(mainClock) !begin main loop
 
-  n = 1 ; m = 1
+  n = 1
   do while ((n < nmax) .and. (Time < Time_end))
 
     ! Set the forcing for the next steps.
@@ -370,7 +370,7 @@ program MOM_main
 
     ! This call steps the model over a time time_step.
     Time1 = Master_Time ; Time = Master_Time
-    m = step_MOM(fluxes, state, Time1, time_step, MOM_CSp)
+    discard_me = step_MOM(fluxes, state, Time1, time_step, MOM_CSp)
 
 !    Time = Time + Time_step_ocean
 !  This is here to enable fractional-second time steps.
@@ -399,7 +399,7 @@ program MOM_main
 
 !  See if it is time to write out the energy.
     if (Time + (Time_step_ocean/2) > write_energy_time) then
-      call write_energy(MOM_CSp%u(:,:,:,m), MOM_CSp%v(:,:,:,m), MOM_CSp%h(:,:,:,m), &
+      call write_energy(MOM_CSp%u(:,:,:,1), MOM_CSp%v(:,:,:,1), MOM_CSp%h(:,:,:,1), &
                         MOM_CSp%tv, Time, n+ntstep-1, grid, sum_output_CSp, &
                         MOM_CSp%tracer_flow_CSp)
       call write_cputime(Time, n+ntstep-1, nmax, write_CPU_CSp)
@@ -410,7 +410,7 @@ program MOM_main
     if ((permit_incr_restart) .and. &
         (Time + (Time_step_ocean/2) > restart_time)) then
       if (BTEST(Restart_control,1)) then
-        call save_restart(dirs%restart_output_dir, Time, m, grid, &
+        call save_restart(dirs%restart_output_dir, Time, 1, grid, &
                           MOM_CSp%restart_CSp, .true.)
         call forcing_save_restart(surface_forcing_CSp, grid, Time, &
                             dirs%restart_output_dir, .true.)
@@ -418,7 +418,7 @@ program MOM_main
                                     dirs%restart_output_dir, .true.)
       endif
       if (BTEST(Restart_control,0)) then
-        call save_restart(dirs%restart_output_dir, Time, m, grid, &
+        call save_restart(dirs%restart_output_dir, Time, 1, grid, &
                           MOM_CSp%restart_CSp)
         call forcing_save_restart(surface_forcing_CSp, grid, Time, &
                             dirs%restart_output_dir)
@@ -434,7 +434,7 @@ program MOM_main
   call cpu_clock_end(mainClock)
   call cpu_clock_begin(termClock)
   if (Restart_control>=0) then
-    call save_restart(dirs%restart_output_dir, Time, m, grid, MOM_CSp%restart_CSp)
+    call save_restart(dirs%restart_output_dir, Time, 1, grid, MOM_CSp%restart_CSp)
     if (use_ice_shelf) call ice_shelf_save_restart(ice_shelf_CSp, Time, &
                                 dirs%restart_output_dir)
     ! Write ocean solo restart file.
