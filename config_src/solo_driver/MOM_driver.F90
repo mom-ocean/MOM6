@@ -147,7 +147,6 @@ program MOM_main
 
   integer :: unit, io_status, ierr
   logical :: unit_in_use
-  integer :: discard_me
   integer :: initClock, mainClock, termClock
 
   type(MOM_control_struct), pointer :: MOM_CSp => NULL()
@@ -370,7 +369,7 @@ program MOM_main
 
     ! This call steps the model over a time time_step.
     Time1 = Master_Time ; Time = Master_Time
-    discard_me = step_MOM(fluxes, state, Time1, time_step, MOM_CSp)
+    call step_MOM(fluxes, state, Time1, time_step, MOM_CSp)
 
 !    Time = Time + Time_step_ocean
 !  This is here to enable fractional-second time steps.
@@ -410,7 +409,7 @@ program MOM_main
     if ((permit_incr_restart) .and. &
         (Time + (Time_step_ocean/2) > restart_time)) then
       if (BTEST(Restart_control,1)) then
-        call save_restart(dirs%restart_output_dir, Time, 1, grid, &
+        call save_restart(dirs%restart_output_dir, Time, grid, &
                           MOM_CSp%restart_CSp, .true.)
         call forcing_save_restart(surface_forcing_CSp, grid, Time, &
                             dirs%restart_output_dir, .true.)
@@ -418,7 +417,7 @@ program MOM_main
                                     dirs%restart_output_dir, .true.)
       endif
       if (BTEST(Restart_control,0)) then
-        call save_restart(dirs%restart_output_dir, Time, 1, grid, &
+        call save_restart(dirs%restart_output_dir, Time, grid, &
                           MOM_CSp%restart_CSp)
         call forcing_save_restart(surface_forcing_CSp, grid, Time, &
                             dirs%restart_output_dir)
@@ -434,7 +433,7 @@ program MOM_main
   call cpu_clock_end(mainClock)
   call cpu_clock_begin(termClock)
   if (Restart_control>=0) then
-    call save_restart(dirs%restart_output_dir, Time, 1, grid, MOM_CSp%restart_CSp)
+    call save_restart(dirs%restart_output_dir, Time, grid, MOM_CSp%restart_CSp)
     if (use_ice_shelf) call ice_shelf_save_restart(ice_shelf_CSp, Time, &
                                 dirs%restart_output_dir)
     ! Write ocean solo restart file.

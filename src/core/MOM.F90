@@ -412,13 +412,12 @@ integer :: id_clock_pass, id_clock_pass_init ! Also in dynamics d/r
 
 contains
 
-function step_MOM(fluxes, state, Time_start, time_interval, CS)
+subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 !   This subroutine orchestrates the time stepping of MOM.  The adiabatic
 ! dynamics are stepped by one of the calls to one of the step_MOM_dyn_...
 ! routines.  The action of lateral processes on tracers occur in the calls to
 ! advect_tracer and tracer_hordiff.  The vertical mixing and possibly remapping
 ! occur inside of diabatic.
-  integer                              :: step_MOM
   type(forcing), intent(inout)         :: fluxes
   type(surface), intent(inout)         :: state
   type(time_type), intent(in)          :: Time_start
@@ -809,11 +808,11 @@ function step_MOM(fluxes, state, Time_start, time_interval, CS)
 
       call cpu_clock_begin(id_clock_diagnostics)
       if (CS%split) then
-        call calculate_diagnostic_fields(u, v, h, CS%uh, CS%vh, 1, CS%tv, &
-                                         dtnt, grid, CS%diagnostics_CSp, CS%eta)
+        call calculate_diagnostic_fields(u, v, h, CS%uh, CS%vh, CS%tv, dtnt, &
+                                         grid, CS%diagnostics_CSp, CS%eta)
       else
-        call calculate_diagnostic_fields(u, v, h, CS%uh, CS%vh, 1, CS%tv, &
-                                         dtnt, grid, CS%diagnostics_CSp)
+        call calculate_diagnostic_fields(u, v, h, CS%uh, CS%vh, CS%tv, dtnt, &
+                                         grid, CS%diagnostics_CSp)
       endif
       call cpu_clock_end(id_clock_diagnostics)
 
@@ -952,9 +951,8 @@ function step_MOM(fluxes, state, Time_start, time_interval, CS)
   enddo ; enddo ; endif
 
   call cpu_clock_end(id_clock_ocean)
-  step_MOM = 1
 
-end function step_MOM
+end subroutine step_MOM
 
 ! ============================================================================
 
@@ -1547,7 +1545,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call write_static_fields(grid, CS%diag)
   call enable_averaging(0.0, Time, CS%diag)
 
-!  call calculate_diagnostic_fields(CS%u, CS%v, CS%h, uh, vh, 1, CS%tv, 0.0, grid, CS%diagnostics_CSp)
+!  call calculate_diagnostic_fields(CS%u, CS%v, CS%h, uh, vh, CS%tv, 0.0, grid, CS%diagnostics_CSp)
 
 !  if (CS%id_u > 0) call post_data(CS%id_u, CS%u, CS%diag)
 !  if (CS%id_v > 0) call post_data(CS%id_v, CS%v, CS%diag)
@@ -1584,9 +1582,9 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     allocate(e(SZI_(grid),SZJ_(grid),SZK_(grid)+1))
     call find_eta(CS%h, CS%tv, grid%g_Earth, grid, e)
     vd = vardesc("eta","Interface heights",'h','i','1',"meter")
-    call register_restart_field(e, e, vd, .true., restart_CSp_tmp)
+    call register_restart_field(e, vd, .true., restart_CSp_tmp)
     
-    call save_restart(dirs%output_directory, Time, 1, grid, &
+    call save_restart(dirs%output_directory, Time, grid, &
                       restart_CSp_tmp, filename=IC_file)
     deallocate(e)
     deallocate(restart_CSp_tmp)
@@ -1927,34 +1925,34 @@ subroutine set_restart_fields(grid, param_file, CS)
   flux_units = get_flux_units(grid)
 
   vd = vardesc("u","Zonal velocity",'u','L','s',"meter second-1")
-  call register_restart_field(CS%u, CS%u, vd, .true., CS%restart_CSp)
+  call register_restart_field(CS%u, vd, .true., CS%restart_CSp)
 
   vd = vardesc("v","Meridional velocity",'v','L','s',"meter second-1")
-  call register_restart_field(CS%v, CS%v, vd, .true., CS%restart_CSp)
+  call register_restart_field(CS%v, vd, .true., CS%restart_CSp)
 
   vd = vardesc("h","Layer Thickness",'h','L','s',thickness_units)
-  call register_restart_field(CS%h, CS%h, vd, .true., CS%restart_CSp)
+  call register_restart_field(CS%h, vd, .true., CS%restart_CSp)
 
   if (CS%use_temperature) then
     vd = vardesc("Temp","Potential Temperature",'h','L','s',"degC")
-    call register_restart_field(CS%tv%T, CS%tv%T, vd, .true., CS%restart_CSp)
+    call register_restart_field(CS%tv%T, vd, .true., CS%restart_CSp)
 
     vd = vardesc("Salt","Salinity",'h','L','s',"PSU")
-    call register_restart_field(CS%tv%S, CS%tv%S, vd, .true., CS%restart_CSp)
+    call register_restart_field(CS%tv%S, vd, .true., CS%restart_CSp)
   endif
 
   if (CS%use_frazil) then
     vd = vardesc("frazil","Frazil heat flux into ocean",'h','1','s',"J m-2")
-    call register_restart_field(CS%tv%frazil, CS%tv%frazil, vd, .false., CS%restart_CSp)
+    call register_restart_field(CS%tv%frazil, vd, .false., CS%restart_CSp)
   endif
 
   if (CS%interp_p_surf) then
     vd = vardesc("p_surf_prev","Previous ocean surface pressure",'h','1','s',"Pa")
-    call register_restart_field(CS%p_surf_prev, CS%p_surf_prev, vd, .false., CS%restart_CSp)
+    call register_restart_field(CS%p_surf_prev, vd, .false., CS%restart_CSp)
   endif
 
   vd = vardesc("ave_ssh","Time average sea surface height",'h','1','s',"meter")
-  call register_restart_field(CS%ave_ssh, CS%ave_ssh, vd, .false., CS%restart_CSp)
+  call register_restart_field(CS%ave_ssh, vd, .false., CS%restart_CSp)
 
 end subroutine set_restart_fields
 

@@ -949,7 +949,7 @@ subroutine register_int_tide_restarts(G, param_file, CS, restart_CS)
 
 ! if (CS%do_integrated) then
 !   vd = vardesc("Ctrl_heat","Control Integrative Heating",'h','1','s',"W m-2")
-!   call register_restart_field(CS%heat_0, CS%heat_0, vd, .false., restart_CS)
+!   call register_restart_field(CS%heat_0, vd, .false., restart_CS)
 ! endif
 
 end subroutine register_int_tide_restarts

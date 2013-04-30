@@ -4041,15 +4041,15 @@ subroutine register_barotropic_restarts(G, param_file, CS, restart_CS)
           "meter second-1")
   vd(3) = vardesc("vbtav","Time mean barotropic meridional velocity",'v','1','s', &
           "meter second-1")
-  call register_restart_field(CS%ubtav, CS%ubtav, vd(2), .false., restart_CS)
-  call register_restart_field(CS%vbtav, CS%vbtav, vd(3), .false., restart_CS)
+  call register_restart_field(CS%ubtav, vd(2), .false., restart_CS)
+  call register_restart_field(CS%vbtav, vd(3), .false., restart_CS)
 
   vd(2) = vardesc("ubt_IC","Next initial condition for the barotropic zonal velocity", &
           'u','1','s', "meter second-1")
   vd(3) = vardesc("vbt_IC","Next initial condition for the barotropic meridional velocity",&
                   'v','1','s', "meter second-1")
-  call register_restart_field(CS%ubt_IC, CS%ubt_IC, vd(2), .false., restart_CS)
-  call register_restart_field(CS%vbt_IC, CS%vbt_IC, vd(3), .false., restart_CS)
+  call register_restart_field(CS%ubt_IC, vd(2), .false., restart_CS)
+  call register_restart_field(CS%vbt_IC, vd(3), .false., restart_CS)
 
   if (G%Boussinesq) then
     vd(2) = vardesc("uhbt_IC","Next initial condition for the barotropic zonal transport", &
@@ -4062,8 +4062,8 @@ subroutine register_barotropic_restarts(G, param_file, CS, restart_CS)
     vd(3) = vardesc("vhbt_IC","Next initial condition for the barotropic meridional transport",&
                     'v','1','s', "kg second-1")
   endif
-  call register_restart_field(CS%uhbt_IC, CS%uhbt_IC, vd(2), .false., restart_CS)
-  call register_restart_field(CS%vhbt_IC, CS%vhbt_IC, vd(3), .false., restart_CS)
+  call register_restart_field(CS%uhbt_IC, vd(2), .false., restart_CS)
+  call register_restart_field(CS%vhbt_IC, vd(3), .false., restart_CS)
 
 end subroutine register_barotropic_restarts
 

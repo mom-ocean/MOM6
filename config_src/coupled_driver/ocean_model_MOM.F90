@@ -319,7 +319,6 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
 
   real :: time_step         ! The time step of a call to step_MOM in seconds.
   integer :: secs, days
-  integer :: discard_me
 
   call get_time(Ocean_coupling_time_step, secs, days)
   time_step = 86400.0*real(days) + real(secs)
@@ -342,7 +341,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
                              OS%grid, OS%forcing_CSp, OS%state, OS%restore_salinity)
   Master_time = OS%Time ; Time1 = OS%Time
 
-  discard_me = step_MOM(OS%fluxes, OS%state, Time1, time_step, OS%MOM_CSp)
+  call step_MOM(OS%fluxes, OS%state, Time1, time_step, OS%MOM_CSp)
 
   OS%Time = Master_time + Ocean_coupling_time_step
   OS%nstep = OS%nstep + 1
@@ -384,13 +383,13 @@ subroutine ocean_model_restart(OS, timestamp)
    character(len=*), intent(in), optional :: timestamp
 
    if (BTEST(OS%Restart_control,1)) then
-     call save_restart(OS%dirs%restart_output_dir,OS%Time,1, OS%grid, &
+     call save_restart(OS%dirs%restart_output_dir, OS%Time, OS%grid, &
                        OS%MOM_CSp%restart_CSp, .true.)
      call forcing_save_restart(OS%forcing_CSp, OS%grid, OS%Time, &
                                OS%dirs%restart_output_dir, .true.)
    endif
    if (BTEST(OS%Restart_control,0)) then
-     call save_restart(OS%dirs%restart_output_dir,OS%Time,1, OS%grid, &
+     call save_restart(OS%dirs%restart_output_dir, OS%Time, OS%grid, &
                        OS%MOM_CSp%restart_CSp)
      call forcing_save_restart(OS%forcing_CSp, OS%grid, OS%Time, &
                                OS%dirs%restart_output_dir)
@@ -444,10 +443,9 @@ subroutine ocean_model_save_restart(OS, Time, directory, filename_suffix)
   if (present(directory)) then ; restart_dir = directory
   else ; restart_dir = OS%dirs%restart_output_dir ; endif
 
-  call save_restart(restart_dir, Time, 1, OS%grid, &
-                    OS%MOM_CSp%restart_CSp)
-  call forcing_save_restart(OS%forcing_CSp, OS%grid, Time, &
-                            restart_dir)
+  call save_restart(restart_dir, Time, OS%grid, OS%MOM_CSp%restart_CSp)
+
+  call forcing_save_restart(OS%forcing_CSp, OS%grid, Time, restart_dir)
 
 end subroutine ocean_model_save_restart
 

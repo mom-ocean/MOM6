@@ -124,10 +124,10 @@ type, public :: MOM_restart_CS ; private
   character(len=120) :: restartfile ! The name or name root for MOM restart files.
 
   type(field_restart), pointer :: restart_field(:) => NULL()
-  type(p0d), pointer :: var_ptr0d(:,:) => NULL()
-  type(p1d), pointer :: var_ptr1d(:,:) => NULL()
-  type(p2d), pointer :: var_ptr2d(:,:) => NULL()
-  type(p3d), pointer :: var_ptr3d(:,:) => NULL()
+  type(p0d), pointer :: var_ptr0d(:) => NULL()
+  type(p1d), pointer :: var_ptr1d(:) => NULL()
+  type(p2d), pointer :: var_ptr2d(:) => NULL()
+  type(p3d), pointer :: var_ptr3d(:) => NULL()
   integer :: max_fields
 end type MOM_restart_CS
 
@@ -152,8 +152,8 @@ end interface
 
 contains
 
-subroutine register_restart_field_ptr3d(f_ptr, f_ptr2, var_desc, mandatory, CS)
-  real, dimension(:,:,:), target :: f_ptr, f_ptr2
+subroutine register_restart_field_ptr3d(f_ptr, var_desc, mandatory, CS)
+  real, dimension(:,:,:), target :: f_ptr
   type(vardesc),      intent(in) :: var_desc
   logical,            intent(in) :: mandatory
   type(MOM_restart_CS),  pointer :: CS
@@ -161,8 +161,6 @@ subroutine register_restart_field_ptr3d(f_ptr, f_ptr2, var_desc, mandatory, CS)
 !  files.
 !
 ! Arguments: f_ptr - A pointer to the field to be read or written.
-!  (in)      f_ptr2 - A pointer to time level 2 of a field, or NULL if there
-!                     is only one time level.
 !  (in)      var_desc - The descriptive structure for the field.
 !  (in)      mandatory - If .true. the run will abort if this field is not
 !                        successfully read from the restart file.  If .false.,
@@ -182,16 +180,16 @@ subroutine register_restart_field_ptr3d(f_ptr, f_ptr2, var_desc, mandatory, CS)
   CS%restart_field(CS%novars)%initialized = .false.
   CS%restart_field(CS%novars)%var_name = trim(CS%restart_field(CS%novars)%vars%name)
 
-  CS%var_ptr3d(1,CS%novars)%p => f_ptr  ; CS%var_ptr3d(2,CS%novars)%p => f_ptr2
-  CS%var_ptr2d(1,CS%novars)%p => NULL() ; CS%var_ptr2d(2,CS%novars)%p => NULL()
-  CS%var_ptr1d(1,CS%novars)%p => NULL() ; CS%var_ptr1d(2,CS%novars)%p => NULL()
-  CS%var_ptr0d(1,CS%novars)%p => NULL() ; CS%var_ptr0d(2,CS%novars)%p => NULL()
+  CS%var_ptr3d(CS%novars)%p => f_ptr
+  CS%var_ptr2d(CS%novars)%p => NULL()
+  CS%var_ptr1d(CS%novars)%p => NULL()
+  CS%var_ptr0d(CS%novars)%p => NULL()
 
 end subroutine register_restart_field_ptr3d
 
-subroutine register_restart_field_ptr2d(f_ptr, f_ptr2, var_desc, mandatory, CS)
+subroutine register_restart_field_ptr2d(f_ptr, var_desc, mandatory, CS)
 
-  real, dimension(:,:), target :: f_ptr, f_ptr2
+  real, dimension(:,:), target :: f_ptr
   type(vardesc), intent(in) :: var_desc
   logical, intent(in)       :: mandatory
   type(MOM_restart_CS),  pointer :: CS
@@ -199,8 +197,6 @@ subroutine register_restart_field_ptr2d(f_ptr, f_ptr2, var_desc, mandatory, CS)
 !  files.
 !
 ! Arguments: f_ptr - A pointer to the field to be read or written.
-!  (in)      f_ptr2 - A pointer to time level 2 of a field, or NULL if there is
-!                     only one time level.
 !  (in)      var_desc - The descriptive structure for the field.
 !  (in)      mandatory - If .true. the run will abort if this field is not
 !                        successfully read from the restart file.  If .false.,
@@ -220,16 +216,16 @@ subroutine register_restart_field_ptr2d(f_ptr, f_ptr2, var_desc, mandatory, CS)
   CS%restart_field(CS%novars)%initialized = .false.
   CS%restart_field(CS%novars)%var_name = trim(CS%restart_field(CS%novars)%vars%name)
 
-  CS%var_ptr2d(1,CS%novars)%p => f_ptr  ; CS%var_ptr2d(2,CS%novars)%p => f_ptr2
-  CS%var_ptr3d(1,CS%novars)%p => NULL() ; CS%var_ptr3d(2,CS%novars)%p => NULL()
-  CS%var_ptr1d(1,CS%novars)%p => NULL() ; CS%var_ptr1d(2,CS%novars)%p => NULL()
-  CS%var_ptr0d(1,CS%novars)%p => NULL() ; CS%var_ptr0d(2,CS%novars)%p => NULL()
+  CS%var_ptr2d(CS%novars)%p => f_ptr
+  CS%var_ptr3d(CS%novars)%p => NULL()
+  CS%var_ptr1d(CS%novars)%p => NULL()
+  CS%var_ptr0d(CS%novars)%p => NULL()
 
 end subroutine register_restart_field_ptr2d
 
-subroutine register_restart_field_ptr1d(f_ptr, f_ptr2, var_desc, mandatory, CS)
+subroutine register_restart_field_ptr1d(f_ptr, var_desc, mandatory, CS)
 
-  real, dimension(:), target :: f_ptr, f_ptr2
+  real, dimension(:), target :: f_ptr
   type(vardesc), intent(in) :: var_desc
   logical, intent(in)       :: mandatory
   type(MOM_restart_CS),  pointer :: CS
@@ -237,8 +233,6 @@ subroutine register_restart_field_ptr1d(f_ptr, f_ptr2, var_desc, mandatory, CS)
 !  files.
 !
 ! Arguments: f_ptr - A pointer to the field to be read or written.
-!  (in)      f_ptr2 - A pointer to time level 2 of a field, or NULL if there is
-!                     only one time level.
 !  (in)      var_desc - The descriptive structure for the field.
 !  (in)      mandatory - If .true. the run will abort if this field is not
 !                        successfully read from the restart file.  If .false.,
@@ -258,16 +252,16 @@ subroutine register_restart_field_ptr1d(f_ptr, f_ptr2, var_desc, mandatory, CS)
   CS%restart_field(CS%novars)%initialized = .false.
   CS%restart_field(CS%novars)%var_name = trim(CS%restart_field(CS%novars)%vars%name)
 
-  CS%var_ptr1d(1,CS%novars)%p => f_ptr  ; CS%var_ptr1d(2,CS%novars)%p => f_ptr2
-  CS%var_ptr3d(1,CS%novars)%p => NULL() ; CS%var_ptr3d(2,CS%novars)%p => NULL()
-  CS%var_ptr2d(1,CS%novars)%p => NULL() ; CS%var_ptr2d(2,CS%novars)%p => NULL()
-  CS%var_ptr0d(1,CS%novars)%p => NULL() ; CS%var_ptr0d(2,CS%novars)%p => NULL()
+  CS%var_ptr1d(CS%novars)%p => f_ptr
+  CS%var_ptr3d(CS%novars)%p => NULL()
+  CS%var_ptr2d(CS%novars)%p => NULL()
+  CS%var_ptr0d(CS%novars)%p => NULL()
 
 end subroutine register_restart_field_ptr1d
 
-subroutine register_restart_field_ptr0d(f_ptr, f_ptr2, var_desc, mandatory, CS)
+subroutine register_restart_field_ptr0d(f_ptr, var_desc, mandatory, CS)
 
-  real, target :: f_ptr, f_ptr2
+  real, target :: f_ptr
   type(vardesc), intent(in) :: var_desc
   logical, intent(in)       :: mandatory
   type(MOM_restart_CS),  pointer :: CS
@@ -275,8 +269,6 @@ subroutine register_restart_field_ptr0d(f_ptr, f_ptr2, var_desc, mandatory, CS)
 !  files.
 !
 ! Arguments: f_ptr - A pointer to the field to be read or written.
-!  (in)      f_ptr2 - A pointer to time level 2 of a field, or NULL if there is
-!                     only one time level.
 !  (in)      var_desc - The descriptive structure for the field.
 !  (in)      mandatory - If .true. the run will abort if this field is not
 !                        successfully read from the restart file.  If .false.,
@@ -296,10 +288,10 @@ subroutine register_restart_field_ptr0d(f_ptr, f_ptr2, var_desc, mandatory, CS)
   CS%restart_field(CS%novars)%initialized = .false.
   CS%restart_field(CS%novars)%var_name = trim(CS%restart_field(CS%novars)%vars%name)
 
-  CS%var_ptr0d(1,CS%novars)%p => f_ptr  ; CS%var_ptr0d(2,CS%novars)%p => f_ptr2
-  CS%var_ptr3d(1,CS%novars)%p => NULL() ; CS%var_ptr3d(2,CS%novars)%p => NULL()
-  CS%var_ptr2d(1,CS%novars)%p => NULL() ; CS%var_ptr2d(2,CS%novars)%p => NULL()
-  CS%var_ptr1d(1,CS%novars)%p => NULL() ; CS%var_ptr1d(2,CS%novars)%p => NULL()
+  CS%var_ptr0d(CS%novars)%p => f_ptr
+  CS%var_ptr3d(CS%novars)%p => NULL()
+  CS%var_ptr2d(CS%novars)%p => NULL()
+  CS%var_ptr1d(CS%novars)%p => NULL()
 
 end subroutine register_restart_field_ptr0d
 
@@ -357,7 +349,7 @@ function query_initialized_0d(f_ptr, CS) result(query_initialized)
   query_initialized = .false.
   n = CS%novars+1
   do m=1,CS%novars
-    if (ASSOCIATED(CS%var_ptr0d(1,m)%p,f_ptr)) then
+    if (ASSOCIATED(CS%var_ptr0d(m)%p,f_ptr)) then
       if (CS%restart_field(m)%initialized) query_initialized = .true.
       n = m ; exit
     endif
@@ -386,7 +378,7 @@ function query_initialized_1d(f_ptr, CS) result(query_initialized)
   query_initialized = .false.
   n = CS%novars+1
   do m=1,CS%novars
-    if (ASSOCIATED(CS%var_ptr1d(1,m)%p,f_ptr)) then
+    if (ASSOCIATED(CS%var_ptr1d(m)%p,f_ptr)) then
       if (CS%restart_field(m)%initialized) query_initialized = .true.
       n = m ; exit
     endif
@@ -415,7 +407,7 @@ function query_initialized_2d(f_ptr, CS) result(query_initialized)
   query_initialized = .false.
   n = CS%novars+1
   do m=1,CS%novars
-    if (ASSOCIATED(CS%var_ptr2d(1,m)%p,f_ptr)) then
+    if (ASSOCIATED(CS%var_ptr2d(m)%p,f_ptr)) then
       if (CS%restart_field(m)%initialized) query_initialized = .true.
       n = m ; exit
     endif
@@ -444,7 +436,7 @@ function query_initialized_3d(f_ptr, CS) result(query_initialized)
   query_initialized = .false.
   n = CS%novars+1
   do m=1,CS%novars
-    if (ASSOCIATED(CS%var_ptr3d(1,m)%p,f_ptr)) then
+    if (ASSOCIATED(CS%var_ptr3d(m)%p,f_ptr)) then
       if (CS%restart_field(m)%initialized) query_initialized = .true.
       n = m ; exit
     endif
@@ -475,7 +467,7 @@ function query_initialized_0d_name(f_ptr, name, CS) result(query_initialized)
   query_initialized = .false.
   n = CS%novars+1
   do m=1,CS%novars
-    if (ASSOCIATED(CS%var_ptr0d(1,m)%p,f_ptr)) then
+    if (ASSOCIATED(CS%var_ptr0d(m)%p,f_ptr)) then
       if (CS%restart_field(m)%initialized) query_initialized = .true.
       n = m ; exit
     endif
@@ -512,7 +504,7 @@ function query_initialized_1d_name(f_ptr, name, CS) result(query_initialized)
   query_initialized = .false.
   n = CS%novars+1
   do m=1,CS%novars
-    if (ASSOCIATED(CS%var_ptr1d(1,m)%p,f_ptr)) then
+    if (ASSOCIATED(CS%var_ptr1d(m)%p,f_ptr)) then
       if (CS%restart_field(m)%initialized) query_initialized = .true.
       n = m ; exit
     endif
@@ -532,7 +524,7 @@ end function query_initialized_1d_name
 function query_initialized_2d_name(f_ptr, name, CS) result(query_initialized)
   real, dimension(:,:),  target  :: f_ptr
   character(len=*)               :: name
-  type(MOM_restart_CS), pointer :: CS
+  type(MOM_restart_CS),  pointer :: CS
   logical :: query_initialized
 !   This subroutine tests whether the field pointed to by f_ptr or with the
 ! specified variable name has been initialized from a restart file.
@@ -549,7 +541,7 @@ function query_initialized_2d_name(f_ptr, name, CS) result(query_initialized)
   query_initialized = .false.
   n = CS%novars+1
   do m=1,CS%novars
-    if (ASSOCIATED(CS%var_ptr2d(1,m)%p,f_ptr)) then
+    if (ASSOCIATED(CS%var_ptr2d(m)%p,f_ptr)) then
       if (CS%restart_field(m)%initialized) query_initialized = .true.
       n = m ; exit
     endif
@@ -586,7 +578,7 @@ function query_initialized_3d_name(f_ptr, name, CS) result(query_initialized)
   query_initialized = .false.
   n = CS%novars+1
   do m=1,CS%novars
-    if (ASSOCIATED(CS%var_ptr3d(1,m)%p,f_ptr)) then
+    if (ASSOCIATED(CS%var_ptr3d(m)%p,f_ptr)) then
       if (CS%restart_field(m)%initialized) query_initialized = .true.
       n = m ; exit
     endif
@@ -603,18 +595,16 @@ function query_initialized_3d_name(f_ptr, name, CS) result(query_initialized)
 
 end function query_initialized_3d_name
 
-subroutine save_restart(directory, time, lev, G, CS, time_stamped, filename)
+subroutine save_restart(directory, time, G, CS, time_stamped, filename)
 !  save_restart saves all registered variables to restart files.
   character(len=*),        intent(in)    :: directory
   type(time_type),         intent(in)    :: time
-  integer,                 intent(in)    :: lev
   type(ocean_grid_type),   intent(inout) :: G
-  type(MOM_restart_CS),   pointer       :: CS
+  type(MOM_restart_CS),    pointer       :: CS
   logical,          optional, intent(in) :: time_stamped
   character(len=*), optional, intent(in) :: filename
 ! Arguments: directory - The directory where the restart file goes.
 !  (in)      time - The time of this restart file.
-!  (in)      lev - The time level to use for multilevel variables.
 !  (in)      G - The ocean's grid structure.
 !  (in)      CS - The control structure returned by a previous call to
 !                 restart_init.
@@ -736,17 +726,17 @@ subroutine save_restart(directory, time, lev, G, CS, time_stamped, filename)
 
     do m=start_var,next_var-1
 
-      if (ASSOCIATED(CS%var_ptr3d(1,m)%p)) then
+      if (ASSOCIATED(CS%var_ptr3d(m)%p)) then
         call write_field(unit,fields(m-start_var+1), G%Domain%mpp_domain, &
-                         CS%var_ptr3d(lev,m)%p, restart_time)
-      elseif (ASSOCIATED(CS%var_ptr2d(1,m)%p)) then
+                         CS%var_ptr3d(m)%p, restart_time)
+      elseif (ASSOCIATED(CS%var_ptr2d(m)%p)) then
         call write_field(unit,fields(m-start_var+1), G%Domain%mpp_domain, &
-                         CS%var_ptr2d(lev,m)%p, restart_time)
-      elseif (ASSOCIATED(CS%var_ptr1d(1,m)%p)) then
-        call write_field(unit, fields(m-start_var+1), CS%var_ptr1d(lev,m)%p, &
+                         CS%var_ptr2d(m)%p, restart_time)
+      elseif (ASSOCIATED(CS%var_ptr1d(m)%p)) then
+        call write_field(unit, fields(m-start_var+1), CS%var_ptr1d(m)%p, &
                          restart_time)
-      elseif (ASSOCIATED(CS%var_ptr0d(1,m)%p)) then
-        call write_field(unit, fields(m-start_var+1), CS%var_ptr0d(lev,m)%p, &
+      elseif (ASSOCIATED(CS%var_ptr0d(m)%p)) then
+        call write_field(unit, fields(m-start_var+1), CS%var_ptr0d(m)%p, &
                          restart_time)
       endif
     enddo
@@ -969,32 +959,32 @@ subroutine restore_state(filename, directory, day, G, CS)
       do i=1, nvar
         call get_file_atts(fields(i),name=varname)
         if (lowercase(trim(varname)) == lowercase(trim(CS%restart_field(m)%var_name))) then
-          if (ASSOCIATED(CS%var_ptr1d(1,m)%p))  then
+          if (ASSOCIATED(CS%var_ptr1d(m)%p))  then
             ! Read a 1d array, which should be invariant to domain decomposition.
-            call read_data(unit_path(n), varname, CS%var_ptr1d(1,m)%p, &
+            call read_data(unit_path(n), varname, CS%var_ptr1d(m)%p, &
                            no_domain=.true., timelevel=1)
-          elseif (ASSOCIATED(CS%var_ptr0d(1,m)%p)) then ! Read a scalar...
-            call read_data(unit_path(n), varname, CS%var_ptr0d(1,m)%p, &
+          elseif (ASSOCIATED(CS%var_ptr0d(m)%p)) then ! Read a scalar...
+            call read_data(unit_path(n), varname, CS%var_ptr0d(m)%p, &
                            no_domain=.true., timelevel=1)
           elseif (unit_is_global(n) .or. G%Domain%use_io_layout) then
-            if (ASSOCIATED(CS%var_ptr3d(1,m)%p)) then
+            if (ASSOCIATED(CS%var_ptr3d(m)%p)) then
               ! Read 3d array...  Time level 1 is always used.
               ! Probably should query the field type to make sure that the sizes are right...
               if (pos == 0) then
-                call read_data(unit_path(n), varname, CS%var_ptr3d(1,m)%p, &
+                call read_data(unit_path(n), varname, CS%var_ptr3d(m)%p, &
                                G%Domain%mpp_domain, 1)
                     ! ### SHOULD BE no_domain=.true., timelevel=1) ?
               else
-                call read_data(unit_path(n), varname, CS%var_ptr3d(1,m)%p, &
+                call read_data(unit_path(n), varname, CS%var_ptr3d(m)%p, &
                                G%Domain%mpp_domain, 1, position=pos)
               endif
-            elseif (ASSOCIATED(CS%var_ptr2d(1,m)%p)) then ! Read 2d array...
+            elseif (ASSOCIATED(CS%var_ptr2d(m)%p)) then ! Read 2d array...
               if (pos == 0) then
-                call read_data(unit_path(n), varname, CS%var_ptr2d(1,m)%p, &
+                call read_data(unit_path(n), varname, CS%var_ptr2d(m)%p, &
                                G%Domain%mpp_domain, 1)
                     ! ### SHOULD BE no_domain=.true., timelevel=1) ?
               else
-                call read_data(unit_path(n), varname, CS%var_ptr2d(1,m)%p, &
+                call read_data(unit_path(n), varname, CS%var_ptr2d(m)%p, &
                                G%Domain%mpp_domain, 1, position=pos)
               endif
             else
@@ -1041,21 +1031,21 @@ subroutine restore_state(filename, directory, day, G, CS)
               exit
             endif
 
-            if (ASSOCIATED(CS%var_ptr3d(1,m)%p)) then
+            if (ASSOCIATED(CS%var_ptr3d(m)%p)) then
               if (ntime == 0) then
                 call read_field(unit(n), fields(i), &
-                                CS%var_ptr3d(1,m)%p(isL:ieL,jsL:jeL,:))
+                                CS%var_ptr3d(m)%p(isL:ieL,jsL:jeL,:))
               else
                 call read_field(unit(n), fields(i), &
-                                CS%var_ptr3d(1,m)%p(isL:ieL,jsL:jeL,:), 1)
+                                CS%var_ptr3d(m)%p(isL:ieL,jsL:jeL,:), 1)
               endif
             else
               if (ntime == 0) then
                 call read_field(unit(n), fields(i), &
-                                CS%var_ptr2d(1,m)%p(isL:ieL,jsL:jeL))
+                                CS%var_ptr2d(m)%p(isL:ieL,jsL:jeL))
               else
                 call read_field(unit(n), fields(i), &
-                                CS%var_ptr2d(1,m)%p(isL:ieL,jsL:jeL), 1)
+                                CS%var_ptr2d(m)%p(isL:ieL,jsL:jeL), 1)
               endif
             endif
           endif
@@ -1134,10 +1124,10 @@ subroutine restart_init(param_file, CS, restart_root)
                  default=MAX_FIELDS_)
 
   allocate(CS%restart_field(CS%max_fields))
-  allocate(CS%var_ptr0d(2,CS%max_fields))
-  allocate(CS%var_ptr1d(2,CS%max_fields))
-  allocate(CS%var_ptr2d(2,CS%max_fields))
-  allocate(CS%var_ptr3d(2,CS%max_fields))
+  allocate(CS%var_ptr0d(CS%max_fields))
+  allocate(CS%var_ptr1d(CS%max_fields))
+  allocate(CS%var_ptr2d(CS%max_fields))
+  allocate(CS%var_ptr3d(CS%max_fields))
 
 end subroutine restart_init
 

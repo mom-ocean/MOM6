@@ -258,7 +258,7 @@ function register_ideal_age_tracer(G, param_file, CS, diag, tr_adv_CSp, &
     ! calls.  Curses on the designers and implementers of Fortran90.
     tr_ptr => CS%tr(:,:,:,m)
     ! Register the tracer for the restart file.
-    call register_restart_field(tr_ptr, tr_ptr, CS%tr_desc(m), &
+    call register_restart_field(tr_ptr, CS%tr_desc(m), &
                                 .not.CS%tracers_may_reinit,restart_CS)
     ! Register the tracer for horizontal advection & diffusion.
     call register_tracer(tr_ptr, CS%tr_desc(m)%name, param_file, tr_adv_CSp)

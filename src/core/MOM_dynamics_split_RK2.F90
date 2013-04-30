@@ -947,30 +947,30 @@ subroutine register_restarts_dyn_split_RK2(G, param_file, CS, restart_CS)
  ! else
  !   vd(1) = vardesc("ocean_mass?","Ocean column mass",'h','1','s',"kg meter-2")
  ! endif
-  call register_restart_field(CS%eta, CS%eta, vd, .false., CS%restart_CSp)
+  call register_restart_field(CS%eta, vd, .false., CS%restart_CSp)
 
   vd = vardesc("u2","Auxiliary Zonal velocity",'u','L','s',"meter second-1")
-  call register_restart_field(CS%u_av, CS%u_av, vd, .false., CS%restart_CSp)
+  call register_restart_field(CS%u_av, vd, .false., CS%restart_CSp)
 
   vd = vardesc("v2","Auxiliary Meridional velocity",'v','L','s',"meter second-1")
-  call register_restart_field(CS%v_av, CS%v_av, vd, .false., CS%restart_CSp)
+  call register_restart_field(CS%v_av, vd, .false., CS%restart_CSp)
 
   vd = vardesc("h2","Auxiliary Layer Thickness",'h','L','s',thickness_units)
-  call register_restart_field(CS%h_av, CS%h_av, vd, .false., CS%restart_CSp)
+  call register_restart_field(CS%h_av, vd, .false., CS%restart_CSp)
 
   vd = vardesc("uh","Zonal thickness flux",'u','L','s',flux_units)
-  call register_restart_field(CS%uh, CS%uh, vd, .false., CS%restart_CSp)
+  call register_restart_field(CS%uh, vd, .false., CS%restart_CSp)
 
   vd = vardesc("vh","Meridional thickness flux",'v','L','s',flux_units)
-  call register_restart_field(CS%vh, CS%vh, vd, .false., CS%restart_CSp)
+  call register_restart_field(CS%vh, vd, .false., CS%restart_CSp)
 
   vd = vardesc("diffu","Zonal horizontal viscous acceleration",'u','L','s', &
                "meter second-2")
-  call register_restart_field(CS%diffu, CS%diffu, vd, .false., CS%restart_CSp)
+  call register_restart_field(CS%diffu, vd, .false., CS%restart_CSp)
 
   vd = vardesc("diffv","Meridional horizontal viscous acceleration",'v','L','s',&
                "meter second-2")
-  call register_restart_field(CS%diffv, CS%diffv, vd, .false., CS%restart_CSp)
+  call register_restart_field(CS%diffv, vd, .false., CS%restart_CSp)
 
   call register_barotropic_restarts(G, param_file, CS%barotropic_CSp, &
                                     CS%restart_CSp)
@@ -978,11 +978,11 @@ subroutine register_restarts_dyn_split_RK2(G, param_file, CS, restart_CS)
   if (CS%readjust_bt_trans) then
     vd = vardesc("uhbt_in","Final instantaneous barotropic zonal thickness flux",&
                  'u','1','s',flux_units)
-    call register_restart_field(CS%uhbt_in, CS%uhbt_in, vd, .false., CS%restart_CSp)
+    call register_restart_field(CS%uhbt_in, vd, .false., CS%restart_CSp)
 
     vd = vardesc("vhbt_in","Final instantaneous barotropic meridional thickness flux",&
                  'v','1','s',flux_units)
-    call register_restart_field(CS%vhbt_in, CS%vhbt_in, vd, .false., CS%restart_CSp)
+    call register_restart_field(CS%vhbt_in, vd, .false., CS%restart_CSp)
   endif
 
 end subroutine register_restarts_dyn_split_RK2

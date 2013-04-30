@@ -710,7 +710,7 @@ subroutine forcing_save_restart(CS, G, Time, directory, time_stamped, &
 
   if (.not.associated(CS)) return
   if (.not.associated(CS%restart_CSp)) return
-  call save_restart(directory, Time, 1, G, CS%restart_CSp, time_stamped)
+  call save_restart(directory, Time, G, CS%restart_CSp, time_stamped)
 
 end subroutine forcing_save_restart
 

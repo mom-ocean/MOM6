@@ -243,7 +243,7 @@ contains
        ! 2008/12/08 jgj: change default to true, so all fields must be present in restart.
        ! 2010/02/04 jgj: if tracers_may_reinit is true, tracers may go through
        ! initialization code if not found in restart
-       call register_restart_field(tr_ptr, tr_ptr, var_desc, .not.CS%tracers_may_reinit, restart_CS)
+       call register_restart_field(tr_ptr, var_desc, .not.CS%tracers_may_reinit, restart_CS)
 
        ! Register prognastic tracer for horizontal advection & diffusion.
        if(g_tracer_is_prog(g_tracer)) call register_tracer(tr_ptr, g_tracer_name, param_file, tr_adv_CSp)

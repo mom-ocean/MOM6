@@ -495,7 +495,7 @@ subroutine MEKE_alloc_register_restart(G, param_file, MEKE, restart_CS)
   if (MEKE_damping>=0.) then
     allocate(MEKE%MEKE(isd:ied,jsd:jed)) ; MEKE%MEKE(:,:) = 0.0
     vd = vardesc("MEKE","Mesoscale Eddy Kinetic Energy",'h','1','s',"m2 s-2")
-    call register_restart_field(MEKE%MEKE, MEKE%MEKE, vd, .false., restart_CS)
+    call register_restart_field(MEKE%MEKE, vd, .false., restart_CS)
   endif
   if (MEKE_GMcoeff>=0.) then
     allocate(MEKE%GM_src(isd:ied,jsd:jed)) ; MEKE%GM_src(:,:) = 0.0
@@ -506,7 +506,7 @@ subroutine MEKE_alloc_register_restart(G, param_file, MEKE, restart_CS)
   if (MEKE_KhCoeff>=0.) then
     allocate(MEKE%Kh(isd:ied,jsd:jed)) ; MEKE%Kh(:,:) = 0.0
     vd = vardesc("MEKE_Kh","Lateral diffusivity from Mesoscale Eddy Kinetic Energy",'h','1','s',"m2 s-1")
-    call register_restart_field(MEKE%Kh, MEKE%Kh, vd, .false., restart_CS)
+    call register_restart_field(MEKE%Kh, vd, .false., restart_CS)
   endif
   allocate(MEKE%Rd_dx_h(isd:ied,jsd:jed)) ; MEKE%Rd_dx_h(:,:) = 0.0
 

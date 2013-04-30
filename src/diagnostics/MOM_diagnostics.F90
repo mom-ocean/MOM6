@@ -115,7 +115,7 @@ type, public :: diagnostics_CS ; private
 
   type(wave_speed_CS), pointer :: wave_speed_CSp => NULL()  
   ! The following pointers are used the calculation of time derivatives.
-  type(p3d) :: var_ptr(2,MAX_FIELDS_)
+  type(p3d) :: var_ptr(MAX_FIELDS_)
   type(p3d) :: deriv(MAX_FIELDS_)
   type(p3d) :: prev_val(MAX_FIELDS_)
   integer   :: nlay(MAX_FIELDS_)
@@ -125,13 +125,12 @@ end type diagnostics_CS
 
 contains
 
-subroutine calculate_diagnostic_fields(u, v, h, uh, vh, lev, tv, dt, G, CS, eta_bt)
+subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, dt, G, CS, eta_bt)
   real, dimension(NIMEMB_,NJMEM_,NKMEM_),   intent(in)    :: u
   real, dimension(NIMEM_,NJMEMB_,NKMEM_),   intent(in)    :: v
   real, dimension(NIMEM_,NJMEM_,NKMEM_),    intent(in)    :: h
   real, dimension(NIMEMB_,NJMEM_,NKMEM_),   intent(in)    :: uh
   real, dimension(NIMEM_,NJMEMB_,NKMEM_),   intent(in)    :: vh
-  integer,                                  intent(in)    :: lev
   type(thermo_var_ptrs),                    intent(in)    :: tv
   real,                                     intent(in)    :: dt
   type(ocean_grid_type),                    intent(inout) :: G
@@ -145,8 +144,6 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, lev, tv, dt, G, CS, eta_
 !  (in)      h - Layer thickness, in m.
 !  (in)      uh - Volume flux through zonal faces = u*h*dy, m3 s-1.
 !  (in)      vh - Volume flux through meridional faces = v*h*dx, in m3 s-1.
-!  (in)      lev - The time levels to use to calculate the diagnostic
-!                  quantities.
 !  (in)      tv - a structure pointing to various thermodynamic variables.
 !  (in)      dt - the time difference in s since the last call to
 !                 this subroutine.
@@ -176,7 +173,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, lev, tv, dt, G, CS, eta_
   if (.not.associated(CS)) call MOM_error(FATAL, &
          "calculate_diagnostic_fields: Module must be initialized before it is used.")
 
-  call calculate_derivs(lev, dt, G, CS)
+  call calculate_derivs(dt, G, CS)
 
   if (ASSOCIATED(CS%e)) then
     call find_eta(h, tv, G%g_Earth, G, CS%e, eta_bt)
@@ -324,7 +321,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, lev, tv, dt, G, CS, eta_
 
     if (CS%id_dh_dt>0) call post_data(CS%id_dh_dt, CS%dh_dt, CS%diag)
 
-    call calculate_energy_diagnostics(u, v, h, uh, vh, lev, G, CS)
+    call calculate_energy_diagnostics(u, v, h, uh, vh, G, CS)
   endif
 
 end subroutine calculate_diagnostic_fields
@@ -480,7 +477,7 @@ subroutine calculate_vertical_integrals(h, tv, G, CS)
 
 end subroutine calculate_vertical_integrals
 
-subroutine calculate_energy_diagnostics(u, v, h, uh, vh, lev, G, CS)
+subroutine calculate_energy_diagnostics(u, v, h, uh, vh, G, CS)
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)    :: u
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)    :: v
   real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h
@@ -499,8 +496,6 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, lev, G, CS)
 !  (in)      G - The ocean's grid structure.
 !  (in)      CS - The control structure returned by a previous call to
 !                 diagnostics_init.
-
-  integer :: lev
   real :: KE_u(SZIB_(G),SZJ_(G))
   real :: KE_v(SZI_(G),SZJB_(G))
   real :: KE_h(SZI_(G),SZJ_(G))
@@ -666,15 +661,14 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, lev, G, CS)
 end subroutine calculate_energy_diagnostics
 
 
-subroutine register_time_deriv(f_ptr, f_ptr2, deriv_ptr, CS)
-  real, dimension(:,:,:), target :: f_ptr, f_ptr2, deriv_ptr
+subroutine register_time_deriv(f_ptr, deriv_ptr, CS)
+  real, dimension(:,:,:), target :: f_ptr, deriv_ptr
   type(diagnostics_CS),  pointer    :: CS
 ! This subroutine registers the fields to calculate a diagnostic time derivative.
 
-! Arguments: f_ptr - the first time level of the field whose derivative is taken.
-!  (in)      f_ptr2 - the second time level of the field whose derivative is taken.
+! Arguments: f_ptr - the field whose derivative is taken.
 !  (in)      deriv_ptr - the field in which the calculated time derivatives
-!                         will be placed.
+!                        will be placed.
 !  (in)      num_lay - the number of layers in this field.
 !  (in)      CS - The control structure returned by a previous call to
 !                 diagnostics_init.
@@ -694,20 +688,17 @@ subroutine register_time_deriv(f_ptr, f_ptr2, deriv_ptr, CS)
   CS%deriv(m)%p => deriv_ptr
   allocate(CS%prev_val(m)%p(size(f_ptr(:,:,:),1), size(f_ptr(:,:,:),2), CS%nlay(m)) )
 
-  CS%var_ptr(1,m)%p => f_ptr ; CS%var_ptr(2,m)%p => f_ptr2
+  CS%var_ptr(m)%p => f_ptr
   CS%prev_val(m)%p(:,:,:) = f_ptr(:,:,:)
 
 end subroutine register_time_deriv
 
-subroutine calculate_derivs(lev, dt, G, CS)
-  integer,               intent(in)    :: lev
+subroutine calculate_derivs(dt, G, CS)
   real,                  intent(in)    :: dt
   type(ocean_grid_type), intent(inout) :: G
   type(diagnostics_CS),  pointer       :: CS
 ! This subroutine calculates all registered time derivatives.
-! Arguments: lev - The time levels to use to calculate the diagnostic
-!                  quantities.
-!  (in)      dt - the time interval in s over which differences occur
+! Arguments: dt - the time interval in s over which differences occur
 !  (in)      G - The ocean's grid structure.
 !  (in)      CS - The control structure returned by a previous call to
 !                 diagnostics_init.
@@ -719,8 +710,8 @@ subroutine calculate_derivs(lev, dt, G, CS)
 
   do m=1,CS%num_time_deriv
     do k=1,CS%nlay(m) ; do j=G%jsc,G%jec ; do i=G%isc,G%iec
-      CS%deriv(m)%p(i,j,k) = (CS%var_ptr(lev,m)%p(i,j,k) - CS%prev_val(m)%p(i,j,k)) * Idt
-      CS%prev_val(m)%p(i,j,k) = CS%var_ptr(lev,m)%p(i,j,k)
+      CS%deriv(m)%p(i,j,k) = (CS%var_ptr(m)%p(i,j,k) - CS%prev_val(m)%p(i,j,k)) * Idt
+      CS%prev_val(m)%p(i,j,k) = CS%var_ptr(m)%p(i,j,k)
     enddo ; enddo ; enddo
   enddo
 
@@ -793,21 +784,21 @@ subroutine MOM_diagnostics_init(HIS, Time, G, param_file, diag, CS)
       'Zonal Acceleration', 'meter second-2')
   if ((CS%id_du_dt>0) .and. .not.ASSOCIATED(CS%du_dt)) then
     call safe_alloc_ptr(CS%du_dt,IsdB,IedB,jsd,jed,nz)
-    call register_time_deriv(HIS%u, HIS%u, CS%du_dt, CS)
+    call register_time_deriv(HIS%u, CS%du_dt, CS)
   endif
 
   CS%id_dv_dt = register_diag_field('ocean_model', 'dvdt', G%axesCvL, Time, &
       'Meridional Acceleration', 'meter second-2')
   if ((CS%id_dv_dt>0) .and. .not.ASSOCIATED(CS%dv_dt)) then
     call safe_alloc_ptr(CS%dv_dt,isd,ied,JsdB,JedB,nz)
-    call register_time_deriv(HIS%v, HIS%v, CS%dv_dt, CS)
+    call register_time_deriv(HIS%v, CS%dv_dt, CS)
   endif
 
   CS%id_dh_dt = register_diag_field('ocean_model', 'dhdt', G%axesTL, Time, &
       'Thickness tendency', trim(thickness_units)//" second-1")
   if ((CS%id_dh_dt>0) .and. .not.ASSOCIATED(CS%dh_dt)) then
     call safe_alloc_ptr(CS%dh_dt,isd,ied,jsd,jed,nz)
-    call register_time_deriv(HIS%h, HIS%h, CS%dh_dt, CS)
+    call register_time_deriv(HIS%h, CS%dh_dt, CS)
   endif
 
   if (G%nk_rho_varies > 0) then
@@ -917,15 +908,15 @@ subroutine set_dependent_diagnostics(HIS, G, CS)
   if (ASSOCIATED(CS%dKE_dt)) then
     if (.not.ASSOCIATED(CS%du_dt)) then
       call safe_alloc_ptr(CS%du_dt,IsdB,IedB,jsd,jed,nz)
-      call register_time_deriv(HIS%u, HIS%u, CS%du_dt, CS)
+      call register_time_deriv(HIS%u, CS%du_dt, CS)
     endif
     if (.not.ASSOCIATED(CS%dv_dt)) then
       call safe_alloc_ptr(CS%dv_dt,isd,ied,JsdB,JedB,nz)
-      call register_time_deriv(HIS%v, HIS%v, CS%dv_dt, CS)
+      call register_time_deriv(HIS%v, CS%dv_dt, CS)
     endif
     if (.not.ASSOCIATED(CS%dh_dt)) then
       call safe_alloc_ptr(CS%dh_dt,isd,ied,jsd,jed,nz)
-      call register_time_deriv(HIS%h, HIS%h, CS%dh_dt, CS)
+      call register_time_deriv(HIS%h, CS%dh_dt, CS)
     endif
   endif
 
