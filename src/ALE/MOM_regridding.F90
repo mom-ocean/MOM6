@@ -196,7 +196,6 @@ subroutine initialize_regridding( nk, coordMode, interpScheme, CS )
   type(regridding_CS),   intent(inout) :: CS
 
   ! Local variables
-  character(len=40)  :: string ! Temporary string
 
   CS%nk = nk
 
@@ -214,7 +213,7 @@ subroutine initialize_regridding( nk, coordMode, interpScheme, CS )
     case ("PQM_IH4IH3"); CS%interpolation_scheme = INTERPOLATION_PQM_IH4IH3
     case ("PQM_IH6IH5"); CS%interpolation_scheme = INTERPOLATION_PQM_IH6IH5
     case default ; call MOM_error(FATAL, "read_regridding_options: "//&
-       "Unrecognized choice for INTERPOLATION_SCHEME ("//trim(string)//").")
+     "Unrecognized choice for INTERPOLATION_SCHEME ("//trim(interpScheme)//").")
   end select
 
   CS%boundary_extrapolation = regriddingDefaultBoundaryExtrapolation
@@ -315,8 +314,8 @@ subroutine buildGridZstar( CS, G, h, h_new )
   nz = G%ke
   
 
-  do j = G%jsc,G%jec+1
-    do i = G%isc,G%iec+1
+  do j = G%jsc-1,G%jec+1
+    do i = G%isc-1,G%iec+1
 
       ! Local depth (G%bathyT is positive)
       localDepth = G%bathyT(i,j)
@@ -420,8 +419,8 @@ subroutine build_grid_sigma( G, h, h_new )
 
   nz = G%ke
   
-  do i = G%isc,G%iec+1
-    do j = G%jsc,G%jec+1
+  do i = G%isc-1,G%iec+1
+    do j = G%jsc-1,G%jec+1
       
       ! Determine water column height
       total_height = 0.0
@@ -475,8 +474,8 @@ subroutine build_grid_arbitrary( G, h, h_new, CS )
   max_depth = G%max_depth
   min_thickness = CS%min_thickness
 
-  do j = G%jsc,G%jec+1
-    do i = G%isc,G%iec+1
+  do j = G%jsc-1,G%jec+1
+    do i = G%isc-1,G%iec+1
 
       ! Local depth
       local_depth = G%bathyT(i,j)
@@ -593,8 +592,8 @@ subroutine build_grid_target_densities( G, h, h_new, tv, remaPCS, CS )
   end do
   
   ! Build grid based on target interface densities
-  do i = G%isc,G%iec+1
-    do j = G%jsc,G%jec+1
+  do i = G%isc-1,G%iec+1
+    do j = G%jsc-1,G%jec+1
     
       ! Copy T and S onto new variables so as to not alter the original values
       ! of T and S (these are remapped at the end of the regridding iterations
@@ -1144,8 +1143,8 @@ subroutine check_grid_integrity( CS, G, h )
   ! Initialize grid 
   call grid1Dconstruct( grid, G%ke )
 
-  do i = G%isc,G%iec+1
-    do j = G%jsc,G%jec+1
+  do i = G%isc-1,G%iec+1
+    do j = G%jsc-1,G%jec+1
     
       ! Build grid for current column
       do k = 1,G%ke
@@ -1268,8 +1267,8 @@ subroutine convective_adjustment(CS, G, h, tv)
   logical   :: stratified
   
   ! Loop on columns 
-  do j = G%jsc,G%jec+1
-    do i = G%isc,G%iec+1
+  do j = G%jsc-1,G%jec+1
+    do i = G%isc-1,G%iec+1
         
       ! Compute densities within current water column
       call calculate_density( tv%T(i,j,:), tv%S(i,j,:), CS%p_column, &

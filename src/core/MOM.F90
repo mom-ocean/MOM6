@@ -739,7 +739,25 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         ! (that may comprise several dynamical time steps)
         ! The routine 'ALE_main' can be found in 'MOM_ALE.F90'.
         if ( CS%useALEalgorithm ) then 
+!         call pass_vector(u, v, grid%Domain)
+          call pass_var(CS%tv%T, grid%Domain, complete=.false.) ! Needed for rho coordiantes
+          call pass_var(CS%tv%S, grid%Domain)
+!         call pass_var(CS%tv%T, grid%Domain, complete=.false.)
+!         call pass_var(CS%tv%S, grid%Domain, complete=.false.)
+!         call pass_var(h, grid%Domain)
+          if (CS%debug) then
+            call MOM_state_chksum("Pre-ALE ", u, v, h, CS%uh, CS%vh, grid)
+            call hchksum(CS%tv%T,"Pre-ALE T",grid,haloshift=1)
+            call hchksum(CS%tv%S,"Pre-ALE S",grid,haloshift=1)
+            call check_redundant("Pre-ALE ", u, v, grid)
+          endif
           call ALE_main(grid, h, CS%h_aux, u, v, CS%tv, CS%regridding_opts )
+          if (CS%debug) then
+            call MOM_state_chksum("Post-ALE ", u, v, h, CS%uh, CS%vh, grid)
+            call hchksum(CS%tv%T,"Post-ALE T",grid,haloshift=1)
+            call hchksum(CS%tv%S,"Post-ALE S",grid,haloshift=1)
+            call check_redundant("Post-ALE ", u, v, grid)
+          endif
 !         call pass_vector(u, v, grid%Domain)
 !         call pass_var(CS%tv%T, grid%Domain, complete=.false.)
 !         call pass_var(CS%tv%S, grid%Domain, complete=.false.)
