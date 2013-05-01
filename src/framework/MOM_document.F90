@@ -272,10 +272,7 @@ subroutine doc_param_real_array(doc, varname, desc, units, vals, default)
   call open_doc_file(doc)
 
   if (doc%unitAll > 0 .or. doc%unitShort > 0) then
-    valstring = real_string(vals(1))
-    do i=2,min(size(vals),128)
-      valstring = trim(valstring)//", "//trim(real_string(vals(i)))
-    enddo
+    valstring = trim(real_array_string(vals(:)))
 
     mesg = define_string(doc,varname,valstring,units)
 
@@ -444,6 +441,45 @@ function real_string(val)
   endif
   real_string = adjustl(real_string)
 end function real_string
+
+function real_array_string(vals,sep)
+  character(len=1320) :: real_array_string
+  real, intent(in)  :: vals(:)
+  character(len=*), optional :: sep
+! Returns a character string of a comma-separated, compact formatted, reals
+! e.g. "1., 2., 5*3., 5.E2"
+  ! Local variables
+  integer :: j, n, b, ns
+  logical :: doWrite
+  character(len=10) :: separator
+  n=1 ; doWrite=.true. ; real_array_string='' ; b=1
+  if (present(sep)) then
+    separator=sep ; ns=len(sep)
+  else
+    separator=', ' ; ns=2
+  endif
+  do j=1,size(vals)
+    doWrite=.true.
+    if (j<size(vals)) then
+      if (vals(j)==vals(j+1)) then
+        n=n+1
+        doWrite=.false.
+      endif
+    endif
+    if (doWrite) then
+      if (b>1) then ! Write separator if a number has already been written
+        write(real_array_string(b:),'(A)') separator
+        b=b+ns
+      endif
+      if (n>1) then
+        write(real_array_string(b:),'(A,"*",A)') trim(int_string(n)),trim(real_string(vals(j)))
+      else
+        write(real_array_string(b:),'(A)') trim(real_string(vals(j)))
+      endif
+      n=1 ; b=len_trim(real_array_string)+1
+    endif
+  enddo
+end function real_array_string
 
 function testFormattedFloatIsReal(str, val)
   character(len=*), intent(in) :: str

@@ -1140,7 +1140,7 @@ subroutine log_param_int(CS, modulename, varname, value, desc, units, &
 ! along with its name and the module it came from.
   character(len=240) :: mesg, myunits
 
-  write(mesg, '("  ",a," ",a,": ",i0)') trim(modulename), trim(varname), value
+  write(mesg, '("  ",a," ",a,": ",a)') trim(modulename), trim(varname), trim(left_int(value))
   if (is_root_pe()) then
     if (CS%log_open) write(CS%stdlog,'(a)') trim(mesg)
     if (CS%log_to_stdout) write(CS%stdout,'(a)') trim(mesg)
@@ -1189,8 +1189,8 @@ subroutine log_param_real(CS, modulename, varname, value, desc, units, &
 ! along with its name and the module it came from.
   character(len=240) :: mesg, myunits
 
-  write(mesg, '("  ",a," ",a,": ",ES19.12)') &
-    trim(modulename), trim(varname), value
+  write(mesg, '("  ",a," ",a,": ",a)') &
+    trim(modulename), trim(varname), trim(left_real(value))
   if (is_root_pe()) then
     if (CS%log_open) write(CS%stdlog,'(a)') trim(mesg)
     if (CS%log_to_stdout) write(CS%stdout,'(a)') trim(mesg)
