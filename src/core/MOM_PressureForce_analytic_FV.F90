@@ -92,14 +92,14 @@ end type PressureForce_AFV_CS
 
 contains
 
-subroutine PressureForce_AFV(h, tv, PFu, PFv, G, CS, regridding_opts, p_atm, pbce, eta)
+subroutine PressureForce_AFV(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce, eta)
   real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)  :: h
   type(thermo_var_ptrs), intent(inout)                :: tv
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(out) :: PFu
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(out) :: PFv
   type(ocean_grid_type),                  intent(in)  :: G
   type(PressureForce_AFV_CS),             pointer     :: CS
-  type(ALE_CS),                           intent(inout) :: regridding_opts
+  type(ALE_CS),                           pointer     :: ALE_CSp
   real, dimension(:,:),                  optional, pointer     :: p_atm
   real, dimension(NIMEM_,NJMEM_,NKMEM_), optional, intent(out) :: pbce
   real, dimension(NIMEM_,NJMEM_),        optional, intent(out) :: eta
@@ -110,7 +110,7 @@ subroutine PressureForce_AFV(h, tv, PFu, PFv, G, CS, regridding_opts, p_atm, pbc
 ! following conditional block.
 
   if (G%Boussinesq) then
-    call PressureForce_AFV_bouss(h, tv, PFu, PFv, G, CS, regridding_opts, p_atm, pbce, eta)
+    call PressureForce_AFV_bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce, eta)
   else
     call PressureForce_AFV_nonbouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
   endif
@@ -119,7 +119,7 @@ end subroutine PressureForce_AFV
 
 subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
   real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h
-  type(thermo_var_ptrs),                  intent(inout) :: tv
+  type(thermo_var_ptrs),                  intent(in)   :: tv
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(out)  :: PFu
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(out)  :: PFv
   type(ocean_grid_type),                  intent(in)   :: G
@@ -404,14 +404,14 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
 
 end subroutine PressureForce_AFV_nonBouss
 
-subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, regridding_opts, p_atm, pbce, eta)
+subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce, eta)
   real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h
-  type(thermo_var_ptrs),                  intent(inout) :: tv
+  type(thermo_var_ptrs),                  intent(in)    :: tv
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(out)   :: PFu
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(out)   :: PFv
   type(ocean_grid_type),                  intent(in)    :: G
   type(PressureForce_AFV_CS),             pointer       :: CS
-  type(ALE_CS),                           intent(inout) :: regridding_opts
+  type(ALE_CS),                           pointer       :: ALE_CSp
   real, dimension(:,:),                  optional, pointer     :: p_atm
   real, dimension(NIMEM_,NJMEM_,NKMEM_), optional, intent(out) :: pbce
   real, dimension(NIMEM_,NJMEM_),        optional, intent(out) :: eta
@@ -488,6 +488,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, regridding_opts, p_at
                              ! "left" or "right" of a velocity point, averaged
                              ! over a layer, less Rho_ref, in kg m-3.
   logical :: use_p_atm       ! If true, use the atmospheric pressure.
+  logical :: use_ALE         ! If true, use an ALE pressure reconstruction.
   logical :: use_EOS    ! If true, density is calculated from T & S using an
                         ! equation of state.
   type(thermo_var_ptrs) :: tv_tmp! A structure of temporary T & S.
@@ -619,11 +620,13 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, regridding_opts, p_at
   ! to top and bottom values within each layer (these are the only degrees
   ! of freedeom needed to know the linear profile).
   
-  if ( usePressureReconstruction(regridding_opts) ) then
-    if ( pressureReconstructionScheme(regridding_opts) == PRESSURE_RECONSTRUCTION_PLM ) then
-      call pressure_gradient_plm (regridding_opts, S_t, S_b, T_t, T_b, G, tv, h );
-    elseif ( pressureReconstructionScheme(regridding_opts) == PRESSURE_RECONSTRUCTION_PPM ) then
-      call pressure_gradient_ppm (regridding_opts, S_t, S_b, T_t, T_b, G, tv, h );
+  use_ALE = .false.
+  if (associated(ALE_CSp)) use_ALE = usePressureReconstruction(ALE_CSp)
+  if ( use_ALE ) then
+    if ( pressureReconstructionScheme(ALE_CSp) == PRESSURE_RECONSTRUCTION_PLM ) then
+      call pressure_gradient_plm (ALE_CSp, S_t, S_b, T_t, T_b, G, tv, h );
+    elseif ( pressureReconstructionScheme(ALE_CSp) == PRESSURE_RECONSTRUCTION_PPM ) then
+      call pressure_gradient_ppm (ALE_CSp, S_t, S_b, T_t, T_b, G, tv, h );
     endif
   endif
 
@@ -639,15 +642,15 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, regridding_opts, p_at
       ! assumed when regridding is activated. Otherwise, the previous version
       ! is used, whereby densities within each layer are constant no matter
       ! where the layers are located.
-      if ( usePressureReconstruction(regridding_opts) ) then
-        if ( pressureReconstructionScheme(regridding_opts) == PRESSURE_RECONSTRUCTION_PLM ) then
+      if ( use_ALE ) then
+        if ( pressureReconstructionScheme(ALE_CSp) == PRESSURE_RECONSTRUCTION_PLM ) then
           call int_density_dz_generic_plm ( T_t(:,:,k), T_b(:,:,k), S_t(:,:,k), &
                                             S_b(:,:,k), &
                                             e(:,:,K), e(:,:,K+1), rho_ref, &
                                             CS%Rho0, G%g_Earth, &
                                             G, tv%eqn_of_state, dpa, intz_dpa, &
                                             intx_dpa, inty_dpa)
-        elseif ( pressureReconstructionScheme(regridding_opts) == PRESSURE_RECONSTRUCTION_PPM ) then
+        elseif ( pressureReconstructionScheme(ALE_CSp) == PRESSURE_RECONSTRUCTION_PPM ) then
           call int_density_dz_generic_ppm ( tv%T(:,:,k), T_t(:,:,k), T_b(:,:,k), &
                                             tv%S(:,:,k), S_t(:,:,k), S_b(:,:,k), &
                                             e(:,:,K), e(:,:,K+1), rho_ref, &

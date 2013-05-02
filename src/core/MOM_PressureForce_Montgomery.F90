@@ -87,8 +87,8 @@ end type PressureForce_Mont_CS
 contains
 
 subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)   :: h
-  type(thermo_var_ptrs), intent(inout)                :: tv
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)  :: h
+  type(thermo_var_ptrs),                  intent(in)  :: tv
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(out) :: PFu
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(out) :: PFv
   type(ocean_grid_type),                  intent(in)  :: G
@@ -369,7 +369,7 @@ end subroutine PressureForce_Mont_nonBouss
 
 subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
   real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)  :: h
-  type(thermo_var_ptrs), intent(inout)                :: tv
+  type(thermo_var_ptrs),                  intent(in)  :: tv
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(out) :: PFu
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(out) :: PFv
   type(ocean_grid_type),                  intent(in)  :: G
