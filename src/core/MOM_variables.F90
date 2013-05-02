@@ -219,6 +219,8 @@ end type ocean_internal_state
 type, public :: vertvisc_type
 !   This structure contains vertical viscosities, drag coefficients, and
 ! related fields.
+  logical :: calc_bbl ! If true, the BBL viscosity and thickness need to be
+                      ! recalculated.
   real, pointer, dimension(:,:) :: &
     bbl_thick_u => NULL(), & ! The bottom boundary layer thickness at the zonal
     bbl_thick_v => NULL(), & ! and meridional velocity points, in m.
