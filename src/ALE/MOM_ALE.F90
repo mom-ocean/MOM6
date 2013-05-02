@@ -14,7 +14,7 @@ module MOM_ALE
 ! (2) Remapping of quantities between old grid and new grid.
 !
 !==============================================================================
-use MOM_error_handler, only : MOM_error, FATAL
+use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_variables,     only : ocean_grid_type, thermo_var_ptrs
 use MOM_file_parser,   only : get_param, param_file_type
 use MOM_EOS,           only : calculate_density
@@ -162,7 +162,7 @@ subroutine initialize_ALE( param_file, G, h, h_aux, &
   real, dimension(NIMEMB_,NJMEM_, NKMEM_), intent(inout) :: u
   real, dimension(NIMEM_,NJMEMB_, NKMEM_), intent(inout) :: v
   type(thermo_var_ptrs), intent(inout)                   :: tv
-  type(ALE_CS), intent(inout)                            :: CS
+  type(ALE_CS), pointer                                  :: CS
 
   ! Local variables
   logical :: verbose, tmpLogical
@@ -173,7 +173,14 @@ subroutine initialize_ALE( param_file, G, h, h_aux, &
   character(len=40) :: string, coordMode, interpScheme ! Temporary strings
 
   verbose = .false.
- 
+
+  if (associated(CS)) then
+    call MOM_error(WARNING, "initialize_ALE called with an associated "// &
+                            "control structure.")
+    return
+  endif
+  allocate(CS)
+
   ! Memory allocation for regridding
   call ALE_memory_allocation( G, CS )
 
@@ -306,12 +313,14 @@ subroutine end_ALE(CS)
 ! This routine is typically called (from MOM_end in file MOM.F90)
 ! after the main time integration loop to deallocate the regridding stuff.
 !------------------------------------------------------------------------------
-  type(ALE_CS), intent(inout) :: CS
+  type(ALE_CS), pointer :: CS
   
   ! Deallocate memory used for the regridding
   call end_remapping( CS%remapCS )
   call end_regridding( CS%regridCS )
   call ALE_memory_deallocation( CS )
+
+  deallocate(CS)
 
 end subroutine end_ALE
 

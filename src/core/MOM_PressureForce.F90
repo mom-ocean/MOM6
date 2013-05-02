@@ -76,14 +76,14 @@ end type PressureForce_CS
 
 contains
 
-subroutine PressureForce(h, tv, PFu, PFv, G, CS, regridding_opts, p_atm, pbce, eta)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)   :: h
-  type(thermo_var_ptrs), intent(inout)                :: tv
+subroutine PressureForce(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce, eta)
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)  :: h
+  type(thermo_var_ptrs),                  intent(in)  :: tv
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(out) :: PFu
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(out) :: PFv
   type(ocean_grid_type),                  intent(in)  :: G
   type(PressureForce_CS),                 pointer     :: CS
-  type(ALE_CS),                         intent(inout) :: regridding_opts
+  type(ALE_CS),                           pointer     :: ALE_CSp
   real, dimension(:,:),                  optional, pointer     :: p_atm
   real, dimension(NIMEM_,NJMEM_,NKMEM_), optional, intent(out) :: pbce
   real, dimension(NIMEM_,NJMEM_),        optional, intent(out) :: eta
@@ -95,15 +95,19 @@ subroutine PressureForce(h, tv, PFu, PFv, G, CS, regridding_opts, p_atm, pbce, e
 
   if (CS%Analytic_FV_PGF) then
     if (G%Boussinesq) then
-      call PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS%PressureForce_AFV_CSp, regridding_opts, p_atm, pbce, eta)
+      call PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS%PressureForce_AFV_CSp, &
+                                   ALE_CSp, p_atm, pbce, eta)
     else
-      call PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, CS%PressureForce_AFV_CSp, p_atm, pbce, eta)
+      call PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, CS%PressureForce_AFV_CSp, &
+                                      p_atm, pbce, eta)
     endif
   else
     if (G%Boussinesq) then
-      call PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, CS%PressureForce_Mont_CSp, p_atm, pbce, eta)
+      call PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, CS%PressureForce_Mont_CSp, &
+                                    p_atm, pbce, eta)
     else
-      call PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, CS%PressureForce_Mont_CSp, p_atm, pbce, eta)
+      call PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, CS%PressureForce_Mont_CSp, &
+                                       p_atm, pbce, eta)
     endif
   endif
 

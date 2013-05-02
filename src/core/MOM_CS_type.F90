@@ -311,7 +311,7 @@ type, public :: MOM_control_struct
   type(diagnostics_CS), pointer :: diagnostics_CSp => NULL()
   type(diag_to_Z_CS), pointer :: diag_to_Z_CSp => NULL()
   type(MOM_restart_CS),  pointer :: restart_CSp => NULL()
-  type(ALE_CS) :: regridding_opts ! Why is this not a pointer? - AJA
+  type(ALE_CS), pointer :: regridding_opts ! Why is this not a pointer? - AJA
 end type MOM_control_struct
 
 contains
