@@ -32,7 +32,7 @@ NJGLOBAL = 48                   !
                                 ! The total number of thickness grid points in the
                                 ! y-direction in the physical domain. With STATIC_MEMORY_
                                 ! this is set in MOM_memory.h at compile time.
-!NIPROC = 1                     !
+!NIPROC = 2                     !
                                 ! The number of processors in the x-direction. With
                                 ! STATIC_MEMORY_ this is set in MOM_memory.h at compile time.
 !NJPROC = 2                     !
@@ -244,6 +244,54 @@ KH = 0.01                       !   [m2 s-1] default = 0.0
 BOUND_KH = False                !   [Boolean] default = True
                                 ! If true, the Laplacian coefficient is locally limited
                                 ! to be stable.
+    !  Parameters of module MOM_barotropic
+BOUND_BT_CORRECTION = True      !   [Boolean] default = False
+                                ! If true, the corrective pseudo mass-fluxes into the
+                                ! barotropic solver are limited to values that require
+                                ! less than 0.1*MAXVEL to be accommodated.
+!BT x-halo = 0                  !
+                                ! The barotropic x-halo size that is actually used.
+!BT y-halo = 0                  !
+                                ! The barotropic y-halo size that is actually used.
+NONLINEAR_BT_CONTINUITY = True  !   [Boolean] default = False
+                                ! If true, use nonlinear transports in the barotropic
+                                ! continuity equation.  This does not apply if
+                                ! USE_BT_CONT_TYPE is true.
+BT_PROJECT_VELOCITY = True      !   [Boolean] default = False
+                                ! If true, step the barotropic velocity first and project
+                                ! out the velocity tendancy by 1+BEBT when calculating the
+                                ! transport.  The default (false) is to use a predictor
+                                ! continuity step to find the pressure field, and then
+                                ! to do a corrector continuity step using a weighted
+                                ! average of the old and new velocities, with weights
+                                ! of (1-BEBT) and BEBT.
+BT_THICK_SCHEME = "FROM_BT_CONT" ! default = "HYBRID"
+                                ! A string describing the scheme that is used to set the
+                                ! open face areas used for barotropic transport and the
+                                ! relative weights of the accelerations. Valid values are:
+                                !    ARITHMETIC - arithmetic mean layer thicknesses
+                                !    HARMONIC - harmonic mean layer thicknesses
+                                !    HYBRID (the default) - use arithmetic means for
+                                !       layers above the shallowest bottom, the harmonic
+                                !       mean for layers below, and a weighted average for
+                                !       layers that straddle that depth
+                                !    FROM_BT_CONT - use the average thicknesses kept
+                                !       in the h_u and h_v fields of the BT_cont_type
+BEBT = 0.2                      !   [nondim] default = 0.1
+                                ! BEBT determines whether the barotropic time stepping
+                                ! uses the forward-backward time-stepping scheme or a
+                                ! backward Euler scheme. BEBT is valid in the range from
+                                ! 0 (for a forward-backward treatment of nonrotating
+                                ! gravity waves) to 1 (for a backward Euler treatment).
+                                ! In practice, BEBT must be greater than about 0.05.
+DTBT = -0.9                     !   [s or nondim] default = -0.98
+                                ! The barotropic time step, in s. DTBT is only used with
+                                ! the split explicit time stepping. To set the time step
+                                ! automatically based the maximum stable value use 0, or
+                                ! a negative value gives the fraction of the stable value.
+                                ! Setting DTBT to 0 is the same as setting it to -0.98.
+                                ! The value of DTBT that will actually be used is an
+                                ! integer fraction of DT, rounding down.
     !  Parameters of module MOM_vert_friction
 BOTTOMDRAGLAW = False           !   [Boolean] default = True
                                 ! If true, the bottom stress is calculated with a drag
@@ -314,54 +362,6 @@ TOLERANCE_ENT = 1.0E-05         !   [m] default = 0.0
                                 ! The tolerance with which to solve for entrainment values.
     !  Parameters of module MOM_regularize_layers
     !  Parameters of module MOM_opacity
-    !  Parameters of module MOM_barotropic
-BOUND_BT_CORRECTION = True      !   [Boolean] default = False
-                                ! If true, the corrective pseudo mass-fluxes into the
-                                ! barotropic solver are limited to values that require
-                                ! less than 0.1*MAXVEL to be accommodated.
-!BT x-halo = 0                  !
-                                ! The barotropic x-halo size that is actually used.
-!BT y-halo = 0                  !
-                                ! The barotropic y-halo size that is actually used.
-NONLINEAR_BT_CONTINUITY = True  !   [Boolean] default = False
-                                ! If true, use nonlinear transports in the barotropic
-                                ! continuity equation.  This does not apply if
-                                ! USE_BT_CONT_TYPE is true.
-BT_PROJECT_VELOCITY = True      !   [Boolean] default = False
-                                ! If true, step the barotropic velocity first and project
-                                ! out the velocity tendancy by 1+BEBT when calculating the
-                                ! transport.  The default (false) is to use a predictor
-                                ! continuity step to find the pressure field, and then
-                                ! to do a corrector continuity step using a weighted
-                                ! average of the old and new velocities, with weights
-                                ! of (1-BEBT) and BEBT.
-BT_THICK_SCHEME = "FROM_BT_CONT" ! default = "HYBRID"
-                                ! A string describing the scheme that is used to set the
-                                ! open face areas used for barotropic transport and the
-                                ! relative weights of the accelerations. Valid values are:
-                                !    ARITHMETIC - arithmetic mean layer thicknesses
-                                !    HARMONIC - harmonic mean layer thicknesses
-                                !    HYBRID (the default) - use arithmetic means for
-                                !       layers above the shallowest bottom, the harmonic
-                                !       mean for layers below, and a weighted average for
-                                !       layers that straddle that depth
-                                !    FROM_BT_CONT - use the average thicknesses kept
-                                !       in the h_u and h_v fields of the BT_cont_type
-BEBT = 0.2                      !   [nondim] default = 0.1
-                                ! BEBT determines whether the barotropic time stepping
-                                ! uses the forward-backward time-stepping scheme or a
-                                ! backward Euler scheme. BEBT is valid in the range from
-                                ! 0 (for a forward-backward treatment of nonrotating
-                                ! gravity waves) to 1 (for a backward Euler treatment).
-                                ! In practice, BEBT must be greater than about 0.05.
-DTBT = -0.9                     !   [s or nondim] default = -0.98
-                                ! The barotropic time step, in s. DTBT is only used with
-                                ! the split explicit time stepping. To set the time step
-                                ! automatically based the maximum stable value use 0, or
-                                ! a negative value gives the fraction of the stable value.
-                                ! Setting DTBT to 0 is the same as setting it to -0.98.
-                                ! The value of DTBT that will actually be used is an
-                                ! integer fraction of DT, rounding down.
     !  Parameters of module MOM_surface_forcing
 VARIABLE_WINDS = False          !   [Boolean] default = True
                                 ! If true, the winds vary in time after the initialization.

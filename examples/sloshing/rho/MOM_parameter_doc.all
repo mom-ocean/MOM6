@@ -39,7 +39,7 @@ NJGLOBAL = 2                    !
                                 ! The total number of thickness grid points in the
                                 ! y-direction in the physical domain. With STATIC_MEMORY_
                                 ! this is set in MOM_memory.h at compile time.
-!NIPROC = 2                     !
+!NIPROC = 4                     !
                                 ! The number of processors in the x-direction. With
                                 ! STATIC_MEMORY_ this is set in MOM_memory.h at compile time.
 !NJPROC = 1                     !
@@ -481,6 +481,63 @@ APPLY_OBC_U = False             !   [Boolean] default = False
 APPLY_OBC_V = False             !   [Boolean] default = False
                                 ! If true, open boundary conditions may be set at some
                                 ! v-points, with the configuration controlled by OBC_CONFIG
+BOUNDARY_EXTRAPOLATION_PRESSURE = True !   [Boolean] default = True
+                                ! When defined, the reconstruction is extrapolated
+                                ! within boundary cells rather than assume PCM for the.
+                                ! calculation of pressure. e.g. if PPM is used, a
+                                ! PPM reconstruction will also be used within
+                                ! boundary cells.
+RECONSTRUCT_FOR_PRESSURE = True !   [Boolean] default = True
+                                ! If True, use vertical reconstruction of T/S within
+                                ! the integrals of teh FV pressure gradient calculation.
+                                ! If False, use the constant-by-layer algorithm.
+                                ! By default, this is True when using ALE and False otherwise.
+PRESSURE_RECONSTRUCTION_SCHEME = 1 ! default = 1
+                                ! Type of vertical reconstruction of T/S to use in integrals
+                                ! within the FV pressure gradient calculation. 1: PLM reconstruction.
+                                !  2: PPM reconstruction.
+MIN_THICKNESS = 0.001           !   [not defined] default = 0.001
+                                ! When regridding, this is the minimum layer
+                                ! thickness allowed.
+REGRIDDING_COORDINATE_MODE = "RHO" ! default = "LAYER"
+                                ! Coordinate mode for vertical regridding.
+                                ! Choose among the following possibilities:
+                                !  LAYER - Isopycnal or stacked shallow water layers
+                                !  Z*    - stetched geopotential z*
+                                !  SIGMA - terrain following coordinates
+                                !  RHO   - continuous isopycnal
+INTERPOLATION_SCHEME = "PQM_IH4IH3" ! default = "P1M_H2"
+                                ! This sets the interpolation scheme to use to
+                                ! determine the new grid. These parameters are
+                                ! only relevant when REGRIDDING_COORDINATE_MODE is
+                                ! set to a function of state. Otherwise, it is not
+                                ! used. It can be one of the following schemes:
+                                !  P1M_H2     (2nd-order accurate)
+                                !  P1M_H4     (2nd-order accurate)
+                                !  P1M_IH4    (2nd-order accurate)
+                                !  PLM        (2nd-order accurate)
+                                !  PPM_H4     (3rd-order accurate)
+                                !  PPM_IH4    (3rd-order accurate)
+                                !  P3M_IH4IH3 (4th-order accurate)
+                                !  P3M_IH6IH5 (4th-order accurate)
+                                !  PQM_IH4IH3 (4th-order accurate)
+                                !  PQM_IH6IH5 (5th-order accurate)
+BOUNDARY_EXTRAPOLATION = True   !   [Boolean] default = False
+                                ! When defined, a proper high-order reconstruction
+                                ! scheme is used within boundary cells rather
+                                ! than PCM. E.g., if PPM is used for remapping, a
+                                ! PPM reconstruction will also be used within
+                                ! boundary cells.
+REMAPPING_SCHEME = "PQM_IH4IH3" ! default = "PLM"
+                                ! This sets the reconstruction scheme used
+                                ! for vertical remapping for all variables.
+                                ! It can be one of the following schemes:
+                                ! PCM         (1st-order accurate)
+                                ! PLM         (2nd-order accurate)
+                                ! PPM_H4      (3rd-order accurate)
+                                ! PPM_IH4     (3rd-order accurate)
+                                ! PQM_IH4IH3  (4th-order accurate)
+                                ! PQM_IH6IH5  (5th-order accurate)
 CONTINUITY_SCHEME = "PPM"       ! default = "PPM"
                                 ! CONTINUITY_SCHEME selects the discretization for the
                                 ! continuity solver. The only valid value currently is:
@@ -605,6 +662,123 @@ HORVISC_BOUND_COEF = 0.8        !   [nondim] default = 0.8
                                 ! The nondimensional coefficient of the ratio of the
                                 ! viscosity bounds to the theoretical maximum for
                                 ! stability without considering other terms.
+    !  Parameters of module MOM_barotropic
+BOUND_BT_CORRECTION = True      !   [Boolean] default = False
+                                ! If true, the corrective pseudo mass-fluxes into the
+                                ! barotropic solver are limited to values that require
+                                ! less than 0.1*MAXVEL to be accommodated.
+GRADUAL_BT_ICS = False          !   [Boolean] default = False
+                                ! If true, adjust the initial conditions for the
+                                ! barotropic solver to the values from the layered
+                                ! solution over a whole timestep instead of instantly.
+                                ! This is a decent approximation to the inclusion of
+                                ! sum(u dh_dt) while also correcting for truncation errors.
+BT_USE_WIDE_HALOS = True        !   [Boolean] default = True
+                                ! If true, use wide halos and march in during the
+                                ! barotropic time stepping for efficiency.
+BTHALO = 0                      ! default = 0
+                                ! The minimum halo size for the barotropic solver.
+!BT x-halo = 0                  !
+                                ! The barotropic x-halo size that is actually used.
+!BT y-halo = 0                  !
+                                ! The barotropic y-halo size that is actually used.
+USE_BT_CONT_TYPE = True         !   [Boolean] default = True
+                                ! If true, use a structure with elements that describe
+                                ! effective face areas from the summed continuity solver
+                                ! as a function the barotropic flow in coupling between
+                                ! the barotropic and baroclinic flow.  This is only used
+                                ! if SPLIT is true.
+NONLINEAR_BT_CONTINUITY = False !   [Boolean] default = False
+                                ! If true, use nonlinear transports in the barotropic
+                                ! continuity equation.  This does not apply if
+                                ! USE_BT_CONT_TYPE is true.
+RESCALE_BT_FACE_AREAS = False   !   [Boolean] default = False
+                                ! If true, the face areas used by the barotropic solver
+                                ! are rescaled to approximately reflect the open face
+                                ! areas of the interior layers.  This probably requires
+                                ! FLUX_BT_COUPLING to work, and should not be used with
+                                ! USE_BT_CONT_TYPE.
+BT_MASS_SOURCE_LIMIT = 0.0      !   [nondim] default = 0.0
+                                ! The fraction of the initial depth of the ocean that can
+                                ! be added to or removed from the bartropic solution
+                                ! within a thermodynamic time step.  By default this is 0
+                                ! for no correction.
+BT_PROJECT_VELOCITY = False     !   [Boolean] default = False
+                                ! If true, step the barotropic velocity first and project
+                                ! out the velocity tendancy by 1+BEBT when calculating the
+                                ! transport.  The default (false) is to use a predictor
+                                ! continuity step to find the pressure field, and then
+                                ! to do a corrector continuity step using a weighted
+                                ! average of the old and new velocities, with weights
+                                ! of (1-BEBT) and BEBT.
+DYNAMIC_SURFACE_PRESSURE = False !   [Boolean] default = False
+                                ! If true, add a dynamic pressure due to a viscous ice
+                                ! shelf, for instance.
+SADOURNY = True                 !   [Boolean] default = True
+                                ! If true, the Coriolis terms are discretized with the
+                                ! Sadourny (1975) energy conserving scheme, otherwise
+                                ! the Arakawa & Hsu scheme is used.  If the internal
+                                ! deformation radius is not resolved, the Sadourny scheme
+                                ! should probably be used.
+BT_THICK_SCHEME = "HYBRID"      ! default = "HYBRID"
+                                ! A string describing the scheme that is used to set the
+                                ! open face areas used for barotropic transport and the
+                                ! relative weights of the accelerations. Valid values are:
+                                !    ARITHMETIC - arithmetic mean layer thicknesses
+                                !    HARMONIC - harmonic mean layer thicknesses
+                                !    HYBRID (the default) - use arithmetic means for
+                                !       layers above the shallowest bottom, the harmonic
+                                !       mean for layers below, and a weighted average for
+                                !       layers that straddle that depth
+                                !    FROM_BT_CONT - use the average thicknesses kept
+                                !       in the h_u and h_v fields of the BT_cont_type
+APPLY_BT_DRAG = True            !   [Boolean] default = True
+                                ! If defined, bottom drag is applied within the
+                                ! barotropic solver.
+BT_STRONG_DRAG = False          !   [Boolean] default = False
+                                ! If true, use a stronger estimate of the retarding
+                                ! effects of strong bottom drag, by making it implicit
+                                ! with the barotropic time-step instead of implicit with
+                                ! the baroclinic time-step and dividing by the number of
+                                ! barotropic steps.
+CLIP_BT_VELOCITY = False        !   [Boolean] default = False
+                                ! If true, limit any velocity components that exceed
+                                ! MAXVEL.  This should only be used as a desperate
+                                ! debugging measure.
+MAXCFL_BT_CONT = 0.1            !   [nondim] default = 0.1
+                                ! The maximum permitted CFL number associated with the
+                                ! barotropic accelerations from the summed velocities
+                                ! times the time-derivatives of thicknesses.
+DT_BT_FILTER = -0.25            !   [sec or nondim] default = -0.25
+                                ! A time-scale over which the barotropic mode solutions
+                                ! are filtered, in seconds if positive, or as a fraction
+                                ! of DT if negative. When used this can never be taken to
+                                ! be longer than 2*dt.  Set this to 0 to apply no filtering.
+G_BT_EXTRA = 0.0                !   [nondim] default = 0.0
+                                ! A nondimensional factor by which gtot is enhanced.
+SSH_EXTRA = 10.0                !   [m] default = 10.0
+                                ! An estimate of how much higher SSH might get, for use
+                                ! in calculating the safe external wave speed. The
+                                ! default is the minimum of 10 m or 5% of MAXIMUM_DEPTH.
+DEBUG_BT = False                !   [Boolean] default = False
+                                ! If true, write out verbose debugging data within the
+                                ! barotropic time-stepping loop. The data volume can be
+                                ! quite large if this is true.
+BEBT = 0.2                      !   [nondim] default = 0.1
+                                ! BEBT determines whether the barotropic time stepping
+                                ! uses the forward-backward time-stepping scheme or a
+                                ! backward Euler scheme. BEBT is valid in the range from
+                                ! 0 (for a forward-backward treatment of nonrotating
+                                ! gravity waves) to 1 (for a backward Euler treatment).
+                                ! In practice, BEBT must be greater than about 0.05.
+DTBT = 10.0                     !   [s or nondim] default = -0.98
+                                ! The barotropic time step, in s. DTBT is only used with
+                                ! the split explicit time stepping. To set the time step
+                                ! automatically based the maximum stable value use 0, or
+                                ! a negative value gives the fraction of the stable value.
+                                ! Setting DTBT to 0 is the same as setting it to -0.98.
+                                ! The value of DTBT that will actually be used is an
+                                ! integer fraction of DT, rounding down.
     !  Parameters of module MOM_vert_friction
 BOTTOMDRAGLAW = True            !   [Boolean] default = True
                                 ! If true, the bottom stress is calculated with a drag
@@ -798,63 +972,6 @@ RESOLN_SCALED_KHTR = False      !   [Boolean] default = False
                                 ! If true, the epipycnal tracer diffusivity is scaled
                                 ! away when the first baroclinic deformation radius is
                                 ! well resolved.
-BOUNDARY_EXTRAPOLATION_PRESSURE = True !   [Boolean] default = True
-                                ! When defined, the reconstruction is extrapolated
-                                ! within boundary cells rather than assume PCM for the.
-                                ! calculation of pressure. e.g. if PPM is used, a
-                                ! PPM reconstruction will also be used within
-                                ! boundary cells.
-RECONSTRUCT_FOR_PRESSURE = True !   [Boolean] default = True
-                                ! If True, use vertical reconstruction of T/S within
-                                ! the integrals of teh FV pressure gradient calculation.
-                                ! If False, use the constant-by-layer algorithm.
-                                ! By default, this is True when using ALE and False otherwise.
-PRESSURE_RECONSTRUCTION_SCHEME = 1 ! default = 1
-                                ! Type of vertical reconstruction of T/S to use in integrals
-                                ! within the FV pressure gradient calculation. 1: PLM reconstruction.
-                                !  2: PPM reconstruction.
-MIN_THICKNESS = 0.001           !   [not defined] default = 0.001
-                                ! When regridding, this is the minimum layer
-                                ! thickness allowed.
-REGRIDDING_COORDINATE_MODE = "RHO" ! default = "LAYER"
-                                ! Coordinate mode for vertical regridding.
-                                ! Choose among the following possibilities:
-                                !  LAYER - Isopycnal or stacked shallow water layers
-                                !  Z*    - stetched geopotential z*
-                                !  SIGMA - terrain following coordinates
-                                !  RHO   - continuous isopycnal
-INTERPOLATION_SCHEME = "PQM_IH4IH3" ! default = "P1M_H2"
-                                ! This sets the interpolation scheme to use to
-                                ! determine the new grid. These parameters are
-                                ! only relevant when REGRIDDING_COORDINATE_MODE is
-                                ! set to a function of state. Otherwise, it is not
-                                ! used. It can be one of the following schemes:
-                                !  P1M_H2     (2nd-order accurate)
-                                !  P1M_H4     (2nd-order accurate)
-                                !  P1M_IH4    (2nd-order accurate)
-                                !  PLM        (2nd-order accurate)
-                                !  PPM_H4     (3rd-order accurate)
-                                !  PPM_IH4    (3rd-order accurate)
-                                !  P3M_IH4IH3 (4th-order accurate)
-                                !  P3M_IH6IH5 (4th-order accurate)
-                                !  PQM_IH4IH3 (4th-order accurate)
-                                !  PQM_IH6IH5 (5th-order accurate)
-BOUNDARY_EXTRAPOLATION = True   !   [Boolean] default = False
-                                ! When defined, a proper high-order reconstruction
-                                ! scheme is used within boundary cells rather
-                                ! than PCM. E.g., if PPM is used for remapping, a
-                                ! PPM reconstruction will also be used within
-                                ! boundary cells.
-REMAPPING_SCHEME = "PQM_IH4IH3" ! default = "PLM"
-                                ! This sets the reconstruction scheme used
-                                ! for vertical remapping for all variables.
-                                ! It can be one of the following schemes:
-                                ! PCM         (1st-order accurate)
-                                ! PLM         (2nd-order accurate)
-                                ! PPM_H4      (3rd-order accurate)
-                                ! PPM_IH4     (3rd-order accurate)
-                                ! PQM_IH4IH3  (4th-order accurate)
-                                ! PQM_IH6IH5  (5th-order accurate)
 Z_OUTPUT_GRID_FILE = ""         ! default = ""
                                 ! The file that specifies the vertical grid for
                                 ! depth-space diagnostics, or blank to disable
@@ -1011,123 +1128,6 @@ PEN_SW_NBANDS = 1               ! default = 1
 OPACITY_LAND_VALUE = 10.0       !   [m-1] default = 10.0
                                 ! The value to use for opacity over land. The default is
                                 ! 10 m-1 - a value for muddy water.
-    !  Parameters of module MOM_barotropic
-BOUND_BT_CORRECTION = True      !   [Boolean] default = False
-                                ! If true, the corrective pseudo mass-fluxes into the
-                                ! barotropic solver are limited to values that require
-                                ! less than 0.1*MAXVEL to be accommodated.
-GRADUAL_BT_ICS = False          !   [Boolean] default = False
-                                ! If true, adjust the initial conditions for the
-                                ! barotropic solver to the values from the layered
-                                ! solution over a whole timestep instead of instantly.
-                                ! This is a decent approximation to the inclusion of
-                                ! sum(u dh_dt) while also correcting for truncation errors.
-BT_USE_WIDE_HALOS = True        !   [Boolean] default = True
-                                ! If true, use wide halos and march in during the
-                                ! barotropic time stepping for efficiency.
-BTHALO = 0                      ! default = 0
-                                ! The minimum halo size for the barotropic solver.
-!BT x-halo = 0                  !
-                                ! The barotropic x-halo size that is actually used.
-!BT y-halo = 0                  !
-                                ! The barotropic y-halo size that is actually used.
-USE_BT_CONT_TYPE = True         !   [Boolean] default = True
-                                ! If true, use a structure with elements that describe
-                                ! effective face areas from the summed continuity solver
-                                ! as a function the barotropic flow in coupling between
-                                ! the barotropic and baroclinic flow.  This is only used
-                                ! if SPLIT is true.
-NONLINEAR_BT_CONTINUITY = False !   [Boolean] default = False
-                                ! If true, use nonlinear transports in the barotropic
-                                ! continuity equation.  This does not apply if
-                                ! USE_BT_CONT_TYPE is true.
-RESCALE_BT_FACE_AREAS = False   !   [Boolean] default = False
-                                ! If true, the face areas used by the barotropic solver
-                                ! are rescaled to approximately reflect the open face
-                                ! areas of the interior layers.  This probably requires
-                                ! FLUX_BT_COUPLING to work, and should not be used with
-                                ! USE_BT_CONT_TYPE.
-BT_MASS_SOURCE_LIMIT = 0.0      !   [nondim] default = 0.0
-                                ! The fraction of the initial depth of the ocean that can
-                                ! be added to or removed from the bartropic solution
-                                ! within a thermodynamic time step.  By default this is 0
-                                ! for no correction.
-BT_PROJECT_VELOCITY = False     !   [Boolean] default = False
-                                ! If true, step the barotropic velocity first and project
-                                ! out the velocity tendancy by 1+BEBT when calculating the
-                                ! transport.  The default (false) is to use a predictor
-                                ! continuity step to find the pressure field, and then
-                                ! to do a corrector continuity step using a weighted
-                                ! average of the old and new velocities, with weights
-                                ! of (1-BEBT) and BEBT.
-DYNAMIC_SURFACE_PRESSURE = False !   [Boolean] default = False
-                                ! If true, add a dynamic pressure due to a viscous ice
-                                ! shelf, for instance.
-SADOURNY = True                 !   [Boolean] default = True
-                                ! If true, the Coriolis terms are discretized with the
-                                ! Sadourny (1975) energy conserving scheme, otherwise
-                                ! the Arakawa & Hsu scheme is used.  If the internal
-                                ! deformation radius is not resolved, the Sadourny scheme
-                                ! should probably be used.
-BT_THICK_SCHEME = "HYBRID"      ! default = "HYBRID"
-                                ! A string describing the scheme that is used to set the
-                                ! open face areas used for barotropic transport and the
-                                ! relative weights of the accelerations. Valid values are:
-                                !    ARITHMETIC - arithmetic mean layer thicknesses
-                                !    HARMONIC - harmonic mean layer thicknesses
-                                !    HYBRID (the default) - use arithmetic means for
-                                !       layers above the shallowest bottom, the harmonic
-                                !       mean for layers below, and a weighted average for
-                                !       layers that straddle that depth
-                                !    FROM_BT_CONT - use the average thicknesses kept
-                                !       in the h_u and h_v fields of the BT_cont_type
-APPLY_BT_DRAG = True            !   [Boolean] default = True
-                                ! If defined, bottom drag is applied within the
-                                ! barotropic solver.
-BT_STRONG_DRAG = False          !   [Boolean] default = False
-                                ! If true, use a stronger estimate of the retarding
-                                ! effects of strong bottom drag, by making it implicit
-                                ! with the barotropic time-step instead of implicit with
-                                ! the baroclinic time-step and dividing by the number of
-                                ! barotropic steps.
-CLIP_BT_VELOCITY = False        !   [Boolean] default = False
-                                ! If true, limit any velocity components that exceed
-                                ! MAXVEL.  This should only be used as a desperate
-                                ! debugging measure.
-MAXCFL_BT_CONT = 0.1            !   [nondim] default = 0.1
-                                ! The maximum permitted CFL number associated with the
-                                ! barotropic accelerations from the summed velocities
-                                ! times the time-derivatives of thicknesses.
-DT_BT_FILTER = -0.25            !   [sec or nondim] default = -0.25
-                                ! A time-scale over which the barotropic mode solutions
-                                ! are filtered, in seconds if positive, or as a fraction
-                                ! of DT if negative. When used this can never be taken to
-                                ! be longer than 2*dt.  Set this to 0 to apply no filtering.
-G_BT_EXTRA = 0.0                !   [nondim] default = 0.0
-                                ! A nondimensional factor by which gtot is enhanced.
-SSH_EXTRA = 10.0                !   [m] default = 10.0
-                                ! An estimate of how much higher SSH might get, for use
-                                ! in calculating the safe external wave speed. The
-                                ! default is the minimum of 10 m or 5% of MAXIMUM_DEPTH.
-DEBUG_BT = False                !   [Boolean] default = False
-                                ! If true, write out verbose debugging data within the
-                                ! barotropic time-stepping loop. The data volume can be
-                                ! quite large if this is true.
-BEBT = 0.2                      !   [nondim] default = 0.1
-                                ! BEBT determines whether the barotropic time stepping
-                                ! uses the forward-backward time-stepping scheme or a
-                                ! backward Euler scheme. BEBT is valid in the range from
-                                ! 0 (for a forward-backward treatment of nonrotating
-                                ! gravity waves) to 1 (for a backward Euler treatment).
-                                ! In practice, BEBT must be greater than about 0.05.
-DTBT = 10.0                     !   [s or nondim] default = -0.98
-                                ! The barotropic time step, in s. DTBT is only used with
-                                ! the split explicit time stepping. To set the time step
-                                ! automatically based the maximum stable value use 0, or
-                                ! a negative value gives the fraction of the stable value.
-                                ! Setting DTBT to 0 is the same as setting it to -0.98.
-                                ! The value of DTBT that will actually be used is an
-                                ! integer fraction of DT, rounding down.
     !  Parameters of module MOM_surface_forcing
 VARIABLE_WINDS = False          !   [Boolean] default = True
                                 ! If true, the winds vary in time after the initialization.
@@ -1195,11 +1195,11 @@ DT_FORCING = 3600.0             !   [s] default = 900.0
                                 ! The time step for changing forcing, coupling with other
                                 ! components, or potentially writing certain diagnostics.
                                 ! The default value is given by DT.
-DAYMAX = 5.0                    !   [days]
+DAYMAX = 5.0                    !   [days] default = 5.0
                                 ! The final time of the whole simulation, in units of
                                 ! TIMEUNIT seconds.  This also sets the potential end
                                 ! time of the present run segment if the end time is
-                                ! not set via ocean_solo_nml in input.nml.
+                                ! not set (as it was here) via ocean_solo_nml in input.nml.
 RESTART_CONTROL = -1            ! default = 1
                                 ! An integer whose bits encode which restart files are
                                 ! written. Add 2 (bit 1) for a time-stamped file, and odd

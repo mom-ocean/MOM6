@@ -68,17 +68,9 @@ module MOM_dynamics_unsplit
 !********+*********+*********+*********+*********+*********+*********+**
 
 
-use MOM_variables, only : vertvisc_type, ocean_OBC_type
-use MOM_variables, only : BT_cont_type, alloc_bt_cont_type, dealloc_bt_cont_type
-use MOM_forcing_type, only : &
-  forcing         ! A structure containing pointers to the forcing fields
-                  ! which may be used to drive MOM.  All fluxes are
-                  ! positive downward.
-use MOM_variables, only : &
-  thermo_var_ptrs ! A structure containing pointers to an assortment of
-                  ! thermodynamic fields that may be available, including
-                  ! potential temperature, salinity and mixed layer density.
-
+use MOM_variables, only : vertvisc_type, ocean_OBC_type, thermo_var_ptrs
+use MOM_forcing_type, only : forcing
+use MOM_checksum_packages, only : MOM_thermo_chksum, MOM_state_chksum, MOM_accel_chksum
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock, only : CLOCK_COMPONENT, CLOCK_SUBCOMPONENT
 use MOM_cpu_clock, only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
@@ -102,12 +94,6 @@ use MOM_time_manager, only : operator(-), operator(>), operator(*), operator(/)
 
 use MOM_continuity, only : continuity, continuity_init, continuity_CS
 use MOM_CoriolisAdv, only : CorAdCalc, CoriolisAdv_init, CoriolisAdv_CS
-use MOM_diabatic_driver, only : diabatic, diabatic_driver_init, diabatic_CS
-use MOM_diagnostics, only : calculate_diagnostic_fields, MOM_diagnostics_init
-use MOM_diagnostics, only : diagnostics_CS
-use MOM_diag_to_Z, only : calculate_Z_diag_fields, calculate_Z_transport
-use MOM_diag_to_Z, only : MOM_diag_to_Z_init, register_Z_tracer, diag_to_Z_CS
-use MOM_diag_to_Z, only : MOM_diag_to_Z_end
 use MOM_EOS, only : select_eqn_of_state
 use MOM_error_checking, only : check_redundant
 use MOM_grid, only : MOM_grid_init, ocean_grid_type, get_thickness_units
@@ -118,16 +104,10 @@ use MOM_open_boundary, only : Radiation_Open_Bdry_Conds, open_boundary_init
 use MOM_open_boundary, only : open_boundary_CS
 use MOM_PressureForce, only : PressureForce, PressureForce_init, PressureForce_CS
 use MOM_tidal_forcing, only : tidal_forcing_init, tidal_forcing_CS
-use MOM_tracer, only : advect_tracer, register_tracer, add_tracer_diagnostics
-use MOM_tracer, only : add_tracer_2d_diagnostics, tracer_hordiff
-use MOM_tracer, only : advect_tracer_init, advect_tracer_diag_init, advect_tracer_CS
-use MOM_tracer_flow_control, only : call_tracer_register, tracer_flow_control_CS
-use MOM_tracer_flow_control, only : tracer_flow_control_init, call_tracer_surface_state
 use MOM_vert_friction, only : vertvisc, vertvisc_coef, vertvisc_remnant
 use MOM_vert_friction, only : vertvisc_limit_vel, vertvisc_init, vertvisc_CS
 use MOM_set_visc, only : set_viscous_BBL, set_viscous_ML, set_visc_init, set_visc_CS
-use MOM_CS_type, only : MOM_control_struct
-use MOM_CS_type, only : MOM_state_chksum, MOM_thermo_chksum, MOM_accel_chksum
+use MOM_CS_type, only : MOM_control_struct, MOM_dyn_control_struct
 
 implicit none ; private
 
@@ -144,24 +124,32 @@ contains
 
 ! =============================================================================
 
-subroutine step_MOM_dyn_unsplit(u, v, h, Time_local, dt, fluxes, &
-                  p_surf_begin, p_surf_end, uh, vh, eta_av, G, CS)
+subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
+                  p_surf_begin, p_surf_end, uh, vh, uhtr, vhtr, eta_av, G, CS, top_CS)
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(inout) :: u
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(inout) :: v
   real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(inout) :: h
+  type(thermo_var_ptrs),                  intent(in)    :: tv
+  type(vertvisc_type),                    intent(inout) :: visc
   type(time_type),                        intent(in)    :: Time_local
   real,                                   intent(in)    :: dt
   type(forcing),                          intent(in)    :: fluxes
   real, dimension(:,:),                   pointer       :: p_surf_begin, p_surf_end
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(inout) :: uh
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(inout) :: vh
+  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(inout) :: uhtr
+  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(inout) :: vhtr
   real, dimension(NIMEM_,NJMEM_),         intent(out)   :: eta_av
   type(ocean_grid_type),                  intent(inout) :: G
-  type(MOM_control_struct),               pointer      :: CS
+  type(MOM_dyn_control_struct),           pointer       :: CS
+  type(MOM_control_struct),               pointer       :: top_CS
 ! Arguments: u - The input and output zonal velocity, in m s-1.
-!  (in)      v - The input and output meridional velocity, in m s-1.
-!  (in)      h - The input and output layer thicknesses, in m or kg m-2,
+!  (inout)   v - The input and output meridional velocity, in m s-1.
+!  (inout)   h - The input and output layer thicknesses, in m or kg m-2,
 !                depending on whether the Boussinesq approximation is made.
+!  (in)      tv - a structure pointing to various thermodynamic variables.
+!  (inout)   visc - A structure containing vertical viscosities, bottom drag
+!                   viscosities, and related fields.
 !  (in)      Time_local - The model time at the end of the time step.
 !  (in)      dt - The time step in s.
 !  (in)      fluxes - A structure containing pointers to any possible
@@ -172,6 +160,10 @@ subroutine step_MOM_dyn_unsplit(u, v, h, Time_local, dt, fluxes, &
 !                     at the end of this dynamic step, in Pa.
 !  (inout)   uh - The zonal volume or mass transport, in m3 s-1 or kg s-1.
 !  (inout)   vh - The meridional volume or mass transport, in m3 s-1 or kg s-1.
+!  (inout)   uhtr - The accumulated zonal volume or mass transport since the last
+!                   tracer advection, in m3 or kg.
+!  (inout)   vhtr - The accumulated meridional volume or mass transport since the last
+!                   tracer advection, in m3 or kg.
 !  (out)     eta_av - The time-mean free surface height or column mass, in m or
 !                     kg m-2.
 !  (in)      G - The ocean's grid structure.
@@ -211,7 +203,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, Time_local, dt, fluxes, &
 ! diffu = horizontal viscosity terms (u,h)
   call enable_averaging(dt,Time_local, CS%diag)
   call cpu_clock_begin(id_clock_horvisc)
-  call horizontal_viscosity(u, v, h, CS%diffu, CS%diffv, CS%MEKE, CS%Varmix, &
+  call horizontal_viscosity(u, v, h, CS%diffu, CS%diffv, top_CS%MEKE, top_CS%Varmix, &
                             G, CS%hor_visc_CSp)
   call cpu_clock_end(id_clock_horvisc)
   call disable_averaging(CS%diag)
@@ -246,10 +238,10 @@ subroutine step_MOM_dyn_unsplit(u, v, h, Time_local, dt, fluxes, &
       v(i,j,k) = v(i,j,k) + dt * CS%diffv(i,j,k) * G%mask2dCv(i,j)
     enddo ; enddo
     do j=js-2,je+2 ; do I=Isq-2,Ieq+2
-      CS%uhtr(i,j,k) = CS%uhtr(i,j,k) + 0.5*dt*uh(i,j,k)
+      uhtr(i,j,k) = uhtr(i,j,k) + 0.5*dt*uh(i,j,k)
     enddo ; enddo
     do J=Jsq-2,Jeq+2 ; do i=is-2,ie+2
-      CS%vhtr(i,j,k) = CS%vhtr(i,j,k) + 0.5*dt*vh(i,j,k)
+      vhtr(i,j,k) = vhtr(i,j,k) + 0.5*dt*vh(i,j,k)
     enddo ; enddo
   enddo
   call cpu_clock_end(id_clock_mom_update)
@@ -267,8 +259,8 @@ subroutine step_MOM_dyn_unsplit(u, v, h, Time_local, dt, fluxes, &
   if (dyn_p_surf) then ; do j=js-2,je+2 ; do i=is-2,ie+2
     p_surf(i,j) = 0.75*p_surf_begin(i,j) + 0.25*p_surf_end(i,j)
   enddo ; enddo ; endif
-  call PressureForce(h_av, CS%tv, CS%PFu, CS%PFv, G, &
-                     CS%PressureForce_CSp, CS%regridding_opts, p_surf)
+  call PressureForce(h_av, tv, CS%PFu, CS%PFv, G, &
+                     CS%PressureForce_CSp, CS%ALE_CSp, p_surf)
   call cpu_clock_end(id_clock_pres)
 
 ! up = u + dt_pred * (PFu + CAu)
@@ -289,34 +281,34 @@ subroutine step_MOM_dyn_unsplit(u, v, h, Time_local, dt, fluxes, &
                           CS%diffu, CS%diffv, G)
   endif
 
-! CS%visc contains viscosity and BBL thickness (u_in,h_in)
-  if (CS%calc_bbl) then
-    call enable_averaging(CS%bbl_calc_time_interval, &
+! visc contains viscosity and BBL thickness (u_in,h_in)
+  if (visc%calc_bbl) then
+    call enable_averaging(top_CS%bbl_calc_time_interval, &
                           Time_local-set_time(int(dt)), CS%diag)
-    call set_viscous_BBL(u, v, h_av, CS%tv, CS%visc, G, CS%set_visc_CSp)
+    call set_viscous_BBL(u, v, h_av, tv, visc, G, CS%set_visc_CSp)
     call cpu_clock_begin(id_clock_pass)
-    if (associated(CS%visc%Ray_u) .and. associated(CS%visc%Ray_v)) &
-      call pass_vector(CS%visc%Ray_u, CS%visc%Ray_v, G%Domain, &
+    if (associated(visc%Ray_u) .and. associated(visc%Ray_v)) &
+      call pass_vector(visc%Ray_u, visc%Ray_v, G%Domain, &
                      To_All+SCALAR_PAIR, CGRID_NE)
-    if (associated(CS%visc%kv_bbl_u) .and. associated(CS%visc%kv_bbl_v)) then
-      call pass_vector(CS%visc%bbl_thick_u, CS%visc%bbl_thick_v, G%Domain, &
+    if (associated(visc%kv_bbl_u) .and. associated(visc%kv_bbl_v)) then
+      call pass_vector(visc%bbl_thick_u, visc%bbl_thick_v, G%Domain, &
                      To_All+SCALAR_PAIR, CGRID_NE, complete=.false.)
-      call pass_vector(CS%visc%kv_bbl_u, CS%visc%kv_bbl_v, G%Domain, &
+      call pass_vector(visc%kv_bbl_u, visc%kv_bbl_v, G%Domain, &
                      To_All+SCALAR_PAIR, CGRID_NE)
     endif
     call cpu_clock_end(id_clock_pass)
     call disable_averaging(CS%diag)
-    CS%calc_bbl = .false.
+    visc%calc_bbl = .false.
   endif
 
  ! up <- up + dt/2 d/dz visc d/dz up
   call cpu_clock_begin(id_clock_vertvisc)
   call enable_averaging(dt, Time_local, CS%diag)
-  call set_viscous_ML(u, v, h_av, CS%tv, fluxes, CS%visc, dt*0.5, G, &
+  call set_viscous_ML(u, v, h_av, tv, fluxes, visc, dt*0.5, G, &
                       CS%set_visc_CSp)
   call disable_averaging(CS%diag)
-  call vertvisc_coef(up, vp, h_av, fluxes, CS%visc, dt*0.5, G, CS%vertvisc_CSp)
-  call vertvisc(up, vp, h_av, fluxes, CS%visc, dt*0.5, CS%OBC, G, &
+  call vertvisc_coef(up, vp, h_av, fluxes, visc, dt*0.5, G, CS%vertvisc_CSp)
+  call vertvisc(up, vp, h_av, fluxes, visc, dt*0.5, CS%OBC, G, &
                 CS%vertvisc_CSp)
   call cpu_clock_end(id_clock_vertvisc)
   call cpu_clock_begin(id_clock_pass)
@@ -350,8 +342,8 @@ subroutine step_MOM_dyn_unsplit(u, v, h, Time_local, dt, fluxes, &
   if (dyn_p_surf) then ; do j=js-2,je+2 ; do i=is-2,ie+2
     p_surf(i,j) = 0.25*p_surf_begin(i,j) + 0.75*p_surf_end(i,j)
   enddo ; enddo ; endif
-  call PressureForce(h_av, CS%tv, CS%PFu, CS%PFv, G, &
-                     CS%PressureForce_CSp, CS%regridding_opts, p_surf)
+  call PressureForce(h_av, tv, CS%PFu, CS%PFv, G, &
+                     CS%PressureForce_CSp, CS%ALE_CSp, p_surf)
   call cpu_clock_end(id_clock_pres)
 
 ! upp = u + dt/2 * ( PFu + CAu )
@@ -374,8 +366,8 @@ subroutine step_MOM_dyn_unsplit(u, v, h, Time_local, dt, fluxes, &
 
 ! upp <- upp + dt/2 d/dz visc d/dz upp
   call cpu_clock_begin(id_clock_vertvisc)
-  call vertvisc_coef(upp, vpp, hp, fluxes, CS%visc, dt*0.5, G, CS%vertvisc_CSp)
-  call vertvisc(upp, vpp, hp, fluxes, CS%visc, dt*0.5, CS%OBC, G, &
+  call vertvisc_coef(upp, vpp, hp, fluxes, visc, dt*0.5, G, CS%vertvisc_CSp)
+  call vertvisc(upp, vpp, hp, fluxes, visc, dt*0.5, CS%OBC, G, &
                 CS%vertvisc_CSp)
   call cpu_clock_end(id_clock_vertvisc)
   call cpu_clock_begin(id_clock_pass)
@@ -406,10 +398,10 @@ subroutine step_MOM_dyn_unsplit(u, v, h, Time_local, dt, fluxes, &
       h_av(i,j,k) = 0.5*(h(i,j,k) + hp(i,j,k))
     enddo ; enddo
     do j=js-2,je+2 ; do I=Isq-2,Ieq+2
-      CS%uhtr(i,j,k) = CS%uhtr(i,j,k) + 0.5*dt*uh(i,j,k)
+      uhtr(i,j,k) = uhtr(i,j,k) + 0.5*dt*uh(i,j,k)
     enddo ; enddo
     do J=Jsq-2,Jeq+2 ; do i=is-2,ie+2
-      CS%vhtr(i,j,k) = CS%vhtr(i,j,k) + 0.5*dt*vh(i,j,k)
+      vhtr(i,j,k) = vhtr(i,j,k) + 0.5*dt*vh(i,j,k)
     enddo ; enddo
   enddo
 
@@ -421,8 +413,8 @@ subroutine step_MOM_dyn_unsplit(u, v, h, Time_local, dt, fluxes, &
 
 ! PFu = d/dx M(h_av,T,S)
   call cpu_clock_begin(id_clock_pres)
-  call PressureForce(h_av, CS%tv, CS%PFu, CS%PFv, G, &
-                     CS%PressureForce_CSp, CS%regridding_opts, p_surf)
+  call PressureForce(h_av, tv, CS%PFu, CS%PFv, G, &
+                     CS%PressureForce_CSp, CS%ALE_CSp, p_surf)
   call cpu_clock_end(id_clock_pres)
 
 ! u = u + dt * ( PFu + CAu )
@@ -437,8 +429,8 @@ subroutine step_MOM_dyn_unsplit(u, v, h, Time_local, dt, fluxes, &
 
 ! u <- u + dt d/dz visc d/dz u
   call cpu_clock_begin(id_clock_vertvisc)
-  call vertvisc_coef(u, v, h_av, fluxes, CS%visc, dt, G, CS%vertvisc_CSp)
-  call vertvisc(u, v, h_av, fluxes, CS%visc, dt, CS%OBC, G, &
+  call vertvisc_coef(u, v, h_av, fluxes, visc, dt, G, CS%vertvisc_CSp)
+  call vertvisc(u, v, h_av, fluxes, visc, dt, CS%OBC, G, &
                 CS%vertvisc_CSp, CS%taux_bot, CS%tauy_bot)
   call cpu_clock_end(id_clock_vertvisc)
   call cpu_clock_begin(id_clock_pass)
@@ -476,8 +468,8 @@ end subroutine step_MOM_dyn_unsplit
 subroutine register_restarts_dyn_unsplit(G, param_file, CS, restart_CS)
   type(ocean_grid_type),     intent(in) :: G
   type(param_file_type),     intent(in) :: param_file
-  type(MOM_control_struct), intent(in) :: CS
-  type(MOM_restart_CS),     pointer    :: restart_CS
+  type(MOM_dyn_control_struct), intent(inout) :: CS
+  type(MOM_restart_CS),         pointer       :: restart_CS
 !   This subroutine sets up any auxiliary restart variables that are specific
 ! to the unsplit time stepping scheme.  All variables registered here should
 ! have the ability to be recreated if they are not present in a restart file.
@@ -514,11 +506,20 @@ subroutine initialize_dyn_unsplit(u, v, h, Time, G, param_file, diag, CS, restar
   type(ocean_grid_type),                  intent(inout) :: G
   type(param_file_type),                  intent(in)    :: param_file
   type(diag_ptrs),                target, intent(inout) :: diag
-  type(MOM_control_struct),               intent(inout) :: CS
+  type(MOM_dyn_control_struct),           intent(inout) :: CS
   type(MOM_restart_CS),                   pointer       :: restart_CS
 
   !   This subroutine initializes any variables that are specific to this time
   ! stepping scheme, including the cpu clocks.
+
+  CS%id_CAu = register_diag_field('ocean_model', 'CAu', G%axesCuL, Time, &
+      'Zonal Coriolis and Advective Acceleration', 'meter second-2')
+  CS%id_CAv = register_diag_field('ocean_model', 'CAv', G%axesCvL, Time, &
+      'Meridional Coriolis and Advective Acceleration', 'meter second-2')
+  CS%id_PFu = register_diag_field('ocean_model', 'PFu', G%axesCuL, Time, &
+      'Zonal Pressure Force Acceleration', 'meter second-2')
+  CS%id_PFv = register_diag_field('ocean_model', 'PFv', G%axesCvL, Time, &
+      'Meridional Pressure Force Acceleration', 'meter second-2')
 
   id_clock_Cor = cpu_clock_id('(Ocean Coriolis & mom advection)', grain=CLOCK_MODULE)
   id_clock_continuity = cpu_clock_id('(Ocean continuity equation)', grain=CLOCK_MODULE)
