@@ -25,7 +25,7 @@ NJGLOBAL = 2                    !
 !NIPROC = 1                     !
                                 ! The number of processors in the x-direction. With
                                 ! STATIC_MEMORY_ this is set in MOM_memory.h at compile time.
-!NJPROC = 1                     !
+!NJPROC = 2                     !
                                 ! The number of processors in the x-direction. With
                                 ! STATIC_MEMORY_ this is set in MOM_memory.h at compile time.
     !  Parameters of module MOM_grid
