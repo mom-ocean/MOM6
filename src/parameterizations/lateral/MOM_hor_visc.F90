@@ -209,9 +209,14 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
 !                    along-isopycnal stress tensor, in m s-2.
 !  (out)     diffv - Meridional acceleration due to convergence of
 !                    the along-isopycnal stress tensor, in m s-2.
+!  (inout)   MEKE - A pointer to a structure containing fields related to
+!                   the Mesoscale Eddy Kinetic Energy.
+!  (in)      VarMix - A pointer to a structure with fields that specify the
+!                     spatially variable viscosities.
 !  (in)      G - The ocean's grid structure.
 !  (in)      CS - The control structure returned by a previous call to
 !                 hor_visc_init.
+!  (in)      OBC - A pointer to an open boundary condition type.
 
 !  By R. Hallberg, August 1998 - November 1998.
 !    This subroutine determines the acceleration due to the
