@@ -165,14 +165,12 @@ subroutine initialize_ALE( param_file, G, h, h_aux, &
   type(ALE_CS), pointer                                  :: CS
 
   ! Local variables
-  logical :: verbose, tmpLogical
+  logical :: tmpLogical
   integer :: i, j, k
   real :: tmpReal
   real, dimension(:), allocatable :: dz
   character(len=40)  :: mod = "MOM_ALE" ! This module's name.
   character(len=40) :: string, coordMode, interpScheme ! Temporary strings
-
-  verbose = .false.
 
   if (associated(CS)) then
     call MOM_error(WARNING, "initialize_ALE called with an associated "// &
@@ -263,45 +261,13 @@ subroutine initialize_ALE( param_file, G, h, h_aux, &
   ! Check grid integrity with respect to minimum allowed thickness
   call check_grid_integrity( CS%regridCS, G, h(:,:,:) )
 
-  if ( verbose ) then
-      i = 20
-      j = 4
-      write(*,*) 'Before regridding/remapping', i, j
-      do k = 1,G%ke
-        write(*,*) h(i,j,k), tv%T(i,j,k)
-      end do
-      i = 22
-      j = 4
-      write(*,*) 'Before regridding/remapping', i, j
-      do k = 1,G%ke
-        write(*,*) h(i,j,k), tv%T(i,j,k)
-      end do
-  end if
-
   ! Perform one regridding/remapping step -- This should NOT modify
   ! either the initial grid or the initial cell averages. This
   ! step is therefore not strictly necessary but is included for historical
   ! reasons when I needed to check whether the combination 'initial 
   ! conditions - regridding/remapping' was consistently implemented.
-  call regridding_main( CS%remapCS, CS%regridCS, G, h, u, v, tv, h_aux )
-  call remapping_main( CS%remapCS, G, h, h_aux, tv, u, v )
-  h(:,:,:) = h_aux(:,:,:)
+  call ALE_main( G, h, h_aux, u, v, tv, CS )
   
-  if ( verbose ) then
-      i = 20
-      j = 4
-      write(*,*) 'After regridding/remapping', i, j
-      do k = 1,G%ke
-        write(*,*) h(i,j,k), tv%T(i,j,k)
-      end do
-      i = 22
-      j = 4
-      write(*,*) 'After regridding/remapping', i, j
-      do k = 1,G%ke
-        write(*,*) h(i,j,k), tv%T(i,j,k)
-      end do
-  end if
-
 end subroutine initialize_ALE
 
 
@@ -607,13 +573,21 @@ subroutine ALE_memory_deallocation( CS )
 end subroutine ALE_memory_deallocation
 
 logical function usePressureReconstruction(CS)
-  type(ALE_CS), intent(in) :: CS
-  usePressureReconstruction=CS%reconstructForPressure
+  type(ALE_CS), pointer :: CS
+  if (associated(CS)) then
+    usePressureReconstruction=CS%reconstructForPressure
+  else
+    usePressureReconstruction=.false.
+  endif
 end function usePressureReconstruction
 
 integer function pressureReconstructionScheme(CS)
-  type(ALE_CS), intent(in) :: CS
-  pressureReconstructionScheme=CS%pressureReconstructionScheme
+  type(ALE_CS), pointer :: CS
+  if (associated(CS)) then
+    pressureReconstructionScheme=CS%pressureReconstructionScheme
+  else
+    pressureReconstructionScheme=-1
+  endif
 end function pressureReconstructionScheme
 
 end module MOM_ALE
