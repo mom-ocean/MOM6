@@ -386,11 +386,12 @@ use MOM_sponge, only : init_sponge_diags, sponge_CS
 use MOM_CS_type, only : MOM_control_struct, MOM_dyn_control_struct
 use MOM_checksum_packages, only : MOM_thermo_chksum, MOM_state_chksum, MOM_accel_chksum
 use MOM_dynamics_unsplit, only : step_MOM_dyn_unsplit, register_restarts_dyn_unsplit
-use MOM_dynamics_unsplit, only : initialize_dyn_unsplit
+use MOM_dynamics_unsplit, only : initialize_dyn_unsplit, end_dyn_unsplit
 use MOM_dynamics_split_RK2, only : step_MOM_dyn_split_RK2, register_restarts_dyn_split_RK2
 use MOM_dynamics_split_RK2, only : initialize_dyn_split_RK2, end_dyn_split_RK2
+use MOM_dynamics_split_RK2, only : adjustments_dyn_split_RK2
 use MOM_dynamics_unsplit_RK2, only : step_MOM_dyn_unsplit_RK2, register_restarts_dyn_unsplit_RK2
-use MOM_dynamics_unsplit_RK2, only : initialize_dyn_unsplit_RK2
+use MOM_dynamics_unsplit_RK2, only : initialize_dyn_unsplit_RK2, end_dyn_unsplit_RK2
 use MOM_ALE, only : initialize_ALE, end_ALE, ALE_main
 
 implicit none ; private
@@ -445,6 +446,8 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
   real :: dtbt_reset_time ! The value of CS%rel_time when DTBT was last
                     ! calculated, in s.
   real :: wt_end, wt_beg
+  logical :: calc_dtbt ! This indicates whether the dynamically adjusted
+                    ! barotropic time step needs to be updated.
   real, dimension(SZI_(CS%grid),SZJ_(CS%grid)) :: &
     eta_av, &       ! The average sea surface height or column mass over
                     ! a time step, in m or kg m-2.
@@ -594,7 +597,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     endif
 
     if (CS%visc%calc_bbl) &
-      CS%bbl_calc_time_interval = dt*real(1+MIN(ntstep-MOD(n,ntstep),n_max-n))
+      CS%visc%bbl_calc_time_interval = dt*real(1+MIN(ntstep-MOD(n,ntstep),n_max-n))
 
     if (associated(CS%u_prev) .and. associated(CS%v_prev)) then
       do k=1,nz ; do j=jsd,jed ; do I=IsdB,IedB
@@ -609,18 +612,18 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       ! This section uses a split time stepping scheme for the dynamic equations,
       ! basically the stacked shallow water equations with viscosity.
 
-      CS%dyn_CSp%calc_dtbt = .false.
+      calc_dtbt = .false.
       if ((CS%dtbt_reset_period >= 0.0) .and. &
           ((n==1) .or. (CS%dtbt_reset_period == 0.0) .or. &
            (CS%rel_time >= dtbt_reset_time + 0.999*CS%dtbt_reset_period))) then
-        CS%dyn_CSp%calc_dtbt = .true.
+        calc_dtbt = .true.
         dtbt_reset_time = CS%rel_time
       endif
 
-      call step_MOM_dyn_split_RK2(u, v, h, CS%tv, CS%visc, CS%eta, CS%uhbt_in, CS%vhbt_in, &
+      call step_MOM_dyn_split_RK2(u, v, h, CS%tv, CS%visc, &
                     Time_local, dt, fluxes, CS%p_surf_begin, CS%p_surf_end, &
-                    dtnt, dt*ntstep, CS%uh, CS%vh, CS%uhtr, CS%vhtr, CS%dyn_CSp%u_av, CS%dyn_CSp%v_av, CS%dyn_CSp%h_av, &
-                    eta_av, grid, CS%dyn_CSp, CS)
+                    dtnt, dt*ntstep, CS%uh, CS%vh, CS%uhtr, CS%vhtr, &
+                    eta_av, grid, CS%dyn_CSp, calc_dtbt, CS%VarMix, CS%MEKE)
 
     else ! --------------------------------------------------- not SPLIT
       !   This section uses a simple unsplit stepping scheme for the dynamic
@@ -632,10 +635,12 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
       if (CS%use_RK2) then
         call step_MOM_dyn_unsplit_RK2(u, v, h, CS%tv, CS%visc, Time_local, dt, fluxes, &
-                 CS%p_surf_begin, CS%p_surf_end, CS%uh, CS%vh, CS%uhtr, CS%vhtr, eta_av, grid, CS%dyn_CSp, CS)
+                 CS%p_surf_begin, CS%p_surf_end, CS%uh, CS%vh, CS%uhtr, CS%vhtr, &
+                 eta_av, grid, CS%dyn_CSp, CS%VarMix, CS%MEKE)
       else
         call step_MOM_dyn_unsplit(u, v, h, CS%tv, CS%visc, Time_local, dt, fluxes, &
-                 CS%p_surf_begin, CS%p_surf_end, CS%uh, CS%vh, CS%uhtr, CS%vhtr, eta_av, grid, CS%dyn_CSp, CS)
+                 CS%p_surf_begin, CS%p_surf_end, CS%uh, CS%vh, CS%uhtr, CS%vhtr, &
+                 eta_av, grid, CS%dyn_CSp, CS%VarMix, CS%MEKE)
       endif
 
     endif ! -------------------------------------------------- end SPLIT
@@ -724,10 +729,8 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
           call check_redundant("Pre-diabatic ", u, v, grid)
         endif
 
-        if (CS%dyn_CSp%readjust_BT_trans) then
-          call find_total_transport(u, v, h, CS%uhbt_in, CS%vhbt_in, dt, grid, &
-                                    CS%dyn_CSp)
-          CS%dyn_CSp%readjust_velocity = .true.
+        if (CS%split) then
+          call adjustments_dyn_split_RK2(u, v, h, dt, grid, CS%dyn_CSp)
         endif
 
         call cpu_clock_begin(id_clock_diabatic)
@@ -825,13 +828,8 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       call cpu_clock_end(id_clock_thermo)
 
       call cpu_clock_begin(id_clock_diagnostics)
-      if (CS%split) then
-        call calculate_diagnostic_fields(u, v, h, CS%uh, CS%vh, CS%tv, dtnt, &
-                                         grid, CS%diagnostics_CSp, CS%eta)
-      else
-        call calculate_diagnostic_fields(u, v, h, CS%uh, CS%vh, CS%tv, dtnt, &
-                                         grid, CS%diagnostics_CSp)
-      endif
+      call calculate_diagnostic_fields(u, v, h, CS%uh, CS%vh, CS%tv, dtnt, &
+                                       grid, CS%diagnostics_CSp)
       call cpu_clock_end(id_clock_diagnostics)
 
       if (CS%id_T > 0) call post_data(CS%id_T, CS%tv%T, CS%diag)
@@ -873,8 +871,6 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
       dtnt = 0.0
       CS%visc%calc_bbl = .true.
-    else  ! It is not time to do thermodynamics.
-      CS%dyn_CSp%readjust_velocity = .false.
     endif
 
     call enable_averaging(dt,Time_local, CS%diag)
@@ -971,54 +967,6 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
   call cpu_clock_end(id_clock_ocean)
 
 end subroutine step_MOM
-
-! ============================================================================
-
-subroutine find_total_transport(u_in, v_in, h_in, uh_tot, vh_tot, dt, G, CS)
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)    :: u_in
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)    :: v_in
-  real,                                   intent(in)    :: dt
-  real, dimension(NIMEMB_,NJMEM_),        intent(out)   :: uh_tot
-  real, dimension(NIMEM_,NJMEMB_),        intent(out)   :: vh_tot
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h_in
-  type(ocean_grid_type),                  intent(inout) :: G
-  type(MOM_dyn_control_struct),           pointer       :: CS
-!   This subroutine determines the vertically summed transport based on input
-! velocities and thicknesses.  The individual layers' transports are not retained.
-
-! Arguments: u_in - The input zonal velocity, in m s-1. (Intent in.)
-!  (in)      v_in - The input meridional velocity, in m s-1.
-!  (in)      h_in - The input layer thicknesses, in m or kg m-2, depending on
-!                   whether the Boussinesq approximation is made.
-!  (out)     uh_tot - The vertically summed zonal and meridional volume or mass
-!  (out)     vh_tot -  transports, in m3 s-1 or kg s-1.
-!  (in)      dt - The time step in s.
-!  (in)      G - The ocean's grid structure.
-!  (in)      CS - The control structure set up by initialize_MOM.
-
-  ! Temporary arrays to contain layer thickness fluxes in m3 s-1 or kg s-1.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: uh_temp 
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: vh_temp
-  ! A temporary array to contain layer projected thicknesses in m or kg m-2.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G))  :: h_temp
-  integer :: i, j, k, is, ie, js, je, nz
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-
-  call cpu_clock_begin(id_clock_continuity)
-  call continuity(u_in, v_in, h_in, h_temp, uh_temp, vh_temp, dt, G, &
-                  CS%continuity_CSp, OBC=CS%OBC)
-  call cpu_clock_end(id_clock_continuity)
-
-  do j=js,je ; do I=is-1,ie ; uh_tot(I,j) = uh_temp(I,j,1) ; enddo ; enddo
-  do k=2,nz ; do j=js,je ; do I=is-1,ie
-    uh_tot(I,j) = uh_tot(I,j) + uh_temp(I,j,k)
-  enddo ; enddo ; enddo
-  do J=js-1,je ; do i=is,ie ; vh_tot(i,J) = vh_temp(i,J,1) ; enddo ; enddo
-  do k=2,nz ; do J=js-1,je ; do i=is,ie
-    vh_tot(i,J) = vh_tot(i,J) + vh_temp(i,J,k)
-  enddo ; enddo ; enddo
-
-end subroutine find_total_transport
 
 ! ============================================================================
 
@@ -1167,22 +1115,6 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
                  "and less than the forcing or coupling time-step. \n"//&
                  "By default DT_THERM is set to DT.", units="s", default=CS%dt)
 
-  call get_param(param_file, "MOM", "BE", CS%dyn_CSp%be, &
-                 "If SPLIT is true, BE determines the relative weighting \n"//&
-                 "of a  2nd-order Runga-Kutta baroclinic time stepping \n"//&
-                 "scheme (0.5) and a backward Euler scheme (1) that is \n"//&
-                 "used for the Coriolis and inertial terms.  BE may be \n"//&
-                 "from 0.5 to 1, but instability may occur near 0.5. \n"//&
-                 "BE is also applicable if SPLIT is false and USE_RK2 \n"//&
-                 "is true.", units="nondim", default=0.6)
-  call get_param(param_file, "MOM", "BEGW", CS%dyn_CSp%begw, &
-                 "If SPILT is true, BEGW is a number from 0 to 1 that \n"//&
-                 "controls the extent to which the treatment of gravity \n"//&
-                 "waves is forward-backward (0) or simulated backward \n"//&
-                 "Euler (1).  0 is almost always used.\n"//&
-                 "If SPLIT is false and USE_RK2 is true, BEGW can be \n"//&
-                 "between 0 and 0.5 to damp gravity waves.", &
-                 units="nondim", default=0.0)
   if (.not.CS%bulkmixedlayer) then
     call get_param(param_file, "MOM", "HMIX_SFC_PROP", CS%Hmix, &
                  "If BULKMIXEDLAYER is false, HMIX_SFC_PROP is the depth \n"//&
@@ -1195,10 +1127,6 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
                  "calculations of depth-space diagnostics. Making this \n"//&
                  "larger than DT_THERM reduces the  performance penalty \n"//&
                  "of regridding to depth online.", units="s", default=0.0)
-  call get_param(param_file, "MOM", "FLUX_BT_COUPLING", CS%dyn_CSp%flux_BT_coupling, &
-                 "If true, use mass fluxes to ensure consistency between \n"//&
-                 "the baroclinic and barotropic modes. This is only used \n"//&
-                 "if SPLIT is true.", default=.false.)
   call get_param(param_file, "MOM", "INTERPOLATE_P_SURF", CS%interp_p_surf, &
                  "If true, linearly interpolate the surface pressure \n"//&
                  "over the coupling time step, using the specified value \n"//&
@@ -1221,25 +1149,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
                  "step, and if 0, every dynamics time step.  The default is \n"//&
                  "set by DT_THERM.  This is only used if SPLIT is true.", &
                  units="s", default=default_val, do_not_read=(dtbt > 0.0))
-
-    call get_param(param_file, "MOM", "READJUST_BT_TRANS", CS%dyn_CSp%readjust_BT_trans, &
-                 "If true, make a barotropic adjustment to the layer \n"//&
-                 "velocities after the thermodynamic part of the step \n"//&
-                 "to ensure that the interaction between the thermodynamics \n"//&
-                 "and the continuity solver do not change the barotropic \n"//&
-                 "transport.  This is only used if FLUX_BT_COUPLING and \n"//&
-                 "SPLIT are true.", default=.false.)
-    call get_param(param_file, "MOM", "SPLIT_BOTTOM_STRESS", CS%dyn_CSp%split_bottom_stress, &
-                 "If true, provide the bottom stress calculated by the \n"//&
-                 "vertical viscosity to the barotropic solver.", default=.false.)
-    call get_param(param_file, "MOM", "BT_USE_LAYER_FLUXES", CS%dyn_CSp%BT_use_layer_fluxes, &
-                 "If true, use the summed layered fluxes plus an \n"//&
-                 "adjustment due to the change in the barotropic velocity \n"//&
-                 "in the barotropic continuity equation.", default=.true.)
   endif
-
-  if (.not.(CS%split .and. CS%dyn_CSp%flux_BT_coupling) .or. CS%adiabatic) &
-    CS%dyn_CSp%readjust_BT_trans = .false.
 
   ! This is here in case these values are used inappropriately.
   CS%use_frazil = .false. ; CS%bound_salinity = .false. ; CS%tv%P_Ref = 2.0e7
@@ -1334,12 +1244,6 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   ALLOC_(CS%h(isd:ied,jsd:jed,nz))     ; CS%h(:,:,:) = grid%Angstrom
   ALLOC_(CS%uh(IsdB:IedB,jsd:jed,nz))  ; CS%uh(:,:,:) = 0.0
   ALLOC_(CS%vh(isd:ied,JsdB:JedB,nz))  ; CS%vh(:,:,:) = 0.0
-  ALLOC_(CS%dyn_CSp%diffu(IsdB:IedB,jsd:jed,nz)) ; CS%dyn_CSp%diffu(:,:,:) = 0.0
-  ALLOC_(CS%dyn_CSp%diffv(isd:ied,JsdB:JedB,nz)) ; CS%dyn_CSp%diffv(:,:,:) = 0.0
-  ALLOC_(CS%dyn_CSp%CAu(IsdB:IedB,jsd:jed,nz)) ; CS%dyn_CSp%CAu(:,:,:) = 0.0
-  ALLOC_(CS%dyn_CSp%CAv(isd:ied,JsdB:JedB,nz)) ; CS%dyn_CSp%CAv(:,:,:) = 0.0
-  ALLOC_(CS%dyn_CSp%PFu(IsdB:IedB,jsd:jed,nz)) ; CS%dyn_CSp%PFu(:,:,:) = 0.0
-  ALLOC_(CS%dyn_CSp%PFv(isd:ied,JsdB:JedB,nz)) ; CS%dyn_CSp%PFv(:,:,:) = 0.0
   if (CS%use_temperature) then
     ALLOC_(CS%T(isd:ied,jsd:jed,nz))   ; CS%T(:,:,:) = 0.0
     ALLOC_(CS%S(isd:ied,jsd:jed,nz))   ; CS%S(:,:,:) = 0.0
@@ -1376,22 +1280,12 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   MOM_internal_state%u => CS%u ; MOM_internal_state%v => CS%v
   MOM_internal_state%h => CS%h
   MOM_internal_state%uh => CS%uh ; MOM_internal_state%vh => CS%vh
-  MOM_internal_state%diffu => CS%dyn_CSp%diffu ; MOM_internal_state%diffv => CS%dyn_CSp%diffv
-  MOM_internal_state%PFu => CS%dyn_CSp%PFu ; MOM_internal_state%PFv => CS%dyn_CSp%PFv
-  MOM_internal_state%CAu => CS%dyn_CSp%CAu ; MOM_internal_state%CAv => CS%dyn_CSp%CAv
   if (CS%use_temperature) then
     MOM_internal_state%T => CS%T ; MOM_internal_state%S => CS%S
-  endif
-  if (CS%split) then
-    ALLOC_(CS%eta(isd:ied,jsd:jed))       ; CS%eta(:,:) = 0.0
-    ALLOC_(CS%uhbt_in(IsdB:IedB,jsd:jed)) ; CS%uhbt_in(:,:) = 0.0
-    ALLOC_(CS%vhbt_in(isd:ied,JsdB:JedB)) ; CS%vhbt_in(:,:) = 0.0
   endif
   if (CS%interp_p_surf) then
     allocate(CS%p_surf_prev(isd:ied,jsd:jed)) ; CS%p_surf_prev(:,:) = 0.0
   endif
-  allocate(CS%dyn_CSp%taux_bot(IsdB:IedB,jsd:jed)) ; CS%dyn_CSp%taux_bot(:,:) = 0.0
-  allocate(CS%dyn_CSp%tauy_bot(isd:ied,JsdB:JedB)) ; CS%dyn_CSp%tauy_bot(:,:) = 0.0
 
   ALLOC_(CS%ave_ssh(isd:ied,jsd:jed)) ; CS%ave_ssh(:,:) = 0.0
 
@@ -1413,10 +1307,12 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call restart_init(param_file, CS%restart_CSp)
   call set_restart_fields(grid, param_file, CS)
   if (CS%split) then
-    call register_restarts_dyn_split_RK2(grid, param_file, CS%dyn_CSp, CS%restart_CSp, CS)
+    call register_restarts_dyn_split_RK2(grid, param_file, CS%dyn_CSp, &
+                                         CS%restart_CSp, CS%uh, CS%vh)
   else
     if (CS%use_RK2) then
-      call register_restarts_dyn_unsplit_RK2(grid, param_file, CS%dyn_CSp, CS%restart_CSp)
+      call register_restarts_dyn_unsplit_RK2(grid, param_file, CS%dyn_CSp, &
+                                             CS%restart_CSp)
     else
       call register_restarts_dyn_unsplit(grid, param_file, CS%dyn_CSp, CS%restart_CSp)
     endif
@@ -1458,6 +1354,9 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     endif
   endif
 
+  call MEKE_init(Time, grid, param_file, diag, CS%MEKE_CSp, CS%MEKE)
+  call VarMix_init(Time, grid, param_file, diag, CS%VarMix)
+
   if (associated(init_CS%advect_tracer_CSp)) &
     CS%tracer_CSp => init_CS%advect_tracer_CSp
 
@@ -1469,24 +1368,17 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
 
   if (use_tides) call tidal_forcing_init(Time, grid, param_file, CS%dyn_CSp%tides_CSp)
 
-  call continuity_init(Time, grid, param_file, diag, CS%dyn_CSp%continuity_CSp)
-  call CoriolisAdv_init(Time, grid, param_file, diag, CS%dyn_CSp%CoriolisAdv_CSp)
-  call PressureForce_init(Time, grid, param_file, diag, CS%dyn_CSp%PressureForce_CSp, &
-                          CS%dyn_CSp%tides_CSp)
-
-  call hor_visc_init(Time, grid, param_file, diag, CS%dyn_CSp%hor_visc_CSp)
-
   if (CS%split) then
-    call initialize_dyn_split_RK2(CS%u, CS%v, CS%h, Time, &
-                                  grid, param_file, diag, CS%dyn_CSp, CS%restart_CSp, &
-                                  CS, MOM_internal_state)
+    call initialize_dyn_split_RK2(CS%u, CS%v, CS%h, CS%uh, CS%vh, Time, &
+                grid, param_file, diag, CS%dyn_CSp, CS%restart_CSp, CS%dt, &
+                MOM_internal_state, CS%VarMix, CS%MEKE)
   else
     if (CS%use_RK2) then
-      call initialize_dyn_unsplit_RK2(CS%u, CS%v, CS%h, Time, &
-                                  grid, param_file, diag, CS%dyn_CSp, CS%restart_CSp)
+      call initialize_dyn_unsplit_RK2(CS%u, CS%v, CS%h, Time, grid, &
+                param_file, diag, CS%dyn_CSp, CS%restart_CSp, MOM_internal_state)
     else
-      call initialize_dyn_unsplit(CS%u, CS%v, CS%h, Time, &
-                                  grid, param_file, diag, CS%dyn_CSp, CS%restart_CSp)
+      call initialize_dyn_unsplit(CS%u, CS%v, CS%h, Time, grid, &
+                param_file, diag, CS%dyn_CSp, CS%restart_CSp, MOM_internal_state)
     endif
   endif
 
@@ -1496,8 +1388,6 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call thickness_diffuse_init(Time, grid, param_file, diag, CS%thickness_diffuse_CSp)
   if (CS%mixedlayer_restrat) &
     call mixedlayer_restrat_init(Time, grid, param_file, diag, CS%mixedlayer_restrat_CSp)
-  call MEKE_init(Time, grid, param_file, diag, CS%MEKE_CSp, CS%MEKE)
-  call VarMix_init(Time, grid, param_file, diag, CS%VarMix)
 
   call MOM_diagnostics_init(MOM_internal_state, Time, grid, param_file, &
                              diag, CS%diagnostics_CSp)
@@ -1581,7 +1471,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   
   if (.not.query_initialized(CS%ave_ssh,"ave_ssh",CS%restart_CSp)) then
     if (CS%split) then
-      call find_eta(CS%h, CS%tv, grid%g_Earth, grid, CS%ave_ssh, CS%eta(:,:))
+      call find_eta(CS%h, CS%tv, grid%g_Earth, grid, CS%ave_ssh, CS%dyn_CSp%eta)
     else
       call find_eta(CS%h, CS%tv, grid%g_Earth, grid, CS%ave_ssh)
     endif
@@ -1721,11 +1611,6 @@ subroutine register_diags(Time, G, CS)
   if (CS%id_Sady_2d > 0)   call safe_alloc_ptr(CS%S_ady_2d,isd,ied,JsdB,JedB)
   if (CS%id_Sdiffx_2d > 0) call safe_alloc_ptr(CS%S_diffx_2d,IsdB,IedB,jsd,jed)
   if (CS%id_Sdiffy_2d > 0) call safe_alloc_ptr(CS%S_diffy_2d,isd,ied,JsdB,JedB)
-
-  CS%dyn_CSp%id_uh = register_diag_field('ocean_model', 'uh', G%axesCuL, Time, &
-      'Zonal Thickness Flux', flux_units)
-  CS%dyn_CSp%id_vh = register_diag_field('ocean_model', 'vh', G%axesCvL, Time, &
-      'Meridional Thickness Flux', flux_units)
 
   if (CS%debug_truncations) then
     call safe_alloc_ptr(CS%diag%du_dt_visc,IsdB,IedB,jsd,jed,nz)
@@ -2243,9 +2128,7 @@ subroutine MOM_end(CS)
 
   DEALLOC_(CS%u) ; DEALLOC_(CS%v) ; DEALLOC_(CS%h)
   DEALLOC_(CS%uh) ; DEALLOC_(CS%vh)
-  DEALLOC_(CS%dyn_CSp%diffu) ; DEALLOC_(CS%dyn_CSp%diffv)
-  DEALLOC_(CS%dyn_CSp%CAu) ; DEALLOC_(CS%dyn_CSp%CAv)
-  DEALLOC_(CS%dyn_CSp%PFu) ; DEALLOC_(CS%dyn_CSp%PFv)
+  
   if (CS%use_temperature) then
     DEALLOC_(CS%T) ; CS%tv%T => NULL() ; DEALLOC_(CS%S) ; CS%tv%S => NULL()
   endif
@@ -2256,9 +2139,11 @@ subroutine MOM_end(CS)
   DEALLOC_(CS%uhtr) ; DEALLOC_(CS%vhtr)
   if (CS%split) then
     call end_dyn_split_RK2(CS%dyn_CSp)
-    DEALLOC_(CS%eta)
-    DEALLOC_(CS%uhbt_in) ; DEALLOC_(CS%vhbt_in)
-  endif
+  else ; if (CS%use_RK2) then
+      call end_dyn_unsplit_RK2(CS%dyn_CSp)
+    else
+      call end_dyn_unsplit(CS%dyn_CSp)
+  endif ; endif
   DEALLOC_(CS%ave_ssh)
 
   deallocate(CS)

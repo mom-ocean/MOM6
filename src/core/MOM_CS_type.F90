@@ -75,8 +75,6 @@ type, public :: MOM_control_struct
     T, &      ! Potential temperature in C.
     S, &      ! Salinity in PSU.
     h_aux     ! Work array for remapping (same units as h).
-  real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
-    eta       ! Instantaneous free surface height, in m.
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: &
     u, &      ! Zonal velocity, in m s-1.
     uh, &     ! uh = u * h * dy at u grid points in m3 s-1.
@@ -87,12 +85,6 @@ type, public :: MOM_control_struct
     vhtr      ! Accumlated meridional thickness fluxes used to advect tracers, in m3.
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
     ave_ssh   ! The time-averaged sea surface height in m.
-
-  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_) :: uhbt_in
-  real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_) :: vhbt_in
-    ! uhbt_in and vhbt_in are the vertically summed transports from based on
-    ! the final thicknessses and velocities from the previous dynamics time
-    ! step, both in units of m3 s-1 or kg s-1.
 
   real, pointer, dimension(:,:,:) :: &
     u_prev => NULL(), &  ! The previous values of u and v, stored for
@@ -146,10 +138,6 @@ type, public :: MOM_control_struct
                              ! should be calculated.
   real    :: Hmix            ! The diagnostic mixed layer thickness in m when
                              ! the bulk mixed layer is not used.
-!  logical :: calc_bbl ! If true, the BBL viscosity and thickness need to be
-!                      ! calculated. This only applies with BOTTOMDRAGLAW true.
-  real :: bbl_calc_time_interval ! The amount of time to use in diagnostics of
-                                 ! the BBL properties.
   real :: missing=-1.0e34    ! The missing data value for masked fields.
 
   integer :: ntrunc          ! The number of times the velocity has been
@@ -258,6 +246,8 @@ type, public :: MOM_dyn_control_struct
               ! that were fed into the barotopic calculation, in m s-2.
 
 ! The following variables are only used with the split time stepping scheme.
+  real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
+    eta       ! Instantaneous free surface height, in m.
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: u_av
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: v_av
     ! u_av and v_av are the layer velocities with the vertical mean replaced by
@@ -271,6 +261,11 @@ type, public :: MOM_dyn_control_struct
     ! uhbt and vhbt are the average volume or mass fluxes determined by the
     ! barotropic solver in m3 s-1 or kg s-1.  uhbt and vhbt should (roughly?) 
     ! equal the verticals sum of uh and vh, respectively.
+  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_) :: uhbt_in
+  real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_) :: vhbt_in
+    ! uhbt_in and vhbt_in are the vertically summed transports from based on
+    ! the final thicknessses and velocities from the previous dynamics time
+    ! step, both in units of m3 s-1 or kg s-1.
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_,NKMEM_) :: pbce
       ! pbce times eta gives the baroclinic pressure anomaly in each layer due
       ! to free surface height anomalies.  pbce has units of m2 H-1 s-2.

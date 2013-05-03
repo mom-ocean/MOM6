@@ -69,6 +69,7 @@ module MOM_dynamics_unsplit
 
 
 use MOM_variables, only : vertvisc_type, ocean_OBC_type, thermo_var_ptrs
+use MOM_variables, only : ocean_internal_state
 use MOM_forcing_type, only : forcing
 use MOM_checksum_packages, only : MOM_thermo_chksum, MOM_state_chksum, MOM_accel_chksum
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
@@ -85,7 +86,7 @@ use MOM_domains, only : To_South, To_West, To_All, CGRID_NE, SCALAR_PAIR
 use MOM_checksums, only : MOM_checksums_init, hchksum, uchksum, vchksum
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
 use MOM_error_handler, only : MOM_set_verbosity
-use MOM_file_parser, only : read_param, log_param, log_version, param_file_type
+use MOM_file_parser, only : read_param, get_param, log_version, param_file_type
 use MOM_io, only : MOM_io_init, vardesc
 use MOM_restart, only : register_restart_field, query_initialized, save_restart
 use MOM_restart, only : restart_init, MOM_restart_CS
@@ -100,6 +101,8 @@ use MOM_grid, only : MOM_grid_init, ocean_grid_type, get_thickness_units
 use MOM_grid, only : get_flux_units, get_tr_flux_units
 use MOM_hor_visc, only : horizontal_viscosity, hor_visc_init, hor_visc_CS
 use MOM_interface_heights, only : find_eta
+use MOM_lateral_mixing_coeffs, only : VarMix_CS
+use MOM_MEKE_types, only : MEKE_type
 use MOM_open_boundary, only : Radiation_Open_Bdry_Conds, open_boundary_init
 use MOM_open_boundary, only : open_boundary_CS
 use MOM_PressureForce, only : PressureForce, PressureForce_init, PressureForce_CS
@@ -114,7 +117,7 @@ implicit none ; private
 #include <MOM_memory.h>
 
 public step_MOM_dyn_unsplit, register_restarts_dyn_unsplit
-public initialize_dyn_unsplit
+public initialize_dyn_unsplit, end_dyn_unsplit
 
 integer :: id_clock_Cor, id_clock_pres, id_clock_vertvisc
 integer :: id_clock_continuity, id_clock_horvisc, id_clock_mom_update
@@ -125,7 +128,8 @@ contains
 ! =============================================================================
 
 subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
-                  p_surf_begin, p_surf_end, uh, vh, uhtr, vhtr, eta_av, G, CS, top_CS)
+                  p_surf_begin, p_surf_end, uh, vh, uhtr, vhtr, eta_av, G, CS, &
+                  VarMix, MEKE)
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(inout) :: u
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(inout) :: v
   real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(inout) :: h
@@ -142,7 +146,8 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
   real, dimension(NIMEM_,NJMEM_),         intent(out)   :: eta_av
   type(ocean_grid_type),                  intent(inout) :: G
   type(MOM_dyn_control_struct),           pointer       :: CS
-  type(MOM_control_struct),               pointer       :: top_CS
+  type(VarMix_CS),                        pointer       :: VarMix
+  type(MEKE_type),                        pointer       :: MEKE
 ! Arguments: u - The input and output zonal velocity, in m s-1.
 !  (inout)   v - The input and output meridional velocity, in m s-1.
 !  (inout)   h - The input and output layer thicknesses, in m or kg m-2,
@@ -168,6 +173,10 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
 !                     kg m-2.
 !  (in)      G - The ocean's grid structure.
 !  (in)      CS - The control structure set up by initialize_MOM.
+!  (in)      VarMix - A pointer to a structure with fields that specify the
+!                     spatially variable viscosities.
+!  (inout)   MEKE - A pointer to a structure containing fields related to
+!                   the Mesoscale Eddy Kinetic Energy.
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_av, hp
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: up, upp
@@ -203,7 +212,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
 ! diffu = horizontal viscosity terms (u,h)
   call enable_averaging(dt,Time_local, CS%diag)
   call cpu_clock_begin(id_clock_horvisc)
-  call horizontal_viscosity(u, v, h, CS%diffu, CS%diffv, top_CS%MEKE, top_CS%Varmix, &
+  call horizontal_viscosity(u, v, h, CS%diffu, CS%diffv, MEKE, Varmix, &
                             G, CS%hor_visc_CSp)
   call cpu_clock_end(id_clock_horvisc)
   call disable_averaging(CS%diag)
@@ -283,7 +292,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
 
 ! visc contains viscosity and BBL thickness (u_in,h_in)
   if (visc%calc_bbl) then
-    call enable_averaging(top_CS%bbl_calc_time_interval, &
+    call enable_averaging(visc%bbl_calc_time_interval, &
                           Time_local-set_time(int(dt)), CS%diag)
     call set_viscous_BBL(u, v, h_av, tv, visc, G, CS%set_visc_CSp)
     call cpu_clock_begin(id_clock_pass)
@@ -466,8 +475,8 @@ end subroutine step_MOM_dyn_unsplit
 ! =============================================================================
 
 subroutine register_restarts_dyn_unsplit(G, param_file, CS, restart_CS)
-  type(ocean_grid_type),     intent(in) :: G
-  type(param_file_type),     intent(in) :: param_file
+  type(ocean_grid_type),        intent(in)    :: G
+  type(param_file_type),        intent(in)    :: param_file
   type(MOM_dyn_control_struct), intent(inout) :: CS
   type(MOM_restart_CS),         pointer       :: restart_CS
 !   This subroutine sets up any auxiliary restart variables that are specific
@@ -482,6 +491,9 @@ subroutine register_restarts_dyn_unsplit(G, param_file, CS, restart_CS)
 
   type(vardesc) :: vd
   character(len=48) :: thickness_units, flux_units
+  integer :: isd, ied, jsd, jed, nz, IsdB, IedB, JsdB, JedB
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = G%ke
+  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
 ! This is where a control structure that is specific to this module would be allocated.
 ! if (associated(CS_unsplit)) then
@@ -491,6 +503,30 @@ subroutine register_restarts_dyn_unsplit(G, param_file, CS, restart_CS)
 ! endif
 ! allocate(CS_unsplit)
 
+  call get_param(param_file, "MOM", "BE", CS%be, &
+                 "If SPLIT is true, BE determines the relative weighting \n"//&
+                 "of a  2nd-order Runga-Kutta baroclinic time stepping \n"//&
+                 "scheme (0.5) and a backward Euler scheme (1) that is \n"//&
+                 "used for the Coriolis and inertial terms.  BE may be \n"//&
+                 "from 0.5 to 1, but instability may occur near 0.5. \n"//&
+                 "BE is also applicable if SPLIT is false and USE_RK2 \n"//&
+                 "is true.", units="nondim", default=0.6)
+  call get_param(param_file, "MOM", "BEGW", CS%begw, &
+                 "If SPILT is true, BEGW is a number from 0 to 1 that \n"//&
+                 "controls the extent to which the treatment of gravity \n"//&
+                 "waves is forward-backward (0) or simulated backward \n"//&
+                 "Euler (1).  0 is almost always used.\n"//&
+                 "If SPLIT is false and USE_RK2 is true, BEGW can be \n"//&
+                 "between 0 and 0.5 to damp gravity waves.", &
+                 units="nondim", default=0.0)
+
+  ALLOC_(CS%diffu(IsdB:IedB,jsd:jed,nz)) ; CS%diffu(:,:,:) = 0.0
+  ALLOC_(CS%diffv(isd:ied,JsdB:JedB,nz)) ; CS%diffv(:,:,:) = 0.0
+  ALLOC_(CS%CAu(IsdB:IedB,jsd:jed,nz)) ; CS%CAu(:,:,:) = 0.0
+  ALLOC_(CS%CAv(isd:ied,JsdB:JedB,nz)) ; CS%CAv(:,:,:) = 0.0
+  ALLOC_(CS%PFu(IsdB:IedB,jsd:jed,nz)) ; CS%PFu(:,:,:) = 0.0
+  ALLOC_(CS%PFv(isd:ied,JsdB:JedB,nz)) ; CS%PFv(:,:,:) = 0.0
+
   thickness_units = get_thickness_units(G)
   flux_units = get_flux_units(G)
 
@@ -498,7 +534,8 @@ subroutine register_restarts_dyn_unsplit(G, param_file, CS, restart_CS)
 
 end subroutine register_restarts_dyn_unsplit
 
-subroutine initialize_dyn_unsplit(u, v, h, Time, G, param_file, diag, CS, restart_CS)
+subroutine initialize_dyn_unsplit(u, v, h, Time, G, param_file, diag, CS, &
+                                  restart_CS, MIS)
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(inout) :: u
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(inout) :: v
   real, dimension(NIMEM_,NJMEM_,NKMEM_) , intent(inout) :: h
@@ -506,12 +543,35 @@ subroutine initialize_dyn_unsplit(u, v, h, Time, G, param_file, diag, CS, restar
   type(ocean_grid_type),                  intent(inout) :: G
   type(param_file_type),                  intent(in)    :: param_file
   type(diag_ptrs),                target, intent(inout) :: diag
-  type(MOM_dyn_control_struct),           intent(inout) :: CS
+  type(MOM_dyn_control_struct),   target, intent(inout) :: CS
   type(MOM_restart_CS),                   pointer       :: restart_CS
+  type(ocean_internal_state),             intent(inout) :: MIS
 
   !   This subroutine initializes any variables that are specific to this time
   ! stepping scheme, including the cpu clocks.
+  character(len=48) :: thickness_units, flux_units
+  integer :: isd, ied, jsd, jed, nz, IsdB, IedB, JsdB, JedB
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = G%ke
+  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
+  allocate(CS%taux_bot(IsdB:IedB,jsd:jed)) ; CS%taux_bot(:,:) = 0.0
+  allocate(CS%tauy_bot(isd:ied,JsdB:JedB)) ; CS%tauy_bot(:,:) = 0.0
+
+  MIS%diffu => CS%diffu ; MIS%diffv => CS%diffv
+  MIS%PFu => CS%PFu ; MIS%PFv => CS%PFv
+  MIS%CAu => CS%CAu ; MIS%CAv => CS%CAv
+
+  call continuity_init(Time, G, param_file, diag, CS%continuity_CSp)
+  call CoriolisAdv_init(Time, G, param_file, diag, CS%CoriolisAdv_CSp)
+  call PressureForce_init(Time, G, param_file, diag, CS%PressureForce_CSp, &
+                          CS%tides_CSp)
+  call hor_visc_init(Time, G, param_file, diag, CS%hor_visc_CSp)
+
+  flux_units = get_flux_units(G)
+  CS%id_uh = register_diag_field('ocean_model', 'uh', G%axesCuL, Time, &
+      'Zonal Thickness Flux', flux_units)
+  CS%id_vh = register_diag_field('ocean_model', 'vh', G%axesCvL, Time, &
+      'Meridional Thickness Flux', flux_units)
   CS%id_CAu = register_diag_field('ocean_model', 'CAu', G%axesCuL, Time, &
       'Zonal Coriolis and Advective Acceleration', 'meter second-2')
   CS%id_CAv = register_diag_field('ocean_model', 'CAv', G%axesCvL, Time, &
@@ -531,5 +591,15 @@ subroutine initialize_dyn_unsplit(u, v, h, Time, G, param_file, diag, CS, restar
   id_clock_pass_init = cpu_clock_id('(Ocean init message passing)', grain=CLOCK_ROUTINE)
 
 end subroutine initialize_dyn_unsplit
+
+subroutine end_dyn_unsplit(CS)
+  type(MOM_dyn_control_struct), pointer :: CS
+  
+  DEALLOC_(CS%diffu) ; DEALLOC_(CS%diffv)
+  DEALLOC_(CS%CAu)   ; DEALLOC_(CS%CAv)
+  DEALLOC_(CS%PFu)   ; DEALLOC_(CS%PFv)
+
+  deallocate(CS)
+end subroutine end_dyn_unsplit
 
 end module MOM_dynamics_unsplit
