@@ -185,6 +185,11 @@ THICKNESS_CONFIG = "circle_obcs" !
 DISK_RADIUS = 24.0              !   [k]
                                 ! The radius of the initially elevated disk in the
                                 ! circle_obcs test case.
+    !  Parameters of module MOM_MEKE
+CDRAG = 0.002                   !   [nondim] default = 0.003
+                                ! CDRAG is the drag coefficient relating the magnitude of
+                                ! the velocity field to the bottom stress.
+    !  Parameters of module MOM_lateral_mixing_coeffs
 BOUND_CORIOLIS = True           !   [Boolean] default = False
                                 ! If true, the Coriolis terms at u-points are bounded by
                                 ! the four estimates of (f+rv)v from the four neighboring
@@ -308,10 +313,6 @@ MAXVEL = 10.0                   !   [m s-1] default = 3.0E+08
 USE_JACKSON_PARAM = True        !   [Boolean] default = False
                                 ! If true, use the Jackson-Hallberg-Legg (JPO 2008)
                                 ! shear mixing parameterization.
-CDRAG = 0.002                   !   [nondim] default = 0.003
-                                ! CDRAG is the drag coefficient relating the magnitude of
-                                ! the velocity field to the bottom stress. CDRAG is only
-                                ! used if BOTTOMDRAGLAW is defined.
 DRAG_BG_VEL = 0.05              !   [m s-1] default = 0.0
                                 ! DRAG_BG_VEL is either the assumed bottom velocity (with
                                 ! LINEAR_DRAG) or an unresolved  velocity that is
@@ -324,8 +325,6 @@ BBL_THICK_MIN = 0.1             !   [m] default = 0.0
                                 ! Kv / (cdrag * drag_bg_vel) to give Kv as the minimum
                                 ! near-bottom viscosity.
     !  Parameters of module MOM_thickness_diffuse
-    !  Parameters of module MOM_MEKE
-    !  Parameters of module MOM_lateral_mixing_coeffs
     !  Parameters of module MOM_diabatic_driver
         ! The following parameters are used for diabatic processes.
 KD = 1.0E-04                    !   [m2 s-1]

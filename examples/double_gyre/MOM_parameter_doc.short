@@ -156,6 +156,8 @@ THICKNESS_CONFIG = "uniform"    !
                                 !     sloshing - TBD AJA.
                                 !     seamount - TBD AJA.
                                 !     USER - call a user modified routine.
+    !  Parameters of module MOM_MEKE
+    !  Parameters of module MOM_lateral_mixing_coeffs
 ETA_TOLERANCE = 1.0E-12         !   [m] default = 1.0E-10
                                 ! The tolerance for the differences between the
                                 ! barotropic and baroclinic estimates of the sea surface
@@ -275,8 +277,6 @@ BBL_THICK_MIN = 0.1             !   [m] default = 0.0
                                 ! Kv / (cdrag * drag_bg_vel) to give Kv as the minimum
                                 ! near-bottom viscosity.
     !  Parameters of module MOM_thickness_diffuse
-    !  Parameters of module MOM_MEKE
-    !  Parameters of module MOM_lateral_mixing_coeffs
     !  Parameters of module MOM_diabatic_driver
         ! The following parameters are used for diabatic processes.
     !  Parameters of module MOM_surface_forcing

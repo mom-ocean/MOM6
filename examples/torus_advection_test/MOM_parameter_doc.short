@@ -223,6 +223,11 @@ INITIAL_U_CONST = 0.2           !   [m s-1]
                                 ! A initial uniform value for the zonal flow.
 INITIAL_V_CONST = 0.2           !   [m s-1]
                                 ! A initial uniform value for the meridional flow.
+    !  Parameters of module MOM_MEKE
+CDRAG = 0.0                     !   [nondim] default = 0.003
+                                ! CDRAG is the drag coefficient relating the magnitude of
+                                ! the velocity field to the bottom stress.
+    !  Parameters of module MOM_lateral_mixing_coeffs
 BOUND_CORIOLIS = True           !   [Boolean] default = False
                                 ! If true, the Coriolis terms at u-points are bounded by
                                 ! the four estimates of (f+rv)v from the four neighboring
@@ -339,11 +344,6 @@ BBL_THICK_MIN = 0.1             !   [m] default = 0.0
 KV_BBL_MIN = 1.0E-06            !   [m2 s-1] default = 0.0
                                 ! The minimum viscosities in the bottom boundary layer.
     !  Parameters of module MOM_thickness_diffuse
-    !  Parameters of module MOM_MEKE
-CDRAG = 0.0                     !   [nondim] default = 0.003
-                                ! CDRAG is the drag coefficient relating the magnitude of
-                                ! the velocity field to the bottom stress.
-    !  Parameters of module MOM_lateral_mixing_coeffs
     !  Parameters of module MOM_diabatic_driver
         ! The following parameters are used for diabatic processes.
 KD = 0.0                        !   [m2 s-1]

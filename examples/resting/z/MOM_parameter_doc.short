@@ -63,14 +63,6 @@ DT = 1200.0                     !   [s]
                                 ! is actually used will be an integer fraction of the
                                 ! forcing time-step (DT_FORCING in ocean-only mode or the
                                 ! coupling timestep in coupled mode.)
-BE = 0.7                        !   [nondim] default = 0.6
-                                ! If SPLIT is true, BE determines the relative weighting
-                                ! of a  2nd-order Runga-Kutta baroclinic time stepping
-                                ! scheme (0.5) and a backward Euler scheme (1) that is
-                                ! used for the Coriolis and inertial terms.  BE may be
-                                ! from 0.5 to 1, but instability may occur near 0.5.
-                                ! BE is also applicable if SPLIT is false and USE_RK2
-                                ! is true.
 C_P = 3925.0                    !   [J kg-1 K-1] default = 3991.86795711963
                                 ! The heat capacity of sea water, approximated as a
                                 ! constant. This is only used if ENABLE_THERMODYNAMICS is
@@ -95,6 +87,14 @@ DRHO_DS = 1.0                   !   [kg m-3 PSU-1] default = 0.8
                                 ! salinity.
 RESTARTFILE = "GOLD.res"        ! default = "MOM.res"
                                 ! The name-root of the restart file.
+BE = 0.7                        !   [nondim] default = 0.6
+                                ! If SPLIT is true, BE determines the relative weighting
+                                ! of a  2nd-order Runga-Kutta baroclinic time stepping
+                                ! scheme (0.5) and a backward Euler scheme (1) that is
+                                ! used for the Coriolis and inertial terms.  BE may be
+                                ! from 0.5 to 1, but instability may occur near 0.5.
+                                ! BE is also applicable if SPLIT is false and USE_RK2
+                                ! is true.
     !  Parameters of module MOM_tracer_flow_control
 INPUTDIR = "INPUT/"             ! default = "."
                                 ! The directory in which input files are found.
@@ -231,6 +231,11 @@ INTERPOLATION_SCHEME = "PLM"    ! default = "P1M_H2"
                                 !  P3M_IH6IH5 (4th-order accurate)
                                 !  PQM_IH4IH3 (4th-order accurate)
                                 !  PQM_IH6IH5 (5th-order accurate)
+    !  Parameters of module MOM_MEKE
+CDRAG = 0.0                     !   [nondim] default = 0.003
+                                ! CDRAG is the drag coefficient relating the magnitude of
+                                ! the velocity field to the bottom stress.
+    !  Parameters of module MOM_lateral_mixing_coeffs
 ETA_TOLERANCE = 1.0E-12         !   [m] default = 4.5E-10
                                 ! The tolerance for the differences between the
                                 ! barotropic and baroclinic estimates of the sea surface
@@ -330,10 +335,6 @@ MAXVEL = 6.0                    !   [m s-1] default = 3.0E+08
 LINEAR_DRAG = True              !   [Boolean] default = False
                                 ! If LINEAR_DRAG and BOTTOMDRAGLAW are defined the drag
                                 ! law is cdrag*DRAG_BG_VEL*u.
-CDRAG = 0.0                     !   [nondim] default = 0.003
-                                ! CDRAG is the drag coefficient relating the magnitude of
-                                ! the velocity field to the bottom stress. CDRAG is only
-                                ! used if BOTTOMDRAGLAW is defined.
 DRAG_BG_VEL = 0.1               !   [m s-1] default = 0.0
                                 ! DRAG_BG_VEL is either the assumed bottom velocity (with
                                 ! LINEAR_DRAG) or an unresolved  velocity that is
@@ -348,8 +349,6 @@ BBL_THICK_MIN = 0.1             !   [m] default = 0.0
     !  Parameters of module MOM_thickness_diffuse
 KHTH = 500.0                    !   [m2 s-1] default = 0.0
                                 ! The background horizontal thickness diffusivity.
-    !  Parameters of module MOM_MEKE
-    !  Parameters of module MOM_lateral_mixing_coeffs
     !  Parameters of module MOM_diabatic_driver
         ! The following parameters are used for diabatic processes.
 BBL_EFFIC = 0.0                 !   [nondim] default = 0.2

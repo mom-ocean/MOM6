@@ -226,6 +226,12 @@ SPONGE_STATE_FILE = "MESO_025_63L_IC.nc" ! default = "MESO_Sponge_025mNG.nc"
                                 ! The name of the file with the state to damp toward.
 Total sponge columns = 19167    !
                                 ! The total number of columns where sponges are applied.
+    !  Parameters of module MOM_MEKE
+MEKE_KHTH_FAC = 0.0             !   [nondim] default = 1.0
+                                ! A factor that maps MEKE%Kh to KhTh.
+MEKE_KHTR_FAC = 0.0             !   [nondim] default = 1.0
+                                ! A factor that maps MEKE%Kh to KhTr.
+    !  Parameters of module MOM_lateral_mixing_coeffs
 ETA_TOLERANCE = 1.0E-06         !   [m] default = 3.15E-09
                                 ! The tolerance for the differences between the
                                 ! barotropic and baroclinic estimates of the sea surface
@@ -364,12 +370,6 @@ FOX_KEMPER_ML_RESTRAT_COEF = 5.0 !   [nondim] default = 0.0
                                 ! geostrophic kinetic energy or 1 plus the square of the
                                 ! grid spacing over the deformation radius, as detailed
                                 ! by Fox-Kemper et al. (2010)
-    !  Parameters of module MOM_MEKE
-MEKE_KHTH_FAC = 0.0             !   [nondim] default = 1.0
-                                ! A factor that maps MEKE%Kh to KhTh.
-MEKE_KHTR_FAC = 0.0             !   [nondim] default = 1.0
-                                ! A factor that maps MEKE%Kh to KhTr.
-    !  Parameters of module MOM_lateral_mixing_coeffs
 Z_OUTPUT_GRID_FILE = "OM3_zgrid.nc" ! default = ""
                                 ! The file that specifies the vertical grid for
                                 ! depth-space diagnostics, or blank to disable

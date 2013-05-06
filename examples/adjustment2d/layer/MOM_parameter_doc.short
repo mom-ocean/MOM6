@@ -209,6 +209,11 @@ TS_CONFIG = "adjustment2d"      !
                                 !     sloshing - TBD AJA.
                                 !     seamount - TBD AJA.
                                 !     USER - call a user modified routine.
+    !  Parameters of module MOM_MEKE
+CDRAG = 0.0                     !   [nondim] default = 0.003
+                                ! CDRAG is the drag coefficient relating the magnitude of
+                                ! the velocity field to the bottom stress.
+    !  Parameters of module MOM_lateral_mixing_coeffs
 ETA_TOLERANCE = 1.0E-12         !   [m] default = 1.25E-14
                                 ! The tolerance for the differences between the
                                 ! barotropic and baroclinic estimates of the sea surface
@@ -306,10 +311,6 @@ MAXVEL = 10.0                   !   [m s-1] default = 3.0E+08
                                 ! components are truncated.
     !  Parameters of module MOM_PointAccel
     !  Parameters of module MOM_set_visc
-CDRAG = 0.0                     !   [nondim] default = 0.003
-                                ! CDRAG is the drag coefficient relating the magnitude of
-                                ! the velocity field to the bottom stress. CDRAG is only
-                                ! used if BOTTOMDRAGLAW is defined.
 BBL_THICK_MIN = 0.01            !   [m] default = 0.0
                                 ! The minimum bottom boundary layer thickness that can be
                                 ! used with BOTTOMDRAGLAW. This might be
@@ -318,8 +319,6 @@ BBL_THICK_MIN = 0.01            !   [m] default = 0.0
     !  Parameters of module MOM_thickness_diffuse
 KHTH = 1.0E-04                  !   [m2 s-1] default = 0.0
                                 ! The background horizontal thickness diffusivity.
-    !  Parameters of module MOM_MEKE
-    !  Parameters of module MOM_lateral_mixing_coeffs
     !  Parameters of module MOM_diabatic_driver
         ! The following parameters are used for diabatic processes.
 BBL_EFFIC = 0.0                 !   [nondim] default = 0.2

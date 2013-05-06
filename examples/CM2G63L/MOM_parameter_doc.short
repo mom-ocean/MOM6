@@ -75,17 +75,6 @@ MIN_Z_DIAG_INTERVAL = 2.16E+04  !   [s] default = 0.0
                                 ! calculations of depth-space diagnostics. Making this
                                 ! larger than DT_THERM reduces the  performance penalty
                                 ! of regridding to depth online.
-FLUX_BT_COUPLING = True         !   [Boolean] default = False
-                                ! If true, use mass fluxes to ensure consistency between
-                                ! the baroclinic and barotropic modes. This is only used
-                                ! if SPLIT is true.
-READJUST_BT_TRANS = True        !   [Boolean] default = False
-                                ! If true, make a barotropic adjustment to the layer
-                                ! velocities after the thermodynamic part of the step
-                                ! to ensure that the interaction between the thermodynamics
-                                ! and the continuity solver do not change the barotropic
-                                ! transport.  This is only used if FLUX_BT_COUPLING and
-                                ! SPLIT are true.
 FRAZIL = True                   !   [Boolean] default = False
                                 ! If true, water freezes if it gets too cold, and the
                                 ! the accumulated heat deficit is returned in the
@@ -133,6 +122,17 @@ ML_KHTR_SCALE = 0.0             !   [nondim] default = 1.0
 PARALLEL_RESTARTFILES = True    !   [Boolean] default = False
                                 ! If true, each processor writes its own restart file,
                                 ! otherwise a single restart file is generated
+FLUX_BT_COUPLING = True         !   [Boolean] default = False
+                                ! If true, use mass fluxes to ensure consistency between
+                                ! the baroclinic and barotropic modes. This is only used
+                                ! if SPLIT is true.
+READJUST_BT_TRANS = True        !   [Boolean] default = False
+                                ! If true, make a barotropic adjustment to the layer
+                                ! velocities after the thermodynamic part of the step
+                                ! to ensure that the interaction between the thermodynamics
+                                ! and the continuity solver do not change the barotropic
+                                ! transport.  This is only used if FLUX_BT_COUPLING and
+                                ! SPLIT are true.
     !  Parameters of module MOM_tracer_flow_control
 USE_IDEAL_AGE_TRACER = True     !   [Boolean] default = False
                                 ! If true, use the ideal_age_example tracer package.
@@ -249,6 +249,31 @@ TS_CONFIG = "file"              !
                                 !     USER - call a user modified routine.
 TS_FILE = "GOLD_IC.2010.11.15.nc" !
                                 ! The initial condition file for temperature.
+    !  Parameters of module MOM_MEKE
+    !  Parameters of module MOM_lateral_mixing_coeffs
+USE_VARIABLE_MIXING = True      !   [Boolean] default = False
+                                ! If true, the variable mixing code will be called.  This
+                                ! allows diagnostics to be created even if the scheme is
+                                ! not used.  If KHTR_SLOPE_CFF>0 or  KhTh_Slope_Cff>0,
+                                ! this is set to true regardless of what is in the
+                                ! parameter file.
+RESOLN_SCALED_KH = True         !   [Boolean] default = False
+                                ! If true, the Laplacian lateral viscosity is scaled away
+                                ! when the first baroclinic deformation radius is well
+                                ! resolved.
+RESOLN_SCALED_KHTH = True       !   [Boolean] default = False
+                                ! If true, the interface depth diffusivity is scaled away
+                                ! when the first baroclinic deformation radius is well
+                                ! resolved.
+KHTH_SLOPE_CFF = 0.25           !   [nondim] default = 0.0
+                                ! The nondimensional coefficient in the Visbeck formula
+                                ! for the interface depth diffusivity
+VARMIX_KTOP = 6                 !   [nondim] default = 2
+                                ! The layer number at which to start vertical integration
+                                ! of S*N for purposes of finding the Eady growth rate.
+VISBECK_L_SCALE = 3.0E+04       !   [m] default = 0.0
+                                ! The fixed length scale in the Visbeck formula.
+    !  Parameters of module MOM_wave_speed
 MONOTONIC_CONTINUITY = True     !   [Boolean] default = False
                                 ! If true, CONTINUITY_PPM uses the Colella and Woodward
                                 ! monotonic limiter.  The default (false) is to use a
@@ -381,9 +406,6 @@ BBL_THICK_MIN = 0.1             !   [m] default = 0.0
     !  Parameters of module MOM_thickness_diffuse
 KHTH = 10.0                     !   [m2 s-1] default = 0.0
                                 ! The background horizontal thickness diffusivity.
-KHTH_SLOPE_CFF = 0.25           !   [nondim] default = 0.0
-                                ! The nondimensional coefficient in the Visbeck formula
-                                ! for the interface depth diffusivity
 KHTH_MAX = 900.0                !   [m2 s-1] default = 0.0
                                 ! The maximum horizontal thickness diffusivity.
     !  Parameters of module MOM_mixed_layer_restrat
@@ -396,28 +418,6 @@ FOX_KEMPER_ML_RESTRAT_COEF = 20.0 !   [nondim] default = 0.0
                                 ! geostrophic kinetic energy or 1 plus the square of the
                                 ! grid spacing over the deformation radius, as detailed
                                 ! by Fox-Kemper et al. (2010)
-    !  Parameters of module MOM_MEKE
-    !  Parameters of module MOM_lateral_mixing_coeffs
-USE_VARIABLE_MIXING = True      !   [Boolean] default = False
-                                ! If true, the variable mixing code will be called.  This
-                                ! allows diagnostics to be created even if the scheme is
-                                ! not used.  If KHTR_SLOPE_CFF>0 or  KhTh_Slope_Cff>0,
-                                ! this is set to true regardless of what is in the
-                                ! parameter file.
-RESOLN_SCALED_KH = True         !   [Boolean] default = False
-                                ! If true, the Laplacian lateral viscosity is scaled away
-                                ! when the first baroclinic deformation radius is well
-                                ! resolved.
-RESOLN_SCALED_KHTH = True       !   [Boolean] default = False
-                                ! If true, the interface depth diffusivity is scaled away
-                                ! when the first baroclinic deformation radius is well
-                                ! resolved.
-VARMIX_KTOP = 6                 !   [nondim] default = 2
-                                ! The layer number at which to start vertical integration
-                                ! of S*N for purposes of finding the Eady growth rate.
-VISBECK_L_SCALE = 3.0E+04       !   [m] default = 0.0
-                                ! The fixed length scale in the Visbeck formula.
-    !  Parameters of module MOM_wave_speed
 Z_OUTPUT_GRID_FILE = "OM3_zgrid.nc" ! default = ""
                                 ! The file that specifies the vertical grid for
                                 ! depth-space diagnostics, or blank to disable
