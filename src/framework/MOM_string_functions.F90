@@ -35,6 +35,7 @@ public lowercase, uppercase
 public left_int, left_ints
 public left_real, left_reals
 public stringFunctionsUnitTests
+public extractWord
 
 contains
 
@@ -190,10 +191,10 @@ function left_reals(r,sep)
 end function left_reals
 
 function isFormattedFloatEqualTo(str, val)
-  character(len=*), intent(in) :: str
-  real,             intent(in) :: val
 ! Returns True if the string can be read/parsed to give the exact
 ! value of "val"
+  character(len=*), intent(in) :: str
+  real,             intent(in) :: val
   logical                      :: isFormattedFloatEqualTo
   ! Local variables
   real :: scannedVal
@@ -204,19 +205,63 @@ function isFormattedFloatEqualTo(str, val)
  987 return
 end function isFormattedFloatEqualTo
 
+function extractWord(string,n)
+! Returns string corresponding to the nth word in the argument
+! or "" if the string is not long enough. Both spaces and commas
+! are interpretted as separators.
+  character(len=*), intent(in) :: string
+  integer,          intent(in) :: n
+  character(len=120) :: extractWord
+  ! Local variables
+  integer :: ns, i, b, e, nw
+  logical :: lastCharIsSeperator
+  extractWord = ''
+  lastCharIsSeperator = .true.
+  ns = len_trim(string)
+  i = 0; b=0; e=0; nw=0;
+  do while (i<=ns)
+    i = i+1
+    if (lastCharIsSeperator) then ! search for end of word
+      if (string(i:i)==' ' .or. string(i:i)==',') then
+        continue ! Multiple separators, .e.g '  ' or ', '
+      else
+        lastCharIsSeperator = .false. ! character is beginning of word
+        b = i
+        continue
+      endif
+    else ! continue search for end of word
+      if (string(i:i)==' ' .or. string(i:i)==',') then
+        lastCharIsSeperator = .true.
+        e = i-1 ! Previous character is end of word
+        nw = nw+1
+        if (nw==n) then
+          extractWord = trim(string(b:e))
+          return
+        endif
+      endif
+    endif
+  enddo
+  if (b<=ns) extractWord = trim(string(b:ns))
+end function extractWord
+
 logical function stringFunctionsUnitTests()
   ! Should only be called from a single/root thread
   ! Returns True is a test fails, otherwise False
   integer :: i(5) = (/ -1, 1, 3, 3, 0 /)
-  real :: r(8) = (/ 0., 1., -2., 1.32, 3.E-11, 3.E-11, 3.E-11, -5.1E12 /)
+  real :: r(8) = (/ 0., 1., -2., 1.3, 3.E-11, 3.E-11, 3.E-11, -5.1E12 /)
   stringFunctionsUnitTests = .false.
   write(*,*) '===== MOM_string_functions: stringFunctionsUnitTests ====='
   call localTest(left_int(i(1)),'-1')
   call localTest(left_ints(i(:)),'-1, 1, 3, 3, 0')
   call localTest(left_real(r(1)),'0.0')
-  call localTest(left_reals(r(:)),'0.0, 1.0, -2.0, 1.32, 3*3.0E-11, -5.1E+12')
-  call localTest(left_reals(r(:),sep=' '),'0.0 1.0 -2.0 1.32 3*3.0E-11 -5.1E+12')
-  call localTest(left_reals(r(:),sep=','),'0.0,1.0,-2.0,1.32,3*3.0E-11,-5.1E+12')
+  call localTest(left_reals(r(:)),'0.0, 1.0, -2.0, 1.3, 3*3.0E-11, -5.1E+12')
+  call localTest(left_reals(r(:),sep=' '),'0.0 1.0 -2.0 1.3 3*3.0E-11 -5.1E+12')
+  call localTest(left_reals(r(:),sep=','),'0.0,1.0,-2.0,1.3,3*3.0E-11,-5.1E+12')
+  call localTest(extractWord("One Two,Three",1),"One")
+  call localTest(extractWord("One Two,Three",2),"Two")
+  call localTest(extractWord("One Two,Three",3),"Three")
+  call localTest(extractWord("One Two,  Three",3),"Three")
+  call localTest(extractWord(" One Two,Three",1),"One")
   write(*,*) '=========================================================='
   contains
   subroutine localTest(str1,str2)

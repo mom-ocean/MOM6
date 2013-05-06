@@ -1004,6 +1004,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
                              ! an equation of state.
   logical :: use_tides       ! If true, tidal momentum forcing is used.
   logical :: save_IC         ! If true, save the initial conditions.
+  logical :: do_unit_tests   ! If true, call unit tests.
   character(len=80) :: IC_file ! A file into which the initial conditions are
                              ! written in a new run if save_IC is true.
   type(vardesc) :: vd
@@ -1494,9 +1495,26 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
 
 !  call calculate_surface_state(state, CS%u, CS%v, CS%h, CS%ave_ssh, grid, CS)
 
+  ! Undocumented parameter: set DO_UNIT_TESTS=True to invoke unitTests s/r
+  ! which calls unit tests provided by some modules.
+  call get_param(param_file, "MOM", "DO_UNIT_TESTS", do_unit_tests, default=.false.)
+  if (do_unit_tests) call unitTests
+
   call cpu_clock_end(id_clock_init)
 
 end subroutine initialize_MOM
+
+subroutine unitTests
+  use MOM_string_functions, only : stringFunctionsUnitTests
+! This s/r calls unit tests for other modules. These are NOT normally invoked
+! and so we provide the module use statments here rather than in the module
+! header. This is an exception to our usual coding standards.
+! Note that if a unit test returns true, a FATAL error is triggered.
+
+  if (stringFunctionsUnitTests()) call MOM_error(FATAL, &
+       "MOM/initialize_MOM/unitTests: stringFunctionsUnitTests FAILED")
+
+end subroutine unitTests
 
 ! ============================================================================
 
