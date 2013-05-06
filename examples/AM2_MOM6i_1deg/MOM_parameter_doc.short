@@ -8,31 +8,13 @@ TRIPOLAR_N = True               !   [Boolean] default = False
                                 ! they are on the staggered grid.  Also, the starting
                                 ! index of the velocity-point arrays is usually 0, not 1.
                                 ! This can only be set at compile time.
-!STATIC_MEMORY_ = False         !   [Boolean]
+!STATIC_MEMORY_ = True          !   [Boolean]
                                 ! If STATIC_MEMORY_ is defined, the principle variables
                                 ! will have sizes that are statically determined at
                                 ! compile time.  Otherwise the sizes are not determined
                                 ! until run time. The STATIC option is substantially
                                 ! faster, but does not allow the PE count to be changed
                                 ! at run time.  This can only be set at compile time.
-NIHALO = 4                      ! default = 2
-                                ! The number of halo points on each side in the
-                                ! x-direction.  With STATIC_MEMORY_ this is set as NIHALO_
-                                ! in MOM_memory.h at compile time; without STATIC_MEMORY_
-                                ! the default is NIHALO_ in MOM_memory.h (if defined) or 2.
-NJHALO = 4                      ! default = 2
-                                ! The number of halo points on each side in the
-                                ! y-direction.  With STATIC_MEMORY_ this is set as NJHALO_
-                                ! in MOM_memory.h at compile time; without STATIC_MEMORY_
-                                ! the default is NJHALO_ in MOM_memory.h (if defined) or 2.
-NIGLOBAL = 360                  !
-                                ! The total number of thickness grid points in the
-                                ! x-direction in the physical domain. With STATIC_MEMORY_
-                                ! this is set in MOM_memory.h at compile time.
-NJGLOBAL = 210                  !
-                                ! The total number of thickness grid points in the
-                                ! y-direction in the physical domain. With STATIC_MEMORY_
-                                ! this is set in MOM_memory.h at compile time.
 !NIPROC = 10                    !
                                 ! The number of processors in the x-direction. With
                                 ! STATIC_MEMORY_ this is set in MOM_memory.h at compile time.
@@ -47,8 +29,6 @@ NJPROC_IO = 1                   ! default = 0
                                 ! y-direction, or 0 to equal NJPROC.
     !  Parameters of module MOM_grid
         ! Parameters providing information about the vertical grid.
-NK = 63                         !   [nondim]
-                                ! The number of model layers.
     !  Parameters of module MOM
 THICKNESSDIFFUSE = True         !   [Boolean] default = False
                                 ! If true, interfaces or isopycnal surfaces are diffused,
@@ -281,56 +261,6 @@ SMAGORINSKY_AH = True           !   [Boolean] default = False
 SMAG_BI_CONST = 0.06            !   [nondim] default = 0.0
                                 ! The nondimensional biharmonic Smagorinsky constant,
                                 ! typically 0.015 - 0.06.
-    !  Parameters of module MOM_barotropic
-BOUND_BT_CORRECTION = True      !   [Boolean] default = False
-                                ! If true, the corrective pseudo mass-fluxes into the
-                                ! barotropic solver are limited to values that require
-                                ! less than 0.1*MAXVEL to be accommodated.
-!BT x-halo = 0                  !
-                                ! The barotropic x-halo size that is actually used.
-!BT y-halo = 0                  !
-                                ! The barotropic y-halo size that is actually used.
-BT_PROJECT_VELOCITY = True      !   [Boolean] default = False
-                                ! If true, step the barotropic velocity first and project
-                                ! out the velocity tendancy by 1+BEBT when calculating the
-                                ! transport.  The default (false) is to use a predictor
-                                ! continuity step to find the pressure field, and then
-                                ! to do a corrector continuity step using a weighted
-                                ! average of the old and new velocities, with weights
-                                ! of (1-BEBT) and BEBT.
-BT_THICK_SCHEME = "FROM_BT_CONT" ! default = "HYBRID"
-                                ! A string describing the scheme that is used to set the
-                                ! open face areas used for barotropic transport and the
-                                ! relative weights of the accelerations. Valid values are:
-                                !    ARITHMETIC - arithmetic mean layer thicknesses
-                                !    HARMONIC - harmonic mean layer thicknesses
-                                !    HYBRID (the default) - use arithmetic means for
-                                !       layers above the shallowest bottom, the harmonic
-                                !       mean for layers below, and a weighted average for
-                                !       layers that straddle that depth
-                                !    FROM_BT_CONT - use the average thicknesses kept
-                                !       in the h_u and h_v fields of the BT_cont_type
-BT_STRONG_DRAG = True           !   [Boolean] default = False
-                                ! If true, use a stronger estimate of the retarding
-                                ! effects of strong bottom drag, by making it implicit
-                                ! with the barotropic time-step instead of implicit with
-                                ! the baroclinic time-step and dividing by the number of
-                                ! barotropic steps.
-BEBT = 0.2                      !   [nondim] default = 0.1
-                                ! BEBT determines whether the barotropic time stepping
-                                ! uses the forward-backward time-stepping scheme or a
-                                ! backward Euler scheme. BEBT is valid in the range from
-                                ! 0 (for a forward-backward treatment of nonrotating
-                                ! gravity waves) to 1 (for a backward Euler treatment).
-                                ! In practice, BEBT must be greater than about 0.05.
-DTBT = -0.95                    !   [s or nondim] default = -0.98
-                                ! The barotropic time step, in s. DTBT is only used with
-                                ! the split explicit time stepping. To set the time step
-                                ! automatically based the maximum stable value use 0, or
-                                ! a negative value gives the fraction of the stable value.
-                                ! Setting DTBT to 0 is the same as setting it to -0.98.
-                                ! The value of DTBT that will actually be used is an
-                                ! integer fraction of DT, rounding down.
     !  Parameters of module MOM_vert_friction
 CHANNEL_DRAG = True             !   [Boolean] default = False
                                 ! If true, the bottom drag is exerted directly on each
@@ -381,6 +311,56 @@ BBL_THICK_MIN = 0.1             !   [m] default = 0.0
                                 ! used with BOTTOMDRAGLAW. This might be
                                 ! Kv / (cdrag * drag_bg_vel) to give Kv as the minimum
                                 ! near-bottom viscosity.
+    !  Parameters of module MOM_barotropic
+BOUND_BT_CORRECTION = True      !   [Boolean] default = False
+                                ! If true, the corrective pseudo mass-fluxes into the
+                                ! barotropic solver are limited to values that require
+                                ! less than 0.1*MAXVEL to be accommodated.
+!BT x-halo = 10                 !
+                                ! The barotropic x-halo size that is actually used.
+!BT y-halo = 10                 !
+                                ! The barotropic y-halo size that is actually used.
+BT_PROJECT_VELOCITY = True      !   [Boolean] default = False
+                                ! If true, step the barotropic velocity first and project
+                                ! out the velocity tendancy by 1+BEBT when calculating the
+                                ! transport.  The default (false) is to use a predictor
+                                ! continuity step to find the pressure field, and then
+                                ! to do a corrector continuity step using a weighted
+                                ! average of the old and new velocities, with weights
+                                ! of (1-BEBT) and BEBT.
+BT_THICK_SCHEME = "FROM_BT_CONT" ! default = "HYBRID"
+                                ! A string describing the scheme that is used to set the
+                                ! open face areas used for barotropic transport and the
+                                ! relative weights of the accelerations. Valid values are:
+                                !    ARITHMETIC - arithmetic mean layer thicknesses
+                                !    HARMONIC - harmonic mean layer thicknesses
+                                !    HYBRID (the default) - use arithmetic means for
+                                !       layers above the shallowest bottom, the harmonic
+                                !       mean for layers below, and a weighted average for
+                                !       layers that straddle that depth
+                                !    FROM_BT_CONT - use the average thicknesses kept
+                                !       in the h_u and h_v fields of the BT_cont_type
+BT_STRONG_DRAG = True           !   [Boolean] default = False
+                                ! If true, use a stronger estimate of the retarding
+                                ! effects of strong bottom drag, by making it implicit
+                                ! with the barotropic time-step instead of implicit with
+                                ! the baroclinic time-step and dividing by the number of
+                                ! barotropic steps.
+BEBT = 0.2                      !   [nondim] default = 0.1
+                                ! BEBT determines whether the barotropic time stepping
+                                ! uses the forward-backward time-stepping scheme or a
+                                ! backward Euler scheme. BEBT is valid in the range from
+                                ! 0 (for a forward-backward treatment of nonrotating
+                                ! gravity waves) to 1 (for a backward Euler treatment).
+                                ! In practice, BEBT must be greater than about 0.05.
+DTBT = -0.95                    !   [s or nondim] default = -0.98
+                                ! The barotropic time step, in s. DTBT is only used with
+                                ! the split explicit time stepping. To set the time step
+                                ! automatically based the maximum stable value use 0, or
+                                ! a negative value gives the fraction of the stable value.
+                                ! Setting DTBT to 0 is the same as setting it to -0.98.
+                                ! The value of DTBT that will actually be used is an
+                                ! integer fraction of DT, rounding down.
     !  Parameters of module MOM_thickness_diffuse
 KHTH = 10.0                     !   [m2 s-1] default = 0.0
                                 ! The background horizontal thickness diffusivity.

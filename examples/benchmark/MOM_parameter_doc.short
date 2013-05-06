@@ -1,4 +1,4 @@
-!SYMMETRIC_MEMORY_ = False      !   [Boolean]
+!SYMMETRIC_MEMORY_ = True       !   [Boolean]
                                 ! If defined, the velocity point data domain includes
                                 ! every face of the thickness points. In other words,
                                 ! some arrays are larger than others, depending on where
@@ -12,16 +12,6 @@
                                 ! until run time. The STATIC option is substantially
                                 ! faster, but does not allow the PE count to be changed
                                 ! at run time.  This can only be set at compile time.
-NIHALO = 4                      ! default = 2
-                                ! The number of halo points on each side in the
-                                ! x-direction.  With STATIC_MEMORY_ this is set as NIHALO_
-                                ! in MOM_memory.h at compile time; without STATIC_MEMORY_
-                                ! the default is NIHALO_ in MOM_memory.h (if defined) or 2.
-NJHALO = 4                      ! default = 2
-                                ! The number of halo points on each side in the
-                                ! y-direction.  With STATIC_MEMORY_ this is set as NJHALO_
-                                ! in MOM_memory.h at compile time; without STATIC_MEMORY_
-                                ! the default is NJHALO_ in MOM_memory.h (if defined) or 2.
 NIGLOBAL = 360                  !
                                 ! The total number of thickness grid points in the
                                 ! x-direction in the physical domain. With STATIC_MEMORY_
@@ -279,6 +269,52 @@ SMAGORINSKY_AH = True           !   [Boolean] default = False
 SMAG_BI_CONST = 0.06            !   [nondim] default = 0.0
                                 ! The nondimensional biharmonic Smagorinsky constant,
                                 ! typically 0.015 - 0.06.
+    !  Parameters of module MOM_vert_friction
+DYNAMIC_VISCOUS_ML = True       !   [Boolean] default = False
+                                ! If true, use a bulk Richardson number criterion to
+                                ! determine the mixed layer thickness for viscosity.
+U_TRUNC_FILE = "U_velocity_truncations" ! default = ""
+                                ! The absolute path to a file into which the accelerations
+                                ! leading to zonal velocity truncations are written.
+                                ! Undefine this for efficiency if this diagnostic is not
+                                ! needed.
+V_TRUNC_FILE = "V_velocity_truncations" ! default = ""
+                                ! The absolute path to a file into which the accelerations
+                                ! leading to meridional velocity truncations are written.
+                                ! Undefine this for efficiency if this diagnostic is not
+                                ! needed.
+KV = 1.0E-04                    !   [m2 s-1]
+                                ! The background kinematic viscosity in the interior.
+                                ! The molecular value, ~1e-6 m2 s-1, may be used.
+HBBL = 10.0                     !   [m]
+                                ! The thickness of a bottom boundary layer with a
+                                ! viscosity of KVBBL if BOTTOMDRAGLAW is not defined, or
+                                ! the thickness over which near-bottom velocities are
+                                ! averaged for the drag law if BOTTOMDRAGLAW is defined
+                                ! but LINEAR_DRAG is not.
+MAXVEL = 10.0                   !   [m s-1] default = 3.0E+08
+                                ! The maximum velocity allowed before the velocity
+                                ! components are truncated.
+    !  Parameters of module MOM_PointAccel
+    !  Parameters of module MOM_set_visc
+USE_JACKSON_PARAM = True        !   [Boolean] default = False
+                                ! If true, use the Jackson-Hallberg-Legg (JPO 2008)
+                                ! shear mixing parameterization.
+ML_USE_OMEGA = True             !   [Boolean] default = False
+                                ! If true, use the absolute rotation rate instead of the
+                                ! vertical component of rotation when setting the decay
+                                ! scale for turbulence.
+DRAG_BG_VEL = 0.1               !   [m s-1] default = 0.0
+                                ! DRAG_BG_VEL is either the assumed bottom velocity (with
+                                ! LINEAR_DRAG) or an unresolved  velocity that is
+                                ! combined with the resolved velocity to estimate the
+                                ! velocity magnitude.  DRAG_BG_VEL is only used when
+                                ! BOTTOMDRAGLAW is defined.
+BBL_THICK_MIN = 0.1             !   [m] default = 0.0
+                                ! The minimum bottom boundary layer thickness that can be
+                                ! used with BOTTOMDRAGLAW. This might be
+                                ! Kv / (cdrag * drag_bg_vel) to give Kv as the minimum
+                                ! near-bottom viscosity.
     !  Parameters of module MOM_barotropic
 BOUND_BT_CORRECTION = True      !   [Boolean] default = False
                                 ! If true, the corrective pseudo mass-fluxes into the
@@ -333,52 +369,6 @@ DTBT = -0.95                    !   [s or nondim] default = -0.98
                                 ! Setting DTBT to 0 is the same as setting it to -0.98.
                                 ! The value of DTBT that will actually be used is an
                                 ! integer fraction of DT, rounding down.
-    !  Parameters of module MOM_vert_friction
-DYNAMIC_VISCOUS_ML = True       !   [Boolean] default = False
-                                ! If true, use a bulk Richardson number criterion to
-                                ! determine the mixed layer thickness for viscosity.
-U_TRUNC_FILE = "U_velocity_truncations" ! default = ""
-                                ! The absolute path to a file into which the accelerations
-                                ! leading to zonal velocity truncations are written.
-                                ! Undefine this for efficiency if this diagnostic is not
-                                ! needed.
-V_TRUNC_FILE = "V_velocity_truncations" ! default = ""
-                                ! The absolute path to a file into which the accelerations
-                                ! leading to meridional velocity truncations are written.
-                                ! Undefine this for efficiency if this diagnostic is not
-                                ! needed.
-KV = 1.0E-04                    !   [m2 s-1]
-                                ! The background kinematic viscosity in the interior.
-                                ! The molecular value, ~1e-6 m2 s-1, may be used.
-HBBL = 10.0                     !   [m]
-                                ! The thickness of a bottom boundary layer with a
-                                ! viscosity of KVBBL if BOTTOMDRAGLAW is not defined, or
-                                ! the thickness over which near-bottom velocities are
-                                ! averaged for the drag law if BOTTOMDRAGLAW is defined
-                                ! but LINEAR_DRAG is not.
-MAXVEL = 10.0                   !   [m s-1] default = 3.0E+08
-                                ! The maximum velocity allowed before the velocity
-                                ! components are truncated.
-    !  Parameters of module MOM_PointAccel
-    !  Parameters of module MOM_set_visc
-USE_JACKSON_PARAM = True        !   [Boolean] default = False
-                                ! If true, use the Jackson-Hallberg-Legg (JPO 2008)
-                                ! shear mixing parameterization.
-ML_USE_OMEGA = True             !   [Boolean] default = False
-                                ! If true, use the absolute rotation rate instead of the
-                                ! vertical component of rotation when setting the decay
-                                ! scale for turbulence.
-DRAG_BG_VEL = 0.1               !   [m s-1] default = 0.0
-                                ! DRAG_BG_VEL is either the assumed bottom velocity (with
-                                ! LINEAR_DRAG) or an unresolved  velocity that is
-                                ! combined with the resolved velocity to estimate the
-                                ! velocity magnitude.  DRAG_BG_VEL is only used when
-                                ! BOTTOMDRAGLAW is defined.
-BBL_THICK_MIN = 0.1             !   [m] default = 0.0
-                                ! The minimum bottom boundary layer thickness that can be
-                                ! used with BOTTOMDRAGLAW. This might be
-                                ! Kv / (cdrag * drag_bg_vel) to give Kv as the minimum
-                                ! near-bottom viscosity.
     !  Parameters of module MOM_thickness_diffuse
 KHTH = 1.0                      !   [m2 s-1] default = 0.0
                                 ! The background horizontal thickness diffusivity.

@@ -87,12 +87,14 @@ use MOM_checksums, only : MOM_checksums_init, hchksum, uchksum, vchksum
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
 use MOM_error_handler, only : MOM_set_verbosity
 use MOM_file_parser, only : read_param, get_param, log_version, param_file_type
+use MOM_get_input, only : directories
 use MOM_io, only : MOM_io_init, vardesc
 use MOM_restart, only : register_restart_field, query_initialized, save_restart
 use MOM_restart, only : restart_init, MOM_restart_CS
 use MOM_time_manager, only : time_type, set_time, time_type_to_real, operator(+)
 use MOM_time_manager, only : operator(-), operator(>), operator(*), operator(/)
 
+use MOM_ALE, only : ALE_CS
 use MOM_continuity, only : continuity, continuity_init, continuity_CS
 use MOM_CoriolisAdv, only : CorAdCalc, CoriolisAdv_init, CoriolisAdv_CS
 use MOM_EOS, only : select_eqn_of_state
@@ -194,8 +196,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
   up(:,:,:) = 0; upp(:,:,:) = 0
   vp(:,:,:) = 0; vpp(:,:,:) = 0
 
-  dyn_p_surf = CS%interp_p_surf .and. associated(p_surf_begin) .and. &
-               associated(p_surf_end)
+  dyn_p_surf = associated(p_surf_begin) .and. associated(p_surf_end)
   if (dyn_p_surf) then
     call safe_alloc_ptr(p_surf,G%isd,G%ied,G%jsd,G%jed) ; p_surf(:,:) = 0.0
   else
@@ -490,6 +491,7 @@ subroutine register_restarts_dyn_unsplit(G, param_file, CS, restart_CS)
 !  (in)      restart_CS - A pointer to the restart control structure.
 
   type(vardesc) :: vd
+  character(len=40)  :: mod = "MOM_dynamics_unsplit" ! This module's name.
   character(len=48) :: thickness_units, flux_units
   integer :: isd, ied, jsd, jed, nz, IsdB, IedB, JsdB, JedB
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = G%ke
@@ -502,23 +504,6 @@ subroutine register_restarts_dyn_unsplit(G, param_file, CS, restart_CS)
 !   return
 ! endif
 ! allocate(CS_unsplit)
-
-  call get_param(param_file, "MOM", "BE", CS%be, &
-                 "If SPLIT is true, BE determines the relative weighting \n"//&
-                 "of a  2nd-order Runga-Kutta baroclinic time stepping \n"//&
-                 "scheme (0.5) and a backward Euler scheme (1) that is \n"//&
-                 "used for the Coriolis and inertial terms.  BE may be \n"//&
-                 "from 0.5 to 1, but instability may occur near 0.5. \n"//&
-                 "BE is also applicable if SPLIT is false and USE_RK2 \n"//&
-                 "is true.", units="nondim", default=0.6)
-  call get_param(param_file, "MOM", "BEGW", CS%begw, &
-                 "If SPILT is true, BEGW is a number from 0 to 1 that \n"//&
-                 "controls the extent to which the treatment of gravity \n"//&
-                 "waves is forward-backward (0) or simulated backward \n"//&
-                 "Euler (1).  0 is almost always used.\n"//&
-                 "If SPLIT is false and USE_RK2 is true, BEGW can be \n"//&
-                 "between 0 and 0.5 to damp gravity waves.", &
-                 units="nondim", default=0.0)
 
   ALLOC_(CS%diffu(IsdB:IedB,jsd:jed,nz)) ; CS%diffu(:,:,:) = 0.0
   ALLOC_(CS%diffv(isd:ied,JsdB:JedB,nz)) ; CS%diffv(:,:,:) = 0.0
@@ -535,7 +520,7 @@ subroutine register_restarts_dyn_unsplit(G, param_file, CS, restart_CS)
 end subroutine register_restarts_dyn_unsplit
 
 subroutine initialize_dyn_unsplit(u, v, h, Time, G, param_file, diag, CS, &
-                                  restart_CS, MIS)
+                                  restart_CS, MIS, OBC, ALE_CSp, visc, dirs, ntrunc)
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(inout) :: u
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(inout) :: v
   real, dimension(NIMEM_,NJMEM_,NKMEM_) , intent(inout) :: h
@@ -546,13 +531,50 @@ subroutine initialize_dyn_unsplit(u, v, h, Time, G, param_file, diag, CS, &
   type(MOM_dyn_control_struct),   target, intent(inout) :: CS
   type(MOM_restart_CS),                   pointer       :: restart_CS
   type(ocean_internal_state),             intent(inout) :: MIS
+  type(ocean_OBC_type),                   pointer       :: OBC
+  type(ALE_CS),                           pointer       :: ALE_CSp
+  type(vertvisc_type),                    intent(inout) :: visc
+  type(directories),                      intent(in)    :: dirs
+  integer, target,                        intent(inout) :: ntrunc
 
   !   This subroutine initializes any variables that are specific to this time
   ! stepping scheme, including the cpu clocks.
+  character(len=40) :: mod = "MOM_dynamics_unsplit" ! This module's name.
   character(len=48) :: thickness_units, flux_units
+  logical :: use_tides
   integer :: isd, ied, jsd, jed, nz, IsdB, IedB, JsdB, JedB
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = G%ke
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
+
+  if (CS%module_is_initialized) then
+    call MOM_error(WARNING, "initialize_dyn_unsplit called with a control "// &
+                            "structure that has already been initialized.")
+    return
+  endif
+  CS%module_is_initialized = .true.
+
+  CS%diag => diag
+
+  call get_param(param_file, mod, "BE", CS%be, &
+                 "If SPLIT is true, BE determines the relative weighting \n"//&
+                 "of a  2nd-order Runga-Kutta baroclinic time stepping \n"//&
+                 "scheme (0.5) and a backward Euler scheme (1) that is \n"//&
+                 "used for the Coriolis and inertial terms.  BE may be \n"//&
+                 "from 0.5 to 1, but instability may occur near 0.5. \n"//&
+                 "BE is also applicable if SPLIT is false and USE_RK2 \n"//&
+                 "is true.", units="nondim", default=0.6)
+  call get_param(param_file, mod, "BEGW", CS%begw, &
+                 "If SPILT is true, BEGW is a number from 0 to 1 that \n"//&
+                 "controls the extent to which the treatment of gravity \n"//&
+                 "waves is forward-backward (0) or simulated backward \n"//&
+                 "Euler (1).  0 is almost always used.\n"//&
+                 "If SPLIT is false and USE_RK2 is true, BEGW can be \n"//&
+                 "between 0 and 0.5 to damp gravity waves.", &
+                 units="nondim", default=0.0)
+  call get_param(param_file, mod, "DEBUG", CS%debug, &
+                 "If true, write out verbose debugging data.", default=.false.)
+  call get_param(param_file, mod, "TIDES", use_tides, &
+                 "If true, apply tidal momentum forcing.", default=.false.)
 
   allocate(CS%taux_bot(IsdB:IedB,jsd:jed)) ; CS%taux_bot(:,:) = 0.0
   allocate(CS%tauy_bot(isd:ied,JsdB:JedB)) ; CS%tauy_bot(:,:) = 0.0
@@ -563,9 +585,19 @@ subroutine initialize_dyn_unsplit(u, v, h, Time, G, param_file, diag, CS, &
 
   call continuity_init(Time, G, param_file, diag, CS%continuity_CSp)
   call CoriolisAdv_init(Time, G, param_file, diag, CS%CoriolisAdv_CSp)
+  if (use_tides) call tidal_forcing_init(Time, G, param_file, CS%tides_CSp)
   call PressureForce_init(Time, G, param_file, diag, CS%PressureForce_CSp, &
                           CS%tides_CSp)
   call hor_visc_init(Time, G, param_file, diag, CS%hor_visc_CSp)
+  call vertvisc_init(MIS, Time, G, param_file, diag, dirs, &
+                     ntrunc, CS%vertvisc_CSp)
+  call set_visc_init(Time, G, param_file, diag, visc, CS%set_visc_CSp)
+
+  if (associated(ALE_CSp)) CS%ALE_CSp => ALE_CSp
+  if (associated(OBC)) then
+    CS%OBC => OBC
+    call open_boundary_init(Time, G, param_file, diag, CS%open_boundary_CSp)
+  endif
 
   flux_units = get_flux_units(G)
   CS%id_uh = register_diag_field('ocean_model', 'uh', G%axesCuL, Time, &

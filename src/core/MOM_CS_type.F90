@@ -63,7 +63,7 @@ use MOM_tracer, only : advect_tracer_CS
 use MOM_tracer_flow_control, only : tracer_flow_control_CS
 use MOM_vert_friction, only : vertvisc_CS
 use MOM_set_visc, only : set_visc_CS
-use MOM_ALE, only: ALE_CS
+use MOM_ALE, only : ALE_CS
 
 implicit none ; private
 
@@ -171,10 +171,10 @@ type, public :: MOM_control_struct
   real    :: bad_val_sss_max   ! Maximum SSS before triggering bad value message
 
   real, pointer, dimension(:,:) :: &
-    p_surf_prev, &  ! The value of the surface pressure at the end of the
-                    ! previous call to step_MOM, in Pa.
-    p_surf_begin, & ! The values of the surface pressure at the beginning and
-    p_surf_end      ! end of a call to step_MOM_dyn_..., in Pa.
+    p_surf_prev => NULL(), &  ! The value of the surface pressure at the end of
+                              ! the previous call to step_MOM, in Pa.
+    p_surf_begin => NULL(), & ! The values of the surface pressure at the start
+    p_surf_end => NULL()      ! and end of a call to step_MOM_dyn_..., in Pa.
 
   ! Arrays that can be used to store advective and diffusive tracer fluxes.
   real, pointer, dimension(:,:,:) :: &
@@ -214,6 +214,7 @@ type, public :: MOM_control_struct
   type(diagnostics_CS), pointer :: diagnostics_CSp => NULL()
   type(diag_to_Z_CS), pointer :: diag_to_Z_CSp => NULL()
   type(MOM_restart_CS),  pointer :: restart_CSp => NULL()
+  type(ocean_OBC_type), pointer :: OBC => NULL()
   type(ALE_CS), pointer :: ALE_CSp => NULL()
 end type MOM_control_struct
 
@@ -287,10 +288,6 @@ type, public :: MOM_dyn_control_struct
   logical :: split_bottom_stress  ! If true, provide the bottom stress
                                ! calculated by the vertical viscosity to the
                                ! barotropic solver.
-  logical :: interp_p_surf     ! If true, linearly interpolate the surface
-                               ! pressure over the coupling time step, using 
-                               ! the specified value at the end of the coupling
-                               ! step. False by default.
   logical :: readjust_BT_trans ! If true, readjust the barotropic transport of
                                ! the input velocities to agree with CS%uhbt_in
                                ! and CS%vhbt_in after the diabatic step.
@@ -309,9 +306,8 @@ type, public :: MOM_dyn_control_struct
                              ! is forward-backward (0) or simulated backward
                              ! Euler (1).  0 is almost always used.
   logical :: debug           ! If true, write verbose checksums for debugging purposes.
-  logical :: debug_truncations  ! If true, make sure that all diagnostics that
-                             ! could be useful for debugging any truncations are
-                             ! calculated.
+
+  logical :: module_is_initialized = .false.
 
   integer :: id_uh = -1, id_vh = -1
   integer :: id_PFu = -1, id_PFv = -1, id_CAu = -1, id_CAv = -1
@@ -336,7 +332,7 @@ type, public :: MOM_dyn_control_struct
   type(ocean_OBC_type), pointer :: OBC => NULL() ! A pointer to an open boundary
      ! condition type that specifies whether, where, and  what open boundary
      ! conditions are used.  If no open BCs are used, this pointer stays
-     ! nullified.  Flather OBCs use open boundary_CS
+     ! nullified.  Flather OBCs use open boundary_CS as well.
   type(tidal_forcing_CS), pointer :: tides_CSp => NULL()
 
 ! This is a copy of the pointer in the top-level control structure.

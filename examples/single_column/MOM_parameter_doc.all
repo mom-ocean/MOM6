@@ -42,7 +42,7 @@ NJGLOBAL = 2                    !
 !NIPROC = 1                     !
                                 ! The number of processors in the x-direction. With
                                 ! STATIC_MEMORY_ this is set in MOM_memory.h at compile time.
-!NJPROC = 2                     !
+!NJPROC = 1                     !
                                 ! The number of processors in the x-direction. With
                                 ! STATIC_MEMORY_ this is set in MOM_memory.h at compile time.
 NIPROC_IO = 0                   ! default = 0
@@ -167,8 +167,6 @@ P_REF = 2.0E+07                 !   [Pa] default = 2.0E+07
                                 ! density.  (1 Pa = 1e4 dbar, so 2e7 is commonly used.)
                                 ! This is only used if USE_EOS and ENABLE_THERMODYNAMICS
                                 ! are true.
-TIDES = False                   !   [Boolean] default = False
-                                ! If true, apply tidal momentum forcing.
 NKML = 2                        !   [nondim] default = 2
                                 ! The number of sublayers within the mixed layer if
                                 ! BULKMIXEDLAYER is true.
@@ -243,21 +241,6 @@ LARGE_FILE_SUPPORT = True       !   [Boolean] default = True
 MAX_FIELDS = 50                 ! default = 50
                                 ! The maximum number of restart fields that can be used
                                 ! The default value is set in MOM_memory.h as MAX_FIELDS_.
-BE = 0.6                        !   [nondim] default = 0.6
-                                ! If SPLIT is true, BE determines the relative weighting
-                                ! of a  2nd-order Runga-Kutta baroclinic time stepping
-                                ! scheme (0.5) and a backward Euler scheme (1) that is
-                                ! used for the Coriolis and inertial terms.  BE may be
-                                ! from 0.5 to 1, but instability may occur near 0.5.
-                                ! BE is also applicable if SPLIT is false and USE_RK2
-                                ! is true.
-BEGW = 0.0                      !   [nondim] default = 0.0
-                                ! If SPILT is true, BEGW is a number from 0 to 1 that
-                                ! controls the extent to which the treatment of gravity
-                                ! waves is forward-backward (0) or simulated backward
-                                ! Euler (1).  0 is almost always used.
-                                ! If SPLIT is false and USE_RK2 is true, BEGW can be
-                                ! between 0 and 0.5 to damp gravity waves.
     !  Parameters of module MOM_tracer_flow_control
 USE_USER_TRACER_EXAMPLE = False !   [Boolean] default = False
                                 ! If true, use the USER_tracer_example tracer package.
@@ -534,6 +517,23 @@ RESOLN_SCALED_KHTR = False      !   [Boolean] default = False
 KHTH_SLOPE_CFF = 0.0            !   [nondim] default = 0.0
                                 ! The nondimensional coefficient in the Visbeck formula
                                 ! for the interface depth diffusivity
+BE = 0.6                        !   [nondim] default = 0.6
+                                ! If SPLIT is true, BE determines the relative weighting
+                                ! of a  2nd-order Runga-Kutta baroclinic time stepping
+                                ! scheme (0.5) and a backward Euler scheme (1) that is
+                                ! used for the Coriolis and inertial terms.  BE may be
+                                ! from 0.5 to 1, but instability may occur near 0.5.
+                                ! BE is also applicable if SPLIT is false and USE_RK2
+                                ! is true.
+BEGW = 0.0                      !   [nondim] default = 0.0
+                                ! If SPILT is true, BEGW is a number from 0 to 1 that
+                                ! controls the extent to which the treatment of gravity
+                                ! waves is forward-backward (0) or simulated backward
+                                ! Euler (1).  0 is almost always used.
+                                ! If SPLIT is false and USE_RK2 is true, BEGW can be
+                                ! between 0 and 0.5 to damp gravity waves.
+TIDES = False                   !   [Boolean] default = False
+                                ! If true, apply tidal momentum forcing.
 CONTINUITY_SCHEME = "PPM"       ! default = "PPM"
                                 ! CONTINUITY_SCHEME selects the discretization for the
                                 ! continuity solver. The only valid value currently is:

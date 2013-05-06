@@ -87,12 +87,14 @@ use MOM_checksums, only : MOM_checksums_init, hchksum, uchksum, vchksum
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
 use MOM_error_handler, only : MOM_set_verbosity
 use MOM_file_parser, only : read_param, get_param, log_version, param_file_type
+use MOM_get_input, only : directories
 use MOM_io, only : MOM_io_init, vardesc
 use MOM_restart, only : register_restart_field, query_initialized, save_restart
 use MOM_restart, only : restart_init, MOM_restart_CS
 use MOM_time_manager, only : time_type, set_time, time_type_to_real, operator(+)
 use MOM_time_manager, only : operator(-), operator(>), operator(*), operator(/)
 
+use MOM_ALE, only : ALE_CS
 use MOM_barotropic, only : barotropic_init, btstep, btcalc, bt_mass_source
 use MOM_barotropic, only : register_barotropic_restarts, set_dtbt, barotropic_CS
 use MOM_continuity, only : continuity, continuity_init, continuity_CS
@@ -261,8 +263,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
     call check_redundant("Start predictor uh ", uh, vh, G)
   endif
 
-  dyn_p_surf = CS%interp_p_surf .and. associated(p_surf_begin) .and. &
-               associated(p_surf_end)
+  dyn_p_surf = associated(p_surf_begin) .and. associated(p_surf_end)
   if (dyn_p_surf) then
     p_surf => p_surf_end
     call safe_alloc_ptr(eta_PF_start,G%isd,G%ied,G%jsd,G%jed)
@@ -980,8 +981,9 @@ subroutine register_restarts_dyn_split_RK2(G, param_file, CS, restart_CS, uh, vh
 !  (inout)   vh - The meridional volume or mass transport, in m3 s-1 or kg s-1.
 
   type(vardesc) :: vd
+  character(len=40)  :: mod = "MOM_dynamics_split_RK2" ! This module's name.
   character(len=48) :: thickness_units, flux_units
-  logical :: adiabatic
+  logical :: adiabatic, flux_BT_coupling, readjust_BT_trans
   integer :: isd, ied, jsd, jed, nz, IsdB, IedB, JsdB, JedB
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = G%ke
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
@@ -994,43 +996,11 @@ subroutine register_restarts_dyn_split_RK2(G, param_file, CS, restart_CS, uh, vh
 ! endif
 ! allocate(CS_split)
 
-  call get_param(param_file, "MOM", "BE", CS%be, &
-                 "If SPLIT is true, BE determines the relative weighting \n"//&
-                 "of a  2nd-order Runga-Kutta baroclinic time stepping \n"//&
-                 "scheme (0.5) and a backward Euler scheme (1) that is \n"//&
-                 "used for the Coriolis and inertial terms.  BE may be \n"//&
-                 "from 0.5 to 1, but instability may occur near 0.5. \n"//&
-                 "BE is also applicable if SPLIT is false and USE_RK2 \n"//&
-                 "is true.", units="nondim", default=0.6)
-  call get_param(param_file, "MOM", "BEGW", CS%begw, &
-                 "If SPILT is true, BEGW is a number from 0 to 1 that \n"//&
-                 "controls the extent to which the treatment of gravity \n"//&
-                 "waves is forward-backward (0) or simulated backward \n"//&
-                 "Euler (1).  0 is almost always used.\n"//&
-                 "If SPLIT is false and USE_RK2 is true, BEGW can be \n"//&
-                 "between 0 and 0.5 to damp gravity waves.", &
-                 units="nondim", default=0.0)
-
-  call get_param(param_file, "MOM", "FLUX_BT_COUPLING", CS%flux_BT_coupling, &
-                 "If true, use mass fluxes to ensure consistency between \n"//&
-                 "the baroclinic and barotropic modes. This is only used \n"//&
-                 "if SPLIT is true.", default=.false.)
-  call get_param(param_file, "MOM", "READJUST_BT_TRANS", CS%readjust_BT_trans, &
-                 "If true, make a barotropic adjustment to the layer \n"//&
-                 "velocities after the thermodynamic part of the step \n"//&
-                 "to ensure that the interaction between the thermodynamics \n"//&
-                 "and the continuity solver do not change the barotropic \n"//&
-                 "transport.  This is only used if FLUX_BT_COUPLING and \n"//&
-                 "SPLIT are true.", default=.false.)
-  call get_param(param_file, "MOM", "SPLIT_BOTTOM_STRESS", CS%split_bottom_stress, &
-                 "If true, provide the bottom stress calculated by the \n"//&
-                 "vertical viscosity to the barotropic solver.", default=.false.)
-  call get_param(param_file, "MOM", "BT_USE_LAYER_FLUXES", CS%BT_use_layer_fluxes, &
-                 "If true, use the summed layered fluxes plus an \n"//&
-                 "adjustment due to the change in the barotropic velocity \n"//&
-                 "in the barotropic continuity equation.", default=.true.)
-  adiabatic=.false. ; call read_param(param_file, "ADIABATIC", adiabatic)
-  if (.not.CS%flux_BT_coupling .or. adiabatic) CS%readjust_BT_trans = .false.
+  flux_BT_coupling = .false. ; readjust_BT_trans = .false. ; adiabatic = .false.
+  call read_param(param_file, "FLUX_BT_COUPLING", flux_BT_coupling)
+  call read_param(param_file, "READJUST_BT_TRANS", readjust_BT_trans)
+  call read_param(param_file, "ADIABATIC", adiabatic)
+  if (.not.flux_BT_coupling .or. adiabatic) readjust_BT_trans = .false.
 
   ALLOC_(CS%diffu(IsdB:IedB,jsd:jed,nz)) ; CS%diffu(:,:,:) = 0.0
   ALLOC_(CS%diffv(isd:ied,JsdB:JedB,nz)) ; CS%diffv(:,:,:) = 0.0
@@ -1082,7 +1052,7 @@ subroutine register_restarts_dyn_split_RK2(G, param_file, CS, restart_CS, uh, vh
   call register_barotropic_restarts(G, param_file, CS%barotropic_CSp, &
                                     restart_CS)
 
-  if (CS%readjust_bt_trans) then
+  if (readjust_bt_trans) then
     vd = vardesc("uhbt_in","Final instantaneous barotropic zonal thickness flux",&
                  'u','1','s',flux_units)
     call register_restart_field(CS%uhbt_in, vd, .false., restart_CS)
@@ -1094,13 +1064,15 @@ subroutine register_restarts_dyn_split_RK2(G, param_file, CS, restart_CS, uh, vh
 
 end subroutine register_restarts_dyn_split_RK2
 
-subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, Time, G, param_file, &
-                                    diag, CS, restart_CS, dt, MIS, VarMix, MEKE)
+subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, param_file, &
+                                    diag, CS, restart_CS, dt, MIS, VarMix, MEKE, &
+                                    OBC, ALE_CSp, visc, dirs, ntrunc)
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(inout) :: u
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(inout) :: v
   real, dimension(NIMEM_,NJMEM_,NKMEM_) , intent(inout) :: h
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), target, intent(inout) :: uh
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), target, intent(inout) :: vh
+  real, dimension(NIMEM_,NJMEM_),         intent(inout) :: eta
   type(time_type),                target, intent(in)    :: Time
   type(ocean_grid_type),                  intent(inout) :: G
   type(param_file_type),                  intent(in)    :: param_file
@@ -1111,17 +1083,76 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, Time, G, param_file, &
   type(ocean_internal_state),             intent(inout) :: MIS
   type(VarMix_CS),                        pointer       :: VarMix
   type(MEKE_type),                        pointer       :: MEKE
-  
+  type(ocean_OBC_type),                   pointer       :: OBC
+  type(ALE_CS),                           pointer       :: ALE_CSp
+  type(vertvisc_type),                    intent(inout) :: visc
+  type(directories),                      intent(in)    :: dirs
+  integer, target,                        intent(inout) :: ntrunc
 
   !   This subroutine initializes any variables that are specific to this time
   ! stepping scheme, including the cpu clocks.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_tmp
+  character(len=40)  :: mod = "MOM_dynamics_split_RK2" ! This module's name.
   character(len=48) :: thickness_units, flux_units
+  logical :: adiabatic, use_tides, debug_truncations
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
   integer :: IsdB, IedB, JsdB, JedB
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
+
+  if (CS%module_is_initialized) then
+    call MOM_error(WARNING, "initialize_dyn_split_RK2 called with a control "// &
+                            "structure that has already been initialized.")
+    return
+  endif
+  CS%module_is_initialized = .true.
+
+  CS%diag => diag
+
+  call get_param(param_file, mod, "TIDES", use_tides, &
+                 "If true, apply tidal momentum forcing.", default=.false.)
+  call get_param(param_file, mod, "BE", CS%be, &
+                 "If SPLIT is true, BE determines the relative weighting \n"//&
+                 "of a  2nd-order Runga-Kutta baroclinic time stepping \n"//&
+                 "scheme (0.5) and a backward Euler scheme (1) that is \n"//&
+                 "used for the Coriolis and inertial terms.  BE may be \n"//&
+                 "from 0.5 to 1, but instability may occur near 0.5. \n"//&
+                 "BE is also applicable if SPLIT is false and USE_RK2 \n"//&
+                 "is true.", units="nondim", default=0.6)
+  call get_param(param_file, mod, "BEGW", CS%begw, &
+                 "If SPILT is true, BEGW is a number from 0 to 1 that \n"//&
+                 "controls the extent to which the treatment of gravity \n"//&
+                 "waves is forward-backward (0) or simulated backward \n"//&
+                 "Euler (1).  0 is almost always used.\n"//&
+                 "If SPLIT is false and USE_RK2 is true, BEGW can be \n"//&
+                 "between 0 and 0.5 to damp gravity waves.", &
+                 units="nondim", default=0.0)
+
+  call get_param(param_file, mod, "FLUX_BT_COUPLING", CS%flux_BT_coupling, &
+                 "If true, use mass fluxes to ensure consistency between \n"//&
+                 "the baroclinic and barotropic modes. This is only used \n"//&
+                 "if SPLIT is true.", default=.false.)
+  call get_param(param_file, mod, "READJUST_BT_TRANS", CS%readjust_BT_trans, &
+                 "If true, make a barotropic adjustment to the layer \n"//&
+                 "velocities after the thermodynamic part of the step \n"//&
+                 "to ensure that the interaction between the thermodynamics \n"//&
+                 "and the continuity solver do not change the barotropic \n"//&
+                 "transport.  This is only used if FLUX_BT_COUPLING and \n"//&
+                 "SPLIT are true.", default=.false.)
+  call get_param(param_file, mod, "SPLIT_BOTTOM_STRESS", CS%split_bottom_stress, &
+                 "If true, provide the bottom stress calculated by the \n"//&
+                 "vertical viscosity to the barotropic solver.", default=.false.)
+  call get_param(param_file, mod, "BT_USE_LAYER_FLUXES", CS%BT_use_layer_fluxes, &
+                 "If true, use the summed layered fluxes plus an \n"//&
+                 "adjustment due to the change in the barotropic velocity \n"//&
+                 "in the barotropic continuity equation.", default=.true.)
+  call get_param(param_file, mod, "DEBUG", CS%debug, &
+                 "If true, write out verbose debugging data.", default=.false.)
+  adiabatic=.false. ; call read_param(param_file, "ADIABATIC", adiabatic)
+  if (.not.CS%flux_BT_coupling .or. adiabatic) CS%readjust_BT_trans = .false.
+  call get_param(param_file, mod, "DEBUG_TRUNCATIONS", debug_truncations, &
+                 default=.false.)
 
   allocate(CS%taux_bot(IsdB:IedB,jsd:jed)) ; CS%taux_bot(:,:) = 0.0
   allocate(CS%tauy_bot(isd:ied,JsdB:JedB)) ; CS%tauy_bot(:,:) = 0.0
@@ -1145,9 +1176,19 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, Time, G, param_file, &
 
   call continuity_init(Time, G, param_file, diag, CS%continuity_CSp)
   call CoriolisAdv_init(Time, G, param_file, diag, CS%CoriolisAdv_CSp)
+  if (use_tides) call tidal_forcing_init(Time, G, param_file, CS%tides_CSp)
   call PressureForce_init(Time, G, param_file, diag, CS%PressureForce_CSp, &
                           CS%tides_CSp)
   call hor_visc_init(Time, G, param_file, diag, CS%hor_visc_CSp)
+  call vertvisc_init(MIS, Time, G, param_file, diag, dirs, &
+                     ntrunc, CS%vertvisc_CSp)
+  call set_visc_init(Time, G, param_file, diag, visc, CS%set_visc_CSp)
+
+  if (associated(ALE_CSp)) CS%ALE_CSp => ALE_CSp
+  if (associated(OBC)) then
+    CS%OBC => OBC
+    call open_boundary_init(Time, G, param_file, diag, CS%open_boundary_CSp)
+  endif
 
   if (.not. query_initialized(CS%eta,"sfc",restart_CS))  then
     ! Estimate eta based on the layer thicknesses - h.  With the Boussinesq
@@ -1161,11 +1202,12 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, Time, G, param_file, &
     do k=1,nz ; do j=js,je ; do i=is,ie
        CS%eta(i,j) = CS%eta(i,j) + h(i,j,k)
     enddo ; enddo ; enddo
-  endif  
+  endif
+  ! Copy eta into an output array.
+  do j=js,je ; do i=is,ie ; eta(i,j) = CS%eta(i,j) ; enddo ; enddo
 
-  call barotropic_init(u, v, h, CS%eta, Time, G, &
-                       param_file, diag, CS%barotropic_CSp, restart_CS, &
-                       CS%BT_cont, CS%tides_CSp)
+  call barotropic_init(u, v, h, CS%eta, Time, G, param_file, diag, &
+                       CS%barotropic_CSp, restart_CS, CS%BT_cont, CS%tides_CSp)
 
   if (.not. query_initialized(CS%diffu,"diffu",restart_CS) .or. &
       .not. query_initialized(CS%diffv,"diffv",restart_CS)) &
@@ -1254,7 +1296,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, Time, G, param_file, &
   CS%id_v_BT_accel = register_diag_field('ocean_model', 'v_BT_accel', G%axesCvL, Time, &
     'Barotropic Anomaly Meridional Acceleration', 'meter second-1')
 
-  if (CS%debug_truncations) then
+  if (debug_truncations) then
     if (CS%flux_BT_coupling) then
       call safe_alloc_ptr(diag%du_adj,IsdB,IedB,jsd,jed,nz)
       call safe_alloc_ptr(diag%dv_adj,isd,ied,JsdB,JedB,nz)

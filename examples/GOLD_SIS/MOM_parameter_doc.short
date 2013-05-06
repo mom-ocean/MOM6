@@ -8,31 +8,13 @@ TRIPOLAR_N = True               !   [Boolean] default = False
                                 ! they are on the staggered grid.  Also, the starting
                                 ! index of the velocity-point arrays is usually 0, not 1.
                                 ! This can only be set at compile time.
-!STATIC_MEMORY_ = False         !   [Boolean]
+!STATIC_MEMORY_ = True          !   [Boolean]
                                 ! If STATIC_MEMORY_ is defined, the principle variables
                                 ! will have sizes that are statically determined at
                                 ! compile time.  Otherwise the sizes are not determined
                                 ! until run time. The STATIC option is substantially
                                 ! faster, but does not allow the PE count to be changed
                                 ! at run time.  This can only be set at compile time.
-NIHALO = 4                      ! default = 2
-                                ! The number of halo points on each side in the
-                                ! x-direction.  With STATIC_MEMORY_ this is set as NIHALO_
-                                ! in MOM_memory.h at compile time; without STATIC_MEMORY_
-                                ! the default is NIHALO_ in MOM_memory.h (if defined) or 2.
-NJHALO = 4                      ! default = 2
-                                ! The number of halo points on each side in the
-                                ! y-direction.  With STATIC_MEMORY_ this is set as NJHALO_
-                                ! in MOM_memory.h at compile time; without STATIC_MEMORY_
-                                ! the default is NJHALO_ in MOM_memory.h (if defined) or 2.
-NIGLOBAL = 360                  !
-                                ! The total number of thickness grid points in the
-                                ! x-direction in the physical domain. With STATIC_MEMORY_
-                                ! this is set in MOM_memory.h at compile time.
-NJGLOBAL = 210                  !
-                                ! The total number of thickness grid points in the
-                                ! y-direction in the physical domain. With STATIC_MEMORY_
-                                ! this is set in MOM_memory.h at compile time.
 !NIPROC = 10                    !
                                 ! The number of processors in the x-direction. With
                                 ! STATIC_MEMORY_ this is set in MOM_memory.h at compile time.
@@ -47,8 +29,6 @@ NJPROC_IO = 2                   ! default = 0
                                 ! y-direction, or 0 to equal NJPROC.
     !  Parameters of module MOM_grid
         ! Parameters providing information about the vertical grid.
-NK = 63                         !   [nondim]
-                                ! The number of model layers.
     !  Parameters of module MOM
 THICKNESSDIFFUSE = True         !   [Boolean] default = False
                                 ! If true, interfaces or isopycnal surfaces are diffused,
@@ -119,17 +99,6 @@ ML_KHTR_SCALE = 0.0             !   [nondim] default = 1.0
                                 ! With Diffuse_ML_interior, the ratio of the truly
                                 ! horizontal diffusivity in the mixed layer to the
                                 ! epipycnal diffusivity.  The valid range is 0 to 1.
-FLUX_BT_COUPLING = True         !   [Boolean] default = False
-                                ! If true, use mass fluxes to ensure consistency between
-                                ! the baroclinic and barotropic modes. This is only used
-                                ! if SPLIT is true.
-READJUST_BT_TRANS = True        !   [Boolean] default = False
-                                ! If true, make a barotropic adjustment to the layer
-                                ! velocities after the thermodynamic part of the step
-                                ! to ensure that the interaction between the thermodynamics
-                                ! and the continuity solver do not change the barotropic
-                                ! transport.  This is only used if FLUX_BT_COUPLING and
-                                ! SPLIT are true.
     !  Parameters of module MOM_tracer_flow_control
 USE_IDEAL_AGE_TRACER = True     !   [Boolean] default = False
                                 ! If true, use the ideal_age_example tracer package.
@@ -271,6 +240,17 @@ VARMIX_KTOP = 6                 !   [nondim] default = 2
 VISBECK_L_SCALE = 3.0E+04       !   [m] default = 0.0
                                 ! The fixed length scale in the Visbeck formula.
     !  Parameters of module MOM_wave_speed
+FLUX_BT_COUPLING = True         !   [Boolean] default = False
+                                ! If true, use mass fluxes to ensure consistency between
+                                ! the baroclinic and barotropic modes. This is only used
+                                ! if SPLIT is true.
+READJUST_BT_TRANS = True        !   [Boolean] default = False
+                                ! If true, make a barotropic adjustment to the layer
+                                ! velocities after the thermodynamic part of the step
+                                ! to ensure that the interaction between the thermodynamics
+                                ! and the continuity solver do not change the barotropic
+                                ! transport.  This is only used if FLUX_BT_COUPLING and
+                                ! SPLIT are true.
 MONOTONIC_CONTINUITY = True     !   [Boolean] default = False
                                 ! If true, CONTINUITY_PPM uses the Colella and Woodward
                                 ! monotonic limiter.  The default (false) is to use a
@@ -315,41 +295,6 @@ SMAGORINSKY_AH = True           !   [Boolean] default = False
 SMAG_BI_CONST = 0.06            !   [nondim] default = 0.0
                                 ! The nondimensional biharmonic Smagorinsky constant,
                                 ! typically 0.015 - 0.06.
-    !  Parameters of module MOM_barotropic
-BOUND_BT_CORRECTION = True      !   [Boolean] default = False
-                                ! If true, the corrective pseudo mass-fluxes into the
-                                ! barotropic solver are limited to values that require
-                                ! less than 0.1*MAXVEL to be accommodated.
-!BT x-halo = 0                  !
-                                ! The barotropic x-halo size that is actually used.
-!BT y-halo = 0                  !
-                                ! The barotropic y-halo size that is actually used.
-BT_STRONG_DRAG = True           !   [Boolean] default = False
-                                ! If true, use a stronger estimate of the retarding
-                                ! effects of strong bottom drag, by making it implicit
-                                ! with the barotropic time-step instead of implicit with
-                                ! the baroclinic time-step and dividing by the number of
-                                ! barotropic steps.
-DT_BT_FILTER = 0.0              !   [sec or nondim] default = -0.25
-                                ! A time-scale over which the barotropic mode solutions
-                                ! are filtered, in seconds if positive, or as a fraction
-                                ! of DT if negative. When used this can never be taken to
-                                ! be longer than 2*dt.  Set this to 0 to apply no filtering.
-BEBT = 0.2                      !   [nondim] default = 0.1
-                                ! BEBT determines whether the barotropic time stepping
-                                ! uses the forward-backward time-stepping scheme or a
-                                ! backward Euler scheme. BEBT is valid in the range from
-                                ! 0 (for a forward-backward treatment of nonrotating
-                                ! gravity waves) to 1 (for a backward Euler treatment).
-                                ! In practice, BEBT must be greater than about 0.05.
-DTBT = 60.0                     !   [s or nondim] default = -0.98
-                                ! The barotropic time step, in s. DTBT is only used with
-                                ! the split explicit time stepping. To set the time step
-                                ! automatically based the maximum stable value use 0, or
-                                ! a negative value gives the fraction of the stable value.
-                                ! Setting DTBT to 0 is the same as setting it to -0.98.
-                                ! The value of DTBT that will actually be used is an
-                                ! integer fraction of DT, rounding down.
     !  Parameters of module MOM_vert_friction
 CHANNEL_DRAG = True             !   [Boolean] default = False
                                 ! If true, the bottom drag is exerted directly on each
@@ -400,6 +345,41 @@ BBL_THICK_MIN = 0.1             !   [m] default = 0.0
                                 ! used with BOTTOMDRAGLAW. This might be
                                 ! Kv / (cdrag * drag_bg_vel) to give Kv as the minimum
                                 ! near-bottom viscosity.
+    !  Parameters of module MOM_barotropic
+BOUND_BT_CORRECTION = True      !   [Boolean] default = False
+                                ! If true, the corrective pseudo mass-fluxes into the
+                                ! barotropic solver are limited to values that require
+                                ! less than 0.1*MAXVEL to be accommodated.
+!BT x-halo = 10                 !
+                                ! The barotropic x-halo size that is actually used.
+!BT y-halo = 10                 !
+                                ! The barotropic y-halo size that is actually used.
+BT_STRONG_DRAG = True           !   [Boolean] default = False
+                                ! If true, use a stronger estimate of the retarding
+                                ! effects of strong bottom drag, by making it implicit
+                                ! with the barotropic time-step instead of implicit with
+                                ! the baroclinic time-step and dividing by the number of
+                                ! barotropic steps.
+DT_BT_FILTER = 0.0              !   [sec or nondim] default = -0.25
+                                ! A time-scale over which the barotropic mode solutions
+                                ! are filtered, in seconds if positive, or as a fraction
+                                ! of DT if negative. When used this can never be taken to
+                                ! be longer than 2*dt.  Set this to 0 to apply no filtering.
+BEBT = 0.2                      !   [nondim] default = 0.1
+                                ! BEBT determines whether the barotropic time stepping
+                                ! uses the forward-backward time-stepping scheme or a
+                                ! backward Euler scheme. BEBT is valid in the range from
+                                ! 0 (for a forward-backward treatment of nonrotating
+                                ! gravity waves) to 1 (for a backward Euler treatment).
+                                ! In practice, BEBT must be greater than about 0.05.
+DTBT = 60.0                     !   [s or nondim] default = -0.98
+                                ! The barotropic time step, in s. DTBT is only used with
+                                ! the split explicit time stepping. To set the time step
+                                ! automatically based the maximum stable value use 0, or
+                                ! a negative value gives the fraction of the stable value.
+                                ! Setting DTBT to 0 is the same as setting it to -0.98.
+                                ! The value of DTBT that will actually be used is an
+                                ! integer fraction of DT, rounding down.
     !  Parameters of module MOM_thickness_diffuse
 KHTH = 10.0                     !   [m2 s-1] default = 0.0
                                 ! The background horizontal thickness diffusivity.

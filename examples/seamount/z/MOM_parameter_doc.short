@@ -32,7 +32,7 @@ NJGLOBAL = 2                    !
                                 ! The total number of thickness grid points in the
                                 ! y-direction in the physical domain. With STATIC_MEMORY_
                                 ! this is set in MOM_memory.h at compile time.
-!NIPROC = 2                     !
+!NIPROC = 4                     !
                                 ! The number of processors in the x-direction. With
                                 ! STATIC_MEMORY_ this is set in MOM_memory.h at compile time.
 !NJPROC = 1                     !
@@ -89,14 +89,6 @@ DRHO_DS = 1.0                   !   [kg m-3 PSU-1] default = 0.8
                                 ! salinity.
 RESTARTFILE = "GOLD.res"        ! default = "MOM.res"
                                 ! The name-root of the restart file.
-BE = 0.7                        !   [nondim] default = 0.6
-                                ! If SPLIT is true, BE determines the relative weighting
-                                ! of a  2nd-order Runga-Kutta baroclinic time stepping
-                                ! scheme (0.5) and a backward Euler scheme (1) that is
-                                ! used for the Coriolis and inertial terms.  BE may be
-                                ! from 0.5 to 1, but instability may occur near 0.5.
-                                ! BE is also applicable if SPLIT is false and USE_RK2
-                                ! is true.
     !  Parameters of module MOM_tracer_flow_control
 INPUTDIR = "INPUT/"             ! default = "."
                                 ! The directory in which input files are found.
@@ -249,6 +241,14 @@ CDRAG = 0.002                   !   [nondim] default = 0.003
                                 ! CDRAG is the drag coefficient relating the magnitude of
                                 ! the velocity field to the bottom stress.
     !  Parameters of module MOM_lateral_mixing_coeffs
+BE = 0.7                        !   [nondim] default = 0.6
+                                ! If SPLIT is true, BE determines the relative weighting
+                                ! of a  2nd-order Runga-Kutta baroclinic time stepping
+                                ! scheme (0.5) and a backward Euler scheme (1) that is
+                                ! used for the Coriolis and inertial terms.  BE may be
+                                ! from 0.5 to 1, but instability may occur near 0.5.
+                                ! BE is also applicable if SPLIT is false and USE_RK2
+                                ! is true.
 ETA_TOLERANCE = 1.0E-12         !   [m] default = 1.0E-09
                                 ! The tolerance for the differences between the
                                 ! barotropic and baroclinic estimates of the sea surface
@@ -279,30 +279,6 @@ KH_VEL_SCALE = 0.003            !   [m s-1] default = 0.0
                                 ! spacing to calculate the Laplacian viscosity.
                                 ! The final viscosity is the largest of this scaled
                                 ! viscosity, the Smagorinsky viscosity and KH.
-    !  Parameters of module MOM_barotropic
-BOUND_BT_CORRECTION = True      !   [Boolean] default = False
-                                ! If true, the corrective pseudo mass-fluxes into the
-                                ! barotropic solver are limited to values that require
-                                ! less than 0.1*MAXVEL to be accommodated.
-!BT x-halo = 0                  !
-                                ! The barotropic x-halo size that is actually used.
-!BT y-halo = 0                  !
-                                ! The barotropic y-halo size that is actually used.
-BEBT = 0.2                      !   [nondim] default = 0.1
-                                ! BEBT determines whether the barotropic time stepping
-                                ! uses the forward-backward time-stepping scheme or a
-                                ! backward Euler scheme. BEBT is valid in the range from
-                                ! 0 (for a forward-backward treatment of nonrotating
-                                ! gravity waves) to 1 (for a backward Euler treatment).
-                                ! In practice, BEBT must be greater than about 0.05.
-DTBT = 10.0                     !   [s or nondim] default = -0.98
-                                ! The barotropic time step, in s. DTBT is only used with
-                                ! the split explicit time stepping. To set the time step
-                                ! automatically based the maximum stable value use 0, or
-                                ! a negative value gives the fraction of the stable value.
-                                ! Setting DTBT to 0 is the same as setting it to -0.98.
-                                ! The value of DTBT that will actually be used is an
-                                ! integer fraction of DT, rounding down.
     !  Parameters of module MOM_vert_friction
 DIRECT_STRESS = True            !   [Boolean] default = False
                                 ! If true, the wind stress is distributed over the
@@ -354,6 +330,30 @@ BBL_THICK_MIN = 0.1             !   [m] default = 0.0
                                 ! used with BOTTOMDRAGLAW. This might be
                                 ! Kv / (cdrag * drag_bg_vel) to give Kv as the minimum
                                 ! near-bottom viscosity.
+    !  Parameters of module MOM_barotropic
+BOUND_BT_CORRECTION = True      !   [Boolean] default = False
+                                ! If true, the corrective pseudo mass-fluxes into the
+                                ! barotropic solver are limited to values that require
+                                ! less than 0.1*MAXVEL to be accommodated.
+!BT x-halo = 0                  !
+                                ! The barotropic x-halo size that is actually used.
+!BT y-halo = 0                  !
+                                ! The barotropic y-halo size that is actually used.
+BEBT = 0.2                      !   [nondim] default = 0.1
+                                ! BEBT determines whether the barotropic time stepping
+                                ! uses the forward-backward time-stepping scheme or a
+                                ! backward Euler scheme. BEBT is valid in the range from
+                                ! 0 (for a forward-backward treatment of nonrotating
+                                ! gravity waves) to 1 (for a backward Euler treatment).
+                                ! In practice, BEBT must be greater than about 0.05.
+DTBT = 10.0                     !   [s or nondim] default = -0.98
+                                ! The barotropic time step, in s. DTBT is only used with
+                                ! the split explicit time stepping. To set the time step
+                                ! automatically based the maximum stable value use 0, or
+                                ! a negative value gives the fraction of the stable value.
+                                ! Setting DTBT to 0 is the same as setting it to -0.98.
+                                ! The value of DTBT that will actually be used is an
+                                ! integer fraction of DT, rounding down.
     !  Parameters of module MOM_thickness_diffuse
 KHTH = 500.0                    !   [m2 s-1] default = 0.0
                                 ! The background horizontal thickness diffusivity.
@@ -414,11 +414,6 @@ DT_FORCING = 1800.0             !   [s] default = 900.0
                                 ! The time step for changing forcing, coupling with other
                                 ! components, or potentially writing certain diagnostics.
                                 ! The default value is given by DT.
-DAYMAX = 5.0                    !   [days]
-                                ! The final time of the whole simulation, in units of
-                                ! TIMEUNIT seconds.  This also sets the potential end
-                                ! time of the present run segment if the end time is
-                                ! not set via ocean_solo_nml in input.nml.
 RESTART_CONTROL = 3             ! default = 1
                                 ! An integer whose bits encode which restart files are
                                 ! written. Add 2 (bit 1) for a time-stamped file, and odd

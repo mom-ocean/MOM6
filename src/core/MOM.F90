@@ -696,7 +696,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       call enable_averaging(dtnt,Time_local, CS%diag)
 
       call cpu_clock_begin(id_clock_tracer)
-      call advect_tracer(h, CS%uhtr, CS%vhtr, CS%dyn_CSp%OBC, dtnt, grid, &
+      call advect_tracer(h, CS%uhtr, CS%vhtr, CS%OBC, dtnt, grid, &
                          CS%tracer_CSp)
       call tracer_hordiff(h, dtnt, CS%MEKE, CS%VarMix, grid, CS%tracer_CSp, &
                           CS%tv)
@@ -995,6 +995,8 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   real    :: Z_diag_int      ! The minimum interval between calculations of
                              ! Depth-space diagnostic quantities, in s.
   real, allocatable, dimension(:,:,:) :: e ! The interface heights in m.
+  real, allocatable, dimension(:,:)   :: eta ! The free surface height in m
+                                             ! or bottom pressure in Pa.
   type(MOM_restart_CS),  pointer :: restart_CSp_tmp => NULL()
   integer :: nkml, nkbl, verbosity
   real    :: default_val     ! A default value for a parameter.
@@ -1002,7 +1004,6 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   logical :: use_geothermal  ! If true, apply geothermal heating.
   logical :: use_EOS         ! If true, density is calculated from T & S using
                              ! an equation of state.
-  logical :: use_tides       ! If true, tidal momentum forcing is used.
   logical :: save_IC         ! If true, save the initial conditions.
   logical :: do_unit_tests   ! If true, call unit tests.
   character(len=80) :: IC_file ! A file into which the initial conditions are
@@ -1019,7 +1020,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   endif
   allocate(CS) ; allocate(CS%dyn_CSp)
   grid => CS%grid ; CS%Time => Time
-  diag => CS%diag ; CS%dyn_CSp%diag => CS%diag
+  diag => CS%diag
 
   id_clock_init = cpu_clock_id('Ocean Initialization', grain=CLOCK_SUBCOMPONENT)
   call cpu_clock_begin(id_clock_init)
@@ -1101,8 +1102,6 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call get_param(param_file, "MOM", "DEBUG_TRUNCATIONS", CS%debug_truncations, &
                  "If true, calculate all diagnostics that are useful for \n"//&
                  "debugging truncations.", default=.false.)
-  CS%dyn_CSp%debug = CS%debug
-  CS%dyn_CSp%debug_truncations = CS%debug_truncations
 
   call get_param(param_file, "MOM", "DT", CS%dt, &
                  "The (baroclinic) dynamics time step.  The time-step that \n"//&
@@ -1132,7 +1131,6 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
                  "If true, linearly interpolate the surface pressure \n"//&
                  "over the coupling time step, using the specified value \n"//&
                  "at the end of the step.", default=.false.)
-  CS%dyn_CSp%interp_p_surf = CS%interp_p_surf
   call get_param(param_file, "MOM", "SSH_SMOOTHING_PASSES", CS%smooth_ssh_passes, &
                  "The number of Laplacian smoothing passes to apply to the \n"//&
                  "the sea surface height that is reported to the sea-ice.", &
@@ -1179,8 +1177,6 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
                  "This is only used if USE_EOS and ENABLE_THERMODYNAMICS \n"//&
                  "are true.", units="Pa", default=2.0e7)
 
-  call get_param(param_file, "MOM", "TIDES", use_tides, &
-                 "If true, apply tidal momentum forcing.", default=.false.)
   if (CS%bulkmixedlayer) then
     call get_param(param_file, "MOM", "NKML", nkml, &
                  "The number of sublayers within the mixed layer if \n"//&
@@ -1346,7 +1342,6 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     ALLOC_(CS%h_aux(isd:ied,jsd:jed,nz)); CS%h_aux(:,:,:) = 0.
     call initialize_ALE(param_file, grid, CS%h, CS%h_aux, &
                         CS%u, CS%v, CS%tv, CS%ALE_CSp)
-    CS%dyn_CSp%ALE_CSp => CS%ALE_CSp
     if (CS%debug) then
       call uchksum(CS%u,"Post initialize_ALE u",grid,haloshift=1)
       call vchksum(CS%v,"Post initialize_ALE v",grid,haloshift=1)
@@ -1361,37 +1356,35 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   if (associated(init_CS%advect_tracer_CSp)) &
     CS%tracer_CSp => init_CS%advect_tracer_CSp
 
-  if (associated(init_CS%OBC)) then
-    CS%dyn_CSp%OBC => init_CS%OBC
-    call open_boundary_init(Time, grid, param_file, diag, CS%dyn_CSp%open_boundary_CSp)
-  endif
 ! if (associated(init_CS%sponge_CSp)) CS%sponge_CSp => init_CS%sponge_CSp
 
-  if (use_tides) call tidal_forcing_init(Time, grid, param_file, CS%dyn_CSp%tides_CSp)
-
   if (CS%split) then
-    call initialize_dyn_split_RK2(CS%u, CS%v, CS%h, CS%uh, CS%vh, Time, &
+    allocate(eta(SZI_(grid),SZJ_(grid))) ; eta(:,:) = 0.0
+    call initialize_dyn_split_RK2(CS%u, CS%v, CS%h, CS%uh, CS%vh, eta, Time, &
                 grid, param_file, diag, CS%dyn_CSp, CS%restart_CSp, CS%dt, &
-                MOM_internal_state, CS%VarMix, CS%MEKE)
+                MOM_internal_state, CS%VarMix, CS%MEKE, init_CS%OBC, &
+                CS%ALE_CSp, CS%visc, dirs, CS%ntrunc)
   else
     if (CS%use_RK2) then
       call initialize_dyn_unsplit_RK2(CS%u, CS%v, CS%h, Time, grid, &
-                param_file, diag, CS%dyn_CSp, CS%restart_CSp, MOM_internal_state)
+                param_file, diag, CS%dyn_CSp, CS%restart_CSp, MOM_internal_state, &
+                init_CS%OBC, CS%ALE_CSp, CS%visc, dirs, CS%ntrunc)
     else
       call initialize_dyn_unsplit(CS%u, CS%v, CS%h, Time, grid, &
-                param_file, diag, CS%dyn_CSp, CS%restart_CSp, MOM_internal_state)
+                param_file, diag, CS%dyn_CSp, CS%restart_CSp, MOM_internal_state, &
+                init_CS%OBC, CS%ALE_CSp, CS%visc, dirs, CS%ntrunc)
     endif
   endif
 
-  call vertvisc_init(MOM_internal_state, Time, grid, param_file, diag, dirs, &
-                     CS%ntrunc, CS%dyn_CSp%vertvisc_CSp)
-  call set_visc_init(Time, grid, param_file, diag, CS%visc, CS%dyn_CSp%set_visc_CSp)
   call thickness_diffuse_init(Time, grid, param_file, diag, CS%thickness_diffuse_CSp)
   if (CS%mixedlayer_restrat) &
     call mixedlayer_restrat_init(Time, grid, param_file, diag, CS%mixedlayer_restrat_CSp)
+  if (associated(init_CS%OBC)) CS%OBC => init_CS%OBC
 
   call MOM_diagnostics_init(MOM_internal_state, Time, grid, param_file, &
                              diag, CS%diagnostics_CSp)
+
+
 
   CS%Z_diag_interval = set_time(int((CS%dt_therm) * &
        max(1,floor(0.01 + Z_diag_int/(CS%dt_therm)))))
@@ -1432,7 +1425,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   ! This subroutine initializes any tracer packages.
   new_sim = ((dirs%input_filename(1:1) == 'n') .and. &
              (LEN_TRIM(dirs%input_filename) == 1))
-  call tracer_flow_control_init(.not.new_sim, Time, grid, CS%h, CS%dyn_CSp%OBC, &
+  call tracer_flow_control_init(.not.new_sim, Time, grid, CS%h, CS%OBC, &
            CS%tracer_flow_CSp, init_CS%sponge_CSp, CS%diag_to_Z_CSp)
 
   call cpu_clock_begin(id_clock_pass_init)
@@ -1472,11 +1465,12 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   
   if (.not.query_initialized(CS%ave_ssh,"ave_ssh",CS%restart_CSp)) then
     if (CS%split) then
-      call find_eta(CS%h, CS%tv, grid%g_Earth, grid, CS%ave_ssh, CS%dyn_CSp%eta)
+      call find_eta(CS%h, CS%tv, grid%g_Earth, grid, CS%ave_ssh, eta)
     else
       call find_eta(CS%h, CS%tv, grid%g_Earth, grid, CS%ave_ssh)
     endif
   endif
+  if (CS%split) deallocate(eta)
 
   if (save_IC .and. .not.((dirs%input_filename(1:1) == 'r') .and. &
                           (LEN_TRIM(dirs%input_filename) == 1))) then

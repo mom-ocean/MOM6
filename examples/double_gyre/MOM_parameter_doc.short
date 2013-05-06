@@ -189,6 +189,49 @@ SMAGORINSKY_KH = True           !   [Boolean] default = False
 SMAG_LAP_CONST = 0.15           !   [nondim] default = 0.0
                                 ! The nondimensional Laplacian Smagorinsky constant,
                                 ! often 0.15.
+    !  Parameters of module MOM_vert_friction
+DIRECT_STRESS = True            !   [Boolean] default = False
+                                ! If true, the wind stress is distributed over the
+                                ! topmost HMIX_STRESS of fluid (like in HYCOM), and KVML
+                                ! may be set to a very small value.
+HARMONIC_VISC = True            !   [Boolean] default = False
+                                ! If true, use the harmonic mean thicknesses for
+                                ! calculating the vertical viscosity.
+HMIX_FIXED = 20.0               !   [m]
+                                ! The prescribed depth over which the near-surface
+                                ! viscosity and diffusivity are elevated when the bulk
+                                ! mixed layer is not used.
+KV = 1.0E-04                    !   [m2 s-1]
+                                ! The background kinematic viscosity in the interior.
+                                ! The molecular value, ~1e-6 m2 s-1, may be used.
+KVML = 0.01                     !   [m2 s-1] default = 1.0E-04
+                                ! The kinematic viscosity in the mixed layer.  A typical
+                                ! value is ~1e-2 m2 s-1. KVML is not used if
+                                ! BULKMIXEDLAYER is true.  The default is set by KV.
+HBBL = 10.0                     !   [m]
+                                ! The thickness of a bottom boundary layer with a
+                                ! viscosity of KVBBL if BOTTOMDRAGLAW is not defined, or
+                                ! the thickness over which near-bottom velocities are
+                                ! averaged for the drag law if BOTTOMDRAGLAW is defined
+                                ! but LINEAR_DRAG is not.
+MAXVEL = 6.0                    !   [m s-1] default = 3.0E+08
+                                ! The maximum velocity allowed before the velocity
+                                ! components are truncated.
+    !  Parameters of module MOM_set_visc
+LINEAR_DRAG = True              !   [Boolean] default = False
+                                ! If LINEAR_DRAG and BOTTOMDRAGLAW are defined the drag
+                                ! law is cdrag*DRAG_BG_VEL*u.
+DRAG_BG_VEL = 0.1               !   [m s-1] default = 0.0
+                                ! DRAG_BG_VEL is either the assumed bottom velocity (with
+                                ! LINEAR_DRAG) or an unresolved  velocity that is
+                                ! combined with the resolved velocity to estimate the
+                                ! velocity magnitude.  DRAG_BG_VEL is only used when
+                                ! BOTTOMDRAGLAW is defined.
+BBL_THICK_MIN = 0.1             !   [m] default = 0.0
+                                ! The minimum bottom boundary layer thickness that can be
+                                ! used with BOTTOMDRAGLAW. This might be
+                                ! Kv / (cdrag * drag_bg_vel) to give Kv as the minimum
+                                ! near-bottom viscosity.
     !  Parameters of module MOM_barotropic
 BOUND_BT_CORRECTION = True      !   [Boolean] default = False
                                 ! If true, the corrective pseudo mass-fluxes into the
@@ -233,49 +276,6 @@ DTBT = -0.9                     !   [s or nondim] default = -0.98
                                 ! Setting DTBT to 0 is the same as setting it to -0.98.
                                 ! The value of DTBT that will actually be used is an
                                 ! integer fraction of DT, rounding down.
-    !  Parameters of module MOM_vert_friction
-DIRECT_STRESS = True            !   [Boolean] default = False
-                                ! If true, the wind stress is distributed over the
-                                ! topmost HMIX_STRESS of fluid (like in HYCOM), and KVML
-                                ! may be set to a very small value.
-HARMONIC_VISC = True            !   [Boolean] default = False
-                                ! If true, use the harmonic mean thicknesses for
-                                ! calculating the vertical viscosity.
-HMIX_FIXED = 20.0               !   [m]
-                                ! The prescribed depth over which the near-surface
-                                ! viscosity and diffusivity are elevated when the bulk
-                                ! mixed layer is not used.
-KV = 1.0E-04                    !   [m2 s-1]
-                                ! The background kinematic viscosity in the interior.
-                                ! The molecular value, ~1e-6 m2 s-1, may be used.
-KVML = 0.01                     !   [m2 s-1] default = 1.0E-04
-                                ! The kinematic viscosity in the mixed layer.  A typical
-                                ! value is ~1e-2 m2 s-1. KVML is not used if
-                                ! BULKMIXEDLAYER is true.  The default is set by KV.
-HBBL = 10.0                     !   [m]
-                                ! The thickness of a bottom boundary layer with a
-                                ! viscosity of KVBBL if BOTTOMDRAGLAW is not defined, or
-                                ! the thickness over which near-bottom velocities are
-                                ! averaged for the drag law if BOTTOMDRAGLAW is defined
-                                ! but LINEAR_DRAG is not.
-MAXVEL = 6.0                    !   [m s-1] default = 3.0E+08
-                                ! The maximum velocity allowed before the velocity
-                                ! components are truncated.
-    !  Parameters of module MOM_set_visc
-LINEAR_DRAG = True              !   [Boolean] default = False
-                                ! If LINEAR_DRAG and BOTTOMDRAGLAW are defined the drag
-                                ! law is cdrag*DRAG_BG_VEL*u.
-DRAG_BG_VEL = 0.1               !   [m s-1] default = 0.0
-                                ! DRAG_BG_VEL is either the assumed bottom velocity (with
-                                ! LINEAR_DRAG) or an unresolved  velocity that is
-                                ! combined with the resolved velocity to estimate the
-                                ! velocity magnitude.  DRAG_BG_VEL is only used when
-                                ! BOTTOMDRAGLAW is defined.
-BBL_THICK_MIN = 0.1             !   [m] default = 0.0
-                                ! The minimum bottom boundary layer thickness that can be
-                                ! used with BOTTOMDRAGLAW. This might be
-                                ! Kv / (cdrag * drag_bg_vel) to give Kv as the minimum
-                                ! near-bottom viscosity.
     !  Parameters of module MOM_thickness_diffuse
     !  Parameters of module MOM_diabatic_driver
         ! The following parameters are used for diabatic processes.
@@ -305,6 +305,11 @@ DT_FORCING = 2400.0             !   [s] default = 1200.0
                                 ! The time step for changing forcing, coupling with other
                                 ! components, or potentially writing certain diagnostics.
                                 ! The default value is given by DT.
+DAYMAX = 10.0                   !   [days]
+                                ! The final time of the whole simulation, in units of
+                                ! TIMEUNIT seconds.  This also sets the potential end
+                                ! time of the present run segment if the end time is
+                                ! not set via ocean_solo_nml in input.nml.
 RESTART_CONTROL = 3             ! default = 1
                                 ! An integer whose bits encode which restart files are
                                 ! written. Add 2 (bit 1) for a time-stamped file, and odd

@@ -39,7 +39,7 @@ NJGLOBAL = 4                    !
                                 ! The total number of thickness grid points in the
                                 ! y-direction in the physical domain. With STATIC_MEMORY_
                                 ! this is set in MOM_memory.h at compile time.
-!NIPROC = 2                     !
+!NIPROC = 4                     !
                                 ! The number of processors in the x-direction. With
                                 ! STATIC_MEMORY_ this is set in MOM_memory.h at compile time.
 !NJPROC = 1                     !
@@ -176,8 +176,6 @@ P_REF = 2.0E+07                 !   [Pa] default = 2.0E+07
                                 ! density.  (1 Pa = 1e4 dbar, so 2e7 is commonly used.)
                                 ! This is only used if USE_EOS and ENABLE_THERMODYNAMICS
                                 ! are true.
-TIDES = False                   !   [Boolean] default = False
-                                ! If true, apply tidal momentum forcing.
 CHECK_BAD_SURFACE_VALS = False  !   [Boolean] default = False
                                 ! If true, check the surface state for ridiculous values.
 SAVE_INITIAL_CONDS = True       !   [Boolean] default = False
@@ -257,39 +255,6 @@ LARGE_FILE_SUPPORT = True       !   [Boolean] default = True
 MAX_FIELDS = 50                 ! default = 50
                                 ! The maximum number of restart fields that can be used
                                 ! The default value is set in MOM_memory.h as MAX_FIELDS_.
-BE = 0.6                        !   [nondim] default = 0.6
-                                ! If SPLIT is true, BE determines the relative weighting
-                                ! of a  2nd-order Runga-Kutta baroclinic time stepping
-                                ! scheme (0.5) and a backward Euler scheme (1) that is
-                                ! used for the Coriolis and inertial terms.  BE may be
-                                ! from 0.5 to 1, but instability may occur near 0.5.
-                                ! BE is also applicable if SPLIT is false and USE_RK2
-                                ! is true.
-BEGW = 0.0                      !   [nondim] default = 0.0
-                                ! If SPILT is true, BEGW is a number from 0 to 1 that
-                                ! controls the extent to which the treatment of gravity
-                                ! waves is forward-backward (0) or simulated backward
-                                ! Euler (1).  0 is almost always used.
-                                ! If SPLIT is false and USE_RK2 is true, BEGW can be
-                                ! between 0 and 0.5 to damp gravity waves.
-FLUX_BT_COUPLING = False        !   [Boolean] default = False
-                                ! If true, use mass fluxes to ensure consistency between
-                                ! the baroclinic and barotropic modes. This is only used
-                                ! if SPLIT is true.
-READJUST_BT_TRANS = False       !   [Boolean] default = False
-                                ! If true, make a barotropic adjustment to the layer
-                                ! velocities after the thermodynamic part of the step
-                                ! to ensure that the interaction between the thermodynamics
-                                ! and the continuity solver do not change the barotropic
-                                ! transport.  This is only used if FLUX_BT_COUPLING and
-                                ! SPLIT are true.
-SPLIT_BOTTOM_STRESS = False     !   [Boolean] default = False
-                                ! If true, provide the bottom stress calculated by the
-                                ! vertical viscosity to the barotropic solver.
-BT_USE_LAYER_FLUXES = True      !   [Boolean] default = True
-                                ! If true, use the summed layered fluxes plus an
-                                ! adjustment due to the change in the barotropic velocity
-                                ! in the barotropic continuity equation.
     !  Parameters of module MOM_tracer_flow_control
 USE_USER_TRACER_EXAMPLE = False !   [Boolean] default = False
                                 ! If true, use the USER_tracer_example tracer package.
@@ -559,6 +524,41 @@ RESOLN_SCALED_KHTR = False      !   [Boolean] default = False
 KHTH_SLOPE_CFF = 0.0            !   [nondim] default = 0.0
                                 ! The nondimensional coefficient in the Visbeck formula
                                 ! for the interface depth diffusivity
+TIDES = False                   !   [Boolean] default = False
+                                ! If true, apply tidal momentum forcing.
+BE = 0.6                        !   [nondim] default = 0.6
+                                ! If SPLIT is true, BE determines the relative weighting
+                                ! of a  2nd-order Runga-Kutta baroclinic time stepping
+                                ! scheme (0.5) and a backward Euler scheme (1) that is
+                                ! used for the Coriolis and inertial terms.  BE may be
+                                ! from 0.5 to 1, but instability may occur near 0.5.
+                                ! BE is also applicable if SPLIT is false and USE_RK2
+                                ! is true.
+BEGW = 0.0                      !   [nondim] default = 0.0
+                                ! If SPILT is true, BEGW is a number from 0 to 1 that
+                                ! controls the extent to which the treatment of gravity
+                                ! waves is forward-backward (0) or simulated backward
+                                ! Euler (1).  0 is almost always used.
+                                ! If SPLIT is false and USE_RK2 is true, BEGW can be
+                                ! between 0 and 0.5 to damp gravity waves.
+FLUX_BT_COUPLING = False        !   [Boolean] default = False
+                                ! If true, use mass fluxes to ensure consistency between
+                                ! the baroclinic and barotropic modes. This is only used
+                                ! if SPLIT is true.
+READJUST_BT_TRANS = False       !   [Boolean] default = False
+                                ! If true, make a barotropic adjustment to the layer
+                                ! velocities after the thermodynamic part of the step
+                                ! to ensure that the interaction between the thermodynamics
+                                ! and the continuity solver do not change the barotropic
+                                ! transport.  This is only used if FLUX_BT_COUPLING and
+                                ! SPLIT are true.
+SPLIT_BOTTOM_STRESS = False     !   [Boolean] default = False
+                                ! If true, provide the bottom stress calculated by the
+                                ! vertical viscosity to the barotropic solver.
+BT_USE_LAYER_FLUXES = True      !   [Boolean] default = True
+                                ! If true, use the summed layered fluxes plus an
+                                ! adjustment due to the change in the barotropic velocity
+                                ! in the barotropic continuity equation.
 CONTINUITY_SCHEME = "PPM"       ! default = "PPM"
                                 ! CONTINUITY_SCHEME selects the discretization for the
                                 ! continuity solver. The only valid value currently is:
@@ -676,6 +676,108 @@ BOUND_KH = False                !   [Boolean] default = True
 BETTER_BOUND_KH = False         !   [Boolean] default = False
                                 ! If true, the Laplacian coefficient is locally limited
                                 ! to be stable with a better bounding than just BOUND_KH.
+    !  Parameters of module MOM_vert_friction
+BOTTOMDRAGLAW = True            !   [Boolean] default = True
+                                ! If true, the bottom stress is calculated with a drag
+                                ! law of the form c_drag*|u|*u. The velocity magnitude
+                                ! may be an assumed value or it may be based on the
+                                ! actual velocity in the bottommost HBBL, depending on
+                                ! LINEAR_DRAG.
+CHANNEL_DRAG = False            !   [Boolean] default = False
+                                ! If true, the bottom drag is exerted directly on each
+                                ! layer proportional to the fraction of the bottom it
+                                ! overlies.
+DIRECT_STRESS = False           !   [Boolean] default = False
+                                ! If true, the wind stress is distributed over the
+                                ! topmost HMIX_STRESS of fluid (like in HYCOM), and KVML
+                                ! may be set to a very small value.
+DYNAMIC_VISCOUS_ML = False      !   [Boolean] default = False
+                                ! If true, use a bulk Richardson number criterion to
+                                ! determine the mixed layer thickness for viscosity.
+U_TRUNC_FILE = "U_velocity_truncations" ! default = ""
+                                ! The absolute path to a file into which the accelerations
+                                ! leading to zonal velocity truncations are written.
+                                ! Undefine this for efficiency if this diagnostic is not
+                                ! needed.
+V_TRUNC_FILE = "V_velocity_truncations" ! default = ""
+                                ! The absolute path to a file into which the accelerations
+                                ! leading to meridional velocity truncations are written.
+                                ! Undefine this for efficiency if this diagnostic is not
+                                ! needed.
+HARMONIC_VISC = False           !   [Boolean] default = False
+                                ! If true, use the harmonic mean thicknesses for
+                                ! calculating the vertical viscosity.
+HMIX_FIXED = 1.0E-10            !   [m]
+                                ! The prescribed depth over which the near-surface
+                                ! viscosity and diffusivity are elevated when the bulk
+                                ! mixed layer is not used.
+KV = 1.0E-04                    !   [m2 s-1]
+                                ! The background kinematic viscosity in the interior.
+                                ! The molecular value, ~1e-6 m2 s-1, may be used.
+KVML = 1.0E-04                  !   [m2 s-1] default = 1.0E-04
+                                ! The kinematic viscosity in the mixed layer.  A typical
+                                ! value is ~1e-2 m2 s-1. KVML is not used if
+                                ! BULKMIXEDLAYER is true.  The default is set by KV.
+HBBL = 0.001                    !   [m]
+                                ! The thickness of a bottom boundary layer with a
+                                ! viscosity of KVBBL if BOTTOMDRAGLAW is not defined, or
+                                ! the thickness over which near-bottom velocities are
+                                ! averaged for the drag law if BOTTOMDRAGLAW is defined
+                                ! but LINEAR_DRAG is not.
+MAXVEL = 10.0                   !   [m s-1] default = 3.0E+08
+                                ! The maximum velocity allowed before the velocity
+                                ! components are truncated.
+CFL_BASED_TRUNCATIONS = True    !   [Boolean] default = True
+                                ! If true, base truncations on the CFL number, and not an
+                                ! absolute speed.
+CFL_TRUNCATE = 0.5              !   [nondim] default = 0.5
+                                ! The value of the CFL number that will cause velocity
+                                ! components to be truncated; instability can occur past 0.5.
+CFL_REPORT = 0.5                !   [nondim] default = 0.5
+                                ! The value of the CFL number that causes accelerations
+                                ! to be reported; the default is CFL_TRUNCATE.
+    !  Parameters of module MOM_PointAccel
+MAX_TRUNC_FILE_SIZE_PER_PE = 50 ! default = 50
+                                ! The maximum number of colums of truncations that any PE
+                                ! will write out during a run.
+    !  Parameters of module MOM_set_visc
+LINEAR_DRAG = False             !   [Boolean] default = False
+                                ! If LINEAR_DRAG and BOTTOMDRAGLAW are defined the drag
+                                ! law is cdrag*DRAG_BG_VEL*u.
+USE_JACKSON_PARAM = False       !   [Boolean] default = False
+                                ! If true, use the Jackson-Hallberg-Legg (JPO 2008)
+                                ! shear mixing parameterization.
+DOUBLE_DIFFUSION = False        !   [Boolean] default = False
+                                ! If true, increase diffusivitives for temperature or salt
+                                ! based on double-diffusive paramaterization from MOM4/KPP.
+DRAG_BG_VEL = 0.05              !   [m s-1] default = 0.0
+                                ! DRAG_BG_VEL is either the assumed bottom velocity (with
+                                ! LINEAR_DRAG) or an unresolved  velocity that is
+                                ! combined with the resolved velocity to estimate the
+                                ! velocity magnitude.  DRAG_BG_VEL is only used when
+                                ! BOTTOMDRAGLAW is defined.
+BBL_USE_EOS = False             !   [Boolean] default = False
+                                ! If true, use the equation of state in determining the
+                                ! properties of the bottom boundary layer.  Otherwise use
+                                ! the layer target potential densities.
+BBL_THICK_MIN = 0.1             !   [m] default = 0.0
+                                ! The minimum bottom boundary layer thickness that can be
+                                ! used with BOTTOMDRAGLAW. This might be
+                                ! Kv / (cdrag * drag_bg_vel) to give Kv as the minimum
+                                ! near-bottom viscosity.
+HTBL_SHELF_MIN = 0.1            !   [m] default = 0.1
+                                ! The minimum top boundary layer thickness that can be
+                                ! used with BOTTOMDRAGLAW. This might be
+                                ! Kv / (cdrag * drag_bg_vel) to give Kv as the minimum
+                                ! near-top viscosity.
+HTBL_SHELF = 0.001              !   [m] default = 0.001
+                                ! The thickness over which near-surface velocities are
+                                ! averaged for the drag law under an ice shelf.  By
+                                ! default this is the same as HBBL
+KV_BBL_MIN = 1.0E-06            !   [m2 s-1] default = 0.0
+                                ! The minimum viscosities in the bottom boundary layer.
+KV_TBL_MIN = 0.0                !   [m2 s-1] default = 0.0
+                                ! The minimum viscosities in the top boundary layer.
     !  Parameters of module MOM_barotropic
 BOUND_BT_CORRECTION = True      !   [Boolean] default = False
                                 ! If true, the corrective pseudo mass-fluxes into the
@@ -797,108 +899,6 @@ DTBT = 20.0                     !   [s or nondim] default = -0.98
                                 ! Setting DTBT to 0 is the same as setting it to -0.98.
                                 ! The value of DTBT that will actually be used is an
                                 ! integer fraction of DT, rounding down.
-    !  Parameters of module MOM_vert_friction
-BOTTOMDRAGLAW = True            !   [Boolean] default = True
-                                ! If true, the bottom stress is calculated with a drag
-                                ! law of the form c_drag*|u|*u. The velocity magnitude
-                                ! may be an assumed value or it may be based on the
-                                ! actual velocity in the bottommost HBBL, depending on
-                                ! LINEAR_DRAG.
-CHANNEL_DRAG = False            !   [Boolean] default = False
-                                ! If true, the bottom drag is exerted directly on each
-                                ! layer proportional to the fraction of the bottom it
-                                ! overlies.
-DIRECT_STRESS = False           !   [Boolean] default = False
-                                ! If true, the wind stress is distributed over the
-                                ! topmost HMIX_STRESS of fluid (like in HYCOM), and KVML
-                                ! may be set to a very small value.
-DYNAMIC_VISCOUS_ML = False      !   [Boolean] default = False
-                                ! If true, use a bulk Richardson number criterion to
-                                ! determine the mixed layer thickness for viscosity.
-U_TRUNC_FILE = "U_velocity_truncations" ! default = ""
-                                ! The absolute path to a file into which the accelerations
-                                ! leading to zonal velocity truncations are written.
-                                ! Undefine this for efficiency if this diagnostic is not
-                                ! needed.
-V_TRUNC_FILE = "V_velocity_truncations" ! default = ""
-                                ! The absolute path to a file into which the accelerations
-                                ! leading to meridional velocity truncations are written.
-                                ! Undefine this for efficiency if this diagnostic is not
-                                ! needed.
-HARMONIC_VISC = False           !   [Boolean] default = False
-                                ! If true, use the harmonic mean thicknesses for
-                                ! calculating the vertical viscosity.
-HMIX_FIXED = 1.0E-10            !   [m]
-                                ! The prescribed depth over which the near-surface
-                                ! viscosity and diffusivity are elevated when the bulk
-                                ! mixed layer is not used.
-KV = 1.0E-04                    !   [m2 s-1]
-                                ! The background kinematic viscosity in the interior.
-                                ! The molecular value, ~1e-6 m2 s-1, may be used.
-KVML = 1.0E-04                  !   [m2 s-1] default = 1.0E-04
-                                ! The kinematic viscosity in the mixed layer.  A typical
-                                ! value is ~1e-2 m2 s-1. KVML is not used if
-                                ! BULKMIXEDLAYER is true.  The default is set by KV.
-HBBL = 0.001                    !   [m]
-                                ! The thickness of a bottom boundary layer with a
-                                ! viscosity of KVBBL if BOTTOMDRAGLAW is not defined, or
-                                ! the thickness over which near-bottom velocities are
-                                ! averaged for the drag law if BOTTOMDRAGLAW is defined
-                                ! but LINEAR_DRAG is not.
-MAXVEL = 10.0                   !   [m s-1] default = 3.0E+08
-                                ! The maximum velocity allowed before the velocity
-                                ! components are truncated.
-CFL_BASED_TRUNCATIONS = True    !   [Boolean] default = True
-                                ! If true, base truncations on the CFL number, and not an
-                                ! absolute speed.
-CFL_TRUNCATE = 0.5              !   [nondim] default = 0.5
-                                ! The value of the CFL number that will cause velocity
-                                ! components to be truncated; instability can occur past 0.5.
-CFL_REPORT = 0.5                !   [nondim] default = 0.5
-                                ! The value of the CFL number that causes accelerations
-                                ! to be reported; the default is CFL_TRUNCATE.
-    !  Parameters of module MOM_PointAccel
-MAX_TRUNC_FILE_SIZE_PER_PE = 50 ! default = 50
-                                ! The maximum number of colums of truncations that any PE
-                                ! will write out during a run.
-    !  Parameters of module MOM_set_visc
-LINEAR_DRAG = False             !   [Boolean] default = False
-                                ! If LINEAR_DRAG and BOTTOMDRAGLAW are defined the drag
-                                ! law is cdrag*DRAG_BG_VEL*u.
-USE_JACKSON_PARAM = False       !   [Boolean] default = False
-                                ! If true, use the Jackson-Hallberg-Legg (JPO 2008)
-                                ! shear mixing parameterization.
-DOUBLE_DIFFUSION = False        !   [Boolean] default = False
-                                ! If true, increase diffusivitives for temperature or salt
-                                ! based on double-diffusive paramaterization from MOM4/KPP.
-DRAG_BG_VEL = 0.05              !   [m s-1] default = 0.0
-                                ! DRAG_BG_VEL is either the assumed bottom velocity (with
-                                ! LINEAR_DRAG) or an unresolved  velocity that is
-                                ! combined with the resolved velocity to estimate the
-                                ! velocity magnitude.  DRAG_BG_VEL is only used when
-                                ! BOTTOMDRAGLAW is defined.
-BBL_USE_EOS = False             !   [Boolean] default = False
-                                ! If true, use the equation of state in determining the
-                                ! properties of the bottom boundary layer.  Otherwise use
-                                ! the layer target potential densities.
-BBL_THICK_MIN = 0.1             !   [m] default = 0.0
-                                ! The minimum bottom boundary layer thickness that can be
-                                ! used with BOTTOMDRAGLAW. This might be
-                                ! Kv / (cdrag * drag_bg_vel) to give Kv as the minimum
-                                ! near-bottom viscosity.
-HTBL_SHELF_MIN = 0.1            !   [m] default = 0.1
-                                ! The minimum top boundary layer thickness that can be
-                                ! used with BOTTOMDRAGLAW. This might be
-                                ! Kv / (cdrag * drag_bg_vel) to give Kv as the minimum
-                                ! near-top viscosity.
-HTBL_SHELF = 0.001              !   [m] default = 0.001
-                                ! The thickness over which near-surface velocities are
-                                ! averaged for the drag law under an ice shelf.  By
-                                ! default this is the same as HBBL
-KV_BBL_MIN = 1.0E-06            !   [m2 s-1] default = 0.0
-                                ! The minimum viscosities in the bottom boundary layer.
-KV_TBL_MIN = 0.0                !   [m2 s-1] default = 0.0
-                                ! The minimum viscosities in the top boundary layer.
     !  Parameters of module MOM_thickness_diffuse
 KHTH = 0.0                      !   [m2 s-1] default = 0.0
                                 ! The background horizontal thickness diffusivity.
