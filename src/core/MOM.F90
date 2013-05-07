@@ -394,6 +394,9 @@ use MOM_dynamics_split_RK2, only : adjustments_dyn_split_RK2, MOM_dyn_split_RK2_
 use MOM_dynamics_unsplit_RK2, only : step_MOM_dyn_unsplit_RK2, register_restarts_dyn_unsplit_RK2
 use MOM_dynamics_unsplit_RK2, only : initialize_dyn_unsplit_RK2, end_dyn_unsplit_RK2
 use MOM_dynamics_unsplit_RK2, only : MOM_dyn_unsplit_RK2_CS
+use MOM_dynamics_legacy_split, only : step_MOM_dyn_legacy_split, register_restarts_dyn_legacy_split
+use MOM_dynamics_legacy_split, only : initialize_dyn_legacy_split, end_dyn_legacy_split
+use MOM_dynamics_legacy_split, only : adjustments_dyn_legacy_split, MOM_dyn_legacy_split_CS
 use MOM_ALE, only : initialize_ALE, end_ALE, ALE_main, ALE_CS
 
 implicit none ; private
@@ -433,6 +436,9 @@ type, public :: MOM_control_struct
                               ! related to the Mesoscale Eddy Kinetic Energy.
 
   logical :: split           ! If true, use the split time stepping scheme.
+  logical :: legacy_split    ! If true, use the legacy split time stepping
+                             ! code with all the options that were available in
+                             ! GOLD.
   logical :: use_RK2         ! If true, use RK2 instead of RK3 for time-
                              ! stepping in unsplit mode.
   logical :: adiabatic       ! If true, there are no diapycnal mass fluxes, and
@@ -536,6 +542,7 @@ type, public :: MOM_control_struct
   type(MOM_dyn_unsplit_CS),     pointer :: dyn_unsplit_CSp => NULL()
   type(MOM_dyn_unsplit_RK2_CS), pointer :: dyn_unsplit_RK2_CSp => NULL()
   type(MOM_dyn_split_RK2_CS),   pointer :: dyn_split_RK2_CSp => NULL()
+  type(MOM_dyn_legacy_split_CS),   pointer :: dyn_legacy_split_CSp => NULL()
 
   type(diabatic_CS), pointer :: diabatic_CSp => NULL()
   type(thickness_diffuse_CS), pointer :: thickness_diffuse_CSp => NULL()
@@ -771,11 +778,17 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         dtbt_reset_time = CS%rel_time
       endif
 
-      call step_MOM_dyn_split_RK2(u, v, h, CS%tv, CS%visc, &
+      if (CS%legacy_split) then
+        call step_MOM_dyn_legacy_split(u, v, h, CS%tv, CS%visc, &
+                    Time_local, dt, fluxes, CS%p_surf_begin, CS%p_surf_end, &
+                    dtnt, dt*ntstep, CS%uh, CS%vh, CS%uhtr, CS%vhtr, &
+                    eta_av, grid, CS%dyn_legacy_split_CSp, calc_dtbt, CS%VarMix, CS%MEKE)
+      else
+        call step_MOM_dyn_split_RK2(u, v, h, CS%tv, CS%visc, &
                     Time_local, dt, fluxes, CS%p_surf_begin, CS%p_surf_end, &
                     dtnt, dt*ntstep, CS%uh, CS%vh, CS%uhtr, CS%vhtr, &
                     eta_av, grid, CS%dyn_split_RK2_CSp, calc_dtbt, CS%VarMix, CS%MEKE)
-
+      endif
     else ! --------------------------------------------------- not SPLIT
       !   This section uses a simple unsplit stepping scheme for the dynamic
       ! equations, basically the stacked shallow water equations with viscosity. 
@@ -880,9 +893,11 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
           call check_redundant("Pre-diabatic ", u, v, grid)
         endif
 
-        if (CS%split) then
+        if (CS%split) then ; if (CS%legacy_split) then
+          call adjustments_dyn_legacy_split(u, v, h, dt, grid, CS%dyn_legacy_split_CSp)
+        else
           call adjustments_dyn_split_RK2(u, v, h, dt, grid, CS%dyn_split_RK2_CSp)
-        endif
+        endif ; endif
 
         call cpu_clock_begin(id_clock_diabatic)
         call diabatic(u, v, h, CS%tv, fluxes, CS%visc, dtnt, &
@@ -1204,10 +1219,18 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
                  "\t9 = All)", default=2)
   call get_param(param_file, "MOM", "SPLIT", CS%split, &
                  "Use the split time stepping if true.", default=.true.)
-  if (.not. CS%split) &
+  if (CS%split) then
+    call get_param(param_file, "MOM", "USE_LEGACY_SPLIT", CS%legacy_split, &
+                 "If true, use the full range of options available from \n"//&
+                 "the older GOLD-derived split time stepping code.", &
+                 default=.false.)
+    CS%use_RK2 = .false.
+  else
     call get_param(param_file, "MOM", "USE_RK2", CS%use_RK2, &
                  "If true, use RK2 instead of RK3 in the unsplit time stepping.", &
                  default=.false.)
+    CS%legacy_split = .false.
+  endif
   call get_param(param_file, "MOM", "ENABLE_THERMODYNAMICS", CS%use_temperature, &
                  "If true, Temperature and salinity are used as state \n"//&
                  "variables.", default=.true.)
@@ -1455,8 +1478,13 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call restart_init(param_file, CS%restart_CSp)
   call set_restart_fields(grid, param_file, CS)
   if (CS%split) then
-    call register_restarts_dyn_split_RK2(grid, param_file, &
-             CS%dyn_split_RK2_CSp, CS%restart_CSp, CS%uh, CS%vh)
+    if (CS%legacy_split) then
+      call register_restarts_dyn_legacy_split(grid, param_file, &
+               CS%dyn_legacy_split_CSp, CS%restart_CSp, CS%uh, CS%vh)
+    else
+      call register_restarts_dyn_split_RK2(grid, param_file, &
+               CS%dyn_split_RK2_CSp, CS%restart_CSp, CS%uh, CS%vh)
+    endif
   else
     if (CS%use_RK2) then
       call register_restarts_dyn_unsplit_RK2(grid, param_file, &
@@ -1512,10 +1540,17 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
 
   if (CS%split) then
     allocate(eta(SZI_(grid),SZJ_(grid))) ; eta(:,:) = 0.0
-    call initialize_dyn_split_RK2(CS%u, CS%v, CS%h, CS%uh, CS%vh, eta, Time, &
-                grid, param_file, diag, CS%dyn_split_RK2_CSp, CS%restart_CSp, &
-                CS%dt, MOM_internal_state, CS%VarMix, CS%MEKE, init_CS%OBC, &
-                CS%ALE_CSp, CS%visc, dirs, CS%ntrunc)
+    if (CS%legacy_split) then
+      call initialize_dyn_legacy_split(CS%u, CS%v, CS%h, CS%uh, CS%vh, eta, Time, &
+                  grid, param_file, diag, CS%dyn_legacy_split_CSp, CS%restart_CSp, &
+                  CS%dt, MOM_internal_state, CS%VarMix, CS%MEKE, init_CS%OBC, &
+                  CS%ALE_CSp, CS%visc, dirs, CS%ntrunc)
+    else
+      call initialize_dyn_split_RK2(CS%u, CS%v, CS%h, CS%uh, CS%vh, eta, Time, &
+                  grid, param_file, diag, CS%dyn_split_RK2_CSp, CS%restart_CSp, &
+                  CS%dt, MOM_internal_state, CS%VarMix, CS%MEKE, init_CS%OBC, &
+                  CS%ALE_CSp, CS%visc, dirs, CS%ntrunc)
+    endif
   else
     if (CS%use_RK2) then
       call initialize_dyn_unsplit_RK2(CS%u, CS%v, CS%h, Time, grid, &
@@ -2301,9 +2336,11 @@ subroutine MOM_end(CS)
   if (associated(CS%tv%Hml)) deallocate(CS%tv%Hml)
 
   DEALLOC_(CS%uhtr) ; DEALLOC_(CS%vhtr)
-  if (CS%split) then
-    call end_dyn_split_RK2(CS%dyn_split_RK2_CSp)
-  else ; if (CS%use_RK2) then
+  if (CS%split) then ; if (CS%legacy_split) then
+      call end_dyn_legacy_split(CS%dyn_legacy_split_CSp)
+    else
+      call end_dyn_split_RK2(CS%dyn_split_RK2_CSp)
+  endif ; else ; if (CS%use_RK2) then
       call end_dyn_unsplit_RK2(CS%dyn_unsplit_RK2_CSp)
     else
       call end_dyn_unsplit(CS%dyn_unsplit_CSp)
