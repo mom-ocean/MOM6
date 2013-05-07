@@ -151,7 +151,7 @@ subroutine set_opacity(optics, fluxes, G, CS)
     else ; Inv_nbands = 1.0 / real(optics%nbands) ; endif
 
     ! Make sure there is no division by 0.
-    inv_sw_pen_scale = 1.0 / max(CS%pen_sw_scale, 0.1*G%Angstrom)
+    inv_sw_pen_scale = 1.0 / max(CS%pen_sw_scale, 0.1*G%Angstrom_z, G%H_to_m*G%H_subroundoff)
 
     do k=1,nz ; do j=js,je ; do i=is,ie  ; do n=1,optics%nbands
       optics%opacity_band(n,i,j,k) = inv_sw_pen_scale

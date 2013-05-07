@@ -676,19 +676,17 @@ subroutine set_diffusivity(u, v, h, tv, fluxes, visc, dt, G, CS, &
   if (CS%debug) then
     call hchksum(Kd,"BBL Kd",G,haloshift=0)
     if (CS%Add_input_Kd) call hchksum(visc%Kd_turb,"Turbulent Kd",G,haloshift=0)
-    call uchksum(visc%kv_bbl_u,"BBL Kv_bbl_u",G,haloshift=1)
-    call vchksum(visc%kv_bbl_v,"BBL Kv_bbl_v",G,haloshift=1)
-    call uchksum(visc%kv_bbl_u,"BBL Kv_bbl_u NPR",G,haloshift=1)
-    call vchksum(visc%kv_bbl_v,"BBL Kv_bbl_v NPR",G,haloshift=1)
-    call uchksum(visc%bbl_thick_u,"BBL bbl_thick_u",G,haloshift=1)
-    call vchksum(visc%bbl_thick_v,"BBL bbl_thick_v",G,haloshift=1)
-    call uchksum(visc%bbl_thick_u,"BBL bbl_thick_u NPR",G,haloshift=1)
-    call vchksum(visc%bbl_thick_v,"BBL bbl_thick_v NPR",G,haloshift=1)
+    if (associated(visc%kv_bbl_u) .and. associated(visc%kv_bbl_v)) then
+      call uchksum(visc%kv_bbl_u,"BBL Kv_bbl_u",G,haloshift=1)
+      call vchksum(visc%kv_bbl_v,"BBL Kv_bbl_v",G,haloshift=1)
+    endif
+    if (associated(visc%bbl_thick_u) .and. associated(visc%bbl_thick_v)) then
+      call uchksum(visc%bbl_thick_u,"BBL bbl_thick_u",G,haloshift=1)
+      call vchksum(visc%bbl_thick_v,"BBL bbl_thick_v",G,haloshift=1)
+    endif
     if (associated(visc%Ray_u) .and. associated(visc%Ray_v)) then
       call uchksum(visc%Ray_u,"Ray_u",G)
       call vchksum(visc%Ray_v,"Ray_v",G)
-      call uchksum(visc%Ray_u,"BBL Ray_u NPR",G)
-      call vchksum(visc%Ray_v,"BBL Ray_v NPR",G)
     endif
   endif
 

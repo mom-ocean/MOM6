@@ -849,7 +849,7 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
   if (CS%Laplacian) then
    ! The 0.3 below was 0.4 in MOM1.10.  The change in hq requires
    ! this to be less than 1/3, rather than 1/2 as before.
-    Kh_Limit = 0.3 / (dt*4.0)
+    if (CS%bound_Kh .or. CS%bound_Ah) Kh_Limit = 0.3 / (dt*4.0)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       grid_sp_h2 = (2.0*CS%DX2h(i,j)*CS%DY2h(i,j)) / (CS%DX2h(i,j) + CS%DY2h(i,j))
       if (CS%Smagorinsky_Kh) CS%LAPLAC_CONST_xx(i,j) = Smag_Lap_const * grid_sp_h2
@@ -924,9 +924,9 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
     enddo ; enddo
   endif
 
-  Idt = 1.0 / dt
   ! The Laplacian bounds should avoid overshoots when CS%bound_coef < 1.
   if (CS%Laplacian .and. CS%better_bound_Kh) then
+    Idt = 1.0 / dt
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       denom = max( &
          (CS%DY2h(i,j) * CS%DY_dxT(i,j) * (G%IdyCu(I,j) + G%IdyCu(I-1,j)) * &
@@ -952,6 +952,7 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
   ! The biharmonic bounds should avoid overshoots when CS%bound_coef < 0.5, but
   ! empirically work for CS%bound_coef <~ 1.0
   if (CS%biharmonic .and. CS%better_bound_Ah) then
+    Idt = 1.0 / dt
     do j=js-1,Jeq+1 ; do I=Isq-1,Ieq+1
       u0u(I,j) = CS%IDXDY2u(I,j)*(CS%DY2h(i+1,j)*CS%DY_dxT(i+1,j)*(G%IdyCu(i+1,j) + G%IdyCu(i,j)) + &
                                   CS%DY2h(i,j) * CS%DY_dxT(i,j) * (G%IdyCu(I,j) + G%IdyCu(I-1,j)) ) + &
