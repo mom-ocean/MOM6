@@ -383,24 +383,175 @@ use MOM_vert_friction, only : vertvisc, vertvisc_coef, vertvisc_remnant
 use MOM_vert_friction, only : vertvisc_limit_vel, vertvisc_init
 use MOM_set_visc, only : set_viscous_BBL, set_viscous_ML, set_visc_init, set_visc_CS
 use MOM_sponge, only : init_sponge_diags, sponge_CS
-use MOM_CS_type, only : MOM_control_struct, MOM_dyn_control_struct
+! use MOM_CS_type, only : MOM_control_struct, MOM_dyn_control_struct
 use MOM_checksum_packages, only : MOM_thermo_chksum, MOM_state_chksum, MOM_accel_chksum
 use MOM_dynamics_unsplit, only : step_MOM_dyn_unsplit, register_restarts_dyn_unsplit
 use MOM_dynamics_unsplit, only : initialize_dyn_unsplit, end_dyn_unsplit
+use MOM_dynamics_unsplit, only : MOM_dyn_unsplit_CS
 use MOM_dynamics_split_RK2, only : step_MOM_dyn_split_RK2, register_restarts_dyn_split_RK2
 use MOM_dynamics_split_RK2, only : initialize_dyn_split_RK2, end_dyn_split_RK2
-use MOM_dynamics_split_RK2, only : adjustments_dyn_split_RK2
+use MOM_dynamics_split_RK2, only : adjustments_dyn_split_RK2, MOM_dyn_split_RK2_CS
 use MOM_dynamics_unsplit_RK2, only : step_MOM_dyn_unsplit_RK2, register_restarts_dyn_unsplit_RK2
 use MOM_dynamics_unsplit_RK2, only : initialize_dyn_unsplit_RK2, end_dyn_unsplit_RK2
-use MOM_ALE, only : initialize_ALE, end_ALE, ALE_main
+use MOM_dynamics_unsplit_RK2, only : MOM_dyn_unsplit_RK2_CS
+use MOM_ALE, only : initialize_ALE, end_ALE, ALE_main, ALE_CS
 
 implicit none ; private
 
 #include <MOM_memory.h>
 
+type, public :: MOM_control_struct
+  real ALLOCABLE_, dimension(NIMEM_,NJMEM_,NKMEM_) :: &
+    h, &      ! Layer thickness, in m or kg m-2 (H).
+    T, &      ! Potential temperature in C.
+    S, &      ! Salinity in PSU.
+    h_aux     ! Work array for remapping (same units as h).
+  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: &
+    u, &      ! Zonal velocity, in m s-1.
+    uh, &     ! uh = u * h * dy at u grid points in m3 s-1.
+    uhtr      ! Accumlated zonal thickness fluxes used to advect tracers, in m3.
+  real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: &
+    v, &      ! Meridional velocity, in m s-1.
+    vh, &     ! vh = v * h * dx at v grid points in m3 s-1.
+    vhtr      ! Accumlated meridional thickness fluxes used to advect tracers, in m3.
+  real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
+    ave_ssh   ! The time-averaged sea surface height in m.
+
+  real, pointer, dimension(:,:,:) :: &
+    u_prev => NULL(), &  ! The previous values of u and v, stored for
+    v_prev => NULL()     ! diagnostic purposes.
+
+  type(ocean_grid_type) :: grid ! A structure containing metrics and grid info.
+  type(thermo_var_ptrs) :: tv ! A structure containing pointers to an assortment
+                              ! of thermodynamic fields that may be available.
+  type(diag_ptrs) :: diag     ! A structure containing pointers to
+                              ! diagnostic fields that might be calculated
+                              ! and shared between modules.
+  type(vertvisc_type) :: visc ! A structure containing vertical viscosities,
+                              ! bottom drag viscosities, and related fields.
+  type(MEKE_type), pointer :: MEKE => NULL()  ! A structure containing fields
+                              ! related to the Mesoscale Eddy Kinetic Energy.
+
+  logical :: split           ! If true, use the split time stepping scheme.
+  logical :: use_RK2         ! If true, use RK2 instead of RK3 for time-
+                             ! stepping in unsplit mode.
+  logical :: adiabatic       ! If true, there are no diapycnal mass fluxes, and
+                             ! the subroutine calls to calculate and apply such
+                             ! diapycnal fluxes are eliminated.
+  logical :: use_temperature ! If true, temperature and salinity are used as
+                             ! state variables.
+  logical :: use_frazil      ! If true, water freezes if it gets too cold, and
+                             ! the accumulated heat deficit is returned in the
+                             ! surface state.
+  logical :: bound_salinity  ! If true, salt is added to keep the salinity above
+                             ! a minimum value, and the deficit is reported.
+  logical :: bulkmixedlayer  ! If true, a refined bulk mixed layer is used with
+                             ! nkml sublayers and nkbl buffer layer.
+  logical :: thickness_diffuse ! If true, interfaces are diffused with a
+                             ! coefficient of KHTH.
+  logical :: thickness_diffuse_first ! If true, diffuse thickness before dynamics.
+  logical :: mixedlayer_restrat ! If true, a density-gradient dependent
+                             ! restratifying flow is imposed in the mixed layer.
+  logical :: debug           ! If true, write verbose checksums for debugging purposes.
+  logical :: debug_truncations  ! If true, make sure that all diagnostics that
+                             ! could be useful for debugging any truncations are
+                             ! calculated.
+  logical :: useALEalgorithm ! If true, use the ALE algorithm rather than layered
+                             ! isopycnal/stacked shallow water mode. This logical is
+                             ! set by calling the function useRegridding() from the
+                             ! MOM_regridding module.
+
+  real    :: dt              ! The (baroclinic) dynamics time step, in s.
+  real    :: dt_therm        ! The thermodynamics time step, in s.
+  type(time_type) :: Z_diag_interval  !   The amount of time between calls to
+                             ! calculate Z-space diagnostics.
+  type(time_type) :: Z_diag_time  ! The next time at which Z-space diagnostics
+                             ! should be calculated.
+  real    :: Hmix            ! The diagnostic mixed layer thickness in m when
+                             ! the bulk mixed layer is not used.
+  real :: missing=-1.0e34    ! The missing data value for masked fields.
+
+  integer :: ntrunc          ! The number of times the velocity has been
+                             ! truncated since the last call to write_energy.
+  type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
+  real :: rel_time = 0.0     ! Relative time in s since the start
+                             ! of the current execution.
+
+  logical :: interp_p_surf     ! If true, linearly interpolate the surface
+                               ! pressure over the coupling time step, using 
+                               ! the specified value at the end of the coupling
+                               ! step. False by default.
+  real    :: smooth_ssh_passes ! If greater than 0, apply this number of 
+                               ! spatial smoothing passes to the sea surface
+                               ! heights that are reported back to the calling
+                               ! program by MOM.  The default is 0.
+  logical :: p_surf_prev_set   ! If true, p_surf_prev has been properly set from
+                               ! a previous time-step or the ocean restart file.
+                               ! This is only valid when interp_p_surf is true.
+
+  real    :: dtbt_reset_period ! The time interval in seconds between dynamic
+                               ! recalculation of the barotropic time step.  If
+                               ! this is negative, it is never calculated, and
+                               ! if it is 0, it is calculated every step.
+
+  logical :: check_bad_surface_vals ! If true, scans the surface state for
+                                    ! ridiculous values
+  real    :: bad_val_ssh_max   ! Maximum SSH before triggering bad value message
+  real    :: bad_val_sst_max   ! Maximum SST before triggering bad value message
+  real    :: bad_val_sst_min   ! Minimum SST before triggering bad value message
+  real    :: bad_val_sss_max   ! Maximum SSS before triggering bad value message
+
+  real, pointer, dimension(:,:) :: &
+    p_surf_prev => NULL(), &  ! The value of the surface pressure at the end of
+                              ! the previous call to step_MOM, in Pa.
+    p_surf_begin => NULL(), & ! The values of the surface pressure at the start
+    p_surf_end => NULL()      ! and end of a call to step_MOM_dyn_..., in Pa.
+
+  ! Arrays that can be used to store advective and diffusive tracer fluxes.
+  real, pointer, dimension(:,:,:) :: &
+    T_adx => NULL(), T_ady => NULL(), T_diffx => NULL(), T_diffy => NULL(), &
+    S_adx => NULL(), S_ady => NULL(), S_diffx => NULL(), S_diffy => NULL()
+  ! Arrays that can be used to store vertically integrated advective and
+  ! diffusive tracer fluxes.
+  real, pointer, dimension(:,:) :: &
+    T_adx_2d => NULL(), T_ady_2d => NULL(), T_diffx_2d => NULL(), T_diffy_2d => NULL(), &
+    S_adx_2d => NULL(), S_ady_2d => NULL(), S_diffx_2d => NULL(), S_diffy_2d => NULL(), &
+    SST_sq => NULL()
+
+! The following are the ids of various diagnostics.
+  integer :: id_u = -1, id_v = -1, id_h = -1
+  integer :: id_T = -1, id_S = -1, id_ssh = -1, id_fraz = -1
+  integer :: id_salt_deficit = -1, id_Heat_PmE = -1, id_intern_heat = -1
+  integer :: id_sst = -1, id_sst_sq = -1, id_sss = -1, id_ssu = -1, id_ssv = -1
+  integer :: id_speed = -1, id_ssh_inst = -1
+
+  integer :: id_Tadx = -1, id_Tady = -1, id_Tdiffx = -1, id_Tdiffy = -1
+  integer :: id_Sadx = -1, id_Sady = -1, id_Sdiffx = -1, id_Sdiffy = -1
+  integer :: id_Tadx_2d = -1, id_Tady_2d = -1, id_Tdiffx_2d = -1, id_Tdiffy_2d = -1
+  integer :: id_Sadx_2d = -1, id_Sady_2d = -1, id_Sdiffx_2d = -1, id_Sdiffy_2d = -1
+  integer :: id_u_predia = -1, id_v_predia = -1, id_h_predia = -1
+  integer :: id_T_predia = -1, id_S_predia = -1, id_e_predia = -1
+
+! The remainder of the structure is pointers to child subroutines' control strings.
+  type(MOM_dyn_unsplit_CS),     pointer :: dyn_unsplit_CSp => NULL()
+  type(MOM_dyn_unsplit_RK2_CS), pointer :: dyn_unsplit_RK2_CSp => NULL()
+  type(MOM_dyn_split_RK2_CS),   pointer :: dyn_split_RK2_CSp => NULL()
+
+  type(diabatic_CS), pointer :: diabatic_CSp => NULL()
+  type(thickness_diffuse_CS), pointer :: thickness_diffuse_CSp => NULL()
+  type(mixedlayer_restrat_CS), pointer :: mixedlayer_restrat_CSp => NULL()
+  type(MEKE_CS),  pointer :: MEKE_CSp => NULL()
+  type(VarMix_CS),  pointer :: VarMix => NULL()
+  type(advect_tracer_CS), pointer :: tracer_CSp => NULL()
+  type(tracer_flow_control_CS), pointer :: tracer_flow_CSp => NULL()
+  type(diagnostics_CS), pointer :: diagnostics_CSp => NULL()
+  type(diag_to_Z_CS), pointer :: diag_to_Z_CSp => NULL()
+  type(MOM_restart_CS),  pointer :: restart_CSp => NULL()
+  type(ocean_OBC_type), pointer :: OBC => NULL()
+  type(ALE_CS), pointer :: ALE_CSp => NULL()
+end type MOM_control_struct
+
 public initialize_MOM, step_MOM, MOM_end, calculate_surface_state
-public MOM_control_struct  ! This is exported for MOM_driver.F90 to use. We could
-                           ! instead have MOM_driver import MOM_cs_type directly?
 
 integer :: id_clock_ocean, id_clock_dynamics, id_clock_thermo
 integer :: id_clock_tracer, id_clock_diabatic
@@ -623,7 +774,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       call step_MOM_dyn_split_RK2(u, v, h, CS%tv, CS%visc, &
                     Time_local, dt, fluxes, CS%p_surf_begin, CS%p_surf_end, &
                     dtnt, dt*ntstep, CS%uh, CS%vh, CS%uhtr, CS%vhtr, &
-                    eta_av, grid, CS%dyn_CSp, calc_dtbt, CS%VarMix, CS%MEKE)
+                    eta_av, grid, CS%dyn_split_RK2_CSp, calc_dtbt, CS%VarMix, CS%MEKE)
 
     else ! --------------------------------------------------- not SPLIT
       !   This section uses a simple unsplit stepping scheme for the dynamic
@@ -636,11 +787,11 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       if (CS%use_RK2) then
         call step_MOM_dyn_unsplit_RK2(u, v, h, CS%tv, CS%visc, Time_local, dt, fluxes, &
                  CS%p_surf_begin, CS%p_surf_end, CS%uh, CS%vh, CS%uhtr, CS%vhtr, &
-                 eta_av, grid, CS%dyn_CSp, CS%VarMix, CS%MEKE)
+                 eta_av, grid, CS%dyn_unsplit_RK2_CSp, CS%VarMix, CS%MEKE)
       else
         call step_MOM_dyn_unsplit(u, v, h, CS%tv, CS%visc, Time_local, dt, fluxes, &
                  CS%p_surf_begin, CS%p_surf_end, CS%uh, CS%vh, CS%uhtr, CS%vhtr, &
-                 eta_av, grid, CS%dyn_CSp, CS%VarMix, CS%MEKE)
+                 eta_av, grid, CS%dyn_unsplit_CSp, CS%VarMix, CS%MEKE)
       endif
 
     endif ! -------------------------------------------------- end SPLIT
@@ -730,7 +881,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         endif
 
         if (CS%split) then
-          call adjustments_dyn_split_RK2(u, v, h, dt, grid, CS%dyn_CSp)
+          call adjustments_dyn_split_RK2(u, v, h, dt, grid, CS%dyn_split_RK2_CSp)
         endif
 
         call cpu_clock_begin(id_clock_diabatic)
@@ -754,7 +905,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
             call hchksum(CS%tv%S,"Pre-ALE S",grid,haloshift=1)
             call check_redundant("Pre-ALE ", u, v, grid)
           endif
-          call ALE_main(grid, h, CS%h_aux, u, v, CS%tv, CS%ALE_CSp )
+          call ALE_main(grid, h, CS%h_aux, u, v, CS%tv, CS%ALE_CSp)
           if (CS%debug) then
             call MOM_state_chksum("Post-ALE ", u, v, h, CS%uh, CS%vh, grid)
             call hchksum(CS%tv%T,"Post-ALE T",grid,haloshift=1)
@@ -1018,7 +1169,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
                             "control structure.")
     return
   endif
-  allocate(CS) ; allocate(CS%dyn_CSp)
+  allocate(CS)
   grid => CS%grid ; CS%Time => Time
   diag => CS%diag
 
@@ -1304,14 +1455,15 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call restart_init(param_file, CS%restart_CSp)
   call set_restart_fields(grid, param_file, CS)
   if (CS%split) then
-    call register_restarts_dyn_split_RK2(grid, param_file, CS%dyn_CSp, &
-                                         CS%restart_CSp, CS%uh, CS%vh)
+    call register_restarts_dyn_split_RK2(grid, param_file, &
+             CS%dyn_split_RK2_CSp, CS%restart_CSp, CS%uh, CS%vh)
   else
     if (CS%use_RK2) then
-      call register_restarts_dyn_unsplit_RK2(grid, param_file, CS%dyn_CSp, &
-                                             CS%restart_CSp)
+      call register_restarts_dyn_unsplit_RK2(grid, param_file, &
+             CS%dyn_unsplit_RK2_CSp, CS%restart_CSp)
     else
-      call register_restarts_dyn_unsplit(grid, param_file, CS%dyn_CSp, CS%restart_CSp)
+      call register_restarts_dyn_unsplit(grid, param_file, &
+             CS%dyn_unsplit_CSp, CS%restart_CSp)
     endif
   endif
 !   This subroutine calls user-specified tracer registration routines.
@@ -1361,18 +1513,18 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   if (CS%split) then
     allocate(eta(SZI_(grid),SZJ_(grid))) ; eta(:,:) = 0.0
     call initialize_dyn_split_RK2(CS%u, CS%v, CS%h, CS%uh, CS%vh, eta, Time, &
-                grid, param_file, diag, CS%dyn_CSp, CS%restart_CSp, CS%dt, &
-                MOM_internal_state, CS%VarMix, CS%MEKE, init_CS%OBC, &
+                grid, param_file, diag, CS%dyn_split_RK2_CSp, CS%restart_CSp, &
+                CS%dt, MOM_internal_state, CS%VarMix, CS%MEKE, init_CS%OBC, &
                 CS%ALE_CSp, CS%visc, dirs, CS%ntrunc)
   else
     if (CS%use_RK2) then
       call initialize_dyn_unsplit_RK2(CS%u, CS%v, CS%h, Time, grid, &
-                param_file, diag, CS%dyn_CSp, CS%restart_CSp, MOM_internal_state, &
-                init_CS%OBC, CS%ALE_CSp, CS%visc, dirs, CS%ntrunc)
+                param_file, diag, CS%dyn_unsplit_RK2_CSp, CS%restart_CSp, &
+                MOM_internal_state, init_CS%OBC, CS%ALE_CSp, CS%visc, dirs, CS%ntrunc)
     else
       call initialize_dyn_unsplit(CS%u, CS%v, CS%h, Time, grid, &
-                param_file, diag, CS%dyn_CSp, CS%restart_CSp, MOM_internal_state, &
-                init_CS%OBC, CS%ALE_CSp, CS%visc, dirs, CS%ntrunc)
+                param_file, diag, CS%dyn_unsplit_CSp, CS%restart_CSp, &
+                MOM_internal_state, init_CS%OBC, CS%ALE_CSp, CS%visc, dirs, CS%ntrunc)
     endif
   endif
 
@@ -2150,11 +2302,11 @@ subroutine MOM_end(CS)
 
   DEALLOC_(CS%uhtr) ; DEALLOC_(CS%vhtr)
   if (CS%split) then
-    call end_dyn_split_RK2(CS%dyn_CSp)
+    call end_dyn_split_RK2(CS%dyn_split_RK2_CSp)
   else ; if (CS%use_RK2) then
-      call end_dyn_unsplit_RK2(CS%dyn_CSp)
+      call end_dyn_unsplit_RK2(CS%dyn_unsplit_RK2_CSp)
     else
-      call end_dyn_unsplit(CS%dyn_CSp)
+      call end_dyn_unsplit(CS%dyn_unsplit_CSp)
   endif ; endif
   DEALLOC_(CS%ave_ssh)
 
