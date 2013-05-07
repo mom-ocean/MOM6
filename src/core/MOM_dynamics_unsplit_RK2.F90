@@ -105,7 +105,7 @@ use MOM_open_boundary, only : Radiation_Open_Bdry_Conds, open_boundary_init
 use MOM_open_boundary, only : open_boundary_CS
 use MOM_PressureForce, only : PressureForce, PressureForce_init, PressureForce_CS
 use MOM_tidal_forcing, only : tidal_forcing_init, tidal_forcing_CS
-use MOM_vert_friction, only : vertvisc, vertvisc_coef, vertvisc_remnant
+use MOM_vert_friction, only : vertvisc, vertvisc_coef
 use MOM_vert_friction, only : vertvisc_limit_vel, vertvisc_init, vertvisc_CS
 use MOM_set_visc, only : set_viscous_BBL, set_viscous_ML, set_visc_init, set_visc_CS
 
@@ -117,78 +117,17 @@ type, public :: MOM_dyn_unsplit_RK2_CS ; private
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: &
     CAu, &    ! CAu = f*v - u.grad(u) in m s-2.
     PFu, &    ! PFu = -dM/dx, in m s-2.
-    diffu, &  ! Zonal acceleration due to convergence of the along-isopycnal
+    diffu     ! Zonal acceleration due to convergence of the along-isopycnal
               ! stress tensor, in m s-2.
-    visc_rem_u, & ! Both the fraction of the zonal momentum originally in a
-              ! layer that remains after a time-step of viscosity, and the
-              ! fraction of a time-step's worth of a barotropic acceleration
-              ! that a layer experiences after viscosity is applied.
-              ! Nondimensional between 0 (at the bottom) and 1 (far above).
-    u_accel_bt ! The layers' zonal accelerations due to the difference between
-              ! the barotropic accelerations and the baroclinic accelerations
-              ! that were fed into the barotopic calculation, in m s-2.
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: &
     CAv, &    ! CAv = -f*u - u.grad(v) in m s-2.
     PFv, &    ! PFv = -dM/dy, in m s-2.
-    diffv, &  ! Meridional acceleration due to convergence of the
+    diffv     ! Meridional acceleration due to convergence of the
               ! along-isopycnal stress tensor, in m s-2.
-    visc_rem_v, & ! Both the fraction of the meridional momentum originally in
-              ! a layer that remains after a time-step of viscosity, and the
-              ! fraction of a time-step's worth of a barotropic acceleration
-              ! that a layer experiences after viscosity is applied.
-              ! Nondimensional between 0 (at the bottom) and 1 (far above).
-    v_accel_bt ! The layers' meridional accelerations due to the difference between
-              ! the barotropic accelerations and the baroclinic accelerations
-              ! that were fed into the barotopic calculation, in m s-2.
 
-! The following variables are only used with the split time stepping scheme.
-  real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
-    eta       ! Instantaneous free surface height, in m.
-  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: u_av
-  real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: v_av
-    ! u_av and v_av are the layer velocities with the vertical mean replaced by
-    ! the time-mean barotropic velocity over a baroclinic timestep, in m s-1.
-  real ALLOCABLE_, dimension(NIMEM_,NJMEM_,NKMEM_)  :: h_av
-    ! The arithmetic mean of two successive layer thicknesses, in m or kg m-2.
-  real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
-    eta_PF    ! The instantaneous SSH used in calculating PFu and PFv, in m.
-  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_) :: uhbt
-  real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_) :: vhbt
-    ! uhbt and vhbt are the average volume or mass fluxes determined by the
-    ! barotropic solver in m3 s-1 or kg s-1.  uhbt and vhbt should (roughly?) 
-    ! equal the verticals sum of uh and vh, respectively.
-  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_) :: uhbt_in
-  real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_) :: vhbt_in
-    ! uhbt_in and vhbt_in are the vertically summed transports from based on
-    ! the final thicknessses and velocities from the previous dynamics time
-    ! step, both in units of m3 s-1 or kg s-1.
-  real ALLOCABLE_, dimension(NIMEM_,NJMEM_,NKMEM_) :: pbce
-      ! pbce times eta gives the baroclinic pressure anomaly in each layer due
-      ! to free surface height anomalies.  pbce has units of m2 H-1 s-2.
 
   real, pointer, dimension(:,:) :: taux_bot => NULL(), tauy_bot => NULL()
     ! The frictional bottom stresses from the ocean to the seafloor, in Pa.
-
-  ! This is to allow the previous, velocity-based coupling with between the
-  ! baroclinic and barotropic modes.
-  logical :: flux_BT_coupling  ! If true, use volume fluxes, not velocities,
-                               ! to couple the baroclinic and barotropic modes.
-  logical :: BT_use_layer_fluxes ! If true, use the summed layered fluxes plus
-                               ! an adjustment due to a changed barotropic
-                               ! velocity in the barotropic continuity equation.
-  logical :: split_bottom_stress  ! If true, provide the bottom stress
-                               ! calculated by the vertical viscosity to the
-                               ! barotropic solver.
-  logical :: readjust_BT_trans ! If true, readjust the barotropic transport of
-                               ! the input velocities to agree with CS%uhbt_in
-                               ! and CS%vhbt_in after the diabatic step.
-  logical :: readjust_velocity ! A flag that varies with time that determines
-                               ! whether the velocities currently need to be
-                               ! readjusted to agree with CS%uhbt_in and
-                               ! CS%vhbt_in.  This is only used if 
-                               ! CS%readjust_BT_trans is true.
-  logical :: calc_dtbt         ! If true, calculate the barotropic time-step
-                               ! dynamically.
 
   real    :: be              ! A nondimensional number from 0.5 to 1 that controls
                              ! the backward weighting of the time stepping scheme.
