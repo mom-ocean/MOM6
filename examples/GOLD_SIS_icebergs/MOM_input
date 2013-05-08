@@ -358,6 +358,11 @@ ANALYTIC_FV_PGF = True          !    If defined the pressure gradient forces
                                 !  numerical thermobaric instability.
 
 !  Specify the scheme for the barotropic solver.
+USE_LEGACY_SPLIT = True         !    If defined, use the split time stepping
+                                !  code that gives acces to the full range of
+                                !  options that were available in GOLD.  If
+                                !  false, only the prefered options can be
+                                !  used in the streamlined code.
 FLUX_BT_COUPLING = True         !    If defined, use mass fluxes to ensure
                                 !  consistency between the baroclinic and
                                 !  barotropic modes.
