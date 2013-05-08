@@ -189,18 +189,10 @@ type, public :: barotropic_CS ; private
     IareaT          !   This is a copy of G%IareaT with wide halos, but will
                     ! still utilize the macro IareaT when referenced, m-2.              
   real ALLOCABLE_, dimension(NIMEMBW_,NJMEMW_) :: &
-    Datu_res, &     ! A nondimensional factor by which the zonal face areas
-                    ! are to be rescaled to account for the effective face
-                    ! areas of the layers, if rescale_D_bt is true.
-                    ! Datu_res is set in btcalc.
     D_u_Cor, &      !   A simply averaged depth at u points, in m.
     dy_Cu, &         !   A copy of G%dy_Cu with wide halos, in m.
     IdxCu            !   A copy of G%IdxCu with wide halos, in m-1.
   real ALLOCABLE_, dimension(NIMEMW_,NJMEMBW_) :: &
-    Datv_res, &     ! A nondimensional factor by which the meridional face
-                    ! areas are to be rescaled to account for the effective
-                    ! face areas of the layers, if rescale_D_bt is true.
-                    ! Datv_res is set in btcalc.
     D_v_Cor, &      !   A simply averaged depth at v points, in m.
     dx_Cv, &         !   A copy of G%dx_Cv with wide halos, in m.
     IdyCv            !   A copy of G%IdyCv with wide halos, in m-1.
@@ -283,10 +275,6 @@ type, public :: barotropic_CS ; private
                              !   HARMONIC, ARITHMETIC, HYBRID, and FROM_BT_CONT
   logical :: strong_drag     ! If true, use a stronger estimate of the retarding
                              ! effects of strong bottom drag.
-  logical :: rescale_D_bt    ! If true, the open face areas are rescaled by a
-                             ! function of the ratio of the summed harmonic
-                             ! mean thicknesses to the harmonic mean of the
-                             ! summed thicknesses.
   logical :: linearized_BT_PV  ! If true, the PV and interface thicknesses used
                              ! in the barotropic Coriolis calculation is time
                              ! invariant and linearized.
@@ -324,7 +312,6 @@ type, public :: barotropic_CS ; private
   integer :: id_ubt_hifreq = -1, id_vbt_hifreq = -1, id_eta_hifreq = -1
   integer :: id_uhbt_hifreq = -1, id_vhbt_hifreq = -1, id_eta_pred_hifreq = -1
   integer :: id_gtotn = -1, id_gtots = -1, id_gtote = -1, id_gtotw = -1
-  integer :: id_Datu_res = -1, id_Datv_res = -1
   integer :: id_uhbtav = -1, id_frhatu = -1, id_vhbtav = -1, id_frhatv = -1
   integer :: id_frhatu1 = -1, id_frhatv1 = -1
 end type barotropic_CS
@@ -389,13 +376,12 @@ character*(20), parameter :: BT_CONT_STRING = "FROM_BT_CONT"
 
 contains
 
-subroutine btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
+subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
                   fluxes, pbce, eta_PF_in, U_Cor, V_Cor, &
                   accel_layer_u, accel_layer_v, eta_out, uhbtav, vhbtav, G, CS, &
                   visc_rem_u, visc_rem_v, etaav, uhbt_out, vhbt_out, OBC, &
                   BT_cont, eta_PF_start, &
                   taux_bot, tauy_bot, uh0, vh0, u_uh0, v_vh0)
-  logical,                              intent(in)    :: use_fluxes
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)  :: U_in
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)  :: V_in
   real, dimension(NIMEM_,NJMEM_),       intent(in)    :: eta_in
@@ -427,13 +413,8 @@ subroutine btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   real, dimension(:,:,:),              pointer,     optional :: uh0, u_uh0
   real, dimension(:,:,:),              pointer,     optional :: vh0, v_vh0
 
-! Arguments: use_fluxes - A logical indicating whether velocities (false) or
-!                         fluxes (true) are used to initialize the barotropic
-!                         velocities.
-!  (in)      U_in - The initial (3-D) zonal velocity or volume or mass fluxes,
-!                   depending on flux_form, in m s-1 or m3 s-1 or kg s-1.
-!  (in)      V_in - The initial (3-D) meridional velocity or volume/mass fluxes,
-!                   depending on flux_form, in m s-1 or m3 s-1 or kg s-1.
+! Arguments: U_in - The initial (3-D) zonal velocity, in m s-1.
+!  (in)      V_in - The initial (3-D) meridional velocity, in m s-1.
 !  (in)      eta_in - The initial barotropic free surface height anomaly or
 !                     column mass anomaly, in m or kg m-2.
 !  (in)      dt - The time increment to integrate over.
@@ -448,9 +429,9 @@ subroutine btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
 !                        gradient accelerations (or its final value if
 !                        eta_PF_start is provided, in m or kg m-2.
 !      Note: eta_in, pbce, and eta_PF_in must have up-to-date halos.
-!  (in)      U_Cor - The (3-D) zonal- and meridional- velocities or volume or
-!  (in)      V_Cor   mass fluxes used to calculate the Coriolis terms in
-!                    bc_accel_u and bc_accel_v, in m s-1 or m3 s-1 or kg s-1.
+!  (in)      U_Cor - The (3-D) zonal- and meridional- velocities used to
+!  (in)      V_Cor   calculate the Coriolis terms in bc_accel_u and
+!                    bc_accel_v, in m s-1.
 !  (out)     accel_layer_u - The accelerations of each layer due to the
 !  (out)     accel_layer_v - barotropic calculation, in m s-2.
 !  (out)     eta_out - The final barotropic free surface height anomaly or
@@ -492,8 +473,6 @@ subroutine btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
 !  0.0 and 1.0 determining the scheme.  In practice, bebt must be of
 !  order 0.2 or greater.  A forwards-backwards treatment of the
 !  Coriolis terms is always used.
-!    Depending on the value of use_fluxes, the initial velocities are determined
-!  from input velocites or volume (Boussinesq) or mass (non-Boussinesq) fluxes.
 
   real :: ubt_Cor(SZIB_(G),SZJ_(G)) ! The barotropic velocities that had been
   real :: vbt_Cor(SZI_(G),SZJB_(G)) ! use to calculate the input Coriolis
@@ -662,7 +641,7 @@ subroutine btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   character(len=200) :: mesg
   integer :: pid_ubt, pid_eta, pid_e_anom, pid_etaav, pid_uhbtav, pid_ubtav
   integer :: pid_q, pid_eta_PF, pid_dyn_coef_eta, pid_eta_src
-  integer :: pid_DCor_u, pid_Datu_res, pid_tmp_u, pid_gtot_E, pid_gtot_W
+  integer :: pid_DCor_u, pid_tmp_u, pid_gtot_E, pid_gtot_W
   integer :: pid_bt_rem_u, pid_Datu, pid_BT_force_u, pid_Cor_ref
   integer :: pid_eta_PF_1, pid_d_eta_PF, pid_uhbt0
   integer :: isv, iev, jsv, jev ! The valid array size at the end of a step.
@@ -717,9 +696,6 @@ subroutine btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   if (add_uh0 .and. .not.(associated(vh0) .and. associated(u_uh0) .and. &
                           associated(v_vh0))) call MOM_error(FATAL, &
       "btstep: vh0, u_uh0, and v_vh0 must be associated if uh0 is used.")
-  if (add_uh0 .and. use_fluxes) call MOM_error(WARNING, &
-      "btstep: with use_fluxes, add_uh0 does nothing!")
-  if (use_fluxes) add_uh0 = .false.
 
   ! This can be changed to try to optimize the performance.
   nonblock_setup = G%nonblocking_updates
@@ -814,19 +790,6 @@ subroutine btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
     endif
     if (id_clock_pass_pre > 0) call cpu_clock_end(id_clock_pass_pre)
     if (id_clock_calc_pre > 0) call cpu_clock_begin(id_clock_calc_pre)
-  endif
-
-  if (nonblock_setup) then
-    ! Start all halo updates that are ready to go.
-  !###   if (use_BT_cont) call start_set_local_BT_cont_types( ... )
-    if ((.not.use_BT_cont) .and. CS%rescale_D_bt .and. (ievf>ie)) then
-      if (id_clock_calc_pre > 0) call cpu_clock_end(id_clock_calc_pre)
-      if (id_clock_pass_pre > 0) call cpu_clock_begin(id_clock_pass_pre)
-      pid_Datu_res = pass_vector_start(CS%Datu_res, CS%Datv_res, CS%BT_Domain, &
-                                       To_All+Scalar_Pair)
-      if (id_clock_pass_pre > 0) call cpu_clock_end(id_clock_pass_pre)
-      if (id_clock_calc_pre > 0) call cpu_clock_begin(id_clock_calc_pre)
-    endif
   endif
 
   ! Zero out various wide-halo arrays.
@@ -935,24 +898,10 @@ subroutine btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   if (use_BT_cont) then
     call set_local_BT_cont_types(BT_cont, BTCL_u, BTCL_v, G, MS, CS%BT_Domain, 1+ievf-ie)
   else
-    if (CS%rescale_D_bt .and. (ievf>ie)) then
-      ! Datu_res was previously calculated in btcalc, and will be used in find_face_areas.
-      ! This halo update is needed for wider halos than 1.  The complete goes here.
-      if (id_clock_calc_pre > 0) call cpu_clock_end(id_clock_calc_pre)
-      if (id_clock_pass_pre > 0) call cpu_clock_begin(id_clock_pass_pre)
-      if (nonblock_setup) then
-        call pass_vector_complete(pid_Datu_res, CS%Datu_res, CS%Datv_res, &
-                                  CS%BT_Domain, To_All+Scalar_Pair)
-      else
-        call pass_vector(CS%Datu_res, CS%Datv_res, CS%BT_Domain, To_All+Scalar_Pair)
-      endif
-      if (id_clock_pass_pre > 0) call cpu_clock_end(id_clock_pass_pre)
-      if (id_clock_calc_pre > 0) call cpu_clock_begin(id_clock_calc_pre)
-    endif
     if (CS%Nonlinear_continuity) then
-      call find_face_areas(Datu, Datv, G, CS, MS, CS%rescale_D_bt, eta, 1)
+      call find_face_areas(Datu, Datv, G, CS, MS, eta, 1)
     else
-      call find_face_areas(Datu, Datv, G, CS, MS, CS%rescale_D_bt, halo=1)
+      call find_face_areas(Datu, Datv, G, CS, MS, halo=1)
     endif
   endif
 
@@ -1042,72 +991,22 @@ subroutine btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   do J=jsvf-2,jevf+1 ; do i=isvf-1,ievf+1
     vbt(i,J) = 0.0 ; vhbt(i,J) = 0.0 ; v_accel_bt(i,J) = 0.0
   enddo ; enddo
-  if (use_fluxes) then
-    do k=1,nz ; do j=js,je ; do I=is-1,ie
-      uhbt(I,j) = uhbt(I,j) + U_in(I,j,k)
-    enddo ; enddo ; enddo
-    do k=1,nz ; do J=js-1,je ; do i=is,ie
-      vhbt(i,J) = vhbt(i,J) + V_in(i,J,k)
-    enddo ; enddo ; enddo
-    if (use_BT_cont) then
-      do j=js,je ; do I=is-1,ie
-        ubt(I,j) = uhbt_to_ubt(uhbt(I,j),BTCL_u(I,j), guess=CS%ubt_IC(I,j))
-      enddo ; enddo
-      do J=js-1,je ; do i=is,ie
-        vbt(i,J) = vhbt_to_vbt(vhbt(i,J),BTCL_v(i,J), guess=CS%vbt_IC(i,J))
-      enddo ; enddo
-    else
-      do j=js,je ; do I=is-1,ie
-        ubt(I,j) = 0.0 ; if (Datu(I,j) > 0.0) ubt(I,j) = uhbt(I,j) / Datu(I,j)
-      enddo ; enddo
-      do J=js-1,je ; do i=is,ie
-        vbt(i,J) = 0.0 ; if (Datv(i,J) > 0.0) vbt(i,J) = vhbt(i,J) / Datv(i,J)
-      enddo ; enddo
-    endif
-  else
-    do k=1,nz ; do j=js,je ; do I=is-1,ie
-      ubt(I,j) = ubt(I,j) + wt_u(I,j,k) * U_in(I,j,k)
-    enddo ; enddo ; enddo
-    do k=1,nz ; do J=js-1,je ; do i=is,ie
-      vbt(i,J) = vbt(i,J) + wt_v(i,J,k) * V_in(i,J,k)
-    enddo ; enddo ; enddo
-  endif
+  do k=1,nz ; do j=js,je ; do I=is-1,ie
+    ubt(I,j) = ubt(I,j) + wt_u(I,j,k) * U_in(I,j,k)
+  enddo ; enddo ; enddo
+  do k=1,nz ; do J=js-1,je ; do i=is,ie
+    vbt(i,J) = vbt(i,J) + wt_v(i,J,k) * V_in(i,J,k)
+  enddo ; enddo ; enddo
 
   if (CS%gradual_BT_ICs) then
-    if (use_fluxes) then
-      if (use_BT_cont) then
-        do j=js,je ; do I=is-1,ie
-          vel_tmp = uhbt_to_ubt(CS%uhbt_IC(I,j),BTCL_u(I,j), guess=CS%ubt_IC(I,j))
-          BT_force_u(I,j) = BT_force_u(I,j) + (ubt(I,j) - vel_tmp) * Idt
-          ubt(I,j) = vel_tmp
-        enddo ; enddo
-        do J=js-1,je ; do i=is,ie
-          vel_tmp = vhbt_to_vbt(CS%vhbt_IC(i,J),BTCL_v(i,J), guess=CS%vbt_IC(i,J))
-          BT_force_v(i,J) = BT_force_v(i,J) + (vbt(i,J) - vel_tmp) * Idt
-          vbt(i,J) = vel_tmp
-        enddo ; enddo
-      else
-        do j=js,je ; do I=is-1,ie
-          vel_tmp = 0.0 ; if (Datu(I,j) > 0.0) vel_tmp = CS%uhbt_IC(I,j) / Datu(I,j)
-          BT_force_u(I,j) = BT_force_u(I,j) + (ubt(I,j) - vel_tmp) * Idt
-          ubt(I,j) = vel_tmp
-        enddo ; enddo
-        do J=js-1,je ; do i=is,ie
-          vel_tmp = 0.0 ; if (Datv(i,J) > 0.0) vel_tmp = CS%vhbt_IC(i,J) / Datv(i,J)
-          BT_force_v(i,J) = BT_force_v(i,J) + (vbt(i,J) - vel_tmp) * Idt
-          vbt(i,J) = vel_tmp
-        enddo ; enddo
-      endif
-    else
-      do j=js,je ; do I=is-1,ie
-        BT_force_u(I,j) = BT_force_u(I,j) + (ubt(I,j) - CS%ubt_IC(I,j)) * Idt
-        ubt(I,j) = CS%ubt_IC(I,j)
-      enddo ; enddo
-      do J=js-1,je ; do i=is,ie
-        BT_force_v(i,J) = BT_force_v(i,J) + (vbt(i,J) - CS%vbt_IC(i,J)) * Idt
-        vbt(i,J) = CS%vbt_IC(i,J)
-      enddo ; enddo
-    endif
+    do j=js,je ; do I=is-1,ie
+      BT_force_u(I,j) = BT_force_u(I,j) + (ubt(I,j) - CS%ubt_IC(I,j)) * Idt
+      ubt(I,j) = CS%ubt_IC(I,j)
+    enddo ; enddo
+    do J=js-1,je ; do i=is,ie
+      BT_force_v(i,J) = BT_force_v(i,J) + (vbt(i,J) - CS%vbt_IC(i,J)) * Idt
+      vbt(i,J) = CS%vbt_IC(i,J)
+    enddo ; enddo
   endif
 
   if ((Isq > is-1) .or. (Jsq > js-1)) then
@@ -1181,40 +1080,14 @@ subroutine btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
 
   !   If they are present, use u_Cor and v_Cor as the reference values for the
   ! Coriolis terms, including the viscous remnant if it is present.
-  if (use_fluxes) then
-    do j=js-1,je+1 ; do I=is-1,ie ; uhbt(I,j) = 0.0 ; enddo ; enddo
-    do J=js-1,je ; do i=is-1,ie+1 ; vhbt(i,J) = 0.0 ; enddo ; enddo
-    do k=1,nz ; do j=js-1,je+1 ; do I=is-1,ie
-      uhbt(I,j) = uhbt(I,j) + U_Cor(I,j,k)
-    enddo ; enddo ; enddo
-    do k=1,nz ; do J=js-1,je ; do i=is-1,ie+1
-      vhbt(i,J) = vhbt(i,J) + V_Cor(i,J,k)
-    enddo ; enddo ; enddo
-    if (use_BT_cont) then
-      do j=js-1,je+1 ; do I=is-1,ie
-        ubt_Cor(I,j) = uhbt_to_ubt(uhbt(I,j), BTCL_u(I,j), guess=CS%ubtav(I,j))
-      enddo ; enddo
-      do J=js-1,je ; do i=is-1,ie+1
-        vbt_Cor(i,J) = vhbt_to_vbt(vhbt(i,J), BTCL_v(i,J), guess=CS%vbtav(i,J))
-      enddo ; enddo
-    else
-      do j=js-1,je+1 ; do I=is-1,ie
-        ubt_Cor(I,j) = 0.0 ; if (Datu(I,j)>0.0) ubt_Cor(I,j) = uhbt(I,j)/Datu(I,j)
-      enddo ; enddo
-      do J=js-1,je ; do i=is-1,ie+1
-        vbt_Cor(i,J) = 0.0 ; if (Datv(i,J)>0.0) vbt_Cor(i,J) = vhbt(i,J)/Datv(i,J)
-      enddo ; enddo
-    endif
-  else
-    do j=js-1,je+1 ; do I=is-1,ie ; ubt_Cor(I,j) = 0.0 ; enddo ; enddo
-    do J=js-1,je ; do i=is-1,ie+1 ; vbt_Cor(i,J) = 0.0 ; enddo ; enddo
-    do k=1,nz ; do j=js-1,je+1 ; do I=is-1,ie
-      ubt_Cor(I,j) = ubt_Cor(I,j) + wt_u(I,j,k) * U_Cor(I,j,k)
-    enddo ; enddo ; enddo
-    do k=1,nz ; do J=js-1,je ; do i=is-1,ie+1
-      vbt_Cor(i,J) = vbt_Cor(i,J) + wt_v(i,J,k) * V_Cor(i,J,k)
-    enddo ; enddo ; enddo
-  endif
+  do j=js-1,je+1 ; do I=is-1,ie ; ubt_Cor(I,j) = 0.0 ; enddo ; enddo
+  do J=js-1,je ; do i=is-1,ie+1 ; vbt_Cor(i,J) = 0.0 ; enddo ; enddo
+  do k=1,nz ; do j=js-1,je+1 ; do I=is-1,ie
+    ubt_Cor(I,j) = ubt_Cor(I,j) + wt_u(I,j,k) * U_Cor(I,j,k)
+  enddo ; enddo ; enddo
+  do k=1,nz ; do J=js-1,je ; do i=is-1,ie+1
+    vbt_Cor(i,J) = vbt_Cor(i,J) + wt_v(i,J,k) * V_Cor(i,J,k)
+  enddo ; enddo ; enddo
 
 !GOMP(parallel do default(shared) private(i, j))
   do j=js,je ; do I=is-1,ie
@@ -1585,7 +1458,7 @@ subroutine btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
     if ((.not.use_BT_cont) .and. CS%Nonlinear_continuity .and. &
         (CS%Nonlin_cont_update_period > 0)) then
       if ((n>1) .and. (mod(n-1,CS%Nonlin_cont_update_period) == 0)) &
-        call find_face_areas(Datu, Datv, G, CS, MS, CS%rescale_D_bt, eta, 1+iev-ie)
+        call find_face_areas(Datu, Datv, G, CS, MS, eta, 1+iev-ie)
     endif
 
     if (CS%dynamic_psurf .or. .not.project_velocity) then
@@ -2009,8 +1882,6 @@ subroutine btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
     if (CS%id_vbtforce > 0) call post_data(CS%id_vbtforce, BT_force_v(isd:ied,JsdB:JedB), CS%diag)
     if (CS%id_uaccel > 0) call post_data(CS%id_uaccel, u_accel_bt(IsdB:IedB,jsd:jed), CS%diag)
     if (CS%id_vaccel > 0) call post_data(CS%id_vaccel, v_accel_bt(isd:ied,JsdB:JedB), CS%diag)
-    if (CS%id_Datu_res > 0) call post_data(CS%id_Datu_res, CS%Datu_res(IsdB:IedB,jsd:jed), CS%diag)
-    if (CS%id_Datv_res > 0) call post_data(CS%id_Datv_res, CS%Datv_res(isd:ied,JsdB:JedB), CS%diag)
 
     if (CS%id_eta_cor > 0) call post_data(CS%id_eta_cor, CS%eta_cor, CS%diag)
     if (CS%id_eta_bt > 0) call post_data(CS%id_eta_bt, eta_out, CS%diag)
@@ -2793,47 +2664,6 @@ subroutine btcalc(h, G, CS, h_u, h_v, may_use_default)
     endif
   enddo
 
-  if (CS%rescale_D_bt) then
-    do j=js-2,je+2 ; do i=is-2,ie+2 ; htot(i,j) = 0.0 ; enddo ; enddo
-    do k=1,nz ; do j=js-2,je+2 ; do i=is-2,ie+2
-      htot(i,j) = htot(i,j) + h(i,j,k)
-    enddo ; enddo ; enddo
-
-!GOMP(parallel do default(shared) private(i, j, k, hatutot, h_harm, Rh))
-    do j=js-1,je+1
-      do I=is-2,ie+1 ; hatutot(I) = 0.0 ; enddo
-      do k=1,nz ; do I=is-2,ie+1
-        h_harm = 2.0*(h(i+1,j,k) * h(i,j,k)) / &
-                 ((h(i+1,j,k) + h(i,j,k)) + h_neglect)
-        hatutot(I) = hatutot(I) + h_harm
-      enddo ; enddo
-      do I=is-2,ie+1
-        Rh = hatutot(I) * (htot(i+1,j) + htot(i,j)) / &
-             (2.0*(htot(i+1,j) * htot(i,j) + h_neglect**2))
-        CS%Datu_res(I,j) = 1.0
-        ! This curve satisfies F(1/2) = 1; F'(1/2) = 0; F(x) ~ x for x<<1.
-        if (Rh < 0.5) CS%Datu_res(I,j) = Rh * ((4.0-7.0*Rh) / (2.0-3.0*Rh)**2)
-      enddo
-    enddo
-
-!GOMP(parallel do default(shared) private(i, j, k, hatvtot, h_harm, Rh))
-    do J=js-2,je+1
-      do i=is-1,ie+1 ; hatvtot(i) = 0.0 ; enddo
-      do k=1,nz ; do i=is-1,ie+1
-        h_harm = 2.0*(h(i,j+1,k) * h(i,j,k)) / &
-                 ((h(i,j+1,k) + h(i,j,k)) + h_neglect)
-        hatvtot(i) = hatvtot(i) + h_harm
-      enddo ; enddo
-      do i=is-1,ie+1
-        Rh = hatvtot(i) * (htot(i,j+1) + htot(i,j)) / &
-             (2.0*(htot(i,j+1) * htot(i,j) + h_neglect**2))
-        CS%Datv_res(i,J) = 1.0
-        ! This curve satisfies F(1/2) = 1; F'(1/2) = 0; F(x) ~ x for x<<1.
-        if (Rh < 0.5) CS%Datv_res(i,J) = Rh * ((4.0-7.0*Rh) / (2.0-3.0*Rh)**2)
-      enddo
-    enddo
-  endif
-
   if (CS%debug) then
     call uchksum(CS%frhatu, "btcalc frhatu",G,haloshift=1)
     call vchksum(CS%frhatv, "btcalc frhatv",G,haloshift=1)
@@ -3226,13 +3056,12 @@ subroutine swap(a,b)
   tmp = a ; a = b ; b = tmp
 end subroutine swap
 
-subroutine find_face_areas(Datu, Datv, G, CS, MS, rescale_faces, eta, halo, add_max)
+subroutine find_face_areas(Datu, Datv, G, CS, MS, eta, halo, add_max)
   type(memory_size_type),                   intent(in) :: MS
   real, dimension(MS%isdw-1:MS%iedw,MS%jsdw:MS%jedw), intent(out)   :: Datu
   real, dimension(MS%isdw:MS%iedw,MS%jsdw-1:MS%jedw), intent(out)   :: Datv
   type(ocean_grid_type),                    intent(in) :: G
   type(barotropic_CS),                      pointer    :: CS
-  logical,                        optional, intent(in) :: rescale_faces
   real, dimension(MS%isdw:MS%iedw,MS%jsdw:MS%jedw), optional, intent(in) :: eta
   integer,                        optional, intent(in) :: halo
   real,                           optional, intent(in) :: add_max
@@ -3242,7 +3071,6 @@ subroutine find_face_areas(Datu, Datv, G, CS, MS, rescale_faces, eta, halo, add_
 !  (in)      CS - The control structure returned by a previous call to
 !                 barotropic_init.
 !  (in)      MS - A type that describes the memory sizes of the argument arrays.
-!  (in, opt) rescale_faces - If true, rescale the face areas by Datu_res, etc.
 !  (in, opt) eta - The barotropic free surface height anomaly or
 !                  column mass anomaly, in m or kg m-2.
 !  (in, opt) halo - The halo size to use, default = 1.
@@ -3253,11 +3081,9 @@ subroutine find_face_areas(Datu, Datv, G, CS, MS, rescale_faces, eta, halo, add_
 !   This subroutine determines the open face areas of cells for calculating
 ! the barotropic transport.
   real :: H1, H2      ! Temporary total thicknesses, in m or kg m-2.
-  logical :: rescale
   integer :: i, j, is, ie, js, je, hs
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   hs = 1 ; if (present(halo)) hs = max(halo,0)
-  rescale = .false. ; if (present(rescale_faces)) rescale = rescale_faces
 
   if (present(eta)) then
     ! The use of harmonic mean thicknesses ensure positive definiteness.
@@ -3315,17 +3141,6 @@ subroutine find_face_areas(Datu, Datv, G, CS, MS, rescale_faces, eta, halo, add_
       Datv(i,J) = 2.0*CS%dx_Cv(i,J) * G%m_to_H * &
                   (CS%bathyT(i,j+1) * CS%bathyT(i,j)) / &
                   (CS%bathyT(i,j+1) + CS%bathyT(i,j))
-    enddo ; enddo
-  endif
-
-  if (rescale) then
-!GOMP(parallel do default(shared) private(i, j))
-    do j=js-hs,je+hs ; do I=is-1-hs,ie+hs
-      Datu(I,j) = Datu(I,j) * CS%Datu_res(I,j)
-    enddo ; enddo
-!GOMP(parallel do default(shared) private(i, j))
-    do J=js-1-hs,je+hs ; do i=is-hs,ie+hs
-      Datv(i,J) = Datv(i,J) * CS%Datv_res(i,J)
     enddo ; enddo
   endif
 
@@ -3556,12 +3371,6 @@ subroutine barotropic_init(u, v, h, eta, Time, G, param_file, diag, CS, &
                  "of barotropic time steps between updates to the face \n"//&
                  "areas, or 0 to update only before the barotropic stepping.",&
                  units="nondim", default=1)
-  call get_param(param_file, mod, "RESCALE_BT_FACE_AREAS", CS%rescale_D_bt, &
-                 "If true, the face areas used by the barotropic solver \n"//&
-                 "are rescaled to approximately reflect the open face \n"//&
-                 "areas of the interior layers.  This probably requires \n"//&
-                 "FLUX_BT_COUPLING to work, and should not be used with \n"//&
-                 "USE_BT_CONT_TYPE.", default=.false.)
   call get_param(param_file, mod, "BT_MASS_SOURCE_LIMIT", CS%eta_source_limit, &
                  "The fraction of the initial depth of the ocean that can \n"//&
                  "be added to or removed from the bartropic solution \n"//&
@@ -3727,15 +3536,12 @@ subroutine barotropic_init(u, v, h, eta, Time, G, param_file, diag, CS, &
   endif
   ALLOC_(CS%IDatu(IsdB:IedB,jsd:jed)) ; ALLOC_(CS%IDatv(isd:ied,JsdB:JedB))
 
-  ALLOC_(CS%Datu_res(isdw-1:iedw,jsdw:jedw))
-  ALLOC_(CS%Datv_res(isdw:iedw,jsdw-1:jedw))
   ALLOC_(CS%ua_polarity(isdw:iedw,jsdw:jedw))
   ALLOC_(CS%va_polarity(isdw:iedw,jsdw:jedw))
 
   CS%frhatu(:,:,:) = 0.0 ; CS%frhatv(:,:,:) = 0.0
   CS%eta_source(:,:) = 0.0 ; CS%eta_cor(:,:) = 0.0
   CS%IDatu(:,:) = 0.0 ; CS%IDatv(:,:) = 0.0
-  CS%Datu_res(:,:) = 1.0 ; CS%Datv_res(:,:) = 1.0
   
   CS%ua_polarity(:,:) = 1.0 ; CS%va_polarity(:,:) = 1.0
   call pass_vector(CS%ua_polarity, CS%va_polarity, CS%BT_domain, To_All, AGRID)
@@ -3893,12 +3699,6 @@ subroutine barotropic_init(u, v, h, eta, Time, G, param_file, diag, CS, &
       'High Frequency Barotropic zonal transport', 'meter3 second-1')
   CS%id_vhbt_hifreq = register_diag_field('ocean_model', 'vhbt_hifreq', G%axesCv1, Time, &
       'High Frequency Barotropic meridional transport', 'meter3 second-1')
-  if (CS%rescale_D_bt) then
-    CS%id_Datu_res = register_diag_field('ocean_model', 'Datu_res', G%axesCu1, Time, &
-      'Rescaling for zonal face area in barotropic continuity', 'Nondimensional')
-    CS%id_Datv_res = register_diag_field('ocean_model', 'Datv_res', G%axesCv1, Time, &
-      'Rescaling for meridional face area in barotropic continuity', 'Nondimensional')
-  endif
   CS%id_frhatu = register_diag_field('ocean_model', 'frhatu', G%axesCuL, Time, &
       'Fractional thickness of layers in u-columns', 'Nondim')
   CS%id_frhatv = register_diag_field('ocean_model', 'frhatv', G%axesCvL, Time, &
@@ -3995,7 +3795,6 @@ subroutine barotropic_end(CS)
   type(barotropic_CS), pointer :: CS
   DEALLOC_(CS%frhatu)   ; DEALLOC_(CS%frhatv)
   DEALLOC_(CS%IDatu)    ; DEALLOC_(CS%IDatv)
-  DEALLOC_(CS%Datu_res) ; DEALLOC_(CS%Datv_res)
   DEALLOC_(CS%ubtav)    ; DEALLOC_(CS%vbtav)
   DEALLOC_(CS%eta_cor)  ; DEALLOC_(CS%eta_source)
   DEALLOC_(CS%ua_polarity) ; DEALLOC_(CS%va_polarity)

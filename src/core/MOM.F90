@@ -390,7 +390,7 @@ use MOM_dynamics_unsplit, only : initialize_dyn_unsplit, end_dyn_unsplit
 use MOM_dynamics_unsplit, only : MOM_dyn_unsplit_CS
 use MOM_dynamics_split_RK2, only : step_MOM_dyn_split_RK2, register_restarts_dyn_split_RK2
 use MOM_dynamics_split_RK2, only : initialize_dyn_split_RK2, end_dyn_split_RK2
-use MOM_dynamics_split_RK2, only : adjustments_dyn_split_RK2, MOM_dyn_split_RK2_CS
+use MOM_dynamics_split_RK2, only : MOM_dyn_split_RK2_CS
 use MOM_dynamics_unsplit_RK2, only : step_MOM_dyn_unsplit_RK2, register_restarts_dyn_unsplit_RK2
 use MOM_dynamics_unsplit_RK2, only : initialize_dyn_unsplit_RK2, end_dyn_unsplit_RK2
 use MOM_dynamics_unsplit_RK2, only : MOM_dyn_unsplit_RK2_CS
@@ -893,11 +893,9 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
           call check_redundant("Pre-diabatic ", u, v, grid)
         endif
 
-        if (CS%split) then ; if (CS%legacy_split) then
+        if (CS%split .and. CS%legacy_split) then
           call adjustments_dyn_legacy_split(u, v, h, dt, grid, CS%dyn_legacy_split_CSp)
-        else
-          call adjustments_dyn_split_RK2(u, v, h, dt, grid, CS%dyn_split_RK2_CSp)
-        endif ; endif
+        endif
 
         call cpu_clock_begin(id_clock_diabatic)
         call diabatic(u, v, h, CS%tv, fluxes, CS%visc, dtnt, &

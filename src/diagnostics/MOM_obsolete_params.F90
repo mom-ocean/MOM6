@@ -49,7 +49,7 @@ subroutine find_obsolete_params(param_file)
   character(len=40)  :: mod = "find_obsolete_params"  ! This module's name.
   real    :: test_val
   integer :: test_int
-  logical :: test_logic, test_logic2, test_logic3
+  logical :: test_logic, test_logic2, test_logic3, split
 
   if (.not.is_root_pe()) return
 
@@ -174,14 +174,20 @@ subroutine find_obsolete_params(param_file)
   if (test_int /= -1) call MOM_ERROR(WARNING, "find_obsolete_params: "// &
     "ML_RADIATION_CODING is an obsolete option.")
 
-
   ! Test for inconsistent parameter settings.
-  test_logic = .true. ; test_logic2 = .false.
-  call read_param(param_file,"SPLIT",test_logic)
-  call read_param(param_file,"DYNAMIC_SURFACE_PRESSURE",test_logic2)
-  if (test_logic2 .and. .not.test_logic) call MOM_ERROR(FATAL, &
+  split = .true. ; test_logic = .false.
+  call read_param(param_file,"SPLIT",split)
+  call read_param(param_file,"DYNAMIC_SURFACE_PRESSURE",test_logic)
+  if (test_logic .and. .not.split) call MOM_ERROR(FATAL, &
     "find_obsolete_params: #define DYNAMIC_SURFACE_PRESSURE is not yet "//&
     "implemented without #define SPLIT.")
+
+  call read_param(param_file,"USE_LEGACY_SPLIT",test_logic)
+  if (.not.(split .and. test_logic)) then
+    call test_obsolete_logical(param_file, "FLUX_BT_COUPLING", .false.)
+    call test_obsolete_logical(param_file, "READJUST_BT_TRANS", .false.)
+    call test_obsolete_logical(param_file, "RESCALE_BE_FACE_AREAS", .false.)
+  endif
 
   ! Write the file version number to the model log.
   call log_version(param_file, mod, version, tagname)
