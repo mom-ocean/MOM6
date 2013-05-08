@@ -517,21 +517,6 @@ RESOLN_SCALED_KHTR = False      !   [Boolean] default = False
 KHTH_SLOPE_CFF = 0.0            !   [nondim] default = 0.0
                                 ! The nondimensional coefficient in the Visbeck formula
                                 ! for the interface depth diffusivity
-BE = 0.6                        !   [nondim] default = 0.6
-                                ! If SPLIT is true, BE determines the relative weighting
-                                ! of a  2nd-order Runga-Kutta baroclinic time stepping
-                                ! scheme (0.5) and a backward Euler scheme (1) that is
-                                ! used for the Coriolis and inertial terms.  BE may be
-                                ! from 0.5 to 1, but instability may occur near 0.5.
-                                ! BE is also applicable if SPLIT is false and USE_RK2
-                                ! is true.
-BEGW = 0.0                      !   [nondim] default = 0.0
-                                ! If SPILT is true, BEGW is a number from 0 to 1 that
-                                ! controls the extent to which the treatment of gravity
-                                ! waves is forward-backward (0) or simulated backward
-                                ! Euler (1).  0 is almost always used.
-                                ! If SPLIT is false and USE_RK2 is true, BEGW can be
-                                ! between 0 and 0.5 to damp gravity waves.
 TIDES = False                   !   [Boolean] default = False
                                 ! If true, apply tidal momentum forcing.
 CONTINUITY_SCHEME = "PPM"       ! default = "PPM"

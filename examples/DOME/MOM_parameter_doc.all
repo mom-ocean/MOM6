@@ -86,6 +86,9 @@ VERBOSITY = 2                   ! default = 2
                                 !   9 = All)
 SPLIT = True                    !   [Boolean] default = True
                                 ! Use the split time stepping if true.
+USE_LEGACY_SPLIT = False        !   [Boolean] default = False
+                                ! If true, use the full range of options available from
+                                ! the older GOLD-derived split time stepping code.
 ENABLE_THERMODYNAMICS = False   !   [Boolean] default = True
                                 ! If true, Temperature and salinity are used as state
                                 ! variables.

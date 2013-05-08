@@ -110,6 +110,7 @@ end interface
 interface MOM_read_data
   module procedure MOM_read_data_3d
   module procedure MOM_read_data_2d
+  module procedure MOM_read_data_1d
 end interface
 
 
@@ -603,10 +604,21 @@ function MOM_file_exists(file_name, MOM_Domain)
 
 end function MOM_file_exists
 
+subroutine MOM_read_data_1d(filename, fieldname, data)
+  character(len=*),                 intent(in)    :: filename, fieldname
+  real, dimension(:),               intent(inout) :: data ! 1 dimensional data
+
+!   This function uses the fms_io function read_data to read 1-D
+!  data field named "fieldname" from file "filename".
+
+  call read_data(filename, fieldname, data)
+
+end subroutine MOM_read_data_1d
+
 subroutine MOM_read_data_2d(filename, fieldname, data, MOM_Domain, &
                              timelevel, position)
   character(len=*),                 intent(in)    :: filename, fieldname
-  real, dimension(:,:),             intent(inout) :: data ! 2 dimensional data    
+  real, dimension(:,:),             intent(inout) :: data ! 2 dimensional data
   type(MOM_domain_type),           intent(in)    :: MOM_Domain
   integer,                optional, intent(in)    :: timelevel, position
 

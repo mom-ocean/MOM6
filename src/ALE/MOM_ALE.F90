@@ -16,9 +16,10 @@ module MOM_ALE
 !==============================================================================
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_variables,     only : ocean_grid_type, thermo_var_ptrs
-use MOM_file_parser,   only : get_param, param_file_type
+use MOM_file_parser,   only : get_param, param_file_type, log_param
+use MOM_io,            only : file_exists, field_exists, MOM_read_data
 use MOM_EOS,           only : calculate_density
-use MOM_string_functions, only : uppercase
+use MOM_string_functions, only : uppercase, extractWord
 
 use regrid_grid1d_class, only : grid1D_t, grid1Dconstruct, grid1Ddestroy
 use regrid_ppoly_class, only : ppoly_t, ppoly_init, ppoly_destroy
@@ -44,8 +45,9 @@ use MOM_regridding, only : regridding_CS
 use MOM_remapping, only : initialize_remapping, remapping_main, end_remapping
 use MOM_remapping, only : remappingSchemesDoc, remappingDefaultScheme
 use MOM_remapping, only : remapping_CS
-use regrid_defs, only : PRESSURE_RECONSTRUCTION_PLM, PRESSURE_RECONSTRUCTION_PPM
-use regrid_consts, only : coordinateMode, DEFAULT_COORDINATE_MODE
+use regrid_defs, only : PRESSURE_RECONSTRUCTION_PLM
+!use regrid_consts, only : coordinateMode, DEFAULT_COORDINATE_MODE
+use regrid_consts, only : coordinateUnits
 
 
 implicit none ; private
@@ -92,9 +94,6 @@ type, public :: ALE_CS
   ! Indicate whether high-order boundary extrapolation should be used within
   ! boundary cells
   logical   :: boundary_extrapolation_for_pressure
-
-  ! Minimum thickness allowed when building the new grid through regridding
-  real      :: min_thickness
 
   ! Indicates whether integrals for FV pressure gradient calculation will
   ! use reconstruction of T/S.
@@ -170,7 +169,9 @@ subroutine initialize_ALE( param_file, G, h, h_aux, &
   real :: tmpReal
   real, dimension(:), allocatable :: dz
   character(len=40)  :: mod = "MOM_ALE" ! This module's name.
-  character(len=40) :: string, coordMode, interpScheme ! Temporary strings
+  character(len=80) :: string, fileName, varName ! Temporary strings
+  character(len=40) :: coordMode, interpScheme, coordUnits ! Temporary strings
+  character(len=320) :: message ! Temporary strings
 
   if (associated(CS)) then
     call MOM_error(WARNING, "initialize_ALE called with an associated "// &
@@ -209,18 +210,15 @@ subroutine initialize_ALE( param_file, G, h, h_aux, &
                  " 1: PLM reconstruction.\n"//&
                  " 2: PPM reconstruction.", default=PRESSURE_RECONSTRUCTION_PLM)
 
-  ! --- MINIMUM THICKNESS ---
-  call get_param(param_file, mod, "MIN_THICKNESS", &
-                 CS%min_thickness, &
-                 "When regridding, this is the minimum layer\n"//&
-                 "thickness allowed.", default=1.e-3 )
-  
   ! Initialize and configure regridding
   call get_param(param_file, mod, "REGRIDDING_COORDINATE_MODE", coordMode, &
                  "Coordinate mode for vertical regridding.\n"//&
                  "Choose among the following possibilities:\n"//&
                  trim(regriddingCoordinateModeDoc),&
                  default=DEFAULT_COORDINATE_MODE, fail_if_missing=.true.)
+  call get_param(param_file, mod, "REGRIDDING_COORDINATE_UNITS", coordUnits, &
+                 "Units of the regridding coordinuate.",&
+                 default=coordinateUnits(coordMode))
 
   call get_param(param_file, mod, "INTERPOLATION_SCHEME", interpScheme, &
                  "This sets the interpolation scheme to use to\n"//&
@@ -231,10 +229,61 @@ subroutine initialize_ALE( param_file, G, h, h_aux, &
                  trim(regriddingInterpSchemeDoc),&
                  default=regriddingDefaultInterpScheme)
   call initialize_regridding( G%ke, coordMode, interpScheme, CS%regridCS )
+
+  call get_param(param_file, mod, "ALE_COORDINATE_CONFIG", string, &
+                 "Determines how to specify the coordinate\n"//&
+                 "resolution. Valid options are:\n"//&
+                 " PARAM       - use the vector-parameter ALE_RESOLUTION\n"//&
+                 " UNIFORM     - uniformly distributed\n"//&
+                 " FILE:string - read from a file. The string specifies\n"//&
+                 "               the filename and variable name, separated\n"//&
+                 "               by a comma or space, e.g. FILE:lev.nc,Z",&
+                 default='UNIFORM')
   allocate( dz(G%ke) )
-  dz(:) = G%max_depth / dfloat( G%ke )
+  message = "The distribution of vertical resolution for the target\n"//&
+            "grid used for Eulerian-like coordinates. For example,\n"//&
+            "in z-coordinate mode, the parameter is a list of level\n"//&
+            "thicknesses (in m). In sigma-coordinate mode, the list\n"//&
+            "is of non-dimensional fractions of the water column."
+  select case ( trim(string) )
+    case ("UNIFORM")
+      dz(:) = G%max_depth/dfloat( G%ke )
+      call log_param(param_file, mod, "!ALE_RESOLUTION", dz, &
+                   trim(message), units=trim(coordUnits))
+    case ("PARAM")
+      call get_param(param_file, mod, "ALE_RESOLUTION", dz, &
+                   trim(message), units=trim(coordUnits), fail_if_missing=.true.)
+    case default 
+      if (index(trim(string),'FILE:')==1) then
+        fileName = extractWord(trim(string(6:80)), 1)
+        if (.not. file_exists(fileName)) call MOM_error(FATAL,"initialize_ALE: "// &
+          "Specified file not found: Looking for '"//trim(fileName)//"' ("//trim(string)//")")
+        varName = extractWord(trim(string(6:80)), 2)
+        if (.not. field_exists(fileName,varName)) call MOM_error(FATAL,"initialize_ALE: "// &
+          "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(string)//")")
+        if (len_trim(varName)==0) then
+          if (field_exists(fileName,'dz')) then; varName = 'dz'
+          elseif (field_exists(fileName,'ztest')) then; varName = 'ztest'
+          endif
+        endif
+        if (len_trim(varName)==0) call MOM_error(FATAL,"initialize_ALE: "// &
+          "Coordinate variable not speified and none could be guessed.")
+        call MOM_read_data(trim(fileName), trim(varName), dz)
+        call log_param(param_file, mod, "!ALE_RESOLUTION", dz, &
+                   trim(message), units=coordinateUnits(coordMode))
+      else
+        call MOM_error(FATAL,"initialize_ALE: "// &
+          "Unrecognized coordinate configuraiton"//trim(string))
+      endif
+  end select
   call setTargetFixedResolution( dz, CS%regridCS )
   deallocate( dz )
+
+  call get_param(param_file, mod, "MIN_THICKNESS", tmpReal, &
+                 "When regridding, this is the minimum layer\n"//&
+                 "thickness allowed.", units="m",&
+                 default=regriddingDefaultMinThickness )
+  call setRegriddingMinimumThickness( tmpReal, CS%regridCS )
 
   call get_param(param_file, mod, "BOUNDARY_EXTRAPOLATION", tmpLogical, &
                  "When defined, a proper high-order reconstruction\n"//&
@@ -243,11 +292,6 @@ subroutine initialize_ALE( param_file, G, h, h_aux, &
                  "PPM reconstruction will also be used within\n"//&
                  "boundary cells.", default=regriddingDefaultBoundaryExtrapolation)
   call setRegriddingBoundaryExtrapolation( tmpLogical, CS%regridCS )
-
-  call get_param(param_file, mod, "MIN_THICKNESS", tmpReal, &
-                 "When regridding, this is the minimum layer\n"//&
-                 "thickness allowed.", default=regriddingDefaultMinThickness )
-  call setRegriddingMinimumThickness( tmpReal, CS%regridCS )
 
 
   ! Initialize and configure remapping

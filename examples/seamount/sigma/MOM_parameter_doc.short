@@ -194,9 +194,6 @@ TS_CONFIG = "seamount"          !
                                 !     sloshing - TBD AJA.
                                 !     seamount - TBD AJA.
                                 !     USER - call a user modified routine.
-MIN_THICKNESS = 0.1             !   [not defined] default = 0.001
-                                ! When regridding, this is the minimum layer
-                                ! thickness allowed.
 REGRIDDING_COORDINATE_MODE = "SIGMA" ! default = "LAYER"
                                 ! Coordinate mode for vertical regridding.
                                 ! Choose among the following possibilities:
@@ -220,6 +217,15 @@ INTERPOLATION_SCHEME = "PPM_IH4" ! default = "P1M_H2"
                                 !  P3M_IH6IH5 (4th-order accurate)
                                 !  PQM_IH4IH3 (4th-order accurate)
                                 !  PQM_IH6IH5 (5th-order accurate)
+!ALE_RESOLUTION = 20*200.0      !   [Non-dimensional]
+                                ! The distribution of vertical resolution for the target
+                                ! grid used for Eulerian-like coordinates. For example,
+                                ! in z-coordinate mode, the parameter is a list of level
+                                ! thicknesses (in m). In sigma-coordinate mode, the list
+                                ! is of non-dimensional fractions of the water column.
+MIN_THICKNESS = 0.1             !   [m] default = 0.001
+                                ! When regridding, this is the minimum layer
+                                ! thickness allowed.
 BOUNDARY_EXTRAPOLATION = True   !   [Boolean] default = False
                                 ! When defined, a proper high-order reconstruction
                                 ! scheme is used within boundary cells rather

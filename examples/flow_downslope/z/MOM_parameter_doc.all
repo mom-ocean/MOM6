@@ -86,6 +86,9 @@ VERBOSITY = 2                   ! default = 2
                                 !   9 = All)
 SPLIT = True                    !   [Boolean] default = True
                                 ! Use the split time stepping if true.
+USE_LEGACY_SPLIT = False        !   [Boolean] default = False
+                                ! If true, use the full range of options available from
+                                ! the older GOLD-derived split time stepping code.
 ENABLE_THERMODYNAMICS = True    !   [Boolean] default = True
                                 ! If true, Temperature and salinity are used as state
                                 ! variables.
@@ -461,9 +464,6 @@ PRESSURE_RECONSTRUCTION_SCHEME = 1 ! default = 1
                                 ! Type of vertical reconstruction of T/S to use in integrals
                                 ! within the FV pressure gradient calculation. 1: PLM reconstruction.
                                 !  2: PPM reconstruction.
-MIN_THICKNESS = 0.001           !   [not defined] default = 0.001
-                                ! When regridding, this is the minimum layer
-                                ! thickness allowed.
 REGRIDDING_COORDINATE_MODE = "Z*" ! default = "LAYER"
                                 ! Coordinate mode for vertical regridding.
                                 ! Choose among the following possibilities:
@@ -471,6 +471,8 @@ REGRIDDING_COORDINATE_MODE = "Z*" ! default = "LAYER"
                                 !  Z*    - stetched geopotential z*
                                 !  SIGMA - terrain following coordinates
                                 !  RHO   - continuous isopycnal
+REGRIDDING_COORDINATE_UNITS = "m" ! default = "m"
+                                ! Units of the regridding coordinuate.
 INTERPOLATION_SCHEME = "PQM_IH4IH3" ! default = "P1M_H2"
                                 ! This sets the interpolation scheme to use to
                                 ! determine the new grid. These parameters are
@@ -487,6 +489,23 @@ INTERPOLATION_SCHEME = "PQM_IH4IH3" ! default = "P1M_H2"
                                 !  P3M_IH6IH5 (4th-order accurate)
                                 !  PQM_IH4IH3 (4th-order accurate)
                                 !  PQM_IH6IH5 (5th-order accurate)
+ALE_COORDINATE_CONFIG = "FILE:vgrid.nc,dz" ! default = "UNIFORM"
+                                ! Determines how to specify the coordinate
+                                ! resolution. Valid options are:
+                                !  PARAM       - use the vector-parameter ALE_RESOLUTION
+                                !  UNIFORM     - uniformly distributed
+                                !  FILE:string - read from a file. The string specifies
+                                !                the filename and variable name, separated
+                                !                by a comma or space, e.g. FILE:lev.nc,Z
+!ALE_RESOLUTION = 40*100.0      !   [m]
+                                ! The distribution of vertical resolution for the target
+                                ! grid used for Eulerian-like coordinates. For example,
+                                ! in z-coordinate mode, the parameter is a list of level
+                                ! thicknesses (in m). In sigma-coordinate mode, the list
+                                ! is of non-dimensional fractions of the water column.
+MIN_THICKNESS = 0.001           !   [m] default = 0.001
+                                ! When regridding, this is the minimum layer
+                                ! thickness allowed.
 BOUNDARY_EXTRAPOLATION = True   !   [Boolean] default = False
                                 ! When defined, a proper high-order reconstruction
                                 ! scheme is used within boundary cells rather

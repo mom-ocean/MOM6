@@ -23,6 +23,11 @@ character(len=3), parameter :: REGRIDDING_RHO_STRING   = "RHO"
 character(len=5), parameter :: REGRIDDING_SIGMA_STRING = "SIGMA"
 character(len=5), parameter :: DEFAULT_COORDINATE_MODE = REGRIDDING_LAYER_STRING
 
+interface coordinateUnits
+  module procedure coordinateUnitsI
+  module procedure coordinateUnitsS
+end interface
+
 contains
 
 ! =============================================================================
@@ -30,7 +35,7 @@ contains
 function coordinateMode(string)
 ! Use this function to parse a string parameter specifying the
 ! coorindate mode and return the appropriate enumerated integer
-  integer :: coordinateMode ! 
+  integer :: coordinateMode
   character(len=*), intent(in) :: string
   select case ( uppercase(trim(string)) )
     case (REGRIDDING_LAYER_STRING); coordinateMode = REGRIDDING_LAYER
@@ -41,5 +46,30 @@ function coordinateMode(string)
        "Unrecognized choice of coordinate ("//trim(string)//").")
   end select
 end function coordinateMode
+
+function coordinateUnitsI(coordMode)
+! Use this function to parse a string parameter specifying the
+! coorindate mode and return the appropriate enumerated integer
+  character(len=16) :: coordinateUnitsI
+  integer, intent(in) :: coordMode
+  select case ( coordMode )
+    case (REGRIDDING_LAYER); coordinateUnitsI = "kg m^-3"
+    case (REGRIDDING_ZSTAR); coordinateUnitsI = "m"
+    case (REGRIDDING_RHO);   coordinateUnitsI = "kg m^-3"
+    case (REGRIDDING_SIGMA); coordinateUnitsI = "Non-dimensional"
+    case default ; call MOM_error(FATAL, "coordinateUnts: "//&
+       "Unrecognized coordinate mode.")
+  end select
+end function coordinateUnitsI
+
+function coordinateUnitsS(string)
+! Use this function to parse a string parameter specifying the
+! coorindate mode and return the appropriate enumerated integer
+  character(len=16) :: coordinateUnitsS
+  character(len=*), intent(in) :: string
+  integer :: coordMode
+  coordMode = coordinateMode(string)
+  coordinateUnitsS = coordinateUnitsI(coordMode)
+end function coordinateUnitsS
 
 end module regrid_consts
