@@ -187,6 +187,7 @@ subroutine find_obsolete_params(param_file)
     call test_obsolete_logical(param_file, "FLUX_BT_COUPLING", .false.)
     call test_obsolete_logical(param_file, "READJUST_BT_TRANS", .false.)
     call test_obsolete_logical(param_file, "RESCALE_BE_FACE_AREAS", .false.)
+    call test_obsolete_logical(param_file, "APPLY_BT_DRAG", .true.)
   endif
 
   ! Write the file version number to the model log.

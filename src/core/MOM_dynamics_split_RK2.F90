@@ -753,12 +753,13 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 
   call btstep(u, v, eta, dt, u_bc_accel, v_bc_accel, &
               fluxes, CS%pbce, CS%eta_PF, u_av, v_av, CS%u_accel_bt, &
-              CS%v_accel_bt, eta, CS%uhbt, CS%vhbt, G, &
+              CS%v_accel_bt, eta_pred, CS%uhbt, CS%vhbt, G, &
               CS%barotropic_CSp, CS%visc_rem_u, CS%visc_rem_v, &
               etaav=eta_av, OBC=CS%OBC, &
               BT_cont = CS%BT_cont, eta_PF_start=eta_PF_start, &
               taux_bot=taux_bot, tauy_bot=tauy_bot, &
               uh0=uh_ptr, vh0=vh_ptr, u_uh0=u_ptr, v_vh0=v_ptr)
+  do j=js,je ; do i=is,ie ; eta(i,j) = eta_pred(i,j) ; enddo ; enddo
   call cpu_clock_end(id_clock_btstep)
 
   if (CS%debug) then
