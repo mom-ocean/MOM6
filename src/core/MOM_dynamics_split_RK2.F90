@@ -164,11 +164,6 @@ type, public :: MOM_dyn_split_RK2_CS ; private
     ! uhbt and vhbt are the average volume or mass fluxes determined by the
     ! barotropic solver in m3 s-1 or kg s-1.  uhbt and vhbt should (roughly?) 
     ! equal the verticals sum of uh and vh, respectively.
-  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_) :: uhbt_in
-  real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_) :: vhbt_in
-    ! uhbt_in and vhbt_in are the vertically summed transports from based on
-    ! the final thicknessses and velocities from the previous dynamics time
-    ! step, both in units of m3 s-1 or kg s-1.
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_,NKMEM_) :: pbce
       ! pbce times eta gives the baroclinic pressure anomaly in each layer due
       ! to free surface height anomalies.  pbce has units of m2 H-1 s-2.
@@ -342,7 +337,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   real, pointer, dimension(:,:) :: &
     p_surf => NULL(), eta_PF_start => NULL(), &
     taux_bot => NULL(), tauy_bot => NULL(), &
-    uhbt_in, vhbt_in, eta
+    eta => NULL()
   real, pointer, dimension(:,:,:) :: &
     uh_ptr => NULL(), u_ptr => NULL(),  vh_ptr => NULL(), v_ptr => NULL(), &
     u_init => NULL(), v_init => NULL(), & ! Pointers to u and v or u_adj and v_adj.
@@ -356,12 +351,11 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
                               ! relative weightings of the layers in calculating
                               ! the barotropic accelerations.
   integer :: pid_Ray, pid_bbl_h, pid_kv_bbl, pid_eta_PF, pid_eta, pid_visc
-  integer :: pid_h, pid_u, pid_u_av, pid_uh, pid_uhbt_in
+  integer :: pid_h, pid_u, pid_u_av, pid_uh
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
-  u_av => CS%u_av ; v_av => CS%v_av ; h_av => CS%h_av
-  eta => CS%eta ; uhbt_in => CS%uhbt_in ; vhbt_in => CS%vhbt_in
+  u_av => CS%u_av ; v_av => CS%v_av ; h_av => CS%h_av ; eta => CS%eta
   Idt = 1.0 / dt
 
   up(:,:,:) = 0.0 ; vp(:,:,:) = 0.0 ; hp(:,:,:) = h(:,:,:)
@@ -956,8 +950,6 @@ subroutine register_restarts_dyn_split_RK2(G, param_file, CS, restart_CS, uh, vh
   ALLOC_(CS%u_av(IsdB:IedB,jsd:jed,nz)) ; CS%u_av(:,:,:) = 0.0
   ALLOC_(CS%v_av(isd:ied,JsdB:JedB,nz)) ; CS%v_av(:,:,:) = 0.0
   ALLOC_(CS%h_av(isd:ied,jsd:jed,nz))   ; CS%h_av(:,:,:) = G%Angstrom
-  ALLOC_(CS%uhbt_in(IsdB:IedB,jsd:jed)) ; CS%uhbt_in(:,:) = 0.0
-  ALLOC_(CS%vhbt_in(isd:ied,JsdB:JedB)) ; CS%vhbt_in(:,:) = 0.0
 
   thickness_units = get_thickness_units(G)
   flux_units = get_flux_units(G)
@@ -1249,7 +1241,6 @@ subroutine end_dyn_split_RK2(CS)
 
   DEALLOC_(CS%eta) ; DEALLOC_(CS%eta_PF) ; DEALLOC_(CS%pbce)
   DEALLOC_(CS%h_av) ; DEALLOC_(CS%u_av) ; DEALLOC_(CS%v_av)
-  DEALLOC_(CS%uhbt_in) ; DEALLOC_(CS%vhbt_in)
 
   call dealloc_BT_cont_type(CS%BT_cont)
 
