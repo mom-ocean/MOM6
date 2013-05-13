@@ -260,15 +260,17 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
                 ! mixed layer detrainment, in m. (I.e. entrainment from below.)
 
   ! If there is resorting, the vertical coordinate for these variables is the
-  ! new, sorted index space.
-  real, dimension(SZI_(G),SZK_(G)) :: &
+  ! new, sorted index space.  Here layer 0 is an initially massless layer that
+  ! will be used to hold the new mixed layer properties.
+  real, dimension(SZI_(G),SZK0_(G)) :: &
     h, &        !   The layer thickness, in m or kg m-2.
-    u, &        !   The zonal velocity, in m s-1.
-    v, &        !   The meridional velocity, in m s-1.
     T, &        !   The layer temperatures, in deg C.
     S, &        !   The layer salinities, in psu.
     R0, &       !   The potential density referenced to the surface, in kg m-3.
-    Rcv, &      !   The coordinate variable potential density, in kg m-3.
+    Rcv         !   The coordinate variable potential density, in kg m-3.
+  real, dimension(SZI_(G),SZK_(G)) :: &
+    u, &        !   The zonal velocity, in m s-1.
+    v, &        !   The meridional velocity, in m s-1.
     h_orig, &   !   The original thickness in m or kg m-2.
     d_eb, &     !   The downward increase across a layer in the entrainment from
                 ! below, in H.  The sign convention is that positive values of
@@ -298,12 +300,6 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
                 ! in H PSU.
     uhtot, &    !   The depth integrated zonal and meridional velocities in the
     vhtot, &    ! mixed layer, in H m s-1.
-    R0_ml, &    !   The potential density referenced to the surface of the mixed
-                ! layer, in units of kg m-3.
-    Rcv_ml, &   !   The coordinate value potential density of the mixed layer,
-                ! in kg m-3.
-    T_ml, &     ! The mixed layer temperature, in C.
-    S_ml, &     ! The salinity of the mixed layer, PSU.
 
     Net_H, &    !   The net mass flux (if non-Boussinsq) or volume flux (if
                 ! Boussinesq - i.e. the fresh water flux (P+R-E)) into the
@@ -489,10 +485,11 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
     if (CS%ML_resort) then
       call cpu_clock_begin(id_clock_resort)
       if (CS%ML_presort_nz_conv_adj > 0) &
-        call convective_adjustment(h, u, v, R0, Rcv, T, S, eps, d_eb, dKE_CA, cTKE, &
-                                   j, G, CS, CS%ML_presort_nz_conv_adj)
+        call convective_adjustment(h(:,1:), u, v, R0(:,1:), Rcv(:,1:), T(:,1:), &
+                                   S(:,1:), eps, d_eb, dKE_CA, cTKE, j, G, CS, &
+                                   CS%ML_presort_nz_conv_adj)
 
-      call sort_ML(h, R0, eps, G, CS, ksort)
+      call sort_ML(h(:,1:), R0(:,1:), eps, G, CS, ksort)
       call cpu_clock_end(id_clock_resort)
     else
       do k=1,nz ; do i=is,ie ; ksort(i,k) = k ; enddo ; enddo
@@ -501,8 +498,8 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
       !  Undergo instantaneous entrainment into the buffer layers and mixed layers
       ! to remove hydrostatic instabilities.  Any water that is lighter than
       ! currently in the mixed or buffer layer is entrained.
-      call convective_adjustment(h, u, v, R0, Rcv, T, S, eps, d_eb, dKE_CA, cTKE, &
-                                 j, G, CS)
+      call convective_adjustment(h(:,1:), u, v, R0(:,1:), Rcv(:,1:), T(:,1:), &
+                                 S(:,1:), eps, d_eb, dKE_CA, cTKE, j, G, CS)
       do i=is,ie ; h_CA(i) = h(i,1) ; enddo
 
       call cpu_clock_end(id_clock_adjustment)
@@ -537,12 +534,13 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
     ! Net_H, Net_heat, Net_salt and the SW penetrative componennts, Pen_SW_bnd.
     call extractFluxes1d(G, fluxes, optics, nsw, j, dt, &
                   CS%H_limit_fluxes, CS%use_river_heat_content, CS%use_calving_heat_content, &
-                  h, T, Net_H, Net_heat, Net_salt, Pen_SW_bnd, tv)
+                  h(:,1:), T(:,1:), Net_H, Net_heat, Net_salt, Pen_SW_bnd, tv)
 
     !   This subroutine causes the mixed layer to entrain to the depth of
     ! free convection.    
-    call mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
-                               R0_tot, Rcv_tot, u, v, T, S, R0, Rcv, eps, &
+    call mixedlayer_convection(h(:,1:), d_eb, htot, Ttot, Stot, uhtot, vhtot, &
+                               R0_tot, Rcv_tot, u, v, T(:,1:), S(:,1:), &
+                               R0(:,1:), Rcv(:,1:), eps, &
                                dR0_dT, dRcv_dT, dR0_dS, dRcv_dS, &
                                Net_H, Net_heat, Net_salt, &
                                nsw, Pen_SW_bnd, opacity_band, Conv_en, &
@@ -563,34 +561,35 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
                            j, ksort, G, CS)
 
     ! Here the mechanically driven entrainment occurs.
-    call mechanical_entrainment(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
-                                R0_tot, Rcv_tot, u, v, T, S, R0, Rcv, eps, dR0_dT, dRcv_dT, &
+    call mechanical_entrainment(h(:,1:), d_eb, htot, Ttot, Stot, uhtot, vhtot, &
+                                R0_tot, Rcv_tot, u, v, T(:,1:), S(:,1:), R0(:,1:), Rcv(:,1:), eps, dR0_dT, dRcv_dT, &
                                 cMKE, Idt_diag, nsw, Pen_SW_bnd, opacity_band, TKE, &
                                 Idecay_len_TKE, j, ksort, G, CS)
 
-    call absorbRemainingSW(G, h, eps, htot, opacity_band, nsw, j, dt, &
+    call absorbRemainingSW(G, h(:,1:), eps, htot, opacity_band, nsw, j, dt, &
                            CS%H_limit_fluxes, CS%correct_absorption, CS%absorb_all_SW, &
-                           ksort, T, Ttot, Pen_SW_bnd)
+                           ksort, T(:,1:), Ttot, Pen_SW_bnd)
 
     if (CS%TKE_diagnostics) then ; do i=is,ie
       CS%diag_TKE_mech_decay(i,j) = CS%diag_TKE_mech_decay(i,j) - Idt_diag*TKE(i)
     enddo ; endif
     call cpu_clock_end(id_clock_mech)
 
-    ! Calculate the homogeneous mixed layer properties.
+    ! Calculate the homogeneous mixed layer properties and store them in layer 0.
     do i=is,ie ; if (htot(i) > 0.0) then
       Ih = 1.0 / htot(i)
-      R0_ml(i) = R0_tot(i) * Ih ; Rcv_ml(i) = Rcv_tot(i) * Ih
-      T_ml(i) = Ttot(i) * Ih ; S_ml(i) = Stot(i) * Ih
+      R0(i,0) = R0_tot(i) * Ih ; Rcv(i,0) = Rcv_tot(i) * Ih
+      T(i,0) = Ttot(i) * Ih ; S(i,0) = Stot(i) * Ih
+      h(i,0) = htot(i)
     else ! This may not ever be needed?
-      R0_ml(i) = R0(i,1)
-      T_ml(i) = T(i,1) ; S_ml(i) = S(i,1) ; Rcv_ml(i) = Rcv(i,1)
+      T(i,0) = T(i,1) ; S(i,0) = S(i,1) ; R0(i,0) = R0(i,1) ; Rcv(i,0) = Rcv(i,1)
+      h(i,0) = htot(i)
     endif ; enddo
     if (write_diags .and. ALLOCATED(CS%ML_depth)) then ; do i=is,ie
-      CS%ML_depth(i,j) = htot(i) * G%H_to_m
+      CS%ML_depth(i,j) = h(i,0) * G%H_to_m
     enddo ; endif
     if (ASSOCIATED(tv%Hml)) then ; do i=is,ie
-      tv%Hml(i,j) = G%mask2dT(i,j) * (htot(i) * G%H_to_m)
+      tv%Hml(i,j) = G%mask2dT(i,j) * (h(i,0) * G%H_to_m)
     enddo ; endif
 
 ! At this point, return water to the original layers, but constrained to
@@ -605,13 +604,13 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
 
     if (CS%ML_resort) then
       call cpu_clock_begin(id_clock_resort)
-      call resort_ML(h, eps, d_ea, d_eb, R0, Rcv, T, S, ksort, G, CS, &
-                     dRcv_dT, dRcv_dS, dR0_dT, dR0_dS, Rcv_ml, R0_ml)
+      call resort_ML(h(:,0:), T(:,0:), S(:,0:), R0(:,0:), Rcv(:,0:), eps, &
+                     d_ea, d_eb, ksort, G, CS, dR0_dT, dR0_dS, dRcv_dT, dRcv_dS)
       call cpu_clock_end(id_clock_resort)
     endif
 
     if (CS%limit_det .or. (CS%id_Hsfc_max > 0) .or. (CS%id_Hsfc_min > 0)) then
-      do i=is,ie ; Hsfc(i) = htot(i) ; enddo
+      do i=is,ie ; Hsfc(i) = h(i,0) ; enddo
       do k=1,nkmb ; do i=is,ie ; Hsfc(i) = Hsfc(i) + h(i,k) ; enddo ; enddo
 
       if (CS%limit_det .or. (CS%id_Hsfc_min > 0)) then
@@ -624,7 +623,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
                           hmbl_prev(i,j-1) - dHD*min(h_sum(i,j),h_sum(i,j-1)), &
                           hmbl_prev(i,j+1) - dHD*min(h_sum(i,j),h_sum(i,j+1))) )
 
-          Hsfc_min(i,j) = G%H_to_m*max(htot(i), min(Hsfc(i), H_nbr))
+          Hsfc_min(i,j) = G%H_to_m*max(h(i,0), min(Hsfc(i), H_nbr))
 
           if (CS%limit_det) max_BL_det(i) = max(0.0, Hsfc(i)-H_nbr)
         enddo
@@ -640,12 +639,13 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
 ! treated in conjuction.
     call cpu_clock_begin(id_clock_detrain)
     if (CS%nkbl == 1) then
-      call mixedlayer_detrain_1(h, R0, htot, R0_ml, dt, dt__diag, d_ea, d_eb, &
-               j, G, CS, T, S, Rcv, T_ml, S_ml, Rcv_ml, dRcv_dT, dRcv_dS, max_BL_det)
+      call mixedlayer_detrain_1(h(:,0:), T(:,0:), S(:,0:), R0(:,0:), Rcv(:,0:), &
+                                dt, dt__diag, d_ea, d_eb, j, G, CS, &
+                                dRcv_dT, dRcv_dS, max_BL_det)
     elseif (CS%nkbl == 2) then
-      call mixedlayer_detrain_2(h, R0, htot, R0_ml, dt, dt__diag, d_ea, j, G, &
-                                CS, T, S, Rcv, T_ml, S_ml, Rcv_ml, &
-                                dRcv_dT, dRcv_dS, dR0_dT, dR0_dS, max_BL_det)
+      call mixedlayer_detrain_2(h(:,0:), T(:,0:), S(:,0:), R0(:,0:), Rcv(:,0:), &
+                                dt, dt__diag, d_ea, j, G, CS, &
+                                dR0_dT, dR0_dS, dRcv_dT, dRcv_dS, max_BL_det)
     else ! CS%nkbl not = 1 or 2
       ! This code only works with 1 or 2 buffer layers.
       call MOM_error(FATAL, "MOM_mixed_layer: CS%nkbl must be 1 or 2 for now.")
@@ -654,7 +654,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
 
 
     if (CS%id_Hsfc_used > 0) then
-      do i=is,ie ; Hsfc_used(i,j) = htot(i)*G%H_to_m ; enddo
+      do i=is,ie ; Hsfc_used(i,j) = h(i,0)*G%H_to_m ; enddo
       do k=CS%nkml+1,nkmb ; do i=is,ie
         Hsfc_used(i,j) = Hsfc_used(i,j) + h(i,k)*G%H_to_m
       enddo ; enddo
@@ -678,32 +678,33 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
             kU_Star = (1.0 - fluxes%frac_shelf_h(i,j)) * kU_star + &
                       fluxes%frac_shelf_h(i,j) * (0.41*fluxes%ustar_shelf(i,j))
         endif
-        absf_x_H = 0.25 * htot(i) * &
+        absf_x_H = 0.25 * h(i,0) * &
             ((abs(G%CoriolisBu(i,j)) + abs(G%CoriolisBu(i-1,j-1))) + &
              (abs(G%CoriolisBu(i,j-1)) + abs(G%CoriolisBu(i-1,j))))
         ! If the mixed layer vertical viscosity specification is changed in
         ! MOM_vert_friction.F90, this line will have to be modified accordingly.
-        h_3d(i,j,1) = htot(i) / (3.0 + sqrt(absf_x_H*(absf_x_H + 2.0*kU_star) / &
+        h_3d(i,j,1) = h(i,0) / (3.0 + sqrt(absf_x_H*(absf_x_H + 2.0*kU_star) / &
                                          (kU_star**2)) )
         do k=2,CS%nkml
           ! The other layers are evenly distributed through the mixed layer.
-          h_3d(i,j,k) = (htot(i)-h_3d(i,j,1)) * Inkmlm1
+          h_3d(i,j,k) = (h(i,0)-h_3d(i,j,1)) * Inkmlm1
           d_ea(i,k) = d_ea(i,k) + h_3d(i,j,k)
           d_ea(i,1) = d_ea(i,1) - h_3d(i,j,k)
         enddo
       enddo
     else
       do i=is,ie
-        h_3d(i,j,1) = htot(i) * Inkml
+        h_3d(i,j,1) = h(i,0) * Inkml
       enddo
       do k=2,CS%nkml ; do i=is,ie
-        h_3d(i,j,k) = htot(i) * Inkml
+        h_3d(i,j,k) = h(i,0) * Inkml
         d_ea(i,k) = d_ea(i,k) + h_3d(i,j,k)
         d_ea(i,1) = d_ea(i,1) - h_3d(i,j,k)
       enddo ; enddo
     endif
+    do i=is,ie ; h(i,0) = 0.0 ; enddo
     do k=1,CS%nkml ; do i=is,ie
-      tv%T(i,j,k) = T_ml(i) ; tv%S(i,j,k) = S_ml(i)
+      tv%T(i,j,k) = T(i,0) ; tv%S(i,j,k) = S(i,0)
     enddo ; enddo
 
     ! These sum needs to be done in the original layer space.
@@ -1753,48 +1754,42 @@ subroutine sort_ML(h, R0, eps, G, CS, ksort)
 
 end subroutine sort_ML
 
-subroutine resort_ML(h, eps, d_ea, d_eb, R0, Rcv, T, S, ksort, G, CS, &
-                     dRcv_dT, dRcv_dS, dR0_dT, dR0_dS, Rcv_ml, R0_ml)
-
-  real, dimension(NIMEM_,NKMEM_),    intent(inout) :: h, eps, d_ea, d_eb
-  real, dimension(NIMEM_,NKMEM_),    intent(inout) :: T, S, R0, Rcv
+subroutine resort_ML(h, T, S, R0, Rcv, eps, d_ea, d_eb, ksort, G, CS, &
+                     dR0_dT, dR0_dS, dRcv_dT, dRcv_dS)
+  real, dimension(NIMEM_,NKMEM0_),   intent(inout) :: h, T, S, R0, Rcv
+  real, dimension(NIMEM_,NKMEM_),    intent(inout) :: eps, d_ea, d_eb
   integer, dimension(NIMEM_,NKMEM_), intent(in)    :: ksort
   type(ocean_grid_type),             intent(in)    :: G
   type(bulkmixedlayer_CS),           pointer       :: CS
-  real, dimension(NIMEM_),           intent(in)    :: dRcv_dT, dRcv_dS
   real, dimension(NIMEM_),           intent(in)    :: dR0_dT, dR0_dS
-  real, dimension(NIMEM_),           intent(in)    :: Rcv_ml, R0_ml
+  real, dimension(NIMEM_),           intent(in)    :: dRcv_dT, dRcv_dS
 !   This subroutine actually moves properties between layers to achieve a
 ! resorted state, with all of the resorted water either moved into the correct
 ! interior layers or in the top nkmb layers.
 ! 
-! Arguments: h - Layer thickness, in m or kg m-2. (Intent in/out)  The units
-!                of h are referred to as H below.
+! Arguments: h - Layer thickness, in m or kg m-2. (Intent in/out)  The units of
+!                h are referred to as H below.  Layer 0 is the new mixed layer.
+!  (in/out)  T - Layer temperatures, in deg C.
+!  (in/out)  S - Layer salinities, in psu.
+!  (in/out)  R0 - Potential density referenced to surface pressure, in kg m-3.
+!  (in/out)  Rcv - The coordinate defining potential density, in kg m-3.
 !  (in)      eps - The (small) thickness that must remain in each layer, in H.
 !  (in/out)  d_ea - The upward increase across a layer in the entrainment from
 !                   above, in m or kg m-2 (H).  Positive d_ea goes with layer
 !                   thickness increases.
 !  (in/out)  d_eb - The downward increase across a layer in the entrainment from
 !                   below, in H. Positive values go with mass gain by a layer.
-!  (in/out)  R0 - Potential density referenced to surface pressure, in kg m-3.
-!  (in/out)  Rcv - The coordinate defining potential density, in kg m-3.
-!  (in/out)  T - Layer temperatures, in deg C.
-!  (in/out)  S - Layer salinities, in psu.
 !  (in)      ksort - The density-sorted k-indicies.
 !  (in)      G - The ocean's grid structure.
 !  (in)      CS - The control structure for this module.
-!  (in/out)  dRcv_dT - The partial derivative of coordinate defining potential
-!                      density with potential temperature, in kg m-3 K-1.
-!  (in/out)  dRcv_dS - The partial derivative of coordinate defining potential
-!                      density with salinity, in kg m-3 psu-1.
 !  (in/out)  dR0_dT - The partial derivative of potential density referenced
 !                     to the surface with potential temperature, in kg m-3 K-1.
 !  (in/out)  dR0_dS - The partial derivative of cpotential density referenced
 !                     to the surface with salinity, in kg m-3 psu-1.
-!  (in/out)  Rcv_ml - The coordinate defining potential density of the mixed
-!                     layer, in kg m-3.
-!  (in)      R0_ml - Mixed layer potential density referenced to surface
-!                    pressure, in kg m-3.
+!  (in/out)  dRcv_dT - The partial derivative of coordinate defining potential
+!                      density with potential temperature, in kg m-3 K-1.
+!  (in/out)  dRcv_dS - The partial derivative of coordinate defining potential
+!                      density with salinity, in kg m-3 psu-1.
 
 !   If there are no massive light layers above the deepest of the mixed- and
 ! buffer layers, do nothing (except perhaps to reshuffle these layers).
@@ -1875,7 +1870,7 @@ subroutine resort_ML(h, eps, d_ea, d_eb, R0, Rcv, T, S, ksort, G, CS, &
     if (num_interior >= 1) then
       ! Find the lightest interior layer with a target coordinate density
       ! greater than the newly forming mixed layer.
-      do k=nkmb+1,nz ; if (Rcv_ml(i) < G%Rlay(k)) exit ; enddo
+      do k=nkmb+1,nz ; if (Rcv(i,0) < G%Rlay(k)) exit ; enddo
       k_int_top = k ; Rcv_int = G%Rlay(k)
 
       I_denom = 1.0 / (dRcv_dS(i)**2 + dT_dS_wt2*dRcv_dT(i)**2)
@@ -1922,7 +1917,7 @@ subroutine resort_ML(h, eps, d_ea, d_eb, R0, Rcv, T, S, ksort, G, CS, &
           R0_dn = R0(i,k) + (dT_dR*dR0_dT(i) + dS_dR*dR0_dS(i)) * dR2
 
           ! Make sure the new properties are acceptable.
-          if ((R0_up > R0_ml(i)) .or. (R0_dn > R0_ml(i))) &
+          if ((R0_up > R0(i,0)) .or. (R0_dn > R0(i,0))) &
             ! Avoid creating obviously unstable profiles.
             exit
 
@@ -2068,32 +2063,26 @@ subroutine resort_ML(h, eps, d_ea, d_eb, R0, Rcv, T, S, ksort, G, CS, &
 
 end subroutine resort_ML
 
-subroutine mixedlayer_detrain_2(h, R0, h_ml, R0_ml, dt, dt_diag, d_ea, j, G, &
-                                CS, T, S, Rcv, T_ml, S_ml, Rcv_ml, &
-                                dRcv_dT, dRcv_dS, dR0_dT, dR0_dS, max_BL_det)
-  real, dimension(NIMEM_,NKMEM_), intent(inout) :: h, R0
-  real, dimension(NIMEM_),        intent(inout) :: h_ml
-  real, dimension(NIMEM_),        intent(in)    :: R0_ml
-  real,                           intent(in)    :: dt, dt_diag
-  real, dimension(NIMEM_,NKMEM_), intent(inout) :: d_ea
-  integer,                        intent(in)    :: j
-  type(ocean_grid_type),          intent(in)    :: G
-  type(bulkmixedlayer_CS),        pointer       :: CS
-  real, dimension(NIMEM_,NKMEM_), intent(inout) :: T, S
-  real, dimension(NIMEM_,NKMEM_), intent(inout) :: Rcv
-  real, dimension(NIMEM_),        intent(in)    :: T_ml, S_ml, Rcv_ml
-  real, dimension(NIMEM_),        intent(in)    :: dRcv_dT, dRcv_dS, dR0_dT, dR0_dS
-  real, dimension(NIMEM_),        intent(in)    :: max_BL_det
+subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, dt, dt_diag, d_ea, j, G, CS, &
+                                dR0_dT, dR0_dS, dRcv_dT, dRcv_dS, max_BL_det)
+  real, dimension(NIMEM_,NKMEM0_), intent(inout) :: h, T, S, R0, Rcv
+  real,                            intent(in)    :: dt, dt_diag
+  real, dimension(NIMEM_,NKMEM_),  intent(inout) :: d_ea
+  integer,                         intent(in)    :: j
+  type(ocean_grid_type),           intent(in)    :: G
+  type(bulkmixedlayer_CS),         pointer       :: CS
+  real, dimension(NIMEM_),         intent(in)    :: dR0_dT, dR0_dS, dRcv_dT, dRcv_dS
+  real, dimension(NIMEM_),         intent(in)    :: max_BL_det
 ! This subroutine moves any water left in the former mixed layers into the
 ! two buffer layers and may also move buffer layer water into the interior
 ! isopycnal layers.
 
-! Arguments: h - Layer thickness, in m or kg m-2. (Intent in/out)  The units
-!                of h are referred to as H below.
+! Arguments: h - Layer thickness, in m or kg m-2. (Intent in/out)  The units of
+!                h are referred to as H below.  Layer 0 is the new mixed layer.
+!  (in/out)  T - Potential temperature, in C.
+!  (in/out)  S - Salinity, in psu.
 !  (in/out)  R0 - Potential density referenced to surface pressure, in kg m-3.
-!  (in/out)  h_ml - New mixed layer thickness in m or kg m-2 (H).
-!  (in)      R0_ml - Mixed layer potential density referenced to surface
-!                    pressure, in kg m-3.
+!  (in/out)  Rcv - The coordinate defining potential density, in kg m-3.
 !  (in)      dt - Time increment, in s.
 !  (in)      dt_diag - The diagnostic time step, in s.
 !  (in/out)  d_ea - The upward increase across a layer in the entrainment from
@@ -2105,21 +2094,14 @@ subroutine mixedlayer_detrain_2(h, R0, h_ml, R0_ml, dt, dt_diag, d_ea, j, G, &
 !                 mixedlayer_init.
 !  (in)      max_BL_det - If non-negative, the maximum detrainment permitted
 !                         from the buffer layers, in H.
-!  (in/out)  T - Potential temperature, in C.
-!  (in/out)  S - Salinity, in psu.
-!  (in/out)  Rcv - The coordinate defining potential density, in kg m-3.
-!  (in/out)  T_ml - Mixed layer potential temperature, in C.
-!  (in/out)  S_ml - Mixed layer salinity, in psu.
-!  (in/out)  Rcv_ml - The coordinate defining potential density of the mixed
-!                     layer, in kg m-3.
-!  (in)  dRcv_dT - The partial derivative of coordinate defining potential
-!                  density with potential temperature, in kg m-3 K-1.
-!  (in)  dRcv_dS - The partial derivative of coordinate defining potential
-!                  density with salinity, in kg m-3 psu-1.
 !  (in)  dR0_dT - The partial derivative of potential density referenced
 !                 to the surface with potential temperature, in kg m-3 K-1.
 !  (in)  dR0_dS - The partial derivative of cpotential density referenced
 !                 to the surface with salinity, in kg m-3 psu-1.
+!  (in)  dRcv_dT - The partial derivative of coordinate defining potential
+!                  density with potential temperature, in kg m-3 K-1.
+!  (in)  dRcv_dS - The partial derivative of coordinate defining potential
+!                  density with salinity, in kg m-3 psu-1.
   real :: h_to_bl                 ! The total thickness detrained to the buffer
                                   ! layers, in H (the units of h).
   real :: R0_to_bl, Rcv_to_bl     ! The depth integrated amount of R0, Rcv, T
@@ -2268,7 +2250,7 @@ subroutine mixedlayer_detrain_2(h, R0, h_ml, R0_ml, dt, dt_diag, d_ea, j, G, &
       h(i,k) = 0.0
     endif ; enddo
     if (h_to_bl > 0.0) then ; R0_det = R0_to_bl / h_to_bl
-    else ; R0_det = R0_ml(i) ; endif
+    else ; R0_det = R0(i,0) ; endif
 
     ! This code does both downward detrainment from both the mixed layer and the
     ! buffer layers.
@@ -2290,7 +2272,7 @@ subroutine mixedlayer_detrain_2(h, R0, h_ml, R0_ml, dt, dt_diag, d_ea, j, G, &
     ! Determine whether more must be detrained from the mixed layer to keep a
     ! minimal amount of mass in the buffer layers.  In this case the 5% of the
     ! mixed layer thickness is hard-coded, but probably shouldn't be!
-    h_min_bl = MIN(h_min_bl_thick,h_min_bl_frac_ml*h_ml(i))
+    h_min_bl = MIN(h_min_bl_thick,h_min_bl_frac_ml*h(i,0))
 
     stable_Rcv = .true.
     if (((R0(i,kb2)-R0(i,kb1)) * (Rcv(i,kb2)-Rcv(i,kb1)) <= 0.0)) &
@@ -2597,20 +2579,20 @@ subroutine mixedlayer_detrain_2(h, R0, h_ml, R0_ml, dt, dt_diag, d_ea, j, G, &
       Ih1f = 1.0 / (h_det_to_h1 + h_ml_to_h1)
 
       R0(i,kb2) = ((h2*R0(i,kb2) + h1*R0(i,kb1)) + &
-                   (h_det_to_h2*R0_to_bl*Ihdet + h_ml_to_h2*R0_ml(i))) * Ih
-      R0(i,kb1) = (h_det_to_h1*R0_to_bl*Ihdet + h_ml_to_h1*R0_ml(i)) * Ih1f
+                   (h_det_to_h2*R0_to_bl*Ihdet + h_ml_to_h2*R0(i,0))) * Ih
+      R0(i,kb1) = (h_det_to_h1*R0_to_bl*Ihdet + h_ml_to_h1*R0(i,0)) * Ih1f
 
       Rcv(i,kb2) = ((h2*Rcv(i,kb2) + h1*Rcv(i,kb1)) + &
-                    (h_det_to_h2*Rcv_to_bl*Ihdet + h_ml_to_h2*Rcv_ml(i))) * Ih
-      Rcv(i,kb1) = (h_det_to_h1*Rcv_to_bl*Ihdet + h_ml_to_h1*Rcv_ml(i)) * Ih1f
+                    (h_det_to_h2*Rcv_to_bl*Ihdet + h_ml_to_h2*Rcv(i,0))) * Ih
+      Rcv(i,kb1) = (h_det_to_h1*Rcv_to_bl*Ihdet + h_ml_to_h1*Rcv(i,0)) * Ih1f
 
       T(i,kb2) = ((h2*T(i,kb2) + h1*T(i,kb1)) + &
-                  (h_det_to_h2*T_to_bl*Ihdet + h_ml_to_h2*T_ml(i))) * Ih
-      T(i,kb1) = (h_det_to_h1*T_to_bl*Ihdet + h_ml_to_h1*T_ml(i)) * Ih1f
+                  (h_det_to_h2*T_to_bl*Ihdet + h_ml_to_h2*T(i,0))) * Ih
+      T(i,kb1) = (h_det_to_h1*T_to_bl*Ihdet + h_ml_to_h1*T(i,0)) * Ih1f
 
       S(i,kb2) = ((h2*S(i,kb2) + h1*S(i,kb1)) + &
-                  (h_det_to_h2*S_to_bl*Ihdet + h_ml_to_h2*S_ml(i))) * Ih
-      S(i,kb1) = (h_det_to_h1*S_to_bl*Ihdet + h_ml_to_h1*S_ml(i)) * Ih1f
+                  (h_det_to_h2*S_to_bl*Ihdet + h_ml_to_h2*S(i,0))) * Ih
+      S(i,kb1) = (h_det_to_h1*S_to_bl*Ihdet + h_ml_to_h1*S(i,0)) * Ih1f
 
       ! Recall that h1 = h(i,kb1) & h2 = h(i,kb2).
       d_ea(i,1) = d_ea(i,1) - (h_ml_to_h1 + h_ml_to_h2)
@@ -2618,16 +2600,16 @@ subroutine mixedlayer_detrain_2(h, R0, h_ml, R0_ml, dt, dt_diag, d_ea, j, G, &
       d_ea(i,kb2) = d_ea(i,kb2) + (h_min_bl - h2)
 
       h(i,kb1) = h_det_to_h1 + h_ml_to_h1 ; h(i,kb2) = h_min_bl
-      h_ml(i) = h_ml(i) - (h_ml_to_h1 + h_ml_to_h2)
+      h(i,0) = h(i,0) - (h_ml_to_h1 + h_ml_to_h2)
 
 
       if (ALLOCATED(CS%diag_PE_detrain) .or. ALLOCATED(CS%diag_PE_detrain2)) then
         R0_det = R0_to_bl*Ihdet
         s1en = G_2 * Idt_H2 * ( ((R0(i,kb2)-R0(i,kb1))*h1*h2 + &
             h_det_to_h2*( (R0(i,kb1)-R0_det)*h1 + (R0(i,kb2)-R0_det)*h2 ) + &
-            h_ml_to_h2*( (R0(i,kb2)-R0_ml(i))*h2 + (R0(i,kb1)-R0_ml(i))*h1 + &
-                         (R0_det-R0_ml(i))*h_det_to_h2 ) + &
-            h_det_to_h1*h_ml_to_h1*(R0_det-R0_ml(i))) - 2.0*G%Rho0*dPE_extrap )
+            h_ml_to_h2*( (R0(i,kb2)-R0(i,0))*h2 + (R0(i,kb1)-R0(i,0))*h1 + &
+                         (R0_det-R0(i,0))*h_det_to_h2 ) + &
+            h_det_to_h1*h_ml_to_h1*(R0_det-R0(i,0))) - 2.0*G%Rho0*dPE_extrap )
 
         if (ALLOCATED(CS%diag_PE_detrain)) &
           CS%diag_PE_detrain(i,j) = CS%diag_PE_detrain(i,j) + s1en
@@ -2645,14 +2627,14 @@ subroutine mixedlayer_detrain_2(h, R0, h_ml, R0_ml, dt, dt_diag, d_ea, j, G, &
       if (h_from_ml > 0.0) then
         ! Some water needs to be moved from the mixed layer so that the upper
         ! (and perhaps lower) buffer layers exceed their minimum thicknesses.
-        dPE_extrap = dPE_extrap - I2Rho0*h_from_ml*(R0_to_bl - R0_ml(i)*h_to_bl)
-        R0_to_bl = R0_to_bl + h_from_ml*R0_ml(i)
-        Rcv_to_bl = Rcv_to_bl + h_from_ml*Rcv_ml(i)
-        T_to_bl = T_to_bl + h_from_ml*T_ml(i)
-        S_to_bl = S_to_bl + h_from_ml*S_ml(i)
+        dPE_extrap = dPE_extrap - I2Rho0*h_from_ml*(R0_to_bl - R0(i,0)*h_to_bl)
+        R0_to_bl = R0_to_bl + h_from_ml*R0(i,0)
+        Rcv_to_bl = Rcv_to_bl + h_from_ml*Rcv(i,0)
+        T_to_bl = T_to_bl + h_from_ml*T(i,0)
+        S_to_bl = S_to_bl + h_from_ml*S(i,0)
 
         h_to_bl = h_to_bl + h_from_ml
-        h_ml(i) = h_ml(i) - h_from_ml
+        h(i,0) = h(i,0) - h_from_ml
         d_ea(i,1) = d_ea(i,1) - h_from_ml
       endif
 
@@ -2724,8 +2706,8 @@ subroutine mixedlayer_detrain_2(h, R0, h_ml, R0_ml, dt, dt_diag, d_ea, j, G, &
                      (h2 - scale_slope*stays*((h1+h2)+h_to_bl)/(h1+h2)) ) - &
                 Rho0xG*dPE_extrap
 
-      if (dPE_time_ratio*h_to_bl > h_to_bl+h_ml(i)) then
-        dPE_ratio = (h_to_bl+h_ml(i)) / h_to_bl
+      if (dPE_time_ratio*h_to_bl > h_to_bl+h(i,0)) then
+        dPE_ratio = (h_to_bl+h(i,0)) / h_to_bl
       else
         dPE_ratio = dPE_time_ratio
       endif
@@ -2859,8 +2841,8 @@ subroutine mixedlayer_detrain_2(h, R0, h_ml, R0_ml, dt, dt_diag, d_ea, j, G, &
                         dT_dS_gauge*dR0_dT(i)*(S_to_bl-S(i,kb1)*h_to_bl)) /&
                         h_to_bl
         else
-          dSpice_lim = dS_dT_gauge*dR0_dS(i)*(T_ml(i)-T(i,kb1)) - &
-                       dT_dS_gauge*dR0_dT(i)*(S_ml(i)-S(i,kb1))
+          dSpice_lim = dS_dT_gauge*dR0_dS(i)*(T(i,0)-T(i,kb1)) - &
+                       dT_dS_gauge*dR0_dT(i)*(S(i,0)-S(i,kb1))
         endif
         if (dSpice_stays*dSpice_lim <= 0.0) then
           dSpice_stays = 0.0
@@ -2917,29 +2899,25 @@ subroutine mixedlayer_detrain_2(h, R0, h_ml, R0_ml, dt, dt_diag, d_ea, j, G, &
 
 end subroutine mixedlayer_detrain_2
 
-subroutine mixedlayer_detrain_1(h, R0, h_ml, R0_ml, dt, dt_diag, d_ea, d_eb, &
-                                j, G, CS, T, S, Rcv, T_ml, S_ml, Rcv_ml, &
-                                dRcv_dT, dRcv_dS, max_BL_det)
-  real, dimension(NIMEM_,NKMEM_), intent(inout) :: h, R0
-  real, dimension(NIMEM_),        intent(inout) :: h_ml, R0_ml
-  real,                           intent(in)    :: dt, dt_diag
-  real, dimension(NIMEM_,NKMEM_), intent(inout) :: d_ea, d_eb
-  integer,                        intent(in)    :: j
-  type(ocean_grid_type),          intent(in)    :: G
-  type(bulkmixedlayer_CS),        pointer       :: CS
-  real, dimension(NIMEM_,NKMEM_), intent(inout) :: T, S, Rcv
-  real, dimension(NIMEM_),        intent(inout) :: T_ml, S_ml, Rcv_ml
-  real, dimension(NIMEM_),        intent(in)    :: dRcv_dT, dRcv_dS, max_BL_det
+subroutine mixedlayer_detrain_1(h, T, S, R0, Rcv, dt, dt_diag, d_ea, d_eb, &
+                                j, G, CS, dRcv_dT, dRcv_dS, max_BL_det)
+  real, dimension(NIMEM_,NKMEM0_), intent(inout) :: h, T, S, R0, Rcv
+  real,                            intent(in)    :: dt, dt_diag
+  real, dimension(NIMEM_,NKMEM_),  intent(inout) :: d_ea, d_eb
+  integer,                         intent(in)    :: j
+  type(ocean_grid_type),           intent(in)    :: G
+  type(bulkmixedlayer_CS),         pointer       :: CS
+  real, dimension(NIMEM_),         intent(in)    :: dRcv_dT, dRcv_dS, max_BL_det
 ! This subroutine moves any water left in the former mixed layers into the
 ! single buffer layers and may also move buffer layer water into the interior
 ! isopycnal layers.
 
-! Arguments: h - Layer thickness, in m or kg m-2. (Intent in/out)  The units
-!                of h are referred to as H below.
+! Arguments: h - Layer thickness, in m or kg m-2. (Intent in/out)  The units of
+!                h are referred to as H below.  Layer 0 is the new mixed layer.
+!  (in/out)  T - Potential temperature, in C.
+!  (in/out)  S - Salinity, in psu.
 !  (in/out)  R0 - Potential density referenced to surface pressure, in kg m-3.
-!  (in/out)  h_ml - New mixed layer thickness in m.
-!  (in/out)  R0_ml - Mixed layer potential density referenced to surface
-!                    pressure, in kg m-3.
+!  (in/out)  Rcv - The coordinate defining potential density, in kg m-3.
 !  (in)      dt - Time increment, in s.
 !  (in/out)  d_ea - The upward increase across a layer in the entrainment from
 !                   above, in m or kg m-2 (H).  Positive d_ea goes with layer
@@ -2952,13 +2930,6 @@ subroutine mixedlayer_detrain_1(h, R0, h_ml, R0_ml, dt, dt_diag, d_ea, d_eb, &
 !                 mixedlayer_init.
 !  (in)      max_BL_det - If non-negative, the maximum detrainment permitted
 !                         from the buffer layers, in H.
-!  (in/out)  T - Potential temperature, in C.
-!  (in/out)  S - Salinity, in psu.
-!  (in/out)  Rcv - The coordinate defining potential density, in kg m-3.
-!  (in/out)  T_ml - Mixed layer potential temperature, in C.
-!  (in/out)  S_ml - Mixed layer salinity, in psu.
-!  (in/out)  Rcv_ml - The coordinate defining potential density of the mixed
-!                     layer, in kg m-3.
 !  (in/out)  dRcv_dT - The partial derivative of coordinate defining potential
 !                      density with potential temperature, in kg m-3 K-1.
 !  (in/out)  dRcv_dS - The partial derivative of coordinate defining potential
@@ -3039,12 +3010,12 @@ subroutine mixedlayer_detrain_1(h, R0, h_ml, R0_ml, dt, dt_diag, d_ea, d_eb, &
 ! the released buoyancy.  With multiple buffer layers, much more
 ! graceful options are available.
   do i=is,ie ; if (h(i,nkmb) > 0.0) then
-    if ((R0_ml(i)<R0(i,nz)) .and. (R0(i,nz)<R0(i,nkmb))) then
-      if ((R0(i,nz)-R0_ml(i))*h_ml(i) > &
+    if ((R0(i,0)<R0(i,nz)) .and. (R0(i,nz)<R0(i,nkmb))) then
+      if ((R0(i,nz)-R0(i,0))*h(i,0) > &
           (R0(i,nkmb)-R0(i,nz))*h(i,nkmb)) then
-        detrain(i) = (R0(i,nkmb)-R0(i,nz))*h(i,nkmb) / (R0(i,nkmb)-R0_ml(i))
+        detrain(i) = (R0(i,nkmb)-R0(i,nz))*h(i,nkmb) / (R0(i,nkmb)-R0(i,0))
       else
-        detrain(i) = (R0(i,nz)-R0_ml(i))*h_ml(i) / (R0(i,nkmb)-R0_ml(i))
+        detrain(i) = (R0(i,nz)-R0(i,0))*h(i,0) / (R0(i,nkmb)-R0(i,0))
       endif
 
       d_eb(i,CS%nkml) = d_eb(i,CS%nkml) + detrain(i)
@@ -3054,18 +3025,18 @@ subroutine mixedlayer_detrain_1(h, R0, h_ml, R0_ml, dt, dt_diag, d_ea, d_eb, &
 
       if (ALLOCATED(CS%diag_PE_detrain)) CS%diag_PE_detrain(i,j) = &
         CS%diag_PE_detrain(i,j) + g_H2_2dt * detrain(i)* &
-                     (h_ml(i) + h(i,nkmb)) * (R0(i,nkmb) - R0_ml(i))
-      x1 = R0_ml(i)
-      R0_ml(i) = R0_ml(i) - detrain(i)*(R0_ml(i)-R0(i,nkmb)) / h_ml(i)
+                     (h(i,0) + h(i,nkmb)) * (R0(i,nkmb) - R0(i,0))
+      x1 = R0(i,0)
+      R0(i,0) = R0(i,0) - detrain(i)*(R0(i,0)-R0(i,nkmb)) / h(i,0)
       R0(i,nkmb) = R0(i,nkmb) - detrain(i)*(R0(i,nkmb)-x1) / h(i,nkmb)
-      x1 = Rcv_ml(i)
-      Rcv_ml(i) = Rcv_ml(i) - detrain(i)*(Rcv_ml(i)-Rcv(i,nkmb)) / h_ml(i)
+      x1 = Rcv(i,0)
+      Rcv(i,0) = Rcv(i,0) - detrain(i)*(Rcv(i,0)-Rcv(i,nkmb)) / h(i,0)
       Rcv(i,nkmb) = Rcv(i,nkmb) - detrain(i)*(Rcv(i,nkmb)-x1) / h(i,nkmb)
-      x1 = T_ml(i)
-      T_ml(i) = T_ml(i) - detrain(i)*(T_ml(i)-T(i,nkmb)) / h_ml(i)
+      x1 = T(i,0)
+      T(i,0) = T(i,0) - detrain(i)*(T(i,0)-T(i,nkmb)) / h(i,0)
       T(i,nkmb) = T(i,nkmb) - detrain(i)*(T(i,nkmb)-x1) / h(i,nkmb)
-      x1 = S_ml(i)
-      S_ml(i) = S_ml(i) - detrain(i)*(S_ml(i)-S(i,nkmb)) / h_ml(i)
+      x1 = S(i,0)
+      S(i,0) = S(i,0) - detrain(i)*(S(i,0)-S(i,nkmb)) / h(i,0)
       S(i,nkmb) = S(i,nkmb) - detrain(i)*(S(i,nkmb)-x1) / h(i,nkmb)
 
     endif
@@ -3098,15 +3069,15 @@ subroutine mixedlayer_detrain_1(h, R0, h_ml, R0_ml, dt, dt_diag, d_ea, d_eb, &
         ! extrapolation is used.  The 10.0 and 0.9 in the following are
         ! arbitrary but probably about right.
         if ((h(i,k+1) < 10.0*G%Angstrom) .or. &
-            ((G%Rlay(k+1)-Rcv(i,nkmb)) >= 0.9*(Rcv(i,k1) - Rcv_ml(i)))) then
+            ((G%Rlay(k+1)-Rcv(i,nkmb)) >= 0.9*(Rcv(i,k1) - Rcv(i,0)))) then
           if (k>=nz-1) then ; orthogonal_extrap = .true.
           elseif ((h(i,k+2) <= 10.0*G%Angstrom) .and. &
-              ((G%Rlay(k+1)-Rcv(i,nkmb)) < 0.9*(Rcv(i,k+2)-Rcv_ml(i)))) then
+              ((G%Rlay(k+1)-Rcv(i,nkmb)) < 0.9*(Rcv(i,k+2)-Rcv(i,0)))) then
             k1 = k+2
           else ; orthogonal_extrap = .true. ; endif
         endif
 
-        if ((R0_ml(i) >= R0(i,k1)) .or. (Rcv_ml(i) >= Rcv(i,nkmb))) cycle
+        if ((R0(i,0) >= R0(i,k1)) .or. (Rcv(i,0) >= Rcv(i,nkmb))) cycle
           ! In this case there is an inversion of in-situ density relative to
           ! the coordinate variable.  Do not detrain from the buffer layer.
 
@@ -3118,14 +3089,14 @@ subroutine mixedlayer_detrain_1(h, R0, h_ml, R0_ml, dt, dt_diag, d_ea, d_eb, &
           dT_dR = dT_dS_wt2*dRcv_dT(i) * I_denom
           dS_dR = dRcv_dS(i) * I_denom
         else
-          dT_dR = (T_ml(i) - T(i,k1)) / (Rcv_ml(i) - Rcv(i,k1))
-          dS_dR = (S_ml(i) - S(i,k1)) / (Rcv_ml(i) - Rcv(i,k1))
+          dT_dR = (T(i,0) - T(i,k1)) / (Rcv(i,0) - Rcv(i,k1))
+          dS_dR = (S(i,0) - S(i,k1)) / (Rcv(i,0) - Rcv(i,k1))
         endif
-        dRml = dt_Time * (R0(i,nkmb) - R0_ml(i)) * &
-               (Rcv_ml(i) - Rcv(i,k1)) / (R0_ml(i) - R0(i,k1))
+        dRml = dt_Time * (R0(i,nkmb) - R0(i,0)) * &
+               (Rcv(i,0) - Rcv(i,k1)) / (R0(i,0) - R0(i,k1))
         ! Once again, there is an apparent density inversion in Rcv.
         if (dRml < 0.0) cycle
-        dR0_dRcv = (R0_ml(i) - R0(i,k1)) / (Rcv_ml(i) - Rcv(i,k1))
+        dR0_dRcv = (R0(i,0) - R0(i,k1)) / (Rcv(i,0) - Rcv(i,k1))
 
         if ((Rcv(i,nkmb) - dRml < G%Rlay(k)) .and. (max_det_rem(i) > h(i,nkmb))) then
           ! In this case, the buffer layer is split into two isopycnal layers.
@@ -3142,15 +3113,15 @@ subroutine mixedlayer_detrain_1(h, R0, h_ml, R0_ml, dt, dt_diag, d_ea, d_eb, &
                        (h(i,k) + (h(i,nkmb) - detrain(i)))
           T(i,k+1) = (h(i,k+1) * T(i,k+1) + Tdown)/ &
                           (h(i,k+1) + detrain(i))
-          T(i,nkmb) = T_ml(i)
+          T(i,nkmb) = T(i,0)
           Sdown = detrain(i) * (S(i,nkmb) + dS_dR*(G%Rlay(k+1)-Rcv(i,nkmb)))
           S(i,k) = (h(i,k) * S(i,k) + &
                       (h(i,nkmb) * S(i,nkmb) - Sdown)) / &
                       (h(i,k) + (h(i,nkmb) - detrain(i)))
           S(i,k+1) = (h(i,k+1) * S(i,k+1) + Sdown)/ &
                          (h(i,k+1) + detrain(i))
-          S(i,nkmb) = S_ml(i)
-          Rcv(i,nkmb) = Rcv_ml(i)
+          S(i,nkmb) = S(i,0)
+          Rcv(i,nkmb) = Rcv(i,0)
 
           d_ea(i,k+1) = d_ea(i,k+1) + detrain(i)
           d_ea(i,k) = d_ea(i,k) + (h(i,nkmb) - detrain(i))
@@ -3194,16 +3165,16 @@ subroutine mixedlayer_detrain_1(h, R0, h_ml, R0_ml, dt, dt_diag, d_ea, d_eb, &
 ! of the mixed layer.  As the physical distinction between the mixed
 ! and buffer layers is vague anyway, this seems hard to argue against.
   do i=is,ie
-    if (h(i,nkmb) < 0.1*h_ml(i)) then
-      h_ent =  0.1*h_ml(i) - h(i,nkmb)
-      Ih = 10.0/h_ml(i)
-      T(i,nkmb) = (h(i,nkmb)*T(i,nkmb) + h_ent*T_ml(i)) * Ih
-      S(i,nkmb) = (h(i,nkmb)*S(i,nkmb) + h_ent*S_ml(i)) * Ih
+    if (h(i,nkmb) < 0.1*h(i,0)) then
+      h_ent =  0.1*h(i,0) - h(i,nkmb)
+      Ih = 10.0/h(i,0)
+      T(i,nkmb) = (h(i,nkmb)*T(i,nkmb) + h_ent*T(i,0)) * Ih
+      S(i,nkmb) = (h(i,nkmb)*S(i,nkmb) + h_ent*S(i,0)) * Ih
 
       d_ea(i,1) = d_ea(i,1) - h_ent
       d_ea(i,nkmb) = d_ea(i,nkmb) + h_ent
 
-      h_ml(i) = h_ml(i) - h_ent
+      h(i,0) = h(i,0) - h_ent
       h(i,nkmb) = h(i,nkmb) + h_ent
     endif
   enddo
