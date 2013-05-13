@@ -333,8 +333,8 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
   real, allocatable, dimension(:,:,:) :: &
     opacity_band ! The opacity in each band, in H-1. The indicies are band, i, k.
  
-  real :: cMKE1(SZI_(G))! Coefficients of HpE and HpE^2 in calculating
-  real :: cMKE2(SZI_(G))! the denominator of MKE_rate, in m-1 and m-2.
+  real :: cMKE(2,SZI_(G)) ! Coefficients of HpE and HpE^2 in calculating the
+                          ! denominator of MKE_rate, in m-1 and m-2.
   real :: Irho0         ! 1.0 / rho_0
   real :: Inkml, Inkmlm1!  1.0 / REAL(nkml) and  1.0 / REAL(nkml-1)
   real :: Ih            !   The inverse of a thickness, in H-1.
@@ -489,7 +489,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
     if (CS%ML_resort) then
       call cpu_clock_begin(id_clock_resort)
       if (CS%ML_presort_nz_conv_adj > 0) &
-        call convective_adjustment(h, u, v, R0, Rcv, T, S, d_eb, dKE_CA, cTKE, &
+        call convective_adjustment(h, u, v, R0, Rcv, T, S, eps, d_eb, dKE_CA, cTKE, &
                                    j, G, CS, CS%ML_presort_nz_conv_adj)
 
       call sort_ML(h, R0, eps, G, CS, ksort)
@@ -501,7 +501,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
       !  Undergo instantaneous entrainment into the buffer layers and mixed layers
       ! to remove hydrostatic instabilities.  Any water that is lighter than
       ! currently in the mixed or buffer layer is entrained.
-      call convective_adjustment(h, u, v, R0, Rcv, T, S, d_eb, dKE_CA, cTKE, &
+      call convective_adjustment(h, u, v, R0, Rcv, T, S, eps, d_eb, dKE_CA, cTKE, &
                                  j, G, CS)
       do i=is,ie ; h_CA(i) = h(i,1) ; enddo
 
@@ -542,8 +542,11 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
     !   This subroutine causes the mixed layer to entrain to the depth of
     ! free convection.    
     call mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
-                               R0_tot, Rcv_tot, nsw, Pen_SW_bnd, Conv_en, &
-                               dKE_FC, j, ksort, G, CS)
+                               R0_tot, Rcv_tot, u, v, T, S, R0, Rcv, eps, &
+                               dR0_dT, dRcv_dT, dR0_dS, dRcv_dS, &
+                               Net_H, Net_heat, Net_salt, &
+                               nsw, Pen_SW_bnd, opacity_band, Conv_en, &
+                               dKE_FC, j, ksort, G, CS, tv)
 
     call cpu_clock_end(id_clock_conv)
 
@@ -556,13 +559,14 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
     call cpu_clock_begin(id_clock_mech)
 
     call find_starting_TKE(htot, h_CA, fluxes, Conv_En, cTKE, dKE_FC, dKE_CA, &
-                           TKE, TKE_river, Idecay_len_TKE, cMKE1, cMKE2, dt, &
+                           TKE, TKE_river, Idecay_len_TKE, cMKE, dt, Idt_diag, &
                            j, ksort, G, CS)
 
     ! Here the mechanically driven entrainment occurs.
     call mechanical_entrainment(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
-                                R0_tot, Rcv_tot, nsw, Pen_SW_bnd, TKE, &
-                                j, ksort, G, CS)
+                                R0_tot, Rcv_tot, u, v, T, S, R0, Rcv, eps, dR0_dT, dRcv_dT, &
+                                cMKE, Idt_diag, nsw, Pen_SW_bnd, opacity_band, TKE, &
+                                Idecay_len_TKE, j, ksort, G, CS)
 
     call absorbRemainingSW(G, h, eps, htot, opacity_band, nsw, j, dt, &
                            CS%H_limit_fluxes, CS%correct_absorption, CS%absorb_all_SW, &
@@ -787,495 +791,503 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
       call post_data(CS%id_Hsfc_min, Hsfc_min, CS%diag)
   endif
 
-  contains
-! end subroutine bulkmixedlayer
+end subroutine bulkmixedlayer
 
-  subroutine convective_adjustment(h, u, v, R0, Rcv, T, S, d_eb, &
-                                   dKE_CA, cTKE, j, G, CS, nz_conv)
-    real, dimension(NIMEM_,NKMEM_), intent(inout) :: h, u, v
-    real, dimension(NIMEM_,NKMEM_), intent(inout) :: T, S, R0, Rcv, d_eb
-    real, dimension(NIMEM_,NKMEM_), intent(out)   :: dKE_CA, cTKE
-    integer,                        intent(in)    :: j
-    type(ocean_grid_type),          intent(in)    :: G
-    type(bulkmixedlayer_CS),        pointer       :: CS
-    integer,              optional, intent(in)    :: nz_conv
-  !   This subroutine does instantaneous convective entrainment into the buffer
-  ! layers and mixed layers to remove hydrostatic instabilities.  Any water that
-  ! is lighter than currently in the mixed- or buffer- layer is entrained.
+subroutine convective_adjustment(h, u, v, R0, Rcv, T, S, eps, d_eb, &
+                                 dKE_CA, cTKE, j, G, CS, nz_conv)
+  real, dimension(NIMEM_,NKMEM_), intent(inout) :: h, u, v
+  real, dimension(NIMEM_,NKMEM_), intent(inout) :: T, S, R0, Rcv, d_eb
+  real, dimension(NIMEM_,NKMEM_), intent(in)    :: eps
+  real, dimension(NIMEM_,NKMEM_), intent(out)   :: dKE_CA, cTKE
+  integer,                        intent(in)    :: j
+  type(ocean_grid_type),          intent(in)    :: G
+  type(bulkmixedlayer_CS),        pointer       :: CS
+  integer,              optional, intent(in)    :: nz_conv
+!   This subroutine does instantaneous convective entrainment into the buffer
+! layers and mixed layers to remove hydrostatic instabilities.  Any water that
+! is lighter than currently in the mixed- or buffer- layer is entrained.
 
-  ! Arguments: h - Layer thickness, in m or kg m-2. (Intent in/out)  The units
-  !                of h are referred to as H below.
-  !  (in/out)  u - Zonal velocities interpolated to h points, m s-1.
-  !  (in/out)  v - Zonal velocities interpolated to h points, m s-1.
-  !  (in/out)  R0 - Potential density referenced to surface pressure, in kg m-3.
-  !  (in/out)  Rcv - The coordinate defining potential density, in kg m-3.
-  !  (in/out)  T - Layer temperatures, in deg C.
-  !  (in/out)  S - Layer salinities, in psu.
-  !  (in/out)  d_eb - The downward increase across a layer in the entrainment from
-  !                   below, in H. Positive values go with mass gain by a layer.
-  !  (out)     dKE_CA - The vertically integrated change in kinetic energy due
-  !                     to convective adjustment, in m3 s-2.
-  !  (out)     cTKE - The buoyant turbulent kinetic energy source due to
-  !                   convective adjustment, in m3 s-2.
-  !  (in)      j - The j-index to work on.
-  !  (in)      ksort - The density-sorted k-indicies.
-  !  (in)      G - The ocean's grid structure.
-  !  (in)      CS - The control structure for this module.
-  !  (in,opt)  nz_conv - If present, the number of layers over which to do 
-  !                      convective adjustment (perhaps CS%nkml).
-    real, dimension(SZI_(G)) :: &
-      htot, &     !   The total depth of the layers being considered for
-                  ! entrainment, in H.
-      R0_tot, &   !   The integrated potential density referenced to the surface
-                  ! of the layers which are fully entrained, in H kg m-3.
-      Rcv_tot, &  !   The integrated coordinate value potential density of the
-                  ! layers that are fully entrained, in H kg m-3.
-      Ttot, &     !   The integrated temperature of layers which are fully
-                  ! entrained, in H K.
-      Stot, &     !   The integrated salt of layers which are fully entrained, 
-                  ! in H PSU.
-      uhtot, &    !   The depth integrated zonal and meridional velocities in
-      vhtot, &    ! the mixed layer, in H m s-1.
-      KE_orig, &  !   The total mean kinetic energy in the mixed layer before
-                  ! convection, H m2 s-2.
-      h_orig_k1   !   The depth of layer k1 before convective adjustment, in H.
-    real :: h_ent !   The thickness from a layer that is entrained, in H.
-    real :: Ih    !   The inverse of a thickness, in H-1.
-    real :: g_H2_2Rho0  ! Half the gravitational acceleration times the
-                        ! square of the conversion from H to m divided
-                        ! by the mean density, in m6 s-2 H-2 kg-1.
-    integer :: is, ie, nz, i, k, k1, nzc, nkmb
+! Arguments: h - Layer thickness, in m or kg m-2. (Intent in/out)  The units
+!                of h are referred to as H below.
+!  (in/out)  u - Zonal velocities interpolated to h points, m s-1.
+!  (in/out)  v - Zonal velocities interpolated to h points, m s-1.
+!  (in/out)  R0 - Potential density referenced to surface pressure, in kg m-3.
+!  (in/out)  Rcv - The coordinate defining potential density, in kg m-3.
+!  (in/out)  T - Layer temperatures, in deg C.
+!  (in/out)  S - Layer salinities, in psu.
+!  (in/out)  d_eb - The downward increase across a layer in the entrainment from
+!                   below, in H. Positive values go with mass gain by a layer.
+!  (out)     dKE_CA - The vertically integrated change in kinetic energy due
+!                     to convective adjustment, in m3 s-2.
+!  (out)     cTKE - The buoyant turbulent kinetic energy source due to
+!                   convective adjustment, in m3 s-2.
+!  (in)      j - The j-index to work on.
+!  (in)      ksort - The density-sorted k-indicies.
+!  (in)      G - The ocean's grid structure.
+!  (in)      CS - The control structure for this module.
+!  (in,opt)  nz_conv - If present, the number of layers over which to do 
+!                      convective adjustment (perhaps CS%nkml).
+  real, dimension(SZI_(G)) :: &
+    htot, &     !   The total depth of the layers being considered for
+                ! entrainment, in H.
+    R0_tot, &   !   The integrated potential density referenced to the surface
+                ! of the layers which are fully entrained, in H kg m-3.
+    Rcv_tot, &  !   The integrated coordinate value potential density of the
+                ! layers that are fully entrained, in H kg m-3.
+    Ttot, &     !   The integrated temperature of layers which are fully
+                ! entrained, in H K.
+    Stot, &     !   The integrated salt of layers which are fully entrained, 
+                ! in H PSU.
+    uhtot, &    !   The depth integrated zonal and meridional velocities in
+    vhtot, &    ! the mixed layer, in H m s-1.
+    KE_orig, &  !   The total mean kinetic energy in the mixed layer before
+                ! convection, H m2 s-2.
+    h_orig_k1   !   The depth of layer k1 before convective adjustment, in H.
+  real :: h_ent !   The thickness from a layer that is entrained, in H.
+  real :: Ih    !   The inverse of a thickness, in H-1.
+  real :: g_H2_2Rho0  ! Half the gravitational acceleration times the
+                      ! square of the conversion from H to m divided
+                      ! by the mean density, in m6 s-2 H-2 kg-1.
+  integer :: is, ie, nz, i, k, k1, nzc, nkmb
 
-    is = G%isc ; ie = G%iec ; nz = G%ke
-    g_H2_2Rho0 = (G%g_Earth * G%H_to_m**2) / (2.0 * G%Rho0)
-    nzc = nz ; if (present(nz_conv)) nzc = nz_conv
-    nkmb = CS%nkml+CS%nkbl
+  is = G%isc ; ie = G%iec ; nz = G%ke
+  g_H2_2Rho0 = (G%g_Earth * G%H_to_m**2) / (2.0 * G%Rho0)
+  nzc = nz ; if (present(nz_conv)) nzc = nz_conv
+  nkmb = CS%nkml+CS%nkbl
 
 !   Undergo instantaneous entrainment into the buffer layers and mixed layers
 ! to remove hydrostatic instabilities.  Any water that is lighter than currently
 ! in the layer is entrained.
-    do k1=min(nzc-1,nkmb),1,-1
+  do k1=min(nzc-1,nkmb),1,-1
+    do i=is,ie
+      h_orig_k1(i) = h(i,k1)
+      KE_orig(i) = 0.5*h(i,k1)*(u(i,k1)**2 + v(i,k1)**2)
+      uhtot(i) = h(i,k1)*u(i,k1) ; vhtot(i) = h(i,k1)*v(i,k1)
+      R0_tot(i) = R0(i,k1) * h(i,k1)
+      cTKE(i,k1) = 0.0 ; dKE_CA(i,k1) = 0.0
+
+      Rcv_tot(i) = Rcv(i,k1) * h(i,k1)
+      Ttot(i) = T(i,k1) * h(i,k1) ; Stot(i) = S(i,k1) * h(i,k1)
+    enddo
+    do k=k1+1,nzc
       do i=is,ie
-        h_orig_k1(i) = h(i,k1)
-        KE_orig(i) = 0.5*h(i,k1)*(u(i,k1)**2 + v(i,k1)**2)
-        uhtot(i) = h(i,k1)*u(i,k1) ; vhtot(i) = h(i,k1)*v(i,k1)
-        R0_tot(i) = R0(i,k1) * h(i,k1)
-        cTKE(i,k1) = 0.0 ; dKE_CA(i,k1) = 0.0
-
-        Rcv_tot(i) = Rcv(i,k1) * h(i,k1)
-        Ttot(i) = T(i,k1) * h(i,k1) ; Stot(i) = S(i,k1) * h(i,k1)
-      enddo
-      do k=k1+1,nzc
-        do i=is,ie
-          if ((h(i,k) > eps(i,k)) .and. (R0_tot(i) > h(i,k1)*R0(i,k))) then
-            h_ent = h(i,k)-eps(i,k)
-            cTKE(i,k1) = cTKE(i,k1) + (h_ent * g_H2_2Rho0 * &
-                     (R0_tot(i) - h(i,k1)*R0(i,k)) * CS%nstar2)
-            if (k < nkmb) then
-              cTKE(i,k1) = cTKE(i,k1) + cTKE(i,k)
-              dKE_CA(i,k1) = dKE_CA(i,k1) + dKE_CA(i,k)
-            endif
-            R0_tot(i) = R0_tot(i) + h_ent * R0(i,k)
-            KE_orig(i) = KE_orig(i) + 0.5*h_ent* &
-                (u(i,k)*u(i,k) + v(i,k)*v(i,k))
-            uhtot(i) = uhtot(i) + h_ent*u(i,k)
-            vhtot(i) = vhtot(i) + h_ent*v(i,k)
-
-            Rcv_tot(i) = Rcv_tot(i) + h_ent * Rcv(i,k)
-            Ttot(i) = Ttot(i) + h_ent * T(i,k)
-            Stot(i) = Stot(i) + h_ent * S(i,k)
-            h(i,k1) = h(i,k1) + h_ent ; h(i,k) = eps(i,k)
-
-            d_eb(i,k) = d_eb(i,k) - h_ent
-            d_eb(i,k1) = d_eb(i,k1) + h_ent
+        if ((h(i,k) > eps(i,k)) .and. (R0_tot(i) > h(i,k1)*R0(i,k))) then
+          h_ent = h(i,k)-eps(i,k)
+          cTKE(i,k1) = cTKE(i,k1) + (h_ent * g_H2_2Rho0 * &
+                   (R0_tot(i) - h(i,k1)*R0(i,k)) * CS%nstar2)
+          if (k < nkmb) then
+            cTKE(i,k1) = cTKE(i,k1) + cTKE(i,k)
+            dKE_CA(i,k1) = dKE_CA(i,k1) + dKE_CA(i,k)
           endif
-        enddo
+          R0_tot(i) = R0_tot(i) + h_ent * R0(i,k)
+          KE_orig(i) = KE_orig(i) + 0.5*h_ent* &
+              (u(i,k)*u(i,k) + v(i,k)*v(i,k))
+          uhtot(i) = uhtot(i) + h_ent*u(i,k)
+          vhtot(i) = vhtot(i) + h_ent*v(i,k)
+
+          Rcv_tot(i) = Rcv_tot(i) + h_ent * Rcv(i,k)
+          Ttot(i) = Ttot(i) + h_ent * T(i,k)
+          Stot(i) = Stot(i) + h_ent * S(i,k)
+          h(i,k1) = h(i,k1) + h_ent ; h(i,k) = eps(i,k)
+
+          d_eb(i,k) = d_eb(i,k) - h_ent
+          d_eb(i,k1) = d_eb(i,k1) + h_ent
+        endif
       enddo
+    enddo
 ! Determine the temperature, salinity, and velocities of the mixed or buffer
 ! layer in question, if it has entrained.
-      do i=is,ie ; if (h(i,k1) > h_orig_k1(i)) then
-        Ih = 1.0 / h(i,k1)
-        R0(i,k1) = R0_tot(i) * Ih
-        u(i,k1) = uhtot(i) * Ih ; v(i,k1) = vhtot(i) * Ih
-        dKE_CA(i,k1) = dKE_CA(i,k1) + G%H_to_m * (CS%bulk_Ri_convective * &
-             (KE_orig(i) - 0.5*h(i,k1)*(u(i,k1)**2 + v(i,k1)**2)))
-        Rcv(i,k1) = Rcv_tot(i) * Ih
-        T(i,k1) = Ttot(i) * Ih ; S(i,k1) = Stot(i) * Ih
-      endif ; enddo
-    enddo
+    do i=is,ie ; if (h(i,k1) > h_orig_k1(i)) then
+      Ih = 1.0 / h(i,k1)
+      R0(i,k1) = R0_tot(i) * Ih
+      u(i,k1) = uhtot(i) * Ih ; v(i,k1) = vhtot(i) * Ih
+      dKE_CA(i,k1) = dKE_CA(i,k1) + G%H_to_m * (CS%bulk_Ri_convective * &
+           (KE_orig(i) - 0.5*h(i,k1)*(u(i,k1)**2 + v(i,k1)**2)))
+      Rcv(i,k1) = Rcv_tot(i) * Ih
+      T(i,k1) = Ttot(i) * Ih ; S(i,k1) = Stot(i) * Ih
+    endif ; enddo
+  enddo
 ! If lower mixed or buffer layers are massless, give them the properties of the
 ! layer above.
-    do k=2,min(nzc,nkmb) ; do i=is,ie ; if (h(i,k) == 0.0) then
-      R0(i,k) = R0(i,k-1)
-      Rcv(i,k) = Rcv(i,k-1) ; T(i,k) = T(i,k-1) ; S(i,k) = S(i,k-1)
-    endif ; enddo ; enddo
+  do k=2,min(nzc,nkmb) ; do i=is,ie ; if (h(i,k) == 0.0) then
+    R0(i,k) = R0(i,k-1)
+    Rcv(i,k) = Rcv(i,k-1) ; T(i,k) = T(i,k-1) ; S(i,k) = S(i,k-1)
+  endif ; enddo ; enddo
 
-  end subroutine convective_adjustment
+end subroutine convective_adjustment
 
-  subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
-                                   R0_tot, Rcv_tot, nsw, Pen_SW_bnd, Conv_en, &
-                                   dKE_FC, j, ksort, G, CS)
-    real, dimension(NIMEM_,NKMEM_), intent(inout) :: h, d_eb
-    real, dimension(NIMEM_),        intent(out)   :: htot, Ttot, Stot
-    real, dimension(NIMEM_),        intent(out)   :: uhtot, vhtot, R0_tot, Rcv_tot
-    integer,                        intent(in)    :: nsw
-    real, dimension(:,:),           intent(inout) :: Pen_SW_bnd
-    real, dimension(NIMEM_),        intent(out)   :: Conv_en, dKE_FC
-    integer,                        intent(in)    :: j
-    integer, dimension(NIMEM_,NKMEM_), intent(in) :: ksort
-    type(ocean_grid_type),          intent(in)    :: G
-    type(bulkmixedlayer_CS),        pointer       :: CS
+subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
+                                 R0_tot, Rcv_tot, u, v, T, S, R0, Rcv, eps, &
+                                 dR0_dT, dRcv_dT, dR0_dS, dRcv_dS, &
+                                 Net_H, Net_heat, Net_salt, &
+                                 nsw, Pen_SW_bnd, opacity_band, Conv_en, &
+                                 dKE_FC, j, ksort, G, CS, tv)
+  real, dimension(NIMEM_,NKMEM_), intent(inout) :: h, d_eb
+  real, dimension(NIMEM_),        intent(out)   :: htot, Ttot, Stot
+  real, dimension(NIMEM_),        intent(out)   :: uhtot, vhtot, R0_tot, Rcv_tot
+  real, dimension(NIMEM_,NKMEM_), intent(in)    :: u, v, T, S, R0, Rcv, eps
+  real, dimension(NIMEM_),        intent(in)    :: dR0_dT, dRcv_dT, dR0_dS, dRcv_dS
+  real, dimension(NIMEM_),        intent(in)    :: Net_H, Net_heat, Net_salt
+  integer,                        intent(in)    :: nsw
+  real, dimension(:,:),           intent(inout) :: Pen_SW_bnd
+  real, dimension(:,:,:),         intent(in)    :: opacity_band
+  real, dimension(NIMEM_),        intent(out)   :: Conv_en, dKE_FC
+  integer,                        intent(in)    :: j
+  integer, dimension(NIMEM_,NKMEM_), intent(in) :: ksort
+  type(ocean_grid_type),          intent(in)    :: G
+  type(bulkmixedlayer_CS),        pointer       :: CS
+  type(thermo_var_ptrs),          intent(inout) :: tv
 !   This subroutine causes the mixed layer to entrain to the depth of free
 ! convection.  The depth of free convection is the shallowest depth at which the
 ! fluid is the denser than the average of the fluid above.
-  ! Arguments: h - Layer thickness, in m or kg m-2. (Intent in/out)  The units
-  !                of h are referred to as H below.
-  !  (in/out)  d_eb - The downward increase across a layer in the entrainment from
-  !                   below, in H. Positive values go with mass gain by a layer.
-  !  (out)     htot - The accumlated mixed layer thickness, in H.
-  !  (out)     Ttot - The depth integrated mixed layer temperature, in deg C H.
-  !  (out)     Stot - The depth integrated mixed layer salinity, in psu H.
-  !  (out)     uhtot - The depth integrated mixed layer zonal velocity, H m s-1.
-  !  (out)     vhtot - The integrated mixed layer meridional velocity, H m s-1.
-  !  (out)     R0_tot - The integrated mixed layer potential density referenced
-  !                     to 0 pressure, in kg m-2.
-  !  (out)     Rcv_tot - The integrated mixed layer coordinate variable
-  !                      potential density, in kg m-2.
-  !  (in)      nsw - The number of bands of penetrating shortwave radiation.
-  !  (out)     Pen_SW_bnd - The penetrating shortwave heating at the sea surface
-  !                         in each penetrating band, in K H, size nsw x NIMEM_.
-  !  (out)     Conv_en - The buoyant turbulent kinetic energy source due to
-  !                      free convection, in m3 s-2.
-  !  (out)     dKE_FC - The vertically integrated change in kinetic energy due
-  !                     to free convection, in m3 s-2.
-  !  (in)      j - The j-index to work on.
-  !  (in)      ksort - The density-sorted k-indicies.
-  !  (in)      G - The ocean's grid structure.
-  !  (in)      CS - The control structure for this module.
-    real, dimension(SZI_(G)) :: &
-      Evap_rem           !   Evaporation that remains to be supplied, in H.
-    real :: SW_trans     !   The fraction of shortwave radiation
-                         ! that is not absorbed in a layer, ND.
-    real :: Pen_absorbed !   The amount of penetrative shortwave radiation
-                         ! that is absorbed in a layer, in units of K H.
-    real :: h_avail      !   The thickness in a layer available for
-                         ! entrainment, in H.
-    real :: h_ent        !   The thickness from a layer that is entrained, in H.
-    real :: precip       !   The amount of net precipation, in H.
-    real :: T_precip     !   The temperature of the precipitation, in deg C.
-    real :: C1_3, C1_6   !  1/3 and 1/6.
-    real :: En_fn, Frac, x1 !  Nondimensional temporary variables.
-    real :: dr, dr0      ! Temporary variables with units of kg m-3 H.
-    real :: dr_ent, dr_comp ! Temporary variables with units of kg m-3 H.
-    real :: dr_dh        ! The partial derivative of dr_ent with h_ent, in kg m-3.
-    real :: h_min, h_max !   The minimum, maximum, and previous estimates for
-    real :: h_prev       ! h_ent, in H.
-    real :: h_evap       !   The thickness that is evaporated, in H.
-    real :: dh_Newt      !   The Newton's method estimate of the change in
-                         ! h_ent between iterations, in H.
-    real :: g_H2_2Rho0   !   Half the gravitational acceleration times the
-                         ! square of the conversion from H to m divided
-                         ! by the mean density, in m6 s-2 H-2 kg-1.
-    real :: Angstrom     !   The minimum layer thickness, in H.
-    real :: opacity      !   The opacity converted to units of H-1.
-    real :: sum_Pen_En   !   The potential energy change due to penetrating
-                         ! shortwave radiation, integrated over a layer, in
-                         ! H kg m-3.
-    integer :: is, ie, nz, i, k, ks, itt, n
-    real, dimension(max(nsw,1)) :: &
-      C2, &              ! Temporary variable with units of kg m-3 H-1.
-      r_SW_top           ! Temporary variables with units of H kg m-3.
+! Arguments: h - Layer thickness, in m or kg m-2. (Intent in/out)  The units
+!                of h are referred to as H below.
+!  (in/out)  d_eb - The downward increase across a layer in the entrainment from
+!                   below, in H. Positive values go with mass gain by a layer.
+!  (out)     htot - The accumlated mixed layer thickness, in H.
+!  (out)     Ttot - The depth integrated mixed layer temperature, in deg C H.
+!  (out)     Stot - The depth integrated mixed layer salinity, in psu H.
+!  (out)     uhtot - The depth integrated mixed layer zonal velocity, H m s-1.
+!  (out)     vhtot - The integrated mixed layer meridional velocity, H m s-1.
+!  (out)     R0_tot - The integrated mixed layer potential density referenced
+!                     to 0 pressure, in kg m-2.
+!  (out)     Rcv_tot - The integrated mixed layer coordinate variable
+!                      potential density, in kg m-2.
+!  (in)      nsw - The number of bands of penetrating shortwave radiation.
+!  (out)     Pen_SW_bnd - The penetrating shortwave heating at the sea surface
+!                         in each penetrating band, in K H, size nsw x NIMEM_.
+!  (out)     Conv_en - The buoyant turbulent kinetic energy source due to
+!                      free convection, in m3 s-2.
+!  (out)     dKE_FC - The vertically integrated change in kinetic energy due
+!                     to free convection, in m3 s-2.
+!  (in)      j - The j-index to work on.
+!  (in)      ksort - The density-sorted k-indicies.
+!  (in)      G - The ocean's grid structure.
+!  (in)      CS - The control structure for this module.
+  real, dimension(SZI_(G)) :: &
+    Evap_rem           !   Evaporation that remains to be supplied, in H.
+  real :: SW_trans     !   The fraction of shortwave radiation
+                       ! that is not absorbed in a layer, ND.
+  real :: Pen_absorbed !   The amount of penetrative shortwave radiation
+                       ! that is absorbed in a layer, in units of K H.
+  real :: h_avail      !   The thickness in a layer available for
+                       ! entrainment, in H.
+  real :: h_ent        !   The thickness from a layer that is entrained, in H.
+  real :: precip       !   The amount of net precipation, in H.
+  real :: T_precip     !   The temperature of the precipitation, in deg C.
+  real :: C1_3, C1_6   !  1/3 and 1/6.
+  real :: En_fn, Frac, x1 !  Nondimensional temporary variables.
+  real :: dr, dr0      ! Temporary variables with units of kg m-3 H.
+  real :: dr_ent, dr_comp ! Temporary variables with units of kg m-3 H.
+  real :: dr_dh        ! The partial derivative of dr_ent with h_ent, in kg m-3.
+  real :: h_min, h_max !   The minimum, maximum, and previous estimates for
+  real :: h_prev       ! h_ent, in H.
+  real :: h_evap       !   The thickness that is evaporated, in H.
+  real :: dh_Newt      !   The Newton's method estimate of the change in
+                       ! h_ent between iterations, in H.
+  real :: g_H2_2Rho0   !   Half the gravitational acceleration times the
+                       ! square of the conversion from H to m divided
+                       ! by the mean density, in m6 s-2 H-2 kg-1.
+  real :: Angstrom     !   The minimum layer thickness, in H.
+  real :: opacity      !   The opacity converted to units of H-1.
+  real :: sum_Pen_En   !   The potential energy change due to penetrating
+                       ! shortwave radiation, integrated over a layer, in
+                       ! H kg m-3.
+  integer :: is, ie, nz, i, k, ks, itt, n
+  real, dimension(max(nsw,1)) :: &
+    C2, &              ! Temporary variable with units of kg m-3 H-1.
+    r_SW_top           ! Temporary variables with units of H kg m-3.
 
-    Angstrom = G%Angstrom
-    C1_3 = 1.0/3.0 ; C1_6 = 1.0/6.0
-    g_H2_2Rho0 = (G%g_Earth * G%H_to_m**2) / (2.0 * G%Rho0)
-    is = G%isc ; ie = G%iec ; nz = G%ke
+  Angstrom = G%Angstrom
+  C1_3 = 1.0/3.0 ; C1_6 = 1.0/6.0
+  g_H2_2Rho0 = (G%g_Earth * G%H_to_m**2) / (2.0 * G%Rho0)
+  is = G%isc ; ie = G%iec ; nz = G%ke
 
-    do i=is,ie ; if (ksort(i,1) > 0) then
-      k = ksort(i,1)
+  do i=is,ie ; if (ksort(i,1) > 0) then
+    k = ksort(i,1)
 
-      Evap_rem(i) = 0.0
-      if (Net_H(i) < 0.0) Evap_rem(i) = -Net_H(i)
-      precip = Net_H(i) + Evap_rem(i)
-      ! htot is an Angstrom (taken from layer 1) plus any net precipitation.
-      h_ent = max(min(Angstrom,h(i,k)-eps(i,k)),0.0)
-      htot(i) = h_ent + precip
-      h(i,k) = h(i,k) - h_ent
-      d_eb(i,k) = d_eb(i,k) - h_ent
+    Evap_rem(i) = 0.0
+    if (Net_H(i) < 0.0) Evap_rem(i) = -Net_H(i)
+    precip = Net_H(i) + Evap_rem(i)
+    ! htot is an Angstrom (taken from layer 1) plus any net precipitation.
+    h_ent = max(min(Angstrom,h(i,k)-eps(i,k)),0.0)
+    htot(i) = h_ent + precip
+    h(i,k) = h(i,k) - h_ent
+    d_eb(i,k) = d_eb(i,k) - h_ent
 
-      Pen_absorbed = 0.0
-      do n=1,nsw ; if (Pen_SW_bnd(n,i) > 0.0) then
-        SW_trans = exp(-htot(i)*opacity_band(n,i,k))
-        Pen_absorbed = Pen_absorbed + Pen_SW_bnd(n,i) * (1.0-SW_trans)
-        Pen_SW_bnd(n,i) = Pen_SW_bnd(n,i) * SW_trans
-      endif ; enddo
-
-      ! Precipitation is assumed to have the same temperature and velocity
-      ! as layer 1.  Because layer 1 might not be the topmost layer, this
-      ! involves multiple terms.
-      T_precip = T(i,1)
-      Ttot(i) = (Net_heat(i) + (precip * T_precip + h_ent * T(i,k))) + &
-                Pen_absorbed
-      Stot(i) = h_ent*S(i,k) + Net_salt(i)
-      uhtot(i) = u(i,1)*precip + u(i,k)*h_ent
-      vhtot(i) = v(i,1)*precip + v(i,k)*h_ent
-      R0_tot(i) = (h_ent*R0(i,k) + precip*R0(i,1)) + &
-!                   dR0_dT(i)*precip*(T_precip - T(i,1)) + &      
-                  (dR0_dT(i)*(Net_heat(i) + Pen_absorbed) - &
-                   dR0_dS(i) * (precip * S(i,1) - Net_salt(i)))
-      Rcv_tot(i) = (h_ent*Rcv(i,k) + precip*Rcv(i,1)) + &
-!                    dRcv_dT(i)*precip*(T_precip - T(i,1)) + &      
-                   (dRcv_dT(i)*(Net_heat(i) + Pen_absorbed) - &
-                    dRcv_dS(i) * (precip * S(i,1) - Net_salt(i)))
-      Conv_En(i) = 0.0 ; dKE_FC(i) = 0.0
-      if (ASSOCIATED(tv%TempxPmE)) tv%TempxPmE(i,j) = tv%TempxPmE(i,j) + &
-                           T_precip * precip * G%H_to_kg_m2
+    Pen_absorbed = 0.0
+    do n=1,nsw ; if (Pen_SW_bnd(n,i) > 0.0) then
+      SW_trans = exp(-htot(i)*opacity_band(n,i,k))
+      Pen_absorbed = Pen_absorbed + Pen_SW_bnd(n,i) * (1.0-SW_trans)
+      Pen_SW_bnd(n,i) = Pen_SW_bnd(n,i) * SW_trans
     endif ; enddo
+
+    ! Precipitation is assumed to have the same temperature and velocity
+    ! as layer 1.  Because layer 1 might not be the topmost layer, this
+    ! involves multiple terms.
+    T_precip = T(i,1)
+    Ttot(i) = (Net_heat(i) + (precip * T_precip + h_ent * T(i,k))) + &
+              Pen_absorbed
+    Stot(i) = h_ent*S(i,k) + Net_salt(i)
+    uhtot(i) = u(i,1)*precip + u(i,k)*h_ent
+    vhtot(i) = v(i,1)*precip + v(i,k)*h_ent
+    R0_tot(i) = (h_ent*R0(i,k) + precip*R0(i,1)) + &
+!                   dR0_dT(i)*precip*(T_precip - T(i,1)) + &      
+                (dR0_dT(i)*(Net_heat(i) + Pen_absorbed) - &
+                 dR0_dS(i) * (precip * S(i,1) - Net_salt(i)))
+    Rcv_tot(i) = (h_ent*Rcv(i,k) + precip*Rcv(i,1)) + &
+!                    dRcv_dT(i)*precip*(T_precip - T(i,1)) + &      
+                 (dRcv_dT(i)*(Net_heat(i) + Pen_absorbed) - &
+                  dRcv_dS(i) * (precip * S(i,1) - Net_salt(i)))
+    Conv_En(i) = 0.0 ; dKE_FC(i) = 0.0
+    if (ASSOCIATED(tv%TempxPmE)) tv%TempxPmE(i,j) = tv%TempxPmE(i,j) + &
+                         T_precip * precip * G%H_to_kg_m2
+  endif ; enddo
 
 !   At this point, htot contains an Angstrom of fluid from layer 0 plus any
 ! net precipitation.
 
-    do ks=1,nz
-      do i=is,ie ; if (ksort(i,ks) > 0) then
-        k = ksort(i,ks)
+  do ks=1,nz
+    do i=is,ie ; if (ksort(i,ks) > 0) then
+      k = ksort(i,ks)
 
-        if ((htot(i) < Angstrom) .and. (h(i,k) > eps(i,k))) then
-          ! If less than an Angstrom was available from the layers above plus
-          ! any precipitation, add more fluid from this layer.
-          h_ent = min(Angstrom-htot(i), h(i,k)-eps(i,k))
-          htot(i) = htot(i) + h_ent
-          h(i,k) = h(i,k) - h_ent 
-          d_eb(i,k) = d_eb(i,k) - h_ent
+      if ((htot(i) < Angstrom) .and. (h(i,k) > eps(i,k))) then
+        ! If less than an Angstrom was available from the layers above plus
+        ! any precipitation, add more fluid from this layer.
+        h_ent = min(Angstrom-htot(i), h(i,k)-eps(i,k))
+        htot(i) = htot(i) + h_ent
+        h(i,k) = h(i,k) - h_ent 
+        d_eb(i,k) = d_eb(i,k) - h_ent
 
-          R0_tot(i) = R0_tot(i) + h_ent*R0(i,k)
-          uhtot(i) = uhtot(i) + h_ent*u(i,k)
-          vhtot(i) = vhtot(i) + h_ent*v(i,k)
+        R0_tot(i) = R0_tot(i) + h_ent*R0(i,k)
+        uhtot(i) = uhtot(i) + h_ent*u(i,k)
+        vhtot(i) = vhtot(i) + h_ent*v(i,k)
 
-          Rcv_tot(i) = Rcv_tot(i) + h_ent*Rcv(i,k)
-          Ttot(i) = Ttot(i) + h_ent*T(i,k)
-          Stot(i) = Stot(i) + h_ent*S(i,k)
-        endif
+        Rcv_tot(i) = Rcv_tot(i) + h_ent*Rcv(i,k)
+        Ttot(i) = Ttot(i) + h_ent*T(i,k)
+        Stot(i) = Stot(i) + h_ent*S(i,k)
+      endif
 ! Evaporation occurs from the topmost layers with any mass.  The
 ! salt that is left behind goes into Stot.
-        if ((Evap_rem(i) > 0.0) .and. (h(i,k) > eps(i,k))) then
-          if (Evap_rem(i) > (h(i,k) - eps(i,k))) then
-            h_evap = h(i,k) - eps(i,k)
-            h(i,k) = eps(i,k)
-            Evap_rem(i) = Evap_rem(i) - h_evap
-          else
-            h_evap = Evap_rem(i)
-            h(i,k) = h(i,k) - h_evap
-            Evap_rem(i) = 0.0
-          endif
-
-          Stot(i) = Stot(i) + h_evap*S(i,k)
-          R0_tot(i) = R0_tot(i) + dR0_dS(i)*h_evap*S(i,k)
-          Rcv_tot(i) = Rcv_tot(i) + dRcv_dS(i)*h_evap*S(i,k)
-          d_eb(i,k) = d_eb(i,k) - h_evap
-          if (ASSOCIATED(tv%TempxPmE)) tv%TempxPmE(i,j) = tv%TempxPmE(i,j) - &
-                                        T(i,k)*h_evap*G%H_to_kg_m2
+      if ((Evap_rem(i) > 0.0) .and. (h(i,k) > eps(i,k))) then
+        if (Evap_rem(i) > (h(i,k) - eps(i,k))) then
+          h_evap = h(i,k) - eps(i,k)
+          h(i,k) = eps(i,k)
+          Evap_rem(i) = Evap_rem(i) - h_evap
+        else
+          h_evap = Evap_rem(i)
+          h(i,k) = h(i,k) - h_evap
+          Evap_rem(i) = 0.0
         endif
-        h_avail = h(i,k) - eps(i,k)
+
+        Stot(i) = Stot(i) + h_evap*S(i,k)
+        R0_tot(i) = R0_tot(i) + dR0_dS(i)*h_evap*S(i,k)
+        Rcv_tot(i) = Rcv_tot(i) + dRcv_dS(i)*h_evap*S(i,k)
+        d_eb(i,k) = d_eb(i,k) - h_evap
+        if (ASSOCIATED(tv%TempxPmE)) tv%TempxPmE(i,j) = tv%TempxPmE(i,j) - &
+                                      T(i,k)*h_evap*G%H_to_kg_m2
+      endif
+      h_avail = h(i,k) - eps(i,k)
 ! The following section calculates how much fluid will be entrained.
-        if (h_avail > 0.0) then
-          dr = R0_tot(i) - htot(i)*R0(i,k)
-          h_ent = 0.0
+      if (h_avail > 0.0) then
+        dr = R0_tot(i) - htot(i)*R0(i,k)
+        h_ent = 0.0
 
-          dr0 = dr
-          do n=1,nsw ; if (Pen_SW_bnd(n,i) > 0.0) then
-            dr0 = dr0 - (dR0_dT(i)*Pen_SW_bnd(n,i)) * &
-                        opacity_band(n,i,k)*htot(i)
-          endif ; enddo
+        dr0 = dr
+        do n=1,nsw ; if (Pen_SW_bnd(n,i) > 0.0) then
+          dr0 = dr0 - (dR0_dT(i)*Pen_SW_bnd(n,i)) * &
+                      opacity_band(n,i,k)*htot(i)
+        endif ; enddo
 
-          if (dr0 > 0.0) then
+        if (dr0 > 0.0) then
 ! Some entrainment will occur from this layer.
-            dr_comp = dr
-            do n=1,nsw ; if (Pen_SW_bnd(n,i) > 0.0) then
-              !   Compare the density at the bottom of a layer with the
-              ! density averaged over the mixed layer and that layer.
-              opacity = opacity_band(n,i,k)
-              SW_trans = exp(-h_avail*opacity)
-              dr_comp = dr_comp + (dR0_dT(i)*Pen_SW_bnd(n,i)) * &
-                  ((1.0 - SW_trans) - opacity*(htot(i)+h_avail)*SW_trans)
-            endif ; enddo
-            if (dr_comp >= 0.0) then
+          dr_comp = dr
+          do n=1,nsw ; if (Pen_SW_bnd(n,i) > 0.0) then
+            !   Compare the density at the bottom of a layer with the
+            ! density averaged over the mixed layer and that layer.
+            opacity = opacity_band(n,i,k)
+            SW_trans = exp(-h_avail*opacity)
+            dr_comp = dr_comp + (dR0_dT(i)*Pen_SW_bnd(n,i)) * &
+                ((1.0 - SW_trans) - opacity*(htot(i)+h_avail)*SW_trans)
+          endif ; enddo
+          if (dr_comp >= 0.0) then
 ! The entire layer is entrained.
-              h_ent = h_avail
-            else
+            h_ent = h_avail
+          else
 !  The layer is partially entrained.   Iterate to determine how much
 !  entrainment occurs.  Solve for the h_ent at which dr_ent = 0.
 
 ! Instead of assuming that the curve is linear between the two end
 ! points, assume that the change is concentrated near small values
 ! of entrainment.  On average, this saves about 1 iteration.
-              Frac = dr0 / (dr0 - dr_comp)
-              h_ent = h_avail * Frac*Frac
-              h_min = 0.0 ; h_max = h_avail
+            Frac = dr0 / (dr0 - dr_comp)
+            h_ent = h_avail * Frac*Frac
+            h_min = 0.0 ; h_max = h_avail
 
+            do n=1,nsw
+              r_SW_top(n) = dR0_dT(i) * Pen_SW_bnd(n,i)
+              C2(n) = r_SW_top(n) * opacity_band(n,i,k)**2
+            enddo
+            do itt=1,10
+              dr_ent = dr ; dr_dh = 0.0
               do n=1,nsw
-                r_SW_top(n) = dR0_dT(i) * Pen_SW_bnd(n,i)
-                C2(n) = r_SW_top(n) * opacity_band(n,i,k)**2
-              enddo
-              do itt=1,10
-                dr_ent = dr ; dr_dh = 0.0
-                do n=1,nsw
-                  opacity = opacity_band(n,i,k)
-                  SW_trans = exp(-h_ent*opacity)
-                  dr_ent = dr_ent + r_SW_top(n) * ((1.0 - SW_trans) - &
-                             opacity*(htot(i)+h_ent)*SW_trans)
-                  dr_dh = dr_dh + C2(n) * (htot(i)+h_ent) * SW_trans
-                enddo
-
-                if (dr_ent > 0.0) then
-                  h_min = h_ent
-                else
-                  h_max = h_ent
-                endif
-
-                dh_Newt = -dr_ent / dr_dh
-                h_prev = h_ent ; h_ent = h_prev+dh_Newt
-                if (h_ent > h_max) then
-                  h_ent = 0.5*(h_prev+h_max)
-                else if (h_ent < h_min) then
-                  h_ent = 0.5*(h_prev+h_min)
-                endif
-
-                if (ABS(dh_Newt) < 0.2*Angstrom) exit
+                opacity = opacity_band(n,i,k)
+                SW_trans = exp(-h_ent*opacity)
+                dr_ent = dr_ent + r_SW_top(n) * ((1.0 - SW_trans) - &
+                           opacity*(htot(i)+h_ent)*SW_trans)
+                dr_dh = dr_dh + C2(n) * (htot(i)+h_ent) * SW_trans
               enddo
 
-            endif
+              if (dr_ent > 0.0) then
+                h_min = h_ent
+              else
+                h_max = h_ent
+              endif
+
+              dh_Newt = -dr_ent / dr_dh
+              h_prev = h_ent ; h_ent = h_prev+dh_Newt
+              if (h_ent > h_max) then
+                h_ent = 0.5*(h_prev+h_max)
+              else if (h_ent < h_min) then
+                h_ent = 0.5*(h_prev+h_min)
+              endif
+
+              if (ABS(dh_Newt) < 0.2*Angstrom) exit
+            enddo
+
+          endif
 
 !  Now that the amount of entrainment (h_ent) has been determined,
 !  calculate changes in various terms.
-            sum_Pen_En = 0.0 ; Pen_absorbed = 0.0
-            do n=1,nsw ; if (Pen_SW_bnd(n,i) > 0.0) then
-              opacity = opacity_band(n,i,k)
-              SW_trans = exp(-h_ent*opacity)
+          sum_Pen_En = 0.0 ; Pen_absorbed = 0.0
+          do n=1,nsw ; if (Pen_SW_bnd(n,i) > 0.0) then
+            opacity = opacity_band(n,i,k)
+            SW_trans = exp(-h_ent*opacity)
 
-              x1 = h_ent*opacity
-              if (x1 < 2.0e-5) then
-                En_fn = (opacity*htot(i)*(1.0 - 0.5*(x1 - C1_3*x1)) + &
-                         x1*x1*C1_6)
-              else
-                En_fn = ((opacity*htot(i) + 2.0) * &
-                         ((1.0-SW_trans) / x1) - 1.0 + SW_trans)
-              endif
-              sum_Pen_En = sum_Pen_En - (dR0_dT(i)*Pen_SW_bnd(n,i)) * En_fn
+            x1 = h_ent*opacity
+            if (x1 < 2.0e-5) then
+              En_fn = (opacity*htot(i)*(1.0 - 0.5*(x1 - C1_3*x1)) + &
+                       x1*x1*C1_6)
+            else
+              En_fn = ((opacity*htot(i) + 2.0) * &
+                       ((1.0-SW_trans) / x1) - 1.0 + SW_trans)
+            endif
+            sum_Pen_En = sum_Pen_En - (dR0_dT(i)*Pen_SW_bnd(n,i)) * En_fn
 
-              Pen_absorbed = Pen_absorbed + Pen_SW_bnd(n,i) * (1.0 - SW_trans)
-              Pen_SW_bnd(n,i) = Pen_SW_bnd(n,i) * SW_trans
-            endif ; enddo
+            Pen_absorbed = Pen_absorbed + Pen_SW_bnd(n,i) * (1.0 - SW_trans)
+            Pen_SW_bnd(n,i) = Pen_SW_bnd(n,i) * SW_trans
+          endif ; enddo
 
-            Conv_En(i) = Conv_En(i) + g_H2_2Rho0 * h_ent * &
-                         ( (R0_tot(i) - R0(i,k)*htot(i)) + sum_Pen_En )
+          Conv_En(i) = Conv_En(i) + g_H2_2Rho0 * h_ent * &
+                       ( (R0_tot(i) - R0(i,k)*htot(i)) + sum_Pen_En )
 
-            R0_tot(i) = R0_tot(i) + (h_ent * R0(i,k) + Pen_absorbed*dR0_dT(i))
-            Stot(i) = Stot(i) + h_ent * S(i,k)
-            Ttot(i) = Ttot(i) + (h_ent * T(i,k) + Pen_absorbed)
-            Rcv_tot(i) = Rcv_tot(i) + (h_ent * Rcv(i,k) + Pen_absorbed*dRcv_dT(i))
-          endif ! dr0 > 0.0
+          R0_tot(i) = R0_tot(i) + (h_ent * R0(i,k) + Pen_absorbed*dR0_dT(i))
+          Stot(i) = Stot(i) + h_ent * S(i,k)
+          Ttot(i) = Ttot(i) + (h_ent * T(i,k) + Pen_absorbed)
+          Rcv_tot(i) = Rcv_tot(i) + (h_ent * Rcv(i,k) + Pen_absorbed*dRcv_dT(i))
+        endif ! dr0 > 0.0
 
-          if (h_ent > 0.0) then
-            if (htot(i) > 0.0) &
-              dKE_FC(i) = dKE_FC(i) + CS%bulk_Ri_convective * 0.5 * &
-                ((G%H_to_m*h_ent) / (htot(i)*(h_ent+htot(i)))) * &
-                ((uhtot(i)-u(i,k)*htot(i))**2 + (vhtot(i)-v(i,k)*htot(i))**2)
+        if (h_ent > 0.0) then
+          if (htot(i) > 0.0) &
+            dKE_FC(i) = dKE_FC(i) + CS%bulk_Ri_convective * 0.5 * &
+              ((G%H_to_m*h_ent) / (htot(i)*(h_ent+htot(i)))) * &
+              ((uhtot(i)-u(i,k)*htot(i))**2 + (vhtot(i)-v(i,k)*htot(i))**2)
 
-            htot(i)  = htot(i)  + h_ent
-            h(i,k) = h(i,k) - h_ent
-            d_eb(i,k) = d_eb(i,k) - h_ent
-            uhtot(i) = u(i,k)*h_ent ; vhtot(i) = v(i,k)*h_ent
-          endif
+          htot(i)  = htot(i)  + h_ent
+          h(i,k) = h(i,k) - h_ent
+          d_eb(i,k) = d_eb(i,k) - h_ent
+          uhtot(i) = u(i,k)*h_ent ; vhtot(i) = v(i,k)*h_ent
+        endif
 
 
-        endif ! h_avail>0
-      endif ; enddo ! i loop
-    enddo ! k loop
-  
-  end subroutine mixedlayer_convection
+      endif ! h_avail>0
+    endif ; enddo ! i loop
+  enddo ! k loop
 
-  subroutine find_starting_TKE(htot, h_CA, fluxes, Conv_En, cTKE, dKE_FC, dKE_CA, &
-                               TKE, TKE_river, Idecay_len_TKE, cMKE1, cMKE2, dt, &
-                               j, ksort, G, CS)
-    real, dimension(NIMEM_),        intent(in)    :: htot, h_CA
-    type(forcing),                  intent(in)    :: fluxes
-    real, dimension(NIMEM_),        intent(inout) :: Conv_En
-    real, dimension(NIMEM_),        intent(in)    :: dKE_FC
-    real, dimension(NIMEM_,NKMEM_), intent(in)    :: cTKE, dKE_CA
-    real, dimension(NIMEM_),        intent(out)   :: TKE, Idecay_len_TKE
-    real, dimension(NIMEM_),        intent(in)    :: TKE_river
-    real, dimension(NIMEM_),        intent(out)   :: cMKE1, cMKE2
-    real,                           intent(in)    :: dt
-    integer,                        intent(in)    :: j
-    integer, dimension(NIMEM_,NKMEM_), intent(in) :: ksort
-    type(ocean_grid_type),          intent(in)    :: G
-    type(bulkmixedlayer_CS),        pointer       :: CS
-  !   This subroutine determines the TKE available at the depth of free
-  ! convection to drive mechanical entrainment.
+end subroutine mixedlayer_convection
 
-  ! Arguments: htot - The accumlated mixed layer thickness, in m or kg m-2. (Intent in)
-  !                   The units of htot are referred to as H below.
-  !  (in)      h_CA - The mixed layer depth after convective adjustment, in H.
-  !  (in)      fluxes - A structure containing pointers to any possible
-  !                     forcing fields.  Unused fields have NULL ptrs.
-  !  (in)      Conv_en - The buoyant turbulent kinetic energy source due to
-  !                      free convection, in m3 s-2.
-  !  (in)      cTKE - The buoyant turbulent kinetic energy source due to
-  !                   convective adjustment, in m3 s-2.
-  !  (in)      dKE_FC - The vertically integrated change in kinetic energy due
-  !                     to free convection, in m3 s-2.
-  !  (in)      dKE_CA - The vertically integrated change in kinetic energy due
-  !                     to convective adjustment, in m3 s-2.
-  !  (out)     TKE - The turbulent kinetic energy available for mixing over a
-  !                  time step, in m3 s-2.
-  !  (out)     Idecay_len_TKE - The inverse of the vertical decay scale for
-  !                             TKE, in H-1.
-  !  (out)     cMKE1, cMKE2 - Coefficients of HpE and HpE^2 in calculating
-  !                           the denominator of MKE_rate, in H-1 and H-2.
-  !  (in)      dt - The time step in s.
-  !  (in)      j - The j-index to work on.
-  !  (in)      ksort - The density-sorted k-indicies.
-  !  (in)      G - The ocean's grid structure.
-  !  (in)      CS - The control structure for this module.
-    real :: dKE_conv  ! The change in mean kinetic energy due
-                      ! to all convection, in m3 s-2.
-    real :: nstar_FC  ! The effective efficiency with which the energy released by
-                      ! free convection is converted to TKE, often ~0.2, ND.
-    real :: nstar_CA  ! The effective efficiency with which the energy released by
-                      ! convective adjustment is converted to TKE, often ~0.2, ND.
-    real :: TKE_CA    ! The potential energy released by convective adjustment if
-                      ! that release is positive, in m3 s2.
-    real :: MKE_rate_CA ! MKE_rate for convective adjustment, ND, 0 to 1.
-    real :: MKE_rate_FC ! MKE_rate for free convection, ND, 0 to 1.
-    real :: totEn     ! The total potential energy released by convection, m3 s-2.
-    real :: Ih        ! The inverse of a thickness, in H-1.
-    real :: exp_kh    ! The nondimensional decay of TKE across a layer, ND.
-    real :: absf      ! The absolute value of f averaged to thickness points, s-1.
-    real :: U_star    ! The friction velocity in m s-1.
-    real :: absf_Ustar  ! The absolute value of f divided by U_star, in m-1.
-    real :: wind_TKE_src ! The surface wind source of TKE, in m3 s-3.
-    real :: diag_wt   ! The ratio of the current timestep to the diagnostic
-                      ! timestep (which may include 2 calls), ND.
-    integer :: is, ie, nz, i
+subroutine find_starting_TKE(htot, h_CA, fluxes, Conv_En, cTKE, dKE_FC, dKE_CA, &
+                             TKE, TKE_river, Idecay_len_TKE, cMKE, dt, Idt_diag, &
+                             j, ksort, G, CS)
+  real, dimension(NIMEM_),        intent(in)    :: htot, h_CA
+  type(forcing),                  intent(in)    :: fluxes
+  real, dimension(NIMEM_),        intent(inout) :: Conv_En
+  real, dimension(NIMEM_),        intent(in)    :: dKE_FC
+  real, dimension(NIMEM_,NKMEM_), intent(in)    :: cTKE, dKE_CA
+  real, dimension(NIMEM_),        intent(out)   :: TKE, Idecay_len_TKE
+  real, dimension(NIMEM_),        intent(in)    :: TKE_river
+  real, dimension(C2_,NIMEM_),    intent(out)   :: cMKE
+  real,                           intent(in)    :: dt, Idt_diag
+  integer,                        intent(in)    :: j
+  integer, dimension(NIMEM_,NKMEM_), intent(in) :: ksort
+  type(ocean_grid_type),          intent(in)    :: G
+  type(bulkmixedlayer_CS),        pointer       :: CS
+!   This subroutine determines the TKE available at the depth of free
+! convection to drive mechanical entrainment.
 
-    is = G%isc ; ie = G%iec ; nz = G%ke
-    diag_wt = dt * Idt_diag
+! Arguments: htot - The accumlated mixed layer thickness, in m or kg m-2. (Intent in)
+!                   The units of htot are referred to as H below.
+!  (in)      h_CA - The mixed layer depth after convective adjustment, in H.
+!  (in)      fluxes - A structure containing pointers to any possible
+!                     forcing fields.  Unused fields have NULL ptrs.
+!  (in)      Conv_en - The buoyant turbulent kinetic energy source due to
+!                      free convection, in m3 s-2.
+!  (in)      cTKE - The buoyant turbulent kinetic energy source due to
+!                   convective adjustment, in m3 s-2.
+!  (in)      dKE_FC - The vertically integrated change in kinetic energy due
+!                     to free convection, in m3 s-2.
+!  (in)      dKE_CA - The vertically integrated change in kinetic energy due
+!                     to convective adjustment, in m3 s-2.
+!  (out)     TKE - The turbulent kinetic energy available for mixing over a
+!                  time step, in m3 s-2.
+!  (out)     Idecay_len_TKE - The inverse of the vertical decay scale for
+!                             TKE, in H-1.
+!  (out)     cMKE - Coefficients of HpE and HpE^2 in calculating the
+!                   denominator of MKE_rate, in H-1 and H-2.
+!  (in)      dt - The time step in s.
+!  (in)      j - The j-index to work on.
+!  (in)      ksort - The density-sorted k-indicies.
+!  (in)      G - The ocean's grid structure.
+!  (in)      CS - The control structure for this module.
+  real :: dKE_conv  ! The change in mean kinetic energy due
+                    ! to all convection, in m3 s-2.
+  real :: nstar_FC  ! The effective efficiency with which the energy released by
+                    ! free convection is converted to TKE, often ~0.2, ND.
+  real :: nstar_CA  ! The effective efficiency with which the energy released by
+                    ! convective adjustment is converted to TKE, often ~0.2, ND.
+  real :: TKE_CA    ! The potential energy released by convective adjustment if
+                    ! that release is positive, in m3 s2.
+  real :: MKE_rate_CA ! MKE_rate for convective adjustment, ND, 0 to 1.
+  real :: MKE_rate_FC ! MKE_rate for free convection, ND, 0 to 1.
+  real :: totEn     ! The total potential energy released by convection, m3 s-2.
+  real :: Ih        ! The inverse of a thickness, in H-1.
+  real :: exp_kh    ! The nondimensional decay of TKE across a layer, ND.
+  real :: absf      ! The absolute value of f averaged to thickness points, s-1.
+  real :: U_star    ! The friction velocity in m s-1.
+  real :: absf_Ustar  ! The absolute value of f divided by U_star, in m-1.
+  real :: wind_TKE_src ! The surface wind source of TKE, in m3 s-3.
+  real :: diag_wt   ! The ratio of the current timestep to the diagnostic
+                    ! timestep (which may include 2 calls), ND.
+  integer :: is, ie, nz, i
 
-    if (CS%use_omega) absf = 2.0*CS%omega
-    do i=is,ie
-      U_Star = fluxes%ustar(i,j) 
-      if (associated(fluxes%ustar_shelf) .and. associated(fluxes%frac_shelf_h)) then
-        if (fluxes%frac_shelf_h(i,j) > 0.0) &
-          U_Star = (1.0 - fluxes%frac_shelf_h(i,j)) * U_star + &
-                    fluxes%frac_shelf_h(i,j) * fluxes%ustar_shelf(i,j)
-      endif
+  is = G%isc ; ie = G%iec ; nz = G%ke
+  diag_wt = dt * Idt_diag
 
-      if (U_Star < CS%ustar_min) U_Star = CS%ustar_min
-      if (.not.CS%use_omega) &
-        absf = 0.25*((abs(G%CoriolisBu(I,J)) + abs(G%CoriolisBu(I-1,J-1))) + &
-                     (abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I-1,J))))
-      absf_Ustar = absf / U_Star
-      Idecay_len_TKE(i) = (absf_Ustar * CS%TKE_decay) * G%H_to_m
+  if (CS%use_omega) absf = 2.0*CS%omega
+  do i=is,ie
+    U_Star = fluxes%ustar(i,j) 
+    if (associated(fluxes%ustar_shelf) .and. associated(fluxes%frac_shelf_h)) then
+      if (fluxes%frac_shelf_h(i,j) > 0.0) &
+        U_Star = (1.0 - fluxes%frac_shelf_h(i,j)) * U_star + &
+                  fluxes%frac_shelf_h(i,j) * fluxes%ustar_shelf(i,j)
+    endif
+
+    if (U_Star < CS%ustar_min) U_Star = CS%ustar_min
+    if (.not.CS%use_omega) &
+      absf = 0.25*((abs(G%CoriolisBu(I,J)) + abs(G%CoriolisBu(I-1,J-1))) + &
+                   (abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I-1,J))))
+    absf_Ustar = absf / U_Star
+    Idecay_len_TKE(i) = (absf_Ustar * CS%TKE_decay) * G%H_to_m
 
 !    The first number in the denominator could be anywhere up to 16.  The
 !  value of 3 was chosen to minimize the time-step dependence of the amount
@@ -1286,399 +1298,405 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
 !  The 0.41 is VonKarman's constant.  This equation assumes that small & large
 !  scales contribute to mixed layer deepening at similar rates, even though
 !  small scales are dissipated more rapidly (implying they are less efficient).
- !     Ih = 1.0/(16.0*0.41*U_star*dt)
-      Ih = G%H_to_m/(3.0*0.41*U_star*dt)
-      cMKE1(i) = 4.0 * Ih ; cMKE2(i) = (absf_Ustar*G%H_to_m) * Ih
+!     Ih = 1.0/(16.0*0.41*U_star*dt)
+    Ih = G%H_to_m/(3.0*0.41*U_star*dt)
+    cMKE(1,i) = 4.0 * Ih ; cMKE(2,i) = (absf_Ustar*G%H_to_m) * Ih
 
-      if (Idecay_len_TKE(i) > 0.0) then
-        exp_kh = exp(-htot(i)*Idecay_len_TKE(i))
-      else
-        exp_kh = 1.0
-      endif
+    if (Idecay_len_TKE(i) > 0.0) then
+      exp_kh = exp(-htot(i)*Idecay_len_TKE(i))
+    else
+      exp_kh = 1.0
+    endif
 
 ! Here nstar is a function of the natural Rossby number  0.2/(1+0.2/Ro), based
 ! on a curve fit from the data of Wang (GRL, 2003).
 ! Note:         Ro = 1.0/sqrt(0.5 * dt * (absf*htot(i))**3 / totEn)
-      if (Conv_En(i) < 0.0) Conv_En(i) = 0.0
-      if (cTKE(i,1) > 0.0) then ; TKE_CA = cTKE(i,1) ; else ; TKE_CA = 0.0 ; endif
-      if ((htot(i) >= h_CA(i)) .or. (TKE_CA == 0.0)) then
-        totEn = Conv_En(i) + TKE_CA
+    if (Conv_En(i) < 0.0) Conv_En(i) = 0.0
+    if (cTKE(i,1) > 0.0) then ; TKE_CA = cTKE(i,1) ; else ; TKE_CA = 0.0 ; endif
+    if ((htot(i) >= h_CA(i)) .or. (TKE_CA == 0.0)) then
+      totEn = Conv_En(i) + TKE_CA
 
-        if (totEn > 0.0) then
-          nstar_FC = CS%nstar * totEn / (totEn + 0.2 * &
-                          sqrt(0.5 * dt * (absf*(htot(i)*G%H_to_m))**3 * totEn))
-        else
-          nstar_FC = CS%nstar
-        endif
-        nstar_CA = nstar_FC
+      if (totEn > 0.0) then
+        nstar_FC = CS%nstar * totEn / (totEn + 0.2 * &
+                        sqrt(0.5 * dt * (absf*(htot(i)*G%H_to_m))**3 * totEn))
       else
-        ! This reconstructs the Buoyancy flux within the topmost htot of water.
-        if (Conv_En(i) > 0.0) then
-          totEn = Conv_En(i) + TKE_CA * (htot(i) / h_CA(i))
-         nstar_FC = CS%nstar * totEn / (totEn + 0.2 * &
-                          sqrt(0.5 * dt * (absf*(htot(i)*G%H_to_m))**3 * totEn))
-        else
-          nstar_FC = CS%nstar
-        endif
-
-        totEn = Conv_En(i) + TKE_CA
-        if (TKE_CA > 0.0) then
-          nstar_CA = CS%nstar * totEn / (totEn + 0.2 * &
-                          sqrt(0.5 * dt * (absf*(h_CA(i)*G%H_to_m))**3 * totEn))
-        else
-          nstar_CA = CS%nstar
-        endif
+        nstar_FC = CS%nstar
+      endif
+      nstar_CA = nstar_FC
+    else
+      ! This reconstructs the Buoyancy flux within the topmost htot of water.
+      if (Conv_En(i) > 0.0) then
+        totEn = Conv_En(i) + TKE_CA * (htot(i) / h_CA(i))
+       nstar_FC = CS%nstar * totEn / (totEn + 0.2 * &
+                        sqrt(0.5 * dt * (absf*(htot(i)*G%H_to_m))**3 * totEn))
+      else
+        nstar_FC = CS%nstar
       endif
 
-      if (dKE_FC(i) + dKE_CA(i,1) > 0.0) then
-        if (htot(i) >= h_CA(i)) then
-          MKE_rate_FC = 1.0 / (1.0 + htot(i)*(cMKE1(i) + cMKE2(i)*htot(i)) )
-          MKE_rate_CA = MKE_rate_FC
-        else
-          MKE_rate_FC = 1.0 / (1.0 + htot(i)*(cMKE1(i) + cMKE2(i)*htot(i)) )
-          MKE_rate_CA = 1.0 / (1.0 + h_CA(i)*(cMKE1(i) + cMKE2(i)*h_CA(i)) )
-        endif
+      totEn = Conv_En(i) + TKE_CA
+      if (TKE_CA > 0.0) then
+        nstar_CA = CS%nstar * totEn / (totEn + 0.2 * &
+                        sqrt(0.5 * dt * (absf*(h_CA(i)*G%H_to_m))**3 * totEn))
       else
-        ! This branch just saves unnecessary calculations.
-        MKE_rate_FC = 1.0 ; MKE_rate_CA = 1.0
+        nstar_CA = CS%nstar
       endif
+    endif
 
-      dKE_conv = dKE_CA(i,1) * MKE_rate_CA + dKE_FC(i) * MKE_rate_FC
+    if (dKE_FC(i) + dKE_CA(i,1) > 0.0) then
+      if (htot(i) >= h_CA(i)) then
+        MKE_rate_FC = 1.0 / (1.0 + htot(i)*(cMKE(1,i) + cMKE(2,i)*htot(i)) )
+        MKE_rate_CA = MKE_rate_FC
+      else
+        MKE_rate_FC = 1.0 / (1.0 + htot(i)*(cMKE(1,i) + cMKE(2,i)*htot(i)) )
+        MKE_rate_CA = 1.0 / (1.0 + h_CA(i)*(cMKE(1,i) + cMKE(2,i)*h_CA(i)) )
+      endif
+    else
+      ! This branch just saves unnecessary calculations.
+      MKE_rate_FC = 1.0 ; MKE_rate_CA = 1.0
+    endif
+
+    dKE_conv = dKE_CA(i,1) * MKE_rate_CA + dKE_FC(i) * MKE_rate_FC
 ! At this point, it is assumed that cTKE is positive and stored in TKE_CA!
 ! Note: Removed factor of 2 in u*^3 terms.
-      TKE(i) = (dt*CS%mstar)*((U_Star*U_Star*U_Star)*exp_kh) + &
-               (exp_kh * dKE_conv + nstar_FC*Conv_En(i) + nstar_CA*TKE_CA)
+    TKE(i) = (dt*CS%mstar)*((U_Star*U_Star*U_Star)*exp_kh) + &
+             (exp_kh * dKE_conv + nstar_FC*Conv_En(i) + nstar_CA*TKE_CA)
 ! Add additional TKE at river mouths
 
-      if (CS%do_rivermix) then
-        TKE(i) = TKE(i) + TKE_river(i)*dt*exp_kh
-      endif
+    if (CS%do_rivermix) then
+      TKE(i) = TKE(i) + TKE_river(i)*dt*exp_kh
+    endif
 
-      if (CS%TKE_diagnostics) then
-        wind_TKE_src = CS%mstar*(U_Star*U_Star*U_Star) * diag_wt
-        CS%diag_TKE_wind(i,j) = CS%diag_TKE_wind(i,j) + &
-            wind_TKE_src + TKE_river(i) * diag_wt
-        CS%diag_TKE_RiBulk(i,j) = CS%diag_TKE_RiBulk(i,j) + dKE_conv*Idt_diag
-        CS%diag_TKE_mech_decay(i,j) = CS%diag_TKE_mech_decay(i,j) + &
-            (exp_kh-1.0)*(wind_TKE_src + dKE_conv*Idt_diag)
-        CS%diag_TKE_conv(i,j) = CS%diag_TKE_conv(i,j) + &
-            Idt_diag*(nstar_FC*Conv_En(i) + nstar_CA*TKE_CA)
-        CS%diag_TKE_conv_decay(i,j) = CS%diag_TKE_conv_decay(i,j) + &
-            Idt_diag*((CS%nstar-nstar_FC)*Conv_En(i) + (CS%nstar-nstar_CA)*TKE_CA)
-        CS%diag_TKE_conv_s2(i,j) = CS%diag_TKE_conv_s2(i,j) + &
-            Idt_diag*(cTKE(i,1)-TKE_CA)
-      endif
-    enddo
+    if (CS%TKE_diagnostics) then
+      wind_TKE_src = CS%mstar*(U_Star*U_Star*U_Star) * diag_wt
+      CS%diag_TKE_wind(i,j) = CS%diag_TKE_wind(i,j) + &
+          wind_TKE_src + TKE_river(i) * diag_wt
+      CS%diag_TKE_RiBulk(i,j) = CS%diag_TKE_RiBulk(i,j) + dKE_conv*Idt_diag
+      CS%diag_TKE_mech_decay(i,j) = CS%diag_TKE_mech_decay(i,j) + &
+          (exp_kh-1.0)*(wind_TKE_src + dKE_conv*Idt_diag)
+      CS%diag_TKE_conv(i,j) = CS%diag_TKE_conv(i,j) + &
+          Idt_diag*(nstar_FC*Conv_En(i) + nstar_CA*TKE_CA)
+      CS%diag_TKE_conv_decay(i,j) = CS%diag_TKE_conv_decay(i,j) + &
+          Idt_diag*((CS%nstar-nstar_FC)*Conv_En(i) + (CS%nstar-nstar_CA)*TKE_CA)
+      CS%diag_TKE_conv_s2(i,j) = CS%diag_TKE_conv_s2(i,j) + &
+          Idt_diag*(cTKE(i,1)-TKE_CA)
+    endif
+  enddo
 
-  end subroutine find_starting_TKE
+end subroutine find_starting_TKE
 
 
-  subroutine mechanical_entrainment(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
-                                    R0_tot, Rcv_tot, nsw, Pen_SW_bnd, TKE, &
-                                    j, ksort, G, CS)
-    real, dimension(NIMEM_,NKMEM_), intent(inout) :: h, d_eb
-    real, dimension(NIMEM_),        intent(inout) :: htot, Ttot, Stot
-    real, dimension(NIMEM_),        intent(inout) :: uhtot, vhtot
-    real, dimension(NIMEM_),        intent(inout) :: R0_tot, Rcv_tot
-    integer,                        intent(in)    :: nsw
-    real, dimension(:,:),           intent(inout) :: Pen_SW_bnd
-    real, dimension(NIMEM_),        intent(inout) :: TKE
-    integer,                        intent(in)    :: j
-    integer, dimension(NIMEM_,NKMEM_), intent(in) :: ksort
-    type(ocean_grid_type),          intent(in)    :: G
-    type(bulkmixedlayer_CS),        pointer       :: CS
+subroutine mechanical_entrainment(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
+                                  R0_tot, Rcv_tot, u, v, T, S, R0, Rcv, eps, &
+                                  dR0_dT, dRcv_dT, cMKE, Idt_diag, nsw, &
+                                  Pen_SW_bnd, opacity_band, TKE, &
+                                  Idecay_len_TKE, j, ksort, G, CS)
+  real, dimension(NIMEM_,NKMEM_), intent(inout) :: h, d_eb
+  real, dimension(NIMEM_),        intent(inout) :: htot, Ttot, Stot
+  real, dimension(NIMEM_),        intent(inout) :: uhtot, vhtot
+  real, dimension(NIMEM_),        intent(inout) :: R0_tot, Rcv_tot
+  real, dimension(NIMEM_,NKMEM_), intent(in)    :: u, v, T, S, R0, Rcv, eps
+  real, dimension(NIMEM_),        intent(in)    :: dR0_dT, dRcv_dT
+  real, dimension(C2_,NIMEM_),    intent(in)    :: cMKE
+  real,                           intent(in)    :: Idt_diag
+  integer,                        intent(in)    :: nsw
+  real, dimension(:,:),           intent(inout) :: Pen_SW_bnd
+  real, dimension(:,:,:),         intent(in)    :: opacity_band
+  real, dimension(NIMEM_),        intent(inout) :: TKE
+  real, dimension(NIMEM_),        intent(inout) :: Idecay_len_TKE
+  integer,                        intent(in)    :: j
+  integer, dimension(NIMEM_,NKMEM_), intent(in) :: ksort
+  type(ocean_grid_type),          intent(in)    :: G
+  type(bulkmixedlayer_CS),        pointer       :: CS
 
-  ! This subroutine calculates mechanically driven entrainment.
-  ! Arguments: h - Layer thickness, in m or kg m-2. (Intent in/out)  The units
-  !                of h are referred to as H below.
-  !  (in/out)  d_eb - The downward increase across a layer in the entrainment from
-  !                   below, in H. Positive values go with mass gain by a layer.
-  !  (in/out)  htot - The accumlated mixed layer thickness, in H.
-  !  (in/out)  Ttot - The depth integrated mixed layer temperature, in deg C H.
-  !  (in/out)  Stot - The depth integrated mixed layer salinity, in psu H.
-  !  (in/out)  uhtot - The depth integrated mixed layer zonal velocity, H m s-1.
-  !  (in/out)  vhtot - The integrated mixed layer meridional velocity, H m s-1.
-  !  (in/out)  R0_tot - The integrated mixed layer potential density referenced
-  !                  to 0 pressure, in H kg m-3.
-  !  (in/out)  Rcv_tot - The integrated mixed layer coordinate variable
-  !                   potential density, in H kg m-3.
-  !  (in)      nsw - The number of bands of penetrating shortwave radiation.
-  !  (in/out)  Pen_SW_bnd - The penetrating shortwave heating at the sea surface
-  !                         in each penetrating band, in K H, size nsw x NIMEM_.
-  !  (in/out)  TKE - The turbulent kinetic energy available for mixing over a
-  !               time step, in m3 s-2.
-  !  (in)      j - The j-index to work on.
-  !  (in)      ksort - The density-sorted k-indicies.
-  !  (in)      G - The ocean's grid structure.
-  !  (in)      CS - The control structure for this module.
+! This subroutine calculates mechanically driven entrainment.
+! Arguments: h - Layer thickness, in m or kg m-2. (Intent in/out)  The units
+!                of h are referred to as H below.
+!  (in/out)  d_eb - The downward increase across a layer in the entrainment from
+!                   below, in H. Positive values go with mass gain by a layer.
+!  (in/out)  htot - The accumlated mixed layer thickness, in H.
+!  (in/out)  Ttot - The depth integrated mixed layer temperature, in deg C H.
+!  (in/out)  Stot - The depth integrated mixed layer salinity, in psu H.
+!  (in/out)  uhtot - The depth integrated mixed layer zonal velocity, H m s-1.
+!  (in/out)  vhtot - The integrated mixed layer meridional velocity, H m s-1.
+!  (in/out)  R0_tot - The integrated mixed layer potential density referenced
+!                  to 0 pressure, in H kg m-3.
+!  (in/out)  Rcv_tot - The integrated mixed layer coordinate variable
+!                   potential density, in H kg m-3.
+!  (in)      nsw - The number of bands of penetrating shortwave radiation.
+!  (in/out)  Pen_SW_bnd - The penetrating shortwave heating at the sea surface
+!                         in each penetrating band, in K H, size nsw x NIMEM_.
+!  (in/out)  TKE - The turbulent kinetic energy available for mixing over a
+!               time step, in m3 s-2.
+!  (in)      j - The j-index to work on.
+!  (in)      ksort - The density-sorted k-indicies.
+!  (in)      G - The ocean's grid structure.
+!  (in)      CS - The control structure for this module.
 
-    real :: SW_trans  !   The fraction of shortwave radiation that is not
-                      ! absorbed in a layer, nondimensional.
-    real :: Pen_absorbed  !   The amount of penetrative shortwave radiation
-                          ! that is absorbed in a layer, in units of K m.
-    real :: h_avail   ! The thickness in a layer available for entrainment in H.
-    real :: h_ent     ! The thickness from a layer that is entrained, in H.
-    real :: h_min, h_max ! Limits on the solution for h_ent, in H.
-    real :: dh_Newt      !   The Newton's method estimate of the change in
-                         ! h_ent between iterations, in H.
-    real :: MKE_rate  !   The fraction of the energy in resolved shears
-                      ! within the mixed layer that will be eliminated
-                      ! within a timestep, nondim, 0 to 1.
-    real :: HpE       !   The current thickness plus entrainment, H.
-    real :: g_H_2Rho0   !   Half the gravitational acceleration times the
-                        ! conversion from H to m divided by the mean density,
-                        ! in m5 s-2 H-1 kg-1.
-    real :: TKE_full_ent  ! The TKE remaining if a layer is fully entrained,
-                          ! in units of m3 s-2.
-    real :: dRL       ! Work required to mix water from the next layer
-                      ! across the mixed layer, in m2 s-2.
-    real :: Pen_En_Contrib  ! Penetrating SW contributions to the changes in
-                            ! TKE, divided by layer thickness in m, in m2 s-2.
-    real :: C1        ! A temporary variable in units of m2 s-2.
-    real :: dMKE      ! A temporary variable related to the release of mean
-                      ! kinetic energy, with units of H m3 s-2.
-    real :: TKE_ent   ! The TKE that remains if h_ent were entrained, in m3 s-2.
-    real :: TKE_ent1  ! The TKE that would remain, without considering the
-                      ! release of mean kinetic energy, in m3 s2.
-    real :: dTKE_dh   ! The partial derivative of TKE with h_ent, in m3 s-2 H-1.
-    real :: Pen_dTKE_dh_Contrib ! The penetrating shortwave contribution to
-                      ! dTKE_dh, in m2 s-2.
-    real :: EF4_val   ! The result of EF4() (see later), in H-1.
-    real :: h_neglect ! A thickness that is so small it is usually lost
-                      ! in roundoff and can be neglected, in H.
-    real :: dEF4_dh   ! The partial derivative of EF4 with h, in H-2.
-    real :: Pen_En1   ! A nondimensional temporary variable.
-    real :: kh, exp_kh  ! Nondimensional temporary variables related to the.
-    real :: f1_kh       ! fractional decay of TKE across a layer.
-    real :: x1, e_x1      !   Nondimensional temporary variables related to
-    real :: f1_x1, f2_x1  ! the relative decay of TKE and SW radiation across
-    real :: f3_x1         ! a layer, and exponential-related functions of x1.
-    real :: E_HxHpE   ! Entrainment divided by the product of the new and old
-                      ! thicknesses, in H-1.
-    real :: Hmix_min  ! The minimum mixed layer depth in H.
-    real :: opacity
-    real :: C1_3, C1_6, C1_24   !  1/3, 1/6, and 1/24.
-    integer :: is, ie, nz, i, k, ks, itt, n
+  real :: SW_trans  !   The fraction of shortwave radiation that is not
+                    ! absorbed in a layer, nondimensional.
+  real :: Pen_absorbed  !   The amount of penetrative shortwave radiation
+                        ! that is absorbed in a layer, in units of K m.
+  real :: h_avail   ! The thickness in a layer available for entrainment in H.
+  real :: h_ent     ! The thickness from a layer that is entrained, in H.
+  real :: h_min, h_max ! Limits on the solution for h_ent, in H.
+  real :: dh_Newt      !   The Newton's method estimate of the change in
+                       ! h_ent between iterations, in H.
+  real :: MKE_rate  !   The fraction of the energy in resolved shears
+                    ! within the mixed layer that will be eliminated
+                    ! within a timestep, nondim, 0 to 1.
+  real :: HpE       !   The current thickness plus entrainment, H.
+  real :: g_H_2Rho0   !   Half the gravitational acceleration times the
+                      ! conversion from H to m divided by the mean density,
+                      ! in m5 s-2 H-1 kg-1.
+  real :: TKE_full_ent  ! The TKE remaining if a layer is fully entrained,
+                        ! in units of m3 s-2.
+  real :: dRL       ! Work required to mix water from the next layer
+                    ! across the mixed layer, in m2 s-2.
+  real :: Pen_En_Contrib  ! Penetrating SW contributions to the changes in
+                          ! TKE, divided by layer thickness in m, in m2 s-2.
+  real :: C1        ! A temporary variable in units of m2 s-2.
+  real :: dMKE      ! A temporary variable related to the release of mean
+                    ! kinetic energy, with units of H m3 s-2.
+  real :: TKE_ent   ! The TKE that remains if h_ent were entrained, in m3 s-2.
+  real :: TKE_ent1  ! The TKE that would remain, without considering the
+                    ! release of mean kinetic energy, in m3 s2.
+  real :: dTKE_dh   ! The partial derivative of TKE with h_ent, in m3 s-2 H-1.
+  real :: Pen_dTKE_dh_Contrib ! The penetrating shortwave contribution to
+                    ! dTKE_dh, in m2 s-2.
+  real :: EF4_val   ! The result of EF4() (see later), in H-1.
+  real :: h_neglect ! A thickness that is so small it is usually lost
+                    ! in roundoff and can be neglected, in H.
+  real :: dEF4_dh   ! The partial derivative of EF4 with h, in H-2.
+  real :: Pen_En1   ! A nondimensional temporary variable.
+  real :: kh, exp_kh  ! Nondimensional temporary variables related to the.
+  real :: f1_kh       ! fractional decay of TKE across a layer.
+  real :: x1, e_x1      !   Nondimensional temporary variables related to
+  real :: f1_x1, f2_x1  ! the relative decay of TKE and SW radiation across
+  real :: f3_x1         ! a layer, and exponential-related functions of x1.
+  real :: E_HxHpE   ! Entrainment divided by the product of the new and old
+                    ! thicknesses, in H-1.
+  real :: Hmix_min  ! The minimum mixed layer depth in H.
+  real :: opacity
+  real :: C1_3, C1_6, C1_24   !  1/3, 1/6, and 1/24.
+  integer :: is, ie, nz, i, k, ks, itt, n
 
-    C1_3 = 1.0/3.0 ; C1_6 = 1.0/6.0 ; C1_24 = 1.0/24.0
-    g_H_2Rho0 = (G%g_Earth * G%H_to_m) / (2.0 * G%Rho0)
-    Hmix_min = CS%Hmix_min * G%m_to_H
-    h_neglect = G%H_subroundoff
-    is = G%isc ; ie = G%iec ; nz = G%ke
+  C1_3 = 1.0/3.0 ; C1_6 = 1.0/6.0 ; C1_24 = 1.0/24.0
+  g_H_2Rho0 = (G%g_Earth * G%H_to_m) / (2.0 * G%Rho0)
+  Hmix_min = CS%Hmix_min * G%m_to_H
+  h_neglect = G%H_subroundoff
+  is = G%isc ; ie = G%iec ; nz = G%ke
 
-    do ks=1,nz
+  do ks=1,nz
 
-      do i=is,ie ; if (ksort(i,ks) > 0) then
-        k = ksort(i,ks)
+    do i=is,ie ; if (ksort(i,ks) > 0) then
+      k = ksort(i,ks)
 
-        h_avail = h(i,k) - eps(i,k)
-        if ((h_avail > 0.) .and. ((TKE(i) > 0.) .or. (htot(i) < Hmix_min))) then
-          dRL = g_H_2Rho0 * (R0(i,k)*htot(i) - R0_tot(i) )
-          dMKE = (G%H_to_m * CS%bulk_Ri_ML) * 0.5 * &
-              ((uhtot(i)-u(i,k)*htot(i))**2 + (vhtot(i)-v(i,k)*htot(i))**2)
+      h_avail = h(i,k) - eps(i,k)
+      if ((h_avail > 0.) .and. ((TKE(i) > 0.) .or. (htot(i) < Hmix_min))) then
+        dRL = g_H_2Rho0 * (R0(i,k)*htot(i) - R0_tot(i) )
+        dMKE = (G%H_to_m * CS%bulk_Ri_ML) * 0.5 * &
+            ((uhtot(i)-u(i,k)*htot(i))**2 + (vhtot(i)-v(i,k)*htot(i))**2)
 
 ! Find the TKE that would remain if the entire layer were entrained.
-          kh = Idecay_len_TKE(i)*h_avail ; exp_kh = exp(-kh)
-          if (kh >= 2.0e-5) then ; f1_kh = (1.0-exp_kh) / kh
-          else ; f1_kh = (1.0 - kh*(0.5 - C1_6*kh)) ; endif
+        kh = Idecay_len_TKE(i)*h_avail ; exp_kh = exp(-kh)
+        if (kh >= 2.0e-5) then ; f1_kh = (1.0-exp_kh) / kh
+        else ; f1_kh = (1.0 - kh*(0.5 - C1_6*kh)) ; endif
 
-          Pen_En_Contrib = 0.0
-          do n=1,nsw ; if (Pen_SW_bnd(n,i) > 0.0) then
-            opacity = opacity_band(n,i,k)
+        Pen_En_Contrib = 0.0
+        do n=1,nsw ; if (Pen_SW_bnd(n,i) > 0.0) then
+          opacity = opacity_band(n,i,k)
 ! Two different forms are used here to make sure that only negative
 ! values are taken into exponentials to avoid excessively large
 ! numbers.  They are, of course, mathematically identical.
-            if (Idecay_len_TKE(i) > opacity) then
-              x1 = (Idecay_len_TKE(i) - opacity) * h_avail
-              if (x1 >= 2.0e-5) then
-                e_x1 = exp(-x1) ; f1_x1 = ((1.0-e_x1)/(x1))
-                f3_x1 = ((e_x1-(1.0-x1))/(x1*x1))
-              else
-                f1_x1 = (1.0 - x1*(0.5 - C1_6*x1))
-                f3_x1 = (0.5 - x1*(C1_6 - C1_24*x1))
-              endif
-
-              Pen_En1 = exp(-opacity*h_avail) * &
-                 ((1.0+opacity*htot(i))*f1_x1 + opacity*h_avail*f3_x1)
+          if (Idecay_len_TKE(i) > opacity) then
+            x1 = (Idecay_len_TKE(i) - opacity) * h_avail
+            if (x1 >= 2.0e-5) then
+              e_x1 = exp(-x1) ; f1_x1 = ((1.0-e_x1)/(x1))
+              f3_x1 = ((e_x1-(1.0-x1))/(x1*x1))
             else
-              x1 = (opacity - Idecay_len_TKE(i)) * h_avail
-              if (x1 >= 2.0e-5) then
-                e_x1 = exp(-x1) ; f1_x1 = ((1.0-e_x1)/(x1))
-                f2_x1 = ((1.0-(1.0+x1)*e_x1)/(x1*x1))
-              else
-                f1_x1 = (1.0 - x1*(0.5 - C1_6*x1))
-                f2_x1 = (0.5 - x1*(C1_3 - 0.125*x1))
-              endif
-
-              Pen_En1 = exp_kh * ((1.0+opacity*htot(i))*f1_x1 + &
-                                   opacity*h_avail*f2_x1)
-            endif
-            Pen_En_Contrib = Pen_En_Contrib + &
-              (g_H_2Rho0*dR0_dT(i)*Pen_SW_bnd(n,i)) * (Pen_En1 - f1_kh)
-          endif ; enddo
-
-          HpE = htot(i)+h_avail
-          MKE_rate = 1.0/(1.0 + (cMKE1(i)*HpE + cMKE2(i)*HpE**2))
-          EF4_val = EF4(htot(i)+h_neglect,h_avail,Idecay_len_TKE(i))
-          TKE_full_ent = (exp_kh*TKE(i) - (h_avail*G%H_to_m)*(dRL*f1_kh + Pen_En_Contrib)) + &
-              MKE_rate*dMKE*EF4_val
-          if ((TKE_full_ent > 0.0) .or. (h_avail+htot(i) <= Hmix_min)) then
-            ! The layer will be fully entrained.
-            h_ent = h_avail
-
-            if (CS%TKE_diagnostics) then
-              E_HxHpE = h_ent / ((htot(i)+h_neglect)*(htot(i)+h_ent+h_neglect))
-              CS%diag_TKE_mech_decay(i,j) = CS%diag_TKE_mech_decay(i,j) + &
-                  Idt_diag * ((exp_kh-1.0)*TKE(i) + &
-                              (h_ent*G%H_to_m)*dRL*(1.0-f1_kh) + &
-                              MKE_rate*dMKE*(EF4_val-E_HxHpE))
-              CS%diag_TKE_mixing(i,j) = CS%diag_TKE_mixing(i,j) - &
-                  Idt_diag*(G%H_to_m*h_ent)*dRL
-              CS%diag_TKE_pen_SW(i,j) = CS%diag_TKE_pen_SW(i,j) - &
-                  Idt_diag*(G%H_to_m*h_ent)*Pen_En_Contrib
-              CS%diag_TKE_RiBulk(i,j) = CS%diag_TKE_RiBulk(i,j) + &
-                  Idt_diag*MKE_rate*dMKE*E_HxHpE
+              f1_x1 = (1.0 - x1*(0.5 - C1_6*x1))
+              f3_x1 = (0.5 - x1*(C1_6 - C1_24*x1))
             endif
 
-            TKE(i) = TKE_full_ent
-            if (TKE(i) <= 0.0) TKE(i) = 1e-300
+            Pen_En1 = exp(-opacity*h_avail) * &
+               ((1.0+opacity*htot(i))*f1_x1 + opacity*h_avail*f3_x1)
           else
+            x1 = (opacity - Idecay_len_TKE(i)) * h_avail
+            if (x1 >= 2.0e-5) then
+              e_x1 = exp(-x1) ; f1_x1 = ((1.0-e_x1)/(x1))
+              f2_x1 = ((1.0-(1.0+x1)*e_x1)/(x1*x1))
+            else
+              f1_x1 = (1.0 - x1*(0.5 - C1_6*x1))
+              f2_x1 = (0.5 - x1*(C1_3 - 0.125*x1))
+            endif
+
+            Pen_En1 = exp_kh * ((1.0+opacity*htot(i))*f1_x1 + &
+                                 opacity*h_avail*f2_x1)
+          endif
+          Pen_En_Contrib = Pen_En_Contrib + &
+            (g_H_2Rho0*dR0_dT(i)*Pen_SW_bnd(n,i)) * (Pen_En1 - f1_kh)
+        endif ; enddo
+
+        HpE = htot(i)+h_avail
+        MKE_rate = 1.0/(1.0 + (cMKE(1,i)*HpE + cMKE(2,i)*HpE**2))
+        EF4_val = EF4(htot(i)+h_neglect,h_avail,Idecay_len_TKE(i))
+        TKE_full_ent = (exp_kh*TKE(i) - (h_avail*G%H_to_m)*(dRL*f1_kh + Pen_En_Contrib)) + &
+            MKE_rate*dMKE*EF4_val
+        if ((TKE_full_ent > 0.0) .or. (h_avail+htot(i) <= Hmix_min)) then
+          ! The layer will be fully entrained.
+          h_ent = h_avail
+
+          if (CS%TKE_diagnostics) then
+            E_HxHpE = h_ent / ((htot(i)+h_neglect)*(htot(i)+h_ent+h_neglect))
+            CS%diag_TKE_mech_decay(i,j) = CS%diag_TKE_mech_decay(i,j) + &
+                Idt_diag * ((exp_kh-1.0)*TKE(i) + &
+                            (h_ent*G%H_to_m)*dRL*(1.0-f1_kh) + &
+                            MKE_rate*dMKE*(EF4_val-E_HxHpE))
+            CS%diag_TKE_mixing(i,j) = CS%diag_TKE_mixing(i,j) - &
+                Idt_diag*(G%H_to_m*h_ent)*dRL
+            CS%diag_TKE_pen_SW(i,j) = CS%diag_TKE_pen_SW(i,j) - &
+                Idt_diag*(G%H_to_m*h_ent)*Pen_En_Contrib
+            CS%diag_TKE_RiBulk(i,j) = CS%diag_TKE_RiBulk(i,j) + &
+                Idt_diag*MKE_rate*dMKE*E_HxHpE
+          endif
+
+          TKE(i) = TKE_full_ent
+          if (TKE(i) <= 0.0) TKE(i) = 1e-300
+        else
 ! The layer is only partially entrained.  The amount that will be
 ! entrained is determined iteratively.  No further layers will be
 ! entrained.
-            h_min = 0.0 ; h_max = h_avail
-            h_ent = h_avail * TKE(i) / (TKE(i) - TKE_full_ent)
+          h_min = 0.0 ; h_max = h_avail
+          h_ent = h_avail * TKE(i) / (TKE(i) - TKE_full_ent)
 
-            do itt=1,15
+          do itt=1,15
 ! Evaluate the TKE that would remain if h_ent were entrained.
 
-              kh = Idecay_len_TKE(i)*h_ent ; exp_kh = exp(-kh)
-              if (kh >= 2.0e-5) then
-                f1_kh = (1.0-exp_kh) / kh
-              else
-                f1_kh = (1.0 - kh*(0.5 - C1_6*kh))
-              endif
+            kh = Idecay_len_TKE(i)*h_ent ; exp_kh = exp(-kh)
+            if (kh >= 2.0e-5) then
+              f1_kh = (1.0-exp_kh) / kh
+            else
+              f1_kh = (1.0 - kh*(0.5 - C1_6*kh))
+            endif
 
 
-              Pen_En_Contrib = 0.0 ; Pen_dTKE_dh_Contrib = 0.0
-              do n=1,nsw ; if (Pen_SW_bnd(n,i) > 0.0) then
+            Pen_En_Contrib = 0.0 ; Pen_dTKE_dh_Contrib = 0.0
+            do n=1,nsw ; if (Pen_SW_bnd(n,i) > 0.0) then
 ! Two different forms are used here to make sure that only negative
 ! values are taken into exponentials to avoid excessively large
 ! numbers.  They are, of course, mathematically identical.
-                opacity = opacity_band(n,i,k)
-                SW_trans = exp(-h_ent*opacity)
-                if (Idecay_len_TKE(i) > opacity) then
-                  x1 = (Idecay_len_TKE(i) - opacity) * h_ent
-                  if (x1 >= 2.0e-5) then
-                    e_x1 = exp(-x1) ; f1_x1 = ((1.0-e_x1)/(x1))
-                    f3_x1 = ((e_x1-(1.0-x1))/(x1*x1))
-                  else
-                    f1_x1 = (1.0 - x1*(0.5 - C1_6*x1))
-                    f3_x1 = (0.5 - x1*(C1_6 - C1_24*x1))
-                  endif
-                  Pen_En1 = SW_trans * ((1.0+opacity*htot(i))*f1_x1 + &
-                                        opacity*h_ent*f3_x1)
+              opacity = opacity_band(n,i,k)
+              SW_trans = exp(-h_ent*opacity)
+              if (Idecay_len_TKE(i) > opacity) then
+                x1 = (Idecay_len_TKE(i) - opacity) * h_ent
+                if (x1 >= 2.0e-5) then
+                  e_x1 = exp(-x1) ; f1_x1 = ((1.0-e_x1)/(x1))
+                  f3_x1 = ((e_x1-(1.0-x1))/(x1*x1))
                 else
-                  x1 = (opacity - Idecay_len_TKE(i)) * h_ent
-                  if (x1 >= 2.0e-5) then
-                    e_x1 = exp(-x1) ; f1_x1 = ((1.0-e_x1)/(x1))
-                    f2_x1 = ((1.0-(1.0+x1)*e_x1)/(x1*x1))
-                  else
-                    f1_x1 = (1.0 - x1*(0.5 - C1_6*x1))
-                    f2_x1 = (0.5 - x1*(C1_3 - 0.125*x1))
-                  endif
-
-                  Pen_En1 = exp_kh * ((1.0+opacity*htot(i))*f1_x1 + &
-                                       opacity*h_ent*f2_x1)
+                  f1_x1 = (1.0 - x1*(0.5 - C1_6*x1))
+                  f3_x1 = (0.5 - x1*(C1_6 - C1_24*x1))
                 endif
-                C1 = g_H_2Rho0*dR0_dT(i)*Pen_SW_bnd(n,i)
-                Pen_En_Contrib = Pen_En_Contrib + C1*(Pen_En1 - f1_kh)
-                Pen_dTKE_dh_Contrib = Pen_dTKE_dh_Contrib + &
-                    C1*((1.0-SW_trans) - opacity*(htot(i) + h_ent)*SW_trans)
-              endif ; enddo ! (Pen_SW_bnd(n,i) > 0.0)
+                Pen_En1 = SW_trans * ((1.0+opacity*htot(i))*f1_x1 + &
+                                      opacity*h_ent*f3_x1)
+              else
+                x1 = (opacity - Idecay_len_TKE(i)) * h_ent
+                if (x1 >= 2.0e-5) then
+                  e_x1 = exp(-x1) ; f1_x1 = ((1.0-e_x1)/(x1))
+                  f2_x1 = ((1.0-(1.0+x1)*e_x1)/(x1*x1))
+                else
+                  f1_x1 = (1.0 - x1*(0.5 - C1_6*x1))
+                  f2_x1 = (0.5 - x1*(C1_3 - 0.125*x1))
+                endif
 
-              TKE_ent1 = exp_kh*TKE(i) - (h_ent*G%H_to_m)*(dRL*f1_kh + Pen_En_Contrib)
-              EF4_val = EF4(htot(i)+h_neglect,h_ent,Idecay_len_TKE(i),dEF4_dh)
-              HpE = htot(i)+h_ent
-              MKE_rate = 1.0/(1.0 + (cMKE1(i)*HpE + cMKE2(i)*HpE**2))
-              TKE_ent = TKE_ent1 + dMKE*EF4_val*MKE_rate
+                Pen_En1 = exp_kh * ((1.0+opacity*htot(i))*f1_x1 + &
+                                     opacity*h_ent*f2_x1)
+              endif
+              C1 = g_H_2Rho0*dR0_dT(i)*Pen_SW_bnd(n,i)
+              Pen_En_Contrib = Pen_En_Contrib + C1*(Pen_En1 - f1_kh)
+              Pen_dTKE_dh_Contrib = Pen_dTKE_dh_Contrib + &
+                  C1*((1.0-SW_trans) - opacity*(htot(i) + h_ent)*SW_trans)
+            endif ; enddo ! (Pen_SW_bnd(n,i) > 0.0)
+
+            TKE_ent1 = exp_kh*TKE(i) - (h_ent*G%H_to_m)*(dRL*f1_kh + Pen_En_Contrib)
+            EF4_val = EF4(htot(i)+h_neglect,h_ent,Idecay_len_TKE(i),dEF4_dh)
+            HpE = htot(i)+h_ent
+            MKE_rate = 1.0/(1.0 + (cMKE(1,i)*HpE + cMKE(2,i)*HpE**2))
+            TKE_ent = TKE_ent1 + dMKE*EF4_val*MKE_rate
 ! TKE_ent is the TKE that would remain if h_ent were entrained.
 
-              dTKE_dh = ((-Idecay_len_TKE(i)*TKE_ent1 - dRL*G%H_to_m) + &
-                        Pen_dTKE_dh_Contrib*G%H_to_m) + dMKE * MKE_rate* &
-                        (dEF4_dh - EF4_val*MKE_rate*(cMKE1(i)+2.0*cMKE2(i)*HpE))
+            dTKE_dh = ((-Idecay_len_TKE(i)*TKE_ent1 - dRL*G%H_to_m) + &
+                      Pen_dTKE_dh_Contrib*G%H_to_m) + dMKE * MKE_rate* &
+                      (dEF4_dh - EF4_val*MKE_rate*(cMKE(1,i)+2.0*cMKE(2,i)*HpE))
 !              dh_Newt = -TKE_ent / dTKE_dh
 
 ! Bisect if the Newton's method prediction is outside of the bounded range.
-              if (TKE_ent > 0.0) then
-                if ((h_max-h_ent)*(-dTKE_dh) > TKE_ent) then
-                  dh_Newt = -TKE_ent / dTKE_dh
-                else
-                  dh_Newt = 0.5*(h_max-h_ent)
-                endif
-                h_min = h_ent
+            if (TKE_ent > 0.0) then
+              if ((h_max-h_ent)*(-dTKE_dh) > TKE_ent) then
+                dh_Newt = -TKE_ent / dTKE_dh
               else
-                if ((h_min-h_ent)*(-dTKE_dh) < TKE_ent) then
-                  dh_Newt = -TKE_ent / dTKE_dh
-                else
-                  dh_Newt = 0.5*(h_min-h_ent)
-                endif
-                h_max = h_ent
+                dh_Newt = 0.5*(h_max-h_ent)
               endif
-              h_ent = h_ent + dh_Newt
-
-              if (ABS(dh_Newt) < 0.2*G%Angstrom) exit
-            enddo
-
-            if (h_ent < Hmix_min-htot(i)) h_ent = Hmix_min - htot(i)
-
-            if (CS%TKE_diagnostics) then
-              HpE = htot(i)+h_ent
-              MKE_rate = 1.0/(1.0 + cMKE1(i)*HpE + cMKE2(i)*HpE**2)
-              EF4_val = EF4(htot(i)+h_neglect,h_ent,Idecay_len_TKE(i))
-
-              E_HxHpE = h_ent / ((htot(i)+h_neglect)*(HpE+h_neglect))
-              CS%diag_TKE_mech_decay(i,j) = CS%diag_TKE_mech_decay(i,j) + &
-                  Idt_diag * ((exp_kh-1.0)*TKE(i) + &
-                              (h_ent*G%H_to_m)*dRL*(1.0-f1_kh) + &
-                               dMKE*MKE_rate*(EF4_val-E_HxHpE))
-              CS%diag_TKE_mixing(i,j) = CS%diag_TKE_mixing(i,j) - &
-                  Idt_diag*(h_ent*G%H_to_m)*dRL
-              CS%diag_TKE_pen_SW(i,j) = CS%diag_TKE_pen_SW(i,j) - &
-                  Idt_diag*(h_ent*G%H_to_m)*Pen_En_Contrib
-              CS%diag_TKE_RiBulk(i,j) = CS%diag_TKE_RiBulk(i,j) + &
-                  Idt_diag*dMKE*MKE_rate*E_HxHpE
+              h_min = h_ent
+            else
+              if ((h_min-h_ent)*(-dTKE_dh) < TKE_ent) then
+                dh_Newt = -TKE_ent / dTKE_dh
+              else
+                dh_Newt = 0.5*(h_min-h_ent)
+              endif
+              h_max = h_ent
             endif
+            h_ent = h_ent + dh_Newt
 
-            TKE(i) = 0.0
-          endif ! TKE_full_ent > 0.0
+            if (ABS(dh_Newt) < 0.2*G%Angstrom) exit
+          enddo
 
-          Pen_absorbed = 0.0
-          do n=1,nsw ; if (Pen_SW_bnd(n,i) > 0.0) then
-            SW_trans = exp(-h_ent*opacity_band(n,i,k))
-            Pen_absorbed = Pen_absorbed + Pen_SW_bnd(n,i) * (1.0 - SW_trans)
-            Pen_SW_bnd(n,i) = Pen_SW_bnd(n,i) * SW_trans
-          endif ; enddo
+          if (h_ent < Hmix_min-htot(i)) h_ent = Hmix_min - htot(i)
 
-          htot(i)   = htot(i)   + h_ent
-          R0_tot(i) = R0_tot(i) + (h_ent * R0(i,k) + Pen_absorbed*dR0_dT(i))
-          h(i,k)    = h(i,k)    - h_ent
-          d_eb(i,k) = d_eb(i,k) - h_ent
+          if (CS%TKE_diagnostics) then
+            HpE = htot(i)+h_ent
+            MKE_rate = 1.0/(1.0 + cMKE(1,i)*HpE + cMKE(2,i)*HpE**2)
+            EF4_val = EF4(htot(i)+h_neglect,h_ent,Idecay_len_TKE(i))
 
-          Stot(i)    = Stot(i)    + h_ent * S(i,k)
-          Ttot(i)    = Ttot(i)    + (h_ent * T(i,k) + Pen_absorbed)
-          Rcv_tot(i) = Rcv_tot(i) + (h_ent*Rcv(i,k) + Pen_absorbed*dRcv_dT(i))
+            E_HxHpE = h_ent / ((htot(i)+h_neglect)*(HpE+h_neglect))
+            CS%diag_TKE_mech_decay(i,j) = CS%diag_TKE_mech_decay(i,j) + &
+                Idt_diag * ((exp_kh-1.0)*TKE(i) + &
+                            (h_ent*G%H_to_m)*dRL*(1.0-f1_kh) + &
+                             dMKE*MKE_rate*(EF4_val-E_HxHpE))
+            CS%diag_TKE_mixing(i,j) = CS%diag_TKE_mixing(i,j) - &
+                Idt_diag*(h_ent*G%H_to_m)*dRL
+            CS%diag_TKE_pen_SW(i,j) = CS%diag_TKE_pen_SW(i,j) - &
+                Idt_diag*(h_ent*G%H_to_m)*Pen_En_Contrib
+            CS%diag_TKE_RiBulk(i,j) = CS%diag_TKE_RiBulk(i,j) + &
+                Idt_diag*dMKE*MKE_rate*E_HxHpE
+          endif
 
-          uhtot(i) = uhtot(i) + u(i,k)*h_ent
-          vhtot(i) = vhtot(i) + v(i,k)*h_ent
-        endif ! h_avail > 0.0 .AND TKE(i) > 0.0
+          TKE(i) = 0.0
+        endif ! TKE_full_ent > 0.0
 
-      endif ; enddo ! i loop
-    enddo ! k loop
+        Pen_absorbed = 0.0
+        do n=1,nsw ; if (Pen_SW_bnd(n,i) > 0.0) then
+          SW_trans = exp(-h_ent*opacity_band(n,i,k))
+          Pen_absorbed = Pen_absorbed + Pen_SW_bnd(n,i) * (1.0 - SW_trans)
+          Pen_SW_bnd(n,i) = Pen_SW_bnd(n,i) * SW_trans
+        endif ; enddo
 
-  end subroutine mechanical_entrainment
+        htot(i)   = htot(i)   + h_ent
+        R0_tot(i) = R0_tot(i) + (h_ent * R0(i,k) + Pen_absorbed*dR0_dT(i))
+        h(i,k)    = h(i,k)    - h_ent
+        d_eb(i,k) = d_eb(i,k) - h_ent
 
-end subroutine bulkmixedlayer
+        Stot(i)    = Stot(i)    + h_ent * S(i,k)
+        Ttot(i)    = Ttot(i)    + (h_ent * T(i,k) + Pen_absorbed)
+        Rcv_tot(i) = Rcv_tot(i) + (h_ent*Rcv(i,k) + Pen_absorbed*dRcv_dT(i))
+
+        uhtot(i) = uhtot(i) + u(i,k)*h_ent
+        vhtot(i) = vhtot(i) + v(i,k)*h_ent
+      endif ! h_avail > 0.0 .AND TKE(i) > 0.0
+
+    endif ; enddo ! i loop
+  enddo ! k loop
+
+end subroutine mechanical_entrainment
 
 subroutine sort_ML(h, R0, eps, G, CS, ksort)
   real, dimension(NIMEM_,NKMEM_),    intent(in)  :: h, R0, eps
