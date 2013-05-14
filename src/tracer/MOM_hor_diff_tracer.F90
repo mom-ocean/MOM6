@@ -1,4 +1,4 @@
-module MOM_tracer
+module MOM_tracer_hor_diff
 !***********************************************************************
 !*                   GNU General Public License                        *
 !* This file is a part of MOM.                                         *
@@ -23,33 +23,13 @@ module MOM_tracer
 !*                                                                     *
 !*  By Robert Hallberg, October 1996 - June 2002                       *
 !*                                                                     *
-!*    This program contains the subroutines that advect and diffuse    *
-!*  tracers horizontally, along with subroutines that handle the       *
-!*  registration of tracers and related subroutines.                   *
+!*    This program contains the subroutines that handle horizontal     *
+!*  diffusion (i.e., isoneutral or along layer) of tracers.            *
 !*                                                                     *
-!*    advect_tracer advects tracer concentrations using a combination  *
-!*  of the modified flux advection scheme from Easter (Mon. Wea. Rev., *
-!*  1993) with tracer distributions given by the monotonic modified    *
-!*  van Leer scheme proposed by Lin et al. (Mon. Wea. Rev., 1994).     *
-!*  This scheme conserves the total amount of tracer while avoiding    *
-!*  spurious maxima and minima of the tracer concentration.  If a      *
-!*  higher order accuracy scheme is needed, I would suggest the mono-  *
-!*  tonic piecewise parabolic method, as described in Carpenter et al. *
-!*  (MWR, 1990).  advect_tracer has 4 arguments, described below. This *
-!*  subroutine determines the volume of a layer in a grid cell at the  *
-!*  previous instance when the tracer concentration was changed, so    *
-!*  it is essential that the volume fluxes should be correct.  It is   *
-!*  also important that the tracer advection occurs before each        *
-!*  calculation of the diabatic forcing.                               *
-!*                                                                     *
-!*    In addition, each of the tracers are subject to Fickian along-   *
-!*  coordinate diffusion if Khtr is defined and positive.  The tracer  *
-!*  diffusion uses a suitable number of iterations to guarantee        *
-!*  stability with an arbitrarily large time step.  tracer_hordiff is  *
-!*  called by advect_tracer.                                           *
-!*                                                                     *
-!*    This file also contains register_tracer, which is called to      *
-!*  indicate the tracers that will be advected and diffused.           *
+!*    Each of the tracers are subject to Fickian along-coordinate      *
+!*  diffusion if Khtr is defined and positive.  The tracer diffusion   *
+!*  can use a suitable number of iterations to guarantee stability     *
+!*  with an arbitrarily large time step.                               *
 !*                                                                     *
 !*     A small fragment of the grid is shown below:                    *
 !*                                                                     *
@@ -67,7 +47,7 @@ module MOM_tracer
 
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock, only : CLOCK_MODULE, CLOCK_ROUTINE
-use MOM_diag_mediator, only : post_data, query_averaging_enabled, diag_ptrs
+use MOM_diag_mediator, only : post_data, diag_ptrs
 use MOM_diag_mediator, only : register_diag_field, safe_alloc_ptr, time_type
 use MOM_domains, only : pass_var, pass_vector, sum_across_PEs, max_across_PEs
 use MOM_checksums, only : hchksum
@@ -77,6 +57,7 @@ use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
 use MOM_lateral_mixing_coeffs, only : VarMix_CS
 use MOM_MEKE_types, only : MEKE_type
+use MOM_tracer_registry, only : tracer_registry_type, tracer_type, MOM_tracer_chksum
 use MOM_variables, only : ocean_OBC_type, thermo_var_ptrs, OBC_FLATHER_E
 use MOM_variables, only : OBC_FLATHER_W, OBC_FLATHER_N, OBC_FLATHER_S
 
@@ -84,32 +65,9 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public advect_tracer, tracer_hordiff, register_tracer, advect_tracer_init
-public add_tracer_diagnostics, add_tracer_2d_diagnostics, add_tracer_OBC_values
-public tracer_vertdiff, advect_tracer_diag_init, tracer_end
+public tracer_hordiff, tracer_hor_diff_init, tracer_hor_diff_end
 
-type :: tracer
-  real, dimension(:,:,:), pointer :: t => NULL()
-                     ! The array containing the tracer concentration.
-  real :: OBC_inflow_conc = 0.0  ! A tracer concentration for generic inflows.
-  real, dimension(:,:,:), pointer :: OBC_in_u => NULL(), OBC_in_v => NULL()
-             ! These arrays contain structured values for flow into the domain
-             ! that are specified in open boundary conditions through u- and
-             ! v- faces of the tracer cell.
-  real, dimension(:,:,:), pointer :: ad_x => NULL(), ad_y => NULL()
-             ! The arrays in which x- & y- advective fluxes are stored.
-  real, dimension(:,:,:), pointer :: df_x => NULL(), df_y => NULL()
-             ! The arrays in which x- & y- diffusive fluxes are stored.
-  real, dimension(:,:), pointer :: ad2d_x => NULL(), ad2d_y => NULL()
-             ! The arrays in which vertically summed x- & y- advective fluxes
-             ! are stored in units of CONC m3 s-1..
-  real, dimension(:,:), pointer :: df2d_x => NULL(), df2d_y => NULL()
-             ! The arrays in which vertically summed x- & y- diffusive fluxes
-             ! are stored in units of CONC m3 s-1..
-  character(len=32) :: name  ! A tracer name for error messages.
-end type tracer
-
-type, public :: advect_tracer_CS ; private
+type, public :: tracer_hor_diff_CS ; private
   real    :: dt             ! The baroclinic dynamics time step, in s.
   real    :: KhTr           ! The along-isopycnal tracer diffusivity in m2/s.
   real    :: KhTr_Slope_Cff ! The non-dimensional coefficient in KhTr formula
@@ -127,13 +85,12 @@ type, public :: advect_tracer_CS ; private
   logical :: check_diffusive_CFL  ! If true, automatically iterate the diffusion
                             ! to ensure that the diffusive equivalent of the CFL
                             ! limit is not violated.
-  integer :: ntr = 0        ! The number of registered tracers.
-  type(tracer) :: Tr(MAX_FIELDS_)  ! The array of registered tracers.
   type(diag_ptrs), pointer :: diag ! A pointer to a structure of shareable
                             ! ocean diagnostic fields and control variables.
-  logical :: debug           ! If true, write verbose checksums for debugging purposes.
-  integer :: id_KhTr_u, id_KhTr_v
-end type advect_tracer_CS
+  logical :: debug          ! If true, write verbose checksums for debugging purposes.
+  logical :: first_call = .true.
+  integer :: id_KhTr_u = -1, id_KhTr_v = -1
+end type tracer_hor_diff_CS
 
 type p2d
   real, dimension(:,:), pointer :: p => NULL()
@@ -142,744 +99,19 @@ type p2di
   integer, dimension(:,:), pointer :: p => NULL()
 end type p2di
 
-integer :: id_clock_advect, id_clock_diffuse, id_clock_epimix
-integer :: id_clock_pass, id_clock_sync
+integer :: id_clock_diffuse, id_clock_epimix, id_clock_pass, id_clock_sync
 
 contains
 
-subroutine register_tracer(tr1, name, param_file, CS, ad_x, ad_y, &
-                           df_x, df_y, OBC_inflow, OBC_in_u, OBC_in_v)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), target :: tr1
-  character(len=*), intent(in)               :: name
-  type(param_file_type), intent(in)          :: param_file
-  type(advect_tracer_CS), pointer            :: CS
-  real, pointer, dimension(:,:,:), optional  :: ad_x, ad_y, df_x, df_y
-  real, intent(in), optional                 :: OBC_inflow
-  real, pointer, dimension(:,:,:), optional  :: OBC_in_u, OBC_in_v
-! This subroutine registers a tracer to be advected and horizontally
-! diffused.
-
-! Arguments: tr1 - The pointer to the tracer, in arbitrary concentration units (CONC).
-!  (in)      name - The name to be used in messages about the tracer.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (in/out)  CS - A pointer that is set to point to the control structure
-!                 for this module
-!  (in)      ad_x - An array in which zonal advective fluxes are stored in
-!                   units of CONC m3 s-1.
-!  (in)      ad_y - An array in which meridional advective fluxes are stored
-!                   in units of CONC m3 s-1.
-!  (in)      df_x - An array in which zonal diffusive fluxes are stored in
-!                   units of CONC m3 s-1.
-!  (in)      df_y - An array in which meridional diffusive fluxes are stored
-!                   in units of CONC m3 s-1.
-!  (in)      OBC_inflow - The value of the tracer for all inflows via the open
-!                         boundary conditions for which OBC_in_u or OBC_in_v are
-!                         not specified, in the same units as tr (CONC).
-!  (in)      OBC_in_u - The value of the tracer at inflows through u-faces of
-!                       tracer cells, in the same units as tr (CONC).
-!  (in)      OBC_in_v - The value of the tracer at inflows through v-faces of
-!                       tracer cells, in the same units as tr (CONC).
-
-  integer :: m, ntr
-  type(tracer) :: temp
-  character(len=256) :: mesg    ! Message for error messages.
-
-  if (.not. associated(CS)) call advect_tracer_init(param_file, CS)
-
-  if (CS%ntr>=MAX_FIELDS_) then
-    write(mesg,'("Increase MAX_FIELDS_ in MOM_memory.h to at least ",I3," to allow for &
-        &all the tracers being registered via register_tracer.")') CS%ntr+1
-    call MOM_error(FATAL,"MOM register_tracer: "//mesg)
-  endif
-  CS%ntr = CS%ntr + 1
-  ntr = CS%ntr
-
-  CS%Tr(ntr)%name = trim(name)
-  CS%Tr(ntr)%t => tr1
-
-  if (present(ad_x)) then ; if (associated(ad_x)) CS%Tr(ntr)%ad_x => ad_x ; endif
-  if (present(ad_y)) then ; if (associated(ad_y)) CS%Tr(ntr)%ad_y => ad_y ; endif
-  if (present(df_x)) then ; if (associated(df_x)) CS%Tr(ntr)%df_x => df_x ; endif
-  if (present(df_y)) then ; if (associated(df_y)) CS%Tr(ntr)%df_y => df_y ; endif
-  if (present(OBC_inflow)) CS%Tr(ntr)%OBC_inflow_conc = OBC_inflow
-  if (present(OBC_in_u)) then ; if (associated(OBC_in_u)) &
-                                    CS%Tr(ntr)%OBC_in_u => OBC_in_u ; endif
-  if (present(OBC_in_v)) then ; if (associated(OBC_in_v)) &
-                                    CS%Tr(ntr)%OBC_in_v => OBC_in_v ; endif
-
-end subroutine register_tracer
-
-subroutine add_tracer_OBC_values(name, CS, OBC_inflow, OBC_in_u, OBC_in_v)
-  character(len=*), intent(in)               :: name
-  type(advect_tracer_CS), pointer            :: CS
-  real, intent(in), optional                 :: OBC_inflow
-  real, pointer, dimension(:,:,:), optional  :: OBC_in_u, OBC_in_v
-! This subroutine adds open boundary condition concentrations for a tracer that
-! has previously been registered by a call to register_tracer.
-
-! Arguments: name - The name of the tracer for which the diagnostic pointers.
-!  (in/out)  CS - A pointer that is set to point to the control structure
-!                 for this module
-!  (in)      OBC_inflow - The value of the tracer for all inflows via the open
-!                         boundary conditions for which OBC_in_u or OBC_in_v are
-!                         not specified, in the same units as tr (CONC).
-!  (in)      OBC_in_u - The value of the tracer at inflows through u-faces of
-!                       tracer cells, in the same units as tr (CONC).
-!  (in)      OBC_in_v - The value of the tracer at inflows through v-faces of
-  integer :: m
-
-  if (.not. associated(CS)) call MOM_error(FATAL, "add_tracer_OBC_values :"// &
-       "register_tracer must be called before add_tracer_OBC_values")
-
-  do m=1,CS%ntr ; if (CS%Tr(m)%name == trim(name)) exit ; enddo
-
-  if (m <= CS%ntr) then
-    if (present(OBC_inflow)) CS%Tr(m)%OBC_inflow_conc = OBC_inflow
-    if (present(OBC_in_u)) then ; if (associated(OBC_in_u)) &
-                                      CS%Tr(m)%OBC_in_u => OBC_in_u ; endif
-    if (present(OBC_in_v)) then ; if (associated(OBC_in_v)) &
-                                      CS%Tr(m)%OBC_in_v => OBC_in_v ; endif
-  else
-    call MOM_error(FATAL, "MOM_tracer: register_tracer must be called for "//&
-             trim(name)//" before add_tracer_OBC_values is called for it.")
-  endif
-
-end subroutine add_tracer_OBC_values
-
-subroutine add_tracer_diagnostics(name, CS, ad_x, ad_y, df_x, df_y)
-  character(len=*), intent(in)   :: name
-  type(advect_tracer_CS), pointer :: CS
-  real, pointer, dimension(:,:,:), optional :: ad_x, ad_y, df_x, df_y
-! This subroutine adds diagnostic arrays for a tracer that has previously been
-! registered by a call to register_tracer.
-
-! Arguments: name - The name of the tracer for which the diagnostic pointers.
-!  (in/out)  CS - A pointer that is set to point to the control structure
-!                 for this module
-!  (in)      ad_x - An array in which zonal advective fluxes are stored in
-!                   units of CONC m3 s-1.
-!  (in)      ad_y - An array in which meridional advective fluxes are stored
-!                   in units of CONC m3 s-1.
-!  (in)      df_x - An array in which zonal diffusive fluxes are stored in
-!                   units of CONC m3 s-1.
-!  (in)      df_y - An array in which meridional diffusive fluxes are stored
-!                   in units of CONC m3 s-1.
-  integer :: m
-  logical :: write_warning
-
-  if (.not. associated(CS)) call MOM_error(FATAL, "add_tracer_diagnostics: "// &
-       "register_tracer must be called before add_tracer_diagnostics")
-
-  do m=1,CS%ntr ; if (CS%Tr(m)%name == trim(name)) exit ; enddo
-
-  if (m <= CS%ntr) then
-    if (present(ad_x)) then ; if (associated(ad_x)) CS%Tr(m)%ad_x => ad_x ; endif
-    if (present(ad_y)) then ; if (associated(ad_y)) CS%Tr(m)%ad_y => ad_y ; endif
-    if (present(df_x)) then ; if (associated(df_x)) CS%Tr(m)%df_x => df_x ; endif
-    if (present(df_y)) then ; if (associated(df_y)) CS%Tr(m)%df_y => df_y ; endif
-  else
-    call MOM_error(FATAL, "MOM_tracer: register_tracer must be called for "//&
-             trim(name)//" before add_tracer_diagnostics is called for it.")
-  endif
-  if (CS%Diffuse_ML_interior) then
-    write_warning = .false.
-    if (present(df_x)) then ; if (associated(df_x)) write_warning = .true. ; endif
-    if (present(df_y)) then ; if (associated(df_y)) write_warning = .true. ; endif
-    if (write_warning .and. is_root_pe()) call MOM_error(WARNING, &
-      "add_tracer_diagnostics: "// &
-      "3-d tracer diffusion diagnostics are not complete with DIFFUSE_ML_TO_INTERIOR "// &
-      "defined.  Use 2-d tracer diffusion diagnostics instead for total fluxes.")
-  endif 
-
-end subroutine add_tracer_diagnostics
-
-subroutine add_tracer_2d_diagnostics(name, CS, ad_x, ad_y, df_x, df_y)
-  character(len=*), intent(in)   :: name
-  type(advect_tracer_CS), pointer :: CS
-  real, pointer, dimension(:,:), optional :: ad_x, ad_y, df_x, df_y
-! This subroutine adds diagnostic arrays for a tracer that has previously been
-! registered by a call to register_tracer.
-
-! Arguments: name - The name of the tracer for which the diagnostic pointers.
-!  (in/out)  CS - A pointer that is set to point to the control structure
-!                 for this module
-!  (in)      ad_x - An array in which the vertically summed zonal advective
-!                   fluxes are stored in units of CONC m3 s-1.
-!  (in)      ad_y - An array in which the vertically summed meridional advective
-!                   fluxes are stored in units of CONC m3 s-1.
-!  (in)      df_x - An array in which the vertically summed zonal diffusive
-!                   fluxes are stored in units of CONC m3 s-1.
-!  (in)      df_y - An array in which the vertically summed meridional diffusive
-!                   fluxes are stored in units of CONC m3 s-1.
-  integer :: m
-
-  if (.not. associated(CS)) call MOM_error(FATAL, "add_tracer_diagnostics: "// &
-       "register_tracer must be called before add_tracer_diagnostics")
-
-  do m=1,CS%ntr ; if (CS%Tr(m)%name == trim(name)) exit ; enddo
-
-  if (m <= CS%ntr) then
-    if (present(ad_x)) then ; if (associated(ad_x)) CS%Tr(m)%ad2d_x => ad_x ; endif
-    if (present(ad_y)) then ; if (associated(ad_y)) CS%Tr(m)%ad2d_y => ad_y ; endif
-    if (present(df_x)) then ; if (associated(df_x)) CS%Tr(m)%df2d_x => df_x ; endif
-    if (present(df_y)) then ; if (associated(df_y)) CS%Tr(m)%df2d_y => df_y ; endif
-  else
-    call MOM_error(FATAL, "MOM_tracer: register_tracer must be called for "//&
-             trim(name)//" before add_tracer_2d_diagnostics is called for it.")
-  endif
-
-end subroutine add_tracer_2d_diagnostics
-
-
-subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, CS)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h_end
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)    :: uhtr
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)    :: vhtr
-  type(ocean_OBC_type),                   pointer       :: OBC
-  real,                                   intent(in)    :: dt
-  type(ocean_grid_type),                  intent(inout) :: G
-  type(advect_tracer_CS),                 pointer       :: CS
-!    This subroutine time steps the tracer concentration.
-!  A monotonic, conservative, weakly diffusive scheme is used.
-
-! Arguments: h_end - Layer thickness after advection, in m or kg m-2.
-!  (in)      uhtr - Accumulated volume or mass fluxes through zonal faces,
-!                   in m3 or kg.
-!  (in)      vhtr - Accumulated volume or mass fluxes through meridional faces,
-!                   in m3 or kg.
-!  (in)      OBC - This open boundary condition type specifies whether, where,
-!                  and what open boundary conditions are used.
-!  (in)      dt - Time increment in s.
-!  (in)      G - The ocean's grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 advect_tracer_init.
-
-  type(tracer) :: Tr(MAX_FIELDS_) ! The array of registered tracers.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
-    hprev           ! The cell volume at the end of the previous tracer
-                    ! change, in m3.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: &
-    uhr             ! The remaining zonal thickness flux, in m3.
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: &
-    vhr             ! The remaining meridional thickness fluxes, in m3.
-  real :: uh_neglect(SZIB_(G),SZJ_(G)) ! uh_neglect and vh_neglect are the
-  real :: vh_neglect(SZI_(G),SZJB_(G)) ! magnitude of remaining transports that
-                                ! can be simply discarded, in m3 or kg.
-
-  real :: landvolfill         ! An arbitrary? nonzero cell volume, m3.
-  real :: Idt                 ! 1/dt in s-1.
-  logical :: domore_u(SZJ_(G),SZK_(G))  ! domore__ indicate whether there is more
-  logical :: domore_v(SZJB_(G),SZK_(G)) ! advection to be done in the corresponding
-                                ! row or column.
-  logical :: x_first            ! If true, advect in the x-direction first.
-  integer :: max_iter           ! The maximum number of iterations in
-                                ! each layer.
-  integer :: domore_k(SZK_(G))
-  integer :: stensil            ! The stensil of the advection scheme.
-  integer :: nsten_halo         ! The number of stensils that fit in the halos.
-  integer :: i, j, k, m, is, ie, js, je, isd, ied, jsd, jed, nz, itt, ntr, do_any
-  integer :: isv, iev, jsv, jev ! The valid range of the indices.
-
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  landvolfill = 1.0e-20         ! This is arbitrary, but must be positive.
-  stensil = 2                   ! The scheme's stensil; 2 for PLM.
-
-  if (.not. associated(CS)) call MOM_error(FATAL, "MOM_tracer: "// &
-       "register_tracer must be called before advect_tracer.")
-  if (CS%ntr==0) return
-  call cpu_clock_begin(id_clock_advect)
-  x_first = (MOD(G%first_direction,2) == 0)
-
-  ntr = CS%ntr
-  do m=1,ntr ; Tr(m) = CS%Tr(m) ; enddo
-  Idt = 1.0/dt
-
-  max_iter = 2*INT(CEILING(dt/CS%dt)) + 1
-
-! This initializes the halos of uhr and vhr because pass_vector might do
-! calculations on them, even though they are never used.
-  uhr(:,:,:) = 0.0 ; vhr(:,:,:) = 0.0
-  hprev(:,:,:) = landvolfill
-
-  do k=1,nz
-    domore_k(k)=1
-!  Put the remaining (total) thickness fluxes into uhr and vhr.
-    do j=js,je ; do I=is-1,ie ; uhr(I,j,k) = uhtr(I,j,k) ; enddo ; enddo
-    do J=js-1,je ; do i=is,ie ; vhr(i,J,k) = vhtr(i,J,k) ; enddo ; enddo
-!   This loop reconstructs the thickness field the last time that the
-! tracers were updated, probably just after the diabatic forcing.  A useful
-! diagnostic could be to compare this reconstruction with that older value.
-    do i=is,ie ; do j=js,je
-      hprev(i,j,k) = max(0.0, G%areaT(i,j)*h_end(i,j,k) + &
-           ((uhr(I,j,k) - uhr(I-1,j,k)) + (vhr(i,J,k) - vhr(i,J-1,k))))
-! In the case that the layer is now dramatically thinner than it was previously,
-! add a bit of mass to avoid truncation errors.  This will lead to
-! non-conservation of tracers 
-      hprev(i,j,k) = hprev(i,j,k) + &
-                     max(0.0, 1.0e-13*hprev(i,j,k) - G%areaT(i,j)*h_end(i,j,k))
-    enddo ; enddo
-  enddo
-  do j=jsd,jed ; do I=isd,ied-1
-    uh_neglect(I,j) = G%H_subroundoff*MIN(G%areaT(i,j),G%areaT(i+1,j))
-  enddo ; enddo
-  do J=jsd,jed-1 ; do i=isd,ied
-    vh_neglect(i,J) = G%H_subroundoff*MIN(G%areaT(i,j),G%areaT(i,j+1))
-  enddo ; enddo
-
-  do m=1,ntr
-    if (associated(Tr(m)%ad_x)) then
-      do k=1,nz ; do j=jsd,jed ; do i=isd,ied
-        Tr(m)%ad_x(I,j,k) = 0.0
-      enddo ; enddo ; enddo
-    endif
-    if (associated(Tr(m)%ad_y)) then
-      do k=1,nz ; do J=jsd,jed ; do i=isd,ied
-        Tr(m)%ad_y(i,J,k) = 0.0
-      enddo ; enddo ; enddo
-    endif
-    if (associated(Tr(m)%ad2d_x)) then
-      do j=jsd,jed ; do i=isd,ied ; Tr(m)%ad2d_x(I,j) = 0.0 ; enddo ; enddo
-    endif
-    if (associated(Tr(m)%ad2d_y)) then
-      do J=jsd,jed ; do i=isd,ied ; Tr(m)%ad2d_y(i,J) = 0.0 ; enddo ; enddo
-    endif
-  enddo
-
-  isv = is ; iev = ie ; jsv = js ; jev = je
-
-  do itt=1,max_iter
-
-    if (isv > is-stensil) then
-      call cpu_clock_begin(id_clock_pass)
-      call pass_vector(uhr, vhr, G%Domain)
-      do m=1,ntr ; call pass_var(Tr(m)%t, G%Domain, complete=.false.) ; enddo
-      call pass_var(hprev, G%Domain)
-      call cpu_clock_end(id_clock_pass)
-
-      nsten_halo = min(is-isd,ied-ie,js-jsd,jed-je)/stensil
-      isv = is-nsten_halo*stensil ; jsv = js-nsten_halo*stensil
-      iev = ie+nsten_halo*stensil ; jev = je+nsten_halo*stensil
-      ! Reevaluate domore_u & domore_v unless the valid range is the same size as
-      ! before.  Also, do this if there is Strang splitting.
-      if ((nsten_halo > 1) .or. (itt==1)) then
-        do k=1,nz ; if (domore_k(k) > 0) then
-          do j=jsv,jev ; if (.not.domore_u(j,k)) then
-            do i=isv+stensil-1,iev-stensil; if (uhr(I,j,k) /= 0.0) then
-              domore_u(j,k) = .true. ; exit
-            endif ; enddo ! i-loop
-          endif ; enddo
-          do J=jsv+stensil-1,jev-stensil ; if (.not.domore_v(J,k)) then
-            do i=isv+stensil,iev-stensil; if (vhr(i,J,k) /= 0.0) then
-              domore_v(J,k) = .true. ; exit
-            endif ; enddo ! i-loop
-          endif ; enddo
-          
-          !   At this point, domore_k is global.  Change it so that it indicates
-          ! whether any work is needed on a layer on this processor.
-          domore_k(k) = 0
-          do j=jsv,jev ; if (domore_u(j,k)) domore_k(k) = 1 ; enddo
-          do J=jsv+stensil-1,jev-stensil ; if (domore_v(J,k)) domore_k(k) = 1 ; enddo
-
-        endif ; enddo ! k-loop    
-      endif
-    endif
-    
-    ! Set the range of valid points after this iteration.
-    isv = isv + stensil ; iev = iev - stensil
-    jsv = jsv + stensil ; jev = jev - stensil
-
-    do k=1,nz ; if (domore_k(k) > 0) then
-!    To ensure positive definiteness of the thickness at each iteration, the
-!  mass fluxes out of each layer are checked each step, and limited to keep
-!  the thicknesses positive.  This means that several iteration may be required
-!  for all the transport to happen.  The sum over domore_k keeps the processors
-!  synchronized.  This may not be very efficient, but it should be reliable.
-
-      if (x_first) then
-  !    First, advect zonally.
-        call advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
-                      isv, iev, jsv-stensil, jev+stensil, k, G)
-
-  !    Next, advect meridionally.
-        call advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
-                      isv, iev, jsv, jev, k, G)
-
-        domore_k(k) = 0
-        do j=jsv-stensil,jev+stensil ; if (domore_u(j,k)) domore_k(k) = 1 ; enddo
-        do J=jsv-1,jev ; if (domore_v(J,k)) domore_k(k) = 1 ; enddo
-      else
-  !    First, advect meridionally.
-        call advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
-                      isv-stensil, iev+stensil, jsv, jev, k, G)
-
-  !    Next, advect zonally.
-        call advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
-                      isv, iev, jsv, jev, k, G)
-
-        domore_k(k) = 0
-        do j=jsv,jev ; if (domore_u(j,k)) domore_k(k) = 1 ; enddo
-        do J=jsv-1,jev ; if (domore_v(J,k)) domore_k(k) = 1 ; enddo
-      endif
-
-    endif ; enddo ! End of k-loop
-
-    ! If the advection just isn't finishing after max_iter, move on.
-    if (itt >= max_iter) exit
-
-    ! Exit if there are no layers that need more iterations.
-    if (isv > is-stensil) then
-      do_any = 0
-      call cpu_clock_begin(id_clock_sync)
-      call sum_across_PEs(domore_k(:), nz)
-      call cpu_clock_end(id_clock_sync)
-      do k=1,nz ; do_any = do_any + domore_k(k) ; enddo
-      if (do_any == 0) exit
-    endif
-
-  enddo ! Iterations loop
-
-  call cpu_clock_end(id_clock_advect)
-
-end subroutine advect_tracer
-
-subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
-                    is, ie, js, je, k, G)
-  type(tracer), dimension(ntr),           intent(inout) :: Tr
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(inout) :: hprev
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(inout) :: uhr
-  real, dimension(NIMEMB_,NJMEM_),        intent(inout) :: uh_neglect
-  type(ocean_OBC_type),                   pointer       :: OBC
-  logical, dimension(NJMEM_,NKMEM_),      intent(inout) :: domore_u
-  real,                                   intent(in)    :: Idt
-  integer,                                intent(in)    :: ntr, is, ie, js, je,k
-  type(ocean_grid_type),                  intent(inout) :: G
-  !   This subroutine does 1-d flux-form advection in the zonal direction using
-  ! a monotonic piecewise linear scheme.
-  real, dimension(SZIB_(G),ntr) :: &
-    slope_x, &      ! The concentration slope per grid point in units of
-                    ! concentration (nondim.).
-    flux_x          ! The tracer flux across a boundary in m3*conc or kg*conc.
-  real :: maxslope            ! The maximum concentration slope per grid point
-                              ! consistent with monotonicity, in conc. (nondim.).
-  real :: hup, hlos           ! hup is the upwind volume, hlos is the
-                              ! part of that volume that might be lost
-                              ! due to advection out the other side of
-                              ! the grid box, both in m3 or kg.
-  real :: uhh(SZIB_(G))       ! The zonal flux that occurs during the
-                              ! current iteration, in m3 or kg.
-  real, dimension(SZIB_(G)) :: &
-    hlst, Ihnew, &      ! Work variables with units of m3 or kg and m-3 or kg-1.
-    ts2                 ! A nondimensional work variable.
-  real :: min_h         ! The minimum thickness that can be realized during
-                        ! any of the passes, in m or kg m-2.
-  real :: h_neglect     ! A thickness that is so small it is usually lost
-                        ! in roundoff and can be neglected, in m.
-  logical :: do_i(SZIB_(G))     ! If true, work on given points.
-  logical :: do_any_i
-  integer :: i, j, m
-
-  min_h = 0.1*G%Angstrom
-  h_neglect = G%H_subroundoff
-
-  do I=is-1,ie ; ts2(I) = 0.0 ; enddo
-  
-  do j=js,je ; if (domore_u(j,k)) then
-    domore_u(j,k) = .false.
-
-!   Calculate the i-direction profiles (slopes) of each tracer that
-! is being advected.
-    do m=1,ntr ; do i=is-1,ie+1
-      if (ABS(Tr(m)%t(i+1,j,k)-Tr(m)%t(i,j,k)) < &
-          ABS(Tr(m)%t(i,j,k)-Tr(m)%t(i-1,j,k))) then
-        maxslope = 4.0*(Tr(m)%t(i+1,j,k)-Tr(m)%t(i,j,k))
-      else
-        maxslope = 4.0*(Tr(m)%t(i,j,k)-Tr(m)%t(i-1,j,k))
-      endif
-      if ((Tr(m)%t(i+1,j,k)-Tr(m)%t(i,j,k)) * (Tr(m)%t(i,j,k)-Tr(m)%t(i-1,j,k)) < 0.0) then
-        slope_x(i,m) = 0.0
-      elseif (ABS(Tr(m)%t(i+1,j,k)-Tr(m)%t(i-1,j,k))<ABS(maxslope)) then
-        slope_x(i,m) = G%mask2dCu(I,j)*G%mask2dCu(I-1,j) * &
-                       0.5*(Tr(m)%t(i+1,j,k)-Tr(m)%t(i-1,j,k))
-      else
-        slope_x(i,m) = G%mask2dCu(I,j)*G%mask2dCu(I-1,j) * 0.5*maxslope
-      endif
-    enddo ; enddo
-
-!   Calculate the i-direction fluxes of each tracer, using as much
-! the minimum of the remaining mass flux (uhr) and the half the mass
-! in the cell plus whatever part of its half of the mass flux that
-! the flux through the other side does not require.
-    do I=is-1,ie
-      if (uhr(I,j,k) == 0.0) then
-        uhh(I) = 0.0
-      elseif (uhr(I,j,k) < 0.0) then
-        hup = (hprev(i+1,j,k)-G%areaT(i+1,j)*G%Angstrom*0.1)
-        hlos = MAX(0.0,uhr(I+1,j,k))
-        if (((hup + uhr(I,j,k) - hlos) < 0.0) .and. &
-            ((0.5*hup + uhr(I,j,k)) < 0.0)) then
-          uhh(I) = MIN(-0.5*hup,-hup+hlos,0.0)
-          domore_u(j,k) = .true.
-        else
-          uhh(I) = uhr(I,j,k)
-        endif
-        ts2(I) = 0.5*(1.0 + uhh(I)/(hprev(i+1,j,k)+h_neglect))
-      else
-        hup = (hprev(i,j,k)-G%areaT(i,j)*G%Angstrom*0.1)
-        hlos = MAX(0.0,-uhr(I-1,j,k))
-        if (((hup - uhr(I,j,k) - hlos) < 0.0) .and. &
-            ((0.5*hup - uhr(I,j,k)) < 0.0)) then
-          uhh(I) = MAX(0.5*hup,hup-hlos,0.0)
-          domore_u(j,k) = .true.
-        else
-          uhh(I) = uhr(I,j,k)
-        endif
-        ts2(I) = 0.5*(1.0 - uhh(I)/(hprev(i,j,k)+h_neglect))
-      endif
-    enddo
-    do m=1,ntr ; do I=is-1,ie
-      if (uhh(I) >= 0.0) then
-        flux_x(I,m) = uhh(I)*(Tr(m)%t(i,j,k) + slope_x(i,m)*ts2(I))
-      else
-        flux_x(I,m) = uhh(I)*(Tr(m)%t(i+1,j,k) - slope_x(i+1,m)*ts2(I))
-      endif
-    enddo ; enddo
-    if (associated(OBC)) then ; if (OBC%apply_OBC_u) then
-      do_any_i = .false.
-      do I=is-1,ie
-        do_i(I) = .false.
-        if (OBC%OBC_mask_u(I,j) .and. uhr(I,j,k) /= 0.0) then
-          ! Tracer fluxes are set to prescribed values only for inflows
-          ! from masked areas.
-          if (((uhr(I,j,k) > 0.0) .and. ((G%mask2dT(i,j) < 0.5) .or. &
-                  (OBC%OBC_kind_u(I,j) == OBC_FLATHER_W))) .or. &
-              ((uhr(I,j,k) < 0.0) .and. ((G%mask2dT(i+1,j) < 0.5) .or. &
-                  (OBC%OBC_kind_u(I,j) == OBC_FLATHER_E))) ) then
-            do_i(I) = .true. ; do_any_i = .true.
-            uhh(I) = uhr(I,j,k)
-          endif
-        endif
-      enddo
-      if (do_any_i) then ; do m=1,ntr ; do i=is,ie ; if (do_i(i)) then
-        if (associated(Tr(m)%OBC_in_u)) then
-          flux_x(I,m) = uhh(I)*Tr(m)%OBC_in_u(I,j,k)
-        else ; flux_x(I,m) = uhh(I)*Tr(m)%OBC_inflow_conc ; endif
-      endif ; enddo ; enddo ; endif
-    endif ; endif
-
-!   Calculate new tracer concentration in each cell after accounting
-! for the i-direction fluxes.
-    do I=is-1,ie
-      uhr(I,j,k) = uhr(I,j,k) - uhh(I)
-      if (abs(uhr(I,j,k)) < uh_neglect(I,j)) uhr(I,j,k) = 0.0
-    enddo
-    do i=is,ie
-      if ((uhh(I) /= 0.0) .or. (uhh(I-1) /= 0.0)) then
-        do_i(i) = .true.
-        hlst(i) = hprev(i,j,k)
-        hprev(i,j,k) = hprev(i,j,k) - (uhh(I) - uhh(I-1))
-        if (hprev(i,j,k) <= 0.0) then ; do_i(i) = .false.
-        elseif (hprev(i,j,k) < h_neglect*G%areaT(i,j)) then
-          hlst(i) = hlst(i) + (h_neglect*G%areaT(i,j) - hprev(i,j,k))
-          Ihnew(i) = 1.0 / (h_neglect*G%areaT(i,j))
-        else ;  Ihnew(i) = 1.0 / hprev(i,j,k) ; endif
-      else
-        do_i(i) = .false.
-      endif
-    enddo
-    do m=1,ntr
-      do i=is,ie ; if ((do_i(i)) .and. (Ihnew(i) > 0.0)) then
-        Tr(m)%t(i,j,k) = (Tr(m)%t(i,j,k) * hlst(i) - &
-                          (flux_x(I,m) - flux_x(I-1,m))) * Ihnew(i)
-      endif ; enddo
-      if (associated(Tr(m)%ad_x)) then ; do i=is,ie ; if (do_i(i)) then
-        Tr(m)%ad_x(I,j,k) = Tr(m)%ad_x(I,j,k) + flux_x(I,m)*Idt
-      endif ; enddo ; endif
-      if (associated(Tr(m)%ad2d_x)) then ; do i=is,ie ; if (do_i(i)) then
-        Tr(m)%ad2d_x(I,j) = Tr(m)%ad2d_x(I,j) + flux_x(I,m)*Idt
-      endif ; enddo ; endif
-    enddo
-
-  endif ; enddo ! End of j-loop.
-
-end subroutine advect_x
-
-subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
-                    is, ie, js, je, k, G)
-  type(tracer), dimension(ntr),           intent(inout) :: Tr
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(inout) :: hprev
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(inout) :: vhr
-  real, dimension(NIMEM_,NJMEMB_),        intent(inout) :: vh_neglect
-  type(ocean_OBC_type),                   pointer       :: OBC
-  logical, dimension(NJMEMB_,NKMEM_),     intent(inout) :: domore_v
-  real,                                   intent(in)    :: Idt
-  integer,                                intent(in)    :: ntr, is, ie, js, je,k
-  type(ocean_grid_type),                  intent(inout) :: G
-  !   This subroutine does 1-d flux-form advection using a monotonic piecewise
-  ! linear scheme.
-  real, dimension(SZI_(G),ntr,SZJB_(G)) :: &
-    slope_y, &      ! The concentration slope per grid point in units of
-                    ! concentration (nondim.).
-    flux_y          ! The tracer flux across a boundary in m3 * conc or kg*conc.
-  real :: maxslope            ! The maximum concentration slope per grid point
-                              ! consistent with monotonicity, in conc. (nondim.).
-  real :: vhh(SZI_(G),SZJB_(G)) ! The meridional flux that occurs during the
-                              ! current iteration, in m3 or kg.
-  real :: hup, hlos           ! hup is the upwind volume, hlos is the
-                              ! part of that volume that might be lost
-                              ! due to advection out the other side of
-                              ! the grid box, both in m3 or kg.
-  real, dimension(SZIB_(G)) :: &
-    hlst, Ihnew, &      ! Work variables with units of m3 or kg and m-3 or kg-1.
-    ts2                 ! A nondimensional work variable.
-  real :: min_h         ! The minimum thickness that can be realized during
-                        ! any of the passes, in m or kg m-2.
-  real :: h_neglect     ! A thickness that is so small it is usually lost
-                        ! in roundoff and can be neglected, in m.
-  logical :: do_j_tr(SZJ_(G))   ! If true, calculate the tracer profiles.
-  logical :: do_i(SZIB_(G))     ! If true, work on given points.
-  logical :: do_any_i
-  integer :: i, j, m
-
-  min_h = 0.1*G%Angstrom
-  h_neglect = G%H_subroundoff
-
-  do i=is,ie ; ts2(i) = 0.0 ; enddo
-!   Calculate the j-direction profiles (slopes) of each tracer that
-! is being advected.
-  do_j_tr(js-1) = domore_v(js-1,k) ; do_j_tr(je+1) = domore_v(je,k)
-  do j=js,je ; do_j_tr(j) = (domore_v(J-1,k) .or. domore_v(J,k)) ; enddo
-  do j=js-1,je+1 ; if (do_j_tr(j)) then ; do m=1,ntr ; do i=is,ie
-    if (ABS(Tr(m)%t(i,j+1,k)-Tr(m)%t(i,j,k)) < &
-        ABS(Tr(m)%t(i,j,k)-Tr(m)%t(i,j-1,k))) then
-      maxslope = 4.0*(Tr(m)%t(i,j+1,k)-Tr(m)%t(i,j,k))
-    else
-      maxslope = 4.0*(Tr(m)%t(i,j,k)-Tr(m)%t(i,j-1,k))
-    endif
-
-    if ((Tr(m)%t(i,j+1,k)-Tr(m)%t(i,j,k))*(Tr(m)%t(i,j,k)-Tr(m)%t(i,j-1,k)) < 0.0) then
-      slope_y(i,m,j) = 0.0
-    elseif (ABS(Tr(m)%t(i,j+1,k)-Tr(m)%t(i,j-1,k))<ABS(maxslope)) then
-      slope_y(i,m,j) = G%mask2dCv(i,J) * G%mask2dCv(i,J-1) * &
-                     0.5*(Tr(m)%t(i,j+1,k)-Tr(m)%t(i,j-1,k))
-    else
-      slope_y(i,m,j) = G%mask2dCv(i,J) * G%mask2dCv(i,J-1) * 0.5*maxslope
-    endif
-  enddo ; enddo ; endif ; enddo ! End of i-, m-, & j- loops.
-
-!   Calculate the j-direction fluxes of each tracer, using as much
-! the minimum of the remaining mass flux (vhr) and the half the mass
-! in the cell plus whatever part of its half of the mass flux that
-! the flux through the other side does not require.
-  do J=js-1,je ; if (domore_v(J,k)) then
-    domore_v(J,k) = .false.
-    do i=is,ie
-      if (vhr(i,J,k) == 0.0) then
-        vhh(i,J) = 0.0
-      elseif (vhr(i,J,k) < 0.0) then
-        hup = (hprev(i,j+1,k)-G%areaT(i,j+1)*G%Angstrom*0.1)
-        hlos = MAX(0.0,vhr(i,J+1,k))
-        if ((((hup - hlos) + vhr(i,J,k)) < 0.0) .and. &
-            ((0.5*hup + vhr(i,J,k)) < 0.0)) then
-          vhh(i,J) = MIN(-0.5*hup,-hup+hlos,0.0)
-          domore_v(J,k) = .true.
-        else
-          vhh(i,J) = vhr(i,J,k)
-        endif
-        ts2(i) = 0.5*(1.0 + vhh(i,J) / (hprev(i,j+1,k)+h_neglect))
-      else
-        hup = (hprev(i,j,k)-G%areaT(i,j)*G%Angstrom*0.1)
-        hlos = MAX(0.0,-vhr(i,J-1,k))
-        if ((((hup - hlos) - vhr(i,J,k)) < 0.0) .and. &
-            ((0.5*hup - vhr(i,J,k)) < 0.0)) then
-          vhh(i,J) = MAX(0.5*hup,hup-hlos,0.0)
-          domore_v(J,k) = .true.
-        else
-          vhh(i,J) = vhr(i,J,k)
-        endif
-        ts2(i) = 0.5*(1.0 - vhh(i,J) / (hprev(i,j,k)+h_neglect))
-      endif
-    enddo
-    do m=1,ntr ; do i=is,ie
-      if (vhh(i,J) >= 0.0) then
-        flux_y(i,m,J) = vhh(i,J)*(Tr(m)%t(i,j,k) + slope_y(i,m,j)*ts2(i))
-      else
-        flux_y(i,m,J) = vhh(i,J)*(Tr(m)%t(i,j+1,k) - slope_y(i,m,j+1)*ts2(i))
-      endif
-    enddo ; enddo
-
-    if (associated(OBC)) then ; if (OBC%apply_OBC_v) then
-      do_any_i = .false.
-      do i=is,ie
-        do_i(i) = .false.
-        if (OBC%OBC_mask_v(i,J) .and. vhr(i,J,k) /= 0.0) then
-        ! Tracer fluxes are set to prescribed values only for inflows
-        ! from masked areas.
-          if (((vhr(i,J,k) > 0.0) .and. ((G%mask2dT(i,j) < 0.5) .or. &
-                  (OBC%OBC_kind_v(i,J) == OBC_FLATHER_S))) .or. &
-              ((vhr(i,J,k) < 0.0) .and. ((G%mask2dT(i,j+1) < 0.5) .or. &
-                  (OBC%OBC_kind_v(i,J) == OBC_FLATHER_N))) ) then
-            do_i(i) = .true. ; do_any_i = .true.
-            vhh(i,J) = vhr(i,J,k)
-          endif
-        endif
-      enddo
-      if (do_any_i) then ; do m=1,ntr ; do i=is,ie ; if (do_i(i)) then
-        if (associated(Tr(m)%OBC_in_v)) then
-          flux_y(i,m,J) = vhh(i,J)*Tr(m)%OBC_in_v(i,J,k)
-        else ; flux_y(i,m,J) = vhh(i,J)*Tr(m)%OBC_inflow_conc ; endif
-      endif ; enddo ; enddo ; endif
-    endif ; endif
-  else ! not domore_v.
-    do i=is,ie ; vhh(i,J) = 0.0 ; enddo
-    do m=1,ntr ; do i=is,ie ; flux_y(i,m,J) = 0.0 ; enddo ; enddo
-  endif ; enddo ! End of j-loop
-
-  do J=js-1,je ; do i=is,ie
-    vhr(i,J,k) = vhr(i,J,k) - vhh(i,J)
-    if (abs(vhr(i,J,k)) < vh_neglect(i,J)) vhr(i,J,k) = 0.0
-  enddo ; enddo
-
-!   Calculate new tracer concentration in each cell after accounting
-! for the j-direction fluxes.
-  do j=js,je ; if (do_j_tr(j)) then
-    do i=is,ie
-      if ((vhh(i,J) /= 0.0) .or. (vhh(i,J-1) /= 0.0)) then
-        do_i(i) = .true.
-        hlst(i) = hprev(i,j,k)
-        hprev(i,j,k) = max(hprev(i,j,k) - (vhh(i,J) - vhh(i,J-1)), 0.0)
-        if (hprev(i,j,k) <= 0.0) then ; do_i(i) = .false.
-        elseif (hprev(i,j,k) < h_neglect*G%areaT(i,j)) then
-          hlst(i) = hlst(i) + (h_neglect*G%areaT(i,j) - hprev(i,j,k))
-          Ihnew(i) = 1.0 / (h_neglect*G%areaT(i,j))
-        else ;  Ihnew(i) = 1.0 / hprev(i,j,k) ; endif
-      else ; do_i(i) = .false. ; endif
-    enddo
-    do m=1,ntr
-      do i=is,ie ; if (do_i(i)) then
-        Tr(m)%t(i,j,k) = (Tr(m)%t(i,j,k) * hlst(i) - &
-                          (flux_y(i,m,J) - flux_y(i,m,J-1))) * Ihnew(i)
-      endif ; enddo
-      if (associated(Tr(m)%ad_y)) then ; do i=is,ie ; if (do_i(i)) then
-        Tr(m)%ad_y(i,J,k) = Tr(m)%ad_y(i,J,k) + flux_y(i,m,J)*Idt
-      endif ; enddo ; endif
-      if (associated(Tr(m)%ad2d_y)) then ; do i=is,ie ; if (do_i(i)) then
-        Tr(m)%ad2d_y(i,J) = Tr(m)%ad2d_y(i,J) + flux_y(i,m,J)*Idt
-      endif ; enddo ; endif
-    enddo
-  endif ; enddo ! End of j-loop.
-
-end subroutine advect_y
-
-subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, tv)
+subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, Reg, tv)
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h
-  real,                               intent(in)    :: dt
-  type(MEKE_type),                    pointer       :: MEKE
-  type(VarMix_CS),                    pointer       :: VarMix
-  type(ocean_grid_type),              intent(inout) :: G
-  type(advect_tracer_CS),             pointer       :: CS
-  type(thermo_var_ptrs),              intent(in)    :: tv
+  real,                                  intent(in)    :: dt
+  type(MEKE_type),                       pointer       :: MEKE
+  type(VarMix_CS),                       pointer       :: VarMix
+  type(ocean_grid_type),                 intent(inout) :: G
+  type(tracer_hor_diff_CS),              pointer       :: CS
+  type(tracer_registry_type),            pointer       :: Reg
+  type(thermo_var_ptrs),                 intent(in)    :: tv
 
 !   This subroutine does along-coordinate diffusion of all tracers,
 ! using the diffusivity in CS%KhTr.  Multiple iterations are
@@ -892,14 +124,15 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, tv)
 !  (in)      VarMix - A structure with information about horizontal diffusivities.
 !  (in)      G - The ocean's grid structure.
 !  (in)      CS - The control structure returned by a previous call to
-!                 advect_tracer_init.
+!                 tracer_hor_diff_init.
+!  (in)      Reg - A pointer to the tracer registry.
 !  (in,opt)  tv - A structure containing pointers to any available
 !                 thermodynamic fields, including potential temperature and
 !                 salinity or mixed layer density. Absent fields have NULL ptrs,
 !                 and these may (probably will) point to some of the same arrays
 !                 as Tr does.  tv is required for epipycnal mixing between the
 !                 mixed layer and the interior.
-  type(tracer) :: Tr(MAX_FIELDS_) ! The array of registered tracers.
+  type(tracer_type) :: Tr(MAX_FIELDS_) ! The array of registered tracers.
   real, dimension(SZI_(G),SZJ_(G)) :: &
     Ihdxdy, &     ! The inverse of the volume or mass of fluid in a layer in a
                   ! grid cell, in m-3 or kg-1.
@@ -934,16 +167,28 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, tv)
   real :: Rd_dx      ! The local value of deformation radius over grid-spacing, nondim.
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-  if (.not. associated(CS)) call MOM_error(FATAL, "MOM_tracer: "// &
+  if (.not. associated(CS)) call MOM_error(FATAL, "MOM_tracer_hor_diff: "// &
        "register_tracer must be called before tracer_hordiff.")
-  if ((CS%ntr==0) .or. ((CS%KhTr <= 0.0) .and. .not.associated(VarMix)) ) return
+  if (.not. associated(Reg)) call MOM_error(FATAL, "MOM_tracer_hor_diff: "// &
+       "register_tracer must be called before tracer_hordiff.")
+  if ((Reg%ntr==0) .or. ((CS%KhTr <= 0.0) .and. .not.associated(VarMix)) ) return
 
   call cpu_clock_begin(id_clock_diffuse)
 
-  ntr = CS%ntr
-  do m=1,ntr ; Tr(m) = CS%Tr(m) ; enddo
+  ntr = Reg%ntr
+  do m=1,ntr ; Tr(m) = Reg%Tr(m) ; enddo
   Idt = 1.0/dt
   h_neglect = G%H_subroundoff
+
+  if (CS%Diffuse_ML_interior .and. CS%first_call) then ; if (is_root_pe()) then
+    do m=1,ntr ; if (associated(Tr(m)%df_x) .or. associated(Tr(m)%df_y)) &
+      call MOM_error(WARNING, "tracer_hordiff: Tracer "//trim(Tr(m)%name)// &
+          " has associated 3-d diffusive flux diagnostics.  These are not "//&
+          "valid when DIFFUSE_ML_TO_INTERIOR is defined. Use 2-d tracer "//&
+          "diffusion diagnostics instead to get accurate total fluxes.")
+    enddo
+  endif ; endif
+  CS%first_call = .false.
 
   if (CS%debug) call MOM_tracer_chksum("Before tracer diffusion ", Tr, ntr, G)
 
@@ -1123,7 +368,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, tv)
     if (CS%debug) call MOM_tracer_chksum("Before epipycnal diff ", Tr, ntr, G)
 
     call cpu_clock_begin(id_clock_epimix)
-    call tracer_epipycnal_ML_diff(h, dt, Tr, khdt_x, khdt_y, G, CS, tv, num_itts)
+    call tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_x, khdt_y, G, CS, tv, num_itts)
     call cpu_clock_end(id_clock_epimix)
   endif
 
@@ -1144,17 +389,18 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, tv)
 
 end subroutine tracer_hordiff
 
-subroutine tracer_epipycnal_ML_diff(h, dt, Tr, khdt_epi_x, khdt_epi_y, G, CS, &
-                                    tv, num_itts)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h
-  real,                                intent(in)    :: dt
-  type(tracer),                        intent(inout) :: Tr(:)
-  real, dimension(NIMEMB_,NJMEM_),     intent(in)    :: khdt_epi_x
-  real, dimension(NIMEM_,NJMEMB_),     intent(in)    :: khdt_epi_y
-  type(ocean_grid_type),               intent(inout) :: G
-  type(advect_tracer_CS),              intent(in)    :: CS
-  type(thermo_var_ptrs),               intent(in)    :: tv
-  integer,                             intent(in)    :: num_itts
+subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
+                                    CS, tv, num_itts)
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h
+  real,                                  intent(in)    :: dt
+  type(tracer_type),                     intent(inout) :: Tr(:)
+  integer,                               intent(in)    :: ntr
+  real, dimension(NIMEMB_,NJMEM_),       intent(in)    :: khdt_epi_x
+  real, dimension(NIMEM_,NJMEMB_),       intent(in)    :: khdt_epi_y
+  type(ocean_grid_type),                 intent(inout) :: G
+  type(tracer_hor_diff_CS),              intent(in)    :: CS
+  type(thermo_var_ptrs),                 intent(in)    :: tv
+  integer,                               intent(in)    :: num_itts
 !   This subroutine does epipycnal diffusion of all tracers between the mixed
 ! and buffer layers and the interior, using the diffusivity in CS%KhTr.
 ! Multiple iterations are used (if necessary) so that there is no limit on the
@@ -1163,9 +409,10 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, khdt_epi_x, khdt_epi_y, G, CS, &
 ! Arguments: h - Layer thickness, in m or kg m-2.
 !  (in)      dt - Time increment in s.
 !  (in/out)  Tr - An array of all of the registered tracers.
+!  (in)      ntr - The number of tracers to work on.
 !  (in)      G - The ocean's grid structure.
 !  (in)      CS - The control structure returned by a previous call to
-!                 advect_tracer_init.
+!                 tracer_hor_diff_init.
 !  (in/out?) tv - A structure containing pointers to any available
 !                 thermodynamic fields, including potential temperature and
 !                 salinity or mixed layer density. Absent fields have NULL ptrs,
@@ -1253,7 +500,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, khdt_epi_x, khdt_epi_y, G, CS, &
   real :: p_ref_cv(SZI_(G))
 
   integer :: k_max, k_min, k_test, itmp
-  integer :: i, j, k, k2, m, is, ie, js, je, nz, ntr, nkmb
+  integer :: i, j, k, k2, m, is, ie, js, je, nz, nkmb
   integer :: isd, ied, jsd, jed, IsdB, IedB, k_size
   integer :: kL, kR, kLa, kLb, kRa, kRb, nP, itt, ns, max_itt
   integer :: PEmax_kRho
@@ -1262,7 +509,6 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, khdt_epi_x, khdt_epi_y, G, CS, &
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB
-  ntr = CS%ntr
   Idt = 1.0/dt
   nkmb = G%nk_rho_varies
 
@@ -1956,202 +1202,30 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, khdt_epi_x, khdt_epi_y, G, CS, &
 
 end subroutine tracer_epipycnal_ML_diff
 
-subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, &
-                           sfc_flux, btm_flux, btm_reservoir, sink_rate)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h_old, ea, eb
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: tr
-  real,                                  intent(in)    :: dt
-  type(ocean_grid_type),                 intent(in)    :: G
-  real, dimension(NIMEM_,NJMEM_), optional, intent(in) :: sfc_flux
-  real, dimension(NIMEM_,NJMEM_), optional, intent(in) :: btm_flux
-  real, dimension(NIMEM_,NJMEM_), optional, intent(inout) :: btm_reservoir
-  real,                           optional, intent(in) :: sink_rate
-! Arguments: h_old -  Layer thickness before entrainment, in m or kg m-2.
-!  (in)      ea - The amount of fluid entrained from the layer above, in the
-!                 same units as h_old, i.e. m or kg m-2.
-!  (in)      eb - The amount of fluid entrained from the layer below, in the
-!                 same units as h_old, i.e. m or kg m-2
-!  (inout)   tr - The tracer concentration, in concentration units (CU).
-!  (in)      dt - The amount of time covered by this call, in s.
+subroutine tracer_hor_diff_init(Time, G, param_file, diag, CS)
+  type(time_type), target,  intent(in)    :: Time
+  type(ocean_grid_type),    intent(in)    :: G
+  type(diag_ptrs), target,  intent(inout) :: diag
+  type(param_file_type),    intent(in)    :: param_file
+  type(tracer_hor_diff_CS), pointer       :: CS
+! Arguments: Time - The current model time.
 !  (in)      G - The ocean's grid structure.
-!  (in,opt)  sfc_flux - The surface flux of the tracer, in CU kg m-2 s-1.
-!  (in,opt)  btm_flux - The (negative upward) bottom flux of the tracer,
-!                       in units of CU kg m-2 s-1.
-!  (inout,opt) btm_reservoir - The amount of tracer in a bottom reservoir, in
-!                              units of CU kg m-2. (was CU m)
-!  (in,opt)  sink_rate - The rate at which the tracer sinks, in m s-1.
-
-!   This subroutine solves a tridiagonal equation for the final tracer
-! concentrations after the dual-entrainments, and possibly sinking or surface
-! and bottom sources, are applied.  The sinking is implemented with an
-! fully implicit upwind advection scheme.
- 
-  real :: sink_dist ! The distance the tracer sinks in a time step, in m or kg m-2.
-  real, dimension(SZI_(G)) :: &
-    sfc_src, &      ! The time-integrated surface source of the tracer, in
-                    ! units of m or kg m-2 times a concentration.
-    btm_src, &      ! The time-integrated bottom source of the tracer, in
-                    ! units of m or kg m-2  times a concentration.
-    b1, &           ! b1 is used by the tridiagonal solver, in m-1 or m2 kg-1.
-    d1              ! d1=1-c1 is used by the tridiagonal solver, nondimensional.
-  real :: c1(SZI_(G),SZK_(G))     ! c1 is used by the tridiagonal solver, ND.
-  real :: h_minus_dsink(SZI_(G),SZK_(G))  ! The layer thickness minus the
-                    ! difference in sinking rates across the layer, in m or kg m-2.
-                    ! By construction, 0 <= h_minus_dsink < h_old.
-  real :: sink(SZI_(G),SZK_(G)+1) ! The tracer's sinking distances at the
-                    ! interfaces, limited to prevent characteristics from
-                    ! crossing within a single timestep, in m or kg m-2.
-  real :: b_denom_1 ! The first term in the denominator of b1, in m or kg m-2.
-  real :: h_tr      ! h_tr is h at tracer points with a h_neglect added to
-                    ! ensure positive definiteness, in m or kg m-2.
-  real :: h_neglect ! A thickness that is so small it is usually lost
-                    ! in roundoff and can be neglected, in m.
-  integer :: i, j, k, is, ie, js, je, nz
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-
-  h_neglect = G%H_subroundoff
-
-  sink_dist = 0.0
-  if (present(sink_rate)) sink_dist = (dt*sink_rate) * G%m_to_H
-  do i=is,ie ; sfc_src(i) = 0.0 ; btm_src(i) = 0.0 ; enddo
-
-  if (present(sink_rate)) then
-    do j=js,je
-      ! Find the sinking rates at all interfaces, limiting them if necesary
-      ! so that the characteristics do not cross within a timestep.
-      !   If a non-constant sinking rate were used, that would be incorprated
-      ! here.
-      if (present(btm_reservoir)) then
-        do i=is,ie ; sink(i,nz+1) = sink_dist ; enddo
-        do k=2,nz ; do i=is,ie
-          sink(i,K) = sink_dist ; h_minus_dsink(i,k) = h_old(i,j,k)
-        enddo ; enddo
-      else
-        do i=is,ie ; sink(i,nz+1) = 0.0 ; enddo
-        ! Find the limited sinking distance at the interfaces.
-        do k=nz,2,-1 ; do i=is,ie
-          if (sink(i,K+1) >= sink_dist) then
-            sink(i,K) = sink_dist
-            h_minus_dsink(i,k) = h_old(i,j,k) + (sink(i,K+1) - sink(i,K))
-          elseif (sink(i,K+1) + h_old(i,j,k) < sink_dist) then
-            sink(i,K) = sink(i,K+1) + h_old(i,j,k)
-            h_minus_dsink(i,k) = 0.0
-          else
-            sink(i,K) = sink_dist
-            h_minus_dsink(i,k) = (h_old(i,j,k) + sink(i,K+1)) - sink(i,K)
-          endif
-        enddo ; enddo
-      endif
-      do i=is,ie
-        sink(i,1) = 0.0 ; h_minus_dsink(i,1) = (h_old(i,j,1) + sink(i,2))
-      enddo
-
-      ! Now solve the tridiagonal equation for the tracer concentrations.
-      do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
-        b_denom_1 = h_minus_dsink(i,1) + ea(i,j,1) + h_neglect
-        b1(i) = 1.0 / (b_denom_1 + eb(i,j,1))
-        d1(i) = b_denom_1 * b1(i)
-        if (present(sfc_flux)) sfc_src(i) = (sfc_flux(i,j)*dt) * G%kg_m2_to_H
-        h_tr = h_old(i,j,1) + h_neglect
-        tr(i,j,1) = b1(i)*(h_tr*tr(i,j,1) + sfc_src(i))
-      endif ; enddo
-      do k=2,nz-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
-        c1(i,k) = eb(i,j,k-1) * b1(i)
-        b_denom_1 = h_minus_dsink(i,k) + d1(i) * (ea(i,j,k) + sink(i,K)) + &
-                    h_neglect
-        b1(i) = 1.0 / (b_denom_1 + eb(i,j,k))
-        d1(i) = b_denom_1 * b1(i)
-        h_tr = h_old(i,j,k) + h_neglect
-        tr(i,j,k) = b1(i) * (h_tr * tr(i,j,k) + &
-                             (ea(i,j,k) + sink(i,K)) * tr(i,j,k-1))
-      endif ; enddo ; enddo
-      do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
-        c1(i,nz) = eb(i,j,nz-1) * b1(i)
-        b_denom_1 = h_minus_dsink(i,nz) + d1(i) * (ea(i,j,nz) + sink(i,nz)) + &
-                    h_neglect
-        b1(i) = 1.0 / (b_denom_1 + eb(i,j,nz))
-        h_tr = h_old(i,j,nz) + h_neglect
-        if (present(btm_flux)) btm_src(i) = (-btm_flux(i,j)*dt) * G%kg_m2_to_H
-        tr(i,j,nz) = b1(i) * ((h_tr * tr(i,j,nz) + btm_src(i)) + &
-                              (ea(i,j,nz) + sink(i,nz)) * tr(i,j,nz-1))
-      endif ; enddo
-      if (present(btm_reservoir)) then ; do i=is,ie ; if (G%mask2dT(i,j)>0.5) then
-        btm_reservoir(i,j) = btm_reservoir(i,j) + &
-                             (sink(i,nz+1)*tr(i,j,nz)) * G%H_to_kg_m2
-      endif ; enddo ; endif
-
-      do k=nz-1,1,-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
-        tr(i,j,k) = tr(i,j,k) + c1(i,k+1)*tr(i,j,k+1)
-      endif ; enddo ; enddo
-    enddo
-  else
-    do j=js,je
-      do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
-        h_tr = h_old(i,j,1) + h_neglect
-        b_denom_1 = h_tr + ea(i,j,1)
-        b1(i) = 1.0 / (b_denom_1 + eb(i,j,1))
-        d1(i) = b_denom_1 * b1(i)
-        if (present(sfc_flux)) sfc_src(i) = (sfc_flux(i,j)*dt) * G%kg_m2_to_H
-        tr(i,j,1) = b1(i)*(h_tr*tr(i,j,1) + sfc_src(i))
-      endif ; enddo
-      do k=2,nz-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
-        c1(i,k) = eb(i,j,k-1) * b1(i)
-        h_tr = h_old(i,j,k) + h_neglect
-        b_denom_1 = h_tr + d1(i) * ea(i,j,k)
-        b1(i) = 1.0 / (b_denom_1 + eb(i,j,k))
-        d1(i) = b_denom_1 * b1(i)
-        tr(i,j,k) = b1(i) * (h_tr * tr(i,j,k) + ea(i,j,k) * tr(i,j,k-1))
-      endif ; enddo ; enddo
-      do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
-        c1(i,nz) = eb(i,j,nz-1) * b1(i)
-        h_tr = h_old(i,j,nz) + h_neglect
-        b1(i) = 1.0 / (h_tr + d1(i) * ea(i,j,nz) + eb(i,j,nz))
-        if (present(btm_flux)) btm_src(i) = (-btm_flux(i,j)*dt) * G%kg_m2_to_H
-        tr(i,j,nz) = b1(i) * ((h_tr * tr(i,j,nz) + btm_src(i)) + &
-                              ea(i,j,nz) * tr(i,j,nz-1))
-      endif ; enddo
-      do k=nz-1,1,-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
-        tr(i,j,k) = tr(i,j,k) + c1(i,k+1)*tr(i,j,k+1)
-      endif ; enddo ; enddo
-    enddo
-  endif
-
-end subroutine tracer_vertdiff
-
-subroutine MOM_tracer_chksum(mesg, Tr, ntr, G)
-  character(len=*),         intent(in) :: mesg
-  type(tracer),             intent(in) :: Tr(:)
-  integer,                  intent(in) :: ntr
-  type(ocean_grid_type),    intent(in) :: G
-!   This subroutine writes out chksums for the model's thermodynamic state
-! variables.
-! Arguments: mesg - A message that appears on the chksum lines.
-!  (in)      Tr - An array of all of the registered tracers.
-!  (in)      ntr - The number of registered tracers.
-!  (in)      G - The ocean's grid structure.
-  integer :: is, ie, js, je, nz, m
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-
-  do m=1,ntr
-    call hchksum(Tr(m)%t, mesg//trim(Tr(m)%name), G)
-  enddo
-end subroutine MOM_tracer_chksum
-
-subroutine advect_tracer_init(param_file, CS)
-  type(param_file_type), intent(in)  :: param_file
-  type(advect_tracer_CS), pointer    :: CS
-! Arguments: param_file - A structure indicating the open file to parse for
+!  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
-!  (in/out)  CS - A pointer that is set to point to the control structure
-!                 for this module
-  integer, save :: init_calls = 0
+!  (in)      diag - A structure containing pointers to common diagnostic fields.
+!  (in/out)  CS - A pointer to the control structure for this module
   character(len=128) :: version = '$Id$'
   character(len=128) :: tagname = '$Name$'
-  character(len=40)  :: mod = "MOM_tracer" ! This module's name.
+  character(len=40)  :: mod = "MOM_tracer_hor_diff" ! This module's name.
   character(len=256) :: mesg    ! Message for error messages.
 
-  if (.not.associated(CS)) then ; allocate(CS)
-  else ; return ; endif
+  if (associated(CS)) then
+    call MOM_error(WARNING, "tracer_hor_diff_init called with associated control structure.")
+    return
+  endif
+  allocate(CS)
+
+  CS%diag => diag
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mod, version, tagname, "")
@@ -2201,53 +1275,20 @@ subroutine advect_tracer_init(param_file, CS)
 
   call get_param(param_file, mod, "DEBUG", CS%debug, default=.false.)
 
-  init_calls = init_calls + 1
-  if (init_calls == 1) then
-
-    id_clock_advect = cpu_clock_id('(Ocean advect tracer)', grain=CLOCK_MODULE)
-    id_clock_diffuse = cpu_clock_id('(Ocean diffuse tracer)', grain=CLOCK_MODULE)
-    id_clock_epimix = cpu_clock_id('(Ocean epipycnal diffuse tracer)', grain=CLOCK_MODULE)
-    id_clock_pass = cpu_clock_id('(Ocean tracer halo updates)', grain=CLOCK_ROUTINE)
-    id_clock_sync = cpu_clock_id('(Ocean tracer global synch)', grain=CLOCK_ROUTINE)
-  else
-    write(mesg,'("Advect_tracer_init called ",I3, &
-      &" times with different control structure pointers.")') init_calls
-    if (is_root_pe()) call MOM_error(WARNING,"MOM_tracer"//mesg)
-  endif
+  id_clock_diffuse = cpu_clock_id('(Ocean diffuse tracer)', grain=CLOCK_MODULE)
+  id_clock_epimix = cpu_clock_id('(Ocean epipycnal diffuse tracer)', grain=CLOCK_MODULE)
+  id_clock_pass = cpu_clock_id('(Ocean tracer halo updates)', grain=CLOCK_ROUTINE)
+  id_clock_sync = cpu_clock_id('(Ocean tracer global synch)', grain=CLOCK_ROUTINE)
 
   CS%id_KhTr_u = -1 ; CS%id_KhTr_v = -1
 
-end subroutine advect_tracer_init
+end subroutine tracer_hor_diff_init
 
-subroutine advect_tracer_diag_init(Time, G, diag, CS)
-  type(time_type), target, intent(in)    :: Time
-  type(ocean_grid_type),   intent(in)    :: G
-  type(diag_ptrs), target, intent(inout) :: diag
-  type(advect_tracer_CS),  pointer       :: CS
-!   This subroutine sets up any diagnostics that are common to all tracers.  It
-! needs to be called separately from advect_tracer_init because the time was not
-! known yet hen advect_tracer_init was called.
-!
-! Arguments: Time - The current model time.
-!  (in)      G - The ocean's grid structure.
-!  (in)      diag - A structure containing pointers to common diagnostic fields.
-!  (in/out)  CS - A pointer to the control structure for this module
+subroutine tracer_hor_diff_end(CS)
+  type(tracer_hor_diff_CS), pointer :: CS
 
-  !   If the control structure is not associated, there are probably no tracers,
-  ! so return without giving an error.
-  if (.not.associated(CS)) return
-
-  CS%diag => diag
-  CS%id_KhTr_u = register_diag_field('ocean_model', 'KhTr_u', G%axesCu1, Time, &
-     'Epipycnal tracer diffusivity at zonal faces of tracer cell', 'meter2 second-1')
-  CS%id_KhTr_v = register_diag_field('ocean_model', 'KhTr_v', G%axesCv1, Time, &
-     'Epipycnal tracer diffusivity at meridional faces of tracer cell', 'meter2 second-1')
-
-end subroutine advect_tracer_diag_init
-
-subroutine tracer_end(CS)
-  type(advect_tracer_CS), pointer :: CS
   if (associated(CS)) deallocate(CS)
-end subroutine tracer_end
 
-end module MOM_tracer
+end subroutine tracer_hor_diff_end
+
+end module MOM_tracer_hor_diff

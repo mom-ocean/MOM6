@@ -32,7 +32,7 @@ NJGLOBAL = 4                    !
                                 ! The total number of thickness grid points in the
                                 ! y-direction in the physical domain. With STATIC_MEMORY_
                                 ! this is set in MOM_memory.h at compile time.
-!NIPROC = 2                     !
+!NIPROC = 4                     !
                                 ! The number of processors in the x-direction. With
                                 ! STATIC_MEMORY_ this is set in MOM_memory.h at compile time.
 !NJPROC = 1                     !
@@ -78,7 +78,7 @@ SAVE_INITIAL_CONDS = True       !   [Boolean] default = False
                                 ! by IC_OUTPUT_FILE.
 IC_OUTPUT_FILE = "Initial_state" ! default = "MOM_IC"
                                 ! The file into which to write the initial conditions.
-    !  Parameters of module MOM_tracer
+    !  Parameters of module MOM_tracer_registry
 EQN_OF_STATE = "LINEAR"         ! default = "WRIGHT"
                                 ! EQN_OF_STATE determines which ocean equation of state
                                 ! should be used.  Currently, the valid choices are
@@ -222,14 +222,6 @@ INTERPOLATION_SCHEME = "PQM_IH4IH3" ! default = "P1M_H2"
                                 !  P3M_IH6IH5 (4th-order accurate)
                                 !  PQM_IH4IH3 (4th-order accurate)
                                 !  PQM_IH6IH5 (5th-order accurate)
-ALE_COORDINATE_CONFIG = "FILE:vgrid.nc,dz" ! default = "UNIFORM"
-                                ! Determines how to specify the coordinate
-                                ! resolution. Valid options are:
-                                !  PARAM       - use the vector-parameter ALE_RESOLUTION
-                                !  UNIFORM     - uniformly distributed
-                                !  FILE:string - read from a file. The string specifies
-                                !                the filename and variable name, separated
-                                !                by a comma or space, e.g. FILE:lev.nc,Z
 !ALE_RESOLUTION = 40*100.0      !   [m]
                                 ! The distribution of vertical resolution for the target
                                 ! grid used for Eulerian-like coordinates. For example,
@@ -392,6 +384,8 @@ PEN_SW_SCALE = 15.0             !   [m] default = 0.0
 PEN_SW_FRAC = 0.42              !   [nondim] default = 0.0
                                 ! The fraction of the shortwave radiation that penetrates
                                 ! below the surface.
+    !  Parameters of module MOM_tracer_advect
+    !  Parameters of module MOM_tracer_hor_diff
     !  Parameters of module MOM_surface_forcing
 VARIABLE_WINDS = False          !   [Boolean] default = True
                                 ! If true, the winds vary in time after the initialization.

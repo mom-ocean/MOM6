@@ -89,7 +89,7 @@ use MOM_sponge, only : set_up_sponge_field, set_up_sponge_ML_density
 use MOM_sponge, only : initialize_sponge, sponge_CS
 use MOM_string_functions, only : uppercase
 use MOM_time_manager, only : time_type, set_time
-use MOM_tracer, only : add_tracer_OBC_values, advect_tracer_CS
+use MOM_tracer_registry, only : add_tracer_OBC_values, tracer_registry_type
 use MOM_variables, only : thermo_var_ptrs, ocean_OBC_type
 use MOM_variables, only : OBC_NONE, OBC_SIMPLE, OBC_FLATHER_E, OBC_FLATHER_W
 use MOM_variables, only : OBC_FLATHER_N, OBC_FLATHER_S
@@ -124,7 +124,6 @@ use Phillips_initialization, only : Phillips_initialize_thickness
 use Phillips_initialization, only : Phillips_initialize_velocity
 use Phillips_initialization, only : Phillips_initialize_sponges
 
-
 use midas_vertmap, only : fill_miss_2d, find_interfaces, tracer_Z_init, meshgrid
 use midas_vertmap, only : determine_temperature
 
@@ -142,7 +141,7 @@ public MOM_initialize, MOM_initialize_rotation, MOM_initialize_topography
 
 ! This structure is to simplify communication with the calling code.
 type, public :: MOM_initialization_struct
-  type(advect_tracer_CS), pointer :: advect_tracer_CSp => NULL()
+  type(tracer_registry_type), pointer :: tracer_Reg => NULL()
   type(sponge_CS), pointer :: sponge_CSp => NULL()
   type(ocean_OBC_type), pointer :: OBC => NULL()
 end type MOM_initialization_struct
@@ -556,13 +555,13 @@ subroutine MOM_initialize(u, v, h, tv, Time, G, PF, dirs, &
                  " \t USER - call a user modified routine.", default="file", &
                  fail_if_missing=.true.)
     if (trim(config) == "DOME") then
-      call DOME_set_Open_Bdry_Conds(CS%OBC, tv, G, PF, CS%advect_tracer_CSp)
+      call DOME_set_Open_Bdry_Conds(CS%OBC, tv, G, PF, CS%tracer_Reg)
     elseif (trim(config) == "USER") then
-      call user_set_Open_Bdry_Conds(CS%OBC, tv, G, PF, CS%advect_tracer_CSp)
+      call user_set_Open_Bdry_Conds(CS%OBC, tv, G, PF, CS%tracer_Reg)
     else
       call MOM_error(FATAL, "The open boundary conditions specified by "//&
               "OBC_CONFIG = "//trim(config)//" have not been fully implemented.")
-      call set_Open_Bdry_Conds(CS%OBC, tv, G, PF, CS%advect_tracer_CSp)
+      call set_Open_Bdry_Conds(CS%OBC, tv, G, PF, CS%tracer_Reg)
     endif
   endif
 
@@ -579,7 +578,7 @@ subroutine MOM_initialize(u, v, h, tv, Time, G, PF, dirs, &
                  "Apply a Flather open boundary condition on the southern \n"//&
                  "side of the global domain", default=.false.)
   if (apply_OBC_u_flather_east .or. apply_OBC_u_flather_west .or. apply_OBC_v_flather_north .or. apply_OBC_v_flather_south) then
-    call set_Flather_Bdry_Conds(CS%OBC, tv, h, G, PF, CS%advect_tracer_CSp)
+    call set_Flather_Bdry_Conds(CS%OBC, tv, h, G, PF, CS%tracer_Reg)
   endif
 
   call MOM_mesg(" MOM_initialization.F90, MOM_initialize: complete", 3)
@@ -2140,12 +2139,12 @@ end subroutine initialize_sponges_file
 ! -----------------------------------------------------------------------------
 
 ! -----------------------------------------------------------------------------
-subroutine set_Open_Bdry_Conds(OBC, tv, G, param_file, advect_tracer_CSp)
-  type(ocean_OBC_type),   pointer    :: OBC
-  type(thermo_var_ptrs),  intent(in) :: tv
-  type(ocean_grid_type),  intent(in) :: G
-  type(param_file_type),  intent(in) :: param_file
-  type(advect_tracer_CS), pointer    :: advect_tracer_CSp
+subroutine set_Open_Bdry_Conds(OBC, tv, G, param_file, tracer_Reg)
+  type(ocean_OBC_type),       pointer    :: OBC
+  type(thermo_var_ptrs),      intent(in) :: tv
+  type(ocean_grid_type),      intent(in) :: G
+  type(param_file_type),      intent(in) :: param_file
+  type(tracer_registry_type), pointer    :: tracer_Reg
 !   This subroutine sets the properties of flow at open boundary conditions.
 ! This particular example is for the DOME inflow describe in Legg et al. 2006.
 
@@ -2275,7 +2274,7 @@ subroutine set_Open_Bdry_Conds(OBC, tv, G, param_file, advect_tracer_CSp)
   if (apply_OBC_u .or. apply_OBC_v) then
     if (associated(tv%S)) then
       ! In this example, all S inflows have values of 35 psu.
-      call add_tracer_OBC_values("S", advect_tracer_CSp, OBC_inflow=35.0)
+      call add_tracer_OBC_values("S", tracer_Reg, OBC_inflow=35.0)
     endif
     if (associated(tv%T)) then
       ! In this example, the T values are set to be consistent with the layer
@@ -2304,8 +2303,8 @@ subroutine set_Open_Bdry_Conds(OBC, tv, G, param_file, advect_tracer_CSp)
           OBC_T_v(i,J,k) = T0(k)
         enddo ; enddo ; enddo
       endif
-      call add_tracer_OBC_values("T", advect_tracer_CSp, OBC_in_u=OBC_T_u, &
-                                                         OBC_in_v=OBC_T_v)
+      call add_tracer_OBC_values("T", tracer_Reg, OBC_in_u=OBC_T_u, &
+                                                  OBC_in_v=OBC_T_v)
     endif
   endif
 
@@ -2313,13 +2312,13 @@ end subroutine set_Open_Bdry_Conds
 ! -----------------------------------------------------------------------------
 
 ! -----------------------------------------------------------------------------
-subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, advect_tracer_CSp)
+subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, tracer_Reg)
   type(ocean_OBC_type),                   pointer    :: OBC
   type(thermo_var_ptrs),                  intent(inout) :: tv
   real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(inout) :: h
   type(ocean_grid_type),                  intent(inout) :: G
   type(param_file_type),                  intent(in) :: PF
-  type(advect_tracer_CS),                 pointer    :: advect_tracer_CSp
+  type(tracer_registry_type),             pointer    :: tracer_Reg
 !   This subroutine sets the initial definitions of the characteristic open boundary
 !   conditions. Written by Mehmet Ilicak
 
@@ -2630,10 +2629,10 @@ subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, advect_tracer_CSp)
     call pass_vector(OBC_T_u, OBC_T_v, G%Domain, To_All+SCALAR_PAIR, CGRID_NE)
     call pass_vector(OBC_S_u, OBC_S_v, G%Domain, To_All+SCALAR_PAIR, CGRID_NE)
 
-    call add_tracer_OBC_values("T", advect_tracer_CSp, OBC_in_u=OBC_T_u, &
-                                                       OBC_in_v=OBC_T_v)
-    call add_tracer_OBC_values("S", advect_tracer_CSp, OBC_in_u=OBC_S_u, &
-                                                       OBC_in_v=OBC_S_v)
+    call add_tracer_OBC_values("T", tracer_Reg, OBC_in_u=OBC_T_u, &
+                                                OBC_in_v=OBC_T_v)
+    call add_tracer_OBC_values("S", tracer_Reg, OBC_in_u=OBC_S_u, &
+                                                OBC_in_v=OBC_S_v)
     do k=1,nz ; do j=js,je ; do I=is-1,ie
       if (OBC%OBC_kind_u(I,j) == OBC_FLATHER_E) then
         tv%T(i+1,j,k) = tv%T(i,j,k) ; tv%S(i+1,j,k) = tv%S(i,j,k)

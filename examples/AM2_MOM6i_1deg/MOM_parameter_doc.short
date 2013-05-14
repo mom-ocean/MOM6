@@ -8,31 +8,13 @@ TRIPOLAR_N = True               !   [Boolean] default = False
                                 ! they are on the staggered grid.  Also, the starting
                                 ! index of the velocity-point arrays is usually 0, not 1.
                                 ! This can only be set at compile time.
-!STATIC_MEMORY_ = False         !   [Boolean]
+!STATIC_MEMORY_ = True          !   [Boolean]
                                 ! If STATIC_MEMORY_ is defined, the principle variables
                                 ! will have sizes that are statically determined at
                                 ! compile time.  Otherwise the sizes are not determined
                                 ! until run time. The STATIC option is substantially
                                 ! faster, but does not allow the PE count to be changed
                                 ! at run time.  This can only be set at compile time.
-NIHALO = 4                      ! default = 2
-                                ! The number of halo points on each side in the
-                                ! x-direction.  With STATIC_MEMORY_ this is set as NIHALO_
-                                ! in MOM_memory.h at compile time; without STATIC_MEMORY_
-                                ! the default is NIHALO_ in MOM_memory.h (if defined) or 2.
-NJHALO = 4                      ! default = 2
-                                ! The number of halo points on each side in the
-                                ! y-direction.  With STATIC_MEMORY_ this is set as NJHALO_
-                                ! in MOM_memory.h at compile time; without STATIC_MEMORY_
-                                ! the default is NJHALO_ in MOM_memory.h (if defined) or 2.
-NIGLOBAL = 360                  !
-                                ! The total number of thickness grid points in the
-                                ! x-direction in the physical domain. With STATIC_MEMORY_
-                                ! this is set in MOM_memory.h at compile time.
-NJGLOBAL = 210                  !
-                                ! The total number of thickness grid points in the
-                                ! y-direction in the physical domain. With STATIC_MEMORY_
-                                ! this is set in MOM_memory.h at compile time.
 !NIPROC = 10                    !
                                 ! The number of processors in the x-direction. With
                                 ! STATIC_MEMORY_ this is set in MOM_memory.h at compile time.
@@ -47,8 +29,6 @@ NJPROC_IO = 1                   ! default = 0
                                 ! y-direction, or 0 to equal NJPROC.
     !  Parameters of module MOM_grid
         ! Parameters providing information about the vertical grid.
-NK = 63                         !   [nondim]
-                                ! The number of model layers.
     !  Parameters of module MOM
 THICKNESSDIFFUSE = True         !   [Boolean] default = False
                                 ! If true, interfaces or isopycnal surfaces are diffused,
@@ -103,29 +83,7 @@ SAVE_INITIAL_CONDS = True       !   [Boolean] default = False
                                 ! by IC_OUTPUT_FILE.
 IC_OUTPUT_FILE = "GOLD_IC"      ! default = "MOM_IC"
                                 ! The file into which to write the initial conditions.
-    !  Parameters of module MOM_tracer
-KHTR = 10.0                     !   [m2 s-1] default = 0.0
-                                ! The background along-isopycnal tracer diffusivity.
-KHTR_SLOPE_CFF = 0.25           !   [nondim] default = 0.0
-                                ! The scaling coefficient for along-isopycnal tracer
-                                ! diffusivity using a shear-based (Visbeck-like)
-                                ! parameterization.  A non-zero value enables this param.
-KHTR_MIN = 50.0                 !   [m2 s-1] default = 0.0
-                                ! The minimum along-isopycnal tracer diffusivity.
-KHTR_MAX = 900.0                !   [m2 s-1] default = 0.0
-                                ! The maximum along-isopycnal tracer diffusivity.
-KHTR_PASSIVITY_COEFF = 3.0      !   [nondim] default = 0.0
-                                ! The coefficient that scales deformation radius over
-                                ! grid-spacing in passivity, where passiviity is the ratio
-                                ! between along isopycnal mxiing of tracers to thickness mixing.
-                                ! A non-zero value enables this parameterization.
-DIFFUSE_ML_TO_INTERIOR = True   !   [Boolean] default = False
-                                ! If true, enable epipycnal mixing between the surface
-                                ! boundary layer and the interior.
-ML_KHTR_SCALE = 0.0             !   [nondim] default = 1.0
-                                ! With Diffuse_ML_interior, the ratio of the truly
-                                ! horizontal diffusivity in the mixed layer to the
-                                ! epipycnal diffusivity.  The valid range is 0 to 1.
+    !  Parameters of module MOM_tracer_registry
     !  Parameters of module MOM_tracer_flow_control
 USE_IDEAL_AGE_TRACER = True     !   [Boolean] default = False
                                 ! If true, use the ideal_age_example tracer package.
@@ -235,6 +193,9 @@ RESOLN_SCALED_KHTH = True       !   [Boolean] default = False
 KHTH_SLOPE_CFF = 0.25           !   [nondim] default = 0.0
                                 ! The nondimensional coefficient in the Visbeck formula
                                 ! for the interface depth diffusivity
+KHTR_SLOPE_CFF = 0.25           !   [nondim] default = 0.0
+                                ! The nondimensional coefficient in the Visbeck formula
+                                ! for the epipycnal tracer diffusivity
 VARMIX_KTOP = 6                 !   [nondim] default = 2
                                 ! The layer number at which to start vertical integration
                                 ! of S*N for purposes of finding the Eady growth rate.
@@ -336,9 +297,9 @@ BOUND_BT_CORRECTION = True      !   [Boolean] default = False
                                 ! If true, the corrective pseudo mass-fluxes into the
                                 ! barotropic solver are limited to values that require
                                 ! less than 0.1*MAXVEL to be accommodated.
-!BT x-halo = 0                  !
+!BT x-halo = 10                 !
                                 ! The barotropic x-halo size that is actually used.
-!BT y-halo = 0                  !
+!BT y-halo = 10                 !
                                 ! The barotropic y-halo size that is actually used.
 BT_PROJECT_VELOCITY = True      !   [Boolean] default = False
                                 ! If true, step the barotropic velocity first and project
@@ -531,6 +492,26 @@ CHL_FILE = "seawifs_1998-2006_GOLD_smoothed_2X.nc" !
                                 ! CHL_FROM_FILE are true.
 PEN_SW_NBANDS = 3               ! default = 1
                                 ! The number of bands of penetrating shortwave radiation.
+    !  Parameters of module MOM_tracer_advect
+    !  Parameters of module MOM_tracer_hor_diff
+KHTR = 10.0                     !   [m2 s-1] default = 0.0
+                                ! The background along-isopycnal tracer diffusivity.
+KHTR_MIN = 50.0                 !   [m2 s-1] default = 0.0
+                                ! The minimum along-isopycnal tracer diffusivity.
+KHTR_MAX = 900.0                !   [m2 s-1] default = 0.0
+                                ! The maximum along-isopycnal tracer diffusivity.
+KHTR_PASSIVITY_COEFF = 3.0      !   [nondim] default = 0.0
+                                ! The coefficient that scales deformation radius over
+                                ! grid-spacing in passivity, where passiviity is the ratio
+                                ! between along isopycnal mxiing of tracers to thickness mixing.
+                                ! A non-zero value enables this parameterization.
+DIFFUSE_ML_TO_INTERIOR = True   !   [Boolean] default = False
+                                ! If true, enable epipycnal mixing between the surface
+                                ! boundary layer and the interior.
+ML_KHTR_SCALE = 0.0             !   [nondim] default = 1.0
+                                ! With Diffuse_ML_interior, the ratio of the truly
+                                ! horizontal diffusivity in the mixed layer to the
+                                ! epipycnal diffusivity.  The valid range is 0 to 1.
     !  Parameters of module ocean_model_init
 ENERGYSAVEDAYS = 0.25           !   [days] default = 1.0
                                 ! The interval in units of TIMEUNIT between saves of the

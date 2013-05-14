@@ -1,4 +1,4 @@
-!SYMMETRIC_MEMORY_ = False      !   [Boolean]
+!SYMMETRIC_MEMORY_ = True       !   [Boolean]
                                 ! If defined, the velocity point data domain includes
                                 ! every face of the thickness points. In other words,
                                 ! some arrays are larger than others, depending on where
@@ -12,16 +12,6 @@
                                 ! until run time. The STATIC option is substantially
                                 ! faster, but does not allow the PE count to be changed
                                 ! at run time.  This can only be set at compile time.
-NIHALO = 4                      ! default = 2
-                                ! The number of halo points on each side in the
-                                ! x-direction.  With STATIC_MEMORY_ this is set as NIHALO_
-                                ! in MOM_memory.h at compile time; without STATIC_MEMORY_
-                                ! the default is NIHALO_ in MOM_memory.h (if defined) or 2.
-NJHALO = 4                      ! default = 2
-                                ! The number of halo points on each side in the
-                                ! y-direction.  With STATIC_MEMORY_ this is set as NJHALO_
-                                ! in MOM_memory.h at compile time; without STATIC_MEMORY_
-                                ! the default is NJHALO_ in MOM_memory.h (if defined) or 2.
 NIGLOBAL = 360                  !
                                 ! The total number of thickness grid points in the
                                 ! x-direction in the physical domain. With STATIC_MEMORY_
@@ -89,22 +79,7 @@ SAVE_INITIAL_CONDS = True       !   [Boolean] default = False
                                 ! by IC_OUTPUT_FILE.
 IC_OUTPUT_FILE = "GOLD_IC"      ! default = "MOM_IC"
                                 ! The file into which to write the initial conditions.
-    !  Parameters of module MOM_tracer
-KHTR = 1.0                      !   [m2 s-1] default = 0.0
-                                ! The background along-isopycnal tracer diffusivity.
-KHTR_SLOPE_CFF = 0.1            !   [nondim] default = 0.0
-                                ! The scaling coefficient for along-isopycnal tracer
-                                ! diffusivity using a shear-based (Visbeck-like)
-                                ! parameterization.  A non-zero value enables this param.
-KHTR_MAX = 900.0                !   [m2 s-1] default = 0.0
-                                ! The maximum along-isopycnal tracer diffusivity.
-DIFFUSE_ML_TO_INTERIOR = True   !   [Boolean] default = False
-                                ! If true, enable epipycnal mixing between the surface
-                                ! boundary layer and the interior.
-ML_KHTR_SCALE = 0.0             !   [nondim] default = 1.0
-                                ! With Diffuse_ML_interior, the ratio of the truly
-                                ! horizontal diffusivity in the mixed layer to the
-                                ! epipycnal diffusivity.  The valid range is 0 to 1.
+    !  Parameters of module MOM_tracer_registry
     !  Parameters of module MOM_tracer_flow_control
 USE_IDEAL_AGE_TRACER = True     !   [Boolean] default = False
                                 ! If true, use the ideal_age_example tracer package.
@@ -244,6 +219,9 @@ RESOLN_SCALED_KHTR = True       !   [Boolean] default = False
 KHTH_SLOPE_CFF = 0.1            !   [nondim] default = 0.0
                                 ! The nondimensional coefficient in the Visbeck formula
                                 ! for the interface depth diffusivity
+KHTR_SLOPE_CFF = 0.1            !   [nondim] default = 0.0
+                                ! The nondimensional coefficient in the Visbeck formula
+                                ! for the epipycnal tracer diffusivity
 VARMIX_KTOP = 6                 !   [nondim] default = 2
                                 ! The layer number at which to start vertical integration
                                 ! of S*N for purposes of finding the Eady growth rate.
@@ -447,6 +425,19 @@ PEN_SW_SCALE = 15.0             !   [m] default = 0.0
 PEN_SW_FRAC = 0.42              !   [nondim] default = 0.0
                                 ! The fraction of the shortwave radiation that penetrates
                                 ! below the surface.
+    !  Parameters of module MOM_tracer_advect
+    !  Parameters of module MOM_tracer_hor_diff
+KHTR = 1.0                      !   [m2 s-1] default = 0.0
+                                ! The background along-isopycnal tracer diffusivity.
+KHTR_MAX = 900.0                !   [m2 s-1] default = 0.0
+                                ! The maximum along-isopycnal tracer diffusivity.
+DIFFUSE_ML_TO_INTERIOR = True   !   [Boolean] default = False
+                                ! If true, enable epipycnal mixing between the surface
+                                ! boundary layer and the interior.
+ML_KHTR_SCALE = 0.0             !   [nondim] default = 1.0
+                                ! With Diffuse_ML_interior, the ratio of the truly
+                                ! horizontal diffusivity in the mixed layer to the
+                                ! epipycnal diffusivity.  The valid range is 0 to 1.
     !  Parameters of module MOM_surface_forcing
 BUOY_CONFIG = "linear"          !
                                 ! The character string that indicates how buoyancy forcing

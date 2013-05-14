@@ -374,16 +374,19 @@ use MOM_open_boundary, only : Radiation_Open_Bdry_Conds, open_boundary_init
 use MOM_PressureForce, only : PressureForce, PressureForce_init, PressureForce_CS
 use MOM_thickness_diffuse, only : thickness_diffuse, thickness_diffuse_init, thickness_diffuse_CS
 use MOM_tidal_forcing, only : tidal_forcing_init, tidal_forcing_CS
-use MOM_tracer, only : advect_tracer, register_tracer, add_tracer_diagnostics
-use MOM_tracer, only : add_tracer_2d_diagnostics, tracer_hordiff
-use MOM_tracer, only : advect_tracer_init, advect_tracer_diag_init, advect_tracer_CS
+use MOM_tracer_advect, only : advect_tracer, tracer_advect_init
+use MOM_tracer_advect, only : tracer_advect_end, tracer_advect_CS
+use MOM_tracer_hor_diff, only : tracer_hordiff, tracer_hor_diff_init
+use MOM_tracer_hor_diff, only : tracer_hor_diff_end, tracer_hor_diff_CS
+use MOM_tracer_registry, only : register_tracer, tracer_registry_init
+use MOM_tracer_registry, only : add_tracer_diagnostics, tracer_registry_type
+use MOM_tracer_registry, only : tracer_registry_end
 use MOM_tracer_flow_control, only : call_tracer_register, tracer_flow_control_CS
 use MOM_tracer_flow_control, only : tracer_flow_control_init, call_tracer_surface_state
 use MOM_vert_friction, only : vertvisc, vertvisc_coef, vertvisc_remnant
 use MOM_vert_friction, only : vertvisc_limit_vel, vertvisc_init
 use MOM_set_visc, only : set_viscous_BBL, set_viscous_ML, set_visc_init, set_visc_CS
 use MOM_sponge, only : init_sponge_diags, sponge_CS
-! use MOM_CS_type, only : MOM_control_struct, MOM_dyn_control_struct
 use MOM_checksum_packages, only : MOM_thermo_chksum, MOM_state_chksum, MOM_accel_chksum
 use MOM_dynamics_unsplit, only : step_MOM_dyn_unsplit, register_restarts_dyn_unsplit
 use MOM_dynamics_unsplit, only : initialize_dyn_unsplit, end_dyn_unsplit
@@ -549,7 +552,9 @@ type, public :: MOM_control_struct
   type(mixedlayer_restrat_CS), pointer :: mixedlayer_restrat_CSp => NULL()
   type(MEKE_CS),  pointer :: MEKE_CSp => NULL()
   type(VarMix_CS),  pointer :: VarMix => NULL()
-  type(advect_tracer_CS), pointer :: tracer_CSp => NULL()
+  type(tracer_registry_type), pointer :: tracer_Reg => NULL()
+  type(tracer_advect_CS), pointer :: tracer_adv_CSp => NULL()
+  type(tracer_hor_diff_CS), pointer :: tracer_diff_CSp => NULL()
   type(tracer_flow_control_CS), pointer :: tracer_flow_CSp => NULL()
   type(diagnostics_CS), pointer :: diagnostics_CSp => NULL()
   type(diag_to_Z_CS), pointer :: diag_to_Z_CSp => NULL()
@@ -861,9 +866,9 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
       call cpu_clock_begin(id_clock_tracer)
       call advect_tracer(h, CS%uhtr, CS%vhtr, CS%OBC, dtnt, grid, &
-                         CS%tracer_CSp)
-      call tracer_hordiff(h, dtnt, CS%MEKE, CS%VarMix, grid, CS%tracer_CSp, &
-                          CS%tv)
+                         CS%tracer_adv_CSp, CS%tracer_Reg)
+      call tracer_hordiff(h, dtnt, CS%MEKE, CS%VarMix, grid, &
+                          CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv)
       call cpu_clock_end(id_clock_tracer)
 
       call cpu_clock_begin(id_clock_Z_diag)
@@ -1405,7 +1410,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
 
   call MOM_timing_init(CS)
 
-  call advect_tracer_init(param_file, CS%tracer_CSp)
+  call tracer_registry_init(param_file, CS%tracer_Reg)
 
 ! Allocate and initialize space for the primary MOM variables.
   ALLOC_(CS%u(IsdB:IedB,jsd:jed,nz))   ; CS%u(:,:,:) = 0.0
@@ -1417,8 +1422,8 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     ALLOC_(CS%T(isd:ied,jsd:jed,nz))   ; CS%T(:,:,:) = 0.0
     ALLOC_(CS%S(isd:ied,jsd:jed,nz))   ; CS%S(:,:,:) = 0.0
     CS%tv%T => CS%T ; CS%tv%S => CS%S
-    call register_tracer(CS%tv%T, "T", param_file, CS%tracer_CSp)
-    call register_tracer(CS%tv%S, "S", param_file, CS%tracer_CSp)
+    call register_tracer(CS%tv%T, "T", param_file, CS%tracer_Reg)
+    call register_tracer(CS%tv%S, "S", param_file, CS%tracer_Reg)
   endif
   if (CS%use_frazil) then
     allocate(CS%tv%frazil(isd:ied,jsd:jed)) ; CS%tv%frazil(:,:) = 0.0
@@ -1495,12 +1500,11 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
 !   This subroutine calls user-specified tracer registration routines.
 ! Additional calls can be added to MOM_tracer_flow_control.F90.
   call call_tracer_register(grid, param_file, CS%tracer_flow_CSp, &
-                            diag, CS%tracer_CSp, CS%restart_CSp)
+                            diag, CS%tracer_Reg, CS%restart_CSp)
   call MEKE_alloc_register_restart(grid, param_file, CS%MEKE, CS%restart_CSp)
 
 !   Initialize all of the relevant fields.
-  if (associated(CS%tracer_CSp)) &
-    init_CS%advect_tracer_CSp => CS%tracer_CSp
+  if (associated(CS%tracer_Reg)) init_CS%tracer_Reg => CS%tracer_Reg
 
   call cpu_clock_begin(id_clock_MOM_init)
   call MOM_initialize(CS%u, CS%v, CS%h, CS%tv, Time, grid, param_file, dirs, &
@@ -1531,8 +1535,8 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call MEKE_init(Time, grid, param_file, diag, CS%MEKE_CSp, CS%MEKE)
   call VarMix_init(Time, grid, param_file, diag, CS%VarMix)
 
-  if (associated(init_CS%advect_tracer_CSp)) &
-    CS%tracer_CSp => init_CS%advect_tracer_CSp
+  if (associated(init_CS%tracer_Reg)) &
+    CS%tracer_Reg => init_CS%tracer_Reg
 
 ! if (associated(init_CS%sponge_CSp)) CS%sponge_CSp => init_CS%sponge_CSp
 
@@ -1588,19 +1592,19 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
                               init_CS%sponge_CSp, CS%diag_to_Z_CSp)
   endif
 
+  call tracer_advect_init(Time, grid, param_file, diag, CS%tracer_adv_CSp)
+  call tracer_hor_diff_init(Time, grid, param_file, diag, CS%tracer_diff_CSp)
+
   call register_diags(Time, grid, CS)
 
-  call advect_tracer_diag_init(Time, grid, diag, CS%tracer_CSp)
   if (CS%use_temperature) then
     ! If needed T_adx, etc., would have been allocated in register_diags.
-    call add_tracer_diagnostics("T", CS%tracer_CSp, CS%T_adx, CS%T_ady, &
-                                CS%T_diffx, CS%T_diffy)
-    call add_tracer_diagnostics("S", CS%tracer_CSp, CS%S_adx, CS%S_ady, &
-                                CS%S_diffx, CS%S_diffy)
-    call add_tracer_2d_diagnostics("T", CS%tracer_CSp, CS%T_adx_2d, CS%T_ady_2d, &
-                                   CS%T_diffx_2d, CS%T_diffy_2d)
-    call add_tracer_2d_diagnostics("S", CS%tracer_CSp, CS%S_adx_2d, CS%S_ady_2d, &
-                                    CS%S_diffx_2d, CS%S_diffy_2d)
+    call add_tracer_diagnostics("T", CS%tracer_Reg, CS%T_adx, CS%T_ady, &
+                       CS%T_diffx, CS%T_diffy, CS%T_adx_2d, CS%T_ady_2d, &
+                       CS%T_diffx_2d, CS%T_diffy_2d)
+    call add_tracer_diagnostics("S", CS%tracer_Reg, CS%S_adx, CS%S_ady, &
+                       CS%S_diffx, CS%S_diffy, CS%S_adx_2d, CS%S_ady_2d, &
+                       CS%S_diffx_2d, CS%S_diffy_2d)
     call register_Z_tracer(CS%tv%T, "temp_z", "Potential Temperature", "degC", Time, &
                            grid, CS%diag_to_Z_CSp)
     call register_Z_tracer(CS%tv%S, "salt_z", "Salinity", "PSU", Time, &
@@ -2332,6 +2336,10 @@ subroutine MOM_end(CS)
   if (associated(CS%tv%frazil)) deallocate(CS%tv%frazil)
   if (associated(CS%tv%salt_deficit)) deallocate(CS%tv%salt_deficit)  
   if (associated(CS%tv%Hml)) deallocate(CS%tv%Hml)
+
+  call tracer_advect_end(CS%tracer_adv_CSp)
+  call tracer_hor_diff_end(CS%tracer_diff_CSp)
+  call tracer_registry_end(CS%tracer_Reg)
 
   DEALLOC_(CS%uhtr) ; DEALLOC_(CS%vhtr)
   if (CS%split) then ; if (CS%legacy_split) then

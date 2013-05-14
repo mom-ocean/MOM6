@@ -32,7 +32,7 @@ NJGLOBAL = 2                    !
                                 ! The total number of thickness grid points in the
                                 ! y-direction in the physical domain. With STATIC_MEMORY_
                                 ! this is set in MOM_memory.h at compile time.
-!NIPROC = 2                     !
+!NIPROC = 4                     !
                                 ! The number of processors in the x-direction. With
                                 ! STATIC_MEMORY_ this is set in MOM_memory.h at compile time.
 !NJPROC = 1                     !
@@ -68,7 +68,7 @@ C_P = 3925.0                    !   [J kg-1 K-1] default = 3991.86795711963
 SAVE_INITIAL_CONDS = True       !   [Boolean] default = False
                                 ! If true, write the initial conditions to a file given
                                 ! by IC_OUTPUT_FILE.
-    !  Parameters of module MOM_tracer
+    !  Parameters of module MOM_tracer_registry
 EQN_OF_STATE = "LINEAR"         ! default = "WRIGHT"
                                 ! EQN_OF_STATE determines which ocean equation of state
                                 ! should be used.  Currently, the valid choices are
@@ -346,6 +346,8 @@ PEN_SW_SCALE = 15.0             !   [m] default = 0.0
 PEN_SW_FRAC = 0.42              !   [nondim] default = 0.0
                                 ! The fraction of the shortwave radiation that penetrates
                                 ! below the surface.
+    !  Parameters of module MOM_tracer_advect
+    !  Parameters of module MOM_tracer_hor_diff
     !  Parameters of module MOM_surface_forcing
 VARIABLE_WINDS = False          !   [Boolean] default = True
                                 ! If true, the winds vary in time after the initialization.
@@ -376,11 +378,6 @@ MAXCPU = 2.88E+04               !   [wall-clock seconds] default = -1.0
                                 ! seconds, so the actual CPU time used is larger by a
                                 ! factor of the number of processors used.
     !  Parameters of module MOM_main (MOM_driver)
-DAYMAX = 5.0                    !   [days]
-                                ! The final time of the whole simulation, in units of
-                                ! TIMEUNIT seconds.  This also sets the potential end
-                                ! time of the present run segment if the end time is
-                                ! not set via ocean_solo_nml in input.nml.
 RESTART_CONTROL = -1            ! default = 1
                                 ! An integer whose bits encode which restart files are
                                 ! written. Add 2 (bit 1) for a time-stamped file, and odd

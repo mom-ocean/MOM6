@@ -89,7 +89,7 @@ use MOM_io, only : close_file, create_file, fieldtype, file_exists
 use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE
 use MOM_io, only : write_field, slasher
 use MOM_sponge, only : set_up_sponge_field, initialize_sponge, sponge_CS
-use MOM_tracer, only : add_tracer_OBC_values, advect_tracer_CS
+use MOM_tracer_registry, only : tracer_registry_type, add_tracer_OBC_values
 use MOM_variables, only : thermo_var_ptrs, ocean_OBC_type, OBC_NONE, OBC_SIMPLE
 use MOM_variables, only : OBC_FLATHER_E, OBC_FLATHER_W, OBC_FLATHER_N, OBC_FLATHER_S
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
@@ -152,10 +152,10 @@ subroutine USER_initialize_thickness(h, G, param_file, T)
 end subroutine USER_initialize_thickness
 
 subroutine USER_initialize_velocity(u, v, G, param_file)
-  real, dimension(NIMEMB_,NJMEM_, NKMEM_), intent(out) :: u
-  real, dimension(NIMEM_,NJMEMB_, NKMEM_), intent(out) :: v
-  type(ocean_grid_type),                intent(in)  :: G
-  type(param_file_type),                intent(in)  :: param_file
+  real, dimension(NIMEMB_, NJMEM_, NKMEM_), intent(out) :: u
+  real, dimension(NIMEM_, NJMEMB_, NKMEM_), intent(out) :: v
+  type(ocean_grid_type),                    intent(in)  :: G
+  type(param_file_type),                    intent(in)  :: param_file
   call MOM_error(FATAL, &
    "USER_initialization.F90, USER_initialize_velocity: " // &
    "Unmodified user routine called - you must edit the routine to use it")
@@ -168,10 +168,10 @@ subroutine USER_initialize_velocity(u, v, G, param_file)
 end subroutine USER_initialize_velocity
 
 subroutine USER_init_temperature_salinity(T, S, G, param_file, eqn_of_state)
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: T, S
-  type(ocean_grid_type),               intent(in)  :: G
-  type(param_file_type),               intent(in)  :: param_file
-  type(EOS_type),                      pointer     :: eqn_of_state
+  real, dimension(NIMEM_, NJMEM_, NKMEM_), intent(out) :: T, S
+  type(ocean_grid_type),                   intent(in)  :: G
+  type(param_file_type),                   intent(in)  :: param_file
+  type(EOS_type),                          pointer     :: eqn_of_state
   call MOM_error(FATAL, &
    "USER_initialization.F90, USER_init_temperature_salinity: " // &
    "Unmodified user routine called - you must edit the routine to use it")
@@ -185,13 +185,13 @@ end subroutine USER_init_temperature_salinity
 
 subroutine USER_init_mixed_layer_density(Rml, G, param_file, use_temperature, &
                                          eqn_of_state, T, S, P_Ref)
-  real, dimension(NIMEM_,NJMEM_, NKMEM_),          intent(out) :: Rml
-  type(ocean_grid_type),                        intent(in)  :: G
-  type(param_file_type),                        intent(in)  :: param_file
-  logical,                                      intent(in)  :: use_temperature
-  type(EOS_type),                      optional, pointer    :: eqn_of_state
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), optional, intent(in) :: T, S
-  real,                                optional, intent(in) :: P_Ref
+  real, dimension(NIMEM_, NJMEM_, NKMEM_),       intent(out) :: Rml
+  type(ocean_grid_type),                         intent(in)  :: G
+  type(param_file_type),                         intent(in)  :: param_file
+  logical,                                       intent(in)  :: use_temperature
+  type(EOS_type),                      optional, pointer     :: eqn_of_state
+  real, dimension(NIMEM_, NJMEM_, NKMEM_), optional, intent(in) :: T, S
+  real,                                optional, intent(in)  :: P_Ref
   call MOM_error(FATAL, &
    "USER_initialization.F90, USER_init_mixed_layer_density: " // &
    "Unmodified user routine called - you must edit the routine to use it")
@@ -204,11 +204,11 @@ end subroutine USER_init_mixed_layer_density
 
 subroutine USER_initialize_sponges(G, use_temperature, tv, param_file, CSp, h)
   type(ocean_grid_type), intent(in) :: G
-  logical, intent(in) :: use_temperature
+  logical,               intent(in) :: use_temperature
   type(thermo_var_ptrs), intent(in) :: tv
   type(param_file_type), intent(in) :: param_file
   type(sponge_CS),       pointer    :: CSp
-  real, intent(in), dimension(NIMEM_,NJMEM_, NKMEM_) :: h
+  real, dimension(NIMEM_, NJMEM_, NKMEM_), intent(in) :: h
   call MOM_error(FATAL, &
    "USER_initialization.F90, USER_initialize_sponges: " // &
    "Unmodified user routine called - you must edit the routine to use it")
@@ -217,12 +217,12 @@ subroutine USER_initialize_sponges(G, use_temperature, tv, param_file, CSp, h)
 
 end subroutine USER_initialize_sponges
 
-subroutine USER_set_Open_Bdry_Conds(OBC, tv, G, param_file, advect_tracer_CSp)
-  type(ocean_OBC_type),  pointer    :: OBC
-  type(thermo_var_ptrs), intent(in) :: tv
-  type(ocean_grid_type), intent(in) :: G
-  type(param_file_type), intent(in) :: param_file
-  type(advect_tracer_CS), pointer   :: advect_tracer_CSp
+subroutine USER_set_Open_Bdry_Conds(OBC, tv, G, param_file, tr_Reg)
+  type(ocean_OBC_type),       pointer    :: OBC
+  type(thermo_var_ptrs),      intent(in) :: tv
+  type(ocean_grid_type),      intent(in) :: G
+  type(param_file_type),      intent(in) :: param_file
+  type(tracer_registry_type), pointer    :: tr_Reg
   call MOM_error(FATAL, &
    "USER_initialization.F90, USER_set_Open_Bdry_Conds: " // &
    "Unmodified user routine called - you must edit the routine to use it")
@@ -233,7 +233,7 @@ end subroutine USER_set_Open_Bdry_Conds
 
 subroutine USER_set_rotation(G, param_file)
   type(ocean_grid_type), intent(inout) :: G
-  type(param_file_type), intent(in) :: param_file
+  type(param_file_type), intent(in)    :: param_file
   call MOM_error(FATAL, &
    "USER_initialization.F90, USER_set_rotation: " // &
    "Unmodified user routine called - you must edit the routine to use it")

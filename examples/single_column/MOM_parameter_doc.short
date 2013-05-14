@@ -25,7 +25,7 @@ NJGLOBAL = 2                    !
 !NIPROC = 1                     !
                                 ! The number of processors in the x-direction. With
                                 ! STATIC_MEMORY_ this is set in MOM_memory.h at compile time.
-!NJPROC = 2                     !
+!NJPROC = 1                     !
                                 ! The number of processors in the x-direction. With
                                 ! STATIC_MEMORY_ this is set in MOM_memory.h at compile time.
     !  Parameters of module MOM_grid
@@ -65,9 +65,7 @@ SAVE_INITIAL_CONDS = True       !   [Boolean] default = False
                                 ! by IC_OUTPUT_FILE.
 IC_OUTPUT_FILE = "GOLD_IC"      ! default = "MOM_IC"
                                 ! The file into which to write the initial conditions.
-    !  Parameters of module MOM_tracer
-KHTR = 600.0                    !   [m2 s-1] default = 0.0
-                                ! The background along-isopycnal tracer diffusivity.
+    !  Parameters of module MOM_tracer_registry
     !  Parameters of module MOM_tracer_flow_control
 INPUTDIR = "INPUT/BATS"         ! default = "."
                                 ! The directory in which input files are found.
@@ -348,6 +346,10 @@ CHL_FILE = "forcing_monthly.nc" !
                                 ! CHL_FROM_FILE are true.
 PEN_SW_NBANDS = 3               ! default = 1
                                 ! The number of bands of penetrating shortwave radiation.
+    !  Parameters of module MOM_tracer_advect
+    !  Parameters of module MOM_tracer_hor_diff
+KHTR = 600.0                    !   [m2 s-1] default = 0.0
+                                ! The background along-isopycnal tracer diffusivity.
     !  Parameters of module MOM_surface_forcing
 BUOY_CONFIG = "file"            !
                                 ! The character string that indicates how buoyancy forcing

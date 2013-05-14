@@ -39,7 +39,7 @@ NJGLOBAL = 2                    !
                                 ! The total number of thickness grid points in the
                                 ! y-direction in the physical domain. With STATIC_MEMORY_
                                 ! this is set in MOM_memory.h at compile time.
-!NIPROC = 2                     !
+!NIPROC = 4                     !
                                 ! The number of processors in the x-direction. With
                                 ! STATIC_MEMORY_ this is set in MOM_memory.h at compile time.
 !NJPROC = 1                     !
@@ -186,32 +186,7 @@ SAVE_INITIAL_CONDS = True       !   [Boolean] default = False
                                 ! by IC_OUTPUT_FILE.
 IC_OUTPUT_FILE = "MOM_IC"       ! default = "MOM_IC"
                                 ! The file into which to write the initial conditions.
-    !  Parameters of module MOM_tracer
-KHTR = 0.0                      !   [m2 s-1] default = 0.0
-                                ! The background along-isopycnal tracer diffusivity.
-KHTR_SLOPE_CFF = 0.0            !   [nondim] default = 0.0
-                                ! The scaling coefficient for along-isopycnal tracer
-                                ! diffusivity using a shear-based (Visbeck-like)
-                                ! parameterization.  A non-zero value enables this param.
-KHTR_MIN = 0.0                  !   [m2 s-1] default = 0.0
-                                ! The minimum along-isopycnal tracer diffusivity.
-KHTR_MAX = 0.0                  !   [m2 s-1] default = 0.0
-                                ! The maximum along-isopycnal tracer diffusivity.
-KHTR_PASSIVITY_COEFF = 0.0      !   [nondim] default = 0.0
-                                ! The coefficient that scales deformation radius over
-                                ! grid-spacing in passivity, where passiviity is the ratio
-                                ! between along isopycnal mxiing of tracers to thickness mixing.
-                                ! A non-zero value enables this parameterization.
-KHTR_PASSIVITY_MIN = 0.5        !   [nondim] default = 0.5
-                                ! The minimum passivity which is the ratio between
-                                ! along isopycnal mxiing of tracers to thickness mixing.
-DIFFUSE_ML_TO_INTERIOR = False  !   [Boolean] default = False
-                                ! If true, enable epipycnal mixing between the surface
-                                ! boundary layer and the interior.
-CHECK_DIFFUSIVE_CFL = False     !   [Boolean] default = False
-                                ! If true, use enough iterations the diffusion to ensure
-                                ! that the diffusive equivalent of the CFL limit is not
-                                ! violated.  If false, always use 1 iteration.
+    !  Parameters of module MOM_tracer_registry
 EQN_OF_STATE = "LINEAR"         ! default = "WRIGHT"
                                 ! EQN_OF_STATE determines which ocean equation of state
                                 ! should be used.  Currently, the valid choices are
@@ -519,6 +494,9 @@ RESOLN_SCALED_KHTR = False      !   [Boolean] default = False
 KHTH_SLOPE_CFF = 0.0            !   [nondim] default = 0.0
                                 ! The nondimensional coefficient in the Visbeck formula
                                 ! for the interface depth diffusivity
+KHTR_SLOPE_CFF = 0.0            !   [nondim] default = 0.0
+                                ! The nondimensional coefficient in the Visbeck formula
+                                ! for the epipycnal tracer diffusivity
 TIDES = False                   !   [Boolean] default = False
                                 ! If true, apply tidal momentum forcing.
 BE = 0.7                        !   [nondim] default = 0.6
@@ -536,17 +514,6 @@ BEGW = 0.0                      !   [nondim] default = 0.0
                                 ! Euler (1).  0 is almost always used.
                                 ! If SPLIT is false and USE_RK2 is true, BEGW can be
                                 ! between 0 and 0.5 to damp gravity waves.
-FLUX_BT_COUPLING = False        !   [Boolean] default = False
-                                ! If true, use mass fluxes to ensure consistency between
-                                ! the baroclinic and barotropic modes. This is only used
-                                ! if SPLIT is true.
-READJUST_BT_TRANS = False       !   [Boolean] default = False
-                                ! If true, make a barotropic adjustment to the layer
-                                ! velocities after the thermodynamic part of the step
-                                ! to ensure that the interaction between the thermodynamics
-                                ! and the continuity solver do not change the barotropic
-                                ! transport.  This is only used if FLUX_BT_COUPLING and
-                                ! SPLIT are true.
 SPLIT_BOTTOM_STRESS = False     !   [Boolean] default = False
                                 ! If true, provide the bottom stress calculated by the
                                 ! vertical viscosity to the barotropic solver.
@@ -813,12 +780,6 @@ NONLINEAR_BT_CONTINUITY = False !   [Boolean] default = False
                                 ! If true, use nonlinear transports in the barotropic
                                 ! continuity equation.  This does not apply if
                                 ! USE_BT_CONT_TYPE is true.
-RESCALE_BT_FACE_AREAS = False   !   [Boolean] default = False
-                                ! If true, the face areas used by the barotropic solver
-                                ! are rescaled to approximately reflect the open face
-                                ! areas of the interior layers.  This probably requires
-                                ! FLUX_BT_COUPLING to work, and should not be used with
-                                ! USE_BT_CONT_TYPE.
 BT_MASS_SOURCE_LIMIT = 0.0      !   [nondim] default = 0.0
                                 ! The fraction of the initial depth of the ocean that can
                                 ! be added to or removed from the bartropic solution
@@ -853,9 +814,6 @@ BT_THICK_SCHEME = "HYBRID"      ! default = "HYBRID"
                                 !       layers that straddle that depth
                                 !    FROM_BT_CONT - use the average thicknesses kept
                                 !       in the h_u and h_v fields of the BT_cont_type
-APPLY_BT_DRAG = True            !   [Boolean] default = True
-                                ! If defined, bottom drag is applied within the
-                                ! barotropic solver.
 BT_STRONG_DRAG = False          !   [Boolean] default = False
                                 ! If true, use a stronger estimate of the retarding
                                 ! effects of strong bottom drag, by making it implicit
@@ -1073,6 +1031,29 @@ PEN_SW_NBANDS = 1               ! default = 1
 OPACITY_LAND_VALUE = 10.0       !   [m-1] default = 10.0
                                 ! The value to use for opacity over land. The default is
                                 ! 10 m-1 - a value for muddy water.
+    !  Parameters of module MOM_tracer_advect
+    !  Parameters of module MOM_tracer_hor_diff
+KHTR = 0.0                      !   [m2 s-1] default = 0.0
+                                ! The background along-isopycnal tracer diffusivity.
+KHTR_MIN = 0.0                  !   [m2 s-1] default = 0.0
+                                ! The minimum along-isopycnal tracer diffusivity.
+KHTR_MAX = 0.0                  !   [m2 s-1] default = 0.0
+                                ! The maximum along-isopycnal tracer diffusivity.
+KHTR_PASSIVITY_COEFF = 0.0      !   [nondim] default = 0.0
+                                ! The coefficient that scales deformation radius over
+                                ! grid-spacing in passivity, where passiviity is the ratio
+                                ! between along isopycnal mxiing of tracers to thickness mixing.
+                                ! A non-zero value enables this parameterization.
+KHTR_PASSIVITY_MIN = 0.5        !   [nondim] default = 0.5
+                                ! The minimum passivity which is the ratio between
+                                ! along isopycnal mxiing of tracers to thickness mixing.
+DIFFUSE_ML_TO_INTERIOR = False  !   [Boolean] default = False
+                                ! If true, enable epipycnal mixing between the surface
+                                ! boundary layer and the interior.
+CHECK_DIFFUSIVE_CFL = False     !   [Boolean] default = False
+                                ! If true, use enough iterations the diffusion to ensure
+                                ! that the diffusive equivalent of the CFL limit is not
+                                ! violated.  If false, always use 1 iteration.
     !  Parameters of module MOM_surface_forcing
 VARIABLE_WINDS = False          !   [Boolean] default = True
                                 ! If true, the winds vary in time after the initialization.
@@ -1140,11 +1121,11 @@ DT_FORCING = 3600.0             !   [s] default = 900.0
                                 ! The time step for changing forcing, coupling with other
                                 ! components, or potentially writing certain diagnostics.
                                 ! The default value is given by DT.
-DAYMAX = 5.0                    !   [days]
+DAYMAX = 5.0                    !   [days] default = 5.0
                                 ! The final time of the whole simulation, in units of
                                 ! TIMEUNIT seconds.  This also sets the potential end
                                 ! time of the present run segment if the end time is
-                                ! not set via ocean_solo_nml in input.nml.
+                                ! not set (as it was here) via ocean_solo_nml in input.nml.
 RESTART_CONTROL = -1            ! default = 1
                                 ! An integer whose bits encode which restart files are
                                 ! written. Add 2 (bit 1) for a time-stamped file, and odd

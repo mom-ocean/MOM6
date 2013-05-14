@@ -61,8 +61,9 @@ module MOM_generic_tracer
   use MOM_restart, only : register_restart_field, query_initialized, MOM_restart_CS
   use MOM_sponge, only : set_up_sponge_field, sponge_CS
   use MOM_time_manager, only : time_type, get_time
-  use MOM_tracer, only : register_tracer, advect_tracer_CS, tracer_vertdiff
-  use MOM_tracer, only : add_tracer_diagnostics, add_tracer_OBC_values
+  use MOM_tracer_registry, only : register_tracer, tracer_registry_type
+  use MOM_tracer_registry, only : add_tracer_diagnostics, add_tracer_OBC_values
+  use MOM_tracer_registry, only : tracer_vertdiff
   use MOM_tracer_Z_init, only : tracer_Z_init
   use MOM_variables, only : surface, ocean_OBC_type, thermo_var_ptrs
 
@@ -117,16 +118,16 @@ contains
   !     Register these tracers for restart
   !  </DESCRIPTION>
   !  <TEMPLATE>
-  !   call register_MOM_generic_tracer(G, param_file, CS, diag, tr_adv_CSp, restart_CS)
+  !   call register_MOM_generic_tracer(G, param_file, CS, diag, tr_Reg, restart_CS)
   !  </TEMPLATE>
   ! </SUBROUTINE>
 
-  function register_MOM_generic_tracer(G, param_file, CS, diag, tr_adv_CSp, restart_CS)
+  function register_MOM_generic_tracer(G, param_file, CS, diag, tr_Reg, restart_CS)
     type(ocean_grid_type), intent(in)   :: G
     type(param_file_type), intent(in)   :: param_file
     type(MOM_generic_tracer_CS),   pointer      :: CS
     type(diag_ptrs), target, intent(in) :: diag
-    type(advect_tracer_CS), pointer     :: tr_adv_CSp
+    type(tracer_registry_type), pointer     :: tr_Reg
     type(MOM_restart_CS),   pointer     :: restart_CS
     ! This subroutine is used to register tracer fields and subroutines
     ! to be used with MOM.
@@ -136,7 +137,7 @@ contains
     !  (in/out)  CS - A pointer that is set to point to the control structure
     !                 for this module
     !  (in)      diag - A structure containing pointers to common diagnostic fields.
-    !  (in/out)  tr_adv_CSp - A pointer that is set to point to the control structure
+    !  (in/out)  tr_Reg - A pointer that is set to point to the control structure
     !                  for the tracer advection and diffusion module.
     !  (in)      restart_CS - A pointer to the restart control structure.
     logical :: register_MOM_generic_tracer
@@ -246,7 +247,7 @@ contains
        call register_restart_field(tr_ptr, var_desc, .not.CS%tracers_may_reinit, restart_CS)
 
        ! Register prognastic tracer for horizontal advection & diffusion.
-       if(g_tracer_is_prog(g_tracer)) call register_tracer(tr_ptr, g_tracer_name, param_file, tr_adv_CSp)
+       if(g_tracer_is_prog(g_tracer)) call register_tracer(tr_ptr, g_tracer_name, param_file, tr_Reg)
 
        !traverse the linked list till hit NULL
        call g_tracer_get_next(g_tracer, g_tracer_next)

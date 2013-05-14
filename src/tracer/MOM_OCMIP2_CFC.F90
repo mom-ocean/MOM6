@@ -75,8 +75,9 @@ use MOM_io, only : file_exists, read_data, slasher, vardesc
 use MOM_restart, only : register_restart_field, query_initialized, MOM_restart_CS
 use MOM_sponge, only : set_up_sponge_field, sponge_CS
 use MOM_time_manager, only : time_type, get_time
-use MOM_tracer, only : register_tracer, advect_tracer_CS, tracer_vertdiff
-use MOM_tracer, only : add_tracer_diagnostics, add_tracer_OBC_values
+use MOM_tracer_registry, only : register_tracer, tracer_registry_type
+use MOM_tracer_registry, only : add_tracer_diagnostics, add_tracer_OBC_values
+use MOM_tracer_registry, only : tracer_vertdiff
 use MOM_tracer_Z_init, only : tracer_Z_init
 use MOM_variables, only : surface, ocean_OBC_type
 
@@ -105,7 +106,7 @@ type, public :: OCMIP2_CFC_CS ; private
                     ! be found, or an empty string for internal initilaization.
   logical :: Z_IC_file ! If true, the IC_file is in Z-space.  The default is false..
   type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
-  type(advect_tracer_CS), pointer :: tr_adv_CSp => NULL()
+  type(tracer_registry_type), pointer :: tr_Reg => NULL()
   real, pointer, dimension(:,:,:) :: &
     CFC11 => NULL(), &     ! The CFC11 concentration in mol m-3.
     CFC12 => NULL(), &     ! The CFC12 concentration in mol m-3.
@@ -152,12 +153,12 @@ end type OCMIP2_CFC_CS
 
 contains
 
-function register_OCMIP2_CFC(G, param_file, CS, diag, tr_adv_CSp, restart_CS)
+function register_OCMIP2_CFC(G, param_file, CS, diag, tr_Reg, restart_CS)
   type(ocean_grid_type),   intent(in) :: G
   type(param_file_type),   intent(in) :: param_file
   type(OCMIP2_CFC_CS),     pointer    :: CS
   type(diag_ptrs), target, intent(in) :: diag
-  type(advect_tracer_CS),  pointer    :: tr_adv_CSp
+  type(tracer_registry_type),  pointer    :: tr_Reg
   type(MOM_restart_CS),    pointer    :: restart_CS
 ! This subroutine is used to register tracer fields and subroutines
 ! to be used with MOM.
@@ -167,8 +168,7 @@ function register_OCMIP2_CFC(G, param_file, CS, diag, tr_adv_CSp, restart_CS)
 !  (in/out)  CS - A pointer that is set to point to the control structure
 !                 for this module
 !  (in)      diag - A structure containing pointers to common diagnostic fields.
-!  (in/out)  tr_adv_CSp - A pointer that is set to point to the control structure
-!                  for the tracer advection and diffusion module.
+!  (in/out)  tr_Reg - A pointer to the tracer registry.
 !  (in)      restart_CS - A pointer to the restart control structure.
 
   character(len=128) :: version = '$Id$'
@@ -267,12 +267,12 @@ function register_OCMIP2_CFC(G, param_file, CS, diag, tr_adv_CSp, restart_CS)
   call register_restart_field(tr_ptr, CS%CFC11_desc, &
                               .not.CS%tracers_may_reinit, restart_CS)
   ! Register CFC11 for horizontal advection & diffusion.
-  call register_tracer(tr_ptr, CS%CFC11_desc%name, param_file, tr_adv_CSp)
+  call register_tracer(tr_ptr, CS%CFC11_desc%name, param_file, tr_Reg)
   ! Do the same for CFC12
   tr_ptr => CS%CFC12
   call register_restart_field(tr_ptr, CS%CFC12_desc, &
                               .not.CS%tracers_may_reinit, restart_CS)
-  call register_tracer(tr_ptr, CS%CFC12_desc%name, param_file, tr_adv_CSp)
+  call register_tracer(tr_ptr, CS%CFC12_desc%name, param_file, tr_Reg)
 
   ! Set and read the various empirical coefficients.
 
@@ -361,7 +361,7 @@ function register_OCMIP2_CFC(G, param_file, CS, diag, tr_adv_CSp, restart_CS)
                  "A coefficient in the solubility of CFC12.", &
                  units="PSU-1 hK-2", default=e12_dflt(3))
 
-  CS%tr_adv_CSp => tr_adv_CSp
+  CS%tr_Reg => tr_Reg
   CS%restart_CSp => restart_CS
 
   register_OCMIP2_CFC = .true.
@@ -422,8 +422,8 @@ subroutine initialize_OCMIP2_CFC(restart, day, G, h, OBC, CS, sponge_CSp, &
   if (associated(OBC)) then
   ! By default, all tracers have 0 concentration in their inflows. This may
   ! make the following calls are unnecessary.
-  !  call add_tracer_OBC_values(trim(CS%CFC11_desc%name), CS%advect_tracer_CSp, 0.0)
-  !  call add_tracer_OBC_values(trim(CS%CFC12_desc%name), CS%advect_tracer_CSp, 0.0)
+  !  call add_tracer_OBC_values(trim(CS%CFC11_desc%name), CS%tr_Reg, 0.0)
+  !  call add_tracer_OBC_values(trim(CS%CFC12_desc%name), CS%tr_Reg, 0.0)
   endif
 
   ! Register CFC11 for potential diagnostic output.
@@ -479,7 +479,7 @@ subroutine initialize_OCMIP2_CFC(restart, day, G, h, OBC, CS, sponge_CSp, &
 !    Register the tracer for horizontal advection & diffusion.
     if ((CS%id_tr_adx(m) > 0) .or. (CS%id_tr_ady(m) > 0) .or. &
         (CS%id_tr_dfx(m) > 0) .or. (CS%id_tr_dfy(m) > 0)) &
-      call add_tracer_diagnostics(name, CS%tr_adv_CSp, CS%tr_adx(m)%p, &
+      call add_tracer_diagnostics(name, CS%tr_Reg, CS%tr_adx(m)%p, &
                                   CS%tr_ady(m)%p,CS%tr_dfx(m)%p,CS%tr_dfy(m)%p)
   enddo
 

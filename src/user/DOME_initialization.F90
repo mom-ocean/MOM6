@@ -31,7 +31,7 @@ use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, is_root_pe
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
-use MOM_tracer, only : add_tracer_OBC_values, advect_tracer_CS
+use MOM_tracer_registry, only : tracer_registry_type, add_tracer_OBC_values
 use MOM_variables, only : thermo_var_ptrs, ocean_OBC_type, OBC_NONE, OBC_SIMPLE
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
 implicit none ; private
@@ -246,12 +246,12 @@ end subroutine DOME_initialize_sponges
 ! -----------------------------------------------------------------------------
 
 ! -----------------------------------------------------------------------------
-subroutine DOME_set_Open_Bdry_Conds(OBC, tv, G, param_file, advect_tracer_CSp)
-  type(ocean_OBC_type),  pointer    :: OBC
-  type(thermo_var_ptrs), intent(in) :: tv
-  type(ocean_grid_type), intent(in) :: G
-  type(param_file_type), intent(in) :: param_file
-  type(advect_tracer_CS), pointer   :: advect_tracer_CSp
+subroutine DOME_set_Open_Bdry_Conds(OBC, tv, G, param_file, tr_Reg)
+  type(ocean_OBC_type),       pointer    :: OBC
+  type(thermo_var_ptrs),      intent(in) :: tv
+  type(ocean_grid_type),      intent(in) :: G
+  type(param_file_type),      intent(in) :: param_file
+  type(tracer_registry_type), pointer    :: tr_Reg
 !   This subroutine sets the properties of flow at open boundary conditions.
 ! This particular example is for the DOME inflow describe in Legg et al. 2006.
 
@@ -427,7 +427,7 @@ subroutine DOME_set_Open_Bdry_Conds(OBC, tv, G, param_file, advect_tracer_CSp)
   if (apply_OBC_u .or. apply_OBC_v) then
     if (associated(tv%S)) then
       ! In this example, all S inflows have values of 35 psu.
-      call add_tracer_OBC_values("S", advect_tracer_CSp, OBC_inflow=35.0)
+      call add_tracer_OBC_values("S", tr_Reg, OBC_inflow=35.0)
     endif
     if (associated(tv%T)) then
       ! In this example, the T values are set to be consistent with the layer
@@ -456,7 +456,7 @@ subroutine DOME_set_Open_Bdry_Conds(OBC, tv, G, param_file, advect_tracer_CSp)
           OBC_T_v(i,J,k) = T0(k)
         enddo ; enddo ; enddo
       endif
-      call add_tracer_OBC_values("T", advect_tracer_CSp, OBC_in_u=OBC_T_u, &
+      call add_tracer_OBC_values("T", tr_Reg, OBC_in_u=OBC_T_u, &
                                                          OBC_in_v=OBC_T_v)
     endif
   endif

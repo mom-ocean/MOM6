@@ -7,32 +7,14 @@ REENTRANT_X = False             !   [Boolean] default = True
                                 ! they are on the staggered grid.  Also, the starting
                                 ! index of the velocity-point arrays is usually 0, not 1.
                                 ! This can only be set at compile time.
-!STATIC_MEMORY_ = False         !   [Boolean]
+!STATIC_MEMORY_ = True          !   [Boolean]
                                 ! If STATIC_MEMORY_ is defined, the principle variables
                                 ! will have sizes that are statically determined at
                                 ! compile time.  Otherwise the sizes are not determined
                                 ! until run time. The STATIC option is substantially
                                 ! faster, but does not allow the PE count to be changed
                                 ! at run time.  This can only be set at compile time.
-NIHALO = 4                      ! default = 2
-                                ! The number of halo points on each side in the
-                                ! x-direction.  With STATIC_MEMORY_ this is set as NIHALO_
-                                ! in MOM_memory.h at compile time; without STATIC_MEMORY_
-                                ! the default is NIHALO_ in MOM_memory.h (if defined) or 2.
-NJHALO = 4                      ! default = 2
-                                ! The number of halo points on each side in the
-                                ! y-direction.  With STATIC_MEMORY_ this is set as NJHALO_
-                                ! in MOM_memory.h at compile time; without STATIC_MEMORY_
-                                ! the default is NJHALO_ in MOM_memory.h (if defined) or 2.
-NIGLOBAL = 150                  !
-                                ! The total number of thickness grid points in the
-                                ! x-direction in the physical domain. With STATIC_MEMORY_
-                                ! this is set in MOM_memory.h at compile time.
-NJGLOBAL = 70                   !
-                                ! The total number of thickness grid points in the
-                                ! y-direction in the physical domain. With STATIC_MEMORY_
-                                ! this is set in MOM_memory.h at compile time.
-!NIPROC = 3                     !
+!NIPROC = 10                    !
                                 ! The number of processors in the x-direction. With
                                 ! STATIC_MEMORY_ this is set in MOM_memory.h at compile time.
 !NJPROC = 2                     !
@@ -51,8 +33,6 @@ RHO_0 = 1031.0                  !   [kg m-3] default = 1035.0
                                 ! calculate accelerations and the mass for conservation
                                 ! properties, or with BOUSSINSEQ false to convert some
                                 ! parameters from vertical units of m to kg m-2.
-NK = 25                         !   [nondim]
-                                ! The number of model layers.
     !  Parameters of module MOM
 ENABLE_THERMODYNAMICS = False   !   [Boolean] default = True
                                 ! If true, Temperature and salinity are used as state
@@ -77,7 +57,7 @@ DTBT_RESET_PERIOD = 8.64E+04    !   [s] default = 3600.0
                                 ! dynamic, DTBT will be set at least every forcing time
                                 ! step, and if 0, every dynamics time step.  The default is
                                 ! set by DT_THERM.  This is only used if SPLIT is true.
-    !  Parameters of module MOM_tracer
+    !  Parameters of module MOM_tracer_registry
     !  Parameters of module MOM_tracer_flow_control
 USE_DOME_TRACER = True          !   [Boolean] default = False
                                 ! If true, use the DOME_tracer tracer package.
@@ -271,9 +251,9 @@ BOUND_BT_CORRECTION = True      !   [Boolean] default = False
                                 ! If true, the corrective pseudo mass-fluxes into the
                                 ! barotropic solver are limited to values that require
                                 ! less than 0.1*MAXVEL to be accommodated.
-!BT x-halo = 0                  !
+!BT x-halo = 4                  !
                                 ! The barotropic x-halo size that is actually used.
-!BT y-halo = 0                  !
+!BT y-halo = 4                  !
                                 ! The barotropic y-halo size that is actually used.
 BT_PROJECT_VELOCITY = True      !   [Boolean] default = False
                                 ! If true, step the barotropic velocity first and project
@@ -330,6 +310,8 @@ MAX_RINO_IT = 25                !   [nondim] default = 50
                                 ! The maximum number of iterations that may be used to
                                 ! estimate the Richardson number driven mixing.
     !  Parameters of module MOM_regularize_layers
+    !  Parameters of module MOM_tracer_advect
+    !  Parameters of module MOM_tracer_hor_diff
     !  Parameters of module MOM_surface_forcing
 VARIABLE_WINDS = False          !   [Boolean] default = True
                                 ! If true, the winds vary in time after the initialization.
@@ -359,6 +341,11 @@ DT_FORCING = 8.64E+04           !   [s] default = 1200.0
                                 ! The time step for changing forcing, coupling with other
                                 ! components, or potentially writing certain diagnostics.
                                 ! The default value is given by DT.
+DAYMAX = 2.0                    !   [days]
+                                ! The final time of the whole simulation, in units of
+                                ! TIMEUNIT seconds.  This also sets the potential end
+                                ! time of the present run segment if the end time is
+                                ! not set via ocean_solo_nml in input.nml.
 RESTART_CONTROL = 3             ! default = 1
                                 ! An integer whose bits encode which restart files are
                                 ! written. Add 2 (bit 1) for a time-stamped file, and odd
