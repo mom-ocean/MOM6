@@ -143,8 +143,6 @@ type, public :: vertvisc_CS ; private
                             ! mean thickness is used except near the bottom.
   logical :: direct_stress  ! If true, the wind stress is distributed over the
                             ! topmost Hmix_stress of fluid and KVML may be very small.
-  logical :: bulkmixedlayer ! If true, a refined bulk mixed layer is used with
-                            ! nkml sublayers.
   logical :: dynamic_viscous_ML  ! If true, use the results from a dynamic
                             ! calculation, perhaps based on a bulk Richardson
                             ! number criterion, to determine the mixed layer

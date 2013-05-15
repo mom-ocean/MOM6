@@ -393,7 +393,6 @@ subroutine wave_speed_init(Time, G, param_file, diag, CS)
   character(len=128) :: version = '$Id$'
   character(len=128) :: tagname = '$Name$'
   character(len=40)  :: mod = "MOM_wave_speed"  ! This module's name.
-  integer :: nkml, nkbl
 
   if (associated(CS)) then
     call MOM_error(WARNING, "wave_speed_init called with an "// &

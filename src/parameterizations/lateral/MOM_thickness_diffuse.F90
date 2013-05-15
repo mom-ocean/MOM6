@@ -81,7 +81,6 @@ type, public :: thickness_diffuse_CS ; private
                             ! timescale over which maximally jagged grid-scale
                             ! thickness variations are suppressed.  This must be
                             ! longer than DT, or 0 (the default) to use DT.
-  logical :: bulkmixedlayer ! If true, a refined bulk mixed layer is used.
   integer :: nkml           ! The number of layers within the mixed layer.
   logical :: debug          ! If true, write verbose checksums for debugging purposes.
   type(diag_ptrs), pointer :: diag ! A pointer to a structure of shareable

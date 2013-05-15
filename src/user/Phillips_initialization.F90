@@ -37,9 +37,6 @@ module Phillips_initialization
 !*  If ENABLE_THERMODYNAMICS is defined:                               *
 !*    T - Temperature in C.                                            *
 !*    S - Salinity in psu.                                             *
-!*  If BULKMIXEDLAYER is defined:                                      *
-!*    Rml - Mixed layer and buffer layer potential densities in        *
-!*          units of kg m-3.                                           *
 !*  If SPONGE is defined:                                              *
 !*    A series of subroutine calls are made to set up the damping      *
 !*    rates and reference profiles for all variables that are damped   *
@@ -72,7 +69,7 @@ module Phillips_initialization
 !*    j+1  x ^ x ^ x   At x:  q, f                                     *
 !*    j+1  > o > o >   At ^:  v, tauy                                  *
 !*    j    x ^ x ^ x   At >:  u, taux                                  *
-!*    j    > o > o >   At o:  h, D, buoy, tr, T, S, Rml, ustar         *
+!*    j    > o > o >   At o:  h, D, buoy, tr, T, S, ustar              *
 !*    j-1  x ^ x ^ x                                                   *
 !*        i-1  i  i+1  At x & ^:                                       *
 !*           i  i+1    At > & o:                                       *

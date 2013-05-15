@@ -129,7 +129,6 @@ subroutine benchmark_initialize_thickness(h, G, param_file, eqn_of_state, P_ref)
                      ! interface temperature for a given z and its derivative.
   real :: pi, z
   character(len=40)  :: mod = "benchmark_initialize_thickness" ! This subroutine's name.
-  logical :: bulkmixedlayer
   integer :: i, j, k, k1, is, ie, js, je, nz, itt
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -241,7 +240,6 @@ subroutine benchmark_init_temperature_salinity(T, S, G, param_file, &
   real :: SST       !  The initial sea surface temperature, in deg C.
   real :: lat
   character(len=40)  :: mod = "benchmark_init_temperature_salinity" ! This subroutine's name.
-  logical :: bulkmixedlayer
   integer :: i, j, k, k1, is, ie, js, je, nz, itt
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
