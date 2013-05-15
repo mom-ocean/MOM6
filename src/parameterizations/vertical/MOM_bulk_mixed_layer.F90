@@ -3259,8 +3259,8 @@ subroutine bulkmixedlayer_init(Time, G, param_file, diag, CS)
                  "energy.  By default BULK_RI_CONVECTIVE=BULK_RI_ML.", &
                  units="nondim", default=CS%bulk_Ri_ML)
   call get_param(param_file, mod, "HMIX_MIN", CS%Hmix_min, &
-                 "The minimum mixed layer depth if BULKMIXEDLAYER is true.", &
-                 units="m", default=0.0)
+                 "The minimum mixed layer depth if the mixed layer depth \n"//&
+                 "is determined dynamically.", units="m", default=0.0)
 
   call get_param(param_file, mod, "LIMIT_BUFFER_DETRAIN", CS%limit_det, &
                  "If true, limit the detrainment from the buffer layers \n"//&

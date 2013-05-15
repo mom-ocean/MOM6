@@ -452,7 +452,8 @@ ABSORB_ALL_SW = True            !   [Boolean] default = False
                                 ! If true,  all shortwave radiation is absorbed by the
                                 ! ocean, instead of passing through to the bottom mud.
 HMIX_MIN = 2.0                  !   [m] default = 0.0
-                                ! The minimum mixed layer depth if BULKMIXEDLAYER is true.
+                                ! The minimum mixed layer depth if the mixed layer depth
+                                ! is determined dynamically.
 LIMIT_BUFFER_DETRAIN = True     !   [Boolean] default = False
                                 ! If true, limit the detrainment from the buffer layers
                                 ! to not be too different from the neighbors.

@@ -933,8 +933,8 @@ subroutine regularize_layers_init(Time, G, param_file, diag, CS)
   endif
 
   call get_param(param_file, mod, "HMIX_MIN", CS%Hmix_min, &
-                 "The minimum mixed layer depth if BULKMIXEDLAYER is true.", &
-                 units="m", default=0.0)
+                 "The minimum mixed layer depth if the mixed layer depth \n"//&
+                 "is determined dynamically.", units="m", default=0.0)
   call get_param(param_file, mod, "REG_SFC_DEFICIT_TOLERANCE", CS%h_def_tol1, &
                  "The value of the relative thickness deficit at which \n"//&
                  "to start modifying the layer structure when \n"//&

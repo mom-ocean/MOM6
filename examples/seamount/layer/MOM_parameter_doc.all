@@ -1011,7 +1011,8 @@ REGULARIZE_SURFACE_LAYERS = False !   [Boolean] default = False
                                 ! layers when they have too much lateral variations to
                                 ! allow for sensible lateral barotropic transports.
 HMIX_MIN = 0.0                  !   [m] default = 0.0
-                                ! The minimum mixed layer depth if BULKMIXEDLAYER is true.
+                                ! The minimum mixed layer depth if the mixed layer depth
+                                ! is determined dynamically.
 REG_SFC_DEFICIT_TOLERANCE = 0.5 !   [nondim] default = 0.5
                                 ! The value of the relative thickness deficit at which
                                 ! to start modifying the layer structure when
