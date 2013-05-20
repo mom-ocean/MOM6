@@ -5,7 +5,7 @@ REENTRANT_Y = False             !   [Boolean] default = False
 TRIPOLAR_N = False              !   [Boolean] default = False
                                 ! Use tripolar connectivity at the northern edge of the
                                 ! domain.  With TRIPOLAR_N, NIGLOBAL must be even.
-!SYMMETRIC_MEMORY_ = True       !   [Boolean]
+!SYMMETRIC_MEMORY_ = False      !   [Boolean]
                                 ! If defined, the velocity point data domain includes
                                 ! every face of the thickness points. In other words,
                                 ! some arrays are larger than others, depending on where
@@ -21,12 +21,12 @@ NONBLOCKING_UPDATES = False     !   [Boolean] default = False
                                 ! until run time. The STATIC option is substantially
                                 ! faster, but does not allow the PE count to be changed
                                 ! at run time.  This can only be set at compile time.
-NIHALO = 4                      ! default = 4
+NIHALO = 4                      ! default = 2
                                 ! The number of halo points on each side in the
                                 ! x-direction.  With STATIC_MEMORY_ this is set as NIHALO_
                                 ! in MOM_memory.h at compile time; without STATIC_MEMORY_
                                 ! the default is NIHALO_ in MOM_memory.h (if defined) or 2.
-NJHALO = 4                      ! default = 4
+NJHALO = 4                      ! default = 2
                                 ! The number of halo points on each side in the
                                 ! y-direction.  With STATIC_MEMORY_ this is set as NJHALO_
                                 ! in MOM_memory.h at compile time; without STATIC_MEMORY_
@@ -221,7 +221,7 @@ RESTARTFILE = "MOM.res"         ! default = "MOM.res"
 LARGE_FILE_SUPPORT = True       !   [Boolean] default = True
                                 ! If true, use the file-size limits with NetCDF large
                                 ! file support (4Gb), otherwise the limit is 2Gb.
-MAX_FIELDS = 100                ! default = 100
+MAX_FIELDS = 50                 ! default = 50
                                 ! The maximum number of restart fields that can be used
                                 ! The default value is set in MOM_memory.h as MAX_FIELDS_.
     !  Parameters of module MOM_tracer_flow_control
