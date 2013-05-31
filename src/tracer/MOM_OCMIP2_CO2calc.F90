@@ -53,8 +53,8 @@ private
 
 public  :: MOM_ocmip2_co2calc, CO2_dope_vector
 
-character(len=128) :: version = '$Id$'
-character(len=128) :: tagname = '$Name$'
+! This include declares and sets the variable "version".
+#include "version_variable.h"
 
 type CO2_dope_vector
   integer  :: isc, iec, jsc, jec

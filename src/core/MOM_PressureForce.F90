@@ -129,8 +129,8 @@ subroutine PressureForce_init(Time, G, param_file, diag, CS, tides_CSp)
 !                 for this module.
 !  (in)      tides_CSp - a pointer to the control structure of the tide module.
   character(len=128) :: mesg  ! A string for writing an output error message.
-  character(len=128) :: version = '$Id$'
-  character(len=128) :: tagname = '$Name$'
+! This include declares and sets the variable "version".
+#include "version_variable.h"
   character(len=40)  :: mod = "MOM_PressureForce" ! This module's name.
 
   if (associated(CS)) then
@@ -140,7 +140,7 @@ subroutine PressureForce_init(Time, G, param_file, diag, CS, tides_CSp)
   else ; allocate(CS) ; endif
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, tagname)
+  call log_version(param_file, mod, version)
   call get_param(param_file, mod, "ANALYTIC_FV_PGF", CS%Analytic_FV_PGF, &
                  "If true the pressure gradient forces are calculated \n"//&
                  "with a finite volume form that analytically integrates \n"//&

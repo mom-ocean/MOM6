@@ -3222,8 +3222,8 @@ subroutine barotropic_init(u, v, h, eta, Time, G, param_file, diag, CS, &
 !  (in,opt)  BT_cont - A structure with elements that describe the effective
 !                      open face areas as a function of barotropic flow.
 !  (in)      tides_CSp - a pointer to the control structure of the tide module.
-  character(len=128) :: version = '$Id$'
-  character(len=128) :: tagname = '$Name$'
+! This include declares and sets the variable "version".
+#include "version_variable.h"
   character(len=40)  :: mod = "MOM_barotropic"  ! This module's name.
   real :: Datu(SZIBS_(G),SZJ_(G)), Datv(SZI_(G),SZJBS_(G))
   real :: gtot_estimate ! Summing G%g_prime gives an upper-bound estimate for pbce.
@@ -3258,7 +3258,7 @@ subroutine barotropic_init(u, v, h, eta, Time, G, param_file, diag, CS, &
   endif
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, tagname, "")
+  call log_version(param_file, mod, version, "")
   call get_param(param_file, mod, "SPLIT", CS%split, &
                  "Use the split time stepping if true.", default=.true.)
   if (.not.CS%split) return

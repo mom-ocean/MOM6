@@ -1156,8 +1156,8 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
                                   ! metrics and related information.
   type(diag_ptrs), pointer :: diag
   character(len=4), parameter :: vers_num = 'v2.0'
-  character(len=128) :: version = '$Id$'
-  character(len=128) :: tagname = '$Name$'
+! This include declares and sets the variable "version".
+#include "version_variable.h"
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
   integer :: IsdB, IedB, JsdB, JedB
   real    :: dtbt
@@ -1214,7 +1214,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call set_diag_mediator_grid(grid, diag)
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, "MOM", version, tagname, "")
+  call log_version(param_file, "MOM", version, "")
   call get_param(param_file, "MOM", "VERBOSITY", verbosity,  &
                  "Integer controlling level of messaging\n" // &
                  "\t0 = Only FATAL messages\n" // &

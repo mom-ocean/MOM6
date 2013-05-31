@@ -974,8 +974,8 @@ subroutine internal_tides_init(Time, G, param_file, diag, CS)
   integer :: num_angle, num_freq, num_mode, m, fr
   integer :: isd, ied, jsd, jed, a
   integer :: axes_ang(3), id_ang
-  character(len=128) :: version = '$Id:  $'
-  character(len=128) :: tagname = '$Name:  $'
+! This include declares and sets the variable "version".
+#include "version_variable.h"
   character(len=40)  :: mod = "MOM_internal_tides" ! This module's name.
   character(len=16), dimension(8) :: freq_name
   character(len=40)  :: var_name
@@ -1024,7 +1024,7 @@ subroutine internal_tides_init(Time, G, param_file, diag, CS)
   endif
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, tagname, "")
+  call log_version(param_file, mod, version, "")
   call get_param(param_file, mod, "INTERNAL_TIDE_FREQS", num_freq, &
                  "The number of distinct internal tide frequency bands \n"//&
                  "that will be calculated.", default=1)

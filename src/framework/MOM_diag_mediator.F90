@@ -160,15 +160,15 @@ subroutine set_axes_info(latq, lath, lonq, lonh, G, param_file, set_vertical)
   real :: zlev(SZK_(G)), zinter(SZK_(G)+1)
   logical :: set_vert, Cartesian_grid
   character(len=80) :: grid_config, units_temp
-  character(len=128) :: version = '$Id$'
-  character(len=128) :: tagname = '$Name$'
+! This include declares and sets the variable "version".
+#include "version_variable.h"
   character(len=40)  :: mod  = "MOM_diag_mediator" ! This module's name.
   nz = G%ke
 
   set_vert = .true. ; if (present(set_vertical)) set_vert = set_vertical
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, tagname)
+  call log_version(param_file, mod, version)
   call get_param(param_file, mod, "GRID_CONFIG", grid_config, &
                  "The method for defining the horizontal grid.  Valid \n"//&
                  "entries include:\n"//&

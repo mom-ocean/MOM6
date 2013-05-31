@@ -233,8 +233,8 @@ subroutine user_change_diff_init(Time, G, param_file, diag, CS)
 !  (in)      diag - A structure containing pointers to common diagnostic fields.
 !  (in/out)  CS - A pointer that is set to point to the control structure
 !                 for this module
-  character(len=128) :: version = '$Id$'
-  character(len=128) :: tagname = '$Name$'
+! This include declares and sets the variable "version".
+#include "version_variable.h"
   character(len=40)  :: mod = "user_set_diffusivity"  ! This module's name.
   character(len=200) :: mesg
   integer :: i, j, is, ie, js, je
@@ -251,7 +251,7 @@ subroutine user_change_diff_init(Time, G, param_file, diag, CS)
   CS%diag => diag
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, tagname)
+  call log_version(param_file, mod, version)
   call get_param(param_file, mod, "USER_KD_ADD", CS%Kd_add, &
                  "A user-specified additional diffusivity over a range of \n"//&
                  "latitude and density.", units="m2 s-1", default=0.0)

@@ -2084,8 +2084,8 @@ subroutine set_diffusivity_init(Time, G, param_file, diag, CS, diag_to_Z_CSp)
   real :: decay_length, utide, zbot, hamp
   type(vardesc) :: vd
   logical :: read_tideamp
-  character(len=128) :: version = '$Id$'
-  character(len=128) :: tagname = '$Name$'
+! This include declares and sets the variable "version".
+#include "version_variable.h"
   character(len=40)  :: mod = "MOM_set_diffusivity"  ! This module's name.
   character(len=20)  :: tmpstr
   character(len=200) :: filename, tideamp_file, h2_file, Niku_TKE_input_file
@@ -2111,7 +2111,7 @@ subroutine set_diffusivity_init(Time, G, param_file, diag, CS, diag_to_Z_CSp)
 
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, tagname)
+  call log_version(param_file, mod, version)
 
   call get_param(param_file, mod, "INPUTDIR", CS%inputdir, default=".")
   CS%inputdir = slasher(CS%inputdir)

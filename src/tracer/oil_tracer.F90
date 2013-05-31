@@ -160,8 +160,8 @@ function register_oil_tracer(G, param_file, CS, diag, tr_Reg, &
 !                  for the tracer advection and diffusion module.
 !  (in)      restart_CS - A pointer to the restart control structure.
 
-  character(len=128) :: version = '$Id$'
-  character(len=128) :: tagname = '$Name$'
+! This include declares and sets the variable "version".
+#include "version_variable.h"
   character(len=40)  :: mod = "oil_tracer" ! This module's name.
   character(len=200) :: inputdir ! The directory where the input files are.
   character(len=3)   :: name_tag ! String for creating identifying oils
@@ -180,7 +180,7 @@ function register_oil_tracer(G, param_file, CS, diag, tr_Reg, &
   CS%diag => diag
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, tagname, "")
+  call log_version(param_file, mod, version, "")
   call get_param(param_file, mod, "OIL_IC_FILE", CS%IC_file, &
                  "The file in which the oil tracer initial values can be \n"//&
                  "found, or an empty string for internal initialization.", &

@@ -642,8 +642,8 @@ subroutine tracer_advect_init(Time, G, param_file, diag, CS)
 !  (in)      diag - A structure containing pointers to common diagnostic fields.
 !  (in/out)  CS - A pointer to the control structure for this module
   integer, save :: init_calls = 0
-  character(len=128) :: version = '$Id$'
-  character(len=128) :: tagname = '$Name$'
+! This include declares and sets the variable "version".
+#include "version_variable.h"
   character(len=40)  :: mod = "MOM_tracer_advect" ! This module's name.
   character(len=256) :: mesg    ! Message for error messages.
 
@@ -656,7 +656,7 @@ subroutine tracer_advect_init(Time, G, param_file, diag, CS)
   CS%diag => diag
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, tagname, "")
+  call log_version(param_file, mod, version, "")
   call get_param(param_file, mod, "DT", CS%dt, fail_if_missing=.true., &
           desc="The (baroclinic) dynamics time step.", units="s")
   call get_param(param_file, mod, "DEBUG", CS%debug, default=.false.)

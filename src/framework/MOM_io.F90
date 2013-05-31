@@ -651,11 +651,11 @@ subroutine MOM_io_init(param_file)
   type(param_file_type), intent(in) :: param_file
 ! Argument:  param_file - A structure indicating the open file to parse for
 !                         model parameter values.
-  character(len=128) :: version = '$Id$'
-  character(len=128) :: tagname = '$Name$'
+! This include declares and sets the variable "version".
+#include "version_variable.h"
   character(len=40)  :: mod = "MOM_io" ! This module's name.
 
-  call log_version(param_file, mod, version, tagname)
+  call log_version(param_file, mod, version)
 
 end subroutine MOM_io_init
 

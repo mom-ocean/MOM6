@@ -436,8 +436,8 @@ subroutine opacity_init(Time, G, param_file, diag, tracer_flow, CS, optics)
 !  
 !  (in/out)  CS - A pointer that is set to point to the control structure
 !                  for this module
-  character(len=128) :: version = '$Id$'
-  character(len=128) :: tagname = '$Name$'
+! This include declares and sets the variable "version".
+#include "version_variable.h"
   character(len=200) :: inputdir   ! The directory where NetCDF input files
   character(len=200) :: filename
   character(len=200) :: tmpstr
@@ -460,7 +460,7 @@ subroutine opacity_init(Time, G, param_file, diag, tracer_flow, CS, optics)
   CS%tracer_flow_CSp => tracer_flow
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, tagname, "")
+  call log_version(param_file, mod, version, "")
 
 ! parameters for CHL_A routines
   call get_param(param_file, mod, "VAR_PEN_SW", CS%var_pen_sw, &

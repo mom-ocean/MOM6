@@ -1271,8 +1271,8 @@ subroutine adiabatic_driver_init(Time, G, param_file, diag, CS, &
 !   This is a highly simplified version of diabatic_driver_init that will allow
 ! the tracer column functions to be called without allowing any of the diabatic
 ! processes to be used.
-  character(len=128) :: version = '$Id$'
-  character(len=128) :: tagname = '$Name$'
+! This include declares and sets the variable "version".
+#include "version_variable.h"
   character(len=40)  :: mod  = "MOM_diabatic_driver" ! This module's name.
 
   if (associated(CS)) then
@@ -1286,7 +1286,7 @@ subroutine adiabatic_driver_init(Time, G, param_file, diag, CS, &
   if (associated(diag_to_Z_CSp)) CS%diag_to_Z_CSp => diag_to_Z_CSp
 
 ! Set default, read and log parameters
-  call log_version(param_file, mod, version, tagname, &
+  call log_version(param_file, mod, version, &
                    "The following parameters are used for diabatic processes.")
 
 end subroutine adiabatic_driver_init
@@ -1316,8 +1316,8 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, CS, 
   real :: Kd
   logical :: use_temperature, double_diffusion
   type(vardesc) :: vd
-  character(len=128) :: version = '$Id$'
-  character(len=128) :: tagname = '$Name$'
+! This include declares and sets the variable "version".
+#include "version_variable.h"
   character(len=40)  :: mod  = "MOM_diabatic_driver" ! This module's name.
   character(len=48)  :: thickness_units
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz, nbands
@@ -1339,7 +1339,7 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, CS, 
   CS%bulkmixedlayer = (G%nkml > 0)
 
 ! Set default, read and log parameters
-  call log_version(param_file, mod, version, tagname, &
+  call log_version(param_file, mod, version, &
                    "The following parameters are used for diabatic processes.")
 
   call get_param(param_file, mod, "SPONGE", CS%use_sponge, &

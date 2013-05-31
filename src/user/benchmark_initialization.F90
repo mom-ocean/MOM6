@@ -61,8 +61,8 @@ subroutine benchmark_initialize_topography(D, G, param_file, max_depth)
   real :: D0                   ! A constant to make the maximum     !
                                ! basin depth MAXIMUM_DEPTH.         !
   real :: x, y
-  character(len=128) :: version = '$Id$'
-  character(len=128) :: tagname = '$Name$'
+! This include declares and sets the variable "version".
+#include "version_variable.h"
   character(len=40)  :: mod = "benchmark_initialize_topography" ! This subroutine's name.
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
@@ -70,7 +70,7 @@ subroutine benchmark_initialize_topography(D, G, param_file, max_depth)
 
   call MOM_mesg("  benchmark_initialization.F90, benchmark_initialize_topography: setting topography", 5)
 
-  call log_version(param_file, mod, version, tagname, "")
+  call log_version(param_file, mod, version, "")
   call get_param(param_file, mod, "MINIMUM_DEPTH", min_depth, &
                  "The minimum depth of the ocean.", units="m", default=0.0)
 

@@ -72,8 +72,8 @@ program MOM_main
   !-----------------------------------------------------------------------
 
   character(len=4), parameter :: vers_num = 'v2.0'
-  character(len=128) :: version = '$Id$'
-  character(len=128) :: tagname = '$Name$'
+! This include declares and sets the variable "version".
+#include "version_variable.h"
   character(len=40)  :: mod = "MOM_main (MOM_sum_driver)" ! This module's name.
   character(len=200) :: mesg
 
@@ -107,7 +107,7 @@ program MOM_main
   IsdB = grid%IsdB ; IedB = grid%IedB ; JsdB = grid%JsdB ; JedB = grid%JedB
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, "MOM", version, tagname, "")
+  call log_version(param_file, "MOM", version, "")
   call get_param(param_file, "MOM", "VERBOSITY", verbosity,  &
                  "Integer controlling level of messaging\n" // &
                  "\t0 = Only FATAL messages\n" // &
@@ -198,8 +198,8 @@ subroutine benchmark_init_topog_local(D, G, param_file, max_depth)
   real :: D0                   ! A constant to make the maximum     !
                                ! basin depth MAXIMUM_DEPTH.         !
   real :: x, y
-  character(len=128) :: version = '$Id$'
-  character(len=128) :: tagname = '$Name$'
+! This include declares and sets the variable "version".
+#include "version_variable.h"
   character(len=40)  :: mod = "benchmark_initialize_topography" ! This subroutine's name.
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec

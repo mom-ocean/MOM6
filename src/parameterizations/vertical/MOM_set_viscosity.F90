@@ -1476,8 +1476,8 @@ subroutine set_visc_init(Time, G, param_file, diag, visc, CS)
   real    :: Csmag_chan_dflt, smag_const1, TKE_decay_dflt, bulk_Ri_ML_dflt
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz
   logical :: use_kappa_shear, adiabatic, double_diffusion
-  character(len=128) :: version = '$Id$'
-  character(len=128) :: tagname = '$Name$'
+! This include declares and sets the variable "version".
+#include "version_variable.h"
   character(len=40)  :: mod = "MOM_set_visc"  ! This module's name.
 
   if (associated(CS)) then
@@ -1493,7 +1493,7 @@ subroutine set_visc_init(Time, G, param_file, diag, visc, CS)
   CS%diag => diag
 
 ! Set default, read and log parameters
-  call log_version(param_file, mod, version, tagname, "")
+  call log_version(param_file, mod, version, "")
   CS%RiNo_mix = .false.
   use_kappa_shear = .false. ; double_diffusion = .false. !; adiabatic = .false.  ! Needed? -AJA
   call get_param(param_file, mod, "BOTTOMDRAGLAW", CS%bottomdraglaw, &

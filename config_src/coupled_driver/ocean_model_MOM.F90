@@ -196,8 +196,8 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in)
   real :: Time_unit   ! The time unit in seconds for ENERGYSAVEDAYS.
   real :: Rho0        ! The Boussinesq ocean density, in kg m-3.
   real :: G_Earth     ! The gravitational acceleration in m s-2.
-  character(len=128) :: version = '$Id$'
-  character(len=128) :: tagname = '$Name$'
+! This include declares and sets the variable "version".
+#include "version_variable.h"
   character(len=40)  :: mod = "ocean_model_init"  ! This module's name.
   integer :: secs, days
   type(param_file_type) :: param_file
@@ -220,7 +220,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in)
   OS%fluxes%C_p = OS%MOM_CSp%tv%C_p
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, tagname, "")
+  call log_version(param_file, mod, version, "")
   call get_param(param_file, mod, "RESTART_CONTROL", OS%Restart_control, &
                  "An integer whose bits encode which restart files are \n"//&
                  "written. Add 2 (bit 1) for a time-stamped file, and odd \n"//&

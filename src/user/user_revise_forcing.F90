@@ -73,11 +73,11 @@ subroutine user_revise_forcing_init(param_file,CS)
   type(param_file_type),     intent(in) :: param_file
   type(user_revise_forcing_CS), pointer :: CS
 
-  character(len=128) :: version = '$Id$'
-  character(len=128) :: tagname = '$Name$'
+! This include declares and sets the variable "version".
+#include "version_variable.h"
   character(len=40)  :: mod = "user_revise_forcing" ! This module's name.
 
-  call log_version(param_file, mod, version, tagname)
+  call log_version(param_file, mod, version)
 
 end subroutine user_revise_forcing_init
 

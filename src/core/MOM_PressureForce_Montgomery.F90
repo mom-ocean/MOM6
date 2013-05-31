@@ -850,8 +850,8 @@ subroutine PressureForce_Mont_init(Time, G, param_file, diag, CS, tides_CSp)
 !                 for this module.
 !  (in)      tides_CSp - a pointer to the control structure of the tide module.
   logical :: use_temperature, use_EOS
-  character(len=128) :: version = '$Id$'
-  character(len=128) :: tagname = '$Name$'
+! This include declares and sets the variable "version".
+#include "version_variable.h"
   character(len=40)  :: mod   ! This module's name.
 
   if (associated(CS)) then
@@ -866,7 +866,7 @@ subroutine PressureForce_Mont_init(Time, G, param_file, diag, CS, tides_CSp)
   endif
 
   mod = "MOM_PressureForce_Mont"
-  call log_version(param_file, mod, version, tagname)
+  call log_version(param_file, mod, version)
   call get_param(param_file, mod, "RHO_0", CS%Rho0, &
                  "The mean ocean density used with BOUSSINESQ true to \n"//&
                  "calculate accelerations and the mass for conservation \n"//&

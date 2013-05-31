@@ -77,8 +77,8 @@ function tracer_Z_init(tr, h, filename, tr_name, G, missing_val, land_val)
 !  (in,opt)  missing_val - The missing value for the tracer.
 !  (in,opt)  land_val - The value to use to fill in land points.
   integer, save :: init_calls = 0
-  character(len=128) :: version = '$Id$'
-  character(len=128) :: tagname = '$Name$'
+! This include declares and sets the variable "version".
+#include "version_variable.h"
   character(len=40)  :: mod = "MOM_tracer_Z_init" ! This module's name.
   character(len=256) :: mesg    ! Message for error messages.
 

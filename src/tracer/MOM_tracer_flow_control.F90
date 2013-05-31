@@ -116,8 +116,8 @@ subroutine call_tracer_register(G, param_file, CS, diag, tr_Reg, restart_CS)
 !                  for the tracer advection and diffusion module.
 !  (in)      restart_CS - A pointer to the restart control structure.
 
-  character(len=128) :: version = '$Id$'
-  character(len=128) :: tagname = '$Name$'
+! This include declares and sets the variable "version".
+#include "version_variable.h"
   character(len=40)  :: mod = "MOM_tracer_flow_control" ! This module's name.
 
   if (associated(CS)) then
@@ -127,7 +127,7 @@ subroutine call_tracer_register(G, param_file, CS, diag, tr_Reg, restart_CS)
   else ; allocate(CS) ; endif
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, tagname, "")
+  call log_version(param_file, mod, version, "")
   call get_param(param_file, mod, "USE_USER_TRACER_EXAMPLE", &
                                 CS%use_USER_tracer_example, &
                  "If true, use the USER_tracer_example tracer package.", &

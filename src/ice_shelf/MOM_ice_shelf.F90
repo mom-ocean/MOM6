@@ -104,8 +104,8 @@ subroutine initialize_ice_shelf(Time, CS, fluxes, Time_in, solo_mode_in)
   type(param_file_type) :: param_file
   type(directories)  :: dirs
   logical :: isshelf ! True if a shelf model is to be used.
-  character(len=128) :: version = '$Id$'
-  character(len=128) :: tagname = '$Name$'
+! This include declares and sets the variable "version".
+#include "version_variable.h"
   character(len=40)  :: mod = "MOM_ice_shelf"  ! This module's name.
 
   if (associated(CS)) then
@@ -121,7 +121,7 @@ subroutine initialize_ice_shelf(Time, CS, fluxes, Time_in, solo_mode_in)
   isshelf = .false. ; call read_param(param_file,"ICE_SHELF",isshelf)
   if (.not.isshelf) return
 
-  call log_version(param_file, mod, version, tagname, "")
+  call log_version(param_file, mod, version, "")
 
   call MOM_error(FATAL, "This version of the code does not have an active "//&
                          "ice shelf available.")

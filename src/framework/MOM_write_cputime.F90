@@ -89,8 +89,8 @@ subroutine MOM_write_cputime_init(param_file, directory, Input_start_time, CS)
 !  (in/out)  CS - A pointer that may be set to point to the control structure
 !                 for this module.
   integer :: new_cputime   ! The CPU time returned by SYSTEM_CLOCK
-  character(len=128) :: version = '$Id$'
-  character(len=128) :: tagname = '$Name$'
+! This include declares and sets the variable "version".
+#include "version_variable.h"
   character(len=40)  :: mod = 'MOM_write_cputime'  ! This module's name.
 
   if (.not.associated(CS)) then
@@ -100,7 +100,7 @@ subroutine MOM_write_cputime_init(param_file, directory, Input_start_time, CS)
   endif
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, tagname)
+  call log_version(param_file, mod, version)
   call get_param(param_file, mod, "MAXCPU", CS%maxcpu, &
                  "The maximum amount of cpu time per processor for which \n"//&
                  "MOM should run before saving a restart file and \n"//&

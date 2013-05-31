@@ -130,8 +130,8 @@ subroutine tidal_forcing_init(Time, G, param_file, CS)
   logical :: use_MF, use_MM
   logical :: tides      ! True if a tidal forcing is to be used.
   logical :: FAIL_IF_MISSING = .true.
-  character(len=128) :: version = '$Id$'
-  character(len=128) :: tagname = '$Name$'
+! This include declares and sets the variable "version".
+#include "version_variable.h"
   character(len=40)  :: mod = "MOM_tidal_forcing" ! This module's name.
   character(len=128) :: mesg
   character(len=128) :: tidal_input_files(4*MAX_CONSTITUENTS)
@@ -146,7 +146,7 @@ subroutine tidal_forcing_init(Time, G, param_file, CS)
   endif
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, tagname, "")
+  call log_version(param_file, mod, version, "")
   call get_param(param_file, mod, "TIDES", tides, &
                  "If true, apply tidal momentum forcing.", default=.false.)
 

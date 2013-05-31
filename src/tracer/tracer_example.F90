@@ -136,8 +136,8 @@ function USER_register_tracer_example(G, param_file, CS, diag, tr_Reg, &
 !                  for the tracer advection and diffusion module.
 !  (in)      restart_CS - A pointer to the restart control structure.
   character(len=80)  :: name, longname
-  character(len=128) :: version = '$Id$'
-  character(len=128) :: tagname = '$Name$'
+! This include declares and sets the variable "version".
+#include "version_variable.h"
   character(len=40)  :: mod = "tracer_example" ! This module's name.
   character(len=200) :: inputdir
   real, pointer :: tr_ptr(:,:,:) => NULL()
@@ -154,7 +154,7 @@ function USER_register_tracer_example(G, param_file, CS, diag, tr_Reg, &
 
   CS%diag => diag
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, tagname, "")
+  call log_version(param_file, mod, version, "")
   call get_param(param_file, mod, "TRACER_EXAMPLE_IC_FILE", CS%tracer_IC_file, &
                  "The name of a file from which to read the initial \n"//&
                  "conditions for the DOME tracers, or blank to initialize \n"//&

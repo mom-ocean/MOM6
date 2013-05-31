@@ -280,8 +280,8 @@ subroutine int_tide_input_init(Time, G, param_file, diag, CS, itide)
 !  (in)      diag_to_Z_CSp - A pointer to the Z-diagnostics control structure.
   type(vardesc) :: vd
   logical :: read_tideamp
-  character(len=128) :: version = '$Id$'
-  character(len=128) :: tagname = '$Name$'
+! This include declares and sets the variable "version".
+#include "version_variable.h"
   character(len=40)  :: mod = "MOM_int_tide_input"  ! This module's name.
   character(len=20)  :: tmpstr
   character(len=200) :: filename, tideamp_file, h2_file
@@ -314,7 +314,7 @@ subroutine int_tide_input_init(Time, G, param_file, diag, CS, itide)
   CS%diag => diag
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, tagname)
+  call log_version(param_file, mod, version)
 
   call get_param(param_file, mod, "INPUTDIR", CS%inputdir, default=".")
   CS%inputdir = slasher(CS%inputdir)

@@ -174,8 +174,8 @@ subroutine MOM_sum_output_init(G, param_file, directory, ntrnc, &
 !  (in/out)  CS - A pointer that is set to point to the control structure
 !                 for this module
   real :: Rho_0, maxvel
-  character(len=128) :: version = '$Id$'
-  character(len=128) :: tagname = '$Name$'
+! This include declares and sets the variable "version".
+#include "version_variable.h"
   character(len=40)  :: mod = "MOM_sum_output" ! This module's name.
   character(len=200) :: energyfile  ! The name of the energy file.
 
@@ -186,7 +186,7 @@ subroutine MOM_sum_output_init(G, param_file, directory, ntrnc, &
   allocate(CS)
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, tagname, "")
+  call log_version(param_file, mod, version, "")
   call get_param(param_file, mod, "CALCULATE_APE", CS%do_APE_calc, &
                  "If true, calculate the available potential energy of \n"//&
                  "the interfaces.  Setting this to false reduces the \n"//&

@@ -390,8 +390,8 @@ subroutine wave_speed_init(Time, G, param_file, diag, CS)
 !  (in)      diag - A structure containing pointers to common diagnostic fields.
 !  (in/out)  CS - A pointer that is set to point to the control structure
 !                  for this module
-  character(len=128) :: version = '$Id$'
-  character(len=128) :: tagname = '$Name$'
+! This include declares and sets the variable "version".
+#include "version_variable.h"
   character(len=40)  :: mod = "MOM_wave_speed"  ! This module's name.
 
   if (associated(CS)) then
@@ -403,7 +403,7 @@ subroutine wave_speed_init(Time, G, param_file, diag, CS)
   CS%diag => diag
 
   ! Write all relevant parameters to the model log.
-  call log_version(param_file, mod, version, tagname, "")
+  call log_version(param_file, mod, version, "")
 
 end subroutine wave_speed_init
 

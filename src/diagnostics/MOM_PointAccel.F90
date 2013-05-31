@@ -1047,8 +1047,8 @@ subroutine PointAccel_init(HIS, Time, G, param_file, diag, dirs, CS)
 !  (in)      dirs - A structure containing several relevant directory paths.
 !  (in/out)  CS - A pointer that is set to point to the control structure
 !                 for this module
-  character(len=128) :: version = '$Id$'
-  character(len=128) :: tagname = '$Name$'
+! This include declares and sets the variable "version".
+#include "version_variable.h"
   character(len=40)  :: mod = "MOM_PointAccel" ! This module's name.
 
   if (associated(CS)) return
@@ -1066,7 +1066,7 @@ subroutine PointAccel_init(HIS, Time, G, param_file, diag, dirs, CS)
   CS%v_av => HIS%v_av; if (.not.associated(HIS%v_av)) CS%v_av => HIS%v(:,:,:)
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, tagname, "")
+  call log_version(param_file, mod, version, "")
   call get_param(param_file, mod, "U_TRUNC_FILE", CS%u_trunc_file, &
                  "The absolute path to the file where the accelerations \n"//&
                  "leading to zonal velocity truncations are written. \n"//&

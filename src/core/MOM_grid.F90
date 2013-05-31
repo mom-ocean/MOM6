@@ -178,8 +178,8 @@ subroutine MOM_grid_init(grid, param_file)
 ! Arguments: grid - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
-  character(len=128) :: version = '$Id$'
-  character(len=128) :: tagname = '$Name$'
+! This include declares and sets the variable "version".
+#include "version_variable.h"
   integer :: isd, ied, jsd, jed, nk, idg_off, jdg_off
   integer :: IsdB, IedB, JsdB, JedB
 
@@ -192,7 +192,7 @@ subroutine MOM_grid_init(grid, param_file)
   grid%isd_global = grid%isd+idg_off ; grid%jsd_global = grid%jsd+jdg_off
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, "MOM_grid", version, tagname, &
+  call log_version(param_file, "MOM_grid", version, &
                    "Parameters providing information about the vertical grid.")
   call get_param(param_file, "MOM", "G_EARTH", grid%g_Earth, &
                  "The gravitational acceleration of the Earth.", &

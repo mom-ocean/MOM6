@@ -326,8 +326,8 @@ subroutine mixedlayer_restrat_init(Time, G, param_file, diag, CS)
 !  (in)      diag - A structure containing pointers to common diagnostic fields.
 !  (in/out)  CS - A pointer that is set to point to the control structure
 !                  for this module
-  character(len=128) :: version = '$Id$'
-  character(len=128) :: tagname = '$Name$'
+! This include declares and sets the variable "version".
+#include "version_variable.h"
   character(len=40)  :: mod = "MOM_mixed_layer_restrat"  ! This module's name.
   character(len=48)  :: flux_units
 
@@ -343,7 +343,7 @@ subroutine mixedlayer_restrat_init(Time, G, param_file, diag, CS)
   CS%diag => diag
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, tagname, "")
+  call log_version(param_file, mod, version, "")
   call get_param(param_file, mod, "FOX_KEMPER_ML_RESTRAT_COEF", &
                  CS%ml_restrat_coef, &
              "A nondimensional coefficient that is proportional to \n"//&

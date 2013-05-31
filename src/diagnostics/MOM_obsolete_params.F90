@@ -44,8 +44,8 @@ subroutine find_obsolete_params(param_file)
   type(param_file_type),       intent(in)    :: param_file
 ! Argument: param_file - A structure indicating the open file to parse for
 !                        model parameter values.
-  character(len=128) :: version = '$Id$'
-  character(len=128) :: tagname = '$Name$'
+! This include declares and sets the variable "version".
+#include "version_variable.h"
   character(len=40)  :: mod = "find_obsolete_params"  ! This module's name.
   real    :: test_val
   integer :: test_int
@@ -191,7 +191,7 @@ subroutine find_obsolete_params(param_file)
   endif
 
   ! Write the file version number to the model log.
-  call log_version(param_file, mod, version, tagname)
+  call log_version(param_file, mod, version)
 
 end subroutine find_obsolete_params
 

@@ -1233,8 +1233,8 @@ subroutine vertvisc_init(HIS, Time, G, param_file, diag, dirs, ntrunc, CS)
 
   real :: hmix_str_dflt
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz
-  character(len=128) :: version = '$Id$'
-  character(len=128) :: tagname = '$Name$'
+! This include declares and sets the variable "version".
+#include "version_variable.h"
   character(len=40)  :: mod = "MOM_vert_friction" ! This module's name.
   character(len=40)  :: thickness_units = "meters or kg m-2"
 
@@ -1251,7 +1251,7 @@ subroutine vertvisc_init(HIS, Time, G, param_file, diag, dirs, ntrunc, CS)
   CS%diag => diag ; CS%ntrunc => ntrunc ; ntrunc = 0
 
 ! Default, read and log parameters
-  call log_version(param_file, mod, version, tagname, "")
+  call log_version(param_file, mod, version, "")
   call get_param(param_file, mod, "BOTTOMDRAGLAW", CS%bottomdraglaw, &
                  "If true, the bottom stress is calculated with a drag \n"//&
                  "law of the form c_drag*|u|*u. The velocity magnitude \n"//&

@@ -1231,8 +1231,8 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, tracer_flow_CSp)
   type(directories)  :: dirs
   logical            :: new_sim
   type(time_type)    :: Time_frc
-  character(len=128) :: version = '$Id$'
-  character(len=128) :: tagname = '$Name$'
+! This include declares and sets the variable "version".
+#include "version_variable.h"
   character(len=40)  :: mod = "MOM_surface_forcing" ! This module's name.
   character(len=60)  :: axis_units
   character(len=200) :: filename, gust_file ! The name of the gustiness input file.
@@ -1251,7 +1251,7 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, tracer_flow_CSp)
   if (associated(tracer_flow_CSp)) CS%tracer_flow_CSp => tracer_flow_CSp
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, tagname, "")
+  call log_version(param_file, mod, version, "")
   call get_param(param_file, mod, "ENABLE_THERMODYNAMICS", CS%use_temperature, &
                  "If true, Temperature and salinity are used as state \n"//&
                  "variables.", default=.true.)

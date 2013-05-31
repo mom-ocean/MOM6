@@ -159,8 +159,8 @@ subroutine initialize_sponge(Iresttime, int_height, G, param_file, CS, &
 !                         model parameter values.
 !  (in/out)  CS - A pointer that is set to point to the control structure
 !                 for this module
-  character(len=128) :: version = '$Id$'
-  character(len=128) :: tagname = '$Name$'
+! This include declares and sets the variable "version".
+#include "version_variable.h"
   character(len=40)  :: mod = "MOM_sponge"  ! This module's name.
   logical :: use_sponge
   integer :: i, j, k, col, total_sponge_cols
@@ -172,7 +172,7 @@ subroutine initialize_sponge(Iresttime, int_height, G, param_file, CS, &
   endif
 
 ! Set default, read and log parameters
-  call log_version(param_file, mod, version, tagname)
+  call log_version(param_file, mod, version)
   call get_param(param_file, mod, "SPONGE", use_sponge, &
                  "If true, sponges may be applied anywhere in the domain. \n"//&
                  "The exact location and properties of those sponges are \n"//&

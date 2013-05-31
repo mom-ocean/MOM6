@@ -615,8 +615,8 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   integer :: i, j
-  character(len=128) :: version = '$Id$'
-  character(len=128) :: tagname = '$Name$'
+! This include declares and sets the variable "version".
+#include "version_variable.h"
   character(len=40)  :: mod = "MOM_hor_visc"  ! This module's name.
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -634,7 +634,7 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
   CS%diag => diag
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, tagname, "")
+  call log_version(param_file, mod, version, "")
   call get_param(param_file, mod, "LAPLACIAN", CS%Laplacian, &
                  "If true, use a Laplacian horizontal viscosity.", &
                  default=.false.)

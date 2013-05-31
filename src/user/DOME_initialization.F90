@@ -58,8 +58,8 @@ subroutine DOME_initialize_topography(D, G, param_file, max_depth)
 
 ! This subroutine sets up the DOME topography
   real :: min_depth ! The minimum and maximum depths in m.
-  character(len=128) :: version = '$Id$'
-  character(len=128) :: tagname = '$Name$'
+! This include declares and sets the variable "version".
+#include "version_variable.h"
   character(len=40)  :: mod = "DOME_initialize_topography" ! This subroutine's name.
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
@@ -67,7 +67,7 @@ subroutine DOME_initialize_topography(D, G, param_file, max_depth)
 
   call MOM_mesg("  DOME_initialization.F90, DOME_initialize_topography: setting topography", 5)
 
-  call log_version(param_file, mod, version, tagname, "")
+  call log_version(param_file, mod, version, "")
   call get_param(param_file, mod, "MINIMUM_DEPTH", min_depth, &
                  "The minimum depth of the ocean.", units="m", default=0.0)
 

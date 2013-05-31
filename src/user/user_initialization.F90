@@ -245,11 +245,11 @@ end subroutine USER_set_rotation
 subroutine write_user_log(param_file)
   type(param_file_type), intent(in) :: param_file
 
-  character(len=128) :: version = '$Id$'
-  character(len=128) :: tagname = '$Name$'
+! This include declares and sets the variable "version".
+#include "version_variable.h"
   character(len=40)  :: mod = "user_initialization" ! This module's name.
 
-  call log_version(param_file, mod, version, tagname)
+  call log_version(param_file, mod, version)
   first_call = .false.
 
 end subroutine write_user_log

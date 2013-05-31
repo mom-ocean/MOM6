@@ -171,8 +171,8 @@ function register_OCMIP2_CFC(G, param_file, CS, diag, tr_Reg, restart_CS)
 !  (in/out)  tr_Reg - A pointer to the tracer registry.
 !  (in)      restart_CS - A pointer to the restart control structure.
 
-  character(len=128) :: version = '$Id$'
-  character(len=128) :: tagname = '$Name$'
+! This include declares and sets the variable "version".
+#include "version_variable.h"
   character(len=40)  :: mod = "MOM_OCMIP2_CFC" ! This module's name.
   character(len=200) :: inputdir ! The directory where NetCDF input files are.
   ! These can be overridden later in via the field manager?
@@ -220,7 +220,7 @@ function register_OCMIP2_CFC(G, param_file, CS, diag, tr_Reg, restart_CS)
   CS%diag => diag
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, tagname, "")
+  call log_version(param_file, mod, version, "")
   call get_param(param_file, mod, "CFC_IC_FILE", CS%IC_file, &
                  "The file in which the CFC initial values can be \n"//&
                  "found, or an empty string for internal initialization.", &

@@ -102,8 +102,8 @@ module MOM_generic_tracer
 
   end type MOM_generic_tracer_CS
 
-  character(len=128) :: version = '$Id$'
-  character(len=128) :: tagname = '$Name$'
+! This include declares and sets the variable "version".
+#include "version_variable.h"
 
 contains
 
@@ -176,7 +176,7 @@ contains
     CS%diag => diag
 
   ! Read all relevant parameters and write them to the model log.
-    call log_version(param_file, sub_name, version, tagname, "")
+    call log_version(param_file, sub_name, version, "")
     call get_param(param_file, sub_name, "GENERIC_TRACER_IC_FILE", CS%IC_file, &
                  "The file in which the generic trcer initial values can \n"//&
                  "be found, or an empty string for internal initialization.", &

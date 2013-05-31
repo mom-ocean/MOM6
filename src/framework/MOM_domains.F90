@@ -570,8 +570,8 @@ subroutine MOM_domains_init(MOM_dom, param_file, min_halo, symmetric)
   logical :: reentrant_x, reentrant_y, tripolar_N, is_static
   character(len=200) :: mesg
   character(len=8) :: char_xsiz, char_ysiz, char_niglobal, char_njglobal
-  character(len=128) :: version = '$Id$'
-  character(len=128) :: tagname = '$Name$'
+! This include declares and sets the variable "version".
+#include "version_variable.h"
   character(len=40)  :: mod ! This module's name.
 
   if (.not.associated(MOM_dom)) then
@@ -597,7 +597,7 @@ subroutine MOM_domains_init(MOM_dom, param_file, min_halo, symmetric)
   if (present(min_halo)) mod = trim(mod)//" min_halo"
   
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, tagname)
+  call log_version(param_file, mod, version)
   call get_param(param_file, mod, "REENTRANT_X", reentrant_x, &
                  "If true, the domain is zonally reentrant.", default=.true.)
   call get_param(param_file, mod, "REENTRANT_Y", reentrant_y, &

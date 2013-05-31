@@ -2010,8 +2010,8 @@ subroutine entrain_diffusive_init(Time, G, param_file, diag, CS)
 !  (in/out)  CS - A pointer that is set to point to the control structure
 !                 for this module
   real :: decay_length, dt, Kd
-  character(len=128) :: version = '$Id$'
-  character(len=128) :: tagname = '$Name$'
+! This include declares and sets the variable "version".
+#include "version_variable.h"
   character(len=40)  :: mod  = "MOM_entrain_diffusive" ! This module's name.
 
   if (associated(CS)) then
@@ -2026,7 +2026,7 @@ subroutine entrain_diffusive_init(Time, G, param_file, diag, CS)
   CS%bulkmixedlayer = (G%nkml > 0)
 
 ! Set default, read and log parameters
-  call log_version(param_file, mod, version, tagname, "")
+  call log_version(param_file, mod, version, "")
   call get_param(param_file, mod, "CORRECT_DENSITY", CS%correct_density, &
                  "If true, and USE_EOS is true, the layer densities are \n"//&
                  "restored toward their target values by the diapycnal \n"//&

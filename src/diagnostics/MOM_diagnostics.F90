@@ -734,8 +734,8 @@ subroutine MOM_diagnostics_init(HIS, Time, G, param_file, diag, CS)
 !  (in)      diag - A structure containing pointers to common diagnostic fields.
 !  (in/out)  CS - A pointer that is set to point to the control structure
 !                 for this module
-  character(len=128) :: version = '$Id$'
-  character(len=128) :: tagname = '$Name$'
+! This include declares and sets the variable "version".
+#include "version_variable.h"
   character(len=40)  :: mod = "MOM_diagnostics" ! This module's name.
   real :: omega, f2_min
   character(len=48) :: thickness_units, flux_units
@@ -756,7 +756,7 @@ subroutine MOM_diagnostics_init(HIS, Time, G, param_file, diag, CS)
   CS%diag => diag
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, tagname)
+  call log_version(param_file, mod, version)
   call get_param(param_file, mod, "SPLIT", CS%split, &
                  "Use the split time stepping if true.", default=.true.)
 

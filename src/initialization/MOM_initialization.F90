@@ -197,8 +197,8 @@ subroutine MOM_initialize(u, v, h, tv, Time, G, PF, dirs, &
   logical :: convert
   type(EOS_type), pointer :: eos => NULL()
   logical :: debug    ! indicates whether to write debugging output
-  character(len=128) :: version = '$Id$'
-  character(len=128) :: tagname = '$Name$'
+! This include declares and sets the variable "version".
+#include "version_variable.h"
   character(len=40)  :: mod = "MOM_initialization" ! This module's name.
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
@@ -209,7 +209,7 @@ subroutine MOM_initialize(u, v, h, tv, Time, G, PF, dirs, &
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   call MOM_mesg(" MOM_initialization.F90, MOM_initialize: subroutine entered", 3)
-  call log_version(PF, mod, version, tagname)
+  call log_version(PF, mod, version)
 
   new_sim = .false.
   if ((dirs%input_filename(1:1) == 'n') .and. &
@@ -3347,8 +3347,8 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
   character(len=200) :: mesg
 
   type(EOS_type), pointer :: eos => NULL()
-  character(len=128) :: version = '$Id$'
-  character(len=128) :: tagname = '$Name$'
+! This include declares and sets the variable "version".
+#include "version_variable.h"
   character(len=40)  :: mod = "MOM_initialize_layers_from_Z" ! This module's name.
 
   integer :: is, ie, js, je, nz ! compute domain indices
@@ -3423,7 +3423,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
   PI_180=atan(1.0)/45.
 
   call MOM_mesg(" MOM_temp_salt_initiale_from_Z.F90, MOM_temp_salt_initialize_from_Z: subroutine entered", 3)
-  call log_version(PF, mod, version, tagname)
+  call log_version(PF, mod, version)
 
   new_sim = .false.
   if ((dirs%input_filename(1:1) == 'n') .and. &

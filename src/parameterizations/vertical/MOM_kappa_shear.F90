@@ -1628,8 +1628,8 @@ subroutine kappa_shear_init(Time, G, param_file, diag, CS)
 !  (in/out)  CS - A pointer that is set to point to the control structure
 !                 for this module
   logical :: merge_mixedlayer
-  character(len=128) :: version = '$Id$'
-  character(len=128) :: tagname = '$Name$'
+! This include declares and sets the variable "version".
+#include "version_variable.h"
   character(len=40)  :: mod = "MOM_kappa_shear"  ! This module's name.
   real :: KD_normal ! The KD of the main model, read here only as a parameter
                     ! for setting the default of KD_SMOOTH
@@ -1650,7 +1650,7 @@ subroutine kappa_shear_init(Time, G, param_file, diag, CS)
   ! subgridscale inhomogeneity into account.
 
 ! Set default, read and log parameters
-  call log_version(param_file, mod, version, tagname, "")
+  call log_version(param_file, mod, version, "")
   call get_param(param_file, mod, "RINO_CRIT", CS%RiNo_crit, &
                  "The critical Richardson number for shear mixing.", &
                  units="nondim", default=0.25)

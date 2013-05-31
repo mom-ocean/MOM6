@@ -424,8 +424,8 @@ subroutine tracer_registry_init(param_file, Reg)
 !                         model parameter values.
 !  (in/out)  Reg - A pointer that is set to point to the tracer registry.
   integer, save :: init_calls = 0
-  character(len=128) :: version = '$Id$'
-  character(len=128) :: tagname = '$Name$'
+! This include declares and sets the variable "version".
+#include "version_variable.h"
   character(len=40)  :: mod = "MOM_tracer_registry" ! This module's name.
   character(len=256) :: mesg    ! Message for error messages.
 
@@ -433,7 +433,7 @@ subroutine tracer_registry_init(param_file, Reg)
   else ; return ; endif
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, tagname, "")
+  call log_version(param_file, mod, version, "")
 
   init_calls = init_calls + 1
   if (init_calls > 1) then

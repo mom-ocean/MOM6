@@ -839,8 +839,8 @@ subroutine CoriolisAdv_init(Time, G, param_file, diag, CS)
 !  (in/out)  CS - A pointer that is set to point to the control structure
 !                 for this module
 
-  character(len=128) :: version = '$Id$'
-  character(len=128) :: tagname = '$Name$'
+! This include declares and sets the variable "version".
+#include "version_variable.h"
   character(len=40)  :: mod = "MOM_CoriolisAdv" ! This module's name.
   character(len=20)  :: tmpstr
   character(len=400) :: mesg
@@ -858,7 +858,7 @@ subroutine CoriolisAdv_init(Time, G, param_file, diag, CS)
   CS%diag => diag ; CS%Time => Time
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, tagname)
+  call log_version(param_file, mod, version)
   call get_param(param_file, mod, "NOSLIP", CS%no_slip, &
                  "If true, no slip boundary conditions are used; otherwise \n"//&
                  "free slip boundary conditions are assumed. The \n"//&

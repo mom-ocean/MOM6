@@ -366,8 +366,8 @@ subroutine set_grid_metrics(G, param_file, set_vertical)
 !  inverses and the cell areas centered on h, q, u, and v points are
 !  calculated, as are the geographic locations of each of these 4
 !  sets of points.
-  character(len=128) :: version = '$Id$'
-  character(len=128) :: tagname = '$Name$'
+! This include declares and sets the variable "version".
+#include "version_variable.h"
   logical :: debug
   character(len=256) :: config
 
@@ -375,7 +375,7 @@ subroutine set_grid_metrics(G, param_file, set_vertical)
  
   call allocate_metrics(G)
 
-  call log_version(param_file, "MOM_grid_init", version, tagname, "")
+  call log_version(param_file, "MOM_grid_init", version, "")
   call get_param(param_file, "MOM_grid_init", "GRID_CONFIG", config, &
                  "A character string that determines the method for \n"//&
                  "defining the horizontal grid.  Current options are: \n"//&

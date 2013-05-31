@@ -392,8 +392,8 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
              ! value is roughly (pi / (the age of the universe) )^2.
   logical :: use_variable_mixing
   logical :: Resoln_scaled_Kh, Resoln_scaled_KhTh, Resoln_scaled_KhTr
-  character(len=128) :: version = '$Id$'
-  character(len=128) :: tagname = '$Name$'
+! This include declares and sets the variable "version".
+#include "version_variable.h"
   character(len=40)  :: mod = "MOM_lateral_mixing_coeffs" ! This module's name.
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, i, j
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
@@ -409,7 +409,7 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
   endif
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, tagname, "")
+  call log_version(param_file, mod, version, "")
   !   This first set of parameters are read into local variables first, in case
   ! the control structure should not be allocated.
   call get_param(param_file, mod, "USE_VARIABLE_MIXING", use_variable_mixing,&

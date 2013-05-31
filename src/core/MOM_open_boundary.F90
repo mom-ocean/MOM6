@@ -202,8 +202,8 @@ subroutine open_boundary_init(Time, G, param_file, diag, CS)
 !  (in)      diag - A structure containing pointers to common diagnostic fields.
 !  (in/out)  CS - A pointer that is set to point to the control structure
 !                 for this module
-  character(len=128) :: version = '$Id$'
-  character(len=128) :: tagname = '$Name$'
+! This include declares and sets the variable "version".
+#include "version_variable.h"
   character(len=40)  :: mod = "MOM_open_boundary" ! This module's name.
   logical :: flather_east, flather_west, flather_north, flather_south
 
@@ -212,7 +212,7 @@ subroutine open_boundary_init(Time, G, param_file, diag, CS)
     return
   endif
 
-  call log_version(param_file, mod, version, tagname)
+  call log_version(param_file, mod, version)
   call get_param(param_file, mod, "APPLY_OBC_U_FLATHER_EAST", flather_east, &
                  "If true, some zonal velocity points use Flather open \n"//&
                  "boundary conditions on the east side of the ocean.", &

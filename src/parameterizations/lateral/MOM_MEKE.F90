@@ -355,8 +355,8 @@ subroutine MEKE_init(Time, G, param_file, diag, CS, MEKE)
 
 ! Local variables
   integer :: is, ie, js, je, isd, ied, jsd, jed, nz
-  character(len=128) :: version = '$Id$'
-  character(len=128) :: tagname = '$Name$'
+! This include declares and sets the variable "version".
+#include "version_variable.h"
   character(len=40)  :: mod = "MOM_MEKE" ! This module's name.
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -378,7 +378,7 @@ subroutine MEKE_init(Time, G, param_file, diag, CS, MEKE)
   CS%diag => diag
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, tagname, "")
+  call log_version(param_file, mod, version, "")
   call get_param(param_file, mod, "MEKE_DAMPING", CS%MEKE_damping, &
                  "The local depth-indepented MEKE dissipation rate.", &
                  units="s-1", default=0.0)

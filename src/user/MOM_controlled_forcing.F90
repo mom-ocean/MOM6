@@ -525,8 +525,8 @@ subroutine controlled_forcing_init(Time, G, param_file, diag, CS)
   real :: smooth_len
   logical :: do_integrated
   integer :: num_cycle
-  character(len=128) :: version = '$Id:  $'
-  character(len=128) :: tagname = '$Name:  $'
+! This include declares and sets the variable "version".
+#include "version_variable.h"
   character(len=40)  :: mod = "MOM_controlled_forcing" ! This module's name.
 
   ! These should have already been called.
@@ -540,7 +540,7 @@ subroutine controlled_forcing_init(Time, G, param_file, diag, CS)
   endif
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, tagname, "")
+  call log_version(param_file, mod, version, "")
   call log_param(param_file, mod, "CTRL_FORCE_INTEGRATED", do_integrated, &
                  "If true, use a PI controller to determine the surface \n"//&
                  "forcing that is consistent with the observed mean properties.", &

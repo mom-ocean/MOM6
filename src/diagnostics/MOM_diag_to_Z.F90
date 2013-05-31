@@ -769,8 +769,8 @@ subroutine MOM_diag_to_Z_init(Time, G, param_file, diag, CS)
 !  (in)      diag - A structure containing pointers to common diagnostic fields.
 !  (in/out)  CS - A pointer that is set to point to the control structure
 !                 for this module
-  character(len=128) :: version = '$Id$'
-  character(len=128) :: tagname = '$Name$'
+! This include declares and sets the variable "version".
+#include "version_variable.h"
   character(len=40)  :: mod = "MOM_diag_to_Z" ! This module's name.
   character(len=200) :: in_dir, zgrid_file   ! Strings for directory/file.
   character(len=48)  :: flux_units
@@ -792,7 +792,7 @@ subroutine MOM_diag_to_Z_init(Time, G, param_file, diag, CS)
   CS%diag => diag
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, tagname)
+  call log_version(param_file, mod, version)
   ! Read in z-space info from a NetCDF file.
   call get_param(param_file, mod, "Z_OUTPUT_GRID_FILE", zgrid_file, &
                  "The file that specifies the vertical grid for \n"//&

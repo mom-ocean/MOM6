@@ -735,8 +735,8 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt)
   logical            :: new_sim
   type(time_type)    :: Time_frc
   character(len=200) :: TideAmp_file, gust_file, salt_file ! Input file names.
-  character(len=128) :: version = '$Id$'
-  character(len=128) :: tagname = '$Name$'
+! This include declares and sets the variable "version".
+#include "version_variable.h"
   character(len=40)  :: mod = "MOM_surface_forcing"  ! This module's name.
   character(len=48)  :: stagger
   character(len=128) :: basin_file
@@ -756,9 +756,9 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt)
 
   CS%diag => diag
 
-  call write_version_number (version, tagname)
+  call write_version_number (version)
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, tagname, "")
+  call log_version(param_file, mod, version, "")
 
   call get_param(param_file, mod, "INPUTDIR", CS%inputdir, &
                  "The directory in which all input files are found.", &

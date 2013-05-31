@@ -99,9 +99,8 @@ public Phillips_initialize_thickness
 public Phillips_initialize_velocity
 public Phillips_initialize_sponges
 
-
-character(len=128) :: version = '$Id$'
-character(len=128) :: tagname = '$Name$'
+! This include declares and sets the variable "version".
+#include "version_variable.h"
 
 contains
 
@@ -124,7 +123,7 @@ subroutine Phillips_initialize_thickness(h, G, param_file)
   
   eta_im(:,:) = 0.0
 
-  call log_version(param_file, mod, version, tagname)
+  call log_version(param_file, mod, version)
   call get_param(param_file, mod, "HALF_STRAT_DEPTH", half_strat, &
                  "The maximum depth of the ocean.", units="nondim", &
                  default = 0.5)
@@ -192,7 +191,7 @@ subroutine Phillips_initialize_velocity(u, v, G, param_file)
 
   pi = 4.0*atan(1.0)
 
-  call log_version(param_file, mod, version, tagname)
+  call log_version(param_file, mod, version)
   call get_param(param_file, mod, "VELOCITY_IC_PERTURB_AMP", velocity_amplitude, &
                  "The magnitude of the initial velocity perturbation.", &
                  units="m s-1", default=0.001)
@@ -257,7 +256,7 @@ subroutine Phillips_initialize_sponges(G, use_temperature, tv, param_file, CSp, 
   eta(:,:,:) = 0.0 ; temp(:,:,:) = 0.0 ; Idamp(:,:) = 0.0
   eta_im(:,:) = 0.0 ; Idamp_im(:) = 0.0
 
-  if (first_call) call log_version(param_file, mod, version, tagname)
+  if (first_call) call log_version(param_file, mod, version)
   first_call = .false.
   call get_param(param_file, mod, "HALF_STRAT_DEPTH", half_strat, &
                  "The maximum depth of the ocean.", units="nondim", &

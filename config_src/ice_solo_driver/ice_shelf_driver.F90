@@ -157,8 +157,8 @@ program SHELF_main
   !-----------------------------------------------------------------------
 
   character(len=4), parameter :: vers_num = 'v2.0'
-  character(len=128) :: version = '$Id$'
-  character(len=128) :: tagname = '$Name$'
+! This include declares and sets the variable "version".
+#include "version_variable.h"
   character(len=40)  :: mod = "SHELF_main (ice_shelf_driver)" ! This module's name.
 
   namelist /ice_solo_nml/ date_init, calendar, months, days, hours, minutes, seconds
@@ -219,7 +219,7 @@ program SHELF_main
   call Get_MOM_Input(param_file, dirs)
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, tagname, "")
+  call log_version(param_file, mod, version, "")
 
   call get_param(param_file, mod, "ICE_SHELF", use_ice_shelf, &
                  "If true, call the code to apply an ice shelf model over \n"//&

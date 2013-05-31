@@ -158,8 +158,8 @@ function register_ideal_age_tracer(G, param_file, CS, diag, tr_Reg, &
 !                  for the tracer advection and diffusion module.
 !  (in)      restart_CS - A pointer to the restart control structure.
 
-  character(len=128) :: version = '$Id$'
-  character(len=128) :: tagname = '$Name$'
+! This include declares and sets the variable "version".
+#include "version_variable.h"
   character(len=40)  :: mod = "ideal_age_example" ! This module's name.
   character(len=200) :: inputdir ! The directory where the input files are.
   real, pointer :: tr_ptr(:,:,:) => NULL()
@@ -178,7 +178,7 @@ function register_ideal_age_tracer(G, param_file, CS, diag, tr_Reg, &
   CS%diag => diag
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, tagname, "")
+  call log_version(param_file, mod, version, "")
   call get_param(param_file, mod, "DO_IDEAL_AGE", do_ideal_age, &
                  "If true, use an ideal age tracer that is set to 0 age \n"//&
                  "in the mixed layer and ages at unit rate in the interior.", &

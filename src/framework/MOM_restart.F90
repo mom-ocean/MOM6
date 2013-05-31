@@ -1089,8 +1089,8 @@ subroutine restart_init(param_file, CS, restart_root)
 !  (in,opt)  restart_root - A filename root that overrides the value in
 !                           RESTARTFILE.  This will enable the use of this
 !                           module by other components.
-  character(len=128) :: version = '$Id$'
-  character(len=128) :: tagname = '$Name$'
+! This include declares and sets the variable "version".
+#include "version_variable.h"
   character(len=40)  :: mod = "MOM_restart"   ! This module's name.
 
   if (associated(CS)) then
@@ -1100,7 +1100,7 @@ subroutine restart_init(param_file, CS, restart_root)
   allocate(CS)
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, tagname)
+  call log_version(param_file, mod, version)
   call get_param(param_file, mod, "PARALLEL_RESTARTFILES", &
                                 CS%parallel_restartfiles, &
                  "If true, each processor writes its own restart file, \n"//&

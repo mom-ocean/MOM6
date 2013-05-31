@@ -56,8 +56,8 @@ subroutine circle_obcs_initialize_thickness(h, G, param_file)
                           ! negative because it is positive upward.      !
   real :: eta1D(SZK_(G)+1)! Interface height relative to the sea surface !
                           ! positive upward, in m.                       !
-  character(len=128) :: version = '$Id$'
-  character(len=128) :: tagname = '$Name$'
+! This include declares and sets the variable "version".
+#include "version_variable.h"
   character(len=40)  :: mod = "circle_obcs_initialize_thickness"   ! This module's name.
   integer :: i, j, k, is, ie, js, je, nz
   real :: diskrad, rad, xCenter, xRadius, lonC, latC
@@ -67,7 +67,7 @@ subroutine circle_obcs_initialize_thickness(h, G, param_file)
   call MOM_mesg("  circle_obcs_initialization.F90, circle_obcs_initialize_thickness: setting thickness", 5)
 
   ! Parameters read by cartesian grid initialization
-  call log_version(param_file, mod, version, tagname, "")
+  call log_version(param_file, mod, version, "")
   call get_param(param_file, mod, "DISK_RADIUS", diskrad, &
                  "The radius of the initially elevated disk in the \n"//&
                  "circle_obcs test case.", units=G%axis_units, &

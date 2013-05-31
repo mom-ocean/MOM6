@@ -238,8 +238,8 @@ subroutine close_param_file(CS, quiet_close, component)
 ! Arguments: CS - the param_file_type to close
 !  (in,opt)  quiet_close - if present and true, do not do any logging with this
 !                          call.
-  character(len=128) :: version = '$Id$'
-  character(len=128) :: tagname = '$Name$'
+! This include declares and sets the variable "version".
+#include "version_variable.h"
   character(len=128) :: docfile_default
   character(len=40)  :: mod   ! This module's name.
   integer :: i, n, num_unused
@@ -259,7 +259,7 @@ subroutine close_param_file(CS, quiet_close, component)
   
   ! Log the parameters for the parser.
   mod = "MOM_file_parser"
-  call log_version(CS, mod, version, tagname)
+  call log_version(CS, mod, version)
   call log_param(CS, mod, "SEND_LOG_TO_STDOUT", &
                         CS%log_to_stdout, &
                  "If true, all log messages are also sent to stdout.", &
@@ -1105,20 +1105,16 @@ end function overrideWarningHasBeenIssued
 
 ! The following subroutines write out to a log file.
 
-subroutine log_version(CS, modulename, version, tagname, desc)
+subroutine log_version(CS, modulename, version, desc)
   type(param_file_type),      intent(in) :: CS
   character(len=*),           intent(in) :: modulename
   character(len=*),           intent(in) :: version
-  character(len=*), optional, intent(in) :: tagname, desc
+  character(len=*), optional, intent(in) :: desc
 ! This subroutine writes the version of a module to a log file.
   character(len=240) :: mesg
 
 !  write(mesg, '(a,": ",a)') trim(modulename), trim(version)
-  if (present(tagname)) then
-    mesg = trim(modulename)//": "//trim(version)//" Tag "//trim(tagname)
-  else
-    mesg = trim(modulename)//": "//trim(version)
-  endif
+  mesg = trim(modulename)//": "//trim(version)
   if (is_root_pe()) then
     if (CS%log_open) write(CS%stdlog,'(a)') trim(mesg)
     if (CS%log_to_stdout) write(CS%stdout,'(a)') trim(mesg)

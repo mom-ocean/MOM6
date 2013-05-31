@@ -157,8 +157,8 @@ program MOM_main
   !-----------------------------------------------------------------------
 
   character(len=4), parameter :: vers_num = 'v2.0'
-  character(len=128) :: version = '$Id$'
-  character(len=128) :: tagname = '$Name$'
+! This include declares and sets the variable "version".
+#include "version_variable.h"
   character(len=40)  :: mod = "MOM_main (MOM_driver)" ! This module's name.
 
   namelist /ocean_solo_nml/ date_init, calendar, months, days, hours, minutes, seconds
@@ -254,7 +254,7 @@ program MOM_main
   elapsed_time = 0.0
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, tagname, "")
+  call log_version(param_file, mod, version, "")
   call get_param(param_file, mod, "DT", dt, fail_if_missing=.true.)
   call get_param(param_file, mod, "DT_FORCING", time_step, &
                  "The time step for changing forcing, coupling with other \n"//&
