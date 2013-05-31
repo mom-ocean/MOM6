@@ -97,15 +97,10 @@ NJHALO = 4                      !  points on each side in the x- and y-direction
                                 !  If static memory allocation is used, these
                                 !  must match the values of NIHALO_ and NJHALO_
                                 !  in MOM_memory.h.
-BTHALO = 10
-
-NIPROC = 40
-NJPROC = 36
-
-NIPROC_IO = 10                  !    The number of processors used for I/O in the
+NIPROC_IO = 8                   !    The number of processors used for I/O in the
                                 !  x-direction, or 0 to equal NIPROC.  NIPROC_IO
                                 !  must be a factor of NIPROC.
-NJPROC_IO = 6                   !    The number of processors used for I/O in the
+NJPROC_IO = 4                   !    The number of processors used for I/O in the
                                 !  y-direction, or 0 to equal NJPROC.  NJPROC_IO
                                 !  must be a factor of NJPROC.
 
@@ -592,9 +587,6 @@ DEPTH_LIMIT_FLUXES = 0.1        !    The surface fluxes are scaled away when the
 KVML = 1.00e-2                  !    The kinematic viscosity in the mixed layer,
                                 !  in m2 s-1.  A typical value is ~1e-2 m2 s-1.
                                 !  KVML is not used if BULKMIXEDLAYER is defined.
-KDML = 1.00e-4                  !    The diapycnal diffusivity of density in the
-                                !  mixed layer, in m2 s-1.  This value may be 0.
-                                !  KDML is not used if BULKMIXEDLAYER is defined.
 DIRECT_STRESS = False           !    If DIRECT_STRESS is defined, the wind stress
                                 !  is distributed over the topmost HMIX_STRESS
                                 !  of fluid, and KVML need not be elevated.
@@ -846,7 +838,7 @@ OPACITY_SCHEME = "MANIZZA_05"   ! OPACITY_SCHEME is used to specify how
                                 ! opacities.  Currently valid options include:
                                 !   MANIZZA_05 - Use Manizza et al., GRL, 2005.
                                 !   MOREL_88 - Use Morel, JGR, 1988.
-CHL_FILE = "/seawifs_1998-2006_MOM_smoothed_2X.nc"
+CHL_FILE = "/seawifs_1998-2006_GOLD_smoothed_2X.nc"
 
 ! CFCs tracers
 USE_OCMIP2_CFC = False          !    If defined, CFC11 and CFC12 distributions

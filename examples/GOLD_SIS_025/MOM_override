@@ -1,5 +1,1 @@
 # Blank file in which we can put "overrides" for parameters
-#override define NIPROC 40
-#override define NJPROC 36
-#override define NIPROC_IO 10     
-#override define NJPROC_IO 6

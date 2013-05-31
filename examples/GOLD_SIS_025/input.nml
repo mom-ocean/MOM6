@@ -8,7 +8,7 @@
 /
 
  &atmos_model_nml
-           layout = 40,36
+           layout = 32, 32
 /
 
  &coupler_nml
@@ -24,7 +24,7 @@
             do_ocean = .true.,
             do_flux = .true.,
             atmos_npes = 0, 
-            ocean_npes = 1440,
+            ocean_npes = 1024,
             concurrent = .false.     
             use_lag_fluxes=.false.    
             check_stocks = 0
@@ -65,8 +65,8 @@
 /
 
  &ice_model_nml
-           layout = 40,36
-           io_layout = 10,6
+           layout = 32, 32
+           io_layout = 8, 4
            nsteps_dyn=144
            nsteps_adv=2
            num_part = 6
