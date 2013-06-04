@@ -34,6 +34,8 @@ use mpp_domains_mod, only : mpp_get_compute_domain, mpp_get_global_domain
 use mpp_domains_mod, only : global_field_sum => mpp_global_sum
 use mpp_domains_mod, only : mpp_update_domains, CYCLIC_GLOBAL_DOMAIN, FOLD_NORTH_EDGE
 use mpp_domains_mod, only : mpp_start_update_domains, mpp_complete_update_domains
+use mpp_domains_mod, only : mpp_create_group_update, mpp_do_group_update
+use mpp_domains_mod, only : group_update_type => mpp_group_update_type
 use mpp_parameter_mod, only : AGRID, BGRID_NE, CGRID_NE, SCALAR_PAIR, BITWISE_EXACT_SUM, CORNER
 use mpp_parameter_mod, only : To_East => WUPDATE, To_West => EUPDATE
 use mpp_parameter_mod, only : To_North => SUPDATE, To_South => NUPDATE
@@ -52,6 +54,7 @@ public :: pass_vector_start, pass_vector_complete
 public :: global_field_sum, sum_across_PEs, min_across_PEs, max_across_PEs
 public :: AGRID, BGRID_NE, CGRID_NE, SCALAR_PAIR, BITWISE_EXACT_SUM, CORNER
 public :: To_East, To_West, To_North, To_South, To_All
+public :: create_group_update, do_group_update, group_update_type
 
 interface pass_var
   module procedure pass_var_3d, pass_var_2d
@@ -76,6 +79,11 @@ end interface pass_vector_start
 interface pass_vector_complete
   module procedure pass_vector_complete_3d, pass_vector_complete_2d
 end interface pass_vector_complete
+
+interface create_group_update
+  module procedure create_var_group_update_2d
+  module procedure create_vector_group_update_2d
+end interface create_group_update
 
 type, public :: MOM_domain_type
   type(domain2D), pointer :: mpp_domain => NULL() ! The domain with halos on
@@ -545,6 +553,88 @@ subroutine pass_vector_complete_3d(id_update, u_cmpt, v_cmpt, MOM_dom, direction
            MOM_dom%mpp_domain, flags=dirflag, gridtype=stagger_local)
 
 end subroutine pass_vector_complete_3d
+
+subroutine create_var_group_update_2d(group, array, MOM_dom, sideflag, position)
+  type(group_update_type),intent(inout) :: group
+  real, dimension(:,:),   intent(inout) :: array
+  type(MOM_domain_type),  intent(inout) :: MOM_dom
+  integer,      optional, intent(in)    :: sideflag
+  integer,      optional, intent(in)    :: position
+! Arguments: 
+!  (inout)   group - The data type that store information for group update. 
+!                    This data will be used in do_group_update.
+!  (inout)   array - The array which is having its halos points exchanged.
+!  (in)      MOM_dom - The MOM_domain_type containing the mpp_domain needed to
+!                      determine where data should be sent.
+!  (in)      sideflag - An optional integer indicating which directions the
+!                       data should be sent.  It is TO_ALL or the sum of any of
+!                       TO_EAST, TO_WEST, TO_NORTH, and TO_SOUTH.  For example,
+!                       TO_EAST sends the data to the processor to the east, so
+!                       the halos on the western side are filled.  TO_ALL is
+!                       the default if sideflag is omitted.
+!  (in)      position - An optional argument indicating the position.  This is
+!                       may be CORNER, but is CENTER by default.
+
+  call mpp_create_group_update(group, array, MOM_dom%mpp_domain, flags=sideflag, position=position) 
+
+end subroutine create_var_group_update_2d
+
+subroutine create_vector_group_update_2d(group, u_cmpt, v_cmpt, MOM_dom, direction, stagger)
+  type(group_update_type),intent(inout) :: group
+  real, dimension(:,:),   intent(inout) :: u_cmpt, v_cmpt
+  type(MOM_domain_type),  intent(inout) :: MOM_dom
+  integer,      optional, intent(in)    :: direction
+  integer,      optional, intent(in)    :: stagger
+! Arguments: 
+!  (inout)   group - The data type that store information for group update. 
+!                    This data will be used in do_group_update.
+!  (inout)   u_cmpt - The nominal zonal (u) component of the vector pair which
+!                     is having its halos points exchanged.
+!  (inout)   v_cmpt - The nominal meridional (v) component of the vector pair
+!                     which is having its halos points exchanged. 
+!  (in)      MOM_dom - The MOM_domain_type containing the mpp_domain needed to
+!                      determine where data should be sent.
+!  (in)      direction - An optional integer indicating which directions the
+!                        data should be sent.  It is TO_ALL or the sum of any of
+!                        TO_EAST, TO_WEST, TO_NORTH, and TO_SOUTH, possibly
+!                        plus SCALAR_PAIR if these are paired non-directional
+!                        scalars discretized at the typical vector component
+!                        locations.  For example, TO_EAST sends the data to the
+!                        processor to the east, so the halos on the western
+!                        side are filled.  TO_ALL is the default if omitted.
+!  (in)      stagger - An optional flag, which may be one of A_GRID, BGRID_NE,
+!                      or CGRID_NE, indicating where the two components of the
+!                      vector are discretized.  Omitting stagger is the same as
+!                      setting it to CGRID_NE.
+  integer :: stagger_local
+  integer :: dirflag
+
+  stagger_local = CGRID_NE ! Default value for type of grid
+  if (present(stagger)) stagger_local = stagger
+
+  dirflag = To_All ! 60
+  if (PRESENT(direction)) then ; if (direction > 0) dirflag = direction ; endif
+
+
+  call mpp_create_group_update(group, u_cmpt, v_cmpt, MOM_dom%mpp_domain, &
+            flags=dirflag, gridtype=stagger_local)
+
+end subroutine create_vector_group_update_2d
+
+subroutine do_group_update(group, MOM_dom, d_type)
+  type(group_update_type),intent(inout) :: group
+  type(MOM_domain_type),  intent(inout) :: MOM_dom
+  real,                   intent(in   ) :: d_type
+
+! Arguments: 
+!  (inout)   group - The data type that store information for group update. 
+!  (in)      MOM_dom - The MOM_domain_type containing the mpp_domain needed to
+!                      determine where data should be sent.
+!  (in)      d_type - A scalar variable to indicate the data type.
+
+  call mpp_do_group_update(group, MOM_dom%mpp_domain, d_type)
+
+end subroutine do_group_update
 
 subroutine MOM_domains_init(MOM_dom, param_file, min_halo, symmetric)
   type(MOM_domain_type),           pointer       :: MOM_dom
