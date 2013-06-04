@@ -101,6 +101,7 @@ use MOM_domains, only : pass_vector_start, pass_vector_complete
 use MOM_domains, only : To_All, Scalar_Pair, AGRID, CORNER, MOM_domain_type
 use MOM_domains, only : pass_var_start, pass_var_complete
 use MOM_domains, only : pass_vector_start, pass_vector_complete
+use MOM_domains, only : create_group_update, do_group_update, group_update_type
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
 use MOM_file_parser, only : get_param, read_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
@@ -627,6 +628,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   logical :: apply_OBCs, apply_u_OBCs, apply_v_OBCs, apply_OBC_flather
   type(BT_OBC_type) :: BT_OBC  ! A structure with all of this module's fields
                                ! for applying open boundary conditions.
+  type(group_update_type) :: group ! mix scalar and vector halo update.
   type(memory_size_type) :: MS
   character(len=200) :: mesg
   integer :: pid_ubt, pid_eta, pid_e_anom, pid_etaav, pid_uhbtav, pid_ubtav
@@ -1235,15 +1237,15 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
       call pass_vector(Datu, Datv, CS%BT_Domain, To_All+Scalar_Pair)
     if (((G%isd > CS%isdw) .or. (G%jsd > CS%jsdw)) .or. (Isq <= is-1) .or. (Jsq <= js-1)) &
       call pass_vector(BT_force_u, BT_force_v, CS%BT_Domain, complete=.false.)
-    if (G%nonblocking_updates) then ! Passing needs to be completed now.
+!    if (G%nonblocking_updates) then ! Passing needs to be completed now.
       call pass_var(eta_src, CS%BT_Domain, complete=.true.)
       if (add_uh0) call pass_vector(uhbt0, vhbt0, CS%BT_Domain, complete=.false.)
       call pass_vector(Cor_ref_u, Cor_ref_v, CS%BT_Domain, complete=.true.)
-    else
-      call pass_var(eta_src, CS%BT_Domain, complete=.false.)
-      if (add_uh0) call pass_vector(uhbt0, vhbt0, CS%BT_Domain, complete=.false.)
-      call pass_vector(Cor_ref_u, Cor_ref_v, CS%BT_Domain, complete=.false.)
-    endif
+!    else
+!      call pass_var(eta_src, CS%BT_Domain, complete=.false.)
+!      if (add_uh0) call pass_vector(uhbt0, vhbt0, CS%BT_Domain, complete=.false.)
+!      call pass_vector(Cor_ref_u, Cor_ref_v, CS%BT_Domain, complete=.false.)
+!    endif
   endif
   if (id_clock_pass_pre > 0) call cpu_clock_end(id_clock_pass_pre)
   if (id_clock_calc_pre > 0) call cpu_clock_begin(id_clock_calc_pre)
@@ -1373,6 +1375,11 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
 
   sum_wt_vel = 0.0 ; sum_wt_eta = 0.0 ; sum_wt_accel = 0.0 ; sum_wt_trans = 0.0
 
+  if( .NOT. G%nonblocking_updates) then
+     call create_group_update(group, eta, CS%BT_Domain)
+     call create_group_update(group, ubt, vbt, CS%BT_Domain)
+  endif
+
   ! The following loop contains all of the time steps.
   isv=is ; iev=ie ; jsv=js ; jev=je
   do n=1,nstep+nfilter
@@ -1406,8 +1413,9 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
         call pass_vector_complete(pid_ubt, ubt, vbt, CS%BT_Domain)
         call pass_var_complete(pid_eta, eta, CS%BT_Domain)
       else
-        call pass_var(eta, CS%BT_Domain)
-        call pass_vector(ubt, vbt, CS%BT_Domain)
+        call do_group_update(group, CS%BT_Domain, eta(isv-1,jsv-1))
+!        call pass_var(eta, CS%BT_Domain)
+!        call pass_vector(ubt, vbt, CS%BT_Domain)
       endif
       isv = isvf ; iev = ievf ; jsv = jsvf ; jev = jevf
       if (id_clock_pass_step > 0) call cpu_clock_end(id_clock_pass_step)
