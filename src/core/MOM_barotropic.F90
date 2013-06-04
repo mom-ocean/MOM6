@@ -92,7 +92,7 @@ module MOM_barotropic
 !********+*********+*********+*********+*********+*********+*********+**
 
 use MOM_checksums, only : hchksum, uchksum, vchksum
-use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
+use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE, CLOCK_SYNC
 use MOM_diag_mediator, only : post_data, query_averaging_enabled, register_diag_field
 use MOM_diag_mediator, only : safe_alloc_ptr, diag_ptrs, enable_averaging
 use MOM_domains, only : pass_var, pass_vector, min_across_PEs, MOM_domains_init
@@ -3715,14 +3715,14 @@ subroutine barotropic_init(u, v, h, eta, Time, G, param_file, diag, CS, &
 
 
 !  id_clock_pass = cpu_clock_id('(Ocean BT halo updates)', grain=CLOCK_ROUTINE)
-  id_clock_calc_pre  = cpu_clock_id('(Ocean BT pre-calcs only)', grain=CLOCK_ROUTINE)
-  id_clock_pass_pre = cpu_clock_id('(Ocean BT pre-step halo updates)', grain=CLOCK_ROUTINE)
-  id_clock_calc = cpu_clock_id('(Ocean BT stepping calcs only)', grain=CLOCK_ROUTINE)
-  id_clock_pass_step = cpu_clock_id('(Ocean BT stepping halo updates)', grain=CLOCK_ROUTINE)
-  id_clock_calc_post = cpu_clock_id('(Ocean BT post-calcs only)', grain=CLOCK_ROUTINE)
-  id_clock_pass_post = cpu_clock_id('(Ocean BT post-step halo updates)', grain=CLOCK_ROUTINE)
+  id_clock_calc_pre  = cpu_clock_id('(Ocean BT pre-calcs only)', grain=CLOCK_ROUTINE)!, flags=CLOCK_SYNC)
+  id_clock_pass_pre = cpu_clock_id('(Ocean BT pre-step halo updates)', grain=CLOCK_ROUTINE)!, flags=CLOCK_SYNC)
+  id_clock_calc = cpu_clock_id('(Ocean BT stepping calcs only)', grain=CLOCK_ROUTINE)!, flags=CLOCK_SYNC)
+  id_clock_pass_step = cpu_clock_id('(Ocean BT stepping halo updates)', grain=CLOCK_ROUTINE)!, flags=CLOCK_SYNC)
+  id_clock_calc_post = cpu_clock_id('(Ocean BT post-calcs only)', grain=CLOCK_ROUTINE)!, flags=CLOCK_SYNC)
+  id_clock_pass_post = cpu_clock_id('(Ocean BT post-step halo updates)', grain=CLOCK_ROUTINE)!, flags=CLOCK_SYNC)
   if (dtbt_input <= 0.0) &
-    id_clock_sync = cpu_clock_id('(Ocean BT global synch)', grain=CLOCK_ROUTINE)
+    id_clock_sync = cpu_clock_id('(Ocean BT global synch)', grain=CLOCK_ROUTINE)!, flags=CLOCK_SYNC)
 
 end subroutine barotropic_init
 

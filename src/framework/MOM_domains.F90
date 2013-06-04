@@ -37,6 +37,8 @@ use mpp_domains_mod, only : mpp_start_update_domains, mpp_complete_update_domain
 use mpp_parameter_mod, only : AGRID, BGRID_NE, CGRID_NE, SCALAR_PAIR, BITWISE_EXACT_SUM, CORNER
 use mpp_parameter_mod, only : To_East => WUPDATE, To_West => EUPDATE
 use mpp_parameter_mod, only : To_North => SUPDATE, To_South => NUPDATE
+use fms_io_mod,        only : parse_mask_table
+use fms_mod,           only : file_exist
 
 implicit none ; private
 
@@ -87,7 +89,7 @@ type, public :: MOM_domain_type
   integer :: layout(2), io_layout(2)    ! Saved data for sake of constructing
   integer :: X_FLAGS,Y_FLAGS            ! new domains of different resolution.
   logical :: use_io_layout              ! True if an I/O layout is available.
-
+  logical, pointer :: maskmap(:,:)=> NULL() !option to mpp_define_domains
 end type MOM_domain_type
 
 integer, parameter :: To_All = To_East + To_West + To_North + To_South
@@ -568,6 +570,8 @@ subroutine MOM_domains_init(MOM_dom, param_file, min_halo, symmetric)
   integer :: X_FLAGS, Y_FLAGS
   integer :: i, xsiz, ysiz
   logical :: reentrant_x, reentrant_y, tripolar_N, is_static
+  logical            :: mask_table_exist
+  character(len=128) :: mask_table 
   character(len=200) :: mesg
   character(len=8) :: char_xsiz, char_ysiz, char_niglobal, char_njglobal
 ! This include declares and sets the variable "version".
@@ -700,13 +704,39 @@ subroutine MOM_domains_init(MOM_dom, param_file, min_halo, symmetric)
   global_indices(3) = 1
   global_indices(4) = MOM_dom%njglobal
 
+  call get_param(param_file, mod, "MASKTABLE", mask_table, &
+                 "A text file to specify n_mask, layout and mask_list.  This table "//&
+                 "aims to reduce the number of processors that are cycling over pure "//&
+                 "land regions.  These processors will be masked out of regions that "//&
+                 "which contain all land points.    \n                               "//&
+                 "The default file name of mask_table is 'INPUT/ocean_mask_table'. " //&
+                 "Please note that the file name must begin with 'INPUT/'.         " //&
+                 "The first line of mask_table is the number of region to be masked out. "//&
+                 "The second line is the layout of the model. User need to set ocean_model_nml "//&
+                 "variable layout to be the same as the second line of the mask table. "//&
+                 "The following n_mask line will be the position of the processor to be masked out. "//&
+                 "The mask_table could be created by tools check_mask. "//&
+                 "For example the mask_table will be as following if n_mask=2, layout=4,6 and "//&
+                 "the processor (1,2) and (3,6) are to be masked out.  "//&
+                 " 2               \n                                      "        // &
+                 " 4,6             \n                                      "        // &
+                 " 1,2             \n                                      "        // &
+                 " 3,6             \n                                      ",          &
+                 default="INPUT/MOM_mask_table" )
+
+  if(file_exist(mask_table)) then
+     mask_table_exist = .true.
+  else
+     mask_table_exist = .false.
+  endif
+
 #ifdef STATIC_MEMORY_
   layout(1) = NIPROC_ ; layout(2) = NJPROC_
 #else
   call mpp_define_layout(global_indices, proc_used, layout)
   call read_param(param_file,"NIPROC",layout(1))
   call read_param(param_file,"NJPROC",layout(2))
-  if (layout(1)*layout(2) /= proc_used) then
+  if (layout(1)*layout(2) /= proc_used .AND. (.NOT. mask_table_exist) ) then
     write(mesg,'("MOM_domains_init: The product of the two components of layout, ", &
           &      2i4,", is not the number of PEs used, ",i5,".")') &
           layout(1),layout(2),proc_used
@@ -720,6 +750,13 @@ subroutine MOM_domains_init(MOM_dom, param_file, min_halo, symmetric)
                  "The number of processors in the x-direction. With \n"//&
                  "STATIC_MEMORY_ this is set in MOM_memory.h at compile time.")
 !  write(*,*) 'layout is now ',layout, global_indices
+
+ if(mask_table_exist) then
+     call MOM_error(NOTE, 'MOM_domains_init: reading maskmap information from '//trim(mask_table))
+     allocate(MOM_dom%maskmap(layout(1), layout(2)))
+     call parse_mask_table(mask_table, MOM_dom%maskmap, "MOM")
+  endif
+
 
   !   Set up the I/O lay-out, and check that it uses an even multiple of the
   ! number of PEs in each direction.
@@ -761,10 +798,17 @@ subroutine MOM_domains_init(MOM_dom, param_file, min_halo, symmetric)
       "TRIPOLAR_N and REENTRANT_Y may not be defined together.")
   endif
   
-  call MOM_define_domain((/1+nihalo,MOM_dom%niglobal+nihalo,1+njhalo, &
+  if(mask_table_exist) then
+     call MOM_define_domain((/1+nihalo,MOM_dom%niglobal+nihalo,1+njhalo, &
+                 MOM_dom%njglobal+njhalo/), layout, MOM_dom%mpp_domain, &
+                 xflags=X_FLAGS, yflags=Y_FLAGS, xhalo=nihalo, yhalo=njhalo, &
+                 symmetry = MOM_dom%symmetric, name="MOM", maskmap=MOM_dom%maskmap )
+  else
+     call MOM_define_domain((/1+nihalo,MOM_dom%niglobal+nihalo,1+njhalo, &
                  MOM_dom%njglobal+njhalo/), layout, MOM_dom%mpp_domain, &
                  xflags=X_FLAGS, yflags=Y_FLAGS, xhalo=nihalo, yhalo=njhalo, &
                  symmetry = MOM_dom%symmetric, name="MOM")
+  endif
 
   if ((io_layout(1) + io_layout(2) > 0)) then
     call MOM_define_io_domain(MOM_dom%mpp_domain, io_layout)

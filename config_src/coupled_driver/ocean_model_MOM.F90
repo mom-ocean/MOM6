@@ -261,8 +261,11 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in)
   OS%write_energy_time = Time_init + OS%energysavedays * &
       (1 + (OS%Time - Time_init) / OS%energysavedays)
 
-  call initialize_ocean_public_type(OS%grid%Domain%mpp_domain,Ocean_sfc)
-
+  if(ASSOCIATED(OS%grid%Domain%maskmap)) then
+     call initialize_ocean_public_type(OS%grid%Domain%mpp_domain,Ocean_sfc,maskmap=OS%grid%Domain%maskmap)
+  else
+     call initialize_ocean_public_type(OS%grid%Domain%mpp_domain,Ocean_sfc)
+  endif
 !  call convert_state_to_ocean_type(state, Ocean_sfc, OS%grid)
 
   call close_param_file(param_file)
@@ -451,9 +454,10 @@ end subroutine ocean_model_save_restart
 
 !#######################################################################
 
-subroutine initialize_ocean_public_type(input_domain, Ocean_sfc)
+subroutine initialize_ocean_public_type(input_domain, Ocean_sfc, maskmap)
   type(domain2D), intent(in)             :: input_domain
   type(ocean_public_type), intent(inout) :: Ocean_sfc
+  logical, intent(in), optional          :: maskmap(:,:)
   integer :: xsz, ysz, layout(2)
   ! ice-ocean-boundary fields are always allocated using absolute indicies
   ! and have no halos.
@@ -461,8 +465,11 @@ subroutine initialize_ocean_public_type(input_domain, Ocean_sfc)
 
   call mpp_get_layout(input_domain,layout)
   call mpp_get_global_domain(input_domain, xsize=xsz, ysize=ysz)
-  call mpp_define_domains((/1,xsz,1,ysz/),layout,Ocean_sfc%Domain)
-
+  if(PRESENT(maskmap)) then
+     call mpp_define_domains((/1,xsz,1,ysz/),layout,Ocean_sfc%Domain, maskmap=maskmap)
+  else
+     call mpp_define_domains((/1,xsz,1,ysz/),layout,Ocean_sfc%Domain)
+  endif
   call mpp_get_compute_domain(Ocean_sfc%Domain, isc_bnd, iec_bnd, &
                               jsc_bnd, jec_bnd)
 

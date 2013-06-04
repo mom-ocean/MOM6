@@ -355,7 +355,7 @@ type, public :: BT_cont_type
                           ! to the south.
     vBT_SS => NULL(), &   ! vBT_SS is the barotropic velocity, in m s-1, beyond
                           ! which the marginal open face area is FA_v_SS.
-                          ! vBT_NN must be non-negative.
+                          ! vBT_SS must be non-negative.
     vBT_NN => NULL()      ! vBT_NN is the barotropic velocity, in m s-1, beyond
                           ! which the marginal open face area is FA_v_NN.
                           ! vBT_NN must be non-positive.

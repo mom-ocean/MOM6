@@ -704,11 +704,20 @@ subroutine set_grid_metrics_from_mosaic(G,param_file)
   global_indices(3) = 1+SGdom%njhalo
   global_indices(4) = SGdom%njglobal+SGdom%njhalo
   exni(:)=2*exni(:); exnj(:)=2*exnj(:)
-  call MOM_define_domain(global_indices, SGdom%layout, SGdom%mpp_domain, &
-         xflags=G%domain%X_FLAGS, yflags=G%domain%Y_FLAGS, &
-         xhalo=SGdom%nihalo, yhalo=SGdom%njhalo, &
-         xextent=exni,yextent=exnj, &
-         symmetry=.true., name="MOM_MOSAIC")
+  if(ASSOCIATED(G%domain%maskmap)) then
+     call MOM_define_domain(global_indices, SGdom%layout, SGdom%mpp_domain, &
+            xflags=G%domain%X_FLAGS, yflags=G%domain%Y_FLAGS, &
+            xhalo=SGdom%nihalo, yhalo=SGdom%njhalo, &
+            xextent=exni,yextent=exnj, &
+            symmetry=.true., name="MOM_MOSAIC", maskmap=G%domain%maskmap)
+  else
+     call MOM_define_domain(global_indices, SGdom%layout, SGdom%mpp_domain, &
+            xflags=G%domain%X_FLAGS, yflags=G%domain%Y_FLAGS, &
+            xhalo=SGdom%nihalo, yhalo=SGdom%njhalo, &
+            xextent=exni,yextent=exnj, &
+            symmetry=.true., name="MOM_MOSAIC")
+  endif
+
   if (SGdom%use_io_layout) &
     call MOM_define_IO_domain(SGdom%mpp_domain, SGdom%io_layout)
 !  call mpp_get_compute_domain(G%domain%mpp_domain,isc,iec,jsc,jec)
