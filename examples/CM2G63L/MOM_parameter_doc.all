@@ -39,6 +39,22 @@ NJGLOBAL = 210                  !
                                 ! The total number of thickness grid points in the
                                 ! y-direction in the physical domain. With STATIC_MEMORY_
                                 ! this is set in MOM_memory.h at compile time.
+MASKTABLE = "MOM_mask_table"    ! default = "MOM_mask_table"
+                                ! A text file to specify n_mask, layout and mask_list.  This feature
+                                ! aims to reduce the number of processors that are cycling over pure
+                                ! land regions.  These processors which contain only land points will
+                                ! be masked out.
+                                ! The first line of mask_table is the number of regions to be masked out.
+                                ! The second line is the layout of the model and must be consistent with
+                                ! the acutal model layout.
+                                ! The following (n_mask) lines will be the position of the processor to
+                                ! be masked out. The mask_table can be created by tools like check_mask.
+                                ! The following example of mask_table uses n_mask=2, layout=4,6 and
+                                ! the processor (1,2) and (3,6) are to be masked out.
+                                !  2
+                                !  4,6
+                                !  1,2
+                                !  3,6
 !NIPROC = 10                    !
                                 ! The number of processors in the x-direction. With
                                 ! STATIC_MEMORY_ this is set in MOM_memory.h at compile time.
