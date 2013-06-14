@@ -23,10 +23,10 @@ module MOM_domains
 use MOM_error_handler, only : MOM_error, NOTE, WARNING, FATAL, is_root_pe
 use MOM_file_parser, only : read_param, get_param, log_param, log_version
 use MOM_file_parser, only : param_file_type
+use MOM_string_functions, only : slasher
 
 use MOM_coms, only : PE_here, root_PE, num_PEs, MOM_infra_init, MOM_infra_end
 use MOM_coms, only : broadcast, sum_across_PEs, min_across_PEs, max_across_PEs
-use MOM_io,          only : file_exists, slasher
 use mpp_domains_mod, only : mpp_define_layout
 use mpp_domains_mod, only : MOM_define_io_domain => mpp_define_io_domain
 use mpp_domains_mod, only : MOM_define_domain => mpp_define_domains
@@ -39,6 +39,7 @@ use mpp_parameter_mod, only : AGRID, BGRID_NE, CGRID_NE, SCALAR_PAIR, BITWISE_EX
 use mpp_parameter_mod, only : To_East => WUPDATE, To_West => EUPDATE
 use mpp_parameter_mod, only : To_North => SUPDATE, To_South => NUPDATE
 use fms_io_mod,        only : parse_mask_table
+use fms_mod,           only : file_exist
 
 implicit none ; private
 
@@ -722,7 +723,7 @@ subroutine MOM_domains_init(MOM_dom, param_file, min_halo, symmetric)
                  " 2\n 4,6\n 1,2\n 3,6\n", default="MOM_mask_table" )
   mask_table = trim(inputdir)//trim(mask_table)
 
-  if(file_exists(mask_table)) then
+  if(file_exist(mask_table)) then
      mask_table_exist = .true.
   else
      mask_table_exist = .false.

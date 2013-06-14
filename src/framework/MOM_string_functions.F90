@@ -36,6 +36,7 @@ public left_int, left_ints
 public left_real, left_reals
 public stringFunctionsUnitTests
 public extractWord
+public slasher
 
 contains
 
@@ -271,5 +272,18 @@ logical function stringFunctionsUnitTests()
     if (trim(str1)/=trim(str2)) stringFunctionsUnitTests=.true.
   end subroutine localTest
 end function stringFunctionsUnitTests
+
+function slasher(dir)
+  character(len=*), intent(in) :: dir
+  character(len=len(dir)+2) :: slasher
+
+  if (len_trim(dir) == 0) then
+    slasher = "./"
+  elseif (dir(len_trim(dir):len_trim(dir)) == '/') then
+    slasher = trim(dir)
+  else
+    slasher = trim(dir)//"/"
+  endif
+end function slasher
 
 end module MOM_string_functions
