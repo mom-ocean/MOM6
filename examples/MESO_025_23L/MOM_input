@@ -84,7 +84,7 @@ ADJUST_THICKNESS = True         !    All mass below the bottom removed if the
                                 !  topography is shallower than the input file
                                 !  would indicate.
 
-VELOCITY_CONFIG = "file"        !    Method for defining initial layer velocities
+VELOCITY_CONFIG = "zero"        !    Method for defining initial layer velocities
                                 !  file - read velocity information from file.
                                 !  zero - zero velocities everywhere.
                                 !  USER - user defined.
@@ -203,7 +203,6 @@ TIMEUNIT = 86400.0              !    The time unit in seconds for the following
                                 !  fields.
 ENERGYSAVEDAYS = 0.25           !    The number of days between saves of the
                                 !  energies of the run.
-USE_REPRODUCING_SUM = False
 ENERGYFILE = "timestats"        !    The file to use to save the energies.
 RESTARTFILE = "MOM.res"         !    The name of the restart file.
 RESTINT = 365.0                 !    The number of days between saves of the
@@ -389,6 +388,11 @@ ANALYTIC_FV_PGF = True          !    If defined the pressure gradient forces
                                 !  numerical thermobaric instability.
 
 !  Specify the scheme for the barotropic solver.
+USE_LEGACY_SPLIT = True         !    If defined, use the split time stepping
+                                !  code that gives acces to the full range of
+                                !  options that were available in GOLD.  If
+                                !  false, only the prefered options can be
+                                !  used in the streamlined code.
 FLUX_BT_COUPLING = False        !    If defined, use mass fluxes to ensure
                                 !  consistency between the baroclinic and
                                 !  barotropic modes.
@@ -529,9 +533,6 @@ HMIX_MIN = 10.0                 !   The minimum mixed layer depth, in m.
 KVML = 1.00e-2                  !    The kinematic viscosity in the mixed layer,
                                 !  in m2 s-1.  A typical value is ~1e-2 m2 s-1.
                                 !  KVML is not used if BULKMIXEDLAYER is defined.
-KDML = 1.00e-4                  !    The diapycnal diffusivity of density in the
-                                !  mixed layer, in m2 s-1.  This value may be 0.
-                                !  KDML is not used if BULKMIXEDLAYER is defined.
 DIRECT_STRESS = False           !    If DIRECT_STRESS is defined, the wind stress
                                 !  is distributed over the topmost HMIX_STRESS
                                 !  of fluid, and KVML need not be elevated.
