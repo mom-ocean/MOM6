@@ -415,7 +415,7 @@ subroutine reopen_file(unit, filename, vars, novars, G, fields, threading, timeu
 end subroutine reopen_file
 
 subroutine read_axis_data(filename, axis_name, var)
-  character(len=*), intent(in) :: filename, axis_name
+  character(len=*),   intent(in)  :: filename, axis_name
   real, dimension(:), intent(out) :: var
 
   integer :: i,len,unit, ndim, nvar, natt, ntime
@@ -452,7 +452,7 @@ subroutine read_axis_data(filename, axis_name, var)
 end subroutine read_axis_data
 
 function num_timelevels(filename, varname, min_dims) result(n_time)
-  character(len=*), intent(in)  :: filename, varname
+  character(len=*),  intent(in) :: filename, varname
   integer, optional, intent(in) :: min_dims
   integer :: n_time
 
@@ -593,7 +593,7 @@ end function slasher
 
 function MOM_file_exists(file_name, MOM_Domain)
   character(len=*),       intent(in) :: file_name
-  type(MOM_domain_type), intent(in) :: MOM_domain
+  type(MOM_domain_type),  intent(in) :: MOM_domain
 
 !   This function uses the fms_io function file_exist to determine whether
 ! a named file (or its decomposed variant) exists.
@@ -616,10 +616,10 @@ subroutine MOM_read_data_1d(filename, fieldname, data)
 end subroutine MOM_read_data_1d
 
 subroutine MOM_read_data_2d(filename, fieldname, data, MOM_Domain, &
-                             timelevel, position)
+                            timelevel, position)
   character(len=*),                 intent(in)    :: filename, fieldname
   real, dimension(:,:),             intent(inout) :: data ! 2 dimensional data
-  type(MOM_domain_type),           intent(in)    :: MOM_Domain
+  type(MOM_domain_type),            intent(in)    :: MOM_Domain
   integer,                optional, intent(in)    :: timelevel, position
 
 !   This function uses the fms_io function read_data to read a distributed
@@ -632,10 +632,10 @@ subroutine MOM_read_data_2d(filename, fieldname, data, MOM_Domain, &
 end subroutine MOM_read_data_2d
 
 subroutine MOM_read_data_3d(filename, fieldname, data, MOM_Domain, &
-                             timelevel, position)
+                            timelevel, position)
   character(len=*),                 intent(in)    :: filename, fieldname
   real, dimension(:,:,:),           intent(inout) :: data ! 2 dimensional data    
-  type(MOM_domain_type),           intent(in)    :: MOM_Domain
+  type(MOM_domain_type),            intent(in)    :: MOM_Domain
   integer,                optional, intent(in)    :: timelevel, position
 
 !   This function uses the fms_io function read_data to read a distributed

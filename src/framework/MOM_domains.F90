@@ -20,13 +20,13 @@ module MOM_domains
 !* or see:   http://www.gnu.org/licenses/gpl.html                      *
 !***********************************************************************
 
+use MOM_coms, only : PE_here, root_PE, num_PEs, MOM_infra_init, MOM_infra_end
+use MOM_coms, only : broadcast, sum_across_PEs, min_across_PEs, max_across_PEs
 use MOM_error_handler, only : MOM_error, NOTE, WARNING, FATAL, is_root_pe
 use MOM_file_parser, only : read_param, get_param, log_param, log_version
 use MOM_file_parser, only : param_file_type
 use MOM_string_functions, only : slasher
 
-use MOM_coms, only : PE_here, root_PE, num_PEs, MOM_infra_init, MOM_infra_end
-use MOM_coms, only : broadcast, sum_across_PEs, min_across_PEs, max_across_PEs
 use mpp_domains_mod, only : mpp_define_layout
 use mpp_domains_mod, only : MOM_define_io_domain => mpp_define_io_domain
 use mpp_domains_mod, only : MOM_define_domain => mpp_define_domains
@@ -38,8 +38,7 @@ use mpp_domains_mod, only : mpp_start_update_domains, mpp_complete_update_domain
 use mpp_parameter_mod, only : AGRID, BGRID_NE, CGRID_NE, SCALAR_PAIR, BITWISE_EXACT_SUM, CORNER
 use mpp_parameter_mod, only : To_East => WUPDATE, To_West => EUPDATE
 use mpp_parameter_mod, only : To_North => SUPDATE, To_South => NUPDATE
-use fms_io_mod,        only : parse_mask_table
-use fms_mod,           only : file_exist
+use fms_io_mod,        only : file_exist, parse_mask_table
 
 implicit none ; private
 
