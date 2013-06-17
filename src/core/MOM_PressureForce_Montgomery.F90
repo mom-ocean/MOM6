@@ -79,8 +79,7 @@ type, public :: PressureForce_Mont_CS ; private
   type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
   type(diag_ptrs), pointer :: diag ! A pointer to a structure of shareable
                              ! ocean diagnostic fields.
-  integer :: id_PFu_bc = -1, id_PFv_bc = -1, id_eta = -1, id_bott_press = -1
-  integer :: id_e_tidal = -1
+  integer :: id_PFu_bc = -1, id_PFv_bc = -1, id_e_tidal = -1
   type(tidal_forcing_CS), pointer :: tides_CSp => NULL()
 end type PressureForce_Mont_CS
 
@@ -360,9 +359,6 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
     enddo
   endif ! use_EOS
 
-  if (CS%id_eta>0) call post_data(CS%id_eta, CS%diag%eta, CS%diag)
-  if (CS%id_bott_press>0) call post_data(CS%id_bott_press, &
-                                         p(:,:,nz+1), CS%diag)
   if (CS%id_e_tidal>0) call post_data(CS%id_e_tidal, e_tidal, CS%diag)   
 
 end subroutine PressureForce_Mont_nonBouss

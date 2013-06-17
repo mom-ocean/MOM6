@@ -69,12 +69,9 @@ type, public :: diag_ptrs
   real, pointer :: dv_dt_visc(:,:,:) => NULL()! viscosity, in m s-2.
   real, pointer :: du_dt_dia(:,:,:) => NULL()! Accelerations due to diapycnal
   real, pointer :: dv_dt_dia(:,:,:) => NULL()! mixing, in m s-2.
-  real, pointer :: du_adj(:,:,:) => NULL()   ! Velocity changes due to the split
-  real, pointer :: dv_adj(:,:,:) => NULL()   ! adjustment at the start of a step
-                                             ! in m s-1.
-  real, pointer :: du_adj2(:,:,:) => NULL()  ! A second set of velocity changes
-  real, pointer :: dv_adj2(:,:,:) => NULL()  ! due to the split adjustment at
-                                             ! the start of a step in m s-1.
+  real, pointer :: du_other(:,:,:) => NULL() ! Velocity changes due to any other
+  real, pointer :: dv_other(:,:,:) => NULL() ! processes that are not due to any
+                                             ! explicit accelerations, in m s-1.
 
   real, pointer :: diffu(:,:,:) => NULL()    ! Accelerations due to along iso-
   real, pointer :: diffv(:,:,:) => NULL()    ! pycnal viscosity, in m s-2.
@@ -90,12 +87,6 @@ type, public :: diag_ptrs
   real, pointer :: vhGM(:,:,:) => NULL()     ! volume fluxes in m3 s-1.
   real, pointer :: rv(:,:,:) => NULL()       ! Relative vorticity in s-1.
   real, pointer :: q(:,:,:) => NULL()        ! Potential vorticity, s-1 m-1.
-  real, pointer :: PFu_tot(:,:,:) => NULL()  ! Accelerations due to both baro-
-  real, pointer :: PFv_tot(:,:,:) => NULL()  ! clinic and barotropic pressure
-                                             ! gradients in m s-2.
-  real, pointer :: CAu_tot(:,:,:) => NULL()  ! Accelerations due to both baro-
-  real, pointer :: CAv_tot(:,:,:) => NULL()  ! clinic and barotropic Coriolis
-                                             ! forces in m s-2.
 
   real, pointer :: Ah_h(:,:,:) => NULL()     ! Biharmonic viscosity at h or q
   real, pointer :: Ah_q(:,:,:) => NULL()     ! points in m4 s-1.
@@ -105,8 +96,6 @@ type, public :: diag_ptrs
   real, pointer :: PFu_bc(:,:,:) => NULL()   ! Accelerations due to pressure
   real, pointer :: PFv_bc(:,:,:) => NULL()   ! gradients deriving from density
                                              ! gradients within layers, m s-2.
-  real, pointer :: eta(:,:) => NULL()        ! SSH, m
-  real, pointer :: bott_press(:,:) => NULL() ! bottom pressure, Pa
  
 ! Each of the following fields has 1 layer.
   real, pointer :: PFu_bt(:,:) => NULL()     ! Barotropic pressure gradient

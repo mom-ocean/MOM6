@@ -1209,8 +1209,8 @@ subroutine vertvisc_limit_vel(u, v, h, fluxes, visc, dt, G, CS)
 
 end subroutine vertvisc_limit_vel
 
-subroutine vertvisc_init(HIS, Time, G, param_file, diag, dirs, ntrunc, CS)
-  type(ocean_internal_state), target, intent(in) :: HIS
+subroutine vertvisc_init(MIS, Time, G, param_file, diag, dirs, ntrunc, CS)
+  type(ocean_internal_state), target, intent(in) :: MIS
   type(time_type), target, intent(in)    :: Time
   type(ocean_grid_type),   intent(in)    :: G
   type(param_file_type),   intent(in)    :: param_file
@@ -1218,7 +1218,7 @@ subroutine vertvisc_init(HIS, Time, G, param_file, diag, dirs, ntrunc, CS)
   type(directories),       intent(in)    :: dirs
   integer, target,         intent(inout) :: ntrunc
   type(vertvisc_CS),       pointer       :: CS
-! Arguments: HIS - For "MOM Internal State" a set of pointers to the fields and
+! Arguments: MIS - For "MOM Internal State" a set of pointers to the fields and
 !                  accelerations that make up the ocean's physical state.
 !  (in)      Time - The current model time.
 !  (in)      G - The ocean's grid structure.
@@ -1372,7 +1372,7 @@ subroutine vertvisc_init(HIS, Time, G, param_file, diag, dirs, ntrunc, CS)
      Time, 'Meridional Bottom Stress from Ocean to Earth', 'Pa')
 
   if ((len_trim(CS%v_trunc_file) > 0) .or. (len_trim(CS%v_trunc_file) > 0)) &
-    call PointAccel_init(HIS, Time, G, param_file, diag, dirs, CS%PointAccel_CSp)
+    call PointAccel_init(MIS, Time, G, param_file, diag, dirs, CS%PointAccel_CSp)
 
 end subroutine vertvisc_init
 

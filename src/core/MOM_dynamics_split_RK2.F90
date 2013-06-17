@@ -772,23 +772,11 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
     u(i,j,k) = G%mask2dCu(i,j) * (u_init(i,j,k) + dt * &
                     (u_bc_accel(I,j,k) + CS%u_accel_bt(I,j,k)))
   enddo ; enddo ; enddo
-  if (ASSOCIATED(CS%diag%PFu_tot)) then ; do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-      CS%diag%PFu_tot(i,j,k) = CS%PFu(i,j,k)
-  enddo ; enddo ; enddo ; endif
-  if (ASSOCIATED(CS%diag%CAu_tot)) then ; do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-      CS%diag%CAu_tot(i,j,k) = CS%CAu(i,j,k) !+ CS%u_accel_bt(i,j) - CS%diag%PFu_bt(i,j)
-  enddo ; enddo ; enddo ; endif
 
   do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
     v(i,j,k) = G%mask2dCv(i,j) * (v_init(i,j,k) + dt * &
                     (v_bc_accel(i,J,k) + CS%v_accel_bt(i,J,k)))
   enddo ; enddo ; enddo
-  if (ASSOCIATED(CS%diag%PFv_tot)) then ; do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-    CS%diag%PFv_tot(i,j,k) = CS%PFv(i,j,k)
-  enddo ; enddo ; enddo ; endif
-  if (ASSOCIATED(CS%diag%CAv_tot)) then ; do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-    CS%diag%CAv_tot(i,j,k) = CS%CAv(i,j,k) !+ CS%v_accel_bt(i,j) - CS%diag%PFv_bt(i,j)
-  enddo ; enddo ; enddo ; endif
   call cpu_clock_end(id_clock_mom_update)
 
   if (CS%debug) then
@@ -882,10 +870,10 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 
 !   Here various terms used in to update the momentum equations are
 ! offered for averaging.
-  if (CS%id_PFu > 0) call post_data(CS%id_PFu, CS%diag%PFu_tot, CS%diag)
-  if (CS%id_PFv > 0) call post_data(CS%id_PFv, CS%diag%PFv_tot, CS%diag)
-  if (CS%id_CAu > 0) call post_data(CS%id_CAu, CS%diag%CAu_tot, CS%diag)
-  if (CS%id_CAv > 0) call post_data(CS%id_CAv, CS%diag%CAv_tot, CS%diag)
+  if (CS%id_PFu > 0) call post_data(CS%id_PFu, CS%PFu, CS%diag)
+  if (CS%id_PFv > 0) call post_data(CS%id_PFv, CS%PFv, CS%diag)
+  if (CS%id_CAu > 0) call post_data(CS%id_CAu, CS%CAu, CS%diag)
+  if (CS%id_CAv > 0) call post_data(CS%id_CAv, CS%CAv, CS%diag)
 
 !   Here the thickness fluxes are offered for averaging.
   if (CS%id_uh > 0) call post_data(CS%id_uh, uh, CS%diag)
@@ -1198,10 +1186,6 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, param_file, &
       'Zonal Pressure Force Acceleration', 'meter second-2')
   CS%id_PFv = register_diag_field('ocean_model', 'PFv', G%axesCvL, Time, &
       'Meridional Pressure Force Acceleration', 'meter second-2')
-  if (CS%id_PFu > 0) call safe_alloc_ptr(diag%PFu_tot,IsdB,IedB,jsd,jed,nz)
-  if (CS%id_PFv > 0) call safe_alloc_ptr(diag%PFv_tot,isd,ied,JsdB,JedB,nz)
-  if (CS%id_CAu > 0) call safe_alloc_ptr(diag%CAu_tot,IsdB,IedB,jsd,jed,nz)
-  if (CS%id_CAv > 0) call safe_alloc_ptr(diag%CAv_tot,isd,ied,JsdB,JedB,nz)
 
   CS%id_uav = register_diag_field('ocean_model', 'uav', G%axesCuL, Time, &
       'Barotropic-step Averaged Zonal Velocity', 'meter second-1')
@@ -1236,6 +1220,8 @@ subroutine end_dyn_split_RK2(CS)
   DEALLOC_(CS%CAu)   ; DEALLOC_(CS%CAv)
   DEALLOC_(CS%PFu)   ; DEALLOC_(CS%PFv)
   
+  if (associated(CS%taux_bot)) deallocate(CS%taux_bot)
+  if (associated(CS%tauy_bot)) deallocate(CS%tauy_bot)
   DEALLOC_(CS%uhbt) ; DEALLOC_(CS%vhbt)
   DEALLOC_(CS%u_accel_bt) ; DEALLOC_(CS%v_accel_bt)
   DEALLOC_(CS%visc_rem_u) ; DEALLOC_(CS%visc_rem_v)

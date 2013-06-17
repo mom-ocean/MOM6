@@ -278,15 +278,10 @@ subroutine write_u_accel(I, j, um, hin, dt, G, CS, maxvel, minvel, str, a, hv)
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
                                       (dt*CS%diag%du_dt_visc(I,j,k)); enddo
     endif
-    if (ASSOCIATED(CS%diag%du_adj)) then
-      write(file,'(/,"duadj: ",$)')
+    if (ASSOCIATED(CS%diag%du_other)) then
+      write(file,'(/,"du_other: ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                      (CS%diag%du_adj(I,j,k)); enddo
-    endif
-    if (ASSOCIATED(CS%diag%du_adj2)) then
-      write(file,'(/,"duadj2: ",$)')
-      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                      (CS%diag%du_adj2(I,j,k)); enddo
+                                      (CS%diag%du_other(I,j,k)); enddo
     endif
     if (present(a)) then
       write(file,'(/,"a:     ",$)')
@@ -533,15 +528,10 @@ subroutine write_u_accel(I, j, um, hin, dt, G, CS, maxvel, minvel, str, a, hv)
         do k=ks,ke ; if (do_k(k)) write(file,'(F10.6," ",$)') &
             (dt*CS%diag%du_dt_visc(I,j,k))*Inorm(k); enddo
       endif
-      if (ASSOCIATED(CS%diag%du_adj)) then
-        write(file,'(/,"duadj: ",$)')
+      if (ASSOCIATED(CS%diag%du_other)) then
+        write(file,'(/,"du_other: ",$)')
         do k=ks,ke ; if (do_k(k)) write(file,'(F10.6," ",$)') &
-            (CS%diag%du_adj(I,j,k))*Inorm(k); enddo
-      endif
-      if (ASSOCIATED(CS%diag%du_adj2)) then
-        write(file,'(/,"duadj2:",$)')
-        do k=ks,ke ; if (do_k(k)) write(file,'(F10.6," ",$)') &
-            (CS%diag%du_adj2(I,j,k))*Inorm(k); enddo
+            (CS%diag%du_other(I,j,k))*Inorm(k); enddo
       endif
       if (CS%split) then
         write(file,'(/,"dubt:  ",$)')
@@ -749,15 +739,10 @@ subroutine write_v_accel(i, J, vm, hin, dt, G, CS, maxvel, minvel, str, a, hv)
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
                                       (dt*CS%diag%dv_dt_visc(i,J,k)); enddo
     endif
-    if (ASSOCIATED(CS%diag%dv_adj)) then
-      write(file,'(/,"dvadj: ",$)')
+    if (ASSOCIATED(CS%diag%dv_other)) then
+      write(file,'(/,"dv_other: ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                      (CS%diag%dv_adj(i,J,k)); enddo
-    endif
-    if (ASSOCIATED(CS%diag%dv_adj2)) then
-      write(file,'(/,"dvadj2:",$)')
-      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                      (CS%diag%dv_adj2(i,J,k)); enddo
+                                      (CS%diag%dv_other(i,J,k)); enddo
     endif
     if (present(a)) then
       write(file,'(/,"a:     ",$)')
@@ -1005,15 +990,10 @@ subroutine write_v_accel(i, J, vm, hin, dt, G, CS, maxvel, minvel, str, a, hv)
         do k=ks,ke ; if (do_k(k)) write(file,'(F10.6," ",$)') &
             (dt*CS%diag%dv_dt_visc(i,J,k)*Inorm(k)); enddo
       endif
-      if (ASSOCIATED(CS%diag%dv_adj)) then
-        write(file,'(/,"dvadj: ",$)')
+      if (ASSOCIATED(CS%diag%dv_other)) then
+        write(file,'(/,"dv_other: ",$)')
         do k=ks,ke ; if (do_k(k)) write(file,'(F10.6," ",$)') &
-            (CS%diag%dv_adj(i,J,k)*Inorm(k)); enddo
-      endif
-      if (ASSOCIATED(CS%diag%dv_adj2)) then
-        write(file,'(/,"dvadj2:",$)')
-        do k=ks,ke ; if (do_k(k)) write(file,'(F10.6," ",$)') &
-            (CS%diag%dv_adj2(i,J,k)*Inorm(k)); enddo
+            (CS%diag%dv_other(i,J,k)*Inorm(k)); enddo
       endif
       if (CS%split) then
         write(file,'(/,"dvbt:  ",$)')
@@ -1029,15 +1009,15 @@ subroutine write_v_accel(i, J, vm, hin, dt, G, CS, maxvel, minvel, str, a, hv)
 
 end subroutine write_v_accel
 
-subroutine PointAccel_init(HIS, Time, G, param_file, diag, dirs, CS)
-  type(ocean_internal_state), target, intent(in) :: HIS
+subroutine PointAccel_init(MIS, Time, G, param_file, diag, dirs, CS)
+  type(ocean_internal_state), target, intent(in) :: MIS
   type(time_type), target, intent(in) :: Time
   type(ocean_grid_type),   intent(in) :: G
   type(param_file_type),   intent(in) :: param_file
   type(diag_ptrs), target, intent(inout) :: diag
   type(directories),       intent(in) :: dirs
   type(PointAccel_CS),     pointer    :: CS
-! Arguments: HIS - For "MOM Internal State" a set of pointers to the fields and
+! Arguments: MIS - For "MOM Internal State" a set of pointers to the fields and
 !                  accelerations that make up the ocean's physical state.
 !  (in)      Time - The current model time.
 !  (in)      G - The ocean's grid structure.
@@ -1056,14 +1036,14 @@ subroutine PointAccel_init(HIS, Time, G, param_file, diag, dirs, CS)
 
   CS%diag => diag ; CS%Time => Time
 
-  CS%uh => HIS%uh ; CS%vh => HIS%vh
-  CS%CAu => HIS%CAu ; CS%CAv => HIS%CAv ; CS%PFu => HIS%PFu ; CS%PFv => HIS%PFv
-  CS%diffu => HIS%diffu ; CS%diffv => HIS%diffv
-  CS%T => HIS%T ; CS%S => HIS%S ; CS%pbce => HIS%pbce
-  CS%u_accel_bt => HIS%u_accel_bt ; CS%v_accel_bt => HIS%v_accel_bt
-  CS%u_prev => HIS%u_prev ; CS%v_prev => HIS%v_prev
-  CS%u_av => HIS%u_av; if (.not.associated(HIS%u_av)) CS%u_av => HIS%u(:,:,:)
-  CS%v_av => HIS%v_av; if (.not.associated(HIS%v_av)) CS%v_av => HIS%v(:,:,:)
+  CS%uh => MIS%uh ; CS%vh => MIS%vh
+  CS%CAu => MIS%CAu ; CS%CAv => MIS%CAv ; CS%PFu => MIS%PFu ; CS%PFv => MIS%PFv
+  CS%diffu => MIS%diffu ; CS%diffv => MIS%diffv
+  CS%T => MIS%T ; CS%S => MIS%S ; CS%pbce => MIS%pbce
+  CS%u_accel_bt => MIS%u_accel_bt ; CS%v_accel_bt => MIS%v_accel_bt
+  CS%u_prev => MIS%u_prev ; CS%v_prev => MIS%v_prev
+  CS%u_av => MIS%u_av; if (.not.associated(MIS%u_av)) CS%u_av => MIS%u(:,:,:)
+  CS%v_av => MIS%v_av; if (.not.associated(MIS%v_av)) CS%v_av => MIS%v(:,:,:)
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mod, version, "")

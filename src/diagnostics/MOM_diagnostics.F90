@@ -717,14 +717,14 @@ subroutine calculate_derivs(dt, G, CS)
 
 end subroutine calculate_derivs
 
-subroutine MOM_diagnostics_init(HIS, Time, G, param_file, diag, CS)
-  type(ocean_internal_state), intent(in) :: HIS
+subroutine MOM_diagnostics_init(MIS, Time, G, param_file, diag, CS)
+  type(ocean_internal_state), intent(in) :: MIS
   type(time_type),         intent(in)    :: Time
   type(ocean_grid_type),   intent(in)    :: G
   type(param_file_type),   intent(in)    :: param_file
   type(diag_ptrs), target, intent(inout) :: diag
   type(diagnostics_CS),    pointer       :: CS
-! Arguments: HIS - For "MOM Internal State" a set of pointers to the fields and
+! Arguments: MIS - For "MOM Internal State" a set of pointers to the fields and
 !                  accelerations that make up the ocean's internal physical
 !                  state.
 !  (in)      Time - The current model time.
@@ -784,21 +784,21 @@ subroutine MOM_diagnostics_init(HIS, Time, G, param_file, diag, CS)
       'Zonal Acceleration', 'meter second-2')
   if ((CS%id_du_dt>0) .and. .not.ASSOCIATED(CS%du_dt)) then
     call safe_alloc_ptr(CS%du_dt,IsdB,IedB,jsd,jed,nz)
-    call register_time_deriv(HIS%u, CS%du_dt, CS)
+    call register_time_deriv(MIS%u, CS%du_dt, CS)
   endif
 
   CS%id_dv_dt = register_diag_field('ocean_model', 'dvdt', G%axesCvL, Time, &
       'Meridional Acceleration', 'meter second-2')
   if ((CS%id_dv_dt>0) .and. .not.ASSOCIATED(CS%dv_dt)) then
     call safe_alloc_ptr(CS%dv_dt,isd,ied,JsdB,JedB,nz)
-    call register_time_deriv(HIS%v, CS%dv_dt, CS)
+    call register_time_deriv(MIS%v, CS%dv_dt, CS)
   endif
 
   CS%id_dh_dt = register_diag_field('ocean_model', 'dhdt', G%axesTL, Time, &
       'Thickness tendency', trim(thickness_units)//" second-1")
   if ((CS%id_dh_dt>0) .and. .not.ASSOCIATED(CS%dh_dt)) then
     call safe_alloc_ptr(CS%dh_dt,isd,ied,jsd,jed,nz)
-    call register_time_deriv(HIS%h, CS%dh_dt, CS)
+    call register_time_deriv(MIS%h, CS%dh_dt, CS)
   endif
 
   if (G%nk_rho_varies > 0) then
@@ -880,16 +880,16 @@ subroutine MOM_diagnostics_init(HIS, Time, G, param_file, diag, CS)
   CS%id_col_ht = register_diag_field('ocean_model', 'col_height', G%axesT1, Time, &
       'The height of the water column', 'm')
 
-  call set_dependent_diagnostics(HIS, G, CS)
+  call set_dependent_diagnostics(MIS, G, CS)
 
 end subroutine MOM_diagnostics_init
 
-subroutine set_dependent_diagnostics(HIS, G, CS)
-  type(ocean_internal_state), intent(in) :: HIS
+subroutine set_dependent_diagnostics(MIS, G, CS)
+  type(ocean_internal_state), intent(in) :: MIS
   type(ocean_grid_type), intent(in) :: G
   type(diagnostics_CS), pointer     :: CS
 ! This subroutine sets up the diagnostics upon which other diagnostics depend.
-! Arguments: HIS - For "MOM Internal State" a set of pointers to the fields and
+! Arguments: MIS - For "MOM Internal State" a set of pointers to the fields and
 !                  accelerations that make up the ocean's internal physical
 !                  state.
 !  (in)      G - The ocean's grid structure.
@@ -908,53 +908,33 @@ subroutine set_dependent_diagnostics(HIS, G, CS)
   if (ASSOCIATED(CS%dKE_dt)) then
     if (.not.ASSOCIATED(CS%du_dt)) then
       call safe_alloc_ptr(CS%du_dt,IsdB,IedB,jsd,jed,nz)
-      call register_time_deriv(HIS%u, CS%du_dt, CS)
+      call register_time_deriv(MIS%u, CS%du_dt, CS)
     endif
     if (.not.ASSOCIATED(CS%dv_dt)) then
       call safe_alloc_ptr(CS%dv_dt,isd,ied,JsdB,JedB,nz)
-      call register_time_deriv(HIS%v, CS%dv_dt, CS)
+      call register_time_deriv(MIS%v, CS%dv_dt, CS)
     endif
     if (.not.ASSOCIATED(CS%dh_dt)) then
       call safe_alloc_ptr(CS%dh_dt,isd,ied,jsd,jed,nz)
-      call register_time_deriv(HIS%h, CS%dh_dt, CS)
+      call register_time_deriv(MIS%h, CS%dh_dt, CS)
     endif
   endif
 
   if (ASSOCIATED(CS%PE_to_KE)) then
     if (.not.ASSOCIATED(CS%diag%PFu)) then
-      if (CS%split) then
-        call safe_alloc_ptr(CS%diag%PFu_tot,IsdB,IedB,jsd,jed,nz)
-        CS%diag%PFu => CS%diag%PFu_tot
-      else
-        CS%diag%PFu => HIS%PFu
-      endif
+      CS%diag%PFu => MIS%PFu
     endif
     if (.not.ASSOCIATED(CS%diag%PFv)) then
-      if (CS%split) then
-        call safe_alloc_ptr(CS%diag%PFv_tot,isd,ied,JsdB,JedB,nz)
-        CS%diag%PFv => CS%diag%PFv_tot
-      else
-        CS%diag%PFv => HIS%PFv
-      endif
+      CS%diag%PFv => MIS%PFv
     endif
   endif
 
   if (ASSOCIATED(CS%KE_CorAdv)) then
     if (.not.ASSOCIATED(CS%diag%CAu)) then
-      if (CS%split) then
-        call safe_alloc_ptr(CS%diag%CAu_tot,IsdB,IedB,jsd,jed,nz)
-        CS%diag%CAu => CS%diag%CAu_tot
-      else
-        CS%diag%CAu => HIS%CAu
-      endif
+      CS%diag%CAu => MIS%CAu
     endif
     if (.not.ASSOCIATED(CS%diag%CAv)) then
-      if (CS%split) then
-        call safe_alloc_ptr(CS%diag%CAv_tot,isd,ied,JsdB,JedB,nz)
-        CS%diag%CAv => CS%diag%CAv_tot
-      else
-        CS%diag%CAv => HIS%CAv
-      endif
+      CS%diag%CAv => MIS%CAv
     endif
   endif
 
@@ -969,20 +949,13 @@ subroutine set_dependent_diagnostics(HIS, G, CS)
   endif
 
   if (ASSOCIATED(CS%KE_horvisc)) then
-    if (.not.ASSOCIATED(CS%diag%diffu)) CS%diag%diffu => HIS%diffu
-    if (.not.ASSOCIATED(CS%diag%diffv)) CS%diag%diffv => HIS%diffv
+    if (.not.ASSOCIATED(CS%diag%diffu)) CS%diag%diffu => MIS%diffu
+    if (.not.ASSOCIATED(CS%diag%diffv)) CS%diag%diffv => MIS%diffv
   endif
 
   if (ASSOCIATED(CS%KE_dia)) then
     call safe_alloc_ptr(CS%diag%du_dt_dia,IsdB,IedB,jsd,jed,nz)
     call safe_alloc_ptr(CS%diag%dv_dt_dia,isd,ied,JsdB,JedB,nz)
-  endif
-
-  if (CS%split) then
-    if (ASSOCIATED(CS%diag%PFu_tot) .or. ASSOCIATED(CS%diag%CAu_tot)) &
-      call safe_alloc_ptr(CS%diag%PFu_bt,IsdB,IedB,jsd,jed)
-    if (ASSOCIATED(CS%diag%PFv_tot) .or. ASSOCIATED(CS%diag%CAv_tot)) &
-      call safe_alloc_ptr(CS%diag%PFv_bt,isd,ied,JsdB,JedB)
   endif
 
   if (ASSOCIATED(CS%uhGM_Rlay)) call safe_alloc_ptr(CS%diag%uhGM,IsdB,IedB,jsd,jed,nz)
@@ -1012,20 +985,14 @@ subroutine MOM_diagnostics_end(CS)
   if (ASSOCIATED(CS%vh_Rlay))    deallocate(CS%vh_Rlay)
   if (ASSOCIATED(CS%uhGM_Rlay))  deallocate(CS%uhGM_Rlay)
   if (ASSOCIATED(CS%vhGM_Rlay))  deallocate(CS%vhGM_Rlay)
-  if (ASSOCIATED(CS%diag%PFu_tot))    deallocate(CS%diag%PFu_tot)
-  if (ASSOCIATED(CS%diag%PFv_tot))    deallocate(CS%diag%PFv_tot)
-  if (ASSOCIATED(CS%diag%CAu_tot))    deallocate(CS%diag%CAu_tot)
-  if (ASSOCIATED(CS%diag%CAv_tot))    deallocate(CS%diag%CAv_tot)
   if (ASSOCIATED(CS%diag%gradKEu))    deallocate(CS%diag%gradKEu)
   if (ASSOCIATED(CS%diag%gradKEu))    deallocate(CS%diag%gradKEu)
   if (ASSOCIATED(CS%diag%du_dt_visc)) deallocate(CS%diag%du_dt_visc)
   if (ASSOCIATED(CS%diag%dv_dt_visc)) deallocate(CS%diag%dv_dt_visc)
   if (ASSOCIATED(CS%diag%du_dt_dia))  deallocate(CS%diag%du_dt_dia)
   if (ASSOCIATED(CS%diag%dv_dt_dia))  deallocate(CS%diag%dv_dt_dia)
-  if (ASSOCIATED(CS%diag%du_adj))     deallocate(CS%diag%du_adj)
-  if (ASSOCIATED(CS%diag%dv_adj))     deallocate(CS%diag%dv_adj)
-  if (ASSOCIATED(CS%diag%du_adj2))    deallocate(CS%diag%du_adj2)
-  if (ASSOCIATED(CS%diag%dv_adj2))    deallocate(CS%diag%dv_adj2)
+  if (ASSOCIATED(CS%diag%du_other))     deallocate(CS%diag%du_other)
+  if (ASSOCIATED(CS%diag%dv_other))     deallocate(CS%diag%dv_other)
   if (ASSOCIATED(CS%diag%PFu_bt))     deallocate(CS%diag%PFu_bt)
   if (ASSOCIATED(CS%diag%PFv_bt))     deallocate(CS%diag%PFv_bt)
 
