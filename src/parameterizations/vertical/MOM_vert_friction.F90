@@ -85,6 +85,7 @@ use MOM_grid, only : ocean_grid_type
 use MOM_PointAccel, only : write_u_accel, write_v_accel, PointAccel_init
 use MOM_PointAccel, only : PointAccel_CS
 use MOM_variables, only : thermo_var_ptrs, vertvisc_type
+use MOM_variables, only : cont_diag_ptrs, accel_diag_ptrs
 use MOM_variables, only : ocean_internal_state, ocean_OBC_type, OBC_SIMPLE
 
 implicit none ; private
@@ -165,7 +166,8 @@ end type vertvisc_CS
 
 contains
 
-subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, G, CS, taux_bot, tauy_bot)
+subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, ADp, CDp, G, CS, &
+                    taux_bot, tauy_bot)
 !    This subroutine does a fully implicit vertical diffusion
 !  of momentum.  Stress top and bottom b.c.s are used.
   real, intent(inout), dimension(NIMEMB_,NJMEM_,NKMEM_) :: u
@@ -175,6 +177,8 @@ subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, G, CS, taux_bot, tauy_bot)
   type(vertvisc_type), intent(inout)                    :: visc
   real, intent(in)                                      :: dt
   type(ocean_OBC_type), pointer                         :: OBC
+  type(accel_diag_ptrs), intent(inout)                  :: ADp
+  type(cont_diag_ptrs),  intent(inout)                  :: CDp
   type(ocean_grid_type), intent(in)                     :: G
   type(vertvisc_CS), pointer                            :: CS
   real, dimension(NIMEMB_,NJMEM_), optional, intent(out) :: taux_bot
@@ -190,6 +194,11 @@ subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, G, CS, taux_bot, tauy_bot)
 !  (in)      dt - Time increment in s.
 !  (in)      OBC - This open boundary condition type specifies whether, where,
 !                  and what open boundary conditions are used.
+!  (in)      ADp - A structure pointing to the various accelerations in
+!                  the momentum equations, to enable the later calculation
+!                  of derived diagnostics, like energy budgets.
+!  (in)      CDp - A structure with pointers to various terms in the continuity
+!                  equations.
 !  (in)      G - The ocean's grid structure.
 !  (in)      CS - The control structure returned by a previous call to
 !                 vertvisc_init.
@@ -252,8 +261,8 @@ subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, G, CS, taux_bot, tauy_bot)
   do j=G%jsc,G%jec
     do I=Isq,Ieq ; do_i(I) = (G%mask2dCu(I,j) > 0) ; enddo
 
-    if (ASSOCIATED(CS%diag%du_dt_visc)) then ; do k=1,nz ; do I=Isq,Ieq
-      CS%diag%du_dt_visc(I,j,k) = u(I,j,k)
+    if (ASSOCIATED(ADp%du_dt_visc)) then ; do k=1,nz ; do I=Isq,Ieq
+      ADp%du_dt_visc(I,j,k) = u(I,j,k)
     enddo ; enddo ; endif
 
 !   One option is to have the wind stress applied as a body force
@@ -297,8 +306,8 @@ subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, G, CS, taux_bot, tauy_bot)
       u(I,j,k) = u(I,j,k) + c1(I,k+1) * u(I,j,k+1)
     endif ; enddo ; enddo ! i and k loops
 
-    if (ASSOCIATED(CS%diag%du_dt_visc)) then ; do k=1,nz ; do I=Isq,Ieq
-      CS%diag%du_dt_visc(I,j,k) = (u(I,j,k) - CS%diag%du_dt_visc(I,j,k))*Idt
+    if (ASSOCIATED(ADp%du_dt_visc)) then ; do k=1,nz ; do I=Isq,Ieq
+      ADp%du_dt_visc(I,j,k) = (u(I,j,k) - ADp%du_dt_visc(I,j,k))*Idt
     enddo ; enddo ; endif
 
     if (ASSOCIATED(visc%taux_shelf)) then ; do I=Isq,Ieq
@@ -319,8 +328,8 @@ subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, G, CS, taux_bot, tauy_bot)
   do J=Jsq,Jeq
     do i=is,ie ; do_i(i) = (G%mask2dCv(i,J) > 0) ; enddo
 
-    if (ASSOCIATED(CS%diag%dv_dt_visc)) then ; do k=1,nz ; do i=is,ie
-      CS%diag%dv_dt_visc(i,J,k) = v(i,J,k)
+    if (ASSOCIATED(ADp%dv_dt_visc)) then ; do k=1,nz ; do i=is,ie
+      ADp%dv_dt_visc(i,J,k) = v(i,J,k)
     enddo ; enddo ; endif
 
 !   One option is to have the wind stress applied as a body force
@@ -364,8 +373,8 @@ subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, G, CS, taux_bot, tauy_bot)
       v(i,J,k) = v(i,J,k) + c1(i,k+1) * v(i,J,k+1)
     endif ; enddo ; enddo ! i and k loops
 
-    if (ASSOCIATED(CS%diag%dv_dt_visc)) then ; do k=1,nz ; do i=is,ie
-      CS%diag%dv_dt_visc(i,J,k) = (v(i,J,k) - CS%diag%dv_dt_visc(i,J,k))*Idt
+    if (ASSOCIATED(ADp%dv_dt_visc)) then ; do k=1,nz ; do i=is,ie
+      ADp%dv_dt_visc(i,J,k) = (v(i,J,k) - ADp%dv_dt_visc(i,J,k))*Idt
     enddo ; enddo ; endif
 
     if (ASSOCIATED(visc%tauy_shelf)) then ; do i=is,ie
@@ -382,7 +391,7 @@ subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, G, CS, taux_bot, tauy_bot)
     endif
   enddo ! end of v-component J loop
 
-  call vertvisc_limit_vel(u, v, h, fluxes, visc, dt, G, CS)
+  call vertvisc_limit_vel(u, v, h, ADp, CDp, fluxes, visc, dt, G, CS)
 
   ! Here the velocities associated with open boundary conditions are applied.
   if (associated(OBC)) then
@@ -401,9 +410,9 @@ subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, G, CS, taux_bot, tauy_bot)
   endif
 ! Offer diagnostic fields for averaging.
   if (CS%id_du_dt_visc > 0) &
-    call post_data(CS%id_du_dt_visc, CS%diag%du_dt_visc, CS%diag)
+    call post_data(CS%id_du_dt_visc, ADp%du_dt_visc, CS%diag)
   if (CS%id_dv_dt_visc > 0) &
-    call post_data(CS%id_dv_dt_visc, CS%diag%dv_dt_visc, CS%diag)
+    call post_data(CS%id_dv_dt_visc, ADp%dv_dt_visc, CS%diag)
   if (present(taux_bot) .and. (CS%id_taux_bot > 0)) &
     call post_data(CS%id_taux_bot, taux_bot, CS%diag) 
   if (present(tauy_bot) .and. (CS%id_tauy_bot > 0)) &
@@ -1044,18 +1053,20 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
 
 end subroutine vertvisc_coef
 
-subroutine vertvisc_limit_vel(u, v, h, fluxes, visc, dt, G, CS)
+subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, fluxes, visc, dt, G, CS)
 !  Within this subroutine, velocity components which exceed a threshold for
 ! physically reasonable values are truncated. Optionally, any column with
 ! excessive velocities may be sent to a diagnostic reporting subroutine.
-  real, intent(inout), dimension(NIMEMB_,NJMEM_,NKMEM_) :: u
-  real, intent(inout), dimension(NIMEM_,NJMEMB_,NKMEM_) :: v
-  real, intent(in),    dimension(NIMEM_,NJMEM_,NKMEM_)  :: h
-  type(forcing), intent(in)                             :: fluxes
-  type(vertvisc_type), intent(in)                       :: visc
-  real, intent(in)                                      :: dt
-  type(ocean_grid_type), intent(in)                     :: G
-  type(vertvisc_CS), pointer                            :: CS
+  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(inout) :: u
+  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(inout) :: v
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h
+  type(accel_diag_ptrs),                  intent(in)    :: ADp
+  type(cont_diag_ptrs),                   intent(in)    :: CDp
+  type(forcing),                          intent(in)    :: fluxes
+  type(vertvisc_type),                    intent(in)    :: visc
+  real,                                   intent(in)    :: dt
+  type(ocean_grid_type),                  intent(in)    :: G
+  type(vertvisc_CS),                      pointer       :: CS
 
   real :: maxvel           ! Velocities components greater than maxvel
   real :: truncvel         ! are truncated to truncvel, both in m s-1.
@@ -1098,7 +1109,7 @@ subroutine vertvisc_limit_vel(u, v, h, fluxes, visc, dt, G, CS)
       do I=Isq,Ieq ; if (dowrite(I)) then
 !   Here the diagnostic reporting subroutines are called if
 ! unphysically large values were found.
-        call write_u_accel(I, j, u, h, dt, G, CS%PointAccel_CSp, &
+        call write_u_accel(I, j, u, h, ADp, CDp, dt, G, CS%PointAccel_CSp, &
                vel_report(I), -vel_report(I), (dt*fluxes%taux(I,j)/G%Rho0), &
                a=CS%a_u(:,j,:), hv=CS%h_u(:,j,:))
       endif ; enddo
@@ -1167,7 +1178,7 @@ subroutine vertvisc_limit_vel(u, v, h, fluxes, visc, dt, G, CS)
       do i=is,ie ; if (dowrite(i)) then
 !   Here the diagnostic reporting subroutines are called if
 ! unphysically large values were found.
-        call write_v_accel(i, J, v, h, dt, G, CS%PointAccel_CSp, &
+        call write_v_accel(i, J, v, h, ADp, CDp, dt, G, CS%PointAccel_CSp, &
                vel_report(I), -vel_report(I), (dt*fluxes%tauy(i,J)/G%Rho0), &
                a=CS%a_v(:,J,:),hv=CS%h_v(:,J,:))
       endif ; enddo
@@ -1209,12 +1220,13 @@ subroutine vertvisc_limit_vel(u, v, h, fluxes, visc, dt, G, CS)
 
 end subroutine vertvisc_limit_vel
 
-subroutine vertvisc_init(MIS, Time, G, param_file, diag, dirs, ntrunc, CS)
+subroutine vertvisc_init(MIS, Time, G, param_file, diag, ADp, dirs, ntrunc, CS)
   type(ocean_internal_state), target, intent(in) :: MIS
   type(time_type), target, intent(in)    :: Time
   type(ocean_grid_type),   intent(in)    :: G
   type(param_file_type),   intent(in)    :: param_file
   type(diag_ptrs), target, intent(inout) :: diag
+  type(accel_diag_ptrs),   intent(inout) :: ADp
   type(directories),       intent(in)    :: dirs
   integer, target,         intent(inout) :: ntrunc
   type(vertvisc_CS),       pointer       :: CS
@@ -1225,6 +1237,9 @@ subroutine vertvisc_init(MIS, Time, G, param_file, diag, dirs, ntrunc, CS)
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
 !  (in)      diag - A structure containing pointers to common diagnostic fields.
+!  (inout)   ADp - A structure pointing to the various accelerations in
+!                  the momentum equations, to enable the later calculation
+!                  of derived diagnostics, like energy budgets.
 !  (in)      dirs - A structure containing several relevant directory paths.
 !  (in/out)  ntrunc - The integer that stores the number of times the velocity
 !                     has been truncated since the last call to write_energy.
@@ -1361,10 +1376,10 @@ subroutine vertvisc_init(MIS, Time, G, param_file, diag, dirs, ntrunc, CS)
 
   CS%id_du_dt_visc = register_diag_field('ocean_model', 'du_dt_visc', G%axesCuL, &
      Time, 'Zonal Acceleration from Vertical Viscosity', 'meter second-2')
-  if (CS%id_du_dt_visc > 0) call safe_alloc_ptr(diag%du_dt_visc,IsdB,IedB,jsd,jed,nz)
+  if (CS%id_du_dt_visc > 0) call safe_alloc_ptr(ADp%du_dt_visc,IsdB,IedB,jsd,jed,nz)
   CS%id_dv_dt_visc = register_diag_field('ocean_model', 'dv_dt_visc', G%axesCvL, &
      Time, 'Meridional Acceleration from Vertical Viscosity', 'meter second-2')
-  if (CS%id_dv_dt_visc > 0) call safe_alloc_ptr(diag%dv_dt_visc,isd,ied,JsdB,JedB,nz)
+  if (CS%id_dv_dt_visc > 0) call safe_alloc_ptr(ADp%dv_dt_visc,isd,ied,JsdB,JedB,nz)
 
   CS%id_taux_bot = register_diag_field('ocean_model', 'taux_bot', G%axesCu1, &
      Time, 'Zonal Bottom Stress from Ocean to Earth', 'Pa')

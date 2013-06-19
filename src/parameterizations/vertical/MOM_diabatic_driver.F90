@@ -93,8 +93,8 @@ use MOM_set_diffusivity, only : set_diffusivity_init, set_diffusivity_end
 use MOM_set_diffusivity, only : set_diffusivity_CS
 use MOM_sponge, only : apply_sponge, sponge_CS
 use MOM_tracer_flow_control, only : call_tracer_column_fns, tracer_flow_control_CS
-use MOM_variables, only : thermo_var_ptrs, vertvisc_type
-use MOM_variables, only : MOM_thermovar_chksum, p3d
+use MOM_variables, only : thermo_var_ptrs, vertvisc_type, accel_diag_ptrs
+use MOM_variables, only : cont_diag_ptrs, MOM_thermovar_chksum, p3d
 use MOM_regularize_layers, only : regularize_layers, regularize_layers_init, regularize_layers_CS
 use MOM_wave_speed, only : wave_speed
 use MOM_EOS, only : calculate_density, calculate_2_densities, calculate_TFreeze
@@ -177,13 +177,15 @@ integer :: id_clock_geothermal, id_clock_double_diff, id_clock_remap
 
 contains
 
-subroutine diabatic(u, v, h, tv, fluxes, visc, dt, G, CS)
+subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(inout) :: u
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(inout) :: v
   real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(inout) :: h
   type(thermo_var_ptrs),                  intent(inout) :: tv
   type(forcing),                          intent(inout) :: fluxes
   type(vertvisc_type),                    intent(inout) :: visc
+  type(accel_diag_ptrs),                  intent(inout) :: ADp
+  type(cont_diag_ptrs),                   intent(inout) :: CDp
   real,                                   intent(in)    :: dt
   type(ocean_grid_type),                  intent(inout) :: G
   type(diabatic_CS),                      pointer       :: CS
@@ -199,6 +201,11 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, dt, G, CS)
 !                     forcing fields.  Unused fields have NULL ptrs.
 !  (in/out)  visc - A structure containing vertical viscosities, bottom boundary
 !                   layer properies, and related fields.
+!  (inout)   ADp - A structure with pointers to the various accelerations in
+!                  the momentum equations, to enable the later calculation
+!                  of derived diagnostics, like energy budgets.
+!  (inout)   CDp - A structure with pointers to various terms in the continuity
+!                  equations.
 !  (in)      dt - Time increment, in s.
 !  (in)      G - The ocean's grid structure.
 !  (in)      CS - The control structure returned by a previous call to
@@ -794,13 +801,13 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, dt, G, CS)
   endif
 
 !   Save the diapycnal mass fluxes as a diagnostic field.
-  if (ASSOCIATED(CS%diag%diapyc_vel)) then
+  if (ASSOCIATED(CDp%diapyc_vel)) then
     do K=2,nz ; do j=js,je ; do i=is,ie
-      CS%diag%diapyc_vel(i,j,K) = Idt * (G%H_to_m * (ea(i,j,k) - eb(i,j,k-1)))
+      CDp%diapyc_vel(i,j,K) = Idt * (G%H_to_m * (ea(i,j,k) - eb(i,j,k-1)))
     enddo ; enddo ; enddo
     do j=js,je ; do i=is,ie
-      CS%diag%diapyc_vel(i,j,1) = 0.0
-      CS%diag%diapyc_vel(i,j,nz+1) = 0.0
+      CDp%diapyc_vel(i,j,1) = 0.0
+      CDp%diapyc_vel(i,j,nz+1) = 0.0
     enddo ; enddo
   endif
 
@@ -854,14 +861,14 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, dt, G, CS)
   call cpu_clock_begin(id_clock_tridiag)
   do j=js,je
     do I=Isq,Ieq
-      if (ASSOCIATED(CS%diag%du_dt_dia)) CS%diag%du_dt_dia(I,j,1) = u(I,j,1)
+      if (ASSOCIATED(ADp%du_dt_dia)) ADp%du_dt_dia(I,j,1) = u(I,j,1)
       hval = (hold(i,j,1) + hold(i+1,j,1)) + (ea(i,j,1) + ea(i+1,j,1)) + h_neglect
       b1(I) = 1.0 / (hval + (eb(i,j,1) + eb(i+1,j,1)))
       d1(I) = hval * b1(I)
       u(I,j,1) = b1(I) * (hval * u(I,j,1))
     enddo
     do k=2,nz ; do I=Isq,Ieq
-      if (ASSOCIATED(CS%diag%du_dt_dia)) CS%diag%du_dt_dia(I,j,k) = u(I,j,k)
+      if (ASSOCIATED(ADp%du_dt_dia)) ADp%du_dt_dia(I,j,k) = u(I,j,k)
       c1(I,k) = (eb(i,j,k-1)+eb(i+1,j,k-1)) * b1(I)
       eaval = ea(i,j,k) + ea(i+1,j,k)
       hval = hold(i,j,k) + hold(i+1,j,k) + h_neglect
@@ -871,12 +878,12 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, dt, G, CS)
     enddo ; enddo
     do k=nz-1,1,-1 ; do I=Isq,Ieq
       u(I,j,k) = u(I,j,k) + c1(I,k+1)*u(I,j,k+1)
-      if (ASSOCIATED(CS%diag%du_dt_dia)) &
-        CS%diag%du_dt_dia(I,j,k) = (u(I,j,k) - CS%diag%du_dt_dia(I,j,k)) * Idt
+      if (ASSOCIATED(ADp%du_dt_dia)) &
+        ADp%du_dt_dia(I,j,k) = (u(I,j,k) - ADp%du_dt_dia(I,j,k)) * Idt
     enddo ; enddo
-    if (ASSOCIATED(CS%diag%du_dt_dia)) then
+    if (ASSOCIATED(ADp%du_dt_dia)) then
       do I=Isq,Ieq
-        CS%diag%du_dt_dia(I,j,nz) = (u(I,j,nz)-CS%diag%du_dt_dia(I,j,nz)) * Idt
+        ADp%du_dt_dia(I,j,nz) = (u(I,j,nz)-ADp%du_dt_dia(I,j,nz)) * Idt
       enddo
     endif
   enddo
@@ -885,14 +892,14 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, dt, G, CS)
   endif
   do J=Jsq,Jeq
     do i=is,ie
-      if (ASSOCIATED(CS%diag%dv_dt_dia)) CS%diag%dv_dt_dia(i,J,1) = v(i,J,1)
+      if (ASSOCIATED(ADp%dv_dt_dia)) ADp%dv_dt_dia(i,J,1) = v(i,J,1)
       hval = (hold(i,j,1) + hold(i,j+1,1)) + (ea(i,j,1) + ea(i,j+1,1)) + h_neglect
       b1(i) = 1.0 / (hval + (eb(i,j,1) + eb(i,j+1,1)))
       d1(I) = hval * b1(I)
       v(i,J,1) = b1(i) * (hval * v(i,J,1))
     enddo
     do k=2,nz ; do i=is,ie
-      if (ASSOCIATED(CS%diag%dv_dt_dia)) CS%diag%dv_dt_dia(i,J,k) = v(i,J,k)
+      if (ASSOCIATED(ADp%dv_dt_dia)) ADp%dv_dt_dia(i,J,k) = v(i,J,k)
       c1(i,k) = (eb(i,j,k-1)+eb(i,j+1,k-1)) * b1(i)
       eaval = ea(i,j,k) + ea(i,j+1,k)
       hval = hold(i,j,k) + hold(i,j+1,k) + h_neglect
@@ -902,12 +909,12 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, dt, G, CS)
     enddo ; enddo
     do k=nz-1,1,-1 ; do i=is,ie
       v(i,J,k) = v(i,J,k) + c1(i,k+1)*v(i,J,k+1)
-      if (ASSOCIATED(CS%diag%dv_dt_dia)) &
-        CS%diag%dv_dt_dia(i,J,k) = (v(i,J,k) - CS%diag%dv_dt_dia(i,J,k)) * Idt
+      if (ASSOCIATED(ADp%dv_dt_dia)) &
+        ADp%dv_dt_dia(i,J,k) = (v(i,J,k) - ADp%dv_dt_dia(i,J,k)) * Idt
     enddo ; enddo
-    if (ASSOCIATED(CS%diag%dv_dt_dia)) then
+    if (ASSOCIATED(ADp%dv_dt_dia)) then
       do i=is,ie
-        CS%diag%dv_dt_dia(i,J,nz) = (v(i,J,nz)-CS%diag%dv_dt_dia(i,J,nz)) * Idt
+        ADp%dv_dt_dia(i,J,nz) = (v(i,J,nz)-ADp%dv_dt_dia(i,J,nz)) * Idt
       enddo
     endif
   enddo
@@ -923,9 +930,9 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, dt, G, CS)
 
   if (CS%id_ea > 0) call post_data(CS%id_ea, ea, CS%diag)
   if (CS%id_eb > 0) call post_data(CS%id_eb, eb, CS%diag)
-  if (CS%id_dudt_dia > 0) call post_data(CS%id_dudt_dia, CS%diag%du_dt_dia, CS%diag)
-  if (CS%id_dvdt_dia > 0) call post_data(CS%id_dvdt_dia, CS%diag%dv_dt_dia, CS%diag)
-  if (CS%id_wd > 0) call post_data(CS%id_wd, CS%diag%diapyc_vel, CS%diag)
+  if (CS%id_dudt_dia > 0) call post_data(CS%id_dudt_dia, ADp%du_dt_dia, CS%diag)
+  if (CS%id_dvdt_dia > 0) call post_data(CS%id_dvdt_dia, ADp%dv_dt_dia, CS%diag)
+  if (CS%id_wd > 0) call post_data(CS%id_wd, CDp%diapyc_vel, CS%diag)
 
   if (CS%id_Tdif > 0) call post_data(CS%id_Tdif, Tdif_flx, CS%diag)
   if (CS%id_Tadv > 0) call post_data(CS%id_Tadv, Tadv_flx, CS%diag)
@@ -1291,13 +1298,15 @@ subroutine adiabatic_driver_init(Time, G, param_file, diag, CS, &
 
 end subroutine adiabatic_driver_init
 
-subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, CS, &
-                                tracer_flow_CSp, sponge_CSp, diag_to_Z_CSp)
+subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
+                     ADp, CDp, CS, tracer_flow_CSp, sponge_CSp, diag_to_Z_CSp)
   type(time_type),         intent(in)    :: Time
   type(ocean_grid_type),   intent(in)    :: G
   type(param_file_type),   intent(in)    :: param_file
   logical,                 intent(in)    :: useALEalgorithm
   type(diag_ptrs), target, intent(inout) :: diag
+  type(accel_diag_ptrs),   intent(inout) :: ADp
+  type(cont_diag_ptrs),    intent(inout) :: CDp
   type(diabatic_CS),       pointer       :: CS
   type(tracer_flow_control_CS), pointer  :: tracer_flow_CSp
   type(sponge_CS),         pointer       :: sponge_CSp
@@ -1307,6 +1316,11 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, CS, 
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
 !  (in)      diag - A structure containing pointers to common diagnostic fields.
+!  (inout)   ADp - A structure with pointers to the various accelerations in
+!                  the momentum equations, to enable the later calculation
+!                  of derived diagnostics, like energy budgets.
+!  (inout)   CDp - A structure with pointers to various terms in the continuity
+!                  equations.
 !  (in/out)  CS - A pointer that is set to point to the control structure
 !                 for this module
 !  (in)      tracer_flow_CSp - A pointer to the control structure of the tracer
@@ -1455,9 +1469,9 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, CS, 
     CS%id_Sadv_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
   endif
 
-  if (CS%id_dudt_dia > 0) call safe_alloc_ptr(diag%du_dt_dia,IsdB,IedB,jsd,jed,nz)
-  if (CS%id_dvdt_dia > 0) call safe_alloc_ptr(diag%dv_dt_dia,isd,ied,JsdB,JedB,nz)
-  if (CS%id_wd > 0) call safe_alloc_ptr(diag%diapyc_vel,isd,ied,jsd,jed,nz+1)
+  if (CS%id_dudt_dia > 0) call safe_alloc_ptr(ADp%du_dt_dia,IsdB,IedB,jsd,jed,nz)
+  if (CS%id_dvdt_dia > 0) call safe_alloc_ptr(ADp%dv_dt_dia,isd,ied,JsdB,JedB,nz)
+  if (CS%id_wd > 0) call safe_alloc_ptr(CDp%diapyc_vel,isd,ied,jsd,jed,nz+1)
 
   call set_diffusivity_init(Time, G, param_file, diag, CS%set_diff_CSp, diag_to_Z_CSp)
   call entrain_diffusive_init(Time, G, param_file, diag, CS%entrain_diffusive_CSp)

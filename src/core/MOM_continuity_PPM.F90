@@ -312,17 +312,6 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, CS, uhbt, vhbt, OBC, &
     endif
   endif
 
-  if (ASSOCIATED(CS%diag%uh_lay)) then
-    do k=1,nz ; do j=G%jsc,G%jec ; do I=G%IscB,G%IecB
-      CS%diag%uh_lay(I,j,k) = uh(I,j,k)
-    enddo ; enddo ; enddo
-  endif
-  if (ASSOCIATED(CS%diag%vh_lay)) then
-    do k=1,nz ; do J=G%JscB,G%JecB ; do i=G%isc,G%iec
-      CS%diag%vh_lay(i,J,k) = vh(i,J,k)
-    enddo ; enddo ; enddo
-  endif
-
 end subroutine continuity_PPM
 
 subroutine zonal_mass_flux(u, h_in, uh, dt, G, CS, LB, uhbt, OBC, &

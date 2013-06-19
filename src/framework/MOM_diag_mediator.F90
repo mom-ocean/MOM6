@@ -62,29 +62,6 @@ end interface post_data
 ! of model output.
 type, public :: diag_ptrs
 ! Each of the following fields has nz+1 levels.
-  real, pointer :: diapyc_vel(:,:,:) => NULL()! The net diapycnal velocity,
-                                              ! in m s-1.  Has nz+1 layers.
-! Each of the following fields has nz layers.
-  real, pointer :: du_dt_visc(:,:,:) => NULL()! Accelerations due to vertical
-  real, pointer :: dv_dt_visc(:,:,:) => NULL()! viscosity, in m s-2.
-  real, pointer :: du_dt_dia(:,:,:) => NULL()! Accelerations due to diapycnal
-  real, pointer :: dv_dt_dia(:,:,:) => NULL()! mixing, in m s-2.
-  real, pointer :: du_other(:,:,:) => NULL() ! Velocity changes due to any other
-  real, pointer :: dv_other(:,:,:) => NULL() ! processes that are not due to any
-                                             ! explicit accelerations, in m s-1.
-
-  real, pointer :: diffu(:,:,:) => NULL()    ! Accelerations due to along iso-
-  real, pointer :: diffv(:,:,:) => NULL()    ! pycnal viscosity, in m s-2.
-  real, pointer :: CAu(:,:,:) => NULL()      ! Coriolis and momentum advection
-  real, pointer :: CAv(:,:,:) => NULL()      ! accelerations, in m s-2.
-  real, pointer :: PFu(:,:,:) => NULL()      ! Accelerations due to pressure
-  real, pointer :: PFv(:,:,:) => NULL()      ! forces, in m s-2.
-  real, pointer :: gradKEu(:,:,:) => NULL()  ! gradKEu = - d/dx(u2), in m s-2.
-  real, pointer :: gradKEv(:,:,:) => NULL()  ! gradKEv = - d/dy(u2), in m s-2.
-  real, pointer :: rv_x_v(:,:,:) => NULL()   ! rv_x_v = rv * v at u, in m s-2.
-  real, pointer :: rv_x_u(:,:,:) => NULL()   ! rv_x_u = rv * u at v, in m s-2.
-  real, pointer :: uhGM(:,:,:) => NULL()     ! Thickness diffusion induced
-  real, pointer :: vhGM(:,:,:) => NULL()     ! volume fluxes in m3 s-1.
   real, pointer :: rv(:,:,:) => NULL()       ! Relative vorticity in s-1.
   real, pointer :: q(:,:,:) => NULL()        ! Potential vorticity, s-1 m-1.
 
@@ -93,9 +70,6 @@ type, public :: diag_ptrs
   real, pointer :: Kh_h(:,:,:) => NULL()     ! Laplacian viscosity at h or q
   real, pointer :: Kh_q(:,:,:) => NULL()     ! points in m2 s-1.
   real, pointer :: Kd(:,:,:) => NULL()       ! Diapycnal diffusivity in m2 s-1.
-  real, pointer :: PFu_bc(:,:,:) => NULL()   ! Accelerations due to pressure
-  real, pointer :: PFv_bc(:,:,:) => NULL()   ! gradients deriving from density
-                                             ! gradients within layers, m s-2.
  
 ! Each of the following fields has 1 layer.
   real, pointer :: PFu_bt(:,:) => NULL()     ! Barotropic pressure gradient
@@ -106,17 +80,6 @@ type, public :: diag_ptrs
   real, pointer :: Nonlnv_bt(:,:) => NULL()  ! erations, in m s-2.
   real, pointer :: ubt_flux(:,:) => NULL()   ! Barotropic mass fluxes across
   real, pointer :: vbt_flux(:,:) => NULL()   ! cell faces, in m3 s-1.
-
-! The following are a number of estimates of the thickness fluxes, in m3 s-1.
-  real, pointer :: uh_min(:,:,:) => NULL()
-  real, pointer :: uh_max(:,:,:) => NULL()
-  real, pointer :: uh_lay(:,:,:) => NULL()
-  real, pointer :: uh_cent(:,:,:) => NULL()
-
-  real, pointer :: vh_min(:,:,:) => NULL()
-  real, pointer :: vh_max(:,:,:) => NULL()
-  real, pointer :: vh_lay(:,:,:) => NULL()
-  real, pointer :: vh_cent(:,:,:) => NULL()
 
 ! The following fields are used for the output of the data.
   integer :: is, ie, js, je

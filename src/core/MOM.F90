@@ -324,8 +324,7 @@ use MOM_variables, only : &
   thermo_var_ptrs, & ! A structure containing pointers to an assortment of
                   ! thermodynamic fields that may be available, including
                   ! potential temperature, salinity and mixed layer density.
-  ocean_internal_state  ! A structure containing pointers to most of the above.
-
+  accel_diag_ptrs, cont_diag_ptrs, ocean_internal_state
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock, only : CLOCK_COMPONENT, CLOCK_SUBCOMPONENT
 use MOM_cpu_clock, only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
@@ -437,6 +436,12 @@ type, public :: MOM_control_struct
                               ! bottom drag viscosities, and related fields.
   type(MEKE_type), pointer :: MEKE => NULL()  ! A structure containing fields
                               ! related to the Mesoscale Eddy Kinetic Energy.
+  type(accel_diag_ptrs) :: ADp ! A structure containing pointers to the
+                              ! model's accelerations, for use in derived
+                              ! diagnostics (like energy budgets).
+  type(cont_diag_ptrs) :: CDp ! A structure containing pointers to the
+                              ! terms in the continuity equation, for use in
+                              ! derived diagnostics (like energy budgets).
 
   logical :: split           ! If true, use the split time stepping scheme.
   logical :: legacy_split    ! If true, use the legacy split time stepping
@@ -739,7 +744,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         if (associated(CS%VarMix)) &
           call calc_slope_function(h, CS%tv, grid, CS%VarMix)
         call thickness_diffuse(h, CS%uhtr, CS%vhtr, CS%tv, dtth, grid, &
-                               CS%MEKE, CS%VarMix, CS%thickness_diffuse_CSp)
+                               CS%MEKE, CS%VarMix, CS%CDp, CS%thickness_diffuse_CSp)
         call cpu_clock_end(id_clock_thick_diff)
         call cpu_clock_begin(id_clock_pass)
         call pass_var(h, grid%Domain)
@@ -819,7 +824,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       if (associated(CS%VarMix)) &
         call calc_slope_function(h, CS%tv, grid, CS%VarMix)
       call thickness_diffuse(h, CS%uhtr, CS%vhtr, CS%tv, dt, grid, &
-                             CS%MEKE, CS%VarMix, CS%thickness_diffuse_CSp)
+                             CS%MEKE, CS%VarMix, CS%CDp, CS%thickness_diffuse_CSp)
       call cpu_clock_end(id_clock_thick_diff)
       call cpu_clock_begin(id_clock_pass)
       call pass_var(h, grid%Domain)
@@ -903,8 +908,8 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         endif
 
         call cpu_clock_begin(id_clock_diabatic)
-        call diabatic(u, v, h, CS%tv, fluxes, CS%visc, dtnt, &
-                      grid, CS%diabatic_CSp)
+        call diabatic(u, v, h, CS%tv, fluxes, CS%visc, CS%ADp, CS%CDp, &
+                      dtnt, grid, CS%diabatic_CSp)
         call cpu_clock_end(id_clock_diabatic)
 
         ! Regridding/remapping is done here, at the end of the thermodynamical time step
@@ -997,8 +1002,8 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       call cpu_clock_end(id_clock_thermo)
 
       call cpu_clock_begin(id_clock_diagnostics)
-      call calculate_diagnostic_fields(u, v, h, CS%uh, CS%vh, CS%tv, dtnt, &
-                                       grid, CS%diagnostics_CSp)
+      call calculate_diagnostic_fields(u, v, h, CS%uh, CS%vh, CS%tv, &
+                          CS%ADp, CS%CDp, dtnt, grid, CS%diagnostics_CSp)
       call cpu_clock_end(id_clock_diagnostics)
 
       if (CS%id_T > 0) call post_data(CS%id_T, CS%tv%T, CS%diag)
@@ -1457,6 +1462,9 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   if (CS%use_temperature) then
     MOM_internal_state%T => CS%T ; MOM_internal_state%S => CS%S
   endif
+
+  CS%CDp%uh => CS%uh ; CS%CDp%vh => CS%vh
+
   if (CS%interp_p_surf) then
     allocate(CS%p_surf_prev(isd:ied,jsd:jed)) ; CS%p_surf_prev(:,:) = 0.0
   endif
@@ -1545,34 +1553,33 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     if (CS%legacy_split) then
       call initialize_dyn_legacy_split(CS%u, CS%v, CS%h, CS%uh, CS%vh, eta, Time, &
                   grid, param_file, diag, CS%dyn_legacy_split_CSp, CS%restart_CSp, &
-                  CS%dt, MOM_internal_state, CS%VarMix, CS%MEKE, init_CS%OBC, &
-                  CS%ALE_CSp, CS%visc, dirs, CS%ntrunc)
+                  CS%dt, CS%ADp, CS%CDp, MOM_internal_state, CS%VarMix, CS%MEKE, &
+                  init_CS%OBC, CS%ALE_CSp, CS%visc, dirs, CS%ntrunc)
     else
       call initialize_dyn_split_RK2(CS%u, CS%v, CS%h, CS%uh, CS%vh, eta, Time, &
                   grid, param_file, diag, CS%dyn_split_RK2_CSp, CS%restart_CSp, &
-                  CS%dt, MOM_internal_state, CS%VarMix, CS%MEKE, init_CS%OBC, &
-                  CS%ALE_CSp, CS%visc, dirs, CS%ntrunc)
+                  CS%dt, CS%ADp, CS%CDp, MOM_internal_state, CS%VarMix, CS%MEKE, &
+                  init_CS%OBC, CS%ALE_CSp, CS%visc, dirs, CS%ntrunc)
     endif
   else
     if (CS%use_RK2) then
       call initialize_dyn_unsplit_RK2(CS%u, CS%v, CS%h, Time, grid, &
                 param_file, diag, CS%dyn_unsplit_RK2_CSp, CS%restart_CSp, &
-                MOM_internal_state, init_CS%OBC, CS%ALE_CSp, CS%visc, dirs, CS%ntrunc)
+                CS%ADp, CS%CDp, MOM_internal_state, init_CS%OBC, CS%ALE_CSp, CS%visc, dirs, CS%ntrunc)
     else
       call initialize_dyn_unsplit(CS%u, CS%v, CS%h, Time, grid, &
                 param_file, diag, CS%dyn_unsplit_CSp, CS%restart_CSp, &
-                MOM_internal_state, init_CS%OBC, CS%ALE_CSp, CS%visc, dirs, CS%ntrunc)
+                CS%ADp, CS%CDp, MOM_internal_state, init_CS%OBC, CS%ALE_CSp, CS%visc, dirs, CS%ntrunc)
     endif
   endif
 
-  call thickness_diffuse_init(Time, grid, param_file, diag, CS%thickness_diffuse_CSp)
+  call thickness_diffuse_init(Time, grid, param_file, diag, CS%CDp, CS%thickness_diffuse_CSp)
   if (CS%mixedlayer_restrat) &
     call mixedlayer_restrat_init(Time, grid, param_file, diag, CS%mixedlayer_restrat_CSp)
   if (associated(init_CS%OBC)) CS%OBC => init_CS%OBC
 
-  call MOM_diagnostics_init(MOM_internal_state, Time, grid, param_file, &
-                             diag, CS%diagnostics_CSp)
-
+  call MOM_diagnostics_init(MOM_internal_state, CS%ADp, CS%CDp, Time, grid, &
+                            param_file, diag, CS%diagnostics_CSp)
 
 
   CS%Z_diag_interval = set_time(int((CS%dt_therm) * &
@@ -1588,14 +1595,14 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
                                CS%tracer_flow_CSp, CS%diag_to_Z_CSp)
   else
     call diabatic_driver_init(Time, grid, param_file, CS%useALEalgorithm, diag, &
-                              CS%diabatic_CSp, CS%tracer_flow_CSp, &
+                              CS%ADp, CS%CDp, CS%diabatic_CSp, CS%tracer_flow_CSp, &
                               init_CS%sponge_CSp, CS%diag_to_Z_CSp)
   endif
 
   call tracer_advect_init(Time, grid, param_file, diag, CS%tracer_adv_CSp)
   call tracer_hor_diff_init(Time, grid, param_file, diag, CS%tracer_diff_CSp)
 
-  call register_diags(Time, grid, CS)
+  call register_diags(Time, grid, CS, CS%ADp)
 
   if (CS%use_temperature) then
     ! If needed T_adx, etc., would have been allocated in register_diags.
@@ -1701,13 +1708,16 @@ end subroutine unitTests
 
 ! ============================================================================
 
-subroutine register_diags(Time, G, CS)
+subroutine register_diags(Time, G, CS, ADp)
   type(time_type),           intent(in)    :: Time
   type(ocean_grid_type),     intent(inout) :: G
-  type(MOM_control_struct), intent(inout) :: CS
+  type(MOM_control_struct),  intent(inout) :: CS
+  type(accel_diag_ptrs),     intent(inout) :: ADp
 ! Arguments: Time - The current model time.
 !  (in)      G - The ocean's grid structure.
 !  (in)      CS - The control structure set up by initialize_MOM.
+!  (inout)   ADp - A structure pointing to the various accelerations in
+!                  the momentum equations.
   character(len=48) :: thickness_units, flux_units, T_flux_units, S_flux_units
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = G%ke
@@ -1814,11 +1824,11 @@ subroutine register_diags(Time, G, CS)
   if (CS%id_Sdiffy_2d > 0) call safe_alloc_ptr(CS%S_diffy_2d,isd,ied,JsdB,JedB)
 
   if (CS%debug_truncations) then
-    call safe_alloc_ptr(CS%diag%du_dt_visc,IsdB,IedB,jsd,jed,nz)
-    call safe_alloc_ptr(CS%diag%dv_dt_visc,isd,ied,JsdB,JedB,nz)
+    call safe_alloc_ptr(ADp%du_dt_visc,IsdB,IedB,jsd,jed,nz)
+    call safe_alloc_ptr(ADp%dv_dt_visc,isd,ied,JsdB,JedB,nz)
     if (.not.CS%adiabatic) then
-      call safe_alloc_ptr(CS%diag%du_dt_dia,IsdB,IedB,jsd,jed,nz)
-      call safe_alloc_ptr(CS%diag%dv_dt_dia,isd,ied,JsdB,JedB,nz)
+      call safe_alloc_ptr(ADp%du_dt_dia,IsdB,IedB,jsd,jed,nz)
+      call safe_alloc_ptr(ADp%dv_dt_dia,isd,ied,JsdB,JedB,nz)
     endif
   endif
 

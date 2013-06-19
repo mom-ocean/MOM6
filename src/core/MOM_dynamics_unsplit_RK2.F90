@@ -66,7 +66,7 @@ module MOM_dynamics_unsplit_RK2
 !********+*********+*********+*********+*********+*********+*********+**
 
 use MOM_variables, only : vertvisc_type, ocean_OBC_type, thermo_var_ptrs
-use MOM_variables, only : ocean_internal_state
+use MOM_variables, only : ocean_internal_state, accel_diag_ptrs, cont_diag_ptrs
 use MOM_forcing_type, only : forcing 
 use MOM_checksum_packages, only : MOM_thermo_chksum, MOM_state_chksum, MOM_accel_chksum
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
@@ -145,6 +145,15 @@ type, public :: MOM_dyn_unsplit_RK2_CS ; private
   type(diag_ptrs), pointer :: diag ! A structure containing pointers to
                                    ! diagnostic fields that might be calculated
                                    ! and shared between modules.
+  type(accel_diag_ptrs), pointer :: ADp ! A structure pointing to the various
+                                   ! accelerations in the momentum equations,
+                                   ! which can later be used to calculate
+                                   ! derived diagnostics like energy budgets.
+  type(cont_diag_ptrs), pointer :: CDp ! A structure with pointers to various
+                                   ! terms in the continuity equations,
+                                   ! which can later be used to calculate
+                                   ! derived diagnostics like energy budgets.
+
 ! The remainder of the structure is pointers to child subroutines' control strings.
   type(hor_visc_CS), pointer :: hor_visc_CSp => NULL()
   type(continuity_CS), pointer :: continuity_CSp => NULL()
@@ -292,7 +301,7 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
 
 ! CAu = -(f+zeta)/h_av vh + d/dx KE  (function of u[n-1] and uh[n-1])
   call cpu_clock_begin(id_clock_Cor)
-  call CorAdCalc(u_in, v_in, h_av, uh, vh, CS%CAu, CS%CAv, G, CS%CoriolisAdv_CSp)
+  call CorAdCalc(u_in, v_in, h_av, uh, vh, CS%CAu, CS%CAv, CS%ADp, G, CS%CoriolisAdv_CSp)
   call cpu_clock_end(id_clock_Cor)
 
 ! PFu = d/dx M(h_av,T,S)  (function of h[n-1/2])
@@ -351,7 +360,7 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
                       CS%set_visc_CSp)
   call disable_averaging(CS%diag)
   call vertvisc_coef(up, vp, h_av, fluxes, visc, dt_pred, G, CS%vertvisc_CSp)
-  call vertvisc(up, vp, h_av, fluxes, visc, dt_pred, CS%OBC, G, &
+  call vertvisc(up, vp, h_av, fluxes, visc, dt_pred, CS%OBC, CS%ADp, CS%CDp, G, &
                 CS%vertvisc_CSp)
   call cpu_clock_end(id_clock_vertvisc)
   call cpu_clock_begin(id_clock_pass)
@@ -379,7 +388,7 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
 
 ! CAu = -(f+zeta(up))/h_av vh + d/dx KE(up)  (function of up[n-1/2], h[n-1/2])
   call cpu_clock_begin(id_clock_Cor)
-  call CorAdCalc(up, vp, h_av, uh, vh, CS%CAu, CS%CAv, &
+  call CorAdCalc(up, vp, h_av, uh, vh, CS%CAu, CS%CAv, CS%ADp, &
                  G, CS%CoriolisAdv_CSp)
   call cpu_clock_end(id_clock_Cor)
 
@@ -404,10 +413,10 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
 ! u[n] <- u*[n] + dt d/dz visc d/dz u[n]
   call cpu_clock_begin(id_clock_vertvisc)
   call vertvisc_coef(up, vp, h_av, fluxes, visc, dt, G, CS%vertvisc_CSp)
-  call vertvisc(up, vp, h_av, fluxes, visc, dt, CS%OBC, G, &
+  call vertvisc(up, vp, h_av, fluxes, visc, dt, CS%OBC, CS%ADp, CS%CDp, G, &
                 CS%vertvisc_CSp, CS%taux_bot, CS%tauy_bot)
   call vertvisc_coef(u_in, v_in, h_av, fluxes, visc, dt, G, CS%vertvisc_CSp)
-  call vertvisc(u_in, v_in, h_av, fluxes, visc, dt, CS%OBC, G, &
+  call vertvisc(u_in, v_in, h_av, fluxes, visc, dt, CS%OBC, CS%ADp, CS%CDp, G, &
                 CS%vertvisc_CSp, CS%taux_bot, CS%tauy_bot)
   call cpu_clock_end(id_clock_vertvisc)
   call cpu_clock_begin(id_clock_pass)
@@ -512,7 +521,8 @@ subroutine register_restarts_dyn_unsplit_RK2(G, param_file, CS, restart_CS)
 end subroutine register_restarts_dyn_unsplit_RK2
 
 subroutine initialize_dyn_unsplit_RK2(u, v, h, Time, G, param_file, diag, CS, &
-                                      restart_CS, MIS, OBC, ALE_CSp, visc, dirs, ntrunc)
+                                      restart_CS, Accel_diag, Cont_diag, MIS, &
+                                      OBC, ALE_CSp, visc, dirs, ntrunc)
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(inout) :: u
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(inout) :: v
   real, dimension(NIMEM_,NJMEM_,NKMEM_) , intent(inout) :: h
@@ -522,6 +532,8 @@ subroutine initialize_dyn_unsplit_RK2(u, v, h, Time, G, param_file, diag, CS, &
   type(diag_ptrs),                target, intent(inout) :: diag
   type(MOM_dyn_unsplit_RK2_CS),           pointer       :: CS
   type(MOM_restart_CS),                   pointer       :: restart_CS
+  type(accel_diag_ptrs),          target, intent(inout) :: Accel_diag
+  type(cont_diag_ptrs),           target, intent(inout) :: Cont_diag
   type(ocean_internal_state),             intent(inout) :: MIS
   type(ocean_OBC_type),                   pointer       :: OBC
   type(ALE_CS),                           pointer       :: ALE_CSp
@@ -539,6 +551,11 @@ subroutine initialize_dyn_unsplit_RK2(u, v, h, Time, G, param_file, diag, CS, &
 !  (in)      diag - A structure containing pointers to common diagnostic fields.
 !  (inout)   CS - The control structure set up by initialize_dyn_unsplit_RK2.
 !  (in)      restart_CS - A pointer to the restart control structure.
+!  (inout)   Accel_diag - A set of pointers to the various accelerations in
+!                  the momentum equations, which can be used for later derived
+!                  diagnostics, like energy budgets.
+!  (inout)   Cont_diag - A structure with pointers to various terms in the
+!                   continuity equations.
 !  (inout)   MIS - The "MOM6 Internal State" structure, used to pass around
 !                  pointers to various arrays for diagnostic purposes.
 !  (in)      OBC - If open boundary conditions are used, this points to the
@@ -596,13 +613,18 @@ subroutine initialize_dyn_unsplit_RK2(u, v, h, Time, G, param_file, diag, CS, &
   MIS%PFu => CS%PFu ; MIS%PFv => CS%PFv
   MIS%CAu => CS%CAu ; MIS%CAv => CS%CAv
 
+  CS%ADp => Accel_diag ; CS%CDp => Cont_diag
+  Accel_diag%diffu => CS%diffu ; Accel_diag%diffv => CS%diffv
+  Accel_diag%PFu => CS%PFu ; Accel_diag%PFv => CS%PFv
+  Accel_diag%CAu => CS%CAu ; Accel_diag%CAv => CS%CAv
+
   call continuity_init(Time, G, param_file, diag, CS%continuity_CSp)
-  call CoriolisAdv_init(Time, G, param_file, diag, CS%CoriolisAdv_CSp)
+  call CoriolisAdv_init(Time, G, param_file, diag, CS%ADp, CS%CoriolisAdv_CSp)
   if (use_tides) call tidal_forcing_init(Time, G, param_file, CS%tides_CSp)
   call PressureForce_init(Time, G, param_file, diag, CS%PressureForce_CSp, &
                           CS%tides_CSp)
   call hor_visc_init(Time, G, param_file, diag, CS%hor_visc_CSp)
-  call vertvisc_init(MIS, Time, G, param_file, diag, dirs, &
+  call vertvisc_init(MIS, Time, G, param_file, diag, CS%ADp, dirs, &
                      ntrunc, CS%vertvisc_CSp)
   call set_visc_init(Time, G, param_file, diag, visc, CS%set_visc_CSp)
 

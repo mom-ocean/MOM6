@@ -66,8 +66,9 @@ use MOM_diag_mediator, only : post_data, query_averaging_enabled, diag_ptrs
 use MOM_diag_mediator, only : register_diag_field, safe_alloc_ptr, time_type
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING
 use MOM_file_parser, only : get_param, read_param, log_version, param_file_type
-use MOM_string_functions, only : uppercase
 use MOM_grid, only : ocean_grid_type
+use MOM_variables, only : accel_diag_ptrs
+use MOM_string_functions, only : uppercase
 
 implicit none ; private
 
@@ -161,7 +162,7 @@ character*(20), parameter :: PV_ADV_UPWIND1_STRING = "PV_ADV_UPWIND1"
 
 contains
 
-subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, G, CS)
+subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, AD, G, CS)
   real, intent(in),  dimension(NIMEMB_,NJMEM_,NKMEM_) :: u
   real, intent(in),  dimension(NIMEM_,NJMEMB_,NKMEM_) :: v
   real, intent(in),  dimension(NIMEM_,NJMEM_,NKMEM_)  :: h
@@ -169,6 +170,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, G, CS)
   real, intent(in),  dimension(NIMEM_,NJMEMB_,NKMEM_) :: vh
   real, intent(out), dimension(NIMEMB_,NJMEM_,NKMEM_) :: CAu
   real, intent(out), dimension(NIMEM_,NJMEMB_,NKMEM_) :: CAv
+  type(accel_diag_ptrs), intent(inout)                :: AD
   type(ocean_grid_type), intent(in)                   :: G
   type(CoriolisAdv_CS), pointer                       :: CS
 !    This subroutine calculates the Coriolis and momentum advection
@@ -184,6 +186,8 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, G, CS)
 !                  advection terms, in m s-2.
 !  (out)     CAv - Meridional acceleration due to Coriolis and
 !                  momentum advection terms, in m s-2.
+!  (in)      AD - A structure pointing to the various accelerations in
+!                 the momentum equations.
 !  (in)      G - The ocean's grid structure.
 !  (in)      CS - The control structure returned by a previous call to
 !                 CoriolisAdv_init.
@@ -333,7 +337,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, G, CS)
 
       if (ASSOCIATED(CS%diag%rv)) CS%diag%rv(I,J,k) = relative_vorticity
       if (ASSOCIATED(CS%diag%q) ) CS%diag%q(I,J,k) = q(I,J)
-      if (ASSOCIATED(CS%diag%rv_x_v) .or. ASSOCIATED(CS%diag%rv_x_u)) &
+      if (ASSOCIATED(AD%rv_x_v) .or. ASSOCIATED(AD%rv_x_u)) &
         q2(I,J) = relative_vorticity * Ih
     enddo ; enddo
 
@@ -418,8 +422,6 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, G, CS)
         ! This sometimes matters with some types of open boundary conditions.
         if (G%dy_Cu(I,j) == 0.0) uhc = uhm
 
-        if (ASSOCIATED(CS%diag%uh_cent)) CS%diag%uh_cent(i,j,k) = uhc
-
         if (abs(uhc) < 0.1*abs(uhm)) then
           uhm = 10.0*uhc
         elseif (abs(uhc) > c1*abs(uhm)) then
@@ -434,16 +436,12 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, G, CS)
         else
           uh_max(i,j) = uhm ; uh_min(i,j) = uhc
         endif
-        if (ASSOCIATED(CS%diag%uh_max)) CS%diag%uh_max(i,j,k) = uh_max(i,j)
-        if (ASSOCIATED(CS%diag%uh_min)) CS%diag%uh_min(i,j,k) = uh_min(i,j)
       enddo ; enddo
       do j=js-1,je ; do I=Isq,Ieq+1
         vhc = 0.5 * (G%dx_Cv(i,J) * v(i,J,k)) * (h(i,j,k) + h(i,j+1,k))
         vhm = vh(i,J,k)
         ! This sometimes matters with some types of open boundary conditions.
         if (G%dx_Cv(i,J) == 0.0) vhc = vhm
-
-        if (ASSOCIATED(CS%diag%vh_cent)) CS%diag%vh_cent(i,j,k) = vhc
 
         if (abs(vhc) < 0.1*abs(vhm)) then
           vhm = 10.0*vhc
@@ -459,8 +457,6 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, G, CS)
         else
           vh_max(i,j) = vhm ; vh_min(i,j) = vhc
         endif
-        if (ASSOCIATED(CS%diag%vh_max)) CS%diag%vh_max(i,j,k) = vh_max(i,j)
-        if (ASSOCIATED(CS%diag%vh_min)) CS%diag%vh_min(i,j,k) = vh_min(i,j)
       enddo ; enddo
     endif
 
@@ -572,7 +568,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, G, CS)
     ! Term - d(KE)/dx.
     do j=js,je ; do I=Isq,Ieq
       CAu(I,j,k) = CAu(I,j,k) - KEx(I,j)
-      if (ASSOCIATED(CS%diag%gradKEu)) CS%diag%gradKEu(I,j,k) = -KEx(I,j)
+      if (ASSOCIATED(AD%gradKEu)) AD%gradKEu(I,j,k) = -KEx(I,j)
     enddo ; enddo
 
 
@@ -678,31 +674,31 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, G, CS)
     ! Term - d(KE)/dy.
     do J=Jsq,Jeq ; do i=is,ie
       CAv(i,J,k) = CAv(i,J,k) - KEy(i,J)
-      if (ASSOCIATED(CS%diag%gradKEv)) CS%diag%gradKEv(i,J,k) = -KEy(i,J)
+      if (ASSOCIATED(AD%gradKEv)) AD%gradKEv(i,J,k) = -KEy(i,J)
     enddo ; enddo
 
-    if (ASSOCIATED(CS%diag%rv_x_u) .or. ASSOCIATED(CS%diag%rv_x_v)) then
+    if (ASSOCIATED(AD%rv_x_u) .or. ASSOCIATED(AD%rv_x_v)) then
 ! Calculate the Coriolis-like acceleration due to relative vorticity.
       if (CS%Coriolis_Scheme == SADOURNY75_ENERGY) then
-        if (ASSOCIATED(CS%diag%rv_x_u)) then
+        if (ASSOCIATED(AD%rv_x_u)) then
           do J=Jsq,Jeq ; do i=is,ie
-            CS%diag%rv_x_u(i,j,k) = - 0.25* &
+            AD%rv_x_u(i,j,k) = - 0.25* &
               (q2(I-1,j)*(uh(I-1,j,k) + uh(I-1,j+1,k)) + &
                q2(I,j)*(uh(I,j,k) + uh(I,j+1,k))) * G%IdyCv(i,J)
           enddo ; enddo
         endif
 
-        if (ASSOCIATED(CS%diag%rv_x_v)) then
+        if (ASSOCIATED(AD%rv_x_v)) then
           do j=js,je ; do I=Isq,Ieq
-            CS%diag%rv_x_v(I,j,k) = 0.25 * &
+            AD%rv_x_v(I,j,k) = 0.25 * &
               (q2(I,j) * (vh(i+1,J,k) + vh(i,J,k)) + &
                q2(I,j-1) * (vh(i,J-1,k) + vh(i+1,J-1,k))) * G%IdxCu(I,j)
           enddo ; enddo
         endif
       else
-        if (ASSOCIATED(CS%diag%rv_x_u)) then
+        if (ASSOCIATED(AD%rv_x_u)) then
           do J=Jsq,Jeq ; do i=is,ie
-            CS%diag%rv_x_u(i,J,k) = -G%IdyCv(i,J) * C1_12 * &
+            AD%rv_x_u(i,J,k) = -G%IdyCv(i,J) * C1_12 * &
               ((q2(I,J) + q2(I-1,J) + q2(I-1,J-1)) * uh(I-1,j,k) + &
                (q2(I-1,J) + q2(I,J) + q2(I,J-1)) * uh(I,j,k) + &
                (q2(I-1,J) + q2(I,J+1) + q2(I,J)) * uh(I,j+1,k) + &
@@ -710,9 +706,9 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, G, CS)
           enddo ; enddo
         endif
 
-        if (ASSOCIATED(CS%diag%rv_x_v)) then
+        if (ASSOCIATED(AD%rv_x_v)) then
           do j=js,je ; do I=Isq,Ieq
-            CS%diag%rv_x_v(I,j,k) = G%IdxCu(I,j) * C1_12 * &
+            AD%rv_x_v(I,j,k) = G%IdxCu(I,j) * C1_12 * &
               ((q2(I+1,J) + q2(I,J) + q2(I,J-1)) * vh(i+1,J,k) + &
                (q2(I-1,J) + q2(I,J) + q2(I,J-1)) * vh(i,J,k) + &
                (q2(I-1,J-1) + q2(I,J) + q2(I,J-1)) * vh(i,J-1,k) + &
@@ -729,10 +725,10 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, G, CS)
   if (query_averaging_enabled(CS%diag)) then
     if (CS%id_rv > 0) call post_data(CS%id_rv, CS%diag%rv, CS%diag)
     if (CS%id_PV > 0) call post_data(CS%id_PV, CS%diag%q, CS%diag)
-    if (CS%id_gKEu>0) call post_data(CS%id_gKEu, CS%diag%gradKEu, CS%diag)
-    if (CS%id_gKEv>0) call post_data(CS%id_gKEv, CS%diag%gradKEv, CS%diag)
-    if (CS%id_rvxu > 0) call post_data(CS%id_rvxu, CS%diag%rv_x_u, CS%diag)
-    if (CS%id_rvxv > 0) call post_data(CS%id_rvxv, CS%diag%rv_x_v, CS%diag)
+    if (CS%id_gKEu>0) call post_data(CS%id_gKEu, AD%gradKEu, CS%diag)
+    if (CS%id_gKEv>0) call post_data(CS%id_gKEv, AD%gradKEv, CS%diag)
+    if (CS%id_rvxu > 0) call post_data(CS%id_rvxu, AD%rv_x_u, CS%diag)
+    if (CS%id_rvxv > 0) call post_data(CS%id_rvxv, AD%rv_x_v, CS%diag)
   endif
 
 end subroutine CorAdCalc
@@ -825,17 +821,20 @@ end subroutine gradKE
 
 ! =========================================================================================
 
-subroutine CoriolisAdv_init(Time, G, param_file, diag, CS)
+subroutine CoriolisAdv_init(Time, G, param_file, diag, AD, CS)
   type(time_type), target, intent(in)    :: Time
   type(ocean_grid_type),   intent(in)    :: G
   type(param_file_type),   intent(in)    :: param_file
   type(diag_ptrs), target, intent(inout) :: diag
+  type(accel_diag_ptrs),   target, intent(inout) :: AD
   type(CoriolisAdv_CS),    pointer       :: CS
 ! Arguments: Time - The current model time.
 !  (in)      G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
 !  (in)      diag - A structure containing pointers to common diagnostic fields.
+!  (inout)   AD - A structure pointing to the various accelerations in
+!                 the momentum equations.
 !  (in/out)  CS - A pointer that is set to point to the control structure
 !                 for this module
 
@@ -844,7 +843,6 @@ subroutine CoriolisAdv_init(Time, G, param_file, diag, CS)
   character(len=40)  :: mod = "MOM_CoriolisAdv" ! This module's name.
   character(len=20)  :: tmpstr
   character(len=400) :: mesg
-  logical :: debug_truncations
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = G%ke
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
@@ -986,34 +984,19 @@ subroutine CoriolisAdv_init(Time, G, param_file, diag, CS)
 
   CS%id_gKEu = register_diag_field('ocean_model', 'gKEu', G%axesCuL, Time, &
      'Zonal Acceleration from Grad. Kinetic Energy', 'meter-1 second-2')
-  if (CS%id_gKEu > 0) call safe_alloc_ptr(diag%gradKEu,IsdB,IedB,jsd,jed,nz)
+  if (CS%id_gKEu > 0) call safe_alloc_ptr(AD%gradKEu,IsdB,IedB,jsd,jed,nz)
 
   CS%id_gKEv = register_diag_field('ocean_model', 'gKEv', G%axesCvL, Time, &
      'Meridional Acceleration from Grad. Kinetic Energy', 'meter-1 second-2')
-  if (CS%id_gKEv > 0) call safe_alloc_ptr(diag%gradKEv,isd,ied,JsdB,JedB,nz)
+  if (CS%id_gKEv > 0) call safe_alloc_ptr(AD%gradKEv,isd,ied,JsdB,JedB,nz)
 
   CS%id_rvxu = register_diag_field('ocean_model', 'rvxu', G%axesCvL, Time, &
      'Meridional Acceleration from Relative Vorticity', 'meter-1 second-2')
-  if (CS%id_rvxu > 0) call safe_alloc_ptr(diag%rv_x_u,isd,ied,JsdB,JedB,nz)
+  if (CS%id_rvxu > 0) call safe_alloc_ptr(AD%rv_x_u,isd,ied,JsdB,JedB,nz)
 
   CS%id_rvxv = register_diag_field('ocean_model', 'rvxv', G%axesCuL, Time, &
      'Zonal Acceleration from Relative Vorticity', 'meter-1 second-2')
-  if (CS%id_rvxv > 0) call safe_alloc_ptr(diag%rv_x_v,IsdB,IedB,jsd,jed,nz)
-
-! These are hard-wired diagnostics.
-  call get_param(param_file, mod, "DEBUG_TRUNCATIONS", debug_truncations, &
-                 default=.false.)
-  if (debug_truncations) then
-    call safe_alloc_ptr(diag%uh_min,IsdB,IedB,jsd,jed,nz)
-    call safe_alloc_ptr(diag%uh_max,IsdB,IedB,jsd,jed,nz)
-    call safe_alloc_ptr(diag%uh_lay,IsdB,IedB,jsd,jed,nz)
-    call safe_alloc_ptr(diag%uh_cent,IsdB,IedB,jsd,jed,nz)
-
-    call safe_alloc_ptr(diag%vh_min,isd,ied,JsdB,JedB,nz)
-    call safe_alloc_ptr(diag%vh_max,isd,ied,JsdB,JedB,nz)
-    call safe_alloc_ptr(diag%vh_lay,isd,ied,JsdB,JedB,nz)
-    call safe_alloc_ptr(diag%vh_cent,isd,ied,JsdB,JedB,nz)
-  endif
+  if (CS%id_rvxv > 0) call safe_alloc_ptr(AD%rv_x_v,IsdB,IedB,jsd,jed,nz)
 
   call safe_alloc_ptr(diag%q,IsdB,IedB,JsdB,JedB,nz)
 

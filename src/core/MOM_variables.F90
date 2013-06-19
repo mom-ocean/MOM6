@@ -209,12 +209,55 @@ type, public :: ocean_internal_state
   real, pointer, dimension(:,:,:) :: &
     u => NULL(), v => NULL(), h => NULL()
   real, pointer, dimension(:,:,:) :: &
-    uh => NULL(), vh => NULL(), CAu => NULL(), CAv => NULL(), &
+    uh => NULL(), vh => NULL(), &
+    CAu => NULL(), CAv => NULL(), &
     PFu  => NULL(), PFv => NULL(), diffu => NULL(), diffv => NULL(), &
-    T => NULL(), S => NULL(), pbce => NULL(), &
-    u_accel_bt => NULL(), v_accel_bt => NULL(), &
+    T => NULL(), S => NULL(), &
+    pbce => NULL(), u_accel_bt => NULL(), v_accel_bt => NULL(), &
     u_av => NULL(), v_av => NULL(), u_prev => NULL(), v_prev => NULL()
 end type ocean_internal_state
+
+type, public :: accel_diag_ptrs
+! This structure contains pointers to arrays with accelerations, which can
+! later be used for derived diagnostics, like energy balances.
+
+! Each of the following fields has nz layers.
+  real, pointer :: diffu(:,:,:) => NULL()    ! Accelerations due to along iso-
+  real, pointer :: diffv(:,:,:) => NULL()    ! pycnal viscosity, in m s-2.
+  real, pointer :: CAu(:,:,:) => NULL()      ! Coriolis and momentum advection
+  real, pointer :: CAv(:,:,:) => NULL()      ! accelerations, in m s-2.
+  real, pointer :: PFu(:,:,:) => NULL()      ! Accelerations due to pressure
+  real, pointer :: PFv(:,:,:) => NULL()      ! forces, in m s-2.
+  real, pointer :: du_dt_visc(:,:,:) => NULL()! Accelerations due to vertical
+  real, pointer :: dv_dt_visc(:,:,:) => NULL()! viscosity, in m s-2.
+  real, pointer :: du_dt_dia(:,:,:) => NULL()! Accelerations due to diapycnal
+  real, pointer :: dv_dt_dia(:,:,:) => NULL()! mixing, in m s-2.
+  real, pointer :: du_other(:,:,:) => NULL() ! Velocity changes due to any other
+  real, pointer :: dv_other(:,:,:) => NULL() ! processes that are not due to any
+                                             ! explicit accelerations, in m s-1.
+
+  ! These accelerations are sub-terms included in the accelerations above.
+  real, pointer :: gradKEu(:,:,:) => NULL()  ! gradKEu = - d/dx(u2), in m s-2.
+  real, pointer :: gradKEv(:,:,:) => NULL()  ! gradKEv = - d/dy(u2), in m s-2.
+  real, pointer :: rv_x_v(:,:,:) => NULL()   ! rv_x_v = rv * v at u, in m s-2.
+  real, pointer :: rv_x_u(:,:,:) => NULL()   ! rv_x_u = rv * u at v, in m s-2.
+
+end type accel_diag_ptrs
+
+type, public :: cont_diag_ptrs
+! This structure contains pointers to arrays with accelerations, which can
+! later be used for derived diagnostics, like energy balances.
+
+! Each of the following fields has nz layers.
+  real, pointer :: uh(:,:,:) => NULL()    ! Resolved layer thickness fluxes,
+  real, pointer :: vh(:,:,:) => NULL()    ! in m3 s-1 or kg s-1.
+  real, pointer :: uhGM(:,:,:) => NULL()  ! Thickness diffusion induced
+  real, pointer :: vhGM(:,:,:) => NULL()  ! volume fluxes in m3 s-1.
+
+! Each of the following fields is found at nz+1 interfaces.
+  real, pointer :: diapyc_vel(:,:,:) => NULL()! The net diapycnal velocity,
+
+end type cont_diag_ptrs
 
 type, public :: vertvisc_type
 !   This structure contains vertical viscosities, drag coefficients, and
