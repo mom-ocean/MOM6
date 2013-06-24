@@ -236,6 +236,9 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, AD, G, CS)
     min_fvq, &  ! adjacent values of (-u) or v times
     max_fuq, &  ! the absolute vorticity, in m s-2.
     min_fuq     ! All are defined at q points.
+  real, dimension(SZIB_(G),SZJB_(G),SZK_(G)) :: &
+    PV, &       ! A diagnostic array of the potential vorticities, in m-1 s-1.
+    RV          ! A diagnostic array of the relative vorticities, in s-1.
   real :: fv1, fv2, fu1, fu2   ! (f+rv)*v or (f+rv)*u in m s-2.
   real :: max_fv, max_fu       ! The maximum or minimum of the neighbor-
   real :: min_fv, min_fu       ! max(min)_fu(v)q, in m s-2.
@@ -335,8 +338,8 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, AD, G, CS)
         endif
       endif
 
-      if (ASSOCIATED(CS%diag%rv)) CS%diag%rv(I,J,k) = relative_vorticity
-      if (ASSOCIATED(CS%diag%q) ) CS%diag%q(I,J,k) = q(I,J)
+      if (CS%id_rv > 0) RV(I,J,k) = relative_vorticity
+      if (CS%id_PV > 0) PV(I,J,k) = q(I,J)
       if (ASSOCIATED(AD%rv_x_v) .or. ASSOCIATED(AD%rv_x_u)) &
         q2(I,J) = relative_vorticity * Ih
     enddo ; enddo
@@ -723,8 +726,8 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, AD, G, CS)
 !   Here the various Coriolis-related derived quantities are offered
 ! for averaging.
   if (query_averaging_enabled(CS%diag)) then
-    if (CS%id_rv > 0) call post_data(CS%id_rv, CS%diag%rv, CS%diag)
-    if (CS%id_PV > 0) call post_data(CS%id_PV, CS%diag%q, CS%diag)
+    if (CS%id_rv > 0) call post_data(CS%id_rv, RV, CS%diag)
+    if (CS%id_PV > 0) call post_data(CS%id_PV, PV, CS%diag)
     if (CS%id_gKEu>0) call post_data(CS%id_gKEu, AD%gradKEu, CS%diag)
     if (CS%id_gKEv>0) call post_data(CS%id_gKEv, AD%gradKEv, CS%diag)
     if (CS%id_rvxu > 0) call post_data(CS%id_rvxu, AD%rv_x_u, CS%diag)
@@ -976,11 +979,9 @@ subroutine CoriolisAdv_init(Time, G, param_file, diag, AD, CS)
 
   CS%id_rv = register_diag_field('ocean_model', 'RV', G%axesBL, Time, &
      'Relative Vorticity', 'second-1')
-  if (CS%id_rv > 0) call safe_alloc_ptr(diag%rv,IsdB,IedB,JsdB,JedB,nz)
 
   CS%id_PV = register_diag_field('ocean_model', 'PV', G%axesBL, Time, &
      'Potential Vorticity', 'meter-1 second-1')
-  if (CS%id_PV > 0) call safe_alloc_ptr(diag%q,IsdB,IedB,JsdB,JedB,nz)
 
   CS%id_gKEu = register_diag_field('ocean_model', 'gKEu', G%axesCuL, Time, &
      'Zonal Acceleration from Grad. Kinetic Energy', 'meter-1 second-2')
@@ -997,8 +998,6 @@ subroutine CoriolisAdv_init(Time, G, param_file, diag, AD, CS)
   CS%id_rvxv = register_diag_field('ocean_model', 'rvxv', G%axesCuL, Time, &
      'Zonal Acceleration from Relative Vorticity', 'meter-1 second-2')
   if (CS%id_rvxv > 0) call safe_alloc_ptr(AD%rv_x_v,IsdB,IedB,jsd,jed,nz)
-
-  call safe_alloc_ptr(diag%q,IsdB,IedB,JsdB,JedB,nz)
 
 end subroutine CoriolisAdv_init
 

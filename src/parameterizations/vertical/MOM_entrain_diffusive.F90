@@ -165,8 +165,11 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, CS, ea, eb, &
   real, dimension(SZI_(G),SZK_(G)+1) :: &
     Ent_bl  ! The average entrainment upward and downward across
             ! each interface around the buffer layers, in H.
-  real, allocatable :: &
-    diff_work(:,:,:) ! The work actually done by diffusion across each
+  real, allocatable, dimension(:,:,:) :: &
+    Kd_eff, &     ! The effective diffusivity that actually applies to each
+                  ! layer after the effects of boundary conditions are
+                  ! considered, in m2 s-1.
+    diff_work     ! The work actually done by diffusion across each
                   ! interface, in W m-2.  Sum vertically for the total work.
 
   real :: hm, fm, fr, fk  ! Work variables with units of H, H, H, and H2.
@@ -287,6 +290,7 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, CS, ea, eb, &
   endif
 
   if (CS%id_diff_work > 0) allocate(diff_work(G%isd:G%ied,G%jsd:G%jed,nz+1))
+  if (CS%id_Kd > 0)        allocate(Kd_eff(G%isd:G%ied,G%jsd:G%jed,nz))
 
   correct_density = (CS%correct_density .and. associated(tv%eqn_of_state))
   if (correct_density) pres(:) = tv%P_Ref
@@ -824,7 +828,7 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, CS, ea, eb, &
 
     endif   ! correct_density
 
-    if (ASSOCIATED(CS%diag%Kd)) then
+    if (CS%id_Kd > 0) then
       Idt = 1.0 / dt
       do k=2,nz-1 ; do i=is,ie
         if (k<kb(i)) then ; Kd_here = 0.0 ; else
@@ -832,11 +836,11 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, CS, ea, eb, &
               (eb(i,j,k) - ea(i,j,k+1))) ) / (I2p2dsp1_ds(i,k) * grats(i,k))
         endif
 
-        CS%diag%Kd(i,j,k) = G%H_to_m**2 * (MAX(dtKd(i,k),Kd_here)*Idt)
+        Kd_eff(i,j,k) = G%H_to_m**2 * (MAX(dtKd(i,k),Kd_here)*Idt)
       enddo ; enddo
       do i=is,ie
-        CS%diag%Kd(i,j,1) = G%H_to_m**2 * (dtKd(i,1)*Idt)
-        CS%diag%Kd(i,j,nz) = G%H_to_m**2 * (dtKd(i,nz)*Idt)
+        Kd_eff(i,j,1) = G%H_to_m**2 * (dtKd(i,1)*Idt)
+        Kd_eff(i,j,nz) = G%H_to_m**2 * (dtKd(i,nz)*Idt)
       enddo
     endif
     
@@ -894,7 +898,8 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, CS, ea, eb, &
   enddo ! end of j loop
 
 ! Offer diagnostic fields for averaging.
-  if (CS%id_Kd > 0) call post_data(CS%id_Kd, CS%diag%Kd, CS%diag)
+  if (CS%id_Kd > 0) call post_data(CS%id_Kd, Kd_eff, CS%diag)
+  if (CS%id_Kd > 0) deallocate(Kd_eff)
   if (CS%id_diff_work > 0) call post_data(CS%id_diff_work, diff_work, CS%diag)
   if (CS%id_diff_work > 0) deallocate(diff_work)
 
@@ -2046,8 +2051,7 @@ subroutine entrain_diffusive_init(Time, G, param_file, diag, CS)
                  units="m", default=MAX(100.0*G%Angstrom,1.0e-4*sqrt(dt*Kd)))
 
   CS%id_Kd = register_diag_field('ocean_model', 'Kd', G%axesTL, Time, &
-      'Diapycnal diffusivity', 'meter2 second-1')
-  if (CS%id_Kd > 0) call safe_alloc_ptr(diag%Kd,G%isd,G%ied,G%jsd,G%jed,G%ke)
+      'Diapycnal diffusivity as applied', 'meter2 second-1')
   CS%id_diff_work = register_diag_field('ocean_model', 'diff_work', G%axesTi, Time, &
       'Work actually done by diapycnal diffusion across each interface', 'W m-2')
 

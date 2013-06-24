@@ -41,7 +41,7 @@ public set_axes_info, post_data, register_diag_field, time_type
 public safe_alloc_ptr, safe_alloc_alloc
 public enable_averaging, disable_averaging, query_averaging_enabled
 public diag_mediator_init, diag_mediator_end, set_diag_mediator_grid
-public diag_mediator_close_registration
+public diag_mediator_close_registration, get_diag_time_end
 public diag_axis_init, ocean_register_diag, register_static_field
 
 interface safe_alloc_ptr
@@ -60,17 +60,8 @@ end interface post_data
 !   The following data type contains pointers to diagnostic fields that might
 ! be shared between modules, and also to the variables that control the handling
 ! of model output.
-type, public :: diag_ptrs
-! Each of the following fields has nz+1 levels.
-  real, pointer :: rv(:,:,:) => NULL()       ! Relative vorticity in s-1.
-  real, pointer :: q(:,:,:) => NULL()        ! Potential vorticity, s-1 m-1.
+type, public :: diag_ptrs ; private
 
-  real, pointer :: Ah_h(:,:,:) => NULL()     ! Biharmonic viscosity at h or q
-  real, pointer :: Ah_q(:,:,:) => NULL()     ! points in m4 s-1.
-  real, pointer :: Kh_h(:,:,:) => NULL()     ! Laplacian viscosity at h or q
-  real, pointer :: Kh_q(:,:,:) => NULL()     ! points in m2 s-1.
-  real, pointer :: Kd(:,:,:) => NULL()       ! Diapycnal diffusivity in m2 s-1.
- 
 ! The following fields are used for the output of the data.
   integer :: is, ie, js, je
   integer :: isd, ied, jsd, jed
@@ -387,6 +378,13 @@ function query_averaging_enabled(diag, time_int, time_end)
   if (present(time_end)) time_end = diag%time_end
   query_averaging_enabled = diag%ave_enabled
 end function query_averaging_enabled
+
+function get_diag_time_end(diag)
+  type(diag_ptrs),           intent(in)  :: diag
+  type(time_type) :: get_diag_time_end
+  
+  get_diag_time_end = diag%time_end
+end function get_diag_time_end
 
 subroutine safe_alloc_ptr_1d(ptr, i1, i2)
   real, pointer :: ptr(:)

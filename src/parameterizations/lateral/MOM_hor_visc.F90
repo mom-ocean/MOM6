@@ -241,8 +241,13 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
     sh_xy, &    ! sh_xy is the horizontal shearing strain (du/dy + dv/dx)
                 ! including all metric terms, in s-1.
     str_xy      ! str_xy is the cross term in the stress tensor, in H m2 s-2.
-  real, dimension(SZIB_(G),SZJB_(G), SZK_(G)) :: &
+  real, dimension(SZIB_(G),SZJB_(G),SZK_(G)) :: &
+    Ah_q, &     ! The biharmonic viscosity at corner points, in m4 s-1.
+    Kh_q, &     ! The Laplacian viscosity at corner points, in m2 s-1.
     FrictWork   ! Work released by lateral friction terms in W m-2.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
+    Ah_h, &     ! The biharmonic viscosity at thickness points, in m4 s-1.
+    Kh_h        ! The Laplacian viscosity at thickness points, in m2 s-1.
   real :: Ah        ! Biharmonic viscosity in m4 s-1.
   real :: Kh        ! Laplacian viscosity in m2 s-1.
   real :: AhSm      ! Smagorinsky biharmonic viscosity in m4 s-1.
@@ -377,7 +382,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
           endif
         endif
 
-        if (ASSOCIATED(CS%diag%Kh_h)) CS%diag%Kh_h(i,j,k) = Kh
+        if (CS%id_Kh_h>0) Kh_h(i,j,k) = Kh
 
         str_xx(i,j) = -Kh * sh_xx(i,j)
       else   ! not Laplacian
@@ -404,7 +409,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
           Ah = MIN(Ah, visc_bound_rem*hrat_min*CS%Ah_Max_xx(i,j))
         endif
 
-        if (ASSOCIATED(CS%diag%Ah_h)) CS%diag%Ah_h(i,j,k) = Ah
+        if (CS%id_Ah_h>0) Ah_h(i,j,k) = Ah
 
         str_xx(i,j) = str_xx(i,j) + Ah * &
           (CS%DY_dxT(i,j)*(G%IdyCu(I,j)*u0(I,j) - G%IdyCu(I-1,j)*u0(I-1,j)) - &
@@ -455,7 +460,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
           endif
         endif
 
-        if (ASSOCIATED(CS%diag%Kh_q)) CS%diag%Kh_q(I,J,k) = Kh
+        if (CS%id_Kh_q>0) Kh_q(I,J,k) = Kh
 
         str_xy(I,J) = -Kh * sh_xy(I,J)
       else   ! not Laplacian
@@ -482,7 +487,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
           Ah = MIN(Ah, visc_bound_rem*hrat_min*CS%Ah_Max_xy(I,J))
         endif
 
-        if (ASSOCIATED(CS%diag%Ah_q)) CS%diag%Ah_q(I,J,k) = Ah
+        if (CS%id_Ah_q>0) Ah_q(I,J,k) = Ah
 
         str_xy(I,J) = str_xy(I,J) + Ah * &
             (CS%DX_dyBu(I,J)*(u0(I,j+1)*G%IdxCu(I,j+1) - u0(I,j)*G%IdxCu(I,j)) + &
@@ -552,10 +557,10 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
   if (CS%id_diffu>0) call post_data(CS%id_diffu, diffu, CS%diag)
   if (CS%id_diffv>0) call post_data(CS%id_diffv, diffv, CS%diag)
   if (CS%id_FrictWork>0) call post_data(CS%id_FrictWork, FrictWork, CS%diag)
-  if (CS%id_Ah_h>0) call post_data(CS%id_Ah_h, CS%diag%Ah_h, CS%diag)
-  if (CS%id_Ah_q>0) call post_data(CS%id_Ah_q, CS%diag%Ah_q, CS%diag)
-  if (CS%id_Kh_h>0) call post_data(CS%id_Kh_h, CS%diag%Kh_h, CS%diag)
-  if (CS%id_Kh_q>0) call post_data(CS%id_Kh_q, CS%diag%Kh_q, CS%diag)
+  if (CS%id_Ah_h>0) call post_data(CS%id_Ah_h, Ah_h, CS%diag)
+  if (CS%id_Ah_q>0) call post_data(CS%id_Ah_q, Ah_q, CS%diag)
+  if (CS%id_Kh_h>0) call post_data(CS%id_Kh_h, Kh_h, CS%diag)
+  if (CS%id_Kh_q>0) call post_data(CS%id_Kh_q, Kh_q, CS%diag)
 
 end subroutine horizontal_viscosity
 
@@ -1017,19 +1022,15 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
 
   CS%id_Ah_h = register_diag_field('ocean_model', 'Ahh', G%axesTL, Time, &
       'Biharmonic Horizontal Viscosity at h Points', 'meter4 second-1')
-  if (CS%id_Ah_h>0) call safe_alloc_ptr(CS%diag%Ah_h,isd,ied,jsd,jed,nz)
 
   CS%id_Ah_q = register_diag_field('ocean_model', 'Ahq', G%axesBL, Time, &
       'Biharmonic Horizontal Viscosity at q Points', 'meter4 second-1')
-  if (CS%id_Ah_q>0) call safe_alloc_ptr(diag%Ah_q,IsdB,IedB,JsdB,JedB,nz)
 
   CS%id_Kh_h = register_diag_field('ocean_model', 'Khh', G%axesTL, Time, &
       'Laplacian Horizontal Viscosity at h Points', 'meter2 second-1')
-  if (CS%id_Kh_h > 0) call safe_alloc_ptr(diag%Kh_h,isd,ied,jsd,jed,nz)
 
   CS%id_Kh_q = register_diag_field('ocean_model', 'Khq', G%axesBL, Time, &
       'Laplacian Horizontal Viscosity at q Points', 'meter2 second-1')
-  if (CS%id_Kh_q > 0) call safe_alloc_ptr(diag%Kh_q,IsdB,IedB,JsdB,JedB,nz)
 
   CS%id_FrictWork =register_diag_field('ocean_model','FrictWork',G%axesTL,Time,&
       'Integral work done by lateral friction terms', 'Watt meter-2')
