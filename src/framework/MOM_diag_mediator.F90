@@ -71,16 +71,6 @@ type, public :: diag_ptrs
   real, pointer :: Kh_q(:,:,:) => NULL()     ! points in m2 s-1.
   real, pointer :: Kd(:,:,:) => NULL()       ! Diapycnal diffusivity in m2 s-1.
  
-! Each of the following fields has 1 layer.
-  real, pointer :: PFu_bt(:,:) => NULL()     ! Barotropic pressure gradient
-  real, pointer :: PFv_bt(:,:) => NULL()     ! accelerations, in m s-2.
-  real, pointer :: Coru_bt(:,:) => NULL()    ! Barotropic Coriolis accel-
-  real, pointer :: Corv_bt(:,:) => NULL()    ! erations, in m s-2.
-  real, pointer :: Nonlnu_bt(:,:) => NULL()  ! Barotropic nonlinear accel-
-  real, pointer :: Nonlnv_bt(:,:) => NULL()  ! erations, in m s-2.
-  real, pointer :: ubt_flux(:,:) => NULL()   ! Barotropic mass fluxes across
-  real, pointer :: vbt_flux(:,:) => NULL()   ! cell faces, in m3 s-1.
-
 ! The following fields are used for the output of the data.
   integer :: is, ie, js, je
   integer :: isd, ied, jsd, jed

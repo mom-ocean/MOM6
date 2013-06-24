@@ -315,8 +315,6 @@ type, public :: legacy_barotropic_CS ; private
   integer :: isdw, iedw, jsdw, jedw ! The memory limits of the wide halo arrays.
 
   integer :: id_PFu_bt = -1, id_PFv_bt = -1, id_Coru_bt = -1, id_Corv_bt = -1
-  integer :: id_Nonlnu_bt = -1, id_Nonlnv_bt = -1
-  integer :: id_ubt_flux = -1, id_vbt_flux = -1
   integer :: id_ubtforce = -1, id_vbtforce = -1, id_uaccel = -1, id_vaccel = -1
   integer :: id_visc_rem_u = -1, id_visc_rem_v = -1, id_eta_cor = -1
   integer :: id_ubt = -1, id_vbt = -1, id_eta_bt = -1, id_ubtav = -1, id_vbtav = -1
@@ -325,7 +323,7 @@ type, public :: legacy_barotropic_CS ; private
   integer :: id_uhbt_hifreq = -1, id_vhbt_hifreq = -1, id_eta_pred_hifreq = -1
   integer :: id_gtotn = -1, id_gtots = -1, id_gtote = -1, id_gtotw = -1
   integer :: id_Datu_res = -1, id_Datv_res = -1
-  integer :: id_uhbtav = -1, id_frhatu = -1, id_vhbtav = -1, id_frhatv = -1
+  integer :: id_uhbt = -1, id_frhatu = -1, id_vhbt = -1, id_frhatv = -1
   integer :: id_frhatu1 = -1, id_frhatv1 = -1
 end type legacy_barotropic_CS
 
@@ -701,13 +699,14 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
   isvf = is - (num_cycles-1)*stensil ; ievf = ie + (num_cycles-1)*stensil
   jsvf = js - (num_cycles-1)*stensil ; jevf = je + (num_cycles-1)*stensil
 
+  do_ave = query_averaging_enabled(CS%diag)
   find_etaav = present(etaav)
   use_visc_rem = present(visc_rem_u)
   if ((use_visc_rem) .neqv. present(visc_rem_v)) call MOM_error(FATAL, &
       "btstep: Either both visc_rem_u and visc_rem_v or neither"// &
        " one must be present in call to btstep.")
-  find_PF = (ASSOCIATED(CS%diag%PFv_bt) .or. ASSOCIATED(CS%diag%PFu_bt))
-  find_Cor = (ASSOCIATED(CS%diag%Corv_bt) .or. ASSOCIATED(CS%diag%Coru_bt))
+  find_PF = (do_ave .and. ((CS%id_PFu_bt > 0) .or. (CS%id_PFv_bt > 0)))
+  find_Cor = (do_ave .and. ((CS%id_Coru_bt > 0) .or. (CS%id_Corv_bt > 0)))
 
   add_uh0 = .false.
   if (present(uh0)) add_uh0 = associated(uh0)
@@ -1937,15 +1936,6 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
     enddo ; enddo
   enddo
 
-  !   These diagnostics are outside of the query_averaging_enabled test because
-  ! they could be used in the forward algorithm.
-  if (ASSOCIATED(CS%diag%ubt_flux)) then ; do j=js,je ; do I=is-1,ie
-    CS%diag%ubt_flux(I,j) = uhbtav(I,J)
-  enddo ; enddo ; endif
-  if (ASSOCIATED(CS%diag%vbt_flux)) then ; do J=js-1,je ; do i=is,ie
-    CS%diag%vbt_flux(i,J) = vhbtav(i,J)
-  enddo ; enddo ; endif
-
   if (id_clock_calc_post > 0) call cpu_clock_end(id_clock_calc_post)
 
   ! Calculate diagnostic quantities.
@@ -1971,40 +1961,32 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
         CS%vhbt_IC(i,J) = vbt_wtd(i,J) * Datv(i,J) + vhbt0(i,J)
       enddo ; enddo
     endif
-    
-    if (ASSOCIATED(CS%diag%PFu_bt)) then ; do j=js,je ; do I=is-1,ie
-      CS%diag%PFu_bt(I,j) = PFu_bt_sum(I,j) * I_sum_wt_accel
-    enddo ; enddo ; endif
-    if (ASSOCIATED(CS%diag%Coru_bt)) then ; do j=js,je ; do I=is-1,ie
-      CS%diag%Coru_bt(I,j) = Coru_bt_sum(I,j) * I_sum_wt_accel
-    enddo ; enddo ; endif
-    if (ASSOCIATED(CS%diag%Nonlnu_bt)) then
-      do j=js,je ; do I=is-1,ie
-        CS%diag%Nonlnu_bt(I,j) = BT_force_u(I,j)
-      enddo ; enddo
-    endif
-
-    if (ASSOCIATED(CS%diag%PFv_bt)) then ; do J=js-1,je ; do i=is,ie
-      CS%diag%PFv_bt(i,J) = PFv_bt_sum(i,J) * I_sum_wt_accel
-    enddo ; enddo ; endif
-    if (ASSOCIATED(CS%diag%Corv_bt)) then ; do J=js-1,je ; do i=is,ie
-      CS%diag%Corv_bt(i,J) = Corv_bt_sum(i,J) * I_sum_wt_accel
-    enddo ; enddo ; endif
-    if (ASSOCIATED(CS%diag%Nonlnv_bt)) then
-      do J=js-1,je ; do i=is,ie
-        CS%diag%Nonlnv_bt(i,J) = BT_force_v(i,J)
-      enddo ; enddo
-    endif
 
 !  Offer various barotropic terms for averaging.
-    if (CS%id_PFu_bt > 0) call post_data(CS%id_PFu_bt, CS%diag%PFu_bt, CS%diag)
-    if (CS%id_PFv_bt > 0) call post_data(CS%id_PFv_bt, CS%diag%PFv_bt, CS%diag)
-    if (CS%id_Coru_bt > 0) call post_data(CS%id_Coru_bt, CS%diag%Coru_bt, CS%diag)
-    if (CS%id_Corv_bt > 0) call post_data(CS%id_Corv_bt, CS%diag%Corv_bt, CS%diag)
-    if (CS%id_Nonlnu_bt > 0) call post_data(CS%id_Nonlnu_bt, CS%diag%Nonlnu_bt, CS%diag)
-    if (CS%id_Nonlnv_bt > 0) call post_data(CS%id_Nonlnv_bt, CS%diag%Nonlnv_bt, CS%diag)
-    if (CS%id_ubt_flux > 0) call post_data(CS%id_ubt_flux, CS%diag%ubt_flux, CS%diag)
-    if (CS%id_vbt_flux > 0) call post_data(CS%id_vbt_flux, CS%diag%vbt_flux, CS%diag)
+    if (CS%id_PFu_bt > 0) then
+      do j=js,je ; do I=is-1,ie
+        PFu_bt_sum(I,j) = PFu_bt_sum(I,j) * I_sum_wt_accel
+      enddo ; enddo
+      call post_data(CS%id_PFu_bt, PFu_bt_sum(IsdB:IedB,jsd:jed), CS%diag)
+    endif
+    if (CS%id_PFv_bt > 0) then
+      do J=js-1,je ; do i=is,ie
+        PFv_bt_sum(i,J) = PFv_bt_sum(i,J) * I_sum_wt_accel
+      enddo ; enddo
+      call post_data(CS%id_PFv_bt, PFv_bt_sum(isd:ied,JsdB:JedB), CS%diag)
+    endif
+    if (CS%id_Coru_bt > 0) then
+      do j=js,je ; do I=is-1,ie
+        Coru_bt_sum(I,j) = Coru_bt_sum(I,j) * I_sum_wt_accel
+      enddo ; enddo
+      call post_data(CS%id_Coru_bt, Coru_bt_sum(IsdB:IedB,jsd:jed), CS%diag)
+    endif
+    if (CS%id_Corv_bt > 0) then
+      do J=js-1,je ; do i=is,ie
+        Corv_bt_sum(i,J) = Corv_bt_sum(i,J) * I_sum_wt_accel
+      enddo ; enddo
+      call post_data(CS%id_Corv_bt, Corv_bt_sum(isd:ied,JsdB:JedB), CS%diag)
+    endif
     if (CS%id_ubtforce > 0) call post_data(CS%id_ubtforce, BT_force_u(IsdB:IedB,jsd:jed), CS%diag)
     if (CS%id_vbtforce > 0) call post_data(CS%id_vbtforce, BT_force_v(isd:ied,JsdB:JedB), CS%diag)
     if (CS%id_uaccel > 0) call post_data(CS%id_uaccel, u_accel_bt(IsdB:IedB,jsd:jed), CS%diag)
@@ -2028,9 +2010,9 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
     endif
     
     if (CS%id_frhatu > 0) call post_data(CS%id_frhatu, CS%frhatu, CS%diag) 
-    if (CS%id_uhbtav > 0) call post_data(CS%id_uhbtav, uhbtav, CS%diag) 
+    if (CS%id_uhbt > 0) call post_data(CS%id_uhbt, uhbtav, CS%diag) 
     if (CS%id_frhatv > 0) call post_data(CS%id_frhatv, CS%frhatv, CS%diag) 
-    if (CS%id_vhbtav > 0) call post_data(CS%id_vhbtav, vhbtav, CS%diag) 
+    if (CS%id_vhbt > 0) call post_data(CS%id_vhbt, vhbtav, CS%diag) 
 
     if (CS%id_frhatu1 > 0) call post_data(CS%id_frhatu1, CS%frhatu1, CS%diag) 
     if (CS%id_frhatv1 > 0) call post_data(CS%id_frhatv1, CS%frhatv1, CS%diag) 
@@ -3834,14 +3816,6 @@ subroutine legacy_barotropic_init(u, v, h, eta, Time, G, param_file, diag, CS, &
       'Zonal Barotropic Coriolis Acceleration', 'meter second-2')
   CS%id_Corv_bt = register_diag_field('ocean_model', 'CorvBT', G%axesCv1, Time, &
       'Meridional Barotropic Coriolis Acceleration', 'meter second-2')
-  CS%id_Nonlnu_bt = register_diag_field('ocean_model', 'NluBT', G%axesCu1, Time, &
-      'Zonal Barotropic Nonlinear Acceleration', 'meter second-2')
-  CS%id_Nonlnv_bt = register_diag_field('ocean_model', 'NlvBT', G%axesCv1, Time, &
-      'Meridional Barotropic Nonlinear Acceleration', 'meter second-2')
-  CS%id_ubt_flux = register_diag_field('ocean_model', 'uhbt', G%axesCu1, Time, &
-      'Zonal Barotropic Mass Flux', flux_units)
-  CS%id_vbt_flux = register_diag_field('ocean_model', 'vhbt', G%axesCv1, Time, &
-      'Meridional Barotropic Mass Flux', flux_units)
   CS%id_uaccel = register_diag_field('ocean_model', 'u_accel_bt', G%axesCu1, Time, &
       'Barotropic zonal acceleration', 'meter second-2')
   CS%id_vaccel = register_diag_field('ocean_model', 'v_accel_bt', G%axesCv1, Time, &
@@ -3907,19 +3881,11 @@ subroutine legacy_barotropic_init(u, v, h, eta, Time, G, param_file, diag, CS, &
       'Predictor Fractional thickness of layers in u-columns', 'Nondim')
   CS%id_frhatv1 = register_diag_field('ocean_model', 'frhatv1', G%axesCvL, Time, &
       'Predictor Fractional thickness of layers in v-columns', 'Nondim')
-  CS%id_uhbtav = register_diag_field('ocean_model', 'uhbtav', G%axesCu1, Time, &
+  CS%id_uhbt = register_diag_field('ocean_model', 'uhbt', G%axesCu1, Time, &
       'Barotropic zonal transport averaged over a baroclinic step', 'meter3 second-1')
-  CS%id_vhbtav = register_diag_field('ocean_model', 'vhbtav', G%axesCv1, Time, &
+  CS%id_vhbt = register_diag_field('ocean_model', 'vhbt', G%axesCv1, Time, &
       'Barotropic meridional transport averaged over a baroclinic step', 'meter3 second-1')
 
-  if (CS%id_PFu_bt > 0)    call safe_alloc_ptr(diag%PFu_bt, IsdB,IedB,jsd,jed)
-  if (CS%id_PFv_bt > 0)    call safe_alloc_ptr(diag%PFv_bt, isd,ied,JsdB,JedB)
-  if (CS%id_Coru_bt > 0)   call safe_alloc_ptr(diag%Coru_bt, IsdB,IedB,jsd,jed)
-  if (CS%id_Corv_bt > 0)   call safe_alloc_ptr(diag%Corv_bt, isd,ied,JsdB,JedB)
-  if (CS%id_Nonlnu_bt > 0) call safe_alloc_ptr(diag%Nonlnu_bt, IsdB,IedB,jsd,jed)
-  if (CS%id_Nonlnv_bt > 0) call safe_alloc_ptr(diag%Nonlnv_bt, isd,ied,JsdB,JedB)
-  if (CS%id_ubt_flux > 0)  call safe_alloc_ptr(diag%ubt_flux, IsdB,IedB,jsd,jed)
-  if (CS%id_vbt_flux > 0)  call safe_alloc_ptr(diag%vbt_flux, isd,ied,JsdB,JedB)
   if (CS%id_frhatu1 > 0) call safe_alloc_ptr(CS%frhatu1, IsdB,IedB,jsd,jed,nz)
   if (CS%id_frhatv1 > 0) call safe_alloc_ptr(CS%frhatv1, isd,ied,JsdB,JedB,nz)
 

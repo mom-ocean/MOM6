@@ -98,8 +98,6 @@ MESO_025_23L
 #"ocean_model","PFvBT","PFvBT","bt_mom","all",.true.,"none",2
 #"ocean_model","CoruBT","CoruBT","bt_mom","all",.true.,"none",2
 #"ocean_model","CorvBT","CorvBT","bt_mom","all",.true.,"none",2
-#"ocean_model","NluBT","NluBT","bt_mom","all",.true.,"none",2
-#"ocean_model","NlvBT","NlvBT","bt_mom","all",.true.,"none",2
 #"ocean_model","ubtforce","ubtforce","bt_mom","all",.true.,"none",2
 #"ocean_model","vbtforce","vbtforce","bt_mom","all",.true.,"none",2
 #"ocean_model","u_accel_bt","u_accel_bt","bt_mom","all",.true.,"none",2

@@ -117,8 +117,6 @@
 #"ocean_model","PFvBT","PFvBT","bt_mom_%4yr_%3dy","all",.true.,"none",2
 #"ocean_model","CoruBT","CoruBT","bt_mom_%4yr_%3dy","all",.true.,"none",2
 #"ocean_model","CorvBT","CorvBT","bt_mom_%4yr_%3dy","all",.true.,"none",2
-#"ocean_model","NluBT","NluBT","bt_mom_%4yr_%3dy","all",.true.,"none",2
-#"ocean_model","NlvBT","NlvBT","bt_mom_%4yr_%3dy","all",.true.,"none",2
 #"ocean_model","ubtforce","ubtforce","bt_mom_%4yr_%3dy","all",.true.,"none",2
 #"ocean_model","vbtforce","vbtforce","bt_mom_%4yr_%3dy","all",.true.,"none",2
 #"ocean_model","u_accel_bt","u_accel_bt","bt_mom_%4yr_%3dy","all",.true.,"none",2

@@ -121,8 +121,6 @@ GOLD_SIS
 #"ocean_model","PFvBT","PFvBT","ocean_day","all",.true.,"none",2
 #"ocean_model","CoruBT","CoruBT","ocean_day","all",.true.,"none",2
 #"ocean_model","CorvBT","CorvBT","ocean_day","all",.true.,"none",2
-#"ocean_model","NluBT","NluBT","ocean_day","all",.true.,"none",2
-#"ocean_model","NlvBT","NlvBT","ocean_day","all",.true.,"none",2
 #"ocean_model","ubtforce","ubtforce","ocean_day","all",.true.,"none",2
 #"ocean_model","vbtforce","vbtforce","ocean_day","all",.true.,"none",2
 #"ocean_model","u_accel_bt","u_accel_bt","ocean_day","all",.true.,"none",2
