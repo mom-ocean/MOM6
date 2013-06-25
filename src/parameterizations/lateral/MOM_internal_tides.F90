@@ -42,7 +42,7 @@ module MOM_internal_tides
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 use MOM_diag_mediator, only : post_data, query_averaging_enabled, diag_axis_init
-use MOM_diag_mediator, only : register_diag_field, diag_ptrs, safe_alloc_ptr
+use MOM_diag_mediator, only : register_diag_field, diag_ctrl, safe_alloc_ptr
 use MOM_domains, only : pass_var, pass_vector_start, pass_vector_complete
 use MOM_domains, only : AGRID, To_South, To_West, To_All
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
@@ -91,8 +91,8 @@ type, public :: int_tide_CS ; private
   real, allocatable, dimension(:) :: &
     frequency           ! The frequency of each band.
 
-  type(diag_ptrs), pointer :: diag ! A pointer to a structure of shareable
-                        ! ocean diagnostic fields and control variables.
+  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
+                        ! timing of diagnostic output.
   integer :: id_tot_En = -1, id_itide_drag = -1
   integer, allocatable, dimension(:,:) :: id_En_mode, id_En_ang_mode
 end type int_tide_CS
@@ -959,13 +959,13 @@ subroutine internal_tides_init(Time, G, param_file, diag, CS)
   type(time_type),           intent(in) :: Time
   type(ocean_grid_type),     intent(in) :: G
   type(param_file_type),     intent(in) :: param_file
-  type(diag_ptrs), target,   intent(in) :: diag
+  type(diag_ctrl), target,   intent(in) :: diag
   type(int_tide_CS),     pointer    :: CS
 ! Arguments: Time - The current model time.
 !  (in)      G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
-!  (in)      diag - A structure containing pointers to common diagnostic fields.
+!  (in)      diag - A structure that is used to regulate diagnostic output.
 !  (in/out)  CS - A pointer that is set to point to the control structure
 !                 for this module
   real    :: angle_size

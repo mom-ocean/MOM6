@@ -48,7 +48,7 @@ module MOM_surface_forcing
 use MOM_coms, only : reproducing_sum
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock, only : CLOCK_SUBCOMPONENT
-use MOM_diag_mediator, only : post_data, query_averaging_enabled, diag_ptrs
+use MOM_diag_mediator, only : post_data, query_averaging_enabled, diag_ctrl
 use MOM_diag_mediator, only : register_diag_field, safe_alloc_ptr, time_type
 use MOM_domains, only : pass_vector, pass_var, global_field_sum, BITWISE_EXACT_SUM
 use MOM_error_handler, only : MOM_error, WARNING, FATAL, is_root_pe, MOM_mesg
@@ -144,8 +144,8 @@ type, public :: surface_forcing_CS ; private
   logical :: mask_srestore_marginal_seas   ! if true, then mask sss restoring in marginal seas
   real :: max_delta_srestore ! maximum delta salinity used for restoring (duplicates mom4 option)
   real, pointer, dimension(:,:) :: basin_mask => NULL() ! mask for sss restoring
-  type(diag_ptrs), pointer :: diag ! A pointer to a structure of shareable
-                             ! ocean diagnostic fields and control variables.
+  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
+                             ! timing of diagnostic output.
   character(len=200) :: inputdir ! The directory where NetCDF input files are.
 
   logical :: first_call = .true. ! True if convert_IOB_to_fluxes has not been
@@ -718,14 +718,14 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt)
   type(time_type),          intent(in) :: Time
   type(ocean_grid_type),    intent(in) :: G
   type(param_file_type),    intent(in) :: param_file
-  type(diag_ptrs), target,  intent(in) :: diag
+  type(diag_ctrl), target,  intent(in) :: diag
   type(surface_forcing_CS), pointer    :: CS
   logical, optional,       intent(in) :: restore_salt
 ! Arguments: Time - The current model time.
 !  (in)      G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
-!  (in)      diag - A structure containing pointers to common diagnostic fields.
+!  (in)      diag - A structure that is used to regulate diagnostic output.
 !  (in/out)  CS - A pointer that is set to point to the control structure
 !                 for this module
 !  (in)      restore_salt - If present and true, salinity restoring will be

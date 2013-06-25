@@ -44,7 +44,7 @@ module MOM_kappa_shear
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock, only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
-use MOM_diag_mediator, only : diag_ptrs, time_type
+use MOM_diag_mediator, only : diag_ctrl, time_type
 use MOM_checksums, only : hchksum
 use MOM_error_handler, only : MOM_error, is_root_pe, FATAL, WARNING, NOTE
 use MOM_file_parser, only : get_param, log_version, param_file_type
@@ -100,8 +100,8 @@ type, public :: Kappa_shear_CS ! ; private
                              ! no good reason why this should be false.
   logical :: layer_stagger = .false.
   logical :: debug = .false.
-  type(diag_ptrs), pointer :: diag ! A pointer to a structure of shareable
-                            ! ocean diagnostic fields.
+  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
+                            ! timing of diagnostic output.
   integer :: id_Kd_shear = -1, id_TKE = -1
   integer :: id_ILd2 = -1, id_dz_Int = -1
 end type Kappa_shear_CS
@@ -1618,13 +1618,13 @@ subroutine kappa_shear_init(Time, G, param_file, diag, CS)
   type(time_type),         intent(in)    :: Time
   type(ocean_grid_type),   intent(in)    :: G
   type(param_file_type),   intent(in)    :: param_file
-  type(diag_ptrs), target, intent(inout) :: diag
+  type(diag_ctrl), target, intent(inout) :: diag
   type(Kappa_shear_CS),   pointer       :: CS
 ! Arguments: Time - The current model time.
 !  (in)      G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
-!  (in)      diag - A structure containing pointers to common diagnostic fields.
+!  (in)      diag - A structure that is used to regulate diagnostic output.
 !  (in/out)  CS - A pointer that is set to point to the control structure
 !                 for this module
   logical :: merge_mixedlayer

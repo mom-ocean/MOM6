@@ -60,7 +60,7 @@ end interface post_data
 !   The following data type contains pointers to diagnostic fields that might
 ! be shared between modules, and also to the variables that control the handling
 ! of model output.
-type, public :: diag_ptrs ; private
+type, public :: diag_ctrl ; private
 
 ! The following fields are used for the output of the data.
   integer :: is, ie, js, je
@@ -70,7 +70,7 @@ type, public :: diag_ptrs ; private
   type(time_type) :: time_end   ! The end time of the valid
                                 ! interval for any offered field.
   logical :: ave_enabled = .false. ! .true. if averaging is enabled.
-end type diag_ptrs
+end type diag_ctrl
 
 integer :: doc_unit = -1
 
@@ -187,10 +187,9 @@ end subroutine set_axes_info
 
 subroutine set_diag_mediator_grid(G, diag)
   type(ocean_grid_type), intent(inout) :: G
-  type(diag_ptrs),       intent(inout) :: diag
+  type(diag_ctrl),       intent(inout) :: diag
 ! Arguments: G - The ocean's grid structure.
-!  (inout)   diag - A structure containing pointers to common diagnostic fields
-!                   and some control information for diagnostics.
+!  (inout)   diag - A structure that is used to regulate diagnostic output.
   diag%is = G%isc ; diag%ie = G%iec ; diag%js = G%jsc ; diag%je = G%jec
   diag%isd = G%isd ; diag%ied = G%ied ; diag%jsd = G%jsd ; diag%jed = G%jed
 end subroutine set_diag_mediator_grid
@@ -198,14 +197,13 @@ end subroutine set_diag_mediator_grid
 subroutine post_data_2d(diag_field_id, field, diag, is_static, mask)
   integer,           intent(in) :: diag_field_id
   real,              intent(in) :: field(:,:)
-  type(diag_ptrs),   intent(in) :: diag
+  type(diag_ctrl),   intent(in) :: diag
   logical, optional, intent(in) :: is_static
   real,    optional, intent(in) :: mask(:,:)
 ! Arguments: diag_field_id - the id for an output variable returned by a
 !                            previous call to register_diag_field.
 !  (in)      field - The 2-d array being offered for output or averaging.
-!  (inout)   diag - A structure containing pointers to common diagnostic fields
-!                   and some control information for diagnostics.
+!  (inout)   diag - A structure that is used to regulate diagnostic output.
 !  (in,opt)  is_static - If true, this is a static field that is always offered.
 !  (in,opt)  mask - If present, use this real array as the data mask.
   logical :: used, is_stat
@@ -266,14 +264,13 @@ end subroutine post_data_2d
 subroutine post_data_3d(diag_field_id, field, diag, is_static, mask)
   integer,           intent(in) :: diag_field_id
   real,              intent(in) :: field(:,:,:)
-  type(diag_ptrs),   intent(in) :: diag
+  type(diag_ctrl),   intent(in) :: diag
   logical, optional, intent(in) :: is_static
   real,    optional, intent(in) :: mask(:,:,:)
 ! Arguments: diag_field_id - the id for an output variable returned by a
 !                            previous call to register_diag_field.
 !  (in)      field - The 3-d array being offered for output or averaging.
-!  (inout)   diag - A structure containing pointers to common diagnostic fields
-!                   and some control information for diagnostics.
+!  (inout)   diag - A structure that is used to regulate diagnostic output.
 !  (in)      static - If true, this is a static field that is always offered.
 !  (in,opt)  mask - If present, use this real array as the data mask.
   logical :: used  ! The return value of send_data is not used for anything.
@@ -336,15 +333,15 @@ end subroutine post_data_3d
 subroutine enable_averaging(time_int_in, time_end_in, diag)
   real, intent(in) :: time_int_in
   type(time_type), intent(in) :: time_end_in
-  type(diag_ptrs), intent(inout) :: diag
+  type(diag_ctrl), intent(inout) :: diag
 ! This subroutine enables the accumulation of time averages over the
 ! specified time interval.
 
 ! Arguments: time_int_in - the time interval in s over which any
 !                          values that are offered are valid.
 !  (in)      time_end_in - the end time in s of the valid interval.
-!  (inout)   diag - A structure containing pointers to common diagnostic fields
-!                   and some control information for diagnostics.
+!  (inout)   diag - A structure that is used to regulate diagnostic output.
+
 !  if (num_file==0) return
   diag%time_int = time_int_in
   diag%time_end = time_end_in
@@ -353,9 +350,8 @@ end subroutine enable_averaging
 
 ! Call this subroutine to avoid averaging any offered fields.
 subroutine disable_averaging(diag)
-  type(diag_ptrs), intent(inout) :: diag
-! Argument: diag - A structure containing pointers to common diagnostic fields
-!                  and some control information for diagnostics.
+  type(diag_ctrl), intent(inout) :: diag
+! Argument: diag - A structure that is used to regulate diagnostic output.
 
   diag%time_int = 0.0
   diag%ave_enabled = .false.
@@ -365,12 +361,11 @@ end subroutine disable_averaging
 ! Call this subroutine to determine whether the averaging is
 ! currently enabled.  .true. is returned if it is.
 function query_averaging_enabled(diag, time_int, time_end)
-  type(diag_ptrs),           intent(in)  :: diag
+  type(diag_ctrl),           intent(in)  :: diag
   real,            optional, intent(out) :: time_int
   type(time_type), optional, intent(out) :: time_end
   logical :: query_averaging_enabled
-! Arguments: diag - A structure containing pointers to common diagnostic fields
-!                   and some control information for diagnostics.
+! Arguments: diag - A structure that is used to regulate diagnostic output.
 !  (out,opt) time_int - The current setting of diag%time_int, in s.
 !  (out,opt) time_end - The current setting of diag%time_end.
 
@@ -380,9 +375,13 @@ function query_averaging_enabled(diag, time_int, time_end)
 end function query_averaging_enabled
 
 function get_diag_time_end(diag)
-  type(diag_ptrs),           intent(in)  :: diag
+  type(diag_ctrl),           intent(in)  :: diag
   type(time_type) :: get_diag_time_end
-  
+! Argument: diag - A structure that is used to regulate diagnostic output.
+
+!   This function returns the valid end time for diagnostics that are handled
+! outside of the MOM6 infrastructure, such as via the generic tracer code.
+
   get_diag_time_end = diag%time_end
 end function get_diag_time_end
 

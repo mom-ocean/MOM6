@@ -54,7 +54,7 @@ module MOM_PressureForce_Mont
 !********+*********+*********+*********+*********+*********+*********+**
 
 use MOM_diag_mediator, only : post_data, register_diag_field
-use MOM_diag_mediator, only : safe_alloc_ptr, diag_ptrs, time_type
+use MOM_diag_mediator, only : safe_alloc_ptr, diag_ctrl, time_type
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
@@ -77,8 +77,8 @@ type, public :: PressureForce_Mont_CS ; private
                             ! By default, Rho_atm is 0.
   real    :: GFS_scale
   type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
-  type(diag_ptrs), pointer :: diag ! A pointer to a structure of shareable
-                             ! ocean diagnostic fields.
+  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
+                             ! timing of diagnostic output.
   real, pointer :: PFu_bc(:,:,:) => NULL()   ! Accelerations due to pressure
   real, pointer :: PFv_bc(:,:,:) => NULL()   ! gradients deriving from density
                                              ! gradients within layers, m s-2.
@@ -838,14 +838,14 @@ subroutine PressureForce_Mont_init(Time, G, param_file, diag, CS, tides_CSp)
   type(time_type), target, intent(in)    :: Time
   type(ocean_grid_type),   intent(in)    :: G
   type(param_file_type),   intent(in)    :: param_file
-  type(diag_ptrs), target, intent(inout) :: diag
+  type(diag_ctrl), target, intent(inout) :: diag
   type(PressureForce_Mont_CS),  pointer  :: CS
   type(tidal_forcing_CS), optional, pointer :: tides_CSp
 ! Arguments: Time - The current model time.
 !  (in)      G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
-!  (in)      diag - A structure containing pointers to common diagnostic fields.
+!  (in)      diag - A structure that is used to regulate diagnostic output.
 !  (in/out)  CS - A pointer that is set to point to the control structure
 !                 for this module.
 !  (in)      tides_CSp - a pointer to the control structure of the tide module.

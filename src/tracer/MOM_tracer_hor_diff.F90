@@ -47,7 +47,7 @@ module MOM_tracer_hor_diff
 
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock, only : CLOCK_MODULE, CLOCK_ROUTINE
-use MOM_diag_mediator, only : post_data, diag_ptrs
+use MOM_diag_mediator, only : post_data, diag_ctrl
 use MOM_diag_mediator, only : register_diag_field, safe_alloc_ptr, time_type
 use MOM_domains, only : pass_var, pass_vector, sum_across_PEs, max_across_PEs
 use MOM_checksums, only : hchksum
@@ -85,8 +85,8 @@ type, public :: tracer_hor_diff_CS ; private
   logical :: check_diffusive_CFL  ! If true, automatically iterate the diffusion
                             ! to ensure that the diffusive equivalent of the CFL
                             ! limit is not violated.
-  type(diag_ptrs), pointer :: diag ! A pointer to a structure of shareable
-                            ! ocean diagnostic fields and control variables.
+  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
+                            ! timing of diagnostic output.
   logical :: debug          ! If true, write verbose checksums for debugging purposes.
   logical :: first_call = .true.
   integer :: id_KhTr_u = -1, id_KhTr_v = -1
@@ -1205,14 +1205,14 @@ end subroutine tracer_epipycnal_ML_diff
 subroutine tracer_hor_diff_init(Time, G, param_file, diag, CS)
   type(time_type), target,  intent(in)    :: Time
   type(ocean_grid_type),    intent(in)    :: G
-  type(diag_ptrs), target,  intent(inout) :: diag
+  type(diag_ctrl), target,  intent(inout) :: diag
   type(param_file_type),    intent(in)    :: param_file
   type(tracer_hor_diff_CS), pointer       :: CS
 ! Arguments: Time - The current model time.
 !  (in)      G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
-!  (in)      diag - A structure containing pointers to common diagnostic fields.
+!  (in)      diag - A structure that is used to regulate diagnostic output.
 !  (in/out)  CS - A pointer to the control structure for this module
 ! This include declares and sets the variable "version".
 #include "version_variable.h"

@@ -43,7 +43,7 @@ module MOM_PointAccel
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 
-use MOM_diag_mediator, only : diag_ptrs
+use MOM_diag_mediator, only : diag_ctrl
 use MOM_domains, only : pe_here
 use MOM_error_handler, only : MOM_error, NOTE
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
@@ -71,7 +71,7 @@ type, public :: PointAccel_CS ; private
   integer :: max_writes     ! The maximum number of times any PE can write out
                             ! a column's worth of accelerations during a run.
   type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
-  type(diag_ptrs), pointer :: diag ! A pointer to a structure of shareable
+  type(diag_ctrl), pointer :: diag ! A pointer to a structure of shareable
                             ! ocean diagnostic fields.
 ! The following are pointers to many of the state variables and accelerations
 ! that are used to step the physical model forward.  They all use the same
@@ -761,7 +761,7 @@ subroutine PointAccel_init(MIS, Time, G, param_file, diag, dirs, CS)
   type(time_type), target, intent(in) :: Time
   type(ocean_grid_type),   intent(in) :: G
   type(param_file_type),   intent(in) :: param_file
-  type(diag_ptrs), target, intent(inout) :: diag
+  type(diag_ctrl), target, intent(inout) :: diag
   type(directories),       intent(in) :: dirs
   type(PointAccel_CS),     pointer    :: CS
 ! Arguments: MIS - For "MOM Internal State" a set of pointers to the fields and
@@ -770,7 +770,7 @@ subroutine PointAccel_init(MIS, Time, G, param_file, diag, dirs, CS)
 !  (in)      G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
-!  (in)      diag - A structure containing pointers to common diagnostic fields.
+!  (in)      diag - A structure that is used to regulate diagnostic output.
 !  (in)      dirs - A structure containing several relevant directory paths.
 !  (in/out)  CS - A pointer that is set to point to the control structure
 !                 for this module

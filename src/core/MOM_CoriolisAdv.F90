@@ -62,7 +62,7 @@ module MOM_CoriolisAdv
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 
-use MOM_diag_mediator, only : post_data, query_averaging_enabled, diag_ptrs
+use MOM_diag_mediator, only : post_data, query_averaging_enabled, diag_ctrl
 use MOM_diag_mediator, only : register_diag_field, safe_alloc_ptr, time_type
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING
 use MOM_file_parser, only : get_param, read_param, log_version, param_file_type
@@ -128,8 +128,8 @@ type, public :: CoriolisAdv_CS ; private
                              ! available at present if Coriolis scheme is
                              ! SADOURNY75_ENERGY.
   type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
-  type(diag_ptrs), pointer :: diag ! A pointer to a structure of shareable
-                             ! ocean diagnostic fields and control variables.
+  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
+                             ! timing of diagnostic output.
   integer :: id_rv = -1, id_PV = -1, id_gKEu = -1, id_gKEv = -1
   integer :: id_rvxu = -1, id_rvxv = -1
 end type CoriolisAdv_CS
@@ -828,14 +828,14 @@ subroutine CoriolisAdv_init(Time, G, param_file, diag, AD, CS)
   type(time_type), target, intent(in)    :: Time
   type(ocean_grid_type),   intent(in)    :: G
   type(param_file_type),   intent(in)    :: param_file
-  type(diag_ptrs), target, intent(inout) :: diag
+  type(diag_ctrl), target, intent(inout) :: diag
   type(accel_diag_ptrs),   target, intent(inout) :: AD
   type(CoriolisAdv_CS),    pointer       :: CS
 ! Arguments: Time - The current model time.
 !  (in)      G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
-!  (in)      diag - A structure containing pointers to common diagnostic fields.
+!  (in)      diag - A structure that is used to regulate diagnostic output.
 !  (inout)   AD - A structure pointing to the various accelerations in
 !                 the momentum equations.
 !  (in/out)  CS - A pointer that is set to point to the control structure

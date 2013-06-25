@@ -68,7 +68,7 @@ module MOM_surface_forcing
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock, only : CLOCK_MODULE
 use MOM_diag_mediator, only : post_data, query_averaging_enabled
-use MOM_diag_mediator, only : register_diag_field, diag_ptrs, safe_alloc_ptr
+use MOM_diag_mediator, only : register_diag_field, diag_ctrl, safe_alloc_ptr
 use MOM_domains, only : pass_var, pass_vector, AGRID, To_South, To_West, To_All
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
 use MOM_file_parser, only : get_param, log_version, param_file_type
@@ -145,8 +145,8 @@ type, public :: surface_forcing_CS ; private
   type(tracer_flow_control_CS), pointer :: tracer_flow_CSp => NULL()
 !###  type(ctrl_forcing_CS), pointer :: ctrl_forcing_CSp => NULL()
   type(MOM_restart_CS), pointer :: restart_CSp => NULL()
-  type(diag_ptrs), pointer :: diag ! A pointer to a structure of shareable
-                             ! ocean diagnostic fields and control variables.
+  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
+                             ! timing of diagnostic output.
   character(len=200) :: inputdir ! The directory where NetCDF input files are.
   character(len=200) :: wind_config ! Indicator for wind forcing type (2gyre, USER, FILE..)
   character(len=200) :: wind_file   ! If wind_config is "file", file to use
@@ -1216,14 +1216,14 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, tracer_flow_CSp)
   type(time_type),           intent(in) :: Time
   type(ocean_grid_type),     intent(in) :: G
   type(param_file_type),     intent(in) :: param_file
-  type(diag_ptrs), target,   intent(in) :: diag
+  type(diag_ctrl), target,   intent(in) :: diag
   type(surface_forcing_CS),  pointer    :: CS
   type(tracer_flow_control_CS), pointer :: tracer_flow_CSp
 ! Arguments: Time - The current model time.
 !  (in)      G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
-!  (in)      diag - A structure containing pointers to common diagnostic fields.
+!  (in)      diag - A structure that is used to regulate diagnostic output.
 !  (in/out)  CS - A pointer that is set to point to the control structure
 !                 for this module
 !  (in)      tracer_flow_CSp - A pointer to the control structure of the tracer

@@ -83,7 +83,7 @@ module MOM_hor_visc
 !********+*********+*********+*********+*********+*********+*********+**
 
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
-use MOM_diag_mediator, only : diag_ptrs, time_type
+use MOM_diag_mediator, only : diag_ctrl, time_type
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
@@ -181,8 +181,8 @@ type, public :: hor_visc_CS ; private
     Laplac_Const_xy, & ! The Laplacian and biharmonic metric-dependent
     Biharm_Const_xy    ! constants, nondim.
 
-  type(diag_ptrs), pointer :: diag ! A pointer to a structure of shareable
-                             ! ocean diagnostic fields.
+  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
+                             ! timing of diagnostic output.
   integer :: id_diffu = -1, id_diffv = -1, id_Ah_h = -1, id_Ah_q = -1
   integer :: id_Kh_h = -1, id_Kh_q = -1, id_FrictWork = -1
 end type hor_visc_CS
@@ -569,7 +569,7 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
   type(time_type),       intent(in) :: Time
   type(ocean_grid_type), intent(in) :: G
   type(param_file_type), intent(in) :: param_file
-  type(diag_ptrs), target, intent(inout) :: diag
+  type(diag_ctrl), target, intent(inout) :: diag
   type(hor_visc_CS), pointer        :: CS
 !   This subroutine allocates space for and claculates the static variables used
 ! by this module.  The metrics may be effectively 0, 1, or 2-D arrays,
@@ -581,7 +581,7 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
 !  (in)      G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
-!  (in)      diag - A structure containing pointers to common diagnostic fields.
+!  (in)      diag - A structure that is used to regulate diagnostic output.
 !  (in/out)  CS - A pointer that is set to point to the control structure
 !                 for this module
 

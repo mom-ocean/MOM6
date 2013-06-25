@@ -78,7 +78,7 @@ use MOM_cpu_clock, only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
 use MOM_diag_mediator, only : diag_mediator_init, enable_averaging
 use MOM_diag_mediator, only : disable_averaging, post_data, safe_alloc_ptr
 use MOM_diag_mediator, only : register_diag_field, register_static_field
-use MOM_diag_mediator, only : set_diag_mediator_grid, diag_ptrs
+use MOM_diag_mediator, only : set_diag_mediator_grid, diag_ctrl
 use MOM_domains, only : MOM_domains_init, pass_var, pass_vector
 use MOM_domains, only : pass_var_start, pass_var_complete
 use MOM_domains, only : pass_vector_start, pass_vector_complete
@@ -203,9 +203,8 @@ type, public :: MOM_dyn_split_RK2_CS ; private
   integer :: id_uav = -1, id_vav = -1
   integer :: id_u_BT_accel = -1, id_v_BT_accel = -1
 
-  type(diag_ptrs), pointer :: diag ! A structure containing pointers to
-                                   ! diagnostic fields that might be calculated
-                                   ! and shared between modules.
+  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
+                                   ! timing of diagnostic output.
   type(accel_diag_ptrs), pointer :: ADp ! A structure pointing to the various
                                    ! accelerations in the momentum equations,
                                    ! which can later be used to calculate
@@ -1000,7 +999,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, param_file, &
   type(time_type),                target, intent(in)    :: Time
   type(ocean_grid_type),                  intent(inout) :: G
   type(param_file_type),                  intent(in)    :: param_file
-  type(diag_ptrs),                target, intent(inout) :: diag
+  type(diag_ctrl),                target, intent(inout) :: diag
   type(MOM_dyn_split_RK2_CS),             pointer       :: CS
   type(MOM_restart_CS),                   pointer       :: restart_CS
   real,                                   intent(in)    :: dt
@@ -1025,7 +1024,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, param_file, &
 !  (in)      G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
-!  (in)      diag - A structure containing pointers to common diagnostic fields.
+!  (in)      diag - A structure that is used to regulate diagnostic output.
 !  (inout)   CS - The control structure set up by initialize_dyn_split_RK2.
 !  (in)      restart_CS - A pointer to the restart control structure.
 !  (inout)   Accel_diag - A set of pointers to the various accelerations in

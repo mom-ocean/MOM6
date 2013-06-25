@@ -30,7 +30,7 @@ module MOM_MEKE
 
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
-use MOM_diag_mediator, only : diag_ptrs, time_type
+use MOM_diag_mediator, only : diag_ctrl, time_type
 use MOM_domains, only : pass_var !, pass_vector
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, NOTE, MOM_mesg
 use MOM_file_parser, only : read_param, get_param, log_version, param_file_type
@@ -67,7 +67,7 @@ type, public :: MEKE_CS ; private
   real :: KhMEKE_Fac   ! A factor relating MEKE%Kh to the diffusivity used for
                        ! MEKE itself (nondimensional).
   ! Diagnostics
-  type(diag_ptrs), pointer :: diag ! A pointer to a structure of shareable
+  type(diag_ctrl), pointer :: diag ! A pointer to a structure of shareable
   integer :: id_MEKE = -1, id_Kh = -1, id_src = -1
   integer :: id_GM_src = -1, id_mom_src = -1, id_decay = -1
   integer :: id_KhMEKE_u = -1, id_KhMEKE_v = -1
@@ -333,7 +333,7 @@ subroutine MEKE_init(Time, G, param_file, diag, CS, MEKE)
   type(time_type),         intent(in)    :: Time
   type(ocean_grid_type),   intent(inout) :: G
   type(param_file_type),   intent(in)    :: param_file
-  type(diag_ptrs), target, intent(inout) :: diag
+  type(diag_ctrl), target, intent(inout) :: diag
   type(MEKE_CS),           pointer       :: CS
   type(MEKE_type),         pointer       :: MEKE
 !   This subroutine allocates space for and claculates the static variables used
@@ -347,7 +347,7 @@ subroutine MEKE_init(Time, G, param_file, diag, CS, MEKE)
 !  (in)      G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
-!  (in)      diag - A structure containing pointers to common diagnostic fields.
+!  (in)      diag - A structure that is used to regulate diagnostic output.
 !  (in/out)  CS - A pointer that is set to point to the control structure
 !                 for this module
 !  (in/out)  MEKE - A structure with MEKE-related fields (intent in/out due to

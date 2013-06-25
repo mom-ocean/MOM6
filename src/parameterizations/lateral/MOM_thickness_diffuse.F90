@@ -46,7 +46,7 @@ module MOM_thickness_diffuse
 !********+*********+*********+*********+*********+*********+*********+**
 
 use MOM_checksums, only : hchksum, uchksum, vchksum
-use MOM_diag_mediator, only : post_data, query_averaging_enabled, diag_ptrs
+use MOM_diag_mediator, only : post_data, query_averaging_enabled, diag_ctrl
 use MOM_diag_mediator, only : register_diag_field, safe_alloc_ptr, time_type
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_EOS, only : calculate_density, calculate_density_derivs
@@ -83,8 +83,8 @@ type, public :: thickness_diffuse_CS ; private
                             ! longer than DT, or 0 (the default) to use DT.
   integer :: nkml           ! The number of layers within the mixed layer.
   logical :: debug          ! If true, write verbose checksums for debugging purposes.
-  type(diag_ptrs), pointer :: diag ! A pointer to a structure of shareable
-                             ! ocean diagnostic fields.
+  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
+                             ! timing of diagnostic output.
   real, pointer :: GMwork(:,:) => NULL()  ! Work by thick. diff. in W m-2.
   integer :: id_uhGM = -1, id_vhGM = -1, id_GMwork = -1, id_KH_u = -1, id_KH_v = -1
   integer :: id_KH_u1 = -1, id_KH_v1 = -1
@@ -1339,14 +1339,14 @@ subroutine thickness_diffuse_init(Time, G, param_file, diag, CDp, CS)
   type(time_type),       intent(in) :: Time
   type(ocean_grid_type), intent(in) :: G
   type(param_file_type), intent(in) :: param_file
-  type(diag_ptrs), target, intent(inout) :: diag
+  type(diag_ctrl), target, intent(inout) :: diag
   type(cont_diag_ptrs),    intent(inout) :: CDp
   type(thickness_diffuse_CS),     pointer    :: CS
 ! Arguments: Time - The current model time.
 !  (in)      G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
-!  (in)      diag - A structure containing pointers to common diagnostic fields.
+!  (in)      diag - A structure that is used to regulate diagnostic output.
 !  (inout)   CDp - A structure with pointers to various terms in the continuity
 !                  equations.
 !  (in/out)  CS - A pointer that is set to point to the control structure

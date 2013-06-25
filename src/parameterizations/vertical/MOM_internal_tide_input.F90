@@ -42,7 +42,7 @@ module MOM_int_tide_input
 
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock, only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
-use MOM_diag_mediator, only : diag_ptrs, time_type
+use MOM_diag_mediator, only : diag_ctrl, time_type
 use MOM_diag_mediator, only : safe_alloc_ptr, post_data, register_diag_field
 use MOM_diag_to_Z, only : diag_to_Z_CS, register_Zint_diag, calc_Zint_diags
 use MOM_checksums, only : hchksum, uchksum, vchksum
@@ -65,8 +65,8 @@ public set_int_tide_input, int_tide_input_init, int_tide_input_end
 
 type, public :: int_tide_input_CS ; private
   logical :: debug           ! If true, write verbose checksums for debugging.
-  type(diag_ptrs), pointer :: diag ! A pointer to a structure of shareable
-                                   ! ocean diagnostic fields.
+  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
+                             ! timing of diagnostic output.
   real :: TKE_itide_max ! Maximum Internal tide conversion (W m-2)
                         ! available to mix above the BBL
 
@@ -267,14 +267,14 @@ subroutine int_tide_input_init(Time, G, param_file, diag, CS, itide)
   type(time_type),          intent(in)    :: Time
   type(ocean_grid_type),    intent(in)    :: G
   type(param_file_type),    intent(in)    :: param_file
-  type(diag_ptrs), target,  intent(inout) :: diag
+  type(diag_ctrl), target,  intent(inout) :: diag
   type(int_tide_input_CS), pointer   :: CS
   type(int_tide_input_type), pointer      :: itide
 ! Arguments: Time - The current model time.
 !  (in)      G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
-!  (in)      diag - A structure containing pointers to common diagnostic fields.
+!  (in)      diag - A structure that is used to regulate diagnostic output.
 !  (in/out)  CS - A pointer that is set to point to the control structure
 !                 for this module
 !  (in)      diag_to_Z_CSp - A pointer to the Z-diagnostics control structure.

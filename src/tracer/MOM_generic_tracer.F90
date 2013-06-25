@@ -51,7 +51,7 @@ module MOM_generic_tracer
   use g_tracer_utils,   only: g_tracer_get_pointer,g_tracer_get_alias,g_diag_type
 
   use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
-  use MOM_diag_mediator, only : diag_ptrs, get_diag_time_end
+  use MOM_diag_mediator, only : diag_ctrl, get_diag_time_end
   use MOM_diag_to_Z, only : register_Z_tracer, diag_to_Z_CS
   use MOM_error_handler, only : MOM_error, FATAL, WARNING, NOTE, is_root_pe
   use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
@@ -88,8 +88,8 @@ module MOM_generic_tracer
                               ! initialization code if they are not found in the
                               ! restart files.
 
-     type(diag_ptrs), pointer :: diag ! A pointer to a structure of shareable
-                                ! ocean diagnostic fields and control variables.
+     type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
+                             ! timing of diagnostic output.
      type(MOM_restart_CS), pointer :: restart_CSp => NULL()
 
      real    :: Rho_0
@@ -126,7 +126,7 @@ contains
     type(ocean_grid_type), intent(in)   :: G
     type(param_file_type), intent(in)   :: param_file
     type(MOM_generic_tracer_CS),   pointer      :: CS
-    type(diag_ptrs), target, intent(in) :: diag
+    type(diag_ctrl), target, intent(in) :: diag
     type(tracer_registry_type), pointer     :: tr_Reg
     type(MOM_restart_CS),   pointer     :: restart_CS
     ! This subroutine is used to register tracer fields and subroutines
@@ -136,7 +136,7 @@ contains
     !                         model parameter values.
     !  (in/out)  CS - A pointer that is set to point to the control structure
     !                 for this module
-    !  (in)      diag - A structure containing pointers to common diagnostic fields.
+    !  (in)      diag - A structure that is used to regulate diagnostic output.
     !  (in/out)  tr_Reg - A pointer that is set to point to the control structure
     !                  for the tracer advection and diffusion module.
     !  (in)      restart_CS - A pointer to the restart control structure.

@@ -29,7 +29,7 @@ module MOM_tracer_flow_control
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 
-use MOM_diag_mediator, only : time_type, diag_ptrs
+use MOM_diag_mediator, only : time_type, diag_ctrl
 use MOM_diag_to_Z, only : diag_to_Z_CS
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_version, param_file_type
@@ -103,7 +103,7 @@ subroutine call_tracer_register(G, param_file, CS, diag, tr_Reg, restart_CS)
   type(ocean_grid_type),        intent(in) :: G
   type(param_file_type),        intent(in) :: param_file
   type(tracer_flow_control_CS), pointer    :: CS
-  type(diag_ptrs), target,      intent(in) :: diag
+  type(diag_ctrl), target,      intent(in) :: diag
   type(tracer_registry_type),       pointer    :: tr_Reg
   type(MOM_restart_CS),         pointer    :: restart_CS
 ! Argument:  G - The ocean's grid structure.
@@ -111,7 +111,7 @@ subroutine call_tracer_register(G, param_file, CS, diag, tr_Reg, restart_CS)
 !                         model parameter values.
 !  (in/out)  CS - A pointer that is set to point to the control structure
 !                 for this module
-!  (in)      diag - A structure containing pointers to common diagnostic fields.
+!  (in)      diag - A structure that is used to regulate diagnostic output.
 !  (in/out)  tr_Reg - A pointer that is set to point to the control structure
 !                  for the tracer advection and diffusion module.
 !  (in)      restart_CS - A pointer to the restart control structure.

@@ -331,7 +331,7 @@ use MOM_cpu_clock, only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
 use MOM_diag_mediator, only : diag_mediator_init, enable_averaging
 use MOM_diag_mediator, only : disable_averaging, post_data, safe_alloc_ptr
 use MOM_diag_mediator, only : register_diag_field, register_static_field
-use MOM_diag_mediator, only : set_diag_mediator_grid, diag_ptrs
+use MOM_diag_mediator, only : set_diag_mediator_grid, diag_ctrl
 use MOM_domains, only : MOM_domains_init, pass_var, pass_vector
 use MOM_domains, only : pass_var_start, pass_var_complete
 use MOM_domains, only : pass_vector_start, pass_vector_complete
@@ -429,9 +429,8 @@ type, public :: MOM_control_struct
   type(ocean_grid_type) :: grid ! A structure containing metrics and grid info.
   type(thermo_var_ptrs) :: tv ! A structure containing pointers to an assortment
                               ! of thermodynamic fields that may be available.
-  type(diag_ptrs) :: diag     ! A structure containing pointers to
-                              ! diagnostic fields that might be calculated
-                              ! and shared between modules.
+  type(diag_ctrl) :: diag     ! A structure that is used to regulate the timing
+                              ! of diagnostic output.
   type(vertvisc_type) :: visc ! A structure containing vertical viscosities,
                               ! bottom drag viscosities, and related fields.
   type(MEKE_type), pointer :: MEKE => NULL()  ! A structure containing fields
@@ -1159,7 +1158,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
 !                      the model is not being started from a restart file.
   type(ocean_grid_type), pointer :: grid ! A pointer to a structure containing
                                   ! metrics and related information.
-  type(diag_ptrs), pointer :: diag
+  type(diag_ctrl), pointer :: diag
   character(len=4), parameter :: vers_num = 'v2.0'
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
@@ -1878,11 +1877,11 @@ end subroutine MOM_timing_init
 
 subroutine write_static_fields(G, diag)
   type(ocean_grid_type),   intent(in) :: G
-  type(diag_ptrs), target, intent(in) :: diag
+  type(diag_ctrl), target, intent(in) :: diag
 !   This subroutine offers the static fields in the ocean grid type
 ! for output via the diag_manager.
 ! Arguments: G - The ocean's grid structure.  Effectively intent in.
-!  (in)      diag - A structure containing pointers to common diagnostic fields.
+!  (in)      diag - A structure that is used to regulate diagnostic output.
 
   ! The out_X arrays are needed because some of the elements of the grid
   ! type may be reduced rank macros.

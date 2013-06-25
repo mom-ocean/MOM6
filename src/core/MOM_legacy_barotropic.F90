@@ -94,7 +94,7 @@ module MOM_legacy_barotropic
 use MOM_checksums, only : hchksum, uchksum, vchksum
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
 use MOM_diag_mediator, only : post_data, query_averaging_enabled, register_diag_field
-use MOM_diag_mediator, only : safe_alloc_ptr, diag_ptrs, enable_averaging
+use MOM_diag_mediator, only : safe_alloc_ptr, diag_ctrl, enable_averaging
 use MOM_domains, only : pass_var, pass_vector, min_across_PEs, MOM_domains_init
 use MOM_domains, only : pass_var_start, pass_var_complete
 use MOM_domains, only : pass_vector_start, pass_vector_complete
@@ -305,8 +305,8 @@ type, public :: legacy_barotropic_CS ; private
                              ! default is 0.1, and there will probably be real
                              ! problems if this were set close to 1.
   type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
-  type(diag_ptrs), pointer :: diag ! A pointer to a structure of shareable
-                             ! ocean diagnostic fields.
+  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
+                             ! timing of diagnostic output.
   type(MOM_domain_type), pointer :: BT_Domain => NULL()
   type(ocean_grid_type), pointer :: debug_BT_G ! debugging copy of ocean grid
   type(tidal_forcing_CS), pointer :: tides_CSp => NULL()
@@ -3424,7 +3424,7 @@ subroutine legacy_barotropic_init(u, v, h, eta, Time, G, param_file, diag, CS, &
   type(time_type), target,          intent(in)    :: Time
   type(ocean_grid_type),            intent(inout) :: G
   type(param_file_type),            intent(in)    :: param_file
-  type(diag_ptrs), target,          intent(inout) :: diag
+  type(diag_ctrl), target,          intent(inout) :: diag
   type(legacy_barotropic_CS),       pointer       :: CS
   type(MOM_restart_CS),             pointer       :: restart_CS
   type(BT_cont_type),     optional, pointer       :: BT_cont
@@ -3441,7 +3441,7 @@ subroutine legacy_barotropic_init(u, v, h, eta, Time, G, param_file, diag, CS, &
 !  (in)      G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
-!  (in)      diag - A structure containing pointers to common diagnostic fields.
+!  (in)      diag - A structure that is used to regulate diagnostic output.
 !  (in/out)  CS - A pointer to the control structure for this module that is
 !                 set in register_barotropic_restarts.
 !  (in)      restart_CS - A pointer to the restart control structure.

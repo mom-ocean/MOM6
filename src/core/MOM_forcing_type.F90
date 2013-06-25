@@ -22,7 +22,7 @@ module MOM_forcing_type
 use MOM_checksums, only : hchksum, qchksum, uchksum, vchksum
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_alloc
-use MOM_diag_mediator, only : time_type, diag_ptrs
+use MOM_diag_mediator, only : time_type
 use MOM_domains, only : pass_var
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type

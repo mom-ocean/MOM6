@@ -30,7 +30,7 @@ module MOM_tracer_registry
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 
-use MOM_diag_mediator, only : diag_ptrs
+use MOM_diag_mediator, only : diag_ctrl
 use MOM_checksums, only : hchksum
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
 use MOM_file_parser, only : get_param, log_version, param_file_type
@@ -68,8 +68,8 @@ end type tracer_type
 type, public :: tracer_registry_type
   integer :: ntr = 0        ! The number of registered tracers.
   type(tracer_type) :: Tr(MAX_FIELDS_)  ! The array of registered tracers.
-  type(diag_ptrs), pointer :: diag ! A pointer to a structure of shareable
-                            ! ocean diagnostic fields and control variables.
+  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
+                             ! timing of diagnostic output.
 end type tracer_registry_type
 
 contains

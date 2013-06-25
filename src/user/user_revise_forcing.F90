@@ -26,8 +26,6 @@ module user_revise_forcing
 !*  extensive code used to create or obtain the fluxes.                *
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
-use MOM_diag_mediator, only : post_data, query_averaging_enabled
-use MOM_diag_mediator, only : register_diag_field, diag_ptrs
 use MOM_domains, only : pass_var, pass_vector, AGRID
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe
 use MOM_file_parser, only : read_param, log_param, log_version, param_file_type

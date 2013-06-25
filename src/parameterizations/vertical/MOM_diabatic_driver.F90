@@ -70,7 +70,7 @@ use MOM_cpu_clock, only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
 use MOM_entrain_diffusive, only : entrainment_diffusive, entrain_diffusive_init
 use MOM_entrain_diffusive, only : entrain_diffusive_end, entrain_diffusive_CS
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
-use MOM_diag_mediator, only : diag_ptrs, time_type
+use MOM_diag_mediator, only : diag_ctrl, time_type
 use MOM_diag_to_Z, only : diag_to_Z_CS, register_Zint_diag, calc_Zint_diags
 use MOM_domains, only : pass_var, To_West, To_South
 use MOM_checksums, only : hchksum, uchksum, vchksum
@@ -147,8 +147,8 @@ type, public :: diabatic_CS ; private
                              ! default is false, which will be faster but is
                              ! inappropriate with ice-shelf cavities.
   logical :: debug           ! If true, write verbose checksums for debugging purposes.
-  type(diag_ptrs), pointer :: diag ! A pointer to a structure of shareable
-                             ! ocean diagnostic fields.
+  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
+                             ! timing of diagnostic output.
   integer :: id_dudt_dia = -1, id_dvdt_dia = -1, id_wd = -1
   integer :: id_ea = -1 , id_eb = -1, id_Kd_z = -1
   integer :: id_Tdif_z = -1, id_Tadv_z = -1, id_Sdif_z = -1, id_Sadv_z = -1
@@ -1260,7 +1260,7 @@ subroutine adiabatic_driver_init(Time, G, param_file, diag, CS, &
   type(time_type),         intent(in)    :: Time
   type(ocean_grid_type),   intent(in)    :: G
   type(param_file_type),   intent(in)    :: param_file
-  type(diag_ptrs), target, intent(inout) :: diag
+  type(diag_ctrl), target, intent(inout) :: diag
   type(diabatic_CS),       pointer       :: CS
   type(tracer_flow_control_CS), pointer  :: tracer_flow_CSp
   type(diag_to_Z_CS),      pointer       :: diag_to_Z_CSp
@@ -1268,7 +1268,7 @@ subroutine adiabatic_driver_init(Time, G, param_file, diag, CS, &
 !  (in)      G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
-!  (in)      diag - A structure containing pointers to common diagnostic fields.
+!  (in)      diag - A structure that is used to regulate diagnostic output.
 !  (in/out)  CS - A pointer that is set to point to the control structure
 !                 for this module
 !  (in)      tracer_flow_CSp - A pointer to the control structure of the tracer
@@ -1304,7 +1304,7 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
   type(ocean_grid_type),   intent(in)    :: G
   type(param_file_type),   intent(in)    :: param_file
   logical,                 intent(in)    :: useALEalgorithm
-  type(diag_ptrs), target, intent(inout) :: diag
+  type(diag_ctrl), target, intent(inout) :: diag
   type(accel_diag_ptrs),   intent(inout) :: ADp
   type(cont_diag_ptrs),    intent(inout) :: CDp
   type(diabatic_CS),       pointer       :: CS
@@ -1315,7 +1315,7 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
 !  (in)      G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
-!  (in)      diag - A structure containing pointers to common diagnostic fields.
+!  (in)      diag - A structure that is used to regulate diagnostic output.
 !  (inout)   ADp - A structure with pointers to the various accelerations in
 !                  the momentum equations, to enable the later calculation
 !                  of derived diagnostics, like energy budgets.

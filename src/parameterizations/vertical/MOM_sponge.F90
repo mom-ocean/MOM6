@@ -73,7 +73,7 @@ module MOM_sponge
 
 use MOM_coms, only : sum_across_PEs
 use MOM_diag_mediator, only : post_data, query_averaging_enabled, register_diag_field
-use MOM_diag_mediator, only : diag_ptrs
+use MOM_diag_mediator, only : diag_ctrl
 use MOM_error_handler, only : MOM_error, FATAL, NOTE, WARNING, is_root_pe
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
@@ -128,8 +128,8 @@ type, public :: sponge_CS ; private
   type(p2d) :: Ref_val_im(MAX_FIELDS_)  ! The values toward which the i-means of
                              ! fields are damped.
 
-  type(diag_ptrs), pointer :: diag ! A pointer to a structure of shareable
-                             ! ocean diagnostic fields.
+  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
+                             ! timing of diagnostic output.
   integer :: id_w_sponge = -1
 
 end type sponge_CS
@@ -245,12 +245,18 @@ end subroutine initialize_sponge
 subroutine init_sponge_diags(Time, G, diag, CS)
   type(time_type),       target, intent(in)    :: Time
   type(ocean_grid_type),         intent(in)    :: G
-  type(diag_ptrs),       target, intent(inout) :: diag
+  type(diag_ctrl),       target, intent(inout) :: diag
   type(sponge_CS),               pointer       :: CS
 
 !   This subroutine sets up diagnostics for the sponges.  It is separate
 ! from initialize_sponge because it requires fields that are not readily
 ! availble where initialize_sponge is called.
+
+! Arguments:  Time - The current model time.
+!  (in)      G - The ocean's grid structure.
+!  (in)      diag - A structure that is used to regulate diagnostic output.
+!  (in/out)  CS - A pointer to the control structure for this module that is
+!                 set by a previous call to initialize_sponge.
 
   if (.not.associated(CS)) return
 
