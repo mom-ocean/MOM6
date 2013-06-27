@@ -1,0 +1,20 @@
+! This file specifies restricted channel widths in GOLD.  The order is:
+!  [UV]_WIDTH,  min_longitude, max_longitude, min_latitude, max_latitude, width
+
+U_width,  -6.5,  -4.5, 35.0, 36.0,  12000.0  ! Gibraltar
+U_width,  42.5,  43.5, 12.0, 13.0,  10000.0  ! Red Sea, Bab-el-Mendeb
+U_width,  25.5,  26.5, 40.0, 41.0,   5000.0  ! Dardanelles
+U_width, 139.5, 140.5, 41.0, 42.0,  35000.0  ! Tsugaru Strait
+U_width, 141.6, 143.4, 45.0, 46.0,  15000.0  ! Between Sakhalin & Hokkaido
+U_width, -65.7, -64.1, 80.64, 81.04, 38000.0 ! Smith Sound, Canadian Arctic
+
+V_width,  28.0,  29.0, 40.5, 41.5,   2500.0  ! Bosporus - should be 1km wide.
+V_width,  42.0,  43.0, 12.5, 13.5,  10000.0  ! Red Sea, Bab-el-Mendeb
+V_width, 118.0, 119.0, -3.6, -2.0,  40000.0  ! Makassar Straits
+V_width, 119.0, 120.0,  0.06, 1.06, 80000.0  ! Entry to Makassar Straits
+V_width, 129.0, 131.0, -0.31, 0.69, 25000.0  ! Between New Guinea & Halmahera
+V_width, 131.0, 132.0, -0.25, 0.25, 25000.0  ! Between New Guinea & Halmahera
+V_width, 115.0, 116.0, -9.0,  -8.0, 20000.0  ! Lombok Straits
+V_width, 124.0, 125.0, -9.0,  -8.0, 20000.0  ! Timor Straits
+V_width, 141.0, 142.0, 51.5,  52.5,  2500.0  ! Between Sakhalin & Russia
+V_width, -89.2, -88.2, 76.74, 76.86, 8400.0  ! Jones Sound, Canadian Arctic
