@@ -27,8 +27,7 @@
       alb_sno = 0.88
       alb_ice = 0.68
       t_range_melt = 1.0
-      do_icebergs = .true.
-      cm2_bugs = .false. /
+      do_icebergs = .true. /
 
  &icebergs_nml
     verbose=.false.,

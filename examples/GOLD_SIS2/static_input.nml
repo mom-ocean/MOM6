@@ -26,8 +26,7 @@
       ice_bulk_salin = 0.005
       alb_sno = 0.88
       alb_ice = 0.68
-      t_range_melt = 1.0
-      cm2_bugs = .false. /
+      t_range_melt = 1.0 /
 
  &monin_obukhov_nml
             neutral = .true. /
