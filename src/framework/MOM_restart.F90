@@ -77,8 +77,6 @@ use MOM_time_manager, only : days_in_month
 
 implicit none ; private
 
-#include <MOM_memory.h>
-
 public restart_init, restart_end, restore_state, register_restart_field
 public save_restart, query_initialized, restart_init_end
 
@@ -1119,9 +1117,8 @@ subroutine restart_init(param_file, CS, restart_root)
                  "file support (4Gb), otherwise the limit is 2Gb.", &
                  default=.true.)
   call get_param(param_file, mod, "MAX_FIELDS", CS%max_fields, &
-                 "The maximum number of restart fields that can be used \n"//&
-                 "The default value is set in MOM_memory.h as MAX_FIELDS_.", &
-                 default=MAX_FIELDS_)
+                 "The maximum number of restart fields that can be used.", &
+                 default=100)
 
   allocate(CS%restart_field(CS%max_fields))
   allocate(CS%var_ptr0d(CS%max_fields))

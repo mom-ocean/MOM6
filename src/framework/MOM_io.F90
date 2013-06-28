@@ -81,8 +81,6 @@ use netcdf
 
 implicit none ; private
 
-#include <MOM_memory.h>
-
 public :: close_file, create_file, field_exists, field_size, fieldtype
 public :: file_exists, flush_file, get_file_info, get_file_atts, get_file_fields
 public :: get_file_times, open_file, read_axis_data, read_data, read_field
@@ -150,7 +148,7 @@ subroutine create_file(unit, filename, vars, novars, G, fields, threading, &
   type(domain1d) :: x_domain, y_domain
   integer :: numaxes, pack, thread, k, nz
   integer :: var_periods, num_periods=0
-  real :: layer_val(SZK_(G)), interface_val(SZK_(G)+1)
+  real :: layer_val(G%ks:G%ke), interface_val(G%ks:G%ke+1)
   real, dimension(:), allocatable :: period_val
   character(len=40) :: time_units
   character(len=8) :: t_grid, t_grid_read

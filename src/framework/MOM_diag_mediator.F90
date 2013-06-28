@@ -35,8 +35,6 @@ use diag_manager_mod, only : register_static_field
 
 implicit none ; private
 
-#include <MOM_memory.h>
-
 public set_axes_info, post_data, register_diag_field, time_type
 public safe_alloc_ptr, safe_alloc_alloc
 public enable_averaging, disable_averaging, query_averaging_enabled
@@ -90,7 +88,7 @@ subroutine set_axes_info(latq, lath, lonq, lonh, G, param_file, set_vertical)
 !                         model parameter values.
 !  (in,opt)  set_vertical - If true (or missing), set up the vertical axes.
   integer :: id_xq, id_yq, id_zl, id_zi, id_xh, id_yh, k, nz
-  real :: zlev(SZK_(G)), zinter(SZK_(G)+1)
+  real :: zlev(G%ks:G%ke), zinter(G%ks:G%ke+1)
   logical :: set_vert, Cartesian_grid
   character(len=80) :: grid_config, units_temp
 ! This include declares and sets the variable "version".
