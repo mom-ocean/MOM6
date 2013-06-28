@@ -21,7 +21,7 @@ module MOM_grid
 !***********************************************************************
 
 use MOM_domains, only : MOM_domain_type, get_domain_extent
-use MOM_error_handler, only : MOM_error, FATAL
+use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 
 implicit none ; private
@@ -252,11 +252,13 @@ subroutine MOM_grid_init(grid, param_file)
   grid%IedB = grid%ied ; grid%JedB = grid%jed
   grid%IegB = grid%ieg ; grid%JegB = grid%jeg
 
+  call MOM_mesg("  MOM_grid.F90, MOM_grid_init: allocating metrics", 5)
+ 
+  call allocate_metrics(grid)
 
   isd = grid%isd ; ied = grid%ied ; jsd = grid%jsd ; jed = grid%jed
   IsdB = grid%IsdB ; IedB = grid%IedB ; JsdB = grid%JsdB ; JedB = grid%JedB
   ALLOC_(grid%bathyT(isd:ied, jsd:jed)) ; grid%bathyT(:,:) = grid%Angstrom_z
-  ALLOC_(grid%CoriolisBu(IsdB:IedB, JsdB:JedB)) ; grid%CoriolisBu(:,:) = 0.0
   ALLOC_(grid%g_prime(nk+1)) ; grid%g_prime(:) = 0.0
   ALLOC_(grid%Rlay(nk+1))    ; grid%Rlay(:) = 0.0
 
@@ -395,14 +397,97 @@ function get_tr_flux_units(grid, tr_units, tr_vol_conc_units,tr_mass_conc_units)
 
 end function get_tr_flux_units
 
-subroutine MOM_grid_end(grid)
-! Arguments: grid - The ocean's grid structure.
-  type(ocean_grid_type), intent(inout) :: grid
 
-  DEALLOC_(grid%bathyT)  ; DEALLOC_(grid%CoriolisBu)
-  DEALLOC_(grid%g_prime) ; DEALLOC_(grid%Rlay)
-  deallocate(grid%gridLonT) ; deallocate(grid%gridLatT)
-  deallocate(grid%gridLonB) ; deallocate(grid%gridLatB)
+subroutine allocate_metrics(G)
+  type(ocean_grid_type), intent(inout) :: G
+  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
+
+  ! This subroutine allocates the lateral elements of the ocean_grid_type that
+  ! are always used and zeros them out.
+
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
+  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
+
+  ALLOC_(G%dxT(isd:ied,jsd:jed))       ; G%dxT(:,:) = 0.0
+  ALLOC_(G%dxCu(IsdB:IedB,jsd:jed))    ; G%dxCu(:,:) = 0.0
+  ALLOC_(G%dxCv(isd:ied,JsdB:JedB))    ; G%dxCv(:,:) = 0.0
+  ALLOC_(G%dxBu(IsdB:IedB,JsdB:JedB))  ; G%dxBu(:,:) = 0.0
+  ALLOC_(G%IdxT(isd:ied,jsd:jed))      ; G%IdxT(:,:) = 0.0
+  ALLOC_(G%IdxCu(IsdB:IedB,jsd:jed))   ; G%IdxCu(:,:) = 0.0
+  ALLOC_(G%IdxCv(isd:ied,JsdB:JedB))   ; G%IdxCv(:,:) = 0.0
+  ALLOC_(G%IdxBu(IsdB:IedB,JsdB:JedB)) ; G%IdxBu(:,:) = 0.0
+
+  ALLOC_(G%dyT(isd:ied,jsd:jed))       ; G%dyT(:,:) = 0.0
+  ALLOC_(G%dyCu(IsdB:IedB,jsd:jed))    ; G%dyCu(:,:) = 0.0
+  ALLOC_(G%dyCv(isd:ied,JsdB:JedB))    ; G%dyCv(:,:) = 0.0
+  ALLOC_(G%dyBu(IsdB:IedB,JsdB:JedB))  ; G%dyBu(:,:) = 0.0
+  ALLOC_(G%IdyT(isd:ied,jsd:jed))      ; G%IdyT(:,:) = 0.0
+  ALLOC_(G%IdyCu(IsdB:IedB,jsd:jed))   ; G%IdyCu(:,:) = 0.0
+  ALLOC_(G%IdyCv(isd:ied,JsdB:JedB))   ; G%IdyCv(:,:) = 0.0
+  ALLOC_(G%IdyBu(IsdB:IedB,JsdB:JedB)) ; G%IdyBu(:,:) = 0.0
+
+  ALLOC_(G%areaT(isd:ied,jsd:jed))       ; G%areaT(:,:) = 0.0
+  ALLOC_(G%IareaT(isd:ied,jsd:jed))      ; G%IareaT(:,:) = 0.0
+  ALLOC_(G%areaBu(IsdB:IedB,JsdB:JedB))  ; G%areaBu(:,:) = 0.0
+  ALLOC_(G%IareaBu(IsdB:IedB,JsdB:JedB)) ; G%IareaBu(:,:) = 0.0
+
+  ALLOC_(G%mask2dT(isd:ied,jsd:jed))      ; G%mask2dT(:,:) = 0.0
+  ALLOC_(G%mask2dCu(IsdB:IedB,jsd:jed))   ; G%mask2dCu(:,:) = 0.0
+  ALLOC_(G%mask2dCv(isd:ied,JsdB:JedB))   ; G%mask2dCv(:,:) = 0.0
+  ALLOC_(G%mask2dBu(IsdB:IedB,JsdB:JedB)) ; G%mask2dBu(:,:) = 0.0
+  ALLOC_(G%geoLatT(isd:ied,jsd:jed))      ; G%geoLatT(:,:) = 0.0
+  ALLOC_(G%geoLatCu(IsdB:IedB,jsd:jed))   ; G%geoLatCu(:,:) = 0.0
+  ALLOC_(G%geoLatCv(isd:ied,JsdB:JedB))   ; G%geoLatCv(:,:) = 0.0
+  ALLOC_(G%geoLatBu(IsdB:IedB,JsdB:JedB)) ; G%geoLatBu(:,:) = 0.0
+  ALLOC_(G%geoLonT(isd:ied,jsd:jed))      ; G%geoLonT(:,:) = 0.0
+  ALLOC_(G%geoLonCu(IsdB:IedB,jsd:jed))   ; G%geoLonCu(:,:) = 0.0
+  ALLOC_(G%geoLonCv(isd:ied,JsdB:JedB))   ; G%geoLonCv(:,:) = 0.0
+  ALLOC_(G%geoLonBu(IsdB:IedB,JsdB:JedB)) ; G%geoLonBu(:,:) = 0.0
+
+  ALLOC_(G%dx_Cv(isd:ied,JsdB:JedB))     ; G%dx_Cv(:,:) = 0.0
+  ALLOC_(G%dy_Cu(IsdB:IedB,jsd:jed))     ; G%dy_Cu(:,:) = 0.0
+  ALLOC_(G%dx_Cv_obc(isd:ied,JsdB:JedB)) ; G%dx_Cv_obc(:,:) = 0.0
+  ALLOC_(G%dy_Cu_obc(IsdB:IedB,jsd:jed)) ; G%dy_Cu_obc(:,:) = 0.0  
+
+  ALLOC_(G%areaCu(IsdB:IedB,jsd:jed))  ; G%areaCu(:,:) = 0.0
+  ALLOC_(G%areaCv(isd:ied,JsdB:JedB))  ; G%areaCv(:,:) = 0.0
+  ALLOC_(G%IareaCu(IsdB:IedB,jsd:jed)) ; G%IareaCu(:,:) = 0.0
+  ALLOC_(G%IareaCv(isd:ied,JsdB:JedB)) ; G%IareaCv(:,:) = 0.0
+
+  ALLOC_(G%CoriolisBu(IsdB:IedB, JsdB:JedB)) ; G%CoriolisBu(:,:) = 0.0
+
+end subroutine allocate_metrics
+
+subroutine MOM_grid_end(G)
+! Arguments: G - The ocean's grid structure.
+  type(ocean_grid_type), intent(inout) :: G
+
+  DEALLOC_(G%dxT)  ; DEALLOC_(G%dxCu)  ; DEALLOC_(G%dxCv)  ; DEALLOC_(G%dxBu)
+  DEALLOC_(G%IdxT) ; DEALLOC_(G%IdxCu) ; DEALLOC_(G%IdxCv) ; DEALLOC_(G%IdxBu)
+
+  DEALLOC_(G%dyT)  ; DEALLOC_(G%dyCu)  ; DEALLOC_(G%dyCv)  ; DEALLOC_(G%dyBu)
+  DEALLOC_(G%IdyT) ; DEALLOC_(G%IdyCu) ; DEALLOC_(G%IdyCv) ; DEALLOC_(G%IdyBu)
+
+  DEALLOC_(G%areaT)  ; DEALLOC_(G%IareaT)
+  DEALLOC_(G%areaBu) ; DEALLOC_(G%IareaBu)
+  DEALLOC_(G%areaCu) ; DEALLOC_(G%IareaCu)
+  DEALLOC_(G%areaCv)  ; DEALLOC_(G%IareaCv)
+
+  DEALLOC_(G%mask2dT)  ; DEALLOC_(G%mask2dCu)
+  DEALLOC_(G%mask2dCv) ; DEALLOC_(G%mask2dBu)
+
+  DEALLOC_(G%geoLatT)  ; DEALLOC_(G%geoLatCu)
+  DEALLOC_(G%geoLatCv) ; DEALLOC_(G%geoLatBu)
+  DEALLOC_(G%geoLonT)  ; DEALLOC_(G%geoLonCu)
+  DEALLOC_(G%geoLonCv) ; DEALLOC_(G%geoLonBu)
+
+  DEALLOC_(G%dx_Cv) ; DEALLOC_(G%dy_Cu)
+  DEALLOC_(G%dx_Cv_obc) ; DEALLOC_(G%dy_Cu_obc)
+
+  DEALLOC_(G%bathyT)  ; DEALLOC_(G%CoriolisBu)
+  DEALLOC_(G%g_prime) ; DEALLOC_(G%Rlay)
+  deallocate(G%gridLonT) ; deallocate(G%gridLatT)
+  deallocate(G%gridLonB) ; deallocate(G%gridLatB)
 end subroutine MOM_grid_end
 
 end module MOM_grid

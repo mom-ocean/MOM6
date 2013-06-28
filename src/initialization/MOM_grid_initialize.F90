@@ -371,10 +371,6 @@ subroutine set_grid_metrics(G, param_file, set_vertical)
   logical :: debug
   character(len=256) :: config
 
-  call MOM_mesg("  MOM_grid_init.F90, set_grid_metrics: allocating metrics", 5)
- 
-  call allocate_metrics(G)
-
   call log_version(param_file, "MOM_grid_init", version, "")
   call get_param(param_file, "MOM_grid_init", "GRID_CONFIG", config, &
                  "A character string that determines the method for \n"//&
@@ -1379,60 +1375,6 @@ subroutine extrapolate_metric(var, jh)
 
 end subroutine extrapolate_metric
 
-
-subroutine allocate_metrics(G)
-  type(ocean_grid_type), intent(inout) :: G
-  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
-
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
-
-  ALLOC_(G%dxT(isd:ied,jsd:jed)) ; G%dxT(:,:) = 0.0
-  ALLOC_(G%dxCu(IsdB:IedB,jsd:jed)) ; G%dxCu(:,:) = 0.0
-  ALLOC_(G%dxCv(isd:ied,JsdB:JedB)) ; G%dxCv(:,:) = 0.0
-  ALLOC_(G%dxBu(IsdB:IedB,JsdB:JedB)) ; G%dxBu(:,:) = 0.0
-  ALLOC_(G%IdxT(isd:ied,jsd:jed)) ; G%IdxT(:,:) = 0.0
-  ALLOC_(G%IdxCu(IsdB:IedB,jsd:jed)) ; G%IdxCu(:,:) = 0.0
-  ALLOC_(G%IdxCv(isd:ied,JsdB:JedB)) ; G%IdxCv(:,:) = 0.0
-  ALLOC_(G%IdxBu(IsdB:IedB,JsdB:JedB)) ; G%IdxBu(:,:) = 0.0
-
-  ALLOC_(G%dyT(isd:ied,jsd:jed)) ; G%dyT(:,:) = 0.0
-  ALLOC_(G%dyCu(IsdB:IedB,jsd:jed)) ; G%dyCu(:,:) = 0.0
-  ALLOC_(G%dyCv(isd:ied,JsdB:JedB)) ; G%dyCv(:,:) = 0.0
-  ALLOC_(G%dyBu(IsdB:IedB,JsdB:JedB)) ; G%dyBu(:,:) = 0.0
-  ALLOC_(G%IdyT(isd:ied,jsd:jed)) ; G%IdyT(:,:) = 0.0
-  ALLOC_(G%IdyCu(IsdB:IedB,jsd:jed)) ; G%IdyCu(:,:) = 0.0
-  ALLOC_(G%IdyCv(isd:ied,JsdB:JedB)) ; G%IdyCv(:,:) = 0.0
-  ALLOC_(G%IdyBu(IsdB:IedB,JsdB:JedB)) ; G%IdyBu(:,:) = 0.0
-
-  ALLOC_(G%areaT(isd:ied,jsd:jed)) ; G%areaT(:,:) = 0.0
-  ALLOC_(G%IareaT(isd:ied,jsd:jed)) ; G%IareaT(:,:) = 0.0
-  ALLOC_(G%areaBu(IsdB:IedB,JsdB:JedB)) ; G%areaBu(:,:) = 0.0
-  ALLOC_(G%IareaBu(IsdB:IedB,JsdB:JedB)) ; G%IareaBu(:,:) = 0.0
-
-  ALLOC_(G%mask2dT(isd:ied,jsd:jed)) ; G%mask2dT(:,:) = 0.0
-  ALLOC_(G%mask2dCu(IsdB:IedB,jsd:jed)) ; G%mask2dCu(:,:) = 0.0
-  ALLOC_(G%mask2dCv(isd:ied,JsdB:JedB)) ; G%mask2dCv(:,:) = 0.0
-  ALLOC_(G%mask2dBu(IsdB:IedB,JsdB:JedB)) ; G%mask2dBu(:,:) = 0.0
-  ALLOC_(G%geoLatT(isd:ied,jsd:jed)) ; G%geoLatT(:,:) = 0.0
-  ALLOC_(G%geoLatCu(IsdB:IedB,jsd:jed)) ; G%geoLatCu(:,:) = 0.0
-  ALLOC_(G%geoLatCv(isd:ied,JsdB:JedB)) ; G%geoLatCv(:,:) = 0.0
-  ALLOC_(G%geoLatBu(IsdB:IedB,JsdB:JedB)) ; G%geoLatBu(:,:) = 0.0
-  ALLOC_(G%geoLonT(isd:ied,jsd:jed)) ; G%geoLonT(:,:) = 0.0
-  ALLOC_(G%geoLonCu(IsdB:IedB,jsd:jed)) ; G%geoLonCu(:,:) = 0.0
-  ALLOC_(G%geoLonCv(isd:ied,JsdB:JedB)) ; G%geoLonCv(:,:) = 0.0
-  ALLOC_(G%geoLonBu(IsdB:IedB,JsdB:JedB)) ; G%geoLonBu(:,:) = 0.0
-
-  ALLOC_(G%dx_Cv(isd:ied,JsdB:JedB)) ; G%dx_Cv(:,:) = 0.0
-  ALLOC_(G%dy_Cu(IsdB:IedB,jsd:jed)) ; G%dy_Cu(:,:) = 0.0
-  ALLOC_(G%dx_Cv_obc(isd:ied,JsdB:JedB)) ; G%dx_Cv_obc(:,:) = 0.0
-  ALLOC_(G%dy_Cu_obc(IsdB:IedB,jsd:jed)) ; G%dy_Cu_obc(:,:) = 0.0  
-  ALLOC_(G%areaCu(IsdB:IedB,jsd:jed)) ; G%areaCu(:,:) = 0.0
-  ALLOC_(G%areaCv(isd:ied,JsdB:JedB)) ; G%areaCv(:,:) = 0.0
-  ALLOC_(G%IareaCu(IsdB:IedB,jsd:jed)) ; G%IareaCu(:,:) = 0.0
-  ALLOC_(G%IareaCv(isd:ied,JsdB:JedB)) ; G%IareaCv(:,:) = 0.0
-
-end subroutine allocate_metrics
 
 
 subroutine initialize_masks(G, PF)
