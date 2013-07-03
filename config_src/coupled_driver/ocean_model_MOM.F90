@@ -161,7 +161,7 @@ type, public :: ocean_state_type ; private
                               ! the ocean forcing fields.
   type(surface)   :: state    ! A structure containing pointers to
                               ! the ocean surface state fields.
-  type(ocean_grid_type), pointer :: grid => NULL() ! A pointer to a structure
+  type(ocean_grid_type), pointer :: grid => NULL() ! A pointer to a grid structure
                               ! containing metrics and related information.
   type(MOM_control_struct), pointer :: MOM_CSp => NULL()
   type(surface_forcing_CS),  pointer :: forcing_CSp => NULL()
@@ -215,7 +215,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in)
   OS%state%tr_fields => Ocean_sfc%fields
   OS%Time = Time_in
   call initialize_MOM(OS%Time, param_file, OS%dirs, OS%MOM_CSp, Time_in)
-  OS%grid => OS%MOM_CSp%grid
+  OS%grid => OS%MOM_CSp%G
   OS%C_p = OS%MOM_CSp%tv%C_p
   OS%fluxes%C_p = OS%MOM_CSp%tv%C_p
 
@@ -262,9 +262,10 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in)
       (1 + (OS%Time - Time_init) / OS%energysavedays)
 
   if(ASSOCIATED(OS%grid%Domain%maskmap)) then
-     call initialize_ocean_public_type(OS%grid%Domain%mpp_domain,Ocean_sfc,maskmap=OS%grid%Domain%maskmap)
+     call initialize_ocean_public_type(OS%grid%Domain%mpp_domain, Ocean_sfc, &
+                                       maskmap=OS%grid%Domain%maskmap)
   else
-     call initialize_ocean_public_type(OS%grid%Domain%mpp_domain,Ocean_sfc)
+     call initialize_ocean_public_type(OS%grid%Domain%mpp_domain, Ocean_sfc)
   endif
 !  call convert_state_to_ocean_type(state, Ocean_sfc, OS%grid)
 

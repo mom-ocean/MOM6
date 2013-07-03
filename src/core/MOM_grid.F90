@@ -172,10 +172,10 @@ end type ocean_grid_type
 
 contains
 
-subroutine MOM_grid_init(grid, param_file)
-  type(ocean_grid_type), intent(inout) :: grid
+subroutine MOM_grid_init(G, param_file)
+  type(ocean_grid_type), intent(inout) :: G
   type(param_file_type), intent(in)    :: param_file
-! Arguments: grid - The ocean's grid structure.
+! Arguments: G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
 ! This include declares and sets the variable "version".
@@ -185,40 +185,40 @@ subroutine MOM_grid_init(grid, param_file)
 
   ! get_domain_extent ensures that domains start at 1 for compatibility between
   ! static and dynamically allocated arrays.
-  call get_domain_extent(grid%Domain, grid%isc, grid%iec, grid%jsc, grid%jec, &
-                         grid%isd, grid%ied, grid%jsd, grid%jed, &
-                         grid%isg, grid%ieg, grid%jsg, grid%jeg, &
-                         idg_off, jdg_off, grid%symmetric)
-  grid%isd_global = grid%isd+idg_off ; grid%jsd_global = grid%jsd+jdg_off
+  call get_domain_extent(G%Domain, G%isc, G%iec, G%jsc, G%jec, &
+                         G%isd, G%ied, G%jsd, G%jed, &
+                         G%isg, G%ieg, G%jsg, G%jeg, &
+                         idg_off, jdg_off, G%symmetric)
+  G%isd_global = G%isd+idg_off ; G%jsd_global = G%jsd+jdg_off
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, "MOM_grid", version, &
                    "Parameters providing information about the vertical grid.")
-  call get_param(param_file, "MOM", "G_EARTH", grid%g_Earth, &
+  call get_param(param_file, "MOM", "G_EARTH", G%g_Earth, &
                  "The gravitational acceleration of the Earth.", &
                  units="m s-2", default = 9.80)
-  call get_param(param_file, "MOM", "RHO_0", grid%Rho0, &
+  call get_param(param_file, "MOM", "RHO_0", G%Rho0, &
                  "The mean ocean density used with BOUSSINESQ true to \n"//&
                  "calculate accelerations and the mass for conservation \n"//&
                  "properties, or with BOUSSINSEQ false to convert some \n"//&
                  "parameters from vertical units of m to kg m-2.", &
                  units="kg m-3", default=1035.0)
-  call get_param(param_file, "MOM_grid", "FIRST_DIRECTION", grid%first_direction, &
+  call get_param(param_file, "MOM_grid", "FIRST_DIRECTION", G%first_direction, &
                  "An integer that indicates which direction goes first \n"//&
                  "in parts of the code that use directionally split \n"//&
                  "updates, with even numbers (or 0) used for x- first \n"//&
                  "and odd numbers used for y-first.", default=0)
-  call get_param(param_file, "MOM_grid", "BOUSSINESQ", grid%Boussinesq, &
+  call get_param(param_file, "MOM_grid", "BOUSSINESQ", G%Boussinesq, &
                  "If true, make the Boussinesq approximation.", default=.true.)
-  call get_param(param_file, "MOM_grid", "ANGSTROM", grid%Angstrom_z, &
+  call get_param(param_file, "MOM_grid", "ANGSTROM", G%Angstrom_z, &
                  "The minumum layer thickness, usually one-Angstrom.", &
                  units="m", default=1.0e-10)
-  if (.not.grid%Boussinesq) &
-    call get_param(param_file, "MOM_grid", "H_TO_KG_M2", grid%H_to_kg_m2,&
+  if (.not.G%Boussinesq) &
+    call get_param(param_file, "MOM_grid", "H_TO_KG_M2", G%H_to_kg_m2,&
                  "A constant that translates thicknesses from the model's \n"//&
                  "internal units of thickness to kg m-2.", units="kg m-2 H-1", &
                  default=1.0)
-  call get_param(param_file, "MOM_grid", "BATHYMETRY_AT_VEL", grid%bathymetry_at_vel, &
+  call get_param(param_file, "MOM_grid", "BATHYMETRY_AT_VEL", G%bathymetry_at_vel, &
                  "If true, there are separate values for the basin depths \n"//&
                  "at velocity points.  Otherwise the effects of of \n"//&
                  "topography are entirely determined from thickness points.", &
@@ -236,114 +236,114 @@ subroutine MOM_grid_init(grid, param_file)
 #endif
 
 
-  grid%ks = 1 ; grid%ke = nk
+  G%ks = 1 ; G%ke = nk
 
-  grid%nonblocking_updates = grid%Domain%nonblocking_updates
+  G%nonblocking_updates = G%Domain%nonblocking_updates
 
-  grid%IscB = grid%isc ; grid%JscB = grid%jsc
-  grid%IsdB = grid%isd ; grid%JsdB = grid%jsd
-  grid%IsgB = grid%isg ; grid%JsgB = grid%jsg
-  if (grid%symmetric) then
-    grid%IscB = grid%isc-1 ; grid%JscB = grid%jsc-1
-    grid%IsdB = grid%isd-1 ; grid%JsdB = grid%jsd-1
-    grid%IsgB = grid%isg-1 ; grid%JsgB = grid%jsg-1
+  G%IscB = G%isc ; G%JscB = G%jsc
+  G%IsdB = G%isd ; G%JsdB = G%jsd
+  G%IsgB = G%isg ; G%JsgB = G%jsg
+  if (G%symmetric) then
+    G%IscB = G%isc-1 ; G%JscB = G%jsc-1
+    G%IsdB = G%isd-1 ; G%JsdB = G%jsd-1
+    G%IsgB = G%isg-1 ; G%JsgB = G%jsg-1
   endif
-  grid%IecB = grid%iec ; grid%JecB = grid%jec
-  grid%IedB = grid%ied ; grid%JedB = grid%jed
-  grid%IegB = grid%ieg ; grid%JegB = grid%jeg
+  G%IecB = G%iec ; G%JecB = G%jec
+  G%IedB = G%ied ; G%JedB = G%jed
+  G%IegB = G%ieg ; G%JegB = G%jeg
 
   call MOM_mesg("  MOM_grid.F90, MOM_grid_init: allocating metrics", 5)
  
-  call allocate_metrics(grid)
+  call allocate_metrics(G)
 
-  isd = grid%isd ; ied = grid%ied ; jsd = grid%jsd ; jed = grid%jed
-  IsdB = grid%IsdB ; IedB = grid%IedB ; JsdB = grid%JsdB ; JedB = grid%JedB
-  ALLOC_(grid%bathyT(isd:ied, jsd:jed)) ; grid%bathyT(:,:) = grid%Angstrom_z
-  ALLOC_(grid%g_prime(nk+1)) ; grid%g_prime(:) = 0.0
-  ALLOC_(grid%Rlay(nk+1))    ; grid%Rlay(:) = 0.0
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
+  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
+  ALLOC_(G%bathyT(isd:ied, jsd:jed)) ; G%bathyT(:,:) = G%Angstrom_z
+  ALLOC_(G%g_prime(nk+1)) ; G%g_prime(:) = 0.0
+  ALLOC_(G%Rlay(nk+1))    ; G%Rlay(:) = 0.0
 
-  if (grid%bathymetry_at_vel) then
-    ALLOC_(grid%Dblock_u(IsdB:IedB, jsd:jed)) ; grid%Dblock_u(:,:) = 0.0
-    ALLOC_(grid%Dopen_u(IsdB:IedB, jsd:jed))  ; grid%Dopen_u(:,:) = 0.0
-    ALLOC_(grid%Dblock_v(isd:ied, JsdB:JedB)) ; grid%Dblock_v(:,:) = 0.0
-    ALLOC_(grid%Dopen_v(isd:ied, JsdB:JedB))  ; grid%Dopen_v(:,:) = 0.0
+  if (G%bathymetry_at_vel) then
+    ALLOC_(G%Dblock_u(IsdB:IedB, jsd:jed)) ; G%Dblock_u(:,:) = 0.0
+    ALLOC_(G%Dopen_u(IsdB:IedB, jsd:jed))  ; G%Dopen_u(:,:) = 0.0
+    ALLOC_(G%Dblock_v(isd:ied, JsdB:JedB)) ; G%Dblock_v(:,:) = 0.0
+    ALLOC_(G%Dopen_v(isd:ied, JsdB:JedB))  ; G%Dopen_v(:,:) = 0.0
   endif
 
-  if (grid%Boussinesq) then
-    grid%H_to_kg_m2 = grid%Rho0
-    grid%kg_m2_to_H = 1.0/grid%Rho0
-    grid%m_to_H = 1.0
-    grid%H_to_m = 1.0
-    grid%Angstrom = grid%Angstrom_z
+  if (G%Boussinesq) then
+    G%H_to_kg_m2 = G%Rho0
+    G%kg_m2_to_H = 1.0/G%Rho0
+    G%m_to_H = 1.0
+    G%H_to_m = 1.0
+    G%Angstrom = G%Angstrom_z
   else
-!    grid%H_to_kg_m2 = 1.0
-!    grid%kg_m2_to_H = 1.0
-!    grid%m_to_H = Rho0
-!    grid%H_to_m = 1.0 / Rho0
-    grid%kg_m2_to_H = 1.0 / grid%H_to_kg_m2
-    grid%m_to_H = grid%Rho0 * grid%kg_m2_to_H
-    grid%H_to_m = grid%H_to_kg_m2 / grid%Rho0
-    grid%Angstrom = grid%Angstrom_z*1000.0*grid%kg_m2_to_H
+!    G%H_to_kg_m2 = 1.0
+!    G%kg_m2_to_H = 1.0
+!    G%m_to_H = Rho0
+!    G%H_to_m = 1.0 / Rho0
+    G%kg_m2_to_H = 1.0 / G%H_to_kg_m2
+    G%m_to_H = G%Rho0 * G%kg_m2_to_H
+    G%H_to_m = G%H_to_kg_m2 / G%Rho0
+    G%Angstrom = G%Angstrom_z*1000.0*G%kg_m2_to_H
   endif
-  grid%H_subroundoff = 1e-20 * max(grid%Angstrom,grid%m_to_H*1e-17)
-  grid%H_to_Pa = grid%g_Earth * grid%H_to_kg_m2
+  G%H_subroundoff = 1e-20 * max(G%Angstrom,G%m_to_H*1e-17)
+  G%H_to_Pa = G%g_Earth * G%H_to_kg_m2
 
-  allocate(grid%gridLatT(grid%Domain%njglobal+2*grid%Domain%njhalo))
-  allocate(grid%gridLatB(grid%Domain%njglobal+2*grid%Domain%njhalo))
-  grid%gridLatT(:) = 0.0 ; grid%gridLatB(:) = 0.0
-  allocate(grid%gridLonT(grid%Domain%niglobal+2*grid%Domain%nihalo))
-  allocate(grid%gridLonB(grid%Domain%niglobal+2*grid%Domain%nihalo))
-  grid%gridLonT(:) = 0.0 ; grid%gridLonB(:) = 0.0
+  allocate(G%gridLatT(G%Domain%njglobal+2*G%Domain%njhalo))
+  allocate(G%gridLatB(G%Domain%njglobal+2*G%Domain%njhalo))
+  G%gridLatT(:) = 0.0 ; G%gridLatB(:) = 0.0
+  allocate(G%gridLonT(G%Domain%niglobal+2*G%Domain%nihalo))
+  allocate(G%gridLonB(G%Domain%niglobal+2*G%Domain%nihalo))
+  G%gridLonT(:) = 0.0 ; G%gridLonB(:) = 0.0
 
 ! Log derivative values.
-  call log_param(param_file, "MOM_grid", "M to THICKNESS", grid%m_to_H)
+  call log_param(param_file, "MOM_grid", "M to THICKNESS", G%m_to_H)
 
 end subroutine MOM_grid_init
 
-subroutine set_first_direction(grid, y_first)
-  type(ocean_grid_type), intent(inout) :: grid
+subroutine set_first_direction(G, y_first)
+  type(ocean_grid_type), intent(inout) :: G
   integer,               intent(in) :: y_first
 
-  grid%first_direction = y_first
+  G%first_direction = y_first
 end subroutine set_first_direction
 
-function get_thickness_units(grid)
+function get_thickness_units(G)
   character(len=48)                 :: get_thickness_units
-  type(ocean_grid_type), intent(in) :: grid
+  type(ocean_grid_type), intent(in) :: G
 !   This subroutine returns the appropriate units for thicknesses,
 ! depending on whether the model is Boussinesq or not and the scaling for
 ! the vertical thickness.
 
-! Arguments: grid - The ocean's grid structure.
+! Arguments: G - The ocean's grid structure.
 !  (ret)     get_thickness_units - The model's vertical thickness units.
 
-  if (grid%Boussinesq) then
+  if (G%Boussinesq) then
     get_thickness_units = "meter"
   else
     get_thickness_units = "kilogram meter-2"
   endif
 end function get_thickness_units
 
-function get_flux_units(grid)
+function get_flux_units(G)
   character(len=48)                 :: get_flux_units
-  type(ocean_grid_type), intent(in) :: grid
+  type(ocean_grid_type), intent(in) :: G
 !   This subroutine returns the appropriate units for thickness fluxes,
 ! depending on whether the model is Boussinesq or not and the scaling for
 ! the vertical thickness.
 
-! Arguments: grid - The ocean's grid structure.
+! Arguments: G - The ocean's grid structure.
 !  (ret)     get_flux_units - The model's thickness flux units.
 
-  if (grid%Boussinesq) then
+  if (G%Boussinesq) then
     get_flux_units = "meter3 second-1"
   else
     get_flux_units = "kilogram second-1"
   endif
 end function get_flux_units
 
-function get_tr_flux_units(grid, tr_units, tr_vol_conc_units,tr_mass_conc_units)
+function get_tr_flux_units(G, tr_units, tr_vol_conc_units,tr_mass_conc_units)
   character(len=48)                      :: get_tr_flux_units
-  type(ocean_grid_type),      intent(in) :: grid
+  type(ocean_grid_type),      intent(in) :: G
   character(len=*), optional, intent(in) :: tr_units
   character(len=*), optional, intent(in) :: tr_vol_conc_units
   character(len=*), optional, intent(in) :: tr_mass_conc_units
@@ -351,7 +351,7 @@ function get_tr_flux_units(grid, tr_units, tr_vol_conc_units,tr_mass_conc_units)
 ! depending on whether the model is Boussinesq or not and the scaling for
 ! the vertical thickness.
 
-! Arguments: grid - The ocean's grid structure.
+! Arguments: G - The ocean's grid structure.
 !      One of the following three arguments must be present.
 !  (in,opt)  tr_units - Units for a tracer, for example Celsius or PSU.
 !  (in,opt)  tr_vol_conc_units - The concentration units per unit volume, for
@@ -374,21 +374,21 @@ function get_tr_flux_units(grid, tr_units, tr_vol_conc_units,tr_mass_conc_units)
   if (cnt > 1) call MOM_error(FATAL, "get_tr_flux_units: Only one of "//&
     "tr_units, tr_vol_conc_units, and tr_mass_conc_units may be present.")
   if (present(tr_units)) then
-    if (grid%Boussinesq) then
+    if (G%Boussinesq) then
       get_tr_flux_units = trim(tr_units)//" meter3 second-1"
     else
       get_tr_flux_units = trim(tr_units)//" kilogram second-1"
     endif
   endif
   if (present(tr_vol_conc_units)) then
-    if (grid%Boussinesq) then
+    if (G%Boussinesq) then
       get_tr_flux_units = trim(tr_vol_conc_units)//" second-1"
     else
       get_tr_flux_units = trim(tr_vol_conc_units)//" m-3 kg s-1"
     endif
   endif
   if (present(tr_mass_conc_units)) then
-    if (grid%Boussinesq) then
+    if (G%Boussinesq) then
       get_tr_flux_units = trim(tr_mass_conc_units)//" kg-1 m3 s-1"
     else
       get_tr_flux_units = trim(tr_mass_conc_units)//" second-1"

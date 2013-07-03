@@ -230,7 +230,7 @@ program MOM_main
   fluxes%C_p = MOM_CSp%tv%C_p  ! Copy the heat capacity for consistency.
 
   Master_Time = Time
-  grid => MOM_CSp%grid
+  grid => MOM_CSp%G
   call calculate_surface_state(state, MOM_CSp%u, MOM_CSp%v, MOM_CSp%h, &
                                MOM_CSp%ave_ssh, grid, MOM_CSp)
 
