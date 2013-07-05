@@ -1,0 +1,1 @@
+.datasets/GOLD_SIS/riga/INPUT/seawifs_1998-2006_GOLD_smoothed_2X.nc
