@@ -3440,8 +3440,8 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
   tripolar_n = .false. ;  call get_param(PF, mod, "TRIPOLAR_N", tripolar_n, default=.false.)
   call get_param(PF, mod, "MINIMUM_DEPTH", min_depth, default=0.0)
 
-  call get_param(PF, mod, "NKML",nkml)
-  call get_param(PF, mod, "NKBL",nkbl)    
+  call get_param(PF, mod, "NKML",nkml,default=0)
+  call get_param(PF, mod, "NKBL",nkbl,default=0)    
 
   call get_param(PF, mod, "TEMP_SALT_Z_INIT_FILE",filename, &
                  "The name of the z-space input file used to initialize \n"//&
