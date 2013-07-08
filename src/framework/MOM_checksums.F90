@@ -31,37 +31,37 @@ public :: hchksum, qchksum, uchksum, vchksum, chksum, is_NaN
 public :: MOM_checksums_init
 
 interface hchksum
-  module procedure hchksum2d
-  module procedure hchksum3d
+! module procedure hchksum2d
+! module procedure hchksum3d
   module procedure chksum_h_2d
   module procedure chksum_h_3d
 end interface
 
 interface qchksum
-  module procedure hchksum2d
-  module procedure hchksum3d
+! module procedure hchksum2d
+! module procedure hchksum3d
   module procedure chksum_q_2d
   module procedure chksum_q_3d
 end interface
 
 interface uchksum
-  module procedure hchksum2d
-  module procedure hchksum3d
+! module procedure hchksum2d
+! module procedure hchksum3d
   module procedure chksum_u_2d
   module procedure chksum_u_3d
 end interface
 
 interface vchksum
-  module procedure hchksum2d
-  module procedure hchksum3d
+! module procedure hchksum2d
+! module procedure hchksum3d
   module procedure chksum_v_2d
   module procedure chksum_v_3d
 end interface
 
 interface chksum
   module procedure chksum1d
-  module procedure chksum2d
-  module procedure chksum3d
+!  module procedure chksum2d
+!  module procedure chksum3d
 end interface
 
 interface chk_sum_msg
