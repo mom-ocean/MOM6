@@ -57,7 +57,7 @@ end interface post_data
 !   The following data type contains pointers to diagnostic fields that might
 ! be shared between modules, and also to the variables that control the handling
 ! of model output.
-type, public :: diag_ctrl ; private
+type, public :: diag_ctrl
 
 ! The following fields are used for the output of the data.
   integer :: is, ie, js, je
@@ -67,24 +67,28 @@ type, public :: diag_ctrl ; private
   type(time_type) :: time_end   ! The end time of the valid
                                 ! interval for any offered field.
   logical :: ave_enabled = .false. ! .true. if averaging is enabled.
+
+  ! The following are axis types defined for output.
+  integer, dimension(3) :: axesBL, axesTL, axesCuL, axesCvL
+  integer, dimension(3) :: axesBi, axesTi, axesCui, axesCvi
+  integer, dimension(2) :: axesB1, axesT1, axesCu1, axesCv1
+  integer, dimension(1) :: axeszi, axeszL
+
 end type diag_ctrl
 
 integer :: doc_unit = -1
 
 contains
 
-subroutine set_axes_info(latq, lath, lonq, lonh, G, param_file, set_vertical)
-  real, intent(in) :: latq(:), lath(:), lonq(:), lonh(:)
+subroutine set_axes_info(G, param_file, diag, set_vertical)
   type(ocean_grid_type), intent(inout) :: G
   type(param_file_type), intent(in)    :: param_file
+  type(diag_ctrl),       intent(inout) :: diag
   logical, optional,     intent(in)    :: set_vertical
-! Arguments: latq - The latitude of q points in the entire domain.
-!  (in)      lath - The latitude of h points in the entire domain.
-!  (in)      lonq - The longitude of q points in the entire domain.
-!  (in)      lonh - The longitude of h points in the entire domain.
-!  (in)      G - The ocean's grid structure.
+! Arguments: G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
+!  (inout)   diag - A structure that is used to regulate diagnostic output.
 !  (in,opt)  set_vertical - If true (or missing), set up the vertical axes.
   integer :: id_xq, id_yq, id_zl, id_zi, id_xh, id_yh, k, nz
   real :: zlev(G%ks:G%ke), zinter(G%ks:G%ke+1)
@@ -137,19 +141,19 @@ subroutine set_axes_info(latq, lath, lonq, lonh, G, param_file, set_vertical)
 !  do i=1,nz ; zlev(i) = real(i) ; enddo
 !  do i=1,nz+1 ; zinter(i) = real(i) - 0.5 ; enddo
   if(G%symmetric) then 
-    id_xq = diag_axis_init('xq', lonq(G%isgB:G%iegB), G%x_axis_units, 'x', &
+    id_xq = diag_axis_init('xq', G%gridLonB(G%isgB:G%iegB), G%x_axis_units, 'x', &
               'q point nominal longitude', Domain2=G%Domain%mpp_domain)
-    id_yq = diag_axis_init('yq', latq(G%jsgB:G%jegB), G%y_axis_units, 'y', &
+    id_yq = diag_axis_init('yq', G%gridLatB(G%jsgB:G%jegB), G%y_axis_units, 'y', &
               'q point nominal latitude', Domain2=G%Domain%mpp_domain)
   else
-    id_xq = diag_axis_init('xq', lonq(G%isg:G%ieg), G%x_axis_units, 'x', &
+    id_xq = diag_axis_init('xq', G%gridLonB(G%isg:G%ieg), G%x_axis_units, 'x', &
               'q point nominal longitude', Domain2=G%Domain%mpp_domain)
-    id_yq = diag_axis_init('yq', latq(G%jsg:G%jeg), G%y_axis_units, 'y', &
+    id_yq = diag_axis_init('yq', G%gridLatB(G%jsg:G%jeg), G%y_axis_units, 'y', &
               'q point nominal latitude', Domain2=G%Domain%mpp_domain)
   endif           
-  id_xh = diag_axis_init('xh', lonh(G%isg:G%ieg), G%x_axis_units, 'x', &
+  id_xh = diag_axis_init('xh', G%gridLonT(G%isg:G%ieg), G%x_axis_units, 'x', &
               'h point nominal longitude', Domain2=G%Domain%mpp_domain)
-  id_yh = diag_axis_init('yh', lath(G%jsg:G%jeg), G%y_axis_units, 'y', &
+  id_yh = diag_axis_init('yh', G%gridLonT(G%jsg:G%jeg), G%y_axis_units, 'y', &
               'h point nominal latitude', Domain2=G%Domain%mpp_domain)
 
   if (set_vert) then
@@ -160,25 +164,25 @@ subroutine set_axes_info(latq, lath, lonq, lonh, G, param_file, set_vertical)
   endif
 
   ! Vertical axes for the interfaces and layers.
-  G%axeszi(1) = id_zi ; G%axeszL(1) = id_zL
+  diag%axeszi(1) = id_zi ; diag%axeszL(1) = id_zL
 
   ! Axis groupings for the model layers.
-  G%axesTL(:) = (/ id_xh, id_yh, id_zL /)
-  G%axesBL(:) = (/ id_xq, id_yq, id_zL /)
-  G%axesCuL(:) = (/ id_xq, id_yh, id_zL /)
-  G%axesCvL(:) = (/ id_xh, id_yq, id_zL /)
+  diag%axesTL(:) = (/ id_xh, id_yh, id_zL /)
+  diag%axesBL(:) = (/ id_xq, id_yq, id_zL /)
+  diag%axesCuL(:) = (/ id_xq, id_yh, id_zL /)
+  diag%axesCvL(:) = (/ id_xh, id_yq, id_zL /)
 
   ! Axis groupings for the model interfaces.
-  G%axesTi(:) = (/ id_xh, id_yh, id_zi /)
-  G%axesCui(:) = (/ id_xq, id_yh, id_zi /)
-  G%axesCvi(:) = (/ id_xh, id_yq, id_zi /)
-  G%axesBi(:) = (/ id_xq, id_yq, id_zi /)
+  diag%axesTi(:) = (/ id_xh, id_yh, id_zi /)
+  diag%axesCui(:) = (/ id_xq, id_yh, id_zi /)
+  diag%axesCvi(:) = (/ id_xh, id_yq, id_zi /)
+  diag%axesBi(:) = (/ id_xq, id_yq, id_zi /)
 
   ! Axis groupings for 2-D arrays.
-  G%axesT1(:) = (/ id_xh, id_yh /)
-  G%axesB1(:) = (/ id_xq, id_yq /)
-  G%axesCu1(:) = (/ id_xq, id_yh /)
-  G%axesCv1(:) = (/ id_xh, id_yq /)
+  diag%axesT1(:) = (/ id_xh, id_yh /)
+  diag%axesB1(:) = (/ id_xq, id_yq /)
+  diag%axesCu1(:) = (/ id_xq, id_yh /)
+  diag%axesCv1(:) = (/ id_xh, id_yq /)
  
 end subroutine set_axes_info
 
@@ -445,11 +449,13 @@ subroutine describe_option(opt_name, value)
   write(doc_unit, '(a)') trim(mesg)
 end subroutine describe_option
 
-function ocean_register_diag(var_desc, G, day)
+function ocean_register_diag(var_desc, G, diag, day)
   integer :: ocean_register_diag
-  type(vardesc), intent(in) :: var_desc
+  type(vardesc),         intent(in) :: var_desc
   type(ocean_grid_type), intent(in) :: G
-  type(time_type), intent(in) :: day
+  type(diag_ctrl),       intent(in) :: diag
+  type(time_type),       intent(in) :: day
+
   integer, dimension(:), allocatable :: axes
 
   ! Use the hor_grid and z_grid components of vardesc to determine the 
@@ -459,23 +465,23 @@ function ocean_register_diag(var_desc, G, day)
     case ("L")
       select case (var_desc%hor_grid)
         case ("q")
-          allocate(axes(3)) ; axes(:) = G%axesBL(:)
+          allocate(axes(3)) ; axes(:) = diag%axesBL(:)
         case ("h")
-          allocate(axes(3)) ; axes(:) = G%axesTL(:)
+          allocate(axes(3)) ; axes(:) = diag%axesTL(:)
         case ("u")
-          allocate(axes(3)) ; axes(:) = G%axesCuL(:)
+          allocate(axes(3)) ; axes(:) = diag%axesCuL(:)
         case ("v")
-          allocate(axes(3)) ; axes(:) = G%axesCvL(:)
+          allocate(axes(3)) ; axes(:) = diag%axesCvL(:)
         case ("Bu")
-          allocate(axes(3)) ; axes(:) = G%axesBL(:)
+          allocate(axes(3)) ; axes(:) = diag%axesBL(:)
         case ("T")
-          allocate(axes(3)) ; axes(:) = G%axesTL(:)
+          allocate(axes(3)) ; axes(:) = diag%axesTL(:)
         case ("Cu")
-          allocate(axes(3)) ; axes(:) = G%axesCuL(:)
+          allocate(axes(3)) ; axes(:) = diag%axesCuL(:)
         case ("Cv")
-          allocate(axes(3)) ; axes(:) = G%axesCvL(:)
+          allocate(axes(3)) ; axes(:) = diag%axesCvL(:)
         case ("z")
-          allocate(axes(1)) ; axes(:) = G%axeszL(:)
+          allocate(axes(1)) ; axes(:) = diag%axeszL(:)
         case default
           call MOM_error(FATAL, "ocean_register_diag: " // &
               "unknown hor_grid component "//trim(var_desc%hor_grid))
@@ -484,23 +490,23 @@ function ocean_register_diag(var_desc, G, day)
     case ("i")
       select case (var_desc%hor_grid)
         case ("q")
-          allocate(axes(3)) ; axes(:) = G%axesBi(:)
+          allocate(axes(3)) ; axes(:) = diag%axesBi(:)
         case ("h")
-          allocate(axes(3)) ; axes(:) = G%axesTi(:)
+          allocate(axes(3)) ; axes(:) = diag%axesTi(:)
         case ("u")
-          allocate(axes(3)) ; axes(:) = G%axesCui(:)
+          allocate(axes(3)) ; axes(:) = diag%axesCui(:)
         case ("v")
-          allocate(axes(3)) ; axes(:) = G%axesCvi(:)
+          allocate(axes(3)) ; axes(:) = diag%axesCvi(:)
         case ("Bu")
-          allocate(axes(3)) ; axes(:) = G%axesBi(:)
+          allocate(axes(3)) ; axes(:) = diag%axesBi(:)
         case ("T")
-          allocate(axes(3)) ; axes(:) = G%axesTi(:)
+          allocate(axes(3)) ; axes(:) = diag%axesTi(:)
         case ("Cu")
-          allocate(axes(3)) ; axes(:) = G%axesCui(:)
+          allocate(axes(3)) ; axes(:) = diag%axesCui(:)
         case ("Cv")
-          allocate(axes(3)) ; axes(:) = G%axesCvi(:)
+          allocate(axes(3)) ; axes(:) = diag%axesCvi(:)
         case ("z")
-          allocate(axes(1)) ; axes(:) = G%axeszi(:)
+          allocate(axes(1)) ; axes(:) = diag%axeszi(:)
         case default
           call MOM_error(FATAL, "ocean_register_diag: " // &
             "unknown hor_grid component "//trim(var_desc%hor_grid))
@@ -510,21 +516,21 @@ function ocean_register_diag(var_desc, G, day)
       allocate(axes(2))
       select case (var_desc%hor_grid)
         case ("q")
-          axes(:) = G%axesB1(:)
+          axes(:) = diag%axesB1(:)
         case ("h")
-          axes(:) = G%axesT1(:)
+          axes(:) = diag%axesT1(:)
         case ("u")
-          axes(:) = G%axesCu1(:)
+          axes(:) = diag%axesCu1(:)
         case ("v")
-          axes(:) = G%axesCv1(:)
+          axes(:) = diag%axesCv1(:)
         case ("Bu")
-          axes(:) = G%axesB1(:)
+          axes(:) = diag%axesB1(:)
         case ("T")
-          axes(:) = G%axesT1(:)
+          axes(:) = diag%axesT1(:)
         case ("Cu")
-          axes(:) = G%axesCu1(:)
+          axes(:) = diag%axesCu1(:)
         case ("Cv")
-          axes(:) = G%axesCv1(:)
+          axes(:) = diag%axesCv1(:)
         case default
           call MOM_error(FATAL, "ocean_register_diag: " // &
             "unknown hor_grid component "//trim(var_desc%hor_grid))
@@ -542,10 +548,15 @@ function ocean_register_diag(var_desc, G, day)
 
 end function ocean_register_diag
 
-subroutine diag_mediator_init(param_file, err_msg)
-  type(param_file_type),      intent(in)  :: param_file
-  character(len=*), optional, intent(out) :: err_msg
+subroutine diag_mediator_init(G, param_file, diag, err_msg)
+  type(ocean_grid_type),      intent(inout) :: G
+  type(param_file_type),      intent(in)    :: param_file
+  type(diag_ctrl),            intent(inout) :: diag
+  character(len=*), optional, intent(out)   :: err_msg
 
+  ! This subroutine initializes the diag_mediator and the diag_manager.
+  ! The grid type should have its dimensions set by this point, but it
+  ! is not necessary that the metrics and axis labels be set up yet.
   integer :: ios, unit
   logical :: opened, new_file
   character(len=8)   :: this_pe
@@ -553,6 +564,9 @@ subroutine diag_mediator_init(param_file, err_msg)
   character(len=40)  :: mod  = "MOM_diag_mediator" ! This module's name.
 
   call diag_manager_init(err_msg=err_msg)
+
+  diag%is = G%isc ; diag%ie = G%iec ; diag%js = G%jsc ; diag%je = G%jec
+  diag%isd = G%isd ; diag%ied = G%ied ; diag%jsd = G%jsd ; diag%jed = G%jed
 
   if (is_root_pe()) then
     write(this_pe,'(i6.6)') PE_here()

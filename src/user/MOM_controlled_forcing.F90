@@ -586,7 +586,7 @@ subroutine controlled_forcing_init(Time, G, param_file, diag, CS)
   CS%Len2 = smooth_len**2
 
 ! ### REPLACE THIS WITH ANY DIAGNOSTICS FROM THIS MODULE.
-!  CS%id_taux = register_diag_field('ocean_model', 'taux', G%axesu1, Time, &
+!  CS%id_taux = register_diag_field('ocean_model', 'taux', diag%axesu1, Time, &
 !        'Zonal Wind Stress', 'Pascal')
 
 end subroutine controlled_forcing_init

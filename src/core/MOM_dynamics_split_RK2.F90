@@ -1198,27 +1198,27 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, param_file, &
   call cpu_clock_end(id_clock_pass_init)
 
   flux_units = get_flux_units(G)
-  CS%id_uh = register_diag_field('ocean_model', 'uh', G%axesCuL, Time, &
+  CS%id_uh = register_diag_field('ocean_model', 'uh', diag%axesCuL, Time, &
       'Zonal Thickness Flux', flux_units)
-  CS%id_vh = register_diag_field('ocean_model', 'vh', G%axesCvL, Time, &
+  CS%id_vh = register_diag_field('ocean_model', 'vh', diag%axesCvL, Time, &
       'Meridional Thickness Flux', flux_units)
-  CS%id_CAu = register_diag_field('ocean_model', 'CAu', G%axesCuL, Time, &
+  CS%id_CAu = register_diag_field('ocean_model', 'CAu', diag%axesCuL, Time, &
       'Zonal Coriolis and Advective Acceleration', 'meter second-2')
-  CS%id_CAv = register_diag_field('ocean_model', 'CAv', G%axesCvL, Time, &
+  CS%id_CAv = register_diag_field('ocean_model', 'CAv', diag%axesCvL, Time, &
       'Meridional Coriolis and Advective Acceleration', 'meter second-2')
-  CS%id_PFu = register_diag_field('ocean_model', 'PFu', G%axesCuL, Time, &
+  CS%id_PFu = register_diag_field('ocean_model', 'PFu', diag%axesCuL, Time, &
       'Zonal Pressure Force Acceleration', 'meter second-2')
-  CS%id_PFv = register_diag_field('ocean_model', 'PFv', G%axesCvL, Time, &
+  CS%id_PFv = register_diag_field('ocean_model', 'PFv', diag%axesCvL, Time, &
       'Meridional Pressure Force Acceleration', 'meter second-2')
 
-  CS%id_uav = register_diag_field('ocean_model', 'uav', G%axesCuL, Time, &
+  CS%id_uav = register_diag_field('ocean_model', 'uav', diag%axesCuL, Time, &
       'Barotropic-step Averaged Zonal Velocity', 'meter second-1')
-  CS%id_vav = register_diag_field('ocean_model', 'vav', G%axesCvL, Time, &
+  CS%id_vav = register_diag_field('ocean_model', 'vav', diag%axesCvL, Time, &
       'Barotropic-step Averaged Meridional Velocity', 'meter second-1')
 
-  CS%id_u_BT_accel = register_diag_field('ocean_model', 'u_BT_accel', G%axesCuL, Time, &
+  CS%id_u_BT_accel = register_diag_field('ocean_model', 'u_BT_accel', diag%axesCuL, Time, &
     'Barotropic Anomaly Zonal Acceleration', 'meter second-1')
-  CS%id_v_BT_accel = register_diag_field('ocean_model', 'v_BT_accel', G%axesCvL, Time, &
+  CS%id_v_BT_accel = register_diag_field('ocean_model', 'v_BT_accel', diag%axesCvL, Time, &
     'Barotropic Anomaly Meridional Acceleration', 'meter second-1')
 
   id_clock_Cor = cpu_clock_id('(Ocean Coriolis & mom advection)', grain=CLOCK_MODULE)

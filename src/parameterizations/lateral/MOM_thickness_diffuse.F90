@@ -1408,31 +1408,31 @@ subroutine thickness_diffuse_init(Time, G, param_file, diag, CDp, CS)
   if (G%Boussinesq) then ; flux_units = "meter3 second-1"
   else ; flux_units = "kilogram second-1" ; endif
 
-  CS%id_uhGM = register_diag_field('ocean_model', 'uhGM', G%axesCuL, Time, &
+  CS%id_uhGM = register_diag_field('ocean_model', 'uhGM', diag%axesCuL, Time, &
            'Time Mean Diffusive Zonal Thickness Flux', flux_units)
   if (CS%id_uhGM > 0) call safe_alloc_ptr(CDp%uhGM,G%IsdB,G%IedB,G%jsd,G%jed,G%ke)
-  CS%id_vhGM = register_diag_field('ocean_model', 'vhGM', G%axesCvL, Time, &
+  CS%id_vhGM = register_diag_field('ocean_model', 'vhGM', diag%axesCvL, Time, &
            'Time Mean Diffusive Meridional Thickness Flux', flux_units)
   if (CS%id_vhGM > 0) call safe_alloc_ptr(CDp%vhGM,G%isd,G%ied,G%JsdB,G%JedB,G%ke)
-  CS%id_GMwork = register_diag_field('ocean_model', 'GMwork', G%axesT1, Time, &
+  CS%id_GMwork = register_diag_field('ocean_model', 'GMwork', diag%axesT1, Time, &
            'Time Mean Integral Work done by Diffusive Thickness Flux', 'Watt meter-2')
   if (CS%id_GMwork > 0) call safe_alloc_ptr(CS%GMwork,G%isd,G%ied,G%jsd,G%jed)
-  CS%id_KH_u = register_diag_field('ocean_model', 'KHTH_u', G%axesCui, Time, &
+  CS%id_KH_u = register_diag_field('ocean_model', 'KHTH_u', diag%axesCui, Time, &
            'Thickness Diffusivity at U-point', 'meter second-2')
-  CS%id_KH_v = register_diag_field('ocean_model', 'KHTH_v', G%axesCvi, Time, &
+  CS%id_KH_v = register_diag_field('ocean_model', 'KHTH_v', diag%axesCvi, Time, &
            'Thickness Diffusivity at V-point', 'meter second-2')
-  CS%id_KH_u1 = register_diag_field('ocean_model', 'KHTH_u1', G%axesCu1, Time, &
+  CS%id_KH_u1 = register_diag_field('ocean_model', 'KHTH_u1', diag%axesCu1, Time, &
            'Thickness Diffusivity at U-points (2-D)', 'meter second-2')
-  CS%id_KH_v1 = register_diag_field('ocean_model', 'KHTH_v1', G%axesCv1, Time, &
+  CS%id_KH_v1 = register_diag_field('ocean_model', 'KHTH_v1', diag%axesCv1, Time, &
            'Thickness Diffusivity at V-points (2-D)', 'meter second-2')
 
- ! CS%id_sfn_x =  register_diag_field('ocean_model', 'sfn_x', G%axesCui, Time, &
+ ! CS%id_sfn_x =  register_diag_field('ocean_model', 'sfn_x', diag%axesCui, Time, &
  !          'Parameterized Zonal Overturning Streamfunction', 'meter3 second-1')
- ! CS%id_sfn_y =  register_diag_field('ocean_model', 'sfn_y', G%axesCvi, Time, &
+ ! CS%id_sfn_y =  register_diag_field('ocean_model', 'sfn_y', diag%axesCvi, Time, &
  !          'Parameterized Meridional Overturning Streamfunction', 'meter3 second-1')
- ! CS%id_sfn_slope_x =  register_diag_field('ocean_model', 'sfn_sl_x', G%axesCui, Time, &
+ ! CS%id_sfn_slope_x =  register_diag_field('ocean_model', 'sfn_sl_x', diag%axesCui, Time, &
  !          'Parameterized Zonal Overturning Streamfunction from Interface Slopes', 'meter3 second-1')
- ! CS%id_sfn_slope_y =  register_diag_field('ocean_model', 'sfn_sl_y', G%axesCvi, Time, &
+ ! CS%id_sfn_slope_y =  register_diag_field('ocean_model', 'sfn_sl_y', diag%axesCvi, Time, &
  !          'Parameterized Meridional Overturning Streamfunction from Interface Slopes', 'meter3 second-1')
 
 end subroutine thickness_diffuse_init

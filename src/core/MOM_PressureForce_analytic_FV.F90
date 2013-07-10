@@ -738,11 +738,11 @@ end subroutine PressureForce_AFV_Bouss
 
 
 subroutine PressureForce_AFV_init(Time, G, param_file, diag, CS, tides_CSp)
-  type(time_type), target, intent(in)    :: Time
-  type(ocean_grid_type),   intent(in)    :: G
-  type(param_file_type),   intent(in)    :: param_file
-  type(diag_ctrl), target, intent(inout) :: diag
-  type(PressureForce_AFV_CS),  pointer       :: CS
+  type(time_type), target,    intent(in)    :: Time
+  type(ocean_grid_type),      intent(in)    :: G
+  type(param_file_type),      intent(in)    :: param_file
+  type(diag_ctrl), target,    intent(inout) :: diag
+  type(PressureForce_AFV_CS), pointer       :: CS
   type(tidal_forcing_CS), optional, pointer :: tides_CSp
 ! Arguments: Time - The current model time.
 !  (in)      G - The ocean's grid structure.
@@ -779,7 +779,7 @@ subroutine PressureForce_AFV_init(Time, G, param_file, diag, CS, tides_CSp)
                  "If true, apply tidal momentum forcing.", default=.false.)
 
   if (CS%tides) then
-    CS%id_e_tidal = register_diag_field('ocean_model', 'e_tidal', G%axesT1, &
+    CS%id_e_tidal = register_diag_field('ocean_model', 'e_tidal', diag%axesT1, &
         Time, 'Tidal Forcing Astronomical and SAL Height Anomaly', 'meter')
   endif
 

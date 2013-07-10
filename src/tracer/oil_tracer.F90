@@ -278,7 +278,7 @@ subroutine initialize_oil_tracer(restart, day, G, h, OBC, CS, sponge_CSp, &
   type(ocean_grid_type),              intent(in) :: G
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h
   type(ocean_OBC_type),               pointer    :: OBC
-  type(oil_tracer_CS),          pointer    :: CS
+  type(oil_tracer_CS),                pointer    :: CS
   type(sponge_CS),                    pointer    :: sponge_CSp
   type(diag_to_Z_CS),                 pointer    :: diag_to_Z_CSp
 !   This subroutine initializes the CS%ntr tracer fields in tr(:,:,:,:)
@@ -380,19 +380,19 @@ subroutine initialize_oil_tracer(restart, day, G, h, OBC, CS, sponge_CSp, &
     ! Register the tracer for the restart file.
     name = CS%tr_desc(m)%name ; longname = CS%tr_desc(m)%longname
     units = CS%tr_desc(m)%units
-    CS%id_tracer(m) = register_diag_field("ocean_model", trim(name), G%axesTL, &
+    CS%id_tracer(m) = register_diag_field("ocean_model", trim(name), CS%diag%axesTL, &
         day, trim(longname) , trim(units))
     CS%id_tr_adx(m) = register_diag_field("ocean_model", trim(name)//"_adx", &
-        G%axesCuL, day, trim(longname)//" advective zonal flux" , &
+        CS%diag%axesCuL, day, trim(longname)//" advective zonal flux" , &
         trim(flux_units))
     CS%id_tr_ady(m) = register_diag_field("ocean_model", trim(name)//"_ady", &
-        G%axesCvL, day, trim(longname)//" advective meridional flux" , &
+        CS%diag%axesCvL, day, trim(longname)//" advective meridional flux" , &
         trim(flux_units))
     CS%id_tr_dfx(m) = register_diag_field("ocean_model", trim(name)//"_dfx", &
-        G%axesCuL, day, trim(longname)//" diffusive zonal flux" , &
+        CS%diag%axesCuL, day, trim(longname)//" diffusive zonal flux" , &
         trim(flux_units))
     CS%id_tr_dfy(m) = register_diag_field("ocean_model", trim(name)//"_dfy", &
-        G%axesCvL, day, trim(longname)//" diffusive zonal flux" , &
+        CS%diag%axesCvL, day, trim(longname)//" diffusive zonal flux" , &
         trim(flux_units))
     if (CS%id_tr_adx(m) > 0) call safe_alloc_ptr(CS%tr_adx(m)%p,IsdB,IedB,jsd,jed,nz)
     if (CS%id_tr_ady(m) > 0) call safe_alloc_ptr(CS%tr_ady(m)%p,isd,ied,JsdB,JedB,nz)

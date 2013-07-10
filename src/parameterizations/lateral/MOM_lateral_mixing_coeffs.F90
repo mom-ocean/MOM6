@@ -472,13 +472,13 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
                  default=0.0)
 
   ! Register fields for output from this module.
-    CS%id_SN_u = register_diag_field('ocean_model', 'SN_u', G%axesCu1, Time, &
+    CS%id_SN_u = register_diag_field('ocean_model', 'SN_u', diag%axesCu1, Time, &
        'Inverse eddy time-scale, S*N, at u-points', 's^-1')
-    CS%id_SN_v = register_diag_field('ocean_model', 'SN_v', G%axesCv1, Time, &
+    CS%id_SN_v = register_diag_field('ocean_model', 'SN_v', diag%axesCv1, Time, &
        'Inverse eddy time-scale, S*N, at v-points', 's^-1')
-    CS%id_L2u = register_diag_field('ocean_model', 'L2u', G%axesCu1, Time, &
+    CS%id_L2u = register_diag_field('ocean_model', 'L2u', diag%axesCu1, Time, &
        'Length scale squared for mixing coefficient, at u-points', 'm^2')
-    CS%id_L2v = register_diag_field('ocean_model', 'L2v', G%axesCv1, Time, &
+    CS%id_L2v = register_diag_field('ocean_model', 'L2v', diag%axesCv1, Time, &
        'Length scale squared for mixing coefficient, at v-points', 'm^2')
   endif
 
@@ -496,9 +496,9 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
     allocate(CS%Rd_dx_h(isd:ied,jsd:jed))        ; CS%Rd_dx_h(:,:) = 0.0
 
 
-    CS%id_Res_fn = register_diag_field('ocean_model', 'Res_fn', G%axesT1, Time, &
+    CS%id_Res_fn = register_diag_field('ocean_model', 'Res_fn', diag%axesT1, Time, &
        'Resolution function for scaling diffusivities', 'Nondim')
-    CS%id_Rd_dx = register_diag_field('ocean_model', 'Rd_dx', G%axesT1, Time, &
+    CS%id_Rd_dx = register_diag_field('ocean_model', 'Rd_dx', diag%axesT1, Time, &
        'Ratio between deformation radius and grid spacing', 'Nondim')
 
     call get_param(param_file, mod, "KH_RES_SCALE_COEF", CS%Res_coef, &

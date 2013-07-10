@@ -1733,14 +1733,14 @@ subroutine kappa_shear_init(Time, G, param_file, diag, CS)
 
   CS%diag => diag
 
-  CS%id_Kd_shear = register_diag_field('ocean_model','Kd_shear',G%axesTi,Time, &
+  CS%id_Kd_shear = register_diag_field('ocean_model','Kd_shear',diag%axesTi,Time, &
       'Shear-driven Diapycnal Diffusivity', 'meter2 second-1')
-  CS%id_TKE = register_diag_field('ocean_model','TKE_shear',G%axesTi,Time, &
+  CS%id_TKE = register_diag_field('ocean_model','TKE_shear',diag%axesTi,Time, &
       'Shear-driven Turbulent Kinetic Energy', 'meter2 second-2')
 #ifdef ADD_DIAGNOSTICS
-  CS%id_ILd2 = register_diag_field('ocean_model','ILd2_shear',G%axesTi,Time, &
+  CS%id_ILd2 = register_diag_field('ocean_model','ILd2_shear',diag%axesTi,Time, &
       'Inverse kappa decay scale at interfaces', 'meter-2')
-  CS%id_dz_Int = register_diag_field('ocean_model','dz_Int_shear',G%axesTi,Time, &
+  CS%id_dz_Int = register_diag_field('ocean_model','dz_Int_shear',diag%axesTi,Time, &
       'Finite volume thickness of interfaces', 'meter')
 #endif
 

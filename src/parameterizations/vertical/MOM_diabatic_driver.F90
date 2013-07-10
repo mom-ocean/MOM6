@@ -1427,27 +1427,27 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
   if (G%Boussinesq) then ; thickness_units = "meter"
   else ; thickness_units = "kilogram meter-2" ; endif
  
-  CS%id_ea = register_diag_field('ocean_model','ea',G%axesTL,Time, &
+  CS%id_ea = register_diag_field('ocean_model','ea',diag%axesTL,Time, &
       'Layer entrainment from above per timestep','meter')
-  CS%id_eb = register_diag_field('ocean_model','eb',G%axesTL,Time, &
+  CS%id_eb = register_diag_field('ocean_model','eb',diag%axesTL,Time, &
       'Layer entrainment from below per timestep', 'meter')
-  CS%id_dudt_dia = register_diag_field('ocean_model','dudt_dia',G%axesCuL,Time, &
+  CS%id_dudt_dia = register_diag_field('ocean_model','dudt_dia',diag%axesCuL,Time, &
       'Zonal Acceleration from Diapycnal Mixing', 'meter second-2')
-  CS%id_dvdt_dia = register_diag_field('ocean_model','dvdt_dia',G%axesCvL,Time, &
+  CS%id_dvdt_dia = register_diag_field('ocean_model','dvdt_dia',diag%axesCvL,Time, &
       'Meridional Acceleration from Diapycnal Mixing', 'meter second-2')
-  CS%id_wd = register_diag_field('ocean_model','wd',G%axesTi,Time, &
+  CS%id_wd = register_diag_field('ocean_model','wd',diag%axesTi,Time, &
       'Diapycnal Velocity', 'meter second-1')
 
-  CS%id_Tdif = register_diag_field('ocean_model',"Tflx_dia_diff",G%axesTi, &
+  CS%id_Tdif = register_diag_field('ocean_model',"Tflx_dia_diff",diag%axesTi, &
       Time, "Diffusive diapycnal temperature flux across interfaces", &
       "degC meter second-1")
-  CS%id_Tadv = register_diag_field('ocean_model',"Tflx_dia_adv",G%axesTi, &
+  CS%id_Tadv = register_diag_field('ocean_model',"Tflx_dia_adv",diag%axesTi, &
       Time, "Advective diapycnal temperature flux across interfaces", &
       "degC meter second-1")
-  CS%id_Sdif = register_diag_field('ocean_model',"Sflx_dia_diff",G%axesTi, &
+  CS%id_Sdif = register_diag_field('ocean_model',"Sflx_dia_diff",diag%axesTi, &
       Time, "Diffusive diapycnal salnity flux across interfaces", &
       "PSU meter second-1")
-  CS%id_Sadv = register_diag_field('ocean_model',"Sflx_dia_adv",G%axesTi, &
+  CS%id_Sadv = register_diag_field('ocean_model',"Sflx_dia_adv",diag%axesTi, &
       Time, "Advective diapycnal salnity flux across interfaces", &
       "PSU meter second-1")
 

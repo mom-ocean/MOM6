@@ -1360,30 +1360,30 @@ subroutine vertvisc_init(MIS, Time, G, param_file, diag, ADp, dirs, ntrunc, CS)
   ALLOC_(CS%a_v(isd:ied,JsdB:JedB,nz+1)) ; CS%a_v(:,:,:) = 0.0
   ALLOC_(CS%h_v(isd:ied,JsdB:JedB,nz))   ; CS%h_v(:,:,:) = 0.0
 
-  CS%id_au_vv = register_diag_field('ocean_model', 'au_visc', G%axesCui, Time, &
+  CS%id_au_vv = register_diag_field('ocean_model', 'au_visc', diag%axesCui, Time, &
      'Zonal Viscous Vertical Coupling Coefficient', 'meter second-1')
-  CS%id_av_vv = register_diag_field('ocean_model', 'av_visc', G%axesCvi, Time, &
+  CS%id_av_vv = register_diag_field('ocean_model', 'av_visc', diag%axesCvi, Time, &
      'Meridional Viscous Vertical Coupling Coefficient', 'meter second-1')
 
-  CS%id_h_u = register_diag_field('ocean_model', 'Hu_visc', G%axesCuL, Time, &
+  CS%id_h_u = register_diag_field('ocean_model', 'Hu_visc', diag%axesCuL, Time, &
      'Thickness at Zonal Velocity Points for Viscosity', thickness_units)
-  CS%id_h_v = register_diag_field('ocean_model', 'Hv_visc', G%axesCvL, Time, &
+  CS%id_h_v = register_diag_field('ocean_model', 'Hv_visc', diag%axesCvL, Time, &
      'Thickness at Meridional Velocity Points for Viscosity', thickness_units)
-  CS%id_hML_u = register_diag_field('ocean_model', 'HMLu_visc', G%axesCu1, Time, &
+  CS%id_hML_u = register_diag_field('ocean_model', 'HMLu_visc', diag%axesCu1, Time, &
      'Mixed Layer Thickness at Zonal Velocity Points for Viscosity', thickness_units)
-  CS%id_hML_v = register_diag_field('ocean_model', 'HMLv_visc', G%axesCv1, Time, &
+  CS%id_hML_v = register_diag_field('ocean_model', 'HMLv_visc', diag%axesCv1, Time, &
      'Mixed Layer Thickness at Meridional Velocity Points for Viscosity', thickness_units)
 
-  CS%id_du_dt_visc = register_diag_field('ocean_model', 'du_dt_visc', G%axesCuL, &
+  CS%id_du_dt_visc = register_diag_field('ocean_model', 'du_dt_visc', diag%axesCuL, &
      Time, 'Zonal Acceleration from Vertical Viscosity', 'meter second-2')
   if (CS%id_du_dt_visc > 0) call safe_alloc_ptr(ADp%du_dt_visc,IsdB,IedB,jsd,jed,nz)
-  CS%id_dv_dt_visc = register_diag_field('ocean_model', 'dv_dt_visc', G%axesCvL, &
+  CS%id_dv_dt_visc = register_diag_field('ocean_model', 'dv_dt_visc', diag%axesCvL, &
      Time, 'Meridional Acceleration from Vertical Viscosity', 'meter second-2')
   if (CS%id_dv_dt_visc > 0) call safe_alloc_ptr(ADp%dv_dt_visc,isd,ied,JsdB,JedB,nz)
 
-  CS%id_taux_bot = register_diag_field('ocean_model', 'taux_bot', G%axesCu1, &
+  CS%id_taux_bot = register_diag_field('ocean_model', 'taux_bot', diag%axesCu1, &
      Time, 'Zonal Bottom Stress from Ocean to Earth', 'Pa')
-  CS%id_tauy_bot = register_diag_field('ocean_model', 'tauy_bot', G%axesCv1, &
+  CS%id_tauy_bot = register_diag_field('ocean_model', 'tauy_bot', diag%axesCv1, &
      Time, 'Meridional Bottom Stress from Ocean to Earth', 'Pa')
 
   if ((len_trim(CS%v_trunc_file) > 0) .or. (len_trim(CS%v_trunc_file) > 0)) &

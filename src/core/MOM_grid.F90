@@ -161,13 +161,6 @@ type, public :: ocean_grid_type
                         ! thickness to m.
   real :: H_to_Pa       ! A constant that translates the units of thickness to 
                         ! to pressure in Pa.
-
-  ! The following are axis types defined for output.
-  integer, dimension(3) :: axesBL, axesTL, axesCuL, axesCvL
-  integer, dimension(3) :: axesBi, axesTi, axesCui, axesCvi
-  integer, dimension(2) :: axesB1, axesT1, axesCu1, axesCv1
-  integer, dimension(1) :: axeszi, axeszL
-
 end type ocean_grid_type
 
 contains

@@ -442,23 +442,23 @@ subroutine MEKE_init(Time, G, param_file, diag, CS, MEKE)
   if (associated(MEKE%Kh)) call pass_var(MEKE%Kh, G%Domain)
 
 ! Register fields for output from this module.
-  CS%id_MEKE = register_diag_field('ocean_model', 'MEKE', G%axesT1, Time, &
+  CS%id_MEKE = register_diag_field('ocean_model', 'MEKE', diag%axesT1, Time, &
      'Mesoscale Eddy Kinetic Energy', 'meter2 second-2')
-  CS%id_Kh = register_diag_field('ocean_model', 'MEKE_KH', G%axesT1, Time, &
+  CS%id_Kh = register_diag_field('ocean_model', 'MEKE_KH', diag%axesT1, Time, &
      'MEKE derived diffusivity', 'meter2 second-1')
-  CS%id_src = register_diag_field('ocean_model', 'MEKE_src', G%axesT1, Time, &
+  CS%id_src = register_diag_field('ocean_model', 'MEKE_src', diag%axesT1, Time, &
      'MEKE energy source', 'meter2 second-3')
-  CS%id_decay = register_diag_field('ocean_model', 'MEKE_decay', G%axesT1, Time, &
+  CS%id_decay = register_diag_field('ocean_model', 'MEKE_decay', diag%axesT1, Time, &
      'MEKE decay rate', 'second-1')
-  CS%id_KhMEKE_u = register_diag_field('ocean_model', 'KHMEKE_u', G%axesCu1, Time, &
+  CS%id_KhMEKE_u = register_diag_field('ocean_model', 'KHMEKE_u', diag%axesCu1, Time, &
      'Zonal diffusivity of MEKE', 'meter2 second-1')
-  CS%id_KhMEKE_v = register_diag_field('ocean_model', 'KHMEKE_v', G%axesCv1, Time, &
+  CS%id_KhMEKE_v = register_diag_field('ocean_model', 'KHMEKE_v', diag%axesCv1, Time, &
      'Meridional diffusivity of MEKE', 'meter2 second-1')
   if (associated(MEKE%GM_src)) &
-    CS%id_GM_src = register_diag_field('ocean_model', 'MEKE_GM_src', G%axesT1, &
+    CS%id_GM_src = register_diag_field('ocean_model', 'MEKE_GM_src', diag%axesT1, &
         Time, 'MEKE energy available from thickness mixing', 'Watt meter-2')
   if (associated(MEKE%mom_src)) &
-    CS%id_mom_src = register_diag_field('ocean_model', 'MEKE_mom_src',G%axesT1,&
+    CS%id_mom_src = register_diag_field('ocean_model', 'MEKE_mom_src',diag%axesT1,&
         Time, 'MEKE energy available from momentum', 'Watt meter-2')
 
   id_clock_pass = cpu_clock_id('(Ocean continuity halo updates)', grain=CLOCK_ROUTINE)

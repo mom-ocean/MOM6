@@ -54,9 +54,9 @@ module MOM_grid_initialize
 !*                                                                     *
 !*     A small fragment of the C-grid is shown below:                  *
 !*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q, dxBu, IdxBu, dyBu, IdyBu, etc.            *
-!*    j+1  > o > o >   At ^:  v, dxCv, IdxCv, dyCv, IdyCv, etc.            *
-!*    j    x ^ x ^ x   At >:  u, dxCu, IdxCu, dyCu, IdyCu, etc.            *
+!*    j+1  x ^ x ^ x   At x:  q, dxBu, IdxBu, dyBu, IdyBu, etc.        *
+!*    j+1  > o > o >   At ^:  v, dxCv, IdxCv, dyCv, IdyCv, etc.        *
+!*    j    x ^ x ^ x   At >:  u, dxCu, IdxCu, dyCu, IdyCu, etc.        *
 !*    j    > o > o >   At o:  h, dxT, IdxT, dyT, IdyT, areaT, etc.     *
 !*    j-1  x ^ x ^ x                                                   *
 !*        i-1  i  i+1  At x & ^:                                       *
@@ -66,7 +66,6 @@ module MOM_grid_initialize
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 
-use MOM_diag_mediator, only : set_axes_info
 use MOM_domains, only : pass_var, pass_vector, pe_here, root_PE, broadcast
 use MOM_checksums, only : hchksum, qchksum, uchksum, vchksum
 use MOM_domains, only : AGRID, BGRID_NE, CGRID_NE, To_All, Scalar_Pair
@@ -350,15 +349,13 @@ end function Int_dj_dy
 
 ! ------------------------------------------------------------------------------
 
-subroutine set_grid_metrics(G, param_file, set_vertical)
+subroutine set_grid_metrics(G, param_file)
   type(ocean_grid_type), intent(inout) :: G
   type(param_file_type), intent(in)    :: param_file
-  logical, optional,     intent(in)    :: set_vertical
 ! Arguments:
 !  (inout)   G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
-!  (in,opt)  set_vertical - If true (or missing), set up the vertical axes.
 
 !    Calculate the values of the metric terms that might be used
 !  and save them in arrays.
@@ -398,10 +395,6 @@ subroutine set_grid_metrics(G, param_file, set_vertical)
 
 ! Calculate derived metrics (i.e. reciprocals and products)
   call set_grid_derived_metrics(G, param_file)
-
-! This call sets up the diagnostic axes.
-  call set_axes_info(G%gridLatB, G%gridLatT, G%gridLonB, G%gridLonT, G, &
-                     param_file, set_vertical=set_vertical)
 
   if (debug) call grid_metrics_chksum('MOM_grid_init/set_grid_metrics',G)
 

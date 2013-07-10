@@ -355,13 +355,13 @@ subroutine mixedlayer_restrat_init(Time, G, param_file, diag, CS)
              "grid spacing over the deformation radius, as detailed \n"//&
              "by Fox-Kemper et al. (2010)", units="nondim", default=0.0)
 
-  CS%id_uhml = register_diag_field('ocean_model', 'uhml', G%axesCuL, Time, &
+  CS%id_uhml = register_diag_field('ocean_model', 'uhml', diag%axesCuL, Time, &
       'Zonal Thickness Flux to Restratify Mixed Layer', flux_units)
-  CS%id_vhml = register_diag_field('ocean_model', 'vhml', G%axesCvL, Time, &
+  CS%id_vhml = register_diag_field('ocean_model', 'vhml', diag%axesCvL, Time, &
       'Meridional Thickness Flux to Restratify Mixed Layer', flux_units)
-  CS%id_urestrat_time = register_diag_field('ocean_model', 'MLu_restrat_time', G%axesCu1, Time, &
+  CS%id_urestrat_time = register_diag_field('ocean_model', 'MLu_restrat_time', diag%axesCu1, Time, &
       'Mixed Layer Zonal Restratification Timescale', 'second')
-  CS%id_vrestrat_time = register_diag_field('ocean_model', 'MLv_restrat_time', G%axesCu1, Time, &
+  CS%id_vrestrat_time = register_diag_field('ocean_model', 'MLv_restrat_time', diag%axesCu1, Time, &
       'Mixed Layer Meridional Restratification Timescale', 'second')
 
 end subroutine mixedlayer_restrat_init

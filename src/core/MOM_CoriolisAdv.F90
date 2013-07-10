@@ -977,25 +977,25 @@ subroutine CoriolisAdv_init(Time, G, param_file, diag, AD, CS)
                      "#DEFINE PV_ADV_SCHEME in input file is invalid.")
   end select
 
-  CS%id_rv = register_diag_field('ocean_model', 'RV', G%axesBL, Time, &
+  CS%id_rv = register_diag_field('ocean_model', 'RV', diag%axesBL, Time, &
      'Relative Vorticity', 'second-1')
 
-  CS%id_PV = register_diag_field('ocean_model', 'PV', G%axesBL, Time, &
+  CS%id_PV = register_diag_field('ocean_model', 'PV', diag%axesBL, Time, &
      'Potential Vorticity', 'meter-1 second-1')
 
-  CS%id_gKEu = register_diag_field('ocean_model', 'gKEu', G%axesCuL, Time, &
+  CS%id_gKEu = register_diag_field('ocean_model', 'gKEu', diag%axesCuL, Time, &
      'Zonal Acceleration from Grad. Kinetic Energy', 'meter-1 second-2')
   if (CS%id_gKEu > 0) call safe_alloc_ptr(AD%gradKEu,IsdB,IedB,jsd,jed,nz)
 
-  CS%id_gKEv = register_diag_field('ocean_model', 'gKEv', G%axesCvL, Time, &
+  CS%id_gKEv = register_diag_field('ocean_model', 'gKEv', diag%axesCvL, Time, &
      'Meridional Acceleration from Grad. Kinetic Energy', 'meter-1 second-2')
   if (CS%id_gKEv > 0) call safe_alloc_ptr(AD%gradKEv,isd,ied,JsdB,JedB,nz)
 
-  CS%id_rvxu = register_diag_field('ocean_model', 'rvxu', G%axesCvL, Time, &
+  CS%id_rvxu = register_diag_field('ocean_model', 'rvxu', diag%axesCvL, Time, &
      'Meridional Acceleration from Relative Vorticity', 'meter-1 second-2')
   if (CS%id_rvxu > 0) call safe_alloc_ptr(AD%rv_x_u,isd,ied,JsdB,JedB,nz)
 
-  CS%id_rvxv = register_diag_field('ocean_model', 'rvxv', G%axesCuL, Time, &
+  CS%id_rvxv = register_diag_field('ocean_model', 'rvxv', diag%axesCuL, Time, &
      'Zonal Acceleration from Relative Vorticity', 'meter-1 second-2')
   if (CS%id_rvxv > 0) call safe_alloc_ptr(AD%rv_x_v,IsdB,IedB,jsd,jed,nz)
 

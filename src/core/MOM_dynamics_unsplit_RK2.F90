@@ -634,17 +634,17 @@ subroutine initialize_dyn_unsplit_RK2(u, v, h, Time, G, param_file, diag, CS, &
   endif
 
   flux_units = get_flux_units(G)
-  CS%id_uh = register_diag_field('ocean_model', 'uh', G%axesCuL, Time, &
+  CS%id_uh = register_diag_field('ocean_model', 'uh', diag%axesCuL, Time, &
       'Zonal Thickness Flux', flux_units)
-  CS%id_vh = register_diag_field('ocean_model', 'vh', G%axesCvL, Time, &
+  CS%id_vh = register_diag_field('ocean_model', 'vh', diag%axesCvL, Time, &
       'Meridional Thickness Flux', flux_units)
-  CS%id_CAu = register_diag_field('ocean_model', 'CAu', G%axesCuL, Time, &
+  CS%id_CAu = register_diag_field('ocean_model', 'CAu', diag%axesCuL, Time, &
       'Zonal Coriolis and Advective Acceleration', 'meter second-2')
-  CS%id_CAv = register_diag_field('ocean_model', 'CAv', G%axesCvL, Time, &
+  CS%id_CAv = register_diag_field('ocean_model', 'CAv', diag%axesCvL, Time, &
       'Meridional Coriolis and Advective Acceleration', 'meter second-2')
-  CS%id_PFu = register_diag_field('ocean_model', 'PFu', G%axesCuL, Time, &
+  CS%id_PFu = register_diag_field('ocean_model', 'PFu', diag%axesCuL, Time, &
       'Zonal Pressure Force Acceleration', 'meter second-2')
-  CS%id_PFv = register_diag_field('ocean_model', 'PFv', G%axesCvL, Time, &
+  CS%id_PFv = register_diag_field('ocean_model', 'PFv', diag%axesCvL, Time, &
       'Meridional Pressure Force Acceleration', 'meter second-2')
 
   id_clock_Cor = cpu_clock_id('(Ocean Coriolis & mom advection)', grain=CLOCK_MODULE)

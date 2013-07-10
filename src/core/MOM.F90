@@ -331,7 +331,7 @@ use MOM_cpu_clock, only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
 use MOM_diag_mediator, only : diag_mediator_init, enable_averaging
 use MOM_diag_mediator, only : disable_averaging, post_data, safe_alloc_ptr
 use MOM_diag_mediator, only : register_diag_field, register_static_field
-use MOM_diag_mediator, only : set_diag_mediator_grid, diag_ctrl
+use MOM_diag_mediator, only : set_axes_info, diag_ctrl
 use MOM_domains, only : MOM_domains_init, pass_var, pass_vector
 use MOM_domains, only : pass_var_start, pass_var_complete
 use MOM_domains, only : pass_vector_start, pass_vector_complete
@@ -1210,12 +1210,12 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call MOM_checksums_init(param_file)
 
   call MOM_io_init(param_file)
-  call diag_mediator_init(param_file)
   call MOM_grid_init(G, param_file)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
-  call set_diag_mediator_grid(G, diag)
+
+  call diag_mediator_init(G, param_file, diag)
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, "MOM", version, "")
@@ -1516,6 +1516,8 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call cpu_clock_begin(id_clock_MOM_init)
   call MOM_initialize(CS%u, CS%v, CS%h, CS%tv, Time, G, param_file, dirs, &
                       CS%restart_CSp, init_CS, Time_in)
+  ! This call sets up the diagnostic axes.
+  call set_axes_info(G, param_file, diag)
   call cpu_clock_end(id_clock_MOM_init)
 
   if (CS%useALEalgorithm) then
@@ -1710,7 +1712,7 @@ end subroutine unitTests
 subroutine register_diags(Time, G, CS, ADp)
   type(time_type),           intent(in)    :: Time
   type(ocean_grid_type),     intent(inout) :: G
-  type(MOM_control_struct),  intent(inout) :: CS
+  type(MOM_control_struct),  pointer       :: CS
   type(accel_diag_ptrs),     intent(inout) :: ADp
 ! Arguments: Time - The current model time.
 !  (in)      G - The ocean's grid structure.
@@ -1718,104 +1720,107 @@ subroutine register_diags(Time, G, CS, ADp)
 !  (inout)   ADp - A structure pointing to the various accelerations in
 !                  the momentum equations.
   character(len=48) :: thickness_units, flux_units, T_flux_units, S_flux_units
+  type(diag_ctrl), pointer :: diag
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = G%ke
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
+
+  diag => CS%diag
 
   thickness_units = get_thickness_units(G)
   flux_units = get_flux_units(G)
   T_flux_units = get_tr_flux_units(G, "Celsius")
   S_flux_units = get_tr_flux_units(G, "PSU")
 
-  CS%id_u = register_diag_field('ocean_model', 'u', G%axesCuL, Time, &
+  CS%id_u = register_diag_field('ocean_model', 'u', diag%axesCuL, Time, &
       'Zonal velocity', 'meter second-1')
-  CS%id_v = register_diag_field('ocean_model', 'v', G%axesCvL, Time, &
+  CS%id_v = register_diag_field('ocean_model', 'v', diag%axesCvL, Time, &
       'Meridional velocity', 'meter second-1')
-  CS%id_h = register_diag_field('ocean_model', 'h', G%axesTL, Time, &
+  CS%id_h = register_diag_field('ocean_model', 'h', diag%axesTL, Time, &
       'Layer Thickness', thickness_units)
-  CS%id_ssh = register_diag_field('ocean_model', 'SSH', G%axesT1, Time, &
+  CS%id_ssh = register_diag_field('ocean_model', 'SSH', diag%axesT1, Time, &
       'Sea Surface Height', 'meter', CS%missing)
-  CS%id_ssh_inst = register_diag_field('ocean_model', 'SSH_inst', G%axesT1, Time, &
+  CS%id_ssh_inst = register_diag_field('ocean_model', 'SSH_inst', diag%axesT1, Time, &
       'Instantaneous Sea Surface Height', 'meter', CS%missing)
-  CS%id_ssu = register_diag_field('ocean_model', 'SSU', G%axesCu1, Time, &
+  CS%id_ssu = register_diag_field('ocean_model', 'SSU', diag%axesCu1, Time, &
       'Sea Surface Zonal Velocity', 'meter second-1', CS%missing)
-  CS%id_ssv = register_diag_field('ocean_model', 'SSV', G%axesCv1, Time, &
+  CS%id_ssv = register_diag_field('ocean_model', 'SSV', diag%axesCv1, Time, &
       'Sea Surface Meridional Velocity', 'meter second-1', CS%missing)
-  CS%id_speed = register_diag_field('ocean_model', 'speed', G%axesT1, Time, &
+  CS%id_speed = register_diag_field('ocean_model', 'speed', diag%axesT1, Time, &
       'Sea Surface Speed', 'meter second-1', CS%missing)
   if (CS%use_temperature) then
-    CS%id_T = register_diag_field('ocean_model', 'temp', G%axesTL, Time, &
+    CS%id_T = register_diag_field('ocean_model', 'temp', diag%axesTL, Time, &
         'Potential Temperature', 'Celsius')
-    CS%id_S = register_diag_field('ocean_model', 'salt', G%axesTL, Time, &
+    CS%id_S = register_diag_field('ocean_model', 'salt', diag%axesTL, Time, &
         'Salinity', 'PSU')
-    CS%id_sst = register_diag_field('ocean_model', 'SST', G%axesT1, Time, &
+    CS%id_sst = register_diag_field('ocean_model', 'SST', diag%axesT1, Time, &
         'Sea Surface Temperature', 'Celsius', CS%missing)
-    CS%id_sst_sq = register_diag_field('ocean_model', 'SST_sq', G%axesT1, Time, &
+    CS%id_sst_sq = register_diag_field('ocean_model', 'SST_sq', diag%axesT1, Time, &
         'Sea Surface Temperature Squared', 'Celsius**2', CS%missing)    
-    CS%id_sss = register_diag_field('ocean_model', 'SSS', G%axesT1, Time, &
+    CS%id_sss = register_diag_field('ocean_model', 'SSS', diag%axesT1, Time, &
         'Sea Surface Salinity', 'PSU', CS%missing)
     if (CS%id_sst_sq > 0) call safe_alloc_ptr(CS%SST_sq,isd,ied,jsd,jed)    
   endif
   if (CS%use_temperature .and. CS%use_frazil) then
-    CS%id_fraz = register_diag_field('ocean_model', 'frazil', G%axesT1, Time, &
+    CS%id_fraz = register_diag_field('ocean_model', 'frazil', diag%axesT1, Time, &
           'Heat sink from frazil formation', 'Watt meter-2')
   endif
 
-  CS%id_salt_deficit = register_diag_field('ocean_model', 'salt_deficit', G%axesT1, Time, &
+  CS%id_salt_deficit = register_diag_field('ocean_model', 'salt_deficit', diag%axesT1, Time, &
          'Salt sink in ocean due to ice flux', 'g Salt meter-2 s-1')
-  CS%id_Heat_PmE = register_diag_field('ocean_model', 'Heat_PmE', G%axesT1, Time, &
+  CS%id_Heat_PmE = register_diag_field('ocean_model', 'Heat_PmE', diag%axesT1, Time, &
          'Heat flux into ocean from mass flux into ocean', 'Watt meter-2')
-  CS%id_intern_heat = register_diag_field('ocean_model', 'internal_heat', G%axesT1, Time, &
+  CS%id_intern_heat = register_diag_field('ocean_model', 'internal_heat', diag%axesT1, Time, &
          'Heat flux into ocean from geothermal or other internal sources', &
          'Watt meter-2')
 
 
-  CS%id_Tadx = register_diag_field('ocean_model', 'T_adx', G%axesCuL, Time, &
+  CS%id_Tadx = register_diag_field('ocean_model', 'T_adx', diag%axesCuL, Time, &
       'Advective Zonal Flux of Potential Temperature', T_flux_units)
-  CS%id_Tady = register_diag_field('ocean_model', 'T_ady', G%axesCvL, Time, &
+  CS%id_Tady = register_diag_field('ocean_model', 'T_ady', diag%axesCvL, Time, &
       'Advective Meridional Flux of Potential Temperature', T_flux_units)
-  CS%id_Tdiffx = register_diag_field('ocean_model', 'T_diffx', G%axesCuL, Time, &
+  CS%id_Tdiffx = register_diag_field('ocean_model', 'T_diffx', diag%axesCuL, Time, &
       'Diffusive Zonal Flux of Potential Temperature', T_flux_units)
-  CS%id_Tdiffy = register_diag_field('ocean_model', 'T_diffy', G%axesCvL, Time, &
+  CS%id_Tdiffy = register_diag_field('ocean_model', 'T_diffy', diag%axesCvL, Time, &
       'Diffusive Meridional Flux of Potential Temperature', T_flux_units)
   if (CS%id_Tadx > 0)   call safe_alloc_ptr(CS%T_adx,IsdB,IedB,jsd,jed,nz)
   if (CS%id_Tady > 0)   call safe_alloc_ptr(CS%T_ady,isd,ied,JsdB,JedB,nz)
   if (CS%id_Tdiffx > 0) call safe_alloc_ptr(CS%T_diffx,IsdB,IedB,jsd,jed,nz)
   if (CS%id_Tdiffy > 0) call safe_alloc_ptr(CS%T_diffy,isd,ied,JsdB,JedB,nz)
 
-  CS%id_Sadx = register_diag_field('ocean_model', 'S_adx', G%axesCuL, Time, &
+  CS%id_Sadx = register_diag_field('ocean_model', 'S_adx', diag%axesCuL, Time, &
       'Advective Zonal Flux of Salinity', S_flux_units)
-  CS%id_Sady = register_diag_field('ocean_model', 'S_ady', G%axesCvL, Time, &
+  CS%id_Sady = register_diag_field('ocean_model', 'S_ady', diag%axesCvL, Time, &
       'Advective Meridional Flux of Salinity', S_flux_units)
-  CS%id_Sdiffx = register_diag_field('ocean_model', 'S_diffx', G%axesCuL, Time, &
+  CS%id_Sdiffx = register_diag_field('ocean_model', 'S_diffx', diag%axesCuL, Time, &
       'Diffusive Zonal Flux of Salinity', S_flux_units)
-  CS%id_Sdiffy = register_diag_field('ocean_model', 'S_diffy', G%axesCvL, Time, &
+  CS%id_Sdiffy = register_diag_field('ocean_model', 'S_diffy', diag%axesCvL, Time, &
       'Diffusive Meridional Flux of Salinity', S_flux_units)
   if (CS%id_Sadx > 0)   call safe_alloc_ptr(CS%S_adx,IsdB,IedB,jsd,jed,nz)
   if (CS%id_Sady > 0)   call safe_alloc_ptr(CS%S_ady,isd,ied,JsdB,JedB,nz)
   if (CS%id_Sdiffx > 0) call safe_alloc_ptr(CS%S_diffx,IsdB,IedB,jsd,jed,nz)
   if (CS%id_Sdiffy > 0) call safe_alloc_ptr(CS%S_diffy,isd,ied,JsdB,JedB,nz)
 
-  CS%id_Tadx_2d = register_diag_field('ocean_model', 'T_adx_2d', G%axesCu1, Time, &
+  CS%id_Tadx_2d = register_diag_field('ocean_model', 'T_adx_2d', diag%axesCu1, Time, &
       'Vertically Integrated Advective Zonal Flux of Potential Temperature', T_flux_units)
-  CS%id_Tady_2d = register_diag_field('ocean_model', 'T_ady_2d', G%axesCv1, Time, &
+  CS%id_Tady_2d = register_diag_field('ocean_model', 'T_ady_2d', diag%axesCv1, Time, &
       'Vertically Integrated Advective Meridional Flux of Potential Temperature', T_flux_units)
-  CS%id_Tdiffx_2d = register_diag_field('ocean_model', 'T_diffx_2d', G%axesCu1, Time, &
+  CS%id_Tdiffx_2d = register_diag_field('ocean_model', 'T_diffx_2d', diag%axesCu1, Time, &
       'Vertically Integrated Diffusive Zonal Flux of Potential Temperature', T_flux_units)
-  CS%id_Tdiffy_2d = register_diag_field('ocean_model', 'T_diffy_2d', G%axesCv1, Time, &
+  CS%id_Tdiffy_2d = register_diag_field('ocean_model', 'T_diffy_2d', diag%axesCv1, Time, &
       'Vertically Integrated Diffusive Meridional Flux of Potential Temperature', T_flux_units)
   if (CS%id_Tadx_2d > 0)   call safe_alloc_ptr(CS%T_adx_2d,IsdB,IedB,jsd,jed)
   if (CS%id_Tady_2d > 0)   call safe_alloc_ptr(CS%T_ady_2d,isd,ied,JsdB,JedB)
   if (CS%id_Tdiffx_2d > 0) call safe_alloc_ptr(CS%T_diffx_2d,IsdB,IedB,jsd,jed)
   if (CS%id_Tdiffy_2d > 0) call safe_alloc_ptr(CS%T_diffy_2d,isd,ied,JsdB,JedB)
 
-  CS%id_Sadx_2d = register_diag_field('ocean_model', 'S_adx_2d', G%axesCu1, Time, &
+  CS%id_Sadx_2d = register_diag_field('ocean_model', 'S_adx_2d', diag%axesCu1, Time, &
       'Vertically Integrated Advective Zonal Flux of Salinity', S_flux_units)
-  CS%id_Sady_2d = register_diag_field('ocean_model', 'S_ady_2d', G%axesCv1, Time, &
+  CS%id_Sady_2d = register_diag_field('ocean_model', 'S_ady_2d', diag%axesCv1, Time, &
       'Vertically Integrated Advective Meridional Flux of Salinity', S_flux_units)
-  CS%id_Sdiffx_2d = register_diag_field('ocean_model', 'S_diffx_2d', G%axesCu1, Time, &
+  CS%id_Sdiffx_2d = register_diag_field('ocean_model', 'S_diffx_2d', diag%axesCu1, Time, &
       'Vertically Integrated Diffusive Zonal Flux of Salinity', S_flux_units)
-  CS%id_Sdiffy_2d = register_diag_field('ocean_model', 'S_diffy_2d', G%axesCv1, Time, &
+  CS%id_Sdiffy_2d = register_diag_field('ocean_model', 'S_diffy_2d', diag%axesCv1, Time, &
       'Vertically Integrated Diffusive Meridional Flux of Salinity', S_flux_units)
   if (CS%id_Sadx_2d > 0)   call safe_alloc_ptr(CS%S_adx_2d,IsdB,IedB,jsd,jed)
   if (CS%id_Sady_2d > 0)   call safe_alloc_ptr(CS%S_ady_2d,isd,ied,JsdB,JedB)
@@ -1831,18 +1836,18 @@ subroutine register_diags(Time, G, CS, ADp)
     endif
   endif
 
-  CS%id_u_predia = register_diag_field('ocean_model', 'u_predia', G%axesCuL, Time, &
+  CS%id_u_predia = register_diag_field('ocean_model', 'u_predia', diag%axesCuL, Time, &
       'Zonal velocity', 'meter second-1')
-  CS%id_v_predia = register_diag_field('ocean_model', 'v_predia', G%axesCvL, Time, &
+  CS%id_v_predia = register_diag_field('ocean_model', 'v_predia', diag%axesCvL, Time, &
       'Meridional velocity', 'meter second-1')
-  CS%id_h_predia = register_diag_field('ocean_model', 'h_predia', G%axesTL, Time, &
+  CS%id_h_predia = register_diag_field('ocean_model', 'h_predia', diag%axesTL, Time, &
       'Layer Thickness', thickness_units)
-  CS%id_e_predia = register_diag_field('ocean_model', 'e_predia', G%axesTi, Time, &
+  CS%id_e_predia = register_diag_field('ocean_model', 'e_predia', diag%axesTi, Time, &
       'Interface Heights', 'meter')
   if (CS%use_temperature) then
-    CS%id_T_predia = register_diag_field('ocean_model', 'temp_predia', G%axesTL, Time, &
+    CS%id_T_predia = register_diag_field('ocean_model', 'temp_predia', diag%axesTL, Time, &
         'Potential Temperature', 'Celsius')
-    CS%id_S_predia = register_diag_field('ocean_model', 'salt_predia', G%axesTL, Time, &
+    CS%id_S_predia = register_diag_field('ocean_model', 'salt_predia', diag%axesTL, Time, &
         'Salinity', 'PSU')
   endif
 
@@ -1891,67 +1896,67 @@ subroutine write_static_fields(G, diag)
 
   out_h(:,:) = 0.0
 
-  id = register_static_field('ocean_model', 'geolat', G%axesT1, &
+  id = register_static_field('ocean_model', 'geolat', diag%axesT1, &
         'Latitude of tracer (T) points', 'degrees_N')
   if (id > 0) call post_data(id, G%geoLatT, diag, .true.)
 
-  id = register_static_field('ocean_model', 'geolon', G%axesT1, &
+  id = register_static_field('ocean_model', 'geolon', diag%axesT1, &
         'Longitude of tracer (T) points', 'degrees_E')
   if (id > 0) call post_data(id, G%geoLonT, diag, .true.)
 
-  id = register_static_field('ocean_model', 'geolat_c', G%axesB1, &
+  id = register_static_field('ocean_model', 'geolat_c', diag%axesB1, &
         'Latitude of corner (Bu) points', 'degrees_N')
   if (id > 0) call post_data(id, G%geoLatBu, diag, .true.)
 
-  id = register_static_field('ocean_model', 'geolon_c', G%axesB1, &
+  id = register_static_field('ocean_model', 'geolon_c', diag%axesB1, &
         'Longitude of corner (Bu) points', 'degrees_E')
   if (id > 0) call post_data(id, G%geoLonBu, diag, .true.)
 
-  id = register_static_field('ocean_model', 'geolat_v', G%axesCv1, &
+  id = register_static_field('ocean_model', 'geolat_v', diag%axesCv1, &
         'Latitude of meridional velocity (Cv) points', 'degrees_N')
   if (id > 0) call post_data(id, G%geoLatCv, diag, .true.)
 
-  id = register_static_field('ocean_model', 'geolon_v', G%axesCv1, &
+  id = register_static_field('ocean_model', 'geolon_v', diag%axesCv1, &
         'Longitude of meridional velocity (Cv) points', 'degrees_E')
   if (id > 0) call post_data(id, G%geoLonCv, diag, .true.)
 
-  id = register_static_field('ocean_model', 'geolat_u', G%axesCu1, &
+  id = register_static_field('ocean_model', 'geolat_u', diag%axesCu1, &
         'Latitude of zonal velocity (Cu) points', 'degrees_N')
   if (id > 0) call post_data(id, G%geoLatCu, diag, .true.)
 
-  id = register_static_field('ocean_model', 'geolon_u', G%axesCu1, &
+  id = register_static_field('ocean_model', 'geolon_u', diag%axesCu1, &
         'Longitude of zonal velocity (Cu) points', 'degrees_E')
   if (id > 0) call post_data(id, G%geoLonCu, diag, .true.)
 
-  id = register_static_field('ocean_model', 'area_t', G%axesT1, &
+  id = register_static_field('ocean_model', 'area_t', diag%axesT1, &
         'Surface area of tracer (T) cells', 'degrees_E')
   if (id > 0) then
     do j=js,je ; do i=is,ie ; out_h(i,j) = G%areaT(i,j) ; enddo ; enddo
     call post_data(id, out_h, diag, .true.)
   endif
 
-  id = register_static_field('ocean_model', 'depth_ocean', G%axesT1, &
+  id = register_static_field('ocean_model', 'depth_ocean', diag%axesT1, &
         'Depth of the ocean at tracer points', 'm', &
         standard_name='sea_floor_depth_below_geoid')
   if (id > 0) call post_data(id, G%bathyT, diag, .true.)
 
-  id = register_static_field('ocean_model', 'wet', G%axesT1, &
+  id = register_static_field('ocean_model', 'wet', diag%axesT1, &
         '0 if land, 1 if ocean at tracer points', 'none')
   if (id > 0) call post_data(id, G%mask2dT, diag, .true.)
 
-  id = register_static_field('ocean_model', 'wet_c', G%axesB1, &
+  id = register_static_field('ocean_model', 'wet_c', diag%axesB1, &
         '0 if land, 1 if ocean at corner (Bu) points', 'none')
   if (id > 0) call post_data(id, G%mask2dBu, diag, .true.)
 
-  id = register_static_field('ocean_model', 'wet_u', G%axesCu1, &
+  id = register_static_field('ocean_model', 'wet_u', diag%axesCu1, &
         '0 if land, 1 if ocean at zonal velocity (Cu) points', 'none')
   if (id > 0) call post_data(id, G%mask2dCu, diag, .true.)
 
-  id = register_static_field('ocean_model', 'wet_v', G%axesCv1, &
+  id = register_static_field('ocean_model', 'wet_v', diag%axesCv1, &
         '0 if land, 1 if ocean at meridional velocity (Cv) points', 'none')
   if (id > 0) call post_data(id, G%mask2dCv, diag, .true.)
 
-  id = register_static_field('ocean_model', 'Coriolis', G%axesB1, &
+  id = register_static_field('ocean_model', 'Coriolis', diag%axesB1, &
         'Coriolis parameter at corner (Bu) points', 's-1')
   if (id > 0) call post_data(id, G%CoriolisBu, diag, .true.)
 

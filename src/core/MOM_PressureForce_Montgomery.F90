@@ -879,9 +879,9 @@ subroutine PressureForce_Mont_init(Time, G, param_file, diag, CS, tides_CSp)
                  do_not_log=.true.) ! Input for diagnostic use only.
 
   if (use_EOS) then
-    CS%id_PFu_bc = register_diag_field('ocean_model', 'PFu_bc', G%axesCuL, Time, &
+    CS%id_PFu_bc = register_diag_field('ocean_model', 'PFu_bc', diag%axesCuL, Time, &
          'Density Gradient Zonal Pressure Force Accel.', "meter second-2")
-    CS%id_PFv_bc = register_diag_field('ocean_model', 'PFv_bc', G%axesCvL, Time, &
+    CS%id_PFv_bc = register_diag_field('ocean_model', 'PFv_bc', diag%axesCvL, Time, &
          'Density Gradient Meridional Pressure Force Accel.', "meter second-2")
     if (CS%id_PFu_bc > 0) then
       call safe_alloc_ptr(CS%PFu_bc,G%IsdB,G%IedB,G%jsd,G%jed,G%ke)
@@ -894,7 +894,7 @@ subroutine PressureForce_Mont_init(Time, G, param_file, diag, CS, tides_CSp)
   endif
 
   if (CS%tides) then
-    CS%id_e_tidal = register_diag_field('ocean_model', 'e_tidal', G%axesT1, &
+    CS%id_e_tidal = register_diag_field('ocean_model', 'e_tidal', diag%axesT1, &
         Time, 'Tidal Forcing Astronomical and SAL Height Anomaly', 'meter')
   endif
 

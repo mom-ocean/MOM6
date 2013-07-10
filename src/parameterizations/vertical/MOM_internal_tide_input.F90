@@ -268,7 +268,7 @@ subroutine int_tide_input_init(Time, G, param_file, diag, CS, itide)
   type(ocean_grid_type),    intent(in)    :: G
   type(param_file_type),    intent(in)    :: param_file
   type(diag_ctrl), target,  intent(inout) :: diag
-  type(int_tide_input_CS), pointer   :: CS
+  type(int_tide_input_CS),   pointer      :: CS
   type(int_tide_input_type), pointer      :: itide
 ! Arguments: Time - The current model time.
 !  (in)      G - The ocean's grid structure.
@@ -385,13 +385,13 @@ subroutine int_tide_input_init(Time, G, param_file, diag, CS, itide)
   enddo; enddo
 
 
-  CS%id_TKE_itidal = register_diag_field('ocean_model','TKE_itidal_itide',G%axesT1,Time, &
+  CS%id_TKE_itidal = register_diag_field('ocean_model','TKE_itidal_itide',diag%axesT1,Time, &
       'Internal Tide Driven Turbulent Kinetic Energy', 'Watt meter-2')
 
-  CS%id_Nb = register_diag_field('ocean_model','Nb_itide',G%axesT1,Time, &
+  CS%id_Nb = register_diag_field('ocean_model','Nb_itide',diag%axesT1,Time, &
        'Bottom Buoyancy Frequency', 'sec-1')
 
-  CS%id_N2_bot = register_diag_field('ocean_model','N2_b_itide',G%axesT1,Time, &
+  CS%id_N2_bot = register_diag_field('ocean_model','N2_b_itide',diag%axesT1,Time, &
        'Bottom Buoyancy frequency squared', 's-2')
 
 end subroutine int_tide_input_init

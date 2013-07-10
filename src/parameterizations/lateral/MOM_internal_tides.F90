@@ -1092,9 +1092,9 @@ subroutine internal_tides_init(Time, G, param_file, diag, CS)
                  "If positive, only one angular band of the internal tides \n"//&
                  "gets all of the energy.  (This is for debugging.)", default=-1)
 
-  CS%id_tot_En = register_diag_field('ocean_model', 'ITide_tot_En', G%axesT1, &
+  CS%id_tot_En = register_diag_field('ocean_model', 'ITide_tot_En', diag%axesT1, &
                  Time, 'Internal tide total energy density', 'J m-2')
-  CS%id_itide_drag = register_diag_field('ocean_model', 'ITide_drag', G%axesT1, &
+  CS%id_itide_drag = register_diag_field('ocean_model', 'ITide_drag', diag%axesT1, &
                  Time, 'Interior and bottom drag internal tide decay timescale', 's-1')
 
   allocate(CS%id_En_mode(CS%nFreq,CS%nMode)) ; CS%id_En_mode(:,:) = -1
@@ -1105,14 +1105,14 @@ subroutine internal_tides_init(Time, G, param_file, diag, CS)
   do a=1,num_angle ; angles(a) = (real(a) - 1) * Angle_size ; enddo
 
   id_ang = diag_axis_init("angle", angles, "Radians", "N", "Angular Orienation of Fluxes")
-  axes_ang(:) = (/ G%axesT1(1), G%axesT1(2), id_ang /)
+  axes_ang(:) = (/ diag%axesT1(1), diag%axesT1(2), id_ang /)
 
   do fr=1,CS%nFreq ; write(freq_name(fr), '("K",i1)') fr ; enddo
   do m=1,CS%nMode ; do fr=1,CS%nFreq
     write(var_name, '("Itide_en_K",i1,"_M",i1)') fr, m
     write(var_descript, '("Internal tide energy density in frequency K",i1," mode ",i1)') fr, m
     CS%id_En_mode(fr,m) = register_diag_field('ocean_model', var_name, &
-                 G%axesT1, Time, var_descript, 'J m-2')
+                 diag%axesT1, Time, var_descript, 'J m-2')
     call MOM_mesg("Registering "//trim(var_name)//", Described as: "//var_descript, 5)
 
     write(var_name, '("Itide_en_ang_K",i1,"_M",i1)') fr, m
