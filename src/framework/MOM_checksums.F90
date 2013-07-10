@@ -21,6 +21,7 @@ module MOM_checksums
 !***********************************************************************
 
 use MOM_coms, only : PE_here, root_PE, num_PEs, sum_across_PEs
+use MOM_coms, only : min_across_PEs, max_across_PEs
 use MOM_error_handler, only : MOM_error, FATAL, is_root_pe
 use MOM_file_parser, only : log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
@@ -66,10 +67,22 @@ end interface
 
 interface chk_sum_msg
   module procedure chk_sum_msg1
+  module procedure chk_sum_msg3
   module procedure chk_sum_msg5
 end interface
 
+interface is_NaN
+  module procedure is_NaN_0d
+  module procedure is_NaN_1d
+  module procedure is_NaN_2d
+  module procedure is_NaN_3d
+end interface
+
 integer, parameter :: default_shift=0
+logical :: calculateStatistics=.false. ! If true, report min, max and mean
+                               ! instead of the bitcount checksum
+logical :: checkForNaNs=.true. ! If true, checks array for NaNs and cause
+                               ! FATAL error is any are found
 
 contains
 
@@ -82,6 +95,15 @@ subroutine chksum_h_2d(array, mesg, G, haloshift)
   integer, intent(in), optional :: haloshift
 
   integer :: bc0,bcSW,bcSE,bcNW,bcNE,hshift
+
+  if (checkForNaNs) then
+    if (is_NaN(array(G%isc:G%iec,G%jsc:G%jec))) &
+      call MOM_error(FATAL, 'NaN detected: '//trim(mesg))
+  endif
+
+  if (calculateStatistics) then
+    call subStats(G, array, mesg); return
+  endif
 
   hshift=default_shift
   if (present(haloshift)) hshift=haloshift
@@ -127,6 +149,30 @@ subroutine chksum_h_2d(array, mesg, G, haloshift)
     subchk=mod(subchk,1000000000)
   end function subchk
 
+  subroutine subStats(G, array, mesg)
+    type(ocean_grid_type), intent(in) :: G
+    real, dimension(G%isd:,G%jsd:), intent(in) :: array
+    character(len=*), intent(in) :: mesg
+    integer :: i, j, n
+    real :: aMean, aMin, aMax
+    aMean = 0.
+    aMin = array(G%isc,G%jsc)
+    aMax = array(G%isc,G%jsc)
+    n = 0
+    do j=G%jsc,G%jec; do i=G%isc,G%iec
+        aMean = aMean + array(i,j)
+        aMin = min(aMin, array(i,j))
+        aMax = max(aMax, array(i,j))
+        n = n + 1
+    enddo; enddo
+    call sum_across_PEs(aMean)
+    call sum_across_PEs(n)
+    call min_across_PEs(aMin)
+    call max_across_PEs(aMax)
+    aMean = aMean / real(n)
+    if (is_root_pe()) call chk_sum_msg("h-point:",aMean,aMin,aMax,mesg)
+  end subroutine subStats
+
 end subroutine chksum_h_2d
 
 ! =====================================================================
@@ -138,6 +184,15 @@ subroutine chksum_q_2d(array, mesg, G, haloshift)
   integer, intent(in), optional :: haloshift
 
   integer :: bc0,bcSW,bcSE,bcNW,bcNE,hshift
+
+  if (checkForNaNs) then
+    if (is_NaN(array(G%IscB:G%IecB,G%JscB:G%JecB))) &
+      call MOM_error(FATAL, 'NaN detected: '//trim(mesg))
+  endif
+
+  if (calculateStatistics) then
+    call subStats(G, array, mesg); return
+  endif
 
   hshift=default_shift
   if (present(haloshift)) hshift=haloshift
@@ -183,6 +238,30 @@ subroutine chksum_q_2d(array, mesg, G, haloshift)
     subchk=mod(subchk,1000000000)
   end function subchk
 
+  subroutine subStats(G, array, mesg)
+    type(ocean_grid_type), intent(in) :: G
+    real, dimension(G%IsdB:,G%JsdB:), intent(in) :: array
+    character(len=*), intent(in) :: mesg
+    integer :: i, j, n
+    real :: aMean, aMin, aMax
+    aMean = 0.
+    aMin = array(G%isc,G%jsc)
+    aMax = array(G%isc,G%jsc)
+    n = 0
+    do j=G%jsc,G%jec; do i=G%isc,G%iec
+        aMean = aMean + array(i,j)
+        aMin = min(aMin, array(i,j))
+        aMax = max(aMax, array(i,j))
+        n = n + 1
+    enddo; enddo
+    call sum_across_PEs(aMean)
+    call sum_across_PEs(n)
+    call min_across_PEs(aMin)
+    call max_across_PEs(aMax)
+    aMean = aMean / real(n)
+    if (is_root_pe()) call chk_sum_msg("q-point:",aMean,aMin,aMax,mesg)
+  end subroutine subStats
+
 end subroutine chksum_q_2d
 
 ! =====================================================================
@@ -194,6 +273,15 @@ subroutine chksum_u_2d(array, mesg, G, haloshift)
   integer, intent(in), optional :: haloshift
 
   integer :: bc0,bcSW,bcSE,bcNW,bcNE,hshift
+
+  if (checkForNaNs) then
+    if (is_NaN(array(G%IscB:G%IecB,G%jsc:G%jec))) &
+      call MOM_error(FATAL, 'NaN detected: '//trim(mesg))
+  endif
+
+  if (calculateStatistics) then
+    call subStats(G, array, mesg); return
+  endif
 
   hshift=default_shift
   if (present(haloshift)) hshift=haloshift
@@ -239,6 +327,30 @@ subroutine chksum_u_2d(array, mesg, G, haloshift)
     subchk=mod(subchk,1000000000)
   end function subchk
 
+  subroutine subStats(G, array, mesg)
+    type(ocean_grid_type), intent(in) :: G
+    real, dimension(G%IsdB:,G%jsd:), intent(in) :: array
+    character(len=*), intent(in) :: mesg
+    integer :: i, j, n
+    real :: aMean, aMin, aMax
+    aMean = 0.
+    aMin = array(G%isc,G%jsc)
+    aMax = array(G%isc,G%jsc)
+    n = 0
+    do j=G%jsc,G%jec; do i=G%isc,G%iec
+        aMean = aMean + array(i,j)
+        aMin = min(aMin, array(i,j))
+        aMax = max(aMax, array(i,j))
+        n = n + 1
+    enddo; enddo
+    call sum_across_PEs(aMean)
+    call sum_across_PEs(n)
+    call min_across_PEs(aMin)
+    call max_across_PEs(aMax)
+    aMean = aMean / real(n)
+    if (is_root_pe()) call chk_sum_msg("u-point:",aMean,aMin,aMax,mesg)
+  end subroutine subStats
+
 end subroutine chksum_u_2d
 
 ! =====================================================================
@@ -250,6 +362,15 @@ subroutine chksum_v_2d(array, mesg, G, haloshift)
   integer, intent(in), optional :: haloshift
 
   integer :: bc0,bcSW,bcSE,bcNW,bcNE,hshift
+
+  if (checkForNaNs) then
+    if (is_NaN(array(G%isc:G%iec,G%JscB:G%JecB))) &
+      call MOM_error(FATAL, 'NaN detected: '//trim(mesg))
+  endif
+
+  if (calculateStatistics) then
+    call subStats(G, array, mesg); return
+  endif
 
   hshift=default_shift
   if (present(haloshift)) hshift=haloshift
@@ -295,6 +416,30 @@ subroutine chksum_v_2d(array, mesg, G, haloshift)
     subchk=mod(subchk,1000000000)
   end function subchk
 
+  subroutine subStats(G, array, mesg)
+    type(ocean_grid_type), intent(in) :: G
+    real, dimension(G%isd:,G%JsdB:), intent(in) :: array
+    character(len=*), intent(in) :: mesg
+    integer :: i, j, n
+    real :: aMean, aMin, aMax
+    aMean = 0.
+    aMin = array(G%isc,G%jsc)
+    aMax = array(G%isc,G%jsc)
+    n = 0
+    do j=G%jsc,G%jec; do i=G%isc,G%iec
+        aMean = aMean + array(i,j)
+        aMin = min(aMin, array(i,j))
+        aMax = max(aMax, array(i,j))
+        n = n + 1
+    enddo; enddo
+    call sum_across_PEs(aMean)
+    call sum_across_PEs(n)
+    call min_across_PEs(aMin)
+    call max_across_PEs(aMax)
+    aMean = aMean / real(n)
+    if (is_root_pe()) call chk_sum_msg("v-point:",aMean,aMin,aMax,mesg)
+  end subroutine subStats
+
 end subroutine chksum_v_2d
 
 ! =====================================================================
@@ -306,6 +451,15 @@ subroutine chksum_h_3d(array, mesg, G, haloshift)
   integer, intent(in), optional :: haloshift
 
   integer :: bc0,bcSW,bcSE,bcNW,bcNE,hshift
+
+  if (checkForNaNs) then
+    if (is_NaN(array(G%isc:G%iec,G%jsc:G%jec,:))) &
+      call MOM_error(FATAL, 'NaN detected: '//trim(mesg))
+  endif
+
+  if (calculateStatistics) then
+    call subStats(G, array, mesg); return
+  endif
 
   hshift=default_shift
   if (present(haloshift)) hshift=haloshift
@@ -351,6 +505,30 @@ subroutine chksum_h_3d(array, mesg, G, haloshift)
     subchk=mod(subchk,1000000000)
   end function subchk
 
+  subroutine subStats(G, array, mesg)
+    type(ocean_grid_type), intent(in) :: G
+    real, dimension(G%isd:,G%jsd:,:), intent(in) :: array
+    character(len=*), intent(in) :: mesg
+    integer :: i, j, k, n
+    real :: aMean, aMin, aMax
+    aMean = 0.
+    aMin = array(G%isc,G%jsc,1)
+    aMax = array(G%isc,G%jsc,1)
+    n = 0
+    do k=LBOUND(array,3),UBOUND(array,3); do j=G%jsc,G%jec; do i=G%isc,G%iec
+        aMean = aMean + array(i,j,k)
+        aMin = min(aMin, array(i,j,k))
+        aMax = max(aMax, array(i,j,k))
+        n = n + 1
+    enddo; enddo; enddo
+    call sum_across_PEs(aMean)
+    call sum_across_PEs(n)
+    call min_across_PEs(aMin)
+    call max_across_PEs(aMax)
+    aMean = aMean / real(n)
+    if (is_root_pe()) call chk_sum_msg("h-point:",aMean,aMin,aMax,mesg)
+  end subroutine subStats
+
 end subroutine chksum_h_3d
 
 ! =====================================================================
@@ -362,6 +540,15 @@ subroutine chksum_q_3d(array, mesg, G, haloshift)
   integer, intent(in), optional :: haloshift
 
   integer :: bc0,bcSW,bcSE,bcNW,bcNE,hshift
+
+  if (checkForNaNs) then
+    if (is_NaN(array(G%IscB:G%IecB,G%JscB:G%JecB,:))) &
+      call MOM_error(FATAL, 'NaN detected: '//trim(mesg))
+  endif
+
+  if (calculateStatistics) then
+    call subStats(G, array, mesg); return
+  endif
 
   hshift=default_shift
   if (present(haloshift)) hshift=haloshift
@@ -407,6 +594,30 @@ subroutine chksum_q_3d(array, mesg, G, haloshift)
     subchk=mod(subchk,1000000000)
   end function subchk
 
+  subroutine subStats(G, array, mesg)
+    type(ocean_grid_type), intent(in) :: G
+    real, dimension(G%IsdB:,G%JsdB:,:), intent(in) :: array
+    character(len=*), intent(in) :: mesg
+    integer :: i, j, k, n
+    real :: aMean, aMin, aMax
+    aMean = 0.
+    aMin = array(G%isc,G%jsc,1)
+    aMax = array(G%isc,G%jsc,1)
+    n = 0
+    do k=LBOUND(array,3),UBOUND(array,3); do j=G%jsc,G%jec; do i=G%isc,G%iec
+        aMean = aMean + array(i,j,k)
+        aMin = min(aMin, array(i,j,k))
+        aMax = max(aMax, array(i,j,k))
+        n = n + 1
+    enddo; enddo; enddo
+    call sum_across_PEs(aMean)
+    call sum_across_PEs(n)
+    call min_across_PEs(aMin)
+    call max_across_PEs(aMax)
+    aMean = aMean / real(n)
+    if (is_root_pe()) call chk_sum_msg("q-point:",aMean,aMin,aMax,mesg)
+  end subroutine subStats
+
 end subroutine chksum_q_3d
 
 ! =====================================================================
@@ -418,6 +629,16 @@ subroutine chksum_u_3d(array, mesg, G, haloshift)
   integer, intent(in), optional :: haloshift
 
   integer :: bc0,bcSW,bcSE,bcNW,bcNE,hshift
+
+  if (checkForNaNs) then
+    if (is_NaN(array(G%IscB:G%IecB,G%jsc:G%jec,:))) &
+      call MOM_error(FATAL, 'NaN detected: '//trim(mesg))
+    if (is_NaN(array)) call MOM_error(FATAL, 'NaN detected in halo: '//trim(mesg))
+  endif
+
+  if (calculateStatistics) then
+    call subStats(G, array, mesg); return
+  endif
 
   hshift=default_shift
   if (present(haloshift)) hshift=haloshift
@@ -463,6 +684,30 @@ subroutine chksum_u_3d(array, mesg, G, haloshift)
     subchk=mod(subchk,1000000000)
   end function subchk
 
+  subroutine subStats(G, array, mesg)
+    type(ocean_grid_type), intent(in) :: G
+    real, dimension(G%IsdB:,G%jsd:,:), intent(in) :: array
+    character(len=*), intent(in) :: mesg
+    integer :: i, j, k, n
+    real :: aMean, aMin, aMax
+    aMean = 0.
+    aMin = array(G%isc,G%jsc,1)
+    aMax = array(G%isc,G%jsc,1)
+    n = 0
+    do k=LBOUND(array,3),UBOUND(array,3); do j=G%jsc,G%jec; do i=G%isc,G%iec
+        aMean = aMean + array(i,j,k)
+        aMin = min(aMin, array(i,j,k))
+        aMax = max(aMax, array(i,j,k))
+        n = n + 1
+    enddo; enddo; enddo
+    call sum_across_PEs(aMean)
+    call sum_across_PEs(n)
+    call min_across_PEs(aMin)
+    call max_across_PEs(aMax)
+    aMean = aMean / real(n)
+    if (is_root_pe()) call chk_sum_msg("u-point:",aMean,aMin,aMax,mesg)
+  end subroutine subStats
+
 end subroutine chksum_u_3d
 
 ! =====================================================================
@@ -474,6 +719,15 @@ subroutine chksum_v_3d(array, mesg, G, haloshift)
   integer, intent(in), optional :: haloshift
 
   integer :: bc0,bcSW,bcSE,bcNW,bcNE,hshift
+
+  if (checkForNaNs) then
+    if (is_NaN(array(G%isc:G%iec,G%JscB:G%JecB,:))) &
+      call MOM_error(FATAL, 'NaN detected: '//trim(mesg))
+  endif
+
+  if (calculateStatistics) then
+    call subStats(G, array, mesg); return
+  endif
 
   hshift=default_shift
   if (present(haloshift)) hshift=haloshift
@@ -518,6 +772,30 @@ subroutine chksum_v_3d(array, mesg, G, haloshift)
     call sum_across_PEs(subchk)
     subchk=mod(subchk,1000000000)
   end function subchk
+
+  subroutine subStats(G, array, mesg)
+    type(ocean_grid_type), intent(in) :: G
+    real, dimension(G%isd:,G%JsdB:,:), intent(in) :: array
+    character(len=*), intent(in) :: mesg
+    integer :: i, j, k, n
+    real :: aMean, aMin, aMax
+    aMean = 0.
+    aMin = array(G%isc,G%jsc,1)
+    aMax = array(G%isc,G%jsc,1)
+    n = 0
+    do k=LBOUND(array,3),UBOUND(array,3); do j=G%jsc,G%jec; do i=G%isc,G%iec
+        aMean = aMean + array(i,j,k)
+        aMin = min(aMin, array(i,j,k))
+        aMax = max(aMax, array(i,j,k))
+        n = n + 1
+    enddo; enddo; enddo
+    call sum_across_PEs(aMean)
+    call sum_across_PEs(n)
+    call min_across_PEs(aMin)
+    call max_across_PEs(aMax)
+    aMean = aMean / real(n)
+    if (is_root_pe()) call chk_sum_msg("v-point:",aMean,aMin,aMax,mesg)
+  end subroutine subStats
 
 end subroutine chksum_v_3d
 
@@ -778,15 +1056,77 @@ end subroutine chksum3d
 
 ! =====================================================================
 
-function is_NaN(x)
+function is_NaN_0d(x)
   real, intent(in) :: x
-  logical :: is_nan
+  logical :: is_NaN_0d
 ! This subroutine returns .true. if x is a NaN, and .false. otherwise.
 
-  is_nan = (((x < 0.0) .and. (x >= 0.0)) .or. &
+  is_NaN_0d = (((x < 0.0) .and. (x >= 0.0)) .or. &
             (.not.(x < 0.0) .and. .not.(x >= 0.0)))
 
-end function is_nan
+end function is_NaN_0d
+
+! =====================================================================
+
+function is_NaN_1d(x,skip_mpp)
+  real, dimension(:), intent(in) :: x
+  logical :: is_NaN_1d
+  logical, optional :: skip_mpp
+! This subroutine returns .true. if any x is a NaN, and .false. otherwise.
+  integer :: i, n
+  logical :: call_mpp
+
+  n = 0
+  do i = LBOUND(x,1), UBOUND(x,1)
+    if (is_NaN_0d(x(i))) n = n + 1
+  enddo
+  call_mpp = .true.
+  if (present(skip_mpp)) then
+    if (skip_mpp) call_mpp = .false.
+  endif
+  if (call_mpp) call sum_across_PEs(n)
+  is_NaN_1d = .false.
+  if (n>0) is_NaN_1d = .true.
+
+end function is_NaN_1d
+
+! =====================================================================
+
+function is_NaN_2d(x)
+  real, dimension(:,:), intent(in) :: x
+  logical :: is_NaN_2d
+! This subroutine returns .true. if any x is a NaN, and .false. otherwise.
+  integer :: i, j, n
+
+  n = 0
+  do j = LBOUND(x,2), UBOUND(x,2) ; do i = LBOUND(x,1), UBOUND(x,1)
+    if (is_NaN_0d(x(i,j))) n = n + 1
+  enddo ; enddo
+  call sum_across_PEs(n)
+  is_NaN_2d = .false.
+  if (n>0) is_NaN_2d = .true.
+
+end function is_NaN_2d
+
+! =====================================================================
+
+function is_NaN_3d(x)
+  real, dimension(:,:,:), intent(in) :: x
+  logical :: is_NaN_3d
+! This subroutine returns .true. if any x is a NaN, and .false. otherwise.
+  integer :: i, j, k, n
+
+  n = 0
+  do k = LBOUND(x,3), UBOUND(x,3)
+    do j = LBOUND(x,2), UBOUND(x,2) ; do i = LBOUND(x,1), UBOUND(x,1)
+      if (is_NaN_0d(x(i,j,k))) n = n + 1
+    enddo ; enddo
+  enddo
+  call sum_across_PEs(n)
+  is_NaN_3d = .false.
+  if (n>0) is_NaN_3d = .true.
+
+end function is_NaN_3d
 
 ! =====================================================================
 
@@ -806,6 +1146,15 @@ subroutine chk_sum_msg5(fmsg,bc0,bcSW,bcSE,bcNW,bcNE,mesg)
   if (is_root_pe()) write(0,'(A,5(A,I9,1X),A)') &
      fmsg," c=",bc0,"sw=",bcSW,"se=",bcSE,"nw=",bcNW,"ne=",bcNE,mesg
 end subroutine chk_sum_msg5
+
+! =====================================================================
+
+subroutine chk_sum_msg3(fmsg,aMean,aMin,aMax,mesg)
+  character(len=*), intent(in) :: fmsg, mesg
+  real,             intent(in) :: aMean,aMin,aMax
+  if (is_root_pe()) write(0,'(A,3(A,ES12.4,1X),A)') &
+     fmsg," mean=",aMean,"min=",aMin,"max=",aMax,mesg
+end subroutine chk_sum_msg3
 
 ! =====================================================================
 
