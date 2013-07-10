@@ -20,12 +20,20 @@ module MOM_diag_mediator
 !* or see:   http://www.gnu.org/licenses/gpl.html                      *
 !***********************************************************************
 
+!********+*********+*********+*********+*********+*********+*********+**
+!*                                                                     *
+!*    The subroutines here provide convenient wrappers to the fms      *
+!*  diag_manager interfaces with additional diagnostic capabilies.     *
+!*                                                                     *
+!********+*********+*********+*********+*********+*********+*********+**
+
 use MOM_coms, only : PE_here
 use MOM_error_handler, only : MOM_error, FATAL, is_root_pe
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
-use MOM_string_functions, only : lowercase
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : vardesc
+use MOM_safe_alloc, only : safe_alloc_ptr, safe_alloc_alloc
+use MOM_string_functions, only : lowercase
 use MOM_time_manager, only : time_type
 
 use diag_manager_mod, only : diag_manager_init, diag_manager_end
@@ -41,15 +49,6 @@ public enable_averaging, disable_averaging, query_averaging_enabled
 public diag_mediator_init, diag_mediator_end, set_diag_mediator_grid
 public diag_mediator_close_registration, get_diag_time_end
 public diag_axis_init, ocean_register_diag, register_static_field
-
-interface safe_alloc_ptr
-  module procedure safe_alloc_ptr_3d_2arg, safe_alloc_ptr_2d_2arg
-  module procedure safe_alloc_ptr_3d, safe_alloc_ptr_2d, safe_alloc_ptr_1d
-end interface safe_alloc_ptr
-
-interface safe_alloc_alloc
-  module procedure safe_alloc_allocatable_3d, safe_alloc_allocatable_2d
-end interface safe_alloc_alloc
 
 interface post_data
   module procedure post_data_3d, post_data_2d
@@ -382,74 +381,6 @@ function get_diag_time_end(diag)
 
   get_diag_time_end = diag%time_end
 end function get_diag_time_end
-
-subroutine safe_alloc_ptr_1d(ptr, i1, i2)
-  real, pointer :: ptr(:)
-  integer, intent(in) :: i1
-  integer, optional, intent(in) :: i2
-  if (.not.ASSOCIATED(ptr)) then
-    if (present(i2)) then
-      allocate(ptr(i1:i2))
-    else
-      allocate(ptr(i1))
-    endif
-    ptr(:) = 0.0
-  endif
-end subroutine safe_alloc_ptr_1d
-
-subroutine safe_alloc_ptr_2d_2arg(ptr, ni, nj)
-  real, pointer :: ptr(:,:)
-  integer, intent(in) :: ni, nj
-  if (.not.ASSOCIATED(ptr)) then
-    allocate(ptr(ni,nj))
-    ptr(:,:) = 0.0
-  endif
-end subroutine safe_alloc_ptr_2d_2arg
-
-subroutine safe_alloc_ptr_3d_2arg(ptr, ni, nj, nk)
-  real, pointer :: ptr(:,:,:)
-  integer, intent(in) :: ni, nj, nk
-  if (.not.ASSOCIATED(ptr)) then
-    allocate(ptr(ni,nj,nk))
-    ptr(:,:,:) = 0.0
-  endif
-end subroutine safe_alloc_ptr_3d_2arg
-
-subroutine safe_alloc_ptr_2d(ptr, is, ie, js, je)
-  real, pointer :: ptr(:,:)
-  integer, intent(in) :: is, ie, js, je
-  if (.not.ASSOCIATED(ptr)) then
-    allocate(ptr(is:ie,js:je))
-    ptr(:,:) = 0.0
-  endif
-end subroutine safe_alloc_ptr_2d
-
-subroutine safe_alloc_ptr_3d(ptr, is, ie, js, je, nk)
-  real, pointer :: ptr(:,:,:)
-  integer, intent(in) :: is, ie, js, je, nk
-  if (.not.ASSOCIATED(ptr)) then
-    allocate(ptr(is:ie,js:je,nk))
-    ptr(:,:,:) = 0.0
-  endif
-end subroutine safe_alloc_ptr_3d
-
-subroutine safe_alloc_allocatable_2d(ptr, is, ie, js, je)
-  real, allocatable :: ptr(:,:)
-  integer, intent(in) :: is, ie, js, je
-  if (.not.ALLOCATED(ptr)) then
-    allocate(ptr(is:ie,js:je))
-    ptr(:,:) = 0.0
-  endif
-end subroutine safe_alloc_allocatable_2d
-
-subroutine safe_alloc_allocatable_3d(ptr, is, ie, js, je, nk)
-  real, allocatable :: ptr(:,:,:)
-  integer, intent(in) :: is, ie, js, je, nk
-  if (.not.ALLOCATED(ptr)) then
-    allocate(ptr(is:ie,js:je,nk))
-    ptr(:,:,:) = 0.0
-  endif
-end subroutine safe_alloc_allocatable_3d
 
 function register_diag_field(module_name, field_name, axes, init_time, &
              long_name, units, missing_value, range, mask_variant, standard_name, &
