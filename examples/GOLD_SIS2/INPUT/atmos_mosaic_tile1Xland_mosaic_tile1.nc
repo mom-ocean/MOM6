@@ -1,0 +1,1 @@
+.datasets/GOLD_SIS/riga/mosaic.unpacked/atmos_mosaic_tile1Xland_mosaic_tile1.nc
