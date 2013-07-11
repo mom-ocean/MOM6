@@ -40,17 +40,16 @@ NJGLOBAL = 450                  !
                                 ! y-direction in the physical domain. With STATIC_MEMORY_
                                 ! this is set in MOM_memory.h at compile time.
 MASKTABLE = "MOM_mask_table"    ! default = "MOM_mask_table"
-                                ! A text file to specify n_mask, layout and mask_list.  This feature
-                                ! aims to reduce the number of processors that are cycling over pure
-                                ! land regions.  These processors which contain only land points will
-                                ! be masked out.
+                                ! A text file to specify n_mask, layout and mask_list.
+                                ! This feature masks out processors that contain only land points.
                                 ! The first line of mask_table is the number of regions to be masked out.
-                                ! The second line is the layout of the model and must be consistent with
-                                ! the acutal model layout.
-                                ! The following (n_mask) lines will be the position of the processor to
-                                ! be masked out. The mask_table can be created by tools like check_mask.
-                                ! The following example of mask_table uses n_mask=2, layout=4,6 and
-                                ! the processor (1,2) and (3,6) are to be masked out.
+                                ! The second line is the layout of the model and must be
+                                ! consistent with the actual model layout.
+                                ! The following (n_mask) lines give the logical positions
+                                ! of the processors that are masked out. The mask_table
+                                ! can be created by tools like check_mask. The
+                                ! following example of mask_table masks out 2 processors,
+                                ! (1,2) and (3,6), out of the 24 in a 4x6 layout:
                                 !  2
                                 !  4,6
                                 !  1,2
