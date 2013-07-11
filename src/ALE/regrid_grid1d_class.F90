@@ -2,7 +2,7 @@ module regrid_grid1d_class
 
 implicit none ; private
 
-public :: grid1D_t, grid1Dconstruct, grid1Ddestroy
+public :: grid1D_t, grid1Dconstruct, grid1Ddestroy, grid1Dprint
 
 ! -----------------------------------------------------------------------------
 ! Definition of the one-dimensional grid structure
@@ -22,7 +22,7 @@ end type grid1D_t
 contains
 
 !------------------------------------------------------------------------------
-! grid1Dinit
+! grid1Dconstruct
 ! -----------------------------------------------------------------------------
 subroutine grid1Dconstruct( grid, nb_cells )
 !------------------------------------------------------------------------------
@@ -44,6 +44,27 @@ subroutine grid1Dconstruct( grid, nb_cells )
   grid%x(:) = 0.0
 
 end subroutine grid1Dconstruct
+
+!------------------------------------------------------------------------------
+! grid1Dprint
+! -----------------------------------------------------------------------------
+subroutine grid1Dprint( ioChannel, grid )
+!------------------------------------------------------------------------------
+! Initialization (memory allocation) of a grid
+!------------------------------------------------------------------------------
+
+  integer, intent(in) :: ioChannel
+  type(grid1D_t), intent(in)  :: grid
+  integer :: k
+
+  write(ioChannel,'(a4,a12,a12)') 'k','x','h'
+  write(ioChannel,'(i4,es12.4)') 1, grid%x(1)
+  do k = 1, grid%nb_cells
+    write(ioChannel,'(i4,12x,es12.4)') k, grid%h(k)
+    write(ioChannel,'(i4,es12.4)') k+1, grid%x(k+1)
+  enddo
+
+end subroutine grid1Dprint
 
 !------------------------------------------------------------------------------
 ! grid1Ddestroy
