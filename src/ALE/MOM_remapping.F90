@@ -87,6 +87,8 @@ character(len=256), public :: remappingSchemesDoc = &
                  "PQM_IH6IH5  (5th-order accurate)\n"
 character(len=3), public :: remappingDefaultScheme = "PLM"
 
+logical, parameter :: doSafetyChecks = .false.
+
 ! -----------------------------------------------------------------------------
 ! This module contains the following routines
 ! -----------------------------------------------------------------------------
@@ -118,26 +120,19 @@ subroutine remapping_main( CS, G, h, h_new, tv, u, v )
   integer               :: problem
 
   nz = G%ke
+  if (doSafetyChecks) then
+    if (nz>CS%grid_start%nb_cells) call MOM_error(FATAL,'nz>nk_start')
+    if (nz>CS%grid_final%nb_cells) call MOM_error(FATAL,'nz>nk_final')
+  endif
 
   ! Remap tracer
   do j = G%jsc,G%jec
     do i = G%isc,G%iec
     
-      ! Build initial grid
+      ! Build the start and final grids
       CS%grid_start%h(:) = h(i,j,:)
-      
-      CS%grid_start%x(1) = 0.0
-      do k = 1,nz
-        CS%grid_start%x(k+1) = CS%grid_start%x(k) + CS%grid_start%h(k)
-      end do
-
-      ! Build new grid
       CS%grid_final%h(:) = h_new(i,j,:)
-      
-      CS%grid_final%x(1) = 0.0
-      do k = 1,nz
-        CS%grid_final%x(k+1) = CS%grid_final%x(k) + CS%grid_final%h(k)
-      end do
+      call buildFinalGrid(nz, CS%grid_start%h, CS%grid_final%h, CS%grid_start%x, CS%grid_final%x)
       
       do k = 1,nz
         CS%grid_start%h(k) = CS%grid_start%x(k+1) - CS%grid_start%x(k)
@@ -160,21 +155,10 @@ subroutine remapping_main( CS, G, h, h_new, tv, u, v )
   do j = G%jsc,G%jec
     do i = G%iscB,G%iecB
     
-      ! Build initial grid
+      ! Build the start and final grids
       CS%grid_start%h(:) = 0.5 * ( h(i,j,:) + h(i+1,j,:) )
-
-      CS%grid_start%x(1) = 0.0
-      do k = 1,nz
-        CS%grid_start%x(k+1) = CS%grid_start%x(k) + CS%grid_start%h(k)
-      end do
-      
-      ! Build final grid
       CS%grid_final%h(:) = 0.5 * ( h_new(i,j,:) + h_new(i+1,j,:) )
-      
-      CS%grid_final%x(1) = 0.0
-      do k = 1,nz
-        CS%grid_final%x(k+1) = CS%grid_final%x(k) + CS%grid_final%h(k)
-      end do
+      call buildFinalGrid(nz, CS%grid_start%h, CS%grid_final%h, CS%grid_start%x, CS%grid_final%x)
       
       do k = 1,nz
         CS%grid_start%h(k) = CS%grid_start%x(k+1) - CS%grid_start%x(k)
@@ -194,19 +178,10 @@ subroutine remapping_main( CS, G, h, h_new, tv, u, v )
   do j = G%jscB,G%jecB
     do i = G%isc,G%iec
 
-      ! Build initial grid
+      ! Build the start and final grids
       CS%grid_start%h(:) = 0.5 * ( h(i,j,:) + h(i,j+1,:) )
-      CS%grid_start%x(1) = 0.0
-      do k = 1,nz
-        CS%grid_start%x(k+1) = CS%grid_start%x(k) + CS%grid_start%h(k)
-      end do
-      
-      ! Build final grid
       CS%grid_final%h(:) = 0.5 * ( h_new(i,j,:) + h_new(i,j+1,:) )
-      CS%grid_final%x(1) = 0.0
-      do k = 1,nz
-        CS%grid_final%x(k+1) = CS%grid_final%x(k) + CS%grid_final%h(k)
-      end do
+      call buildFinalGrid(nz, CS%grid_start%h, CS%grid_final%h, CS%grid_start%x, CS%grid_final%x)
 
       do k = 1,nz
         CS%grid_start%h(k) = CS%grid_start%x(k+1) - CS%grid_start%x(k)
@@ -222,6 +197,63 @@ subroutine remapping_main( CS, G, h, h_new, tv, u, v )
   end if
 
 end subroutine remapping_main
+
+
+!------------------------------------------------------------------------------
+! Build a final grid 
+!------------------------------------------------------------------------------
+subroutine buildFinalGrid(nz, hs, hf, xs, xf)
+!------------------------------------------------------------------------------
+! This routine calculates the coordinates xs and xf consistently from
+! hs and hf so that the edges of the domain line up.
+! If suM(hs) and sum(hf) differ significantly and error is generated.
+!------------------------------------------------------------------------------
+
+  ! Arguments
+  integer,               intent(in)    :: nz
+  real, dimension(nz),   intent(in)    :: hs, hf
+  real, dimension(nz+1), intent(inout) :: xs, xf
+
+  integer :: k
+  real    :: sumH1, sumH2, nonDimPos
+
+  ! Build start grid
+  xs(1) = 0.0
+  do k = 1,nz
+    xs(k+1) = xs(k) + hs(k)
+  end do
+  sumH1 = xs(nz+1)
+
+  ! Initial guess at final grid
+  xf(1) = 0.0
+  do k = 1,nz
+    xf(k+1) = xf(k) + hf(k)
+  end do
+  sumH2 = xf(nz+1)
+
+  if (doSafetyChecks) then
+    if (abs(sumH1-sumH2)>0.5*real(nz)*epsilon(sumH2)*(sumH1+sumH2)) then
+      write(0,*) 'Start/final/start-final grid'
+      do k = 1,nz+1
+        write(0,'(i4,3es12.3)') k,xs(k),xf(k),xs(k)-xf(k)
+      enddo
+      write(0,*) 'eps,H*eps',epsilon(sumH2),0.5*epsilon(sumH2)*(sumH1+sumH2)
+      call MOM_error(FATAL,'MOM_remapping, buildFinalGrid: '//&
+                     'Final and start grids do not match.')
+    endif
+  endif
+
+  ! Adjust new grid to match start grid to handle round-off differences
+  ! This ensures that the final grid matches the start grid at top and bottom
+! if (sumH1/=sumH2) then
+!   xf(nz+1) = xs(nz+1)
+!   do k = nz,1,-1
+!     nonDimPos = xf(k) / sumH2
+!     xf(k) = (1.-nonDimPos) * xf(k) + nonDimPos  * (xf(k+1) - hf(k))
+!   end do
+! endif
+
+end subroutine buildFinalGrid
 
 
 !------------------------------------------------------------------------------
@@ -312,7 +344,7 @@ subroutine remapping_integration( grid0, u0, ppoly0, grid1, u1, method )
   integer                           :: method   ! remapping scheme to use
   
   ! Local variables
-  integer       :: i, j, k
+  integer       :: iTarget, j, k
   integer       :: n0, n1       ! nb of cells in grid0 and grid1, respectively
   integer       :: j0, j1       ! indexes of source cells containing target 
                                 ! cell edges
@@ -331,10 +363,10 @@ subroutine remapping_integration( grid0, u0, ppoly0, grid1, u1, method )
   ! Loop on cells in target grid (grid1). For each target cell, we need to find
   ! in which source cells the target cell edges lie. The associated indexes are 
   ! noted j0 and j1.
-  do i = 1,grid1%nb_cells
+  do iTarget = 1,grid1%nb_cells
     ! Determine the coordinates of the target cell edges
-    x0 = grid1%x(i)
-    x1 = grid1%x(i+1)
+    x0 = grid1%x(iTarget)
+    x1 = grid1%x(iTarget+1)
 
     ! ============================================================
     ! Check whether target cell is vanished. If it is, the cell
@@ -361,7 +393,7 @@ subroutine remapping_integration( grid0, u0, ppoly0, grid1, u1, method )
       ! the source and target grids do not cover the same physical domain
       ! and there is something very wrong !
       if ( j0 .EQ. -1 ) then
-        write(*,*) i 
+        write(0,*) iTarget
         call MOM_error(FATAL, 'The location of the vanished cell could '//&
                               'not be found in "remapping_integration"' )
       end if
@@ -371,19 +403,19 @@ subroutine remapping_integration( grid0, u0, ppoly0, grid1, u1, method )
       ! value is set to be mean of the edge values (which should be the same).
       ! If it isn't, we simply interpolate.
       if ( grid0%h(j0) .EQ. 0.0 ) then
-        u1(i) = 0.5 * ( ppoly0%E(j0,1) + ppoly0%E(j0,2) )
+        u1(iTarget) = 0.5 * ( ppoly0%E(j0,1) + ppoly0%E(j0,2) )
       else
         xi0 = x0 / grid0%h(j0) - grid0%x(j0) / grid0%h(j0)
     
         select case ( method )
           case ( INTEGRATION_PCM )   
-            u1(i) = ppoly0%coefficients(j0,1)
+            u1(iTarget) = ppoly0%coefficients(j0,1)
           case ( INTEGRATION_PLM )  
-            u1(i) = evaluation_polynomial( ppoly0%coefficients(j0,:), 2, xi0 )
+            u1(iTarget) = evaluation_polynomial( ppoly0%coefficients(j0,:), 2, xi0 )
           case ( INTEGRATION_PPM )
-            u1(i) = evaluation_polynomial( ppoly0%coefficients(j0,:), 3, xi0 )
+            u1(iTarget) = evaluation_polynomial( ppoly0%coefficients(j0,:), 3, xi0 )
           case ( INTEGRATION_PQM )
-            u1(i) = evaluation_polynomial( ppoly0%coefficients(j0,:), 5, xi0 )
+            u1(iTarget) = evaluation_polynomial( ppoly0%coefficients(j0,:), 5, xi0 )
           case default
             call MOM_error( FATAL,'The selected integration method is invalid' )
         end select   
@@ -419,11 +451,11 @@ subroutine remapping_integration( grid0, u0, ppoly0, grid1, u1, method )
 
     ! Here, we make sure that the boundary edges of boundary cells
     ! coincide
-    if ( i .EQ. 1 ) then
+    if ( iTarget .EQ. 1 ) then
       j0 = 1
     end if  
     
-    if ( i .EQ. grid1%nb_cells ) then
+    if ( iTarget .EQ. grid1%nb_cells ) then
       j1 = grid1%nb_cells
     end if  
 
@@ -528,11 +560,11 @@ subroutine remapping_integration( grid0, u0, ppoly0, grid1, u1, method )
     end if ! end integration for non-vanished cells 
     
     ! The cell average is the integrated value divided by the cell width
-    u1(i) = q / grid1%h(i)
+    u1(iTarget) = q / grid1%h(iTarget)
     
     end if ! end if clause to check if cell is vanished
     
-  end do ! end i loop on target grid cells
+  end do ! end iTarget loop on target grid cells
 
 end subroutine remapping_integration
 
