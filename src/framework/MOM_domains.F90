@@ -546,11 +546,12 @@ subroutine pass_vector_complete_3d(id_update, u_cmpt, v_cmpt, MOM_dom, direction
 
 end subroutine pass_vector_complete_3d
 
-subroutine MOM_domains_init(MOM_dom, param_file, min_halo, symmetric)
+subroutine MOM_domains_init(MOM_dom, param_file, min_halo, symmetric, dynamic)
   type(MOM_domain_type),           pointer       :: MOM_dom
   type(param_file_type),           intent(in)    :: param_file
   integer, dimension(2), optional, intent(inout) :: min_halo
   logical, optional,               intent(in)    :: symmetric
+  logical, optional,               intent(in)    :: dynamic
 ! Arguments: MOM_dom - A pointer to the MOM_domain_type being defined here.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
@@ -560,6 +561,8 @@ subroutine MOM_domains_init(MOM_dom, param_file, min_halo, symmetric)
 !  (in,opt)  symmetric - If present, this specified whether this domain
 !                        is symmetric, regardless of whether the macro
 !                        SYMMETRIC_MEMORY_ is defined.
+!  (in,opt)  dynamic - If present and true, this domain type is always dynamic,
+!                      and all macros related to static memory are disregarded.
 
   integer, dimension(2) :: layout = (/ 1, 1 /)
   integer, dimension(2) :: io_layout = (/ 0, 0 /)
@@ -569,8 +572,8 @@ subroutine MOM_domains_init(MOM_dom, param_file, min_halo, symmetric)
   integer :: isc,iec,jsc,jec ! The bounding indices of the computational domain.
   integer :: X_FLAGS, Y_FLAGS
   integer :: i, xsiz, ysiz
-  logical :: reentrant_x, reentrant_y, tripolar_N, is_static
-  logical            :: mask_table_exist
+  logical :: reentrant_x, reentrant_y, tripolar_N, is_static, may_be_static
+  logical            :: mask_table_exists
   character(len=128) :: mask_table, inputdir
   character(len=200) :: mesg
   character(len=8) :: char_xsiz, char_ysiz, char_niglobal, char_njglobal
@@ -623,26 +626,30 @@ subroutine MOM_domains_init(MOM_dom, param_file, min_halo, symmetric)
                  "If true, non-blocking halo updates may be used.", &
                  default=.false.)
 
+  may_be_static = .true. ; if (present(dynamic)) may_be_static = .not.dynamic
+
   is_static = .false.
   nihalo_dflt = 2 ; njhalo_dflt = 2
+  if (may_be_static) then
 #ifdef STATIC_MEMORY_
-  is_static = .true.
-  nihalo_dflt = NIHALO_ ; njhalo_dflt = NJHALO_
+    is_static = .true.
+    nihalo_dflt = NIHALO_ ; njhalo_dflt = NJHALO_
 #else
 # ifdef NIHALO_
-  nihalo_dflt = NIHALO_
+    nihalo_dflt = NIHALO_
 # endif
 # ifdef NJHALO_
-  njhalo_dflt = NJHALO_
+    njhalo_dflt = NJHALO_
 # endif
 #endif
-  call log_param(param_file, mod, "!STATIC_MEMORY_", is_static, &
+    call log_param(param_file, mod, "!STATIC_MEMORY_", is_static, &
                  "If STATIC_MEMORY_ is defined, the principle variables \n"//&
                  "will have sizes that are statically determined at \n"//&
                  "compile time.  Otherwise the sizes are not determined \n"//&
                  "until run time. The STATIC option is substantially \n"//&
                  "faster, but does not allow the PE count to be changed \n"//&
                  "at run time.  This can only be set at compile time.")
+  endif ! may_be_static
 
   call get_param(param_file, mod, "NIHALO", MOM_dom%nihalo, &
                  "The number of halo points on each side in the \n"//&
@@ -664,38 +671,40 @@ subroutine MOM_domains_init(MOM_dom, param_file, min_halo, symmetric)
     call log_param(param_file, mod, "!NIHALO min_halo", MOM_dom%nihalo)
     call log_param(param_file, mod, "!NJHALO min_halo", MOM_dom%nihalo)
   endif
+  if (is_static) then
 #ifdef STATIC_MEMORY_
-  call get_param(param_file, mod, "NIGLOBAL", MOM_dom%niglobal, &
+    call get_param(param_file, mod, "NIGLOBAL", MOM_dom%niglobal, &
                  "The total number of thickness grid points in the \n"//&
                  "x-direction in the physical domain. With STATIC_MEMORY_ \n"//&
                  "this is set in MOM_memory.h at compile time.", default=NIGLOBAL_)
-  call get_param(param_file, mod, "NJGLOBAL", MOM_dom%njglobal, &
+    call get_param(param_file, mod, "NJGLOBAL", MOM_dom%njglobal, &
                  "The total number of thickness grid points in the \n"//&
                  "y-direction in the physical domain. With STATIC_MEMORY_ \n"//&
                  "this is set in MOM_memory.h at compile time.", default=NJGLOBAL_)
-  if (MOM_dom%niglobal /= NIGLOBAL_) call MOM_error(FATAL,"MOM_domains_init: " // &
-   "static mismatch for NIGLOBAL_ domain size. Header file does not match input namelist")
-  if (MOM_dom%njglobal /= NJGLOBAL_) call MOM_error(FATAL,"MOM_domains_init: " // &
-   "static mismatch for NJGLOBAL_ domain size. Header file does not match input namelist")
+    if (MOM_dom%niglobal /= NIGLOBAL_) call MOM_error(FATAL,"MOM_domains_init: " // &
+     "static mismatch for NIGLOBAL_ domain size. Header file does not match input namelist")
+    if (MOM_dom%njglobal /= NJGLOBAL_) call MOM_error(FATAL,"MOM_domains_init: " // &
+     "static mismatch for NJGLOBAL_ domain size. Header file does not match input namelist")
 
-  if (.not.present(min_halo)) then
-    if (MOM_dom%nihalo /= NIHALO_) call MOM_error(FATAL,"MOM_domains_init: " // &
-           "static mismatch for NIHALO domain size")
-    if (MOM_dom%njhalo /= NJHALO_) call MOM_error(FATAL,"MOM_domains_init: " // &
-           "static mismatch for NJHALO domain size")
-  endif
-#else
-  call get_param(param_file, mod, "NIGLOBAL", MOM_dom%niglobal, &
+    if (.not.present(min_halo)) then
+      if (MOM_dom%nihalo /= NIHALO_) call MOM_error(FATAL,"MOM_domains_init: " // &
+             "static mismatch for NIHALO domain size")
+      if (MOM_dom%njhalo /= NJHALO_) call MOM_error(FATAL,"MOM_domains_init: " // &
+             "static mismatch for NJHALO domain size")
+    endif
+#endif
+  else
+    call get_param(param_file, mod, "NIGLOBAL", MOM_dom%niglobal, &
                  "The total number of thickness grid points in the \n"//&
                  "x-direction in the physical domain. With STATIC_MEMORY_ \n"//&
                  "this is set in MOM_memory.h at compile time.", &
                  fail_if_missing=.true.)
-  call get_param(param_file, mod, "NJGLOBAL", MOM_dom%njglobal, &
+    call get_param(param_file, mod, "NJGLOBAL", MOM_dom%njglobal, &
                  "The total number of thickness grid points in the \n"//&
                  "y-direction in the physical domain. With STATIC_MEMORY_ \n"//&
                  "this is set in MOM_memory.h at compile time.", &
                  fail_if_missing=.true.)
-#endif
+  endif
   nihalo = MOM_dom%nihalo
   njhalo = MOM_dom%njhalo
 
@@ -708,39 +717,35 @@ subroutine MOM_domains_init(MOM_dom, param_file, min_halo, symmetric)
   inputdir = slasher(inputdir)
 
   call get_param(param_file, mod, "MASKTABLE", mask_table, &
-                 "A text file to specify n_mask, layout and mask_list.  This feature\n"//&
-                 "aims to reduce the number of processors that are cycling over pure\n"//&
-                 "land regions.  These processors which contain only land points will\n"//&
-                 "be masked out.\n"//&
+                 "A text file to specify n_mask, layout and mask_list. \n"//&
+                 "This feature masks out processors that contain only land points. \n"//&
                  "The first line of mask_table is the number of regions to be masked out.\n"//&
-                 "The second line is the layout of the model and must be consistent with\n"//&
-                 "the acutal model layout.\n"//&
-                 "The following (n_mask) lines will be the position of the processor to\n"//&
-                 "be masked out. The mask_table can be created by tools like check_mask.\n"//&
-                 "The following example of mask_table uses n_mask=2, layout=4,6 and\n"//&
-                 "the processor (1,2) and (3,6) are to be masked out.\n"//&
+                 "The second line is the layout of the model and must be \n"//&
+                 "consistent with the actual model layout.\n"//&
+                 "The following (n_mask) lines give the logical positions \n"//&
+                 "of the processors that are masked out. The mask_table \n"//&
+                 "can be created by tools like check_mask. The \n"//&
+                 "following example of mask_table masks out 2 processors, \n"//&
+                 "(1,2) and (3,6), out of the 24 in a 4x6 layout: \n"//&
                  " 2\n 4,6\n 1,2\n 3,6\n", default="MOM_mask_table" )
   mask_table = trim(inputdir)//trim(mask_table)
+  mask_table_exists = file_exist(mask_table)
 
-  if(file_exist(mask_table)) then
-     mask_table_exist = .true.
-  else
-     mask_table_exist = .false.
-  endif
-
+  if (is_static) then
 #ifdef STATIC_MEMORY_
-  layout(1) = NIPROC_ ; layout(2) = NJPROC_
-#else
-  call mpp_define_layout(global_indices, proc_used, layout)
-  call read_param(param_file,"NIPROC",layout(1))
-  call read_param(param_file,"NJPROC",layout(2))
-  if (layout(1)*layout(2) /= proc_used .AND. (.NOT. mask_table_exist) ) then
-    write(mesg,'("MOM_domains_init: The product of the two components of layout, ", &
-          &      2i4,", is not the number of PEs used, ",i5,".")') &
-          layout(1),layout(2),proc_used
-    call MOM_error(FATAL, mesg)
-  endif
+    layout(1) = NIPROC_ ; layout(2) = NJPROC_
 #endif
+  else
+    call mpp_define_layout(global_indices, proc_used, layout)
+    call read_param(param_file,"NIPROC",layout(1))
+    call read_param(param_file,"NJPROC",layout(2))
+    if (layout(1)*layout(2) /= proc_used .and. (.not. mask_table_exists) ) then
+      write(mesg,'("MOM_domains_init: The product of the two components of layout, ", &
+            &      2i4,", is not the number of PEs used, ",i5,".")') &
+            layout(1),layout(2),proc_used
+      call MOM_error(FATAL, mesg)
+    endif
+  endif
   call log_param(param_file, mod, "!NIPROC", layout(1), &
                  "The number of processors in the x-direction. With \n"//&
                  "STATIC_MEMORY_ this is set in MOM_memory.h at compile time.")
@@ -749,10 +754,11 @@ subroutine MOM_domains_init(MOM_dom, param_file, min_halo, symmetric)
                  "STATIC_MEMORY_ this is set in MOM_memory.h at compile time.")
 !  write(*,*) 'layout is now ',layout, global_indices
 
- if(mask_table_exist) then
-     call MOM_error(NOTE, 'MOM_domains_init: reading maskmap information from '//trim(mask_table))
-     allocate(MOM_dom%maskmap(layout(1), layout(2)))
-     call parse_mask_table(mask_table, MOM_dom%maskmap, "MOM")
+  if (mask_table_exists) then
+    call MOM_error(NOTE, 'MOM_domains_init: reading maskmap information from '//&
+                         trim(mask_table))
+    allocate(MOM_dom%maskmap(layout(1), layout(2)))
+    call parse_mask_table(mask_table, MOM_dom%maskmap, "MOM")
   endif
 
 
@@ -796,16 +802,17 @@ subroutine MOM_domains_init(MOM_dom, param_file, min_halo, symmetric)
       "TRIPOLAR_N and REENTRANT_Y may not be defined together.")
   endif
   
-  if(mask_table_exist) then
-     call MOM_define_domain((/1+nihalo,MOM_dom%niglobal+nihalo,1+njhalo, &
-                 MOM_dom%njglobal+njhalo/), layout, MOM_dom%mpp_domain, &
-                 xflags=X_FLAGS, yflags=Y_FLAGS, xhalo=nihalo, yhalo=njhalo, &
-                 symmetry = MOM_dom%symmetric, name="MOM", maskmap=MOM_dom%maskmap )
+  if (mask_table_exists) then
+    call MOM_define_domain( (/1+nihalo,MOM_dom%niglobal+nihalo,1+njhalo, &
+                MOM_dom%njglobal+njhalo/), layout, MOM_dom%mpp_domain, &
+                xflags=X_FLAGS, yflags=Y_FLAGS, xhalo=nihalo, yhalo=njhalo, &
+                symmetry = MOM_dom%symmetric, name="MOM", &
+                maskmap=MOM_dom%maskmap )
   else
-     call MOM_define_domain((/1+nihalo,MOM_dom%niglobal+nihalo,1+njhalo, &
-                 MOM_dom%njglobal+njhalo/), layout, MOM_dom%mpp_domain, &
-                 xflags=X_FLAGS, yflags=Y_FLAGS, xhalo=nihalo, yhalo=njhalo, &
-                 symmetry = MOM_dom%symmetric, name="MOM")
+    call MOM_define_domain( (/1+nihalo,MOM_dom%niglobal+nihalo,1+njhalo, &
+                MOM_dom%njglobal+njhalo/), layout, MOM_dom%mpp_domain, &
+                xflags=X_FLAGS, yflags=Y_FLAGS, xhalo=nihalo, yhalo=njhalo, &
+                symmetry = MOM_dom%symmetric, name="MOM")
   endif
 
   if ((io_layout(1) + io_layout(2) > 0)) then
@@ -820,35 +827,39 @@ subroutine MOM_domains_init(MOM_dom, param_file, min_halo, symmetric)
   MOM_dom%use_io_layout = (io_layout(1) + io_layout(2) > 0)
 
 #ifdef STATIC_MEMORY_
-!   A requirement of equal sized compute domains is necessary when STATIC_MEMORY_
-! is used.
-  call mpp_get_compute_domain(MOM_dom%mpp_domain,isc,iec,jsc,jec)
-  xsiz = iec - isc + 1
-  ysiz = jec - jsc + 1
-  if (xsiz*NIPROC_ /= MOM_dom%niglobal .OR. ysiz*NJPROC_ /= MOM_dom%njglobal) then
-     write( char_xsiz,'(i4)' ) NIPROC_
-     write( char_ysiz,'(i4)' ) NJPROC_
-     write( char_niglobal,'(i4)' ) MOM_dom%niglobal
-     write( char_njglobal,'(i4)' ) MOM_dom%njglobal
-     call MOM_error(WARNING,'MOM_domains: Processor decomposition (NIPROC_,NJPROC_) = (' &
-         //trim(char_xsiz)//','//trim(char_ysiz)// &
-         ') does not evenly divide size set by preprocessor macro ('&
-         //trim(char_niglobal)//','//trim(char_njglobal)// '). ')
-     call MOM_error(FATAL,'MOM_domains:  #undef STATIC_MEMORY_ in MOM_memory.h to use &
-         &dynamic allocation, or change processor decomposition to evenly divide the domain.')
+  if (is_static) then
+  !   A requirement of equal sized compute domains is necessary when STATIC_MEMORY_
+  ! is used.
+    call mpp_get_compute_domain(MOM_dom%mpp_domain,isc,iec,jsc,jec)
+    xsiz = iec - isc + 1
+    ysiz = jec - jsc + 1
+    if (xsiz*NIPROC_ /= MOM_dom%niglobal .OR. ysiz*NJPROC_ /= MOM_dom%njglobal) then
+       write( char_xsiz,'(i4)' ) NIPROC_
+       write( char_ysiz,'(i4)' ) NJPROC_
+       write( char_niglobal,'(i4)' ) MOM_dom%niglobal
+       write( char_njglobal,'(i4)' ) MOM_dom%njglobal
+       call MOM_error(WARNING,'MOM_domains: Processor decomposition (NIPROC_,NJPROC_) = (' &
+           //trim(char_xsiz)//','//trim(char_ysiz)// &
+           ') does not evenly divide size set by preprocessor macro ('&
+           //trim(char_niglobal)//','//trim(char_njglobal)// '). ')
+       call MOM_error(FATAL,'MOM_domains:  #undef STATIC_MEMORY_ in MOM_memory.h to use &
+           &dynamic allocation, or change processor decomposition to evenly divide the domain.')
+    endif
   endif
 #endif
 
 end subroutine MOM_domains_init
 
 subroutine get_domain_extent(Domain, isc, iec, jsc, jec, isd, ied, jsd, jed, &
-                             isg, ieg, jsg, jeg, idg_offset, jdg_offset, symmetric)
+                             isg, ieg, jsg, jeg, idg_offset, jdg_offset, &
+                             symmetric, local_indexing)
   type(MOM_domain_type), intent(in) :: Domain
   integer, intent(out) :: isc, iec, jsc, jec
   integer, intent(out) :: isd, ied, jsd, jed
   integer, intent(out) :: isg, ieg, jsg, jeg
   integer, intent(out) :: idg_offset, jdg_offset
   logical, intent(out) :: symmetric
+  logical, optional, intent(in) :: local_indexing
 ! Arguments: Domain - The MOM_domain_type from which the indices are extracted.
 !  (out)     isc, iec, jsc, jec - the start & end indices of the
 !                                 computational domain.
@@ -857,16 +868,25 @@ subroutine get_domain_extent(Domain, isc, iec, jsc, jec, isd, ied, jsd, jed, &
 !  (out)     idg_offset, jdg_offset - the offset between the corresponding
 !                                     global and data index spaces.
 !  (out)     symmetric - true if symmetric memory is used.
+!  (in,opt)  local_indexing - if true, local tracer array indices start at 1, as
+!                             in most MOM6 or GOLD code.
+
+  logical :: local
+  local = .true. ; if (present(local_indexing)) local = local_indexing
 
   call mpp_get_compute_domain(Domain%mpp_domain, isc, iec, jsc, jec)
   call mpp_get_data_domain(Domain%mpp_domain, isd, ied, jsd, jed)
   call mpp_get_global_domain(Domain%mpp_domain, isg, ieg, jsg, jeg)
 
   ! This code institutes the MOM convention that local array indices start at 1.
-  idg_offset = isd-1 ; jdg_offset = jsd-1
-  isc = isc-isd+1 ; iec = iec-isd+1 ; jsc = jsc-jsd+1 ; jec = jec-jsd+1
-  ied = ied-isd+1 ; jed = jed-jsd+1
-  isd = 1 ; jsd = 1
+  if (local) then
+    idg_offset = isd-1 ; jdg_offset = jsd-1
+    isc = isc-isd+1 ; iec = iec-isd+1 ; jsc = jsc-jsd+1 ; jec = jec-jsd+1
+    ied = ied-isd+1 ; jed = jed-jsd+1
+    isd = 1 ; jsd = 1
+  else
+    idg_offset = 0 ; jdg_offset = 0
+  endif
   symmetric = Domain%symmetric
 
 end subroutine get_domain_extent
