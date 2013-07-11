@@ -67,9 +67,6 @@ NIPROC_IO = 1                   ! default = 0
 NJPROC_IO = 1                   ! default = 0
                                 ! The number of processors used for I/O in the
                                 ! y-direction, or 0 to equal NJPROC.
-AVAILABLE_DIAGS_FILE = "available_diags.000000" ! default = "available_diags.000000"
-                                ! A file into which to write a list of all available
-                                ! ocean diagnostics that can be included in a diag_table.
     !  Parameters of module MOM_grid
         ! Parameters providing information about the vertical grid.
 G_EARTH = 10.0                  !   [m s-2] default = 9.8
@@ -94,6 +91,9 @@ BATHYMETRY_AT_VEL = False       !   [Boolean] default = False
                                 ! topography are entirely determined from thickness points.
 NK = 25                         !   [nondim]
                                 ! The number of model layers.
+AVAILABLE_DIAGS_FILE = "available_diags.000000" ! default = "available_diags.000000"
+                                ! A file into which to write a list of all available
+                                ! ocean diagnostics that can be included in a diag_table.
     !  Parameters of module MOM
 VERBOSITY = 2                   ! default = 2
                                 ! Integer controlling level of messaging
