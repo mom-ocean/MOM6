@@ -87,7 +87,7 @@ character(len=256), public :: remappingSchemesDoc = &
                  "PQM_IH6IH5  (5th-order accurate)\n"
 character(len=3), public :: remappingDefaultScheme = "PLM"
 
-logical, parameter :: doSafetyChecks = .false.
+logical, parameter :: doSafetyChecks = .true.
 
 ! -----------------------------------------------------------------------------
 ! This module contains the following routines
@@ -132,7 +132,7 @@ subroutine remapping_main( CS, G, h, h_new, tv, u, v )
       ! Build the start and final grids
       CS%grid_start%h(:) = h(i,j,:)
       CS%grid_final%h(:) = h_new(i,j,:)
-      call buildFinalGrid(nz, CS%grid_start%h, CS%grid_final%h, CS%grid_start%x, CS%grid_final%x)
+      call buildConsistentGrids(nz, CS%grid_start%h, CS%grid_final%h, CS%grid_start%x, CS%grid_final%x)
       
       do k = 1,nz
         CS%grid_start%h(k) = CS%grid_start%x(k+1) - CS%grid_start%x(k)
@@ -158,7 +158,7 @@ subroutine remapping_main( CS, G, h, h_new, tv, u, v )
       ! Build the start and final grids
       CS%grid_start%h(:) = 0.5 * ( h(i,j,:) + h(i+1,j,:) )
       CS%grid_final%h(:) = 0.5 * ( h_new(i,j,:) + h_new(i+1,j,:) )
-      call buildFinalGrid(nz, CS%grid_start%h, CS%grid_final%h, CS%grid_start%x, CS%grid_final%x)
+      call buildConsistentGrids(nz, CS%grid_start%h, CS%grid_final%h, CS%grid_start%x, CS%grid_final%x)
       
       do k = 1,nz
         CS%grid_start%h(k) = CS%grid_start%x(k+1) - CS%grid_start%x(k)
@@ -181,7 +181,7 @@ subroutine remapping_main( CS, G, h, h_new, tv, u, v )
       ! Build the start and final grids
       CS%grid_start%h(:) = 0.5 * ( h(i,j,:) + h(i,j+1,:) )
       CS%grid_final%h(:) = 0.5 * ( h_new(i,j,:) + h_new(i,j+1,:) )
-      call buildFinalGrid(nz, CS%grid_start%h, CS%grid_final%h, CS%grid_start%x, CS%grid_final%x)
+      call buildConsistentGrids(nz, CS%grid_start%h, CS%grid_final%h, CS%grid_start%x, CS%grid_final%x)
 
       do k = 1,nz
         CS%grid_start%h(k) = CS%grid_start%x(k+1) - CS%grid_start%x(k)
@@ -202,7 +202,7 @@ end subroutine remapping_main
 !------------------------------------------------------------------------------
 ! Build a final grid 
 !------------------------------------------------------------------------------
-subroutine buildFinalGrid(nz, hs, hf, xs, xf)
+subroutine buildConsistentGrids(nz, hs, hf, xs, xf)
 !------------------------------------------------------------------------------
 ! This routine calculates the coordinates xs and xf consistently from
 ! hs and hf so that the edges of the domain line up.
@@ -218,42 +218,218 @@ subroutine buildFinalGrid(nz, hs, hf, xs, xf)
   real    :: sumH1, sumH2, nonDimPos
 
   ! Build start grid
-  xs(1) = 0.0
-  do k = 1,nz
-    xs(k+1) = xs(k) + hs(k)
-  end do
+  call buildGridFromH(nz, hs, xs)
   sumH1 = xs(nz+1)
 
   ! Initial guess at final grid
-  xf(1) = 0.0
-  do k = 1,nz
-    xf(k+1) = xf(k) + hf(k)
-  end do
+  call buildGridFromH(nz, hf, xf)
   sumH2 = xf(nz+1)
 
   if (doSafetyChecks) then
+    call checkGridConsistentcies(nz, xs, nz, xf, strict=.false.)
     if (abs(sumH1-sumH2)>0.5*real(nz)*epsilon(sumH2)*(sumH1+sumH2)) then
       write(0,*) 'Start/final/start-final grid'
       do k = 1,nz+1
         write(0,'(i4,3es12.3)') k,xs(k),xf(k),xs(k)-xf(k)
       enddo
       write(0,*) 'eps,H*eps',epsilon(sumH2),0.5*epsilon(sumH2)*(sumH1+sumH2)
-      call MOM_error(FATAL,'MOM_remapping, buildFinalGrid: '//&
+      call MOM_error(FATAL,'MOM_remapping, buildConsistentGrids: '//&
                      'Final and start grids do not match.')
     endif
   endif
 
-  ! Adjust new grid to match start grid to handle round-off differences
-  ! This ensures that the final grid matches the start grid at top and bottom
-! if (sumH1/=sumH2) then
-!   xf(nz+1) = xs(nz+1)
-!   do k = nz,1,-1
-!     nonDimPos = xf(k) / sumH2
-!     xf(k) = (1.-nonDimPos) * xf(k) + nonDimPos  * (xf(k+1) - hf(k))
-!   end do
-! endif
+! call makeGridsConsistent(nz, xs, nz, hf, xf)
 
-end subroutine buildFinalGrid
+end subroutine buildConsistentGrids
+
+
+!------------------------------------------------------------------------------
+! Build a grid from h
+!------------------------------------------------------------------------------
+subroutine buildGridFromH(nz, h, x)
+!------------------------------------------------------------------------------
+! This routine calculates the coordinates x by integrating h.
+!------------------------------------------------------------------------------
+
+  ! Arguments
+  integer,               intent(in)    :: nz
+  real, dimension(nz),   intent(in)    :: h
+  real, dimension(nz+1), intent(inout) :: x
+
+  integer :: k
+
+  ! Build start grid
+  x(1) = 0.0
+  do k = 1,nz
+    x(k+1) = x(k) + h(k)
+  end do
+
+end subroutine buildGridFromH
+
+
+!------------------------------------------------------------------------------
+! Check that two grids are consistent
+!------------------------------------------------------------------------------
+subroutine checkGridConsistentcies(ns, xs, nf, xf, strict)
+!------------------------------------------------------------------------------
+! Checks that xs and xf are consistent to within roundoff.
+! If strict=False, the end points of xs and xf are allowed to differ by
+! numerical roundoff due to the nature of summation to obtain xs, xf.
+! If strict=True, the edn points must be identical.
+!------------------------------------------------------------------------------
+
+  ! Arguments
+  integer, intent(in) :: ns, nf
+  real,    intent(in) :: xs(ns+1), xf(nf+1)
+  logical, intent(in) :: strict
+
+  ! Local variables
+  integer :: k !,n
+  real    :: sumHs, sumHf !, sumErr, sumMean, allowedErr, eps
+
+  sumHs = xs(ns+1)-xs(1)
+  sumHf = xf(nf+1)-xf(1)
+! sumErr = abs(sumHf-sumHs)
+
+  if (strict) then
+    if (sumHf /= sumHs) call &
+        MOM_error(FATAL,'MOM_remapping, checkGridConsistentcies: '//&
+                        'Total thickness of two grids are not exactly equal..')
+  else ! not strict
+    if (isPosSumErrSignificant(ns, sumHs, nf, sumhf)) then
+      write(0,*) 'Start/final/start-final grid'
+      do k = 1,max(ns,nf)+1
+        if (k<=min(ns,nf)) then
+          write(0,'(i4,3es12.3)') k,xs(k),xf(k),xs(k)-xf(k)
+        elseif (k>ns) then
+          write(0,'(i4,12x,1es12.3)') k,xf(k)
+        else
+          write(0,'(i4,1es12.3)') k,xs(k)
+        endif
+      enddo
+      call MOM_error(FATAL,'MOM_remapping, checkGridConsistentcies: '//&
+              'Total thickness of two grids do not match to within round-off.')
+    endif
+  endif
+
+end subroutine checkGridConsistentcies
+
+
+!------------------------------------------------------------------------------
+! Compare two summation estimates of positive data and judge if due to more
+! than round-off
+!------------------------------------------------------------------------------
+function isPosSumErrSignificant(n1, sum1, n2, sum2)
+!------------------------------------------------------------------------------
+! When two sums are calculated from different vectors that should add up to
+! the same value, the results can differ by round off. The round off error
+! can be bounded to be proportional to the number of operations.
+! This function returns true if the difference between sum1 and sum2 is
+! larger than than the estimated round off bound.
+! NOTE: This estimate/function is only valid for summation of postive data.
+!------------------------------------------------------------------------------
+  ! Arguments
+  integer, intent(in) :: n1, n2
+  real,    intent(in) :: sum1, sum2
+  logical             :: isPosSumErrSignificant
+  ! Local variables
+  integer :: n
+  real :: sumErr, sumMean, allowedErr, eps
+
+  sumErr = abs(sum1-sum2)
+  sumMean = 0.5*abs(sum1+sum2)
+  eps = epsilon(sumMean)
+  allowedErr = eps*sumMean
+  n = max(n1,n1)
+  if (sumErr>real(n)*allowedErr) then
+    write(0,*) 'isPosSumErrSignificant: sum1,sum2=',sum1,sum2
+    write(0,*) 'isPosSumErrSignificant: eps=',eps
+    write(0,*) 'isPosSumErrSignificant: err,n*H*eps,H*eps=',sumErr,real(n)*allowedErr,allowedErr
+    write(0,*) 'isPosSumErrSignificant: err/eps,n1,n2,n1+n2=',sumErr/eps,n1,n2,n1+n2
+    isPosSumErrSignificant = .true.
+  else
+    isPosSumErrSignificant = .false.
+  endif
+end function isPosSumErrSignificant
+
+
+!------------------------------------------------------------------------------
+! Compare two summation estimates of signed data and judge if due to more
+! than round-off
+!------------------------------------------------------------------------------
+function isSignedSumErrSignificant(n1, maxTerm1, sum1, n2, maxTerm2, sum2)
+!------------------------------------------------------------------------------
+! When two sums are calculated from different vectors that should add up to
+! the same value, the results can differ by round off. The round off error
+! can be bounded to be proportional to the number of operations.
+! This function returns true if the difference between sum1 and sum2 is
+! larger than than the estimated round off bound.
+!------------------------------------------------------------------------------
+  ! Arguments
+  integer, intent(in) :: n1, n2
+  real,    intent(in) :: maxTerm1, sum1, maxTerm2, sum2
+  logical             :: isSignedSumErrSignificant
+  ! Local variables
+  integer :: n
+  real :: sumErr, sumMean, allowedErr, eps
+
+  sumErr = abs(sum1-sum2)
+  eps = epsilon(sumErr)
+  allowedErr = eps*(real(n1)*abs(maxTerm1)+real(n2)*abs(maxTerm2))
+  if (sumErr>allowedErr) then
+    write(0,*) 'isSignedSumErrSignificant: maxTerm1,maxTerm2=',maxTerm1,maxTerm2
+    write(0,*) 'isSignedSumErrSignificant: sum1,sum2=',sum1,sum2
+    write(0,*) 'isSignedSumErrSignificant: eps=',eps
+    write(0,*) 'isSignedSumErrSignificant: err,n*eps*maxTerm=',sumErr,allowedErr
+    isSignedSumErrSignificant = .true.
+  else
+    isSignedSumErrSignificant = .false.
+  endif
+end function isSignedSumErrSignificant
+
+
+!------------------------------------------------------------------------------
+! Make a second grid consistent with the first
+!------------------------------------------------------------------------------
+subroutine makeGridsConsistent(ns, xs, nf, hf, xf)
+!------------------------------------------------------------------------------
+! Adjusts xf so that the end points exactly match those of xs.
+! It is best to have called checkGridConsistentcies with strict=false
+! to ensure that the grids are already close and only differ due to
+! round-off.
+!------------------------------------------------------------------------------
+
+  ! Arguments
+  integer, intent(in)    :: ns, nf
+  real,    intent(in)    :: xs(ns+1), hf(nf)
+  real,    intent(inout) :: xf(nf+1)
+
+  ! Local variables
+  integer :: n, k
+  real    :: nonDimPos, sumHs, sumHf
+
+  if (doSafetyChecks) then
+    if (xf(1) /= xs(1)) call &
+         MOM_error(FATAL,'MOM_remapping, makeGridsConsistent: '//&
+                         'Starting point of two grids do not match.')
+  endif
+
+  ! Adjust new grid so that end-points match those of the start grid.
+  sumHs = xs(ns+1)
+  sumHf = xf(nf+1)
+  if (sumHf/=sumHs) then
+    xf(nf+1) = sumHs
+    do k = nf,1,-1
+      nonDimPos = xf(k) / sumHf ! Position of xf interface within column
+      ! When nonDimPos -> 1, adjust xf towards a bottom-up integration
+      ! When nonDomPos -> 0, keep xf at the original top-down integration
+      xf(k) = (1.-nonDimPos) * xf(k) + nonDimPos * (xf(k+1) - hf(k))
+    end do
+  endif
+
+  if (doSafetyChecks) call checkGridConsistentcies(ns, xs, nf, xf, strict=.true.)
+
+end subroutine makeGridsConsistent
 
 
 !------------------------------------------------------------------------------
@@ -273,6 +449,27 @@ subroutine remapping_core( CS, grid0, u0, grid1, u1 )
   type(grid1D_t), intent(in)          :: grid1
   real, dimension(:), intent(inout)   :: u1
   
+  ! Local variables
+  integer :: k
+  real :: sumUh0, sumUx0, sumUh1, sumUx1
+  real :: maxUh0, maxUx0, maxUh1, maxUx1
+
+  if (doSafetyChecks) then
+    sumUh0 = 0.; sumUx0 = 0.
+    maxUh0 = 0.; maxUx0 = 0.
+    do k = 1, grid0%nb_cells
+      maxUh0 = max( maxUh0 , abs(grid0%h(k) * u0(k)) )
+      sumUh0 = sumUh0 + grid0%h(k) * u0(k)
+      maxUx0 = max( maxUx0 , abs(( grid0%x(k+1) - grid0%x(k) ) * u0(k)) )
+      sumUx0 = sumUx0 + ( grid0%x(k+1) - grid0%x(k) ) * u0(k)
+    enddo
+    if (isSignedSumErrSignificant(grid0%nb_cells, maxUh0, sumUh0, grid0%nb_cells, maxUx0, sumUx0)) &
+      call MOM_error(FATAL,'MOM_remapping, remapping_core: '//&
+              'Total content based on initial grid, using h and x differ signficantly.')
+    if (sumUh0 /= sumUx0) call MOM_error(FATAL,'MOM_remapping, remapping_core: '//&
+              'Total content based on initial grid, using h and x are not equal.')
+  endif
+
   ! Reset polynomial
   CS%ppoly_r%E(:,:) = 0.0
   CS%ppoly_r%S(:,:) = 0.0
@@ -327,6 +524,29 @@ subroutine remapping_core( CS, grid0, u0, grid1, u1 )
     case default
       call MOM_error( FATAL, 'The selected remapping method is invalid' )
   end select
+
+  if (doSafetyChecks) then
+    sumUh1 = 0.; sumUx1 = 0.
+    maxUh1 = 0.; maxUx1 = 0.
+    do k = 1, grid1%nb_cells
+      maxUh1 = max( maxUh1 , abs(grid1%h(k) * u1(k)) )
+      sumUh1 = sumUh1 + grid1%h(k) * u1(k)
+      maxUx1 = max( maxUx1 , abs(( grid1%x(k+1) - grid1%x(k) ) * u1(k)) )
+      sumUx1 = sumUx1 + ( grid1%x(k+1) - grid1%x(k) ) * u1(k)
+    enddo
+    if (isSignedSumErrSignificant(grid1%nb_cells, maxUh1, sumUh1, grid1%nb_cells, maxUx1, sumUx1)) &
+      call MOM_error(FATAL,'MOM_remapping, remapping_core: '//&
+              'Total content based on initial grid, using h and x differ signficantly.')
+    if (sumUh1 /= sumUx1) call MOM_error(FATAL,'MOM_remapping, remapping_core: '//&
+              'Total content based on initial grid, using h and x are not equal.')
+!   if (isSignedSumErrSignificant(grid0%nb_cells, maxUx0, sumUx0, grid1%nb_cells, maxUx1, sumUx1)) &
+!     call MOM_error(FATAL,'MOM_remapping, remapping_core: '//&
+!             'Total content of initial and final grids, using x, differ signficantly.')
+!   if (isSignedSumErrSignificant(grid0%nb_cells, maxUh0, sumUh0, grid1%nb_cells, maxUh1, sumUh1)) &
+!     call MOM_error(FATAL,'MOM_remapping, remapping_core: '//&
+!             'Total content of initial and final grids, using h, differ signficantly.')
+  endif
+
 
 end subroutine remapping_core
 
