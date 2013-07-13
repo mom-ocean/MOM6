@@ -884,7 +884,7 @@ subroutine calculate_projected_state(kappa, u0, v0, T0, S0, dt, nz, &
   real, dimension(NK_INTERFACE_), intent(in)  :: I_dz_int, dbuoy_dT, dbuoy_dS
   real,                           intent(in)  :: dt
   integer,                        intent(in)  :: nz
-  real, dimension(NKMEM_),        intent(out) :: u, v, T, Sal
+  real, dimension(NKMEM_),        intent(inout) :: u, v, T, Sal
   real, dimension(NK_INTERFACE_), optional, intent(inout) :: N2, S2
   integer, optional,              intent(in)  :: ks_int, ke_int
   ! Arguments: kappa - The diapycnal diffusivity at interfaces, in m2 s-1.

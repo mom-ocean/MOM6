@@ -522,7 +522,7 @@ subroutine find_overlap(e, Z_top, Z_bot, k_max, k_start, k_top, k_bot, wt, z1, z
   real, dimension(:), intent(in) :: e
   real, intent(in)   :: Z_top, Z_bot
   integer, intent(in) :: k_max, k_start
-  integer, intent(out) :: k_top, k_bot
+  integer, intent(inout) :: k_top, k_bot
   real, dimension(:), intent(out) :: wt, z1, z2
 
 !   This subroutine determines the layers bounded by interfaces e that overlap
