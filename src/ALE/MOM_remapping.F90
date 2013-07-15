@@ -285,11 +285,10 @@ subroutine checkGridConsistentcies(ns, xs, nf, xf, strict)
 
   ! Local variables
   integer :: k !,n
-  real    :: sumHs, sumHf !, sumErr, sumMean, allowedErr, eps
+  real    :: sumHs, sumHf
 
   sumHs = xs(ns+1)-xs(1)
   sumHf = xf(nf+1)-xf(1)
-! sumErr = abs(sumHf-sumHs)
 
   if (strict) then
     if (sumHf /= sumHs) call &
@@ -299,9 +298,9 @@ subroutine checkGridConsistentcies(ns, xs, nf, xf, strict)
     if (isPosSumErrSignificant(ns, sumHs, nf, sumhf)) then
       write(0,*) 'Start/final/start-final grid'
       do k = 1,max(ns,nf)+1
-        if (k<=min(ns,nf)) then
+        if (k<=min(ns+1,nf+1)) then
           write(0,'(i4,3es12.3)') k,xs(k),xf(k),xs(k)-xf(k)
-        elseif (k>ns) then
+        elseif (k>ns+1) then
           write(0,'(i4,12x,1es12.3)') k,xf(k)
         else
           write(0,'(i4,1es12.3)') k,xs(k)
@@ -333,18 +332,17 @@ function isPosSumErrSignificant(n1, sum1, n2, sum2)
   real,    intent(in) :: sum1, sum2
   logical             :: isPosSumErrSignificant
   ! Local variables
-  integer :: n
-  real :: sumErr, sumMean, allowedErr, eps
+  real :: sumErr, allowedErr, eps
 
+  if (sum1<0.) call MOM_error(FATAL,'isPosSumErrSignificant: sum1<0 is not allowed!')
+  if (sum2<0.) call MOM_error(FATAL,'isPosSumErrSignificant: sum2<0 is not allowed!')
   sumErr = abs(sum1-sum2)
-  sumMean = 0.5*abs(sum1+sum2)
-  eps = epsilon(sumMean)
-  allowedErr = eps*sumMean
-  n = max(n1,n1)
-  if (sumErr>real(n)*allowedErr) then
+  eps = epsilon(sum1)
+  allowedErr = eps*0.5*(real(n1-1)*sum1+real(n2-1)*sum2)
+  if (sumErr>allowedErr) then
     write(0,*) 'isPosSumErrSignificant: sum1,sum2=',sum1,sum2
     write(0,*) 'isPosSumErrSignificant: eps=',eps
-    write(0,*) 'isPosSumErrSignificant: err,n*H*eps,H*eps=',sumErr,real(n)*allowedErr,allowedErr
+    write(0,*) 'isPosSumErrSignificant: err,n*eps=',sumErr,allowedErr
     write(0,*) 'isPosSumErrSignificant: err/eps,n1,n2,n1+n2=',sumErr/eps,n1,n2,n1+n2
     isPosSumErrSignificant = .true.
   else
@@ -371,7 +369,7 @@ function isSignedSumErrSignificant(n1, maxTerm1, sum1, n2, maxTerm2, sum2)
   logical             :: isSignedSumErrSignificant
   ! Local variables
   integer :: n
-  real :: sumErr, sumMean, allowedErr, eps
+  real :: sumErr, allowedErr, eps
 
   sumErr = abs(sum1-sum2)
   eps = epsilon(sumErr)
