@@ -87,7 +87,8 @@ character(len=256), public :: remappingSchemesDoc = &
                  "PQM_IH6IH5  (5th-order accurate)\n"
 character(len=3), public :: remappingDefaultScheme = "PLM"
 
-logical, parameter :: doSafetyChecks = .false.
+! This CPP macro embeds some safety checks
+#define __DO_SAFTEY_CHECKS__
 
 ! -----------------------------------------------------------------------------
 ! This module contains the following routines
@@ -120,10 +121,10 @@ subroutine remapping_main( CS, G, h, h_new, tv, u, v )
   integer               :: problem
 
   nz = G%ke
-  if (doSafetyChecks) then
+#ifdef __DO_SAFTEY_CHECKS__
     if (nz>CS%grid_start%nb_cells) call MOM_error(FATAL,'nz>nk_start')
     if (nz>CS%grid_final%nb_cells) call MOM_error(FATAL,'nz>nk_final')
-  endif
+#endif
 
   ! Remap tracer
   do j = G%jsc,G%jec
@@ -132,7 +133,7 @@ subroutine remapping_main( CS, G, h, h_new, tv, u, v )
       ! Build the start and final grids
       CS%grid_start%h(:) = h(i,j,:)
       CS%grid_final%h(:) = h_new(i,j,:)
-      call buildFinalGrid(nz, CS%grid_start%h, CS%grid_final%h, CS%grid_start%x, CS%grid_final%x)
+      call buildConsistentGrids(nz, CS%grid_start%h, CS%grid_final%h, CS%grid_start%x, CS%grid_final%x)
       
       do k = 1,nz
         CS%grid_start%h(k) = CS%grid_start%x(k+1) - CS%grid_start%x(k)
@@ -158,7 +159,7 @@ subroutine remapping_main( CS, G, h, h_new, tv, u, v )
       ! Build the start and final grids
       CS%grid_start%h(:) = 0.5 * ( h(i,j,:) + h(i+1,j,:) )
       CS%grid_final%h(:) = 0.5 * ( h_new(i,j,:) + h_new(i+1,j,:) )
-      call buildFinalGrid(nz, CS%grid_start%h, CS%grid_final%h, CS%grid_start%x, CS%grid_final%x)
+      call buildConsistentGrids(nz, CS%grid_start%h, CS%grid_final%h, CS%grid_start%x, CS%grid_final%x)
       
       do k = 1,nz
         CS%grid_start%h(k) = CS%grid_start%x(k+1) - CS%grid_start%x(k)
@@ -181,7 +182,7 @@ subroutine remapping_main( CS, G, h, h_new, tv, u, v )
       ! Build the start and final grids
       CS%grid_start%h(:) = 0.5 * ( h(i,j,:) + h(i,j+1,:) )
       CS%grid_final%h(:) = 0.5 * ( h_new(i,j,:) + h_new(i,j+1,:) )
-      call buildFinalGrid(nz, CS%grid_start%h, CS%grid_final%h, CS%grid_start%x, CS%grid_final%x)
+      call buildConsistentGrids(nz, CS%grid_start%h, CS%grid_final%h, CS%grid_start%x, CS%grid_final%x)
 
       do k = 1,nz
         CS%grid_start%h(k) = CS%grid_start%x(k+1) - CS%grid_start%x(k)
@@ -202,7 +203,7 @@ end subroutine remapping_main
 !------------------------------------------------------------------------------
 ! Build a final grid 
 !------------------------------------------------------------------------------
-subroutine buildFinalGrid(nz, hs, hf, xs, xf)
+subroutine buildConsistentGrids(nz, hs, hf, xs, xf)
 !------------------------------------------------------------------------------
 ! This routine calculates the coordinates xs and xf consistently from
 ! hs and hf so that the edges of the domain line up.
@@ -218,42 +219,332 @@ subroutine buildFinalGrid(nz, hs, hf, xs, xf)
   real    :: sumH1, sumH2, nonDimPos
 
   ! Build start grid
-  xs(1) = 0.0
-  do k = 1,nz
-    xs(k+1) = xs(k) + hs(k)
-  end do
+  call buildGridFromH(nz, hs, xs)
   sumH1 = xs(nz+1)
 
   ! Initial guess at final grid
-  xf(1) = 0.0
-  do k = 1,nz
-    xf(k+1) = xf(k) + hf(k)
-  end do
+  call buildGridFromH(nz, hf, xf)
   sumH2 = xf(nz+1)
 
-  if (doSafetyChecks) then
+#ifdef __DO_SAFTEY_CHECKS__
+    call checkGridConsistentcies(nz, xs, nz, xf, strict=.false.)
     if (abs(sumH1-sumH2)>0.5*real(nz)*epsilon(sumH2)*(sumH1+sumH2)) then
       write(0,*) 'Start/final/start-final grid'
       do k = 1,nz+1
         write(0,'(i4,3es12.3)') k,xs(k),xf(k),xs(k)-xf(k)
       enddo
       write(0,*) 'eps,H*eps',epsilon(sumH2),0.5*epsilon(sumH2)*(sumH1+sumH2)
-      call MOM_error(FATAL,'MOM_remapping, buildFinalGrid: '//&
+      call MOM_error(FATAL,'MOM_remapping, buildConsistentGrids: '//&
                      'Final and start grids do not match.')
+    endif
+#endif
+
+! call makeGridsConsistent(nz, xs, nz, hf, xf)
+
+end subroutine buildConsistentGrids
+
+
+!------------------------------------------------------------------------------
+! Build a grid from h
+!------------------------------------------------------------------------------
+subroutine buildGridFromH(nz, h, x)
+!------------------------------------------------------------------------------
+! This routine calculates the coordinates x by integrating h.
+!------------------------------------------------------------------------------
+
+  ! Arguments
+  integer,               intent(in)    :: nz
+  real, dimension(nz),   intent(in)    :: h
+  real, dimension(nz+1), intent(inout) :: x
+
+  integer :: k
+
+  ! Build start grid
+  x(1) = 0.0
+  do k = 1,nz
+    x(k+1) = x(k) + h(k)
+  end do
+
+end subroutine buildGridFromH
+
+
+!------------------------------------------------------------------------------
+! Check that two grids are consistent
+!------------------------------------------------------------------------------
+subroutine checkGridConsistentcies(ns, xs, nf, xf, strict)
+!------------------------------------------------------------------------------
+! Checks that xs and xf are consistent to within roundoff.
+! If strict=False, the end points of xs and xf are allowed to differ by
+! numerical roundoff due to the nature of summation to obtain xs, xf.
+! If strict=True, the edn points must be identical.
+!------------------------------------------------------------------------------
+
+  ! Arguments
+  integer, intent(in) :: ns, nf
+  real,    intent(in) :: xs(ns+1), xf(nf+1)
+  logical, intent(in) :: strict
+
+  ! Local variables
+  integer :: k
+  real    :: sumHs, sumHf
+
+  sumHs = xs(ns+1)-xs(1)
+  sumHf = xf(nf+1)-xf(1)
+
+  if (strict) then
+    if (sumHf /= sumHs) call &
+        MOM_error(FATAL,'MOM_remapping, checkGridConsistentcies: '//&
+                        'Total thickness of two grids are not exactly equal..')
+  else ! not strict
+    if (isPosSumErrSignificant(ns, sumHs, nf, sumhf)) then
+      write(0,*) 'Start/final/start-final grid'
+      do k = 1,max(ns,nf)+1
+        if (k<=min(ns+1,nf+1)) then
+          write(0,'(i4,3es12.3)') k,xs(k),xf(k),xs(k)-xf(k)
+        elseif (k>ns+1) then
+          write(0,'(i4,12x,1es12.3)') k,xf(k)
+        else
+          write(0,'(i4,1es12.3)') k,xs(k)
+        endif
+      enddo
+      call MOM_error(FATAL,'MOM_remapping, checkGridConsistentcies: '//&
+              'Total thickness of two grids do not match to within round-off.')
     endif
   endif
 
-  ! Adjust new grid to match start grid to handle round-off differences
-  ! This ensures that the final grid matches the start grid at top and bottom
-! if (sumH1/=sumH2) then
-!   xf(nz+1) = xs(nz+1)
-!   do k = nz,1,-1
-!     nonDimPos = xf(k) / sumH2
-!     xf(k) = (1.-nonDimPos) * xf(k) + nonDimPos  * (xf(k+1) - hf(k))
-!   end do
-! endif
+end subroutine checkGridConsistentcies
 
-end subroutine buildFinalGrid
+
+!------------------------------------------------------------------------------
+! Compare two summation estimates of positive data and judge if due to more
+! than round-off
+!------------------------------------------------------------------------------
+function isPosSumErrSignificant(n1, sum1, n2, sum2)
+!------------------------------------------------------------------------------
+! When two sums are calculated from different vectors that should add up to
+! the same value, the results can differ by round off. The round off error
+! can be bounded to be proportional to the number of operations.
+! This function returns true if the difference between sum1 and sum2 is
+! larger than than the estimated round off bound.
+! NOTE: This estimate/function is only valid for summation of postive data.
+!------------------------------------------------------------------------------
+  ! Arguments
+  integer, intent(in) :: n1, n2
+  real,    intent(in) :: sum1, sum2
+  logical             :: isPosSumErrSignificant
+  ! Local variables
+  real :: sumErr, allowedErr, eps
+
+  if (sum1<0.) call MOM_error(FATAL,'isPosSumErrSignificant: sum1<0 is not allowed!')
+  if (sum2<0.) call MOM_error(FATAL,'isPosSumErrSignificant: sum2<0 is not allowed!')
+  sumErr = abs(sum1-sum2)
+  eps = epsilon(sum1)
+  allowedErr = eps*0.5*(real(n1-1)*sum1+real(n2-1)*sum2)
+  if (sumErr>allowedErr) then
+    write(0,*) 'isPosSumErrSignificant: sum1,sum2=',sum1,sum2
+    write(0,*) 'isPosSumErrSignificant: eps=',eps
+    write(0,*) 'isPosSumErrSignificant: err,n*eps=',sumErr,allowedErr
+    write(0,*) 'isPosSumErrSignificant: err/eps,n1,n2,n1+n2=',sumErr/eps,n1,n2,n1+n2
+    isPosSumErrSignificant = .true.
+  else
+    isPosSumErrSignificant = .false.
+  endif
+end function isPosSumErrSignificant
+
+
+!------------------------------------------------------------------------------
+! Check that data remapped between two grids are conserved
+!------------------------------------------------------------------------------
+subroutine checkGridConservation(ns, hs, xs, us, nf, hf, xf, uf)
+!------------------------------------------------------------------------------
+! Checks that the sum of hs*us and hf*uf match. Also checks that the
+! analgous sums in terms of sx and xf are consistant.
+!------------------------------------------------------------------------------
+
+  ! Arguments
+  integer, intent(in) :: ns, nf
+  real,    intent(in) :: hs(ns), xs(ns+1), us(ns)
+  real,    intent(in) :: hf(nf), xf(nf+1), uf(nf)
+
+  ! Local variables
+  integer :: k
+  real    :: sumHUs, errHUs, sumXUs, errXUs
+  real    :: sumHUf, errHUf, sumXUf, errXUf
+
+  call sumHtimesQ(ns, hs, us, sumHUs, errHUs)
+  call sumHtimesQ(ns, xs(2:ns+1)-xs(1:ns), us, sumXUs, errXUs)
+  call sumHtimesQ(nf, hf, uf, sumHUf, errHUf)
+  call sumHtimesQ(ns, xf(2:nf+1)-xf(1:nf), uf, sumXUf, errXUf)
+  if (abs(sumHUs-sumXUs)>errHUs+errXUs) then
+    write(0,'("ns=",i4)') ns
+    do k = 1,ns+1
+      write(0,'(i4,"xs=",es12.3)') k,xs(k)
+      if (k<=ns) write(0,'(i4,"hs,us=",2es12.3)') k,hs(k),us(k)
+    enddo
+    write(0,'("sumHUs,sumXUs=",2es12.3)') sumHUs,sumXUs
+    write(0,'("err,errHUs,errXUs=",3es12.3)') abs(sumHUs-sumXUs),errHUs,errXUs
+    call MOM_error(FATAL,'MOM_remapping, checkGridConservation: '//&
+       'Total amount of stuff on start grid differs by more than round-off.')
+  endif
+  if (abs(sumHUf-sumXUf)>errHUf+errXUf) then
+    write(0,'("nf=",i4)') nf
+    do k = 1,nf+1
+      write(0,'(i4,"xf=",es12.3)') k,xf(k)
+      if (k<=nf) write(0,'(i4,"hf,uf=",2es12.3)') k,hf(k),uf(k)
+    enddo
+    write(0,'("sumHUf,sumXUf=",2es12.3)') sumHUf,sumXUf
+    write(0,'("err,errHUf,errXUf=",3es12.3)') abs(sumHUf-sumXUf),errHUf,errXUf
+    call MOM_error(FATAL,'MOM_remapping, checkGridConservation: '//&
+       'Total amount of stuff on final grid differs by more than round-off.')
+  endif
+#ifdef DISABLE_CONSEEVATION_CHECK_BECAUSE_IT_FAILS______
+  if (abs(sumHUf-sumHUs)>errHUf+errHUs) then
+    write(0,'("ns,nf=",2i4)') ns,nf
+    do k = 1,max(ns,nf)+1
+      if (k<=min(ns+1,nf+1)) then
+        write(0,'(i4,"xs,xf=",2es12.3)') k,xs(k),xf(k)
+      elseif (k>ns+1) then
+        write(0,'(i4,"   xf=",12x,es12.3)') k,xf(k)
+      else
+        write(0,'(i4,"xs   =",es12.3)') k,xs(k)
+      endif
+      if (k<=min(ns,nf)) then
+        write(0,'(i4,"hs,us,hf,uf=",4es12.3)') k,hs(k),us(k),hf(k),uf(k)
+      elseif (k>ns .and. k<=nf) then
+        write(0,'(i4,"      hf,uf=",24x,2es12.3)') k,hf(k),uf(k)
+      elseif (k>nf .and. k<=ns) then
+        write(0,'(i4,"hs,us      =",2es12.3)') k,hs(k),us(k)
+      endif
+    enddo
+    write(0,'("sumHUf,sumHUs=",2es12.3)') sumHUf,sumHUs
+    write(0,'("err,errHUf,errHUs=",3es12.3)') abs(sumHUf-sumHUs),errHUf,errHUs
+    call MOM_error(FATAL,'MOM_remapping, checkGridConservation: '//&
+       'Total amount of stuff on two grids differs by more than round-off.')
+  endif
+#endif
+
+end subroutine checkGridConservation
+
+
+!------------------------------------------------------------------------------
+! Sum the product of two arrays
+!------------------------------------------------------------------------------
+subroutine sumHtimesQ(nz, h, q, sumHQ, sumErr)
+!------------------------------------------------------------------------------
+! This routine calculates the sum of h(:)*q(:), and optionally returns a
+! bound on the roundoff error in the sum.
+!------------------------------------------------------------------------------
+
+  ! Arguments
+  integer,             intent(in)  :: nz
+  real, dimension(nz), intent(in)  :: h, q
+  real,                intent(out) :: sumHQ
+  real, optional,      intent(out) :: sumErr
+
+  integer :: k
+  real :: hq, eps
+
+  if (present(sumErr)) then
+    ! Calculate the sum and estimate errors
+    eps = epsilon(q(1))
+    sumErr=0.
+    sumHQ = 0.
+    do k = 1,nz
+      hq = h(k)*q(k)
+      sumHQ = sumHQ + hq
+      if (k>1) sumErr = sumErr + eps*max(abs(sumHQ),abs(hq))
+    end do
+  else
+    ! Calculate the sum
+    sumHQ = 0.
+    do k = 1,nz
+      sumHQ = sumHQ + h(k)*q(k)
+    end do
+  endif
+
+end subroutine sumHtimesQ
+
+
+!------------------------------------------------------------------------------
+! Compare two summation estimates of signed data and judge if due to more
+! than round-off
+!------------------------------------------------------------------------------
+function isSignedSumErrSignificant(n1, maxTerm1, sum1, n2, maxTerm2, sum2)
+!------------------------------------------------------------------------------
+! When two sums are calculated from different vectors that should add up to
+! the same value, the results can differ by round off. The round off error
+! can be bounded to be proportional to the number of operations.
+! This function returns true if the difference between sum1 and sum2 is
+! larger than than the estimated round off bound.
+!------------------------------------------------------------------------------
+  ! Arguments
+  integer, intent(in) :: n1, n2
+  real,    intent(in) :: maxTerm1, sum1, maxTerm2, sum2
+  logical             :: isSignedSumErrSignificant
+  ! Local variables
+  integer :: n
+  real :: sumErr, allowedErr, eps
+
+  sumErr = abs(sum1-sum2)
+  eps = epsilon(sumErr)
+  allowedErr = eps*0.5*( real(n1-1)*max(abs(maxTerm1),abs(sum1)) &
+                       + real(n2-1)*max(abs(maxTerm2),abs(sum2)) )
+  if (sumErr>allowedErr) then
+    write(0,*) 'isSignedSumErrSignificant: maxTerm1,maxTerm2=',maxTerm1,maxTerm2
+    write(0,*) 'isSignedSumErrSignificant: sum1,sum2=',sum1,sum2
+    write(0,*) 'isSignedSumErrSignificant: eps=',eps
+    write(0,*) 'isSignedSumErrSignificant: err,n*eps*maxTerm=',sumErr,allowedErr
+    isSignedSumErrSignificant = .true.
+  else
+    isSignedSumErrSignificant = .false.
+  endif
+end function isSignedSumErrSignificant
+
+
+!------------------------------------------------------------------------------
+! Make a second grid consistent with the first
+!------------------------------------------------------------------------------
+subroutine makeGridsConsistent(ns, xs, nf, hf, xf)
+!------------------------------------------------------------------------------
+! Adjusts xf so that the end points exactly match those of xs.
+! It is best to have called checkGridConsistentcies with strict=false
+! to ensure that the grids are already close and only differ due to
+! round-off.
+!------------------------------------------------------------------------------
+
+  ! Arguments
+  integer, intent(in)    :: ns, nf
+  real,    intent(in)    :: xs(ns+1), hf(nf)
+  real,    intent(inout) :: xf(nf+1)
+
+  ! Local variables
+  integer :: n, k
+  real    :: nonDimPos, sumHs, sumHf
+
+#ifdef __DO_SAFTEY_CHECKS__
+    if (xf(1) /= xs(1)) call &
+         MOM_error(FATAL,'MOM_remapping, makeGridsConsistent: '//&
+                         'Starting point of two grids do not match.')
+#endif
+
+  ! Adjust new grid so that end-points match those of the start grid.
+  sumHs = xs(ns+1)
+  sumHf = xf(nf+1)
+  if (sumHf/=sumHs) then
+    xf(nf+1) = sumHs
+    do k = nf,1,-1
+      nonDimPos = xf(k) / sumHf ! Position of xf interface within column
+      ! When nonDimPos -> 1, adjust xf towards a bottom-up integration
+      ! When nonDomPos -> 0, keep xf at the original top-down integration
+      xf(k) = (1.-nonDimPos) * xf(k) + nonDimPos * (xf(k+1) - hf(k))
+    end do
+  endif
+
+#ifdef __DO_SAFTEY_CHECKS__
+    call checkGridConsistentcies(ns, xs, nf, xf, strict=.true.)
+#endif
+
+end subroutine makeGridsConsistent
 
 
 !------------------------------------------------------------------------------
@@ -328,6 +619,11 @@ subroutine remapping_core( CS, grid0, u0, grid1, u1 )
       call MOM_error( FATAL, 'The selected remapping method is invalid' )
   end select
 
+#ifdef __DO_SAFTEY_CHECKS__
+    call checkGridConservation(grid0%nb_cells, grid0%h, grid0%x, u0, &
+                               grid1%nb_cells, grid1%h, grid1%x, u1)
+#endif
+
 end subroutine remapping_core
 
 
@@ -368,191 +664,237 @@ subroutine remapping_integration( grid0, u0, ppoly0, grid1, u1, method )
     x0 = grid1%x(iTarget)
     x1 = grid1%x(iTarget+1)
 
-    ! ============================================================
-    ! Check whether target cell is vanished. If it is, the cell
-    ! average is simply the interpolated value at the location
-    ! of the vanished cell. If it isn't, we need to integrate the
-    ! quantity within the cell and divide by the cell width to
-    ! determine the cell average.
-    ! ============================================================
-    ! 1. Cell is vanished
-    if ( abs(x0 - x1) .EQ. 0.0 ) then
-    
-      j0 = -1
-    
-      do j = 1,grid0%nb_cells
-        ! Left edge is found in cell j
-        if ( ( x0 .GE. grid0%x(j) ) .AND. ( x0 .LE. grid0%x(j+1) ) ) then
-          j0 = j
-          exit ! once target grid cell is found, exit loop
-        end if
-      end do
+!   if (x1<=(1.+epsilon(x1))*grid0%x(n0+1)) then
+!     if (x1>grid0%x(n0+1)) then   ! HACK ALERT !!!!!! -----AJA
+!       x1 = min( grid0%x(n0+1), x1) ! Bound target grid to be within source grid
+!     endif
+!   endif
 
-      ! If, at this point, j0 is equal to -1, it means the vanished
-      ! cell lies outside the source grid. In other words, it means that
-      ! the source and target grids do not cover the same physical domain
-      ! and there is something very wrong !
-      if ( j0 .EQ. -1 ) then
-        write(0,*) iTarget
-        call MOM_error(FATAL, 'The location of the vanished cell could '//&
-                              'not be found in "remapping_integration"' )
-      end if
+    call integrateReconOnCell( grid0, u0, ppoly0, x0, x1, grid1%h(iTarget), &
+           u1(iTarget), method , grid1, iTarget)
+    
+  end do ! end iTarget loop on target grid cells
 
-      ! We check whether the source cell (i.e. the cell in which the
-      ! vanished target cell lies) is vanished. If it is, the interpolated 
-      ! value is set to be mean of the edge values (which should be the same).
-      ! If it isn't, we simply interpolate.
-      if ( grid0%h(j0) .EQ. 0.0 ) then
-        u1(iTarget) = 0.5 * ( ppoly0%E(j0,1) + ppoly0%E(j0,2) )
-      else
-        xi0 = x0 / grid0%h(j0) - grid0%x(j0) / grid0%h(j0)
+end subroutine remapping_integration
+
+
+! -----------------------------------------------------------------------------
+! integrate the reconstructed profile over a single cell
+! -----------------------------------------------------------------------------
+subroutine integrateReconOnCell( grid0, u0, ppoly0, xL, xR, hC, uAve, method, grid1, iTarget )
+  ! Arguments
+  type(grid1D_t),     intent(in)    :: grid0    ! source grid
+  real, dimension(:), intent(in)    :: u0       ! source cell averages
+  type(ppoly_t),      intent(in)    :: ppoly0   ! source piecewise polynomial
+  real,               intent(in)    :: xL, xR   ! left/right edges of target cell
+  real,               intent(in)    :: hC       ! cell width hC = xR - xL
+  real,               intent(inout) :: uAve     ! average value on target cell
+  integer,            intent(in)    :: method   ! remapping scheme to use
+  type(grid1D_t),     intent(in)    :: grid1    ! DEBUGGING
+  integer,            intent(in)    :: iTarget  ! DEBUGGING
+  
+  ! Local variables
+  integer       :: j, k
+  integer       :: n0, n1       ! nb of cells in grid0 and grid1, respectively
+  integer       :: jL, jR       ! indexes of source cells containing target 
+                                ! cell edges
+  real          :: q0, q1       ! partially integrated quantities in source 
+                                ! cells j0 and j1
+  real          :: q            ! complete integration
+  real          :: a, b         ! interval of integration (global coordinates)
+  real          :: xi0, xi1     ! interval of integration (local -- normalized 
+                                ! -- coordinates)
+
+  ! A priori, both grids contains the same number of cells but, who knows...
+  n0 = grid0%nb_cells
+
+#ifdef __DO_SAFTEY_CHECKS__
+! if (xL < grid0%x(1)) call MOM_error(FATAL, &
+!         'MOM_remapping, integrateReconOnCell: '//&
+!         'The target cell starts beyond the left edge of the source grid')
+! if (xR < grid0%x(1)) call MOM_error(FATAL, &
+!         'MOM_remapping, integrateReconOnCell: '//&
+!         'The target cell ends beyond the left edge of the source grid')
+! if (xL > grid0%x(n0+1)) call MOM_error(FATAL, &
+!         'MOM_remapping, integrateReconOnCell: '//&
+!         'The target cell starts beyond the right edge of the source grid')
+! if (xR > grid0%x(n0+1)) call MOM_error(FATAL, &
+!         'MOM_remapping, integrateReconOnCell: '//&
+!         'The target cell ends beyond the right edge of the source grid')
+#endif
+
+  ! Find the left most cell in source grid spanned by the target cell
+  jL = -1
+  do j = 1,grid0%nb_cells
+    ! Left edge is found in cell j
+    if ( ( xL >= grid0%x(j) ) .AND. ( xL <= grid0%x(j+1) ) ) then
+      jL = j
+      exit ! once target grid cell is found, exit loop
+    endif
+  enddo
+
+  ! If, at this point, jL is equal to -1, it means the vanished
+  ! cell lies outside the source grid. In other words, it means that
+  ! the source and target grids do not cover the same physical domain
+  ! and there is something very wrong !
+  if ( jL == -1 ) call MOM_error(FATAL, &
+          'MOM_remapping, integrateReconOnCell: '//&
+          'The location of the left-most cell could not be found')
+
+
+  ! ============================================================
+  ! Check whether target cell is vanished. If it is, the cell
+  ! average is simply the interpolated value at the location
+  ! of the vanished cell. If it isn't, we need to integrate the
+  ! quantity within the cell and divide by the cell width to
+  ! determine the cell average.
+  ! ============================================================
+  ! 1. Cell is vanished
+  if ( abs(xR - xL) == 0.0 ) then
     
-        select case ( method )
-          case ( INTEGRATION_PCM )   
-            u1(iTarget) = ppoly0%coefficients(j0,1)
-          case ( INTEGRATION_PLM )  
-            u1(iTarget) = evaluation_polynomial( ppoly0%coefficients(j0,:), 2, xi0 )
-          case ( INTEGRATION_PPM )
-            u1(iTarget) = evaluation_polynomial( ppoly0%coefficients(j0,:), 3, xi0 )
-          case ( INTEGRATION_PQM )
-            u1(iTarget) = evaluation_polynomial( ppoly0%coefficients(j0,:), 5, xi0 )
-          case default
-            call MOM_error( FATAL,'The selected integration method is invalid' )
-        end select   
-        
-      end if ! end checking whether source cell is vanished
-    
-    ! 2. Cell is not vanished
+    ! We check whether the source cell (i.e. the cell in which the
+    ! vanished target cell lies) is vanished. If it is, the interpolated 
+    ! value is set to be mean of the edge values (which should be the same).
+    ! If it isn't, we simply interpolate.
+    if ( grid0%h(jL) == 0.0 ) then
+      uAve = 0.5 * ( ppoly0%E(jL,1) + ppoly0%E(jL,2) )
     else
+      ! WHY IS THIS NOT WRITTEN AS xi0 = ( xL - grid0%x(jL) ) / grid0%h(jL) ---AJA
+      xi0 = xL / grid0%h(jL) - grid0%x(jL) / grid0%h(jL)
+  
+      select case ( method )
+        case ( INTEGRATION_PCM )   
+          uAve = ppoly0%coefficients(jL,1)
+        case ( INTEGRATION_PLM )  
+          uAve = evaluation_polynomial( ppoly0%coefficients(jL,:), 2, xi0 )
+        case ( INTEGRATION_PPM )
+          uAve = evaluation_polynomial( ppoly0%coefficients(jL,:), 3, xi0 )
+        case ( INTEGRATION_PQM )
+          uAve = evaluation_polynomial( ppoly0%coefficients(jL,:), 5, xi0 )
+        case default
+          call MOM_error( FATAL,'The selected integration method is invalid' )
+      end select   
+      
+    end if ! end checking whether source cell is vanished
+  
+  ! 2. Cell is not vanished
+  else
 
-    ! Find the cells in source grid containing the target cell edges
-    j0 = -1
-    j1 = -1
-    
+    ! Find the right most cell in source grid spanned by the target cell
+    jR = -1
     do j = 1,grid0%nb_cells
-    
-        ! Left edge is found in cell j
-        if ( ( x0 .GE. grid0%x(j) ) .AND. ( x0 .LE. grid0%x(j+1) ) ) then
-            j0 = j
-            exit   ! once target grid cell is found, exit loop
-        end if
-        
-    end do  
+      ! Right edge is found in cell j
+      if ( ( xR >= grid0%x(j) ) .AND. ( xR <= grid0%x(j+1) ) ) then
+        jR = j
+        exit  ! once target grid cell is found, exit loop
+      endif
+    enddo ! end loop on source grid cells
 
-    do j = 1,grid0%nb_cells
-        
-        ! Right edge is found in cell j
-        if ( ( x1 .GE. grid0%x(j) ) .AND. ( x1 .LE. grid0%x(j+1) ) ) then
-            j1 = j
-            exit  ! once target grid cell is found, exit loop
-        end if
-        
-    end do ! end loop on source grid cells
+    ! HACK to avoid roundoff problems  THIS NEEDS TO BE REMOVED ---AJA
+    if (xR>grid0%x(grid0%nb_cells+1)) jR = grid0%nb_cells
 
-    ! Here, we make sure that the boundary edges of boundary cells
-    ! coincide
-    if ( iTarget .EQ. 1 ) then
-      j0 = 1
-    end if  
-    
-    if ( iTarget .EQ. grid1%nb_cells ) then
-      j1 = grid1%nb_cells
-    end if  
+#ifdef __DO_SAFTEY_CHECKS__
+    if ( jR == -1 ) call MOM_error(FATAL, &
+          'MOM_remapping, integrateReconOnCell: '//&
+          'The location of the right-most cell could not be found')
+#endif
 
     ! To integrate, two cases must be considered: (1) the target cell is
     ! entirely comtained within a cell of the source grid and (2) the target
     ! cell spans at least two cells of the source grid.
 
-    if ( j0 .EQ. j1 ) then
-    ! The target cell is entirely contained within a cell of the source
-    ! grid. This situation is represented by the following schematic, where
-    ! the cell in which x0 and x1 are located has index j0=j1 :
-    ! 
-    ! ----|-----o--------o----------|-------------
-    !           x0       x1
-    !
+    if ( jL == jR ) then
+      ! The target cell is entirely contained within a cell of the source
+      ! grid. This situation is represented by the following schematic, where
+      ! the cell in which xL and xR are located has index jL=jR :
+      ! 
+      ! ----|-----o--------o----------|-------------
+      !           xL       xR
+      !
       ! Determine normalized coordinates
-      xi0 = x0 / grid0%h(j0) - grid0%x(j0) / grid0%h(j0)
-      xi1 = x1 / grid0%h(j0) - grid0%x(j0) / grid0%h(j0)
+      ! WHY IS THIS NOT WRITTEN AS xi0 = ( xL - grid0%x(jL) ) / grid0%h(jL) ---AJA
+      ! WHY IS THIS NOT WRITTEN AS xi0 = ( xR - grid0%x(jL) ) / grid0%h(jL) ---AJA
+      xi0 = xL / grid0%h(jL) - grid0%x(jL) / grid0%h(jL)
+      xi1 = xR / grid0%h(jL) - grid0%x(jL) / grid0%h(jL)
 
       ! Depending on which polynomial is used, integrate quantity
-      ! between x0 and xi1. Integration is carried out in normalized
-      ! coordinates, hence: \int_x0^x1 p(x) dx = h \int_xi0^xi1 p(xi) dxi
+      ! between xi0 and xi1. Integration is carried out in normalized
+      ! coordinates, hence: \int_xL^xR p(x) dx = h \int_xi0^xi1 p(xi) dxi
       select case ( method )
         case ( INTEGRATION_PCM )     
-          q = ppoly0%coefficients(j0,1) * ( x1 - x0 )
+          q = ppoly0%coefficients(jL,1) * ( xR - xL )
         case ( INTEGRATION_PLM )    
-          q = grid0%h(j0) * &
-              integration_polynomial( xi0, xi1, ppoly0%coefficients(j0,:), 1 )
+          q = grid0%h(jL) * &
+              integration_polynomial( xi0, xi1, ppoly0%coefficients(jL,:), 1 )
         case ( INTEGRATION_PPM )
-          q = grid0%h(j0) * &
-              integration_polynomial( xi0, xi1, ppoly0%coefficients(j0,:), 2 )
+          q = grid0%h(jL) * &
+              integration_polynomial( xi0, xi1, ppoly0%coefficients(jL,:), 2 )
         case ( INTEGRATION_PQM )
-          q = grid0%h(j0) * &
-              integration_polynomial( xi0, xi1, ppoly0%coefficients(j0,:), 4 )
+          q = grid0%h(jL) * &
+              integration_polynomial( xi0, xi1, ppoly0%coefficients(jL,:), 4 )
         case default
           call MOM_error( FATAL,'The selected integration method is invalid' )
       end select     
-    
+
     else
     ! The target cell spans at least two cells of the source grid.
     ! This situation is represented by the following schematic, where
-    ! the cells in which x0 and x1 are located have indexes j0 and j1,
+    ! the cells in which xL and xR are located have indexes jL and jR,
     ! respectively :
     ! 
     ! ----|-----o---|--- ... --|---o----------|-------------
-    !           x0                 x1
+    !           xL                 xR
     !
-    ! We first integrate from x0 up to the right boundary of cell j0, then
-    ! add the integrated amounts of cells located between j0 and j1 and then
-    ! integrate from the left boundary of cell j1 up to x1
+    ! We first integrate from xL up to the right boundary of cell jL, then
+    ! add the integrated amounts of cells located between jL and jR and then
+    ! integrate from the left boundary of cell jR up to xR
 
       q = 0.0
 
-      ! Integrate from x0 up to right boundary of cell j0
-      !xi0 = x0 / grid0%h(j0) - grid0%x(j0) / grid0%h(j0)
-      xi0 = (x0 - grid0%x(j0)) / grid0%h(j0)
+      ! Integrate from xL up to right boundary of cell jL
+      !xi0 = xL / grid0%h(jL) - grid0%x(jL) / grid0%h(jL)
+      xi0 = (xL - grid0%x(jL)) / grid0%h(jL)
       xi1 = 1.0
       select case ( method )
         case ( INTEGRATION_PCM )     
-          q = q + ppoly0%coefficients(j0,1) * ( grid0%x(j0+1) - x0 )
+          q = q + ppoly0%coefficients(jL,1) * ( grid0%x(jL+1) - xL )
         case ( INTEGRATION_PLM )    
-          q = q + grid0%h(j0) * &
-              integration_polynomial( xi0, xi1, ppoly0%coefficients(j0,:), 1 )
+          q = q + grid0%h(jL) * &
+              integration_polynomial( xi0, xi1, ppoly0%coefficients(jL,:), 1 )
         case ( INTEGRATION_PPM )
-          q = q + grid0%h(j0) * &
-              integration_polynomial( xi0, xi1, ppoly0%coefficients(j0,:), 2 )
+          q = q + grid0%h(jL) * &
+              integration_polynomial( xi0, xi1, ppoly0%coefficients(jL,:), 2 )
         case ( INTEGRATION_PQM )
-          q = q + grid0%h(j0) * &
-              integration_polynomial( xi0, xi1, ppoly0%coefficients(j0,:), 4 )
+          q = q + grid0%h(jL) * &
+              integration_polynomial( xi0, xi1, ppoly0%coefficients(jL,:), 4 )
         case default
           call MOM_error( FATAL, 'The selected integration method is invalid' )
       end select     
-    
-      ! Integrate contents within cells strictly comprised between j0 and j1
-      if ( j1 .GT. (j0+1) ) then
-        do k = j0+1,j1-1
+  
+      ! Integrate contents within cells strictly comprised between jL and jR
+      if ( jR > (jL+1) ) then
+        do k = jL+1,jR-1
           q = q + grid0%h(k) * u0(k)
         end do
       end if
 
-      ! Integrate from left boundary of cell j1 up to x1
+      ! Integrate from left boundary of cell jR up to xR
       xi0 = 0.0
-      !xi1 = x1 / grid0%h(j1) - grid0%x(j1) / grid0%h(j1)
-      xi1 = (x1 - grid0%x(j1)) / grid0%h(j1)
-      
+      !xi1 = xR / grid0%h(jR) - grid0%x(jR) / grid0%h(jR)
+      xi1 = (xR - grid0%x(jR)) / grid0%h(jR)
+    
       select case ( method )
         case ( INTEGRATION_PCM )     
-          q = q + ppoly0%coefficients(j1,1) * ( x1 - grid0%x(j1) )
+          q = q + ppoly0%coefficients(jR,1) * ( xR - grid0%x(jR) )
         case ( INTEGRATION_PLM )    
-          q = q + grid0%h(j1) * &
-              integration_polynomial( xi0, xi1, ppoly0%coefficients(j1,:), 1 )
+          q = q + grid0%h(jR) * &
+              integration_polynomial( xi0, xi1, ppoly0%coefficients(jR,:), 1 )
         case ( INTEGRATION_PPM )
-          q = q + grid0%h(j1) * &
-              integration_polynomial( xi0, xi1, ppoly0%coefficients(j1,:), 2 )
+          q = q + grid0%h(jR) * &
+              integration_polynomial( xi0, xi1, ppoly0%coefficients(jR,:), 2 )
         case ( INTEGRATION_PQM )
-          q = q + grid0%h(j1) * &
-              integration_polynomial( xi0, xi1, ppoly0%coefficients(j1,:), 4 )
+          q = q + grid0%h(jR) * &
+              integration_polynomial( xi0, xi1, ppoly0%coefficients(jR,:), 4 )
         case default
           call MOM_error( FATAL,'The selected integration method is invalid' )
       end select     
@@ -560,13 +902,11 @@ subroutine remapping_integration( grid0, u0, ppoly0, grid1, u1, method )
     end if ! end integration for non-vanished cells 
     
     ! The cell average is the integrated value divided by the cell width
-    u1(iTarget) = q / grid1%h(iTarget)
+    uAve = q / hC
+  
+  end if ! end if clause to check if cell is vanished
     
-    end if ! end if clause to check if cell is vanished
-    
-  end do ! end iTarget loop on target grid cells
-
-end subroutine remapping_integration
+end subroutine integrateReconOnCell
 
 
 !------------------------------------------------------------------------------

@@ -173,6 +173,9 @@ real, parameter    :: NR_TOLERANCE = 1e-12
 ! an offset, respectively, when the derivative is zero at the boundary.
 real, parameter    :: NR_OFFSET = 1e-6
 
+! This CPP macro embeds some safety checks
+!#define __DO_SAFTEY_CHECKS__
+
 ! -----------------------------------------------------------------------------
 ! This module contains the following routines
 ! -----------------------------------------------------------------------------
@@ -245,7 +248,7 @@ end subroutine end_regridding
 !------------------------------------------------------------------------------
 ! Dispatching regridding routine: regridding & remapping
 !------------------------------------------------------------------------------
-subroutine regridding_main( remapCS, CS, G, h, u, v, tv, h_new )
+subroutine regridding_main( remapCS, CS, G, h, tv, h_new )
 !------------------------------------------------------------------------------
 ! This routine takes care of (1) building a new grid and (2) remapping between
 ! the old grid and the new grid. The creation of the new grid can be based
@@ -258,8 +261,6 @@ subroutine regridding_main( remapCS, CS, G, h, u, v, tv, h_new )
   type(regridding_CS),                     intent(inout) :: CS     ! Regridding parameters and options
   type(ocean_grid_type),                   intent(in)    :: G      ! Ocean grid informations
   real, dimension(NIMEM_,NJMEM_, NKMEM_),  intent(inout) :: h      ! Current 3D grid obtained after the last time step
-  real, dimension(NIMEMB_,NJMEM_, NKMEM_), intent(in)    :: u      ! Zonal velocity field
-  real, dimension(NIMEM_,NJMEMB_, NKMEM_), intent(in)    :: v      ! Meridional velocity field
   type(thermo_var_ptrs),                   intent(inout) :: tv     ! Thermodynamical variables (T, S, ...)  
   real, dimension(NIMEM_,NJMEM_, NKMEM_),  intent(inout) :: h_new  ! The new 3D grid obtained via regridding
 
@@ -284,7 +285,58 @@ subroutine regridding_main( remapCS, CS, G, h, u, v, tv, h_new )
 
   end select ! type of grid 
   
+#ifdef __DO_SAFTEY_CHECKS__
+  call checkGridsMatch(G, h, h_new)
+#endif
+
 end subroutine regridding_main
+
+
+!------------------------------------------------------------------------------
+! Check that the total thickness of two grids match
+!------------------------------------------------------------------------------
+subroutine checkGridsMatch( G, h, h_new )
+!------------------------------------------------------------------------------
+! This routine calculates the total thickness of 
+!------------------------------------------------------------------------------
+  
+  ! Arguments
+  type(ocean_grid_type),                 intent(in) :: G
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h_new
+  
+  ! Local variables
+  integer   :: i, j, k
+  integer   :: nz
+  real      :: H1, H2, eps
+
+  nz = G%ke
+  eps =1.
+  eps = epsilon(eps)
+
+  do j = G%jsc-1,G%jec+1
+    do i = G%isc-1,G%iec+1
+
+      ! Total thickness of grid h
+      H1 = 0.
+      do k = 1,nz
+        H1 = H1 + h(i,j,k)
+      enddo
+          
+      ! Total thickness of grid h_new
+      H2 = 0.
+      do k = 1,nz
+        H2 = H2 + h_new(i,j,k)
+      enddo
+
+      if (abs(H2-H1)>real(nz-1)*0.5*(H1+H2)*eps) then
+        call MOM_error( FATAL, 'MOM_regridding, checkGridsMatch: '//&
+          'The difference of total thicknesses exceeds roundoff')
+      endif
+    enddo
+  enddo
+          
+end subroutine checkGridsMatch
 
 
 !------------------------------------------------------------------------------

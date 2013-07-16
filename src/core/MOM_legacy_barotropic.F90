@@ -407,7 +407,7 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)  :: V_Cor
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(out) :: accel_layer_u
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(out) :: accel_layer_v
-  real, dimension(NIMEM_,NJMEM_),       intent(out)   :: eta_out
+  real, dimension(NIMEM_,NJMEM_),       intent(inout) :: eta_out
   real, dimension(NIMEMB_,NJMEM_),      intent(out)   :: uhbtav
   real, dimension(NIMEM_,NJMEMB_),      intent(out)   :: vhbtav
   type(ocean_grid_type),                intent(inout) :: G
