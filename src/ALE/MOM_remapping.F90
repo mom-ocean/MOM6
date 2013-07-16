@@ -284,7 +284,7 @@ subroutine checkGridConsistentcies(ns, xs, nf, xf, strict)
   logical, intent(in) :: strict
 
   ! Local variables
-  integer :: k !,n
+  integer :: k
   real    :: sumHs, sumHf
 
   sumHs = xs(ns+1)-xs(1)
@@ -352,6 +352,119 @@ end function isPosSumErrSignificant
 
 
 !------------------------------------------------------------------------------
+! Check that data remapped between two grids are conserved
+!------------------------------------------------------------------------------
+subroutine checkGridConservation(ns, hs, xs, us, nf, hf, xf, uf)
+!------------------------------------------------------------------------------
+! Checks that the sum of hs*us and hf*uf match. Also checks that the
+! analgous sums in terms of sx and xf are consistant.
+!------------------------------------------------------------------------------
+
+  ! Arguments
+  integer, intent(in) :: ns, nf
+  real,    intent(in) :: hs(ns), xs(ns+1), us(ns)
+  real,    intent(in) :: hf(nf), xf(nf+1), uf(nf)
+
+  ! Local variables
+  integer :: k
+  real    :: sumHUs, errHUs, sumXUs, errXUs
+  real    :: sumHUf, errHUf, sumXUf, errXUf
+
+  call sumHtimesQ(ns, hs, us, sumHUs, errHUs)
+  call sumHtimesQ(ns, xs(2:ns+1)-xs(1:ns), us, sumXUs, errXUs)
+  call sumHtimesQ(nf, hf, uf, sumHUf, errHUf)
+  call sumHtimesQ(ns, xf(2:nf+1)-xf(1:nf), uf, sumXUf, errXUf)
+  if (abs(sumHUs-sumXUs)>errHUs+errXUs) then
+    write(0,'("ns=",i4)') ns
+    do k = 1,ns+1
+      write(0,'(i4,"xs=",es12.3)') k,xs(k)
+      if (k<=ns) write(0,'(i4,"hs,us=",2es12.3)') k,hs(k),us(k)
+    enddo
+    write(0,'("sumHUs,sumXUs=",2es12.3)') sumHUs,sumXUs
+    write(0,'("err,errHUs,errXUs=",3es12.3)') abs(sumHUs-sumXUs),errHUs,errXUs
+    call MOM_error(FATAL,'MOM_remapping, checkGridConservation: '//&
+       'Total amount of stuff on start grid differs by more than round-off.')
+  endif
+  if (abs(sumHUf-sumXUf)>errHUf+errXUf) then
+    write(0,'("nf=",i4)') nf
+    do k = 1,nf+1
+      write(0,'(i4,"xf=",es12.3)') k,xf(k)
+      if (k<=nf) write(0,'(i4,"hf,uf=",2es12.3)') k,hf(k),uf(k)
+    enddo
+    write(0,'("sumHUf,sumXUf=",2es12.3)') sumHUf,sumXUf
+    write(0,'("err,errHUf,errXUf=",3es12.3)') abs(sumHUf-sumXUf),errHUf,errXUf
+    call MOM_error(FATAL,'MOM_remapping, checkGridConservation: '//&
+       'Total amount of stuff on final grid differs by more than round-off.')
+  endif
+#ifdef DISABLE_CONSEEVATION_CHECK_BECAUSE_IT_FAILS______
+  if (abs(sumHUf-sumHUs)>errHUf+errHUs) then
+    write(0,'("ns,nf=",2i4)') ns,nf
+    do k = 1,max(ns,nf)+1
+      if (k<=min(ns+1,nf+1)) then
+        write(0,'(i4,"xs,xf=",2es12.3)') k,xs(k),xf(k)
+      elseif (k>ns+1) then
+        write(0,'(i4,"   xf=",12x,es12.3)') k,xf(k)
+      else
+        write(0,'(i4,"xs   =",es12.3)') k,xs(k)
+      endif
+      if (k<=min(ns,nf)) then
+        write(0,'(i4,"hs,us,hf,uf=",4es12.3)') k,hs(k),us(k),hf(k),uf(k)
+      elseif (k>ns .and. k<=nf) then
+        write(0,'(i4,"      hf,uf=",24x,2es12.3)') k,hf(k),uf(k)
+      elseif (k>nf .and. k<=ns) then
+        write(0,'(i4,"hs,us      =",2es12.3)') k,hs(k),us(k)
+      endif
+    enddo
+    write(0,'("sumHUf,sumHUs=",2es12.3)') sumHUf,sumHUs
+    write(0,'("err,errHUf,errHUs=",3es12.3)') abs(sumHUf-sumHUs),errHUf,errHUs
+    call MOM_error(FATAL,'MOM_remapping, checkGridConservation: '//&
+       'Total amount of stuff on two grids differs by more than round-off.')
+  endif
+#endif
+
+end subroutine checkGridConservation
+
+
+!------------------------------------------------------------------------------
+! Sum the product of two arrays
+!------------------------------------------------------------------------------
+subroutine sumHtimesQ(nz, h, q, sumHQ, sumErr)
+!------------------------------------------------------------------------------
+! This routine calculates the sum of h(:)*q(:), and optionally returns a
+! bound on the roundoff error in the sum.
+!------------------------------------------------------------------------------
+
+  ! Arguments
+  integer,             intent(in)  :: nz
+  real, dimension(nz), intent(in)  :: h, q
+  real,                intent(out) :: sumHQ
+  real, optional,      intent(out) :: sumErr
+
+  integer :: k
+  real :: hq, eps
+
+  if (present(sumErr)) then
+    ! Calculate the sum and estimate errors
+    eps = epsilon(q(1))
+    sumErr=0.
+    sumHQ = 0.
+    do k = 1,nz
+      hq = h(k)*q(k)
+      sumHQ = sumHQ + hq
+      if (k>1) sumErr = sumErr + eps*max(abs(sumHQ),abs(hq))
+    end do
+  else
+    ! Calculate the sum
+    sumHQ = 0.
+    do k = 1,nz
+      sumHQ = sumHQ + h(k)*q(k)
+    end do
+  endif
+
+end subroutine sumHtimesQ
+
+
+!------------------------------------------------------------------------------
 ! Compare two summation estimates of signed data and judge if due to more
 ! than round-off
 !------------------------------------------------------------------------------
@@ -373,7 +486,8 @@ function isSignedSumErrSignificant(n1, maxTerm1, sum1, n2, maxTerm2, sum2)
 
   sumErr = abs(sum1-sum2)
   eps = epsilon(sumErr)
-  allowedErr = eps*(real(n1)*abs(maxTerm1)+real(n2)*abs(maxTerm2))
+  allowedErr = eps*0.5*( real(n1-1)*max(abs(maxTerm1),abs(sum1)) &
+                       + real(n2-1)*max(abs(maxTerm2),abs(sum2)) )
   if (sumErr>allowedErr) then
     write(0,*) 'isSignedSumErrSignificant: maxTerm1,maxTerm2=',maxTerm1,maxTerm2
     write(0,*) 'isSignedSumErrSignificant: sum1,sum2=',sum1,sum2
@@ -447,27 +561,6 @@ subroutine remapping_core( CS, grid0, u0, grid1, u1 )
   type(grid1D_t), intent(in)          :: grid1
   real, dimension(:), intent(inout)   :: u1
   
-  ! Local variables
-  integer :: k
-  real :: sumUh0, sumUx0, sumUh1, sumUx1
-  real :: maxUh0, maxUx0, maxUh1, maxUx1
-
-  if (doSafetyChecks) then
-    sumUh0 = 0.; sumUx0 = 0.
-    maxUh0 = 0.; maxUx0 = 0.
-    do k = 1, grid0%nb_cells
-      maxUh0 = max( maxUh0 , abs(grid0%h(k) * u0(k)) )
-      sumUh0 = sumUh0 + grid0%h(k) * u0(k)
-      maxUx0 = max( maxUx0 , abs(( grid0%x(k+1) - grid0%x(k) ) * u0(k)) )
-      sumUx0 = sumUx0 + ( grid0%x(k+1) - grid0%x(k) ) * u0(k)
-    enddo
-    if (isSignedSumErrSignificant(grid0%nb_cells, maxUh0, sumUh0, grid0%nb_cells, maxUx0, sumUx0)) &
-      call MOM_error(FATAL,'MOM_remapping, remapping_core: '//&
-              'Total content based on initial grid, using h and x differ signficantly.')
-    if (sumUh0 /= sumUx0) call MOM_error(FATAL,'MOM_remapping, remapping_core: '//&
-              'Total content based on initial grid, using h and x are not equal.')
-  endif
-
   ! Reset polynomial
   CS%ppoly_r%E(:,:) = 0.0
   CS%ppoly_r%S(:,:) = 0.0
@@ -523,28 +616,9 @@ subroutine remapping_core( CS, grid0, u0, grid1, u1 )
       call MOM_error( FATAL, 'The selected remapping method is invalid' )
   end select
 
-  if (doSafetyChecks) then
-    sumUh1 = 0.; sumUx1 = 0.
-    maxUh1 = 0.; maxUx1 = 0.
-    do k = 1, grid1%nb_cells
-      maxUh1 = max( maxUh1 , abs(grid1%h(k) * u1(k)) )
-      sumUh1 = sumUh1 + grid1%h(k) * u1(k)
-      maxUx1 = max( maxUx1 , abs(( grid1%x(k+1) - grid1%x(k) ) * u1(k)) )
-      sumUx1 = sumUx1 + ( grid1%x(k+1) - grid1%x(k) ) * u1(k)
-    enddo
-    if (isSignedSumErrSignificant(grid1%nb_cells, maxUh1, sumUh1, grid1%nb_cells, maxUx1, sumUx1)) &
-      call MOM_error(FATAL,'MOM_remapping, remapping_core: '//&
-              'Total content based on initial grid, using h and x differ signficantly.')
-    if (sumUh1 /= sumUx1) call MOM_error(FATAL,'MOM_remapping, remapping_core: '//&
-              'Total content based on initial grid, using h and x are not equal.')
-!   if (isSignedSumErrSignificant(grid0%nb_cells, maxUx0, sumUx0, grid1%nb_cells, maxUx1, sumUx1)) &
-!     call MOM_error(FATAL,'MOM_remapping, remapping_core: '//&
-!             'Total content of initial and final grids, using x, differ signficantly.')
-!   if (isSignedSumErrSignificant(grid0%nb_cells, maxUh0, sumUh0, grid1%nb_cells, maxUh1, sumUh1)) &
-!     call MOM_error(FATAL,'MOM_remapping, remapping_core: '//&
-!             'Total content of initial and final grids, using h, differ signficantly.')
-  endif
-
+  if (doSafetyChecks) &
+    call checkGridConservation(grid0%nb_cells, grid0%h, grid0%x, u0, &
+                               grid1%nb_cells, grid1%h, grid1%x, u1)
 
 end subroutine remapping_core
 
