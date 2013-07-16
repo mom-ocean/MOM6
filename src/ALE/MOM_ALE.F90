@@ -365,7 +365,7 @@ subroutine ALE_main( G, h, h_new, u, v, tv, CS )
   
   ! Build new grid. The new grid is stored in h_new. The old grid is h.
   ! Both are needed for the subsequent remapping of variables.
-  call regridding_main( CS%remapCS, CS%regridCS, G, h, u, v, tv, h_new )
+  call regridding_main( CS%remapCS, CS%regridCS, G, h, tv, h_new )
   
   ! Remap all variables from old grid h onto new grid h_new
   call remapping_main( CS%remapCS, G, h, h_new, tv, u, v )
