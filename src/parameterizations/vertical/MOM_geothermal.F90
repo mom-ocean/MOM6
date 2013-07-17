@@ -229,7 +229,7 @@ subroutine geothermal(h, tv, dt, ea, eb, G, CS)
             h_geo_rem(i) = h_geo_rem(i) - h_heated
           endif
 
-          if (k<=nkmb) then
+          if (k<=nkmb .or. (k==1.and.nkmb==0)) then
             ! Simply heat the layer; convective adjustment occurs later
             ! if necessary.
             k_tgt = k
