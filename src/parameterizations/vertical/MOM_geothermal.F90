@@ -229,7 +229,7 @@ subroutine geothermal(h, tv, dt, ea, eb, G, CS)
             h_geo_rem(i) = h_geo_rem(i) - h_heated
           endif
 
-          if (k<=nkmb) then
+          if (k<=nkmb .or. nkmb<=0) then
             ! Simply heat the layer; convective adjustment occurs later
             ! if necessary.
             k_tgt = k
@@ -243,7 +243,7 @@ subroutine geothermal(h, tv, dt, ea, eb, G, CS)
             Rcv_tgt = G%Rlay(k-1)
           endif
 
-          if (k<=nkmb) then
+          if (k<=nkmb .or. nkmb<=0) then
             Rcv = 0.0 ; dRcv_dT = 0.0 ! Is this OK?
           else
             call calculate_density(tv%T(i,j,k), tv%S(i,j,k), tv%P_Ref, &
@@ -255,11 +255,12 @@ subroutine geothermal(h, tv, dt, ea, eb, G, CS)
             dRcv_dT = 0.5*(dRcv_dT_(1) + dRcv_dT_(2)) 
           endif
 
-          if ((dRcv_dT >= 0.0) .or. (k<=nkmb)) then
+          if ((dRcv_dT >= 0.0) .or. (k<=nkmb .or. nkmb<=0)) then
+            ! This applies to variable density layers.
             heat_in_place = heat_avail
             heat_trans = 0.0
           elseif (dRcv_dT <= CS%dRcv_dT_inplace) then
-            ! This is the option that usually applies in the ocean.
+            ! This is the option that usually applies in isopycnal coordinates.
             heat_in_place = min(heat_avail, max(0.0, h(i,j,k) * ((G%Rlay(k)-Rcv) / dRcv_dT)))
             heat_trans = heat_avail - heat_in_place
           else
@@ -271,9 +272,10 @@ subroutine geothermal(h, tv, dt, ea, eb, G, CS)
           endif
 
           if (heat_in_place > 0.0) then
-            ! This only arises for relatively fresh water near the 
-            ! freezing point.  Heat in place, and things will eventually
-            ! sort themselves out, if only because the water will warm to
+            ! This applies to variable density layers. In isopycnal coordinates
+            ! this only arises for relatively fresh water near the freezing 
+            ! point, in which case heating in place will eventually cause things
+            ! to sort themselves out, if only because the water will warm to
             ! the temperature of maximum density.
             dTemp = heat_in_place / (h(i,j,k) + H_neglect)
             tv%T(i,j,k) = tv%T(i,j,k) + dTemp

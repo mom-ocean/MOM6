@@ -1019,7 +1019,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
             ! Find dRho/dT and dRho_dS.
             do I=Isq,Ieq
               press(I) = G%H_to_Pa * htot(I)
-              k2 = G%nkml
+              k2 = max(1,G%nkml)
               I_2hlay = 1.0 / (h(i,j,k2) + h(i+1,j,k2) + h_neglect)
               T_EOS(I) = (h(i,j,k2)*tv%T(i,j,k2) + h(i+1,j,k2)*tv%T(i+1,j,k2)) * I_2hlay
               S_EOS(I) = (h(i,j,k2)*tv%S(i,j,k2) + h(i+1,j,k2)*tv%S(i+1,j,k2)) * I_2hlay
@@ -1248,7 +1248,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
             ! Find dRho/dT and dRho_dS.
             do i=is,ie
               press(i) = G%H_to_Pa * htot(i)
-              k2 = G%nkml
+              k2 = max(1,G%nkml)
               I_2hlay = 1.0 / (h(i,j,k2) + h(i,j+1,k2) + h_neglect)
               T_EOS(i) = (h(i,j,k2)*tv%T(i,j,k2) + h(i,j+1,k2)*tv%T(i,j+1,k2)) * I_2hlay
               S_EOS(i) = (h(i,j,k2)*tv%S(i,j,k2) + h(i,j+1,k2)*tv%S(i,j+1,k2)) * I_2hlay
