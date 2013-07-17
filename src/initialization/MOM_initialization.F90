@@ -3825,7 +3825,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
 
 ! finally adjust to target density
 
-  ks=nkml+nkbl+1
+  ks=max(0,nkml)+max(0,nkbl)+1
 
   if (adjust_temperature) then
     call determine_temperature(tv%T(is:ie,js:je,:), tv%S(is:ie,js:je,:), &

@@ -933,8 +933,8 @@ nx = size(rho,1); ny=size(rho,2); nz = size(rho,3)
 nlevs_data(:,:) = size(rho,3)
 
 nkml_=0;nkbl_=0;hml_=0.0
-if (PRESENT(nkml)) nkml_=nkml
-if (PRESENT(nkbl)) nkbl_=nkbl
+if (PRESENT(nkml)) nkml_=max(0,nkml)
+if (PRESENT(nkbl)) nkbl_=max(0,nkbl)
 if (PRESENT(hml)) hml_=hml    
     
 if (PRESENT(nlevs)) then
