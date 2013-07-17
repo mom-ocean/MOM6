@@ -1,3 +1,6 @@
 [submodule "pkg/CVmix"]
 	path = pkg/CVmix
 	url = ssh://cvs.princeton.rdhpcs.noaa.gov/home/aja/Repos/CVmix.git
+[submodule "tools/matlab/gtools"]
+	path = tools/matlab/gtools
+	url = https://github.com/Adcroft/gtools.git

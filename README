@@ -1,0 +1,18 @@
+What's what
+===========
+
+src/        - contains the source code for MOM6 that is always compiled
+config_src/ - contains optional source code depending on mode and configuration
+              such as dynamic-memory versus static, ocean-only versus coupled.
+examples/   - contains parametesr, input data, patths to data, and some source
+              code for static compiles.
+pkg/        - contains third party (non-MOM6 or FMS) code that can be linked to MOM6
+tools/      - tools for working with MOM6 (not source code and not necessarily supported)
+
+More information
+================
+
+During development, the MOM6 wiki is the primary place for find more information:
+  http://wiki.gfdl.noaa.gov/index.php/MOM6
+In particular, to setup your working directory there are extensive instructions at:
+  http://wiki.gfdl.noaa.gov/index.php/MOM6_setup_instructions
