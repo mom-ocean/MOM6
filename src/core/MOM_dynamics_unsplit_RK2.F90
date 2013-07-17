@@ -604,6 +604,8 @@ subroutine initialize_dyn_unsplit_RK2(u, v, h, Time, G, param_file, diag, CS, &
                  units="nondim", default=0.0)
   call get_param(param_file, mod, "DEBUG", CS%debug, &
                  "If true, write out verbose debugging data.", default=.false.)
+  call get_param(param_file, mod, "TIDES", use_tides, &
+                 "If true, apply tidal momentum forcing.", default=.false.)
 
   allocate(CS%taux_bot(IsdB:IedB,jsd:jed)) ; CS%taux_bot(:,:) = 0.0
   allocate(CS%tauy_bot(isd:ied,JsdB:JedB)) ; CS%tauy_bot(:,:) = 0.0
