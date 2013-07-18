@@ -35,7 +35,8 @@ use PPM_functions, only : PPM_reconstruction, PPM_boundary_extrapolation
 use P1M_functions, only : P1M_interpolation, P1M_boundary_extrapolation
 use P3M_functions, only : P3M_interpolation, P3M_boundary_extrapolation
 use MOM_regridding, only : initialize_regridding, regridding_main , end_regridding
-use MOM_regridding, only : check_grid_integrity, setTargetFixedResolution
+use MOM_regridding, only : uniformResolution
+use MOM_regridding, only : check_grid_integrity, setCoordinateResolution
 use MOM_regridding, only : regriddingCoordinateModeDoc, DEFAULT_COORDINATE_MODE
 use MOM_regridding, only : regriddingInterpSchemeDoc, regriddingDefaultInterpScheme
 use MOM_regridding, only : setRegriddingBoundaryExtrapolation
@@ -144,7 +145,7 @@ contains
 !------------------------------------------------------------------------------
 ! Initialization of regridding
 !------------------------------------------------------------------------------
-subroutine initialize_ALE( param_file, G, h, h_aux, &
+subroutine initialize_ALE( param_file, G, h, h_aux, dzRegrid, &
                                   u, v, tv, CS )
 !------------------------------------------------------------------------------
 ! This routine is typically called (from initialize_MOM in file MOM.F90)
@@ -158,6 +159,7 @@ subroutine initialize_ALE( param_file, G, h, h_aux, &
   type(ocean_grid_type), intent(in)                      :: G
   real, dimension(NIMEM_,NJMEM_, NKMEM_),  intent(inout) :: h
   real, dimension(NIMEM_,NJMEM_, NKMEM_),  intent(inout) :: h_aux
+  real, dimension(NIMEM_,NJMEM_, NK_INTERFACE_),  intent(inout) :: dzRegrid
   real, dimension(NIMEMB_,NJMEM_, NKMEM_), intent(inout) :: u
   real, dimension(NIMEM_,NJMEMB_, NKMEM_), intent(inout) :: v
   type(thermo_var_ptrs), intent(inout)                   :: tv
@@ -247,7 +249,9 @@ subroutine initialize_ALE( param_file, G, h, h_aux, &
             "is of non-dimensional fractions of the water column."
   select case ( trim(string) )
     case ("UNIFORM")
-      dz(:) = G%max_depth/dfloat( G%ke )
+      dz(:) = uniformResolution(G%ke, coordMode, G%max_depth, &
+                 G%Rlay(1)+0.5*(G%Rlay(1)-G%Rlay(2)), &
+                 G%Rlay(G%ke)+0.5*(G%Rlay(G%ke)-G%Rlay(G%ke-1)) )
       call log_param(param_file, mod, "!ALE_RESOLUTION", dz, &
                    trim(message), units=trim(coordUnits))
     case ("PARAM")
@@ -263,11 +267,12 @@ subroutine initialize_ALE( param_file, G, h, h_aux, &
           "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(string)//")")
         if (len_trim(varName)==0) then
           if (field_exists(fileName,'dz')) then; varName = 'dz'
+          elseif (field_exists(fileName,'dsigma')) then; varName = 'dsigma'
           elseif (field_exists(fileName,'ztest')) then; varName = 'ztest'
           endif
         endif
         if (len_trim(varName)==0) call MOM_error(FATAL,"initialize_ALE: "// &
-          "Coordinate variable not speified and none could be guessed.")
+          "Coordinate variable not specified and none could be guessed.")
         call MOM_read_data(trim(fileName), trim(varName), dz)
         call log_param(param_file, mod, "!ALE_RESOLUTION", dz, &
                    trim(message), units=coordinateUnits(coordMode))
@@ -276,7 +281,7 @@ subroutine initialize_ALE( param_file, G, h, h_aux, &
           "Unrecognized coordinate configuraiton"//trim(string))
       endif
   end select
-  call setTargetFixedResolution( dz, CS%regridCS )
+  call setCoordinateResolution( dz, CS%regridCS )
   deallocate( dz )
 
   call get_param(param_file, mod, "MIN_THICKNESS", tmpReal, &
@@ -310,7 +315,7 @@ subroutine initialize_ALE( param_file, G, h, h_aux, &
   ! step is therefore not strictly necessary but is included for historical
   ! reasons when I needed to check whether the combination 'initial 
   ! conditions - regridding/remapping' was consistently implemented.
-  call ALE_main( G, h, h_aux, u, v, tv, CS )
+  call ALE_main( G, h, h_aux, dzRegrid, u, v, tv, CS )
   
 end subroutine initialize_ALE
 
@@ -338,7 +343,7 @@ end subroutine end_ALE
 !------------------------------------------------------------------------------
 ! Dispatching regridding routine: regridding & remapping
 !------------------------------------------------------------------------------
-subroutine ALE_main( G, h, h_new, u, v, tv, CS )
+subroutine ALE_main( G, h, h_new, dzRegrid, u, v, tv, CS )
 !------------------------------------------------------------------------------
 ! This routine takes care of (1) building a new grid and (2) remapping between
 ! the old grid and the new grid. The creation of the new grid can be based
@@ -353,6 +358,8 @@ subroutine ALE_main( G, h, h_new, u, v, tv, CS )
   h      ! Current 3D grid obtained after the last time step
   real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(inout)   :: &
   h_new  ! The new 3D grid obtained via regridding
+  real, dimension(NIMEM_,NJMEM_, NK_INTERFACE_), intent(inout)   :: &
+  dzRegrid ! The new 3D grid obtained via regridding
   real, dimension(NIMEMB_,NJMEM_, NKMEM_), intent(inout)  :: &
   u      ! Zonal velocity field
   real, dimension(NIMEM_,NJMEMB_, NKMEM_), intent(inout)  :: &
@@ -365,7 +372,7 @@ subroutine ALE_main( G, h, h_new, u, v, tv, CS )
   
   ! Build new grid. The new grid is stored in h_new. The old grid is h.
   ! Both are needed for the subsequent remapping of variables.
-  call regridding_main( CS%remapCS, CS%regridCS, G, h, tv, h_new )
+  call regridding_main( CS%remapCS, CS%regridCS, G, h, tv, dzRegrid, h_new )
   
   ! Remap all variables from old grid h onto new grid h_new
   call remapping_main( CS%remapCS, G, h, h_new, tv, u, v )

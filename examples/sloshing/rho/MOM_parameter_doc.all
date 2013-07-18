@@ -486,7 +486,7 @@ ALE_COORDINATE_CONFIG = "UNIFORM" ! default = "UNIFORM"
                                 !  FILE:string - read from a file. The string specifies
                                 !                the filename and variable name, separated
                                 !                by a comma or space, e.g. FILE:lev.nc,Z
-!ALE_RESOLUTION = 10*100.0      !   [kg m^-3]
+!ALE_RESOLUTION = 10*0.2        !   [kg m^-3]
                                 ! The distribution of vertical resolution for the target
                                 ! grid used for Eulerian-like coordinates. For example,
                                 ! in z-coordinate mode, the parameter is a list of level

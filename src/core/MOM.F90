@@ -410,7 +410,8 @@ type, public :: MOM_control_struct
     h, &      ! Layer thickness, in m or kg m-2 (H).
     T, &      ! Potential temperature in C.
     S, &      ! Salinity in PSU.
-    h_aux     ! Work array for remapping (same units as h).
+    h_aux, &  ! Work array for remapping (same units as h).
+    dzRegrid  ! Work array for remapping (same units as h).
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: &
     u, &      ! Zonal velocity, in m s-1.
     uh, &     ! uh = u * h * dy at u grid points in m3 s-1.
@@ -927,7 +928,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
             call hchksum(CS%tv%S,"Pre-ALE S",G,haloshift=1)
             call check_redundant("Pre-ALE ", u, v, G)
           endif
-          call ALE_main(G, h, CS%h_aux, u, v, CS%tv, CS%ALE_CSp)
+          call ALE_main(G, h, CS%h_aux, CS%dzRegrid, u, v, CS%tv, CS%ALE_CSp)
           if (CS%debug) then
             call MOM_state_chksum("Post-ALE ", u, v, h, CS%uh, CS%vh, G)
             call hchksum(CS%tv%T,"Post-ALE T",G,haloshift=1)
@@ -1531,13 +1532,15 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
       call hchksum(CS%h, "Pre initialize_ALE h",G,haloshift=1)
     endif
     ALLOC_(CS%h_aux(isd:ied,jsd:jed,nz)); CS%h_aux(:,:,:) = 0.
-    call initialize_ALE(param_file, G, CS%h, CS%h_aux, &
+    ALLOC_(CS%dzRegrid(isd:ied,jsd:jed,nz+1)); CS%dzRegrid(:,:,:) = 0.
+    call initialize_ALE(param_file, G, CS%h, CS%h_aux, CS%dzRegrid, &
                         CS%u, CS%v, CS%tv, CS%ALE_CSp)
     if (CS%debug) then
       call uchksum(CS%u,"Post initialize_ALE u",G,haloshift=1)
       call vchksum(CS%v,"Post initialize_ALE v",G,haloshift=1)
       call hchksum(CS%h, "Post initialize_ALE h",G,haloshift=1)
       call hchksum(CS%h_aux, "Post initialize_ALE h_aux",G,haloshift=1)
+      call hchksum(CS%dzRegrid, "Post initialize_ALE dzRegrid",G,haloshift=1)
     endif
   endif
 
@@ -2338,6 +2341,7 @@ subroutine MOM_end(CS)
 
   if (CS%useALEalgorithm) then
     DEALLOC_(CS%h_aux)
+    DEALLOC_(CS%dzRegrid)
     call end_ALE(CS%ALE_CSp)
   endif
 
