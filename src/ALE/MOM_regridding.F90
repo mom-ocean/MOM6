@@ -706,9 +706,9 @@ subroutine buildGridRho( G, h, tv, dzInterface, hNew, remapCS, CS )
         zNew(k) = zNew(k+1) + hNew(i,j,k)
         ! Adjust interface position to accomodate inflating layers
         ! without disturbing the interface above
-        if ( zNew(k) < (zNew(k+1) + CS%min_thickness) ) then
-          zNew(k) = zNew(k+1) + CS%min_thickness
-        endif
+  !     if ( zNew(k) < (zNew(k+1) + CS%min_thickness) ) then
+  !       zNew(k) = zNew(k+1) + CS%min_thickness
+  !     endif
         zOld(k) = zOld(k+1) + h(i,j,k)
       enddo
 
@@ -720,22 +720,22 @@ subroutine buildGridRho( G, h, tv, dzInterface, hNew, remapCS, CS )
       dzInterface(i,j,nz+1) = 0.
 
 !#ifdef __DO_SAFTEY_CHECKS__
-!     dh=max(nominalDepth,totalThickness)
-!     if (abs(zNew(1)-zOld(1))>(nz-1)*0.5*epsilon(dh)*dh) then
-!       write(0,*) 'min_thickness=',CS%min_thickness
-!       write(0,*) 'nominalDepth=',nominalDepth,'totalThickness=',totalThickness
-!       write(0,*) 'zNew(1)-zOld(1) = ',zNew(1)-zOld(1),epsilon(dh),nz
-!       do k=1,nz+1
-!         write(0,*) k,zOld(k),zNew(k)
-!       enddo
-!       do k=1,nz
-!         write(0,*) k,h(i,j,k),hNew(i,j,k),zNew(k)-zNew(k+1)
-!       enddo
-!       call MOM_error( FATAL, &
-!              'MOM_regridding, buildGridRho: top surface has moved!!!' )
-!     endif
-!     dzInterface(i,j,1) = 0.
-!     dzInterface(i,j,nz+1) = 0.
+      dh=max(nominalDepth,totalThickness)
+      if (abs(zNew(1)-zOld(1))>(nz-1)*0.5*epsilon(dh)*dh) then
+        write(0,*) 'min_thickness=',CS%min_thickness
+        write(0,*) 'nominalDepth=',nominalDepth,'totalThickness=',totalThickness
+        write(0,*) 'zNew(1)-zOld(1) = ',zNew(1)-zOld(1),epsilon(dh),nz
+        do k=1,nz+1
+          write(0,*) k,zOld(k),zNew(k)
+        enddo
+        do k=1,nz
+          write(0,*) k,h(i,j,k),hNew(i,j,k),zNew(k)-zNew(k+1)
+        enddo
+        call MOM_error( FATAL, &
+               'MOM_regridding, buildGridRho: top surface has moved!!!' )
+      endif
+      dzInterface(i,j,1) = 0.
+      dzInterface(i,j,nz+1) = 0.
 !#endif
 
     end do  ! end loop on j 
