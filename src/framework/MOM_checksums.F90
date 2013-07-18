@@ -98,7 +98,9 @@ subroutine chksum_h_2d(array, mesg, G, haloshift)
 
   if (checkForNaNs) then
     if (is_NaN(array(G%isc:G%iec,G%jsc:G%jec))) &
-      call MOM_error(FATAL, 'NaN detected: '//trim(mesg))
+      call chksum_error(FATAL, 'NaN detected: '//trim(mesg))
+!   if (is_NaN(array)) &
+!     call chksum_error(FATAL, 'NaN detected in halo: '//trim(mesg))
   endif
 
   if (calculateStatistics) then
@@ -116,7 +118,7 @@ subroutine chksum_h_2d(array, mesg, G, haloshift)
     write(0,*) 'chksum_h_2d: haloshift =',hshift
     write(0,*) 'chksum_h_2d: isd,isc,iec,ied=',G%isd,G%isc,G%iec,G%ied
     write(0,*) 'chksum_h_2d: jsd,jsc,jec,jed=',G%jsd,G%jsc,G%jec,G%jed
-    call MOM_error(FATAL,'Error in chksum_h_2d '//trim(mesg))
+    call chksum_error(FATAL,'Error in chksum_h_2d '//trim(mesg))
   endif
 
   bc0=subchk(array, G, 0, 0)
@@ -187,7 +189,9 @@ subroutine chksum_q_2d(array, mesg, G, haloshift)
 
   if (checkForNaNs) then
     if (is_NaN(array(G%IscB:G%IecB,G%JscB:G%JecB))) &
-      call MOM_error(FATAL, 'NaN detected: '//trim(mesg))
+      call chksum_error(FATAL, 'NaN detected: '//trim(mesg))
+!   if (is_NaN(array)) &
+!     call chksum_error(FATAL, 'NaN detected in halo: '//trim(mesg))
   endif
 
   if (calculateStatistics) then
@@ -205,7 +209,7 @@ subroutine chksum_q_2d(array, mesg, G, haloshift)
     write(0,*) 'chksum_q_2d: haloshift =',hshift
     write(0,*) 'chksum_q_2d: isd,isc,iec,ied=',G%isd,G%isc,G%iec,G%ied
     write(0,*) 'chksum_q_2d: jsd,jsc,jec,jed=',G%jsd,G%jsc,G%jec,G%jed
-    call MOM_error(FATAL,'Error in chksum_q_2d '//trim(mesg))
+    call chksum_error(FATAL,'Error in chksum_q_2d '//trim(mesg))
   endif
 
   bc0=subchk(array, G, 0, 0)
@@ -276,7 +280,9 @@ subroutine chksum_u_2d(array, mesg, G, haloshift)
 
   if (checkForNaNs) then
     if (is_NaN(array(G%IscB:G%IecB,G%jsc:G%jec))) &
-      call MOM_error(FATAL, 'NaN detected: '//trim(mesg))
+      call chksum_error(FATAL, 'NaN detected: '//trim(mesg))
+!   if (is_NaN(array)) &
+!     call chksum_error(FATAL, 'NaN detected in halo: '//trim(mesg))
   endif
 
   if (calculateStatistics) then
@@ -294,7 +300,7 @@ subroutine chksum_u_2d(array, mesg, G, haloshift)
     write(0,*) 'chksum_u_2d: haloshift =',hshift
     write(0,*) 'chksum_u_2d: isd,isc,iec,ied=',G%isd,G%isc,G%iec,G%ied
     write(0,*) 'chksum_u_2d: jsd,jsc,jec,jed=',G%jsd,G%jsc,G%jec,G%jed
-    call MOM_error(FATAL,'Error in chksum_u_2d '//trim(mesg))
+    call chksum_error(FATAL,'Error in chksum_u_2d '//trim(mesg))
   endif
 
   bc0=subchk(array, G, 0, 0)
@@ -365,7 +371,9 @@ subroutine chksum_v_2d(array, mesg, G, haloshift)
 
   if (checkForNaNs) then
     if (is_NaN(array(G%isc:G%iec,G%JscB:G%JecB))) &
-      call MOM_error(FATAL, 'NaN detected: '//trim(mesg))
+      call chksum_error(FATAL, 'NaN detected: '//trim(mesg))
+!   if (is_NaN(array)) &
+!     call chksum_error(FATAL, 'NaN detected in halo: '//trim(mesg))
   endif
 
   if (calculateStatistics) then
@@ -383,7 +391,7 @@ subroutine chksum_v_2d(array, mesg, G, haloshift)
     write(0,*) 'chksum_v_2d: haloshift =',hshift
     write(0,*) 'chksum_v_2d: isd,isc,iec,ied=',G%isd,G%isc,G%iec,G%ied
     write(0,*) 'chksum_v_2d: jsd,jsc,jec,jed=',G%jsd,G%jsc,G%jec,G%jed
-    call MOM_error(FATAL,'Error in chksum_v_2d '//trim(mesg))
+    call chksum_error(FATAL,'Error in chksum_v_2d '//trim(mesg))
   endif
 
   bc0=subchk(array, G, 0, 0)
@@ -454,7 +462,9 @@ subroutine chksum_h_3d(array, mesg, G, haloshift)
 
   if (checkForNaNs) then
     if (is_NaN(array(G%isc:G%iec,G%jsc:G%jec,:))) &
-      call MOM_error(FATAL, 'NaN detected: '//trim(mesg))
+      call chksum_error(FATAL, 'NaN detected: '//trim(mesg))
+!   if (is_NaN(array)) &
+!     call chksum_error(FATAL, 'NaN detected in halo: '//trim(mesg))
   endif
 
   if (calculateStatistics) then
@@ -472,7 +482,7 @@ subroutine chksum_h_3d(array, mesg, G, haloshift)
     write(0,*) 'chksum_h_3d: haloshift =',hshift
     write(0,*) 'chksum_h_3d: isd,isc,iec,ied=',G%isd,G%isc,G%iec,G%ied
     write(0,*) 'chksum_h_3d: jsd,jsc,jec,jed=',G%jsd,G%jsc,G%jec,G%jed
-    call MOM_error(FATAL,'Error in chksum_h_3d '//trim(mesg))
+    call chksum_error(FATAL,'Error in chksum_h_3d '//trim(mesg))
   endif
 
   bc0=subchk(array, G, 0, 0)
@@ -543,7 +553,9 @@ subroutine chksum_q_3d(array, mesg, G, haloshift)
 
   if (checkForNaNs) then
     if (is_NaN(array(G%IscB:G%IecB,G%JscB:G%JecB,:))) &
-      call MOM_error(FATAL, 'NaN detected: '//trim(mesg))
+      call chksum_error(FATAL, 'NaN detected: '//trim(mesg))
+!   if (is_NaN(array)) &
+!     call chksum_error(FATAL, 'NaN detected in halo: '//trim(mesg))
   endif
 
   if (calculateStatistics) then
@@ -561,7 +573,7 @@ subroutine chksum_q_3d(array, mesg, G, haloshift)
     write(0,*) 'chksum_q_3d: haloshift =',hshift
     write(0,*) 'chksum_q_3d: isd,isc,iec,ied=',G%isd,G%isc,G%iec,G%ied
     write(0,*) 'chksum_q_3d: jsd,jsc,jec,jed=',G%jsd,G%jsc,G%jec,G%jed
-    call MOM_error(FATAL,'Error in chksum_q_3d '//trim(mesg))
+    call chksum_error(FATAL,'Error in chksum_q_3d '//trim(mesg))
   endif
 
   bc0=subchk(array, G, 0, 0)
@@ -632,8 +644,9 @@ subroutine chksum_u_3d(array, mesg, G, haloshift)
 
   if (checkForNaNs) then
     if (is_NaN(array(G%IscB:G%IecB,G%jsc:G%jec,:))) &
-      call MOM_error(FATAL, 'NaN detected: '//trim(mesg))
-    if (is_NaN(array)) call MOM_error(FATAL, 'NaN detected in halo: '//trim(mesg))
+      call chksum_error(FATAL, 'NaN detected: '//trim(mesg))
+!   if (is_NaN(array)) &
+!     call chksum_error(FATAL, 'NaN detected in halo: '//trim(mesg))
   endif
 
   if (calculateStatistics) then
@@ -651,7 +664,7 @@ subroutine chksum_u_3d(array, mesg, G, haloshift)
     write(0,*) 'chksum_u_3d: haloshift =',hshift
     write(0,*) 'chksum_u_3d: isd,isc,iec,ied=',G%isd,G%isc,G%iec,G%ied
     write(0,*) 'chksum_u_3d: jsd,jsc,jec,jed=',G%jsd,G%jsc,G%jec,G%jed
-    call MOM_error(FATAL,'Error in chksum_u_3d '//trim(mesg))
+    call chksum_error(FATAL,'Error in chksum_u_3d '//trim(mesg))
   endif
 
   bc0=subchk(array, G, 0, 0)
@@ -722,7 +735,9 @@ subroutine chksum_v_3d(array, mesg, G, haloshift)
 
   if (checkForNaNs) then
     if (is_NaN(array(G%isc:G%iec,G%JscB:G%JecB,:))) &
-      call MOM_error(FATAL, 'NaN detected: '//trim(mesg))
+      call chksum_error(FATAL, 'NaN detected: '//trim(mesg))
+!   if (is_NaN(array)) &
+!     call chksum_error(FATAL, 'NaN detected in halo: '//trim(mesg))
   endif
 
   if (calculateStatistics) then
@@ -740,7 +755,7 @@ subroutine chksum_v_3d(array, mesg, G, haloshift)
     write(0,*) 'chksum_v_3d: haloshift =',hshift
     write(0,*) 'chksum_v_3d: isd,isc,iec,ied=',G%isd,G%isc,G%iec,G%ied
     write(0,*) 'chksum_v_3d: jsd,jsc,jec,jed=',G%jsd,G%jsc,G%jec,G%jed
-    call MOM_error(FATAL,'Error in chksum_v_3d '//trim(mesg))
+    call chksum_error(FATAL,'Error in chksum_v_3d '//trim(mesg))
   endif
 
   bc0=subchk(array, G, 0, 0)
@@ -816,7 +831,7 @@ subroutine hchksum2d(array, mesg, start_x, end_x, start_y, end_y, haloshift)
     write(0,*) 'hchksum2d: must pass full array with haloes!'
     write(0,*) 'hchksum2d: xs,xe,ys,ye=',xs,xe,ys,ye
     write(0,*) 'hchksum2d: start_x,end_x,start_y,end_y=',start_x,end_x,start_y,end_y
-    call MOM_error(FATAL,'Error in hchksum2d '//trim(mesg))
+    call chksum_error(FATAL,'Error in hchksum2d '//trim(mesg))
   endif
 
   bc0=hsubsum2d(array, start_x, end_x, start_y, end_y, 0, 0)
@@ -873,7 +888,7 @@ subroutine hchksum3d(array, mesg, start_x, end_x, start_y, end_y, haloshift)
     write(0,*) 'hchksum2d: must pass full array with haloes!'
     write(0,*) 'hchksum2d: xs,xe,ys,ye=',xs,xe,ys,ye
     write(0,*) 'hchksum2d: start_x,end_x,start_y,end_y=',start_x,end_x,start_y,end_y
-    call MOM_error(FATAL,'Error in hchksum3d '//trim(mesg))
+    call chksum_error(FATAL,'Error in hchksum3d '//trim(mesg))
   endif
 
   bc0=hsubsum3d(array, start_x, end_x, start_y, end_y, 0, 0)
@@ -1061,8 +1076,14 @@ function is_NaN_0d(x)
   logical :: is_NaN_0d
 ! This subroutine returns .true. if x is a NaN, and .false. otherwise.
 
-  is_NaN_0d = (((x < 0.0) .and. (x >= 0.0)) .or. &
-            (.not.(x < 0.0) .and. .not.(x >= 0.0)))
+ !is_NaN_0d = (((x < 0.0) .and. (x >= 0.0)) .or. &
+ !          (.not.(x < 0.0) .and. .not.(x >= 0.0)))
+  if (((x < 0.0) .and. (x >= 0.0)) .or. &
+            (.not.(x < 0.0) .and. .not.(x >= 0.0))) then
+    is_NaN_0d = .true.
+  else
+    is_NaN_0d = .false.
+  endif
 
 end function is_NaN_0d
 
@@ -1167,6 +1188,16 @@ subroutine MOM_checksums_init(param_file)
   call log_version(param_file, mod, version)
 
 end subroutine MOM_checksums_init
+
+! =====================================================================
+
+subroutine chksum_error(signal, message)
+  ! Wrapper for MOM_error to help place specific break points in
+  ! debuggers
+  integer, intent(in) :: signal
+  character(len=*), intent(in) :: message
+  call MOM_error(signal, message)
+end subroutine chksum_error
 
 ! =====================================================================
 
