@@ -1376,17 +1376,13 @@ KHTR_PASSIVITY_COEFF = 3.0      !   [nondim] default = 0.0
 KHTR_PASSIVITY_MIN = 0.5        !   [nondim] default = 0.5
                                 ! The minimum passivity which is the ratio between
                                 ! along isopycnal mxiing of tracers to thickness mixing.
-DIFFUSE_ML_TO_INTERIOR = True   !   [Boolean] default = False
+DIFFUSE_ML_TO_INTERIOR = False  !   [Boolean] default = False
                                 ! If true, enable epipycnal mixing between the surface
                                 ! boundary layer and the interior.
 CHECK_DIFFUSIVE_CFL = False     !   [Boolean] default = False
                                 ! If true, use enough iterations the diffusion to ensure
                                 ! that the diffusive equivalent of the CFL limit is not
                                 ! violated.  If false, always use 1 iteration.
-ML_KHTR_SCALE = 0.0             !   [nondim] default = 1.0
-                                ! With Diffuse_ML_interior, the ratio of the truly
-                                ! horizontal diffusivity in the mixed layer to the
-                                ! epipycnal diffusivity.  The valid range is 0 to 1.
     !  Parameters of module MOM_surface_forcing
 VARIABLE_WINDS = True           !   [Boolean] default = True
                                 ! If true, the winds vary in time after the initialization.

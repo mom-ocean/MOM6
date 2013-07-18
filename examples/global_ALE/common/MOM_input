@@ -526,7 +526,7 @@ KHTR_PASSIVITY_COEFF = 3.0      !   [nondim] default = 0.0
                                 ! grid-spacing in passivity, where passiviity is the ratio
                                 ! between along isopycnal mxiing of tracers to thickness mixing.
                                 ! A non-zero value enables this parameterization.
-DIFFUSE_ML_TO_INTERIOR = True   !   [Boolean] default = False
+DIFFUSE_ML_TO_INTERIOR = False  !   [Boolean] default = False
                                 ! If true, enable epipycnal mixing between the surface
                                 ! boundary layer and the interior.
 ML_KHTR_SCALE = 0.0             !   [nondim] default = 1.0

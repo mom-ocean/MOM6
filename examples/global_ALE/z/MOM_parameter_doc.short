@@ -519,13 +519,6 @@ KHTR_PASSIVITY_COEFF = 3.0      !   [nondim] default = 0.0
                                 ! grid-spacing in passivity, where passiviity is the ratio
                                 ! between along isopycnal mxiing of tracers to thickness mixing.
                                 ! A non-zero value enables this parameterization.
-DIFFUSE_ML_TO_INTERIOR = True   !   [Boolean] default = False
-                                ! If true, enable epipycnal mixing between the surface
-                                ! boundary layer and the interior.
-ML_KHTR_SCALE = 0.0             !   [nondim] default = 1.0
-                                ! With Diffuse_ML_interior, the ratio of the truly
-                                ! horizontal diffusivity in the mixed layer to the
-                                ! epipycnal diffusivity.  The valid range is 0 to 1.
     !  Parameters of module MOM_surface_forcing
 BUOY_CONFIG = "file"            !
                                 ! The character string that indicates how buoyancy forcing
