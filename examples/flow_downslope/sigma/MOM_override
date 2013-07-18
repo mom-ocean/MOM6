@@ -1,0 +1,5 @@
+# Z* coordinate regridding + initialization
+USE_REGRIDDING = True
+REGRIDDING_COORDINATE_MODE = "SIGMA"
+!ALE_COORDINATE_CONFIG = "PARAM"
+!ALE_RESOLUTION = 38*100., 50., 150.

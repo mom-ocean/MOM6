@@ -278,7 +278,7 @@ subroutine regridding_main( remapCS, CS, G, h, tv, h_new )
       call build_grid_target_densities( G, h, h_new, tv, remapCS, CS )
 
     case ( REGRIDDING_SIGMA )
-      call build_grid_sigma( G, h, h_new )
+      call build_grid_sigma( CS, G, h, h_new )
     
     case ( REGRIDDING_ARBITRARY )
       call build_grid_arbitrary( G, h, h_new, CS )
@@ -453,13 +453,14 @@ end subroutine setRegriddingMinimumThickness
 !------------------------------------------------------------------------------
 ! Build sigma grid
 !------------------------------------------------------------------------------
-subroutine build_grid_sigma( G, h, h_new )
+subroutine build_grid_sigma( CS, G, h, h_new )
 !------------------------------------------------------------------------------
 ! This routine builds a grid based on terrain-following coordinates.
 !------------------------------------------------------------------------------
   
   ! Arguments
-  type(ocean_grid_type), intent(in)                  :: G
+  type(regridding_CS),                    intent(inout) :: CS
+  type(ocean_grid_type),                  intent(in)    :: G
   real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(in)    :: h
   real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(inout) :: h_new
   
@@ -470,6 +471,7 @@ subroutine build_grid_sigma( G, h, h_new )
   real      :: delta_h
 
   nz = G%ke
+  CS%targetFixedResolution(:) = 1. / real(nz)
   
   do i = G%isc-1,G%iec+1
     do j = G%jsc-1,G%jec+1
@@ -480,12 +482,9 @@ subroutine build_grid_sigma( G, h, h_new )
         total_height = total_height + h(i,j,k)
       end do
           
-      ! Compute new thicknesses based on stretched water column
-      delta_h = total_height / nz
-      
       ! Define thicknesses in terms of interface heights
       do k = 1,nz
-        h_new(i,j,k) = delta_h
+        h_new(i,j,k) = total_height * CS%targetFixedResolution(k)
       end do    
       
     end do
