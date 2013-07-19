@@ -74,24 +74,6 @@ type, public :: ALE_CS
   ! memory allocation)
   type(ppoly_t)                   :: ppoly_parab
 
-  type(grid1D_t)                  :: grid_start      ! starting grid
-  type(grid1D_t)                  :: grid_trans      ! transition/iterated grid
-  type(grid1D_t)                  :: grid_final      ! final grid
-  type(ppoly_t)                   :: ppoly_i         ! interpolation ppoly
-  type(ppoly_t)                   :: ppoly_r         ! reconstruction ppoly
-                                                    
-  ! These variables are private to this module and memory is allocated at
-  ! the beginning of the simulation. Note that 'u_column' is a generic variable
-  ! used for remapping. It is not necessarily associated with the zonal velocity
-  ! component.
-  real, dimension(:), allocatable :: target_values
-  real, dimension(:), allocatable :: densities
-  integer, dimension(:), allocatable :: mapping
-  real, dimension(:), allocatable :: u_column
-  real, dimension(:), allocatable :: T_column
-  real, dimension(:), allocatable :: S_column
-  real, dimension(:), allocatable :: p_column
-
   ! Indicate whether high-order boundary extrapolation should be used within
   ! boundary cells
   logical   :: boundary_extrapolation_for_pressure
@@ -375,7 +357,7 @@ subroutine ALE_main( G, h, h_new, dzRegrid, u, v, tv, CS )
   call regridding_main( CS%remapCS, CS%regridCS, G, h, tv, dzRegrid, h_new )
   
   ! Remap all variables from old grid h onto new grid h_new
-  call remapping_main( CS%remapCS, G, h, h_new, tv, u, v )
+  call remapping_main( CS%remapCS, G, h, dzRegrid, h_new, tv, u, v )
   
   ! Override old grid with new one. The new grid 'h_new' is built in
   ! one of the 'build_...' routines above.
@@ -553,35 +535,15 @@ subroutine ALE_memory_allocation( G, CS )
   call triDiagEdgeWorkAllocate( nz, CS%edgeValueWrk )
   call triDiagSlopeWorkAllocate( nz, CS%edgeSlopeWrk )
 
-  ! Target values
-  allocate( CS%target_values(nz+1) )
-
   ! Allocate memory for grids
   call grid1Dconstruct( CS%grid_generic, nz )
-  call grid1Dconstruct( CS%grid_start, nz )
-  call grid1Dconstruct( CS%grid_trans, nz )
-  call grid1Dconstruct( CS%grid_final, nz )
 
-  ! Piecewise polynomials used for remapping
-  call ppoly_init( CS%ppoly_r, nz, 4 )
-  
-  ! Piecewise polynomials used for interpolation
-  call ppoly_init( CS%ppoly_i, nz, 4 )
-  
   ! Generic linear piecewise polynomial
   call ppoly_init( CS%ppoly_linear, nz, 1 )
   
   ! Generic parabolic piecewise polynomial
   call ppoly_init( CS%ppoly_parab, nz, 2 )
   
-  ! Memory allocation for one column
-  allocate( CS%mapping(nz) ); CS%mapping = 0
-  allocate( CS%u_column(nz) ); CS%u_column = 0.0
-  allocate( CS%T_column(nz) ); CS%T_column = 0.0
-  allocate( CS%S_column(nz) ); CS%S_column = 0.0
-  allocate( CS%p_column(nz) ); CS%p_column = 0.0
-  allocate( CS%densities(nz) ); CS%densities = 0.0
-
 end subroutine ALE_memory_allocation
 
 
@@ -599,27 +561,12 @@ subroutine ALE_memory_deallocation( CS )
   call triDiagEdgeWorkDeallocate( CS%edgeValueWrk )
   call triDiagSlopeWorkDeallocate( CS%edgeSlopeWrk )
   
-  ! Target values
-  deallocate( CS%target_values )
-
   ! Deallocate memory for grid
   call grid1Ddestroy( CS%grid_generic )
-  call grid1Ddestroy( CS%grid_start )
-  call grid1Ddestroy( CS%grid_trans )
-  call grid1Ddestroy( CS%grid_final )
   
   ! Piecewise polynomials
-  call ppoly_destroy( CS%ppoly_i )
-  call ppoly_destroy( CS%ppoly_r )
   call ppoly_destroy( CS%ppoly_linear )
   call ppoly_destroy( CS%ppoly_parab )
-
-  deallocate( CS%mapping )
-  deallocate( CS%u_column )
-  deallocate( CS%T_column )
-  deallocate( CS%S_column )
-  deallocate( CS%p_column )
-  deallocate( CS%densities )
 
 end subroutine ALE_memory_deallocation
 

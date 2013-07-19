@@ -98,7 +98,7 @@ contains
 !------------------------------------------------------------------------------
 ! General remapping routine 
 !------------------------------------------------------------------------------
-subroutine remapping_main( CS, G, h, h_new, tv, u, v )
+subroutine remapping_main( CS, G, h, dzInterface, h_new, tv, u, v )
 !------------------------------------------------------------------------------
 ! This routine takes care of remapping all variable between the old and the
 ! new grids. When velocity components need to be remapped, thicknesses at
@@ -106,13 +106,14 @@ subroutine remapping_main( CS, G, h, h_new, tv, u, v )
 !------------------------------------------------------------------------------
   
   ! Arguments
-  type(remapping_CS),                     intent(inout) :: CS
-  type(ocean_grid_type),                  intent(in)    :: G
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h_new
-  type(thermo_var_ptrs),                  intent(inout) :: tv       
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(inout), optional  :: u
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(inout), optional  :: v
+  type(remapping_CS),                               intent(inout) :: CS
+  type(ocean_grid_type),                            intent(in)    :: G
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),            intent(in)    :: h
+  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_),     intent(in)    :: dzInterface
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),            intent(in)    :: h_new
+  type(thermo_var_ptrs),                            intent(inout) :: tv       
+  real, dimension(NIMEMB_,NJMEM_,NKMEM_), optional, intent(inout) :: u
+  real, dimension(NIMEM_,NJMEMB_,NKMEM_), optional, intent(inout) :: v
   
   ! Local variables
   integer               :: i, j, k
