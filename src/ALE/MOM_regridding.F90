@@ -164,7 +164,7 @@ real, parameter    :: NR_TOLERANCE = 1e-12
 real, parameter    :: NR_OFFSET = 1e-6
 
 ! This CPP macro embeds some safety checks
-!#define __DO_SAFTEY_CHECKS__
+#define __DO_SAFTEY_CHECKS__
 
 ! -----------------------------------------------------------------------------
 ! This module contains the following routines
@@ -277,7 +277,7 @@ subroutine regridding_main( remapCS, CS, G, h, tv, dzInterface, hNew )
   end select ! type of grid 
   
 #ifdef __DO_SAFTEY_CHECKS__
-  call checkGridsMatch(G, h, hNew)
+  call checkGridsMatch(G, h, dzInterface, hNew)
 #endif
 
 end subroutine regridding_main
@@ -286,20 +286,21 @@ end subroutine regridding_main
 !------------------------------------------------------------------------------
 ! Check that the total thickness of two grids match
 !------------------------------------------------------------------------------
-subroutine checkGridsMatch( G, h, hNew )
+subroutine checkGridsMatch( G, h, dzInterface, hNew )
 !------------------------------------------------------------------------------
 ! This routine calculates the total thickness of 
 !------------------------------------------------------------------------------
   
   ! Arguments
-  type(ocean_grid_type),                 intent(in) :: G
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: hNew
+  type(ocean_grid_type),                        intent(in) :: G
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),        intent(in) :: h
+  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(in) :: dzInterface
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),        intent(in) :: hNew
   
   ! Local variables
   integer   :: i, j, k
   integer   :: nz
-  real      :: H1, H2, eps
+  real      :: H1, H2, H3, eps, Heps
 
   nz = G%ke
   eps =1.
@@ -313,17 +314,40 @@ subroutine checkGridsMatch( G, h, hNew )
       do k = 1,nz
         H1 = H1 + h(i,j,k)
       enddo
-          
+
       ! Total thickness of grid hNew
       H2 = 0.
       do k = 1,nz
         H2 = H2 + hNew(i,j,k)
       enddo
 
-      if (abs(H2-H1)>real(nz-1)*0.5*(H1+H2)*eps) then
+      if (abs(H2-H1)>real(nz-1)*0.5*(H1+H2)*eps * 10.) then !!!! FUDGE FACTOR ----AJA
+        do k = 1,nz
+          write(0,*) 'k,h,hnew=',k,h(i,j,k),hNew(i,j,k)
+        enddo
+        write(0,*) 'i,j,nz=',i,j,nz
+        write(0,*) 'H1,H2,H2-H1=',H1,H2,H2-H1
+        write(0,*) 'eps,(n-1)/2*eps*H=',eps,real(nz-1)*0.5*(H1+H2)*eps
         call MOM_error( FATAL, 'MOM_regridding, checkGridsMatch: '//&
           'The difference of total thicknesses exceeds roundoff')
       endif
+
+      Heps = (H1 + H2) * eps ! Change meaning of eps
+      H1 = - G%bathyT(i,j)
+      H2 = - G%bathyT(i,j)
+      do k = nz,1,-1
+        H1 = H1 + h(i,j,k) ! Old interface position
+        H2 = H2 + hNew(i,j,k) ! New interface position based on hNew
+        H3 = H1 + dzInterface(i,j,k) ! New interface position based dzInterface
+
+        if (abs(H3-H2)>real(nz-k+1)*0.5*Heps) then
+          write(0,*) 'i,j,k,eps=',i,j,k,eps
+          write(0,*) 'H1,dzI,H3=H1+dzI =',H1,dzInterface(i,j,k),H3
+          write(0,*) 'H3-H2,(n-1)*eps*D,eps*D=',H3-H2,real(nz-k)*0.5*Heps,Heps
+          call MOM_error( FATAL, 'MOM_regridding, checkGridsMatch: '//&
+            'The two estimates of new interfaces differ by more than roundoff')
+        endif
+      enddo
     enddo
   enddo
           
@@ -404,7 +428,7 @@ subroutine buildGridZstar( CS, G, h, dzInterface, hNew )
       enddo
       dzInterface(i,j,nz+1) = 0.
 
-!#ifdef __DO_SAFTEY_CHECKS__
+#ifdef __DO_SAFTEY_CHECKS__
       dh=max(nominalDepth,totalThickness)
       if (abs(zNew(1)-zOld(1))>(nz-1)*0.5*epsilon(eta)*dh) then
         write(0,*) 'min_thickness=',CS%min_thickness
@@ -422,7 +446,7 @@ subroutine buildGridZstar( CS, G, h, dzInterface, hNew )
       endif
       dzInterface(i,j,1) = 0.
       dzInterface(i,j,nz+1) = 0.
-!#endif
+#endif
 
     end do
   end do
@@ -490,7 +514,7 @@ subroutine buildGridSigma( CS, G, h, dzInterface, hNew )
       enddo
       dzInterface(i,j,nz+1) = 0.
 
-!#ifdef __DO_SAFTEY_CHECKS__
+#ifdef __DO_SAFTEY_CHECKS__
       dh=max(nominalDepth,totalThickness)
       if (abs(zNew(1)-zOld(1))>(nz-1)*0.5*epsilon(dh)*dh) then
         write(0,*) 'min_thickness=',CS%min_thickness
@@ -507,7 +531,7 @@ subroutine buildGridSigma( CS, G, h, dzInterface, hNew )
       endif
       dzInterface(i,j,1) = 0.
       dzInterface(i,j,nz+1) = 0.
-!#endif
+#endif
 
     end do
   end do
@@ -719,7 +743,7 @@ subroutine buildGridRho( G, h, tv, dzInterface, hNew, remapCS, CS )
       enddo
       dzInterface(i,j,nz+1) = 0.
 
-!#ifdef __DO_SAFTEY_CHECKS__
+#ifdef __DO_SAFTEY_CHECKS__
       dh=max(nominalDepth,totalThickness)
       if (abs(zNew(1)-zOld(1))>(nz-1)*0.5*epsilon(dh)*dh) then
         write(0,*) 'min_thickness=',CS%min_thickness
@@ -736,7 +760,7 @@ subroutine buildGridRho( G, h, tv, dzInterface, hNew, remapCS, CS )
       endif
       dzInterface(i,j,1) = 0.
       dzInterface(i,j,nz+1) = 0.
-!#endif
+#endif
 
     end do  ! end loop on j 
   end do  ! end loop on i
