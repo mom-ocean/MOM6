@@ -298,9 +298,9 @@ subroutine checkGridsMatch( G, h, dzInterface, hNew )
   real, dimension(NIMEM_,NJMEM_,NKMEM_),        intent(in) :: hNew
   
   ! Local variables
-  integer   :: i, j, k
-  integer   :: nz
-  real      :: H1, H2, H3, eps, Heps
+  integer :: i, j, k
+  integer :: nz
+  real    :: H1, H2, H3, eps, Heps, Htmp, z1, z2, z3
 
   nz = G%ke
   eps =1.
@@ -333,21 +333,42 @@ subroutine checkGridsMatch( G, h, dzInterface, hNew )
       endif
 
       Heps = (H1 + H2) * eps ! Change meaning of eps
-      H1 = - G%bathyT(i,j)
-      H2 = - G%bathyT(i,j)
+      z1 = - G%bathyT(i,j)
+      z2 = - G%bathyT(i,j)
+      H1 = 0.
+      H3 = 0.
       do k = nz,1,-1
-        H1 = H1 + h(i,j,k) ! Old interface position
-        H2 = H2 + hNew(i,j,k) ! New interface position based on hNew
-        H3 = H1 + dzInterface(i,j,k) ! New interface position based dzInterface
+        z1 = z1 + h(i,j,k) ! Old interface position
+        z2 = z2 + hNew(i,j,k) ! New interface position based on hNew
+        z3 = z1 + dzInterface(i,j,k) ! New interface position based dzInterface
+        hTmp = ( h(i,j,k) - dzInterface(i,j,k+1) ) + dzInterface(i,j,k)
+        if (hTmp<0.) then
+          write(0,*) 'k,h,hnp1=',k,h(i,j,k),hTmp
+          write(0,*) 'dzI(k+1),dzI(k)=',dzInterface(i,j,k+1),dzInterface(i,j,k)
+          call MOM_error( FATAL, 'MOM_regridding, checkGridsMatch: '//&
+            'Flux form led to negative layer thickness')
+        endif
+        H1 = H1 + h(i,j,k)
+        H3 = H3 + hTmp
 
-        if (abs(H3-H2)>real(nz-k+1)*0.5*Heps) then
+        if (abs(z3-z2)>real(nz-k+1)*0.5*Heps) then
           write(0,*) 'i,j,k,eps=',i,j,k,eps
-          write(0,*) 'H1,dzI,H3=H1+dzI =',H1,dzInterface(i,j,k),H3
-          write(0,*) 'H3-H2,(n-1)*eps*D,eps*D=',H3-H2,real(nz-k)*0.5*Heps,Heps
+          write(0,*) 'z1,dzI,z3=z1+dzI =',z1,dzInterface(i,j,k),z3
+          write(0,*) 'z3-z2,(n-1)*eps*D,eps*D=',z3-z2,real(nz-k)*0.5*Heps,Heps
           call MOM_error( FATAL, 'MOM_regridding, checkGridsMatch: '//&
             'The two estimates of new interfaces differ by more than roundoff')
         endif
       enddo
+      if (abs(H3-H1)>real(nz-1)*0.5*(H1+H3)*eps) then
+        do k = 1,nz
+          write(0,*) 'k,h,hnew=',k,h(i,j,k),hNew(i,j,k)
+        enddo
+        write(0,*) 'i,j,nz=',i,j,nz
+        write(0,*) 'H1,H3,H3-H1=',H1,H3,H3-H1
+        write(0,*) 'eps,(n)/2*eps*H=',eps,real(nz-1)*0.5*(H1+H3)*eps
+        call MOM_error( FATAL, 'MOM_regridding, checkGridsMatch: '//&
+          'Flux form did NOT conserve total thickness to within roundoff')
+      endif
     enddo
   enddo
           
