@@ -57,6 +57,7 @@ public remapping_main, remapping_core
 public initialize_remapping, end_remapping
 public rempaEnableBoundaryExtrapolation, remapDisableBoundaryExtrapolation
 public setReconstructionType
+public remappingUnitTests
 
 ! -----------------------------------------------------------------------------
 ! The following are private parameter constants
@@ -683,6 +684,112 @@ end subroutine remapping_integration
 
 
 ! -----------------------------------------------------------------------------
+! Remap using change in interface positions
+! -----------------------------------------------------------------------------
+subroutine remapByDeltaZ( n0, h0, u0, ppoly0, n1, dx1, method, u1, h1 )
+! The new grid is defined relative to the original grid by change
+!  dx1(:) = xNew(:) - xOld(:)
+! and the remapping calculated so that
+!  hNew(k) qNew(k) = hOld(k) qOld(k) + F(k+1) - F(k)
+! where
+!  F(k) = dx1(k) qAverage
+! and where qAverage is the average qOld in the region zOld(k) to zNew(k).
+  ! Arguments
+  integer,       intent(in)    :: n0        ! number of cells in source grid
+  real,          intent(in)    :: h0(n0)    ! source grid widths
+  real,          intent(in)    :: u0(n0)    ! source cell averages
+  type(ppoly_t), intent(in)    :: ppoly0    ! source piecewise polynomial
+  integer,       intent(in)    :: n1        ! number of cells in target grid
+  real,          intent(in)    :: dx1(n1+1) ! target grid edge positions
+  integer                      :: method    ! remapping scheme to use
+  real,          intent(inout) :: u1(n1)    ! target cell averages
+  real,          intent(inout) :: h1(n1)    ! target grid widths
+  
+  ! Local variables
+  integer :: iTarget, k
+  real    :: xL, xR       ! coordinates of target cell edges  
+  real    :: x0(n0+1)  ! source grid edge positions
+  real    :: xOld, hOld, uOld
+  real    :: xNew, hNew, uNew
+  real    :: uhNew, hFlux, uAve, fluxL, fluxR
+
+  ! Source grid positions
+  x0(1) = 0.
+  do k = 1, n0
+    x0(k+1) = x0(k) + h0(k)
+  enddo
+
+  ! Loop on cells in target grid. For each cell, iTarget, the left flux is
+  ! the right flux of the cell to the left, iTarget-1.
+  ! The left flux is initialized by started at iTarget=0 to calclate the
+  ! right flux which can take into account the target left boundary being
+  ! in the interior of the source domain.
+  fluxR = 0.
+  do iTarget = 0,n1
+    fluxL = fluxR ! This does nothing for iTarget=0
+
+    if (iTarget == 0) then
+      xOld = x0(1)  ! Left boundary of source domain
+      hOld = -1.E30 ! Should not be used for iTarget = 0
+      uOld = -1.E30 ! Should not be used for iTarget = 0
+    elseif (iTarget <= n0) then
+      xOld = x0(iTarget+1) ! New grid has less or the same number of layers
+      hOld = h0(iTarget)
+      uOld = u0(iTarget)
+    else
+      xOld = x0(n0+1) ! New grid has more layers
+      hOld = 0.       ! as if for layers>n0, they were vanished
+      uOld = 1.E30    ! and the initial value should not matter
+    endif
+    xNew = xOld + dx1(iTarget+1)
+    xL = min( xOld, xNew )
+    xR = max( xOld, xNew )
+
+#ifdef __DO_SAFTEY_CHECKS__
+    if (xL<x0(1)) then
+      write(0,*) 'xOld,xNew,xL,xR=',xOld,xNew,xL,xR,iTarget
+      call MOM_error(FATAL,'MOM_remapping, remapByDeltaZ: xL too negative')
+    endif
+    if (xR>x0(n0+1)) then
+      write(0,*) 'xOld,xNew,xL,xR=',xOld,xNew,xL,xR,iTarget
+      call MOM_error(FATAL,'MOM_remapping, remapByDeltaZ: xR too positive')
+    endif
+#endif
+
+    ! hFlux is the positive width of the remapped volume
+    hFlux = abs(dx1(iTarget+1))
+    call integrateReconOnCell( n0, x0, h0, u0, ppoly0, method, &
+                               xL, xR, hFlux, uAve )
+    ! uAve is the average value of u, indendent of sign of dx1
+    fluxR = dx1(iTarget+1)*uAve ! Includes sign of dx1
+
+#ifdef XXX__DO_SAFTEY_CHECKS__
+    ! Valid for CFL<1
+    if (dx1(iTarget+1)<h0(iTarget+1) .and. dx1(iTarget+1)>-hOld) then
+      if (uAve<min(u0(iTarget),u0(iTarget+1))) then
+        write(0,*) 'u,u(k),u(k+1)=',uAve,u0(iTarget),u0(iTarget+1)
+        call MOM_error(FATAL,'MOM_remapping, remapByDeltaZ: undershoot in U')
+      endif
+      if (uAve>max(u0(iTarget),u0(iTarget+1))) then
+        write(0,*) 'u,u(k),u(k+1)=',uAve,u0(iTarget),u0(iTarget+1)
+        call MOM_error(FATAL,'MOM_remapping, remapByDeltaZ: overshoot in U')
+      endif
+    endif
+#endif
+
+    if (iTarget>0) then
+      hNew = hOld + ( dx1(iTarget+1) - dx1(iTarget) )
+      uhNew = ( uOld * hOld ) + ( fluxR - fluxL )
+      u1(iTarget) = uhNew / hNew
+      h1(iTarget) = hNew
+    endif
+    
+  end do ! end iTarget loop on target grid cells
+
+end subroutine remapByDeltaZ
+
+
+! -----------------------------------------------------------------------------
 ! integrate the reconstructed profile over a single cell
 ! -----------------------------------------------------------------------------
 subroutine integrateReconOnCell( n0, x0, h0, u0, ppoly0, method, &
@@ -916,7 +1023,7 @@ end subroutine integrateReconOnCell
 subroutine initialize_remapping( nk, remappingScheme, CS)
   ! Arguments
   integer, intent(in)                  :: nk
-  character(len=40),     intent(in)    :: remappingScheme
+  character(len=*),     intent(in)    :: remappingScheme
   type(remapping_CS),    intent(inout) :: CS
   
   CS%nk = nk
@@ -1024,5 +1131,116 @@ subroutine end_remapping(CS)
   call triDiagSlopeWorkDeallocate( CS%edgeSlopeWrk )
 
 end subroutine end_remapping
+
+logical function remappingUnitTests()
+  ! Should only be called from a single/root thread
+  ! Returns True if a test fails, otherwise False
+  integer, parameter :: n0 = 4, n1 = 3, n2 = 6
+  real :: h0(n0), x0(n0+1), u0(n0)
+  real :: h1(n1), x1(n1+1), u1(n1), hn1(n1)
+  real :: h2(n2), x2(n2+1), u2(n2), hn2(n2), dx2(n2+1)
+  data u0 /3., 1., -1., -3./   ! Linear profile, 4 at surface to -4 at bottom
+  data h0 /4*0.75/ ! 4 uniform layers with total depth of 3
+  data h1 /3*1./   ! 3 uniform layers with total depth of 3
+  data h2 /6*0.5/  ! 6 uniform layers with total depth of 3
+  type(remapping_CS) :: CS 
+  type(grid1D_t) :: grid0, grid1
+  type(ppoly_t) :: ppoly0
+  integer :: i
+  real :: err
+
+  write(*,*) '===== MOM_remapping: remappingUnitTests =================='
+  remappingUnitTests = .false. ! Normally return false
+
+  call buildGridFromH(n0, h0, x0)
+  do i=1,n0+1
+    err=x0(i)-0.75*real(i-1)
+    if (abs(err)>real(i-1)*epsilon(err)) remappingUnitTests = .true.
+  enddo
+  call buildGridFromH(n1, h1, x1)
+  do i=1,n1+1
+    err=x1(i)-real(i-1)
+    if (abs(err)>real(i-1)*epsilon(err)) remappingUnitTests = .true.
+  enddo
+
+  call initialize_remapping(n0, 'PPM_H4', CS)
+  call grid1Dconstruct( grid0, n0 )
+  grid0%h(:) = h0(:)
+  grid0%x(:) = x0(:)
+  call grid1Dconstruct( grid1, n1 )
+  grid1%h(:) = h1(:)
+  grid1%x(:) = x1(:)
+  write(*,*) 'h0 (test data)'
+  call dumpGrid(n0,h0,x0,u0)
+
+  call remapping_core( CS, grid0, u0, grid1, u1 )
+  do i=1,n1
+    err=u1(i)-8./3.*(0.5*real(1+n1)-real(i))
+    if (abs(err)>epsilon(err)) remappingUnitTests = .true.
+  enddo
+  write(*,*) 'h1 (by projection)'
+  call dumpGrid(n1,h1,x1,u1)
+
+  call ppoly_init( ppoly0, n0, CS%degree )
+  ppoly0%E(:,:) = 0.0
+  ppoly0%S(:,:) = 0.0
+  ppoly0%coefficients(:,:) = 0.0
+
+  call edge_values_explicit_h4( grid0, u0, ppoly0%E )
+  call PPM_reconstruction( grid0, u0, ppoly0 )
+  call PPM_boundary_extrapolation( grid0, u0, ppoly0 )
+  u1(:) = 0.
+  call remapping_integration( n0, grid0%h, grid0%x, u0, ppoly0, &
+                              n1, grid1%h, grid1%x, u1, &
+                              INTEGRATION_PPM )
+  do i=1,n1
+    err=u1(i)-8./3.*(0.5*real(1+n1)-real(i))
+    if (abs(err)>2.*epsilon(err)) remappingUnitTests = .true.
+  enddo
+
+  u1(:) = 0.
+  call remapByDeltaZ( n0, h0, u0, ppoly0, &
+                      n1, x1-x0(1:n1+1), &
+                      INTEGRATION_PPM, u1, hn1 )
+  write(*,*) 'h1 (by delta)'
+  call dumpGrid(n1,h1,x1,u1)
+  hn1=hn1-h1
+  do i=1,n1
+    err=u1(i)-8./3.*(0.5*real(1+n1)-real(i))
+    if (abs(err)>2.*epsilon(err)) remappingUnitTests = .true.
+  enddo
+
+  call buildGridFromH(n2, h2, x2)
+  dx2(1:n0+1) = x2(1:n0+1) - x0
+  dx2(n0+2:n2+1) = x2(n0+2:n2+1) - x0(n0+1)
+  call remapByDeltaZ( n0, h0, u0, ppoly0, &
+                      n2, dx2, &
+                      INTEGRATION_PPM, u2, hn2 )
+  write(*,*) 'h2'
+  call dumpGrid(n2,h2,x2,u2)
+  write(*,*) 'hn2'
+  call dumpGrid(n2,hn2,x2,u2)
+
+  do i=1,n2
+    err=u2(i)-8./6.*(0.5*real(1+n2)-real(i))
+    if (abs(err)>2.*epsilon(err)) remappingUnitTests = .true.
+  enddo
+
+  write(*,*) '=========================================================='
+
+  contains
+
+  subroutine dumpGrid(n,h,x,u)
+  integer, intent(in) :: n
+  real, dimension(:), intent(in) :: h,x,u
+  integer :: i
+  write(*,'("i=",20i10)') (i,i=1,n+1)
+  write(*,'("x=",20es10.2)') (x(i),i=1,n+1)
+  write(*,'("i=",5x,20i10)') (i,i=1,n)
+  write(*,'("h=",5x,20es10.2)') (h(i),i=1,n)
+  write(*,'("u=",5x,20es10.2)') (u(i),i=1,n)
+  end subroutine dumpGrid
+
+end function remappingUnitTests
 
 end module MOM_remapping
