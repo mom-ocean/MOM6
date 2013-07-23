@@ -121,6 +121,7 @@ subroutine remapping_main( CS, G, h, dzInterface, h_new, tv, u, v )
   integer               :: nz
   real                  :: val, new_val
   integer               :: problem
+  real, dimension(G%ke+1) :: grid_start_x, grid_final_x
 
   nz = G%ke
 #ifdef __DO_SAFTEY_CHECKS__
@@ -135,11 +136,11 @@ subroutine remapping_main( CS, G, h, dzInterface, h_new, tv, u, v )
       ! Build the start and final grids
       CS%grid_start%h(:) = h(i,j,:)
       CS%grid_final%h(:) = h_new(i,j,:)
-      call buildConsistentGrids(nz, CS%grid_start%h, CS%grid_final%h, CS%grid_start%x, CS%grid_final%x)
+      call buildConsistentGrids(nz, CS%grid_start%h, CS%grid_final%h, grid_start_x, grid_final_x)
       
       do k = 1,nz
-        CS%grid_start%h(k) = CS%grid_start%x(k+1) - CS%grid_start%x(k)
-        CS%grid_final%h(k) = CS%grid_final%x(k+1) - CS%grid_final%x(k)
+        CS%grid_start%h(k) = grid_start_x(k+1) - grid_start_x(k)
+        CS%grid_final%h(k) = grid_final_x(k+1) - grid_final_x(k)
       end do
       
       call remapping_core(CS, CS%grid_start, tv%S(i,j,:), CS%grid_final, CS%u_column)
@@ -161,11 +162,11 @@ subroutine remapping_main( CS, G, h, dzInterface, h_new, tv, u, v )
       ! Build the start and final grids
       CS%grid_start%h(:) = 0.5 * ( h(i,j,:) + h(i+1,j,:) )
       CS%grid_final%h(:) = 0.5 * ( h_new(i,j,:) + h_new(i+1,j,:) )
-      call buildConsistentGrids(nz, CS%grid_start%h, CS%grid_final%h, CS%grid_start%x, CS%grid_final%x)
+      call buildConsistentGrids(nz, CS%grid_start%h, CS%grid_final%h, grid_start_x, grid_final_x)
       
       do k = 1,nz
-        CS%grid_start%h(k) = CS%grid_start%x(k+1) - CS%grid_start%x(k)
-        CS%grid_final%h(k) = CS%grid_final%x(k+1) - CS%grid_final%x(k)
+        CS%grid_start%h(k) = grid_start_x(k+1) - grid_start_x(k)
+        CS%grid_final%h(k) = grid_final_x(k+1) - grid_final_x(k)
       end do
   
       call remapping_core(CS, CS%grid_start, u(i,j,:), CS%grid_final, CS%u_column)
@@ -184,11 +185,11 @@ subroutine remapping_main( CS, G, h, dzInterface, h_new, tv, u, v )
       ! Build the start and final grids
       CS%grid_start%h(:) = 0.5 * ( h(i,j,:) + h(i,j+1,:) )
       CS%grid_final%h(:) = 0.5 * ( h_new(i,j,:) + h_new(i,j+1,:) )
-      call buildConsistentGrids(nz, CS%grid_start%h, CS%grid_final%h, CS%grid_start%x, CS%grid_final%x)
+      call buildConsistentGrids(nz, CS%grid_start%h, CS%grid_final%h, grid_start_x, grid_final_x)
 
       do k = 1,nz
-        CS%grid_start%h(k) = CS%grid_start%x(k+1) - CS%grid_start%x(k)
-        CS%grid_final%h(k) = CS%grid_final%x(k+1) - CS%grid_final%x(k)
+        CS%grid_start%h(k) = grid_start_x(k+1) - grid_start_x(k)
+        CS%grid_final%h(k) = grid_final_x(k+1) - grid_final_x(k)
       end do
 
       call remapping_core(CS, CS%grid_start, v(i,j,:), CS%grid_final, CS%u_column)
@@ -357,7 +358,7 @@ end function isPosSumErrSignificant
 !------------------------------------------------------------------------------
 ! Check that data remapped between two grids are conserved
 !------------------------------------------------------------------------------
-subroutine checkGridConservation(ns, hs, xs, us, nf, hf, xf, uf)
+subroutine checkGridConservation(ns, hs, us, nf, hf, uf)
 !------------------------------------------------------------------------------
 ! Checks that the sum of hs*us and hf*uf match. Also checks that the
 ! analgous sums in terms of sx and xf are consistant.
@@ -365,51 +366,20 @@ subroutine checkGridConservation(ns, hs, xs, us, nf, hf, xf, uf)
 
   ! Arguments
   integer, intent(in) :: ns, nf
-  real,    intent(in) :: hs(ns), xs(ns+1), us(ns)
-  real,    intent(in) :: hf(nf), xf(nf+1), uf(nf)
+  real,    intent(in) :: hs(:), us(:) ! Size ns
+  real,    intent(in) :: hf(:), uf(:) ! Size nf
 
   ! Local variables
   integer :: k
-  real    :: sumHUs, errHUs, sumXUs, errXUs
-  real    :: sumHUf, errHUf, sumXUf, errXUf
+  real    :: sumHUs, errHUs
+  real    :: sumHUf, errHUf
 
   call sumHtimesQ(ns, hs, us, sumHUs, errHUs)
-  call sumHtimesQ(ns, xs(2:ns+1)-xs(1:ns), us, sumXUs, errXUs)
   call sumHtimesQ(nf, hf, uf, sumHUf, errHUf)
-  call sumHtimesQ(ns, xf(2:nf+1)-xf(1:nf), uf, sumXUf, errXUf)
-  if (abs(sumHUs-sumXUs)>errHUs+errXUs) then
-    write(0,'("ns=",i4)') ns
-    do k = 1,ns+1
-      write(0,'(i4,"xs=",es12.3)') k,xs(k)
-      if (k<=ns) write(0,'(i4,"hs,us=",2es12.3)') k,hs(k),us(k)
-    enddo
-    write(0,'("sumHUs,sumXUs=",2es12.3)') sumHUs,sumXUs
-    write(0,'("err,errHUs,errXUs=",3es12.3)') abs(sumHUs-sumXUs),errHUs,errXUs
-    call MOM_error(FATAL,'MOM_remapping, checkGridConservation: '//&
-       'Total amount of stuff on start grid differs by more than round-off.')
-  endif
-  if (abs(sumHUf-sumXUf)>errHUf+errXUf) then
-    write(0,'("nf=",i4)') nf
-    do k = 1,nf+1
-      write(0,'(i4,"xf=",es12.3)') k,xf(k)
-      if (k<=nf) write(0,'(i4,"hf,uf=",2es12.3)') k,hf(k),uf(k)
-    enddo
-    write(0,'("sumHUf,sumXUf=",2es12.3)') sumHUf,sumXUf
-    write(0,'("err,errHUf,errXUf=",3es12.3)') abs(sumHUf-sumXUf),errHUf,errXUf
-    call MOM_error(FATAL,'MOM_remapping, checkGridConservation: '//&
-       'Total amount of stuff on final grid differs by more than round-off.')
-  endif
 #ifdef DISABLE_CONSEEVATION_CHECK_BECAUSE_IT_FAILS______
   if (abs(sumHUf-sumHUs)>errHUf+errHUs) then
     write(0,'("ns,nf=",2i4)') ns,nf
     do k = 1,max(ns,nf)+1
-      if (k<=min(ns+1,nf+1)) then
-        write(0,'(i4,"xs,xf=",2es12.3)') k,xs(k),xf(k)
-      elseif (k>ns+1) then
-        write(0,'(i4,"   xf=",12x,es12.3)') k,xf(k)
-      else
-        write(0,'(i4,"xs   =",es12.3)') k,xs(k)
-      endif
       if (k<=min(ns,nf)) then
         write(0,'(i4,"hs,us,hf,uf=",4es12.3)') k,hs(k),us(k),hf(k),uf(k)
       elseif (k>ns .and. k<=nf) then
@@ -623,13 +593,13 @@ subroutine remapping_core( CS, grid0, u0, grid1, u1 )
   end select
 
   call remapByProjection( n0, grid0%h, u0, CS%ppoly_r, &
-                          n1, grid1%h, grid1%x, u1, iMethod )
+                          n1, grid1%h, iMethod, u1 )
 ! call remapByDeltaZ( n0, grid0%h, u0, CS%ppoly_r, &
 !                     n1, dx1, iMethod, u1, h1 )
 
 #ifdef __DO_SAFTEY_CHECKS__
-    call checkGridConservation(grid0%nb_cells, grid0%h, grid0%x, u0, &
-                               grid1%nb_cells, grid1%h, grid1%x, u1)
+  call checkGridConservation(grid0%nb_cells, grid0%h, u0, &
+                             grid1%nb_cells, grid1%h, u1)
 #endif
 
 end subroutine remapping_core
@@ -638,17 +608,16 @@ end subroutine remapping_core
 ! -----------------------------------------------------------------------------
 ! remapByProjection (integration of reconstructed profile)
 ! -----------------------------------------------------------------------------
-subroutine remapByProjection( n0, h0, u0, ppoly0, n1, h1, x1, u1, method )
+subroutine remapByProjection( n0, h0, u0, ppoly0, n1, h1, method, u1 )
   ! Arguments
-  integer,       intent(in)    :: n0       ! number of cells in source grid
-  real,          intent(in)    :: h0(n0)   ! source grid widths
-  real,          intent(in)    :: u0(n0)   ! source cell averages
-  type(ppoly_t), intent(in)    :: ppoly0   ! source piecewise polynomial
-  integer,       intent(in)    :: n1       ! number of cells in target grid
-  real,          intent(in)    :: h1(n1)   ! target grid widths
-  real,          intent(in)    :: x1(n1+1) ! target grid edge positions
-  real,          intent(inout) :: u1(n1)   ! target cell averages
-  integer                      :: method   ! remapping scheme to use
+  integer,       intent(in)    :: n0     ! number of cells in source grid
+  real,          intent(in)    :: h0(:)  ! source grid widths (size n0)
+  real,          intent(in)    :: u0(:)  ! source cell averages (size n0)
+  type(ppoly_t), intent(in)    :: ppoly0 ! source piecewise polynomial
+  integer,       intent(in)    :: n1     ! number of cells in target grid
+  real,          intent(in)    :: h1(:)  ! target grid widths (size n1)
+  integer,       intent(in)    :: method ! remapping scheme to use
+  real,          intent(inout) :: u1(:)  ! target cell averages (size n1)
   
   ! Local variables
   integer       :: iTarget, j, k
@@ -662,12 +631,6 @@ subroutine remapByProjection( n0, h0, u0, ppoly0, n1, h1, x1, u1, method )
     ! Determine the coordinates of the target cell edges
     xL = xR
     xR = xL + h1(iTarget)
-
-!   if (x1<=(1.+epsilon(x1))*x0(n0+1)) then
-!     if (x1>x0(n0+1)) then   ! HACK ALERT !!!!!! -----AJA
-!       x1 = min( x0(n0+1), x1) ! Bound target grid to be within source grid
-!     endif
-!   endif
 
     call integrateReconOnInterval( n0, h0, u0, ppoly0, method, &
                                    xL, xR, h1(iTarget), u1(iTarget) )
@@ -689,20 +652,19 @@ subroutine remapByDeltaZ( n0, h0, u0, ppoly0, n1, dx1, method, u1, h1 )
 !  F(k) = dx1(k) qAverage
 ! and where qAverage is the average qOld in the region zOld(k) to zNew(k).
   ! Arguments
-  integer,       intent(in)  :: n0        ! number of cells in source grid
-  real,          intent(in)  :: h0(n0)    ! source grid widths
-  real,          intent(in)  :: u0(n0)    ! source cell averages
-  type(ppoly_t), intent(in)  :: ppoly0    ! source piecewise polynomial
-  integer,       intent(in)  :: n1        ! number of cells in target grid
-  real,          intent(in)  :: dx1(n1+1) ! target grid edge positions
-  integer                    :: method    ! remapping scheme to use
-  real,          intent(out) :: u1(n1)    ! target cell averages
-  real,          intent(out) :: h1(n1)    ! target grid widths
+  integer,       intent(in)  :: n0     ! number of cells in source grid
+  real,          intent(in)  :: h0(:)  ! source grid widths (size n0)
+  real,          intent(in)  :: u0(:)  ! source cell averages (size n0)
+  type(ppoly_t), intent(in)  :: ppoly0 ! source piecewise polynomial
+  integer,       intent(in)  :: n1     ! number of cells in target grid
+  real,          intent(in)  :: dx1(:) ! target grid edge positions (size n1+1)
+  integer                    :: method ! remapping scheme to use
+  real,          intent(out) :: u1(:)  ! target cell averages (size n1)
+  real,          intent(out) :: h1(:)  ! target grid widths (size n1)
   
   ! Local variables
   integer :: iTarget
   real    :: xL, xR    ! coordinates of target cell edges  
-  real    :: x0(n0+1)  ! source grid edge positions
   real    :: xOld, hOld, uOld
   real    :: xNew, hNew, uNew
   real    :: uhNew, hFlux, uAve, fluxL, fluxR
@@ -729,12 +691,10 @@ subroutine remapByDeltaZ( n0, h0, u0, ppoly0, n1, dx1, method, u1, h1 )
       hOld = -1.E30 ! Should not be used for iTarget = 0
       uOld = -1.E30 ! Should not be used for iTarget = 0
     elseif (iTarget <= n0) then
-!     xOld = x0(iTarget+1) ! New grid has less or the same number of layers
       xOld = xOld + h0(iTarget) ! Position of right edge of cell
       hOld = h0(iTarget)
       uOld = u0(iTarget)
     else
-!     xOld = x0(n0+1) ! New grid has more layers
       hOld = 0.       ! as if for layers>n0, they were vanished
       uOld = 1.E30    ! and the initial value should not matter
     endif
@@ -1201,8 +1161,7 @@ logical function remappingUnitTests()
   call PPM_boundary_extrapolation( grid0, u0, ppoly0 )
   u1(:) = 0.
   call remapByProjection( n0, grid0%h, u0, ppoly0, &
-                          n1, grid1%h, grid1%x, u1, &
-                          INTEGRATION_PPM )
+                          n1, grid1%h, INTEGRATION_PPM, u1 )
   do i=1,n1
     err=u1(i)-8./3.*(0.5*real(1+n1)-real(i))
     if (abs(err)>2.*epsilon(err)) remappingUnitTests = .true.

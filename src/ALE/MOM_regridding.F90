@@ -1081,7 +1081,7 @@ subroutine regridding_iteration( densities, target_values, CS, &
   ! Based on global density profile, interpolate new grid and 
   ! inflate vanished layers    
   call interpolate_grid( grid0, ppoly0, grid1, target_values, degree )
-  call inflate_vanished_layers( grid1, CS )
+  call inflate_vanished_layers( CS%min_thickness, grid1%nb_cells, grid1%h, grid1%x )
     
 end subroutine regridding_iteration
 
@@ -1123,21 +1123,18 @@ subroutine interpolate_grid( grid0, ppoly0, grid1, target_values, degree )
   ! Find coordinates for interior target values
   do k = 2,nz
     t = target_values(k)
-    grid1%x(k) = get_polynomial_coordinate ( grid0, ppoly0, t, degree )
+    grid1%x(k) = get_polynomial_coordinate ( N, grid0%h, ppoly0, t, degree )
+    grid1%h(k-1) = grid1%x(k) - grid1%x(k-1)
   end do
+  grid1%h(nz) = grid1%x(nz+1) - grid1%x(nz)
     
-  ! Determine cell widths
-  do k = 1,nz
-    grid1%h(k) = grid1%x(k+1) - grid1%x(k)
-  end do
-
 end subroutine interpolate_grid
 
 
 !------------------------------------------------------------------------------
 ! Given target value, find corresponding coordinate for given polynomial
 !------------------------------------------------------------------------------
-real function get_polynomial_coordinate ( grid, ppoly, target_value, degree )
+real function get_polynomial_coordinate ( N, h, ppoly, target_value, degree )
 ! ------------------------------------------------------------------------------
 ! Here, 'ppoly' is assumed to be a piecewise discontinuous polynomial of degree
 ! 'degree' throughout the domain defined by 'grid'. A target value is given 
@@ -1156,14 +1153,14 @@ real function get_polynomial_coordinate ( grid, ppoly, target_value, degree )
 ! ------------------------------------------------------------------------------
 
   ! Arguments
-  type(grid1D_t), intent(in)  :: grid               
+  integer,        intent(in)  :: N
+  real,           intent(in)  :: h(:) ! size n
   type(ppoly_t),  intent(in)  :: ppoly
   real,           intent(in)  :: target_value
   integer,        intent(in)  :: degree
 
   ! Local variables
   integer            :: i, k            ! loop indices
-  integer            :: N
   integer            :: k_found         ! index of target cell
   integer            :: iter
   real               :: x_l, x_r        ! end coordinates of target cell
@@ -1177,7 +1174,6 @@ real function get_polynomial_coordinate ( grid, ppoly, target_value, degree )
                                         ! boundaries
   real               :: g               ! gradient during N-R iterations
 
-  N = grid%nb_cells
   eps = NR_OFFSET
   
   k_found = -1
@@ -1186,35 +1182,42 @@ real function get_polynomial_coordinate ( grid, ppoly, target_value, degree )
   ! force the target coordinate to be equal to the lowest or
   ! largest value, depending on which bound is overtaken
   if ( target_value .LE. ppoly%E(1,1) ) then
-    x = grid%x(1)
-    get_polynomial_coordinate = x
-    return  ! return because there is no need to look further
-  end if
-  
-  if ( target_value .GE. ppoly%E(N,2) ) then
-    x = grid%x(N+1)
+    x = 0. ! Left boundary is at x=0
     get_polynomial_coordinate = x
     return  ! return because there is no need to look further
   end if
   
   ! Since discontinuous edge values are allowed, we check whether the target
   ! value lies between two discontinuous edge values at interior interfaces
+    x = 0. ! Left boundary is at x=0
   do k = 2,N
+    x = x + h(k-1) ! Position of interface k
     if ( ( target_value .GE. ppoly%E(k-1,2) ) .AND. &
        ( target_value .LE. ppoly%E(k,1) ) ) then
-       x = grid%x(k)
        get_polynomial_coordinate = x
        return   ! return because there is no need to look further
        exit
     end if   
   end do
 
+  ! If the target value is outside the range of all values, we
+  ! force the target coordinate to be equal to the lowest or
+  ! largest value, depending on which bound is overtaken
+  x = x + h(N) ! Position of right boundary
+  if ( target_value .GE. ppoly%E(N,2) ) then
+    get_polynomial_coordinate = x
+    return  ! return because there is no need to look further
+  end if
+  
   ! At this point, we know that the target value is bounded and does not
   ! lie between discontinuous, monotonic edge values. Therefore,
   ! there is a unique solution. We loop on all cells and find which one
   ! contains the target value. The variable k_found holds the index value
   ! of the cell where the taregt value lies.
+  x_r = 0. ! Left boundary is at x=0
   do k = 1,N
+    x_l = x_r
+    x_r = x_l + h(k)
     if ( ( target_value .GT. ppoly%E(k,1) ) .AND. &
        ( target_value .LT. ppoly%E(k,2) ) ) then
        k_found = k
@@ -1286,9 +1289,7 @@ real function get_polynomial_coordinate ( grid, ppoly, target_value, degree )
 
   end do ! end Newton-Raphson iterations
 
-  x_l = grid%x(k_found)
-  x_r = grid%x(k_found+1)
-  x = x_l + xi0 * grid%h(k_found)
+  x = x_l + xi0 * h(k_found)
     
   get_polynomial_coordinate = x
 
@@ -1327,12 +1328,7 @@ subroutine check_grid_integrity( CS, G, h )
         grid%h(k) = h(i,j,k)
       end do
 
-      grid%x(1) = 0.0
-      do k = 1,G%ke
-        grid%x(k+1) = grid%x(k) + grid%h(k)
-      end do
-      
-      call inflate_vanished_layers( grid, CS )
+      call inflate_vanished_layers( CS%min_thickness, grid%nb_cells, grid%h, grid%x )
 
       ! Save modified grid
       do k = 1,G%ke
@@ -1350,29 +1346,26 @@ end subroutine check_grid_integrity
 !------------------------------------------------------------------------------
 ! Inflate vanished layers to finite (nonzero) width
 !------------------------------------------------------------------------------
-subroutine inflate_vanished_layers( grid, CS )
+subroutine inflate_vanished_layers( minThickness, N, h, x )
 
   ! Argument
-  type(grid1D_t), intent(inout)       :: grid
-  type(regridding_CS), intent(in) :: CS
+  real,                intent(in) :: minThickness
+  integer,             intent(in) :: N
+  real,                intent(inout) :: h(:)
+  real,                intent(inout) :: x(:)
     
   ! Local variable
-  integer   :: N
   integer   :: k
   integer   :: k_found
   integer   :: count_nonzero_layers
   real      :: delta
   real      :: correction
-  real      :: min_thickness
-  real      :: max_thickness
+  real      :: maxThickness
 
-  N = grid%nb_cells
-  min_thickness = CS%min_thickness
-  
   ! Count number of nonzero layers
   count_nonzero_layers = 0
   do k = 1,N
-    if ( grid%h(k) .GT. min_thickness ) then
+    if ( h(k) .GT. minThickness ) then
       count_nonzero_layers = count_nonzero_layers + 1
     end if
   end do
@@ -1383,7 +1376,7 @@ subroutine inflate_vanished_layers( grid, CS )
   ! If all thicknesses are zero, inflate them all and exit
   if ( count_nonzero_layers .eq. 0 ) then  
     do k = 1,N
-      grid%h(k) = min_thickness
+      h(k) = minThickness
     end do
     return
   end if    
@@ -1391,30 +1384,30 @@ subroutine inflate_vanished_layers( grid, CS )
   ! Inflate zero layers
   correction = 0.0
   do k = 1,N
-    if ( grid%h(k) .le. min_thickness ) then
-      delta = min_thickness - grid%h(k)
+    if ( h(k) .le. minThickness ) then
+      delta = minThickness - h(k)
       correction = correction + delta
-      grid%h(k) = grid%h(k) + delta
+      h(k) = h(k) + delta
     end if  
   end do
   
   ! Modify thicknesses of nonzero layers to ensure volume conservation
-  max_thickness = grid%h(1)
+  maxThickness = h(1)
   k_found = 1
-  do k = 1,grid%nb_cells
-    if ( grid%h(k) .gt. max_thickness ) then
-      max_thickness = grid%h(k)
+  do k = 1,N
+    if ( h(k) .gt. maxThickness ) then
+      maxThickness = h(k)
       k_found = k
     end if  
   end do
   
-  grid%h(k_found) = grid%h(k_found) - correction
+  h(k_found) = h(k_found) - correction
   
   ! Redefine grid coordinates according to new layer thicknesses
-  grid%x(1) = 0.0
+  x(1) = 0.0
   do k = 1,N
-    grid%x(k+1) = grid%x(k) + grid%h(k)
-  end do    
+    x(k+1) = x(k) + h(k)
+  end do
   
 end subroutine inflate_vanished_layers
 
