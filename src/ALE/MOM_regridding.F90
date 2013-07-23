@@ -272,7 +272,7 @@ subroutine regridding_main( remapCS, CS, G, h, tv, dzInterface, hNew )
       call buildGridRho( G, h, tv, dzInterface, hNew, remapCS, CS )
 
     case ( REGRIDDING_ARBITRARY )
-      call build_grid_arbitrary( G, h, hNew, CS )
+      call build_grid_arbitrary( G, h, dzInterface, hNew, CS )
 
   end select ! type of grid 
   
@@ -796,7 +796,7 @@ end subroutine buildGridRho
 !------------------------------------------------------------------------------
 ! Build arbitrary grid
 !------------------------------------------------------------------------------
-subroutine build_grid_arbitrary( G, h, h_new, CS )
+subroutine build_grid_arbitrary( G, h, dzInterface, h_new, CS )
 !------------------------------------------------------------------------------
 ! This routine builds a grid based on arbitrary rules
 !------------------------------------------------------------------------------
@@ -804,6 +804,7 @@ subroutine build_grid_arbitrary( G, h, h_new, CS )
   ! Arguments
   type(ocean_grid_type), intent(in)                  :: G
   real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(in)    :: h
+  real, dimension(NIMEM_,NJMEM_, NK_INTERFACE_), intent(inout) :: dzInterface
   real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(inout) :: h_new
   type(regridding_CS), intent(in)                :: CS
   
@@ -875,8 +876,18 @@ subroutine build_grid_arbitrary( G, h, h_new, CS )
           z_inter(k) = z_inter(k+1) + min_thickness
         end if
       end do
+
+      ! Chnage in interface position
+      x = 0. ! Left boundary at x=0
+      dzInterface(i,j,1) = 0.
+      do k = 2,nz
+        x = x + h(i,j,k)
+        dzInterface(i,j,k) = z_inter(k) - x
+      end do
+      dzInterface(i,j,nz+1) = 0.
     
       ! Define thicknesses in terms of interface heights
+      x = 0. ! Left boundary at x=0
       do k = 1,nz
         h_new(i,j,k) = z_inter(k) - z_inter(k+1)
       end do    
@@ -1318,35 +1329,26 @@ subroutine check_grid_integrity( CS, G, h )
   real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(inout) :: h
 
   ! Local variables
-  integer           :: i, j, k
-  type(grid1D_t)    :: grid
-
-  ! Initialize grid 
-  call grid1Dconstruct( grid, G%ke )
+  integer :: i, j, k
+  real    :: hTmp(G%ke)
 
   do i = G%isc-1,G%iec+1
     do j = G%jsc-1,G%jec+1
     
       ! Build grid for current column
       do k = 1,G%ke
-        grid%h(k) = h(i,j,k)
+        hTmp(k) = h(i,j,k)
       end do
 
-      call inflate_vanished_layers( CS%min_thickness, grid%nb_cells, grid%h )
-      grid%x(1) = 0.0
-      do k = 1,G%ke
-        grid%x(k+1) = grid%x(k) + grid%h(k)
-      end do
+      call inflate_vanished_layers( CS%min_thickness, G%ke, hTmp )
 
       ! Save modified grid
       do k = 1,G%ke
-        h(i,j,k) = grid%h(k)
+        h(i,j,k) = hTmp(k)
       end do
     
     end do
   end do
-
-  call grid1Ddestroy( grid )
 
 end subroutine check_grid_integrity
 
