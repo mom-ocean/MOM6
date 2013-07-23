@@ -595,7 +595,7 @@ subroutine remapping_core( CS, grid0, u0, grid1, u1 )
   call remapByProjection( n0, grid0%h, u0, CS%ppoly_r, &
                           n1, grid1%h, iMethod, u1 )
 ! call remapByDeltaZ( n0, grid0%h, u0, CS%ppoly_r, &
-!                     n1, dx1, iMethod, u1, h1 )
+!                     n1, dx1, iMethod, u1 )
 
 #ifdef __DO_SAFTEY_CHECKS__
   call checkGridConservation(grid0%nb_cells, grid0%h, u0, &
@@ -660,7 +660,7 @@ subroutine remapByDeltaZ( n0, h0, u0, ppoly0, n1, dx1, method, u1, h1 )
   real,          intent(in)  :: dx1(:) ! target grid edge positions (size n1+1)
   integer                    :: method ! remapping scheme to use
   real,          intent(out) :: u1(:)  ! target cell averages (size n1)
-  real,          intent(out) :: h1(:)  ! target grid widths (size n1)
+  real,optional, intent(out) :: h1(:)  ! target grid widths (size n1)
   
   ! Local variables
   integer :: iTarget
@@ -738,7 +738,7 @@ subroutine remapByDeltaZ( n0, h0, u0, ppoly0, n1, dx1, method, u1, h1 )
       hNew = hOld + ( dx1(iTarget+1) - dx1(iTarget) )
       uhNew = ( uOld * hOld ) + ( fluxR - fluxL )
       u1(iTarget) = uhNew / hNew
-      h1(iTarget) = hNew
+      if (present(h1)) h1(iTarget) = hNew
     endif
     
   end do ! end iTarget loop on target grid cells
