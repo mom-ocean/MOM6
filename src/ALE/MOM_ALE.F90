@@ -479,7 +479,7 @@ subroutine pressure_gradient_ppm( CS, S_t, S_b, T_t, T_b, G, tv, h )
       ! Reconstruct salinity profile    
       CS%ppoly_parab%E = 0.0
       CS%ppoly_parab%coefficients = 0.0
-      call edge_values_implicit_h4( CS%grid_generic, CS%edgeValueWrk, tv%S(i,j,:), CS%ppoly_parab%E )
+      call edge_values_implicit_h4( G%ke, CS%grid_generic%h, tv%S(i,j,:), CS%edgeValueWrk, CS%ppoly_parab%E )
       call PPM_reconstruction( CS%grid_generic, tv%S(i,j,:), CS%ppoly_parab )
       if (CS%boundary_extrapolation_for_pressure) call &
         PPM_boundary_extrapolation( CS%grid_generic, tv%S(i,j,:), CS%ppoly_parab )
@@ -492,7 +492,7 @@ subroutine pressure_gradient_ppm( CS, S_t, S_b, T_t, T_b, G, tv, h )
       ! Reconstruct temperature profile 
       CS%ppoly_parab%E = 0.0
       CS%ppoly_parab%coefficients = 0.0
-      call edge_values_implicit_h4( CS%grid_generic, CS%edgeValueWrk, tv%T(i,j,:), CS%ppoly_parab%E )
+      call edge_values_implicit_h4( G%ke, CS%grid_generic%h, tv%T(i,j,:), CS%edgeValueWrk, CS%ppoly_parab%E )
       call PPM_reconstruction( CS%grid_generic, tv%T(i,j,:), CS%ppoly_parab )
       if (CS%boundary_extrapolation_for_pressure) call &
         PPM_boundary_extrapolation( CS%grid_generic, tv%T(i,j,:), CS%ppoly_parab )

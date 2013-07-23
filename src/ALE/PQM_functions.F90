@@ -124,10 +124,10 @@ subroutine PQM_limiter( grid, u, ppoly )
   N = grid%nb_cells
 
   ! Bound edge values
-  call bound_edge_values( grid, u, ppoly%E )
+  call bound_edge_values( N, grid%h, u, ppoly%E )
 
   ! Make discontinuous edge values monotonic (thru averaging)
-  call check_discontinuous_edge_values( grid, u, ppoly%E )
+  call check_discontinuous_edge_values( N, u, ppoly%E )
 
   ! Loop on interior cells to apply the PQM limiter
   do k = 2,N-1

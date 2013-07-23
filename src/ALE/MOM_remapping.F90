@@ -559,21 +559,21 @@ subroutine remapping_core( CS, grid0, u0, grid1, u1 )
       end if    
       iMethod = INTEGRATION_PLM
     case ( REMAPPING_PPM_H4 )
-      call edge_values_explicit_h4( grid0, u0, CS%ppoly_r%E )
+      call edge_values_explicit_h4( n0, grid0%h, u0, CS%ppoly_r%E )
       call PPM_reconstruction( grid0, u0, CS%ppoly_r )
       if ( CS%boundary_extrapolation) then
         call PPM_boundary_extrapolation( grid0, u0, CS%ppoly_r )
       end if
       iMethod = INTEGRATION_PPM
     case ( REMAPPING_PPM_IH4 )
-      call edge_values_implicit_h4( grid0, CS%edgeValueWrk, u0, CS%ppoly_r%E )
+      call edge_values_implicit_h4( n0, grid0%h, u0, CS%edgeValueWrk, CS%ppoly_r%E )
       call PPM_reconstruction( grid0, u0, CS%ppoly_r )
       if ( CS%boundary_extrapolation) then
         call PPM_boundary_extrapolation( grid0, u0, CS%ppoly_r )
       end if    
       iMethod = INTEGRATION_PPM
     case ( REMAPPING_PQM_IH4IH3 )
-      call edge_values_implicit_h4( grid0, CS%edgeValueWrk, u0, CS%ppoly_r%E )
+      call edge_values_implicit_h4( n0, grid0%h, u0, CS%edgeValueWrk, CS%ppoly_r%E )
       call edge_slopes_implicit_h3( grid0, CS%edgeSlopeWrk, u0, CS%ppoly_r%S )
       call PQM_reconstruction( grid0, u0, CS%ppoly_r )
       if ( CS%boundary_extrapolation) then
@@ -581,7 +581,7 @@ subroutine remapping_core( CS, grid0, u0, grid1, u1 )
       end if    
       iMethod = INTEGRATION_PQM
     case ( REMAPPING_PQM_IH6IH5 )
-      call edge_values_implicit_h6( grid0, CS%edgeValueWrk, u0, CS%ppoly_r%E )
+      call edge_values_implicit_h6( n0, grid0%h, u0, CS%edgeValueWrk, CS%ppoly_r%E )
       call edge_slopes_implicit_h5( grid0, CS%edgeSlopeWrk, u0, CS%ppoly_r%S )
       call PQM_reconstruction( grid0, u0, CS%ppoly_r )
       if ( CS%boundary_extrapolation) then
@@ -1156,7 +1156,7 @@ logical function remappingUnitTests()
   ppoly0%S(:,:) = 0.0
   ppoly0%coefficients(:,:) = 0.0
 
-  call edge_values_explicit_h4( grid0, u0, ppoly0%E )
+  call edge_values_explicit_h4( n0, grid0%h, u0, ppoly0%E )
   call PPM_reconstruction( grid0, u0, ppoly0 )
   call PPM_boundary_extrapolation( grid0, u0, ppoly0 )
   u1(:) = 0.

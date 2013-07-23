@@ -95,10 +95,10 @@ subroutine P3M_limiter( grid, u, ppoly )
   N = grid%nb_cells
 
   ! 1. Bound edge values (boundary cells are assumed to be local extrema)
-  call bound_edge_values( grid, u, ppoly%E )
+  call bound_edge_values( N, grid%h, u, ppoly%E )
 
   ! 2. Systematically average discontinuous edge values
-  call average_discontinuous_edge_values( grid, u, ppoly%E )
+  call average_discontinuous_edge_values( N, u, ppoly%E )
   
 
   ! 3. Loop on cells and do the following
