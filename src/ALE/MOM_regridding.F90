@@ -918,7 +918,7 @@ subroutine regridding_iteration( densities, target_values, CS, &
   CS   ! Parameters used for regridding
 
   ! Local variables
-  integer        :: degree
+  integer :: degree, k
 
   ! Reset piecewise polynomials
   ppoly0%E = 0.0
@@ -1081,7 +1081,11 @@ subroutine regridding_iteration( densities, target_values, CS, &
   ! Based on global density profile, interpolate new grid and 
   ! inflate vanished layers    
   call interpolate_grid( grid0, ppoly0, grid1, target_values, degree )
-  call inflate_vanished_layers( CS%min_thickness, grid1%nb_cells, grid1%h, grid1%x )
+  call inflate_vanished_layers( CS%min_thickness, grid1%nb_cells, grid1%h )
+  grid1%x(1) = 0.0
+  do k = 1,grid1%nb_cells
+    grid1%x(k+1) = grid1%x(k) + grid1%h(k)
+  end do
     
 end subroutine regridding_iteration
 
@@ -1328,7 +1332,11 @@ subroutine check_grid_integrity( CS, G, h )
         grid%h(k) = h(i,j,k)
       end do
 
-      call inflate_vanished_layers( CS%min_thickness, grid%nb_cells, grid%h, grid%x )
+      call inflate_vanished_layers( CS%min_thickness, grid%nb_cells, grid%h )
+      grid%x(1) = 0.0
+      do k = 1,G%ke
+        grid%x(k+1) = grid%x(k) + grid%h(k)
+      end do
 
       ! Save modified grid
       do k = 1,G%ke
@@ -1346,13 +1354,12 @@ end subroutine check_grid_integrity
 !------------------------------------------------------------------------------
 ! Inflate vanished layers to finite (nonzero) width
 !------------------------------------------------------------------------------
-subroutine inflate_vanished_layers( minThickness, N, h, x )
+subroutine inflate_vanished_layers( minThickness, N, h )
 
   ! Argument
   real,                intent(in) :: minThickness
   integer,             intent(in) :: N
   real,                intent(inout) :: h(:)
-  real,                intent(inout) :: x(:)
     
   ! Local variable
   integer   :: k
@@ -1402,12 +1409,6 @@ subroutine inflate_vanished_layers( minThickness, N, h, x )
   end do
   
   h(k_found) = h(k_found) - correction
-  
-  ! Redefine grid coordinates according to new layer thicknesses
-  x(1) = 0.0
-  do k = 1,N
-    x(k+1) = x(k) + h(k)
-  end do
   
 end subroutine inflate_vanished_layers
 
