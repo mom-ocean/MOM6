@@ -10,7 +10,6 @@ module regrid_edge_slopes
 ! high-order reconstruction schemes.
 !
 !==============================================================================
-use regrid_grid1d_class, only : grid1D_t
 use regrid_solvers, only : solve_linear_system, solve_tridiagonal_system
 use polynomial_functions, only : evaluation_polynomial
 
@@ -43,7 +42,7 @@ contains
 !------------------------------------------------------------------------------
 ! Compute ih4 edge slopes (implicit third order accurate)
 !------------------------------------------------------------------------------
-subroutine edge_slopes_implicit_h3( grid, work, u, edge_slopes )
+subroutine edge_slopes_implicit_h3( N, h, u, work, edge_slopes )
 ! -----------------------------------------------------------------------------
 ! Compute edge slopes based on third-order implicit estimates. Note that
 ! the estimates are fourth-order accurate on uniform grids
@@ -71,14 +70,14 @@ subroutine edge_slopes_implicit_h3( grid, work, u, edge_slopes )
 ! -----------------------------------------------------------------------------
 
   ! Arguments
-  type(grid1D_t), intent(in)            :: grid             
-  type(edgeSlopeArrays), intent(inout)  :: work
-  real, dimension(:), intent(in)        :: u            ! cell averages
-  real, dimension(:,:), intent(inout)   :: edge_slopes      
+  integer,               intent(in)    :: N ! Number of cells
+  real, dimension(:),    intent(in)    :: h ! cell averages (size N)
+  real, dimension(:),    intent(in)    :: u ! cell averages (size N)
+  type(edgeSlopeArrays), intent(inout) :: work
+  real, dimension(:,:),  intent(inout) :: edge_slopes
 
   ! Local variables
   integer               :: i, j                 ! loop indexes
-  integer               :: N                    ! number of cells
   real                  :: h0, h1               ! cell widths
   real                  :: h0_2, h1_2, h0h1
   real                  :: h0_3, h1_3
@@ -90,15 +89,12 @@ subroutine edge_slopes_implicit_h3( grid, work, u, edge_slopes )
   real, dimension(4)    :: Bsys, Csys
   real, dimension(3)    :: Dsys
 
-  ! Get number of cells (there are N+1 edge slopes to estimate)
-  N = grid%nb_cells
-
   ! Loop on cells (except last one)
   do i = 1,N-1
 
     ! Get cell widths
-    h0 = grid%h(i)
-    h1 = grid%h(i+1)
+    h0 = h(i)
+    h1 = h(i+1)
 
     ! Auxiliary calculations
     h0h1 = h0 * h1
@@ -126,7 +122,7 @@ subroutine edge_slopes_implicit_h3( grid, work, u, edge_slopes )
   ! Boundary conditions: left boundary
   x(1) = 0.0
   do i = 2,5
-    x(i) = x(i-1) + grid%h(i-1)
+    x(i) = x(i-1) + h(i-1)
   end do
 
   do i = 1,4
@@ -135,7 +131,7 @@ subroutine edge_slopes_implicit_h3( grid, work, u, edge_slopes )
       Asys(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / j
     end do
     
-    Bsys(i) = u(i) * ( grid%h(i) )
+    Bsys(i) = u(i) * ( h(i) )
     
   end do    
 
@@ -152,7 +148,7 @@ subroutine edge_slopes_implicit_h3( grid, work, u, edge_slopes )
   ! Boundary conditions: right boundary
   x(1) = 0.0
   do i = 2,5
-    x(i) = x(i-1) + grid%h(N-5+i)
+    x(i) = x(i-1) + h(N-5+i)
   end do
 
   do i = 1,4
@@ -161,7 +157,7 @@ subroutine edge_slopes_implicit_h3( grid, work, u, edge_slopes )
       Asys(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / j
     end do
     
-    Bsys(i) = u(N-4+i) * ( grid%h(N-4+i) )
+    Bsys(i) = u(N-4+i) * ( h(N-4+i) )
     
   end do    
 
@@ -191,7 +187,7 @@ end subroutine edge_slopes_implicit_h3
 !------------------------------------------------------------------------------
 ! Compute ih5 edge values (implicit fifth order accurate)
 !------------------------------------------------------------------------------
-subroutine edge_slopes_implicit_h5( grid, work, u, edge_slopes )
+subroutine edge_slopes_implicit_h5( N, h, u, work, edge_slopes )
 ! -----------------------------------------------------------------------------
 ! Fifth-order implicit estimates of edge values are based on a four-cell, 
 ! three-edge stencil. A tridiagonal system is set up and is based on 
@@ -226,14 +222,14 @@ subroutine edge_slopes_implicit_h5( grid, work, u, edge_slopes )
 ! -----------------------------------------------------------------------------
 
   ! Arguments
-  type(grid1D_t), intent(in)            :: grid
-  type(edgeSlopeArrays), intent(inout)  :: work
-  real, dimension(:), intent(in)        :: u            ! cell averages
-  real, dimension(:,:), intent(inout)   :: edge_slopes
+  integer,               intent(in)    :: N ! Number of cells
+  real, dimension(:),    intent(in)    :: h ! cell averages (size N)
+  real, dimension(:),    intent(in)    :: u ! cell averages (size N)
+  type(edgeSlopeArrays), intent(inout) :: work
+  real, dimension(:,:),  intent(inout) :: edge_slopes
 
   ! Local variables
   integer               :: i, j, k              ! loop indexes
-  integer               :: N                    ! number of cells
   real                  :: h0, h1, h2, h3       ! cell widths
   real                  :: g, g_2, g_3          ! the following are 
   real                  :: g_4, g_5, g_6        ! auxiliary variables
@@ -256,17 +252,14 @@ subroutine edge_slopes_implicit_h5( grid, work, u, edge_slopes )
   real, dimension(5)    :: Dsys                 ! derivative        
 
 
-  ! Get number of cells (there are N+1 edge values to estimate)
-  N = grid%nb_cells
-
   ! Loop on cells (except last one)
   do k = 2,N-2
 
     ! Cell widths
-    h0 = grid%h(k-1)
-    h1 = grid%h(k+0)
-    h2 = grid%h(k+1)
-    h3 = grid%h(k+2)
+    h0 = h(k-1)
+    h1 = h(k+0)
+    h2 = h(k+1)
+    h3 = h(k+2)
     
     ! Auxiliary calculations
     h1_2 = h1 * h1
@@ -371,10 +364,10 @@ subroutine edge_slopes_implicit_h5( grid, work, u, edge_slopes )
   ! Use a right-biased stencil for the second row
   
   ! Cell widths
-  h0 = grid%h(1)
-  h1 = grid%h(2)
-  h2 = grid%h(3)
-  h3 = grid%h(4)
+  h0 = h(1)
+  h1 = h(2)
+  h2 = h(3)
+  h3 = h(4)
     
   ! Auxiliary calculations
   h1_2 = h1 * h1
@@ -482,7 +475,7 @@ subroutine edge_slopes_implicit_h5( grid, work, u, edge_slopes )
   ! Boundary conditions: left boundary
   x(1) = 0.0
   do i = 2,7
-    x(i) = x(i-1) + grid%h(i-1)
+    x(i) = x(i-1) + h(i-1)
   end do
 
   do i = 1,6
@@ -491,7 +484,7 @@ subroutine edge_slopes_implicit_h5( grid, work, u, edge_slopes )
       Asys(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / j
     end do
     
-    Bsys(i) = u(i) * grid%h(i)
+    Bsys(i) = u(i) * h(i)
     
   end do    
 
@@ -511,10 +504,10 @@ subroutine edge_slopes_implicit_h5( grid, work, u, edge_slopes )
   ! Use a left-biased stencil for the second to last row
   
   ! Cell widths
-  h0 = grid%h(N-3)
-  h1 = grid%h(N-2)
-  h2 = grid%h(N-1)
-  h3 = grid%h(N)
+  h0 = h(N-3)
+  h1 = h(N-2)
+  h2 = h(N-1)
+  h3 = h(N)
     
   ! Auxiliary calculations
   h1_2 = h1 * h1
@@ -622,7 +615,7 @@ subroutine edge_slopes_implicit_h5( grid, work, u, edge_slopes )
   ! Boundary conditions: right boundary
   x(1) = 0.0
   do i = 2,7
-    x(i) = x(i-1) + grid%h(N-7+i)
+    x(i) = x(i-1) + h(N-7+i)
   end do
 
   do i = 1,6
@@ -631,7 +624,7 @@ subroutine edge_slopes_implicit_h5( grid, work, u, edge_slopes )
       Asys(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / j
     end do
     
-    Bsys(i) = u(N-6+i) * grid%h(N-6+i)
+    Bsys(i) = u(N-6+i) * h(N-6+i)
     
   end do    
 

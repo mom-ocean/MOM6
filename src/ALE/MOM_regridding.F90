@@ -1019,7 +1019,7 @@ subroutine regridding_iteration( densities, target_values, CS, &
       if ( grid0%nb_cells .ge. 4 ) then
         degree = DEGREE_3
         call edge_values_implicit_h4( n0, grid0%h, densities, CS%edgeValueWrk, ppoly0%E )
-        call edge_slopes_implicit_h3( grid0, CS%edgeSlopeWrk, densities, ppoly0%S )
+        call edge_slopes_implicit_h3( n0, grid0%h, densities, CS%edgeSlopeWrk, ppoly0%S )
         call P3m_interpolation( grid0, densities, ppoly0 )
         if ( CS%boundary_extrapolation) then
           call P3M_boundary_extrapolation( grid0, densities, ppoly0 )
@@ -1037,7 +1037,7 @@ subroutine regridding_iteration( densities, target_values, CS, &
       if ( grid0%nb_cells .ge. 6 ) then
         degree = DEGREE_3
         call edge_values_implicit_h6( n0, grid0%h, densities, CS%edgeValueWrk, ppoly0%E )
-        call edge_slopes_implicit_h5( grid0, CS%edgeSlopeWrk, densities, ppoly0%S )
+        call edge_slopes_implicit_h5( n0, grid0%h, densities, CS%edgeSlopeWrk, ppoly0%S )
         call P3m_interpolation( grid0, densities, ppoly0 )
         if ( CS%boundary_extrapolation) then
           call P3M_boundary_extrapolation( grid0, densities, ppoly0 )
@@ -1056,7 +1056,7 @@ subroutine regridding_iteration( densities, target_values, CS, &
       if ( grid0%nb_cells .ge. 4 ) then
         degree = DEGREE_4
         call edge_values_implicit_h4( n0, grid0%h, densities, CS%edgeValueWrk, ppoly0%E )
-        call edge_slopes_implicit_h3( grid0, CS%edgeSlopeWrk, densities, ppoly0%S )
+        call edge_slopes_implicit_h3( n0, grid0%h, densities, CS%edgeSlopeWrk, ppoly0%S )
         call PQM_reconstruction( grid0, densities, ppoly0 )
         if ( CS%boundary_extrapolation) then
           call PQM_boundary_extrapolation_v1( grid0, densities, ppoly0 )
@@ -1074,7 +1074,7 @@ subroutine regridding_iteration( densities, target_values, CS, &
       if ( grid0%nb_cells .ge. 6 ) then
         degree = DEGREE_4
         call edge_values_implicit_h6( n0, grid0%h, densities, CS%edgeValueWrk, ppoly0%E )
-        call edge_slopes_implicit_h5( grid0, CS%edgeSlopeWrk, densities, ppoly0%S )
+        call edge_slopes_implicit_h5( n0, grid0%h, densities, CS%edgeSlopeWrk, ppoly0%S )
         call PQM_reconstruction( grid0, densities, ppoly0 )
         if ( CS%boundary_extrapolation) then
           call PQM_boundary_extrapolation_v1( grid0, densities, ppoly0 )
