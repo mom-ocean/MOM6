@@ -410,7 +410,8 @@ type, public :: MOM_control_struct
     h, &      ! Layer thickness, in m or kg m-2 (H).
     T, &      ! Potential temperature in C.
     S, &      ! Salinity in PSU.
-    h_aux, &  ! Work array for remapping (same units as h).
+    h_aux     ! Work array for remapping (same units as h).
+  real ALLOCABLE_, dimension(NIMEM_,NJMEM_,NK_INTERFACE_) :: &
     dzRegrid  ! Work array for remapping (same units as h).
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: &
     u, &      ! Zonal velocity, in m s-1.
