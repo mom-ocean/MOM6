@@ -567,10 +567,11 @@ subroutine remapping_core( CS, grid0, u0, grid1, u1 )
   real, dimension(:), intent(inout)   :: u1
 
   ! Local variables
-  integer :: n0, n1
+  integer :: n0, n1, iMethod
 
   n0 = grid0%nb_cells
   n1 = grid1%nb_cells
+  iMethod = -999
   
   ! Reset polynomial
   CS%ppoly_r%E(:,:) = 0.0
@@ -580,35 +581,27 @@ subroutine remapping_core( CS, grid0, u0, grid1, u1 )
   select case ( CS%remapping_scheme )
     case ( REMAPPING_PCM )
       call PCM_reconstruction( grid0, u0, CS%ppoly_r )
-      call remapping_integration( n0, grid0%h, grid0%x, u0, CS%ppoly_r, &
-                                  n1, grid1%h, grid1%x, u1, &
-                                  INTEGRATION_PCM )
+      iMethod = INTEGRATION_PCM
     case ( REMAPPING_PLM )
       call PLM_reconstruction( grid0, u0, CS%ppoly_r )
       if ( CS%boundary_extrapolation) then
         call PLM_boundary_extrapolation( grid0, u0, CS%ppoly_r )
       end if    
-      call remapping_integration( n0, grid0%h, grid0%x, u0, CS%ppoly_r, &
-                                  n1, grid1%h, grid1%x, u1, &
-                                  INTEGRATION_PLM )
+      iMethod = INTEGRATION_PLM
     case ( REMAPPING_PPM_H4 )
       call edge_values_explicit_h4( grid0, u0, CS%ppoly_r%E )
       call PPM_reconstruction( grid0, u0, CS%ppoly_r )
       if ( CS%boundary_extrapolation) then
         call PPM_boundary_extrapolation( grid0, u0, CS%ppoly_r )
-      end if    
-      call remapping_integration( n0, grid0%h, grid0%x, u0, CS%ppoly_r, &
-                                  n1, grid1%h, grid1%x, u1, &
-                                  INTEGRATION_PPM )
+      end if
+      iMethod = INTEGRATION_PPM
     case ( REMAPPING_PPM_IH4 )
       call edge_values_implicit_h4( grid0, CS%edgeValueWrk, u0, CS%ppoly_r%E )
       call PPM_reconstruction( grid0, u0, CS%ppoly_r )
       if ( CS%boundary_extrapolation) then
         call PPM_boundary_extrapolation( grid0, u0, CS%ppoly_r )
       end if    
-      call remapping_integration( n0, grid0%h, grid0%x, u0, CS%ppoly_r, &
-                                  n1, grid1%h, grid1%x, u1, &
-                                  INTEGRATION_PPM )
+      iMethod = INTEGRATION_PPM
     case ( REMAPPING_PQM_IH4IH3 )
       call edge_values_implicit_h4( grid0, CS%edgeValueWrk, u0, CS%ppoly_r%E )
       call edge_slopes_implicit_h3( grid0, CS%edgeSlopeWrk, u0, CS%ppoly_r%S )
@@ -616,9 +609,7 @@ subroutine remapping_core( CS, grid0, u0, grid1, u1 )
       if ( CS%boundary_extrapolation) then
         call PQM_boundary_extrapolation_v1( grid0, u0, CS%ppoly_r )
       end if    
-      call remapping_integration( n0, grid0%h, grid0%x, u0, CS%ppoly_r, &
-                                  n1, grid1%h, grid1%x, u1, &
-                                  INTEGRATION_PQM )
+      iMethod = INTEGRATION_PQM
     case ( REMAPPING_PQM_IH6IH5 )
       call edge_values_implicit_h6( grid0, CS%edgeValueWrk, u0, CS%ppoly_r%E )
       call edge_slopes_implicit_h5( grid0, CS%edgeSlopeWrk, u0, CS%ppoly_r%S )
@@ -626,12 +617,15 @@ subroutine remapping_core( CS, grid0, u0, grid1, u1 )
       if ( CS%boundary_extrapolation) then
         call PQM_boundary_extrapolation_v1( grid0, u0, CS%ppoly_r )
       end if    
-      call remapping_integration( n0, grid0%h, grid0%x, u0, CS%ppoly_r, &
-                                  n1, grid1%h, grid1%x, u1, &
-                                  INTEGRATION_PQM )
+      iMethod = INTEGRATION_PQM
     case default
       call MOM_error( FATAL, 'The selected remapping method is invalid' )
   end select
+
+  call remapByProjection( n0, grid0%h, u0, CS%ppoly_r, &
+                          n1, grid1%h, grid1%x, u1, iMethod )
+! call remapByDeltaZ( n0, grid0%h, u0, CS%ppoly_r, &
+!                     n1, dx1, iMethod, u1, h1 )
 
 #ifdef __DO_SAFTEY_CHECKS__
     call checkGridConservation(grid0%nb_cells, grid0%h, grid0%x, u0, &
@@ -642,13 +636,12 @@ end subroutine remapping_core
 
 
 ! -----------------------------------------------------------------------------
-! remapping_integration (integration of reconstructed profile)
+! remapByProjection (integration of reconstructed profile)
 ! -----------------------------------------------------------------------------
-subroutine remapping_integration( n0, h0, x0, u0, ppoly0, n1, h1, x1, u1, method )
+subroutine remapByProjection( n0, h0, u0, ppoly0, n1, h1, x1, u1, method )
   ! Arguments
   integer,       intent(in)    :: n0       ! number of cells in source grid
   real,          intent(in)    :: h0(n0)   ! source grid widths
-  real,          intent(in)    :: x0(n0+1) ! source grid edge positions
   real,          intent(in)    :: u0(n0)   ! source cell averages
   type(ppoly_t), intent(in)    :: ppoly0   ! source piecewise polynomial
   integer,       intent(in)    :: n1       ! number of cells in target grid
@@ -664,10 +657,11 @@ subroutine remapping_integration( n0, h0, x0, u0, ppoly0, n1, h1, x1, u1, method
   ! Loop on cells in target grid (grid1). For each target cell, we need to find
   ! in which source cells the target cell edges lie. The associated indexes are 
   ! noted j0 and j1.
+  xR = 0. ! Left boundary is at x=0
   do iTarget = 1,n1
     ! Determine the coordinates of the target cell edges
-    xL = x1(iTarget)
-    xR = x1(iTarget+1)
+    xL = xR
+    xR = xL + h1(iTarget)
 
 !   if (x1<=(1.+epsilon(x1))*x0(n0+1)) then
 !     if (x1>x0(n0+1)) then   ! HACK ALERT !!!!!! -----AJA
@@ -675,12 +669,12 @@ subroutine remapping_integration( n0, h0, x0, u0, ppoly0, n1, h1, x1, u1, method
 !     endif
 !   endif
 
-    call integrateReconOnCell( n0, h0, u0, ppoly0, method, &
-                               xL, xR, h1(iTarget), u1(iTarget) )
+    call integrateReconOnInterval( n0, h0, u0, ppoly0, method, &
+                                   xL, xR, h1(iTarget), u1(iTarget) )
     
   end do ! end iTarget loop on target grid cells
 
-end subroutine remapping_integration
+end subroutine remapByProjection
 
 
 ! -----------------------------------------------------------------------------
@@ -695,15 +689,15 @@ subroutine remapByDeltaZ( n0, h0, u0, ppoly0, n1, dx1, method, u1, h1 )
 !  F(k) = dx1(k) qAverage
 ! and where qAverage is the average qOld in the region zOld(k) to zNew(k).
   ! Arguments
-  integer,       intent(in)    :: n0        ! number of cells in source grid
-  real,          intent(in)    :: h0(n0)    ! source grid widths
-  real,          intent(in)    :: u0(n0)    ! source cell averages
-  type(ppoly_t), intent(in)    :: ppoly0    ! source piecewise polynomial
-  integer,       intent(in)    :: n1        ! number of cells in target grid
-  real,          intent(in)    :: dx1(n1+1) ! target grid edge positions
-  integer                      :: method    ! remapping scheme to use
-  real,          intent(inout) :: u1(n1)    ! target cell averages
-  real,          intent(inout) :: h1(n1)    ! target grid widths
+  integer,       intent(in)  :: n0        ! number of cells in source grid
+  real,          intent(in)  :: h0(n0)    ! source grid widths
+  real,          intent(in)  :: u0(n0)    ! source cell averages
+  type(ppoly_t), intent(in)  :: ppoly0    ! source piecewise polynomial
+  integer,       intent(in)  :: n1        ! number of cells in target grid
+  real,          intent(in)  :: dx1(n1+1) ! target grid edge positions
+  integer                    :: method    ! remapping scheme to use
+  real,          intent(out) :: u1(n1)    ! target cell averages
+  real,          intent(out) :: h1(n1)    ! target grid widths
   
   ! Local variables
   integer :: iTarget
@@ -761,8 +755,8 @@ subroutine remapByDeltaZ( n0, h0, u0, ppoly0, n1, dx1, method, u1, h1 )
 
     ! hFlux is the positive width of the remapped volume
     hFlux = abs(dx1(iTarget+1))
-    call integrateReconOnCell( n0, h0, u0, ppoly0, method, &
-                               xL, xR, hFlux, uAve )
+    call integrateReconOnInterval( n0, h0, u0, ppoly0, method, &
+                                   xL, xR, hFlux, uAve )
     ! uAve is the average value of u, indendent of sign of dx1
     fluxR = dx1(iTarget+1)*uAve ! Includes sign of dx1
 
@@ -795,8 +789,8 @@ end subroutine remapByDeltaZ
 ! -----------------------------------------------------------------------------
 ! integrate the reconstructed profile over a single cell
 ! -----------------------------------------------------------------------------
-subroutine integrateReconOnCell( n0, h0, u0, ppoly0, method, &
-                                 xL, xR, hC, uAve )
+subroutine integrateReconOnInterval( n0, h0, u0, ppoly0, method, &
+                                     xL, xR, hC, uAve )
   ! Arguments
   integer,            intent(in)    :: n0       ! number of cells in source grid
   real,               intent(in)    :: h0(:)    ! source grid sizes (size n0)
@@ -828,16 +822,16 @@ subroutine integrateReconOnCell( n0, h0, u0, ppoly0, method, &
     h0Total = h0Total + h0(k)
   enddo
 ! if (xL < 0.) call MOM_error(FATAL, &
-!         'MOM_remapping, integrateReconOnCell: '//&
+!         'MOM_remapping, integrateReconOnInterval: '//&
 !         'The target cell starts beyond the left edge of the source grid')
 ! if (xR < 0.) call MOM_error(FATAL, &
-!         'MOM_remapping, integrateReconOnCell: '//&
+!         'MOM_remapping, integrateReconOnInterval: '//&
 !         'The target cell ends beyond the left edge of the source grid')
 ! if (xL > h0Total) call MOM_error(FATAL, &
-!         'MOM_remapping, integrateReconOnCell: '//&
+!         'MOM_remapping, integrateReconOnInterval: '//&
 !         'The target cell starts beyond the right edge of the source grid')
 ! if (xR > h0Total) call MOM_error(FATAL, &
-!         'MOM_remapping, integrateReconOnCell: '//&
+!         'MOM_remapping, integrateReconOnInterval: '//&
 !         'The target cell ends beyond the right edge of the source grid')
 #endif
 
@@ -859,7 +853,7 @@ subroutine integrateReconOnCell( n0, h0, u0, ppoly0, method, &
   ! the source and target grids do not cover the same physical domain
   ! and there is something very wrong !
   if ( jL == -1 ) call MOM_error(FATAL, &
-          'MOM_remapping, integrateReconOnCell: '//&
+          'MOM_remapping, integrateReconOnInterval: '//&
           'The location of the left-most cell could not be found')
 
 
@@ -919,7 +913,7 @@ subroutine integrateReconOnCell( n0, h0, u0, ppoly0, method, &
 
 #ifdef __DO_SAFTEY_CHECKS__
     if ( jR == -1 ) call MOM_error(FATAL, &
-          'MOM_remapping, integrateReconOnCell: '//&
+          'MOM_remapping, integrateReconOnInterval: '//&
           'The location of the right-most cell could not be found')
 #endif
 
@@ -1030,7 +1024,7 @@ subroutine integrateReconOnCell( n0, h0, u0, ppoly0, method, &
   
   end if ! end if clause to check if cell is vanished
     
-end subroutine integrateReconOnCell
+end subroutine integrateReconOnInterval
 
 
 !------------------------------------------------------------------------------
@@ -1206,9 +1200,9 @@ logical function remappingUnitTests()
   call PPM_reconstruction( grid0, u0, ppoly0 )
   call PPM_boundary_extrapolation( grid0, u0, ppoly0 )
   u1(:) = 0.
-  call remapping_integration( n0, grid0%h, grid0%x, u0, ppoly0, &
-                              n1, grid1%h, grid1%x, u1, &
-                              INTEGRATION_PPM )
+  call remapByProjection( n0, grid0%h, u0, ppoly0, &
+                          n1, grid1%h, grid1%x, u1, &
+                          INTEGRATION_PPM )
   do i=1,n1
     err=u1(i)-8./3.*(0.5*real(1+n1)-real(i))
     if (abs(err)>2.*epsilon(err)) remappingUnitTests = .true.
