@@ -62,30 +62,35 @@ type, public :: ALE_CS
   private
   ! Generic linear piecewise polynomial used for various purposes throughout 
   ! the code (the same ppoly is used to avoid having dynamical memory allocation)
-  type(ppoly_t)                   :: ppoly_linear
+  type(ppoly_t) :: ppoly_linear
 
   ! Generic parabolic piecewise polynomial used for various purposes 
   ! throughout the code (the same ppoly is used to avoid having dynamical 
   ! memory allocation)
-  type(ppoly_t)                   :: ppoly_parab
+  type(ppoly_t) :: ppoly_parab
 
   ! Indicate whether high-order boundary extrapolation should be used within
   ! boundary cells
-  logical   :: boundary_extrapolation_for_pressure
+  logical :: boundary_extrapolation_for_pressure
 
   ! Indicates whether integrals for FV pressure gradient calculation will
   ! use reconstruction of T/S.
   ! By default, it is true if regridding has been initialized, otherwise false.
-  logical   :: reconstructForPressure = .false.
+  logical :: reconstructForPressure = .false.
 
   ! The form of the reconstruction of T/S for FV pressure gradient calculation.
   ! By default, it is =1 (PLM)
-  integer   :: pressureReconstructionScheme
+  integer :: pressureReconstructionScheme
 
   type(regridding_CS) :: regridCS ! Regridding parameters and work arrays
   type(remapping_CS) :: remapCS ! Remapping parameters and work arrays
   type(edgeValueArrays) :: edgeValueWrk ! Work space for edge values
   type(edgeSlopeArrays) :: edgeSlopeWrk ! Work space for edge slopes
+
+  ! Work space for communicating between regridding and remapping
+  real ALLOCABLE_, dimension(NIMEM_,NJMEM_,NKMEM_) :: h_aux
+  real ALLOCABLE_, dimension(NIMEM_,NJMEM_,NK_INTERFACE_) :: dzRegrid
+
 end type
 
 ! -----------------------------------------------------------------------------
@@ -122,7 +127,7 @@ contains
 !------------------------------------------------------------------------------
 ! Initialization of regridding
 !------------------------------------------------------------------------------
-subroutine initialize_ALE( param_file, G, h, h_aux, dzRegrid, &
+subroutine initialize_ALE( param_file, G, h, &
                                   u, v, tv, CS )
 !------------------------------------------------------------------------------
 ! This routine is typically called (from initialize_MOM in file MOM.F90)
@@ -135,8 +140,6 @@ subroutine initialize_ALE( param_file, G, h, h_aux, dzRegrid, &
   type(param_file_type), intent(in)                      :: param_file
   type(ocean_grid_type), intent(in)                      :: G
   real, dimension(NIMEM_,NJMEM_, NKMEM_),  intent(inout) :: h
-  real, dimension(NIMEM_,NJMEM_, NKMEM_),  intent(inout) :: h_aux
-  real, dimension(NIMEM_,NJMEM_, NK_INTERFACE_),  intent(inout) :: dzRegrid
   real, dimension(NIMEMB_,NJMEM_, NKMEM_), intent(inout) :: u
   real, dimension(NIMEM_,NJMEMB_, NKMEM_), intent(inout) :: v
   type(thermo_var_ptrs), intent(inout)                   :: tv
@@ -291,7 +294,7 @@ subroutine initialize_ALE( param_file, G, h, h_aux, dzRegrid, &
   ! step is therefore not strictly necessary but is included for historical
   ! reasons when I needed to check whether the combination 'initial 
   ! conditions - regridding/remapping' was consistently implemented.
-  call ALE_main( G, h, h_aux, dzRegrid, u, v, tv, CS )
+  call ALE_main( G, h, u, v, tv, CS )
   
 end subroutine initialize_ALE
 
@@ -319,7 +322,7 @@ end subroutine end_ALE
 !------------------------------------------------------------------------------
 ! Dispatching regridding routine: regridding & remapping
 !------------------------------------------------------------------------------
-subroutine ALE_main( G, h, h_new, dzRegrid, u, v, tv, CS )
+subroutine ALE_main( G, h, u, v, tv, CS )
 !------------------------------------------------------------------------------
 ! This routine takes care of (1) building a new grid and (2) remapping between
 ! the old grid and the new grid. The creation of the new grid can be based
@@ -332,10 +335,6 @@ subroutine ALE_main( G, h, h_new, dzRegrid, u, v, tv, CS )
   G      ! Ocean grid informations
   real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(inout)   :: &
   h      ! Current 3D grid obtained after the last time step
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(inout)   :: &
-  h_new  ! The new 3D grid obtained via regridding
-  real, dimension(NIMEM_,NJMEM_, NK_INTERFACE_), intent(inout)   :: &
-  dzRegrid ! The new 3D grid obtained via regridding
   real, dimension(NIMEMB_,NJMEM_, NKMEM_), intent(inout)  :: &
   u      ! Zonal velocity field
   real, dimension(NIMEM_,NJMEMB_, NKMEM_), intent(inout)  :: &
@@ -348,14 +347,14 @@ subroutine ALE_main( G, h, h_new, dzRegrid, u, v, tv, CS )
   
   ! Build new grid. The new grid is stored in h_new. The old grid is h.
   ! Both are needed for the subsequent remapping of variables.
-  call regridding_main( CS%remapCS, CS%regridCS, G, h, tv, dzRegrid, h_new )
+  call regridding_main( CS%remapCS, CS%regridCS, G, h, tv, CS%dzRegrid, CS%h_aux )
   
   ! Remap all variables from old grid h onto new grid h_new
-  call remapping_main( CS%remapCS, G, h, dzRegrid, h_new, tv, u, v )
+  call remapping_main( CS%remapCS, G, h, CS%dzRegrid, CS%h_aux, tv, u, v )
   
   ! Override old grid with new one. The new grid 'h_new' is built in
   ! one of the 'build_...' routines above.
-  h(:,:,:) = h_new(:,:,:)
+  h(:,:,:) = CS%h_aux(:,:,:)
 
 end subroutine ALE_main
 
@@ -527,6 +526,10 @@ subroutine ALE_memory_allocation( G, CS )
   
   ! Generic parabolic piecewise polynomial
   call ppoly_init( CS%ppoly_parab, nz, 2 )
+
+  ! Work space
+  ALLOC_(CS%h_aux(G%isd:G%ied,G%jsd:G%jed,nz)); CS%h_aux(:,:,:) = 0.
+  ALLOC_(CS%dzRegrid(G%isd:G%ied,G%jsd:G%jed,nz+1)); CS%dzRegrid(:,:,:) = 0.
   
 end subroutine ALE_memory_allocation
 
@@ -548,6 +551,10 @@ subroutine ALE_memory_deallocation( CS )
   ! Piecewise polynomials
   call ppoly_destroy( CS%ppoly_linear )
   call ppoly_destroy( CS%ppoly_parab )
+
+  ! Work space
+  DEALLOC_(CS%h_aux)
+  DEALLOC_(CS%dzRegrid)
 
 end subroutine ALE_memory_deallocation
 
