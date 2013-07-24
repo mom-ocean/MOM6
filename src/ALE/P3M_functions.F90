@@ -14,7 +14,6 @@ module P3M_functions
 ! cubic curve.
 !
 !==============================================================================
-use regrid_grid1d_class, only : grid1D_t
 use regrid_ppoly_class, only : ppoly_t
 use regrid_edge_values, only : bound_edge_values, average_discontinuous_edge_values
 
@@ -28,7 +27,7 @@ contains
 !------------------------------------------------------------------------------
 ! p3m interpolation
 ! -----------------------------------------------------------------------------
-subroutine P3M_interpolation( grid, u, ppoly )
+subroutine P3M_interpolation( N, h, u, ppoly )
 !------------------------------------------------------------------------------
 ! Cubic interpolation between edges.
 !
@@ -40,9 +39,10 @@ subroutine P3M_interpolation( grid, u, ppoly )
 !------------------------------------------------------------------------------
 
   ! Arguments
-  type(grid1D_t), intent(in)      :: grid
-  real, dimension(:), intent(in)  :: u
-  type(ppoly_t), intent(inout)    :: ppoly
+  integer,            intent(in)    :: N ! Number of cells
+  real, dimension(:), intent(in)    :: h ! cell widths (size N)
+  real, dimension(:), intent(in)    :: u ! cell averages (size N)
+  type(ppoly_t),      intent(inout) :: ppoly
 
   ! Call the limiter for p3m, which takes care of everything from
   ! computing the coefficients of the cubic to monotonizing it.
@@ -50,7 +50,7 @@ subroutine P3M_interpolation( grid, u, ppoly )
   ! 'P3M_interpolation' first but we do that to provide an homogeneous
   ! interface.
   
-  call P3M_limiter( grid, u, ppoly )
+  call P3M_limiter( N, h, u, ppoly )
     
 end subroutine P3M_interpolation
 
@@ -58,7 +58,7 @@ end subroutine P3M_interpolation
 !------------------------------------------------------------------------------
 ! p3m limiter
 ! -----------------------------------------------------------------------------
-subroutine P3M_limiter( grid, u, ppoly )
+subroutine P3M_limiter( N, h, u, ppoly )
 !------------------------------------------------------------------------------
 ! The p3m limiter operates as follows:
 !
@@ -73,13 +73,13 @@ subroutine P3M_limiter( grid, u, ppoly )
 !------------------------------------------------------------------------------
 
   ! Arguments
-  type(grid1D_t), intent(in)      :: grid
-  type(ppoly_t), intent(inout)    :: ppoly
-  real, dimension(:), intent(in)  :: u
+  integer,            intent(in)    :: N ! Number of cells
+  real, dimension(:), intent(in)    :: h ! cell widths (size N)
+  real, dimension(:), intent(in)    :: u ! cell averages (size N)
+  type(ppoly_t),      intent(inout) :: ppoly
 
   ! Local variables
   integer   :: k            ! loop index
-  integer   :: N            ! number of cells
   integer   :: monotonic    ! boolean indicating whether the cubic is monotonic
   real      :: u0_l, u0_r   ! edge values
   real      :: u1_l, u1_r   ! edge slopes
@@ -92,10 +92,8 @@ subroutine P3M_limiter( grid, u, ppoly )
 
   eps = 1e-10
   
-  N = grid%nb_cells
-
   ! 1. Bound edge values (boundary cells are assumed to be local extrema)
-  call bound_edge_values( N, grid%h, u, ppoly%E )
+  call bound_edge_values( N, h, u, ppoly%E )
 
   ! 2. Systematically average discontinuous edge values
   call average_discontinuous_edge_values( N, u, ppoly%E )
@@ -116,21 +114,21 @@ subroutine P3M_limiter( grid, u, ppoly )
     ! Get cell widths and cell averages (boundary cells are assumed to
     ! be local extrema for the sake of slopes)
     u_c = u(k)
-    h_c = grid%h(k)
+    h_c = h(k)
     
     if ( k .EQ. 1 ) then
-      h_l = grid%h(k)
+      h_l = h(k)
       u_l = u(k)
     else
-      h_l = grid%h(k-1)
+      h_l = h(k-1)
       u_l = u(k-1)
     end if  
     
     if ( k .EQ. N ) then
-      h_r = grid%h(k)
+      h_r = h(k)
       u_r = u(k)
     else
-      h_r = grid%h(k+1)
+      h_r = h(k+1)
       u_r = u(k+1)
     end if  
 
@@ -167,7 +165,7 @@ subroutine P3M_limiter( grid, u, ppoly )
     end if
 
     ! Build cubic interpolant (compute the coefficients)
-    call build_cubic_interpolant( grid, k, ppoly )
+    call build_cubic_interpolant( N, h, k, ppoly )
 
     ! Check whether cubic is monotonic
     monotonic = is_cubic_monotonic( ppoly, k )
@@ -184,7 +182,7 @@ subroutine P3M_limiter( grid, u, ppoly )
     ppoly%S(k,2) = u1_r
 
     ! Recompute coefficients of cubic
-    call build_cubic_interpolant( grid, k, ppoly )
+    call build_cubic_interpolant( N, h, k, ppoly )
 
   end do ! loop on cells
   
@@ -194,7 +192,7 @@ end subroutine P3M_limiter
 !------------------------------------------------------------------------------
 ! p3m boundary extrapolation
 ! -----------------------------------------------------------------------------
-subroutine P3M_boundary_extrapolation( grid, u, ppoly )
+subroutine P3M_boundary_extrapolation( N, h, u, ppoly )
 !------------------------------------------------------------------------------
 ! The following explanations apply to the left boundary cell. The same 
 ! reasoning holds for the right boundary cell.
@@ -209,13 +207,13 @@ subroutine P3M_boundary_extrapolation( grid, u, ppoly )
 !------------------------------------------------------------------------------
 
   ! Arguments
-  type(grid1D_t), intent(in)      :: grid
-  real, dimension(:), intent(in)  :: u
-  type(ppoly_t), intent(inout)    :: ppoly
+  integer,            intent(in)    :: N ! Number of cells
+  real, dimension(:), intent(in)    :: h ! cell widths (size N)
+  real, dimension(:), intent(in)    :: u ! cell averages (size N)
+  type(ppoly_t),      intent(inout) :: ppoly
 
   ! Local variables
   integer       :: k        ! loop index
-  integer       :: N        ! number of cells
   integer       :: i0, i1
   integer       :: monotonic
   real          :: u0, u1
@@ -227,13 +225,12 @@ subroutine P3M_boundary_extrapolation( grid, u, ppoly )
   real          :: slope
 
   eps = 1e-10
-  N = grid%nb_cells
   
   ! ----- Left boundary -----
   i0 = 1
   i1 = 2
-  h0 = grid%h(i0) + eps
-  h1 = grid%h(i1) + eps
+  h0 = h(i0) + eps
+  h1 = h(i1) + eps
   u0 = u(i0)
   u1 = u(i1)
 
@@ -274,7 +271,7 @@ subroutine P3M_boundary_extrapolation( grid, u, ppoly )
   ppoly%S(i0,2) = u1_r
 
   ! Store edge values and slope, build cubic and check monotonicity
-  call build_cubic_interpolant( grid, i0, ppoly )
+  call build_cubic_interpolant( N, h, i0, ppoly )
   monotonic = is_cubic_monotonic( ppoly, i0 )
     
   if ( monotonic .EQ. 0 ) then
@@ -283,15 +280,15 @@ subroutine P3M_boundary_extrapolation( grid, u, ppoly )
     ! Rebuild cubic after monotonization
     ppoly%S(i0,1) = u1_l
     ppoly%S(i0,2) = u1_r
-    call build_cubic_interpolant( grid, i0, ppoly )
+    call build_cubic_interpolant( N, h, i0, ppoly )
     
   end if
   
   ! ----- Right boundary -----
   i0 = N-1
   i1 = N
-  h0 = grid%h(i0) + eps
-  h1 = grid%h(i1) + eps
+  h0 = h(i0) + eps
+  h1 = h(i1) + eps
   u0 = u(i0)
   u1 = u(i1)
 
@@ -333,7 +330,7 @@ subroutine P3M_boundary_extrapolation( grid, u, ppoly )
   ppoly%S(i1,1) = u1_l
   ppoly%S(i1,2) = u1_r
   
-  call build_cubic_interpolant( grid, i1, ppoly )
+  call build_cubic_interpolant( N, h, i1, ppoly )
   monotonic = is_cubic_monotonic( ppoly, i1 )
     
   if ( monotonic .EQ. 0 ) then
@@ -342,7 +339,7 @@ subroutine P3M_boundary_extrapolation( grid, u, ppoly )
     ! Rebuild cubic after monotonization
     ppoly%S(i1,1) = u1_l
     ppoly%S(i1,2) = u1_r
-    call build_cubic_interpolant( grid, i1, ppoly )
+    call build_cubic_interpolant( N, h, i1, ppoly )
     
   end if
 
@@ -352,7 +349,7 @@ end subroutine P3M_boundary_extrapolation
 !------------------------------------------------------------------------------
 ! Build cubic interpolant in cell k
 ! -----------------------------------------------------------------------------
-subroutine build_cubic_interpolant( grid, k, ppoly )
+subroutine build_cubic_interpolant( N, h, k, ppoly )
 !------------------------------------------------------------------------------
 ! Given edge values and edge slopes, compute coefficients of cubic in cell k.
 !
@@ -361,23 +358,24 @@ subroutine build_cubic_interpolant( grid, k, ppoly )
 !------------------------------------------------------------------------------
 
   ! Arguments
-  type(grid1D_t), intent(in)      :: grid
-  integer                         :: k
-  type(ppoly_t), intent(inout)    :: ppoly
+  integer,            intent(in)    :: N ! Number of cells
+  real, dimension(:), intent(in)    :: h ! cell widths (size N)
+  integer,            intent(in)    :: k
+  type(ppoly_t),      intent(inout) :: ppoly
 
   ! Local variables
   real          :: u0_l, u0_r       ! edge values
   real          :: u1_l, u1_r       ! edge slopes
-  real          :: h                ! cell width
+  real          :: h_c              ! cell width
   real          :: a0, a1, a2, a3   ! cubic coefficients
 
-  h = grid%h(k)
+  h_c = h(k)
   
   u0_l = ppoly%E(k,1)
   u0_r = ppoly%E(k,2)
   
-  u1_l = ppoly%S(k,1) * h
-  u1_r = ppoly%S(k,2) * h
+  u1_l = ppoly%S(k,1) * h_c
+  u1_r = ppoly%S(k,2) * h_c
 
   a0 = u0_l
   a1 = u1_l
