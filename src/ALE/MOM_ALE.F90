@@ -480,9 +480,9 @@ subroutine pressure_gradient_ppm( CS, S_t, S_b, T_t, T_b, G, tv, h )
       CS%ppoly_parab%E = 0.0
       CS%ppoly_parab%coefficients = 0.0
       call edge_values_implicit_h4( G%ke, CS%grid_generic%h, tv%S(i,j,:), CS%edgeValueWrk, CS%ppoly_parab%E )
-      call PPM_reconstruction( CS%grid_generic, tv%S(i,j,:), CS%ppoly_parab )
+      call PPM_reconstruction( G%ke, CS%grid_generic%h, tv%S(i,j,:), CS%ppoly_parab )
       if (CS%boundary_extrapolation_for_pressure) call &
-        PPM_boundary_extrapolation( CS%grid_generic, tv%S(i,j,:), CS%ppoly_parab )
+        PPM_boundary_extrapolation( G%ke, CS%grid_generic%h, tv%S(i,j,:), CS%ppoly_parab )
       
       do k = 1,G%ke
         S_t(i,j,k) = CS%ppoly_parab%E(k,1)
@@ -493,9 +493,9 @@ subroutine pressure_gradient_ppm( CS, S_t, S_b, T_t, T_b, G, tv, h )
       CS%ppoly_parab%E = 0.0
       CS%ppoly_parab%coefficients = 0.0
       call edge_values_implicit_h4( G%ke, CS%grid_generic%h, tv%T(i,j,:), CS%edgeValueWrk, CS%ppoly_parab%E )
-      call PPM_reconstruction( CS%grid_generic, tv%T(i,j,:), CS%ppoly_parab )
+      call PPM_reconstruction( G%ke, CS%grid_generic%h, tv%T(i,j,:), CS%ppoly_parab )
       if (CS%boundary_extrapolation_for_pressure) call &
-        PPM_boundary_extrapolation( CS%grid_generic, tv%T(i,j,:), CS%ppoly_parab )
+        PPM_boundary_extrapolation( G%ke, CS%grid_generic%h, tv%T(i,j,:), CS%ppoly_parab )
       
       do k = 1,G%ke
         T_t(i,j,k) = CS%ppoly_parab%E(k,1)

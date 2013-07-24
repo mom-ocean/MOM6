@@ -560,16 +560,16 @@ subroutine remapping_core( CS, grid0, u0, grid1, u1 )
       iMethod = INTEGRATION_PLM
     case ( REMAPPING_PPM_H4 )
       call edge_values_explicit_h4( n0, grid0%h, u0, CS%ppoly_r%E )
-      call PPM_reconstruction( grid0, u0, CS%ppoly_r )
+      call PPM_reconstruction( n0, grid0%h, u0, CS%ppoly_r )
       if ( CS%boundary_extrapolation) then
-        call PPM_boundary_extrapolation( grid0, u0, CS%ppoly_r )
+        call PPM_boundary_extrapolation( n0, grid0%h, u0, CS%ppoly_r )
       end if
       iMethod = INTEGRATION_PPM
     case ( REMAPPING_PPM_IH4 )
       call edge_values_implicit_h4( n0, grid0%h, u0, CS%edgeValueWrk, CS%ppoly_r%E )
-      call PPM_reconstruction( grid0, u0, CS%ppoly_r )
+      call PPM_reconstruction( n0, grid0%h, u0, CS%ppoly_r )
       if ( CS%boundary_extrapolation) then
-        call PPM_boundary_extrapolation( grid0, u0, CS%ppoly_r )
+        call PPM_boundary_extrapolation( n0, grid0%h, u0, CS%ppoly_r )
       end if    
       iMethod = INTEGRATION_PPM
     case ( REMAPPING_PQM_IH4IH3 )
@@ -1157,8 +1157,8 @@ logical function remappingUnitTests()
   ppoly0%coefficients(:,:) = 0.0
 
   call edge_values_explicit_h4( n0, grid0%h, u0, ppoly0%E )
-  call PPM_reconstruction( grid0, u0, ppoly0 )
-  call PPM_boundary_extrapolation( grid0, u0, ppoly0 )
+  call PPM_reconstruction( n0, grid0%h, u0, ppoly0 )
+  call PPM_boundary_extrapolation( n0, grid0%h, u0, ppoly0 )
   u1(:) = 0.
   call remapByProjection( n0, grid0%h, u0, ppoly0, &
                           n1, grid1%h, INTEGRATION_PPM, u1 )

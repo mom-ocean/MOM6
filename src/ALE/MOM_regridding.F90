@@ -983,9 +983,9 @@ subroutine regridding_iteration( densities, target_values, CS, &
       if ( grid0%nb_cells .ge. 4 ) then
         degree = DEGREE_2
         call edge_values_explicit_h4( n0, grid0%h, densities, ppoly0%E )
-        call PPM_reconstruction( grid0, densities, ppoly0 )
+        call PPM_reconstruction( n0, grid0%h, densities, ppoly0 )
         if ( CS%boundary_extrapolation) then
-          call PPM_boundary_extrapolation( grid0, densities, ppoly0 )
+          call PPM_boundary_extrapolation( n0, grid0%h, densities, ppoly0 )
         end if  
       else
         degree = DEGREE_1
@@ -1001,9 +1001,9 @@ subroutine regridding_iteration( densities, target_values, CS, &
       if ( grid0%nb_cells .ge. 4 ) then
         degree = DEGREE_2
         call edge_values_implicit_h4( n0, grid0%h, densities, CS%edgeValueWrk, ppoly0%E )
-        call PPM_reconstruction( grid0, densities, ppoly0 )
+        call PPM_reconstruction( n0, grid0%h, densities, ppoly0 )
         if ( CS%boundary_extrapolation) then
-          call PPM_boundary_extrapolation( grid0, densities, ppoly0 )
+          call PPM_boundary_extrapolation( n0, grid0%h, densities, ppoly0 )
         end if  
       else
         degree = DEGREE_1
