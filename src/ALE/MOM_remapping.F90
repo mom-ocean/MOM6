@@ -550,7 +550,7 @@ subroutine remapping_core( CS, grid0, u0, grid1, u1 )
 
   select case ( CS%remapping_scheme )
     case ( REMAPPING_PCM )
-      call PCM_reconstruction( grid0, u0, CS%ppoly_r )
+      call PCM_reconstruction( n0, u0, CS%ppoly_r )
       iMethod = INTEGRATION_PCM
     case ( REMAPPING_PLM )
       call PLM_reconstruction( n0, grid0%h, u0, CS%ppoly_r )
