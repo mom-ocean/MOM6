@@ -12,7 +12,6 @@ module MOM_remapping
 use MOM_error_handler, only : MOM_error, FATAL
 use MOM_string_functions, only : uppercase
 use MOM_variables,     only : ocean_grid_type, thermo_var_ptrs
-use regrid_grid1d_class, only : grid1D_t, grid1Dconstruct, grid1Ddestroy
 use regrid_ppoly_class, only : ppoly_t, ppoly_init, ppoly_destroy
 use polynomial_functions, only : evaluation_polynomial, integration_polynomial
 use regrid_edge_values, only : edgeValueArrays
@@ -37,8 +36,6 @@ implicit none ; private
 type, public :: remapping_CS
   private
   ! Work arrays
-  type(grid1D_t)                  :: grid_start ! starting grid
-  type(grid1D_t)                  :: grid_final ! final grid
   type(ppoly_t)                   :: ppoly_r    ! reconstruction ppoly
   real, dimension(:), allocatable :: u_column   ! generic variable
   type(edgeValueArrays)           :: edgeValueWrk ! Work space for edge values
@@ -121,33 +118,30 @@ subroutine remapping_main( CS, G, h, dzInterface, h_new, tv, u, v )
   integer               :: nz
   real                  :: val, new_val
   integer               :: problem
-  real, dimension(G%ke+1) :: grid_start_x, grid_final_x
+  real, dimension(G%ke+1) :: x1, x2
+  real, dimension(G%ke) :: h1, h2
 
   nz = G%ke
-#ifdef __DO_SAFTEY_CHECKS__
-    if (nz>CS%grid_start%nb_cells) call MOM_error(FATAL,'nz>nk_start')
-    if (nz>CS%grid_final%nb_cells) call MOM_error(FATAL,'nz>nk_final')
-#endif
 
   ! Remap tracer
   do j = G%jsc,G%jec
     do i = G%isc,G%iec
     
       ! Build the start and final grids
-      CS%grid_start%h(:) = h(i,j,:)
-      CS%grid_final%h(:) = h_new(i,j,:)
-      call buildConsistentGrids(nz, CS%grid_start%h, CS%grid_final%h, grid_start_x, grid_final_x)
+      h1(:) = h(i,j,:)
+      h2(:) = h_new(i,j,:)
+      call buildConsistentGrids(nz, h1, h2, x1, x2)
       
       do k = 1,nz
-        CS%grid_start%h(k) = grid_start_x(k+1) - grid_start_x(k)
-        CS%grid_final%h(k) = grid_final_x(k+1) - grid_final_x(k)
+        h1(k) = x1(k+1) - x1(k)
+        h2(k) = x2(k+1) - x2(k)
       end do
       
-      call remapping_core(CS, nz, CS%grid_start%h, tv%S(i,j,:), nz, CS%grid_final%h, CS%u_column)
+      call remapping_core(CS, nz, h1, tv%S(i,j,:), nz, h2, CS%u_column)
       
       tv%S(i,j,:) = CS%u_column(:)
       
-      call remapping_core(CS, nz, CS%grid_start%h, tv%T(i,j,:), nz, CS%grid_final%h, CS%u_column)
+      call remapping_core(CS, nz, h1, tv%T(i,j,:), nz, h2, CS%u_column)
      
       tv%T(i,j,:) = CS%u_column(:)
 
@@ -160,16 +154,16 @@ subroutine remapping_main( CS, G, h, dzInterface, h_new, tv, u, v )
     do i = G%iscB,G%iecB
     
       ! Build the start and final grids
-      CS%grid_start%h(:) = 0.5 * ( h(i,j,:) + h(i+1,j,:) )
-      CS%grid_final%h(:) = 0.5 * ( h_new(i,j,:) + h_new(i+1,j,:) )
-      call buildConsistentGrids(nz, CS%grid_start%h, CS%grid_final%h, grid_start_x, grid_final_x)
+      h1(:) = 0.5 * ( h(i,j,:) + h(i+1,j,:) )
+      h2(:) = 0.5 * ( h_new(i,j,:) + h_new(i+1,j,:) )
+      call buildConsistentGrids(nz, h1, h2, x1, x2)
       
       do k = 1,nz
-        CS%grid_start%h(k) = grid_start_x(k+1) - grid_start_x(k)
-        CS%grid_final%h(k) = grid_final_x(k+1) - grid_final_x(k)
+        h1(k) = x1(k+1) - x1(k)
+        h2(k) = x2(k+1) - x2(k)
       end do
   
-      call remapping_core(CS, nz, CS%grid_start%h, u(i,j,:), nz, CS%grid_final%h, CS%u_column)
+      call remapping_core(CS, nz, h1, u(i,j,:), nz, h2, CS%u_column)
      
       u(i,j,:) = CS%u_column(:)
       
@@ -183,16 +177,16 @@ subroutine remapping_main( CS, G, h, dzInterface, h_new, tv, u, v )
     do i = G%isc,G%iec
 
       ! Build the start and final grids
-      CS%grid_start%h(:) = 0.5 * ( h(i,j,:) + h(i,j+1,:) )
-      CS%grid_final%h(:) = 0.5 * ( h_new(i,j,:) + h_new(i,j+1,:) )
-      call buildConsistentGrids(nz, CS%grid_start%h, CS%grid_final%h, grid_start_x, grid_final_x)
+      h1(:) = 0.5 * ( h(i,j,:) + h(i,j+1,:) )
+      h2(:) = 0.5 * ( h_new(i,j,:) + h_new(i,j+1,:) )
+      call buildConsistentGrids(nz, h1, h2, x1, x2)
 
       do k = 1,nz
-        CS%grid_start%h(k) = grid_start_x(k+1) - grid_start_x(k)
-        CS%grid_final%h(k) = grid_final_x(k+1) - grid_final_x(k)
+        h1(k) = x1(k+1) - x1(k)
+        h2(k) = x2(k+1) - x2(k)
       end do
 
-      call remapping_core(CS, nz, CS%grid_start%h, v(i,j,:), nz, CS%grid_final%h, CS%u_column)
+      call remapping_core(CS, nz, h1, v(i,j,:), nz, h2, CS%u_column)
      
       v(i,j,:) = CS%u_column(:)
       
@@ -1072,8 +1066,6 @@ subroutine allocate_remapping( CS )
   ! Arguments
   type(remapping_CS),    intent(inout) :: CS
   
-  call grid1Dconstruct( CS%grid_start, CS%nk )
-  call grid1Dconstruct( CS%grid_final, CS%nk )
   call ppoly_init( CS%ppoly_r, CS%nk, CS%degree )
   allocate( CS%u_column(CS%nk) ); CS%u_column = 0.0
   call triDiagEdgeWorkAllocate( CS%nk, CS%edgeValueWrk )
@@ -1090,8 +1082,6 @@ subroutine end_remapping(CS)
   type(remapping_CS), intent(inout) :: CS
 
   ! Deallocate memory for grid
-  call grid1Ddestroy( CS%grid_start )
-  call grid1Ddestroy( CS%grid_final )
   call ppoly_destroy( CS%ppoly_r )
   deallocate( CS%u_column )
   call triDiagEdgeWorkDeallocate( CS%edgeValueWrk )
@@ -1111,7 +1101,6 @@ logical function remappingUnitTests()
   data h1 /3*1./   ! 3 uniform layers with total depth of 3
   data h2 /6*0.5/  ! 6 uniform layers with total depth of 3
   type(remapping_CS) :: CS 
-  type(grid1D_t) :: grid0, grid1
   type(ppoly_t) :: ppoly0
   integer :: i
   real :: err
@@ -1131,12 +1120,6 @@ logical function remappingUnitTests()
   enddo
 
   call initialize_remapping(n0, 'PPM_H4', CS)
-  call grid1Dconstruct( grid0, n0 )
-  grid0%h(:) = h0(:)
-  grid0%x(:) = x0(:)
-  call grid1Dconstruct( grid1, n1 )
-  grid1%h(:) = h1(:)
-  grid1%x(:) = x1(:)
   write(*,*) 'h0 (test data)'
   call dumpGrid(n0,h0,x0,u0)
 
@@ -1153,12 +1136,12 @@ logical function remappingUnitTests()
   ppoly0%S(:,:) = 0.0
   ppoly0%coefficients(:,:) = 0.0
 
-  call edge_values_explicit_h4( n0, grid0%h, u0, ppoly0%E )
-  call PPM_reconstruction( n0, grid0%h, u0, ppoly0 )
-  call PPM_boundary_extrapolation( n0, grid0%h, u0, ppoly0 )
+  call edge_values_explicit_h4( n0, h0, u0, ppoly0%E )
+  call PPM_reconstruction( n0, h0, u0, ppoly0 )
+  call PPM_boundary_extrapolation( n0, h0, u0, ppoly0 )
   u1(:) = 0.
-  call remapByProjection( n0, grid0%h, u0, ppoly0, &
-                          n1, grid1%h, INTEGRATION_PPM, u1 )
+  call remapByProjection( n0, h0, u0, ppoly0, &
+                          n1, h1, INTEGRATION_PPM, u1 )
   do i=1,n1
     err=u1(i)-8./3.*(0.5*real(1+n1)-real(i))
     if (abs(err)>2.*epsilon(err)) remappingUnitTests = .true.
