@@ -974,9 +974,9 @@ subroutine regridding_iteration( densities, target_values, CS, &
     
     case ( INTERPOLATION_PLM )   
       degree = DEGREE_1
-      call PLM_reconstruction( grid0, densities, ppoly0 )
+      call PLM_reconstruction( n0, grid0%h, densities, ppoly0 )
       if ( CS%boundary_extrapolation) then
-        call PLM_boundary_extrapolation( grid0, densities, ppoly0 )
+        call PLM_boundary_extrapolation( n0, grid0%h, densities, ppoly0 )
       end if    
     
     case ( INTERPOLATION_PPM_H4 )

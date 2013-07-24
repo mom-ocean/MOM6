@@ -553,9 +553,9 @@ subroutine remapping_core( CS, grid0, u0, grid1, u1 )
       call PCM_reconstruction( grid0, u0, CS%ppoly_r )
       iMethod = INTEGRATION_PCM
     case ( REMAPPING_PLM )
-      call PLM_reconstruction( grid0, u0, CS%ppoly_r )
+      call PLM_reconstruction( n0, grid0%h, u0, CS%ppoly_r )
       if ( CS%boundary_extrapolation) then
-        call PLM_boundary_extrapolation( grid0, u0, CS%ppoly_r )
+        call PLM_boundary_extrapolation( n0, grid0%h, u0, CS%ppoly_r )
       end if    
       iMethod = INTEGRATION_PLM
     case ( REMAPPING_PPM_H4 )

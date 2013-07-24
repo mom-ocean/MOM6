@@ -409,9 +409,9 @@ subroutine pressure_gradient_plm( CS, S_t, S_b, T_t, T_b, G, tv, h )
       ! Reconstruct salinity profile    
       CS%ppoly_linear%E = 0.0
       CS%ppoly_linear%coefficients = 0.0
-      call PLM_reconstruction( CS%grid_generic, tv%S(i,j,:), CS%ppoly_linear )
+      call PLM_reconstruction( G%ke, CS%grid_generic%h, tv%S(i,j,:), CS%ppoly_linear )
       if (CS%boundary_extrapolation_for_pressure) call &
-        PLM_boundary_extrapolation( CS%grid_generic, tv%S(i,j,:), CS%ppoly_linear )
+        PLM_boundary_extrapolation( G%ke, CS%grid_generic%h, tv%S(i,j,:), CS%ppoly_linear )
       
       do k = 1,G%ke
         S_t(i,j,k) = CS%ppoly_linear%E(k,1)
@@ -421,9 +421,9 @@ subroutine pressure_gradient_plm( CS, S_t, S_b, T_t, T_b, G, tv, h )
       ! Reconstruct temperature profile 
       CS%ppoly_linear%E = 0.0
       CS%ppoly_linear%coefficients = 0.0
-      call PLM_reconstruction( CS%grid_generic, tv%T(i,j,:), CS%ppoly_linear )
+      call PLM_reconstruction( G%ke, CS%grid_generic%h, tv%T(i,j,:), CS%ppoly_linear )
       if (CS%boundary_extrapolation_for_pressure) call &
-        PLM_boundary_extrapolation( CS%grid_generic, tv%T(i,j,:), CS%ppoly_linear )
+        PLM_boundary_extrapolation( G%ke, CS%grid_generic%h, tv%T(i,j,:), CS%ppoly_linear )
       
       do k = 1,G%ke
         T_t(i,j,k) = CS%ppoly_linear%E(k,1)

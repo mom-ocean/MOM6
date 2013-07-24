@@ -10,7 +10,6 @@ module PLM_functions
 ! reconstruction using the piecewise linear method (PLM).
 !
 !==============================================================================
-use regrid_grid1d_class, only : grid1D_t
 use regrid_ppoly_class, only : ppoly_t
 
 implicit none ; private
@@ -22,7 +21,7 @@ contains
 !------------------------------------------------------------------------------
 ! PLM_reconstruction
 ! -----------------------------------------------------------------------------
-subroutine PLM_reconstruction( grid, u, ppoly )
+subroutine PLM_reconstruction( N, h, u, ppoly )
 !------------------------------------------------------------------------------
 ! Reconstruction by linear polynomials within each cell.
 !
@@ -35,13 +34,13 @@ subroutine PLM_reconstruction( grid, u, ppoly )
 !------------------------------------------------------------------------------
 
   ! Arguments
-  type(grid1D_t), intent(in)      :: grid
-  real, dimension(:), intent(in)  :: u
-  type(ppoly_t), intent(inout)    :: ppoly
+  integer,            intent(in)    :: N ! Number of cells
+  real, dimension(:), intent(in)    :: h ! cell widths (size N)
+  real, dimension(:), intent(in)    :: u ! cell averages (size N)
+  type(ppoly_t),      intent(inout) :: ppoly
 
   ! Local variables
   integer       :: k                    ! loop index
-  integer       :: N                    ! number of cells
   real          :: u_l, u_c, u_r        ! left, center and right cell averages
   real          :: h_l, h_c, h_r        ! left, center and right cell widths
   real          :: sigma_l, sigma_c, sigma_r    ! left, center and right 
@@ -49,8 +48,6 @@ subroutine PLM_reconstruction( grid, u, ppoly )
   real          :: slope                ! retained PLM slope
   real          :: a, b                 ! auxiliary variables
   real, dimension(:,:), allocatable :: E_old
-
-  N = grid%nb_cells
 
   ! Loop on interior cells
   do k = 2,N-1
@@ -61,9 +58,9 @@ subroutine PLM_reconstruction( grid, u, ppoly )
     u_r = u(k+1)
 
     ! Get cell widths
-    h_l = grid%h(k-1)
-    h_c = grid%h(k)
-    h_r = grid%h(k+1)
+    h_l = h(k-1)
+    h_c = h(k)
+    h_r = h(k+1)
 
     ! Compute limited slope
     sigma_l = 2.0 * ( u_c - u_l ) / h_c
@@ -165,7 +162,7 @@ end subroutine PLM_reconstruction
 !------------------------------------------------------------------------------
 ! plm boundary extrapolation
 ! -----------------------------------------------------------------------------
-subroutine PLM_boundary_extrapolation( grid, u, ppoly )
+subroutine PLM_boundary_extrapolation( N, h, u, ppoly )
 !------------------------------------------------------------------------------
 ! Reconstruction by linear polynomials within boundary cells.
 ! The left and right edge values in the left and right boundary cells,
@@ -182,25 +179,23 @@ subroutine PLM_boundary_extrapolation( grid, u, ppoly )
 !------------------------------------------------------------------------------
 
   ! Arguments
-  type(grid1D_t), intent(in)      :: grid
-  real, dimension(:), intent(in)  :: u
-  type(ppoly_t), intent(inout)    :: ppoly
+  integer,            intent(in)    :: N ! Number of cells
+  real, dimension(:), intent(in)    :: h ! cell widths (size N)
+  real, dimension(:), intent(in)    :: u ! cell averages (size N)
+  type(ppoly_t),      intent(inout) :: ppoly
 
   ! Local variables
   integer       :: k                    ! loop index
-  integer       :: N                    ! number of cells
   real          :: u0, u1               ! cell averages
   real          :: h0, h1               ! corresponding cell widths
   real          :: slope                ! retained PLM slope
   real          :: u0_l, u0_r           ! edge values
 
-  N = grid%nb_cells
-
   ! -----------------------------------------
   ! Left edge value in the left boundary cell
   ! -----------------------------------------
-  h0 = grid%h(1)
-  h1 = grid%h(2)
+  h0 = h(1)
+  h1 = h(2)
 
   u0 = u(1)
   u1 = u(2)
@@ -221,8 +216,8 @@ subroutine PLM_boundary_extrapolation( grid, u, ppoly )
   ! ------------------------------------------
   ! Right edge value in the left boundary cell
   ! ------------------------------------------
-  h0 = grid%h(N-1)
-  h1 = grid%h(N)
+  h0 = h(N-1)
+  h1 = h(N)
 
   u0 = u(N-1)
   u1 = u(N)
