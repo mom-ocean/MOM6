@@ -21,7 +21,6 @@ use MOM_io,            only : file_exists, field_exists, MOM_read_data
 use MOM_EOS,           only : calculate_density
 use MOM_string_functions, only : uppercase, extractWord
 
-use regrid_grid1d_class, only : grid1D_t, grid1Dconstruct, grid1Ddestroy
 use regrid_ppoly_class, only : ppoly_t, ppoly_init, ppoly_destroy
 use regrid_edge_values, only : edgeValueArrays
 use regrid_edge_values, only : edge_values_implicit_h4
@@ -61,10 +60,6 @@ implicit none ; private
 
 type, public :: ALE_CS
   private
-  ! Generic grid used for various purposes throughout the code (the same 
-  ! grid is used to avoid having dynamical memory allocation)
-  type(grid1D_t)                  :: grid_generic
-
   ! Generic linear piecewise polynomial used for various purposes throughout 
   ! the code (the same ppoly is used to avoid having dynamical memory allocation)
   type(ppoly_t)                   :: ppoly_linear
@@ -389,7 +384,8 @@ subroutine pressure_gradient_plm( CS, S_t, S_b, T_t, T_b, G, tv, h )
   h         ! Three-dimensional ocean grid
 
   ! Local variables
-  integer           :: i, j, k
+  integer :: i, j, k
+  real    :: hTmp(G%ke)
 
   ! NOTE: the variables 'CS%grid_generic' and 'CS%ppoly_linear' are declared at
   ! the module level. Memory is allocated once at the beginning of the run
@@ -400,18 +396,14 @@ subroutine pressure_gradient_plm( CS, S_t, S_b, T_t, T_b, G, tv, h )
     do j = G%jsc,G%jec+1
      
       ! Build current grid
-      CS%grid_generic%h(:) = h(i,j,:)
-      CS%grid_generic%x(1) = 0.0
-      do k = 1,G%ke
-        CS%grid_generic%x(k+1) = CS%grid_generic%x(k) + CS%grid_generic%h(k)
-      end do
+      hTmp(:) = h(i,j,:)
       
       ! Reconstruct salinity profile    
       CS%ppoly_linear%E = 0.0
       CS%ppoly_linear%coefficients = 0.0
-      call PLM_reconstruction( G%ke, CS%grid_generic%h, tv%S(i,j,:), CS%ppoly_linear )
+      call PLM_reconstruction( G%ke, hTmp, tv%S(i,j,:), CS%ppoly_linear )
       if (CS%boundary_extrapolation_for_pressure) call &
-        PLM_boundary_extrapolation( G%ke, CS%grid_generic%h, tv%S(i,j,:), CS%ppoly_linear )
+        PLM_boundary_extrapolation( G%ke, hTmp, tv%S(i,j,:), CS%ppoly_linear )
       
       do k = 1,G%ke
         S_t(i,j,k) = CS%ppoly_linear%E(k,1)
@@ -421,9 +413,9 @@ subroutine pressure_gradient_plm( CS, S_t, S_b, T_t, T_b, G, tv, h )
       ! Reconstruct temperature profile 
       CS%ppoly_linear%E = 0.0
       CS%ppoly_linear%coefficients = 0.0
-      call PLM_reconstruction( G%ke, CS%grid_generic%h, tv%T(i,j,:), CS%ppoly_linear )
+      call PLM_reconstruction( G%ke, hTmp, tv%T(i,j,:), CS%ppoly_linear )
       if (CS%boundary_extrapolation_for_pressure) call &
-        PLM_boundary_extrapolation( G%ke, CS%grid_generic%h, tv%T(i,j,:), CS%ppoly_linear )
+        PLM_boundary_extrapolation( G%ke, hTmp, tv%T(i,j,:), CS%ppoly_linear )
       
       do k = 1,G%ke
         T_t(i,j,k) = CS%ppoly_linear%E(k,1)
@@ -459,7 +451,8 @@ subroutine pressure_gradient_ppm( CS, S_t, S_b, T_t, T_b, G, tv, h )
   h         ! Three-dimensional ocean grid
 
   ! Local variables
-  integer           :: i, j, k
+  integer :: i, j, k
+  real    :: hTmp(G%ke)
 
   ! NOTE: the variables 'CS%grid_generic' and 'CS%ppoly_parab' are declared at
   ! the module level. Memory is allocated once at the beginning of the run
@@ -470,19 +463,15 @@ subroutine pressure_gradient_ppm( CS, S_t, S_b, T_t, T_b, G, tv, h )
     do j = G%jsc,G%jec+1
      
       ! Build current grid
-      CS%grid_generic%h(:) = h(i,j,:)
-      CS%grid_generic%x(1) = 0.0
-      do k = 1,G%ke
-        CS%grid_generic%x(k+1) = CS%grid_generic%x(k) + CS%grid_generic%h(k)
-      end do
+      hTmp(:) = h(i,j,:)
       
       ! Reconstruct salinity profile    
       CS%ppoly_parab%E = 0.0
       CS%ppoly_parab%coefficients = 0.0
-      call edge_values_implicit_h4( G%ke, CS%grid_generic%h, tv%S(i,j,:), CS%edgeValueWrk, CS%ppoly_parab%E )
-      call PPM_reconstruction( G%ke, CS%grid_generic%h, tv%S(i,j,:), CS%ppoly_parab )
+      call edge_values_implicit_h4( G%ke, hTmp, tv%S(i,j,:), CS%edgeValueWrk, CS%ppoly_parab%E )
+      call PPM_reconstruction( G%ke, hTmp, tv%S(i,j,:), CS%ppoly_parab )
       if (CS%boundary_extrapolation_for_pressure) call &
-        PPM_boundary_extrapolation( G%ke, CS%grid_generic%h, tv%S(i,j,:), CS%ppoly_parab )
+        PPM_boundary_extrapolation( G%ke, hTmp, tv%S(i,j,:), CS%ppoly_parab )
       
       do k = 1,G%ke
         S_t(i,j,k) = CS%ppoly_parab%E(k,1)
@@ -492,10 +481,10 @@ subroutine pressure_gradient_ppm( CS, S_t, S_b, T_t, T_b, G, tv, h )
       ! Reconstruct temperature profile 
       CS%ppoly_parab%E = 0.0
       CS%ppoly_parab%coefficients = 0.0
-      call edge_values_implicit_h4( G%ke, CS%grid_generic%h, tv%T(i,j,:), CS%edgeValueWrk, CS%ppoly_parab%E )
-      call PPM_reconstruction( G%ke, CS%grid_generic%h, tv%T(i,j,:), CS%ppoly_parab )
+      call edge_values_implicit_h4( G%ke, hTmp, tv%T(i,j,:), CS%edgeValueWrk, CS%ppoly_parab%E )
+      call PPM_reconstruction( G%ke, hTmp, tv%T(i,j,:), CS%ppoly_parab )
       if (CS%boundary_extrapolation_for_pressure) call &
-        PPM_boundary_extrapolation( G%ke, CS%grid_generic%h, tv%T(i,j,:), CS%ppoly_parab )
+        PPM_boundary_extrapolation( G%ke, hTmp, tv%T(i,j,:), CS%ppoly_parab )
       
       do k = 1,G%ke
         T_t(i,j,k) = CS%ppoly_parab%E(k,1)
@@ -535,9 +524,6 @@ subroutine ALE_memory_allocation( G, CS )
   call triDiagEdgeWorkAllocate( nz, CS%edgeValueWrk )
   call triDiagSlopeWorkAllocate( nz, CS%edgeSlopeWrk )
 
-  ! Allocate memory for grids
-  call grid1Dconstruct( CS%grid_generic, nz )
-
   ! Generic linear piecewise polynomial
   call ppoly_init( CS%ppoly_linear, nz, 1 )
   
@@ -560,9 +546,6 @@ subroutine ALE_memory_deallocation( CS )
   ! Reclaim memory for the tridiagonal system
   call triDiagEdgeWorkDeallocate( CS%edgeValueWrk )
   call triDiagSlopeWorkDeallocate( CS%edgeSlopeWrk )
-  
-  ! Deallocate memory for grid
-  call grid1Ddestroy( CS%grid_generic )
   
   ! Piecewise polynomials
   call ppoly_destroy( CS%ppoly_linear )
