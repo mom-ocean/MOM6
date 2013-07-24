@@ -143,11 +143,11 @@ subroutine remapping_main( CS, G, h, dzInterface, h_new, tv, u, v )
         CS%grid_final%h(k) = grid_final_x(k+1) - grid_final_x(k)
       end do
       
-      call remapping_core(CS, CS%grid_start, tv%S(i,j,:), CS%grid_final, CS%u_column)
+      call remapping_core(CS, nz, CS%grid_start%h, tv%S(i,j,:), nz, CS%grid_final%h, CS%u_column)
       
       tv%S(i,j,:) = CS%u_column(:)
       
-      call remapping_core(CS, CS%grid_start, tv%T(i,j,:), CS%grid_final, CS%u_column)
+      call remapping_core(CS, nz, CS%grid_start%h, tv%T(i,j,:), nz, CS%grid_final%h, CS%u_column)
      
       tv%T(i,j,:) = CS%u_column(:)
 
@@ -169,7 +169,7 @@ subroutine remapping_main( CS, G, h, dzInterface, h_new, tv, u, v )
         CS%grid_final%h(k) = grid_final_x(k+1) - grid_final_x(k)
       end do
   
-      call remapping_core(CS, CS%grid_start, u(i,j,:), CS%grid_final, CS%u_column)
+      call remapping_core(CS, nz, CS%grid_start%h, u(i,j,:), nz, CS%grid_final%h, CS%u_column)
      
       u(i,j,:) = CS%u_column(:)
       
@@ -192,7 +192,7 @@ subroutine remapping_main( CS, G, h, dzInterface, h_new, tv, u, v )
         CS%grid_final%h(k) = grid_final_x(k+1) - grid_final_x(k)
       end do
 
-      call remapping_core(CS, CS%grid_start, v(i,j,:), CS%grid_final, CS%u_column)
+      call remapping_core(CS, nz, CS%grid_start%h, v(i,j,:), nz, CS%grid_final%h, CS%u_column)
      
       v(i,j,:) = CS%u_column(:)
       
@@ -522,7 +522,7 @@ end subroutine makeGridsConsistent
 !------------------------------------------------------------------------------
 ! Remapping core routine
 !------------------------------------------------------------------------------
-subroutine remapping_core( CS, grid0, u0, grid1, u1 )
+subroutine remapping_core( CS, n0, h0, u0, n1, h1, u1 )
 !------------------------------------------------------------------------------
 ! This routine is basic in that it simply takes two grids and remaps the
 ! field known on the first grid onto the second grid, following the rules
@@ -530,17 +530,17 @@ subroutine remapping_core( CS, grid0, u0, grid1, u1 )
 !------------------------------------------------------------------------------
 
   ! Arguments
-  type(remapping_CS), intent(inout)   :: CS
-  type(grid1D_t), intent(in)          :: grid0
-  real, dimension(:), intent(in)      :: u0
-  type(grid1D_t), intent(in)          :: grid1
-  real, dimension(:), intent(inout)   :: u1
+  type(remapping_CS), intent(inout) :: CS
+  integer,            intent(in)    :: n0 ! Number of cells on source grid
+  real, dimension(:), intent(in)    :: h0 ! cell widths on source grid
+  real, dimension(:), intent(in)    :: u0 ! cell averages on source grid
+  integer,            intent(in)    :: n1 ! Number of cells on target grid
+  real, dimension(:), intent(in)    :: h1 ! cell widths on target grid
+  real, dimension(:), intent(inout) :: u1 ! cell averages on target grid
 
   ! Local variables
-  integer :: n0, n1, iMethod
+  integer :: iMethod
 
-  n0 = grid0%nb_cells
-  n1 = grid1%nb_cells
   iMethod = -999
   
   ! Reset polynomial
@@ -553,53 +553,50 @@ subroutine remapping_core( CS, grid0, u0, grid1, u1 )
       call PCM_reconstruction( n0, u0, CS%ppoly_r )
       iMethod = INTEGRATION_PCM
     case ( REMAPPING_PLM )
-      call PLM_reconstruction( n0, grid0%h, u0, CS%ppoly_r )
+      call PLM_reconstruction( n0, h0, u0, CS%ppoly_r )
       if ( CS%boundary_extrapolation) then
-        call PLM_boundary_extrapolation( n0, grid0%h, u0, CS%ppoly_r )
+        call PLM_boundary_extrapolation( n0, h0, u0, CS%ppoly_r )
       end if    
       iMethod = INTEGRATION_PLM
     case ( REMAPPING_PPM_H4 )
-      call edge_values_explicit_h4( n0, grid0%h, u0, CS%ppoly_r%E )
-      call PPM_reconstruction( n0, grid0%h, u0, CS%ppoly_r )
+      call edge_values_explicit_h4( n0, h0, u0, CS%ppoly_r%E )
+      call PPM_reconstruction( n0, h0, u0, CS%ppoly_r )
       if ( CS%boundary_extrapolation) then
-        call PPM_boundary_extrapolation( n0, grid0%h, u0, CS%ppoly_r )
+        call PPM_boundary_extrapolation( n0, h0, u0, CS%ppoly_r )
       end if
       iMethod = INTEGRATION_PPM
     case ( REMAPPING_PPM_IH4 )
-      call edge_values_implicit_h4( n0, grid0%h, u0, CS%edgeValueWrk, CS%ppoly_r%E )
-      call PPM_reconstruction( n0, grid0%h, u0, CS%ppoly_r )
+      call edge_values_implicit_h4( n0, h0, u0, CS%edgeValueWrk, CS%ppoly_r%E )
+      call PPM_reconstruction( n0, h0, u0, CS%ppoly_r )
       if ( CS%boundary_extrapolation) then
-        call PPM_boundary_extrapolation( n0, grid0%h, u0, CS%ppoly_r )
+        call PPM_boundary_extrapolation( n0, h0, u0, CS%ppoly_r )
       end if    
       iMethod = INTEGRATION_PPM
     case ( REMAPPING_PQM_IH4IH3 )
-      call edge_values_implicit_h4( n0, grid0%h, u0, CS%edgeValueWrk, CS%ppoly_r%E )
-      call edge_slopes_implicit_h3( n0, grid0%h, u0, CS%edgeSlopeWrk, CS%ppoly_r%S )
-      call PQM_reconstruction( n0, grid0%h, u0, CS%ppoly_r )
+      call edge_values_implicit_h4( n0, h0, u0, CS%edgeValueWrk, CS%ppoly_r%E )
+      call edge_slopes_implicit_h3( n0, h0, u0, CS%edgeSlopeWrk, CS%ppoly_r%S )
+      call PQM_reconstruction( n0, h0, u0, CS%ppoly_r )
       if ( CS%boundary_extrapolation) then
-        call PQM_boundary_extrapolation_v1( n0, grid0%h, u0, CS%ppoly_r )
+        call PQM_boundary_extrapolation_v1( n0, h0, u0, CS%ppoly_r )
       end if    
       iMethod = INTEGRATION_PQM
     case ( REMAPPING_PQM_IH6IH5 )
-      call edge_values_implicit_h6( n0, grid0%h, u0, CS%edgeValueWrk, CS%ppoly_r%E )
-      call edge_slopes_implicit_h5( n0, grid0%h, u0, CS%edgeSlopeWrk, CS%ppoly_r%S )
-      call PQM_reconstruction( n0, grid0%h, u0, CS%ppoly_r )
+      call edge_values_implicit_h6( n0, h0, u0, CS%edgeValueWrk, CS%ppoly_r%E )
+      call edge_slopes_implicit_h5( n0, h0, u0, CS%edgeSlopeWrk, CS%ppoly_r%S )
+      call PQM_reconstruction( n0, h0, u0, CS%ppoly_r )
       if ( CS%boundary_extrapolation) then
-        call PQM_boundary_extrapolation_v1( n0, grid0%h, u0, CS%ppoly_r )
+        call PQM_boundary_extrapolation_v1( n0, h0, u0, CS%ppoly_r )
       end if    
       iMethod = INTEGRATION_PQM
     case default
       call MOM_error( FATAL, 'The selected remapping method is invalid' )
   end select
 
-  call remapByProjection( n0, grid0%h, u0, CS%ppoly_r, &
-                          n1, grid1%h, iMethod, u1 )
-! call remapByDeltaZ( n0, grid0%h, u0, CS%ppoly_r, &
-!                     n1, dx1, iMethod, u1 )
+  call remapByProjection( n0, h0, u0, CS%ppoly_r, n1, h1, iMethod, u1 )
+! call remapByDeltaZ( n0, h0, u0, CS%ppoly_r, n1, dx1, iMethod, u1 )
 
 #ifdef __DO_SAFTEY_CHECKS__
-  call checkGridConservation(grid0%nb_cells, grid0%h, u0, &
-                             grid1%nb_cells, grid1%h, u1)
+  call checkGridConservation(n0, h0, u0, n1, h1, u1)
 #endif
 
 end subroutine remapping_core
@@ -1143,7 +1140,7 @@ logical function remappingUnitTests()
   write(*,*) 'h0 (test data)'
   call dumpGrid(n0,h0,x0,u0)
 
-  call remapping_core( CS, grid0, u0, grid1, u1 )
+  call remapping_core( CS, n0, h0, u0, n1, h1, u1 )
   do i=1,n1
     err=u1(i)-8./3.*(0.5*real(1+n1)-real(i))
     if (abs(err)>epsilon(err)) remappingUnitTests = .true.

@@ -714,9 +714,9 @@ subroutine buildGridRho( G, h, tv, dzInterface, hNew, remapCS, CS )
           grid_final%h(k) = grid_final%x(k+1) - grid_final%x(k)
         end do
         
-        call remapping_core(remapCS, grid_start, S_column, grid_final, S_column)
+        call remapping_core(remapCS, nz, grid_start%h, S_column, nz, grid_final%h, S_column)
         
-        call remapping_core(remapCS, grid_start, T_column, grid_final, T_column)
+        call remapping_core(remapCS, nz, grid_start%h, T_column, nz, grid_final%h, T_column)
 
         ! Compute the deviation between two successive grids
         deviation = 0.0
