@@ -25,7 +25,6 @@ module P1M_functions
 ! P1M_boundary_extrapolation (public)
 !
 !==============================================================================
-use regrid_grid1d_class, only : grid1D_t
 use regrid_ppoly_class, only : ppoly_t
 use regrid_edge_values, only : bound_edge_values, average_discontinuous_edge_values
 
@@ -42,7 +41,7 @@ contains
 !------------------------------------------------------------------------------
 ! p1m interpolation
 !------------------------------------------------------------------------------
-subroutine P1M_interpolation( grid, u, ppoly )
+subroutine P1M_interpolation( N, h, u, ppoly )
 ! ------------------------------------------------------------------------------
 ! Linearly interpolate between edge values. 
 ! The resulting piecewise interpolant is stored in 'ppoly'.
@@ -58,19 +57,17 @@ subroutine P1M_interpolation( grid, u, ppoly )
 ! ------------------------------------------------------------------------------
 
   ! Arguments
-  type(grid1D_t), intent(in)      :: grid
-  real, dimension(:), intent(in)  :: u
-  type(ppoly_t), intent(inout)    :: ppoly
+  integer,            intent(in)    :: N ! Number of cells
+  real, dimension(:), intent(in)    :: h ! cell widths (size N)
+  real, dimension(:), intent(in)    :: u ! cell averages (size N)
+  type(ppoly_t),      intent(inout) :: ppoly
 
   ! Local variables
   integer   :: k            ! loop index
-  integer   :: N            ! number of cells
   real      :: u0_l, u0_r   ! edge values (left and right)
 
-  N = grid%nb_cells
-
   ! Bound edge values (routine found in 'edge_values.F90')
-  call bound_edge_values( N, grid%h, u, ppoly%E )
+  call bound_edge_values( N, h, u, ppoly%E )
   
   ! Systematically average discontinuous edge values (routine found in
   ! 'edge_values.F90')
@@ -93,7 +90,7 @@ end subroutine P1M_interpolation
 !------------------------------------------------------------------------------
 ! p1m boundary extrapolation
 ! -----------------------------------------------------------------------------
-subroutine P1M_boundary_extrapolation( grid, u, ppoly )
+subroutine P1M_boundary_extrapolation( N, h, u, ppoly )
 !------------------------------------------------------------------------------
 ! Interpolation by linear polynomials within boundary cells.
 ! The left and right edge values in the left and right boundary cells,
@@ -108,26 +105,24 @@ subroutine P1M_boundary_extrapolation( grid, u, ppoly )
 !------------------------------------------------------------------------------
 
   ! Arguments
-  type(grid1D_t), intent(in)      :: grid
-  real, dimension(:), intent(in)  :: u
-  type(ppoly_t), intent(inout)    :: ppoly
+  integer,            intent(in)    :: N ! Number of cells
+  real, dimension(:), intent(in)    :: h ! cell widths (size N)
+  real, dimension(:), intent(in)    :: u ! cell averages (size N)
+  type(ppoly_t),      intent(inout) :: ppoly
 
   ! Local variables
   integer       :: k                    ! loop index
-  integer       :: N                    ! number of cells
   real          :: u0, u1               ! cell averages
   real          :: h0, h1               ! corresponding cell widths
   real          :: slope                ! retained PLM slope
   real          :: a, b                 ! auxiliary variables
   real          :: u0_l, u0_r           ! edge values
 
-  N = grid%nb_cells
-
   ! -----------------------------------------
   ! Left edge value in the left boundary cell
   ! -----------------------------------------
-  h0 = grid%h(1)
-  h1 = grid%h(2)
+  h0 = h(1)
+  h1 = h(2)
 
   u0 = u(1)
   u1 = u(2)
@@ -161,8 +156,8 @@ subroutine P1M_boundary_extrapolation( grid, u, ppoly )
   ! ------------------------------------------
   ! Right edge value in the left boundary cell
   ! ------------------------------------------
-  h0 = grid%h(N-1)
-  h1 = grid%h(N)
+  h0 = h(N-1)
+  h1 = h(N)
 
   u0 = u(N-1)
   u1 = u(N)
