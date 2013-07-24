@@ -575,17 +575,17 @@ subroutine remapping_core( CS, grid0, u0, grid1, u1 )
     case ( REMAPPING_PQM_IH4IH3 )
       call edge_values_implicit_h4( n0, grid0%h, u0, CS%edgeValueWrk, CS%ppoly_r%E )
       call edge_slopes_implicit_h3( n0, grid0%h, u0, CS%edgeSlopeWrk, CS%ppoly_r%S )
-      call PQM_reconstruction( grid0, u0, CS%ppoly_r )
+      call PQM_reconstruction( n0, grid0%h, u0, CS%ppoly_r )
       if ( CS%boundary_extrapolation) then
-        call PQM_boundary_extrapolation_v1( grid0, u0, CS%ppoly_r )
+        call PQM_boundary_extrapolation_v1( n0, grid0%h, u0, CS%ppoly_r )
       end if    
       iMethod = INTEGRATION_PQM
     case ( REMAPPING_PQM_IH6IH5 )
       call edge_values_implicit_h6( n0, grid0%h, u0, CS%edgeValueWrk, CS%ppoly_r%E )
       call edge_slopes_implicit_h5( n0, grid0%h, u0, CS%edgeSlopeWrk, CS%ppoly_r%S )
-      call PQM_reconstruction( grid0, u0, CS%ppoly_r )
+      call PQM_reconstruction( n0, grid0%h, u0, CS%ppoly_r )
       if ( CS%boundary_extrapolation) then
-        call PQM_boundary_extrapolation_v1( grid0, u0, CS%ppoly_r )
+        call PQM_boundary_extrapolation_v1( n0, grid0%h, u0, CS%ppoly_r )
       end if    
       iMethod = INTEGRATION_PQM
     case default

@@ -10,7 +10,6 @@ module PQM_functions
 ! reconstruction using the piecewise quartic method (PQM).
 !
 !==============================================================================
-use regrid_grid1d_class, only : grid1D_t
 use regrid_ppoly_class, only : ppoly_t
 use regrid_edge_values, only : bound_edge_values, check_discontinuous_edge_values
 
@@ -23,7 +22,7 @@ contains
 !------------------------------------------------------------------------------
 ! PQM_reconstruction
 ! -----------------------------------------------------------------------------
-subroutine PQM_reconstruction( grid, u, ppoly )
+subroutine PQM_reconstruction( N, h, u, ppoly )
 !------------------------------------------------------------------------------
 ! Reconstruction by quartic polynomials within each cell.
 !
@@ -36,22 +35,20 @@ subroutine PQM_reconstruction( grid, u, ppoly )
 !------------------------------------------------------------------------------
 
   ! Arguments
-  type(grid1D_t), intent(in)     :: grid
-  real, dimension(:), intent(in) :: u
-  type(ppoly_t), intent(inout)   :: ppoly
+  integer,            intent(in)    :: N ! Number of cells
+  real, dimension(:), intent(in)    :: h ! cell widths (size N)
+  real, dimension(:), intent(in)    :: u ! cell averages (size N)
+  type(ppoly_t),      intent(inout) :: ppoly
   
   ! Local variables
   integer   :: k                ! loop index
-  integer   :: N                ! number of cells
-  real      :: h                ! cell width
+  real      :: h_c              ! cell width
   real      :: u0_l, u0_r       ! edge values (left and right)
   real      :: u1_l, u1_r       ! edge slopes (left and right)
   real      :: a, b, c, d, e    ! parabola coefficients
   
-  N = grid%nb_cells
-
   ! PQM limiter
-  call PQM_limiter( grid, u, ppoly )
+  call PQM_limiter( N, h, u, ppoly )
 
   ! Loop on cells to construct the cubic within each cell
   do k = 1,N
@@ -62,13 +59,13 @@ subroutine PQM_reconstruction( grid, u, ppoly )
     u1_l = ppoly%S(k,1)
     u1_r = ppoly%S(k,2)
 
-    h = grid%h(k)
+    h_c = h(k)
     
     a = u0_l
-    b = h * u1_l
-    c = 30.0 * u(k) - 12.0*u0_r - 18.0*u0_l + 1.5*h*(u1_r - 3.0*u1_l)
-    d = -60.0 * u(k) + h *(6.0*u1_l - 4.0*u1_r) + 28.0*u0_r + 32.0*u0_l
-    e = 30.0 * u(k) + 2.5*h*(u1_r - u1_l) - 15.0*(u0_l + u0_r)
+    b = h_c * u1_l
+    c = 30.0 * u(k) - 12.0*u0_r - 18.0*u0_l + 1.5*h_c*(u1_r - 3.0*u1_l)
+    d = -60.0 * u(k) + h_c *(6.0*u1_l - 4.0*u1_r) + 28.0*u0_r + 32.0*u0_l
+    e = 30.0 * u(k) + 2.5*h_c*(u1_r - u1_l) - 15.0*(u0_l + u0_r)
     
     ! Store coefficients
     ppoly%coefficients(k,1) = a
@@ -85,7 +82,7 @@ end subroutine PQM_reconstruction
 !------------------------------------------------------------------------------
 ! Limit pqm
 ! -----------------------------------------------------------------------------
-subroutine PQM_limiter( grid, u, ppoly )
+subroutine PQM_limiter( N, h, u, ppoly )
 !------------------------------------------------------------------------------
 ! Standard PQM limiter (White & Adcroft, JCP 2008).
 !
@@ -98,13 +95,13 @@ subroutine PQM_limiter( grid, u, ppoly )
 !------------------------------------------------------------------------------
 
   ! Arguments
-  type(grid1D_t), intent(in)     :: grid
-  real, dimension(:), intent(in) :: u
-  type(ppoly_t), intent(inout)   :: ppoly
+  integer,            intent(in)    :: N ! Number of cells
+  real, dimension(:), intent(in)    :: h ! cell widths (size N)
+  real, dimension(:), intent(in)    :: u ! cell averages (size N)
+  type(ppoly_t),      intent(inout) :: ppoly
 
   ! Local variables
   integer   :: k            ! loop index
-  integer   :: N            ! number of cells
   integer   :: monotonic    ! boolean indicating whether the cubic is monotonic
   integer   :: inflexion_l
   integer   :: inflexion_r
@@ -121,10 +118,8 @@ subroutine PQM_limiter( grid, u, ppoly )
   real      :: gradient1, gradient2
   real      :: x1, x2
 
-  N = grid%nb_cells
-
   ! Bound edge values
-  call bound_edge_values( N, grid%h, u, ppoly%E )
+  call bound_edge_values( N, h, u, ppoly%E )
 
   ! Make discontinuous edge values monotonic (thru averaging)
   call check_discontinuous_edge_values( N, u, ppoly%E )
@@ -132,7 +127,7 @@ subroutine PQM_limiter( grid, u, ppoly )
   ! Loop on interior cells to apply the PQM limiter
   do k = 2,N-1
     
-    !if ( grid%h(k) .lt. 1.0 ) cycle
+    !if ( h(k) .lt. 1.0 ) cycle
     
     inflexion_l = 0
     inflexion_r = 0
@@ -145,9 +140,9 @@ subroutine PQM_limiter( grid, u, ppoly )
     
     ! Get cell widths and cell averages (boundary cells are assumed to
     ! be local extrema for the sake of slopes)
-    h_l = grid%h(k-1)
-    h_c = grid%h(k)
-    h_r = grid%h(k+1)
+    h_l = h(k-1)
+    h_c = h(k)
+    h_r = h(k+1)
     u_l = u(k-1)
     u_c = u(k)
     u_r = u(k+1)
@@ -362,7 +357,7 @@ end subroutine PQM_limiter
 !------------------------------------------------------------------------------
 ! pqm boundary extrapolation
 ! -----------------------------------------------------------------------------
-subroutine PQM_boundary_extrapolation( grid, u, ppoly )
+subroutine PQM_boundary_extrapolation( N, h, u, ppoly )
 !------------------------------------------------------------------------------
 ! Reconstruction by parabolas within boundary cells.
 !
@@ -386,13 +381,13 @@ subroutine PQM_boundary_extrapolation( grid, u, ppoly )
 !------------------------------------------------------------------------------
 
   ! Arguments
-  type(grid1D_t), intent(in)      :: grid
-  real, dimension(:), intent(in)  :: u
-  type(ppoly_t), intent(inout)    :: ppoly
+  integer,            intent(in)    :: N ! Number of cells
+  real, dimension(:), intent(in)    :: h ! cell widths (size N)
+  real, dimension(:), intent(in)    :: u ! cell averages (size N)
+  type(ppoly_t),      intent(inout) :: ppoly
   
   ! Local variables
   integer       :: k        ! loop index
-  integer       :: N        ! number of cells
   integer       :: i0, i1
   integer       :: monotonic
   real          :: u0, u1
@@ -403,13 +398,11 @@ subroutine PQM_boundary_extrapolation( grid, u, ppoly )
   real          :: slope
   real          :: exp1, exp2
 
-  N = grid%nb_cells
-  
   ! ----- Left boundary -----
   i0 = 1
   i1 = 2
-  h0 = grid%h(i0)
-  h1 = grid%h(i1)
+  h0 = h(i0)
+  h1 = h(i1)
   u0 = u(i0)
   u1 = u(i1)
 
@@ -463,8 +456,8 @@ subroutine PQM_boundary_extrapolation( grid, u, ppoly )
   ! ----- Right boundary -----
   i0 = N-1
   i1 = N
-  h0 = grid%h(i0)
-  h1 = grid%h(i1)
+  h0 = h(i0)
+  h1 = h(i1)
   u0 = u(i0)
   u1 = u(i1)
 
@@ -524,7 +517,7 @@ end subroutine PQM_boundary_extrapolation
 !------------------------------------------------------------------------------
 ! pqm boundary extrapolation using rational function
 ! -----------------------------------------------------------------------------
-subroutine PQM_boundary_extrapolation_v1( grid, u, ppoly )
+subroutine PQM_boundary_extrapolation_v1( N, h, u, ppoly )
 !------------------------------------------------------------------------------
 ! Reconstruction by parabolas within boundary cells.
 !
@@ -548,13 +541,13 @@ subroutine PQM_boundary_extrapolation_v1( grid, u, ppoly )
 !------------------------------------------------------------------------------
 
   ! Arguments
-  type(grid1D_t), intent(in)      :: grid
-  real, dimension(:), intent(in)  :: u
-  type(ppoly_t), intent(inout)    :: ppoly
+  integer,            intent(in)    :: N ! Number of cells
+  real, dimension(:), intent(in)    :: h ! cell widths (size N)
+  real, dimension(:), intent(in)    :: u ! cell averages (size N)
+  type(ppoly_t),      intent(inout) :: ppoly
   
   ! Local variables
   integer       :: k        ! loop index
-  integer       :: N        ! number of cells
   integer       :: i0, i1
   integer       :: monotonic
   integer       :: inflexion_l
@@ -573,13 +566,11 @@ subroutine PQM_boundary_extrapolation_v1( grid, u, ppoly )
   real          :: gradient1, gradient2
   real          :: x1, x2
 
-  N = grid%nb_cells
-  
   ! ----- Left boundary (TOP) -----
   i0 = 1
   i1 = 2
-  h0 = grid%h(i0)
-  h1 = grid%h(i1)
+  h0 = h(i0)
+  h1 = h(i1)
   u0 = u(i0)
   u1 = u(i1)
   um = u0
@@ -725,8 +716,8 @@ subroutine PQM_boundary_extrapolation_v1( grid, u, ppoly )
   ! ----- Right boundary (BOTTOM) -----
   i0 = N-1
   i1 = N
-  h0 = grid%h(i0)
-  h1 = grid%h(i1)
+  h0 = h(i0)
+  h1 = h(i1)
   u0 = u(i0)
   u1 = u(i1)
   um = u1
