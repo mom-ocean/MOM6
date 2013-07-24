@@ -194,9 +194,6 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
                              ! in roundoff and can be neglected, in Pa.
   real :: alpha_anom         ! The in-situ specific volume, averaged over a
                              ! layer, less alpha_ref, in m3 kg-1.
-  real :: aaL, aaR           ! The in-situ specific volume at the thickness point
-                             ! to the" left" or "right" of a velocity point,
-                             ! averaged over a layer, less Rho_ref, in kg m-3.
   logical :: use_p_atm       ! If true, use the atmospheric pressure.
   logical :: use_EOS    ! If true, density is calculated from T & S using an
                         ! equation of state.
@@ -482,11 +479,6 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
   real :: I_Rho0             ! 1/Rho0.
   real :: G_Rho0             ! G_Earth / Rho0 in m4 s-2 kg-1.
   real :: Rho_ref            ! The reference density in kg m-3.
-  real :: Rho_anom_here      ! The in-situ density, averaged over a layer, less
-                             ! Rho_ref, in kg m-3.
-  real :: raL, raR           ! The in-situ density at the thickness point to the
-                             ! "left" or "right" of a velocity point, averaged
-                             ! over a layer, less Rho_ref, in kg m-3.
   logical :: use_p_atm       ! If true, use the atmospheric pressure.
   logical :: use_ALE         ! If true, use an ALE pressure reconstruction.
   logical :: use_EOS    ! If true, density is calculated from T & S using an

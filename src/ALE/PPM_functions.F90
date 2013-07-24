@@ -178,12 +178,10 @@ subroutine PPM_boundary_extrapolation( N, h, u, ppoly )
   type(ppoly_t),      intent(inout) :: ppoly
   
   ! Local variables
-  integer       :: k        ! loop index
   integer       :: i0, i1
-  integer       :: monotonic
   real          :: u0, u1
   real          :: h0, h1
-  real          :: a, b, c, d, e
+  real          :: a, b, c
   real          :: u0_l, u0_r
   real          :: u1_l, u1_r
   real          :: slope

@@ -96,7 +96,7 @@ subroutine P3M_limiter( N, h, u, ppoly )
   call bound_edge_values( N, h, u, ppoly%E )
 
   ! 2. Systematically average discontinuous edge values
-  call average_discontinuous_edge_values( N, u, ppoly%E )
+  call average_discontinuous_edge_values( N, ppoly%E )
   
 
   ! 3. Loop on cells and do the following
@@ -165,7 +165,7 @@ subroutine P3M_limiter( N, h, u, ppoly )
     end if
 
     ! Build cubic interpolant (compute the coefficients)
-    call build_cubic_interpolant( N, h, k, ppoly )
+    call build_cubic_interpolant( h, k, ppoly )
 
     ! Check whether cubic is monotonic
     monotonic = is_cubic_monotonic( ppoly, k )
@@ -182,7 +182,7 @@ subroutine P3M_limiter( N, h, u, ppoly )
     ppoly%S(k,2) = u1_r
 
     ! Recompute coefficients of cubic
-    call build_cubic_interpolant( N, h, k, ppoly )
+    call build_cubic_interpolant( h, k, ppoly )
 
   end do ! loop on cells
   
@@ -213,7 +213,6 @@ subroutine P3M_boundary_extrapolation( N, h, u, ppoly )
   type(ppoly_t),      intent(inout) :: ppoly
 
   ! Local variables
-  integer       :: k        ! loop index
   integer       :: i0, i1
   integer       :: monotonic
   real          :: u0, u1
@@ -271,7 +270,7 @@ subroutine P3M_boundary_extrapolation( N, h, u, ppoly )
   ppoly%S(i0,2) = u1_r
 
   ! Store edge values and slope, build cubic and check monotonicity
-  call build_cubic_interpolant( N, h, i0, ppoly )
+  call build_cubic_interpolant( h, i0, ppoly )
   monotonic = is_cubic_monotonic( ppoly, i0 )
     
   if ( monotonic .EQ. 0 ) then
@@ -280,7 +279,7 @@ subroutine P3M_boundary_extrapolation( N, h, u, ppoly )
     ! Rebuild cubic after monotonization
     ppoly%S(i0,1) = u1_l
     ppoly%S(i0,2) = u1_r
-    call build_cubic_interpolant( N, h, i0, ppoly )
+    call build_cubic_interpolant( h, i0, ppoly )
     
   end if
   
@@ -330,7 +329,7 @@ subroutine P3M_boundary_extrapolation( N, h, u, ppoly )
   ppoly%S(i1,1) = u1_l
   ppoly%S(i1,2) = u1_r
   
-  call build_cubic_interpolant( N, h, i1, ppoly )
+  call build_cubic_interpolant( h, i1, ppoly )
   monotonic = is_cubic_monotonic( ppoly, i1 )
     
   if ( monotonic .EQ. 0 ) then
@@ -339,7 +338,7 @@ subroutine P3M_boundary_extrapolation( N, h, u, ppoly )
     ! Rebuild cubic after monotonization
     ppoly%S(i1,1) = u1_l
     ppoly%S(i1,2) = u1_r
-    call build_cubic_interpolant( N, h, i1, ppoly )
+    call build_cubic_interpolant( h, i1, ppoly )
     
   end if
 
@@ -349,7 +348,7 @@ end subroutine P3M_boundary_extrapolation
 !------------------------------------------------------------------------------
 ! Build cubic interpolant in cell k
 ! -----------------------------------------------------------------------------
-subroutine build_cubic_interpolant( N, h, k, ppoly )
+subroutine build_cubic_interpolant( h, k, ppoly )
 !------------------------------------------------------------------------------
 ! Given edge values and edge slopes, compute coefficients of cubic in cell k.
 !
@@ -358,7 +357,6 @@ subroutine build_cubic_interpolant( N, h, k, ppoly )
 !------------------------------------------------------------------------------
 
   ! Arguments
-  integer,            intent(in)    :: N ! Number of cells
   real, dimension(:), intent(in)    :: h ! cell widths (size N)
   integer,            intent(in)    :: k
   type(ppoly_t),      intent(inout) :: ppoly

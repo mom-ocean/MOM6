@@ -144,7 +144,7 @@ end subroutine bound_edge_values
 !------------------------------------------------------------------------------
 ! Average discontinuous edge values (systematically)
 !------------------------------------------------------------------------------
-subroutine average_discontinuous_edge_values( N, u, edge_values )
+subroutine average_discontinuous_edge_values( N, edge_values )
 ! ------------------------------------------------------------------------------
 ! For each interior edge, check whether the edge values are discontinuous.
 ! If so, compute the average and replace the edge values by the average.!
@@ -152,7 +152,6 @@ subroutine average_discontinuous_edge_values( N, u, edge_values )
   
   ! Arguments
   integer,              intent(in)    :: N ! Number of cells
-  real, dimension(:),   intent(in)    :: u ! cell averages (size N)
   real, dimension(:,:), intent(inout) :: edge_values      
 
   ! Local variables
@@ -315,7 +314,6 @@ subroutine edge_values_explicit_h4( N, h, u, edge_values )
   integer               :: i, j
   real                  :: u0, u1, u2, u3
   real                  :: h0, h1, h2, h3
-  real                  :: href
   real                  :: f1, f2, f3       ! auxiliary variables
   real                  :: e                ! edge value    
   real, dimension(5)    :: x                ! used to compute edge

@@ -144,7 +144,6 @@ subroutine initialize_ALE( param_file, G, h, h_aux, dzRegrid, &
 
   ! Local variables
   logical :: tmpLogical
-  integer :: i, j, k
   real :: tmpReal
   real, dimension(:), allocatable :: dz
   character(len=40)  :: mod = "MOM_ALE" ! This module's name.
@@ -516,7 +515,6 @@ subroutine ALE_memory_allocation( G, CS )
 
   ! Local variables
   integer   :: nz
-  integer   :: degree       ! Degree of polynomials used for the reconstruction 
   
   nz = G%ke
 

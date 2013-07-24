@@ -102,7 +102,6 @@ subroutine PQM_limiter( N, h, u, ppoly )
 
   ! Local variables
   integer   :: k            ! loop index
-  integer   :: monotonic    ! boolean indicating whether the cubic is monotonic
   integer   :: inflexion_l
   integer   :: inflexion_r
   real      :: u0_l, u0_r   ! edge values
@@ -387,9 +386,7 @@ subroutine PQM_boundary_extrapolation( N, h, u, ppoly )
   type(ppoly_t),      intent(inout) :: ppoly
   
   ! Local variables
-  integer       :: k        ! loop index
   integer       :: i0, i1
-  integer       :: monotonic
   real          :: u0, u1
   real          :: h0, h1
   real          :: a, b, c, d, e
@@ -547,9 +544,7 @@ subroutine PQM_boundary_extrapolation_v1( N, h, u, ppoly )
   type(ppoly_t),      intent(inout) :: ppoly
   
   ! Local variables
-  integer       :: k        ! loop index
   integer       :: i0, i1
-  integer       :: monotonic
   integer       :: inflexion_l
   integer       :: inflexion_r
   real          :: u0, u1, um
@@ -558,9 +553,8 @@ subroutine PQM_boundary_extrapolation_v1( N, h, u, ppoly )
   real          :: ar, br, beta
   real          :: u0_l, u0_r
   real          :: u1_l, u1_r
-  real          :: u_plm, u_ppm
+  real          :: u_plm
   real          :: slope
-  real          :: exp1, exp2
   real          :: alpha1, alpha2, alpha3
   real          :: rho, sqrt_rho
   real          :: gradient1, gradient2

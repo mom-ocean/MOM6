@@ -71,7 +71,7 @@ subroutine P1M_interpolation( N, h, u, ppoly )
   
   ! Systematically average discontinuous edge values (routine found in
   ! 'edge_values.F90')
-  call average_discontinuous_edge_values( N, u, ppoly%E )
+  call average_discontinuous_edge_values( N, ppoly%E )
   
   ! Loop on interior cells to build interpolants
   do k = 1,N
@@ -111,11 +111,9 @@ subroutine P1M_boundary_extrapolation( N, h, u, ppoly )
   type(ppoly_t),      intent(inout) :: ppoly
 
   ! Local variables
-  integer       :: k                    ! loop index
   real          :: u0, u1               ! cell averages
   real          :: h0, h1               ! corresponding cell widths
   real          :: slope                ! retained PLM slope
-  real          :: a, b                 ! auxiliary variables
   real          :: u0_l, u0_r           ! edge values
 
   ! -----------------------------------------

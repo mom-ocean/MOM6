@@ -267,7 +267,7 @@ subroutine regridding_main( remapCS, CS, G, h, tv, dzInterface, hNew )
       call buildGridSigma( CS, G, h, dzInterface, hNew )
     
     case ( REGRIDDING_RHO )  
-      call convective_adjustment(CS, G, h, tv)
+      call convective_adjustment(G, h, tv)
       call buildGridRho( G, h, tv, dzInterface, hNew, remapCS, CS )
 
     case ( REGRIDDING_ARBITRARY )
@@ -600,7 +600,6 @@ subroutine buildGridRho( G, h, tv, dzInterface, hNew, remapCS, CS )
   real      :: max_thickness
   real      :: correction
   
-  real      :: t
   real, dimension(SZK_(G)) :: p_column, densities, T_column, S_column
   integer, dimension(SZK_(G)) :: mapping
   real    :: nominalDepth, totalThickness, dh
@@ -1173,6 +1172,7 @@ real function get_polynomial_coordinate ( N, h, ppoly, target_value, degree )
   eps = NR_OFFSET
   
   k_found = -1
+  x_l = -1.E30
 
   ! If the target value is outside the range of all values, we
   ! force the target coordinate to be equal to the lowest or
@@ -1399,14 +1399,13 @@ end subroutine inflate_vanished_layers
 !------------------------------------------------------------------------------
 ! Convective adjustment by swapping layers
 !------------------------------------------------------------------------------
-subroutine convective_adjustment(CS, G, h, tv)
+subroutine convective_adjustment(G, h, tv)
 !------------------------------------------------------------------------------
 ! Check each water column to see whether it is stratified. If not, sort the
 ! layers by successive swappings of water masses (bubble sort algorithm)
 !------------------------------------------------------------------------------
 
   ! Arguments
-  type(regridding_CS), intent(inout) :: CS
   type(ocean_grid_type), intent(in)                  :: G
   real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(inout) :: h
   type(thermo_var_ptrs), intent(inout)               :: tv     
@@ -1489,7 +1488,7 @@ function uniformResolution(nk,coordMode,maxDepth,rhoLight,rhoHeavy)
   real                         :: uniformResolution(nk)
 
   ! Local variables
-  integer :: scheme, k
+  integer :: scheme
   
   scheme = coordinateMode(coordMode)
   select case ( scheme )

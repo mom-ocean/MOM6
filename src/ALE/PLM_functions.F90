@@ -185,11 +185,9 @@ subroutine PLM_boundary_extrapolation( N, h, u, ppoly )
   type(ppoly_t),      intent(inout) :: ppoly
 
   ! Local variables
-  integer       :: k                    ! loop index
   real          :: u0, u1               ! cell averages
   real          :: h0, h1               ! corresponding cell widths
   real          :: slope                ! retained PLM slope
-  real          :: u0_l, u0_r           ! edge values
 
   ! -----------------------------------------
   ! Left edge value in the left boundary cell

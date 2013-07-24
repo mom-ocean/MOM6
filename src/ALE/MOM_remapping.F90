@@ -116,8 +116,6 @@ subroutine remapping_main( CS, G, h, dzInterface, h_new, tv, u, v )
   ! Local variables
   integer               :: i, j, k
   integer               :: nz
-  real                  :: val, new_val
-  integer               :: problem
   real, dimension(G%ke+1) :: x1, x2
   real, dimension(G%ke) :: h1, h2
 
@@ -213,7 +211,7 @@ subroutine buildConsistentGrids(nz, hs, hf, xs, xf)
   real, dimension(nz+1), intent(inout) :: xs, xf
 
   integer :: k
-  real    :: sumH1, sumH2, nonDimPos
+  real    :: sumH1, sumH2
 
   ! Build start grid
   call buildGridFromH(nz, hs, xs)
@@ -364,7 +362,9 @@ subroutine checkGridConservation(ns, hs, us, nf, hf, uf)
   real,    intent(in) :: hf(:), uf(:) ! Size nf
 
   ! Local variables
+#ifdef DISABLE_CONSEEVATION_CHECK_BECAUSE_IT_FAILS______
   integer :: k
+#endif
   real    :: sumHUs, errHUs
   real    :: sumHUf, errHUf
 
@@ -448,7 +448,6 @@ function isSignedSumErrSignificant(n1, maxTerm1, sum1, n2, maxTerm2, sum2)
   real,    intent(in) :: maxTerm1, sum1, maxTerm2, sum2
   logical             :: isSignedSumErrSignificant
   ! Local variables
-  integer :: n
   real :: sumErr, allowedErr, eps
 
   sumErr = abs(sum1-sum2)
@@ -484,7 +483,7 @@ subroutine makeGridsConsistent(ns, xs, nf, hf, xf)
   real,    intent(inout) :: xf(nf+1)
 
   ! Local variables
-  integer :: n, k
+  integer :: k
   real    :: nonDimPos, sumHs, sumHf
 
 #ifdef __DO_SAFTEY_CHECKS__
@@ -611,7 +610,7 @@ subroutine remapByProjection( n0, h0, u0, ppoly0, n1, h1, method, u1 )
   real,          intent(inout) :: u1(:)  ! target cell averages (size n1)
   
   ! Local variables
-  integer       :: iTarget, j, k
+  integer       :: iTarget
   real          :: xL, xR       ! coordinates of target cell edges  
 
   ! Loop on cells in target grid (grid1). For each target cell, we need to find
@@ -657,7 +656,7 @@ subroutine remapByDeltaZ( n0, h0, u0, ppoly0, n1, dx1, method, u1, h1 )
   integer :: iTarget
   real    :: xL, xR    ! coordinates of target cell edges  
   real    :: xOld, hOld, uOld
-  real    :: xNew, hNew, uNew
+  real    :: xNew, hNew
   real    :: uhNew, hFlux, uAve, fluxL, fluxR
 #ifdef __DO_SAFTEY_CHECKS__
   real    :: h0Total
@@ -756,10 +755,7 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0, method, &
   integer :: j, k
   integer :: jL, jR       ! indexes of source cells containing target 
                           ! cell edges
-  real    :: q0, q1       ! partially integrated quantities in source 
-                          ! cells j0 and j1
   real    :: q            ! complete integration
-  real    :: a, b         ! interval of integration (global coordinates)
   real    :: xi0, xi1     ! interval of integration (local -- normalized 
                           ! -- coordinates)
   real    :: x0jLl, x0jLr ! Left/right position of cell jL
@@ -785,6 +781,10 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0, method, &
 !         'MOM_remapping, integrateReconOnInterval: '//&
 !         'The target cell ends beyond the right edge of the source grid')
 #endif
+
+  q = -1.E30
+  x0jLl = -1.E30
+  x0jRl = -1.E30
 
   ! Find the left most cell in source grid spanned by the target cell
   jL = -1
@@ -1006,6 +1006,7 @@ subroutine setReconstructionType(string,CS)
   type(remapping_CS), intent(inout) :: CS
   ! Local variables
   integer :: degree
+  degree = -99
   select case ( uppercase(trim(string)) )
     case ("PCM")
       CS%remapping_scheme = REMAPPING_PCM
