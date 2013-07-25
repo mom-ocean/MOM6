@@ -554,17 +554,24 @@ subroutine remapping_core( CS, n0, h0, u0, n1, dx, h1, u1 )
   integer,            intent(in)    :: n1 ! Number of cells on target grid
   real, dimension(:), intent(in)    :: dx ! Change in interface positions
   real, dimension(:), intent(in)    :: h1 ! cell widths on target grid
-  real, dimension(:), intent(inout) :: u1 ! cell averages on target grid
+  real, dimension(:), intent(out)   :: u1 ! cell averages on target grid
 
   ! Local variables
   integer :: iMethod
 
 #ifdef __DO_SAFTEY_CHECKS__
   integer :: k
-  real :: hTmp
+  real :: hTmp, totalH0, totalH1, totalHf, eps
+  real :: err0, totalHU0, err1, totalHU1, err2, totalHU2
 
   if (dx(1) /= 0.) call MOM_error( FATAL, 'MOM_remapping, remapping_core: '//&
-             'Non-zero surface flux!' ) ! This is techically allowed but in practice avoided
+             'Non-zero surface flux!' ) ! This is techically allowed but in avoided practice 
+  totalH0 = 0.
+  do k=1, n1
+    totalH0 = totalH0 + h0(k)
+  enddo
+  totalH1 = 0.
+  totalHf = 0.
   do k=1, n1
     if (k <= n0) then
       hTmp = h0(k) + ( dx(k+1) - dx(k) )
@@ -581,7 +588,20 @@ subroutine remapping_core( CS, n0, h0, u0, n1, dx, h1, u1 )
              'negative h implied by fluxes' )
       endif
     endif
+    totalH1 = totalH1 + h1(k)
+    totalHf = totalHf + hTmp
   end do
+  eps = epsilon(hTmp)*totalH0
+  if (abs(totalH1-totalH0) > 0.5*real(n0+n1-2)*eps) then
+    write(0,*) 'H0,H1=',totalH0,totalH1,totalH1-totalH0,eps
+    call MOM_error( FATAL, 'MOM_remapping, remapping_core: '//&
+         'Total thicknesses of h1 and h2 differ by more than roundoff' )
+  endif
+  if (abs(totalHf-totalH0) > 0.5*real(n0+n1-1)*eps) then
+    write(0,*) 'H0,Hf=',totalH0,totalHf,totalHf-totalH0,eps
+    call MOM_error( FATAL, 'MOM_remapping, remapping_core: '//&
+         'Total thicknesses of h1 and h2 differ by more than roundoff' )
+  endif
 #endif
 
   iMethod = -999
@@ -641,6 +661,58 @@ subroutine remapping_core( CS, n0, h0, u0, n1, dx, h1, u1 )
 
 #ifdef __DO_SAFTEY_CHECKS__
   call checkGridConservation(n0, h0, u0, n1, h1, u1)
+  totalHU0 = 0.
+  err0 = 0.
+  do k = 1, n0
+    hTmp = h0(k) * u0(k)
+    totalHU0 = totalHU0 + hTmp
+    err0 = err0 + epsilon(err0)*max(err0,abs(hTmp))
+  enddo
+  totalHU1 = 0.
+  err1 = 0.
+  do k = 1, n1
+    hTmp = h1(k) * u1(k)
+    totalHU1 = totalHU1 + hTmp
+    err1 = err1 + epsilon(err1)*max(err1,abs(hTmp))
+  enddo
+  totalHU2 = 0.
+  err2 = 0.
+  do k = 1, n1
+    if (k <= n0) then
+      hTmp = h0(k) + ( dx(k+1) - dx(k) )
+    else
+      hTmp = ( dx(k+1) - dx(k) )
+    endif
+!   if (abs(hTmp-h1(k)) > real(200*n1)*epsilon(hTmp)*max(hTmp,max(abs(dx(k+1)),abs(dx(k)))) ) then
+!     write(0,*) 'k,h0,dx+,dx-',k,h0(k),dx(k+1),dx(k)
+!     write(0,*) 'hTmp,h1,h1-hTmp',hTmp,h1(k),h1(k)-hTmp
+!     call MOM_error( FATAL, 'MOM_remapping, remapping_core: '//&
+!          'Flux form layer thickness differs from projection.' )
+!   endif
+    hTmp = hTmp * u1(k)
+    totalHU2 = totalHU2 + hTmp
+    err2 = err2 + epsilon(err2)*max(err2,abs(hTmp))
+  enddo
+  if (abs(totalHU1-totalHU0) > (err0+err1)*5000.) then
+    write(0,*) 'h0=',h0
+    write(0,*) 'h1=',h1
+    write(0,*) 'u0=',u0
+    write(0,*) 'u1=',u1
+    write(0,*) 'total HU0,HU1,1-0=',totalHU0,totalHU1,totalHU1-totalHU0
+    write(0,*) 'err0,err1=',err0,err1
+    call MOM_error( FATAL, 'MOM_remapping, remapping_core: '//&
+         'Total stuff on h0 and h1 differ by more than roundoff' )
+  endif
+  if (abs(totalHU2-totalHU0) > (err0+err2)*5000.) then
+    write(0,*) 'h0=',h0
+    write(0,*) 'hf=',h0+dx(2:n1+1)-dx(1:n1)
+    write(0,*) 'u0=',u0
+    write(0,*) 'u1=',u1
+    write(0,*) 'total HU0,HUf,f-0=',totalHU0,totalHU2,totalHU2-totalHU0
+    write(0,*) 'err0,errF=',err0,err2
+    call MOM_error( FATAL, 'MOM_remapping, remapping_core: '//&
+         'Total stuff on h0 and hF differ by more than roundoff' )
+  endif
 #endif
 
 end subroutine remapping_core

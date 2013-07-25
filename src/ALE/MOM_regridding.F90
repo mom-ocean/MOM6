@@ -621,7 +621,7 @@ subroutine buildGridRho( G, h, tv, dzInterface, hNew, remapCS, CS )
   real      :: max_thickness
   real      :: correction
   
-  real, dimension(SZK_(G)) :: p_column, densities, T_column, S_column
+  real, dimension(SZK_(G)) :: p_column, densities, T_column, S_column, Tmp_column
   integer, dimension(SZK_(G)) :: mapping
   real    :: nominalDepth, totalThickness, dh
   real, dimension(SZK_(G)+1) :: zOld, zNew
@@ -728,9 +728,11 @@ subroutine buildGridRho( G, h, tv, dzInterface, hNew, remapCS, CS )
         dx(1) = 0.
         dx(nz+1) = 0.
         
-        call remapping_core(remapCS, nz, h0, S_column, nz, dx, h1, S_column)
+        call remapping_core(remapCS, nz, h0, S_column, nz, dx, h1, Tmp_column)
+        S_column(:) = Tmp_column(:)
         
-        call remapping_core(remapCS, nz, h0, T_column, nz, dx, h1, T_column)
+        call remapping_core(remapCS, nz, h0, T_column, nz, dx, h1, Tmp_column)
+        T_column(:) = Tmp_column(:)
 
         ! Compute the deviation between two successive grids
         deviation = 0.0
