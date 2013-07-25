@@ -41,6 +41,8 @@ implicit none ; private
 
 integer, parameter, public :: MAX_PARAM_FILES = 5 ! Maximum number of parameter files.
 integer, parameter :: INPUT_STR_LENGTH = 120 ! Maximum linelength in parameter file.
+integer, parameter :: FILENAME_LENGTH = 200  ! Maximum number of characters in
+                                             ! file names.
 
 ! The all_PEs_read option should be eliminated with post-riga shared code.
 logical :: all_PEs_read = .false.
@@ -71,7 +73,7 @@ end type parameter_block
 type, public :: param_file_type ; private
   integer  :: nfiles = 0            ! The number of open files.
   integer  :: iounit(MAX_PARAM_FILES)   ! The unit number of an open file.
-  character(len=200) :: filename(MAX_PARAM_FILES) ! The names of the open files.
+  character(len=FILENAME_LENGTH) :: filename(MAX_PARAM_FILES) ! The names of the open files.
   logical  :: NetCDF_file(MAX_PARAM_FILES)! If true, the input file is in NetCDF.
                                     ! This is not yet implemented.
   type(file_data_type) :: param_data(MAX_PARAM_FILES) ! Structures that contain 
@@ -334,8 +336,7 @@ subroutine populate_param_data(iounit, filename, param_data)
   type(file_data_type), intent(inout) :: param_data
 
   character(len=INPUT_STR_LENGTH) :: line
-  integer :: is, isd, isu, icom
-  integer :: last, num_lines
+  integer :: num_lines
   logical :: inMultiLineComment
 
 ! Find the number of keyword lines in a parameter file
@@ -641,8 +642,8 @@ subroutine read_param_real_array(CS, varname, value, fail_if_missing)
 ! which is to be read, the (case-sensitive) variable name, the variable
 ! where the value is to be stored, and (optionally) a flag indicating
 ! whether to fail if this parameter can not be found.
-  character(len=120) :: value_string(1)
-  logical            :: found, defined
+  character(len=INPUT_STR_LENGTH) :: value_string(1)
+  logical                         :: found, defined
 
   call get_variable_line(CS, varname, found, defined, value_string)
   if (found .and. defined .and. (LEN_TRIM(value_string(1)) > 0)) then
@@ -780,9 +781,10 @@ subroutine get_variable_line(CS, varname, found, defined, value_string, paramIsL
   character(len=*),      intent(out) :: value_string(:)
   logical, optional,      intent(in) :: paramIsLogical
 
-  character(len=INPUT_STR_LENGTH) :: val_str, lname, filename
+  character(len=INPUT_STR_LENGTH) :: val_str, lname
   character(len=INPUT_STR_LENGTH) :: line, continuationBuffer, blockName
-  integer            :: is, id, isd, isu, ise, iso, icom, verbose, ipf
+  character(len=FILENAME_LENGTH)  :: filename
+  integer            :: is, id, isd, isu, ise, iso, verbose, ipf
   integer            :: last, last1, ival, oval, max_vals, count, contBufSize
   character(len=52)  :: set
   logical            :: found_override, found_equals
@@ -1619,7 +1621,7 @@ subroutine closeParameterBlock(CS)
   type(param_file_type), intent(in) :: CS
 ! Remove the lowest level of recursion from the active block name
   type(parameter_block), pointer :: block
-  integer :: i
+
   if (associated(CS%blockName)) then
     block => CS%blockName
     if (is_root_pe().and.len_trim(block%name)==0) call MOM_error(FATAL, &

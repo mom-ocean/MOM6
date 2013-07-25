@@ -47,7 +47,6 @@ subroutine find_obsolete_params(param_file)
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mod = "find_obsolete_params"  ! This module's name.
-  real    :: test_val
   integer :: test_int
   logical :: test_logic, test_logic2, test_logic3, split
 

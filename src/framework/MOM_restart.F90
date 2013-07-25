@@ -626,7 +626,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename)
                                         ! current and next files.
   integer :: unit                       ! The mpp unit of the open file.
   integer :: m, nz, num_files, var_periods
-  integer :: seconds, days, year, month, hour, minute, err
+  integer :: seconds, days, year, month, hour, minute
   character(len=8) :: t_grid, t_grid_read
   real :: restart_time
 
@@ -781,9 +781,8 @@ subroutine restore_state(filename, directory, day, G, CS)
                              ! current file name.
   integer :: n, m, start_of_day, num_days
   integer :: isL, ieL, jsL, jeL, is0, js0
-  integer :: fsize(4), sizes(7)
+  integer :: sizes(7)
   integer :: ndim, nvar, natt, ntime, pos
-  integer :: nz
   integer :: unit(CS%max_fields) ! The mpp unit of all open files.
   logical :: unit_is_global(CS%max_fields) ! True if the file is global.
   character(len=200) :: unit_path(CS%max_fields) ! The file names.

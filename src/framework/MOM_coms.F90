@@ -416,8 +416,7 @@ subroutine increment_ints_faster(int_sum, r, max_mag_term)
   ! representation in real_to_ints, but without doing any carrying of overflow.
   ! The entire operation is embedded in a single call for greater speed.
   real :: rs
-  character(len=80) :: mesg
-  integer(kind=8) :: ival, prec_err
+  integer(kind=8) :: ival
   integer :: sgn, i
 
   sgn = 1 ; if (r<0.0) sgn = -1
@@ -441,7 +440,7 @@ subroutine carry_overflow(int_sum, prec_error)
   integer :: i, num_carry
 
   do i=ni,2,-1 ; if (abs(int_sum(i)) > prec) then
-    num_carry = int_sum(i) * I_prec
+    num_carry = int(int_sum(i) * I_prec)
     int_sum(i) = int_sum(i) - num_carry*prec
     int_sum(i-1) = int_sum(i-1) + num_carry
   endif ; enddo
@@ -460,7 +459,7 @@ subroutine regularize_ints(int_sum)
   integer :: i, num_carry
 
   do i=ni,2,-1 ; if (abs(int_sum(i)) > prec) then
-    num_carry = int_sum(i) * I_prec
+    num_carry = int(int_sum(i) * I_prec)
     int_sum(i) = int_sum(i) - num_carry*prec
     int_sum(i-1) = int_sum(i-1) + num_carry
   endif ; enddo

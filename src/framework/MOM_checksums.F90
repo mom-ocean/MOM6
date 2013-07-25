@@ -942,10 +942,9 @@ subroutine chksum1d(array, mesg, start_x, end_x)
 
   integer :: xs,xe,i,bc,sum1
   integer :: bitcount
-  real :: sum, dummy
+  real :: sum
   real, allocatable :: sum_here(:)
   integer :: pe_num   ! pe number of the data
-  !character(len=16) :: dum
 
   xs = LBOUND(array,1) ; xe = UBOUND(array,1)
   if (present(start_x)) xs = start_x
@@ -983,7 +982,6 @@ subroutine chksum2d(array, mesg, start_x, end_x, start_y, end_y)
   real :: sum
   real, allocatable :: sum_here(:)
   integer :: pe_num   ! pe number of the data
-  character(len=16) :: dum
 
   xs = LBOUND(array,1) ; xe = UBOUND(array,1)
   ys = LBOUND(array,2) ; ye = UBOUND(array,2)
@@ -1029,7 +1027,6 @@ subroutine chksum3d(array, mesg, start_x, end_x, start_y, end_y, start_z, end_z)
   real :: sum
   real, allocatable :: sum_here(:)
   integer :: pe_num   ! pe number of the data
-  character(len=16) :: dum
 
   xs = LBOUND(array,1) ; xe = UBOUND(array,1)
   ys = LBOUND(array,2) ; ye = UBOUND(array,2)
@@ -1154,7 +1151,6 @@ end function is_NaN_3d
 subroutine chk_sum_msg1(fmsg,bc0,mesg)
   character(len=*), intent(in) :: fmsg, mesg
   integer,          intent(in) :: bc0
-  integer                      :: f0
   if (is_root_pe()) write(0,'(A,1(A,I9,X),A)') fmsg," c=",bc0,mesg
 end subroutine chk_sum_msg1
 
@@ -1163,7 +1159,6 @@ end subroutine chk_sum_msg1
 subroutine chk_sum_msg5(fmsg,bc0,bcSW,bcSE,bcNW,bcNE,mesg)
   character(len=*), intent(in) :: fmsg, mesg
   integer,          intent(in) :: bc0,bcSW,bcSE,bcNW,bcNE
-  integer                      :: f0,fSW,fSE,fNW,fNE
   if (is_root_pe()) write(0,'(A,5(A,I9,1X),A)') &
      fmsg," c=",bc0,"sw=",bcSW,"se=",bcSE,"nw=",bcNW,"ne=",bcNE,mesg
 end subroutine chk_sum_msg5
