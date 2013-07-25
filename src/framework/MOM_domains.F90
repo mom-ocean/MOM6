@@ -234,7 +234,6 @@ subroutine pass_var_complete_2d(id_update, array, MOM_dom, sideflag, position)
   type(MOM_domain_type),  intent(inout) :: MOM_dom
   integer,      optional, intent(in)    :: sideflag
   integer,      optional, intent(in)    :: position
-  integer :: pass_var_start_2d
 ! Arguments: id_update - The integer id of this update which has been returned
 !                        from a previous call to pass_var_start.
 !  (inout)   array - The array which is having its halos points exchanged.
@@ -468,7 +467,6 @@ subroutine pass_vector_complete_2d(id_update, u_cmpt, v_cmpt, MOM_dom, direction
   type(MOM_domain_type),  intent(inout) :: MOM_dom
   integer,      optional, intent(in)    :: direction
   integer,      optional, intent(in)    :: stagger
-  integer                               :: pass_vector_start_2d
 ! Arguments: id_update - The integer id of this update which has been returned
 !                        from a previous call to pass_var_start.
 !  (inout)   u_cmpt - The nominal zonal (u) component of the vector pair which
@@ -510,7 +508,6 @@ subroutine pass_vector_complete_3d(id_update, u_cmpt, v_cmpt, MOM_dom, direction
   type(MOM_domain_type),  intent(inout) :: MOM_dom
   integer,      optional, intent(in)    :: direction
   integer,      optional, intent(in)    :: stagger
-  integer                               :: pass_vector_start_2d
 ! Arguments: id_update - The integer id of this update which has been returned
 !                        from a previous call to pass_var_start.
 !  (inout)   u_cmpt - The nominal zonal (u) component of the vector pair which
@@ -569,14 +566,16 @@ subroutine MOM_domains_init(MOM_dom, param_file, min_halo, symmetric, dynamic)
   integer, dimension(4) :: global_indices
   integer :: nihalo, njhalo, nihalo_dflt, njhalo_dflt
   integer :: pe, proc_used
-  integer :: isc,iec,jsc,jec ! The bounding indices of the computational domain.
   integer :: X_FLAGS, Y_FLAGS
-  integer :: i, xsiz, ysiz
   logical :: reentrant_x, reentrant_y, tripolar_N, is_static, may_be_static
   logical            :: mask_table_exists
   character(len=128) :: mask_table, inputdir
   character(len=200) :: mesg
+#ifdef STATIC_MEMORY_
+  integer :: xsiz, ysiz
+  integer :: isc,iec,jsc,jec ! The bounding indices of the computational domain.
   character(len=8) :: char_xsiz, char_ysiz, char_niglobal, char_njglobal
+#endif
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mod ! This module's name.

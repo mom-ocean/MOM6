@@ -51,7 +51,7 @@ subroutine global_i_mean(array, i_mean, G, mask)
 
   type(EFP_type), allocatable, dimension(:) :: sum, mask_sum
   real :: mask_sum_r
-  integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, idg_off, jdg_off
+  integer :: is, ie, js, je, idg_off, jdg_off
   integer :: i, j
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
@@ -129,7 +129,7 @@ subroutine global_j_mean(array, j_mean, G, mask)
 
   type(EFP_type), allocatable, dimension(:) :: sum, mask_sum
   real :: mask_sum_r
-  integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, idg_off, jdg_off
+  integer :: is, ie, js, je, idg_off, jdg_off
   integer :: i, j
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec

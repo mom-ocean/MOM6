@@ -366,8 +366,8 @@ subroutine reopen_file(unit, filename, vars, novars, G, fields, threading, timeu
 !  (in)      threading - SINGLE_FILE or MULTIPLE, optional.
 !  (in,opt)  timeunit - The length, in seconds, of the units for time. The
 !                       default value is 86400.0, for 1 day.
-  character(len=200) :: check_name, mesg, name
-  integer :: i, length, ndim, nvar, natt, ntime, thread
+  character(len=200) :: check_name, mesg
+  integer :: length, ndim, nvar, natt, ntime, thread
   logical :: exists
 
   thread = SINGLE_FILE

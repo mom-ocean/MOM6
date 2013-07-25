@@ -441,9 +441,9 @@ subroutine describe_option(opt_name, value)
   character(len=*), intent(in) :: opt_name, value
 
   character(len=240) :: mesg
-  integer :: start_ind = 1, end_ind, len_ind
+  integer :: len_ind
 
-  len_ind = len_trim(value)
+  len_ind = len_trim(value)  ! Add error handling for long values?
 
   mesg = "    ! "//trim(opt_name)//": "//trim(value)
   write(doc_unit, '(a)') trim(mesg)
@@ -557,7 +557,7 @@ subroutine diag_mediator_init(G, param_file, diag, err_msg)
   ! This subroutine initializes the diag_mediator and the diag_manager.
   ! The grid type should have its dimensions set by this point, but it
   ! is not necessary that the metrics and axis labels be set up yet.
-  integer :: ios, unit
+  integer :: ios
   logical :: opened, new_file
   character(len=8)   :: this_pe
   character(len=240) :: doc_file, doc_file_dflt
