@@ -243,6 +243,16 @@ subroutine regridding_main( remapCS, CS, G, h, tv, dzInterface, hNew )
 ! the old grid and the new grid. The creation of the new grid can be based
 ! on z coordinates, target interface densities, sigma coordinates or any
 ! arbitrary coordinate system.
+!   The MOM6 interface positions are always calculated from the bottom up by
+! accumulating the layer thicknessea starting at z=-G%bathyT.  z increases
+! upwards (decreasing k-index).
+!   The new grid is defined by the change in position of those interfaces in z
+!       dzInterface = zNew - zOld.
+!   Thus, if the regridding inflates the top layer, hNew(1) > hOld(1), then the
+! second interface moves downward, zNew(2) < zOld(2), and dzInterface(2) < 0.
+!       hNew(k) = hOld(k) - dzInterface(k+1) + dzInterface(k)
+! IMPORTANT NOTE:
+!   This is the converse of the sign convention used in the remapping code!
 !------------------------------------------------------------------------------
   
   ! Arguments
@@ -299,7 +309,7 @@ subroutine checkGridsMatch( G, h, dzInterface, hNew )
   ! Local variables
   integer :: i, j, k
   integer :: nz
-  real    :: H1, H2, H3, eps, Heps, Htmp, z1, z2, z3
+  real    :: totalHold, totalHnew, totalHnewF, eps, Heps, hNewF, zOld, zNewH, zNewF
 
   nz = G%ke
   eps =1.
@@ -309,65 +319,76 @@ subroutine checkGridsMatch( G, h, dzInterface, hNew )
     do i = G%isc-1,G%iec+1
 
       ! Total thickness of grid h
-      H1 = 0.
+      totalHold = 0.
       do k = 1,nz
-        H1 = H1 + h(i,j,k)
+        totalHold = totalHold + h(i,j,k)
       enddo
 
       ! Total thickness of grid hNew
-      H2 = 0.
+      totalHnew = 0.
       do k = 1,nz
-        H2 = H2 + hNew(i,j,k)
+        totalHnew = totalHnew + hNew(i,j,k)
       enddo
 
-      if (abs(H2-H1)>real(nz-1)*0.5*(H1+H2)*eps * 10.) then !!!! FUDGE FACTOR ----AJA
+      if (abs(totalHnew-totalHold)>real(nz-1)*0.5*(totalHold+totalHnew)*eps * 10.) then !!!! FUDGE FACTOR ----AJA
         do k = 1,nz
           write(0,*) 'k,h,hnew=',k,h(i,j,k),hNew(i,j,k)
         enddo
         write(0,*) 'i,j,nz=',i,j,nz
-        write(0,*) 'H1,H2,H2-H1=',H1,H2,H2-H1
-        write(0,*) 'eps,(n-1)/2*eps*H=',eps,real(nz-1)*0.5*(H1+H2)*eps
+        write(0,*) 'Hold,Hnew,Hnew-Hold=',totalHold,totalHnew,totalHnew-totalHold
+        write(0,*) 'eps,(n-1)/2*eps*H=',eps,real(nz-1)*0.5*(totalHold+totalHnew)*eps
         call MOM_error( FATAL, 'MOM_regridding, checkGridsMatch: '//&
           'The difference of total thicknesses exceeds roundoff')
       endif
 
-      Heps = (H1 + H2) * eps ! Change meaning of eps
-      z1 = - G%bathyT(i,j)
-      z2 = - G%bathyT(i,j)
-      H1 = 0.
-      H3 = 0.
+      ! Change meaning of eps. Hereon, Heps is a dimensional error
+      Heps = (totalHold + totalHnew) * eps
+
+      ! Integrate upwards for the interfaces consistent with the rest of MOM6
+      zOld = - G%bathyT(i,j)
+      zNewH = - G%bathyT(i,j)
+      totalHnewF = 0.
       do k = nz,1,-1
-        z1 = z1 + h(i,j,k) ! Old interface position
-        z2 = z2 + hNew(i,j,k) ! New interface position based on hNew
-        z3 = z1 + dzInterface(i,j,k) ! New interface position based dzInterface
-        hTmp = ( h(i,j,k) - dzInterface(i,j,k+1) ) + dzInterface(i,j,k)
-        if (hTmp<0.) then
-          write(0,*) 'k,h,hnp1=',k,h(i,j,k),hTmp
+        zOld = zOld + h(i,j,k) ! Old interface position
+        zNewH = zNewH + hNew(i,j,k) ! New interface position based on hNew
+        zNewF = zOld + dzInterface(i,j,k) ! New interface position based on dzInterface
+       !hNewF = ( h(i,j,k) - dzInterface(i,j,k+1) ) + dzInterface(i,j,k)
+        hNewF = h(i,j,k) + ( dzInterface(i,j,k) - dzInterface(i,j,k+1) )
+        if (hNewF<0.) then
+          write(0,*) 'k,h,hnew=',k,h(i,j,k),hNewF
           write(0,*) 'dzI(k+1),dzI(k)=',dzInterface(i,j,k+1),dzInterface(i,j,k)
           call MOM_error( FATAL, 'MOM_regridding, checkGridsMatch: '//&
             'Flux form led to negative layer thickness')
         endif
-        H1 = H1 + h(i,j,k)
-        H3 = H3 + hTmp
+        totalHnewF = totalHnewF + hNewF
 
-        if (abs(z3-z2)>real(nz-k+1)*0.5*Heps) then
+        if (abs(zNewF-zNewH)>real(nz-k+1)*0.5*Heps) then
           write(0,*) 'i,j,k,eps=',i,j,k,eps
-          write(0,*) 'z1,dzI,z3=z1+dzI =',z1,dzInterface(i,j,k),z3
-          write(0,*) 'z3-z2,(n-1)*eps*D,eps*D=',z3-z2,real(nz-k)*0.5*Heps,Heps
+          write(0,*) 'zOld,dzI,zNewF=zOld+dzI =',zOld,dzInterface(i,j,k),zNewF
+          write(0,*) 'zNewF-zNewH,(n-1)*eps*D,eps*D=',zNewF-zNewH,real(nz-k+1)*0.5*Heps,Heps
           call MOM_error( FATAL, 'MOM_regridding, checkGridsMatch: '//&
             'The two estimates of new interfaces differ by more than roundoff')
         endif
       enddo
-      if (abs(H3-H1)>real(nz-1)*0.5*(H1+H3)*eps) then
-        do k = 1,nz
-          write(0,*) 'k,h,hnew=',k,h(i,j,k),hNew(i,j,k)
-        enddo
+
+      ! Conservation by implied hNewF
+      if (abs(totalHnewF-totalHold)>real(nz-1)*0.5*(totalHold+totalHnewF)*eps) then
         write(0,*) 'i,j,nz=',i,j,nz
-        write(0,*) 'H1,H3,H3-H1=',H1,H3,H3-H1
-        write(0,*) 'eps,(n)/2*eps*H=',eps,real(nz-1)*0.5*(H1+H3)*eps
+        do k = 1,nz
+          write(0,*) 'k,h,hnew=',k,h(i,j,k),h(i,j,k)+(dzInterface(i,j,k)-dzInterface(i,j,k+1))
+        enddo
+        write(0,*) 'Hold,Hnew,Hnew-Hold=',totalHold,totalHnewF,totalHnewF-totalHold
+        write(0,*) 'eps,(n)/2*eps*H=',eps,real(nz-1)*0.5*(totalHold+totalHnewF)*eps
         call MOM_error( FATAL, 'MOM_regridding, checkGridsMatch: '//&
           'Flux form did NOT conserve total thickness to within roundoff')
       endif
+
+      if (dzInterface(i,j,1) /= 0.) call MOM_error( FATAL, &
+          'MOM_regridding, checkGridsMatch: '//&
+          'Non-zero dzInterface at surface!')
+      if (dzInterface(i,j,nz+1) /= 0.) call MOM_error( FATAL, &
+          'MOM_regridding, checkGridsMatch: '//&
+          'Non-zero dzInterface at bottom!')
     enddo
   enddo
           
@@ -704,6 +725,8 @@ subroutine buildGridRho( G, h, tv, dzInterface, hNew, remapCS, CS )
           h1(k) = x1(k+1) - x1(k)
         end do
         dx(:) = x1(:) - x0(:)
+        dx(1) = 0.
+        dx(nz+1) = 0.
         
         call remapping_core(remapCS, nz, h0, S_column, nz, dx, h1, S_column)
         
@@ -752,6 +775,20 @@ subroutine buildGridRho( G, h, tv, dzInterface, hNew, remapCS, CS )
       dzInterface(i,j,1) = 0.
       do k = 2,nz
         dzInterface(i,j,k) = zNew(k) - zOld(k)
+#ifdef __DO_SAFTEY_CHECKS__
+        if (zNew(k) > zOld(1)) then
+          write(0,*) 'zOld=',zOld
+          write(0,*) 'zNew=',zNew
+          call MOM_error( FATAL, 'MOM_regridding, buildGridRho: '//&
+               'interior interface above surface!' )
+        endif
+        if (zNew(k) > zNew(k-1)) then
+          write(0,*) 'zOld=',zOld
+          write(0,*) 'zNew=',zNew
+          call MOM_error( FATAL, 'MOM_regridding, buildGridRho: '//&
+               'interior interfaces cross!' )
+        endif
+#endif
       enddo
       dzInterface(i,j,nz+1) = 0.
 
@@ -770,8 +807,6 @@ subroutine buildGridRho( G, h, tv, dzInterface, hNew, remapCS, CS )
         call MOM_error( FATAL, &
                'MOM_regridding, buildGridRho: top surface has moved!!!' )
       endif
-      dzInterface(i,j,1) = 0.
-      dzInterface(i,j,nz+1) = 0.
 #endif
 
     end do  ! end loop on j 

@@ -96,7 +96,7 @@ contains
 !------------------------------------------------------------------------------
 ! General remapping routine 
 !------------------------------------------------------------------------------
-subroutine remapping_main( CS, G, h, dzInterface, h_new, tv, u, v )
+subroutine remapping_main( CS, G, h, dxInterface, h_new, tv, u, v )
 !------------------------------------------------------------------------------
 ! This routine takes care of remapping all variable between the old and the
 ! new grids. When velocity components need to be remapped, thicknesses at
@@ -107,7 +107,7 @@ subroutine remapping_main( CS, G, h, dzInterface, h_new, tv, u, v )
   type(remapping_CS),                               intent(inout) :: CS
   type(ocean_grid_type),                            intent(in)    :: G
   real, dimension(NIMEM_,NJMEM_,NKMEM_),            intent(in)    :: h
-  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_),     intent(in)    :: dzInterface
+  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_),     intent(in)    :: dxInterface
   real, dimension(NIMEM_,NJMEM_,NKMEM_),            intent(in)    :: h_new
   type(thermo_var_ptrs),                            intent(inout) :: tv       
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), optional, intent(inout) :: u
@@ -128,8 +128,8 @@ subroutine remapping_main( CS, G, h, dzInterface, h_new, tv, u, v )
       ! Build the start and final grids
       h1(:) = h(i,j,:)
       h2(:) = h_new(i,j,:)
-      dx(:) = dzInterface(i,j,:)
-      call buildConsistentGrids(nz, h1, h2, x1, x2)
+      dx(:) = dxInterface(i,j,:)
+      call buildConsistentGrids(nz, h1, dx, h2, x1, x2)
       
       do k = 1,nz
         h1(k) = x1(k+1) - x1(k)
@@ -155,8 +155,8 @@ subroutine remapping_main( CS, G, h, dzInterface, h_new, tv, u, v )
       ! Build the start and final grids
       h1(:) = 0.5 * ( h(i,j,:) + h(i+1,j,:) )
       h2(:) = 0.5 * ( h_new(i,j,:) + h_new(i+1,j,:) )
-      dx(:) = 0.5 * ( dzInterface(i,j,:) + dzInterface(i+1,j,:) )
-      call buildConsistentGrids(nz, h1, h2, x1, x2)
+      dx(:) = 0.5 * ( dxInterface(i,j,:) + dxInterface(i+1,j,:) )
+      call buildConsistentGrids(nz, h1, dx, h2, x1, x2)
       
       do k = 1,nz
         h1(k) = x1(k+1) - x1(k)
@@ -179,8 +179,8 @@ subroutine remapping_main( CS, G, h, dzInterface, h_new, tv, u, v )
       ! Build the start and final grids
       h1(:) = 0.5 * ( h(i,j,:) + h(i,j+1,:) )
       h2(:) = 0.5 * ( h_new(i,j,:) + h_new(i,j+1,:) )
-      dx(:) = 0.5 * ( dzInterface(i,j,:) + dzInterface(i,j+1,:) )
-      call buildConsistentGrids(nz, h1, h2, x1, x2)
+      dx(:) = 0.5 * ( dxInterface(i,j,:) + dxInterface(i,j+1,:) )
+      call buildConsistentGrids(nz, h1, dx, h2, x1, x2)
 
       do k = 1,nz
         h1(k) = x1(k+1) - x1(k)
@@ -201,7 +201,7 @@ end subroutine remapping_main
 !------------------------------------------------------------------------------
 ! Build a final grid 
 !------------------------------------------------------------------------------
-subroutine buildConsistentGrids(nz, hs, hf, xs, xf)
+subroutine buildConsistentGrids(nz, hs, dx, hf, xs, xf)
 !------------------------------------------------------------------------------
 ! This routine calculates the coordinates xs and xf consistently from
 ! hs and hf so that the edges of the domain line up.
@@ -211,30 +211,47 @@ subroutine buildConsistentGrids(nz, hs, hf, xs, xf)
   ! Arguments
   integer,               intent(in)    :: nz
   real, dimension(nz),   intent(in)    :: hs, hf
+  real, dimension(nz+1), intent(in)    :: dx
   real, dimension(nz+1), intent(inout) :: xs, xf
 
   integer :: k
   real    :: sumH1, sumH2
+  real, dimension(nz+1) :: xAlt
 
   ! Build start grid
   call buildGridFromH(nz, hs, xs)
   sumH1 = xs(nz+1)
 
-  ! Initial guess at final grid
+  ! Final grid based on hf
   call buildGridFromH(nz, hf, xf)
   sumH2 = xf(nz+1)
 
+  ! Final grid based on dx
+  xAlt = xs + dx
+
 #ifdef __DO_SAFTEY_CHECKS__
-    call checkGridConsistentcies(nz, xs, nz, xf, strict=.false.)
-    if (abs(sumH1-sumH2)>0.5*real(nz)*epsilon(sumH2)*(sumH1+sumH2)) then
-      write(0,*) 'Start/final/start-final grid'
-      do k = 1,nz+1
-        write(0,'(i4,3es12.3)') k,xs(k),xf(k),xs(k)-xf(k)
-      enddo
-      write(0,*) 'eps,H*eps',epsilon(sumH2),0.5*epsilon(sumH2)*(sumH1+sumH2)
-      call MOM_error(FATAL,'MOM_remapping, buildConsistentGrids: '//&
-                     'Final and start grids do not match.')
-    endif
+  call checkConsistantCoords(nz, xs, nz, xf, .false., 'buildConsistentGrids xf')
+  call checkConsistantCoords(nz, xs, nz, xAlt, .true., 'buildConsistentGrids xAlt')
+  ! Conservation of thickness
+  if (abs(sumH1-sumH2)>0.5*real(nz)*epsilon(sumH2)*(sumH1+sumH2)) then
+    write(0,*) 'Start/final/start-final grid'
+    do k = 1,nz+1
+      write(0,'(i4,3es12.3)') k,xs(k),xf(k),xs(k)-xf(k)
+    enddo
+    write(0,*) 'eps,H*eps',epsilon(sumH2),0.5*epsilon(sumH2)*(sumH1+sumH2)
+    call MOM_error(FATAL,'MOM_remapping, buildConsistentGrids: '//&
+                   'Final and start grids do not match.')
+  endif
+  if (dx(1) /= 0.) then
+    write(0,*) 'dx=',dx
+    call MOM_error(FATAL,'MOM_remapping, buildConsistentGrids: '//&
+                   'Surface moved ... dx at surface non zero.')
+  endif
+  if (dx(nz+1) /= 0.) then
+    write(0,*) 'dx=',dx
+    call MOM_error(FATAL,'MOM_remapping, buildConsistentGrids: '//&
+                   'Bottom moved ... dx at surface non zero.')
+  endif
 #endif
 
 ! call makeGridsConsistent(nz, xs, nz, hf, xf)
@@ -269,7 +286,7 @@ end subroutine buildGridFromH
 !------------------------------------------------------------------------------
 ! Check that two grids are consistent
 !------------------------------------------------------------------------------
-subroutine checkGridConsistentcies(ns, xs, nf, xf, strict)
+subroutine checkConsistantCoords(ns, xs, nf, xf, strict, msg)
 !------------------------------------------------------------------------------
 ! Checks that xs and xf are consistent to within roundoff.
 ! If strict=False, the end points of xs and xf are allowed to differ by
@@ -281,6 +298,7 @@ subroutine checkGridConsistentcies(ns, xs, nf, xf, strict)
   integer, intent(in) :: ns, nf
   real,    intent(in) :: xs(ns+1), xf(nf+1)
   logical, intent(in) :: strict
+  character(len=*), intent(in) :: msg
 
   ! Local variables
   integer :: k
@@ -291,8 +309,9 @@ subroutine checkGridConsistentcies(ns, xs, nf, xf, strict)
 
   if (strict) then
     if (sumHf /= sumHs) call &
-        MOM_error(FATAL,'MOM_remapping, checkGridConsistentcies: '//&
-                        'Total thickness of two grids are not exactly equal..')
+        MOM_error(FATAL,'MOM_remapping, checkConsistantCoords: '//&
+                        'Total thickness of two grids are not exactly equal.'//&
+                        ' Called from '//trim(msg) )
   else ! not strict
     if (isPosSumErrSignificant(ns, sumHs, nf, sumhf)) then
       write(0,*) 'Start/final/start-final grid'
@@ -305,12 +324,13 @@ subroutine checkGridConsistentcies(ns, xs, nf, xf, strict)
           write(0,'(i4,1es12.3)') k,xs(k)
         endif
       enddo
-      call MOM_error(FATAL,'MOM_remapping, checkGridConsistentcies: '//&
-              'Total thickness of two grids do not match to within round-off.')
+      call MOM_error(FATAL,'MOM_remapping, checkConsistantCoords: '//&
+              'Total thickness of two grids do not match to within round-off.'//&
+              ' Called from '//trim(msg) )
     endif
   endif
 
-end subroutine checkGridConsistentcies
+end subroutine checkConsistantCoords
 
 
 !------------------------------------------------------------------------------
@@ -475,7 +495,7 @@ end function isSignedSumErrSignificant
 subroutine makeGridsConsistent(ns, xs, nf, hf, xf)
 !------------------------------------------------------------------------------
 ! Adjusts xf so that the end points exactly match those of xs.
-! It is best to have called checkGridConsistentcies with strict=false
+! It is best to have called checkConsistantCoords with strict=false
 ! to ensure that the grids are already close and only differ due to
 ! round-off.
 !------------------------------------------------------------------------------
@@ -493,6 +513,7 @@ subroutine makeGridsConsistent(ns, xs, nf, hf, xf)
     if (xf(1) /= xs(1)) call &
          MOM_error(FATAL,'MOM_remapping, makeGridsConsistent: '//&
                          'Starting point of two grids do not match.')
+    call checkConsistantCoords(ns, xs, nf, xf, .false., 'makeGridsConsistent 1')
 #endif
 
   ! Adjust new grid so that end-points match those of the start grid.
@@ -509,7 +530,7 @@ subroutine makeGridsConsistent(ns, xs, nf, hf, xf)
   endif
 
 #ifdef __DO_SAFTEY_CHECKS__
-    call checkGridConsistentcies(ns, xs, nf, xf, strict=.true.)
+    call checkConsistantCoords(ns, xs, nf, xf, .true., 'makeGridsConsistent 2')
 #endif
 
 end subroutine makeGridsConsistent
@@ -537,6 +558,31 @@ subroutine remapping_core( CS, n0, h0, u0, n1, dx, h1, u1 )
 
   ! Local variables
   integer :: iMethod
+
+#ifdef __DO_SAFTEY_CHECKS__
+  integer :: k
+  real :: hTmp
+
+  if (dx(1) /= 0.) call MOM_error( FATAL, 'MOM_remapping, remapping_core: '//&
+             'Non-zero surface flux!' ) ! This is techically allowed but in practice avoided
+  do k=1, n1
+    if (k <= n0) then
+      hTmp = h0(k) + ( dx(k+1) - dx(k) )
+      if (hTmp < 0.) then
+        write(0,*) 'k,h0(k),hNew,dx(+1),dx(0)=',k,h0(k),dx(k+1),dx(k)
+        call MOM_error( FATAL, 'MOM_remapping, remapping_core: '//&
+             'negative h implied by fluxes' )
+      endif
+    else
+      hTmp = ( dx(k+1) - dx(k) )
+      if (hTmp < 0.) then
+        write(0,*) 'k,hNew,dx(+1),dx(0)=',k,dx(k+1),dx(k)
+        call MOM_error( FATAL, 'MOM_remapping, remapping_core: '//&
+             'negative h implied by fluxes' )
+      endif
+    endif
+  end do
+#endif
 
   iMethod = -999
   
@@ -586,11 +632,12 @@ subroutine remapping_core( CS, n0, h0, u0, n1, dx, h1, u1 )
       end if    
       iMethod = INTEGRATION_PQM
     case default
-      call MOM_error( FATAL, 'The selected remapping method is invalid' )
+      call MOM_error( FATAL, 'MOM_remapping, remapping_core: '//&
+           'The selected remapping method is invalid' )
   end select
 
-  call remapByProjection( n0, h0, u0, CS%ppoly_r, n1, h1, iMethod, u1 )
 ! call remapByDeltaZ( n0, h0, u0, CS%ppoly_r, n1, dx, iMethod, u1 )
+  call remapByProjection( n0, h0, u0, CS%ppoly_r, n1, h1, iMethod, u1 )
 
 #ifdef __DO_SAFTEY_CHECKS__
   call checkGridConservation(n0, h0, u0, n1, h1, u1)
@@ -698,11 +745,15 @@ subroutine remapByDeltaZ( n0, h0, u0, ppoly0, n1, dx1, method, u1, h1 )
 
 #ifdef __DO_SAFTEY_CHECKS__
     if (xL < 0.) then
-      write(0,*) 'xOld,xNew,xL,xR=',xOld,xNew,xL,xR,iTarget
+      write(0,*) 'h0=',h0
+      write(0,*) 'dx1=',dx1
+      write(0,*) 'xOld,xNew,xL,xR,i=',xOld,xNew,xL,xR,iTarget
       call MOM_error(FATAL,'MOM_remapping, remapByDeltaZ: xL too negative')
     endif
     if (xR > h0Total) then
-      write(0,*) 'xOld,xNew,xL,xR=',xOld,xNew,xL,xR,iTarget
+      write(0,*) 'h0=',h0
+      write(0,*) 'dx1=',dx1
+      write(0,*) 'xOld,xNew,xL,xR,i=',xOld,xNew,xL,xR,iTarget
       call MOM_error(FATAL,'MOM_remapping, remapByDeltaZ: xR too positive')
     endif
 #endif
@@ -1170,7 +1221,7 @@ logical function remappingUnitTests()
   write(*,*) 'h0 (test data)'
   call dumpGrid(n0,h0,x0,u0)
 
-  dx1(:)=-9.E20
+  call dzFromH( n0, h0, n1, h1, dx1 )
   call remapping_core( CS, n0, h0, u0, n1, dx1, h1, u1 )
   do i=1,n1
     err=u1(i)-8./3.*(0.5*real(1+n1)-real(i))
