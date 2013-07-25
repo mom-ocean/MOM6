@@ -116,7 +116,7 @@ subroutine remapping_main( CS, G, h, dzInterface, h_new, tv, u, v )
   ! Local variables
   integer               :: i, j, k
   integer               :: nz
-  real, dimension(G%ke+1) :: x1, x2
+  real, dimension(G%ke+1) :: x1, x2, dx
   real, dimension(G%ke) :: h1, h2
 
   nz = G%ke
@@ -128,6 +128,7 @@ subroutine remapping_main( CS, G, h, dzInterface, h_new, tv, u, v )
       ! Build the start and final grids
       h1(:) = h(i,j,:)
       h2(:) = h_new(i,j,:)
+      dx(:) = dzInterface(i,j,:)
       call buildConsistentGrids(nz, h1, h2, x1, x2)
       
       do k = 1,nz
@@ -135,11 +136,11 @@ subroutine remapping_main( CS, G, h, dzInterface, h_new, tv, u, v )
         h2(k) = x2(k+1) - x2(k)
       end do
       
-      call remapping_core(CS, nz, h1, tv%S(i,j,:), nz, h2, CS%u_column)
+      call remapping_core(CS, nz, h1, tv%S(i,j,:), nz, dx, h2, CS%u_column)
       
       tv%S(i,j,:) = CS%u_column(:)
       
-      call remapping_core(CS, nz, h1, tv%T(i,j,:), nz, h2, CS%u_column)
+      call remapping_core(CS, nz, h1, tv%T(i,j,:), nz, dx, h2, CS%u_column)
      
       tv%T(i,j,:) = CS%u_column(:)
 
@@ -154,6 +155,7 @@ subroutine remapping_main( CS, G, h, dzInterface, h_new, tv, u, v )
       ! Build the start and final grids
       h1(:) = 0.5 * ( h(i,j,:) + h(i+1,j,:) )
       h2(:) = 0.5 * ( h_new(i,j,:) + h_new(i+1,j,:) )
+      dx(:) = 0.5 * ( dzInterface(i,j,:) + dzInterface(i+1,j,:) )
       call buildConsistentGrids(nz, h1, h2, x1, x2)
       
       do k = 1,nz
@@ -161,7 +163,7 @@ subroutine remapping_main( CS, G, h, dzInterface, h_new, tv, u, v )
         h2(k) = x2(k+1) - x2(k)
       end do
   
-      call remapping_core(CS, nz, h1, u(i,j,:), nz, h2, CS%u_column)
+      call remapping_core(CS, nz, h1, u(i,j,:), nz, dx, h2, CS%u_column)
      
       u(i,j,:) = CS%u_column(:)
       
@@ -177,6 +179,7 @@ subroutine remapping_main( CS, G, h, dzInterface, h_new, tv, u, v )
       ! Build the start and final grids
       h1(:) = 0.5 * ( h(i,j,:) + h(i,j+1,:) )
       h2(:) = 0.5 * ( h_new(i,j,:) + h_new(i,j+1,:) )
+      dx(:) = 0.5 * ( dzInterface(i,j,:) + dzInterface(i,j+1,:) )
       call buildConsistentGrids(nz, h1, h2, x1, x2)
 
       do k = 1,nz
@@ -184,7 +187,7 @@ subroutine remapping_main( CS, G, h, dzInterface, h_new, tv, u, v )
         h2(k) = x2(k+1) - x2(k)
       end do
 
-      call remapping_core(CS, nz, h1, v(i,j,:), nz, h2, CS%u_column)
+      call remapping_core(CS, nz, h1, v(i,j,:), nz, dx, h2, CS%u_column)
      
       v(i,j,:) = CS%u_column(:)
       
@@ -515,7 +518,7 @@ end subroutine makeGridsConsistent
 !------------------------------------------------------------------------------
 ! Remapping core routine
 !------------------------------------------------------------------------------
-subroutine remapping_core( CS, n0, h0, u0, n1, h1, u1 )
+subroutine remapping_core( CS, n0, h0, u0, n1, dx, h1, u1 )
 !------------------------------------------------------------------------------
 ! This routine is basic in that it simply takes two grids and remaps the
 ! field known on the first grid onto the second grid, following the rules
@@ -528,6 +531,7 @@ subroutine remapping_core( CS, n0, h0, u0, n1, h1, u1 )
   real, dimension(:), intent(in)    :: h0 ! cell widths on source grid
   real, dimension(:), intent(in)    :: u0 ! cell averages on source grid
   integer,            intent(in)    :: n1 ! Number of cells on target grid
+  real, dimension(:), intent(in)    :: dx ! Change in interface positions
   real, dimension(:), intent(in)    :: h1 ! cell widths on target grid
   real, dimension(:), intent(inout) :: u1 ! cell averages on target grid
 
@@ -586,7 +590,7 @@ subroutine remapping_core( CS, n0, h0, u0, n1, h1, u1 )
   end select
 
   call remapByProjection( n0, h0, u0, CS%ppoly_r, n1, h1, iMethod, u1 )
-! call remapByDeltaZ( n0, h0, u0, CS%ppoly_r, n1, dx1, iMethod, u1 )
+! call remapByDeltaZ( n0, h0, u0, CS%ppoly_r, n1, dx, iMethod, u1 )
 
 #ifdef __DO_SAFTEY_CHECKS__
   call checkGridConservation(n0, h0, u0, n1, h1, u1)
@@ -979,6 +983,48 @@ end subroutine integrateReconOnInterval
 
 
 !------------------------------------------------------------------------------
+! dzFromH
+!------------------------------------------------------------------------------
+subroutine dzFromH( n1, h1, n2, h2, dx )
+! ------------------------------------------------------------------------------
+! Calculates the change in interface positions based on h1 and h2
+! ------------------------------------------------------------------------------
+  
+  ! Arguments
+  integer,            intent(in)  :: n1 ! Number of cells on source grid
+  real, dimension(:), intent(in)  :: h1 ! cell widths of source grid (size n0)
+  integer,            intent(in)  :: n2 ! Number of cells on target grid
+  real, dimension(:), intent(in)  :: h2 ! cell widths of target grid (size n1)
+  real, dimension(:), intent(out) :: dx ! Change in interface position (size n1+1)
+    
+  ! Local variables
+  integer :: k
+  real :: x1, x2
+
+  x1 = 0.
+  x2 = 0.
+  dx(1) = 0.
+  do k = 1, max(n1,n2)
+    if (k <= n1) x1 = x1 + h1(k) ! Interface k+1, right of source cell k
+    if (k <= n2) then
+      x2 = x2 + h2(k) ! Interface k+1, right of target cell k
+      dx(k+1) = x2 - x1 ! Change of interface k+1, target - source
+    endif
+  enddo
+#ifdef __DO_SAFTEY_CHECKS__
+  if (abs(x2-x1) > 0.5*(real(n1-1)*x1+real(n2-1)*x2)*epsilon(x1)) then
+    write(0,*) 'h1=',h1
+    write(0,*) 'h2=',h2
+    write(0,*) 'dx=',dx
+    write(0,*) 'x1,x2,x2-x1',x1,x2,x2-x1
+    call MOM_error(FATAL,'MOM_regridding, dzFromH: Bottom has moved!')
+  endif
+#endif
+
+end subroutine dzFromH
+
+
+!------------------------------------------------------------------------------
 ! Constructor for remapping
 !------------------------------------------------------------------------------
 subroutine initialize_remapping( nk, remappingScheme, CS)
@@ -1095,7 +1141,7 @@ logical function remappingUnitTests()
   ! Returns True if a test fails, otherwise False
   integer, parameter :: n0 = 4, n1 = 3, n2 = 6
   real :: h0(n0), x0(n0+1), u0(n0)
-  real :: h1(n1), x1(n1+1), u1(n1), hn1(n1)
+  real :: h1(n1), x1(n1+1), u1(n1), hn1(n1), dx1(n1+1)
   real :: h2(n2), x2(n2+1), u2(n2), hn2(n2), dx2(n2+1)
   data u0 /3., 1., -1., -3./   ! Linear profile, 4 at surface to -4 at bottom
   data h0 /4*0.75/ ! 4 uniform layers with total depth of 3
@@ -1124,7 +1170,8 @@ logical function remappingUnitTests()
   write(*,*) 'h0 (test data)'
   call dumpGrid(n0,h0,x0,u0)
 
-  call remapping_core( CS, n0, h0, u0, n1, h1, u1 )
+  dx1(:)=-9.E20
+  call remapping_core( CS, n0, h0, u0, n1, dx1, h1, u1 )
   do i=1,n1
     err=u1(i)-8./3.*(0.5*real(1+n1)-real(i))
     if (abs(err)>epsilon(err)) remappingUnitTests = .true.
