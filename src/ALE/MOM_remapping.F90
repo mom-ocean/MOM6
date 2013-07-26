@@ -115,7 +115,7 @@ subroutine remapping_main( CS, G, h, dxInterface, tv, u, v )
   ! Local variables
   integer               :: i, j, k
   integer               :: nz
-  real, dimension(G%ke+1) :: x1, dx
+  real, dimension(G%ke+1) :: dx
   real, dimension(G%ke) :: h1
 
   nz = G%ke
@@ -127,11 +127,6 @@ subroutine remapping_main( CS, G, h, dxInterface, tv, u, v )
       ! Build the start and final grids
       h1(:) = h(i,j,:)
       dx(:) = dxInterface(i,j,:)
-      call buildGridFromH(nz, h1, x1)
-      
-      do k = 1,nz
-        h1(k) = x1(k+1) - x1(k)
-      end do
       
       call remapping_core(CS, nz, h1, tv%S(i,j,:), nz, dx, CS%u_column)
       
@@ -152,12 +147,7 @@ subroutine remapping_main( CS, G, h, dxInterface, tv, u, v )
       ! Build the start and final grids
       h1(:) = 0.5 * ( h(i,j,:) + h(i+1,j,:) )
       dx(:) = 0.5 * ( dxInterface(i,j,:) + dxInterface(i+1,j,:) )
-      call buildGridFromH(nz, h1, x1)
       
-      do k = 1,nz
-        h1(k) = x1(k+1) - x1(k)
-      end do
-  
       call remapping_core(CS, nz, h1, u(i,j,:), nz, dx, CS%u_column)
      
       u(i,j,:) = CS%u_column(:)
@@ -174,11 +164,6 @@ subroutine remapping_main( CS, G, h, dxInterface, tv, u, v )
       ! Build the start and final grids
       h1(:) = 0.5 * ( h(i,j,:) + h(i,j+1,:) )
       dx(:) = 0.5 * ( dxInterface(i,j,:) + dxInterface(i,j+1,:) )
-      call buildGridFromH(nz, h1, x1)
-
-      do k = 1,nz
-        h1(k) = x1(k+1) - x1(k)
-      end do
 
       call remapping_core(CS, nz, h1, v(i,j,:), nz, dx, CS%u_column)
      
