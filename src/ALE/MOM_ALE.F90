@@ -344,6 +344,7 @@ subroutine ALE_main( G, h, u, v, tv, CS )
   type(ALE_CS), intent(inout) :: CS ! Regridding parameters and options
 
   ! Local variables
+  integer :: nk
   
   ! Build new grid. The new grid is stored in h_new. The old grid is h.
   ! Both are needed for the subsequent remapping of variables.
@@ -354,7 +355,8 @@ subroutine ALE_main( G, h, u, v, tv, CS )
   
   ! Override old grid with new one. The new grid 'h_new' is built in
   ! one of the 'build_...' routines above.
-  h(:,:,:) = CS%h_aux(:,:,:)
+  nk = G%ke
+  h(:,:,:) = h(:,:,:) + ( CS%dzRegrid(:,:,1:nk) - CS%dzRegrid(:,:,2:nk+1) )
 
 end subroutine ALE_main
 
