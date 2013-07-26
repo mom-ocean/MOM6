@@ -88,7 +88,6 @@ type, public :: ALE_CS
   type(edgeSlopeArrays) :: edgeSlopeWrk ! Work space for edge slopes
 
   ! Work space for communicating between regridding and remapping
-  real ALLOCABLE_, dimension(NIMEM_,NJMEM_,NKMEM_) :: h_aux
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_,NK_INTERFACE_) :: dzRegrid
 
 end type
@@ -348,7 +347,7 @@ subroutine ALE_main( G, h, u, v, tv, CS )
   
   ! Build new grid. The new grid is stored in h_new. The old grid is h.
   ! Both are needed for the subsequent remapping of variables.
-  call regridding_main( CS%remapCS, CS%regridCS, G, h, tv, CS%dzRegrid, CS%h_aux )
+  call regridding_main( CS%remapCS, CS%regridCS, G, h, tv, CS%dzRegrid )
   
   ! Remap all variables from old grid h onto new grid h_new
   call remapping_main( CS%remapCS, G, h, -CS%dzRegrid, tv, u, v )
@@ -530,7 +529,6 @@ subroutine ALE_memory_allocation( G, CS )
   call ppoly_init( CS%ppoly_parab, nz, 2 )
 
   ! Work space
-  ALLOC_(CS%h_aux(G%isd:G%ied,G%jsd:G%jed,nz)); CS%h_aux(:,:,:) = 0.
   ALLOC_(CS%dzRegrid(G%isd:G%ied,G%jsd:G%jed,nz+1)); CS%dzRegrid(:,:,:) = 0.
   
 end subroutine ALE_memory_allocation
@@ -555,7 +553,6 @@ subroutine ALE_memory_deallocation( CS )
   call ppoly_destroy( CS%ppoly_parab )
 
   ! Work space
-  DEALLOC_(CS%h_aux)
   DEALLOC_(CS%dzRegrid)
 
 end subroutine ALE_memory_deallocation

@@ -237,7 +237,7 @@ end subroutine end_regridding
 !------------------------------------------------------------------------------
 ! Dispatching regridding routine: regridding & remapping
 !------------------------------------------------------------------------------
-subroutine regridding_main( remapCS, CS, G, h, tv, dzInterface, hNew )
+subroutine regridding_main( remapCS, CS, G, h, tv, dzInterface )
 !------------------------------------------------------------------------------
 ! This routine takes care of (1) building a new grid and (2) remapping between
 ! the old grid and the new grid. The creation of the new grid can be based
@@ -262,31 +262,34 @@ subroutine regridding_main( remapCS, CS, G, h, tv, dzInterface, hNew )
   real, dimension(NIMEM_,NJMEM_, NKMEM_),  intent(inout) :: h      ! Current 3D grid obtained after the last time step
   type(thermo_var_ptrs),                   intent(inout) :: tv     ! Thermodynamical variables (T, S, ...)  
   real, dimension(NIMEM_,NJMEM_, NK_INTERFACE_), intent(inout) :: dzInterface  ! The change in position of each interface
-  real, dimension(NIMEM_,NJMEM_, NKMEM_),  intent(inout) :: hNew  ! The new 3D grid obtained via regridding
+
+  real :: trickGnuCompiler
 
   ! Local variables
   
-  ! Build new grid. The new grid is stored in hNew. The old grid is h.
-  ! Both are needed for the subsequent remapping of variables.
   select case ( CS%regridding_scheme )
 
     case ( REGRIDDING_ZSTAR )
-      call buildGridZstar( CS, G, h, dzInterface, hNew )
+      call buildGridZstar( CS, G, h, dzInterface )
 
     case ( REGRIDDING_SIGMA )
-      call buildGridSigma( CS, G, h, dzInterface, hNew )
+      call buildGridSigma( CS, G, h, dzInterface )
     
     case ( REGRIDDING_RHO )  
       call convective_adjustment(G, h, tv)
-      call buildGridRho( G, h, tv, dzInterface, hNew, remapCS, CS )
+      call buildGridRho( G, h, tv, dzInterface, remapCS, CS )
 
     case ( REGRIDDING_ARBITRARY )
-      call build_grid_arbitrary( G, h, dzInterface, hNew, CS )
+      call build_grid_arbitrary( G, h, dzInterface, trickGnuCompiler, CS )
 
+    case default
+      call MOM_error(FATAL,'MOM_regridding, regridding_main: '//&
+                     'Unknown regridding scheme selected!')
+      
   end select ! type of grid 
   
 #ifdef __DO_SAFTEY_CHECKS__
-  call checkGridsMatch(G, h, dzInterface, hNew)
+  call checkGridsMatch(G, h, dzInterface)
 #endif
 
 end subroutine regridding_main
@@ -295,7 +298,7 @@ end subroutine regridding_main
 !------------------------------------------------------------------------------
 ! Check that the total thickness of two grids match
 !------------------------------------------------------------------------------
-subroutine checkGridsMatch( G, h, dzInterface, hNew )
+subroutine checkGridsMatch( G, h, dzInterface )
 !------------------------------------------------------------------------------
 ! This routine calculates the total thickness of 
 !------------------------------------------------------------------------------
@@ -304,12 +307,11 @@ subroutine checkGridsMatch( G, h, dzInterface, hNew )
   type(ocean_grid_type),                        intent(in) :: G
   real, dimension(NIMEM_,NJMEM_,NKMEM_),        intent(in) :: h
   real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(in) :: dzInterface
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),        intent(in) :: hNew
   
   ! Local variables
   integer :: i, j, k
   integer :: nz
-  real    :: totalHold, totalHnew, totalHnewF, eps, Heps, hNewF, zOld, zNewH, zNewF
+  real    :: totalHold, totalHnewF, eps, Heps, hNewF, zOld, zNewF
 
   nz = G%ke
   eps =1.
@@ -324,33 +326,14 @@ subroutine checkGridsMatch( G, h, dzInterface, hNew )
         totalHold = totalHold + h(i,j,k)
       enddo
 
-      ! Total thickness of grid hNew
-      totalHnew = 0.
-      do k = 1,nz
-        totalHnew = totalHnew + hNew(i,j,k)
-      enddo
-
-      if (abs(totalHnew-totalHold)>real(nz-1)*0.5*(totalHold+totalHnew)*eps * 10.) then !!!! FUDGE FACTOR ----AJA
-        do k = 1,nz
-          write(0,*) 'k,h,hnew=',k,h(i,j,k),hNew(i,j,k)
-        enddo
-        write(0,*) 'i,j,nz=',i,j,nz
-        write(0,*) 'Hold,Hnew,Hnew-Hold=',totalHold,totalHnew,totalHnew-totalHold
-        write(0,*) 'eps,(n-1)/2*eps*H=',eps,real(nz-1)*0.5*(totalHold+totalHnew)*eps
-        call MOM_error( FATAL, 'MOM_regridding, checkGridsMatch: '//&
-          'The difference of total thicknesses exceeds roundoff')
-      endif
-
       ! Change meaning of eps. Hereon, Heps is a dimensional error
-      Heps = (totalHold + totalHnew) * eps
+      Heps = 2. * totalHold  * eps
 
       ! Integrate upwards for the interfaces consistent with the rest of MOM6
       zOld = - G%bathyT(i,j)
-      zNewH = - G%bathyT(i,j)
       totalHnewF = 0.
       do k = nz,1,-1
         zOld = zOld + h(i,j,k) ! Old interface position
-        zNewH = zNewH + hNew(i,j,k) ! New interface position based on hNew
         zNewF = zOld + dzInterface(i,j,k) ! New interface position based on dzInterface
        !hNewF = ( h(i,j,k) - dzInterface(i,j,k+1) ) + dzInterface(i,j,k)
         hNewF = h(i,j,k) + ( dzInterface(i,j,k) - dzInterface(i,j,k+1) )
@@ -362,13 +345,6 @@ subroutine checkGridsMatch( G, h, dzInterface, hNew )
         endif
         totalHnewF = totalHnewF + hNewF
 
-        if (abs(zNewF-zNewH)>real(nz-k+1)*0.5*Heps) then
-          write(0,*) 'i,j,k,eps=',i,j,k,eps
-          write(0,*) 'zOld,dzI,zNewF=zOld+dzI =',zOld,dzInterface(i,j,k),zNewF
-          write(0,*) 'zNewF-zNewH,(n-1)*eps*D,eps*D=',zNewF-zNewH,real(nz-k+1)*0.5*Heps,Heps
-          call MOM_error( FATAL, 'MOM_regridding, checkGridsMatch: '//&
-            'The two estimates of new interfaces differ by more than roundoff')
-        endif
       enddo
 
       ! Conservation by implied hNewF
@@ -398,7 +374,7 @@ end subroutine checkGridsMatch
 !------------------------------------------------------------------------------
 ! Build uniform z*-ccordinate grid with partial steps
 !------------------------------------------------------------------------------
-subroutine buildGridZstar( CS, G, h, dzInterface, hNew )
+subroutine buildGridZstar( CS, G, h, dzInterface )
 !------------------------------------------------------------------------------
 ! This routine builds a grid where the distribution of levels is based on a
 ! z* coordinate system with partial steps (Adcroft and Campin, 2004).
@@ -412,7 +388,6 @@ subroutine buildGridZstar( CS, G, h, dzInterface, hNew )
   type(ocean_grid_type),                         intent(in)    :: G
   real, dimension(NIMEM_,NJMEM_,NKMEM_),         intent(in)    :: h
   real, dimension(NIMEM_,NJMEM_, NK_INTERFACE_), intent(inout) :: dzInterface
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),         intent(inout) :: hNew
   
   ! Local variables
   integer :: i, j, k
@@ -459,7 +434,6 @@ subroutine buildGridZstar( CS, G, h, dzInterface, hNew )
           zNew(k) = zNew(k+1) + CS%min_thickness
         endif
         zOld(k) = zOld(k+1) + h(i,j,k)
-        hNew(i,j,k) = zNew(k) - zNew(k+1)
       enddo
 
       ! Define regridding in terms of a movement of interfaces
@@ -498,7 +472,7 @@ end subroutine buildGridZstar
 !------------------------------------------------------------------------------
 ! Build sigma grid
 !------------------------------------------------------------------------------
-subroutine buildGridSigma( CS, G, h, dzInterface, hNew )
+subroutine buildGridSigma( CS, G, h, dzInterface )
 !------------------------------------------------------------------------------
 ! This routine builds a grid based on terrain-following coordinates.
 ! The module parameter coordinateResolution(:) determines the resolution in
@@ -511,7 +485,6 @@ subroutine buildGridSigma( CS, G, h, dzInterface, hNew )
   type(ocean_grid_type),                         intent(in)    :: G
   real, dimension(NIMEM_,NJMEM_, NKMEM_),        intent(in)    :: h
   real, dimension(NIMEM_,NJMEM_, NK_INTERFACE_), intent(inout) :: dzInterface
-  real, dimension(NIMEM_,NJMEM_, NKMEM_),        intent(inout) :: hNew
   
   ! Local variables
   integer :: i, j, k
@@ -530,16 +503,11 @@ subroutine buildGridSigma( CS, G, h, dzInterface, hNew )
         totalThickness = totalThickness + h(i,j,k)
       end do
           
-      ! Define thicknesses in terms of interface heights
-      do k = 1,nz
-        hNew(i,j,k) = totalThickness * CS%coordinateResolution(k)
-      end do    
-      
       ! The rest of the model defines grids integrating up from the bottom
       zOld(nz+1) = - nominalDepth
       zNew(nz+1) = - nominalDepth
       do k = nz,1,-1
-        zNew(k) = zNew(k+1) + hNew(i,j,k)
+        zNew(k) = zNew(k+1) + ( totalThickness * CS%coordinateResolution(k) )
         ! Adjust interface position to accomodate inflating layers
         ! without disturbing the interface above
         if ( zNew(k) < (zNew(k+1) + CS%min_thickness) ) then
@@ -583,7 +551,7 @@ end subroutine buildGridSigma
 !------------------------------------------------------------------------------
 ! Build grid based on target interface densities
 !------------------------------------------------------------------------------
-subroutine buildGridRho( G, h, tv, dzInterface, hNew, remapCS, CS )
+subroutine buildGridRho( G, h, tv, dzInterface, remapCS, CS )
 !------------------------------------------------------------------------------
 ! This routine builds a new grid based on a given set of target interface
 ! densities (these target densities are computed by taking the mean value
@@ -604,7 +572,6 @@ subroutine buildGridRho( G, h, tv, dzInterface, hNew, remapCS, CS )
   real, dimension(NIMEM_,NJMEM_, NKMEM_),        intent(in)    :: h
   type(thermo_var_ptrs),                         intent(in)    :: tv     
   real, dimension(NIMEM_,NJMEM_, NK_INTERFACE_), intent(inout) :: dzInterface
-  real, dimension(NIMEM_,NJMEM_, NKMEM_),        intent(inout) :: hNew
   type(remapping_CS),                            intent(inout) :: remapCS
   type(regridding_CS),                           intent(inout) :: CS
   
@@ -750,11 +717,6 @@ subroutine buildGridRho( G, h, tv, dzInterface, hNew, remapCS, CS )
 
       end do ! end regridding iterations               
 
-      ! The new grid is that obtained after the iterations
-      do k = 1,nz
-        hNew(i,j,k) = h1(k)
-      end do
-        
       ! Local depth (G%bathyT is positive)
       nominalDepth = G%bathyT(i,j)
 
@@ -764,7 +726,7 @@ subroutine buildGridRho( G, h, tv, dzInterface, hNew, remapCS, CS )
       zNew(nz+1) = - nominalDepth
       do k = nz,1,-1
         totalThickness = totalThickness + h(i,j,k)
-        zNew(k) = zNew(k+1) + hNew(i,j,k)
+        zNew(k) = zNew(k+1) + h1(k)
         ! Adjust interface position to accomodate inflating layers
         ! without disturbing the interface above
   !     if ( zNew(k) < (zNew(k+1) + CS%min_thickness) ) then
@@ -804,7 +766,7 @@ subroutine buildGridRho( G, h, tv, dzInterface, hNew, remapCS, CS )
           write(0,*) k,zOld(k),zNew(k)
         enddo
         do k=1,nz
-          write(0,*) k,h(i,j,k),hNew(i,j,k),zNew(k)-zNew(k+1)
+          write(0,*) k,h(i,j,k),zNew(k)-zNew(k+1)
         enddo
         call MOM_error( FATAL, &
                'MOM_regridding, buildGridRho: top surface has moved!!!' )
@@ -826,11 +788,11 @@ subroutine build_grid_arbitrary( G, h, dzInterface, h_new, CS )
 !------------------------------------------------------------------------------
   
   ! Arguments
-  type(ocean_grid_type), intent(in)                  :: G
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(in)    :: h
+  type(ocean_grid_type),                         intent(in)    :: G
+  real, dimension(NIMEM_,NJMEM_, NKMEM_),        intent(in)    :: h
   real, dimension(NIMEM_,NJMEM_, NK_INTERFACE_), intent(inout) :: dzInterface
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(inout) :: h_new
-  type(regridding_CS), intent(in)                :: CS
+  real,                                          intent(inout) :: h_new
+  type(regridding_CS),                           intent(in)    :: CS
   
   ! Local variables
   integer   :: i, j, k
@@ -910,15 +872,11 @@ subroutine build_grid_arbitrary( G, h, dzInterface, h_new, CS )
       end do
       dzInterface(i,j,nz+1) = 0.
     
-      ! Define thicknesses in terms of interface heights
-      x = 0. ! Left boundary at x=0
-      do k = 1,nz
-        h_new(i,j,k) = z_inter(k) - z_inter(k+1)
-      end do    
-
     end do
   end do
   
+stop 'OOOOOOPS' ! For some reason the gnu compiler will not let me delete this
+                ! routine????
   
 end subroutine build_grid_arbitrary
 
