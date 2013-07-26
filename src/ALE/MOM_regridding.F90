@@ -504,6 +504,7 @@ subroutine buildGridSigma( CS, G, h, dzInterface )
       end do
           
       ! The rest of the model defines grids integrating up from the bottom
+      nominalDepth = G%bathyT(i,j)
       zOld(nz+1) = - nominalDepth
       zNew(nz+1) = - nominalDepth
       do k = nz,1,-1
