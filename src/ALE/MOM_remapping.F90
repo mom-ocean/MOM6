@@ -37,7 +37,6 @@ type, public :: remapping_CS
   private
   ! Work arrays
   type(ppoly_t)                   :: ppoly_r    ! reconstruction ppoly
-  real, dimension(:), allocatable :: u_column   ! generic variable
   type(edgeValueArrays)           :: edgeValueWrk ! Work space for edge values
   type(edgeSlopeArrays)           :: edgeSlopeWrk ! Work space for edge slopes
   ! Parameters
@@ -116,7 +115,7 @@ subroutine remapping_main( CS, G, h, dxInterface, tv, u, v )
   integer               :: i, j, k
   integer               :: nz
   real, dimension(G%ke+1) :: dx
-  real, dimension(G%ke) :: h1
+  real, dimension(G%ke) :: h1, u_column
 
   nz = G%ke
 
@@ -128,13 +127,13 @@ subroutine remapping_main( CS, G, h, dxInterface, tv, u, v )
       h1(:) = h(i,j,:)
       dx(:) = dxInterface(i,j,:)
       
-      call remapping_core(CS, nz, h1, tv%S(i,j,:), nz, dx, CS%u_column)
+      call remapping_core(CS, nz, h1, tv%S(i,j,:), nz, dx, u_column)
       
-      tv%S(i,j,:) = CS%u_column(:)
+      tv%S(i,j,:) = u_column(:)
       
-      call remapping_core(CS, nz, h1, tv%T(i,j,:), nz, dx, CS%u_column)
+      call remapping_core(CS, nz, h1, tv%T(i,j,:), nz, dx, u_column)
      
-      tv%T(i,j,:) = CS%u_column(:)
+      tv%T(i,j,:) = u_column(:)
 
     end do
   end do
@@ -148,9 +147,9 @@ subroutine remapping_main( CS, G, h, dxInterface, tv, u, v )
       h1(:) = 0.5 * ( h(i,j,:) + h(i+1,j,:) )
       dx(:) = 0.5 * ( dxInterface(i,j,:) + dxInterface(i+1,j,:) )
       
-      call remapping_core(CS, nz, h1, u(i,j,:), nz, dx, CS%u_column)
+      call remapping_core(CS, nz, h1, u(i,j,:), nz, dx, u_column)
      
-      u(i,j,:) = CS%u_column(:)
+      u(i,j,:) = u_column(:)
       
     end do
   end do
@@ -165,9 +164,9 @@ subroutine remapping_main( CS, G, h, dxInterface, tv, u, v )
       h1(:) = 0.5 * ( h(i,j,:) + h(i,j+1,:) )
       dx(:) = 0.5 * ( dxInterface(i,j,:) + dxInterface(i,j+1,:) )
 
-      call remapping_core(CS, nz, h1, v(i,j,:), nz, dx, CS%u_column)
+      call remapping_core(CS, nz, h1, v(i,j,:), nz, dx, u_column)
      
-      v(i,j,:) = CS%u_column(:)
+      v(i,j,:) = u_column(:)
       
     end do
   end do
@@ -993,12 +992,12 @@ subroutine setReconstructionType(string,CS)
        "Unrecognized choice for REMAPPING_SCHEME ("//trim(string)//").")
   end select
 
-  if (allocated(CS%u_column) .and. degree/=CS%degree) then
+  if (allocated(CS%ppoly_r%E) .and. degree/=CS%degree) then
     ! If the degree has changed then deallocate to force a re-allocation
     call end_remapping(CS)
   endif
   CS%degree = degree
-  if (.not. allocated(CS%u_column)) then
+  if (.not. allocated(CS%ppoly_r%E)) then
     call allocate_remapping( CS )
   endif
   
@@ -1030,7 +1029,6 @@ subroutine allocate_remapping( CS )
   type(remapping_CS), intent(inout) :: CS
   
   call ppoly_init( CS%ppoly_r, CS%nk, CS%degree )
-  allocate( CS%u_column(CS%nk) ); CS%u_column = 0.0
   call triDiagEdgeWorkAllocate( CS%nk, CS%edgeValueWrk )
   call triDiagSlopeWorkAllocate( CS%nk, CS%edgeSlopeWrk )
 
@@ -1046,7 +1044,6 @@ subroutine end_remapping(CS)
 
   ! Deallocate memory for grid
   call ppoly_destroy( CS%ppoly_r )
-  deallocate( CS%u_column )
   call triDiagEdgeWorkDeallocate( CS%edgeValueWrk )
   call triDiagSlopeWorkDeallocate( CS%edgeSlopeWrk )
 
