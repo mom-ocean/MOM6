@@ -115,8 +115,8 @@ subroutine remapping_main( CS, G, h, dxInterface, tv, u, v )
   ! Local variables
   integer               :: i, j, k
   integer               :: nz
-  real, dimension(G%ke+1) :: x1, x2, dx
-  real, dimension(G%ke) :: h1, h2
+  real, dimension(G%ke+1) :: x1, dx
+  real, dimension(G%ke) :: h1
 
   nz = G%ke
 
@@ -538,7 +538,7 @@ subroutine remapByProjection( n0, h0, u0, ppoly0, n1, h1, method, u1 )
   integer,       intent(in)    :: n1     ! number of cells in target grid
   real,          intent(in)    :: h1(:)  ! target grid widths (size n1)
   integer,       intent(in)    :: method ! remapping scheme to use
-  real,          intent(inout) :: u1(:)  ! target cell averages (size n1)
+  real,          intent(out)   :: u1(:)  ! target cell averages (size n1)
   
   ! Local variables
   integer       :: iTarget
@@ -684,7 +684,7 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0, method, &
   integer,            intent(in)    :: method   ! remapping scheme to use
   real,               intent(in)    :: xL, xR   ! left/right edges of target cell
   real,               intent(in)    :: hC       ! cell width hC = xR - xL
-  real,               intent(inout) :: uAve     ! average value on target cell
+  real,               intent(out)   :: uAve     ! average value on target cell
   
   ! Local variables
   integer :: j, k
@@ -961,7 +961,7 @@ end subroutine dzFromH
 subroutine initialize_remapping( nk, remappingScheme, CS)
   ! Arguments
   integer, intent(in)                  :: nk
-  character(len=*),     intent(in)    :: remappingScheme
+  character(len=*),      intent(in)    :: remappingScheme
   type(remapping_CS),    intent(inout) :: CS
   
   CS%nk = nk
@@ -979,7 +979,7 @@ end subroutine initialize_remapping
 !------------------------------------------------------------------------------
 subroutine setReconstructionType(string,CS)
   ! Arguments
-  character(len=*), intent(in) :: string
+  character(len=*),   intent(in)    :: string
   type(remapping_CS), intent(inout) :: CS
   ! Local variables
   integer :: degree
@@ -1042,7 +1042,7 @@ end subroutine remapDisableBoundaryExtrapolation
 !------------------------------------------------------------------------------
 subroutine allocate_remapping( CS )
   ! Arguments
-  type(remapping_CS),    intent(inout) :: CS
+  type(remapping_CS), intent(inout) :: CS
   
   call ppoly_init( CS%ppoly_r, CS%nk, CS%degree )
   allocate( CS%u_column(CS%nk) ); CS%u_column = 0.0

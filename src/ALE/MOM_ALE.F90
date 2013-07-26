@@ -238,10 +238,10 @@ subroutine initialize_ALE( param_file, G, h, &
                    trim(message), units=trim(coordUnits), fail_if_missing=.true.)
     case default 
       if (index(trim(string),'FILE:')==1) then
-        fileName = extractWord(trim(string(6:80)), 1)
+        fileName = trim( extractWord(trim(string(6:80)), 1) )
         if (.not. file_exists(fileName)) call MOM_error(FATAL,"initialize_ALE: "// &
           "Specified file not found: Looking for '"//trim(fileName)//"' ("//trim(string)//")")
-        varName = extractWord(trim(string(6:80)), 2)
+        varName = trim( extractWord(trim(string(6:80)), 2) )
         if (.not. field_exists(fileName,varName)) call MOM_error(FATAL,"initialize_ALE: "// &
           "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(string)//")")
         if (len_trim(varName)==0) then
