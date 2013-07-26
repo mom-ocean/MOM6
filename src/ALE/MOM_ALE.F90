@@ -350,7 +350,7 @@ subroutine ALE_main( G, h, u, v, tv, CS )
   call regridding_main( CS%remapCS, CS%regridCS, G, h, tv, CS%dzRegrid, CS%h_aux )
   
   ! Remap all variables from old grid h onto new grid h_new
-  call remapping_main( CS%remapCS, G, h, -CS%dzRegrid, CS%h_aux, tv, u, v )
+  call remapping_main( CS%remapCS, G, h, -CS%dzRegrid, tv, u, v )
   
   ! Override old grid with new one. The new grid 'h_new' is built in
   ! one of the 'build_...' routines above.

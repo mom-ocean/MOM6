@@ -96,7 +96,7 @@ contains
 !------------------------------------------------------------------------------
 ! General remapping routine 
 !------------------------------------------------------------------------------
-subroutine remapping_main( CS, G, h, dxInterface, h_new, tv, u, v )
+subroutine remapping_main( CS, G, h, dxInterface, tv, u, v )
 !------------------------------------------------------------------------------
 ! This routine takes care of remapping all variable between the old and the
 ! new grids. When velocity components need to be remapped, thicknesses at
@@ -108,7 +108,6 @@ subroutine remapping_main( CS, G, h, dxInterface, h_new, tv, u, v )
   type(ocean_grid_type),                            intent(in)    :: G
   real, dimension(NIMEM_,NJMEM_,NKMEM_),            intent(in)    :: h
   real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_),     intent(in)    :: dxInterface
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),            intent(in)    :: h_new
   type(thermo_var_ptrs),                            intent(inout) :: tv       
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), optional, intent(inout) :: u
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), optional, intent(inout) :: v
@@ -127,20 +126,18 @@ subroutine remapping_main( CS, G, h, dxInterface, h_new, tv, u, v )
     
       ! Build the start and final grids
       h1(:) = h(i,j,:)
-      h2(:) = h_new(i,j,:)
       dx(:) = dxInterface(i,j,:)
-      call buildConsistentGrids(nz, h1, dx, h2, x1, x2)
+      call buildGridFromH(nz, h1, x1)
       
       do k = 1,nz
         h1(k) = x1(k+1) - x1(k)
-        h2(k) = x2(k+1) - x2(k)
       end do
       
-      call remapping_core(CS, nz, h1, tv%S(i,j,:), nz, dx, h2, CS%u_column)
+      call remapping_core(CS, nz, h1, tv%S(i,j,:), nz, dx, CS%u_column)
       
       tv%S(i,j,:) = CS%u_column(:)
       
-      call remapping_core(CS, nz, h1, tv%T(i,j,:), nz, dx, h2, CS%u_column)
+      call remapping_core(CS, nz, h1, tv%T(i,j,:), nz, dx, CS%u_column)
      
       tv%T(i,j,:) = CS%u_column(:)
 
@@ -154,16 +151,14 @@ subroutine remapping_main( CS, G, h, dxInterface, h_new, tv, u, v )
     
       ! Build the start and final grids
       h1(:) = 0.5 * ( h(i,j,:) + h(i+1,j,:) )
-      h2(:) = 0.5 * ( h_new(i,j,:) + h_new(i+1,j,:) )
       dx(:) = 0.5 * ( dxInterface(i,j,:) + dxInterface(i+1,j,:) )
-      call buildConsistentGrids(nz, h1, dx, h2, x1, x2)
+      call buildGridFromH(nz, h1, x1)
       
       do k = 1,nz
         h1(k) = x1(k+1) - x1(k)
-        h2(k) = x2(k+1) - x2(k)
       end do
   
-      call remapping_core(CS, nz, h1, u(i,j,:), nz, dx, h2, CS%u_column)
+      call remapping_core(CS, nz, h1, u(i,j,:), nz, dx, CS%u_column)
      
       u(i,j,:) = CS%u_column(:)
       
@@ -178,16 +173,14 @@ subroutine remapping_main( CS, G, h, dxInterface, h_new, tv, u, v )
 
       ! Build the start and final grids
       h1(:) = 0.5 * ( h(i,j,:) + h(i,j+1,:) )
-      h2(:) = 0.5 * ( h_new(i,j,:) + h_new(i,j+1,:) )
       dx(:) = 0.5 * ( dxInterface(i,j,:) + dxInterface(i,j+1,:) )
-      call buildConsistentGrids(nz, h1, dx, h2, x1, x2)
+      call buildGridFromH(nz, h1, x1)
 
       do k = 1,nz
         h1(k) = x1(k+1) - x1(k)
-        h2(k) = x2(k+1) - x2(k)
       end do
 
-      call remapping_core(CS, nz, h1, v(i,j,:), nz, dx, h2, CS%u_column)
+      call remapping_core(CS, nz, h1, v(i,j,:), nz, dx, CS%u_column)
      
       v(i,j,:) = CS%u_column(:)
       
@@ -196,67 +189,6 @@ subroutine remapping_main( CS, G, h, dxInterface, h_new, tv, u, v )
   end if
 
 end subroutine remapping_main
-
-
-!------------------------------------------------------------------------------
-! Build a final grid 
-!------------------------------------------------------------------------------
-subroutine buildConsistentGrids(nz, hs, dx, hf, xs, xf)
-!------------------------------------------------------------------------------
-! This routine calculates the coordinates xs and xf consistently from
-! hs and hf so that the edges of the domain line up.
-! If suM(hs) and sum(hf) differ significantly and error is generated.
-!------------------------------------------------------------------------------
-
-  ! Arguments
-  integer,               intent(in)    :: nz
-  real, dimension(nz),   intent(in)    :: hs, hf
-  real, dimension(nz+1), intent(in)    :: dx
-  real, dimension(nz+1), intent(inout) :: xs, xf
-
-  integer :: k
-  real    :: sumH1, sumH2
-  real, dimension(nz+1) :: xAlt
-
-  ! Build start grid
-  call buildGridFromH(nz, hs, xs)
-  sumH1 = xs(nz+1)
-
-  ! Final grid based on hf
-  call buildGridFromH(nz, hf, xf)
-  sumH2 = xf(nz+1)
-
-  ! Final grid based on dx
-  xAlt = xs + dx
-
-#ifdef __DO_SAFTEY_CHECKS__
-  call checkConsistantCoords(nz, xs, nz, xf, .false., 'buildConsistentGrids xf')
-  call checkConsistantCoords(nz, xs, nz, xAlt, .true., 'buildConsistentGrids xAlt')
-  ! Conservation of thickness
-  if (abs(sumH1-sumH2)>0.5*real(nz)*epsilon(sumH2)*(sumH1+sumH2)) then
-    write(0,*) 'Start/final/start-final grid'
-    do k = 1,nz+1
-      write(0,'(i4,3es12.3)') k,xs(k),xf(k),xs(k)-xf(k)
-    enddo
-    write(0,*) 'eps,H*eps',epsilon(sumH2),0.5*epsilon(sumH2)*(sumH1+sumH2)
-    call MOM_error(FATAL,'MOM_remapping, buildConsistentGrids: '//&
-                   'Final and start grids do not match.')
-  endif
-  if (dx(1) /= 0.) then
-    write(0,*) 'dx=',dx
-    call MOM_error(FATAL,'MOM_remapping, buildConsistentGrids: '//&
-                   'Surface moved ... dx at surface non zero.')
-  endif
-  if (dx(nz+1) /= 0.) then
-    write(0,*) 'dx=',dx
-    call MOM_error(FATAL,'MOM_remapping, buildConsistentGrids: '//&
-                   'Bottom moved ... dx at surface non zero.')
-  endif
-#endif
-
-! call makeGridsConsistent(nz, xs, nz, hf, xf)
-
-end subroutine buildConsistentGrids
 
 
 !------------------------------------------------------------------------------
@@ -371,51 +303,6 @@ end function isPosSumErrSignificant
 
 
 !------------------------------------------------------------------------------
-! Check that data remapped between two grids are conserved
-!------------------------------------------------------------------------------
-subroutine checkGridConservation(ns, hs, us, nf, hf, uf)
-!------------------------------------------------------------------------------
-! Checks that the sum of hs*us and hf*uf match. Also checks that the
-! analgous sums in terms of sx and xf are consistant.
-!------------------------------------------------------------------------------
-
-  ! Arguments
-  integer, intent(in) :: ns, nf
-  real,    intent(in) :: hs(:), us(:) ! Size ns
-  real,    intent(in) :: hf(:), uf(:) ! Size nf
-
-  ! Local variables
-#ifdef DISABLE_CONSEEVATION_CHECK_BECAUSE_IT_FAILS______
-  integer :: k
-#endif
-  real    :: sumHUs, errHUs
-  real    :: sumHUf, errHUf
-
-  call sumHtimesQ(ns, hs, us, sumHUs, errHUs)
-  call sumHtimesQ(nf, hf, uf, sumHUf, errHUf)
-#ifdef DISABLE_CONSEEVATION_CHECK_BECAUSE_IT_FAILS______
-  if (abs(sumHUf-sumHUs)>errHUf+errHUs) then
-    write(0,'("ns,nf=",2i4)') ns,nf
-    do k = 1,max(ns,nf)+1
-      if (k<=min(ns,nf)) then
-        write(0,'(i4,"hs,us,hf,uf=",4es12.3)') k,hs(k),us(k),hf(k),uf(k)
-      elseif (k>ns .and. k<=nf) then
-        write(0,'(i4,"      hf,uf=",24x,2es12.3)') k,hf(k),uf(k)
-      elseif (k>nf .and. k<=ns) then
-        write(0,'(i4,"hs,us      =",2es12.3)') k,hs(k),us(k)
-      endif
-    enddo
-    write(0,'("sumHUf,sumHUs=",2es12.3)') sumHUf,sumHUs
-    write(0,'("err,errHUf,errHUs=",3es12.3)') abs(sumHUf-sumHUs),errHUf,errHUs
-    call MOM_error(FATAL,'MOM_remapping, checkGridConservation: '//&
-       'Total amount of stuff on two grids differs by more than round-off.')
-  endif
-#endif
-
-end subroutine checkGridConservation
-
-
-!------------------------------------------------------------------------------
 ! Sum the product of two arrays
 !------------------------------------------------------------------------------
 subroutine sumHtimesQ(nz, h, q, sumHQ, sumErr)
@@ -490,56 +377,9 @@ end function isSignedSumErrSignificant
 
 
 !------------------------------------------------------------------------------
-! Make a second grid consistent with the first
-!------------------------------------------------------------------------------
-subroutine makeGridsConsistent(ns, xs, nf, hf, xf)
-!------------------------------------------------------------------------------
-! Adjusts xf so that the end points exactly match those of xs.
-! It is best to have called checkConsistantCoords with strict=false
-! to ensure that the grids are already close and only differ due to
-! round-off.
-!------------------------------------------------------------------------------
-
-  ! Arguments
-  integer, intent(in)    :: ns, nf
-  real,    intent(in)    :: xs(ns+1), hf(nf)
-  real,    intent(inout) :: xf(nf+1)
-
-  ! Local variables
-  integer :: k
-  real    :: nonDimPos, sumHs, sumHf
-
-#ifdef __DO_SAFTEY_CHECKS__
-    if (xf(1) /= xs(1)) call &
-         MOM_error(FATAL,'MOM_remapping, makeGridsConsistent: '//&
-                         'Starting point of two grids do not match.')
-    call checkConsistantCoords(ns, xs, nf, xf, .false., 'makeGridsConsistent 1')
-#endif
-
-  ! Adjust new grid so that end-points match those of the start grid.
-  sumHs = xs(ns+1)
-  sumHf = xf(nf+1)
-  if (sumHf/=sumHs) then
-    xf(nf+1) = sumHs
-    do k = nf,1,-1
-      nonDimPos = xf(k) / sumHf ! Position of xf interface within column
-      ! When nonDimPos -> 1, adjust xf towards a bottom-up integration
-      ! When nonDomPos -> 0, keep xf at the original top-down integration
-      xf(k) = (1.-nonDimPos) * xf(k) + nonDimPos * (xf(k+1) - hf(k))
-    end do
-  endif
-
-#ifdef __DO_SAFTEY_CHECKS__
-    call checkConsistantCoords(ns, xs, nf, xf, .true., 'makeGridsConsistent 2')
-#endif
-
-end subroutine makeGridsConsistent
-
-
-!------------------------------------------------------------------------------
 ! Remapping core routine
 !------------------------------------------------------------------------------
-subroutine remapping_core( CS, n0, h0, u0, n1, dx, h1, u1 )
+subroutine remapping_core( CS, n0, h0, u0, n1, dx, u1 )
 !------------------------------------------------------------------------------
 ! This routine is basic in that it simply takes two grids and remaps the
 ! field known on the first grid onto the second grid, following the rules
@@ -553,7 +393,6 @@ subroutine remapping_core( CS, n0, h0, u0, n1, dx, h1, u1 )
   real, dimension(:), intent(in)    :: u0 ! cell averages on source grid
   integer,            intent(in)    :: n1 ! Number of cells on target grid
   real, dimension(:), intent(in)    :: dx ! Change in interface positions
-  real, dimension(:), intent(in)    :: h1 ! cell widths on target grid
   real, dimension(:), intent(out)   :: u1 ! cell averages on target grid
 
   ! Local variables
@@ -561,8 +400,8 @@ subroutine remapping_core( CS, n0, h0, u0, n1, dx, h1, u1 )
 
 #ifdef __DO_SAFTEY_CHECKS__
   integer :: k
-  real :: hTmp, totalH0, totalH1, totalHf, eps
-  real :: err0, totalHU0, err1, totalHU1, err2, totalHU2
+  real :: hTmp, totalH0, totalHf, eps
+  real :: err0, totalHU0, err2, totalHU2
 
   if (dx(1) /= 0.) call MOM_error( FATAL, 'MOM_remapping, remapping_core: '//&
              'Non-zero surface flux!' ) ! This is techically allowed but in avoided practice 
@@ -570,7 +409,6 @@ subroutine remapping_core( CS, n0, h0, u0, n1, dx, h1, u1 )
   do k=1, n1
     totalH0 = totalH0 + h0(k)
   enddo
-  totalH1 = 0.
   totalHf = 0.
   do k=1, n1
     if (k <= n0) then
@@ -588,19 +426,13 @@ subroutine remapping_core( CS, n0, h0, u0, n1, dx, h1, u1 )
              'negative h implied by fluxes' )
       endif
     endif
-    totalH1 = totalH1 + h1(k)
     totalHf = totalHf + hTmp
   end do
   eps = epsilon(hTmp)*totalH0
-  if (abs(totalH1-totalH0) > 0.5*real(n0+n1-2)*eps) then
-    write(0,*) 'H0,H1=',totalH0,totalH1,totalH1-totalH0,eps
-    call MOM_error( FATAL, 'MOM_remapping, remapping_core: '//&
-         'Total thicknesses of h1 and h2 differ by more than roundoff' )
-  endif
   if (abs(totalHf-totalH0) > 0.5*real(n0+n1-1)*eps) then
     write(0,*) 'H0,Hf=',totalH0,totalHf,totalHf-totalH0,eps
     call MOM_error( FATAL, 'MOM_remapping, remapping_core: '//&
-         'Total thicknesses of h1 and h2 differ by more than roundoff' )
+         'Total thicknesses of h0 and h2 differ by more than roundoff' )
   endif
 #endif
 
@@ -660,20 +492,12 @@ subroutine remapping_core( CS, n0, h0, u0, n1, dx, h1, u1 )
 ! call remapByProjection( n0, h0, u0, CS%ppoly_r, n1, h1, iMethod, u1 )
 
 #ifdef __DO_SAFTEY_CHECKS__
-  call checkGridConservation(n0, h0, u0, n1, h1, u1)
   totalHU0 = 0.
   err0 = 0.
   do k = 1, n0
     hTmp = h0(k) * u0(k)
     totalHU0 = totalHU0 + hTmp
     err0 = err0 + epsilon(err0)*max(err0,abs(hTmp))
-  enddo
-  totalHU1 = 0.
-  err1 = 0.
-  do k = 1, n1
-    hTmp = h1(k) * u1(k)
-    totalHU1 = totalHU1 + hTmp
-    err1 = err1 + epsilon(err1)*max(err1,abs(hTmp))
   enddo
   totalHU2 = 0.
   err2 = 0.
@@ -683,26 +507,10 @@ subroutine remapping_core( CS, n0, h0, u0, n1, dx, h1, u1 )
     else
       hTmp = ( dx(k+1) - dx(k) )
     endif
-!   if (abs(hTmp-h1(k)) > real(200*n1)*epsilon(hTmp)*max(hTmp,max(abs(dx(k+1)),abs(dx(k)))) ) then
-!     write(0,*) 'k,h0,dx+,dx-',k,h0(k),dx(k+1),dx(k)
-!     write(0,*) 'hTmp,h1,h1-hTmp',hTmp,h1(k),h1(k)-hTmp
-!     call MOM_error( FATAL, 'MOM_remapping, remapping_core: '//&
-!          'Flux form layer thickness differs from projection.' )
-!   endif
     hTmp = hTmp * u1(k)
     totalHU2 = totalHU2 + hTmp
     err2 = err2 + epsilon(err2)*max(err2,abs(hTmp))
   enddo
-  if (abs(totalHU1-totalHU0) > (err0+err1)*5000.) then
-    write(0,*) 'h0=',h0
-    write(0,*) 'h1=',h1
-    write(0,*) 'u0=',u0
-    write(0,*) 'u1=',u1
-    write(0,*) 'total HU0,HU1,1-0=',totalHU0,totalHU1,totalHU1-totalHU0
-    write(0,*) 'err0,err1=',err0,err1
-    call MOM_error( FATAL, 'MOM_remapping, remapping_core: '//&
-         'Total stuff on h0 and h1 differ by more than roundoff' )
-  endif
   if (abs(totalHU2-totalHU0) > (err0+err2)*real(n1)) then
     write(0,*) 'h0=',h0
     write(0,*) 'hf=',h0+dx(2:n1+1)-dx(1:n1)
@@ -765,15 +573,15 @@ subroutine remapByDeltaZ( n0, h0, u0, ppoly0, n1, dx1, method, u1, h1 )
 !  F(k) = dx1(k) qAverage
 ! and where qAverage is the average qOld in the region zOld(k) to zNew(k).
   ! Arguments
-  integer,       intent(in)  :: n0     ! number of cells in source grid
-  real,          intent(in)  :: h0(:)  ! source grid widths (size n0)
-  real,          intent(in)  :: u0(:)  ! source cell averages (size n0)
-  type(ppoly_t), intent(in)  :: ppoly0 ! source piecewise polynomial
-  integer,       intent(in)  :: n1     ! number of cells in target grid
-  real,          intent(in)  :: dx1(:) ! target grid edge positions (size n1+1)
-  integer                    :: method ! remapping scheme to use
-  real,          intent(out) :: u1(:)  ! target cell averages (size n1)
-  real,optional, intent(out) :: h1(:)  ! target grid widths (size n1)
+  integer,        intent(in)  :: n0     ! number of cells in source grid
+  real,           intent(in)  :: h0(:)  ! source grid widths (size n0)
+  real,           intent(in)  :: u0(:)  ! source cell averages (size n0)
+  type(ppoly_t),  intent(in)  :: ppoly0 ! source piecewise polynomial
+  integer,        intent(in)  :: n1     ! number of cells in target grid
+  real,           intent(in)  :: dx1(:) ! target grid edge positions (size n1+1)
+  integer                     :: method ! remapping scheme to use
+  real,           intent(out) :: u1(:)  ! target cell averages (size n1)
+  real, optional, intent(out) :: h1(:)  ! target grid widths (size n1)
   
   ! Local variables
   integer :: iTarget
@@ -1294,7 +1102,7 @@ logical function remappingUnitTests()
   call dumpGrid(n0,h0,x0,u0)
 
   call dzFromH( n0, h0, n1, h1, dx1 )
-  call remapping_core( CS, n0, h0, u0, n1, dx1, h1, u1 )
+  call remapping_core( CS, n0, h0, u0, n1, dx1, u1 )
   do i=1,n1
     err=u1(i)-8./3.*(0.5*real(1+n1)-real(i))
     if (abs(err)>epsilon(err)) remappingUnitTests = .true.
