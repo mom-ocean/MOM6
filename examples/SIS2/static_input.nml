@@ -1,4 +1,5 @@
 
+
  &data_override_nml
          /
 
@@ -20,7 +21,6 @@
       nsteps_dyn=72
       nsteps_adv=1
       num_part = 6
-      wd_turn = 0.0
       io_layout = 1, 1
       spec_ice=.false.
       ice_bulk_salin = 0.005
