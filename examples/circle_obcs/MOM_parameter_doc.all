@@ -1084,6 +1084,10 @@ REG_SFC_DEFICIT_TOLERANCE = 0.5 !   [nondim] default = 0.5
                                 ! to start modifying the layer structure when
                                 ! REGULARIZE_SURFACE_LAYERS is true.
     !  Parameters of module MOM_tracer_advect
+TRACER_ADVECTION_SCHEME = "PLM" ! default = "PLM"
+                                ! The horizontal transport scheme for tracers:
+                                !   PLM    - Piecewise Linear Method
+                                !   PPM:H3 - Piecewise Parabolic Method (Huyhn 3rd order)
     !  Parameters of module MOM_tracer_hor_diff
 KHTR = 0.0                      !   [m2 s-1] default = 0.0
                                 ! The background along-isopycnal tracer diffusivity.
