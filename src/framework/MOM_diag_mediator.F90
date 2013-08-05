@@ -153,7 +153,7 @@ subroutine set_axes_info(G, param_file, diag, set_vertical)
   endif           
   id_xh = diag_axis_init('xh', G%gridLonT(G%isg:G%ieg), G%x_axis_units, 'x', &
               'h point nominal longitude', Domain2=G%Domain%mpp_domain)
-  id_yh = diag_axis_init('yh', G%gridLonT(G%jsg:G%jeg), G%y_axis_units, 'y', &
+  id_yh = diag_axis_init('yh', G%gridLatT(G%jsg:G%jeg), G%y_axis_units, 'y', &
               'h point nominal latitude', Domain2=G%Domain%mpp_domain)
 
   if (set_vert) then
