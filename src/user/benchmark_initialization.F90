@@ -147,7 +147,7 @@ subroutine benchmark_initialize_thickness(h, G, param_file, eqn_of_state, P_ref)
     pres(k) = P_Ref ; S0(k) = 35.0
   enddo
   T0(k1) = 29.0
-  call calculate_density(T0(k1),S0(k1),pres(k1),rho_guess(k1),1,1,eqn_of_state)
+  call calculate_density(T0(k1),S0(k1),pres(k1),rho_guess(k1),eqn_of_state)
   call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,k1,1,eqn_of_state)
 
 ! A first guess of the layers' temperatures.
@@ -251,7 +251,7 @@ subroutine benchmark_init_temperature_salinity(T, S, G, param_file, &
   enddo
 
   T0(k1) = 29.0
-  call calculate_density(T0(k1),S0(k1),pres(k1),rho_guess(k1),1,1,eqn_of_state)
+  call calculate_density(T0(k1),S0(k1),pres(k1),rho_guess(k1),eqn_of_state)
   call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,k1,1,eqn_of_state)
 
 ! A first guess of the layers' temperatures.                         !

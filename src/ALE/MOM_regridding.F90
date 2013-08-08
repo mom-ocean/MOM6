@@ -1453,10 +1453,10 @@ subroutine convective_adjustment(G, h, tv)
             ! Recompute densities at levels k and k+1
             call calculate_density( tv%T(i,j,k), tv%S(i,j,k), &
                                      p_column(k), &
-                                     densities(k), 1, 1, tv%eqn_of_state )
+                                     densities(k), tv%eqn_of_state )
             call calculate_density( tv%T(i,j,k+1), tv%S(i,j,k+1), &
                                      p_column(k+1), &
-                                     densities(k+1), 1, 1, tv%eqn_of_state )
+                                     densities(k+1), tv%eqn_of_state )
             stratified = .false.
           end if
         end do  ! k 

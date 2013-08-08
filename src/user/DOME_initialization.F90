@@ -434,7 +434,7 @@ subroutine DOME_set_Open_Bdry_Conds(OBC, tv, G, param_file, tr_Reg)
       ! target density and a salinity of 35 psu.  This code is taken from
       ! USER_initialize_temp_sal.
       pres(:) = tv%P_Ref ; S0(:) = 35.0 ; T0(1) = 25.0
-      call calculate_density(T0(1),S0(1),pres(1),rho_guess(1),1,1,tv%eqn_of_state)
+      call calculate_density(T0(1),S0(1),pres(1),rho_guess(1),tv%eqn_of_state)
       call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,1,tv%eqn_of_state)
 
       do k=1,nz ; T0(k) = T0(1) + (G%Rlay(k)-rho_guess(1)) / drho_dT(1) ; enddo
