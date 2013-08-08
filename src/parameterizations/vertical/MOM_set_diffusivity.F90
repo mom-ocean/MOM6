@@ -54,6 +54,7 @@ use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_intrinsic_functions, only : invcosh
 use MOM_io, only : slasher, vardesc
+use MOM_KPP, only : KPP_CS, KPP_init, KPP_end, KPP_calculate
 use MOM_thickness_diffuse, only : vert_fill_TS
 use MOM_variables, only : thermo_var_ptrs, vertvisc_type, p3d
 use MOM_EOS, only : calculate_density, calculate_density_derivs
@@ -248,6 +249,8 @@ type, public :: set_diffusivity_CS ; private
   logical :: user_change_diff  !   If true, call user-defined code to change the
                                ! diffusivity.
   logical :: double_diffusion  ! If true, enable double-diffusive mixing.
+  logical :: useKPP          ! If true, use [CVmix] KPP diffusivities and non-local
+                             ! transport.
   real    :: Max_Rrho_salt_fingers    ! maximum density ratio for salt fingering
   real    :: Max_salt_diff_salt_fingers ! maximum salt diffusivity for salt fingers
   real    :: Kv_molecular    ! molecular viscosity for double diffusive convection
@@ -267,6 +270,7 @@ type, public :: set_diffusivity_CS ; private
   integer :: id_KT_extra = -1, id_KS_extra = -1
   integer :: id_KT_extra_z = -1, id_KS_extra_z = -1
   character(len=200) :: inputdir
+  type(KPP_CS),               pointer :: KPP_CSp => NULL()
   type(user_change_diff_CS), pointer :: user_change_diff_CSp => NULL()
   type(diag_to_Z_CS), pointer :: diag_to_Z_CSp => NULL()
 end type set_diffusivity_CS
@@ -704,6 +708,12 @@ subroutine set_diffusivity(u, v, h, tv, fluxes, visc, dt, G, CS, &
                           T_f, S_f, dd%Kd_user)
   endif
 
+  if (CS%useKPP) then
+    if (.not. present(KD_int)) call MOM_error(FATAL,'set_diffusivity: '//&
+                'KPP can only be used with optional argument Kd_int.')
+    call KPP_calculate(CS%KPP_CSp, G, h, tv%T, tv%S, u, v, tv%eqn_of_state, &
+             fluxes%ustar, fluxes%lw, Kd_int)
+  endif
 
   if (CS%id_Kd > 0) call post_data(CS%id_Kd, Kd, CS%diag)
 
@@ -2625,6 +2635,12 @@ subroutine set_diffusivity_init(Time, G, param_file, diag, CS, diag_to_Z_CSp)
     call user_change_diff_init(Time, G, param_file, diag, CS%user_change_diff_CSp)
   endif
 
+  call get_param(param_file, mod, "USE_KPP", CS%useKPP, &
+                 "If true, turns on the [CVmix] KPP scheme of Large et al., 1984,"// &
+                 "to calculate diffusivities and non-local transport in the OBL.", &
+                 default=.false.)
+  if (CS%useKPP) call KPP_init(param_file, G, diag, Time, CS%KPP_CSp)
+
 end subroutine set_diffusivity_init
 
 subroutine set_diffusivity_end(CS)
@@ -2632,6 +2648,8 @@ subroutine set_diffusivity_end(CS)
 
   if (CS%user_change_diff) &
     call user_change_diff_end(CS%user_change_diff_CSp)
+
+  if (CS%useKPP) call KPP_end(CS%KPP_CSp)
 
   if (associated(CS)) deallocate(CS)
 
