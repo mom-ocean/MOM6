@@ -247,7 +247,7 @@ subroutine geothermal(h, tv, dt, ea, eb, G, CS)
             Rcv = 0.0 ; dRcv_dT = 0.0 ! Is this OK?
           else
             call calculate_density(tv%T(i,j,k), tv%S(i,j,k), tv%P_Ref, &
-                         Rcv, 1, 1, tv%eqn_of_state)
+                         Rcv, tv%eqn_of_state)
             T2(1) = tv%T(i,j,k) ; S2(1) = tv%S(i,j,k)
             T2(2) = tv%T(i,j,k_tgt) ; S2(2) = tv%S(i,j,k_tgt)
             call calculate_density_derivs(T2(:), S2(:), p_Ref(:), &

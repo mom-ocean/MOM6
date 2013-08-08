@@ -93,10 +93,9 @@ character*(10), parameter :: TFREEZE_DEFAULT = TFREEZE_LINEAR_STRING
 
 contains
 
-subroutine calculate_density_scalar(T, S, pressure, rho, start, npts, EOS)
+subroutine calculate_density_scalar(T, S, pressure, rho, EOS)
   real,           intent(in)  :: T, S, pressure
   real,           intent(out) :: rho
-  integer,        intent(in)  :: start, npts
   type(EOS_type), pointer     :: EOS
 ! * Arguments: T - potential temperature relative to the surface in C. *
 ! *  (in)      S - salinity in PSU.                                    *
@@ -115,12 +114,12 @@ subroutine calculate_density_scalar(T, S, pressure, rho, start, npts, EOS)
 
   select case (EOS%form_of_EOS)
     case (EOS_LINEAR)
-      call calculate_density_scalar_linear(T, S, pressure, rho, start, npts, &
+      call calculate_density_scalar_linear(T, S, pressure, rho, &
                                       EOS%Rho_T0_S0, EOS%dRho_dT, EOS%dRho_dS)
     case (EOS_UNESCO)
-      call calculate_density_scalar_unesco(T, S, pressure, rho, start, npts)
+      call calculate_density_scalar_unesco(T, S, pressure, rho)
     case (EOS_WRIGHT)
-      call calculate_density_scalar_wright(T, S, pressure, rho, start, npts)
+      call calculate_density_scalar_wright(T, S, pressure, rho)
     case default
       call MOM_error(FATAL, &
            "calculate_density_scalar: EOS is not valid.")

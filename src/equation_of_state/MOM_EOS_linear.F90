@@ -42,11 +42,10 @@ end interface calculate_density_linear
 
 contains
 
-subroutine calculate_density_scalar_linear(T, S, pressure, rho, start, npts, &
+subroutine calculate_density_scalar_linear(T, S, pressure, rho, &
                                            Rho_T0_S0, dRho_dT, dRho_dS)
   real,    intent(in)  :: T, S, pressure
   real,    intent(out) :: rho
-  integer, intent(in)  :: start, npts
   real,    intent(in)  :: Rho_T0_S0, dRho_dT, dRho_dS
 ! *  This subroutine computes the density of sea water with a trivial  *
 ! *  linear equation of state (in kg/m^3) from salinity (sal in psu),  *

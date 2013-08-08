@@ -60,10 +60,9 @@ real, parameter :: c3 = 5.140652e-2, c4 = -2.302158e2, c5 = -3.079464
 
 contains
 
-subroutine calculate_density_scalar_wright(T, S, pressure, rho, start, npts)
+subroutine calculate_density_scalar_wright(T, S, pressure, rho)
 real,    intent(in)  :: T, S, pressure
 real,    intent(out) :: rho
-integer, intent(in)  :: start, npts
 ! * Arguments: T - potential temperature relative to the surface in C. *
 ! *  (in)      S - salinity in PSU.                                    *
 ! *  (in)      pressure - pressure in Pa.                              *
