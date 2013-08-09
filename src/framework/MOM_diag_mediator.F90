@@ -208,24 +208,38 @@ subroutine post_data_2d(diag_field_id, field, diag, is_static, mask)
 !  (in,opt)  is_static - If true, this is a static field that is always offered.
 !  (in,opt)  mask - If present, use this real array as the data mask.
   logical :: used, is_stat
-  integer :: ishift, jshift
+  integer :: isv, iev, jsv, jev
 
   is_stat = .false. ; if (present(is_static)) is_stat = is_static 
 
-  ishift = 0 ; jshift = 0
+  ! Determine the propery array indices, noting that because of the (:,:)
+  ! declaration of field, symmetric arrays are using a SW-grid indexing,
+  ! but non-symmetric arrays are using a NE-grid indexing.  Send_data
+  ! actually only uses the difference between ie and is to determine
+  ! the output data size and assumes that halos are symmetric.
+  isv = diag%is ; iev = diag%ie ; jsv = diag%js ; jev = diag%je
+
   if ( size(field,1) == diag%ied-diag%isd +1 ) then
-    ishift = 0
+    isv = diag%is ; iev = diag%ie        ! Data domain
   elseif ( size(field,1) == diag%ied-diag%isd +2 ) then
-    ishift = 1
-!  else
-!    call MOM_error(FATAL,"post_data_2d: peculiar size in i-direction")
+    isv = diag%is ; iev = diag%ie+1      ! Symmetric data domain
+  elseif ( size(field,1) == diag%ie-diag%is +1 ) then
+    isv = 1 ; iev = diag%ie + 1-diag%is  ! Computational domain
+  elseif ( size(field,1) == diag%ie-diag%is +2 ) then
+    isv = 1 ; iev = diag%ie + 2-diag%is  ! Symmetric computational domain
+  else
+    call MOM_error(FATAL,"post_data_2d: peculiar size in i-direction")
   endif
   if ( size(field,2) == diag%jed-diag%jsd +1 ) then
-    jshift = 0
+    jsv = diag%js ; jev = diag%je        ! Data domain
   elseif ( size(field,2) == diag%jed-diag%jsd +2 ) then
-    jshift = 1
-!  else
-!    call MOM_error(FATAL,"post_data_2d: peculiar size in j-direction")
+    jsv = diag%js ; jev = diag%je+1      ! Symmetric data domain
+  elseif ( size(field,2) == diag%je-diag%js +1 ) then
+    jsv = 1 ; jev = diag%je + 1-diag%js  ! Computational domain
+  elseif ( size(field,1) == diag%je-diag%js +2 ) then
+    jsv = 1 ; jev = diag%je + 2-diag%js  ! Symmetric computational domain
+  else
+    call MOM_error(FATAL,"post_data_2d: peculiar size in j-direction")
   endif
 
   if (present(mask)) then
@@ -239,23 +253,19 @@ subroutine post_data_2d(diag_field_id, field, diag, is_static, mask)
   if (is_stat) then
     if (present(mask)) then
       used = send_data(diag_field_id, field, &
-                       is_in = diag%is-ishift, js_in = diag%js-jshift, &
-                       ie_in = diag%ie, je_in = diag%je, rmask=mask)
+                       is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=mask)
     else
       used = send_data(diag_field_id, field, &
-                       is_in = diag%is-ishift, js_in = diag%js-jshift, &
-                       ie_in = diag%ie, je_in = diag%je)
+                       is_in=isv, js_in=jsv, ie_in=iev, je_in=jev)
     endif
   elseif (diag%ave_enabled) then
     if (present(mask)) then
       used = send_data(diag_field_id, field, diag%time_end, &
-                       is_in = diag%is-ishift, js_in = diag%js-jshift, &
-                       ie_in = diag%ie, je_in = diag%je, &
+                       is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
                        weight=diag%time_int, rmask=mask)
     else
       used = send_data(diag_field_id, field, diag%time_end, &
-                       is_in = diag%is-ishift, js_in = diag%js-jshift, &
-                       ie_in = diag%ie, je_in = diag%je, &
+                       is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
                        weight=diag%time_int)
     endif
   endif
@@ -276,23 +286,37 @@ subroutine post_data_3d(diag_field_id, field, diag, is_static, mask)
 !  (in,opt)  mask - If present, use this real array as the data mask.
   logical :: used  ! The return value of send_data is not used for anything.
   logical :: is_stat
-  integer :: ishift, jshift
+  integer :: isv, iev, jsv, jev
   is_stat = .false. ; if (present(is_static)) is_stat = is_static 
   
-  ishift = 0 ; jshift = 0
+  ! Determine the propery array indices, noting that because of the (:,:)
+  ! declaration of field, symmetric arrays are using a SW-grid indexing,
+  ! but non-symmetric arrays are using a NE-grid indexing.  Send_data
+  ! actually only uses the difference between ie and is to determine
+  ! the output data size and assumes that halos are symmetric.
+  isv = diag%is ; iev = diag%ie ; jsv = diag%js ; jev = diag%je
+
   if ( size(field,1) == diag%ied-diag%isd +1 ) then
-    ishift = 0
+    isv = diag%is ; iev = diag%ie        ! Data domain
   elseif ( size(field,1) == diag%ied-diag%isd +2 ) then
-    ishift = 1
-!  else
-!    call MOM_error(FATAL,"post_data_3d: peculiar size in i-direction")
+    isv = diag%is ; iev = diag%ie+1      ! Symmetric data domain
+  elseif ( size(field,1) == diag%ie-diag%is +1 ) then
+    isv = 1 ; iev = diag%ie + 1-diag%is  ! Computational domain
+  elseif ( size(field,1) == diag%ie-diag%is +2 ) then
+    isv = 1 ; iev = diag%ie + 2-diag%is  ! Symmetric computational domain
+  else
+    call MOM_error(FATAL,"post_data_3d: peculiar size in i-direction")
   endif
   if ( size(field,2) == diag%jed-diag%jsd +1 ) then
-    jshift = 0
+    jsv = diag%js ; jev = diag%je        ! Data domain
   elseif ( size(field,2) == diag%jed-diag%jsd +2 ) then
-    jshift = 1  
-!  else
-!    call MOM_error(FATAL,"post_data_3d: peculiar size in j-direction")
+    jsv = diag%js ; jev = diag%je+1      ! Symmetric data domain
+  elseif ( size(field,2) == diag%je-diag%js +1 ) then
+    jsv = 1 ; jev = diag%je + 1-diag%js  ! Computational domain
+  elseif ( size(field,1) == diag%je-diag%js +2 ) then
+    jsv = 1 ; jev = diag%je + 2-diag%js  ! Symmetric computational domain
+  else
+    call MOM_error(FATAL,"post_data_3d: peculiar size in j-direction")
   endif
 
   if (present(mask)) then
@@ -307,23 +331,20 @@ subroutine post_data_3d(diag_field_id, field, diag, is_static, mask)
   if (is_stat) then
     if (present(mask)) then
       used = send_data(diag_field_id, field, &
-                       is_in = diag%is-ishift, js_in = diag%js-jshift, &
-                       ie_in = diag%ie, je_in = diag%je, rmask=mask)
+                       is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=mask)
+
     else
       used = send_data(diag_field_id, field, &
-                       is_in = diag%is-ishift, js_in = diag%js-jshift, &
-                       ie_in = diag%ie, je_in = diag%je)
+                       is_in=isv, js_in=jsv, ie_in=iev, je_in=jev)
     endif
   elseif (diag%ave_enabled) then
     if (present(mask)) then
       used = send_data(diag_field_id, field, diag%time_end, &
-                       is_in = diag%is-ishift, js_in = diag%js-jshift, &
-                       ie_in = diag%ie, je_in = diag%je, &
+                       is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
                        weight=diag%time_int, rmask=mask)
     else
       used = send_data(diag_field_id, field, diag%time_end, &
-                       is_in = diag%is-ishift, js_in = diag%js-jshift, &
-                       ie_in = diag%ie, je_in = diag%je, &
+                       is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
                        weight=diag%time_int)
     endif
   endif
