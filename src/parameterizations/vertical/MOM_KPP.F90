@@ -44,7 +44,7 @@ type, public :: KPP_CS ; private
   ! Daignostic handles and pointers
   type(diag_ctrl), pointer :: diag => NULL()
   integer :: id_OBL = -1, id_BulkRi = -1, id_Ws = -1, id_N = -1
-  integer :: id_Ut2 = -1, id_BulkUz = -1
+  integer :: id_Ut2 = -1, id_BulkUz2 = -1
 
 end type KPP_CS
 
@@ -112,8 +112,8 @@ subroutine KPP_init(paramFile, G, diag, Time, CS)
       'Brunt-Vaisala frequency used by [CVmix] KPP', '1/s')
   CS%id_Ut2 = register_diag_field('ocean_model', 'KPP_Ut2', diag%axesTi, Time, &
       'Unresolved shear turbulence used by [CVmix] KPP', '1/s2')
-  CS%id_BulkUz = register_diag_field('ocean_model', 'KPP_BulkUz', diag%axesTL, Time, &
-      'Bulk difference in resolved velocity used in Bulk Richardson number, as used by [CVmix] KPP', 'm/s')
+  CS%id_BulkUz2 = register_diag_field('ocean_model', 'KPP_BulkUz2', diag%axesTL, Time, &
+      'Square of bulk difference in resolved velocity used in Bulk Richardson number, as used by [CVmix] KPP', 'm2/s2')
 
 end subroutine KPP_init
 
@@ -143,7 +143,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, bFlux, Kv)
   real, dimension( G%ke+1 ) :: Ut2_1d ! Unresolved shear turbulence, at interfaces (1/s2)
   real, dimension( G%ke ) :: BulkRi_1d ! Bulk Richardson number for each layer
   real, dimension( G%ke ) :: deltaRho ! delta Rho as appears in numerator of Bulk Richardson number
-  real, dimension( G%ke ) :: deltaU2 ! square of delta U (shear) as appears in denominator of Bulk Richardson number
+  real, dimension( G%ke ) :: deltaU2 ! square of delta U (shear) as appears in denominator of Bulk Richardson number (m2/s2)
   real :: OBLheight, surfFricVel, surfBuoyFlux, Coriolis, lastOBLheight
   real :: correction, maxCorrection
   real :: GoRho, pRef, rho1, rho2, rho3, Uk, Vk, const1
@@ -155,7 +155,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, bFlux, Kv)
   real, dimension( SZI_(G), SZJ_(G) ) :: OBLdepth ! Depth (positive) of OBL (m)
   real, dimension( SZI_(G), SZJ_(G), SZK_(G)+1 ) :: Ws ! Turbulent velocity scale for scalars (m/s)
   real, dimension( SZI_(G), SZJ_(G), SZK_(G)+1 ) :: N ! Brunt-Vaisala frequency (1/s)
-  real, dimension( SZI_(G), SZJ_(G), SZK_(G) ) :: Uz ! Bulk difference in resolved velocity (m/s)
+  real, dimension( SZI_(G), SZJ_(G), SZK_(G) ) :: Uz2 ! Square of bulk difference in resolved velocity (m2/s2)
   real, dimension( SZI_(G), SZJ_(G), SZK_(G)+1 ) :: Ut2 ! Unresolved shear turbulence (1/s2)
 
 ! call calculateBulkRichardson(CS, G, h, Temp, Salt, u, v, EOS, BulkRi )
@@ -165,7 +165,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, bFlux, Kv)
   Ws(:,:,:) = 0.
   N(:,:,:) = 0.
   Ut2(:,:,:) = 0.
-  Uz(:,:,:) = 0.
+  Uz2(:,:,:) = 0.
 
   GoRho = G%g_Earth / G%Rho0
   const1 = 1.
@@ -268,7 +268,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, bFlux, Kv)
       if (CS%id_Ws > 0) Ws(i,j,:) = Ws_1d(:)
       if (CS%id_N > 0) N(i,j,:) = N_1d(:)
       if (CS%id_Ut2 > 0) Ut2(i,j,:) = Ut2_1d(:)
-      if (CS%id_BulkUz > 0) Uz(i,j,:) = deltaU2(:)
+      if (CS%id_BulkUz2 > 0) Uz2(i,j,:) = deltaU2(:)
     enddo ! i
   enddo ! j
 
@@ -284,7 +284,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, bFlux, Kv)
   if (CS%id_Ws > 0) call post_data(CS%id_Ws, Ws, CS%diag)
   if (CS%id_N > 0) call post_data(CS%id_N, N, CS%diag)
   if (CS%id_Ut2 > 0) call post_data(CS%id_Ut2, Ut2, CS%diag)
-  if (CS%id_BulkUz > 0) call post_data(CS%id_BulkUz, Uz, CS%diag)
+  if (CS%id_BulkUz2 > 0) call post_data(CS%id_BulkUz2, Uz2, CS%diag)
 
 end subroutine KPP_calculate
 
