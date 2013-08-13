@@ -45,6 +45,7 @@ type, public :: KPP_CS ; private
   type(diag_ctrl), pointer :: diag => NULL()
   integer :: id_OBL = -1, id_BulkRi = -1, id_Ws = -1, id_N = -1
   integer :: id_Ut2 = -1, id_BulkUz2 = -1, id_BulkDrho = -1
+  integer :: id_uStar = -1, id_buoyFlux = -1
 
 end type KPP_CS
 
@@ -116,6 +117,10 @@ subroutine KPP_init(paramFile, G, diag, Time, CS)
       'Square of bulk difference in resolved velocity used in Bulk Richardson number, as used by [CVmix] KPP', 'm2/s2')
   CS%id_BulkDrho = register_diag_field('ocean_model', 'KPP_BulkDrho', diag%axesTL, Time, &
       'Bulk difference in density used in Bulk Richardson number, as used by [CVmix] KPP', 'kg/m3')
+  CS%id_uStar = register_diag_field('ocean_model', 'KPP_uStar', diag%axesT1, Time, &
+      'Frictional velocity, u*, as used by [CVmix] KPP', 'm/s')
+  CS%id_buoyFlux = register_diag_field('ocean_model', 'KPP_buoyFlux', diag%axesT1, Time, &
+      'Buoyancy flux, as used by [CVmix] KPP', 'm2/s3')
 
 end subroutine KPP_init
 
@@ -295,6 +300,8 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, bFlux, Kv)
   if (CS%id_Ut2 > 0) call post_data(CS%id_Ut2, Ut2, CS%diag)
   if (CS%id_BulkUz2 > 0) call post_data(CS%id_BulkUz2, Uz2, CS%diag)
   if (CS%id_BulkDrho > 0) call post_data(CS%id_BulkDrho, dRho, CS%diag)
+  if (CS%id_uStar > 0) call post_data(CS%id_uStar, uStar, CS%diag)
+  if (CS%id_buoyFlux > 0) call post_data(CS%id_buoyFlux, bFlux, CS%diag)
 
 end subroutine KPP_calculate
 

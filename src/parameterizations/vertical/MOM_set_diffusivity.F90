@@ -49,12 +49,12 @@ use MOM_diag_to_Z, only : diag_to_Z_CS, register_Zint_diag, calc_Zint_diags
 use MOM_checksums, only : hchksum, uchksum, vchksum
 use MOM_error_handler, only : MOM_error, is_root_pe, FATAL, WARNING, NOTE
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
-use MOM_string_functions, only : uppercase
-use MOM_forcing_type, only : forcing
+use MOM_forcing_type, only : forcing, optics_type, calculateBuoyancyFlux2d
 use MOM_grid, only : ocean_grid_type
 use MOM_intrinsic_functions, only : invcosh
 use MOM_io, only : slasher, vardesc
 use MOM_KPP, only : KPP_CS, KPP_init, KPP_end, KPP_calculate
+use MOM_string_functions, only : uppercase
 use MOM_thickness_diffuse, only : vert_fill_TS
 use MOM_variables, only : thermo_var_ptrs, vertvisc_type, p3d
 use MOM_EOS, only : calculate_density, calculate_density_derivs
@@ -319,13 +319,14 @@ integer, parameter :: POLZIN_09    = 2
 
 contains
 
-subroutine set_diffusivity(u, v, h, tv, fluxes, visc, dt, G, CS, &
+subroutine set_diffusivity(u, v, h, tv, fluxes, optics, visc, dt, G, CS, &
                            Kd, Kd_int)
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)    :: u
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)    :: v
   real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h
-  type(thermo_var_ptrs),                  intent(in)    :: tv
+  type(thermo_var_ptrs),                  intent(inout) :: tv  ! out is for tv%TempxPmE
   type(forcing),                          intent(in)    :: fluxes
+  type(optics_type),                      pointer       :: optics
   type(vertvisc_type),                    intent(inout) :: visc
   real,                                   intent(in)    :: dt
   type(ocean_grid_type),                  intent(in)    :: G
@@ -401,6 +402,7 @@ subroutine set_diffusivity(u, v, h, tv, fluxes, visc, dt, G, CS, &
                          ! interpolated into depth space.
   integer :: i, j, k, is, ie, js, je, nz
   integer :: isd, ied, jsd, jed
+  real, dimension(SZI_(G),SZJ_(G)) :: buoyancyFlux
 
   real :: kappa_fill  ! diffusivity used to fill massless layers
   real :: dt_fill     ! timestep used to fill massless layers
@@ -709,10 +711,16 @@ subroutine set_diffusivity(u, v, h, tv, fluxes, visc, dt, G, CS, &
   endif
 
   if (CS%useKPP) then
+    ! The KPP scheme calculates the mixed layer diffusivities and non-local transport
+    ! and requires the interior diffusivity to be complete so that KPP can match profiles.
+    ! Thus, KPP is the last contribution to Kd.
     if (.not. present(KD_int)) call MOM_error(FATAL,'set_diffusivity: '//&
                 'KPP can only be used with optional argument Kd_int.')
+    ! KPP needs the surface buoyancy flux but does not update state variables.
+    ! We could make this call higher up to avoid a repeat unpacking of the surface fluxes.  ????
+    call calculateBuoyancyFlux2d(G, fluxes, optics, h, tv%T, tv%S, tv, buoyancyFlux, includeSW = .True. )
     call KPP_calculate(CS%KPP_CSp, G, h, tv%T, tv%S, u, v, tv%eqn_of_state, &
-             fluxes%ustar, fluxes%lw, Kd_int)
+             fluxes%ustar, buoyancyFlux, Kd_int)
   endif
 
   if (CS%id_Kd > 0) call post_data(CS%id_Kd, Kd, CS%diag)
@@ -2636,7 +2644,7 @@ subroutine set_diffusivity_init(Time, G, param_file, diag, CS, diag_to_Z_CSp)
   endif
 
   call get_param(param_file, mod, "USE_KPP", CS%useKPP, &
-                 "If true, turns on the [CVmix] KPP scheme of Large et al., 1984,"// &
+                 "If true, turns on the [CVmix] KPP scheme of Large et al., 1984,\n"// &
                  "to calculate diffusivities and non-local transport in the OBL.", &
                  default=.false.)
   if (CS%useKPP) call KPP_init(param_file, G, diag, Time, CS%KPP_CSp)

@@ -414,7 +414,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   endif
 
   call cpu_clock_begin(id_clock_set_diffusivity)
-  call set_diffusivity(u, v, h, tv, fluxes, visc, dt, G, CS%set_diff_CSp, Kd, Kd_int)
+  call set_diffusivity(u, v, h, tv, fluxes, CS%optics, visc, dt, G, CS%set_diff_CSp, Kd, Kd_int)
   call cpu_clock_end(id_clock_set_diffusivity)
   if (CS%debug) then
     call MOM_state_chksum("after set_diffusivity ", u(:,:,:), v(:,:,:), h(:,:,:), G)
