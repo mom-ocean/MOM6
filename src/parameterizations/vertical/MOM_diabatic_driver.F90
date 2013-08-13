@@ -1702,8 +1702,8 @@ subroutine applyBoundaryFluxes(G, dt, fluxes, optics, ea, eb, h, tv)
   ! vanish(ed/ing) layer.
   IforcingDepthScale = 1000. ! Use 1 mm to distribute the surface fluxes uniformly
 
-  use_riverHeatContent = .false.
-  useCalvingHeatContent = .false.
+  use_riverHeatContent = .false.              ! ?????????????????
+  useCalvingHeatContent = .false.             ! ?????????????????
 
   ! s/r aborbRemaining uses an indirect indexing in the vertical, a hold over for use
   ! with the bulk mixed layer
@@ -1758,6 +1758,8 @@ subroutine applyBoundaryFluxes(G, dt, fluxes, optics, ea, eb, h, tv)
         Ithickness = 1./h2d(i,k)
         tv%T(i,j,k) = (hOld*tv%T(i,j,k) + dTemp)*Ithickness
         tv%S(i,j,k) = (hOld*tv%S(i,j,k) + dSalt)*Ithickness
+
+        !  update ea    ??????????????????
 
       enddo ! k
     enddo ! i
