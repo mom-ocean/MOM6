@@ -119,13 +119,14 @@ subroutine KPP_init(paramFile, G, diag, Time, CS)
 
 end subroutine KPP_init
 
+
 subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, bFlux, Kv)
 ! Calculates diffusivity and non-local transport for KPP parameterization 
 
 ! Arguments
   type(KPP_CS),                           intent(in)    :: CS    ! Control structure
   type(ocean_grid_type),                  intent(in)    :: G     ! Ocean grid
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h     ! layer/level thicknesses (units of H)
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h     ! Layer/level thicknesses (units of H)
   real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: Temp  ! Pot. temperature (degrees C)
   real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: Salt  ! Salinity (ppt)
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)    :: u     ! Velocity components (m/s)
@@ -296,66 +297,6 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, bFlux, Kv)
   if (CS%id_BulkDrho > 0) call post_data(CS%id_BulkDrho, dRho, CS%diag)
 
 end subroutine KPP_calculate
-
-
-subroutine NOTUSED_calculateBulkRichardson(CS, G, h, Temp, Salt, u, v, EOS, BulkRi )
-! Calculates Bulk richardson number
-
-! Arguments
-  type(KPP_CS),                           intent(in)    :: CS     ! Control structure
-  type(ocean_grid_type),                  intent(in)    :: G      ! Ocean grid
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h     ! layer/level thicknesses (units of H)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: Temp  ! Pot. temperature (degrees C)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: Salt  ! Salinity (ppt)
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)    :: u     ! Velocity components (m/s)
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)    :: v     ! Velocity components (m/s)
-  type(EOS_type),                         pointer       :: EOS    ! Equation of state
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(inout) :: BulkRi ! Bulk Richardson number (nondim)
-
-! Local variables
-  integer :: i, j, k
-  real :: rho1( SZI_(G) ) ! Density of surface properties at depth z
-  real :: rho2( SZI_(G) ) ! In-situ density at depth z
-  real :: pRef( SZI_(G) ) ! Pressure at top of rho2 cell
-  real :: dRef( SZI_(G) ) ! Depth of top of rho2 cell (positve in m)
-  real :: dLev( SZI_(G) ) ! Depth of center of rho2 cell (positve in m)
-  real :: GoRho, epsShear, Uk, Vk
-
-  GoRho = G%g_Earth / G%Rho0
-  epsShear = 1.e-15 ! A small number added to resolved/unresolved velocity shears to avoid divide by zero
-
-  do j = G%jsc, G%jec
-    pRef(:) = 0. ! Ignore atmospheric loading in this calculation ????
-    dRef(:) = 0.
-    do k = 1, G%ke
-
-      ! rho1 is meant to be the average over some [Monin-Obukhov] scale at the surface
-      ! In z-mode, this will typically just be the top level. but a proper integral
-      ! will be needed for fine vertical resolution or arbitray coordinates.   ???????
-      call calculate_density(Temp(:,j,1), Salt(:,j,1), pRef, &
-                      rho1, G%isc, G%iec, EOS)
-      call calculate_density(Temp(:,j,k), Salt(:,j,k), pRef, &
-                      rho2, G%isc, G%iec, EOS)
-
-      dLev(:) = dRef(:) + 0.5 * h(:,j,k) * G%H_to_m ! Depth of center of level k
-
-      do i = G%isc, G%iec
-        Uk = 0.5 * ( abs( u(i,j,k) - u(i,j,1) ) + abs( u(i-1,j,k) - u(i-1,j,1) ) ) ! delta_k U
-        Vk = 0.5 * ( abs( v(i,j,k) - v(i,j,1) ) + abs( v(i,j-1,k) - v(i,j-1,1) ) ) ! delta_k V
-        BulkRi(i,j,k) = ( GoRho * dLev(i) ) * ( rho2(i) - rho1(i) ) / ( ( Uk**2 + Vk**2 ) + epsShear )
-        ! Notes:
-        ! o Using dLev includes an extra half layer thickness from surface for all levels
-        ! o BulRi(k=1)=0 because rho1=rho2
-      enddo ! i
-
-      ! Pressure at bottom of level k will become pressure at top of level on next iteration
-      pRef(:) = pRef(:) + G%g_Earth * G%Rho0 * h(:,j,k) ! Boussinesq approximation!!!! ?????
-      dRef(:) = dRef(:) + h(:,j,k) * G%H_to_m ! Depth of bottom of level k
-
-    enddo ! k
-  enddo ! j
-
-end subroutine NOTUSED_calculateBulkRichardson
 
 
 subroutine KPP_end(CS)
