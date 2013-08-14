@@ -27,12 +27,13 @@ type, public :: KPP_CS ; private
   ! Parameters
   real    :: Ri_crit    ! Critical Richardson number (defines OBL depth)
   real    :: vonKarman  ! von Karman constant
+  real    :: Cv         ! Ratio of N to N at the entrainment depth
 ! real    :: zeta_m     ! parameter for computing vel scale func
 ! real    :: zeta_s     ! parameter for computing vel scale func
 ! real    :: a_m        ! parameter for computing vel scale func
 ! real    :: a_s        ! parameter for computing vel scale func
 ! real    :: c_m        ! parameter for computing vel scale func
-! real    :: c_s        ! parameter for computing vel scale func
+  real    :: cs         ! Parameter for computing velocity scale function
 ! real    :: eps        ! small non-negative val (rec 1e-10)
   character(len=10) :: interpType ! Type of iterpolation to use in determining OBL
   logical :: computeEkman ! If True, compute Ekman depth limit
@@ -92,6 +93,12 @@ subroutine KPP_init(paramFile, G, diag, Time, CS)
                  'If True, limit the OBL depth to be shallower than the\n'//       &
                  'Monin-Obukhov depth.',                                           &
                  default=.False.)
+  call get_param(paramFile, mod, 'CV', CS%Cv, &
+                 'Ratio of interior N to N at entrianment depth.', &
+                 units='nondim', default=1.5)
+  call get_param(paramFile, mod, 'CS', CS%cs, &
+                 'Parameter for computing velocity scale function.', &
+                 units='nondim', default=98.96)
   call closeParameterBlock(paramFile)
 
   call CVmix_init_kpp( Ri_crit=CS%Ri_crit,                 &
@@ -99,6 +106,7 @@ subroutine KPP_init(paramFile, G, diag, Time, CS)
                        interp_type=CS%interpType,          &
                        lEkman=CS%computeEkman,             &
                        lMonOb=CS%computeMoninObukhov,      &
+                       c_s=CS%cs,                          &
                        CVmix_kpp_params_user=CS%KPP_params )
 
 ! Register diagnostics
@@ -155,9 +163,11 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, bFlux, Kv)
   real :: kOBL, OBLdepth_0d, surfFricVel, surfBuoyFlux, Coriolis, lastOBLdepth
   real :: correction, largestCorrection
   real :: GoRho, pRef, rho1, rhoK, rhoKm1, Uk, Vk, const1
-  real, parameter :: epsShear = 1.e-15 ! A small number added to (un)resolved shears to avoid divide by zero
+  real, parameter :: negligibleShear = 1.e-15 ! A small number added to (un)resolved shears to avoid divide by zero
   integer, parameter :: maxIterations = 4 ! Number of iteration on OBL depth to make
-  real, parameter :: tolerance = 1.e-4 ! (m) What change in OBL depth is acceptably accurate to stop iterating
+  real, parameter :: tolerance = 1.e-8 ! (m) What change in OBL depth is acceptably accurate to stop iterating
+  real, parameter :: eps = 0.1 ! Nondimensional extent of surface layer. Used for const1 below.
+  real, parameter :: BetaT = -0.2 ! Ratio of entrainment flux to surface buoyancy flux. Used for const1 below.
 
 ! Diagnostics arrays                   should these become allocatables ??????????
   real, dimension( SZI_(G), SZJ_(G), SZK_(G) ) :: BulkRi ! Bulk Richardson number for each layer
@@ -178,10 +188,11 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, bFlux, Kv)
   Uz2(:,:,:) = 0.
 
   GoRho = G%g_Earth / G%Rho0
-  const1 = 1.
+  ! const1 is a constant factor in the equation for unresolved shear, Ut (eq. 23 in LMD94)
+  const1 = CS%Cv * sqrt( abs(BetaT) / (CS%cs * eps) )/( CS%Ri_crit * (CS%vonKarman**2) )
+
   largestIterationCount = 0
   largestCorrection = 0.
-
   do j = G%jsc, G%jec
     do i = G%isc, G%iec
 
@@ -203,7 +214,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, bFlux, Kv)
         Uk = 0.5 * ( abs( u(i,j,k) - u(i,j,1) ) + abs( u(i-1,j,k) - u(i-1,j,1) ) ) ! delta_k U
         Vk = 0.5 * ( abs( v(i,j,k) - v(i,j,1) ) + abs( v(i,j-1,k) - v(i,j-1,1) ) ) ! delta_k V
         deltaRho(k) = rhoK - rho1
-        deltaU2(k) = ( Uk**2 + Vk**2 ) + epsShear
+        deltaU2(k) = ( Uk**2 + Vk**2 ) + negligibleShear
         N_1d(k) = sqrt( GoRho * max(rhoK - rhoKm1, 0.) / (0.5*(h(i,j,km1) + h(i,j,k))+G%H_subroundoff) )
         BulkRi_1d(k) = ( GoRho * ( -cellHeight(k) ) ) * deltaRho(k) / deltaU2(k)
         ! Notes:
@@ -219,7 +230,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, bFlux, Kv)
       Coriolis = 0.25*( (G%CoriolisBu(i,j) + G%CoriolisBu(i-1,j-1)) &
                        +(G%CoriolisBu(i-1,j) + G%CoriolisBu(i,j-1)) )
       surfFricVel = uStar(i,j)
-      surfBuoyFlux = bFlux(i,j)   ! This might contain zeros since we do not normally use this array  ?????????????
+      surfBuoyFlux = bFlux(i,j)
 
       OBLdepth_0d = 1.e10
       OBLiterater: do iteration = 0, maxIterations ! Iterate of the estimates of Bulk Ri, Ws and OBL depth
@@ -233,7 +244,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, bFlux, Kv)
            kOBL,                   & ! (out) level (+fraction) of OBL extent
            zt_cntr=cellHeight,     & ! (in) Height of cell centers (m)
            surf_fric=surfFricVel,  & ! (in) Turbulent friction velocity at surface (m/s)
-           surf_buoy=surfBuoyFlux, & ! (in) Buoyancy flux at surface (m2/s3)                  SIGNS???
+           surf_buoy=surfBuoyFlux, & ! (in) Buoyancy flux at surface (m2/s3)
            Coriolis=Coriolis,      & ! (in) Coriolis parameter (1/s)
            CVmix_kpp_params_user=CS%KPP_params ) ! KPP parameters
 
@@ -245,8 +256,8 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, bFlux, Kv)
         sigmaCoord(:) = -iFaceHeight/OBLdepth_0d ! =0 at surface, =1 at z=-OBLd
         call CVmix_kpp_compute_turbulent_scales( &
            sigmaCoord,     & ! (in) Normalized boundary layer coordinate (at interfaces)
-           -OBLdepth_0d,    & ! (in) OBL height (m)
-           surfBuoyFlux,   & ! (in) Buoyancy flux at surface (m2/s3)                  SIGNS???
+           OBLdepth_0d,    & ! (in) OBL depth (m)
+           surfBuoyFlux,   & ! (in) Buoyancy flux at surface (m2/s3)
            surfFricVel,    & ! (in) Turbulent friction velocity at surface (m/s)
            w_s=Ws_1d,      & ! (out) Turbulent velocity scale profile, at interfaces (m/s)
            CVmix_kpp_params_user=CS%KPP_params ) ! KPP parameters
