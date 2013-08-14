@@ -27,7 +27,6 @@ type, public :: KPP_CS ; private
   ! Parameters
   real    :: Ri_crit    ! Critical Richardson number (defines OBL depth)
   real    :: vonKarman  ! von Karman constant
-  real    :: Cv         ! Ratio of N to N at the entrainment depth
 ! real    :: zeta_m     ! parameter for computing vel scale func
 ! real    :: zeta_s     ! parameter for computing vel scale func
 ! real    :: a_m        ! parameter for computing vel scale func
@@ -81,7 +80,7 @@ subroutine KPP_init(paramFile, G, diag, Time, CS)
                  units='nondim', default=0.3)
   call get_param(paramFile, mod, 'VON_KARMAN', CS%vonKarman, &
                  'von Karman constant.',                     &
-                 units='nondim', default=0.41)
+                 units='nondim', default=0.40)
   call get_param(paramFile, mod, 'INTERP_TYPE', CS%interpType,                  &
                  'Type of interpolation to use to determine the OBL depth.\n'// &
                  'Allowed types are: linear, quadratic, cubic.',                &
@@ -93,9 +92,6 @@ subroutine KPP_init(paramFile, G, diag, Time, CS)
                  'If True, limit the OBL depth to be shallower than the\n'//       &
                  'Monin-Obukhov depth.',                                           &
                  default=.False.)
-  call get_param(paramFile, mod, 'CV', CS%Cv, &
-                 'Ratio of interior N to N at entrianment depth.', &
-                 units='nondim', default=1.5)
   call get_param(paramFile, mod, 'CS', CS%cs, &
                  'Parameter for computing velocity scale function.', &
                  units='nondim', default=98.96)
@@ -162,7 +158,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, bFlux, Kv)
   real, dimension( G%ke ) :: deltaU2 ! square of delta U (shear) as appears in denominator of Bulk Richardson number (m2/s2)
   real :: kOBL, OBLdepth_0d, surfFricVel, surfBuoyFlux, Coriolis, lastOBLdepth
   real :: correction, largestCorrection
-  real :: GoRho, pRef, rho1, rhoK, rhoKm1, Uk, Vk, const1
+  real :: GoRho, pRef, rho1, rhoK, rhoKm1, Uk, Vk, const1, Cv
   real, parameter :: negligibleShear = 1.e-15 ! A small number added to (un)resolved shears to avoid divide by zero
   integer, parameter :: maxIterations = 4 ! Number of iteration on OBL depth to make
   real, parameter :: tolerance = 1.e-8 ! (m) What change in OBL depth is acceptably accurate to stop iterating
@@ -189,7 +185,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, bFlux, Kv)
 
   GoRho = G%g_Earth / G%Rho0
   ! const1 is a constant factor in the equation for unresolved shear, Ut (eq. 23 in LMD94)
-  const1 = CS%Cv * sqrt( abs(BetaT) / (CS%cs * eps) )/( CS%Ri_crit * (CS%vonKarman**2) )
+  const1 = sqrt( abs(BetaT) / (CS%cs * eps) )/( CS%Ri_crit * (CS%vonKarman**2) )
 
   largestIterationCount = 0
   largestCorrection = 0.
@@ -266,7 +262,8 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, bFlux, Kv)
         if ( iteration < maxIterations ) then
           do k = 1, G%ke
             ! Unresolved turbulence shear
-            Ut2_1d(k) = const1 * (-cellHeight(k)) * N_1d(k) * Ws_1d(k)
+            Cv = max( 1.7, 2.1 - 200. * N_1d(k) )
+            Ut2_1d(k) = const1 * Cv * (-cellHeight(k)) * N_1d(k) * Ws_1d(k)
             ! Note upward-biased used of Ws since Ws is at interfaces
             BulkRi_1d(k) = ( GoRho * ( -cellHeight(k) ) ) * deltaRho(k) / ( deltaU2(k) + Ut2_1d(k) )
           enddo ! k
