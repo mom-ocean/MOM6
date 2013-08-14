@@ -78,7 +78,7 @@ GOLD_SIS
 #"ocean_model","TKE_conv_s2","TKE_conv_s2","ocean_day","all",.true.,"none",2
 #"ocean_model","TKE_tidal","TKE_tidal","ocean_day","all",.true.,"none",2
 #"ocean_model","h_ML","h_ML","ocean_day","all",.true.,"none",2
-#"ocean_model","Kd","Kd","ocean_day","all",.true.,"none",2
+#"ocean_model","Kd_effective","Kd_effective","ocean_day","all",.true.,"none",2
 #
 # Tracer Fluxes:
 #==================

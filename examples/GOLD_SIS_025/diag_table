@@ -77,7 +77,7 @@ HiRes_025_SIS_1440
 #"ocean_model","TKE_conv_s2","TKE_conv_s2","ocean_month","all",.true.,"none",2
 #"ocean_model","TKE_tidal","TKE_tidal","ocean_month","all",.true.,"none",2
 "ocean_model","h_ML","h_ML","ocean_month","all",.false.,"none",2
-#"ocean_model","Kd","Kd","ocean_month","all",.true.,"none",2
+#"ocean_model","Kd_effective","Kd_effective","ocean_month","all",.true.,"none",2
 #"ocean_model","PE_detrain","PE_detrain","ocean_month","all",.true.,"none",2
 #"ocean_model","PE_detrain2","PE_detrain2","ocean_month","all",.true.,"none",2
 #"ocean_model","Rayleigh_u","Rayleigh_u","ocean_month","all",.true.,"none",2

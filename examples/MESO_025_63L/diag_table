@@ -105,7 +105,7 @@ MESO_025_63L
 #
 # Viscosities and diffusivities:
 #===============================
-#"ocean_model","Kd","Kd","visc","all",.true.,"none",2
+#"ocean_model","Kd_effective","Kd_effective","visc","all",.true.,"none",2
 #"ocean_model","Ahh","Ahh","visc","all",.true.,"none",2
 #"ocean_model","Ahq","Ahq","visc","all",.true.,"none",2
 #"ocean_model","Khh","Khh","visc","all",.true.,"none",2
