@@ -142,7 +142,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, bFlux, Kv)
   real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(inout) :: Kv ! Vertical diffusivity due to KPP
 
 ! Local variables
-  integer :: i, j, k, km1, kOBL, iteration, largestIterationCount
+  integer :: i, j, k, km1, iteration, largestIterationCount
   real, dimension( G%ke ) :: cellHeight ! Cell center heights referenced to surface (m)
   real, dimension( G%ke+1 ) :: iFaceHeight ! Interface heights referenced to surface (m)
   real, dimension( G%ke+1 ) :: sigmaCoord ! Normalized coordiante, =0 at surface, =1 at z=-OBLd
@@ -152,7 +152,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, bFlux, Kv)
   real, dimension( G%ke ) :: BulkRi_1d ! Bulk Richardson number for each layer
   real, dimension( G%ke ) :: deltaRho ! delta Rho as appears in numerator of Bulk Richardson number
   real, dimension( G%ke ) :: deltaU2 ! square of delta U (shear) as appears in denominator of Bulk Richardson number (m2/s2)
-  real :: OBLdepth_0d, surfFricVel, surfBuoyFlux, Coriolis, lastOBLdepth
+  real :: kOBL, OBLdepth_0d, surfFricVel, surfBuoyFlux, Coriolis, lastOBLdepth
   real :: correction, largestCorrection
   real :: GoRho, pRef, rho1, rhoK, rhoKm1, Uk, Vk, const1
   real, parameter :: epsShear = 1.e-15 ! A small number added to (un)resolved shears to avoid divide by zero
@@ -230,7 +230,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, bFlux, Kv)
            BulkRi_1d,              & ! (in) Bulk Richardson number
            iFaceHeight,            & ! (in) Height of interfaces (m)
            OBLdepth_0d,            & ! (out) OBL depth (m)
-           kOBL,                   & ! (out) level of OBL extent
+           kOBL,                   & ! (out) level (+fraction) of OBL extent
            zt_cntr=cellHeight,     & ! (in) Height of cell centers (m)
            surf_fric=surfFricVel,  & ! (in) Turbulent friction velocity at surface (m/s)
            surf_buoy=surfBuoyFlux, & ! (in) Buoyancy flux at surface (m2/s3)                  SIGNS???
