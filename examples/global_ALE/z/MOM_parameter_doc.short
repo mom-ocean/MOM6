@@ -310,7 +310,7 @@ V_TRUNC_FILE = "V_velocity_truncations" ! default = ""
                                 ! leading to meridional velocity truncations are written.
                                 ! Undefine this for efficiency if this diagnostic is not
                                 ! needed.
-HMIX_FIXED = 30.0               !   [m]
+HMIX_FIXED = 0.5                !   [m]
                                 ! The prescribed depth over which the near-surface
                                 ! viscosity and diffusivity are elevated when the bulk
                                 ! mixed layer is not used.
@@ -440,10 +440,6 @@ KD = 2.0E-05                    !   [m2 s-1]
                                 ! may be used.
 KD_MIN = 2.0E-06                !   [m2 s-1] default = 2.0E-07
                                 ! The minimum diapycnal diffusivity.
-KDML = 0.1                      !   [m2 s-1] default = 2.0E-05
-                                ! If BULKMIXEDLAYER is false, KDML is the elevated
-                                ! diapycnal diffusivity in the topmost HMIX of fluid.
-                                ! KDML is only used if BULKMIXEDLAYER is false.
 INT_TIDE_DISSIPATION = True     !   [Boolean] default = False
                                 ! If true, use an internal tidal dissipation scheme to
                                 ! drive diapycnal mixing, along the lines of St. Laurent
@@ -473,6 +469,10 @@ READ_TIDEAMP = True             !   [Boolean] default = False
 H2_FILE = "sgs_h2.nc"           !
                                 ! The path to the file containing the sub-grid-scale
                                 ! topographic roughness amplitude with INT_TIDE_DISSIPATION.
+USE_KPP = True                  !   [Boolean] default = False
+                                ! If true, turns on the [CVmix] KPP scheme of Large et al., 1984,
+                                ! to calculate diffusivities and non-local transport in the OBL.
+    !  Parameters of module MOM_KPP
     !  Parameters of module MOM_entrain_diffusive
 MAX_ENT_IT = 20                 ! default = 5
                                 ! The maximum number of iterations that may be used to

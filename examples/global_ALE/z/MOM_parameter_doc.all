@@ -840,7 +840,7 @@ V_TRUNC_FILE = "V_velocity_truncations" ! default = ""
 HARMONIC_VISC = False           !   [Boolean] default = False
                                 ! If true, use the harmonic mean thicknesses for
                                 ! calculating the vertical viscosity.
-HMIX_FIXED = 30.0               !   [m]
+HMIX_FIXED = 0.5                !   [m]
                                 ! The prescribed depth over which the near-surface
                                 ! viscosity and diffusivity are elevated when the bulk
                                 ! mixed layer is not used.
@@ -1174,7 +1174,7 @@ KD_MAX = -1.0                   !   [m2 s-1] default = -1.0
 KD_ADD = 0.0                    !   [m2 s-1] default = 0.0
                                 ! A uniform diapycnal diffusivity that is added
                                 ! everywhere without any filtering or scaling.
-KDML = 0.1                      !   [m2 s-1] default = 2.0E-05
+KDML = 2.0E-05                  !   [m2 s-1] default = 2.0E-05
                                 ! If BULKMIXEDLAYER is false, KDML is the elevated
                                 ! diapycnal diffusivity in the topmost HMIX of fluid.
                                 ! KDML is only used if BULKMIXEDLAYER is false.
@@ -1241,9 +1241,25 @@ TIDEAMP_FILE = "tideamp.nc"     ! default = "tideamp.nc"
 H2_FILE = "sgs_h2.nc"           !
                                 ! The path to the file containing the sub-grid-scale
                                 ! topographic roughness amplitude with INT_TIDE_DISSIPATION.
-USE_KPP = False                 !   [Boolean] default = False
+USE_KPP = True                  !   [Boolean] default = False
                                 ! If true, turns on the [CVmix] KPP scheme of Large et al., 1984,
                                 ! to calculate diffusivities and non-local transport in the OBL.
+    !  Parameters of module MOM_KPP
+RI_CRIT = 0.3                   !   [nondim] default = 0.3
+                                ! Critical Richardson number used to define depth of the
+                                ! Oceab Boundary Layer (OBL).
+VON_KARMAN = 0.4                !   [nondim] default = 0.4
+                                ! von Karman constant.
+INTERP_TYPE = "quadratic"       ! default = "quadratic"
+                                ! Type of interpolation to use to determine the OBL depth.
+                                ! Allowed types are: linear, quadratic, cubic.
+COMPUTE_EKMAN = False           !   [Boolean] default = False
+                                ! If True, limit the OBL depth to be shallower than the Ekman depth.
+COMPUTE_MONIN_OBUKHOV = False   !   [Boolean] default = False
+                                ! If True, limit the OBL depth to be shallower than the
+                                ! Monin-Obukhov depth.
+CS = 98.96                      !   [nondim] default = 98.96
+                                ! Parameter for computing velocity scale function.
     !  Parameters of module MOM_entrain_diffusive
 CORRECT_DENSITY = True          !   [Boolean] default = True
                                 ! If true, and USE_EOS is true, the layer densities are
