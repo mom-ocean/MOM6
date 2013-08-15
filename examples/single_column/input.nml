@@ -20,20 +20,3 @@
  
  &ice_model_nml
  /
-
- &coupler_nml
-            months = 1
-            days   =  0
-            current_date = 1982,1,1,0,0,0,
-            calendar = 'julian',
-            dt_cpld = 7200,
-            dt_atmos = 7200,
-            do_atmos = .false.,
-            do_land = .false.,
-            do_ice = .false.,
-            do_ocean = .true.,
-            atmos_npes = 0,
-            ocean_npes = 0,
-            concurrent = .false.
-            use_lag_fluxes=.false.
- /
