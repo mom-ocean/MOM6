@@ -66,8 +66,9 @@ NIPROC_IO = 1                   ! default = 0
 NJPROC_IO = 1                   ! default = 0
                                 ! The number of processors used for I/O in the
                                 ! y-direction, or 0 to equal NJPROC.
-    !  Parameters of module MOM_grid
-        ! Parameters providing information about the vertical grid.
+
+! === Parameters of module MOM_grid ===
+! Parameters providing information about the vertical grid.
 G_EARTH = 9.8                   !   [m s-2] default = 9.8
                                 ! The gravitational acceleration of the Earth.
 RHO_0 = 1035.0                  !   [kg m-3] default = 1035.0
@@ -93,7 +94,8 @@ NK = 20                         !   [nondim]
 AVAILABLE_DIAGS_FILE = "available_diags.000000" ! default = "available_diags.000000"
                                 ! A file into which to write a list of all available
                                 ! ocean diagnostics that can be included in a diag_table.
-    !  Parameters of module MOM
+
+! === Parameters of module MOM ===
 VERBOSITY = 2                   ! default = 2
                                 ! Integer controlling level of messaging
                                 !   0 = Only FATAL messages
@@ -201,7 +203,8 @@ SAVE_INITIAL_CONDS = True       !   [Boolean] default = False
                                 ! by IC_OUTPUT_FILE.
 IC_OUTPUT_FILE = "Initial_state" ! default = "MOM_IC"
                                 ! The file into which to write the initial conditions.
-    !  Parameters of module MOM_tracer_registry
+
+! === Parameters of module MOM_tracer_registry ===
 EQN_OF_STATE = "LINEAR"         ! default = "WRIGHT"
                                 ! EQN_OF_STATE determines which ocean equation of state
                                 ! should be used.  Currently, the valid choices are
@@ -247,7 +250,8 @@ LARGE_FILE_SUPPORT = True       !   [Boolean] default = True
                                 ! file support (4Gb), otherwise the limit is 2Gb.
 MAX_FIELDS = 100                ! default = 100
                                 ! The maximum number of restart fields that can be used.
-    !  Parameters of module MOM_tracer_flow_control
+
+! === Parameters of module MOM_tracer_flow_control ===
 USE_USER_TRACER_EXAMPLE = False !   [Boolean] default = False
                                 ! If true, use the USER_tracer_example tracer package.
 USE_DOME_TRACER = False         !   [Boolean] default = False
@@ -285,7 +289,8 @@ DENSITY_RANGE = 2.0             !   [kg m-3] default = 2.0
                                 ! The range of reference potential densities in the layers.
 GFS = 0.98                      !   [m s-2] default = 9.8
                                 ! The reduced gravity at the free surface.
-    !  Parameters of module MOM_grid_init
+
+! === Parameters of module MOM_grid_init ===
 GRID_CONFIG = "cartesian"       !
                                 ! A character string that determines the method for
                                 ! defining the horizontal grid.  Current options are:
@@ -515,7 +520,8 @@ REMAPPING_SCHEME = "PPM_IH4"    ! default = "PLM"
                                 ! PPM_IH4     (3rd-order accurate)
                                 ! PQM_IH4IH3  (4th-order accurate)
                                 ! PQM_IH6IH5  (5th-order accurate)
-    !  Parameters of module MOM_MEKE
+
+! === Parameters of module MOM_MEKE ===
 MEKE_DAMPING = 0.0              !   [s-1] default = 0.0
                                 ! The local depth-indepented MEKE dissipation rate.
 MEKE_CD_SCALE = 0.0             !   [nondim] default = 0.0
@@ -563,7 +569,8 @@ MEKE_KHMEKE_FAC = 0.0           !   [nondim] default = 0.0
 MEKE_RD_MAX_SCALE = True        !   [nondim] default = True
                                 ! If true, the maximum length scale used by MEKE is
                                 ! the deformation radius.
-    !  Parameters of module MOM_lateral_mixing_coeffs
+
+! === Parameters of module MOM_lateral_mixing_coeffs ===
 USE_VARIABLE_MIXING = False     !   [Boolean] default = False
                                 ! If true, the variable mixing code will be called.  This
                                 ! allows diagnostics to be created even if the scheme is
@@ -708,7 +715,8 @@ ANALYTIC_FV_PGF = True          !   [Boolean] default = True
                                 ! the equations of state in pressure to avoid any
                                 ! possibility of numerical thermobaric instability, as
                                 ! described in Adcroft et al., O. Mod. (2008).
-    !  Parameters of module MOM_hor_visc
+
+! === Parameters of module MOM_hor_visc ===
 LAPLACIAN = True                !   [Boolean] default = False
                                 ! If true, use a Laplacian horizontal viscosity.
 BIHARMONIC = False              !   [Boolean] default = True
@@ -733,7 +741,8 @@ HORVISC_BOUND_COEF = 0.8        !   [nondim] default = 0.8
                                 ! The nondimensional coefficient of the ratio of the
                                 ! viscosity bounds to the theoretical maximum for
                                 ! stability without considering other terms.
-    !  Parameters of module MOM_vert_friction
+
+! === Parameters of module MOM_vert_friction ===
 BOTTOMDRAGLAW = True            !   [Boolean] default = True
                                 ! If true, the bottom stress is calculated with a drag
                                 ! law of the form c_drag*|u|*u. The velocity magnitude
@@ -796,11 +805,13 @@ CFL_TRUNCATE = 0.5              !   [nondim] default = 0.5
 CFL_REPORT = 0.5                !   [nondim] default = 0.5
                                 ! The value of the CFL number that causes accelerations
                                 ! to be reported; the default is CFL_TRUNCATE.
-    !  Parameters of module MOM_PointAccel
+
+! === Parameters of module MOM_PointAccel ===
 MAX_TRUNC_FILE_SIZE_PER_PE = 50 ! default = 50
                                 ! The maximum number of colums of truncations that any PE
                                 ! will write out during a run.
-    !  Parameters of module MOM_set_visc
+
+! === Parameters of module MOM_set_visc ===
 LINEAR_DRAG = True              !   [Boolean] default = False
                                 ! If LINEAR_DRAG and BOTTOMDRAGLAW are defined the drag
                                 ! law is cdrag*DRAG_BG_VEL*u.
@@ -838,7 +849,8 @@ KV_BBL_MIN = 0.0                !   [m2 s-1] default = 0.0
                                 ! The minimum viscosities in the bottom boundary layer.
 KV_TBL_MIN = 0.0                !   [m2 s-1] default = 0.0
                                 ! The minimum viscosities in the top boundary layer.
-    !  Parameters of module MOM_barotropic
+
+! === Parameters of module MOM_barotropic ===
 BOUND_BT_CORRECTION = True      !   [Boolean] default = False
                                 ! If true, the corrective pseudo mass-fluxes into the
                                 ! barotropic solver are limited to values that require
@@ -946,7 +958,8 @@ DTBT = 10.0                     !   [s or nondim] default = -0.98
                                 ! Setting DTBT to 0 is the same as setting it to -0.98.
                                 ! The value of DTBT that will actually be used is an
                                 ! integer fraction of DT, rounding down.
-    !  Parameters of module MOM_thickness_diffuse
+
+! === Parameters of module MOM_thickness_diffuse ===
 KHTH = 500.0                    !   [m2 s-1] default = 0.0
                                 ! The background horizontal thickness diffusivity.
 KHTH_MIN = 0.0                  !   [m2 s-1] default = 0.0
@@ -967,8 +980,9 @@ Z_OUTPUT_GRID_FILE = ""         ! default = ""
                                 ! The file that specifies the vertical grid for
                                 ! depth-space diagnostics, or blank to disable
                                 ! depth-space output.
-    !  Parameters of module MOM_diabatic_driver
-        ! The following parameters are used for diabatic processes.
+
+! === Parameters of module MOM_diabatic_driver ===
+! The following parameters are used for diabatic processes.
 INTERNAL_TIDES = False          !   [Boolean] default = False
                                 ! If true, use the code that advances as separate set of
                                 ! equations for the internal tide energy density.
@@ -1085,7 +1099,8 @@ DISSIPATION_KD_MIN = 0.0        !   [m2 s-1] default = 0.0
 USE_KPP = False                 !   [Boolean] default = False
                                 ! If true, turns on the [CVmix] KPP scheme of Large et al., 1984,
                                 ! to calculate diffusivities and non-local transport in the OBL.
-    !  Parameters of module MOM_entrain_diffusive
+
+! === Parameters of module MOM_entrain_diffusive ===
 CORRECT_DENSITY = False         !   [Boolean] default = True
                                 ! If true, and USE_EOS is true, the layer densities are
                                 ! restored toward their target values by the diapycnal
@@ -1095,7 +1110,8 @@ MAX_ENT_IT = 5                  ! default = 5
                                 ! calculate the interior diapycnal entrainment.
 TOLERANCE_ENT = 1.0E-08         !   [m] default = 1.0E-08
                                 ! The tolerance with which to solve for entrainment values.
-    !  Parameters of module MOM_regularize_layers
+
+! === Parameters of module MOM_regularize_layers ===
 REGULARIZE_SURFACE_LAYERS = False !   [Boolean] default = False
                                 ! If defined, vertically restructure the near-surface
                                 ! layers when they have too much lateral variations to
@@ -1107,7 +1123,8 @@ REG_SFC_DEFICIT_TOLERANCE = 0.5 !   [nondim] default = 0.5
                                 ! The value of the relative thickness deficit at which
                                 ! to start modifying the layer structure when
                                 ! REGULARIZE_SURFACE_LAYERS is true.
-    !  Parameters of module MOM_opacity
+
+! === Parameters of module MOM_opacity ===
 VAR_PEN_SW = False              !   [Boolean] default = False
                                 ! If true, use one of the CHL_A schemes specified by
                                 ! OPACITY_SCHEME to determine the e-folding depth of
@@ -1123,12 +1140,14 @@ PEN_SW_NBANDS = 1               ! default = 1
 OPACITY_LAND_VALUE = 10.0       !   [m-1] default = 10.0
                                 ! The value to use for opacity over land. The default is
                                 ! 10 m-1 - a value for muddy water.
-    !  Parameters of module MOM_tracer_advect
+
+! === Parameters of module MOM_tracer_advect ===
 TRACER_ADVECTION_SCHEME = "PLM" ! default = "PLM"
                                 ! The horizontal transport scheme for tracers:
                                 !   PLM    - Piecewise Linear Method
                                 !   PPM:H3 - Piecewise Parabolic Method (Huyhn 3rd order)
-    !  Parameters of module MOM_tracer_hor_diff
+
+! === Parameters of module MOM_tracer_hor_diff ===
 KHTR = 0.0                      !   [m2 s-1] default = 0.0
                                 ! The background along-isopycnal tracer diffusivity.
 KHTR_MIN = 0.0                  !   [m2 s-1] default = 0.0
@@ -1150,7 +1169,8 @@ CHECK_DIFFUSIVE_CFL = False     !   [Boolean] default = False
                                 ! If true, use enough iterations the diffusion to ensure
                                 ! that the diffusive equivalent of the CFL limit is not
                                 ! violated.  If false, always use 1 iteration.
-    !  Parameters of module MOM_surface_forcing
+
+! === Parameters of module MOM_surface_forcing ===
 VARIABLE_WINDS = False          !   [Boolean] default = True
                                 ! If true, the winds vary in time after the initialization.
 VARIABLE_BUOYFORCE = False      !   [Boolean] default = True
@@ -1173,7 +1193,8 @@ GUST_CONST = 0.02               !   [Pa] default = 0.02
 READ_GUST_2D = False            !   [Boolean] default = False
                                 ! If true, use a 2-dimensional gustiness supplied from
                                 ! an input file
-    !  Parameters of module MOM_sum_output
+
+! === Parameters of module MOM_sum_output ===
 CALCULATE_APE = True            !   [Boolean] default = True
                                 ! If true, calculate the available potential energy of
                                 ! the interfaces.  Setting this to false reduces the
@@ -1212,7 +1233,8 @@ MAXCPU = 2.88E+04               !   [wall-clock seconds] default = -1.0
                                 ! factor of the number of processors used.
 CPU_TIME_FILE = "CPU_stats"     ! default = "CPU_stats"
                                 ! The file into which CPU time is written.
-    !  Parameters of module MOM_main (MOM_driver)
+
+! === Parameters of module MOM_main (MOM_driver) ===
 DT_FORCING = 1800.0             !   [s] default = 900.0
                                 ! The time step for changing forcing, coupling with other
                                 ! components, or potentially writing certain diagnostics.

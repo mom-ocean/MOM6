@@ -72,7 +72,8 @@ subroutine KPP_init(paramFile, G, diag, Time, CS)
   allocate(CS)
 
 ! Read parameters
-  call log_version(paramFile, mod, version, '')
+  call log_version(paramFile, mod, version, 'This is the MOM wrapper to CVmix:KPP\n' // &
+            'See http://code.google.com/p/cvmix/')
   call openParameterBlock(paramFile,'KPP')
   call get_param(paramFile, mod, 'RI_CRIT', CS%Ri_crit,                       &
                  'Critical Richardson number used to define depth of the\n'// &
