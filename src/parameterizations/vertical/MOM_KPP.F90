@@ -161,7 +161,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, bFlux, Kv)
   real :: correction, largestCorrection
   real :: GoRho, pRef, rho1, rhoK, rhoKm1, Uk, Vk, const1, Cv
   real, parameter :: negligibleShear = 1.e-15 ! A small number added to (un)resolved shears to avoid divide by zero
-  integer, parameter :: maxIterations = 4 ! Number of iteration on OBL depth to make
+  integer, parameter :: maxIterations = 10 ! Number of iteration on OBL depth to make
   real, parameter :: tolerance = 1.e-4 ! (m) What change in OBL depth is acceptably accurate to stop iterating
   real, parameter :: eps = 0.1 ! Nondimensional extent of surface layer. Used for const1 below.
   real, parameter :: BetaT = -0.2 ! Ratio of entrainment flux to surface buoyancy flux. Used for const1 below.
