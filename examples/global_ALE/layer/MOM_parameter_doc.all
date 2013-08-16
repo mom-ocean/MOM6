@@ -1189,30 +1189,9 @@ TIDEAMP_FILE = "tideamp.nc"     ! default = "tideamp.nc"
 H2_FILE = "sgs_h2.nc"           !
                                 ! The path to the file containing the sub-grid-scale
                                 ! topographic roughness amplitude with INT_TIDE_DISSIPATION.
-USE_KPP = True                  !   [Boolean] default = False
+USE_KPP = False                 !   [Boolean] default = False
                                 ! If true, turns on the [CVmix] KPP scheme of Large et al., 1984,
                                 ! to calculate diffusivities and non-local transport in the OBL.
-
-! === Parameters of module MOM_KPP ===
-! This is the MOM wrapper to CVmix:KPP
-! See http://code.google.com/p/cvmix/
-KPP%
-RI_CRIT = 0.3                   !   [nondim] default = 0.3
-                                ! Critical Richardson number used to define depth of the
-                                ! Oceab Boundary Layer (OBL).
-VON_KARMAN = 0.4                !   [nondim] default = 0.4
-                                ! von Karman constant.
-INTERP_TYPE = "quadratic"       ! default = "quadratic"
-                                ! Type of interpolation to use to determine the OBL depth.
-                                ! Allowed types are: linear, quadratic, cubic.
-COMPUTE_EKMAN = False           !   [Boolean] default = False
-                                ! If True, limit the OBL depth to be shallower than the Ekman depth.
-COMPUTE_MONIN_OBUKHOV = False   !   [Boolean] default = False
-                                ! If True, limit the OBL depth to be shallower than the
-                                ! Monin-Obukhov depth.
-CS = 98.96                      !   [nondim] default = 98.96
-                                ! Parameter for computing velocity scale function.
-%KPP
 
 ! === Parameters of module MOM_entrain_diffusive ===
 CORRECT_DENSITY = True          !   [Boolean] default = True

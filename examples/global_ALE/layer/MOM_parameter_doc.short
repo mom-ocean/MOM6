@@ -467,15 +467,6 @@ READ_TIDEAMP = True             !   [Boolean] default = False
 H2_FILE = "sgs_h2.nc"           !
                                 ! The path to the file containing the sub-grid-scale
                                 ! topographic roughness amplitude with INT_TIDE_DISSIPATION.
-USE_KPP = True                  !   [Boolean] default = False
-                                ! If true, turns on the [CVmix] KPP scheme of Large et al., 1984,
-                                ! to calculate diffusivities and non-local transport in the OBL.
-
-! === Parameters of module MOM_KPP ===
-! This is the MOM wrapper to CVmix:KPP
-! See http://code.google.com/p/cvmix/
-KPP%
-%KPP
 
 ! === Parameters of module MOM_entrain_diffusive ===
 MAX_ENT_IT = 20                 ! default = 5
