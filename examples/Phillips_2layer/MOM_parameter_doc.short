@@ -28,7 +28,7 @@ NIGLOBAL = 160                  !
                                 ! this is set in MOM_memory.h at compile time.
 NJGLOBAL = 120                  !
                                 ! The total number of thickness grid points in the
-                                ! x-direction in the physical domain. With STATIC_MEMORY_
+                                ! y-direction in the physical domain. With STATIC_MEMORY_
                                 ! this is set in MOM_memory.h at compile time.
 !NIPROC = 8                     !
                                 ! The number of processors in the x-direction. With
@@ -68,14 +68,6 @@ DT_THERM = 1800.0               !   [s] default = 600.0
                                 ! Ideally DT_THERM should be an integer multiple of DT
                                 ! and less than the forcing or coupling time-step.
                                 ! By default DT_THERM is set to DT.
-HMIX = 20.0                     !   [m] default = 1.0
-                                ! If BULKMIXEDLAYER is false, HMIX is the depth over
-                                ! which to average to find surface properties like SST
-                                ! and SSS, and over which the vertical viscosity and
-                                ! diapycnal diffusivity are elevated.  HMIX is only used
-                                ! directly if BULKMIXEDLAYER is false, but provides a
-                                ! default value for other variables if BULKMIXEDLAYER is
-                                ! true.
 DTBT_RESET_PERIOD = 8.64E+04    !   [s] default = 1800.0
                                 ! The period between recalculations of DTBT (if DTBT <= 0).
                                 ! If DTBT_RESET_PERIOD is negative, DTBT is set based
@@ -86,7 +78,7 @@ DTBT_RESET_PERIOD = 8.64E+04    !   [s] default = 1800.0
 SAVE_INITIAL_CONDS = True       !   [Boolean] default = False
                                 ! If true, write the initial conditions to a file given
                                 ! by IC_OUTPUT_FILE.
-    !  Parameters of module MOM_tracer
+    !  Parameters of module MOM_tracer_registry
 RESTARTFILE = "GOLD.res"        ! default = "MOM.res"
                                 ! The name-root of the restart file.
     !  Parameters of module MOM_tracer_flow_control
@@ -211,6 +203,11 @@ SPONGE_CONFIG = "phillips"      ! default = "file"
                                 !     USER - call a user modified routine.
 Total sponge columns = 0        !
                                 ! The total number of columns where sponges are applied.
+    !  Parameters of module MOM_MEKE
+CDRAG = 0.01                    !   [nondim] default = 0.003
+                                ! CDRAG is the drag coefficient relating the magnitude of
+                                ! the velocity field to the bottom stress.
+    !  Parameters of module MOM_lateral_mixing_coeffs
 BOUND_CORIOLIS = True           !   [Boolean] default = False
                                 ! If true, the Coriolis terms at u-points are bounded by
                                 ! the four estimates of (f+rv)v from the four neighboring
@@ -238,11 +235,15 @@ SMAG_BI_CONST = 0.06            !   [nondim] default = 0.0
     !  Parameters of module MOM_vert_friction
 DIRECT_STRESS = True            !   [Boolean] default = False
                                 ! If true, the wind stress is distributed over the
-                                ! topmost HMIX of fluid (like in HYCOM), and KVML may be
-                                ! set to a very small value.
+                                ! topmost HMIX_STRESS of fluid (like in HYCOM), and KVML
+                                ! may be set to a very small value.
 HARMONIC_VISC = True            !   [Boolean] default = False
                                 ! If true, use the harmonic mean thicknesses for
                                 ! calculating the vertical viscosity.
+HMIX_FIXED = 20.0               !   [m]
+                                ! The prescribed depth over which the near-surface
+                                ! viscosity and diffusivity are elevated when the bulk
+                                ! mixed layer is not used.
 KV = 1.0E-04                    !   [m2 s-1]
                                 ! The background kinematic viscosity in the interior.
                                 ! The molecular value, ~1e-6 m2 s-1, may be used.
@@ -260,10 +261,6 @@ MAXVEL = 10.0                   !   [m s-1] default = 3.0E+08
                                 ! The maximum velocity allowed before the velocity
                                 ! components are truncated.
     !  Parameters of module MOM_set_visc
-CDRAG = 0.01                    !   [nondim] default = 0.003
-                                ! CDRAG is the drag coefficient relating the magnitude of
-                                ! the velocity field to the bottom stress. CDRAG is only
-                                ! used if BOTTOMDRAGLAW is defined.
 DRAG_BG_VEL = 0.1               !   [m s-1] default = 0.0
                                 ! DRAG_BG_VEL is either the assumed bottom velocity (with
                                 ! LINEAR_DRAG) or an unresolved  velocity that is
@@ -275,25 +272,6 @@ BBL_THICK_MIN = 0.1             !   [m] default = 0.0
                                 ! used with BOTTOMDRAGLAW. This might be
                                 ! Kv / (cdrag * drag_bg_vel) to give Kv as the minimum
                                 ! near-bottom viscosity.
-    !  Parameters of module MOM_thickness_diffuse
-KHTH = 1.0E-04                  !   [m2 s-1] default = 0.0
-                                ! The background horizontal thickness diffusivity.
-    !  Parameters of module MOM_MEKE
-    !  Parameters of module MOM_lateral_mixing_coeffs
-    !  Parameters of module MOM_wave_speed
-    !  Parameters of module MOM_diabatic_driver
-        ! The following parameters are used for diabatic processes.
-KD = 1.0E-04                    !   [m2 s-1]
-                                ! The background diapycnal diffusivity of density in the
-                                ! interior. Zero or the molecular value, ~1e-7 m2 s-1,
-                                ! may be used.
-    !  Parameters of module MOM_entrain_diffusive
-MAX_ENT_IT = 20                 ! default = 5
-                                ! The maximum number of iterations that may be used to
-                                ! calculate the interior diapycnal entrainment.
-TOLERANCE_ENT = 1.0E-05         !   [m] default = 2.449489742783178E-05
-                                ! The tolerance with which to solve for entrainment values.
-    !  Parameters of module MOM_regularize_layers
     !  Parameters of module MOM_barotropic
 BOUND_BT_CORRECTION = True      !   [Boolean] default = False
                                 ! If true, the corrective pseudo mass-fluxes into the
@@ -338,6 +316,25 @@ DTBT = -0.9                     !   [s or nondim] default = -0.98
                                 ! Setting DTBT to 0 is the same as setting it to -0.98.
                                 ! The value of DTBT that will actually be used is an
                                 ! integer fraction of DT, rounding down.
+    !  Parameters of module MOM_thickness_diffuse
+KHTH = 1.0E-04                  !   [m2 s-1] default = 0.0
+                                ! The background horizontal thickness diffusivity.
+    !  Parameters of module MOM_wave_speed
+    !  Parameters of module MOM_diabatic_driver
+        ! The following parameters are used for diabatic processes.
+KD = 1.0E-04                    !   [m2 s-1]
+                                ! The background diapycnal diffusivity of density in the
+                                ! interior. Zero or the molecular value, ~1e-7 m2 s-1,
+                                ! may be used.
+    !  Parameters of module MOM_entrain_diffusive
+MAX_ENT_IT = 20                 ! default = 5
+                                ! The maximum number of iterations that may be used to
+                                ! calculate the interior diapycnal entrainment.
+TOLERANCE_ENT = 1.0E-05         !   [m] default = 2.449489742783178E-05
+                                ! The tolerance with which to solve for entrainment values.
+    !  Parameters of module MOM_regularize_layers
+    !  Parameters of module MOM_tracer_advect
+    !  Parameters of module MOM_tracer_hor_diff
     !  Parameters of module MOM_surface_forcing
 VARIABLE_WINDS = False          !   [Boolean] default = True
                                 ! If true, the winds vary in time after the initialization.
