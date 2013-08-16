@@ -165,6 +165,10 @@
 "ocean_model","KPP_Ut2","KPP_Ut2","visc","all",.true.,"none",2
 "ocean_model","KPP_BulkUz2","KPP_BulkUz2","visc","all",.true.,"none",2
 "ocean_model","KPP_BulkDrho","KPP_BulkDrho","visc","all",.true.,"none",2
+"ocean_model","KPP_Kheat","KPP_Kheat","visc","all",.true.,"none",2
+"ocean_model","KPP_Ksalt","KPP_Ksalt","visc","all",.true.,"none",2
+"ocean_model","KPP_NLtransport_heat","KPP_NLtransport_heat","visc","all",.true.,"none",2
+"ocean_model","KPP_NLtransport_salt","KPP_NLtransport_salt","visc","all",.true.,"none",2
 
 #
 # Kinetic Energy Balance Terms:
