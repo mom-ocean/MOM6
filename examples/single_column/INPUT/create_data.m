@@ -1,31 +1,31 @@
 function [] = create_data()
 
-name='Arabian'; x=66; y=15; doall(x,y,name)
-name='BATS'; x=-63.5; y=31.5; doall(x,y,name)
-name='Chagos'; x=-284; y=-6; doall(x,y,name)
-name='COARE'; x=-180; y=0; doall(x,y,name)
-name='Kerguelen'; x=-284; y=-51; doall(x,y,name)
-name='Kuroshio'; x=-210; y=30; doall(x,y,name)
-name='Labrador'; x=-58; y=61; doall(x,y,name)
-name='Mariana'; x=-215; y=13; doall(x,y,name)
-name='Nazca'; x=-90; y=20; doall(x,y,name)
-name='Nino'; x=-119; y=0; doall(x,y,name)
-name='Norwegian'; x=-7; y=75; doall(x,y,name)
-name='PAPA'; x=-150; y=51; doall(x,y,name)
+%name='Arabian'; x=66; y=15; doall(x,y,name)
+%name='BATS'; x=-63.5; y=31.5; doall(x,y,name)
+%name='Chagos'; x=-284; y=-6; doall(x,y,name)
+%name='COARE'; x=-180; y=0; doall(x,y,name)
+%name='Kerguelen'; x=-284; y=-51; doall(x,y,name)
+%name='Kuroshio'; x=-210; y=30; doall(x,y,name)
+%name='Labrador'; x=-58; y=61; doall(x,y,name)
+%name='Mariana'; x=-215; y=13; doall(x,y,name)
+%name='Nazca'; x=-90; y=20; doall(x,y,name)
+%name='Nino'; x=-119; y=0; doall(x,y,name)
+%name='Norwegian'; x=-7; y=75; doall(x,y,name)
+%name='PAPA'; x=-150; y=51; doall(x,y,name)
 name='St_Peter_Rock'; x=-29; y=0; doall(x,y,name)
-name='Walvis'; x=5; y=-25; doall(x,y,name)
-name='Weddell'; x=-54; y=-74; doall(x,y,name)
+%name='Walvis'; x=5; y=-25; doall(x,y,name)
+%name='Weddell'; x=-54; y=-74; doall(x,y,name)
 
 % ==============================================================================
 
 function [] = doall(x,y,name)
 
 [success,msg,msgid]=mkdir(name);
-create_override(x,y,name)
+%create_override(x,y,name)
 grab_forcing(x,y,name)
-grab_forcing_m(x,y,name)
-grab_initconds(x,y,name)
-grab_tides(x,y,name)
+%grab_forcing_m(x,y,name)
+%grab_initconds(x,y,name)
+%grab_tides(x,y,name)
 
 % ==============================================================================
 
@@ -60,6 +60,9 @@ Y=evap{'gridlat_t'}(:);
 
 i=findi(X,x);
 j=round( interp1(Y,0.5:length(Y),y) );
+if y<Y(j)
+ j=j-1;
+end
 
 EVAP=evap{'evap'}(:,j:j+1,i:i+1);
 PRECIP=precip{'precip'}(:,j:j+1,i:i+1);
@@ -204,29 +207,42 @@ sst=mycdf([rtpth 'levitus_temp_HIM.nc']);
 
 X=evap{'gridlon_t'}(:);
 Y=evap{'gridlat_t'}(:);
+X2=sss{'gridlon_t'}(:);
+Y2=sss{'gridlat_t'}(:);
 
 i=findi(X,x);
 j=round( interp1(Y,0.5:length(Y),y) );
+if y<Y(j) % Handle roundoff problem
+  j=j-1;
+end
+i2=findi(X2,x);
+j2=round( interp1(Y2,0.5:length(Y2),y) );
+if y<Y2(j2) % Handle roundoff problem
+  j2=j2-1;
+end
 
 DISCH_W=disch{'disch_w'}(:,j:j+1,i:i+1);
 DISCH_S=disch{'disch_s'}(:,j:j+1,i:i+1);
-SSS=sss{'SALT'}(:,j:j+1,i:i+1);
-SST=sst{'TEMP'}(:,j:j+1,i:i+1);
+SSS=sss{'SALT'}(:,j2:j2+1,i2:i2+1);
+SST=sst{'TEMP'}(:,j2:j2+1,i2:i2+1);
 nt=size(DISCH_W,1);
 for n=1:nt;
   DISCH_W(n,:,:)=interp2(Y(j:j+1),X(i:i+1),squeeze(DISCH_W(n,:,:)),y,x);
   DISCH_S(n,:,:)=interp2(Y(j:j+1),X(i:i+1),squeeze(DISCH_S(n,:,:)),y,x);
-  SSS(n,:,:)=interp2(Y(j:j+1),X(i:i+1),squeeze(SSS(n,:,:)),y,x);
-  SST(n,:,:)=interp2(Y(j:j+1),X(i:i+1),squeeze(SST(n,:,:)),y,x);
+  SSS(n,:,:)=interp2(Y2(j2:j2+1),X2(i2:i2+1),squeeze(SSS(n,:,:)),y,x);
+  SST(n,:,:)=interp2(Y2(j2:j2+1),X2(i2:i2+1),squeeze(SST(n,:,:)),y,x);
 end
 
 rtpth='/archive/gold/datasets/CM2G/perth/INPUT/';
-chl_a=mycdf([rtpth 'seawifs_1998-2006_MOM_smoothed_2X.nc']);
+chl_a=mycdf([rtpth 'seawifs_1998-2006_GOLD_smoothed_2X.nc']);
 gust=mycdf([rtpth 'gustiness_qscat.nc']);
 
 X=chl_a{'LON'}(:);
 Y=chl_a{'LAT'}(:);
 
+if (x<min(X))
+  x=x+360;
+end
 i2=findi(X,x);
 j2=round( interp1(Y,0.5:length(Y),y) );
 
@@ -344,6 +360,9 @@ Y=ics{'gridlat_t'}(:);
 
 i=findi(X,x);
 j=round( interp1(Y,0.5:length(Y),y) );
+if y<Y(j)
+ j=j-1;
+end
 
 Layer=ics{'Layer'}(:);
 PTEMP=ics{'PTEMP'}(:,j:j+1,i:i+1);
