@@ -1,6 +1,7 @@
 module MOM_KPP
 
 use MOM_coms, only : max_across_PEs
+use MOM_checksums, only : hchksum, is_NaN
 use MOM_diag_mediator, only : time_type, diag_ctrl, safe_alloc_ptr, post_data
 use MOM_diag_mediator, only : query_averaging_enabled, register_diag_field
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_PE
@@ -37,6 +38,7 @@ type, public :: KPP_CS ; private
   character(len=10) :: interpType ! Type of iterpolation to use in determining OBL
   logical :: computeEkman ! If True, compute Ekman depth limit
   logical :: computeMoninObukhov ! If True, compute Monin-Obukhov limit
+  logical :: debug      ! If True, calculate checksums and write debugging information
 
   ! CVmix parameters
   type(CVmix_kpp_params_type), pointer :: KPP_params => NULL()
@@ -53,6 +55,7 @@ end type KPP_CS
 
 ! Module data used for debugging only
 logical, parameter :: verbose = .True.
+#define __DO_SAFETY_CHECKS__
 
 contains
 
@@ -76,6 +79,7 @@ subroutine KPP_init(paramFile, G, diag, Time, CS)
 ! Read parameters
   call log_version(paramFile, mod, version, 'This is the MOM wrapper to CVmix:KPP\n' // &
             'See http://code.google.com/p/cvmix/')
+  call get_param(paramFile, mod, 'DEBUG', CS%debug, default=.False., do_not_log=.True.)
   call openParameterBlock(paramFile,'KPP')
   call get_param(paramFile, mod, 'RI_CRIT', CS%Ri_crit,                       &
                  'Critical Richardson number used to define depth of the\n'// &
@@ -154,7 +158,8 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, bFlux, Kv)
   type(EOS_type),                         pointer       :: EOS   ! Equation of state
   real, dimension(NIMEM_,NJMEM_),         intent(in)    :: uStar ! Piston velocity (m/s)
   real, dimension(NIMEM_,NJMEM_),         intent(in)    :: bFlux ! Buoyancy flux (m2/s3)
-  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(inout) :: Kv ! Vertical diffusivity due to KPP
+  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(inout) :: Kv ! (in) Vertical diffusivity in interior (m2/s)
+                                                                 ! (out) Vertical diffusivity including KPP (m2/s)
 
 ! Diagnostics arrays                   should these become allocatables ??????????
   real, dimension( SZI_(G), SZJ_(G), SZK_(G) ) :: BulkRi ! Bulk Richardson number for each layer
@@ -201,6 +206,19 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, bFlux, Kv)
   NLt_KPP(:,:,:) = 0.
   NLs_KPP(:,:,:) = 0.
 
+#ifdef __DO_SAFETY_CHECKS__
+  if (CS%debug) then
+    call hchksum(h, "KPP in: h",G,haloshift=0)
+    call hchksum(Temp, "KPP in: T",G,haloshift=0)
+    call hchksum(Salt, "KPP in: S",G,haloshift=0)
+    call hchksum(u, "KPP in: u",G,haloshift=0)
+    call hchksum(v, "KPP in: v",G,haloshift=0)
+    call hchksum(uStar, "KPP in: uStar",G,haloshift=0)
+    call hchksum(bFlux, "KPP in: bFlux",G,haloshift=0)
+    call hchksum(Kv, "KPP in: Kv",G,haloshift=0)
+  endif
+#endif
+
   GoRho = G%g_Earth / G%Rho0
   ! const1 is a constant factor in the equation for unresolved shear, Ut (eq. 23 in LMD94)
   const1 = sqrt( abs(BetaT) / (CS%cs * eps) )/( CS%Ri_crit * (CS%vonKarman**2) )
@@ -245,6 +263,12 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, bFlux, Kv)
                        +(G%CoriolisBu(i-1,j) + G%CoriolisBu(i,j-1)) )
       surfFricVel = uStar(i,j)
       surfBuoyFlux = bFlux(i,j)
+! if (isPointInCell(G,i,j,-235.5,13.3)) then
+!   print *,'u*,bFlux',surfFricVel,surfBuoyFlux
+!   do k=1,G%ke
+!     print *,'k,h,z,S,T=',k,h(i,j,k),cellHeight(k),Temp(i,j,k),Salt(i,j,k)
+!   enddo
+! endif
 
       OBLdepth_0d = 1.e10
       OBLiterater: do iteration = 0, maxIterations ! Iterate of the estimates of Bulk Ri, Ws and OBL depth
@@ -264,6 +288,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, bFlux, Kv)
 
         correction = abs(OBLdepth_0d - lastOBLdepth)
         !if (isPointInCell(G,i,j,-30.5,60.)) print *,'iter,OBL',iteration, OBLdepth_0d
+        if (isPointInCell(G,i,j,-235.5,13.3)) print *,'iter,OBL',iteration, OBLdepth_0d
         if (correction < tolerance) exit OBLiterater
 
         ! Now calculate the unresolved turbulence velocity scales
@@ -309,6 +334,18 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, bFlux, Kv)
       call cvmix_coeffs_kpp(Kdiffusivity, Kviscosity, iFaceHeight, cellHeight, OBLdepth_0d, &
                             kOBL, nonLocalTrans, surfFricVel, surfBuoyFlux,                 &
                             CVmix_kpp_params_user=CS%KPP_params )
+#ifdef __DO_SAFETY_CHECKS__
+!     if (is_NaN(Kdiffusivity(:,2),skip_mpp=.True.)) then
+!       write(0,*) 'i,j=',i,j
+!       write(0,*) 'u*,bFlux',surfFricVel, surfBuoyFlux
+!       write(0,*) 'OBLd,kOBL',OBLdepth_0d, kOBL
+!       do k = 1, G%ke+1
+!         write(0,*) 'k,zw,Kin,Kout',k,iFaceHeight(k),Kv(i,j,k),Kdiffusivity(k,2)
+!       enddo
+!       call MOM_error(FATAL, 'MOM_KPP, KPP_calculate: '// &
+!             'NaN detected on return from KPP!!!')
+!     endif
+#endif
 
       if (CS%id_OBL > 0) OBLdepth(i,j) = OBLdepth_0d ! Change sign for depth/thickness
       if (CS%id_BulkRi > 0) BulkRi(i,j,:) = BulkRi_1d(:)
@@ -321,6 +358,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, bFlux, Kv)
       if (CS%id_Ks_KPP > 0) Ks_KPP(i,j,:) = Kdiffusivity(:,2) - Kv(i,j,:) ! Salt diffusivity due to KPP  (correct index ???)
       if (CS%id_NLt_KPP > 0) NLt_KPP(i,j,:) = nonLocalTrans(:,1) ! correct index ???
       if (CS%id_NLs_KPP > 0) NLs_KPP(i,j,:) = nonLocalTrans(:,2) ! correct index ???
+ !    Kv(i,j,:) = Kdiffusivity(:,2)
     enddo ! i
   enddo ! j
 
@@ -330,6 +368,12 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, bFlux, Kv)
     if (is_root_PE()) &
       write(*,'("MOM_KPP: max(iter, correction)=",i3,es10.2," m")') largestIterationCount, largestCorrection
   endif
+
+#ifdef __DO_SAFETY_CHECKS__
+  if (CS%debug) then
+    call hchksum(Kv, "KPP out: Kv",G,haloshift=0)
+  endif
+#endif
 
   if (CS%id_OBL > 0) call post_data(CS%id_OBL, OBLdepth, CS%diag)
   if (CS%id_BulkRi > 0) call post_data(CS%id_BulkRi, BulkRi, CS%diag)
