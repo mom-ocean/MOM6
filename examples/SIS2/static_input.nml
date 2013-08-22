@@ -18,15 +18,8 @@
       t_range = 10. /
 
  &ice_model_nml
-      nsteps_dyn=72
-      nsteps_adv=1
       num_part = 6
-      io_layout = 1, 1
-      spec_ice=.false.
-      ice_bulk_salin = 0.005
-      alb_sno = 0.88
-      alb_ice = 0.68
-      t_range_melt = 1.0 /
+      io_layout = 1, 1 /
 
  &monin_obukhov_nml
             neutral = .true. /

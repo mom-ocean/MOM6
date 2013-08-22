@@ -68,9 +68,9 @@ C_P_ICE = 2100.0                !    C_P_ICE is the heat capacity of fresh ice
                                 !  in J kg-1 K-1, approximated as a constant.
 C_P = 3925.0                    !    C_P is the heat capacity of sea water in
                                 !  J kg-1 K-1, approximated as a constant.
-CORRECT_DENSITY = True          !    If CORRECT_DENSITY is defined, the layer
-                                !  densities are restored toward their target
-                                !  values by the diapycnal mixing.
+SNOW_ALBEDO = 0.88              !    The albedo of dry snow atop sea ice, ND.
+ICE_ALBEDO  = 0.68              !    The albedo of dry bare sea ice, ND.
+ICE_BULK_SALINITY = 0.005       !    The fixed bulk salinity of sea ice, in kg/kg.
 
 !  Specify the properties of the surface forcing.
 WIND_STAGGER = "B"              !  "A", "B", or "C" to indicate the
