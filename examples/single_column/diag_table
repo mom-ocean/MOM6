@@ -124,7 +124,7 @@
 #
 # Viscosities and diffusivities:
 #===============================
-"ocean_model","Kd","Kd","prog","all",.false.,"none",2
+"ocean_model","Kd_effective","Kd_effective","prog","all",.false.,"none",2
 #"ocean_model","Ahh","Ahh","visc_%4yr_%3dy","all",.true.,"none",2
 #"ocean_model","Ahq","Ahq","visc_%4yr_%3dy","all",.true.,"none",2
 #"ocean_model","Khh","Khh","visc_%4yr_%3dy","all",.true.,"none",2

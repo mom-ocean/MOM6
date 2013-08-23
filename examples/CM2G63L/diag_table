@@ -95,7 +95,7 @@ CM2G63L
 "ocean_model","TKE_conv_s2","TKE_conv_s2","ocean_month","all",.true.,"none",2
 "ocean_model","TKE_tidal","TKE_tidal","ocean_month","all",.true.,"none",2
 "ocean_model","h_ML","h_ML","ocean_month","all",.true.,"none",2
-"ocean_model","Kd","Kd","ocean_month","all",.true.,"none",2
+"ocean_model","Kd_effective","Kd_effective","ocean_month","all",.true.,"none",2
 "ocean_model","Kd_itides","Kd_itides","ocean_month","all",.true.,"none",2
 "ocean_model","Kd_Work","Kd_Work","ocean_month","all",.true.,"none",2
 "ocean_model","Kd_ITidal_Work","Kd_Itidal_Work","ocean_month","all",.true.,"none",2

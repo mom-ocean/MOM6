@@ -34,6 +34,7 @@ use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg
 use MOM_error_handler, only : is_root_pe, stdlog, stdout
 use MOM_time_manager, only : set_time, get_time, time_type, get_ticks_per_second
 use MOM_document, only : doc_param, doc_module, doc_init, doc_end, doc_type
+use MOM_document, only : doc_openBlock, doc_closeBlock
 use MOM_string_functions, only : left_int, left_ints
 use MOM_string_functions, only : left_real, left_reals
 
@@ -508,7 +509,7 @@ function simplifyWhiteSpace(string)
       i=i+1
       simplifyWhiteSpace(i:i)=string(j:j)
       if (string(j:j)==quoteChar) insideString=.false. ! End of string
-    else ! The following block is outside of strings blocks
+    else ! The following is outside of string delimiters
       if (string(j:j)==" " .or. string(j:j)==achar(9)) then ! Space or tab
         if (nonBlank) then ! Only copy a blank if the preceeding character was non-blank
           i=i+1
@@ -859,7 +860,7 @@ subroutine get_variable_line(CS, varname, found, defined, value_string, paramIsL
           cycle
         endif
       endif
-      ! Newer form of parameter block
+      ! Newer form of parameter block, block%, %block or block%param or 
       iso=index(line(:last),'%')
       fullPathParameter = .false.
       if (iso==1) then ! % is first character means this is a close
@@ -875,9 +876,9 @@ subroutine get_variable_line(CS, varname, found, defined, value_string, paramIsL
         blockName = popBlockLevel(blockName)
       elseif (iso==last) then ! This is a new block
         blockName = pushBlockLevel(blockName, line(:iso-1))
-      else ! This is of the form block@parameter = ... (full path parameter)
+      else ! This is of the form block%parameter = ... (full path parameter)
         iso=index(line(:last),'%',.true.)
-        if (trim(CS%blockName%name)==trim(line(:iso-1))) then
+        if (iso>0 .and. trim(CS%blockName%name)==trim(line(:iso-1))) then
           fullPathParameter = .true.
           line = trim(line(iso+1:last)) ! Strip away the block name for subsequent processing
         endif
@@ -886,6 +887,9 @@ subroutine get_variable_line(CS, varname, found, defined, value_string, paramIsL
       ! We should only read this line if this block is the active block
       inWrongBlock = .false.
       if (len_trim(blockName)>0) then ! In a namelist block in file
+        if (trim(CS%blockName%name)/=trim(blockName)) inWrongBlock = .true. ! Not in the required block
+      endif
+      if (len_trim(CS%blockName%name)>0) then ! In a namelist block in the model
         if (trim(CS%blockName%name)/=trim(blockName)) inWrongBlock = .true. ! Not in the required block
       endif
 
@@ -897,7 +901,12 @@ subroutine get_variable_line(CS, varname, found, defined, value_string, paramIsL
         blockName = popBlockLevel(blockName)
         last = last - 1 ! Ignore the termination character from here on
       endif
-      if (inWrongBlock .and. .not. fullPathParameter) cycle
+      if (inWrongBlock .and. .not. fullPathParameter) then
+        if (index(" "//line(:last+1), " "//trim(varname)//" ")>0) &
+          call MOM_error(WARNING,"MOM_file_parser : "//trim(varname)// &
+               ' found outside of block '//trim(CS%blockName%name)//'%. Ignoring.')
+        cycle
+      endif
 
       ! Determine whether this line mentions the named parameter or not
       line(last+1:last+1) = " " ! Ensure a blank after last character
@@ -1603,14 +1612,16 @@ subroutine clearParameterBlock(CS)
   endif
 end subroutine clearParameterBlock
 
-subroutine openParameterBlock(CS,blockName)
-  type(param_file_type), intent(in) :: CS
-  character(len=*),      intent(in) :: blockName
+subroutine openParameterBlock(CS,blockName,desc)
+  type(param_file_type),      intent(in) :: CS
+  character(len=*),           intent(in) :: blockName
+  character(len=*), optional, intent(in) :: desc
 ! Tags blockName onto the end of the active parameter block name
   type(parameter_block), pointer :: block
   if (associated(CS%blockName)) then
     block => CS%blockName
     block%name = pushBlockLevel(block%name,blockName)
+    call doc_openBlock(CS%doc,block%name,desc)
   else
     if (is_root_pe()) call MOM_error(FATAL, &
       'openParameterBlock: A push was attempted before allocation.')
@@ -1627,6 +1638,7 @@ subroutine closeParameterBlock(CS)
     if (is_root_pe().and.len_trim(block%name)==0) call MOM_error(FATAL, &
       'closeParameterBlock: A pop was attempted on an empty stack. ("'//&
       trim(block%name)//'")')
+    call doc_closeBlock(CS%doc,block%name)
   else
     if (is_root_pe()) call MOM_error(FATAL, &
       'closeParameterBlock: A pop was attempted before allocation.')

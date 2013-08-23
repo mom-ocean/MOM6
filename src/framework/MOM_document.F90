@@ -32,6 +32,7 @@ use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe
 implicit none ; private
 
 public doc_param, doc_subroutine, doc_function, doc_module, doc_init, doc_end
+public doc_openBlock, doc_closeBlock
 
 interface doc_param
   module procedure doc_param_none, &
@@ -316,6 +317,45 @@ subroutine doc_param_char(doc, varname, desc, units, val, default)
 
 end subroutine doc_param_char
 
+subroutine doc_openBlock(doc, blockName, desc)
+  type(doc_type),   pointer    :: doc
+  character(len=*), intent(in) :: blockName
+  character(len=*), optional, intent(in) :: desc
+! This subroutine handles documentation for opening a parameter block.
+  character(len=mLen) :: mesg
+  character(len=doc%commentColumn) :: valstring
+
+  if (.not. (is_root_pe() .and. associated(doc))) return
+  call open_doc_file(doc)
+
+  if (doc%unitAll > 0 .or. doc%unitShort > 0) then
+    mesg = trim(blockName)//'%'
+
+    if (present(desc)) then
+      call writeMessageAndDesc(doc, mesg, desc)
+    else
+      call writeMessageAndDesc(doc, mesg, '')
+    endif
+  endif
+end subroutine doc_openBlock
+
+subroutine doc_closeBlock(doc, blockName)
+  type(doc_type),   pointer    :: doc
+  character(len=*), intent(in) :: blockName
+! This subroutine handles documentation for closing a parameter block.
+  character(len=mLen) :: mesg
+  character(len=doc%commentColumn) :: valstring
+
+  if (.not. (is_root_pe() .and. associated(doc))) return
+  call open_doc_file(doc)
+
+  if (doc%unitAll > 0 .or. doc%unitShort > 0) then
+    mesg = '%'//trim(blockName)
+
+    call writeMessageAndDesc(doc, mesg, '')
+  endif
+end subroutine doc_closeBlock
+
 subroutine doc_param_time(doc, varname, desc, units, val, default)
   type(doc_type),   pointer    :: doc
   character(len=*), intent(in) :: varname, desc, units
@@ -559,8 +599,9 @@ subroutine doc_module(doc, modname, desc)
   call open_doc_file(doc)
 
   if (doc%unitAll > 0 .or. doc%unitShort > 0) then
-    mesg = "    !  Parameters of module "//trim(modname)
-    call writeMessageAndDesc(doc, mesg, desc, indent=8)
+    call writeMessageAndDesc(doc, '', '') ! Blank line for delineation
+    mesg = "! === Parameters of module "//trim(modname)//" ==="
+    call writeMessageAndDesc(doc, mesg, desc, indent=0)
   endif 
 end subroutine doc_module
 

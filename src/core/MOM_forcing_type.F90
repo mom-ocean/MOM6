@@ -25,6 +25,7 @@ use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_alloc
 use MOM_diag_mediator, only : time_type
 use MOM_domains, only : pass_var
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
+use MOM_EOS, only : calculate_density_derivs
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
 use MOM_variables, only : thermo_var_ptrs
@@ -37,6 +38,7 @@ implicit none ; private
 
 public extractFluxes1d, extractFluxes2d
 public MOM_forcing_chksum, absorbRemainingSW
+public calculateBuoyancyFlux1d, calculateBuoyancyFlux2d
 
 integer :: num_msg = 0, max_msg = 2
 
@@ -354,6 +356,92 @@ subroutine extractFluxes2d(G, fluxes, optics, nsw, dt, &
   enddo
 
 end subroutine extractFluxes2d
+
+
+subroutine calculateBuoyancyFlux1d(G, fluxes, optics, h, Temp, Salt, tv, j, buoyancyFlux, includeSW )
+! Calculates buoyancy flux by adding up the heat, FW and salt fluxes and linearizing
+! about the surface state.
+
+! Arguments
+  type(ocean_grid_type),                 intent(in)    :: G      ! Ocean grid
+  type(forcing),                         intent(in)    :: fluxes ! Surface fluxes/forcing type
+  type(optics_type),                     pointer       :: optics ! Optics for penetrating SW
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h      ! Layer/level thicknesses (units of H)
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: Temp   ! Pot. temperature (degrees C)
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: Salt   ! Salinity (ppt)
+  type(thermo_var_ptrs),                 intent(inout) :: tv     ! Thermodynamics type (out needed for tv%TempxPmE ????)
+  integer,                               intent(in)    :: j      ! j-index of row to work on
+  real, dimension(NIMEM_),               intent(inout) :: buoyancyFlux ! Buoyancy flux (m2/s3)
+  logical, optional,                     intent(in)    :: includeSW ! If True, include SW heating in buoyancy flux (default False)
+
+! Local variables
+  integer :: nsw, start, npts
+  real, parameter :: dt = 1. ! This is set to unity to return a rate from extractFluxes1d
+  real, dimension( SZI_(G) ) :: netH, netHeat, netSalt ! FW, heat, salt fluxes in (m/s, K m/s, ppt m/s)
+  real, dimension( optics%nbands, SZI_(G) ) :: penSWbnd ! SW penetration bands
+  real, dimension( SZI_(G) ) :: pressure ! Pressurea the surface ( Pa )
+  real, dimension( SZI_(G) ) :: dRhodT, dRhodS ! Derivatives of density
+  logical :: useRiverHeatContent, useCalvingHeatContent, addSWtoNetHeat
+  real :: depthBeforeScalingFluxes, GoRho
+
+  nsw = optics%nbands
+  useRiverHeatContent = .False.    !  ????????????????
+  useCalvingHeatContent = .False.  !  ????????????????
+  depthBeforeScalingFluxes = max( G%Angstrom, 1.e-30 )
+  pressure(:) = 0. ! Ignore atmospheric pressure
+  GoRho = G%g_Earth / G%Rho0
+  start = 1 + G%isc - G%isd
+  npts = 1 + G%iec - G%isc
+  addSWtoNetHeat = .False.
+  if (present(includeSW)) addSWtoNetHeat = includeSW
+
+  ! Fetch the fresh-water, heat and salt fluxes
+  ! netH is the fresh-water flux
+  ! netSalt is the salt flux (typically zero except under sea-ice)
+  ! netHeat is the heat flux EXCEPT the penetrating SW
+  call extractFluxes1d(G, fluxes, optics, nsw, j, dt, &
+                depthBeforeScalingFluxes, useRiverHeatContent, useCalvingHeatContent, &
+                h(:,j,:), Temp(:,j,:), netH, netHeat, netSalt, penSWbnd, tv)
+
+  ! Density derivatives
+  call calculate_density_derivs(Temp(:,j,1), Salt(:,j,1), pressure, &
+                                dRhodT, dRhodS, start, npts, tv%eqn_of_state)
+
+  ! Adjust netSalt to reflect dillution effect of FW flux
+  netSalt(:) = netSalt(:) - Salt(:,j,1) * netH * G%H_to_m
+
+  ! Add back in the SW heating
+  if (addSWtoNetHeat) netHeat(:) = netHeat(:) + sum( penSWbnd(:,:), dim=1 )
+
+  ! Convert to a buoyancy flux, excluding penetrating SW heating
+  buoyancyFlux(:) = - GoRho * ( dRhodS(:) * netSalt(:) + dRhodT(:) * netHeat(:) ) ! m2/s3
+
+end subroutine calculateBuoyancyFlux1d
+
+
+subroutine calculateBuoyancyFlux2d(G, fluxes, optics, h, Temp, Salt, tv, buoyancyFlux, includeSW )
+! Calculates buoyancy flux by adding up the heat, FW and salt fluxes and linearizing
+! about the surface state.
+
+! Arguments
+  type(ocean_grid_type),                 intent(in)    :: G      ! Ocean grid
+  type(forcing),                         intent(in)    :: fluxes ! Surface fluxes/forcing type
+  type(optics_type),                     pointer       :: optics ! Optics for penetrating SW
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h      ! Layer/level thicknesses (units of H)
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: Temp   ! Pot. temperature (degrees C)
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: Salt   ! Salinity (ppt)
+  type(thermo_var_ptrs),                 intent(inout) :: tv     ! Thermodynamics type (out needed for tv%TempxPmE ????)
+  real, dimension(NIMEM_,NJMEM_),        intent(inout) :: buoyancyFlux ! Buoyancy flux (m2/s3)
+  logical, optional,                     intent(in)    :: includeSW ! If True, include SW heating in buoyancy flux (default False)
+
+! Local variables
+  integer :: j
+
+  do j = G%jsc, G%jec
+    call calculateBuoyancyFlux1d(G, fluxes, optics, h, Temp, Salt, tv, j, buoyancyFlux(:,j), includeSW )
+  enddo ! j
+
+end subroutine calculateBuoyancyFlux2d
 
 
 subroutine absorbRemainingSW(G, h, eps, htot, opacity_band, nsw, j, dt, &

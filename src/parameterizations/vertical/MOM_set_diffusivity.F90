@@ -49,11 +49,12 @@ use MOM_diag_to_Z, only : diag_to_Z_CS, register_Zint_diag, calc_Zint_diags
 use MOM_checksums, only : hchksum, uchksum, vchksum
 use MOM_error_handler, only : MOM_error, is_root_pe, FATAL, WARNING, NOTE
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
-use MOM_string_functions, only : uppercase
-use MOM_forcing_type, only : forcing
+use MOM_forcing_type, only : forcing, optics_type, calculateBuoyancyFlux2d
 use MOM_grid, only : ocean_grid_type
 use MOM_intrinsic_functions, only : invcosh
 use MOM_io, only : slasher, vardesc
+use MOM_KPP, only : KPP_CS, KPP_init, KPP_end, KPP_calculate
+use MOM_string_functions, only : uppercase
 use MOM_thickness_diffuse, only : vert_fill_TS
 use MOM_variables, only : thermo_var_ptrs, vertvisc_type, p3d
 use MOM_EOS, only : calculate_density, calculate_density_derivs
@@ -248,6 +249,8 @@ type, public :: set_diffusivity_CS ; private
   logical :: user_change_diff  !   If true, call user-defined code to change the
                                ! diffusivity.
   logical :: double_diffusion  ! If true, enable double-diffusive mixing.
+  logical :: useKPP          ! If true, use [CVmix] KPP diffusivities and non-local
+                             ! transport.
   real    :: Max_Rrho_salt_fingers    ! maximum density ratio for salt fingering
   real    :: Max_salt_diff_salt_fingers ! maximum salt diffusivity for salt fingers
   real    :: Kv_molecular    ! molecular viscosity for double diffusive convection
@@ -258,7 +261,8 @@ type, public :: set_diffusivity_CS ; private
   real, pointer, dimension(:,:) :: h2 => NULL()
   real, pointer, dimension(:,:) :: tideamp => NULL() ! RMS tidal amplitude (m s-1)
   integer :: id_TKE_itidal = -1, id_TKE_leewave = -1, id_Nb = -1, id_N2 = -1
-  integer :: id_Kd_itidal = -1, id_Kd_Niku = -1, id_Kd_user = -1, id_Kd = -1
+  integer :: id_Kd_itidal = -1, id_Kd_Niku = -1, id_Kd_user = -1
+  integer :: id_Kd_layer = -1, id_Kd_interface = -1
   integer :: id_N2_z = -1, id_Kd_itidal_z = -1, id_Kd_Niku_z = -1, id_Kd_user_z = -1
   integer :: id_Kd_Work = -1, id_Kd_Itidal_Work = -1, id_Kd_Niku_Work = -1
   integer :: id_maxTKE = -1, id_TKE_to_Kd = -1, id_Fl_itidal = -1
@@ -267,6 +271,7 @@ type, public :: set_diffusivity_CS ; private
   integer :: id_KT_extra = -1, id_KS_extra = -1
   integer :: id_KT_extra_z = -1, id_KS_extra_z = -1
   character(len=200) :: inputdir
+  type(KPP_CS),               pointer :: KPP_CSp => NULL()
   type(user_change_diff_CS), pointer :: user_change_diff_CSp => NULL()
   type(diag_to_Z_CS), pointer :: diag_to_Z_CSp => NULL()
 end type set_diffusivity_CS
@@ -315,13 +320,14 @@ integer, parameter :: POLZIN_09    = 2
 
 contains
 
-subroutine set_diffusivity(u, v, h, tv, fluxes, visc, dt, G, CS, &
+subroutine set_diffusivity(u, v, h, tv, fluxes, optics, visc, dt, G, CS, &
                            Kd, Kd_int)
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)    :: u
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)    :: v
   real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h
-  type(thermo_var_ptrs),                  intent(in)    :: tv
+  type(thermo_var_ptrs),                  intent(inout) :: tv  ! out is for tv%TempxPmE
   type(forcing),                          intent(in)    :: fluxes
+  type(optics_type),                      pointer       :: optics
   type(vertvisc_type),                    intent(inout) :: visc
   real,                                   intent(in)    :: dt
   type(ocean_grid_type),                  intent(in)    :: G
@@ -397,6 +403,7 @@ subroutine set_diffusivity(u, v, h, tv, fluxes, visc, dt, G, CS, &
                          ! interpolated into depth space.
   integer :: i, j, k, is, ie, js, je, nz
   integer :: isd, ied, jsd, jed
+  real, dimension(SZI_(G),SZJ_(G)) :: buoyancyFlux
 
   real :: kappa_fill  ! diffusivity used to fill massless layers
   real :: dt_fill     ! timestep used to fill massless layers
@@ -704,8 +711,21 @@ subroutine set_diffusivity(u, v, h, tv, fluxes, visc, dt, G, CS, &
                           T_f, S_f, dd%Kd_user)
   endif
 
+  if (CS%useKPP) then
+    ! The KPP scheme calculates the mixed layer diffusivities and non-local transport
+    ! and requires the interior diffusivity to be complete so that KPP can match profiles.
+    ! Thus, KPP is the last contribution to Kd.
+    if (.not. present(KD_int)) call MOM_error(FATAL,'set_diffusivity: '//&
+                'KPP can only be used with optional argument Kd_int.')
+    ! KPP needs the surface buoyancy flux but does not update state variables.
+    ! We could make this call higher up to avoid a repeat unpacking of the surface fluxes.  ????
+    call calculateBuoyancyFlux2d(G, fluxes, optics, h, tv%T, tv%S, tv, buoyancyFlux, includeSW = .True. )
+    call KPP_calculate(CS%KPP_CSp, G, h, tv%T, tv%S, u, v, tv%eqn_of_state, &
+             fluxes%ustar, buoyancyFlux, Kd_int)
+  endif
 
-  if (CS%id_Kd > 0) call post_data(CS%id_Kd, Kd, CS%diag)
+  if (CS%id_Kd_layer > 0) call post_data(CS%id_Kd_layer, Kd, CS%diag)
+  if (CS%id_Kd_interface > 0) call post_data(CS%id_Kd_interface, Kd_int, CS%diag)
 
   num_z_diags = 0
   if (CS%Int_tide_dissipation .or. CS%Lee_wave_dissipation) then
@@ -2486,8 +2506,10 @@ subroutine set_diffusivity_init(Time, G, param_file, diag, CS, diag_to_Z_CSp)
 
   endif
 
-  CS%id_Kd = register_diag_field('ocean_model', 'Kd_set', diag%axesTL, Time, &
-      'Diapycnal diffusivity of layers as set', 'meter2 second-1')
+  CS%id_Kd_layer = register_diag_field('ocean_model', 'Kd_layer', diag%axesTL, Time, &
+      'Diapycnal diffusivity of layers (as set)', 'meter2 second-1')
+  CS%id_Kd_interface = register_diag_field('ocean_model', 'Kd_interface', diag%axesTi, Time, &
+      'Diapycnal diffusivity at interfaces (as set)', 'meter2 second-1')
 
   if (CS%Lee_wave_dissipation) then
  
@@ -2625,6 +2647,12 @@ subroutine set_diffusivity_init(Time, G, param_file, diag, CS, diag_to_Z_CSp)
     call user_change_diff_init(Time, G, param_file, diag, CS%user_change_diff_CSp)
   endif
 
+  call get_param(param_file, mod, "USE_KPP", CS%useKPP, &
+                 "If true, turns on the [CVmix] KPP scheme of Large et al., 1984,\n"// &
+                 "to calculate diffusivities and non-local transport in the OBL.", &
+                 default=.false.)
+  if (CS%useKPP) call KPP_init(param_file, G, diag, Time, CS%KPP_CSp)
+
 end subroutine set_diffusivity_init
 
 subroutine set_diffusivity_end(CS)
@@ -2632,6 +2660,8 @@ subroutine set_diffusivity_end(CS)
 
   if (CS%user_change_diff) &
     call user_change_diff_end(CS%user_change_diff_CSp)
+
+  if (CS%useKPP) call KPP_end(CS%KPP_CSp)
 
   if (associated(CS)) deallocate(CS)
 

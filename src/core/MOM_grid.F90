@@ -30,6 +30,7 @@ implicit none ; private
 
 public MOM_grid_init, MOM_grid_end, set_first_direction
 public get_flux_units, get_thickness_units, get_tr_flux_units
+public isPointInCell
 
 type, public :: ocean_grid_type
   type(MOM_domain_type), pointer :: Domain => NULL()
@@ -292,6 +293,23 @@ subroutine MOM_grid_init(G, param_file)
   call log_param(param_file, "MOM_grid", "M to THICKNESS", G%m_to_H)
 
 end subroutine MOM_grid_init
+
+logical function isPointInCell(G, i, j, x, y)
+! Returns true if the coordinates (x,y) are within the h-cell (i,j)
+  type(ocean_grid_type), intent(in) :: G
+  integer,               intent(in) :: i, j
+  real,                  intent(in) :: x, y
+! This is a crude calculation that assume a geographic coordinate system
+isPointInCell =                        &
+          ( G%geoLonBu(i-1,j-1) <= x ) &
+    .and. ( G%geoLonBu(i-1,j)   <= x ) &
+    .and. ( G%geoLonBu(i,j-1)   >= x ) &
+    .and. ( G%geoLonBu(i,j)     >= x ) &
+    .and. ( G%geoLatBu(i-1,j-1) <= y ) &
+    .and. ( G%geoLatBu(i,j-1)   <= y ) &
+    .and. ( G%geoLatBu(i-1,j)   >= y ) &
+    .and. ( G%geoLatBu(i,j)     >= y )
+end function isPointInCell
 
 subroutine set_first_direction(G, y_first)
   type(ocean_grid_type), intent(inout) :: G
