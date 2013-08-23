@@ -186,11 +186,11 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, bFlux, Kv)
   real, dimension( G%ke+1, 2) :: Kdiffusivity ! Vertical diffusivity at interfaces (m2/s)
   real, dimension( G%ke+1 ) :: Kviscosity ! Vertical viscosity at interfaces (m2/s)
   real, dimension( G%ke+1, 2) :: nonLocalTrans ! Non-local transport for heat/salt at interfaces (m/s)
-  real :: kOBL, OBLdepth_0d, surfFricVel, surfBuoyFlux, Coriolis, lastOBLdepth
+  real :: kOBL, OBLdepth_0d, surfFricVel, surfBuoyFlux, Coriolis, lastOBLdepth, penulOBLdepth
   real :: correction, largestCorrection
   real :: GoRho, pRef, rho1, rhoK, rhoKm1, Uk, Vk, const1, Cv
   real, parameter :: negligibleShear = 1.e-15 ! A small number added to (un)resolved shears to avoid divide by zero
-  integer, parameter :: maxIterations = 10 ! Number of iteration on OBL depth to make
+  integer, parameter :: maxIterations = 30 ! Number of iteration on OBL depth to make
   real, parameter :: tolerance = 1.e-4 ! (m) What change in OBL depth is acceptably accurate to stop iterating
   real, parameter :: eps = 0.1 ! Nondimensional extent of surface layer. Used for const1 below.
   real, parameter :: BetaT = -0.2 ! Ratio of entrainment flux to surface buoyancy flux. Used for const1 below.
@@ -270,10 +270,11 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, bFlux, Kv)
 !   enddo
 ! endif
 
-      OBLdepth_0d = 1.e10
+      OBLdepth_0d = 1.e10 ! Silly initial value
       OBLiterater: do iteration = 0, maxIterations ! Iterate of the estimates of Bulk Ri, Ws and OBL depth
 
         ! Compute the OBL thickness
+        penulOBLdepth = lastOBLdepth ! Store penultimate estimate to catch oscillations in iterator
         lastOBLdepth = OBLdepth_0d ! Record last estimate to measure convergence
         call CVmix_kpp_compute_OBL_depth( &
            BulkRi_1d,              & ! (in) Bulk Richardson number
@@ -285,11 +286,22 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, bFlux, Kv)
            surf_buoy=surfBuoyFlux, & ! (in) Buoyancy flux at surface (m2/s3)
            Coriolis=Coriolis,      & ! (in) Coriolis parameter (1/s)
            CVmix_kpp_params_user=CS%KPP_params ) ! KPP parameters
-
-        correction = abs(OBLdepth_0d - lastOBLdepth)
         !if (isPointInCell(G,i,j,-30.5,60.)) print *,'iter,OBL',iteration, OBLdepth_0d
-        if (isPointInCell(G,i,j,-235.5,13.3)) print *,'iter,OBL',iteration, OBLdepth_0d
-        if (correction < tolerance) exit OBLiterater
+!       OBLdepth_0d = max( OBLdepth_0d, h(i,j,1) ) ! Limit OBL to thicker than top layer ?????
+
+        ! Exit loop if converged, one iteration is guaranteed because initial value
+        ! of OBLdepth_0d is silly
+        if (abs(OBLdepth_0d - penulOBLdepth) < tolerance .and. & ! Detect oscillatory state
+            lastOBLdepth < OBLdepth_0d) then ! Select deeper solution to smooth over problem areas????
+          lastOBLdepth = penulOBLdepth ! Force exit through simple criteria
+        endif
+        correction = abs(OBLdepth_0d - lastOBLdepth)
+        if (correction < tolerance) exit OBLiterater ! Simple exit criteria
+
+!       if (iteration > 7 .and. mod(iteration,4) == 0) then ! Slow convergence
+!         if ((OBLdepth_0d-lastOBLdepth)*(lastOBLdepth-penulOBLdepth) < 0.) & ! Oscillating
+!           OBLdepth_0d = 0.25*( OBLdepth_0d + 2.*lastOBLdepth + penulOBLdepth ) ! Filter guess
+!       endif
 
         ! Now calculate the unresolved turbulence velocity scales
         sigmaCoord(:) = -iFaceHeight/OBLdepth_0d ! =0 at surface, =1 at z=-OBLd
@@ -317,7 +329,15 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, bFlux, Kv)
       if (maxIterations > 0 .and. correction >= tolerance) then
         write(0,*) 'i,j,x,y',i,j,G%geoLonT(i,j),G%geoLatT(i,j)
         write(0,*) 'iters',iteration
-        write(0,*) 'OBLs',lastOBLdepth,OBLdepth_0d
+        write(0,*) 'penul,last, current OBL',penulOBLdepth,lastOBLdepth,OBLdepth_0d
+        write(0,*) 'u*, bFlux',surfFricVel,surfBuoyFlux
+        do k = 1, G%ke
+          write(0,*) 'k,zw,h,T,S',k,iFaceHeight(k),h(i,j,k),temp(i,j,k),salt(i,j,k)
+        enddo
+        do k = 1, G%ke
+          write(0,*) 'k,h,dRho,dU,Ri_b',k,h(i,j,k),deltaRho(k),sqrt(deltaU2(k)), &
+              ( GoRho * ( -cellHeight(k) ) ) * deltaRho(k) / ( deltaU2(k) + Ut2_1d(k) )
+        enddo
         call MOM_error(FATAL, 'MOM_KPP, KPP_calculate: '// &
               'The OBL depth iteration failed to converge!!!')
       endif
