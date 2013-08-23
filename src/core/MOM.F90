@@ -915,11 +915,9 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         ! The routine 'ALE_main' can be found in 'MOM_ALE.F90'.
         if ( CS%useALEalgorithm ) then 
 !         call pass_vector(u, v, G%Domain)
-          call pass_var(CS%tv%T, G%Domain, complete=.false.) ! Needed for rho coordiantes
-          call pass_var(CS%tv%S, G%Domain)
-!         call pass_var(CS%tv%T, G%Domain, complete=.false.)
-!         call pass_var(CS%tv%S, G%Domain, complete=.false.)
-!         call pass_var(h, G%Domain)
+          call pass_var(CS%tv%T, G%Domain, complete=.false.)
+          call pass_var(CS%tv%S, G%Domain, complete=.false.)
+          call pass_var(h, G%Domain)
           if (CS%debug) then
             call MOM_state_chksum("Pre-ALE ", u, v, h, CS%uh, CS%vh, G)
             call hchksum(CS%tv%T,"Pre-ALE T",G,haloshift=1)
@@ -933,10 +931,6 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
             call hchksum(CS%tv%S,"Post-ALE S",G,haloshift=1)
             call check_redundant("Post-ALE ", u, v, G)
           endif
-!         call pass_vector(u, v, G%Domain)
-!         call pass_var(CS%tv%T, G%Domain, complete=.false.)
-!         call pass_var(CS%tv%S, G%Domain, complete=.false.)
-!         call pass_var(h, G%Domain)
         end if   
 
         call cpu_clock_begin(id_clock_pass)
