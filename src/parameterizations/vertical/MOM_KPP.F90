@@ -38,6 +38,7 @@ type, public :: KPP_CS ; private
   character(len=10) :: interpType ! Type of iterpolation to use in determining OBL
   logical :: computeEkman ! If True, compute Ekman depth limit
   logical :: computeMoninObukhov ! If True, compute Monin-Obukhov limit
+  logical :: passiveMode ! If True, makes KPP passive meaning it does NOT alter the diffusivity
   logical :: debug      ! If True, calculate checksums and write debugging information
 
   ! CVmix parameters
@@ -81,6 +82,9 @@ subroutine KPP_init(paramFile, G, diag, Time, CS)
             'See http://code.google.com/p/cvmix/')
   call get_param(paramFile, mod, 'DEBUG', CS%debug, default=.False., do_not_log=.True.)
   call openParameterBlock(paramFile,'KPP')
+  call get_param(paramFile, mod, 'PASSIVE', CS%passiveMode,           &
+                 'If True, puts KPP into a passive-diagnostic mode.', &
+                 default=.False.)
   call get_param(paramFile, mod, 'RI_CRIT', CS%Ri_crit,                       &
                  'Critical Richardson number used to define depth of the\n'// &
                  'Oceab Boundary Layer (OBL).',                               &
@@ -378,7 +382,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, bFlux, Kv)
       if (CS%id_Ks_KPP > 0) Ks_KPP(i,j,:) = Kdiffusivity(:,2) - Kv(i,j,:) ! Salt diffusivity due to KPP  (correct index ???)
       if (CS%id_NLt_KPP > 0) NLt_KPP(i,j,:) = nonLocalTrans(:,1) ! correct index ???
       if (CS%id_NLs_KPP > 0) NLs_KPP(i,j,:) = nonLocalTrans(:,2) ! correct index ???
- !    Kv(i,j,:) = Kdiffusivity(:,2)
+      if (CS%passiveMode) Kv(i,j,:) = Kdiffusivity(:,2)
     enddo ! i
   enddo ! j
 
