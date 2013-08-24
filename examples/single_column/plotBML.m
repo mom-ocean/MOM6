@@ -21,21 +21,29 @@ for j = 1:length(allvars)
  end
 end
 
-subplot(321)
+subplot(421)
+plot(Time,temp(:,1))
+xlabel('Time (days)');ylabel('SST (^oC)')
+
+subplot(422)
+plot(Time,salt(:,1))
+xlabel('Time (days)');ylabel('SSS (ppt)')
+
+subplot(423)
 gcolor(temp',e',Time);ylim(ZLIM);colorbar
 caxis([18 21])
 xlabel('Time (days)');ylabel('z (m)')
 title('\theta (^oC)')
 hold on;plot(Time,-h_ML,'w');hold off
 
-subplot(322)
+subplot(424)
 gcolor(salt',e',Time);ylim(ZLIM);colorbar
 caxis([36 37])
 xlabel('Time (days)');ylabel('z (m)')
 title('S (ppt)')
 hold on;plot(Time,-h_ML,'w');hold off
 
-subplot(323)
+subplot(425)
 gcolor(KPP_N',e',Time);ylim(ZLIM);colorbar
 stats(KPP_N,'KPP N')
 caxis([0 2e-2])
@@ -43,7 +51,7 @@ xlabel('Time (days)');ylabel('z (m)')
 title('KPP N (1/s)')
 hold on;plot(Time,-h_ML,'w');hold off
 
-subplot(324)
+subplot(426)
 gcolor(Kd_interface',e',Time);ylim(ZLIM);colorbar
 stats(Kd_interface,'Kd_interface')
 caxis([0 2e-2])
@@ -51,7 +59,7 @@ xlabel('Time (days)');ylabel('z (m)')
 title('Kd interface (m^2/s)')
 hold on;plot(Time,-h_ML,'w');hold off
 
-subplot(325)
+subplot(427)
 gcolor(KPP_Ksalt',e',Time);ylim(ZLIM);colorbar
 stats(KPP_Ksalt,'KPP_Ksalt')
 caxis([0 2e-2])
@@ -59,10 +67,10 @@ xlabel('Time (days)');ylabel('z (m)')
 title('KPP \kappa_s (m^2/s)')
 hold on;plot(Time,-KPP_OBLdepth ,'w');hold off
 
-subplot(6,2,10)
+subplot(8,2,14)
 plot(Time,KPP_uStar)
 xlabel('Time (days)');ylabel('u* (m/s)')
 
-subplot(6,2,12)
+subplot(8,2,16)
 plot(Time,KPP_buoyFlux)
 xlabel('Time (days)');ylabel('B (m^2/s^3)')
