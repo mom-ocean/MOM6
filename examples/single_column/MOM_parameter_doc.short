@@ -301,6 +301,9 @@ RECLAIM_FRAZIL = False          !   [Boolean] default = True
                                 ! overlying layers down to the freezing point, thereby
                                 ! avoiding the creation of thin ice when the SST is above
                                 ! the freezing point.
+USE_KPP = True                  !   [Boolean] default = False
+                                ! If true, turns on the [CVmix] KPP scheme of Large et al., 1984,
+                                ! to calculate diffusivities and non-local transport in the OBL.
 ML_RADIATION = True             !   [Boolean] default = False
                                 ! If true, allow a fraction of TKE available from wind
                                 ! work to penetrate below the base of the mixed layer
@@ -320,6 +323,14 @@ KD = 2.0E-05                    !   [m2 s-1]
                                 ! may be used.
 KD_MIN = 2.0E-06                !   [m2 s-1] default = 2.0E-07
                                 ! The minimum diapycnal diffusivity.
+
+! === Parameters of module MOM_KPP ===
+! This is the MOM wrapper to CVmix:KPP
+! See http://code.google.com/p/cvmix/
+KPP%
+PASSIVE = True                  !   [Boolean] default = False
+                                ! If True, puts KPP into a passive-diagnostic mode.
+%KPP
 
 ! === Parameters of module MOM_entrain_diffusive ===
 MAX_ENT_IT = 20                 ! default = 5

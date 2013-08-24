@@ -1266,7 +1266,7 @@ H2_FILE = "sgs_h2.nc"           !
 ! This is the MOM wrapper to CVmix:KPP
 ! See http://code.google.com/p/cvmix/
 KPP%
-PASSIVE = False                 !   [Boolean] default = False
+PASSIVE = True                  !   [Boolean] default = False
                                 ! If True, puts KPP into a passive-diagnostic mode.
 RI_CRIT = 0.3                   !   [nondim] default = 0.3
                                 ! Critical Richardson number used to define depth of the

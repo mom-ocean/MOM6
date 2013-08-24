@@ -494,6 +494,8 @@ H2_FILE = "sgs_h2.nc"           !
 ! This is the MOM wrapper to CVmix:KPP
 ! See http://code.google.com/p/cvmix/
 KPP%
+PASSIVE = True                  !   [Boolean] default = False
+                                ! If True, puts KPP into a passive-diagnostic mode.
 %KPP
 
 ! === Parameters of module MOM_entrain_diffusive ===

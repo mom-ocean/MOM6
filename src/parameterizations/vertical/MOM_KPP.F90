@@ -382,7 +382,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, bFlux, Kv)
       if (CS%id_Ks_KPP > 0) Ks_KPP(i,j,:) = Kdiffusivity(:,2) - Kv(i,j,:) ! Salt diffusivity due to KPP  (correct index ???)
       if (CS%id_NLt_KPP > 0) NLt_KPP(i,j,:) = nonLocalTrans(:,1) ! correct index ???
       if (CS%id_NLs_KPP > 0) NLs_KPP(i,j,:) = nonLocalTrans(:,2) ! correct index ???
-      if (CS%passiveMode) Kv(i,j,:) = Kdiffusivity(:,2)
+      if (.not. CS%passiveMode) Kv(i,j,:) = Kdiffusivity(:,2)
     enddo ! i
   enddo ! j
 
