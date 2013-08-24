@@ -65,6 +65,7 @@ module MOM_diabatic_driver
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 
+use MOM_bulk_mixed_layer, only : bulkmixedlayer, bulkmixedlayer_init, bulkmixedlayer_CS
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock, only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
 use MOM_entrain_diffusive, only : entrainment_diffusive, entrain_diffusive_init
@@ -77,7 +78,7 @@ use MOM_checksums, only : hchksum, uchksum, vchksum
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing, optics_type, MOM_forcing_chksum
-use MOM_forcing_type, only : extractFluxes1d, absorbRemainingSW
+use MOM_forcing_type, only : extractFluxes1d, absorbRemainingSW, calculateBuoyancyFlux2d
 use MOM_geothermal, only : geothermal, geothermal_init, geothermal_end, geothermal_CS
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : vardesc
@@ -86,7 +87,7 @@ use MOM_int_tide_input, only : int_tide_input_end, int_tide_input_CS, int_tide_i
 use MOM_internal_tides, only : propagate_int_tide, register_int_tide_restarts
 use MOM_internal_tides, only : internal_tides_init, internal_tides_end, int_tide_CS
 use MOM_kappa_shear, only : Calculate_kappa_shear, kappa_shear_init, Kappa_shear_CS
-use MOM_bulk_mixed_layer, only : bulkmixedlayer, bulkmixedlayer_init, bulkmixedlayer_CS
+use MOM_KPP, only : KPP_CS, KPP_init, KPP_calculate, KPP_end
 use MOM_opacity, only : opacity_init, set_opacity, opacity_end, opacity_CS
 use MOM_set_diffusivity, only : set_diffusivity, set_BBL_diffusivity
 use MOM_set_diffusivity, only : set_diffusivity_init, set_diffusivity_end
@@ -146,6 +147,8 @@ type, public :: diabatic_CS ; private
                              ! freezing temperature when making frazil.  The
                              ! default is false, which will be faster but is
                              ! inappropriate with ice-shelf cavities.
+  logical :: useKPP          ! If true, use [CVmix] KPP diffusivities and non-local
+                             ! transport.
   logical :: debug           ! If true, write verbose checksums for debugging purposes.
   type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
                              ! timing of diagnostic output.
@@ -168,6 +171,7 @@ type, public :: diabatic_CS ; private
   type(tracer_flow_control_CS), pointer :: tracer_flow_CSp => NULL()
   type(optics_type),          pointer :: optics => NULL()
   type(diag_to_Z_CS),         pointer :: diag_to_Z_CSp => NULL()
+  type(KPP_CS),               pointer :: KPP_CSp => NULL()
 end type diabatic_CS
 
 integer :: id_clock_entrain, id_clock_mixedlayer, id_clock_set_diffusivity
@@ -279,6 +283,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
                        ! interpolated into depth space.
   integer :: z_ids(7)  ! The id numbers of the diagnostics that are to be
                        ! interpolated into depth space.
+  real, dimension(SZI_(G),SZJ_(G)) :: buoyancyFlux ! Buoyancy flux for KPP (m2/s3)
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkmb
   real, pointer :: T(:,:,:), S(:,:,:)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -415,6 +420,16 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
 
   call cpu_clock_begin(id_clock_set_diffusivity)
   call set_diffusivity(u, v, h, tv, fluxes, CS%optics, visc, dt, G, CS%set_diff_CSp, Kd, Kd_int)
+  if (CS%useKPP) then
+    ! KPP needs the surface buoyancy flux but does not update state variables.
+    ! We could make this call higher up to avoid a repeat unpacking of the surface fluxes.  ????
+    call calculateBuoyancyFlux2d(G, fluxes, CS%optics, h, tv%T, tv%S, tv, buoyancyFlux)
+    ! The KPP scheme calculates the mixed layer diffusivities and non-local transport
+    ! and requires the interior diffusivity to be complete so that KPP can match profiles.
+    ! Thus, KPP is the last contribution to Kd.
+    call KPP_calculate(CS%KPP_CSp, G, h, tv%T, tv%S, u, v, tv%eqn_of_state, &
+           fluxes%ustar, buoyancyFlux, Kd_int)
+  endif
   call cpu_clock_end(id_clock_set_diffusivity)
   if (CS%debug) then
     call MOM_state_chksum("after set_diffusivity ", u(:,:,:), v(:,:,:), h(:,:,:), G)
@@ -1423,6 +1438,10 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
                  "entrainment at the bottom is at least sqrt(Kd_BBL_tr*dt) \n"//&
                  "over the same distance.", units="m2 s-1", default=0.)
   endif
+  call get_param(param_file, mod, "USE_KPP", CS%useKPP, &
+                 "If true, turns on the [CVmix] KPP scheme of Large et al., 1984,\n"// &
+                 "to calculate diffusivities and non-local transport in the OBL.", &
+                 default=.false.)
 
   if (G%Boussinesq) then ; thickness_units = "meter"
   else ; thickness_units = "kilogram meter-2" ; endif
@@ -1474,6 +1493,8 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
   if (CS%id_wd > 0) call safe_alloc_ptr(CDp%diapyc_vel,isd,ied,jsd,jed,nz+1)
 
   call set_diffusivity_init(Time, G, param_file, diag, CS%set_diff_CSp, diag_to_Z_CSp)
+  if (CS%useKPP) call KPP_init(param_file, G, diag, Time, CS%KPP_CSp)
+
   call entrain_diffusive_init(Time, G, param_file, diag, CS%entrain_diffusive_CSp)
   if (CS%use_geothermal) &
     call geothermal_init(Time, G, param_file, diag, CS%geothermal_CSp)
@@ -1526,6 +1547,7 @@ subroutine diabatic_driver_end(CS)
 
   call entrain_diffusive_end(CS%entrain_diffusive_CSp)
   call set_diffusivity_end(CS%set_diff_CSp)
+  if (CS%useKPP) call KPP_end(CS%KPP_CSp)
 
   if (associated(CS%optics)) then
     call opacity_end(CS%opacity_CSp, CS%optics)

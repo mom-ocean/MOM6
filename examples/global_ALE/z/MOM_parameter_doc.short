@@ -427,6 +427,9 @@ NK_ZSPACE (from file) = 50      !   [nondim]
 
 ! === Parameters of module MOM_diabatic_driver ===
 ! The following parameters are used for diabatic processes.
+USE_KPP = True                  !   [Boolean] default = False
+                                ! If true, turns on the [CVmix] KPP scheme of Large et al., 1984,
+                                ! to calculate diffusivities and non-local transport in the OBL.
 ML_RADIATION = True             !   [Boolean] default = False
                                 ! If true, allow a fraction of TKE available from wind
                                 ! work to penetrate below the base of the mixed layer
@@ -486,9 +489,6 @@ READ_TIDEAMP = True             !   [Boolean] default = False
 H2_FILE = "sgs_h2.nc"           !
                                 ! The path to the file containing the sub-grid-scale
                                 ! topographic roughness amplitude with INT_TIDE_DISSIPATION.
-USE_KPP = True                  !   [Boolean] default = False
-                                ! If true, turns on the [CVmix] KPP scheme of Large et al., 1984,
-                                ! to calculate diffusivities and non-local transport in the OBL.
 
 ! === Parameters of module MOM_KPP ===
 ! This is the MOM wrapper to CVmix:KPP

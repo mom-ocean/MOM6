@@ -1042,6 +1042,9 @@ KD_BBL_TR = 0.0                 !   [m2 s-1] default = 0.0
                                 ! allow for explicitly specified bottom fluxes. The
                                 ! entrainment at the bottom is at least sqrt(Kd_BBL_tr*dt)
                                 ! over the same distance.
+USE_KPP = False                 !   [Boolean] default = False
+                                ! If true, turns on the [CVmix] KPP scheme of Large et al., 1984,
+                                ! to calculate diffusivities and non-local transport in the OBL.
 FLUX_RI_MAX = 0.2               !   [not defined] default = 0.2
                                 ! The flux Richardson number where the stratification is
                                 ! large enough that N2 > omega2.  The full expression for
@@ -1183,9 +1186,6 @@ TIDEAMP_FILE = "tideamp.nc"     ! default = "tideamp.nc"
 H2_FILE = "sgs_h2.nc"           !
                                 ! The path to the file containing the sub-grid-scale
                                 ! topographic roughness amplitude with INT_TIDE_DISSIPATION.
-USE_KPP = False                 !   [Boolean] default = False
-                                ! If true, turns on the [CVmix] KPP scheme of Large et al., 1984,
-                                ! to calculate diffusivities and non-local transport in the OBL.
 
 ! === Parameters of module MOM_entrain_diffusive ===
 CORRECT_DENSITY = True          !   [Boolean] default = True

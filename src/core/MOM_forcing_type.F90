@@ -358,7 +358,7 @@ subroutine extractFluxes2d(G, fluxes, optics, nsw, dt, &
 end subroutine extractFluxes2d
 
 
-subroutine calculateBuoyancyFlux1d(G, fluxes, optics, h, Temp, Salt, tv, j, buoyancyFlux, includeSW )
+subroutine calculateBuoyancyFlux1d(G, fluxes, optics, h, Temp, Salt, tv, j, buoyancyFlux, netHeatMinusSW, netSalt )
 ! Calculates buoyancy flux by adding up the heat, FW and salt fluxes and linearizing
 ! about the surface state.
 
@@ -372,16 +372,17 @@ subroutine calculateBuoyancyFlux1d(G, fluxes, optics, h, Temp, Salt, tv, j, buoy
   type(thermo_var_ptrs),                 intent(inout) :: tv     ! Thermodynamics type (out needed for tv%TempxPmE ????)
   integer,                               intent(in)    :: j      ! j-index of row to work on
   real, dimension(NIMEM_),               intent(inout) :: buoyancyFlux ! Buoyancy flux (m2/s3)
-  logical, optional,                     intent(in)    :: includeSW ! If True, include SW heating in buoyancy flux (default False)
+  real, dimension(NIMEM_),               intent(inout) :: netHeatMinusSW ! Heat flux excluding SW (K m/s)
+  real, dimension(NIMEM_),               intent(inout) :: netSalt ! Salt flux (ppt m/s)
 
 ! Local variables
   integer :: nsw, start, npts
   real, parameter :: dt = 1. ! This is set to unity to return a rate from extractFluxes1d
-  real, dimension( SZI_(G) ) :: netH, netHeat, netSalt ! FW, heat, salt fluxes in (m/s, K m/s, ppt m/s)
+  real, dimension( SZI_(G) ) :: netH, netHeat ! FW, heat fluxes in (m/s, K m/s, ppt m/s)
   real, dimension( optics%nbands, SZI_(G) ) :: penSWbnd ! SW penetration bands
   real, dimension( SZI_(G) ) :: pressure ! Pressurea the surface ( Pa )
   real, dimension( SZI_(G) ) :: dRhodT, dRhodS ! Derivatives of density
-  logical :: useRiverHeatContent, useCalvingHeatContent, addSWtoNetHeat
+  logical :: useRiverHeatContent, useCalvingHeatContent
   real :: depthBeforeScalingFluxes, GoRho
 
   nsw = optics%nbands
@@ -392,8 +393,6 @@ subroutine calculateBuoyancyFlux1d(G, fluxes, optics, h, Temp, Salt, tv, j, buoy
   GoRho = G%g_Earth / G%Rho0
   start = 1 + G%isc - G%isd
   npts = 1 + G%iec - G%isc
-  addSWtoNetHeat = .False.
-  if (present(includeSW)) addSWtoNetHeat = includeSW
 
   ! Fetch the fresh-water, heat and salt fluxes
   ! netH is the fresh-water flux
@@ -401,7 +400,7 @@ subroutine calculateBuoyancyFlux1d(G, fluxes, optics, h, Temp, Salt, tv, j, buoy
   ! netHeat is the heat flux EXCEPT the penetrating SW
   call extractFluxes1d(G, fluxes, optics, nsw, j, dt, &
                 depthBeforeScalingFluxes, useRiverHeatContent, useCalvingHeatContent, &
-                h(:,j,:), Temp(:,j,:), netH, netHeat, netSalt, penSWbnd, tv)
+                h(:,j,:), Temp(:,j,:), netH, netHeatMinusSW, netSalt, penSWbnd, tv)
 
   ! Density derivatives
   call calculate_density_derivs(Temp(:,j,1), Salt(:,j,1), pressure, &
@@ -411,7 +410,7 @@ subroutine calculateBuoyancyFlux1d(G, fluxes, optics, h, Temp, Salt, tv, j, buoy
   netSalt(:) = netSalt(:) - Salt(:,j,1) * netH * G%H_to_m
 
   ! Add back in the SW heating
-  if (addSWtoNetHeat) netHeat(:) = netHeat(:) + sum( penSWbnd(:,:), dim=1 )
+  netHeat(:) = netHeatMinusSW(:) + sum( penSWbnd(:,:), dim=1 )
 
   ! Convert to a buoyancy flux, excluding penetrating SW heating
   buoyancyFlux(:) = - GoRho * ( dRhodS(:) * netSalt(:) + dRhodT(:) * netHeat(:) ) ! m2/s3
@@ -419,26 +418,32 @@ subroutine calculateBuoyancyFlux1d(G, fluxes, optics, h, Temp, Salt, tv, j, buoy
 end subroutine calculateBuoyancyFlux1d
 
 
-subroutine calculateBuoyancyFlux2d(G, fluxes, optics, h, Temp, Salt, tv, buoyancyFlux, includeSW )
+subroutine calculateBuoyancyFlux2d(G, fluxes, optics, h, Temp, Salt, tv, buoyancyFlux, netHeatMinusSW, netSalt )
 ! Calculates buoyancy flux by adding up the heat, FW and salt fluxes and linearizing
 ! about the surface state.
 
 ! Arguments
-  type(ocean_grid_type),                 intent(in)    :: G      ! Ocean grid
-  type(forcing),                         intent(in)    :: fluxes ! Surface fluxes/forcing type
-  type(optics_type),                     pointer       :: optics ! Optics for penetrating SW
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h      ! Layer/level thicknesses (units of H)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: Temp   ! Pot. temperature (degrees C)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: Salt   ! Salinity (ppt)
-  type(thermo_var_ptrs),                 intent(inout) :: tv     ! Thermodynamics type (out needed for tv%TempxPmE ????)
-  real, dimension(NIMEM_,NJMEM_),        intent(inout) :: buoyancyFlux ! Buoyancy flux (m2/s3)
-  logical, optional,                     intent(in)    :: includeSW ! If True, include SW heating in buoyancy flux (default False)
+  type(ocean_grid_type),                  intent(in)    :: G      ! Ocean grid
+  type(forcing),                          intent(in)    :: fluxes ! Surface fluxes/forcing type
+  type(optics_type),                      pointer       :: optics ! Optics for penetrating SW
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h      ! Layer/level thicknesses (units of H)
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: Temp   ! Pot. temperature (degrees C)
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: Salt   ! Salinity (ppt)
+  type(thermo_var_ptrs),                  intent(inout) :: tv     ! Thermodynamics type (out needed for tv%TempxPmE ????)
+  real, dimension(NIMEM_,NJMEM_),         intent(inout) :: buoyancyFlux ! Buoyancy flux (m2/s3)
+  real, dimension(NIMEM_,NJMEM_),optional,intent(inout) :: netHeatMinusSW ! Heat flux excluding SW (K m/s)
+  real, dimension(NIMEM_,NJMEM_),optional,intent(inout) :: netSalt ! Salt flux (ppt m/s)
 
 ! Local variables
+  real, dimension( SZI_(G) ) :: netT, netS ! Fluxes in (K m/s, ppt m/s)
   integer :: j
 
+  netT(:) = 0. ; netS(:) = 0.
+
   do j = G%jsc, G%jec
-    call calculateBuoyancyFlux1d(G, fluxes, optics, h, Temp, Salt, tv, j, buoyancyFlux(:,j), includeSW )
+    call calculateBuoyancyFlux1d(G, fluxes, optics, h, Temp, Salt, tv, j, buoyancyFlux(:,j), netT, netS )
+    if (present(netHeatMinusSW)) netHeatMinusSW(:,j) = netT(:)
+    if (present(netSalt)) netSalt(:,j) = netS(:)
   enddo ! j
 
 end subroutine calculateBuoyancyFlux2d
