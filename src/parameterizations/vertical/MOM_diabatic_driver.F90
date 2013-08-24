@@ -1778,7 +1778,7 @@ subroutine applyBoundaryFluxes(G, dt, fluxes, optics, ea, eb, h, tv)
         hOld = h2d(i,k) ! Need to keep original thickness in hand
         h2d(i,k) = h2d(i,k) + dThickness
         Ithickness = 1./h2d(i,k)
-        tv%T(i,j,k) = (hOld*tv%T(i,j,k) + dTemp)*Ithickness
+        T2d(i,k) = (hOld*T2d(i,k) + dTemp)*Ithickness
         tv%S(i,j,k) = (hOld*tv%S(i,j,k) + dSalt)*Ithickness
 
         !  update ea    ??????????????????
