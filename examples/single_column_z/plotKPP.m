@@ -1,3 +1,5 @@
+% TO use this script, ensure the scripts in MOM6/tools/matlab/gtools are in your
+% matlab path. e.g. addpath('.../MOM6/tools/matlab/gtools')
 ZLIM=[-250 0];
 interpcolormap('bgr')
 
@@ -21,56 +23,72 @@ for j = 1:length(allvars)
  end
 end
 
-subplot(421)
-plot(Time,temp(:,1))
-xlabel('Time (days)');ylabel('SST (^oC)')
+subplot(821)
+plot(Time,KPP_uStar)
+%xlabel('Time (days)')
+ylabel('u* (m/s)')
 
-subplot(422)
+subplot(822)
+plot(Time,KPP_buoyFlux)
+%xlabel('Time (days)')
+ylabel('B (m^2/s^3)')
+
+subplot(823)
+plot(Time,temp(:,1))
+%xlabel('Time (days)')
+ylabel('SST (^oC)')
+
+subplot(824)
 plot(Time,salt(:,1))
-xlabel('Time (days)');ylabel('SSS (ppt)')
+%xlabel('Time (days)')
+ylabel('SSS (ppt)')
 
 subplot(423)
 gcolor(temp',e',Time);ylim(ZLIM);colorbar
 caxis([18 21])
-xlabel('Time (days)');ylabel('z (m)')
+%xlabel('Time (days)')
+ylabel('z (m)')
 title('\theta (^oC)')
 hold on;plot(Time,-KPP_OBLdepth,'w');hold off
 
 subplot(424)
 gcolor(salt',e',Time);ylim(ZLIM);colorbar
 caxis([36 37])
-xlabel('Time (days)');ylabel('z (m)')
+%xlabel('Time (days)')
+ylabel('z (m)')
 title('S (ppt)')
 hold on;plot(Time,-KPP_OBLdepth,'w');hold off
 
 subplot(425)
-gcolor(KPP_N',e',Time);ylim(ZLIM);colorbar
-stats(KPP_N,'KPP_N')
-caxis([0 2e-2])
-xlabel('Time (days)');ylabel('z (m)')
-title('KPP N (1/s)')
+gcolor(KPP_dTdt',e',Time);ylim(ZLIM);colorbar
+caxis([-1 1]*1e-5)
+%xlabel('Time (days)')
+ylabel('z (m)')
+title('dTdt non-local (K/s)')
 hold on;plot(Time,-KPP_OBLdepth,'w');hold off
 
 subplot(426)
-gcolor(Kd_interface',e',Time);ylim(ZLIM);colorbar
-stats(Kd_interface,'Kd_interface')
-caxis([0 2e-2])
-xlabel('Time (days)');ylabel('z (m)')
-title('Kd interface (m^2/s)')
+gcolor(KPP_dSdt',e',Time);ylim(ZLIM);colorbar
+caxis([-1 1]*5e-7)
+%xlabel('Time (days)')
+ylabel('z (m)')
+title('dSdt non-local (ppt/s)')
 hold on;plot(Time,-KPP_OBLdepth,'w');hold off
 
 subplot(427)
 gcolor(KPP_Ksalt',e',Time);ylim(ZLIM);colorbar
 stats(KPP_Ksalt,'KPP_Ksalt')
 caxis([0 2e-2])
-xlabel('Time (days)');ylabel('z (m)')
+xlabel('Time (days)')
+ylabel('z (m)')
 title('KPP \kappa_s (m^2/s)')
 hold on;plot(Time,-KPP_OBLdepth ,'w');hold off
 
-subplot(8,2,14)
-plot(Time,KPP_uStar)
-xlabel('Time (days)');ylabel('u* (m/s)')
-
-subplot(8,2,16)
-plot(Time,KPP_buoyFlux)
-xlabel('Time (days)');ylabel('B (m^2/s^3)')
+subplot(428)
+gcolor(KPP_N',e',Time);ylim(ZLIM);colorbar
+stats(KPP_N,'KPP_N')
+caxis([0 2e-2])
+xlabel('Time (days)')
+ylabel('z (m)')
+title('KPP N (1/s)')
+hold on;plot(Time,-KPP_OBLdepth,'w');hold off

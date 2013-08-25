@@ -21,6 +21,7 @@ implicit none ; private
 #include "MOM_memory.h"
 
 public :: KPP_init, KPP_calculate, KPP_end
+public :: KPP_applyNonLocalTransport
 
 ! Control structure for containing KPP parameters/data
 type, public :: KPP_CS ; private
@@ -39,6 +40,7 @@ type, public :: KPP_CS ; private
   logical :: computeEkman ! If True, compute Ekman depth limit
   logical :: computeMoninObukhov ! If True, compute Monin-Obukhov limit
   logical :: passiveMode ! If True, makes KPP passive meaning it does NOT alter the diffusivity
+  logical :: applyNonLocalTrans ! If True, apply non-local transport to heat and scalars
   logical :: debug      ! If True, calculate checksums and write debugging information
 
   ! CVmix parameters
@@ -51,8 +53,9 @@ type, public :: KPP_CS ; private
   integer :: id_uStar = -1, id_buoyFlux = -1
   integer :: id_QminusSW = -1, id_netS = -1
   integer :: id_Kt_KPP = -1, id_Ks_KPP = -1
-  integer :: id_NLt_KPP = -1, id_NLs_KPP = -1
-  integer :: id_Sigma = -1
+  integer :: id_NLTt = -1, id_NLTs = -1
+  integer :: id_sigma = -1
+  integer :: id_dSdt = -1, id_dTdt = -1
 
 end type KPP_CS
 
@@ -87,6 +90,11 @@ subroutine KPP_init(paramFile, G, diag, Time, CS)
   call get_param(paramFile, mod, 'PASSIVE', CS%passiveMode,           &
                  'If True, puts KPP into a passive-diagnostic mode.', &
                  default=.False.)
+  call get_param(paramFile, mod, 'APPLY_NONLOCAL_TRANSPORT', CS%applyNonLocalTrans,  &
+                 'If True, applies the non-local transport to heat and scalars.\n'//  &
+                 'If False, calculates the non-local transport and tendancies but\n'//&
+                 'purely for diagnostic purposes.',                                   &
+                 default=.True.)
   call get_param(paramFile, mod, 'RI_CRIT', CS%Ri_crit,                       &
                  'Critical Richardson number used to define depth of the\n'// &
                  'Oceab Boundary Layer (OBL).',                               &
@@ -148,15 +156,19 @@ subroutine KPP_init(paramFile, G, diag, Time, CS)
       'Heat diffusivity due to KPP, as calculated by [CVmix] KPP', 'm2/s')
   CS%id_Ks_KPP = register_diag_field('ocean_model', 'KPP_Ksalt', diag%axesTi, Time, &
       'Salt diffusivity due to KPP, as calculated by [CVmix] KPP', 'm2/s')
-  CS%id_NLt_KPP = register_diag_field('ocean_model', 'KPP_NLtransport_heat', diag%axesTi, Time, &
+  CS%id_NLTt = register_diag_field('ocean_model', 'KPP_NLtransport_heat', diag%axesTi, Time, &
       'Non-local transport for heat, as calculated by [CVmix] KPP', 'm/s')
-  CS%id_NLs_KPP = register_diag_field('ocean_model', 'KPP_NLtransport_salt', diag%axesTi, Time, &
-      'Non-local tranpsort for salt, as calculated by [CVmix] KPP', 'm/s')
+  CS%id_NLTs = register_diag_field('ocean_model', 'KPP_NLtransport_salt', diag%axesTi, Time, &
+      'Non-local tranpsort for scalars, as calculated by [CVmix] KPP', 'm/s')
+  CS%id_dTdt = register_diag_field('ocean_model', 'KPP_dTdt', diag%axesTL, Time, &
+      'Temperature tendancy due to non-local transport of heat, as calculated by [CVmix] KPP', 'K/s')
+  CS%id_dSdt = register_diag_field('ocean_model', 'KPP_dSdt', diag%axesTL, Time, &
+      'Salinity tendancy due to non-local transport of heat, as calculated by [CVmix] KPP', 'ppt/s')
 
 end subroutine KPP_init
 
 
-subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, netHeatMinusSW, netSalt, Kv)
+subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kv, nonLocalTransHeat, nonLocalTransScalar)
 ! Calculates diffusivity and non-local transport for KPP parameterization 
 
 ! Arguments
@@ -170,10 +182,9 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, netHe
   type(EOS_type),                         pointer       :: EOS   ! Equation of state
   real, dimension(NIMEM_,NJMEM_),         intent(in)    :: uStar ! Piston velocity (m/s)
   real, dimension(NIMEM_,NJMEM_),         intent(in)    :: buoyFlux ! Buoyancy flux (m2/s3)
-  real, dimension(NIMEM_,NJMEM_),         intent(in)    :: netHeatMinusSW ! Net temperature flux (K m/s)
-  real, dimension(NIMEM_,NJMEM_),         intent(in)    :: netSalt ! Net salt flux (ppt m/s)
   real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(inout) :: Kv ! (in) Vertical diffusivity in interior (m2/s)
                                                                  ! (out) Vertical diffusivity including KPP (m2/s)
+  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(inout) :: nonLocalTransHeat, nonLocalTransScalar ! Temp/scalar non-local transport (m/s)
 
 ! Diagnostics arrays                   should these become allocatables ??????????
   real, dimension( SZI_(G), SZJ_(G), SZK_(G) ) :: BulkRi ! Bulk Richardson number for each layer
@@ -184,8 +195,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, netHe
   real, dimension( SZI_(G), SZJ_(G), SZK_(G) ) :: dRho ! Bulk difference in density (kg/m3)
   real, dimension( SZI_(G), SZJ_(G), SZK_(G) ) :: Uz2 ! Square of bulk difference in resolved velocity (m2/s2)
   real, dimension( SZI_(G), SZJ_(G), SZK_(G)+1 ) :: Ut2 ! Unresolved shear turbulence (1/s2)
-  real, dimension( SZI_(G), SZJ_(G), SZK_(G)+1 ) :: Kt_KPP, Ks_KPP ! Temp/alt diffusivity due to KPP (m2/s)
-  real, dimension( SZI_(G), SZJ_(G), SZK_(G)+1 ) :: NLt_KPP, NLs_KPP ! Temp/alt non-local transport (m/s)
+  real, dimension( SZI_(G), SZJ_(G), SZK_(G)+1 ) :: Kt_KPP, Ks_KPP ! Temp/scalar diffusivity due to KPP (m2/s)
 
 ! Local variables
   integer :: i, j, k, km1, iteration, largestIterationCount
@@ -219,8 +229,8 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, netHe
   Uz2(:,:,:) = 0.
   Kt_KPP(:,:,:) = 0.
   Ks_KPP(:,:,:) = 0.
-  NLt_KPP(:,:,:) = 0.
-  NLs_KPP(:,:,:) = 0.
+  nonLocalTransHeat(:,:,:) = 0.
+  nonLocalTransScalar(:,:,:) = 0.
 
 #ifdef __DO_SAFETY_CHECKS__
   if (CS%debug) then
@@ -383,6 +393,8 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, netHe
 !     endif
 #endif
 
+      nonLocalTransHeat(i,j,:) = nonLocalTrans(:,1) ! correct index ???
+      nonLocalTransScalar(i,j,:) = nonLocalTrans(:,2) ! correct index ???
       if (CS%id_OBL > 0) OBLdepth(i,j) = OBLdepth_0d ! Change sign for depth/thickness
       if (CS%id_sigma > 0) sigma(i,j,:) = sigmaCoord(:)
       if (CS%id_BulkRi > 0) BulkRi(i,j,:) = BulkRi_1d(:)
@@ -393,8 +405,6 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, netHe
       if (CS%id_BulkDrho > 0) dRho(i,j,:) = deltaRho(:)
       if (CS%id_Kt_KPP > 0) Kt_KPP(i,j,:) = Kdiffusivity(:,1) - Kv(i,j,:) ! Heat diffusivity due to KPP  (correct index ???)
       if (CS%id_Ks_KPP > 0) Ks_KPP(i,j,:) = Kdiffusivity(:,2) - Kv(i,j,:) ! Salt diffusivity due to KPP  (correct index ???)
-      if (CS%id_NLt_KPP > 0) NLt_KPP(i,j,:) = nonLocalTrans(:,1) ! correct index ???
-      if (CS%id_NLs_KPP > 0) NLs_KPP(i,j,:) = nonLocalTrans(:,2) ! correct index ???
 
       if (.not. CS%passiveMode) then
         Kv(i,j,:) = Kdiffusivity(:,2)
@@ -425,14 +435,69 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, netHe
   if (CS%id_BulkDrho > 0) call post_data(CS%id_BulkDrho, dRho, CS%diag)
   if (CS%id_uStar > 0) call post_data(CS%id_uStar, uStar, CS%diag)
   if (CS%id_buoyFlux > 0) call post_data(CS%id_buoyFlux, buoyFlux, CS%diag)
-  if (CS%id_QminusSW > 0) call post_data(CS%id_QminusSW, netHeatMinusSW, CS%diag)
-  if (CS%id_netS > 0) call post_data(CS%id_netS, netSalt, CS%diag)
   if (CS%id_Kt_KPP > 0) call post_data(CS%id_Kt_KPP, Kt_KPP, CS%diag)
   if (CS%id_Ks_KPP > 0) call post_data(CS%id_Ks_KPP, Ks_KPP, CS%diag)
-  if (CS%id_NLt_KPP > 0) call post_data(CS%id_NLt_KPP, NLt_KPP, CS%diag)
-  if (CS%id_NLs_KPP > 0) call post_data(CS%id_NLs_KPP, NLs_KPP, CS%diag)
+  if (CS%id_NLTt > 0) call post_data(CS%id_NLTt, nonLocalTransHeat, CS%diag)
+  if (CS%id_NLTs > 0) call post_data(CS%id_NLTs, nonLocalTransScalar, CS%diag)
 
 end subroutine KPP_calculate
+
+
+subroutine KPP_applyNonLocalTransport(CS, G, h, nonLocalTrans, surfFlux, dt, scalar, isHeat, isSalt)
+! Applies the KPP non-local transport of surface fluxes
+
+! Arguments
+  type(KPP_CS),                                 intent(in)    :: CS       ! Control structure
+  type(ocean_grid_type),                        intent(in)    :: G        ! Ocean grid
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),        intent(in)    :: h        ! Layer/level thicknesses (units of H)
+  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(in)    :: nonLocalTrans ! Non-local transport (m/s * scalar)
+  real, dimension(NIMEM_,NJMEM_),               intent(in)    :: surfFlux ! Buoyancy flux (m2/s3)
+  real,                                         intent(in)    :: dt       ! Time-step (s)
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),        intent(inout) :: scalar   ! Scalar or temperature (scalar units)
+  logical, optional,                            intent(in)    :: isHeat   ! Inidicates scalar is heat for diagnostics
+  logical, optional,                            intent(in)    :: isSalt   ! Inidicates scalar is salt for diagnostics
+
+! Diagnostics arrays
+  real, dimension( SZI_(G), SZJ_(G), SZK_(G) ) :: dSdt ! Tendancy in scalar due to non-local transport (scalar/s)
+
+! Local variables
+  integer :: i, j, k
+  logical :: diagHeat, diagSalt
+
+  diagHeat = .False.
+  if (present(isHeat)) then
+    if (isHeat) then
+      if (CS%id_dTdt > 0) diagHeat = .True.
+      if (CS%id_QminusSW > 0) call post_data(CS%id_QminusSW, surfFlux, CS%diag)
+    endif
+  endif
+  diagSalt = .False.
+  if (present(isSalt)) then
+    if (isSalt) then
+      if (CS%id_dSdt > 0) diagSalt = .True.
+      if (CS%id_netS > 0) call post_data(CS%id_netS, surfFlux, CS%diag)
+    endif
+  endif
+
+  if (diagHeat .or. diagSalt) dSdt(:,:,:) = 0. ! Zero halos for diagnostics ???
+
+  do k = 1, G%ke
+    do j = G%jsc, G%jec
+      do i = G%isc, G%iec
+        ! Tendancy due to non-local transport of scalar
+        dSdt(i,j,k) = ( nonLocalTrans(i,j,k) - nonLocalTrans(i,j,k+1) ) / h(i,j,k) * surfFlux(i,j)
+        ! Update the scalar
+        if (.not. CS%passiveMode .and. CS%applyNonLocalTrans) then
+          scalar(i,j,k) = scalar(i,j,k) + dt * dSdt(i,j,k)
+        endif
+      enddo ! i
+    enddo ! j
+  enddo ! k
+
+  if (diagHeat) call post_data(CS%id_dTdt, dSdt, CS%diag)
+  if (diagSalt) call post_data(CS%id_dSdt, dSdt, CS%diag)
+
+end subroutine KPP_applyNonLocalTransport
 
 
 subroutine KPP_end(CS)

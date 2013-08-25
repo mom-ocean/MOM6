@@ -87,7 +87,7 @@ use MOM_int_tide_input, only : int_tide_input_end, int_tide_input_CS, int_tide_i
 use MOM_internal_tides, only : propagate_int_tide, register_int_tide_restarts
 use MOM_internal_tides, only : internal_tides_init, internal_tides_end, int_tide_CS
 use MOM_kappa_shear, only : Calculate_kappa_shear, kappa_shear_init, Kappa_shear_CS
-use MOM_KPP, only : KPP_CS, KPP_init, KPP_calculate, KPP_end
+use MOM_KPP, only : KPP_CS, KPP_init, KPP_calculate, KPP_end, KPP_applyNonLocalTransport
 use MOM_opacity, only : opacity_init, set_opacity, opacity_end, opacity_CS
 use MOM_set_diffusivity, only : set_diffusivity, set_BBL_diffusivity
 use MOM_set_diffusivity, only : set_diffusivity_init, set_diffusivity_end
@@ -286,6 +286,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   real, dimension(SZI_(G),SZJ_(G)) :: buoyancyFlux ! Buoyancy flux for KPP (m2/s3)
   real, dimension(SZI_(G),SZJ_(G)) :: netHeatMinusSW ! Effective temperature flux for KPP (K m/s)
   real, dimension(SZI_(G),SZJ_(G)) :: netSalt ! Effective salt flux for KPP (ppt m/s)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: KPP_NLTheat ! Non-local transport for heat due to KPP (m/s)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: KPP_NLTscalar ! Non-local transport for scalars due to KPP (m/s)
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkmb
   real, pointer :: T(:,:,:), S(:,:,:)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -431,7 +433,10 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     ! and requires the interior diffusivity to be complete so that KPP can match profiles.
     ! Thus, KPP is the last contribution to Kd.
     call KPP_calculate(CS%KPP_CSp, G, h, tv%T, tv%S, u, v, tv%eqn_of_state, &
-           fluxes%ustar, buoyancyFlux, netHeatMinusSW, netSalt, Kd_int)
+           fluxes%ustar, buoyancyFlux, Kd_int, KPP_NLTheat, KPP_NLTscalar)
+    ! Apply non-local transport of heat and salt
+    call KPP_applyNonLocalTransport(CS%KPP_CSp, G, h, KPP_NLTheat, netHeatMinusSW, dt, tv%T, isHeat=.true.)
+    call KPP_applyNonLocalTransport(CS%KPP_CSp, G, h, KPP_NLTscalar, netSalt, dt, tv%S, isSalt=.true.)
   endif
   call cpu_clock_end(id_clock_set_diffusivity)
   if (CS%debug) then

@@ -1023,6 +1023,10 @@ DISSIPATION_KD_MIN = 0.0        !   [m2 s-1] default = 0.0
 KPP%
 PASSIVE = False                 !   [Boolean] default = False
                                 ! If True, puts KPP into a passive-diagnostic mode.
+APPLY_NONLOCAL_TRANSPORT = True !   [Boolean] default = True
+                                ! If True, applies the non-local transport to heat and scalars.
+                                ! If False, calculates the non-local transport and tendancies but
+                                ! purely for diagnostic purposes.
 RI_CRIT = 0.3                   !   [nondim] default = 0.3
                                 ! Critical Richardson number used to define depth of the
                                 ! Oceab Boundary Layer (OBL).

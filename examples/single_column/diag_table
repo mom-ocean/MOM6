@@ -153,6 +153,8 @@
 "ocean_model","KPP_Ksalt","KPP_Ksalt","visc","all",.true.,"none",2
 "ocean_model","KPP_NLtransport_heat","KPP_NLtransport_heat","visc","all",.true.,"none",2
 "ocean_model","KPP_NLtransport_salt","KPP_NLtransport_salt","visc","all",.true.,"none",2
+"ocean_model","KPP_dTdt","KPP_dTdt","visc","all",.true.,"none",2
+"ocean_model","KPP_dSdt","KPP_dSdt","visc","all",.true.,"none",2
 
 #
 # Kinetic Energy Balance Terms:
