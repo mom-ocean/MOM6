@@ -284,6 +284,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   integer :: z_ids(7)  ! The id numbers of the diagnostics that are to be
                        ! interpolated into depth space.
   real, dimension(SZI_(G),SZJ_(G)) :: buoyancyFlux ! Buoyancy flux for KPP (m2/s3)
+  real, dimension(SZI_(G),SZJ_(G)) :: netHeatMinusSW ! Effective temperature flux for KPP (K m/s)
+  real, dimension(SZI_(G),SZJ_(G)) :: netSalt ! Effective salt flux for KPP (ppt m/s)
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkmb
   real, pointer :: T(:,:,:), S(:,:,:)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -423,12 +425,13 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   if (CS%useKPP) then
     ! KPP needs the surface buoyancy flux but does not update state variables.
     ! We could make this call higher up to avoid a repeat unpacking of the surface fluxes.  ????
-    call calculateBuoyancyFlux2d(G, fluxes, CS%optics, h, tv%T, tv%S, tv, buoyancyFlux)
+    call calculateBuoyancyFlux2d(G, fluxes, CS%optics, h, tv%T, tv%S, tv, buoyancyFlux, &
+              netHeatMinusSW, netSalt)
     ! The KPP scheme calculates the mixed layer diffusivities and non-local transport
     ! and requires the interior diffusivity to be complete so that KPP can match profiles.
     ! Thus, KPP is the last contribution to Kd.
     call KPP_calculate(CS%KPP_CSp, G, h, tv%T, tv%S, u, v, tv%eqn_of_state, &
-           fluxes%ustar, buoyancyFlux, Kd_int)
+           fluxes%ustar, buoyancyFlux, netHeatMinusSW, netSalt, Kd_int)
   endif
   call cpu_clock_end(id_clock_set_diffusivity)
   if (CS%debug) then
@@ -439,6 +442,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     call hchksum(Kd_Int, "after set_diffusivity Kd_Int",G,haloshift=0)
   endif
 
+  ! When used with KPP this needs to provide a diffusivity and happen before KPP ?????
   if (associated(visc%Kd_extra_T) .and. associated(visc%Kd_extra_S) .and. &
       associated(T)) then
     call cpu_clock_begin(id_clock_double_diff)

@@ -139,7 +139,10 @@
 #"ocean_model","FrictWork","FrictWork","visc","all",.true.,"none",2
 "ocean_model","KPP_uStar","KPP_uStar","visc","all",.true.,"none",2
 "ocean_model","KPP_buoyFlux","KPP_buoyFlux","visc","all",.true.,"none",2
+"ocean_model","KPP_QminusSW","KPP_QminusSW","visc","all",.true.,"none",2
+"ocean_model","KPP_netSalt","KPP_netSalt","visc","all",.true.,"none",2
 "ocean_model","KPP_OBLdepth","KPP_OBLdepth","visc","all",.true.,"none",2
+"ocean_model","KPP_sigma","KPP_sigma","visc","all",.true.,"none",2
 "ocean_model","KPP_BulkRi","KPP_BulkRi","visc","all",.true.,"none",2
 "ocean_model","KPP_Ws","KPP_Ws","visc","all",.true.,"none",2
 "ocean_model","KPP_N","KPP_N","visc","all",.true.,"none",2

@@ -49,8 +49,10 @@ type, public :: KPP_CS ; private
   integer :: id_OBL = -1, id_BulkRi = -1, id_Ws = -1, id_N = -1
   integer :: id_Ut2 = -1, id_BulkUz2 = -1, id_BulkDrho = -1
   integer :: id_uStar = -1, id_buoyFlux = -1
+  integer :: id_QminusSW = -1, id_netS = -1
   integer :: id_Kt_KPP = -1, id_Ks_KPP = -1
   integer :: id_NLt_KPP = -1, id_NLs_KPP = -1
+  integer :: id_Sigma = -1
 
 end type KPP_CS
 
@@ -120,6 +122,8 @@ subroutine KPP_init(paramFile, G, diag, Time, CS)
   CS%diag => diag
   CS%id_OBL = register_diag_field('ocean_model', 'KPP_OBLdepth', diag%axesT1, Time, &
       'Thickness of the surface Ocean Boundary Layer calculated by [CVmix] KPP', 'meter')
+  CS%id_Sigma = register_diag_field('ocean_model', 'KPP_sigma', diag%axesTi, Time, &
+      'Sigma coordinate used by [CVmix] KPP', 'nondim')
   CS%id_BulkRi = register_diag_field('ocean_model', 'KPP_BulkRi', diag%axesTL, Time, &
       'Bulk Richardson number used to find the OBL depth used by [CVmix] KPP', 'nondim')
   CS%id_Ws = register_diag_field('ocean_model', 'KPP_Ws', diag%axesTi, Time, &
@@ -136,6 +140,10 @@ subroutine KPP_init(paramFile, G, diag, Time, CS)
       'Frictional velocity, u*, as used by [CVmix] KPP', 'm/s')
   CS%id_buoyFlux = register_diag_field('ocean_model', 'KPP_buoyFlux', diag%axesT1, Time, &
       'Buoyancy flux, as used by [CVmix] KPP', 'm2/s3')
+  CS%id_QminusSW = register_diag_field('ocean_model', 'KPP_QminusSW', diag%axesT1, Time, &
+      'Net temperature flux ignoring short-wave, as used by [CVmix] KPP', 'K m/s')
+  CS%id_netS = register_diag_field('ocean_model', 'KPP_netSalt', diag%axesT1, Time, &
+      'Effective net surface salt flux, as used by [CVmix] KPP', 'ppt m/s')
   CS%id_Kt_KPP = register_diag_field('ocean_model', 'KPP_Kheat', diag%axesTi, Time, &
       'Heat diffusivity due to KPP, as calculated by [CVmix] KPP', 'm2/s')
   CS%id_Ks_KPP = register_diag_field('ocean_model', 'KPP_Ksalt', diag%axesTi, Time, &
@@ -148,7 +156,7 @@ subroutine KPP_init(paramFile, G, diag, Time, CS)
 end subroutine KPP_init
 
 
-subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, bFlux, Kv)
+subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, netHeatMinusSW, netSalt, Kv)
 ! Calculates diffusivity and non-local transport for KPP parameterization 
 
 ! Arguments
@@ -161,13 +169,16 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, bFlux, Kv)
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)    :: v     ! Velocity components (m/s)
   type(EOS_type),                         pointer       :: EOS   ! Equation of state
   real, dimension(NIMEM_,NJMEM_),         intent(in)    :: uStar ! Piston velocity (m/s)
-  real, dimension(NIMEM_,NJMEM_),         intent(in)    :: bFlux ! Buoyancy flux (m2/s3)
+  real, dimension(NIMEM_,NJMEM_),         intent(in)    :: buoyFlux ! Buoyancy flux (m2/s3)
+  real, dimension(NIMEM_,NJMEM_),         intent(in)    :: netHeatMinusSW ! Net temperature flux (K m/s)
+  real, dimension(NIMEM_,NJMEM_),         intent(in)    :: netSalt ! Net salt flux (ppt m/s)
   real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(inout) :: Kv ! (in) Vertical diffusivity in interior (m2/s)
                                                                  ! (out) Vertical diffusivity including KPP (m2/s)
 
 ! Diagnostics arrays                   should these become allocatables ??????????
   real, dimension( SZI_(G), SZJ_(G), SZK_(G) ) :: BulkRi ! Bulk Richardson number for each layer
   real, dimension( SZI_(G), SZJ_(G) ) :: OBLdepth ! Depth (positive) of OBL (m)
+  real, dimension( SZI_(G), SZJ_(G), SZK_(G)+1 ) :: sigma ! Sigma coordinate (nondim)
   real, dimension( SZI_(G), SZJ_(G), SZK_(G)+1 ) :: Ws ! Turbulent velocity scale for scalars (m/s)
   real, dimension( SZI_(G), SZJ_(G), SZK_(G)+1 ) :: N ! Brunt-Vaisala frequency (1/s)
   real, dimension( SZI_(G), SZJ_(G), SZK_(G) ) :: dRho ! Bulk difference in density (kg/m3)
@@ -201,6 +212,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, bFlux, Kv)
 
   BulkRi(:,:,:) = 0.
   OBLdepth(:,:) = 0.
+  sigma(:,:,:) = 0.
   Ws(:,:,:) = 0.
   N(:,:,:) = 0.
   Ut2(:,:,:) = 0.
@@ -218,7 +230,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, bFlux, Kv)
     call hchksum(u, "KPP in: u",G,haloshift=0)
     call hchksum(v, "KPP in: v",G,haloshift=0)
     call hchksum(uStar, "KPP in: uStar",G,haloshift=0)
-    call hchksum(bFlux, "KPP in: bFlux",G,haloshift=0)
+    call hchksum(buoyFlux, "KPP in: buoyFlux",G,haloshift=0)
     call hchksum(Kv, "KPP in: Kv",G,haloshift=0)
   endif
 #endif
@@ -266,9 +278,9 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, bFlux, Kv)
       Coriolis = 0.25*( (G%CoriolisBu(i,j) + G%CoriolisBu(i-1,j-1)) &
                        +(G%CoriolisBu(i-1,j) + G%CoriolisBu(i,j-1)) )
       surfFricVel = uStar(i,j)
-      surfBuoyFlux = bFlux(i,j)
+      surfBuoyFlux = buoyFlux(i,j)
 ! if (isPointInCell(G,i,j,-235.5,13.3)) then
-!   print *,'u*,bFlux',surfFricVel,surfBuoyFlux
+!   print *,'u*,buoyFlux',surfFricVel,surfBuoyFlux
 !   do k=1,G%ke
 !     print *,'k,h,z,S,T=',k,h(i,j,k),cellHeight(k),Temp(i,j,k),Salt(i,j,k)
 !   enddo
@@ -334,7 +346,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, bFlux, Kv)
         write(0,*) 'i,j,x,y',i,j,G%geoLonT(i,j),G%geoLatT(i,j)
         write(0,*) 'iters',iteration
         write(0,*) 'penul,last, current OBL',penulOBLdepth,lastOBLdepth,OBLdepth_0d
-        write(0,*) 'u*, bFlux',surfFricVel,surfBuoyFlux
+        write(0,*) 'u*, buoyFlux',surfFricVel,surfBuoyFlux
         do k = 1, G%ke
           write(0,*) 'k,zw,h,T,S',k,iFaceHeight(k),h(i,j,k),temp(i,j,k),salt(i,j,k)
         enddo
@@ -361,7 +373,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, bFlux, Kv)
 #ifdef __DO_SAFETY_CHECKS__
 !     if (is_NaN(Kdiffusivity(:,2),skip_mpp=.True.)) then
 !       write(0,*) 'i,j=',i,j
-!       write(0,*) 'u*,bFlux',surfFricVel, surfBuoyFlux
+!       write(0,*) 'u*,buoyFlux',surfFricVel, surfBuoyFlux
 !       write(0,*) 'OBLd,kOBL',OBLdepth_0d, kOBL
 !       do k = 1, G%ke+1
 !         write(0,*) 'k,zw,Kin,Kout',k,iFaceHeight(k),Kv(i,j,k),Kdiffusivity(k,2)
@@ -372,6 +384,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, bFlux, Kv)
 #endif
 
       if (CS%id_OBL > 0) OBLdepth(i,j) = OBLdepth_0d ! Change sign for depth/thickness
+      if (CS%id_sigma > 0) sigma(i,j,:) = sigmaCoord(:)
       if (CS%id_BulkRi > 0) BulkRi(i,j,:) = BulkRi_1d(:)
       if (CS%id_Ws > 0) Ws(i,j,:) = Ws_1d(:)
       if (CS%id_N > 0) N(i,j,:) = N_1d(:)
@@ -382,7 +395,10 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, bFlux, Kv)
       if (CS%id_Ks_KPP > 0) Ks_KPP(i,j,:) = Kdiffusivity(:,2) - Kv(i,j,:) ! Salt diffusivity due to KPP  (correct index ???)
       if (CS%id_NLt_KPP > 0) NLt_KPP(i,j,:) = nonLocalTrans(:,1) ! correct index ???
       if (CS%id_NLs_KPP > 0) NLs_KPP(i,j,:) = nonLocalTrans(:,2) ! correct index ???
-      if (.not. CS%passiveMode) Kv(i,j,:) = Kdiffusivity(:,2)
+
+      if (.not. CS%passiveMode) then
+        Kv(i,j,:) = Kdiffusivity(:,2)
+      endif
     enddo ! i
   enddo ! j
 
@@ -400,6 +416,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, bFlux, Kv)
 #endif
 
   if (CS%id_OBL > 0) call post_data(CS%id_OBL, OBLdepth, CS%diag)
+  if (CS%id_sigma > 0) call post_data(CS%id_sigma, sigma, CS%diag)
   if (CS%id_BulkRi > 0) call post_data(CS%id_BulkRi, BulkRi, CS%diag)
   if (CS%id_Ws > 0) call post_data(CS%id_Ws, Ws, CS%diag)
   if (CS%id_N > 0) call post_data(CS%id_N, N, CS%diag)
@@ -407,7 +424,9 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, bFlux, Kv)
   if (CS%id_BulkUz2 > 0) call post_data(CS%id_BulkUz2, Uz2, CS%diag)
   if (CS%id_BulkDrho > 0) call post_data(CS%id_BulkDrho, dRho, CS%diag)
   if (CS%id_uStar > 0) call post_data(CS%id_uStar, uStar, CS%diag)
-  if (CS%id_buoyFlux > 0) call post_data(CS%id_buoyFlux, bFlux, CS%diag)
+  if (CS%id_buoyFlux > 0) call post_data(CS%id_buoyFlux, buoyFlux, CS%diag)
+  if (CS%id_QminusSW > 0) call post_data(CS%id_QminusSW, netHeatMinusSW, CS%diag)
+  if (CS%id_netS > 0) call post_data(CS%id_netS, netSalt, CS%diag)
   if (CS%id_Kt_KPP > 0) call post_data(CS%id_Kt_KPP, Kt_KPP, CS%diag)
   if (CS%id_Ks_KPP > 0) call post_data(CS%id_Ks_KPP, Ks_KPP, CS%diag)
   if (CS%id_NLt_KPP > 0) call post_data(CS%id_NLt_KPP, NLt_KPP, CS%diag)
