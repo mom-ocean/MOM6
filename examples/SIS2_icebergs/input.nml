@@ -55,8 +55,7 @@
 
  &ice_model_nml
       num_part = 6
-      io_layout = 1, 1
-      do_icebergs = .true. /
+      io_layout = 1, 1 /
 
  &icebergs_nml
     verbose=.false.,

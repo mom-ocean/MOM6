@@ -5,6 +5,8 @@
 !********+*********+*********+*********+*********+*********+*********+*
 ! >>> Global coupled ice-ocean SIS2 5 layer ice, 63 layer ocean test case.
 
+DO_ICEBERGS = True              !   If true, use the icebergs module.
+
 !  Specify properties of the physical domain.
 OMEGA = 7.2921e-5               !   The rotation rate of the earth in s-1.
 ROTATION = "2omegasinlat"       !   Rotation approximation (2omegasinlat,
