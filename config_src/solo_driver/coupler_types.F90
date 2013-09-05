@@ -5,10 +5,10 @@ module coupler_types_mod
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 !
-! This file was modified for use in MOM6 from MOM4 code by Stephen Griffies.
+! This file was modified for use in MOM6 from MOM4/5.
 !
 ! This module contains simplified type declarations for the coupler
-! of an ocean-only model. With mom4, this is used with ocean_solo_mod
+! of an ocean-only model. With mom4/5, this is used with ocean_solo_mod
 ! as the driver, and with MOM6 it is used with MOM_driver.
 !
 
@@ -38,11 +38,12 @@ contains
 
 subroutine extract_coupler_values(BC_struc, BC_index, BC_element, array_out, &
                                   is, ie, js, je, conversion)
-  type(coupler_2d_bc_type), intent(in)  :: BC_struc
-  integer,                  intent(in)  :: BC_index, BC_element
+  type(coupler_2d_bc_type), intent(in)    :: BC_struc
+  integer,                  intent(in)    :: BC_index, BC_element
   real, dimension(:,:),     intent(inout) :: array_out
-  integer,        optional, intent(in)  :: is, ie, js, je
-  real,           optional, intent(in)  :: conversion
+  integer,        optional, intent(in)    :: is, ie, js, je
+  real,           optional, intent(in)    :: conversion
+
 ! Arguments: BC_struc - The type from which the data is being extracted.
 !  (in)      BC_index - The boundary condition number being extracted.
 !  (in)      BC_element - The element of the boundary condition being extracted.
@@ -66,6 +67,7 @@ subroutine set_coupler_values(array_in, BC_struc, BC_index, BC_element, &
   integer,                  intent(in)    :: BC_index, BC_element
   integer,        optional, intent(in)    :: is, ie, js, je
   real,           optional, intent(in)    :: conversion
+
 ! Arguments: array_in - The array containing the values to load into the BC.
 !  (out)     BC_struc - The type into which the data is being loaded.
 !  (in)      BC_index - The boundary condition number being extracted.
