@@ -496,6 +496,13 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     call hchksum(G%H_to_m*eb, "after calc_entrain eb",G,haloshift=0)
   endif
 
+  ! Apply forcing when using the ALE algorithm
+  if (CS%useALEalgorithm) then
+    call cpu_clock_begin(id_clock_remap)
+    call applyBoundaryFluxes(G, dt, fluxes, CS%optics, ea, eb, h, tv)
+    call cpu_clock_end(id_clock_remap)
+  endif
+  
   ! Update h according to divergence of the difference between
   ! ea and eb. We keep a record of the original h in hold.
   ! In the following, the checks for negative values are to guard
@@ -524,13 +531,6 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     call MOM_state_chksum("after negative check ", u(:,:,:), v(:,:,:), h(:,:,:), G)
   endif
 
-  ! Apply forcing when using the ALE algorithm
-  if (CS%useALEalgorithm) then
-    call cpu_clock_begin(id_clock_remap)
-    call applyBoundaryFluxes(G, dt, fluxes, CS%optics, ea, eb, h, tv)
-    call cpu_clock_end(id_clock_remap)
-  endif
-  
   ! Here, T and S are updated according to ea and eb.
   ! If using the bulk mixed layer, T and S are also updated
   ! by surface fluxes (in fluxes%*).
@@ -666,7 +666,6 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
         call adjust_salt(h, tv, G, CS)
 
       call cpu_clock_end(id_clock_mixedlayer)
-      if (CS%debug) call MOM_state_chksum("after Mixedlayer ", u, v, h, G)
     endif
 
   else                                             ! Not BULKMIXEDLAYER.
@@ -700,6 +699,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     endif
 
   endif                                          ! end BULKMIXEDLAYER
+  if (CS%debug) call MOM_state_chksum("after mixed layer ", u, v, h, G)
 
   if (.not. CS%useALEalgorithm) then
     call cpu_clock_begin(id_clock_remap)
@@ -880,7 +880,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
 !  or enters the ocean with the surface velocity.
 
   if (CS%debug) then
-    call MOM_state_chksum("before tridiag ", u, v, h, G)
+    call MOM_state_chksum("before u/v tridiag ", u, v, h, G)
   endif
   call cpu_clock_begin(id_clock_tridiag)
   do j=js,je
@@ -944,7 +944,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   enddo
   call cpu_clock_end(id_clock_tridiag)
   if (CS%debug) then
-    call MOM_state_chksum("after tridiag ", u, v, h, G)
+    call MOM_state_chksum("after u/v tridiag ", u, v, h, G)
   endif
 
 !   Frazil formation keeps the temperature above the freezing point.
@@ -1763,6 +1763,11 @@ subroutine applyBoundaryFluxes(G, dt, fluxes, optics, ea, eb, h, tv)
                   H_limit_fluxes, use_riverHeatContent, useCalvingHeatContent, &
                   h2d, T2d, netThickness, netHeat, netSalt, Pen_SW_bnd, tv)
  
+    ! For passive tracers
+    do i=is,ie
+      ea(i,j,1) = netThickness(i)
+    enddo
+
     do i=is,ie
       do k=1,nz
         ! Fraction of forcing that we put into this layer is normally 100%, unless the
@@ -1782,15 +1787,15 @@ subroutine applyBoundaryFluxes(G, dt, fluxes, optics, ea, eb, h, tv)
 
         ! Adjust heating by the temperature of rain/water vapor
         dTemp = dTemp + dThickness*tv%T(i,j,k)
+        if (ASSOCIATED(tv%TempxPmE)) tv%TempxPmE(i,j) = tv%TempxPmE(i,j) + &
+                         tv%T(i,j,k) * dThickness * G%H_to_kg_m2
 
         ! Update state by the appropriate delta (change in state calculated above)
         hOld = h2d(i,k) ! Need to keep original thickness in hand
         h2d(i,k) = h2d(i,k) + dThickness
-        Ithickness = 1./h2d(i,k)
+        Ithickness = 1./h2d(i,k) ! Inverse of new thickness
         T2d(i,k) = (hOld*T2d(i,k) + dTemp)*Ithickness
         tv%S(i,j,k) = (hOld*tv%S(i,j,k) + dSalt)*Ithickness
-
-        !  update ea    ??????????????????
 
       enddo ! k
     enddo ! i
@@ -1807,6 +1812,7 @@ subroutine applyBoundaryFluxes(G, dt, fluxes, optics, ea, eb, h, tv)
         tv%T(i,j,k) = T2d(i,k)
       enddo
     enddo
+
   enddo ! j
 
   deallocate(Pen_SW_bnd)
