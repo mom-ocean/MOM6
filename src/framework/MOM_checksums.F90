@@ -29,6 +29,7 @@ use MOM_grid, only : ocean_grid_type
 implicit none ; private
 
 public :: hchksum, qchksum, uchksum, vchksum, chksum, is_NaN
+public :: totalStuff, totalTandS
 public :: MOM_checksums_init
 
 interface hchksum
@@ -1145,6 +1146,62 @@ function is_NaN_3d(x)
   if (n>0) is_NaN_3d = .true.
 
 end function is_NaN_3d
+
+! =====================================================================
+
+function totalStuff(G, hThick, stuff)
+  type(ocean_grid_type),            intent(in) :: G
+  real, dimension(G%isd:,G%jsd:,:), intent(in) :: hThick, stuff
+  real                                         :: totalStuff
+! This subroutine returns sum over computational domain of hThick*Stuff
+  integer :: i, j, k
+
+  totalStuff = 0.
+  do k = 1, G%ke ; do j = G%jsc, G%jec ; do i= G%isc, G%iec
+    totalStuff = totalStuff + hThick(i,j,k) * stuff(i,j,k) * G%areaT(i,j)
+  enddo ; enddo ; enddo
+  call sum_across_PEs(totalStuff)
+
+end function totalStuff
+
+! =====================================================================
+
+subroutine totalTandS(G, hThick, temperature, salinity, mesg)
+  type(ocean_grid_type),            intent(in) :: G
+  real, dimension(G%isd:,G%jsd:,:), intent(in) :: hThick, temperature, salinity
+  character(len=*),                 intent(in) :: mesg
+! This subroutine display the total thickness, temperature and salinity
+! as well as the change since the last call.
+! NOTE: This uses "save" data which is not thread safe and is purely for
+! extreme debugging without a proper debugger.
+  real, save :: totalH = 0., totalT = 0., totalS = 0.
+  logical, save :: firstCall = .true.
+  real :: thisH, thisT, thisS, delH, delT, delS
+  integer :: i, j, k
+
+  thisH = 0.
+  do k = 1, G%ke ; do j = G%jsc, G%jec ; do i= G%isc, G%iec
+    thisH = thisH + hThick(i,j,k) * G%areaT(i,j)
+  enddo ; enddo ; enddo
+  call sum_across_PEs(thisH)
+  thisT = totalStuff(G, hThick, temperature)
+  thisS = totalStuff(G, hThick, salinity)
+
+  if (is_root_pe()) then
+    if (firstCall) then
+      totalH = thisH ; totalT = thisT ; totalS = thisS
+      write(0,*) 'Totals H,T,S:',thisH,thisT,thisS,' ',mesg
+      firstCall = .false.
+    else
+      delH = thisH - totalH
+      delT = thisT - totalT
+      delS = thisS - totalS
+      totalH = thisH ; totalT = thisT ; totalS = thisS
+      write(0,*) 'Tot/del H,T,S:',thisH,thisT,thisS,delH,delT,delS,' ',mesg
+    endif
+  endif
+
+end subroutine totalTandS
 
 ! =====================================================================
 
