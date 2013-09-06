@@ -399,7 +399,7 @@ use MOM_dynamics_unsplit_RK2, only : MOM_dyn_unsplit_RK2_CS
 use MOM_dynamics_legacy_split, only : step_MOM_dyn_legacy_split, register_restarts_dyn_legacy_split
 use MOM_dynamics_legacy_split, only : initialize_dyn_legacy_split, end_dyn_legacy_split
 use MOM_dynamics_legacy_split, only : adjustments_dyn_legacy_split, MOM_dyn_legacy_split_CS
-use MOM_ALE, only : initialize_ALE, end_ALE, ALE_main, ALE_CS
+use MOM_ALE, only : initialize_ALE, end_ALE, ALE_main, ALE_CS, adjustGridForIntegrity
 
 implicit none ; private
 
@@ -1522,7 +1522,12 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
       call vchksum(CS%v,"Pre initialize_ALE v",G,haloshift=1)
       call hchksum(CS%h, "Pre initialize_ALE h",G,haloshift=1)
     endif
-    call initialize_ALE(param_file, G, CS%h, CS%u, CS%v, CS%tv, CS%ALE_CSp)
+    call initialize_ALE(param_file, G, CS%ALE_CSp)
+    if (.not. query_initialized(CS%h,"h",CS%restart_CSp)) then
+      ! This is a not a restart so we do the following...
+      call adjustGridForIntegrity(CS%ALE_CSp, G, CS%h )
+      call ALE_main( G, CS%h, CS%u, CS%v, CS%tv, CS%ALE_CSp )
+    endif
     if (CS%debug) then
       call uchksum(CS%u,"Post initialize_ALE u",G,haloshift=1)
       call vchksum(CS%v,"Post initialize_ALE v",G,haloshift=1)

@@ -102,6 +102,7 @@ public pressure_gradient_plm
 public pressure_gradient_ppm
 public usePressureReconstruction
 public pressureReconstructionScheme
+public adjustGridForIntegrity
 
 ! -----------------------------------------------------------------------------
 ! The following are private constants
@@ -126,8 +127,7 @@ contains
 !------------------------------------------------------------------------------
 ! Initialization of regridding
 !------------------------------------------------------------------------------
-subroutine initialize_ALE( param_file, G, h, &
-                                  u, v, tv, CS )
+subroutine initialize_ALE( param_file, G, CS )
 !------------------------------------------------------------------------------
 ! This routine is typically called (from initialize_MOM in file MOM.F90)
 ! before the main time integration loop to initialize the regridding stuff.
@@ -138,10 +138,6 @@ subroutine initialize_ALE( param_file, G, h, &
   ! Arguments
   type(param_file_type), intent(in)                      :: param_file
   type(ocean_grid_type), intent(in)                      :: G
-  real, dimension(NIMEM_,NJMEM_, NKMEM_),  intent(inout) :: h
-  real, dimension(NIMEMB_,NJMEM_, NKMEM_), intent(inout) :: u
-  real, dimension(NIMEM_,NJMEMB_, NKMEM_), intent(inout) :: v
-  type(thermo_var_ptrs), intent(inout)                   :: tv
   type(ALE_CS), pointer                                  :: CS
 
   ! Local variables
@@ -285,17 +281,28 @@ subroutine initialize_ALE( param_file, G, h, &
                  trim(remappingSchemesDoc), default=remappingDefaultScheme)
   call initialize_remapping( G%ke, string, CS%remapCS )
 
-  ! Check grid integrity with respect to minimum allowed thickness
+end subroutine initialize_ALE
+
+
+!------------------------------------------------------------------------------
+! Crudely adjust (initial) grid for integrity
+!------------------------------------------------------------------------------
+subroutine adjustGridForIntegrity( CS, G, h )
+!------------------------------------------------------------------------------
+! This routine is typically called (from initialize_MOM in file MOM.F90)
+! before the main time integration loop to initialize the regridding stuff.
+! We read the MOM_input file to register the values of different
+! regridding/remapping parameters.
+!------------------------------------------------------------------------------
+  
+  ! Arguments
+  type(ALE_CS), pointer                                  :: CS
+  type(ocean_grid_type), intent(in)                      :: G
+  real, dimension(NIMEM_,NJMEM_, NKMEM_),  intent(inout) :: h
+
   call check_grid_integrity( CS%regridCS, G, h(:,:,:) )
 
-  ! Perform one regridding/remapping step -- This should NOT modify
-  ! either the initial grid or the initial cell averages. This
-  ! step is therefore not strictly necessary but is included for historical
-  ! reasons when I needed to check whether the combination 'initial 
-  ! conditions - regridding/remapping' was consistently implemented.
-  call ALE_main( G, h, u, v, tv, CS )
-  
-end subroutine initialize_ALE
+end subroutine adjustGridForIntegrity
 
 
 !------------------------------------------------------------------------------
