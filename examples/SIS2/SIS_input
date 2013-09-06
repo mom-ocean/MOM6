@@ -25,6 +25,7 @@ NIGLOBAL = 360                  !    NIGLOBAL and NJGLOBAL are the number of thi
 NJGLOBAL = 210                  !  grid points in the zonal and meridional
                                 !  directions of the physical domain.
 NK = 63                         !    The number of layers.
+NCAT_ICE = 5                    !    The number of sea ice thickness categories.
 NIHALO = 1                      !    NIHALO and NJHALO are the number of halo
 NJHALO = 1                      !  points on each side in the x- and y-directions.
                                 !  If static memory allocation is used, these

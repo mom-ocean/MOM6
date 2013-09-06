@@ -54,8 +54,7 @@
       t_range = 10. /
 
  &ice_model_nml
-      num_part = 6
-      io_layout = 1, 1 /
+           /
 
  &monin_obukhov_nml
             neutral = .true. /
