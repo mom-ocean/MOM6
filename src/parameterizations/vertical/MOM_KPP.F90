@@ -48,7 +48,7 @@ type, public :: KPP_CS ; private
 
   ! Daignostic handles and pointers
   type(diag_ctrl), pointer :: diag => NULL()
-  integer :: id_OBL = -1, id_BulkRi = -1, id_Ws = -1, id_N = -1
+  integer :: id_OBL = -1, id_BulkRi = -1, id_Ws = -1, id_N = -1, id_N2 = -1
   integer :: id_Ut2 = -1, id_BulkUz2 = -1, id_BulkDrho = -1
   integer :: id_uStar = -1, id_buoyFlux = -1
   integer :: id_QminusSW = -1, id_netS = -1
@@ -137,7 +137,9 @@ subroutine KPP_init(paramFile, G, diag, Time, CS)
   CS%id_Ws = register_diag_field('ocean_model', 'KPP_Ws', diag%axesTi, Time, &
       'Turbulent vertical velocity scale for scalars used by [CVmix] KPP', 'm/s')
   CS%id_N = register_diag_field('ocean_model', 'KPP_N', diag%axesTi, Time, &
-      'Brunt-Vaisala frequency used by [CVmix] KPP', '1/s')
+      '(Adjusted) Brunt-Vaisala frequency used by [CVmix] KPP', '1/s')
+  CS%id_N2 = register_diag_field('ocean_model', 'KPP_N2', diag%axesTi, Time, &
+      'Square of Brunt-Vaisala frequency used by [CVmix] KPP', '1/s2')
   CS%id_Ut2 = register_diag_field('ocean_model', 'KPP_Ut2', diag%axesTi, Time, &
       'Unresolved shear turbulence used by [CVmix] KPP', '1/s2')
   CS%id_BulkUz2 = register_diag_field('ocean_model', 'KPP_BulkUz2', diag%axesTL, Time, &
@@ -192,6 +194,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kv, n
   real, dimension( SZI_(G), SZJ_(G), SZK_(G)+1 ) :: sigma ! Sigma coordinate (nondim)
   real, dimension( SZI_(G), SZJ_(G), SZK_(G)+1 ) :: Ws ! Turbulent velocity scale for scalars (m/s)
   real, dimension( SZI_(G), SZJ_(G), SZK_(G)+1 ) :: N ! Brunt-Vaisala frequency (1/s)
+  real, dimension( SZI_(G), SZJ_(G), SZK_(G)+1 ) :: N2 ! Brunt-Vaisala frequency (1/s2)
   real, dimension( SZI_(G), SZJ_(G), SZK_(G) ) :: dRho ! Bulk difference in density (kg/m3)
   real, dimension( SZI_(G), SZJ_(G), SZK_(G) ) :: Uz2 ! Square of bulk difference in resolved velocity (m2/s2)
   real, dimension( SZI_(G), SZJ_(G), SZK_(G)+1 ) :: Ut2 ! Unresolved shear turbulence (1/s2)
@@ -203,7 +206,8 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kv, n
   real, dimension( G%ke+1 ) :: iFaceHeight ! Interface heights referenced to surface (m)
   real, dimension( G%ke+1 ) :: sigmaCoord ! Normalized coordiante, =0 at surface, =1 at z=-OBLd
   real, dimension( G%ke+1 ) :: Ws_1d, Wm_1d ! Profiles of vertical velocity scale for scalars/momentum (m/s)
-  real, dimension( G%ke+1 ) :: N_1d ! Brunt-Vaisala frequency, at interfaces (1/s)
+  real, dimension( G%ke+1 ) :: N2_1d ! Brunt-Vaisala frequency squared, at interfaces (1/s2)
+  real, dimension( G%ke+1 ) :: N_1d ! (Adjusted) Brunt-Vaisala frequency, at interfaces (1/s)
   real, dimension( G%ke+1 ) :: Ut2_1d ! Unresolved shear turbulence, at interfaces (1/s2)
   real, dimension( G%ke ) :: BulkRi_1d ! Bulk Richardson number for each layer
   real, dimension( G%ke ) :: deltaRho ! delta Rho as appears in numerator of Bulk Richardson number
@@ -225,6 +229,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kv, n
   sigma(:,:,:) = 0.
   Ws(:,:,:) = 0.
   N(:,:,:) = 0.
+  N2(:,:,:) = 0.
   Ut2(:,:,:) = 0.
   Uz2(:,:,:) = 0.
   Kt_KPP(:,:,:) = 0.
@@ -273,7 +278,9 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kv, n
         Vk = 0.5 * ( abs( v(i,j,k) - v(i,j,1) ) + abs( v(i,j-1,k) - v(i,j-1,1) ) ) ! delta_k V
         deltaRho(k) = rhoK - rho1
         deltaU2(k) = ( Uk**2 + Vk**2 ) + negligibleShear
-        N_1d(k) = sqrt( GoRho * max(rhoK - rhoKm1, 0.) / (0.5*(h(i,j,km1) + h(i,j,k))+G%H_subroundoff) )
+        N2_1d(k) = GoRho * (rhoK - rhoKm1) / (0.5*(h(i,j,km1) + h(i,j,k))+G%H_subroundoff) ! Can be negative
+        ! N = sqrt(N^2) but because N^2 can be negative, we clip N^2 before taking the square root   ??????
+        N_1d(k) = sqrt( max( N2_1d(k), 0.) )
         BulkRi_1d(k) = ( GoRho * ( -cellHeight(k) ) ) * deltaRho(k) / deltaU2(k)
         ! Notes:
         ! o Using cellHeight includes an extra half layer thickness from surface for all levels   ????
@@ -282,6 +289,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kv, n
         ! Pressure at bottom of level k will become pressure at top of level on next iteration
         pRef = pRef + G%g_Earth * G%Rho0 * h(i,j,k) ! Boussinesq approximation!!!! ?????
       enddo ! k
+      N2_1d( G%ke+1 ) = 0.
       N_1d( G%ke+1 ) = 0.
       Ut2_1d( G%ke+1 ) = 0.
 
@@ -400,11 +408,20 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kv, n
       if (CS%id_BulkRi > 0) BulkRi(i,j,:) = BulkRi_1d(:)
       if (CS%id_Ws > 0) Ws(i,j,:) = Ws_1d(:)
       if (CS%id_N > 0) N(i,j,:) = N_1d(:)
+      if (CS%id_N2 > 0) N2(i,j,:) = N2_1d(:)
       if (CS%id_Ut2 > 0) Ut2(i,j,:) = Ut2_1d(:)
       if (CS%id_BulkUz2 > 0) Uz2(i,j,:) = deltaU2(:)
       if (CS%id_BulkDrho > 0) dRho(i,j,:) = deltaRho(:)
-      if (CS%id_Kt_KPP > 0) Kt_KPP(i,j,:) = Kdiffusivity(:,1) - Kv(i,j,:) ! Heat diffusivity due to KPP  (correct index ???)
-      if (CS%id_Ks_KPP > 0) Ks_KPP(i,j,:) = Kdiffusivity(:,2) - Kv(i,j,:) ! Salt diffusivity due to KPP  (correct index ???)
+      if (CS%id_Kt_KPP > 0) then
+        do k = 1, G%ke
+          if (Kdiffusivity(k,1) /= Kv(i,j,k)) Kt_KPP(i,j,k) = Kdiffusivity(k,1) ! Heat diffusivity due to KPP  (correct index ???)
+        enddo
+      endif
+      if (CS%id_Ks_KPP > 0) then
+        do k = 1, G%ke
+          if (Kdiffusivity(k,2) /= Kv(i,j,k)) Ks_KPP(i,j,k) = Kdiffusivity(k,2) ! Salt diffusivity due to KPP  (correct index ???)
+        enddo
+      endif
 
       if (.not. CS%passiveMode) then
         Kv(i,j,:) = Kdiffusivity(:,2)
@@ -430,6 +447,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kv, n
   if (CS%id_BulkRi > 0) call post_data(CS%id_BulkRi, BulkRi, CS%diag)
   if (CS%id_Ws > 0) call post_data(CS%id_Ws, Ws, CS%diag)
   if (CS%id_N > 0) call post_data(CS%id_N, N, CS%diag)
+  if (CS%id_N2 > 0) call post_data(CS%id_N2, N2, CS%diag)
   if (CS%id_Ut2 > 0) call post_data(CS%id_Ut2, Ut2, CS%diag)
   if (CS%id_BulkUz2 > 0) call post_data(CS%id_BulkUz2, Uz2, CS%diag)
   if (CS%id_BulkDrho > 0) call post_data(CS%id_BulkDrho, dRho, CS%diag)
@@ -451,7 +469,7 @@ subroutine KPP_applyNonLocalTransport(CS, G, h, nonLocalTrans, surfFlux, dt, sca
   type(ocean_grid_type),                        intent(in)    :: G        ! Ocean grid
   real, dimension(NIMEM_,NJMEM_,NKMEM_),        intent(in)    :: h        ! Layer/level thicknesses (units of H)
   real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(in)    :: nonLocalTrans ! Non-local transport (m/s * scalar)
-  real, dimension(NIMEM_,NJMEM_),               intent(in)    :: surfFlux ! Buoyancy flux (m2/s3)
+  real, dimension(NIMEM_,NJMEM_),               intent(in)    :: surfFlux ! Surface source of scalar (m/s * scalar)
   real,                                         intent(in)    :: dt       ! Time-step (s)
   real, dimension(NIMEM_,NJMEM_,NKMEM_),        intent(inout) :: scalar   ! Scalar or temperature (scalar units)
   logical, optional,                            intent(in)    :: isHeat   ! Inidicates scalar is heat for diagnostics

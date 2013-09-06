@@ -1,13 +1,13 @@
 "MOM Experiment"
 1 1 1 0 0 0
-"prog",                2,"hours",1,"days","Time"
+"prog",                1,"days",1,"days","Time"
 "prog_z",              1,"days",1,"days","Time"
 "surffluxes",          1,"days",1,"days","Time"
-#"ave_prog_%4yr_%3dy", 1,"days",1,"days","Time",365,"days"
-#"mom_%4yr_%3dy",      5,"days",1,"days","Time",10,"days"
-#"bt_mom_%4yr_%3dy",   5,"days",1,"days","Time",10,"days"
-"visc",                2,"hours",1,"days","Time",
-#"energy_%4yr_%3dy",   5,"days",1,"days","Time",10,"days"
+"ave_prog",            1,"days",1,"days","Time",
+#"mom",                5,"days",1,"days","Time",
+#"bt_mom",             5,"days",1,"days","Time",
+"visc",                1,"days",1,"days","Time",
+#"energy",             5,"days",1,"days","Time",
 
 
 #This is the field section of the diag_table.
@@ -24,17 +24,17 @@
 #"ocean_model","Rml","Rml","prog","all",.false.,"none",2
 "ocean_model","h_ML","h_ML","prog","all",.false.,"none",2
 
-#"ocean_model","RV","RV","prog_%4yr_%3dy","all",.false.,"none",2
-#"ocean_model","PV","PV","prog_%4yr_%3dy","all",.false.,"none",2
-#"ocean_model","e_D","e_D","prog_%4yr_%3dy","all",.false.,"none",2
+#"ocean_model","RV","RV","prog","all",.false.,"none",2
+#"ocean_model","PV","PV","prog","all",.false.,"none",2
+#"ocean_model","e_D","e_D","prog","all",.false.,"none",2
 
-#"ocean_model","u","u","ave_prog_%4yr_%3dy","all",.true.,"none",2
-#"ocean_model","v","v","ave_prog_%4yr_%3dy","all",.true.,"none",2
-#"ocean_model","h","h","ave_prog_%4yr_%3dy","all",.true.,"none",1
-#"ocean_model","e","e","ave_prog_%4yr_%3dy","all",.true.,"none",2
-#"ocean_model","temp","temp","ave_prog_%4yr_%3dy","all",.true.,"none",2
-#"ocean_model","salt","salt","ave_prog_%4yr_%3dy","all",.true.,"none",2
-#"ocean_model","Rml","Rml","ave_prog_%4yr_%3dy","all",.true.,"none",2
+"ocean_model","u","u","ave_prog","all",.true.,"none",2
+"ocean_model","v","v","ave_prog","all",.true.,"none",2
+#"ocean_model","h","h","ave_prog","all",.true.,"none",1
+"ocean_model","e","e","ave_prog","all",.true.,"none",2
+"ocean_model","temp","temp","ave_prog","all",.true.,"none",2
+"ocean_model","salt","salt","ave_prog","all",.true.,"none",2
+#"ocean_model","Rml","Rml","ave_prog","all",.true.,"none",2
 
 # Z level output
 #================
@@ -45,82 +45,82 @@
 
 # Auxilary Tracers:
 #==================
-#"ocean_model","vintage","vintage","prog_%4yr_%3dy","all",.false.,"none",2
-#"ocean_model","age","age","prog_%4yr_%3dy","all",.false.,"none",2
+#"ocean_model","vintage","vintage","prog","all",.false.,"none",2
+#"ocean_model","age","age","prog","all",.false.,"none",2
 
 # Continuity Equation Terms:
 #===========================
-#"ocean_model","dhdt","dhdt","cont_%4yr_%3dy","all",.true.,"none",2
+#"ocean_model","dhdt","dhdt","cont","all",.true.,"none",2
 "ocean_model","wd","wd","prog","all",.false.,"none",2
-#"ocean_model","uh","uh","cont_%4yr_%3dy","all",.true.,"none",2
-#"ocean_model","vh","vh","cont_%4yr_%3dy","all",.true.,"none",2
-#"ocean_model","uhGM","uhGM","cont_%4yr_%3dy","all",.true.,"none",2
-#"ocean_model","vhGM","vhGM","cont_%4yr_%3dy","all",.true.,"none",2
-#"ocean_model","uhbt","uhbt","cont_%4yr_%3dy","all",.true.,"none",2
-#"ocean_model","vhbt","vhbt","cont_%4yr_%3dy","all",.true.,"none",2
-#"ocean_model","h_rho","h_rho","cont_%4yr_%3dy","all",.true.,"none",2
-#"ocean_model","uh_rho","uh_rho","cont_%4yr_%3dy","all",.true.,"none",2
-#"ocean_model","vh_rho","vh_rho","cont_%4yr_%3dy","all",.true.,"none",2
-#"ocean_model","uhGM_rho","uhGM_rho","cont_%4yr_%3dy","all",.true.,"none",2
-#"ocean_model","vhGM_rho","vhGM_rho","cont_%4yr_%3dy","all",.true.,"none",2
-#"ocean_model","KH_u","KH_u","cont_%4yr_%3dy","all",.true.,"none",2
-#"ocean_model","KH_v","KH_v","cont_%4yr_%3dy","all",.true.,"none",2
-#"ocean_model","GMwork","GMwork","cont_%4yr_%3dy","all",.true.,"none",2
+#"ocean_model","uh","uh","cont","all",.true.,"none",2
+#"ocean_model","vh","vh","cont","all",.true.,"none",2
+#"ocean_model","uhGM","uhGM","cont","all",.true.,"none",2
+#"ocean_model","vhGM","vhGM","cont","all",.true.,"none",2
+#"ocean_model","uhbt","uhbt","cont","all",.true.,"none",2
+#"ocean_model","vhbt","vhbt","cont","all",.true.,"none",2
+#"ocean_model","h_rho","h_rho","cont","all",.true.,"none",2
+#"ocean_model","uh_rho","uh_rho","cont","all",.true.,"none",2
+#"ocean_model","vh_rho","vh_rho","cont","all",.true.,"none",2
+#"ocean_model","uhGM_rho","uhGM_rho","cont","all",.true.,"none",2
+#"ocean_model","vhGM_rho","vhGM_rho","cont","all",.true.,"none",2
+#"ocean_model","KH_u","KH_u","cont","all",.true.,"none",2
+#"ocean_model","KH_v","KH_v","cont","all",.true.,"none",2
+#"ocean_model","GMwork","GMwork","cont","all",.true.,"none",2
 
 # Continuity Equation Terms In Pure Potential Density Coordiantes:
 #=================================================================
-#"ocean_model","h_rho","h_rho","cont_%4yr_%3dy","all",.true.,"none",2
-#"ocean_model","uh_rho","uh_rho","cont_%4yr_%3dy","all",.true.,"none",2
-#"ocean_model","vh_rho","vh_rho","cont_%4yr_%3dy","all",.true.,"none",2
-#"ocean_model","uhGM_rho","uhGM_rho","cont_%4yr_%3dy","all",.true.,"none",2
-#"ocean_model","vhGM_rho","vhGM_rho","cont_%4yr_%3dy","all",.true.,"none",2
+#"ocean_model","h_rho","h_rho","cont","all",.true.,"none",2
+#"ocean_model","uh_rho","uh_rho","cont","all",.true.,"none",2
+#"ocean_model","vh_rho","vh_rho","cont","all",.true.,"none",2
+#"ocean_model","uhGM_rho","uhGM_rho","cont","all",.true.,"none",2
+#"ocean_model","vhGM_rho","vhGM_rho","cont","all",.true.,"none",2
 
 #
 # Tracer Fluxes:
 #==================
-#"ocean_model","T_adx",  "T_adx",  "ave_prog_%4yr_%3dy","all",.true.,"none",2
-#"ocean_model","T_ady",  "T_ady",  "ave_prog_%4yr_%3dy","all",.true.,"none",2
-#"ocean_model","T_diffx","T_diffx","ave_prog_%4yr_%3dy","all",.true.,"none",2
-#"ocean_model","T_diffy","T_diffy","ave_prog_%4yr_%3dy","all",.true.,"none",2
-#"ocean_model","S_adx",  "S_adx",  "ave_prog_%4yr_%3dy","all",.true.,"none",2
-#"ocean_model","S_ady",  "S_ady",  "ave_prog_%4yr_%3dy","all",.true.,"none",2
-#"ocean_model","S_diffx","S_diffx","ave_prog_%4yr_%3dy","all",.true.,"none",2
-#"ocean_model","S_diffy","S_diffy","ave_prog_%4yr_%3dy","all",.true.,"none",2
+#"ocean_model","T_adx",  "T_adx",  "ave_prog","all",.true.,"none",2
+#"ocean_model","T_ady",  "T_ady",  "ave_prog","all",.true.,"none",2
+#"ocean_model","T_diffx","T_diffx","ave_prog","all",.true.,"none",2
+#"ocean_model","T_diffy","T_diffy","ave_prog","all",.true.,"none",2
+#"ocean_model","S_adx",  "S_adx",  "ave_prog","all",.true.,"none",2
+#"ocean_model","S_ady",  "S_ady",  "ave_prog","all",.true.,"none",2
+#"ocean_model","S_diffx","S_diffx","ave_prog","all",.true.,"none",2
+#"ocean_model","S_diffy","S_diffy","ave_prog","all",.true.,"none",2
 
 
 # Momentum Balance Terms:
 #=======================
-#"ocean_model","dudt","dudt","mom_%4yr_%3dy","all",.true.,"none",2
-#"ocean_model","dvdt","dvdt","mom_%4yr_%3dy","all",.true.,"none",2
-#"ocean_model","CAu","CAu","mom_%4yr_%3dy","all",.true.,"none",2
-#"ocean_model","CAv","CAv","mom_%4yr_%3dy","all",.true.,"none",2
-#"ocean_model","PFu","PFu","mom_%4yr_%3dy","all",.true.,"none",2
-#"ocean_model","PFv","PFv","mom_%4yr_%3dy","all",.true.,"none",2
-#"ocean_model","du_dt_visc","du_dt_visc","mom_%4yr_%3dy","all",.true.,"none",2
-#"ocean_model","dv_dt_visc","dv_dt_visc","mom_%4yr_%3dy","all",.true.,"none",2
-#"ocean_model","diffu","diffu","mom_%4yr_%3dy","all",.true.,"none",2
-#"ocean_model","diffv","diffv","mom_%4yr_%3dy","all",.true.,"none",2
-#"ocean_model","dudt_dia","dudt_dia","mom_%4yr_%3dy","all",.true.,"none",2
-#"ocean_model","dvdt_dia","dvdt_dia","mom_%4yr_%3dy","all",.true.,"none",2
+#"ocean_model","dudt","dudt","mom","all",.true.,"none",2
+#"ocean_model","dvdt","dvdt","mom","all",.true.,"none",2
+#"ocean_model","CAu","CAu","mom","all",.true.,"none",2
+#"ocean_model","CAv","CAv","mom","all",.true.,"none",2
+#"ocean_model","PFu","PFu","mom","all",.true.,"none",2
+#"ocean_model","PFv","PFv","mom","all",.true.,"none",2
+#"ocean_model","du_dt_visc","du_dt_visc","mom","all",.true.,"none",2
+#"ocean_model","dv_dt_visc","dv_dt_visc","mom","all",.true.,"none",2
+#"ocean_model","diffu","diffu","mom","all",.true.,"none",2
+#"ocean_model","diffv","diffv","mom","all",.true.,"none",2
+#"ocean_model","dudt_dia","dudt_dia","mom","all",.true.,"none",2
+#"ocean_model","dvdt_dia","dvdt_dia","mom","all",.true.,"none",2
 # Subterms that should not be added to a closed budget.
-#"ocean_model","gKEu","gKEu","mom_%4yr_%3dy","all",.true.,"none",2
-#"ocean_model","gKEv","gKEv","mom_%4yr_%3dy","all",.true.,"none",2
-#"ocean_model","rvxu","rvxu","mom_%4yr_%3dy","all",.true.,"none",2
-#"ocean_model","rvxv","rvxv","mom_%4yr_%3dy","all",.true.,"none",2
-#"ocean_model","PFu_bc","PFu_bc","mom_%4yr_%3dy","all",.true.,"none",2
-#"ocean_model","PFv_bc","PFv_bc","mom_%4yr_%3dy","all",.true.,"none",2
+#"ocean_model","gKEu","gKEu","mom","all",.true.,"none",2
+#"ocean_model","gKEv","gKEv","mom","all",.true.,"none",2
+#"ocean_model","rvxu","rvxu","mom","all",.true.,"none",2
+#"ocean_model","rvxv","rvxv","mom","all",.true.,"none",2
+#"ocean_model","PFu_bc","PFu_bc","mom","all",.true.,"none",2
+#"ocean_model","PFv_bc","PFv_bc","mom","all",.true.,"none",2
 
 # Barotropic Momentum Balance Terms:
 # (only available with split time stepping.)
 #===========================================
-#"ocean_model","PFuBT","PFuBT","bt_mom_%4yr_%3dy","all",.true.,"none",2
-#"ocean_model","PFvBT","PFvBT","bt_mom_%4yr_%3dy","all",.true.,"none",2
-#"ocean_model","CoruBT","CoruBT","bt_mom_%4yr_%3dy","all",.true.,"none",2
-#"ocean_model","CorvBT","CorvBT","bt_mom_%4yr_%3dy","all",.true.,"none",2
-#"ocean_model","ubtforce","ubtforce","bt_mom_%4yr_%3dy","all",.true.,"none",2
-#"ocean_model","vbtforce","vbtforce","bt_mom_%4yr_%3dy","all",.true.,"none",2
-#"ocean_model","u_accel_bt","u_accel_bt","bt_mom_%4yr_%3dy","all",.true.,"none",2
-#"ocean_model","v_accel_bt","v_accel_bt","bt_mom_%4yr_%3dy","all",.true.,"none",2
+#"ocean_model","PFuBT","PFuBT","bt_mom","all",.true.,"none",2
+#"ocean_model","PFvBT","PFvBT","bt_mom","all",.true.,"none",2
+#"ocean_model","CoruBT","CoruBT","bt_mom","all",.true.,"none",2
+#"ocean_model","CorvBT","CorvBT","bt_mom","all",.true.,"none",2
+#"ocean_model","ubtforce","ubtforce","bt_mom","all",.true.,"none",2
+#"ocean_model","vbtforce","vbtforce","bt_mom","all",.true.,"none",2
+#"ocean_model","u_accel_bt","u_accel_bt","bt_mom","all",.true.,"none",2
+#"ocean_model","v_accel_bt","v_accel_bt","bt_mom","all",.true.,"none",2
 #
 # Viscosities and diffusivities:
 #===============================
@@ -146,6 +146,7 @@
 "ocean_model","KPP_BulkRi","KPP_BulkRi","visc","all",.true.,"none",2
 "ocean_model","KPP_Ws","KPP_Ws","visc","all",.true.,"none",2
 "ocean_model","KPP_N","KPP_N","visc","all",.true.,"none",2
+"ocean_model","KPP_N2","KPP_N2","visc","all",.true.,"none",2
 "ocean_model","KPP_Ut2","KPP_Ut2","visc","all",.true.,"none",2
 "ocean_model","KPP_BulkUz2","KPP_BulkUz2","visc","all",.true.,"none",2
 "ocean_model","KPP_BulkDrho","KPP_BulkDrho","visc","all",.true.,"none",2
@@ -159,14 +160,14 @@
 #
 # Kinetic Energy Balance Terms:
 #=============================
-#"ocean_model","KE","KE","energy_%4yr_%3dy","all",.true.,"none",2
-#"ocean_model","dKE_dt","dKE_dt","energy_%4yr_%3dy","all",.true.,"none",2
-#"ocean_model","PE_to_KE","PE_to_KE","energy_%4yr_%3dy","all",.true.,"none",2
-#"ocean_model","KE_Coradv","KE_Coradv","energy_%4yr_%3dy","all",.true.,"none",2
-#"ocean_model","KE_adv","KE_adv","energy_%4yr_%3dy","all",.true.,"none",2
-#"ocean_model","KE_visc","KE_visc","energy_%4yr_%3dy","all",.true.,"none",2
-#"ocean_model","KE_horvisc","KE_horvisc","energy_%4yr_%3dy","all",.true.,"none",2
-#"ocean_model","KE_dia","KE_dia","energy_%4yr_%3dy","all",.true.,"none",2
+#"ocean_model","KE","KE","energy","all",.true.,"none",2
+#"ocean_model","dKE_dt","dKE_dt","energy","all",.true.,"none",2
+#"ocean_model","PE_to_KE","PE_to_KE","energy","all",.true.,"none",2
+#"ocean_model","KE_Coradv","KE_Coradv","energy","all",.true.,"none",2
+#"ocean_model","KE_adv","KE_adv","energy","all",.true.,"none",2
+#"ocean_model","KE_visc","KE_visc","energy","all",.true.,"none",2
+#"ocean_model","KE_horvisc","KE_horvisc","energy","all",.true.,"none",2
+#"ocean_model","KE_dia","KE_dia","energy","all",.true.,"none",2
 
 # Surface Forcing:
 #=================
