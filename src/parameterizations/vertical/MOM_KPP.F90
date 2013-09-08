@@ -305,6 +305,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kv, n
 ! endif
 
       OBLdepth_0d = 1.e10 ! Silly initial value
+      lastOBLdepth = OBLdepth_0d
       OBLiterater: do iteration = 0, maxIterations ! Iterate of the estimates of Bulk Ri, Ws and OBL depth
 
         ! Compute the OBL thickness
