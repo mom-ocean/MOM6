@@ -60,7 +60,7 @@ type, public :: KPP_CS ; private
 end type KPP_CS
 
 ! Module data used for debugging only
-logical, parameter :: verbose = .True.
+logical, parameter :: verbose = .False.
 #define __DO_SAFETY_CHECKS__
 
 contains
@@ -170,7 +170,7 @@ subroutine KPP_init(paramFile, G, diag, Time, CS)
 end subroutine KPP_init
 
 
-subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kv, nonLocalTransHeat, nonLocalTransScalar)
+subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, Ks, nonLocalTransHeat, nonLocalTransScalar)
 ! Calculates diffusivity and non-local transport for KPP parameterization 
 
 ! Arguments
@@ -184,8 +184,10 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kv, n
   type(EOS_type),                         pointer       :: EOS   ! Equation of state
   real, dimension(NIMEM_,NJMEM_),         intent(in)    :: uStar ! Piston velocity (m/s)
   real, dimension(NIMEM_,NJMEM_),         intent(in)    :: buoyFlux ! Buoyancy flux (m2/s3)
-  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(inout) :: Kv ! (in) Vertical diffusivity in interior (m2/s)
-                                                                 ! (out) Vertical diffusivity including KPP (m2/s)
+  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(inout) :: Kt ! (in) Vertical diffusivity of heat in interior (m2/s)
+                                                                    ! (out) Vertical diffusivity including KPP (m2/s)
+  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(inout) :: Ks ! (in) Vertical diffusivity of salt in interior (m2/s)
+                                                                    ! (out) Vertical diffusivity including KPP (m2/s)
   real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(inout) :: nonLocalTransHeat, nonLocalTransScalar ! Temp/scalar non-local transport (m/s)
 
 ! Diagnostics arrays                   should these become allocatables ??????????
@@ -246,7 +248,8 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kv, n
     call hchksum(v, "KPP in: v",G,haloshift=0)
     call hchksum(uStar, "KPP in: uStar",G,haloshift=0)
     call hchksum(buoyFlux, "KPP in: buoyFlux",G,haloshift=0)
-    call hchksum(Kv, "KPP in: Kv",G,haloshift=0)
+    call hchksum(Kt, "KPP in: Kt",G,haloshift=0)
+    call hchksum(Ks, "KPP in: Ks",G,haloshift=0)
   endif
 #endif
 
@@ -383,9 +386,9 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kv, n
       endif
 
       ! Now call KPP proper to obtain BL diffusivities, viscosities and non-local transports
-      Kdiffusivity(:,1) = Kv(i,j,:) ! Diffusivty for heat ????
-      Kdiffusivity(:,2) = Kv(i,j,:) ! Diffusivity for salt ????
-      Kviscosity(:) = Kv(i,j,:) ! Viscosity    ???????
+      Kdiffusivity(:,1) = Kt(i,j,:) ! Diffusivty for heat
+      Kdiffusivity(:,2) = Ks(i,j,:) ! Diffusivity for salt
+      Kviscosity(:) = Ks(i,j,:) ! Viscosity    ???????
       call cvmix_coeffs_kpp(Kdiffusivity, Kviscosity, iFaceHeight, cellHeight, OBLdepth_0d, &
                             kOBL, nonLocalTrans, surfFricVel, surfBuoyFlux,                 &
                             CVmix_kpp_params_user=CS%KPP_params )
@@ -395,7 +398,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kv, n
 !       write(0,*) 'u*,buoyFlux',surfFricVel, surfBuoyFlux
 !       write(0,*) 'OBLd,kOBL',OBLdepth_0d, kOBL
 !       do k = 1, G%ke+1
-!         write(0,*) 'k,zw,Kin,Kout',k,iFaceHeight(k),Kv(i,j,k),Kdiffusivity(k,2)
+!         write(0,*) 'k,zw,Kin,Kout',k,iFaceHeight(k),Ks(i,j,k),Kdiffusivity(k,2)
 !       enddo
 !       call MOM_error(FATAL, 'MOM_KPP, KPP_calculate: '// &
 !             'NaN detected on return from KPP!!!')
@@ -415,17 +418,18 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kv, n
       if (CS%id_BulkDrho > 0) dRho(i,j,:) = deltaRho(:)
       if (CS%id_Kt_KPP > 0) then
         do k = 1, G%ke
-          if (Kdiffusivity(k,1) /= Kv(i,j,k)) Kt_KPP(i,j,k) = Kdiffusivity(k,1) ! Heat diffusivity due to KPP  (correct index ???)
+          if (Kdiffusivity(k,1) /= Kt(i,j,k)) Kt_KPP(i,j,k) = Kdiffusivity(k,1) ! Heat diffusivity due to KPP  (correct index ???)
         enddo
       endif
       if (CS%id_Ks_KPP > 0) then
         do k = 1, G%ke
-          if (Kdiffusivity(k,2) /= Kv(i,j,k)) Ks_KPP(i,j,k) = Kdiffusivity(k,2) ! Salt diffusivity due to KPP  (correct index ???)
+          if (Kdiffusivity(k,2) /= Ks(i,j,k)) Ks_KPP(i,j,k) = Kdiffusivity(k,2) ! Salt diffusivity due to KPP  (correct index ???)
         enddo
       endif
 
       if (.not. CS%passiveMode) then
-        Kv(i,j,:) = Kdiffusivity(:,2)
+        Kt(i,j,:) = Kdiffusivity(:,1)
+        Ks(i,j,:) = Kdiffusivity(:,2)
       endif
     enddo ! i
   enddo ! j
@@ -439,7 +443,8 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kv, n
 
 #ifdef __DO_SAFETY_CHECKS__
   if (CS%debug) then
-    call hchksum(Kv, "KPP out: Kv",G,haloshift=0)
+    call hchksum(Kt, "KPP out: Kt",G,haloshift=0)
+    call hchksum(Ks, "KPP out: Ks",G,haloshift=0)
   endif
 #endif
 

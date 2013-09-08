@@ -239,6 +239,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
              ! near the boundaries, in units of m or kg m-2.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), target :: &
     Kd_int, &  ! The diapycnal diffusivity of interfaces, in m2 s-1.
+    Kd_heat, &  ! The diapycnal diffusivity of heat, in m2 s-1.
+    Kd_salt, &  ! The diapycnal diffusivity of heat, in m2 s-1.
     Tdif_flx, &! The diffusive diapycnal heat flux across interfaces, in K m s-1.
     Tadv_flx, &! The advective diapycnal heat flux across interfaces, in K m s-1.
     Sdif_flx, &! The diffusive diapycnal salt flux across interfaces, in PSU m s-1.
@@ -443,8 +445,18 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     ! and requires the interior diffusivity to be complete so that KPP can match profiles.
     ! Thus, KPP is the last contribution to Kd.
     ! Changes: Kd_int. Sets: KPP_NLTheat, KPP_NLTscalar
+    Kd_salt(:,:,:) = Kd_int(:,:,:) !- visc%Kd_turb(:,:,:) )  ! Temporarily remove part due to Kappa-shear
+  !                  + visc%Kd_extra_S(:,:,:)
+    Kd_heat(:,:,:) = Kd_int(:,:,:) !- visc%Kd_turb(:,:,:) )  ! Temporarily remove part due to Kappa-shear
+  !                  + visc%Kd_extra_T(:,:,:)
     call KPP_calculate(CS%KPP_CSp, G, h, tv%T, tv%S, u, v, tv%eqn_of_state, &
-           fluxes%ustar, buoyancyFlux, Kd_int, KPP_NLTheat, KPP_NLTscalar)
+           fluxes%ustar, buoyancyFlux, Kd_heat, Kd_salt, KPP_NLTheat, KPP_NLTscalar)
+  ! Kd_salt(:,:,:) = ( Kd_salt(:,:,:) + visc%Kd_turb(:,:,:) )  ! Put back part due to Kappa-shear
+  ! Kd_heat(:,:,:) = ( Kd_heat(:,:,:) + visc%Kd_turb(:,:,:) )  ! Put back part due to Kappa-shear
+    Kd_int(:,:,:) = Kd_salt(:,:,:)
+  ! Kd_int(:,:,:) = min( Kd_salt(:,:,:),  Kd_heat(:,:,:) )
+  ! visc%Kd_extra_S(:,:,:) = Kd_salt(:,:,:) - Kd_int(:,:,:)
+  ! visc%Kd_extra_T(:,:,:) = Kd_heat(:,:,:) - Kd_int(:,:,:)
     call cpu_clock_end(id_clock_kpp)
   endif
 
