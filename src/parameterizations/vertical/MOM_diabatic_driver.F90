@@ -178,6 +178,7 @@ integer :: id_clock_entrain, id_clock_mixedlayer, id_clock_set_diffusivity
 integer :: id_clock_uv_at_h, id_clock_frazil, id_clock_kappa_shear
 integer :: id_clock_tracers, id_clock_tridiag, id_clock_pass, id_clock_sponge
 integer :: id_clock_geothermal, id_clock_differential_diff, id_clock_remap
+integer :: id_clock_kpp
 
 contains
 
@@ -350,10 +351,12 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
 
       call cpu_clock_begin(id_clock_mixedlayer)
       if (CS%ML_mix_first < 1.0) then
+        ! Changes: h, tv%T, tv%S, eaml and ebml  (G is also inout???)
         call bulkmixedlayer(h, u_h, v_h, tv, fluxes, dt*CS%ML_mix_first, &
                             eaml,ebml, G, CS%bulkmixedlayer_CSp, CS%optics, dt, &
                             last_call=.false.)
       else
+        ! Changes: h, tv%T, tv%S, eaml and ebml  (G is also inout???)
         call bulkmixedlayer(h, u_h, v_h, tv, fluxes, dt, eaml, ebml, &
                         G, CS%bulkmixedlayer_CSp, CS%optics, dt, last_call=.true.)
       endif
@@ -401,6 +404,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     endif
 
     call cpu_clock_begin(id_clock_kappa_shear)
+    ! Changes: visc%Kd_turb, visc%TKE_turb (not clear that TKE_turb is used as input ????)
     call calculate_kappa_shear(u_h, v_h, h, tv, fluxes%p_surf, visc%Kd_turb, visc%TKE_turb, &
                                dt, G, CS%kappa_shear_CSp)
     call cpu_clock_end(id_clock_kappa_shear)
@@ -413,6 +417,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     endif
   endif
 
+  ! Why is this block here? -AJA  ?????
   if (CS%use_int_tides) then
     call set_int_tide_input(u, v, h, tv, fluxes, CS%int_tide_input, dt, G, &
                             CS%int_tide_input_CSp)
@@ -423,22 +428,35 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   endif
 
   call cpu_clock_begin(id_clock_set_diffusivity)
+  ! Sets: Kd, Kd_int, visc%Kd_extra_T, visc%Kd_extra_S
   call set_diffusivity(u, v, h, tv, fluxes, CS%optics, visc, dt, G, CS%set_diff_CSp, Kd, Kd_int)
+  call cpu_clock_end(id_clock_set_diffusivity)
+
   if (CS%useKPP) then
+    call cpu_clock_begin(id_clock_kpp)
     ! KPP needs the surface buoyancy flux but does not update state variables.
     ! We could make this call higher up to avoid a repeat unpacking of the surface fluxes.  ????
+    ! Sets: buoyancyFlux, netHeatMinusSW, netSalt
     call calculateBuoyancyFlux2d(G, fluxes, CS%optics, h, tv%T, tv%S, tv, buoyancyFlux, &
               netHeatMinusSW, netSalt)
     ! The KPP scheme calculates the mixed layer diffusivities and non-local transport
     ! and requires the interior diffusivity to be complete so that KPP can match profiles.
     ! Thus, KPP is the last contribution to Kd.
+    ! Changes: Kd_int. Sets: KPP_NLTheat, KPP_NLTscalar
     call KPP_calculate(CS%KPP_CSp, G, h, tv%T, tv%S, u, v, tv%eqn_of_state, &
            fluxes%ustar, buoyancyFlux, Kd_int, KPP_NLTheat, KPP_NLTscalar)
+    call cpu_clock_end(id_clock_kpp)
+  endif
+
+  if (CS%useKPP) then
+    call cpu_clock_begin(id_clock_kpp)
     ! Apply non-local transport of heat and salt
+    ! Changes: tv%T, tv%S
     call KPP_applyNonLocalTransport(CS%KPP_CSp, G, h, KPP_NLTheat, netHeatMinusSW, dt, tv%T, isHeat=.true.)
     call KPP_applyNonLocalTransport(CS%KPP_CSp, G, h, KPP_NLTscalar, netSalt, dt, tv%S, isSalt=.true.)
+    call cpu_clock_end(id_clock_kpp)
   endif
-  call cpu_clock_end(id_clock_set_diffusivity)
+
   if (CS%debug) then
     call MOM_state_chksum("after set_diffusivity ", u(:,:,:), v(:,:,:), h(:,:,:), G)
     call MOM_forcing_chksum("after set_diffusivity ", fluxes, G, haloshift=0)
@@ -451,13 +469,15 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   if (associated(visc%Kd_extra_T) .and. associated(visc%Kd_extra_S) .and. &
       associated(T)) then
     call cpu_clock_begin(id_clock_differential_diff)
+    ! Changes: tv%T, tv%S
     call differential_diffuse_T_S(h, tv, visc, dt, G)
     call cpu_clock_end(id_clock_differential_diff)
   endif
 
-  ! If using the ALE algorithm, set ea=eb=Kd on interfaces for
+  ! This block sets ea, eb from Kd or Kd_int.
+  !   If using the ALE algorithm, set ea=eb=Kd_int on interfaces for
   ! use in the tri-diagonal solver.
-  ! Otherwise, call entrainment_diffusive() which sets ea and eb
+  !   Otherwise, call entrainment_diffusive() which sets ea and eb
   ! based on KD and target densities (ie. does remapping as well).
   if (CS%useALEalgorithm) then
     do j=js,je ; do i=is,ie
@@ -465,24 +485,17 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     enddo ; enddo
     do k=2,nz ; do j=js,je ; do i=is,ie
       hval=1.0/(h_neglect + 0.5*(h(i,j,k-1) + h(i,j,k)))
-      ea(i,j,k) = (G%m_to_H**2) * dt * hval * Kd_int(i,j,k) 
-    ! Alternative to use Kd rather than Kd_int:
-    ! ea(i,j,k) = (G%m_to_H**2) * dt * hval * &
-    !      0.5*(h(i,j,k)*Kd(i,j,k-1)+h(i,j,k-1)*Kd(i,j,k))*hval
+      ea(i,j,k) = (G%m_to_H**2) * dt * hval * Kd_int(i,j,k)
       eb(i,j,k-1) = ea(i,j,k)
     enddo ; enddo ; enddo
     do j=js,je ; do i=is,ie
       eb(i,j,nz) = 0.
     enddo ; enddo
-!   This block could replace the more general block below ... - AJA ?
-!   do k=1,nz ; do j=js,je ; do i=is,ie
-!     hold(i,j,k) = h(i,j,k)
-!     if (h(i,j,k) <= 0.0) h(i,j,k) = G%Angstrom
-!   enddo ; enddo ; enddo
   else ! .not. CS%useALEalgorithm
     ! If not useing ALE, then calculate layer entrainments/detrainments from
     ! diffusivities and differences between layer and target densities
     call cpu_clock_begin(id_clock_entrain)
+    ! Sets: ea, eb. Changes: kb
     call Entrainment_diffusive(u, v, h, tv, fluxes, dt, G, CS%entrain_diffusive_CSp, &
                                ea, eb, kb, Kd_Lay=Kd, Kd_int=Kd_int)
     call cpu_clock_end(id_clock_entrain)
@@ -499,7 +512,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   ! Apply forcing when using the ALE algorithm
   if (CS%useALEalgorithm) then
     call cpu_clock_begin(id_clock_remap)
-    call applyBoundaryFluxes(G, dt, fluxes, CS%optics, ea, eb, h, tv)
+    ! Changes: ea(:,:,1), h, tv%T and tv%S.
+    call applyBoundaryFluxes(G, dt, fluxes, CS%optics, ea, h, tv)
     call cpu_clock_end(id_clock_remap)
   endif
   
@@ -541,9 +555,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
       ! differently from other tracers to insure that massless layers that
       ! are lighter than the mixed layer have temperatures and salinities
       ! that correspond to their prescribed densities.
-      do j=js,je
-
-        if (CS%massless_match_targets) then
+      if (CS%massless_match_targets) then
+        do j=js,je
           do i=is,ie
             h_tr = hold(i,j,1) + h_neglect
             b1(i) = 1.0 / (h_tr + eb(i,j,1))
@@ -604,31 +617,13 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
             T(i,j,k) = T(i,j,k) + c1(i,k+1)*T(i,j,k+1)
             S(i,j,k) = S(i,j,k) + c1(i,k+1)*S(i,j,k+1)
           enddo ; enddo
-        else
-          ! This simpler form allows T & S to be too dense for the layers
-          ! between the buffer layers and the interior.
-          do i=is,ie
-            h_tr = hold(i,j,1) + h_neglect
-            b1(i) = 1.0 / (h_tr + eb(i,j,1))
-            d1(i) = h_tr * b1(i)
-            T(i,j,1) = b1(i) * (h_tr*T(i,j,1))
-            S(i,j,1) = b1(i) * (h_tr*S(i,j,1))
-          enddo
-          do k=2,nz ; do i=is,ie
-            c1(i,k) = eb(i,j,k-1) * b1(i)
-            h_tr = hold(i,j,k) + h_neglect
-            b_denom_1 = h_tr + d1(i)*ea(i,j,k)
-            b1(i) = 1.0 / (b_denom_1 + eb(i,j,k))
-            d1(i) = b_denom_1 * b1(i)
-            T(i,j,k) = b1(i) * (h_tr*T(i,j,k) + ea(i,j,k)*T(i,j,k-1))
-            S(i,j,k) = b1(i) * (h_tr*S(i,j,k) + ea(i,j,k)*S(i,j,k-1))
-          enddo ; enddo
-          do k=nz-1,1,-1 ; do i=is,ie
-            T(i,j,k) = T(i,j,k) + c1(i,k+1)*T(i,j,k+1)
-            S(i,j,k) = S(i,j,k) + c1(i,k+1)*S(i,j,k+1)
-          enddo ; enddo
-        endif
-      enddo ! end of j loop
+        enddo ! end of j loop
+      else ! .not. massless_match_targets
+        ! This simpler form allows T & S to be too dense for the layers
+        ! between the buffer layers and the interior.
+        ! Changes: T, S
+        call triDiagTS(G, is, ie, js, je, hold, ea, eb, T, S)
+      endif ! massless_match_targets
       call cpu_clock_end(id_clock_tridiag)
     endif ! end of ASSOCIATED(T)
 
@@ -656,6 +651,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
 
       dt_mix = min(dt,dt*(1.0 - CS%ML_mix_first))
       call cpu_clock_begin(id_clock_mixedlayer)
+      ! Changes: h, tv%T, tv%S, ea and eb  (G is also inout???)
       call bulkmixedlayer(h, u_h, v_h, tv, fluxes, dt_mix, ea, eb, &
                       G, CS%bulkmixedlayer_CSp, CS%optics, dt, last_call=.true.)
 
@@ -673,28 +669,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
 ! Calculate the change in temperature & salinity due to entrainment.
     if (ASSOCIATED(T)) then
       call cpu_clock_begin(id_clock_tridiag)
-      do j=js,je
-        do i=is,ie
-          h_tr = hold(i,j,1) + h_neglect
-          b1(i) = 1.0 / (h_tr + eb(i,j,1))
-          d1(i) = h_tr * b1(i)
-          T(i,j,1) = (b1(i)*h_tr)*T(i,j,1)
-          S(i,j,1) = (b1(i)*h_tr)*S(i,j,1)
-        enddo
-        do k=2,nz ; do i=is,ie
-          c1(i,k) = eb(i,j,k-1) * b1(i)
-          h_tr = hold(i,j,k) + h_neglect
-          b_denom_1 = h_tr + d1(i)*ea(i,j,k)
-          b1(i) = 1.0 / (b_denom_1 + eb(i,j,k))
-          d1(i) = b_denom_1 * b1(i)
-          T(i,j,k) = b1(i) * (h_tr*T(i,j,k) + ea(i,j,k)*T(i,j,k-1))
-          S(i,j,k) = b1(i) * (h_tr*S(i,j,k) + ea(i,j,k)*S(i,j,k-1))
-        enddo ; enddo
-        do k=nz-1,1,-1 ; do i=is,ie
-          T(i,j,k) = T(i,j,k) + c1(i,k+1)*T(i,j,k+1)
-          S(i,j,k) = S(i,j,k) + c1(i,k+1)*S(i,j,k+1)
-        enddo ; enddo
-      enddo
+      ! Changes: T, S
+      call triDiagTS(G, is, ie, js, je, hold, ea, eb, T, S)
       call cpu_clock_end(id_clock_tridiag)
     endif
 
@@ -1279,6 +1255,44 @@ subroutine adjust_salt(h, tv, G, CS)
 
 end subroutine adjust_salt
 
+subroutine triDiagTS(G, is, ie, js, je, hold, ea, eb, T, S)
+! Simple tri-diagnonal solver for T and S
+! "Simple" means it only uses arrays hold, ea and eb
+  ! Arguments
+  type(ocean_grid_type),                 intent(in)    :: G
+  integer,                               intent(in)    :: is, ie, js, je
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: hold, ea, eb
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: T, S
+  ! Local variables
+  real :: b1(SZIB_(G)), d1(SZIB_(G)) ! b1, c1, and d1 are variables used by the
+  real :: c1(SZIB_(G),SZK_(G))       ! tridiagonal solver.
+  real :: h_tr, b_denom_1
+  integer :: i, j, k
+
+  do j=js,je
+    do i=is,ie
+      h_tr = hold(i,j,1) + G%H_subroundoff
+      b1(i) = 1.0 / (h_tr + eb(i,j,1))
+      d1(i) = h_tr * b1(i)
+      T(i,j,1) = (b1(i)*h_tr)*T(i,j,1)
+      S(i,j,1) = (b1(i)*h_tr)*S(i,j,1)
+    enddo
+    do k=2,G%ke ; do i=is,ie
+      c1(i,k) = eb(i,j,k-1) * b1(i)
+      h_tr = hold(i,j,k) + G%H_subroundoff
+      b_denom_1 = h_tr + d1(i)*ea(i,j,k)
+      b1(i) = 1.0 / (b_denom_1 + eb(i,j,k))
+      d1(i) = b_denom_1 * b1(i)
+      T(i,j,k) = b1(i) * (h_tr*T(i,j,k) + ea(i,j,k)*T(i,j,k-1))
+      S(i,j,k) = b1(i) * (h_tr*S(i,j,k) + ea(i,j,k)*S(i,j,k-1))
+    enddo ; enddo
+    do k=G%ke-1,1,-1 ; do i=is,ie
+      T(i,j,k) = T(i,j,k) + c1(i,k+1)*T(i,j,k+1)
+      S(i,j,k) = S(i,j,k) + c1(i,k+1)*S(i,j,k+1)
+    enddo ; enddo
+  enddo
+end subroutine triDiagTS
+
 subroutine adiabatic_driver_init(Time, G, param_file, diag, CS, &
                                 tracer_flow_CSp, diag_to_Z_CSp)
   type(time_type),         intent(in)    :: Time
@@ -1528,6 +1542,7 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
   if (CS%use_kappa_shear) &
     id_clock_kappa_shear = cpu_clock_id('(Ocean kappa_shear)', grain=CLOCK_MODULE)
   id_clock_set_diffusivity = cpu_clock_id('(Ocean set_diffusivity)', grain=CLOCK_MODULE)
+  id_clock_kpp = cpu_clock_id('(Ocean KPP)', grain=CLOCK_MODULE)
   id_clock_tracers = cpu_clock_id('(Ocean tracer_columns)', grain=CLOCK_MODULE_DRIVER+5)
   if (CS%use_sponge) &
     id_clock_sponge = cpu_clock_id('(Ocean sponges)', grain=CLOCK_MODULE)
@@ -1690,17 +1705,15 @@ subroutine MOM_state_chksum(mesg, u, v, h, G)
   call hchksum(G%H_to_m*h, mesg//" h",G,haloshift=0)
 end subroutine MOM_state_chksum
 
-subroutine applyBoundaryFluxes(G, dt, fluxes, optics, ea, eb, h, tv)
+subroutine applyBoundaryFluxes(G, dt, fluxes, optics, ea, h, tv)
   type(ocean_grid_type),                 intent(in)    :: G
   real,                                  intent(in)    :: dt
   type(forcing),                         intent(in)    :: fluxes
   type(optics_type),                     pointer       :: optics
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: ea, eb, h
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: ea, h
   type(thermo_var_ptrs),                 intent(inout) :: tv
   !   This subroutine applies thermodynamic forcing (contained in fluxes type)
-  ! to h, tv%T and tv%S. If the event the P-E+R is negatively in excess of the
-  ! available layer thickness, ea and eb might be adjusted to exchange (entrain)
-  ! volume between layers to maintain non-negative values.
+  ! to h, tv%T and tv%S. 
   real :: Irho0, I_Cp, Irho_cp, H_limit_fluxes, IforcingDepthScale
   real :: dThickness, dTemp, dSalt, fractionOfForcing, hOld, Ithickness
   real, dimension(SZI_(G)) :: netThickness, netHeat, netSalt, htot, Ttot
