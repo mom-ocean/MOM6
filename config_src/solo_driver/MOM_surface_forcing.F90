@@ -151,26 +151,26 @@ type, public :: surface_forcing_CS ; private
   character(len=200) :: wind_file   ! If wind_config is "file", file to use
   character(len=200) :: buoy_config ! Indicator for buoyancy forcing type
 
-  character(len=200) :: longwave_file = ""
-  character(len=200) :: shortwave_file = ""
-  character(len=200) :: evaporation_file = ""
-  character(len=200) :: sensibleheat_file = ""
-  character(len=200) :: latentheat_file = ""
+  character(len=200) :: longwave_file = ''
+  character(len=200) :: shortwave_file = ''
+  character(len=200) :: evaporation_file = ''
+  character(len=200) :: sensibleheat_file = ''
+  character(len=200) :: latentheat_file = ''
 
-  character(len=200) :: rain_file = ""
-  character(len=200) :: snow_file = ""
-  character(len=200) :: runoff_file = ""
+  character(len=200) :: rain_file = ''
+  character(len=200) :: snow_file = ''
+  character(len=200) :: runoff_file = ''
 
-  character(len=200) :: longwaveup_file = ""
-  character(len=200) :: shortwaveup_file = ""
+  character(len=200) :: longwaveup_file = ''
+  character(len=200) :: shortwaveup_file = ''
 
-  character(len=200) :: SSTrestore_file = ""
-  character(len=200) :: salinityrestore_file = ""
+  character(len=200) :: SSTrestore_file = ''
+  character(len=200) :: salinityrestore_file = ''
   character(len=80)  :: & ! Variable names in the input files.
-    stress_x_var = "", stress_y_var = "", ustar_var = "", &
-    LW_var = "", SW_var = "", latent_var = "", sens_var = "", evap_var = "", &
-    rain_var = "", snow_var = "", liq_runoff_var = "", froz_runoff_var = "", &
-    SST_restore_var = "", SSS_restore_var = ""
+    stress_x_var = '', stress_y_var = '', ustar_var = '', &
+    LW_var = '', SW_var = '', latent_var = '', sens_var = '', evap_var = '', &
+    rain_var = '', snow_var = '', liq_runoff_var = '', froz_runoff_var = '', &
+    SST_restore_var = '', SSS_restore_var = ''
 
   ! These variables give the number of time levels in the various forcing files
   integer :: SW_nlev = -1, LW_nlev = -1, latent_nlev = -1, sens_nlev = -1
@@ -1404,7 +1404,7 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, tracer_flow_CSp)
   if (associated(tracer_flow_CSp)) CS%tracer_flow_CSp => tracer_flow_CSp
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, "")
+  call log_version(param_file, mod, version, '')
   call get_param(param_file, mod, "ENABLE_THERMODYNAMICS", CS%use_temperature, &
                  "If true, Temperature and salinity are used as state \n"//&
                  "variables.", default=.true.)
