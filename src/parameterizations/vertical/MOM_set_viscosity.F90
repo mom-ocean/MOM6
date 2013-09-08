@@ -1475,7 +1475,7 @@ subroutine set_visc_init(Time, G, param_file, diag, visc, CS)
 !                 for this module
   real    :: Csmag_chan_dflt, smag_const1, TKE_decay_dflt, bulk_Ri_ML_dflt
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz
-  logical :: use_kappa_shear, adiabatic, double_diffusion
+  logical :: use_kappa_shear, adiabatic, differential_diffusion
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mod = "MOM_set_visc"  ! This module's name.
@@ -1495,7 +1495,7 @@ subroutine set_visc_init(Time, G, param_file, diag, visc, CS)
 ! Set default, read and log parameters
   call log_version(param_file, mod, version, "")
   CS%RiNo_mix = .false.
-  use_kappa_shear = .false. ; double_diffusion = .false. !; adiabatic = .false.  ! Needed? -AJA
+  use_kappa_shear = .false. ; differential_diffusion = .false. !; adiabatic = .false.  ! Needed? -AJA
   call get_param(param_file, mod, "BOTTOMDRAGLAW", CS%bottomdraglaw, &
                  "If true, the bottom stress is calculated with a drag \n"//&
                  "law of the form c_drag*|u|*u. The velocity magnitude \n"//&
@@ -1526,7 +1526,7 @@ subroutine set_visc_init(Time, G, param_file, diag, visc, CS)
                  "If true, use the Jackson-Hallberg-Legg (JPO 2008) \n"//& 
                  "shear mixing parameterization.", default=.false.)
     CS%RiNo_mix = use_kappa_shear
-    call get_param(param_file, mod, "DOUBLE_DIFFUSION", double_diffusion, &
+    call get_param(param_file, mod, "DOUBLE_DIFFUSION", differential_diffusion, &
                  "If true, increase diffusivitives for temperature or salt \n"//&
                  "based on double-diffusive paramaterization from MOM4/KPP.", &
                  default=.false.)
@@ -1655,7 +1655,7 @@ subroutine set_visc_init(Time, G, param_file, diag, visc, CS)
     allocate(visc%Kd_turb(isd:ied,jsd:jed,nz+1)) ; visc%Kd_turb = 0.0
     allocate(visc%TKE_turb(isd:ied,jsd:jed,nz+1)) ; visc%TKE_turb = 0.0
   endif
-  if (double_diffusion) then
+  if (differential_diffusion) then
     allocate(visc%Kd_extra_T(isd:ied,jsd:jed,nz+1)) ; visc%Kd_extra_T = 0.0
     allocate(visc%Kd_extra_S(isd:ied,jsd:jed,nz+1)) ; visc%Kd_extra_S = 0.0
   endif

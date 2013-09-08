@@ -86,7 +86,7 @@ use MOM_int_tide_input, only : set_int_tide_input, int_tide_input_init
 use MOM_int_tide_input, only : int_tide_input_end, int_tide_input_CS, int_tide_input_type
 use MOM_internal_tides, only : propagate_int_tide, register_int_tide_restarts
 use MOM_internal_tides, only : internal_tides_init, internal_tides_end, int_tide_CS
-use MOM_kappa_shear, only : Calculate_kappa_shear, kappa_shear_init, Kappa_shear_CS
+use MOM_kappa_shear, only : calculate_kappa_shear, kappa_shear_init, Kappa_shear_CS
 use MOM_KPP, only : KPP_CS, KPP_init, KPP_calculate, KPP_end, KPP_applyNonLocalTransport
 use MOM_opacity, only : opacity_init, set_opacity, opacity_end, opacity_CS
 use MOM_set_diffusivity, only : set_diffusivity, set_BBL_diffusivity
@@ -177,7 +177,7 @@ end type diabatic_CS
 integer :: id_clock_entrain, id_clock_mixedlayer, id_clock_set_diffusivity
 integer :: id_clock_uv_at_h, id_clock_frazil, id_clock_kappa_shear
 integer :: id_clock_tracers, id_clock_tridiag, id_clock_pass, id_clock_sponge
-integer :: id_clock_geothermal, id_clock_double_diff, id_clock_remap
+integer :: id_clock_geothermal, id_clock_differential_diff, id_clock_remap
 
 contains
 
@@ -401,7 +401,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     endif
 
     call cpu_clock_begin(id_clock_kappa_shear)
-    call Calculate_kappa_shear(u_h, v_h, h, tv, fluxes%p_surf, visc%Kd_turb, visc%TKE_turb, &
+    call calculate_kappa_shear(u_h, v_h, h, tv, fluxes%p_surf, visc%Kd_turb, visc%TKE_turb, &
                                dt, G, CS%kappa_shear_CSp)
     call cpu_clock_end(id_clock_kappa_shear)
     if (CS%debug) then
@@ -450,9 +450,9 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   ! When used with KPP this needs to provide a diffusivity and happen before KPP ?????
   if (associated(visc%Kd_extra_T) .and. associated(visc%Kd_extra_S) .and. &
       associated(T)) then
-    call cpu_clock_begin(id_clock_double_diff)
-    call double_diffuse_T_S(h, tv, visc, dt, G)
-    call cpu_clock_end(id_clock_double_diff)
+    call cpu_clock_begin(id_clock_differential_diff)
+    call differential_diffuse_T_S(h, tv, visc, dt, G)
+    call cpu_clock_end(id_clock_differential_diff)
   endif
 
   ! If using the ALE algorithm, set ea=eb=Kd on interfaces for
@@ -1119,7 +1119,7 @@ subroutine make_frazil(h, tv, G, CS)
 
 end subroutine make_frazil
 
-subroutine double_diffuse_T_S(h, tv, visc, dt, G)
+subroutine differential_diffuse_T_S(h, tv, visc, dt, G)
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h
   type(thermo_var_ptrs),                 intent(inout) :: tv
   type(vertvisc_type),                   intent(in)    :: visc
@@ -1160,13 +1160,13 @@ subroutine double_diffuse_T_S(h, tv, visc, dt, G)
   h_neglect = G%H_subroundoff
 
   if (.not.associated(tv%T)) call MOM_error(FATAL, &
-      "double_diffuse_T_S: Called with an unassociated tv%T")
+      "differential_diffuse_T_S: Called with an unassociated tv%T")
   if (.not.associated(tv%S)) call MOM_error(FATAL, &
-      "double_diffuse_T_S: Called with an unassociated tv%S")
+      "differential_diffuse_T_S: Called with an unassociated tv%S")
   if (.not.associated(visc%Kd_extra_T)) call MOM_error(FATAL, &
-      "double_diffuse_T_S: Called with an unassociated visc%Kd_extra_T")
+      "differential_diffuse_T_S: Called with an unassociated visc%Kd_extra_T")
   if (.not.associated(visc%Kd_extra_S)) call MOM_error(FATAL, &
-      "double_diffuse_T_S: Called with an unassociated visc%Kd_extra_S")
+      "differential_diffuse_T_S: Called with an unassociated visc%Kd_extra_S")
 
   T => tv%T ; S => tv%S
   Kd_T => visc%Kd_extra_T ; Kd_S => visc%Kd_extra_S
@@ -1221,7 +1221,7 @@ subroutine double_diffuse_T_S(h, tv, visc, dt, G)
     enddo ; enddo
   enddo
 
-end subroutine double_diffuse_T_S
+end subroutine differential_diffuse_T_S
 
 subroutine adjust_salt(h, tv, G, CS)
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h
@@ -1352,7 +1352,7 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
 !  (in)      sponge_CSp - A pointer to the sponge module control structure.
 !  (in)      diag_to_Z_CSp - A pointer to the Z-diagnostics control structure.
   real :: Kd
-  logical :: use_temperature, double_diffusion
+  logical :: use_temperature, differentialDiffusion
   type(vardesc) :: vd
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
@@ -1388,7 +1388,7 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
   call get_param(param_file, mod, "ENABLE_THERMODYNAMICS", use_temperature, &
                  "If true, temperature and salinity are used as state \n"//&
                  "variables.", default=.true.)
-  call get_param(param_file, mod, "DOUBLE_DIFFUSION", double_diffusion, &
+  call get_param(param_file, mod, "DOUBLE_DIFFUSION", differentialDiffusion, &
                  "If true, apply parameterization of double-diffusion.", &
                  default=.false. )
   call get_param(param_file, mod, "USE_JACKSON_PARAM", CS%use_kappa_shear, &
@@ -1533,8 +1533,8 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
     id_clock_sponge = cpu_clock_id('(Ocean sponges)', grain=CLOCK_MODULE)
   id_clock_tridiag = cpu_clock_id('(Ocean diabatic tridiag)', grain=CLOCK_ROUTINE)
   id_clock_pass = cpu_clock_id('(Ocean diabatic message passing)', grain=CLOCK_ROUTINE)
-  id_clock_double_diff = -1 ; if (double_diffusion) &
-    id_clock_double_diff = cpu_clock_id('(Ocean double diffusion)', grain=CLOCK_ROUTINE)
+  id_clock_differential_diff = -1 ; if (differentialDiffusion) &
+    id_clock_differential_diff = cpu_clock_id('(Ocean differential diffusion)', grain=CLOCK_ROUTINE)
 
   if (CS%bulkmixedlayer) &
     call bulkmixedlayer_init(Time, G, param_file, diag, CS%bulkmixedlayer_CSp)
