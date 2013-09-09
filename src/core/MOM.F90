@@ -1113,7 +1113,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     if (CS%id_ssu > 0) &
       call post_data(CS%id_ssu, state%u, CS%diag, mask=G%mask2dCu)
     if (CS%id_ssv > 0) &
-      call post_data(CS%id_ssv, state%v, CS%diag, mask=G%mask2dCu)
+      call post_data(CS%id_ssv, state%v, CS%diag, mask=G%mask2dCv)
     if (CS%id_speed > 0) then
       allocate(sfc_speed(G%isd:G%ied,G%jsd:G%jed))
       do j=js,je ; do i=is,ie
