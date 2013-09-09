@@ -263,6 +263,7 @@ subroutine MOM_initialize(u, v, h, tv, Time, G, PF, dirs, &
       call set_coord_from_file(G%Rlay, G%g_prime, G, PF)
     case ("USER")
       call user_set_coord(G%Rlay, G%g_prime, G, PF, eos)
+    case ("none")
     case default ; call MOM_error(FATAL,"MOM_initialize: "// &
       "Unrecognized coordinate setup"//trim(config))
   end select
@@ -3415,6 +3416,9 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
   integer, parameter :: i_debug=1, j_debug=28
 
   real, dimension(:,:,:), allocatable :: tmp1
+  logical :: homogenize
+  real :: tempAvg, saltAvg
+  integer :: nPoints
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -3454,6 +3458,9 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
   call get_param(PF, mod, "Z_INIT_FILE_SALT_VAR", salin_var, &
                  "The name of the salinity variable in \n"//&
                  "TEMP_SALT_Z_INIT_FILE.", default="salt")
+  call get_param(PF, mod, "Z_INIT_HOMOGENIZE", homogenize, &
+                 "If True, then horizontally homogenize the interpolated \n"//&
+                 "initial conditions.", default=.false.)
 
 !   Read input grid coordinates for temperature and salinity field
 !   in z-coordinate dataset. The file is REQUIRED to contain the
@@ -3661,6 +3668,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
 
     fill = 0; good = 0
 
+    nPoints = 0 ; tempAvg = 0. ; saltAvg = 0.
     do j=1,nj
       do i=1,ni
         if (mask_out(i,j).lt.1.0) then
@@ -3668,11 +3676,26 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
           salt_out(i,j)=missing_value
         else
           good(i,j)=1
+          nPoints = nPoints + 1
+          tempAvg = tempAvg + temp_out(i,j)
+          saltAvg = saltAvg + salt_out(i,j)
         endif
         if (mask2dT(i,j) .eq. 1.0 .and. z_edges_in(k) <= Depth(i,j) .and. mask_out(i,j) .lt. 1.0) fill(i,j)=1
       enddo
     enddo
 
+    ! Horizontally homogenize data to produce perfectly "flat" initial conditions
+    if (homogenize) then
+      call sum_across_PEs(nPoints)
+      call sum_across_PEs(tempAvg)
+      call sum_across_PEs(saltAvg)
+      if (nPoints>0) then
+        tempAvg = tempAvg/float(nPoints)
+        saltAvg = saltAvg/float(nPoints)
+      endif
+      temp_out(:,:) = tempAvg
+      salt_out(:,:) = saltAvg
+    endif
 
 ! temp_out,salt_out contain input z-space data on the model grid with missing values
 ! now fill in missing values using "ICE-nine" algorithm. 
