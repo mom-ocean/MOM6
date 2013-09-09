@@ -26,7 +26,8 @@ function [] = doall(x,y,name)
 %grab_forcing_m(x,y,name)
 %grab_initconds(x,y,name)
 %grab_tides(x,y,name)
-grab_woa(x,y,name)
+%grab_woa(x,y,name)
+grab_coords(x,y,name)
 
 % ==============================================================================
 
@@ -422,6 +423,36 @@ nc{'Layer'}(:)=Layer;
 nc{'PTEMP'}(1:nk,1:2,1:2)=PTEMP(1:nk,1:2,1:2);
 nc{'SALT'}(1:nk,1:2,1:2)=SALT(1:nk,1:2,1:2);
 nc{'eta'}(1:nk+1,1:2,1:2)=ETA(1:nk+1,1:2,1:2);
+
+close(nc)
+
+% ==============================================================================
+
+function [] = grab_coords(x,y,name)
+
+disp(['Creating isopyc_coords.nc for ' name])
+rtpth='/archive/gold/datasets/CM2G63L/siena/INPUT/';
+ics=mycdf([rtpth 'GOLD_IC.2010.11.15.nc']);
+
+Layer=ics{'Layer'}(:);
+
+% Define new netCDF file
+nc=netcdf(sprintf('./isopyc_coords.nc',name),'clobber');
+nc.filename='isopyc_coords.nc';
+nc('Layer') = length(Layer);
+
+nc{'Layer'} = ncfloat('Layer'); %% 63 elements.
+nc{'Layer'}.long_name = ncchar('Layer potential density relative to 2000 dbar');
+nc{'Layer'}.units = ncchar('kg m-3');
+nc{'Layer'}.positive = ncchar('down');
+nc{'Layer'}.axis = ncchar('Z');
+nc{'Layer'}.edges = ncchar('Interface');
+nc{'Layer'}.ref_pres = ncfloat(20000000);
+nc{'Layer'}.ref_pres_units = ncchar('Pa\0');
+nc{'Layer'}.cartesian_axis = ncchar('Z\0');
+
+% Write data into netCDF file
+nc{'Layer'}(:)=Layer;
 
 close(nc)
 
