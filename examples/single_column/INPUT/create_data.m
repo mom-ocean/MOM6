@@ -1,20 +1,20 @@
 function [] = create_data()
 
-%name='Arabian'; x=66; y=15; doall(x,y,name)
-%name='BATS'; x=-63.5; y=31.5; doall(x,y,name)
-%name='Chagos'; x=-284; y=-6; doall(x,y,name)
-%name='COARE'; x=-180; y=0; doall(x,y,name)
-%name='Kerguelen'; x=-284; y=-51; doall(x,y,name)
-%name='Kuroshio'; x=-210; y=30; doall(x,y,name)
-%name='Labrador'; x=-58; y=61; doall(x,y,name)
-%name='Mariana'; x=-215; y=13; doall(x,y,name)
-%name='Nazca'; x=-90; y=20; doall(x,y,name)
-%name='Nino'; x=-119; y=0; doall(x,y,name)
-%name='Norwegian'; x=-7; y=75; doall(x,y,name)
-%name='PAPA'; x=-150; y=51; doall(x,y,name)
+name='Arabian'; x=66; y=15; doall(x,y,name)
+name='BATS'; x=-63.5; y=31.5; doall(x,y,name)
+name='Chagos'; x=-284; y=-6; doall(x,y,name)
+name='COARE'; x=-180; y=0; doall(x,y,name)
+name='Kerguelen'; x=-284; y=-51; doall(x,y,name)
+name='Kuroshio'; x=-210; y=30; doall(x,y,name)
+name='Labrador'; x=-58; y=61; doall(x,y,name)
+name='Mariana'; x=-215; y=13; doall(x,y,name)
+name='Nazca'; x=-90; y=20; doall(x,y,name)
+name='Nino'; x=-119; y=0; doall(x,y,name)
+name='Norwegian'; x=-7; y=75; doall(x,y,name)
+name='PAPA'; x=-150; y=51; doall(x,y,name)
 name='St_Peter_Rock'; x=-29; y=0; doall(x,y,name)
-%name='Walvis'; x=5; y=-25; doall(x,y,name)
-%name='Weddell'; x=-54; y=-74; doall(x,y,name)
+name='Walvis'; x=5; y=-25; doall(x,y,name)
+name='Weddell'; x=-54; y=-74; doall(x,y,name)
 
 % ==============================================================================
 
@@ -22,10 +22,11 @@ function [] = doall(x,y,name)
 
 [success,msg,msgid]=mkdir(name);
 %create_override(x,y,name)
-grab_forcing(x,y,name)
+%grab_forcing(x,y,name)
 %grab_forcing_m(x,y,name)
 %grab_initconds(x,y,name)
 %grab_tides(x,y,name)
+grab_woa(x,y,name)
 
 % ==============================================================================
 
@@ -469,6 +470,105 @@ nc{'gridlon_t'}(:)=[0.5:2]; % 1 degree grid starting at Greenwich
 nc{'gridlat_t'}(:)=[0.5:2]; % 1 dgree grid starting at equator
 nc{'h2'}(1:2,1:2)=H2(1:2,1:2);
 nc{'tideamp'}(1:2,1:2)=TIDEAMP(1:2,1:2);
+
+close(nc)
+
+% ==============================================================================
+
+function [] = grab_woa(x,y,name)
+
+disp(['Interpolating WOA for ' name])
+ics=mycdf('/archive/gold/datasets/obs/WOA05_pottemp_salt.nc');
+
+X=ics{'LON'}(:);
+Y=ics{'LAT'}(:);
+
+i=findi(X,x);
+if x<X(i)
+ x=x+360;
+end
+j=round( interp1(Y,0.5:length(Y),y) );
+if y<Y(j)
+ j=j-1;
+end
+
+DEPTH=ics{'DEPTH'}(:);
+DEPTH_bnds=ics{'DEPTH_bnds'}(:);
+TIME=ics{'TIME'}(:);
+TIME_bnds=ics{'TIME_bnds'}(:);
+PTEMP=ics{'PTEMP'}(:,:,j:j+1,i:i+1);
+SALT=ics{'SALT'}(:,:,j:j+1,i:i+1);
+nt=size(PTEMP,1);
+nk=size(PTEMP,2);
+for n=1:nt;
+ for k=1:nk;
+  PTEMP(n,k,:,:)=interp2(Y(j:j+1),X(i:i+1),squeeze(PTEMP(n,k,:,:)),y,x);
+  SALT(n,k,:,:)=interp2(Y(j:j+1),X(i:i+1),squeeze(SALT(n,k,:,:)),y,x);
+ end
+end
+if isnan(SALT(1))
+  error('Urgh!')
+end
+
+% Define new netCDF file
+nc=netcdf(sprintf('%s/WOA_column.nc',name),'clobber');
+nc.filename='WOA_column.nc';
+nc('LON') = 2;
+nc('LAT') = 2;
+nc('DEPTH') = 33;
+nc('bnds') = 2;
+nc('TIME') = 12; %% (record dimension)
+
+%% Variables and attributes:
+
+nc{'LON'} = ncdouble('LON'); %% 2 elements.
+nc{'LON'}.units = ncchar('degrees_east');
+nc{'LON'}.modulo = ncdouble(360);
+nc{'LON'}.point_spacing = ncchar('even');
+nc{'LON'}.axis = ncchar('X');
+
+nc{'LAT'} = ncdouble('LAT'); %% 2 elements.
+nc{'LAT'}.units = ncchar('degrees_north');
+nc{'LAT'}.point_spacing = ncchar('even');
+nc{'LAT'}.axis = ncchar('Y');
+
+nc{'DEPTH'} = ncdouble('DEPTH'); %% 33 elements.
+nc{'DEPTH'}.units = ncchar('m');
+nc{'DEPTH'}.positive = ncchar('down');
+nc{'DEPTH'}.point_spacing = ncchar('uneven');
+nc{'DEPTH'}.axis = ncchar('Z');
+nc{'DEPTH'}.bounds = ncchar('DEPTH_bnds');
+
+nc{'DEPTH_bnds'} = ncdouble('DEPTH', 'bnds'); %% 66 elements.
+
+nc{'TIME'} = ncdouble('TIME'); %% 12 elements.
+nc{'TIME'}.units = ncchar('days since 0000-01-01 00:00:00');
+nc{'TIME'}.time_origin = ncchar('01-JAN-0000 00:00:00');
+nc{'TIME'}.modulo = ncdouble(365.242492675781);
+nc{'TIME'}.axis = ncchar('T');
+nc{'TIME'}.bounds = ncchar('TIME_bnds');
+
+nc{'PTEMP'} = ncfloat('TIME', 'DEPTH', 'LAT', 'LON'); %% 25660800 elements.
+nc{'PTEMP'}.missing_value = ncfloat(-9.99999979021477e+33);
+nc{'PTEMP'}.FillValue_ = ncfloat(-9.99999979021477e+33);
+nc{'PTEMP'}.long_name = ncchar('THETA_FO(SALT,TEMP,DPTH,P_REF)');
+
+nc{'SALT'} = ncfloat('TIME', 'DEPTH', 'LAT', 'LON'); %% 25660800 elements.
+nc{'SALT'}.missing_value = ncfloat(-9.99999979021477e+33);
+nc{'SALT'}.FillValue_ = ncfloat(-9.99999979021477e+33);
+nc{'SALT'}.long_name = ncchar('IF S0112AN1[D=4,GZ=GRIDZ@ASN] THEN S0112AN1[D=4,GZ=GRIDZ@ASN] ELSE S00AN1[D=3]');
+
+nc{'TIME_bnds'} = ncdouble('TIME', 'bnds'); %% 24 elements.
+
+% Write data into netCDF file
+nc{'LON'}(:)=[-10:80:70]; % 4 degree grid starting at Greenwich
+nc{'LAT'}(:)=[-10:80:70]; % 4 dgree grid starting at equator
+nc{'DEPTH'}(:)=DEPTH;
+nc{'DEPTH_bnds'}(:)=DEPTH_bnds;
+nc{'TIME'}(:)=TIME;
+nc{'TIME_bnds'}(:)=TIME_bnds;
+nc{'PTEMP'}(1:nt,1:nk,1:2,1:2)=PTEMP(1:nt,1:nk,1:2,1:2);
+nc{'SALT'}(1:nt,1:nk,1:2,1:2)=SALT(1:nt,1:nk,1:2,1:2);
 
 close(nc)
 
