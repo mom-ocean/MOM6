@@ -24,28 +24,30 @@ for j = 1:length(allvars)
 end
 
 subplot(821)
-plot(Time,KPP_uStar)
+plot(Time,KPP_uStar); xlim([0 max(Time)])
 %xlabel('Time (days)')
 ylabel('u* (m/s)')
 
 subplot(822)
-plot(Time,KPP_buoyFlux)
+plot(Time,KPP_buoyFlux); xlim([0 max(Time)])
 %xlabel('Time (days)')
 ylabel('B (m^2/s^3)')
 
 subplot(823)
-plot(Time,temp(:,1))
+plot(Time,temp(:,1)); xlim([0 max(Time)])
+ylim([18 27])
 %xlabel('Time (days)')
 ylabel('SST (^oC)')
 
 subplot(824)
-plot(Time,salt(:,1))
+plot(Time,salt(:,1)); xlim([0 max(Time)])
+ylim([36.25 36.75])
 %xlabel('Time (days)')
 ylabel('SSS (ppt)')
 
 subplot(423)
 gcolor(temp',e',Time);ylim(ZLIM);colorbar
-caxis([18 21])
+caxis([18 27])
 %xlabel('Time (days)')
 ylabel('z (m)')
 title('\theta (^oC)')
@@ -53,7 +55,7 @@ hold on;plot(Time,-KPP_OBLdepth,'w');hold off
 
 subplot(424)
 gcolor(salt',e',Time);ylim(ZLIM);colorbar
-caxis([36 37])
+caxis([36.25 36.75])
 %xlabel('Time (days)')
 ylabel('z (m)')
 title('S (ppt)')

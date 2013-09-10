@@ -127,6 +127,11 @@ use Phillips_initialization, only : Phillips_initialize_sponges
 use midas_vertmap, only : fill_miss_2d, find_interfaces, tracer_Z_init, meshgrid
 use midas_vertmap, only : determine_temperature
 
+use MOM_ALE, only : ALE_initRegridding
+use MOM_regridding, only : regridding_CS
+use MOM_remapping, only : remapping_CS, remapping_core, initialize_remapping
+use MOM_remapping, only : dzFromH1H2
+
 use mpp_domains_mod, only : mpp_global_field, mpp_get_compute_domain
 use horiz_interp_mod, only : horiz_interp_new, horiz_interp,horiz_interp_type
 use horiz_interp_mod, only : horiz_interp_init, horiz_interp_del
@@ -3415,8 +3420,15 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
                                    ! location.
   integer, parameter :: i_debug=1, j_debug=28
 
+  ! Local variables for ALE remapping
+  real, dimension(:), allocatable :: h1, h2, hTarget, deltaE, tmpT1d, tmpS1d
+  real, dimension(:), allocatable :: tmpT1dIn, tmpS1dIn
+  real :: zTopOfCell, zBottomOfCell
+  type(regridding_CS) :: regridCS ! Regridding parameters and work arrays
+  type(remapping_CS) :: remapCS ! Remapping parameters and work arrays
+
   real, dimension(:,:,:), allocatable :: tmp1
-  logical :: homogenize
+  logical :: homogenize, useALEremapping
   real :: tempAvg, saltAvg
   integer :: nPoints
 
@@ -3461,6 +3473,9 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
   call get_param(PF, mod, "Z_INIT_HOMOGENIZE", homogenize, &
                  "If True, then horizontally homogenize the interpolated \n"//&
                  "initial conditions.", default=.false.)
+  call get_param(PF, mod, "Z_INIT_ALE_REMAPPING", useALEremapping, &
+                 "If True, then remap straight to model coordinate from file.",&
+                 default=.false.)
 
 !   Read input grid coordinates for temperature and salinity field
 !   in z-coordinate dataset. The file is REQUIRED to contain the
@@ -3680,6 +3695,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
           tempAvg = tempAvg + temp_out(i,j)
           saltAvg = saltAvg + salt_out(i,j)
         endif
+                                                ! vvv  k+1  ???? -AJA
         if (mask2dT(i,j) .eq. 1.0 .and. z_edges_in(k) <= Depth(i,j) .and. mask_out(i,j) .lt. 1.0) fill(i,j)=1
       enddo
     enddo
@@ -3729,116 +3745,175 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
   call horiz_interp_del(Interp)    
 
 ! Done with horizontal interpolation.    
+! Now remap to model coordinates
+  if (useALEremapping) then
+    ! First we reserve a work space for reconstructions of the source data
+    allocate( h1(kd) )
+    allocate( tmpT1dIn(kd) )
+    allocate( tmpS1dIn(kd) )
+    call initialize_remapping( kd, 'PPM_IH4', remapCS ) ! Data for reconstructions
+    ! Next we initialize the regridding package so that it knows about the target grid
+    allocate( hTarget(nz) )
+    allocate( h2(nz) )
+    allocate( tmpT1d(nz) )
+    allocate( tmpS1d(nz) )
+    allocate( deltaE(nz+1) )
+    ! This call can be more general but is hard-coded for z* coordinates...  ????
+    call ALE_initRegridding( G, PF, mod, regridCS, hTarget ) ! sets regridCS and hTarget(1:nz)
+    ! For each column ...
+    do j = js, je ; do i = is, ie
+      ! Build the source grid
+      zTopOfCell = 0. ; zBottomOfCell = 0. ; nPoints = 0
+      do k = 1, kd
+        if (mask_z(i,j,k) > 0.) then
+          zBottomOfCell = -min( z_edges_in(k+1), G%bathyT(i,j) )
+          tmpT1dIn(k) = temp_z(i,j,k)
+          tmpS1dIn(k) = salt_z(i,j,k)
+        elseif (k>1) then
+          zBottomOfCell = -G%bathyT(i,j) 
+          tmpT1dIn(k) = tmpT1dIn(k-1)
+          tmpS1dIn(k) = tmpS1dIn(k-1)
+        else ! This next block should only ever be reached over land
+          tmpT1dIn(k) = -99.9
+          tmpS1dIn(k) = -99.9
+        endif
+        h1(k) = zTopOfCell - zBottomOfCell
+        if (h1(k)>0.) nPoints = nPoints + 1
+        zTopOfCell = zBottomOfCell ! Bottom becomes top for next value of k
+      enddo
+      h1(kd) = h1(kd) + ( zTopOfCell + G%bathyT(i,j) ) ! In case data is deeper than model
+      ! Build the target grid combining hTarget and topography
+      zTopOfCell = 0. ; zBottomOfCell = 0.
+      do k = 1, nz
+        zBottomOfCell = max( zTopOfCell - hTarget(k), -G%bathyT(i,j) )
+        h2(k) = zTopOfCell - zBottomOfCell
+        zTopOfCell = zBottomOfCell ! Bottom becomes top for next value of k
+      enddo
+      ! Calcaulate an effectiveadisplacement, deltaE
+      call dzFromH1H2( nPoints, h1, nz, h2, deltaE ) ! sets deltaE
+      ! Now remap from h1 to h2=h1+div.deltaE
+      call remapping_core( remapCS, nPoints, h1, tmpT1dIn, nz, deltaE, tmpT1d ) ! sets tmpT1d
+      call remapping_core( remapCS, nPoints, h1, tmpS1dIn, nz, deltaE, tmpS1d ) ! sets tmpS1d
+      h(i,j,:) = h2(:)
+      tv%T(i,j,:) = tmpT1d(:)
+      tv%S(i,j,:) = tmpS1d(:)
+    enddo ; enddo
+    deallocate( h1 )
+    deallocate( h2 )
+    deallocate( hTarget )
+    deallocate( tmpT1d )
+    deallocate( tmpS1d )
+    deallocate( tmpT1dIn )
+    deallocate( tmpS1dIn )
+    deallocate( deltaE )
+
+  else ! remap to isopycnal layer space
 ! next find interface positions using local arrays
 ! nlevs contains the number of valid data points in each column
+    allocate(zi(is:ie,js:je,nz+1))
+    allocate(nlevs(is:ie,js:je))
 
-  allocate(zi(is:ie,js:je,nz+1))
-  allocate(nlevs(is:ie,js:je))
+    nlevs(:,:)=0.0
 
-  nlevs(:,:)=0.0
-
-  nlevs = sum(mask_z(is:ie,js:je,:),dim=3)
+    nlevs = sum(mask_z(is:ie,js:je,:),dim=3)
 
 ! Rb contains the layer interface densities
+    allocate(Rb(nz+1))
+    do k=2,nz
+       Rb(k)=0.5*(G%Rlay(k-1)+G%Rlay(k))
+    enddo
+    Rb(1)=0.0
+    Rb(nz+1)=2.0*G%Rlay(nz) - G%Rlay(nz-1)
 
-  allocate(Rb(nz+1))
-  do k=2,nz
-     Rb(k)=0.5*(G%Rlay(k-1)+G%Rlay(k))
-  enddo
-  Rb(1)=0.0
-  Rb(nz+1)=2.0*G%Rlay(nz) - G%Rlay(nz-1)
+    zi(is:ie,js:je,:) = find_interfaces(rho_z(is:ie,js:je,:), z_in, Rb, G%bathyT(is:ie,js:je), &
+                         nlevs, nkml, nkbl, min_depth)
 
-  zi(is:ie,js:je,:) = find_interfaces(rho_z(is:ie,js:je,:), z_in, Rb, G%bathyT(is:ie,js:je), &
-                       nlevs, nkml, nkbl, min_depth)
+    call get_param(PF, mod, "ADJUST_THICKNESS", correct_thickness, &
+                 "If true, all mass below the bottom removed if the \n"//&
+                 "topography is shallower than the thickness input file \n"//&
+                 "would indicate.", default=.false.)
 
-  call get_param(PF, mod, "ADJUST_THICKNESS", correct_thickness, &
-               "If true, all mass below the bottom removed if the \n"//&
-               "topography is shallower than the thickness input file \n"//&
-               "would indicate.", default=.false.)
-
-  if (correct_thickness) then
-    ! All mass below the bottom removed if the topography is shallower than
-    ! the input file would indicate.  G%bathyT is positive downward,
-    ! eta is negative downward.
-    do j=js,je ; do i=is,ie
-      if (-zi(i,j,nz+1) > G%bathyT(i,j) + 0.1) zi(i,j,nz+1) = -G%bathyT(i,j)
-    enddo ; enddo
-  endif
-
-  do k=nz,1,-1 ; do j=js,je ; do i=is,ie
-    if (zi(i,j,K) < (zi(i,j,K+1) + G%Angstrom_z)) then
-      zi(i,j,K) = zi(i,j,K+1) + G%Angstrom_z
-      h(i,j,k) = G%Angstrom_z
-    else
-      h(i,j,k) = zi(i,j,K) - zi(i,j,K+1)
+    if (correct_thickness) then
+      ! All mass below the bottom removed if the topography is shallower than
+      ! the input file would indicate.  G%bathyT is positive downward,
+      ! eta is negative downward.
+      do j=js,je ; do i=is,ie
+        if (-zi(i,j,nz+1) > G%bathyT(i,j) + 0.1) zi(i,j,nz+1) = -G%bathyT(i,j)
+      enddo ; enddo
     endif
-  enddo ; enddo ; enddo
+
+    do k=nz,1,-1 ; do j=js,je ; do i=is,ie
+      if (zi(i,j,K) < (zi(i,j,K+1) + G%Angstrom_z)) then
+        zi(i,j,K) = zi(i,j,K+1) + G%Angstrom_z
+        h(i,j,k) = G%Angstrom_z
+      else
+        h(i,j,k) = zi(i,j,K) - zi(i,j,K+1)
+      endif
+    enddo ; enddo ; enddo
 
 
 !  Check for consistency between the interface heights and topography.!
-  if (correct_thickness) then
-    do j=js,je ; do i=is,ie
-      !   The whole column is dilated to accomodate deeper topography than
-      ! the input file would indicate.
-      if (-zi(i,j,nz+1) < G%bathyT(i,j) - 0.1) then
-        dilate = (zi(i,j,1)+G%bathyT(i,j)) / (zi(i,j,1)-zi(i,j,nz+1))
-        do k=1,nz ; h(i,j,k) = h(i,j,k) * dilate ; enddo
-      endif
-    enddo ; enddo
-  else
-    inconsistent=0
-    do j=js,je ; do i=is,ie
-      if (abs(zi(i,j,nz+1) + G%bathyT(i,j)) > 1.0) &
-        inconsistent = inconsistent + 1
-    enddo ; enddo
-    call sum_across_PEs(inconsistent)
+    if (correct_thickness) then
+      do j=js,je ; do i=is,ie
+        !   The whole column is dilated to accomodate deeper topography than
+        ! the input file would indicate.
+        if (-zi(i,j,nz+1) < G%bathyT(i,j) - 0.1) then
+          dilate = (zi(i,j,1)+G%bathyT(i,j)) / (zi(i,j,1)-zi(i,j,nz+1))
+          do k=1,nz ; h(i,j,k) = h(i,j,k) * dilate ; enddo
+        endif
+      enddo ; enddo
+    else
+      inconsistent=0
+      do j=js,je ; do i=is,ie
+        if (abs(zi(i,j,nz+1) + G%bathyT(i,j)) > 1.0) &
+          inconsistent = inconsistent + 1
+      enddo ; enddo
+      call sum_across_PEs(inconsistent)
 
-    if ((inconsistent > 0) .and. (is_root_pe())) then
-      write(mesg,'("Thickness initial conditions are inconsistent ",'// &
-               '"with topography in ",I5," places.")') inconsistent
-      call MOM_error(WARNING, mesg)
+      if ((inconsistent > 0) .and. (is_root_pe())) then
+        write(mesg,'("Thickness initial conditions are inconsistent ",'// &
+                 '"with topography in ",I5," places.")') inconsistent
+        call MOM_error(WARNING, mesg)
+      endif
     endif
-  endif
 
 ! and remap temperature and salinity to layers
-
-  dbg=.false.
-  if (debug_point) then
-     if (isc-xhalo.le.i_debug .and. ie-is+isc-xhalo .ge. i_debug) then
-       if (jsc-yhalo.le.j_debug .and. je-js+jsc-yhalo .ge. j_debug) then
-         dbg=.true.
-         idbg=i_debug+is-isc
-         jdbg=j_debug+js-jsc
+    dbg=.false.
+    if (debug_point) then
+       if (isc-xhalo.le.i_debug .and. ie-is+isc-xhalo .ge. i_debug) then
+         if (jsc-yhalo.le.j_debug .and. je-js+jsc-yhalo .ge. j_debug) then
+           dbg=.true.
+           idbg=i_debug+is-isc
+           jdbg=j_debug+js-jsc
+         endif
        endif
-     endif
-  endif
+    endif
 
 
-  tv%T(is:ie,js:je,:) = tracer_z_init(temp_z(is:ie,js:je,:),-1.0*z_edges_in,zi(is:ie,js:je,:),nkml,nkbl,missing_value,G%mask2dT(is:ie,js:je),nz,nlevs(is:ie,js:je),dbg,idbg,jdbg)
-  tv%S(is:ie,js:je,:) = tracer_z_init(salt_z(is:ie,js:je,:),-1.0*z_edges_in,zi(is:ie,js:je,:),nkml,nkbl,missing_value,G%mask2dT(is:ie,js:je),nz,nlevs(is:ie,js:je))
+    tv%T(is:ie,js:je,:) = tracer_z_init(temp_z(is:ie,js:je,:),-1.0*z_edges_in,zi(is:ie,js:je,:),nkml,nkbl,missing_value,G%mask2dT(is:ie,js:je),nz,nlevs(is:ie,js:je),dbg,idbg,jdbg)
+    tv%S(is:ie,js:je,:) = tracer_z_init(salt_z(is:ie,js:je,:),-1.0*z_edges_in,zi(is:ie,js:je,:),nkml,nkbl,missing_value,G%mask2dT(is:ie,js:je),nz,nlevs(is:ie,js:je))
 
 
 ! In case of a problem , use this.
-
-  if (dbg) then
-    do j=js,je ; do i=is,ie
-      if (i-is+isc-xhalo.eq.i_debug.and. j-js+jsc-yhalo.eq.j_debug) then
-        do k=1,kd
-          print *,'klev,T,S,rho=',k,temp_z(i,j,k),salt_z(i,j,k),rho_z(i,j,k)
-        enddo
-        do k=1,nz
-          print *,'klay,T,S,z=',k,tv%T(i,j,k),tv%S(i,j,k),zi(i,j,k)
-        enddo
-        allocate(tmp1(1,1,nz))
-        tmp1=tracer_z_init(temp_z(i:i,j:j,:),-1.0*z_edges_in,zi(i:i,j:j,:),nkml,nkbl,missing_value,G%mask2dT(i:i,j:j),nz,nlevs(i:i,j:j),debug=.true.)
-        print *,'tmp= ',tmp1
-        deallocate(tmp1)
-      endif
-    enddo ; enddo
-  endif
+    if (dbg) then
+      do j=js,je ; do i=is,ie
+        if (i-is+isc-xhalo.eq.i_debug.and. j-js+jsc-yhalo.eq.j_debug) then
+          do k=1,kd
+            print *,'klev,T,S,rho=',k,temp_z(i,j,k),salt_z(i,j,k),rho_z(i,j,k)
+          enddo
+          do k=1,nz
+            print *,'klay,T,S,z=',k,tv%T(i,j,k),tv%S(i,j,k),zi(i,j,k)
+          enddo
+          allocate(tmp1(1,1,nz))
+          tmp1=tracer_z_init(temp_z(i:i,j:j,:),-1.0*z_edges_in,zi(i:i,j:j,:),nkml,nkbl,missing_value,G%mask2dT(i:i,j:j),nz,nlevs(i:i,j:j),debug=.true.)
+          print *,'tmp= ',tmp1
+          deallocate(tmp1)
+        endif
+      enddo ; enddo
+    endif
+  endif ! useALEremapping
 
 ! Fill land values
-
   do k=1,nz ; do j=js,je ; do i=is,ie
     if (tv%T(i,j,k).eq.missing_value) then
       tv%T(i,j,k)=temp_land_fill
@@ -3846,11 +3921,10 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
     endif
   enddo ; enddo ; enddo
 
-! finally adjust to target density
-
+! Finally adjust to target density
   ks=max(0,nkml)+max(0,nkbl)+1
 
-  if (adjust_temperature) then
+  if (adjust_temperature .and. .not. useALEremapping) then
     call determine_temperature(tv%T(is:ie,js:je,:), tv%S(is:ie,js:je,:), &
             G%Rlay(1:nz), tv%p_ref, niter, missing_value, h(is:ie,js:je,:), ks, eos)
     if (debug_point) then
@@ -3871,8 +3945,6 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
   deallocate(tmp_in,temp_in,salt_in,mask_in,last_row)
   deallocate(temp_out,salt_out,mask_out,temp_prev,salt_prev)
   deallocate(rho_out,fill,mask2dT,good,Depth)
-
-  return
 
 end subroutine MOM_temp_salt_initialize_from_Z
 

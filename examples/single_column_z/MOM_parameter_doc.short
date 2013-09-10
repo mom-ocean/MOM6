@@ -31,7 +31,7 @@ NJGLOBAL = 2                    !
 
 ! === Parameters of module MOM_grid ===
 ! Parameters providing information about the vertical grid.
-NK = 48                         !   [nondim]
+NK = 75                         !   [nondim]
                                 ! The number of model layers.
 
 ! === Parameters of module MOM ===
@@ -74,15 +74,13 @@ C_P = 3925.0                    !   [J kg-1 K-1] default = 3991.86795711963
 SAVE_INITIAL_CONDS = True       !   [Boolean] default = False
                                 ! If true, write the initial conditions to a file given
                                 ! by IC_OUTPUT_FILE.
-IC_OUTPUT_FILE = "GOLD_IC"      ! default = "MOM_IC"
-                                ! The file into which to write the initial conditions.
 
 ! === Parameters of module MOM_tracer_registry ===
 
 ! === Parameters of module MOM_tracer_flow_control ===
 INPUTDIR = "INPUT/BATS"         ! default = "."
                                 ! The directory in which input files are found.
-COORD_CONFIG = "file"           !
+COORD_CONFIG = "none"           !
                                 ! This specifies how layers are to be defined:
                                 !     file - read coordinate information from the file
                                 !       specified by (COORD_FILE).
@@ -96,8 +94,6 @@ COORD_CONFIG = "file"           !
                                 !     ts_profile - use temperature and salinity profiles
                                 !       (read from COORD_FILE) to set layer densities.
                                 !     USER - call a user modified routine.
-COORD_FILE = "ICs.nc"           !
-                                ! The file from which the coordinate densities are read.
 
 ! === Parameters of module MOM_grid_init ===
 GRID_CONFIG = "cartesian"       !
@@ -135,7 +131,7 @@ TOPO_CONFIG = "flat"            !
                                 !     USER - call a user modified routine.
 MINIMUM_DEPTH = 0.5             !   [m] default = 0.0
                                 ! The minimum depth of the ocean.
-MAXIMUM_DEPTH = 5500.0          !   [m]
+MAXIMUM_DEPTH = 6000.0          !   [m]
                                 ! The maximum depth of the ocean.
 ROTATION = "betaplane"          ! default = "2omegasinlat"
                                 ! This specifies how the Coriolis parameter is specified:
@@ -150,49 +146,24 @@ ALWAYS_WRITE_GEOM = False       !   [Boolean] default = True
                                 ! If true, write the geometry and vertical grid files
                                 ! every time the model is run.  Otherwise, only write
                                 ! them for new runs.
-THICKNESS_CONFIG = "file"       !
-                                ! A string that determines how the initial layer
-                                ! thicknesses are specified for a new run:
-                                !     file - read interface heights from the file specified
-                                !     thickness_file - read thicknesses from the file specified
-                                !       by (THICKNESS_FILE).
-                                !     uniform - uniform thickness layers evenly distributed
-                                !       between the surface and MAXIMUM_DEPTH.
-                                !     DOME - use a slope and channel configuration for the
-                                !       DOME sill-overflow test case.
-                                !     benchmark - use the benchmark test case thicknesses.
-                                !     search - search a density profile for the interface
-                                !       densities. This is not yet implemented.
-                                !     circle_obcs - the circle_obcs test case is used.
-                                !     DOME2D - 2D version of DOME initialization.
-                                !     adjustment2d - TBD AJA.
-                                !     sloshing - TBD AJA.
-                                !     seamount - TBD AJA.
-                                !     USER - call a user modified routine.
-THICKNESS_FILE = "ICs.nc"       !
-                                ! The name of the thickness file.
-ADJUST_THICKNESS = True         !   [Boolean] default = False
-                                ! If true, all mass below the bottom removed if the
-                                ! topography is shallower than the thickness input file
-                                ! would indicate.
-TS_CONFIG = "file"              !
-                                ! A string that determines how the initial tempertures
-                                ! and salinities are specified for a new run:
-                                !     file - read velocities from the file specified
-                                !       by (TS_FILE).
-                                !     fit - find the temperatures that are consistent with
-                                !       the layer densities and salinity S_REF.
-                                !     TS_profile - use temperature and salinity profiles
-                                !       (read from TS_FILE) to set layer densities.
-                                !     benchmark - use the benchmark test case T & S.
-                                !     linear - linear in logical layer space.
-                                !     DOME2D - 2D DOME initialization.
-                                !     adjustment2d - TBD AJA.
-                                !     sloshing - TBD AJA.
-                                !     seamount - TBD AJA.
-                                !     USER - call a user modified routine.
-TS_FILE = "ICs.nc"              !
-                                ! The initial condition file for temperature.
+INIT_LAYERS_FROM_Z_FILE = True  !   [Boolean] default = False
+                                ! If true, intialize the layer thicknesses, temperatures,
+                                ! and salnities from a Z-space file on a latitude-
+                                ! longitude grid.
+TEMP_SALT_Z_INIT_FILE = "WOA_column.nc" ! default = "temp_salt_z.nc"
+                                ! The name of the z-space input file used to initialize
+                                ! the layer thicknesses, temperatures and salinities.
+Z_INIT_FILE_PTEMP_VAR = "PTEMP" ! default = "ptemp"
+                                ! The name of the potential temperature variable in
+                                ! TEMP_SALT_Z_INIT_FILE.
+Z_INIT_FILE_SALT_VAR = "SALT"   ! default = "salt"
+                                ! The name of the salinity variable in
+                                ! TEMP_SALT_Z_INIT_FILE.
+Z_INIT_HOMOGENIZE = True        !   [Boolean] default = False
+                                ! If True, then horizontally homogenize the interpolated
+                                ! initial conditions.
+Z_INIT_ALE_REMAPPING = True     !   [Boolean] default = False
+                                ! If True, then remap straight to model coordinate from file.
 REGRIDDING_COORDINATE_MODE = "Z*" ! default = "LAYER"
                                 ! Coordinate mode for vertical regridding.
                                 ! Choose among the following possibilities:
@@ -200,7 +171,7 @@ REGRIDDING_COORDINATE_MODE = "Z*" ! default = "LAYER"
                                 !  Z*    - stetched geopotential z*
                                 !  SIGMA - terrain following coordinates
                                 !  RHO   - continuous isopycnal
-ALE_COORDINATE_CONFIG = "PARAM" ! default = "UNIFORM"
+ALE_COORDINATE_CONFIG = "FILE:INPUT/vgrid_cm4_10.nc,dz" ! default = "UNIFORM"
                                 ! Determines how to specify the coordinate
                                 ! resolution. Valid options are:
                                 !  PARAM       - use the vector-parameter ALE_RESOLUTION
@@ -208,7 +179,7 @@ ALE_COORDINATE_CONFIG = "PARAM" ! default = "UNIFORM"
                                 !  FILE:string - read from a file. The string specifies
                                 !                the filename and variable name, separated
                                 !                by a comma or space, e.g. FILE:lev.nc,Z
-ALE_RESOLUTION = 48*10.0        !   [m]
+!ALE_RESOLUTION = 3*10.0, 10.01, 10.02, 10.03, 10.05, 10.09, 10.13, 10.2, 10.29, 10.39, 10.53, 10.71, 10.91, 11.15, 11.46, 11.8, 12.22, 12.69, 13.24, 13.88, 14.62, 15.45, 16.4, 17.5, 18.72, 20.13, 21.7, 23.48, 25.47, 27.71, 30.22, 33.0, 36.08, 39.51, 43.26, 47.38, 51.86, 56.72, 61.95, 67.53, 73.47, 79.72, 86.25, 93.0, 99.95, 106.99, 114.09, 121.13, 128.08, 134.83, 141.32, 147.47, 153.23, 158.55, 163.4, 167.73, 171.57, 174.87, 177.7, 180.06, 181.97, 183.49, 184.66, 185.55, 186.17, 186.6, 186.87, 187.04, 187.11, 187.15, 2*187.16, 187.17 !   [m]
                                 ! The distribution of vertical resolution for the target
                                 ! grid used for Eulerian-like coordinates. For example,
                                 ! in z-coordinate mode, the parameter is a list of level
@@ -226,7 +197,7 @@ UPWIND_1ST_CONTINUITY = True    !   [Boolean] default = False
                                 ! continuity solver.  This scheme is highly diffusive
                                 ! but may be useful for debugging or in single-column
                                 ! mode where its minimal stensil is useful.
-ETA_TOLERANCE = 1.0E-06         !   [m] default = 2.4E-09
+ETA_TOLERANCE = 1.0E-06         !   [m] default = 3.75E-09
                                 ! The tolerance for the differences between the
                                 ! barotropic and baroclinic estimates of the sea surface
                                 ! height due to the fluxes through each face.  The total

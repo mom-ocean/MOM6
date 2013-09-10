@@ -395,6 +395,8 @@ Z_INIT_FILE_SALT_VAR = "SALT"   ! default = "salt"
 Z_INIT_HOMOGENIZE = False       !   [Boolean] default = False
                                 ! If True, then horizontally homogenize the interpolated
                                 ! initial conditions.
+Z_INIT_ALE_REMAPPING = False    !   [Boolean] default = False
+                                ! If True, then remap straight to model coordinate from file.
 ADJUST_THICKNESS = True         !   [Boolean] default = False
                                 ! If true, all mass below the bottom removed if the
                                 ! topography is shallower than the thickness input file

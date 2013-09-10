@@ -89,7 +89,7 @@ BATHYMETRY_AT_VEL = False       !   [Boolean] default = False
                                 ! If true, there are separate values for the basin depths
                                 ! at velocity points.  Otherwise the effects of of
                                 ! topography are entirely determined from thickness points.
-NK = 48                         !   [nondim]
+NK = 75                         !   [nondim]
                                 ! The number of model layers.
 AVAILABLE_DIAGS_FILE = "available_diags.000000" ! default = "available_diags.000000"
                                 ! A file into which to write a list of all available
@@ -193,7 +193,7 @@ CHECK_BAD_SURFACE_VALS = False  !   [Boolean] default = False
 SAVE_INITIAL_CONDS = True       !   [Boolean] default = False
                                 ! If true, write the initial conditions to a file given
                                 ! by IC_OUTPUT_FILE.
-IC_OUTPUT_FILE = "GOLD_IC"      ! default = "MOM_IC"
+IC_OUTPUT_FILE = "MOM_IC"       ! default = "MOM_IC"
                                 ! The file into which to write the initial conditions.
 
 ! === Parameters of module MOM_tracer_registry ===
@@ -250,7 +250,7 @@ USE_generic_tracer = False      !   [Boolean] default = False
                                 ! preprocessor macro, use the MOM_generic_tracer packages.
 INPUTDIR = "INPUT/BATS"         ! default = "."
                                 ! The directory in which input files are found.
-COORD_CONFIG = "file"           !
+COORD_CONFIG = "none"           !
                                 ! This specifies how layers are to be defined:
                                 !     file - read coordinate information from the file
                                 !       specified by (COORD_FILE).
@@ -264,13 +264,6 @@ COORD_CONFIG = "file"           !
                                 !     ts_profile - use temperature and salinity profiles
                                 !       (read from COORD_FILE) to set layer densities.
                                 !     USER - call a user modified routine.
-GFS = 9.8                       !   [m s-2] default = 9.8
-                                ! The reduced gravity at the free surface.
-COORD_FILE = "ICs.nc"           !
-                                ! The file from which the coordinate densities are read.
-COORD_VAR = "Layer"             ! default = "Layer"
-                                ! The variable in COORD_FILE that is to be used for the
-                                ! coordinate densities.
 
 ! === Parameters of module MOM_grid_init ===
 GRID_CONFIG = "cartesian"       !
@@ -318,7 +311,7 @@ TOPO_CONFIG = "flat"            !
                                 !     USER - call a user modified routine.
 MINIMUM_DEPTH = 0.5             !   [m] default = 0.0
                                 ! The minimum depth of the ocean.
-MAXIMUM_DEPTH = 5500.0          !   [m]
+MAXIMUM_DEPTH = 6000.0          !   [m]
                                 ! The maximum depth of the ocean.
 APPLY_OBC_U_FLATHER_EAST = False !   [Boolean] default = False
                                 ! Apply a Flather open boundary condition on the eastern
@@ -359,59 +352,72 @@ ALWAYS_WRITE_GEOM = False       !   [Boolean] default = True
                                 ! If true, write the geometry and vertical grid files
                                 ! every time the model is run.  Otherwise, only write
                                 ! them for new runs.
-INIT_LAYERS_FROM_Z_FILE = False !   [Boolean] default = False
+INIT_LAYERS_FROM_Z_FILE = True  !   [Boolean] default = False
                                 ! If true, intialize the layer thicknesses, temperatures,
                                 ! and salnities from a Z-space file on a latitude-
                                 ! longitude grid.
-THICKNESS_CONFIG = "file"       !
-                                ! A string that determines how the initial layer
-                                ! thicknesses are specified for a new run:
-                                !     file - read interface heights from the file specified
-                                !     thickness_file - read thicknesses from the file specified
-                                !       by (THICKNESS_FILE).
-                                !     uniform - uniform thickness layers evenly distributed
-                                !       between the surface and MAXIMUM_DEPTH.
-                                !     DOME - use a slope and channel configuration for the
-                                !       DOME sill-overflow test case.
-                                !     benchmark - use the benchmark test case thicknesses.
-                                !     search - search a density profile for the interface
-                                !       densities. This is not yet implemented.
-                                !     circle_obcs - the circle_obcs test case is used.
-                                !     DOME2D - 2D version of DOME initialization.
-                                !     adjustment2d - TBD AJA.
-                                !     sloshing - TBD AJA.
-                                !     seamount - TBD AJA.
-                                !     USER - call a user modified routine.
-THICKNESS_FILE = "ICs.nc"       !
-                                ! The name of the thickness file.
-ADJUST_THICKNESS = True         !   [Boolean] default = False
-                                ! If true, all mass below the bottom removed if the
-                                ! topography is shallower than the thickness input file
-                                ! would indicate.
-TS_CONFIG = "file"              !
-                                ! A string that determines how the initial tempertures
-                                ! and salinities are specified for a new run:
-                                !     file - read velocities from the file specified
-                                !       by (TS_FILE).
-                                !     fit - find the temperatures that are consistent with
-                                !       the layer densities and salinity S_REF.
-                                !     TS_profile - use temperature and salinity profiles
-                                !       (read from TS_FILE) to set layer densities.
-                                !     benchmark - use the benchmark test case T & S.
-                                !     linear - linear in logical layer space.
-                                !     DOME2D - 2D DOME initialization.
-                                !     adjustment2d - TBD AJA.
-                                !     sloshing - TBD AJA.
-                                !     seamount - TBD AJA.
-                                !     USER - call a user modified routine.
-TS_FILE = "ICs.nc"              !
-                                ! The initial condition file for temperature.
-TEMP_IC_VAR = "PTEMP"           ! default = "PTEMP"
-                                ! The initial condition variable for potential temperature.
-SALT_IC_VAR = "SALT"            ! default = "SALT"
-                                ! The initial condition variable for salinity.
-SALT_FILE = "ICs.nc"            ! default = "ICs.nc"
-                                ! The initial condition file for salinity.
+TEMP_SALT_Z_INIT_FILE = "WOA_column.nc" ! default = "temp_salt_z.nc"
+                                ! The name of the z-space input file used to initialize
+                                ! the layer thicknesses, temperatures and salinities.
+Z_INIT_FILE_PTEMP_VAR = "PTEMP" ! default = "ptemp"
+                                ! The name of the potential temperature variable in
+                                ! TEMP_SALT_Z_INIT_FILE.
+Z_INIT_FILE_SALT_VAR = "SALT"   ! default = "salt"
+                                ! The name of the salinity variable in
+                                ! TEMP_SALT_Z_INIT_FILE.
+Z_INIT_HOMOGENIZE = True        !   [Boolean] default = False
+                                ! If True, then horizontally homogenize the interpolated
+                                ! initial conditions.
+Z_INIT_ALE_REMAPPING = True     !   [Boolean] default = False
+                                ! If True, then remap straight to model coordinate from file.
+REGRIDDING_COORDINATE_MODE = "Z*" ! default = "LAYER"
+                                ! Coordinate mode for vertical regridding.
+                                ! Choose among the following possibilities:
+                                !  LAYER - Isopycnal or stacked shallow water layers
+                                !  Z*    - stetched geopotential z*
+                                !  SIGMA - terrain following coordinates
+                                !  RHO   - continuous isopycnal
+REGRIDDING_COORDINATE_UNITS = "m" ! default = "m"
+                                ! Units of the regridding coordinuate.
+INTERPOLATION_SCHEME = "P1M_H2" ! default = "P1M_H2"
+                                ! This sets the interpolation scheme to use to
+                                ! determine the new grid. These parameters are
+                                ! only relevant when REGRIDDING_COORDINATE_MODE is
+                                ! set to a function of state. Otherwise, it is not
+                                ! used. It can be one of the following schemes:
+                                !  P1M_H2     (2nd-order accurate)
+                                !  P1M_H4     (2nd-order accurate)
+                                !  P1M_IH4    (2nd-order accurate)
+                                !  PLM        (2nd-order accurate)
+                                !  PPM_H4     (3rd-order accurate)
+                                !  PPM_IH4    (3rd-order accurate)
+                                !  P3M_IH4IH3 (4th-order accurate)
+                                !  P3M_IH6IH5 (4th-order accurate)
+                                !  PQM_IH4IH3 (4th-order accurate)
+                                !  PQM_IH6IH5 (5th-order accurate)
+ALE_COORDINATE_CONFIG = "FILE:INPUT/vgrid_cm4_10.nc,dz" ! default = "UNIFORM"
+                                ! Determines how to specify the coordinate
+                                ! resolution. Valid options are:
+                                !  PARAM       - use the vector-parameter ALE_RESOLUTION
+                                !  UNIFORM     - uniformly distributed
+                                !  FILE:string - read from a file. The string specifies
+                                !                the filename and variable name, separated
+                                !                by a comma or space, e.g. FILE:lev.nc,Z
+!ALE_RESOLUTION = 3*10.0, 10.01, 10.02, 10.03, 10.05, 10.09, 10.13, 10.2, 10.29, 10.39, 10.53, 10.71, 10.91, 11.15, 11.46, 11.8, 12.22, 12.69, 13.24, 13.88, 14.62, 15.45, 16.4, 17.5, 18.72, 20.13, 21.7, 23.48, 25.47, 27.71, 30.22, 33.0, 36.08, 39.51, 43.26, 47.38, 51.86, 56.72, 61.95, 67.53, 73.47, 79.72, 86.25, 93.0, 99.95, 106.99, 114.09, 121.13, 128.08, 134.83, 141.32, 147.47, 153.23, 158.55, 163.4, 167.73, 171.57, 174.87, 177.7, 180.06, 181.97, 183.49, 184.66, 185.55, 186.17, 186.6, 186.87, 187.04, 187.11, 187.15, 2*187.16, 187.17 !   [m]
+                                ! The distribution of vertical resolution for the target
+                                ! grid used for Eulerian-like coordinates. For example,
+                                ! in z-coordinate mode, the parameter is a list of level
+                                ! thicknesses (in m). In sigma-coordinate mode, the list
+                                ! is of non-dimensional fractions of the water column.
+MIN_THICKNESS = 0.001           !   [m] default = 0.001
+                                ! When regridding, this is the minimum layer
+                                ! thickness allowed.
+BOUNDARY_EXTRAPOLATION = False  !   [Boolean] default = False
+                                ! When defined, a proper high-order reconstruction
+                                ! scheme is used within boundary cells rather
+                                ! than PCM. E.g., if PPM is used for remapping, a
+                                ! PPM reconstruction will also be used within
+                                ! boundary cells.
 VELOCITY_CONFIG = "zero"        ! default = "zero"
                                 ! A string that determines how the initial velocities
                                 ! are specified for a new run:
@@ -454,54 +460,6 @@ PRESSURE_RECONSTRUCTION_SCHEME = 1 ! default = 1
                                 ! Type of vertical reconstruction of T/S to use in integrals
                                 ! within the FV pressure gradient calculation. 1: PLM reconstruction.
                                 !  2: PPM reconstruction.
-REGRIDDING_COORDINATE_MODE = "Z*" ! default = "LAYER"
-                                ! Coordinate mode for vertical regridding.
-                                ! Choose among the following possibilities:
-                                !  LAYER - Isopycnal or stacked shallow water layers
-                                !  Z*    - stetched geopotential z*
-                                !  SIGMA - terrain following coordinates
-                                !  RHO   - continuous isopycnal
-REGRIDDING_COORDINATE_UNITS = "m" ! default = "m"
-                                ! Units of the regridding coordinuate.
-INTERPOLATION_SCHEME = "P1M_H2" ! default = "P1M_H2"
-                                ! This sets the interpolation scheme to use to
-                                ! determine the new grid. These parameters are
-                                ! only relevant when REGRIDDING_COORDINATE_MODE is
-                                ! set to a function of state. Otherwise, it is not
-                                ! used. It can be one of the following schemes:
-                                !  P1M_H2     (2nd-order accurate)
-                                !  P1M_H4     (2nd-order accurate)
-                                !  P1M_IH4    (2nd-order accurate)
-                                !  PLM        (2nd-order accurate)
-                                !  PPM_H4     (3rd-order accurate)
-                                !  PPM_IH4    (3rd-order accurate)
-                                !  P3M_IH4IH3 (4th-order accurate)
-                                !  P3M_IH6IH5 (4th-order accurate)
-                                !  PQM_IH4IH3 (4th-order accurate)
-                                !  PQM_IH6IH5 (5th-order accurate)
-ALE_COORDINATE_CONFIG = "PARAM" ! default = "UNIFORM"
-                                ! Determines how to specify the coordinate
-                                ! resolution. Valid options are:
-                                !  PARAM       - use the vector-parameter ALE_RESOLUTION
-                                !  UNIFORM     - uniformly distributed
-                                !  FILE:string - read from a file. The string specifies
-                                !                the filename and variable name, separated
-                                !                by a comma or space, e.g. FILE:lev.nc,Z
-ALE_RESOLUTION = 48*10.0        !   [m]
-                                ! The distribution of vertical resolution for the target
-                                ! grid used for Eulerian-like coordinates. For example,
-                                ! in z-coordinate mode, the parameter is a list of level
-                                ! thicknesses (in m). In sigma-coordinate mode, the list
-                                ! is of non-dimensional fractions of the water column.
-MIN_THICKNESS = 0.001           !   [m] default = 0.001
-                                ! When regridding, this is the minimum layer
-                                ! thickness allowed.
-BOUNDARY_EXTRAPOLATION = False  !   [Boolean] default = False
-                                ! When defined, a proper high-order reconstruction
-                                ! scheme is used within boundary cells rather
-                                ! than PCM. E.g., if PPM is used for remapping, a
-                                ! PPM reconstruction will also be used within
-                                ! boundary cells.
 REMAPPING_SCHEME = "PLM"        ! default = "PLM"
                                 ! This sets the reconstruction scheme used
                                 ! for vertical remapping for all variables.
@@ -611,7 +569,7 @@ UPWIND_1ST_CONTINUITY = True    !   [Boolean] default = False
                                 ! continuity solver.  This scheme is highly diffusive
                                 ! but may be useful for debugging or in single-column
                                 ! mode where its minimal stensil is useful.
-ETA_TOLERANCE = 1.0E-06         !   [m] default = 2.4E-09
+ETA_TOLERANCE = 1.0E-06         !   [m] default = 3.75E-09
                                 ! The tolerance for the differences between the
                                 ! barotropic and baroclinic estimates of the sea surface
                                 ! height due to the fluxes through each face.  The total

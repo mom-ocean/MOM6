@@ -54,6 +54,7 @@ public initialize_remapping, end_remapping
 public rempaEnableBoundaryExtrapolation, remapDisableBoundaryExtrapolation
 public setReconstructionType
 public remappingUnitTests
+public dzFromH1H2
 
 ! -----------------------------------------------------------------------------
 ! The following are private parameter constants
@@ -390,7 +391,7 @@ subroutine remapping_core( CS, n0, h0, u0, n1, dx, u1 )
   if (dx(1) /= 0.) call MOM_error( FATAL, 'MOM_remapping, remapping_core: '//&
              'Non-zero surface flux!' ) ! This is techically allowed but in avoided practice 
   totalH0 = 0.
-  do k=1, n1
+  do k=1, n0
     totalH0 = totalH0 + h0(k)
   enddo
   totalHf = 0.
@@ -898,9 +899,9 @@ end subroutine integrateReconOnInterval
 
 
 !------------------------------------------------------------------------------
-! dzFromH
+! dzFromH1H2
 !------------------------------------------------------------------------------
-subroutine dzFromH( n1, h1, n2, h2, dx )
+subroutine dzFromH1H2( n1, h1, n2, h2, dx )
 ! ------------------------------------------------------------------------------
 ! Calculates the change in interface positions based on h1 and h2
 ! ------------------------------------------------------------------------------
@@ -932,11 +933,11 @@ subroutine dzFromH( n1, h1, n2, h2, dx )
     write(0,*) 'h2=',h2
     write(0,*) 'dx=',dx
     write(0,*) 'x1,x2,x2-x1',x1,x2,x2-x1
-    call MOM_error(FATAL,'MOM_regridding, dzFromH: Bottom has moved!')
+    call MOM_error(FATAL,'MOM_regridding, dzFromH1H2: Bottom has moved!')
   endif
 #endif
 
-end subroutine dzFromH
+end subroutine dzFromH1H2
 
 
 !------------------------------------------------------------------------------
@@ -1083,7 +1084,7 @@ logical function remappingUnitTests()
   write(*,*) 'h0 (test data)'
   call dumpGrid(n0,h0,x0,u0)
 
-  call dzFromH( n0, h0, n1, h1, dx1 )
+  call dzFromH1H2( n0, h0, n1, h1, dx1 )
   call remapping_core( CS, n0, h0, u0, n1, dx1, u1 )
   do i=1,n1
     err=u1(i)-8./3.*(0.5*real(1+n1)-real(i))
