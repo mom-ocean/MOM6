@@ -103,10 +103,13 @@ public initialize_regridding
 public end_regridding
 public regridding_main 
 public check_grid_integrity
-public setCoordinateResolution
 public setRegriddingBoundaryExtrapolation
 public setRegriddingMinimumThickness
 public uniformResolution
+public setCoordinateResolution
+public getCoordinateResolution
+public getCoordinateInterfaces
+public getCoordinateUnits
 
 public DEFAULT_COORDINATE_MODE
 character(len=158), parameter, public :: regriddingCoordinateModeDoc = &
@@ -1521,6 +1524,57 @@ subroutine setCoordinateResolution( dz, CS )
   CS%coordinateResolution(:) = dz(:)
   
 end subroutine setCoordinateResolution
+
+!------------------------------------------------------------------------------
+! Query the fixed resolution data
+!------------------------------------------------------------------------------
+function getCoordinateResolution( CS )
+  type(regridding_CS), intent(in) :: CS
+  real, dimension(CS%nk)          :: getCoordinateResolution
+
+  getCoordinateResolution(:) = CS%coordinateResolution(:)
+  
+end function getCoordinateResolution
+
+!------------------------------------------------------------------------------
+! Query the target coordinate interfaces positions
+!------------------------------------------------------------------------------
+function getCoordinateInterfaces( CS )
+  type(regridding_CS), intent(in) :: CS
+  real, dimension(CS%nk+1)        :: getCoordinateInterfaces
+
+  integer :: k
+
+  getCoordinateInterfaces(1) = 0.
+  do k = 1, CS%nk
+    getCoordinateInterfaces(k+1) = getCoordinateInterfaces(k) &
+                                  -CS%coordinateResolution(k)
+  enddo
+
+end function getCoordinateInterfaces
+
+!------------------------------------------------------------------------------
+! Query the target coordinate units
+!------------------------------------------------------------------------------
+function getCoordinateUnits( CS )
+  type(regridding_CS), intent(in) :: CS
+  character(len=20)               :: getCoordinateUnits
+
+  select case ( CS%regridding_scheme )
+    case ( REGRIDDING_ZSTAR )
+      getCoordinateUnits = 'meter'
+    case ( REGRIDDING_SIGMA )
+      getCoordinateUnits = 'fraction'
+    case ( REGRIDDING_RHO )  
+      getCoordinateUnits = 'kg/m3'
+    case ( REGRIDDING_ARBITRARY )
+      getCoordinateUnits = 'unknown'
+    case default
+      call MOM_error(FATAL,'MOM_regridding, getCoordinateUnits: '//&
+                     'Unknown regridding scheme selected!')
+  end select ! type of grid 
+
+end function getCoordinateUnits
 
 !------------------------------------------------------------------------------
 ! Control the extrapolation of boundary data

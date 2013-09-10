@@ -42,6 +42,8 @@ use MOM_regridding, only : setRegriddingBoundaryExtrapolation
 use MOM_regridding, only : regriddingDefaultBoundaryExtrapolation
 use MOM_regridding, only : setRegriddingMinimumThickness, regriddingDefaultMinThickness
 use MOM_regridding, only : regridding_CS
+use MOM_regridding, only : getCoordinateInterfaces, getCoordinateResolution
+use MOM_regridding, only : getCoordinateUnits
 use MOM_remapping, only : initialize_remapping, remapping_main, end_remapping
 use MOM_remapping, only : remappingSchemesDoc, remappingDefaultScheme
 use MOM_remapping, only : remapping_CS
@@ -88,6 +90,9 @@ type, public :: ALE_CS
   type(edgeValueArrays) :: edgeValueWrk ! Work space for edge values
   type(edgeSlopeArrays) :: edgeSlopeWrk ! Work space for edge slopes
 
+  ! Used only for queries, not directly by this module
+  integer :: nk
+
   ! Work space for communicating between regridding and remapping
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_,NK_INTERFACE_) :: dzRegrid
 
@@ -105,6 +110,8 @@ public usePressureReconstruction
 public pressureReconstructionScheme
 public adjustGridForIntegrity
 public ALE_initRegridding
+public ALE_getCoordinate
+public ALE_getCoordinateUnits
 
 ! -----------------------------------------------------------------------------
 ! The following are private constants
@@ -196,6 +203,9 @@ subroutine initialize_ALE( param_file, G, CS )
                  "It can be one of the following schemes:\n"//&
                  trim(remappingSchemesDoc), default=remappingDefaultScheme)
   call initialize_remapping( G%ke, string, CS%remapCS )
+
+  ! Keep a record of values for subsequent queries
+  CS%nk = G%ke
 
 end subroutine initialize_ALE
 
@@ -614,5 +624,27 @@ subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
   call setRegriddingBoundaryExtrapolation( tmpLogical, regridCS )
 
 end subroutine ALE_initRegridding
+
+!------------------------------------------------------------------------------
+! Query the target coordinate interfaces positions
+!------------------------------------------------------------------------------
+function ALE_getCoordinate( CS )
+  type(ALE_CS), pointer    :: CS
+  real, dimension(CS%nk+1) :: ALE_getCoordinate
+
+  ALE_getCoordinate(:) = getCoordinateInterfaces( CS%regridCS )
+
+end function ALE_getCoordinate
+
+!------------------------------------------------------------------------------
+! Query the target coordinate units
+!------------------------------------------------------------------------------
+function ALE_getCoordinateUnits( CS )
+  type(ALE_CS), pointer    :: CS
+  character(len=20)               :: ALE_getCoordinateUnits
+
+  ALE_getCoordinateUnits = getCoordinateUnits( CS%regridCS )
+
+end function ALE_getCoordinateUnits
 
 end module MOM_ALE

@@ -400,6 +400,7 @@ use MOM_dynamics_legacy_split, only : step_MOM_dyn_legacy_split, register_restar
 use MOM_dynamics_legacy_split, only : initialize_dyn_legacy_split, end_dyn_legacy_split
 use MOM_dynamics_legacy_split, only : adjustments_dyn_legacy_split, MOM_dyn_legacy_split_CS
 use MOM_ALE, only : initialize_ALE, end_ALE, ALE_main, ALE_CS, adjustGridForIntegrity
+use MOM_ALE, only : ALE_getCoordinate, ALE_getCoordinateUnits
 
 implicit none ; private
 
@@ -1508,8 +1509,6 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call cpu_clock_begin(id_clock_MOM_init)
   call MOM_initialize(CS%u, CS%v, CS%h, CS%tv, Time, G, param_file, dirs, &
                       CS%restart_CSp, init_CS, Time_in)
-  ! This call sets up the diagnostic axes.
-  call set_axes_info(G, param_file, diag)
   call cpu_clock_end(id_clock_MOM_init)
 
   if (CS%useALEalgorithm) then
@@ -1534,6 +1533,17 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
       call hchksum(CS%h, "Post initialize_ALE h",G,haloshift=1)
     endif
   endif
+
+  ! This call sets up the diagnostic axes.
+  call cpu_clock_begin(id_clock_MOM_init)
+  if (CS%useALEalgorithm) then
+    call set_axes_info(G, param_file, diag, &
+           verticalUnits=ALE_getCoordinateUnits(CS%ALE_CSp), &
+           verticalInterfaces=ALE_getCoordinate(CS%ALE_CSp) )
+  else
+    call set_axes_info(G, param_file, diag)
+  endif
+  call cpu_clock_end(id_clock_MOM_init)
 
   call MEKE_init(Time, G, param_file, diag, CS%MEKE_CSp, CS%MEKE)
   call VarMix_init(Time, G, param_file, diag, CS%VarMix)
