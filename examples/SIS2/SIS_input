@@ -19,6 +19,9 @@ GRID_CONFIG = "mosaic"          !    Method for defining horizontal grid
                                 !  mercator  - a Mercator grid
 GRID_FILE = "ocean_hgrid.nc"
                                 !    Name of file to read horizontal grid data
+INPUTDIR = "INPUT"
+                                !    INPUTDIR is a directory in which NetCDF
+                                !  input files might be found.
 
 !  Specify the numerical domain.
 NIGLOBAL = 360                  !    NIGLOBAL and NJGLOBAL are the number of thickness
