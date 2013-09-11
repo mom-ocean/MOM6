@@ -27,7 +27,7 @@ use MOM_file_parser, only : read_param, get_param, log_param, log_version
 use MOM_file_parser, only : param_file_type
 use MOM_string_functions, only : slasher
 
-use mpp_domains_mod, only : mpp_define_layout
+use mpp_domains_mod, only : mpp_define_layout, mpp_get_boundary
 use mpp_domains_mod, only : MOM_define_io_domain => mpp_define_io_domain
 use mpp_domains_mod, only : MOM_define_domain => mpp_define_domains
 use mpp_domains_mod, only : domain2D, domain1D, mpp_get_data_domain
@@ -47,7 +47,7 @@ implicit none ; private
 public :: MOM_domains_init, MOM_infra_init, MOM_infra_end, get_domain_extent
 public :: MOM_define_domain, MOM_define_io_domain
 public :: pass_var, pass_vector, broadcast, PE_here, root_PE, num_PEs
-public :: pass_var_start, pass_var_complete
+public :: pass_var_start, pass_var_complete, fill_symmetric_edges
 public :: pass_vector_start, pass_vector_complete
 public :: global_field_sum, sum_across_PEs, min_across_PEs, max_across_PEs
 public :: AGRID, BGRID_NE, CGRID_NE, SCALAR_PAIR, BITWISE_EXACT_SUM, CORNER
@@ -77,6 +77,11 @@ interface pass_vector_complete
   module procedure pass_vector_complete_3d, pass_vector_complete_2d
 end interface pass_vector_complete
 
+interface fill_symmetric_edges
+  module procedure fill_vector_symmetric_edges_2d !, fill_vector_symmetric_edges_3d
+!   module procedure fill_scalar_symmetric_edges_2d, fill_scalar_symmetric_edges_3d
+end interface fill_symmetric_edges
+
 type, public :: MOM_domain_type
   type(domain2D), pointer :: mpp_domain => NULL() ! The domain with halos on
                                         ! this processor, centered at h points.
@@ -89,7 +94,12 @@ type, public :: MOM_domain_type
   integer :: layout(2), io_layout(2)    ! Saved data for sake of constructing
   integer :: X_FLAGS,Y_FLAGS            ! new domains of different resolution.
   logical :: use_io_layout              ! True if an I/O layout is available.
-  logical, pointer :: maskmap(:,:)=> NULL() !option to mpp_define_domains
+  logical, pointer :: maskmap(:,:)=> NULL() ! A pointer to an array indicating
+                                ! which logical processors are actually used for
+                                ! the ocean code. The other logical processors
+                                ! would be all land points and are not assigned
+                                ! to actual processors. This need not be
+                                ! assigned if all logical processors are used.
 end type MOM_domain_type
 
 integer, parameter :: To_All = To_East + To_West + To_North + To_South
@@ -328,6 +338,89 @@ subroutine pass_vector_2d(u_cmpt, v_cmpt, MOM_dom, direction, stagger, complete)
   call mpp_update_domains(u_cmpt, v_cmpt, MOM_dom%mpp_domain, flags=dirflag, &
                           gridtype=stagger_local, complete = block_til_complete)
 end subroutine pass_vector_2d
+
+subroutine fill_vector_symmetric_edges_2d(u_cmpt, v_cmpt, MOM_dom, stagger, scalar)
+  real, dimension(:,:),  intent(inout) :: u_cmpt, v_cmpt
+  type(MOM_domain_type), intent(inout) :: MOM_dom
+  integer,     optional, intent(in)    :: stagger
+  logical,     optional, intent(in)    :: scalar
+! Arguments: u_cmpt - The nominal zonal (u) component of the vector pair which
+!                     is having its halos points exchanged.
+!  (inout)   v_cmpt - The nominal meridional (v) component of the vector pair
+!                     which is having its halos points exchanged. 
+!  (in)      MOM_dom - The MOM_domain_type containing the mpp_domain needed to
+!                      determine where data should be sent.
+!  (in)      stagger - An optional flag, which may be one of A_GRID, BGRID_NE,
+!                      or CGRID_NE, indicating where the two components of the
+!                      vector are discretized.  Omitting stagger is the same as
+!                      setting it to CGRID_NE.
+!  (in)      scalar -  An optional argument indicating whether 
+
+  integer :: stagger_local
+  integer :: dirflag
+  integer :: i, j, isc, iec, jsc, jec, isd, ied, jsd, jed, IscB, IecB, JscB, JecB
+  real, allocatable, dimension(:) :: nbuff_x, nbuff_y, ebuff_x, ebuff_y
+  real, allocatable, dimension(:) :: sbuff_x, sbuff_y, wbuff_x, wbuff_y
+  logical :: block_til_complete
+
+  if (.not. MOM_dom%symmetric) return
+
+  stagger_local = CGRID_NE ! Default value for type of grid
+  if (present(stagger)) stagger_local = stagger
+
+  if (.not.(stagger_local == CGRID_NE .or. stagger_local == BGRID_NE)) return
+
+  call mpp_get_compute_domain(MOM_dom%mpp_domain, isc, iec, jsc, jec)
+  call mpp_get_data_domain(MOM_dom%mpp_domain, isd, ied, jsd, jed)
+
+  ! Adjust isc, etc., to account for the fact that the input arrays indices all
+  ! start at 1 (and are effectively on a SW grid!).
+  isc = isc - (isd-1) ; iec = iec - (isd-1)
+  jsc = jsc - (jsd-1) ; jec = jec - (jsd-1)
+  IscB = isc ; IecB = iec+1 ; JscB = jsc ; JecB = jec+1
+
+  dirflag = To_All ! 60
+  if (PRESENT(scalar)) then ; if (scalar) dirflag = To_All+SCALAR_PAIR ; endif
+
+  if (stagger_local == CGRID_NE) then
+    allocate(wbuff_x(jsc:jec)) ; allocate(sbuff_y(isc:iec))
+    allocate(ebuff_x(jsc:jec)) ; allocate(nbuff_y(isc:iec))
+    call mpp_get_boundary(u_cmpt, v_cmpt, MOM_dom%mpp_domain, flags=dirflag, &
+                          wbufferx=wbuff_x, sbuffery=sbuff_y, &
+                          ebufferx=ebuff_x, nbuffery=nbuff_y, &
+                          gridtype=stagger_local)
+    do i=isc,iec
+      v_cmpt(i,JscB) = sbuff_y(i)
+    enddo
+    do j=jsc,jec
+      u_cmpt(IscB,j) = wbuff_x(j)
+    enddo
+    deallocate(wbuff_x) ; deallocate(sbuff_y)
+    deallocate(ebuff_x) ; deallocate(nbuff_y)
+  elseif  (stagger_local == BGRID_NE) then
+    allocate(wbuff_x(JscB:JecB)) ; allocate(sbuff_x(IscB:IecB))
+    allocate(wbuff_y(JscB:JecB)) ; allocate(sbuff_y(IscB:IecB))
+    allocate(ebuff_x(JscB:JecB)) ; allocate(nbuff_x(IscB:IecB))
+    allocate(ebuff_y(JscB:JecB)) ; allocate(nbuff_y(IscB:IecB))
+    call mpp_get_boundary(u_cmpt, v_cmpt, MOM_dom%mpp_domain, flags=dirflag, &
+                          wbufferx=wbuff_x, sbufferx=sbuff_x, &
+                          wbuffery=wbuff_y, sbuffery=sbuff_y, &
+                          ebufferx=ebuff_x, nbufferx=nbuff_x, &
+                          ebuffery=ebuff_y, nbuffery=nbuff_y, &
+                          gridtype=stagger_local)
+    do I=IscB,IecB
+      u_cmpt(I,JscB) = sbuff_x(I) ; v_cmpt(I,JscB) = sbuff_y(I)
+    enddo
+    do J=JscB,JecB
+      u_cmpt(IscB,J) = wbuff_x(J) ; v_cmpt(IscB,J) = wbuff_y(J)
+    enddo
+    deallocate(wbuff_x) ; deallocate(sbuff_x)
+    deallocate(wbuff_y) ; deallocate(sbuff_y)
+    deallocate(ebuff_x) ; deallocate(nbuff_x)
+    deallocate(ebuff_y) ; deallocate(nbuff_y)
+  endif
+
+end subroutine fill_vector_symmetric_edges_2d
 
 subroutine pass_vector_3d(u_cmpt, v_cmpt, MOM_dom, direction, stagger, complete)
   real, dimension(:,:,:), intent(inout) :: u_cmpt, v_cmpt
