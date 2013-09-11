@@ -23,6 +23,8 @@ module MOM_grid
 use MOM_domains, only : MOM_domain_type, get_domain_extent
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
+use MOM_verticalGrid, only : verticalGrid_type
+use MOM_verticalGrid, only : verticalGridInit, verticalGridEnd
 
 implicit none ; private
 
@@ -35,6 +37,7 @@ public isPointInCell
 type, public :: ocean_grid_type
   type(MOM_domain_type), pointer :: Domain => NULL()
   type(MOM_domain_type), pointer :: Domain_aux => NULL()
+  type(verticalGrid_type), pointer :: GV => NULL()
   integer :: isc, iec, jsc, jec ! The range of the computational domain indicies
   integer :: isd, ied, jsd, jed ! and data domain indicies at tracer cell centers.
   integer :: isg, ieg, jsg, jeg ! The range of the global domain tracer cell indicies.
@@ -292,6 +295,8 @@ subroutine MOM_grid_init(G, param_file)
 ! Log derivative values.
   call log_param(param_file, "MOM_grid", "M to THICKNESS", G%m_to_H)
 
+  call verticalGridInit( param_file, G%GV )
+
 end subroutine MOM_grid_init
 
 logical function isPointInCell(G, i, j, x, y)
@@ -499,6 +504,8 @@ subroutine MOM_grid_end(G)
   DEALLOC_(G%g_prime) ; DEALLOC_(G%Rlay)
   deallocate(G%gridLonT) ; deallocate(G%gridLatT)
   deallocate(G%gridLonB) ; deallocate(G%gridLatB)
+
+  call verticalGridEnd( G%GV )
 end subroutine MOM_grid_end
 
 end module MOM_grid

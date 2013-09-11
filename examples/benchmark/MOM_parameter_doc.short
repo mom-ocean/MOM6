@@ -48,6 +48,9 @@ NJPROC_IO = 1                   ! default = 0
 NK = 22                         !   [nondim]
                                 ! The number of model layers.
 
+! === Parameters of module MOM_verticalGrid ===
+! Parameters providing information about the vertical grid.
+
 ! === Parameters of module MOM ===
 THICKNESSDIFFUSE = True         !   [Boolean] default = False
                                 ! If true, interfaces or isopycnal surfaces are diffused,

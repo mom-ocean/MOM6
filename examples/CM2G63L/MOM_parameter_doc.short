@@ -51,6 +51,9 @@ NJPROC_IO = 2                   ! default = 0
 NK = 63                         !   [nondim]
                                 ! The number of model layers.
 
+! === Parameters of module MOM_verticalGrid ===
+! Parameters providing information about the vertical grid.
+
 ! === Parameters of module MOM ===
 USE_LEGACY_SPLIT = True         !   [Boolean] default = False
                                 ! If true, use the full range of options available from

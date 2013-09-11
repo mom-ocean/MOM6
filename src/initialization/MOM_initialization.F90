@@ -93,6 +93,7 @@ use MOM_tracer_registry, only : add_tracer_OBC_values, tracer_registry_type
 use MOM_variables, only : thermo_var_ptrs, ocean_OBC_type
 use MOM_variables, only : OBC_NONE, OBC_SIMPLE, OBC_FLATHER_E, OBC_FLATHER_W
 use MOM_variables, only : OBC_FLATHER_N, OBC_FLATHER_S
+use MOM_verticalGrid, only : setVerticalGridAxes
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
 use MOM_EOS, only : int_specific_vol_dp
 use user_initialization, only : user_set_coord, user_initialize_topography
@@ -274,6 +275,7 @@ subroutine MOM_initialize(u, v, h, tv, Time, G, PF, dirs, &
   end select
   if (debug) call chksum(G%Rlay, "MOM_initialize: Rlay ", 1, nz)
   if (debug) call chksum(G%g_prime, "MOM_initialize: g_prime ", 1, nz)
+  call setVerticalGridAxes( G%Rlay, G%GV )
 
 ! Set up the parameters of the physical domain (i.e. the grid), G
   call set_grid_metrics(G, PF)

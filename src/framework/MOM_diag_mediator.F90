@@ -80,13 +80,11 @@ integer :: doc_unit = -1
 
 contains
 
-subroutine set_axes_info(G, param_file, diag, set_vertical, verticalUnits, verticalInterfaces)
+subroutine set_axes_info(G, param_file, diag, set_vertical)
   type(ocean_grid_type),        intent(inout) :: G
   type(param_file_type),        intent(in)    :: param_file
   type(diag_ctrl),              intent(inout) :: diag
   logical, optional,            intent(in)    :: set_vertical
-  character(len=*), optional,   intent(in)    :: verticalUnits
-  real, dimension(:), optional, intent(in)    :: verticalInterfaces
 ! Arguments: G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
@@ -135,15 +133,8 @@ subroutine set_axes_info(G, param_file, diag, set_vertical, verticalUnits, verti
     Cartesian_grid = .false.
   endif
   
-  if (present(verticalInterfaces)) then
-    do k=1,nz+1 ; zInter(k) = verticalInterfaces(k); enddo
-    do k=1,nz ; zLev(k) = 0.5 * ( zInter(k) + zInter(k+1) ) ; enddo
-  else
-    do k=1,nz ; zlev(k) = G%Rlay(k) ; enddo
-    zinter(1) = 1.5*G%Rlay(1) - 0.5*G%Rlay(2)
-    do k=2,nz ; zinter(k) = 0.5*(G%Rlay(k) + G%Rlay(k-1)) ; enddo
-    zinter(nz+1) = 1.5*G%Rlay(nz) - 0.5*G%Rlay(nz-1)
-  endif
+  zInter(1:nz+1) = G%GV%sInterface(1:nz+1)
+  zLev(1:nz) = G%GV%sLayer(1:nz)
 
 !  do i=1,nz ; zlev(i) = real(i) ; enddo
 !  do i=1,nz+1 ; zinter(i) = real(i) - 0.5 ; enddo
@@ -164,13 +155,10 @@ subroutine set_axes_info(G, param_file, diag, set_vertical, verticalUnits, verti
               'h point nominal latitude', Domain2=G%Domain%mpp_domain)
 
   if (set_vert) then
-    if (present(verticalUnits)) then
-      id_zl = diag_axis_init('zl', zlev, trim(verticalUnits), 'z', 'cell height')
-      id_zi = diag_axis_init('zi', zinter, trim(verticalUnits), 'z', 'cell interface height')
-    else
-      id_zl = diag_axis_init('zl', zlev, 'layer', 'z', 'cell depth')
-      id_zi = diag_axis_init('zi', zinter, 'interface', 'z', 'cell interface depth')
-    endif
+    id_zl = diag_axis_init('zl', zlev, trim(G%GV%zAxisUnits), 'z', &
+                           'Layer '//trim(G%GV%zAxisLongName))
+    id_zi = diag_axis_init('zi', zinter, trim(G%GV%zAxisUnits), 'z', &
+                           'Interface '//trim(G%GV%zAxisLongName))
   else
     id_zl = -1 ; id_zi = -1
   endif

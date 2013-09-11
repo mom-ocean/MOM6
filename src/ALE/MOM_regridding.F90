@@ -110,6 +110,7 @@ public setCoordinateResolution
 public getCoordinateResolution
 public getCoordinateInterfaces
 public getCoordinateUnits
+public getCoordinateShortName
 
 public DEFAULT_COORDINATE_MODE
 character(len=158), parameter, public :: regriddingCoordinateModeDoc = &
@@ -1575,6 +1576,29 @@ function getCoordinateUnits( CS )
   end select ! type of grid 
 
 end function getCoordinateUnits
+
+!------------------------------------------------------------------------------
+! Query the short name of the coordinate
+!------------------------------------------------------------------------------
+function getCoordinateShortName( CS )
+  type(regridding_CS), intent(in) :: CS
+  character(len=20)               :: getCoordinateShortName
+
+  select case ( CS%regridding_scheme )
+    case ( REGRIDDING_ZSTAR )
+      getCoordinateShortName = 'z*'
+    case ( REGRIDDING_SIGMA )
+      getCoordinateShortName = 'Sigma'
+    case ( REGRIDDING_RHO )  
+      getCoordinateShortName = 'Rho'
+    case ( REGRIDDING_ARBITRARY )
+      getCoordinateShortName = 'Arbitrary'
+    case default
+      call MOM_error(FATAL,'MOM_regridding, getCoordinateShortName: '//&
+                     'Unknown regridding scheme selected!')
+  end select ! type of grid 
+
+end function getCoordinateShortName
 
 !------------------------------------------------------------------------------
 ! Control the extrapolation of boundary data

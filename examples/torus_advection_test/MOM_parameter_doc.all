@@ -91,6 +91,9 @@ BATHYMETRY_AT_VEL = False       !   [Boolean] default = False
                                 ! topography are entirely determined from thickness points.
 NK = 5                          !   [nondim]
                                 ! The number of model layers.
+
+! === Parameters of module MOM_verticalGrid ===
+! Parameters providing information about the vertical grid.
 AVAILABLE_DIAGS_FILE = "available_diags.000000" ! default = "available_diags.000000"
                                 ! A file into which to write a list of all available
                                 ! ocean diagnostics that can be included in a diag_table.

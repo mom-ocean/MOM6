@@ -18,8 +18,11 @@ use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_variables,     only : ocean_grid_type, thermo_var_ptrs
 use MOM_file_parser,   only : get_param, param_file_type, log_param
 use MOM_io,            only : file_exists, field_exists, MOM_read_data
+use MOM_io,            only : vardesc, fieldtype, SINGLE_FILE
+use MOM_io,            only : create_file, write_field, close_file
 use MOM_EOS,           only : calculate_density
 use MOM_string_functions, only : uppercase, extractWord
+use MOM_verticalGrid,  only : verticalGrid_type
 
 use regrid_ppoly_class, only : ppoly_t, ppoly_init, ppoly_destroy
 use regrid_edge_values, only : edgeValueArrays
@@ -43,7 +46,7 @@ use MOM_regridding, only : regriddingDefaultBoundaryExtrapolation
 use MOM_regridding, only : setRegriddingMinimumThickness, regriddingDefaultMinThickness
 use MOM_regridding, only : regridding_CS
 use MOM_regridding, only : getCoordinateInterfaces, getCoordinateResolution
-use MOM_regridding, only : getCoordinateUnits
+use MOM_regridding, only : getCoordinateUnits, getCoordinateShortName
 use MOM_remapping, only : initialize_remapping, remapping_main, end_remapping
 use MOM_remapping, only : remappingSchemesDoc, remappingDefaultScheme
 use MOM_remapping, only : remapping_CS
@@ -112,6 +115,8 @@ public adjustGridForIntegrity
 public ALE_initRegridding
 public ALE_getCoordinate
 public ALE_getCoordinateUnits
+public ALE_writeCoordinateFile
+public ALE_updateVerticalGridType
 
 ! -----------------------------------------------------------------------------
 ! The following are private constants
@@ -646,5 +651,56 @@ function ALE_getCoordinateUnits( CS )
   ALE_getCoordinateUnits = getCoordinateUnits( CS%regridCS )
 
 end function ALE_getCoordinateUnits
+
+!------------------------------------------------------------------------------
+! Update the vertical grid type with ALE information
+!------------------------------------------------------------------------------
+subroutine ALE_updateVerticalGridType( CS, GV )
+  type(ALE_CS),            pointer :: CS
+  type(verticalGrid_type), pointer :: GV
+!   This subroutine sets information in the verticalGrid_type to be
+! consistent with the sue of ALE mode
+  integer :: nk
+
+  nk = GV%ke
+  GV%sInterface(1:nk+1) = getCoordinateInterfaces( CS%regridCS )
+  GV%sLayer(1:nk) = 0.5*( GV%sInterface(1:nk) + GV%sInterface(2:nk+1) )
+  GV%zAxisUnits = getCoordinateUnits( CS%regridCS )
+  GV%zAxisLongName = getCoordinateShortName( CS%regridCS )
+
+end subroutine ALE_updateVerticalGridType
+
+!------------------------------------------------------------------------------
+! Write the vertical coordinate information into a file
+!------------------------------------------------------------------------------
+subroutine ALE_writeCoordinateFile( CS, G, directory )
+  type(ALE_CS),          pointer       :: CS
+  type(ocean_grid_type), intent(inout) :: G
+  character(len=*),      intent(in)    :: directory
+!   This subroutine writes out a file containing any available data related
+! to the vertical grid used by the MOM ocean model when in ALE mode.
+  character(len=120) :: filepath
+  type(vardesc) :: vars(2)
+  type(fieldtype) :: fields(2)
+  integer :: unit
+  real :: ds(G%ke), dsi(G%ke+1)
+
+  filepath = trim(directory) // trim("Vertical_coordinate")
+  ds(:) = getCoordinateResolution( CS%regridCS )
+  dsi(1) = 0.5*ds(1)
+  dsi(2:G%ke) = 0.5*( ds(1:G%ke-1) + ds(2:G%ke) )
+  dsi(G%ke+1) = 0.5*ds(G%ke)
+
+  vars(1) = vardesc('ds','Layer Coordinate Thickness','1','L','1', &
+                    getCoordinateUnits( CS%regridCS ) )
+  vars(2) = vardesc('ds_interface','Layer Center Coordinate Separation','1','i','1', &
+                    getCoordinateUnits( CS%regridCS ) )
+
+  call create_file(unit, trim(filepath), vars, 2, G, fields, SINGLE_FILE)
+  call write_field(unit, fields(1), ds)
+  call write_field(unit, fields(2), dsi)
+  call close_file(unit)
+
+end subroutine ALE_writeCoordinateFile
 
 end module MOM_ALE

@@ -169,13 +169,8 @@ subroutine create_file(unit, filename, vars, novars, G, fields, threading, &
     call open_file(unit, filename, MPP_OVERWR, MPP_NETCDF, domain=G%Domain%mpp_domain)
   endif
 
-! do k=1,nz ; layer_val(k) = real(k) ; enddo
-! do k=1,nz+1 ; interface_val(k) = real(k) - 0.5 ; enddo
-
-  do k=1,nz ; layer_val(k) = G%Rlay(k) ; enddo
-  interface_val(1) = 1.5*G%Rlay(1) - 0.5*G%Rlay(2)
-  do k=2,nz ; interface_val(k) = 0.5*(G%Rlay(k) + G%Rlay(k-1)) ; enddo
-  interface_val(nz+1) = 1.5*G%Rlay(nz) - 0.5*G%Rlay(nz-1)
+  interface_val(1:nz+1) = G%GV%sInterface(1:nz+1)
+  layer_val(1:nz) = G%GV%sLayer(1:nz)
 
   call mpp_get_domain_components(G%Domain%mpp_domain, x_domain, y_domain)
 
@@ -253,12 +248,12 @@ subroutine create_file(unit, filename, vars, novars, G, fields, threading, &
                    'X', domain = x_domain, data=G%gridLonB(G%IsgB:G%IegB))
 
   if (use_layer) &
-    call mpp_write_meta(unit, axis_layer, "Layer", "kg m-3", &
-          "Layer Target Potential Density", 'Z', sense=1, data=layer_val)
+    call mpp_write_meta(unit, axis_layer, "Layer", trim(G%GV%zAxisUnits), &
+          "Layer "//trim(G%GV%zAxisLongName), 'Z', sense=1, data=layer_val)
 
   if (use_int) &
-    call mpp_write_meta(unit, axis_int, "Interface", "kg m-3", &
-          "Interface Target Potential Density", 'Z', sense=1, data=interface_val)
+    call mpp_write_meta(unit, axis_int, "Interface", trim(G%GV%zAxisUnits), &
+          "Interface "//trim(G%GV%zAxisLongName), 'Z', sense=1, data=interface_val)
 
   if (use_time) then ; if (present(timeunit)) then
     ! Set appropriate units, depending on the value.

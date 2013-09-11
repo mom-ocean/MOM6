@@ -53,6 +53,9 @@ RHO_0 = 1031.0                  !   [kg m-3] default = 1035.0
 NK = 2                          !   [nondim]
                                 ! The number of model layers.
 
+! === Parameters of module MOM_verticalGrid ===
+! Parameters providing information about the vertical grid.
+
 ! === Parameters of module MOM ===
 ENABLE_THERMODYNAMICS = False   !   [Boolean] default = True
                                 ! If true, Temperature and salinity are used as state

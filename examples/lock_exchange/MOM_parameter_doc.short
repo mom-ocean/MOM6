@@ -59,6 +59,9 @@ ANGSTROM = 1.0E-15              !   [m] default = 1.0E-10
 NK = 21                         !   [nondim]
                                 ! The number of model layers.
 
+! === Parameters of module MOM_verticalGrid ===
+! Parameters providing information about the vertical grid.
+
 ! === Parameters of module MOM ===
 BULKMIXEDLAYER = False          !   [Boolean] default = True
                                 ! If true, use a Kraus-Turner-like bulk mixed layer
