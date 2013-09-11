@@ -413,7 +413,7 @@ subroutine set_grid_derived_metrics(G, param_file)
 !    Calculate the values of the metric terms that might be used
 !  and save them in arrays.
 !    Within this subroutine, the x- and y- grid spacings and their
-!  inverses and the cell areas centered on h, q, u, and v points are
+!  inverses and the cell areas centered on T, Bu, Cu, and Cv points are
 !  calculated, as are the geographic locations of each of these 4
 !  sets of points.
   character( len = 128) :: warnmesg
@@ -607,6 +607,8 @@ end subroutine grid_metrics_chksum
 subroutine set_grid_metrics_from_mosaic(G,param_file)
   type(ocean_grid_type), intent(inout) :: G
   type(param_file_type), intent(in)    :: param_file
+!   This subroutine sets the grid metrics from a mosaic file.
+!  
 ! Arguments:
 !  (inout)   G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
@@ -623,19 +625,17 @@ subroutine set_grid_metrics_from_mosaic(G,param_file)
   real, dimension(G%isd :G%ied ,G%JsdB:G%JedB) :: dxCv, dyCv
   real, dimension(G%IsdB:G%IedB,G%JsdB:G%JedB) :: dxBu, dyBu, areaBu
   ! This are symmetric arrays, corresponding to the data in the mosaic file
-  real, dimension(2*G%isd-1:2*G%ied,2*G%jsd-1:2*G%jed) :: tmpT
-  real, dimension(2*G%isd-2:2*G%ied,2*G%jsd-1:2*G%jed) :: tmpU
-  real, dimension(2*G%isd-1:2*G%ied,2*G%jsd-2:2*G%jed) :: tmpV
-  real, dimension(2*G%isd-2:2*G%ied,2*G%jsd-2:2*G%jed) :: tmpZ
+  real, dimension(2*G%isd-2:2*G%ied+1,2*G%jsd-2:2*G%jed+1) :: tmpT
+  real, dimension(2*G%isd-3:2*G%ied+1,2*G%jsd-2:2*G%jed+1) :: tmpU
+  real, dimension(2*G%isd-2:2*G%ied+1,2*G%jsd-3:2*G%jed+1) :: tmpV
+  real, dimension(2*G%isd-3:2*G%ied+1,2*G%jsd-3:2*G%jed+1) :: tmpZ
   real, dimension(:,:), allocatable :: tmpGlbl
   character(len=200) :: filename, grid_file, inputdir
   character(len=64)  :: mod="MOM_grid_init set_grid_metrics_from_mosaic"
-  integer :: err=0, dv(2,5), ni, nj, global_indices(4)
+  integer :: err=0, ni, nj, global_indices(4)
   type(MOM_domain_type) :: SGdom ! Supergrid domain
-  integer :: i, j
+  integer :: i, j, i2, j2
   integer :: npei,npej
-  integer :: isc,jsc,iec,jec ! Computational domain extents on the supergrid.
-  integer :: isd,jsd,ied,jed ! Memory extents on the supergrid.
   integer, dimension(:), allocatable :: exni,exnj
   type(domain1D) :: domx, domy
   integer        :: start(4), nread(4)
@@ -661,16 +661,6 @@ subroutine set_grid_metrics_from_mosaic(G,param_file)
 !<MISSING CODE TO READ REFINEMENT LEVEL>
   ni=2*(G%iec-G%isc+1) ! i size of supergrid
   nj=2*(G%jec-G%jsc+1) ! j size of supergrid
-  dv(1,1)=2*G%isd-1
-  dv(1,2)=2*G%ied
-  dv(1,3)=2*G%isc-1
-  dv(1,4)=2*G%iec
-  dv(1,5)=2*G%isd_global-1 ! location of tmpT(1,1) in data file
-  dv(2,1)=2*G%jsd-1
-  dv(2,2)=2*G%jed
-  dv(2,3)=2*G%jsc-1
-  dv(2,4)=2*G%jec
-  dv(2,5)=2*G%jsd_global-1 ! location of tmpT(1,1) in data file
 
 ! Define a domain for the supergrid (SGdom)
   npei=G%domain%layout(1)
@@ -681,8 +671,8 @@ subroutine set_grid_metrics_from_mosaic(G,param_file)
   call mpp_get_compute_domains(domx,size=exni)
   call mpp_get_compute_domains(domy,size=exnj)
   allocate(SGdom%mpp_domain)
-  SGdom%nihalo = 2*G%domain%nihalo
-  SGdom%njhalo = 2*G%domain%njhalo
+  SGdom%nihalo = 2*G%domain%nihalo+1
+  SGdom%njhalo = 2*G%domain%njhalo+1
   SGdom%niglobal = 2*G%domain%niglobal
   SGdom%njglobal = 2*G%domain%njglobal
   SGdom%layout(:) = G%domain%layout(:)
@@ -709,85 +699,91 @@ subroutine set_grid_metrics_from_mosaic(G,param_file)
 
   if (SGdom%use_io_layout) &
     call MOM_define_IO_domain(SGdom%mpp_domain, SGdom%io_layout)
-!  call mpp_get_compute_domain(G%domain%mpp_domain,isc,iec,jsc,jec)
-!  call mpp_get_data_domain(G%domain%mpp_domain,isd,ied,jsd,jed)
-!  call mpp_get_compute_domain(SGdom%mpp_domain,isc,iec,jsc,jec)
-!  call mpp_get_data_domain(SGdom%mpp_domain,isd,ied,jsd,jed)
   deallocate(exni)
   deallocate(exnj)
-
-  isc=2*G%isc-1 ; iec=2*G%iec ; jsc=2*G%jsc-1 ; jec=2*G%jec
-  isd=2*G%isd-1 ; ied=2*G%ied ; jsd=2*G%jsd-1 ; jed=2*G%jed
 
 ! Read X from the supergrid
   tmpZ(:,:)=999.
   call read_data(filename,'x',tmpZ,domain=SGdom%mpp_domain,position=CORNER)
- !call read_LRG_supergrid(filename,dv,x=tmpZ,err=err)
- !if (err.ne.0) &
- !  call MOM_error(FATAL," set_grid_metrics_from_mosaic: read_LRG(x) failed!")
 
   call pass_var(tmpZ, SGdom, position=CORNER)
-  call extrapolate_metric(tmpZ,jsc-jsd+1)
-  G%geoLonT(G%isd:G%ied,G%jsd:G%jed)=tmpZ(isd:ied:2,jsd:jed:2)
-  G%geoLonBu(G%isd:G%ied,G%jsd:G%jed)=tmpZ(isd+1:ied:2,jsd+1:jed:2)
-  G%geoLonCu(G%isd:G%ied,G%jsd:G%jed)=tmpZ(isd+1:ied:2,jsd:jed:2)
-  G%geoLonCv(G%isd:G%ied,G%jsd:G%jed)=tmpZ(isd:ied:2,jsd+1:jed:2)
+  call extrapolate_metric(tmpZ,2*(G%jsc-G%jsd)+2)
+  do j=G%jsd,G%jed ; do i=G%isd,G%ied ; i2 = 2*i ; j2 = 2*j
+    G%geoLonT(i,j) = tmpZ(i2-1,j2-1)
+  enddo ; enddo
+  do J=G%JsdB,G%JedB ; do I=G%IsdB,G%IedB ; i2 = 2*I ; j2 = 2*J
+    G%geoLonBu(I,J) = tmpZ(i2,j2)
+  enddo ; enddo
+  do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB ; i2 = 2*i ; j2 = 2*j
+    G%geoLonCu(I,j) = tmpZ(i2,j2-1)
+  enddo ; enddo
+  do J=G%JsdB,G%JedB ; do i=G%isd,G%ied ; i2 = 2*i ; j2 = 2*J
+    G%geoLonCv(i,J) = tmpZ(i2-1,j2)
+  enddo ; enddo
+ ! For some reason, this messes up the solution...
  ! call pass_var(G%geoLonBu, G%domain, position=CORNER)
 
 ! Read Y from the supergrid
   tmpZ(:,:)=999.
   call read_data(filename,'y',tmpZ,domain=SGdom%mpp_domain,position=CORNER)
- !call read_LRG_supergrid(filename,dv,y=tmpZ,err=err)
- !if (err.ne.0) &
- !  call MOM_error(FATAL," set_grid_metrics_from_mosaic: read_LRG(y) failed!")
 
   call pass_var(tmpZ, SGdom, position=CORNER)
-  call extrapolate_metric(tmpZ,jsc-jsd+1)
-  G%geoLatT(G%isd:G%ied,G%jsd:G%jed)=tmpZ(isd:ied:2,jsd:jed:2)
-  G%geoLatBu(G%isd:G%ied,G%jsd:G%jed)=tmpZ(isd+1:ied:2,jsd+1:jed:2)
-  G%geoLatCu(G%isd:G%ied,G%jsd:G%jed)=tmpZ(isd+1:ied:2,jsd:jed:2)
-  G%geoLatCv(G%isd:G%ied,G%jsd:G%jed)=tmpZ(isd:ied:2,jsd+1:jed:2)
+  call extrapolate_metric(tmpZ,2*(G%jsc-G%jsd)+2)
+  do j=G%jsd,G%jed ; do i=G%isd,G%ied ; i2 = 2*i ; j2 = 2*j
+    G%geoLatT(i,j) = tmpZ(i2-1,j2-1)
+  enddo ; enddo
+  do J=G%JsdB,G%JedB ; do I=G%IsdB,G%IedB ; i2 = 2*I ; j2 = 2*J
+    G%geoLatBu(I,J) = tmpZ(i2,j2)
+  enddo ; enddo
+  do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB ; i2 = 2*i ; j2 = 2*j
+    G%geoLatCu(I,j) = tmpZ(i2,j2-1)
+  enddo ; enddo
+  do J=G%JsdB,G%JedB ; do i=G%isd,G%ied ; i2 = 2*i ; j2 = 2*J
+    G%geoLatCv(i,J) = tmpZ(i2-1,j2)
+  enddo ; enddo
 
 ! Read DX,DY from the supergrid
   tmpU(:,:)=0.; tmpV(:,:)=0.
   call read_data(filename,'dx',tmpV,domain=SGdom%mpp_domain,position=NORTH_FACE)
   call read_data(filename,'dy',tmpU,domain=SGdom%mpp_domain,position=EAST_FACE)
- !call read_LRG_supergrid(filename,dv,dx=tmpV,err=err)
- !if (err.ne.0) &
- !  call MOM_error(FATAL," set_grid_metrics_from_mosaic: read_LRG(dx) failed!")
- !call read_LRG_supergrid(filename,dv,dy=tmpU,err=err)
- !if (err.ne.0) &
- !  call MOM_error(FATAL," set_grid_metrics_from_mosaic: read_LRG(dy) failed!")
   call pass_vector(tmpU,tmpV,SGdom,To_All+Scalar_Pair,CGRID_NE)
-  call extrapolate_metric(tmpV,jsc-jsd+1)
-  call extrapolate_metric(tmpU,jsc-jsd+1)
-  dxT(G%isd:G%ied,G%jsd:G%jed)=tmpV(isd:ied:2,jsd:jed:2)+tmpV(isd+1:ied:2,jsd:jed:2)
-  dyT(G%isd:G%ied,G%jsd:G%jed)=tmpU(isd:ied:2,jsd:jed:2)+tmpU(isd:ied:2,jsd+1:jed:2)
+  call extrapolate_metric(tmpV,2*(G%jsc-G%jsd)+2)
+  call extrapolate_metric(tmpU,2*(G%jsc-G%jsd)+2)
 
-  dxCv(G%isd:G%ied,G%jsd:G%jed)=tmpV(isd:ied:2,jsd+1:jed:2)+tmpV(isd+1:ied:2,jsd+1:jed:2)
-  dyCu(G%isd:G%ied,G%jsd:G%jed)=tmpU(isd+1:ied:2,jsd:jed:2)+tmpU(isd+1:ied:2,jsd+1:jed:2)
+  do j=G%jsd,G%jed ; do i=G%isd,G%ied ; i2 = 2*i ; j2 = 2*j
+    dxT(i,j) = tmpV(i2-1,j2-1) + tmpV(i2,j2-1)
+    dyT(i,j) = tmpU(i2-1,j2-1) + tmpU(i2-1,j2)
+  enddo ; enddo
 
-  dxCu(G%isd:G%ied-1,G%jsd:G%jed)=tmpV(isd+1:ied-2:2,jsd:jed:2)+tmpV(isd+2:ied-1:2,jsd:jed:2)
-  dyCv(G%isd:G%ied,G%jsd:G%jed-1)=tmpU(isd:ied:2,jsd+1:jed-2:2)+tmpU(isd:ied:2,jsd+2:jed-1:2)
+  do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB ; i2 = 2*i ; j2 = 2*j
+    dxCu(I,j) = tmpV(i2,j2-1) + tmpV(i2+1,j2-1)
+    dyCu(I,j) = tmpU(i2,j2-1) + tmpU(i2,j2)
+  enddo ; enddo
 
-  dxBu(G%isd:G%ied-1,G%jsd:G%jed-1)=tmpV(isd+1:ied-2:2,jsd+1:jed-2:2)+tmpV(isd+2:ied-1:2,jsd+1:jed-2:2)
-  dyBu(G%isd:G%ied-1,G%jsd:G%jed-1)=tmpU(isd+1:ied-2:2,jsd+1:jed-2:2)+tmpU(isd+1:ied-2:2,jsd+2:jed-1:2)
+  do J=G%JsdB,G%JedB ; do i=G%isd,G%ied ; i2 = 2*i ; j2 = 2*j
+    dxCv(i,J) = tmpV(i2-1,j2) + tmpV(i2,j2)
+    dyCv(i,J) = tmpU(i2-1,j2) + tmpU(i2-1,j2+1)
+  enddo ; enddo
+
+  do J=G%JsdB,G%JedB ; do I=G%IsdB,G%IedB ; i2 = 2*i ; j2 = 2*j
+    dxBu(I,J) = tmpV(i2,j2) + tmpV(i2+1,j2)
+    dyBu(I,J) = tmpU(i2,j2) + tmpU(i2,j2+1)
+  enddo ; enddo
 
 ! Read AREA from the supergrid
   tmpT(:,:)=0.
   call read_data(filename,'area',tmpT,domain=SGdom%mpp_domain)
- !call read_LRG_supergrid(filename,dv,area=tmpT,err=err)
- !if (err.ne.0) &
- !  call MOM_error(FATAL," set_grid_metrics_from_mosaic: read_LRG(A) failed!")
   call pass_var(tmpT, SGdom)
-  call extrapolate_metric(tmpT,jsc-jsd+1)
+  call extrapolate_metric(tmpT,2*(G%jsc-G%jsd)+2)
 
-  areaT(G%isd:G%ied,G%jsd:G%jed)=( &
-        (tmpT(isd:ied-1:2,jsd:jed-1:2)+tmpT(isd+1:ied:2,jsd+1:jed:2)) &
-       +(tmpT(isd+1:ied:2,jsd:jed-1:2)+tmpT(isd:ied-1:2,jsd+1:jed:2)) )
-  areaBu(G%isd:G%ied-1,G%jsd:G%jed-1)=0.*( &
-        (tmpT(isd+1:ied-2:2,jsd+1:jed-2:2)+tmpT(isd+2:ied-1:2,jsd+2:jed-1:2)) &
-       +(tmpT(isd+1:ied-2:2,jsd+2:jed-1:2)+tmpT(isd+2:ied-1:2,jsd+1:jed-2:2)) )
+  do j=G%jsd,G%jed ; do i=G%isd,G%ied ; i2 = 2*i ; j2 = 2*j
+    areaT(i,j) = (tmpT(i2-1,j2-1) + tmpT(i2,j2)) + &
+                 (tmpT(i2-1,j2) + tmpT(i2,j2-1))
+  enddo ; enddo
+  do J=G%JsdB,G%JedB ; do I=G%IsdB,G%IedB ; i2 = 2*i ; j2 = 2*j
+    areaBu(i,j) = (tmpT(i2,j2) + tmpT(i2+1,j2+1)) + &
+                  (tmpT(i2,j2+1) + tmpT(i2+1,j2))
+  enddo ; enddo
 
   ni=SGdom%niglobal
   nj=SGdom%njglobal
@@ -821,10 +817,8 @@ subroutine set_grid_metrics_from_mosaic(G,param_file)
     call read_data(filename, "x", tmpGlbl, start, nread, no_domain=.TRUE.)
   call broadcast(tmpGlbl, 2*(ni+1), root_PE())
   
-  G%gridLonT(G%domain%nihalo+1:G%domain%nihalo+G%domain%niglobal) = &
-    tmpGlbl(2:ni:2,2)
-  G%gridLonB(G%domain%nihalo+0:G%domain%nihalo+G%domain%niglobal) = &
-    tmpGlbl(1:ni+1:2,1)
+  G%gridLonT(:) = tmpGlbl(2:ni:2,2)
+  G%gridLonB(:) = tmpGlbl(1:ni+1:2,1)
   deallocate( tmpGlbl )
 
   allocate  ( tmpGlbl(1, nj+1) )  
@@ -834,10 +828,8 @@ subroutine set_grid_metrics_from_mosaic(G,param_file)
     call read_data(filename, "y", tmpGlbl, start, nread, no_domain=.TRUE.)
   call broadcast(tmpGlbl, nj+1, root_PE())
 
-  G%gridLatT(G%domain%njhalo+1:G%domain%njhalo+G%domain%njglobal) = &
-    tmpGlbl(1,2:nj:2)
-  G%gridLatB(G%domain%njhalo+0:G%domain%njhalo+G%domain%njglobal) = &
-    tmpGlbl(1,1:nj+1:2)
+  G%gridLatT(:) = tmpGlbl(1,2:nj:2)
+  G%gridLatB(:) = tmpGlbl(1,1:nj+1:2)
   deallocate( tmpGlbl )
 
 
