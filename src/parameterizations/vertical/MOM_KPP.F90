@@ -65,7 +65,7 @@ logical, parameter :: verbose = .False.
 
 contains
 
-subroutine KPP_init(paramFile, G, diag, Time, CS)
+subroutine KPP_init(paramFile, G, diag, Time, CS, passive)
 ! Initialize the CVmix KPP module and set up diagnostics
 
 ! Arguments
@@ -74,6 +74,7 @@ subroutine KPP_init(paramFile, G, diag, Time, CS)
   type(diag_ctrl), target, intent(in)    :: diag      ! Diagnostics
   type(time_type),         intent(in)    :: Time      ! Time
   type(KPP_CS),            pointer       :: CS        ! Control structure
+  logical, optional,       intent(out)   :: passive   ! Copy of %passiveMode
 ! Local variables
 #include "version_variable.h"
   character(len=40) :: mod = 'MOM_KPP' ! This module's name.
@@ -90,6 +91,8 @@ subroutine KPP_init(paramFile, G, diag, Time, CS)
   call get_param(paramFile, mod, 'PASSIVE', CS%passiveMode,           &
                  'If True, puts KPP into a passive-diagnostic mode.', &
                  default=.False.)
+  if (present(passive)) passive=CS%passiveMode ! This is passed back to the caller so
+                                               ! the caller knows to not use KPP output
   call get_param(paramFile, mod, 'APPLY_NONLOCAL_TRANSPORT', CS%applyNonLocalTrans,  &
                  'If True, applies the non-local transport to heat and scalars.\n'//  &
                  'If False, calculates the non-local transport and tendancies but\n'//&

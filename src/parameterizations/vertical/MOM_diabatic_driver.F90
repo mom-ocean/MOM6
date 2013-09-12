@@ -149,6 +149,9 @@ type, public :: diabatic_CS ; private
                              ! inappropriate with ice-shelf cavities.
   logical :: useKPP          ! If true, use [CVmix] KPP diffusivities and non-local
                              ! transport.
+  logical :: KPPisPassive    ! If true, KPP is in passive mode, not changing answers.
+  logical :: matchKPPwithoutKappaShear ! If true, KPP is matched to interior diffusivities
+                             ! that do NOT include kappa-shear diffusivity.
   logical :: debug           ! If true, write verbose checksums for debugging purposes.
   type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
                              ! timing of diagnostic output.
@@ -445,18 +448,30 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     ! and requires the interior diffusivity to be complete so that KPP can match profiles.
     ! Thus, KPP is the last contribution to Kd.
     ! Changes: Kd_int. Sets: KPP_NLTheat, KPP_NLTscalar
-    Kd_salt(:,:,:) = Kd_int(:,:,:) !- visc%Kd_turb(:,:,:) )  ! Temporarily remove part due to Kappa-shear
-  !                  + visc%Kd_extra_S(:,:,:)
-    Kd_heat(:,:,:) = Kd_int(:,:,:) !- visc%Kd_turb(:,:,:) )  ! Temporarily remove part due to Kappa-shear
-  !                  + visc%Kd_extra_T(:,:,:)
+    if (associated(visc%Kd_turb) .and. CS%matchKPPwithoutKappaShear) then
+      Kd_salt(:,:,:) = Kd_int(:,:,:) - visc%Kd_turb(:,:,:) ! Temporarily remove part due to Kappa-shear
+      Kd_heat(:,:,:) = Kd_int(:,:,:) - visc%Kd_turb(:,:,:) ! Temporarily remove part due to Kappa-shear
+    else
+      Kd_salt(:,:,:) = Kd_int(:,:,:)
+      Kd_heat(:,:,:) = Kd_int(:,:,:)
+    endif
+    if (associated(visc%Kd_extra_S)) &
+        Kd_salt(:,:,:) = Kd_salt(:,:,:) + visc%Kd_extra_S(:,:,:)
+    if (associated(visc%Kd_extra_T)) &
+        Kd_heat(:,:,:) = Kd_heat(:,:,:) + visc%Kd_extra_T(:,:,:)
     call KPP_calculate(CS%KPP_CSp, G, h, tv%T, tv%S, u, v, tv%eqn_of_state, &
            fluxes%ustar, buoyancyFlux, Kd_heat, Kd_salt, KPP_NLTheat, KPP_NLTscalar)
-  ! Kd_salt(:,:,:) = ( Kd_salt(:,:,:) + visc%Kd_turb(:,:,:) )  ! Put back part due to Kappa-shear
-  ! Kd_heat(:,:,:) = ( Kd_heat(:,:,:) + visc%Kd_turb(:,:,:) )  ! Put back part due to Kappa-shear
-    Kd_int(:,:,:) = Kd_salt(:,:,:)
-  ! Kd_int(:,:,:) = min( Kd_salt(:,:,:),  Kd_heat(:,:,:) )
-  ! visc%Kd_extra_S(:,:,:) = Kd_salt(:,:,:) - Kd_int(:,:,:)
-  ! visc%Kd_extra_T(:,:,:) = Kd_heat(:,:,:) - Kd_int(:,:,:)
+    if (.not. CS%KPPisPassive) then
+      if (associated(visc%Kd_turb) .and. CS%matchKPPwithoutKappaShear) then
+        Kd_salt(:,:,:) = ( Kd_salt(:,:,:) + visc%Kd_turb(:,:,:) )  ! Put back part due to Kappa-shear
+        Kd_heat(:,:,:) = ( Kd_heat(:,:,:) + visc%Kd_turb(:,:,:) )  ! Put back part due to Kappa-shear
+      endif
+      Kd_int(:,:,:) = min( Kd_salt(:,:,:),  Kd_heat(:,:,:) )
+      if (associated(visc%Kd_extra_S)) &
+          visc%Kd_extra_S(:,:,:) = Kd_salt(:,:,:) - Kd_int(:,:,:)
+      if (associated(visc%Kd_extra_T)) &
+          visc%Kd_extra_T(:,:,:) = Kd_heat(:,:,:) - Kd_int(:,:,:)
+    endif ! not passive
     call cpu_clock_end(id_clock_kpp)
   endif
 
@@ -1477,6 +1492,10 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
                  "If true, turns on the [CVmix] KPP scheme of Large et al., 1984,\n"// &
                  "to calculate diffusivities and non-local transport in the OBL.", &
                  default=.false.)
+  if (CS%useKPP .and. CS%use_kappa_shear) &
+    call get_param(param_file, mod, "KPP_BEFORE_KAPPA_SHEAR", CS%matchKPPwithoutKappaShear, &
+                 "If true, KPP matches interior diffusivity that EXCLUDES any\n"// &
+                 "diffusivity from KPP.", default=.true.)
 
   if (G%Boussinesq) then ; thickness_units = "meter"
   else ; thickness_units = "kilogram meter-2" ; endif
@@ -1528,7 +1547,7 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
   if (CS%id_wd > 0) call safe_alloc_ptr(CDp%diapyc_vel,isd,ied,jsd,jed,nz+1)
 
   call set_diffusivity_init(Time, G, param_file, diag, CS%set_diff_CSp, diag_to_Z_CSp)
-  if (CS%useKPP) call KPP_init(param_file, G, diag, Time, CS%KPP_CSp)
+  if (CS%useKPP) call KPP_init(param_file, G, diag, Time, CS%KPP_CSp, passive=CS%KPPisPassive)
 
   call entrain_diffusive_init(Time, G, param_file, diag, CS%entrain_diffusive_CSp)
   if (CS%use_geothermal) &
