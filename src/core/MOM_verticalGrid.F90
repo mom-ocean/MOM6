@@ -143,8 +143,8 @@ subroutine verticalGridInit( param_file, GV )
 ! Log derivative values.
   call log_param(param_file, "MOM_grid", "M to THICKNESS", GV%m_to_H)
 
-  allocate( GV%sInterface(nk+1) )
-  allocate( GV%sLayer(nk) )
+  ALLOC_( GV%sInterface(nk+1) )
+  ALLOC_( GV%sLayer(nk) )
 
 end subroutine verticalGridInit
 
@@ -172,8 +172,8 @@ subroutine verticalGridEnd( GV )
   type(verticalGrid_type), pointer :: GV
 
   DEALLOC_(GV%g_prime) ; DEALLOC_(GV%Rlay)
-  deallocate( GV%sInterface )
-  deallocate( GV%sLayer )
+  DEALLOC_( GV%sInterface )
+  DEALLOC_( GV%sLayer )
   deallocate( GV )
 
 end subroutine verticalGridEnd
