@@ -285,11 +285,11 @@ subroutine MOM_grid_init(G, param_file)
   G%H_subroundoff = 1e-20 * max(G%Angstrom,G%m_to_H*1e-17)
   G%H_to_Pa = G%g_Earth * G%H_to_kg_m2
 
-  allocate(G%gridLatT(G%Domain%njglobal+2*G%Domain%njhalo))
-  allocate(G%gridLatB(G%Domain%njglobal+2*G%Domain%njhalo))
+  allocate(G%gridLatT(G%jsg:G%jeg))
+  allocate(G%gridLatB(G%JsgB:G%JegB))
   G%gridLatT(:) = 0.0 ; G%gridLatB(:) = 0.0
-  allocate(G%gridLonT(G%Domain%niglobal+2*G%Domain%nihalo))
-  allocate(G%gridLonB(G%Domain%niglobal+2*G%Domain%nihalo))
+  allocate(G%gridLonT(G%isg:G%ieg))
+  allocate(G%gridLonB(G%IsgB:G%IegB))
   G%gridLonT(:) = 0.0 ; G%gridLonB(:) = 0.0
 
 ! Log derivative values.

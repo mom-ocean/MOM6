@@ -95,7 +95,7 @@ use MOM_checksums, only : hchksum, uchksum, vchksum
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
 use MOM_diag_mediator, only : post_data, query_averaging_enabled, register_diag_field
 use MOM_diag_mediator, only : safe_alloc_ptr, diag_ctrl, enable_averaging
-use MOM_domains, only : pass_var, pass_vector, min_across_PEs, MOM_domains_init
+use MOM_domains, only : pass_var, pass_vector, min_across_PEs, clone_MOM_domain
 use MOM_domains, only : pass_var_start, pass_var_complete
 use MOM_domains, only : pass_vector_start, pass_vector_complete
 use MOM_domains, only : To_All, Scalar_Pair, AGRID, CORNER, MOM_domain_type
@@ -3426,7 +3426,7 @@ subroutine barotropic_init(u, v, h, eta, Time, G, param_file, diag, CS, &
                  default = -0.98)
 
   ! Initialize a version of the MOM domain that is specific to the barotropic solver.
-  call MOM_domains_init(CS%BT_Domain, param_file, min_halo=wd_halos, symmetric=.true.)
+  call clone_MOM_domain(G%Domain, CS%BT_Domain, min_halo=wd_halos, symmetric=.true.)
 #ifdef STATIC_MEMORY_
   if (wd_halos(1) /= WHALOI_+NIHALO_) call MOM_error(FATAL, "barotropic_init: "//&
           "Barotropic x-halo sizes are incorrectly resized with STATIC_MEMORY_.")

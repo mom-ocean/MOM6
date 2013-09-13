@@ -332,7 +332,7 @@ use MOM_diag_mediator, only : diag_mediator_init, enable_averaging
 use MOM_diag_mediator, only : disable_averaging, post_data, safe_alloc_ptr
 use MOM_diag_mediator, only : register_diag_field, register_static_field
 use MOM_diag_mediator, only : set_axes_info, diag_ctrl
-use MOM_domains, only : MOM_domains_init, pass_var, pass_vector
+use MOM_domains, only : MOM_domains_init, clone_MOM_domain, pass_var, pass_vector
 use MOM_domains, only : pass_var_start, pass_var_complete
 use MOM_domains, only : pass_vector_start, pass_vector_complete
 use MOM_domains, only : To_South, To_West, To_All, CGRID_NE, SCALAR_PAIR
@@ -1404,7 +1404,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
 
   ! Allocate the auxiliary non-symmetric domain for debugging or I/O purposes.
   if (CS%debug .or. G%symmetric) &
-    call MOM_domains_init(G%Domain_aux, param_file, symmetric=.false.)
+    call clone_MOM_domain(G%Domain, G%Domain_aux, symmetric=.false.)
 
   call MOM_timing_init(CS)
 

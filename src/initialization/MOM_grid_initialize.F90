@@ -817,8 +817,13 @@ subroutine set_grid_metrics_from_mosaic(G,param_file)
     call read_data(filename, "x", tmpGlbl, start, nread, no_domain=.TRUE.)
   call broadcast(tmpGlbl, 2*(ni+1), root_PE())
   
-  G%gridLonT(:) = tmpGlbl(2:ni:2,2)
-  G%gridLonB(:) = tmpGlbl(1:ni+1:2,1)
+  ! I don't know why the second axis is 1 or 2 here.
+  do i=G%isg,G%ieg
+    G%gridLonT(i) = tmpGlbl(2*(i-G%isg)+2,2)
+  enddo
+  do I=G%IsgB,G%IegB
+    G%gridLonB(I) = tmpGlbl(2*(I-G%isg)+3,1)
+  enddo
   deallocate( tmpGlbl )
 
   allocate  ( tmpGlbl(1, nj+1) )  
@@ -828,8 +833,12 @@ subroutine set_grid_metrics_from_mosaic(G,param_file)
     call read_data(filename, "y", tmpGlbl, start, nread, no_domain=.TRUE.)
   call broadcast(tmpGlbl, nj+1, root_PE())
 
-  G%gridLatT(:) = tmpGlbl(1,2:nj:2)
-  G%gridLatB(:) = tmpGlbl(1,1:nj+1:2)
+  do j=G%jsg,G%jeg
+    G%gridLatT(j) = tmpGlbl(1,2*(j-G%jsg)+2)
+  enddo
+  do J=G%JsgB,G%JegB
+    G%gridLatB(J) = tmpGlbl(1,2*(j-G%jsg)+3)
+  enddo
   deallocate( tmpGlbl )
 
 
@@ -852,18 +861,17 @@ subroutine set_grid_metrics_cartesian(G, param_file)
 !  inverses and the cell areas centered on h, q, u, and v points are
 !  calculated, as are the geographic locations of each of these 4
 !  sets of points.
-  integer :: i, j, isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, X1off, Y1off
-  integer :: niglobal, njglobal, nihalo, njhalo
-  real :: grid_latq(0:G%Domain%njglobal+2*G%Domain%njhalo)
-  real :: grid_lonq(0:G%Domain%niglobal+2*G%Domain%nihalo)
+  integer :: i, j, isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, I1off, J1off
+  integer :: niglobal, njglobal
+  real :: grid_latT(G%jsd:G%jed), grid_latB(G%JsdB:G%JedB)
+  real :: grid_lonT(G%isd:G%ied), grid_lonB(G%IsdB:G%IedB)
   real :: PI
   character(len=48)  :: mod  = "MOM_grid_init set_grid_metrics_cartesian"
 
   niglobal = G%Domain%niglobal ; njglobal = G%Domain%njglobal
-  nihalo = G%Domain%nihalo ; njhalo = G%Domain%njhalo
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
-  X1off = G%isd_global - isd ; Y1off = G%jsd_global - jsd;
+  I1off = G%isd_global - isd ; J1off = G%jsd_global - jsd;
 
   call MOM_mesg("  MOM_grid_init.F90, set_grid_metrics_cartesian: setting metrics", 5)
  
@@ -891,23 +899,34 @@ subroutine set_grid_metrics_cartesian(G, param_file)
                  "The radius of the Earth.", units="m", default=6.378e6)
 
   ! These are larger in case symmetric memory is being used.
-  do J=0,njglobal+2*njhalo
-    grid_latq(J) = G%south_lat + G%len_lat* REAL(J-njhalo)/REAL(njglobal)
-  enddo 
-  do I=0,niglobal+2*nihalo
-    grid_lonq(I) = G%west_lon + G%len_lon*REAL(I-nihalo)/REAL(niglobal)
+  do J=G%JsgB,G%JegB
+    G%gridLatB(j) = G%south_lat + G%len_lat*REAL(J-(G%jsg-1))/REAL(njglobal)
   enddo
-  do j=1,njglobal+2*njhalo
-    G%gridLatB(j) = G%south_lat + G%len_lat* REAL(j-njhalo)/REAL(njglobal)
-    G%gridLatT(j) = G%south_lat + G%len_lat*(REAL(j-njhalo)-0.5)/REAL(njglobal)
+  do j=G%jsg,G%jeg
+    G%gridLatT(j) = G%south_lat + G%len_lat*(REAL(j-G%jsg)+0.5)/REAL(njglobal)
   enddo
-  do i=1,niglobal+2*nihalo
-    G%gridLonB(i) = G%west_lon + G%len_lon*REAL(i-nihalo)/REAL(niglobal)
-    G%gridLonT(i) = G%west_lon + G%len_lon*(REAL(i-nihalo)-0.5)/REAL(niglobal)
+  do I=G%IsgB,G%IegB
+    G%gridLonB(i) = G%west_lon + G%len_lon*REAL(I-(G%isg-1))/REAL(niglobal)
+  enddo
+  do i=G%isg,G%ieg
+    G%gridLonT(i) = G%west_lon + G%len_lon*(REAL(i-G%isg)+0.5)/REAL(niglobal)
+  enddo
+
+  do J=JsdB,JedB
+    grid_latB(J) = G%south_lat + G%len_lat*REAL(J+J1off-(G%jsg-1))/REAL(njglobal)
+  enddo
+  do j=jsd,jed
+    grid_latT(J) = G%south_lat + G%len_lat*(REAL(j+J1off-G%jsg)+0.5)/REAL(njglobal)
+  enddo
+  do I=IsdB,IedB
+    grid_lonB(I) = G%west_lon + G%len_lon*REAL(i+I1off-(G%isg-1))/REAL(niglobal)
+  enddo
+  do i=isd,ied
+    grid_lonT(i) = G%west_lon + G%len_lon*(REAL(i+I1off-G%isg)+0.5)/REAL(niglobal)
   enddo
 
   do J=JsdB,JedB ; do I=IsdB,IedB
-    G%geoLonBu(i,j) = grid_lonq(i+X1off) ; G%geoLatBu(i,j) = grid_latq(j+Y1off)
+    G%geoLonBu(I,J) = grid_lonB(I) ; G%geoLatBu(I,J) = grid_latB(J)
 
     G%dxBu(I,J) = G%Rad_Earth * G%len_lon * PI / (180.0 * niglobal)
     G%dyBu(I,J) = G%Rad_Earth * G%len_lat * PI / (180.0 * njglobal)
@@ -930,21 +949,21 @@ subroutine set_grid_metrics_cartesian(G, param_file)
   enddo ; enddo
 
   do j=jsd,jed ; do i=isd,ied
-    G%geoLonT(i,j) = G%gridLonT(i+X1off) ; G%geoLatT(i,j) = G%gridLatT(j+Y1off)
+    G%geoLonT(i,j) = grid_lonT(i) ; G%geoLatT(i,j) = grid_LatT(j)
     G%dxT(i,j) = G%dxBu(I,J) ; G%IdxT(i,j) = G%IdxBu(I,J)
     G%dyT(i,j) = G%dyBu(I,J) ; G%IdyT(i,j) = G%IdyBu(I,J)
     G%areaT(i,j) = G%areaBu(I,J) ; G%IareaT(i,j) = G%IareaBu(I,J)
   enddo ; enddo
 
   do j=jsd,jed ; do I=IsdB,IedB
-    G%geoLonCu(i,j) = grid_lonq(i+X1off) ; G%geoLatCu(i,j) = G%gridLatT(j+Y1off)
+    G%geoLonCu(I,j) = grid_lonB(I) ; G%geoLatCu(I,j) = grid_LatT(j)
 
     G%dxCu(I,j) = G%dxBu(I,J) ; G%IdxCu(I,j) = G%IdxBu(I,J)
     G%dyCu(I,j) = G%dyBu(I,J) ; G%IdyCu(I,j) = G%IdyBu(I,J)
   enddo ; enddo
 
   do J=JsdB,JedB ; do i=isd,ied
-    G%geoLonCv(i,j) = G%gridLonT(i+X1off) ; G%geoLatCv(i,j) = grid_latq(j+Y1off)
+    G%geoLonCv(i,J) = grid_lonT(i) ; G%geoLatCv(i,J) = grid_latB(J)
 
     G%dxCv(i,J) = G%dxBu(I,J) ; G%IdxCv(i,J) = G%IdxBu(I,J)
     G%dyCv(i,J) = G%dyBu(I,J) ; G%IdyCv(i,J) = G%IdyBu(I,J)
@@ -969,11 +988,11 @@ subroutine set_grid_metrics_spherical(G, param_file)
 !  calculated, as are the geographic locations of each of these 4
 !  sets of points.
   real :: PI, PI_180! PI = 3.1415926... as 4*atan(1)
-  integer :: i,j, isd, ied, jsd, jed
+  integer :: i, j, isd, ied, jsd, jed
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, IsdB, IedB, JsdB, JedB
   integer :: i_offset, j_offset
-  real :: grid_latq(0:G%Domain%njglobal+2*G%Domain%njhalo)
-  real :: grid_lonq(0:G%Domain%niglobal+2*G%Domain%nihalo)
+  real :: grid_latT(G%jsd:G%jed), grid_latB(G%JsdB:G%JedB)
+  real :: grid_lonT(G%isd:G%ied), grid_lonB(G%IsdB:G%IedB)
   real :: dLon,dLat,latitude,longitude,dL_di
   character(len=48)  :: mod  = "MOM_grid_init set_grid_metrics_spherical"
 
@@ -1014,28 +1033,40 @@ subroutine set_grid_metrics_spherical(G, param_file)
   dLon = G%len_lon/G%Domain%niglobal
   dLat = G%len_lat/G%Domain%njglobal
 
-  do J=0,G%Domain%njglobal+2*G%Domain%njhalo
-    latitude = G%south_lat + dLat* REAL(J-G%Domain%njhalo)
-    grid_latq(J) = MIN(MAX(latitude,-90.),90.)
+  do j=G%JsgB,G%JegB
+    latitude = G%south_lat + dLat*(REAL(J-(G%jsg-1)))
+    G%gridLatB(J) = MIN(MAX(latitude,-90.),90.)
   enddo
-  do I=1,G%Domain%niglobal+2*G%Domain%nihalo
-    grid_lonq(I) = G%west_lon + dLon*REAL(I-G%Domain%nihalo)
-  enddo
-
-  do j=1,G%Domain%njglobal+2*G%Domain%njhalo
-    G%gridLatB(J) = grid_latq(J)
-    latitude = G%south_lat + dLat*(REAL(j-G%Domain%njhalo)-0.5)
+  do j=G%jsg,G%jeg
+    latitude = G%south_lat + dLat*(REAL(j-G%jsg)+0.5)
     G%gridLatT(j) = MIN(MAX(latitude,-90.),90.)
   enddo
-  do i=1,G%Domain%niglobal+2*G%Domain%nihalo
-    G%gridLonB(I) = grid_lonq(I)
-    G%gridLonT(i) = G%west_lon + dLon*(REAL(i-G%Domain%nihalo)-0.5)
+  do i=G%IegB,G%IegB
+    G%gridLonB(I) = G%west_lon + dLon*(REAL(I-(G%isg-1)))
+  enddo
+  do i=G%ieg,G%ieg
+    G%gridLonT(i) = G%west_lon + dLon*(REAL(i-G%isg)+0.5)
+  enddo
+
+  do J=JsdB,JedB
+    latitude = G%south_lat + dLat* REAL(J+J_offset-(G%jsg-1))
+    grid_LatB(J) = MIN(MAX(latitude,-90.),90.)
+  enddo
+  do j=jsd,jed
+    latitude = G%south_lat + dLat*(REAL(j+J_offset-G%jsg)+0.5)
+    grid_LatT(j) = MIN(MAX(latitude,-90.),90.)
+  enddo
+  do I=IsdB,IedB
+    grid_LonB(I) = G%west_lon + dLon*REAL(I+I_offset-(G%isg-1))
+  enddo
+  do i=isd,ied
+    grid_LonT(i) = G%west_lon + dLon*(REAL(i+I_offset-G%isg)+0.5)
   enddo
 
   dL_di = (G%len_lon * 4.0*atan(1.0)) / (180.0 * G%Domain%niglobal)
   do J=JsdB,JedB ; do I=IsdB,IedB
-    G%geoLonBu(I,J) = grid_lonq(I+I_offset)
-    G%geoLatBu(I,J) = grid_latq(J+J_offset)
+    G%geoLonBu(I,J) = grid_lonB(I)
+    G%geoLatBu(I,J) = grid_latB(J)
 
 ! The following line is needed to reproduce the solution from
 ! set_grid_metrics_mercator when used to generate a simple spherical grid.
@@ -1046,8 +1077,8 @@ subroutine set_grid_metrics_spherical(G, param_file)
   enddo; enddo
 
   do J=JsdB,JedB ; do i=isd,ied
-    G%geoLonCv(i,J) = G%gridLonT(i+i_offset)
-    G%geoLatCv(i,J) = grid_latq(j+j_offset)
+    G%geoLonCv(i,J) = grid_LonT(i)
+    G%geoLatCv(i,J) = grid_latB(J)
 
 ! The following line is needed to reproduce the solution from
 ! set_grid_metrics_mercator when used to generate a simple spherical grid.
@@ -1057,8 +1088,8 @@ subroutine set_grid_metrics_spherical(G, param_file)
   enddo; enddo
 
   do j=jsd,jed ; do I=IsdB,IedB
-    G%geoLonCu(I,j) = grid_lonq(i+i_offset)
-    G%geoLatCu(I,j) = G%gridLatT(j+j_offset)
+    G%geoLonCu(I,j) = grid_lonB(I)
+    G%geoLatCu(I,j) = grid_LatT(j)
 
 ! The following line is needed to reproduce the solution from
 ! set_grid_metrics_mercator when used to generate a simple spherical grid.
@@ -1068,8 +1099,8 @@ subroutine set_grid_metrics_spherical(G, param_file)
   enddo; enddo
 
   do j=jsd,jed ; do i=isd,ied
-    G%geoLonT(i,j) = G%gridLonT(i+i_offset)
-    G%geoLatT(i,j) = G%gridLatT(j+j_offset)
+    G%geoLonT(i,j) = grid_LonT(i)
+    G%geoLatT(i,j) = grid_LatT(j)
 
 ! The following line is needed to reproduce the solution from
 ! set_grid_metrics_mercator when used to generate a simple spherical grid.
@@ -1101,9 +1132,7 @@ subroutine set_grid_metrics_mercator(G, param_file)
 !  inverses and the cell areas centered on h, q, u, and v points are
 !  calculated, as are the geographic locations of each of these 4
 !  sets of points.
-  real :: grid_latq(0:G%Domain%njglobal+2*G%Domain%njhalo)
-  real :: grid_lonq(0:G%Domain%niglobal+2*G%Domain%nihalo)
-  integer :: i,j, isd, ied, jsd, jed
+  integer :: i, j, isd, ied, jsd, jed
   integer :: X1off, Y1off
   type(GPS) :: GP
   character(len=128) :: warnmesg
@@ -1198,11 +1227,11 @@ subroutine set_grid_metrics_mercator(G, param_file)
 ! With the following expression, the equator will always be placed
 ! on either h or q points, in a position consistent with the ratio
 ! GP%south_lat to GP%len_lat.
-    jRef =  G%Domain%njhalo-1 + 0.5*FLOOR(GP%njglobal*((-1.0*GP%south_lat*2.0)/GP%len_lat)+0.5)
+    jRef =  (G%jsg-1) + 0.5*FLOOR(GP%njglobal*((-1.0*GP%south_lat*2.0)/GP%len_lat)+0.5)
     fnRef = Int_dj_dy(0.0,GP)
   else
-!  The following line sets the refererence latitude GP%south_lat at j=js-1.
-    jRef = G%Domain%njhalo-1
+!  The following line sets the reference latitude GP%south_lat at j=js-1 (or -2?)
+    jRef = (G%jsg-1)
     fnRef = Int_dj_dy((GP%south_lat*PI/180.0),GP)
   endif
 
@@ -1211,15 +1240,15 @@ subroutine set_grid_metrics_mercator(G, param_file)
     do I=IsdB,IedB ; yq(I, -Y1off) = y_q ; enddo
     do i=isd,ied ; yv(i, -Y1off) = y_q ; enddo
   endif
-  do j=1,GP%njglobal+2*G%Domain%njhalo
-    jd = fnRef + (j -1 - jRef) - 0.5
+  do j=G%jsg-G%Domain%njhalo,G%jeg+G%Domain%njhalo
+    jd = fnRef + (j - jRef) - 0.5
     y_h = find_root(Int_dj_dy,dy_dj,GP,jd,y_q,-1.0*PI_2,PI_2,itt1)
 
-    jd = fnRef + (j -1 - jRef)
+    jd = fnRef + (j - jRef)
     y_q = find_root(Int_dj_dy,dy_dj,GP,jd,y_h,-1.0*PI_2,PI_2,itt2)
 
-    G%gridLatB(j) = y_q*180.0/PI
-    G%gridLatT(j) = y_h*180.0/PI
+    if (j>=G%JsgB .and. j<=G%JegB) G%gridLatB(j) = y_q*180.0/PI
+    if (j>=G%jsg .and. j<=G%jeg)   G%gridLatT(j) = y_h*180.0/PI
 
     if ((j >= jsd+Y1off) .and. (j <= jed+Y1off)) then
       do i=isd,ied ; yh(i,j-Y1off) = y_h ; enddo
@@ -1234,7 +1263,7 @@ subroutine set_grid_metrics_mercator(G, param_file)
 ! Determine the longitudes of the various points.
 
 ! These two lines place the western edge of the domain at GP%west_lon.
-  iRef = G%Domain%nihalo -1 + GP%niglobal
+  iRef = (G%isg-1) + GP%niglobal
   fnRef = Int_di_dx(((GP%west_lon+GP%len_lon)*PI/180.0),GP)
 
   x_q = GP%west_lon*PI/180.0
@@ -1245,16 +1274,16 @@ subroutine set_grid_metrics_mercator(G, param_file)
     do J=JsdB,JedB ; xq(-X1off,j) = x_q ; enddo
     do j=jsd,jed ; xu(-X1off,j) = x_q ; enddo
   endif
-  do i=1,GP%niglobal+2*G%Domain%nihalo
-    id = fnRef + (i - 1 - iRef) - 0.5
+  do i=G%isg-G%Domain%nihalo,G%ieg+G%Domain%nihalo
+    id = fnRef + (i - iRef) - 0.5
     x_h = find_root(Int_di_dx,dx_di,GP,id,x_q,-4.0*PI,4.0*PI,itt1)
 
-    id = fnRef + (i - 1 -iRef)
+    id = fnRef + (i - iRef)
     x_q = find_root(Int_di_dx,dx_di,GP,id,x_h,-4.0*PI,4.0*PI,itt2)
     if(i == G%isc) dx_q = x_q - x_q_west
 
-    G%gridLonB(i) = x_q*180.0/PI
-    G%gridLonT(i) = x_h*180.0/PI
+    if (i>=G%IsgB .and. i<=G%IegB) G%gridLonB(i) = x_q*180.0/PI
+    if (i>=G%isg .and. i<=G%ieg)   G%gridLonT(i) = x_h*180.0/PI
 
     if ((i >= isd+X1off) .and. (i <= ied+X1off)) then
       do j=jsd,jed ; xh(i-X1off,j) = x_h ; enddo
@@ -1417,7 +1446,7 @@ subroutine initialize_masks(G, PF)
   ! that are not necessarily at the edges of the domain.
   if (apply_OBC_u_flather_west) then
     do j=G%jsd,G%jed ; do I=G%isd+1,G%ied
-      if ((I+G%isd_global-G%isd) == G%domain%nihalo+1) then
+      if ((I+G%isd_global-G%isd) == G%isg) then
         G%bathyT(i-1,j) = G%bathyT(i,j)
       endif
     enddo; enddo       
@@ -1425,7 +1454,7 @@ subroutine initialize_masks(G, PF)
 
   if (apply_OBC_u_flather_east) then
     do j=G%jsd,G%jed ; do I=G%isd,G%ied-1
-      if ((i+G%isd_global-G%isd) == G%domain%niglobal+G%domain%nihalo) then
+      if ((i+G%isd_global-G%isd) == G%ieg) then
         G%bathyT(i+1,j) = G%bathyT(i,j)
       endif
     enddo; enddo    
@@ -1433,7 +1462,7 @@ subroutine initialize_masks(G, PF)
 
   if (apply_OBC_v_flather_north) then
     do J=G%jsd,G%jed-1 ; do i=G%isd,G%ied
-      if ((j+G%jsd_global-G%jsd) == G%domain%njglobal+G%domain%njhalo) then
+      if ((j+G%jsd_global-G%jsd) == G%jeg) then
         G%bathyT(i,j+1) = G%bathyT(i,j)
       endif
     enddo; enddo    
@@ -1441,7 +1470,7 @@ subroutine initialize_masks(G, PF)
 
   if (apply_OBC_v_flather_south) then
     do J=G%jsd+1,G%jed ; do i=G%isd,G%ied
-      if ((J+G%jsd_global-G%jsd) == G%domain%njhalo+1) then
+      if ((J+G%jsd_global-G%jsd) == G%jsg) then
         G%bathyT(i,j-1) = G%bathyT(i,j)
       endif
     enddo; enddo

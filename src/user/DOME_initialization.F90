@@ -292,13 +292,12 @@ subroutine DOME_set_Open_Bdry_Conds(OBC, tv, G, param_file, tr_Reg)
   real :: Ri_trans          ! The shear Richardson number in the transition
                             ! region of the specified shear profile.
   character(len=40)  :: mod = "DOME_set_Open_Bdry_Conds" ! This subroutine's name.
-  integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, nz, njhalo
+  integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, nz
   integer :: IsdB, IedB, JsdB, JedB
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
-  njhalo = G%jsc-G%jsd
 
   ! The following variables should be transformed into runtime parameters.
   D_edge = 300.0  ! The thickness of dense fluid in the inflow.
@@ -336,7 +335,7 @@ subroutine DOME_set_Open_Bdry_Conds(OBC, tv, G, param_file, tr_Reg)
     any_OBC = .false.
     do J=JsdB,JedB ; do i=isd,ied
       if ((G%geoLonCv(i,J) > 1000.0) .and. (G%geoLonCv(i,J)  < 1100.0) .and. &
-          (abs(G%geoLatCv(i,J) - G%gridLatB(G%Domain%njglobal+njhalo)) < 0.1)) then
+          (abs(G%geoLatCv(i,J) - G%gridLatB(G%JegB)) < 0.1)) then
         OBC_mask_v(i,J) = .true. ; any_OBC = .true.
       endif
     enddo ; enddo

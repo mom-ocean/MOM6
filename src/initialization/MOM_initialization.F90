@@ -1147,7 +1147,6 @@ subroutine initialize_topography_named(D, G, param_file, topog_config, max_depth
   real :: expdecay             ! A decay scale of associated with   !
                                ! the sloping boundaries, in m.      !
   real :: Dedge                ! The depth in m at the basin edge.  !
-! real :: southlat0, westlon0, lenlon0, lenlat0
 ! real :: south_lat, west_lon, len_lon, len_lat, Rad_earth
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed, xhalo, yhalo
   character(len=40)  :: mod = "initialize_topography_named" ! This subroutine's name.
@@ -1165,10 +1164,6 @@ subroutine initialize_topography_named(D, G, param_file, topog_config, max_depth
   ! These expressions force rounding of approximate values in a
   ! consistent way.
   xhalo = G%isc-G%isd ; yhalo = G%jsc-G%jsd
-! southlat0 = ANInt(G%gridLatB(yhalo)*1024.0)/1024.0
-! westlon0 = ANInt(G%gridLonB(xhalo)*1024.0)/1024.0
-! lenlon0 = ANInt((G%gridLonB(G%Domain%niglobal+xhalo)-G%gridLonB(xhalo))*1024.0)/1024.0
-! lenlat0 = ANInt((G%gridLatB(G%Domain%njglobal+yhalo)-G%gridLatB(yhalo))*1024.0)/1024.0
 
   if (trim(topog_config) /= "flat") then
     call get_param(param_file, mod, "EDGE_DEPTH", Dedge, &
@@ -1176,16 +1171,16 @@ subroutine initialize_topography_named(D, G, param_file, topog_config, max_depth
                    units="m", default=100.0)
 !   call get_param(param_file, mod, "SOUTHLAT", south_lat, &
 !                  "The southern latitude of the domain.", units="degrees", &
-!                  default=southlat0)
+!                  fail_if_missing=.true.)
 !   call get_param(param_file, mod, "LENLAT", len_lat, &
 !                  "The latitudinal length of the domain.", units="degrees", &
-!                  default=lenlat0)
+!                  fail_if_missing=.true.)
 !   call get_param(param_file, mod, "WESTLON", west_lon, &
 !                  "The western longitude of the domain.", units="degrees", &
-!                  default=westlon0)
+!                  default=0.0)
 !   call get_param(param_file, mod, "LENLON", len_lon, &
 !                  "The longitudinal length of the domain.", units="degrees", &
-!                  default=lenlon0)
+!                  fail_if_missing=.true.)
 !   call get_param(param_file, mod, "RAD_EARTH", Rad_Earth, &
 !                  "The radius of the Earth.", units="m", default=6.378e6)
     call get_param(param_file, mod, "TOPOG_SLOPE_SCALE", expdecay, &
@@ -2418,15 +2413,16 @@ subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, tracer_Reg)
   endif
 
   if (G%symmetric) then
-    east_boundary = G%domain%niglobal+G%domain%nihalo
-    west_boundary = G%domain%nihalo
-    north_boundary = G%domain%njglobal+G%domain%njhalo
-    south_boundary = G%domain%njhalo
+    east_boundary = G%ieg
+    west_boundary = G%isg-1
+    north_boundary = G%jeg
+    south_boundary = G%jsg-1
   else
-    east_boundary = G%domain%niglobal+G%domain%nihalo-1
-    west_boundary = G%domain%nihalo+1
-    north_boundary = G%domain%njglobal+G%domain%njhalo-1
-    south_boundary = G%domain%njhalo+1
+    ! I am not entirely sure that this works properly. -RWH
+    east_boundary = G%ieg-1
+    west_boundary = G%isg
+    north_boundary = G%jeg-1
+    south_boundary = G%jsg
   endif
 
   if (.not.associated(OBC%OBC_mask_u)) then

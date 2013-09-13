@@ -45,7 +45,7 @@ implicit none ; private
 #include <MOM_memory.h>
 
 public :: MOM_domains_init, MOM_infra_init, MOM_infra_end, get_domain_extent
-public :: MOM_define_domain, MOM_define_io_domain
+public :: MOM_define_domain, MOM_define_io_domain, clone_MOM_domain
 public :: pass_var, pass_vector, broadcast, PE_here, root_PE, num_PEs
 public :: pass_var_start, pass_var_complete, fill_symmetric_edges
 public :: pass_vector_start, pass_vector_complete
@@ -92,9 +92,9 @@ type, public :: MOM_domain_type
   logical :: nonblocking_updates        ! If true, non-blocking halo updates are
                                         ! allowed.  The default is .false. (for now).
   integer :: layout(2), io_layout(2)    ! Saved data for sake of constructing
-  integer :: X_FLAGS,Y_FLAGS            ! new domains of different resolution.
+  integer :: X_FLAGS, Y_FLAGS           ! new domains of different resolution.
   logical :: use_io_layout              ! True if an I/O layout is available.
-  logical, pointer :: maskmap(:,:)=> NULL() ! A pointer to an array indicating
+  logical, pointer :: maskmap(:,:) => NULL() ! A pointer to an array indicating
                                 ! which logical processors are actually used for
                                 ! the ocean code. The other logical processors
                                 ! would be all land points and are not assigned
@@ -657,7 +657,7 @@ subroutine MOM_domains_init(MOM_dom, param_file, min_halo, symmetric, dynamic)
   integer, dimension(2) :: layout = (/ 1, 1 /)
   integer, dimension(2) :: io_layout = (/ 0, 0 /)
   integer, dimension(4) :: global_indices
-  integer :: nihalo, njhalo, nihalo_dflt, njhalo_dflt
+  integer :: nihalo, njhalo, nihalo_dflt, njhalo_dflt, i_off, j_off
   integer :: pe, proc_used
   integer :: X_FLAGS, Y_FLAGS
   logical :: reentrant_x, reentrant_y, tripolar_N, is_static, may_be_static
@@ -800,10 +800,8 @@ subroutine MOM_domains_init(MOM_dom, param_file, min_halo, symmetric, dynamic)
   nihalo = MOM_dom%nihalo
   njhalo = MOM_dom%njhalo
 
-  global_indices(1) = 1
-  global_indices(2) = MOM_dom%niglobal
-  global_indices(3) = 1
-  global_indices(4) = MOM_dom%njglobal
+  global_indices(1) = 1 ; global_indices(2) = MOM_dom%niglobal
+  global_indices(3) = 1 ; global_indices(4) = MOM_dom%njglobal
 
   call get_param(param_file, mod, "INPUTDIR", inputdir, do_not_log=.true., default=".")
   inputdir = slasher(inputdir)
@@ -844,7 +842,6 @@ subroutine MOM_domains_init(MOM_dom, param_file, min_halo, symmetric, dynamic)
   call log_param(param_file, mod, "!NJPROC", layout(2), &
                  "The number of processors in the x-direction. With \n"//&
                  "STATIC_MEMORY_ this is set in MOM_memory.h at compile time.")
-!  write(*,*) 'layout is now ',layout, global_indices
 
   if (mask_table_exists) then
     call MOM_error(NOTE, 'MOM_domains_init: reading maskmap information from '//&
@@ -852,7 +849,6 @@ subroutine MOM_domains_init(MOM_dom, param_file, min_halo, symmetric, dynamic)
     allocate(MOM_dom%maskmap(layout(1), layout(2)))
     call parse_mask_table(mask_table, MOM_dom%maskmap, "MOM")
   endif
-
 
   !   Set up the I/O lay-out, and check that it uses an even multiple of the
   ! number of PEs in each direction.
@@ -893,16 +889,17 @@ subroutine MOM_domains_init(MOM_dom, param_file, min_halo, symmetric, dynamic)
     if (reentrant_y) call MOM_error(FATAL,"MOM_domains: "// &
       "TRIPOLAR_N and REENTRANT_Y may not be defined together.")
   endif
-  
+
+  i_off = MOM_dom%nihalo ; j_off = MOM_dom%njhalo
+  global_indices(1) = 1+i_off ; global_indices(2) = MOM_dom%niglobal+i_off
+  global_indices(3) = 1+j_off ; global_indices(4) = MOM_dom%njglobal+j_off
   if (mask_table_exists) then
-    call MOM_define_domain( (/1+nihalo,MOM_dom%niglobal+nihalo,1+njhalo, &
-                MOM_dom%njglobal+njhalo/), layout, MOM_dom%mpp_domain, &
+    call MOM_define_domain( global_indices, layout, MOM_dom%mpp_domain, &
                 xflags=X_FLAGS, yflags=Y_FLAGS, xhalo=nihalo, yhalo=njhalo, &
                 symmetry = MOM_dom%symmetric, name="MOM", &
                 maskmap=MOM_dom%maskmap )
   else
-    call MOM_define_domain( (/1+nihalo,MOM_dom%niglobal+nihalo,1+njhalo, &
-                MOM_dom%njglobal+njhalo/), layout, MOM_dom%mpp_domain, &
+    call MOM_define_domain( global_indices, layout, MOM_dom%mpp_domain, &
                 xflags=X_FLAGS, yflags=Y_FLAGS, xhalo=nihalo, yhalo=njhalo, &
                 symmetry = MOM_dom%symmetric, name="MOM")
   endif
@@ -941,6 +938,90 @@ subroutine MOM_domains_init(MOM_dom, param_file, min_halo, symmetric, dynamic)
 #endif
 
 end subroutine MOM_domains_init
+
+subroutine clone_MOM_domain(MD_in, MOM_dom, min_halo, halo_size, symmetric, &
+                            no_offset, domain_name)
+  type(MOM_domain_type),           intent(in)    :: MD_in
+  type(MOM_domain_type),           pointer       :: MOM_dom
+  integer, dimension(2), optional, intent(inout) :: min_halo
+  integer,               optional, intent(in)    :: halo_size
+  logical,               optional, intent(in)    :: symmetric
+  logical,               optional, intent(in)    :: no_offset
+  character(len=*),      optional, intent(in)    :: domain_name
+
+  logical :: mask_table_exists
+  character(len=64) :: dom_name
+  integer :: global_indices(4), i_off, j_off
+
+  if (.not.associated(MOM_dom)) then
+    allocate(MOM_dom)
+    allocate(MOM_dom%mpp_domain)
+  endif
+
+! Save the extra data for creating other domains of different resolution that overlay this domain
+  MOM_dom%niglobal = MD_in%niglobal ; MOM_dom%njglobal = MD_in%njglobal
+  MOM_dom%nihalo = MD_in%nihalo ; MOM_dom%njhalo = MD_in%njhalo
+ 
+  MOM_dom%symmetric = MD_in%symmetric
+  MOM_dom%nonblocking_updates = MD_in%nonblocking_updates
+  
+  MOM_dom%X_FLAGS = MD_in%X_FLAGS ; MOM_dom%Y_FLAGS = MD_in%Y_FLAGS
+  MOM_dom%layout(:) = MD_in%layout(:) ; MOM_dom%io_layout(:) = MD_in%io_layout(:)
+  MOM_dom%use_io_layout = (MOM_dom%io_layout(1) + MOM_dom%io_layout(2) > 0)
+
+  if (associated(MD_in%maskmap)) then
+    mask_table_exists = .true.
+    allocate(MOM_dom%maskmap(MOM_dom%layout(1), MOM_dom%layout(2)))
+    MOM_dom%maskmap(:,:) = MD_in%maskmap(:,:)
+  else
+    mask_table_exists = .false.
+  endif
+
+  if (present(halo_size) .and. present(min_halo)) call MOM_error(FATAL, &
+      "clone_MOM_domain can not have both halo_size and min_halo present.")
+
+  if (present(min_halo)) then
+    MOM_dom%nihalo = max(MOM_dom%nihalo, min_halo(1))
+    min_halo(1) = MOM_dom%nihalo
+    MOM_dom%njhalo = max(MOM_dom%njhalo, min_halo(2))
+    min_halo(2) = MOM_dom%njhalo
+  endif
+  
+  if (present(halo_size)) then
+    MOM_dom%nihalo = halo_size ; MOM_dom%njhalo = halo_size
+  endif
+
+  if (present(symmetric)) then ; MOM_dom%symmetric = symmetric ; endif
+
+  i_off = MOM_dom%nihalo ; j_off = MOM_dom%njhalo
+  if (present(no_offset)) then ; if (no_offset) then
+    i_off = 0 ; j_off = 0
+  endif ; endif
+
+  dom_name = "MOM"
+  if (present(domain_name)) dom_name = trim(domain_name)
+
+  global_indices(1) = 1+i_off ; global_indices(2) = MOM_dom%niglobal+i_off
+  global_indices(3) = 1+j_off ; global_indices(4) = MOM_dom%njglobal+j_off
+  if (mask_table_exists) then
+    call MOM_define_domain( global_indices, MOM_dom%layout, MOM_dom%mpp_domain, &
+                xflags=MOM_dom%X_FLAGS, yflags=MOM_dom%Y_FLAGS, &
+                xhalo=MOM_dom%nihalo, yhalo=MOM_dom%njhalo, &
+                symmetry = MOM_dom%symmetric, name=dom_name, &
+                maskmap=MOM_dom%maskmap )
+  else
+    call MOM_define_domain( global_indices, MOM_dom%layout, MOM_dom%mpp_domain, &
+                xflags=MOM_dom%X_FLAGS, yflags=MOM_dom%Y_FLAGS, &
+                xhalo=MOM_dom%nihalo, yhalo=MOM_dom%njhalo, &
+                symmetry = MOM_dom%symmetric, name=dom_name)
+  endif
+
+  if ((MOM_dom%io_layout(1) + MOM_dom%io_layout(2) > 0)) then
+    call MOM_define_io_domain(MOM_dom%mpp_domain, MOM_dom%io_layout)
+  endif
+
+
+end subroutine clone_MOM_domain
 
 subroutine get_domain_extent(Domain, isc, iec, jsc, jec, isd, ied, jsd, jed, &
                              isg, ieg, jsg, jeg, idg_offset, jdg_offset, &
