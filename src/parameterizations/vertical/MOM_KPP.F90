@@ -14,8 +14,8 @@ use CVmix_kpp, only : CVmix_init_kpp, CVmix_put_kpp, CVmix_get_kpp_real
 use CVmix_kpp, only : CVmix_coeffs_kpp
 use CVmix_kpp, only : CVmix_kpp_compute_OBL_depth
 use CVmix_kpp, only : CVmix_kpp_compute_turbulent_scales
-use CVmix_kpp, only : CVmix_kpp_compute_bulk_Richardson
-use CVmix_kpp, only : CVmix_kpp_compute_unresolved_shear
+!use CVmix_kpp, only : CVmix_kpp_compute_bulk_Richardson
+!use CVmix_kpp, only : CVmix_kpp_compute_unresolved_shear
 use CVmix_kpp, only : CVmix_kpp_params_type
 implicit none ; private
 
