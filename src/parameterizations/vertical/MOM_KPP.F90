@@ -14,8 +14,9 @@ use CVmix_kpp, only : CVmix_init_kpp, CVmix_put_kpp, CVmix_get_kpp_real
 use CVmix_kpp, only : CVmix_coeffs_kpp
 use CVmix_kpp, only : CVmix_kpp_compute_OBL_depth
 use CVmix_kpp, only : CVmix_kpp_compute_turbulent_scales
+use CVmix_kpp, only : CVmix_kpp_compute_bulk_Richardson
+use CVmix_kpp, only : CVmix_kpp_compute_unresolved_shear
 use CVmix_kpp, only : CVmix_kpp_params_type
-
 implicit none ; private
 
 #include "MOM_memory.h"
@@ -162,9 +163,9 @@ subroutine KPP_init(paramFile, G, diag, Time, CS, passive)
   CS%id_Ks_KPP = register_diag_field('ocean_model', 'KPP_Ksalt', diag%axesTi, Time, &
       'Salt diffusivity due to KPP, as calculated by [CVmix] KPP', 'm2/s')
   CS%id_NLTt = register_diag_field('ocean_model', 'KPP_NLtransport_heat', diag%axesTi, Time, &
-      'Non-local transport for heat, as calculated by [CVmix] KPP', 'm/s')
+      'Non-local transport for heat, as calculated by [CVmix] KPP', 'nondim')
   CS%id_NLTs = register_diag_field('ocean_model', 'KPP_NLtransport_salt', diag%axesTi, Time, &
-      'Non-local tranpsort for scalars, as calculated by [CVmix] KPP', 'm/s')
+      'Non-local tranpsort for scalars, as calculated by [CVmix] KPP', 'nondim')
   CS%id_dTdt = register_diag_field('ocean_model', 'KPP_dTdt', diag%axesTL, Time, &
       'Temperature tendancy due to non-local transport of heat, as calculated by [CVmix] KPP', 'K/s')
   CS%id_dSdt = register_diag_field('ocean_model', 'KPP_dSdt', diag%axesTL, Time, &
@@ -284,6 +285,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
         Vk = 0.5 * ( abs( v(i,j,k) - v(i,j,1) ) + abs( v(i,j-1,k) - v(i,j-1,1) ) ) ! delta_k V
         deltaRho(k) = rhoK - rho1
         deltaU2(k) = ( Uk**2 + Vk**2 ) + negligibleShear
+        ! N2 is on interfaces.
         N2_1d(k) = GoRho * (rhoK - rhoKm1) / (0.5*(h(i,j,km1) + h(i,j,k))+G%H_subroundoff) ! Can be negative
         ! N = sqrt(N^2) but because N^2 can be negative, we clip N^2 before taking the square root   ??????
         N_1d(k) = sqrt( max( N2_1d(k), 0.) )
@@ -299,16 +301,18 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
       N_1d( G%ke+1 ) = 0.
       Ut2_1d( G%ke+1 ) = 0.
 
+      Ut2_1d(:) = negligibleShear ! Non-zero even at bottom, to avoid divide by zero
+    ! BulkRi_1d = CVmix_kpp_compute_bulk_Richardson( &
+    !                  cellHeight,      & ! Height of level centers (m)
+    !                  GoRho*deltaRho,  & ! Bulk buoyancy difference, Br -B(z) (1/s)
+    !                  deltaU2,         & ! Square of bulk shear (m/s)
+    !     ! THIS NEXT ARGUMENT IS SHIFTED TO HAVE SAME SIZE AS OTHER ARGS ???????
+    !                  Ut2_1d(1:G%ke) )   ! Square of unresolved turbulence (m2/s2)
+
       Coriolis = 0.25*( (G%CoriolisBu(i,j) + G%CoriolisBu(i-1,j-1)) &
                        +(G%CoriolisBu(i-1,j) + G%CoriolisBu(i,j-1)) )
       surfFricVel = uStar(i,j)
       surfBuoyFlux = buoyFlux(i,j)
-! if (isPointInCell(G,i,j,-235.5,13.3)) then
-!   print *,'u*,buoyFlux',surfFricVel,surfBuoyFlux
-!   do k=1,G%ke
-!     print *,'k,h,z,S,T=',k,h(i,j,k),cellHeight(k),Temp(i,j,k),Salt(i,j,k)
-!   enddo
-! endif
 
       OBLdepth_0d = 1.e10 ! Silly initial value
       lastOBLdepth = OBLdepth_0d
@@ -327,7 +331,6 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
            surf_buoy=surfBuoyFlux, & ! (in) Buoyancy flux at surface (m2/s3)
            Coriolis=Coriolis,      & ! (in) Coriolis parameter (1/s)
            CVmix_kpp_params_user=CS%KPP_params ) ! KPP parameters
-        !if (isPointInCell(G,i,j,-30.5,60.)) print *,'iter,OBL',iteration, OBLdepth_0d
 !       OBLdepth_0d = max( OBLdepth_0d, h(i,j,1) ) ! Limit OBL to thicker than top layer ?????
 
         ! Exit loop if converged, one iteration is guaranteed because initial value
@@ -363,6 +366,17 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
             ! Note upward-biased used of Ws since Ws is at interfaces
             BulkRi_1d(k) = ( GoRho * ( -cellHeight(k) ) ) * deltaRho(k) / ( deltaU2(k) + Ut2_1d(k) )
           enddo ! k
+        ! Ut2_1d(:) = CVmix_kpp_compute_unresolved_shear( &
+        !                  iFaceHeight, & ! Height of interfaces (m)
+        !                  N_1d,        & ! Buoyancy frequency at interfaces (1/s)
+        !                  Ws_1d,       & ! Turbulent velocity scale profile, at interfaces (m/s)
+        !                  CVmix_kpp_params_user=CS%KPP_params ) ! KPP parameters
+        ! BulkRi_1d = CVmix_kpp_compute_bulk_Richardson( &
+        !                  cellHeight,      & ! Height of level centers (m)
+        !                  GoRho*deltaRho,  & ! Bulk buoyancy difference, Br -B(z) (1/s)
+        !                  deltaU2,         & ! Square of bulk shear (m/s)
+        !     ! THIS NEXT ARGUMENT IS SHIFTED TO HAVE SAME SIZE AS OTHER ARGS ???????
+        !                  Ut2_1d(1:G%ke) )   ! Square of unresolved turbulence (m2/s2)
         endif
 
       enddo OBLiterater ! iteration
@@ -392,8 +406,15 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
       Kdiffusivity(:,1) = Kt(i,j,:) ! Diffusivty for heat
       Kdiffusivity(:,2) = Ks(i,j,:) ! Diffusivity for salt
       Kviscosity(:) = Ks(i,j,:) ! Viscosity    ???????
-      call cvmix_coeffs_kpp(Kdiffusivity, Kviscosity, iFaceHeight, cellHeight, OBLdepth_0d, &
-                            kOBL, nonLocalTrans, surfFricVel, surfBuoyFlux,                 &
+      call cvmix_coeffs_kpp(Kdiffusivity, & ! (inout) Total heat/salt diffusivities (m2/s)
+                            Kviscosity,   & ! (inout) Total viscosity (m2/s)
+                            iFaceHeight,  & ! (in) Height of interfaces (m)
+                            cellHeight,   & ! (in) Height of level centers (m)
+                            OBLdepth_0d,  & ! (in) OBL depth (m)
+                            kOBL,         & ! (in) level (+fraction) of OBL extent
+                            nonLocalTrans,& ! (out) Non-local heat/salt transport (non-dimensional)
+                            surfFricVel,  & ! (in) Turbulent friction velocity at surface (m/s)
+                            surfBuoyFlux, & ! (in) Buoyancy flux at surface (m2/s3)
                             CVmix_kpp_params_user=CS%KPP_params )
 #ifdef __DO_SAFETY_CHECKS__
 !     if (is_NaN(Kdiffusivity(:,2),skip_mpp=.True.)) then
@@ -477,7 +498,7 @@ subroutine KPP_applyNonLocalTransport(CS, G, h, nonLocalTrans, surfFlux, dt, sca
   type(KPP_CS),                                 intent(in)    :: CS       ! Control structure
   type(ocean_grid_type),                        intent(in)    :: G        ! Ocean grid
   real, dimension(NIMEM_,NJMEM_,NKMEM_),        intent(in)    :: h        ! Layer/level thicknesses (units of H)
-  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(in)    :: nonLocalTrans ! Non-local transport (m/s * scalar)
+  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(in)    :: nonLocalTrans ! Non-local transport (non-dimensional)
   real, dimension(NIMEM_,NJMEM_),               intent(in)    :: surfFlux ! Surface source of scalar (m/s * scalar)
   real,                                         intent(in)    :: dt       ! Time-step (s)
   real, dimension(NIMEM_,NJMEM_,NKMEM_),        intent(inout) :: scalar   ! Scalar or temperature (scalar units)
