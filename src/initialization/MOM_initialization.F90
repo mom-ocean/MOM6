@@ -1148,7 +1148,7 @@ subroutine initialize_topography_named(D, G, param_file, topog_config, max_depth
                                ! the sloping boundaries, in m.      !
   real :: Dedge                ! The depth in m at the basin edge.  !
 ! real :: south_lat, west_lon, len_lon, len_lat, Rad_earth
-  integer :: i, j, is, ie, js, je, isd, ied, jsd, jed, xhalo, yhalo
+  integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
   character(len=40)  :: mod = "initialize_topography_named" ! This subroutine's name.
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -1160,10 +1160,6 @@ subroutine initialize_topography_named(D, G, param_file, topog_config, max_depth
                  "The minimum depth of the ocean.", units="m", default=0.0)
   if (max_depth<=0.) call MOM_error(FATAL,"initialize_topography_named: "// &
       "MAXIMUM_DEPTH has a non-sensical value! Was it set?")
-
-  ! These expressions force rounding of approximate values in a
-  ! consistent way.
-  xhalo = G%isc-G%isd ; yhalo = G%jsc-G%jsd
 
   if (trim(topog_config) /= "flat") then
     call get_param(param_file, mod, "EDGE_DEPTH", Dedge, &
@@ -2179,13 +2175,12 @@ subroutine set_Open_Bdry_Conds(OBC, tv, G, param_file, tracer_Reg)
   real :: drho_dS(SZK_(G))   ! Derivative of density with salinity in kg m-3 PSU-1.                             !
   real :: rho_guess(SZK_(G)) ! Potential density at T0 & S0 in kg m-3.
   character(len=40) :: mod = "set_Open_Bdry_Conds"
-  integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, nz, yhalo
+  integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, nz
   integer :: IsdB, IedB, JsdB, JedB
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
-  yhalo = G%jsc-G%jsd
 
   call get_param(param_file, mod, "APPLY_OBC_U", apply_OBC_u, default=.false.)
   call get_param(param_file, mod, "APPLY_OBC_V", apply_OBC_v, default=.false.)
@@ -2344,7 +2339,7 @@ subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, tracer_Reg)
   logical :: read_OBC_TS = .false.
 
   integer :: isd_global, jsd_global
-  integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, nz, yhalo
+  integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, nz
   integer :: isd_off, jsd_off
   integer :: IsdB, IedB, JsdB, JedB
   integer :: east_boundary, west_boundary, north_boundary, south_boundary
@@ -2363,7 +2358,6 @@ subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, tracer_Reg)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
-  yhalo = G%jsc-G%jsd 
   
   isd_global = G%isd_global
   jsd_global = G%jsd_global
@@ -2476,7 +2470,7 @@ subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, tracer_Reg)
   if (apply_OBC_u_flather_east) then
     ! Determine where u points are applied at east side 
     do j=jsd,jed ; do I=IsdB,IedB
-      if ((I+isd_global-isd) .eq. east_boundary) then !eastern side
+      if ((I+isd_global-isd) == east_boundary) then !eastern side
         OBC%OBC_mask_u(I,j) = .true.
         OBC%OBC_kind_u(I,j) = OBC_FLATHER_E
         if ((i+1>isd) .and. (i+1<ied) .and. (J>JsdB) .and. (J<JedB)) then
@@ -2494,7 +2488,7 @@ subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, tracer_Reg)
   if (apply_OBC_u_flather_west) then
     ! Determine where u points are applied at west side 
     do j=jsd,jed ; do I=IsdB,IedB
-      if ((I+isd_global-isd) .eq. west_boundary) then !western side
+      if ((I+isd_global-isd) == west_boundary) then !western side
         OBC%OBC_mask_u(I,j) = .true.
         OBC%OBC_kind_u(I,j) = OBC_FLATHER_W
         if ((i>isd) .and. (i<ied) .and. (J>JsdB) .and. (J<JedB)) then
@@ -2513,7 +2507,7 @@ subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, tracer_Reg)
   if (apply_OBC_v_flather_north) then
     ! Determine where v points are applied at north side 
     do J=JsdB,JedB ; do i=isd,ied
-      if ((J+jsd_global-jsd) .eq. north_boundary) then         !northern side
+      if ((J+jsd_global-jsd) == north_boundary) then         !northern side
         OBC%OBC_mask_v(i,J) = .true.
         OBC%OBC_kind_v(i,J) = OBC_FLATHER_N
         if ((I>IsdB) .and. (I<IedB) .and. (j+1>jsd) .and. (j+1<jed)) then
@@ -2531,7 +2525,7 @@ subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, tracer_Reg)
   if (apply_OBC_v_flather_south) then
     ! Determine where v points are applied at south side 
     do J=JsdB,JedB ; do i=isd,ied
-      if ((J+jsd_global-jsd) .eq. south_boundary) then         !southern side
+      if ((J+jsd_global-jsd) == south_boundary) then         !southern side
         OBC%OBC_mask_v(i,J) = .true.
         OBC%OBC_kind_v(i,J) = OBC_FLATHER_S
         if ((I>IsdB) .and. (I<IedB) .and. (j>jsd) .and. (j<jed)) then
@@ -3367,7 +3361,8 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
 
 
   integer :: nkml, nkbl         ! number of mixed and buffer layers
-  integer :: xhalo,yhalo        ! halo widths
+  integer :: i_offset, j_offset ! Offsets between the global grid and the local
+                                ! 1-indexed version of the global grid.
   integer :: ncid, varid_t, varid_s
   integer :: id, jd, kd, jdp, inconsistent
   real    :: PI_180             ! for conversion from degrees to radians
@@ -3668,7 +3663,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
 
 ! call fms routine horiz_interp to interpolate input level data to model horizontal grid
 
-    if (k .eq. 1) then
+    if (k == 1) then
       call horiz_interp_new(Interp,x_in,y_in,x_out,y_out, &
                interp_method='bilinear',src_modulo=reentrant_x, &
                mask_in=mask_in,mask_out=mask_out)
@@ -3693,8 +3688,8 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
           tempAvg = tempAvg + temp_out(i,j)
           saltAvg = saltAvg + salt_out(i,j)
         endif
-                                                ! vvv  k+1  ???? -AJA
-        if (mask2dT(i,j) .eq. 1.0 .and. z_edges_in(k) <= Depth(i,j) .and. mask_out(i,j) .lt. 1.0) fill(i,j)=1
+                                              ! vvv  k+1  ???? -AJA
+        if (mask2dT(i,j) == 1.0 .and. z_edges_in(k) <= Depth(i,j) .and. mask_out(i,j) .lt. 1.0) fill(i,j)=1
       enddo
     enddo
 
@@ -3732,11 +3727,11 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
     enddo
 
 ! copy to local arrays
-    xhalo=is-isd;yhalo=js-jsd
-    temp_z(is:ie,js:je,k) = temp_out(isc-xhalo:iec-xhalo,jsc-yhalo:jec-yhalo)
-    salt_z(is:ie,js:je,k) = salt_out(isc-xhalo:iec-xhalo,jsc-yhalo:jec-yhalo)
-    mask_z(is:ie,js:je,k) = float(good(isc-xhalo:iec-xhalo,jsc-yhalo:jec-yhalo))
-    rho_z(is:ie,js:je,k) = rho_out(isc-xhalo:iec-xhalo,jsc-yhalo:jec-yhalo)       
+    i_offset=G%isg-1; j_offset=G%jsg-1
+    temp_z(is:ie,js:je,k) = temp_out(isc-i_offset:iec-i_offset,jsc-j_offset:jec-j_offset)
+    salt_z(is:ie,js:je,k) = salt_out(isc-i_offset:iec-i_offset,jsc-j_offset:jec-j_offset)
+    mask_z(is:ie,js:je,k) = float(good(isc-i_offset:iec-i_offset,jsc-j_offset:jec-j_offset))
+    rho_z(is:ie,js:je,k) = rho_out(isc-i_offset:iec-i_offset,jsc-j_offset:jec-j_offset)       
 
   enddo
 
@@ -3878,8 +3873,8 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
 ! and remap temperature and salinity to layers
     dbg=.false.
     if (debug_point) then
-       if (isc-xhalo.le.i_debug .and. ie-is+isc-xhalo .ge. i_debug) then
-         if (jsc-yhalo.le.j_debug .and. je-js+jsc-yhalo .ge. j_debug) then
+       if (isc-i_offset <= i_debug .and. ie-is+isc-i_offset >= i_debug) then
+         if (jsc-j_offset <= j_debug .and. je-js+jsc-j_offset >= j_debug) then
            dbg=.true.
            idbg=i_debug+is-isc
            jdbg=j_debug+js-jsc
@@ -3895,7 +3890,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
 ! In case of a problem , use this.
     if (dbg) then
       do j=js,je ; do i=is,ie
-        if (i-is+isc-xhalo.eq.i_debug.and. j-js+jsc-yhalo.eq.j_debug) then
+        if (i-is+isc-i_offset == i_debug .and. j-js+jsc-j_offset == j_debug) then
           do k=1,kd
             print *,'klev,T,S,rho=',k,temp_z(i,j,k),salt_z(i,j,k),rho_z(i,j,k)
           enddo
@@ -3913,7 +3908,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
 
 ! Fill land values
   do k=1,nz ; do j=js,je ; do i=is,ie
-    if (tv%T(i,j,k).eq.missing_value) then
+    if (tv%T(i,j,k) == missing_value) then
       tv%T(i,j,k)=temp_land_fill
       tv%S(i,j,k)=salt_land_fill
     endif
@@ -3927,7 +3922,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
             G%Rlay(1:nz), tv%p_ref, niter, missing_value, h(is:ie,js:je,:), ks, eos)
     if (debug_point) then
        do j=js,je ; do i=is,ie
-          if (i-is+isc-xhalo.eq.i_debug.and. j-js+jsc-yhalo.eq.j_debug) then
+          if (i-is+isc-i_offset == i_debug .and. j-js+jsc-j_offset == j_debug) then
              do k=1,nz
                 print *,'after adj klay,T,S,z=',k,tv%T(i,j,k),tv%S(i,j,k),zi(i,j,k)
              enddo

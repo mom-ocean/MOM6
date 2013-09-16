@@ -1171,6 +1171,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   logical :: use_geothermal  ! If true, apply geothermal heating.
   logical :: use_EOS         ! If true, density is calculated from T & S using
                              ! an equation of state.
+  logical :: symmetric       ! If true, use symmetric memory allocation.
   logical :: save_IC         ! If true, save the initial conditions.
   logical :: do_unit_tests   ! If true, call unit tests.
   character(len=80) :: IC_file ! A file into which the initial conditions are
@@ -1200,7 +1201,21 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call MOM_set_verbosity(verbosity)
 
   call find_obsolete_params(param_file)
-  call MOM_domains_init(G%domain, param_file)
+
+#ifdef SYMMETRIC_MEMORY_
+  symmetric = .true.
+#else
+  symmetric = .false.
+#endif
+#ifdef STATIC_MEMORY_
+  call MOM_domains_init(G%domain, param_file, symmetric=symmetric, &
+            static_memory=.true., NIHALO=NIHALO_, NJHALO=NJHALO_, &
+            NIGLOBAL=NIGLOBAL_, NJGLOBAL=NJGLOBAL_, NIPROC=NIPROC_, &
+            NJPROC=NJPROC_)
+#else
+  call MOM_domains_init(G%domain, param_file, symmetric=symmetric)
+#endif
+
   call MOM_checksums_init(param_file)
 
   call MOM_io_init(param_file)

@@ -21,11 +21,11 @@ module MOM_string_functions
 
 !********+*********+*********+*********+*********+*********+*********+**
 !*                                                                     *
-!*  By Robert Hallberg, June 2005.                                     *
+!*  By Alistair Adcroft and Robert Hallberg, last updated Sept. 2013.  *
 !*                                                                     *
-!*    The subroutines here parse a set of input files for the value    *
-!*  a named parameter and sets that parameter at run time.  Currently  *
-!*  these files use the same format as the header file MOM_memory.h.   *
+!*    The functions here perform a set of useful manipulations of      *
+!*  character strings.   Although they are a part of MOM6, the do not  *
+!*  require any other MOM software to be useful.                       *
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 

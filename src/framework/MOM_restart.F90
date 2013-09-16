@@ -46,8 +46,6 @@ module MOM_restart
 !*    query_initialized returns 1 if a field (or the entire restart    *
 !*  file) has been initialized from a restart file and 0 otherwise.    *
 !*                                                                     *
-!*  Macros written all in capital letters are defined in MOM_memory.h. *
-!*                                                                     *
 !*     A small fragment of the grid is shown below:                    *
 !*                                                                     *
 !*    j+1  x ^ x ^ x   At x:  q, CoriolisBu                            *

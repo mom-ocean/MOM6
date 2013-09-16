@@ -48,8 +48,6 @@ module MOM_io
 !*                                                                     *
 !*   handle_error: write an error code and quit.                       *
 !*                                                                     *
-!*  Macros written all in capital letters are defined in MOM_memory.h. *
-!*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 
 

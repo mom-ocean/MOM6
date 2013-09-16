@@ -14,28 +14,28 @@ TRIPOLAR_N = False              !   [Boolean] default = False
                                 ! This can only be set at compile time.
 NONBLOCKING_UPDATES = False     !   [Boolean] default = False
                                 ! If true, non-blocking halo updates may be used.
-!STATIC_MEMORY_ = False         !   [Boolean]
+!STATIC_MEMORY_ = True          !   [Boolean]
                                 ! If STATIC_MEMORY_ is defined, the principle variables
                                 ! will have sizes that are statically determined at
                                 ! compile time.  Otherwise the sizes are not determined
                                 ! until run time. The STATIC option is substantially
                                 ! faster, but does not allow the PE count to be changed
                                 ! at run time.  This can only be set at compile time.
-NIHALO = 4                      ! default = 2
+NIHALO = 4                      ! default = 4
                                 ! The number of halo points on each side in the
                                 ! x-direction.  With STATIC_MEMORY_ this is set as NIHALO_
                                 ! in MOM_memory.h at compile time; without STATIC_MEMORY_
                                 ! the default is NIHALO_ in MOM_memory.h (if defined) or 2.
-NJHALO = 4                      ! default = 2
+NJHALO = 4                      ! default = 4
                                 ! The number of halo points on each side in the
                                 ! y-direction.  With STATIC_MEMORY_ this is set as NJHALO_
                                 ! in MOM_memory.h at compile time; without STATIC_MEMORY_
                                 ! the default is NJHALO_ in MOM_memory.h (if defined) or 2.
-NIGLOBAL = 1440                 !
+NIGLOBAL = 1440                 ! default = 1440
                                 ! The total number of thickness grid points in the
                                 ! x-direction in the physical domain. With STATIC_MEMORY_
                                 ! this is set in MOM_memory.h at compile time.
-NJGLOBAL = 450                  !
+NJGLOBAL = 450                  ! default = 450
                                 ! The total number of thickness grid points in the
                                 ! y-direction in the physical domain. With STATIC_MEMORY_
                                 ! this is set in MOM_memory.h at compile time.
@@ -54,18 +54,17 @@ MASKTABLE = "MOM_mask_table"    ! default = "MOM_mask_table"
                                 !  4,6
                                 !  1,2
                                 !  3,6
-!NIPROC = 24                    !
+!NIPROC = 16                    !
                                 ! The number of processors in the x-direction. With
                                 ! STATIC_MEMORY_ this is set in MOM_memory.h at compile time.
-!NJPROC = 12                    !
+!NJPROC = 18                    !
                                 ! The number of processors in the x-direction. With
                                 ! STATIC_MEMORY_ this is set in MOM_memory.h at compile time.
-NIPROC_IO = 4                   ! default = 0
-                                ! The number of processors used for I/O in the
-                                ! x-direction, or 0 to equal NIPROC.
-NJPROC_IO = 3                   ! default = 0
-                                ! The number of processors used for I/O in the
-                                ! y-direction, or 0 to equal NJPROC.
+!LAYOUT = 16, 18                !
+                                ! The processor layout that was acutally used.
+IO_LAYOUT = 4, 3                ! default = 0
+                                ! The processor layout to be used, or 0,0 to automatically
+                                ! set the io_layout to be the same as the layout.
 
 ! === Parameters of module MOM_grid ===
 ! Parameters providing information about the vertical grid.
@@ -89,7 +88,7 @@ BATHYMETRY_AT_VEL = False       !   [Boolean] default = False
                                 ! If true, there are separate values for the basin depths
                                 ! at velocity points.  Otherwise the effects of of
                                 ! topography are entirely determined from thickness points.
-NK = 63                         !   [nondim]
+NK = 63                         !   [nondim] default = 63
                                 ! The number of model layers.
 
 ! === Parameters of module MOM_verticalGrid ===
@@ -854,9 +853,9 @@ BT_USE_WIDE_HALOS = True        !   [Boolean] default = True
                                 ! barotropic time stepping for efficiency.
 BTHALO = 0                      ! default = 0
                                 ! The minimum halo size for the barotropic solver.
-!BT x-halo = 0                  !
+!BT x-halo = 10                 !
                                 ! The barotropic x-halo size that is actually used.
-!BT y-halo = 0                  !
+!BT y-halo = 10                 !
                                 ! The barotropic y-halo size that is actually used.
 USE_BT_CONT_TYPE = True         !   [Boolean] default = True
                                 ! If true, use a structure with elements that describe

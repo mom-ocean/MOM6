@@ -21,11 +21,27 @@ module MOM_file_parser
 
 !********+*********+*********+*********+*********+*********+*********+**
 !*                                                                     *
-!*  By Robert Hallberg, June 2005.                                     *
+!*  By Robert Hallberg and Alistair Adcroft, updated 9/2013.           *
 !*                                                                     *
 !*    The subroutines here parse a set of input files for the value    *
 !*  a named parameter and sets that parameter at run time.  Currently  *
-!*  these files use the same format as the header file MOM_memory.h.   *
+!*  these files use use one of several formats:                        *
+!*    #define VAR       ! To set the logical VAR to true.              *
+!*    VAR = True        ! To set the logical VAR to true.              *
+!*    #undef VAR        ! To set the logical VAR to false.             *
+!*    VAR = False       ! To set the logical VAR to false.             *
+!*    #define VAR 999   ! To set the real or integer VAR to 999.       *
+!*    VAR = 999         ! To set the real or integer VAR to 999.       *
+!*    #override VAR = 888 ! To override a previously set value.        *
+!*    VAR = 1.1, 2.2, 3.3 ! To set an array of real values.            *
+!*                                                                     *
+!*  In addition, when set by the get_param interface, the values of    *
+!*  parameters are automatically logged, along with defaults, units,   *
+!*  and a description.  It is an error for a variable to be overridden *
+!*  more than once, and MOM6 has a facility to check for unused lines  *
+!*  to set variables, which may indicate miss-spelled or archaic       *
+!*  parameters.  Parameter names are case-specific, and lines may use  *
+!*  a F90 or C++ style comment, starting with ! or //.                 *
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 
@@ -1004,7 +1020,10 @@ subroutine get_variable_line(CS, varname, found, defined, value_string, paramIsL
         endif
         found = .true.
       else
-        call MOM_error(FATAL, "MOM_file_parser: we should never reach this point")
+!        call MOM_error(FATAL, "MOM_file_parser: we should never reach this point")
+        call MOM_error(FATAL, "MOM_file_parser (non-root PE?): the parameter name '"// &
+           trim(varname)//"' was found without define or undef."// &
+           " Line: '"//trim(line(:last))//"'"//" in file "//trim(filename)//".")
       endif
 
       ! This line has now been used.
