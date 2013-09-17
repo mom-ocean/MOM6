@@ -115,7 +115,8 @@ subroutine verticalGridInit( param_file, GV )
 #ifdef STATIC_MEMORY_
   ! Here NK_ is a macro, while nk is a variable.
   call get_param(param_file, mod, "NK", nk, &
-                 "The number of model layers.", units="nondim", default=NK_)
+                 "The number of model layers.", units="nondim", &
+                 static_value=NK_)
   if (nk /= NK_) call MOM_error(FATAL, "MOM_grid_init: " // &
        "Mismatched number of layers NK_ between MOM_memory.h and param_file")
 

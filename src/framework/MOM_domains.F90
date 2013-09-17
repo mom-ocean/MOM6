@@ -762,13 +762,13 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
                  "x-direction.  With STATIC_MEMORY_ this is set as NIHALO_ \n"//&
                  "in "//trim(inc_nm)//" at compile time; without STATIC_MEMORY_ \n"//&
                  "the default is NIHALO_ in "//trim(inc_nm)//" (if defined) or 2.", &
-                 default=nihalo_dflt)
+                 default=2, static_value=nihalo_dflt)
   call get_param(param_file, mod, "NJHALO", MOM_dom%njhalo, &
                  "The number of halo points on each side in the \n"//&
                  "y-direction.  With STATIC_MEMORY_ this is set as NJHALO_ \n"//&
                  "in "//trim(inc_nm)//" at compile time; without STATIC_MEMORY_ \n"//&
                  "the default is NJHALO_ in "//trim(inc_nm)//" (if defined) or 2.", &
-                 default=njhalo_dflt)
+                 default=2, static_value=njhalo_dflt)
   if (present(min_halo)) then
     MOM_dom%nihalo = max(MOM_dom%nihalo, min_halo(1))
     min_halo(1) = MOM_dom%nihalo
@@ -781,11 +781,13 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
     call get_param(param_file, mod, "NIGLOBAL", MOM_dom%niglobal, &
                  "The total number of thickness grid points in the \n"//&
                  "x-direction in the physical domain. With STATIC_MEMORY_ \n"//&
-                 "this is set in "//trim(inc_nm)//" at compile time.", default=NIGLOBAL)
+                 "this is set in "//trim(inc_nm)//" at compile time.", &
+                 static_value=NIGLOBAL)
     call get_param(param_file, mod, "NJGLOBAL", MOM_dom%njglobal, &
                  "The total number of thickness grid points in the \n"//&
                  "y-direction in the physical domain. With STATIC_MEMORY_ \n"//&
-                 "this is set in "//trim(inc_nm)//" at compile time.", default=NJGLOBAL)
+                 "this is set in "//trim(inc_nm)//" at compile time.", &
+                 static_value=NJGLOBAL)
     if (MOM_dom%niglobal /= NIGLOBAL) call MOM_error(FATAL,"MOM_domains_init: " // &
      "static mismatch for NIGLOBAL_ domain size. Header file does not match input namelist")
     if (MOM_dom%njglobal /= NJGLOBAL) call MOM_error(FATAL,"MOM_domains_init: " // &

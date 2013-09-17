@@ -223,7 +223,8 @@ subroutine MOM_grid_init(G, param_file)
 #ifdef STATIC_MEMORY_
   ! Here NK_ is a macro, while nk is a variable.
   call get_param(param_file, "MOM_grid", "NK", nk, &
-                 "The number of model layers.", units="nondim", default=NK_)
+                 "The number of model layers.", units="nondim", &
+                 static_value=NK_)
   if (nk /= NK_) call MOM_error(FATAL, "MOM_grid_init: " // &
        "Mismatched number of layers NK_ between MOM_memory.h and param_file")
 
@@ -231,7 +232,6 @@ subroutine MOM_grid_init(G, param_file)
   call get_param(param_file, "MOM_grid", "NK", nk, &
                  "The number of model layers.", units="nondim", fail_if_missing=.true.)
 #endif
-
 
   G%ks = 1 ; G%ke = nk
 
@@ -273,10 +273,6 @@ subroutine MOM_grid_init(G, param_file)
     G%H_to_m = 1.0
     G%Angstrom = G%Angstrom_z
   else
-!    G%H_to_kg_m2 = 1.0
-!    G%kg_m2_to_H = 1.0
-!    G%m_to_H = Rho0
-!    G%H_to_m = 1.0 / Rho0
     G%kg_m2_to_H = 1.0 / G%H_to_kg_m2
     G%m_to_H = G%Rho0 * G%kg_m2_to_H
     G%H_to_m = G%H_to_kg_m2 / G%Rho0

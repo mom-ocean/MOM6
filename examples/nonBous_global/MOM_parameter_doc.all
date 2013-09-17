@@ -21,21 +21,21 @@ NONBLOCKING_UPDATES = False     !   [Boolean] default = False
                                 ! until run time. The STATIC option is substantially
                                 ! faster, but does not allow the PE count to be changed
                                 ! at run time.  This can only be set at compile time.
-NIHALO = 4                      ! default = 4
+NIHALO = 4                      ! default = 2
                                 ! The number of halo points on each side in the
                                 ! x-direction.  With STATIC_MEMORY_ this is set as NIHALO_
                                 ! in MOM_memory.h at compile time; without STATIC_MEMORY_
                                 ! the default is NIHALO_ in MOM_memory.h (if defined) or 2.
-NJHALO = 4                      ! default = 4
+NJHALO = 4                      ! default = 2
                                 ! The number of halo points on each side in the
                                 ! y-direction.  With STATIC_MEMORY_ this is set as NJHALO_
                                 ! in MOM_memory.h at compile time; without STATIC_MEMORY_
                                 ! the default is NJHALO_ in MOM_memory.h (if defined) or 2.
-NIGLOBAL = 360                  ! default = 360
+NIGLOBAL = 360                  !
                                 ! The total number of thickness grid points in the
                                 ! x-direction in the physical domain. With STATIC_MEMORY_
                                 ! this is set in MOM_memory.h at compile time.
-NJGLOBAL = 210                  ! default = 210
+NJGLOBAL = 210                  !
                                 ! The total number of thickness grid points in the
                                 ! y-direction in the physical domain. With STATIC_MEMORY_
                                 ! this is set in MOM_memory.h at compile time.
@@ -91,7 +91,7 @@ BATHYMETRY_AT_VEL = False       !   [Boolean] default = False
                                 ! If true, there are separate values for the basin depths
                                 ! at velocity points.  Otherwise the effects of of
                                 ! topography are entirely determined from thickness points.
-NK = 63                         !   [nondim] default = 63
+NK = 63                         !   [nondim]
                                 ! The number of model layers.
 
 ! === Parameters of module MOM_verticalGrid ===

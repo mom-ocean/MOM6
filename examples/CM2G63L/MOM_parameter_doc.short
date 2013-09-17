@@ -15,6 +15,24 @@ TRIPOLAR_N = True               !   [Boolean] default = False
                                 ! until run time. The STATIC option is substantially
                                 ! faster, but does not allow the PE count to be changed
                                 ! at run time.  This can only be set at compile time.
+NIHALO = 4                      ! default = 2
+                                ! The number of halo points on each side in the
+                                ! x-direction.  With STATIC_MEMORY_ this is set as NIHALO_
+                                ! in MOM_memory.h at compile time; without STATIC_MEMORY_
+                                ! the default is NIHALO_ in MOM_memory.h (if defined) or 2.
+NJHALO = 4                      ! default = 2
+                                ! The number of halo points on each side in the
+                                ! y-direction.  With STATIC_MEMORY_ this is set as NJHALO_
+                                ! in MOM_memory.h at compile time; without STATIC_MEMORY_
+                                ! the default is NJHALO_ in MOM_memory.h (if defined) or 2.
+NIGLOBAL = 360                  !
+                                ! The total number of thickness grid points in the
+                                ! x-direction in the physical domain. With STATIC_MEMORY_
+                                ! this is set in MOM_memory.h at compile time.
+NJGLOBAL = 210                  !
+                                ! The total number of thickness grid points in the
+                                ! y-direction in the physical domain. With STATIC_MEMORY_
+                                ! this is set in MOM_memory.h at compile time.
 !NIPROC = 10                    !
                                 ! The number of processors in the x-direction. With
                                 ! STATIC_MEMORY_ this is set in MOM_memory.h at compile time.
@@ -29,6 +47,8 @@ IO_LAYOUT = 2, 2                ! default = 0
 
 ! === Parameters of module MOM_grid ===
 ! Parameters providing information about the vertical grid.
+NK = 63                         !   [nondim]
+                                ! The number of model layers.
 
 ! === Parameters of module MOM_verticalGrid ===
 ! Parameters providing information about the vertical grid.

@@ -1374,13 +1374,13 @@ end subroutine log_param_time
 
 
 subroutine get_param_int(CS, modulename, varname, value, desc, units, &
-                         default, fail_if_missing, do_not_read, do_not_log)
+               default, fail_if_missing, do_not_read, do_not_log, static_value)
   type(param_file_type),      intent(in)    :: CS
   character(len=*),           intent(in)    :: modulename
   character(len=*),           intent(in)    :: varname
   integer,                    intent(inout) :: value
   character(len=*), optional, intent(in)    :: desc, units
-  integer,          optional, intent(in)    :: default
+  integer,          optional, intent(in)    :: default, static_value
   logical,          optional, intent(in)    :: fail_if_missing
   logical,          optional, intent(in)    :: do_not_read, do_not_log
 ! This subroutine writes the value of a real parameter to a log file,
@@ -1392,24 +1392,25 @@ subroutine get_param_int(CS, modulename, varname, value, desc, units, &
 
   if (do_read) then
     if (present(default)) value = default
+    if (present(static_value)) value = static_value
     call read_param_int(CS, varname, value, fail_if_missing)
   endif
 
   if (do_log) then
     call log_param_int(CS, modulename, varname, value, desc, units, &
-                        default)
+                       default)
   endif
 
 end subroutine get_param_int
 
 subroutine get_param_int_array(CS, modulename, varname, value, desc, units, &
-                               default, fail_if_missing, do_not_read, do_not_log)
+               default, fail_if_missing, do_not_read, do_not_log, static_value)
   type(param_file_type),      intent(in)    :: CS
   character(len=*),           intent(in)    :: modulename
   character(len=*),           intent(in)    :: varname
   integer,                    intent(inout) :: value(:)
   character(len=*), optional, intent(in)    :: desc, units
-  integer,          optional, intent(in)    :: default
+  integer,          optional, intent(in)    :: default, static_value
   logical,          optional, intent(in)    :: fail_if_missing
   logical,          optional, intent(in)    :: do_not_read, do_not_log
 ! This subroutine writes the value of a real parameter to a log file,
@@ -1421,24 +1422,25 @@ subroutine get_param_int_array(CS, modulename, varname, value, desc, units, &
 
   if (do_read) then
     if (present(default)) then ; value(:) = default ; endif
+    if (present(static_value)) then ; value(:) = static_value ; endif
     call read_param_int_array(CS, varname, value, fail_if_missing)
   endif
 
   if (do_log) then
     call log_param_int_array(CS, modulename, varname, value, desc, &
-                              units, default)
+                             units, default)
   endif
 
 end subroutine get_param_int_array
 
 subroutine get_param_real(CS, modulename, varname, value, desc, units, &
-                          default, fail_if_missing, do_not_read, do_not_log)
+               default, fail_if_missing, do_not_read, do_not_log, static_value)
   type(param_file_type),      intent(in)    :: CS
   character(len=*),           intent(in)    :: modulename
   character(len=*),           intent(in)    :: varname
   real,                       intent(inout) :: value
   character(len=*), optional, intent(in)    :: desc, units
-  real,             optional, intent(in)    :: default
+  real,             optional, intent(in)    :: default, static_value
   logical,          optional, intent(in)    :: fail_if_missing
   logical,          optional, intent(in)    :: do_not_read, do_not_log
 ! This subroutine writes the value of a real parameter to a log file,
@@ -1450,6 +1452,7 @@ subroutine get_param_real(CS, modulename, varname, value, desc, units, &
 
   if (do_read) then
     if (present(default)) value = default
+    if (present(static_value)) value = static_value
     call read_param_real(CS, varname, value, fail_if_missing)
   endif
 
@@ -1461,13 +1464,13 @@ subroutine get_param_real(CS, modulename, varname, value, desc, units, &
 end subroutine get_param_real
 
 subroutine get_param_real_array(CS, modulename, varname, value, desc, units, &
-                                default, fail_if_missing, do_not_read, do_not_log)
+               default, fail_if_missing, do_not_read, do_not_log, static_value)
   type(param_file_type),      intent(in)    :: CS
   character(len=*),           intent(in)    :: modulename
   character(len=*),           intent(in)    :: varname
   real,                       intent(inout) :: value(:)
   character(len=*), optional, intent(in)    :: desc, units
-  real,             optional, intent(in)    :: default
+  real,             optional, intent(in)    :: default, static_value
   logical,          optional, intent(in)    :: fail_if_missing
   logical,          optional, intent(in)    :: do_not_read, do_not_log
 ! This subroutine writes the value of a real parameter to a log file,
@@ -1479,6 +1482,7 @@ subroutine get_param_real_array(CS, modulename, varname, value, desc, units, &
 
   if (do_read) then
     if (present(default)) then ; value(:) = default ; endif
+    if (present(static_value)) then ; value(:) = static_value ; endif
     call read_param_real_array(CS, varname, value, fail_if_missing)
   endif
 
@@ -1490,13 +1494,13 @@ subroutine get_param_real_array(CS, modulename, varname, value, desc, units, &
 end subroutine get_param_real_array
 
 subroutine get_param_char(CS, modulename, varname, value, desc, units, &
-                          default, fail_if_missing, do_not_read, do_not_log)
+               default, fail_if_missing, do_not_read, do_not_log, static_value)
   type(param_file_type),      intent(in)    :: CS
   character(len=*),           intent(in)    :: modulename
   character(len=*),           intent(in)    :: varname
   character(len=*),           intent(inout) :: value
   character(len=*), optional, intent(in)    :: desc, units
-  character(len=*), optional, intent(in)    :: default
+  character(len=*), optional, intent(in)    :: default, static_value
   logical,          optional, intent(in)    :: fail_if_missing
   logical,          optional, intent(in)    :: do_not_read, do_not_log
 ! This subroutine writes the value of a real parameter to a log file,
@@ -1508,6 +1512,7 @@ subroutine get_param_char(CS, modulename, varname, value, desc, units, &
 
   if (do_read) then
     if (present(default)) value = default
+    if (present(static_value)) value = static_value
     call read_param_char(CS, varname, value, fail_if_missing)
   endif
 
@@ -1519,13 +1524,13 @@ subroutine get_param_char(CS, modulename, varname, value, desc, units, &
 end subroutine get_param_char
 
 subroutine get_param_char_array(CS, modulename, varname, value, desc, units, &
-                          default, fail_if_missing, do_not_read, do_not_log)
+               default, fail_if_missing, do_not_read, do_not_log, static_value)
   type(param_file_type),      intent(in)    :: CS
   character(len=*),           intent(in)    :: modulename
   character(len=*),           intent(in)    :: varname
   character(len=*),           intent(inout) :: value(:)
   character(len=*), optional, intent(in)    :: desc, units
-  character(len=*), optional, intent(in)    :: default
+  character(len=*), optional, intent(in)    :: default, static_value
   logical,          optional, intent(in)    :: fail_if_missing
   logical,          optional, intent(in)    :: do_not_read, do_not_log
 ! This subroutine writes the value of a real parameter to a log file,
@@ -1539,6 +1544,7 @@ subroutine get_param_char_array(CS, modulename, varname, value, desc, units, &
 
   if (do_read) then
     if (present(default)) then ; value(:) = default ; endif
+    if (present(static_value)) then ; value(:) = static_value ; endif
     call read_param_char_array(CS, varname, value, fail_if_missing)
   endif
 
@@ -1558,13 +1564,13 @@ subroutine get_param_char_array(CS, modulename, varname, value, desc, units, &
 end subroutine get_param_char_array
 
 subroutine get_param_logical(CS, modulename, varname, value, desc, units, &
-                          default, fail_if_missing, do_not_read, do_not_log)
+               default, fail_if_missing, do_not_read, do_not_log, static_value)
   type(param_file_type),      intent(in)    :: CS
   character(len=*),           intent(in)    :: modulename
   character(len=*),           intent(in)    :: varname
   logical,                    intent(inout) :: value
   character(len=*), optional, intent(in)    :: desc, units
-  logical,          optional, intent(in)    :: default
+  logical,          optional, intent(in)    :: default, static_value
   logical,          optional, intent(in)    :: fail_if_missing
   logical,          optional, intent(in)    :: do_not_read, do_not_log
 ! This subroutine writes the value of a real parameter to a log file,
@@ -1576,6 +1582,7 @@ subroutine get_param_logical(CS, modulename, varname, value, desc, units, &
 
   if (do_read) then
     if (present(default)) value = default
+    if (present(static_value)) value = static_value
     call read_param_logical(CS, varname, value, fail_if_missing)
   endif
 
@@ -1587,13 +1594,14 @@ subroutine get_param_logical(CS, modulename, varname, value, desc, units, &
 end subroutine get_param_logical
 
 subroutine get_param_time(CS, modulename, varname, value, desc, units, &
-                          default, fail_if_missing, do_not_read, do_not_log, timeunit)
+                          default, fail_if_missing, do_not_read, do_not_log, &
+                          timeunit, static_value)
   type(param_file_type),      intent(in)    :: CS
   character(len=*),           intent(in)    :: modulename
   character(len=*),           intent(in)    :: varname
   type(time_type),            intent(inout) :: value
   character(len=*), optional, intent(in)    :: desc, units
-  type(time_type),  optional, intent(in)    :: default
+  type(time_type),  optional, intent(in)    :: default, static_value
   logical,          optional, intent(in)    :: fail_if_missing
   logical,          optional, intent(in)    :: do_not_read, do_not_log
   real,             optional, intent(in)    :: timeunit
@@ -1606,6 +1614,7 @@ subroutine get_param_time(CS, modulename, varname, value, desc, units, &
 
   if (do_read) then
     if (present(default)) value = default
+    if (present(static_value)) value = static_value
     call read_param_time(CS, varname, value, timeunit, fail_if_missing)
   endif
 
