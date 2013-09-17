@@ -26,6 +26,10 @@ INPUTDIR = "INPUT"
                                 !  input files might be found.
 
 !  Specify the numerical domain.
+LAYOUT = 0,1                    !    LAYOUT specifies the grid layout for the
+                                !  sea-ice, with 0 indicating a PE count in one
+                                !  or both directions that is automatically
+                                !  generated.
 NIGLOBAL = 360                  !    NIGLOBAL and NJGLOBAL are the number of thickness
 NJGLOBAL = 210                  !  grid points in the zonal and meridional
                                 !  directions of the physical domain.

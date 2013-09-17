@@ -82,6 +82,11 @@ interface fill_symmetric_edges
 !   module procedure fill_scalar_symmetric_edges_2d, fill_scalar_symmetric_edges_3d
 end interface fill_symmetric_edges
 
+interface clone_MOM_domain
+  module procedure clone_MD_to_MD, clone_MD_to_d2D
+end interface clone_MOM_domain
+
+
 type, public :: MOM_domain_type
   type(domain2D), pointer :: mpp_domain => NULL() ! The domain with halos on
                                         ! this processor, centered at h points.
@@ -1007,8 +1012,8 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
 
 end subroutine MOM_domains_init
 
-subroutine clone_MOM_domain(MD_in, MOM_dom, min_halo, halo_size, symmetric, &
-                            domain_name)
+subroutine clone_MD_to_MD(MD_in, MOM_dom, min_halo, halo_size, symmetric, &
+                          domain_name)
   type(MOM_domain_type),           intent(in)    :: MD_in
   type(MOM_domain_type),           pointer       :: MOM_dom
   integer, dimension(2), optional, intent(inout) :: min_halo
@@ -1016,9 +1021,9 @@ subroutine clone_MOM_domain(MD_in, MOM_dom, min_halo, halo_size, symmetric, &
   logical,               optional, intent(in)    :: symmetric
   character(len=*),      optional, intent(in)    :: domain_name
 
+  integer :: global_indices(4)
   logical :: mask_table_exists
   character(len=64) :: dom_name
-  integer :: global_indices(4)
 
   if (.not.associated(MOM_dom)) then
     allocate(MOM_dom)
@@ -1078,12 +1083,77 @@ subroutine clone_MOM_domain(MD_in, MOM_dom, min_halo, halo_size, symmetric, &
                 symmetry = MOM_dom%symmetric, name=dom_name)
   endif
 
-  if ((MOM_dom%io_layout(1) + MOM_dom%io_layout(2) > 0)) then
+  if ((MOM_dom%io_layout(1) + MOM_dom%io_layout(2) > 0) .and. &
+      (MOM_dom%layout(1)*MOM_dom%layout(2) > 1)) then
     call MOM_define_io_domain(MOM_dom%mpp_domain, MOM_dom%io_layout)
   endif
 
 
-end subroutine clone_MOM_domain
+end subroutine clone_MD_to_MD
+
+
+subroutine clone_MD_to_d2D(MD_in, mpp_domain, min_halo, halo_size, symmetric, &
+                           domain_name)
+  type(MOM_domain_type),           intent(in)    :: MD_in
+  type(domain2d),                  intent(inout) :: mpp_domain
+  integer, dimension(2), optional, intent(inout) :: min_halo
+  integer,               optional, intent(in)    :: halo_size
+  logical,               optional, intent(in)    :: symmetric
+  character(len=*),      optional, intent(in)    :: domain_name
+
+  integer :: global_indices(4), layout(2), io_layout(2)
+  integer :: X_FLAGS, Y_FLAGS, niglobal, njglobal, nihalo, njhalo
+  logical :: symmetric_dom
+  character(len=64) :: dom_name
+
+! Save the extra data for creating other domains of different resolution that overlay this domain
+  niglobal = MD_in%niglobal ; njglobal = MD_in%njglobal
+  nihalo = MD_in%nihalo ; njhalo = MD_in%njhalo
+ 
+  symmetric_dom = MD_in%symmetric
+  
+  X_FLAGS = MD_in%X_FLAGS ; Y_FLAGS = MD_in%Y_FLAGS
+  layout(:) = MD_in%layout(:) ; io_layout(:) = MD_in%io_layout(:)
+
+  if (present(halo_size) .and. present(min_halo)) call MOM_error(FATAL, &
+      "clone_MOM_domain can not have both halo_size and min_halo present.")
+
+  if (present(min_halo)) then
+    nihalo = max(nihalo, min_halo(1))
+    njhalo = max(njhalo, min_halo(2))
+    min_halo(1) = nihalo ; min_halo(2) = njhalo
+  endif
+  
+  if (present(halo_size)) then
+    nihalo = halo_size ; njhalo = halo_size
+  endif
+
+  if (present(symmetric)) then ; symmetric_dom = symmetric ; endif
+
+  dom_name = "MOM"
+  if (present(domain_name)) dom_name = trim(domain_name)
+
+  global_indices(1) = 1 ; global_indices(2) = niglobal
+  global_indices(3) = 1 ; global_indices(4) = njglobal
+  if (associated(MD_in%maskmap)) then
+    call MOM_define_domain( global_indices, layout, mpp_domain, &
+                xflags=X_FLAGS, yflags=Y_FLAGS, &
+                xhalo=nihalo, yhalo=njhalo, &
+                symmetry = symmetric, name=dom_name, &
+                maskmap=MD_in%maskmap )
+  else
+    call MOM_define_domain( global_indices, layout, mpp_domain, &
+                xflags=X_FLAGS, yflags=Y_FLAGS, &
+                xhalo=nihalo, yhalo=njhalo, &
+                symmetry = symmetric, name=dom_name)
+  endif
+
+  if ((io_layout(1) + io_layout(2) > 0) .and. &
+      (layout(1)*layout(2) > 1)) then
+    call MOM_define_io_domain(mpp_domain, io_layout)
+  endif
+
+end subroutine clone_MD_to_d2D
 
 subroutine get_domain_extent(Domain, isc, iec, jsc, jec, isd, ied, jsd, jed, &
                              isg, ieg, jsg, jeg, idg_offset, jdg_offset, &
