@@ -34,13 +34,13 @@ module MOM
 !*  MOM ice-shelf code by Daniel Goldberg, Robert Hallberg             *
 !*    Chris Little, and Olga Sergienko                                 *
 !*                                                                     *
-!*  This file was first relased in 2012.                               *
+!*  This file was first released in 2012.                              *
 !*                                                                     *
 !*    This program (MOM) simulates the ocean by numerically solving    *
 !*  the hydrostatic primitive equations in generalized Lagrangian      *
-!*  vertical coordinates, typically trackng stretched pressure (p*)    *
+!*  vertical coordinates, typically tracking stretched pressure (p*)   *
 !*  surfaces or following isopycnals in the ocean's interior, and      *
-!*  general orthogonal horizontal coordinates.  Unlike earlier verions *
+!*  general orthogonal horizontal coordinates. Unlike earlier versions *
 !*  of MOM, in MOM6 these equations are horizontally discretized on an *
 !*  Arakawa C-grid.  (It remains to be seen whether a B-grid dynamic   *
 !*  core will be revived in MOM6 at a later date; for now applications *
@@ -57,8 +57,8 @@ module MOM
 !*  embodied in previous versions of MOM, even as it draws extensively *
 !*  on the lessons learned in the development of the Generalized Ocean *
 !*  Layered Dynamics (GOLD) ocean model, which was also primarily      *
-!*  developed at NOAA/GFDL.  MOM has also benefitted tremendously from *
-!*  the FMS infrastucture, which it utilizes and shares with other     *
+!*  developed at NOAA/GFDL.  MOM has also benefited tremendously from  *
+!*  the FMS infrastructure, which it utilizes and shares with other    *
 !*  component models developed at GFDL.                                *
 !*                                                                     *
 !*    When run is isopycnal-coordinate mode, the uppermost few layers  *
@@ -82,7 +82,7 @@ module MOM
 !*                                                                     *
 !*    MOM6 integrates the equations forward in time in three distinct  *
 !*  phases.  In one phase, the dynamic equations for the velocities    *
-!*  and layerthicknesses are advanced, capturing the propagation of    *
+!*  and layer thicknesses are advanced, capturing the propagation of   *
 !*  external and internal inertia-gravity waves, Rossby waves, and     *
 !*  other strictly adiabatic processes, including lateral stresses,    *
 !*  vertical viscosity and momentum forcing, and interface height      *
@@ -103,7 +103,7 @@ module MOM
 !*  is applied to the time-mean layer velocities to ensure that the    *
 !*  sum of the layer transports agrees with the time-mean barotropic   *
 !*  transport, thereby ensuring that the estimates of the free surface *
-!*  from the sum of the layer thinknesses agrees with the final free   *
+!*  from the sum of the layer thicknesses agrees with the final free   *
 !*  surface height as calculated by the barotropic solver.  The        *
 !*  barotropic and baroclinic velocities are kept consistent by        *
 !*  recalculating the barotropic velocities from the baroclinic        *
@@ -461,6 +461,8 @@ type, public :: MOM_control_struct
                              ! a minimum value, and the deficit is reported.
   logical :: bulkmixedlayer  ! If true, a refined bulk mixed layer is used with
                              ! nkml sublayers and nkbl buffer layer.
+  logical :: diabatic_first  ! If true, apply diabatic and thermodynamic
+                             ! processes before stepping the dynamics.
   logical :: thickness_diffuse ! If true, interfaces are diffused with a
                              ! coefficient of KHTH.
   logical :: thickness_diffuse_first ! If true, diffuse thickness before dynamics.
@@ -611,6 +613,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
   real :: dtth      ! The time step used for thickness diffusion, in s.
   real :: dtnt      ! The elapsed time since updating the tracers and applying
                     ! diabatic processes, in s.
+  real :: dtdia     ! The time step used for diabatic processes, in s.
   real :: dtbt_reset_time ! The value of CS%rel_time when DTBT was last
                     ! calculated, in s.
   real :: wt_end, wt_beg
@@ -660,7 +663,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
   endif
 
   dt = real(time_interval) / real(n_max)
-  dtnt = 0.0
+  dtnt = 0.0 ; dtdia = 0.0
   ntstep = MAX(1,MIN(n_max,floor(CS%dt_therm/dt + 0.001)))
 
   CS%visc%calc_bbl = .true.
@@ -732,6 +735,109 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     CS%rel_time = CS%rel_time + dt
     ! Set the local time to the end of the time step.
     Time_local = Time_start + set_time(int(floor(CS%rel_time+0.5)))
+
+    if (CS%diabatic_first .and. ((n==1) .or. MOD(n-1,ntstep)==0)) then ! do thermodynamics.
+      dtdia = dt*min(ntstep,n_max-(n-1))
+      
+      if (.not.CS%adiabatic) then
+        if (CS%debug) then
+          call MOM_state_chksum("Pre-dia first ", u, v, h, CS%uhtr, CS%vhtr, G)
+          call MOM_thermo_chksum("Pre-dia first ", CS%tv, G, haloshift=0)
+          call check_redundant("Pre-dia first ", u, v, G)
+        endif
+
+        if (CS%split .and. CS%legacy_split) then
+          call adjustments_dyn_legacy_split(u, v, h, dt, G, CS%dyn_legacy_split_CSp)
+        endif
+
+        call cpu_clock_begin(id_clock_diabatic)
+        call diabatic(u, v, h, CS%tv, fluxes, CS%visc, CS%ADp, CS%CDp, &
+                      dtdia, G, CS%diabatic_CSp)
+        call cpu_clock_end(id_clock_diabatic)
+
+        ! Regridding/remapping is done here, at the end of the thermodynamics time step
+        ! (that may comprise several dynamical time steps)
+        ! The routine 'ALE_main' can be found in 'MOM_ALE.F90'.
+        if ( CS%useALEalgorithm ) then 
+!         call pass_vector(u, v, G%Domain)
+          call pass_var(CS%tv%T, G%Domain, complete=.false.)
+          call pass_var(CS%tv%S, G%Domain, complete=.false.)
+          call pass_var(h, G%Domain)
+          if (CS%debug) then
+            call MOM_state_chksum("Pre-ALE 1 ", u, v, h, CS%uh, CS%vh, G)
+            call hchksum(CS%tv%T,"Pre-ALE 1 T", G, haloshift=1)
+            call hchksum(CS%tv%S,"Pre-ALE 1 S", G, haloshift=1)
+            call check_redundant("Pre-ALE 1 ", u, v, G)
+          endif
+          call ALE_main(G, h, u, v, CS%tv, CS%ALE_CSp)
+          if (CS%debug) then
+            call MOM_state_chksum("Post-ALE 1 ", u, v, h, CS%uh, CS%vh, G)
+            call hchksum(CS%tv%T,"Post-ALE 1 T", G, haloshift=1)
+            call hchksum(CS%tv%S,"Post-ALE 1 S", G, haloshift=1)
+            call check_redundant("Post-ALE 1 ", u, v, G)
+          endif
+        endif   
+
+        call cpu_clock_begin(id_clock_pass)
+        if (G%nonblocking_updates) then        
+          pid_u = pass_vector_start(u, v, G%Domain)
+          if (CS%use_temperature) then
+            pid_T = pass_var_start(CS%tv%T, G%Domain)
+            pid_S = pass_var_start(CS%tv%S, G%Domain)
+          endif
+          pid_h = pass_var_start(h, G%Domain)
+
+          call pass_vector_complete(pid_u, u, v, G%Domain)
+          if (CS%use_temperature) then
+            call pass_var_complete(pid_T, CS%tv%T, G%Domain)
+            call pass_var_complete(pid_S, CS%tv%S, G%Domain)
+          endif
+          call pass_var_complete(pid_h, h, G%Domain)
+        else 
+          call pass_vector(u, v, G%Domain)
+          if (CS%use_temperature) then
+            call pass_var(CS%tv%T, G%Domain, complete=.false.)
+            call pass_var(CS%tv%S, G%Domain, complete=.false.)
+          endif
+          call pass_var(h, G%Domain)
+        endif
+        call cpu_clock_end(id_clock_pass)
+
+        if (CS%debug) then
+          call uchksum(u,"Post-dia first u", G, haloshift=2)
+          call vchksum(v,"Post-dia first v", G, haloshift=2)
+          call hchksum(h,"Post-dia first h", G, haloshift=1)
+          call uchksum(CS%uhtr,"Post-dia first uh", G, haloshift=0)
+          call vchksum(CS%vhtr,"Post-dia first vh", G, haloshift=0)
+        ! call MOM_state_chksum("Post-dia first ", u, v, &
+        !                       h, CS%uhtr, CS%vhtr, G, haloshift=1)
+          if (associated(CS%tv%T)) call hchksum(CS%tv%T, "Post-dia first T", G, haloshift=1)
+          if (associated(CS%tv%S)) call hchksum(CS%tv%S, "Post-dia first S", G, haloshift=1)
+          if (associated(CS%tv%frazil)) call hchksum(CS%tv%frazil, &
+                                  "Post-dia first frazil", G, haloshift=0)
+          if (associated(CS%tv%salt_deficit)) call hchksum(CS%tv%salt_deficit, &
+                                  "Post-dia first salt deficit", G, haloshift=0)
+        ! call MOM_thermo_chksum("Post-dia first ", CS%tv, G)
+          call check_redundant("Post-dia first ", u, v, G)
+        endif
+      else
+
+        call cpu_clock_begin(id_clock_diabatic)
+        call adiabatic(h, CS%tv, fluxes, dtdia, G, CS%diabatic_CSp)
+        call cpu_clock_end(id_clock_diabatic)
+
+        if (CS%use_temperature) then
+          call cpu_clock_begin(id_clock_pass)
+          call pass_var(CS%tv%T, G%Domain, complete=.false.)
+          call pass_var(CS%tv%S, G%Domain, complete=.true.)
+          call cpu_clock_end(id_clock_pass)
+          if (CS%debug) then
+            if (associated(CS%tv%T)) call hchksum(CS%tv%T, "Post-dia first T", G, haloshift=1)
+            if (associated(CS%tv%S)) call hchksum(CS%tv%S, "Post-dia first S", G, haloshift=1)
+          endif
+        endif
+      endif                                                  ! ADIABATIC
+    endif ! diabatic_first
 
     call cpu_clock_begin(id_clock_dynamics)
     call disable_averaging(CS%diag)
@@ -849,19 +955,21 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     call cpu_clock_end(id_clock_dynamics)
 
     dtnt = dtnt + dt
-    if ((MOD(n,ntstep) == 0) .or. (n==n_max)) then
+    if ((MOD(n,ntstep) == 0) .or. (n==n_max)) then ! Do advection and thermo.
       if (CS%debug) then
-        call uchksum(u,"Pre-advection u",G,haloshift=2)
-        call vchksum(v,"Pre-advection v",G,haloshift=2)
-        call hchksum(h,"Pre-advection h",G,haloshift=1)
-        call uchksum(CS%uhtr,"Pre-advection uh",G,haloshift=0)
-        call vchksum(CS%vhtr,"Pre-advection vh",G,haloshift=0)
+        call uchksum(u,"Pre-advection u", G, haloshift=2)
+        call vchksum(v,"Pre-advection v", G, haloshift=2)
+        call hchksum(h,"Pre-advection h", G, haloshift=1)
+        call uchksum(CS%uhtr,"Pre-advection uh", G, haloshift=0)
+        call vchksum(CS%vhtr,"Pre-advection vh", G, haloshift=0)
       ! call MOM_state_chksum("Pre-advection ", u, v, &
       !                       h, CS%uhtr, CS%vhtr, G, haloshift=1)
-          if (associated(CS%tv%T)) call hchksum(CS%tv%T, "Pre-advection T",G,haloshift=1)
-          if (associated(CS%tv%S)) call hchksum(CS%tv%S, "Pre-advection S",G,haloshift=1)
-          if (associated(CS%tv%frazil)) call hchksum(CS%tv%frazil, "Pre-advection frazil",G,haloshift=0)
-          if (associated(CS%tv%salt_deficit)) call hchksum(CS%tv%salt_deficit, "Pre-advection salt deficit",G,haloshift=0)
+          if (associated(CS%tv%T)) call hchksum(CS%tv%T, "Pre-advection T", G, haloshift=1)
+          if (associated(CS%tv%S)) call hchksum(CS%tv%S, "Pre-advection S", G, haloshift=1)
+          if (associated(CS%tv%frazil)) call hchksum(CS%tv%frazil, &
+                         "Pre-advection frazil", G, haloshift=0)
+          if (associated(CS%tv%salt_deficit)) call hchksum(CS%tv%salt_deficit, &
+                         "Pre-advection salt deficit", G, haloshift=0)
       ! call MOM_thermo_chksum("Pre-advection ", CS%tv, G)
         call check_redundant("Pre-advection ", u, v, G)
       endif
@@ -891,13 +999,13 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         call post_data(CS%id_e_predia, eta_predia, CS%diag)
       endif
 
-      if (.not.CS%adiabatic) then
+      if (.not.CS%diabatic_first) then ; if (.not.CS%adiabatic) then
         if (CS%debug) then
-          call uchksum(u,"Pre-diabatic u",G,haloshift=2)
-          call vchksum(v,"Pre-diabatic v",G,haloshift=2)
-          call hchksum(h,"Pre-diabatic h",G,haloshift=1)
-          call uchksum(CS%uhtr,"Pre-diabatic uh",G,haloshift=0)
-          call vchksum(CS%vhtr,"Pre-diabatic vh",G,haloshift=0)
+          call uchksum(u,"Pre-diabatic u", G, haloshift=2)
+          call vchksum(v,"Pre-diabatic v", G, haloshift=2)
+          call hchksum(h,"Pre-diabatic h", G, haloshift=1)
+          call uchksum(CS%uhtr,"Pre-diabatic uh", G, haloshift=0)
+          call vchksum(CS%vhtr,"Pre-diabatic vh", G, haloshift=0)
         ! call MOM_state_chksum("Pre-diabatic ",u, v, h, CS%uhtr, CS%vhtr, G)
           call MOM_thermo_chksum("Pre-diabatic ", CS%tv, G,haloshift=0)
           call check_redundant("Pre-diabatic ", u, v, G)
@@ -912,7 +1020,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
                       dtnt, G, CS%diabatic_CSp)
         call cpu_clock_end(id_clock_diabatic)
 
-        ! Regridding/remapping is done here, at the end of the thermodynamical time step
+        ! Regridding/remapping is done here, at the end of the thermodynamics time step
         ! (that may comprise several dynamical time steps)
         ! The routine 'ALE_main' can be found in 'MOM_ALE.F90'.
         if ( CS%useALEalgorithm ) then 
@@ -922,18 +1030,18 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
           call pass_var(h, G%Domain)
           if (CS%debug) then
             call MOM_state_chksum("Pre-ALE ", u, v, h, CS%uh, CS%vh, G)
-            call hchksum(CS%tv%T,"Pre-ALE T",G,haloshift=1)
-            call hchksum(CS%tv%S,"Pre-ALE S",G,haloshift=1)
+            call hchksum(CS%tv%T,"Pre-ALE T", G, haloshift=1)
+            call hchksum(CS%tv%S,"Pre-ALE S", G, haloshift=1)
             call check_redundant("Pre-ALE ", u, v, G)
           endif
           call ALE_main(G, h, u, v, CS%tv, CS%ALE_CSp)
           if (CS%debug) then
             call MOM_state_chksum("Post-ALE ", u, v, h, CS%uh, CS%vh, G)
-            call hchksum(CS%tv%T,"Post-ALE T",G,haloshift=1)
-            call hchksum(CS%tv%S,"Post-ALE S",G,haloshift=1)
+            call hchksum(CS%tv%T,"Post-ALE T", G, haloshift=1)
+            call hchksum(CS%tv%S,"Post-ALE S", G, haloshift=1)
             call check_redundant("Post-ALE ", u, v, G)
           endif
-        end if   
+        endif   
 
         call cpu_clock_begin(id_clock_pass)
         if (G%nonblocking_updates) then        
@@ -961,17 +1069,19 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         call cpu_clock_end(id_clock_pass)
 
         if (CS%debug) then
-          call uchksum(u,"Post-diabatic u",G,haloshift=2)
-          call vchksum(v,"Post-diabatic v",G,haloshift=2)
-          call hchksum(h,"Post-diabatic h",G,haloshift=1)
-          call uchksum(CS%uhtr,"Post-diabatic uh",G,haloshift=0)
-          call vchksum(CS%vhtr,"Post-diabatic vh",G,haloshift=0)
+          call uchksum(u,"Post-diabatic u", G, haloshift=2)
+          call vchksum(v,"Post-diabatic v", G, haloshift=2)
+          call hchksum(h,"Post-diabatic h", G, haloshift=1)
+          call uchksum(CS%uhtr,"Post-diabatic uh", G, haloshift=0)
+          call vchksum(CS%vhtr,"Post-diabatic vh", G, haloshift=0)
         ! call MOM_state_chksum("Post-diabatic ", u, v, &
         !                       h, CS%uhtr, CS%vhtr, G, haloshift=1)
-          if (associated(CS%tv%T)) call hchksum(CS%tv%T, "Post-diabatic T",G,haloshift=1)
-          if (associated(CS%tv%S)) call hchksum(CS%tv%S, "Post-diabatic S",G,haloshift=1)
-          if (associated(CS%tv%frazil)) call hchksum(CS%tv%frazil, "Post-diabatic frazil",G,haloshift=0)
-          if (associated(CS%tv%salt_deficit)) call hchksum(CS%tv%salt_deficit, "Post-diabatic salt deficit",G,haloshift=0)
+          if (associated(CS%tv%T)) call hchksum(CS%tv%T, "Post-diabatic T", G, haloshift=1)
+          if (associated(CS%tv%S)) call hchksum(CS%tv%S, "Post-diabatic S", G, haloshift=1)
+          if (associated(CS%tv%frazil)) call hchksum(CS%tv%frazil, &
+                                   "Post-diabatic frazil", G, haloshift=0)
+          if (associated(CS%tv%salt_deficit)) call hchksum(CS%tv%salt_deficit, &
+                                   "Post-diabatic salt deficit", G, haloshift=0)
         ! call MOM_thermo_chksum("Post-diabatic ", CS%tv, G)
           call check_redundant("Post-diabatic ", u, v, G)
         endif
@@ -982,14 +1092,16 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         call cpu_clock_end(id_clock_diabatic)
 
         if (CS%use_temperature) then
+          call cpu_clock_begin(id_clock_pass)
           call pass_var(CS%tv%T, G%Domain, complete=.false.)
           call pass_var(CS%tv%S, G%Domain, complete=.true.)
+          call cpu_clock_end(id_clock_pass)
           if (CS%debug) then
-            if (associated(CS%tv%T)) call hchksum(CS%tv%T, "Post-diabatic T",G,haloshift=1)
-            if (associated(CS%tv%S)) call hchksum(CS%tv%S, "Post-diabatic S",G,haloshift=1)
+            if (associated(CS%tv%T)) call hchksum(CS%tv%T, "Post-diabatic T", G, haloshift=1)
+            if (associated(CS%tv%S)) call hchksum(CS%tv%S, "Post-diabatic S", G, haloshift=1)
           endif
         endif
-      endif                                                  ! ADIABATIC
+      endif ; endif ! Adiabatic and diabatic_first.
       CS%uhtr(:,:,:) = 0.0
       CS%vhtr(:,:,:) = 0.0
       call cpu_clock_end(id_clock_thermo)
@@ -1038,7 +1150,8 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
       dtnt = 0.0
       CS%visc%calc_bbl = .true.
-    endif
+    endif  ! End do advection and thermo.
+
 
     call enable_averaging(dt,Time_local, CS%diag)
     if (CS%id_u > 0) call post_data(CS%id_u, u, CS%diag)
@@ -1255,6 +1368,10 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
                  "salinity with an equation of state.  If USE_EOS is \n"//&
                  "true, ENABLE_THERMODYNAMICS must be true as well.", &
                  default=CS%use_temperature)
+  call get_param(param_file, "MOM", "DIABATIC_FIRST", CS%diabatic_first, &
+                 "If true, apply diabatic and thermodynamic processes, \n"//&
+                 "including buoyancy forcing and mass gain or loss, \n"//&
+                 "before stepping the dynamics forward.", default=.false.)
   call get_param(param_file, "MOM", "ADIABATIC", CS%adiabatic, &
                  "There are no diapycnal mass fluxes if ADIABATIC is \n"//&
                  "true. This assumes that KD = KDML = 0.0 and that \n"//&
@@ -1533,9 +1650,9 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     ! be broken into two separate steps, with the regridding step optionally
     ! occuring inside of MOM_initialize.
     if (CS%debug) then
-      call uchksum(CS%u,"Pre initialize_ALE u",G,haloshift=1)
-      call vchksum(CS%v,"Pre initialize_ALE v",G,haloshift=1)
-      call hchksum(CS%h, "Pre initialize_ALE h",G,haloshift=1)
+      call uchksum(CS%u,"Pre initialize_ALE u", G, haloshift=1)
+      call vchksum(CS%v,"Pre initialize_ALE v", G, haloshift=1)
+      call hchksum(CS%h, "Pre initialize_ALE h", G, haloshift=1)
     endif
     call initialize_ALE(param_file, G, CS%ALE_CSp)
     if (.not. query_initialized(CS%h,"h",CS%restart_CSp)) then
@@ -1545,9 +1662,9 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     endif
     call ALE_updateVerticalGridType( CS%ALE_CSp, G%GV )
     if (CS%debug) then
-      call uchksum(CS%u,"Post initialize_ALE u",G,haloshift=1)
-      call vchksum(CS%v,"Post initialize_ALE v",G,haloshift=1)
-      call hchksum(CS%h, "Post initialize_ALE h",G,haloshift=1)
+      call uchksum(CS%u,"Post initialize_ALE u", G, haloshift=1)
+      call vchksum(CS%v,"Post initialize_ALE v", G, haloshift=1)
+      call hchksum(CS%h, "Post initialize_ALE h", G, haloshift=1)
     endif
   endif
 

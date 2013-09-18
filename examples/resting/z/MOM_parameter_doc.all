@@ -118,6 +118,10 @@ USE_EOS = True                  !   [Boolean] default = True
                                 ! If true,  density is calculated from temperature and
                                 ! salinity with an equation of state.  If USE_EOS is
                                 ! true, ENABLE_THERMODYNAMICS must be true as well.
+DIABATIC_FIRST = False          !   [Boolean] default = False
+                                ! If true, apply diabatic and thermodynamic processes,
+                                ! including buoyancy forcing and mass gain or loss,
+                                ! before stepping the dynamics forward.
 ADIABATIC = False               !   [Boolean] default = False
                                 ! There are no diapycnal mass fluxes if ADIABATIC is
                                 ! true. This assumes that KD = KDML = 0.0 and that
