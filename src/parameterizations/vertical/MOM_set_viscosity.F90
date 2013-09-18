@@ -59,6 +59,7 @@ use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
+use MOM_restart, only : register_restart_field, vardesc, MOM_restart_CS
 use MOM_variables, only : thermo_var_ptrs
 use MOM_variables, only : vertvisc_type, ocean_OBC_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs
@@ -68,6 +69,7 @@ implicit none ; private
 #include <MOM_memory.h>
 
 public set_viscous_BBL, set_viscous_ML, set_visc_init, set_visc_end
+public set_visc_register_restarts
 
 type, public :: set_visc_CS ; private
   real    :: Hbbl           ! The static bottom boundary layer thickness, in
@@ -1457,6 +1459,48 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
 
 end subroutine set_viscous_ML
 
+subroutine set_visc_register_restarts(G, param_file, visc, restart_CS)
+  type(ocean_grid_type),   intent(in)    :: G
+  type(param_file_type),   intent(in)    :: param_file
+  type(vertvisc_type),     intent(inout) :: visc
+  type(MOM_restart_CS),    pointer       :: restart_CS
+!   This subroutine is used to register any fields associated with the
+! vertvisc_type.
+! Arguments: G - The ocean's grid structure.
+!  (in)      param_file - A structure indicating the open file to parse for
+!                         model parameter values.
+!  (out)     visc - A structure containing vertical viscosities and related
+!                   fields.  Allocated here.
+!  (in)      restart_CS - A pointer to the restart control structure.
+  type(vardesc) :: vd
+  logical :: use_kappa_shear, adiabatic
+  integer :: isd, ied, jsd, jed, nz
+  character(len=40)  :: mod = "MOM_set_visc"  ! This module's name.
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = G%ke
+
+  call get_param(param_file, mod, "ADIABATIC", adiabatic, default=.false., &
+                 do_not_log=.true.)
+  use_kappa_shear = .false.
+  if (.not.adiabatic) &
+    call get_param(param_file, mod, "USE_JACKSON_PARAM", use_kappa_shear, &
+                 "If true, use the Jackson-Hallberg-Legg (JPO 2008) \n"//& 
+                 "shear mixing parameterization.", default=.false., &
+                  do_not_log=.true.)
+
+  if (use_kappa_shear) then
+    allocate(visc%Kd_turb(isd:ied,jsd:jed,nz+1)) ; visc%Kd_turb = 0.0
+    allocate(visc%TKE_turb(isd:ied,jsd:jed,nz+1)) ; visc%TKE_turb = 0.0
+
+    vd = vardesc("Kd_turb","Turbulent diffusivity at interfaces",'h','i','s',"m2 s-1")
+    call register_restart_field(visc%Kd_turb, vd, .false., restart_CS)
+
+    vd = vardesc("TKE_turb","Turbulent kinetic energy per unit mass at interfaces", &
+                 'h','i','s',"m2 s-2")
+    call register_restart_field(visc%TKE_turb, vd, .false., restart_CS)
+  endif
+
+end subroutine set_visc_register_restarts
+
 subroutine set_visc_init(Time, G, param_file, diag, visc, CS)
   type(time_type), target, intent(in)    :: Time
   type(ocean_grid_type),   intent(in)    :: G
@@ -1512,7 +1556,7 @@ subroutine set_visc_init(Time, G, param_file, diag, visc, CS)
                  "If LINEAR_DRAG and BOTTOMDRAGLAW are defined the drag \n"//&
                  "law is cdrag*DRAG_BG_VEL*u.", default=.false.)
   call get_param(param_file, mod, "ADIABATIC", adiabatic, default=.false., &
-                  do_not_log=.true.)
+                 do_not_log=.true.)
   if (adiabatic) then
     call log_param(param_file, mod, "ADIABATIC",adiabatic, &
                  "There are no diapycnal mass fluxes if ADIABATIC is \n"//&
@@ -1531,6 +1575,9 @@ subroutine set_visc_init(Time, G, param_file, diag, visc, CS)
                  "based on double-diffusive paramaterization from MOM4/KPP.", &
                  default=.false.)
   endif
+  call get_param(param_file, mod, "PRANDTL_TURB", visc%Prandtl_turb, &
+                 "The turbulent Prandtl number applied to shear \n"//&
+                 "instability.", units="nondim", default=0.0)
   call get_param(param_file, mod, "DEBUG", CS%debug, default=.false.)
 
   call get_param(param_file, mod, "DYNAMIC_VISCOUS_ML", CS%dynamic_viscous_ML, &
@@ -1651,10 +1698,6 @@ subroutine set_visc_init(Time, G, param_file, diag, visc, CS)
        Time, 'Rayleigh drag velocity at v points', 'meter second-1')
   endif
 
-  if (use_kappa_shear) then
-    allocate(visc%Kd_turb(isd:ied,jsd:jed,nz+1)) ; visc%Kd_turb = 0.0
-    allocate(visc%TKE_turb(isd:ied,jsd:jed,nz+1)) ; visc%TKE_turb = 0.0
-  endif
   if (differential_diffusion) then
     allocate(visc%Kd_extra_T(isd:ied,jsd:jed,nz+1)) ; visc%Kd_extra_T = 0.0
     allocate(visc%Kd_extra_S(isd:ied,jsd:jed,nz+1)) ; visc%Kd_extra_S = 0.0

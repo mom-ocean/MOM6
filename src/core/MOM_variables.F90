@@ -192,6 +192,8 @@ type, public :: vertvisc_type
   real :: bbl_calc_time_interval ! The amount of time over which the impending
                                  ! calculation of the BBL properties will apply,
                                  ! for use in diagnostics of the BBL properties.
+  real :: Prandtl_turb       ! The Prandtl number for the turbulent diffusion
+                             ! that is captured in Kd_turb.
   real, pointer, dimension(:,:) :: &
     bbl_thick_u => NULL(), & ! The bottom boundary layer thickness at the zonal
     bbl_thick_v => NULL(), & ! and meridional velocity points, in m.

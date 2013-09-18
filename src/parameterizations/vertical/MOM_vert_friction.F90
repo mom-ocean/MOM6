@@ -875,7 +875,7 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
     logical, dimension(NIMEMB_),          intent(in)  :: do_i
     logical,                              intent(in)  :: work_on_u
     logical, optional,                    intent(in)  :: shelf
-! Arguments: a - The coupling coefficent across interfaces, in m.  Intent out.
+! Arguments: a - The coupling coefficent across interfaces, in m/s.  Intent out.
 !  (in)      hvel - The thickness at velocity points, in H.
 !  (in)      do_i - If true, determine the a for a column.
 !  (in)      work_on_u - If true, u-points are being worked on, otherwise this
@@ -943,6 +943,20 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
       endif
     endif ; enddo
 
+    if ((visc%Prandtl_turb > 0) .and. associated(visc%Kd_turb)) then
+      if (work_on_u) then
+        do K=nz,2,-1 ; do i=is,ie ; if (do_i(i)) then
+          a(i,K) = a(i,K) + visc%Prandtl_turb * &
+                   0.5*(visc%Kd_turb(i,j,k) + visc%Kd_turb(i+1,j,k))
+        endif ; enddo ; enddo
+      else
+        do K=nz,2,-1 ; do i=is,ie ; if (do_i(i)) then
+          a(i,K) = a(i,K) + visc%Prandtl_turb * &
+                   0.5*(visc%Kd_turb(i,j,k) + visc%Kd_turb(i,j+1,k))
+        endif ; enddo ; enddo
+      endif
+    endif
+
     do K=nz,2,-1 ; do i=is,ie ; if (do_i(i)) then
       !    botfn determines when a point is within the influence of the bottom
       !  boundary layer, going from 1 at the bottom to 0 in the interior.
@@ -961,6 +975,8 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
         a(i,K) = a(i,K) + 2.0*(CS%Kvbbl-CS%Kv)*botfn
         h_shear = hvel(i,k) + hvel(i,k-1) + h_neglect
       endif
+      
+      !   Up to this point a has units of m2 s-1, but now is converted to m s-1.
       !   The term including 1e-10 in the denominators is here to avoid
       ! truncation error problems in the tridiagonal solver. Effectively, this
       ! sets the maximum coupling coefficient at 1e10 m.

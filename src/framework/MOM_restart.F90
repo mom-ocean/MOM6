@@ -76,7 +76,7 @@ use MOM_time_manager, only : days_in_month
 implicit none ; private
 
 public restart_init, restart_end, restore_state, register_restart_field
-public save_restart, query_initialized, restart_init_end
+public save_restart, query_initialized, restart_init_end, vardesc
 
 type p3d
   real, dimension(:,:,:), pointer :: p => NULL()

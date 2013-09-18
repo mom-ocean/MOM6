@@ -829,6 +829,9 @@ USE_JACKSON_PARAM = False       !   [Boolean] default = False
 DOUBLE_DIFFUSION = False        !   [Boolean] default = False
                                 ! If true, increase diffusivitives for temperature or salt
                                 ! based on double-diffusive paramaterization from MOM4/KPP.
+PRANDTL_TURB = 0.0              !   [nondim] default = 0.0
+                                ! The turbulent Prandtl number applied to shear
+                                ! instability.
 DRAG_BG_VEL = 0.1               !   [m s-1] default = 0.0
                                 ! DRAG_BG_VEL is either the assumed bottom velocity (with
                                 ! LINEAR_DRAG) or an unresolved  velocity that is

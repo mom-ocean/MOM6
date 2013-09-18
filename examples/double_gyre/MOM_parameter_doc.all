@@ -662,6 +662,9 @@ CFL_REPORT = 0.5                !   [nondim] default = 0.5
 LINEAR_DRAG = True              !   [Boolean] default = False
                                 ! If LINEAR_DRAG and BOTTOMDRAGLAW are defined the drag
                                 ! law is cdrag*DRAG_BG_VEL*u.
+PRANDTL_TURB = 0.0              !   [nondim] default = 0.0
+                                ! The turbulent Prandtl number applied to shear
+                                ! instability.
 DRAG_BG_VEL = 0.1               !   [m s-1] default = 0.0
                                 ! DRAG_BG_VEL is either the assumed bottom velocity (with
                                 ! LINEAR_DRAG) or an unresolved  velocity that is

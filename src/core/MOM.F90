@@ -384,7 +384,8 @@ use MOM_tracer_flow_control, only : call_tracer_register, tracer_flow_control_CS
 use MOM_tracer_flow_control, only : tracer_flow_control_init, call_tracer_surface_state
 use MOM_vert_friction, only : vertvisc, vertvisc_coef, vertvisc_remnant
 use MOM_vert_friction, only : vertvisc_limit_vel, vertvisc_init
-use MOM_set_visc, only : set_viscous_BBL, set_viscous_ML, set_visc_init, set_visc_CS
+use MOM_set_visc, only : set_viscous_BBL, set_viscous_ML, set_visc_init
+use MOM_set_visc, only : set_visc_register_restarts, set_visc_CS
 use MOM_sponge, only : init_sponge_diags, sponge_CS
 use MOM_checksum_packages, only : MOM_thermo_chksum, MOM_state_chksum, MOM_accel_chksum
 use MOM_dynamics_unsplit, only : step_MOM_dyn_unsplit, register_restarts_dyn_unsplit
@@ -738,7 +739,12 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
     if (CS%diabatic_first .and. ((n==1) .or. MOD(n-1,ntstep)==0)) then ! do thermodynamics.
       dtdia = dt*min(ntstep,n_max-(n-1))
-      
+      call cpu_clock_begin(id_clock_thermo)
+      ! The end-time of the diagnostic interval needs to be set ahead if there
+      ! are multiple dynamic time steps worth of dynamics applied here.
+      call enable_averaging(dtdia, Time_local + &
+                                   set_time(int(floor(dtdia-dt+0.5))), CS%diag)
+
       if (.not.CS%adiabatic) then
         if (CS%debug) then
           call MOM_state_chksum("Pre-dia first ", u, v, h, CS%uhtr, CS%vhtr, G)
@@ -837,7 +843,15 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
           endif
         endif
       endif                                                  ! ADIABATIC
+      call disable_averaging(CS%diag)
+      call cpu_clock_end(id_clock_thermo)
     endif ! diabatic_first
+
+    if ((CS%visc%Prandtl_turb > 0) .and. associated(CS%visc%Kd_turb)) then
+      call cpu_clock_begin(id_clock_pass)
+      call pass_var(CS%visc%Kd_turb, G%Domain)
+      call cpu_clock_end(id_clock_pass)
+    endif
 
     call cpu_clock_begin(id_clock_dynamics)
     call disable_averaging(CS%diag)
@@ -1635,6 +1649,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call call_tracer_register(G, param_file, CS%tracer_flow_CSp, &
                             diag, CS%tracer_Reg, CS%restart_CSp)
   call MEKE_alloc_register_restart(G, param_file, CS%MEKE, CS%restart_CSp)
+  call set_visc_register_restarts(G, param_file, CS%visc, CS%restart_CSp)
 
 !   Initialize all of the relevant fields.
   if (associated(CS%tracer_Reg)) init_CS%tracer_Reg => CS%tracer_Reg
