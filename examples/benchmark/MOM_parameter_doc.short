@@ -1,4 +1,4 @@
-!SYMMETRIC_MEMORY_ = True       !   [Boolean]
+!SYMMETRIC_MEMORY_ = False      !   [Boolean]
                                 ! If defined, the velocity point data domain includes
                                 ! every face of the thickness points. In other words,
                                 ! some arrays are larger than others, depending on where

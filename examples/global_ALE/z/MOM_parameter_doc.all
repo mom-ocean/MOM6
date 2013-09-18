@@ -54,18 +54,20 @@ MASKTABLE = "MOM_mask_table"    ! default = "MOM_mask_table"
                                 !  4,6
                                 !  1,2
                                 !  3,6
+LAYOUT = 0, 0                   ! default = 0
+                                ! The processor layout to be used, or 0, 0 to automatically
+                                ! set the layout based on the number of processors.
 !NIPROC = 8                     !
                                 ! The number of processors in the x-direction. With
                                 ! STATIC_MEMORY_ this is set in MOM_memory.h at compile time.
 !NJPROC = 8                     !
                                 ! The number of processors in the x-direction. With
                                 ! STATIC_MEMORY_ this is set in MOM_memory.h at compile time.
-NIPROC_IO = 1                   ! default = 0
-                                ! The number of processors used for I/O in the
-                                ! x-direction, or 0 to equal NIPROC.
-NJPROC_IO = 1                   ! default = 0
-                                ! The number of processors used for I/O in the
-                                ! y-direction, or 0 to equal NJPROC.
+!LAYOUT = 8, 8                  !
+                                ! The processor layout that was acutally used.
+IO_LAYOUT = 1, 1                ! default = 0
+                                ! The processor layout to be used, or 0,0 to automatically
+                                ! set the io_layout to be the same as the layout.
 
 ! === Parameters of module MOM_grid ===
 ! Parameters providing information about the vertical grid.
@@ -116,6 +118,10 @@ USE_EOS = True                  !   [Boolean] default = True
                                 ! If true,  density is calculated from temperature and
                                 ! salinity with an equation of state.  If USE_EOS is
                                 ! true, ENABLE_THERMODYNAMICS must be true as well.
+DIABATIC_FIRST = False          !   [Boolean] default = False
+                                ! If true, apply diabatic and thermodynamic processes,
+                                ! including buoyancy forcing and mass gain or loss,
+                                ! before stepping the dynamics forward.
 ADIABATIC = False               !   [Boolean] default = False
                                 ! There are no diapycnal mass fluxes if ADIABATIC is
                                 ! true. This assumes that KD = KDML = 0.0 and that
@@ -1126,7 +1132,7 @@ USE_KPP = True                  !   [Boolean] default = False
                                 ! to calculate diffusivities and non-local transport in the OBL.
 KPP_BEFORE_KAPPA_SHEAR = True   !   [Boolean] default = True
                                 ! If true, KPP matches interior diffusivity that EXCLUDES any
-                                ! diffusivity from KPP.
+                                ! diffusivity from kappa-shear.
 FLUX_RI_MAX = 0.2               !   [not defined] default = 0.2
                                 ! The flux Richardson number where the stratification is
                                 ! large enough that N2 > omega2.  The full expression for
@@ -1279,6 +1285,8 @@ H2_FILE = "sgs_h2.nc"           !
 KPP%
 PASSIVE = True                  !   [Boolean] default = False
                                 ! If True, puts KPP into a passive-diagnostic mode.
+USE_MOM4_ALGORITHM = False      !   [Boolean] default = False
+                                ! If True, uses the MOM4p1/MOM5 algorithm.
 APPLY_NONLOCAL_TRANSPORT = True !   [Boolean] default = True
                                 ! If True, applies the non-local transport to heat and scalars.
                                 ! If False, calculates the non-local transport and tendancies but

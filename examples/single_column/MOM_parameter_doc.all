@@ -811,7 +811,7 @@ USE_KPP = True                  !   [Boolean] default = False
                                 ! to calculate diffusivities and non-local transport in the OBL.
 KPP_BEFORE_KAPPA_SHEAR = True   !   [Boolean] default = True
                                 ! If true, KPP matches interior diffusivity that EXCLUDES any
-                                ! diffusivity from KPP.
+                                ! diffusivity from kappa-shear.
 FLUX_RI_MAX = 0.2               !   [not defined] default = 0.2
                                 ! The flux Richardson number where the stratification is
                                 ! large enough that N2 > omega2.  The full expression for
@@ -924,6 +924,8 @@ DISSIPATION_KD_MIN = 0.0        !   [m2 s-1] default = 0.0
 KPP%
 PASSIVE = True                  !   [Boolean] default = False
                                 ! If True, puts KPP into a passive-diagnostic mode.
+USE_MOM4_ALGORITHM = False      !   [Boolean] default = False
+                                ! If True, uses the MOM4p1/MOM5 algorithm.
 APPLY_NONLOCAL_TRANSPORT = True !   [Boolean] default = True
                                 ! If True, applies the non-local transport to heat and scalars.
                                 ! If False, calculates the non-local transport and tendancies but

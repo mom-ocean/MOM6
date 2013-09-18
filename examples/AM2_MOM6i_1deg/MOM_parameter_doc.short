@@ -8,7 +8,7 @@ TRIPOLAR_N = True               !   [Boolean] default = False
                                 ! they are on the staggered grid.  Also, the starting
                                 ! index of the velocity-point arrays is usually 0, not 1.
                                 ! This can only be set at compile time.
-!STATIC_MEMORY_ = True          !   [Boolean]
+!STATIC_MEMORY_ = False         !   [Boolean]
                                 ! If STATIC_MEMORY_ is defined, the principle variables
                                 ! will have sizes that are statically determined at
                                 ! compile time.  Otherwise the sizes are not determined
@@ -334,9 +334,9 @@ BOUND_BT_CORRECTION = True      !   [Boolean] default = False
                                 ! If true, the corrective pseudo mass-fluxes into the
                                 ! barotropic solver are limited to values that require
                                 ! less than 0.1*MAXVEL to be accommodated.
-!BT x-halo = 10                 !
+!BT x-halo = 0                  !
                                 ! The barotropic x-halo size that is actually used.
-!BT y-halo = 10                 !
+!BT y-halo = 0                  !
                                 ! The barotropic y-halo size that is actually used.
 BT_PROJECT_VELOCITY = True      !   [Boolean] default = False
                                 ! If true, step the barotropic velocity first and project

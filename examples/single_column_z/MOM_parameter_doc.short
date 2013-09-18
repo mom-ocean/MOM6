@@ -28,6 +28,8 @@ NJGLOBAL = 2                    !
 !NJPROC = 1                     !
                                 ! The number of processors in the x-direction. With
                                 ! STATIC_MEMORY_ this is set in MOM_memory.h at compile time.
+!LAYOUT = 1, 1                  !
+                                ! The processor layout that was acutally used.
 
 ! === Parameters of module MOM_grid ===
 ! Parameters providing information about the vertical grid.
