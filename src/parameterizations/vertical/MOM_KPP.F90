@@ -49,7 +49,7 @@ type, public :: KPP_CS ; private
 
   ! Daignostic handles and pointers
   type(diag_ctrl), pointer :: diag => NULL()
-  integer :: id_OBL = -1, id_BulkRi = -1, id_Ws = -1, id_N = -1, id_N2 = -1
+  integer :: id_OBLdepth = -1, id_BulkRi = -1, id_Ws = -1, id_N = -1, id_N2 = -1
   integer :: id_Vt2 = -1, id_BulkUz2 = -1, id_BulkDrho = -1
   integer :: id_uStar = -1, id_buoyFlux = -1
   integer :: id_QminusSW = -1, id_netS = -1
@@ -57,6 +57,18 @@ type, public :: KPP_CS ; private
   integer :: id_NLTt = -1, id_NLTs = -1
   integer :: id_sigma = -1
   integer :: id_dSdt = -1, id_dTdt = -1
+
+! Diagnostics arrays
+  real, allocatable, dimension(:,:)   :: OBLdepth ! Depth (positive) of OBL (m)
+  real, allocatable, dimension(:,:,:) :: dRho ! Bulk difference in density (kg/m3)
+  real, allocatable, dimension(:,:,:) :: Uz2 ! Square of bulk difference in resolved velocity (m2/s2)
+  real, allocatable, dimension(:,:,:) :: BulkRi ! Bulk Richardson number for each layer
+  real, allocatable, dimension(:,:,:) :: sigma ! Sigma coordinate (nondim)
+  real, allocatable, dimension(:,:,:) :: Ws ! Turbulent velocity scale for scalars (m/s)
+  real, allocatable, dimension(:,:,:) :: N ! Brunt-Vaisala frequency (1/s)
+  real, allocatable, dimension(:,:,:) :: N2 ! Brunt-Vaisala frequency (1/s2)
+  real, allocatable, dimension(:,:,:) :: Vt2 ! Unresolved shear turbulence (1/s2)
+  real, allocatable, dimension(:,:,:) :: Kt_KPP, Ks_KPP ! Temp/scalar diffusivity due to KPP (m2/s)
 
 end type KPP_CS
 
@@ -132,24 +144,33 @@ subroutine KPP_init(paramFile, G, diag, Time, CS, passive)
 
 ! Register diagnostics
   CS%diag => diag
-  CS%id_OBL = register_diag_field('ocean_model', 'KPP_OBLdepth', diag%axesT1, Time, &
+  CS%id_OBLdepth = register_diag_field('ocean_model', 'KPP_OBLdepth', diag%axesT1, Time, &
       'Thickness of the surface Ocean Boundary Layer calculated by [CVmix] KPP', 'meter')
-  CS%id_Sigma = register_diag_field('ocean_model', 'KPP_sigma', diag%axesTi, Time, &
-      'Sigma coordinate used by [CVmix] KPP', 'nondim')
-  CS%id_BulkRi = register_diag_field('ocean_model', 'KPP_BulkRi', diag%axesTL, Time, &
-      'Bulk Richardson number used to find the OBL depth used by [CVmix] KPP', 'nondim')
-  CS%id_Ws = register_diag_field('ocean_model', 'KPP_Ws', diag%axesTi, Time, &
-      'Turbulent vertical velocity scale for scalars used by [CVmix] KPP', 'm/s')
-  CS%id_N = register_diag_field('ocean_model', 'KPP_N', diag%axesTi, Time, &
-      '(Adjusted) Brunt-Vaisala frequency used by [CVmix] KPP', '1/s')
-  CS%id_N2 = register_diag_field('ocean_model', 'KPP_N2', diag%axesTi, Time, &
-      'Square of Brunt-Vaisala frequency used by [CVmix] KPP', '1/s2')
-  CS%id_Vt2 = register_diag_field('ocean_model', 'KPP_Vt2', diag%axesTi, Time, &
-      'Unresolved shear turbulence used by [CVmix] KPP', '1/s2')
-  CS%id_BulkUz2 = register_diag_field('ocean_model', 'KPP_BulkUz2', diag%axesTL, Time, &
-      'Square of bulk difference in resolved velocity used in Bulk Richardson number, as used by [CVmix] KPP', 'm2/s2')
+  if (CS%id_OBLdepth > 0) allocate( CS%OBLdepth( SZI_(G), SZJ_(G) ) )
   CS%id_BulkDrho = register_diag_field('ocean_model', 'KPP_BulkDrho', diag%axesTL, Time, &
       'Bulk difference in density used in Bulk Richardson number, as used by [CVmix] KPP', 'kg/m3')
+  if (CS%id_BulkDrho > 0) allocate( CS%dRho( SZI_(G), SZJ_(G), SZK_(G) ) )
+  CS%id_BulkUz2 = register_diag_field('ocean_model', 'KPP_BulkUz2', diag%axesTL, Time, &
+      'Square of bulk difference in resolved velocity used in Bulk Richardson number, as used by [CVmix] KPP', 'm2/s2')
+  if (CS%id_BulkUz2 > 0) allocate( CS%Uz2( SZI_(G), SZJ_(G), SZK_(G) ) )
+  CS%id_BulkRi = register_diag_field('ocean_model', 'KPP_BulkRi', diag%axesTL, Time, &
+      'Bulk Richardson number used to find the OBL depth used by [CVmix] KPP', 'nondim')
+  if (CS%id_BulkRi > 0) allocate( CS%BulkRi( SZI_(G), SZJ_(G), SZK_(G) ) )
+  CS%id_Sigma = register_diag_field('ocean_model', 'KPP_sigma', diag%axesTi, Time, &
+      'Sigma coordinate used by [CVmix] KPP', 'nondim')
+  if (CS%id_Sigma > 0) allocate( CS%sigma( SZI_(G), SZJ_(G), SZK_(G)+1 ) )
+  CS%id_Ws = register_diag_field('ocean_model', 'KPP_Ws', diag%axesTi, Time, &
+      'Turbulent vertical velocity scale for scalars used by [CVmix] KPP', 'm/s')
+  if (CS%id_Ws > 0) allocate( CS%Ws( SZI_(G), SZJ_(G), SZK_(G)+1 ) )
+  CS%id_N = register_diag_field('ocean_model', 'KPP_N', diag%axesTi, Time, &
+      '(Adjusted) Brunt-Vaisala frequency used by [CVmix] KPP', '1/s')
+  if (CS%id_N > 0) allocate( CS%N( SZI_(G), SZJ_(G), SZK_(G)+1 ) )
+  CS%id_N2 = register_diag_field('ocean_model', 'KPP_N2', diag%axesTi, Time, &
+      'Square of Brunt-Vaisala frequency used by [CVmix] KPP', '1/s2')
+  if (CS%id_N2 > 0) allocate( CS%N2( SZI_(G), SZJ_(G), SZK_(G)+1 ) )
+  CS%id_Vt2 = register_diag_field('ocean_model', 'KPP_Vt2', diag%axesTi, Time, &
+      'Unresolved shear turbulence used by [CVmix] KPP', '1/s2')
+  if (CS%id_Vt2 > 0) allocate( CS%Vt2( SZI_(G), SZJ_(G), SZK_(G)+1 ) )
   CS%id_uStar = register_diag_field('ocean_model', 'KPP_uStar', diag%axesT1, Time, &
       'Frictional velocity, u*, as used by [CVmix] KPP', 'm/s')
   CS%id_buoyFlux = register_diag_field('ocean_model', 'KPP_buoyFlux', diag%axesT1, Time, &
@@ -160,8 +181,10 @@ subroutine KPP_init(paramFile, G, diag, Time, CS, passive)
       'Effective net surface salt flux, as used by [CVmix] KPP', 'ppt m/s')
   CS%id_Kt_KPP = register_diag_field('ocean_model', 'KPP_Kheat', diag%axesTi, Time, &
       'Heat diffusivity due to KPP, as calculated by [CVmix] KPP', 'm2/s')
+  if (CS%id_Kt_KPP > 0) allocate( CS%Kt_KPP( SZI_(G), SZJ_(G), SZK_(G)+1 ) )
   CS%id_Ks_KPP = register_diag_field('ocean_model', 'KPP_Ksalt', diag%axesTi, Time, &
       'Salt diffusivity due to KPP, as calculated by [CVmix] KPP', 'm2/s')
+  if (CS%id_Ks_KPP > 0) allocate( CS%Ks_KPP( SZI_(G), SZJ_(G), SZK_(G)+1 ) )
   CS%id_NLTt = register_diag_field('ocean_model', 'KPP_NLtransport_heat', diag%axesTi, Time, &
       'Non-local transport for heat, as calculated by [CVmix] KPP', 'nondim')
   CS%id_NLTs = register_diag_field('ocean_model', 'KPP_NLtransport_salt', diag%axesTi, Time, &
@@ -171,6 +194,18 @@ subroutine KPP_init(paramFile, G, diag, Time, CS, passive)
   CS%id_dSdt = register_diag_field('ocean_model', 'KPP_dSdt', diag%axesTL, Time, &
       'Salinity tendancy due to non-local transport of heat, as calculated by [CVmix] KPP', 'ppt/s')
 
+  if (CS%id_OBLdepth > 0) CS%OBLdepth(:,:) = 0.
+  if (CS%id_BulkDrho > 0) CS%dRho(:,:,:) = 0.
+  if (CS%id_BulkUz2 > 0) CS%Uz2(:,:,:) = 0.
+  if (CS%id_BulkRi > 0) CS%BulkRi(:,:,:) = 0.
+  if (CS%id_Sigma > 0) CS%sigma(:,:,:) = 0.
+  if (CS%id_Ws > 0) CS%Ws(:,:,:) = 0.
+  if (CS%id_N > 0) CS%N(:,:,:) = 0.
+  if (CS%id_N2 > 0) CS%N2(:,:,:) = 0.
+  if (CS%id_Vt2 > 0) CS%Vt2(:,:,:) = 0.
+  if (CS%id_Kt_KPP > 0) CS%Kt_KPP(:,:,:) = 0.
+  if (CS%id_Ks_KPP > 0) CS%Ks_KPP(:,:,:) = 0.
+
 end subroutine KPP_init
 
 
@@ -178,7 +213,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
 ! Calculates diffusivity and non-local transport for KPP parameterization 
 
 ! Arguments
-  type(KPP_CS),                           intent(in)    :: CS    ! Control structure
+  type(KPP_CS),                           pointer       :: CS    ! Control structure
   type(ocean_grid_type),                  intent(in)    :: G     ! Ocean grid
   real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h     ! Layer/level thicknesses (units of H)
   real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: Temp  ! Pot. temperature (degrees C)
@@ -193,18 +228,6 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
   real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(inout) :: Ks ! (in) Vertical diffusivity of salt in interior (m2/s)
                                                                     ! (out) Vertical diffusivity including KPP (m2/s)
   real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(inout) :: nonLocalTransHeat, nonLocalTransScalar ! Temp/scalar non-local transport (m/s)
-
-! Diagnostics arrays
-  real, dimension( SZI_(G), SZJ_(G), SZK_(G) )   :: BulkRi ! Bulk Richardson number for each layer
-  real, dimension( SZI_(G), SZJ_(G) )            :: OBLdepth ! Depth (positive) of OBL (m)
-  real, dimension( SZI_(G), SZJ_(G), SZK_(G)+1 ) :: sigma ! Sigma coordinate (nondim)
-  real, dimension( SZI_(G), SZJ_(G), SZK_(G)+1 ) :: Ws ! Turbulent velocity scale for scalars (m/s)
-  real, dimension( SZI_(G), SZJ_(G), SZK_(G)+1 ) :: N ! Brunt-Vaisala frequency (1/s)
-  real, dimension( SZI_(G), SZJ_(G), SZK_(G)+1 ) :: N2 ! Brunt-Vaisala frequency (1/s2)
-  real, dimension( SZI_(G), SZJ_(G), SZK_(G) )   :: dRho ! Bulk difference in density (kg/m3)
-  real, dimension( SZI_(G), SZJ_(G), SZK_(G) )   :: Uz2 ! Square of bulk difference in resolved velocity (m2/s2)
-  real, dimension( SZI_(G), SZJ_(G), SZK_(G)+1 ) :: Vt2 ! Unresolved shear turbulence (1/s2)
-  real, dimension( SZI_(G), SZJ_(G), SZK_(G)+1 ) :: Kt_KPP, Ks_KPP ! Temp/scalar diffusivity due to KPP (m2/s)
 
 ! Local variables
   integer :: i, j, k, km1
@@ -225,19 +248,6 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
   real, parameter :: negligibleShear = 1.e-15 ! A small number added to (un)resolved shears to avoid divide by zero
   real, parameter :: eps = 0.1 ! Nondimensional extent of surface layer. Used for const1 below.
   real, parameter :: BetaT = -0.2 ! Ratio of entrainment flux to surface buoyancy flux. Used for const1 below.
-
-  BulkRi(:,:,:) = 0.
-  OBLdepth(:,:) = 0.
-  sigma(:,:,:) = 0.
-  Ws(:,:,:) = 0.
-  N(:,:,:) = 0.
-  N2(:,:,:) = 0.
-  Vt2(:,:,:) = 0.
-  Uz2(:,:,:) = 0.
-  Kt_KPP(:,:,:) = 0.
-  Ks_KPP(:,:,:) = 0.
-  nonLocalTransHeat(:,:,:) = 0.
-  nonLocalTransScalar(:,:,:) = 0.
 
 #ifdef __DO_SAFETY_CHECKS__
   if (CS%debug) then
@@ -374,26 +384,27 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
                             surfBuoyFlux, & ! (in) Buoyancy flux at surface (m2/s3)
                             CVmix_kpp_params_user=CS%KPP_params )
 
-      ! Copy 1d data into 3d diagnostic arrays
       nonLocalTransHeat(i,j,:) = nonLocalTrans(:,1) ! correct index ???
       nonLocalTransScalar(i,j,:) = nonLocalTrans(:,2) ! correct index ???
-      if (CS%id_OBL > 0) OBLdepth(i,j) = OBLdepth_0d ! Change sign for depth/thickness
-      if (CS%id_sigma > 0) sigma(i,j,:) = -iFaceHeight/OBLdepth_0d
-      if (CS%id_BulkRi > 0) BulkRi(i,j,:) = BulkRi_1d(:)
-      if (CS%id_Ws > 0) Ws(i,j,:) = Ws_1d(:)
-      if (CS%id_N > 0) N(i,j,:) = N_1d(:)
-      if (CS%id_N2 > 0) N2(i,j,:) = N2_1d(:)
-      if (CS%id_Vt2 > 0) Vt2(i,j,:) = Vt2_1d(:)
-      if (CS%id_BulkUz2 > 0) Uz2(i,j,:) = deltaU2(:)
-      if (CS%id_BulkDrho > 0) dRho(i,j,:) = deltaRho(:)
+
+      ! Copy 1d data into 3d diagnostic arrays
+      if (CS%id_OBLdepth > 0) CS%OBLdepth(i,j) = OBLdepth_0d
+      if (CS%id_BulkDrho > 0) CS%dRho(i,j,:) = deltaRho(:)
+      if (CS%id_BulkUz2 > 0) CS%Uz2(i,j,:) = deltaU2(:)
+      if (CS%id_BulkRi > 0) CS%BulkRi(i,j,:) = BulkRi_1d(:)
+      if (CS%id_sigma > 0) CS%sigma(i,j,:) = -iFaceHeight/OBLdepth_0d
+      if (CS%id_Ws > 0) CS%Ws(i,j,:) = Ws_1d(:)
+      if (CS%id_N > 0) CS%N(i,j,:) = N_1d(:)
+      if (CS%id_N2 > 0) CS%N2(i,j,:) = N2_1d(:)
+      if (CS%id_Vt2 > 0) CS%Vt2(i,j,:) = Vt2_1d(:)
       if (CS%id_Kt_KPP > 0) then
         do k = 1, G%ke
-          if (Kdiffusivity(k,1) /= Kt(i,j,k)) Kt_KPP(i,j,k) = Kdiffusivity(k,1) ! Heat diffusivity due to KPP  (correct index ???)
+          if (Kdiffusivity(k,1) /= Kt(i,j,k)) CS%Kt_KPP(i,j,k) = Kdiffusivity(k,1) ! Heat diffusivity due to KPP
         enddo
       endif
       if (CS%id_Ks_KPP > 0) then
         do k = 1, G%ke
-          if (Kdiffusivity(k,2) /= Ks(i,j,k)) Ks_KPP(i,j,k) = Kdiffusivity(k,2) ! Salt diffusivity due to KPP  (correct index ???)
+          if (Kdiffusivity(k,2) /= Ks(i,j,k)) CS%Ks_KPP(i,j,k) = Kdiffusivity(k,2) ! Salt diffusivity due to KPP
         enddo
       endif
 
@@ -421,19 +432,19 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
   endif
 #endif
 
-  if (CS%id_OBL > 0) call post_data(CS%id_OBL, OBLdepth, CS%diag)
-  if (CS%id_sigma > 0) call post_data(CS%id_sigma, sigma, CS%diag)
-  if (CS%id_BulkRi > 0) call post_data(CS%id_BulkRi, BulkRi, CS%diag)
-  if (CS%id_Ws > 0) call post_data(CS%id_Ws, Ws, CS%diag)
-  if (CS%id_N > 0) call post_data(CS%id_N, N, CS%diag)
-  if (CS%id_N2 > 0) call post_data(CS%id_N2, N2, CS%diag)
-  if (CS%id_Vt2 > 0) call post_data(CS%id_Vt2, Vt2, CS%diag)
-  if (CS%id_BulkUz2 > 0) call post_data(CS%id_BulkUz2, Uz2, CS%diag)
-  if (CS%id_BulkDrho > 0) call post_data(CS%id_BulkDrho, dRho, CS%diag)
+  if (CS%id_OBLdepth > 0) call post_data(CS%id_OBLdepth, CS%OBLdepth, CS%diag)
+  if (CS%id_BulkDrho > 0) call post_data(CS%id_BulkDrho, CS%dRho, CS%diag)
+  if (CS%id_BulkUz2 > 0) call post_data(CS%id_BulkUz2, CS%Uz2, CS%diag)
+  if (CS%id_BulkRi > 0) call post_data(CS%id_BulkRi, CS%BulkRi, CS%diag)
+  if (CS%id_sigma > 0) call post_data(CS%id_sigma, CS%sigma, CS%diag)
+  if (CS%id_Ws > 0) call post_data(CS%id_Ws, CS%Ws, CS%diag)
+  if (CS%id_N > 0) call post_data(CS%id_N, CS%N, CS%diag)
+  if (CS%id_N2 > 0) call post_data(CS%id_N2, CS%N2, CS%diag)
+  if (CS%id_Vt2 > 0) call post_data(CS%id_Vt2, CS%Vt2, CS%diag)
   if (CS%id_uStar > 0) call post_data(CS%id_uStar, uStar, CS%diag)
   if (CS%id_buoyFlux > 0) call post_data(CS%id_buoyFlux, buoyFlux, CS%diag)
-  if (CS%id_Kt_KPP > 0) call post_data(CS%id_Kt_KPP, Kt_KPP, CS%diag)
-  if (CS%id_Ks_KPP > 0) call post_data(CS%id_Ks_KPP, Ks_KPP, CS%diag)
+  if (CS%id_Kt_KPP > 0) call post_data(CS%id_Kt_KPP, CS%Kt_KPP, CS%diag)
+  if (CS%id_Ks_KPP > 0) call post_data(CS%id_Ks_KPP, CS%Ks_KPP, CS%diag)
   if (CS%id_NLTt > 0) call post_data(CS%id_NLTt, nonLocalTransHeat, CS%diag)
   if (CS%id_NLTs > 0) call post_data(CS%id_NLTs, nonLocalTransScalar, CS%diag)
 
