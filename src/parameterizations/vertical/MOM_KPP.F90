@@ -14,8 +14,8 @@ use CVmix_kpp, only : CVmix_init_kpp, CVmix_put_kpp, CVmix_get_kpp_real
 use CVmix_kpp, only : CVmix_coeffs_kpp
 use CVmix_kpp, only : CVmix_kpp_compute_OBL_depth
 use CVmix_kpp, only : CVmix_kpp_compute_turbulent_scales
-!use CVmix_kpp, only : CVmix_kpp_compute_bulk_Richardson
-!use CVmix_kpp, only : CVmix_kpp_compute_unresolved_shear
+use CVmix_kpp, only : CVmix_kpp_compute_bulk_Richardson
+use CVmix_kpp, only : CVmix_kpp_compute_unresolved_shear
 use CVmix_kpp, only : CVmix_kpp_params_type
 implicit none ; private
 
@@ -50,7 +50,7 @@ type, public :: KPP_CS ; private
   ! Daignostic handles and pointers
   type(diag_ctrl), pointer :: diag => NULL()
   integer :: id_OBL = -1, id_BulkRi = -1, id_Ws = -1, id_N = -1, id_N2 = -1
-  integer :: id_Ut2 = -1, id_BulkUz2 = -1, id_BulkDrho = -1
+  integer :: id_Vt2 = -1, id_BulkUz2 = -1, id_BulkDrho = -1
   integer :: id_uStar = -1, id_buoyFlux = -1
   integer :: id_QminusSW = -1, id_netS = -1
   integer :: id_Kt_KPP = -1, id_Ks_KPP = -1
@@ -144,7 +144,7 @@ subroutine KPP_init(paramFile, G, diag, Time, CS, passive)
       '(Adjusted) Brunt-Vaisala frequency used by [CVmix] KPP', '1/s')
   CS%id_N2 = register_diag_field('ocean_model', 'KPP_N2', diag%axesTi, Time, &
       'Square of Brunt-Vaisala frequency used by [CVmix] KPP', '1/s2')
-  CS%id_Ut2 = register_diag_field('ocean_model', 'KPP_Ut2', diag%axesTi, Time, &
+  CS%id_Vt2 = register_diag_field('ocean_model', 'KPP_Vt2', diag%axesTi, Time, &
       'Unresolved shear turbulence used by [CVmix] KPP', '1/s2')
   CS%id_BulkUz2 = register_diag_field('ocean_model', 'KPP_BulkUz2', diag%axesTL, Time, &
       'Square of bulk difference in resolved velocity used in Bulk Richardson number, as used by [CVmix] KPP', 'm2/s2')
@@ -194,39 +194,35 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
                                                                     ! (out) Vertical diffusivity including KPP (m2/s)
   real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(inout) :: nonLocalTransHeat, nonLocalTransScalar ! Temp/scalar non-local transport (m/s)
 
-! Diagnostics arrays                   should these become allocatables ??????????
-  real, dimension( SZI_(G), SZJ_(G), SZK_(G) ) :: BulkRi ! Bulk Richardson number for each layer
-  real, dimension( SZI_(G), SZJ_(G) ) :: OBLdepth ! Depth (positive) of OBL (m)
+! Diagnostics arrays
+  real, dimension( SZI_(G), SZJ_(G), SZK_(G) )   :: BulkRi ! Bulk Richardson number for each layer
+  real, dimension( SZI_(G), SZJ_(G) )            :: OBLdepth ! Depth (positive) of OBL (m)
   real, dimension( SZI_(G), SZJ_(G), SZK_(G)+1 ) :: sigma ! Sigma coordinate (nondim)
   real, dimension( SZI_(G), SZJ_(G), SZK_(G)+1 ) :: Ws ! Turbulent velocity scale for scalars (m/s)
   real, dimension( SZI_(G), SZJ_(G), SZK_(G)+1 ) :: N ! Brunt-Vaisala frequency (1/s)
   real, dimension( SZI_(G), SZJ_(G), SZK_(G)+1 ) :: N2 ! Brunt-Vaisala frequency (1/s2)
-  real, dimension( SZI_(G), SZJ_(G), SZK_(G) ) :: dRho ! Bulk difference in density (kg/m3)
-  real, dimension( SZI_(G), SZJ_(G), SZK_(G) ) :: Uz2 ! Square of bulk difference in resolved velocity (m2/s2)
-  real, dimension( SZI_(G), SZJ_(G), SZK_(G)+1 ) :: Ut2 ! Unresolved shear turbulence (1/s2)
+  real, dimension( SZI_(G), SZJ_(G), SZK_(G) )   :: dRho ! Bulk difference in density (kg/m3)
+  real, dimension( SZI_(G), SZJ_(G), SZK_(G) )   :: Uz2 ! Square of bulk difference in resolved velocity (m2/s2)
+  real, dimension( SZI_(G), SZJ_(G), SZK_(G)+1 ) :: Vt2 ! Unresolved shear turbulence (1/s2)
   real, dimension( SZI_(G), SZJ_(G), SZK_(G)+1 ) :: Kt_KPP, Ks_KPP ! Temp/scalar diffusivity due to KPP (m2/s)
 
 ! Local variables
-  integer :: i, j, k, km1, iteration, largestIterationCount
+  integer :: i, j, k, km1
   real, dimension( G%ke ) :: cellHeight ! Cell center heights referenced to surface (m)
   real, dimension( G%ke+1 ) :: iFaceHeight ! Interface heights referenced to surface (m)
-  real, dimension( G%ke+1 ) :: sigmaCoord ! Normalized coordiante, =0 at surface, =1 at z=-OBLd
-  real, dimension( G%ke+1 ) :: Ws_1d, Wm_1d ! Profiles of vertical velocity scale for scalars/momentum (m/s)
   real, dimension( G%ke+1 ) :: N2_1d ! Brunt-Vaisala frequency squared, at interfaces (1/s2)
   real, dimension( G%ke+1 ) :: N_1d ! (Adjusted) Brunt-Vaisala frequency, at interfaces (1/s)
-  real, dimension( G%ke+1 ) :: Ut2_1d ! Unresolved shear turbulence, at interfaces (1/s2)
+  real, dimension( G%ke ) :: Ws_1d, Wm_1d ! Profiles of vertical velocity scale for scalars/momentum (m/s)
+  real, dimension( G%ke ) :: Vt2_1d ! Unresolved shear turbulence, at interfaces (1/s2)
   real, dimension( G%ke ) :: BulkRi_1d ! Bulk Richardson number for each layer
   real, dimension( G%ke ) :: deltaRho ! delta Rho as appears in numerator of Bulk Richardson number
   real, dimension( G%ke ) :: deltaU2 ! square of delta U (shear) as appears in denominator of Bulk Richardson number (m2/s2)
   real, dimension( G%ke+1, 2) :: Kdiffusivity ! Vertical diffusivity at interfaces (m2/s)
   real, dimension( G%ke+1 ) :: Kviscosity ! Vertical viscosity at interfaces (m2/s)
   real, dimension( G%ke+1, 2) :: nonLocalTrans ! Non-local transport for heat/salt at interfaces (m/s)
-  real :: kOBL, OBLdepth_0d, surfFricVel, surfBuoyFlux, Coriolis, lastOBLdepth, penulOBLdepth
-  real :: correction, largestCorrection
+  real :: kOBL, OBLdepth_0d, surfFricVel, surfBuoyFlux, Coriolis
   real :: GoRho, pRef, rho1, rhoK, rhoKm1, Uk, Vk, const1, Cv
   real, parameter :: negligibleShear = 1.e-15 ! A small number added to (un)resolved shears to avoid divide by zero
-  integer, parameter :: maxIterations = 30 ! Number of iteration on OBL depth to make
-  real, parameter :: tolerance = 1.e-4 ! (m) What change in OBL depth is acceptably accurate to stop iterating
   real, parameter :: eps = 0.1 ! Nondimensional extent of surface layer. Used for const1 below.
   real, parameter :: BetaT = -0.2 ! Ratio of entrainment flux to surface buoyancy flux. Used for const1 below.
 
@@ -236,7 +232,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
   Ws(:,:,:) = 0.
   N(:,:,:) = 0.
   N2(:,:,:) = 0.
-  Ut2(:,:,:) = 0.
+  Vt2(:,:,:) = 0.
   Uz2(:,:,:) = 0.
   Kt_KPP(:,:,:) = 0.
   Ks_KPP(:,:,:) = 0.
@@ -261,11 +257,16 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
   ! const1 is a constant factor in the equation for unresolved shear, Ut (eq. 23 in LMD94)
   const1 = sqrt( abs(BetaT) / (CS%cs * eps) )/( CS%Ri_crit * (CS%vonKarman**2) )
 
-  largestIterationCount = 0
-  largestCorrection = 0.
   do j = G%jsc, G%jec
     do i = G%isc, G%iec
 
+      ! Things that are independent of position within the column
+      Coriolis = 0.25*( (G%CoriolisBu(i,j) + G%CoriolisBu(i-1,j-1)) &
+                       +(G%CoriolisBu(i-1,j) + G%CoriolisBu(i,j-1)) )
+      surfFricVel = uStar(i,j)
+      surfBuoyFlux = buoyFlux(i,j)
+
+      ! This k-loop calculates quantities external to KPP
       iFaceHeight(1) = 0.
       pRef = 0.
       do k = 1, G%ke
@@ -286,121 +287,77 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
         deltaRho(k) = rhoK - rho1
         deltaU2(k) = ( Uk**2 + Vk**2 ) + negligibleShear
         ! N2 is on interfaces.
-        N2_1d(k) = GoRho * (rhoK - rhoKm1) / (0.5*(h(i,j,km1) + h(i,j,k))+G%H_subroundoff) ! Can be negative
+        N2_1d(k) = ( GoRho * (rhoK - rhoKm1) ) / (0.5*(h(i,j,km1) + h(i,j,k))+G%H_subroundoff) ! Can be negative
         ! N = sqrt(N^2) but because N^2 can be negative, we clip N^2 before taking the square root   ??????
         N_1d(k) = sqrt( max( N2_1d(k), 0.) )
-        BulkRi_1d(k) = ( GoRho * ( -cellHeight(k) ) ) * deltaRho(k) / deltaU2(k)
-        ! Notes:
-        ! o Using cellHeight includes an extra half layer thickness from surface for all levels   ????
-        ! o BulRi(k=1)=0 because rho1=rhoK
-
+   !    N_1d(k) = sqrt( abs( N2_1d(k)) ) ! From MOM4p1 ?????
+   !    N_1d(k) = sign( sqrt( abs( N2_1d(k) ) ), N2_1d(k) ) ! Suggestion ????
         ! Pressure at bottom of level k will become pressure at top of level on next iteration
-        pRef = pRef + G%g_Earth * G%Rho0 * h(i,j,k) ! Boussinesq approximation!!!! ?????
+        pRef = pRef + G%g_Earth * G%Rho0 * h(i,j,k) * G%H_to_m ! Boussinesq approximation!!!! ?????
       enddo ! k
       N2_1d( G%ke+1 ) = 0.
       N_1d( G%ke+1 ) = 0.
-      Ut2_1d( G%ke+1 ) = 0.
 
-      Ut2_1d(:) = negligibleShear ! Non-zero even at bottom, to avoid divide by zero
-    ! BulkRi_1d = CVmix_kpp_compute_bulk_Richardson( &
-    !                  cellHeight,      & ! Height of level centers (m)
-    !                  GoRho*deltaRho,  & ! Bulk buoyancy difference, Br -B(z) (1/s)
-    !                  deltaU2,         & ! Square of bulk shear (m/s)
-    !     ! THIS NEXT ARGUMENT IS SHIFTED TO HAVE SAME SIZE AS OTHER ARGS ???????
-    !                  Ut2_1d(1:G%ke) )   ! Square of unresolved turbulence (m2/s2)
-
-      Coriolis = 0.25*( (G%CoriolisBu(i,j) + G%CoriolisBu(i-1,j-1)) &
-                       +(G%CoriolisBu(i-1,j) + G%CoriolisBu(i,j-1)) )
-      surfFricVel = uStar(i,j)
-      surfBuoyFlux = buoyFlux(i,j)
-
-      OBLdepth_0d = 1.e10 ! Silly initial value
-      lastOBLdepth = OBLdepth_0d
-      OBLiterater: do iteration = 0, maxIterations ! Iterate of the estimates of Bulk Ri, Ws and OBL depth
-
-        ! Compute the OBL thickness
-        penulOBLdepth = lastOBLdepth ! Store penultimate estimate to catch oscillations in iterator
-        lastOBLdepth = OBLdepth_0d ! Record last estimate to measure convergence
-        call CVmix_kpp_compute_OBL_depth( &
-           BulkRi_1d,              & ! (in) Bulk Richardson number
-           iFaceHeight,            & ! (in) Height of interfaces (m)
-           OBLdepth_0d,            & ! (out) OBL depth (m)
-           kOBL,                   & ! (out) level (+fraction) of OBL extent
-           zt_cntr=cellHeight,     & ! (in) Height of cell centers (m)
-           surf_fric=surfFricVel,  & ! (in) Turbulent friction velocity at surface (m/s)
-           surf_buoy=surfBuoyFlux, & ! (in) Buoyancy flux at surface (m2/s3)
-           Coriolis=Coriolis,      & ! (in) Coriolis parameter (1/s)
-           CVmix_kpp_params_user=CS%KPP_params ) ! KPP parameters
-!       OBLdepth_0d = max( OBLdepth_0d, h(i,j,1) ) ! Limit OBL to thicker than top layer ?????
-
-        ! Exit loop if converged, one iteration is guaranteed because initial value
-        ! of OBLdepth_0d is silly
-        if (abs(OBLdepth_0d - penulOBLdepth) < tolerance .and. & ! Detect oscillatory state
-            lastOBLdepth < OBLdepth_0d) then ! Select deeper solution to smooth over problem areas????
-          lastOBLdepth = penulOBLdepth ! Force exit through simple criteria
+      ! Estimate Ws in order to estimate Vt^2
+      do k = 1, G%ke
+        ! Calculate Ws at each depth as if OBLdepth = -z
+        if (surfBuoyFlux>0.) then 
+          call CVmix_kpp_compute_turbulent_scales( &
+            1.,             & ! (in) Normalized boundary layer coordinate
+            -cellHeight(k), & ! (in) OBL depth (m)
+            surfBuoyFlux,   & ! (in) Buoyancy flux at surface (m2/s3)
+            surfFricVel,    & ! (in) Turbulent friction velocity at surface (m/s)
+            w_s=Ws_1d(k),   & ! (out) Turbulent velocity scale profile (m/s)
+            CVmix_kpp_params_user=CS%KPP_params ) ! KPP parameters
+        else
+          call CVmix_kpp_compute_turbulent_scales( &
+            eps,            & ! (in) Normalized boundary layer coordinate
+            -cellHeight(k), & ! (in) OBL depth (m)
+            surfBuoyFlux,   & ! (in) Buoyancy flux at surface (m2/s3)
+            surfFricVel,    & ! (in) Turbulent friction velocity at surface (m/s)
+            w_s=Ws_1d(k),   & ! (out) Turbulent velocity scale profile (m/s)
+            CVmix_kpp_params_user=CS%KPP_params ) ! KPP parameters
         endif
-        correction = abs(OBLdepth_0d - lastOBLdepth)
-        if (correction < tolerance) exit OBLiterater ! Simple exit criteria
+        ! Unresolved shear, Vt^2, eq 23 from LMD94
+        Cv = max( 1.7, 2.1 - 200. * N_1d(k) ) ! Cv from eq A3 of Danbasoglu et al. 2003
+    !   Cv = 1.8 ! MOM4p1 ?????
+        ! The calculation is for Vt^2 at level center but uses N from the interface below
+        ! (and depth of lower interface) to bias towards higher estimates.  One would
+        ! otherwise use d=-cellHeight(k) and a vertical average of N.  ?????
+        Vt2_1d(k) = const1 * Cv * ( -iFaceHeight(k+1) ) * N_1d(k+1) * Ws_1d(k)
+      enddo ! k
+    ! The following call gives a similar answer to the above but is much less efficient
+    ! Vt2_1d(:) = CVmix_kpp_compute_unresolved_shear( &
+    !               iFaceHeight(2:G%ke+1), & ! Height of level centers (m) NOTE DISCREPANCY ????
+    !               N_1d(2:G%ke+1),        & ! Buoyancy frequency at centers (1/s) NOTE DISCREPANCY ????
+    !               Ws_1d,                 & ! Turbulent velocity scale profile, at centers (m/s)
+    !               CVmix_kpp_params_user=CS%KPP_params ) ! KPP parameters
 
-!       if (iteration > 7 .and. mod(iteration,4) == 0) then ! Slow convergence
-!         if ((OBLdepth_0d-lastOBLdepth)*(lastOBLdepth-penulOBLdepth) < 0.) & ! Oscillating
-!           OBLdepth_0d = 0.25*( OBLdepth_0d + 2.*lastOBLdepth + penulOBLdepth ) ! Filter guess
-!       endif
-
-        ! Now calculate the unresolved turbulence velocity scales
-        sigmaCoord(:) = -iFaceHeight/OBLdepth_0d ! =0 at surface, =1 at z=-OBLd
-        call CVmix_kpp_compute_turbulent_scales( &
-           sigmaCoord,     & ! (in) Normalized boundary layer coordinate (at interfaces)
-           OBLdepth_0d,    & ! (in) OBL depth (m)
-           surfBuoyFlux,   & ! (in) Buoyancy flux at surface (m2/s3)
-           surfFricVel,    & ! (in) Turbulent friction velocity at surface (m/s)
-           w_s=Ws_1d,      & ! (out) Turbulent velocity scale profile, at interfaces (m/s)
-           CVmix_kpp_params_user=CS%KPP_params ) ! KPP parameters
-
-        ! Re-calculate the Bulk Richardson number adding the turbulent velocity scale
-        if ( iteration < maxIterations ) then
-          do k = 1, G%ke
-            ! Unresolved turbulence shear
-            Cv = max( 1.7, 2.1 - 200. * N_1d(k) )
-            Ut2_1d(k) = const1 * Cv * (-cellHeight(k)) * N_1d(k) * Ws_1d(k)
-            ! Note upward-biased used of Ws since Ws is at interfaces
-            BulkRi_1d(k) = ( GoRho * ( -cellHeight(k) ) ) * deltaRho(k) / ( deltaU2(k) + Ut2_1d(k) )
-          enddo ! k
-        ! Ut2_1d(:) = CVmix_kpp_compute_unresolved_shear( &
-        !                  iFaceHeight, & ! Height of interfaces (m)
-        !                  N_1d,        & ! Buoyancy frequency at interfaces (1/s)
-        !                  Ws_1d,       & ! Turbulent velocity scale profile, at interfaces (m/s)
-        !                  CVmix_kpp_params_user=CS%KPP_params ) ! KPP parameters
-        ! BulkRi_1d = CVmix_kpp_compute_bulk_Richardson( &
-        !                  cellHeight,      & ! Height of level centers (m)
-        !                  GoRho*deltaRho,  & ! Bulk buoyancy difference, Br -B(z) (1/s)
-        !                  deltaU2,         & ! Square of bulk shear (m/s)
-        !     ! THIS NEXT ARGUMENT IS SHIFTED TO HAVE SAME SIZE AS OTHER ARGS ???????
-        !                  Ut2_1d(1:G%ke) )   ! Square of unresolved turbulence (m2/s2)
-        endif
-
-      enddo OBLiterater ! iteration
-
-      if (maxIterations > 0 .and. correction >= tolerance) then
-        write(0,*) 'i,j,x,y',i,j,G%geoLonT(i,j),G%geoLatT(i,j)
-        write(0,*) 'iters',iteration
-        write(0,*) 'penul,last, current OBL',penulOBLdepth,lastOBLdepth,OBLdepth_0d
-        write(0,*) 'u*, buoyFlux',surfFricVel,surfBuoyFlux
-        do k = 1, G%ke
-          write(0,*) 'k,zw,h,T,S',k,iFaceHeight(k),h(i,j,k),temp(i,j,k),salt(i,j,k)
-        enddo
-        do k = 1, G%ke
-          write(0,*) 'k,h,dRho,dU,Ri_b',k,h(i,j,k),deltaRho(k),sqrt(deltaU2(k)), &
-              ( GoRho * ( -cellHeight(k) ) ) * deltaRho(k) / ( deltaU2(k) + Ut2_1d(k) )
-        enddo
-        call MOM_error(FATAL, 'MOM_KPP, KPP_calculate: '// &
-              'The OBL depth iteration failed to converge!!!')
-      endif
-
-      if (verbose .and. maxIterations > 0) then
-        largestCorrection = max( largestCorrection, correction )
-        largestIterationCount = max( largestIterationCount, iteration )
-      endif
+      ! Calculate Bulk Richardson number, eq 21 of LMD94
+      BulkRi_1d = CVmix_kpp_compute_bulk_Richardson( &
+                    iFaceHeight(1:G%ke), & ! Height of level centers (m) NOTE DISCREPANCY ????
+                    GoRho*deltaRho,      & ! Bulk buoyancy difference, Br -B(z) (1/s)
+                    deltaU2,             & ! Square of bulk shear (m/s)
+                    Vt2_1d )           ! Square of unresolved turbulence (m2/s2)
+    ! do k = 1, G%ke
+    ! ! Notes:
+    ! ! o BulRi(k=1)=0 because rho1=rhoK
+    !   BulkRi_1d(k) = ( ( GoRho * deltaRho(k) ) * ( cellHeight(1)-cellHeight(k) ) ) / ( deltaU2(k) + Vt2_1d(k) )
+    !   ! The distance here between the surface and the interface at which a stability
+    !   ! calculation (and the pressure used) would take place, ie. the upper interface     ?????
+    !   BulkRi_1d(k) = ( ( GoRho * deltaRho(k) ) * ( -iFaceHeight(k) ) ) / ( deltaU2(k) + Vt2_1d(k) )
+    ! enddo ! k
+      call CVmix_kpp_compute_OBL_depth( &
+        BulkRi_1d,              & ! (in) Bulk Richardson number
+        iFaceHeight,            & ! (in) Height of interfaces (m)
+        OBLdepth_0d,            & ! (out) OBL depth (m)
+        kOBL,                   & ! (out) level (+fraction) of OBL extent
+        zt_cntr=cellHeight,     & ! (in) Height of cell centers (m)
+        surf_fric=surfFricVel,  & ! (in) Turbulent friction velocity at surface (m/s)
+        surf_buoy=surfBuoyFlux, & ! (in) Buoyancy flux at surface (m2/s3)
+        Coriolis=Coriolis,      & ! (in) Coriolis parameter (1/s)
+        CVmix_kpp_params_user=CS%KPP_params ) ! KPP parameters
+      OBLdepth_0d = max( OBLdepth_0d, -iFaceHeight(2) ) ! Keep at least as deep as top layer
 
       ! Now call KPP proper to obtain BL diffusivities, viscosities and non-local transports
       Kdiffusivity(:,1) = Kt(i,j,:) ! Diffusivty for heat
@@ -416,28 +373,17 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
                             surfFricVel,  & ! (in) Turbulent friction velocity at surface (m/s)
                             surfBuoyFlux, & ! (in) Buoyancy flux at surface (m2/s3)
                             CVmix_kpp_params_user=CS%KPP_params )
-#ifdef __DO_SAFETY_CHECKS__
-!     if (is_NaN(Kdiffusivity(:,2),skip_mpp=.True.)) then
-!       write(0,*) 'i,j=',i,j
-!       write(0,*) 'u*,buoyFlux',surfFricVel, surfBuoyFlux
-!       write(0,*) 'OBLd,kOBL',OBLdepth_0d, kOBL
-!       do k = 1, G%ke+1
-!         write(0,*) 'k,zw,Kin,Kout',k,iFaceHeight(k),Ks(i,j,k),Kdiffusivity(k,2)
-!       enddo
-!       call MOM_error(FATAL, 'MOM_KPP, KPP_calculate: '// &
-!             'NaN detected on return from KPP!!!')
-!     endif
-#endif
 
+      ! Copy 1d data into 3d diagnostic arrays
       nonLocalTransHeat(i,j,:) = nonLocalTrans(:,1) ! correct index ???
       nonLocalTransScalar(i,j,:) = nonLocalTrans(:,2) ! correct index ???
       if (CS%id_OBL > 0) OBLdepth(i,j) = OBLdepth_0d ! Change sign for depth/thickness
-      if (CS%id_sigma > 0) sigma(i,j,:) = sigmaCoord(:)
+      if (CS%id_sigma > 0) sigma(i,j,:) = -iFaceHeight/OBLdepth_0d
       if (CS%id_BulkRi > 0) BulkRi(i,j,:) = BulkRi_1d(:)
       if (CS%id_Ws > 0) Ws(i,j,:) = Ws_1d(:)
       if (CS%id_N > 0) N(i,j,:) = N_1d(:)
       if (CS%id_N2 > 0) N2(i,j,:) = N2_1d(:)
-      if (CS%id_Ut2 > 0) Ut2(i,j,:) = Ut2_1d(:)
+      if (CS%id_Vt2 > 0) Vt2(i,j,:) = Vt2_1d(:)
       if (CS%id_BulkUz2 > 0) Uz2(i,j,:) = deltaU2(:)
       if (CS%id_BulkDrho > 0) dRho(i,j,:) = deltaRho(:)
       if (CS%id_Kt_KPP > 0) then
@@ -451,19 +397,22 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
         enddo
       endif
 
+      ! Update output of routine
       if (.not. CS%passiveMode) then
         Kt(i,j,:) = Kdiffusivity(:,1)
         Ks(i,j,:) = Kdiffusivity(:,2)
       endif
+
+      if (CS%debug .and. i==G%isc .and. j==G%jsc) then
+        write(*,'(7(a,1x,1es10.3,1x))') 'OBL_depth=',OBLdepth_0d,'u*=',surfFricVel,'buoySurf=',surfBuoyFlux
+        write(*,'(a2,12a11)') 'k','z','T','S','dB*d','dU2','Ws','Vt2','Rib'
+        do k=1,0*G%ke+int(kOBL+1)
+        write(*,'(i2,12(1x,1es10.3))') k,cellHeight(k), &
+           Temp(i,j,k),Salt(i,j,k),GoRho*deltaRho(k)*(cellHeight(1)-cellHeight(k)),deltaU2(k),Ws_1d(k),Vt2_1d(k),BulkRi_1d(k)
+        enddo
+      endif
     enddo ! i
   enddo ! j
-
-  if (verbose) then
-    call max_across_PEs( largestIterationCount )
-    call max_across_PEs( largestCorrection )
-    if (is_root_PE()) &
-      write(*,'("MOM_KPP: max(iter, correction)=",i3,es10.2," m")') largestIterationCount, largestCorrection
-  endif
 
 #ifdef __DO_SAFETY_CHECKS__
   if (CS%debug) then
@@ -478,7 +427,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
   if (CS%id_Ws > 0) call post_data(CS%id_Ws, Ws, CS%diag)
   if (CS%id_N > 0) call post_data(CS%id_N, N, CS%diag)
   if (CS%id_N2 > 0) call post_data(CS%id_N2, N2, CS%diag)
-  if (CS%id_Ut2 > 0) call post_data(CS%id_Ut2, Ut2, CS%diag)
+  if (CS%id_Vt2 > 0) call post_data(CS%id_Vt2, Vt2, CS%diag)
   if (CS%id_BulkUz2 > 0) call post_data(CS%id_BulkUz2, Uz2, CS%diag)
   if (CS%id_BulkDrho > 0) call post_data(CS%id_BulkDrho, dRho, CS%diag)
   if (CS%id_uStar > 0) call post_data(CS%id_uStar, uStar, CS%diag)
