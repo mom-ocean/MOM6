@@ -1495,7 +1495,7 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
   if (CS%useKPP .and. CS%use_kappa_shear) &
     call get_param(param_file, mod, "KPP_BEFORE_KAPPA_SHEAR", CS%matchKPPwithoutKappaShear, &
                  "If true, KPP matches interior diffusivity that EXCLUDES any\n"// &
-                 "diffusivity from KPP.", default=.true.)
+                 "diffusivity from kappa-shear.", default=.true.)
 
   if (G%Boussinesq) then ; thickness_units = "meter"
   else ; thickness_units = "kilogram meter-2" ; endif
