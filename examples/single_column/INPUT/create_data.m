@@ -26,8 +26,8 @@ function [] = doall(x,y,name)
 %grab_forcing_m(x,y,name)
 %grab_initconds(x,y,name)
 %grab_tides(x,y,name)
-%grab_woa(x,y,name)
-grab_coords(x,y,name)
+grab_woa(x,y,name)
+%grab_coords(x,y,name)
 
 % ==============================================================================
 
@@ -527,8 +527,8 @@ DEPTH=ics{'DEPTH'}(:);
 DEPTH_bnds=ics{'DEPTH_bnds'}(:);
 TIME=ics{'TIME'}(:);
 TIME_bnds=ics{'TIME_bnds'}(:);
-PTEMP=ics{'PTEMP'}(:,:,j:j+1,i:i+1);
-SALT=ics{'SALT'}(:,:,j:j+1,i:i+1);
+PTEMP=ics{'PTEMP'}(:,:,j:j+1,i:i+1); PTEMP( PTEMP==ics{'PTEMP'}.missing_value )=NaN;
+SALT=ics{'SALT'}(:,:,j:j+1,i:i+1); SALT( SALT==ics{'SALT'}.missing_value )=NaN;
 nt=size(PTEMP,1);
 nk=size(PTEMP,2);
 for n=1:nt;
@@ -537,7 +537,10 @@ for n=1:nt;
   SALT(n,k,:,:)=interp2(Y(j:j+1),X(i:i+1),squeeze(SALT(n,k,:,:)),y,x);
  end
 end
+PTEMP( isnan(PTEMP) ) = ics{'PTEMP'}.missing_value;
+SALT( isnan(SALT) ) = ics{'SALT'}.missing_value;
 if isnan(SALT(1))
+ keyboard
   error('Urgh!')
 end
 
@@ -580,13 +583,13 @@ nc{'TIME'}.axis = ncchar('T');
 nc{'TIME'}.bounds = ncchar('TIME_bnds');
 
 nc{'PTEMP'} = ncfloat('TIME', 'DEPTH', 'LAT', 'LON'); %% 25660800 elements.
-nc{'PTEMP'}.missing_value = ncfloat(-9.99999979021477e+33);
-nc{'PTEMP'}.FillValue_ = ncfloat(-9.99999979021477e+33);
+nc{'PTEMP'}.missing_value = ncfloat(ics{'PTEMP'}.missing_value);
+nc{'PTEMP'}.FillValue_ = ncfloat(ics{'PTEMP'}.missing_value);
 nc{'PTEMP'}.long_name = ncchar('THETA_FO(SALT,TEMP,DPTH,P_REF)');
 
 nc{'SALT'} = ncfloat('TIME', 'DEPTH', 'LAT', 'LON'); %% 25660800 elements.
-nc{'SALT'}.missing_value = ncfloat(-9.99999979021477e+33);
-nc{'SALT'}.FillValue_ = ncfloat(-9.99999979021477e+33);
+nc{'SALT'}.missing_value = ncfloat(ics{'SALT'}.missing_value);
+nc{'SALT'}.FillValue_ = ncfloat(ics{'SALT'}.missing_value);
 nc{'SALT'}.long_name = ncchar('IF S0112AN1[D=4,GZ=GRIDZ@ASN] THEN S0112AN1[D=4,GZ=GRIDZ@ASN] ELSE S00AN1[D=3]');
 
 nc{'TIME_bnds'} = ncdouble('TIME', 'bnds'); %% 24 elements.
