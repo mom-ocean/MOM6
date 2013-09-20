@@ -4,8 +4,13 @@ What's what
 src/        - contains the source code for MOM6 that is always compiled
 config_src/ - contains optional source code depending on mode and configuration
               such as dynamic-memory versus static, ocean-only versus coupled.
-examples/   - contains parametesr, input data, patths to data, and some source
-              code for static compiles.
+examples/   - contains parameters, input data, patths to data, and some source
+              code for static compiles. examples/ is sub-divided into four
+              directories named for the style of compiled executable:
+              * examples/solo_ocean - uses just MOM6 code
+              * examples/ocean_SIS - uses just MOM6 and SIS code in coupled mode
+              * examples/ocean_SIS2 - uses just MOM6 and SIS2 code in coupled mode
+              * examples/coupled_AM2_SIS - uses MOM6, SIS, LM3 and AM2 code ie. fully coupled
 pkg/        - contains third party (non-MOM6 or FMS) code that can be linked to MOM6
 tools/      - tools for working with MOM6 (not source code and not necessarily supported)
 
