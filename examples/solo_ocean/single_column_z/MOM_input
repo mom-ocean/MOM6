@@ -56,7 +56,7 @@ DT = 3600.0                     !   [s]
                                 ! is actually used will be an integer fraction of the
                                 ! forcing time-step (DT_FORCING in ocean-only mode or the
                                 ! coupling timestep in coupled mode.)
-DT_THERM = 7200.0               !   [s] default = 3600.0
+DT_THERM = 3600.0               !   [s] default = 3600.0
                                 ! The thermodynamic and tracer advection time step.
                                 ! Ideally DT_THERM should be an integer multiple of DT
                                 ! and less than the forcing or coupling time-step.
@@ -403,7 +403,7 @@ MAXCPU = 2.88E+04               !   [wall-clock seconds] default = -1.0
                                 ! factor of the number of processors used.
 
 ! === Parameters of module MOM_main (MOM_driver) ===
-DT_FORCING = 7200.0             !   [s] default = 3600.0
+DT_FORCING = 3600.0             !   [s] default = 3600.0
                                 ! The time step for changing forcing, coupling with other
                                 ! components, or potentially writing certain diagnostics.
                                 ! The default value is given by DT.
