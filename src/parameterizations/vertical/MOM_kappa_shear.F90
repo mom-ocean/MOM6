@@ -87,6 +87,7 @@ type, public :: Kappa_shear_CS ! ; private
   real    :: TKE_bg          !   The background level of TKE, in m2 s-2.
   real    :: kappa_0         !   The background diapycnal diffusivity, in m2 s-1.
   real    :: kappa_tol_err   !   The fractional error in kappa that is tolerated.
+  real    :: Prandtl_turb    ! Prandtl number used to convert Kd_turb into viscosity.
   integer :: nkml            !   The number of layers in the mixed layer, as
                              ! treated in this routine.  If the pieces of the
                              ! mixed layer are not to be treated collectively,
@@ -114,7 +115,7 @@ end type Kappa_shear_CS
 contains
 
 subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
-                                 dt, G, CS, initialize_all)
+                                 kv_io, dt, G, CS, initialize_all)
   real, dimension(NIMEM_,NJMEM_,NKMEM_),        intent(in)    :: u_in
   real, dimension(NIMEM_,NJMEM_,NKMEM_),        intent(in)    :: v_in
   real, dimension(NIMEM_,NJMEM_,NKMEM_),        intent(in)    :: h
@@ -122,6 +123,7 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
   real, dimension(:,:),                         pointer       :: p_surf
   real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(inout) :: kappa_io
   real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(inout) :: tke_io
+  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(inout) :: kv_io ! really intent(out)
   real,                                         intent(in)    :: dt
   type(ocean_grid_type),                        intent(in)    :: G
   type(Kappa_shear_CS),                         pointer       :: CS
@@ -144,6 +146,9 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
 !                     interface (not layer!) in m2 s-2.  Initially this is the
 !                     value from the previous timestep, which may accelerate
 !                     the iteration toward convergence.
+!  (in/out)  kv_io - The vertical viscosity at each interface
+!                    (not layer!) in m2 s-1. This discards any previous value
+!                    i.e. intent(out) and simply sets Kv = Prandtl * Kd_turb
 !  (in)      dt - Time increment, in s.
 !  (in)      G - The ocean's grid structure.
 !  (in)      CS - The control structure returned by a previous call to
@@ -848,6 +853,7 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
     do K=1,nz+1 ; do i=is,ie
       kappa_io(i,j,K) = G%mask2dT(i,j) * kappa_2d(i,K)
       tke_io(i,j,K) = G%mask2dT(i,j) * tke_2d(i,K)
+      kv_io(i,j,K) = ( G%mask2dT(i,j) * kappa_2d(i,K) ) * CS%Prandtl_turb
 #ifdef ADD_DIAGNOSTICS
       I_Ld2_3d(i,j,K) = I_Ld2_2d(i,K)
       dz_Int_3d(i,j,K) = dz_Int_2d(i,K)
@@ -1713,6 +1719,9 @@ subroutine kappa_shear_init(Time, G, param_file, diag, CS)
                  "The maximum number of iterations that may be used to \n"//&
                  "estimate the time-averaged diffusivity.", units="nondim", &
                  default=13)
+  call get_param(param_file, mod, "PRANDTL_TURB", CS%Prandtl_turb, &
+                 "The turbulent Prandtl number applied to shear \n"//&
+                 "instability.", units="nondim", default=0.0, do_not_log=.true.)
   call get_param(param_file, mod, "DEBUG_KAPPA_SHEAR", CS%debug, &
                  "If true, write debugging data for the kappa-shear code. \n"//&
                  "Caution: this option is _very_ verbose and should only \n"//&

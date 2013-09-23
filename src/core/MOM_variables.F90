@@ -229,6 +229,8 @@ type, public :: vertvisc_type
                         ! DOUBLE_DIFFUSION is true.
     Kd_turb => NULL(), &! The turbulent diapycnal diffusivity at the interfaces
                         ! between each layer, in m2 s-1.
+    Kv_turb => NULL(), &! The turbulent vertical viscosity at the interfaces
+                        ! between each layer, in m2 s-1.
     TKE_turb => NULL()  ! The turbulent kinetic energy per unit mass defined
                         ! at the interfaces between each layer, in m2 s-2.
 end type vertvisc_type

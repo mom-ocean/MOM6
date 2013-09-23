@@ -943,16 +943,14 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
       endif
     endif ; enddo
 
-    if ((visc%Prandtl_turb > 0) .and. associated(visc%Kd_turb)) then
+    if (associated(visc%Kv_turb)) then
       if (work_on_u) then
         do K=nz,2,-1 ; do i=is,ie ; if (do_i(i)) then
-          a(i,K) = a(i,K) + visc%Prandtl_turb * &
-                   0.5*(visc%Kd_turb(i,j,k) + visc%Kd_turb(i+1,j,k))
+          a(i,K) = a(i,K) + 0.5*(visc%Kv_turb(i,j,k) + visc%Kv_turb(i+1,j,k))
         endif ; enddo ; enddo
       else
         do K=nz,2,-1 ; do i=is,ie ; if (do_i(i)) then
-          a(i,K) = a(i,K) + visc%Prandtl_turb * &
-                   0.5*(visc%Kd_turb(i,j,k) + visc%Kd_turb(i,j+1,k))
+          a(i,K) = a(i,K) + 0.5*(visc%Kv_turb(i,j,k) + visc%Kv_turb(i,j+1,k))
         endif ; enddo ; enddo
       endif
     endif

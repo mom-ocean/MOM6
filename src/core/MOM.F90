@@ -847,11 +847,12 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       call cpu_clock_end(id_clock_thermo)
     endif ! diabatic_first
 
-    if ((CS%visc%Prandtl_turb > 0) .and. associated(CS%visc%Kd_turb)) then
-      call cpu_clock_begin(id_clock_pass)
-      call pass_var(CS%visc%Kd_turb, G%Domain)
-      call cpu_clock_end(id_clock_pass)
-    endif
+    call cpu_clock_begin(id_clock_pass)
+    if ((CS%visc%Prandtl_turb > 0) .and. associated(CS%visc%Kd_turb)) &
+         call pass_var(CS%visc%Kd_turb, G%Domain)
+    if (associated(CS%visc%Kv_turb)) call pass_var(CS%visc%Kv_turb, G%Domain)
+    call cpu_clock_end(id_clock_pass)
+
 
     call cpu_clock_begin(id_clock_dynamics)
     call disable_averaging(CS%diag)

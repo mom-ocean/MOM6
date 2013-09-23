@@ -410,14 +410,16 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
 
     call cpu_clock_begin(id_clock_kappa_shear)
     ! Changes: visc%Kd_turb, visc%TKE_turb (not clear that TKE_turb is used as input ????)
+    ! Sets visc%Kv_turb
     call calculate_kappa_shear(u_h, v_h, h, tv, fluxes%p_surf, visc%Kd_turb, visc%TKE_turb, &
-                               dt, G, CS%kappa_shear_CSp)
+                               visc%Kv_turb, dt, G, CS%kappa_shear_CSp)
     call cpu_clock_end(id_clock_kappa_shear)
     if (CS%debug) then
       call MOM_state_chksum("after Calc_KS ", u(:,:,:), v(:,:,:), h(:,:,:), G)
       call MOM_forcing_chksum("after calc_KS ", fluxes, G, haloshift=0)
       call MOM_thermovar_chksum("after calc_KS ", tv, G)
       call hchksum(visc%Kd_turb, "after calc_KS visc%Kd_turb",G)
+      call hchksum(visc%Kv_turb, "after calc_KS visc%Kv_turb",G)
       call hchksum(visc%TKE_turb, "after calc_KS visc%TKE_turb",G)
     endif
   endif

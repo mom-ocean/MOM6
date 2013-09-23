@@ -1481,15 +1481,18 @@ subroutine set_visc_register_restarts(G, param_file, visc, restart_CS)
   call get_param(param_file, mod, "ADIABATIC", adiabatic, default=.false., &
                  do_not_log=.true.)
   use_kappa_shear = .false.
-  if (.not.adiabatic) &
+  if (.not.adiabatic) then
     call get_param(param_file, mod, "USE_JACKSON_PARAM", use_kappa_shear, &
                  "If true, use the Jackson-Hallberg-Legg (JPO 2008) \n"//& 
                  "shear mixing parameterization.", default=.false., &
                   do_not_log=.true.)
+  endif
+
 
   if (use_kappa_shear) then
-    allocate(visc%Kd_turb(isd:ied,jsd:jed,nz+1)) ; visc%Kd_turb = 0.0
-    allocate(visc%TKE_turb(isd:ied,jsd:jed,nz+1)) ; visc%TKE_turb = 0.0
+    allocate(visc%Kd_turb(isd:ied,jsd:jed,nz+1)) ; visc%Kd_turb(:,:,:) = 0.0
+    allocate(visc%TKE_turb(isd:ied,jsd:jed,nz+1)) ; visc%TKE_turb(:,:,:) = 0.0
+    allocate(visc%Kv_turb(isd:ied,jsd:jed,nz+1)) ; visc%Kv_turb(:,:,:) = 0.0
 
     vd = vardesc("Kd_turb","Turbulent diffusivity at interfaces",'h','i','s',"m2 s-1")
     call register_restart_field(visc%Kd_turb, vd, .false., restart_CS)
@@ -1497,6 +1500,8 @@ subroutine set_visc_register_restarts(G, param_file, visc, restart_CS)
     vd = vardesc("TKE_turb","Turbulent kinetic energy per unit mass at interfaces", &
                  'h','i','s',"m2 s-2")
     call register_restart_field(visc%TKE_turb, vd, .false., restart_CS)
+    vd = vardesc("Kv_turb","Turbulent viscosity at interfaces",'h','i','s',"m2 s-1")
+    call register_restart_field(visc%Kv_turb, vd, .false., restart_CS)
   endif
 
 end subroutine set_visc_register_restarts
@@ -1732,6 +1737,7 @@ subroutine set_visc_end(visc, CS)
   endif
   if (associated(visc%Kd_turb)) deallocate(visc%Kd_turb)
   if (associated(visc%TKE_turb)) deallocate(visc%TKE_turb)
+  if (associated(visc%Kv_turb)) deallocate(visc%Kv_turb)
   if (associated(visc%ustar_bbl)) deallocate(visc%ustar_bbl)
   if (associated(visc%TKE_bbl)) deallocate(visc%TKE_bbl)
   if (associated(visc%taux_shelf)) deallocate(visc%taux_shelf)
