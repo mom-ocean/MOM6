@@ -278,6 +278,9 @@ MAXVEL = 6.0                    !   [m s-1] default = 3.0E+08
 USE_JACKSON_PARAM = True        !   [Boolean] default = False
                                 ! If true, use the Jackson-Hallberg-Legg (JPO 2008)
                                 ! shear mixing parameterization.
+PRANDTL_TURB = 1.0              !   [nondim] default = 0.0
+                                ! The turbulent Prandtl number applied to shear
+                                ! instability.
 DRAG_BG_VEL = 0.1               !   [m s-1] default = 0.0
                                 ! DRAG_BG_VEL is either the assumed bottom velocity (with
                                 ! LINEAR_DRAG) or an unresolved  velocity that is

@@ -56,11 +56,6 @@ DT = 3600.0                     !   [s]
                                 ! is actually used will be an integer fraction of the
                                 ! forcing time-step (DT_FORCING in ocean-only mode or the
                                 ! coupling timestep in coupled mode.)
-DT_THERM = 3600.0               !   [s] default = 3600.0
-                                ! The thermodynamic and tracer advection time step.
-                                ! Ideally DT_THERM should be an integer multiple of DT
-                                ! and less than the forcing or coupling time-step.
-                                ! By default DT_THERM is set to DT.
 MIN_Z_DIAG_INTERVAL = 2.16E+04  !   [s] default = 0.0
                                 ! The minimum amount of time in seconds between
                                 ! calculations of depth-space diagnostics. Making this
@@ -278,6 +273,9 @@ MAXVEL = 6.0                    !   [m s-1] default = 3.0E+08
 USE_JACKSON_PARAM = True        !   [Boolean] default = False
                                 ! If true, use the Jackson-Hallberg-Legg (JPO 2008)
                                 ! shear mixing parameterization.
+PRANDTL_TURB = 1.0              !   [nondim] default = 0.0
+                                ! The turbulent Prandtl number applied to shear
+                                ! instability.
 DRAG_BG_VEL = 0.1               !   [m s-1] default = 0.0
                                 ! DRAG_BG_VEL is either the assumed bottom velocity (with
                                 ! LINEAR_DRAG) or an unresolved  velocity that is
@@ -403,10 +401,6 @@ MAXCPU = 2.88E+04               !   [wall-clock seconds] default = -1.0
                                 ! factor of the number of processors used.
 
 ! === Parameters of module MOM_main (MOM_driver) ===
-DT_FORCING = 3600.0             !   [s] default = 3600.0
-                                ! The time step for changing forcing, coupling with other
-                                ! components, or potentially writing certain diagnostics.
-                                ! The default value is given by DT.
 DAYMAX = 365.0                  !   [days]
                                 ! The final time of the whole simulation, in units of
                                 ! TIMEUNIT seconds.  This also sets the potential end
@@ -422,6 +416,6 @@ RESTINT = 3650.0                !   [days] default = 0.0
                                 ! The interval between saves of the restart file in units
                                 ! of TIMEUNIT.  Use 0 (the default) to not save
                                 ! incremental restart files at all.
-ENERGYSAVEDAYS = 1.0            !   [days] default = 7200.0
+ENERGYSAVEDAYS = 1.0            !   [days] default = 3600.0
                                 ! The interval in units of TIMEUNIT between saves of the
                                 ! energies of the run and other globally summed diagnostics.
