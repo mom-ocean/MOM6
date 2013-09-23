@@ -1160,66 +1160,14 @@ VARIABLE_WINDS = True           !   [Boolean] default = True
 VARIABLE_BUOYFORCE = True       !   [Boolean] default = True
                                 ! If true, the buoyancy forcing varies in time after the
                                 ! initialization of the model.
-BUOY_CONFIG = "file"            !
+BUOY_CONFIG = "data_override"   !
                                 ! The character string that indicates how buoyancy forcing
                                 ! is specified. Valid options include (file), (zero),
                                 ! (linear), (USER), and (NONE).
-ARCHAIC_OMIP_FORCING_FILE = True !   [Boolean] default = True
-                                ! If true, use the forcing variable decomposition from
-                                ! the old German OMIP prescription that predated CORE. If
-                                ! false, use the variable groupings available from MOM
-                                ! output diagnostics of forcing variables.
-LONGWAVEDOWN_FILE = "forcing.nc" !
-                                ! The file with the downward longwave heat flux, in
-                                ! variable lwdn_sfc.
-LONGWAVEUP_FILE = "forcing.nc"  !
-                                ! The file with the upward longwave heat flux, in
-                                ! variable lwup_sfc.
-EVAPORATION_FILE = "forcing.nc" !
-                                ! The file with the evaporative moisture flux, in
-                                ! variable evap.
-SENSIBLEHEAT_FILE = "forcing.nc" !
-                                ! The file with the sensible heat flux, in
-                                ! variable shflx.
-SHORTWAVEUP_FILE = "forcing.nc" !
-                                ! The file with the upward shortwave heat flux.
-SHORTWAVEDOWN_FILE = "forcing.nc" !
-                                ! The file with the downward shortwave heat flux.
-SNOW_FILE = "forcing.nc"        !
-                                ! The file with the downward frozen precip flux, in
-                                ! variable snow.
-PRECIP_FILE = "forcing.nc"      !
-                                ! The file with the downward total precip flux, in
-                                ! variable precip.
-FRESHDISCHARGE_FILE = "forcing_monthly.nc" !
-                                ! The file with the fresh and frozen runoff/calving fluxes,
-                                ! invariables disch_w and disch_s.
-SSTRESTORE_FILE = ""            !
-                                ! The file with the SST toward which to restore in the
-                                ! variable given by SST_RESTORE_VAR.
-SALINITYRESTORE_FILE = ""       !
-                                ! The file with the surface salinity toward which to
-                                ! restore in the variable given by SSS_RESTORE_VAR.
-WIND_CONFIG = "file"            !
+WIND_CONFIG = "data_override"   !
                                 ! The character string that indicates how wind forcing
                                 ! is specified. Valid options include (file), (2gyre),
                                 ! (1gyre), (gyres), (zero), and (USER).
-WIND_FILE = "forcing.nc"        !
-                                ! The file in which the wind stresses are found in
-                                ! variables STRESS_X and STRESS_Y.
-WINDSTRESS_X_VAR = "STRESS_X"   ! default = "STRESS_X"
-                                ! The name of the x-wind stress variable in WIND_FILE.
-WINDSTRESS_Y_VAR = "STRESS_Y"   ! default = "STRESS_Y"
-                                ! The name of the y-wind stress variable in WIND_FILE.
-WINDSTRESS_STAGGER = "A"        ! default = "A"
-                                ! A character indicating how the wind stress components
-                                ! are staggered in WIND_FILE.  This may be A or C for now.
-WINDSTRESS_SCALE = 1.0          !   [nondim] default = 1.0
-                                ! A value by which the wind stresses in WIND_FILE are rescaled.
-USTAR_FORCING_VAR = ""          !   [nondim] default = ""
-                                ! The name of the friction velocity variable in WIND_FILE
-                                ! or blank to get ustar from the wind stresses plus the
-                                ! gustiness.
 RESTOREBUOY = False             !   [Boolean] default = False
                                 ! If true, the buoyancy fluxes drive the model back
                                 ! toward some specified surface state with a rate

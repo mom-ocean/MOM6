@@ -357,48 +357,14 @@ KHTR = 600.0                    !   [m2 s-1] default = 0.0
                                 ! The background along-isopycnal tracer diffusivity.
 
 ! === Parameters of module MOM_surface_forcing ===
-BUOY_CONFIG = "file"            !
+BUOY_CONFIG = "data_override"   !
                                 ! The character string that indicates how buoyancy forcing
                                 ! is specified. Valid options include (file), (zero),
                                 ! (linear), (USER), and (NONE).
-LONGWAVEDOWN_FILE = "forcing.nc" !
-                                ! The file with the downward longwave heat flux, in
-                                ! variable lwdn_sfc.
-LONGWAVEUP_FILE = "forcing.nc"  !
-                                ! The file with the upward longwave heat flux, in
-                                ! variable lwup_sfc.
-EVAPORATION_FILE = "forcing.nc" !
-                                ! The file with the evaporative moisture flux, in
-                                ! variable evap.
-SENSIBLEHEAT_FILE = "forcing.nc" !
-                                ! The file with the sensible heat flux, in
-                                ! variable shflx.
-SHORTWAVEUP_FILE = "forcing.nc" !
-                                ! The file with the upward shortwave heat flux.
-SHORTWAVEDOWN_FILE = "forcing.nc" !
-                                ! The file with the downward shortwave heat flux.
-SNOW_FILE = "forcing.nc"        !
-                                ! The file with the downward frozen precip flux, in
-                                ! variable snow.
-PRECIP_FILE = "forcing.nc"      !
-                                ! The file with the downward total precip flux, in
-                                ! variable precip.
-FRESHDISCHARGE_FILE = "forcing_monthly.nc" !
-                                ! The file with the fresh and frozen runoff/calving fluxes,
-                                ! invariables disch_w and disch_s.
-SSTRESTORE_FILE = ""            !
-                                ! The file with the SST toward which to restore in the
-                                ! variable given by SST_RESTORE_VAR.
-SALINITYRESTORE_FILE = ""       !
-                                ! The file with the surface salinity toward which to
-                                ! restore in the variable given by SSS_RESTORE_VAR.
-WIND_CONFIG = "file"            !
+WIND_CONFIG = "data_override"   !
                                 ! The character string that indicates how wind forcing
                                 ! is specified. Valid options include (file), (2gyre),
                                 ! (1gyre), (gyres), (zero), and (USER).
-WIND_FILE = "forcing.nc"        !
-                                ! The file in which the wind stresses are found in
-                                ! variables STRESS_X and STRESS_Y.
 READ_GUST_2D = True             !   [Boolean] default = False
                                 ! If true, use a 2-dimensional gustiness supplied from
                                 ! an input file
