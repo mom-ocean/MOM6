@@ -47,6 +47,7 @@ type, public :: verticalGrid_type
                   ! e.g. "Target Potential Density" or "Height"
   real ALLOCABLE_, dimension(NKMEM_) :: sLayer ! Coordinate values of layer centers
   real ALLOCABLE_, dimension(NK_INTERFACE_) :: sInterface ! Coordinate values on interfaces
+  integer :: direction = 1 ! Direction defaults to 1, positive up.
 
   ! The following variables give information about the vertical grid.
   logical :: Boussinesq     ! If true, make the Boussinesq approximation.

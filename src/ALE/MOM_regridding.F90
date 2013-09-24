@@ -1551,6 +1551,9 @@ function getCoordinateInterfaces( CS )
     getCoordinateInterfaces(k+1) = getCoordinateInterfaces(k) &
                                   -CS%coordinateResolution(k)
   enddo
+  ! The following line has an "abs()" to allow ferret users to reference
+  ! data by index. It is a temporary work around...  :(  -AJA
+  getCoordinateInterfaces(:) = abs( getCoordinateInterfaces(:) )
 
 end function getCoordinateInterfaces
 
@@ -1586,13 +1589,15 @@ function getCoordinateShortName( CS )
 
   select case ( CS%regridding_scheme )
     case ( REGRIDDING_ZSTAR )
-      getCoordinateShortName = 'z*'
+      !getCoordinateShortName = 'z*'
+      ! The following line is a temporary work around...  :(  -AJA
+      getCoordinateShortName = 'pseaduo-depth, -z*'
     case ( REGRIDDING_SIGMA )
-      getCoordinateShortName = 'Sigma'
+      getCoordinateShortName = 'sigma'
     case ( REGRIDDING_RHO )  
-      getCoordinateShortName = 'Rho'
+      getCoordinateShortName = 'rho'
     case ( REGRIDDING_ARBITRARY )
-      getCoordinateShortName = 'Arbitrary'
+      getCoordinateShortName = 'coordinate'
     case default
       call MOM_error(FATAL,'MOM_regridding, getCoordinateShortName: '//&
                      'Unknown regridding scheme selected!')

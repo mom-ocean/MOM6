@@ -156,9 +156,11 @@ subroutine set_axes_info(G, param_file, diag, set_vertical)
 
   if (set_vert) then
     id_zl = diag_axis_init('zl', zlev, trim(G%GV%zAxisUnits), 'z', &
-                           'Layer '//trim(G%GV%zAxisLongName))
+                           'Layer '//trim(G%GV%zAxisLongName),     &
+                           direction=G%GV%direction)
     id_zi = diag_axis_init('zi', zinter, trim(G%GV%zAxisUnits), 'z', &
-                           'Interface '//trim(G%GV%zAxisLongName))
+                           'Interface '//trim(G%GV%zAxisLongName),   &
+                           direction=G%GV%direction)
   else
     id_zl = -1 ; id_zi = -1
   endif

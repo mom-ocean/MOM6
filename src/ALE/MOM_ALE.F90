@@ -667,6 +667,8 @@ subroutine ALE_updateVerticalGridType( CS, GV )
   GV%sLayer(1:nk) = 0.5*( GV%sInterface(1:nk) + GV%sInterface(2:nk+1) )
   GV%zAxisUnits = getCoordinateUnits( CS%regridCS )
   GV%zAxisLongName = getCoordinateShortName( CS%regridCS )
+  GV%direction = -1 ! Because of ferret in z* mode. Need method to set
+                    ! as function of coordinae mode.
 
 end subroutine ALE_updateVerticalGridType
 
