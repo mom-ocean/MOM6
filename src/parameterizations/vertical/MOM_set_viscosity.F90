@@ -1473,23 +1473,27 @@ subroutine set_visc_register_restarts(G, param_file, visc, restart_CS)
 !                   fields.  Allocated here.
 !  (in)      restart_CS - A pointer to the restart control structure.
   type(vardesc) :: vd
-  logical :: use_kappa_shear, adiabatic
+  logical :: use_kappa_shear, adiabatic, useKPP
   integer :: isd, ied, jsd, jed, nz
   character(len=40)  :: mod = "MOM_set_visc"  ! This module's name.
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = G%ke
 
   call get_param(param_file, mod, "ADIABATIC", adiabatic, default=.false., &
                  do_not_log=.true.)
-  use_kappa_shear = .false.
+  use_kappa_shear = .false. ; useKPP = .false.
   if (.not.adiabatic) then
     call get_param(param_file, mod, "USE_JACKSON_PARAM", use_kappa_shear, &
                  "If true, use the Jackson-Hallberg-Legg (JPO 2008) \n"//& 
                  "shear mixing parameterization.", default=.false., &
                   do_not_log=.true.)
+    call get_param(param_file, mod, "USE_KPP", useKPP, &
+                 "If true, turns on the [CVmix] KPP scheme of Large et al., 1984,\n"// &
+                 "to calculate diffusivities and non-local transport in the OBL.", &
+                 default=.false., do_not_log=.true.)
   endif
 
 
-  if (use_kappa_shear) then
+  if (use_kappa_shear .or. useKPP) then
     allocate(visc%Kd_turb(isd:ied,jsd:jed,nz+1)) ; visc%Kd_turb(:,:,:) = 0.0
     allocate(visc%TKE_turb(isd:ied,jsd:jed,nz+1)) ; visc%TKE_turb(:,:,:) = 0.0
     allocate(visc%Kv_turb(isd:ied,jsd:jed,nz+1)) ; visc%Kv_turb(:,:,:) = 0.0

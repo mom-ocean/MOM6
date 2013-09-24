@@ -53,7 +53,7 @@ type, public :: KPP_CS ; private
   integer :: id_Vt2 = -1, id_BulkUz2 = -1, id_BulkDrho = -1
   integer :: id_uStar = -1, id_buoyFlux = -1
   integer :: id_QminusSW = -1, id_netS = -1
-  integer :: id_Kt_KPP = -1, id_Ks_KPP = -1
+  integer :: id_Kt_KPP = -1, id_Ks_KPP = -1, id_Kv_KPP = -1
   integer :: id_NLTt = -1, id_NLTs = -1
   integer :: id_sigma = -1
   integer :: id_dSdt = -1, id_dTdt = -1
@@ -69,6 +69,7 @@ type, public :: KPP_CS ; private
   real, allocatable, dimension(:,:,:) :: N2 ! Brunt-Vaisala frequency (1/s2)
   real, allocatable, dimension(:,:,:) :: Vt2 ! Unresolved shear turbulence (1/s2)
   real, allocatable, dimension(:,:,:) :: Kt_KPP, Ks_KPP ! Temp/scalar diffusivity due to KPP (m2/s)
+  real, allocatable, dimension(:,:,:) :: Kv_KPP ! Viscosity due to KPP (m2/s)
 
 end type KPP_CS
 
@@ -185,6 +186,9 @@ subroutine KPP_init(paramFile, G, diag, Time, CS, passive)
   CS%id_Ks_KPP = register_diag_field('ocean_model', 'KPP_Ksalt', diag%axesTi, Time, &
       'Salt diffusivity due to KPP, as calculated by [CVmix] KPP', 'm2/s')
   if (CS%id_Ks_KPP > 0) allocate( CS%Ks_KPP( SZI_(G), SZJ_(G), SZK_(G)+1 ) )
+  CS%id_Kv_KPP = register_diag_field('ocean_model', 'KPP_Kv', diag%axesTi, Time, &
+      'Vertical viscosity due to KPP, as calculated by [CVmix] KPP', 'm2/s')
+  if (CS%id_Kv_KPP > 0) allocate( CS%Kv_KPP( SZI_(G), SZJ_(G), SZK_(G)+1 ) )
   CS%id_NLTt = register_diag_field('ocean_model', 'KPP_NLtransport_heat', diag%axesTi, Time, &
       'Non-local transport for heat, as calculated by [CVmix] KPP', 'nondim')
   CS%id_NLTs = register_diag_field('ocean_model', 'KPP_NLtransport_salt', diag%axesTi, Time, &
@@ -205,11 +209,12 @@ subroutine KPP_init(paramFile, G, diag, Time, CS, passive)
   if (CS%id_Vt2 > 0) CS%Vt2(:,:,:) = 0.
   if (CS%id_Kt_KPP > 0) CS%Kt_KPP(:,:,:) = 0.
   if (CS%id_Ks_KPP > 0) CS%Ks_KPP(:,:,:) = 0.
+  if (CS%id_Kv_KPP > 0) CS%Kv_KPP(:,:,:) = 0.
 
 end subroutine KPP_init
 
 
-subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, Ks, nonLocalTransHeat, nonLocalTransScalar)
+subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, Ks, Kv, nonLocalTransHeat, nonLocalTransScalar)
 ! Calculates diffusivity and non-local transport for KPP parameterization 
 
 ! Arguments
@@ -227,6 +232,8 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
                                                                     ! (out) Vertical diffusivity including KPP (m2/s)
   real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(inout) :: Ks ! (in) Vertical diffusivity of salt in interior (m2/s)
                                                                     ! (out) Vertical diffusivity including KPP (m2/s)
+  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(inout) :: Kv ! (in) Vertical viscosity in interior (m2/s)
+                                                                    ! (out) Vertical viscosity including KPP (m2/s)
   real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(inout) :: nonLocalTransHeat, nonLocalTransScalar ! Temp/scalar non-local transport (m/s)
 
 ! Local variables
@@ -372,7 +379,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
       ! Now call KPP proper to obtain BL diffusivities, viscosities and non-local transports
       Kdiffusivity(:,1) = Kt(i,j,:) ! Diffusivty for heat
       Kdiffusivity(:,2) = Ks(i,j,:) ! Diffusivity for salt
-      Kviscosity(:) = Ks(i,j,:) ! Viscosity    ???????
+      Kviscosity(:) = Kv(i,j,:) ! Viscosity    ???????
       call cvmix_coeffs_kpp(Kdiffusivity, & ! (inout) Total heat/salt diffusivities (m2/s)
                             Kviscosity,   & ! (inout) Total viscosity (m2/s)
                             iFaceHeight,  & ! (in) Height of interfaces (m)
@@ -407,11 +414,17 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
           if (Kdiffusivity(k,2) /= Ks(i,j,k)) CS%Ks_KPP(i,j,k) = Kdiffusivity(k,2) ! Salt diffusivity due to KPP
         enddo
       endif
+      if (CS%id_Kv_KPP > 0) then
+        do k = 1, G%ke
+          if (Kviscosity(k) /= Kv(i,j,k)) CS%Kv_KPP(i,j,k) = Kviscosity(k) ! Viscosity due to KPP
+        enddo
+      endif
 
       ! Update output of routine
       if (.not. CS%passiveMode) then
         Kt(i,j,:) = Kdiffusivity(:,1)
         Ks(i,j,:) = Kdiffusivity(:,2)
+        Kv(i,j,:) = Kviscosity(:)
       endif
 
       if (CS%debug .and. i==G%isc .and. j==G%jsc) then
@@ -445,6 +458,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
   if (CS%id_buoyFlux > 0) call post_data(CS%id_buoyFlux, buoyFlux, CS%diag)
   if (CS%id_Kt_KPP > 0) call post_data(CS%id_Kt_KPP, CS%Kt_KPP, CS%diag)
   if (CS%id_Ks_KPP > 0) call post_data(CS%id_Ks_KPP, CS%Ks_KPP, CS%diag)
+  if (CS%id_Kv_KPP > 0) call post_data(CS%id_Kv_KPP, CS%Kv_KPP, CS%diag)
   if (CS%id_NLTt > 0) call post_data(CS%id_NLTt, nonLocalTransHeat, CS%diag)
   if (CS%id_NLTs > 0) call post_data(CS%id_NLTs, nonLocalTransScalar, CS%diag)
 

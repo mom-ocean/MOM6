@@ -462,7 +462,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     if (associated(visc%Kd_extra_T)) &
         Kd_heat(:,:,:) = Kd_heat(:,:,:) + visc%Kd_extra_T(:,:,:)
     call KPP_calculate(CS%KPP_CSp, G, h, tv%T, tv%S, u, v, tv%eqn_of_state, &
-           fluxes%ustar, buoyancyFlux, Kd_heat, Kd_salt, KPP_NLTheat, KPP_NLTscalar)
+           fluxes%ustar, buoyancyFlux, Kd_heat, Kd_salt, visc%Kv_turb, KPP_NLTheat, KPP_NLTscalar)
     if (.not. CS%KPPisPassive) then
       if (associated(visc%Kd_turb) .and. CS%matchKPPwithoutKappaShear) then
         Kd_salt(:,:,:) = ( Kd_salt(:,:,:) + visc%Kd_turb(:,:,:) )  ! Put back part due to Kappa-shear
