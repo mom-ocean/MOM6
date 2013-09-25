@@ -142,6 +142,7 @@ type, public :: surface_forcing_CS ; private
   logical :: archaic_OMIP_file = .true.
   logical :: dataOverrideIsInitialized = .false.
   real :: wind_scale         ! A value by which wind-stresses are scaled, ND.
+  real :: constantHeatForcing ! A value used for sensible heat flux when buoy_config="const"
   character(len=8)   :: wind_stagger
   type(tracer_flow_control_CS), pointer :: tracer_flow_CSp => NULL()
 !###  type(ctrl_forcing_CS), pointer :: ctrl_forcing_CSp => NULL()
@@ -268,6 +269,8 @@ subroutine set_forcing(state, fluxes, day_start, day_interval, G, CS)
       call buoyancy_forcing_from_data_override(state, fluxes, day_center, dt, G, CS)
     elseif (trim(CS%buoy_config) == "zero") then
       call buoyancy_forcing_zero(state, fluxes, day_center, dt, G, CS)
+    elseif (trim(CS%buoy_config) == "const") then
+      call buoyancy_forcing_const(state, fluxes, day_center, dt, G, CS)
     elseif (trim(CS%buoy_config) == "linear") then
       call buoyancy_forcing_linear(state, fluxes, day_center, dt, G, CS)
     elseif (trim(CS%buoy_config) == "MESO") then
@@ -1423,6 +1426,82 @@ subroutine buoyancy_forcing_zero(state, fluxes, day, dt, G, CS)
 
 end subroutine buoyancy_forcing_zero
 
+subroutine buoyancy_forcing_const(state, fluxes, day, dt, G, CS)
+  type(surface),         intent(inout) :: state
+  type(forcing),         intent(inout) :: fluxes
+  type(time_type),       intent(in)    :: day
+  real,                  intent(in)    :: dt
+  type(ocean_grid_type), intent(in)    :: G
+  type(surface_forcing_CS), pointer    :: CS
+!    This subroutine specifies the current surface fluxes of buoyancy
+!  temperature and fresh water.  It may also be modified to add
+!  surface fluxes of user provided tracers.
+!
+! Arguments: state - A structure containing fields that describe the
+!                    surface state of the ocean.
+!  (out)     fluxes - A structure containing pointers to any possible
+!                     forcing fields.  Unused fields have NULL ptrs.
+!  (in)      day - Time of the fluxes.
+!  (in)      dt - The amount of time over which the fluxes apply.
+!  (in)      G - The ocean's grid structure.
+!  (in)      CS - A pointer to the control structure returned by a previous
+!                 call to surface_forcing_init.
+  integer :: i, j, is, ie, js, je
+
+  if ( CS%use_temperature ) then
+    if (.not.associated(fluxes%evap)) then
+      allocate(fluxes%evap(G%isd:G%ied,G%jsd:G%jed))
+      fluxes%evap(:,:) = 0.0
+    endif
+    if (.not.associated(fluxes%liq_precip)) then
+      allocate(fluxes%liq_precip(G%isd:G%ied,G%jsd:G%jed))
+      fluxes%liq_precip(:,:) = 0.0
+    endif
+    if (.not.associated(fluxes%froz_precip)) then
+      allocate(fluxes%froz_precip(G%isd:G%ied,G%jsd:G%jed))
+      fluxes%froz_precip(:,:) = 0.0
+    endif
+    if (.not.associated(fluxes%liq_runoff)) then
+      allocate(fluxes%liq_runoff(G%isd:G%ied,G%jsd:G%jed))
+      fluxes%liq_runoff(:,:) = 0.0
+    endif
+    if (.not.associated(fluxes%froz_runoff)) then
+      allocate(fluxes%froz_runoff(G%isd:G%ied,G%jsd:G%jed))
+      fluxes%froz_runoff(:,:) = 0.0
+    endif
+    if (.not.associated(fluxes%virt_precip)) then
+      allocate(fluxes%virt_precip(G%isd:G%ied,G%jsd:G%jed))
+      fluxes%virt_precip(:,:) = 0.0
+    endif
+
+    !   Specify the heat fluxes by setting the following, all in units
+    ! of W m-2 and positive for heat fluxes into the ocean.
+    if (.not.associated(fluxes%sw)) then
+      allocate(fluxes%sw(G%isd:G%ied,G%jsd:G%jed)) ; fluxes%sw(:,:) = 0.0
+    endif
+    if (.not.associated(fluxes%lw)) then
+      allocate(fluxes%lw(G%isd:G%ied,G%jsd:G%jed)) ; fluxes%lw(:,:) = 0.0
+    endif
+    if (.not.associated(fluxes%latent)) then
+      allocate(fluxes%latent(G%isd:G%ied,G%jsd:G%jed)) ; fluxes%latent(:,:) = 0.0
+    endif
+    if (.not.associated(fluxes%sens)) then
+      allocate(fluxes%sens(G%isd:G%ied,G%jsd:G%jed)) ; fluxes%sens(:,:) = CS%constantHeatForcing
+    endif
+  else
+    if (.not.associated(fluxes%buoy)) then
+      allocate(fluxes%buoy(G%isd:G%ied,G%jsd:G%jed)) ; fluxes%buoy(:,:) = 0.0
+    endif
+  endif
+
+  if (associated(fluxes%p_surf)) then
+    do j=js,je ; do i=is,ie
+      fluxes%p_surf(i,j) = 0.0
+    enddo ; enddo
+  endif
+
+end subroutine buoyancy_forcing_const
+
 subroutine buoyancy_forcing_linear(state, fluxes, day, dt, G, CS)
   type(surface),         intent(inout) :: state
   type(forcing),         intent(inout) :: fluxes
@@ -1880,6 +1959,11 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, tracer_flow_CSp)
 
     CS%SSTrestore_file = trim(CS%inputdir)//trim(CS%SSTrestore_file)
     CS%salinityrestore_file = trim(CS%inputdir)//trim(CS%salinityrestore_file)
+  elseif (trim(CS%buoy_config) == "const") then
+    call get_param(param_file, mod, "SENSIBLE_HEAT_FLUX", CS%constantHeatForcing, &
+                 "A constant heat forcing (positive into ocean) applied \n"//&
+                 "through the sensible heat flux field. ", &
+                 units='W/m2', default=0., fail_if_missing=.true.)
   endif
   call get_param(param_file, mod, "WIND_CONFIG", CS%wind_config, &
                  "The character string that indicates how wind forcing \n"//&
