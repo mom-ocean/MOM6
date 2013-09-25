@@ -933,7 +933,7 @@ subroutine dzFromH1H2( n1, h1, n2, h2, dx )
     write(0,*) 'h2=',h2
     write(0,*) 'dx=',dx
     write(0,*) 'x1,x2,x2-x1',x1,x2,x2-x1
-    call MOM_error(FATAL,'MOM_regridding, dzFromH1H2: Bottom has moved!')
+    call MOM_error(FATAL,'MOM_remapping, dzFromH1H2: Bottom has moved!')
   endif
 #endif
 

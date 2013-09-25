@@ -580,6 +580,7 @@ integer :: id_clock_thick_diff, id_clock_ml_restrat
 integer :: id_clock_diagnostics, id_clock_Z_diag
 integer :: id_clock_init, id_clock_MOM_init
 integer :: id_clock_pass, id_clock_pass_init ! Also in dynamics d/r
+integer :: id_clock_ALE
 
 contains
 
@@ -775,7 +776,9 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
             call hchksum(CS%tv%S,"Pre-ALE 1 S", G, haloshift=1)
             call check_redundant("Pre-ALE 1 ", u, v, G)
           endif
+          call cpu_clock_begin(id_clock_ALE)
           call ALE_main(G, h, u, v, CS%tv, CS%ALE_CSp)
+          call cpu_clock_end(id_clock_ALE)
           if (CS%debug) then
             call MOM_state_chksum("Post-ALE 1 ", u, v, h, CS%uh, CS%vh, G)
             call hchksum(CS%tv%T,"Post-ALE 1 T", G, haloshift=1)
@@ -1049,7 +1052,9 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
             call hchksum(CS%tv%S,"Pre-ALE S", G, haloshift=1)
             call check_redundant("Pre-ALE ", u, v, G)
           endif
+          call cpu_clock_begin(id_clock_ALE)
           call ALE_main(G, h, u, v, CS%tv, CS%ALE_CSp)
+          call cpu_clock_end(id_clock_ALE)
           if (CS%debug) then
             call MOM_state_chksum("Post-ALE ", u, v, h, CS%uh, CS%vh, G)
             call hchksum(CS%tv%T,"Post-ALE T", G, haloshift=1)
@@ -2031,6 +2036,7 @@ subroutine MOM_timing_init(CS)
    id_clock_ml_restrat = cpu_clock_id('(Ocean mixed layer restrat)', grain=CLOCK_MODULE)
  id_clock_diagnostics = cpu_clock_id('(Ocean collective diagnostics)', grain=CLOCK_MODULE)
  id_clock_Z_diag = cpu_clock_id('(Ocean Z-space diagnostics)', grain=CLOCK_MODULE)
+ id_clock_ALE = cpu_clock_id('(Ocean ALE)', grain=CLOCK_MODULE)
 
 end subroutine MOM_timing_init
 
