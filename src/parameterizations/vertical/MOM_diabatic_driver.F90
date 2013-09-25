@@ -66,15 +66,17 @@ module MOM_diabatic_driver
 !********+*********+*********+*********+*********+*********+*********+**
 
 use MOM_bulk_mixed_layer, only : bulkmixedlayer, bulkmixedlayer_init, bulkmixedlayer_CS
+use MOM_checksums, only : hchksum, uchksum, vchksum
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock, only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
-use MOM_entrain_diffusive, only : entrainment_diffusive, entrain_diffusive_init
-use MOM_entrain_diffusive, only : entrain_diffusive_end, entrain_diffusive_CS
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator, only : diag_ctrl, time_type
 use MOM_diag_to_Z, only : diag_to_Z_CS, register_Zint_diag, calc_Zint_diags
+use MOM_diffConvection, only : diffConvection_CS, diffConvection_init
+use MOM_diffConvection, only : diffConvection_calculate, diffConvection_end
 use MOM_domains, only : pass_var, To_West, To_South
-use MOM_checksums, only : hchksum, uchksum, vchksum
+use MOM_entrain_diffusive, only : entrainment_diffusive, entrain_diffusive_init
+use MOM_entrain_diffusive, only : entrain_diffusive_end, entrain_diffusive_CS
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing, optics_type, MOM_forcing_chksum
@@ -150,6 +152,8 @@ type, public :: diabatic_CS ; private
   logical :: useKPP          ! If true, use [CVmix] KPP diffusivities and non-local
                              ! transport.
   logical :: KPPisPassive    ! If true, KPP is in passive mode, not changing answers.
+  logical :: useConvection   ! If true, calculate large diffusivities when column
+                             ! is statically unstable.
   logical :: matchKPPwithoutKappaShear ! If true, KPP is matched to interior diffusivities
                              ! that do NOT include kappa-shear diffusivity.
   logical :: debug           ! If true, write verbose checksums for debugging purposes.
@@ -175,6 +179,7 @@ type, public :: diabatic_CS ; private
   type(optics_type),          pointer :: optics => NULL()
   type(diag_to_Z_CS),         pointer :: diag_to_Z_CSp => NULL()
   type(KPP_CS),               pointer :: KPP_CSp => NULL()
+  type(diffConvection_CS),    pointer :: Conv_CSp => NULL()
 end type diabatic_CS
 
 integer :: id_clock_entrain, id_clock_mixedlayer, id_clock_set_diffusivity
@@ -476,6 +481,10 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     endif ! not passive
     call cpu_clock_end(id_clock_kpp)
   endif
+
+  ! Check for static instabilities and increase Kd_int where unstable
+  if (CS%useConvection) call diffConvection_calculate(CS%Conv_CSp, &
+         G, h, tv%T, tv%S, tv%eqn_of_state, Kd_int)
 
   if (CS%useKPP) then
     call cpu_clock_begin(id_clock_kpp)
@@ -1551,6 +1560,9 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
   call set_diffusivity_init(Time, G, param_file, diag, CS%set_diff_CSp, diag_to_Z_CSp)
   if (CS%useKPP) call KPP_init(param_file, G, diag, Time, CS%KPP_CSp, passive=CS%KPPisPassive)
 
+  ! CS%useConvection is set True by diffConvection_init() IF convection will be used.
+  call diffConvection_init(param_file, G, diag, Time, CS%useConvection, CS%Conv_CSp)
+
   call entrain_diffusive_init(Time, G, param_file, diag, CS%entrain_diffusive_CSp)
   if (CS%use_geothermal) &
     call geothermal_init(Time, G, param_file, diag, CS%geothermal_CSp)
@@ -1605,6 +1617,7 @@ subroutine diabatic_driver_end(CS)
   call entrain_diffusive_end(CS%entrain_diffusive_CSp)
   call set_diffusivity_end(CS%set_diff_CSp)
   if (CS%useKPP) call KPP_end(CS%KPP_CSp)
+  if (CS%useConvection) call diffConvection_end(CS%Conv_CSp)
 
   if (associated(CS%optics)) then
     call opacity_end(CS%opacity_CSp, CS%optics)
