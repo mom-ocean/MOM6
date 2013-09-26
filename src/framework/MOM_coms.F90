@@ -33,7 +33,7 @@ implicit none ; private
 public :: PE_here, root_PE, num_PEs, MOM_infra_init, MOM_infra_end
 public :: broadcast, sum_across_PEs, min_across_PEs, max_across_PEs
 public :: reproducing_sum, EFP_list_sum_across_PEs
-public :: EFP_plus, EFP_minus, EFP_to_real, real_to_EFP
+public :: EFP_plus, EFP_minus, EFP_to_real, real_to_EFP, EFP_real_diff
 public :: operator(+), operator(-), assignment(=)
 public :: query_EFP_overflow_error, reset_EFP_overflow_error
 
@@ -43,7 +43,7 @@ public :: query_EFP_overflow_error, reset_EFP_overflow_error
 integer(kind=8), parameter :: prec=2_8**46 ! The precision of each integer.
 real, parameter :: r_prec=2.0**46  ! A real version of prec.
 real, parameter :: I_prec=1.0/(2.0**46) ! The inverse of prec.
-integer, parameter :: max_count_prec=2**(63-46)-1 
+integer, parameter :: max_count_prec=2**(63-46)-1
                               ! The number of values that can be added together
                               ! with the current value of prec before there will
                               ! be roundoff problems.
@@ -75,14 +75,15 @@ interface assignment(=); module procedure EFP_assign ; end interface
 contains
 
 function reproducing_sum_2d(array, isr, ier, jsr, jer, EFP_sum, reproducing, &
-                            overflow_check) result(sum)
-  real, dimension(:,:), intent(in) :: array
-  integer,    optional, intent(in) :: isr, ier, jsr, jer
+                            overflow_check, err) result(sum)
+  real, dimension(:,:),     intent(in) :: array
+  integer,        optional, intent(in)  :: isr, ier, jsr, jer
   type(EFP_type), optional, intent(out) :: EFP_sum
-  logical,    optional, intent(in) :: reproducing
-  logical,    optional, intent(in) :: overflow_check
-  real                             :: sum
-  
+  logical,        optional, intent(in)  :: reproducing
+  logical,        optional, intent(in)  :: overflow_check
+  integer,        optional, intent(out) :: err
+  real                                  :: sum  ! Result
+
   !   This subroutine uses a conversion to an integer representation
   ! of real numbers to give order-invariant sums that will reproduce
   ! across PE count.  This idea comes from R. Hallberg and A. Adcroft.
@@ -126,7 +127,7 @@ function reproducing_sum_2d(array, isr, ier, jsr, jer, EFP_sum, reproducing, &
   repro = .true. ; if (present(reproducing)) repro = reproducing
   over_check = .true. ; if (present(overflow_check)) over_check = overflow_check
 
-  if (repro) then  
+  if (repro) then
     overflow_error = .false. ; NaN_error = .false. ; max_mag_term = 0.0
     ints_sum(:) = 0
     if (over_check) then
@@ -161,12 +162,19 @@ function reproducing_sum_2d(array, isr, ier, jsr, jer, EFP_sum, reproducing, &
       call carry_overflow(ints_sum, prec_error)
     endif
 
-    if (NaN_error) call MOM_error(FATAL, "NaN in input field of reproducing_sum(_2d).")
-    if (abs(max_mag_term) >= prec_error*pr(1)) then
-      write(mesg, '(ES13.5)') max_mag_term
-      call MOM_error(FATAL,"Overflow in reproducing_sum(_2d) conversion of "//trim(mesg))
+    if (present(err)) then
+      err = 0
+      if (overflow_error) err = err+2
+      if (NaN_error) err = err+4
+      if (err > 0) then ; do n=1,ni ; ints_sum(n) = 0 ; enddo ; endif
+    else
+      if (NaN_error) call MOM_error(FATAL, "NaN in input field of reproducing_sum(_2d).")
+      if (abs(max_mag_term) >= prec_error*pr(1)) then
+        write(mesg, '(ES13.5)') max_mag_term
+        call MOM_error(FATAL,"Overflow in reproducing_sum(_2d) conversion of "//trim(mesg))
+      endif
+      if (overflow_error) call MOM_error(FATAL, "Overflow in reproducing_sum(_2d).")
     endif
-    if (overflow_error) call MOM_error(FATAL, "Overflow in reproducing_sum(_2d).")
 
     call sum_across_PEs(ints_sum, ni)
 
@@ -179,8 +187,21 @@ function reproducing_sum_2d(array, isr, ier, jsr, jer, EFP_sum, reproducing, &
     enddo ; enddo
     call sum_across_PEs(rsum,1)
     sum = rsum(1)
-    
-    if (debug .or. present(EFP_sum)) ints_sum = real_to_ints(sum, prec_error)
+
+    if (present(err)) then ; err = 0 ; endif
+
+    if (debug .or. present(EFP_sum)) then
+      overflow_error = .false.
+      ints_sum = real_to_ints(sum, prec_error, overflow_error)
+      if (overflow_error) then
+        if (present(err)) then
+          err = err + 2
+        else
+          write(mesg, '(ES13.5)') sum
+          call MOM_error(FATAL,"Repro_sum_2d: Overflow in real_to_ints conversion of "//trim(mesg))
+        endif
+      endif
+    endif
   endif
 
   if (present(EFP_sum)) EFP_sum%v(:) = ints_sum(:)
@@ -192,13 +213,15 @@ function reproducing_sum_2d(array, isr, ier, jsr, jer, EFP_sum, reproducing, &
 
 end function reproducing_sum_2d
 
-function reproducing_sum_3d(array, isr, ier, jsr, jer, sums, EFP_sum) result(sum)
+function reproducing_sum_3d(array, isr, ier, jsr, jer, sums, EFP_sum, err) &
+                            result(sum)
   real, dimension(:,:,:),        intent(in) :: array
   integer,    optional,          intent(in) :: isr, ier, jsr, jer
   real, dimension(:), optional, intent(out) :: sums
-  type(EFP_type), optional,     intent(out) :: EFP_sum
-  real                                      :: sum
-  
+  type(EFP_type),     optional, intent(out) :: EFP_sum
+  integer,            optional, intent(out) :: err
+  real                                      :: sum  ! Result
+
   !   This subroutine uses a conversion to an integer representation
   ! of real numbers to give order-invariant sums that will reproduce
   ! across PE count.  This idea comes from R. Hallberg and A. Adcroft.
@@ -209,7 +232,7 @@ function reproducing_sum_3d(array, isr, ier, jsr, jer, sums, EFP_sum) result(sum
   integer(kind=8) :: prec_error
   character(len=256) :: mesg
   integer :: i, j, k, is, ie, js, je, ke, isz, jsz, n
-  
+
   if (num_PEs() > max_count_prec) call MOM_error(FATAL, &
     "reproducing_sum: Too many processors are being used for the value of "//&
     "prec.  Reduce prec to (2^63-1)/num_PEs.")
@@ -239,7 +262,7 @@ function reproducing_sum_3d(array, isr, ier, jsr, jer, sums, EFP_sum) result(sum
     je = jer
   endif
   jsz = je+1-js; isz = ie+1-is
-  
+
   if (present(sums)) then
     if (size(sums) > ke) call MOM_error(FATAL, "Sums is smaller than "//&
       "the vertical extent of array in reproducing_sum(_3d).")
@@ -265,12 +288,20 @@ function reproducing_sum_3d(array, isr, ier, jsr, jer, sums, EFP_sum) result(sum
                             real_to_ints(array(i,j,k), prec_error), prec_error);
       enddo ; enddo ; enddo
     endif
-    if (NaN_error) call MOM_error(FATAL, "NaN in input field of reproducing_sum(_3d).")
-    if (abs(max_mag_term) >= prec_error*pr(1)) then
-      write(mesg, '(ES13.5)') max_mag_term
-      call MOM_error(FATAL,"Overflow in reproducing_sum(_3d) conversion of "//trim(mesg))
+    if (present(err)) then
+      err = 0
+      if (abs(max_mag_term) >= prec_error*pr(1)) err = err+1
+      if (overflow_error) err = err+2
+      if (NaN_error) err = err+2
+      if (err > 0) then ; do k=1,ke ; do n=1,ni ; ints_sums(n,k) = 0 ; enddo ; enddo ; endif
+    else
+      if (NaN_error) call MOM_error(FATAL, "NaN in input field of reproducing_sum(_3d).")
+      if (abs(max_mag_term) >= prec_error*pr(1)) then
+        write(mesg, '(ES13.5)') max_mag_term
+        call MOM_error(FATAL,"Overflow in reproducing_sum(_3d) conversion of "//trim(mesg))
+      endif
+      if (overflow_error) call MOM_error(FATAL, "Overflow in reproducing_sum(_3d).")
     endif
-    if (overflow_error) call MOM_error(FATAL, "Overflow in reproducing_sum(_3d).")
 
     call sum_across_PEs(ints_sums(:,1:ke), ni*ke)
 
@@ -315,12 +346,20 @@ function reproducing_sum_3d(array, isr, ier, jsr, jer, sums, EFP_sum) result(sum
                             prec_error);
       enddo ; enddo ; enddo
     endif
-    if (NaN_error) call MOM_error(FATAL, "NaN in input field of reproducing_sum(_3d).")
-    if (abs(max_mag_term) >= prec_error*pr(1)) then
-      write(mesg, '(ES13.5)') max_mag_term
-      call MOM_error(FATAL,"Overflow in reproducing_sum(_3d) conversion of "//trim(mesg))
+    if (present(err)) then
+      err = 0
+      if (abs(max_mag_term) >= prec_error*pr(1)) err = err+1
+      if (overflow_error) err = err+2
+      if (NaN_error) err = err+2
+      if (err > 0) then ; do n=1,ni ; ints_sum(n) = 0 ; enddo ; endif
+    else
+      if (NaN_error) call MOM_error(FATAL, "NaN in input field of reproducing_sum(_3d).")
+      if (abs(max_mag_term) >= prec_error*pr(1)) then
+        write(mesg, '(ES13.5)') max_mag_term
+        call MOM_error(FATAL,"Overflow in reproducing_sum(_3d) conversion of "//trim(mesg))
+      endif
+      if (overflow_error) call MOM_error(FATAL, "Overflow in reproducing_sum(_3d).")
     endif
-    if (overflow_error) call MOM_error(FATAL, "Overflow in reproducing_sum(_3d).")
 
     call sum_across_PEs(ints_sum, ni)
 
@@ -333,13 +372,14 @@ function reproducing_sum_3d(array, isr, ier, jsr, jer, sums, EFP_sum) result(sum
       write(mesg,'("3d RS: ", ES24.16, 6 Z17.16)') sum, ints_sum(1:ni)
       call MOM_mesg(mesg, 3)
     endif
-  endif   
+  endif
 
 end function reproducing_sum_3d
 
-function real_to_ints(r, prec_error) result(ints)
+function real_to_ints(r, prec_error, overflow) result(ints)
   real,                      intent(in) :: r
   integer(kind=8), optional, intent(in) :: prec_error
+  logical,         optional, intent(inout) :: overflow
   integer(kind=8), dimension(ni)  :: ints
   !   This subroutine converts a real number to an equivalent representation
   ! using several long integers.
@@ -350,15 +390,20 @@ function real_to_ints(r, prec_error) result(ints)
   integer :: sgn, i
 
   prec_err = prec ; if (present(prec_error)) prec_err = prec_error
-  
+  ints(:) = 0_8
+  if ((r >= 1e30) .eqv. (r < 1e30)) then ; NaN_error = .true. ; return ; endif
+
   sgn = 1 ; if (r<0.0) sgn = -1
   rs = abs(r)
-  ints(:) = 0_8
 
-  if (.not.(rs < prec_err*pr(1))) then
+  if (present(overflow)) then
+    if (.not.(rs < prec_err*pr(1))) overflow = .true.
+    if ((r >= 1e30) .eqv. (r < 1e30)) overflow = .true.
+  elseif (.not.(rs < prec_err*pr(1))) then
     write(mesg, '(ES13.5)') r
     call MOM_error(FATAL,"Overflow in real_to_ints conversion of "//trim(mesg))
   endif
+
   do i=1,ni
     ival = int(rs*I_pr(i), 8)
     rs = rs - ival*pr(i)
@@ -373,7 +418,7 @@ function ints_to_real(ints) result(r)
   ! This subroutine reverses the conversion in real_to_ints.
 
   integer :: i
-  
+
   r = 0.0
   do i=1,ni ; r = r + pr(i)*ints(i) ; enddo
 end function ints_to_real
@@ -382,7 +427,7 @@ subroutine increment_ints(int_sum, int2, prec_error)
   integer(kind=8), dimension(ni), intent(inout) :: int_sum
   integer(kind=8), dimension(ni), intent(in)    :: int2
   integer(kind=8), optional,      intent(in)    :: prec_error
-  
+
   ! This subroutine increments a number with another, both using the integer
   ! representation in real_to_ints.
   integer :: i
@@ -404,14 +449,14 @@ subroutine increment_ints(int_sum, int2, prec_error)
   else
     if (abs(int_sum(1)) > prec) overflow_error = .true.
   endif
-   
+
 end subroutine increment_ints
 
 subroutine increment_ints_faster(int_sum, r, max_mag_term)
   integer(kind=8), dimension(ni), intent(inout) :: int_sum
   real,                           intent(in)    :: r
   real,                           intent(inout) :: max_mag_term
-  
+
   ! This subroutine increments a number with another, both using the integer
   ! representation in real_to_ints, but without doing any carrying of overflow.
   ! The entire operation is embedded in a single call for greater speed.
@@ -419,17 +464,17 @@ subroutine increment_ints_faster(int_sum, r, max_mag_term)
   integer(kind=8) :: ival
   integer :: sgn, i
 
+  if ((r >= 1e30) .eqv. (r < 1e30)) then ; NaN_error = .true. ; return ; endif
   sgn = 1 ; if (r<0.0) sgn = -1
   rs = abs(r)
   if (rs > abs(max_mag_term)) max_mag_term = r
-  if ((r >= 1e30) .eqv. (r < 1e30)) NaN_error = .true.
 
   do i=1,ni
     ival = int(rs*I_pr(i), 8)
     rs = rs - ival*pr(i)
     int_sum(i) = int_sum(i) + sgn*ival
   enddo
-   
+
 end subroutine increment_ints_faster
 
 subroutine carry_overflow(int_sum, prec_error)
@@ -463,7 +508,7 @@ subroutine regularize_ints(int_sum)
     int_sum(i) = int_sum(i) - num_carry*prec
     int_sum(i-1) = int_sum(i-1) + num_carry
   endif ; enddo
-  
+
   ! Determine the sign of the final number.
   positive = .true.
   do i=1,ni
@@ -501,7 +546,7 @@ function EFP_plus(EFP1, EFP2)
   type(EFP_type), intent(in) :: EFP1, EFP2
 
   EFP_plus = EFP1
-  
+
   call increment_ints(EFP_plus%v(:), EFP2%v(:))
 end function EFP_plus
 
@@ -511,7 +556,7 @@ function EFP_minus(EFP1, EFP2)
   integer :: i
 
   do i=1,ni ; EFP_minus%v(i) = -1*EFP2%v(i) ; enddo
-  
+
   call increment_ints(EFP_minus%v(:), EFP1%v(:))
 end function EFP_minus
 
@@ -534,21 +579,46 @@ function EFP_to_real(EFP1)
   EFP_to_real = ints_to_real(EFP1%v)
 end function EFP_to_real
 
-function real_to_EFP(val)
-  real, intent(in) :: val
+function EFP_real_diff(EFP1, EFP2)
+  type(EFP_type), intent(in) :: EFP1, EFP2
+  real :: EFP_real_diff
+
+  type(EFP_type)             :: EFP_diff
+
+  EFP_diff = EFP1 - EFP2
+  EFP_real_diff = EFP_to_real(EFP_diff)
+
+end function EFP_real_diff
+
+function real_to_EFP(val, overflow)
+  real,              intent(in)    :: val
+  logical, optional, intent(inout) :: overflow
   type(EFP_type) :: real_to_EFP
 
-  real_to_EFP%v(:) = real_to_ints(val)
+  logical :: over
+  character(len=80) :: mesg
+
+  if (present(overflow)) then
+    real_to_EFP%v(:) = real_to_ints(val, overflow=overflow)
+  else
+    over = .false.
+    real_to_EFP%v(:) = real_to_ints(val, overflow=over)
+    if (over) then
+      write(mesg, '(ES13.5)') val
+      call MOM_error(FATAL,"Overflow in real_to_EFP conversion of "//trim(mesg))
+    endif
+  endif
+
 end function real_to_EFP
 
 subroutine EFP_list_sum_across_PEs(EFPs, nval, errors)
   type(EFP_type), dimension(:), intent(inout) :: EFPs
   integer, intent(in) :: nval
   logical, dimension(:), optional, intent(out) :: errors
-  
+
   !   This subroutine does a sum across PEs of a list of EFP variables,
   ! returning the sums in place, with all overflows carried.
-  
+
   integer(kind=8), dimension(ni,nval) :: ints
   integer(kind=8) :: prec_error
   logical :: error_found
@@ -564,7 +634,7 @@ subroutine EFP_list_sum_across_PEs(EFPs, nval, errors)
   overflow_error = .false. ; error_found = .false.
 
   do i=1,nval ; do n=1,ni ; ints(n,i) = EFPs(i)%v(n) ; enddo ; enddo
-  
+
   call sum_across_PEs(ints(:,:), ni*nval)
 
   if (present(errors)) errors(:) = .false.
@@ -583,7 +653,7 @@ subroutine EFP_list_sum_across_PEs(EFPs, nval, errors)
   if (error_found .and. .not.(present(errors))) then
     call MOM_error(FATAL, "Overflow in EFP_list_sum_across_PEs.")
   endif
-  
+
 end subroutine EFP_list_sum_across_PEs
 
 subroutine MOM_infra_end
