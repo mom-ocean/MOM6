@@ -947,6 +947,11 @@ COMPUTE_MONIN_OBUKHOV = False   !   [Boolean] default = False
 CS = 98.96                      !   [nondim] default = 98.96
                                 ! Parameter for computing velocity scale function.
 %KPP
+USE_CONVECTION = False          !   [Boolean] default = False
+                                ! If true, turns on the diffusive convection scheme that
+                                ! increases diapycnal diffusivities at statically unstable
+                                ! interfaces. Relevant parameters are contained in the
+                                ! CONVECTION% parameter block.
 
 ! === Parameters of module MOM_entrain_diffusive ===
 CORRECT_DENSITY = True          !   [Boolean] default = True

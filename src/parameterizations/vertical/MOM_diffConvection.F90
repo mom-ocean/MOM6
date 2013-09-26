@@ -57,8 +57,6 @@ subroutine diffConvection_init(paramFile, G, diag, Time, useConvection, CS)
   allocate(CS)
 
 ! Read parameters
-  call log_version(paramFile, mod, version, 'This is the MOM wrapper to CVmix:KPP\n' // &
-            'See http://code.google.com/p/cvmix/')
   call get_param(paramFile, mod, "USE_CONVECTION", useConvection, &
                  "If true, turns on the diffusive convection scheme that\n"// &
                  "increases diapycnal diffusivities at statically unstable\n"// &
@@ -67,6 +65,9 @@ subroutine diffConvection_init(paramFile, G, diag, Time, useConvection, CS)
                  default=.false.)
   if (.not. useConvection) return
 
+  call log_version(paramFile, mod, version, &
+            'This is module implements enhanced diffusivity as a\n' // &
+            'function of static stability, N^2.')
   call openParameterBlock(paramFile,'CONVECTION')
   call get_param(paramFile, mod, 'PASSIVE', CS%passiveMode,           &
                  'If True, puts KPP into a passive-diagnostic mode.', &
