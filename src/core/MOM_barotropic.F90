@@ -3054,13 +3054,17 @@ subroutine find_face_areas(Datu, Datv, G, CS, MS, eta, halo, add_max)
   else
 !GOMP(parallel do default(shared) private(i, j))
     do j=js-hs,je+hs ; do I=is-1-hs,ie+hs
-      Datu(I,j) = 2.0*CS%dy_Cu(I,j) * G%m_to_H * &
+      !Would be "if (G%mask2dCu(I,j)>0.) &" is G was valid on BT domain
+      if (CS%bathyT(i+1,j)+CS%bathyT(i,j)>0.) &
+        Datu(I,j) = 2.0*CS%dy_Cu(I,j) * G%m_to_H * &
                   (CS%bathyT(i+1,j) * CS%bathyT(i,j)) / &
                   (CS%bathyT(i+1,j) + CS%bathyT(i,j))
     enddo ; enddo
 !GOMP(parallel do default(shared) private(i, j))
     do J=js-1-hs,je+hs ; do i=is-hs,ie+hs
-      Datv(i,J) = 2.0*CS%dx_Cv(i,J) * G%m_to_H * &
+      !Would be "if (G%mask2dCv(i,J)>0.) &" is G was valid on BT domain
+      if (CS%bathyT(i,j+1)+CS%bathyT(i,j)>0.) &
+        Datv(i,J) = 2.0*CS%dx_Cv(i,J) * G%m_to_H * &
                   (CS%bathyT(i,j+1) * CS%bathyT(i,j)) / &
                   (CS%bathyT(i,j+1) + CS%bathyT(i,j))
     enddo ; enddo
@@ -3521,10 +3525,14 @@ subroutine barotropic_init(u, v, h, eta, Time, G, param_file, diag, CS, &
       CS%D_v_Cor(i,J) = 0.5 * (G%bathyT(i,j+1) + G%bathyT(i,j))
     enddo ; enddo
     do J=js-1,je ; do I=is-1,ie
-      CS%q_D(I,J) = 0.25 * G%CoriolisBu(I,J) * &
+      if (G%mask2dT(i,j)+G%mask2dT(i,j+1)+G%mask2dT(i+1,j)+G%mask2dT(i+1,j+1)>0.) then
+        CS%q_D(I,J) = 0.25 * G%CoriolisBu(I,J) * &
            ((G%areaT(i,j) + G%areaT(i+1,j+1)) + (G%areaT(i+1,j) + G%areaT(i,j+1))) / &
            ((G%areaT(i,j) * G%bathyT(i,j) + G%areaT(i+1,j+1) * G%bathyT(i+1,j+1)) + &
             (G%areaT(i+1,j) * G%bathyT(i+1,j) + G%areaT(i,j+1) * G%bathyT(i,j+1)))
+      else ! All four h points are masked out so q_D(I,J) will is meaningless
+        CS%q_D(I,J) = 0.
+      endif
     enddo ; enddo
     ! With very wide halos, q and D need to be calculated on the available data
     ! domain and then updated onto the full computational domain.
@@ -3650,10 +3658,18 @@ subroutine barotropic_init(u, v, h, eta, Time, G, param_file, diag, CS, &
   ! The following is only valid with the Boussinesq approximation.
 ! if (G%Boussinesq) then
     do j=js,je ; do I=is-1,ie
-      CS%IDatu(I,j) = G%mask2dCu(i,j) * 2.0 / (G%bathyT(i+1,j) + G%bathyT(i,j))
+      if (G%mask2dCu(i,j)>0.) then
+        CS%IDatu(I,j) = G%mask2dCu(I,j) * 2.0 / (G%bathyT(i+1,j) + G%bathyT(i,j))
+      else ! Both neighboring H points are masked out so IDatu(I,j) is meaningless
+        CS%IDatu(I,j) = 0.
+      endif
     enddo ; enddo
     do J=js-1,je ; do i=is,ie
-      CS%IDatv(i,J) = G%mask2dCv(i,j) * 2.0 / (G%bathyT(i,j+1) + G%bathyT(i,j))
+      if (G%mask2dCv(i,J)>0.) then
+        CS%IDatv(i,J) = G%mask2dCv(i,J) * 2.0 / (G%bathyT(i,j+1) + G%bathyT(i,j))
+      else ! Both neighboring H points are masked out so IDatu(I,j) is meaningless
+        CS%IDatv(i,J) = 0.
+      endif
     enddo ; enddo
 ! else
 !   do j=js,je ; do I=is-1,ie
