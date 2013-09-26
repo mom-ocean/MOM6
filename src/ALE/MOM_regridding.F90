@@ -541,7 +541,7 @@ subroutine buildGridSigma( CS, G, h, dzInterface )
           write(0,*) k,h(i,j,k),zNew(k)-zNew(k+1),totalThickness*CS%coordinateResolution(k),CS%coordinateResolution(k)
         enddo
         call MOM_error( FATAL, &
-               'MOM_regridding, buildGridZstar: top surface has moved!!!' )
+               'MOM_regridding, buildGridSigma: top surface has moved!!!' )
       endif
       dzInterface(i,j,1) = 0.
       dzInterface(i,j,nz+1) = 0.
