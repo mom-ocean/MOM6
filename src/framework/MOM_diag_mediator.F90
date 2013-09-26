@@ -49,6 +49,7 @@ public enable_averaging, disable_averaging, query_averaging_enabled
 public diag_mediator_init, diag_mediator_end, set_diag_mediator_grid
 public diag_mediator_close_registration, get_diag_time_end
 public diag_axis_init, ocean_register_diag, register_static_field
+public diag_masks_set
 
 interface post_data
   module procedure post_data_3d, post_data_2d
@@ -77,6 +78,15 @@ type, public :: diag_ctrl
 end type diag_ctrl
 
 integer :: doc_unit = -1
+
+!diagnostics mask arrays 
+real,pointer, dimension(:,:),save :: diag_mask2dT => null()
+real,pointer, dimension(:,:),save :: diag_mask2dBu=> null()
+real,pointer, dimension(:,:),save :: diag_mask2dCu=> null()
+real,pointer, dimension(:,:),save :: diag_mask2dCv=> null()
+!real,pointer, dimension(:,:,:),save :: diag_mask3dT => null()
+real,allocatable, dimension(:,:,:), save :: diag_mask3dT
+real, save :: diag_missing = -1.0
 
 contains
 
@@ -256,7 +266,7 @@ subroutine post_data_2d(diag_field_id, field, diag, is_static, mask)
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=mask)
     else
       used = send_data(diag_field_id, field, &
-                       is_in=isv, js_in=jsv, ie_in=iev, je_in=jev)
+                       is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=diag_mask2dT)
     endif
   elseif (diag%ave_enabled) then
     if (present(mask)) then
@@ -266,7 +276,7 @@ subroutine post_data_2d(diag_field_id, field, diag, is_static, mask)
     else
       used = send_data(diag_field_id, field, diag%time_end, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
-                       weight=diag%time_int)
+                       weight=diag%time_int, rmask=diag_mask2dT)
     endif
   endif
 
@@ -335,7 +345,7 @@ subroutine post_data_3d(diag_field_id, field, diag, is_static, mask)
 
     else
       used = send_data(diag_field_id, field, &
-                       is_in=isv, js_in=jsv, ie_in=iev, je_in=jev)
+                       is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=diag_mask3dT)
     endif
   elseif (diag%ave_enabled) then
     if (present(mask)) then
@@ -345,7 +355,7 @@ subroutine post_data_3d(diag_field_id, field, diag, is_static, mask)
     else
       used = send_data(diag_field_id, field, diag%time_end, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
-                       weight=diag%time_int)
+                       weight=diag%time_int, rmask=diag_mask3dT)
     endif
   endif
 
@@ -437,9 +447,13 @@ function register_diag_field(module_name, field_name, axes, init_time, &
 !  (in,opt)  interp_method - No clue. (Not used in MOM.)
 !  (in,opt)  tile_count - No clue. (Not used in MOM.)
   character(len=240) :: mesg
+  real :: mom_missing_value
+
+  mom_missing_value = diag_missing
+  if(present(missing_value)) mom_missing_value = missing_value
 
   register_diag_field = register_diag_field_fms(module_name, field_name, axes, &
-         init_time, long_name=long_name, units=units, missing_value=missing_value, &
+         init_time, long_name=long_name, units=units, missing_value=mom_missing_value, &
          range=range, mask_variant=mask_variant, standard_name=standard_name, &
          verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
          interp_method=interp_method, tile_count=tile_count)
@@ -622,6 +636,26 @@ subroutine diag_mediator_init(G, param_file, diag, err_msg)
   endif
 
 end subroutine diag_mediator_init
+
+subroutine diag_masks_set(G,missing_value)
+ !Setup the 2d masks for diagnostics
+  type(ocean_grid_type), target, intent(in) :: G
+  real,                          intent(in) :: missing_value
+
+  integer :: k
+
+  diag_mask2dT => G%mask2dT
+  diag_mask2dBu=> G%mask2dBu
+  diag_mask2dCu=> G%mask2dCu
+  diag_mask2dCv=> G%mask2dCv
+  allocate(diag_mask3dT(G%isd:G%ied,G%jsd:G%jed,1:G%ke)) 
+  do k = 1,G%ke
+    diag_mask3dT(:,:,k) = G%mask2dT(:,:)
+  enddo
+
+  diag_missing = missing_value
+ 
+end subroutine diag_masks_set
 
 subroutine diag_mediator_close_registration( )
 
