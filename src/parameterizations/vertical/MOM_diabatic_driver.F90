@@ -180,6 +180,13 @@ type, public :: diabatic_CS ; private
   type(diag_to_Z_CS),         pointer :: diag_to_Z_CSp => NULL()
   type(KPP_CS),               pointer :: KPP_CSp => NULL()
   type(diffConvection_CS),    pointer :: Conv_CSp => NULL()
+
+  ! Data arrays for communicating between components
+  real, allocatable, dimension(:,:,:) :: KPP_NLTheat ! Non-local transport for heat due to KPP (m/s)
+  real, allocatable, dimension(:,:,:) :: KPP_NLTscalar ! Non-local transport for scalars due to KPP (m/s)
+  real, allocatable, dimension(:,:) :: buoyancyFlux ! Buoyancy flux for KPP (m2/s3)
+  real, allocatable, dimension(:,:) :: netHeatMinusSW ! Effective temperature flux for KPP (K m/s)
+  real, allocatable, dimension(:,:) :: netSalt ! Effective salt flux for KPP (ppt m/s)
 end type diabatic_CS
 
 integer :: id_clock_entrain, id_clock_mixedlayer, id_clock_set_diffusivity
@@ -294,11 +301,6 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
                        ! interpolated into depth space.
   integer :: z_ids(7)  ! The id numbers of the diagnostics that are to be
                        ! interpolated into depth space.
-  real, dimension(SZI_(G),SZJ_(G)) :: buoyancyFlux ! Buoyancy flux for KPP (m2/s3)
-  real, dimension(SZI_(G),SZJ_(G)) :: netHeatMinusSW ! Effective temperature flux for KPP (K m/s)
-  real, dimension(SZI_(G),SZJ_(G)) :: netSalt ! Effective salt flux for KPP (ppt m/s)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: KPP_NLTheat ! Non-local transport for heat due to KPP (m/s)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: KPP_NLTscalar ! Non-local transport for scalars due to KPP (m/s)
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkmb
   real, pointer :: T(:,:,:), S(:,:,:)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -448,9 +450,9 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     call cpu_clock_begin(id_clock_kpp)
     ! KPP needs the surface buoyancy flux but does not update state variables.
     ! We could make this call higher up to avoid a repeat unpacking of the surface fluxes.  ????
-    ! Sets: buoyancyFlux, netHeatMinusSW, netSalt
-    call calculateBuoyancyFlux2d(G, fluxes, CS%optics, h, tv%T, tv%S, tv, buoyancyFlux, &
-              netHeatMinusSW, netSalt)
+    ! Sets: CS%buoyancyFlux, CS%netHeatMinusSW, CS%netSalt
+    call calculateBuoyancyFlux2d(G, fluxes, CS%optics, h, tv%T, tv%S, tv, &
+              CS%buoyancyFlux, CS%netHeatMinusSW, CS%netSalt)
     ! The KPP scheme calculates the mixed layer diffusivities and non-local transport
     ! and requires the interior diffusivity to be complete so that KPP can match profiles.
     ! Thus, KPP is the last contribution to Kd.
@@ -467,7 +469,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     if (associated(visc%Kd_extra_T)) &
         Kd_heat(:,:,:) = Kd_heat(:,:,:) + visc%Kd_extra_T(:,:,:)
     call KPP_calculate(CS%KPP_CSp, G, h, tv%T, tv%S, u, v, tv%eqn_of_state, &
-           fluxes%ustar, buoyancyFlux, Kd_heat, Kd_salt, visc%Kv_turb, KPP_NLTheat, KPP_NLTscalar)
+           fluxes%ustar, CS%buoyancyFlux, Kd_heat, Kd_salt, visc%Kv_turb, CS%KPP_NLTheat, CS%KPP_NLTscalar)
     if (.not. CS%KPPisPassive) then
       if (associated(visc%Kd_turb) .and. CS%matchKPPwithoutKappaShear) then
         Kd_salt(:,:,:) = ( Kd_salt(:,:,:) + visc%Kd_turb(:,:,:) )  ! Put back part due to Kappa-shear
@@ -490,8 +492,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     call cpu_clock_begin(id_clock_kpp)
     ! Apply non-local transport of heat and salt
     ! Changes: tv%T, tv%S
-    call KPP_applyNonLocalTransport(CS%KPP_CSp, G, h, KPP_NLTheat, netHeatMinusSW, dt, tv%T, isHeat=.true.)
-    call KPP_applyNonLocalTransport(CS%KPP_CSp, G, h, KPP_NLTscalar, netSalt, dt, tv%S, isSalt=.true.)
+    call KPP_applyNonLocalTransport(CS%KPP_CSp, G, h, CS%KPP_NLTheat, CS%netHeatMinusSW, dt, tv%T, isHeat=.true.)
+    call KPP_applyNonLocalTransport(CS%KPP_CSp, G, h, CS%KPP_NLTscalar, CS%netSalt, dt, tv%S, isSalt=.true.)
     call cpu_clock_end(id_clock_kpp)
   endif
 
@@ -1503,10 +1505,17 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
                  "If true, turns on the [CVmix] KPP scheme of Large et al., 1984,\n"// &
                  "to calculate diffusivities and non-local transport in the OBL.", &
                  default=.false.)
-  if (CS%useKPP .and. CS%use_kappa_shear) &
-    call get_param(param_file, mod, "KPP_BEFORE_KAPPA_SHEAR", CS%matchKPPwithoutKappaShear, &
+  if (CS%useKPP) then
+    allocate( CS%KPP_NLTheat(isd:ied,jsd:jed,nz+1) ) ; CS%KPP_NLTheat(:,:,:) = 0.
+    allocate( CS%KPP_NLTscalar(isd:ied,jsd:jed,nz+1) ) ; CS%KPP_NLTscalar(:,:,:) = 0.
+    allocate( CS%buoyancyFlux(isd:ied,jsd:jed) ) ; CS%buoyancyFlux(:,:) = 0.
+    allocate( CS%netHeatMinusSW(isd:ied,jsd:jed) ) ; CS%netHeatMinusSW(:,:) = 0.
+    allocate( CS%netSalt(isd:ied,jsd:jed) ) ; CS%netSalt(:,:) = 0.
+    if (CS%use_kappa_shear) &
+      call get_param(param_file, mod, "KPP_BEFORE_KAPPA_SHEAR", CS%matchKPPwithoutKappaShear, &
                  "If true, KPP matches interior diffusivity that EXCLUDES any\n"// &
                  "diffusivity from kappa-shear.", default=.true.)
+  endif
 
   if (G%Boussinesq) then ; thickness_units = "meter"
   else ; thickness_units = "kilogram meter-2" ; endif
@@ -1616,7 +1625,14 @@ subroutine diabatic_driver_end(CS)
 
   call entrain_diffusive_end(CS%entrain_diffusive_CSp)
   call set_diffusivity_end(CS%set_diff_CSp)
-  if (CS%useKPP) call KPP_end(CS%KPP_CSp)
+  if (CS%useKPP) then
+    deallocate( CS%KPP_NLTheat )
+    deallocate( CS%KPP_NLTscalar )
+    deallocate( CS%buoyancyFlux )
+    deallocate( CS%netHeatMinusSW )
+    deallocate( CS%netSalt )
+    call KPP_end(CS%KPP_CSp)
+  endif
   if (CS%useConvection) call diffConvection_end(CS%Conv_CSp)
 
   if (associated(CS%optics)) then

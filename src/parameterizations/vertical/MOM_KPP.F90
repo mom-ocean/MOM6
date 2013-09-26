@@ -160,18 +160,18 @@ subroutine KPP_init(paramFile, G, diag, Time, CS, passive)
   CS%id_Sigma = register_diag_field('ocean_model', 'KPP_sigma', diag%axesTi, Time, &
       'Sigma coordinate used by [CVmix] KPP', 'nondim')
   if (CS%id_Sigma > 0) allocate( CS%sigma( SZI_(G), SZJ_(G), SZK_(G)+1 ) )
-  CS%id_Ws = register_diag_field('ocean_model', 'KPP_Ws', diag%axesTi, Time, &
+  CS%id_Ws = register_diag_field('ocean_model', 'KPP_Ws', diag%axesTL, Time, &
       'Turbulent vertical velocity scale for scalars used by [CVmix] KPP', 'm/s')
-  if (CS%id_Ws > 0) allocate( CS%Ws( SZI_(G), SZJ_(G), SZK_(G)+1 ) )
+  if (CS%id_Ws > 0) allocate( CS%Ws( SZI_(G), SZJ_(G), SZK_(G) ) )
   CS%id_N = register_diag_field('ocean_model', 'KPP_N', diag%axesTi, Time, &
       '(Adjusted) Brunt-Vaisala frequency used by [CVmix] KPP', '1/s')
   if (CS%id_N > 0) allocate( CS%N( SZI_(G), SZJ_(G), SZK_(G)+1 ) )
   CS%id_N2 = register_diag_field('ocean_model', 'KPP_N2', diag%axesTi, Time, &
       'Square of Brunt-Vaisala frequency used by [CVmix] KPP', '1/s2')
   if (CS%id_N2 > 0) allocate( CS%N2( SZI_(G), SZJ_(G), SZK_(G)+1 ) )
-  CS%id_Vt2 = register_diag_field('ocean_model', 'KPP_Vt2', diag%axesTi, Time, &
+  CS%id_Vt2 = register_diag_field('ocean_model', 'KPP_Vt2', diag%axesTL, Time, &
       'Unresolved shear turbulence used by [CVmix] KPP', '1/s2')
-  if (CS%id_Vt2 > 0) allocate( CS%Vt2( SZI_(G), SZJ_(G), SZK_(G)+1 ) )
+  if (CS%id_Vt2 > 0) allocate( CS%Vt2( SZI_(G), SZJ_(G), SZK_(G) ) )
   CS%id_uStar = register_diag_field('ocean_model', 'KPP_uStar', diag%axesT1, Time, &
       'Frictional velocity, u*, as used by [CVmix] KPP', 'm/s')
   CS%id_buoyFlux = register_diag_field('ocean_model', 'KPP_buoyFlux', diag%axesT1, Time, &
@@ -276,6 +276,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
 
   do j = G%jsc, G%jec
     do i = G%isc, G%iec
+      if (G%mask2dT(i,j)==0.) cycle ! Skip calling KPP for land points
 
       ! Things that are independent of position within the column
       Coriolis = 0.25*( (G%CoriolisBu(i,j) + G%CoriolisBu(i-1,j-1)) &
@@ -435,6 +436,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
            Temp(i,j,k),Salt(i,j,k),GoRho*deltaRho(k)*(cellHeight(1)-cellHeight(k)),deltaU2(k),Ws_1d(k),Vt2_1d(k),BulkRi_1d(k)
         enddo
       endif
+
     enddo ! i
   enddo ! j
 
@@ -479,12 +481,12 @@ subroutine KPP_applyNonLocalTransport(CS, G, h, nonLocalTrans, surfFlux, dt, sca
   logical, optional,                            intent(in)    :: isHeat   ! Inidicates scalar is heat for diagnostics
   logical, optional,                            intent(in)    :: isSalt   ! Inidicates scalar is salt for diagnostics
 
-! Diagnostics arrays
-  real, dimension( SZI_(G), SZJ_(G), SZK_(G) ) :: dSdt ! Tendancy in scalar due to non-local transport (scalar/s)
-
 ! Local variables
   integer :: i, j, k
-  logical :: diagHeat, diagSalt
+  logical :: diagHeat, diagSalt, applyNLtrans
+  real, dimension( SZI_(G), SZJ_(G), SZK_(G) ) :: dSdt ! Tendancy in scalar due to non-local transport (scalar/s)
+
+  applyNLtrans = (.not. CS%passiveMode) .and. CS%applyNonLocalTrans
 
   diagHeat = .False.
   if (present(isHeat)) then
@@ -509,9 +511,7 @@ subroutine KPP_applyNonLocalTransport(CS, G, h, nonLocalTrans, surfFlux, dt, sca
         ! Tendancy due to non-local transport of scalar
         dSdt(i,j,k) = ( nonLocalTrans(i,j,k) - nonLocalTrans(i,j,k+1) ) / h(i,j,k) * surfFlux(i,j)
         ! Update the scalar
-        if (.not. CS%passiveMode .and. CS%applyNonLocalTrans) then
-          scalar(i,j,k) = scalar(i,j,k) + dt * dSdt(i,j,k)
-        endif
+        if (applyNLtrans) scalar(i,j,k) = scalar(i,j,k) + dt * dSdt(i,j,k)
       enddo ! i
     enddo ! j
   enddo ! k
