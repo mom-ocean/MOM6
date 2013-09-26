@@ -162,7 +162,7 @@
 "ocean_model","KPP_BulkRi","KPP_BulkRi","visc","all",.true.,"none",2
 "ocean_model","KPP_Ws","KPP_Ws","visc","all",.true.,"none",2
 "ocean_model","KPP_N","KPP_N","visc","all",.true.,"none",2
-"ocean_model","KPP_Ut2","KPP_Ut2","visc","all",.true.,"none",2
+"ocean_model","KPP_vt2","KPP_vt2","visc","all",.true.,"none",2
 "ocean_model","KPP_BulkUz2","KPP_BulkUz2","visc","all",.true.,"none",2
 "ocean_model","KPP_BulkDrho","KPP_BulkDrho","visc","all",.true.,"none",2
 "ocean_model","KPP_Kheat","KPP_Kheat","visc","all",.true.,"none",2
