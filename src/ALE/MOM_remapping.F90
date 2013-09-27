@@ -123,55 +123,47 @@ subroutine remapping_main( CS, G, h, dxInterface, tv, u, v )
   ! Remap tracer
   do j = G%jsc,G%jec
     do i = G%isc,G%iec
-    
-      ! Build the start and final grids
-      h1(:) = h(i,j,:)
-      dx(:) = dxInterface(i,j,:)
-      
-      call remapping_core(CS, nz, h1, tv%S(i,j,:), nz, dx, u_column)
-      
-      tv%S(i,j,:) = u_column(:)
-      
-      call remapping_core(CS, nz, h1, tv%T(i,j,:), nz, dx, u_column)
-     
-      tv%T(i,j,:) = u_column(:)
-
-    end do
-  end do
+      if (G%mask2dT(i,j)>0.) then
+        ! Build the start and final grids
+        h1(:) = h(i,j,:)
+        dx(:) = dxInterface(i,j,:)
+        call remapping_core(CS, nz, h1, tv%S(i,j,:), nz, dx, u_column)
+        tv%S(i,j,:) = u_column(:)
+        call remapping_core(CS, nz, h1, tv%T(i,j,:), nz, dx, u_column)
+        tv%T(i,j,:) = u_column(:)
+      endif
+    enddo
+  enddo
   
   ! Remap u velocity component
   if ( present(u) ) then
-  do j = G%jsc,G%jec
-    do i = G%iscB,G%iecB
-    
-      ! Build the start and final grids
-      h1(:) = 0.5 * ( h(i,j,:) + h(i+1,j,:) )
-      dx(:) = 0.5 * ( dxInterface(i,j,:) + dxInterface(i+1,j,:) )
-      
-      call remapping_core(CS, nz, h1, u(i,j,:), nz, dx, u_column)
-     
-      u(i,j,:) = u_column(:)
-      
-    end do
-  end do
-  end if
+    do j = G%jsc,G%jec
+      do i = G%iscB,G%iecB
+        if (G%mask2dCu(i,j)>0.) then
+          ! Build the start and final grids
+          h1(:) = 0.5 * ( h(i,j,:) + h(i+1,j,:) )
+          dx(:) = 0.5 * ( dxInterface(i,j,:) + dxInterface(i+1,j,:) )
+          call remapping_core(CS, nz, h1, u(i,j,:), nz, dx, u_column)
+          u(i,j,:) = u_column(:)
+        endif
+      enddo
+    enddo
+  endif
   
   ! Remap v velocity component
   if ( present(v) ) then
-  do j = G%jscB,G%jecB
-    do i = G%isc,G%iec
-
-      ! Build the start and final grids
-      h1(:) = 0.5 * ( h(i,j,:) + h(i,j+1,:) )
-      dx(:) = 0.5 * ( dxInterface(i,j,:) + dxInterface(i,j+1,:) )
-
-      call remapping_core(CS, nz, h1, v(i,j,:), nz, dx, u_column)
-     
-      v(i,j,:) = u_column(:)
-      
-    end do
-  end do
-  end if
+    do j = G%jscB,G%jecB
+      do i = G%isc,G%iec
+        if (G%mask2dCv(i,j)>0.) then
+          ! Build the start and final grids
+          h1(:) = 0.5 * ( h(i,j,:) + h(i,j+1,:) )
+          dx(:) = 0.5 * ( dxInterface(i,j,:) + dxInterface(i,j+1,:) )
+          call remapping_core(CS, nz, h1, v(i,j,:), nz, dx, u_column)
+          v(i,j,:) = u_column(:)
+        endif
+      enddo
+    enddo
+  endif
 
 end subroutine remapping_main
 
@@ -384,7 +376,7 @@ subroutine remapping_core( CS, n0, h0, u0, n1, dx, u1 )
   integer :: iMethod
 
 #ifdef __DO_SAFTEY_CHECKS__
-  integer :: k
+  integer :: k, remapping_scheme
   real :: hTmp, totalH0, totalHf, eps
   real :: err0, totalHU0, err2, totalHU2
 
@@ -428,7 +420,15 @@ subroutine remapping_core( CS, n0, h0, u0, n1, dx, u1 )
   CS%ppoly_r%S(:,:) = 0.0
   CS%ppoly_r%coefficients(:,:) = 0.0
 
-  select case ( CS%remapping_scheme )
+  remapping_scheme = CS%remapping_scheme
+  if (n0<=1) then
+    remapping_scheme = REMAPPING_PCM
+  elseif (n0<=3) then
+    remapping_scheme = min( remapping_scheme, REMAPPING_PLM )
+  elseif (n0<=4) then
+    remapping_scheme = min( remapping_scheme, REMAPPING_PPM_H4 )
+  endif
+  select case ( remapping_scheme )
     case ( REMAPPING_PCM )
       call PCM_reconstruction( n0, u0, CS%ppoly_r )
       iMethod = INTEGRATION_PCM
@@ -646,8 +646,13 @@ subroutine remapByDeltaZ( n0, h0, u0, ppoly0, n1, dx1, method, u1, h1 )
 
     if (iTarget>0) then
       hNew = hOld + ( dx1(iTarget+1) - dx1(iTarget) )
+      hNew = max( 0., hNew )
       uhNew = ( uOld * hOld ) + ( fluxR - fluxL )
-      u1(iTarget) = uhNew / hNew
+      if (hNew>0.) then
+        u1(iTarget) = uhNew / hNew
+      else
+        u1(iTarget) = uAve
+      endif
       if (present(h1)) h1(iTarget) = hNew
     endif
     
@@ -908,10 +913,10 @@ subroutine dzFromH1H2( n1, h1, n2, h2, dx )
   
   ! Arguments
   integer,            intent(in)  :: n1 ! Number of cells on source grid
-  real, dimension(:), intent(in)  :: h1 ! cell widths of source grid (size n0)
+  real, dimension(:), intent(in)  :: h1 ! cell widths of source grid (size n1)
   integer,            intent(in)  :: n2 ! Number of cells on target grid
-  real, dimension(:), intent(in)  :: h2 ! cell widths of target grid (size n1)
-  real, dimension(:), intent(out) :: dx ! Change in interface position (size n1+1)
+  real, dimension(:), intent(in)  :: h2 ! cell widths of target grid (size n2)
+  real, dimension(:), intent(out) :: dx ! Change in interface position (size n2+1)
     
   ! Local variables
   integer :: k
@@ -929,9 +934,17 @@ subroutine dzFromH1H2( n1, h1, n2, h2, dx )
   enddo
 #ifdef __DO_SAFTEY_CHECKS__
   if (abs(x2-x1) > 0.5*(real(n1-1)*x1+real(n2-1)*x2)*epsilon(x1)) then
-    write(0,*) 'h1=',h1
-    write(0,*) 'h2=',h2
-    write(0,*) 'dx=',dx
+    write(0,'(a4,3a12)') 'k','h1','h2','dh'
+    do k = 1,max(n1,n2)
+      if (k<=min(n1,n2)) then
+        write(0,'(i4,3es12.3)') k,h1(k),h2(k),dx(k)
+      elseif (k>n1) then
+        write(0,'(i4,12x,2es12.3)') k,h2(k),dx(k)
+      else
+        write(0,'(i4,es12.3)') k,h1(k)
+      endif
+    enddo
+    write(0,'(i4,24x,es12.3)') n2+1,dx(n2+1)
     write(0,*) 'x1,x2,x2-x1',x1,x2,x2-x1
     call MOM_error(FATAL,'MOM_remapping, dzFromH1H2: Bottom has moved!')
   endif

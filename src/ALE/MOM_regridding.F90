@@ -405,6 +405,11 @@ subroutine buildGridZstar( CS, G, h, dzInterface )
   do j = G%jsc-1,G%jec+1
     do i = G%isc-1,G%iec+1
 
+      if (G%mask2dT(i,j)==0.) then
+        dzInterface(i,j,:) = 0.
+        cycle
+      endif
+
       ! Local depth (G%bathyT is positive)
       nominalDepth = G%bathyT(i,j)
 
