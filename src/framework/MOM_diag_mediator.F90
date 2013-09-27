@@ -84,9 +84,26 @@ real,pointer, dimension(:,:),save :: diag_mask2dT => null()
 real,pointer, dimension(:,:),save :: diag_mask2dBu=> null()
 real,pointer, dimension(:,:),save :: diag_mask2dCu=> null()
 real,pointer, dimension(:,:),save :: diag_mask2dCv=> null()
-!real,pointer, dimension(:,:,:),save :: diag_mask3dT => null()
-real,allocatable, dimension(:,:,:), save :: diag_mask3dT
-real, save :: diag_missing = -1.0
+real,pointer, dimension(:,:,:),save :: diag_mask3dT => null()
+real,pointer, dimension(:,:,:),save :: diag_mask3dBu=> null()
+real,pointer, dimension(:,:,:),save :: diag_mask3dCu=> null()
+real,pointer, dimension(:,:,:),save :: diag_mask3dCv=> null()
+!diagnostics axes string identifier
+character(len=15) :: axesBL_str, axesTL_str, axesCuL_str, axesCvL_str
+character(len=15) :: axesBi_str, axesTi_str, axesCui_str, axesCvi_str
+character(len=15) :: axesB1_str, axesT1_str, axesCu1_str, axesCv1_str
+character(len=15) :: axeszi_str, axeszL_str
+!default missing value to be sent to ALL diagnostics registerations 
+real, save :: diag_missing = 1.0e+20
+
+type, private :: diag_container
+  real,pointer, dimension(:,:)   :: mask2d => null()
+  real,pointer, dimension(:,:,:) :: mask3d => null()
+end type diag_container
+
+#define MAX_NUM_DIAGNOSTICS 200
+
+type(diag_container), dimension(MAX_NUM_DIAGNOSTICS) :: diagState
 
 contains
 
@@ -174,25 +191,25 @@ subroutine set_axes_info(G, param_file, diag, set_vertical)
   endif
 
   ! Vertical axes for the interfaces and layers.
-  diag%axeszi(1) = id_zi ; diag%axeszL(1) = id_zL
+  diag%axeszi(1) = id_zi ; diag%axeszL(1) = id_zL ;axeszi_str= i2s(diag%axeszi,1)
 
   ! Axis groupings for the model layers.
-  diag%axesTL(:) = (/ id_xh, id_yh, id_zL /)
-  diag%axesBL(:) = (/ id_xq, id_yq, id_zL /)
-  diag%axesCuL(:) = (/ id_xq, id_yh, id_zL /)
-  diag%axesCvL(:) = (/ id_xh, id_yq, id_zL /)
+  diag%axesTL(:) = (/ id_xh, id_yh, id_zL /) ; axesTL_str = i2s(diag%axesTL)
+  diag%axesBL(:) = (/ id_xq, id_yq, id_zL /) ; axesBL_str = i2s(diag%axesBL)
+  diag%axesCuL(:) = (/ id_xq, id_yh, id_zL /); axesCuL_str = i2s(diag%axesCuL)
+  diag%axesCvL(:) = (/ id_xh, id_yq, id_zL /); axesCvL_str = i2s(diag%axesCvL)
 
   ! Axis groupings for the model interfaces.
-  diag%axesTi(:) = (/ id_xh, id_yh, id_zi /)
-  diag%axesCui(:) = (/ id_xq, id_yh, id_zi /)
-  diag%axesCvi(:) = (/ id_xh, id_yq, id_zi /)
-  diag%axesBi(:) = (/ id_xq, id_yq, id_zi /)
+  diag%axesTi(:) = (/ id_xh, id_yh, id_zi /) ; axesTi_str = i2s(diag%axesTi)
+  diag%axesCui(:) = (/ id_xq, id_yh, id_zi /); axesCui_str = i2s(diag%axesCui)
+  diag%axesCvi(:) = (/ id_xh, id_yq, id_zi /); axesCvi_str = i2s(diag%axesCvi)
+  diag%axesBi(:) = (/ id_xq, id_yq, id_zi /) ; axesBi_str = i2s(diag%axesBi)
 
   ! Axis groupings for 2-D arrays.
-  diag%axesT1(:) = (/ id_xh, id_yh /)
-  diag%axesB1(:) = (/ id_xq, id_yq /)
-  diag%axesCu1(:) = (/ id_xq, id_yh /)
-  diag%axesCv1(:) = (/ id_xh, id_yq /)
+  diag%axesT1(:) = (/ id_xh, id_yh /) ; axesT1_str = i2s(diag%axesT1) 
+  diag%axesB1(:) = (/ id_xq, id_yq /) ; axesB1_str = i2s(diag%axesB1)
+  diag%axesCu1(:) = (/ id_xq, id_yh /); axesCu1_str= i2s(diag%axesCu1)
+  diag%axesCv1(:) = (/ id_xh, id_yq /); axesCv1_str= i2s(diag%axesCv1)
  
 end subroutine set_axes_info
 
@@ -264,19 +281,26 @@ subroutine post_data_2d(diag_field_id, field, diag, is_static, mask)
     if (present(mask)) then
       used = send_data(diag_field_id, field, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=mask)
+    elseif(associated(diagState(diag_field_id)%mask2d)) then       
+      used = send_data(diag_field_id, field, &
+                       is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=diagState(diag_field_id)%mask2d)
     else
       used = send_data(diag_field_id, field, &
-                       is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=diag_mask2dT)
+                       is_in=isv, js_in=jsv, ie_in=iev, je_in=jev)
     endif
   elseif (diag%ave_enabled) then
     if (present(mask)) then
       used = send_data(diag_field_id, field, diag%time_end, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
                        weight=diag%time_int, rmask=mask)
+    elseif(associated(diagState(diag_field_id)%mask2d)) then       
+      used = send_data(diag_field_id, field, diag%time_end, &
+                       is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
+                       weight=diag%time_int, rmask=diagState(diag_field_id)%mask2d)
     else
       used = send_data(diag_field_id, field, diag%time_end, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
-                       weight=diag%time_int, rmask=diag_mask2dT)
+                       weight=diag%time_int)
     endif
   endif
 
@@ -342,20 +366,26 @@ subroutine post_data_3d(diag_field_id, field, diag, is_static, mask)
     if (present(mask)) then
       used = send_data(diag_field_id, field, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=mask)
-
+    elseif(associated(diagState(diag_field_id)%mask3d)) then       
+      used = send_data(diag_field_id, field, &
+                       is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=diagState(diag_field_id)%mask3d)
     else
       used = send_data(diag_field_id, field, &
-                       is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=diag_mask3dT)
+                       is_in=isv, js_in=jsv, ie_in=iev, je_in=jev)
     endif
   elseif (diag%ave_enabled) then
     if (present(mask)) then
       used = send_data(diag_field_id, field, diag%time_end, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
                        weight=diag%time_int, rmask=mask)
+    elseif(associated(diagState(diag_field_id)%mask3d)) then       
+      used = send_data(diag_field_id, field, diag%time_end, &
+                       is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
+                       weight=diag%time_int, rmask=diagState(diag_field_id)%mask3d)
     else
       used = send_data(diag_field_id, field, diag%time_end, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
-                       weight=diag%time_int, rmask=diag_mask3dT)
+                       weight=diag%time_int)
     endif
   endif
 
@@ -418,8 +448,8 @@ function get_diag_time_end(diag)
 end function get_diag_time_end
 
 function register_diag_field(module_name, field_name, axes, init_time, &
-             long_name, units, missing_value, range, mask_variant, standard_name, &
-             verbose, do_not_log, err_msg, interp_method, tile_count)
+     long_name, units, missing_value, range, mask_variant, standard_name, &
+     verbose, do_not_log, err_msg, interp_method, tile_count)
   integer :: register_diag_field
   character(len=*), intent(in) :: module_name, field_name
   integer,          intent(in) :: axes(:)
@@ -430,45 +460,110 @@ function register_diag_field(module_name, field_name, axes, init_time, &
   character(len=*), optional, intent(out):: err_msg
   character(len=*), optional, intent(in) :: interp_method
   integer,          optional, intent(in) :: tile_count
-! Output:    An integer handle for a diagnostic array.
-! Arguments: module_name - The name of this module, usually "ocean_model" or "ice_shelf_model".
-!  (in)      field_name - The name of the diagnostic field.
-!  (in)      axes - A set of up to 3 integers that indicates the axes for this field.
-!  (in)      init_time - The time at which a field is first available?
-!  (in,opt)  long_name - The long name of a field.
-!  (in,opt)  units - The units of a field.
-!  (in,opt)  standard_name - The standardized name associated with a field. (Not yet used in MOM.)
-!  (in,opt)  missing_value - A value that indicates missing values.
-!  (in,opt)  range - The valid range of a variable. (Not used in MOM.)
-!  (in,opt)  mask_variant - If true a logical mask must be provided with post_data calls.  (Not used in MOM.)
-!  (in,opt)  verbose - If true, FMS is verbosed. (Not used in MOM.)
-!  (in,opt)  do_not_log - If true, do not log something. (Not used in MOM.)
-!  (out,opt) err_msg - An character string into which an error message might be placed. (Not used in MOM.)
-!  (in,opt)  interp_method - No clue. (Not used in MOM.)
-!  (in,opt)  tile_count - No clue. (Not used in MOM.)
+  ! Output:    An integer handle for a diagnostic array.
+  ! Arguments: module_name - The name of this module, usually "ocean_model" or "ice_shelf_model".
+  !  (in)      field_name - The name of the diagnostic field.
+  !  (in)      axes - A set of up to 3 integers that indicates the axes for this field.
+  !  (in)      init_time - The time at which a field is first available?
+  !  (in,opt)  long_name - The long name of a field.
+  !  (in,opt)  units - The units of a field.
+  !  (in,opt)  standard_name - The standardized name associated with a field. (Not yet used in MOM.)
+  !  (in,opt)  missing_value - A value that indicates missing values.
+  !  (in,opt)  range - The valid range of a variable. (Not used in MOM.)
+  !  (in,opt)  mask_variant - If true a logical mask must be provided with post_data calls.  (Not used in MOM.)
+  !  (in,opt)  verbose - If true, FMS is verbosed. (Not used in MOM.)
+  !  (in,opt)  do_not_log - If true, do not log something. (Not used in MOM.)
+  !  (out,opt) err_msg - An character string into which an error message might be placed. (Not used in MOM.)
+  !  (in,opt)  interp_method - No clue. (Not used in MOM.)
+  !  (in,opt)  tile_count - No clue. (Not used in MOM.)
   character(len=240) :: mesg
   real :: mom_missing_value
+  character(len=15) :: axes_str
 
   mom_missing_value = diag_missing
   if(present(missing_value)) mom_missing_value = missing_value
 
   register_diag_field = register_diag_field_fms(module_name, field_name, axes, &
-         init_time, long_name=long_name, units=units, missing_value=mom_missing_value, &
-         range=range, mask_variant=mask_variant, standard_name=standard_name, &
-         verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
-         interp_method=interp_method, tile_count=tile_count)
+       init_time, long_name=long_name, units=units, missing_value=mom_missing_value, &
+       range=range, mask_variant=mask_variant, standard_name=standard_name, &
+       verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
+       interp_method=interp_method, tile_count=tile_count)
 
   if (is_root_pe() .and. doc_unit > 0) then
-    if (register_diag_field > 0) then
-      mesg = '"'//trim(module_name)//'", "'//trim(field_name)//'"  [Used]'
-    else
-      mesg = '"'//trim(module_name)//'", "'//trim(field_name)//'"  [Unused]'
-    endif
-    write(doc_unit, '(a)') trim(mesg)
-    if (present(long_name)) call describe_option("long_name", long_name)
-    if (present(units)) call describe_option("units", units)
-    if (present(standard_name)) call describe_option("standard_name", standard_name)
+     if (register_diag_field > 0) then
+        mesg = '"'//trim(module_name)//'", "'//trim(field_name)//'"  [Used]'
+     else
+        mesg = '"'//trim(module_name)//'", "'//trim(field_name)//'"  [Unused]'
+     endif
+     write(doc_unit, '(a)') trim(mesg)
+     if (present(long_name)) call describe_option("long_name", long_name)
+     if (present(units)) call describe_option("units", units)
+     if (present(standard_name)) call describe_option("standard_name", standard_name)
   endif
+
+  !Decide what mask to use based on the axes info
+  !Beware this logic is Experimental.
+
+  !  axes_str = i2s(axes)
+  !  !3d masks
+  !  if    (axes_str .eq. axesTL_str .OR. axes_str .eq. axesTi_str) then
+  !     diagState(register_diag_field)%mask3d =>  diag_mask3dT
+  !  elseif(axes_str .eq. axesBL_str .OR. axes_str .eq. axesBi_str) then
+  !     diagState(register_diag_field)%mask3d =>  diag_mask3dBu
+  !  elseif(axes_str .eq. axesCuL_str .OR. axes_str .eq. axesCui_str) then
+  !     diagState(register_diag_field)%mask3d =>  diag_mask3dCu
+  !  elseif(axes_str .eq. axesCvL_str .OR. axes_str .eq. axesCvi_str ) then
+  !     diagState(register_diag_field)%mask3d =>  diag_mask3dCv
+  !  !2d masks
+  !  elseif(axes_str .eq. axesT1_str) then
+  !     diagState(register_diag_field)%mask2d =>  diag_mask2dT
+  !  elseif(axes_str .eq. axesB1_str) then
+  !     diagState(register_diag_field)%mask2d =>  diag_mask2dBu
+  !  elseif(axes_str .eq. axesCu1_str) then
+  !     diagState(register_diag_field)%mask2d =>  diag_mask2dCu
+  !  elseif(axes_str .eq.axesCv1_str) then
+  !     diagState(register_diag_field)%mask2d =>  diag_mask2dCv
+  !  else
+  !     call MOM_error(FATAL, "MOM_diag_mediator:register_diag_field: " // &
+  !              "unknown axes for diagnostic variable "//trim(field_name))     
+  !  endif
+  !FATAL from PE   12: MOM_diag_mediator:register_diag_field: unknown axes for diagnostic variable u_z
+
+
+  axes_str = i2s(axes,2)
+  !3d masks
+  if(size(axes) .eq. 3) then
+     if    (axes_str .eq. axesT1_str) then
+        diagState(register_diag_field)%mask3d =>  diag_mask3dT
+     elseif(axes_str .eq. axesB1_str) then
+        diagState(register_diag_field)%mask3d =>  diag_mask3dBu
+     elseif(axes_str .eq.axesCu1_str ) then
+        diagState(register_diag_field)%mask3d =>  diag_mask3dCu
+     elseif(axes_str .eq. axesCv1_str) then
+        diagState(register_diag_field)%mask3d =>  diag_mask3dCv
+     else
+        call MOM_error(FATAL, "MOM_diag_mediator:register_diag_field: " // &
+             "unknown axes for diagnostic variable "//trim(field_name))     
+     endif
+  !2d masks
+  elseif(size(axes) .eq. 2) then
+     if(axes_str .eq. axesT1_str) then
+        diagState(register_diag_field)%mask2d =>  diag_mask2dT
+     elseif(axes_str .eq. axesB1_str) then
+        diagState(register_diag_field)%mask2d =>  diag_mask2dBu
+     elseif(axes_str .eq. axesCu1_str) then
+        diagState(register_diag_field)%mask2d =>  diag_mask2dCu
+     elseif(axes_str .eq. axesCv1_str) then
+        diagState(register_diag_field)%mask2d =>  diag_mask2dCv
+     else
+        call MOM_error(FATAL, "MOM_diag_mediator:register_diag_field: " // &
+             "unknown axes for diagnostic variable "//trim(field_name))     
+     endif
+  else
+        call MOM_error(FATAL, "MOM_diag_mediator:register_diag_field: " // &
+             "unknown axes for diagnostic variable "//trim(field_name))          
+  endif
+
 
 end function register_diag_field
 
@@ -648,10 +743,16 @@ subroutine diag_masks_set(G,missing_value)
   diag_mask2dBu=> G%mask2dBu
   diag_mask2dCu=> G%mask2dCu
   diag_mask2dCv=> G%mask2dCv
-  allocate(diag_mask3dT(G%isd:G%ied,G%jsd:G%jed,1:G%ke)) 
+  allocate(diag_mask3dT (G%isd:G%ied,G%jsd:G%jed,1:G%ke)) 
+  allocate(diag_mask3dBu(G%isd:G%ied,G%jsd:G%jed,1:G%ke)) 
+  allocate(diag_mask3dCu(G%isd:G%ied,G%jsd:G%jed,1:G%ke)) 
+  allocate(diag_mask3dCv(G%isd:G%ied,G%jsd:G%jed,1:G%ke)) 
   do k = 1,G%ke
-    diag_mask3dT(:,:,k) = G%mask2dT(:,:)
-  enddo
+    diag_mask3dT (:,:,k) = diag_mask2dT (:,:)
+    diag_mask3dBu(:,:,k) = diag_mask2dBu(:,:)
+    diag_mask3dCu(:,:,k) = diag_mask2dCu(:,:)
+    diag_mask3dCv(:,:,k) = diag_mask2dCv(:,:)
+ enddo
 
   diag_missing = missing_value
  
@@ -675,5 +776,25 @@ subroutine diag_mediator_end(time)
   endif
 
 end subroutine diag_mediator_end
+
+function i2s(a,n_in)
+!   "Convert the first n elements of an integer array to a string."
+    integer, dimension(:), intent(in) :: a
+    integer, optional    , intent(in) :: n_in
+    character(len=15) :: i2s
+
+    character(len=15) :: i2s_temp
+    integer :: i,n
+
+    n=size(a)
+    if(present(n_in)) n = n_in
+ 
+    i2s = ''
+    do i=1,n
+       write (i2s_temp, '(I4.4)') a(i)
+       i2s = trim(i2s) //'_'// trim(i2s_temp)
+    enddo
+    i2s = adjustl(i2s)
+end function i2s
 
 end module MOM_diag_mediator

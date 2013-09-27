@@ -1659,6 +1659,9 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
                       CS%restart_CSp, init_CS, Time_in)
   call cpu_clock_end(id_clock_MOM_init)
 
+  !Initialize the diagnostics mask arrays. This has to be done after MOM_initialize call and before MOM_diagnostics_init
+  call diag_masks_set(G, CS%missing)
+
   if (CS%useALEalgorithm) then
     ! For now, this has to follow immediately after MOM_initialize because
     ! the call to initialize_ALE can change CS%h, etc.  initialize_ALE should
@@ -1888,7 +1891,7 @@ subroutine register_diags(Time, G, CS, ADp)
   S_flux_units = get_tr_flux_units(G, "PSU")
 
   !Initialize the diagnostics mask arrays. This has to be done after MOM_initialize call
-  call diag_masks_set(G, CS%missing)
+  !call diag_masks_set(G, CS%missing)
 
   CS%id_u = register_diag_field('ocean_model', 'u', diag%axesCuL, Time, &
       'Zonal velocity', 'meter second-1')
