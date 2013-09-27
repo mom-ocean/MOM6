@@ -114,6 +114,7 @@ use MOM_PressureForce, only : PressureForce, PressureForce_init, PressureForce_C
 use MOM_tidal_forcing, only : tidal_forcing_init, tidal_forcing_CS
 use MOM_vert_friction, only : vertvisc, vertvisc_coef, vertvisc_remnant
 use MOM_vert_friction, only : vertvisc_limit_vel, vertvisc_init, vertvisc_CS
+use MOM_vert_friction, only : updateCFLtruncationValue
 use MOM_set_visc, only : set_viscous_BBL, set_viscous_ML, set_visc_init, set_visc_CS
 
 implicit none ; private
@@ -366,6 +367,9 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   Idt = 1.0 / dt
 
   up(:,:,:) = 0.0 ; vp(:,:,:) = 0.0 ; hp(:,:,:) = h(:,:,:)
+
+  ! Update CFL truncation value as function of time
+  call updateCFLtruncationValue(Time_local, CS%vertvisc_CSp)
 
   if (CS%debug) then
     call MOM_state_chksum("Start predictor ", u, v, h, uh, vh, G)
@@ -1142,6 +1146,9 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, param_file, &
   call vertvisc_init(MIS, Time, G, param_file, diag, CS%ADp, dirs, &
                      ntrunc, CS%vertvisc_CSp)
   call set_visc_init(Time, G, param_file, diag, visc, CS%set_visc_CSp)
+  call updateCFLtruncationValue(Time, CS%vertvisc_CSp, activate= &
+            ((dirs%input_filename(1:1) == 'n') .and. &
+             (LEN_TRIM(dirs%input_filename) == 1))   )
 
   if (associated(ALE_CSp)) CS%ALE_CSp => ALE_CSp
   if (associated(OBC)) then

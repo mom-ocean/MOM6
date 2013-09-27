@@ -819,6 +819,12 @@ CFL_TRUNCATE = 0.5              !   [nondim] default = 0.5
 CFL_REPORT = 0.5                !   [nondim] default = 0.5
                                 ! The value of the CFL number that causes accelerations
                                 ! to be reported; the default is CFL_TRUNCATE.
+CFL_TRUNCATE_RAMP_TIME = 0.0    !   [s] default = 0.0
+                                ! The time over which the CFL trunction value is ramped
+                                ! up at the beginning of the run.
+CFL_TRUNCATE_START = 0.0        !   [nondim] default = 0.0
+                                ! The start value of the truncation CFL number used when
+                                ! ramping up CFL_TRUNC.
 
 ! === Parameters of module MOM_PointAccel ===
 MAX_TRUNC_FILE_SIZE_PER_PE = 50 ! default = 50
