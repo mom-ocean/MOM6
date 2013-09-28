@@ -41,7 +41,7 @@ NJGLOBAL = 210                  !
                                 ! STATIC_MEMORY_ this is set in MOM_memory.h at compile time.
 !LAYOUT = 10, 6                 !
                                 ! The processor layout that was acutally used.
-IO_LAYOUT = 2, 2                ! default = 0
+IO_LAYOUT = 1, 1                ! default = 0
                                 ! The processor layout to be used, or 0,0 to automatically
                                 ! set the io_layout to be the same as the layout.
 

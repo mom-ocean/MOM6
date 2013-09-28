@@ -204,6 +204,13 @@ ICE_CHANNEL_SMAG_COEF = 0.15    !   [Nondim] default = 0.15
 ICE_CHANNEL_CFL_LIMIT = 0.25    !   [Nondim] default = 0.25
                                 ! The CFL limit that is applied to the parameterized
                                 ! viscous transport in single-point channels.
+SIS1_ICE_TRANSPORT = True       !   [Boolean] default = True
+                                ! If true, use SIS1 code to solve the ice continuity
+                                ! equation and transport tracers.
+CHECK_ICE_TRANSPORT_CONSERVATION = False !   [Boolean] default = False
+                                ! If true, use add multiple diagnostics of ice and snow
+                                ! mass conservation in the sea-ice transport code.  This
+                                ! is expensive and should be used sparingly.
 SEND_LOG_TO_STDOUT = False      !   [Boolean] default = False
                                 ! If true, all log messages are also sent to stdout.
 REPORT_UNUSED_PARAMS = False    !   [Boolean] default = False
