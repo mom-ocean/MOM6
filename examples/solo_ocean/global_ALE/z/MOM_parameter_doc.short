@@ -200,10 +200,8 @@ Z_INIT_FILE_PTEMP_VAR = "PTEMP" ! default = "ptemp"
 Z_INIT_FILE_SALT_VAR = "SALT"   ! default = "salt"
                                 ! The name of the salinity variable in
                                 ! TEMP_SALT_Z_INIT_FILE.
-ADJUST_THICKNESS = True         !   [Boolean] default = False
-                                ! If true, all mass below the bottom removed if the
-                                ! topography is shallower than the thickness input file
-                                ! would indicate.
+Z_INIT_ALE_REMAPPING = True     !   [Boolean] default = False
+                                ! If True, then remap straight to model coordinate from file.
 REGRIDDING_COORDINATE_MODE = "Z*" ! default = "LAYER"
                                 ! Coordinate mode for vertical regridding.
                                 ! Choose among the following possibilities:
@@ -340,6 +338,9 @@ HBBL = 10.0                     !   [m]
 MAXVEL = 6.0                    !   [m s-1] default = 3.0E+08
                                 ! The maximum velocity allowed before the velocity
                                 ! components are truncated.
+CFL_TRUNCATE_RAMP_TIME = 7200.0 !   [s] default = 0.0
+                                ! The time over which the CFL trunction value is ramped
+                                ! up at the beginning of the run.
 
 ! === Parameters of module MOM_PointAccel ===
 
