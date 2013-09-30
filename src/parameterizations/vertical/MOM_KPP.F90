@@ -395,13 +395,25 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
       nonLocalTransHeat(i,j,:) = nonLocalTrans(:,1) ! correct index ???
       nonLocalTransScalar(i,j,:) = nonLocalTrans(:,2) ! correct index ???
 
+      ! recompute wscale for diagnostics, now that we know boundary layer depth 
+      if (CS%id_Ws > 0) then 
+          call CVmix_kpp_compute_turbulent_scales( &
+            -CellHeight/OBLdepth_0d,               & ! (in) Normalized boundary layer coordinate
+            OBLdepth_0d,                           & ! (in) OBL depth (m)
+            surfBuoyFlux,                          & ! (in) Buoyancy flux at surface (m2/s3)
+            surfFricVel,                           & ! (in) Turbulent friction velocity at surface (m/s)
+            w_s=Ws_1d,                             & ! (out) Turbulent velocity scale profile (m/s)
+            CVmix_kpp_params_user=CS%KPP_params    & ! KPP parameters
+            )
+          CS%Ws(i,j,:) = Ws_1d(:)
+      endif 
+
       ! Copy 1d data into 3d diagnostic arrays
       if (CS%id_OBLdepth > 0) CS%OBLdepth(i,j) = OBLdepth_0d
       if (CS%id_BulkDrho > 0) CS%dRho(i,j,:) = deltaRho(:)
       if (CS%id_BulkUz2 > 0) CS%Uz2(i,j,:) = deltaU2(:)
       if (CS%id_BulkRi > 0) CS%BulkRi(i,j,:) = BulkRi_1d(:)
       if (CS%id_sigma > 0) CS%sigma(i,j,:) = -iFaceHeight/OBLdepth_0d
-      if (CS%id_Ws > 0) CS%Ws(i,j,:) = Ws_1d(:)
       if (CS%id_N > 0) CS%N(i,j,:) = N_1d(:)
       if (CS%id_N2 > 0) CS%N2(i,j,:) = N2_1d(:)
       if (CS%id_Vt2 > 0) CS%Vt2(i,j,:) = Vt2_1d(:)
