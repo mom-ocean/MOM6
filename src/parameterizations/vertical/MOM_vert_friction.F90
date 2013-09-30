@@ -75,15 +75,16 @@ module MOM_vert_friction
 !********+*********+*********+*********+*********+*********+*********+**
 
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
-use MOM_diag_mediator, only : diag_ctrl, time_type
+use MOM_diag_mediator, only : diag_ctrl
 use MOM_checksums, only : uchksum, vchksum
-use MOM_error_handler, only : MOM_error, FATAL, WARNING
+use MOM_error_handler, only : MOM_error, FATAL, WARNING, NOTE
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
 use MOM_PointAccel, only : write_u_accel, write_v_accel, PointAccel_init
 use MOM_PointAccel, only : PointAccel_CS
+use MOM_time_manager, only : time_type, time_type_to_real, operator(-)
 use MOM_variables, only : thermo_var_ptrs, vertvisc_type
 use MOM_variables, only : cont_diag_ptrs, accel_diag_ptrs
 use MOM_variables, only : ocean_internal_state, ocean_OBC_type, OBC_SIMPLE
@@ -94,6 +95,7 @@ implicit none ; private
 
 public vertvisc, vertvisc_remnant, vertvisc_coef
 public vertvisc_limit_vel, vertvisc_init, vertvisc_end
+public updateCFLtruncationValue
 
 type, public :: vertvisc_CS ; private
   real    :: Hmix           ! The mixed layer thickness in m.
@@ -115,6 +117,11 @@ type, public :: vertvisc_CS ; private
   real    :: CFL_report     ! The value of the CFL number that will cause the
                             ! accelerations to be reported, nondim.  CFL_report
                             ! will often equal CFL_trunc.
+  real    :: truncRampTime  ! The time-scale over which to ramp up the value of
+                            ! CFL_trunc from zero to CFK_trunc0
+  real    :: CFL_truncS     ! The start value of CFL_trunc
+  real    :: CFL_truncE     ! The end/target value of CFL_trunc
+  type(time_type) :: rampStartTime ! The time that the ramping of CFL_trunc starts
 
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NK_INTERFACE_) :: &
     a_u                ! The u-drag coefficient across an interface, in m s-1.
@@ -1368,6 +1375,15 @@ subroutine vertvisc_init(MIS, Time, G, param_file, diag, ADp, dirs, ntrunc, CS)
                  "The value of the CFL number that causes accelerations \n"//&
                  "to be reported; the default is CFL_TRUNCATE.", &
                  units="nondim", default=CS%CFL_trunc)
+  call get_param(param_file, mod, "CFL_TRUNCATE_RAMP_TIME", CS%truncRampTime, &
+                 "The time over which the CFL trunction value is ramped\n"//&
+                 "up at the beginning of the run.", &
+                 units="s", default=0.)
+  CS%CFL_truncE = CS%CFL_trunc
+  call get_param(param_file, mod, "CFL_TRUNCATE_START", CS%CFL_truncS, &
+                 "The start value of the truncation CFL number used when\n"//&
+                 "ramping up CFL_TRUNC.", &
+                 units="nondim", default=0.)
 
   ALLOC_(CS%a_u(IsdB:IedB,jsd:jed,nz+1)) ; CS%a_u(:,:,:) = 0.0
   ALLOC_(CS%h_u(IsdB:IedB,jsd:jed,nz))   ; CS%h_u(:,:,:) = 0.0
@@ -1404,6 +1420,40 @@ subroutine vertvisc_init(MIS, Time, G, param_file, diag, ADp, dirs, ntrunc, CS)
     call PointAccel_init(MIS, Time, G, param_file, diag, dirs, CS%PointAccel_CSp)
 
 end subroutine vertvisc_init
+
+subroutine updateCFLtruncationValue(Time, CS, activate)
+  ! This routine updates the CFL truncation value as a function of time
+  ! If called with the optional argument activate=.true., records the
+  ! value of Time as the beginning of the ramp period.
+  type(time_type), target, intent(in)    :: Time
+  type(vertvisc_CS),       pointer       :: CS
+  logical, optional,       intent(in)    :: activate
+  ! Local variables
+  real :: deltaTime, wghtA
+  character(len=12) :: msg
+
+  if (CS%truncRampTime==0.) return ! This indicates to ramping is turned off
+
+  ! We use the optional argument to indicate this Time should be recorded as the
+  ! beginning of the ramp-up period.
+  if (present(activate)) then
+    if (activate) CS%rampStartTime = Time ! Record the current time 
+  endif
+  deltaTime = max( 0., time_type_to_real( Time - CS%rampStartTime ) )
+  if (deltaTime >= CS%truncRampTime) then
+    CS%CFL_trunc = CS%CFL_truncE
+    CS%truncRampTime = 0. ! This turns off ramping after this call
+  else
+    wghtA = min( 1., deltaTime / CS%truncRampTime ) ! Linear profile in time
+    !wghtA = wghtA*wghtA ! Convert linear profile to parabolic profile in time
+    !wghtA = wghtA*wghtA*(3. - 2.*wghtA) ! Convert linear profile to cosine profile
+    wghtA = 1. - ( (1. - wghtA)**2 ) ! Convert linear profiel to nverted parabolic profile
+    CS%CFL_trunc = CS%CFL_truncS + wghtA * ( CS%CFL_truncE - CS%CFL_truncS )
+  endif
+  write(msg(1:12),'(es12.3)') CS%CFL_trunc
+  call MOM_error(NOTE, "MOM_vert_friction: updateCFLtruncationValue set CFL"// &
+                       " limit to "//trim(msg))
+end subroutine updateCFLtruncationValue
 
 subroutine vertvisc_end(CS)
   type(vertvisc_CS),   pointer       :: CS

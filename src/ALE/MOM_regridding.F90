@@ -405,6 +405,11 @@ subroutine buildGridZstar( CS, G, h, dzInterface )
   do j = G%jsc-1,G%jec+1
     do i = G%isc-1,G%iec+1
 
+      if (G%mask2dT(i,j)==0.) then
+        dzInterface(i,j,:) = 0.
+        cycle
+      endif
+
       ! Local depth (G%bathyT is positive)
       nominalDepth = G%bathyT(i,j)
 
@@ -541,7 +546,7 @@ subroutine buildGridSigma( CS, G, h, dzInterface )
           write(0,*) k,h(i,j,k),zNew(k)-zNew(k+1),totalThickness*CS%coordinateResolution(k),CS%coordinateResolution(k)
         enddo
         call MOM_error( FATAL, &
-               'MOM_regridding, buildGridZstar: top surface has moved!!!' )
+               'MOM_regridding, buildGridSigma: top surface has moved!!!' )
       endif
       dzInterface(i,j,1) = 0.
       dzInterface(i,j,nz+1) = 0.

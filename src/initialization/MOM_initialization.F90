@@ -3422,6 +3422,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
 
   real, dimension(:,:,:), allocatable :: tmp1
   logical :: homogenize, useALEremapping
+  character(len=10) :: remappingScheme
   real :: tempAvg, saltAvg
   integer :: nPoints
 
@@ -3469,6 +3470,9 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
   call get_param(PF, mod, "Z_INIT_ALE_REMAPPING", useALEremapping, &
                  "If True, then remap straight to model coordinate from file.",&
                  default=.false.)
+  call get_param(PF, mod, "Z_INIT_REMAPPING_SCHEME", remappingScheme, &
+                 "The remapping scheme to use if using Z_INIT_ALE_REMAPPING\n"//&
+                 "is True.", default="PPM_IH4")
 
 !   Read input grid coordinates for temperature and salinity field
 !   in z-coordinate dataset. The file is REQUIRED to contain the
@@ -3744,7 +3748,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
     allocate( h1(kd) )
     allocate( tmpT1dIn(kd) )
     allocate( tmpS1dIn(kd) )
-    call initialize_remapping( kd, 'PPM_IH4', remapCS ) ! Data for reconstructions
+    call initialize_remapping( kd, remappingScheme, remapCS ) ! Data for reconstructions
     ! Next we initialize the regridding package so that it knows about the target grid
     allocate( hTarget(nz) )
     allocate( h2(nz) )
@@ -3755,41 +3759,47 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
     call ALE_initRegridding( G, PF, mod, regridCS, hTarget ) ! sets regridCS and hTarget(1:nz)
     ! For each column ...
     do j = js, je ; do i = is, ie
-      ! Build the source grid
-      zTopOfCell = 0. ; zBottomOfCell = 0. ; nPoints = 0
-      do k = 1, kd
-        if (mask_z(i,j,k) > 0.) then
-          zBottomOfCell = -min( z_edges_in(k+1), G%bathyT(i,j) )
-          tmpT1dIn(k) = temp_z(i,j,k)
-          tmpS1dIn(k) = salt_z(i,j,k)
-        elseif (k>1) then
-          zBottomOfCell = -G%bathyT(i,j) 
-          tmpT1dIn(k) = tmpT1dIn(k-1)
-          tmpS1dIn(k) = tmpS1dIn(k-1)
-        else ! This next block should only ever be reached over land
-          tmpT1dIn(k) = -99.9
-          tmpS1dIn(k) = -99.9
-        endif
-        h1(k) = zTopOfCell - zBottomOfCell
-        if (h1(k)>0.) nPoints = nPoints + 1
-        zTopOfCell = zBottomOfCell ! Bottom becomes top for next value of k
-      enddo
-      h1(kd) = h1(kd) + ( zTopOfCell + G%bathyT(i,j) ) ! In case data is deeper than model
-      ! Build the target grid combining hTarget and topography
-      zTopOfCell = 0. ; zBottomOfCell = 0.
-      do k = 1, nz
-        zBottomOfCell = max( zTopOfCell - hTarget(k), -G%bathyT(i,j) )
-        h2(k) = zTopOfCell - zBottomOfCell
-        zTopOfCell = zBottomOfCell ! Bottom becomes top for next value of k
-      enddo
-      ! Calcaulate an effectiveadisplacement, deltaE
-      call dzFromH1H2( nPoints, h1, nz, h2, deltaE ) ! sets deltaE
-      ! Now remap from h1 to h2=h1+div.deltaE
-      call remapping_core( remapCS, nPoints, h1, tmpT1dIn, nz, deltaE, tmpT1d ) ! sets tmpT1d
-      call remapping_core( remapCS, nPoints, h1, tmpS1dIn, nz, deltaE, tmpS1d ) ! sets tmpS1d
-      h(i,j,:) = h2(:)
-      tv%T(i,j,:) = tmpT1d(:)
-      tv%S(i,j,:) = tmpS1d(:)
+      if (G%mask2dT(i,j)>0.) then
+        ! Build the source grid
+        zTopOfCell = 0. ; zBottomOfCell = 0. ; nPoints = 0
+        do k = 1, kd
+          if (mask_z(i,j,k) > 0.) then
+            zBottomOfCell = -min( z_edges_in(k+1), G%bathyT(i,j) )
+            tmpT1dIn(k) = temp_z(i,j,k)
+            tmpS1dIn(k) = salt_z(i,j,k)
+          elseif (k>1) then
+            zBottomOfCell = -G%bathyT(i,j) 
+            tmpT1dIn(k) = tmpT1dIn(k-1)
+            tmpS1dIn(k) = tmpS1dIn(k-1)
+          else ! This next block should only ever be reached over land
+            tmpT1dIn(k) = -99.9
+            tmpS1dIn(k) = -99.9
+          endif
+          h1(k) = zTopOfCell - zBottomOfCell
+          if (h1(k)>0.) nPoints = nPoints + 1
+          zTopOfCell = zBottomOfCell ! Bottom becomes top for next value of k
+        enddo
+        h1(kd) = h1(kd) + ( zTopOfCell + G%bathyT(i,j) ) ! In case data is deeper than model
+        ! Build the target grid combining hTarget and topography
+        zTopOfCell = 0. ; zBottomOfCell = 0.
+        do k = 1, nz
+          zBottomOfCell = max( zTopOfCell - hTarget(k), -G%bathyT(i,j) )
+          h2(k) = zTopOfCell - zBottomOfCell
+          zTopOfCell = zBottomOfCell ! Bottom becomes top for next value of k
+        enddo
+        ! Calcaulate an effectiveadisplacement, deltaE
+        call dzFromH1H2( nPoints, h1, nz, h2, deltaE ) ! sets deltaE
+        ! Now remap from h1 to h2=h1+div.deltaE
+        call remapping_core( remapCS, nPoints, h1, tmpT1dIn, nz, deltaE, tmpT1d ) ! sets tmpT1d
+        call remapping_core( remapCS, nPoints, h1, tmpS1dIn, nz, deltaE, tmpS1d ) ! sets tmpS1d
+        h(i,j,:) = h2(:)
+        tv%T(i,j,:) = tmpT1d(:)
+        tv%S(i,j,:) = tmpS1d(:)
+      else
+        tv%T(i,j,:) = 0.
+        tv%S(i,j,:) = 0.
+        h(i,j,:) = 0.
+      endif ! mask2dT
     enddo ; enddo
     deallocate( h1 )
     deallocate( h2 )

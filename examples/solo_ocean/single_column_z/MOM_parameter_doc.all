@@ -379,6 +379,9 @@ Z_INIT_HOMOGENIZE = True        !   [Boolean] default = False
                                 ! initial conditions.
 Z_INIT_ALE_REMAPPING = True     !   [Boolean] default = False
                                 ! If True, then remap straight to model coordinate from file.
+Z_INIT_REMAPPING_SCHEME = "PPM_IH4" ! default = "PPM_IH4"
+                                ! The remapping scheme to use if using Z_INIT_ALE_REMAPPING
+                                ! is True.
 REGRIDDING_COORDINATE_MODE = "Z*" ! default = "LAYER"
                                 ! Coordinate mode for vertical regridding.
                                 ! Choose among the following possibilities:
@@ -769,6 +772,12 @@ CFL_TRUNCATE = 0.5              !   [nondim] default = 0.5
 CFL_REPORT = 0.5                !   [nondim] default = 0.5
                                 ! The value of the CFL number that causes accelerations
                                 ! to be reported; the default is CFL_TRUNCATE.
+CFL_TRUNCATE_RAMP_TIME = 0.0    !   [s] default = 0.0
+                                ! The time over which the CFL trunction value is ramped
+                                ! up at the beginning of the run.
+CFL_TRUNCATE_START = 0.0        !   [nondim] default = 0.0
+                                ! The start value of the truncation CFL number used when
+                                ! ramping up CFL_TRUNC.
 
 ! === Parameters of module MOM_PointAccel ===
 MAX_TRUNC_FILE_SIZE_PER_PE = 50 ! default = 50
