@@ -1208,7 +1208,7 @@ end subroutine totalTandS
 subroutine chk_sum_msg1(fmsg,bc0,mesg)
   character(len=*), intent(in) :: fmsg, mesg
   integer,          intent(in) :: bc0
-  if (is_root_pe()) write(0,'(A,1(A,I9,X),A)') fmsg," c=",bc0,mesg
+  if (is_root_pe()) write(0,'(A,1(A,I10,X),A)') fmsg," c=",bc0,mesg
 end subroutine chk_sum_msg1
 
 ! =====================================================================
@@ -1216,7 +1216,7 @@ end subroutine chk_sum_msg1
 subroutine chk_sum_msg5(fmsg,bc0,bcSW,bcSE,bcNW,bcNE,mesg)
   character(len=*), intent(in) :: fmsg, mesg
   integer,          intent(in) :: bc0,bcSW,bcSE,bcNW,bcNE
-  if (is_root_pe()) write(0,'(A,5(A,I9,1X),A)') &
+  if (is_root_pe()) write(0,'(A,5(A,I10,1X),A)') &
      fmsg," c=",bc0,"sw=",bcSW,"se=",bcSE,"nw=",bcNW,"ne=",bcNE,mesg
 end subroutine chk_sum_msg5
 
