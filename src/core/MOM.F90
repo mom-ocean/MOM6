@@ -2159,15 +2159,6 @@ subroutine set_restart_fields(G, param_file, CS)
   thickness_units = get_thickness_units(G)
   flux_units = get_flux_units(G)
 
-  vd = vardesc("u","Zonal velocity",'u','L','s',"meter second-1")
-  call register_restart_field(CS%u, vd, .true., CS%restart_CSp)
-
-  vd = vardesc("v","Meridional velocity",'v','L','s',"meter second-1")
-  call register_restart_field(CS%v, vd, .true., CS%restart_CSp)
-
-  vd = vardesc("h","Layer Thickness",'h','L','s',thickness_units)
-  call register_restart_field(CS%h, vd, .true., CS%restart_CSp)
-
   if (CS%use_temperature) then
     vd = vardesc("Temp","Potential Temperature",'h','L','s',"degC")
     call register_restart_field(CS%tv%T, vd, .true., CS%restart_CSp)
@@ -2175,6 +2166,15 @@ subroutine set_restart_fields(G, param_file, CS)
     vd = vardesc("Salt","Salinity",'h','L','s',"PSU")
     call register_restart_field(CS%tv%S, vd, .true., CS%restart_CSp)
   endif
+
+  vd = vardesc("h","Layer Thickness",'h','L','s',thickness_units)
+  call register_restart_field(CS%h, vd, .true., CS%restart_CSp)
+
+  vd = vardesc("u","Zonal velocity",'u','L','s',"meter second-1")
+  call register_restart_field(CS%u, vd, .true., CS%restart_CSp)
+
+  vd = vardesc("v","Meridional velocity",'v','L','s',"meter second-1")
+  call register_restart_field(CS%v, vd, .true., CS%restart_CSp)
 
   if (CS%use_frazil) then
     vd = vardesc("frazil","Frazil heat flux into ocean",'h','1','s',"J m-2")
