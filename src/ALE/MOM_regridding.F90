@@ -398,6 +398,7 @@ subroutine buildGridZstar( CS, G, h, dzInterface )
   integer :: nz
   real    :: nominalDepth, totalThickness, eta, stretching, dh
   real, dimension(SZK_(G)+1) :: zOld, zNew
+  real :: minThickness
 
   nz = G%ke
   
@@ -418,6 +419,7 @@ subroutine buildGridZstar( CS, G, h, dzInterface )
       do k = 1,nz
         totalThickness = totalThickness + h(i,j,k)
       end do
+      minThickness = min( CS%min_thickness, totalThickness/float(nz) )
 
       ! Position of free-surface
       eta = totalThickness - nominalDepth
@@ -439,8 +441,8 @@ subroutine buildGridZstar( CS, G, h, dzInterface )
       do k = nz,1,-1
         ! Adjust interface position to accomodate inflating layers
         ! without disturbing the interface above
-        if ( zNew(k) < (zNew(k+1) + CS%min_thickness) ) then
-          zNew(k) = zNew(k+1) + CS%min_thickness
+        if ( zNew(k) < (zNew(k+1) + minThickness) ) then
+          zNew(k) = zNew(k+1) + minThickness
         endif
         zOld(k) = zOld(k+1) + h(i,j,k)
       enddo
@@ -455,7 +457,7 @@ subroutine buildGridZstar( CS, G, h, dzInterface )
 #ifdef __DO_SAFTEY_CHECKS__
       dh=max(nominalDepth,totalThickness)
       if (abs(zNew(1)-zOld(1))>(nz-1)*0.5*epsilon(eta)*dh) then
-        write(0,*) 'min_thickness=',CS%min_thickness
+        write(0,*) 'min_thickness=',minThickness
         write(0,*) 'eta=',eta,'nominalDepth=',nominalDepth,'totalThickness=',totalThickness
         write(0,*) 'dzInterface(1) = ',dzInterface(i,j,1),epsilon(eta),nz
         do k=1,nz+1
