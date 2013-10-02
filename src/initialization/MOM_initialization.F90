@@ -71,6 +71,8 @@ module MOM_initialization
 
 use MOM_checksums, only : hchksum, qchksum, uchksum, vchksum, chksum
 use MOM_coms, only : max_across_PEs
+use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
+use MOM_cpu_clock, only :  CLOCK_ROUTINE, CLOCK_LOOP
 use MOM_domains, only : pass_var, pass_vector, sum_across_PEs, broadcast
 use MOM_domains, only : root_PE, To_All, SCALAR_PAIR, CGRID_NE
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
@@ -3425,6 +3427,15 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
   character(len=10) :: remappingScheme
   real :: tempAvg, saltAvg
   integer :: nPoints
+  integer :: id_clock_routine, id_clock_read, id_clock_interp, id_clock_fill, id_clock_ALE
+
+  id_clock_routine = cpu_clock_id('(Initialize from Z)', grain=CLOCK_ROUTINE)
+  id_clock_read = cpu_clock_id('(Initialize from Z) read', grain=CLOCK_LOOP)
+  id_clock_interp = cpu_clock_id('(Initialize from Z) interp', grain=CLOCK_LOOP)
+  id_clock_fill = cpu_clock_id('(Initialize from Z) fill', grain=CLOCK_LOOP)
+  id_clock_ALE = cpu_clock_id('(Initialize from Z) ALE', grain=CLOCK_LOOP)
+
+  call cpu_clock_begin(id_clock_routine)
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -3432,7 +3443,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
 
   PI_180=atan(1.0)/45.
 
-  call MOM_mesg(" MOM_temp_salt_initiale_from_Z.F90, MOM_temp_salt_initialize_from_Z: subroutine entered", 3)
+  call MOM_mesg(" MOM_initialization.F90, MOM_temp_salt_initialize_from_Z: subroutine entered", 3)
   call log_version(PF, mod, version)
 
   new_sim = .false.
@@ -3488,6 +3499,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
 !   The observation grid MUST tile the model grid. If the model grid extends
 !   to the North Pole, the input data are extrapolated using the average
 !   value at the northernmost latitude.      
+  call cpu_clock_begin(id_clock_read)
 
   rcode = NF90_OPEN(filename, NF90_NOWRITE, ncid)
   if (rcode .ne. 0) call MOM_error(FATAL,"error opening file "//trim(filename)//&
@@ -3603,7 +3615,9 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
 ! after interpolating, fill in points which will be needed
 ! to define the layers
 
+  call cpu_clock_end(id_clock_read)
   do k=1,kd
+    call cpu_clock_begin(id_clock_read)
     write(laynum,'(I8)') k ; laynum = adjustl(laynum)
   
     start = 1; start(3) = k; count = 1; count(1) = id; count(2) = jd
@@ -3664,6 +3678,8 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
         endif
       enddo
     enddo
+    call cpu_clock_end(id_clock_read)
+    call cpu_clock_begin(id_clock_interp)
 
 ! call fms routine horiz_interp to interpolate input level data to model horizontal grid
 
@@ -3678,6 +3694,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
     call horiz_interp(Interp,salt_in,salt_out,mask_in=mask_in, &
                       mask_out=mask_out,missing_value=missing_value)       
 
+    call cpu_clock_end(id_clock_interp)
     fill = 0; good = 0
 
     nPoints = 0 ; tempAvg = 0. ; saltAvg = 0.
@@ -3712,6 +3729,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
 
 ! temp_out,salt_out contain input z-space data on the model grid with missing values
 ! now fill in missing values using "ICE-nine" algorithm. 
+    call cpu_clock_begin(id_clock_fill)
 
     temp_out = fill_miss_2d(temp_out,good,fill,temp_prev,reentrant_x,tripolar_n)
     salt_out = fill_miss_2d(salt_out,good,fill,salt_prev,reentrant_x,tripolar_n)
@@ -3723,6 +3741,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
 
     temp_prev=temp_out
     salt_prev=salt_out
+    call cpu_clock_end(id_clock_fill)
 
 ! next use the equation of state to create a potential density field using filled z-data
 
@@ -3744,6 +3763,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
 ! Done with horizontal interpolation.    
 ! Now remap to model coordinates
   if (useALEremapping) then
+    call cpu_clock_begin(id_clock_ALE)
     ! First we reserve a work space for reconstructions of the source data
     allocate( h1(kd) )
     allocate( tmpT1dIn(kd) )
@@ -3810,6 +3830,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
     deallocate( tmpS1dIn )
     deallocate( deltaE )
 
+    call cpu_clock_end(id_clock_ALE)
   else ! remap to isopycnal layer space
 ! next find interface positions using local arrays
 ! nlevs contains the number of valid data points in each column
@@ -3949,6 +3970,8 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
   deallocate(temp_out,salt_out,mask_out,temp_prev,salt_prev)
   deallocate(rho_out,fill,mask2dT,good,Depth)
 
+  call MOM_mesg(" MOM_initialization.F90, MOM_temp_salt_initialize_from_Z: subroutine completed", 3)
+  call cpu_clock_end(id_clock_routine)
 end subroutine MOM_temp_salt_initialize_from_Z
 
 end module MOM_initialization
