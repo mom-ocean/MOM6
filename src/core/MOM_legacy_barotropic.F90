@@ -3731,6 +3731,10 @@ subroutine legacy_barotropic_init(u, v, h, eta, Time, G, param_file, diag, CS, &
     CS%debug_BT_G%iec=G%iec
     CS%debug_BT_G%jsc=G%jsc
     CS%debug_BT_G%jec=G%jec
+    CS%debug_BT_G%IscB=G%isc-1
+    CS%debug_BT_G%IecB=G%iec
+    CS%debug_BT_G%JscB=G%jsc-1
+    CS%debug_BT_G%JecB=G%jec
     CS%debug_BT_G%isd=CS%isdw
     CS%debug_BT_G%ied=CS%iedw
     CS%debug_BT_G%jsd=CS%jsdw
