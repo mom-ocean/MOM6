@@ -1314,6 +1314,8 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   type(MOM_initialization_struct) :: init_CS
   type(ocean_internal_state) :: MOM_internal_state
 
+  call MOM_mesg(" MOM.F90, initialize_MOM: subroutine entered", 3)
+
   if (associated(CS)) then
     call MOM_error(WARNING, "initialize_MOM called with an associated "// &
                             "control structure.")
@@ -1348,6 +1350,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
 #else
   call MOM_domains_init(G%domain, param_file, symmetric=symmetric)
 #endif
+  call MOM_mesg(" MOM.F90, initialize_MOM: domains initialized", 4)
 
   call MOM_checksums_init(param_file)
 
@@ -1628,6 +1631,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
       CS%tv%internal_heat(:,:) = 0.0
     endif
   endif
+  call MOM_mesg(" MOM.F90, initialize_MOM: state variables allocated", 4)
 
 !   Set the fields that are needed for bitwise identical restarting
 ! the time stepping scheme.
@@ -1659,11 +1663,13 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
 
 !   Initialize all of the relevant fields.
   if (associated(CS%tracer_Reg)) init_CS%tracer_Reg => CS%tracer_Reg
+  call MOM_mesg(" MOM.F90, initialize_MOM: restart registration complete", 4)
 
   call cpu_clock_begin(id_clock_MOM_init)
   call MOM_initialize(CS%u, CS%v, CS%h, CS%tv, Time, G, param_file, dirs, &
                       CS%restart_CSp, init_CS, Time_in)
   call cpu_clock_end(id_clock_MOM_init)
+  call MOM_mesg(" MOM.F90, initialize_MOM: returned from MOM_initialize()", 4)
 
   if (CS%useALEalgorithm) then
     ! For now, this has to follow immediately after MOM_initialize because
@@ -1696,6 +1702,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     call ALE_writeCoordinateFile( CS%ALE_CSp, G, dirs%output_directory )
   endif
   call cpu_clock_end(id_clock_MOM_init)
+  call MOM_mesg(" MOM.F90, initialize_MOM: ALE initialized", 4)
 
   call MEKE_init(Time, G, param_file, diag, CS%MEKE_CSp, CS%MEKE)
   call VarMix_init(Time, G, param_file, diag, CS%VarMix)
@@ -1729,6 +1736,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
                 CS%ADp, CS%CDp, MOM_internal_state, init_CS%OBC, CS%ALE_CSp, CS%visc, dirs, CS%ntrunc)
     endif
   endif
+  call MOM_mesg(" MOM.F90, initialize_MOM: dynamics initialized", 4)
 
   call thickness_diffuse_init(Time, G, param_file, diag, CS%CDp, CS%thickness_diffuse_CSp)
   if (CS%mixedlayer_restrat) &
@@ -1792,6 +1800,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call cpu_clock_end(id_clock_pass_init)
 
   call write_static_fields(G, CS%diag)
+  call MOM_mesg(" MOM.F90, initialize_MOM: static fields written", 4)
   call enable_averaging(0.0, Time, CS%diag)
 
 !  call calculate_diagnostic_fields(CS%u, CS%v, CS%h, uh, vh, CS%tv, 0.0, G, CS%diagnostics_CSp)
@@ -1847,6 +1856,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call get_param(param_file, "MOM", "DO_UNIT_TESTS", do_unit_tests, default=.false.)
   if (do_unit_tests) call unitTests
 
+  call MOM_mesg(" MOM.F90, initialize_MOM: subroutine completed", 3)
   call cpu_clock_end(id_clock_init)
 
 end subroutine initialize_MOM
