@@ -39,6 +39,7 @@ implicit none ; private
 public extractFluxes1d, extractFluxes2d
 public MOM_forcing_chksum, absorbRemainingSW
 public calculateBuoyancyFlux1d, calculateBuoyancyFlux2d
+public forcing_SinglePointPrint
 
 integer :: num_msg = 0, max_msg = 2
 
@@ -700,6 +701,57 @@ subroutine MOM_forcing_chksum(mesg, fluxes, G, haloshift)
     call hchksum(fluxes%liq_runoff, mesg//" fluxes%liq_runoff",G,haloshift=hshift)
   if (associated(fluxes%froz_runoff)) &
     call hchksum(fluxes%froz_runoff, mesg//" fluxes%froz_runoff",G,haloshift=hshift)
+  if (associated(fluxes%runoff_hflx)) &
+    call hchksum(fluxes%runoff_hflx, mesg//" fluxes%runoff_hflx",G,haloshift=hshift)
+  if (associated(fluxes%calving_hflx)) &
+    call hchksum(fluxes%calving_hflx, mesg//" fluxes%calving_hflx",G,haloshift=hshift)
 end subroutine MOM_forcing_chksum
+
+subroutine forcing_SinglePointPrint(fluxes, G, i, j, mesg)
+  type(forcing),                       intent(in) :: fluxes
+  type(ocean_grid_type),               intent(in) :: G
+  character(len=*),                    intent(in) :: mesg
+  integer,                             intent(in) :: i, j
+!   This subroutine writes out values of the fluxes arrays at
+! the i,j location
+
+  write(0,'(2a)') 'MOM_forcing_type, forcing_SinglePointPrint: Called from ',mesg
+  write(0,'(a,2es15.3)') 'MOM_forcing_type, forcing_SinglePointPrint: lon,lat = ',G%geoLonT(i,j),G%geoLatT(i,j)
+  call locMsg(fluxes%taux,'taux')
+  call locMsg(fluxes%tauy,'tauy')
+  call locMsg(fluxes%ustar,'ustar')
+  call locMsg(fluxes%buoy,'buoy')
+  call locMsg(fluxes%sw,'sw')
+  call locMsg(fluxes%sw_vis_dir,'sw_vis_dir')
+  call locMsg(fluxes%sw_vis_dif,'sw_vis_dif')
+  call locMsg(fluxes%sw_nir_dir,'sw_nir_dir')
+  call locMsg(fluxes%sw_nir_dif,'sw_nir_dif')
+  call locMsg(fluxes%lw,'lw')
+  call locMsg(fluxes%latent,'latent')
+  call locMsg(fluxes%sens,'sens')
+  call locMsg(fluxes%evap,'evap')
+  call locMsg(fluxes%liq_precip,'liq_precip')
+  call locMsg(fluxes%froz_precip,'froz_precip')
+  call locMsg(fluxes%virt_precip,'virt_precip')
+  call locMsg(fluxes%p_surf,'p_surf')
+  call locMsg(fluxes%salt_flux,'salt_flux')
+  call locMsg(fluxes%TKE_tidal,'TKE_tidal')
+  call locMsg(fluxes%ustar_tidal,'ustar_tidal')
+  call locMsg(fluxes%liq_runoff,'liq_runoff')
+  call locMsg(fluxes%froz_runoff,'froz_runoff')
+  call locMsg(fluxes%runoff_hflx,'runoff_hflx')
+  call locMsg(fluxes%calving_hflx,'calving_hflx')
+
+  contains
+  subroutine locMsg(array,aname)
+  real, dimension(NIMEM_,NKMEM_), pointer :: array
+  character(len=*) :: aname
+  if (associated(array)) then
+    write(0,'(3a,es15.3)') 'MOM_forcing_type, forcing_SinglePointPrint: ',trim(aname),' = ',array(i,j)
+  else
+    write(0,'(4a)') 'MOM_forcing_type, forcing_SinglePointPrint: ',trim(aname),' is not associated.'
+  endif
+  end subroutine locMsg
+end subroutine forcing_SinglePointPrint
 
 end module MOM_forcing_type
