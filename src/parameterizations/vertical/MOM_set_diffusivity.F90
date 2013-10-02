@@ -822,12 +822,6 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, CS, TKE_to_Kd, maxT
                   ! compensating entrainment from above to keep the layer
                   ! density from changing) that will not deplete all of the
                   ! layers above or below a layer within a timestep, in m.
-  real, dimension(SZK_(G)) :: &
-    gkp1_gk, &    ! The reduced gravity of the interface below a layer
-                  ! divided by the reduced gravity of the interface
-                  ! above it. Nondimensional.
-    I_glay        ! The inverse of the average reduced gravities around
-                  ! a layer in s2 m-1.
   real, dimension(SZI_(G)) :: &
     htot, &       ! The total thickness above or below a layer, or the
                   ! integrated thickness in the BBL, in m.
@@ -856,11 +850,6 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, CS, TKE_to_Kd, maxT
   G_Rho0 = G%g_Earth / G%Rho0
   H_neglect = G%H_subroundoff
   I_Rho0 = 1.0/G%Rho0
-
-  do k=2,nz-1
-    I_glay(k) = 2.0 / (G%g_prime(k)+G%g_prime(k+1))
-    gkp1_gk(k) = G%g_prime(k+1) / G%g_prime(k)
-  enddo
 
   ! determine kb - the index of the shallowest active interior layer.
   if (CS%bulkmixedlayer) then
@@ -1999,9 +1988,17 @@ subroutine set_density_ratios(h, tv, kb, G, CS, j, ds_dsp1, rho_0)
   integer :: i, k, k3, is, ie, nz, kmb
   is = G%isc ; ie = G%iec ; nz = G%ke
 
-  do k=2,nz-1 ; do i=is,ie
-    ds_dsp1(i,k) = G%g_prime(k) / G%g_prime(k+1)
-  enddo ; enddo
+  do k=2,nz-1
+    if (G%g_prime(k+1)/=0.) then
+      do i=is,ie
+        ds_dsp1(i,k) = G%g_prime(k) / G%g_prime(k+1)
+      enddo 
+    else
+      do i=is,ie
+        ds_dsp1(i,k) = 1.
+      enddo 
+    endif
+  enddo
 
   if (CS%bulkmixedlayer) then
     g_R0 = G%g_Earth/G%Rho0
