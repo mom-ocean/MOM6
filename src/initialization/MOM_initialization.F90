@@ -70,7 +70,7 @@ module MOM_initialization
 
 
 use MOM_checksums, only : hchksum, qchksum, uchksum, vchksum, chksum
-use MOM_coms, only : max_across_PEs
+use MOM_coms, only : max_across_PEs, min_across_PEs
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock, only :  CLOCK_ROUTINE, CLOCK_LOOP
 use MOM_domains, only : pass_var, pass_vector, sum_across_PEs, broadcast
@@ -133,7 +133,7 @@ use midas_vertmap, only : determine_temperature
 use MOM_ALE, only : ALE_initRegridding
 use MOM_regridding, only : regridding_CS
 use MOM_remapping, only : remapping_CS, remapping_core, initialize_remapping
-use MOM_remapping, only : dzFromH1H2
+use MOM_remapping, only : dzFromH1H2, remapDisableBoundaryExtrapolation
 
 use mpp_domains_mod, only : mpp_global_field, mpp_get_compute_domain
 use horiz_interp_mod, only : horiz_interp_new, horiz_interp,horiz_interp_type
@@ -3689,8 +3689,10 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
                mask_in=mask_in,mask_out=mask_out)
     endif
 
+    call myStats(temp_in,missing_value,k,'Temp from file')
     call horiz_interp(Interp,temp_in,temp_out,mask_in=mask_in, &
                       mask_out=mask_out,missing_value=missing_value)
+    call myStats(temp_out,missing_value,k,'Temp from horiz_interp()')
     call horiz_interp(Interp,salt_in,salt_out,mask_in=mask_in, &
                       mask_out=mask_out,missing_value=missing_value)       
 
@@ -3732,6 +3734,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
     call cpu_clock_begin(id_clock_fill)
 
     temp_out = fill_miss_2d(temp_out,good,fill,temp_prev,reentrant_x,tripolar_n)
+    call myStats(temp_out,missing_value,k,'Temp from fill_miss_2d()')
     salt_out = fill_miss_2d(salt_out,good,fill,salt_prev,reentrant_x,tripolar_n)
 
     good=good+fill
@@ -3769,6 +3772,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
     allocate( tmpT1dIn(kd) )
     allocate( tmpS1dIn(kd) )
     call initialize_remapping( kd, remappingScheme, remapCS ) ! Data for reconstructions
+    call remapDisableBoundaryExtrapolation( remapCS )
     ! Next we initialize the regridding package so that it knows about the target grid
     allocate( hTarget(nz) )
     allocate( h2(nz) )
@@ -3830,6 +3834,9 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
     deallocate( tmpS1dIn )
     deallocate( deltaE )
 
+    do k=1,nz
+      call myStats(tv%T(is:ie,js:je,k),missing_value,k,'Temp from ALE()')
+    enddo
     call cpu_clock_end(id_clock_ALE)
   else ! remap to isopycnal layer space
 ! next find interface positions using local arrays
@@ -3972,6 +3979,41 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
 
   call MOM_mesg(" MOM_initialization.F90, MOM_temp_salt_initialize_from_Z: subroutine completed", 3)
   call cpu_clock_end(id_clock_routine)
+
+  contains
+  subroutine myStats(array, missing, k, mesg)
+  real, dimension(:,:), intent(in) :: array
+  real, intent(in) :: missing
+  integer :: k
+  character(len=*) :: mesg
+  ! Local variables
+  real :: minA, maxA
+  integer :: i,j
+  logical :: found
+  character(len=120) :: lMesg
+  minA = 9.E24 ; maxA = -9.E24 ; found = .false.
+  do j = 1, ubound(array,2)
+    do i = 1, ubound(array,1)
+      if (abs(array(i,j)-missing)>1.e-6*abs(missing)) then
+        if (found) then
+          minA = min(minA, array(i,j))
+          maxA = max(maxA, array(i,j))
+        else
+          found = .true.
+          minA = array(i,j)
+          maxA = array(i,j)
+        endif
+      endif
+    enddo
+  enddo
+  call min_across_PEs(minA)
+  call max_across_PEs(maxA)
+  if (is_root_pe()) then
+    write(lMesg(1:120),'(2(a,es12.4),a,i3,x,a)') &
+       'init_from_Z: min=',minA,' max=',maxA,' Level=',k,trim(mesg)
+    call MOM_mesg(lMesg,8)
+  endif
+  end subroutine myStats
 end subroutine MOM_temp_salt_initialize_from_Z
 
 end module MOM_initialization
