@@ -333,7 +333,7 @@ use MOM_diag_mediator, only : disable_averaging, post_data, safe_alloc_ptr
 use MOM_diag_mediator, only : register_diag_field, register_static_field
 use MOM_diag_mediator, only : set_axes_info, diag_ctrl
 use MOM_domains, only : MOM_domains_init, clone_MOM_domain, pass_var, pass_vector
-use MOM_domains, only : pass_var_start, pass_var_complete
+use MOM_domains, only : pass_var_start, pass_var_complete, sum_across_PEs
 use MOM_domains, only : pass_vector_start, pass_vector_complete
 use MOM_domains, only : To_South, To_West, To_All, CGRID_NE, SCALAR_PAIR
 use MOM_checksums, only : MOM_checksums_init, hchksum, uchksum, vchksum
@@ -2222,9 +2222,10 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, CS, p_atm)
                             ! mixed layer, in m.
   real :: mass              ! The mass per unit area of a layer, in kg m-2.
   real :: IgR0
-  integer :: i, j, k, is, ie, js, je, nz, num_pnts, num_errs
+  integer :: i, j, k, is, ie, js, je, nz, numberOfErrors
   integer :: isd, ied, jsd, jed
-  character(128) :: msg
+  logical :: localError
+  character(160) :: msg
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -2380,61 +2381,46 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, CS, p_atm)
   endif
 
   if (CS%check_bad_surface_vals) then
-    num_errs=0 ! count number of errors
-    num_pnts=0 ! count number of errors
+    numberOfErrors=0 ! count number of errors
     do j=js,je; do i=is,ie
-      if (num_errs>99) exit ! If things get really bad, stop filling up the tty
-      k=0 ! Num errors at this point
       if (G%mask2dT(i,j)>0.) then
-        if (state%sea_lev(i,j)<=-G%bathyT(i,j)) then
-          k=k+1
-          write(msg(1:128),'(2(a,i4,x),2(a,f8.3,x),a,es12.3)') &
-              'Sea level < bathymetry at i=',i,'j=',j,'x=',G%geoLonT(i,j),&
-              'y=',G%geoLatT(i,j),'SSH=',state%sea_lev(i,j)
-          call MOM_error(WARNING, trim(msg), all_print=.true.)
-        endif
-        if (state%sea_lev(i,j)>=CS%bad_val_ssh_max) then
-          k=k+1
-          write(msg(1:128),'(2(a,i4,x),2(a,f8.3,x),a,es12.3)') &
-              'Very high sea level at i=',i,'j=',j,'x=',G%geoLonT(i,j),&
-              'y=',G%geoLatT(i,j),'SSH=',state%sea_lev(i,j)
-          call MOM_error(WARNING, trim(msg), all_print=.true.)
-        endif
-        if (CS%use_temperature) then
-          if (state%SSS(i,j)<0.) then
-            k=k+1
-            write(msg(1:128),'(2(a,i4,x),2(a,f8.3,x),a,es12.3)') &
-                'Negative salinity at i=',i,'j=',j,'x=',G%geoLonT(i,j),&
-                'y=',G%geoLatT(i,j),'SSS=',state%SSS(i,j)
+        localError = state%sea_lev(i,j)<=-G%bathyT(i,j)       &
+                .or. state%sea_lev(i,j)>= CS%bad_val_ssh_max  &
+                .or. state%sea_lev(i,j)<=-CS%bad_val_ssh_max
+        if (CS%use_temperature) localError = localError &
+                .or. state%SSS(i,j)<0.                        &
+                .or. state%SSS(i,j)>=CS%bad_val_sss_max       &
+                .or. state%SST(i,j)< CS%bad_val_sst_min       &
+                .or. state%SST(i,j)>=CS%bad_val_sst_max
+        if (localError) then
+          numberOfErrors=numberOfErrors+1
+          if (numberOfErrors<9) then ! Only report details for the first few errors
+            if (CS%use_temperature) then
+              write(msg(1:160),'(2(a,i4,x),2(a,f8.3,x),4(a,es11.4,x))') &
+                'Extreme surface state detected: i=',i,'j=',j, &
+                'x=',G%geoLonT(i,j),'y=',G%geoLatT(i,j), &
+                'D=',G%bathyT(i,j),                      &
+                'SSH=',state%sea_lev(i,j),               &
+                'SST=',state%SST(i,j),                   &
+                'SSS=',state%SSS(i,j)
+            else
+              write(msg(1:160),'(2(a,i4,x),2(a,f8.3,x),2(a,es11.4))') &
+                'Extreme surface state detected: i=',i,'j=',j, &
+                'x=',G%geoLonT(i,j),'y=',G%geoLatT(i,j), &
+                'D=',G%bathyT(i,j),                      &
+                'SSH=',state%sea_lev(i,j)
+            endif
             call MOM_error(WARNING, trim(msg), all_print=.true.)
-          elseif (state%SSS(i,j)>=CS%bad_val_sss_max) then
-            k=k+1
-            write(msg(1:128),'(2(a,i4,x),2(a,f8.3,x),a,es12.3)') &
-                'Very high salinity at i=',i,'j=',j,'x=',G%geoLonT(i,j),&
-                'y=',G%geoLatT(i,j),'SSS=',state%SSS(i,j)
-            call MOM_error(WARNING, trim(msg), all_print=.true.)
-          endif
-          if (state%SST(i,j)<CS%bad_val_sst_min) then
-            k=k+1
-            write(msg(1:128),'(2(a,i4,x),2(a,f8.3,x),a,es12.3)') &
-                'Very cold SST at i=',i,'j=',j,'x=',G%geoLonT(i,j),&
-                'y=',G%geoLatT(i,j),'SST=',state%SST(i,j)
-            call MOM_error(WARNING, trim(msg), all_print=.true.)
-          elseif (state%SST(i,j)>=CS%bad_val_sst_max) then
-            k=k+1
-            write(msg(1:128),'(2(a,i4,x),2(a,f8.3,x),a,es12.3)') &
-                'Very hot SST at i=',i,'j=',j,'x=',G%geoLonT(i,j),&
-                'y=',G%geoLatT(i,j),'SST=',state%SST(i,j)
-            call MOM_error(WARNING, trim(msg), all_print=.true.)
-          endif
-        endif ! use_temperature
-        num_pnts=num_pnts+min(1,k)
-        num_errs=num_errs+k
+          elseif (numberOfErrors==9) then ! Indicate once that there are more errors
+            call MOM_error(WARNING, 'There were more unreported extreme events!', all_print=.true.)
+          endif ! numberOfErrors
+        endif ! localError
       endif ! mask2dT
     enddo; enddo
-    if (num_errs>0) then
-      write(msg(1:128),'(3(a,i4,x))') 'There were',num_errs, &
-          'errors involving',num_pnts,'points'
+    call sum_across_PEs(numberOfErrors)
+    if (numberOfErrors>0) then
+      write(msg(1:160),'(3(a,i5,x))') 'There were a total of ',numberOfErrors, &
+          'locations detected with extreme surface values!'
       call MOM_error(FATAL, trim(msg))
     endif
   endif
