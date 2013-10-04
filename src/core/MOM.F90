@@ -2225,7 +2225,7 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, CS, p_atm)
   integer :: i, j, k, is, ie, js, je, nz, numberOfErrors
   integer :: isd, ied, jsd, jed
   logical :: localError
-  character(160) :: msg
+  character(240) :: msg
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -2396,19 +2396,27 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, CS, p_atm)
           numberOfErrors=numberOfErrors+1
           if (numberOfErrors<9) then ! Only report details for the first few errors
             if (CS%use_temperature) then
-              write(msg(1:160),'(2(a,i4,x),2(a,f8.3,x),4(a,es11.4,x))') &
+              write(msg(1:240),'(2(a,i4,x),2(a,f8.3,x),8(a,es11.4,x))') &
                 'Extreme surface state detected: i=',i,'j=',j, &
                 'x=',G%geoLonT(i,j),'y=',G%geoLatT(i,j), &
                 'D=',G%bathyT(i,j),                      &
                 'SSH=',state%sea_lev(i,j),               &
                 'SST=',state%SST(i,j),                   &
-                'SSS=',state%SSS(i,j)
+                'SSS=',state%SSS(i,j),                   &
+                'U-=',state%u(i-1,j),                    &
+                'U+=',state%u(i,j),                      &
+                'V-=',state%v(i,j-1),                    &
+                'V+=',state%v(i,j)
             else
-              write(msg(1:160),'(2(a,i4,x),2(a,f8.3,x),2(a,es11.4))') &
+              write(msg(1:240),'(2(a,i4,x),2(a,f8.3,x),6(a,es11.4))') &
                 'Extreme surface state detected: i=',i,'j=',j, &
                 'x=',G%geoLonT(i,j),'y=',G%geoLatT(i,j), &
                 'D=',G%bathyT(i,j),                      &
-                'SSH=',state%sea_lev(i,j)
+                'SSH=',state%sea_lev(i,j),               &
+                'U-=',state%u(i-1,j),                    &
+                'U+=',state%u(i,j),                      &
+                'V-=',state%v(i,j-1),                    &
+                'V+=',state%v(i,j)
             endif
             call MOM_error(WARNING, trim(msg), all_print=.true.)
           elseif (numberOfErrors==9) then ! Indicate once that there are more errors
@@ -2419,7 +2427,7 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, CS, p_atm)
     enddo; enddo
     call sum_across_PEs(numberOfErrors)
     if (numberOfErrors>0) then
-      write(msg(1:160),'(3(a,i5,x))') 'There were a total of ',numberOfErrors, &
+      write(msg(1:240),'(3(a,i5,x))') 'There were a total of ',numberOfErrors, &
           'locations detected with extreme surface values!'
       call MOM_error(FATAL, trim(msg))
     endif
