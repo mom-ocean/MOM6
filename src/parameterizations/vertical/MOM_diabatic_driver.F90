@@ -555,6 +555,12 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     ! Changes: ea(:,:,1), h, tv%T and tv%S.
     call applyBoundaryFluxes(G, dt, fluxes, CS%optics, ea, h, tv)
     call cpu_clock_end(id_clock_remap)
+    if (CS%debug) then
+      call MOM_forcing_chksum("after applyBoundaryFluxes ", fluxes, G, haloshift=0)
+      call MOM_thermovar_chksum("after applyBoundaryFluxes ", tv, G)
+      call MOM_state_chksum("after applyBoundaryFluxes ", u(:,:,:), v(:,:,:), h(:,:,:), G)
+      call hchksum(G%H_to_m*ea, "after applyBoundaryFluxes ea",G,haloshift=0)
+    endif
   endif
   
   ! Update h according to divergence of the difference between
@@ -583,6 +589,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   enddo
   if (CS%debug) then
     call MOM_state_chksum("after negative check ", u(:,:,:), v(:,:,:), h(:,:,:), G)
+    call MOM_forcing_chksum("after negative check ", fluxes, G, haloshift=0)
+    call MOM_thermovar_chksum("after negative check ", tv, G)
   endif
 
   ! Here, T and S are updated according to ea and eb.
@@ -675,6 +683,10 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
         ea(i,j,k) = ea(i,j,k) + eaml(i,j,k)
         eb(i,j,k) = eb(i,j,k) + ebml(i,j,k)
       enddo ; enddo ; enddo
+      if (CS%debug) then
+        call hchksum(G%H_to_m*ea, "after ea = ea + eaml",G,haloshift=0)
+        call hchksum(G%H_to_m*eb, "after eb = eb + ebml",G,haloshift=0)
+      endif
     endif
 
     if (CS%ML_mix_first < 1.0) then
@@ -708,6 +720,10 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
 
 ! Calculate the change in temperature & salinity due to entrainment.
     if (ASSOCIATED(T)) then
+      if (CS%debug) then
+        call hchksum(G%H_to_m*ea, "before triDiagTS ea ",G,haloshift=0)
+        call hchksum(G%H_to_m*eb, "before triDiagTS eb ",G,haloshift=0)
+      endif
       call cpu_clock_begin(id_clock_tridiag)
       ! Changes: T, S
       call triDiagTS(G, is, ie, js, je, hold, ea, eb, T, S)
@@ -715,7 +731,10 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     endif
 
   endif                                          ! end BULKMIXEDLAYER
-  if (CS%debug) call MOM_state_chksum("after mixed layer ", u, v, h, G)
+  if (CS%debug) then
+    call MOM_state_chksum("after mixed layer ", u, v, h, G)
+    call MOM_thermovar_chksum("after mixed layer ", tv, G)
+  endif
 
   if (.not. CS%useALEalgorithm) then
     call cpu_clock_begin(id_clock_remap)
@@ -837,6 +856,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     call cpu_clock_end(id_clock_sponge)
     if (CS%debug) then
       call MOM_state_chksum("apply_sponge ", u, v, h, G)
+      call MOM_thermovar_chksum("apply_sponge ", tv, G)
     endif
   endif
 
