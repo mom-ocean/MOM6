@@ -67,6 +67,7 @@ module MOM_diabatic_driver
 
 use MOM_bulk_mixed_layer, only : bulkmixedlayer, bulkmixedlayer_init, bulkmixedlayer_CS
 use MOM_checksums, only : hchksum, uchksum, vchksum
+use MOM_checksum_packages, only : MOM_state_chksum
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock, only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
@@ -1771,31 +1772,6 @@ subroutine find_uv_at_h(u, v, h, u_h, v_h, G, ea, eb)
 
   call cpu_clock_end(id_clock_uv_at_h)
 end subroutine find_uv_at_h
-
-subroutine MOM_state_chksum(mesg, u, v, h, G)
-  character(len=*),                       intent(in) :: mesg
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in) :: u
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in) :: v
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in) :: h
-  type(ocean_grid_type),                  intent(in) :: G
-!   This subroutine writes out chksums for the model's basic state variables.
-! Arguments: mesg - A message that appears on the chksum lines.
-!  (in)      u - Zonal velocity, in m s-1.
-!  (in)      v - Meridional velocity, in m s-1.
-!  (in)      h - Layer thickness, in m.
-!  (in)      uh - Volume flux through zonal faces = u*h*dy, m3 s-1.
-!  (in)      vh - Volume flux through meridional faces = v*h*dx, in m3 s-1.
-!  (in)      G - The ocean's grid structure.
-  integer :: is, ie, js, je, nz
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-
-  ! Note that for the chksum calls to be useful for reproducing across PE
-  ! counts, there must be no redundant points, so all variables use is..ie
-  ! and js...je as their extent.
-  call uchksum(u,mesg//" u",G,haloshift=0)
-  call vchksum(v,mesg//" v",G,haloshift=0)
-  call hchksum(G%H_to_m*h, mesg//" h",G,haloshift=0)
-end subroutine MOM_state_chksum
 
 subroutine applyBoundaryFluxes(CS, G, dt, fluxes, optics, ea, h, tv)
   type(diabatic_CS),                     pointer       :: CS

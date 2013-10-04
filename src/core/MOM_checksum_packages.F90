@@ -31,13 +31,18 @@ implicit none ; private
 
 public MOM_state_chksum, MOM_thermo_chksum, MOM_accel_chksum
 
+interface MOM_state_chksum
+  module procedure MOM_state_chksum_5arg
+  module procedure MOM_state_chksum_3arg
+end interface
+
 #include <MOM_memory.h>
 
 contains
 
 ! =============================================================================
 
-subroutine MOM_state_chksum(mesg, u, v, h, uh, vh, G, haloshift)
+subroutine MOM_state_chksum_5arg(mesg, u, v, h, uh, vh, G, haloshift)
   character(len=*),                       intent(in) :: mesg
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in) :: u
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in) :: v
@@ -66,7 +71,36 @@ subroutine MOM_state_chksum(mesg, u, v, h, uh, vh, G, haloshift)
   call hchksum(G%H_to_kg_m2*h, mesg//" h",G,haloshift=hs)
   call uchksum(G%H_to_kg_m2*uh, mesg//" uh",G,haloshift=hs)
   call vchksum(G%H_to_kg_m2*vh, mesg//" vh",G,haloshift=hs)
-end subroutine MOM_state_chksum
+end subroutine MOM_state_chksum_5arg
+
+! =============================================================================
+
+subroutine MOM_state_chksum_3arg(mesg, u, v, h, G, haloshift)
+  character(len=*),                       intent(in) :: mesg
+  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in) :: u
+  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in) :: v
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in) :: h
+  type(ocean_grid_type),                  intent(in) :: G
+  integer, optional,                      intent(in) :: haloshift
+!   This subroutine writes out chksums for the model's basic state variables.
+! Arguments: mesg - A message that appears on the chksum lines.
+!  (in)      u - Zonal velocity, in m s-1.
+!  (in)      v - Meridional velocity, in m s-1.
+!  (in)      h - Layer thickness, in m.
+!  (in)      uh - Volume flux through zonal faces = u*h*dy, m3 s-1.
+!  (in)      vh - Volume flux through meridional faces = v*h*dx, in m3 s-1.
+!  (in)      G - The ocean's grid structure.
+  integer :: is, ie, js, je, nz, hs
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+
+  ! Note that for the chksum calls to be useful for reproducing across PE
+  ! counts, there must be no redundant points, so all variables use is..ie
+  ! and js...je as their extent.
+  hs=1; if (present(haloshift)) hs=haloshift
+  call uchksum(u, mesg//" u",G,haloshift=hs)
+  call vchksum(v, mesg//" v",G,haloshift=hs)
+  call hchksum(G%H_to_kg_m2*h, mesg//" h",G,haloshift=hs)
+end subroutine MOM_state_chksum_3arg
 
 ! =============================================================================
 
