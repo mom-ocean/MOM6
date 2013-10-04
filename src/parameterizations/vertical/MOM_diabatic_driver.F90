@@ -81,6 +81,7 @@ use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing, optics_type, MOM_forcing_chksum
 use MOM_forcing_type, only : extractFluxes1d, absorbRemainingSW, calculateBuoyancyFlux2d
+use MOM_forcing_type, only : forcing_SinglePointPrint
 use MOM_geothermal, only : geothermal, geothermal_init, geothermal_end, geothermal_CS
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : vardesc
@@ -163,6 +164,7 @@ type, public :: diabatic_CS ; private
   integer :: id_ea = -1 , id_eb = -1, id_Kd_z = -1
   integer :: id_Tdif_z = -1, id_Tadv_z = -1, id_Sdif_z = -1, id_Sadv_z = -1
   integer :: id_Tdif = -1, id_Tadv = -1, id_Sdif = -1, id_Sadv = -1
+  integer :: id_createdH = -1
 
   type(entrain_diffusive_CS), pointer :: entrain_diffusive_CSp => NULL()
   type(bulkmixedlayer_CS),    pointer :: bulkmixedlayer_CSp => NULL()
@@ -187,6 +189,9 @@ type, public :: diabatic_CS ; private
   real, allocatable, dimension(:,:) :: buoyancyFlux ! Buoyancy flux for KPP (m2/s3)
   real, allocatable, dimension(:,:) :: netHeatMinusSW ! Effective temperature flux for KPP (K m/s)
   real, allocatable, dimension(:,:) :: netSalt ! Effective salt flux for KPP (ppt m/s)
+
+  ! Optional diagnostic arrays
+  real, allocatable, dimension(:,:) :: createdH ! The amount of volume added in order to avoid grounding (m/s)
 end type diabatic_CS
 
 integer :: id_clock_entrain, id_clock_mixedlayer, id_clock_set_diffusivity
@@ -553,7 +558,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   if (CS%useALEalgorithm) then
     call cpu_clock_begin(id_clock_remap)
     ! Changes: ea(:,:,1), h, tv%T and tv%S.
-    call applyBoundaryFluxes(G, dt, fluxes, CS%optics, ea, h, tv)
+    call applyBoundaryFluxes(CS, G, dt, fluxes, CS%optics, ea, h, tv)
     call cpu_clock_end(id_clock_remap)
     if (CS%debug) then
       call MOM_forcing_chksum("after applyBoundaryFluxes ", fluxes, G, haloshift=0)
@@ -1563,6 +1568,10 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
   CS%id_Sadv = register_diag_field('ocean_model',"Sflx_dia_adv",diag%axesTi, &
       Time, "Advective diapycnal salnity flux across interfaces", &
       "PSU meter second-1")
+  CS%id_createdH = register_diag_field('ocean_model',"created_H",diag%axesT1, &
+      Time, "The volume flux added to stop the ocean from drying out and becoming negative in depth", &
+      "meter second-1")
+  if (CS%id_createdH>0) allocate(CS%createdH(isd:ied,jsd:jed))
 
   if (associated(diag_to_Z_CSp)) then
     vd = vardesc("Kd_z","Diapycnal diffusivity at interfaces, interpolated to z",&
@@ -1659,6 +1668,7 @@ subroutine diabatic_driver_end(CS)
     call opacity_end(CS%opacity_CSp, CS%optics)
     deallocate(CS%optics)
   endif
+  if (CS%id_createdH>0) deallocate(CS%createdH)
   if (associated(CS)) deallocate(CS)
 
 end subroutine diabatic_driver_end
@@ -1787,7 +1797,8 @@ subroutine MOM_state_chksum(mesg, u, v, h, G)
   call hchksum(G%H_to_m*h, mesg//" h",G,haloshift=0)
 end subroutine MOM_state_chksum
 
-subroutine applyBoundaryFluxes(G, dt, fluxes, optics, ea, h, tv)
+subroutine applyBoundaryFluxes(CS, G, dt, fluxes, optics, ea, h, tv)
+  type(diabatic_CS),                     pointer       :: CS
   type(ocean_grid_type),                 intent(in)    :: G
   real,                                  intent(in)    :: dt
   type(forcing),                         intent(in)    :: fluxes
@@ -1804,7 +1815,11 @@ subroutine applyBoundaryFluxes(G, dt, fluxes, optics, ea, h, tv)
   real, allocatable, dimension(:,:) :: Pen_SW_bnd
   real, allocatable, dimension(:,:,:) :: opacityBand
   logical :: use_riverHeatContent, useCalvingHeatContent
+  integer, parameter :: maxGroundings = 5
+  integer :: numberOfGroundings, iGround(maxGroundings), jGround(maxGroundings)
+  real :: hGrounding(maxGroundings)
   integer :: i, j, is, ie, js, je, k, nz, n, nsw
+  character(len=45) :: mesg
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   ! Skip applying forcing if fluxes%sw is not associated.
@@ -1836,7 +1851,9 @@ subroutine applyBoundaryFluxes(G, dt, fluxes, optics, ea, h, tv)
   do k=1,nz ; do i=is,ie
       ksort(i,k) = k
   enddo ; enddo
+  if (CS%id_createdH>0) CS%createdH(:,:) = 0.
 
+  numberOfGroundings = 0
   do j=js,je ! Work in vertical slices (this is a hold over from the routines called with a j argument)
     ! Copy state into 2D-slice arrays
     do k=1,nz
@@ -1864,35 +1881,62 @@ subroutine applyBoundaryFluxes(G, dt, fluxes, optics, ea, h, tv)
     enddo
 
     do i=is,ie
-      do k=1,nz
-        ! Fraction of forcing that we put into this layer is normally 100%, unless the
-        ! layer is thin relative to 1/IforcingDepthScale
-        fractionOfForcing = min(1.0, h2d(i,k)*IforcingDepthScale)
+      if (G%mask2dT(i,j)>0.) then
+        do k=1,nz
+          ! Fraction of forcing that we put into this layer is normally 100%, unless the
+          ! layer is thin relative to 1/IforcingDepthScale
+          fractionOfForcing = min(1.0, h2d(i,k)*IforcingDepthScale)
+          if (-netThickness(i)>0.8*h2d(i,k)) fractionOfForcing=-0.8*h2d(i,k)/netThickness(i) ! Restrict volume loss
 
-        ! Change in state due to forcing
-        ! (Limit mass loss to the available mass in layer)
-        dThickness = max( fractionOfForcing*netThickness(i), -h2d(i,k) )
-        dTemp = fractionOfForcing*netHeat(i)
-        dSalt = fractionOfForcing*netSalt(i)
+          ! Change in state due to forcing
+          ! (Limit mass loss to the available mass in layer)
+          dThickness = max( fractionOfForcing*netThickness(i), -h2d(i,k) )
+          dTemp = fractionOfForcing*netHeat(i)
+          dSalt = fractionOfForcing*netSalt(i)
 
-        ! Update the forcing by the part to be consumed
-        netThickness(i) = netThickness(i) - dThickness
-        netHeat(i) = netHeat(i) - dTemp
-        netSalt(i) = netSalt(i) - dSalt
+          ! Update the forcing by the part to be consumed
+          netThickness(i) = netThickness(i) - dThickness
+          netHeat(i) = netHeat(i) - dTemp
+          netSalt(i) = netSalt(i) - dSalt
 
-        ! Adjust heating by the temperature of rain/water vapor
-        dTemp = dTemp + dThickness*tv%T(i,j,k)
-        if (ASSOCIATED(tv%TempxPmE)) tv%TempxPmE(i,j) = tv%TempxPmE(i,j) + &
+          ! Adjust heating by the temperature of rain/water vapor
+          dTemp = dTemp + dThickness*tv%T(i,j,k)
+          if (ASSOCIATED(tv%TempxPmE)) tv%TempxPmE(i,j) = tv%TempxPmE(i,j) + &
                          tv%T(i,j,k) * dThickness * G%H_to_kg_m2
 
-        ! Update state by the appropriate delta (change in state calculated above)
-        hOld = h2d(i,k) ! Need to keep original thickness in hand
-        h2d(i,k) = h2d(i,k) + dThickness
-        Ithickness = 1./h2d(i,k) ! Inverse of new thickness
-        T2d(i,k) = (hOld*T2d(i,k) + dTemp)*Ithickness
-        tv%S(i,j,k) = (hOld*tv%S(i,j,k) + dSalt)*Ithickness
-
-      enddo ! k
+          ! Update state by the appropriate delta (change in state calculated above)
+          hOld = h2d(i,k) ! Need to keep original thickness in hand
+          h2d(i,k) = h2d(i,k) + dThickness
+          if (h2d(i,k) > 0.) then
+            Ithickness = 1./h2d(i,k) ! Inverse of new thickness
+            T2d(i,k) = (hOld*T2d(i,k) + dTemp)*Ithickness
+            tv%S(i,j,k) = (hOld*tv%S(i,j,k) + dSalt)*Ithickness
+          else!if (h2d(i,k) < 0.) then ! h2d==0 is a special limit that need no extra handling
+            call forcing_SinglePointPrint(fluxes,G,i,j,'applyBoundaryFluxes')
+            write(0,*) 'applyBoundaryFluxes(): lon,lat=',G%geoLonT(i,j),G%geoLatT(i,j)
+            write(0,*) 'applyBoundaryFluxes(): netT,netS,netH=',netHeat(i),netSalt(i),netThickness(i)
+            write(0,*) 'applyBoundaryFluxes(): dT,dS,dH=',dTemp,dSalt,dThickness
+            write(0,*) 'applyBoundaryFluxes(): h(n),h(n+1),k=',hOld,h2d(i,k),k
+            call MOM_error(FATAL, "MOM_diabatic_driver.F90, applyBoundaryFluxes(): "//&
+                           "Complete mass loss in column!")
+          endif
+        enddo ! k
+        if (netThickness(i)/=0.) then ! If anything remains then we grounded out
+          numberOfGroundings = numberOfGroundings +1
+          if (numberOfGroundings<=maxGroundings) then
+            iGround(numberOfGroundings) = i ! Record i,j location of event for
+            jGround(numberOfGroundings) = j ! warning message
+            hGrounding = netThickness(i)
+          endif
+          if (CS%id_createdH>0) CS%createdH(i,j) = CS%createdH(i,j) - netThickness(i)/dt
+        endif
+      elseif( (abs(netHeat(i))+abs(netSalt(i))+abs(netThickness(i)))>0. ) then
+        call forcing_SinglePointPrint(fluxes,G,i,j,'applyBoundaryFluxes')
+        write(0,*) 'applyBoundaryFluxes(): lon,lat=',G%geoLonT(i,j),G%geoLatT(i,j)
+        write(0,*) 'applyBoundaryFluxes(): netT,netS,netH=',netHeat(i),netSalt(i),netThickness(i)
+        call MOM_error(FATAL, "MOM_diabatic_driver.F90, applyBoundaryFluxes(): "//&
+                              "Mass loss over land?")
+      endif
     enddo ! i
 
     ! Heat by the divergence of penetrating SW (this uses the updated thicknesses)
@@ -1909,6 +1953,17 @@ subroutine applyBoundaryFluxes(G, dt, fluxes, optics, ea, h, tv)
     enddo
 
   enddo ! j
+  if (CS%id_createdH > 0) call post_data(CS%id_createdH, CS%createdH, CS%diag)
+
+  if (numberOfGroundings>0) then
+    do i = 1, numberOfGroundings
+      call forcing_SinglePointPrint(fluxes,G,iGround(i),jGround(i),'applyBoundaryFluxes')
+      write(mesg(1:45),'(3es15.3)') G%geoLonT( iGround(i), jGround(i) ), &
+                             G%geoLatT( iGround(i), jGround(i)) , hGrounding(i)
+      call MOM_error(WARNING, "MOM_diabatic_driver.F90, applyBoundaryFluxes(): "//&
+                              "Mass created. x,y,dh= "//trim(mesg), all_print=.true.)
+    enddo
+  endif
 
   deallocate(Pen_SW_bnd)
   deallocate(opacityBand)
