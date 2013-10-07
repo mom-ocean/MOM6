@@ -337,8 +337,9 @@ use MOM_domains, only : pass_var_start, pass_var_complete, sum_across_PEs
 use MOM_domains, only : pass_vector_start, pass_vector_complete
 use MOM_domains, only : To_South, To_West, To_All, CGRID_NE, SCALAR_PAIR
 use MOM_checksums, only : MOM_checksums_init, hchksum, uchksum, vchksum
-use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
-use MOM_error_handler, only : MOM_set_verbosity
+use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe
+use MOM_error_handler, only : MOM_set_verbosity, callTree_showQuery
+use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser, only : read_param, get_param, log_version, param_file_type
 use MOM_get_input, only : Get_MOM_Input, directories
 use MOM_io, only : MOM_io_init, vardesc
@@ -645,6 +646,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
   type(time_type) :: Time_local
   integer :: pid_tau, pid_ustar, pid_psurf, pid_u, pid_h
   integer :: pid_T, pid_S
+  logical :: showCallTree
 
   G => CS%G
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -654,6 +656,8 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
   u => CS%u ; v => CS%v ; h => CS%h
 
   call cpu_clock_begin(id_clock_ocean)
+  showCallTree = callTree_showQuery()
+  if (showCallTree) call callTree_enter("step_MOM(), MOM.F90")
  !   First determine the time step that is consistent with this call.
  ! It is anticipated that the time step will almost always coincide
  ! with dt.  In addition, ntstep is determined, subject to the constraint
@@ -737,6 +741,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     CS%rel_time = CS%rel_time + dt
     ! Set the local time to the end of the time step.
     Time_local = Time_start + set_time(int(floor(CS%rel_time+0.5)))
+    if (showCallTree) call callTree_enter("DT cycles (step_MOM) n=",n)
 
     if (CS%diabatic_first .and. ((n==1) .or. MOD(n-1,ntstep)==0)) then ! do thermodynamics.
       dtdia = dt*min(ntstep,n_max-(n-1))
@@ -848,6 +853,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       endif                                                  ! ADIABATIC
       call disable_averaging(CS%diag)
       call cpu_clock_end(id_clock_thermo)
+      if (showCallTree) call callTree_waypoint("finished diabatic_first (step_MOM)")
     endif ! diabatic_first
 
     call cpu_clock_begin(id_clock_pass)
@@ -874,6 +880,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         call pass_var(h, G%Domain)
         call cpu_clock_end(id_clock_pass)
         call disable_averaging(CS%diag)
+        if (showCallTree) call callTree_waypoint("finished thickness_diffuse_first (step_MOM)")
       endif
     endif
 
@@ -923,6 +930,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
                     dtnt, dt*ntstep, CS%uh, CS%vh, CS%uhtr, CS%vhtr, &
                     eta_av, G, CS%dyn_split_RK2_CSp, calc_dtbt, CS%VarMix, CS%MEKE)
       endif
+      if (showCallTree) call callTree_waypoint("finished step_MOM_dyn_split (step_MOM)")
     else ! --------------------------------------------------- not SPLIT
       !   This section uses a simple unsplit stepping scheme for the dynamic
       ! equations, basically the stacked shallow water equations with viscosity. 
@@ -940,6 +948,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
                  CS%p_surf_begin, CS%p_surf_end, CS%uh, CS%vh, CS%uhtr, CS%vhtr, &
                  eta_av, G, CS%dyn_unsplit_CSp, CS%VarMix, CS%MEKE)
       endif
+      if (showCallTree) call callTree_waypoint("finished step_MOM_dyn_unsplit (step_MOM)")
 
     endif ! -------------------------------------------------- end SPLIT
 
@@ -953,6 +962,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       call cpu_clock_begin(id_clock_pass)
       call pass_var(h, G%Domain)
       call cpu_clock_end(id_clock_pass)
+      if (showCallTree) call callTree_waypoint("finished thickness_diffuse (step_MOM)")
     endif
 
     if (CS%mixedlayer_restrat) then
@@ -1105,6 +1115,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         ! call MOM_thermo_chksum("Post-diabatic ", CS%tv, G)
           call check_redundant("Post-diabatic ", u, v, G)
         endif
+        if (showCallTree) call callTree_waypoint("finished diabatic (step_MOM)")
       else
 
         call cpu_clock_begin(id_clock_diabatic)
@@ -1121,6 +1132,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
             if (associated(CS%tv%S)) call hchksum(CS%tv%S, "Post-diabatic S", G, haloshift=1)
           endif
         endif
+        if (showCallTree) call callTree_waypoint("finished adiabatic (step_MOM)")
       endif ; endif ! Adiabatic and diabatic_first.
       CS%uhtr(:,:,:) = 0.0
       CS%vhtr(:,:,:) = 0.0
@@ -1129,6 +1141,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       call cpu_clock_begin(id_clock_diagnostics)
       call calculate_diagnostic_fields(u, v, h, CS%uh, CS%vh, CS%tv, &
                           CS%ADp, CS%CDp, dtnt, G, CS%diagnostics_CSp)
+      if (showCallTree) call callTree_waypoint("finished calculate_diagnostic_fields (step_MOM)")
       call cpu_clock_end(id_clock_diagnostics)
 
       if (CS%id_T > 0) call post_data(CS%id_T, CS%tv%T, CS%diag)
@@ -1165,6 +1178,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
                                      G, CS%diag_to_Z_CSp)
         CS%Z_diag_time = CS%Z_diag_time + CS%Z_diag_interval
         call disable_averaging(CS%diag)
+        if (showCallTree) call callTree_waypoint("finished calculate_Z_diag_fields (step_MOM)")
       endif
       call cpu_clock_end(id_clock_Z_diag)
 
@@ -1186,6 +1200,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     if (CS%id_ssh_inst > 0) call post_data(CS%id_ssh_inst, ssh, CS%diag)
     call disable_averaging(CS%diag)
 
+    if (showCallTree) call callTree_leave("DT cycles (step_MOM)")
   enddo ! End of n loop
 
   Itot_wt_ssh = 1.0/tot_wt_ssh
@@ -1231,6 +1246,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     endif
   call disable_averaging(CS%diag)
 
+  if (showCallTree) call callTree_waypoint("calling calculate_surface_state (step_MOM)")
   call calculate_surface_state(state, u, v, h, CS%ave_ssh, G, CS, &
                                fluxes%p_surf_full)
 
@@ -1264,6 +1280,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     CS%p_surf_prev(i,j) = fluxes%p_surf(i,j)
   enddo ; enddo ; endif
 
+  if (showCallTree) call callTree_leave("step_MOM()")
   call cpu_clock_end(id_clock_ocean)
 
 end subroutine step_MOM
@@ -1314,8 +1331,6 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   type(MOM_initialization_struct) :: init_CS
   type(ocean_internal_state) :: MOM_internal_state
 
-  call MOM_mesg(" MOM.F90, initialize_MOM: subroutine entered", 3)
-
   if (associated(CS)) then
     call MOM_error(WARNING, "initialize_MOM called with an associated "// &
                             "control structure.")
@@ -1334,6 +1349,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
 
   verbosity = 2 ; call read_param(param_file, "VERBOSITY", verbosity)
   call MOM_set_verbosity(verbosity)
+  call callTree_enter("initialize_MOM(), MOM.F90")
 
   call find_obsolete_params(param_file)
 
@@ -1350,7 +1366,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
 #else
   call MOM_domains_init(G%domain, param_file, symmetric=symmetric)
 #endif
-  call MOM_mesg(" MOM.F90, initialize_MOM: domains initialized", 4)
+  call callTree_waypoint("domains initialized (initialize_MOM)")
 
   call MOM_checksums_init(param_file)
 
@@ -1631,7 +1647,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
       CS%tv%internal_heat(:,:) = 0.0
     endif
   endif
-  call MOM_mesg(" MOM.F90, initialize_MOM: state variables allocated", 4)
+  call callTree_waypoint("state variables allocated (initialize_MOM)")
 
 !   Set the fields that are needed for bitwise identical restarting
 ! the time stepping scheme.
@@ -1663,13 +1679,13 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
 
 !   Initialize all of the relevant fields.
   if (associated(CS%tracer_Reg)) init_CS%tracer_Reg => CS%tracer_Reg
-  call MOM_mesg(" MOM.F90, initialize_MOM: restart registration complete", 4)
+  call callTree_waypoint("restart registration complete (initialize_MOM)")
 
   call cpu_clock_begin(id_clock_MOM_init)
   call MOM_initialize(CS%u, CS%v, CS%h, CS%tv, Time, G, param_file, dirs, &
                       CS%restart_CSp, init_CS, Time_in)
   call cpu_clock_end(id_clock_MOM_init)
-  call MOM_mesg(" MOM.F90, initialize_MOM: returned from MOM_initialize()", 4)
+  call callTree_waypoint("returned from MOM_initialize() (initialize_MOM)")
 
   if (CS%useALEalgorithm) then
     ! For now, this has to follow immediately after MOM_initialize because
@@ -1702,7 +1718,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     call ALE_writeCoordinateFile( CS%ALE_CSp, G, dirs%output_directory )
   endif
   call cpu_clock_end(id_clock_MOM_init)
-  call MOM_mesg(" MOM.F90, initialize_MOM: ALE initialized", 4)
+  call callTree_waypoint("ALE initialized (initialize_MOM)")
 
   call MEKE_init(Time, G, param_file, diag, CS%MEKE_CSp, CS%MEKE)
   call VarMix_init(Time, G, param_file, diag, CS%VarMix)
@@ -1736,7 +1752,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
                 CS%ADp, CS%CDp, MOM_internal_state, init_CS%OBC, CS%ALE_CSp, CS%visc, dirs, CS%ntrunc)
     endif
   endif
-  call MOM_mesg(" MOM.F90, initialize_MOM: dynamics initialized", 4)
+  call callTree_waypoint("dynamics initialized (initialize_MOM)")
 
   call thickness_diffuse_init(Time, G, param_file, diag, CS%CDp, CS%thickness_diffuse_CSp)
   if (CS%mixedlayer_restrat) &
@@ -1800,7 +1816,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call cpu_clock_end(id_clock_pass_init)
 
   call write_static_fields(G, CS%diag)
-  call MOM_mesg(" MOM.F90, initialize_MOM: static fields written", 4)
+  call callTree_waypoint("static fields written (initialize_MOM)")
   call enable_averaging(0.0, Time, CS%diag)
 
 !  call calculate_diagnostic_fields(CS%u, CS%v, CS%h, uh, vh, CS%tv, 0.0, G, CS%diagnostics_CSp)
@@ -1856,7 +1872,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call get_param(param_file, "MOM", "DO_UNIT_TESTS", do_unit_tests, default=.false.)
   if (do_unit_tests) call unitTests
 
-  call MOM_mesg(" MOM.F90, initialize_MOM: subroutine completed", 3)
+  call callTree_leave("initialize_MOM()")
   call cpu_clock_end(id_clock_init)
 
 end subroutine initialize_MOM
@@ -2227,6 +2243,7 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, CS, p_atm)
   logical :: localError
   character(240) :: msg
 
+  call callTree_enter("calculate_surface_state(), MOM.F90")
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
@@ -2433,6 +2450,7 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, CS, p_atm)
     endif
   endif
 
+  call callTree_leave("calculate_surface_state()")
 end subroutine calculate_surface_state
 
 ! ============================================================================

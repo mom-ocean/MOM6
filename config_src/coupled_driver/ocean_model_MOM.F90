@@ -41,6 +41,7 @@ use MOM_diag_mediator, only : enable_averaging, disable_averaging
 use MOM_diag_mediator, only : diag_mediator_close_registration
 use MOM_domains, only : pass_vector, AGRID, BGRID_NE, CGRID_NE
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe
+use MOM_error_handler, only : callTree_enter, callTree_leave
 use MOM_file_parser, only : get_param, log_version, close_param_file, param_file_type
 use MOM_forcing_type, only : forcing
 use MOM_get_input, only : Get_MOM_Input, directories
@@ -93,7 +94,7 @@ end interface
 type, public ::  ocean_public_type
   type(domain2d) :: Domain       ! The domain for the surface fields.
   logical :: is_ocean_pe         ! .true. on processors that run the ocean model.
-  character(len=32) :: instance_name = "" ! A name that can be used to identify
+  character(len=32) :: instance_name = '' ! A name that can be used to identify
                                  ! this instance of an ocean model, for example
                                  ! in ensembles when writing messages.
   integer, pointer, dimension(:) :: pelist => NULL()   ! The list of ocean PEs.
@@ -202,6 +203,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in)
   integer :: secs, days
   type(param_file_type) :: param_file
 
+  call callTree_enter("ocean_model_init(), ocean_model_MOM.F90")
   if (associated(OS)) then
     call MOM_error(WARNING, "ocean_model_init called with an associated "// &
                     "ocean_state_type structure. Model is already initialized.")
@@ -275,6 +277,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in)
   if (is_root_pe()) &
     write(*,'(/12x,a/)') '======== COMPLETED MOM INITIALIZATION ========'
 
+  call callTree_leave("ocean_model_init(")
 end subroutine ocean_model_init
 ! </SUBROUTINE> NAME="ocean_model_init"
 
@@ -324,6 +327,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   real :: time_step         ! The time step of a call to step_MOM in seconds.
   integer :: secs, days
 
+  call callTree_enter("update_ocean_model(), ocean_model_MOM.F90")
   call get_time(Ocean_coupling_time_step, secs, days)
   time_step = 86400.0*real(days) + real(secs)
   
@@ -368,6 +372,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
 !                                   Ice_ocean_boundary%p, OS%press_to_z)
   call convert_state_to_ocean_type(OS%state, Ocean_sfc, OS%grid)
 
+  call callTree_leave("update_ocean_model()")
 end subroutine update_ocean_model
 ! </SUBROUTINE> NAME="update_ocean_model"
 

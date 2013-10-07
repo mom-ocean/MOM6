@@ -76,6 +76,7 @@ use MOM_cpu_clock, only :  CLOCK_ROUTINE, CLOCK_LOOP
 use MOM_domains, only : pass_var, pass_vector, sum_across_PEs, broadcast
 use MOM_domains, only : root_PE, To_All, SCALAR_PAIR, CGRID_NE
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
+use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser, only : get_param, read_param, log_param, param_file_type
 use MOM_file_parser, only : log_version
 use MOM_get_input, only : directories
@@ -216,7 +217,7 @@ subroutine MOM_initialize(u, v, h, tv, Time, G, PF, dirs, &
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
-  call MOM_mesg(" MOM_initialization.F90, MOM_initialize: subroutine entered", 3)
+  call callTree_enter("MOM_initialize(), MOM_initialization.F90")
   call log_version(PF, mod, version)
 
   new_sim = .false.
@@ -591,7 +592,7 @@ subroutine MOM_initialize(u, v, h, tv, Time, G, PF, dirs, &
     call set_Flather_Bdry_Conds(CS%OBC, tv, h, G, PF, CS%tracer_Reg)
   endif
 
-  call MOM_mesg(" MOM_initialization.F90, MOM_initialize: complete", 3)
+  call callTree_leave('MOM_initialize()')
 
 end subroutine MOM_initialize
 ! -----------------------------------------------------------------------------
@@ -616,7 +617,7 @@ subroutine set_coord_from_gprime(Rlay, g_prime, G, param_file)
   integer :: k, nz
   nz = G%ke
 
-  call MOM_mesg("  MOM_initialization.F90, set_coord_from_gprime: setting coordinate", 5)
+  call callTree_enter(trim(mod)//"(), MOM_initialization.F90")
 
   call get_param(param_file, mod, "GFS" , g_fs, &
                  "The reduced gravity at the free surface.", units="m s-2", &
@@ -630,6 +631,7 @@ subroutine set_coord_from_gprime(Rlay, g_prime, G, param_file)
   Rlay(1) = G%Rho0
   do k=2,nz ; Rlay(k) = Rlay(k-1) + g_prime(k)*(G%Rho0/G%g_Earth) ; enddo
 
+  call callTree_leave(trim(mod)//'()')
 
 end subroutine set_coord_from_gprime
 ! -----------------------------------------------------------------------------
@@ -654,7 +656,7 @@ subroutine set_coord_from_layer_density(Rlay, g_prime, G, param_file)
   integer :: k, nz
   nz = G%ke
 
-  call MOM_mesg("  MOM_initialization.F90, set_coord_from_layer_density: setting coordinate", 5)
+  call callTree_enter(trim(mod)//"(), MOM_initialization.F90")
 
   call get_param(param_file, mod, "GFS", g_fs, &
                  "The reduced gravity at the free surface.", units="m s-2", &
@@ -676,6 +678,7 @@ subroutine set_coord_from_layer_density(Rlay, g_prime, G, param_file)
      g_prime(k) = (G%g_Earth/G%Rho0) * (Rlay(k) - Rlay(k-1))
   enddo
 
+  call callTree_leave(trim(mod)//'()')
 end subroutine set_coord_from_layer_density
 ! -----------------------------------------------------------------------------
 
@@ -705,7 +708,7 @@ subroutine set_coord_from_TS_ref(Rlay, g_prime, G, param_file, eqn_of_state, &
   integer :: k, nz
   nz = G%ke
 
-  call MOM_mesg("  MOM_initialization.F90, set_coord_from_TS_ref: setting coordinate", 5)
+  call callTree_enter(trim(mod)//"(), MOM_initialization.F90")
 
   call get_param(param_file, mod, "T_REF", T_Ref, &
                  "The initial temperature of the lightest layer.", units="degC", &
@@ -731,7 +734,7 @@ subroutine set_coord_from_TS_ref(Rlay, g_prime, G, param_file, eqn_of_state, &
 !    These statements set the layer densities.                       !
   do k=2,nz ; Rlay(k) = Rlay(k-1) + g_prime(k)*(G%Rho0/G%g_Earth) ; enddo
 
-
+  call callTree_leave(trim(mod)//'()')
 end subroutine set_coord_from_TS_ref
 ! -----------------------------------------------------------------------------
 
@@ -760,7 +763,7 @@ subroutine set_coord_from_TS_profile(Rlay, g_prime, G, param_file, &
   character(len=200) :: filename, coord_file, inputdir ! Strings for file/path
   nz = G%ke
 
-  call MOM_mesg("  MOM_initialization.F90, set_coord_from_TS_profile: setting coordinate", 5)
+  call callTree_enter(trim(mod)//"(), MOM_initialization.F90")
 
   call get_param(param_file, mod, "GFS", g_fs, &
                  "The reduced gravity at the free surface.", units="m s-2", &
@@ -784,6 +787,7 @@ subroutine set_coord_from_TS_profile(Rlay, g_prime, G, param_file, &
   call calculate_density(T0, S0, Pref, Rlay, 1,nz,eqn_of_state)
   do k=2,nz; g_prime(k) = (G%g_Earth/G%Rho0) * (Rlay(k) - Rlay(k-1)); enddo
 
+  call callTree_leave(trim(mod)//'()')
 end subroutine set_coord_from_TS_profile
 ! -----------------------------------------------------------------------------
 
@@ -819,7 +823,7 @@ subroutine set_coord_from_TS_range(Rlay, g_prime, G, param_file, &
   character(len=200) :: filename, coord_file, inputdir ! Strings for file/path
   nz = G%ke
 
-  call MOM_mesg("  MOM_initialization.F90, set_coord_from_TS_range: setting coordinate", 5)
+  call callTree_enter(trim(mod)//"(), MOM_initialization.F90")
 
   call get_param(param_file, mod, "T_REF", T_Ref, &
                  "The default initial temperatures.", units="degC", default=10.0)
@@ -871,6 +875,7 @@ subroutine set_coord_from_TS_range(Rlay, g_prime, G, param_file, &
   enddo
   do k=2,nz; g_prime(k) = (G%g_Earth/G%Rho0) * (Rlay(k) - Rlay(k-1)); enddo
 
+  call callTree_leave(trim(mod)//'()')
 end subroutine set_coord_from_TS_range
 ! -----------------------------------------------------------------------------
 
@@ -894,7 +899,7 @@ subroutine set_coord_from_file(Rlay, g_prime, G, param_file)
   character(len=200) :: filename,coord_file,inputdir ! Strings for file/path
   nz = G%ke
 
-  call MOM_mesg("  MOM_initialization.F90, set_coord_from_file: setting coordinate", 5)
+  call callTree_enter(trim(mod)//"(), MOM_initialization.F90")
 
   call get_param(param_file, mod, "GFS", g_fs, &
                  "The reduced gravity at the free surface.", units="m s-2", &
@@ -921,6 +926,7 @@ subroutine set_coord_from_file(Rlay, g_prime, G, param_file)
        trim(filename))
   endif ; enddo
 
+  call callTree_leave(trim(mod)//'()')
 end subroutine set_coord_from_file
 ! -----------------------------------------------------------------------------
 
@@ -939,12 +945,12 @@ subroutine set_coord_linear(Rlay, g_prime, G, param_file)
 ! reduced gravities (g) according to a linear profile starting at a
 ! reference surface layer density and spanning a range of densities 
 ! defined by the parameter RLAY_RANGE (defaulted to 2 if not defined) 
-  character(len=40)  :: mod = "set_coord_from_layer_density" ! This subroutine
+  character(len=40)  :: mod = "set_coord_linear" ! This subroutine
   real :: Rlay_ref, Rlay_range, g_fs
   integer :: k, nz
   nz = G%ke
 
-  call MOM_mesg("  MOM_initialization.F90, set_coord_linear: setting coordinate")
+  call callTree_enter(trim(mod)//"(), MOM_initialization.F90")
 
   call get_param(param_file, mod, "LIGHTEST_DENSITY", Rlay_Ref, &
                  "The reference potential density used for layer 1.", &
@@ -971,6 +977,7 @@ subroutine set_coord_linear(Rlay, g_prime, G, param_file)
      g_prime(k) = (G%g_Earth/G%Rho0) * (Rlay(k) - Rlay(k-1))
   enddo
 
+  call callTree_leave(trim(mod)//'()')
 end subroutine set_coord_linear
 ! -----------------------------------------------------------------------------
 
@@ -990,6 +997,7 @@ subroutine MOM_initialize_rotation(f, G, PF)
   character(len=40)  :: mod = "MOM_initialize_rotation" ! This subroutine's name.
   character(len=200) :: config
 
+  call callTree_enter(trim(mod)//"(), MOM_initialization.F90")
   call get_param(PF, mod, "ROTATION", config, &
                  "This specifies how the Coriolis parameter is specified: \n"//&
                  " \t 2omegasinlat - Use twice the planetary rotation rate \n"//&
@@ -1005,6 +1013,7 @@ subroutine MOM_initialize_rotation(f, G, PF)
     case default ; call MOM_error(FATAL,"MOM_initialize: "// &
       "Unrecognized rotation setup "//trim(config))
   end select
+  call callTree_leave(trim(mod)//'()')
 end subroutine MOM_initialize_rotation
 
 subroutine MOM_initialize_topography(D, max_depth, G, PF)
@@ -1105,7 +1114,7 @@ subroutine initialize_topography_from_file(D, G, param_file )
   character(len=200) :: topo_varname                  ! Variable name in file
   character(len=40)  :: mod = "initialize_topography_from_file" ! This subroutine's name.
 
-  call MOM_mesg("  MOM_initialization.F90, initialize_topography_from_file: reading topography", 5)
+  call callTree_enter(trim(mod)//"(), MOM_initialization.F90")
 
   call get_param(param_file, mod, "INPUTDIR", inputdir, default=".")
   inputdir = slasher(inputdir)
@@ -1124,6 +1133,7 @@ subroutine initialize_topography_from_file(D, G, param_file )
 
   call read_data(filename,trim(topo_varname),D,domain=G%Domain%mpp_domain)
 
+  call callTree_leave(trim(mod)//'()')
 end subroutine initialize_topography_from_file
 ! -----------------------------------------------------------------------------
 
@@ -1155,8 +1165,9 @@ subroutine initialize_topography_named(D, G, param_file, topog_config, max_depth
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
+  call callTree_enter(trim(mod)//"(), MOM_initialization.F90")
   call MOM_mesg("  MOM_initialization.F90, initialize_topography_named: "//&
-                 "setting topography "//trim(topog_config), 5)
+                 "TOPO_CONFIG = "//trim(topog_config), 5)
 
   call get_param(param_file, mod, "MINIMUM_DEPTH", min_depth, &
                  "The minimum depth of the ocean.", units="m", default=0.0)
@@ -1234,6 +1245,7 @@ subroutine initialize_topography_named(D, G, param_file, topog_config, max_depth
     if (D(i,j) < min_depth) D(i,j) = 0.5*min_depth
   enddo ; enddo
 
+  call callTree_leave(trim(mod)//'()')
 end subroutine initialize_topography_named
 ! -----------------------------------------------------------------------------
 
@@ -1254,7 +1266,7 @@ subroutine limit_topography(D, G, param_file, max_depth)
   character(len=40)  :: mod = "limit_topography" ! This subroutine's name.
   real :: min_depth
 
-  call MOM_mesg("  MOM_initialization.F90, limit_topography: limiting topography", 5)
+  call callTree_enter(trim(mod)//"(), MOM_initialization.F90")
 
   call get_param(param_file, mod, "MINIMUM_DEPTH", min_depth, &
                  "The minimum depth of the ocean.", units="m", default=0.0)
@@ -1264,6 +1276,7 @@ subroutine limit_topography(D, G, param_file, max_depth)
     D(i,j) = min( max( D(i,j), 0.5*min_depth ), max_depth )
   enddo ; enddo
 
+  call callTree_leave(trim(mod)//'()')
 end subroutine limit_topography
 ! -----------------------------------------------------------------------------
 
@@ -1277,10 +1290,11 @@ subroutine set_rotation_planetary(f, G, param_file)
 !     (in)   param_file - parameter file type
 
 ! This subroutine sets up the Coriolis parameter for a sphere
+  character(len=30) :: mod = "set_rotation_planetary" ! This subroutine's name.
   integer :: I, J
   real    :: PI, omega
 
-  call MOM_mesg("  MOM_initialization.F90, set_rotation_planetary: setting f (Coriolis)", 5)
+  call callTree_enter(trim(mod)//"(), MOM_initialization.F90")
 
   call get_param(param_file, "set_rotation_planetary", "OMEGA", omega, &
                  "The rotation rate of the earth.", units="s-1", &
@@ -1291,6 +1305,7 @@ subroutine set_rotation_planetary(f, G, param_file)
     f(I,J) = ( 2.0 * omega ) * sin( ( PI * G%geoLatBu(I,J) ) / 180.)
   enddo ; enddo
 
+  call callTree_leave(trim(mod)//'()')
 end subroutine set_rotation_planetary
 ! -----------------------------------------------------------------------------
 
@@ -1309,7 +1324,7 @@ subroutine set_rotation_beta_plane(f, G, param_file)
   character(len=40)  :: mod = "set_rotation_beta_plane" ! This subroutine's name.
   character(len=200) :: axis_units
 
-  call MOM_mesg("  MOM_initialization.F90, set_rotation_beta_plane: setting f (Coriolis)", 5)
+  call callTree_enter(trim(mod)//"(), MOM_initialization.F90")
 
   call get_param(param_file, mod, "F_0", f_0, &
                  "The reference value of the Coriolis parameter with the \n"//&
@@ -1336,6 +1351,7 @@ subroutine set_rotation_beta_plane(f, G, param_file)
     f(I,J) = f_0 + beta * ( G%geoLatBu(I,J) * y_scl )
   enddo ; enddo
 
+  call callTree_leave(trim(mod)//'()')
 end subroutine set_rotation_beta_plane
 ! -----------------------------------------------------------------------------
 
@@ -1364,7 +1380,7 @@ subroutine initialize_thickness_from_file(h, G, param_file, file_has_thickness)
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
-  call MOM_mesg("  MOM_initialization.F90, initialize_thickness_from_file: reading thickness", 5)
+  call callTree_enter(trim(mod)//"(), MOM_initialization.F90")
 
   call get_param(param_file, mod, "INPUTDIR", inputdir, default=".")
   inputdir = slasher(inputdir)
@@ -1430,6 +1446,7 @@ subroutine initialize_thickness_from_file(h, G, param_file, file_has_thickness)
     endif
 
   endif
+  call callTree_leave(trim(mod)//'()')
 end subroutine initialize_thickness_from_file
 ! -----------------------------------------------------------------------------
 
@@ -1445,6 +1462,7 @@ subroutine initialize_thickness_uniform(h, G, param_file)
 !                         model parameter values.
 
 !  This subroutine initializes the layer thicknesses to be uniform.
+  character(len=40)  :: mod = "initialize_thickness_uniform" ! This subroutine's name.
   real :: e0(SZK_(G)+1)   ! The resting interface heights, in m, usually !
                           ! negative because it is positive upward.      !
   real :: eta1D(SZK_(G)+1)! Interface height relative to the sea surface !
@@ -1453,7 +1471,7 @@ subroutine initialize_thickness_uniform(h, G, param_file)
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
-  call MOM_mesg("  MOM_initialization.F90, initialize_thickness_uniform: setting thickness", 5)
+  call callTree_enter(trim(mod)//"(), MOM_initialization.F90")
 
   if (G%max_depth<=0.) call MOM_error(FATAL,"initialize_thickness_uniform: "// &
       "MAXIMUM_DEPTH has a non-sensical value! Was it set?")
@@ -1480,6 +1498,7 @@ subroutine initialize_thickness_uniform(h, G, param_file)
     enddo
   enddo ; enddo
 
+  call callTree_leave(trim(mod)//'()')
 end subroutine initialize_thickness_uniform
 ! -----------------------------------------------------------------------------
 
@@ -1653,7 +1672,7 @@ subroutine initialize_velocity_from_file(u, v, G, param_file)
   character(len=40)  :: mod = "initialize_velocity_from_file" ! This subroutine's name.
   character(len=200) :: filename,velocity_file,inputdir ! Strings for file/path
 
-  call MOM_mesg("  MOM_initialization.F90, initialize_velocity_from_file: reading u and v", 5)
+  call callTree_enter(trim(mod)//"(), MOM_initialization.F90")
 
   call get_param(param_file, mod, "VELOCITY_FILE", velocity_file, &
                  "The name of the velocity initial condition file.", &
@@ -1671,6 +1690,7 @@ subroutine initialize_velocity_from_file(u, v, G, param_file)
   call read_data(filename,"u",u(:,:,:),domain=G%Domain%mpp_domain,position=EAST_FACE)
   call read_data(filename,"v",v(:,:,:),domain=G%Domain%mpp_domain,position=NORTH_FACE)
 
+  call callTree_leave(trim(mod)//'()')
 end subroutine initialize_velocity_from_file
 ! -----------------------------------------------------------------------------
 
@@ -1686,10 +1706,12 @@ subroutine initialize_velocity_zero(u, v, G, param_file)
 !  (in)      param_file -  parameter file type
 
 !   This subroutine sets the initial velocity components to zero
+  character(len=200) :: mod = "initialize_velocity_zero" ! This subroutine's name.
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
+  call callTree_enter(trim(mod)//"(), MOM_initialization.F90")
 
   do k=1,nz ; do j=js,je ; do I=Isq,Ieq
     u(I,j,k) = 0.0
@@ -1698,6 +1720,7 @@ subroutine initialize_velocity_zero(u, v, G, param_file)
     v(i,J,k) = 0.0
   enddo ; enddo ; enddo
 
+  call callTree_leave(trim(mod)//'()')
 end subroutine initialize_velocity_zero
 ! -----------------------------------------------------------------------------
 
@@ -1809,7 +1832,7 @@ subroutine initialize_temp_salt_from_file(T, S, G, param_file)
   character(len=40)  :: mod = "initialize_temp_salt_from_file"
   character(len=64)  :: temp_var, salt_var
 
-  call MOM_mesg("  MOM_initialization.F90, initialize_temp_salt_from_file: reading T and S", 5)
+  call callTree_enter(trim(mod)//"(), MOM_initialization.F90")
 
   call get_param(param_file, mod, "TS_FILE", ts_file, &
                  "The initial condition file for temperature.", &
@@ -1839,6 +1862,7 @@ subroutine initialize_temp_salt_from_file(T, S, G, param_file)
 
   call read_data(filename, salt_var, S(:,:,:), domain=G%Domain%mpp_domain)
 
+  call callTree_leave(trim(mod)//'()')
 end subroutine initialize_temp_salt_from_file
 ! -----------------------------------------------------------------------------
 
@@ -1863,7 +1887,7 @@ subroutine initialize_temp_salt_from_profile(T, S, G, param_file)
   character(len=200) :: filename, ts_file, inputdir ! Strings for file/path
   character(len=40)  :: mod = "initialize_temp_salt_from_profile"
 
-  call MOM_mesg("  MOM_initialization.F90, initialize_temp_salt_from_file: reading T and S", 5)
+  call callTree_enter(trim(mod)//"(), MOM_initialization.F90")
 
   call get_param(param_file, mod, "TS_FILE", ts_file, &
                  "The file with the reference profiles for temperature \n"//&
@@ -1883,6 +1907,7 @@ subroutine initialize_temp_salt_from_profile(T, S, G, param_file)
     T(i,j,k) = T0(k) ; S(i,j,k) = S0(k)
   enddo ; enddo ; enddo
 
+  call callTree_leave(trim(mod)//'()')
 end subroutine initialize_temp_salt_from_profile
 ! -----------------------------------------------------------------------------
 
@@ -1915,8 +1940,7 @@ subroutine initialize_temp_salt_fit(T, S, G, param_file, eqn_of_state, P_Ref)
   integer :: i, j, k, itt, nz
   nz = G%ke
 
-  call MOM_mesg("  MOM_initialization.F90, initialize_temp_salt_fit: "//&
-                 "  setting T and S", 5)
+  call callTree_enter(trim(mod)//"(), MOM_initialization.F90")
 
   call get_param(param_file, mod, "T_REF", T_Ref, &
                  "A reference temperature used in initialization.", &
@@ -1950,6 +1974,7 @@ subroutine initialize_temp_salt_fit(T, S, G, param_file, eqn_of_state, P_Ref)
     T(i,j,k) = T0(k) ; S(i,j,k) = S0(k)
   enddo ; enddo ; enddo
 
+  call callTree_leave(trim(mod)//'()')
 end subroutine initialize_temp_salt_fit
 ! -----------------------------------------------------------------------------
 
@@ -1969,6 +1994,7 @@ subroutine initialize_temp_salt_linear(T, S, G, param_file)
   real  :: delta
   character(len=40)  :: mod = "initialize_temp_salt_linear" ! This subroutine's name.
   
+  call callTree_enter(trim(mod)//"(), MOM_initialization.F90")
   call get_param(param_file, mod, "T_TOP", T_top, &
                  "Initial temperature of the top surface.", &
                  units="degC", fail_if_missing=.true.)
@@ -2002,6 +2028,7 @@ subroutine initialize_temp_salt_linear(T, S, G, param_file)
 ! delta = 1;
 ! T(:,:,G%ke/2 - (delta-1):G%ke/2 + delta) = 1.0;
   
+  call callTree_leave(trim(mod)//'()')
 end subroutine initialize_temp_salt_linear
 ! -----------------------------------------------------------------------------
 
@@ -2805,8 +2832,7 @@ subroutine reset_face_lengths_file(G, param_file)
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
   ! These checks apply regardless of the chosen option.
 
-  call MOM_mesg("  MOM_initialization.F90, reset_face_lengths_file: "//&
-                 " setting channel configurations from file", 5)
+  call callTree_enter(trim(mod)//"(), MOM_initialization.F90")
 
   call get_param(param_file, mod, "CHANNEL_WIDTH_FILE", chan_file, &
                  "The file from which the list of narrowed channels is read.", &
@@ -2852,6 +2878,7 @@ subroutine reset_face_lengths_file(G, param_file)
     if (G%areaCv(i,J) > 0.0) G%IareaCv(i,J) = G%mask2dCv(i,J) / G%areaCv(i,J)
   enddo ; enddo
 
+  call callTree_leave(trim(mod)//'()')
 end subroutine reset_face_lengths_file
 ! -----------------------------------------------------------------------------
 
@@ -2885,8 +2912,7 @@ subroutine reset_face_lengths_list(G, param_file)
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
-  call MOM_mesg("  MOM_initialization.F90, reset_face_lengths_list: "//&
-                 " setting channel configurations from list", 5)
+  call callTree_enter(trim(mod)//"(), MOM_initialization.F90")
 
   call get_param(param_file, mod, "CHANNEL_LIST_FILE", chan_file, &
                  "The file from which the list of narrowed channels is read.", &
@@ -3058,6 +3084,7 @@ subroutine reset_face_lengths_list(G, param_file)
     deallocate(v_lat) ; deallocate(v_lon) ; deallocate(v_width)
   endif
 
+  call callTree_leave(trim(mod)//'()')
 end subroutine reset_face_lengths_list
 
 subroutine read_face_length_list(iounit, filename, num_lines, lines)
@@ -3443,7 +3470,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
 
   PI_180=atan(1.0)/45.
 
-  call MOM_mesg(" MOM_initialization.F90, MOM_temp_salt_initialize_from_Z: subroutine entered", 3)
+  call callTree_enter(trim(mod)//"(), MOM_initialization.F90")
   call log_version(PF, mod, version)
 
   new_sim = .false.
@@ -3977,7 +4004,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
   deallocate(temp_out,salt_out,mask_out,temp_prev,salt_prev)
   deallocate(rho_out,fill,mask2dT,good,Depth)
 
-  call MOM_mesg(" MOM_initialization.F90, MOM_temp_salt_initialize_from_Z: subroutine completed", 3)
+  call callTree_leave(trim(mod)//'()')
   call cpu_clock_end(id_clock_routine)
 
   contains

@@ -49,6 +49,7 @@ program MOM_main
   use MOM,                 only : calculate_surface_state, MOM_end
   use MOM_domains,         only : MOM_infra_init, MOM_infra_end
   use MOM_error_handler,   only : MOM_error, MOM_mesg, WARNING, FATAL, is_root_pe
+  use MOM_error_handler,   only : callTree_enter, callTree_leave, callTree_waypoint
   use MOM_file_parser,     only : read_param, get_param, log_param, log_version, param_file_type
   use MOM_file_parser,     only : close_param_file
   use MOM_forcing_type,    only : forcing
@@ -185,6 +186,7 @@ program MOM_main
   call cpu_clock_begin(initClock)
 
   call MOM_mesg('======== Model being driven by MOM_driver ========', 2)
+  call callTree_waypoint("Program MOM_main, MOM_driver.F90")
 
   if (file_exists('input.nml')) then
     ! Provide for namelist specification of the run length and calendar data.
@@ -250,14 +252,13 @@ program MOM_main
 
   call surface_forcing_init(Time, grid, param_file, MOM_CSp%diag, &
                             surface_forcing_CSp, MOM_CSp%tracer_flow_CSp)
-  call MOM_mesg("Done surface_forcing_init.", 5)
+  call callTree_waypoint("done surface_forcing_init")
 
-  call MOM_mesg("Call MOM_sum_output_init.", 5)
   call MOM_sum_output_init(grid, param_file, dirs%output_directory, &
                            MOM_CSp%ntrunc, Start_time, sum_output_CSp)
   call MOM_write_cputime_init(param_file, dirs%output_directory, Start_time, &
                               write_CPU_CSp)
-  call MOM_mesg("Done MOM_sum_output_init.", 5)
+  call callTree_waypoint("done MOM_sum_output_init")
 
   segment_start_time = Time
   elapsed_time = 0.0
@@ -364,6 +365,7 @@ program MOM_main
 
   n = 1
   do while ((n < nmax) .and. (Time < Time_end))
+    call callTree_enter("Main loop, MOM_driver.F90",n)
 
     ! Set the forcing for the next steps.
     call set_forcing(state, fluxes, Time, Time_step_ocean, grid, &
@@ -437,6 +439,7 @@ program MOM_main
     endif
 
     n = n + ntstep
+    call callTree_leave("Main loop")
   enddo
 
   call cpu_clock_end(mainClock)
@@ -475,6 +478,7 @@ program MOM_main
     close(unit)
   endif
 
+  call callTree_waypoint("End MOM_main")
   call diag_mediator_end(Time)
   call cpu_clock_end(termClock)
 

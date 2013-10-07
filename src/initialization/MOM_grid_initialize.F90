@@ -73,6 +73,7 @@ use MOM_domains, only : To_North, To_South, To_East, To_West
 use MOM_domains, only : MOM_define_domain, MOM_define_IO_domain
 use MOM_domains, only : MOM_domain_type
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, NOTE, is_root_pe
+use MOM_error_handler, only : callTree_enter, callTree_leave
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : read_data, slasher, file_exists
@@ -368,6 +369,7 @@ subroutine set_grid_metrics(G, param_file)
   logical :: debug
   character(len=256) :: config
 
+  call callTree_enter("set_grid_metrics(), MOM_grid_initialize.F90")
   call log_version(param_file, "MOM_grid_init", version, "")
   call get_param(param_file, "MOM_grid_init", "GRID_CONFIG", config, &
                  "A character string that determines the method for \n"//&
@@ -398,6 +400,7 @@ subroutine set_grid_metrics(G, param_file)
 
   if (debug) call grid_metrics_chksum('MOM_grid_init/set_grid_metrics',G)
 
+  call callTree_leave("set_grid_metrics()")
 end subroutine set_grid_metrics
 
 ! ------------------------------------------------------------------------------
@@ -425,7 +428,7 @@ subroutine set_grid_derived_metrics(G, param_file)
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
-  call MOM_mesg("  MOM_grid_init.F90, set_grid_derived_metrics: deriving metrics", 5)
+  call callTree_enter("set_grid_derived_metrics(), MOM_grid_initialize.F90")
  
   do j=jsd,jed ; do i=isd,ied
     if (G%dxT(i,j) <= 0.0) then
@@ -494,6 +497,7 @@ subroutine set_grid_derived_metrics(G, param_file)
 68 FORMAT ("WARNING: PE ",I4," ",a3,"(",I4,",",I4,") = ",ES10.4, &
            " is being changed to ",ES10.4,".")
 
+  call callTree_leave("set_grid_derived_metrics()")
 end subroutine set_grid_derived_metrics
 
 ! ------------------------------------------------------------------------------
@@ -640,7 +644,7 @@ subroutine set_grid_metrics_from_mosaic(G,param_file)
   type(domain1D) :: domx, domy
   integer        :: start(4), nread(4)
  
-  call MOM_mesg("   MOM_grid_init.F90, set_grid_metrics_from_mosaic: reading grid", 5)
+  call callTree_enter("set_grid_metrics_from_mosaic(), MOM_grid_initialize.F90")
 
   call get_param(param_file, mod, "GRID_FILE", grid_file, &
                  "Name of the file from which to read horizontal grid data.", &
@@ -841,7 +845,7 @@ subroutine set_grid_metrics_from_mosaic(G,param_file)
   enddo
   deallocate( tmpGlbl )
 
-
+  call callTree_leave("set_grid_metrics_from_mosaic()")
 end subroutine set_grid_metrics_from_mosaic
 
 
@@ -873,7 +877,7 @@ subroutine set_grid_metrics_cartesian(G, param_file)
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
   I1off = G%isd_global - isd ; J1off = G%jsd_global - jsd;
 
-  call MOM_mesg("  MOM_grid_init.F90, set_grid_metrics_cartesian: setting metrics", 5)
+  call callTree_enter("set_grid_metrics_cartesian(), MOM_grid_initialize.F90")
  
   PI = 4.0*atan(1.0) ;
 
@@ -969,6 +973,7 @@ subroutine set_grid_metrics_cartesian(G, param_file)
     G%dyCv(i,J) = G%dyBu(I,J) ; G%IdyCv(i,J) = G%IdyBu(I,J)
   enddo ; enddo
 
+  call callTree_leave("set_grid_metrics_cartesian()")
 end subroutine set_grid_metrics_cartesian
 
 ! ------------------------------------------------------------------------------
@@ -1002,8 +1007,7 @@ subroutine set_grid_metrics_spherical(G, param_file)
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
   i_offset = G%isd_global - isd; j_offset = G%jsd_global - jsd
 
-  call MOM_mesg("  MOM_grid_init.F90, set_grid_metrics_simple_spherical: "// &
-                 "Setting metrics.", 5)
+  call callTree_enter("set_grid_metrics_spherical(), MOM_grid_initialize.F90")
  
 !    Calculate the values of the metric terms that might be used
 !  and save them in arrays.
@@ -1114,6 +1118,7 @@ subroutine set_grid_metrics_spherical(G, param_file)
     G%areaT(i,j) = G%dxT(i,j) * G%dyT(i,j)
   enddo; enddo
 
+  call callTree_leave("set_grid_metrics_spherical()")
 end subroutine set_grid_metrics_spherical
 
 ! ------------------------------------------------------------------------------
@@ -1173,7 +1178,7 @@ subroutine set_grid_metrics_mercator(G, param_file)
   GP%niglobal = G%Domain%niglobal
   GP%njglobal = G%Domain%njglobal
 
-  call MOM_mesg("  MOM_grid_init.F90, set_grid_metrics_mercator: setting metrics", 5)
+  call callTree_enter("set_grid_metrics_mercator(), MOM_grid_initialize.F90")
  
 !    Calculate the values of the metric terms that might be used
 !  and save them in arrays.
@@ -1358,6 +1363,7 @@ subroutine set_grid_metrics_mercator(G, param_file)
     enddo ; enddo
   endif
 
+  call callTree_leave("set_grid_metrics_mercator()")
 end subroutine set_grid_metrics_mercator
 
 ! ------------------------------------------------------------------------------
@@ -1413,6 +1419,7 @@ subroutine initialize_masks(G, PF)
   logical :: apply_OBC_v_flather_north, apply_OBC_v_flather_south
   character(len=40)  :: mod = "MOM_grid_init initialize_masks"
 
+  call callTree_enter("initialize_masks(), MOM_grid_initialize.F90")
   call get_param(PF, "MOM_grid_init initialize_masks", &
                  "MINIMUM_DEPTH", min_depth, &
                  "The minimum ocean depth, anything shallower than which \n"//&
@@ -1526,6 +1533,7 @@ subroutine initialize_masks(G, PF)
     if (G%areaCu(i,j) > 0.0) G%IareaCu(i,j) = G%mask2dCu(i,j) / G%areaCu(i,j)
   enddo ; enddo
 
+  call callTree_leave("initialize_masks()")
 end subroutine initialize_masks
 
 end module MOM_grid_initialize

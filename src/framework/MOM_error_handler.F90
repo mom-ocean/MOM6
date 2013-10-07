@@ -17,6 +17,7 @@ implicit none ; private
 
 public MOM_error, MOM_mesg, NOTE, WARNING, FATAL, is_root_pe, stdlog, stdout
 public MOM_set_verbosity, MOM_get_verbosity, MOM_verbose_enough
+public callTree_showQuery, callTree_enter, callTree_leave, callTree_waypoint
 
 ! Verbosity level:
 !  0 - FATAL messages only
@@ -29,10 +30,17 @@ public MOM_set_verbosity, MOM_get_verbosity, MOM_verbose_enough
 !  7 -
 !  8 -
 !  9 - anything and everything (also set with #define DEBUG)
-integer :: verbosity = 2
-! Note that this is a module variable rather than contained in a
-! type passed by argument (preferred for most data) for convenience
+integer :: verbosity = 6
+!   Note that this module default will only hold until the
+! VERBOSITY parameter is parsed and the given default imposed.
+! We set it to 6 here so that the call tree will print before
+! the parser has been initialized
+!   Also note that this is a module variable rather than contained in
+! a type passed by argument (preferred for most data) for convenience
 ! and to reduce obfiscation of code
+
+! The level of calling within the call tree
+integer :: callTreeIndentLevel = 0
 
 contains
 
@@ -102,8 +110,56 @@ end function MOM_get_verbosity
 function MOM_verbose_enough(verb)
   integer, intent(in) :: verb
   logical :: MOM_verbose_enough
-
   MOM_verbose_enough = (verbosity >= verb)
 end function MOM_verbose_enough
+
+function callTree_showQuery()
+! Returns True, if the verbosity>=6 indicating to show the call tree
+  logical :: callTree_showQuery
+  callTree_showQuery = (verbosity >= 6)
+end function callTree_showQuery
+
+subroutine callTree_enter(mesg,n)
+! A wrapper for MOM_mesg that updates the indent level for
+! call tree reporting
+  character(len=*)  :: mesg ! Message to write
+  integer, optional :: n ! An optional integer to write at end of message
+  ! Local variables
+  character(len=8) :: nAsString
+  callTreeIndentLevel = callTreeIndentLevel + 1
+  if (verbosity<6) return
+  if (is_root_pe()) then
+    nAsString = ''
+    if (present(n)) then
+      write(nAsString(1:8),'(i8)') n
+      call mpp_error(NOTE, 'callTree: '// &
+        repeat('   ',callTreeIndentLevel-1)//'loop '//trim(mesg)//trim(nAsString))
+    else
+      call mpp_error(NOTE, 'callTree: '// &
+        repeat('   ',callTreeIndentLevel-1)//'---> '//trim(mesg))
+    endif
+  endif
+end subroutine callTree_enter
+
+subroutine callTree_leave(mesg)
+! A wrapper for MOM_mesg that updates the indent level for
+! call tree reporting
+  character(len=*) :: mesg ! Message to write
+  if (callTreeIndentLevel<1) write(0,*) 'callTree_leave: error callTreeIndentLevel=',callTreeIndentLevel,trim(mesg)
+  callTreeIndentLevel = callTreeIndentLevel - 1
+  if (verbosity<6) return
+  if (is_root_pe()) call mpp_error(NOTE, 'callTree: '// &
+        repeat('   ',callTreeIndentLevel)//'<--- '//trim(mesg))
+end subroutine callTree_leave
+
+subroutine callTree_waypoint(mesg)
+! A wrapper for MOM_mesg that updates the indent level for
+! call tree reporting
+  character(len=*) :: mesg ! Message to write
+  if (callTreeIndentLevel<0) write(0,*) 'callTree_waypoint: error callTreeIndentLevel=',callTreeIndentLevel,trim(mesg)
+  if (verbosity<6) return
+  if (is_root_pe()) call mpp_error(NOTE, 'callTree: '// &
+        repeat('   ',callTreeIndentLevel)//'o '//trim(mesg))
+end subroutine callTree_waypoint
 
 end module MOM_error_handler

@@ -78,7 +78,8 @@ use MOM_diffConvection, only : diffConvection_calculate, diffConvection_end
 use MOM_domains, only : pass_var, To_West, To_South
 use MOM_entrain_diffusive, only : entrainment_diffusive, entrain_diffusive_init
 use MOM_entrain_diffusive, only : entrain_diffusive_end, entrain_diffusive_CS
-use MOM_error_handler, only : MOM_error, FATAL, WARNING
+use MOM_error_handler, only : MOM_error, FATAL, WARNING, callTree_showQuery
+use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing, optics_type, MOM_forcing_chksum
 use MOM_forcing_type, only : extractFluxes1d, absorbRemainingSW, calculateBuoyancyFlux2d
@@ -307,6 +308,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
                        ! interpolated into depth space.
   integer :: z_ids(7)  ! The id numbers of the diagnostics that are to be
                        ! interpolated into depth space.
+  logical :: showCallTree ! If true, show the call tree
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkmb
   real, pointer :: T(:,:,:), S(:,:,:)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -315,6 +317,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   h_neglect = G%H_subroundoff ; h_neglect2 = h_neglect*h_neglect
 
   if (nz == 1) return
+  showCallTree = callTree_showQuery()
+  if (showCallTree) call callTree_enter("diabatic(), MOM_diabatic_driver.F90")
 
   T => tv%T
   S => tv%S
@@ -338,7 +342,10 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   !   Frazil formation keeps the temperature above the freezing point.
   ! make_frazil is deliberately called at both the beginning and at
   ! the end of the diabatic processes.
-  if (ASSOCIATED(T) .AND. ASSOCIATED(tv%frazil)) call make_frazil(h,tv,G,CS)
+  if (ASSOCIATED(T) .AND. ASSOCIATED(tv%frazil)) then
+    call make_frazil(h,tv,G,CS)
+    if (showCallTree) call callTree_waypoint("done with 1st make_frazil (diabatic)")
+  endif
 
   if ((CS%ML_mix_first > 0.0) .or. CS%use_geothermal) then
     do k=1,nz ; do j=js,je ; do i=is,ie
@@ -349,6 +356,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     call cpu_clock_begin(id_clock_geothermal)
     call geothermal(h, tv, dt, eaml, ebml, G, CS%geothermal_CSp)
     call cpu_clock_end(id_clock_geothermal)
+    if (showCallTree) call callTree_waypoint("geothermal (diabatic)")
   endif
 
   ! Set_opacity estimates the optical properties of the water column.
@@ -385,8 +393,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
         call adjust_salt(h, tv, G, CS)
       call cpu_clock_end(id_clock_mixedlayer)
       if (CS%debug) call MOM_state_chksum("After mixedlayer ", u, v, h, G)
+      if (showCallTree) call callTree_waypoint("done with 1st nulkmixedlayer (diabatic)")
     endif
-
   endif
 
 !    This following subroutine applies diapycnal diffusion and the
@@ -435,6 +443,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
       call hchksum(visc%Kv_turb, "after calc_KS visc%Kv_turb",G)
       call hchksum(visc%TKE_turb, "after calc_KS visc%TKE_turb",G)
     endif
+    if (showCallTree) call callTree_waypoint("done with calculate_kappa_shear (diabatic)")
   endif
 
   ! Why is this block here? -AJA  ?????
@@ -445,12 +454,14 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     call wave_speed(h, tv, G, cg1, full_halos=.true.)
     call propagate_int_tide(cg1, CS%int_tide_input%TKE_itidal_input, &
                             CS%int_tide_input%tideamp, dt, G, CS%int_tide_CSp)
+    if (showCallTree) call callTree_waypoint("done with propagate_int_tide (diabatic)")
   endif
 
   call cpu_clock_begin(id_clock_set_diffusivity)
   ! Sets: Kd, Kd_int, visc%Kd_extra_T, visc%Kd_extra_S
   call set_diffusivity(u, v, h, tv, fluxes, CS%optics, visc, dt, G, CS%set_diff_CSp, Kd, Kd_int)
   call cpu_clock_end(id_clock_set_diffusivity)
+  if (showCallTree) call callTree_waypoint("done with set_diffusivity (diabatic)")
 
   if (CS%useKPP) then
     call cpu_clock_begin(id_clock_kpp)
@@ -488,6 +499,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
           visc%Kd_extra_T(:,:,:) = Kd_heat(:,:,:) - Kd_int(:,:,:)
     endif ! not passive
     call cpu_clock_end(id_clock_kpp)
+    if (showCallTree) call callTree_waypoint("done with KPP_calculate (diabatic)")
   endif
 
   ! Check for static instabilities and increase Kd_int where unstable
@@ -501,6 +513,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     call KPP_applyNonLocalTransport(CS%KPP_CSp, G, h, CS%KPP_NLTheat, CS%netHeatMinusSW, dt, tv%T, isHeat=.true.)
     call KPP_applyNonLocalTransport(CS%KPP_CSp, G, h, CS%KPP_NLTscalar, CS%netSalt, dt, tv%S, isSalt=.true.)
     call cpu_clock_end(id_clock_kpp)
+    if (showCallTree) call callTree_waypoint("done with KPP_applyNonLocalTransport (diabatic)")
   endif
 
   if (CS%debug) then
@@ -518,6 +531,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     ! Changes: tv%T, tv%S
     call differential_diffuse_T_S(h, tv, visc, dt, G)
     call cpu_clock_end(id_clock_differential_diff)
+    if (showCallTree) call callTree_waypoint("done with differential_diffuse_T_S (diabatic)")
   endif
 
   ! This block sets ea, eb from Kd or Kd_int.
@@ -537,6 +551,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     do j=js,je ; do i=is,ie
       eb(i,j,nz) = 0.
     enddo ; enddo
+    if (showCallTree) call callTree_waypoint("done setting ea,eb from Kd_int (diabatic)")
   else ! .not. CS%useALEalgorithm
     ! If not useing ALE, then calculate layer entrainments/detrainments from
     ! diffusivities and differences between layer and target densities
@@ -545,6 +560,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     call Entrainment_diffusive(u, v, h, tv, fluxes, dt, G, CS%entrain_diffusive_CSp, &
                                ea, eb, kb, Kd_Lay=Kd, Kd_int=Kd_int)
     call cpu_clock_end(id_clock_entrain)
+    if (showCallTree) call callTree_waypoint("done with Entrainment_diffusive (diabatic)")
   endif ! (CS%useALEalgorithm)
 
   if (CS%debug) then
@@ -567,6 +583,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
       call MOM_state_chksum("after applyBoundaryFluxes ", u(:,:,:), v(:,:,:), h(:,:,:), G)
       call hchksum(G%H_to_m*ea, "after applyBoundaryFluxes ea",G,haloshift=0)
     endif
+    if (showCallTree) call callTree_waypoint("done with applyBoundaryFluxes (diabatic)")
   endif
   
   ! Update h according to divergence of the difference between
@@ -598,6 +615,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     call MOM_forcing_chksum("after negative check ", fluxes, G, haloshift=0)
     call MOM_thermovar_chksum("after negative check ", tv, G)
   endif
+  if (showCallTree) call callTree_waypoint("done with h=ea-eb (diabatic)")
 
   ! Here, T and S are updated according to ea and eb.
   ! If using the bulk mixed layer, T and S are also updated
@@ -720,6 +738,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
         call adjust_salt(h, tv, G, CS)
 
       call cpu_clock_end(id_clock_mixedlayer)
+      if (showCallTree) call callTree_waypoint("done with 2nd bulkmixedlayer (diabatic)")
     endif
 
   else                                             ! Not BULKMIXEDLAYER.
@@ -734,6 +753,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
       ! Changes: T, S
       call triDiagTS(G, is, ie, js, je, hold, ea, eb, T, S)
       call cpu_clock_end(id_clock_tridiag)
+      if (showCallTree) call callTree_waypoint("done with triDiagTS (diabatic)")
     endif
 
   endif                                          ! end BULKMIXEDLAYER
@@ -746,6 +766,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     call cpu_clock_begin(id_clock_remap)
     call regularize_layers(h, tv, dt, ea, eb, G, CS%regularize_layers_CSp)
     call cpu_clock_end(id_clock_remap)
+    if (showCallTree) call callTree_waypoint("done with regularize_layers (diabatic)")
   endif
 
   if ((CS%id_Tdif > 0) .or. (CS%id_Tdif_z > 0) .or. &
@@ -992,7 +1013,10 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
 !   Frazil formation keeps the temperature above the freezing point.
 ! make_frazil is deliberately called at both the beginning and at
 ! the end of the diabatic processes.
-  if (ASSOCIATED(T) .AND. ASSOCIATED(tv%frazil)) call make_frazil(h,tv,G,CS)
+  if (ASSOCIATED(T) .AND. ASSOCIATED(tv%frazil)) then
+    call make_frazil(h,tv,G,CS)
+    if (showCallTree) call callTree_waypoint("done with 2nd make_frazil (diabatic)")
+  endif
 
   if (CS%id_ea > 0) call post_data(CS%id_ea, ea, CS%diag)
   if (CS%id_eb > 0) call post_data(CS%id_eb, eb, CS%diag)
@@ -1030,6 +1054,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   if (num_z_diags > 0) &
     call calc_Zint_diags(h, z_ptrs, z_ids, num_z_diags, G, CS%diag_to_Z_CSp)
 
+  if (showCallTree) call callTree_leave("diabatic()")
 end subroutine diabatic
 
 subroutine adiabatic(h, tv, fluxes, dt, G, CS)

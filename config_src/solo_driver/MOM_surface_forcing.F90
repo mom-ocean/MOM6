@@ -70,6 +70,7 @@ use MOM_diag_mediator, only : post_data, query_averaging_enabled
 use MOM_diag_mediator, only : register_diag_field, diag_ctrl, safe_alloc_ptr
 use MOM_domains, only : pass_var, pass_vector, AGRID, To_South, To_West, To_All
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
+use MOM_error_handler,   only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_string_functions, only : uppercase
 use MOM_forcing_type, only : forcing
@@ -231,6 +232,7 @@ subroutine set_forcing(state, fluxes, day_start, day_interval, G, CS)
   integer :: intdt
 
   call cpu_clock_begin(id_clock_forcing)
+  call callTree_enter("set_forcing, MOM_surface_forcing.F90")
 
   day_center = day_start + day_interval/2
   call get_time(day_interval, intdt)
@@ -299,6 +301,7 @@ subroutine set_forcing(state, fluxes, day_start, day_interval, G, CS)
   CS%first_call_set_forcing = .false.
 
   call cpu_clock_end(id_clock_forcing)
+  call callTree_leave("set_forcing")
 end subroutine set_forcing
 
 
@@ -322,6 +325,7 @@ subroutine wind_forcing_zero(state, fluxes, day, G, CS)
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
 
+  call callTree_enter("wind_forcing_zero, MOM_surface_forcing.F90")
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -354,6 +358,7 @@ subroutine wind_forcing_zero(state, fluxes, day, G, CS)
     enddo ; enddo ; endif
   endif
 
+  call callTree_leave("wind_forcing_zero")
 end subroutine wind_forcing_zero
 
 subroutine wind_forcing_2gyre(state, fluxes, day, G, CS)
@@ -376,6 +381,7 @@ subroutine wind_forcing_2gyre(state, fluxes, day, G, CS)
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
 
+  call callTree_enter("wind_forcing_2gyre, MOM_surface_forcing.F90")
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -401,6 +407,7 @@ subroutine wind_forcing_2gyre(state, fluxes, day, G, CS)
     fluxes%tauy(i,J) = 0.0
   enddo ; enddo
 
+  call callTree_leave("wind_forcing_2gyre")
 end subroutine wind_forcing_2gyre
 
 subroutine wind_forcing_1gyre(state, fluxes, day, G, CS)
@@ -423,6 +430,7 @@ subroutine wind_forcing_1gyre(state, fluxes, day, G, CS)
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
 
+  call callTree_enter("wind_forcing_1gyre, MOM_surface_forcing.F90")
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -447,6 +455,7 @@ subroutine wind_forcing_1gyre(state, fluxes, day, G, CS)
     fluxes%tauy(i,J) = 0.0
   enddo ; enddo
 
+  call callTree_leave("wind_forcing_1gyre")
 end subroutine wind_forcing_1gyre
 
 subroutine wind_forcing_gyres(state, fluxes, day, G, CS)
@@ -469,6 +478,7 @@ subroutine wind_forcing_gyres(state, fluxes, day, G, CS)
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
 
+  call callTree_enter("wind_forcing_gyres, MOM_surface_forcing.F90")
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -503,6 +513,7 @@ subroutine wind_forcing_gyres(state, fluxes, day, G, CS)
       fluxes%taux(i,j)*fluxes%taux(i,j)))/CS%Rho0 + (CS%gust_const/CS%Rho0))
   enddo ; enddo
 
+  call callTree_leave("wind_forcing_gyres")
 end subroutine wind_forcing_gyres
 
 subroutine wind_forcing_from_file(state, fluxes, day, G, CS)
@@ -534,6 +545,7 @@ subroutine wind_forcing_from_file(state, fluxes, day, G, CS)
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   logical :: read_Ustar
 
+  call callTree_enter("wind_forcing_from_file, MOM_surface_forcing.F90")
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -678,6 +690,7 @@ subroutine wind_forcing_from_file(state, fluxes, day, G, CS)
     
   endif ! time_lev /= CS%wind_last_lev
 
+  call callTree_leave("wind_forcing_from_file")
 end subroutine wind_forcing_from_file
 
 subroutine wind_forcing_by_data_override(state, fluxes, day, G, CS)
@@ -702,6 +715,7 @@ subroutine wind_forcing_by_data_override(state, fluxes, day, G, CS)
   integer :: i, j, is_in, ie_in, js_in, je_in
   logical :: read_uStar
 
+  call callTree_enter("wind_forcing_by_data_override, MOM_surface_forcing.F90")
   if (.not.associated(fluxes%taux)) then
     allocate(fluxes%taux(G%IsdB:G%IedB,G%jsd:G%jed)) ; fluxes%taux(:,:) = 0.0
   endif
@@ -755,6 +769,7 @@ subroutine wind_forcing_by_data_override(state, fluxes, day, G, CS)
   call pass_vector(fluxes%taux, fluxes%tauy, G%Domain, To_All)
 ! call pass_var(fluxes%ustar, G%Domain, To_All)     Not needed  ?????
 
+  call callTree_leave("wind_forcing_by_data_override")
 end subroutine wind_forcing_by_data_override
 
 subroutine buoyancy_forcing_from_files(state, fluxes, day, dt, G, CS)
