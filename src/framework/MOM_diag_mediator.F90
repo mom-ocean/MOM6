@@ -39,7 +39,7 @@ use MOM_time_manager, only : time_type
 use diag_manager_mod, only : diag_manager_init, diag_manager_end
 use diag_manager_mod, only : send_data, diag_axis_init
 use diag_manager_mod, only : register_diag_field_fms=>register_diag_field
-use diag_manager_mod, only : register_static_field
+use diag_manager_mod, only : register_static_field_fms=>register_static_field
 
 implicit none ; private
 
@@ -49,11 +49,20 @@ public enable_averaging, disable_averaging, query_averaging_enabled
 public diag_mediator_init, diag_mediator_end, set_diag_mediator_grid
 public diag_mediator_close_registration, get_diag_time_end
 public diag_axis_init, ocean_register_diag, register_static_field
-public diag_masks_set
+public defineAxes, diag_masks_set
 
 interface post_data
   module procedure post_data_3d, post_data_2d
 end interface post_data
+
+! 2D/3D axes type to contain 1D axes handles and pointers to masks
+type, public :: axesType
+  integer :: rank ! The number of dimensions in the list of axes
+  integer, dimension(:), allocatable :: handles ! Handles to 1D axes
+  real, dimension(:,:), pointer :: mask2D => null()
+  real, dimension(:,:,:), pointer :: mask3D => null()
+  type(diag_ctrl), pointer :: diag => null()
+end type axesType
 
 !   The following data type contains pointers to diagnostic fields that might
 ! be shared between modules, and also to the variables that control the handling
@@ -70,10 +79,10 @@ type, public :: diag_ctrl
   logical :: ave_enabled = .false. ! .true. if averaging is enabled.
 
   ! The following are axis types defined for output.
-  integer, dimension(3) :: axesBL, axesTL, axesCuL, axesCvL
-  integer, dimension(3) :: axesBi, axesTi, axesCui, axesCvi
-  integer, dimension(2) :: axesB1, axesT1, axesCu1, axesCv1
-  integer, dimension(1) :: axeszi, axeszL
+  type(axesType) :: axesBL, axesTL, axesCuL, axesCvL
+  type(axesType) :: axesBi, axesTi, axesCui, axesCvi
+  type(axesType) :: axesB1, axesT1, axesCu1, axesCv1
+  type(axesType) :: axesZi, axesZL
 
 end type diag_ctrl
 
@@ -96,7 +105,6 @@ real,pointer, dimension(:,:,:),save :: diag_mask3dCvi=> null()
 character(len=15) :: axesBL_str, axesTL_str, axesCuL_str, axesCvL_str
 character(len=15) :: axesBi_str, axesTi_str, axesCui_str, axesCvi_str
 character(len=15) :: axesB1_str, axesT1_str, axesCu1_str, axesCv1_str
-character(len=15) :: axeszi_str, axeszL_str
 !default missing value to be sent to ALL diagnostics registerations 
 real, save :: diag_missing = 1.0e+20
 
@@ -195,27 +203,43 @@ subroutine set_axes_info(G, param_file, diag, set_vertical)
   endif
 
   ! Vertical axes for the interfaces and layers.
-  diag%axeszi(1) = id_zi ; diag%axeszL(1) = id_zL ;axeszi_str= i2s(diag%axeszi,1)
+  call defineAxes(diag, (/ id_zi /), diag%axesZi)
+  call defineAxes(diag, (/ id_zi /), diag%axesZL)
 
   ! Axis groupings for the model layers.
-  diag%axesTL(:) = (/ id_xh, id_yh, id_zL /) ; axesTL_str = i2s(diag%axesTL)
-  diag%axesBL(:) = (/ id_xq, id_yq, id_zL /) ; axesBL_str = i2s(diag%axesBL)
-  diag%axesCuL(:) = (/ id_xq, id_yh, id_zL /); axesCuL_str = i2s(diag%axesCuL)
-  diag%axesCvL(:) = (/ id_xh, id_yq, id_zL /); axesCvL_str = i2s(diag%axesCvL)
+  call defineAxes(diag, (/ id_xh, id_yh, id_zL /), diag%axesTL) ; axesTL_str = i2s(diag%axesTL%handles)
+  call defineAxes(diag, (/ id_xq, id_yq, id_zL /), diag%axesBL) ; axesBL_str = i2s(diag%axesBL%handles)
+  call defineAxes(diag, (/ id_xq, id_yh, id_zL /), diag%axesCuL); axesCuL_str = i2s(diag%axesCuL%handles)
+  call defineAxes(diag, (/ id_xh, id_yq, id_zL /), diag%axesCvL); axesCvL_str = i2s(diag%axesCvL%handles)
 
   ! Axis groupings for the model interfaces.
-  diag%axesTi(:) = (/ id_xh, id_yh, id_zi /) ; axesTi_str = i2s(diag%axesTi)
-  diag%axesCui(:) = (/ id_xq, id_yh, id_zi /); axesCui_str = i2s(diag%axesCui)
-  diag%axesCvi(:) = (/ id_xh, id_yq, id_zi /); axesCvi_str = i2s(diag%axesCvi)
-  diag%axesBi(:) = (/ id_xq, id_yq, id_zi /) ; axesBi_str = i2s(diag%axesBi)
+  call defineAxes(diag, (/ id_xh, id_yh, id_zi /), diag%axesTi) ; axesTi_str = i2s(diag%axesTi%handles)
+  call defineAxes(diag, (/ id_xq, id_yh, id_zi /), diag%axesCui); axesCui_str = i2s(diag%axesCui%handles)
+  call defineAxes(diag, (/ id_xh, id_yq, id_zi /), diag%axesCvi); axesCvi_str = i2s(diag%axesCvi%handles)
+  call defineAxes(diag, (/ id_xq, id_yq, id_zi /), diag%axesBi) ; axesBi_str = i2s(diag%axesBi%handles)
 
   ! Axis groupings for 2-D arrays.
-  diag%axesT1(:) = (/ id_xh, id_yh /) ; axesT1_str = i2s(diag%axesT1) 
-  diag%axesB1(:) = (/ id_xq, id_yq /) ; axesB1_str = i2s(diag%axesB1)
-  diag%axesCu1(:) = (/ id_xq, id_yh /); axesCu1_str= i2s(diag%axesCu1)
-  diag%axesCv1(:) = (/ id_xh, id_yq /); axesCv1_str= i2s(diag%axesCv1)
+  call defineAxes(diag, (/ id_xh, id_yh /), diag%axesT1) ; axesT1_str = i2s(diag%axesT1%handles)
+  call defineAxes(diag, (/ id_xq, id_yq /), diag%axesB1) ; axesB1_str = i2s(diag%axesB1%handles)
+  call defineAxes(diag, (/ id_xq, id_yh /), diag%axesCu1); axesCu1_str= i2s(diag%axesCu1%handles)
+  call defineAxes(diag, (/ id_xh, id_yq /), diag%axesCv1); axesCv1_str= i2s(diag%axesCv1%handles)
  
 end subroutine set_axes_info
+
+subroutine defineAxes(diag, handles, axes)
+  ! Defines "axes" from list of handle and associates mask
+  type(diag_ctrl), target, intent(in) :: diag
+  integer, dimension(:),   intent(in)  :: handles
+  type(axesType),          intent(out) :: axes
+  ! Local variables
+  integer :: n
+  n = size(handles)
+  if (n<1 .or. n>3) call MOM_error(FATAL,"defineAxes: wrong size for list of handles!")
+  axes%rank = n
+  allocate( axes%handles(n) )
+  axes%handles(:) = handles(:)
+  axes%diag => diag ! A [circular] link back to the diag_ctrl structure
+end subroutine defineAxes
 
 subroutine set_diag_mediator_grid(G, diag)
   type(ocean_grid_type), intent(inout) :: G
@@ -456,7 +480,7 @@ function register_diag_field(module_name, field_name, axes, init_time, &
      verbose, do_not_log, err_msg, interp_method, tile_count)
   integer :: register_diag_field
   character(len=*), intent(in) :: module_name, field_name
-  integer,          intent(in) :: axes(:)
+  type(axesType),   intent(in) :: axes
   type(time_type),  intent(in) :: init_time
   character(len=*), optional, intent(in) :: long_name, units, standard_name
   real,             optional, intent(in) :: missing_value, range(2)
@@ -467,7 +491,7 @@ function register_diag_field(module_name, field_name, axes, init_time, &
   ! Output:    An integer handle for a diagnostic array.
   ! Arguments: module_name - The name of this module, usually "ocean_model" or "ice_shelf_model".
   !  (in)      field_name - The name of the diagnostic field.
-  !  (in)      axes - A set of up to 3 integers that indicates the axes for this field.
+  !  (in)      axes - A container with up to 3 integer handles that indicates the axes for this field.
   !  (in)      init_time - The time at which a field is first available?
   !  (in,opt)  long_name - The long name of a field.
   !  (in,opt)  units - The units of a field.
@@ -487,7 +511,7 @@ function register_diag_field(module_name, field_name, axes, init_time, &
   mom_missing_value = diag_missing
   if(present(missing_value)) mom_missing_value = missing_value
 
-  register_diag_field = register_diag_field_fms(module_name, field_name, axes, &
+  register_diag_field = register_diag_field_fms(module_name, field_name, axes%handles, &
        init_time, long_name=long_name, units=units, missing_value=mom_missing_value, &
        range=range, mask_variant=mask_variant, standard_name=standard_name, &
        verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
@@ -535,13 +559,15 @@ function register_diag_field(module_name, field_name, axes, init_time, &
 
   if (register_diag_field>-1) then
   !3d masks
-  if(size(axes) .eq. 3) then
-     axes_str = i2s(axes,3)
+  if(axes%rank .eq. 3) then
+    axes_str = i2s(axes%handles,3)
+    diagState(register_diag_field)%mask2d => null()
+    diagState(register_diag_field)%mask3d => null()
      if    (axes_str .eq. axesTL_str) then
         diagState(register_diag_field)%mask3d =>  diag_mask3dTL
      elseif(axes_str .eq. axesBL_str) then
         diagState(register_diag_field)%mask3d =>  diag_mask3dBuL
-     elseif(axes_str .eq.axesCuL_str ) then
+     elseif(axes_str .eq. axesCuL_str ) then
         diagState(register_diag_field)%mask3d =>  diag_mask3dCuL
      elseif(axes_str .eq. axesCvL_str) then
         diagState(register_diag_field)%mask3d =>  diag_mask3dCvL
@@ -549,11 +575,13 @@ function register_diag_field(module_name, field_name, axes, init_time, &
         diagState(register_diag_field)%mask3d =>  diag_mask3dTi
 !    else
 !       call MOM_error(FATAL, "MOM_diag_mediator:register_diag_field: " // &
-!            "unknown axes for diagnostic variable "//trim(field_name)//trim(axes_str))     
+!            "unknown axes for diagnostic variable "//trim(field_name))     
      endif
   !2d masks
-  elseif(size(axes) .eq. 2) then
-     axes_str = i2s(axes,2)
+  elseif(axes%rank .eq. 2) then
+    axes_str = i2s(axes%handles,2)
+    diagState(register_diag_field)%mask2d => null()
+    diagState(register_diag_field)%mask3d => null()
      if(axes_str .eq. axesT1_str) then
         diagState(register_diag_field)%mask2d =>  diag_mask2dT
      elseif(axes_str .eq. axesB1_str) then
@@ -574,6 +602,45 @@ function register_diag_field(module_name, field_name, axes, init_time, &
 
 end function register_diag_field
 
+function register_static_field(module_name, field_name, axes, &
+     long_name, units, missing_value, range, mask_variant, standard_name, &
+     do_not_log, interp_method, tile_count)
+  integer :: register_static_field
+  character(len=*), intent(in) :: module_name, field_name
+  type(axesType),   intent(in) :: axes
+  character(len=*), optional, intent(in) :: long_name, units, standard_name
+  real,             optional, intent(in) :: missing_value, range(2)
+  logical,          optional, intent(in) :: mask_variant, do_not_log
+  character(len=*), optional, intent(in) :: interp_method
+  integer,          optional, intent(in) :: tile_count
+  ! Output:    An integer handle for a diagnostic array.
+  ! Arguments: module_name - The name of this module, usually "ocean_model" or "ice_shelf_model".
+  !  (in)      field_name - The name of the diagnostic field.
+  !  (in)      axes - A container with up to 3 integer handles that indicates the axes for this field.
+  !  (in,opt)  long_name - The long name of a field.
+  !  (in,opt)  units - The units of a field.
+  !  (in,opt)  standard_name - The standardized name associated with a field. (Not yet used in MOM.)
+  !  (in,opt)  missing_value - A value that indicates missing values.
+  !  (in,opt)  range - The valid range of a variable. (Not used in MOM.)
+  !  (in,opt)  mask_variant - If true a logical mask must be provided with post_data calls.  (Not used in MOM.)
+  !  (in,opt)  do_not_log - If true, do not log something. (Not used in MOM.)
+  !  (in,opt)  interp_method - No clue. (Not used in MOM.)
+  !  (in,opt)  tile_count - No clue. (Not used in MOM.)
+  character(len=240) :: mesg
+  real :: mom_missing_value
+  character(len=15) :: axes_str
+
+  mom_missing_value = diag_missing
+  if(present(missing_value)) mom_missing_value = missing_value
+
+  register_static_field = register_static_field_fms(module_name, field_name, axes%handles, &
+       long_name=long_name, units=units, missing_value=mom_missing_value, &
+       range=range, mask_variant=mask_variant, standard_name=standard_name, &
+       do_not_log=do_not_log, &
+       interp_method=interp_method, tile_count=tile_count)
+
+end function register_static_field
+
 subroutine describe_option(opt_name, value)
   character(len=*), intent(in) :: opt_name, value
 
@@ -593,7 +660,7 @@ function ocean_register_diag(var_desc, G, diag, day)
   type(diag_ctrl),       intent(in) :: diag
   type(time_type),       intent(in) :: day
 
-  integer, dimension(:), allocatable :: axes
+  type(axesType) :: axes
 
   ! Use the hor_grid and z_grid components of vardesc to determine the 
   ! desired axes to register the diagnostic field for.
@@ -602,23 +669,23 @@ function ocean_register_diag(var_desc, G, diag, day)
     case ("L")
       select case (var_desc%hor_grid)
         case ("q")
-          allocate(axes(3)) ; axes(:) = diag%axesBL(:)
+          axes = diag%axesBL
         case ("h")
-          allocate(axes(3)) ; axes(:) = diag%axesTL(:)
+          axes = diag%axesTL
         case ("u")
-          allocate(axes(3)) ; axes(:) = diag%axesCuL(:)
+          axes = diag%axesCuL
         case ("v")
-          allocate(axes(3)) ; axes(:) = diag%axesCvL(:)
+          axes = diag%axesCvL
         case ("Bu")
-          allocate(axes(3)) ; axes(:) = diag%axesBL(:)
+          axes = diag%axesBL
         case ("T")
-          allocate(axes(3)) ; axes(:) = diag%axesTL(:)
+          axes = diag%axesTL
         case ("Cu")
-          allocate(axes(3)) ; axes(:) = diag%axesCuL(:)
+          axes = diag%axesCuL
         case ("Cv")
-          allocate(axes(3)) ; axes(:) = diag%axesCvL(:)
+          axes = diag%axesCvL
         case ("z")
-          allocate(axes(1)) ; axes(:) = diag%axeszL(:)
+          axes = diag%axeszL
         case default
           call MOM_error(FATAL, "ocean_register_diag: " // &
               "unknown hor_grid component "//trim(var_desc%hor_grid))
@@ -627,47 +694,46 @@ function ocean_register_diag(var_desc, G, diag, day)
     case ("i")
       select case (var_desc%hor_grid)
         case ("q")
-          allocate(axes(3)) ; axes(:) = diag%axesBi(:)
+          axes = diag%axesBi
         case ("h")
-          allocate(axes(3)) ; axes(:) = diag%axesTi(:)
+          axes = diag%axesTi
         case ("u")
-          allocate(axes(3)) ; axes(:) = diag%axesCui(:)
+          axes = diag%axesCui
         case ("v")
-          allocate(axes(3)) ; axes(:) = diag%axesCvi(:)
+          axes = diag%axesCvi
         case ("Bu")
-          allocate(axes(3)) ; axes(:) = diag%axesBi(:)
+          axes = diag%axesBi
         case ("T")
-          allocate(axes(3)) ; axes(:) = diag%axesTi(:)
+          axes = diag%axesTi
         case ("Cu")
-          allocate(axes(3)) ; axes(:) = diag%axesCui(:)
+          axes = diag%axesCui
         case ("Cv")
-          allocate(axes(3)) ; axes(:) = diag%axesCvi(:)
+          axes = diag%axesCvi
         case ("z")
-          allocate(axes(1)) ; axes(:) = diag%axeszi(:)
+          axes = diag%axeszi
         case default
           call MOM_error(FATAL, "ocean_register_diag: " // &
             "unknown hor_grid component "//trim(var_desc%hor_grid))
       end select
 
     case ("1")
-      allocate(axes(2))
       select case (var_desc%hor_grid)
         case ("q")
-          axes(:) = diag%axesB1(:)
+          axes = diag%axesB1
         case ("h")
-          axes(:) = diag%axesT1(:)
+          axes = diag%axesT1
         case ("u")
-          axes(:) = diag%axesCu1(:)
+          axes = diag%axesCu1
         case ("v")
-          axes(:) = diag%axesCv1(:)
+          axes = diag%axesCv1
         case ("Bu")
-          axes(:) = diag%axesB1(:)
+          axes = diag%axesB1
         case ("T")
-          axes(:) = diag%axesT1(:)
+          axes = diag%axesT1
         case ("Cu")
-          axes(:) = diag%axesCu1(:)
+          axes = diag%axesCu1
         case ("Cv")
-          axes(:) = diag%axesCv1(:)
+          axes = diag%axesCv1
         case default
           call MOM_error(FATAL, "ocean_register_diag: " // &
             "unknown hor_grid component "//trim(var_desc%hor_grid))
@@ -678,10 +744,9 @@ function ocean_register_diag(var_desc, G, diag, day)
         "ocean_register_diag: unknown z_grid component "//trim(var_desc%z_grid))
   end select
 
-  ocean_register_diag = register_diag_field("ocean_model", trim(var_desc%name), axes, &
-        day, trim(var_desc%longname), trim(var_desc%units), missing_value = -1.0e+34)
-
-  if (allocated(axes)) deallocate(axes)
+  ocean_register_diag = register_diag_field("ocean_model", trim(var_desc%name), &
+          axes, day, trim(var_desc%longname), trim(var_desc%units),     &
+          missing_value = -1.0e+34)
 
 end function ocean_register_diag
 

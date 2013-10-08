@@ -43,6 +43,7 @@ module MOM_internal_tides
 !********+*********+*********+*********+*********+*********+*********+**
 use MOM_diag_mediator, only : post_data, query_averaging_enabled, diag_axis_init
 use MOM_diag_mediator, only : register_diag_field, diag_ctrl, safe_alloc_ptr
+use MOM_diag_mediator, only : axesType, defineAxes
 use MOM_domains, only : pass_var, pass_vector_start, pass_vector_complete
 use MOM_domains, only : AGRID, To_South, To_West, To_All
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
@@ -972,8 +973,8 @@ subroutine internal_tides_init(Time, G, param_file, diag, CS)
   real, allocatable :: angles(:)
   logical :: use_int_tides, use_temperature
   integer :: num_angle, num_freq, num_mode, m, fr
-  integer :: isd, ied, jsd, jed, a
-  integer :: axes_ang(3), id_ang
+  integer :: isd, ied, jsd, jed, a, id_ang
+  type(axesType) :: axes_ang
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mod = "MOM_internal_tides" ! This module's name.
@@ -1105,7 +1106,7 @@ subroutine internal_tides_init(Time, G, param_file, diag, CS)
   do a=1,num_angle ; angles(a) = (real(a) - 1) * Angle_size ; enddo
 
   id_ang = diag_axis_init("angle", angles, "Radians", "N", "Angular Orienation of Fluxes")
-  axes_ang(:) = (/ diag%axesT1(1), diag%axesT1(2), id_ang /)
+  call defineAxes(diag, (/ diag%axesT1%handles(1), diag%axesT1%handles(2), id_ang /), axes_ang)
 
   do fr=1,CS%nFreq ; write(freq_name(fr), '("K",i1)') fr ; enddo
   do m=1,CS%nMode ; do fr=1,CS%nFreq
