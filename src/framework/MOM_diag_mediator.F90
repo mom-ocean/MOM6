@@ -800,9 +800,9 @@ subroutine diag_masks_set(G, missing_value, diag)
   diag%mask2dCu=> G%mask2dCu
   diag%mask2dCv=> G%mask2dCv
   allocate(diag%mask3dTL(G%isd:G%ied,G%jsd:G%jed,1:G%ke)) 
-  allocate(diag%mask3dBuL(G%isd:G%ied,G%jsd:G%jed,1:G%ke)) 
-  allocate(diag%mask3dCuL(G%isd:G%ied,G%jsd:G%jed,1:G%ke)) 
-  allocate(diag%mask3dCvL(G%isd:G%ied,G%jsd:G%jed,1:G%ke)) 
+  allocate(diag%mask3dBuL(G%IsdB:G%IedB,G%JsdB:G%JedB,1:G%ke)) 
+  allocate(diag%mask3dCuL(G%IsdB:G%IedB,G%jsd:G%jed,1:G%ke)) 
+  allocate(diag%mask3dCvL(G%isd:G%ied,G%JsdB:G%JedB,1:G%ke)) 
   do k = 1,G%ke
     diag%mask3dTL(:,:,k) = diag%mask2dT (:,:)
     diag%mask3dBuL(:,:,k) = diag%mask2dBu(:,:)
@@ -810,9 +810,9 @@ subroutine diag_masks_set(G, missing_value, diag)
     diag%mask3dCvL(:,:,k) = diag%mask2dCv(:,:)
   enddo
   allocate(diag%mask3dTi(G%isd:G%ied,G%jsd:G%jed,1:G%ke+1)) 
-  allocate(diag%mask3dBui(G%isd:G%ied,G%jsd:G%jed,1:G%ke+1)) 
-  allocate(diag%mask3dCui(G%isd:G%ied,G%jsd:G%jed,1:G%ke+1)) 
-  allocate(diag%mask3dCvi(G%isd:G%ied,G%jsd:G%jed,1:G%ke+1)) 
+  allocate(diag%mask3dBui(G%IsdB:G%IedB,G%JsdB:G%JedB,1:G%ke+1)) 
+  allocate(diag%mask3dCui(G%IsdB:G%IedB,G%jsd:G%jed,1:G%ke+1)) 
+  allocate(diag%mask3dCvi(G%isd:G%ied,G%JsdB:G%JedB,1:G%ke+1)) 
   do k = 1,G%ke+1
     diag%mask3dTi(:,:,k) = diag%mask2dT (:,:)
     diag%mask3dBui(:,:,k) = diag%mask2dBu(:,:)
