@@ -108,12 +108,12 @@ type, public :: diag_ctrl
 #define MAX_NUM_DIAGNOSTICS 200
   type(diag_container), dimension(MAX_NUM_DIAGNOSTICS) :: diagState
 
+  !default missing value to be sent to ALL diagnostics registerations 
+  real :: missing_value = 1.0e+20
+
 end type diag_ctrl
 
 integer :: doc_unit = -1
-
-!default missing value to be sent to ALL diagnostics registerations 
-real, save :: diag_missing = 1.0e+20
 
 contains
 
@@ -507,7 +507,7 @@ function register_diag_field(module_name, field_name, axes, init_time, &
   real :: mom_missing_value
   type(diag_ctrl), pointer :: diag
 
-  mom_missing_value = diag_missing
+  mom_missing_value = axes%diag%missing_value
   if(present(missing_value)) mom_missing_value = missing_value
 
   register_diag_field = register_diag_field_fms(module_name, field_name, axes%handles, &
@@ -607,7 +607,7 @@ function register_static_field(module_name, field_name, axes, &
   character(len=240) :: mesg
   real :: mom_missing_value
 
-  mom_missing_value = diag_missing
+  mom_missing_value = axes%diag%missing_value
   if(present(missing_value)) mom_missing_value = missing_value
 
   register_static_field = register_static_field_fms(module_name, field_name, axes%handles, &
@@ -814,7 +814,7 @@ subroutine diag_masks_set(G, missing_value, diag)
     diag%mask3dCvi(:,:,k) = diag%mask2dCv(:,:)
   enddo
 
-  diag_missing = missing_value
+  diag%missing_value = missing_value
  
 end subroutine diag_masks_set
 
