@@ -57,12 +57,19 @@ end interface post_data
 
 ! 2D/3D axes type to contain 1D axes handles and pointers to masks
 type, public :: axesType
+  character(len=15) :: id ! This is the id string for this particular combination of handles
   integer :: rank ! The number of dimensions in the list of axes
   integer, dimension(:), allocatable :: handles ! Handles to 1D axes
   real, dimension(:,:), pointer :: mask2D => null()
   real, dimension(:,:,:), pointer :: mask3D => null()
   type(diag_ctrl), pointer :: diag => null()
 end type axesType
+
+! Type for vector of pointers to masks for either 2D or 3D data
+type, private :: diag_container
+  real,pointer, dimension(:,:)   :: mask2d => null()
+  real,pointer, dimension(:,:,:) :: mask3d => null()
+end type diag_container
 
 !   The following data type contains pointers to diagnostic fields that might
 ! be shared between modules, and also to the variables that control the handling
@@ -84,38 +91,33 @@ type, public :: diag_ctrl
   type(axesType) :: axesB1, axesT1, axesCu1, axesCv1
   type(axesType) :: axesZi, axesZL
 
+  ! Mask arrays for diagnostics
+  real, dimension(:,:),   pointer :: mask2dT   => null()
+  real, dimension(:,:),   pointer :: mask2dBu  => null()
+  real, dimension(:,:),   pointer :: mask2dCu  => null()
+  real, dimension(:,:),   pointer :: mask2dCv  => null()
+  real, dimension(:,:,:), pointer :: mask3dTL  => null()
+  real, dimension(:,:,:), pointer :: mask3dBuL => null()
+  real, dimension(:,:,:), pointer :: mask3dCuL => null()
+  real, dimension(:,:,:), pointer :: mask3dCvL => null()
+  real, dimension(:,:,:), pointer :: mask3dTi  => null()
+  real, dimension(:,:,:), pointer :: mask3dBui => null()
+  real, dimension(:,:,:), pointer :: mask3dCui => null()
+  real, dimension(:,:,:), pointer :: mask3dCvi => null()
+
+#define MAX_NUM_DIAGNOSTICS 200
+  type(diag_container), dimension(MAX_NUM_DIAGNOSTICS) :: diagState
+
 end type diag_ctrl
 
 integer :: doc_unit = -1
 
-!diagnostics mask arrays 
-real,pointer, dimension(:,:),save :: diag_mask2dT => null()
-real,pointer, dimension(:,:),save :: diag_mask2dBu=> null()
-real,pointer, dimension(:,:),save :: diag_mask2dCu=> null()
-real,pointer, dimension(:,:),save :: diag_mask2dCv=> null()
-real,pointer, dimension(:,:,:),save :: diag_mask3dTL=> null()
-real,pointer, dimension(:,:,:),save :: diag_mask3dBuL=> null()
-real,pointer, dimension(:,:,:),save :: diag_mask3dCuL=> null()
-real,pointer, dimension(:,:,:),save :: diag_mask3dCvL=> null()
-real,pointer, dimension(:,:,:),save :: diag_mask3dTi=> null()
-real,pointer, dimension(:,:,:),save :: diag_mask3dBui=> null()
-real,pointer, dimension(:,:,:),save :: diag_mask3dCui=> null()
-real,pointer, dimension(:,:,:),save :: diag_mask3dCvi=> null()
 !diagnostics axes string identifier
 character(len=15) :: axesBL_str, axesTL_str, axesCuL_str, axesCvL_str
 character(len=15) :: axesBi_str, axesTi_str, axesCui_str, axesCvi_str
 character(len=15) :: axesB1_str, axesT1_str, axesCu1_str, axesCv1_str
 !default missing value to be sent to ALL diagnostics registerations 
 real, save :: diag_missing = 1.0e+20
-
-type, private :: diag_container
-  real,pointer, dimension(:,:)   :: mask2d => null()
-  real,pointer, dimension(:,:,:) :: mask3d => null()
-end type diag_container
-
-#define MAX_NUM_DIAGNOSTICS 200
-
-type(diag_container), dimension(MAX_NUM_DIAGNOSTICS) :: diagState
 
 contains
 
@@ -235,8 +237,9 @@ subroutine defineAxes(diag, handles, axes)
   integer :: n
   n = size(handles)
   if (n<1 .or. n>3) call MOM_error(FATAL,"defineAxes: wrong size for list of handles!")
-  axes%rank = n
   allocate( axes%handles(n) )
+  axes%id = i2s(handles, n) ! Identifying string
+  axes%rank = n
   axes%handles(:) = handles(:)
   axes%diag => diag ! A [circular] link back to the diag_ctrl structure
 end subroutine defineAxes
@@ -309,9 +312,9 @@ subroutine post_data_2d(diag_field_id, field, diag, is_static, mask)
     if (present(mask)) then
       used = send_data(diag_field_id, field, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=mask)
-    elseif(associated(diagState(diag_field_id)%mask2d)) then       
+    elseif(associated(diag%diagState(diag_field_id)%mask2d)) then       
       used = send_data(diag_field_id, field, &
-                       is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=diagState(diag_field_id)%mask2d)
+                       is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=diag%diagState(diag_field_id)%mask2d)
     else
       used = send_data(diag_field_id, field, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev)
@@ -321,10 +324,10 @@ subroutine post_data_2d(diag_field_id, field, diag, is_static, mask)
       used = send_data(diag_field_id, field, diag%time_end, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
                        weight=diag%time_int, rmask=mask)
-    elseif(associated(diagState(diag_field_id)%mask2d)) then       
+    elseif(associated(diag%diagState(diag_field_id)%mask2d)) then       
       used = send_data(diag_field_id, field, diag%time_end, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
-                       weight=diag%time_int, rmask=diagState(diag_field_id)%mask2d)
+                       weight=diag%time_int, rmask=diag%diagState(diag_field_id)%mask2d)
     else
       used = send_data(diag_field_id, field, diag%time_end, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
@@ -394,9 +397,9 @@ subroutine post_data_3d(diag_field_id, field, diag, is_static, mask)
     if (present(mask)) then
       used = send_data(diag_field_id, field, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=mask)
-    elseif(associated(diagState(diag_field_id)%mask3d)) then       
+    elseif(associated(diag%diagState(diag_field_id)%mask3d)) then       
       used = send_data(diag_field_id, field, &
-                       is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=diagState(diag_field_id)%mask3d)
+                       is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=diag%diagState(diag_field_id)%mask3d)
     else
       used = send_data(diag_field_id, field, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev)
@@ -406,10 +409,10 @@ subroutine post_data_3d(diag_field_id, field, diag, is_static, mask)
       used = send_data(diag_field_id, field, diag%time_end, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
                        weight=diag%time_int, rmask=mask)
-    elseif(associated(diagState(diag_field_id)%mask3d)) then       
+    elseif(associated(diag%diagState(diag_field_id)%mask3d)) then       
       used = send_data(diag_field_id, field, diag%time_end, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
-                       weight=diag%time_int, rmask=diagState(diag_field_id)%mask3d)
+                       weight=diag%time_int, rmask=diag%diagState(diag_field_id)%mask3d)
     else
       used = send_data(diag_field_id, field, diag%time_end, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
@@ -507,6 +510,7 @@ function register_diag_field(module_name, field_name, axes, init_time, &
   character(len=240) :: mesg
   real :: mom_missing_value
   character(len=15) :: axes_str
+  type(diag_ctrl), pointer :: diag
 
   mom_missing_value = diag_missing
   if(present(missing_value)) mom_missing_value = missing_value
@@ -530,66 +534,47 @@ function register_diag_field(module_name, field_name, axes, init_time, &
   endif
 
   !Decide what mask to use based on the axes info
-  !Beware this logic is Experimental.
-
-  !  axes_str = i2s(axes)
-  !  !3d masks
-  !  if    (axes_str .eq. axesTL_str .OR. axes_str .eq. axesTi_str) then
-  !     diagState(register_diag_field)%mask3d =>  diag_mask3dT
-  !  elseif(axes_str .eq. axesBL_str .OR. axes_str .eq. axesBi_str) then
-  !     diagState(register_diag_field)%mask3d =>  diag_mask3dBu
-  !  elseif(axes_str .eq. axesCuL_str .OR. axes_str .eq. axesCui_str) then
-  !     diagState(register_diag_field)%mask3d =>  diag_mask3dCu
-  !  elseif(axes_str .eq. axesCvL_str .OR. axes_str .eq. axesCvi_str ) then
-  !     diagState(register_diag_field)%mask3d =>  diag_mask3dCv
-  !  !2d masks
-  !  elseif(axes_str .eq. axesT1_str) then
-  !     diagState(register_diag_field)%mask2d =>  diag_mask2dT
-  !  elseif(axes_str .eq. axesB1_str) then
-  !     diagState(register_diag_field)%mask2d =>  diag_mask2dBu
-  !  elseif(axes_str .eq. axesCu1_str) then
-  !     diagState(register_diag_field)%mask2d =>  diag_mask2dCu
-  !  elseif(axes_str .eq.axesCv1_str) then
-  !     diagState(register_diag_field)%mask2d =>  diag_mask2dCv
-  !  else
-  !     call MOM_error(FATAL, "MOM_diag_mediator:register_diag_field: " // &
-  !              "unknown axes for diagnostic variable "//trim(field_name))     
-  !  endif
-  !FATAL from PE   12: MOM_diag_mediator:register_diag_field: unknown axes for diagnostic variable u_z
-
   if (register_diag_field>-1) then
   !3d masks
   if(axes%rank .eq. 3) then
-    axes_str = i2s(axes%handles,3)
-    diagState(register_diag_field)%mask2d => null()
-    diagState(register_diag_field)%mask3d => null()
-     if    (axes_str .eq. axesTL_str) then
-        diagState(register_diag_field)%mask3d =>  diag_mask3dTL
-     elseif(axes_str .eq. axesBL_str) then
-        diagState(register_diag_field)%mask3d =>  diag_mask3dBuL
-     elseif(axes_str .eq. axesCuL_str ) then
-        diagState(register_diag_field)%mask3d =>  diag_mask3dCuL
-     elseif(axes_str .eq. axesCvL_str) then
-        diagState(register_diag_field)%mask3d =>  diag_mask3dCvL
-     elseif(axes_str .eq. axesTi_str) then
-        diagState(register_diag_field)%mask3d =>  diag_mask3dTi
+    axes_str = axes%id
+    diag => axes%diag
+    diag%diagState(register_diag_field)%mask2d => null()
+    diag%diagState(register_diag_field)%mask3d => null()
+     if    (axes_str .eq. diag%axesTL%id) then
+        diag%diagState(register_diag_field)%mask3d =>  diag%mask3dTL
+     elseif(axes_str .eq. diag%axesBL%id) then
+        diag%diagState(register_diag_field)%mask3d =>  diag%mask3dBuL
+     elseif(axes_str .eq. diag%axesCuL%id ) then
+        diag%diagState(register_diag_field)%mask3d =>  diag%mask3dCuL
+     elseif(axes_str .eq. diag%axesCvL%id) then
+        diag%diagState(register_diag_field)%mask3d =>  diag%mask3dCvL
+     elseif(axes_str .eq. diag%axesTi%id) then
+        diag%diagState(register_diag_field)%mask3d =>  diag%mask3dTi
+     elseif(axes_str .eq. diag%axesBi%id) then
+        diag%diagState(register_diag_field)%mask3d =>  diag%mask3dBui
+     elseif(axes_str .eq. diag%axesCui%id ) then
+        diag%diagState(register_diag_field)%mask3d =>  diag%mask3dCui
+     elseif(axes_str .eq. diag%axesCvi%id) then
+        diag%diagState(register_diag_field)%mask3d =>  diag%mask3dCvi
 !    else
 !       call MOM_error(FATAL, "MOM_diag_mediator:register_diag_field: " // &
 !            "unknown axes for diagnostic variable "//trim(field_name))     
      endif
   !2d masks
   elseif(axes%rank .eq. 2) then
-    axes_str = i2s(axes%handles,2)
-    diagState(register_diag_field)%mask2d => null()
-    diagState(register_diag_field)%mask3d => null()
-     if(axes_str .eq. axesT1_str) then
-        diagState(register_diag_field)%mask2d =>  diag_mask2dT
-     elseif(axes_str .eq. axesB1_str) then
-        diagState(register_diag_field)%mask2d =>  diag_mask2dBu
-     elseif(axes_str .eq. axesCu1_str) then
-        diagState(register_diag_field)%mask2d =>  diag_mask2dCu
-     elseif(axes_str .eq. axesCv1_str) then
-        diagState(register_diag_field)%mask2d =>  diag_mask2dCv
+    axes_str = axes%id
+    diag => axes%diag
+    diag%diagState(register_diag_field)%mask2d => null()
+    diag%diagState(register_diag_field)%mask3d => null()
+     if    (axes_str .eq. diag%axesT1%id) then
+        diag%diagState(register_diag_field)%mask2d =>  diag%mask2dT
+     elseif(axes_str .eq. diag%axesB1%id) then
+        diag%diagState(register_diag_field)%mask2d =>  diag%mask2dBu
+     elseif(axes_str .eq. diag%axesCu1%id) then
+        diag%diagState(register_diag_field)%mask2d =>  diag%mask2dCu
+     elseif(axes_str .eq. diag%axesCv1%id) then
+        diag%diagState(register_diag_field)%mask2d =>  diag%mask2dCv
 !    else
 !       call MOM_error(FATAL, "MOM_diag_mediator:register_diag_field: " // &
 !            "unknown axes for diagnostic variable "//trim(field_name))     
@@ -804,36 +789,37 @@ subroutine diag_mediator_init(G, param_file, diag, err_msg)
 
 end subroutine diag_mediator_init
 
-subroutine diag_masks_set(G,missing_value)
- !Setup the 2d masks for diagnostics
+subroutine diag_masks_set(G, missing_value, diag)
+! Setup the 2d masks for diagnostics
   type(ocean_grid_type), target, intent(in) :: G
   real,                          intent(in) :: missing_value
-
+  type(diag_ctrl),               pointer    :: diag
+  ! Local variables
   integer :: k
 
-  diag_mask2dT => G%mask2dT
-  diag_mask2dBu=> G%mask2dBu
-  diag_mask2dCu=> G%mask2dCu
-  diag_mask2dCv=> G%mask2dCv
-  allocate(diag_mask3dTL(G%isd:G%ied,G%jsd:G%jed,1:G%ke)) 
-  allocate(diag_mask3dBuL(G%isd:G%ied,G%jsd:G%jed,1:G%ke)) 
-  allocate(diag_mask3dCuL(G%isd:G%ied,G%jsd:G%jed,1:G%ke)) 
-  allocate(diag_mask3dCvL(G%isd:G%ied,G%jsd:G%jed,1:G%ke)) 
+  diag%mask2dT => G%mask2dT
+  diag%mask2dBu=> G%mask2dBu
+  diag%mask2dCu=> G%mask2dCu
+  diag%mask2dCv=> G%mask2dCv
+  allocate(diag%mask3dTL(G%isd:G%ied,G%jsd:G%jed,1:G%ke)) 
+  allocate(diag%mask3dBuL(G%isd:G%ied,G%jsd:G%jed,1:G%ke)) 
+  allocate(diag%mask3dCuL(G%isd:G%ied,G%jsd:G%jed,1:G%ke)) 
+  allocate(diag%mask3dCvL(G%isd:G%ied,G%jsd:G%jed,1:G%ke)) 
   do k = 1,G%ke
-    diag_mask3dTL(:,:,k) = diag_mask2dT (:,:)
-    diag_mask3dBuL(:,:,k) = diag_mask2dBu(:,:)
-    diag_mask3dCuL(:,:,k) = diag_mask2dCu(:,:)
-    diag_mask3dCvL(:,:,k) = diag_mask2dCv(:,:)
+    diag%mask3dTL(:,:,k) = diag%mask2dT (:,:)
+    diag%mask3dBuL(:,:,k) = diag%mask2dBu(:,:)
+    diag%mask3dCuL(:,:,k) = diag%mask2dCu(:,:)
+    diag%mask3dCvL(:,:,k) = diag%mask2dCv(:,:)
   enddo
-  allocate(diag_mask3dTi(G%isd:G%ied,G%jsd:G%jed,1:G%ke+1)) 
-  allocate(diag_mask3dBui(G%isd:G%ied,G%jsd:G%jed,1:G%ke+1)) 
-  allocate(diag_mask3dCui(G%isd:G%ied,G%jsd:G%jed,1:G%ke+1)) 
-  allocate(diag_mask3dCvi(G%isd:G%ied,G%jsd:G%jed,1:G%ke+1)) 
+  allocate(diag%mask3dTi(G%isd:G%ied,G%jsd:G%jed,1:G%ke+1)) 
+  allocate(diag%mask3dBui(G%isd:G%ied,G%jsd:G%jed,1:G%ke+1)) 
+  allocate(diag%mask3dCui(G%isd:G%ied,G%jsd:G%jed,1:G%ke+1)) 
+  allocate(diag%mask3dCvi(G%isd:G%ied,G%jsd:G%jed,1:G%ke+1)) 
   do k = 1,G%ke+1
-    diag_mask3dTi(:,:,k) = diag_mask2dT (:,:)
-    diag_mask3dBui(:,:,k) = diag_mask2dBu(:,:)
-    diag_mask3dCui(:,:,k) = diag_mask2dCu(:,:)
-    diag_mask3dCvi(:,:,k) = diag_mask2dCv(:,:)
+    diag%mask3dTi(:,:,k) = diag%mask2dT (:,:)
+    diag%mask3dBui(:,:,k) = diag%mask2dBu(:,:)
+    diag%mask3dCui(:,:,k) = diag%mask2dCu(:,:)
+    diag%mask3dCvi(:,:,k) = diag%mask2dCv(:,:)
   enddo
 
   diag_missing = missing_value

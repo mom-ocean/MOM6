@@ -1660,7 +1660,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call cpu_clock_end(id_clock_MOM_init)
 
   !Initialize the diagnostics mask arrays. This has to be done after MOM_initialize call and before MOM_diagnostics_init
-  call diag_masks_set(G, CS%missing)
+  call diag_masks_set(G, CS%missing, diag)
 
   if (CS%useALEalgorithm) then
     ! For now, this has to follow immediately after MOM_initialize because
