@@ -45,6 +45,7 @@ module MOM_diag_to_Z
 
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator, only : diag_ctrl, time_type, diag_axis_init
+use MOM_diag_mediator, only : axesType, defineAxes
 use MOM_diag_mediator, only : ocean_register_diag
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
@@ -83,8 +84,8 @@ type, public :: diag_to_Z_CS ; private
   integer :: nk_zspace = -1
   real, pointer :: Z_int(:) => NULL()  ! The interface depths of the z-space file, in m.
 
-  integer, dimension(3) :: axesBz, axesTz, axesCuz, axesCvz
-  integer, dimension(3) :: axesBzi, axesTzi, axesCuzi, axesCvzi
+  type(axesType) :: axesBz, axesTz, axesCuz, axesCvz
+  type(axesType) :: axesBzi, axesTzi, axesCuzi, axesCvzi
   integer, dimension(1) :: axesz_out
 
   type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
@@ -815,14 +816,14 @@ subroutine MOM_diag_to_Z_init(Time, G, param_file, diag, CS)
   endif
 
   if (CS%nk_zspace > 0) then
-    CS%axesBz = (/ diag%axesB1(1), diag%axesB1(2), z_axis /)
-    CS%axesTz = (/ diag%axesT1(1), diag%axesT1(2), z_axis /)
-    CS%axesCuz = (/ diag%axesCu1(1), diag%axesCu1(2), z_axis /)
-    CS%axesCvz = (/ diag%axesCv1(1), diag%axesCv1(2), z_axis /)
-    CS%axesBzi = (/ diag%axesB1(1), diag%axesB1(2), zint_axis /)
-    CS%axesTzi = (/ diag%axesT1(1), diag%axesT1(2), zint_axis /)
-    CS%axesCuzi = (/ diag%axesCu1(1), diag%axesCu1(2), zint_axis /)
-    CS%axesCvzi = (/ diag%axesCv1(1), diag%axesCv1(2), zint_axis /)
+    call defineAxes(diag, (/ diag%axesB1%handles(1), diag%axesB1%handles(2), z_axis /), CS%axesBz)
+    call defineAxes(diag, (/ diag%axesT1%handles(1), diag%axesT1%handles(2), z_axis /), CS%axesTz)
+    call defineAxes(diag, (/ diag%axesCu1%handles(1), diag%axesCu1%handles(2), z_axis /), CS%axesCuz)
+    call defineAxes(diag, (/ diag%axesCv1%handles(1), diag%axesCv1%handles(2), z_axis /), CS%axesCvz)
+    call defineAxes(diag, (/ diag%axesB1%handles(1), diag%axesB1%handles(2), zint_axis /), CS%axesBzi)
+    call defineAxes(diag, (/ diag%axesT1%handles(1), diag%axesT1%handles(2), zint_axis /), CS%axesTzi)
+    call defineAxes(diag, (/ diag%axesCu1%handles(1), diag%axesCu1%handles(2), zint_axis /), CS%axesCuzi)
+    call defineAxes(diag, (/ diag%axesCv1%handles(1), diag%axesCv1%handles(2), zint_axis /), CS%axesCvzi)
 
     CS%id_u_z = register_diag_field('ocean_model', 'u_z', CS%axesCuz, Time, &
         'Zonal Velocity in Depth Space', 'meter second-1', &
@@ -1068,7 +1069,7 @@ function register_Z_diag(var_desc, CS, day, missing)
   type(time_type),     intent(in) :: day
   real,                intent(in) :: missing
 
-  integer, dimension(3)  :: axes
+  type(axesType) :: axes
 
   ! Use the hor_grid and z_grid components of vardesc to determine the 
   ! desired axes to register the diagnostic field for.
@@ -1112,7 +1113,7 @@ function register_Zint_diag(var_desc, CS, day)
   type(vardesc),       intent(in) :: var_desc
   type(diag_to_Z_CS),  pointer    :: CS
   type(time_type),     intent(in) :: day
-  integer, dimension(3)  :: axes
+  type(axesType) :: axes
 
   if (CS%nk_zspace < 0) then
     register_Zint_diag = -1 ; return

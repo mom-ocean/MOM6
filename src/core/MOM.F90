@@ -331,7 +331,7 @@ use MOM_cpu_clock, only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
 use MOM_diag_mediator, only : diag_mediator_init, enable_averaging
 use MOM_diag_mediator, only : disable_averaging, post_data, safe_alloc_ptr
 use MOM_diag_mediator, only : register_diag_field, register_static_field
-use MOM_diag_mediator, only : set_axes_info, diag_ctrl
+use MOM_diag_mediator, only : set_axes_info, diag_ctrl, diag_masks_set
 use MOM_domains, only : MOM_domains_init, clone_MOM_domain, pass_var, pass_vector
 use MOM_domains, only : pass_var_start, pass_var_complete, sum_across_PEs
 use MOM_domains, only : pass_vector_start, pass_vector_complete
@@ -1687,6 +1687,9 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call cpu_clock_end(id_clock_MOM_init)
   call callTree_waypoint("returned from MOM_initialize() (initialize_MOM)")
 
+  !Initialize the diagnostics mask arrays. This has to be done after MOM_initialize call and before MOM_diagnostics_init
+  call diag_masks_set(G, CS%missing, diag)
+
   if (CS%useALEalgorithm) then
     ! For now, this has to follow immediately after MOM_initialize because
     ! the call to initialize_ALE can change CS%h, etc.  initialize_ALE should
@@ -1918,6 +1921,9 @@ subroutine register_diags(Time, G, CS, ADp)
   flux_units = get_flux_units(G)
   T_flux_units = get_tr_flux_units(G, "Celsius")
   S_flux_units = get_tr_flux_units(G, "PSU")
+
+  !Initialize the diagnostics mask arrays. This has to be done after MOM_initialize call
+  !call diag_masks_set(G, CS%missing)
 
   CS%id_u = register_diag_field('ocean_model', 'u', diag%axesCuL, Time, &
       'Zonal velocity', 'meter second-1')
