@@ -60,16 +60,14 @@ type, public :: axesType
   character(len=15) :: id ! This is the id string for this particular combination of handles
   integer :: rank ! The number of dimensions in the list of axes
   integer, dimension(:), allocatable :: handles ! Handles to 1D axes
-  real, dimension(:,:), pointer :: mask2D => null()
-  real, dimension(:,:,:), pointer :: mask3D => null()
   type(diag_ctrl), pointer :: diag => null()
 end type axesType
 
 ! Type for vector of pointers to masks for either 2D or 3D data
-type, private :: diag_container
+type, private :: maskContainer
   real,pointer, dimension(:,:)   :: mask2d => null()
   real,pointer, dimension(:,:,:) :: mask3d => null()
-end type diag_container
+end type maskContainer
 
 !   The following data type contains pointers to diagnostic fields that might
 ! be shared between modules, and also to the variables that control the handling
@@ -106,7 +104,7 @@ type, public :: diag_ctrl
   real, dimension(:,:,:), pointer :: mask3dCvi => null()
 
 #define MAX_NUM_DIAGNOSTICS 200
-  type(diag_container), dimension(MAX_NUM_DIAGNOSTICS) :: diagState
+  type(maskContainer), dimension(MAX_NUM_DIAGNOSTICS) :: maskList
 
   !default missing value to be sent to ALL diagnostics registerations 
   real :: missing_value = 1.0e+20
@@ -308,9 +306,9 @@ subroutine post_data_2d(diag_field_id, field, diag, is_static, mask)
     if (present(mask)) then
       used = send_data(diag_field_id, field, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=mask)
-    elseif(associated(diag%diagState(diag_field_id)%mask2d)) then       
+    elseif(associated(diag%maskList(diag_field_id)%mask2d)) then       
       used = send_data(diag_field_id, field, &
-                       is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=diag%diagState(diag_field_id)%mask2d)
+                       is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=diag%maskList(diag_field_id)%mask2d)
     else
       used = send_data(diag_field_id, field, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev)
@@ -320,10 +318,10 @@ subroutine post_data_2d(diag_field_id, field, diag, is_static, mask)
       used = send_data(diag_field_id, field, diag%time_end, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
                        weight=diag%time_int, rmask=mask)
-    elseif(associated(diag%diagState(diag_field_id)%mask2d)) then       
+    elseif(associated(diag%maskList(diag_field_id)%mask2d)) then       
       used = send_data(diag_field_id, field, diag%time_end, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
-                       weight=diag%time_int, rmask=diag%diagState(diag_field_id)%mask2d)
+                       weight=diag%time_int, rmask=diag%maskList(diag_field_id)%mask2d)
     else
       used = send_data(diag_field_id, field, diag%time_end, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
@@ -393,9 +391,9 @@ subroutine post_data_3d(diag_field_id, field, diag, is_static, mask)
     if (present(mask)) then
       used = send_data(diag_field_id, field, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=mask)
-    elseif(associated(diag%diagState(diag_field_id)%mask3d)) then       
+    elseif(associated(diag%maskList(diag_field_id)%mask3d)) then       
       used = send_data(diag_field_id, field, &
-                       is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=diag%diagState(diag_field_id)%mask3d)
+                       is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=diag%maskList(diag_field_id)%mask3d)
     else
       used = send_data(diag_field_id, field, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev)
@@ -405,10 +403,10 @@ subroutine post_data_3d(diag_field_id, field, diag, is_static, mask)
       used = send_data(diag_field_id, field, diag%time_end, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
                        weight=diag%time_int, rmask=mask)
-    elseif(associated(diag%diagState(diag_field_id)%mask3d)) then       
+    elseif(associated(diag%maskList(diag_field_id)%mask3d)) then       
       used = send_data(diag_field_id, field, diag%time_end, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
-                       weight=diag%time_int, rmask=diag%diagState(diag_field_id)%mask3d)
+                       weight=diag%time_int, rmask=diag%maskList(diag_field_id)%mask3d)
     else
       used = send_data(diag_field_id, field, diag%time_end, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
@@ -533,45 +531,51 @@ function register_diag_field(module_name, field_name, axes, init_time, &
   !3d masks
   if(axes%rank .eq. 3) then
     diag => axes%diag
-    diag%diagState(register_diag_field)%mask2d => null()
-    diag%diagState(register_diag_field)%mask3d => null()
-     if    (axes%id .eq. diag%axesTL%id) then
-        diag%diagState(register_diag_field)%mask3d =>  diag%mask3dTL
-     elseif(axes%id .eq. diag%axesBL%id) then
-        diag%diagState(register_diag_field)%mask3d =>  diag%mask3dBuL
-     elseif(axes%id .eq. diag%axesCuL%id ) then
-        diag%diagState(register_diag_field)%mask3d =>  diag%mask3dCuL
-     elseif(axes%id .eq. diag%axesCvL%id) then
-        diag%diagState(register_diag_field)%mask3d =>  diag%mask3dCvL
-     elseif(axes%id .eq. diag%axesTi%id) then
-        diag%diagState(register_diag_field)%mask3d =>  diag%mask3dTi
-     elseif(axes%id .eq. diag%axesBi%id) then
-        diag%diagState(register_diag_field)%mask3d =>  diag%mask3dBui
-     elseif(axes%id .eq. diag%axesCui%id ) then
-        diag%diagState(register_diag_field)%mask3d =>  diag%mask3dCui
-     elseif(axes%id .eq. diag%axesCvi%id) then
-        diag%diagState(register_diag_field)%mask3d =>  diag%mask3dCvi
+    diag%maskList(register_diag_field)%mask2d => null()
+    diag%maskList(register_diag_field)%mask3d => null()
+    if (register_diag_field>MAX_NUM_DIAGNOSTICS) call MOM_error(FATAL, &
+         "MOM_diag_mediator, register_diag_field: " // &
+         "Too many diagnostics. Make MAX_NUM_DIAGNOSTICS bigger! "//trim(field_name))     
+    if    (axes%id .eq. diag%axesTL%id) then
+        diag%maskList(register_diag_field)%mask3d =>  diag%mask3dTL
+    elseif(axes%id .eq. diag%axesBL%id) then
+        diag%maskList(register_diag_field)%mask3d =>  diag%mask3dBuL
+    elseif(axes%id .eq. diag%axesCuL%id ) then
+        diag%maskList(register_diag_field)%mask3d =>  diag%mask3dCuL
+    elseif(axes%id .eq. diag%axesCvL%id) then
+        diag%maskList(register_diag_field)%mask3d =>  diag%mask3dCvL
+    elseif(axes%id .eq. diag%axesTi%id) then
+        diag%maskList(register_diag_field)%mask3d =>  diag%mask3dTi
+    elseif(axes%id .eq. diag%axesBi%id) then
+        diag%maskList(register_diag_field)%mask3d =>  diag%mask3dBui
+    elseif(axes%id .eq. diag%axesCui%id ) then
+        diag%maskList(register_diag_field)%mask3d =>  diag%mask3dCui
+    elseif(axes%id .eq. diag%axesCvi%id) then
+        diag%maskList(register_diag_field)%mask3d =>  diag%mask3dCvi
 !    else
 !       call MOM_error(FATAL, "MOM_diag_mediator:register_diag_field: " // &
 !            "unknown axes for diagnostic variable "//trim(field_name))     
-     endif
+    endif
   !2d masks
   elseif(axes%rank .eq. 2) then
     diag => axes%diag
-    diag%diagState(register_diag_field)%mask2d => null()
-    diag%diagState(register_diag_field)%mask3d => null()
-     if    (axes%id .eq. diag%axesT1%id) then
-        diag%diagState(register_diag_field)%mask2d =>  diag%mask2dT
-     elseif(axes%id .eq. diag%axesB1%id) then
-        diag%diagState(register_diag_field)%mask2d =>  diag%mask2dBu
-     elseif(axes%id .eq. diag%axesCu1%id) then
-        diag%diagState(register_diag_field)%mask2d =>  diag%mask2dCu
-     elseif(axes%id .eq. diag%axesCv1%id) then
-        diag%diagState(register_diag_field)%mask2d =>  diag%mask2dCv
+    diag%maskList(register_diag_field)%mask2d => null()
+    diag%maskList(register_diag_field)%mask3d => null()
+    if (register_diag_field>MAX_NUM_DIAGNOSTICS) call MOM_error(FATAL, &
+         "MOM_diag_mediator, register_diag_field: " // &
+         "Too many diagnostics. Make MAX_NUM_DIAGNOSTICS bigger! "//trim(field_name))     
+    if    (axes%id .eq. diag%axesT1%id) then
+        diag%maskList(register_diag_field)%mask2d =>  diag%mask2dT
+    elseif(axes%id .eq. diag%axesB1%id) then
+        diag%maskList(register_diag_field)%mask2d =>  diag%mask2dBu
+    elseif(axes%id .eq. diag%axesCu1%id) then
+        diag%maskList(register_diag_field)%mask2d =>  diag%mask2dCu
+    elseif(axes%id .eq. diag%axesCv1%id) then
+        diag%maskList(register_diag_field)%mask2d =>  diag%mask2dCv
 !    else
 !       call MOM_error(FATAL, "MOM_diag_mediator:register_diag_field: " // &
 !            "unknown axes for diagnostic variable "//trim(field_name))     
-     endif
+    endif
   else
         call MOM_error(FATAL, "MOM_diag_mediator:register_diag_field: " // &
              "unknown axes for diagnostic variable "//trim(field_name))          
