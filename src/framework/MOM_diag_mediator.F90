@@ -112,10 +112,6 @@ end type diag_ctrl
 
 integer :: doc_unit = -1
 
-!diagnostics axes string identifier
-character(len=15) :: axesBL_str, axesTL_str, axesCuL_str, axesCvL_str
-character(len=15) :: axesBi_str, axesTi_str, axesCui_str, axesCvi_str
-character(len=15) :: axesB1_str, axesT1_str, axesCu1_str, axesCv1_str
 !default missing value to be sent to ALL diagnostics registerations 
 real, save :: diag_missing = 1.0e+20
 
@@ -209,22 +205,22 @@ subroutine set_axes_info(G, param_file, diag, set_vertical)
   call defineAxes(diag, (/ id_zi /), diag%axesZL)
 
   ! Axis groupings for the model layers.
-  call defineAxes(diag, (/ id_xh, id_yh, id_zL /), diag%axesTL) ; axesTL_str = i2s(diag%axesTL%handles)
-  call defineAxes(diag, (/ id_xq, id_yq, id_zL /), diag%axesBL) ; axesBL_str = i2s(diag%axesBL%handles)
-  call defineAxes(diag, (/ id_xq, id_yh, id_zL /), diag%axesCuL); axesCuL_str = i2s(diag%axesCuL%handles)
-  call defineAxes(diag, (/ id_xh, id_yq, id_zL /), diag%axesCvL); axesCvL_str = i2s(diag%axesCvL%handles)
+  call defineAxes(diag, (/ id_xh, id_yh, id_zL /), diag%axesTL)
+  call defineAxes(diag, (/ id_xq, id_yq, id_zL /), diag%axesBL)
+  call defineAxes(diag, (/ id_xq, id_yh, id_zL /), diag%axesCuL)
+  call defineAxes(diag, (/ id_xh, id_yq, id_zL /), diag%axesCvL)
 
   ! Axis groupings for the model interfaces.
-  call defineAxes(diag, (/ id_xh, id_yh, id_zi /), diag%axesTi) ; axesTi_str = i2s(diag%axesTi%handles)
-  call defineAxes(diag, (/ id_xq, id_yh, id_zi /), diag%axesCui); axesCui_str = i2s(diag%axesCui%handles)
-  call defineAxes(diag, (/ id_xh, id_yq, id_zi /), diag%axesCvi); axesCvi_str = i2s(diag%axesCvi%handles)
-  call defineAxes(diag, (/ id_xq, id_yq, id_zi /), diag%axesBi) ; axesBi_str = i2s(diag%axesBi%handles)
+  call defineAxes(diag, (/ id_xh, id_yh, id_zi /), diag%axesTi)
+  call defineAxes(diag, (/ id_xq, id_yh, id_zi /), diag%axesCui)
+  call defineAxes(diag, (/ id_xh, id_yq, id_zi /), diag%axesCvi)
+  call defineAxes(diag, (/ id_xq, id_yq, id_zi /), diag%axesBi)
 
   ! Axis groupings for 2-D arrays.
-  call defineAxes(diag, (/ id_xh, id_yh /), diag%axesT1) ; axesT1_str = i2s(diag%axesT1%handles)
-  call defineAxes(diag, (/ id_xq, id_yq /), diag%axesB1) ; axesB1_str = i2s(diag%axesB1%handles)
-  call defineAxes(diag, (/ id_xq, id_yh /), diag%axesCu1); axesCu1_str= i2s(diag%axesCu1%handles)
-  call defineAxes(diag, (/ id_xh, id_yq /), diag%axesCv1); axesCv1_str= i2s(diag%axesCv1%handles)
+  call defineAxes(diag, (/ id_xh, id_yh /), diag%axesT1)
+  call defineAxes(diag, (/ id_xq, id_yq /), diag%axesB1)
+  call defineAxes(diag, (/ id_xq, id_yh /), diag%axesCu1)
+  call defineAxes(diag, (/ id_xh, id_yq /), diag%axesCv1)
  
 end subroutine set_axes_info
 
@@ -509,7 +505,6 @@ function register_diag_field(module_name, field_name, axes, init_time, &
   !  (in,opt)  tile_count - No clue. (Not used in MOM.)
   character(len=240) :: mesg
   real :: mom_missing_value
-  character(len=15) :: axes_str
   type(diag_ctrl), pointer :: diag
 
   mom_missing_value = diag_missing
@@ -537,25 +532,24 @@ function register_diag_field(module_name, field_name, axes, init_time, &
   if (register_diag_field>-1) then
   !3d masks
   if(axes%rank .eq. 3) then
-    axes_str = axes%id
     diag => axes%diag
     diag%diagState(register_diag_field)%mask2d => null()
     diag%diagState(register_diag_field)%mask3d => null()
-     if    (axes_str .eq. diag%axesTL%id) then
+     if    (axes%id .eq. diag%axesTL%id) then
         diag%diagState(register_diag_field)%mask3d =>  diag%mask3dTL
-     elseif(axes_str .eq. diag%axesBL%id) then
+     elseif(axes%id .eq. diag%axesBL%id) then
         diag%diagState(register_diag_field)%mask3d =>  diag%mask3dBuL
-     elseif(axes_str .eq. diag%axesCuL%id ) then
+     elseif(axes%id .eq. diag%axesCuL%id ) then
         diag%diagState(register_diag_field)%mask3d =>  diag%mask3dCuL
-     elseif(axes_str .eq. diag%axesCvL%id) then
+     elseif(axes%id .eq. diag%axesCvL%id) then
         diag%diagState(register_diag_field)%mask3d =>  diag%mask3dCvL
-     elseif(axes_str .eq. diag%axesTi%id) then
+     elseif(axes%id .eq. diag%axesTi%id) then
         diag%diagState(register_diag_field)%mask3d =>  diag%mask3dTi
-     elseif(axes_str .eq. diag%axesBi%id) then
+     elseif(axes%id .eq. diag%axesBi%id) then
         diag%diagState(register_diag_field)%mask3d =>  diag%mask3dBui
-     elseif(axes_str .eq. diag%axesCui%id ) then
+     elseif(axes%id .eq. diag%axesCui%id ) then
         diag%diagState(register_diag_field)%mask3d =>  diag%mask3dCui
-     elseif(axes_str .eq. diag%axesCvi%id) then
+     elseif(axes%id .eq. diag%axesCvi%id) then
         diag%diagState(register_diag_field)%mask3d =>  diag%mask3dCvi
 !    else
 !       call MOM_error(FATAL, "MOM_diag_mediator:register_diag_field: " // &
@@ -563,17 +557,16 @@ function register_diag_field(module_name, field_name, axes, init_time, &
      endif
   !2d masks
   elseif(axes%rank .eq. 2) then
-    axes_str = axes%id
     diag => axes%diag
     diag%diagState(register_diag_field)%mask2d => null()
     diag%diagState(register_diag_field)%mask3d => null()
-     if    (axes_str .eq. diag%axesT1%id) then
+     if    (axes%id .eq. diag%axesT1%id) then
         diag%diagState(register_diag_field)%mask2d =>  diag%mask2dT
-     elseif(axes_str .eq. diag%axesB1%id) then
+     elseif(axes%id .eq. diag%axesB1%id) then
         diag%diagState(register_diag_field)%mask2d =>  diag%mask2dBu
-     elseif(axes_str .eq. diag%axesCu1%id) then
+     elseif(axes%id .eq. diag%axesCu1%id) then
         diag%diagState(register_diag_field)%mask2d =>  diag%mask2dCu
-     elseif(axes_str .eq. diag%axesCv1%id) then
+     elseif(axes%id .eq. diag%axesCv1%id) then
         diag%diagState(register_diag_field)%mask2d =>  diag%mask2dCv
 !    else
 !       call MOM_error(FATAL, "MOM_diag_mediator:register_diag_field: " // &
@@ -613,7 +606,6 @@ function register_static_field(module_name, field_name, axes, &
   !  (in,opt)  tile_count - No clue. (Not used in MOM.)
   character(len=240) :: mesg
   real :: mom_missing_value
-  character(len=15) :: axes_str
 
   mom_missing_value = diag_missing
   if(present(missing_value)) mom_missing_value = missing_value
