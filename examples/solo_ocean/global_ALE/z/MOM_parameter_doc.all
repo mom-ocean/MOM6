@@ -1122,6 +1122,8 @@ PRESSURE_DEPENDENT_FRAZIL = False !   [Boolean] default = False
                                 ! If true, use a pressure dependent freezing temperature
                                 ! when making frazil. The default is false, which will be
                                 ! faster but is inappropriate with ice-shelf cavities.
+DEBUG_CONSERVATION = False      !   [Boolean] default = False
+                                ! If true, monitor conservation and extrema.
 MIX_BOUNDARY_TRACERS = True     !   [Boolean] default = True
                                 ! If true, mix the passive tracers in massless layers at
                                 ! the bottom into the interior as though a diffusivity of

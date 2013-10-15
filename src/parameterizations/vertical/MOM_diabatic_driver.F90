@@ -67,7 +67,7 @@ module MOM_diabatic_driver
 
 use MOM_bulk_mixed_layer, only : bulkmixedlayer, bulkmixedlayer_init, bulkmixedlayer_CS
 use MOM_checksums, only : hchksum, uchksum, vchksum
-use MOM_checksum_packages, only : MOM_state_chksum
+use MOM_checksum_packages, only : MOM_state_chksum, MOM_state_stats
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock, only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
@@ -160,6 +160,7 @@ type, public :: diabatic_CS ; private
   logical :: matchKPPwithoutKappaShear ! If true, KPP is matched to interior diffusivities
                              ! that do NOT include kappa-shear diffusivity.
   logical :: debug           ! If true, write verbose checksums for debugging purposes.
+  logical :: debugConservation! If true, monitor conservation and extrema.
   type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
                              ! timing of diagnostic output.
   integer :: id_dudt_dia = -1, id_dvdt_dia = -1, id_wd = -1
@@ -334,6 +335,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   if (CS%debug) then
     call MOM_state_chksum("Start of diabatic ", u(:,:,:), v(:,:,:), h(:,:,:), G)
   endif
+  if (CS%debugConservation) call MOM_state_stats('Start of diabatic', u, v, h, T, S, G)
 
   call cpu_clock_begin(id_clock_set_diffusivity)
   call set_BBL_diffusivity(u, v, h, fluxes, visc, G, CS%set_diff_CSp)
@@ -346,6 +348,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     call make_frazil(h,tv,G,CS)
     if (showCallTree) call callTree_waypoint("done with 1st make_frazil (diabatic)")
   endif
+  if (CS%debugConservation) call MOM_state_stats('1st make_frazil', u, v, h, T, S, G)
 
   if ((CS%ML_mix_first > 0.0) .or. CS%use_geothermal) then
     do k=1,nz ; do j=js,je ; do i=is,ie
@@ -357,6 +360,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     call geothermal(h, tv, dt, eaml, ebml, G, CS%geothermal_CSp)
     call cpu_clock_end(id_clock_geothermal)
     if (showCallTree) call callTree_waypoint("geothermal (diabatic)")
+    if (CS%debugConservation) call MOM_state_stats('geothermal', u, v, h, T, S, G)
   endif
 
   ! Set_opacity estimates the optical properties of the water column.
@@ -393,7 +397,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
         call adjust_salt(h, tv, G, CS)
       call cpu_clock_end(id_clock_mixedlayer)
       if (CS%debug) call MOM_state_chksum("After mixedlayer ", u, v, h, G)
-      if (showCallTree) call callTree_waypoint("done with 1st nulkmixedlayer (diabatic)")
+      if (showCallTree) call callTree_waypoint("done with 1st bulkmixedlayer (diabatic)")
+      if (CS%debugConservation) call MOM_state_stats('1st bulkmixedlayer', u, v, h, T, S, G)
     endif
   endif
 
@@ -514,6 +519,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     call KPP_applyNonLocalTransport(CS%KPP_CSp, G, h, CS%KPP_NLTscalar, CS%netSalt, dt, tv%S, isSalt=.true.)
     call cpu_clock_end(id_clock_kpp)
     if (showCallTree) call callTree_waypoint("done with KPP_applyNonLocalTransport (diabatic)")
+    if (CS%debugConservation) call MOM_state_stats('KPP_applyNonLocalTransport', u, v, h, T, S, G)
   endif
 
   if (CS%debug) then
@@ -532,6 +538,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     call differential_diffuse_T_S(h, tv, visc, dt, G)
     call cpu_clock_end(id_clock_differential_diff)
     if (showCallTree) call callTree_waypoint("done with differential_diffuse_T_S (diabatic)")
+    if (CS%debugConservation) call MOM_state_stats('differential_diffuse_T_S', u, v, h, T, S, G)
   endif
 
   ! This block sets ea, eb from Kd or Kd_int.
@@ -584,6 +591,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
       call hchksum(G%H_to_m*ea, "after applyBoundaryFluxes ea",G,haloshift=0)
     endif
     if (showCallTree) call callTree_waypoint("done with applyBoundaryFluxes (diabatic)")
+    if (CS%debugConservation)  call MOM_state_stats('applyBoundaryFluxes', u, v, h, T, S, G)
   endif
   
   ! Update h according to divergence of the difference between
@@ -616,6 +624,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     call MOM_thermovar_chksum("after negative check ", tv, G)
   endif
   if (showCallTree) call callTree_waypoint("done with h=ea-eb (diabatic)")
+  if (CS%debugConservation) call MOM_state_stats('h=ea-eb', u, v, hold, T, S, G)
 
   ! Here, T and S are updated according to ea and eb.
   ! If using the bulk mixed layer, T and S are also updated
@@ -697,6 +706,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
         call triDiagTS(G, is, ie, js, je, hold, ea, eb, T, S)
       endif ! massless_match_targets
       call cpu_clock_end(id_clock_tridiag)
+      if (CS%debugConservation) call MOM_state_stats('BML tridiag', u, v, h, T, S, G)
     endif ! end of ASSOCIATED(T)
 
     if ((CS%ML_mix_first > 0.0) .or. CS%use_geothermal) then
@@ -739,6 +749,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
 
       call cpu_clock_end(id_clock_mixedlayer)
       if (showCallTree) call callTree_waypoint("done with 2nd bulkmixedlayer (diabatic)")
+      if (CS%debugConservation) call MOM_state_stats('2nd bulkmixedlayer', u, v, h, T, S, G)
     endif
 
   else                                             ! Not BULKMIXEDLAYER.
@@ -754,6 +765,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
       call triDiagTS(G, is, ie, js, je, hold, ea, eb, T, S)
       call cpu_clock_end(id_clock_tridiag)
       if (showCallTree) call callTree_waypoint("done with triDiagTS (diabatic)")
+      if (CS%debugConservation) call MOM_state_stats('triDiagTS', u, v, h, T, S, G)
     endif
 
   endif                                          ! end BULKMIXEDLAYER
@@ -767,6 +779,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     call regularize_layers(h, tv, dt, ea, eb, G, CS%regularize_layers_CSp)
     call cpu_clock_end(id_clock_remap)
     if (showCallTree) call callTree_waypoint("done with regularize_layers (diabatic)")
+    if (CS%debugConservation) call MOM_state_stats('regularize_layers', u, v, h, T, S, G)
   endif
 
   if ((CS%id_Tdif > 0) .or. (CS%id_Tdif_z > 0) .or. &
@@ -1016,6 +1029,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   if (ASSOCIATED(T) .AND. ASSOCIATED(tv%frazil)) then
     call make_frazil(h,tv,G,CS)
     if (showCallTree) call callTree_waypoint("done with 2nd make_frazil (diabatic)")
+    if (CS%debugConservation) call MOM_state_stats('2nd make_frazil', u, v, h, T, S, G)
   endif
 
   if (CS%id_ea > 0) call post_data(CS%id_ea, ea, CS%diag)
@@ -1054,6 +1068,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   if (num_z_diags > 0) &
     call calc_Zint_diags(h, z_ptrs, z_ids, num_z_diags, G, CS%diag_to_Z_CSp)
 
+  if (CS%debugConservation) call MOM_state_stats('leaving diabatic', u, v, h, T, S, G)
   if (showCallTree) call callTree_leave("diabatic()")
 end subroutine diabatic
 
@@ -1536,6 +1551,8 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
                  default=.false.)
   call get_param(param_file, mod, "DEBUG", CS%debug, &
                  "If true, write out verbose debugging data.", default=.false.)
+  call get_param(param_file, mod, "DEBUG_CONSERVATION", CS%debugConservation, &
+                 "If true, monitor conservation and extrema.", default=.false.)
   call get_param(param_file, mod, "MIX_BOUNDARY_TRACERS", CS%mix_boundary_tracers, &
                  "If true, mix the passive tracers in massless layers at \n"//&
                  "the bottom into the interior as though a diffusivity of \n"//&

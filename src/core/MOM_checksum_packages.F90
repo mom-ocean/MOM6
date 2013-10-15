@@ -24,12 +24,16 @@ module MOM_checksum_packages
 ! of variables in the various dynamic solver routines.
 
 use MOM_checksums, only : hchksum, uchksum, vchksum
+use MOM_checksums, only : totalStuff
+use MOM_domains, only : sum_across_PEs, min_across_PEs, max_across_PEs
+use MOM_error_handler, only : MOM_mesg, is_root_pe
 use MOM_grid, only : ocean_grid_type
 use MOM_variables, only : thermo_var_ptrs
 
 implicit none ; private
 
 public MOM_state_chksum, MOM_thermo_chksum, MOM_accel_chksum
+public MOM_state_stats
 
 interface MOM_state_chksum
   module procedure MOM_state_chksum_5arg
@@ -37,6 +41,11 @@ interface MOM_state_chksum
 end interface
 
 #include <MOM_memory.h>
+
+type :: stats
+  private
+  real :: minimum = 1.E34, maximum = -1.E34, average = 0.
+end type stats
 
 contains
 
@@ -182,5 +191,100 @@ subroutine MOM_accel_chksum(mesg, CAu, CAv, PFu, PFv, diffu, diffv, G, pbce, &
   if (present(v_accel_bt)) &
     call vchksum(v_accel_bt, mesg//" v_accel_bt",G,haloshift=0)
 end subroutine MOM_accel_chksum
+
+! =============================================================================
+
+subroutine MOM_state_stats(mesg, u, v, h, Temp, Salt, G, allowChange, permitDiminishing)
+  character(len=*),                       intent(in) :: mesg
+  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in) :: u
+  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in) :: v
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in) :: h, Temp, Salt
+  type(ocean_grid_type),                  intent(in) :: G
+  logical, optional,                      intent(in) :: allowChange, permitDiminishing
+!   This subroutine monitors statistics for the model's state variables.
+! Arguments: mesg - A message that appears on the chksum lines.
+!  (in) u - Zonal velocity, in m s-1.
+!  (in) v - Meridional velocity, in m s-1.
+!  (in) h - Layer thickness, in m.
+!  (in) T - Temperature, in degree C.
+!  (in) S - Salinity, in ppt.
+!  (in) G - The ocean's grid structure.
+!  (in) allowChange - do not flag an error if the statistics change
+!  (in) permitDiminishing - do not flag an error if the extrema are diminishing
+  integer :: is, ie, js, je, nz, i, j, k
+  real :: Vol, dV, Area
+  type(stats) :: T, S, delT, delS
+  type(stats), save :: oldT, oldS     ! NOTE: save data is not normally allowed but
+  logical, save :: firstCall = .true. ! we use it for debugging purposes here on the
+  real, save :: oldVol                ! assumption we will not turn this on with threads
+  character(len=80) :: lMsg
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+
+  ! First collect local stats
+  Area = 0. ; Vol = 0.
+  do j = js, je ; do i = is, ie
+    Area = Area + G%areaT(i,j)
+  enddo ; enddo
+  T%minimum = 1.E34 ; T%maximum = -1.E34 ; T%average = 0.
+  S%minimum = 1.E34 ; S%maximum = -1.E34 ; S%average = 0.
+  do k = 1, nz ; do j = js, je ; do i = is, ie
+    if (G%mask2dT(i,j)>0.) then
+      dV = G%areaT(i,j)*h(i,j,k) ; Vol = Vol + dV
+      if (h(i,j,k)>0.) then
+        T%minimum = min( T%minimum, Temp(i,j,k) ) ; T%maximum = max( T%maximum, Temp(i,j,k) )
+        T%average = T%average + dV*Temp(i,j,k)
+        S%minimum = min( S%minimum, Salt(i,j,k) ) ; S%maximum = max( S%maximum, Salt(i,j,k) )
+        S%average = S%average + dV*Salt(i,j,k)
+      endif
+    endif
+  enddo ; enddo ; enddo
+  call sum_across_PEs( Area ) ; call sum_across_PEs( Vol )
+  call min_across_PEs( T%minimum ) ; call max_across_PEs( T%maximum ) ; call sum_across_PEs( T%average )
+  call min_across_PEs( S%minimum ) ; call max_across_PEs( S%maximum ) ; call sum_across_PEs( S%average )
+  T%average = T%average / Vol ; S%average = S%average / Vol
+  if (is_root_pe()) then
+    if (.not.firstCall) then
+      dV = Vol - oldVol
+      delT%minimum = T%minimum - oldT%minimum ; delT%maximum = T%maximum - oldT%maximum
+      delT%average = T%average - oldT%average
+      delS%minimum = S%minimum - oldS%minimum ; delS%maximum = S%maximum - oldS%maximum
+      delS%average = S%average - oldS%average
+      write(lMsg(1:80),'(2(a,es12.4))') 'Mean thickness =',Vol/Area,' frac. delta=',dV/Vol
+      call MOM_mesg(lMsg//trim(mesg))
+      write(lMsg(1:80),'(a,3es12.4)') 'Temp min/mean/max =',T%minimum,T%average,T%maximum
+      call MOM_mesg(lMsg//trim(mesg))
+      write(lMsg(1:80),'(a,3es12.4)') 'delT min/mean/max =',delT%minimum,delT%average,delT%maximum
+      call MOM_mesg(lMsg//trim(mesg))
+      write(lMsg(1:80),'(a,3es12.4)') 'Salt min/mean/max =',S%minimum,S%average,S%maximum
+      call MOM_mesg(lMsg//trim(mesg))
+      write(lMsg(1:80),'(a,3es12.4)') 'delS min/mean/max =',delS%minimum,delS%average,delS%maximum
+      call MOM_mesg(lMsg//trim(mesg))
+    else
+      write(lMsg(1:80),'(a,es12.4)') 'Mean thickness =',Vol/Area
+      call MOM_mesg(lMsg//trim(mesg))
+      write(lMsg(1:80),'(a,3es12.4)') 'Temp min/mean/max =',T%minimum,T%average,T%maximum
+      call MOM_mesg(lMsg//trim(mesg))
+      write(lMsg(1:80),'(a,3es12.4)') 'Salt min/mean/max =',S%minimum,S%average,S%maximum
+      call MOM_mesg(lMsg//trim(mesg))
+    endif
+  endif
+  firstCall = .false. ; oldVol = Vol
+  oldT%minimum = T%minimum ; oldT%maximum = T%maximum ; oldT%average = T%average
+  oldS%minimum = S%minimum ; oldS%maximum = S%maximum ; oldS%average = S%average
+
+  if (T%minimum<-5.0) then
+    do j = js, je ; do i = is, ie
+      if (minval(Temp(i,j,:)) == T%minimum) then
+        write(0,'(a,2f12.5)') 'x,y=',G%geoLonT(i,j),G%geoLatT(i,j)
+        write(0,'(a3,3a12)') 'k','h','Temp','Salt'
+        do k = 1, nz
+          write(0,'(i3,3es12.4)') k,h(i,j,k),Temp(i,j,k),Salt(i,j,k)
+        enddo
+        stop 'Extremum detected'
+      endif
+    enddo ; enddo
+  endif
+
+end subroutine MOM_state_stats
 
 end module MOM_checksum_packages
