@@ -85,7 +85,8 @@ use MOM_domains, only : pass_vector_start, pass_vector_complete
 use MOM_domains, only : To_South, To_West, To_All, CGRID_NE, SCALAR_PAIR
 use MOM_checksums, only : MOM_checksums_init, hchksum, uchksum, vchksum
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
-use MOM_error_handler, only : MOM_set_verbosity
+use MOM_error_handler, only : MOM_set_verbosity, callTree_showQuery
+use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser, only : read_param, get_param, log_version, param_file_type
 use MOM_get_input, only : directories
 use MOM_io, only : MOM_io_init, vardesc
@@ -358,6 +359,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   logical :: BT_cont_BT_thick ! If true, use the BT_cont_type to estimate the
                               ! relative weightings of the layers in calculating
                               ! the barotropic accelerations.
+  logical :: showCallTree
   integer :: pid_Ray, pid_bbl_h, pid_kv_bbl, pid_eta_PF, pid_eta, pid_visc
   integer :: pid_h, pid_u, pid_u_av, pid_uh
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
@@ -366,6 +368,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   u_av => CS%u_av ; v_av => CS%v_av ; h_av => CS%h_av ; eta => CS%eta
   Idt = 1.0 / dt
 
+  showCallTree = callTree_showQuery()
+  if (showCallTree) call callTree_enter("step_MOM_dyn_split_RK2(), MOM_dynamics_split_RK2.F90")
   up(:,:,:) = 0.0 ; vp(:,:,:) = 0.0 ; hp(:,:,:) = h(:,:,:)
 
   ! Update CFL truncation value as function of time
@@ -440,6 +444,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
       visc%calc_bbl = .false.
     endif
     call cpu_clock_end(id_clock_pass)
+    if (showCallTree) call callTree_wayPoint("done with set_viscous_BBL (step_MOM_dyn_split_RK2)")
   endif
 
 ! PFu = d/dx M(h,T,S)
@@ -461,6 +466,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   endif
   call cpu_clock_end(id_clock_pres)
   call disable_averaging(CS%diag)
+  if (showCallTree) call callTree_wayPoint("done with PressureForce (step_MOM_dyn_split_RK2)")
 
   if (G%nonblocking_updates) then
     call cpu_clock_begin(id_clock_pass)
@@ -474,6 +480,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   call CorAdCalc(u_av, v_av, h_av, uh, vh, CS%CAu, CS%CAv, CS%ADp, G, &
                  CS%CoriolisAdv_CSp)
   call cpu_clock_end(id_clock_Cor)
+  if (showCallTree) call callTree_wayPoint("done with CorAdCalc (step_MOM_dyn_split_RK2)")
 
 ! u_bc_accel = CAu + PFu + diffu(u[n-1])
   call cpu_clock_begin(id_clock_btforce)
@@ -528,6 +535,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   call vertvisc_coef(up, vp, h, fluxes, visc, dt, G, CS%vertvisc_CSp)
   call vertvisc_remnant(visc, CS%visc_rem_u, CS%visc_rem_v, dt, G, CS%vertvisc_CSp)
   call cpu_clock_end(id_clock_vertvisc)
+  if (showCallTree) call callTree_wayPoint("done with vertvisc_coef (step_MOM_dyn_split_RK2)")
 
   call cpu_clock_begin(id_clock_pass)
   if (G%nonblocking_updates) then
@@ -570,6 +578,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
       call cpu_clock_end(id_clock_pass)
       call btcalc(h, G, CS%barotropic_CSp, CS%BT_cont%h_u, CS%BT_cont%h_v)
     endif
+    if (showCallTree) call callTree_wayPoint("done with continuity[BT_cont] (step_MOM_dyn_split_RK2)")
   endif
 
   if (CS%BT_use_layer_fluxes) then
@@ -579,6 +588,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   u_init => u ; v_init => v
   call cpu_clock_begin(id_clock_btstep)
   if (calc_dtbt) call set_dtbt(G, CS%barotropic_CSp, eta, CS%pbce)
+  if (showCallTree) call callTree_enter("btstep(), MOM_barotropic.F90")
   call btstep(u, v, eta, dt, u_bc_accel, v_bc_accel, &
               fluxes, CS%pbce, CS%eta_PF, u_av, v_av, CS%u_accel_bt, &
               CS%v_accel_bt, eta_pred, CS%uhbt, CS%vhbt, G, CS%barotropic_CSp,&
@@ -586,6 +596,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
               BT_cont = CS%BT_cont, eta_PF_start=eta_PF_start, &
               taux_bot=taux_bot, tauy_bot=tauy_bot, &
               uh0=uh_ptr, vh0=vh_ptr, u_uh0=u_ptr, v_vh0=v_ptr)
+  if (showCallTree) call callTree_leave("btstep()")
   call cpu_clock_end(id_clock_btstep)
 
 ! up = u + dt_pred*( u_bc_accel + u_accel_bt )
@@ -622,6 +633,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   call vertvisc_coef(up, vp, h, fluxes, visc, dt_pred, G, CS%vertvisc_CSp)
   call vertvisc(up, vp, h, fluxes, visc, dt_pred, CS%OBC, CS%ADp, CS%CDp, G, &
                 CS%vertvisc_CSp, CS%taux_bot, CS%tauy_bot)
+  if (showCallTree) call callTree_wayPoint("done with vertvisc (step_MOM_dyn_split_RK2)")
   if (G%nonblocking_updates) then
     call cpu_clock_end(id_clock_vertvisc) ; call cpu_clock_begin(id_clock_pass)
     pid_u = pass_vector_start(up, vp, G%Domain)
@@ -647,6 +659,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
                   CS%uhbt, CS%vhbt, CS%OBC, CS%visc_rem_u, CS%visc_rem_v, &
                   u_av, v_av, BT_cont=CS%BT_cont)
   call cpu_clock_end(id_clock_continuity)
+  if (showCallTree) call callTree_wayPoint("done with continuity (step_MOM_dyn_split_RK2)")
 
   call cpu_clock_begin(id_clock_pass)
   call pass_var(hp, G%Domain)
@@ -699,6 +712,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
     call cpu_clock_begin(id_clock_pass)
     call pass_var(CS%eta_PF, G%Domain)
     call cpu_clock_end(id_clock_pass)
+    if (showCallTree) call callTree_wayPoint("done with PressureForce[hp=(1-b).h+b.h] (step_MOM_dyn_split_RK2)")
   endif
 
   if (G%nonblocking_updates) then
@@ -714,6 +728,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
                      To_All+SCALAR_PAIR, CGRID_NE)
     call cpu_clock_end(id_clock_pass)
     call btcalc(h, G, CS%barotropic_CSp, CS%BT_cont%h_u, CS%BT_cont%h_v)
+    if (showCallTree) call callTree_wayPoint("done with btcalc[BT_cont_BT_thick] (step_MOM_dyn_split_RK2)")
   endif
 
   if (CS%debug) then
@@ -731,12 +746,14 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   call horizontal_viscosity(u_av, v_av, h_av, CS%diffu, CS%diffv, &
                             MEKE, Varmix, G, CS%hor_visc_CSp, OBC=CS%OBC)
   call cpu_clock_end(id_clock_horvisc)
+  if (showCallTree) call callTree_wayPoint("done with horizontal_viscosity (step_MOM_dyn_split_RK2)")
 
 ! CAu = -(f+zeta_av)/h_av vh + d/dx KE_av
   call cpu_clock_begin(id_clock_Cor)
   call CorAdCalc(u_av, v_av, h_av, uh, vh, CS%CAu, CS%CAv, CS%ADp, G, &
                  CS%CoriolisAdv_CSp)
   call cpu_clock_end(id_clock_Cor)
+  if (showCallTree) call callTree_wayPoint("done with CorAdCalc (step_MOM_dyn_split_RK2)")
 
 ! Calculate the momentum forcing terms for the barotropic equations.
 
@@ -764,6 +781,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
     uh_ptr => uh ; vh_ptr => vh ; u_ptr => u_av ; v_ptr => v_av
   endif
 
+  if (showCallTree) call callTree_enter("btstep(), MOM_barotropic.F90")
   call btstep(u, v, eta, dt, u_bc_accel, v_bc_accel, &
               fluxes, CS%pbce, CS%eta_PF, u_av, v_av, CS%u_accel_bt, &
               CS%v_accel_bt, eta_pred, CS%uhbt, CS%vhbt, G, &
@@ -774,6 +792,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
               uh0=uh_ptr, vh0=vh_ptr, u_uh0=u_ptr, v_vh0=v_ptr)
   do j=js,je ; do i=is,ie ; eta(i,j) = eta_pred(i,j) ; enddo ; enddo
   call cpu_clock_end(id_clock_btstep)
+  if (showCallTree) call callTree_leave("btstep()")
 
   if (CS%debug) then
     call check_redundant("u_accel_bt ", CS%u_accel_bt, CS%v_accel_bt, G)
@@ -816,6 +835,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   endif
   call vertvisc_remnant(visc, CS%visc_rem_u, CS%visc_rem_v, dt, G, CS%vertvisc_CSp)
   call cpu_clock_end(id_clock_vertvisc)
+  if (showCallTree) call callTree_wayPoint("done with vertvisc (step_MOM_dyn_split_RK2)")
 
 ! Later, h_av = (h_in + h_out)/2, but for now use h_av to store h_in.
   do k=1,nz ; do j=js-2,je+2 ; do i=is-2,ie+2
@@ -843,6 +863,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   call cpu_clock_begin(id_clock_pass)
   call pass_var(h, G%Domain)
   call cpu_clock_end(id_clock_pass)
+  if (showCallTree) call callTree_wayPoint("done with continuity (step_MOM_dyn_split_RK2)")
 
   call cpu_clock_begin(id_clock_pass)
   if (G%nonblocking_updates) then
@@ -902,6 +923,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
     call hchksum(G%H_to_kg_m2*h_av,"Corrector avg h",G,haloshift=1)
  !  call MOM_state_chksum("Corrector avg ", u_av, v_av, h_av, uh, vh, G)
   endif
+  if (showCallTree) call callTree_leave("step_MOM_dyn_split_RK2()")
 
 end subroutine step_MOM_dyn_split_RK2
 
