@@ -2450,7 +2450,7 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, CS, p_atm)
     enddo; enddo
     call sum_across_PEs(numberOfErrors)
     if (numberOfErrors>0) then
-      write(msg(1:240),'(3(a,i5,x))') 'There were a total of ',numberOfErrors, &
+      write(msg(1:240),'(3(a,i9,x))') 'There were a total of ',numberOfErrors, &
           'locations detected with extreme surface values!'
       call MOM_error(FATAL, trim(msg))
     endif
