@@ -480,28 +480,28 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     ! Thus, KPP is the last contribution to Kd.
     ! Changes: Kd_int. Sets: KPP_NLTheat, KPP_NLTscalar
     if (associated(visc%Kd_turb) .and. CS%matchKPPwithoutKappaShear) then
-      Kd_salt(:,:,:) = Kd_int(:,:,:) - visc%Kd_turb(:,:,:) ! Temporarily remove part due to Kappa-shear
-      Kd_heat(:,:,:) = Kd_int(:,:,:) - visc%Kd_turb(:,:,:) ! Temporarily remove part due to Kappa-shear
+      Kd_salt(is:ie,js:je,:) = Kd_int(is:ie,js:je,:) - visc%Kd_turb(is:ie,js:je,:) ! Temporarily remove part due to Kappa-shear
+      Kd_heat(is:ie,js:je,:) = Kd_int(is:ie,js:je,:) - visc%Kd_turb(is:ie,js:je,:) ! Temporarily remove part due to Kappa-shear
     else
-      Kd_salt(:,:,:) = Kd_int(:,:,:)
-      Kd_heat(:,:,:) = Kd_int(:,:,:)
+      Kd_salt(is:ie,js:je,:) = Kd_int(is:ie,js:je,:)
+      Kd_heat(is:ie,js:je,:) = Kd_int(is:ie,js:je,:)
     endif
     if (associated(visc%Kd_extra_S)) &
-        Kd_salt(:,:,:) = Kd_salt(:,:,:) + visc%Kd_extra_S(:,:,:)
+        Kd_salt(is:ie,js:je,:) = Kd_salt(is:ie,js:je,:) + visc%Kd_extra_S(is:ie,js:je,:)
     if (associated(visc%Kd_extra_T)) &
-        Kd_heat(:,:,:) = Kd_heat(:,:,:) + visc%Kd_extra_T(:,:,:)
+        Kd_heat(is:ie,js:je,:) = Kd_heat(is:ie,js:je,:) + visc%Kd_extra_T(is:ie,js:je,:)
     call KPP_calculate(CS%KPP_CSp, G, h, tv%T, tv%S, u, v, tv%eqn_of_state, &
            fluxes%ustar, CS%buoyancyFlux, Kd_heat, Kd_salt, visc%Kv_turb, CS%KPP_NLTheat, CS%KPP_NLTscalar)
     if (.not. CS%KPPisPassive) then
       if (associated(visc%Kd_turb) .and. CS%matchKPPwithoutKappaShear) then
-        Kd_salt(:,:,:) = ( Kd_salt(:,:,:) + visc%Kd_turb(:,:,:) )  ! Put back part due to Kappa-shear
-        Kd_heat(:,:,:) = ( Kd_heat(:,:,:) + visc%Kd_turb(:,:,:) )  ! Put back part due to Kappa-shear
+        Kd_salt(is:ie,js:je,:) = ( Kd_salt(is:ie,js:je,:) + visc%Kd_turb(is:ie,js:je,:) )  ! Put back part due to Kappa-shear
+        Kd_heat(is:ie,js:je,:) = ( Kd_heat(is:ie,js:je,:) + visc%Kd_turb(is:ie,js:je,:) )  ! Put back part due to Kappa-shear
       endif
-      Kd_int(:,:,:) = min( Kd_salt(:,:,:),  Kd_heat(:,:,:) )
+      Kd_int(is:ie,js:je,:) = min( Kd_salt(is:ie,js:je,:),  Kd_heat(is:ie,js:je,:) )
       if (associated(visc%Kd_extra_S)) &
-          visc%Kd_extra_S(:,:,:) = Kd_salt(:,:,:) - Kd_int(:,:,:)
+          visc%Kd_extra_S(is:ie,js:je,:) = Kd_salt(is:ie,js:je,:) - Kd_int(is:ie,js:je,:)
       if (associated(visc%Kd_extra_T)) &
-          visc%Kd_extra_T(:,:,:) = Kd_heat(:,:,:) - Kd_int(:,:,:)
+          visc%Kd_extra_T(is:ie,js:je,:) = Kd_heat(is:ie,js:je,:) - Kd_int(is:ie,js:je,:)
     endif ! not passive
     call cpu_clock_end(id_clock_kpp)
     if (showCallTree) call callTree_waypoint("done with KPP_calculate (diabatic)")
