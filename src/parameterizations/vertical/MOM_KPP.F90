@@ -44,6 +44,7 @@ type, public :: KPP_CS ; private
   logical :: passiveMode ! If True, makes KPP passive meaning it does NOT alter the diffusivity
   logical :: applyNonLocalTrans ! If True, apply non-local transport to heat and scalars
   logical :: NLTworkaround ! If True, re-scale the non-local transport to limit the amplitude
+  logical :: doMatching ! If True, do NOT match diffusivities at the base of the boundary layer.
   real    :: maxKdInterior ! A value to which interior mixing is clipped to (m2/s)
   real    :: deepOBLoffset ! If non-zero, is a distance from the bottom that the OBL can not penetrate through (m)
   logical :: debug      ! If True, calculate checksums and write debugging information
@@ -144,6 +145,9 @@ subroutine KPP_init(paramFile, G, diag, Time, CS, passive)
   call get_param(paramFile, mod, 'MAX_KD_INTERIOR', CS%maxKdInterior, &
                  'If non-zero, the value to limit incoming interior diffusivity to.\n', &
                  units='m2/s',default=0.)
+  call get_param(paramFile, mod, 'MATCH_INTERIOR', CS%doMatching, &
+                 'If true, turns off the matching of diffuvities at the OBL.', &
+                 default=.False.)
   call get_param(paramFile, mod, 'DEEP_OBL_OFFSET', CS%deepOBLoffset, &
                  'If non-zero, the distance above the bottom to which the OBL is clipped\n'// &
                  'if it would otherwise reach the bottom. The smaller of this and 0.1D is used.', &
@@ -399,7 +403,10 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
       endif
 
       ! Now call KPP proper to obtain BL diffusivities, viscosities and non-local transports
-      if (CS%maxKdInterior>0.) then
+      if (.not. CS%doMatching) then
+        Kdiffusivity(:,:) = 0.! Diffusivties for heat and salt
+        Kviscosity(:) = 0.    ! Viscosity    ???????
+      elseif (CS%maxKdInterior>0.) then
         Kdiffusivity(:,1) = min( CS%maxKdInterior, Kt(i,j,:)  )! Diffusivty for heat
         Kdiffusivity(:,2) = min( CS%maxKdInterior, Ks(i,j,:) ) ! Diffusivity for salt
         Kviscosity(:) = min( CS%maxKdInterior, Kv(i,j,:) )     ! Viscosity    ???????
