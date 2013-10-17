@@ -743,8 +743,9 @@ subroutine forcing_SinglePointPrint(fluxes, G, i, j, mesg)
   call locMsg(fluxes%calving_hflx,'calving_hflx')
 
   contains
+
   subroutine locMsg(array,aname)
-  real, dimension(NIMEM_,NKMEM_), pointer :: array
+  real, dimension(:,:), pointer :: array
   character(len=*) :: aname
   if (associated(array)) then
     write(0,'(3a,es15.3)') 'MOM_forcing_type, forcing_SinglePointPrint: ',trim(aname),' = ',array(i,j)
