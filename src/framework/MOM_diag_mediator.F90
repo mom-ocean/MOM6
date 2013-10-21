@@ -202,7 +202,7 @@ subroutine set_axes_info(G, param_file, diag, set_vertical)
 
   ! Vertical axes for the interfaces and layers.
   call defineAxes(diag, (/ id_zi /), diag%axesZi)
-  call defineAxes(diag, (/ id_zi /), diag%axesZL)
+  call defineAxes(diag, (/ id_zL /), diag%axesZL)
 
   ! Axis groupings for the model layers.
   call defineAxes(diag, (/ id_xh, id_yh, id_zL /), diag%axesTL)
@@ -245,7 +245,8 @@ subroutine set_diag_mediator_grid(G, diag)
   type(diag_ctrl),       intent(inout) :: diag
 ! Arguments: G - The ocean's grid structure.
 !  (inout)   diag - A structure that is used to regulate diagnostic output.
-  diag%is = G%isc ; diag%ie = G%iec ; diag%js = G%jsc ; diag%je = G%jec
+  diag%is = G%isc - (G%isd-1) ; diag%ie = G%iec - (G%isd-1)
+  diag%js = G%jsc - (G%jsd-1) ; diag%je = G%jec - (G%jsd-1)
   diag%isd = G%isd ; diag%ied = G%ied ; diag%jsd = G%jsd ; diag%jed = G%jed
 end subroutine set_diag_mediator_grid
 
@@ -350,7 +351,7 @@ subroutine post_data_3d(diag_field_id, field, diag, is_static, mask)
   integer :: isv, iev, jsv, jev
   is_stat = .false. ; if (present(is_static)) is_stat = is_static 
   
-  ! Determine the propery array indices, noting that because of the (:,:)
+  ! Determine the proper array indices, noting that because of the (:,:)
   ! declaration of field, symmetric arrays are using a SW-grid indexing,
   ! but non-symmetric arrays are using a NE-grid indexing.  Send_data
   ! actually only uses the difference between ie and is to determine
@@ -504,14 +505,14 @@ function register_diag_field(module_name, field_name, axes, init_time, &
   !  (in,opt)  interp_method - No clue. (Not used in MOM.)
   !  (in,opt)  tile_count - No clue. (Not used in MOM.)
   character(len=240) :: mesg
-  real :: mom_missing_value
+  real :: MOM_missing_value
   type(diag_ctrl), pointer :: diag
 
-  mom_missing_value = axes%diag%missing_value
-  if(present(missing_value)) mom_missing_value = missing_value
+  MOM_missing_value = axes%diag%missing_value
+  if(present(missing_value)) MOM_missing_value = missing_value
 
   register_diag_field = register_diag_field_fms(module_name, field_name, axes%handles, &
-       init_time, long_name=long_name, units=units, missing_value=mom_missing_value, &
+       init_time, long_name=long_name, units=units, missing_value=MOM_missing_value, &
        range=range, mask_variant=mask_variant, standard_name=standard_name, &
        verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
        interp_method=interp_method, tile_count=tile_count)
@@ -611,13 +612,13 @@ function register_static_field(module_name, field_name, axes, &
   !  (in,opt)  interp_method - No clue. (Not used in MOM.)
   !  (in,opt)  tile_count - No clue. (Not used in MOM.)
   character(len=240) :: mesg
-  real :: mom_missing_value
+  real :: MOM_missing_value
 
-  mom_missing_value = axes%diag%missing_value
-  if(present(missing_value)) mom_missing_value = missing_value
+  MOM_missing_value = axes%diag%missing_value
+  if(present(missing_value)) MOM_missing_value = missing_value
 
   register_static_field = register_static_field_fms(module_name, field_name, axes%handles, &
-       long_name=long_name, units=units, missing_value=mom_missing_value, &
+       long_name=long_name, units=units, missing_value=MOM_missing_value, &
        range=range, mask_variant=mask_variant, standard_name=standard_name, &
        do_not_log=do_not_log, &
        interp_method=interp_method, tile_count=tile_count)
@@ -750,7 +751,8 @@ subroutine diag_mediator_init(G, param_file, diag, err_msg)
 
   call diag_manager_init(err_msg=err_msg)
 
-  diag%is = G%isc ; diag%ie = G%iec ; diag%js = G%jsc ; diag%je = G%jec
+  diag%is = G%isc - (G%isd-1) ; diag%ie = G%iec - (G%isd-1)
+  diag%js = G%jsc - (G%jsd-1) ; diag%je = G%jec - (G%jsd-1)
   diag%isd = G%isd ; diag%ied = G%ied ; diag%jsd = G%jsd ; diag%jed = G%jed
 
   if (is_root_pe()) then
