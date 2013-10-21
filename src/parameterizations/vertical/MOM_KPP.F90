@@ -159,7 +159,6 @@ subroutine KPP_init(paramFile, G, diag, Time, CS, passive)
                        interp_type=CS%interpType,          &
                        lEkman=CS%computeEkman,             &
                        lMonOb=CS%computeMoninObukhov,      &
-                       c_s=CS%cs,                          &
                        CVmix_kpp_params_user=CS%KPP_params )
 
 ! Register diagnostics
