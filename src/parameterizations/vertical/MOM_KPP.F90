@@ -261,7 +261,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
   real, dimension( G%ke+1 )   :: N2_1d                  ! Brunt-Vaisala frequency squared, at interfaces (1/s2)
   real, dimension( G%ke+1 )   :: N_1d                   ! (Adjusted) Brunt-Vaisala frequency, at interfaces (1/s)
   real, dimension( G%ke )     :: Ws_1d, Wm_1d           ! Profiles of vertical velocity scale for scalars/momentum (m/s)
-  real, dimension( G%ke )     :: Vt2_1d                 ! Unresolved shear turbulence, at interfaces (1/s2)
+  real, dimension( G%ke )     :: Vt2_1d                 ! Unresolved shear turbulence, at interfaces (m2/s2)
   real, dimension( G%ke )     :: BulkRi_1d              ! Bulk Richardson number for each layer
   real, dimension( G%ke )     :: deltaRho               ! delta Rho in numerator of Bulk Ri number
   real, dimension( G%ke )     :: deltaU2                ! square of delta U (shear) in denominator of Bulk Ri (m2/s2)
