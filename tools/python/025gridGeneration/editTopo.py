@@ -78,6 +78,7 @@ def createGUI(fileName, variable, outFile):
       self.data = None
       self.quadMesh = None
       self.ax = None
+      self.syms = None
       cdict = {'red': ((0.0, 0.0, 0.0), (0.5, 0.7, 0.0), (1.0, 0.9, 0.0)),
            'green': ((0.0, 0.0, 0.0), (0.5, 0.7, 0.2), (1.0, 1.0, 0.0)),
             'blue': ((0.0, 0.0, 0.2), (0.5, 1.0, 0.0), (1.0, 0.9, 0.0))}
@@ -104,6 +105,8 @@ def createGUI(fileName, variable, outFile):
   #wet = ice9it(600,270,depth)
 
   All.quadMesh = plt.pcolormesh(All.data.longitude,All.data.latitude,All.data.height,cmap=All.cmap,vmin=-All.clim,vmax=All.clim)
+  All.syms = All.edits.plot(fullData)
+  dir(All.syms)
   All.ax=plt.gca(); All.ax.set_xlim( All.data.xlim ); All.ax.set_ylim( All.data.ylim )
   All.climLabel = plt.figtext(.97,.97, 'XXXXX', ha='right', va='top')
   All.climLabel.set_text('clim = $\pm$%i'%(All.clim))
@@ -138,7 +141,9 @@ def createGUI(fileName, variable, outFile):
     All.edits.pop()
     All.data = fullData.cloneWindow( (All.view.i0,All.view.j0), (All.view.iw,All.view.jw) )
     All.data.applyEdits(fullData, All.edits.ijz)
-    All.quadMesh.set_array(All.data.height.ravel()); plt.draw()
+    All.quadMesh.set_array(All.data.height.ravel())
+    All.edits.updatePlot(fullData,All.syms)
+    plt.draw()
   lowerButtons.add('Undo', undoLast)
   upperButtons = Buttons(bottom=1-.0615)
   def colorScale(event):
@@ -159,6 +164,7 @@ def createGUI(fileName, variable, outFile):
     plt.sca(All.ax); plt.cla()
     All.quadMesh = plt.pcolormesh(All.data.longitude,All.data.latitude,All.data.height,cmap=All.cmap,vmin=-All.clim,vmax=All.clim)
     All.ax.set_xlim( All.data.xlim ); All.ax.set_ylim( All.data.ylim )
+    All.syms = All.edits.plot(fullData)
     plt.draw()
   def moveWindowLeft(event): moveVisData(-1,0)
   upperButtons.add('West', moveWindowLeft)
@@ -191,14 +197,18 @@ def createGUI(fileName, variable, outFile):
         else:
           All.edits.add(i,j)
           All.data.height[I,J] = All.edits.get()
-        All.quadMesh.set_array(All.data.height.ravel()); plt.draw()
+        All.quadMesh.set_array(All.data.height.ravel())
+        All.edits.updatePlot(fullData,All.syms)
+        plt.draw()
     elif event.inaxes==All.ax and event.button==3 and event.xdata:
       (i,j) = findPointInMesh(fullData.longitude, fullData.latitude, event.xdata, event.ydata)
       if not i==None:
         All.edits.delete(i,j)
         All.data = fullData.cloneWindow( (All.view.i0,All.view.j0), (All.view.iw,All.view.jw) )
         All.data.applyEdits(fullData, All.edits.ijz)
-        All.quadMesh.set_array(All.data.height.ravel()); plt.draw()
+        All.quadMesh.set_array(All.data.height.ravel())
+        All.edits.updatePlot(fullData,All.syms)
+        plt.draw()
     elif event.inaxes==All.ax and event.button==2 and event.xdata: zoom(event) # Re-center
   plt.gcf().canvas.mpl_connect('button_press_event', onClick)
   def zoom(event): # Scroll wheel up/down
@@ -381,6 +391,24 @@ class Edits:
     if self.ijz: self.ijz.pop()
   def list(self):
     for a in self.ijz: print a
+  def plot(self,topo):
+    x = []; y= []
+    for i,j,z in self.ijz:
+      tx,ty = topo.cellCoord(j,i)
+      if tx:
+        x.append(tx); y.append(ty)
+    if x:
+      h, = plt.plot(x, y, 'ro', hold=True)
+      return h
+    else: return None
+  def updatePlot(self,topo,h):
+    x = []; y= []
+    for i,j,z in self.ijz:
+      tx,ty = topo.cellCoord(j,i)
+      if tx:
+        x.append(tx); y.append(ty)
+    if x:
+      h.set_xdata(x); h.set_ydata(y)
 
 
 # Class to contain data
@@ -398,10 +426,16 @@ class Topography:
                        self.height[j0:j1,i0:i1] )
   def applyEdits(self, origData, ijz):
     for i,j,z in ijz:
-      x = (origData.longitude[i,j] + origData.longitude[i+1,j+1])/2
-      y = (origData.latitude[i,j] + origData.latitude[i+1,j+1])/2
+      x = (origData.longitude[i,j] + origData.longitude[i+1,j+1])/2.
+      y = (origData.latitude[i,j] + origData.latitude[i+1,j+1])/2.
       (I,J) = findPointInMesh(self.longitude, self.latitude, x, y)
       if not I==None: self.height[I,J] = z
+  def cellCoord(self,j,i):
+    #ni, nj = self.longitude.shape
+    #if i<0 or j<0 or i>=ni-1 or j>=nj-1: return None, None
+    x = (self.longitude[i,j] + self.longitude[i+1,j+1])/2.
+    y = (self.latitude[i,j] + self.latitude[i+1,j+1])/2.
+    return x,y
 
 # CLass to record the editing window
 class View:
