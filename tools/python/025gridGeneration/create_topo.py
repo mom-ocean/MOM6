@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 #============================================================
 # Generate tiles for the northern/southern caps
 # and central mercator grid.
@@ -29,9 +31,11 @@ def csv(value):
 #### Begin User Input
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--tile',type=str,help='ncap|scap|mercator')
-parser.add_argument('--use_ice_sheet',type=int,help='use ice sheet mask for generating coupler mosaic',default=0)
-parser.add_argument('--use_gebco',type=int,help='use Gebco for polar regions',default=0)
+parser.add_argument('tile',type=str,choices=['ncap','scap','mercator'])
+parser.add_argument('--use_ice_sheet', action='store_true', default=False,
+        help='Use ice sheet mask for generating coupler mosaic')
+parser.add_argument('--use_gebco', action='store_true', default=False,
+        help='Use GEBCO for polar regions')
 
 
 args=parser.parse_args()

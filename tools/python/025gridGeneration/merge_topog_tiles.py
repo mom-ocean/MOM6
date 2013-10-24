@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 import netCDF4 as nc
 import numpy as np
 
@@ -48,7 +50,7 @@ std=blend1234(
   ncap_ibcao.variables['std'][:]
   )
 
-fout=nc.Dataset('topog.nc','w',format='NETCDF3_CLASSIC')
+fout=nc.Dataset('interpolated_topog.nc','w',format='NETCDF3_CLASSIC')
 
 ny=mean.shape[0]; nx = mean.shape[1]
 
