@@ -72,7 +72,7 @@ type, public :: KPP_CS ; private
   real, allocatable, dimension(:,:,:) :: Ws ! Turbulent velocity scale for scalars (m/s)
   real, allocatable, dimension(:,:,:) :: N ! Brunt-Vaisala frequency (1/s)
   real, allocatable, dimension(:,:,:) :: N2 ! Brunt-Vaisala frequency (1/s2)
-  real, allocatable, dimension(:,:,:) :: Vt2 ! Unresolved shear turbulence (1/s2)
+  real, allocatable, dimension(:,:,:) :: Vt2 ! Unresolved squared turbulence velocity for bulk Ri (m2/s2)
   real, allocatable, dimension(:,:,:) :: Kt_KPP, Ks_KPP ! Temp/scalar diffusivity due to KPP (m2/s)
   real, allocatable, dimension(:,:,:) :: Kv_KPP ! Viscosity due to KPP (m2/s)
 
@@ -188,7 +188,7 @@ subroutine KPP_init(paramFile, G, diag, Time, CS, passive)
       'Square of Brunt-Vaisala frequency used by [CVmix] KPP', '1/s2')
   if (CS%id_N2 > 0) allocate( CS%N2( SZI_(G), SZJ_(G), SZK_(G)+1 ) )
   CS%id_Vt2 = register_diag_field('ocean_model', 'KPP_Vt2', diag%axesTL, Time, &
-      'Unresolved shear turbulence used by [CVmix] KPP', '1/s2')
+      'Unresolved shear turbulence used by [CVmix] KPP', 'm2/s2')
   if (CS%id_Vt2 > 0) allocate( CS%Vt2( SZI_(G), SZJ_(G), SZK_(G) ) )
   CS%id_uStar = register_diag_field('ocean_model', 'KPP_uStar', diag%axesT1, Time, &
       'Frictional velocity, u*, as used by [CVmix] KPP', 'm/s')
@@ -217,17 +217,17 @@ subroutine KPP_init(paramFile, G, diag, Time, CS, passive)
       'Salinity tendancy due to non-local transport of heat, as calculated by [CVmix] KPP', 'ppt/s')
 
   if (CS%id_OBLdepth > 0) CS%OBLdepth(:,:) = 0.
-  if (CS%id_BulkDrho > 0) CS%dRho(:,:,:) = 0.
-  if (CS%id_BulkUz2 > 0) CS%Uz2(:,:,:) = 0.
-  if (CS%id_BulkRi > 0) CS%BulkRi(:,:,:) = 0.
-  if (CS%id_Sigma > 0) CS%sigma(:,:,:) = 0.
-  if (CS%id_Ws > 0) CS%Ws(:,:,:) = 0.
-  if (CS%id_N > 0) CS%N(:,:,:) = 0.
-  if (CS%id_N2 > 0) CS%N2(:,:,:) = 0.
-  if (CS%id_Vt2 > 0) CS%Vt2(:,:,:) = 0.
-  if (CS%id_Kt_KPP > 0) CS%Kt_KPP(:,:,:) = 0.
-  if (CS%id_Ks_KPP > 0) CS%Ks_KPP(:,:,:) = 0.
-  if (CS%id_Kv_KPP > 0) CS%Kv_KPP(:,:,:) = 0.
+  if (CS%id_BulkDrho > 0) CS%dRho(:,:,:)   = 0.
+  if (CS%id_BulkUz2 > 0)  CS%Uz2(:,:,:)    = 0.
+  if (CS%id_BulkRi > 0)   CS%BulkRi(:,:,:) = 0.
+  if (CS%id_Sigma > 0)    CS%sigma(:,:,:)  = 0.
+  if (CS%id_Ws > 0)       CS%Ws(:,:,:)     = 0.
+  if (CS%id_N > 0)        CS%N(:,:,:)      = 0.
+  if (CS%id_N2 > 0)       CS%N2(:,:,:)     = 0.
+  if (CS%id_Vt2 > 0)      CS%Vt2(:,:,:)    = 0.
+  if (CS%id_Kt_KPP > 0)   CS%Kt_KPP(:,:,:) = 0.
+  if (CS%id_Ks_KPP > 0)   CS%Ks_KPP(:,:,:) = 0.
+  if (CS%id_Kv_KPP > 0)   CS%Kv_KPP(:,:,:) = 0.
 
 end subroutine KPP_init
 
@@ -254,26 +254,28 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
                                                                     ! (out) Vertical viscosity including KPP (m2/s)
   real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(inout) :: nonLocalTransHeat, nonLocalTransScalar ! Temp/scalar non-local transport (m/s)
 
-! Local variables
+  ! Local variables
   integer :: i, j, k, km1
-  real, dimension( G%ke ) :: cellHeight ! Cell center heights referenced to surface (m)
-  real, dimension( G%ke+1 ) :: iFaceHeight ! Interface heights referenced to surface (m)
-  real, dimension( G%ke+1 ) :: N2_1d ! Brunt-Vaisala frequency squared, at interfaces (1/s2)
-  real, dimension( G%ke+1 ) :: N_1d ! (Adjusted) Brunt-Vaisala frequency, at interfaces (1/s)
-  real, dimension( G%ke ) :: Ws_1d, Wm_1d ! Profiles of vertical velocity scale for scalars/momentum (m/s)
-  real, dimension( G%ke ) :: Vt2_1d ! Unresolved shear turbulence, at interfaces (1/s2)
-  real, dimension( G%ke ) :: BulkRi_1d ! Bulk Richardson number for each layer
-  real, dimension( G%ke ) :: deltaRho ! delta Rho as appears in numerator of Bulk Richardson number
-  real, dimension( G%ke ) :: deltaU2 ! square of delta U (shear) as appears in denominator of Bulk Richardson number (m2/s2)
+  real, dimension( G%ke )     :: cellHeight             ! Cell center heights referenced to surface (m)
+  real, dimension( G%ke+1 )   :: iFaceHeight            ! Interface heights referenced to surface (m)
+  real, dimension( G%ke+1 )   :: N2_1d                  ! Brunt-Vaisala frequency squared, at interfaces (1/s2)
+  real, dimension( G%ke+1 )   :: N_1d                   ! (Adjusted) Brunt-Vaisala frequency, at interfaces (1/s)
+  real, dimension( G%ke )     :: Ws_1d, Wm_1d           ! Profiles of vertical velocity scale for scalars/momentum (m/s)
+  real, dimension( G%ke )     :: Vt2_1d                 ! Unresolved shear turbulence, at interfaces (1/s2)
+  real, dimension( G%ke )     :: BulkRi_1d              ! Bulk Richardson number for each layer
+  real, dimension( G%ke )     :: deltaRho               ! delta Rho in numerator of Bulk Ri number
+  real, dimension( G%ke )     :: deltaU2                ! square of delta U (shear) in denominator of Bulk Ri (m2/s2)
   real, dimension( G%ke+1, 2) :: Kdiffusivity, Kd_match ! Vertical diffusivity at interfaces (m2/s)
-  real, dimension( G%ke+1 ) :: Kviscosity, Kv_match ! Vertical viscosity at interfaces (m2/s)
-  real, dimension( G%ke+1, 2) :: nonLocalTrans ! Non-local transport for heat/salt at interfaces (m/s)
+  real, dimension( G%ke+1 )   :: Kviscosity, Kv_match   ! Vertical viscosity at interfaces (m2/s)
+  real, dimension( G%ke+1, 2) :: nonLocalTrans          ! Non-local transport for heat/salt at interfaces (m/s)
+
   real :: kOBL, OBLdepth_0d, surfFricVel, surfBuoyFlux, Coriolis
   real :: GoRho, pRef, rho1, rhoK, rhoKm1, Uk, Vk, const1, Cv
+
   real, parameter :: negligibleShear = 1.e-15 ! A small number added to (un)resolved shears to avoid divide by zero
-  real, parameter :: eps = 0.1 ! Nondimensional extent of surface layer. Used for const1 below.
-  real, parameter :: BetaT = -0.2 ! Ratio of entrainment flux to surface buoyancy flux. Used for const1 below.
-  real :: zBottomMinusOffset ! Height of bottom plus a little bit (m)
+  real, parameter :: eps = 0.1                ! Nondimensional extent of surface layer. Used for const1 below.
+  real, parameter :: BetaT = -0.2             ! Ratio of entrainment flux to surface buoyancy flux. Used for const1 below.
+  real :: zBottomMinusOffset                  ! Height of bottom plus a little bit (m)
 
 #ifdef __DO_SAFETY_CHECKS__
   if (CS%debug) then
@@ -297,16 +299,17 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
     do i = G%isc, G%iec
       if (G%mask2dT(i,j)==0.) cycle ! Skip calling KPP for land points
 
-      ! Things that are independent of position within the column
+      ! things that are independent of position within the column
       Coriolis = 0.25*( (G%CoriolisBu(i,j) + G%CoriolisBu(i-1,j-1)) &
                        +(G%CoriolisBu(i-1,j) + G%CoriolisBu(i,j-1)) )
       surfFricVel = uStar(i,j)
       surfBuoyFlux = buoyFlux(i,j)
 
-      ! This k-loop calculates quantities external to KPP
+      ! this k-loop calculates quantities external to KPP
       iFaceHeight(1) = 0.
       pRef = 0.
       do k = 1, G%ke
+
         ! Compute heights, referenced to the surface (z=0)
         cellHeight(k) = iFaceHeight(k) - 0.5 * h(i,j,k) * G%H_to_m ! cell center in metres 
         iFaceHeight(k+1) = iFaceHeight(k) - h(i,j,k) * G%H_to_m ! cell bottom in metres
@@ -335,8 +338,9 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
       N2_1d( G%ke+1 ) = 0.
       N_1d( G%ke+1 ) = 0.
 
-      ! Estimate Ws in order to estimate Vt^2
+      ! Estimate Ws in order to estimate Vt^2  (eq. 23 in LMD94)
       do k = 1, G%ke
+
         ! Calculate Ws at each depth as if OBLdepth = -z
         if (surfBuoyFlux>0.) then 
           call CVmix_kpp_compute_turbulent_scales( &
@@ -355,14 +359,17 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
             w_s=Ws_1d(k),   & ! (out) Turbulent velocity scale profile (m/s)
             CVmix_kpp_params_user=CS%KPP_params ) ! KPP parameters
         endif
-        ! Unresolved shear, Vt^2, eq 23 from LMD94
-        Cv = max( 1.7, 2.1 - 200. * N_1d(k) ) ! Cv from eq A3 of Danbasoglu et al. 2003
-    !   Cv = 1.8 ! MOM4p1 ?????
+
+        ! Unresolved squared velocity, Vt^2, eq 23 from LMD94
+        Cv = max( 1.7, 2.1 - 200. * N_1d(k) ) ! Cv from eq A3 of Danbasoglu et al. 2006
+    !   Cv = 1.8 ! MOM5 
         ! The calculation is for Vt^2 at level center but uses N from the interface below
         ! (and depth of lower interface) to bias towards higher estimates.  One would
         ! otherwise use d=-cellHeight(k) and a vertical average of N.  ?????
         Vt2_1d(k) = const1 * Cv * ( -iFaceHeight(k+1) ) * N_1d(k+1) * Ws_1d(k)
+
       enddo ! k
+
     ! The following call gives a similar answer to the above but is much less efficient
     ! Vt2_1d(:) = CVmix_kpp_compute_unresolved_shear( &
     !               iFaceHeight(2:G%ke+1), & ! Height of level centers (m) NOTE DISCREPANCY ????
