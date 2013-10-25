@@ -272,10 +272,15 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
   real :: kOBL, OBLdepth_0d, surfFricVel, surfBuoyFlux, Coriolis
   real :: GoRho, pRef, rho1, rhoK, rhoKm1, Uk, Vk, const1, Cv
 
-  real, parameter :: negligibleShear = 1.e-15 ! A small number added to (un)resolved shears to avoid divide by zero
-  real, parameter :: eps = 0.1                ! Nondimensional extent of surface layer. Used for const1 below.
-  real, parameter :: BetaT = -0.2             ! Ratio of entrainment flux to surface buoyancy flux. Used for const1 below.
   real :: zBottomMinusOffset                  ! Height of bottom plus a little bit (m)
+  real, parameter :: eps = 0.1                ! Nondimensional extent of Monin-Obukov surface layer. Used for const1 below.
+  real, parameter :: BetaT = -0.2             ! Ratio of entrainment flux to surface buoyancy flux. Used for const1 below.
+  real, parameter :: minimumVt2 = 1.e-15      ! A small number added to unresolved velocity Vt2 to avoid divide by zero.
+!  real, parameter :: minimumVt2 = 1.e-11      ! A small number added to unresolved velocity Vt2 to avoid divide by zero.
+                                              ! This value should be larger than roundoff for sensible behaviour 
+                                              ! with zero vertical stratification and zero resolved velocity.  
+                                              ! We compute 1e-11 by the following rough scaling: 
+                                              ! minimumVt2 = const1*depth*N*ws, with depth=1m, N = 1e-5 s^{-1}, ws = 1e-6 m/s
 
 #ifdef __DO_SAFETY_CHECKS__
   if (CS%debug) then
@@ -292,7 +297,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
 #endif
 
   GoRho = G%g_Earth / G%Rho0
-  ! const1 is a constant factor in the equation for unresolved shear, Ut (eq. 23 in LMD94)
+  ! const1 is a constant factor in unresolved squared velocity, Vt2 (eq. 23 in LMD94)
   const1 = sqrt( abs(BetaT) / (CS%cs * eps) )/( CS%Ri_crit * (CS%vonKarman**2) )
 
   do j = G%jsc, G%jec
@@ -316,16 +321,16 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
 
         ! Compute Bulk Richardson number
         ! rho1 is meant to be the average over some [Monin-Obukhov] scale at the surface
-        ! In z-mode, this will typically just be the top level. but a proper integral
+        ! In z-mode, this will typically just be the top level. But a proper integral
         ! will be needed for fine vertical resolution or arbitray coordinates.   ???????
         km1 = max(1, k-1)
         call calculate_density(Temp(i,j,1), Salt(i,j,1), pRef, rho1, EOS)
         call calculate_density(Temp(i,j,k), Salt(i,j,k), pRef, rhoK, EOS)
         call calculate_density(Temp(i,j,km1), Salt(i,j,km1), pRef, rhoKm1, EOS)
-        Uk = 0.5 * ( abs( u(i,j,k) - u(i,j,1) ) + abs( u(i-1,j,k) - u(i-1,j,1) ) ) ! delta_k U
-        Vk = 0.5 * ( abs( v(i,j,k) - v(i,j,1) ) + abs( v(i,j-1,k) - v(i,j-1,1) ) ) ! delta_k V
+        Uk = 0.5 * ( abs( u(i,j,k) - u(i,j,1) ) + abs( u(i-1,j,k) - u(i-1,j,1) ) ) ! delta_k U  w/ C-grid average
+        Vk = 0.5 * ( abs( v(i,j,k) - v(i,j,1) ) + abs( v(i,j-1,k) - v(i,j-1,1) ) ) ! delta_k V  w/ C-grid average 
         deltaRho(k) = rhoK - rho1
-        deltaU2(k) = ( Uk**2 + Vk**2 ) + negligibleShear
+        deltaU2(k) = ( Uk**2 + Vk**2 ) 
         ! N2 is on interfaces.
         N2_1d(k) = ( GoRho * (rhoK - rhoKm1) ) / (0.5*(h(i,j,km1) + h(i,j,k))+G%H_subroundoff) ! Can be negative
         ! N = sqrt(N^2) but because N^2 can be negative, we clip N^2 before taking the square root   ??????
@@ -341,24 +346,16 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
       ! Estimate Ws in order to estimate Vt^2  (eq. 23 in LMD94)
       do k = 1, G%ke
 
-        ! Calculate Ws at each depth as if OBLdepth = -z
-        if (surfBuoyFlux>0.) then 
-          call CVmix_kpp_compute_turbulent_scales( &
-            1.,             & ! (in) Normalized boundary layer coordinate
-            -cellHeight(k), & ! (in) OBL depth (m)
-            surfBuoyFlux,   & ! (in) Buoyancy flux at surface (m2/s3)
-            surfFricVel,    & ! (in) Turbulent friction velocity at surface (m/s)
-            w_s=Ws_1d(k),   & ! (out) Turbulent velocity scale profile (m/s)
-            CVmix_kpp_params_user=CS%KPP_params ) ! KPP parameters
-        else
-          call CVmix_kpp_compute_turbulent_scales( &
-            eps,            & ! (in) Normalized boundary layer coordinate
-            -cellHeight(k), & ! (in) OBL depth (m)
-            surfBuoyFlux,   & ! (in) Buoyancy flux at surface (m2/s3)
-            surfFricVel,    & ! (in) Turbulent friction velocity at surface (m/s)
-            w_s=Ws_1d(k),   & ! (out) Turbulent velocity scale profile (m/s)
-            CVmix_kpp_params_user=CS%KPP_params ) ! KPP parameters
-        endif
+        ! Note that if sigma > eps, then CVmix_kpp_compute_turbulent_scales 
+        ! computes w_s and w_m velocity scale at sigma=eps. So we only pass
+        ! sigma=eps for this calculation.    
+        call CVmix_kpp_compute_turbulent_scales( &
+        eps,            & ! (in)  Normalized boundary layer depth; sigma = eps
+        -cellHeight(k), & ! (in)  Guess that OBL depth (m) = -cellHeight(k)
+        surfBuoyFlux,   & ! (in)  Buoyancy flux at surface (m2/s3)
+        surfFricVel,    & ! (in)  Turbulent friction velocity at surface (m/s)
+        w_s=Ws_1d(k),   & ! (out) Turbulent velocity scale profile (m/s)
+        CVmix_kpp_params_user=CS%KPP_params ) ! KPP parameters
 
         ! Unresolved squared velocity, Vt^2, eq 23 from LMD94
         Cv = max( 1.7, 2.1 - 200. * N_1d(k) ) ! Cv from eq A3 of Danbasoglu et al. 2006
@@ -366,7 +363,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
         ! The calculation is for Vt^2 at level center but uses N from the interface below
         ! (and depth of lower interface) to bias towards higher estimates.  One would
         ! otherwise use d=-cellHeight(k) and a vertical average of N.  ?????
-        Vt2_1d(k) = const1 * Cv * ( -iFaceHeight(k+1) ) * N_1d(k+1) * Ws_1d(k)
+        Vt2_1d(k) = minimumVt2 + const1 * Cv * ( -iFaceHeight(k+1) ) * N_1d(k+1) * Ws_1d(k)
 
       enddo ! k
 
@@ -409,20 +406,23 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
       endif
 
       ! Now call KPP proper to obtain BL diffusivities, viscosities and non-local transports
+
+      ! Determine what mixing coeff to match at the base of the OBL; recommend match to zeroes.  
       if (.not. CS%doMatching) then
-        Kdiffusivity(:,:) = 0.! Diffusivties for heat and salt
-        Kviscosity(:) = 0.    ! Viscosity    ???????
+        Kdiffusivity(:,:) = 0. ! Diffusivties for heat and salt
+        Kviscosity(:)     = 0. ! Viscosity
       elseif (CS%maxKdInterior>0.) then
-        Kdiffusivity(:,1) = min( CS%maxKdInterior, Kt(i,j,:)  )! Diffusivty for heat
-        Kdiffusivity(:,2) = min( CS%maxKdInterior, Ks(i,j,:) ) ! Diffusivity for salt
-        Kviscosity(:) = min( CS%maxKdInterior, Kv(i,j,:) )     ! Viscosity    ???????
+        Kdiffusivity(:,1) = min( CS%maxKdInterior, Kt(i,j,:)  ) ! Diffusivty for heat
+        Kdiffusivity(:,2) = min( CS%maxKdInterior, Ks(i,j,:) )  ! Diffusivity for salt
+        Kviscosity(:)     = min( CS%maxKdInterior, Kv(i,j,:) )  ! Viscosity   
       else
         Kdiffusivity(:,1) = Kt(i,j,:) ! Diffusivty for heat
         Kdiffusivity(:,2) = Ks(i,j,:) ! Diffusivity for salt
-        Kviscosity(:) = Kv(i,j,:)     ! Viscosity    ???????
+        Kviscosity(:)     = Kv(i,j,:) ! Viscosity  
       endif
+
       Kd_match(:,:) = Kdiffusivity(:,:) ! Record diffusivity passed to KPP for matching
-      Kv_match(:) = Kviscosity(:)       ! Record viscosity passed to KPP
+      Kv_match(:)   = Kviscosity(:)     ! Record viscosity passed to KPP
       call cvmix_coeffs_kpp(Kdiffusivity, & ! (inout) Total heat/salt diffusivities (m2/s)
                             Kviscosity,   & ! (inout) Total viscosity (m2/s)
                             iFaceHeight,  & ! (in) Height of interfaces (m)
@@ -436,46 +436,35 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
 
       if (CS%NLTworkaround) call fixNLTamplitude( h(i,j,:), nonLocalTrans(:,1) )
       if (CS%NLTworkaround) call fixNLTamplitude( h(i,j,:), nonLocalTrans(:,2) )
-      nonLocalTransHeat(i,j,:) = nonLocalTrans(:,1) ! correct index ???
+      nonLocalTransHeat(i,j,:)   = nonLocalTrans(:,1) ! correct index ???
       nonLocalTransScalar(i,j,:) = nonLocalTrans(:,2) ! correct index ???
 
-      ! recompute wscale for diagnostics, now that we know boundary layer depth 
+      ! recompute wscale for diagnostics, now that we in fact know boundary layer depth 
       if (CS%id_Ws > 0) then 
           call CVmix_kpp_compute_turbulent_scales( &
-            -CellHeight/OBLdepth_0d,               & ! (in) Normalized boundary layer coordinate
-            OBLdepth_0d,                           & ! (in) OBL depth (m)
-            surfBuoyFlux,                          & ! (in) Buoyancy flux at surface (m2/s3)
-            surfFricVel,                           & ! (in) Turbulent friction velocity at surface (m/s)
+            -CellHeight/OBLdepth_0d,               & ! (in)  Normalized boundary layer coordinate
+            OBLdepth_0d,                           & ! (in)  OBL depth (m)
+            surfBuoyFlux,                          & ! (in)  Buoyancy flux at surface (m2/s3)
+            surfFricVel,                           & ! (in)  Turbulent friction velocity at surface (m/s)
             w_s=Ws_1d,                             & ! (out) Turbulent velocity scale profile (m/s)
-            CVmix_kpp_params_user=CS%KPP_params    & ! KPP parameters
+            CVmix_kpp_params_user=CS%KPP_params    & !       KPP parameters
             )
           CS%Ws(i,j,:) = Ws_1d(:)
       endif 
 
       ! Copy 1d data into 3d diagnostic arrays
       if (CS%id_OBLdepth > 0) CS%OBLdepth(i,j) = OBLdepth_0d
-      if (CS%id_BulkDrho > 0) CS%dRho(i,j,:) = deltaRho(:)
-      if (CS%id_BulkUz2 > 0) CS%Uz2(i,j,:) = deltaU2(:)
-      if (CS%id_BulkRi > 0) CS%BulkRi(i,j,:) = BulkRi_1d(:)
-      if (CS%id_sigma > 0) CS%sigma(i,j,:) = -iFaceHeight/OBLdepth_0d
-      if (CS%id_N > 0) CS%N(i,j,:) = N_1d(:)
-      if (CS%id_N2 > 0) CS%N2(i,j,:) = N2_1d(:)
-      if (CS%id_Vt2 > 0) CS%Vt2(i,j,:) = Vt2_1d(:)
-      if (CS%id_Kt_KPP > 0) then
-        do k = 1, G%ke
-          if (Kdiffusivity(k,1) /= Kd_match(k,1)) CS%Kt_KPP(i,j,k) = Kdiffusivity(k,1) ! Heat diffusivity due to KPP
-        enddo
-      endif
-      if (CS%id_Ks_KPP > 0) then
-        do k = 1, G%ke
-          if (Kdiffusivity(k,2) /= Kd_match(k,2)) CS%Ks_KPP(i,j,k) = Kdiffusivity(k,2) ! Salt diffusivity due to KPP
-        enddo
-      endif
-      if (CS%id_Kv_KPP > 0) then
-        do k = 1, G%ke
-          if (Kviscosity(k) /= Kv_match(k)) CS%Kv_KPP(i,j,k) = Kviscosity(k) ! Viscosity due to KPP
-        enddo
-      endif
+      if (CS%id_BulkDrho > 0) CS%dRho(i,j,:)   = deltaRho(:)
+      if (CS%id_BulkUz2 > 0)  CS%Uz2(i,j,:)    = deltaU2(:)
+      if (CS%id_BulkRi > 0)   CS%BulkRi(i,j,:) = BulkRi_1d(:)
+      if (CS%id_sigma > 0)    CS%sigma(i,j,:)  = -iFaceHeight/OBLdepth_0d
+      if (CS%id_N > 0)        CS%N(i,j,:)      = N_1d(:)
+      if (CS%id_N2 > 0)       CS%N2(i,j,:)     = N2_1d(:)
+      if (CS%id_Vt2 > 0)      CS%Vt2(i,j,:)    = Vt2_1d(:)
+      if (CS%id_Kt_KPP > 0)   CS%Kt_KPP(i,j,:) = Kdiffusivity(:,1)
+      if (CS%id_Ks_KPP > 0)   CS%Ks_KPP(i,j,:) = Kdiffusivity(:,2)
+      if (CS%id_Kv_KPP > 0)   CS%Kv_KPP(i,j,:) = Kviscosity(:)
+ 
 
 !if (abs(G%geoLonT(i,j)+80.99621)+abs(G%geoLatT(i,j)-82.64066)<0.5) then
 ! write(0,*) G%geoLonT(i,j), G%geoLatT(i,j), isPointInCell(G,i,j,-80.99621,82.64066)
@@ -518,20 +507,20 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
 
   if (CS%id_OBLdepth > 0) call post_data(CS%id_OBLdepth, CS%OBLdepth, CS%diag)
   if (CS%id_BulkDrho > 0) call post_data(CS%id_BulkDrho, CS%dRho, CS%diag)
-  if (CS%id_BulkUz2 > 0) call post_data(CS%id_BulkUz2, CS%Uz2, CS%diag)
-  if (CS%id_BulkRi > 0) call post_data(CS%id_BulkRi, CS%BulkRi, CS%diag)
-  if (CS%id_sigma > 0) call post_data(CS%id_sigma, CS%sigma, CS%diag)
-  if (CS%id_Ws > 0) call post_data(CS%id_Ws, CS%Ws, CS%diag)
-  if (CS%id_N > 0) call post_data(CS%id_N, CS%N, CS%diag)
-  if (CS%id_N2 > 0) call post_data(CS%id_N2, CS%N2, CS%diag)
-  if (CS%id_Vt2 > 0) call post_data(CS%id_Vt2, CS%Vt2, CS%diag)
-  if (CS%id_uStar > 0) call post_data(CS%id_uStar, uStar, CS%diag)
+  if (CS%id_BulkUz2 > 0)  call post_data(CS%id_BulkUz2, CS%Uz2, CS%diag)
+  if (CS%id_BulkRi > 0)   call post_data(CS%id_BulkRi, CS%BulkRi, CS%diag)
+  if (CS%id_sigma > 0)    call post_data(CS%id_sigma, CS%sigma, CS%diag)
+  if (CS%id_Ws > 0)       call post_data(CS%id_Ws, CS%Ws, CS%diag)
+  if (CS%id_N > 0)        call post_data(CS%id_N, CS%N, CS%diag)
+  if (CS%id_N2 > 0)       call post_data(CS%id_N2, CS%N2, CS%diag)
+  if (CS%id_Vt2 > 0)      call post_data(CS%id_Vt2, CS%Vt2, CS%diag)
+  if (CS%id_uStar > 0)    call post_data(CS%id_uStar, uStar, CS%diag)
   if (CS%id_buoyFlux > 0) call post_data(CS%id_buoyFlux, buoyFlux, CS%diag)
-  if (CS%id_Kt_KPP > 0) call post_data(CS%id_Kt_KPP, CS%Kt_KPP, CS%diag)
-  if (CS%id_Ks_KPP > 0) call post_data(CS%id_Ks_KPP, CS%Ks_KPP, CS%diag)
-  if (CS%id_Kv_KPP > 0) call post_data(CS%id_Kv_KPP, CS%Kv_KPP, CS%diag)
-  if (CS%id_NLTt > 0) call post_data(CS%id_NLTt, nonLocalTransHeat, CS%diag)
-  if (CS%id_NLTs > 0) call post_data(CS%id_NLTs, nonLocalTransScalar, CS%diag)
+  if (CS%id_Kt_KPP > 0)   call post_data(CS%id_Kt_KPP, CS%Kt_KPP, CS%diag)
+  if (CS%id_Ks_KPP > 0)   call post_data(CS%id_Ks_KPP, CS%Ks_KPP, CS%diag)
+  if (CS%id_Kv_KPP > 0)   call post_data(CS%id_Kv_KPP, CS%Kv_KPP, CS%diag)
+  if (CS%id_NLTt > 0)     call post_data(CS%id_NLTt, nonLocalTransHeat, CS%diag)
+  if (CS%id_NLTs > 0)     call post_data(CS%id_NLTs, nonLocalTransScalar, CS%diag)
 
 end subroutine KPP_calculate
 
@@ -550,9 +539,8 @@ end subroutine fixNLTamplitude
 
 
 subroutine KPP_applyNonLocalTransport(CS, G, h, nonLocalTrans, surfFlux, dt, scalar, isHeat, isSalt)
-! Applies the KPP non-local transport of surface fluxes
+! Applies the KPP non-local transport of surface fluxes; only available for tracers
 
-! Arguments
   type(KPP_CS),                                 intent(in)    :: CS       ! Control structure
   type(ocean_grid_type),                        intent(in)    :: G        ! Ocean grid
   real, dimension(NIMEM_,NJMEM_,NKMEM_),        intent(in)    :: h        ! Layer/level thicknesses (units of H)
@@ -563,10 +551,9 @@ subroutine KPP_applyNonLocalTransport(CS, G, h, nonLocalTrans, surfFlux, dt, sca
   logical, optional,                            intent(in)    :: isHeat   ! Inidicates scalar is heat for diagnostics
   logical, optional,                            intent(in)    :: isSalt   ! Inidicates scalar is salt for diagnostics
 
-! Local variables
   integer :: i, j, k
   logical :: diagHeat, diagSalt, applyNLtrans
-logical :: debugColumn
+  logical :: debugColumn
   real, dimension( SZI_(G), SZJ_(G), SZK_(G) ) :: dSdt ! Tendancy in scalar due to non-local transport (scalar/s)
 
   applyNLtrans = (.not. CS%passiveMode) .and. CS%applyNonLocalTrans
