@@ -17,3 +17,9 @@ for (b = 0; *y !=0; *y >>= 1)
     b++;
 return b;
 }
+
+/* wrapper for IBM system */
+int bitcount(double *x) 
+{
+  return bitcount_(x);
+}
