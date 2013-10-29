@@ -57,13 +57,13 @@ MASKTABLE = "MOM_mask_table"    ! default = "MOM_mask_table"
 LAYOUT = 0, 0                   ! default = 0
                                 ! The processor layout to be used, or 0, 0 to automatically
                                 ! set the layout based on the number of processors.
-!NIPROC = 4                     !
+!NIPROC = 2                     !
                                 ! The number of processors in the x-direction. With
                                 ! STATIC_MEMORY_ this is set in MOM_memory.h at compile time.
 !NJPROC = 1                     !
                                 ! The number of processors in the x-direction. With
                                 ! STATIC_MEMORY_ this is set in MOM_memory.h at compile time.
-!LAYOUT = 4, 1                  !
+!LAYOUT = 2, 1                  !
                                 ! The processor layout that was acutally used.
 IO_LAYOUT = 1, 1                ! default = 0
                                 ! The processor layout to be used, or 0,0 to automatically
@@ -347,6 +347,9 @@ MINIMUM_DEPTH = 1.0             !   [m] default = 0.0
                                 ! The minimum depth of the ocean.
 MAXIMUM_DEPTH = 1000.0          !   [m]
                                 ! The maximum depth of the ocean.
+MASKING_DEPTH = -9999.0         !   [m] default = -9999.0
+                                ! The depth below which to mask points as land points, for which all
+                                ! fluxes are zeroed out. MASKING_DEPTH is ignored if negative.
 APPLY_OBC_U_FLATHER_EAST = False !   [Boolean] default = False
                                 ! Apply a Flather open boundary condition on the eastern
                                 ! side of the global domain
@@ -745,6 +748,12 @@ CFL_TRUNCATE = 0.5              !   [nondim] default = 0.5
 CFL_REPORT = 0.5                !   [nondim] default = 0.5
                                 ! The value of the CFL number that causes accelerations
                                 ! to be reported; the default is CFL_TRUNCATE.
+CFL_TRUNCATE_RAMP_TIME = 0.0    !   [s] default = 0.0
+                                ! The time over which the CFL trunction value is ramped
+                                ! up at the beginning of the run.
+CFL_TRUNCATE_START = 0.0        !   [nondim] default = 0.0
+                                ! The start value of the truncation CFL number used when
+                                ! ramping up CFL_TRUNC.
 
 ! === Parameters of module MOM_PointAccel ===
 MAX_TRUNC_FILE_SIZE_PER_PE = 50 ! default = 50
@@ -943,6 +952,8 @@ PRESSURE_DEPENDENT_FRAZIL = False !   [Boolean] default = False
                                 ! If true, use a pressure dependent freezing temperature
                                 ! when making frazil. The default is false, which will be
                                 ! faster but is inappropriate with ice-shelf cavities.
+DEBUG_CONSERVATION = False      !   [Boolean] default = False
+                                ! If true, monitor conservation and extrema.
 MIX_BOUNDARY_TRACERS = True     !   [Boolean] default = True
                                 ! If true, mix the passive tracers in massless layers at
                                 ! the bottom into the interior as though a diffusivity of
@@ -1042,6 +1053,11 @@ DISSIPATION_N1 = 0.0            !   [J m-3] default = 0.0
                                 ! bound of Kd (a floor): B in eps_min = A + B*N
 DISSIPATION_KD_MIN = 0.0        !   [m2 s-1] default = 0.0
                                 ! The minimum vertical diffusivity applied as a floor.
+USE_CONVECTION = False          !   [Boolean] default = False
+                                ! If true, turns on the diffusive convection scheme that
+                                ! increases diapycnal diffusivities at statically unstable
+                                ! interfaces. Relevant parameters are contained in the
+                                ! CONVECTION% parameter block.
 
 ! === Parameters of module MOM_entrain_diffusive ===
 CORRECT_DENSITY = False         !   [Boolean] default = True
@@ -1182,11 +1198,11 @@ DT_FORCING = 1200.0             !   [s] default = 1200.0
                                 ! The time step for changing forcing, coupling with other
                                 ! components, or potentially writing certain diagnostics.
                                 ! The default value is given by DT.
-DAYMAX = 5.0                    !   [days] default = 5.0
+DAYMAX = 5.0                    !   [days]
                                 ! The final time of the whole simulation, in units of
                                 ! TIMEUNIT seconds.  This also sets the potential end
                                 ! time of the present run segment if the end time is
-                                ! not set (as it was here) via ocean_solo_nml in input.nml.
+                                ! not set via ocean_solo_nml in input.nml.
 RESTART_CONTROL = -1            ! default = 1
                                 ! An integer whose bits encode which restart files are
                                 ! written. Add 2 (bit 1) for a time-stamped file, and odd
