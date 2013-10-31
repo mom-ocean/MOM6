@@ -192,8 +192,8 @@ subroutine KPP_init(paramFile, G, diag, Time, CS, passive)
       'Unresolved shear turbulence used by [CVmix] KPP', 'm2/s2')
   CS%id_uStar = register_diag_field('ocean_model', 'KPP_uStar', diag%axesT1, Time, &
       'Frictional velocity, u*, as used by [CVmix] KPP', 'm/s')
-  CS%id_buoyFlux = register_diag_field('ocean_model', 'KPP_buoyFlux', diag%axesT1, Time, &
-      'Buoyancy flux, as used by [CVmix] KPP', 'm2/s3')
+  CS%id_buoyFlux = register_diag_field('ocean_model', 'KPP_buoyFlux', diag%axesTi, Time, &
+      'Surface (and penetrating) buoyancy flux, as used by [CVmix] KPP', 'm2/s3')
   CS%id_QminusSW = register_diag_field('ocean_model', 'KPP_QminusSW', diag%axesT1, Time, &
       'Net temperature flux ignoring short-wave, as used by [CVmix] KPP', 'K m/s')
   CS%id_netS = register_diag_field('ocean_model', 'KPP_netSalt', diag%axesT1, Time, &
@@ -270,7 +270,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)    :: v     ! Velocity components (m/s)
   type(EOS_type),                         pointer       :: EOS   ! Equation of state
   real, dimension(NIMEM_,NJMEM_),         intent(in)    :: uStar ! Piston velocity (m/s)
-  real, dimension(NIMEM_,NJMEM_),         intent(in)    :: buoyFlux ! Buoyancy flux (m2/s3)
+  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(in)    :: buoyFlux ! Forcing buoyancy flux (m2/s3)
   real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(inout) :: Kt ! (in) Vertical diffusivity of heat in interior (m2/s)
                                                                     ! (out) Vertical diffusivity including KPP (m2/s)
   real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(inout) :: Ks ! (in) Vertical diffusivity of salt in interior (m2/s)
@@ -339,7 +339,6 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
       Coriolis = 0.25*( (G%CoriolisBu(i,j) + G%CoriolisBu(i-1,j-1)) &
                        +(G%CoriolisBu(i-1,j) + G%CoriolisBu(i,j-1)) )
       surfFricVel = uStar(i,j)
-      surfBuoyFlux = buoyFlux(i,j)
 
       ! Initialize the surface properties to layer k=1 values and initialize the running integrals
       SLdepth_0d = CS%surfLayerDepth ! This is a first guess at the surface layer depth (which we do not know yet)
@@ -420,6 +419,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
         ! Note that if sigma > eps, then CVmix_kpp_compute_turbulent_scales 
         ! computes w_s and w_m velocity scale at sigma=eps. So we only pass
         ! sigma=eps for this calculation.    
+        surfBuoyFlux = buoyFlux(i,j,1) - buoyFlux(i,j,k+1) ! This difference accounts for penetrating of SW
         call CVmix_kpp_compute_turbulent_scales( &
         eps,            & ! (in)  Normalized boundary layer depth; sigma = eps
         -cellHeight(k), & ! (in)  Guess that OBL depth (m) = -cellHeight(k)
@@ -459,6 +459,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
     !   ! calculation (and the pressure used) would take place, ie. the upper interface     ?????
     !   BulkRi_1d(k) = ( ( GoRho * deltaRho(k) ) * ( -iFaceHeight(k) ) ) / ( deltaU2(k) + Vt2_1d(k) )
     ! enddo ! k
+      surfBuoyFlux = buoyFlux(i,j,1)
       call CVmix_kpp_compute_OBL_depth( &
         BulkRi_1d,              & ! (in) Bulk Richardson number
         iFaceHeight,            & ! (in) Height of interfaces (m)

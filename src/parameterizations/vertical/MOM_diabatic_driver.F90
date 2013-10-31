@@ -189,7 +189,7 @@ type, public :: diabatic_CS ; private
   ! Data arrays for communicating between components
   real, allocatable, dimension(:,:,:) :: KPP_NLTheat ! Non-local transport for heat due to KPP (m/s)
   real, allocatable, dimension(:,:,:) :: KPP_NLTscalar ! Non-local transport for scalars due to KPP (m/s)
-  real, allocatable, dimension(:,:) :: buoyancyFlux ! Buoyancy flux for KPP (m2/s3)
+  real, allocatable, dimension(:,:,:) :: buoyancyFlux ! Fordcing buoyancy flux for KPP (m2/s3)
   real, allocatable, dimension(:,:) :: netHeatMinusSW ! Effective temperature flux for KPP (K m/s)
   real, allocatable, dimension(:,:) :: netSalt ! Effective salt flux for KPP (ppt m/s)
 
@@ -1576,7 +1576,7 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
   if (CS%useKPP) then
     allocate( CS%KPP_NLTheat(isd:ied,jsd:jed,nz+1) ) ; CS%KPP_NLTheat(:,:,:) = 0.
     allocate( CS%KPP_NLTscalar(isd:ied,jsd:jed,nz+1) ) ; CS%KPP_NLTscalar(:,:,:) = 0.
-    allocate( CS%buoyancyFlux(isd:ied,jsd:jed) ) ; CS%buoyancyFlux(:,:) = 0.
+    allocate( CS%buoyancyFlux(isd:ied,jsd:jed,nz+1) ) ; CS%buoyancyFlux(:,:,:) = 0.
     allocate( CS%netHeatMinusSW(isd:ied,jsd:jed) ) ; CS%netHeatMinusSW(:,:) = 0.
     allocate( CS%netSalt(isd:ied,jsd:jed) ) ; CS%netSalt(:,:) = 0.
     if (CS%use_kappa_shear) &
