@@ -582,6 +582,7 @@ integer :: id_clock_diagnostics, id_clock_Z_diag
 integer :: id_clock_init, id_clock_MOM_init
 integer :: id_clock_pass, id_clock_pass_init ! Also in dynamics d/r
 integer :: id_clock_ALE
+integer :: id_clock_other
 
 contains
 
@@ -656,6 +657,8 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
   u => CS%u ; v => CS%v ; h => CS%h
 
   call cpu_clock_begin(id_clock_ocean)
+  call cpu_clock_begin(id_clock_other)
+
   showCallTree = callTree_showQuery()
   if (showCallTree) call callTree_enter("step_MOM(), MOM.F90")
  !   First determine the time step that is consistent with this call.
@@ -733,15 +736,18 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       call pass_var_complete(pid_psurf, fluxes%p_surf(:,:), G%Domain)
     call cpu_clock_end(id_clock_pass)
   endif
+  call cpu_clock_end(id_clock_other)
 
   do n=1,n_max
     nt = nt + 1
+    call cpu_clock_begin(id_clock_other)
     ! Set the universally visible time to the middle of the time step
     CS%Time = Time_start + set_time(int(floor(CS%rel_time+0.5*dt+0.5)))
     CS%rel_time = CS%rel_time + dt
     ! Set the local time to the end of the time step.
     Time_local = Time_start + set_time(int(floor(CS%rel_time+0.5)))
     if (showCallTree) call callTree_enter("DT cycles (step_MOM) n=",n)
+    call cpu_clock_end(id_clock_other)
 
     if (CS%diabatic_first .and. ((n==1) .or. MOD(n-1,ntstep)==0)) then ! do thermodynamics.
       dtdia = dt*min(ntstep,n_max-(n-1))
@@ -856,11 +862,15 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       if (showCallTree) call callTree_waypoint("finished diabatic_first (step_MOM)")
     endif ! diabatic_first
 
+    call cpu_clock_begin(id_clock_other)
+
     call cpu_clock_begin(id_clock_pass)
     if ((CS%visc%Prandtl_turb > 0) .and. associated(CS%visc%Kd_turb)) &
          call pass_var(CS%visc%Kd_turb, G%Domain)
     if (associated(CS%visc%Kv_turb)) call pass_var(CS%visc%Kv_turb, G%Domain)
     call cpu_clock_end(id_clock_pass)
+
+    call cpu_clock_end(id_clock_other)
 
 
     call cpu_clock_begin(id_clock_dynamics)
@@ -982,8 +992,12 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     call disable_averaging(CS%diag)
     call cpu_clock_end(id_clock_dynamics)
 
+
     dtnt = dtnt + dt
     if ((MOD(n,ntstep) == 0) .or. (n==n_max)) then ! Do advection and thermo.
+
+      call cpu_clock_begin(id_clock_other)
+
       if (CS%debug) then
         call uchksum(u,"Pre-advection u", G, haloshift=2)
         call vchksum(v,"Pre-advection v", G, haloshift=2)
@@ -1001,6 +1015,8 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       ! call MOM_thermo_chksum("Pre-advection ", CS%tv, G)
         call check_redundant("Pre-advection ", u, v, G)
       endif
+
+      call cpu_clock_end(id_clock_other)
 
       call cpu_clock_begin(id_clock_thermo)
       call enable_averaging(dtnt,Time_local, CS%diag)
@@ -1138,6 +1154,8 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       CS%vhtr(:,:,:) = 0.0
       call cpu_clock_end(id_clock_thermo)
 
+      call cpu_clock_begin(id_clock_other)
+
       call cpu_clock_begin(id_clock_diagnostics)
       call calculate_diagnostic_fields(u, v, h, CS%uh, CS%vh, CS%tv, &
                           CS%ADp, CS%CDp, dtnt, G, CS%diagnostics_CSp)
@@ -1167,6 +1185,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       if (CS%id_Sdiffx_2d > 0) call post_data(CS%id_Sdiffx_2d, CS%S_diffx_2d, CS%diag)
       if (CS%id_Sdiffy_2d > 0) call post_data(CS%id_Sdiffy_2d, CS%S_diffy_2d, CS%diag)
 
+
       call disable_averaging(CS%diag)
 
       call cpu_clock_begin(id_clock_Z_diag)
@@ -1182,10 +1201,13 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       endif
       call cpu_clock_end(id_clock_Z_diag)
 
+      call cpu_clock_end(id_clock_other)
+
       dtnt = 0.0
       CS%visc%calc_bbl = .true.
     endif  ! End do advection and thermo.
 
+    call cpu_clock_begin(id_clock_other)
 
     call enable_averaging(dt,Time_local, CS%diag)
     if (CS%id_u > 0) call post_data(CS%id_u, u, CS%diag)
@@ -1201,7 +1223,12 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     call disable_averaging(CS%diag)
 
     if (showCallTree) call callTree_leave("DT cycles (step_MOM)")
+
+  call cpu_clock_end(id_clock_other)
+
   enddo ! End of n loop
+
+  call cpu_clock_begin(id_clock_other)
 
   Itot_wt_ssh = 1.0/tot_wt_ssh
   do j=js,je ; do i=is,ie
@@ -1245,7 +1272,6 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       deallocate(intern_heat_ave)
     endif
   call disable_averaging(CS%diag)
-
   if (showCallTree) call callTree_waypoint("calling calculate_surface_state (step_MOM)")
   call calculate_surface_state(state, u, v, h, CS%ave_ssh, G, CS, &
                                fluxes%p_surf_full)
@@ -1275,6 +1301,8 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       deallocate(sfc_speed)
     endif
   call disable_averaging(CS%diag)
+
+  call cpu_clock_end(id_clock_other)
 
   if (CS%interp_p_surf) then ; do j=jsd,jed ; do i=isd,ied
     CS%p_surf_prev(i,j) = fluxes%p_surf(i,j)
@@ -2054,6 +2082,7 @@ subroutine MOM_timing_init(CS)
  id_clock_ocean = cpu_clock_id('Ocean', grain=CLOCK_COMPONENT)
  id_clock_dynamics = cpu_clock_id('Ocean dynamics', grain=CLOCK_SUBCOMPONENT)
  id_clock_thermo = cpu_clock_id('Ocean thermodynamics and tracers', grain=CLOCK_SUBCOMPONENT)
+ id_clock_other = cpu_clock_id('Ocean Other', grain=CLOCK_SUBCOMPONENT)
  id_clock_tracer = cpu_clock_id('(Ocean tracer advection)', grain=CLOCK_MODULE_DRIVER)
  if (.not.CS%adiabatic) &
    id_clock_diabatic = cpu_clock_id('(Ocean diabatic driver)', grain=CLOCK_MODULE_DRIVER)
