@@ -151,12 +151,12 @@ DEBUG = False                   !   [Boolean] default = False
 DEBUG_TRUNCATIONS = False       !   [Boolean] default = False
                                 ! If true, calculate all diagnostics that are useful for
                                 ! debugging truncations.
-DT = 1800.0                     !   [s]
+DT = 1200.0                     !   [s]
                                 ! The (baroclinic) dynamics time step.  The time-step that
                                 ! is actually used will be an integer fraction of the
                                 ! forcing time-step (DT_FORCING in ocean-only mode or the
                                 ! coupling timestep in coupled mode.)
-DT_THERM = 3600.0               !   [s] default = 1800.0
+DT_THERM = 3600.0               !   [s] default = 1200.0
                                 ! The thermodynamic and tracer advection time step.
                                 ! Ideally DT_THERM should be an integer multiple of DT
                                 ! and less than the forcing or coupling time-step.
@@ -1341,7 +1341,7 @@ CORRECT_DENSITY = True          !   [Boolean] default = True
 MAX_ENT_IT = 20                 ! default = 5
                                 ! The maximum number of iterations that may be used to
                                 ! calculate the interior diapycnal entrainment.
-TOLERANCE_ENT = 1.0E-05         !   [m] default = 1.897366596101028E-05
+TOLERANCE_ENT = 1.0E-05         !   [m] default = 1.549193338482967E-05
                                 ! The tolerance with which to solve for entrainment values.
 
 ! === Parameters of module MOM_kappa_shear ===

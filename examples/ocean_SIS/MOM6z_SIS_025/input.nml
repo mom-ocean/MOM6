@@ -13,7 +13,7 @@
 
  &coupler_nml
             months = 0,
-            days   = 2,
+            days   = 1,
             current_date = 1900,1,1,0,0,0,
             calendar = 'NOLEAP',
             dt_cpld = 7200,
