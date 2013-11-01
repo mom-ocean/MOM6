@@ -459,7 +459,8 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
     !   ! calculation (and the pressure used) would take place, ie. the upper interface     ?????
     !   BulkRi_1d(k) = ( ( GoRho * deltaRho(k) ) * ( -iFaceHeight(k) ) ) / ( deltaU2(k) + Vt2_1d(k) )
     ! enddo ! k
-      surfBuoyFlux = buoyFlux(i,j,1)
+      surfBuoyFlux = buoyFlux(i,j,1) ! This is only used in kpp_compute_OBL_depth to limit
+                                     ! h to Monin-Obukov (default is false, ie. not used)
       call CVmix_kpp_compute_OBL_depth( &
         BulkRi_1d,              & ! (in) Bulk Richardson number
         iFaceHeight,            & ! (in) Height of interfaces (m)
@@ -536,6 +537,8 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
                       GoRho*deltaRho,      & ! Bulk buoyancy difference, Br -B(z) (1/s)
                       deltaU2,             & ! Square of bulk shear (m/s)
                       Vt2_1d )               ! Square of unresolved turbulence (m2/s2)
+        surfBuoyFlux = buoyFlux(i,j,1) ! This is only used in kpp_compute_OBL_depth to limit
+                                       ! h to Monin-Obukov (default is false, ie. not used)
         call CVmix_kpp_compute_OBL_depth( &
           BulkRi_1d,              & ! (in) Bulk Richardson number
           iFaceHeight,            & ! (in) Height of interfaces (m)
@@ -572,6 +575,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
 
       Kd_match(:,:) = Kdiffusivity(:,:) ! Record diffusivity passed to KPP for matching
       Kv_match(:)   = Kviscosity(:)     ! Record viscosity passed to KPP
+      surfBuoyFlux  = buoyFlux(i,j,1) - buoyFlux(i,j,int(kOBL)+1) ! We know the actual buoyancy flux into the OBL
       call cvmix_coeffs_kpp(Kdiffusivity, & ! (inout) Total heat/salt diffusivities (m2/s)
                             Kviscosity,   & ! (inout) Total viscosity (m2/s)
                             iFaceHeight,  & ! (in) Height of interfaces (m)
