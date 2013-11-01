@@ -1,5 +1,5 @@
  &MOM_input_nml
-         output_directory = 'RESTART',
+         output_directory = '.',
          input_filename = 'n'
          restart_input_dir = 'INPUT',
          restart_output_dir = 'RESTART',
