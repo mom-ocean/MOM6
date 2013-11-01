@@ -1,1 +1,1 @@
-.datasets/MOM6z_SIS_025/siena/mosaic.unpacked/topog.nc
+ocean_topog.nc
