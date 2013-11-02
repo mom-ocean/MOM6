@@ -384,7 +384,7 @@ contains
     enddo ; enddo
 
     call g_tracer_set_common(G%isc,G%iec,G%jsc,G%jec,G%isd,G%ied,G%jsd,G%jed,&
-                             G%ke,1,CS%diag%axesTL,grid_tmask,grid_kmt,day)
+                             G%ke,1,CS%diag%axesTL%handles,grid_tmask,grid_kmt,day)
 
     ! Register generic tracer modules diagnostics
 

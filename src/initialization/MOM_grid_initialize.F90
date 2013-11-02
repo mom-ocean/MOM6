@@ -1412,7 +1412,7 @@ subroutine initialize_masks(G, PF)
 ! any land or boundary point.  For points in the interior, mask2dCu,
 ! mask2dCv, and mask2dBu are all 1.0.
 
-  real :: Dmin, min_depth
+  real :: Dmin, min_depth, mask_depth
   integer :: i, j
   integer :: isd, isd_global, jsd, jsd_global 
   logical :: apply_OBC_u_flather_east, apply_OBC_u_flather_west
@@ -1420,11 +1420,16 @@ subroutine initialize_masks(G, PF)
   character(len=40)  :: mod = "MOM_grid_init initialize_masks"
 
   call callTree_enter("initialize_masks(), MOM_grid_initialize.F90")
-  call get_param(PF, "MOM_grid_init initialize_masks", &
-                 "MINIMUM_DEPTH", min_depth, &
-                 "The minimum ocean depth, anything shallower than which \n"//&
-                 "is assumed to be land and all fluxes are masked out.", &
+  call get_param(PF, "MOM_grid_init initialize_masks", "MINIMUM_DEPTH", min_depth, &
+                 "If MASKING_DEPTH is unspecified, then anything shallower than\n"//&
+                 "MINIMUM_DEPTH is assumed to be land and all fluxes are masked out.\n"//&
+                 "If MASKING_DEPTH is specified, then all depths shallower than\n"//&
+                 "MINIMUM_DEPTH but depper than MASKING_DEPTH are rounded to MINIMUM_DEPTH.", &
                  units="m", default=0.0)
+  call get_param(PF, "MOM_grid_init initialize_masks", "MASKING_DEPTH", mask_depth, &
+                 "The depth below which to mask points as land points, for which all\n"//&
+                 "fluxes are zeroed out. MASKING_DEPTH is ignored if negative.", &
+                 units="m", default=-9999.0)
   call get_param(PF, mod, "APPLY_OBC_U_FLATHER_EAST", apply_OBC_u_flather_east,&
                  "Apply a Flather open boundary condition on the eastern \n"//&
                  "side of the global domain", default=.false.)
@@ -1444,6 +1449,7 @@ subroutine initialize_masks(G, PF)
       "APPLY_OBC_U_FLATHER_WEST or APPLY_OBC_V_FLATHER_SOUTH is true.")
 
   Dmin = MAX(min_depth,2.0*G%Angstrom_z)
+  if (mask_depth>=0.) Dmin = mask_depth
 
   call pass_var(G%bathyT, G%Domain)
   G%mask2dCu(:,:) = 0.0 ; G%mask2dCv(:,:) = 0.0 ; G%mask2dBu(:,:) = 0.0

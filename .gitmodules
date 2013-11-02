@@ -4,3 +4,6 @@
 [submodule "tools/matlab/gtools"]
 	path = tools/matlab/gtools
 	url = https://github.com/Adcroft/gtools.git
+[submodule "tools/python/025gridGeneration/MIDAS"]
+	path = tools/python/025gridGeneration/MIDAS
+	url = https://github.com/mjharriso/MIDAS.git

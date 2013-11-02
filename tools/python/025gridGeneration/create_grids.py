@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 #============================================================
 # Generate tiles for the northern/southern caps
 # and central mercator grid. For use in Antarctic ice-sheet

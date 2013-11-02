@@ -352,7 +352,13 @@ TOPO_VARNAME = "depth"          ! default = "depth"
 MAXIMUM_DEPTH = 6000.0          !   [m]
                                 ! The maximum depth of the ocean.
 MINIMUM_DEPTH = 0.5             !   [m] default = 0.0
-                                ! The minimum depth of the ocean.
+                                ! If MASKING_DEPTH is unspecified, then anything shallower than
+                                ! MINIMUM_DEPTH is assumed to be land and all fluxes are masked out.
+                                ! If MASKING_DEPTH is specified, then all depths shallower than
+                                ! MINIMUM_DEPTH but depper than MASKING_DEPTH are rounded to MINIMUM_DEPTH.
+MASKING_DEPTH = -9999.0         !   [m] default = -9999.0
+                                ! The depth below which to mask points as land points, for which all
+                                ! fluxes are zeroed out. MASKING_DEPTH is ignored if negative.
 APPLY_OBC_U_FLATHER_EAST = False !   [Boolean] default = False
                                 ! Apply a Flather open boundary condition on the eastern
                                 ! side of the global domain
@@ -1324,6 +1330,14 @@ MATCH_INTERIOR = False          !   [Boolean] default = False
 DEEP_OBL_OFFSET = 0.0           !   [m] default = 0.0
                                 ! If non-zero, the distance above the bottom to which the OBL is clipped
                                 ! if it would otherwise reach the bottom. The smaller of this and 0.1D is used.
+CORRECT_SURFACE_LAYER_AVERAGE = False !   [Boolean] default = False
+                                ! If true, applies a correction step to the averaging of surface layer
+                                ! properties.
+FIRST_GUESS_SURFACE_LAYER_DEPTH = 0.0 !   [m] default = 0.0
+                                ! The first guess at the depth of the surface layer used for averaging
+                                ! the surface layer properties. If =0, the top model level properties
+                                ! will be used for the surface layer. If CORRECT_SURFACE_LAYER_AVERAGE=True, a
+                                ! subsequent correction is applied.
 %KPP
 USE_CONVECTION = False          !   [Boolean] default = False
                                 ! If true, turns on the diffusive convection scheme that

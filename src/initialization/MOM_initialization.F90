@@ -1264,17 +1264,34 @@ subroutine limit_topography(D, G, param_file, max_depth)
 ! This subroutine ensures that    min_depth < D(x,y) < max_depth
   integer :: i, j
   character(len=40)  :: mod = "limit_topography" ! This subroutine's name.
-  real :: min_depth
+  real :: min_depth, mask_depth
 
   call callTree_enter(trim(mod)//"(), MOM_initialization.F90")
 
-  call get_param(param_file, mod, "MINIMUM_DEPTH", min_depth, &
-                 "The minimum depth of the ocean.", units="m", default=0.0)
+  call get_param(param_file, "MOM_grid_init initialize_masks", "MINIMUM_DEPTH", min_depth, &
+                 "If MASKING_DEPTH is unspecified, then anything shallower than\n"//&
+                 "MINIMUM_DEPTH is assumed to be land and all fluxes are masked out.\n"//&
+                 "If MASKING_DEPTH is specified, then all depths shallower than\n"//&
+                 "MINIMUM_DEPTH but depper than MASKING_DEPTH are rounded to MINIMUM_DEPTH.", &
+                 units="m", default=0.0)
+  call get_param(param_file, mod, "MASKING_DEPTH", mask_depth, &
+                 "The depth below which to mask the ocean as land.", units="m", &
+                 default=-9999.0, do_not_log=.true.)
 
 ! Make sure that min_depth < D(x,y) < max_depth
-  do j=G%jsd,G%jed ; do i=G%isd,G%ied
-    D(i,j) = min( max( D(i,j), 0.5*min_depth ), max_depth )
-  enddo ; enddo
+  if (mask_depth<-9990.) then
+    do j=G%jsd,G%jed ; do i=G%isd,G%ied
+      D(i,j) = min( max( D(i,j), 0.5*min_depth ), max_depth )
+    enddo ; enddo
+  else
+    do j=G%jsd,G%jed ; do i=G%isd,G%ied
+      if (D(i,j)>0.) then
+        D(i,j) = min( max( D(i,j), min_depth ), max_depth )
+      else
+        D(i,j) = 0.
+      endif
+    enddo ; enddo
+  endif
 
   call callTree_leave(trim(mod)//'()')
 end subroutine limit_topography

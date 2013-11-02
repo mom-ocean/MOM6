@@ -124,7 +124,7 @@
 #
 # Viscosities and diffusivities:
 #===============================
-"ocean_model","Kd_effective","Kd_effective","visc","all",.true.,"none",2
+#"ocean_model","Kd_effective","Kd_effective","visc","all",.true.,"none",2
 "ocean_model","Kd_interface","Kd_interface","visc","all",.true.,"none",2
 #"ocean_model","Ahh","Ahh","visc","all",.true.,"none",2
 #"ocean_model","Ahq","Ahq","visc","all",.true.,"none",2
@@ -152,10 +152,15 @@
 "ocean_model","KPP_BulkDrho","KPP_BulkDrho","visc","all",.true.,"none",2
 "ocean_model","KPP_Kheat","KPP_Kheat","visc","all",.true.,"none",2
 "ocean_model","KPP_Ksalt","KPP_Ksalt","visc","all",.true.,"none",2
+"ocean_model","KPP_Kv","KPP_Kv","visc","all",.true.,"none",2
 "ocean_model","KPP_NLtransport_heat","KPP_NLtransport_heat","visc","all",.true.,"none",2
 "ocean_model","KPP_NLtransport_salt","KPP_NLtransport_salt","visc","all",.true.,"none",2
 "ocean_model","KPP_dTdt","KPP_dTdt","visc","all",.true.,"none",2
 "ocean_model","KPP_dSdt","KPP_dSdt","visc","all",.true.,"none",2
+"ocean_model","KPP_Tsurf","KPP_Tsurf","visc","all",.true.,"none",2
+"ocean_model","KPP_Ssurf","KPP_Ssurf","visc","all",.true.,"none",2
+"ocean_model","KPP_Usurf","KPP_Usurf","visc","all",.true.,"none",2
+"ocean_model","KPP_Vsurf","KPP_Vsurf","visc","all",.true.,"none",2
 
 #
 # Kinetic Energy Balance Terms:

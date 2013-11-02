@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 from midas import *
 
 f=nc.Dataset('scap_supergrid.nc')
