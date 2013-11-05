@@ -31,15 +31,15 @@ NJGLOBAL = 2                    !
 !LAYOUT = 1, 1                  !
                                 ! The processor layout that was acutally used.
 
-! === Parameters of module MOM_grid ===
+! === module MOM_grid ===
 ! Parameters providing information about the vertical grid.
 NK = 63                         !   [nondim]
                                 ! The number of model layers.
 
-! === Parameters of module MOM_verticalGrid ===
+! === module MOM_verticalGrid ===
 ! Parameters providing information about the vertical grid.
 
-! === Parameters of module MOM ===
+! === module MOM ===
 SPLIT = False                   !   [Boolean] default = True
                                 ! Use the split time stepping if true.
 DT = 3600.0                     !   [s]
@@ -66,9 +66,9 @@ SAVE_INITIAL_CONDS = True       !   [Boolean] default = False
                                 ! If true, write the initial conditions to a file given
                                 ! by IC_OUTPUT_FILE.
 
-! === Parameters of module MOM_tracer_registry ===
+! === module MOM_tracer_registry ===
 
-! === Parameters of module MOM_tracer_flow_control ===
+! === module MOM_tracer_flow_control ===
 INPUTDIR = "INPUT/BATS"         ! default = "."
                                 ! The directory in which input files are found.
 COORD_CONFIG = "file"           !
@@ -88,7 +88,7 @@ COORD_CONFIG = "file"           !
 COORD_FILE = "../isopyc_coords.nc" !
                                 ! The file from which the coordinate densities are read.
 
-! === Parameters of module MOM_grid_init ===
+! === module MOM_grid_init ===
 GRID_CONFIG = "cartesian"       !
                                 ! A character string that determines the method for
                                 ! defining the horizontal grid.  Current options are:
@@ -160,12 +160,12 @@ ADJUST_THICKNESS = True         !   [Boolean] default = False
                                 ! topography is shallower than the thickness input file
                                 ! would indicate.
 
-! === Parameters of module MOM_MEKE ===
+! === module MOM_MEKE ===
 CDRAG = 0.0                     !   [nondim] default = 0.003
                                 ! CDRAG is the drag coefficient relating the magnitude of
                                 ! the velocity field to the bottom stress.
 
-! === Parameters of module MOM_lateral_mixing_coeffs ===
+! === module MOM_lateral_mixing_coeffs ===
 UPWIND_1ST_CONTINUITY = True    !   [Boolean] default = False
                                 ! If true, CONTINUITY_PPM becomes a 1st-order upwind
                                 ! continuity solver.  This scheme is highly diffusive
@@ -188,7 +188,7 @@ BOUND_CORIOLIS = True           !   [Boolean] default = False
                                 ! always effectively false with CORIOLIS_EN_DIS defined and
                                 ! CORIOLIS_SCHEME set to SADOURNY75_ENERGY.
 
-! === Parameters of module MOM_hor_visc ===
+! === module MOM_hor_visc ===
 LAPLACIAN = True                !   [Boolean] default = False
                                 ! If true, use a Laplacian horizontal viscosity.
 KH_VEL_SCALE = 0.01             !   [m s-1] default = 0.0
@@ -208,7 +208,7 @@ SMAG_BI_CONST = 0.06            !   [nondim] default = 0.0
                                 ! The nondimensional biharmonic Smagorinsky constant,
                                 ! typically 0.015 - 0.06.
 
-! === Parameters of module MOM_vert_friction ===
+! === module MOM_vert_friction ===
 U_TRUNC_FILE = "U_velocity_truncations" ! default = ""
                                 ! The absolute path to a file into which the accelerations
                                 ! leading to zonal velocity truncations are written.
@@ -235,9 +235,9 @@ MAXVEL = 6.0                    !   [m s-1] default = 3.0E+08
                                 ! The maximum velocity allowed before the velocity
                                 ! components are truncated.
 
-! === Parameters of module MOM_PointAccel ===
+! === module MOM_PointAccel ===
 
-! === Parameters of module MOM_set_visc ===
+! === module MOM_set_visc ===
 USE_JACKSON_PARAM = True        !   [Boolean] default = False
                                 ! If true, use the Jackson-Hallberg-Legg (JPO 2008)
                                 ! shear mixing parameterization.
@@ -253,7 +253,7 @@ BBL_THICK_MIN = 0.1             !   [m] default = 0.0
                                 ! Kv / (cdrag * drag_bg_vel) to give Kv as the minimum
                                 ! near-bottom viscosity.
 
-! === Parameters of module MOM_thickness_diffuse ===
+! === module MOM_thickness_diffuse ===
 Z_OUTPUT_GRID_FILE = "../zgrid.nc" ! default = ""
                                 ! The file that specifies the vertical grid for
                                 ! depth-space diagnostics, or blank to disable
@@ -262,16 +262,13 @@ NK_ZSPACE (from file) = 50      !   [nondim]
                                 ! The number of depth-space levels.  This is determined
                                 ! from the size of the variable zw in the output grid file.
 
-! === Parameters of module MOM_diabatic_driver ===
+! === module MOM_diabatic_driver ===
 ! The following parameters are used for diabatic processes.
 RECLAIM_FRAZIL = False          !   [Boolean] default = True
                                 ! If true, try to use any frazil heat deficit to cool any
                                 ! overlying layers down to the freezing point, thereby
                                 ! avoiding the creation of thin ice when the SST is above
                                 ! the freezing point.
-USE_KPP = True                  !   [Boolean] default = False
-                                ! If true, turns on the [CVmix] KPP scheme of Large et al., 1984,
-                                ! to calculate diffusivities and non-local transport in the OBL.
 ML_RADIATION = True             !   [Boolean] default = False
                                 ! If true, allow a fraction of TKE available from wind
                                 ! work to penetrate below the base of the mixed layer
@@ -292,27 +289,36 @@ KD = 2.0E-05                    !   [m2 s-1]
 KD_MIN = 2.0E-06                !   [m2 s-1] default = 2.0E-07
                                 ! The minimum diapycnal diffusivity.
 
-! === Parameters of module MOM_KPP ===
+! === module MOM_KPP ===
 ! This is the MOM wrapper to CVmix:KPP
 ! See http://code.google.com/p/cvmix/
+USE_KPP = True                  !   [Boolean] default = False
+                                ! If true, turns on the [CVmix] KPP scheme of Large et al., 1984,
+                                ! to calculate diffusivities and non-local transport in the OBL.
 KPP%
 PASSIVE = True                  !   [Boolean] default = False
                                 ! If True, puts KPP into a passive-diagnostic mode.
 %KPP
 
-! === Parameters of module MOM_entrain_diffusive ===
+! === module MOM_diffConvection ===
+! This module implements enhanced diffusivity as a
+! function of static stability, N^2.
+CONVECTION%
+%CONVECTION
+
+! === module MOM_entrain_diffusive ===
 MAX_ENT_IT = 20                 ! default = 5
                                 ! The maximum number of iterations that may be used to
                                 ! calculate the interior diapycnal entrainment.
 TOLERANCE_ENT = 1.0E-05         !   [m] default = 2.683281572999748E-05
                                 ! The tolerance with which to solve for entrainment values.
 
-! === Parameters of module MOM_kappa_shear ===
+! === module MOM_kappa_shear ===
 MAX_RINO_IT = 25                !   [nondim] default = 50
                                 ! The maximum number of iterations that may be used to
                                 ! estimate the Richardson number driven mixing.
 
-! === Parameters of module MOM_mixed_layer ===
+! === module MOM_mixed_layer ===
 BULK_RI_ML = 0.05               !   [nondim]
                                 ! The efficiency with which mean kinetic energy released
                                 ! by mechanically forced entrainment of the mixed layer
@@ -331,9 +337,9 @@ CORRECT_ABSORPTION_DEPTH = True !   [Boolean] default = False
                                 ! radiation is absorbed is corrected by moving some of
                                 ! the heating upward in the water column.
 
-! === Parameters of module MOM_regularize_layers ===
+! === module MOM_regularize_layers ===
 
-! === Parameters of module MOM_opacity ===
+! === module MOM_opacity ===
 VAR_PEN_SW = True               !   [Boolean] default = False
                                 ! If true, use one of the CHL_A schemes specified by
                                 ! OPACITY_SCHEME to determine the e-folding depth of
@@ -345,13 +351,13 @@ CHL_FILE = "forcing_monthly.nc" !
 PEN_SW_NBANDS = 3               ! default = 1
                                 ! The number of bands of penetrating shortwave radiation.
 
-! === Parameters of module MOM_tracer_advect ===
+! === module MOM_tracer_advect ===
 
-! === Parameters of module MOM_tracer_hor_diff ===
+! === module MOM_tracer_hor_diff ===
 KHTR = 600.0                    !   [m2 s-1] default = 0.0
                                 ! The background along-isopycnal tracer diffusivity.
 
-! === Parameters of module MOM_surface_forcing ===
+! === module MOM_surface_forcing ===
 BUOY_CONFIG = "data_override"   !
                                 ! The character string that indicates how buoyancy forcing
                                 ! is specified. Valid options include (file), (zero),
@@ -367,7 +373,7 @@ GUST_2D_FILE = "forcing_monthly.nc" !
                                 ! The file in which the wind gustiness is found in
                                 ! variable gustiness.
 
-! === Parameters of module MOM_sum_output ===
+! === module MOM_sum_output ===
 MAXTRUNC = 5000                 !   [truncations save_interval-1] default = 0
                                 ! The run will be stopped, and the day set to a very
                                 ! large value if the velocity is truncated more than
@@ -383,7 +389,7 @@ MAXCPU = 2.88E+04               !   [wall-clock seconds] default = -1.0
                                 ! seconds, so the actual CPU time used is larger by a
                                 ! factor of the number of processors used.
 
-! === Parameters of module MOM_main (MOM_driver) ===
+! === module MOM_main (MOM_driver) ===
 DAYMAX = 365.0                  !   [days]
                                 ! The final time of the whole simulation, in units of
                                 ! TIMEUNIT seconds.  This also sets the potential end

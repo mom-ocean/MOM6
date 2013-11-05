@@ -600,7 +600,7 @@ subroutine doc_module(doc, modname, desc)
 
   if (doc%unitAll > 0 .or. doc%unitShort > 0) then
     call writeMessageAndDesc(doc, '', '') ! Blank line for delineation
-    mesg = "! === Parameters of module "//trim(modname)//" ==="
+    mesg = "! === module "//trim(modname)//" ==="
     call writeMessageAndDesc(doc, mesg, desc, indent=0)
   endif 
 end subroutine doc_module

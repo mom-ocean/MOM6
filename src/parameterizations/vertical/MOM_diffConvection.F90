@@ -38,15 +38,15 @@ logical, parameter :: verbose = .False.
 
 contains
 
-subroutine diffConvection_init(paramFile, G, diag, Time, useConvection, CS)
+logical function diffConvection_init(paramFile, G, diag, Time, CS)
 ! Initialize the CVmix KPP module and set up diagnostics
+! Returns True if module is to be used, otherwise returns False.
 
 ! Arguments
   type(param_file_type),   intent(in)    :: paramFile ! File parser
   type(ocean_grid_type),   intent(in)    :: G         ! Ocean grid
   type(diag_ctrl), target, intent(in)    :: diag      ! Diagnostics
   type(time_type),         intent(in)    :: Time      ! Time
-  logical,                 intent(out)   :: useConvection ! Set true if module is in use
   type(diffConvection_CS), pointer       :: CS        ! Control structure
 ! Local variables
 #include "version_variable.h"
@@ -57,17 +57,16 @@ subroutine diffConvection_init(paramFile, G, diag, Time, useConvection, CS)
   allocate(CS)
 
 ! Read parameters
-  call get_param(paramFile, mod, "USE_CONVECTION", useConvection, &
+  call log_version(paramFile, mod, version, &
+            'This module implements enhanced diffusivity as a\n' // &
+            'function of static stability, N^2.')
+  call get_param(paramFile, mod, "USE_CONVECTION", diffConvection_init, &
                  "If true, turns on the diffusive convection scheme that\n"// &
                  "increases diapycnal diffusivities at statically unstable\n"// &
                  "interfaces. Relevant parameters are contained in the\n"// &
                  "CONVECTION% parameter block.", &
                  default=.false.)
-  if (.not. useConvection) return
 
-  call log_version(paramFile, mod, version, &
-            'This is module implements enhanced diffusivity as a\n' // &
-            'function of static stability, N^2.')
   call openParameterBlock(paramFile,'CONVECTION')
   call get_param(paramFile, mod, 'PASSIVE', CS%passiveMode,           &
                  'If True, puts KPP into a passive-diagnostic mode.', &
@@ -77,6 +76,9 @@ subroutine diffConvection_init(paramFile, G, diag, Time, useConvection, CS)
                  units='m2/s', default=1.00)
   call closeParameterBlock(paramFile)
   call get_param(paramFile, mod, 'DEBUG', CS%debug, default=.False., do_not_log=.True.)
+
+! Forego remainder of initialization if not using this scheme
+  if (.not. diffConvection_init) return
 
 ! Register diagnostics
   CS%diag => diag
@@ -90,7 +92,7 @@ subroutine diffConvection_init(paramFile, G, diag, Time, useConvection, CS)
   if (CS%id_N2 > 0) CS%N2(:,:,:) = 0.
   if (CS%id_Kd_conv > 0) CS%Kd_conv(:,:,:) = 0.
 
-end subroutine diffConvection_init
+end function diffConvection_init
 
 
 subroutine diffConvection_calculate(CS, G, h, Temp, Salt, EOS, Kd_int)

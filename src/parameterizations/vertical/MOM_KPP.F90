@@ -85,8 +85,9 @@ logical, parameter :: verbose = .False.
 
 contains
 
-subroutine KPP_init(paramFile, G, diag, Time, CS, passive)
+logical function KPP_init(paramFile, G, diag, Time, CS, passive)
 ! Initialize the CVmix KPP module and set up diagnostics
+! Returns True if KPP is to be used, False otherwise.
 
 ! Arguments
   type(param_file_type),   intent(in)    :: paramFile ! File parser
@@ -106,7 +107,11 @@ subroutine KPP_init(paramFile, G, diag, Time, CS, passive)
 ! Read parameters
   call log_version(paramFile, mod, version, 'This is the MOM wrapper to CVmix:KPP\n' // &
             'See http://code.google.com/p/cvmix/')
-  call get_param(paramFile, mod, 'DEBUG', CS%debug, default=.False., do_not_log=.True.)
+  call get_param(paramFile, mod, "USE_KPP", KPP_init, &
+                 "If true, turns on the [CVmix] KPP scheme of Large et al., 1984,\n"// &
+                 "to calculate diffusivities and non-local transport in the OBL.", &
+                 default=.false.)
+
   call openParameterBlock(paramFile,'KPP')
   call get_param(paramFile, mod, 'PASSIVE', CS%passiveMode,           &
                  'If True, puts KPP into a passive-diagnostic mode.', &
@@ -162,6 +167,10 @@ subroutine KPP_init(paramFile, G, diag, Time, CS, passive)
                  'will be used for the surface layer. If CORRECT_SURFACE_LAYER_AVERAGE=True, a\n'// &
                  'subsequent correction is applied.', units='m', default=0.)
   call closeParameterBlock(paramFile)
+  call get_param(paramFile, mod, 'DEBUG', CS%debug, default=.False., do_not_log=.True.)
+
+! Forego remainder of initialization if not using this scheme
+  if (.not. KPP_init) return
 
   call CVmix_init_kpp( Ri_crit=CS%Ri_crit,                 &
                        vonKarman=CS%vonKarman,             &
@@ -254,7 +263,7 @@ subroutine KPP_init(paramFile, G, diag, Time, CS, passive)
   if (CS%id_Vsurf > 0)    allocate( CS%Vsurf( SZI_(G), SZJB_(G)) )
   if (CS%id_Vsurf > 0)    CS%Ssurf(:,:) = 0.
 
-end subroutine KPP_init
+end function KPP_init
 
 
 subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, Ks, Kv, nonLocalTransHeat, nonLocalTransScalar)

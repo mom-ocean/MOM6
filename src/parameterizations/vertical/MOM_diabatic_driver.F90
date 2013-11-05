@@ -1569,21 +1569,6 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
                  "entrainment at the bottom is at least sqrt(Kd_BBL_tr*dt) \n"//&
                  "over the same distance.", units="m2 s-1", default=0.)
   endif
-  call get_param(param_file, mod, "USE_KPP", CS%useKPP, &
-                 "If true, turns on the [CVmix] KPP scheme of Large et al., 1984,\n"// &
-                 "to calculate diffusivities and non-local transport in the OBL.", &
-                 default=.false.)
-  if (CS%useKPP) then
-    allocate( CS%KPP_NLTheat(isd:ied,jsd:jed,nz+1) ) ; CS%KPP_NLTheat(:,:,:) = 0.
-    allocate( CS%KPP_NLTscalar(isd:ied,jsd:jed,nz+1) ) ; CS%KPP_NLTscalar(:,:,:) = 0.
-    allocate( CS%buoyancyFlux(isd:ied,jsd:jed,nz+1) ) ; CS%buoyancyFlux(:,:,:) = 0.
-    allocate( CS%netHeatMinusSW(isd:ied,jsd:jed) ) ; CS%netHeatMinusSW(:,:) = 0.
-    allocate( CS%netSalt(isd:ied,jsd:jed) ) ; CS%netSalt(:,:) = 0.
-    if (CS%use_kappa_shear) &
-      call get_param(param_file, mod, "KPP_BEFORE_KAPPA_SHEAR", CS%matchKPPwithoutKappaShear, &
-                 "If true, KPP matches interior diffusivity that EXCLUDES any\n"// &
-                 "diffusivity from kappa-shear.", default=.true.)
-  endif
 
   if (G%Boussinesq) then ; thickness_units = "meter"
   else ; thickness_units = "kilogram meter-2" ; endif
@@ -1639,10 +1624,29 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
   if (CS%id_wd > 0) call safe_alloc_ptr(CDp%diapyc_vel,isd,ied,jsd,jed,nz+1)
 
   call set_diffusivity_init(Time, G, param_file, diag, CS%set_diff_CSp, diag_to_Z_CSp)
-  if (CS%useKPP) call KPP_init(param_file, G, diag, Time, CS%KPP_CSp, passive=CS%KPPisPassive)
 
-  ! CS%useConvection is set True by diffConvection_init() IF convection will be used.
-  call diffConvection_init(param_file, G, diag, Time, CS%useConvection, CS%Conv_CSp)
+  ! CS%useKPP is set to True if KPP-scheme is to be used, False otherwise.
+  ! KPP_init() allocated CS%KPP_Csp and also sets CS%KPPisPassive
+  CS%useKPP = KPP_init(param_file, G, diag, Time, CS%KPP_CSp, passive=CS%KPPisPassive)
+  call get_param(param_file, mod, "USE_KPP", CS%useKPP, &
+                 "If true, turns on the [CVmix] KPP scheme of Large et al., 1984,\n"// &
+                 "to calculate diffusivities and non-local transport in the OBL.", &
+                 default=.false.)
+  if (CS%useKPP) then
+    allocate( CS%KPP_NLTheat(isd:ied,jsd:jed,nz+1) ) ; CS%KPP_NLTheat(:,:,:) = 0.
+    allocate( CS%KPP_NLTscalar(isd:ied,jsd:jed,nz+1) ) ; CS%KPP_NLTscalar(:,:,:) = 0.
+    allocate( CS%buoyancyFlux(isd:ied,jsd:jed,nz+1) ) ; CS%buoyancyFlux(:,:,:) = 0.
+    allocate( CS%netHeatMinusSW(isd:ied,jsd:jed) ) ; CS%netHeatMinusSW(:,:) = 0.
+    allocate( CS%netSalt(isd:ied,jsd:jed) ) ; CS%netSalt(:,:) = 0.
+    if (CS%use_kappa_shear) &
+      call get_param(param_file, mod, "KPP_BEFORE_KAPPA_SHEAR", CS%matchKPPwithoutKappaShear, &
+                 "If true, KPP matches interior diffusivity that EXCLUDES any\n"// &
+                 "diffusivity from kappa-shear.", default=.true.)
+  endif
+
+  ! CS%useConvection is set to True IF convection will be used, otherwise False.
+  ! CS%Conv_CSp is allocated by diffConvection_init()
+  CS%useConvection = diffConvection_init(param_file, G, diag, Time, CS%Conv_CSp)
 
   call entrain_diffusive_init(Time, G, param_file, diag, CS%entrain_diffusive_CSp)
   if (CS%use_geothermal) &

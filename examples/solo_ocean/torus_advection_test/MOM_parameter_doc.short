@@ -44,7 +44,7 @@ IO_LAYOUT = 1, 1                ! default = 0
                                 ! The processor layout to be used, or 0,0 to automatically
                                 ! set the io_layout to be the same as the layout.
 
-! === Parameters of module MOM_grid ===
+! === module MOM_grid ===
 ! Parameters providing information about the vertical grid.
 RHO_0 = 1000.0                  !   [kg m-3] default = 1035.0
                                 ! The mean ocean density used with BOUSSINESQ true to
@@ -56,10 +56,10 @@ ANGSTROM = 0.0                  !   [m] default = 1.0E-10
 NK = 5                          !   [nondim]
                                 ! The number of model layers.
 
-! === Parameters of module MOM_verticalGrid ===
+! === module MOM_verticalGrid ===
 ! Parameters providing information about the vertical grid.
 
-! === Parameters of module MOM ===
+! === module MOM ===
 BULKMIXEDLAYER = False          !   [Boolean] default = True
                                 ! If true, use a Kraus-Turner-like bulk mixed layer
                                 ! with transitional buffer layers.  Layers 1 through
@@ -89,18 +89,18 @@ SAVE_INITIAL_CONDS = True       !   [Boolean] default = False
 IC_OUTPUT_FILE = "GOLD_IC"      ! default = "MOM_IC"
                                 ! The file into which to write the initial conditions.
 
-! === Parameters of module MOM_tracer_registry ===
+! === module MOM_tracer_registry ===
 EQN_OF_STATE = "LINEAR"         ! default = "WRIGHT"
                                 ! EQN_OF_STATE determines which ocean equation of state
                                 ! should be used.  Currently, the valid choices are
                                 ! "LINEAR", "UNESCO", and "WRIGHT".
                                 ! This is only used if USE_EOS is true.
 
-! === Parameters of module MOM_tracer_flow_control ===
+! === module MOM_tracer_flow_control ===
 USE_ADVECTION_TEST_TRACER = True !   [Boolean] default = False
                                 ! If true, use the advection_test_tracer tracer package.
 
-! === Parameters of module advection_test_tracer ===
+! === module advection_test_tracer ===
 ADVECTION_TEST_X_ORIGIN = 43.2  !   [not defined] default = 0.0
                                 ! The x-coorindate of the center of the test-functions.
 ADVECTION_TEST_Y_ORIGIN = 86.4  !   [not defined] default = 0.0
@@ -130,7 +130,7 @@ T_REF = 20.0                    !   [degC]
 GINT = 7.89E-04                 !   [m s-2]
                                 ! The reduced gravity across internal interfaces.
 
-! === Parameters of module MOM_grid_init ===
+! === module MOM_grid_init ===
 GRID_CONFIG = "cartesian"       !
                                 ! A character string that determines the method for
                                 ! defining the horizontal grid.  Current options are:
@@ -232,12 +232,12 @@ INITIAL_U_CONST = 0.2           !   [m s-1]
 INITIAL_V_CONST = 0.2           !   [m s-1]
                                 ! A initial uniform value for the meridional flow.
 
-! === Parameters of module MOM_MEKE ===
+! === module MOM_MEKE ===
 CDRAG = 0.0                     !   [nondim] default = 0.003
                                 ! CDRAG is the drag coefficient relating the magnitude of
                                 ! the velocity field to the bottom stress.
 
-! === Parameters of module MOM_lateral_mixing_coeffs ===
+! === module MOM_lateral_mixing_coeffs ===
 BOUND_CORIOLIS = True           !   [Boolean] default = False
                                 ! If true, the Coriolis terms at u-points are bounded by
                                 ! the four estimates of (f+rv)v from the four neighboring
@@ -249,7 +249,7 @@ KE_SCHEME = "KE_GUDONOV"        ! default = "KE_ARAKAWA"
                                 ! due to the kinetic energy gradient. Valid values are:
                                 !    KE_ARAKAWA, KE_SIMPLE_GUDONOV, KE_GUDONOV
 
-! === Parameters of module MOM_hor_visc ===
+! === module MOM_hor_visc ===
 LAPLACIAN = True                !   [Boolean] default = False
                                 ! If true, use a Laplacian horizontal viscosity.
 BIHARMONIC = False              !   [Boolean] default = True
@@ -261,7 +261,7 @@ BOUND_KH = False                !   [Boolean] default = True
                                 ! If true, the Laplacian coefficient is locally limited
                                 ! to be stable.
 
-! === Parameters of module MOM_vert_friction ===
+! === module MOM_vert_friction ===
 BOTTOMDRAGLAW = False           !   [Boolean] default = True
                                 ! If true, the bottom stress is calculated with a drag
                                 ! law of the form c_drag*|u|*u. The velocity magnitude
@@ -299,9 +299,9 @@ MAXVEL = 10.0                   !   [m s-1] default = 3.0E+08
                                 ! The maximum velocity allowed before the velocity
                                 ! components are truncated.
 
-! === Parameters of module MOM_PointAccel ===
+! === module MOM_PointAccel ===
 
-! === Parameters of module MOM_set_visc ===
+! === module MOM_set_visc ===
 BBL_THICK_MIN = 0.1             !   [m] default = 0.0
                                 ! The minimum bottom boundary layer thickness that can be
                                 ! used with BOTTOMDRAGLAW. This might be
@@ -310,7 +310,7 @@ BBL_THICK_MIN = 0.1             !   [m] default = 0.0
 KV_BBL_MIN = 1.0E-06            !   [m2 s-1] default = 0.0
                                 ! The minimum viscosities in the bottom boundary layer.
 
-! === Parameters of module MOM_barotropic ===
+! === module MOM_barotropic ===
 BOUND_BT_CORRECTION = True      !   [Boolean] default = False
                                 ! If true, the corrective pseudo mass-fluxes into the
                                 ! barotropic solver are limited to values that require
@@ -359,16 +359,28 @@ DTBT = -0.9                     !   [s or nondim] default = -0.98
                                 ! The value of DTBT that will actually be used is an
                                 ! integer fraction of DT, rounding down.
 
-! === Parameters of module MOM_thickness_diffuse ===
+! === module MOM_thickness_diffuse ===
 
-! === Parameters of module MOM_diabatic_driver ===
+! === module MOM_diabatic_driver ===
 ! The following parameters are used for diabatic processes.
 KD = 0.0                        !   [m2 s-1]
                                 ! The background diapycnal diffusivity of density in the
                                 ! interior. Zero or the molecular value, ~1e-7 m2 s-1,
                                 ! may be used.
 
-! === Parameters of module MOM_entrain_diffusive ===
+! === module MOM_KPP ===
+! This is the MOM wrapper to CVmix:KPP
+! See http://code.google.com/p/cvmix/
+KPP%
+%KPP
+
+! === module MOM_diffConvection ===
+! This module implements enhanced diffusivity as a
+! function of static stability, N^2.
+CONVECTION%
+%CONVECTION
+
+! === module MOM_entrain_diffusive ===
 CORRECT_DENSITY = False         !   [Boolean] default = True
                                 ! If true, and USE_EOS is true, the layer densities are
                                 ! restored toward their target values by the diapycnal
@@ -379,15 +391,15 @@ MAX_ENT_IT = 20                 ! default = 5
 TOLERANCE_ENT = 1.0E-05         !   [m] default = 0.0
                                 ! The tolerance with which to solve for entrainment values.
 
-! === Parameters of module MOM_regularize_layers ===
+! === module MOM_regularize_layers ===
 
-! === Parameters of module MOM_opacity ===
+! === module MOM_opacity ===
 
-! === Parameters of module MOM_tracer_advect ===
+! === module MOM_tracer_advect ===
 
-! === Parameters of module MOM_tracer_hor_diff ===
+! === module MOM_tracer_hor_diff ===
 
-! === Parameters of module MOM_surface_forcing ===
+! === module MOM_surface_forcing ===
 VARIABLE_WINDS = False          !   [Boolean] default = True
                                 ! If true, the winds vary in time after the initialization.
 VARIABLE_BUOYFORCE = False      !   [Boolean] default = True
@@ -402,7 +414,7 @@ WIND_CONFIG = "zero"            !
                                 ! is specified. Valid options include (file), (2gyre),
                                 ! (1gyre), (gyres), (zero), and (USER).
 
-! === Parameters of module MOM_sum_output ===
+! === module MOM_sum_output ===
 MAXTRUNC = 10                   !   [truncations save_interval-1] default = 0
                                 ! The run will be stopped, and the day set to a very
                                 ! large value if the velocity is truncated more than
@@ -418,7 +430,7 @@ MAXCPU = 2.88E+04               !   [wall-clock seconds] default = -1.0
                                 ! seconds, so the actual CPU time used is larger by a
                                 ! factor of the number of processors used.
 
-! === Parameters of module MOM_main (MOM_driver) ===
+! === module MOM_main (MOM_driver) ===
 RESTART_CONTROL = -1            ! default = 1
                                 ! An integer whose bits encode which restart files are
                                 ! written. Add 2 (bit 1) for a time-stamped file, and odd
