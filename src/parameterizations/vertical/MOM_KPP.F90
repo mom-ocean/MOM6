@@ -122,7 +122,7 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive)
                  'If True, applies the non-local transport to heat and scalars.\n'//  &
                  'If False, calculates the non-local transport and tendancies but\n'//&
                  'purely for diagnostic purposes.',                                   &
-                 default=.True.)
+                 default=.not. CS%passiveMode)
   call get_param(paramFile, mod, 'RI_CRIT', CS%Ri_crit,                       &
                  'Critical Richardson number used to define depth of the\n'// &
                  'Oceab Boundary Layer (OBL).',                               &
@@ -721,11 +721,9 @@ subroutine KPP_applyNonLocalTransport(CS, G, h, nonLocalTrans, surfFlux, dt, sca
   logical, optional,                            intent(in)    :: isSalt   ! Inidicates scalar is salt for diagnostics
 
   integer :: i, j, k
-  logical :: diagHeat, diagSalt, applyNLtrans
+  logical :: diagHeat, diagSalt
   logical :: debugColumn
   real, dimension( SZI_(G), SZJ_(G), SZK_(G) ) :: dSdt ! Tendancy in scalar due to non-local transport (scalar/s)
-
-  applyNLtrans = (.not. CS%passiveMode) .and. CS%applyNonLocalTrans
 
   diagHeat = .False.
   if (present(isHeat)) then
@@ -750,7 +748,7 @@ subroutine KPP_applyNonLocalTransport(CS, G, h, nonLocalTrans, surfFlux, dt, sca
         ! Tendancy due to non-local transport of scalar
         dSdt(i,j,k) = ( nonLocalTrans(i,j,k) - nonLocalTrans(i,j,k+1) ) / h(i,j,k) * surfFlux(i,j)
         ! Update the scalar
-        if (applyNLtrans) scalar(i,j,k) = scalar(i,j,k) + dt * dSdt(i,j,k)
+        if (CS%applyNonLocalTrans) scalar(i,j,k) = scalar(i,j,k) + dt * dSdt(i,j,k)
       enddo ! i
     enddo ! j
   enddo ! k
