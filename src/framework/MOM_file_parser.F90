@@ -1011,8 +1011,10 @@ subroutine get_variable_line(CS, varname, found, defined, value_string, paramIsL
         if (trim(lname) /= trim(varname)) cycle
         val_str = trim(adjustl(line(ise+3:last)))
         ! Remove starting and trailing quotes.
-        id = index(val_str,ACHAR(34)) ; if (id > 0) val_str = val_str(id+1:)
-        id = index(val_str,ACHAR(34)) ; if (id > 0) val_str = val_str(:id-1)
+        id = index(val_str,ACHAR(34)) ; if (id > 0) val_str = val_str(id+1:) ! Double quote
+        id = index(val_str,ACHAR(34)) ; if (id > 0) val_str = val_str(:id-1) ! Double quote
+        id = index(val_str,ACHAR(39)) ; if (id > 0) val_str = val_str(id+1:) ! Single quote
+        id = index(val_str,ACHAR(39)) ; if (id > 0) val_str = val_str(:id-1) ! Single quote
         if (variableKindIsLogical) then ! Special handling for logicals
           read(val_str(:len_trim(val_str)),*) defined_in_line
         else
