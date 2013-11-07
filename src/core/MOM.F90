@@ -751,11 +751,38 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
     if (CS%diabatic_first .and. ((n==1) .or. MOD(n-1,ntstep)==0)) then ! do thermodynamics.
       dtdia = dt*min(ntstep,n_max-(n-1))
-      call cpu_clock_begin(id_clock_thermo)
       ! The end-time of the diagnostic interval needs to be set ahead if there
       ! are multiple dynamic time steps worth of dynamics applied here.
       call enable_averaging(dtdia, Time_local + &
                                    set_time(int(floor(dtdia-dt+0.5))), CS%diag)
+
+      ! This block has been duplicated from MOM_dynamics_split_RK2.F90 and uses
+      ! what would otherwise be a private member of CS%dyn_split_RK2_CSp.
+      ! This is a [temporary] workaround to needing CS%visc to be updated
+      ! before diabatic() when DIABATIC_FIRST=True. If False, diabatic() is
+      ! called after set_viscous_BBL.
+
+      !if (visc%calc_bbl) then
+        ! Calculate the BBL properties and store them inside visc (u,h).
+        !call cpu_clock_begin(id_clock_vertvisc)
+        call set_viscous_BBL(u, v, h, CS%tv, CS%visc, G, CS%dyn_split_RK2_CSp%set_visc_CSp)
+        !call cpu_clock_end(id_clock_vertvisc)
+    
+        call cpu_clock_begin(id_clock_pass)
+        if (associated(CS%visc%Ray_u) .and. associated(CS%visc%Ray_v)) &
+          call pass_vector(CS%visc%Ray_u, CS%visc%Ray_v, G%Domain, &
+                         To_All+SCALAR_PAIR, CGRID_NE)
+        if (associated(CS%visc%kv_bbl_u) .and. associated(CS%visc%kv_bbl_v)) then
+          call pass_vector(CS%visc%bbl_thick_u, CS%visc%bbl_thick_v, G%Domain, &
+                         To_All+SCALAR_PAIR, CGRID_NE, complete=.false.)
+          call pass_vector(CS%visc%kv_bbl_u, CS%visc%kv_bbl_v, G%Domain, &
+                         To_All+SCALAR_PAIR, CGRID_NE)
+        endif
+        call cpu_clock_end(id_clock_pass)
+        if (showCallTree) call callTree_wayPoint("done with set_viscous_BBL (step_MOM_dyn_split_RK2)")
+      !endif
+
+      call cpu_clock_begin(id_clock_thermo)
 
       if (.not.CS%adiabatic) then
         if (CS%debug) then

@@ -122,7 +122,7 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-type, public :: MOM_dyn_split_RK2_CS ; private
+type, public :: MOM_dyn_split_RK2_CS !; private
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: &
     CAu, &    ! CAu = f*v - u.grad(u) in m s-2.
     PFu, &    ! PFu = -dM/dx, in m s-2.
