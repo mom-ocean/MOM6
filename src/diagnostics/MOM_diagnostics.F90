@@ -88,7 +88,10 @@ type, public :: diagnostics_CS ; private
 ! The following fields are 2-D.
   real, pointer, dimension(:,:) :: &
     cg1 => NULL(), &      ! The first baroclinic gravity wave speed, in m s-1.
-    Rd1 => NULL()         ! The first baroclinic deformation radius, in m.
+    Rd1 => NULL(), &      ! The first baroclinic deformation radius, in m.
+    cfl_cg1 => NULL(), &  ! CFL of the first baroclinic gravity wave speed, nondim.
+    cfl_cg1_x => NULL(), &! i-component of CFL of the first baroclinic gravity wave speed, nondim.
+    cfl_cg1_y => NULL()   ! j-component of CFL of the first baroclinic gravity wave speed, nondim.
 
   ! These are arrays that are used to hold diagnostics in the layer-integrated
   ! energy budget. All except KE have units of m3 s-3.
@@ -110,7 +113,7 @@ type, public :: diagnostics_CS ; private
   integer :: id_KE_adv = -1, id_KE_visc = -1, id_KE_horvisc = -1, id_KE_dia = -1
   integer :: id_h_Rlay = -1, id_uh_Rlay = -1, id_vh_Rlay = -1
   integer :: id_uhGM_Rlay = -1, id_vhGM_Rlay = -1, id_Rml = -1, id_Rcv = -1
-  integer :: id_cg1 = -1, id_Rd1 = -1
+  integer :: id_cg1 = -1, id_Rd1 = -1, id_cfl_cg1 = -1, id_cfl_cg1_x = -1, id_cfl_cg1_y = -1
   integer :: id_mass_wt = -1, id_temp_int = -1, id_salt_int = -1
   integer :: id_col_ht = -1, id_col_mass = -1
 
@@ -301,7 +304,8 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, dt, G, &
     endif
   endif
 
-  if ((CS%id_cg1>0) .or. (CS%id_Rd1>0)) then
+  if ((CS%id_cg1>0) .or. (CS%id_Rd1>0) .or. (CS%id_cfl_cg1>0) .or. &
+      (CS%id_cfl_cg1_x>0) .or. (CS%id_cfl_cg1_y>0)) then
     call wave_speed(h, tv, G, CS%cg1, CS%wave_speed_CSp)
     if (CS%id_cg1>0) call post_data(CS%id_cg1, CS%cg1, CS%diag)
     if (CS%id_Rd1>0) then
@@ -319,6 +323,24 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, dt, G, &
 
       enddo ; enddo
       call post_data(CS%id_Rd1, CS%Rd1, CS%diag)
+    endif
+    if (CS%id_cfl_cg1>0) then
+      do j=js,je ; do i=is,ie
+        CS%cfl_cg1(i,j) = (dt*CS%cg1(i,j)) * (G%IdxT(i,j) + G%IdyT(i,j))
+      enddo ; enddo
+      call post_data(CS%id_cfl_cg1, CS%cfl_cg1, CS%diag)
+    endif
+    if (CS%id_cfl_cg1_x>0) then
+      do j=js,je ; do i=is,ie
+        CS%cfl_cg1_x(i,j) = (dt*CS%cg1(i,j)) * G%IdxT(i,j)
+      enddo ; enddo
+      call post_data(CS%id_cfl_cg1_x, CS%cfl_cg1_x, CS%diag)
+    endif
+    if (CS%id_cfl_cg1_y>0) then
+      do j=js,je ; do i=is,ie
+        CS%cfl_cg1_y(i,j) = (dt*CS%cg1(i,j)) * G%IdyT(i,j)
+      enddo ; enddo
+      call post_data(CS%id_cfl_cg1_y, CS%cfl_cg1_y, CS%diag)
     endif
   endif
 
@@ -883,10 +905,20 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, param_file, diag, CS)
       'First baroclinic gravity wave speed', 'meter second-1')
   CS%id_Rd1 = register_diag_field('ocean_model', 'Rd1', diag%axesT1, Time, &
       'First baroclinic deformation radius', 'meter')
-  if ((CS%id_cg1>0) .or. (CS%id_Rd1>0)) then
+  CS%id_cfl_cg1 = register_diag_field('ocean_model', 'CFL_cg1', diag%axesT1, Time, &
+      'CFL of first baroclinic gravity wave = dt*cg1*(1/dx+1/dy)', 'nondim')
+  CS%id_cfl_cg1_x = register_diag_field('ocean_model', 'CFL_cg1_x', diag%axesT1, Time, &
+      'i-component of CFL of first baroclinic gravity wave = dt*cg1*/dx', 'nondim')
+  CS%id_cfl_cg1_y = register_diag_field('ocean_model', 'CFL_cg1_y', diag%axesT1, Time, &
+      'j-component of CFL of first baroclinic gravity wave = dt*cg1*/dy', 'nondim')
+  if ((CS%id_cg1>0) .or. (CS%id_Rd1>0) .or. (CS%id_cfl_cg1>0) .or. &
+      (CS%id_cfl_cg1_x>0) .or. (CS%id_cfl_cg1_y>0)) then
     call safe_alloc_ptr(CS%cg1,isd,ied,jsd,jed)
     call wave_speed_init(Time, G, param_file, diag, CS%wave_speed_CSp)
     if (CS%id_Rd1>0) call safe_alloc_ptr(CS%Rd1,isd,ied,jsd,jed)
+    if (CS%id_cfl_cg1>0) call safe_alloc_ptr(CS%cfl_cg1,isd,ied,jsd,jed)
+    if (CS%id_cfl_cg1_x>0) call safe_alloc_ptr(CS%cfl_cg1_x,isd,ied,jsd,jed)
+    if (CS%id_cfl_cg1_y>0) call safe_alloc_ptr(CS%cfl_cg1_y,isd,ied,jsd,jed)
   endif
 
   CS%id_mass_wt = register_diag_field('ocean_model', 'mass_wt', diag%axesT1, Time, &
