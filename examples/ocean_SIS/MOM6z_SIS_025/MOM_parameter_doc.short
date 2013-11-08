@@ -41,7 +41,7 @@ NJGLOBAL = 1080                 !
                                 ! STATIC_MEMORY_ this is set in MOM_memory.h at compile time.
 !LAYOUT = 18, 16                !
                                 ! The processor layout that was acutally used.
-IO_LAYOUT = 2, 2                ! default = 0
+IO_LAYOUT = 1, 1                ! default = 0
                                 ! The processor layout to be used, or 0,0 to automatically
                                 ! set the io_layout to be the same as the layout.
 
@@ -123,9 +123,6 @@ BAD_VAL_SST_MAX = 55.0          !   [deg C] default = 45.0
 BAD_VAL_SST_MIN = -3.0          !   [deg C] default = -2.1
                                 ! The value of SST below which a bad value message is
                                 ! triggered, if CHECK_BAD_SURFACE_VALS is true.
-SAVE_INITIAL_CONDS = True       !   [Boolean] default = False
-                                ! If true, write the initial conditions to a file given
-                                ! by IC_OUTPUT_FILE.
 
 ! === module MOM_tracer_registry ===
 
@@ -566,6 +563,10 @@ PEN_SW_NBANDS = 3               ! default = 1
                                 ! The number of bands of penetrating shortwave radiation.
 
 ! === module MOM_tracer_advect ===
+TRACER_ADVECTION_SCHEME = "PPM:H3" ! default = "PLM"
+                                ! The horizontal transport scheme for tracers:
+                                !   PLM    - Piecewise Linear Method
+                                !   PPM:H3 - Piecewise Parabolic Method (Huyhn 3rd order)
 
 ! === module MOM_tracer_hor_diff ===
 DIFFUSE_ML_TO_INTERIOR = True   !   [Boolean] default = False

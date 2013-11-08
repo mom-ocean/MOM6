@@ -24,7 +24,6 @@
             do_ocean = .true.,
             do_flux = .true.,
             atmos_npes = 0, 
-            ocean_npes = 288,
             concurrent = .false.     
             use_lag_fluxes=.false.    
             check_stocks = 0
