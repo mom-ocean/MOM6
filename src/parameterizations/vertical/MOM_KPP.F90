@@ -29,53 +29,62 @@ public :: KPP_applyNonLocalTransport
 type, public :: KPP_CS ; private
 
   ! Parameters
-  real    :: Ri_crit    ! Critical Richardson number (defines OBL depth)
-  real    :: vonKarman  ! von Karman constant
-  real    :: cs         ! Parameter for computing velocity scale function
+  real    :: Ri_crit              ! Critical bulk Richardson number (defines OBL depth)
+  real    :: vonKarman            ! von Karman constant (dimensionless)
+  real    :: cs                   ! Parameter for computing velocity scale function (dimensionless)
   character(len=10) :: interpType ! Type of iterpolation to use in determining OBL
-  logical :: computeEkman ! If True, compute Ekman depth limit
-  logical :: computeMoninObukhov ! If True, compute Monin-Obukhov limit
-  logical :: passiveMode ! If True, makes KPP passive meaning it does NOT alter the diffusivity
-  logical :: applyNonLocalTrans ! If True, apply non-local transport to heat and scalars
-  logical :: NLTworkaround ! If True, re-scale the non-local transport to limit the amplitude
-  logical :: doMatching ! If True, do NOT match diffusivities at the base of the boundary layer.
-  real    :: maxKdInterior ! A value to which interior mixing is clipped to (m2/s)
-  real    :: deepOBLoffset ! If non-zero, is a distance from the bottom that the OBL can not penetrate through (m)
-  logical :: debug      ! If True, calculate checksums and write debugging information
-  logical :: correctSurfLayerAvg ! If true, applies a correction to the averaging of surface layer properties
-  real    :: surfLayerDepth ! A guess at the depth of the surface layer (which should 0.1 of OBLdepth) (m)
+  logical :: computeEkman         ! If True, compute Ekman depth limit
+  logical :: computeMoninObukhov  ! If True, compute Monin-Obukhov limit
+  logical :: passiveMode          ! If True, makes KPP passive meaning it does NOT alter the diffusivity
+  logical :: applyNonLocalTrans   ! If True, apply non-local transport to heat and scalars
+  logical :: NLTworkaround        ! If True, re-scale the non-local transport to limit the amplitude
+  logical :: doMatching           ! If True, do NOT match diffusivities at the base of the boundary layer.
+  real    :: maxKdInterior        ! A value to which interior mixing is clipped to (m2/s)
+  real    :: deepOBLoffset        ! If non-zero, is a distance from the bottom that the OBL can not penetrate through (m)
+  logical :: debug                ! If True, calculate checksums and write debugging information
+  logical :: correctSurfLayerAvg  ! If true, applies a correction to the averaging of surface layer properties
+  real    :: surfLayerDepth       ! A guess at the depth of the surface layer (which should 0.1 of OBLdepth) (m)
+  logical :: NLT_shape_linear     ! If True, will modify the NLT structure function to use a linear function 
+  logical :: NLT_shape_parabolic  ! If True, will modify the NLT structure function to use a monotonic parabolic function 
+  logical :: NLT_shape_cubic_orig ! If True, will use the original cubic NLT structure function 
+  logical :: NLT_shape_cubic      ! If True, will modify the NLT structure function to use a monotonic cubic function 
+  logical :: KPP_zero_diffusivity ! If True, will set diffusivity and viscosity from KPP to zero; for testing purposes. 
 
   ! CVmix parameters
   type(CVmix_kpp_params_type), pointer :: KPP_params => NULL()
 
   ! Daignostic handles and pointers
   type(diag_ctrl), pointer :: diag => NULL()
-  integer :: id_OBLdepth = -1, id_BulkRi = -1, id_Ws = -1, id_N = -1, id_N2 = -1
-  integer :: id_Vt2 = -1, id_BulkUz2 = -1, id_BulkDrho = -1
-  integer :: id_uStar = -1, id_buoyFlux = -1
-  integer :: id_QminusSW = -1, id_netS = -1
-  integer :: id_Kt_KPP = -1, id_Ks_KPP = -1, id_Kv_KPP = -1
-  integer :: id_NLTt = -1, id_NLTs = -1
-  integer :: id_sigma = -1
-  integer :: id_Tsurf = -1, id_Ssurf = -1, id_Usurf = -1, id_Vsurf = -1
-  integer :: id_dSdt = -1, id_dTdt = -1
+  integer :: id_OBLdepth = -1, id_BulkRi   = -1
+  integer :: id_N        = -1, id_N2       = -1
+  integer :: id_Ws       = -1, id_Vt2      = -1
+  integer :: id_BulkUz2  = -1, id_BulkDrho = -1
+  integer :: id_uStar    = -1, id_buoyFlux = -1
+  integer :: id_QminusSW = -1, id_netS     = -1
+  integer :: id_sigma    = -1, id_Kv_KPP   = -1
+  integer :: id_Kt_KPP   = -1, id_Ks_KPP   = -1
+  integer :: id_NLTt     = -1, id_NLTs     = -1
+  integer :: id_Tsurf    = -1, id_Ssurf    = -1
+  integer :: id_Usurf    = -1, id_Vsurf    = -1
+  integer :: id_dSdt     = -1, id_dTdt     = -1
 
 ! Diagnostics arrays
-  real, allocatable, dimension(:,:)   :: OBLdepth ! Depth (positive) of OBL (m)
-  real, allocatable, dimension(:,:,:) :: dRho ! Bulk difference in density (kg/m3)
-  real, allocatable, dimension(:,:,:) :: Uz2 ! Square of bulk difference in resolved velocity (m2/s2)
-  real, allocatable, dimension(:,:,:) :: BulkRi ! Bulk Richardson number for each layer
-  real, allocatable, dimension(:,:,:) :: sigma ! Sigma coordinate (nondim)
-  real, allocatable, dimension(:,:,:) :: Ws ! Turbulent velocity scale for scalars (m/s)
-  real, allocatable, dimension(:,:,:) :: N ! Brunt-Vaisala frequency (1/s)
-  real, allocatable, dimension(:,:,:) :: N2 ! Brunt-Vaisala frequency (1/s2)
-  real, allocatable, dimension(:,:,:) :: Vt2 ! Unresolved squared turbulence velocity for bulk Ri (m2/s2)
-  real, allocatable, dimension(:,:,:) :: Kt_KPP, Ks_KPP ! Temp/scalar diffusivity due to KPP (m2/s)
-  real, allocatable, dimension(:,:,:) :: Kv_KPP ! Viscosity due to KPP (m2/s)
-  real, allocatable, dimension(:,:)   :: Tsurf ! Temperature of surface layer (C)
-  real, allocatable, dimension(:,:)   :: Ssurf ! Salinity of surface layer (ppt)
-  real, allocatable, dimension(:,:)   :: Usurf ! i-component of velocity for surface layer (m/s)
-  real, allocatable, dimension(:,:)   :: Vsurf ! j-component of velocity for surface layer (m/s)
+  real, allocatable, dimension(:,:)   :: OBLdepth  ! Depth (positive) of OBL (m)
+  real, allocatable, dimension(:,:,:) :: dRho      ! Bulk difference in density (kg/m3)
+  real, allocatable, dimension(:,:,:) :: Uz2       ! Square of bulk difference in resolved velocity (m2/s2)
+  real, allocatable, dimension(:,:,:) :: BulkRi    ! Bulk Richardson number for each layer (dimensionless)
+  real, allocatable, dimension(:,:,:) :: sigma     ! Sigma coordinate (dimensionless)
+  real, allocatable, dimension(:,:,:) :: Ws        ! Turbulent velocity scale for scalars (m/s)
+  real, allocatable, dimension(:,:,:) :: N         ! Brunt-Vaisala frequency (1/s)
+  real, allocatable, dimension(:,:,:) :: N2        ! Squared Brunt-Vaisala frequency (1/s2)
+  real, allocatable, dimension(:,:,:) :: Vt2       ! Unresolved squared turbulence velocity for bulk Ri (m2/s2)
+  real, allocatable, dimension(:,:,:) :: Kt_KPP    ! Temp diffusivity from KPP (m2/s)
+  real, allocatable, dimension(:,:,:) :: Ks_KPP    ! Scalar diffusivity from KPP (m2/s)
+  real, allocatable, dimension(:,:,:) :: Kv_KPP    ! Viscosity due to KPP (m2/s)
+  real, allocatable, dimension(:,:)   :: Tsurf     ! Temperature of surface layer (C)
+  real, allocatable, dimension(:,:)   :: Ssurf     ! Salinity of surface layer (ppt)
+  real, allocatable, dimension(:,:)   :: Usurf     ! i-component of velocity for surface layer (m/s)
+  real, allocatable, dimension(:,:)   :: Vsurf     ! j-component of velocity for surface layer (m/s)
 
 end type KPP_CS
 
@@ -120,11 +129,11 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive)
                                                ! the caller knows to not use KPP output
   call get_param(paramFile, mod, 'APPLY_NONLOCAL_TRANSPORT', CS%applyNonLocalTrans,  &
                  'If True, applies the non-local transport to heat and scalars.\n'//  &
-                 'If False, calculates the non-local transport and tendancies but\n'//&
+                 'If False, calculates the non-local transport and tendencies but\n'//&
                  'purely for diagnostic purposes.',                                   &
                  default=.not. CS%passiveMode)
   call get_param(paramFile, mod, 'RI_CRIT', CS%Ri_crit,                       &
-                 'Critical Richardson number used to define depth of the\n'// &
+                 'Critical bulk Richardson number used to define depth of the\n'// &
                  'Oceab Boundary Layer (OBL).',                               &
                  units='nondim', default=0.3)
   call get_param(paramFile, mod, 'VON_KARMAN', CS%vonKarman, &
@@ -166,6 +175,22 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive)
                  'the surface layer properties. If =0, the top model level properties\n'//&
                  'will be used for the surface layer. If CORRECT_SURFACE_LAYER_AVERAGE=True, a\n'// &
                  'subsequent correction is applied.', units='m', default=0.)
+  call get_param(paramFile, mod, 'NLT_SHAPE_CUBIC_ORIG', CS%NLT_shape_cubic_orig, &
+                 'If true, uses original cubic shape function to define the non-local transport.'&
+                 ,default=.False.)
+  call get_param(paramFile, mod, 'NLT_SHAPE_CUBIC', CS%NLT_shape_cubic, &
+                 'If true, uses a monotonic cubic shape function to define the non-local transport.'&
+                 ,default=.False.)
+  call get_param(paramFile, mod, 'NLT_SHAPE_PARABOLIC', CS%NLT_shape_parabolic, &
+                 'If true, uses a monotonic parabolic shape function to define the non-local transport.'&
+                 ,default=.False.)
+  call get_param(paramFile, mod, 'NLT_SHAPE_LINEAR', CS%NLT_shape_linear, &
+                 'If true, uses a monotonic linear shape function to define the non-local transport.'&
+                 ,default=.False.)
+  call get_param(paramFile, mod, 'KPP_ZERO_DIFFUSIVITY', CS%KPP_zero_diffusivity, &
+                 'If true, sets both the diffusivity and viscosity from KPP to zero; for testing.'&
+                 ,default=.False.)
+
   call closeParameterBlock(paramFile)
   call get_param(paramFile, mod, 'DEBUG', CS%debug, default=.False., do_not_log=.True.)
 
@@ -214,13 +239,13 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive)
   CS%id_Kv_KPP = register_diag_field('ocean_model', 'KPP_Kv', diag%axesTi, Time, &
       'Vertical viscosity due to KPP, as calculated by [CVmix] KPP', 'm2/s')
   CS%id_NLTt = register_diag_field('ocean_model', 'KPP_NLtransport_heat', diag%axesTi, Time, &
-      'Non-local transport for heat, as calculated by [CVmix] KPP', 'nondim')
+      'Non-local transport (Cs*G(sigma)) for heat, as calculated by [CVmix] KPP', 'nondim')
   CS%id_NLTs = register_diag_field('ocean_model', 'KPP_NLtransport_salt', diag%axesTi, Time, &
-      'Non-local tranpsort for scalars, as calculated by [CVmix] KPP', 'nondim')
+      'Non-local tranpsort (Cs*G(sigma)) for scalars, as calculated by [CVmix] KPP', 'nondim')
   CS%id_dTdt = register_diag_field('ocean_model', 'KPP_dTdt', diag%axesTL, Time, &
-      'Temperature tendancy due to non-local transport of heat, as calculated by [CVmix] KPP', 'K/s')
+      'Temperature tendency due to non-local transport of heat, as calculated by [CVmix] KPP', 'K/s')
   CS%id_dSdt = register_diag_field('ocean_model', 'KPP_dSdt', diag%axesTL, Time, &
-      'Salinity tendancy due to non-local transport of heat, as calculated by [CVmix] KPP', 'ppt/s')
+      'Salinity tendency due to non-local transport of heat, as calculated by [CVmix] KPP', 'ppt/s')
   CS%id_Tsurf = register_diag_field('ocean_model', 'KPP_Tsurf', diag%axesT1, Time, &
       'Temperature of surface layer (10% of OBL depth) as passed to [CVmix] KPP', 'C')
   CS%id_Ssurf = register_diag_field('ocean_model', 'KPP_Ssurf', diag%axesT1, Time, &
@@ -267,7 +292,7 @@ end function KPP_init
 
 
 subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, Ks, Kv, nonLocalTransHeat, nonLocalTransScalar)
-! Calculates diffusivity and non-local transport for KPP parameterization 
+! Calculates diffusivity and non-local transport according to KPP parameterization 
 
 ! Arguments
   type(KPP_CS),                           pointer       :: CS    ! Control structure
@@ -286,7 +311,8 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
                                                                     ! (out) Vertical diffusivity including KPP (m2/s)
   real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(inout) :: Kv ! (in) Vertical viscosity in interior (m2/s)
                                                                     ! (out) Vertical viscosity including KPP (m2/s)
-  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(inout) :: nonLocalTransHeat, nonLocalTransScalar ! Temp/scalar non-local transport (m/s)
+  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(inout) :: nonLocalTransHeat   ! Temp non-local transport (m/s)
+  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(inout) :: nonLocalTransScalar ! scalar non-local transport (m/s)
 
   ! Local variables
   integer :: i, j, k, km1
@@ -301,7 +327,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
   real, dimension( G%ke )     :: deltaU2                ! square of delta U (shear) in denominator of Bulk Ri (m2/s2)
   real, dimension( G%ke+1, 2) :: Kdiffusivity, Kd_match ! Vertical diffusivity at interfaces (m2/s)
   real, dimension( G%ke+1 )   :: Kviscosity, Kv_match   ! Vertical viscosity at interfaces (m2/s)
-  real, dimension( G%ke+1, 2) :: nonLocalTrans          ! Non-local transport for heat/salt at interfaces (m/s)
+  real, dimension( G%ke+1, 2) :: nonLocalTrans          ! Non-local transport for heat/salt at interfaces (non-dimensional)
   real :: kOBL, OBLdepth_0d, surfFricVel, surfBuoyFlux, Coriolis
   real :: GoRho, pRef, rho1, rhoK, rhoKm1, Uk, Vk, const1, Cv
   real :: zBottomMinusOffset                  ! Height of bottom plus a little bit (m)
@@ -339,13 +365,14 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
   GoRho = G%g_Earth / G%Rho0
   ! const1 is a constant factor in unresolved squared velocity, Vt2 (eq. 23 in LMD94)
   const1 = sqrt( abs(BetaT) / (CS%cs * eps) )/( CS%Ri_crit * (CS%vonKarman**2) )
+  nonLocalTrans(:,:) = 0.0
 
   do j = G%jsc, G%jec
     do i = G%isc, G%iec
       if (G%mask2dT(i,j)==0.) cycle ! Skip calling KPP for land points
 
       ! things that are independent of position within the column
-      Coriolis = 0.25*( (G%CoriolisBu(i,j) + G%CoriolisBu(i-1,j-1)) &
+      Coriolis = 0.25*( (G%CoriolisBu(i,j)   + G%CoriolisBu(i-1,j-1)) &
                        +(G%CoriolisBu(i-1,j) + G%CoriolisBu(i,j-1)) )
       surfFricVel = uStar(i,j)
 
@@ -570,16 +597,16 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
 
       ! Determine what mixing coeff to match at the base of the OBL; recommend match to zeroes.  
       if (.not. CS%doMatching) then
-        Kdiffusivity(:,:) = 0. ! Diffusivties for heat and salt
-        Kviscosity(:)     = 0. ! Viscosity
+        Kdiffusivity(:,:) = 0. ! Diffusivities for heat and salt (m2/s)
+        Kviscosity(:)     = 0. ! Viscosity (m2/s)
       elseif (CS%maxKdInterior>0.) then
-        Kdiffusivity(:,1) = min( CS%maxKdInterior, Kt(i,j,:)  ) ! Diffusivty for heat
-        Kdiffusivity(:,2) = min( CS%maxKdInterior, Ks(i,j,:) )  ! Diffusivity for salt
-        Kviscosity(:)     = min( CS%maxKdInterior, Kv(i,j,:) )  ! Viscosity   
+        Kdiffusivity(:,1) = min( CS%maxKdInterior, Kt(i,j,:)  ) ! Diffusivty for heat (m2/s)
+        Kdiffusivity(:,2) = min( CS%maxKdInterior, Ks(i,j,:) )  ! Diffusivity for salt/passive (m2/s) 
+        Kviscosity(:)     = min( CS%maxKdInterior, Kv(i,j,:) )  ! Viscosity (m2/s)
       else
-        Kdiffusivity(:,1) = Kt(i,j,:) ! Diffusivty for heat
-        Kdiffusivity(:,2) = Ks(i,j,:) ! Diffusivity for salt
-        Kviscosity(:)     = Kv(i,j,:) ! Viscosity  
+        Kdiffusivity(:,1) = Kt(i,j,:) ! Diffusivty for heat (m2/s)
+        Kdiffusivity(:,2) = Ks(i,j,:) ! Diffusivity for salt/passive (m2/s) 
+        Kviscosity(:)     = Kv(i,j,:) ! Viscosity (m2/s)
       endif
 
       Kd_match(:,:) = Kdiffusivity(:,:) ! Record diffusivity passed to KPP for matching
@@ -596,10 +623,55 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
                             surfBuoyFlux, & ! (in) Buoyancy flux at surface (m2/s3)
                             CVmix_kpp_params_user=CS%KPP_params )
 
+
+      ! Over-write CVMix shape function with one of the following choices. 
+      ! Note that nonLocalTrans = Cs * G(sigma) (LMD94 notation), with 
+      ! Cs = 6.32739901508.
+      ! Start do-loop at k=2, since k=1 is ocean surface (sigma=0) 
+      ! and we do not wish to double-count the surface forcing.  
+      ! Only compute nonlocal transport for 0 le sigma le 1. 
+      ! Recommended shape is the parabolic; it gives deeper boundary layer. 
+      if(CS%NLT_shape_cubic .and. surfBuoyFlux < 0.0) then 
+          CS%sigma(i,j,:) = min(1.0,-iFaceHeight/OBLdepth_0d)
+          do k = 2, G%ke
+              nonLocalTrans(k,1)   = 1.0 + (2.0*CS%sigma(i,j,k)-3)*CS%sigma(i,j,k)**2
+              nonLocalTrans(k,2)   = nonLocalTrans(k,1)
+          enddo 
+      endif 
+      if(CS%NLT_shape_parabolic .and. surfBuoyFlux < 0.0) then 
+          CS%sigma(i,j,:) = min(1.0,-iFaceHeight/OBLdepth_0d)
+          do k = 2, G%ke
+              nonLocalTrans(k,1)   = (1.0 - CS%sigma(i,j,k))**2
+              nonLocalTrans(k,2)   = nonLocalTrans(k,1)
+          enddo 
+      endif 
+      if(CS%NLT_shape_linear .and. surfBuoyFlux < 0.0) then 
+          CS%sigma(i,j,:) = min(1.0,-iFaceHeight/OBLdepth_0d)
+          do k = 2, G%ke
+              nonLocalTrans(k,1)   = (1.0 - CS%sigma(i,j,k))
+              nonLocalTrans(k,2)   = nonLocalTrans(k,1)
+          enddo 
+      endif 
+      ! sanity check (should agree with CVMix result using simple matching)
+      if(CS%NLT_shape_cubic_orig .and. surfBuoyFlux < 0.0) then 
+          CS%sigma(i,j,:) = min(1.0,-iFaceHeight/OBLdepth_0d)
+          do k = 2, G%ke
+              nonLocalTrans(k,1)   = 6.32739901508 * CS%sigma(i,j,k)*(1.0 -CS%sigma(i,j,k))**2
+              nonLocalTrans(k,2)   = nonLocalTrans(k,1)
+          enddo 
+      endif 
+
       if (CS%NLTworkaround) call fixNLTamplitude( h(i,j,:), nonLocalTrans(:,1) )
       if (CS%NLTworkaround) call fixNLTamplitude( h(i,j,:), nonLocalTrans(:,2) )
       nonLocalTransHeat(i,j,:)   = nonLocalTrans(:,1) ! correct index ???
       nonLocalTransScalar(i,j,:) = nonLocalTrans(:,2) ! correct index ???
+
+      ! set the KPP diffusivity and viscosity to zero for testing purposes
+      if(CS%KPP_zero_diffusivity) then 
+          Kdiffusivity(:,1) = 0.0
+          Kdiffusivity(:,2) = 0.0
+          Kviscosity(:)     = 0.0
+      endif 
 
       ! recompute wscale for diagnostics, now that we in fact know boundary layer depth 
       if (CS%id_Ws > 0) then 
@@ -626,10 +698,10 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
       if (CS%id_Kt_KPP > 0)   CS%Kt_KPP(i,j,:) = Kdiffusivity(:,1)
       if (CS%id_Ks_KPP > 0)   CS%Ks_KPP(i,j,:) = Kdiffusivity(:,2)
       if (CS%id_Kv_KPP > 0)   CS%Kv_KPP(i,j,:) = Kviscosity(:)
-      if (CS%id_Tsurf > 0)    CS%Tsurf(i,j) = surfTemp
-      if (CS%id_Ssurf > 0)    CS%Ssurf(i,j) = surfSalt
-      if (CS%id_Usurf > 0)    CS%Usurf(i,j) = surfU
-      if (CS%id_Vsurf > 0)    CS%Vsurf(i,j) = surfv
+      if (CS%id_Tsurf > 0)    CS%Tsurf(i,j)    = surfTemp
+      if (CS%id_Ssurf > 0)    CS%Ssurf(i,j)    = surfSalt
+      if (CS%id_Usurf > 0)    CS%Usurf(i,j)    = surfU
+      if (CS%id_Vsurf > 0)    CS%Vsurf(i,j)    = surfv
 
 !if (abs(G%geoLonT(i,j)+80.99621)+abs(G%geoLatT(i,j)-82.64066)<0.5) then
 ! write(0,*) G%geoLonT(i,j), G%geoLatT(i,j), isPointInCell(G,i,j,-80.99621,82.64066)
@@ -710,20 +782,20 @@ end subroutine fixNLTamplitude
 subroutine KPP_applyNonLocalTransport(CS, G, h, nonLocalTrans, surfFlux, dt, scalar, isHeat, isSalt)
 ! Applies the KPP non-local transport of surface fluxes; only available for tracers
 
-  type(KPP_CS),                                 intent(in)    :: CS       ! Control structure
-  type(ocean_grid_type),                        intent(in)    :: G        ! Ocean grid
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),        intent(in)    :: h        ! Layer/level thicknesses (units of H)
+  type(KPP_CS),                                 intent(in)    :: CS            ! Control structure
+  type(ocean_grid_type),                        intent(in)    :: G             ! Ocean grid
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),        intent(in)    :: h             ! Layer/level thicknesses (units of H)
   real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(in)    :: nonLocalTrans ! Non-local transport (non-dimensional)
-  real, dimension(NIMEM_,NJMEM_),               intent(in)    :: surfFlux ! Surface source of scalar (m/s * scalar)
-  real,                                         intent(in)    :: dt       ! Time-step (s)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),        intent(inout) :: scalar   ! Scalar or temperature (scalar units)
-  logical, optional,                            intent(in)    :: isHeat   ! Inidicates scalar is heat for diagnostics
-  logical, optional,                            intent(in)    :: isSalt   ! Inidicates scalar is salt for diagnostics
+  real, dimension(NIMEM_,NJMEM_),               intent(in)    :: surfFlux      ! Surface source of scalar (m/s * scalar)
+  real,                                         intent(in)    :: dt            ! Time-step (s)
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),        intent(inout) :: scalar        ! Scalar or temperature (scalar units)
+  logical, optional,                            intent(in)    :: isHeat        ! Indicates scalar is heat for diagnostics
+  logical, optional,                            intent(in)    :: isSalt        ! Indicates scalar is salt for diagnostics
 
   integer :: i, j, k
   logical :: diagHeat, diagSalt
   logical :: debugColumn
-  real, dimension( SZI_(G), SZJ_(G), SZK_(G) ) :: dSdt ! Tendancy in scalar due to non-local transport (scalar/s)
+  real, dimension( SZI_(G), SZJ_(G), SZK_(G) ) :: dSdt ! Tendency in scalar due to non-local transport (scalar/s)
 
   diagHeat = .False.
   if (present(isHeat)) then
@@ -745,7 +817,7 @@ subroutine KPP_applyNonLocalTransport(CS, G, h, nonLocalTrans, surfFlux, dt, sca
   do k = 1, G%ke
     do j = G%jsc, G%jec
       do i = G%isc, G%iec
-        ! Tendancy due to non-local transport of scalar
+        ! Tendency due to non-local transport of scalar
         dSdt(i,j,k) = ( nonLocalTrans(i,j,k) - nonLocalTrans(i,j,k+1) ) / h(i,j,k) * surfFlux(i,j)
         ! Update the scalar
         if (CS%applyNonLocalTrans) scalar(i,j,k) = scalar(i,j,k) + dt * dSdt(i,j,k)
