@@ -121,6 +121,7 @@ type, public :: vertvisc_CS ; private
                             ! CFL_trunc from zero to CFK_trunc0
   real    :: CFL_truncS     ! The start value of CFL_trunc
   real    :: CFL_truncE     ! The end/target value of CFL_trunc
+  logical :: CFLrampingIsActivated = .false. ! True of the ramping has been initialized
   type(time_type) :: rampStartTime ! The time that the ramping of CFL_trunc starts
 
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NK_INTERFACE_) :: &
@@ -1437,8 +1438,12 @@ subroutine updateCFLtruncationValue(Time, CS, activate)
   ! We use the optional argument to indicate this Time should be recorded as the
   ! beginning of the ramp-up period.
   if (present(activate)) then
-    if (activate) CS%rampStartTime = Time ! Record the current time 
+    if (activate) then
+      CS%rampStartTime = Time ! Record the current time 
+      CS%CFLrampingIsActivated = .true.
+    endif
   endif
+  if (.not.CS%CFLrampingIsActivated) return
   deltaTime = max( 0., time_type_to_real( Time - CS%rampStartTime ) )
   if (deltaTime >= CS%truncRampTime) then
     CS%CFL_trunc = CS%CFL_truncE
