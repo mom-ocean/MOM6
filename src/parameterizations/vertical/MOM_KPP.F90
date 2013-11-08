@@ -25,6 +25,13 @@ implicit none ; private
 public :: KPP_init, KPP_calculate, KPP_end
 public :: KPP_applyNonLocalTransport
 
+! Enumerated constants
+integer, private, parameter :: NLT_SHAPE_CVMIX     = 0 ! Use the CVmix profile
+integer, private, parameter :: NLT_SHAPE_LINEAR    = 1 ! Linear, Cs.G(s) = 1-s
+integer, private, parameter :: NLT_SHAPE_PARABOLIC = 2 ! Parabolic, Cs.G(s) = (1-s)^2
+integer, private, parameter :: NLT_SHAPE_CUBIC     = 3 ! Cubic, G(s) = 
+integer, private, parameter :: NLT_SHAPE_CUBIC_LMD = 4 ! Original shape, Cs.G(s) = 27/4.s.(1-s)^2
+
 ! Control structure for containing KPP parameters/data
 type, public :: KPP_CS ; private
 
@@ -44,10 +51,7 @@ type, public :: KPP_CS ; private
   logical :: debug                ! If True, calculate checksums and write debugging information
   logical :: correctSurfLayerAvg  ! If true, applies a correction to the averaging of surface layer properties
   real    :: surfLayerDepth       ! A guess at the depth of the surface layer (which should 0.1 of OBLdepth) (m)
-  logical :: NLT_shape_linear     ! If True, will modify the NLT structure function to use a linear function 
-  logical :: NLT_shape_parabolic  ! If True, will modify the NLT structure function to use a monotonic parabolic function 
-  logical :: NLT_shape_cubic_orig ! If True, will use the original cubic NLT structure function 
-  logical :: NLT_shape_cubic      ! If True, will modify the NLT structure function to use a monotonic cubic function 
+  integer :: NLT_shape            ! Determines the shape function for nonlocal transport.
   logical :: KPP_zero_diffusivity ! If True, will set diffusivity and viscosity from KPP to zero; for testing purposes. 
 
   ! CVmix parameters
@@ -108,6 +112,7 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive)
 ! Local variables
 #include "version_variable.h"
   character(len=40) :: mod = 'MOM_KPP' ! This module's name.
+  character(len=20) :: string ! A local temporary string
 
   if (associated(CS)) call MOM_error(FATAL, 'MOM_KPP, KPP_init: '// &
            'Control structure has already been initialized')
@@ -175,18 +180,24 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive)
                  'the surface layer properties. If =0, the top model level properties\n'//&
                  'will be used for the surface layer. If CORRECT_SURFACE_LAYER_AVERAGE=True, a\n'// &
                  'subsequent correction is applied.', units='m', default=0.)
-  call get_param(paramFile, mod, 'NLT_SHAPE_CUBIC_ORIG', CS%NLT_shape_cubic_orig, &
-                 'If true, uses original cubic shape function to define the non-local transport.'&
-                 ,default=.False.)
-  call get_param(paramFile, mod, 'NLT_SHAPE_CUBIC', CS%NLT_shape_cubic, &
-                 'If true, uses a monotonic cubic shape function to define the non-local transport.'&
-                 ,default=.False.)
-  call get_param(paramFile, mod, 'NLT_SHAPE_PARABOLIC', CS%NLT_shape_parabolic, &
-                 'If true, uses a monotonic parabolic shape function to define the non-local transport.'&
-                 ,default=.False.)
-  call get_param(paramFile, mod, 'NLT_SHAPE_LINEAR', CS%NLT_shape_linear, &
-                 'If true, uses a monotonic linear shape function to define the non-local transport.'&
-                 ,default=.False.)
+  call get_param(paramFile, mod, 'NLT_SHAPE', string, &
+                 'The shape of the nonlocal transport (or redistribution of surface\n'//&
+                 'forcina. Allowed values are: \n'//&
+                 '\t CVMIX     - Uses the profile from CVmix\n'//&
+                 '\t LINEAR    - A linear profile, 1-sigma\n'//&
+                 '\t PARABOLIC - A paroblic profile, (1-sigma)^2\n'//&
+                 '\t CUBIC     - A cubic profile, (1-sigma)^2(1+2*sigma)\n'//&
+                 '\t CUBIC_LMD - The original KPP profile', &
+                 default='CVMIX')
+  select case ( trim(string) )
+    case ("CVMIX")     ; CS%NLT_shape = NLT_SHAPE_CVMIX
+    case ("LINEAR")    ; CS%NLT_shape = NLT_SHAPE_LINEAR
+    case ("PARABOLIC") ; CS%NLT_shape = NLT_SHAPE_PARABOLIC
+    case ("CUBIC")     ; CS%NLT_shape = NLT_SHAPE_CUBIC
+    case ("CUBIC_LMD") ; CS%NLT_shape = NLT_SHAPE_CUBIC_LMD
+    case default ; call MOM_error(FATAL,"KPP_init: "// &
+                   "Unrecognized NLT_SHAPE option"//trim(string))
+  end select
   call get_param(paramFile, mod, 'KPP_ZERO_DIFFUSIVITY', CS%KPP_zero_diffusivity, &
                  'If true, sets both the diffusivity and viscosity from KPP to zero; for testing.'&
                  ,default=.False.)
@@ -329,7 +340,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
   real, dimension( G%ke+1 )   :: Kviscosity, Kv_match   ! Vertical viscosity at interfaces (m2/s)
   real, dimension( G%ke+1, 2) :: nonLocalTrans          ! Non-local transport for heat/salt at interfaces (non-dimensional)
   real :: kOBL, OBLdepth_0d, surfFricVel, surfBuoyFlux, Coriolis
-  real :: GoRho, pRef, rho1, rhoK, rhoKm1, Uk, Vk, const1, Cv
+  real :: GoRho, pRef, rho1, rhoK, rhoKm1, Uk, Vk, const1, Cv, sigma
   real :: zBottomMinusOffset                  ! Height of bottom plus a little bit (m)
   real, parameter :: eps = 0.1                ! Nondimensional extent of Monin-Obukov surface layer. Used for const1 below.
   real, parameter :: BetaT = -0.2             ! Ratio of entrainment flux to surface buoyancy flux. Used for const1 below.
@@ -629,36 +640,36 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
       ! Cs = 6.32739901508.
       ! Start do-loop at k=2, since k=1 is ocean surface (sigma=0) 
       ! and we do not wish to double-count the surface forcing.  
-      ! Only compute nonlocal transport for 0 le sigma le 1. 
+      ! Only compute nonlocal transport for 0 <= sigma <= 1. 
       ! Recommended shape is the parabolic; it gives deeper boundary layer. 
-      if(CS%NLT_shape_cubic .and. surfBuoyFlux < 0.0) then 
-          CS%sigma(i,j,:) = min(1.0,-iFaceHeight/OBLdepth_0d)
+      if (surfBuoyFlux < 0.0) then
+        if (CS%NLT_shape == NLT_SHAPE_CUBIC) then
           do k = 2, G%ke
-              nonLocalTrans(k,1)   = 1.0 + (2.0*CS%sigma(i,j,k)-3)*CS%sigma(i,j,k)**2
-              nonLocalTrans(k,2)   = nonLocalTrans(k,1)
+            sigma = min(1.0,-iFaceHeight(k)/OBLdepth_0d)
+           !nonLocalTrans(k,1) = 1.0 + (2.0*sigma-3)*sigma**2
+            nonLocalTrans(k,1) = (1.0 - sigma)**2 * (1.0 + 2.0*sigma)
+            nonLocalTrans(k,2) = nonLocalTrans(k,1)
           enddo 
-      endif 
-      if(CS%NLT_shape_parabolic .and. surfBuoyFlux < 0.0) then 
-          CS%sigma(i,j,:) = min(1.0,-iFaceHeight/OBLdepth_0d)
+        elseif (CS%NLT_shape == NLT_SHAPE_PARABOLIC) then
           do k = 2, G%ke
-              nonLocalTrans(k,1)   = (1.0 - CS%sigma(i,j,k))**2
-              nonLocalTrans(k,2)   = nonLocalTrans(k,1)
+            sigma = min(1.0,-iFaceHeight(k)/OBLdepth_0d)
+            nonLocalTrans(k,1) = (1.0 - sigma)**2
+            nonLocalTrans(k,2) = nonLocalTrans(k,1)
           enddo 
-      endif 
-      if(CS%NLT_shape_linear .and. surfBuoyFlux < 0.0) then 
-          CS%sigma(i,j,:) = min(1.0,-iFaceHeight/OBLdepth_0d)
+        elseif (CS%NLT_shape == NLT_SHAPE_LINEAR) then
           do k = 2, G%ke
-              nonLocalTrans(k,1)   = (1.0 - CS%sigma(i,j,k))
-              nonLocalTrans(k,2)   = nonLocalTrans(k,1)
+            sigma = min(1.0,-iFaceHeight(k)/OBLdepth_0d)
+            nonLocalTrans(k,1) = (1.0 - sigma)
+            nonLocalTrans(k,2) = nonLocalTrans(k,1)
           enddo 
-      endif 
-      ! sanity check (should agree with CVMix result using simple matching)
-      if(CS%NLT_shape_cubic_orig .and. surfBuoyFlux < 0.0) then 
-          CS%sigma(i,j,:) = min(1.0,-iFaceHeight/OBLdepth_0d)
+        elseif (CS%NLT_shape == NLT_SHAPE_CUBIC_LMD) then
+          ! Sanity check (should agree with CVMix result using simple matching)
           do k = 2, G%ke
-              nonLocalTrans(k,1)   = 6.32739901508 * CS%sigma(i,j,k)*(1.0 -CS%sigma(i,j,k))**2
-              nonLocalTrans(k,2)   = nonLocalTrans(k,1)
+            sigma = min(1.0,-iFaceHeight(k)/OBLdepth_0d)
+            nonLocalTrans(k,1) = 6.32739901508 * sigma*(1.0 -sigma)**2
+            nonLocalTrans(k,2) = nonLocalTrans(k,1)
           enddo 
+        endif 
       endif 
 
       if (CS%NLTworkaround) call fixNLTamplitude( h(i,j,:), nonLocalTrans(:,1) )
@@ -668,9 +679,9 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
 
       ! set the KPP diffusivity and viscosity to zero for testing purposes
       if(CS%KPP_zero_diffusivity) then 
-          Kdiffusivity(:,1) = 0.0
-          Kdiffusivity(:,2) = 0.0
-          Kviscosity(:)     = 0.0
+         Kdiffusivity(:,1) = 0.0
+         Kdiffusivity(:,2) = 0.0
+         Kviscosity(:)     = 0.0
       endif 
 
       ! recompute wscale for diagnostics, now that we in fact know boundary layer depth 

@@ -1135,10 +1135,10 @@ PASSIVE = False                 !   [Boolean] default = False
                                 ! If True, puts KPP into a passive-diagnostic mode.
 APPLY_NONLOCAL_TRANSPORT = True !   [Boolean] default = True
                                 ! If True, applies the non-local transport to heat and scalars.
-                                ! If False, calculates the non-local transport and tendancies but
+                                ! If False, calculates the non-local transport and tendencies but
                                 ! purely for diagnostic purposes.
 RI_CRIT = 0.3                   !   [nondim] default = 0.3
-                                ! Critical Richardson number used to define depth of the
+                                ! Critical bulk Richardson number used to define depth of the
                                 ! Oceab Boundary Layer (OBL).
 VON_KARMAN = 0.4                !   [nondim] default = 0.4
                                 ! von Karman constant.
@@ -1170,6 +1170,16 @@ FIRST_GUESS_SURFACE_LAYER_DEPTH = 0.0 !   [m] default = 0.0
                                 ! the surface layer properties. If =0, the top model level properties
                                 ! will be used for the surface layer. If CORRECT_SURFACE_LAYER_AVERAGE=True, a
                                 ! subsequent correction is applied.
+NLT_SHAPE = "CVMIX"             ! default = "CVMIX"
+                                ! The shape of the nonlocal transport (or redistribution of surface
+                                ! forcina. Allowed values are:
+                                !    CVMIX     - Uses the profile from CVmix
+                                !    LINEAR    - A linear profile, 1-sigma
+                                !    PARABOLIC - A paroblic profile, (1-sigma)^2
+                                !    CUBIC     - A cubic profile, (1-sigma)^2(1+2*sigma)
+                                !    CUBIC_LMD - The original KPP profile
+KPP_ZERO_DIFFUSIVITY = False    !   [Boolean] default = False
+                                ! If true, sets both the diffusivity and viscosity from KPP to zero; for testing.
 %KPP
 
 ! === module MOM_diffConvection ===
