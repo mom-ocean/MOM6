@@ -181,6 +181,13 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, dt, G, &
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   nz = G%ke ; nkmb = G%nk_rho_varies
 
+  ! If the model is NOT in isopycnal mode then nkmb=0 but we need all of the
+  ! following diagnostics to treat all layers as variable density so we set
+  ! nkmb = nz, on the expectation that loops nkmb+1,nz will not iterate.
+  ! This behavior is ANSI F77 but somce compiler options can force at least
+  ! one iteration which would break the follwoing one-line workaround!
+  if (nkmb==0) nkmb = nz
+
   if (.not.associated(CS)) call MOM_error(FATAL, &
          "calculate_diagnostic_fields: Module must be initialized before it is used.")
 
@@ -843,7 +850,7 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, param_file, diag, CS)
     call register_time_deriv(MIS%h, CS%dh_dt, CS)
   endif
 
-  if (G%nk_rho_varies > 0) then
+  !if (G%nk_rho_varies > 0) then
     CS%id_h_Rlay = register_diag_field('ocean_model', 'h_rho', diag%axesTL, Time, &
         'Layer thicknesses in pure potential density coordinates', thickness_units)
     if (CS%id_h_Rlay>0) call safe_alloc_ptr(CS%h_Rlay,isd,ied,jsd,jed,nz)
@@ -865,7 +872,7 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, param_file, diag, CS)
         'Meridional volume transport due to interface height diffusion in pure &
         &potential density coordinates', flux_units)
     if (CS%id_vhGM_Rlay>0) call safe_alloc_ptr(CS%vhGM_Rlay,isd,ied,JsdB,JedB,nz)
-  endif
+  !endif
 
 ! The next variables are terms in the kinetic energy balance.
 
