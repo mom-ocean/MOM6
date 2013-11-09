@@ -68,7 +68,7 @@
     generate_test_icebergs=.false.,
     speed_limit=0.,
     use_roundoff_fix=.true.,
-    make_calving_reproduce=.false.,
+    make_calving_reproduce=.true.,
  /
 
  &monin_obukhov_nml

@@ -1,13 +1,16 @@
 SPECIFIED_ICE = False           !   [Boolean] default = False
                                 ! If true, the ice is specified and there is no dynamics.
+CGRID_ICE_DYNAMICS = False      !   [Boolean] default = False
+                                ! If true, use a C-grid discretization of the sea-ice
+                                ! dynamics; if false use a B-grid discretization.
+USE_SLAB_ICE = False            !   [Boolean] default = False
+                                ! If true, use the very old slab-style ice.
 RHO_OCEAN = 1030.0              !   [kg m-3] default = 1030.0
                                 ! The nominal density of sea water as used by SIS.
 RHO_ICE = 905.0                 !   [kg m-3] default = 905.0
                                 ! The nominal density of sea ice as used by SIS.
 RHO_SNOW = 330.0                !   [kg m-3] default = 330.0
                                 ! The nominal density of snow as used by SIS.
-USE_SLAB_ICE = False            !   [Boolean] default = False
-                                ! If true, use the very old slab-style ice.
 MOMENTUM_ROUGH_ICE = 1.0E-04    !   [m] default = 1.0E-04
                                 ! The default momentum roughness length scale for the ocean.
 HEAT_ROUGH_ICE = 1.0E-04        !   [m] default = 1.0E-04
