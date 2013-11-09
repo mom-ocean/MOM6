@@ -344,8 +344,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
   real :: zBottomMinusOffset                  ! Height of bottom plus a little bit (m)
   real, parameter :: eps = 0.1                ! Nondimensional extent of Monin-Obukov surface layer. Used for const1 below.
   real, parameter :: BetaT = -0.2             ! Ratio of entrainment flux to surface buoyancy flux. Used for const1 below.
-  real, parameter :: minimumVt2 = 1.e-15      ! A small number added to unresolved velocity Vt2 to avoid divide by zero.
-!  real, parameter :: minimumVt2 = 1.e-11      ! A small number added to unresolved velocity Vt2 to avoid divide by zero.
+  real, parameter :: minimumVt2 = 1.e-11      ! A small number added to unresolved velocity Vt2 to avoid divide by zero.
                                               ! This value should be larger than roundoff for sensible behaviour 
                                               ! with zero vertical stratification and zero resolved velocity.  
                                               ! We compute 1e-11 by the following rough scaling: 
@@ -415,7 +414,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
         ! will be needed for fine vertical resolution or arbitray coordinates.   ???????
         Uk = 0.5 * ( abs( u(i,j,k) - surfU ) + abs( u(i-1,j,k) - surfUm1 ) ) ! delta_k U  w/ C-grid average
         Vk = 0.5 * ( abs( v(i,j,k) - surfV ) + abs( v(i,j-1,k) - surfVm1 ) ) ! delta_k V  w/ C-grid average
-        deltaU2(k) = ( Uk**2 + Vk**2 ) + minimumVt2
+        deltaU2(k) = Uk**2 + Vk**2
         call calculate_density(surfTemp, surfSalt, pRef, rho1, EOS)
         call calculate_density(Temp(i,j,k), Salt(i,j,k), pRef, rhoK, EOS)
         call calculate_density(Temp(i,j,km1), Salt(i,j,km1), pRef, rhoKm1, EOS)
@@ -481,7 +480,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
         ! The calculation is for Vt^2 at level center but uses N from the interface below
         ! (and depth of lower interface) to bias towards higher estimates.  One would
         ! otherwise use d=-cellHeight(k) and a vertical average of N.  ?????
-        Vt2_1d(k) = 0.*minimumVt2 + const1 * Cv * ( -iFaceHeight(k+1) ) * N_1d(k+1) * Ws_1d(k)
+        Vt2_1d(k) = minimumVt2 + const1 * Cv * ( -iFaceHeight(k+1) ) * N_1d(k+1) * Ws_1d(k)
 
       enddo ! k
 
@@ -491,6 +490,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
     !               N_1d(2:G%ke+1),        & ! Buoyancy frequency at centers (1/s) NOTE DISCREPANCY ????
     !               Ws_1d,                 & ! Turbulent velocity scale profile, at centers (m/s)
     !               CVmix_kpp_params_user=CS%KPP_params ) ! KPP parameters
+    ! Vt2_1d(:) = Vt2_1d(:) + minimumVt2
 
       ! Calculate Bulk Richardson number, eq 21 of LMD94
       BulkRi_1d = CVmix_kpp_compute_bulk_Richardson( &
@@ -541,7 +541,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
           ! Recalculate differences with surface layer
           Uk = 0.5 * ( abs( u(i,j,k) - surfU ) + abs( u(i-1,j,k) - surfUm1 ) ) ! delta_k U
           Vk = 0.5 * ( abs( v(i,j,k) - surfV ) + abs( v(i,j-1,k) - surfVm1 ) ) ! delta_k V
-          deltaU2(k) = ( Uk**2 + Vk**2 ) + minimumVt2
+          deltaU2(k) = Uk**2 + Vk**2
           pRef = pRef + G%g_Earth * G%Rho0 * h(i,j,k) * G%H_to_m ! Boussinesq approximation!!!! ?????
           call calculate_density(surfTemp, surfSalt, pRef, rho1, EOS)
           call calculate_density(Temp(i,j,k), Salt(i,j,k), pRef, rhoK, EOS)
