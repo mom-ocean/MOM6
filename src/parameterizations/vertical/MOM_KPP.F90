@@ -213,6 +213,7 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive)
                        interp_type=CS%interpType,          &
                        lEkman=CS%computeEkman,             &
                        lMonOb=CS%computeMoninObukhov,      &
+                       MatchTechnique='SimpleShapes',      &
                        CVmix_kpp_params_user=CS%KPP_params )
 
 ! Register diagnostics
