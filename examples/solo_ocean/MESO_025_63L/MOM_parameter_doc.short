@@ -42,15 +42,15 @@ IO_LAYOUT = 4, 3                ! default = 0
                                 ! The processor layout to be used, or 0,0 to automatically
                                 ! set the io_layout to be the same as the layout.
 
-! === Parameters of module MOM_grid ===
+! === module MOM_grid ===
 ! Parameters providing information about the vertical grid.
 NK = 63                         !   [nondim]
                                 ! The number of model layers.
 
-! === Parameters of module MOM_verticalGrid ===
+! === module MOM_verticalGrid ===
 ! Parameters providing information about the vertical grid.
 
-! === Parameters of module MOM ===
+! === module MOM ===
 THICKNESSDIFFUSE_FIRST = True   !   [Boolean] default = False
                                 ! If true, do thickness diffusion before dynamics.
                                 ! This is only used if THICKNESSDIFFUSE is true.
@@ -94,9 +94,9 @@ SAVE_INITIAL_CONDS = True       !   [Boolean] default = False
                                 ! If true, write the initial conditions to a file given
                                 ! by IC_OUTPUT_FILE.
 
-! === Parameters of module MOM_tracer_registry ===
+! === module MOM_tracer_registry ===
 
-! === Parameters of module MOM_tracer_flow_control ===
+! === module MOM_tracer_flow_control ===
 INPUTDIR = "INPUT"              ! default = "."
                                 ! The directory in which input files are found.
 COORD_CONFIG = "file"           !
@@ -116,7 +116,7 @@ COORD_CONFIG = "file"           !
 COORD_FILE = "MESO_025_63L_IC.nc" !
                                 ! The file from which the coordinate densities are read.
 
-! === Parameters of module MOM_grid_init ===
+! === module MOM_grid_init ===
 GRID_CONFIG = "mercator"        !
                                 ! A character string that determines the method for
                                 ! defining the horizontal grid.  Current options are:
@@ -164,7 +164,10 @@ TOPO_VARNAME = "depth_t"        ! default = "depth"
 MAXIMUM_DEPTH = 5500.0          !   [m]
                                 ! The maximum depth of the ocean.
 MINIMUM_DEPTH = 15.0            !   [m] default = 0.0
-                                ! The minimum depth of the ocean.
+                                ! If MASKING_DEPTH is unspecified, then anything shallower than
+                                ! MINIMUM_DEPTH is assumed to be land and all fluxes are masked out.
+                                ! If MASKING_DEPTH is specified, then all depths shallower than
+                                ! MINIMUM_DEPTH but depper than MASKING_DEPTH are rounded to MINIMUM_DEPTH.
 ALWAYS_WRITE_GEOM = False       !   [Boolean] default = True
                                 ! If true, write the geometry and vertical grid files
                                 ! every time the model is run.  Otherwise, only write
@@ -234,13 +237,13 @@ SPONGE_STATE_FILE = "MESO_025_63L_IC.nc" ! default = "MESO_Sponge_025mNG.nc"
 Total sponge columns = 19167    !
                                 ! The total number of columns where sponges are applied.
 
-! === Parameters of module MOM_MEKE ===
+! === module MOM_MEKE ===
 MEKE_KHTH_FAC = 0.0             !   [nondim] default = 1.0
                                 ! A factor that maps MEKE%Kh to KhTh.
 MEKE_KHTR_FAC = 0.0             !   [nondim] default = 1.0
                                 ! A factor that maps MEKE%Kh to KhTr.
 
-! === Parameters of module MOM_lateral_mixing_coeffs ===
+! === module MOM_lateral_mixing_coeffs ===
 ETA_TOLERANCE = 1.0E-06         !   [m] default = 3.15E-09
                                 ! The tolerance for the differences between the
                                 ! barotropic and baroclinic estimates of the sea surface
@@ -261,7 +264,7 @@ BOUND_CORIOLIS = True           !   [Boolean] default = False
                                 ! have no effect on the SADOURNY Coriolis scheme if it
                                 ! were possible to use centered difference thickness fluxes.
 
-! === Parameters of module MOM_hor_visc ===
+! === module MOM_hor_visc ===
 AH_VEL_SCALE = 0.025            !   [m s-1] default = 0.0
                                 ! The velocity scale which is multiplied by the cube of
                                 ! the grid spacing to calculate the Laplacian viscosity.
@@ -274,7 +277,7 @@ SMAG_BI_CONST = 0.06            !   [nondim] default = 0.0
                                 ! The nondimensional biharmonic Smagorinsky constant,
                                 ! typically 0.015 - 0.06.
 
-! === Parameters of module MOM_vert_friction ===
+! === module MOM_vert_friction ===
 DYNAMIC_VISCOUS_ML = True       !   [Boolean] default = False
                                 ! If true, use a bulk Richardson number criterion to
                                 ! determine the mixed layer thickness for viscosity.
@@ -307,9 +310,9 @@ CFL_TRUNCATE = 0.45             !   [nondim] default = 0.5
                                 ! The value of the CFL number that will cause velocity
                                 ! components to be truncated; instability can occur past 0.5.
 
-! === Parameters of module MOM_PointAccel ===
+! === module MOM_PointAccel ===
 
-! === Parameters of module MOM_set_visc ===
+! === module MOM_set_visc ===
 USE_JACKSON_PARAM = True        !   [Boolean] default = False
                                 ! If true, use the Jackson-Hallberg-Legg (JPO 2008)
                                 ! shear mixing parameterization.
@@ -329,7 +332,7 @@ BBL_THICK_MIN = 0.1             !   [m] default = 0.0
                                 ! Kv / (cdrag * drag_bg_vel) to give Kv as the minimum
                                 ! near-bottom viscosity.
 
-! === Parameters of module MOM_barotropic ===
+! === module MOM_barotropic ===
 BOUND_BT_CORRECTION = True      !   [Boolean] default = False
                                 ! If true, the corrective pseudo mass-fluxes into the
                                 ! barotropic solver are limited to values that require
@@ -374,9 +377,9 @@ DTBT = -0.9                     !   [s or nondim] default = -0.98
                                 ! The value of DTBT that will actually be used is an
                                 ! integer fraction of DT, rounding down.
 
-! === Parameters of module MOM_thickness_diffuse ===
+! === module MOM_thickness_diffuse ===
 
-! === Parameters of module MOM_mixed_layer_restrat ===
+! === module MOM_mixed_layer_restrat ===
 FOX_KEMPER_ML_RESTRAT_COEF = 5.0 !   [nondim] default = 0.0
                                 ! A nondimensional coefficient that is proportional to
                                 ! the ratio of the deformation radius to the dominant
@@ -394,7 +397,7 @@ NK_ZSPACE (from file) = -1      !   [nondim]
                                 ! The number of depth-space levels.  This is determined
                                 ! from the size of the variable zw in the output grid file.
 
-! === Parameters of module MOM_diabatic_driver ===
+! === module MOM_diabatic_driver ===
 ! The following parameters are used for diabatic processes.
 RECLAIM_FRAZIL = False          !   [Boolean] default = True
                                 ! If true, try to use any frazil heat deficit to cool any
@@ -434,19 +437,31 @@ DISSIPATION_N1 = 6.0E-04        !   [J m-3] default = 0.0
                                 ! set a minimum dissipation by which to determine a lower
                                 ! bound of Kd (a floor): B in eps_min = A + B*N
 
-! === Parameters of module MOM_entrain_diffusive ===
+! === module MOM_KPP ===
+! This is the MOM wrapper to CVmix:KPP
+! See http://code.google.com/p/cvmix/
+KPP%
+%KPP
+
+! === module MOM_diffConvection ===
+! This module implements enhanced diffusivity as a
+! function of static stability, N^2.
+CONVECTION%
+%CONVECTION
+
+! === module MOM_entrain_diffusive ===
 MAX_ENT_IT = 20                 ! default = 5
                                 ! The maximum number of iterations that may be used to
                                 ! calculate the interior diapycnal entrainment.
 TOLERANCE_ENT = 1.0E-05         !   [m] default = 1.095445115010332E-05
                                 ! The tolerance with which to solve for entrainment values.
 
-! === Parameters of module MOM_kappa_shear ===
+! === module MOM_kappa_shear ===
 MAX_RINO_IT = 25                !   [nondim] default = 50
                                 ! The maximum number of iterations that may be used to
                                 ! estimate the Richardson number driven mixing.
 
-! === Parameters of module MOM_mixed_layer ===
+! === module MOM_mixed_layer ===
 BULK_RI_ML = 0.05               !   [nondim]
                                 ! The efficiency with which mean kinetic energy released
                                 ! by mechanically forced entrainment of the mixed layer
@@ -470,9 +485,9 @@ ML_PRESORT_NK_CONV_ADJ = 4      !   [nondim] default = 0
                                 ! Convectively mix the first ML_PRESORT_NK_CONV_ADJ
                                 ! layers before sorting when ML_RESORT is true.
 
-! === Parameters of module MOM_regularize_layers ===
+! === module MOM_regularize_layers ===
 
-! === Parameters of module MOM_opacity ===
+! === module MOM_opacity ===
 PEN_SW_SCALE = 15.0             !   [m] default = 0.0
                                 ! The vertical absorption e-folding depth of the
                                 ! penetrating shortwave radiation.
@@ -480,11 +495,11 @@ PEN_SW_FRAC = 0.42              !   [nondim] default = 0.0
                                 ! The fraction of the shortwave radiation that penetrates
                                 ! below the surface.
 
-! === Parameters of module MOM_tracer_advect ===
+! === module MOM_tracer_advect ===
 
-! === Parameters of module MOM_tracer_hor_diff ===
+! === module MOM_tracer_hor_diff ===
 
-! === Parameters of module MOM_surface_forcing ===
+! === module MOM_surface_forcing ===
 VARIABLE_WINDS = False          !   [Boolean] default = True
                                 ! If true, the winds vary in time after the initialization.
 BUOY_CONFIG = "MESO"            !
@@ -512,7 +527,7 @@ FLUXCONST = 0.1667              !   [m day-1]
                                 ! to the relative surface anomalies (akin to a piston
                                 ! velocity).  Note the non-MKS units.
 
-! === Parameters of module MESO_surface_forcing ===
+! === module MESO_surface_forcing ===
 SSTRESTORE_FILE = "MESO_SfcTS_025.nc" !
                                 ! The file with the SST toward which to restore in
                                 ! variable TEMP.
@@ -529,7 +544,7 @@ SHORTWAVE_FILE = "MESO_Solar_025.nc" !
                                 ! The file with the shortwave heat flux in
                                 ! variable NET_SOL.
 
-! === Parameters of module MOM_sum_output ===
+! === module MOM_sum_output ===
 MAXTRUNC = 5000                 !   [truncations save_interval-1] default = 0
                                 ! The run will be stopped, and the day set to a very
                                 ! large value if the velocity is truncated more than
@@ -547,7 +562,7 @@ MAXCPU = 8.64E+04               !   [wall-clock seconds] default = -1.0
                                 ! seconds, so the actual CPU time used is larger by a
                                 ! factor of the number of processors used.
 
-! === Parameters of module MOM_main (MOM_driver) ===
+! === module MOM_main (MOM_driver) ===
 DT_FORCING = 3600.0             !   [s] default = 600.0
                                 ! The time step for changing forcing, coupling with other
                                 ! components, or potentially writing certain diagnostics.
