@@ -29,7 +29,7 @@ module sloshing_initialization
 
 use MOM_domains, only : sum_across_PEs
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, is_root_pe
-use MOM_file_parser, only : read_param, log_param, log_version, param_file_type
+use MOM_file_parser, only : get_param, param_file_type
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : close_file, create_file, fieldtype, file_exists
@@ -50,6 +50,8 @@ implicit none ; private
 public sloshing_initialize_topography
 public sloshing_initialize_thickness
 public sloshing_initialize_temperature_salinity 
+
+character(len=40)  :: mod = "sloshing_initialization" ! This module's name.
 
 ! -----------------------------------------------------------------------------
 ! This module contains the following routines
@@ -223,13 +225,13 @@ subroutine sloshing_initialize_temperature_salinity ( T, S, h, G, param_file, &
                                                             ! name.
   
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-  call read_param(param_file,"S_REF",S_ref,.true.)
-  call read_param(param_file,"T_REF",T_ref,.true.)
+  call get_param(param_file,mod,"S_REF",S_ref,'Reference value for salinity',units='1e-3',fail_if_missing=.true.)
+  call get_param(param_file,mod,"T_REF",T_ref,'Refernce value for temperature',units='C',fail_if_missing=.true.)
   
   ! The default is to assume an increase by 2 for the salinity and a uniform
   ! temperature
-  S_range = 2.0; call read_param(param_file,"S_RANGE",S_range,.false.)
-  T_range = 0.0; call read_param(param_file,"T_RANGE",T_range,.false.)
+  call get_param(param_file,mod,"S_RANGE",S_range,'Initial salinity range.',units='1e-3',default=2.0)
+  call get_param(param_file,mod,"T_RANGE",T_range,'Initial temperature range',units='C',default=0.0)
 
   ! Prescribe salinity
   !delta_S = S_range / ( G%ke - 1.0 )
@@ -258,11 +260,6 @@ subroutine sloshing_initialize_temperature_salinity ( T, S, h, G, param_file, &
   end do  
   kdelta = 2
   T(:,:,G%ke/2 - (kdelta-1):G%ke/2 + kdelta) = 1.0
-  
-  call log_param(param_file, mod, "S_REF", S_ref)
-  call log_param(param_file, mod, "T_REF", T_ref)
-  call log_param(param_file, mod, "S_RANGE", S_range)
-  call log_param(param_file, mod, "T_RANGE", T_range)
   
 end subroutine sloshing_initialize_temperature_salinity
 

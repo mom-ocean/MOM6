@@ -431,6 +431,14 @@ TS_CONFIG = "sloshing"          !
                                 !     sloshing - TBD AJA.
                                 !     seamount - TBD AJA.
                                 !     USER - call a user modified routine.
+S_REF = 34.0                    !   [1e-3]
+                                ! Reference value for salinity
+T_REF = 0.0                     !   [C]
+                                ! Refernce value for temperature
+S_RANGE = 2.0                   !   [1e-3] default = 2.0
+                                ! Initial salinity range.
+T_RANGE = 0.0                   !   [C] default = 0.0
+                                ! Initial temperature range
 VELOCITY_CONFIG = "zero"        ! default = "zero"
                                 ! A string that determines how the initial velocities
                                 ! are specified for a new run:

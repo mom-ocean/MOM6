@@ -200,6 +200,10 @@ TS_CONFIG = "sloshing"          !
                                 !     sloshing - TBD AJA.
                                 !     seamount - TBD AJA.
                                 !     USER - call a user modified routine.
+S_REF = 34.0                    !   [1e-3]
+                                ! Reference value for salinity
+T_REF = 0.0                     !   [C]
+                                ! Refernce value for temperature
 REGRIDDING_COORDINATE_MODE = "RHO" ! default = "LAYER"
                                 ! Coordinate mode for vertical regridding.
                                 ! Choose among the following possibilities:
