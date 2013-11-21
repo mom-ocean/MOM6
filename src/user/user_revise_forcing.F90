@@ -28,7 +28,7 @@ module user_revise_forcing
 !********+*********+*********+*********+*********+*********+*********+**
 use MOM_domains, only : pass_var, pass_vector, AGRID
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe
-use MOM_file_parser, only : read_param, log_param, log_version, param_file_type
+use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : file_exists, read_data
