@@ -415,6 +415,8 @@ THICKNESS_CONFIG = "DOME2D"     !
                                 !     sloshing - TBD AJA.
                                 !     seamount - TBD AJA.
                                 !     USER - call a user modified routine.
+MIN_THICKNESS = 0.001           !   [m] default = 0.001
+                                ! Minimum layer thickness
 TS_CONFIG = "DOME2D"            !
                                 ! A string that determines how the initial tempertures
                                 ! and salinities are specified for a new run:
@@ -431,6 +433,14 @@ TS_CONFIG = "DOME2D"            !
                                 !     sloshing - TBD AJA.
                                 !     seamount - TBD AJA.
                                 !     USER - call a user modified routine.
+S_REF = 34.0                    !   [1e-3]
+                                ! Reference salinity
+T_REF = 0.0                     !   [C]
+                                ! Refernce temperature
+S_RANGE = 1.0                   !   [1e-3] default = 2.0
+                                ! Initial salinity range
+T_RANGE = 0.0                   !   [1e-3] default = 0.0
+                                ! Initial temperature range
 VELOCITY_CONFIG = "zero"        ! default = "zero"
                                 ! A string that determines how the initial velocities
                                 ! are specified for a new run:

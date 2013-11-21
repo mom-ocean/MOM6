@@ -206,6 +206,12 @@ TS_CONFIG = "DOME2D"            !
                                 !     sloshing - TBD AJA.
                                 !     seamount - TBD AJA.
                                 !     USER - call a user modified routine.
+S_REF = 34.0                    !   [1e-3]
+                                ! Reference salinity
+T_REF = 0.0                     !   [C]
+                                ! Refernce temperature
+S_RANGE = 1.0                   !   [1e-3] default = 2.0
+                                ! Initial salinity range
 
 ! === module MOM_MEKE ===
 CDRAG = 0.0                     !   [nondim] default = 0.003
