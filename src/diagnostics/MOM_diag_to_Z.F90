@@ -805,9 +805,9 @@ subroutine MOM_diag_to_Z_init(Time, G, param_file, diag, CS)
     in_dir = slasher(in_dir)  
     call get_Z_depths(trim(in_dir)//trim(zgrid_file), "zw", CS%Z_int, "zt", &
                       z_axis, zint_axis, CS%nk_zspace)
-    call log_param(param_file, mod, "INPUTDIR/Z_OUTPUT_GRID_FILE", &
+    call log_param(param_file, mod, "!INPUTDIR/Z_OUTPUT_GRID_FILE", &
                    trim(in_dir)//trim(zgrid_file))
-    call log_param(param_file, mod, "NK_ZSPACE (from file)", CS%nk_zspace, &
+    call log_param(param_file, mod, "!NK_ZSPACE (from file)", CS%nk_zspace, &
                  "The number of depth-space levels.  This is determined \n"//&
                  "from the size of the variable zw in the output grid file.", &
                  units="nondim")

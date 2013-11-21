@@ -782,7 +782,7 @@ Z_OUTPUT_GRID_FILE = "../zgrid.nc" ! default = ""
                                 ! The file that specifies the vertical grid for
                                 ! depth-space diagnostics, or blank to disable
                                 ! depth-space output.
-NK_ZSPACE (from file) = 50      !   [nondim]
+!NK_ZSPACE (from file) = 50     !   [nondim]
                                 ! The number of depth-space levels.  This is determined
                                 ! from the size of the variable zw in the output grid file.
 
