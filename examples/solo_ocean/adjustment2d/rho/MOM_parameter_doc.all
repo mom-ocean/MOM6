@@ -412,11 +412,13 @@ THICKNESS_CONFIG = "adjustment2d" !
                                 !     sloshing - TBD AJA.
                                 !     seamount - TBD AJA.
                                 !     USER - call a user modified routine.
+MIN_THICKNESS = 1.0E-04         !   [m] default = 0.001
+                                ! Minimum layer thickness
 ADJUSTMENT_WIDTH = 0.01         !   [same as x,y]
                                 ! Width of frontal zone
-DELTA_S_STRAT = 0.0             !   [PSU]
+DELTA_S_STRAT = 0.0             !   [1e-3]
                                 ! Top-to-bottom salinity difference of stratification
-ADJUSTMENT_DELTAS = 5.0         !   [PSU]
+ADJUSTMENT_DELTAS = 5.0         !   [1e-3]
                                 ! Salinity difference across front
 FRONT_WAVE_AMP = 0.0            !   [same as x,y] default = 0.0
                                 ! Amplitude of trans-frontal wave perturbation
@@ -440,6 +442,14 @@ TS_CONFIG = "adjustment2d"      !
                                 !     sloshing - TBD AJA.
                                 !     seamount - TBD AJA.
                                 !     USER - call a user modified routine.
+S_REF = 0.0                     !   [1e-3]
+                                ! Reference salinity
+T_REF = 0.0                     !   [C]
+                                ! Reference temperature
+S_RANGE = 5.0                   !   [1e-3] default = 2.0
+                                ! Initial salinity range
+T_RANGE = 0.0                   !   [C] default = 0.0
+                                ! Initial temperature range
 VELOCITY_CONFIG = "zero"        ! default = "zero"
                                 ! A string that determines how the initial velocities
                                 ! are specified for a new run:
@@ -521,9 +531,6 @@ ALE_COORDINATE_CONFIG = "UNIFORM" ! default = "UNIFORM"
                                 ! in z-coordinate mode, the parameter is a list of level
                                 ! thicknesses (in m). In sigma-coordinate mode, the list
                                 ! is of non-dimensional fractions of the water column.
-MIN_THICKNESS = 1.0E-04         !   [m] default = 0.001
-                                ! When regridding, this is the minimum layer
-                                ! thickness allowed.
 BOUNDARY_EXTRAPOLATION = True   !   [Boolean] default = False
                                 ! When defined, a proper high-order reconstruction
                                 ! scheme is used within boundary cells rather
