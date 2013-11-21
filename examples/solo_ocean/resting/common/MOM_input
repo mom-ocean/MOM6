@@ -1,626 +1,434 @@
-!********+*********+*********+*********+*********+*********+*********+*
-!*   This file determines the adjustable run-time parameters for the  *
-!* Modular Ocean Model (MOM), versions 6 and later.  Where            *
-!* appropriate, MKS units are used.                                   *
-!********+*********+*********+*********+*********+*********+*********+*
-! >>> resting test case <<<
+REENTRANT_X = False             !   [Boolean] default = True
+                                ! If true, the domain is zonally reentrant.
+!SYMMETRIC_MEMORY_ = False      !   [Boolean]
+                                ! If defined, the velocity point data domain includes
+                                ! every face of the thickness points. In other words,
+                                ! some arrays are larger than others, depending on where
+                                ! they are on the staggered grid.  Also, the starting
+                                ! index of the velocity-point arrays is usually 0, not 1.
+                                ! This can only be set at compile time.
+!STATIC_MEMORY_ = False         !   [Boolean]
+                                ! If STATIC_MEMORY_ is defined, the principle variables
+                                ! will have sizes that are statically determined at
+                                ! compile time.  Otherwise the sizes are not determined
+                                ! until run time. The STATIC option is substantially
+                                ! faster, but does not allow the PE count to be changed
+                                ! at run time.  This can only be set at compile time.
+NIHALO = 3                      ! default = 2
+                                ! The number of halo points on each side in the
+                                ! x-direction.  With STATIC_MEMORY_ this is set as NIHALO_
+                                ! in MOM_memory.h at compile time; without STATIC_MEMORY_
+                                ! the default is NIHALO_ in MOM_memory.h (if defined) or 2.
+NJHALO = 3                      ! default = 2
+                                ! The number of halo points on each side in the
+                                ! y-direction.  With STATIC_MEMORY_ this is set as NJHALO_
+                                ! in MOM_memory.h at compile time; without STATIC_MEMORY_
+                                ! the default is NJHALO_ in MOM_memory.h (if defined) or 2.
+NIGLOBAL = 20                   !
+                                ! The total number of thickness grid points in the
+                                ! x-direction in the physical domain. With STATIC_MEMORY_
+                                ! this is set in MOM_memory.h at compile time.
+NJGLOBAL = 2                    !
+                                ! The total number of thickness grid points in the
+                                ! y-direction in the physical domain. With STATIC_MEMORY_
+                                ! this is set in MOM_memory.h at compile time.
+!NIPROC = 2                     !
+                                ! The number of processors in the x-direction. With
+                                ! STATIC_MEMORY_ this is set in MOM_memory.h at compile time.
+!NJPROC = 1                     !
+                                ! The number of processors in the x-direction. With
+                                ! STATIC_MEMORY_ this is set in MOM_memory.h at compile time.
+!LAYOUT = 2, 1                  !
+                                ! The processor layout that was acutally used.
+IO_LAYOUT = 1, 1                ! default = 0
+                                ! The processor layout to be used, or 0,0 to automatically
+                                ! set the io_layout to be the same as the layout.
 
-!  Specify properties of the physical domain.
-#define OMEGA 7.2921e-5        !    The rotation rate of the earth in s-1 (std=7.2921e-5).
-#define ROTATION "betaplane"   !    Rotation approximation (2omegasinlat,
-                               !  betaplane or USER).
-#define  F_0 0.0e-4            !    Refence Coriolis value for betaplane
-                               !  option in s-1.
-#define  BETA 0.0e-11          !    df/dy term for betaplane option in m-1 s-1.
-                               !  Set to 0. for f-plane.
-#define RAD_EARTH 6.378e6      !    The radius of the earth in m.
-#define G_EARTH 9.80           !    G_EARTH is the Earth's gravitational
-                               !  acceleration, in m s-2.
-#define GRID_CONFIG "cartesian"!    Method for defining horizontal grid
-                               !  = file|cartesian|spherical|mercator
-                               !  file - read grid from fle "GRID_FILE"
-                               !  cartesian - a Cartesian grid
-                               !  spherical - a spherical grid
-                               !  mercator  - a mercator grid
-#define TOPO_CONFIG "flat"     !    Method for defining topography
-                               !  file - read topographic information from file
-                               !  (TOPO_FILE).
-                               !  flat - flat bottom set to MAXIMUM_DEPTH.
-                               !  bowl - bowl like basin using MAXIMUM_DEPTH and
-                               !  MINIMUM_DEPTH.
-                               !  spoon - similar to bowl except that southern
-                               !  face of the "bowl" is open.
-                               !  DOME - sill-overflow test case basin.
-                               !  USER - user defined
-#define MAXIMUM_DEPTH 1000.0   !    The maximum depth of the ocean in m.
-#define MINIMUM_DEPTH 1.0      !    The minimum ocean depth, in m. Anything
-                               !  shallower than this depth is assumed to be on
-                               !  land, and all fluxes are masked out.
-#define COORD_CONFIG "linear"  !  How layers are to be defined:
-                               !  file - read coordinate information from file
-                               !  (COORD_FILE).
-                               !  ts_ref - use reference temperature
-                               !  and salinity (T_REF and S_REF) to determine
-                               !  surface denisty and GINT calculate internal
-                               !  densities.
-                               !  gprime - use reference density (RHO_0) for
-                               !  surface denisty and GINT calculate internal
-                               !  densities.
-                               !  ts_profile - use profiles of temperature
-                               !  and salinity (read from COORD_FILE) to determine
-                               !  surface denisty and internal densities.
-                               !  layer_ref - linear distribution of layer
-                               !  target densities.
-                               !  linear - linear distribution with respect to
-                               !  layer number (LIGHTEST_DENSITY must be defined and 
-                               !  DENSITY_RANGE may be defined to specify a range,
-                               !  defaulted to 2 if not defined)
-                               !  USER - user defined routine
-#define LIGHTEST_DENSITY 1034.0!    The surface layer's target density (must be 
-                               ! defined when COORD_CONFIG is set to 'layer_ref' or
-                               ! 'linear').
-#define DENSITY_RANGE 2.0      ! When defined, this specifies the density range
-                               ! when COORD_CONFIF is set to 'linear'
-#define GFS 0.98               !    The reduced gravity at the free
-                               !  surface, in m s-2.
-#define GINT 9.8e-3            !    The nominal reduced gravity of the internal
-                               !  interfaces for idealized models, in m s-2.
-#undef  TRIPOLAR_N             !    Use tripolar connectivity at the northern
-                               !  edge of the domain.  With TRIPOLAR_N, NIGLOBAL
-                               !  must be even.
-#define THICKNESS_CONFIG "uniform"!  Method for defining initial layer thicknesses
-                               !  file - read thickness information from file
-                               !  (THICKNESS_FILE).
-                               !  uniform - thickness is distributed uniformally
-                               !  and equally between layers.
-                               !  search - thickness determined by search
-                               !  through initial temperature and salinity space
-                               !  of a fixed coordinate data set (not yet
-                               !  implemented)
-                               !  sloshing - cosine displacement of all
-                               !  interfaces in the zonal direction across
-                               !  the entire domain.
-                               !  USER - user defined
-#undef  ADJUST_THICKNESS       !    All mass below the bottom removed if the
-                               !  topography is shallower than the input file
-                               !  would indicate.
-#define VELOCITY_CONFIG "zero" !    Method for defining initial layer velocities
-                               !  file - read velocity information from file.
-                               !  zero - zero velocities everywhere.
-                               !  USER - user defined.
+! === module MOM_grid ===
+! Parameters providing information about the vertical grid.
+NK = 9                          !   [nondim]
+                                ! The number of model layers.
 
-!  Specify the numerical domain.
-#define NIGLOBAL 20            !    NIGLOBAL and NJGLOBAL are the number of thickness
-#define NJGLOBAL 2             !  grid points in the zonal and meridional
-                               !  directions of the physical domain.
-#define NK 9                   !    The number of layers.
-#define NIHALO 3               !    NIHALO and NJHALO are the number of halo
-#define NJHALO 3               !  points on each side in the x- and y-directions.
-                               !  If static memory allocation is used, these
-                               !  must match the values of X1 and Y1 in GOLD_memory.h
-NIPROC_IO = 1                  !    The number of processors used for I/O in the
-                               !  x-direction, or 0 to equal NIPROC.  NIPROC_IO
-NJPROC_IO = 1                  !    The number of processors used for I/O in the
-                               !  y-direction, or 0 to equal NJPROC.  NJPROC_IO
-#define ANGSTROM 1.0e-10                               
+! === module MOM_verticalGrid ===
+! Parameters providing information about the vertical grid.
 
-! The following parameters apply to the regridding/remapping schemes
-#define REMAPPING_SCHEME "PLM"       !   This sets the remapping scheme to use to
-                               ! remap all variables between successive grids.
-                               ! It can be one of the following schemes (must be
-                               ! an integer !):
-                               ! 0: PCM         (1st-order accurate)
-                               ! 1: PLM         (2nd-order accurate)
-                               ! 2: PPM_H4         (3rd-order accurate)
-                               ! 3: PPM_IH4     (3rd-order accurate) 
-                               ! 4: PQM_IH4IH3     (4th-order accurate)
-                               ! 5: PQM_IH6IH5     (5th-order accurate)
-                               ! Default is set to 1 (PLM).
-#define INTERPOLATION_SCHEME "PLM" !   This sets the interpolation scheme to use to
-                               ! determine the new grid. These parameters are
-                               ! only relevant when REGRIDDING_SCHEME is set to
-                               ! 1. Otherwise, it is not used.
-                               ! It can be one of the following schemes (must be
-                               ! an integer !):
-                               ! 0: P1M_H2         (2nd-order accurate)
-                               ! 1: P1M_H4         (2nd-order accurate)
-                               ! 2: P1M_IH4     (2nd-order accurate)
-                               ! 3: PLM         (2nd-order accurate)
-                               ! 4: PPM_H4        (3rd-order accurate)
-                               ! 5: PPM_IH4        (3rd-order accurate)
-                               ! 6: P3M_IH4IH3     (4th-order accurate)
-                               ! 7: P3M_IH6IH5     (4th-order accurate)
-                               ! 8: PQM_IH4IH3    (4th-order accurate)
-                               ! 9: PQM_IH6IH5    (5th-order accurate)
-                               ! Default is set to 0 (P1M_H2).
+! === module MOM ===
+BULKMIXEDLAYER = False          !   [Boolean] default = True
+                                ! If true, use a Kraus-Turner-like bulk mixed layer
+                                ! with transitional buffer layers.  Layers 1 through
+                                ! NKML+NKBL have variable densities. There must be at
+                                ! least NKML+NKBL+1 layers if BULKMIXEDLAYER is true.
+                                ! The default is the same setting as ENABLE_THERMODYNAMICS.
+DT = 1200.0                     !   [s]
+                                ! The (baroclinic) dynamics time step.  The time-step that
+                                ! is actually used will be an integer fraction of the
+                                ! forcing time-step (DT_FORCING in ocean-only mode or the
+                                ! coupling timestep in coupled mode.)
+C_P = 3925.0                    !   [J kg-1 K-1] default = 3991.86795711963
+                                ! The heat capacity of sea water, approximated as a
+                                ! constant. This is only used if ENABLE_THERMODYNAMICS is
+                                ! true. The default value is from the TEOS-10 definition
+                                ! of conservative temperature.
+SAVE_INITIAL_CONDS = True       !   [Boolean] default = False
+                                ! If true, write the initial conditions to a file given
+                                ! by IC_OUTPUT_FILE.
 
-!  The following parameters only apply if the grid is internally generated.
-#define CARTESIAN
-#define LENLAT 20.0            !    The length of the domain in units defined
-#define LENLON 200.0           !  defined by AXIS_UNITS; by default the units
-                               !  are degrees of latitude and longitude.
-#define SOUTHLAT 0.0           !  The domain's southern latitude.
-#define WESTLON 0.0            !  The domain's western longitude.
-#define AXIS_UNITS "k"         !    AXIS_UNITS should be defined as "k" for km,
-                               !  "m" for m, or undefined for degrees of
-                               !  latitude and longitude.  Except on a Cartesian
-                               !  grid, only degrees are currently implemented.
-#undef  ISOTROPIC              !    If ISOTROPIC is defined, an isotropic grid
-                               !  on a sphere (also known as a Mercator grid)
-                               !  is used. With an isotropic grid, the merid-
-                               !  ional extent of the domain (LENLAT), the zonal
-                               !  extent (LENLON), and the number of grid points
-                               !  in each direction are _not_ independent.  Here
-                               !  the meridional extent will be determined to
-                               !  fit the zonal extent and the number of grid
-                               !  points.  The grid is perfectly isotropic.
-#undef REENTRANT_X             !    If defined, the domain is zonally reentrant.
-#undef REENTRANT_Y             !    If defined, the domain is meridionally
-                               !  reentrant.
-#undef  EQUATOR_REFERENCE      !    If EQUATOR_REFERENCE is defined, the grid is
-                               !  defined to have the equator at the nearest q
-                               !  or h grid point to (-LOWLAT*NJGLOBAL/LENLAT).
-#undef  LAT_EQ_ENHANCE         !   The latitude (north and south) to which the
-                               !  resolution is enhanced.
-#undef  LAT_ENHANCE_FACTOR     !   The amount by which the meridional resolution
-                               !  is enhanced within LAT_EQ_ENHANCE of the
-                               !  equator.
-! Memory ...
-#undef  SYMMETRIC_MEMORY       !    If defined, the velocity point computational
-                               !  domain includes every face of the thickness
-                               !  points.  In other words, some arrays are
-                               !  larger than others, depending on where they
-                               !  are on the staggered grid.
-#undef DEBUG                   !    If true, write out verbose debugging data.
+! === module MOM_tracer_registry ===
+EQN_OF_STATE = "LINEAR"         ! default = "WRIGHT"
+                                ! EQN_OF_STATE determines which ocean equation of state
+                                ! should be used.  Currently, the valid choices are
+                                ! "LINEAR", "UNESCO", and "WRIGHT".
+                                ! This is only used if USE_EOS is true.
+DRHO_DT = 0.0                   !   [kg m-3 K-1] default = -0.2
+                                ! When EQN_OF_STATE=LINEAR,
+                                ! this is the partial derivative of density with
+                                ! temperature.
+DRHO_DS = 1.0                   !   [kg m-3 PSU-1] default = 0.8
+                                ! When EQN_OF_STATE=LINEAR,
+                                ! this is the partial derivative of density with
+                                ! salinity.
+RESTARTFILE = "GOLD.res"        ! default = "MOM.res"
+                                ! The name-root of the restart file.
 
-!  Specify the time integration scheme.
-#define SPLIT                  !    Use the split time stepping if defined.
-#define DT_FORCING 1200.0      !    The time step for changing forcing or
-                               !  writing certain diagnostics, in s.
-#define DT_THERM 1200.0        !    The thermodynamic time step, in s.  DT_THERM
-                               !  should be an integer multiple of DT and less
-                               !  than or equal to DT_FORCING.
-#define DT 1200.0              !    The (baroclinic) dynamics time step, in s.
-                               !  DT should be an integer fraction of DT_FORCING.
-#define DTBT 60.0              !    The barotropic time step, in s. DTBT is only
-                               !  used with the split explicit time stepping.
-                               !  DTBT should be an integer fraction of DT.
-                               !  used with the split explicit time stepping.
-DT_BT_FILTER = 0.0             !    A time-scale for filtering BT variables,
-                               !  in s if positive, or as a fraction of DT if
-                               !  negative.
-#define BE 0.7                 !    BE determines whether the neutral baroclinic
-                               !  time stepping scheme (0.5) or a backward Euler
-                               !  scheme (1) is used.  BE may be from 0.5 to 1,
-                               !  but instability may occur near 0.5.
-#define BEBT 0.2               !    BEBT determines whether the barotropic time
-                               !  stepping uses the forward-backward time-
-                               !  stepping scheme or a backward Euler scheme.
-                               !  BEBT is valid in the range from 0 (for a
-                               !  forward-backward treatment of nonrotating
-                               !  gravity waves) to 1 (for a backward Euler
-                               !  treatment). In practice, BEBT must be greater
-                               !  than about 0.05.
-#define ETA_TOLERANCE 1e-12    !    The tolerance, in m, for the differences
-                               !  between the barotropic and baroclinic
-                               !  estimates of the sea surface height.  The
-                               !  default is 0.5*NK*EPSILON, and this should not
-                               !  be set less than about 10^-15*MAXIMUM_DEPTH.
+! === module MOM_tracer_flow_control ===
+INPUTDIR = "INPUT/"             ! default = "."
+                                ! The directory in which input files are found.
+COORD_CONFIG = "linear"         !
+                                ! This specifies how layers are to be defined:
+                                !     file - read coordinate information from the file
+                                !       specified by (COORD_FILE).
+                                !     linear - linear based on interfaces not layesrs.
+                                !     ts_ref - use reference temperature and salinity
+                                !     ts_range - use range of temperature and salinity
+                                !       (T_REF and S_REF) to determine surface density
+                                !       and GINT calculate internal densities.
+                                !     gprime - use reference density (RHO_0) for surface
+                                !       density and GINT calculate internal densities.
+                                !     ts_profile - use temperature and salinity profiles
+                                !       (read from COORD_FILE) to set layer densities.
+                                !     USER - call a user modified routine.
+LIGHTEST_DENSITY = 1034.0       !   [kg m-3] default = 1035.0
+                                ! The reference potential density used for layer 1.
+GFS = 0.98                      !   [m s-2] default = 9.8
+                                ! The reduced gravity at the free surface.
 
-!  Specify properties of the I/O and length of the integration.
-#define TIMEUNIT 86400.0       !    The time unit in seconds for the following
-                               !  fields.
-#define DAYMAX 5.0             !    The final day of the simulation.
-#define ENERGYSAVEDAYS 1.0     !    The number of days between saves of the
-                               !  energies of the run.
-#define ENERGYFILE "timestats" !    The file to use to save the energies.
-#define RESTARTFILE "GOLD.res" !    The name of the restart file.
-#define RESTINT 1000           !    The number of days between saves of the
-                               !  restart file.  Use a value that is larger than
-                               !  DAYMAX not to save incremental restart files
-                               !  within a run.  Use 0 not to save restart files
-                               !  at all.
-#undef  PARALLEL_RESTARTFILES  !    If defined, each processor writes its own
-                               !  restart file, otherwise a single restart file
-                               !  is generated.
-#define RESTART_CONTROL -1     !    RESTART_CONTROL determines which restart
-                               !  files are written - Add 2 (bit 1) for a time-
-                               !  stamped restart file, and odd (bit 0) for a
-                               !  non-time-stamped file.  A restart will be
-                               !  saved at the end of the run segment for any
-                               !  non-negative value.
-#define SAVE_INITIAL_CONDS     !    If defined, the inital conditions are
-                               !  written to IC_OUTPUT_FILE at the start of a
-                               !  new run.
-#define IC_OUTPUT_FILE "MOM_IC"!  The name-root of a file into which the
-                               !  initial conditions are written for a new run.
-#define Z_OUTPUT_GRID_FILE ""
-                               !    The file that specifies the vertical grid
-                               !  for depth-space diagnostics.
-#define MIN_Z_DIAG_INTERVAL 0.0 !   The minimum amount of time in seconds between
-                               !  calculations of depth-space diagnostics.  
-                               !  Making this larger than DT*NTSTEP reduces the
-                               !  performance penalty of regriding to depth
-                               !  online.
+! === module MOM_grid_init ===
+GRID_CONFIG = "cartesian"       !
+                                ! A character string that determines the method for
+                                ! defining the horizontal grid.  Current options are:
+                                !     mosaic - read the grid from a mosaic (supergrid)
+                                !              file set by GRID_FILE.
+                                !     cartesian - use a (flat) Cartesian grid.
+                                !     spherical - use a simple spherical grid.
+                                !     mercator - use a Mercator spherical grid.
+AXIS_UNITS = "k"                ! default = "degrees"
+                                ! The units for the Cartesian axes. Valid entries are:
+                                !     degrees - degrees of latitude and longitude
+                                !     m - meters
+                                !     k - kilometers
+SOUTHLAT = 0.0                  !   [k]
+                                ! The southern latitude of the domain or the equivalent
+                                ! starting value for the y-axis.
+LENLAT = 20.0                   !   [k]
+                                ! The latitudinal or y-direction length of the domain.
+LENLON = 200.0                  !   [k]
+                                ! The longitudinal or x-direction length of the domain.
+TOPO_CONFIG = "flat"            !
+                                ! This specifies how bathymetry is specified:
+                                !     file - read bathymetric information from the file
+                                !       specified by (TOPO_FILE).
+                                !     flat - flat bottom set to MAXIMUM_DEPTH.
+                                !     bowl - an analytically specified bowl-shaped basin
+                                !       ranging between MAXIMUM_DEPTH and MINIMUM_DEPTH.
+                                !     spoon - a similar shape to 'bowl', but with an vertical
+                                !       wall at the southern face.
+                                !     halfpipe - a zonally uniform channel with a half-sine
+                                !       profile in the meridional direction.
+                                !     benchmark - use the benchmark test case topography.
+                                !     DOME - use a slope and channel configuration for the
+                                !       DOME sill-overflow test case.
+                                !     DOME2D - use a shelf and slope configuration for the
+                                !       DOME2D gravity current/overflow test case.
+                                !     seamount - Gaussian bump for spontaneous motion test case.
+                                !     USER - call a user modified routine.
+MINIMUM_DEPTH = 1.0             !   [m] default = 0.0
+                                ! The minimum depth of the ocean.
+MAXIMUM_DEPTH = 1000.0          !   [m]
+                                ! The maximum depth of the ocean.
+ROTATION = "betaplane"          ! default = "2omegasinlat"
+                                ! This specifies how the Coriolis parameter is specified:
+                                !     2omegasinlat - Use twice the planetary rotation rate
+                                !       times the sine of latitude.
+                                !     betaplane - Use a beta-plane or f-plane.
+                                !     USER - call a user modified routine.
+THICKNESS_CONFIG = "uniform"    !
+                                ! A string that determines how the initial layer
+                                ! thicknesses are specified for a new run:
+                                !     file - read interface heights from the file specified
+                                !     thickness_file - read thicknesses from the file specified
+                                !       by (THICKNESS_FILE).
+                                !     uniform - uniform thickness layers evenly distributed
+                                !       between the surface and MAXIMUM_DEPTH.
+                                !     DOME - use a slope and channel configuration for the
+                                !       DOME sill-overflow test case.
+                                !     benchmark - use the benchmark test case thicknesses.
+                                !     search - search a density profile for the interface
+                                !       densities. This is not yet implemented.
+                                !     circle_obcs - the circle_obcs test case is used.
+                                !     DOME2D - 2D version of DOME initialization.
+                                !     adjustment2d - TBD AJA.
+                                !     sloshing - TBD AJA.
+                                !     seamount - TBD AJA.
+                                !     USER - call a user modified routine.
+TS_CONFIG = "linear"            !
+                                ! A string that determines how the initial tempertures
+                                ! and salinities are specified for a new run:
+                                !     file - read velocities from the file specified
+                                !       by (TS_FILE).
+                                !     fit - find the temperatures that are consistent with
+                                !       the layer densities and salinity S_REF.
+                                !     TS_profile - use temperature and salinity profiles
+                                !       (read from TS_FILE) to set layer densities.
+                                !     benchmark - use the benchmark test case T & S.
+                                !     linear - linear in logical layer space.
+                                !     DOME2D - 2D DOME initialization.
+                                !     adjustment2d - TBD AJA.
+                                !     sloshing - TBD AJA.
+                                !     seamount - TBD AJA.
+                                !     USER - call a user modified routine.
+T_TOP = 0.0                     !   [degC]
+                                ! Initial temperature of the top surface.
+T_RANGE = 0.0                   !   [degC]
+                                ! Initial temperature difference (top-bottom).
+S_TOP = 34.0                    !   [PSU]
+                                ! Initial salinity of the top surface.
+S_RANGE = 2.0                   !   [PSU]
+                                ! Initial salinity difference (top-bottom).
 
-#define MAXCPU 28800.0         !    The maximum amount of cpu time per processor
-                               !  for which GOLD should run before saving a
-                               !  restart file and quitting with a return value
-                               !  that indicates that a further execution is
-                               !  required to complete the simulation.  If
-                               !  automatic restarts are not desired, use a
-                               !  negative value for MAXCPU.  MAXCPU has units
-                               !  of wall-clock seconds. (i.e. CPU time limit is
-                               !  larger by a factor of the number of processors
-                               !  used.
-#define INPUTDIR "INPUT/"
-                               !    INPUTDIR is a directory in which NetCDF
-                               !  input files might be found.
+! === module MOM_MEKE ===
+CDRAG = 0.0                     !   [nondim] default = 0.003
+                                ! CDRAG is the drag coefficient relating the magnitude of
+                                ! the velocity field to the bottom stress.
 
-!  Specify the horizontal (along-isopycnal) viscosity.
-#define LAPLACIAN              !    LAPLACIAN is defined to use a Laplacian
-                               !  horizontal viscosity.
-#undef  BIHARMONIC             !    BIHARMONIC is defined to use a biharmonic
-                               !  horizontal viscosity.  BIHARMONIC may be used
-                               !  with LAPLACIAN, and it is automatically
-                               !  defined if LAPLACIAN is undefined.
-#define BOUND_KH               !    If BOUND_KH is defined, the Laplacian
-                               !  coefficient is locally limited to guarantee
-                               !  stability.
-#define BOUND_AH               !    If BOUND_AH is defined, the biharmonic
-                               !  coefficient is locally limited to guarantee
-                               !  stability.
-#define KH 1.0e0              !    The Laplacian horizontal viscosity, in
-                               !  m2 s-1.  KH is used if LAPLACIAN is defined.
-#define AH 0.0e0               !    The biharmonic horizontal viscosity, in
-                               !  m4 s-1.  AH is used if BIHARMONIC is defined.
-#define KH_VEL_SCALE 0.003     !    The velocity scale which is multiplied by
-                               !  the grid spacing to calculate the Laplacian
-                               !  viscosity ,if LAPLACIAN is defined, in m s-1.
-                               !  The final viscosity is the largest of this
-                               !  scaled viscosity, the Smagorinsky viscosity
-                               !  and KH.
-#define AH_VEL_SCALE 0.003     !    The velocity scale which is multiplied by
-                               !  the cube of the grid spacing to calculate the
-                               !  biharmonic viscosity if BIHARMONIC is defined,
-                               !  in units of m s-1. The final viscosity is
-                               !  the largest of this scaled viscosity, the
-                               !  Smagorinsky viscosity and AH.
-#undef SMAGORINSKY_KH         !    If defined, use Smagorinsky's nonlinear eddy
-                               !  viscosity.  KH is the background.
-#define SMAG_LAP_CONST 0.15    !    The nondimensional Laplacian Smagorinsky
-                               !  constant.  Often 0.15.
-#undef  SMAGORINSKY_AH         !    If defined, use a biharmonic form of
-                               !  Smagorinskys nonlinear eddy viscosity.
-#define SMAG_BI_CONST 0.032    !    The nondimensional biharmonic Smagorinsky
-                               !  constant.  Often 0.015.
-#undef  NOSLIP                 !    This should be #define NOSLIP for no slip
-                               !  boundary conditions or #undef NOSLIP for free
-                               !  slip boundary conditions (the default). The
-                               !  implementation of the free slip boundary
-                               !  conditions on a C-grid is much cleaner than
-                               !  the no slip boundary conditions.  The use of
-                               !  free slip b.c.s is strongly encouraged.  The
-                               !  no slip b.c.s are not implemented with the
-                               !  biharmonic viscosity.
+! === module MOM_lateral_mixing_coeffs ===
+BE = 0.7                        !   [nondim] default = 0.6
+                                ! If SPLIT is true, BE determines the relative weighting
+                                ! of a  2nd-order Runga-Kutta baroclinic time stepping
+                                ! scheme (0.5) and a backward Euler scheme (1) that is
+                                ! used for the Coriolis and inertial terms.  BE may be
+                                ! from 0.5 to 1, but instability may occur near 0.5.
+                                ! BE is also applicable if SPLIT is false and USE_RK2
+                                ! is true.
+ETA_TOLERANCE = 1.0E-12         !   [m] default = 4.5E-10
+                                ! The tolerance for the differences between the
+                                ! barotropic and baroclinic estimates of the sea surface
+                                ! height due to the fluxes through each face.  The total
+                                ! tolerance for SSH is 4 times this value.  The default
+                                ! is 0.5*NK*ANGSTROM, and this should not be set less x
+                                ! than about 10^-15*MAXIMUM_DEPTH.
+CORIOLIS_EN_DIS = True          !   [Boolean] default = False
+                                ! If true, two estimates of the thickness fluxes are used
+                                ! to estimate the Coriolis term, and the one that
+                                ! dissipates energy relative to the other one is used.
+BOUND_CORIOLIS = True           !   [Boolean] default = False
+                                ! If true, the Coriolis terms at u-points are bounded by
+                                ! the four estimates of (f+rv)v from the four neighboring
+                                ! v-points, and similarly at v-points.  This option is
+                                ! always effectively false with CORIOLIS_EN_DIS defined and
+                                ! CORIOLIS_SCHEME set to SADOURNY75_ENERGY.
 
-!  Specify the horizontal interface depth diffusion.
-#undef  THICKNESSDIFFUSE       !    If THICKNESSDIFFUSE is defined, interfaces
-                               !  are diffused with a coefficient of KHTH.
-#define KHTH 500.0             !    KHTH is the interface depth diffusivity,
-                               !  in m2 s-1.
-#undef  MIXEDLAYER_RESTRAT     !    If true, a density-gradient dependent
-                               !  restratifying flow is imposed in the mixed
-                               !  layer.
+! === module MOM_hor_visc ===
+LAPLACIAN = True                !   [Boolean] default = False
+                                ! If true, use a Laplacian horizontal viscosity.
+BIHARMONIC = False              !   [Boolean] default = True
+                                ! If true, se a biharmonic horizontal viscosity.
+                                ! BIHARMONIC may be used with LAPLACIAN.
+KH = 1.0                        !   [m2 s-1] default = 0.0
+                                ! The background Laplacian horizontal viscosity.
+KH_VEL_SCALE = 0.003            !   [m s-1] default = 0.0
+                                ! The velocity scale which is multiplied by the grid
+                                ! spacing to calculate the Laplacian viscosity.
+                                ! The final viscosity is the largest of this scaled
+                                ! viscosity, the Smagorinsky viscosity and KH.
 
-!  Specify the scheme for the Coriolis and momentum advection terms.
-#define CORIOLIS_SCHEME "SADOURNY75_ENERGY"
-                               ! Selects the discretization of Coriolis terms.
-                               ! Possible values are:
-                               !   SADOURNY75_ENERGY - Sadourny's energy
-                               !                       conserving scheme
-                               !   ARAKAWA_HSU90     - Arakawa and Hsu's scheme
-                               !   ROBUST_ENSTRO     - A pseudo-enstrophy
-                               !                       conserving scheme, robust
-                               !                       to vanishing thickness
-#define BOUND_CORIOLIS         !    If BOUND_CORIOLIS is defined, the Coriolis
-                               !  terms at u points are bounded by the four
-                               !  estimates of (f+rv)v from the four neighboring
-                               !  v points, and similarly at v points. This
-                               !  option would have no effect on the SADOURNY
-                               !  scheme if it were possible to use centered
-                               !  difference thickness fluxes.  In addition, if
-                               !  SMAGORINSKY_AH is used, the biharmonic
-                               !  viscosity is modified to include a term that
-                               !  scales quadratically with the velocity
-                               !  shears.
-#define CORIOLIS_EN_DIS        !    If CORIOLIS_EN_DIS is defined, two estimates
-                               !  of the thickness fluxes are used to estimate
-                               !  the Coriolis term, and the one that dissipates
-                               !  energy relative to the other one is used.
+! === module MOM_vert_friction ===
+DIRECT_STRESS = True            !   [Boolean] default = False
+                                ! If true, the wind stress is distributed over the
+                                ! topmost HMIX_STRESS of fluid (like in HYCOM), and KVML
+                                ! may be set to a very small value.
+U_TRUNC_FILE = "U_velocity_truncations" ! default = ""
+                                ! The absolute path to a file into which the accelerations
+                                ! leading to zonal velocity truncations are written.
+                                ! Undefine this for efficiency if this diagnostic is not
+                                ! needed.
+V_TRUNC_FILE = "V_velocity_truncations" ! default = ""
+                                ! The absolute path to a file into which the accelerations
+                                ! leading to meridional velocity truncations are written.
+                                ! Undefine this for efficiency if this diagnostic is not
+                                ! needed.
+HMIX_FIXED = 20.0               !   [m]
+                                ! The prescribed depth over which the near-surface
+                                ! viscosity and diffusivity are elevated when the bulk
+                                ! mixed layer is not used.
+KV = 0.0                        !   [m2 s-1]
+                                ! The background kinematic viscosity in the interior.
+                                ! The molecular value, ~1e-6 m2 s-1, may be used.
+KVML = 0.01                     !   [m2 s-1] default = 0.0
+                                ! The kinematic viscosity in the mixed layer.  A typical
+                                ! value is ~1e-2 m2 s-1. KVML is not used if
+                                ! BULKMIXEDLAYER is true.  The default is set by KV.
+HBBL = 10.0                     !   [m]
+                                ! The thickness of a bottom boundary layer with a
+                                ! viscosity of KVBBL if BOTTOMDRAGLAW is not defined, or
+                                ! the thickness over which near-bottom velocities are
+                                ! averaged for the drag law if BOTTOMDRAGLAW is defined
+                                ! but LINEAR_DRAG is not.
+MAXVEL = 6.0                    !   [m s-1] default = 3.0E+08
+                                ! The maximum velocity allowed before the velocity
+                                ! components are truncated.
 
-!  Specify the scheme for the pressure gradient accelerations.
-#define ANALYTIC_FV_PGF        !    If defined the pressure gradient forces
-                               !  are calculated with a Jacobian form that
-                               !  analytically integrates the equations of state
-                               !  in pressure to avoid any possibility of
-                               !  numerical therobaric instability.
+! === module MOM_PointAccel ===
 
-!  Specify the scheme for the barotropic solver.
-#define BOUND_BT_CORRECTION    !    If defined, the corrective pseudo mass-
-                               !  fluxes into the barotropic solver are limited
-                               !  to values that require less than 0.1*MAXVEL to
-                               !  be accommodated.
+! === module MOM_set_visc ===
+LINEAR_DRAG = True              !   [Boolean] default = False
+                                ! If LINEAR_DRAG and BOTTOMDRAGLAW are defined the drag
+                                ! law is cdrag*DRAG_BG_VEL*u.
+DRAG_BG_VEL = 0.1               !   [m s-1] default = 0.0
+                                ! DRAG_BG_VEL is either the assumed bottom velocity (with
+                                ! LINEAR_DRAG) or an unresolved  velocity that is
+                                ! combined with the resolved velocity to estimate the
+                                ! velocity magnitude.  DRAG_BG_VEL is only used when
+                                ! BOTTOMDRAGLAW is defined.
+BBL_THICK_MIN = 0.1             !   [m] default = 0.0
+                                ! The minimum bottom boundary layer thickness that can be
+                                ! used with BOTTOMDRAGLAW. This might be
+                                ! Kv / (cdrag * drag_bg_vel) to give Kv as the minimum
+                                ! near-bottom viscosity.
 
-!  Specify the properties of the active tracers and Eqn of state.
-#define ENABLE_THERMODYNAMICS  !    Temperature and salinity are used as state
-                               !  variables if TEMPERATURE is defined.
-#define TS_CONFIG "linear"       !    T&S distribution.
-                               ! linear - a linear profile with respect to
-                               ! layer number is defined. S_REF and T_REF must
-                               ! be defined. S_RANGE and T_RANGE may be defined
-                               ! and, if not, are defaulted to 2.0 and 0.0
-                               ! (salinity increases in the vertical and
-                               ! temperature is uniform)
-#define S_TOP 34.0             !    Surface layer reference salinity
-#define T_TOP 0.0              !    Surface layer reference temperature
-#define S_RANGE 2.0            !    Range of salinities in the vertical
-#define T_RANGE 0.0            !    Range of temperature in the vertical
+! === module MOM_barotropic ===
+BOUND_BT_CORRECTION = True      !   [Boolean] default = False
+                                ! If true, the corrective pseudo mass-fluxes into the
+                                ! barotropic solver are limited to values that require
+                                ! less than 0.1*MAXVEL to be accommodated.
+!BT x-halo = 0                  !
+                                ! The barotropic x-halo size that is actually used.
+!BT y-halo = 0                  !
+                                ! The barotropic y-halo size that is actually used.
+DT_BT_FILTER = 0.0              !   [sec or nondim] default = -0.25
+                                ! A time-scale over which the barotropic mode solutions
+                                ! are filtered, in seconds if positive, or as a fraction
+                                ! of DT if negative. When used this can never be taken to
+                                ! be longer than 2*dt.  Set this to 0 to apply no filtering.
+BEBT = 0.2                      !   [nondim] default = 0.1
+                                ! BEBT determines whether the barotropic time stepping
+                                ! uses the forward-backward time-stepping scheme or a
+                                ! backward Euler scheme. BEBT is valid in the range from
+                                ! 0 (for a forward-backward treatment of nonrotating
+                                ! gravity waves) to 1 (for a backward Euler treatment).
+                                ! In practice, BEBT must be greater than about 0.05.
+DTBT = 60.0                     !   [s or nondim] default = -0.98
+                                ! The barotropic time step, in s. DTBT is only used with
+                                ! the split explicit time stepping. To set the time step
+                                ! automatically based the maximum stable value use 0, or
+                                ! a negative value gives the fraction of the stable value.
+                                ! Setting DTBT to 0 is the same as setting it to -0.98.
+                                ! The value of DTBT that will actually be used is an
+                                ! integer fraction of DT, rounding down.
 
-#undef  FRAZIL                 !    If FRAZIL is defined, water freezes if it
-                               !  gets colder than the freezing point, and the
-                               !  accumulated heat deficit is returned in the
-                               !  surface state.
-#define USE_EOS                !    If USE_EOS is defined, density is calculated
-                               !  from temperature and salinity with an equation
-                               !  of state.  TEMPERATURE must be defined if
-                               !  USE_EOS is.
-#define EQN_OF_STATE "LINEAR"  !    EQN_OF_STATE determines which ocean equation
-                               !  of state should be used.  Currently, the valid
-                               !  choices are "LINEAR", "UNESCO", and "WRIGHT".
-                               !  The default is "WRIGHT", but this only matters
-                               !  of USE_EOS is defined.
-#define RHO_T0_S0 1000.0
-#define DRHO_DT 0.0
-#define DRHO_DS 1.0
+! === module MOM_thickness_diffuse ===
+KHTH = 500.0                    !   [m2 s-1] default = 0.0
+                                ! The background horizontal thickness diffusivity.
 
-#define BOUSSINESQ             !    If true, make the Boussinesq approximation.
-#define P_REF 2.0e7            !    P_REF is the pressure that is used for
-                               !  calculating the coordinate density, in Pa.
-                               !  (1 Pa = 1e4 dbar, so 2e7 is commonly used.)
-#define RHO_0 1035.0           !    RHO_0 is used in the Boussinesq
-                               !  approximation to calculations of pressure and
-                               !  pressure gradients, in units of kg m-3.
-#define C_P 3925.0             !    C_P is the heat capacity of sea water in
-                               !  J kg-1 K-1, approximated as a constant.
-#undef  CORRECT_DENSITY        !    If CORRECT_DENSITY is defined, the layer
-                               !  densities are restored toward their target
-                               !  values by the diapycnal mixing.
+! === module MOM_diabatic_driver ===
+! The following parameters are used for diabatic processes.
+BBL_EFFIC = 0.0                 !   [nondim] default = 0.2
+                                ! The efficiency with which the energy extracted by
+                                ! bottom drag drives BBL diffusion.  This is only
+                                ! used if BOTTOMDRAGLAW is true.
+KD = 0.1                        !   [m2 s-1]
+                                ! The background diapycnal diffusivity of density in the
+                                ! interior. Zero or the molecular value, ~1e-7 m2 s-1,
+                                ! may be used.
 
-!  Specify the properties of the passive tracers.
-#define KHTR 0.0               !    KHTR is the along-isopycnal tracer
-                               !  diffusivity, in m2 s-1. KHTR is not needed for
-                               !  numerical stability.
-#undef  USE_USER_TRACER_EXAMPLE! If defined, the example tracer package is used.
-#undef  USE_IDEAL_AGE_TRACER   !  If defined, the ideal age and vintage
-                               !  tracer package is used.
+! === module MOM_KPP ===
+! This is the MOM wrapper to CVmix:KPP
+! See http://code.google.com/p/cvmix/
+KPP%
+%KPP
 
-!  Specify the properties of the diapycnal viscosity and diffusion.
-#undef  ADIABATIC               !    There are no diapycnal mass fluxes if
-                               !  ADIABATIC is defined. This assumes that
-                               !  KD = KDML = 0.0 and that there is no buoyancy
-                               !  forcing, but makes the model faster by
-                               ! eliminating subroutine calls.
-#undef  BULKMIXEDLAYER         !    If defined, use a Kraus-Turner-like bulk
-                               !  mixed layer with transitional buffer layers.
-                               !  Layers 1 through NKML+NKBL have variable
-                               !  densities. There must be at least NKML+NKBL+1
-                               !  layers if BULKMIXEDLAYER is defined.
-! The following parameters only apply when BULKMIXEDLAYER is defined.
-#define NKML 2                 !    NKML is the number of sublayers within the
-                               !  mixed layer.
-#define NKBL 1                 !    NKBL is the number of layers used as
-                               !  variable density buffer layers.
-#define MSTAR 1.25             !    MSTAR is a non-dimensional constant of
-                               !  proportionality between the cube of the
-                               !  surface friction velocity and the turbulent
-                               !  kinetic energy input at the surface.
-#define NSTAR 0.2              !    NSTAR is the portion of the buoyant
-                               !  potential energy imparted by surface fluxes
-                               !  that is available to drive entrainment at the
-                               !  base of mixed layer when that energy is
-                               !  positive.
-#define NSTAR2 0.2             !    NSTAR2 is the portion of any potential
-                               !  energy released by convective adjustment that
-                               !  is available to drive entrainment at the
-                               !  base of the mixed layer.  By default,
-                               !  NSTAR2 = NSTAR.
-#define PEN_SW_FRAC 0.42       !    PEN_SW_FRAC is the fraction of the shortwave
-                               !  radiation that penetrates below the surface.
-#define PEN_SW_SCALE 15.0      !    PEN_SW_SCALE is the vertical absorption
-                               !  e-folding depth of the penetrating shortwave
-                               !  radiation, in m.
-#define ABSORB_ALL_SW          !    If defined, all shortwave radiation is
-                               !  absorbed by the ocean, instead of passing
-                               !  through to the bottom mud.
-#define TKE_DECAY 2.5          !    TKE_DECAY relates the vertical rate of decay
-                               !  of the TKE available for mechanical entrain-
-                               !  ment to the natural Ekman depth.  Nondim.
-#define CONV_DECAY 0.5         !    CONV_DECAY relates the vertical rate of
-                               !  decay of the convectively released TKE
-                               !  available for penetrating entrainment to the
-                               !  natural Ekman length.  Nondimensional.
-#define BULK_RI_ML 0.25        !    BULK_RI_ML is the efficiency with which mean
-                               !  kinetic energy released by mechanically forced
-                               !  entrainment of the mixed layer is converted to
-                               !  turbulent kinetic energy.  Nondimensional.
-#define BULK_RI_CONVECTIVE 0.1 !    BULK_RI_CONVECTIVE is the efficiency with
-                               !  which convectively released mean kinetic
-                               !  energy is converted to turbulent kinetic
-                               !  energy.  Nondimensional.
-!  End of the BULKMIXEDLAYER parameters.
+! === module MOM_diffConvection ===
+! This module implements enhanced diffusivity as a
+! function of static stability, N^2.
+CONVECTION%
+%CONVECTION
 
-#define HMIX_FIXED 20.0              !    The depth of the assumed mixed layer for
-                               !  distribution of wind forcing, in m.  If
-                               !  BULKMIXEDLAYER is defined, the buoyancy fluxes
-                               !  are scaled away when the total depth is less
-                               !  than HMIX/2.
-#define KVML 1.00e-2           !    The kinematic viscosity in the mixed layer,
-                               !  in m2 s-1.  A typical value is ~1e-2 m2 s-1.
-                               !  KVML is not used if BULKMIXEDLAYER is defined.
-#define DIRECT_STRESS          !    If DIRECT_STRESS is defined, the wind stress
-                               !  is distributed over the topmost HMIX of fluid,
-                               !  and KVML may be set to a very small value.
+! === module MOM_entrain_diffusive ===
+CORRECT_DENSITY = False         !   [Boolean] default = True
+                                ! If true, and USE_EOS is true, the layer densities are
+                                ! restored toward their target values by the diapycnal
+                                ! mixing, as described in Hallberg (MWR, 2000).
 
-#define KV 0.00e-4             !    The kinematic viscosity in the interior, in
-                               !  m2 s-1.  The molecular value, ~1e-6 m2 s-1,
-                               !  may be used.
-#define KD 1.00e-1             !    The diapycnal diffusivity of density in the
-                               !  interior, in m2 s-1.  Zero or the molecular
-                               !  value, ~1e-7 m2 s-1, may be used.
-#define MAX_ENT_IT 5           !    The maximum number of iterations that may be
-                               !  used to calculate the interior diapycnal
-                               !  entrainment.
-#define RINO_CRIT 0.8          !    The critical shear Richardson number for
-                               !  shear-driven entrainment.  The theoretical
-                               !  value is 1, as in Hallberg (MWR 2000).
-#define SHEARMIX_RATE 0.1      !    A nondimensional rate scale for shear-driven
-                               !  entrainment.  The original value from Hallberg
-                               !  (MWR 2000) is 0.1.
-#define MAX_RINO_IT 2          !    The maximum number of iterations that may be
-                               !  used to estimate the Richardson number driven
-                               !  mixing.
+! === module MOM_regularize_layers ===
 
-#undef  BRYAN_LEWIS_DIFFUSIVITY!    If true, a Bryan & Lewis (JGR 1979) like
-                               !  tanh profile of background diapycnal
-                               !  diffusivity with depth is used.
-#define KD_BRYAN_LEWIS_DEEP 1.3e-4
-                               !    The abyssal value of a Bryan-Lewis
-                               !  diffusivity profile, in m2 s-1.
-#define KD_BRYAN_LEWIS_SURFACE 0.15e-4
-                               !    The surface value of a Bryan-Lewis
-                               !  diffusivity profile, in m2 s-1.
-#define BRYAN_LEWIS_DEPTH_CENT 2500.0
-                               !    The depth about which the transition in
-                               !  the Bryan-Lewis profile is centered, in m.
-#define BRYAN_LEWIS_WIDTH_TRANS 222.2222222222222
-                               !    The width of the transition in the
-                               !  Bryan-Lewis diffusivity profile, in m.
+! === module MOM_opacity ===
+PEN_SW_SCALE = 15.0             !   [m] default = 0.0
+                                ! The vertical absorption e-folding depth of the
+                                ! penetrating shortwave radiation.
+PEN_SW_FRAC = 0.42              !   [nondim] default = 0.0
+                                ! The fraction of the shortwave radiation that penetrates
+                                ! below the surface.
 
+! === module MOM_tracer_advect ===
 
-#define HBBL 10.0              !    The thickness in m of a bottom boundary
-                               !  layer with a viscosity of KVBBL if
-                               !  BOTTOMDRAGLAW is not defined, or the thickness
-                               !  over which near-bottom velocities are averaged
-                               !  for the drag law if BOTTOMDRAGLAW is defined
-                               !  but LINEAR_DRAG is not.
-#define KVBBL 2.00e-2          !    The kinematic viscosity in the benthic
-                               !  boundary layer, in m2 s-1. A typical value is
-                               !  ~1e-3 m2 s-1. KVBBL is not used with if
-                               !  BOTTOMDRAGLAW is defined.
-#define BOTTOMDRAGLAW          !    If BOTTOMDRAGLAW is defined, the bottom
-                               !  stress is calculated with a drag law
-                               !  c_drag*|u|*u. The velocity magnitude may be an
-                               !  assumed value or it may be based on the actual
-                               !  velocity in the bottommost HBBL, depending on
-                               !  LINEAR_DRAG.
-#define CDRAG 0.0e-8           !    CDRAG is the drag coefficient relating the
-                               !  magnitude of the velocity field to the bottom
-                               !  stress. CDRAG is only used if BOTTOMDRAGLAW is
-                               !  defined.
-#define LINEAR_DRAG            !    If LINEAR_DRAG and BOTTOMDRAGLAW are defined
-                               !  the drag law is cdrag*DRAG_BG_VEL*u.
-#define DRAG_BG_VEL 0.10       !    DRAG_BG_VEL is either the assumed bottom
-                               !  velocity (with LINEAR_DRAG) or an unresolved
-                               !  velocity that is combined with the resolved
-                               !  velocity to estimate the velocity magnitude,
-                               !  in m s-1.  DRAG_BG_VEL is only used when
-                               !  BOTTOMDRAGLAW is defined.
-#define BBL_THICK_MIN 0.1      !    The minimum bottom boundary layer thickness,
-                               !  in m, that can be used with BOTTOMDRAGLAW.
-                               !  This might be Kv / (cdrag * drag_bg_vel) to
-                               !  give Kv as the minimum near-bottom viscosity.
-#define BBL_EFFIC 0.00         !    BBL_EFFIC is the efficiency with which the
-                               !  energy extracted by  bottom drag drives BBL
-                               !  diffusion.  Nondimensional.  BBL_EFFIC only
-                               !  applies when BOTTOMDRAGLAW is defined.
+! === module MOM_tracer_hor_diff ===
 
-!  Specify properties of the surface forcing.
-#undef  VARIABLE_BUOYFORCE     !    If VARIABLE_BUOYFORCE is defined the surface
-                               !  fluxes of buoyancy or heat and fresh water
-                               !  are recalculated every coupling time step.
-#define BUOY_CONFIG "NONE"     !    Method for determining buoyancy forcing
-                               !  (can be file, zero or USER).
+! === module MOM_surface_forcing ===
+VARIABLE_WINDS = False          !   [Boolean] default = True
+                                ! If true, the winds vary in time after the initialization.
+VARIABLE_BUOYFORCE = False      !   [Boolean] default = True
+                                ! If true, the buoyancy forcing varies in time after the
+                                ! initialization of the model.
+BUOY_CONFIG = "NONE"            !
+                                ! The character string that indicates how buoyancy forcing
+                                ! is specified. Valid options include (file), (zero),
+                                ! (linear), (USER), and (NONE).
+WIND_CONFIG = "zero"            !
+                                ! The character string that indicates how wind forcing
+                                ! is specified. Valid options include (file), (2gyre),
+                                ! (1gyre), (gyres), (zero), and (USER).
 
-#undef  VARIABLE_WINDS         !    If the wind stresses vary with time, define
-                               !  VARIABLE_WINDS, which will cause wind_forcing
-                               !  to be calculated every coupling timestep.
-#define WIND_CONFIG "zero"    !    Method for forcing winds (can be zero,
-                               !  2gyre, file or USER).
-#undef  RESTOREBUOY            !    If RESTOREBUOY is defined, the buoyancy
-                               !  fluxes drive the model back toward some
-                               !  specified state with a rate given by
-                               !  FLUXCONST.
-#undef  RESTORE_SALINITY       !    If RESTORE_SALINITY is defined, the coupled
-                               !  driver will add a globally-balanced fresh-
-                               !  water flux that drives sea-surface salinity
-                               !  toward specified values.
-#define FLUXCONST 0.5          !    A constant that relates the surface fluxes
-                               !  to the mixed layer property anomalies, if
-                               !  RESTOREBUOY or RESTORE_SALINITY is defined.
-                               !  In m day-1. [Note the non-MKS units here!]
+! === module MOM_sum_output ===
+MAXTRUNC = 5000                 !   [truncations save_interval-1] default = 0
+                                ! The run will be stopped, and the day set to a very
+                                ! large value if the velocity is truncated more than
+                                ! MAXTRUNC times between energy saves.  Set MAXTRUNC to 0
+                                ! to stop if there is any truncation of velocities.
+MAXCPU = 2.88E+04               !   [wall-clock seconds] default = -1.0
+                                ! The maximum amount of cpu time per processor for which
+                                ! MOM should run before saving a restart file and
+                                ! quitting with a return value that indicates that a
+                                ! further run is required to complete the simulation.
+                                ! If automatic restarts are not desired, use a negative
+                                ! value for MAXCPU.  MAXCPU has units of wall-clock
+                                ! seconds, so the actual CPU time used is larger by a
+                                ! factor of the number of processors used.
 
-!   Specify whether sponges are used.  It is possible to use the model in robust
-! diagnostic mode by defining sponges that span the entire domain.
-#undef  SPONGE                 !    If SPONGE is defined, sponges may be applied
-                               !  anywhere in the domain. The exact location and
-                               !  properties of those sponges are specified from
-                               !  GOLD_initialization.F90.
-#undef  APPLY_OBC_U            !    If defined, open boundary conditions may be
-#undef  APPLY_OBC_V            !  applied at some u- or v- points.  The boundary
-                               !  conditions are set in USER_set_Open_Bdry_Conds
-                               !  in GOLD_initialization.F90
-
-! Specify properties of the tides.
-#undef  TIDES                  !    Apply tidal momentum forcing.
-#define TIDE_USE_SAL_SCALAR    !    Use the scalar approximation when
-                               !  calculating self-attraction and loading.
-#define TIDE_SAL_SCALAR_VALUE 0.094
-                               !    The constant of proportionality between
-                               !  sea surface height (should be bottom pressure)
-                               !  anomalies and bottom geopotential anomalies.
-#undef  TIDAL_SAL_FROM_FILE    !    Read the tidal self-attraction and loading
-                               !  from input files, specified with one or more
-                               !  lines like '#define TIDAL_INPUT_FILE path'.
-#undef  USE_PREVIOUS_TIDES     !    Use the previous iteration of the tides
-                               !  to facilitate convergent iteration.
-! Specify which tidal constituents to use.
-#undef  TIDE_M2
-#undef  TIDE_S2
-#undef  TIDE_N2
-#undef  TIDE_K2
-#undef  TIDE_K1
-#undef  TIDE_O1
-#undef  TIDE_P1
-#undef  TIDE_Q1
-#undef  TIDE_MF
-#undef  TIDE_MM
-
-! Specify a few miscellaneous limits.
-#define MAXVEL 6.0             !    This is the maximum velocity allowed before
-                               !  the velocity is truncated, in units of m s-1.
-#define MAXTRUNC 5000          !    The run will be stopped, and the day set to
-                               !  a very large value if the velocity is
-                               !  truncated more than MAXTRUNC times between
-                               !  energy saves.  Set MAXTRUNC to 0 to stop if
-                               !  there is any truncation of velocities.
-#define U_TRUNC_FILE "U_velocity_truncations"
-                               !    The absolute path to a file into which the
-                               !  accelerations leading to zonal velocity
-                               !  truncations are written.  Undefine this for
-                               !  efficiency if this diagnostic is not needed.
-#define V_TRUNC_FILE "V_velocity_truncations"
-                               !    The absolute path to a file into which the
-                               !  accelerations leading to meridional velocity
-                               !  truncations are written.  Undefine this for
-                               !  efficiency if this diagnostic is not needed.
+! === module MOM_main (MOM_driver) ===
+DAYMAX = 5.0                    !   [days]
+                                ! The final time of the whole simulation, in units of
+                                ! TIMEUNIT seconds.  This also sets the potential end
+                                ! time of the present run segment if the end time is
+                                ! not set via ocean_solo_nml in input.nml.
+RESTART_CONTROL = -1            ! default = 1
+                                ! An integer whose bits encode which restart files are
+                                ! written. Add 2 (bit 1) for a time-stamped file, and odd
+                                ! (bit 0) for a non-time-stamped file. A non-time-stamped
+                                ! restart file is saved at the end of the run segment
+                                ! for any non-negative value.
+RESTINT = 1000.0                !   [days] default = 0.0
+                                ! The interval between saves of the restart file in units
+                                ! of TIMEUNIT.  Use 0 (the default) to not save
+                                ! incremental restart files at all.
+ENERGYSAVEDAYS = 1.0            !   [days] default = 1200.0
+                                ! The interval in units of TIMEUNIT between saves of the
+                                ! energies of the run and other globally summed diagnostics.
