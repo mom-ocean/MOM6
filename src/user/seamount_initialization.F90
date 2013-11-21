@@ -133,7 +133,7 @@ subroutine seamount_initialize_thickness ( h, G, param_file )
 
   call MOM_mesg("MOM_initialization.F90, initialize_thickness_uniform: setting thickness")
 
-  call get_param(param_file,mod,"MIN_THICKNESS",min_thickness,default=1.0e-3)
+  call get_param(param_file,mod,"MIN_THICKNESS",min_thickness,'Minimum thickness for layer',units='m',default=1.0e-3)
   call get_param(param_file,mod,"REGRIDDING_COORDINATE_MODE",verticalCoordinate, &
                  default=DEFAULT_COORDINATE_MODE)
 

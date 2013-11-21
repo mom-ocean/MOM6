@@ -419,6 +419,8 @@ THICKNESS_CONFIG = "seamount"   !
                                 !     sloshing - TBD AJA.
                                 !     seamount - TBD AJA.
                                 !     USER - call a user modified routine.
+MIN_THICKNESS = 0.1             !   [m] default = 0.001
+                                ! Minimum thickness for layer
 TS_CONFIG = "seamount"          !
                                 ! A string that determines how the initial tempertures
                                 ! and salinities are specified for a new run:

@@ -188,6 +188,8 @@ THICKNESS_CONFIG = "seamount"   !
                                 !     sloshing - TBD AJA.
                                 !     seamount - TBD AJA.
                                 !     USER - call a user modified routine.
+MIN_THICKNESS = 0.1             !   [m] default = 0.001
+                                ! Minimum thickness for layer
 TS_CONFIG = "seamount"          !
                                 ! A string that determines how the initial tempertures
                                 ! and salinities are specified for a new run:
@@ -233,9 +235,6 @@ INTERPOLATION_SCHEME = "PPM_IH4" ! default = "P1M_H2"
                                 ! in z-coordinate mode, the parameter is a list of level
                                 ! thicknesses (in m). In sigma-coordinate mode, the list
                                 ! is of non-dimensional fractions of the water column.
-MIN_THICKNESS = 0.1             !   [m] default = 0.001
-                                ! When regridding, this is the minimum layer
-                                ! thickness allowed.
 BOUNDARY_EXTRAPOLATION = True   !   [Boolean] default = False
                                 ! When defined, a proper high-order reconstruction
                                 ! scheme is used within boundary cells rather
