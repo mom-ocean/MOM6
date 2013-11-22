@@ -237,7 +237,7 @@ subroutine initialize_sponge(Iresttime, int_height, G, param_file, CS, &
   total_sponge_cols = CS%num_col
   call sum_across_PEs(total_sponge_cols)
 
-  call log_param(param_file, mod, "Total sponge columns", total_sponge_cols, &
+  call log_param(param_file, mod, "!Total sponge columns", total_sponge_cols, &
                  "The total number of columns where sponges are applied.")
 
 end subroutine initialize_sponge

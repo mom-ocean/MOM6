@@ -234,7 +234,7 @@ SPONGE_DAMPING_FILE = "MESO_Sponge_025mNG.nc" !
                                 ! The name of the file with the sponge damping rates.
 SPONGE_STATE_FILE = "MESO_025_63L_IC.nc" ! default = "MESO_Sponge_025mNG.nc"
                                 ! The name of the file with the state to damp toward.
-Total sponge columns = 19167    !
+!Total sponge columns = 19167   !
                                 ! The total number of columns where sponges are applied.
 
 ! === module MOM_MEKE ===

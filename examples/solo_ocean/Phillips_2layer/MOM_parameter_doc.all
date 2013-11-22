@@ -393,7 +393,7 @@ SPONGE_CONFIG = "phillips"      ! default = "file"
                                 !     USER - call a user modified routine.
 SPONGE_RATE = 1.157407407407407E-06 !   [s-1] default = 1.157407407407407E-06
                                 ! The rate at which the zonal-mean sponges damp.
-Total sponge columns = 0        !
+!Total sponge columns = 0       !
                                 ! The total number of columns where sponges are applied.
 APPLY_OBC_U = False             !   [Boolean] default = False
                                 ! If true, open boundary conditions may be set at some

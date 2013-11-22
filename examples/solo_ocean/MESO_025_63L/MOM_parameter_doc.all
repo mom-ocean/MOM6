@@ -493,7 +493,7 @@ SPONGE_ETA_VAR = "ETA"          ! default = "ETA"
 SPONGE_IDAMP_VAR = "IDAMP"      ! default = "IDAMP"
                                 ! The name of the inverse damping rate variable in
                                 ! SPONGE_DAMPING_FILE.
-Total sponge columns = 19167    !
+!Total sponge columns = 19167   !
                                 ! The total number of columns where sponges are applied.
 APPLY_OBC_U = False             !   [Boolean] default = False
                                 ! If true, open boundary conditions may be set at some

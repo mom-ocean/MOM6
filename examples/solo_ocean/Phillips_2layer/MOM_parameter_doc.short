@@ -208,7 +208,7 @@ SPONGE_CONFIG = "phillips"      ! default = "file"
                                 !     DOME - use a slope and channel configuration for the
                                 !       DOME sill-overflow test case.
                                 !     USER - call a user modified routine.
-Total sponge columns = 0        !
+!Total sponge columns = 0       !
                                 ! The total number of columns where sponges are applied.
 
 ! === module MOM_MEKE ===
