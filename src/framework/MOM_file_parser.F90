@@ -323,11 +323,9 @@ subroutine close_param_file(CS, quiet_close, component)
       do n=1,CS%param_data(i)%num_lines
         if (.not.CS%param_data(i)%line_used(n)) then
           num_unused = num_unused + 1
-!          call MOM_error(WARNING, "Unused line in "//trim(CS%filename(i))//&
-!                          " : "//trim(CS%param_data(i)%line(n)))
           if (CS%report_unused) &
-            call MOM_mesg("Unused line in "//trim(CS%filename(i))// &
-                            " : "//trim(CS%param_data(i)%line(n)), 0)
+            call MOM_error(WARNING, "Unused line in "//trim(CS%filename(i))// &
+                            " : "//trim(CS%param_data(i)%line(n)))
         endif
       enddo
     endif
@@ -798,7 +796,7 @@ subroutine get_variable_line(CS, varname, found, defined, value_string, paramIsL
   character(len=*),      intent(out) :: value_string(:)
   logical, optional,      intent(in) :: paramIsLogical
 
-  character(len=INPUT_STR_LENGTH) :: val_str, lname
+  character(len=INPUT_STR_LENGTH) :: val_str, lname, origLine
   character(len=INPUT_STR_LENGTH) :: line, continuationBuffer, blockName
   character(len=FILENAME_LENGTH)  :: filename
   integer            :: is, id, isd, isu, ise, iso, verbose, ipf
@@ -807,7 +805,7 @@ subroutine get_variable_line(CS, varname, found, defined, value_string, paramIsL
   logical            :: found_override, found_equals
   logical            :: found_define, found_undef
   logical            :: force_cycle, defined_in_line, continuedLine
-  logical            :: variableKindIsLogical
+  logical            :: variableKindIsLogical, valueIsSame
   logical            :: inWrongBlock, fullPathParameter
   logical, parameter :: requireNamedClose = .false.
   set = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
@@ -831,12 +829,13 @@ subroutine get_variable_line(CS, varname, found, defined, value_string, paramIsL
     continuedLine = .false.
     blockName = ''
 
+    ! Scan through each line of the file
     do count = 1, CS%param_data(ipf)%num_lines
       line = CS%param_data(ipf)%line(count)
       last = len_trim(line)
 
       last1 = max(1,last)
-      ! Check if line ends in continuation character
+      ! Check if line ends in continuation character (either & or \)
       ! Note achar(92) is a backslash
       if (line(last1:last1) == achar(92).or.line(last1:last1) == "&") then
         continuationBuffer(contBufSize+1:contBufSize+len_trim(line))=line(:last-1)
@@ -848,7 +847,7 @@ subroutine get_variable_line(CS, varname, found, defined, value_string, paramIsL
                  " there are no more lines to read. "// &
                  " Line: '"//trim(line(:last))//"'"//&
                  " in file "//trim(filename)//".")
-        cycle
+        cycle ! cycle inorder to append the next line of the file
       elseif (continuedLine) then
         ! If we reached this point then this is the end of line continuation
         continuationBuffer(contBufSize+1:contBufSize+len_trim(line))=line(:last)
@@ -859,7 +858,23 @@ subroutine get_variable_line(CS, varname, found, defined, value_string, paramIsL
         last = len_trim(line)
       endif
 
-      ! Check for start of namelist
+      origLine = trim(line) ! Keep original for error messages
+
+      ! Check for '#override' at start of line
+      found_override = .false.; found_define = .false.; found_undef = .false.
+      iso = index(line(:last), "#override " )!; if (is > 0) found_override = .true.
+      if (iso>1) call MOM_error(FATAL, "MOM_file_parser : #override was found "// &
+                 " but was not the first keyword."// &
+                 " Line: '"//trim(line(:last))//"'"//&
+                 " in file "//trim(filename)//".")
+      if (iso==1) then
+        found_override = .true.
+        if (index(line(:last), "#override define ")==1) found_define = .true.
+        if (index(line(:last), "#override undef ")==1) found_undef = .true.
+        line = trim(adjustl(line(iso+10:last))); last = len_trim(line)
+      endif
+
+      ! Check for start of fortran namelist, ie. '&namelist'
       if (index(line(:last),'&')==1) then
         iso=index(line(:last),' ')
         if (iso>0) then ! possibly simething else on this line
@@ -873,9 +888,11 @@ subroutine get_variable_line(CS, varname, found, defined, value_string, paramIsL
           else
             blockName = trim(line(2:last))
           endif
+          call flag_line_as_read(CS%param_data(ipf)%line_used,count)
           cycle
         endif
       endif
+
       ! Newer form of parameter block, block%, %block or block%param or 
       iso=index(line(:last),'%')
       fullPathParameter = .false.
@@ -890,17 +907,21 @@ subroutine get_variable_line(CS, varname, found, defined, value_string, paramIsL
             call MOM_error(FATAL, 'get_variable_line: A named close for a parameter'// &
             ' block is required but found "%". Block="'//trim(blockName)//'"' )
         blockName = popBlockLevel(blockName)
-      elseif (iso==last) then ! This is a new block
+        call flag_line_as_read(CS%param_data(ipf)%line_used,count)
+      elseif (iso==last) then ! This is a new block if % is last character
         blockName = pushBlockLevel(blockName, line(:iso-1))
+        call flag_line_as_read(CS%param_data(ipf)%line_used,count)
       else ! This is of the form block%parameter = ... (full path parameter)
         iso=index(line(:last),'%',.true.)
+        ! Check that the parameter block names on the line matches the state set by the caller
         if (iso>0 .and. trim(CS%blockName%name)==trim(line(:iso-1))) then
           fullPathParameter = .true.
           line = trim(line(iso+1:last)) ! Strip away the block name for subsequent processing
+          last = len_trim(line)
         endif
       endif
 
-      ! We should only read this line if this block is the active block
+      ! We should only interpret this line if this block is the active block
       inWrongBlock = .false.
       if (len_trim(blockName)>0) then ! In a namelist block in file
         if (trim(CS%blockName%name)/=trim(blockName)) inWrongBlock = .true. ! Not in the required block
@@ -909,7 +930,7 @@ subroutine get_variable_line(CS, varname, found, defined, value_string, paramIsL
         if (trim(CS%blockName%name)/=trim(blockName)) inWrongBlock = .true. ! Not in the required block
       endif
 
-      ! Check for termination of a namelist
+      ! Check for termination of a fortran namelist (with a '/')
       if (line(last:last)=='/') then
         if (len_trim(blockName)==0 .and. is_root_pe()) call MOM_error(FATAL, &
             'get_variable_line: An extra namelist/block end was encountered. Line="'// &
@@ -925,24 +946,15 @@ subroutine get_variable_line(CS, varname, found, defined, value_string, paramIsL
       endif
 
       ! Determine whether this line mentions the named parameter or not
-      line(last+1:last+1) = " " ! Ensure a blank after last character
-      if (index(" "//line(:last+1), " "//trim(varname)//" ") == 0) cycle
+      if (index(" "//line(:last)//" ", " "//trim(varname)//" ") == 0) cycle
 
       ! Detect keywords
-      found_override = .false.; found_equals = .false.;
-      found_define = .false.; found_undef = .false.
-      iso = index(line(:last), "#override" )!; if (is > 0) found_override = .true.
+      found_equals = .false.
       isd = index(line(:last), "define" )!; if (isd > 0) found_define = .true.
       isu = index(line(:last), "undef" )!; if (isu > 0) found_undef = .true.
       ise = index(line(:last), " = " ); if (ise > 1) found_equals = .true.
-      if (index(line(:last), "#override ")==1) found_override = .true.
-      if (found_override) then
-        if (index(line(:last), "#override define ")==1) found_define = .true.
-        if (index(line(:last), "#override undef ")==1) found_undef = .true.
-      else
-        if (index(line(:last), "#define ")==1) found_define = .true.
-        if (index(line(:last), "#undef ")==1) found_undef = .true.
-      endif
+      if (index(line(:last), "#define ")==1) found_define = .true.
+      if (index(line(:last), "#undef ")==1) found_undef = .true.
 
       ! Check for missing, mutually exclusive or incomplete keywords
       if (is_root_pe()) then
@@ -963,12 +975,6 @@ subroutine get_variable_line(CS, varname, found, defined, value_string, paramIsL
         if (found_override .and. .not. (found_define .or. found_undef .or. found_equals)) &
                call MOM_error(FATAL, "MOM_file_parser : override was found "// &
                  " without a define or undef."// &
-                 " Line: '"//trim(line(:last))//"'"//&
-                 " in file "//trim(filename)//".")
-        if (found_override .and. (found_define .or. found_undef) &
-            .and. (isd+isu<iso)) &
-               call MOM_error(FATAL, "MOM_file_parser : override was found "// &
-                 " but was not the first keyword."// &
                  " Line: '"//trim(line(:last))//"'"//&
                  " in file "//trim(filename)//".")
       endif
@@ -1006,7 +1012,7 @@ subroutine get_variable_line(CS, varname, found, defined, value_string, paramIsL
         found = .true. ; defined_in_line = .false.
       elseif (found_equals) then
         ! Move starting pointer to first letter of defined name.
-        is = iso*10 + scan(line((1+iso*10):ise), set)
+        is = scan(line(1:ise), set)
         lname = trim(line(is:ise-1))
         if (trim(lname) /= trim(varname)) cycle
         val_str = trim(adjustl(line(ise+3:last)))
@@ -1022,9 +1028,8 @@ subroutine get_variable_line(CS, varname, found, defined, value_string, paramIsL
         endif
         found = .true.
       else
-!        call MOM_error(FATAL, "MOM_file_parser: we should never reach this point")
         call MOM_error(FATAL, "MOM_file_parser (non-root PE?): the parameter name '"// &
-           trim(varname)//"' was found without define or undef."// &
+           trim(varname)//"' was found without an assignment, define or undef."// &
            " Line: '"//trim(line(:last))//"'"//" in file "//trim(filename)//".")
       endif
 
@@ -1033,13 +1038,14 @@ subroutine get_variable_line(CS, varname, found, defined, value_string, paramIsL
 
       ! Detect inconsistencies
       force_cycle = .false.
+      valueIsSame = (trim(val_str) == trim(value_string(max_vals)))
       if (found_override .and. (oval >= max_vals)) then
         if (is_root_pe()) then
-          if ((defined_in_line .neqv. defined) .or. &
-              (trim(val_str) /= trim(value_string(max_vals)))) then
+          if ((defined_in_line .neqv. defined) .or. .not. valueIsSame) then
             call MOM_error(FATAL,"MOM_file_parser : "//trim(varname)// &
                      " found with multiple inconsistent overrides."// &
-                     " Line: '"//trim(line(:last))//"'"//&
+                     " Line A: '"//trim(value_string(max_vals))//"'"//&
+                     " Line B: '"//trim(line(:last))//"'"//&
                      " in file "//trim(filename)//" caused the model failure.")
           else
             call MOM_error(WARNING,"MOM_file_parser : "//trim(varname)// &
@@ -1060,11 +1066,11 @@ subroutine get_variable_line(CS, varname, found, defined, value_string, paramIsL
       endif
       if (.not.found_override .and. (ival >= max_vals)) then
         if (is_root_pe()) then
-          if ((defined_in_line .neqv. defined) .or. &
-              (trim(val_str) /= trim(value_string(max_vals)))) then
+          if ((defined_in_line .neqv. defined) .or. .not. valueIsSame) then
             call MOM_error(FATAL,"MOM_file_parser : "//trim(varname)// &
                      " found with multiple inconsistent definitions."// &
-                     " Line: '"//trim(line(:last))//"'"//&
+                     " Line A: '"//trim(value_string(max_vals))//"'"//&
+                     " Line B: '"//trim(line(:last))//"'"//&
                      " in file "//trim(filename)//" caused the model failure.")
           else
             call MOM_error(WARNING,"MOM_file_parser : "//trim(varname)// &
