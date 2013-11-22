@@ -1,4 +1,4 @@
-# Terrain-following coordinates
+! Terrain-following coordinates
 USE_REGRIDDING = True
 REGRIDDING_COORDINATE_MODE = "SIGMA" 
 INTERPOLATION_SCHEME = "PPM_IH4"

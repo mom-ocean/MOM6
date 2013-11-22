@@ -1,4 +1,4 @@
-# Continuous isopycnal mode + initialization
+! Continuous isopycnal mode + initialization
 USE_REGRIDDING = True
 REGRIDDING_COORDINATE_MODE = "Z*" 
 INTERPOLATION_SCHEME = "PPM_IH4"

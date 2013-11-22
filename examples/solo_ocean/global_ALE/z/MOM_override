@@ -1,4 +1,4 @@
-# Blank file in which we can put "overrides" for parameters
+! Blank file in which we can put "overrides" for parameters
 #override NK = 50
 #override USE_REGRIDDING = True
 #override BULKMIXEDLAYER = False
