@@ -1123,6 +1123,8 @@ USE_CONVECTION = False          !   [Boolean] default = False
                                 ! interfaces. Relevant parameters are contained in the
                                 ! CONVECTION% parameter block.
 CONVECTION%
+PASSIVE = False                 !   [Boolean] default = False
+                                ! If True, puts KPP into a passive-diagnostic mode.
 KD_CONV = 1.0                   !   [m2/s] default = 1.0
                                 ! DIffusivity used in statically unstable regions of column.
 %CONVECTION
