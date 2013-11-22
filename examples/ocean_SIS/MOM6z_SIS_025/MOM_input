@@ -78,12 +78,6 @@ BULKMIXEDLAYER = False          !   [Boolean] default = True
 USE_REGRIDDING = True           !   [Boolean] default = False
                                 ! If True, use the ALE algorithm (regridding/remapping).
                                 ! If False, use the layered isopycnal algorithm.
-THICKNESSDIFFUSE = True         !   [Boolean] default = False
-                                ! If true, interfaces or isopycnal surfaces are diffused,
-                                ! depending on the value of FULL_THICKNESSDIFFUSE.
-THICKNESSDIFFUSE_FIRST = True   !   [Boolean] default = False
-                                ! If true, do thickness diffusion before dynamics.
-                                ! This is only used if THICKNESSDIFFUSE is true.
 DT = 1200.0                     !   [s]
                                 ! The (baroclinic) dynamics time step.  The time-step that
                                 ! is actually used will be an integer fraction of the
@@ -448,30 +442,9 @@ DTBT = -0.9                     !   [s or nondim] default = -0.98
                                 ! integer fraction of DT, rounding down.
 
 ! === module MOM_thickness_diffuse ===
-KHTH = 1.0                      !   [m2 s-1] default = 0.0
-                                ! The background horizontal thickness diffusivity.
-KHTH_MAX = 1000.0               !   [m2 s-1] default = 0.0
-                                ! The maximum horizontal thickness diffusivity.
-Z_OUTPUT_GRID_FILE = "OM3_zgrid.nc" ! default = ""
-                                ! The file that specifies the vertical grid for
-                                ! depth-space diagnostics, or blank to disable
-                                ! depth-space output.
-!NK_ZSPACE (from file) = -1     !   [nondim]
-                                ! The number of depth-space levels.  This is determined
-                                ! from the size of the variable zw in the output grid file.
 
 ! === module MOM_diabatic_driver ===
 ! The following parameters are used for diabatic processes.
-ML_RADIATION = True             !   [Boolean] default = False
-                                ! If true, allow a fraction of TKE available from wind
-                                ! work to penetrate below the base of the mixed layer
-                                ! with a vertical decay scale determined by the minimum
-                                ! of: (1) The depth of the mixed layer, (2) an Ekman
-                                ! length scale.
-ML_RAD_COEFF = 0.1              !   [nondim] default = 0.2
-                                ! The coefficient which scales MSTAR*USTAR^3 to obtain
-                                ! the energy available for mixing below the base of the
-                                ! mixed layer. This is only used if ML_RADIATION is true.
 BBL_MIXING_AS_MAX = False       !   [Boolean] default = True
                                 ! If true, take the maximum of the diffusivity from the
                                 ! BBL mixing and the other diffusivities. Otherwise,
@@ -498,14 +471,6 @@ INT_TIDE_DISSIPATION = True     !   [Boolean] default = False
                                 ! If true, use an internal tidal dissipation scheme to
                                 ! drive diapycnal mixing, along the lines of St. Laurent
                                 ! et al. (2002) and Simmons et al. (2004).
-DISSIPATION_N0 = 1.0E-07        !   [W m-3] default = 0.0
-                                ! The intercept when N=0 of the N-dependent expression
-                                ! used to set a minimum dissipation by which to determine
-                                ! a lower bound of Kd (a floor): A in eps_min = A + B*N.
-DISSIPATION_N1 = 6.0E-04        !   [J m-3] default = 0.0
-                                ! The coefficient multiplying N, following Gargett, used to
-                                ! set a minimum dissipation by which to determine a lower
-                                ! bound of Kd (a floor): B in eps_min = A + B*N
 INT_TIDE_DECAY_SCALE = 300.3003003003003 !   [m] default = 0.0
                                 ! The decay scale away from the bottom for tidal TKE with
                                 ! the new coding when INT_TIDE_DISSIPATION is used.
@@ -539,20 +504,10 @@ KPP%
 ! === module MOM_diffConvection ===
 ! This module implements enhanced diffusivity as a
 ! function of static stability, N^2.
-USE_CONVECTION = True           !   [Boolean] default = False
-                                ! If true, turns on the diffusive convection scheme that
-                                ! increases diapycnal diffusivities at statically unstable
-                                ! interfaces. Relevant parameters are contained in the
-                                ! CONVECTION% parameter block.
 CONVECTION%
 %CONVECTION
 
 ! === module MOM_entrain_diffusive ===
-MAX_ENT_IT = 20                 ! default = 5
-                                ! The maximum number of iterations that may be used to
-                                ! calculate the interior diapycnal entrainment.
-TOLERANCE_ENT = 1.0E-05         !   [m] default = 1.549193338482967E-05
-                                ! The tolerance with which to solve for entrainment values.
 
 ! === module MOM_kappa_shear ===
 MAX_RINO_IT = 25                !   [nondim] default = 50
@@ -580,17 +535,10 @@ TRACER_ADVECTION_SCHEME = "PPM:H3" ! default = "PLM"
                                 !   PPM:H3 - Piecewise Parabolic Method (Huyhn 3rd order)
 
 ! === module MOM_tracer_hor_diff ===
-DIFFUSE_ML_TO_INTERIOR = True   !   [Boolean] default = False
-                                ! If true, enable epipycnal mixing between the surface
-                                ! boundary layer and the interior.
 CHECK_DIFFUSIVE_CFL = True      !   [Boolean] default = False
                                 ! If true, use enough iterations the diffusion to ensure
                                 ! that the diffusive equivalent of the CFL limit is not
                                 ! violated.  If false, always use 1 iteration.
-ML_KHTR_SCALE = 0.0             !   [nondim] default = 1.0
-                                ! With Diffuse_ML_interior, the ratio of the truly
-                                ! horizontal diffusivity in the mixed layer to the
-                                ! epipycnal diffusivity.  The valid range is 0 to 1.
 
 ! === module ocean_model_init ===
 ENERGYSAVEDAYS = 0.25           !   [days] default = 1.0
