@@ -91,7 +91,7 @@ use MOM_int_tide_input, only : set_int_tide_input, int_tide_input_init
 use MOM_int_tide_input, only : int_tide_input_end, int_tide_input_CS, int_tide_input_type
 use MOM_internal_tides, only : propagate_int_tide, register_int_tide_restarts
 use MOM_internal_tides, only : internal_tides_init, internal_tides_end, int_tide_CS
-use MOM_kappa_shear, only : calculate_kappa_shear, kappa_shear_init, Kappa_shear_CS
+use MOM_kappa_shear, only : kappa_shear_is_used
 use MOM_KPP, only : KPP_CS, KPP_init, KPP_calculate, KPP_end, KPP_applyNonLocalTransport
 use MOM_opacity, only : opacity_init, set_opacity, opacity_end, opacity_CS
 use MOM_set_diffusivity, only : set_diffusivity, set_BBL_diffusivity
@@ -173,7 +173,6 @@ type, public :: diabatic_CS ; private
   type(bulkmixedlayer_CS),    pointer :: bulkmixedlayer_CSp => NULL()
   type(regularize_layers_CS), pointer :: regularize_layers_CSp => NULL()
   type(geothermal_CS),        pointer :: geothermal_CSp => NULL()
-  type(Kappa_shear_CS),       pointer :: kappa_shear_CSp => NULL()
   type(int_tide_CS),          pointer :: int_tide_CSp => NULL()
   type(int_tide_input_CS),    pointer :: int_tide_input_CSp => NULL()
   type(int_tide_input_type),  pointer :: int_tide_input => NULL()
@@ -198,7 +197,7 @@ type, public :: diabatic_CS ; private
 end type diabatic_CS
 
 integer :: id_clock_entrain, id_clock_mixedlayer, id_clock_set_diffusivity
-integer :: id_clock_uv_at_h, id_clock_frazil, id_clock_kappa_shear
+integer :: id_clock_uv_at_h, id_clock_frazil
 integer :: id_clock_tracers, id_clock_tridiag, id_clock_pass, id_clock_sponge
 integer :: id_clock_geothermal, id_clock_differential_diff, id_clock_remap
 integer :: id_clock_kpp
@@ -414,41 +413,19 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
 !   Calculate appropriately limited diapycnal mass fluxes to account
 ! for diapycnal diffusion and advection.
   if (CS%debug) then
-    call MOM_state_chksum("before use_kappa_shear ", u(:,:,:), v(:,:,:), h(:,:,:), G)
+    call MOM_state_chksum("before find_uv_at_h", u(:,:,:), v(:,:,:), h(:,:,:), G)
   endif
   if (CS%use_kappa_shear) then
     if ((CS%ML_mix_first > 0.0) .or. CS%use_geothermal) then
       call find_uv_at_h(u, v, h_orig, u_h, v_h, G, eaml, ebml)
       if (CS%debug) then
-        call hchksum(eaml, "aft find_uv_at_h eaml",G)
-        call hchksum(ebml, "aft find_uv_at_h ebml",G)
+        call hchksum(eaml, "after find_uv_at_h eaml",G)
+        call hchksum(ebml, "after find_uv_at_h ebml",G)
       endif
     else
       call find_uv_at_h(u, v, h, u_h, v_h, G)
     endif
-    if (CS%debug) then
-      call MOM_state_chksum("aft find_uv_at_h KS ", u(:,:,:), v(:,:,:), h(:,:,:), G)
-      call MOM_forcing_chksum("before calc_KS ", fluxes, G, haloshift=0)
-      call MOM_thermovar_chksum("before calc_KS ", tv, G)
-      call uchksum(u_h, "before calc_KS u_h",G)
-      call vchksum(v_h, "before calc_KS v_h",G)
-    endif
-
-    call cpu_clock_begin(id_clock_kappa_shear)
-    ! Changes: visc%Kd_turb, visc%TKE_turb (not clear that TKE_turb is used as input ????)
-    ! Sets visc%Kv_turb
-    call calculate_kappa_shear(u_h, v_h, h, tv, fluxes%p_surf, visc%Kd_turb, visc%TKE_turb, &
-                               visc%Kv_turb, dt, G, CS%kappa_shear_CSp)
-    call cpu_clock_end(id_clock_kappa_shear)
-    if (CS%debug) then
-      call MOM_state_chksum("after Calc_KS ", u(:,:,:), v(:,:,:), h(:,:,:), G)
-      call MOM_forcing_chksum("after calc_KS ", fluxes, G, haloshift=0)
-      call MOM_thermovar_chksum("after calc_KS ", tv, G)
-      call hchksum(visc%Kd_turb, "after calc_KS visc%Kd_turb",G)
-      call hchksum(visc%Kv_turb, "after calc_KS visc%Kv_turb",G)
-      call hchksum(visc%TKE_turb, "after calc_KS visc%TKE_turb",G)
-    endif
-    if (showCallTree) call callTree_waypoint("done with calculate_kappa_shear (diabatic)")
+    if (showCallTree) call callTree_waypoint("done with find_uv_at_h (diabatic)")
   endif
 
   ! Why is this block here? -AJA  ?????
@@ -464,7 +441,9 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
 
   call cpu_clock_begin(id_clock_set_diffusivity)
   ! Sets: Kd, Kd_int, visc%Kd_extra_T, visc%Kd_extra_S
-  call set_diffusivity(u, v, h, tv, fluxes, CS%optics, visc, dt, G, CS%set_diff_CSp, Kd, Kd_int)
+  ! Also changes: visc%Kd_turb, visc%TKE_turb (not clear that TKE_turb is used as input ????)
+  ! And sets visc%Kv_turb
+  call set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, CS%optics, visc, dt, G, CS%set_diff_CSp, Kd, Kd_int)
   call cpu_clock_end(id_clock_set_diffusivity)
   if (showCallTree) call callTree_waypoint("done with set_diffusivity (diabatic)")
 
@@ -1512,9 +1491,7 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
   call get_param(param_file, mod, "DOUBLE_DIFFUSION", differentialDiffusion, &
                  "If true, apply parameterization of double-diffusion.", &
                  default=.false. )
-  call get_param(param_file, mod, "USE_JACKSON_PARAM", CS%use_kappa_shear, &
-                 "If true, use the Jackson-Hallberg-Legg (JPO 2008) \n"//& 
-                 "shear mixing parameterization.", default=.false.)
+  CS%use_kappa_shear = kappa_shear_is_used(param_file)
   if (CS%bulkmixedlayer) then
     call get_param(param_file, mod, "ML_MIX_FIRST", CS%ML_mix_first, &
                  "The fraction of the mixed layer mixing that is applied \n"//&
@@ -1654,8 +1631,6 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
   call entrain_diffusive_init(Time, G, param_file, diag, CS%entrain_diffusive_CSp)
   if (CS%use_geothermal) &
     call geothermal_init(Time, G, param_file, diag, CS%geothermal_CSp)
-  if (CS%use_kappa_shear) &
-    call kappa_shear_init(Time, G, param_file, diag, CS%kappa_shear_CSp)
 
   if (CS%use_int_tides) then
     call int_tide_input_init(Time, G, param_file, diag, CS%int_tide_input_CSp, &
@@ -1672,8 +1647,6 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
     id_clock_frazil = cpu_clock_id('(Ocean frazil)', grain=CLOCK_ROUTINE)
   if (CS%use_geothermal) &
     id_clock_geothermal = cpu_clock_id('(Ocean geothermal)', grain=CLOCK_ROUTINE)
-  if (CS%use_kappa_shear) &
-    id_clock_kappa_shear = cpu_clock_id('(Ocean kappa_shear)', grain=CLOCK_MODULE)
   id_clock_set_diffusivity = cpu_clock_id('(Ocean set_diffusivity)', grain=CLOCK_MODULE)
   id_clock_kpp = cpu_clock_id('(Ocean KPP)', grain=CLOCK_MODULE)
   id_clock_tracers = cpu_clock_id('(Ocean tracer_columns)', grain=CLOCK_MODULE_DRIVER+5)

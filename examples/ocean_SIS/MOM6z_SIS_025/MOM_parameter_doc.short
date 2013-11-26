@@ -361,9 +361,6 @@ CFL_TRUNCATE_START = 0.2        !   [nondim] default = 0.0
 ! === module MOM_PointAccel ===
 
 ! === module MOM_set_visc ===
-USE_JACKSON_PARAM = True        !   [Boolean] default = False
-                                ! If true, use the Jackson-Hallberg-Legg (JPO 2008)
-                                ! shear mixing parameterization.
 PRANDTL_TURB = 1.0              !   [nondim] default = 0.0
                                 ! The turbulent Prandtl number applied to shear
                                 ! instability.
@@ -481,6 +478,15 @@ H2_FILE = "ocean_topog.nc"      !
                                 ! The path to the file containing the sub-grid-scale
                                 ! topographic roughness amplitude with INT_TIDE_DISSIPATION.
 
+! === module MOM_kappa_shear ===
+! Parameterization of shear-driven turbulence following Jackson, Hallberg and Legg, JPO 2008
+USE_JACKSON_PARAM = True        !   [Boolean] default = False
+                                ! If true, use the Jackson-Hallberg-Legg (JPO 2008)
+                                ! shear mixing parameterization.
+MAX_RINO_IT = 25                !   [nondim] default = 50
+                                ! The maximum number of iterations that may be used to
+                                ! estimate the Richardson number driven mixing.
+
 ! === module MOM_KPP ===
 ! This is the MOM wrapper to CVmix:KPP
 ! See http://code.google.com/p/cvmix/
@@ -497,11 +503,6 @@ CONVECTION%
 %CONVECTION
 
 ! === module MOM_entrain_diffusive ===
-
-! === module MOM_kappa_shear ===
-MAX_RINO_IT = 25                !   [nondim] default = 50
-                                ! The maximum number of iterations that may be used to
-                                ! estimate the Richardson number driven mixing.
 
 ! === module MOM_regularize_layers ===
 

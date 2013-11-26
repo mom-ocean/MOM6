@@ -59,6 +59,7 @@ use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
+use MOM_kappa_shear, only : kappa_shear_is_used
 use MOM_restart, only : register_restart_field, vardesc, MOM_restart_CS
 use MOM_variables, only : thermo_var_ptrs
 use MOM_variables, only : vertvisc_type, ocean_OBC_type
@@ -1482,10 +1483,7 @@ subroutine set_visc_register_restarts(G, param_file, visc, restart_CS)
                  do_not_log=.true.)
   use_kappa_shear = .false. ; useKPP = .false.
   if (.not.adiabatic) then
-    call get_param(param_file, mod, "USE_JACKSON_PARAM", use_kappa_shear, &
-                 "If true, use the Jackson-Hallberg-Legg (JPO 2008) \n"//& 
-                 "shear mixing parameterization.", default=.false., &
-                  do_not_log=.true.)
+    use_kappa_shear = kappa_shear_is_used(param_file)
     call get_param(param_file, mod, "USE_KPP", useKPP, &
                  "If true, turns on the [CVmix] KPP scheme of Large et al., 1984,\n"// &
                  "to calculate diffusivities and non-local transport in the OBL.", &
@@ -1575,9 +1573,7 @@ subroutine set_visc_init(Time, G, param_file, diag, visc, CS)
   endif
 
   if (.not.adiabatic) then
-    call get_param(param_file, mod, "USE_JACKSON_PARAM", use_kappa_shear, &
-                 "If true, use the Jackson-Hallberg-Legg (JPO 2008) \n"//& 
-                 "shear mixing parameterization.", default=.false.)
+    use_kappa_shear = kappa_shear_is_used(param_file)
     CS%RiNo_mix = use_kappa_shear
     call get_param(param_file, mod, "DOUBLE_DIFFUSION", differential_diffusion, &
                  "If true, increase diffusivitives for temperature or salt \n"//&

@@ -59,7 +59,7 @@ implicit none ; private
 #include <netcdf.inc>
 #endif
 
-public Calculate_kappa_shear, kappa_shear_init
+public Calculate_kappa_shear, kappa_shear_init, kappa_shear_is_used
 
 type, public :: Kappa_shear_CS ! ; private
   real    :: RiNo_crit       ! The critical shear Richardson number for
@@ -108,6 +108,7 @@ type, public :: Kappa_shear_CS ! ; private
 end type Kappa_shear_CS
 
 ! integer :: id_clock_project, id_clock_KQ, id_clock_avg, id_clock_setup
+  character(len=40)  :: mod = "MOM_kappa_shear"  ! This module's name.
 
 #undef  DEBUG
 #undef  ADD_DIAGNOSTICS
@@ -1620,12 +1621,12 @@ end subroutine find_kappa_tke
 
 end subroutine Calculate_kappa_shear
 
-subroutine kappa_shear_init(Time, G, param_file, diag, CS)
+logical function kappa_shear_init(Time, G, param_file, diag, CS)
   type(time_type),         intent(in)    :: Time
   type(ocean_grid_type),   intent(in)    :: G
   type(param_file_type),   intent(in)    :: param_file
   type(diag_ctrl), target, intent(inout) :: diag
-  type(Kappa_shear_CS),   pointer       :: CS
+  type(Kappa_shear_CS),    pointer       :: CS
 ! Arguments: Time - The current model time.
 !  (in)      G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
@@ -1633,10 +1634,10 @@ subroutine kappa_shear_init(Time, G, param_file, diag, CS)
 !  (in)      diag - A structure that is used to regulate diagnostic output.
 !  (in/out)  CS - A pointer that is set to point to the control structure
 !                 for this module
+!  (returns) kappa_shear_init - True if module is to be used, False otherwise
   logical :: merge_mixedlayer
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = "MOM_kappa_shear"  ! This module's name.
   real :: KD_normal ! The KD of the main model, read here only as a parameter
                     ! for setting the default of KD_SMOOTH
   if (associated(CS)) then
@@ -1656,7 +1657,11 @@ subroutine kappa_shear_init(Time, G, param_file, diag, CS)
   ! subgridscale inhomogeneity into account.
 
 ! Set default, read and log parameters
-  call log_version(param_file, mod, version, "")
+  call log_version(param_file, mod, version, &
+    "Parameterization of shear-driven turbulence following Jackson, Hallberg and Legg, JPO 2008")
+  call get_param(param_file, mod, "USE_JACKSON_PARAM", kappa_shear_init, &
+                 "If true, use the Jackson-Hallberg-Legg (JPO 2008) \n"//&
+                 "shear mixing parameterization.", default=.false.)
   call get_param(param_file, mod, "RINO_CRIT", CS%RiNo_crit, &
                  "The critical Richardson number for shear mixing.", &
                  units="nondim", default=0.25)
@@ -1740,6 +1745,9 @@ subroutine kappa_shear_init(Time, G, param_file, diag, CS)
     if (merge_mixedlayer) CS%nkml = G%nkml
   endif
 
+! Forego remainder of initialization if not using this scheme
+  if (.not. kappa_shear_init) return
+
   CS%diag => diag
 
   CS%id_Kd_shear = register_diag_field('ocean_model','Kd_shear',diag%axesTi,Time, &
@@ -1753,8 +1761,15 @@ subroutine kappa_shear_init(Time, G, param_file, diag, CS)
       'Finite volume thickness of interfaces', 'meter')
 #endif
 
-  ! Write all relevant parameters to the model log.
+end function kappa_shear_init
 
-end subroutine kappa_shear_init
+logical function kappa_shear_is_used(param_file)
+! Reads the parameter "USE_JACKSON_PARAM" and returns state.
+!   This function allows other modules to know whether this parameterization will
+! be used without needing to duplicate the log entry.
+  type(param_file_type), intent(in) :: param_file
+  call get_param(param_file, mod, "USE_JACKSON_PARAM", kappa_shear_is_used, &
+                 default=.false., do_not_log = .true.)
+end function kappa_shear_is_used
 
 end module MOM_kappa_shear

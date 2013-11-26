@@ -48,10 +48,13 @@ use MOM_diag_mediator, only : safe_alloc_ptr, post_data, register_diag_field
 use MOM_diag_to_Z, only : diag_to_Z_CS, register_Zint_diag, calc_Zint_diags
 use MOM_checksums, only : hchksum, uchksum, vchksum
 use MOM_error_handler, only : MOM_error, is_root_pe, FATAL, WARNING, NOTE
+use MOM_error_handler, only : callTree_showQuery
+use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing, optics_type
 use MOM_grid, only : ocean_grid_type
 use MOM_intrinsic_functions, only : invcosh
+use MOM_kappa_shear, only : calculate_kappa_shear, kappa_shear_init, Kappa_shear_CS
 use MOM_io, only : slasher, vardesc
 use MOM_string_functions, only : uppercase
 use MOM_thickness_diffuse, only : vert_fill_TS
@@ -120,8 +123,6 @@ type, public :: set_diffusivity_CS ; private
                              ! from the BBL mixing and the other diffusivities.
                              ! Otherwise, diffusivities from the BBL_mixing is
                              ! simply added.
-  logical :: Add_input_Kd    !   If true, add visc%Kd_turb to the diapycnal
-                             ! diffusivities.
   logical :: debug           ! If true, write verbose checksums for debugging.
   real    :: Kd              ! The interior diapycnal diffusivity in m2 s-1.
   real    :: Kd_min          ! The minimum permitted value for the diapycnal
@@ -248,6 +249,8 @@ type, public :: set_diffusivity_CS ; private
   logical :: user_change_diff  !   If true, call user-defined code to change the
                                ! diffusivity.
   logical :: double_diffusion  ! If true, enable double-diffusive mixing.
+  logical :: useKappaShear   ! If true, use the kappa_shear module to find the
+                             ! shear-driven diapycnal diffusivity.
   real    :: Max_Rrho_salt_fingers    ! maximum density ratio for salt fingering
   real    :: Max_salt_diff_salt_fingers ! maximum salt diffusivity for salt fingers
   real    :: Kv_molecular    ! molecular viscosity for double diffusive convection
@@ -270,6 +273,7 @@ type, public :: set_diffusivity_CS ; private
   character(len=200) :: inputdir
   type(user_change_diff_CS), pointer :: user_change_diff_CSp => NULL()
   type(diag_to_Z_CS), pointer :: diag_to_Z_CSp => NULL()
+  type(Kappa_shear_CS), pointer :: kappaShear_CSp => NULL()
 end type set_diffusivity_CS
 
 type diffusivity_diags
@@ -314,13 +318,16 @@ character*(20), parameter :: POLZIN_PROFILE_STRING = "POLZIN_09"
 integer, parameter :: STLAURENT_02 = 1
 integer, parameter :: POLZIN_09    = 2
 
+! Clocks
+integer :: id_clock_kappaShear
+
 contains
 
-subroutine set_diffusivity(u, v, h, tv, fluxes, optics, visc, dt, G, CS, &
+subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, G, CS, &
                            Kd, Kd_int)
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)    :: u
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)    :: v
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h, u_h, v_h
   type(thermo_var_ptrs),                  intent(inout) :: tv  ! out is for tv%TempxPmE
   type(forcing),                          intent(in)    :: fluxes
   type(optics_type),                      pointer       :: optics
@@ -397,6 +404,7 @@ subroutine set_diffusivity(u, v, h, tv, fluxes, optics, visc, dt, G, CS, &
                          ! interpolated into depth space.
   integer :: z_ids(6)    ! The id numbers of the diagnostics that are to be
                          ! interpolated into depth space.
+  logical :: showCallTree ! If true, show the call tree
   integer :: i, j, k, is, ie, js, je, nz
   integer :: isd, ied, jsd, jed
 
@@ -405,6 +413,8 @@ subroutine set_diffusivity(u, v, h, tv, fluxes, optics, visc, dt, G, CS, &
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
+  showCallTree = callTree_showQuery()
+  if (showCallTree) call callTree_enter("set_diffusivity(), MOM_set_diffusivity.F90")
 
   if (.not.associated(CS)) call MOM_error(FATAL,"set_diffusivity: "//&
          "Module must be initialized before it is used.")
@@ -481,9 +491,29 @@ subroutine set_diffusivity(u, v, h, tv, fluxes, optics, visc, dt, G, CS, &
   if ((CS%id_KS_extra > 0) .or. (CS%id_KS_extra_z > 0)) then
     allocate(dd%KS_extra(isd:ied,jsd:jed,nz+1)) ; dd%KS_extra(:,:,:) = 0.0
   endif
+
   ! Smooth the properties through massless layers.
   if (use_EOS) then
     call vert_fill_TS(h, tv%T, tv%S, kappa_fill, dt_fill, T_f, S_f, G)
+  endif
+
+  if (CS%useKappaShear) then
+    if (CS%debug) then
+      call hchksum(u_h, "before calc_KS u_h",G)
+      call hchksum(v_h, "before calc_KS v_h",G)
+    endif
+    call cpu_clock_begin(id_clock_kappaShear)
+    ! Changes: visc%Kd_turb, visc%TKE_turb (not clear that TKE_turb is used as input ????)
+    ! Sets visc%Kv_turb
+    call calculate_kappa_shear(u_h, v_h, h, tv, fluxes%p_surf, visc%Kd_turb, visc%TKE_turb, &
+                               visc%Kv_turb, dt, G, CS%kappaShear_CSp)
+    call cpu_clock_end(id_clock_kappaShear)
+    if (CS%debug) then
+      call hchksum(visc%Kd_turb, "after calc_KS visc%Kd_turb",G)
+      call hchksum(visc%Kv_turb, "after calc_KS visc%Kv_turb",G)
+      call hchksum(visc%TKE_turb, "after calc_KS visc%TKE_turb",G)
+    endif
+    if (showCallTree) call callTree_waypoint("done with calculate_kappa_shear (set_diffusivity)")
   endif
 
 !   Calculate the diffusivity, Kd, for each layer.  This would be
@@ -592,7 +622,7 @@ subroutine set_diffusivity(u, v, h, tv, fluxes, optics, visc, dt, G, CS, &
     endif
 
   ! Add the input turbulent diffusivity.
-    if (CS%Add_input_Kd) then
+    if (CS%useKappaShear) then
       if (present(Kd_int)) then
         do K=2,nz ; do i=is,ie
           Kd_int(i,j,K) = visc%Kd_turb(i,j,K) + 0.5*(Kd(i,j,k-1) + Kd(i,j,k))
@@ -677,7 +707,7 @@ subroutine set_diffusivity(u, v, h, tv, fluxes, optics, visc, dt, G, CS, &
 
   if (CS%debug) then
     call hchksum(Kd,"BBL Kd",G,haloshift=0)
-    if (CS%Add_input_Kd) call hchksum(visc%Kd_turb,"Turbulent Kd",G,haloshift=0)
+    if (CS%useKappaShear) call hchksum(visc%Kd_turb,"Turbulent Kd",G,haloshift=0)
     if (associated(visc%kv_bbl_u) .and. associated(visc%kv_bbl_v)) then
       call uchksum(visc%kv_bbl_u,"BBL Kv_bbl_u",G,haloshift=1)
       call vchksum(visc%kv_bbl_v,"BBL Kv_bbl_v",G,haloshift=1)
@@ -793,6 +823,8 @@ subroutine set_diffusivity(u, v, h, tv, fluxes, optics, visc, dt, G, CS, &
   if (associated(dd%TKE_to_Kd)) deallocate(dd%TKE_to_Kd)
   if (associated(dd%KT_extra)) deallocate(dd%KT_extra)
   if (associated(dd%KS_extra)) deallocate(dd%KS_extra)
+
+  if (showCallTree) call callTree_leave("set_diffusivity()")
 
 end subroutine set_diffusivity
 
@@ -2251,12 +2283,6 @@ subroutine set_diffusivity_init(Time, G, param_file, diag, CS, diag_to_Z_CSp)
                  "with KD_TANH_LAT_FN. Valid values are in the range of \n"//&
                  "-2 to 2; 0.4 reproduces CM2M.", units="nondim", default=0.0)
 
-  call get_param(param_file, mod, "USE_JACKSON_PARAM", CS%Add_input_Kd, &
-                 "If true, use the Jackson-Hallberg-Legg (JPO 2008) \n"//&
-                 "shear mixing parameterization.", default=.false.)
-
-
-
   call get_param(param_file, mod, "KV", CS%Kv, &
                  "The background kinematic viscosity in the interior. \n"//&
                  "The molecular value, ~1e-6 m2 s-1, may be used.", &
@@ -2622,6 +2648,10 @@ subroutine set_diffusivity_init(Time, G, param_file, diag, CS, diag_to_Z_CSp)
   if (CS%user_change_diff) then
     call user_change_diff_init(Time, G, param_file, diag, CS%user_change_diff_CSp)
   endif
+
+  CS%useKappaShear = kappa_shear_init(Time, G, param_file, CS%diag, CS%kappaShear_CSp)
+  if (CS%useKappaShear) &
+    id_clock_kappaShear = cpu_clock_id('(Ocean kappa_shear)', grain=CLOCK_MODULE)
 
 end subroutine set_diffusivity_init
 

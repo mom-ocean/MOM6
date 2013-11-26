@@ -872,9 +872,6 @@ MAX_TRUNC_FILE_SIZE_PER_PE = 50 ! default = 50
 LINEAR_DRAG = False             !   [Boolean] default = False
                                 ! If LINEAR_DRAG and BOTTOMDRAGLAW are defined the drag
                                 ! law is cdrag*DRAG_BG_VEL*u.
-USE_JACKSON_PARAM = True        !   [Boolean] default = False
-                                ! If true, use the Jackson-Hallberg-Legg (JPO 2008)
-                                ! shear mixing parameterization.
 DOUBLE_DIFFUSION = False        !   [Boolean] default = False
                                 ! If true, increase diffusivitives for temperature or salt
                                 ! based on double-diffusive paramaterization from MOM4/KPP.
@@ -1255,6 +1252,69 @@ H2_FILE = "sgs_h2.nc"           !
                                 ! The path to the file containing the sub-grid-scale
                                 ! topographic roughness amplitude with INT_TIDE_DISSIPATION.
 
+! === module MOM_kappa_shear ===
+! Parameterization of shear-driven turbulence following Jackson, Hallberg and Legg, JPO 2008
+USE_JACKSON_PARAM = True        !   [Boolean] default = False
+                                ! If true, use the Jackson-Hallberg-Legg (JPO 2008)
+                                ! shear mixing parameterization.
+RINO_CRIT = 0.25                !   [nondim] default = 0.25
+                                ! The critical Richardson number for shear mixing.
+SHEARMIX_RATE = 0.089           !   [nondim] default = 0.089
+                                ! A nondimensional rate scale for shear-driven entrainment.
+                                ! Jackson et al find values in the range of 0.085-0.089.
+MAX_RINO_IT = 25                !   [nondim] default = 50
+                                ! The maximum number of iterations that may be used to
+                                ! estimate the Richardson number driven mixing.
+KD_KAPPA_SHEAR_0 = 2.0E-05      !   [m2 s-1] default = 2.0E-05
+                                ! The background diffusivity that is used to smooth the
+                                ! density and shear profiles before solving for the
+                                ! diffusivities. Defaults to value of KD.
+FRI_CURVATURE = -0.97           !   [nondim] default = -0.97
+                                ! The nondimensional curvature of the function of the
+                                ! Richardson number in the kappa source term in the
+                                ! Jackson et al. scheme.
+TKE_N_DECAY_CONST = 0.24        !   [nondim] default = 0.24
+                                ! The coefficient for the decay of TKE due to
+                                ! stratification (i.e. proportional to N*tke).
+                                ! The values found by Jackson et al. are 0.24-0.28.
+TKE_SHEAR_DECAY_CONST = 0.14    !   [nondim] default = 0.14
+                                ! The coefficient for the decay of TKE due to shear (i.e.
+                                ! proportional to |S|*tke). The values found by Jackson
+                                ! et al. are 0.14-0.12.
+KAPPA_BUOY_SCALE_COEF = 0.82    !   [nondim] default = 0.82
+                                ! The coefficient for the buoyancy length scale in the
+                                ! kappa equation.  The values found by Jackson et al. are
+                                ! in the range of 0.81-0.86.
+KAPPA_N_OVER_S_SCALE_COEF2 = 0.0 !   [nondim] default = 0.0
+                                ! The square of the ratio of the coefficients of the
+                                ! buoyancy and shear scales in the diffusivity equation,
+                                ! Set this to 0 (the default) to eliminate the shear scale.
+                                ! This is only used if USE_JACKSON_PARAM is true.
+KAPPA_SHEAR_TOL_ERR = 0.1       !   [nondim] default = 0.1
+                                ! The fractional error in kappa that is tolerated.
+                                ! Iteration stops when changes between subsequent
+                                ! iterations are smaller than this everywhere in a
+                                ! column.  The peak diffusivities usually converge most
+                                ! rapidly, and have much smaller errors than this.
+TKE_BACKGROUND = 0.0            !   [m2 s-2] default = 0.0
+                                ! A background level of TKE used in the first iteration
+                                ! of the kappa equation.  TKE_BACKGROUND could be 0.
+KAPPA_SHEAR_ELIM_MASSLESS = True !   [Boolean] default = True
+                                ! If true, massless layers are merged with neighboring
+                                ! massive layers in this calculation.  The default is
+                                ! true and I can think of no good reason why it should
+                                ! be false. This is only used if USE_JACKSON_PARAM is true.
+MAX_KAPPA_SHEAR_IT = 13         !   [nondim] default = 13
+                                ! The maximum number of iterations that may be used to
+                                ! estimate the time-averaged diffusivity.
+DEBUG_KAPPA_SHEAR = False       !   [Boolean] default = False
+                                ! If true, write debugging data for the kappa-shear code.
+                                ! Caution: this option is _very_ verbose and should only
+                                ! be used in single-column mode!
+KAPPA_SHEAR_MERGE_ML = True     !   [Boolean] default = True
+                                ! If true, combine the mixed layers together before
+                                ! solving the kappa-shear equations.
+
 ! === module MOM_KPP ===
 ! This is the MOM wrapper to CVmix:KPP
 ! See http://code.google.com/p/cvmix/
@@ -1356,65 +1416,6 @@ GEOTHERMAL_DRHO_DT_INPLACE = -0.01 !   [kg m-3 K-1] default = -0.01
 GEOTHERMAL_VARNAME = "geo_heat" ! default = "geo_heat"
                                 ! The name of the geothermal heating variable in
                                 ! GEOTHERMAL_FILE.
-
-! === module MOM_kappa_shear ===
-RINO_CRIT = 0.25                !   [nondim] default = 0.25
-                                ! The critical Richardson number for shear mixing.
-SHEARMIX_RATE = 0.089           !   [nondim] default = 0.089
-                                ! A nondimensional rate scale for shear-driven entrainment.
-                                ! Jackson et al find values in the range of 0.085-0.089.
-MAX_RINO_IT = 25                !   [nondim] default = 50
-                                ! The maximum number of iterations that may be used to
-                                ! estimate the Richardson number driven mixing.
-KD_KAPPA_SHEAR_0 = 2.0E-05      !   [m2 s-1] default = 2.0E-05
-                                ! The background diffusivity that is used to smooth the
-                                ! density and shear profiles before solving for the
-                                ! diffusivities. Defaults to value of KD.
-FRI_CURVATURE = -0.97           !   [nondim] default = -0.97
-                                ! The nondimensional curvature of the function of the
-                                ! Richardson number in the kappa source term in the
-                                ! Jackson et al. scheme.
-TKE_N_DECAY_CONST = 0.24        !   [nondim] default = 0.24
-                                ! The coefficient for the decay of TKE due to
-                                ! stratification (i.e. proportional to N*tke).
-                                ! The values found by Jackson et al. are 0.24-0.28.
-TKE_SHEAR_DECAY_CONST = 0.14    !   [nondim] default = 0.14
-                                ! The coefficient for the decay of TKE due to shear (i.e.
-                                ! proportional to |S|*tke). The values found by Jackson
-                                ! et al. are 0.14-0.12.
-KAPPA_BUOY_SCALE_COEF = 0.82    !   [nondim] default = 0.82
-                                ! The coefficient for the buoyancy length scale in the
-                                ! kappa equation.  The values found by Jackson et al. are
-                                ! in the range of 0.81-0.86.
-KAPPA_N_OVER_S_SCALE_COEF2 = 0.0 !   [nondim] default = 0.0
-                                ! The square of the ratio of the coefficients of the
-                                ! buoyancy and shear scales in the diffusivity equation,
-                                ! Set this to 0 (the default) to eliminate the shear scale.
-                                ! This is only used if USE_JACKSON_PARAM is true.
-KAPPA_SHEAR_TOL_ERR = 0.1       !   [nondim] default = 0.1
-                                ! The fractional error in kappa that is tolerated.
-                                ! Iteration stops when changes between subsequent
-                                ! iterations are smaller than this everywhere in a
-                                ! column.  The peak diffusivities usually converge most
-                                ! rapidly, and have much smaller errors than this.
-TKE_BACKGROUND = 0.0            !   [m2 s-2] default = 0.0
-                                ! A background level of TKE used in the first iteration
-                                ! of the kappa equation.  TKE_BACKGROUND could be 0.
-KAPPA_SHEAR_ELIM_MASSLESS = True !   [Boolean] default = True
-                                ! If true, massless layers are merged with neighboring
-                                ! massive layers in this calculation.  The default is
-                                ! true and I can think of no good reason why it should
-                                ! be false. This is only used if USE_JACKSON_PARAM is true.
-MAX_KAPPA_SHEAR_IT = 13         !   [nondim] default = 13
-                                ! The maximum number of iterations that may be used to
-                                ! estimate the time-averaged diffusivity.
-DEBUG_KAPPA_SHEAR = False       !   [Boolean] default = False
-                                ! If true, write debugging data for the kappa-shear code.
-                                ! Caution: this option is _very_ verbose and should only
-                                ! be used in single-column mode!
-KAPPA_SHEAR_MERGE_ML = True     !   [Boolean] default = True
-                                ! If true, combine the mixed layers together before
-                                ! solving the kappa-shear equations.
 
 ! === module MOM_mixed_layer ===
 NSTAR = 0.15                    !   [nondim] default = 0.15
