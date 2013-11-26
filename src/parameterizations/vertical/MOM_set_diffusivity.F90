@@ -259,7 +259,7 @@ type, public :: set_diffusivity_CS ; private
   real, pointer, dimension(:,:) :: tideamp => NULL() ! RMS tidal amplitude (m s-1)
   integer :: id_TKE_itidal = -1, id_TKE_leewave = -1, id_Nb = -1, id_N2 = -1
   integer :: id_Kd_itidal = -1, id_Kd_Niku = -1, id_Kd_user = -1
-  integer :: id_Kd_layer = -1, id_Kd_interface = -1
+  integer :: id_Kd_layer = -1
   integer :: id_N2_z = -1, id_Kd_itidal_z = -1, id_Kd_Niku_z = -1, id_Kd_user_z = -1
   integer :: id_Kd_Work = -1, id_Kd_Itidal_Work = -1, id_Kd_Niku_Work = -1
   integer :: id_maxTKE = -1, id_TKE_to_Kd = -1, id_Fl_itidal = -1
@@ -707,7 +707,6 @@ subroutine set_diffusivity(u, v, h, tv, fluxes, optics, visc, dt, G, CS, &
   endif
 
   if (CS%id_Kd_layer > 0) call post_data(CS%id_Kd_layer, Kd, CS%diag)
-  if (CS%id_Kd_interface > 0) call post_data(CS%id_Kd_interface, Kd_int, CS%diag)
 
   num_z_diags = 0
   if (CS%Int_tide_dissipation .or. CS%Lee_wave_dissipation) then
@@ -2487,8 +2486,6 @@ subroutine set_diffusivity_init(Time, G, param_file, diag, CS, diag_to_Z_CSp)
 
   CS%id_Kd_layer = register_diag_field('ocean_model', 'Kd_layer', diag%axesTL, Time, &
       'Diapycnal diffusivity of layers (as set)', 'meter2 second-1')
-  CS%id_Kd_interface = register_diag_field('ocean_model', 'Kd_interface', diag%axesTi, Time, &
-      'Diapycnal diffusivity at interfaces (as set)', 'meter2 second-1')
 
   if (CS%Lee_wave_dissipation) then
  

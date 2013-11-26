@@ -164,7 +164,7 @@ type, public :: diabatic_CS ; private
   type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
                              ! timing of diagnostic output.
   integer :: id_dudt_dia = -1, id_dvdt_dia = -1, id_wd = -1
-  integer :: id_ea = -1 , id_eb = -1, id_Kd_z = -1
+  integer :: id_ea = -1 , id_eb = -1, id_Kd_z = -1, id_Kd_interface = -1
   integer :: id_Tdif_z = -1, id_Tadv_z = -1, id_Sdif_z = -1, id_Sadv_z = -1
   integer :: id_Tdif = -1, id_Tadv = -1, id_Sdif = -1, id_Sadv = -1
   integer :: id_createdH = -1
@@ -546,6 +546,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   ! use in the tri-diagonal solver.
   !   Otherwise, call entrainment_diffusive() which sets ea and eb
   ! based on KD and target densities (ie. does remapping as well).
+  if (CS%id_Kd_interface > 0) call post_data(CS%id_Kd_interface, Kd_int, CS%diag)
   if (CS%useALEalgorithm) then
     do j=js,je ; do i=is,ie
       ea(i,j,1) = 0.
@@ -1624,6 +1625,8 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
   if (CS%id_wd > 0) call safe_alloc_ptr(CDp%diapyc_vel,isd,ied,jsd,jed,nz+1)
 
   call set_diffusivity_init(Time, G, param_file, diag, CS%set_diff_CSp, diag_to_Z_CSp)
+  CS%id_Kd_interface = register_diag_field('ocean_model', 'Kd_interface', diag%axesTi, Time, &
+      'Total diapycnal diffusivity at interfaces', 'meter2 second-1')
 
   ! CS%useKPP is set to True if KPP-scheme is to be used, False otherwise.
   ! KPP_init() allocated CS%KPP_Csp and also sets CS%KPPisPassive
