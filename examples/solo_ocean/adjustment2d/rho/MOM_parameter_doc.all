@@ -1223,13 +1223,6 @@ COMPUTE_MONIN_OBUKHOV = False   !   [Boolean] default = False
                                 ! Monin-Obukhov depth.
 CS = 98.96                      !   [nondim] default = 98.96
                                 ! Parameter for computing velocity scale function.
-NLT_WORKAROUND = False          !   [Boolean] default = False
-                                ! If true, re-scales the non-local transport to ensure
-                                ! that local differences do not exceed a value of 1.0
-MAX_KD_INTERIOR = 0.0           !   [m2/s] default = 0.0
-                                ! If non-zero, the value to limit incoming interior diffusivity to.
-MATCH_INTERIOR = False          !   [Boolean] default = False
-                                ! If true, turns off the matching of diffuvities at the OBL.
 DEEP_OBL_OFFSET = 0.0           !   [m] default = 0.0
                                 ! If non-zero, the distance above the bottom to which the OBL is clipped
                                 ! if it would otherwise reach the bottom. The smaller of this and 0.1D is used.

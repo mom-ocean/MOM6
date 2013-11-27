@@ -44,9 +44,6 @@ type, public :: KPP_CS ; private
   logical :: computeMoninObukhov  ! If True, compute Monin-Obukhov limit
   logical :: passiveMode          ! If True, makes KPP passive meaning it does NOT alter the diffusivity
   logical :: applyNonLocalTrans   ! If True, apply non-local transport to heat and scalars
-  logical :: NLTworkaround        ! If True, re-scale the non-local transport to limit the amplitude
-  logical :: doMatching           ! If True, do NOT match diffusivities at the base of the boundary layer.
-  real    :: maxKdInterior        ! A value to which interior mixing is clipped to (m2/s)
   real    :: deepOBLoffset        ! If non-zero, is a distance from the bottom that the OBL can not penetrate through (m)
   logical :: debug                ! If True, calculate checksums and write debugging information
   logical :: correctSurfLayerAvg  ! If true, applies a correction to the averaging of surface layer properties
@@ -158,16 +155,6 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive)
   call get_param(paramFile, mod, 'CS', CS%cs, &
                  'Parameter for computing velocity scale function.', &
                  units='nondim', default=98.96)
-  call get_param(paramFile, mod, 'NLT_WORKAROUND', CS%NLTworkaround, &
-                 'If true, re-scales the non-local transport to ensure\n'// &
-                 'that local differences do not exceed a value of 1.0', &
-                 default=.False.)
-  call get_param(paramFile, mod, 'MAX_KD_INTERIOR', CS%maxKdInterior, &
-                 'If non-zero, the value to limit incoming interior diffusivity to.\n', &
-                 units='m2/s',default=0.)
-  call get_param(paramFile, mod, 'MATCH_INTERIOR', CS%doMatching, &
-                 'If true, turns off the matching of diffuvities at the OBL.', &
-                 default=.False.)
   call get_param(paramFile, mod, 'DEEP_OBL_OFFSET', CS%deepOBLoffset, &
                  'If non-zero, the distance above the bottom to which the OBL is clipped\n'// &
                  'if it would otherwise reach the bottom. The smaller of this and 0.1D is used.', &
@@ -337,8 +324,8 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
   real, dimension( G%ke )     :: BulkRi_1d              ! Bulk Richardson number for each layer
   real, dimension( G%ke )     :: deltaRho               ! delta Rho in numerator of Bulk Ri number
   real, dimension( G%ke )     :: deltaU2                ! square of delta U (shear) in denominator of Bulk Ri (m2/s2)
-  real, dimension( G%ke+1, 2) :: Kdiffusivity, Kd_match ! Vertical diffusivity at interfaces (m2/s)
-  real, dimension( G%ke+1 )   :: Kviscosity, Kv_match   ! Vertical viscosity at interfaces (m2/s)
+  real, dimension( G%ke+1, 2) :: Kdiffusivity           ! Vertical diffusivity at interfaces (m2/s)
+  real, dimension( G%ke+1 )   :: Kviscosity             ! Vertical viscosity at interfaces (m2/s)
   real, dimension( G%ke+1, 2) :: nonLocalTrans          ! Non-local transport for heat/salt at interfaces (non-dimensional)
   real :: kOBL, OBLdepth_0d, surfFricVel, surfBuoyFlux, Coriolis
   real :: GoRho, pRef, rho1, rhoK, rhoKm1, Uk, Vk, const1, Cv, sigma
@@ -607,22 +594,10 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
 
       ! Now call KPP proper to obtain BL diffusivities, viscosities and non-local transports
 
-      ! Determine what mixing coeff to match at the base of the OBL; recommend match to zeroes.  
-      if (.not. CS%doMatching) then
-        Kdiffusivity(:,:) = 0. ! Diffusivities for heat and salt (m2/s)
-        Kviscosity(:)     = 0. ! Viscosity (m2/s)
-      elseif (CS%maxKdInterior>0.) then
-        Kdiffusivity(:,1) = min( CS%maxKdInterior, Kt(i,j,:)  ) ! Diffusivty for heat (m2/s)
-        Kdiffusivity(:,2) = min( CS%maxKdInterior, Ks(i,j,:) )  ! Diffusivity for salt/passive (m2/s) 
-        Kviscosity(:)     = min( CS%maxKdInterior, Kv(i,j,:) )  ! Viscosity (m2/s)
-      else
-        Kdiffusivity(:,1) = Kt(i,j,:) ! Diffusivty for heat (m2/s)
-        Kdiffusivity(:,2) = Ks(i,j,:) ! Diffusivity for salt/passive (m2/s) 
-        Kviscosity(:)     = Kv(i,j,:) ! Viscosity (m2/s)
-      endif
-
-      Kd_match(:,:) = Kdiffusivity(:,:) ! Record diffusivity passed to KPP for matching
-      Kv_match(:)   = Kviscosity(:)     ! Record viscosity passed to KPP
+      ! Unlike LMD94, we do not match to interior diffusivities. If using the original
+      ! LMD94 shape funcation, not matching is equivalent to matching to a zero diffusivity.
+      Kdiffusivity(:,:) = 0. ! Diffusivities for heat and salt (m2/s)
+      Kviscosity(:)     = 0. ! Viscosity (m2/s)
       surfBuoyFlux  = buoyFlux(i,j,1) - buoyFlux(i,j,int(kOBL)+1) ! We know the actual buoyancy flux into the OBL
       call cvmix_coeffs_kpp(Kdiffusivity, & ! (inout) Total heat/salt diffusivities (m2/s)
                             Kviscosity,   & ! (inout) Total viscosity (m2/s)
@@ -673,8 +648,6 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
         endif 
       endif 
 
-      if (CS%NLTworkaround) call fixNLTamplitude( h(i,j,:), nonLocalTrans(:,1) )
-      if (CS%NLTworkaround) call fixNLTamplitude( h(i,j,:), nonLocalTrans(:,2) )
       nonLocalTransHeat(i,j,:)   = nonLocalTrans(:,1) ! correct index ???
       nonLocalTransScalar(i,j,:) = nonLocalTrans(:,2) ! correct index ???
 
@@ -726,21 +699,21 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
         write(*,'(a4,12a13)') 'k','zT','T','S','dB*d','dU2','Ws','Rib','div.NLT'
         do k=1,min(G%ke,int(kOBL)+3)
         write(*,'(f4.1,5x,12(1x,1es12.3))') float(k)-0.5,iFaceHeight(k), &
-           N2_1d(k),Vt2_1d(k),min(CS%maxKdInterior,Kt(i,j,k)),Kdiffusivity(k,1),nonLocalTrans(k,1)
+           N2_1d(k),Vt2_1d(k),Kt(i,j,k),Kdiffusivity(k,1),nonLocalTrans(k,1)
         write(*,'(f4.1,12(1x,1es12.3))') float(k),cellHeight(k), &
            Temp(i,j,k),Salt(i,j,k),GoRho*deltaRho(k)*(cellHeight(1)-cellHeight(k)),deltaU2(k),Ws_1d(k), &
            BulkRi_1d(k),(nonLocalTrans(k,1)-nonLocalTrans(k+1,1))/h(i,j,k)
         enddo
         write(*,'(f4.1,5x,12(1x,1es12.3))') float(k)-0.5,iFaceHeight(k), &
-           N2_1d(k),Vt2_1d(k),min(CS%maxKdInterior,Kt(i,j,k)),Kdiffusivity(k,1),nonLocalTrans(k,1)
+           N2_1d(k),Vt2_1d(k),Kt(i,j,k),Kdiffusivity(k,1),nonLocalTrans(k,1)
       endif
 
       ! Update output of routine
       if (.not. CS%passiveMode) then
         do k=1, G%ke+1
-          if (Kdiffusivity(k,1) /= Kd_match(k,1)) Kt(i,j,k) = Kdiffusivity(k,1)
-          if (Kdiffusivity(k,2) /= Kd_match(k,2)) Ks(i,j,k) = Kdiffusivity(k,2)
-          if (Kviscosity(k) /= Kv_match(k)) Kv(i,j,k) = Kviscosity(k)
+          if (Kdiffusivity(k,1) /= 0.) Kt(i,j,k) = Kdiffusivity(k,1)
+          if (Kdiffusivity(k,2) /= 0.) Ks(i,j,k) = Kdiffusivity(k,2)
+          if (Kviscosity(k) /= 0.) Kv(i,j,k) = Kviscosity(k)
         enddo
       endif
 
@@ -778,17 +751,17 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
 end subroutine KPP_calculate
 
 
-subroutine fixNLTamplitude( h, NLT )
-! Arguments
-  real, dimension(:), intent(in)    :: h
-  real, dimension(:), intent(inout) :: NLT
-! Local variables
-  real :: maxDelta
-  integer :: n
-  n=size(NLT,1)
-  maxDelta = maxval( abs( (NLT(1:n-1)-NLT(2:n)) )/h(:) )
-  if (maxDelta>1.) NLT = NLT / maxDelta
-end subroutine fixNLTamplitude
+!subroutine fixNLTamplitude( h, NLT )
+!! Arguments
+!  real, dimension(:), intent(in)    :: h
+!  real, dimension(:), intent(inout) :: NLT
+!! Local variables
+!  real :: maxDelta
+!  integer :: n
+!  n=size(NLT,1)
+!  maxDelta = maxval( abs( (NLT(1:n-1)-NLT(2:n)) )/h(:) )
+!  if (maxDelta>1.) NLT = NLT / maxDelta
+!end subroutine fixNLTamplitude
 
 
 subroutine KPP_applyNonLocalTransport(CS, G, h, nonLocalTrans, surfFlux, dt, scalar, isHeat, isSalt)
