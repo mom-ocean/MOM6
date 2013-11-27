@@ -8,7 +8,7 @@
 /
 
  &atmos_model_nml
-           layout = 16, 18
+           layout = 0, 0
 /
 
  &coupler_nml
@@ -65,8 +65,8 @@
 /
 
  &ice_model_nml
-           layout = 16, 18
-           io_layout = 2,2
+           layout = 0, 0
+           io_layout = 1, 1
            nsteps_dyn=144
            nsteps_adv=2
            num_part = 6
