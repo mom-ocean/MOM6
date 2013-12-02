@@ -147,6 +147,8 @@ type, public :: surface_forcing_CS ; private
   type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
                              ! timing of diagnostic output.
   character(len=200) :: inputdir ! The directory where NetCDF input files are.
+  character(len=200) :: salt_restore_file ! The filename for salt restoring data
+  character(len=30) :: salt_restore_var_name ! The vairable name of surface salinity in salt_restore_file
 
   logical :: first_call = .true. ! True if convert_IOB_to_fluxes has not been
                                  ! called yet.
@@ -819,6 +821,13 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt)
                  "to the relative surface anomalies (akin to a piston \n"//&
                  "velocity).  Note the non-MKS units.", units="m day-1", &
                  fail_if_missing=.true.)
+    call get_param(param_file, mod, "SALT_RESTORE_FILE", CS%salt_restore_file, &
+                 "A file in which to find the surface salinity to use for restoring.", &
+                 default="salt_restore.nc")
+    call get_param(param_file, mod, "SALT_RESTORE_VARIABLE", CS%salt_restore_var_name, &
+                 "The name of the surface salinity variable to read from "//&
+                 "SALT_RESTORE_FILE for restoring salinity.", &
+                 default="salt")
 ! Convert CS%Flux_const from m day-1 to m s-1.
     CS%Flux_const = CS%Flux_const / 86400.0
 
@@ -992,8 +1001,8 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt)
   endif
 
   if (present(restore_salt)) then ; if (restore_salt) then
-    salt_file = trim(CS%inputdir) // "salt_restore.nc"
-    CS%id_srestore = init_external_field(salt_file,'salt',domain=G%Domain%mpp_domain)
+    salt_file = trim(CS%inputdir) // trim(CS%salt_restore_file)
+    CS%id_srestore = init_external_field(salt_file, CS%salt_restore_var_name, domain=G%Domain%mpp_domain)
   endif ; endif
 
   ! Set up any restart fields associated with the forcing.
