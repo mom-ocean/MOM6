@@ -49,7 +49,9 @@ type, public :: KPP_CS ; private
   logical :: correctSurfLayerAvg  ! If true, applies a correction to the averaging of surface layer properties
   real    :: surfLayerDepth       ! A guess at the depth of the surface layer (which should 0.1 of OBLdepth) (m)
   integer :: NLT_shape            ! Determines the shape function for nonlocal transport.
-  logical :: KPP_zero_diffusivity ! If True, will set diffusivity and viscosity from KPP to zero; for testing purposes. 
+  logical :: KPPzeroDiffusivity   ! If True, will set diffusivity and viscosity from KPP to zero; for testing purposes. 
+  logical :: KPPisAdditive        ! If True, will add KPP diffusivity to initial diffusivity.
+                                  ! If False, will replace initial diffusivity wherever KPP diffusivity is non-zero.
 
   ! CVmix parameters
   type(CVmix_kpp_params_type), pointer :: KPP_params => NULL()
@@ -68,6 +70,7 @@ type, public :: KPP_CS ; private
   integer :: id_Tsurf    = -1, id_Ssurf    = -1
   integer :: id_Usurf    = -1, id_Vsurf    = -1
   integer :: id_dSdt     = -1, id_dTdt     = -1
+  integer :: id_Kd_in    = -1
 
 ! Diagnostics arrays
   real, allocatable, dimension(:,:)   :: OBLdepth  ! Depth (positive) of OBL (m)
@@ -185,9 +188,13 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive)
     case default ; call MOM_error(FATAL,"KPP_init: "// &
                    "Unrecognized NLT_SHAPE option"//trim(string))
   end select
-  call get_param(paramFile, mod, 'KPP_ZERO_DIFFUSIVITY', CS%KPP_zero_diffusivity, &
-                 'If true, sets both the diffusivity and viscosity from KPP to zero; for testing.'&
-                 ,default=.False.)
+  call get_param(paramFile, mod, 'KPP_ZERO_DIFFUSIVITY', CS%KPPzeroDiffusivity, &
+                 'If true, sets both the diffusivity and viscosity from KPP to zero; for testing.',&
+                 default=.False.)
+  call get_param(paramFile, mod, 'KPP_IS_ADDITIVE', CS%KPPisAdditive, &
+                 'If true, adds KPP diffusivity to the existing diffusivity. If false, replaces '//&
+                 'exisiting diffusivity with KPP diffusivity wherever the latter is non-zero.',&
+                 default=.False.)
 
   call closeParameterBlock(paramFile)
   call get_param(paramFile, mod, 'DEBUG', CS%debug, default=.False., do_not_log=.True.)
@@ -233,6 +240,8 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive)
       'Effective net surface salt flux, as used by [CVmix] KPP', 'ppt m/s')
   CS%id_Kt_KPP = register_diag_field('ocean_model', 'KPP_Kheat', diag%axesTi, Time, &
       'Heat diffusivity due to KPP, as calculated by [CVmix] KPP', 'm2/s')
+  CS%id_Kd_in = register_diag_field('ocean_model', 'KPP_Kd_in', diag%axesTi, Time, &
+      'Diffusivity passed to KPP', 'm2/s')
   CS%id_Ks_KPP = register_diag_field('ocean_model', 'KPP_Ksalt', diag%axesTi, Time, &
       'Salt diffusivity due to KPP, as calculated by [CVmix] KPP', 'm2/s')
   CS%id_Kv_KPP = register_diag_field('ocean_model', 'KPP_Kv', diag%axesTi, Time, &
@@ -364,6 +373,8 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
   ! const1 is a constant factor in unresolved squared velocity, Vt2 (eq. 23 in LMD94)
   const1 = sqrt( abs(BetaT) / (CS%cs * eps) )/( CS%Ri_crit * (CS%vonKarman**2) )
   nonLocalTrans(:,:) = 0.0
+
+  if (CS%id_Kd_in > 0) call post_data(CS%id_Kd_in, Kt, CS%diag)
 
   do j = G%jsc, G%jec
     do i = G%isc, G%iec
@@ -652,7 +663,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
       nonLocalTransScalar(i,j,:) = nonLocalTrans(:,2) ! correct index ???
 
       ! set the KPP diffusivity and viscosity to zero for testing purposes
-      if(CS%KPP_zero_diffusivity) then 
+      if(CS%KPPzeroDiffusivity) then 
          Kdiffusivity(:,1) = 0.0
          Kdiffusivity(:,2) = 0.0
          Kviscosity(:)     = 0.0
@@ -710,11 +721,19 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
 
       ! Update output of routine
       if (.not. CS%passiveMode) then
-        do k=1, G%ke+1
-          if (Kdiffusivity(k,1) /= 0.) Kt(i,j,k) = Kdiffusivity(k,1)
-          if (Kdiffusivity(k,2) /= 0.) Ks(i,j,k) = Kdiffusivity(k,2)
-          if (Kviscosity(k) /= 0.) Kv(i,j,k) = Kviscosity(k)
-        enddo
+        if (CS%KPPisAdditive) then
+          do k=1, G%ke+1
+            Kt(i,j,k) = Kt(i,j,k) + Kdiffusivity(k,1)
+            Ks(i,j,k) = Ks(i,j,k) + Kdiffusivity(k,2)
+            Kv(i,j,k) = Kv(i,j,k) + Kviscosity(k)
+          enddo
+        else ! KPP replaces prior diffusivity when former is non-zero
+          do k=1, G%ke+1
+            if (Kdiffusivity(k,1) /= 0.) Kt(i,j,k) = Kdiffusivity(k,1)
+            if (Kdiffusivity(k,2) /= 0.) Ks(i,j,k) = Kdiffusivity(k,2)
+            if (Kviscosity(k) /= 0.) Kv(i,j,k) = Kviscosity(k)
+          enddo
+        endif
       endif
 
     enddo ! i
