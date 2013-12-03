@@ -505,6 +505,8 @@ USE_KPP = True                  !   [Boolean] default = False
                                 ! If true, turns on the [CVmix] KPP scheme of Large et al., 1984,
                                 ! to calculate diffusivities and non-local transport in the OBL.
 KPP%
+KPP_IS_ADDITIVE = True          !   [Boolean] default = False
+                                ! If true, adds KPP diffusivity to the existing diffusivity. If false, replaces exisiting diffusivity with KPP diffusivity wherever the latter is non-zero.
 %KPP
 
 ! === module MOM_diffConvection ===
