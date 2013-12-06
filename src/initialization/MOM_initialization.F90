@@ -340,6 +340,9 @@ subroutine MOM_initialize(u, v, h, tv, Time, G, PF, dirs, &
     call qchksum(G%CoriolisBu, "MOM_initialize: f ", G)
   endif
 
+! Compute global integrals of grid values for later use in scalar diagnostics !
+  call compute_global_grid_integrals(G)
+
 ! Write out all of the grid data used by this run.
   call get_param(PF, mod, "ALWAYS_WRITE_GEOM", write_geom, &
                  "If true, write the geometry and vertical grid files \n"//&
@@ -3122,7 +3125,8 @@ subroutine reset_face_lengths_list(G, param_file)
           (((lon >= u_lon(1,npt)) .and. (lon <= u_lon(2,npt))) .or. &
            ((lon_p >= u_lon(1,npt)) .and. (lon_p <= u_lon(2,npt))) .or. &
            ((lon_m >= u_lon(1,npt)) .and. (lon_m <= u_lon(2,npt)))) ) &
-        G%dy_Cu(I,j) = G%mask2dCu(I,j) * min(G%dyCu(I,j), max(u_width(npt), 0.0))
+  
+      G%dy_Cu(I,j) = G%mask2dCu(I,j) * min(G%dyCu(I,j), max(u_width(npt), 0.0))
     enddo
 
     G%areaCu(I,j) = G%dxCu(I,j)*G%dy_Cu(I,j)
@@ -3225,6 +3229,21 @@ subroutine set_velocity_depth_max(G)
   enddo ; enddo
 end subroutine set_velocity_depth_max
 ! -----------------------------------------------------------------------------
+
+! -----------------------------------------------------------------------------
+subroutine compute_global_grid_integrals(G)
+  type(ocean_grid_type), intent(inout) :: G
+  ! Subroutine to pre-compute global integrals of grid quantities for
+  ! later use in reporting diagnostics
+  integer :: i,j
+
+  G%areaT_global = 0.0 ; G%IareaT_global = 0.0
+  do j=G%jsc,G%jec ; do i=G%isc,G%iec
+    G%areaT_global = G%areaT_global + ( G%areaT(i,j) * G%mask2dT(i,j) )
+  enddo ; enddo
+  call sum_across_PEs( G%areaT_global )
+  G%IareaT_global = 1. / G%areaT_global 
+end subroutine compute_global_grid_integrals
 
 ! -----------------------------------------------------------------------------
 subroutine set_velocity_depth_min(G)
