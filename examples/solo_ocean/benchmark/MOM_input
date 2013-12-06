@@ -555,6 +555,11 @@ DT_FORCING = 3600.0             !   [s] default = 900.0
                                 ! The time step for changing forcing, coupling with other
                                 ! components, or potentially writing certain diagnostics.
                                 ! The default value is given by DT.
+DAYMAX = 1.0                    !   [days]
+                                ! The final time of the whole simulation, in units of
+                                ! TIMEUNIT seconds.  This also sets the potential end
+                                ! time of the present run segment if the end time is
+                                ! not set (as it was here) via ocean_solo_nml in input.nml.
 RESTART_CONTROL = 3             ! default = 1
                                 ! An integer whose bits encode which restart files are
                                 ! written. Add 2 (bit 1) for a time-stamped file, and odd

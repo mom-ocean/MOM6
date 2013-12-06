@@ -6,9 +6,6 @@
          parameter_filename = 'MOM_input',
                               'MOM_override' /
 
- &diag_manager_nml
- /
-
  &fms_io_nml
             fms_netcdf_restart=.true.
             threading_read='multi'
@@ -22,13 +19,3 @@
             clock_flags='NONE'
             domains_stack_size = 960000
             stack_size =0 /
-
- &ocean_solo_nml
-            months = 0
-            days   = 0
-            date_init = 1,1,1,0,0,0
-            hours = 6
-            minutes = 0
-            seconds = 0
-            calendar = 'julian' /
-

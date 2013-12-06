@@ -6,24 +6,9 @@
          parameter_filename = 'MOM_input',
                               'MOM_override' /
 
- &diag_manager_nml
- /
-
  &fms_nml
          clock_grain='MODULE',
          clock_flags='NONE',
          domains_stack_size = 710000,
          stack_size = 0 /
-
- &ocean_domains_nml
- /
- 
- &ocean_solo_nml
-            months = 0
-            days   = 2
-            date_init = 1,1,1,0,0,0
-            hours = 0
-            minutes = 0
-            seconds = 0
-            calendar = 'julian' /
 
