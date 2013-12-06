@@ -331,6 +331,7 @@ use MOM_cpu_clock, only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
 use MOM_diag_mediator, only : diag_mediator_init, enable_averaging
 use MOM_diag_mediator, only : disable_averaging, post_data, safe_alloc_ptr
 use MOM_diag_mediator, only : register_diag_field, register_static_field
+use MOM_diag_mediator, only : register_scalar_field
 use MOM_diag_mediator, only : set_axes_info, diag_ctrl, diag_masks_set
 use MOM_domains, only : MOM_domains_init, clone_MOM_domain, pass_var, pass_vector
 use MOM_domains, only : pass_var_start, pass_var_complete, sum_across_PEs
@@ -535,12 +536,13 @@ type, public :: MOM_control_struct
     T_adx_2d => NULL(), T_ady_2d => NULL(), T_diffx_2d => NULL(), T_diffy_2d => NULL(), &
     S_adx_2d => NULL(), S_ady_2d => NULL(), S_diffx_2d => NULL(), S_diffy_2d => NULL(), &
     SST_sq => NULL()
-
+  
 ! The following are the ids of various diagnostics.
   integer :: id_u = -1, id_v = -1, id_h = -1
   integer :: id_T = -1, id_S = -1, id_ssh = -1, id_fraz = -1
   integer :: id_salt_deficit = -1, id_Heat_PmE = -1, id_intern_heat = -1
-  integer :: id_sst = -1, id_sst_sq = -1, id_sss = -1, id_ssu = -1, id_ssv = -1
+  integer :: id_sst = -1, id_sst_sq = -1,  id_sst_global = -1
+  integer :: id_sss = -1, id_ssu = -1, id_ssv = -1
   integer :: id_speed = -1, id_ssh_inst = -1
 
   integer :: id_Tadx = -1, id_Tady = -1, id_Tdiffx = -1, id_Tdiffy = -1
@@ -643,11 +645,12 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     v, &                     ! v : Meridional velocity, in m s-1.
     h                        ! h : Layer thickness, in m.
   real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)+1) :: eta_predia
-  real :: tot_wt_ssh, Itot_wt_ssh, I_time_int
+  real :: tot_wt_ssh, Itot_wt_ssh, I_time_int, SST_global
   type(time_type) :: Time_local
   integer :: pid_tau, pid_ustar, pid_psurf, pid_u, pid_h
   integer :: pid_T, pid_S
   logical :: showCallTree
+  real :: temporary
 
   G => CS%G
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -1312,6 +1315,17 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       enddo ; enddo
       call post_data(CS%id_sst_sq, CS%SST_sq, CS%diag, mask=G%mask2dT)
     endif
+
+    if (CS%id_sst_global > 0) then
+      SST_global = 0.0
+      do j=js,je ; do i=is, ie
+        SST_global = SST_global + ( state%SST(i,j) * G%areaT(i,j) * G%mask2dT(i,j) )
+      enddo ; enddo
+      call sum_across_PEs( SST_global )
+      SST_global = SST_global * G%IareaT_global
+      call post_data(CS%id_sst_global, SST_global, CS%diag)
+    endif
+
     if (CS%id_sss > 0) &
       call post_data(CS%id_sss, state%SSS, CS%diag, mask=G%mask2dT)
     if (CS%id_ssu > 0) &
@@ -2003,6 +2017,8 @@ subroutine register_diags(Time, G, CS, ADp)
         'Salinity', 'PSU')
     CS%id_sst = register_diag_field('ocean_model', 'SST', diag%axesT1, Time, &
         'Sea Surface Temperature', 'Celsius', CS%missing)
+    CS%id_sst_global = register_scalar_field('ocean_model', 'SST_global', Time, &
+        'Global Average Sea Surface Temperature', 'Celsius', CS%missing)
     CS%id_sst_sq = register_diag_field('ocean_model', 'SST_sq', diag%axesT1, Time, &
         'Sea Surface Temperature Squared', 'Celsius**2', CS%missing)    
     CS%id_sss = register_diag_field('ocean_model', 'SSS', diag%axesT1, Time, &

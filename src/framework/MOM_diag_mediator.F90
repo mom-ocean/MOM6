@@ -49,10 +49,11 @@ public enable_averaging, disable_averaging, query_averaging_enabled
 public diag_mediator_init, diag_mediator_end, set_diag_mediator_grid
 public diag_mediator_close_registration, get_diag_time_end
 public diag_axis_init, ocean_register_diag, register_static_field
+public register_scalar_field
 public defineAxes, diag_masks_set
 
 interface post_data
-  module procedure post_data_3d, post_data_2d
+  module procedure post_data_3d, post_data_2d, post_data_1d
 end interface post_data
 
 ! 2D/3D axes type to contain 1D axes handles and pointers to masks
@@ -249,6 +250,30 @@ subroutine set_diag_mediator_grid(G, diag)
   diag%js = G%jsc - (G%jsd-1) ; diag%je = G%jec - (G%jsd-1)
   diag%isd = G%isd ; diag%ied = G%ied ; diag%jsd = G%jsd ; diag%jed = G%jed
 end subroutine set_diag_mediator_grid
+
+subroutine post_data_1d(diag_field_id, field, diag, is_static, mask)
+  integer,           intent(in) :: diag_field_id
+  real,              intent(in) :: field
+  type(diag_ctrl),   intent(in) :: diag
+  logical, optional, intent(in) :: is_static
+  real,    optional, intent(in) :: mask(:,:)
+! Arguments: diag_field_id - the id for an output variable returned by a
+!                            previous call to register_diag_field.
+!  (in)      field - The 1-d array being offered for output or averaging.
+!  (inout)   diag - A structure that is used to regulate diagnostic output.
+!  (in,opt)  is_static - If true, this is a static field that is always offered.
+!  (in,opt)  mask - If present, use this real array as the data mask.
+  logical :: used, is_stat
+
+  is_stat = .false. ; if (present(is_static)) is_stat = is_static 
+
+  if (is_stat) then
+    used = send_data(diag_field_id, field)
+  elseif (diag%ave_enabled) then
+    used = send_data(diag_field_id, field, diag%time_end)
+  endif
+
+end subroutine post_data_1d
 
 subroutine post_data_2d(diag_field_id, field, diag, is_static, mask)
   integer,           intent(in) :: diag_field_id
@@ -624,6 +649,61 @@ function register_static_field(module_name, field_name, axes, &
        interp_method=interp_method, tile_count=tile_count)
 
 end function register_static_field
+
+function register_scalar_field(module_name, field_name, init_time, &
+     long_name, units, missing_value, range, mask_variant, standard_name, &
+     verbose, do_not_log, err_msg, interp_method, tile_count)
+  integer :: register_scalar_field
+  character(len=*), intent(in) :: module_name, field_name
+  type(time_type),  intent(in) :: init_time
+  character(len=*), optional, intent(in) :: long_name, units, standard_name
+  real,             optional, intent(in) :: missing_value, range(2)
+  logical,          optional, intent(in) :: mask_variant, verbose, do_not_log
+  character(len=*), optional, intent(out):: err_msg
+  character(len=*), optional, intent(in) :: interp_method
+  integer,          optional, intent(in) :: tile_count
+  ! Output:    An integer handle for a diagnostic array.
+  ! Arguments: module_name - The name of this module, usually "ocean_model" or "ice_shelf_model".
+  !  (in)      field_name - The name of the diagnostic field.
+  !  (in)      axes - A container with up to 3 integer handles that indicates the axes for this field.
+  !  (in)      init_time - The time at which a field is first available?
+  !  (in,opt)  long_name - The long name of a field.
+  !  (in,opt)  units - The units of a field.
+  !  (in,opt)  standard_name - The standardized name associated with a field. (Not yet used in MOM.)
+  !  (in,opt)  missing_value - A value that indicates missing values.
+  !  (in,opt)  range - The valid range of a variable. (Not used in MOM.)
+  !  (in,opt)  mask_variant - If true a logical mask must be provided with post_data calls.  (Not used in MOM.)
+  !  (in,opt)  verbose - If true, FMS is verbosed. (Not used in MOM.)
+  !  (in,opt)  do_not_log - If true, do not log something. (Not used in MOM.)
+  !  (out,opt) err_msg - An character string into which an error message might be placed. (Not used in MOM.)
+  !  (in,opt)  interp_method - No clue. (Not used in MOM.)
+  !  (in,opt)  tile_count - No clue. (Not used in MOM.)
+  character(len=240) :: mesg
+  real :: MOM_missing_value
+  type(diag_ctrl), pointer :: diag
+
+  MOM_missing_value = -1e-20
+  if(present(missing_value)) MOM_missing_value = missing_value
+
+  register_scalar_field = register_diag_field_fms(module_name, field_name, &
+       init_time, long_name=long_name, units=units, missing_value=MOM_missing_value, &
+       range=range, standard_name=standard_name, &
+       do_not_log=do_not_log, err_msg=err_msg)
+
+  if (is_root_pe() .and. doc_unit > 0) then
+     if (register_scalar_field > 0) then
+        mesg = '"'//trim(module_name)//'", "'//trim(field_name)//'"  [Used]'
+     else
+        mesg = '"'//trim(module_name)//'", "'//trim(field_name)//'"  [Unused]'
+     endif
+     write(doc_unit, '(a)') trim(mesg)
+     if (present(long_name)) call describe_option("long_name", long_name)
+     if (present(units)) call describe_option("units", units)
+     if (present(standard_name)) call describe_option("standard_name", standard_name)
+  endif
+
+end function register_scalar_field
+
 
 subroutine describe_option(opt_name, value)
   character(len=*), intent(in) :: opt_name, value

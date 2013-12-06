@@ -165,6 +165,11 @@ type, public :: ocean_grid_type
                         ! thickness to m.
   real :: H_to_Pa       ! A constant that translates the units of thickness to 
                         ! to pressure in Pa.
+
+  ! These variables are global sums that are useful for 1-d diagnostics
+  real :: areaT_global  ! Global sum of h-cell area in m2
+  real :: IareaT_global ! Global sum of inverse h-cell area (1/areaT_global)
+                        ! in m2
 end type ocean_grid_type
 
 contains
