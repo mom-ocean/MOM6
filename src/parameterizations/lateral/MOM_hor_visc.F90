@@ -162,10 +162,10 @@ type, public :: hor_visc_CS ; private
 
 ! The following variables are precalculated combinations of metric terms.
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
-    dx2h, dy2h, &              ! dx^2 or dy^2 at h points, in m-2.
+    dx2h, dy2h, &              ! dx^2 or dy^2 at h points, in m2.
     dx_dyT, dy_dxT             ! dx/dy or dy/dx at h points, nondim.
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: &
-    dx2q, dy2q, &              ! dx^2 or dy^2 at q points, in m-2.
+    dx2q, dy2q, &              ! dx^2 or dy^2 at q points, in m2.
     dx_dyBu, dy_dxBu             ! dx/dy or dy/dx at q points, nondim.
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_) :: &
     Idx2dyCu, Idxdy2u           ! 1/(dx^2 dy) and 1/(dx dy^2) at u points, in m-3.
