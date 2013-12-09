@@ -50,6 +50,7 @@ use MOM_io, only : close_file, file_exists, read_data, write_version_number
 use MOM_restart, only : save_restart
 use MOM_sum_output, only : write_energy, accumulate_net_input
 use MOM_sum_output, only : MOM_sum_output_init, sum_output_CS
+use MOM_string_functions, only : uppercase
 use MOM_surface_forcing, only : surface_forcing_init, convert_IOB_to_fluxes
 use MOM_surface_forcing, only : average_forcing, ice_ocn_bnd_type_chksum
 use MOM_surface_forcing, only : ice_ocean_boundary_type, surface_forcing_CS
@@ -200,6 +201,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in)
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mod = "ocean_model_init"  ! This module's name.
+  character(len=48)  :: stagger
   integer :: secs, days
   type(param_file_type) :: param_file
 
@@ -236,6 +238,18 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in)
                  "The interval in units of TIMEUNIT between saves of the \n"//&
                  "energies of the run and other globally summed diagnostics.", &
                  default=set_time(0,1), timeunit=Time_unit)
+
+  call get_param(param_file, mod, "OCEAN_SURFACE_STAGGER", stagger, &
+                 "A case-insensitive character string to indicate the \n"//&
+                 "staggering of the surface velocity field that is \n"//&
+                 "returned to the coupler.  Valid values include \n"//&
+                 "'A', 'B', or 'C'.", default="B") !### CHANGE THE DEFAULT.
+  if (uppercase(stagger(1:1)) == 'A') then ; Ocean_sfc%stagger = AGRID
+  elseif (uppercase(stagger(1:1)) == 'B') then ; Ocean_sfc%stagger = BGRID_NE
+  elseif (uppercase(stagger(1:1)) == 'C') then ; Ocean_sfc%stagger = CGRID_NE
+  else ; call MOM_error(FATAL,"ocean_model_init: OCEAN_SURFACE_STAGGER = "// &
+                        trim(stagger)//" is invalid.") ; endif
+
   call get_param(param_file, mod, "RESTORE_SALINITY",OS%restore_salinity, &
                  "If true, the coupled driver will add a globally-balanced \n"//&
                  "fresh-water flux that drives sea-surface salinity \n"//&
@@ -508,10 +522,11 @@ subroutine convert_state_to_ocean_type(state, Ocean_sfc, G, patm, press_to_z)
 ! code that calculates the surface state in the first place.
 ! Note the offset in the arrays because the ocean_data_type has no
 ! halo points in its arrays and always uses absolute indicies.
+  real :: IgR0
+  character(len=48)  :: val_str
   integer :: isc_bnd, iec_bnd, jsc_bnd, jec_bnd
   integer :: i, j, i0, j0, is, ie, js, je
-  real :: IgR0
-
+ 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   call pass_vector(state%u,state%v,G%Domain)
 
@@ -527,14 +542,33 @@ subroutine convert_state_to_ocean_type(state, Ocean_sfc, G, patm, press_to_z)
   do j=jsc_bnd,jec_bnd ; do i=isc_bnd,iec_bnd
     Ocean_sfc%t_surf(i,j) = state%SST(i+i0,j+j0) + CELSIUS_KELVIN_OFFSET
     Ocean_sfc%s_surf(i,j) = state%SSS(i+i0,j+j0)
-    Ocean_sfc%u_surf(i,j) = G%mask2dBu(i+i0,j+j0)*0.5*(state%u(i+i0,j+j0)+state%u(i+i0,j+j0+1))
-    Ocean_sfc%v_surf(i,j) = G%mask2dBu(i+i0,j+j0)*0.5*(state%v(i+i0,j+j0)+state%v(i+i0+1,j+j0))
     Ocean_sfc%sea_lev(i,j) = state%sea_lev(i+i0,j+j0)
     if (present(patm)) &
       Ocean_sfc%sea_lev(i,j) = Ocean_sfc%sea_lev(i,j) + patm(i,j) * press_to_z
     Ocean_sfc%frazil(i,j) = state%frazil(i+i0,j+j0)
     Ocean_sfc%area(i,j)   =  G%areaT(i+i0,j+j0)  
   enddo ; enddo
+  
+  if (Ocean_sfc%stagger == AGRID) then
+    do j=jsc_bnd,jec_bnd ; do i=isc_bnd,iec_bnd
+      Ocean_sfc%u_surf(i,j) = G%mask2dT(i+i0,j+j0)*0.5*(state%u(I+i0,j+j0)+state%u(I-1+i0,j+j0))
+      Ocean_sfc%v_surf(i,j) = G%mask2dT(i+i0,j+j0)*0.5*(state%v(i+i0,J+j0)+state%v(i+i0,J-1+j0))
+    enddo ; enddo
+  elseif (Ocean_sfc%stagger == BGRID_NE) then
+    do j=jsc_bnd,jec_bnd ; do i=isc_bnd,iec_bnd
+      Ocean_sfc%u_surf(i,j) = G%mask2dBu(I+i0,J+j0)*0.5*(state%u(I+i0,j+j0)+state%u(I+i0,j+j0+1))
+      Ocean_sfc%v_surf(i,j) = G%mask2dBu(I+i0,J+j0)*0.5*(state%v(i+i0,J+j0)+state%v(i+i0+1,J+j0))
+    enddo ; enddo
+  elseif (Ocean_sfc%stagger == CGRID_NE) then
+    do j=jsc_bnd,jec_bnd ; do i=isc_bnd,iec_bnd
+      Ocean_sfc%u_surf(i,j) = G%mask2dCu(I+i0,j+j0)*state%u(I+i0,j+j0)
+      Ocean_sfc%v_surf(i,j) = G%mask2dCv(i+i0,J+j0)*state%v(i+i0,J+j0)
+    enddo ; enddo
+  else
+    write(val_str, '(I8)') Ocean_sfc%stagger
+    call MOM_error(FATAL, "convert_state_to_ocean_type: "//&
+      "Ocean_sfc%stagger has the unrecognized value of "//trim(val_str))
+  endif
 
   if (.not.associated(state%tr_fields,Ocean_sfc%fields)) &
     call MOM_error(FATAL,'state%tr_fields is not pointing to Ocean_sfc%fields')

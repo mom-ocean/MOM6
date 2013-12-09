@@ -51,6 +51,7 @@ use MOM_cpu_clock, only : CLOCK_SUBCOMPONENT
 use MOM_diag_mediator, only : post_data, query_averaging_enabled, diag_ctrl
 use MOM_diag_mediator, only : register_diag_field, safe_alloc_ptr, time_type
 use MOM_domains, only : pass_vector, pass_var, global_field_sum, BITWISE_EXACT_SUM
+use MOM_domains, only : AGRID, BGRID_NE, CGRID_NE
 use MOM_error_handler, only : MOM_error, WARNING, FATAL, is_root_pe, MOM_mesg
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
@@ -59,6 +60,7 @@ use MOM_grid, only : ocean_grid_type
 use MOM_io, only : slasher, write_version_number
 use MOM_restart, only : register_restart_field, restart_init, MOM_restart_CS
 use MOM_restart, only : restart_init_end, save_restart, restore_state
+use MOM_string_functions, only : uppercase
 use MOM_variables, only : surface
 use user_revise_forcing, only : user_alter_forcing, user_revise_forcing_init, &
                                 user_revise_forcing_CS
@@ -84,10 +86,10 @@ public convert_IOB_to_fluxes, surface_forcing_init, average_forcing, ice_ocn_bnd
 public forcing_save_restart
 
 type, public :: surface_forcing_CS ; private
-  integer :: wind_stagger    !   A_GRID, B_GRID, or C_GRID (integer module
-                             ! parameters defined below) to indicate the
-                             ! staggering of the winds that are being
-                             ! provided in calls to update_ocean_model.
+  integer :: wind_stagger    !   AGRID, BGRID_NE, or CGRID_NE (integer values
+                             ! from MOM_domains) to indicate the staggering of
+                             ! the winds that are being provided in calls to
+                             ! update_ocean_model.
   logical :: use_temperature !   If true, temperature and salinity are used as
                              ! state variables.
   real :: Rho0               !   The density used in the Boussinesq
@@ -191,9 +193,13 @@ type, public :: ice_ocean_boundary_type
   type(coupler_2d_bc_type)      :: fluxes            ! A structure that may contain an
                                                      ! array of named fields used for
                                                      ! passive tracer fluxes.
+  integer :: wind_stagger = -999                     ! A flag indicating the spatial discretization of
+                                                     ! wind stresses.  This flag may be set by the
+                                                     ! flux-exchange code, based on what the sea-ice
+                                                     ! model is providing.  Otherwise, the value from
+                                                     ! the surface_forcing_CS is used.
 end type ice_ocean_boundary_type
 
-integer, parameter :: A_GRID = 1, B_GRID = 2, C_GRID = 3
 integer :: id_clock_forcing
 
 contains
@@ -225,9 +231,12 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
 !  (in)      state - A structure containing fields that describe the
 !                    surface state of the ocean.
 !  (in)      restore_salt - if true, salinity is restored to a target value.
-  real, dimension(SZI_(G),SZJ_(G)) :: &
+  real, dimension(SZIB_(G),SZJB_(G)) :: &
     taux_at_q, &     ! Zonal wind stresses at q points in Pa.
-    tauy_at_q, &     ! Meridional wind stresses at q points in Pa.
+    tauy_at_q        ! Meridional wind stresses at q points in Pa.
+  real, dimension(SZI_(G),SZJ_(G)) :: &
+    taux_at_h, &     ! Zonal wind stresses at h points in Pa.
+    tauy_at_h, &     ! Meridional wind stresses at h points in Pa.
     data_srestore, & ! The surface salinity toward which to restore, in PSU.
     SST_anom, &      ! Instantaneous sea surface temperature anomalies from a
                      ! target (observed) value, in deg C.
@@ -255,6 +264,8 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
   real :: Kv_rho_ice    ! (CS%kv_sea_ice / CS%density_sea_ice), in m5 s-1 kg-1.
   real :: mass_ice      ! The mass of sea ice at a face, in kg m-2.
   real :: mass_eff      ! The effective mass of sea ice for rigidity, in kg m-2.
+  integer :: wind_stagger  !   AGRID, BGRID_NE, or CGRID_NE (integer values from
+                           ! MOM_domains) to indicate the wind staggering.
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq, i0, j0
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, isr, ier, jsr, jer
   integer :: isc_bnd, iec_bnd, jsc_bnd, jec_bnd
@@ -371,19 +382,30 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
       endif
   endif
 
-  if (CS%wind_stagger == B_GRID) then
+  wind_stagger = CS%wind_stagger
+  if ((IOB%wind_stagger == AGRID) .or. (IOB%wind_stagger == BGRID_NE) .or. &
+      (IOB%wind_stagger == CGRID_NE)) wind_stagger = IOB%wind_stagger
+
+  if (wind_stagger == BGRID_NE) then
     ! This is necessary to fill in the halo points.
     taux_at_q(:,:) = 0.0 ; tauy_at_q(:,:) = 0.0
+  endif
+  if (wind_stagger == AGRID) then
+    ! This is necessary to fill in the halo points.
+    taux_at_h(:,:) = 0.0 ; tauy_at_h(:,:) = 0.0
   endif
 
   i0 = is - isc_bnd ; j0 = js - jsc_bnd
   do j=js,je ; do i=is,ie
-    if (CS%wind_stagger == B_GRID) then
-      if (ASSOCIATED(IOB%u_flux)) taux_at_q(i,j) = IOB%u_flux(i-i0,j-j0)
-      if (ASSOCIATED(IOB%v_flux)) tauy_at_q(i,j) = IOB%v_flux(i-i0,j-j0)
+    if (wind_stagger == BGRID_NE) then
+      if (ASSOCIATED(IOB%u_flux)) taux_at_q(I,J) = IOB%u_flux(i-i0,j-j0)
+      if (ASSOCIATED(IOB%v_flux)) tauy_at_q(I,J) = IOB%v_flux(i-i0,j-j0)
+    elseif (wind_stagger == AGRID) then
+      if (ASSOCIATED(IOB%u_flux)) taux_at_h(i,j) = IOB%u_flux(i-i0,j-j0)
+      if (ASSOCIATED(IOB%v_flux)) tauy_at_h(i,j) = IOB%v_flux(i-i0,j-j0)
     else ! C-grid wind stresses.
-      if (ASSOCIATED(IOB%u_flux)) fluxes%taux(i,j) = IOB%u_flux(i-i0,j-j0)
-      if (ASSOCIATED(IOB%v_flux)) fluxes%tauy(i,j) = IOB%v_flux(i-i0,j-j0)
+      if (ASSOCIATED(IOB%u_flux)) fluxes%taux(I,j) = IOB%u_flux(i-i0,j-j0)
+      if (ASSOCIATED(IOB%v_flux)) fluxes%tauy(i,J) = IOB%v_flux(i-i0,j-j0)
     endif
 
     if (ASSOCIATED(IOB%lprec)) &
@@ -497,21 +519,23 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
     enddo ; enddo
   endif
 
-  if (CS%wind_stagger == B_GRID) then
+  if (wind_stagger == BGRID_NE) then
     call pass_vector(taux_at_q,tauy_at_q,G%Domain,stagger=BGRID_NE)
 
     do j=js,je ; do I=Isq,Ieq
       fluxes%taux(I,j) = 0.0
-      If ((G%mask2dBu(I,J) + G%mask2dBu(I,J-1)) > 0) &
-        fluxes%taux(I,j) = (G%mask2dBu(I,J)*taux_at_q(I,J) + G%mask2dBu(I,J-1)*taux_at_q(I,J-1)) / &
-            (G%mask2dBu(I,J) + G%mask2dBu(I,J-1))
+      if ((G%mask2dBu(I,J) + G%mask2dBu(I,J-1)) > 0) &
+        fluxes%taux(I,j) = (G%mask2dBu(I,J)*taux_at_q(I,J) + &
+                            G%mask2dBu(I,J-1)*taux_at_q(I,J-1)) / &
+                           (G%mask2dBu(I,J) + G%mask2dBu(I,J-1))
     enddo ; enddo
 
     do J=Jsq,Jeq ; do i=is,ie
       fluxes%tauy(i,J) = 0.0
       if ((G%mask2dBu(I,J) + G%mask2dBu(I-1,J)) > 0) &
-        fluxes%tauy(i,J) = (G%mask2dBu(I,J)*tauy_at_q(I,J) + G%mask2dBu(I-1,J)*tauy_at_q(I-1,J)) / &
-            (G%mask2dBu(I,J) + G%mask2dBu(I-1,J))
+        fluxes%tauy(i,J) = (G%mask2dBu(I,J)*tauy_at_q(I,J) + &
+                            G%mask2dBu(I-1,J)*tauy_at_q(I-1,J)) / &
+                           (G%mask2dBu(I,J) + G%mask2dBu(I-1,J))
     enddo ; enddo
 
     ! ustar is required for MOM's mixed layer formulation.  The background value
@@ -520,7 +544,8 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
 
     do j=js,je ; do i=is,ie
       tau_mag = 0.0 ; gustiness = CS%gust_const
-      if (((G%mask2dBu(I,J) + G%mask2dBu(I-1,J-1)) + (G%mask2dBu(I,J-1) + G%mask2dBu(I-1,J))) > 0) then
+      if (((G%mask2dBu(I,J) + G%mask2dBu(I-1,J-1)) + &
+           (G%mask2dBu(I,J-1) + G%mask2dBu(I-1,J))) > 0) then
         tau_mag = sqrt(((G%mask2dBu(I,J)*(taux_at_q(I,J)**2 + tauy_at_q(I,J)**2) + &
             G%mask2dBu(I-1,J-1)*(taux_at_q(I-1,J-1)**2 + tauy_at_q(I-1,J-1)**2)) + &
            (G%mask2dBu(I,J-1)*(taux_at_q(I,J-1)**2 + tauy_at_q(I,J-1)**2) + &
@@ -529,6 +554,31 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
         if (CS%read_gust_2d) gustiness = CS%gust(i,j)
       endif
       fluxes%ustar(i,j) = sqrt(gustiness*Irho0 + Irho0*tau_mag)
+    enddo ; enddo
+  elseif (wind_stagger == AGRID) then
+    call pass_vector(taux_at_h, tauy_at_h, G%Domain,stagger=AGRID)
+
+    do j=js,je ; do I=Isq,Ieq
+      fluxes%taux(I,j) = 0.0
+      if ((G%mask2dT(i,j) + G%mask2dT(i+1,j)) > 0) &
+        fluxes%taux(I,j) = (G%mask2dT(i,j)*taux_at_h(i,j) + &
+                            G%mask2dT(i+1,j)*taux_at_h(i+1,j)) / &
+                           (G%mask2dT(i,j) + G%mask2dT(i+1,j))
+    enddo ; enddo
+
+    do J=Jsq,Jeq ; do i=is,ie
+      fluxes%tauy(i,J) = 0.0
+      if ((G%mask2dT(i,j) + G%mask2dT(i,j+1)) > 0) &
+        fluxes%tauy(i,J) = (G%mask2dT(i,j)*tauy_at_h(i,j) + &
+                            G%mask2dT(i,J+1)*tauy_at_h(i,j+1)) / &
+                           (G%mask2dT(i,j) + G%mask2dT(i,j+1))
+    enddo ; enddo
+
+    do j=js,je ; do i=is,ie
+      gustiness = CS%gust_const
+      if (CS%read_gust_2d .and. (G%mask2dT(i,j) > 0)) gustiness = CS%gust(i,j)
+      fluxes%ustar(i,j) = sqrt(gustiness*Irho0 + Irho0 * G%mask2dT(i,j) * &
+                               sqrt(taux_at_h(i,j)**2 + tauy_at_h(i,j)**2))
     enddo ; enddo
   else ! C-grid wind stresses.
     call pass_vector(fluxes%taux, fluxes%tauy, G%Domain)
@@ -802,18 +852,11 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt)
                  "A case-insensitive character string to indicate the \n"//&
                  "staggering of the input wind stress field.  Valid \n"//&
                  "values are 'A', 'B', or 'C'.", default="C")
-  if ((stagger(1:1) == 'a') .or. (stagger(1:1) == 'A')) then
-    CS%wind_stagger = A_GRID
-    call MOM_error(FATAL,"surface_forcing_init: A-grid input wind stagger "// &
-                          "is not supported yet.")
-  elseif ((stagger(1:1) == 'b') .or. (stagger(1:1) == 'B')) then
-    CS%wind_stagger = B_GRID
-  elseif ((stagger(1:1) == 'c') .or. (stagger(1:1) == 'C')) then
-    CS%wind_stagger = C_GRID
-  else
-    call MOM_error(FATAL,"surface_forcing_init: #define WIND_STAGGER "// &
-                    trim(stagger)//" is invalid.")
-  endif
+  if (uppercase(stagger(1:1)) == 'A') then ; CS%wind_stagger = AGRID
+  elseif (uppercase(stagger(1:1)) == 'B') then ; CS%wind_stagger = BGRID_NE
+  elseif (uppercase(stagger(1:1)) == 'C') then ; CS%wind_stagger = CGRID_NE
+  else ; call MOM_error(FATAL,"surface_forcing_init: WIND_STAGGER = "// &
+                        trim(stagger)//" is invalid.") ; endif
 
   if (restore_salt) then
     call get_param(param_file, mod, "FLUXCONST", CS%Flux_const, &
