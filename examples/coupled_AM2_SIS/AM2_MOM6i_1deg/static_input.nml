@@ -121,10 +121,6 @@
       do_conserve_energy = .true.
 /
 
- &data_override_nml
-
-/
-
  &diag_cloud_nml
        linvers = .false., lcnvcld = .false.,
        l_theqv = .true., lomega = .true.,
@@ -195,10 +191,6 @@
        sw_diff_streams = 1
 /
 
- &flux_exchange_nml
-
-/
-
  &fms_io_nml
          fms_netcdf_restart=.true.
          threading_read='multi'
@@ -231,9 +223,6 @@
        do_writestdn2otfs= .false.,
        do_readstdn2otfs = .false.
 /
-
- &horiz_interp_nml
-      reproduce_siena=.true. /
 
  &ice_albedo_nml
          t_range = 10.
@@ -340,10 +329,6 @@
 
  &rad_output_file_nml
        write_data_file=.true.
-/
-
- &rad_utilities_nml
-
 /
 
  &radiation_diag_nml
@@ -500,10 +485,6 @@
        retain_cm3_bug = .true.
 /
 
- &time_manager_nml
-
-/
-
  &topography_nml
         topog_file = 'INPUT/navy_topography.data.nc'
 /
@@ -531,4 +512,3 @@
         make_exchange_reproduce = .false.
         interp_method = 'second_order'
 /
-

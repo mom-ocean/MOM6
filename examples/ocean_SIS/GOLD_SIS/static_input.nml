@@ -1,7 +1,4 @@
 
- &data_override_nml
-         /
-
  &fms_io_nml
          fms_netcdf_restart=.true.
          threading_read='multi'
@@ -12,9 +9,6 @@
        clock_grain='MODULE'
        domains_stack_size = 2000000
        clock_flags='SYNC' /
-
- &horiz_interp_nml
-      reproduce_siena=.true. /
 
  &ice_albedo_nml
       t_range = 10. /
