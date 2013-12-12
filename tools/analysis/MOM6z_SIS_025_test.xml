@@ -11,7 +11,7 @@ Quick start guide
 
 module load fre/bronx-6
 fremake -x MOM6z_SIS_025.xml -p ncrc2.intel -t prod MOM6_SIS_compile
-frerun  -x MOM6z_SIS_025.xml -p ncrc2.intel -t prod -r basic MOM6z_SIS_025_proto_v03 
+frerun  -x MOM6z_SIS_025.xml -p ncrc2.intel -t prod -r basic MOM6z_SIS_025_base_line_TEST 
 
 To validate against fre schema do:
 xmllint 2-noent 2-noout 2-xinclude 2-schema /home/fms/local/opt/fre-commands/bronx-6/etc/schema/fre.xsd ./MOM6z_SIS_025.xml
@@ -22,16 +22,16 @@ xmllint 2-noent 2-noout 2-xinclude 2-schema /home/fms/local/opt/fre-commands/bro
    <property name="RELEASE"      value="siena_201309"/> <!-- CVS tag for shared source code -->
    <property name="MOM6_GIT_TAG" value="dev/master/2013.12.03"/>  <!-- git tag for MOM6 source code -->
    <property name="FRE_STEM"     value="siena_201309_mom6_2013.12.03"/>
-   <property name="FRE_VERSION"  value="fre/bronx-6"/>
+   <property name="FRE_VERSION"  value="fre/bronx-7"/>
 
    <!--Production run properties. Users can modify these according to their need and/or performance analysis-->
-   <property name="PROD_SIMTIME"   value="3"/>
+   <property name="PROD_SIMTIME"   value="4"/>
    <!-- Post-processing start date and chunk lengths -->
    <property name="PP_START_YEAR"  value="1900"/>
-   <property name="CHUNK_LENGTH_A" value="3yr"/>
+   <property name="CHUNK_LENGTH_A" value="4yr"/>
    <property name="ANALYSIS_SWITCH" value="on"/>
    <property name="ANALYSIS_START"  value="1900"/>
-   <property name="ANALYSIS_END"    value="1901"/>
+   <property name="ANALYSIS_END"    value="1903"/>
 
    <property name="PROD_RUNTIME"         value="16:00:00"/>
    <property name="PROD_SEGTIME"         value="03:15:00"/>
@@ -104,7 +104,7 @@ xmllint 2-noent 2-noout 2-xinclude 2-schema /home/fms/local/opt/fre-commands/bro
 <!-- gfdl platforms -->
 
     <platform name="gfdl.ncrc2-intel">
-     <property name="NB_ROOT"       value="/nbhome/$USER/$(FRE_STEM)$(DEBUGLEVEL)/$(name)"/>
+     <property name="NB_ROOT"  value="/nbhome/$USER/$(FRE_STEM)$(DEBUGLEVEL)/$(name)"/>
      <directory stem="$(FRE_STEM)">
      <!-- MDBI requires these to be listed in order to show the path under "Platform Environment" -->
         <archive>$ARCHIVE/$(FRE_STEM)$(DEBUGLEVEL)/$(name)/$(platform)-$(target)</archive>
@@ -121,15 +121,17 @@ xmllint 2-noent 2-noout 2-xinclude 2-schema /home/fms/local/opt/fre-commands/bro
            module purge
            module load jpk-analysis/0.0.4
            module load $(FRE_VERSION)
-setenv NBROOT $(NB_ROOT)
-mkdir -p $NBROOT
-cd $NBROOT
-git clone /home/fms/git/ocean/mom6
-
+           #Some tricks to use the refineDiag and analysis scripts from a checkout of MOM6 at gfdl 
+           setenv FREVERSION $(FRE_VERSION)           
+           setenv NBROOT $(NB_ROOT)
+           mkdir -p $NBROOT
+           cd $NBROOT
+           git clone /home/fms/git/ocean/mom6
          ]]></csh>
-<!--The following are not used, but needed by fre -->
+
+     <!--The following are not used, but needed by fre -->
      <property name="SGI_FLAGS" value=""/>
-     <property name="REFERENCE"            value=""/>
+     <property name="REFERENCE" value=""/>
     </platform>
 
     <platform name="gfdl.ncrc2-default">
