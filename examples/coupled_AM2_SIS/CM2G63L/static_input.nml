@@ -232,6 +232,10 @@
        do_readstdn2otfs = .false.
 /
 
+ &horiz_interp_nml
+      reproduce_siena=.true.
+/
+
  &ice_albedo_nml
          t_range = 10.
 /

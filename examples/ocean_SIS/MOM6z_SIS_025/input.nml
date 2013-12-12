@@ -60,6 +60,9 @@
             stack_size =0
 /
 
+ &horiz_interp_nml
+      reproduce_siena=.true. /
+
  &ice_albedo_nml
             t_range = 10.
 /
@@ -92,7 +95,8 @@
             verbose=.FALSE.
             traj_sample_hrs=0
             verbose_hrs=2400
-/
+    reproduce_siena=.true.,
+ /
 
  &monin_obukhov_nml
             neutral = .true.

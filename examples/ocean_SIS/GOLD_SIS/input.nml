@@ -6,9 +6,6 @@
          parameter_filename = 'MOM_input',
                               'MOM_override' /
 
- &diag_manager_nml
- /
-
  &coupler_nml
             months = 0,
             days   = 1,
@@ -41,6 +38,9 @@
        clock_grain='MODULE'
        domains_stack_size = 2000000
        clock_flags='SYNC' /
+
+ &horiz_interp_nml
+      reproduce_siena=.true. /
 
  &ice_albedo_nml
       t_range = 10. /

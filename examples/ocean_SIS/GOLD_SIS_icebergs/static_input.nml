@@ -13,6 +13,9 @@
        domains_stack_size = 2000000
        clock_flags='SYNC' /
 
+ &horiz_interp_nml
+      reproduce_siena=.true. /
+
  &ice_albedo_nml
       t_range = 10. /
 
@@ -40,6 +43,7 @@
     add_weight_to_ocean=.true.,
     passive_mode=.false.,
     generate_test_icebergs=.false.,
+    reproduce_siena=.true.,
     speed_limit=0.,
     use_roundoff_fix=.true.,
     make_calving_reproduce=.true.,
