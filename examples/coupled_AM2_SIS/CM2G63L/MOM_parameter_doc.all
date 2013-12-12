@@ -1588,6 +1588,11 @@ TIMEUNIT = 8.64E+04             !   [s] default = 8.64E+04
 ENERGYSAVEDAYS = 0.25           !   [days] default = 1.0
                                 ! The interval in units of TIMEUNIT between saves of the
                                 ! energies of the run and other globally summed diagnostics.
+OCEAN_SURFACE_STAGGER = "B"     ! default = "B"
+                                ! A case-insensitive character string to indicate the
+                                ! staggering of the surface velocity field that is
+                                ! returned to the coupler.  Valid values include
+                                ! 'A', 'B', or 'C'.
 RESTORE_SALINITY = False        !   [Boolean] default = False
                                 ! If true, the coupled driver will add a globally-balanced
                                 ! fresh-water flux that drives sea-surface salinity

@@ -1249,6 +1249,8 @@ NLT_SHAPE = "CVMIX"             ! default = "CVMIX"
                                 !    CUBIC_LMD - The original KPP profile
 KPP_ZERO_DIFFUSIVITY = False    !   [Boolean] default = False
                                 ! If true, sets both the diffusivity and viscosity from KPP to zero; for testing.
+KPP_IS_ADDITIVE = False         !   [Boolean] default = False
+                                ! If true, adds KPP diffusivity to the existing diffusivity. If false, replaces exisiting diffusivity with KPP diffusivity wherever the latter is non-zero.
 %KPP
 
 ! === module MOM_diffConvection ===
@@ -1520,11 +1522,11 @@ DT_FORCING = 3600.0             !   [s] default = 600.0
                                 ! The time step for changing forcing, coupling with other
                                 ! components, or potentially writing certain diagnostics.
                                 ! The default value is given by DT.
-DAYMAX = 6.0                    !   [hours] default = 6.0
+DAYMAX = 6.0                    !   [hours]
                                 ! The final time of the whole simulation, in units of
                                 ! TIMEUNIT seconds.  This also sets the potential end
                                 ! time of the present run segment if the end time is
-                                ! not set (as it was here) via ocean_solo_nml in input.nml.
+                                ! not set via ocean_solo_nml in input.nml.
 RESTART_CONTROL = 3             ! default = 1
                                 ! An integer whose bits encode which restart files are
                                 ! written. Add 2 (bit 1) for a time-stamped file, and odd

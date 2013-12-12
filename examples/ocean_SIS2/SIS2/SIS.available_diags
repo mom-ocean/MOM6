@@ -208,6 +208,12 @@
 "ice_model", "OBI"  [Unused]
     ! long_name: ice observed
     ! units: 0 or 1
+"ice_model", "FA_XC"  [Unused]
+    ! long_name: Air stress on ice on C-grid - x component
+    ! units: Pa
+"ice_model", "FA_YC"  [Unused]
+    ! long_name: Air stress on ice on C-grid - y component
+    ! units: Pa
 "ice_model", "SIGI"  [Unused]
     ! long_name: first stress invariant
     ! units: none
