@@ -90,11 +90,12 @@ interface ocean_model_data_get
 end interface
 
 
-
-! For communication with FMS coupler
+! This type is used for communication with other components via the FMS coupler.
+! The element names and types can be changed only with great deliberation, hence
+! the persistnce of things like the cutsy element name "avg_kount".
 type, public ::  ocean_public_type
-  type(domain2d) :: Domain       ! The domain for the surface fields.
-  logical :: is_ocean_pe         ! .true. on processors that run the ocean model.
+  type(domain2d) :: Domain    ! The domain for the surface fields.
+  logical :: is_ocean_pe      ! .true. on processors that run the ocean model.
   character(len=32) :: instance_name = '' ! A name that can be used to identify
                                  ! this instance of an ocean model, for example
                                  ! in ensembles when writing messages.
@@ -105,31 +106,30 @@ type, public ::  ocean_public_type
                     ! land points and are not assigned to actual processors.
                     ! This need not be assigned if all logical processors are used.
 
-  integer :: stagger = BGRID_NE  ! The staggering relative to the tracer points
-                                 ! points of the two velocity components. Valid
-                                 ! entries include AGRID, BGRID_NE, CGRID_NE,
-                                 ! BGRID_SW, and CGRID_SW, corresponding to the
-                                 ! community-standard Arakawa notation.  (These
-                                 ! are named integers taken from mpp_parameter_mod.)
-                                 ! Following MOM, this is BGRID_NE by default.
-  real, pointer, dimension(:,:)  :: t_surf =>NULL()  ! SST on t-cell (degrees Kelvin)
-  real, pointer, dimension(:,:)  :: s_surf =>NULL()  ! SSS on t-cell (psu)
-  real, pointer, dimension(:,:)  :: u_surf =>NULL()  ! i-velocity the points indicated
-                                                     ! by velocity_stagger. (m/s)
-  real, pointer, dimension(:,:)  :: v_surf =>NULL()  ! j-velocity the points indicated
-                                                     ! by velocity_stagger. (m/s)
-  real, pointer, dimension(:,:)  :: sea_lev =>NULL() ! Sea level in m after correction
-                                                     ! for surface pressure, i.e.
-                                                     ! dzt(1) + eta_t + patm/rho0/grav (m)
-  real, pointer, dimension(:,:)  :: frazil  =>NULL() ! Accumulated heating (Joules/m^2)
-                                                     ! from frazil formation in the ocean.
-  type(coupler_2d_bc_type)       :: fields    ! A structure that may contain an
-                                              ! array of named tracer-related fields.
-  integer                        :: avg_kount ! Used for accumulating averages of this type.
-  integer, dimension(3)          :: axes = 0  ! Axis numbers that are available
-                                              ! for I/O using this surface data.
-
-  real, pointer, dimension(:,:)  :: area =>NULL() ! cell area of the ocean surface.
+  integer :: stagger = -999   ! The staggering relative to the tracer points
+                    ! points of the two velocity components. Valid entries
+                    ! include AGRID, BGRID_NE, CGRID_NE, BGRID_SW, and CGRID_SW,
+                    ! corresponding to the community-standard Arakawa notation. 
+                    ! (These are named integers taken from mpp_parameter_mod.)
+                    ! Following MOM, this is BGRID_NE by default when the ocean
+                    ! is initialized, but here it is set to -999 so that a
+                    ! global max across ocean and non-ocean processors  can be
+                    ! used to determine its value.
+  real, pointer, dimension(:,:)  :: &
+    t_surf => NULL(), & ! SST on t-cell (degrees Kelvin)
+    s_surf => NULL(), & ! SSS on t-cell (psu)
+    u_surf => NULL(), & ! i-velocity at the locations indicated by stagger, m/s.
+    v_surf => NULL(), & ! j-velocity at the locations indicated by stagger, m/s.
+    sea_lev => NULL(), & ! Sea level in m after correction for surface pressure,
+                        ! i.e. dzt(1) + eta_t + patm/rho0/grav (m)
+    frazil =>NULL(), &  ! Accumulated heating (in Joules/m^2) from frazil
+                        ! formation in the ocean.
+    area => NULL()      ! cell area of the ocean surface, in m2.
+  type(coupler_2d_bc_type) :: fields    ! A structure that may contain an
+                                        ! array of named tracer-related fields.
+  integer                  :: avg_kount ! Used for accumulating averages of this type.
+  integer, dimension(3)    :: axes = 0  ! Axis numbers that are available
+                                        ! for I/O using this surface data.
 
 end type ocean_public_type
 
