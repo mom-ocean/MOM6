@@ -364,7 +364,6 @@ subroutine fill_vector_symmetric_edges_2d(u_cmpt, v_cmpt, MOM_dom, stagger, scal
   integer :: stagger_local
   integer :: dirflag
   integer :: i, j, isc, iec, jsc, jec, isd, ied, jsd, jed, IscB, IecB, JscB, JecB
-  real, allocatable, dimension(:) :: nbuff_x, nbuff_y, ebuff_x, ebuff_y
   real, allocatable, dimension(:) :: sbuff_x, sbuff_y, wbuff_x, wbuff_y
   logical :: block_til_complete
 
@@ -389,11 +388,10 @@ subroutine fill_vector_symmetric_edges_2d(u_cmpt, v_cmpt, MOM_dom, stagger, scal
 
   if (stagger_local == CGRID_NE) then
     allocate(wbuff_x(jsc:jec)) ; allocate(sbuff_y(isc:iec))
-    allocate(ebuff_x(jsc:jec)) ; allocate(nbuff_y(isc:iec))
+    wbuff_x(:) = 0.0 ; sbuff_y(:) = 0.0
     call mpp_get_boundary(u_cmpt, v_cmpt, MOM_dom%mpp_domain, flags=dirflag, &
                           wbufferx=wbuff_x, sbuffery=sbuff_y, &
-                          ebufferx=ebuff_x, nbuffery=nbuff_y, &
-                          gridtype=stagger_local)
+                          gridtype=CGRID_NE)
     do i=isc,iec
       v_cmpt(i,JscB) = sbuff_y(i)
     enddo
@@ -401,18 +399,14 @@ subroutine fill_vector_symmetric_edges_2d(u_cmpt, v_cmpt, MOM_dom, stagger, scal
       u_cmpt(IscB,j) = wbuff_x(j)
     enddo
     deallocate(wbuff_x) ; deallocate(sbuff_y)
-    deallocate(ebuff_x) ; deallocate(nbuff_y)
   elseif  (stagger_local == BGRID_NE) then
     allocate(wbuff_x(JscB:JecB)) ; allocate(sbuff_x(IscB:IecB))
     allocate(wbuff_y(JscB:JecB)) ; allocate(sbuff_y(IscB:IecB))
-    allocate(ebuff_x(JscB:JecB)) ; allocate(nbuff_x(IscB:IecB))
-    allocate(ebuff_y(JscB:JecB)) ; allocate(nbuff_y(IscB:IecB))
+    wbuff_x(:) = 0.0 ; wbuff_y(:) = 0.0 ; sbuff_x(:) = 0.0 ; sbuff_y(:) = 0.0
     call mpp_get_boundary(u_cmpt, v_cmpt, MOM_dom%mpp_domain, flags=dirflag, &
                           wbufferx=wbuff_x, sbufferx=sbuff_x, &
                           wbuffery=wbuff_y, sbuffery=sbuff_y, &
-                          ebufferx=ebuff_x, nbufferx=nbuff_x, &
-                          ebuffery=ebuff_y, nbuffery=nbuff_y, &
-                          gridtype=stagger_local)
+                          gridtype=BGRID_NE)
     do I=IscB,IecB
       u_cmpt(I,JscB) = sbuff_x(I) ; v_cmpt(I,JscB) = sbuff_y(I)
     enddo
@@ -421,8 +415,6 @@ subroutine fill_vector_symmetric_edges_2d(u_cmpt, v_cmpt, MOM_dom, stagger, scal
     enddo
     deallocate(wbuff_x) ; deallocate(sbuff_x)
     deallocate(wbuff_y) ; deallocate(sbuff_y)
-    deallocate(ebuff_x) ; deallocate(nbuff_x)
-    deallocate(ebuff_y) ; deallocate(nbuff_y)
   endif
 
 end subroutine fill_vector_symmetric_edges_2d
