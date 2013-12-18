@@ -967,17 +967,17 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
 !  (out,opt) inty_dpa - The integral in y of the difference between the
 !                       pressure anomaly at the top and bottom of the layer
 !                       divided by the y grid spacing, in Pa.
-  real :: T35(35), S35(35), p35(35), r35(35)
+
+  real :: T5(5), S5(5), p5(5), r5(5)
+  real :: T15(15), S15(15), p15(15), r15(15)
   real :: rho_anom
   real :: w_left, w_right, intz(5)
   real, parameter :: C1_90 = 1.0/90.0  ! Rational constants.
   real :: GxRho, I_Rho
-  real :: dz
+  real :: dz, dz_x(5), dz_y(5)
   real :: weight_t, weight_b
   integer :: Isq, Ieq, Jsq, Jeq, i, j, m, n
-  integer :: pos, count, ii, jj
-  logical :: do_intx_dpa, do_inty_dpa
-  real    :: dz_x(5), dz_y(5)
+  integer :: pos
 
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
@@ -993,136 +993,122 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
       weight_t = 0.25 * real(5-n)
       weight_b = 1.0 - weight_t
       
-      p35(n) = -GxRho*(z_t(i,j) - 0.25*real(n-1)*dz)
+      p5(n) = -GxRho*(z_t(i,j) - 0.25*real(n-1)*dz)
       ! Salinity and temperature points are linearly interpolated
-      S35(n) = weight_t * S_t(i,j) + weight_b * S_b(i,j)
-      T35(n) = weight_t * T_t(i,j) + weight_b * T_b(i,j)
+      S5(n) = weight_t * S_t(i,j) + weight_b * S_b(i,j)
+      T5(n) = weight_t * T_t(i,j) + weight_b * T_b(i,j)
     enddo
-    count = 5
-
-    ! ==================================================
-    ! 2. Compute horizontal integrals in the x direction
-    ! ==================================================
-    do_intx_dpa = .false.
-    jj = j - 1
-    ii = i - 1
-    if (present(intx_dpa) .AND. jj .GE. G%jsc .AND. jj .LE. G%jec .AND. ii .GE. Isq .AND. ii .LE. Ieq ) then
-       do_intx_dpa = .true.
-       do m=2,4
-          w_left = 0.25*real(5-m) ; w_right = 1.0-w_left
-          dz_x(m) = w_left*(z_t(ii,jj) - z_b(ii,jj)) + w_right*(z_t(ii+1,jj) - z_b(ii+1,jj))
-          ! Salinity and temperature points are linearly interpolated in
-          ! the horizontal. The subscript (1) refers to the top value in
-          ! the vertical profile while subscript (5) refers to the bottom
-          ! value in the vertical profile.
-          pos = count + (m-2)*5
-          T35(pos+1) = w_left*T_t(ii,jj) + w_right*T_t(ii+1,jj)
-          T35(pos+5) = w_left*T_b(ii,jj) + w_right*T_b(ii+1,jj)
-
-          S35(pos+1) = w_left*S_t(ii,jj) + w_right*S_t(ii+1,jj)
-          S35(pos+5) = w_left*S_b(ii,jj) + w_right*S_b(ii+1,jj)
-
-          p35(pos+1) = -GxRho*(w_left*z_t(ii,jj) + w_right*z_t(ii+1,jj))
-
-          ! Pressure
-          do n=2,5
-             p35(pos+n) = p35(pos+n-1) + GxRho*0.25*dz_x(m)
-          enddo
-
-          ! Salinity and temperature (linear interpolation in the vertical)
-          do n=1,5
-             weight_t = 0.25 * real(5-n)
-             weight_b = 1.0 - weight_t
-             S35(pos+n) = weight_t * S35(pos+1) + weight_b * S35(pos+5)
-             T35(pos+n) = weight_t * T35(pos+1) + weight_b * T35(pos+5)
-          enddo
-       enddo
-       count = count + 15
-    endif
-
-    ! ==================================================
-    ! 3. Compute horizontal integrals in the y direction
-    ! ==================================================
-    do_inty_dpa = .false.
-    if (present(inty_dpa) .AND. ii .GE. G%isc .AND. ii .LE. G%iec .AND. jj .GE. Jsq .AND. jj .LE. Jeq ) then
-       do_inty_dpa = .true.
-       do m=2,4
-          w_left = 0.25*real(5-m) ; w_right = 1.0-w_left
-          dz_y(m) = w_left*(z_t(ii,jj) - z_b(ii,jj)) + w_right*(z_t(ii,jj+1) - z_b(ii,jj+1))
-          ! Salinity and temperature points are linearly interpolated in
-          ! the horizontal. The subscript (1) refers to the top value in
-          ! the vertical profile while subscript (5) refers to the bottom
-          ! value in the vertical profile.
-          pos = count + (m-2)*5
-          T35(pos+1) = w_left*T_t(ii,jj) + w_right*T_t(ii,jj+1)
-          T35(pos+5) = w_left*T_b(ii,jj) + w_right*T_b(ii,jj+1)
-
-          S35(pos+1) = w_left*S_t(ii,jj) + w_right*S_t(ii,jj+1)
-          S35(pos+5) = w_left*S_b(ii,jj) + w_right*S_b(ii,jj+1)
-
-          p35(pos+1) = -GxRho*(w_left*z_t(ii,jj) + w_right*z_t(ii,jj+1))
-
-          ! Pressure
-          do n=2,5
-             p35(pos+n) = p35(pos+n-1) + GxRho*0.25*dz_y(m)
-          enddo
-
-          ! Salinity and temperature (linear interpolation in the vertical)
-          do n=1,5
-             weight_t = 0.25 * real(5-n)
-             weight_b = 1.0 - weight_t
-             S35(pos+n) = weight_t * S35(pos+1) + weight_b * S35(pos+5)
-             T35(pos+n) = weight_t * T35(pos+1) + weight_b * T35(pos+5)
-          enddo
-       enddo
-       count = count + 15
-    endif
-
-    call calculate_density_array(T35, S35, p35, r35, 1, count, EOS)
-
+    call calculate_density(T5, S5, p5, r5, 1, 5, EOS)
+    
     ! Use Bode's rule to estimate the pressure anomaly change.
-    rho_anom = C1_90*(7.0*(r35(1)+r35(5)) + 32.0*(r35(2)+r35(4)) + 12.0*r35(3)) - &
+    rho_anom = C1_90*(7.0*(r5(1)+r5(5)) + 32.0*(r5(2)+r5(4)) + 12.0*r5(3)) - &
            rho_ref
     dpa(i,j) = G_e*dz*rho_anom
     ! Use a Bode's-rule-like fifth-order accurate estimate of 
     ! the double integral of the pressure anomaly.
-    r35(1:5) = r35(1:5) - rho_ref
+    r5 = r5 - rho_ref
     if (present(intz_dpa)) intz_dpa(i,j) = 0.5*G_e*dz**2 * &
-          (rho_anom - C1_90*(16.0*(r35(4)-r35(2)) + 7.0*(r35(5)-r35(1))) )
-    count = 5
-
-    if (do_intx_dpa) then
-       intz(1) = dpa(ii,jj) ; intz(5) = dpa(ii+1,jj)
-    ! Use Bode's rule to estimate the pressure anomaly change.
-       do m = 2,4
-          pos = count+(m-2)*5
-          intz(m) = G_e*dz_x(m)*( C1_90*(7.0*(r35(pos+1)+r35(pos+5)) + 32.0*(r35(pos+2)+r35(pos+4)) + &
-               12.0*r35(pos+3)) - rho_ref)
-       enddo
-
-       ! Use Bode's rule to integrate the bottom pressure anomaly values in x.
-       intx_dpa(ii,jj) = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + &
-            12.0*intz(3))
-       count=count+15
-    endif
-
-    if (do_inty_dpa) then
-       intz(1) = dpa(ii,jj) ; intz(5) = dpa(ii,jj+1)
-       ! Use Bode's rule to estimate the pressure anomaly change.
-       do m = 2,4
-          pos = count + (m-2)*5
-          intz(m) = G_e*dz_y(m)*( C1_90*(7.0*(r35(pos+1)+r35(pos+5)) + 32.0*(r35(pos+2)+r35(pos+4)) + &
-               12.0*r35(pos+3)) - rho_ref)
-       enddo
-       ! Use Bode's rule to integrate the values.
-       inty_dpa(ii,jj) = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + &
-            12.0*intz(3))       
-    endif
-    
+          (rho_anom - C1_90*(16.0*(r5(4)-r5(2)) + 7.0*(r5(5)-r5(1))) )
   enddo ; enddo ! end loops on j and i
 
+  ! ==================================================
+  ! 2. Compute horizontal integrals in the x direction
+  ! ==================================================
+  if (present(intx_dpa)) then ; do j=G%jsc,G%jec ; do I=Isq,Ieq
+    intz(1) = dpa(i,j) ; intz(5) = dpa(i+1,j)
+    do m=2,4
+      w_left = 0.25*real(5-m) ; w_right = 1.0-w_left
+      dz_x(m) = w_left*(z_t(i,j) - z_b(i,j)) + w_right*(z_t(i+1,j) - z_b(i+1,j))
 
+      ! Salinity and temperature points are linearly interpolated in
+      ! the horizontal. The subscript (1) refers to the top value in
+      ! the vertical profile while subscript (5) refers to the bottom
+      ! value in the vertical profile.
+      pos = (m-2)*5
+      T15(pos+1) = w_left*T_t(i,j) + w_right*T_t(i+1,j)
+      T15(pos+5) = w_left*T_b(i,j) + w_right*T_b(i+1,j)
 
+      S15(pos+1) = w_left*S_t(i,j) + w_right*S_t(i+1,j)
+      S15(pos+5) = w_left*S_b(i,j) + w_right*S_b(i+1,j)
+
+      p15(pos+1) = -GxRho*(w_left*z_t(i,j) + w_right*z_t(i+1,j))
+
+      ! Pressure
+      do n=2,5
+        p15(pos+n) = p15(pos+n-1) + GxRho*0.25*dz_x(m)
+      enddo
+
+      ! Salinity and temperature (linear interpolation in the vertical)
+      do n=1,5
+        weight_t = 0.25 * real(5-n)
+        weight_b = 1.0 - weight_t
+        S15(pos+n) = weight_t * S15(pos+1) + weight_b * S15(pos+5)
+        T15(pos+n) = weight_t * T15(pos+1) + weight_b * T15(pos+5)
+      enddo
+    enddo
+
+    call calculate_density(T15, S15, p15, r15, 1, 15, EOS)
+    
+    ! Use Bode's rule to estimate the pressure anomaly change.
+    do m = 2,4
+      pos = (m-2)*5
+      intz(m) = G_e*dz_x(m)*( C1_90*(7.0*(r15(pos+1)+r15(pos+5)) + 32.0*(r15(pos+2)+r15(pos+4)) + &
+                            12.0*r15(pos+3)) - rho_ref)
+    enddo    
+    ! Use Bode's rule to integrate the bottom pressure anomaly values in x.
+    intx_dpa(i,j) = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + &
+                           12.0*intz(3))
+  enddo ; enddo ; endif
+
+  ! ==================================================
+  ! 3. Compute horizontal integrals in the y direction
+  ! ==================================================
+  if (present(inty_dpa)) then ; do J=Jsq,Jeq ; do i=G%isc,G%iec
+    intz(1) = dpa(i,j) ; intz(5) = dpa(i,j+1)
+    do m=2,4
+      w_left = 0.25*real(5-m) ; w_right = 1.0-w_left
+      dz_y(m) = w_left*(z_t(i,j) - z_b(i,j)) + w_right*(z_t(i,j+1) - z_b(i,j+1))
+
+      ! Salinity and temperature points are linearly interpolated in
+      ! the horizontal. The subscript (1) refers to the top value in
+      ! the vertical profile while subscript (5) refers to the bottom
+      ! value in the vertical profile.
+      pos = (m-2)*5
+      T15(pos+1) = w_left*T_t(i,j) + w_right*T_t(i,j+1)
+      T15(pos+5) = w_left*T_b(i,j) + w_right*T_b(i,j+1)
+      
+      S15(pos+1) = w_left*S_t(i,j) + w_right*S_t(i,j+1)
+      S15(pos+5) = w_left*S_b(i,j) + w_right*S_b(i,j+1)
+      
+      p15(pos+1) = -GxRho*(w_left*z_t(i,j) + w_right*z_t(i,j+1))
+
+      ! Pressure
+      do n=2,5
+        p15(pos+n) = p15(pos+n-1) + GxRho*0.25*dz_y(m)
+      enddo
+
+      ! Salinity and temperature (linear interpolation in the vertical)
+      do n=1,5
+        weight_t = 0.25 * real(5-n)
+        weight_b = 1.0 - weight_t
+        S15(pos+n) = weight_t * S15(pos+1) + weight_b * S15(pos+5)
+        T15(pos+n) = weight_t * T15(pos+1) + weight_b * T15(pos+5)
+      enddo
+    enddo      
+
+    call calculate_density(T15, S15, p15, r15, 1, 15, EOS)
+    
+    ! Use Bode's rule to estimate the pressure anomaly change.
+    do m = 2,4
+      pos = (m-2)*5
+      intz(m) = G_e*dz_y(m)*( C1_90*(7.0*(r15(pos+1)+r15(pos+5)) + 32.0*(r15(pos+2)+r15(pos+4)) + &
+                            12.0*r15(pos+3)) - rho_ref)
+    enddo
+
+    ! Use Bode's rule to integrate the values.
+    inty_dpa(i,j) = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + &
+                           12.0*intz(3))
+  enddo ; enddo ; endif
 end subroutine int_density_dz_generic_plm
 ! ==========================================================================
 ! Above is the routine where only the S and T profiles are modified
