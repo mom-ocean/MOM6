@@ -920,7 +920,8 @@ end subroutine int_density_dz_generic_cell
 ! ==========================================================================
 subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, & 
                                        rho_0, G_e, G, EOS, dpa, &
-                                       intz_dpa, intx_dpa, inty_dpa)
+                                       intz_dpa, intx_dpa, inty_dpa, &
+                                       useMassWghtInterp)
   real, dimension(NIMEM_,NJMEM_),  intent(in)  :: T_t, T_b, S_t, S_b, z_t, z_b
   real,                            intent(in)  :: rho_ref, rho_0, G_e
   type(ocean_grid_type),           intent(in)  :: G
@@ -929,6 +930,7 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
   real, dimension(NIMEM_,NJMEM_),  optional, intent(out) :: intz_dpa
   real, dimension(NIMEMB_,NJMEM_), optional, intent(out) :: intx_dpa
   real, dimension(NIMEM_,NJMEMB_), optional, intent(out) :: inty_dpa
+  logical,                         optional, intent(in)  :: useMassWghtInterp
 ! This subroutine calculates (by numerical quadrature) integrals of
 ! pressure anomalies across layers, which are required for calculating the
 ! finite-volume form pressure accelerations in a Boussinesq model.  The one
@@ -967,6 +969,8 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
 !  (out,opt) inty_dpa - The integral in y of the difference between the
 !                       pressure anomaly at the top and bottom of the layer
 !                       divided by the y grid spacing, in Pa.
+!  (in,opt) useMassWghtInterp - If true, uses mass weighting to interpolate
+!                       T/S for top and bottom integrals.
 
   real :: T5(5), S5(5), p5(5), r5(5)
   real :: T15(15), S15(15), p15(15), r15(15)
@@ -975,7 +979,8 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
   real, parameter :: C1_90 = 1.0/90.0  ! Rational constants.
   real :: GxRho, I_Rho
   real :: dz, dz_x(5), dz_y(5)
-  real :: weight_t, weight_b
+  real :: weight_t, weight_b, hWght, massWeightingToggle
+  real :: Ttl, Tbl, Ttr, Tbr, Stl, Sbl, Str, Sbr, hL, hR, iDenom
   integer :: Isq, Ieq, Jsq, Jeq, i, j, m, n
   integer :: pos
 
@@ -983,6 +988,10 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
 
   GxRho = G_e * rho_0
   I_Rho = 1.0 / rho_0
+  massWeightingToggle = 0.
+  if (present(useMassWghtInterp)) then
+    if (useMassWghtInterp) massWeightingToggle = 1.
+  endif
 
   ! =============================
   ! 1. Compute vertical integrals
@@ -1016,8 +1025,36 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
   ! ==================================================
   if (present(intx_dpa)) then ; do j=G%jsc,G%jec ; do I=Isq,Ieq
     intz(1) = dpa(i,j) ; intz(5) = dpa(i+1,j)
+
+    ! Corner values of T and S
+    ! hWght is the distance measure by which the cell is violation of
+    ! hydrostatic consistency. For large hWght we bias the interpolation
+    ! of T,S along the top and bottom integrals, almost like thickness
+    ! weighting.
+    ! Note: To work in terrain following coordinates we could offset
+    ! this distance by the layer thickness to replicate other models.
+    hWght = massWeightingToggle * &
+            max(0., -G%bathyT(i,j)-z_t(i+1,j), -G%bathyT(i+1,j)-z_t(i,j))
+    if (hWght > 0.) then
+      hL = (z_t(i,j) - z_b(i,j)) + G%H_subroundoff
+      hR = (z_t(i+1,j) - z_b(i+1,j)) + G%H_subroundoff
+      hWght = hWght * ( (hL-hR)/(hL+hR) )**2
+      iDenom = 1./( hWght*(hR + hL) + hL*hR )
+      Ttl = ( (hWght*hR)*T_t(i+1,j) + (hWght*hL + hR*hL)*T_t(i,j) ) * iDenom
+      Ttr = ( (hWght*hL)*T_t(i,j) + (hWght*hR + hR*hL)*T_t(i+1,j) ) * iDenom
+      Tbl = ( (hWght*hR)*T_b(i+1,j) + (hWght*hL + hR*hL)*T_b(i,j) ) * iDenom
+      Tbr = ( (hWght*hL)*T_b(i,j) + (hWght*hR + hR*hL)*T_b(i+1,j) ) * iDenom
+      Stl = ( (hWght*hR)*S_t(i+1,j) + (hWght*hL + hR*hL)*S_t(i,j) ) * iDenom
+      Str = ( (hWght*hL)*S_t(i,j) + (hWght*hR + hR*hL)*S_t(i+1,j) ) * iDenom
+      Sbl = ( (hWght*hR)*S_b(i+1,j) + (hWght*hL + hR*hL)*S_b(i,j) ) * iDenom
+      Sbr = ( (hWght*hL)*S_b(i,j) + (hWght*hR + hR*hL)*S_b(i+1,j) ) * iDenom
+    else
+      Ttl = T_t(i,j); Tbl = T_b(i,j); Ttr = T_t(i+1,j); Tbr = T_b(i+1,j)
+      Stl = S_t(i,j); Sbl = S_b(i,j); Str = S_t(i+1,j); Sbr = S_b(i+1,j)
+    endif
+
     do m=2,4
-      w_left = 0.25*real(5-m) ; w_right = 1.0-w_left
+      w_left = 0.25*real(5-m) ; w_right = 1.0-w_left  ! = 0.25*real(m-1)
       dz_x(m) = w_left*(z_t(i,j) - z_b(i,j)) + w_right*(z_t(i+1,j) - z_b(i+1,j))
 
       ! Salinity and temperature points are linearly interpolated in
@@ -1025,11 +1062,11 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
       ! the vertical profile while subscript (5) refers to the bottom
       ! value in the vertical profile.
       pos = (m-2)*5
-      T15(pos+1) = w_left*T_t(i,j) + w_right*T_t(i+1,j)
-      T15(pos+5) = w_left*T_b(i,j) + w_right*T_b(i+1,j)
+      T15(pos+1) = w_left*Ttl + w_right*Ttr
+      T15(pos+5) = w_left*Tbl + w_right*Tbr
 
-      S15(pos+1) = w_left*S_t(i,j) + w_right*S_t(i+1,j)
-      S15(pos+5) = w_left*S_b(i,j) + w_right*S_b(i+1,j)
+      S15(pos+1) = w_left*Stl + w_right*Str
+      S15(pos+5) = w_left*Sbl + w_right*Sbr
 
       p15(pos+1) = -GxRho*(w_left*z_t(i,j) + w_right*z_t(i+1,j))
 
@@ -1065,8 +1102,36 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
   ! ==================================================
   if (present(inty_dpa)) then ; do J=Jsq,Jeq ; do i=G%isc,G%iec
     intz(1) = dpa(i,j) ; intz(5) = dpa(i,j+1)
+
+    ! Corner values of T and S
+    ! hWght is the distance measure by which the cell is violation of
+    ! hydrostatic consistency. For large hWght we bias the interpolation
+    ! of T,S along the top and bottom integrals, almost like thickness
+    ! weighting.
+    ! Note: To work in terrain following coordinates we could offset
+    ! this distance by the layer thickness to replicate other models.
+    hWght = massWeightingToggle * &
+            max(0., -G%bathyT(i,j)-z_t(i,j+1), -G%bathyT(i,j+1)-z_t(i,j))
+    if (hWght > 0.) then
+      hL = (z_t(i,j) - z_b(i,j)) + G%H_subroundoff
+      hR = (z_t(i,j+1) - z_b(i,j+1)) + G%H_subroundoff
+      hWght = hWght * ( (hL-hR)/(hL+hR) )**2
+      iDenom = 1./( hWght*(hR + hL) + hL*hR )
+      Ttl = ( (hWght*hR)*T_t(i,j+1) + (hWght*hL + hR*hL)*T_t(i,j) ) * iDenom
+      Ttr = ( (hWght*hL)*T_t(i,j) + (hWght*hR + hR*hL)*T_t(i,j+1) ) * iDenom
+      Tbl = ( (hWght*hR)*T_b(i,j+1) + (hWght*hL + hR*hL)*T_b(i,j) ) * iDenom
+      Tbr = ( (hWght*hL)*T_b(i,j) + (hWght*hR + hR*hL)*T_b(i,j+1) ) * iDenom
+      Stl = ( (hWght*hR)*S_t(i,j+1) + (hWght*hL + hR*hL)*S_t(i,j) ) * iDenom
+      Str = ( (hWght*hL)*S_t(i,j) + (hWght*hR + hR*hL)*S_t(i,j+1) ) * iDenom
+      Sbl = ( (hWght*hR)*S_b(i,j+1) + (hWght*hL + hR*hL)*S_b(i,j) ) * iDenom
+      Sbr = ( (hWght*hL)*S_b(i,j) + (hWght*hR + hR*hL)*S_b(i,j+1) ) * iDenom
+    else
+      Ttl = T_t(i,j); Tbl = T_b(i,j); Ttr = T_t(i,j+1); Tbr = T_b(i,j+1)
+      Stl = S_t(i,j); Sbl = S_b(i,j); Str = S_t(i,j+1); Sbr = S_b(i,j+1)
+    endif
+
     do m=2,4
-      w_left = 0.25*real(5-m) ; w_right = 1.0-w_left
+      w_left = 0.25*real(5-m) ; w_right = 1.0-w_left  ! = 0.25*real(m-1)
       dz_y(m) = w_left*(z_t(i,j) - z_b(i,j)) + w_right*(z_t(i,j+1) - z_b(i,j+1))
 
       ! Salinity and temperature points are linearly interpolated in
@@ -1074,11 +1139,11 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
       ! the vertical profile while subscript (5) refers to the bottom
       ! value in the vertical profile.
       pos = (m-2)*5
-      T15(pos+1) = w_left*T_t(i,j) + w_right*T_t(i,j+1)
-      T15(pos+5) = w_left*T_b(i,j) + w_right*T_b(i,j+1)
+      T15(pos+1) = w_left*Ttl + w_right*Ttr
+      T15(pos+5) = w_left*Tbl + w_right*Tbr
       
-      S15(pos+1) = w_left*S_t(i,j) + w_right*S_t(i,j+1)
-      S15(pos+5) = w_left*S_b(i,j) + w_right*S_b(i,j+1)
+      S15(pos+1) = w_left*Stl + w_right*Str
+      S15(pos+5) = w_left*Sbl + w_right*Sbr
       
       p15(pos+1) = -GxRho*(w_left*z_t(i,j) + w_right*z_t(i,j+1))
 

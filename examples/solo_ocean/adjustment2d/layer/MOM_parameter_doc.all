@@ -672,6 +672,9 @@ ANALYTIC_FV_PGF = True          !   [Boolean] default = True
                                 ! the equations of state in pressure to avoid any
                                 ! possibility of numerical thermobaric instability, as
                                 ! described in Adcroft et al., O. Mod. (2008).
+MASS_WEIGHT_IN_PRESSURE_GRADIENT = False !   [Boolean] default = False
+                                ! If true, use mass weighting when interpolation T/S for
+                                ! top/bottom integrals in AFV pressure gradient calculation.
 
 ! === module MOM_hor_visc ===
 LAPLACIAN = True                !   [Boolean] default = False

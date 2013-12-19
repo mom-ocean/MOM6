@@ -86,6 +86,7 @@ type, public :: PressureForce_AFV_CS ; private
   type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
   type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
                              ! timing of diagnostic output.
+  logical :: useMassWghtInterp ! Use mass weighting in T/S interpolation
   integer :: id_e_tidal = -1
   type(tidal_forcing_CS), pointer :: tides_CSp => NULL()
 end type PressureForce_AFV_CS
@@ -641,7 +642,8 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
                                             e(:,:,K), e(:,:,K+1), rho_ref, &
                                             CS%Rho0, G%g_Earth, &
                                             G, tv%eqn_of_state, dpa, intz_dpa, &
-                                            intx_dpa, inty_dpa)
+                                            intx_dpa, inty_dpa, &
+                                            useMassWghtInterp = CS%useMassWghtInterp)
         elseif ( pressureReconstructionScheme(ALE_CSp) == PRESSURE_RECONSTRUCTION_PPM ) then
           call int_density_dz_generic_ppm ( tv%T(:,:,k), T_t(:,:,k), T_b(:,:,k), &
                                             tv%S(:,:,k), S_t(:,:,k), S_b(:,:,k), &
@@ -769,6 +771,9 @@ subroutine PressureForce_AFV_init(Time, G, param_file, diag, CS, tides_CSp)
                  units="kg m-3", default=1035.0)
   call get_param(param_file, mod, "TIDES", CS%tides, &
                  "If true, apply tidal momentum forcing.", default=.false.)
+  call get_param(param_file, mod, "MASS_WEIGHT_IN_PRESSURE_GRADIENT", CS%useMassWghtInterp, &
+                 "If true, use mass weighting when interpolation T/S for\n"//&
+                 "top/bottom integrals in AFV pressure gradient calculation.", default=.false.)
 
   if (CS%tides) then
     CS%id_e_tidal = register_diag_field('ocean_model', 'e_tidal', diag%axesT1, &
