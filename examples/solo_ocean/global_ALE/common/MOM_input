@@ -269,6 +269,9 @@ TIDE_SAL_SCALAR_VALUE = 0.094   !   [m m-1]
                                 ! height (really it should be bottom pressure) anomalies
                                 ! and bottom geopotential anomalies. This is only used if
                                 ! TIDES and TIDE_USE_SAL_SCALAR are true.
+MASS_WEIGHT_IN_PRESSURE_GRADIENT = True !   [Boolean] default = False
+                                ! If true, use mass weighting when interpolation T/S for
+                                ! top/bottom integrals in AFV pressure gradient calculation.
 
 ! === module MOM_hor_visc ===
 LAPLACIAN = True                !   [Boolean] default = False
