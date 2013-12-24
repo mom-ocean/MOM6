@@ -444,6 +444,10 @@ DTBT = -0.9                     !   [s or nondim] default = -0.98
 
 ! === module MOM_diabatic_driver ===
 ! The following parameters are used for diabatic processes.
+BBL_EFFIC = 0.0                 !   [nondim] default = 0.2
+                                ! The efficiency with which the energy extracted by
+                                ! bottom drag drives BBL diffusion.  This is only
+                                ! used if BOTTOMDRAGLAW is true.
 BBL_MIXING_AS_MAX = False       !   [Boolean] default = True
                                 ! If true, take the maximum of the diffusivity from the
                                 ! BBL mixing and the other diffusivities. Otherwise,
