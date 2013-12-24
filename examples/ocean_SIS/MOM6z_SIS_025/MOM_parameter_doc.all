@@ -473,9 +473,16 @@ CONVERT_THICKNESS_UNITS = False !   [Boolean] default = False
                                 ! units of m to kg m-2 or vice versa, depending on whether
                                 ! BOUSSINESQ is defined. This does not apply if a restart
                                 ! file is read.
-DEPRESS_INITIAL_SURFACE = False !   [Boolean] default = False
+DEPRESS_INITIAL_SURFACE = True  !   [Boolean] default = False
                                 ! If true,  depress the initial surface to avoid huge
                                 ! tsunamis when a large surface pressure is applied.
+SURFACE_HEIGHT_IC_FILE = "sit_sic_MOM6z_025_v1.nc" !
+                                ! The initial condition file for the surface height.
+SURFACE_HEIGHT_IC_VAR = "sit"   ! default = "SSH"
+                                ! The initial condition variable for the surface height.
+SURFACE_HEIGHT_IC_SCALE = -1.0  !   [variable] default = 1.0
+                                ! A scaling factor to convert SURFACE_HEIGHT_IC_VAR into
+                                ! units of m
 SPONGE = False                  !   [Boolean] default = False
                                 ! If true, sponges may be applied anywhere in the domain.
                                 ! The exact location and properties of those sponges are

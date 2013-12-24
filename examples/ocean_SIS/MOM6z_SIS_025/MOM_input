@@ -200,6 +200,27 @@ ALWAYS_WRITE_GEOM = False       !   [Boolean] default = True
                                 ! If true, write the geometry and vertical grid files
                                 ! every time the model is run.  Otherwise, only write
                                 ! them for new runs.
+INIT_LAYERS_FROM_Z_FILE = False !   [Boolean] default = False
+                                ! If true, intialize the layer thicknesses, temperatures,
+                                ! and salnities from a Z-space file on a latitude-
+                                ! longitude grid.
+TEMP_SALT_Z_INIT_FILE = "WOA05_pottemp_salt.nc" ! default = "temp_salt_z.nc"
+                                ! The name of the z-space input file used to initialize
+                                ! the layer thicknesses, temperatures and salinities.
+Z_INIT_FILE_PTEMP_VAR = "PTEMP" ! default = "ptemp"
+                                ! The name of the potential temperature variable in
+                                ! TEMP_SALT_Z_INIT_FILE.
+Z_INIT_FILE_SALT_VAR = "SALT"   ! default = "salt"
+                                ! The name of the salinity variable in
+                                ! TEMP_SALT_Z_INIT_FILE.
+Z_INIT_HOMOGENIZE = False       !   [Boolean] default = False
+                                ! If True, then horizontally homogenize the interpolated
+                                ! initial conditions.
+Z_INIT_ALE_REMAPPING = True     !   [Boolean] default = False
+                                ! If True, then remap straight to model coordinate from file.
+Z_INIT_REMAPPING_SCHEME = "PPM_IH4" ! default = "PPM_IH4"
+                                ! The remapping scheme to use if using Z_INIT_ALE_REMAPPING
+                                ! is True.
 THICKNESS_CONFIG = "file"       !
                                 ! A string that determines how the initial layer
                                 ! thicknesses are specified for a new run:
@@ -243,6 +264,16 @@ TEMP_IC_VAR = "Temp"            ! default = "PTEMP"
                                 ! The initial condition variable for potential temperature.
 SALT_IC_VAR = "Salt"            ! default = "SALT"
                                 ! The initial condition variable for salinity.
+DEPRESS_INITIAL_SURFACE = True  !   [Boolean] default = False
+                                ! If true,  depress the initial surface to avoid huge
+                                ! tsunamis when a large surface pressure is applied.
+SURFACE_HEIGHT_IC_FILE = "sit_sic_MOM6z_025_v1.nc" !
+                                ! The initial condition file for the surface height.
+SURFACE_HEIGHT_IC_VAR = "sit"   ! default = "SSH"
+                                ! The initial condition variable for the surface height.
+SURFACE_HEIGHT_IC_SCALE = -1.0  !   [variable] default = 1.0
+                                ! A scaling factor to convert SURFACE_HEIGHT_IC_VAR into
+                                ! units of m
 REGRIDDING_COORDINATE_MODE = "Z*" ! default = "LAYER"
                                 ! Coordinate mode for vertical regridding.
                                 ! Choose among the following possibilities:

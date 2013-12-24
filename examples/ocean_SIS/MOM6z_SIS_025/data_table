@@ -18,8 +18,8 @@
 "ICE" , "dhdt"          , ""            , ""                             , .true.  ,  80.0
 "ICE" , "dedt"          , ""            , ""                             , .true.  ,  2.0e-6
 "ICE" , "drdt"          , ""            , ""                             , .true.  , 10.0
-"ICE", "sic_obs"        , "SIC"         ,"./INPUT/sst_ice_clim.nc"       , .false. ,  0.00
-"ICE", "sit_obs"        , "SIT"         ,"./INPUT/sst_ice_clim.nc"       , .false. ,  0.00
+"ICE", "sic_obs"        , "sic"         ,"./INPUT/sit_sic_MOM6z_025_v1.nc", .true.  ,  1.00
+"ICE", "sit_obs"        , "sit"         ,"./INPUT/sit_sic_MOM6z_025_v1.nc", .true.  ,  1.00
 "ICE", "sst_obs"        , "SST"         ,"./INPUT/sst_ice_clim.nc"       , .false. ,  1.0
 "LND" , "t_surf"        , ""            , ""                             , .true.  ,  273.0
 "LND" , "t_ca"          , ""            , ""                             , .true.  ,  273.0
