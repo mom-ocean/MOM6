@@ -2017,7 +2017,7 @@ subroutine register_diags(Time, G, CS, ADp)
         'Salinity', 'PSU')
     CS%id_sst = register_diag_field('ocean_model', 'SST', diag%axesT1, Time, &
         'Sea Surface Temperature', 'Celsius', CS%missing)
-    CS%id_sst_global = register_scalar_field('ocean_model', 'SST_global', Time, &
+    CS%id_sst_global = register_scalar_field('ocean_model', 'SST_global', Time, diag, &
         'Global Average Sea Surface Temperature', 'Celsius', CS%missing)
     CS%id_sst_sq = register_diag_field('ocean_model', 'SST_sq', diag%axesT1, Time, &
         'Sea Surface Temperature Squared', 'Celsius**2', CS%missing)    

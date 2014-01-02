@@ -53,7 +53,7 @@ public register_scalar_field
 public defineAxes, diag_masks_set
 
 interface post_data
-  module procedure post_data_3d, post_data_2d, post_data_1d
+  module procedure post_data_3d, post_data_2d, post_data_0d
 end interface post_data
 
 ! 2D/3D axes type to contain 1D axes handles and pointers to masks
@@ -251,7 +251,7 @@ subroutine set_diag_mediator_grid(G, diag)
   diag%isd = G%isd ; diag%ied = G%ied ; diag%jsd = G%jsd ; diag%jed = G%jed
 end subroutine set_diag_mediator_grid
 
-subroutine post_data_1d(diag_field_id, field, diag, is_static, mask)
+subroutine post_data_0d(diag_field_id, field, diag, is_static, mask)
   integer,           intent(in) :: diag_field_id
   real,              intent(in) :: field
   type(diag_ctrl),   intent(in) :: diag
@@ -259,7 +259,7 @@ subroutine post_data_1d(diag_field_id, field, diag, is_static, mask)
   real,    optional, intent(in) :: mask(:,:)
 ! Arguments: diag_field_id - the id for an output variable returned by a
 !                            previous call to register_diag_field.
-!  (in)      field - The 1-d array being offered for output or averaging.
+!  (in)      field - The 0-d array being offered for output or averaging.
 !  (inout)   diag - A structure that is used to regulate diagnostic output.
 !  (in,opt)  is_static - If true, this is a static field that is always offered.
 !  (in,opt)  mask - If present, use this real array as the data mask.
@@ -273,7 +273,7 @@ subroutine post_data_1d(diag_field_id, field, diag, is_static, mask)
     used = send_data(diag_field_id, field, diag%time_end)
   endif
 
-end subroutine post_data_1d
+end subroutine post_data_0d
 
 subroutine post_data_2d(diag_field_id, field, diag, is_static, mask)
   integer,           intent(in) :: diag_field_id
@@ -650,12 +650,13 @@ function register_static_field(module_name, field_name, axes, &
 
 end function register_static_field
 
-function register_scalar_field(module_name, field_name, init_time, &
+function register_scalar_field(module_name, field_name, init_time, diag, &
      long_name, units, missing_value, range, mask_variant, standard_name, &
      verbose, do_not_log, err_msg, interp_method, tile_count)
   integer :: register_scalar_field
   character(len=*), intent(in) :: module_name, field_name
   type(time_type),  intent(in) :: init_time
+  type(diag_ctrl),  intent(in) :: diag
   character(len=*), optional, intent(in) :: long_name, units, standard_name
   real,             optional, intent(in) :: missing_value, range(2)
   logical,          optional, intent(in) :: mask_variant, verbose, do_not_log
@@ -680,9 +681,9 @@ function register_scalar_field(module_name, field_name, init_time, &
   !  (in,opt)  tile_count - No clue. (Not used in MOM.)
   character(len=240) :: mesg
   real :: MOM_missing_value
-  type(diag_ctrl), pointer :: diag
+  !type(diag_ctrl), pointer :: diag
 
-  MOM_missing_value = -1e-20
+  MOM_missing_value = diag%missing_value
   if(present(missing_value)) MOM_missing_value = missing_value
 
   register_scalar_field = register_diag_field_fms(module_name, field_name, &
