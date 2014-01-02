@@ -1420,35 +1420,18 @@ subroutine initialize_thickness_from_file(h, G, param_file, file_has_thickness)
 
     call read_data(filename,"eta",eta(:,:,:),domain=G%Domain%mpp_domain)
 
-    if (correct_thickness) then
-      ! All mass below the bottom removed if the topography is shallower than
-      ! the input file would indicate.  G%bathyT is positive downward,
-      ! eta is negative downward.
-      do j=js,je ; do i=is,ie
-        if (-eta(i,j,nz+1) > G%bathyT(i,j) + 0.1) eta(i,j,nz+1) = -G%bathyT(i,j)
-      enddo ; enddo
-    endif
-
-    do k=nz,1,-1 ; do j=js,je ; do i=is,ie
-      if (eta(i,j,K) < (eta(i,j,K+1) + G%Angstrom_z)) then
-        eta(i,j,K) = eta(i,j,K+1) + G%Angstrom_z
-        h(i,j,k) = G%Angstrom_z
-      else
-        h(i,j,k) = eta(i,j,K) - eta(i,j,K+1)
-      endif
-    enddo ; enddo ; enddo
-
-  !  Check for consistency between the interface heights and topography.!
-    if (correct_thickness) then
-      do j=js,je ; do i=is,ie
-        !   The whole column is dilated to accomodate deeper topography than
-        ! the input file would indicate.
-        if (-eta(i,j,nz+1) < G%bathyT(i,j) - 0.1) then
-          dilate = (eta(i,j,1)+G%bathyT(i,j)) / (eta(i,j,1)-eta(i,j,nz+1))
-          do k=1,nz ; h(i,j,k) = h(i,j,k) * dilate ; enddo
-        endif
-      enddo ; enddo
+    if (correct_thickness) then 
+      call adjustEtaToFitBathymetry(G, eta, h)
     else
+      do k=nz,1,-1 ; do j=js,je ; do i=is,ie
+        if (eta(i,j,K) < (eta(i,j,K+1) + G%Angstrom_z)) then
+          eta(i,j,K) = eta(i,j,K+1) + G%Angstrom_z
+          h(i,j,k) = G%Angstrom_z
+        else
+          h(i,j,k) = eta(i,j,K) - eta(i,j,K+1)
+        endif
+      enddo ; enddo ; enddo
+
       do j=js,je ; do i=is,ie
         if (abs(eta(i,j,nz+1) + G%bathyT(i,j)) > 1.0) &
           inconsistent = inconsistent + 1
@@ -1457,7 +1440,7 @@ subroutine initialize_thickness_from_file(h, G, param_file, file_has_thickness)
 
       if ((inconsistent > 0) .and. (is_root_pe())) then
         write(mesg,'("Thickness initial conditions are inconsistent ",'// &
-                 '"with topography in ",I5," places.")') inconsistent
+                 '"with topography in ",I8," places.")') inconsistent
         call MOM_error(WARNING, mesg)
       endif
     endif
@@ -1465,6 +1448,75 @@ subroutine initialize_thickness_from_file(h, G, param_file, file_has_thickness)
   endif
   call callTree_leave(trim(mod)//'()')
 end subroutine initialize_thickness_from_file
+! -----------------------------------------------------------------------------
+
+! -----------------------------------------------------------------------------
+!> Adjust interface heights to fit the bathymetry and diagnose layer thickness.
+!! If the bottom most interface is below the topography then the bottom-most
+!! layers are contracted to G%Angstrom_z.
+!! If the bottom most interface is above the topography then the entire column
+!! is dilated (expanded) to fill the void.
+!!   @remark{There is a (hard-wired) "tolerance" parameter such that the
+!! criteria for adjustment must equal or exceed 10cm.}
+!!   @param[in]     G   Grid type
+!!   @param[in,out] eta Interface heights
+!!   @param[out]    h   Layer thicknesses
+subroutine adjustEtaToFitBathymetry(G, eta, h)
+  type(ocean_grid_type),                          intent(in)    :: G
+  real, dimension(NIMEM_,NJMEM_, NK_INTERFACE_ ), intent(inout) :: eta
+  real, dimension(NIMEM_,NJMEM_, NKMEM_),         intent(inout) :: h
+  ! Local variables
+  integer :: i, j, k, is, ie, js, je, nz, contractions, dilations
+  real, parameter :: hTolerance = 0.1 !<  Tolerance to exceed adjustment criteria (m)
+  real :: hTmp, eTmp, dilate
+  character(len=100) :: mesg
+
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+
+  contractions = 0
+  do j=js,je ; do i=is,ie
+    if (-eta(i,j,nz+1) > G%bathyT(i,j) + hTolerance) then
+      eta(i,j,nz+1) = -G%bathyT(i,j)
+      contractions = contractions + 1
+    endif
+  enddo ; enddo
+  call sum_across_PEs(contractions)
+  if ((contractions > 0) .and. (is_root_pe())) then
+    write(mesg,'("Thickness initial conditions were contracted ",'// &
+               '"to fit topography in ",I8," places.")') contractions
+    call MOM_error(WARNING, 'adjustEtaToFitBathymetry: '//mesg)
+  endif
+
+  do k=nz,1,-1 ; do j=js,je ; do i=is,ie
+    ! Collapse layers to thinnest possible if the thickness less than
+    ! the thinnest possible (or negative).
+    if (eta(i,j,K) < (eta(i,j,K+1) + G%Angstrom_z)) then
+      eta(i,j,K) = eta(i,j,K+1) + G%Angstrom_z
+      h(i,j,k) = G%Angstrom_z
+    else
+      h(i,j,k) = eta(i,j,K) - eta(i,j,K+1)
+    endif
+  enddo ; enddo ; enddo
+
+  dilations = 0
+  do j=js,je ; do i=is,ie
+    !   The whole column is dilated to accomodate deeper topography than
+    ! the bathymetry would indicate.
+    if (-eta(i,j,nz+1) < G%bathyT(i,j) - hTolerance) then
+      dilations = dilations + 1
+      dilate = (eta(i,j,1)+G%bathyT(i,j)) / (eta(i,j,1)-eta(i,j,nz+1))
+      do k=1,nz ; h(i,j,k) = h(i,j,k) * dilate ; enddo
+      do k=nz, 2, -1; eta(i,j,K) = eta(i,j,K+1) + h(i,j,k); enddo
+    endif
+  enddo ; enddo
+  call sum_across_PEs(dilations)
+  if ((dilations > 0) .and. (is_root_pe())) then
+    write(mesg,'("Thickness initial conditions were dilated ",'// &
+               '"to fit topography in ",I8," places.")') dilations
+    call MOM_error(WARNING, 'adjustEtaToFitBathymetry: '//mesg)
+  endif
+
+end subroutine adjustEtaToFitBathymetry
 ! -----------------------------------------------------------------------------
 
 ! -----------------------------------------------------------------------------
@@ -3885,7 +3937,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
   else ! remap to isopycnal layer space
 ! next find interface positions using local arrays
 ! nlevs contains the number of valid data points in each column
-    allocate(zi(is:ie,js:je,nz+1))
+    allocate(zi(G%isd:G%ied,G%jsd:G%jed,nz+1))
     allocate(nlevs(is:ie,js:je))
 
     nlevs(:,:)=0.0
@@ -3909,35 +3961,16 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
                  "would indicate.", default=.false.)
 
     if (correct_thickness) then
-      ! All mass below the bottom removed if the topography is shallower than
-      ! the input file would indicate.  G%bathyT is positive downward,
-      ! eta is negative downward.
-      do j=js,je ; do i=is,ie
-        if (-zi(i,j,nz+1) > G%bathyT(i,j) + 0.1) zi(i,j,nz+1) = -G%bathyT(i,j)
-      enddo ; enddo
-    endif
-
-    do k=nz,1,-1 ; do j=js,je ; do i=is,ie
-      if (zi(i,j,K) < (zi(i,j,K+1) + G%Angstrom_z)) then
-        zi(i,j,K) = zi(i,j,K+1) + G%Angstrom_z
-        h(i,j,k) = G%Angstrom_z
-      else
-        h(i,j,k) = zi(i,j,K) - zi(i,j,K+1)
-      endif
-    enddo ; enddo ; enddo
-
-
-!  Check for consistency between the interface heights and topography.!
-    if (correct_thickness) then
-      do j=js,je ; do i=is,ie
-        !   The whole column is dilated to accomodate deeper topography than
-        ! the input file would indicate.
-        if (-zi(i,j,nz+1) < G%bathyT(i,j) - 0.1) then
-          dilate = (zi(i,j,1)+G%bathyT(i,j)) / (zi(i,j,1)-zi(i,j,nz+1))
-          do k=1,nz ; h(i,j,k) = h(i,j,k) * dilate ; enddo
-        endif
-      enddo ; enddo
+      call adjustEtaToFitBathymetry(G, zi, h)
     else
+      do k=nz,1,-1 ; do j=js,je ; do i=is,ie
+        if (zi(i,j,K) < (zi(i,j,K+1) + G%Angstrom_z)) then
+          zi(i,j,K) = zi(i,j,K+1) + G%Angstrom_z
+          h(i,j,k) = G%Angstrom_z
+        else
+          h(i,j,k) = zi(i,j,K) - zi(i,j,K+1)
+        endif
+      enddo ; enddo ; enddo
       inconsistent=0
       do j=js,je ; do i=is,ie
         if (abs(zi(i,j,nz+1) + G%bathyT(i,j)) > 1.0) &
@@ -3964,10 +3997,8 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
        endif
     endif
 
-
     tv%T(is:ie,js:je,:) = tracer_z_init(temp_z(is:ie,js:je,:),-1.0*z_edges_in,zi(is:ie,js:je,:),nkml,nkbl,missing_value,G%mask2dT(is:ie,js:je),nz,nlevs(is:ie,js:je),dbg,idbg,jdbg)
     tv%S(is:ie,js:je,:) = tracer_z_init(salt_z(is:ie,js:je,:),-1.0*z_edges_in,zi(is:ie,js:je,:),nkml,nkbl,missing_value,G%mask2dT(is:ie,js:je),nz,nlevs(is:ie,js:je))
-
 
 ! In case of a problem , use this.
     if (dbg) then
