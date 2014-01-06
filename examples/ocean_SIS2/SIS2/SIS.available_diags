@@ -151,12 +151,6 @@
 "ice_model", "STRAIN_ANGLE"  [Unused]
     ! long_name: strain angle
     ! units: none
-"ice_model", "FA_X"  [Used]
-    ! long_name: air stress on ice - x component
-    ! units: Pa
-"ice_model", "FA_Y"  [Used]
-    ! long_name: air stress on ice - y component
-    ! units: Pa
 "ice_model", "UO"  [Used]
     ! long_name: surface current - x component
     ! units: m/s
@@ -208,11 +202,11 @@
 "ice_model", "OBI"  [Unused]
     ! long_name: ice observed
     ! units: 0 or 1
-"ice_model", "FA_XC"  [Unused]
-    ! long_name: Air stress on ice on C-grid - x component
+"ice_model", "FA_X"  [Used]
+    ! long_name: air stress on ice - x component
     ! units: Pa
-"ice_model", "FA_YC"  [Unused]
-    ! long_name: Air stress on ice on C-grid - y component
+"ice_model", "FA_Y"  [Used]
+    ! long_name: air stress on ice - y component
     ! units: Pa
 "ice_model", "SIGI"  [Unused]
     ! long_name: first stress invariant
