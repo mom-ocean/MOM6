@@ -49,7 +49,7 @@ use MOM_coms, only : reproducing_sum
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock, only : CLOCK_SUBCOMPONENT
 use MOM_diag_mediator, only : post_data, query_averaging_enabled, diag_ctrl
-use MOM_diag_mediator, only : register_diag_field, safe_alloc_ptr, time_type
+use MOM_diag_mediator, only : register_diag_field, safe_alloc_ptr, time_type, register_scalar_field
 use MOM_domains, only : pass_vector, pass_var, global_field_sum, BITWISE_EXACT_SUM
 use MOM_domains, only : AGRID, BGRID_NE, CGRID_NE
 use MOM_error_handler, only : MOM_error, WARNING, FATAL, is_root_pe, MOM_mesg
@@ -162,7 +162,8 @@ type, public :: surface_forcing_CS ; private
   integer :: id_runoff_hflx = -1, id_calving_hflx = -1
   integer :: id_Net_Heating = -1, id_sw = -1, id_LwLatSens = -1, id_buoy = -1
   integer :: id_LW = -1, id_lat = -1, id_sens = -1
-  integer :: id_psurf = -1, id_saltflux = -1, id_TKE_tidal = -1
+  integer :: id_psurf = -1, id_saltflux = -1, id_saltFluxIn = -1, id_TKE_tidal = -1
+  integer :: id_saltFluxRestore = -1, id_saltFluxGlobalAdj = -1
   integer :: id_srestore = -1  ! An id number for time_interp_external.
 !###  type(ctrl_forcing_CS), pointer :: ctrl_forcing_CSp => NULL()
   type(MOM_restart_CS), pointer :: restart_CSp => NULL()
@@ -343,43 +344,44 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
   endif
 
   if (restore_salinity) then
-      call time_interp_external(CS%id_srestore,Time,data_srestore)
-      open_ocn_mask = 1.0
-      if (CS%mask_srestore_under_ice) then
-        do j=js,je ; do i=is,ie
-          if (state%SST(i,j) .le. -0.0539*state%SSS(i,j)) open_ocn_mask(i,j)=0.0
-        enddo; enddo
-      endif
-      if (CS%salt_restore_as_sflux) then
-        do j=js,je ; do i=is,ie
-          delta_sss = data_srestore(i,j)- state%SSS(i,j)
+    call time_interp_external(CS%id_srestore,Time,data_srestore)
+    open_ocn_mask(:,:) = 1.0
+    if (CS%mask_srestore_under_ice) then
+      do j=js,je ; do i=is,ie
+        if (state%SST(i,j) .le. -0.0539*state%SSS(i,j)) open_ocn_mask(i,j)=0.0
+      enddo; enddo
+    endif
+    if (CS%salt_restore_as_sflux) then
+      do j=js,je ; do i=is,ie
+        delta_sss = data_srestore(i,j)- state%SSS(i,j)
+        delta_sss = sign(1.0,delta_sss)*min(abs(delta_sss),CS%max_delta_srestore)
+        fluxes%salt_flux(i,j) = 1.e-3*G%mask2dT(i,j) * (CS%Rho0*CS%Flux_const)* &
+                  (CS%basin_mask(i,j)*open_ocn_mask(i,j)) *delta_sss  ! kg Salt m-2 s-1
+        work_sum(i,j) = G%areaT(i,j)*fluxes%salt_flux(i,j)
+      enddo; enddo
+      Sflux_adj_total = reproducing_sum(work_sum(:,:), isr,ier, jsr,jer) / &
+                        CS%area_surf
+    else
+      do j=js,je ; do i=is,ie
+        if (G%mask2dT(i,j) > 0.5) then
+          delta_sss = state%SSS(i,j) - data_srestore(i,j)
           delta_sss = sign(1.0,delta_sss)*min(abs(delta_sss),CS%max_delta_srestore)
-          fluxes%salt_flux(i,j) = 1.e-3*G%mask2dT(i,j) * (CS%Rho0*CS%Flux_const)* &
-                    (CS%basin_mask(i,j)*open_ocn_mask(i,j)) *delta_sss  ! kg Salt m-2 s-1
-          work_sum(i,j) = G%areaT(i,j)*fluxes%salt_flux(i,j)
-        enddo; enddo
-        Sflux_adj_total = reproducing_sum(work_sum(:,:), isr,ier, jsr,jer) / &
-                          CS%area_surf
-      else
-        do j=js,je ; do i=is,ie
-          if (G%mask2dT(i,j) > 0.5) then
-            delta_sss = state%SSS(i,j) - data_srestore(i,j)
-            delta_sss = sign(1.0,delta_sss)*min(abs(delta_sss),CS%max_delta_srestore)
-            pme_adj(i,j) = (CS%basin_mask(i,j)*open_ocn_mask(i,j))* &
+          pme_adj(i,j) = (CS%basin_mask(i,j)*open_ocn_mask(i,j))* &
                       (CS%Rho0*CS%Flux_const) * &
                       delta_sss / (0.5*(state%SSS(i,j) + data_srestore(i,j)))
-          else
-            pme_adj(i,j) = 0.0
-          endif
-          work_sum(i,j) = G%areaT(i,j) * pme_adj(i,j)
-        enddo; enddo
-        PmE_adj_total = reproducing_sum(work_sum(:,:), isr, ier, jsr, jer) / &
-                           CS%area_surf
-        ! Note that when CS%adjust_net_fresh_water_to_zero is true, this adjustment
-        ! of the net salt-restoring to zero is redundant but has been left here
-        ! for backward compatibility. See section below where
-        ! CS%adjust_net_fresh_water_to_zero is tested to be true.
-      endif
+        else
+          pme_adj(i,j) = 0.0
+        endif
+        work_sum(i,j) = G%areaT(i,j) * pme_adj(i,j)
+      enddo; enddo
+      PmE_adj_total = reproducing_sum(work_sum(:,:), isr, ier, jsr, jer) / CS%area_surf
+      ! Note that when CS%adjust_net_fresh_water_to_zero is true, this adjustment
+      ! of the net salt-restoring to zero is redundant but has been left here
+      ! for backward compatibility. See section below where
+      ! CS%adjust_net_fresh_water_to_zero is tested to be true.
+    endif
+    if ((CS%id_saltFluxRestore > 0)) call post_data(CS%id_saltFluxRestore, fluxes%salt_flux, CS%diag)
+    if ((CS%id_saltFluxGlobalAdj > 0)) call post_data(CS%id_saltFluxGlobalAdj, Sflux_adj_total, CS%diag)
   endif
 
   wind_stagger = CS%wind_stagger
@@ -457,18 +459,24 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
       fluxes%sw_nir_dif(i,j) = G%mask2dT(i,j) * IOB%sw_flux_nir_dif(i-i0,j-j0)
     fluxes%sw(i,j) = fluxes%sw_vis_dir(i,j) + fluxes%sw_vis_dif(i,j) + &
                      fluxes%sw_nir_dir(i,j) + fluxes%sw_nir_dif(i,j)
-
-
-    if (restore_salinity .and. CS%salt_restore_as_sflux) then
-      fluxes%salt_flux(i,j) = G%mask2dT(i,j)*(fluxes%salt_flux(i,j)-Sflux_adj_total)
-    else
-      fluxes%salt_flux(i,j) = 0.0
-    endif
-
-    if (ASSOCIATED(IOB%salt_flux)) then
-      fluxes%salt_flux(i,j) = G%mask2dT(i,j)*(fluxes%salt_flux(i,j) - IOB%salt_flux(i-i0,j-j0))
-    endif
   enddo ; enddo
+
+  if (restore_salinity .and. CS%salt_restore_as_sflux) then
+    do j=js,je ; do i=is,ie
+      fluxes%salt_flux(i,j) = G%mask2dT(i,j)*(fluxes%salt_flux(i,j)-Sflux_adj_total)
+    enddo ; enddo
+  else
+    do j=js,je ; do i=is,ie
+      fluxes%salt_flux(i,j) = 0.0
+    enddo ; enddo
+  endif
+
+  if (ASSOCIATED(IOB%salt_flux)) then
+    do j=js,je ; do i=is,ie
+      fluxes%salt_flux(i,j) = G%mask2dT(i,j)*(fluxes%salt_flux(i,j) - IOB%salt_flux(i-i0,j-j0))
+    enddo ; enddo
+    if (CS%id_saltFluxIn > 0) call post_data(CS%id_saltFluxIn, -IOB%salt_flux, CS%diag, mask=G%mask2dT(is:ie,js:je))
+  endif
 
 !### if (associated(CS%ctrl_forcing_CSp)) then
 !###   do j=js,je ; do i=is,ie
@@ -1036,6 +1044,12 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt)
           'Pressure at ice-ocean or atmosphere-ocean interface', 'Pascal')
     CS%id_saltflux = register_diag_field('ocean_model', 'salt_flux', diag%axesT1, Time, &
           'Salt flux into ocean at surface', 'kilogram meter-2 second-1')
+    CS%id_saltFluxIn = register_diag_field('ocean_model', 'salt_flux_in', diag%axesT1, Time, &
+          'Salt flux into ocean at surface from coupler', 'kilogram meter-2 second-1')
+    CS%id_saltFluxRestore = register_diag_field('ocean_model', 'salt_flux_restore', diag%axesT1, Time, &
+          'Salt flux into ocean at surface due to restoring term', 'kilogram meter-2 second-1')
+    CS%id_saltFluxGlobalAdj = register_scalar_field('ocean_model', 'salt_flux_global_restoring_adjustment', Time, diag, &
+          'Adjustment needed to balance net global salt flux into ocean at surface', 'kilogram meter-2 second-1')
     CS%id_TKE_tidal = register_diag_field('ocean_model', 'TKE_tidal', diag%axesT1, Time, &
           'Tidal source of BBL mixing', 'Watt meter-2')
   else

@@ -359,8 +359,10 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
 !  Translate Ice_ocean_boundary into fluxes.
   call mpp_get_compute_domain(Ocean_sfc%Domain, index_bnds(1), index_bnds(2), &
                               index_bnds(3), index_bnds(4))
+  call enable_averaging(time_step, OS%Time + Ocean_coupling_time_step, OS%MOM_CSp%diag) ! Needed to allow diagnostics in convert_IOB
   call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%fluxes, index_bnds, OS%Time, &
                              OS%grid, OS%forcing_CSp, OS%state, OS%restore_salinity)
+  call disable_averaging(OS%MOM_CSp%diag)
   Master_time = OS%Time ; Time1 = OS%Time
 
   call step_MOM(OS%fluxes, OS%state, Time1, time_step, OS%MOM_CSp)
