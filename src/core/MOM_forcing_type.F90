@@ -802,6 +802,8 @@ subroutine sumSWoverBands(G, h, eps, htot, opacity_band, nsw, j, dt, &
     do i=is,ie ; if ((Pen_SW_rem(i) > 0.0) .and. (h_heat(i) > 0.0)) then
       if (h_heat(i)*Ih_limit < 1.0) then
         unabsorbed = 1.0 - h_heat(i)*Ih_limit
+      else
+        unabsorbed = 0.0
       endif
       do n=1,nsw ; Pen_SW_bnd(n,i) = unabsorbed * Pen_SW_bnd(n,i) ; enddo
     endif ; enddo
