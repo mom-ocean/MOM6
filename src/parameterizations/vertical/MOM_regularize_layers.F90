@@ -520,7 +520,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, CS)
 
               ! Move up to the next target layer.
               k2 = k2-1
-              e_2d(i,k2) = e_2d(i,k2) + h_det_tot
+              if (k2>nkmb+1) e_2d(i,k2) = e_2d(i,k2) + h_det_tot
             else
               h_add = h_2d(i,k1)
               h_prev = h_2d(i,k2)
@@ -542,11 +542,12 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, CS)
           else
             ! Move up to the next target layer.
             k2 = k2-1
-            e_2d(i,k2) = e_2d(i,k2) + h_det_tot
+            if (k2>nkmb+1) e_2d(i,k2) = e_2d(i,k2) + h_det_tot
           endif
 
         enddo ! exit terminated loop.
       endif ; enddo
+      ! ### This could be faster if the deepest k with nonzero d_ea were kept.
       do k=nz-1,nkmb+1,-1 ; do i=is,ie ; if (det_i(i)) then
         d_ea(i,k) = d_ea(i,k) + d_ea(i,k+1)
       endif ; enddo ; enddo
@@ -755,6 +756,11 @@ subroutine find_deficit_ratios(e, def_rat_u, def_rat_v, G, CS, &
   real, dimension(NIMEM_,NJMEMB_), optional, intent(out) :: def_rat_v_2lay
   integer,                         optional, intent(in)  :: halo
   real, dimension(NIMEM_,NJMEM_,NKMEM_), optional, intent(in)  :: h
+!    This subroutine determines the amount by which the harmonic mean
+!  thickness at velocity points differ from the arithmetic means, relative to
+!  the the arithmetic means, after eliminating thickness variations that are
+!  solely due to topography and aggregating all interior layers into one.
+
 ! Arguments: e - Interface depths, in m or kg m-2.
 !  (out)     def_rat_u - The thickness deficit ratio at u points, nondim.
 !  (out)     def_rat_v - The thickness deficit ratio at v points, nondim.
@@ -945,6 +951,9 @@ subroutine regularize_layers_init(Time, G, param_file, diag, CS)
   CS%h_def_tol4 = 0.5 + 0.5*CS%h_def_tol1
 
   call get_param(param_file, mod, "DEBUG", CS%debug, default=.false.)
+!  if (.not. CS%debug) &
+!    call get_param(param_file, mod, "DEBUG_CONSERVATION", CS%debug, &
+!                 "If true, monitor conservation and extrema.", default=.false.)
    
   CS%id_def_rat = register_diag_field('ocean_model', 'deficit_ratio', diag%axesT1, &
       Time, 'Max face thickness deficit ratio', 'Nondim')
