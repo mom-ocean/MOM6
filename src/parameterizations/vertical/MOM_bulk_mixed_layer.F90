@@ -106,6 +106,12 @@ type, public :: bulkmixedlayer_CS ; private
                              ! density contours.  It should be a typical value of
                              ! (dR/dS) / (dR/dT) in oceanic profiles.  
                              ! 6 K psu-1 might be reasonable.
+  real    :: BL_extrap_lim   ! A limit on the density range over which
+                             ! extrapolation can occur when detraining from the
+                             ! buffer layers, relative to the density range
+                             ! within the mixed and buffer layers, when the
+                             ! detrainment is going into the lightest interior
+                             ! layer, nondimensional.
   logical :: ML_resort       !   If true, resort the layers by density, rather than
                              ! doing convective adjustment.
   integer :: ML_presort_nz_conv_adj ! If ML_resort is true, do convective
@@ -2202,7 +2208,7 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, dt, dt_diag, d_ea, j, G, CS, &
   real :: Ihk0, Ihk1, Ih12        ! all with units of H-1.
   real :: dR1, dR2, dR2b, dRk1    ! Assorted density difference work variables,
   real :: dR0, dR21, dRcv         ! all with units of kg m-3.
-  real :: dRcv_stays, dRcv_det
+  real :: dRcv_stays, dRcv_det, dRcv_lim
 
   real :: h2_to_k1_lim, T_new, S_new, T_max, T_min, S_max, S_min
   character(len=200) :: mesg
@@ -2332,22 +2338,33 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, dt, dt_diag, d_ea, j, G, CS, &
         dRk1 = (G%Rlay(k1) - Rcv(i,kb2)) * (R0(i,kb2) - R0(i,kb1)) / &
                                            (Rcv(i,kb2) - Rcv(i,kb1))
         b1 = dRk1 / (R0(i,kb2) - R0(i,kb1))
+        ! b1 = G%Rlay(k1) - Rcv(i,kb2)) / (Rcv(i,kb2) - Rcv(i,kb1))
 
+        ! Apply several limits to the detrainment.
+        ! Entrain less than the mass in h2, and keep the base of the buffer
+        ! layers from becoming shallower than any neighbors.
         h2_to_k1 = min(h2 - h_min_bl, h2_to_k1_rem)
+        ! Balance downwind advection of density into the layer below the
+        ! buffer layers with upwind advection from the layer above.
         if (h2_to_k1*(h1_avail + b1*(h1_avail + h2)) > h2*h1_avail) &
           h2_to_k1 = (h2*h1_avail) / (h1_avail + b1*(h1_avail + h2))
         if (h2_to_k1*(dRk1 * h2) > (h_to_bl*R0(i,kb1) - R0_to_bl) * h1) &
           h2_to_k1 = (h_to_bl*R0(i,kb1) - R0_to_bl) * h1 / (dRk1 * h2)
 
-        h1_to_h2 = b1*h2*h2_to_k1 / (h2 - (1.0+b1)*h2_to_k1)
-
-        Ihk1 = 1.0 / (h(i,k1) + h2_to_k1)
-        Ih2f = 1.0 / ((h(i,kb2) - h2_to_k1) + h1_to_h2)
+        if ((k1==kb2+1) .and. (CS%BL_extrap_lim > 0.)) then
+          ! Simply do not detrain very light water into the lightest isopycnal
+          ! coordinate layers if the density jump is too large.
+          dRcv_lim = Rcv(i,kb2)-Rcv(i,0)
+          do k=1,kb2 ; dRcv_lim = max(dRcv_lim, Rcv(i,kb2)-Rcv(i,k)) ; enddo
+          dRcv_lim = CS%BL_extrap_lim*dRcv_lim
+          if ((G%Rlay(k1) - Rcv(i,kb2)) >= dRcv_lim) then
+            h2_to_k1 = 0.0
+          elseif ((G%Rlay(k1) - Rcv(i,kb2)) > 0.5*dRcv_lim) then
+            h2_to_k1 = h2_to_k1 * (2.0 - 2.0*((G%Rlay(k1) - Rcv(i,kb2)) / dRcv_lim))
+          endif
+        endif
 
         dRcv = (G%Rlay(k1) - Rcv(i,kb2))
-        Rcv(i,kb2) = ((h(i,kb2)*Rcv(i,kb2) - h2_to_k1*G%Rlay(k1)) + &
-                      h1_to_h2*Rcv(i,kb1))*Ih2f
-        Rcv(i,k1) = (h(i,k1)*Rcv(i,k1) + h2_to_k1*G%Rlay(k1)) * Ihk1
 
         ! Use 2nd order upwind advection of spiciness, limited by the values
         ! in deeper thick layers to determine the detrained temperature and
@@ -2377,6 +2394,39 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, dt, dt_diag, d_ea, j, G, CS, &
         ! The detrained values of R0 are based on changes in T and S.
         R0_det = R0(i,kb2) + (T_det-T(i,kb2)) * dR0_dT(i) + &
                              (S_det-S(i,kb2)) * dR0_dS(i)
+ 
+        if (CS%BL_extrap_lim >= 0.) then
+          ! Only do this detrainment if the new layer's temperature and salinity
+          ! are not too far outside of the range of previous values.
+          if (h(i,k1) > 10.0*G%Angstrom) then
+            T_min = min(T(i,kb1), T(i,kb2), T(i,k1)) - CS%Allowed_T_chg
+            T_max = max(T(i,kb1), T(i,kb2), T(i,k1)) + CS%Allowed_T_chg
+            S_min = min(S(i,kb1), S(i,kb2), S(i,k1)) - CS%Allowed_S_chg
+            S_max = max(S(i,kb1), S(i,kb2), S(i,k1)) + CS%Allowed_S_chg
+          else
+            T_min = min(T(i,kb1), T(i,kb2)) - CS%Allowed_T_chg
+            T_max = max(T(i,kb1), T(i,kb2)) + CS%Allowed_T_chg
+            S_min = min(S(i,kb1), S(i,kb2)) - CS%Allowed_S_chg
+            S_max = max(S(i,kb1), S(i,kb2)) + CS%Allowed_S_chg
+          endif
+          Ihk1 = 1.0 / (h(i,k1) + h2_to_k1)
+          T_new = (h(i,k1)*T(i,k1) + h2_to_k1*T_det) * Ihk1
+          S_new = (h(i,k1)*S(i,k1) + h2_to_k1*S_det) * Ihk1
+          ! A less restrictive limit might be used here.
+          if ((T_new < T_min) .or. (T_new > T_max) .or. &
+              (S_new < S_min) .or. (S_new > S_max)) &
+            h2_to_k1 = 0.0
+        endif
+ 
+        h1_to_h2 = b1*h2*h2_to_k1 / (h2 - (1.0+b1)*h2_to_k1)
+
+        Ihk1 = 1.0 / (h(i,k1) + h2_to_k1)
+        Ih2f = 1.0 / ((h(i,kb2) - h2_to_k1) + h1_to_h2)
+
+        Rcv(i,kb2) = ((h(i,kb2)*Rcv(i,kb2) - h2_to_k1*G%Rlay(k1)) + &
+                      h1_to_h2*Rcv(i,kb1))*Ih2f
+        Rcv(i,k1) = (h(i,k1)*Rcv(i,k1) + h2_to_k1*G%Rlay(k1)) * Ihk1
+
         T(i,kb2) = ((h(i,kb2)*T(i,kb2) - h2_to_k1*T_det) + &
                     h1_to_h2*T(i,kb1)) * Ih2f
         T(i,k1) = (h(i,k1)*T(i,k1) + h2_to_k1*T_det) * Ihk1
@@ -3278,6 +3328,13 @@ subroutine bulkmixedlayer_init(Time, G, param_file, diag, CS)
                  "what direction is orthogonal to density contours. It \n"//&
                  "should be a typical value of (dR/dS) / (dR/dT) in \n"//&
                  "oceanic profiles.", units="degC PSU-1", default=6.0)
+  call get_param(param_file, mod, "BUFFER_LAYER_EXTRAP_LIMIT", CS%BL_extrap_lim, &
+                 "A limit on the density range over which extrapolation \n"//&
+                 "can occur when detraining from the buffer layers, \n"//&
+                 "relative to the density range within the mixed and \n"//&
+                 "buffer layers, when the detrainment is going into the \n"//&
+                 "lightest interior layer, nondimensional, or a negative \n"//&
+                 "value not to apply this limit.", units="nondim", default = -1.0)
   call get_param(param_file, mod, "DEPTH_LIMIT_FLUXES", CS%H_limit_fluxes, &
                  "The surface fluxes are scaled away when the total ocean \n"//&
                  "depth is less than DEPTH_LIMIT_FLUXES.", &

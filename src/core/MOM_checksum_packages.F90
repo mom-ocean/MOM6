@@ -212,7 +212,7 @@ subroutine MOM_state_stats(mesg, u, v, h, Temp, Salt, G, allowChange, permitDimi
 !  (in) allowChange - do not flag an error if the statistics change
 !  (in) permitDiminishing - do not flag an error if the extrema are diminishing
   integer :: is, ie, js, je, nz, i, j, k
-  real :: Vol, dV, Area
+  real :: Vol, dV, Area, h_minimum
   type(stats) :: T, S, delT, delS
   type(stats), save :: oldT, oldS     ! NOTE: save data is not normally allowed but
   logical, save :: firstCall = .true. ! we use it for debugging purposes here on the
@@ -227,6 +227,7 @@ subroutine MOM_state_stats(mesg, u, v, h, Temp, Salt, G, allowChange, permitDimi
   enddo ; enddo
   T%minimum = 1.E34 ; T%maximum = -1.E34 ; T%average = 0.
   S%minimum = 1.E34 ; S%maximum = -1.E34 ; S%average = 0.
+  h_minimum = 1.E34
   do k = 1, nz ; do j = js, je ; do i = is, ie
     if (G%mask2dT(i,j)>0.) then
       dV = G%areaT(i,j)*h(i,j,k) ; Vol = Vol + dV
@@ -236,6 +237,7 @@ subroutine MOM_state_stats(mesg, u, v, h, Temp, Salt, G, allowChange, permitDimi
         S%minimum = min( S%minimum, Salt(i,j,k) ) ; S%maximum = max( S%maximum, Salt(i,j,k) )
         S%average = S%average + dV*Salt(i,j,k)
       endif
+      if (h_minimum > h(i,j,k)) h_minimum = h(i,j,k)
     endif
   enddo ; enddo ; enddo
   call sum_across_PEs( Area ) ; call sum_across_PEs( Vol )
@@ -281,6 +283,19 @@ subroutine MOM_state_stats(mesg, u, v, h, Temp, Salt, G, allowChange, permitDimi
           write(0,'(i3,3es12.4)') k,h(i,j,k),Temp(i,j,k),Salt(i,j,k)
         enddo
         stop 'Extremum detected'
+      endif
+    enddo ; enddo
+  endif
+
+  if (h_minimum<0.0) then
+    do j = js, je ; do i = is, ie
+      if (minval(h(i,j,:)) == h_minimum) then
+        write(0,'(a,2f12.5)') 'x,y=',G%geoLonT(i,j),G%geoLatT(i,j)
+        write(0,'(a3,3a12)') 'k','h','Temp','Salt'
+        do k = 1, nz
+          write(0,'(i3,3es12.4)') k,h(i,j,k),Temp(i,j,k),Salt(i,j,k)
+        enddo
+        stop 'Negative thickness detected'
       endif
     enddo ; enddo
   endif
