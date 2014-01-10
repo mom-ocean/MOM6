@@ -514,6 +514,8 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, G, C
       call hchksum(visc%TKE_turb, "after calc_KS visc%TKE_turb",G)
     endif
     if (showCallTree) call callTree_waypoint("done with calculate_kappa_shear (set_diffusivity)")
+  elseif (associated(visc%Kv_turb)) then
+    visc%Kv_turb(:,:,:) = 0. ! needed if calculate_kappa_shear is not enabled
   endif
 
 !   Calculate the diffusivity, Kd, for each layer.  This would be
