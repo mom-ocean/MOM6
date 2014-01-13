@@ -334,9 +334,9 @@ subroutine post_data_2d(diag_field_id, field, diag, is_static, mask)
     if (present(mask)) then
       used = send_data(diag_field_id, field, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=mask)
-    elseif(associated(diag%maskList(diag_field_id)%mask2d)) then       
-      used = send_data(diag_field_id, field, &
-                       is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=diag%maskList(diag_field_id)%mask2d)
+   !elseif(associated(diag%maskList(diag_field_id)%mask2d)) then       
+   !  used = send_data(diag_field_id, field, &
+   !                   is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=diag%maskList(diag_field_id)%mask2d)
     else
       used = send_data(diag_field_id, field, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev)
@@ -419,9 +419,9 @@ subroutine post_data_3d(diag_field_id, field, diag, is_static, mask)
     if (present(mask)) then
       used = send_data(diag_field_id, field, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=mask)
-    elseif(associated(diag%maskList(diag_field_id)%mask3d)) then       
-      used = send_data(diag_field_id, field, &
-                       is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=diag%maskList(diag_field_id)%mask3d)
+   !elseif(associated(diag%maskList(diag_field_id)%mask3d)) then       
+   !  used = send_data(diag_field_id, field, &
+   !                   is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=diag%maskList(diag_field_id)%mask3d)
     else
       used = send_data(diag_field_id, field, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev)
