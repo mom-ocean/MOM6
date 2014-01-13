@@ -1456,6 +1456,13 @@ ML_DT_DS_WEIGHT = 6.0           !   [degC PSU-1] default = 6.0
                                 ! what direction is orthogonal to density contours. It
                                 ! should be a typical value of (dR/dS) / (dR/dT) in
                                 ! oceanic profiles.
+BUFFER_LAYER_EXTRAP_LIMIT = -1.0 !   [nondim] default = -1.0
+                                ! A limit on the density range over which extrapolation
+                                ! can occur when detraining from the buffer layers,
+                                ! relative to the density range within the mixed and
+                                ! buffer layers, when the detrainment is going into the
+                                ! lightest interior layer, nondimensional, or a negative
+                                ! value not to apply this limit.
 DEPTH_LIMIT_FLUXES = 0.1        !   [m] default = 0.2
                                 ! The surface fluxes are scaled away when the total ocean
                                 ! depth is less than DEPTH_LIMIT_FLUXES.
