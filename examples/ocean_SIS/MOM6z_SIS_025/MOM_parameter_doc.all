@@ -1346,7 +1346,7 @@ FIRST_GUESS_SURFACE_LAYER_DEPTH = 0.0 !   [m] default = 0.0
                                 ! the surface layer properties. If =0, the top model level properties
                                 ! will be used for the surface layer. If CORRECT_SURFACE_LAYER_AVERAGE=True, a
                                 ! subsequent correction is applied.
-NLT_SHAPE = "CVMIX"             ! default = "CVMIX"
+NLT_SHAPE = "PARABOLIC"         ! default = "CVMIX"
                                 ! The shape of the nonlocal transport (or redistribution of surface
                                 ! forcina. Allowed values are:
                                 !    CVMIX     - Uses the profile from CVmix
