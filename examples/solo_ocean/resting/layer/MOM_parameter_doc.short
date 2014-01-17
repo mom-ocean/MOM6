@@ -87,8 +87,6 @@ DRHO_DS = 1.0                   !   [kg m-3 PSU-1] default = 0.8
                                 ! When EQN_OF_STATE=LINEAR,
                                 ! this is the partial derivative of density with
                                 ! salinity.
-RESTARTFILE = "GOLD.res"        ! default = "MOM.res"
-                                ! The name-root of the restart file.
 
 ! === module MOM_tracer_flow_control ===
 INPUTDIR = "INPUT/"             ! default = "."

@@ -196,7 +196,7 @@ IC_OUTPUT_FILE = "MOM_IC"       ! default = "MOM_IC"
 PARALLEL_RESTARTFILES = False   !   [Boolean] default = False
                                 ! If true, each processor writes its own restart file,
                                 ! otherwise a single restart file is generated
-RESTARTFILE = "GOLD.res"        ! default = "MOM.res"
+RESTARTFILE = "MOM.res"         ! default = "MOM.res"
                                 ! The name-root of the restart file.
 LARGE_FILE_SUPPORT = True       !   [Boolean] default = True
                                 ! If true, use the file-size limits with NetCDF large
