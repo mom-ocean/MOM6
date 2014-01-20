@@ -315,11 +315,10 @@ subroutine checkGridsMatch( G, h, dzInterface )
   ! Local variables
   integer :: i, j, k
   integer :: nz
-  real    :: totalHold, totalHnewF, eps, Heps, hNewF, zOld, zNewF
+  real    :: totalHold, totalHnewF, eps, hNewF, zOld, zNewF
 
   nz = G%ke
-  eps =1.
-  eps = epsilon(eps)
+  eps =1. ; eps = epsilon(eps)
 
   do j = G%jsc-1,G%jec+1
     do i = G%isc-1,G%iec+1
@@ -329,9 +328,6 @@ subroutine checkGridsMatch( G, h, dzInterface )
       do k = 1,nz
         totalHold = totalHold + h(i,j,k)
       enddo
-
-      ! Change meaning of eps. Hereon, Heps is a dimensional error
-      Heps = 2. * totalHold  * eps
 
       ! Integrate upwards for the interfaces consistent with the rest of MOM6
       zOld = - G%bathyT(i,j)
