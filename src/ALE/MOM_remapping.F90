@@ -379,6 +379,7 @@ subroutine remapping_core( CS, n0, h0, u0, n1, dx, u1 )
   integer :: k, remapping_scheme
   real :: hTmp, totalH0, totalHf, eps
   real :: err0, totalHU0, err2, totalHU2
+  real :: z0, z1
 
   if (dx(1) /= 0.) call MOM_error( FATAL, 'MOM_remapping, remapping_core: '//&
              'Non-zero surface flux!' ) ! This is techically allowed but in avoided practice 
@@ -484,8 +485,7 @@ subroutine remapping_core( CS, n0, h0, u0, n1, dx, u1 )
     totalHU0 = totalHU0 + hTmp
     err0 = err0 + epsilon(err0)*max(err0,abs(hTmp))
   enddo
-  totalHU2 = 0.
-  err2 = 0.
+  totalHU2 = 0. ; err2 = 0. ; z0 =0. ; z1 = 0.
   do k = 1, n1
     if (k <= n0) then
       hTmp = h0(k) + ( dx(k+1) - dx(k) )
@@ -495,6 +495,18 @@ subroutine remapping_core( CS, n0, h0, u0, n1, dx, u1 )
     hTmp = hTmp * u1(k)
     totalHU2 = totalHU2 + hTmp
     err2 = err2 + epsilon(err2)*max(err2,abs(hTmp))
+    if (u1(k) /= u1(k)) then
+      write(0,*) 'NaN detected at k=',k
+      write(0,*) 'h0(k)=',h0(k),' u0(k)=',u0(k)
+      write(0,*) 'z0(k)=',z0,' z0(k+1)=',z0+h0(k)
+      write(0,*) 'w(k)=',dx(k),' w(k+1)=',dx(k+1)
+      write(0,*) 'z1(k)=',z1,' z1(k+1)=',z1+(h0(k)+(dx(k+1)-dx(k)))
+      write(0,*) 'z0(k)+w(k)=',z0-dx(k),' z1(k+1)+w(k+1)=',(z0+h0(k))-dx(k+1)
+      write(0,*) 'h1(k)=',h0(k) + ( dx(k+1) - dx(k) )
+      call MOM_error( FATAL, 'MOM_remapping, remapping_core: '//&
+         'NaN detected!' )
+    endif
+    z0 = z0 + h0(k) ; z1 = z1 + ( h0(k) + ( dx(k+1) - dx(k) ) )
   enddo
   if (abs(totalHU2-totalHU0) > (err0+err2)*real(n1)) then
     write(0,*) 'h0=',h0
