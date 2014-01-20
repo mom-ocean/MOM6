@@ -1,0 +1,6 @@
+! Blank file in which we can put "overrides" for parameters
+USE_REGRIDDING = True
+REGRIDDING_COORDINATE_MODE = "Z*"
+INTERPOLATION_SCHEME = "PQM_IH4IH3"
+BOUNDARY_EXTRAPOLATION = True
+REMAPPING_SCHEME = "PQM_IH4IH3"
