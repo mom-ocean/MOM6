@@ -23,7 +23,7 @@ module MOM_domains
 use MOM_coms, only : PE_here, root_PE, num_PEs, MOM_infra_init, MOM_infra_end
 use MOM_coms, only : broadcast, sum_across_PEs, min_across_PEs, max_across_PEs
 use MOM_error_handler, only : MOM_error, MOM_mesg, NOTE, WARNING, FATAL, is_root_pe
-use MOM_file_parser, only : read_param, get_param, log_param, log_version
+use MOM_file_parser, only : get_param, log_param, log_version
 use MOM_file_parser, only : param_file_type
 use MOM_string_functions, only : slasher
 

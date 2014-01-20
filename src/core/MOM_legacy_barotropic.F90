@@ -102,7 +102,7 @@ use MOM_domains, only : To_All, Scalar_Pair, AGRID, CORNER, MOM_domain_type
 use MOM_domains, only : pass_var_start, pass_var_complete
 use MOM_domains, only : pass_vector_start, pass_vector_complete
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
-use MOM_file_parser, only : get_param, read_param, log_param, log_version, param_file_type
+use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : vardesc
@@ -3800,8 +3800,8 @@ subroutine legacy_barotropic_init(u, v, h, eta, Time, G, param_file, diag, CS, &
   call legacy_set_dtbt(G, CS, gtot_est = gtot_estimate, SSH_add = SSH_extra)
   if (dtbt_input > 0.0) CS%dtbt = dtbt_input
 
-  call log_param(param_file, mod, "DTBT as used", CS%dtbt)
-  call log_param(param_file, mod, "estimated maximum DTBT", CS%dtbt_max)
+  call log_param(param_file, mod, "!DTBT as used", CS%dtbt)
+  call log_param(param_file, mod, "!estimated maximum DTBT", CS%dtbt_max)
 
   ! ubtav, vbtav, ubt_IC, vbt_IC, uhbt_IC, and vhbt_IC are allocated and
   ! initialized in register_barotropic_restarts.

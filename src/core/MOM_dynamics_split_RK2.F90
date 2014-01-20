@@ -87,7 +87,7 @@ use MOM_checksums, only : MOM_checksums_init, hchksum, uchksum, vchksum
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
 use MOM_error_handler, only : MOM_set_verbosity, callTree_showQuery
 use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
-use MOM_file_parser, only : read_param, get_param, log_version, param_file_type
+use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_get_input, only : directories
 use MOM_io, only : MOM_io_init, vardesc
 use MOM_restart, only : register_restart_field, query_initialized, save_restart
@@ -1081,7 +1081,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, param_file, &
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_tmp
   character(len=40)  :: mod = "MOM_dynamics_split_RK2" ! This module's name.
   character(len=48) :: thickness_units, flux_units
-  logical :: adiabatic, use_tides, debug_truncations
+  logical :: use_tides, debug_truncations
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
   integer :: IsdB, IedB, JsdB, JedB
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -1127,7 +1127,6 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, param_file, &
                  "in the barotropic continuity equation.", default=.true.)
   call get_param(param_file, mod, "DEBUG", CS%debug, &
                  "If true, write out verbose debugging data.", default=.false.)
-  adiabatic=.false. ; call read_param(param_file, "ADIABATIC", adiabatic)
   call get_param(param_file, mod, "DEBUG_TRUNCATIONS", debug_truncations, &
                  default=.false.)
 

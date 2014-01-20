@@ -23,7 +23,6 @@ module MOM_variables
 use MOM_domains, only : MOM_domain_type, get_domain_extent
 use MOM_checksums, only : hchksum, qchksum, uchksum, vchksum
 use MOM_error_handler, only : MOM_error, FATAL
-use MOM_file_parser, only : read_param, log_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type, MOM_variables_init => MOM_grid_init
 use MOM_io, only : vardesc
 use MOM_EOS, only : EOS_type

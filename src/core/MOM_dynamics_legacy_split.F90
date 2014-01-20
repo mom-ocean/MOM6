@@ -86,7 +86,7 @@ use MOM_domains, only : To_South, To_West, To_All, CGRID_NE, SCALAR_PAIR
 use MOM_checksums, only : MOM_checksums_init, hchksum, uchksum, vchksum
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
 use MOM_error_handler, only : MOM_set_verbosity
-use MOM_file_parser, only : read_param, get_param, log_version, param_file_type
+use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_get_input, only : directories
 use MOM_io, only : MOM_io_init, vardesc
 use MOM_restart, only : register_restart_field, query_initialized, save_restart
@@ -1120,10 +1120,12 @@ subroutine register_restarts_dyn_legacy_split(G, param_file, CS, restart_CS, uh,
   endif
   allocate(CS)
 
-  flux_BT_coupling = .false. ; readjust_BT_trans = .false. ; adiabatic = .false.
-  call read_param(param_file, "FLUX_BT_COUPLING", flux_BT_coupling)
-  call read_param(param_file, "READJUST_BT_TRANS", readjust_BT_trans)
-  call read_param(param_file, "ADIABATIC", adiabatic)
+  call get_param(param_file, "MOM_legacy_split", "FLUX_BT_COUPLING", flux_BT_coupling, &
+       default=.false., do_not_log=.true.)
+  call get_param(param_file, "MOM_legacy_split", "READJUST_BT_TRANS", readjust_BT_trans, &
+       default=.false., do_not_log=.true.)
+  call get_param(param_file, "MOM_legacy_split", "ADIABATIC", adiabatic, &
+       default=.false., do_not_log=.true.)
   if (.not.flux_BT_coupling .or. adiabatic) readjust_BT_trans = .false.
 
   ALLOC_(CS%diffu(IsdB:IedB,jsd:jed,nz)) ; CS%diffu(:,:,:) = 0.0
@@ -1313,7 +1315,7 @@ subroutine initialize_dyn_legacy_split(u, v, h, uh, vh, eta, Time, G, param_file
                  "in the barotropic continuity equation.", default=.true.)
   call get_param(param_file, mod, "DEBUG", CS%debug, &
                  "If true, write out verbose debugging data.", default=.false.)
-  adiabatic=.false. ; call read_param(param_file, "ADIABATIC", adiabatic)
+  call get_param(param_file, mod, "ADIABATIC", adiabatic, default=.false., do_not_log=.true.)
   if (.not.CS%flux_BT_coupling .or. adiabatic) CS%readjust_BT_trans = .false.
   call get_param(param_file, mod, "DEBUG_TRUNCATIONS", debug_truncations, &
                  default=.false.)

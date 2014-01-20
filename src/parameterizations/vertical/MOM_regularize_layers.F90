@@ -53,7 +53,7 @@ use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator, only : time_type, diag_ctrl
 use MOM_domains, only : pass_var
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
-use MOM_file_parser, only : read_param, get_param, log_version, param_file_type
+use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_EOS, only : calculate_density, calculate_density_derivs
