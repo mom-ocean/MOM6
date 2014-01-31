@@ -1,3 +1,7 @@
+!> This module provides the K-profile parameterization (aka KPP) of
+!! Large et al., 1994 (ftp://128.171.154.9/pub/rlukas/Thibault/Large%20etal%20RevGeo%201994.pdf).
+!! KPP is implemented via the CVMix package (https://code.google.com/p/cvmix)
+!! which this module invokes.
 module MOM_KPP
 
 use MOM_coms, only : max_across_PEs
@@ -26,37 +30,37 @@ public :: KPP_init, KPP_calculate, KPP_end
 public :: KPP_applyNonLocalTransport
 
 ! Enumerated constants
-integer, private, parameter :: NLT_SHAPE_CVMIX     = 0 ! Use the CVmix profile
-integer, private, parameter :: NLT_SHAPE_LINEAR    = 1 ! Linear, Cs.G(s) = 1-s
-integer, private, parameter :: NLT_SHAPE_PARABOLIC = 2 ! Parabolic, Cs.G(s) = (1-s)^2
-integer, private, parameter :: NLT_SHAPE_CUBIC     = 3 ! Cubic, G(s) = 
-integer, private, parameter :: NLT_SHAPE_CUBIC_LMD = 4 ! Original shape, Cs.G(s) = 27/4.s.(1-s)^2
+integer, private, parameter :: NLT_SHAPE_CVMIX     = 0 !< Use the CVmix profile
+integer, private, parameter :: NLT_SHAPE_LINEAR    = 1 !< Linear, Cs.G(s) = 1-s
+integer, private, parameter :: NLT_SHAPE_PARABOLIC = 2 !< Parabolic, Cs.G(s) = (1-s)^2
+integer, private, parameter :: NLT_SHAPE_CUBIC     = 3 !< Cubic, G(s) = 
+integer, private, parameter :: NLT_SHAPE_CUBIC_LMD = 4 !< Original shape, Cs.G(s) = 27/4.s.(1-s)^2
 
-! Control structure for containing KPP parameters/data
+!> Control structure for containing KPP parameters/data
 type, public :: KPP_CS ; private
 
   ! Parameters
-  real    :: Ri_crit              ! Critical bulk Richardson number (defines OBL depth)
-  real    :: vonKarman            ! von Karman constant (dimensionless)
-  real    :: cs                   ! Parameter for computing velocity scale function (dimensionless)
-  character(len=10) :: interpType ! Type of iterpolation to use in determining OBL
-  logical :: computeEkman         ! If True, compute Ekman depth limit
-  logical :: computeMoninObukhov  ! If True, compute Monin-Obukhov limit
-  logical :: passiveMode          ! If True, makes KPP passive meaning it does NOT alter the diffusivity
-  logical :: applyNonLocalTrans   ! If True, apply non-local transport to heat and scalars
-  real    :: deepOBLoffset        ! If non-zero, is a distance from the bottom that the OBL can not penetrate through (m)
-  logical :: debug                ! If True, calculate checksums and write debugging information
-  logical :: correctSurfLayerAvg  ! If true, applies a correction to the averaging of surface layer properties
-  real    :: surfLayerDepth       ! A guess at the depth of the surface layer (which should 0.1 of OBLdepth) (m)
-  integer :: NLT_shape            ! Determines the shape function for nonlocal transport.
-  logical :: KPPzeroDiffusivity   ! If True, will set diffusivity and viscosity from KPP to zero; for testing purposes. 
-  logical :: KPPisAdditive        ! If True, will add KPP diffusivity to initial diffusivity.
-                                  ! If False, will replace initial diffusivity wherever KPP diffusivity is non-zero.
+  real    :: Ri_crit              !< Critical bulk Richardson number (defines OBL depth)
+  real    :: vonKarman            !< von Karman constant (dimensionless)
+  real    :: cs                   !< Parameter for computing velocity scale function (dimensionless)
+  character(len=10) :: interpType !< Type of iterpolation to use in determining OBL
+  logical :: computeEkman         !< If True, compute Ekman depth limit
+  logical :: computeMoninObukhov  !< If True, compute Monin-Obukhov limit
+  logical :: passiveMode          !< If True, makes KPP passive meaning it does NOT alter the diffusivity
+  logical :: applyNonLocalTrans   !< If True, apply non-local transport to heat and scalars
+  real    :: deepOBLoffset        !< If non-zero, is a distance from the bottom that the OBL can not penetrate through (m)
+  logical :: debug                !< If True, calculate checksums and write debugging information
+  logical :: correctSurfLayerAvg  !< If true, applies a correction to the averaging of surface layer properties
+  real    :: surfLayerDepth       !< A guess at the depth of the surface layer (which should 0.1 of OBLdepth) (m)
+  integer :: NLT_shape            !< Determines the shape function for nonlocal transport.
+  logical :: KPPzeroDiffusivity   !< If True, will set diffusivity and viscosity from KPP to zero; for testing purposes. 
+  logical :: KPPisAdditive        !< If True, will add KPP diffusivity to initial diffusivity.
+                                  !! If False, will replace initial diffusivity wherever KPP diffusivity is non-zero.
 
-  ! CVmix parameters
+  !> CVmix parameters
   type(CVmix_kpp_params_type), pointer :: KPP_params => NULL()
 
-  ! Daignostic handles and pointers
+  ! Diagnostic handles and pointers
   type(diag_ctrl), pointer :: diag => NULL()
   integer :: id_OBLdepth = -1, id_BulkRi   = -1
   integer :: id_N        = -1, id_N2       = -1
@@ -72,23 +76,24 @@ type, public :: KPP_CS ; private
   integer :: id_dSdt     = -1, id_dTdt     = -1
   integer :: id_Kd_in    = -1
 
-! Diagnostics arrays
-  real, allocatable, dimension(:,:)   :: OBLdepth  ! Depth (positive) of OBL (m)
-  real, allocatable, dimension(:,:,:) :: dRho      ! Bulk difference in density (kg/m3)
-  real, allocatable, dimension(:,:,:) :: Uz2       ! Square of bulk difference in resolved velocity (m2/s2)
-  real, allocatable, dimension(:,:,:) :: BulkRi    ! Bulk Richardson number for each layer (dimensionless)
-  real, allocatable, dimension(:,:,:) :: sigma     ! Sigma coordinate (dimensionless)
-  real, allocatable, dimension(:,:,:) :: Ws        ! Turbulent velocity scale for scalars (m/s)
-  real, allocatable, dimension(:,:,:) :: N         ! Brunt-Vaisala frequency (1/s)
-  real, allocatable, dimension(:,:,:) :: N2        ! Squared Brunt-Vaisala frequency (1/s2)
-  real, allocatable, dimension(:,:,:) :: Vt2       ! Unresolved squared turbulence velocity for bulk Ri (m2/s2)
-  real, allocatable, dimension(:,:,:) :: Kt_KPP    ! Temp diffusivity from KPP (m2/s)
-  real, allocatable, dimension(:,:,:) :: Ks_KPP    ! Scalar diffusivity from KPP (m2/s)
-  real, allocatable, dimension(:,:,:) :: Kv_KPP    ! Viscosity due to KPP (m2/s)
-  real, allocatable, dimension(:,:)   :: Tsurf     ! Temperature of surface layer (C)
-  real, allocatable, dimension(:,:)   :: Ssurf     ! Salinity of surface layer (ppt)
-  real, allocatable, dimension(:,:)   :: Usurf     ! i-component of velocity for surface layer (m/s)
-  real, allocatable, dimension(:,:)   :: Vsurf     ! j-component of velocity for surface layer (m/s)
+  ! Diagnostics arrays
+  real, allocatable, dimension(:,:)   :: &
+ OBLdepth  !< Depth (positive) of OBL (m)
+  real, allocatable, dimension(:,:,:) :: dRho      !< Bulk difference in density (kg/m3)
+  real, allocatable, dimension(:,:,:) :: Uz2       !< Square of bulk difference in resolved velocity (m2/s2)
+  real, allocatable, dimension(:,:,:) :: BulkRi    !< Bulk Richardson number for each layer (dimensionless)
+  real, allocatable, dimension(:,:,:) :: sigma     !< Sigma coordinate (dimensionless)
+  real, allocatable, dimension(:,:,:) :: Ws        !< Turbulent velocity scale for scalars (m/s)
+  real, allocatable, dimension(:,:,:) :: N         !< Brunt-Vaisala frequency (1/s)
+  real, allocatable, dimension(:,:,:) :: N2        !< Squared Brunt-Vaisala frequency (1/s2)
+  real, allocatable, dimension(:,:,:) :: Vt2       !< Unresolved squared turbulence velocity for bulk Ri (m2/s2)
+  real, allocatable, dimension(:,:,:) :: Kt_KPP    !< Temp diffusivity from KPP (m2/s)
+  real, allocatable, dimension(:,:,:) :: Ks_KPP    !< Scalar diffusivity from KPP (m2/s)
+  real, allocatable, dimension(:,:,:) :: Kv_KPP    !< Viscosity due to KPP (m2/s)
+  real, allocatable, dimension(:,:)   :: Tsurf     !< Temperature of surface layer (C)
+  real, allocatable, dimension(:,:)   :: Ssurf     !< Salinity of surface layer (ppt)
+  real, allocatable, dimension(:,:)   :: Usurf     !< i-component of velocity for surface layer (m/s)
+  real, allocatable, dimension(:,:)   :: Vsurf     !< j-component of velocity for surface layer (m/s)
 
 end type KPP_CS
 
@@ -98,17 +103,17 @@ logical, parameter :: verbose = .False.
 
 contains
 
+!> Initialize the CVmix KPP module and set up diagnostics
+!! Returns True if KPP is to be used, False otherwise.
 logical function KPP_init(paramFile, G, diag, Time, CS, passive)
-! Initialize the CVmix KPP module and set up diagnostics
-! Returns True if KPP is to be used, False otherwise.
 
 ! Arguments
-  type(param_file_type),   intent(in)    :: paramFile ! File parser
-  type(ocean_grid_type),   intent(in)    :: G         ! Ocean grid
-  type(diag_ctrl), target, intent(in)    :: diag      ! Diagnostics
-  type(time_type),         intent(in)    :: Time      ! Time
-  type(KPP_CS),            pointer       :: CS        ! Control structure
-  logical, optional,       intent(out)   :: passive   ! Copy of %passiveMode
+  type(param_file_type),   intent(in)    :: paramFile !< File parser
+  type(ocean_grid_type),   intent(in)    :: G         !< Ocean grid
+  type(diag_ctrl), target, intent(in)    :: diag      !< Diagnostics
+  type(time_type),         intent(in)    :: Time      !< Time
+  type(KPP_CS),            pointer       :: CS        !< Control structure
+  logical, optional,       intent(out)   :: passive   !< Copy of %passiveMode
 ! Local variables
 #include "version_variable.h"
   character(len=40) :: mod = 'MOM_KPP' ! This module's name.
@@ -299,31 +304,31 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive)
 end function KPP_init
 
 
+!> Calculates diffusivity and non-local transport according to KPP parameterization 
 subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, Ks, Kv, nonLocalTransHeat, nonLocalTransScalar)
-! Calculates diffusivity and non-local transport according to KPP parameterization 
 
 ! Arguments
-  type(KPP_CS),                           pointer       :: CS    ! Control structure
-  type(ocean_grid_type),                  intent(in)    :: G     ! Ocean grid
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h     ! Layer/level thicknesses (units of H)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: Temp  ! Pot. temperature (degrees C)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: Salt  ! Salinity (ppt)
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)    :: u     ! Velocity components (m/s)
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)    :: v     ! Velocity components (m/s)
-  type(EOS_type),                         pointer       :: EOS   ! Equation of state
-  real, dimension(NIMEM_,NJMEM_),         intent(in)    :: uStar ! Piston velocity (m/s)
-  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(in)    :: buoyFlux ! Forcing buoyancy flux (m2/s3)
-  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(inout) :: Kt ! (in) Vertical diffusivity of heat in interior (m2/s)
-                                                                    ! (out) Vertical diffusivity including KPP (m2/s)
-  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(inout) :: Ks ! (in) Vertical diffusivity of salt in interior (m2/s)
-                                                                    ! (out) Vertical diffusivity including KPP (m2/s)
-  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(inout) :: Kv ! (in) Vertical viscosity in interior (m2/s)
-                                                                    ! (out) Vertical viscosity including KPP (m2/s)
-  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(inout) :: nonLocalTransHeat   ! Temp non-local transport (m/s)
-  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(inout) :: nonLocalTransScalar ! scalar non-local transport (m/s)
+  type(KPP_CS),                           pointer       :: CS    !< Control structure
+  type(ocean_grid_type),                  intent(in)    :: G     !< Ocean grid
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h     !< Layer/level thicknesses (units of H)
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: Temp  !< Pot. temperature (degrees C)
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: Salt  !< Salinity (ppt)
+  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)    :: u     !< Velocity components (m/s)
+  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)    :: v     !< Velocity components (m/s)
+  type(EOS_type),                         pointer       :: EOS   !< Equation of state
+  real, dimension(NIMEM_,NJMEM_),         intent(in)    :: uStar !< Piston velocity (m/s)
+  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(in)    :: buoyFlux !< Forcing buoyancy flux (m2/s3)
+  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(inout) :: Kt !< (in) Vertical diffusivity of heat in interior (m2/s)
+                                                                    !< (out) Vertical diffusivity including KPP (m2/s)
+  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(inout) :: Ks !< (in) Vertical diffusivity of salt in interior (m2/s)
+                                                                    !< (out) Vertical diffusivity including KPP (m2/s)
+  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(inout) :: Kv !< (in) Vertical viscosity in interior (m2/s)
+                                                                    !< (out) Vertical viscosity including KPP (m2/s)
+  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(inout) :: nonLocalTransHeat   !< Temp non-local transport (m/s)
+  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(inout) :: nonLocalTransScalar !< scalar non-local transport (m/s)
 
   ! Local variables
-  integer :: i, j, k, km1
+  integer :: i, j, k, km1                               ! Loop indices
   real, dimension( G%ke )     :: cellHeight             ! Cell center heights referenced to surface (m)
   real, dimension( G%ke+1 )   :: iFaceHeight            ! Interface heights referenced to surface (m)
   real, dimension( G%ke+1 )   :: N2_1d                  ! Brunt-Vaisala frequency squared, at interfaces (1/s2)
@@ -783,18 +788,18 @@ end subroutine KPP_calculate
 !end subroutine fixNLTamplitude
 
 
+!> Applies the KPP non-local transport of surface fluxes; only available for tracers
 subroutine KPP_applyNonLocalTransport(CS, G, h, nonLocalTrans, surfFlux, dt, scalar, isHeat, isSalt)
-! Applies the KPP non-local transport of surface fluxes; only available for tracers
 
-  type(KPP_CS),                                 intent(in)    :: CS            ! Control structure
-  type(ocean_grid_type),                        intent(in)    :: G             ! Ocean grid
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),        intent(in)    :: h             ! Layer/level thicknesses (units of H)
-  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(in)    :: nonLocalTrans ! Non-local transport (non-dimensional)
-  real, dimension(NIMEM_,NJMEM_),               intent(in)    :: surfFlux      ! Surface source of scalar (m/s * scalar)
-  real,                                         intent(in)    :: dt            ! Time-step (s)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),        intent(inout) :: scalar        ! Scalar or temperature (scalar units)
-  logical, optional,                            intent(in)    :: isHeat        ! Indicates scalar is heat for diagnostics
-  logical, optional,                            intent(in)    :: isSalt        ! Indicates scalar is salt for diagnostics
+  type(KPP_CS),                                 intent(in)    :: CS            !< Control structure
+  type(ocean_grid_type),                        intent(in)    :: G             !< Ocean grid
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),        intent(in)    :: h             !< Layer/level thicknesses (units of H)
+  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(in)    :: nonLocalTrans !< Non-local transport (non-dimensional)
+  real, dimension(NIMEM_,NJMEM_),               intent(in)    :: surfFlux      !< Surface source of scalar (m/s * scalar)
+  real,                                         intent(in)    :: dt            !< Time-step (s)
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),        intent(inout) :: scalar        !< Scalar or temperature (scalar units)
+  logical, optional,                            intent(in)    :: isHeat        !< Indicates scalar is heat for diagnostics
+  logical, optional,                            intent(in)    :: isSalt        !< Indicates scalar is salt for diagnostics
 
   integer :: i, j, k
   logical :: diagHeat, diagSalt
@@ -835,9 +840,9 @@ subroutine KPP_applyNonLocalTransport(CS, G, h, nonLocalTrans, surfFlux, dt, sca
 end subroutine KPP_applyNonLocalTransport
 
 
+!> Clear pointers, dealocate memory
 subroutine KPP_end(CS)
-! Clear pointers, dealocate memory
-  type(KPP_CS), pointer :: CS ! Control structure
+  type(KPP_CS), pointer :: CS !< Control structure
 
   deallocate(CS)
 end subroutine KPP_end
