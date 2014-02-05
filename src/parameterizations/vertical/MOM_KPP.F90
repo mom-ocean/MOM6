@@ -43,7 +43,7 @@ type, public :: KPP_CS ; private
   real    :: Ri_crit              !< Critical bulk Richardson number (defines OBL depth)
   real    :: vonKarman            !< von Karman constant (dimensionless)
   real    :: cs                   !< Parameter for computing velocity scale function (dimensionless)
-  character(len=10) :: interpType !< Type of iterpolation to use in determining OBL
+  character(len=10) :: interpType !< Type of interpolation to use in determining OBL
   logical :: computeEkman         !< If True, compute Ekman depth limit
   logical :: computeMoninObukhov  !< If True, compute Monin-Obukhov limit
   logical :: passiveMode          !< If True, makes KPP passive meaning it does NOT alter the diffusivity
@@ -344,10 +344,10 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
   real :: kOBL, OBLdepth_0d, surfFricVel, surfBuoyFlux, Coriolis
   real :: GoRho, pRef, rho1, rhoK, rhoKm1, Uk, Vk, const1, Cv, sigma
   real :: zBottomMinusOffset                  ! Height of bottom plus a little bit (m)
-  real, parameter :: eps = 0.1                ! Nondimensional extent of Monin-Obukov surface layer. Used for const1 below.
+  real, parameter :: eps = 0.1                ! Non-dimensional extent of Monin-Obukov surface layer. Used for const1 below.
   real, parameter :: BetaT = -0.2             ! Ratio of entrainment flux to surface buoyancy flux. Used for const1 below.
   real, parameter :: minimumVt2 = 1.e-11      ! A small number added to unresolved velocity Vt2 to avoid divide by zero.
-                                              ! This value should be larger than roundoff for sensible behaviour 
+                                              ! This value should be larger than roundoff for sensible behavior 
                                               ! with zero vertical stratification and zero resolved velocity.  
                                               ! We compute 1e-11 by the following rough scaling: 
                                               ! minimumVt2 = const1*depth*N*ws, with depth=1m, N = 1e-5 s^{-1}, ws = 1e-6 m/s
@@ -415,7 +415,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
         ! we do not know at this point. So we compute a running average down to a
         ! prescribed depth, as a first guess.
         ! In z-mode, this will typically just be the top level. but a proper integral
-        ! will be needed for fine vertical resolution or arbitray coordinates.   ???????
+        ! will be needed for fine vertical resolution or arbitrary coordinates.   ???????
         Uk = 0.5 * ( abs( u(i,j,k) - surfU ) + abs( u(i-1,j,k) - surfUm1 ) ) ! delta_k U  w/ C-grid average
         Vk = 0.5 * ( abs( v(i,j,k) - surfV ) + abs( v(i,j-1,k) - surfVm1 ) ) ! delta_k V  w/ C-grid average
         deltaU2(k) = Uk**2 + Vk**2
@@ -479,7 +479,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
         CVmix_kpp_params_user=CS%KPP_params ) ! KPP parameters
 
         ! Unresolved squared velocity, Vt^2, eq 23 from LMD94
-        Cv = max( 1.7, 2.1 - 200. * N_1d(k) ) ! Cv from eq A3 of Danbasoglu et al. 2006
+        Cv = max( 1.7, 2.1 - 200. * N_1d(k) ) ! Cv from eq A3 of Danabasoglu et al. 2006
     !   Cv = 1.8 ! MOM5 
         ! The calculation is for Vt^2 at level center but uses N from the interface below
         ! (and depth of lower interface) to bias towards higher estimates.  One would
@@ -530,7 +530,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
       endif
 
       ! The surface temp/salt was estimated as equal to the top layer in the first guess.
-      ! Now we have an estiamte of BL_depth, we can do a proper average for surfTemp and surfSalt
+      ! Now we have an estimate of BL_depth, we can do a proper average for surfTemp and surfSalt
       if (CS%correctSurfLayerAvg) then
         SLdepth_0d = eps * OBLdepth_0d ! This is the corrected depth of the surface layer depth (m)
         hTot = h(i,j,1) ! We initialize to first layer
@@ -611,7 +611,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
       ! Now call KPP proper to obtain BL diffusivities, viscosities and non-local transports
 
       ! Unlike LMD94, we do not match to interior diffusivities. If using the original
-      ! LMD94 shape funcation, not matching is equivalent to matching to a zero diffusivity.
+      ! LMD94 shape function, not matching is equivalent to matching to a zero diffusivity.
       Kdiffusivity(:,:) = 0. ! Diffusivities for heat and salt (m2/s)
       Kviscosity(:)     = 0. ! Viscosity (m2/s)
       surfBuoyFlux  = buoyFlux(i,j,1) - buoyFlux(i,j,int(kOBL)+1) ! We know the actual buoyancy flux into the OBL
@@ -840,7 +840,7 @@ subroutine KPP_applyNonLocalTransport(CS, G, h, nonLocalTrans, surfFlux, dt, sca
 end subroutine KPP_applyNonLocalTransport
 
 
-!> Clear pointers, dealocate memory
+!> Clear pointers, deallocate memory
 subroutine KPP_end(CS)
   type(KPP_CS), pointer :: CS !< Control structure
 
