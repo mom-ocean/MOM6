@@ -3495,8 +3495,8 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
   character(len=8)  :: laynum
 
   integer, parameter :: niter=10   ! number of iterations for t/s adjustment to layer density
-  logical, parameter :: adjust_temperature = .true.  ! fit t/s to target densities
-  real, parameter    :: missing_value = -1.e34
+  logical            :: adjust_temperature = .true.  ! fit t/s to target densities
+  real, parameter    :: missing_value = -1.e20
   real, parameter    :: temp_land_fill = 0.0, salt_land_fill = 35.0
 
   !data arrays
@@ -3528,6 +3528,9 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
   logical :: debug_point = .false.  ! manually set this to true and adjust the locations below
                                    ! if you want to track down a problem with a particular
                                    ! location.
+
+  logical :: use_old_hinterp = .true.
+			
   integer, parameter :: i_debug=1, j_debug=28
 
   ! Local variables for ALE remapping
@@ -3571,6 +3574,12 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
   eos => tv%eqn_of_state
 
   call mpp_get_compute_domain(G%domain%mpp_domain,isc,iec,jsc,jec)
+
+
+  call get_param(PF, mod, "USE_OLD_HINTERP", use_old_hinterp, &
+               "If true, use older version of hinterp, \n"//&
+               "in order to reproduce siena answers."//&
+               "Recommended setting is False", default=.true.)
 
   reentrant_x = .false. ;  call get_param(PF, mod, "REENTRANT_X", reentrant_x,default=.true.)
   tripolar_n = .false. ;  call get_param(PF, mod, "TRIPOLAR_N", tripolar_n, default=.false.)
@@ -3790,6 +3799,11 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
       do i=1,id
         if (abs(temp_in(i,j)-missing_value_temp) .gt. abs(G%Angstrom_Z*missing_value_temp)) then                           
             mask_in(i,j)=1.0
+	else	    
+            if (.not. use_old_hinterp) then
+               temp_in(i,j)=missing_value
+               salt_in(i,j)=missing_value
+            endif
         endif
       enddo
     enddo
@@ -3799,17 +3813,47 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
 ! call fms routine horiz_interp to interpolate input level data to model horizontal grid
 
     if (k == 1) then
-      call horiz_interp_new(Interp,x_in,y_in,x_out,y_out, &
+      if (use_old_hinterp) then
+         call horiz_interp_new(Interp,x_in,y_in,x_out,y_out, &
                interp_method='bilinear',src_modulo=reentrant_x, &
                mask_in=mask_in,mask_out=mask_out)
+
+      else
+
+         call horiz_interp_new(Interp,x_in,y_in,x_out,y_out, &
+               interp_method='bilinear',src_modulo=reentrant_x)
+      endif
+   
     endif
 
     call myStats(temp_in,missing_value,k,'Temp from file')
-    call horiz_interp(Interp,temp_in,temp_out,mask_in=mask_in, &
+    call myStats(salt_in,missing_value,k,'Salt from file')
+
+    if (use_old_hinterp) then
+       call horiz_interp(Interp,temp_in,temp_out,mask_in=mask_in, &
                       mask_out=mask_out,missing_value=missing_value)
-    call myStats(temp_out,missing_value,k,'Temp from horiz_interp()')
-    call horiz_interp(Interp,salt_in,salt_out,mask_in=mask_in, &
-                      mask_out=mask_out,missing_value=missing_value)       
+    else
+
+       call horiz_interp(Interp,temp_in,temp_out, missing_value=missing_value, new_missing_handle=.true.)
+
+       mask_out=1.0
+       do j=1,nj
+          do i=1,ni
+             if (abs(temp_out(i,j)-missing_value) .lt. abs(G%Angstrom_Z*missing_value)) then
+                mask_out(i,j)=0.
+             endif
+          enddo
+       enddo
+
+    endif
+
+
+    if (use_old_hinterp) then
+       call horiz_interp(Interp,salt_in,salt_out,mask_in=mask_in, &
+                      mask_out=mask_out,missing_value=missing_value)
+    else
+       call horiz_interp(Interp,salt_in,salt_out, missing_value=missing_value, new_missing_handle=.true.)
+    endif
 
     call cpu_clock_end(id_clock_interp)
     fill = 0; good = 0
@@ -3817,7 +3861,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
     nPoints = 0 ; tempAvg = 0. ; saltAvg = 0.
     do j=1,nj
       do i=1,ni
-        if (mask_out(i,j).lt.1.0) then
+        if (mask_out(i,j) .lt. 1.0) then
           temp_out(i,j)=missing_value
           salt_out(i,j)=missing_value
         else
@@ -3827,9 +3871,18 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
           saltAvg = saltAvg + salt_out(i,j)
         endif
                                               ! vvv  k+1  ???? -AJA
-        if (mask2dT(i,j) == 1.0 .and. z_edges_in(k) <= Depth(i,j) .and. mask_out(i,j) .lt. 1.0) fill(i,j)=1
+                                              ! ^^^  correct. (use_old_hinterp=.true. keeps the bug) -MJH
+        if (use_old_hinterp) then
+           if (mask2dT(i,j) == 1.0 .and. z_edges_in(k) <= Depth(i,j) .and. mask_out(i,j) .lt. 1.0) fill(i,j)=1
+        else
+           if (mask2dT(i,j) == 1.0 .and. z_edges_in(k+1) <= Depth(i,j) .and. mask_out(i,j) .lt. 1.0) fill(i,j)=1
+        endif
       enddo
     enddo
+
+    call myStats(temp_out,missing_value,k,'Temp from horiz_interp()')
+    call myStats(salt_out,missing_value,k,'Salt from horiz_interp()')
+
 
     ! Horizontally homogenize data to produce perfectly "flat" initial conditions
     if (homogenize) then
@@ -3848,9 +3901,17 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
 ! now fill in missing values using "ICE-nine" algorithm. 
     call cpu_clock_begin(id_clock_fill)
 
-    temp_out = fill_miss_2d(temp_out,good,fill,temp_prev,reentrant_x,tripolar_n)
-    call myStats(temp_out,missing_value,k,'Temp from fill_miss_2d()')
-    salt_out = fill_miss_2d(salt_out,good,fill,salt_prev,reentrant_x,tripolar_n)
+    if (use_old_hinterp) then
+       temp_out = fill_miss_2d(temp_out,good,fill,temp_prev,reentrant_x,tripolar_n,keep_bug=.true.)
+       call myStats(temp_out,missing_value,k,'Temp from fill_miss_2d()')
+       salt_out = fill_miss_2d(salt_out,good,fill,salt_prev,reentrant_x,tripolar_n,keep_bug=.true.)
+       call myStats(salt_out,missing_value,k,'Salt from fill_miss_2d()')
+    else
+       temp_out = fill_miss_2d(temp_out,good,fill,temp_prev,reentrant_x,tripolar_n,smooth=.true.)
+       call myStats(temp_out,missing_value,k,'Temp from fill_miss_2d()')
+       salt_out = fill_miss_2d(salt_out,good,fill,salt_prev,reentrant_x,tripolar_n,smooth=.true.)
+       call myStats(salt_out,missing_value,k,'Salt from fill_miss_2d()')
+    endif
 
     good=good+fill
 
@@ -3978,6 +4039,12 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
                  "If true, all mass below the bottom removed if the \n"//&
                  "topography is shallower than the thickness input file \n"//&
                  "would indicate.", default=.false.)
+
+    call get_param(PF, mod, "FIT_TO_TARGET_DENSITY_IC", adjust_temperature, &
+                 "If true, all the interior layers are adjusted to \n"//&
+                 "their target densities using mostly temperature \n"//&
+                 "This approach can be problematic, particularly in the \n"//&
+                 "high latitudes.", default=.true.)
 
     if (correct_thickness) then
       call adjustEtaToFitBathymetry(G, zi, h)
