@@ -245,14 +245,15 @@ program MOM_main
   call calculate_surface_state(state, MOM_CSp%u, MOM_CSp%v, MOM_CSp%h, &
                                MOM_CSp%ave_ssh, grid, MOM_CSp)
 
-  use_ice_shelf=.false. ; call read_param(param_file,"ICE_SHELF",use_ice_shelf)
-  if (use_ice_shelf) then
-    call initialize_ice_shelf(Time, ice_shelf_CSp, fluxes)
-  endif
 
   call surface_forcing_init(Time, grid, param_file, MOM_CSp%diag, &
                             surface_forcing_CSp, MOM_CSp%tracer_flow_CSp)
   call callTree_waypoint("done surface_forcing_init")
+
+  use_ice_shelf=.false. ; call read_param(param_file,"ICE_SHELF",use_ice_shelf)
+  if (use_ice_shelf) then
+    call initialize_ice_shelf(Time, ice_shelf_CSp, MOM_CSp%diag, fluxes)
+  endif
 
   call MOM_sum_output_init(grid, param_file, dirs%output_directory, &
                            MOM_CSp%ntrunc, Start_time, sum_output_CSp)
