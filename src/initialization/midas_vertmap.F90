@@ -478,10 +478,11 @@ real(kind=8), dimension(size(temp,1),size(temp,3)) :: drho_dT,drho_dS
 real(kind=8), dimension(size(temp,1)) :: press
    
 integer :: nx,ny,nz,nt,i,j,k,n,itt
+logical :: adjust_salt , old_fit
+real    :: dT_dS
 real, parameter :: T_max = 35.0, T_min = -2.0
 real, parameter :: S_min = 0.5, S_max=65.0
 real, parameter :: tol=1.e-4, max_t_adj=1.0, max_s_adj = 0.5
-logical :: adjust_salt
 
 #else
 
@@ -514,14 +515,22 @@ real(kind=8), dimension(size(temp,1),size(temp,3)) :: drho_dT,drho_dS
 real(kind=8), dimension(size(temp,1)) :: press
 
 integer :: nx,ny,nz,nt,i,j,k,n,itt
+real    :: dT_dS
+logical :: adjust_salt , old_fit
 real, parameter :: T_max = 31.0, T_min = -2.0
 real, parameter :: S_min = 0.5, S_max=65.0
 real, parameter :: tol=1.e-4, max_t_adj=1.0, max_s_adj = 0.5
-logical :: adjust_salt
+
    
 #endif
    
-   
+
+old_fit = .true.   ! reproduces siena behavior
+                   ! will switch to the newer 
+                   ! method which simultaneously adjusts
+                   ! temp and salt based on the ratio
+                   ! of the thermal and haline coefficients.
+                    
 nx=size(temp,1);ny=size(temp,2); nz=size(temp,3)
 
 
@@ -532,7 +541,7 @@ do j=1,ny
   S=salt(:,j,:)
   hin=h(:,j,:)
   dT=0.0
-  adjust_salt=.true.
+  adjust_salt = .true.
   iter_loop: do itt = 1,niter
 #ifdef PY_SOLO
     rho=wright_eos_2d(T,S,p_ref)
@@ -545,22 +554,33 @@ do j=1,ny
 #endif         
     do k=k_start,nz
       do i=1,nx
+
 !               if (abs(rho(i,k)-R(k))>tol .and. hin(i,k)>epsln .and. abs(T(i,k)-land_fill) < epsln) then
         if (abs(rho(i,k)-R(k))>tol) then               
-          dT(i,k)=(R(k)-rho(i,k))/drho_dT(i,k)
-          if (dT(i,k)>max_t_adj) dT(i,k)=max_t_adj
-          if (dT(i,k)<-1.0*max_t_adj) dT(i,k)=-1.0*max_t_adj
-          T(i,k)=max(min(T(i,k)+dT(i,k),T_max),T_min)
+           if (old_fit) then
+              dT(i,k)=(R(k)-rho(i,k))/drho_dT(i,k)
+              if (dT(i,k)>max_t_adj) dT(i,k)=max_t_adj
+              if (dT(i,k)<-1.0*max_t_adj) dT(i,k)=-1.0*max_t_adj
+              T(i,k)=max(min(T(i,k)+dT(i,k),T_max),T_min)
+           else
+              dT_dS = 10.0 - min(-drho_dT(i,k)/drho_dS(i,k),10.)
+              dS(i,k) = (R(k)-rho(i,k))/(drho_dS(i,k) - drho_dT(i,k)*dT_dS )
+              dT(i,k)= -dT_dS*dS(i,k)
+              !          if (dT(i,k)>max_t_adj) dT(i,k)=max_t_adj
+              !          if (dT(i,k)<-1.0*max_t_adj) dT(i,k)=-1.0*max_t_adj
+              T(i,k)=max(min(T(i,k)+dT(i,k),T_max),T_min)
+              S(i,k)=max(min(S(i,k)+dS(i,k),S_max),S_min)
+           endif
         endif
       enddo
     enddo
     if (maxval(abs(dT)) < tol) then
-      adjust_salt=.false.
+       adjust_salt = .false.
       exit iter_loop
     endif
   enddo iter_loop
 
-  if (adjust_salt) then
+  if (adjust_salt .and. old_fit) then
     iter_loop2: do itt = 1,niter
 #ifdef PY_SOLO
       rho=wright_eos_2d(T,S,p_ref)
@@ -598,7 +618,7 @@ return
 end subroutine determine_temperature
 
  
-function fill_miss_2d(a,good,fill,prev,cyclic_x,tripolar_n,smooth) result(aout)
+function fill_miss_2d(a,good,fill,prev,cyclic_x,tripolar_n,smooth,num_pass,relc,crit,keep_bug) result(aout)
 !
 !# Use ICE-9 algorithm to populate points (fill=1) with 
 !# valid data (good=1). If no information is available,
@@ -618,7 +638,10 @@ integer, dimension(size(a,1),size(a,2)), intent(in) :: good,fill
 real(kind=8), dimension(size(a,1),size(a,2)), optional, intent(in) :: prev
 logical, intent(in), optional :: cyclic_x, tripolar_n
 logical, intent(in), optional :: smooth
-   
+integer, intent(in), optional :: num_pass
+real(kind=8), intent(in), optional    :: relc,crit
+logical, intent(in), optional :: keep_bug
+
 real, dimension(size(a,1),size(a,2)) :: aout,b,r
 integer, dimension(size(a,1),size(a,2)) :: fill_pts,good_,good_new
 #else
@@ -627,6 +650,9 @@ integer, dimension(size(a,1),size(a,2)), intent(in) :: good,fill
 real, dimension(size(a,1),size(a,2)), optional, intent(in) :: prev
 logical, intent(in), optional :: cyclic_x, tripolar_n
 logical, intent(in), optional :: smooth
+integer, intent(in), optional :: num_pass
+real, intent(in), optional    :: relc,crit
+logical, intent(in), optional :: keep_bug
    
 real, dimension(size(a,1),size(a,2)) :: aout,b,r
 integer, dimension(size(a,1),size(a,2)) :: fill_pts,good_,good_new   
@@ -634,13 +660,28 @@ integer, dimension(size(a,1),size(a,2)) :: fill_pts,good_,good_new
 integer :: nfill, i,j,ngood,nfill_prev,nx,ny,ip,jp,im,jm,ijp
 real    :: east,west,north,south,sor
 integer :: g,ge,gw,gn,gs,k
-logical :: xcyclic,tripolar_north,do_smooth
+logical :: xcyclic,tripolar_north,do_smooth,siena_bug
 
-integer, parameter :: num_pass = 10
-real, parameter :: relc = 0.2, crit = 1.e-5
+integer, parameter :: num_pass_default = 100
+real, parameter :: relc_default = 0.25, crit_default = 1.e-5
+   
+integer :: npass
+real    :: relax_coeff, acrit
    
 xcyclic=.false.
 if (PRESENT(cyclic_x)) xcyclic=cyclic_x
+
+npass = num_pass_default
+if (PRESENT(num_pass)) npass = num_pass
+
+relax_coeff = relc_default
+if (PRESENT(relc)) relax_coeff = relc
+
+acrit = crit_default
+if (PRESENT(crit)) acrit = crit
+
+siena_bug=.false.
+if (PRESENT(keep_bug)) siena_bug = keep_bug
 
 tripolar_north=.false.
 if (PRESENT(tripolar_n)) tripolar_north=tripolar_n
@@ -730,11 +771,11 @@ do while (nfill > 0)
 end do
 
 if (do_smooth) then
-  do k=1,num_pass
+  do k=1,npass
     do j=1,ny
       do i=1,nx
         sor=0.0
-        if (fill(i,j) .eq. 1 .and. good(i,j) .eq. 0) sor=relc            
+        if (fill(i,j) .eq. 1 .and. good(i,j) .eq. 0) sor=relax_coeff           
         ip=i+1;im=i-1
         jp=j+1;jm=j-1
         ijp=i
@@ -747,9 +788,13 @@ if (do_smooth) then
         endif
         if (jm .eq. 0) jm=1
         if (tripolar_north) then
-          if (jp.eq.ny+1) jp=ny;ijp=nx-i+1
+           if (jp.eq.ny+1) then
+              jp=ny;ijp=nx-i+1
+           endif
         else
-          if (jp.eq.ny+1) jp=ny;ijp=i
+           if (jp.eq.ny+1) then
+              jp=ny;ijp=i
+           endif
         endif
         east=min(fill(i,j),fill(ip,j));west=min(fill(i,j),fill(im,j))
         north=min(fill(i,j),fill(ijp,jp));south=min(fill(i,j),fill(i,jm))
@@ -760,7 +805,7 @@ if (do_smooth) then
       
     aout(:,:)=r(:,:)+aout(:,:)
     
-    if (maxval(abs(r)) <= crit) exit
+    if (maxval(abs(r)) <= acrit) exit
   enddo
 endif
 
