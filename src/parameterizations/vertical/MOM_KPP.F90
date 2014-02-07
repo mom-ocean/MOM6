@@ -1,7 +1,61 @@
-!> This module provides the K-profile parameterization (aka KPP) of
-!! Large et al., 1994 (ftp://128.171.154.9/pub/rlukas/Thibault/Large%20etal%20RevGeo%201994.pdf).
-!! KPP is implemented via the CVMix package (https://code.google.com/p/cvmix)
-!! which this module invokes.
+!> \brief This module provides the K-Profile Parameterization (KPP)
+!! of Large et al., 1994.
+!!
+!! \section section_KPP The K-Profile Parameterization
+!!
+!! The K-Profile Parameterization (KPP) of Large et al., 1994,
+!! (http://dx.doi.org/10.1029/94RG01872) is
+!! implemented via the Community Vertical Mixing package,
+!! [CVmix](https://code.google.com/p/cvmix), which is called
+!! directly by this module.
+!! The formulation and implementation of KPP is described in great detail in the 
+!! [CVMix manual](https://cvmix.googlecode.com/svn/trunk/manual/cvmix.pdf)
+!! (written by our own Stephen Griffies).
+!!
+!! \subsection section_KPP_nutshell KPP in a nutshell
+!!
+!! Large et al., 1994, decompose the parameterized boundary layer turbulent flux
+!! of a scalar, \f$ s \f$, as
+!! \f[ \overline{w^\prime s^\prime} = -K \partial_z s + K \gamma_s(\sigma), \f]
+!! where \f$ \sigma = -z/h \f$ is a non-dimensional coordinate within the
+!! boundary layer of depth \f$ h \f$.
+!! \f$ K \f$ is the eddy diffusivity and is a function of position within the
+!! boundary layer as well as a function of the surface forcing:
+!! \f[ K = h w_s(\sigma) G(\sigma) . \f]
+!! Here, \f$ w_s \f$ is the vertical velocity scale of the boundary layer turbulence 
+!! and \f$ G(\sigma) \f$ is a "shape function" which is described later.
+!! The last term is the "non-local transport" which involves a function
+!! \f$ \gamma_s(\sigma) \f$ that is matched to the forcing but is not actually
+!! needed in the final implementation.
+!! Instead, the entire non-local transport term can be equivalently written
+!! \f[ K \gamma_s(\sigma) = C_s G(\sigma) Q_s \f]
+!! where \f$ Q_s \f$ is the surface flux of \f$ s \f$ and \f$ C_s \f$ is a
+!! constant.
+!! The vertical structure of the redistribution (non-local) term is solely due
+!! to the shape function, \f$ G(\sigma) \f$.
+!! In our implementation of KPP, we allow the shape functions used for \f$ K \f$ and
+!! for the non-local transport to be chosen independently.
+!!
+!! [google_thread_NLT]: https://groups.google.com/forum/#!msg/cvmix-dev/i6rF-eHOtKI/Ti8BeyksrhAJ "Extreme values of non-local transport"
+!!
+!! The particular shape function most widely used in the atmospheric community
+!! is
+!! \f[ G(\sigma) = \sigma (1-\sigma)^2 \f]
+!! which satisfies the boundary conditions
+!!  \f$ G(0) = 0 \f$,
+!!  \f$ G(1) = 0 \f$,
+!!  \f$ G^\prime(0) = 1 \f$, and
+!!  \f$ G^\prime(1) = 0 \f$.
+!! Large et al, 1994, alter the function so as to match interior diffusivities
+!! but we have found that this leads to inconsistencies within the formulation
+!! (see google groups thread [Extreme values of non-local transport][google_thread_NLT]).
+!! Instead, we use either the above form, or even simpler forms that use
+!! alternative upper boundary conditions.
+!!
+!! \sa
+!! kpp_calculate()
+!! kpp_applynonlocaltransport()
+
 module MOM_KPP
 
 use MOM_coms, only : max_across_PEs
@@ -31,10 +85,10 @@ public :: KPP_applyNonLocalTransport
 
 ! Enumerated constants
 integer, private, parameter :: NLT_SHAPE_CVMIX     = 0 !< Use the CVmix profile
-integer, private, parameter :: NLT_SHAPE_LINEAR    = 1 !< Linear, Cs.G(s) = 1-s
-integer, private, parameter :: NLT_SHAPE_PARABOLIC = 2 !< Parabolic, Cs.G(s) = (1-s)^2
-integer, private, parameter :: NLT_SHAPE_CUBIC     = 3 !< Cubic, G(s) = 
-integer, private, parameter :: NLT_SHAPE_CUBIC_LMD = 4 !< Original shape, Cs.G(s) = 27/4.s.(1-s)^2
+integer, private, parameter :: NLT_SHAPE_LINEAR    = 1 !< Linear, \f$ C_s G(\sigma) = 1-\sigma \f$
+integer, private, parameter :: NLT_SHAPE_PARABOLIC = 2 !< Parabolic, \f$ C_s G(s) = (1-\sigma)^2 \f$
+integer, private, parameter :: NLT_SHAPE_CUBIC     = 3 !< Cubic, \f$ C_s. G(\sigma) = \f$ ???
+integer, private, parameter :: NLT_SHAPE_CUBIC_LMD = 4 !< Original shape, \f$ C_s G(\sigma) = \frac{27}{4} \sigma (1-\sigma)^2 \f$
 
 !> Control structure for containing KPP parameters/data
 type, public :: KPP_CS ; private
