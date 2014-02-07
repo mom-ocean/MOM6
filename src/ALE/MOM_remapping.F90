@@ -506,7 +506,8 @@ subroutine remapping_core( CS, n0, h0, u0, n1, dx, u1 )
       call MOM_error( FATAL, 'MOM_remapping, remapping_core: '//&
          'NaN detected!' )
     endif
-    z0 = z0 + h0(k) ; z1 = z1 + ( h0(k) + ( dx(k+1) - dx(k) ) )
+    if (k<=n0) then; hTmp = h0(k); else; hTmp = 0.; endif
+    z0 = z0 + hTmp ; z1 = z1 + ( hTmp + ( dx(k+1) - dx(k) ) )
   enddo
   if (abs(totalHU2-totalHU0) > (err0+err2)*real(n1)) then
     write(0,*) 'h0=',h0
