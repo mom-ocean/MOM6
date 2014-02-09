@@ -848,6 +848,8 @@ end subroutine KPP_end
 
 !> \class mom_kpp
 !!
+!! [google_thread_NLT]: https://groups.google.com/forum/#!msg/cvmix-dev/i6rF-eHOtKI/Ti8BeyksrhAJ "Extreme values of non-local transport"
+!!
 !! \section section_KPP The K-Profile Parameterization
 !!
 !! The K-Profile Parameterization (KPP) of Large et al., 1994, (http://dx.doi.org/10.1029/94RG01872) is
@@ -875,8 +877,6 @@ end subroutine KPP_end
 !! The vertical structure of the redistribution (non-local) term is solely due  to the shape function, \f$ G(\sigma) \f$.
 !! In our implementation of KPP, we allow the shape functions used for \f$ K \f$ and for the non-local transport
 !! to be chosen independently.
-!!
-!! [google_thread_NLT]: https://groups.google.com/forum/#!msg/cvmix-dev/i6rF-eHOtKI/Ti8BeyksrhAJ "Extreme values of non-local transport"
 !!
 !! The particular shape function most widely used in the atmospheric community is
 !! \f[ G(\sigma) = \sigma (1-\sigma)^2 \f]
