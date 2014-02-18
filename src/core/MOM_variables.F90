@@ -23,7 +23,6 @@ module MOM_variables
 use MOM_domains, only : MOM_domain_type, get_domain_extent
 use MOM_checksums, only : hchksum, qchksum, uchksum, vchksum
 use MOM_error_handler, only : MOM_error, FATAL
-use MOM_file_parser, only : read_param, log_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type, MOM_variables_init => MOM_grid_init
 use MOM_io, only : vardesc
 use MOM_EOS, only : EOS_type
@@ -34,7 +33,7 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public MOM_variables_init, MOM_forcing_chksum, MOM_thermovar_chksum
+public MOM_variables_init, MOM_thermovar_chksum
 public ocean_grid_type, vardesc, alloc_BT_cont_type, dealloc_BT_cont_type
 
 type, public :: p3d
@@ -43,81 +42,6 @@ end type p3d
 type, public :: p2d
   real, dimension(:,:), pointer :: p => NULL()
 end type p2d
-
-!   The following structure contains pointers to the forcing fields
-! which may be used to drive MOM.  All fluxes are positive downward.
-! Pointers to unused fluxes should be set to NULL.
-type, public :: forcing
-  real, pointer, dimension(:,:) :: &
-    taux => NULL(), &       ! The zonal wind stress, in Pa.
-    tauy => NULL(), &       ! The meridional wind stress, in Pa.
-    ustar => NULL(), &      ! The surface friction velocity, in units of m s-1.
-    buoy => NULL(), &       ! The buoyancy flux into the ocean in m2 s-3.
-
-    sw => NULL(), &         ! The shortwave heat flux into the ocean, in W m-2.
-    sw_vis_dir => NULL(), & ! The visible, direct shortwave heat flux into the
-                            ! ocean, in W m-2.
-    sw_vis_dif => NULL(), & ! The visible, diffuse shortwave heat flux into the
-                            ! ocean, in W m-2.
-    sw_nir_dir => NULL(), & ! The near-IR, direct shortwave heat flux into the
-                            ! ocean, in W m-2.
-    sw_nir_dif => NULL(), & ! The near-IR, diffuse shortwave heat
-                            ! flux into the ocean, in W m-2.
-    lw => NULL(), &         ! The longwave heat flux into the ocean, in W m-2.
-                            ! This field is typically negative.
-    latent => NULL(), &     ! The latent heat flux into the ocean, in W m-2.
-                            ! This field is typically negative.
-    sens => NULL(), &       ! The sensible heat flux into the ocean, in W m-2.
-                            ! This field is typically negative.
-    heat_restore => NULL(), & ! The heat flux into the ocean from temperature
-                            ! restoring, in W m-2.
-                            ! This field is typically negative.
-
-    evap => NULL(), &       ! The negative of the fresh water flux out of the
-                            ! ocean, in kg m-2 s-1.
-    liq_precip => NULL(), & ! The liquid water flux into the ocean, in
-                            ! kg m-2 s-1.
-    froz_precip => NULL(), &  ! The frozen water flux into the ocean,
-                            ! in kg m-2 s-1.
-    virt_precip => NULL(), & ! The virtual water flux into the ocean associated
-                            ! with salinity restoring, in kg m-2 s-1.
-    runoff_hflx => NULL(), & ! Heat flux associated with liq_runoff in W m-2.
-    calving_hflx => NULL(), & ! Heat flux associated with froz_runoff in W m-2.
-
-    p_surf_full => NULL(), & ! The pressure at the top ocean interface, in Pa.
-                             ! If there is sea-ice, this is at the interface
-                             ! between the ice and ocean.
-    p_surf => NULL(), &      ! The pressure at the top ocean interface, in Pa,
-                             ! as used to drive the ocean model.  If p_surf is
-                             ! limited, this may be smaller than p_surf_full,
-                             ! otherwise they are the same.
-    salt_flux => NULL(), &   ! The net salt flux into the ocean in kg Salt m-2 s-1.
-    TKE_tidal => NULL(), &   ! The tidal source of energy driving mixing in the
-                             ! bottom boundary layer, in W m-2.
-    ustar_tidal => NULL(), & ! The tidal contribution to bottom ustar, in m s-1.
-    liq_runoff => NULL(), &  ! Mass of river runoff in units of kg m-2 s-1.
-    froz_runoff => NULL(), & ! Mass of calving in units of kg m-2 s-1.
-
-    ustar_shelf => NULL(), & ! The friction velocity under ice-shelves in m s-1.
-                             ! This was calculated by the ocean the previous
-                             ! time step.
-    frac_shelf_h => NULL(), &! Fractional ice shelf coverage of h-, u-, and v-
-    frac_shelf_u => NULL(), &! cells, nondimensional from 0 to 1. These are only
-    frac_shelf_v => NULL(), &! associated if ice shelves are enabled, and are
-                             ! exactly 0 away from shelves or on land.
-    rigidity_ice_u => NULL(),& ! The depth-integrated lateral viscosity of
-    rigidity_ice_v => NULL()   ! ice shelves at u- or v-points, in m3 s-1.
-  real :: C_p            !   The heat capacity of seawater, in J K-1 kg-1.
-                         ! This is always set to the same value as is found in
-                         ! the thermovar_ptrs_type.
-  type(coupler_2d_bc_type), pointer :: tr_fluxes  => NULL()
-                                            ! A structure that may contain an
-                                            ! array of named fields used for
-                                            ! passive tracer fluxes.
-       !!! NOTE: ALL OF THE ARRAYS IN TR_FLUXES USE THE COUPLER'S INDEXING
-       !!!       CONVENTION AND HAVE NO HALOS!  THIS IS DONE TO CONFORM TO
-       !!!       THE TREATMENT IN MOM4, BUT I DON'T LIKE IT!
-end type forcing
 
 !   The following structure contains pointers to various fields
 ! which may be used describe the surface state of MOM, and which
@@ -209,12 +133,55 @@ type, public :: ocean_internal_state
   real, pointer, dimension(:,:,:) :: &
     u => NULL(), v => NULL(), h => NULL()
   real, pointer, dimension(:,:,:) :: &
-    uh => NULL(), vh => NULL(), CAu => NULL(), CAv => NULL(), &
+    uh => NULL(), vh => NULL(), &
+    CAu => NULL(), CAv => NULL(), &
     PFu  => NULL(), PFv => NULL(), diffu => NULL(), diffv => NULL(), &
-    T => NULL(), S => NULL(), pbce => NULL(), &
-    u_accel_bt => NULL(), v_accel_bt => NULL(), &
+    T => NULL(), S => NULL(), &
+    pbce => NULL(), u_accel_bt => NULL(), v_accel_bt => NULL(), &
     u_av => NULL(), v_av => NULL(), u_prev => NULL(), v_prev => NULL()
 end type ocean_internal_state
+
+type, public :: accel_diag_ptrs
+! This structure contains pointers to arrays with accelerations, which can
+! later be used for derived diagnostics, like energy balances.
+
+! Each of the following fields has nz layers.
+  real, pointer :: diffu(:,:,:) => NULL()    ! Accelerations due to along iso-
+  real, pointer :: diffv(:,:,:) => NULL()    ! pycnal viscosity, in m s-2.
+  real, pointer :: CAu(:,:,:) => NULL()      ! Coriolis and momentum advection
+  real, pointer :: CAv(:,:,:) => NULL()      ! accelerations, in m s-2.
+  real, pointer :: PFu(:,:,:) => NULL()      ! Accelerations due to pressure
+  real, pointer :: PFv(:,:,:) => NULL()      ! forces, in m s-2.
+  real, pointer :: du_dt_visc(:,:,:) => NULL()! Accelerations due to vertical
+  real, pointer :: dv_dt_visc(:,:,:) => NULL()! viscosity, in m s-2.
+  real, pointer :: du_dt_dia(:,:,:) => NULL()! Accelerations due to diapycnal
+  real, pointer :: dv_dt_dia(:,:,:) => NULL()! mixing, in m s-2.
+  real, pointer :: du_other(:,:,:) => NULL() ! Velocity changes due to any other
+  real, pointer :: dv_other(:,:,:) => NULL() ! processes that are not due to any
+                                             ! explicit accelerations, in m s-1.
+
+  ! These accelerations are sub-terms included in the accelerations above.
+  real, pointer :: gradKEu(:,:,:) => NULL()  ! gradKEu = - d/dx(u2), in m s-2.
+  real, pointer :: gradKEv(:,:,:) => NULL()  ! gradKEv = - d/dy(u2), in m s-2.
+  real, pointer :: rv_x_v(:,:,:) => NULL()   ! rv_x_v = rv * v at u, in m s-2.
+  real, pointer :: rv_x_u(:,:,:) => NULL()   ! rv_x_u = rv * u at v, in m s-2.
+
+end type accel_diag_ptrs
+
+type, public :: cont_diag_ptrs
+! This structure contains pointers to arrays with accelerations, which can
+! later be used for derived diagnostics, like energy balances.
+
+! Each of the following fields has nz layers.
+  real, pointer :: uh(:,:,:) => NULL()    ! Resolved layer thickness fluxes,
+  real, pointer :: vh(:,:,:) => NULL()    ! in m3 s-1 or kg s-1.
+  real, pointer :: uhGM(:,:,:) => NULL()  ! Thickness diffusion induced
+  real, pointer :: vhGM(:,:,:) => NULL()  ! volume fluxes in m3 s-1.
+
+! Each of the following fields is found at nz+1 interfaces.
+  real, pointer :: diapyc_vel(:,:,:) => NULL()! The net diapycnal velocity,
+
+end type cont_diag_ptrs
 
 type, public :: vertvisc_type
 !   This structure contains vertical viscosities, drag coefficients, and
@@ -224,6 +191,8 @@ type, public :: vertvisc_type
   real :: bbl_calc_time_interval ! The amount of time over which the impending
                                  ! calculation of the BBL properties will apply,
                                  ! for use in diagnostics of the BBL properties.
+  real :: Prandtl_turb       ! The Prandtl number for the turbulent diffusion
+                             ! that is captured in Kd_turb.
   real, pointer, dimension(:,:) :: &
     bbl_thick_u => NULL(), & ! The bottom boundary layer thickness at the zonal
     bbl_thick_v => NULL(), & ! and meridional velocity points, in m.
@@ -258,6 +227,8 @@ type, public :: vertvisc_type
                         ! diffusive convection.  These are only allocated if
                         ! DOUBLE_DIFFUSION is true.
     Kd_turb => NULL(), &! The turbulent diapycnal diffusivity at the interfaces
+                        ! between each layer, in m2 s-1.
+    Kv_turb => NULL(), &! The turbulent vertical viscosity at the interfaces
                         ! between each layer, in m2 s-1.
     TKE_turb => NULL()  ! The turbulent kinetic energy per unit mass defined
                         ! at the interfaces between each layer, in m2 s-2.
@@ -420,74 +391,6 @@ subroutine dealloc_BT_cont_type(BT_cont)
   deallocate(BT_cont)
 
 end subroutine dealloc_BT_cont_type
-
-
-subroutine MOM_forcing_chksum(mesg, fluxes, G, haloshift)
-  character(len=*),                    intent(in) :: mesg
-  type(forcing),                       intent(in) :: fluxes
-  type(ocean_grid_type),               intent(in) :: G
-  integer, optional,                   intent(in) :: haloshift
-!   This subroutine writes out chksums for the model's basic state variables.
-! Arguments: mesg - A message that appears on the chksum lines.
-!  (in)      u - Zonal velocity, in m s-1.
-!  (in)      v - Meridional velocity, in m s-1.
-!  (in)      h - Layer thickness, in m.
-!  (in)      uh - Volume flux through zonal faces = u*h*dy, m3 s-1.
-!  (in)      vh - Volume flux through meridional faces = v*h*dx, in m3 s-1.
-!  (in)      G - The ocean's grid structure.
-  integer :: is, ie, js, je, nz, hshift
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-
-  hshift=1; if (present(haloshift)) hshift=haloshift
-
-  ! Note that for the chksum calls to be useful for reproducing across PE
-  ! counts, there must be no redundant points, so all variables use is..ie
-  ! and js...je as their extent.
-  if (associated(fluxes%taux)) &
-    call uchksum(fluxes%taux, mesg//" fluxes%taux",G,haloshift=1)
-  if (associated(fluxes%tauy)) &
-    call vchksum(fluxes%tauy, mesg//" fluxes%tauy",G,haloshift=1)
-  if (associated(fluxes%ustar)) &
-    call hchksum(fluxes%ustar, mesg//" fluxes%ustar",G,haloshift=1)
-  if (associated(fluxes%buoy)) &
-    call hchksum(fluxes%buoy, mesg//" fluxes%buoy ",G,haloshift=hshift)
-  if (associated(fluxes%sw)) &
-    call hchksum(fluxes%sw, mesg//" fluxes%sw",G,haloshift=hshift)
-  if (associated(fluxes%sw_vis_dir)) &
-    call hchksum(fluxes%sw_vis_dir, mesg//" fluxes%sw_vis_dir",G,haloshift=hshift)
-  if (associated(fluxes%sw_vis_dif)) &
-    call hchksum(fluxes%sw_vis_dif, mesg//" fluxes%sw_vis_dif",G,haloshift=hshift)
-  if (associated(fluxes%sw_nir_dir)) &
-    call hchksum(fluxes%sw_nir_dir, mesg//" fluxes%sw_nir_dir",G,haloshift=hshift)
-  if (associated(fluxes%sw_nir_dif)) &
-    call hchksum(fluxes%sw_nir_dif, mesg//" fluxes%sw_nir_dif",G,haloshift=hshift)
-  if (associated(fluxes%lw)) &
-    call hchksum(fluxes%lw, mesg//" fluxes%lw",G,haloshift=hshift)
-  if (associated(fluxes%latent)) &
-    call hchksum(fluxes%latent, mesg//" fluxes%latent",G,haloshift=hshift)
-  if (associated(fluxes%sens)) &
-    call hchksum(fluxes%sens, mesg//" fluxes%sens",G,haloshift=hshift)
-  if (associated(fluxes%evap)) &
-    call hchksum(fluxes%evap, mesg//" fluxes%evap",G,haloshift=hshift)
-  if (associated(fluxes%liq_precip)) &
-    call hchksum(fluxes%liq_precip, mesg//" fluxes%liq_precip",G,haloshift=hshift)
-  if (associated(fluxes%froz_precip)) &
-    call hchksum(fluxes%froz_precip, mesg//" fluxes%froz_precip",G,haloshift=hshift)
-  if (associated(fluxes%virt_precip)) &
-    call hchksum(fluxes%virt_precip, mesg//" fluxes%virt_precip",G,haloshift=hshift)
-  if (associated(fluxes%p_surf)) &
-    call hchksum(fluxes%p_surf, mesg//" fluxes%p_surf",G,haloshift=hshift)
-  if (associated(fluxes%salt_flux)) &
-    call hchksum(fluxes%salt_flux, mesg//" fluxes%salt_flux",G,haloshift=hshift)
-  if (associated(fluxes%TKE_tidal)) &
-    call hchksum(fluxes%TKE_tidal, mesg//" fluxes%TKE_tidal",G,haloshift=hshift)
-  if (associated(fluxes%ustar_tidal)) &
-    call hchksum(fluxes%ustar_tidal, mesg//" fluxes%ustar_tidal",G,haloshift=hshift)
-  if (associated(fluxes%liq_runoff)) &
-    call hchksum(fluxes%liq_runoff, mesg//" fluxes%liq_runoff",G,haloshift=hshift)
-  if (associated(fluxes%froz_runoff)) &
-    call hchksum(fluxes%froz_runoff, mesg//" fluxes%froz_runoff",G,haloshift=hshift)
-end subroutine MOM_forcing_chksum
 
 subroutine MOM_thermovar_chksum(mesg, tv, G)
   character(len=*),                    intent(in) :: mesg

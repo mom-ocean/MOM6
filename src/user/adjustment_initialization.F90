@@ -88,7 +88,8 @@ subroutine adjustment_initialize_thickness ( h, G, param_file )
 
   ! Parameters used by main model initialization
   call get_param(param_file,mod,"S_REF",S_ref,fail_if_missing=.true.,do_not_log=.true.)
-  call get_param(param_file,mod,"MIN_THICKNESS",min_thickness,default=1.0e-3,do_not_log=.true.)
+  call get_param(param_file,mod,"MIN_THICKNESS",min_thickness,'Minimum layer thickness', &
+         units='m',default=1.0e-3)
 
   ! Parameters specific to this experiment configuration
   call get_param(param_file,mod,"REGRIDDING_COORDINATE_MODE",verticalCoordinate, &
@@ -98,10 +99,10 @@ subroutine adjustment_initialize_thickness ( h, G, param_file )
                  units="same as x,y",fail_if_missing=.true.)
   call get_param(param_file,mod,"DELTA_S_STRAT",delta_S_strat,           &
                  "Top-to-bottom salinity difference of stratification",  &
-                 units="PSU",fail_if_missing=.true.)
+                 units="1e-3",fail_if_missing=.true.)
   call get_param(param_file,mod,"ADJUSTMENT_DELTAS",adjustment_deltaS,   &
                  "Salinity difference across front",                     &
-                 units="PSU",fail_if_missing=.true.)
+                 units="1e-3",fail_if_missing=.true.)
   call get_param(param_file,mod,"FRONT_WAVE_AMP",front_wave_amp,         &
                  "Amplitude of trans-frontal wave perturbation",         &
                  units="same as x,y",default=0.)
@@ -226,11 +227,11 @@ subroutine adjustment_initialize_temperature_salinity ( T, S, h, G, param_file, 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   ! Parameters used by main model initialization
-  call get_param(param_file,mod,"S_REF",S_ref,fail_if_missing=.true.,do_not_log=.true.)
-  call get_param(param_file,mod,"T_REF",T_ref,fail_if_missing=.true.,do_not_log=.true.)
-  call get_param(param_file,mod,"S_RANGE",S_range, &
+  call get_param(param_file,mod,"S_REF",S_ref,'Reference salinity',units='1e-3',fail_if_missing=.true.)
+  call get_param(param_file,mod,"T_REF",T_ref,'Reference temperature',units='C',fail_if_missing=.true.)
+  call get_param(param_file,mod,"S_RANGE",S_range,'Initial salinity range',units='1e-3', &
                  default=2.0)
-  call get_param(param_file,mod,"T_RANGE",T_range, &
+  call get_param(param_file,mod,"T_RANGE",T_range,'Initial temperature range',units='C', &
                  default=0.0)
   ! Parameters specific to this experiment configuration BUT logged in previous s/r
   call get_param(param_file,mod,"REGRIDDING_COORDINATE_MODE",verticalCoordinate, &

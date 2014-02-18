@@ -30,7 +30,7 @@ module MOM_lateral_mixing_coeffs
 
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg
 use MOM_diag_mediator, only : register_diag_field, safe_alloc_ptr, post_data
-use MOM_diag_mediator, only : diag_ptrs, time_type, query_averaging_enabled
+use MOM_diag_mediator, only : diag_ctrl, time_type, query_averaging_enabled
 use MOM_domains, only : pass_var, pass_vector, CGRID_NE, To_All, Scalar_Pair
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_interface_heights, only : find_eta
@@ -80,7 +80,8 @@ type, public :: VarMix_CS ;
                           ! and especially 2 are coded to be more efficient.
 
   ! Diagnostics
-  type(diag_ptrs), pointer :: diag ! A pointer to a structure of shareable
+  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
+                          ! timing of diagnostic output.
   type(wave_speed_CS), pointer :: wave_speed_CSp => NULL()
   integer :: id_SN_u=-1, id_SN_v=-1, id_L2u=-1, id_L2v=-1, id_Res_fn = -1
   integer :: id_Rd_dx=-1
@@ -377,13 +378,13 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
   type(time_type),            intent(in) :: Time
   type(ocean_grid_type),      intent(in) :: G
   type(param_file_type),      intent(in) :: param_file
-  type(diag_ptrs), target, intent(inout) :: diag
+  type(diag_ctrl), target, intent(inout) :: diag
   type(VarMix_CS),               pointer :: CS
 ! Arguments: Time - The current model time.
 !  (in)      G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
-!  (in)      diag - A structure containing pointers to common diagnostic fields.
+!  (in)      diag - A structure that is used to regulate diagnostic output.
 !  (in/out)  CS - A pointer that is set to point to the control structure
 !                 for this module
   real :: KhTr_Slope_Cff, KhTh_Slope_Cff
@@ -471,13 +472,13 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
                  default=0.0)
 
   ! Register fields for output from this module.
-    CS%id_SN_u = register_diag_field('ocean_model', 'SN_u', G%axesCu1, Time, &
+    CS%id_SN_u = register_diag_field('ocean_model', 'SN_u', diag%axesCu1, Time, &
        'Inverse eddy time-scale, S*N, at u-points', 's^-1')
-    CS%id_SN_v = register_diag_field('ocean_model', 'SN_v', G%axesCv1, Time, &
+    CS%id_SN_v = register_diag_field('ocean_model', 'SN_v', diag%axesCv1, Time, &
        'Inverse eddy time-scale, S*N, at v-points', 's^-1')
-    CS%id_L2u = register_diag_field('ocean_model', 'L2u', G%axesCu1, Time, &
+    CS%id_L2u = register_diag_field('ocean_model', 'L2u', diag%axesCu1, Time, &
        'Length scale squared for mixing coefficient, at u-points', 'm^2')
-    CS%id_L2v = register_diag_field('ocean_model', 'L2v', G%axesCv1, Time, &
+    CS%id_L2v = register_diag_field('ocean_model', 'L2v', diag%axesCv1, Time, &
        'Length scale squared for mixing coefficient, at v-points', 'm^2')
   endif
 
@@ -495,9 +496,9 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
     allocate(CS%Rd_dx_h(isd:ied,jsd:jed))        ; CS%Rd_dx_h(:,:) = 0.0
 
 
-    CS%id_Res_fn = register_diag_field('ocean_model', 'Res_fn', G%axesT1, Time, &
+    CS%id_Res_fn = register_diag_field('ocean_model', 'Res_fn', diag%axesT1, Time, &
        'Resolution function for scaling diffusivities', 'Nondim')
-    CS%id_Rd_dx = register_diag_field('ocean_model', 'Rd_dx', G%axesT1, Time, &
+    CS%id_Rd_dx = register_diag_field('ocean_model', 'Rd_dx', diag%axesT1, Time, &
        'Ratio between deformation radius and grid spacing', 'Nondim')
 
     call get_param(param_file, mod, "KH_RES_SCALE_COEF", CS%Res_coef, &

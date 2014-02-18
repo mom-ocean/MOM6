@@ -207,7 +207,7 @@ subroutine benchmark_init_topog_local(D, G, param_file, max_depth)
 
   call MOM_mesg("  benchmark_initialization.F90, benchmark_initialize_topography: setting topography", 5)
 
-  call log_version(param_file, mod, version, tagname, "")
+  call log_version(param_file, mod, version)
   call get_param(param_file, mod, "MINIMUM_DEPTH", min_depth, &
                  "The minimum depth of the ocean.", units="m", default=0.0)
 

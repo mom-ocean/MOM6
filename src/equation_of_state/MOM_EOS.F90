@@ -93,10 +93,9 @@ character*(10), parameter :: TFREEZE_DEFAULT = TFREEZE_LINEAR_STRING
 
 contains
 
-subroutine calculate_density_scalar(T, S, pressure, rho, start, npts, EOS)
+subroutine calculate_density_scalar(T, S, pressure, rho, EOS)
   real,           intent(in)  :: T, S, pressure
   real,           intent(out) :: rho
-  integer,        intent(in)  :: start, npts
   type(EOS_type), pointer     :: EOS
 ! * Arguments: T - potential temperature relative to the surface in C. *
 ! *  (in)      S - salinity in PSU.                                    *
@@ -115,12 +114,12 @@ subroutine calculate_density_scalar(T, S, pressure, rho, start, npts, EOS)
 
   select case (EOS%form_of_EOS)
     case (EOS_LINEAR)
-      call calculate_density_scalar_linear(T, S, pressure, rho, start, npts, &
+      call calculate_density_scalar_linear(T, S, pressure, rho, &
                                       EOS%Rho_T0_S0, EOS%dRho_dT, EOS%dRho_dS)
     case (EOS_UNESCO)
-      call calculate_density_scalar_unesco(T, S, pressure, rho, start, npts)
+      call calculate_density_scalar_unesco(T, S, pressure, rho)
     case (EOS_WRIGHT)
-      call calculate_density_scalar_wright(T, S, pressure, rho, start, npts)
+      call calculate_density_scalar_wright(T, S, pressure, rho)
     case default
       call MOM_error(FATAL, &
            "calculate_density_scalar: EOS is not valid.")
@@ -921,7 +920,8 @@ end subroutine int_density_dz_generic_cell
 ! ==========================================================================
 subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, & 
                                        rho_0, G_e, G, EOS, dpa, &
-                                       intz_dpa, intx_dpa, inty_dpa)
+                                       intz_dpa, intx_dpa, inty_dpa, &
+                                       useMassWghtInterp)
   real, dimension(NIMEM_,NJMEM_),  intent(in)  :: T_t, T_b, S_t, S_b, z_t, z_b
   real,                            intent(in)  :: rho_ref, rho_0, G_e
   type(ocean_grid_type),           intent(in)  :: G
@@ -930,6 +930,7 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
   real, dimension(NIMEM_,NJMEM_),  optional, intent(out) :: intz_dpa
   real, dimension(NIMEMB_,NJMEM_), optional, intent(out) :: intx_dpa
   real, dimension(NIMEM_,NJMEMB_), optional, intent(out) :: inty_dpa
+  logical,                         optional, intent(in)  :: useMassWghtInterp
 ! This subroutine calculates (by numerical quadrature) integrals of
 ! pressure anomalies across layers, which are required for calculating the
 ! finite-volume form pressure accelerations in a Boussinesq model.  The one
@@ -968,20 +969,29 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
 !  (out,opt) inty_dpa - The integral in y of the difference between the
 !                       pressure anomaly at the top and bottom of the layer
 !                       divided by the y grid spacing, in Pa.
+!  (in,opt) useMassWghtInterp - If true, uses mass weighting to interpolate
+!                       T/S for top and bottom integrals.
 
   real :: T5(5), S5(5), p5(5), r5(5)
+  real :: T15(15), S15(15), p15(15), r15(15)
   real :: rho_anom
   real :: w_left, w_right, intz(5)
   real, parameter :: C1_90 = 1.0/90.0  ! Rational constants.
   real :: GxRho, I_Rho
-  real :: dz
-  real :: weight_t, weight_b
+  real :: dz, dz_x(5), dz_y(5)
+  real :: weight_t, weight_b, hWght, massWeightingToggle
+  real :: Ttl, Tbl, Ttr, Tbr, Stl, Sbl, Str, Sbr, hL, hR, iDenom
   integer :: Isq, Ieq, Jsq, Jeq, i, j, m, n
+  integer :: pos
 
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
   GxRho = G_e * rho_0
   I_Rho = 1.0 / rho_0
+  massWeightingToggle = 0.
+  if (present(useMassWghtInterp)) then
+    if (useMassWghtInterp) massWeightingToggle = 1.
+  endif
 
   ! =============================
   ! 1. Compute vertical integrals
@@ -1015,41 +1025,73 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
   ! ==================================================
   if (present(intx_dpa)) then ; do j=G%jsc,G%jec ; do I=Isq,Ieq
     intz(1) = dpa(i,j) ; intz(5) = dpa(i+1,j)
+
+    ! Corner values of T and S
+    ! hWght is the distance measure by which the cell is violation of
+    ! hydrostatic consistency. For large hWght we bias the interpolation
+    ! of T,S along the top and bottom integrals, almost like thickness
+    ! weighting.
+    ! Note: To work in terrain following coordinates we could offset
+    ! this distance by the layer thickness to replicate other models.
+    hWght = massWeightingToggle * &
+            max(0., -G%bathyT(i,j)-z_t(i+1,j), -G%bathyT(i+1,j)-z_t(i,j))
+    if (hWght > 0.) then
+      hL = (z_t(i,j) - z_b(i,j)) + G%H_subroundoff
+      hR = (z_t(i+1,j) - z_b(i+1,j)) + G%H_subroundoff
+      hWght = hWght * ( (hL-hR)/(hL+hR) )**2
+      iDenom = 1./( hWght*(hR + hL) + hL*hR )
+      Ttl = ( (hWght*hR)*T_t(i+1,j) + (hWght*hL + hR*hL)*T_t(i,j) ) * iDenom
+      Ttr = ( (hWght*hL)*T_t(i,j) + (hWght*hR + hR*hL)*T_t(i+1,j) ) * iDenom
+      Tbl = ( (hWght*hR)*T_b(i+1,j) + (hWght*hL + hR*hL)*T_b(i,j) ) * iDenom
+      Tbr = ( (hWght*hL)*T_b(i,j) + (hWght*hR + hR*hL)*T_b(i+1,j) ) * iDenom
+      Stl = ( (hWght*hR)*S_t(i+1,j) + (hWght*hL + hR*hL)*S_t(i,j) ) * iDenom
+      Str = ( (hWght*hL)*S_t(i,j) + (hWght*hR + hR*hL)*S_t(i+1,j) ) * iDenom
+      Sbl = ( (hWght*hR)*S_b(i+1,j) + (hWght*hL + hR*hL)*S_b(i,j) ) * iDenom
+      Sbr = ( (hWght*hL)*S_b(i,j) + (hWght*hR + hR*hL)*S_b(i+1,j) ) * iDenom
+    else
+      Ttl = T_t(i,j); Tbl = T_b(i,j); Ttr = T_t(i+1,j); Tbr = T_b(i+1,j)
+      Stl = S_t(i,j); Sbl = S_b(i,j); Str = S_t(i+1,j); Sbr = S_b(i+1,j)
+    endif
+
     do m=2,4
-      w_left = 0.25*real(5-m) ; w_right = 1.0-w_left
-      dz = w_left*(z_t(i,j) - z_b(i,j)) + w_right*(z_t(i+1,j) - z_b(i+1,j))
+      w_left = 0.25*real(5-m) ; w_right = 1.0-w_left  ! = 0.25*real(m-1)
+      dz_x(m) = w_left*(z_t(i,j) - z_b(i,j)) + w_right*(z_t(i+1,j) - z_b(i+1,j))
 
       ! Salinity and temperature points are linearly interpolated in
       ! the horizontal. The subscript (1) refers to the top value in
       ! the vertical profile while subscript (5) refers to the bottom
       ! value in the vertical profile.
-      T5(1) = w_left*T_t(i,j) + w_right*T_t(i+1,j)
-      T5(5) = w_left*T_b(i,j) + w_right*T_b(i+1,j)
+      pos = (m-2)*5
+      T15(pos+1) = w_left*Ttl + w_right*Ttr
+      T15(pos+5) = w_left*Tbl + w_right*Tbr
 
-      S5(1) = w_left*S_t(i,j) + w_right*S_t(i+1,j)
-      S5(5) = w_left*S_b(i,j) + w_right*S_b(i+1,j)
-      
-      p5(1) = -GxRho*(w_left*z_t(i,j) + w_right*z_t(i+1,j))
+      S15(pos+1) = w_left*Stl + w_right*Str
+      S15(pos+5) = w_left*Sbl + w_right*Sbr
+
+      p15(pos+1) = -GxRho*(w_left*z_t(i,j) + w_right*z_t(i+1,j))
 
       ! Pressure
       do n=2,5
-        p5(n) = p5(n-1) + GxRho*0.25*dz
+        p15(pos+n) = p15(pos+n-1) + GxRho*0.25*dz_x(m)
       enddo
-      
+
       ! Salinity and temperature (linear interpolation in the vertical)
       do n=1,5
         weight_t = 0.25 * real(5-n)
         weight_b = 1.0 - weight_t
-        S5(n) = weight_t * S5(1) + weight_b * S5(5)
-        T5(n) = weight_t * T5(1) + weight_b * T5(5)
+        S15(pos+n) = weight_t * S15(pos+1) + weight_b * S15(pos+5)
+        T15(pos+n) = weight_t * T15(pos+1) + weight_b * T15(pos+5)
       enddo
+    enddo
 
-      call calculate_density(T5, S5, p5, r5, 1, 5, EOS)
+    call calculate_density(T15, S15, p15, r15, 1, 15, EOS)
     
     ! Use Bode's rule to estimate the pressure anomaly change.
-      intz(m) = G_e*dz*( C1_90*(7.0*(r5(1)+r5(5)) + 32.0*(r5(2)+r5(4)) + &
-                            12.0*r5(3)) - rho_ref)
-    enddo
+    do m = 2,4
+      pos = (m-2)*5
+      intz(m) = G_e*dz_x(m)*( C1_90*(7.0*(r15(pos+1)+r15(pos+5)) + 32.0*(r15(pos+2)+r15(pos+4)) + &
+                            12.0*r15(pos+3)) - rho_ref)
+    enddo    
     ! Use Bode's rule to integrate the bottom pressure anomaly values in x.
     intx_dpa(i,j) = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + &
                            12.0*intz(3))
@@ -1060,41 +1102,74 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
   ! ==================================================
   if (present(inty_dpa)) then ; do J=Jsq,Jeq ; do i=G%isc,G%iec
     intz(1) = dpa(i,j) ; intz(5) = dpa(i,j+1)
+
+    ! Corner values of T and S
+    ! hWght is the distance measure by which the cell is violation of
+    ! hydrostatic consistency. For large hWght we bias the interpolation
+    ! of T,S along the top and bottom integrals, almost like thickness
+    ! weighting.
+    ! Note: To work in terrain following coordinates we could offset
+    ! this distance by the layer thickness to replicate other models.
+    hWght = massWeightingToggle * &
+            max(0., -G%bathyT(i,j)-z_t(i,j+1), -G%bathyT(i,j+1)-z_t(i,j))
+    if (hWght > 0.) then
+      hL = (z_t(i,j) - z_b(i,j)) + G%H_subroundoff
+      hR = (z_t(i,j+1) - z_b(i,j+1)) + G%H_subroundoff
+      hWght = hWght * ( (hL-hR)/(hL+hR) )**2
+      iDenom = 1./( hWght*(hR + hL) + hL*hR )
+      Ttl = ( (hWght*hR)*T_t(i,j+1) + (hWght*hL + hR*hL)*T_t(i,j) ) * iDenom
+      Ttr = ( (hWght*hL)*T_t(i,j) + (hWght*hR + hR*hL)*T_t(i,j+1) ) * iDenom
+      Tbl = ( (hWght*hR)*T_b(i,j+1) + (hWght*hL + hR*hL)*T_b(i,j) ) * iDenom
+      Tbr = ( (hWght*hL)*T_b(i,j) + (hWght*hR + hR*hL)*T_b(i,j+1) ) * iDenom
+      Stl = ( (hWght*hR)*S_t(i,j+1) + (hWght*hL + hR*hL)*S_t(i,j) ) * iDenom
+      Str = ( (hWght*hL)*S_t(i,j) + (hWght*hR + hR*hL)*S_t(i,j+1) ) * iDenom
+      Sbl = ( (hWght*hR)*S_b(i,j+1) + (hWght*hL + hR*hL)*S_b(i,j) ) * iDenom
+      Sbr = ( (hWght*hL)*S_b(i,j) + (hWght*hR + hR*hL)*S_b(i,j+1) ) * iDenom
+    else
+      Ttl = T_t(i,j); Tbl = T_b(i,j); Ttr = T_t(i,j+1); Tbr = T_b(i,j+1)
+      Stl = S_t(i,j); Sbl = S_b(i,j); Str = S_t(i,j+1); Sbr = S_b(i,j+1)
+    endif
+
     do m=2,4
-      w_left = 0.25*real(5-m) ; w_right = 1.0-w_left
-      dz = w_left*(z_t(i,j) - z_b(i,j)) + w_right*(z_t(i,j+1) - z_b(i,j+1))
+      w_left = 0.25*real(5-m) ; w_right = 1.0-w_left  ! = 0.25*real(m-1)
+      dz_y(m) = w_left*(z_t(i,j) - z_b(i,j)) + w_right*(z_t(i,j+1) - z_b(i,j+1))
 
       ! Salinity and temperature points are linearly interpolated in
       ! the horizontal. The subscript (1) refers to the top value in
       ! the vertical profile while subscript (5) refers to the bottom
       ! value in the vertical profile.
-      T5(1) = w_left*T_t(i,j) + w_right*T_t(i,j+1)
-      T5(5) = w_left*T_b(i,j) + w_right*T_b(i,j+1)
+      pos = (m-2)*5
+      T15(pos+1) = w_left*Ttl + w_right*Ttr
+      T15(pos+5) = w_left*Tbl + w_right*Tbr
       
-      S5(1) = w_left*S_t(i,j) + w_right*S_t(i,j+1)
-      S5(5) = w_left*S_b(i,j) + w_right*S_b(i,j+1)
+      S15(pos+1) = w_left*Stl + w_right*Str
+      S15(pos+5) = w_left*Sbl + w_right*Sbr
       
-      p5(1) = -GxRho*(w_left*z_t(i,j) + w_right*z_t(i,j+1))
+      p15(pos+1) = -GxRho*(w_left*z_t(i,j) + w_right*z_t(i,j+1))
 
       ! Pressure
       do n=2,5
-        p5(n) = p5(n-1) + GxRho*0.25*dz
+        p15(pos+n) = p15(pos+n-1) + GxRho*0.25*dz_y(m)
       enddo
 
       ! Salinity and temperature (linear interpolation in the vertical)
       do n=1,5
         weight_t = 0.25 * real(5-n)
         weight_b = 1.0 - weight_t
-        S5(n) = weight_t * S5(1) + weight_b * S5(5)
-        T5(n) = weight_t * T5(1) + weight_b * T5(5)
+        S15(pos+n) = weight_t * S15(pos+1) + weight_b * S15(pos+5)
+        T15(pos+n) = weight_t * T15(pos+1) + weight_b * T15(pos+5)
       enddo
-      
-      call calculate_density(T5, S5, p5, r5, 1, 5, EOS)
+    enddo      
+
+    call calculate_density(T15, S15, p15, r15, 1, 15, EOS)
     
     ! Use Bode's rule to estimate the pressure anomaly change.
-      intz(m) = G_e*dz*( C1_90*(7.0*(r5(1)+r5(5)) + 32.0*(r5(2)+r5(4)) + &
-                            12.0*r5(3)) - rho_ref)
+    do m = 2,4
+      pos = (m-2)*5
+      intz(m) = G_e*dz_y(m)*( C1_90*(7.0*(r15(pos+1)+r15(pos+5)) + 32.0*(r15(pos+2)+r15(pos+4)) + &
+                            12.0*r15(pos+3)) - rho_ref)
     enddo
+
     ! Use Bode's rule to integrate the values.
     inty_dpa(i,j) = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + &
                            12.0*intz(3))

@@ -54,7 +54,7 @@ module advection_test_tracer
 !********+*********+*********+*********+*********+*********+*********+**
 
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
-use MOM_diag_mediator, only : diag_ptrs
+use MOM_diag_mediator, only : diag_ctrl
 use MOM_diag_to_Z, only : register_Z_tracer, diag_to_Z_CS
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
@@ -114,8 +114,8 @@ type, public :: advection_test_tracer_CS ; private
              ! if it is used and the surface tracer concentrations are to be
              ! provided to the coupler.
 
-  type(diag_ptrs), pointer :: diag ! A pointer to a structure of shareable
-                             ! ocean diagnostic fields and control variables.
+  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
+                             ! timing of diagnostic output.
   integer, dimension(NTR) :: id_tracer = -1, id_tr_adx = -1, id_tr_ady = -1
   integer, dimension(NTR) :: id_tr_dfx = -1, id_tr_dfy = -1
 
@@ -129,7 +129,7 @@ function register_advection_test_tracer(G, param_file, CS, diag, tr_Reg, &
   type(ocean_grid_type),   intent(in) :: G
   type(param_file_type),   intent(in) :: param_file
   type(advection_test_tracer_CS),    pointer    :: CS
-  type(diag_ptrs), target, intent(in) :: diag
+  type(diag_ctrl), target, intent(in) :: diag
   type(tracer_registry_type),  pointer    :: tr_Reg
   type(MOM_restart_CS),   pointer    :: restart_CS
 ! This subroutine is used to register tracer fields and subroutines
@@ -139,7 +139,7 @@ function register_advection_test_tracer(G, param_file, CS, diag, tr_Reg, &
 !                         model parameter values.
 !  (in/out)  CS - A pointer that is set to point to the control structure
 !                 for this module
-!  (in)      diag - A structure containing pointers to common diagnostic fields.
+!  (in)      diag - A structure that is used to regulate diagnostic output.
 !  (in/out)  tr_Reg - A pointer that is set to point to the control structure
 !                  for the tracer advection and diffusion module.
 !  (in)      restart_CS - A pointer to the restart control structure.
@@ -319,19 +319,19 @@ subroutine initialize_advection_test_tracer(restart, day, G, h, OBC, CS, sponge_
     ! Register the tracer for the restart file.
     name = CS%tr_desc(m)%name ; longname = CS%tr_desc(m)%longname
     units = CS%tr_desc(m)%units
-    CS%id_tracer(m) = register_diag_field("ocean_model", trim(name), G%axesTL, &
+    CS%id_tracer(m) = register_diag_field("ocean_model", trim(name), CS%diag%axesTL, &
         day, trim(longname) , trim(units))
     CS%id_tr_adx(m) = register_diag_field("ocean_model", trim(name)//"_adx", &
-        G%axesCuL, day, trim(longname)//" advective zonal flux" , &
+        CS%diag%axesCuL, day, trim(longname)//" advective zonal flux" , &
         trim(flux_units))
     CS%id_tr_ady(m) = register_diag_field("ocean_model", trim(name)//"_ady", &
-        G%axesCvL, day, trim(longname)//" advective meridional flux" , &
+        CS%diag%axesCvL, day, trim(longname)//" advective meridional flux" , &
         trim(flux_units))
     CS%id_tr_dfx(m) = register_diag_field("ocean_model", trim(name)//"_dfx", &
-        G%axesCuL, day, trim(longname)//" diffusive zonal flux" , &
+        CS%diag%axesCuL, day, trim(longname)//" diffusive zonal flux" , &
         trim(flux_units))
     CS%id_tr_dfy(m) = register_diag_field("ocean_model", trim(name)//"_dfy", &
-        G%axesCvL, day, trim(longname)//" diffusive zonal flux" , &
+        CS%diag%axesCvL, day, trim(longname)//" diffusive zonal flux" , &
         trim(flux_units))
     if (CS%id_tr_adx(m) > 0) call safe_alloc_ptr(CS%tr_adx(m)%p,IsdB,IedB,jsd,jed,nz)
     if (CS%id_tr_ady(m) > 0) call safe_alloc_ptr(CS%tr_ady(m)%p,isd,ied,JsdB,JedB,nz)

@@ -57,7 +57,7 @@ module MOM_tracer_advect
 
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock, only : CLOCK_MODULE, CLOCK_ROUTINE
-use MOM_diag_mediator, only : post_data, query_averaging_enabled, diag_ptrs
+use MOM_diag_mediator, only : post_data, query_averaging_enabled, diag_ctrl
 use MOM_diag_mediator, only : register_diag_field, safe_alloc_ptr, time_type
 use MOM_domains, only : pass_var, pass_vector, sum_across_PEs, max_across_PEs
 use MOM_checksums, only : hchksum
@@ -76,9 +76,10 @@ public advect_tracer, tracer_advect_init, tracer_advect_end
 
 type, public :: tracer_advect_CS ; private
   real    :: dt             ! The baroclinic dynamics time step, in s.
-  type(diag_ptrs), pointer :: diag ! A pointer to a structure of shareable
-                            ! ocean diagnostic fields and control variables.
+  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
+                            ! timing of diagnostic output.
   logical :: debug          ! If true, write verbose checksums for debugging purposes.
+  logical :: usePPM         ! If true, use PPM instead of PLM
 end type tracer_advect_CS
 
 integer :: id_clock_advect, id_clock_pass, id_clock_sync
@@ -257,11 +258,11 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, CS, Reg)
       if (x_first) then
   !    First, advect zonally.
         call advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
-                      isv, iev, jsv-stensil, jev+stensil, k, G)
+                      isv, iev, jsv-stensil, jev+stensil, k, G, CS%usePPM)
 
   !    Next, advect meridionally.
         call advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
-                      isv, iev, jsv, jev, k, G)
+                      isv, iev, jsv, jev, k, G, CS%usePPM)
 
         domore_k(k) = 0
         do j=jsv-stensil,jev+stensil ; if (domore_u(j,k)) domore_k(k) = 1 ; enddo
@@ -269,11 +270,11 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, CS, Reg)
       else
   !    First, advect meridionally.
         call advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
-                      isv-stensil, iev+stensil, jsv, jev, k, G)
+                      isv-stensil, iev+stensil, jsv, jev, k, G, CS%usePPM)
 
   !    Next, advect zonally.
         call advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
-                      isv, iev, jsv, jev, k, G)
+                      isv, iev, jsv, jev, k, G, CS%usePPM)
 
         domore_k(k) = 0
         do j=jsv,jev ; if (domore_u(j,k)) domore_k(k) = 1 ; enddo
@@ -302,7 +303,7 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, CS, Reg)
 end subroutine advect_tracer
 
 subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
-                    is, ie, js, je, k, G)
+                    is, ie, js, je, k, G, usePPM)
   type(tracer_type), dimension(ntr),      intent(inout) :: Tr
   real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(inout) :: hprev
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(inout) :: uhr
@@ -312,6 +313,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
   real,                                   intent(in)    :: Idt
   integer,                                intent(in)    :: ntr, is, ie, js, je,k
   type(ocean_grid_type),                  intent(inout) :: G
+  logical,                                intent(in)    :: usePPM
   !   This subroutine does 1-d flux-form advection in the zonal direction using
   ! a monotonic piecewise linear scheme.
   real, dimension(SZIB_(G),ntr) :: &
@@ -328,7 +330,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
                               ! current iteration, in m3 or kg.
   real, dimension(SZIB_(G)) :: &
     hlst, Ihnew, &      ! Work variables with units of m3 or kg and m-3 or kg-1.
-    ts2                 ! A nondimensional work variable.
+    CFL                 ! A nondimensional work variable.
   real :: min_h         ! The minimum thickness that can be realized during
                         ! any of the passes, in m or kg m-2.
   real :: h_neglect     ! A thickness that is so small it is usually lost
@@ -336,33 +338,45 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
   logical :: do_i(SZIB_(G))     ! If true, work on given points.
   logical :: do_any_i
   integer :: i, j, m
+  real :: aR, aL, dMx, dMn, Tp, Tc, Tm, dA, mA, a6
+  logical :: usePLMslope
+
+  usePLMslope = .not. usePPM
 
   min_h = 0.1*G%Angstrom
   h_neglect = G%H_subroundoff
 
-  do I=is-1,ie ; ts2(I) = 0.0 ; enddo
+! do I=is-1,ie ; ts2(I) = 0.0 ; enddo
+  do I=is-1,ie ; CFL(I) = 0.0 ; enddo
   
   do j=js,je ; if (domore_u(j,k)) then
     domore_u(j,k) = .false.
 
 !   Calculate the i-direction profiles (slopes) of each tracer that
 ! is being advected.
-    do m=1,ntr ; do i=is-1,ie+1
-      if (ABS(Tr(m)%t(i+1,j,k)-Tr(m)%t(i,j,k)) < &
-          ABS(Tr(m)%t(i,j,k)-Tr(m)%t(i-1,j,k))) then
-        maxslope = 4.0*(Tr(m)%t(i+1,j,k)-Tr(m)%t(i,j,k))
-      else
-        maxslope = 4.0*(Tr(m)%t(i,j,k)-Tr(m)%t(i-1,j,k))
-      endif
-      if ((Tr(m)%t(i+1,j,k)-Tr(m)%t(i,j,k)) * (Tr(m)%t(i,j,k)-Tr(m)%t(i-1,j,k)) < 0.0) then
-        slope_x(i,m) = 0.0
-      elseif (ABS(Tr(m)%t(i+1,j,k)-Tr(m)%t(i-1,j,k))<ABS(maxslope)) then
+    if (usePLMslope) then
+      do m=1,ntr ; do i=is-1,ie+1
+       !if (ABS(Tr(m)%t(i+1,j,k)-Tr(m)%t(i,j,k)) < &
+       !    ABS(Tr(m)%t(i,j,k)-Tr(m)%t(i-1,j,k))) then
+       !  maxslope = 4.0*(Tr(m)%t(i+1,j,k)-Tr(m)%t(i,j,k))
+       !else
+       !  maxslope = 4.0*(Tr(m)%t(i,j,k)-Tr(m)%t(i-1,j,k))
+       !endif
+       !if ((Tr(m)%t(i+1,j,k)-Tr(m)%t(i,j,k)) * (Tr(m)%t(i,j,k)-Tr(m)%t(i-1,j,k)) < 0.0) then
+       !  slope_x(i,m) = 0.0
+       !elseif (ABS(Tr(m)%t(i+1,j,k)-Tr(m)%t(i-1,j,k))<ABS(maxslope)) then
+       !  slope_x(i,m) = G%mask2dCu(I,j)*G%mask2dCu(I-1,j) * &
+       !                 0.5*(Tr(m)%t(i+1,j,k)-Tr(m)%t(i-1,j,k))
+       !else
+       !  slope_x(i,m) = G%mask2dCu(I,j)*G%mask2dCu(I-1,j) * 0.5*maxslope
+       !endif
+        Tp = Tr(m)%t(i+1,j,k) ; Tc = Tr(m)%t(i,j,k) ; Tm = Tr(m)%t(i-1,j,k)
+        dMx = max( Tp, Tc, Tm ) - Tc
+        dMn= Tc - min( Tp, Tc, Tm )
         slope_x(i,m) = G%mask2dCu(I,j)*G%mask2dCu(I-1,j) * &
-                       0.5*(Tr(m)%t(i+1,j,k)-Tr(m)%t(i-1,j,k))
-      else
-        slope_x(i,m) = G%mask2dCu(I,j)*G%mask2dCu(I-1,j) * 0.5*maxslope
-      endif
-    enddo ; enddo
+            sign( min(0.5*abs(Tp-Tm), 2.0*dMx, 2.0*dMn), Tp-Tm )
+        enddo ; enddo
+    endif ! usePLMslope
 
 !   Calculate the i-direction fluxes of each tracer, using as much
 ! the minimum of the remaining mass flux (uhr) and the half the mass
@@ -371,6 +385,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
     do I=is-1,ie
       if (uhr(I,j,k) == 0.0) then
         uhh(I) = 0.0
+        CFL(I) = 0.0
       elseif (uhr(I,j,k) < 0.0) then
         hup = (hprev(i+1,j,k)-G%areaT(i+1,j)*G%Angstrom*0.1)
         hlos = MAX(0.0,uhr(I+1,j,k))
@@ -381,7 +396,8 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
         else
           uhh(I) = uhr(I,j,k)
         endif
-        ts2(I) = 0.5*(1.0 + uhh(I)/(hprev(i+1,j,k)+h_neglect))
+       !ts2(I) = 0.5*(1.0 + uhh(I)/(hprev(i+1,j,k)+h_neglect))
+        CFL(I) = - uhh(I)/(hprev(i+1,j,k)+h_neglect) ! CFL is positive
       else
         hup = (hprev(i,j,k)-G%areaT(i,j)*G%Angstrom*0.1)
         hlos = MAX(0.0,-uhr(I-1,j,k))
@@ -392,16 +408,84 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
         else
           uhh(I) = uhr(I,j,k)
         endif
-        ts2(I) = 0.5*(1.0 - uhh(I)/(hprev(i,j,k)+h_neglect))
+       !ts2(I) = 0.5*(1.0 - uhh(I)/(hprev(i,j,k)+h_neglect))
+        CFL(I) = uhh(I)/(hprev(i,j,k)+h_neglect) ! CFL is positive
       endif
     enddo
-    do m=1,ntr ; do I=is-1,ie
-      if (uhh(I) >= 0.0) then
-        flux_x(I,m) = uhh(I)*(Tr(m)%t(i,j,k) + slope_x(i,m)*ts2(I))
-      else
-        flux_x(I,m) = uhh(I)*(Tr(m)%t(i+1,j,k) - slope_x(i+1,m)*ts2(I))
-      endif
-    enddo ; enddo
+    if (usePPM) then
+      do m=1,ntr ; do I=is-1,ie
+        if (uhh(I) >= 0.0) then
+          ! Implementation of PPM-H3
+          Tp = Tr(m)%t(i+1,j,k) ; Tc = Tr(m)%t(i,j,k) ; Tm = Tr(m)%t(i-1,j,k)
+          aL = ( 5.*Tc + ( 2.*Tm - Tp ) )/6. ! H3 estimate
+          aL = max( min(Tc,Tm), aL) ; aL = min( max(Tc,Tm), aL) ! Bound
+          aR = ( 5.*Tc + ( 2.*Tp - Tm ) )/6. ! H3 estimate
+          aR = max( min(Tc,Tp), aR) ; aR = min( max(Tc,Tp), aR) ! Bound
+          dA = aR - aL ; mA = 0.5*( aR + aL )
+          if (G%mask2dCu(I,j)*G%mask2dCu(I-1,j)*(Tp-Tc)*(Tc-Tm) <= 0.) then
+            aL = Tc ; aR = Tc ! PCM for local extremum and bounadry cells
+          elseif ( dA*(Tc-mA) > (dA*dA)/6. ) then
+            aL = 3.*Tc - 2.*aR
+          elseif ( dA*(Tc-mA) < - (dA*dA)/6. ) then
+            aR = 3.*Tc - 2.*aL
+          endif
+          a6 = 6.*Tc - 3. * (aR + aL) ! Curvature
+          flux_x(I,m) = uhh(I)*( aR - 0.5 * CFL(I) * ( &
+                  ( aR - aL ) - a6 * ( 1. - 2./3. * CFL(I) ) ) )
+        else
+          ! Implementation of PPM-H3
+          Tp = Tr(m)%t(i+2,j,k) ; Tc = Tr(m)%t(i+1,j,k) ; Tm = Tr(m)%t(i,j,k)
+          aL = ( 5.*Tc + ( 2.*Tm - Tp ) )/6. ! H3 estimate
+          aL = max( min(Tc,Tm), aL) ; aL = min( max(Tc,Tm), aL) ! Bound
+          aR = ( 5.*Tc + ( 2.*Tp - Tm ) )/6. ! H3 estimate
+          aR = max( min(Tc,Tp), aR) ; aR = min( max(Tc,Tp), aR) ! Bound
+          dA = aR - aL ; mA = 0.5*( aR + aL )
+          dA = aR - aL ; mA = 0.5*( aR + aL )
+          if (G%mask2dCu(I,j)*G%mask2dCu(I+1,j)*(Tp-Tc)*(Tc-Tm) <= 0.) then
+            aL = Tc ; aR = Tc ! PCM for local extremum and bounadry cells
+          elseif ( dA*(Tc-mA) > (dA*dA)/6. ) then
+            aL = 3.*Tc - 2.*aR
+          elseif ( dA*(Tc-mA) < - (dA*dA)/6. ) then
+            aR = 3.*Tc - 2.*aL
+          endif
+          a6 = 6.*Tc - 3. * (aR + aL) ! Curvature
+          flux_x(I,m) = uhh(I)*( aL + 0.5 * CFL(I) * ( &
+                  ( aR - aL ) + a6 * ( 1. - 2./3. * CFL(I) ) ) )
+        endif
+      enddo ; enddo
+    else ! PLM
+      do m=1,ntr ; do I=is-1,ie
+        if (uhh(I) >= 0.0) then
+          ! Indirect implementation of PLM
+         !aL = Tr(m)%t(i,j,k) - 0.5 * slope_x(i,m)
+         !aR = Tr(m)%t(i,j,k) + 0.5 * slope_x(i,m)
+         !flux_x(I,m) = uhh(I)*( aR - 0.5 * (aR-aL) * CFL(I) )
+          ! Alternative implementation of PLM
+         !aR = Tr(m)%t(i,j,k) + 0.5 * slope_x(i,m)
+         !flux_x(I,m) = uhh(I)*( aR - 0.5 * slope_x(i,m) * CFL(I) )
+          ! Alternative implementation of PLM
+          Tc = Tr(m)%t(i,j,k)
+          flux_x(I,m) = uhh(I)*( Tc + 0.5 * slope_x(i,m) * ( 1. - CFL(I) ) )
+          ! Original implementation of PLM
+         !flux_x(I,m) = uhh(I)*(Tr(m)%t(i,j,k) + slope_x(i,m)*ts2(I))
+        else
+          ! Indirect implementation of PLM
+         !aL = Tr(m)%t(i+1,j,k) - 0.5 * slope_x(i+1,m)
+         !aR = Tr(m)%t(i+1,j,k) + 0.5 * slope_x(i+1,m)
+         !flux_x(I,m) = uhh(I)*( aL + 0.5 * (aR-aL) * CFL(I) )
+          ! Alternative implementation of PLM
+         !aL = Tr(m)%t(i+1,j,k) - 0.5 * slope_x(i+1,m)
+         !flux_x(I,m) = uhh(I)*( aL + 0.5 * slope_x(i+1,m) * CFL(I) )
+          ! Alternative implementation of PLM
+          Tc = Tr(m)%t(i+1,j,k)
+          flux_x(I,m) = uhh(I)*( Tc - 0.5 * slope_x(i+1,m) * ( 1. - CFL(I) ) )
+          ! Original implementation of PLM
+         !flux_x(I,m) = uhh(I)*(Tr(m)%t(i+1,j,k) - slope_x(i+1,m)*ts2(I))
+        endif
+       !ts2(I) = 0.5*(1.0 - uhh(I)/(hprev(i,j,k)+h_neglect))
+      enddo ; enddo
+    endif ! usePPM
+
     if (associated(OBC)) then ; if (OBC%apply_OBC_u) then
       do_any_i = .false.
       do I=is-1,ie
@@ -463,7 +547,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
 end subroutine advect_x
 
 subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
-                    is, ie, js, je, k, G)
+                    is, ie, js, je, k, G, usePPM)
   type(tracer_type), dimension(ntr),      intent(inout) :: Tr
   real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(inout) :: hprev
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(inout) :: vhr
@@ -473,6 +557,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
   real,                                   intent(in)    :: Idt
   integer,                                intent(in)    :: ntr, is, ie, js, je,k
   type(ocean_grid_type),                  intent(inout) :: G
+  logical,                                intent(in)    :: usePPM
   !   This subroutine does 1-d flux-form advection using a monotonic piecewise
   ! linear scheme.
   real, dimension(SZI_(G),ntr,SZJB_(G)) :: &
@@ -489,7 +574,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
                               ! the grid box, both in m3 or kg.
   real, dimension(SZIB_(G)) :: &
     hlst, Ihnew, &      ! Work variables with units of m3 or kg and m-3 or kg-1.
-    ts2                 ! A nondimensional work variable.
+    CFL                 ! A nondimensional work variable.
   real :: min_h         ! The minimum thickness that can be realized during
                         ! any of the passes, in m or kg m-2.
   real :: h_neglect     ! A thickness that is so small it is usually lost
@@ -498,32 +583,43 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
   logical :: do_i(SZIB_(G))     ! If true, work on given points.
   logical :: do_any_i
   integer :: i, j, m
+  real :: aR, aL, dMx, dMn, Tp, Tc, Tm, dA, mA, a6
+  logical :: usePLMslope
+
+  usePLMslope = .not. usePPM
 
   min_h = 0.1*G%Angstrom
   h_neglect = G%H_subroundoff
 
-  do i=is,ie ; ts2(i) = 0.0 ; enddo
-!   Calculate the j-direction profiles (slopes) of each tracer that
-! is being advected.
+ !do i=is,ie ; ts2(i) = 0.0 ; enddo
   do_j_tr(js-1) = domore_v(js-1,k) ; do_j_tr(je+1) = domore_v(je,k)
   do j=js,je ; do_j_tr(j) = (domore_v(J-1,k) .or. domore_v(J,k)) ; enddo
-  do j=js-1,je+1 ; if (do_j_tr(j)) then ; do m=1,ntr ; do i=is,ie
-    if (ABS(Tr(m)%t(i,j+1,k)-Tr(m)%t(i,j,k)) < &
-        ABS(Tr(m)%t(i,j,k)-Tr(m)%t(i,j-1,k))) then
-      maxslope = 4.0*(Tr(m)%t(i,j+1,k)-Tr(m)%t(i,j,k))
-    else
-      maxslope = 4.0*(Tr(m)%t(i,j,k)-Tr(m)%t(i,j-1,k))
-    endif
 
-    if ((Tr(m)%t(i,j+1,k)-Tr(m)%t(i,j,k))*(Tr(m)%t(i,j,k)-Tr(m)%t(i,j-1,k)) < 0.0) then
-      slope_y(i,m,j) = 0.0
-    elseif (ABS(Tr(m)%t(i,j+1,k)-Tr(m)%t(i,j-1,k))<ABS(maxslope)) then
-      slope_y(i,m,j) = G%mask2dCv(i,J) * G%mask2dCv(i,J-1) * &
-                     0.5*(Tr(m)%t(i,j+1,k)-Tr(m)%t(i,j-1,k))
-    else
-      slope_y(i,m,j) = G%mask2dCv(i,J) * G%mask2dCv(i,J-1) * 0.5*maxslope
-    endif
-  enddo ; enddo ; endif ; enddo ! End of i-, m-, & j- loops.
+!   Calculate the j-direction profiles (slopes) of each tracer that
+! is being advected.
+  if (usePLMslope) then
+    do j=js-1,je+1 ; if (do_j_tr(j)) then ; do m=1,ntr ; do i=is,ie
+      !if (ABS(Tr(m)%t(i,j+1,k)-Tr(m)%t(i,j,k)) < &
+      !    ABS(Tr(m)%t(i,j,k)-Tr(m)%t(i,j-1,k))) then
+      !  maxslope = 4.0*(Tr(m)%t(i,j+1,k)-Tr(m)%t(i,j,k))
+      !else
+      !  maxslope = 4.0*(Tr(m)%t(i,j,k)-Tr(m)%t(i,j-1,k))
+      !endif
+      !if ((Tr(m)%t(i,j+1,k)-Tr(m)%t(i,j,k))*(Tr(m)%t(i,j,k)-Tr(m)%t(i,j-1,k)) < 0.0) then
+      !  slope_y(i,m,j) = 0.0
+      !elseif (ABS(Tr(m)%t(i,j+1,k)-Tr(m)%t(i,j-1,k))<ABS(maxslope)) then
+      !  slope_y(i,m,j) = G%mask2dCv(i,J) * G%mask2dCv(i,J-1) * &
+      !                 0.5*(Tr(m)%t(i,j+1,k)-Tr(m)%t(i,j-1,k))
+      !else
+      !  slope_y(i,m,j) = G%mask2dCv(i,J) * G%mask2dCv(i,J-1) * 0.5*maxslope
+      !endif
+       Tp = Tr(m)%t(i,j+1,k) ; Tc = Tr(m)%t(i,j,k) ; Tm = Tr(m)%t(i,j-1,k)
+       dMx = max( Tp, Tc, Tm ) - Tc
+       dMn= Tc - min( Tp, Tc, Tm )
+       slope_y(i,m,j) = G%mask2dCv(i,J)*G%mask2dCv(i,J-1) * &
+           sign( min(0.5*abs(Tp-Tm), 2.0*dMx, 2.0*dMn), Tp-Tm )
+    enddo ; enddo ; endif ; enddo ! End of i-, m-, & j- loops.
+  endif ! usePLMslope
 
 !   Calculate the j-direction fluxes of each tracer, using as much
 ! the minimum of the remaining mass flux (vhr) and the half the mass
@@ -534,6 +630,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
     do i=is,ie
       if (vhr(i,J,k) == 0.0) then
         vhh(i,J) = 0.0
+        CFL(i) = 0.0
       elseif (vhr(i,J,k) < 0.0) then
         hup = (hprev(i,j+1,k)-G%areaT(i,j+1)*G%Angstrom*0.1)
         hlos = MAX(0.0,vhr(i,J+1,k))
@@ -544,7 +641,8 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
         else
           vhh(i,J) = vhr(i,J,k)
         endif
-        ts2(i) = 0.5*(1.0 + vhh(i,J) / (hprev(i,j+1,k)+h_neglect))
+       !ts2(i) = 0.5*(1.0 + vhh(i,J) / (hprev(i,j+1,k)+h_neglect))
+        CFL(i) = - vhh(i,J) / (hprev(i,j+1,k)+h_neglect) ! CFL is positive
       else
         hup = (hprev(i,j,k)-G%areaT(i,j)*G%Angstrom*0.1)
         hlos = MAX(0.0,-vhr(i,J-1,k))
@@ -555,16 +653,81 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
         else
           vhh(i,J) = vhr(i,J,k)
         endif
-        ts2(i) = 0.5*(1.0 - vhh(i,J) / (hprev(i,j,k)+h_neglect))
+       !ts2(i) = 0.5*(1.0 - vhh(i,J) / (hprev(i,j,k)+h_neglect))
+        CFL(i) = vhh(i,J) / (hprev(i,j,k)+h_neglect) ! CFL is positive
       endif
     enddo
-    do m=1,ntr ; do i=is,ie
-      if (vhh(i,J) >= 0.0) then
-        flux_y(i,m,J) = vhh(i,J)*(Tr(m)%t(i,j,k) + slope_y(i,m,j)*ts2(i))
-      else
-        flux_y(i,m,J) = vhh(i,J)*(Tr(m)%t(i,j+1,k) - slope_y(i,m,j+1)*ts2(i))
-      endif
-    enddo ; enddo
+    if (usePPM) then
+      do m=1,ntr ; do i=is,ie
+        if (vhh(i,J) >= 0.0) then
+          ! Implementation of PPM-H3
+          Tp = Tr(m)%t(i,j+1,k) ; Tc = Tr(m)%t(i,j,k) ; Tm = Tr(m)%t(i,j-1,k)
+          aL = ( 5.*Tc + ( 2.*Tm - Tp ) )/6. ! H3 estimate
+          aL = max( min(Tc,Tm), aL) ; aL = min( max(Tc,Tm), aL) ! Bound
+          aR = ( 5.*Tc + ( 2.*Tp - Tm ) )/6. ! H3 estimate
+          aR = max( min(Tc,Tp), aR) ; aR = min( max(Tc,Tp), aR) ! Bound
+          dA = aR - aL ; mA = 0.5*( aR + aL )
+          if (G%mask2dCv(i,J)*G%mask2dCv(i,J-1)*(Tp-Tc)*(Tc-Tm) <= 0.) then
+            aL = Tc ; aR = Tc ! PCM for local extremum and bounadry cells
+          elseif ( dA*(Tc-mA) > (dA*dA)/6. ) then
+            aL = 3.*Tc - 2.*aR
+          elseif ( dA*(Tc-mA) < - (dA*dA)/6. ) then
+            aR = 3.*Tc - 2.*aL
+          endif
+          a6 = 6.*Tc - 3. * (aR + aL) ! Curvature
+          flux_y(i,m,J) = vhh(i,J)*( aR - 0.5 * CFL(i) * ( &
+                ( aR - aL ) - a6 * ( 1. - 2./3. * CFL(I) ) ) )
+        else
+          ! Implementation of PPM-H3
+          Tp = Tr(m)%t(i,j+2,k) ; Tc = Tr(m)%t(i,j+1,k) ; Tm = Tr(m)%t(i,j,k)
+          aL = ( 5.*Tc + ( 2.*Tm - Tp ) )/6. ! H3 estimate
+          aL = max( min(Tc,Tm), aL) ; aL = min( max(Tc,Tm), aL) ! Bound
+          aR = ( 5.*Tc + ( 2.*Tp - Tm ) )/6. ! H3 estimate
+          aR = max( min(Tc,Tp), aR) ; aR = min( max(Tc,Tp), aR) ! Bound
+          dA = aR - aL ; mA = 0.5*( aR + aL )
+          if (G%mask2dCv(i,J)*G%mask2dCv(i,J+1)*(Tp-Tc)*(Tc-Tm) <= 0.) then
+            aL = Tc ; aR = Tc ! PCM for local extremum and bounadry cells
+          elseif ( dA*(Tc-mA) > (dA*dA)/6. ) then
+            aL = 3.*Tc - 2.*aR
+          elseif ( dA*(Tc-mA) < - (dA*dA)/6. ) then
+            aR = 3.*Tc - 2.*aL
+          endif
+          a6 = 6.*Tc - 3. * (aR + aL) ! Curvature
+          flux_y(i,m,J) = vhh(i,J)*( aL + 0.5 * CFL(i) * ( &
+                ( aR - aL ) + a6 * ( 1. - 2./3. * CFL(I) ) ) )
+        endif
+      enddo ; enddo
+    else ! PLM
+      do m=1,ntr ; do i=is,ie
+        if (vhh(i,J) >= 0.0) then
+          ! Indirect implementation of PLM
+         !aL = Tr(m)%t(i,j,k) - 0.5 * slope_y(i,m,j)
+         !aR = Tr(m)%t(i,j,k) + 0.5 * slope_y(i,m,j)
+         !flux_y(i,m,J) = vhh(i,J)*( aR - 0.5 * (aR-aL) * CFL(i) )
+          ! Alternative implementation of PLM
+         !aR = Tr(m)%t(i,j,k) + 0.5 * slope_y(i,m,j)
+         !flux_y(i,m,J) = vhh(i,J)*(aR - 0.5 * slope_y(i,m,j)*CFL(i))
+          ! Alternative implementation of PLM
+          Tc = Tr(m)%t(i,j,k)
+          flux_y(i,m,J) = vhh(i,J)*( Tc + 0.5 * slope_y(i,m,j) * ( 1. - CFL(i) ) )
+          ! Original implementation of PLM
+         !flux_y(i,m,J) = vhh(i,J)*(Tr(m)%t(i,j,k) + slope_y(i,m,j)*ts2(i))
+        else
+          ! Indirect implementation of PLM
+         !aL = Tr(m)%t(i,j+1,k) - 0.5 * slope_y(i,m,j+1)
+         !aR = Tr(m)%t(i,j+1,k) + 0.5 * slope_y(i,m,j+1)
+         !flux_y(i,m,J) = vhh(i,J)*( aL + 0.5 * (aR-aL) * CFL(i) )
+          ! Alternative implementation of PLM
+         !aL = Tr(m)%t(i,j+1,k) - 0.5 * slope_y(i,m,j+1)
+         !flux_y(i,m,J) = vhh(i,J)*( aL + 0.5 * slope_y(i,m,j+1)*CFL(i) )
+          ! Alternative implementation of PLM
+          Tc = Tr(m)%t(i,j+1,k)
+          flux_y(i,m,J) = vhh(i,J)*( Tc - 0.5 * slope_y(i,m,j+1) * ( 1. - CFL(i) ) )
+          ! Original implementation of PLM
+         !flux_y(i,m,J) = vhh(i,J)*(Tr(m)%t(i,j+1,k) - slope_y(i,m,j+1)*ts2(i))
+        endif
+      enddo ; enddo
+    endif ! usePPM
 
     if (associated(OBC)) then ; if (OBC%apply_OBC_v) then
       do_any_i = .false.
@@ -633,13 +796,13 @@ subroutine tracer_advect_init(Time, G, param_file, diag, CS)
   type(time_type), target, intent(in)    :: Time
   type(ocean_grid_type),   intent(in)    :: G
   type(param_file_type),   intent(in)    :: param_file
-  type(diag_ptrs), target, intent(inout) :: diag
+  type(diag_ctrl), target, intent(inout) :: diag
   type(tracer_advect_CS),  pointer       :: CS
 ! Arguments: Time - The current model time.
 !  (in)      G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
-!  (in)      diag - A structure containing pointers to common diagnostic fields.
+!  (in)      diag - A structure that is used to regulate diagnostic output.
 !  (in/out)  CS - A pointer to the control structure for this module
   integer, save :: init_calls = 0
 ! This include declares and sets the variable "version".
@@ -660,6 +823,20 @@ subroutine tracer_advect_init(Time, G, param_file, diag, CS)
   call get_param(param_file, mod, "DT", CS%dt, fail_if_missing=.true., &
           desc="The (baroclinic) dynamics time step.", units="s")
   call get_param(param_file, mod, "DEBUG", CS%debug, default=.false.)
+  call get_param(param_file, mod, "TRACER_ADVECTION_SCHEME", mesg, &
+          desc="The horizontal transport scheme for tracers:\n"//&
+          "  PLM    - Piecewise Linear Method\n"//&
+          "  PPM:H3 - Piecewise Parabolic Method (Huyhn 3rd order)" &
+          , default='PLM')
+  select case (trim(mesg))
+    case ("PLM")
+      CS%usePPM = .false.
+    case ("PPM:H3")
+      CS%usePPM = .true.
+    case default
+      call MOM_error(FATAL, "MOM_tracer_advect, tracer_advect_init: "//&
+           "Unknown TRACER_ADVECTION_SCHEME = "//trim(mesg))
+  end select
 
   id_clock_advect = cpu_clock_id('(Ocean advect tracer)', grain=CLOCK_MODULE)
   id_clock_pass = cpu_clock_id('(Ocean tracer halo updates)', grain=CLOCK_ROUTINE)

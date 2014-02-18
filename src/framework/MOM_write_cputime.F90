@@ -43,8 +43,8 @@ public write_cputime, MOM_write_cputime_init, write_cputime_start_clock
 
 !-----------------------------------------------------------------------
 
-integer :: CLOCKS_PER_SEC = 1E+03
-integer :: MAX_TICKS      = 1E+03
+integer :: CLOCKS_PER_SEC = 1000
+integer :: MAX_TICKS      = 1000
 
 type, public :: write_cputime_CS ; private
   real :: maxcpu                !   The maximum amount of cpu time per processor
@@ -170,9 +170,9 @@ subroutine write_cputime(day, n, nmax, CS)
       CS%dn_dcpu_min = (n - CS%prev_n) / d_cputime
     if (CS%dn_dcpu_min >= 0.0) then
       ! Have the model stop itself after 95% of the CPU time has been used.
-      nmax = n + CS%dn_dcpu_min * &
+      nmax = n + INT( CS%dn_dcpu_min * &
           (0.95*CS%maxcpu * REAL(num_pes())*CLOCKS_PER_SEC - &
-           (CS%startup_cputime + CS%cputime2))
+           (CS%startup_cputime + CS%cputime2)) )
 !     if (is_root_pe() ) then
 !       write(*,*) "Resetting nmax to ",nmax," at day",reday
 !     endif

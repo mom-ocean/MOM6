@@ -51,7 +51,7 @@ module MOM_generic_tracer
   use g_tracer_utils,   only: g_tracer_get_pointer,g_tracer_get_alias,g_diag_type
 
   use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
-  use MOM_diag_mediator, only : diag_ptrs
+  use MOM_diag_mediator, only : diag_ctrl, get_diag_time_end
   use MOM_diag_to_Z, only : register_Z_tracer, diag_to_Z_CS
   use MOM_error_handler, only : MOM_error, FATAL, WARNING, NOTE, is_root_pe
   use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
@@ -88,8 +88,8 @@ module MOM_generic_tracer
                               ! initialization code if they are not found in the
                               ! restart files.
 
-     type(diag_ptrs), pointer :: diag ! A pointer to a structure of shareable
-                                ! ocean diagnostic fields and control variables.
+     type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
+                             ! timing of diagnostic output.
      type(MOM_restart_CS), pointer :: restart_CSp => NULL()
 
      real    :: Rho_0
@@ -126,7 +126,7 @@ contains
     type(ocean_grid_type), intent(in)   :: G
     type(param_file_type), intent(in)   :: param_file
     type(MOM_generic_tracer_CS),   pointer      :: CS
-    type(diag_ptrs), target, intent(in) :: diag
+    type(diag_ctrl), target, intent(in) :: diag
     type(tracer_registry_type), pointer     :: tr_Reg
     type(MOM_restart_CS),   pointer     :: restart_CS
     ! This subroutine is used to register tracer fields and subroutines
@@ -136,7 +136,7 @@ contains
     !                         model parameter values.
     !  (in/out)  CS - A pointer that is set to point to the control structure
     !                 for this module
-    !  (in)      diag - A structure containing pointers to common diagnostic fields.
+    !  (in)      diag - A structure that is used to regulate diagnostic output.
     !  (in/out)  tr_Reg - A pointer that is set to point to the control structure
     !                  for the tracer advection and diffusion module.
     !  (in)      restart_CS - A pointer to the restart control structure.
@@ -172,7 +172,7 @@ contains
        g_registered = .true.
     endif
 
-    !nnz: Trick to get the time. I don't know how it works! time=diag%time_end
+    ! diag is an opaque type that contains information about the diagnostics.
     CS%diag => diag
 
   ! Read all relevant parameters and write them to the model log.
@@ -202,7 +202,7 @@ contains
     ntau=1 ! MOM needs the fields at only one time step
 
 
-    !   At this point G%mask2dT and G%axesTL are not allocated.
+    !   At this point G%mask2dT and CS%diag%axesTL are not allocated.
     ! postpone diag_registeration to initialize_MOM_generic_tracer
 
     !Fields cannot be diag registered as they are allocated and have to registered later.
@@ -214,7 +214,7 @@ contains
     ! Initialize all generic tracers
     !
     call generic_tracer_init(G%isc,G%iec,G%jsc,G%jec,G%isd,G%ied,G%jsd,G%jed,&
-         G%ke,ntau,axes,grid_tmask,grid_kmt,CS%diag%time_end)
+         G%ke,ntau,axes,grid_tmask,grid_kmt,get_diag_time_end(CS%diag))
 
 
     !
@@ -383,7 +383,8 @@ contains
        endif
     enddo ; enddo
 
-    call g_tracer_set_common(G%isc,G%iec,G%jsc,G%jec,G%isd,G%ied,G%jsd,G%jed,G%ke,1,G%axesTL,grid_tmask,grid_kmt,day)
+    call g_tracer_set_common(G%isc,G%iec,G%jsc,G%jec,G%isd,G%ied,G%jsd,G%jed,&
+                             G%ke,1,CS%diag%axesTL%handles,grid_tmask,grid_kmt,day)
 
     ! Register generic tracer modules diagnostics
 
@@ -562,7 +563,7 @@ contains
     !
 
     call generic_tracer_source(tv%T,tv%S,rho_dzt,dzt,hblt_depth,G%isd,G%jsd,1,dt,&
-         G%areaT,CS%diag%time_end,&
+         G%areaT,get_diag_time_end(CS%diag),&
          optics%nbands, optics%max_wavelength_band, optics%sw_pen_band, optics%opacity_band)
 
     !
@@ -576,7 +577,7 @@ contains
 
     ! Update bottom fields after vertical processes
 
-    call generic_tracer_update_from_bottom(dt, 1, CS%diag%time_end) !Second arg is tau which is always 1 for MOM
+    call generic_tracer_update_from_bottom(dt, 1, get_diag_time_end(CS%diag)) !Second arg is tau which is always 1 for MOM
 
   end subroutine MOM_generic_tracer_column_physics
 
@@ -807,7 +808,7 @@ contains
     !Output diagnostics via diag_manager for all tracers in this module
     if(.NOT. associated(CS%g_tracer_list)) call mpp_error(FATAL, trim(sub_name)//&
          "No tracer in the list.")
-    call g_tracer_send_diag(CS%g_tracer_list, CS%diag%time_end, tau=1)
+    call g_tracer_send_diag(CS%g_tracer_list, get_diag_time_end(CS%diag), tau=1)
 
   end subroutine MOM_generic_tracer_surface_state
 

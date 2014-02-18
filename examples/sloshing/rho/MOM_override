@@ -1,3 +1,0 @@
-# Blank file in which we can put "overrides" for parameters
-USE_REGRIDDING = True
-REGRIDDING_COORDINATE_MODE = "RHO"

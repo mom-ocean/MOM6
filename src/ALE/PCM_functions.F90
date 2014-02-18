@@ -10,7 +10,6 @@ module PCM_functions
 ! reconstruction using the piecewise constant method (PCM).
 !
 !==============================================================================
-use regrid_grid1d_class, only : grid1D_t
 use regrid_ppoly_class, only : ppoly_t
 
 implicit none ; private
@@ -22,7 +21,7 @@ contains
 !------------------------------------------------------------------------------
 ! pcm_reconstruction
 !------------------------------------------------------------------------------
-subroutine PCM_reconstruction( grid, u, ppoly )
+subroutine PCM_reconstruction( N, u, ppoly )
 !------------------------------------------------------------------------------
 ! Reconstruction by constant polynomials within each cell. There is nothing to
 ! do but this routine is provided to ensure a homogeneous interface
@@ -38,19 +37,19 @@ subroutine PCM_reconstruction( grid, u, ppoly )
 !------------------------------------------------------------------------------
 
   ! Arguments
-  type(grid1D_t), intent(in)     :: grid
-  real, dimension(:), intent(in) :: u
-  type(ppoly_t), intent(inout)   :: ppoly
+  integer,            intent(in)    :: N ! Number of cells
+  real, dimension(:), intent(in)    :: u ! cell averages
+  type(ppoly_t),      intent(inout) :: ppoly
 
   ! Local variables
-  integer   :: k
+  integer :: k
 
   ! The coefficients of the piecewise constant polynomial are simply
   ! the cell averages.
-  ppoly%coefficients(:,1) = u
+  ppoly%coefficients(:,1) = u(:)
 
   ! The edge values are equal to the cell average
-  do k = 1,grid%nb_cells
+  do k = 1,N
     ppoly%E(k,:) = u(k)
   end do
 

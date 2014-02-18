@@ -58,10 +58,9 @@ real, parameter ::  S00 = 1.965933e4, S10 = 1.444304e2, S20 = -1.706103, &
 
 contains
 
-subroutine calculate_density_scalar_UNESCO(T, S, pressure, rho, start, npts)
+subroutine calculate_density_scalar_UNESCO(T, S, pressure, rho)
 real,    intent(in)  :: T, S, pressure
 real,    intent(out) :: rho
-integer, intent(in)  :: start, npts
 ! * Arguments: T - potential temperature relative to the surface in C. *
 ! *  (in)      S - salinity in PSU.                                    *
 ! *  (in)      pressure - pressure in Pa.                              *

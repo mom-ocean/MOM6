@@ -1,0 +1,4 @@
+! Z* coordinate regridding + initialization
+USE_REGRIDDING = True
+REGRIDDING_COORDINATE_MODE = "Z*"
+INTERPOLATION_SCHEME = "PLM"

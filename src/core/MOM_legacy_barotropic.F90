@@ -94,15 +94,15 @@ module MOM_legacy_barotropic
 use MOM_checksums, only : hchksum, uchksum, vchksum
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
 use MOM_diag_mediator, only : post_data, query_averaging_enabled, register_diag_field
-use MOM_diag_mediator, only : safe_alloc_ptr, diag_ptrs, enable_averaging
-use MOM_domains, only : pass_var, pass_vector, min_across_PEs, MOM_domains_init
+use MOM_diag_mediator, only : safe_alloc_ptr, diag_ctrl, enable_averaging
+use MOM_domains, only : pass_var, pass_vector, min_across_PEs, clone_MOM_domain
 use MOM_domains, only : pass_var_start, pass_var_complete
 use MOM_domains, only : pass_vector_start, pass_vector_complete
 use MOM_domains, only : To_All, Scalar_Pair, AGRID, CORNER, MOM_domain_type
 use MOM_domains, only : pass_var_start, pass_var_complete
 use MOM_domains, only : pass_vector_start, pass_vector_complete
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
-use MOM_file_parser, only : get_param, read_param, log_param, log_version, param_file_type
+use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : vardesc
@@ -305,8 +305,8 @@ type, public :: legacy_barotropic_CS ; private
                              ! default is 0.1, and there will probably be real
                              ! problems if this were set close to 1.
   type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
-  type(diag_ptrs), pointer :: diag ! A pointer to a structure of shareable
-                             ! ocean diagnostic fields.
+  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
+                             ! timing of diagnostic output.
   type(MOM_domain_type), pointer :: BT_Domain => NULL()
   type(ocean_grid_type), pointer :: debug_BT_G ! debugging copy of ocean grid
   type(tidal_forcing_CS), pointer :: tides_CSp => NULL()
@@ -315,8 +315,6 @@ type, public :: legacy_barotropic_CS ; private
   integer :: isdw, iedw, jsdw, jedw ! The memory limits of the wide halo arrays.
 
   integer :: id_PFu_bt = -1, id_PFv_bt = -1, id_Coru_bt = -1, id_Corv_bt = -1
-  integer :: id_Nonlnu_bt = -1, id_Nonlnv_bt = -1
-  integer :: id_ubt_flux = -1, id_vbt_flux = -1
   integer :: id_ubtforce = -1, id_vbtforce = -1, id_uaccel = -1, id_vaccel = -1
   integer :: id_visc_rem_u = -1, id_visc_rem_v = -1, id_eta_cor = -1
   integer :: id_ubt = -1, id_vbt = -1, id_eta_bt = -1, id_ubtav = -1, id_vbtav = -1
@@ -325,7 +323,7 @@ type, public :: legacy_barotropic_CS ; private
   integer :: id_uhbt_hifreq = -1, id_vhbt_hifreq = -1, id_eta_pred_hifreq = -1
   integer :: id_gtotn = -1, id_gtots = -1, id_gtote = -1, id_gtotw = -1
   integer :: id_Datu_res = -1, id_Datv_res = -1
-  integer :: id_uhbtav = -1, id_frhatu = -1, id_vhbtav = -1, id_frhatv = -1
+  integer :: id_uhbt = -1, id_frhatu = -1, id_vhbt = -1, id_frhatv = -1
   integer :: id_frhatu1 = -1, id_frhatv1 = -1
 end type legacy_barotropic_CS
 
@@ -409,7 +407,7 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)  :: V_Cor
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(out) :: accel_layer_u
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(out) :: accel_layer_v
-  real, dimension(NIMEM_,NJMEM_),       intent(out)   :: eta_out
+  real, dimension(NIMEM_,NJMEM_),       intent(inout) :: eta_out
   real, dimension(NIMEMB_,NJMEM_),      intent(out)   :: uhbtav
   real, dimension(NIMEM_,NJMEMB_),      intent(out)   :: vhbtav
   type(ocean_grid_type),                intent(inout) :: G
@@ -701,13 +699,14 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
   isvf = is - (num_cycles-1)*stensil ; ievf = ie + (num_cycles-1)*stensil
   jsvf = js - (num_cycles-1)*stensil ; jevf = je + (num_cycles-1)*stensil
 
+  do_ave = query_averaging_enabled(CS%diag)
   find_etaav = present(etaav)
   use_visc_rem = present(visc_rem_u)
   if ((use_visc_rem) .neqv. present(visc_rem_v)) call MOM_error(FATAL, &
       "btstep: Either both visc_rem_u and visc_rem_v or neither"// &
        " one must be present in call to btstep.")
-  find_PF = (ASSOCIATED(CS%diag%PFv_bt) .or. ASSOCIATED(CS%diag%PFu_bt))
-  find_Cor = (ASSOCIATED(CS%diag%Corv_bt) .or. ASSOCIATED(CS%diag%Coru_bt))
+  find_PF = (do_ave .and. ((CS%id_PFu_bt > 0) .or. (CS%id_PFv_bt > 0)))
+  find_Cor = (do_ave .and. ((CS%id_Coru_bt > 0) .or. (CS%id_Corv_bt > 0)))
 
   add_uh0 = .false.
   if (present(uh0)) add_uh0 = associated(uh0)
@@ -1937,15 +1936,6 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
     enddo ; enddo
   enddo
 
-  !   These diagnostics are outside of the query_averaging_enabled test because
-  ! they could be used in the forward algorithm.
-  if (ASSOCIATED(CS%diag%ubt_flux)) then ; do j=js,je ; do I=is-1,ie
-    CS%diag%ubt_flux(I,j) = uhbtav(I,J)
-  enddo ; enddo ; endif
-  if (ASSOCIATED(CS%diag%vbt_flux)) then ; do J=js-1,je ; do i=is,ie
-    CS%diag%vbt_flux(i,J) = vhbtav(i,J)
-  enddo ; enddo ; endif
-
   if (id_clock_calc_post > 0) call cpu_clock_end(id_clock_calc_post)
 
   ! Calculate diagnostic quantities.
@@ -1971,40 +1961,32 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
         CS%vhbt_IC(i,J) = vbt_wtd(i,J) * Datv(i,J) + vhbt0(i,J)
       enddo ; enddo
     endif
-    
-    if (ASSOCIATED(CS%diag%PFu_bt)) then ; do j=js,je ; do I=is-1,ie
-      CS%diag%PFu_bt(I,j) = PFu_bt_sum(I,j) * I_sum_wt_accel
-    enddo ; enddo ; endif
-    if (ASSOCIATED(CS%diag%Coru_bt)) then ; do j=js,je ; do I=is-1,ie
-      CS%diag%Coru_bt(I,j) = Coru_bt_sum(I,j) * I_sum_wt_accel
-    enddo ; enddo ; endif
-    if (ASSOCIATED(CS%diag%Nonlnu_bt)) then
-      do j=js,je ; do I=is-1,ie
-        CS%diag%Nonlnu_bt(I,j) = BT_force_u(I,j)
-      enddo ; enddo
-    endif
-
-    if (ASSOCIATED(CS%diag%PFv_bt)) then ; do J=js-1,je ; do i=is,ie
-      CS%diag%PFv_bt(i,J) = PFv_bt_sum(i,J) * I_sum_wt_accel
-    enddo ; enddo ; endif
-    if (ASSOCIATED(CS%diag%Corv_bt)) then ; do J=js-1,je ; do i=is,ie
-      CS%diag%Corv_bt(i,J) = Corv_bt_sum(i,J) * I_sum_wt_accel
-    enddo ; enddo ; endif
-    if (ASSOCIATED(CS%diag%Nonlnv_bt)) then
-      do J=js-1,je ; do i=is,ie
-        CS%diag%Nonlnv_bt(i,J) = BT_force_v(i,J)
-      enddo ; enddo
-    endif
 
 !  Offer various barotropic terms for averaging.
-    if (CS%id_PFu_bt > 0) call post_data(CS%id_PFu_bt, CS%diag%PFu_bt, CS%diag)
-    if (CS%id_PFv_bt > 0) call post_data(CS%id_PFv_bt, CS%diag%PFv_bt, CS%diag)
-    if (CS%id_Coru_bt > 0) call post_data(CS%id_Coru_bt, CS%diag%Coru_bt, CS%diag)
-    if (CS%id_Corv_bt > 0) call post_data(CS%id_Corv_bt, CS%diag%Corv_bt, CS%diag)
-    if (CS%id_Nonlnu_bt > 0) call post_data(CS%id_Nonlnu_bt, CS%diag%Nonlnu_bt, CS%diag)
-    if (CS%id_Nonlnv_bt > 0) call post_data(CS%id_Nonlnv_bt, CS%diag%Nonlnv_bt, CS%diag)
-    if (CS%id_ubt_flux > 0) call post_data(CS%id_ubt_flux, CS%diag%ubt_flux, CS%diag)
-    if (CS%id_vbt_flux > 0) call post_data(CS%id_vbt_flux, CS%diag%vbt_flux, CS%diag)
+    if (CS%id_PFu_bt > 0) then
+      do j=js,je ; do I=is-1,ie
+        PFu_bt_sum(I,j) = PFu_bt_sum(I,j) * I_sum_wt_accel
+      enddo ; enddo
+      call post_data(CS%id_PFu_bt, PFu_bt_sum(IsdB:IedB,jsd:jed), CS%diag)
+    endif
+    if (CS%id_PFv_bt > 0) then
+      do J=js-1,je ; do i=is,ie
+        PFv_bt_sum(i,J) = PFv_bt_sum(i,J) * I_sum_wt_accel
+      enddo ; enddo
+      call post_data(CS%id_PFv_bt, PFv_bt_sum(isd:ied,JsdB:JedB), CS%diag)
+    endif
+    if (CS%id_Coru_bt > 0) then
+      do j=js,je ; do I=is-1,ie
+        Coru_bt_sum(I,j) = Coru_bt_sum(I,j) * I_sum_wt_accel
+      enddo ; enddo
+      call post_data(CS%id_Coru_bt, Coru_bt_sum(IsdB:IedB,jsd:jed), CS%diag)
+    endif
+    if (CS%id_Corv_bt > 0) then
+      do J=js-1,je ; do i=is,ie
+        Corv_bt_sum(i,J) = Corv_bt_sum(i,J) * I_sum_wt_accel
+      enddo ; enddo
+      call post_data(CS%id_Corv_bt, Corv_bt_sum(isd:ied,JsdB:JedB), CS%diag)
+    endif
     if (CS%id_ubtforce > 0) call post_data(CS%id_ubtforce, BT_force_u(IsdB:IedB,jsd:jed), CS%diag)
     if (CS%id_vbtforce > 0) call post_data(CS%id_vbtforce, BT_force_v(isd:ied,JsdB:JedB), CS%diag)
     if (CS%id_uaccel > 0) call post_data(CS%id_uaccel, u_accel_bt(IsdB:IedB,jsd:jed), CS%diag)
@@ -2028,9 +2010,9 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
     endif
     
     if (CS%id_frhatu > 0) call post_data(CS%id_frhatu, CS%frhatu, CS%diag) 
-    if (CS%id_uhbtav > 0) call post_data(CS%id_uhbtav, uhbtav, CS%diag) 
+    if (CS%id_uhbt > 0) call post_data(CS%id_uhbt, uhbtav, CS%diag) 
     if (CS%id_frhatv > 0) call post_data(CS%id_frhatv, CS%frhatv, CS%diag) 
-    if (CS%id_vhbtav > 0) call post_data(CS%id_vhbtav, vhbtav, CS%diag) 
+    if (CS%id_vhbt > 0) call post_data(CS%id_vhbt, vhbtav, CS%diag) 
 
     if (CS%id_frhatu1 > 0) call post_data(CS%id_frhatu1, CS%frhatu1, CS%diag) 
     if (CS%id_frhatv1 > 0) call post_data(CS%id_frhatv1, CS%frhatv1, CS%diag) 
@@ -3442,7 +3424,7 @@ subroutine legacy_barotropic_init(u, v, h, eta, Time, G, param_file, diag, CS, &
   type(time_type), target,          intent(in)    :: Time
   type(ocean_grid_type),            intent(inout) :: G
   type(param_file_type),            intent(in)    :: param_file
-  type(diag_ptrs), target,          intent(inout) :: diag
+  type(diag_ctrl), target,          intent(inout) :: diag
   type(legacy_barotropic_CS),       pointer       :: CS
   type(MOM_restart_CS),             pointer       :: restart_CS
   type(BT_cont_type),     optional, pointer       :: BT_cont
@@ -3459,7 +3441,7 @@ subroutine legacy_barotropic_init(u, v, h, eta, Time, G, param_file, diag, CS, &
 !  (in)      G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
-!  (in)      diag - A structure containing pointers to common diagnostic fields.
+!  (in)      diag - A structure that is used to regulate diagnostic output.
 !  (in/out)  CS - A pointer to the control structure for this module that is
 !                 set in register_barotropic_restarts.
 !  (in)      restart_CS - A pointer to the restart control structure.
@@ -3701,7 +3683,7 @@ subroutine legacy_barotropic_init(u, v, h, eta, Time, G, param_file, diag, CS, &
   if (apply_bt_drag) then ; CS%drag_amp = 1.0 ; else ; CS%drag_amp = 0.0 ; endif
 
   ! Initialize a version of the MOM domain that is specific to the barotropic solver.
-  call MOM_domains_init(CS%BT_Domain, param_file, min_halo=wd_halos, symmetric=.true.)
+  call clone_MOM_domain(G%Domain, CS%BT_Domain, min_halo=wd_halos, symmetric=.true.)
 #ifdef STATIC_MEMORY_
   if (wd_halos(1) /= WHALOI_+NIHALO_) call MOM_error(FATAL, "barotropic_init: "//&
           "Barotropic x-halo sizes are incorrectly resized with STATIC_MEMORY_.")
@@ -3749,6 +3731,10 @@ subroutine legacy_barotropic_init(u, v, h, eta, Time, G, param_file, diag, CS, &
     CS%debug_BT_G%iec=G%iec
     CS%debug_BT_G%jsc=G%jsc
     CS%debug_BT_G%jec=G%jec
+    CS%debug_BT_G%IscB=G%isc-1
+    CS%debug_BT_G%IecB=G%iec
+    CS%debug_BT_G%JscB=G%jsc-1
+    CS%debug_BT_G%JecB=G%jec
     CS%debug_BT_G%isd=CS%isdw
     CS%debug_BT_G%ied=CS%iedw
     CS%debug_BT_G%jsd=CS%jsdw
@@ -3814,8 +3800,8 @@ subroutine legacy_barotropic_init(u, v, h, eta, Time, G, param_file, diag, CS, &
   call legacy_set_dtbt(G, CS, gtot_est = gtot_estimate, SSH_add = SSH_extra)
   if (dtbt_input > 0.0) CS%dtbt = dtbt_input
 
-  call log_param(param_file, mod, "DTBT as used", CS%dtbt)
-  call log_param(param_file, mod, "estimated maximum DTBT", CS%dtbt_max)
+  call log_param(param_file, mod, "!DTBT as used", CS%dtbt)
+  call log_param(param_file, mod, "!estimated maximum DTBT", CS%dtbt_max)
 
   ! ubtav, vbtav, ubt_IC, vbt_IC, uhbt_IC, and vhbt_IC are allocated and
   ! initialized in register_barotropic_restarts.
@@ -3826,100 +3812,84 @@ subroutine legacy_barotropic_init(u, v, h, eta, Time, G, param_file, diag, CS, &
     thickness_units = "kilogram meter-2" ; flux_units = "kilogram second-1"
   endif
 
-  CS%id_PFu_bt = register_diag_field('ocean_model', 'PFuBT', G%axesCu1, Time, &
+  CS%id_PFu_bt = register_diag_field('ocean_model', 'PFuBT', diag%axesCu1, Time, &
       'Zonal Anomalous Barotropic Pressure Force Force Acceleration', 'meter second-2')
-  CS%id_PFv_bt = register_diag_field('ocean_model', 'PFvBT', G%axesCv1, Time, &
+  CS%id_PFv_bt = register_diag_field('ocean_model', 'PFvBT', diag%axesCv1, Time, &
       'Meridional Anomalous Barotropic Pressure Force Acceleration', 'meter second-2')
-  CS%id_Coru_bt = register_diag_field('ocean_model', 'CoruBT', G%axesCu1, Time, &
+  CS%id_Coru_bt = register_diag_field('ocean_model', 'CoruBT', diag%axesCu1, Time, &
       'Zonal Barotropic Coriolis Acceleration', 'meter second-2')
-  CS%id_Corv_bt = register_diag_field('ocean_model', 'CorvBT', G%axesCv1, Time, &
+  CS%id_Corv_bt = register_diag_field('ocean_model', 'CorvBT', diag%axesCv1, Time, &
       'Meridional Barotropic Coriolis Acceleration', 'meter second-2')
-  CS%id_Nonlnu_bt = register_diag_field('ocean_model', 'NluBT', G%axesCu1, Time, &
-      'Zonal Barotropic Nonlinear Acceleration', 'meter second-2')
-  CS%id_Nonlnv_bt = register_diag_field('ocean_model', 'NlvBT', G%axesCv1, Time, &
-      'Meridional Barotropic Nonlinear Acceleration', 'meter second-2')
-  CS%id_ubt_flux = register_diag_field('ocean_model', 'uhbt', G%axesCu1, Time, &
-      'Zonal Barotropic Mass Flux', flux_units)
-  CS%id_vbt_flux = register_diag_field('ocean_model', 'vhbt', G%axesCv1, Time, &
-      'Meridional Barotropic Mass Flux', flux_units)
-  CS%id_uaccel = register_diag_field('ocean_model', 'u_accel_bt', G%axesCu1, Time, &
+  CS%id_uaccel = register_diag_field('ocean_model', 'u_accel_bt', diag%axesCu1, Time, &
       'Barotropic zonal acceleration', 'meter second-2')
-  CS%id_vaccel = register_diag_field('ocean_model', 'v_accel_bt', G%axesCv1, Time, &
+  CS%id_vaccel = register_diag_field('ocean_model', 'v_accel_bt', diag%axesCv1, Time, &
       'Barotropic meridional acceleration', 'meter second-2')
-  CS%id_ubtforce = register_diag_field('ocean_model', 'ubtforce', G%axesCu1, Time, &
+  CS%id_ubtforce = register_diag_field('ocean_model', 'ubtforce', diag%axesCu1, Time, &
       'Barotropic zonal acceleration from baroclinic terms', 'meter second-2')
-  CS%id_vbtforce = register_diag_field('ocean_model', 'vbtforce', G%axesCv1, Time, &
+  CS%id_vbtforce = register_diag_field('ocean_model', 'vbtforce', diag%axesCv1, Time, &
       'Barotropic meridional acceleration from baroclinic terms', 'meter second-2')
 
-  CS%id_eta_bt = register_diag_field('ocean_model', 'eta_bt', G%axesT1, Time, &
+  CS%id_eta_bt = register_diag_field('ocean_model', 'eta_bt', diag%axesT1, Time, &
       'Barotropic end SSH', thickness_units)
-  CS%id_ubt = register_diag_field('ocean_model', 'ubt', G%axesCu1, Time, &
+  CS%id_ubt = register_diag_field('ocean_model', 'ubt', diag%axesCu1, Time, &
       'Barotropic end zonal velocity', 'meter second-1')
-  CS%id_vbt = register_diag_field('ocean_model', 'vbt', G%axesCv1, Time, &
+  CS%id_vbt = register_diag_field('ocean_model', 'vbt', diag%axesCv1, Time, &
       'Barotropic end meridional velocity', 'meter second-1')
-  CS%id_eta_st = register_diag_field('ocean_model', 'eta_st', G%axesT1, Time, &
+  CS%id_eta_st = register_diag_field('ocean_model', 'eta_st', diag%axesT1, Time, &
       'Barotropic start SSH', thickness_units)
-  CS%id_ubt_st = register_diag_field('ocean_model', 'ubt_st', G%axesCu1, Time, &
+  CS%id_ubt_st = register_diag_field('ocean_model', 'ubt_st', diag%axesCu1, Time, &
       'Barotropic start zonal velocity', 'meter second-1')
-  CS%id_vbt_st = register_diag_field('ocean_model', 'vbt_st', G%axesCv1, Time, &
+  CS%id_vbt_st = register_diag_field('ocean_model', 'vbt_st', diag%axesCv1, Time, &
       'Barotropic start meridional velocity', 'meter second-1')
-  CS%id_ubtav = register_diag_field('ocean_model', 'ubtav', G%axesCu1, Time, &
+  CS%id_ubtav = register_diag_field('ocean_model', 'ubtav', diag%axesCu1, Time, &
       'Barotropic time-average zonal velocity', 'meter second-1')
-  CS%id_vbtav = register_diag_field('ocean_model', 'vbtav', G%axesCv1, Time, &
+  CS%id_vbtav = register_diag_field('ocean_model', 'vbtav', diag%axesCv1, Time, &
       'Barotropic time-average meridional velocity', 'meter second-1')
-  CS%id_eta_cor = register_diag_field('ocean_model', 'eta_cor', G%axesT1, Time, &
+  CS%id_eta_cor = register_diag_field('ocean_model', 'eta_cor', diag%axesT1, Time, &
       'Corrective mass flux', 'meter second-1')
-  CS%id_visc_rem_u = register_diag_field('ocean_model', 'visc_rem_u', G%axesCuL, Time, &
+  CS%id_visc_rem_u = register_diag_field('ocean_model', 'visc_rem_u', diag%axesCuL, Time, &
       'Viscous remnant at u', 'Nondim')
-  CS%id_visc_rem_v = register_diag_field('ocean_model', 'visc_rem_v', G%axesCvL, Time, &
+  CS%id_visc_rem_v = register_diag_field('ocean_model', 'visc_rem_v', diag%axesCvL, Time, &
       'Viscous remnant at v', 'Nondim')
-  CS%id_gtotn = register_diag_field('ocean_model', 'gtot_n', G%axesT1, Time, &
+  CS%id_gtotn = register_diag_field('ocean_model', 'gtot_n', diag%axesT1, Time, &
       'gtot to North', 'm s-2')
-  CS%id_gtots = register_diag_field('ocean_model', 'gtot_s', G%axesT1, Time, &
+  CS%id_gtots = register_diag_field('ocean_model', 'gtot_s', diag%axesT1, Time, &
       'gtot to South', 'm s-2')
-  CS%id_gtote = register_diag_field('ocean_model', 'gtot_e', G%axesT1, Time, &
+  CS%id_gtote = register_diag_field('ocean_model', 'gtot_e', diag%axesT1, Time, &
       'gtot to East', 'm s-2')
-  CS%id_gtotw = register_diag_field('ocean_model', 'gtot_w', G%axesT1, Time, &
+  CS%id_gtotw = register_diag_field('ocean_model', 'gtot_w', diag%axesT1, Time, &
       'gtot to West', 'm s-2')
-  CS%id_eta_hifreq = register_diag_field('ocean_model', 'eta_hifreq', G%axesT1, Time, &
+  CS%id_eta_hifreq = register_diag_field('ocean_model', 'eta_hifreq', diag%axesT1, Time, &
       'High Frequency Barotropic SSH', thickness_units)
-  CS%id_ubt_hifreq = register_diag_field('ocean_model', 'ubt_hifreq', G%axesCu1, Time, &
+  CS%id_ubt_hifreq = register_diag_field('ocean_model', 'ubt_hifreq', diag%axesCu1, Time, &
       'High Frequency Barotropic zonal velocity', 'meter second-1')
-  CS%id_vbt_hifreq = register_diag_field('ocean_model', 'vbt_hifreq', G%axesCv1, Time, &
+  CS%id_vbt_hifreq = register_diag_field('ocean_model', 'vbt_hifreq', diag%axesCv1, Time, &
       'High Frequency Barotropic meridional velocity', 'meter second-1')
-  CS%id_eta_pred_hifreq = register_diag_field('ocean_model', 'eta_pred_hifreq', G%axesT1, Time, &
+  CS%id_eta_pred_hifreq = register_diag_field('ocean_model', 'eta_pred_hifreq', diag%axesT1, Time, &
       'High Frequency Predictor Barotropic SSH', thickness_units)
-  CS%id_uhbt_hifreq = register_diag_field('ocean_model', 'uhbt_hifreq', G%axesCu1, Time, &
+  CS%id_uhbt_hifreq = register_diag_field('ocean_model', 'uhbt_hifreq', diag%axesCu1, Time, &
       'High Frequency Barotropic zonal transport', 'meter3 second-1')
-  CS%id_vhbt_hifreq = register_diag_field('ocean_model', 'vhbt_hifreq', G%axesCv1, Time, &
+  CS%id_vhbt_hifreq = register_diag_field('ocean_model', 'vhbt_hifreq', diag%axesCv1, Time, &
       'High Frequency Barotropic meridional transport', 'meter3 second-1')
   if (CS%rescale_D_bt) then
-    CS%id_Datu_res = register_diag_field('ocean_model', 'Datu_res', G%axesCu1, Time, &
+    CS%id_Datu_res = register_diag_field('ocean_model', 'Datu_res', diag%axesCu1, Time, &
       'Rescaling for zonal face area in barotropic continuity', 'Nondimensional')
-    CS%id_Datv_res = register_diag_field('ocean_model', 'Datv_res', G%axesCv1, Time, &
+    CS%id_Datv_res = register_diag_field('ocean_model', 'Datv_res', diag%axesCv1, Time, &
       'Rescaling for meridional face area in barotropic continuity', 'Nondimensional')
   endif
-  CS%id_frhatu = register_diag_field('ocean_model', 'frhatu', G%axesCuL, Time, &
+  CS%id_frhatu = register_diag_field('ocean_model', 'frhatu', diag%axesCuL, Time, &
       'Fractional thickness of layers in u-columns', 'Nondim')
-  CS%id_frhatv = register_diag_field('ocean_model', 'frhatv', G%axesCvL, Time, &
+  CS%id_frhatv = register_diag_field('ocean_model', 'frhatv', diag%axesCvL, Time, &
       'Fractional thickness of layers in v-columns', 'Nondim')
-  CS%id_frhatu1 = register_diag_field('ocean_model', 'frhatu1', G%axesCuL, Time, &
+  CS%id_frhatu1 = register_diag_field('ocean_model', 'frhatu1', diag%axesCuL, Time, &
       'Predictor Fractional thickness of layers in u-columns', 'Nondim')
-  CS%id_frhatv1 = register_diag_field('ocean_model', 'frhatv1', G%axesCvL, Time, &
+  CS%id_frhatv1 = register_diag_field('ocean_model', 'frhatv1', diag%axesCvL, Time, &
       'Predictor Fractional thickness of layers in v-columns', 'Nondim')
-  CS%id_uhbtav = register_diag_field('ocean_model', 'uhbtav', G%axesCu1, Time, &
+  CS%id_uhbt = register_diag_field('ocean_model', 'uhbt', diag%axesCu1, Time, &
       'Barotropic zonal transport averaged over a baroclinic step', 'meter3 second-1')
-  CS%id_vhbtav = register_diag_field('ocean_model', 'vhbtav', G%axesCv1, Time, &
+  CS%id_vhbt = register_diag_field('ocean_model', 'vhbt', diag%axesCv1, Time, &
       'Barotropic meridional transport averaged over a baroclinic step', 'meter3 second-1')
 
-  if (CS%id_PFu_bt > 0)    call safe_alloc_ptr(diag%PFu_bt, IsdB,IedB,jsd,jed)
-  if (CS%id_PFv_bt > 0)    call safe_alloc_ptr(diag%PFv_bt, isd,ied,JsdB,JedB)
-  if (CS%id_Coru_bt > 0)   call safe_alloc_ptr(diag%Coru_bt, IsdB,IedB,jsd,jed)
-  if (CS%id_Corv_bt > 0)   call safe_alloc_ptr(diag%Corv_bt, isd,ied,JsdB,JedB)
-  if (CS%id_Nonlnu_bt > 0) call safe_alloc_ptr(diag%Nonlnu_bt, IsdB,IedB,jsd,jed)
-  if (CS%id_Nonlnv_bt > 0) call safe_alloc_ptr(diag%Nonlnv_bt, isd,ied,JsdB,JedB)
-  if (CS%id_ubt_flux > 0)  call safe_alloc_ptr(diag%ubt_flux, IsdB,IedB,jsd,jed)
-  if (CS%id_vbt_flux > 0)  call safe_alloc_ptr(diag%vbt_flux, isd,ied,JsdB,JedB)
   if (CS%id_frhatu1 > 0) call safe_alloc_ptr(CS%frhatu1, IsdB,IedB,jsd,jed,nz)
   if (CS%id_frhatv1 > 0) call safe_alloc_ptr(CS%frhatv1, isd,ied,JsdB,JedB,nz)
 

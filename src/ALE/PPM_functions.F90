@@ -10,7 +10,6 @@ module PPM_functions
 ! reconstruction using the piecewise parabolic method (PPM).
 !
 !==============================================================================
-use regrid_grid1d_class, only : grid1D_t
 use regrid_ppoly_class, only : ppoly_t
 use regrid_edge_values, only : bound_edge_values, check_discontinuous_edge_values
 
@@ -23,7 +22,7 @@ contains
 !------------------------------------------------------------------------------
 ! PPM_reconstruction
 ! -----------------------------------------------------------------------------
-subroutine PPM_reconstruction( grid, u, ppoly )
+subroutine PPM_reconstruction( N, h, u, ppoly )
 !------------------------------------------------------------------------------
 ! Reconstruction by quadratic polynomials within each cell.
 !
@@ -38,20 +37,18 @@ subroutine PPM_reconstruction( grid, u, ppoly )
 !------------------------------------------------------------------------------
 
   ! Arguments
-  type(grid1D_t), intent(in)     :: grid
-  real, dimension(:), intent(in) :: u
-  type(ppoly_t), intent(inout)   :: ppoly
+  integer,            intent(in)    :: N ! Number of cells
+  real, dimension(:), intent(in)    :: h ! cell widths (size N)
+  real, dimension(:), intent(in)    :: u ! cell averages (size N)
+  type(ppoly_t),      intent(inout) :: ppoly
 
   ! Local variables
   integer   :: k            ! loop index
-  integer   :: N            ! number of cells
   real      :: u0_l, u0_r   ! edge values (left and right)
   real      :: a, b, c      ! parabola coefficients
   
-  N = grid%nb_cells
-
   ! PPM limiter
-  call PPM_limiter_standard( grid, u, ppoly )
+  call PPM_limiter_standard( N, h, u, ppoly )
 
   ! Loop on cells to construct the parabola within each cell
   do k = 1,N
@@ -76,7 +73,7 @@ end subroutine PPM_reconstruction
 !------------------------------------------------------------------------------
 ! Limit ppm
 ! -----------------------------------------------------------------------------
-subroutine PPM_limiter_standard( grid, u, ppoly )
+subroutine PPM_limiter_standard( N, h, u, ppoly )
 !------------------------------------------------------------------------------
 ! Standard PPM limiter (Colella & Woodward, JCP 1984).
 !
@@ -89,24 +86,22 @@ subroutine PPM_limiter_standard( grid, u, ppoly )
 !------------------------------------------------------------------------------
 
   ! Arguments
-  type(grid1D_t), intent(in)     :: grid
-  real, dimension(:), intent(in) :: u
-  type(ppoly_t), intent(inout)   :: ppoly
+  integer,            intent(in)    :: N ! Number of cells
+  real, dimension(:), intent(in)    :: h ! cell widths (size N)
+  real, dimension(:), intent(in)    :: u ! cell averages (size N)
+  type(ppoly_t),      intent(inout) :: ppoly
 
   ! Local variables
   integer   :: k                ! loop index
-  integer   :: N                ! number of cells
   real      :: u_l, u_c, u_r    ! cell averages (left, center and right)
   real      :: u0_l, u0_r       ! edge values (left and right)
   real      :: expr1, expr2
   
-  N = grid%nb_cells
-
   ! Bound edge values
-  call bound_edge_values( grid, u, ppoly%E )
+  call bound_edge_values( N, h, u, ppoly%E )
 
   ! Make discontinuous edge values monotonic
-  call check_discontinuous_edge_values( grid, u, ppoly%E )
+  call check_discontinuous_edge_values( N, u, ppoly%E )
 
   ! Loop on interior cells to apply the standard 
   ! PPM limiter (Colella & Woodward, JCP 84)
@@ -153,7 +148,7 @@ end subroutine PPM_limiter_standard
 !------------------------------------------------------------------------------
 ! ppm boundary extrapolation
 ! -----------------------------------------------------------------------------
-subroutine PPM_boundary_extrapolation( grid, u, ppoly )
+subroutine PPM_boundary_extrapolation( N, h, u, ppoly )
 !------------------------------------------------------------------------------
 ! Reconstruction by parabolas within boundary cells.
 !
@@ -177,30 +172,26 @@ subroutine PPM_boundary_extrapolation( grid, u, ppoly )
 !------------------------------------------------------------------------------
 
   ! Arguments
-  type(grid1D_t), intent(in)      :: grid
-  real, dimension(:), intent(in)  :: u
-  type(ppoly_t), intent(inout)    :: ppoly
+  integer,            intent(in)    :: N ! Number of cells
+  real, dimension(:), intent(in)    :: h ! cell widths (size N)
+  real, dimension(:), intent(in)    :: u ! cell averages (size N)
+  type(ppoly_t),      intent(inout) :: ppoly
   
   ! Local variables
-  integer       :: k        ! loop index
-  integer       :: N        ! number of cells
   integer       :: i0, i1
-  integer       :: monotonic
   real          :: u0, u1
   real          :: h0, h1
-  real          :: a, b, c, d, e
+  real          :: a, b, c
   real          :: u0_l, u0_r
   real          :: u1_l, u1_r
   real          :: slope
   real          :: exp1, exp2
 
-  N = grid%nb_cells
-  
   ! ----- Left boundary -----
   i0 = 1
   i1 = 2
-  h0 = grid%h(i0)
-  h1 = grid%h(i1)
+  h0 = h(i0)
+  h1 = h(i1)
   u0 = u(i0)
   u1 = u(i1)
 
@@ -251,8 +242,8 @@ subroutine PPM_boundary_extrapolation( grid, u, ppoly )
   ! ----- Right boundary -----
   i0 = N-1
   i1 = N
-  h0 = grid%h(i0)
-  h1 = grid%h(i1)
+  h0 = h(i0)
+  h1 = h(i1)
   u0 = u(i0)
   u1 = u(i1)
 

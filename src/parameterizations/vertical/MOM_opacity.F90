@@ -52,7 +52,7 @@ module MOM_opacity
 !*  The boundaries always run through q grid points (x).               *
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
-use MOM_diag_mediator, only : time_type, diag_ptrs, safe_alloc_ptr, post_data
+use MOM_diag_mediator, only : time_type, diag_ctrl, safe_alloc_ptr, post_data
 use MOM_diag_mediator, only : query_averaging_enabled, register_diag_field
 use MOM_time_manager, only :  get_time
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING
@@ -95,8 +95,8 @@ type, public :: opacity_CS ; private
                              ! when var_pen_sw is defined and reading from file.
   logical ::  chl_from_file  !   If true, chl_a is read from a file.
   type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
-  type(diag_ptrs), pointer :: diag ! A pointer to a structure of shareable
-                             ! ocean diagnostic fields.
+  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
+                             ! timing of diagnostic output.
   type(tracer_flow_control_CS), pointer  :: tracer_flow_CSp => NULL() 
                     ! A pointer to the control structure of the tracer modules.
 
@@ -424,7 +424,7 @@ subroutine opacity_init(Time, G, param_file, diag, tracer_flow, CS, optics)
   type(time_type), target, intent(in)    :: Time
   type(ocean_grid_type),   intent(in)    :: G
   type(param_file_type),   intent(in)    :: param_file
-  type(diag_ptrs), target, intent(inout) :: diag
+  type(diag_ctrl), target, intent(inout) :: diag
   type(tracer_flow_control_CS), target, intent(in) :: tracer_flow 
   type(opacity_CS),        pointer       :: CS  
   type(optics_type),       pointer       :: optics
@@ -432,7 +432,7 @@ subroutine opacity_init(Time, G, param_file, diag, tracer_flow, CS, optics)
 !  (in)      G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
-!  (in)      diag - A structure containing pointers to common diagnostic fields.
+!  (in)      diag - A structure that is used to regulate diagnostic output.
 !  
 !  (in/out)  CS - A pointer that is set to point to the control structure
 !                  for this module
@@ -557,19 +557,19 @@ subroutine opacity_init(Time, G, param_file, diag, tracer_flow, CS, optics)
     allocate(optics%sw_pen_band(optics%nbands,isd:ied,jsd:jed))
   allocate(CS%id_opacity(optics%nbands)) ; CS%id_opacity(:) = -1
 
-  CS%id_sw_pen = register_diag_field('ocean_model', 'SW_pen', G%axesT1, Time, &
+  CS%id_sw_pen = register_diag_field('ocean_model', 'SW_pen', diag%axesT1, Time, &
       'Penetrating shortwave radiation flux into ocean', 'Watt meter-2')
-  CS%id_sw_vis_pen = register_diag_field('ocean_model', 'SW_vis_pen', G%axesT1, Time, &
+  CS%id_sw_vis_pen = register_diag_field('ocean_model', 'SW_vis_pen', diag%axesT1, Time, &
       'Visible penetrating shortwave radiation flux into ocean', 'Watt meter-2')
   do n=1,optics%nbands
     write(bandnum,'(i3)') n
     shortname = 'opac_'//trim(adjustl(bandnum))
     longname = 'Opacity for shortwave radiation in band '//trim(adjustl(bandnum))
-    CS%id_opacity(n) = register_diag_field('ocean_model', shortname, G%axesTL, Time, &
+    CS%id_opacity(n) = register_diag_field('ocean_model', shortname, diag%axesTL, Time, &
       longname, 'meter-1')
   enddo
   if (CS%var_pen_sw) &
-    CS%id_chl = register_diag_field('ocean_model', 'Chl_opac', G%axesT1, Time, &
+    CS%id_chl = register_diag_field('ocean_model', 'Chl_opac', diag%axesT1, Time, &
         'Surface chlorophyll A concentration used to find opacity', 'mg meter-3')
 
 

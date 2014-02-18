@@ -59,7 +59,7 @@ module MOM_mixed_layer_restrat
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 
-use MOM_diag_mediator, only : post_data, query_averaging_enabled, diag_ptrs
+use MOM_diag_mediator, only : post_data, query_averaging_enabled, diag_ctrl
 use MOM_diag_mediator, only : register_diag_field, safe_alloc_ptr, time_type
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_version, param_file_type
@@ -80,8 +80,8 @@ type, public :: mixedlayer_restrat_CS ; private
                              ! predicted based on the resolved  gradients.  This
                              ! increases with grid spacing^2, up to something
                              ! of order 500.
-  type(diag_ptrs), pointer :: diag ! A pointer to a structure of shareable
-                             ! ocean diagnostic fields and control variables.
+  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
+                             ! timing of diagnostic output.
   integer :: id_urestrat_time , id_vrestrat_time 
   integer :: id_uhml = -1, id_vhml = -1
 end type mixedlayer_restrat_CS
@@ -317,13 +317,13 @@ subroutine mixedlayer_restrat_init(Time, G, param_file, diag, CS)
   type(time_type),             intent(in)    :: Time
   type(ocean_grid_type),       intent(in)    :: G
   type(param_file_type),       intent(in)    :: param_file
-  type(diag_ptrs), target,     intent(inout) :: diag
+  type(diag_ctrl), target,     intent(inout) :: diag
   type(mixedlayer_restrat_CS), pointer       :: CS
 ! Arguments: Time - The current model time.
 !  (in)      G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
-!  (in)      diag - A structure containing pointers to common diagnostic fields.
+!  (in)      diag - A structure that is used to regulate diagnostic output.
 !  (in/out)  CS - A pointer that is set to point to the control structure
 !                  for this module
 ! This include declares and sets the variable "version".
@@ -355,13 +355,13 @@ subroutine mixedlayer_restrat_init(Time, G, param_file, diag, CS)
              "grid spacing over the deformation radius, as detailed \n"//&
              "by Fox-Kemper et al. (2010)", units="nondim", default=0.0)
 
-  CS%id_uhml = register_diag_field('ocean_model', 'uhml', G%axesCuL, Time, &
+  CS%id_uhml = register_diag_field('ocean_model', 'uhml', diag%axesCuL, Time, &
       'Zonal Thickness Flux to Restratify Mixed Layer', flux_units)
-  CS%id_vhml = register_diag_field('ocean_model', 'vhml', G%axesCvL, Time, &
+  CS%id_vhml = register_diag_field('ocean_model', 'vhml', diag%axesCvL, Time, &
       'Meridional Thickness Flux to Restratify Mixed Layer', flux_units)
-  CS%id_urestrat_time = register_diag_field('ocean_model', 'MLu_restrat_time', G%axesCu1, Time, &
+  CS%id_urestrat_time = register_diag_field('ocean_model', 'MLu_restrat_time', diag%axesCu1, Time, &
       'Mixed Layer Zonal Restratification Timescale', 'second')
-  CS%id_vrestrat_time = register_diag_field('ocean_model', 'MLv_restrat_time', G%axesCu1, Time, &
+  CS%id_vrestrat_time = register_diag_field('ocean_model', 'MLv_restrat_time', diag%axesCu1, Time, &
       'Mixed Layer Meridional Restratification Timescale', 'second')
 
 end subroutine mixedlayer_restrat_init

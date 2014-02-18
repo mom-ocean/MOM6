@@ -46,8 +46,6 @@ module MOM_restart
 !*    query_initialized returns 1 if a field (or the entire restart    *
 !*  file) has been initialized from a restart file and 0 otherwise.    *
 !*                                                                     *
-!*  Macros written all in capital letters are defined in MOM_memory.h. *
-!*                                                                     *
 !*     A small fragment of the grid is shown below:                    *
 !*                                                                     *
 !*    j+1  x ^ x ^ x   At x:  q, CoriolisBu                            *
@@ -77,10 +75,8 @@ use MOM_time_manager, only : days_in_month
 
 implicit none ; private
 
-#include <MOM_memory.h>
-
 public restart_init, restart_end, restore_state, register_restart_field
-public save_restart, query_initialized, restart_init_end
+public save_restart, query_initialized, restart_init_end, vardesc
 
 type p3d
   real, dimension(:,:,:), pointer :: p => NULL()
@@ -628,7 +624,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename)
                                         ! current and next files.
   integer :: unit                       ! The mpp unit of the open file.
   integer :: m, nz, num_files, var_periods
-  integer :: seconds, days, year, month, hour, minute, err
+  integer :: seconds, days, year, month, hour, minute
   character(len=8) :: t_grid, t_grid_read
   real :: restart_time
 
@@ -783,9 +779,8 @@ subroutine restore_state(filename, directory, day, G, CS)
                              ! current file name.
   integer :: n, m, start_of_day, num_days
   integer :: isL, ieL, jsL, jeL, is0, js0
-  integer :: fsize(4), sizes(7)
+  integer :: sizes(7)
   integer :: ndim, nvar, natt, ntime, pos
-  integer :: nz
   integer :: unit(CS%max_fields) ! The mpp unit of all open files.
   logical :: unit_is_global(CS%max_fields) ! True if the file is global.
   character(len=200) :: unit_path(CS%max_fields) ! The file names.
@@ -1119,9 +1114,8 @@ subroutine restart_init(param_file, CS, restart_root)
                  "file support (4Gb), otherwise the limit is 2Gb.", &
                  default=.true.)
   call get_param(param_file, mod, "MAX_FIELDS", CS%max_fields, &
-                 "The maximum number of restart fields that can be used \n"//&
-                 "The default value is set in MOM_memory.h as MAX_FIELDS_.", &
-                 default=MAX_FIELDS_)
+                 "The maximum number of restart fields that can be used.", &
+                 default=100)
 
   allocate(CS%restart_field(CS%max_fields))
   allocate(CS%var_ptr0d(CS%max_fields))

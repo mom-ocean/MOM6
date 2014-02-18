@@ -51,7 +51,7 @@ module MOM_geothermal
 !********+*********+*********+*********+*********+*********+*********+**
 
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
-use MOM_diag_mediator, only : register_static_field, time_type, diag_ptrs
+use MOM_diag_mediator, only : register_static_field, time_type, diag_ctrl
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_io, only : read_data, slasher
@@ -79,8 +79,8 @@ type, public :: geothermal_CS ; private
                              ! there is no heat to apply.
 
   type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
-  type(diag_ptrs), pointer :: diag ! A pointer to a structure of shareable
-                             ! ocean diagnostic fields.
+  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
+                             ! timing of diagnostic output.
 end type geothermal_CS
 
 contains
@@ -229,7 +229,7 @@ subroutine geothermal(h, tv, dt, ea, eb, G, CS)
             h_geo_rem(i) = h_geo_rem(i) - h_heated
           endif
 
-          if (k<=nkmb) then
+          if (k<=nkmb .or. nkmb<=0) then
             ! Simply heat the layer; convective adjustment occurs later
             ! if necessary.
             k_tgt = k
@@ -243,11 +243,11 @@ subroutine geothermal(h, tv, dt, ea, eb, G, CS)
             Rcv_tgt = G%Rlay(k-1)
           endif
 
-          if (k<=nkmb) then
+          if (k<=nkmb .or. nkmb<=0) then
             Rcv = 0.0 ; dRcv_dT = 0.0 ! Is this OK?
           else
             call calculate_density(tv%T(i,j,k), tv%S(i,j,k), tv%P_Ref, &
-                         Rcv, 1, 1, tv%eqn_of_state)
+                         Rcv, tv%eqn_of_state)
             T2(1) = tv%T(i,j,k) ; S2(1) = tv%S(i,j,k)
             T2(2) = tv%T(i,j,k_tgt) ; S2(2) = tv%S(i,j,k_tgt)
             call calculate_density_derivs(T2(:), S2(:), p_Ref(:), &
@@ -255,11 +255,12 @@ subroutine geothermal(h, tv, dt, ea, eb, G, CS)
             dRcv_dT = 0.5*(dRcv_dT_(1) + dRcv_dT_(2)) 
           endif
 
-          if ((dRcv_dT >= 0.0) .or. (k<=nkmb)) then
+          if ((dRcv_dT >= 0.0) .or. (k<=nkmb .or. nkmb<=0)) then
+            ! This applies to variable density layers.
             heat_in_place = heat_avail
             heat_trans = 0.0
           elseif (dRcv_dT <= CS%dRcv_dT_inplace) then
-            ! This is the option that usually applies in the ocean.
+            ! This is the option that usually applies in isopycnal coordinates.
             heat_in_place = min(heat_avail, max(0.0, h(i,j,k) * ((G%Rlay(k)-Rcv) / dRcv_dT)))
             heat_trans = heat_avail - heat_in_place
           else
@@ -271,9 +272,10 @@ subroutine geothermal(h, tv, dt, ea, eb, G, CS)
           endif
 
           if (heat_in_place > 0.0) then
-            ! This only arises for relatively fresh water near the 
-            ! freezing point.  Heat in place, and things will eventually
-            ! sort themselves out, if only because the water will warm to
+            ! This applies to variable density layers. In isopycnal coordinates
+            ! this only arises for relatively fresh water near the freezing 
+            ! point, in which case heating in place will eventually cause things
+            ! to sort themselves out, if only because the water will warm to
             ! the temperature of maximum density.
             dTemp = heat_in_place / (h(i,j,k) + H_neglect)
             tv%T(i,j,k) = tv%T(i,j,k) + dTemp
@@ -354,13 +356,13 @@ subroutine geothermal_init(Time, G, param_file, diag, CS)
   type(time_type), target, intent(in)    :: Time
   type(ocean_grid_type),   intent(in)    :: G
   type(param_file_type),   intent(in)    :: param_file
-  type(diag_ptrs), target, intent(inout) :: diag
+  type(diag_ctrl), target, intent(inout) :: diag
   type(geothermal_CS),     pointer       :: CS
 ! Arguments: Time - The current model time.
 !  (in)      G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
-!  (in)      diag - A structure containing pointers to common diagnostic fields.
+!  (in)      diag - A structure that is used to regulate diagnostic output.
 !  (in/out)  CS - A pointer that is set to point to the control structure
 !                  for this module
 ! This include declares and sets the variable "version".
@@ -425,7 +427,7 @@ subroutine geothermal_init(Time, G, param_file, diag, CS)
     enddo ; enddo
   endif
 
-  id = register_static_field('ocean_model', 'geo_heat', G%axesT1, &
+  id = register_static_field('ocean_model', 'geo_heat', diag%axesT1, &
         'Geothermal heat flux into ocean', 'W m-2')
   if (id > 0) call post_data(id, CS%geo_heat, diag, .true.)
 

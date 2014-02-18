@@ -46,7 +46,7 @@ module MOM_thickness_diffuse
 !********+*********+*********+*********+*********+*********+*********+**
 
 use MOM_checksums, only : hchksum, uchksum, vchksum
-use MOM_diag_mediator, only : post_data, query_averaging_enabled, diag_ptrs
+use MOM_diag_mediator, only : post_data, query_averaging_enabled, diag_ctrl
 use MOM_diag_mediator, only : register_diag_field, safe_alloc_ptr, time_type
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_EOS, only : calculate_density, calculate_density_derivs
@@ -54,7 +54,7 @@ use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
 use MOM_interface_heights, only : find_eta
 use MOM_lateral_mixing_coeffs, only : VarMix_CS
-use MOM_variables, only : thermo_var_ptrs
+use MOM_variables, only : thermo_var_ptrs, cont_diag_ptrs
 use MOM_EOS, only : calculate_density
 use MOM_MEKE_types, only : MEKE_type
 
@@ -83,8 +83,8 @@ type, public :: thickness_diffuse_CS ; private
                             ! longer than DT, or 0 (the default) to use DT.
   integer :: nkml           ! The number of layers within the mixed layer.
   logical :: debug          ! If true, write verbose checksums for debugging purposes.
-  type(diag_ptrs), pointer :: diag ! A pointer to a structure of shareable
-                             ! ocean diagnostic fields.
+  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
+                             ! timing of diagnostic output.
   real, pointer :: GMwork(:,:) => NULL()  ! Work by thick. diff. in W m-2.
   integer :: id_uhGM = -1, id_vhGM = -1, id_GMwork = -1, id_KH_u = -1, id_KH_v = -1
   integer :: id_KH_u1 = -1, id_KH_v1 = -1
@@ -93,7 +93,7 @@ end type thickness_diffuse_CS
 
 contains
 
-subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, MEKE, VarMix, CS)
+subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, MEKE, VarMix, CDp, CS)
   real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(inout) :: h
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(inout) :: uhtr
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(inout) :: vhtr
@@ -102,6 +102,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, MEKE, VarMix, CS)
   type(ocean_grid_type),                  intent(in)    :: G
   type(MEKE_type),                        pointer       :: MEKE
   type(VarMix_CS),                        pointer       :: VarMix
+  type(cont_diag_ptrs),                   intent(inout) :: CDp
   type(thickness_diffuse_CS),             pointer       :: CS
 !    This subroutine does interface depth diffusion.  The fluxes are
 !  limited to give positive definiteness, and the diffusivities are
@@ -118,6 +119,8 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, MEKE, VarMix, CS)
 !                     variable lateral mixing.
 !  (in)      MEKE - A structure containing information about the Mesoscale Eddy
 !                   Kinetic Energy parameterization; this might be unassociated.
+!  (inout)   CDp - A structure with pointers to various terms in the continuity
+!                  equations.
 !  (in)      CS - The control structure returned by a previous call to
 !                 thickness_diffuse_init.
 
@@ -236,11 +239,11 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, MEKE, VarMix, CS)
   do k=1,nz
     do j=js,je ; do I=is-1,ie
       uhtr(I,j,k) = uhtr(I,j,k) + uhD(I,j,k)*dt
-      if (ASSOCIATED(CS%diag%uhGM)) CS%diag%uhGM(I,j,k) = uhD(I,j,k)
+      if (ASSOCIATED(CDp%uhGM)) CDp%uhGM(I,j,k) = uhD(I,j,k)
     enddo ; enddo
     do J=js-1,je ; do i=is,ie
       vhtr(i,J,k) = vhtr(i,J,k) + vhD(i,J,k)*dt
-      if (ASSOCIATED(CS%diag%vhGM)) CS%diag%vhGM(i,J,k) = vhD(i,J,k)
+      if (ASSOCIATED(CDp%vhGM)) CDp%vhGM(i,J,k) = vhD(i,J,k)
     enddo ; enddo
     do j=js,je ; do i=is,ie
       h(i,j,k) = h(i,j,k) - dt * G%IareaT(i,j) * &
@@ -267,8 +270,8 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, MEKE, VarMix, CS)
 
 ! Offer diagnostic fields for averaging.
   if (query_averaging_enabled(CS%diag)) then
-    if (CS%id_uhGM > 0) call post_data(CS%id_uhGM, CS%diag%uhGM, CS%diag)
-    if (CS%id_vhGM > 0) call post_data(CS%id_vhGM, CS%diag%vhGM, CS%diag)
+    if (CS%id_uhGM > 0) call post_data(CS%id_uhGM, CDp%uhGM, CS%diag)
+    if (CS%id_vhGM > 0) call post_data(CS%id_vhGM, CDp%vhGM, CS%diag)
     if (CS%id_GMwork > 0) call post_data(CS%id_GMwork, CS%GMwork, CS%diag)
     if (CS%id_KH_u > 0) call post_data(CS%id_KH_u, KH_u, CS%diag)
     if (CS%id_KH_v > 0) call post_data(CS%id_KH_v, KH_v, CS%diag)
@@ -1332,17 +1335,20 @@ subroutine vert_fill_TS(h, T_in, S_in, kappa, dt, T_f, S_f, G, halo_here)
 end subroutine vert_fill_TS
 
 
-subroutine thickness_diffuse_init(Time, G, param_file, diag, CS)
+subroutine thickness_diffuse_init(Time, G, param_file, diag, CDp, CS)
   type(time_type),       intent(in) :: Time
   type(ocean_grid_type), intent(in) :: G
   type(param_file_type), intent(in) :: param_file
-  type(diag_ptrs), target, intent(inout) :: diag
+  type(diag_ctrl), target, intent(inout) :: diag
+  type(cont_diag_ptrs),    intent(inout) :: CDp
   type(thickness_diffuse_CS),     pointer    :: CS
 ! Arguments: Time - The current model time.
 !  (in)      G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
-!  (in)      diag - A structure containing pointers to common diagnostic fields.
+!  (in)      diag - A structure that is used to regulate diagnostic output.
+!  (inout)   CDp - A structure with pointers to various terms in the continuity
+!                  equations.
 !  (in/out)  CS - A pointer that is set to point to the control structure
 !                 for this module
 
@@ -1402,31 +1408,31 @@ subroutine thickness_diffuse_init(Time, G, param_file, diag, CS)
   if (G%Boussinesq) then ; flux_units = "meter3 second-1"
   else ; flux_units = "kilogram second-1" ; endif
 
-  CS%id_uhGM = register_diag_field('ocean_model', 'uhGM', G%axesCuL, Time, &
+  CS%id_uhGM = register_diag_field('ocean_model', 'uhGM', diag%axesCuL, Time, &
            'Time Mean Diffusive Zonal Thickness Flux', flux_units)
-  if (CS%id_uhGM > 0) call safe_alloc_ptr(diag%uhGM,G%IsdB,G%IedB,G%jsd,G%jed,G%ke)
-  CS%id_vhGM = register_diag_field('ocean_model', 'vhGM', G%axesCvL, Time, &
+  if (CS%id_uhGM > 0) call safe_alloc_ptr(CDp%uhGM,G%IsdB,G%IedB,G%jsd,G%jed,G%ke)
+  CS%id_vhGM = register_diag_field('ocean_model', 'vhGM', diag%axesCvL, Time, &
            'Time Mean Diffusive Meridional Thickness Flux', flux_units)
-  if (CS%id_vhGM > 0) call safe_alloc_ptr(diag%vhGM,G%isd,G%ied,G%JsdB,G%JedB,G%ke)
-  CS%id_GMwork = register_diag_field('ocean_model', 'GMwork', G%axesT1, Time, &
+  if (CS%id_vhGM > 0) call safe_alloc_ptr(CDp%vhGM,G%isd,G%ied,G%JsdB,G%JedB,G%ke)
+  CS%id_GMwork = register_diag_field('ocean_model', 'GMwork', diag%axesT1, Time, &
            'Time Mean Integral Work done by Diffusive Thickness Flux', 'Watt meter-2')
   if (CS%id_GMwork > 0) call safe_alloc_ptr(CS%GMwork,G%isd,G%ied,G%jsd,G%jed)
-  CS%id_KH_u = register_diag_field('ocean_model', 'KHTH_u', G%axesCui, Time, &
+  CS%id_KH_u = register_diag_field('ocean_model', 'KHTH_u', diag%axesCui, Time, &
            'Thickness Diffusivity at U-point', 'meter second-2')
-  CS%id_KH_v = register_diag_field('ocean_model', 'KHTH_v', G%axesCvi, Time, &
+  CS%id_KH_v = register_diag_field('ocean_model', 'KHTH_v', diag%axesCvi, Time, &
            'Thickness Diffusivity at V-point', 'meter second-2')
-  CS%id_KH_u1 = register_diag_field('ocean_model', 'KHTH_u1', G%axesCu1, Time, &
+  CS%id_KH_u1 = register_diag_field('ocean_model', 'KHTH_u1', diag%axesCu1, Time, &
            'Thickness Diffusivity at U-points (2-D)', 'meter second-2')
-  CS%id_KH_v1 = register_diag_field('ocean_model', 'KHTH_v1', G%axesCv1, Time, &
+  CS%id_KH_v1 = register_diag_field('ocean_model', 'KHTH_v1', diag%axesCv1, Time, &
            'Thickness Diffusivity at V-points (2-D)', 'meter second-2')
 
- ! CS%id_sfn_x =  register_diag_field('ocean_model', 'sfn_x', G%axesCui, Time, &
+ ! CS%id_sfn_x =  register_diag_field('ocean_model', 'sfn_x', diag%axesCui, Time, &
  !          'Parameterized Zonal Overturning Streamfunction', 'meter3 second-1')
- ! CS%id_sfn_y =  register_diag_field('ocean_model', 'sfn_y', G%axesCvi, Time, &
+ ! CS%id_sfn_y =  register_diag_field('ocean_model', 'sfn_y', diag%axesCvi, Time, &
  !          'Parameterized Meridional Overturning Streamfunction', 'meter3 second-1')
- ! CS%id_sfn_slope_x =  register_diag_field('ocean_model', 'sfn_sl_x', G%axesCui, Time, &
+ ! CS%id_sfn_slope_x =  register_diag_field('ocean_model', 'sfn_sl_x', diag%axesCui, Time, &
  !          'Parameterized Zonal Overturning Streamfunction from Interface Slopes', 'meter3 second-1')
- ! CS%id_sfn_slope_y =  register_diag_field('ocean_model', 'sfn_sl_y', G%axesCvi, Time, &
+ ! CS%id_sfn_slope_y =  register_diag_field('ocean_model', 'sfn_sl_y', diag%axesCvi, Time, &
  !          'Parameterized Meridional Overturning Streamfunction from Interface Slopes', 'meter3 second-1')
 
 end subroutine thickness_diffuse_init

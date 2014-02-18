@@ -43,17 +43,20 @@ module MOM_set_diffusivity
 
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock, only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
-use MOM_diag_mediator, only : diag_ptrs, time_type
+use MOM_diag_mediator, only : diag_ctrl, time_type
 use MOM_diag_mediator, only : safe_alloc_ptr, post_data, register_diag_field
 use MOM_diag_to_Z, only : diag_to_Z_CS, register_Zint_diag, calc_Zint_diags
 use MOM_checksums, only : hchksum, uchksum, vchksum
 use MOM_error_handler, only : MOM_error, is_root_pe, FATAL, WARNING, NOTE
+use MOM_error_handler, only : callTree_showQuery
+use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
-use MOM_string_functions, only : uppercase
-use MOM_forcing_type, only : forcing
+use MOM_forcing_type, only : forcing, optics_type
 use MOM_grid, only : ocean_grid_type
 use MOM_intrinsic_functions, only : invcosh
+use MOM_kappa_shear, only : calculate_kappa_shear, kappa_shear_init, Kappa_shear_CS
 use MOM_io, only : slasher, vardesc
+use MOM_string_functions, only : uppercase
 use MOM_thickness_diffuse, only : vert_fill_TS
 use MOM_variables, only : thermo_var_ptrs, vertvisc_type, p3d
 use MOM_EOS, only : calculate_density, calculate_density_derivs
@@ -120,8 +123,6 @@ type, public :: set_diffusivity_CS ; private
                              ! from the BBL mixing and the other diffusivities.
                              ! Otherwise, diffusivities from the BBL_mixing is
                              ! simply added.
-  logical :: Add_input_Kd    !   If true, add visc%Kd_turb to the diapycnal
-                             ! diffusivities.
   logical :: debug           ! If true, write verbose checksums for debugging.
   real    :: Kd              ! The interior diapycnal diffusivity in m2 s-1.
   real    :: Kd_min          ! The minimum permitted value for the diapycnal
@@ -155,8 +156,8 @@ type, public :: set_diffusivity_CS ; private
   real    :: N2_FLOOR_IOMEGA2 ! The floor applied to N2(k) scaled by Omega^2
                              ! If =0., N2(k) is simply positive definite
                              ! If =1., N2(k) > Omega^2 everywhere
-  type(diag_ptrs), pointer :: diag ! A pointer to a structure of shareable
-                                   ! ocean diagnostic fields.
+  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
+                             ! timing of diagnostic output.
   real :: Int_tide_decay_scale ! The decay scale for internal wave TKE, in m.
   real :: Mu_itides          ! Efficiency factor for conversion of dissipation
                              ! to potential energy, nondimensional.
@@ -248,6 +249,8 @@ type, public :: set_diffusivity_CS ; private
   logical :: user_change_diff  !   If true, call user-defined code to change the
                                ! diffusivity.
   logical :: double_diffusion  ! If true, enable double-diffusive mixing.
+  logical :: useKappaShear   ! If true, use the kappa_shear module to find the
+                             ! shear-driven diapycnal diffusivity.
   real    :: Max_Rrho_salt_fingers    ! maximum density ratio for salt fingering
   real    :: Max_salt_diff_salt_fingers ! maximum salt diffusivity for salt fingers
   real    :: Kv_molecular    ! molecular viscosity for double diffusive convection
@@ -259,6 +262,7 @@ type, public :: set_diffusivity_CS ; private
   real, pointer, dimension(:,:) :: tideamp => NULL() ! RMS tidal amplitude (m s-1)
   integer :: id_TKE_itidal = -1, id_TKE_leewave = -1, id_Nb = -1, id_N2 = -1
   integer :: id_Kd_itidal = -1, id_Kd_Niku = -1, id_Kd_user = -1
+  integer :: id_Kd_layer = -1
   integer :: id_N2_z = -1, id_Kd_itidal_z = -1, id_Kd_Niku_z = -1, id_Kd_user_z = -1
   integer :: id_Kd_Work = -1, id_Kd_Itidal_Work = -1, id_Kd_Niku_Work = -1
   integer :: id_maxTKE = -1, id_TKE_to_Kd = -1, id_Fl_itidal = -1
@@ -269,6 +273,7 @@ type, public :: set_diffusivity_CS ; private
   character(len=200) :: inputdir
   type(user_change_diff_CS), pointer :: user_change_diff_CSp => NULL()
   type(diag_to_Z_CS), pointer :: diag_to_Z_CSp => NULL()
+  type(Kappa_shear_CS), pointer :: kappaShear_CSp => NULL()
 end type set_diffusivity_CS
 
 type diffusivity_diags
@@ -313,15 +318,19 @@ character*(20), parameter :: POLZIN_PROFILE_STRING = "POLZIN_09"
 integer, parameter :: STLAURENT_02 = 1
 integer, parameter :: POLZIN_09    = 2
 
+! Clocks
+integer :: id_clock_kappaShear
+
 contains
 
-subroutine set_diffusivity(u, v, h, tv, fluxes, visc, dt, G, CS, &
+subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, G, CS, &
                            Kd, Kd_int)
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)    :: u
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)    :: v
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h
-  type(thermo_var_ptrs),                  intent(in)    :: tv
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h, u_h, v_h
+  type(thermo_var_ptrs),                  intent(inout) :: tv  ! out is for tv%TempxPmE
   type(forcing),                          intent(in)    :: fluxes
+  type(optics_type),                      pointer       :: optics
   type(vertvisc_type),                    intent(inout) :: visc
   real,                                   intent(in)    :: dt
   type(ocean_grid_type),                  intent(in)    :: G
@@ -395,6 +404,7 @@ subroutine set_diffusivity(u, v, h, tv, fluxes, visc, dt, G, CS, &
                          ! interpolated into depth space.
   integer :: z_ids(6)    ! The id numbers of the diagnostics that are to be
                          ! interpolated into depth space.
+  logical :: showCallTree ! If true, show the call tree
   integer :: i, j, k, is, ie, js, je, nz
   integer :: isd, ied, jsd, jed
 
@@ -403,6 +413,8 @@ subroutine set_diffusivity(u, v, h, tv, fluxes, visc, dt, G, CS, &
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
+  showCallTree = callTree_showQuery()
+  if (showCallTree) call callTree_enter("set_diffusivity(), MOM_set_diffusivity.F90")
 
   if (.not.associated(CS)) call MOM_error(FATAL,"set_diffusivity: "//&
          "Module must be initialized before it is used.")
@@ -479,9 +491,31 @@ subroutine set_diffusivity(u, v, h, tv, fluxes, visc, dt, G, CS, &
   if ((CS%id_KS_extra > 0) .or. (CS%id_KS_extra_z > 0)) then
     allocate(dd%KS_extra(isd:ied,jsd:jed,nz+1)) ; dd%KS_extra(:,:,:) = 0.0
   endif
+
   ! Smooth the properties through massless layers.
   if (use_EOS) then
     call vert_fill_TS(h, tv%T, tv%S, kappa_fill, dt_fill, T_f, S_f, G)
+  endif
+
+  if (CS%useKappaShear) then
+    if (CS%debug) then
+      call hchksum(u_h, "before calc_KS u_h",G)
+      call hchksum(v_h, "before calc_KS v_h",G)
+    endif
+    call cpu_clock_begin(id_clock_kappaShear)
+    ! Changes: visc%Kd_turb, visc%TKE_turb (not clear that TKE_turb is used as input ????)
+    ! Sets visc%Kv_turb
+    call calculate_kappa_shear(u_h, v_h, h, tv, fluxes%p_surf, visc%Kd_turb, visc%TKE_turb, &
+                               visc%Kv_turb, dt, G, CS%kappaShear_CSp)
+    call cpu_clock_end(id_clock_kappaShear)
+    if (CS%debug) then
+      call hchksum(visc%Kd_turb, "after calc_KS visc%Kd_turb",G)
+      call hchksum(visc%Kv_turb, "after calc_KS visc%Kv_turb",G)
+      call hchksum(visc%TKE_turb, "after calc_KS visc%TKE_turb",G)
+    endif
+    if (showCallTree) call callTree_waypoint("done with calculate_kappa_shear (set_diffusivity)")
+  elseif (associated(visc%Kv_turb)) then
+    visc%Kv_turb(:,:,:) = 0. ! needed if calculate_kappa_shear is not enabled
   endif
 
 !   Calculate the diffusivity, Kd, for each layer.  This would be
@@ -590,7 +624,7 @@ subroutine set_diffusivity(u, v, h, tv, fluxes, visc, dt, G, CS, &
     endif
 
   ! Add the input turbulent diffusivity.
-    if (CS%Add_input_Kd) then
+    if (CS%useKappaShear) then
       if (present(Kd_int)) then
         do K=2,nz ; do i=is,ie
           Kd_int(i,j,K) = visc%Kd_turb(i,j,K) + 0.5*(Kd(i,j,k-1) + Kd(i,j,k))
@@ -675,7 +709,7 @@ subroutine set_diffusivity(u, v, h, tv, fluxes, visc, dt, G, CS, &
 
   if (CS%debug) then
     call hchksum(Kd,"BBL Kd",G,haloshift=0)
-    if (CS%Add_input_Kd) call hchksum(visc%Kd_turb,"Turbulent Kd",G,haloshift=0)
+    if (CS%useKappaShear) call hchksum(visc%Kd_turb,"Turbulent Kd",G,haloshift=0)
     if (associated(visc%kv_bbl_u) .and. associated(visc%kv_bbl_v)) then
       call uchksum(visc%kv_bbl_u,"BBL Kv_bbl_u",G,haloshift=1)
       call vchksum(visc%kv_bbl_v,"BBL Kv_bbl_v",G,haloshift=1)
@@ -704,13 +738,7 @@ subroutine set_diffusivity(u, v, h, tv, fluxes, visc, dt, G, CS, &
                           T_f, S_f, dd%Kd_user)
   endif
 
-  if (ASSOCIATED(CS%diag)) then ; if (ASSOCIATED(CS%diag%Kd)) then
-    do k=1,nz ; do j=js,je ; do i=is,ie
-      CS%diag%Kd(i,j,k) = Kd(i,j,k)
-    enddo ; enddo ; enddo
-  endif ; endif
-
-  ! Kd no longer changes after this point.
+  if (CS%id_Kd_layer > 0) call post_data(CS%id_Kd_layer, Kd, CS%diag)
 
   num_z_diags = 0
   if (CS%Int_tide_dissipation .or. CS%Lee_wave_dissipation) then
@@ -798,6 +826,8 @@ subroutine set_diffusivity(u, v, h, tv, fluxes, visc, dt, G, CS, &
   if (associated(dd%KT_extra)) deallocate(dd%KT_extra)
   if (associated(dd%KS_extra)) deallocate(dd%KS_extra)
 
+  if (showCallTree) call callTree_leave("set_diffusivity()")
+
 end subroutine set_diffusivity
 
 subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, CS, TKE_to_Kd, maxTKE, kb)
@@ -825,12 +855,6 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, CS, TKE_to_Kd, maxT
                   ! compensating entrainment from above to keep the layer
                   ! density from changing) that will not deplete all of the
                   ! layers above or below a layer within a timestep, in m.
-  real, dimension(SZK_(G)) :: &
-    gkp1_gk, &    ! The reduced gravity of the interface below a layer
-                  ! divided by the reduced gravity of the interface
-                  ! above it. Nondimensional.
-    I_glay        ! The inverse of the average reduced gravities around
-                  ! a layer in s2 m-1.
   real, dimension(SZI_(G)) :: &
     htot, &       ! The total thickness above or below a layer, or the
                   ! integrated thickness in the BBL, in m.
@@ -859,11 +883,6 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, CS, TKE_to_Kd, maxT
   G_Rho0 = G%g_Earth / G%Rho0
   H_neglect = G%H_subroundoff
   I_Rho0 = 1.0/G%Rho0
-
-  do k=2,nz-1
-    I_glay(k) = 2.0 / (G%g_prime(k)+G%g_prime(k+1))
-    gkp1_gk(k) = G%g_prime(k+1) / G%g_prime(k)
-  enddo
 
   ! determine kb - the index of the shallowest active interior layer.
   if (CS%bulkmixedlayer) then
@@ -1895,11 +1914,11 @@ subroutine set_BBL_diffusivity(u, v, h, fluxes, visc, G, CS)
     ! Determine ustar and the square magnitude of the velocity in the
     ! bottom boundary layer. Together these give the TKE source and
     ! vertical decay scale.
-    do i=is,ie ; if ((G%mask2dCv(i,J) > 0.5) .and. (cdrag_sqrt > 0.0)) then
+    do i=is,ie ; if ((G%mask2dCv(i,J) > 0.5) .and. (cdrag_sqrt*visc%bbl_thick_v(i,J) > 0.0)) then
       do_i(i) = .true. ; vhtot(i) = 0.0 ; htot(i) = 0.0
       vstar(i,J) = visc%kv_bbl_v(i,J)/(cdrag_sqrt*visc%bbl_thick_v(i,J))
     else
-      do_i(i) = .false. ; vstar(i,J) = 0.0
+      do_i(i) = .false. ; vstar(i,J) = 0.0 ; htot(i) = 0.0
     endif ; enddo
     do k=nz,1,-1
       domore = .false.
@@ -1925,11 +1944,11 @@ subroutine set_BBL_diffusivity(u, v, h, fluxes, visc, G, CS)
   enddo
 
   do j=js,je
-    do I=is-1,ie ; if ((G%mask2dCu(I,j) > 0.5) .and. (cdrag_sqrt > 0.0))  then
+    do I=is-1,ie ; if ((G%mask2dCu(I,j) > 0.5) .and. (cdrag_sqrt*visc%bbl_thick_u(I,j) > 0.0))  then
       do_i(I) = .true. ; uhtot(I) = 0.0 ; htot(I) = 0.0
       ustar(I) = visc%kv_bbl_u(I,j)/(cdrag_sqrt*visc%bbl_thick_u(I,j))
     else
-      do_i(I) = .false. ; ustar(I) = 0.0
+      do_i(I) = .false. ; ustar(I) = 0.0 ; htot(I) = 0.0
     endif ; enddo
     do k=nz,1,-1 ; domore = .false.
       do I=is-1,ie ; if (do_i(I)) then
@@ -2002,9 +2021,17 @@ subroutine set_density_ratios(h, tv, kb, G, CS, j, ds_dsp1, rho_0)
   integer :: i, k, k3, is, ie, nz, kmb
   is = G%isc ; ie = G%iec ; nz = G%ke
 
-  do k=2,nz-1 ; do i=is,ie
-    ds_dsp1(i,k) = G%g_prime(k) / G%g_prime(k+1)
-  enddo ; enddo
+  do k=2,nz-1
+    if (G%g_prime(k+1)/=0.) then
+      do i=is,ie
+        ds_dsp1(i,k) = G%g_prime(k) / G%g_prime(k+1)
+      enddo 
+    else
+      do i=is,ie
+        ds_dsp1(i,k) = 1.
+      enddo 
+    endif
+  enddo
 
   if (CS%bulkmixedlayer) then
     g_R0 = G%g_Earth/G%Rho0
@@ -2070,14 +2097,14 @@ subroutine set_diffusivity_init(Time, G, param_file, diag, CS, diag_to_Z_CSp)
   type(time_type),          intent(in)    :: Time
   type(ocean_grid_type),    intent(in)    :: G
   type(param_file_type),    intent(in)    :: param_file
-  type(diag_ptrs), target,  intent(inout) :: diag
+  type(diag_ctrl), target,  intent(inout) :: diag
   type(set_diffusivity_CS), pointer       :: CS
   type(diag_to_Z_CS),       pointer       :: diag_to_Z_CSp
 ! Arguments: Time - The current model time.
 !  (in)      G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
-!  (in)      diag - A structure containing pointers to common diagnostic fields.
+!  (in)      diag - A structure that is used to regulate diagnostic output.
 !  (in/out)  CS - A pointer that is set to point to the control structure
 !                 for this module
 !  (in)      diag_to_Z_CSp - A pointer to the Z-diagnostics control structure.
@@ -2257,12 +2284,6 @@ subroutine set_diffusivity_init(Time, G, param_file, diag, CS, diag_to_Z_CSp)
                  "A nondimensional scaling for the range ofdiffusivities \n"//&
                  "with KD_TANH_LAT_FN. Valid values are in the range of \n"//&
                  "-2 to 2; 0.4 reproduces CM2M.", units="nondim", default=0.0)
-
-  call get_param(param_file, mod, "USE_JACKSON_PARAM", CS%Add_input_Kd, &
-                 "If true, use the Jackson-Hallberg-Legg (JPO 2008) \n"//&
-                 "shear mixing parameterization.", default=.false.)
-
-
 
   call get_param(param_file, mod, "KV", CS%Kv, &
                  "The background kinematic viscosity in the interior. \n"//&
@@ -2491,6 +2512,9 @@ subroutine set_diffusivity_init(Time, G, param_file, diag, CS, diag_to_Z_CSp)
 
   endif
 
+  CS%id_Kd_layer = register_diag_field('ocean_model', 'Kd_layer', diag%axesTL, Time, &
+      'Diapycnal diffusivity of layers (as set)', 'meter2 second-1')
+
   if (CS%Lee_wave_dissipation) then
  
     call get_param(param_file, mod, "NIKURASHIN_TKE_INPUT_FILE",Niku_TKE_input_file, &
@@ -2519,54 +2543,54 @@ subroutine set_diffusivity_init(Time, G, param_file, diag, CS, diag_to_Z_CSp)
                  "dissipation of lee waves dissipation.", units="nondim", &
                  default=1.0)
 
-    CS%id_TKE_leewave = register_diag_field('ocean_model','TKE_leewave',G%axesT1,Time, &
+    CS%id_TKE_leewave = register_diag_field('ocean_model','TKE_leewave',diag%axesT1,Time, &
         'Lee wave Driven Turbulent Kinetic Energy', 'Watt meter-2')
-    CS%id_Kd_Niku = register_diag_field('ocean_model','Kd_Nikurashin',G%axesTi,Time, &
+    CS%id_Kd_Niku = register_diag_field('ocean_model','Kd_Nikurashin',diag%axesTi,Time, &
          'Lee Wave Driven Diffusivity', 'meter2 sec-1')
   endif
 
-  CS%id_TKE_itidal = register_diag_field('ocean_model','TKE_itidal',G%axesT1,Time, &
+  CS%id_TKE_itidal = register_diag_field('ocean_model','TKE_itidal',diag%axesT1,Time, &
       'Internal Tide Driven Turbulent Kinetic Energy', 'Watt meter-2')
-  CS%id_maxTKE = register_diag_field('ocean_model','maxTKE',G%axesTL,Time, &
+  CS%id_maxTKE = register_diag_field('ocean_model','maxTKE',diag%axesTL,Time, &
          'Maximum layer TKE', 'meter3 second-3')
-  CS%id_TKE_to_Kd = register_diag_field('ocean_model','TKE_to_Kd',G%axesTL,Time, &
+  CS%id_TKE_to_Kd = register_diag_field('ocean_model','TKE_to_Kd',diag%axesTL,Time, &
          'Convert TKE to Kd', 'second2 meter')
 
-  CS%id_Nb = register_diag_field('ocean_model','Nb',G%axesT1,Time, &
+  CS%id_Nb = register_diag_field('ocean_model','Nb',diag%axesT1,Time, &
        'Bottom Buoyancy Frequency', 'sec-1')
 
-  CS%id_Kd_itidal = register_diag_field('ocean_model','Kd_itides',G%axesTi,Time, &
+  CS%id_Kd_itidal = register_diag_field('ocean_model','Kd_itides',diag%axesTi,Time, &
        'Internal Tide Driven Diffusivity', 'meter2 sec-1')
 
-  CS%id_Fl_itidal = register_diag_field('ocean_model','Fl_itides',G%axesTi,Time, &
+  CS%id_Fl_itidal = register_diag_field('ocean_model','Fl_itides',diag%axesTi,Time, &
        'Vertical flux of tidal turbulent dissipation', 'meter3 sec-3')
 
-  CS%id_Polzin_decay_scale = register_diag_field('ocean_model','Polzin_decay_scale',G%axesT1,Time, &
+  CS%id_Polzin_decay_scale = register_diag_field('ocean_model','Polzin_decay_scale',diag%axesT1,Time, &
        'Vertical decay scale for the tidal turbulent dissipation with Polzin scheme', 'meter')
 
-  CS%id_Polzin_decay_scale_scaled = register_diag_field('ocean_model','Polzin_decay_scale_scaled',G%axesT1,Time, &
+  CS%id_Polzin_decay_scale_scaled = register_diag_field('ocean_model','Polzin_decay_scale_scaled',diag%axesT1,Time, &
        'Vertical decay scale for the tidal turbulent dissipation with Polzin scheme, scaled by N2_bot/N2_meanz', 'meter')
 
-  CS%id_N2_bot = register_diag_field('ocean_model','N2_b',G%axesT1,Time, &
+  CS%id_N2_bot = register_diag_field('ocean_model','N2_b',diag%axesT1,Time, &
        'Bottom Buoyancy frequency squared', 's-2')
 
-  CS%id_N2_meanz = register_diag_field('ocean_model','N2_meanz',G%axesT1,Time, &
+  CS%id_N2_meanz = register_diag_field('ocean_model','N2_meanz',diag%axesT1,Time, &
        'Buoyancy frequency squared averaged over the water column', 's-2')
 
-  CS%id_Kd_Work = register_diag_field('ocean_model','Kd_Work',G%axesTL,Time, &
+  CS%id_Kd_Work = register_diag_field('ocean_model','Kd_Work',diag%axesTL,Time, &
        'Work done by Diapycnal Mixing', 'Watts m-2')
 
-  CS%id_Kd_Itidal_Work = register_diag_field('ocean_model','Kd_Itidal_Work',G%axesTL,Time, &
+  CS%id_Kd_Itidal_Work = register_diag_field('ocean_model','Kd_Itidal_Work',diag%axesTL,Time, &
        'Work done by Internal Tide Diapycnal Mixing', 'Watts m-2')
 
-  CS%id_Kd_Niku_Work = register_diag_field('ocean_model','Kd_Nikurashin_Work',G%axesTL,Time, &
+  CS%id_Kd_Niku_Work = register_diag_field('ocean_model','Kd_Nikurashin_Work',diag%axesTL,Time, &
        'Work done by Nikurashin Lee Wave Drag Scheme', 'Watts m-2')
 
-  CS%id_N2 = register_diag_field('ocean_model','N2',G%axesTi,Time, &
+  CS%id_N2 = register_diag_field('ocean_model','N2',diag%axesTi,Time, &
        'Buoyancy frequency squared', 'sec-2')
 
   if (CS%user_change_diff) &
-    CS%id_Kd_user = register_diag_field('ocean_model','Kd_user',G%axesTi,Time, &
+    CS%id_Kd_user = register_diag_field('ocean_model','Kd_user',diag%axesTi,Time, &
          'User-specified Extra Diffusivity', 'meter2 sec-1')
 
   if (associated(diag_to_Z_CSp)) then
@@ -2601,10 +2625,10 @@ subroutine set_diffusivity_init(Time, G, param_file, diag, CS, diag_to_Z_CSp)
                  "double-diffusive convection.", default=1.5e-6, units="m2 s-1")
     ! The default molecular viscosity follows the CCSM4.0 and MOM4p1 defaults.
 
-    CS%id_KT_extra = register_diag_field('ocean_model','KT_extra',G%axesTi,Time, &
+    CS%id_KT_extra = register_diag_field('ocean_model','KT_extra',diag%axesTi,Time, &
          'Double-diffusive diffusivity for temperature', 'meter2 sec-1')
 
-    CS%id_KS_extra = register_diag_field('ocean_model','KS_extra',G%axesTi,Time, &
+    CS%id_KS_extra = register_diag_field('ocean_model','KS_extra',diag%axesTi,Time, &
          'Double-diffusive diffusivity for salinity', 'meter2 sec-1')
 
     if (associated(diag_to_Z_CSp)) then
@@ -2626,6 +2650,10 @@ subroutine set_diffusivity_init(Time, G, param_file, diag, CS, diag_to_Z_CSp)
   if (CS%user_change_diff) then
     call user_change_diff_init(Time, G, param_file, diag, CS%user_change_diff_CSp)
   endif
+
+  CS%useKappaShear = kappa_shear_init(Time, G, param_file, CS%diag, CS%kappaShear_CSp)
+  if (CS%useKappaShear) &
+    id_clock_kappaShear = cpu_clock_id('(Ocean kappa_shear)', grain=CLOCK_MODULE)
 
 end subroutine set_diffusivity_init
 

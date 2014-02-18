@@ -54,7 +54,7 @@ module MOM_PressureForce_Mont
 !********+*********+*********+*********+*********+*********+*********+**
 
 use MOM_diag_mediator, only : post_data, register_diag_field
-use MOM_diag_mediator, only : safe_alloc_ptr, diag_ptrs, time_type
+use MOM_diag_mediator, only : safe_alloc_ptr, diag_ctrl, time_type
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
@@ -77,10 +77,12 @@ type, public :: PressureForce_Mont_CS ; private
                             ! By default, Rho_atm is 0.
   real    :: GFS_scale
   type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
-  type(diag_ptrs), pointer :: diag ! A pointer to a structure of shareable
-                             ! ocean diagnostic fields.
-  integer :: id_PFu_bc = -1, id_PFv_bc = -1, id_eta = -1, id_bott_press = -1
-  integer :: id_e_tidal = -1
+  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
+                             ! timing of diagnostic output.
+  real, pointer :: PFu_bc(:,:,:) => NULL()   ! Accelerations due to pressure
+  real, pointer :: PFv_bc(:,:,:) => NULL()   ! gradients deriving from density
+                                             ! gradients within layers, m s-2.
+  integer :: id_PFu_bc = -1, id_PFv_bc = -1, id_e_tidal = -1
   type(tidal_forcing_CS), pointer :: tides_CSp => NULL()
 end type PressureForce_Mont_CS
 
@@ -339,14 +341,14 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
           ((dp_star(i,j) * dp_star(i+1,j) + (p(i,j,K) * dp_star(i+1,j) + &
            p(i+1,j,K) * dp_star(i,j))) / (dp_star(i,j) + dp_star(i+1,j))))
         PFu(I,j,k) = -(M(i+1,j,k) - M(i,j,k)) * G%IdxCu(I,j) + PFu_bc
-        if (ASSOCIATED(CS%diag%PFu_bc)) CS%diag%PFu_bc(i,j,k) = PFu_bc
+        if (ASSOCIATED(CS%PFu_bc)) CS%PFu_bc(i,j,k) = PFu_bc
       enddo ; enddo
       do J=Jsq,Jeq ; do i=is,ie
         PFv_bc = (alpha_star(i,j+1,k) - alpha_star(i,j,k)) * (G%IdyCv(i,J) * &
           ((dp_star(i,j) * dp_star(i,j+1) + (p(i,j,K) * dp_star(i,j+1) + &
           p(i,j+1,K) * dp_star(i,j))) / (dp_star(i,j) + dp_star(i,j+1))))
         PFv(i,J,k) = -(M(i,j+1,k) - M(i,j,k)) * G%IdyCv(i,J) + PFv_bc
-        if (ASSOCIATED(CS%diag%PFv_bc)) CS%diag%PFv_bc(i,j,k) = PFv_bc
+        if (ASSOCIATED(CS%PFv_bc)) CS%PFv_bc(i,j,k) = PFv_bc
       enddo ; enddo
     enddo ! k-loop
   else ! .not. use_EOS
@@ -360,9 +362,8 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
     enddo
   endif ! use_EOS
 
-  if (CS%id_eta>0) call post_data(CS%id_eta, CS%diag%eta, CS%diag)
-  if (CS%id_bott_press>0) call post_data(CS%id_bott_press, &
-                                         p(:,:,nz+1), CS%diag)
+  if (CS%id_PFu_bc>0) call post_data(CS%id_PFu_bc, CS%PFu_bc, CS%diag)
+  if (CS%id_PFv_bc>0) call post_data(CS%id_PFv_bc, CS%PFv_bc, CS%diag)
   if (CS%id_e_tidal>0) call post_data(CS%id_e_tidal, e_tidal, CS%diag)   
 
 end subroutine PressureForce_Mont_nonBouss
@@ -567,14 +568,14 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
           ((h_star(i,j) * h_star(i+1,j) - (e(i,j,K) * h_star(i+1,j) + &
           e(i+1,j,K) * h_star(i,j))) / (h_star(i,j) + h_star(i+1,j))))
         PFu(I,j,k) = -(M(i+1,j,k) - M(i,j,k)) * G%IdxCu(I,j) + PFu_bc
-        if (ASSOCIATED(CS%diag%PFu_bc)) CS%diag%PFu_bc(i,j,k) = PFu_bc
+        if (ASSOCIATED(CS%PFu_bc)) CS%PFu_bc(i,j,k) = PFu_bc
       enddo ; enddo
       do J=Jsq,Jeq ; do i=is,ie
         PFv_bc = -1.0*(rho_star(i,j+1,k) - rho_star(i,j,k)) * (G%IdyCv(i,J) * &
           ((h_star(i,j) * h_star(i,j+1) - (e(i,j,K) * h_star(i,j+1) + &
           e(i,j+1,K) * h_star(i,j))) / (h_star(i,j) + h_star(i,j+1))))
         PFv(i,J,k) = -(M(i,j+1,k) - M(i,j,k)) * G%IdyCv(i,J) + PFv_bc
-        if (ASSOCIATED(CS%diag%PFv_bc)) CS%diag%PFv_bc(i,j,k) = PFv_bc
+        if (ASSOCIATED(CS%PFv_bc)) CS%PFv_bc(i,j,k) = PFv_bc
       enddo ; enddo
     enddo ! k-loop
   else ! .not. use_EOS
@@ -603,9 +604,8 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
     endif
   endif
 
-! Here the pressure gradient accelerations are offered for averaging.
-  if (CS%id_PFu_bc>0) call post_data(CS%id_PFu_bc, CS%diag%PFu_bc, CS%diag)
-  if (CS%id_PFv_bc>0) call post_data(CS%id_PFv_bc, CS%diag%PFv_bc, CS%diag)
+  if (CS%id_PFu_bc>0) call post_data(CS%id_PFu_bc, CS%PFu_bc, CS%diag)
+  if (CS%id_PFv_bc>0) call post_data(CS%id_PFv_bc, CS%PFv_bc, CS%diag)
   if (CS%id_e_tidal>0) call post_data(CS%id_e_tidal, e_tidal, CS%diag)
 
 end subroutine PressureForce_Mont_Bouss
@@ -838,14 +838,14 @@ subroutine PressureForce_Mont_init(Time, G, param_file, diag, CS, tides_CSp)
   type(time_type), target, intent(in)    :: Time
   type(ocean_grid_type),   intent(in)    :: G
   type(param_file_type),   intent(in)    :: param_file
-  type(diag_ptrs), target, intent(inout) :: diag
+  type(diag_ctrl), target, intent(inout) :: diag
   type(PressureForce_Mont_CS),  pointer  :: CS
   type(tidal_forcing_CS), optional, pointer :: tides_CSp
 ! Arguments: Time - The current model time.
 !  (in)      G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
-!  (in)      diag - A structure containing pointers to common diagnostic fields.
+!  (in)      diag - A structure that is used to regulate diagnostic output.
 !  (in/out)  CS - A pointer that is set to point to the control structure
 !                 for this module.
 !  (in)      tides_CSp - a pointer to the control structure of the tide module.
@@ -879,22 +879,22 @@ subroutine PressureForce_Mont_init(Time, G, param_file, diag, CS, tides_CSp)
                  do_not_log=.true.) ! Input for diagnostic use only.
 
   if (use_EOS) then
-    CS%id_PFu_bc = register_diag_field('ocean_model', 'PFu_bc', G%axesCuL, Time, &
+    CS%id_PFu_bc = register_diag_field('ocean_model', 'PFu_bc', diag%axesCuL, Time, &
          'Density Gradient Zonal Pressure Force Accel.', "meter second-2")
-    CS%id_PFv_bc = register_diag_field('ocean_model', 'PFv_bc', G%axesCvL, Time, &
+    CS%id_PFv_bc = register_diag_field('ocean_model', 'PFv_bc', diag%axesCvL, Time, &
          'Density Gradient Meridional Pressure Force Accel.', "meter second-2")
     if (CS%id_PFu_bc > 0) then
-      call safe_alloc_ptr(diag%PFu_bc,G%IsdB,G%IedB,G%jsd,G%jed,G%ke)
-      diag%PFu_bc(:,:,:) = 0.0
+      call safe_alloc_ptr(CS%PFu_bc,G%IsdB,G%IedB,G%jsd,G%jed,G%ke)
+      CS%PFu_bc(:,:,:) = 0.0
     endif
     if (CS%id_PFv_bc > 0) then
-      call safe_alloc_ptr(diag%PFv_bc,G%isd,G%ied,G%JsdB,G%JedB,G%ke)
-      diag%PFv_bc(:,:,:) = 0.0
+      call safe_alloc_ptr(CS%PFv_bc,G%isd,G%ied,G%JsdB,G%JedB,G%ke)
+      CS%PFv_bc(:,:,:) = 0.0
     endif
   endif
 
   if (CS%tides) then
-    CS%id_e_tidal = register_diag_field('ocean_model', 'e_tidal', G%axesT1, &
+    CS%id_e_tidal = register_diag_field('ocean_model', 'e_tidal', diag%axesT1, &
         Time, 'Tidal Forcing Astronomical and SAL Height Anomaly', 'meter')
   endif
 

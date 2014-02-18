@@ -67,9 +67,10 @@ module MOM_surface_forcing
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock, only : CLOCK_MODULE
 use MOM_diag_mediator, only : post_data, query_averaging_enabled
-use MOM_diag_mediator, only : register_diag_field, diag_ptrs, safe_alloc_ptr
+use MOM_diag_mediator, only : register_diag_field, diag_ctrl, safe_alloc_ptr
 use MOM_domains, only : pass_var, pass_vector, AGRID, To_South, To_West, To_All
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
+use MOM_error_handler,   only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_string_functions, only : uppercase
 use MOM_forcing_type, only : forcing
@@ -89,6 +90,7 @@ use user_surface_forcing, only : USER_wind_forcing, USER_buoyancy_forcing
 use user_surface_forcing, only : USER_surface_forcing_init, user_surface_forcing_CS
 use user_revise_forcing, only : user_alter_forcing, user_revise_forcing_init
 use user_revise_forcing, only : user_revise_forcing_CS
+use data_override_mod, only : data_override_init, data_override
 !   Forcing is a structure containing pointers to the forcing fields
 ! which may be used to drive MOM.  All fluxes are positive downward.
 !   Surface is a structure containing pointers to various fields that
@@ -139,38 +141,40 @@ type, public :: surface_forcing_CS ; private
                              ! buoyancy_forcing_linear.
   logical :: first_call_set_forcing = .true.
   logical :: archaic_OMIP_file = .true.
+  logical :: dataOverrideIsInitialized = .false.
   real :: wind_scale         ! A value by which wind-stresses are scaled, ND.
+  real :: constantHeatForcing ! A value used for sensible heat flux when buoy_config="const"
   character(len=8)   :: wind_stagger
   type(tracer_flow_control_CS), pointer :: tracer_flow_CSp => NULL()
 !###  type(ctrl_forcing_CS), pointer :: ctrl_forcing_CSp => NULL()
   type(MOM_restart_CS), pointer :: restart_CSp => NULL()
-  type(diag_ptrs), pointer :: diag ! A pointer to a structure of shareable
-                             ! ocean diagnostic fields and control variables.
+  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
+                             ! timing of diagnostic output.
   character(len=200) :: inputdir ! The directory where NetCDF input files are.
   character(len=200) :: wind_config ! Indicator for wind forcing type (2gyre, USER, FILE..)
   character(len=200) :: wind_file   ! If wind_config is "file", file to use
   character(len=200) :: buoy_config ! Indicator for buoyancy forcing type
 
-  character(len=200) :: longwave_file = ""
-  character(len=200) :: shortwave_file = ""
-  character(len=200) :: evaporation_file = ""
-  character(len=200) :: sensibleheat_file = ""
-  character(len=200) :: latentheat_file = ""
+  character(len=200) :: longwave_file = ''
+  character(len=200) :: shortwave_file = ''
+  character(len=200) :: evaporation_file = ''
+  character(len=200) :: sensibleheat_file = ''
+  character(len=200) :: latentheat_file = ''
 
-  character(len=200) :: rain_file = ""
-  character(len=200) :: snow_file = ""
-  character(len=200) :: runoff_file = ""
+  character(len=200) :: rain_file = ''
+  character(len=200) :: snow_file = ''
+  character(len=200) :: runoff_file = ''
 
-  character(len=200) :: longwaveup_file = ""
-  character(len=200) :: shortwaveup_file = ""
+  character(len=200) :: longwaveup_file = ''
+  character(len=200) :: shortwaveup_file = ''
 
-  character(len=200) :: SSTrestore_file = ""
-  character(len=200) :: salinityrestore_file = ""
+  character(len=200) :: SSTrestore_file = ''
+  character(len=200) :: salinityrestore_file = ''
   character(len=80)  :: & ! Variable names in the input files.
-    stress_x_var = "", stress_y_var = "", ustar_var = "", &
-    LW_var = "", SW_var = "", latent_var = "", sens_var = "", evap_var = "", &
-    rain_var = "", snow_var = "", liq_runoff_var = "", froz_runoff_var = "", &
-    SST_restore_var = "", SSS_restore_var = ""
+    stress_x_var = '', stress_y_var = '', ustar_var = '', &
+    LW_var = '', SW_var = '', latent_var = '', sens_var = '', evap_var = '', &
+    rain_var = '', snow_var = '', liq_runoff_var = '', froz_runoff_var = '', &
+    SST_restore_var = '', SSS_restore_var = ''
 
   ! These variables give the number of time levels in the various forcing files
   integer :: SW_nlev = -1, LW_nlev = -1, latent_nlev = -1, sens_nlev = -1
@@ -228,6 +232,7 @@ subroutine set_forcing(state, fluxes, day_start, day_interval, G, CS)
   integer :: intdt
 
   call cpu_clock_begin(id_clock_forcing)
+  call callTree_enter("set_forcing, MOM_surface_forcing.F90")
 
   day_center = day_start + day_interval/2
   call get_time(day_interval, intdt)
@@ -236,6 +241,8 @@ subroutine set_forcing(state, fluxes, day_start, day_interval, G, CS)
   if (CS%variable_winds .or. CS%first_call_set_forcing) then
     if (trim(CS%wind_config) == "file") then
       call wind_forcing_from_file(state, fluxes, day_center, G, CS)
+    elseif (trim(CS%wind_config) == "data_override") then
+      call wind_forcing_by_data_override(state, fluxes, day_center, G, CS)
     elseif (trim(CS%wind_config) == "2gyre") then
       call wind_forcing_2gyre(state, fluxes, day_center, G, CS)
     elseif (trim(CS%wind_config) == "1gyre") then
@@ -260,8 +267,12 @@ subroutine set_forcing(state, fluxes, day_start, day_interval, G, CS)
       (.not.CS%adiabatic)) then
     if (trim(CS%buoy_config) == "file") then
       call buoyancy_forcing_from_files(state, fluxes, day_center, dt, G, CS)
+    elseif (trim(CS%buoy_config) == "data_override") then
+      call buoyancy_forcing_from_data_override(state, fluxes, day_center, dt, G, CS)
     elseif (trim(CS%buoy_config) == "zero") then
       call buoyancy_forcing_zero(state, fluxes, day_center, dt, G, CS)
+    elseif (trim(CS%buoy_config) == "const") then
+      call buoyancy_forcing_const(state, fluxes, day_center, dt, G, CS)
     elseif (trim(CS%buoy_config) == "linear") then
       call buoyancy_forcing_linear(state, fluxes, day_center, dt, G, CS)
     elseif (trim(CS%buoy_config) == "MESO") then
@@ -290,6 +301,7 @@ subroutine set_forcing(state, fluxes, day_start, day_interval, G, CS)
   CS%first_call_set_forcing = .false.
 
   call cpu_clock_end(id_clock_forcing)
+  call callTree_leave("set_forcing")
 end subroutine set_forcing
 
 
@@ -313,6 +325,7 @@ subroutine wind_forcing_zero(state, fluxes, day, G, CS)
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
 
+  call callTree_enter("wind_forcing_zero, MOM_surface_forcing.F90")
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -345,6 +358,7 @@ subroutine wind_forcing_zero(state, fluxes, day, G, CS)
     enddo ; enddo ; endif
   endif
 
+  call callTree_leave("wind_forcing_zero")
 end subroutine wind_forcing_zero
 
 subroutine wind_forcing_2gyre(state, fluxes, day, G, CS)
@@ -367,6 +381,7 @@ subroutine wind_forcing_2gyre(state, fluxes, day, G, CS)
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
 
+  call callTree_enter("wind_forcing_2gyre, MOM_surface_forcing.F90")
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -392,6 +407,7 @@ subroutine wind_forcing_2gyre(state, fluxes, day, G, CS)
     fluxes%tauy(i,J) = 0.0
   enddo ; enddo
 
+  call callTree_leave("wind_forcing_2gyre")
 end subroutine wind_forcing_2gyre
 
 subroutine wind_forcing_1gyre(state, fluxes, day, G, CS)
@@ -414,6 +430,7 @@ subroutine wind_forcing_1gyre(state, fluxes, day, G, CS)
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
 
+  call callTree_enter("wind_forcing_1gyre, MOM_surface_forcing.F90")
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -438,6 +455,7 @@ subroutine wind_forcing_1gyre(state, fluxes, day, G, CS)
     fluxes%tauy(i,J) = 0.0
   enddo ; enddo
 
+  call callTree_leave("wind_forcing_1gyre")
 end subroutine wind_forcing_1gyre
 
 subroutine wind_forcing_gyres(state, fluxes, day, G, CS)
@@ -460,6 +478,7 @@ subroutine wind_forcing_gyres(state, fluxes, day, G, CS)
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
 
+  call callTree_enter("wind_forcing_gyres, MOM_surface_forcing.F90")
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -494,6 +513,7 @@ subroutine wind_forcing_gyres(state, fluxes, day, G, CS)
       fluxes%taux(i,j)*fluxes%taux(i,j)))/CS%Rho0 + (CS%gust_const/CS%Rho0))
   enddo ; enddo
 
+  call callTree_leave("wind_forcing_gyres")
 end subroutine wind_forcing_gyres
 
 subroutine wind_forcing_from_file(state, fluxes, day, G, CS)
@@ -525,6 +545,7 @@ subroutine wind_forcing_from_file(state, fluxes, day, G, CS)
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   logical :: read_Ustar
 
+  call callTree_enter("wind_forcing_from_file, MOM_surface_forcing.F90")
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -669,7 +690,87 @@ subroutine wind_forcing_from_file(state, fluxes, day, G, CS)
     
   endif ! time_lev /= CS%wind_last_lev
 
+  call callTree_leave("wind_forcing_from_file")
 end subroutine wind_forcing_from_file
+
+subroutine wind_forcing_by_data_override(state, fluxes, day, G, CS)
+  type(surface),            intent(inout) :: state
+  type(forcing),            intent(inout) :: fluxes
+  type(time_type),          intent(in)    :: day
+  type(ocean_grid_type),    intent(inout) :: G
+  type(surface_forcing_CS), pointer       :: CS
+
+! This subroutine sets the surface wind stresses.
+!
+! Arguments: state - A structure containing fields that describe the
+!                    surface state of the ocean.
+!  (out)     fluxes - A structure containing pointers to any possible
+!                     forcing fields.  Unused fields have NULL ptrs.
+!  (in)      day - Time of the fluxes.
+!  (in)      G - The ocean's grid structure.
+!  (in)      CS - A pointer to the control structure returned by a previous
+!                 call to surface_forcing_init.
+  real :: temp_x(SZI_(G),SZJ_(G)) ! Pseudo-zonal and psuedo-meridional
+  real :: temp_y(SZI_(G),SZJ_(G)) ! wind stresses at h-points, in Pa.
+  integer :: i, j, is_in, ie_in, js_in, je_in
+  logical :: read_uStar
+
+  call callTree_enter("wind_forcing_by_data_override, MOM_surface_forcing.F90")
+  if (.not.associated(fluxes%taux)) then
+    allocate(fluxes%taux(G%IsdB:G%IedB,G%jsd:G%jed)) ; fluxes%taux(:,:) = 0.0
+  endif
+  if (.not.associated(fluxes%tauy)) then
+    allocate(fluxes%tauy(G%isd:G%ied,G%JsdB:G%JedB)) ; fluxes%tauy(:,:) = 0.0
+  endif
+  if (.not.associated(fluxes%ustar)) then
+    allocate(fluxes%ustar(G%isd:G%ied,G%jsd:G%jed)) ; fluxes%ustar(:,:) = 0.0
+  endif
+
+  if (.not.CS%dataOverrideIsInitialized) then
+    call data_override_init(Ocean_domain_in=G%Domain%mpp_domain)
+    CS%dataOverrideIsInitialized = .True.
+  endif
+
+  is_in = G%isc - G%isd + 1
+  ie_in = G%iec - G%isd + 1
+  js_in = G%jsc - G%jsd + 1
+  je_in = G%jec - G%jsd + 1
+
+  temp_x(:,:) = 0.0 ; temp_y(:,:) = 0.0
+  call data_override('OCN', 'taux', temp_x, day, is_in=is_in, ie_in=ie_in, js_in=js_in, je_in=je_in)
+  call data_override('OCN', 'tauy', temp_y, day, is_in=is_in, ie_in=ie_in, js_in=js_in, je_in=je_in)
+  call pass_vector(temp_x, temp_y, G%Domain, To_All, AGRID)
+  ! Ignore CS%wind_scale when using data_override ?????
+  do j=G%jsc,G%jec ; do I=G%IscB,G%IecB
+    fluxes%taux(I,j) = 0.5 * (temp_x(i,j) + temp_x(i+1,j))
+  enddo ; enddo
+  do J=G%JscB,G%JecB ; do i=G%isc,G%iec
+    fluxes%tauy(i,J) = 0.5 * (temp_y(i,j) + temp_y(i,j+1))
+  enddo ; enddo
+
+  read_Ustar = (len_trim(CS%ustar_var) > 0) ! Need better control higher up ????
+  if (read_Ustar) then
+    call data_override('OCN', 'ustar', fluxes%ustar, day, is_in=is_in, ie_in=ie_in, js_in=js_in, je_in=je_in)
+  else
+    if (CS%read_gust_2d) then
+      call data_override('OCN', 'gust', CS%gust, day, is_in=is_in, ie_in=ie_in, js_in=js_in, je_in=je_in)
+      do j=G%jsc,G%jec ; do i=G%isc,G%iec
+        fluxes%ustar(i,j) = sqrt((sqrt(temp_x(i,j)*temp_x(i,j) + &
+            temp_y(i,j)*temp_y(i,j)) + CS%gust(i,j)) / CS%Rho0)
+      enddo ; enddo
+    else
+      do j=G%jsc,G%jec ; do i=G%isc,G%iec
+        fluxes%ustar(i,j) = sqrt(sqrt(temp_x(i,j)*temp_x(i,j) + &
+            temp_y(i,j)*temp_y(i,j))/CS%Rho0 + (CS%gust_const/CS%Rho0))
+      enddo ; enddo
+    endif
+  endif
+
+  call pass_vector(fluxes%taux, fluxes%tauy, G%Domain, To_All)
+! call pass_var(fluxes%ustar, G%Domain, To_All)     Not needed  ?????
+
+  call callTree_leave("wind_forcing_by_data_override")
+end subroutine wind_forcing_by_data_override
 
 subroutine buoyancy_forcing_from_files(state, fluxes, day, dt, G, CS)
   type(surface),         intent(inout) :: state
@@ -1009,6 +1110,242 @@ subroutine buoyancy_forcing_from_files(state, fluxes, day, dt, G, CS)
 
 end subroutine buoyancy_forcing_from_files
 
+
+subroutine buoyancy_forcing_from_data_override(state, fluxes, day, dt, G, CS)
+  type(surface),         intent(inout) :: state
+  type(forcing),         intent(inout) :: fluxes
+  type(time_type),       intent(in)    :: day
+  real,                  intent(in)    :: dt
+  type(ocean_grid_type), intent(inout) :: G
+  type(surface_forcing_CS), pointer    :: CS
+!    This subroutine specifies the current surface fluxes of buoyancy
+!  temperature and fresh water.  It may also be modified to add
+!  surface fluxes of user provided tracers.
+!
+! Arguments: state - A structure containing fields that describe the
+!                    surface state of the ocean.
+!  (out)     fluxes - A structure containing pointers to any possible
+!                     forcing fields.  Unused fields have NULL ptrs.
+!  (in)      day - Time of the fluxes.
+!  (in)      dt - The amount of time over which the fluxes apply.
+!  (in)      G - The ocean's grid structure.
+!  (in)      CS - A pointer to the control structure returned by a previous
+!                 call to surface_forcing_init.
+
+  real, dimension(SZI_(G),SZJ_(G)) :: &
+    temp, &       ! A 2-d temporary work array with various units.
+    SST_anom, &   ! Instantaneous sea surface temperature anomalies from a
+                  ! target (observed) value, in deg C.
+    SSS_anom, &   ! Instantaneous sea surface salinity anomalies from a target
+                  ! (observed) value, in g kg-1.
+    SSS_mean      ! A (mean?) salinity about which to normalize local salinity
+                  ! anomalies when calculating restorative precipitation
+                  ! anomalies, in g kg-1.
+  real :: rhoXcp ! The mean density times the heat capacity, in J m-3 K-1.
+  real :: Irho0  ! The inverse of the Boussinesq density, in m3 kg-1.
+
+  integer :: time_lev_daily     ! The time levels to read for fields with
+  integer :: time_lev_monthly   ! daily and montly cycles.
+  integer :: itime_lev           ! The time level that is used for a field.
+
+  integer :: days, seconds
+  integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
+  integer :: is_in, ie_in, js_in, je_in
+
+!    Latent heat of vaporization at 15 deg C according to appendix of Gill
+  real :: latent_heat_evap=2.4663e6
+
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
+  
+  if (CS%use_temperature) rhoXcp = CS%Rho0 * fluxes%C_p
+  Irho0 = 1.0/CS%Rho0
+
+
+  if (.not.CS%dataOverrideIsInitialized) then
+    call data_override_init(Ocean_domain_in=G%Domain%mpp_domain)
+    CS%dataOverrideIsInitialized = .True.
+  endif
+
+  is_in = G%isc - G%isd + 1
+  ie_in = G%iec - G%isd + 1
+  js_in = G%jsc - G%jsd + 1
+  je_in = G%jec - G%jsd + 1
+
+  if ( CS%use_temperature ) then
+    ! Specify the fresh water forcing by setting the following, all in units
+    ! of kg m-2 s-1 and positive for water fluxes into the ocean.
+    if (.not.associated(fluxes%evap)) then
+      allocate(fluxes%evap(isd:ied,jsd:jed))
+      fluxes%evap(:,:) = 0.0
+    endif
+    if (.not.associated(fluxes%liq_precip)) then
+      allocate(fluxes%liq_precip(isd:ied,jsd:jed))
+      fluxes%liq_precip(:,:) = 0.0
+    endif
+    if (.not.associated(fluxes%froz_precip)) then
+      allocate(fluxes%froz_precip(isd:ied,jsd:jed))
+      fluxes%froz_precip(:,:) = 0.0
+    endif
+    if (.not.associated(fluxes%liq_runoff)) then
+      allocate(fluxes%liq_runoff(isd:ied,jsd:jed))
+      fluxes%liq_runoff(:,:) = 0.0
+    endif
+    if (.not.associated(fluxes%froz_runoff)) then
+      allocate(fluxes%froz_runoff(isd:ied,jsd:jed))
+      fluxes%froz_runoff(:,:) = 0.0
+    endif
+    if (.not.associated(fluxes%virt_precip)) then
+      allocate(fluxes%virt_precip(isd:ied,jsd:jed))
+      fluxes%virt_precip(:,:) = 0.0
+    endif
+
+    !   Specify the fresh water forcing by setting the following, all in units
+    ! of W m-2 and positive for heat fluxes into the ocean.
+    if (.not.associated(fluxes%sw)) then
+      allocate(fluxes%sw(isd:ied,jsd:jed)) ; fluxes%sw(:,:) = 0.0
+    endif
+    if (.not.associated(fluxes%lw)) then
+      allocate(fluxes%lw(isd:ied,jsd:jed)) ; fluxes%lw(:,:) = 0.0
+    endif
+    if (.not.associated(fluxes%latent)) then
+      allocate(fluxes%latent(isd:ied,jsd:jed)) ; fluxes%latent(:,:) = 0.0
+    endif
+    if (.not.associated(fluxes%sens)) then
+      allocate(fluxes%sens(isd:ied,jsd:jed)) ; fluxes%sens(:,:) = 0.0
+    endif
+    if (CS%restorebuoy) then
+      if (.not.associated(CS%T_Restore)) then
+        allocate(CS%T_Restore(isd:ied,jsd:jed))
+        CS%T_Restore(:,:) = 0.0
+      endif
+      if (.not.associated(fluxes%heat_restore)) then
+        allocate(fluxes%heat_restore(isd:ied,jsd:jed))
+        fluxes%heat_restore(:,:) = 0.0
+      endif
+      if (.not.associated(CS%S_Restore)) then
+        allocate(CS%S_Restore(isd:ied,jsd:jed))
+        CS%S_Restore(:,:) = 0.0
+      endif
+    endif
+  else ! CS%use_temperature false.
+    if (.not.associated(fluxes%buoy)) then
+      allocate(fluxes%buoy(isd:ied,jsd:jed)) ; fluxes%buoy(:,:) = 0.0
+    endif
+    if (CS%restorebuoy .and. .not.associated(CS%Dens_Restore)) then
+      allocate(CS%Dens_Restore(isd:ied,jsd:jed))
+      CS%Dens_Restore(:,:) = 0.0
+    endif
+  endif
+
+
+  call data_override('OCN', 'lw', fluxes%LW(:,:), day, &
+       is_in=is_in, ie_in=ie_in, js_in=js_in, je_in=je_in)
+  call data_override('OCN', 'evap', fluxes%evap(:,:), day, &
+       is_in=is_in, ie_in=ie_in, js_in=js_in, je_in=je_in)
+
+  do j=js,je ; do i=is,ie
+     fluxes%evap(i,j) = -fluxes%evap(i,j)  ! Normal convention is positive into the ocean
+                                           ! but evap is normally a positive quantity in the files
+     fluxes%latent(i,j) = latent_heat_evap*fluxes%evap(i,j)
+  enddo; enddo
+
+  call data_override('OCN', 'sens', fluxes%sens(:,:), day, &
+       is_in=is_in, ie_in=ie_in, js_in=js_in, je_in=je_in)
+
+  do j=js,je ; do i=is,ie
+     fluxes%sens(i,j) = -fluxes%sens(i,j)  ! Normal convention is positive into the ocean
+                                           ! but sensible is normally a positive quantity in the files
+  enddo; enddo
+
+  call data_override('OCN', 'sw', fluxes%sw(:,:), day, &
+       is_in=is_in, ie_in=ie_in, js_in=js_in, je_in=je_in)
+
+  call data_override('OCN', 'snow', fluxes%froz_precip(:,:), day, &
+       is_in=is_in, ie_in=ie_in, js_in=js_in, je_in=je_in)
+
+  call data_override('OCN', 'rain', fluxes%liq_precip(:,:), day, &
+       is_in=is_in, ie_in=ie_in, js_in=js_in, je_in=je_in)
+
+  call data_override('OCN', 'runoff', fluxes%liq_runoff(:,:), day, &
+       is_in=is_in, ie_in=ie_in, js_in=js_in, je_in=je_in)
+
+  call data_override('OCN', 'calving', fluxes%froz_runoff(:,:), day, &
+       is_in=is_in, ie_in=ie_in, js_in=js_in, je_in=je_in)
+
+!     Read the SST and SSS fields for damping.
+  if (CS%restorebuoy) then !### .or. associated(CS%ctrl_forcing_CSp)) then
+     call data_override('OCN', 'SST_restore', CS%T_restore(:,:), day, &
+          is_in=is_in, ie_in=ie_in, js_in=js_in, je_in=je_in)
+
+     call data_override('OCN', 'SSS_restore', CS%S_restore(:,:), day, &
+          is_in=is_in, ie_in=ie_in, js_in=js_in, je_in=je_in)
+
+  endif
+
+!   Mask out land points.
+  do j=js,je ; do i=is,ie
+     fluxes%evap(i,j) = fluxes%evap(i,j) * G%mask2dT(i,j)
+     fluxes%liq_precip(i,j)  = fluxes%liq_precip(i,j)  * G%mask2dT(i,j)
+     fluxes%froz_precip(i,j) = fluxes%froz_precip(i,j) * G%mask2dT(i,j)
+     fluxes%liq_runoff(i,j)  = fluxes%liq_runoff(i,j)  * G%mask2dT(i,j)
+     fluxes%froz_runoff(i,j) = fluxes%froz_runoff(i,j) * G%mask2dT(i,j)
+     fluxes%LW(i,j) = fluxes%LW(i,j) * G%mask2dT(i,j)
+     fluxes%latent(i,j) = fluxes%latent(i,j) * G%mask2dT(i,j)
+     fluxes%sens(i,j) = fluxes%sens(i,j) * G%mask2dT(i,j)
+     fluxes%sw(i,j) = fluxes%sw(i,j) * G%mask2dT(i,j)
+  enddo; enddo
+
+
+  if (CS%restorebuoy) then
+    if (CS%use_temperature) then
+      do j=js,je ; do i=is,ie
+        if (G%mask2dT(i,j) > 0) then
+          fluxes%heat_restore(i,j) = G%mask2dT(i,j) * &
+              ((CS%T_Restore(i,j) - state%SST(i,j)) * rhoXcp * CS%Flux_const)
+          fluxes%virt_precip(i,j) = - (CS%Rho0*CS%Flux_const) * &
+              (CS%S_Restore(i,j) - state%SSS(i,j)) / &
+              (0.5*(state%SSS(i,j) + CS%S_Restore(i,j)))
+        else
+          fluxes%heat_restore(i,j) = 0.0
+          fluxes%virt_precip(i,j) = 0.0
+        endif
+      enddo ; enddo
+    else
+      do j=js,je ; do i=is,ie
+        if (G%mask2dT(i,j) > 0) then
+          fluxes%buoy(i,j) = (CS%Dens_Restore(i,j) - state%sfc_density(i,j)) * &
+                             (CS%G_Earth*CS%Flux_const/CS%Rho0)
+        else
+          fluxes%buoy(i,j) = 0.0
+        endif
+      enddo ; enddo
+    endif
+  else                                              ! not RESTOREBUOY
+    if (.not.CS%use_temperature) then
+      call MOM_error(FATAL, "buoyancy_forcing in MOM_surface_forcing: "// &
+                     "The fluxes need to be defined without RESTOREBUOY.")
+    endif
+  endif                                             ! end RESTOREBUOY
+
+!### if (associated(CS%ctrl_forcing_CSp)) then
+!###   do j=js,je ; do i=is,ie
+!###     SST_anom(i,j) = state%SST(i,j) - CS%T_Restore(i,j)
+!###     SSS_anom(i,j) = state%SSS(i,j) - CS%S_Restore(i,j)
+!###     SSS_mean(i,j) = 0.5*(state%SSS(i,j) + CS%S_Restore(i,j))
+!###   enddo ; enddo
+!###   call apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, fluxes%heat_restore, &
+!###                           fluxes%virt_precip, day, dt, G, CS%ctrl_forcing_CSp)
+!### endif
+
+  if (associated(fluxes%p_surf)) then
+    do j=js,je ; do i=is,ie
+      fluxes%p_surf(i,j) = 0.0
+    enddo ; enddo
+  endif
+
+end subroutine buoyancy_forcing_from_data_override
+
 subroutine buoyancy_forcing_zero(state, fluxes, day, dt, G, CS)
   type(surface),         intent(inout) :: state
   type(forcing),         intent(inout) :: fluxes
@@ -1103,6 +1440,82 @@ subroutine buoyancy_forcing_zero(state, fluxes, day, dt, G, CS)
   endif
 
 end subroutine buoyancy_forcing_zero
+
+subroutine buoyancy_forcing_const(state, fluxes, day, dt, G, CS)
+  type(surface),         intent(inout) :: state
+  type(forcing),         intent(inout) :: fluxes
+  type(time_type),       intent(in)    :: day
+  real,                  intent(in)    :: dt
+  type(ocean_grid_type), intent(in)    :: G
+  type(surface_forcing_CS), pointer    :: CS
+!    This subroutine specifies the current surface fluxes of buoyancy
+!  temperature and fresh water.  It may also be modified to add
+!  surface fluxes of user provided tracers.
+!
+! Arguments: state - A structure containing fields that describe the
+!                    surface state of the ocean.
+!  (out)     fluxes - A structure containing pointers to any possible
+!                     forcing fields.  Unused fields have NULL ptrs.
+!  (in)      day - Time of the fluxes.
+!  (in)      dt - The amount of time over which the fluxes apply.
+!  (in)      G - The ocean's grid structure.
+!  (in)      CS - A pointer to the control structure returned by a previous
+!                 call to surface_forcing_init.
+  integer :: i, j, is, ie, js, je
+
+  if ( CS%use_temperature ) then
+    if (.not.associated(fluxes%evap)) then
+      allocate(fluxes%evap(G%isd:G%ied,G%jsd:G%jed))
+      fluxes%evap(:,:) = 0.0
+    endif
+    if (.not.associated(fluxes%liq_precip)) then
+      allocate(fluxes%liq_precip(G%isd:G%ied,G%jsd:G%jed))
+      fluxes%liq_precip(:,:) = 0.0
+    endif
+    if (.not.associated(fluxes%froz_precip)) then
+      allocate(fluxes%froz_precip(G%isd:G%ied,G%jsd:G%jed))
+      fluxes%froz_precip(:,:) = 0.0
+    endif
+    if (.not.associated(fluxes%liq_runoff)) then
+      allocate(fluxes%liq_runoff(G%isd:G%ied,G%jsd:G%jed))
+      fluxes%liq_runoff(:,:) = 0.0
+    endif
+    if (.not.associated(fluxes%froz_runoff)) then
+      allocate(fluxes%froz_runoff(G%isd:G%ied,G%jsd:G%jed))
+      fluxes%froz_runoff(:,:) = 0.0
+    endif
+    if (.not.associated(fluxes%virt_precip)) then
+      allocate(fluxes%virt_precip(G%isd:G%ied,G%jsd:G%jed))
+      fluxes%virt_precip(:,:) = 0.0
+    endif
+
+    !   Specify the heat fluxes by setting the following, all in units
+    ! of W m-2 and positive for heat fluxes into the ocean.
+    if (.not.associated(fluxes%sw)) then
+      allocate(fluxes%sw(G%isd:G%ied,G%jsd:G%jed)) ; fluxes%sw(:,:) = 0.0
+    endif
+    if (.not.associated(fluxes%lw)) then
+      allocate(fluxes%lw(G%isd:G%ied,G%jsd:G%jed)) ; fluxes%lw(:,:) = 0.0
+    endif
+    if (.not.associated(fluxes%latent)) then
+      allocate(fluxes%latent(G%isd:G%ied,G%jsd:G%jed)) ; fluxes%latent(:,:) = 0.0
+    endif
+    if (.not.associated(fluxes%sens)) then
+      allocate(fluxes%sens(G%isd:G%ied,G%jsd:G%jed)) ; fluxes%sens(:,:) = CS%constantHeatForcing
+    endif
+  else
+    if (.not.associated(fluxes%buoy)) then
+      allocate(fluxes%buoy(G%isd:G%ied,G%jsd:G%jed)) ; fluxes%buoy(:,:) = 0.0
+    endif
+  endif
+
+  if (associated(fluxes%p_surf)) then
+    do j=js,je ; do i=is,ie
+      fluxes%p_surf(i,j) = 0.0
+    enddo ; enddo
+  endif
+
+end subroutine buoyancy_forcing_const
 
 subroutine buoyancy_forcing_linear(state, fluxes, day, dt, G, CS)
   type(surface),         intent(inout) :: state
@@ -1370,14 +1783,14 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, tracer_flow_CSp)
   type(time_type),           intent(in) :: Time
   type(ocean_grid_type),     intent(in) :: G
   type(param_file_type),     intent(in) :: param_file
-  type(diag_ptrs), target,   intent(in) :: diag
+  type(diag_ctrl), target,   intent(in) :: diag
   type(surface_forcing_CS),  pointer    :: CS
   type(tracer_flow_control_CS), pointer :: tracer_flow_CSp
 ! Arguments: Time - The current model time.
 !  (in)      G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
-!  (in)      diag - A structure containing pointers to common diagnostic fields.
+!  (in)      diag - A structure that is used to regulate diagnostic output.
 !  (in/out)  CS - A pointer that is set to point to the control structure
 !                 for this module
 !  (in)      tracer_flow_CSp - A pointer to the control structure of the tracer
@@ -1404,7 +1817,7 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, tracer_flow_CSp)
   if (associated(tracer_flow_CSp)) CS%tracer_flow_CSp => tracer_flow_CSp
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, "")
+  call log_version(param_file, mod, version, '')
   call get_param(param_file, mod, "ENABLE_THERMODYNAMICS", CS%use_temperature, &
                  "If true, Temperature and salinity are used as state \n"//&
                  "variables.", default=.true.)
@@ -1561,6 +1974,11 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, tracer_flow_CSp)
 
     CS%SSTrestore_file = trim(CS%inputdir)//trim(CS%SSTrestore_file)
     CS%salinityrestore_file = trim(CS%inputdir)//trim(CS%salinityrestore_file)
+  elseif (trim(CS%buoy_config) == "const") then
+    call get_param(param_file, mod, "SENSIBLE_HEAT_FLUX", CS%constantHeatForcing, &
+                 "A constant heat forcing (positive into ocean) applied \n"//&
+                 "through the sensible heat flux field. ", &
+                 units='W/m2', default=0., fail_if_missing=.true.)
   endif
   call get_param(param_file, mod, "WIND_CONFIG", CS%wind_config, &
                  "The character string that indicates how wind forcing \n"//&
@@ -1683,59 +2101,59 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, tracer_flow_CSp)
     call MESO_surface_forcing_init(Time, G, param_file, diag, CS%MESO_forcing_CSp)
   endif
 
-  CS%id_taux = register_diag_field('ocean_model', 'taux', G%axesCu1, Time, &
+  CS%id_taux = register_diag_field('ocean_model', 'taux', diag%axesCu1, Time, &
         'Zonal Wind Stress', 'Pascal')
-  CS%id_tauy = register_diag_field('ocean_model', 'tauy', G%axesCv1, Time, &
+  CS%id_tauy = register_diag_field('ocean_model', 'tauy', diag%axesCv1, Time, &
         'Meridional Wind Stress', 'Pascal')
-  CS%id_ustar = register_diag_field('ocean_model', 'ustar', G%axesT1, Time, &
+  CS%id_ustar = register_diag_field('ocean_model', 'ustar', diag%axesT1, Time, &
       'Surface friction velocity', 'meter second-1')
 
   if (CS%use_temperature) then
-    CS%id_PminusE = register_diag_field('ocean_model', 'PmE', G%axesT1, Time, &
+    CS%id_PminusE = register_diag_field('ocean_model', 'PmE', diag%axesT1, Time, &
           'Net fresh water flux (P-E+C+R)', 'kilogram meter-2 second-1')
-    CS%id_evap = register_diag_field('ocean_model', 'evap', G%axesT1, Time, &
+    CS%id_evap = register_diag_field('ocean_model', 'evap', diag%axesT1, Time, &
           'Evaporation at ocean surface (usually negative)', 'kilogram meter-2 second-1')
-    CS%id_precip = register_diag_field('ocean_model', 'precip', G%axesT1, Time, &
+    CS%id_precip = register_diag_field('ocean_model', 'precip', diag%axesT1, Time, &
           'Net (liq.+froz.) precipitation into ocean', 'kilogram meter-2 second-1')
-    CS%id_froz_precip = register_diag_field('ocean_model', 'froz_precip', G%axesT1, Time, &
+    CS%id_froz_precip = register_diag_field('ocean_model', 'froz_precip', diag%axesT1, Time, &
           'Frozen Precipitation into ocean', 'kilogram meter-2 second-1')
-    CS%id_liq_precip = register_diag_field('ocean_model', 'liq_precip', G%axesT1, Time, &
+    CS%id_liq_precip = register_diag_field('ocean_model', 'liq_precip', diag%axesT1, Time, &
           'Liquid Precipitation into ocean', 'kilogram meter-2 second-1')
-    CS%id_virt_precip = register_diag_field('ocean_model', 'virt_precip', G%axesT1, Time, &
+    CS%id_virt_precip = register_diag_field('ocean_model', 'virt_precip', diag%axesT1, Time, &
           'Virtual Precipitation due to salt restoring', 'kilogram meter-2 second-1')
-    CS%id_froz_runoff = register_diag_field('ocean_model', 'froz_runoff', G%axesT1, Time, &
+    CS%id_froz_runoff = register_diag_field('ocean_model', 'froz_runoff', diag%axesT1, Time, &
           'Frozen runoff (calving) into ocean', 'kilogram meter-2 second-1')
-    CS%id_liq_runoff = register_diag_field('ocean_model', 'liq_runoff', G%axesT1, Time, &
+    CS%id_liq_runoff = register_diag_field('ocean_model', 'liq_runoff', diag%axesT1, Time, &
           'Liquid runoff (rivers) into ocean', 'kilogram meter-2 second-1')
-    CS%id_runoff_hflx = register_diag_field('ocean_model', 'runoff_hflx', G%axesT1, Time, &
+    CS%id_runoff_hflx = register_diag_field('ocean_model', 'runoff_hflx', diag%axesT1, Time, &
           'Heat content of liquid runoff (rivers) into ocean', 'Watt meter-2')
-    CS%id_calving_hflx = register_diag_field('ocean_model', 'calving_hflx', G%axesT1, Time, &
+    CS%id_calving_hflx = register_diag_field('ocean_model', 'calving_hflx', diag%axesT1, Time, &
           'Heat content of liquid runoff (rivers) into ocean', 'Watt meter-2')
 
-    CS%id_Net_Heating = register_diag_field('ocean_model', 'Net_Heat', G%axesT1, Time, &
+    CS%id_Net_Heating = register_diag_field('ocean_model', 'Net_Heat', diag%axesT1, Time, &
           'Net Surface Heating of Ocean', 'Watt meter-2')
-    CS%id_sw = register_diag_field('ocean_model', 'SW', G%axesT1, Time, &
+    CS%id_sw = register_diag_field('ocean_model', 'SW', diag%axesT1, Time, &
         'Shortwave radiation flux into ocean', 'Watt meter-2')
-    CS%id_LwLatSens = register_diag_field('ocean_model', 'LwLatSens', G%axesT1, Time, &
+    CS%id_LwLatSens = register_diag_field('ocean_model', 'LwLatSens', diag%axesT1, Time, &
           'Combined longwave, latent, and sensible heating', 'Watt meter-2')
-    CS%id_lw = register_diag_field('ocean_model', 'LW', G%axesT1, Time, &
+    CS%id_lw = register_diag_field('ocean_model', 'LW', diag%axesT1, Time, &
         'Longwave radiation flux into ocean', 'Watt meter-2')
-    CS%id_lat = register_diag_field('ocean_model', 'latent', G%axesT1, Time, &
+    CS%id_lat = register_diag_field('ocean_model', 'latent', diag%axesT1, Time, &
         'Latent heat flux into ocean', 'Watt meter-2')
-    CS%id_sens = register_diag_field('ocean_model', 'sensible', G%axesT1, Time, &
+    CS%id_sens = register_diag_field('ocean_model', 'sensible', diag%axesT1, Time, &
         'Sensible heat flux into ocean', 'Watt meter-2')
     if (CS%restorebuoy) &
-      CS%id_heat_rest = register_diag_field('ocean_model', 'heat_rest', G%axesT1, Time, &
+      CS%id_heat_rest = register_diag_field('ocean_model', 'heat_rest', diag%axesT1, Time, &
             'Restoring surface heat flux into ocean', 'Watt meter-2')
 
-    CS%id_psurf = register_diag_field('ocean_model', 'p_surf', G%axesT1, Time, &
+    CS%id_psurf = register_diag_field('ocean_model', 'p_surf', diag%axesT1, Time, &
           'Pressure at ice-ocean or atmosphere-ocean interface', 'Pascal')
-    CS%id_saltflux = register_diag_field('ocean_model', 'salt_flux', G%axesT1, Time, &
+    CS%id_saltflux = register_diag_field('ocean_model', 'salt_flux', diag%axesT1, Time, &
           'Salt flux into ocean at surface', 'kilogram meter-2 second-1')
-    CS%id_TKE_tidal = register_diag_field('ocean_model', 'TKE_tidal', G%axesT1, Time, &
+    CS%id_TKE_tidal = register_diag_field('ocean_model', 'TKE_tidal', diag%axesT1, Time, &
           'Tidal source of BBL mixing', 'Watt meter-2')
   else
-    CS%id_buoy = register_diag_field('ocean_model', 'buoy', G%axesT1, Time, &
+    CS%id_buoy = register_diag_field('ocean_model', 'buoy', diag%axesT1, Time, &
           'Buoyancy forcing', 'meter2 second-3')
   endif
 

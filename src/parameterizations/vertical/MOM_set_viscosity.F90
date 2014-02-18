@@ -54,11 +54,13 @@ module MOM_set_visc
 use MOM_checksums, only : uchksum, vchksum
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
-use MOM_diag_mediator, only : diag_ptrs, time_type
+use MOM_diag_mediator, only : diag_ctrl, time_type
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
+use MOM_kappa_shear, only : kappa_shear_is_used
+use MOM_restart, only : register_restart_field, vardesc, MOM_restart_CS
 use MOM_variables, only : thermo_var_ptrs
 use MOM_variables, only : vertvisc_type, ocean_OBC_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs
@@ -68,6 +70,7 @@ implicit none ; private
 #include <MOM_memory.h>
 
 public set_viscous_BBL, set_viscous_ML, set_visc_init, set_visc_end
+public set_visc_register_restarts
 
 type, public :: set_visc_CS ; private
   real    :: Hbbl           ! The static bottom boundary layer thickness, in
@@ -114,8 +117,8 @@ type, public :: set_visc_CS ; private
                             ! of the vertical component of rotation when
                             ! setting the decay scale for turbulence.
   logical :: debug          ! If true, write verbose checksums for debugging purposes.
-  type(diag_ptrs), pointer :: diag ! A pointer to a structure of shareable
-                            ! ocean diagnostic fields.
+  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
+                            ! timing of diagnostic output.
   integer :: id_bbl_thick_u = -1, id_kv_bbl_u = -1
   integer :: id_bbl_thick_v = -1, id_kv_bbl_v = -1
   integer :: id_Ray_u = -1, id_Ray_v = -1
@@ -1019,7 +1022,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
             ! Find dRho/dT and dRho_dS.
             do I=Isq,Ieq
               press(I) = G%H_to_Pa * htot(I)
-              k2 = G%nkml
+              k2 = max(1,G%nkml)
               I_2hlay = 1.0 / (h(i,j,k2) + h(i+1,j,k2) + h_neglect)
               T_EOS(I) = (h(i,j,k2)*tv%T(i,j,k2) + h(i+1,j,k2)*tv%T(i+1,j,k2)) * I_2hlay
               S_EOS(I) = (h(i,j,k2)*tv%S(i,j,k2) + h(i+1,j,k2)*tv%S(i+1,j,k2)) * I_2hlay
@@ -1248,7 +1251,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
             ! Find dRho/dT and dRho_dS.
             do i=is,ie
               press(i) = G%H_to_Pa * htot(i)
-              k2 = G%nkml
+              k2 = max(1,G%nkml)
               I_2hlay = 1.0 / (h(i,j,k2) + h(i,j+1,k2) + h_neglect)
               T_EOS(i) = (h(i,j,k2)*tv%T(i,j,k2) + h(i,j+1,k2)*tv%T(i,j+1,k2)) * I_2hlay
               S_EOS(i) = (h(i,j,k2)*tv%S(i,j,k2) + h(i,j+1,k2)*tv%S(i,j+1,k2)) * I_2hlay
@@ -1457,25 +1460,73 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
 
 end subroutine set_viscous_ML
 
+subroutine set_visc_register_restarts(G, param_file, visc, restart_CS)
+  type(ocean_grid_type),   intent(in)    :: G
+  type(param_file_type),   intent(in)    :: param_file
+  type(vertvisc_type),     intent(inout) :: visc
+  type(MOM_restart_CS),    pointer       :: restart_CS
+!   This subroutine is used to register any fields associated with the
+! vertvisc_type.
+! Arguments: G - The ocean's grid structure.
+!  (in)      param_file - A structure indicating the open file to parse for
+!                         model parameter values.
+!  (out)     visc - A structure containing vertical viscosities and related
+!                   fields.  Allocated here.
+!  (in)      restart_CS - A pointer to the restart control structure.
+  type(vardesc) :: vd
+  logical :: use_kappa_shear, adiabatic, useKPP
+  integer :: isd, ied, jsd, jed, nz
+  character(len=40)  :: mod = "MOM_set_visc"  ! This module's name.
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = G%ke
+
+  call get_param(param_file, mod, "ADIABATIC", adiabatic, default=.false., &
+                 do_not_log=.true.)
+  use_kappa_shear = .false. ; useKPP = .false.
+  if (.not.adiabatic) then
+    use_kappa_shear = kappa_shear_is_used(param_file)
+    call get_param(param_file, mod, "USE_KPP", useKPP, &
+                 "If true, turns on the [CVmix] KPP scheme of Large et al., 1984,\n"// &
+                 "to calculate diffusivities and non-local transport in the OBL.", &
+                 default=.false., do_not_log=.true.)
+  endif
+
+
+  if (use_kappa_shear .or. useKPP) then
+    allocate(visc%Kd_turb(isd:ied,jsd:jed,nz+1)) ; visc%Kd_turb(:,:,:) = 0.0
+    allocate(visc%TKE_turb(isd:ied,jsd:jed,nz+1)) ; visc%TKE_turb(:,:,:) = 0.0
+    allocate(visc%Kv_turb(isd:ied,jsd:jed,nz+1)) ; visc%Kv_turb(:,:,:) = 0.0
+
+    vd = vardesc("Kd_turb","Turbulent diffusivity at interfaces",'h','i','s',"m2 s-1")
+    call register_restart_field(visc%Kd_turb, vd, .false., restart_CS)
+
+    vd = vardesc("TKE_turb","Turbulent kinetic energy per unit mass at interfaces", &
+                 'h','i','s',"m2 s-2")
+    call register_restart_field(visc%TKE_turb, vd, .false., restart_CS)
+    vd = vardesc("Kv_turb","Turbulent viscosity at interfaces",'h','i','s',"m2 s-1")
+    call register_restart_field(visc%Kv_turb, vd, .false., restart_CS)
+  endif
+
+end subroutine set_visc_register_restarts
+
 subroutine set_visc_init(Time, G, param_file, diag, visc, CS)
   type(time_type), target, intent(in)    :: Time
   type(ocean_grid_type),   intent(in)    :: G
   type(param_file_type),   intent(in)    :: param_file
-  type(diag_ptrs), target, intent(inout) :: diag
+  type(diag_ctrl), target, intent(inout) :: diag
   type(vertvisc_type),     intent(inout) :: visc
   type(set_visc_CS),       pointer       :: CS
 ! Arguments: Time - The current model time.
 !  (in)      G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
-!  (in)      diag - A structure containing pointers to common diagnostic fields.
+!  (in)      diag - A structure that is used to regulate diagnostic output.
 !  (out)     visc - A structure containing vertical viscosities and related
 !                   fields.  Allocated here.
 !  (in/out)  CS - A pointer that is set to point to the control structure
 !                 for this module
   real    :: Csmag_chan_dflt, smag_const1, TKE_decay_dflt, bulk_Ri_ML_dflt
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz
-  logical :: use_kappa_shear, adiabatic, double_diffusion
+  logical :: use_kappa_shear, adiabatic, differential_diffusion
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mod = "MOM_set_visc"  ! This module's name.
@@ -1495,7 +1546,7 @@ subroutine set_visc_init(Time, G, param_file, diag, visc, CS)
 ! Set default, read and log parameters
   call log_version(param_file, mod, version, "")
   CS%RiNo_mix = .false.
-  use_kappa_shear = .false. ; double_diffusion = .false. !; adiabatic = .false.  ! Needed? -AJA
+  use_kappa_shear = .false. ; differential_diffusion = .false. !; adiabatic = .false.  ! Needed? -AJA
   call get_param(param_file, mod, "BOTTOMDRAGLAW", CS%bottomdraglaw, &
                  "If true, the bottom stress is calculated with a drag \n"//&
                  "law of the form c_drag*|u|*u. The velocity magnitude \n"//&
@@ -1512,7 +1563,7 @@ subroutine set_visc_init(Time, G, param_file, diag, visc, CS)
                  "If LINEAR_DRAG and BOTTOMDRAGLAW are defined the drag \n"//&
                  "law is cdrag*DRAG_BG_VEL*u.", default=.false.)
   call get_param(param_file, mod, "ADIABATIC", adiabatic, default=.false., &
-                  do_not_log=.true.)
+                 do_not_log=.true.)
   if (adiabatic) then
     call log_param(param_file, mod, "ADIABATIC",adiabatic, &
                  "There are no diapycnal mass fluxes if ADIABATIC is \n"//&
@@ -1522,15 +1573,16 @@ subroutine set_visc_init(Time, G, param_file, diag, visc, CS)
   endif
 
   if (.not.adiabatic) then
-    call get_param(param_file, mod, "USE_JACKSON_PARAM", use_kappa_shear, &
-                 "If true, use the Jackson-Hallberg-Legg (JPO 2008) \n"//& 
-                 "shear mixing parameterization.", default=.false.)
+    use_kappa_shear = kappa_shear_is_used(param_file)
     CS%RiNo_mix = use_kappa_shear
-    call get_param(param_file, mod, "DOUBLE_DIFFUSION", double_diffusion, &
+    call get_param(param_file, mod, "DOUBLE_DIFFUSION", differential_diffusion, &
                  "If true, increase diffusivitives for temperature or salt \n"//&
                  "based on double-diffusive paramaterization from MOM4/KPP.", &
                  default=.false.)
   endif
+  call get_param(param_file, mod, "PRANDTL_TURB", visc%Prandtl_turb, &
+                 "The turbulent Prandtl number applied to shear \n"//&
+                 "instability.", units="nondim", default=0.0)
   call get_param(param_file, mod, "DEBUG", CS%debug, default=.false.)
 
   call get_param(param_file, mod, "DYNAMIC_VISCOUS_ML", CS%dynamic_viscous_ML, &
@@ -1634,28 +1686,24 @@ subroutine set_visc_init(Time, G, param_file, diag, visc, CS)
     allocate(visc%TKE_bbl(isd:ied,jsd:jed)) ; visc%TKE_bbl = 0.0
 
     CS%id_bbl_thick_u = register_diag_field('ocean_model', 'bbl_thick_u', &
-       G%axesCu1, Time, 'BBL thickness at u points', 'meter')
-    CS%id_kv_bbl_u = register_diag_field('ocean_model', 'kv_bbl_u', G%axesCu1, &
+       diag%axesCu1, Time, 'BBL thickness at u points', 'meter')
+    CS%id_kv_bbl_u = register_diag_field('ocean_model', 'kv_bbl_u', diag%axesCu1, &
        Time, 'BBL viscosity at u points', 'meter2 second-1')
     CS%id_bbl_thick_v = register_diag_field('ocean_model', 'bbl_thick_v', &
-       G%axesCv1, Time, 'BBL thickness at v points', 'meter')
-    CS%id_kv_bbl_v = register_diag_field('ocean_model', 'kv_bbl_v', G%axesCv1, &
+       diag%axesCv1, Time, 'BBL thickness at v points', 'meter')
+    CS%id_kv_bbl_v = register_diag_field('ocean_model', 'kv_bbl_v', diag%axesCv1, &
        Time, 'BBL viscosity at v points', 'meter2 second-1')
   endif
   if (CS%Channel_drag) then
     allocate(visc%Ray_u(IsdB:IedB,jsd:jed,nz)) ; visc%Ray_u = 0.0
     allocate(visc%Ray_v(isd:ied,JsdB:JedB,nz)) ; visc%Ray_v = 0.0
-    CS%id_Ray_u = register_diag_field('ocean_model', 'Rayleigh_u', G%axesCuL, &
+    CS%id_Ray_u = register_diag_field('ocean_model', 'Rayleigh_u', diag%axesCuL, &
        Time, 'Rayleigh drag velocity at u points', 'meter second-1')
-    CS%id_Ray_v = register_diag_field('ocean_model', 'Rayleigh_v', G%axesCvL, &
+    CS%id_Ray_v = register_diag_field('ocean_model', 'Rayleigh_v', diag%axesCvL, &
        Time, 'Rayleigh drag velocity at v points', 'meter second-1')
   endif
 
-  if (use_kappa_shear) then
-    allocate(visc%Kd_turb(isd:ied,jsd:jed,nz+1)) ; visc%Kd_turb = 0.0
-    allocate(visc%TKE_turb(isd:ied,jsd:jed,nz+1)) ; visc%TKE_turb = 0.0
-  endif
-  if (double_diffusion) then
+  if (differential_diffusion) then
     allocate(visc%Kd_extra_T(isd:ied,jsd:jed,nz+1)) ; visc%Kd_extra_T = 0.0
     allocate(visc%Kd_extra_S(isd:ied,jsd:jed,nz+1)) ; visc%Kd_extra_S = 0.0
   endif
@@ -1664,9 +1712,9 @@ subroutine set_visc_init(Time, G, param_file, diag, visc, CS)
     allocate(visc%nkml_visc_u(IsdB:IedB,jsd:jed)) ; visc%nkml_visc_u = 0.0
     allocate(visc%nkml_visc_v(isd:ied,JsdB:JedB)) ; visc%nkml_visc_v = 0.0
     CS%id_nkml_visc_u = register_diag_field('ocean_model', 'nkml_visc_u', &
-       G%axesCu1, Time, 'Number of layers in viscous mixed layer at u points', 'meter')
+       diag%axesCu1, Time, 'Number of layers in viscous mixed layer at u points', 'meter')
     CS%id_nkml_visc_v = register_diag_field('ocean_model', 'nkml_visc_v', &
-       G%axesCv1, Time, 'Number of layers in viscous mixed layer at v points', 'meter')
+       diag%axesCv1, Time, 'Number of layers in viscous mixed layer at v points', 'meter')
   endif
 
   CS%Hbbl = CS%Hbbl * G%m_to_H
@@ -1689,6 +1737,7 @@ subroutine set_visc_end(visc, CS)
   endif
   if (associated(visc%Kd_turb)) deallocate(visc%Kd_turb)
   if (associated(visc%TKE_turb)) deallocate(visc%TKE_turb)
+  if (associated(visc%Kv_turb)) deallocate(visc%Kv_turb)
   if (associated(visc%ustar_bbl)) deallocate(visc%ustar_bbl)
   if (associated(visc%TKE_bbl)) deallocate(visc%TKE_bbl)
   if (associated(visc%taux_shelf)) deallocate(visc%taux_shelf)

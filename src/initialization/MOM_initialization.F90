@@ -70,10 +70,13 @@ module MOM_initialization
 
 
 use MOM_checksums, only : hchksum, qchksum, uchksum, vchksum, chksum
-use MOM_coms, only : max_across_PEs
+use MOM_coms, only : max_across_PEs, min_across_PEs
+use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
+use MOM_cpu_clock, only :  CLOCK_ROUTINE, CLOCK_LOOP
 use MOM_domains, only : pass_var, pass_vector, sum_across_PEs, broadcast
 use MOM_domains, only : root_PE, To_All, SCALAR_PAIR, CGRID_NE
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
+use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser, only : get_param, read_param, log_param, param_file_type
 use MOM_file_parser, only : log_version
 use MOM_get_input, only : directories
@@ -93,6 +96,7 @@ use MOM_tracer_registry, only : add_tracer_OBC_values, tracer_registry_type
 use MOM_variables, only : thermo_var_ptrs, ocean_OBC_type
 use MOM_variables, only : OBC_NONE, OBC_SIMPLE, OBC_FLATHER_E, OBC_FLATHER_W
 use MOM_variables, only : OBC_FLATHER_N, OBC_FLATHER_S
+use MOM_verticalGrid, only : setVerticalGridAxes
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
 use MOM_EOS, only : int_specific_vol_dp
 use user_initialization, only : user_set_coord, user_initialize_topography
@@ -126,6 +130,11 @@ use Phillips_initialization, only : Phillips_initialize_sponges
 
 use midas_vertmap, only : fill_miss_2d, find_interfaces, tracer_Z_init, meshgrid
 use midas_vertmap, only : determine_temperature
+
+use MOM_ALE, only : ALE_initRegridding
+use MOM_regridding, only : regridding_CS
+use MOM_remapping, only : remapping_CS, remapping_core, initialize_remapping
+use MOM_remapping, only : dzFromH1H2, remapDisableBoundaryExtrapolation
 
 use mpp_domains_mod, only : mpp_global_field, mpp_get_compute_domain
 use horiz_interp_mod, only : horiz_interp_new, horiz_interp,horiz_interp_type
@@ -208,7 +217,7 @@ subroutine MOM_initialize(u, v, h, tv, Time, G, PF, dirs, &
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
-  call MOM_mesg(" MOM_initialization.F90, MOM_initialize: subroutine entered", 3)
+  call callTree_enter("MOM_initialize(), MOM_initialization.F90")
   call log_version(PF, mod, version)
 
   new_sim = .false.
@@ -263,11 +272,13 @@ subroutine MOM_initialize(u, v, h, tv, Time, G, PF, dirs, &
       call set_coord_from_file(G%Rlay, G%g_prime, G, PF)
     case ("USER")
       call user_set_coord(G%Rlay, G%g_prime, G, PF, eos)
+    case ("none")
     case default ; call MOM_error(FATAL,"MOM_initialize: "// &
       "Unrecognized coordinate setup"//trim(config))
   end select
   if (debug) call chksum(G%Rlay, "MOM_initialize: Rlay ", 1, nz)
   if (debug) call chksum(G%g_prime, "MOM_initialize: g_prime ", 1, nz)
+  call setVerticalGridAxes( G%Rlay, G%GV )
 
 ! Set up the parameters of the physical domain (i.e. the grid), G
   call set_grid_metrics(G, PF)
@@ -328,6 +339,9 @@ subroutine MOM_initialize(u, v, h, tv, Time, G, PF, dirs, &
   if (debug) then
     call qchksum(G%CoriolisBu, "MOM_initialize: f ", G)
   endif
+
+! Compute global integrals of grid values for later use in scalar diagnostics !
+  call compute_global_grid_integrals(G)
 
 ! Write out all of the grid data used by this run.
   call get_param(PF, mod, "ALWAYS_WRITE_GEOM", write_geom, &
@@ -581,7 +595,7 @@ subroutine MOM_initialize(u, v, h, tv, Time, G, PF, dirs, &
     call set_Flather_Bdry_Conds(CS%OBC, tv, h, G, PF, CS%tracer_Reg)
   endif
 
-  call MOM_mesg(" MOM_initialization.F90, MOM_initialize: complete", 3)
+  call callTree_leave('MOM_initialize()')
 
 end subroutine MOM_initialize
 ! -----------------------------------------------------------------------------
@@ -606,7 +620,7 @@ subroutine set_coord_from_gprime(Rlay, g_prime, G, param_file)
   integer :: k, nz
   nz = G%ke
 
-  call MOM_mesg("  MOM_initialization.F90, set_coord_from_gprime: setting coordinate", 5)
+  call callTree_enter(trim(mod)//"(), MOM_initialization.F90")
 
   call get_param(param_file, mod, "GFS" , g_fs, &
                  "The reduced gravity at the free surface.", units="m s-2", &
@@ -620,6 +634,7 @@ subroutine set_coord_from_gprime(Rlay, g_prime, G, param_file)
   Rlay(1) = G%Rho0
   do k=2,nz ; Rlay(k) = Rlay(k-1) + g_prime(k)*(G%Rho0/G%g_Earth) ; enddo
 
+  call callTree_leave(trim(mod)//'()')
 
 end subroutine set_coord_from_gprime
 ! -----------------------------------------------------------------------------
@@ -644,7 +659,7 @@ subroutine set_coord_from_layer_density(Rlay, g_prime, G, param_file)
   integer :: k, nz
   nz = G%ke
 
-  call MOM_mesg("  MOM_initialization.F90, set_coord_from_layer_density: setting coordinate", 5)
+  call callTree_enter(trim(mod)//"(), MOM_initialization.F90")
 
   call get_param(param_file, mod, "GFS", g_fs, &
                  "The reduced gravity at the free surface.", units="m s-2", &
@@ -666,6 +681,7 @@ subroutine set_coord_from_layer_density(Rlay, g_prime, G, param_file)
      g_prime(k) = (G%g_Earth/G%Rho0) * (Rlay(k) - Rlay(k-1))
   enddo
 
+  call callTree_leave(trim(mod)//'()')
 end subroutine set_coord_from_layer_density
 ! -----------------------------------------------------------------------------
 
@@ -695,7 +711,7 @@ subroutine set_coord_from_TS_ref(Rlay, g_prime, G, param_file, eqn_of_state, &
   integer :: k, nz
   nz = G%ke
 
-  call MOM_mesg("  MOM_initialization.F90, set_coord_from_TS_ref: setting coordinate", 5)
+  call callTree_enter(trim(mod)//"(), MOM_initialization.F90")
 
   call get_param(param_file, mod, "T_REF", T_Ref, &
                  "The initial temperature of the lightest layer.", units="degC", &
@@ -716,12 +732,12 @@ subroutine set_coord_from_TS_ref(Rlay, g_prime, G, param_file, eqn_of_state, &
 !    The uppermost layer's density is set here.  Subsequent layers'  !
 !  densities are determined from this value and the g values.        !
 !        T0 = 28.228 ; S0 = 34.5848 ; Pref = P_Ref
-  call calculate_density(T_ref, S_ref, P_ref, Rlay(1), 1,1, eqn_of_state)
+  call calculate_density(T_ref, S_ref, P_ref, Rlay(1), eqn_of_state)
 
 !    These statements set the layer densities.                       !
   do k=2,nz ; Rlay(k) = Rlay(k-1) + g_prime(k)*(G%Rho0/G%g_Earth) ; enddo
 
-
+  call callTree_leave(trim(mod)//'()')
 end subroutine set_coord_from_TS_ref
 ! -----------------------------------------------------------------------------
 
@@ -750,7 +766,7 @@ subroutine set_coord_from_TS_profile(Rlay, g_prime, G, param_file, &
   character(len=200) :: filename, coord_file, inputdir ! Strings for file/path
   nz = G%ke
 
-  call MOM_mesg("  MOM_initialization.F90, set_coord_from_TS_profile: setting coordinate", 5)
+  call callTree_enter(trim(mod)//"(), MOM_initialization.F90")
 
   call get_param(param_file, mod, "GFS", g_fs, &
                  "The reduced gravity at the free surface.", units="m s-2", &
@@ -774,6 +790,7 @@ subroutine set_coord_from_TS_profile(Rlay, g_prime, G, param_file, &
   call calculate_density(T0, S0, Pref, Rlay, 1,nz,eqn_of_state)
   do k=2,nz; g_prime(k) = (G%g_Earth/G%Rho0) * (Rlay(k) - Rlay(k-1)); enddo
 
+  call callTree_leave(trim(mod)//'()')
 end subroutine set_coord_from_TS_profile
 ! -----------------------------------------------------------------------------
 
@@ -809,7 +826,7 @@ subroutine set_coord_from_TS_range(Rlay, g_prime, G, param_file, &
   character(len=200) :: filename, coord_file, inputdir ! Strings for file/path
   nz = G%ke
 
-  call MOM_mesg("  MOM_initialization.F90, set_coord_from_TS_range: setting coordinate", 5)
+  call callTree_enter(trim(mod)//"(), MOM_initialization.F90")
 
   call get_param(param_file, mod, "T_REF", T_Ref, &
                  "The default initial temperatures.", units="degC", default=10.0)
@@ -861,6 +878,7 @@ subroutine set_coord_from_TS_range(Rlay, g_prime, G, param_file, &
   enddo
   do k=2,nz; g_prime(k) = (G%g_Earth/G%Rho0) * (Rlay(k) - Rlay(k-1)); enddo
 
+  call callTree_leave(trim(mod)//'()')
 end subroutine set_coord_from_TS_range
 ! -----------------------------------------------------------------------------
 
@@ -884,7 +902,7 @@ subroutine set_coord_from_file(Rlay, g_prime, G, param_file)
   character(len=200) :: filename,coord_file,inputdir ! Strings for file/path
   nz = G%ke
 
-  call MOM_mesg("  MOM_initialization.F90, set_coord_from_file: setting coordinate", 5)
+  call callTree_enter(trim(mod)//"(), MOM_initialization.F90")
 
   call get_param(param_file, mod, "GFS", g_fs, &
                  "The reduced gravity at the free surface.", units="m s-2", &
@@ -911,6 +929,7 @@ subroutine set_coord_from_file(Rlay, g_prime, G, param_file)
        trim(filename))
   endif ; enddo
 
+  call callTree_leave(trim(mod)//'()')
 end subroutine set_coord_from_file
 ! -----------------------------------------------------------------------------
 
@@ -929,12 +948,12 @@ subroutine set_coord_linear(Rlay, g_prime, G, param_file)
 ! reduced gravities (g) according to a linear profile starting at a
 ! reference surface layer density and spanning a range of densities 
 ! defined by the parameter RLAY_RANGE (defaulted to 2 if not defined) 
-  character(len=40)  :: mod = "set_coord_from_layer_density" ! This subroutine
+  character(len=40)  :: mod = "set_coord_linear" ! This subroutine
   real :: Rlay_ref, Rlay_range, g_fs
   integer :: k, nz
   nz = G%ke
 
-  call MOM_mesg("  MOM_initialization.F90, set_coord_linear: setting coordinate")
+  call callTree_enter(trim(mod)//"(), MOM_initialization.F90")
 
   call get_param(param_file, mod, "LIGHTEST_DENSITY", Rlay_Ref, &
                  "The reference potential density used for layer 1.", &
@@ -961,6 +980,7 @@ subroutine set_coord_linear(Rlay, g_prime, G, param_file)
      g_prime(k) = (G%g_Earth/G%Rho0) * (Rlay(k) - Rlay(k-1))
   enddo
 
+  call callTree_leave(trim(mod)//'()')
 end subroutine set_coord_linear
 ! -----------------------------------------------------------------------------
 
@@ -980,6 +1000,7 @@ subroutine MOM_initialize_rotation(f, G, PF)
   character(len=40)  :: mod = "MOM_initialize_rotation" ! This subroutine's name.
   character(len=200) :: config
 
+  call callTree_enter(trim(mod)//"(), MOM_initialization.F90")
   call get_param(PF, mod, "ROTATION", config, &
                  "This specifies how the Coriolis parameter is specified: \n"//&
                  " \t 2omegasinlat - Use twice the planetary rotation rate \n"//&
@@ -995,6 +1016,7 @@ subroutine MOM_initialize_rotation(f, G, PF)
     case default ; call MOM_error(FATAL,"MOM_initialize: "// &
       "Unrecognized rotation setup "//trim(config))
   end select
+  call callTree_leave(trim(mod)//'()')
 end subroutine MOM_initialize_rotation
 
 subroutine MOM_initialize_topography(D, max_depth, G, PF)
@@ -1095,7 +1117,7 @@ subroutine initialize_topography_from_file(D, G, param_file )
   character(len=200) :: topo_varname                  ! Variable name in file
   character(len=40)  :: mod = "initialize_topography_from_file" ! This subroutine's name.
 
-  call MOM_mesg("  MOM_initialization.F90, initialize_topography_from_file: reading topography", 5)
+  call callTree_enter(trim(mod)//"(), MOM_initialization.F90")
 
   call get_param(param_file, mod, "INPUTDIR", inputdir, default=".")
   inputdir = slasher(inputdir)
@@ -1114,6 +1136,7 @@ subroutine initialize_topography_from_file(D, G, param_file )
 
   call read_data(filename,trim(topo_varname),D,domain=G%Domain%mpp_domain)
 
+  call callTree_leave(trim(mod)//'()')
 end subroutine initialize_topography_from_file
 ! -----------------------------------------------------------------------------
 
@@ -1139,28 +1162,20 @@ subroutine initialize_topography_named(D, G, param_file, topog_config, max_depth
   real :: expdecay             ! A decay scale of associated with   !
                                ! the sloping boundaries, in m.      !
   real :: Dedge                ! The depth in m at the basin edge.  !
-! real :: southlat0, westlon0, lenlon0, lenlat0
 ! real :: south_lat, west_lon, len_lon, len_lat, Rad_earth
-  integer :: i, j, is, ie, js, je, isd, ied, jsd, jed, xhalo, yhalo
+  integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
   character(len=40)  :: mod = "initialize_topography_named" ! This subroutine's name.
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
+  call callTree_enter(trim(mod)//"(), MOM_initialization.F90")
   call MOM_mesg("  MOM_initialization.F90, initialize_topography_named: "//&
-                 "setting topography "//trim(topog_config), 5)
+                 "TOPO_CONFIG = "//trim(topog_config), 5)
 
   call get_param(param_file, mod, "MINIMUM_DEPTH", min_depth, &
                  "The minimum depth of the ocean.", units="m", default=0.0)
   if (max_depth<=0.) call MOM_error(FATAL,"initialize_topography_named: "// &
       "MAXIMUM_DEPTH has a non-sensical value! Was it set?")
-
-  ! These expressions force rounding of approximate values in a
-  ! consistent way.
-  xhalo = G%isc-G%isd ; yhalo = G%jsc-G%jsd
-! southlat0 = ANInt(G%gridLatB(yhalo)*1024.0)/1024.0
-! westlon0 = ANInt(G%gridLonB(xhalo)*1024.0)/1024.0
-! lenlon0 = ANInt((G%gridLonB(G%Domain%niglobal+xhalo)-G%gridLonB(xhalo))*1024.0)/1024.0
-! lenlat0 = ANInt((G%gridLatB(G%Domain%njglobal+yhalo)-G%gridLatB(yhalo))*1024.0)/1024.0
 
   if (trim(topog_config) /= "flat") then
     call get_param(param_file, mod, "EDGE_DEPTH", Dedge, &
@@ -1168,16 +1183,16 @@ subroutine initialize_topography_named(D, G, param_file, topog_config, max_depth
                    units="m", default=100.0)
 !   call get_param(param_file, mod, "SOUTHLAT", south_lat, &
 !                  "The southern latitude of the domain.", units="degrees", &
-!                  default=southlat0)
+!                  fail_if_missing=.true.)
 !   call get_param(param_file, mod, "LENLAT", len_lat, &
 !                  "The latitudinal length of the domain.", units="degrees", &
-!                  default=lenlat0)
+!                  fail_if_missing=.true.)
 !   call get_param(param_file, mod, "WESTLON", west_lon, &
 !                  "The western longitude of the domain.", units="degrees", &
-!                  default=westlon0)
+!                  default=0.0)
 !   call get_param(param_file, mod, "LENLON", len_lon, &
 !                  "The longitudinal length of the domain.", units="degrees", &
-!                  default=lenlon0)
+!                  fail_if_missing=.true.)
 !   call get_param(param_file, mod, "RAD_EARTH", Rad_Earth, &
 !                  "The radius of the Earth.", units="m", default=6.378e6)
     call get_param(param_file, mod, "TOPOG_SLOPE_SCALE", expdecay, &
@@ -1233,6 +1248,7 @@ subroutine initialize_topography_named(D, G, param_file, topog_config, max_depth
     if (D(i,j) < min_depth) D(i,j) = 0.5*min_depth
   enddo ; enddo
 
+  call callTree_leave(trim(mod)//'()')
 end subroutine initialize_topography_named
 ! -----------------------------------------------------------------------------
 
@@ -1251,18 +1267,36 @@ subroutine limit_topography(D, G, param_file, max_depth)
 ! This subroutine ensures that    min_depth < D(x,y) < max_depth
   integer :: i, j
   character(len=40)  :: mod = "limit_topography" ! This subroutine's name.
-  real :: min_depth
+  real :: min_depth, mask_depth
 
-  call MOM_mesg("  MOM_initialization.F90, limit_topography: limiting topography", 5)
+  call callTree_enter(trim(mod)//"(), MOM_initialization.F90")
 
-  call get_param(param_file, mod, "MINIMUM_DEPTH", min_depth, &
-                 "The minimum depth of the ocean.", units="m", default=0.0)
+  call get_param(param_file, "MOM_grid_init initialize_masks", "MINIMUM_DEPTH", min_depth, &
+                 "If MASKING_DEPTH is unspecified, then anything shallower than\n"//&
+                 "MINIMUM_DEPTH is assumed to be land and all fluxes are masked out.\n"//&
+                 "If MASKING_DEPTH is specified, then all depths shallower than\n"//&
+                 "MINIMUM_DEPTH but depper than MASKING_DEPTH are rounded to MINIMUM_DEPTH.", &
+                 units="m", default=0.0)
+  call get_param(param_file, mod, "MASKING_DEPTH", mask_depth, &
+                 "The depth below which to mask the ocean as land.", units="m", &
+                 default=-9999.0, do_not_log=.true.)
 
 ! Make sure that min_depth < D(x,y) < max_depth
-  do j=G%jsd,G%jed ; do i=G%isd,G%ied
-    D(i,j) = min( max( D(i,j), 0.5*min_depth ), max_depth )
-  enddo ; enddo
+  if (mask_depth<-9990.) then
+    do j=G%jsd,G%jed ; do i=G%isd,G%ied
+      D(i,j) = min( max( D(i,j), 0.5*min_depth ), max_depth )
+    enddo ; enddo
+  else
+    do j=G%jsd,G%jed ; do i=G%isd,G%ied
+      if (D(i,j)>0.) then
+        D(i,j) = min( max( D(i,j), min_depth ), max_depth )
+      else
+        D(i,j) = 0.
+      endif
+    enddo ; enddo
+  endif
 
+  call callTree_leave(trim(mod)//'()')
 end subroutine limit_topography
 ! -----------------------------------------------------------------------------
 
@@ -1276,10 +1310,11 @@ subroutine set_rotation_planetary(f, G, param_file)
 !     (in)   param_file - parameter file type
 
 ! This subroutine sets up the Coriolis parameter for a sphere
+  character(len=30) :: mod = "set_rotation_planetary" ! This subroutine's name.
   integer :: I, J
   real    :: PI, omega
 
-  call MOM_mesg("  MOM_initialization.F90, set_rotation_planetary: setting f (Coriolis)", 5)
+  call callTree_enter(trim(mod)//"(), MOM_initialization.F90")
 
   call get_param(param_file, "set_rotation_planetary", "OMEGA", omega, &
                  "The rotation rate of the earth.", units="s-1", &
@@ -1290,6 +1325,7 @@ subroutine set_rotation_planetary(f, G, param_file)
     f(I,J) = ( 2.0 * omega ) * sin( ( PI * G%geoLatBu(I,J) ) / 180.)
   enddo ; enddo
 
+  call callTree_leave(trim(mod)//'()')
 end subroutine set_rotation_planetary
 ! -----------------------------------------------------------------------------
 
@@ -1308,7 +1344,7 @@ subroutine set_rotation_beta_plane(f, G, param_file)
   character(len=40)  :: mod = "set_rotation_beta_plane" ! This subroutine's name.
   character(len=200) :: axis_units
 
-  call MOM_mesg("  MOM_initialization.F90, set_rotation_beta_plane: setting f (Coriolis)", 5)
+  call callTree_enter(trim(mod)//"(), MOM_initialization.F90")
 
   call get_param(param_file, mod, "F_0", f_0, &
                  "The reference value of the Coriolis parameter with the \n"//&
@@ -1335,6 +1371,7 @@ subroutine set_rotation_beta_plane(f, G, param_file)
     f(I,J) = f_0 + beta * ( G%geoLatBu(I,J) * y_scl )
   enddo ; enddo
 
+  call callTree_leave(trim(mod)//'()')
 end subroutine set_rotation_beta_plane
 ! -----------------------------------------------------------------------------
 
@@ -1363,7 +1400,7 @@ subroutine initialize_thickness_from_file(h, G, param_file, file_has_thickness)
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
-  call MOM_mesg("  MOM_initialization.F90, initialize_thickness_from_file: reading thickness", 5)
+  call callTree_enter(trim(mod)//"(), MOM_initialization.F90")
 
   call get_param(param_file, mod, "INPUTDIR", inputdir, default=".")
   inputdir = slasher(inputdir)
@@ -1386,35 +1423,18 @@ subroutine initialize_thickness_from_file(h, G, param_file, file_has_thickness)
 
     call read_data(filename,"eta",eta(:,:,:),domain=G%Domain%mpp_domain)
 
-    if (correct_thickness) then
-      ! All mass below the bottom removed if the topography is shallower than
-      ! the input file would indicate.  G%bathyT is positive downward,
-      ! eta is negative downward.
-      do j=js,je ; do i=is,ie
-        if (-eta(i,j,nz+1) > G%bathyT(i,j) + 0.1) eta(i,j,nz+1) = -G%bathyT(i,j)
-      enddo ; enddo
-    endif
-
-    do k=nz,1,-1 ; do j=js,je ; do i=is,ie
-      if (eta(i,j,K) < (eta(i,j,K+1) + G%Angstrom_z)) then
-        eta(i,j,K) = eta(i,j,K+1) + G%Angstrom_z
-        h(i,j,k) = G%Angstrom_z
-      else
-        h(i,j,k) = eta(i,j,K) - eta(i,j,K+1)
-      endif
-    enddo ; enddo ; enddo
-
-  !  Check for consistency between the interface heights and topography.!
-    if (correct_thickness) then
-      do j=js,je ; do i=is,ie
-        !   The whole column is dilated to accomodate deeper topography than
-        ! the input file would indicate.
-        if (-eta(i,j,nz+1) < G%bathyT(i,j) - 0.1) then
-          dilate = (eta(i,j,1)+G%bathyT(i,j)) / (eta(i,j,1)-eta(i,j,nz+1))
-          do k=1,nz ; h(i,j,k) = h(i,j,k) * dilate ; enddo
-        endif
-      enddo ; enddo
+    if (correct_thickness) then 
+      call adjustEtaToFitBathymetry(G, eta, h)
     else
+      do k=nz,1,-1 ; do j=js,je ; do i=is,ie
+        if (eta(i,j,K) < (eta(i,j,K+1) + G%Angstrom_z)) then
+          eta(i,j,K) = eta(i,j,K+1) + G%Angstrom_z
+          h(i,j,k) = G%Angstrom_z
+        else
+          h(i,j,k) = eta(i,j,K) - eta(i,j,K+1)
+        endif
+      enddo ; enddo ; enddo
+
       do j=js,je ; do i=is,ie
         if (abs(eta(i,j,nz+1) + G%bathyT(i,j)) > 1.0) &
           inconsistent = inconsistent + 1
@@ -1423,13 +1443,83 @@ subroutine initialize_thickness_from_file(h, G, param_file, file_has_thickness)
 
       if ((inconsistent > 0) .and. (is_root_pe())) then
         write(mesg,'("Thickness initial conditions are inconsistent ",'// &
-                 '"with topography in ",I5," places.")') inconsistent
+                 '"with topography in ",I8," places.")') inconsistent
         call MOM_error(WARNING, mesg)
       endif
     endif
 
   endif
+  call callTree_leave(trim(mod)//'()')
 end subroutine initialize_thickness_from_file
+! -----------------------------------------------------------------------------
+
+! -----------------------------------------------------------------------------
+!> Adjust interface heights to fit the bathymetry and diagnose layer thickness.
+!! If the bottom most interface is below the topography then the bottom-most
+!! layers are contracted to G%Angstrom_z.
+!! If the bottom most interface is above the topography then the entire column
+!! is dilated (expanded) to fill the void.
+!!   @remark{There is a (hard-wired) "tolerance" parameter such that the
+!! criteria for adjustment must equal or exceed 10cm.}
+!!   @param[in]     G   Grid type
+!!   @param[in,out] eta Interface heights
+!!   @param[out]    h   Layer thicknesses
+subroutine adjustEtaToFitBathymetry(G, eta, h)
+  type(ocean_grid_type),                          intent(in)    :: G
+  real, dimension(NIMEM_,NJMEM_, NK_INTERFACE_ ), intent(inout) :: eta
+  real, dimension(NIMEM_,NJMEM_, NKMEM_),         intent(inout) :: h
+  ! Local variables
+  integer :: i, j, k, is, ie, js, je, nz, contractions, dilations
+  real, parameter :: hTolerance = 0.1 !<  Tolerance to exceed adjustment criteria (m)
+  real :: hTmp, eTmp, dilate
+  character(len=100) :: mesg
+
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+
+  contractions = 0
+  do j=js,je ; do i=is,ie
+    if (-eta(i,j,nz+1) > G%bathyT(i,j) + hTolerance) then
+      eta(i,j,nz+1) = -G%bathyT(i,j)
+      contractions = contractions + 1
+    endif
+  enddo ; enddo
+  call sum_across_PEs(contractions)
+  if ((contractions > 0) .and. (is_root_pe())) then
+    write(mesg,'("Thickness initial conditions were contracted ",'// &
+               '"to fit topography in ",I8," places.")') contractions
+    call MOM_error(WARNING, 'adjustEtaToFitBathymetry: '//mesg)
+  endif
+
+  do k=nz,1,-1 ; do j=js,je ; do i=is,ie
+    ! Collapse layers to thinnest possible if the thickness less than
+    ! the thinnest possible (or negative).
+    if (eta(i,j,K) < (eta(i,j,K+1) + G%Angstrom_z)) then
+      eta(i,j,K) = eta(i,j,K+1) + G%Angstrom_z
+      h(i,j,k) = G%Angstrom_z
+    else
+      h(i,j,k) = eta(i,j,K) - eta(i,j,K+1)
+    endif
+  enddo ; enddo ; enddo
+
+  dilations = 0
+  do j=js,je ; do i=is,ie
+    !   The whole column is dilated to accomodate deeper topography than
+    ! the bathymetry would indicate.
+    if (-eta(i,j,nz+1) < G%bathyT(i,j) - hTolerance) then
+      dilations = dilations + 1
+      dilate = (eta(i,j,1)+G%bathyT(i,j)) / (eta(i,j,1)-eta(i,j,nz+1))
+      do k=1,nz ; h(i,j,k) = h(i,j,k) * dilate ; enddo
+      do k=nz, 2, -1; eta(i,j,K) = eta(i,j,K+1) + h(i,j,k); enddo
+    endif
+  enddo ; enddo
+  call sum_across_PEs(dilations)
+  if ((dilations > 0) .and. (is_root_pe())) then
+    write(mesg,'("Thickness initial conditions were dilated ",'// &
+               '"to fit topography in ",I8," places.")') dilations
+    call MOM_error(WARNING, 'adjustEtaToFitBathymetry: '//mesg)
+  endif
+
+end subroutine adjustEtaToFitBathymetry
 ! -----------------------------------------------------------------------------
 
 ! -----------------------------------------------------------------------------
@@ -1444,6 +1534,7 @@ subroutine initialize_thickness_uniform(h, G, param_file)
 !                         model parameter values.
 
 !  This subroutine initializes the layer thicknesses to be uniform.
+  character(len=40)  :: mod = "initialize_thickness_uniform" ! This subroutine's name.
   real :: e0(SZK_(G)+1)   ! The resting interface heights, in m, usually !
                           ! negative because it is positive upward.      !
   real :: eta1D(SZK_(G)+1)! Interface height relative to the sea surface !
@@ -1452,7 +1543,7 @@ subroutine initialize_thickness_uniform(h, G, param_file)
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
-  call MOM_mesg("  MOM_initialization.F90, initialize_thickness_uniform: setting thickness", 5)
+  call callTree_enter(trim(mod)//"(), MOM_initialization.F90")
 
   if (G%max_depth<=0.) call MOM_error(FATAL,"initialize_thickness_uniform: "// &
       "MAXIMUM_DEPTH has a non-sensical value! Was it set?")
@@ -1479,6 +1570,7 @@ subroutine initialize_thickness_uniform(h, G, param_file)
     enddo
   enddo ; enddo
 
+  call callTree_leave(trim(mod)//'()')
 end subroutine initialize_thickness_uniform
 ! -----------------------------------------------------------------------------
 
@@ -1652,7 +1744,7 @@ subroutine initialize_velocity_from_file(u, v, G, param_file)
   character(len=40)  :: mod = "initialize_velocity_from_file" ! This subroutine's name.
   character(len=200) :: filename,velocity_file,inputdir ! Strings for file/path
 
-  call MOM_mesg("  MOM_initialization.F90, initialize_velocity_from_file: reading u and v", 5)
+  call callTree_enter(trim(mod)//"(), MOM_initialization.F90")
 
   call get_param(param_file, mod, "VELOCITY_FILE", velocity_file, &
                  "The name of the velocity initial condition file.", &
@@ -1670,6 +1762,7 @@ subroutine initialize_velocity_from_file(u, v, G, param_file)
   call read_data(filename,"u",u(:,:,:),domain=G%Domain%mpp_domain,position=EAST_FACE)
   call read_data(filename,"v",v(:,:,:),domain=G%Domain%mpp_domain,position=NORTH_FACE)
 
+  call callTree_leave(trim(mod)//'()')
 end subroutine initialize_velocity_from_file
 ! -----------------------------------------------------------------------------
 
@@ -1685,10 +1778,12 @@ subroutine initialize_velocity_zero(u, v, G, param_file)
 !  (in)      param_file -  parameter file type
 
 !   This subroutine sets the initial velocity components to zero
+  character(len=200) :: mod = "initialize_velocity_zero" ! This subroutine's name.
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
+  call callTree_enter(trim(mod)//"(), MOM_initialization.F90")
 
   do k=1,nz ; do j=js,je ; do I=Isq,Ieq
     u(I,j,k) = 0.0
@@ -1697,6 +1792,7 @@ subroutine initialize_velocity_zero(u, v, G, param_file)
     v(i,J,k) = 0.0
   enddo ; enddo ; enddo
 
+  call callTree_leave(trim(mod)//'()')
 end subroutine initialize_velocity_zero
 ! -----------------------------------------------------------------------------
 
@@ -1808,7 +1904,7 @@ subroutine initialize_temp_salt_from_file(T, S, G, param_file)
   character(len=40)  :: mod = "initialize_temp_salt_from_file"
   character(len=64)  :: temp_var, salt_var
 
-  call MOM_mesg("  MOM_initialization.F90, initialize_temp_salt_from_file: reading T and S", 5)
+  call callTree_enter(trim(mod)//"(), MOM_initialization.F90")
 
   call get_param(param_file, mod, "TS_FILE", ts_file, &
                  "The initial condition file for temperature.", &
@@ -1838,6 +1934,7 @@ subroutine initialize_temp_salt_from_file(T, S, G, param_file)
 
   call read_data(filename, salt_var, S(:,:,:), domain=G%Domain%mpp_domain)
 
+  call callTree_leave(trim(mod)//'()')
 end subroutine initialize_temp_salt_from_file
 ! -----------------------------------------------------------------------------
 
@@ -1862,7 +1959,7 @@ subroutine initialize_temp_salt_from_profile(T, S, G, param_file)
   character(len=200) :: filename, ts_file, inputdir ! Strings for file/path
   character(len=40)  :: mod = "initialize_temp_salt_from_profile"
 
-  call MOM_mesg("  MOM_initialization.F90, initialize_temp_salt_from_file: reading T and S", 5)
+  call callTree_enter(trim(mod)//"(), MOM_initialization.F90")
 
   call get_param(param_file, mod, "TS_FILE", ts_file, &
                  "The file with the reference profiles for temperature \n"//&
@@ -1882,6 +1979,7 @@ subroutine initialize_temp_salt_from_profile(T, S, G, param_file)
     T(i,j,k) = T0(k) ; S(i,j,k) = S0(k)
   enddo ; enddo ; enddo
 
+  call callTree_leave(trim(mod)//'()')
 end subroutine initialize_temp_salt_from_profile
 ! -----------------------------------------------------------------------------
 
@@ -1914,8 +2012,7 @@ subroutine initialize_temp_salt_fit(T, S, G, param_file, eqn_of_state, P_Ref)
   integer :: i, j, k, itt, nz
   nz = G%ke
 
-  call MOM_mesg("  MOM_initialization.F90, initialize_temp_salt_fit: "//&
-                 "  setting T and S", 5)
+  call callTree_enter(trim(mod)//"(), MOM_initialization.F90")
 
   call get_param(param_file, mod, "T_REF", T_Ref, &
                  "A reference temperature used in initialization.", &
@@ -1928,7 +2025,7 @@ subroutine initialize_temp_salt_fit(T, S, G, param_file, eqn_of_state, P_Ref)
   enddo
   T0(1) = T_Ref
 
-  call calculate_density(T0(1),S0(1),pres(1),rho_guess(1),1,1,eqn_of_state)
+  call calculate_density(T0(1),S0(1),pres(1),rho_guess(1),eqn_of_state)
   call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,1,eqn_of_state)
 
 ! A first guess of the layers' temperatures.                         !
@@ -1949,6 +2046,7 @@ subroutine initialize_temp_salt_fit(T, S, G, param_file, eqn_of_state, P_Ref)
     T(i,j,k) = T0(k) ; S(i,j,k) = S0(k)
   enddo ; enddo ; enddo
 
+  call callTree_leave(trim(mod)//'()')
 end subroutine initialize_temp_salt_fit
 ! -----------------------------------------------------------------------------
 
@@ -1968,6 +2066,7 @@ subroutine initialize_temp_salt_linear(T, S, G, param_file)
   real  :: delta
   character(len=40)  :: mod = "initialize_temp_salt_linear" ! This subroutine's name.
   
+  call callTree_enter(trim(mod)//"(), MOM_initialization.F90")
   call get_param(param_file, mod, "T_TOP", T_top, &
                  "Initial temperature of the top surface.", &
                  units="degC", fail_if_missing=.true.)
@@ -2001,6 +2100,7 @@ subroutine initialize_temp_salt_linear(T, S, G, param_file)
 ! delta = 1;
 ! T(:,:,G%ke/2 - (delta-1):G%ke/2 + delta) = 1.0;
   
+  call callTree_leave(trim(mod)//'()')
 end subroutine initialize_temp_salt_linear
 ! -----------------------------------------------------------------------------
 
@@ -2176,13 +2276,12 @@ subroutine set_Open_Bdry_Conds(OBC, tv, G, param_file, tracer_Reg)
   real :: drho_dS(SZK_(G))   ! Derivative of density with salinity in kg m-3 PSU-1.                             !
   real :: rho_guess(SZK_(G)) ! Potential density at T0 & S0 in kg m-3.
   character(len=40) :: mod = "set_Open_Bdry_Conds"
-  integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, nz, yhalo
+  integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, nz
   integer :: IsdB, IedB, JsdB, JedB
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
-  yhalo = G%jsc-G%jsd
 
   call get_param(param_file, mod, "APPLY_OBC_U", apply_OBC_u, default=.false.)
   call get_param(param_file, mod, "APPLY_OBC_V", apply_OBC_v, default=.false.)
@@ -2281,7 +2380,7 @@ subroutine set_Open_Bdry_Conds(OBC, tv, G, param_file, tracer_Reg)
       ! target density and a salinity of 35 psu.  This code is taken from
       !  initialize_temp_sal.
       pres(:) = tv%P_Ref ; S0(:) = 35.0 ; T0(1) = 25.0
-      call calculate_density(T0(1),S0(1),pres(1),rho_guess(1),1,1,tv%eqn_of_state)
+      call calculate_density(T0(1),S0(1),pres(1),rho_guess(1),tv%eqn_of_state)
       call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,1,tv%eqn_of_state)
 
       do k=1,nz ; T0(k) = T0(1) + (G%Rlay(k)-rho_guess(1)) / drho_dT(1) ; enddo
@@ -2341,7 +2440,7 @@ subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, tracer_Reg)
   logical :: read_OBC_TS = .false.
 
   integer :: isd_global, jsd_global
-  integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, nz, yhalo
+  integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, nz
   integer :: isd_off, jsd_off
   integer :: IsdB, IedB, JsdB, JedB
   integer :: east_boundary, west_boundary, north_boundary, south_boundary
@@ -2360,7 +2459,6 @@ subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, tracer_Reg)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
-  yhalo = G%jsc-G%jsd 
   
   isd_global = G%isd_global
   jsd_global = G%jsd_global
@@ -2410,15 +2508,16 @@ subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, tracer_Reg)
   endif
 
   if (G%symmetric) then
-    east_boundary = G%domain%niglobal+G%domain%nihalo
-    west_boundary = G%domain%nihalo
-    north_boundary = G%domain%njglobal+G%domain%njhalo
-    south_boundary = G%domain%njhalo
+    east_boundary = G%ieg
+    west_boundary = G%isg-1
+    north_boundary = G%jeg
+    south_boundary = G%jsg-1
   else
-    east_boundary = G%domain%niglobal+G%domain%nihalo-1
-    west_boundary = G%domain%nihalo+1
-    north_boundary = G%domain%njglobal+G%domain%njhalo-1
-    south_boundary = G%domain%njhalo+1
+    ! I am not entirely sure that this works properly. -RWH
+    east_boundary = G%ieg-1
+    west_boundary = G%isg
+    north_boundary = G%jeg-1
+    south_boundary = G%jsg
   endif
 
   if (.not.associated(OBC%OBC_mask_u)) then
@@ -2472,7 +2571,7 @@ subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, tracer_Reg)
   if (apply_OBC_u_flather_east) then
     ! Determine where u points are applied at east side 
     do j=jsd,jed ; do I=IsdB,IedB
-      if ((I+isd_global-isd) .eq. east_boundary) then !eastern side
+      if ((I+isd_global-isd) == east_boundary) then !eastern side
         OBC%OBC_mask_u(I,j) = .true.
         OBC%OBC_kind_u(I,j) = OBC_FLATHER_E
         if ((i+1>isd) .and. (i+1<ied) .and. (J>JsdB) .and. (J<JedB)) then
@@ -2490,7 +2589,7 @@ subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, tracer_Reg)
   if (apply_OBC_u_flather_west) then
     ! Determine where u points are applied at west side 
     do j=jsd,jed ; do I=IsdB,IedB
-      if ((I+isd_global-isd) .eq. west_boundary) then !western side
+      if ((I+isd_global-isd) == west_boundary) then !western side
         OBC%OBC_mask_u(I,j) = .true.
         OBC%OBC_kind_u(I,j) = OBC_FLATHER_W
         if ((i>isd) .and. (i<ied) .and. (J>JsdB) .and. (J<JedB)) then
@@ -2509,7 +2608,7 @@ subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, tracer_Reg)
   if (apply_OBC_v_flather_north) then
     ! Determine where v points are applied at north side 
     do J=JsdB,JedB ; do i=isd,ied
-      if ((J+jsd_global-jsd) .eq. north_boundary) then         !northern side
+      if ((J+jsd_global-jsd) == north_boundary) then         !northern side
         OBC%OBC_mask_v(i,J) = .true.
         OBC%OBC_kind_v(i,J) = OBC_FLATHER_N
         if ((I>IsdB) .and. (I<IedB) .and. (j+1>jsd) .and. (j+1<jed)) then
@@ -2527,7 +2626,7 @@ subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, tracer_Reg)
   if (apply_OBC_v_flather_south) then
     ! Determine where v points are applied at south side 
     do J=JsdB,JedB ; do i=isd,ied
-      if ((J+jsd_global-jsd) .eq. south_boundary) then         !southern side
+      if ((J+jsd_global-jsd) == south_boundary) then         !southern side
         OBC%OBC_mask_v(i,J) = .true.
         OBC%OBC_kind_v(i,J) = OBC_FLATHER_S
         if ((I>IsdB) .and. (I<IedB) .and. (j>jsd) .and. (j<jed)) then
@@ -2805,8 +2904,7 @@ subroutine reset_face_lengths_file(G, param_file)
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
   ! These checks apply regardless of the chosen option.
 
-  call MOM_mesg("  MOM_initialization.F90, reset_face_lengths_file: "//&
-                 " setting channel configurations from file", 5)
+  call callTree_enter(trim(mod)//"(), MOM_initialization.F90")
 
   call get_param(param_file, mod, "CHANNEL_WIDTH_FILE", chan_file, &
                  "The file from which the list of narrowed channels is read.", &
@@ -2852,6 +2950,7 @@ subroutine reset_face_lengths_file(G, param_file)
     if (G%areaCv(i,J) > 0.0) G%IareaCv(i,J) = G%mask2dCv(i,J) / G%areaCv(i,J)
   enddo ; enddo
 
+  call callTree_leave(trim(mod)//'()')
 end subroutine reset_face_lengths_file
 ! -----------------------------------------------------------------------------
 
@@ -2885,8 +2984,7 @@ subroutine reset_face_lengths_list(G, param_file)
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
-  call MOM_mesg("  MOM_initialization.F90, reset_face_lengths_list: "//&
-                 " setting channel configurations from list", 5)
+  call callTree_enter(trim(mod)//"(), MOM_initialization.F90")
 
   call get_param(param_file, mod, "CHANNEL_LIST_FILE", chan_file, &
                  "The file from which the list of narrowed channels is read.", &
@@ -3027,7 +3125,8 @@ subroutine reset_face_lengths_list(G, param_file)
           (((lon >= u_lon(1,npt)) .and. (lon <= u_lon(2,npt))) .or. &
            ((lon_p >= u_lon(1,npt)) .and. (lon_p <= u_lon(2,npt))) .or. &
            ((lon_m >= u_lon(1,npt)) .and. (lon_m <= u_lon(2,npt)))) ) &
-        G%dy_Cu(I,j) = G%mask2dCu(I,j) * min(G%dyCu(I,j), max(u_width(npt), 0.0))
+  
+      G%dy_Cu(I,j) = G%mask2dCu(I,j) * min(G%dyCu(I,j), max(u_width(npt), 0.0))
     enddo
 
     G%areaCu(I,j) = G%dxCu(I,j)*G%dy_Cu(I,j)
@@ -3058,6 +3157,7 @@ subroutine reset_face_lengths_list(G, param_file)
     deallocate(v_lat) ; deallocate(v_lon) ; deallocate(v_width)
   endif
 
+  call callTree_leave(trim(mod)//'()')
 end subroutine reset_face_lengths_list
 
 subroutine read_face_length_list(iounit, filename, num_lines, lines)
@@ -3129,6 +3229,21 @@ subroutine set_velocity_depth_max(G)
   enddo ; enddo
 end subroutine set_velocity_depth_max
 ! -----------------------------------------------------------------------------
+
+! -----------------------------------------------------------------------------
+subroutine compute_global_grid_integrals(G)
+  type(ocean_grid_type), intent(inout) :: G
+  ! Subroutine to pre-compute global integrals of grid quantities for
+  ! later use in reporting diagnostics
+  integer :: i,j
+
+  G%areaT_global = 0.0 ; G%IareaT_global = 0.0
+  do j=G%jsc,G%jec ; do i=G%isc,G%iec
+    G%areaT_global = G%areaT_global + ( G%areaT(i,j) * G%mask2dT(i,j) )
+  enddo ; enddo
+  call sum_across_PEs( G%areaT_global )
+  G%IareaT_global = 1. / G%areaT_global 
+end subroutine compute_global_grid_integrals
 
 ! -----------------------------------------------------------------------------
 subroutine set_velocity_depth_min(G)
@@ -3363,7 +3478,8 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
 
 
   integer :: nkml, nkbl         ! number of mixed and buffer layers
-  integer :: xhalo,yhalo        ! halo widths
+  integer :: i_offset, j_offset ! Offsets between the global grid and the local
+                                ! 1-indexed version of the global grid.
   integer :: ncid, varid_t, varid_s
   integer :: id, jd, kd, jdp, inconsistent
   real    :: PI_180             ! for conversion from degrees to radians
@@ -3379,8 +3495,8 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
   character(len=8)  :: laynum
 
   integer, parameter :: niter=10   ! number of iterations for t/s adjustment to layer density
-  logical, parameter :: adjust_temperature = .true.  ! fit t/s to target densities
-  real, parameter    :: missing_value = -1.e34
+  logical            :: adjust_temperature = .true.  ! fit t/s to target densities
+  real, parameter    :: missing_value = -1.e20
   real, parameter    :: temp_land_fill = 0.0, salt_land_fill = 35.0
 
   !data arrays
@@ -3412,9 +3528,32 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
   logical :: debug_point = .false.  ! manually set this to true and adjust the locations below
                                    ! if you want to track down a problem with a particular
                                    ! location.
+
+  logical :: use_old_hinterp = .true.
+			
   integer, parameter :: i_debug=1, j_debug=28
 
+  ! Local variables for ALE remapping
+  real, dimension(:), allocatable :: h1, h2, hTarget, deltaE, tmpT1d, tmpS1d
+  real, dimension(:), allocatable :: tmpT1dIn, tmpS1dIn
+  real :: zTopOfCell, zBottomOfCell
+  type(regridding_CS) :: regridCS ! Regridding parameters and work arrays
+  type(remapping_CS) :: remapCS ! Remapping parameters and work arrays
+
   real, dimension(:,:,:), allocatable :: tmp1
+  logical :: homogenize, useALEremapping
+  character(len=10) :: remappingScheme
+  real :: tempAvg, saltAvg
+  integer :: nPoints
+  integer :: id_clock_routine, id_clock_read, id_clock_interp, id_clock_fill, id_clock_ALE
+
+  id_clock_routine = cpu_clock_id('(Initialize from Z)', grain=CLOCK_ROUTINE)
+  id_clock_read = cpu_clock_id('(Initialize from Z) read', grain=CLOCK_LOOP)
+  id_clock_interp = cpu_clock_id('(Initialize from Z) interp', grain=CLOCK_LOOP)
+  id_clock_fill = cpu_clock_id('(Initialize from Z) fill', grain=CLOCK_LOOP)
+  id_clock_ALE = cpu_clock_id('(Initialize from Z) ALE', grain=CLOCK_LOOP)
+
+  call cpu_clock_begin(id_clock_routine)
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -3422,7 +3561,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
 
   PI_180=atan(1.0)/45.
 
-  call MOM_mesg(" MOM_temp_salt_initiale_from_Z.F90, MOM_temp_salt_initialize_from_Z: subroutine entered", 3)
+  call callTree_enter(trim(mod)//"(), MOM_initialization.F90")
   call log_version(PF, mod, version)
 
   new_sim = .false.
@@ -3436,12 +3575,18 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
 
   call mpp_get_compute_domain(G%domain%mpp_domain,isc,iec,jsc,jec)
 
+
+  call get_param(PF, mod, "USE_OLD_HINTERP", use_old_hinterp, &
+               "If true, use older version of hinterp, \n"//&
+               "in order to reproduce siena answers."//&
+               "Recommended setting is False", default=.true.)
+
   reentrant_x = .false. ;  call get_param(PF, mod, "REENTRANT_X", reentrant_x,default=.true.)
   tripolar_n = .false. ;  call get_param(PF, mod, "TRIPOLAR_N", tripolar_n, default=.false.)
   call get_param(PF, mod, "MINIMUM_DEPTH", min_depth, default=0.0)
 
-  call get_param(PF, mod, "NKML",nkml)
-  call get_param(PF, mod, "NKBL",nkbl)    
+  call get_param(PF, mod, "NKML",nkml,default=0)
+  call get_param(PF, mod, "NKBL",nkbl,default=0)    
 
   call get_param(PF, mod, "TEMP_SALT_Z_INIT_FILE",filename, &
                  "The name of the z-space input file used to initialize \n"//&
@@ -3454,6 +3599,15 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
   call get_param(PF, mod, "Z_INIT_FILE_SALT_VAR", salin_var, &
                  "The name of the salinity variable in \n"//&
                  "TEMP_SALT_Z_INIT_FILE.", default="salt")
+  call get_param(PF, mod, "Z_INIT_HOMOGENIZE", homogenize, &
+                 "If True, then horizontally homogenize the interpolated \n"//&
+                 "initial conditions.", default=.false.)
+  call get_param(PF, mod, "Z_INIT_ALE_REMAPPING", useALEremapping, &
+                 "If True, then remap straight to model coordinate from file.",&
+                 default=.false.)
+  call get_param(PF, mod, "Z_INIT_REMAPPING_SCHEME", remappingScheme, &
+                 "The remapping scheme to use if using Z_INIT_ALE_REMAPPING\n"//&
+                 "is True.", default="PPM_IH4")
 
 !   Read input grid coordinates for temperature and salinity field
 !   in z-coordinate dataset. The file is REQUIRED to contain the
@@ -3469,6 +3623,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
 !   The observation grid MUST tile the model grid. If the model grid extends
 !   to the North Pole, the input data are extrapolated using the average
 !   value at the northernmost latitude.      
+  call cpu_clock_begin(id_clock_read)
 
   rcode = NF90_OPEN(filename, NF90_NOWRITE, ncid)
   if (rcode .ne. 0) call MOM_error(FATAL,"error opening file "//trim(filename)//&
@@ -3584,7 +3739,9 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
 ! after interpolating, fill in points which will be needed
 ! to define the layers
 
+  call cpu_clock_end(id_clock_read)
   do k=1,kd
+    call cpu_clock_begin(id_clock_read)
     write(laynum,'(I8)') k ; laynum = adjustl(laynum)
   
     start = 1; start(3) = k; count = 1; count(1) = id; count(2) = jd
@@ -3642,43 +3799,119 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
       do i=1,id
         if (abs(temp_in(i,j)-missing_value_temp) .gt. abs(G%Angstrom_Z*missing_value_temp)) then                           
             mask_in(i,j)=1.0
+	else	    
+            if (.not. use_old_hinterp) then
+               temp_in(i,j)=missing_value
+               salt_in(i,j)=missing_value
+            endif
         endif
       enddo
     enddo
+    call cpu_clock_end(id_clock_read)
+    call cpu_clock_begin(id_clock_interp)
 
 ! call fms routine horiz_interp to interpolate input level data to model horizontal grid
 
-    if (k .eq. 1) then
-      call horiz_interp_new(Interp,x_in,y_in,x_out,y_out, &
+    if (k == 1) then
+      if (use_old_hinterp) then
+         call horiz_interp_new(Interp,x_in,y_in,x_out,y_out, &
                interp_method='bilinear',src_modulo=reentrant_x, &
                mask_in=mask_in,mask_out=mask_out)
+
+      else
+
+         call horiz_interp_new(Interp,x_in,y_in,x_out,y_out, &
+               interp_method='bilinear',src_modulo=reentrant_x)
+      endif
+   
     endif
 
-    call horiz_interp(Interp,temp_in,temp_out,mask_in=mask_in, &
-                      mask_out=mask_out,missing_value=missing_value)
-    call horiz_interp(Interp,salt_in,salt_out,mask_in=mask_in, &
-                      mask_out=mask_out,missing_value=missing_value)       
+    call myStats(temp_in,missing_value,k,'Temp from file')
+    call myStats(salt_in,missing_value,k,'Salt from file')
 
+    if (use_old_hinterp) then
+       call horiz_interp(Interp,temp_in,temp_out,mask_in=mask_in, &
+                      mask_out=mask_out,missing_value=missing_value)
+    else
+
+       call horiz_interp(Interp,temp_in,temp_out, missing_value=missing_value, new_missing_handle=.true.)
+
+       mask_out=1.0
+       do j=1,nj
+          do i=1,ni
+             if (abs(temp_out(i,j)-missing_value) .lt. abs(G%Angstrom_Z*missing_value)) then
+                mask_out(i,j)=0.
+             endif
+          enddo
+       enddo
+
+    endif
+
+
+    if (use_old_hinterp) then
+       call horiz_interp(Interp,salt_in,salt_out,mask_in=mask_in, &
+                      mask_out=mask_out,missing_value=missing_value)
+    else
+       call horiz_interp(Interp,salt_in,salt_out, missing_value=missing_value, new_missing_handle=.true.)
+    endif
+
+    call cpu_clock_end(id_clock_interp)
     fill = 0; good = 0
 
+    nPoints = 0 ; tempAvg = 0. ; saltAvg = 0.
     do j=1,nj
       do i=1,ni
-        if (mask_out(i,j).lt.1.0) then
+        if (mask_out(i,j) .lt. 1.0) then
           temp_out(i,j)=missing_value
           salt_out(i,j)=missing_value
         else
           good(i,j)=1
+          nPoints = nPoints + 1
+          tempAvg = tempAvg + temp_out(i,j)
+          saltAvg = saltAvg + salt_out(i,j)
         endif
-        if (mask2dT(i,j) .eq. 1.0 .and. z_edges_in(k) <= Depth(i,j) .and. mask_out(i,j) .lt. 1.0) fill(i,j)=1
+                                              ! vvv  k+1  ???? -AJA
+                                              ! ^^^  correct. (use_old_hinterp=.true. keeps the bug) -MJH
+        if (use_old_hinterp) then
+           if (mask2dT(i,j) == 1.0 .and. z_edges_in(k) <= Depth(i,j) .and. mask_out(i,j) .lt. 1.0) fill(i,j)=1
+        else
+           if (mask2dT(i,j) == 1.0 .and. z_edges_in(k+1) <= Depth(i,j) .and. mask_out(i,j) .lt. 1.0) fill(i,j)=1
+        endif
       enddo
     enddo
 
+    call myStats(temp_out,missing_value,k,'Temp from horiz_interp()')
+    call myStats(salt_out,missing_value,k,'Salt from horiz_interp()')
+
+
+    ! Horizontally homogenize data to produce perfectly "flat" initial conditions
+    if (homogenize) then
+      call sum_across_PEs(nPoints)
+      call sum_across_PEs(tempAvg)
+      call sum_across_PEs(saltAvg)
+      if (nPoints>0) then
+        tempAvg = tempAvg/float(nPoints)
+        saltAvg = saltAvg/float(nPoints)
+      endif
+      temp_out(:,:) = tempAvg
+      salt_out(:,:) = saltAvg
+    endif
 
 ! temp_out,salt_out contain input z-space data on the model grid with missing values
 ! now fill in missing values using "ICE-nine" algorithm. 
+    call cpu_clock_begin(id_clock_fill)
 
-    temp_out = fill_miss_2d(temp_out,good,fill,temp_prev,reentrant_x,tripolar_n)
-    salt_out = fill_miss_2d(salt_out,good,fill,salt_prev,reentrant_x,tripolar_n)
+    if (use_old_hinterp) then
+       temp_out = fill_miss_2d(temp_out,good,fill,temp_prev,reentrant_x,tripolar_n,keep_bug=.true.)
+       call myStats(temp_out,missing_value,k,'Temp from fill_miss_2d()')
+       salt_out = fill_miss_2d(salt_out,good,fill,salt_prev,reentrant_x,tripolar_n,keep_bug=.true.)
+       call myStats(salt_out,missing_value,k,'Salt from fill_miss_2d()')
+    else
+       temp_out = fill_miss_2d(temp_out,good,fill,temp_prev,reentrant_x,tripolar_n,smooth=.true.)
+       call myStats(temp_out,missing_value,k,'Temp from fill_miss_2d()')
+       salt_out = fill_miss_2d(salt_out,good,fill,salt_prev,reentrant_x,tripolar_n,smooth=.true.)
+       call myStats(salt_out,missing_value,k,'Salt from fill_miss_2d()')
+    endif
 
     good=good+fill
 
@@ -3687,6 +3920,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
 
     temp_prev=temp_out
     salt_prev=salt_out
+    call cpu_clock_end(id_clock_fill)
 
 ! next use the equation of state to create a potential density field using filled z-data
 
@@ -3695,144 +3929,199 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
     enddo
 
 ! copy to local arrays
-    xhalo=is-isd;yhalo=js-jsd
-    temp_z(is:ie,js:je,k) = temp_out(isc-xhalo:iec-xhalo,jsc-yhalo:jec-yhalo)
-    salt_z(is:ie,js:je,k) = salt_out(isc-xhalo:iec-xhalo,jsc-yhalo:jec-yhalo)
-    mask_z(is:ie,js:je,k) = float(good(isc-xhalo:iec-xhalo,jsc-yhalo:jec-yhalo))
-    rho_z(is:ie,js:je,k) = rho_out(isc-xhalo:iec-xhalo,jsc-yhalo:jec-yhalo)       
+    i_offset=G%isg-1; j_offset=G%jsg-1
+    temp_z(is:ie,js:je,k) = temp_out(isc-i_offset:iec-i_offset,jsc-j_offset:jec-j_offset)
+    salt_z(is:ie,js:je,k) = salt_out(isc-i_offset:iec-i_offset,jsc-j_offset:jec-j_offset)
+    mask_z(is:ie,js:je,k) = float(good(isc-i_offset:iec-i_offset,jsc-j_offset:jec-j_offset))
+    rho_z(is:ie,js:je,k) = rho_out(isc-i_offset:iec-i_offset,jsc-j_offset:jec-j_offset)       
 
   enddo
 
   call horiz_interp_del(Interp)    
 
 ! Done with horizontal interpolation.    
+! Now remap to model coordinates
+  if (useALEremapping) then
+    call cpu_clock_begin(id_clock_ALE)
+    ! First we reserve a work space for reconstructions of the source data
+    allocate( h1(kd) )
+    allocate( tmpT1dIn(kd) )
+    allocate( tmpS1dIn(kd) )
+    call initialize_remapping( kd, remappingScheme, remapCS ) ! Data for reconstructions
+    call remapDisableBoundaryExtrapolation( remapCS )
+    ! Next we initialize the regridding package so that it knows about the target grid
+    allocate( hTarget(nz) )
+    allocate( h2(nz) )
+    allocate( tmpT1d(nz) )
+    allocate( tmpS1d(nz) )
+    allocate( deltaE(nz+1) )
+    ! This call can be more general but is hard-coded for z* coordinates...  ????
+    call ALE_initRegridding( G, PF, mod, regridCS, hTarget ) ! sets regridCS and hTarget(1:nz)
+    ! For each column ...
+    do j = js, je ; do i = is, ie
+      if (G%mask2dT(i,j)>0.) then
+        ! Build the source grid
+        zTopOfCell = 0. ; zBottomOfCell = 0. ; nPoints = 0
+        do k = 1, kd
+          if (mask_z(i,j,k) > 0.) then
+            zBottomOfCell = -min( z_edges_in(k+1), G%bathyT(i,j) )
+            tmpT1dIn(k) = temp_z(i,j,k)
+            tmpS1dIn(k) = salt_z(i,j,k)
+          elseif (k>1) then
+            zBottomOfCell = -G%bathyT(i,j) 
+            tmpT1dIn(k) = tmpT1dIn(k-1)
+            tmpS1dIn(k) = tmpS1dIn(k-1)
+          else ! This next block should only ever be reached over land
+            tmpT1dIn(k) = -99.9
+            tmpS1dIn(k) = -99.9
+          endif
+          h1(k) = zTopOfCell - zBottomOfCell
+          if (h1(k)>0.) nPoints = nPoints + 1
+          zTopOfCell = zBottomOfCell ! Bottom becomes top for next value of k
+        enddo
+        h1(kd) = h1(kd) + ( zTopOfCell + G%bathyT(i,j) ) ! In case data is deeper than model
+        ! Build the target grid combining hTarget and topography
+        zTopOfCell = 0. ; zBottomOfCell = 0.
+        do k = 1, nz
+          zBottomOfCell = max( zTopOfCell - hTarget(k), -G%bathyT(i,j) )
+          h2(k) = zTopOfCell - zBottomOfCell
+          zTopOfCell = zBottomOfCell ! Bottom becomes top for next value of k
+        enddo
+        ! Calcaulate an effectiveadisplacement, deltaE
+        call dzFromH1H2( nPoints, h1, nz, h2, deltaE ) ! sets deltaE
+        ! Now remap from h1 to h2=h1+div.deltaE
+        call remapping_core( remapCS, nPoints, h1, tmpT1dIn, nz, deltaE, tmpT1d ) ! sets tmpT1d
+        call remapping_core( remapCS, nPoints, h1, tmpS1dIn, nz, deltaE, tmpS1d ) ! sets tmpS1d
+        h(i,j,:) = h2(:)
+        tv%T(i,j,:) = tmpT1d(:)
+        tv%S(i,j,:) = tmpS1d(:)
+      else
+        tv%T(i,j,:) = 0.
+        tv%S(i,j,:) = 0.
+        h(i,j,:) = 0.
+      endif ! mask2dT
+    enddo ; enddo
+    deallocate( h1 )
+    deallocate( h2 )
+    deallocate( hTarget )
+    deallocate( tmpT1d )
+    deallocate( tmpS1d )
+    deallocate( tmpT1dIn )
+    deallocate( tmpS1dIn )
+    deallocate( deltaE )
+
+    do k=1,nz
+      call myStats(tv%T(is:ie,js:je,k),missing_value,k,'Temp from ALE()')
+    enddo
+    call cpu_clock_end(id_clock_ALE)
+  else ! remap to isopycnal layer space
 ! next find interface positions using local arrays
 ! nlevs contains the number of valid data points in each column
+    allocate(zi(G%isd:G%ied,G%jsd:G%jed,nz+1))
+    allocate(nlevs(is:ie,js:je))
 
-  allocate(zi(is:ie,js:je,nz+1))
-  allocate(nlevs(is:ie,js:je))
+    nlevs(:,:)=0.0
 
-  nlevs(:,:)=0.0
-
-  nlevs = sum(mask_z(is:ie,js:je,:),dim=3)
+    nlevs = sum(mask_z(is:ie,js:je,:),dim=3)
 
 ! Rb contains the layer interface densities
+    allocate(Rb(nz+1))
+    do k=2,nz
+       Rb(k)=0.5*(G%Rlay(k-1)+G%Rlay(k))
+    enddo
+    Rb(1)=0.0
+    Rb(nz+1)=2.0*G%Rlay(nz) - G%Rlay(nz-1)
 
-  allocate(Rb(nz+1))
-  do k=2,nz
-     Rb(k)=0.5*(G%Rlay(k-1)+G%Rlay(k))
-  enddo
-  Rb(1)=0.0
-  Rb(nz+1)=2.0*G%Rlay(nz) - G%Rlay(nz-1)
+    zi(is:ie,js:je,:) = find_interfaces(rho_z(is:ie,js:je,:), z_in, Rb, G%bathyT(is:ie,js:je), &
+                         nlevs, nkml, nkbl, min_depth)
 
-  zi(is:ie,js:je,:) = find_interfaces(rho_z(is:ie,js:je,:), z_in, Rb, G%bathyT(is:ie,js:je), &
-                       nlevs, nkml, nkbl, min_depth)
+    call get_param(PF, mod, "ADJUST_THICKNESS", correct_thickness, &
+                 "If true, all mass below the bottom removed if the \n"//&
+                 "topography is shallower than the thickness input file \n"//&
+                 "would indicate.", default=.false.)
 
-  call get_param(PF, mod, "ADJUST_THICKNESS", correct_thickness, &
-               "If true, all mass below the bottom removed if the \n"//&
-               "topography is shallower than the thickness input file \n"//&
-               "would indicate.", default=.false.)
+    call get_param(PF, mod, "FIT_TO_TARGET_DENSITY_IC", adjust_temperature, &
+                 "If true, all the interior layers are adjusted to \n"//&
+                 "their target densities using mostly temperature \n"//&
+                 "This approach can be problematic, particularly in the \n"//&
+                 "high latitudes.", default=.true.)
 
-  if (correct_thickness) then
-    ! All mass below the bottom removed if the topography is shallower than
-    ! the input file would indicate.  G%bathyT is positive downward,
-    ! eta is negative downward.
-    do j=js,je ; do i=is,ie
-      if (-zi(i,j,nz+1) > G%bathyT(i,j) + 0.1) zi(i,j,nz+1) = -G%bathyT(i,j)
-    enddo ; enddo
-  endif
-
-  do k=nz,1,-1 ; do j=js,je ; do i=is,ie
-    if (zi(i,j,K) < (zi(i,j,K+1) + G%Angstrom_z)) then
-      zi(i,j,K) = zi(i,j,K+1) + G%Angstrom_z
-      h(i,j,k) = G%Angstrom_z
+    if (correct_thickness) then
+      call adjustEtaToFitBathymetry(G, zi, h)
     else
-      h(i,j,k) = zi(i,j,K) - zi(i,j,K+1)
-    endif
-  enddo ; enddo ; enddo
+      do k=nz,1,-1 ; do j=js,je ; do i=is,ie
+        if (zi(i,j,K) < (zi(i,j,K+1) + G%Angstrom_z)) then
+          zi(i,j,K) = zi(i,j,K+1) + G%Angstrom_z
+          h(i,j,k) = G%Angstrom_z
+        else
+          h(i,j,k) = zi(i,j,K) - zi(i,j,K+1)
+        endif
+      enddo ; enddo ; enddo
+      inconsistent=0
+      do j=js,je ; do i=is,ie
+        if (abs(zi(i,j,nz+1) + G%bathyT(i,j)) > 1.0) &
+          inconsistent = inconsistent + 1
+      enddo ; enddo
+      call sum_across_PEs(inconsistent)
 
-
-!  Check for consistency between the interface heights and topography.!
-  if (correct_thickness) then
-    do j=js,je ; do i=is,ie
-      !   The whole column is dilated to accomodate deeper topography than
-      ! the input file would indicate.
-      if (-zi(i,j,nz+1) < G%bathyT(i,j) - 0.1) then
-        dilate = (zi(i,j,1)+G%bathyT(i,j)) / (zi(i,j,1)-zi(i,j,nz+1))
-        do k=1,nz ; h(i,j,k) = h(i,j,k) * dilate ; enddo
+      if ((inconsistent > 0) .and. (is_root_pe())) then
+        write(mesg,'("Thickness initial conditions are inconsistent ",'// &
+                 '"with topography in ",I5," places.")') inconsistent
+        call MOM_error(WARNING, mesg)
       endif
-    enddo ; enddo
-  else
-    inconsistent=0
-    do j=js,je ; do i=is,ie
-      if (abs(zi(i,j,nz+1) + G%bathyT(i,j)) > 1.0) &
-        inconsistent = inconsistent + 1
-    enddo ; enddo
-    call sum_across_PEs(inconsistent)
-
-    if ((inconsistent > 0) .and. (is_root_pe())) then
-      write(mesg,'("Thickness initial conditions are inconsistent ",'// &
-               '"with topography in ",I5," places.")') inconsistent
-      call MOM_error(WARNING, mesg)
     endif
-  endif
 
 ! and remap temperature and salinity to layers
-
-  dbg=.false.
-  if (debug_point) then
-     if (isc-xhalo.le.i_debug .and. ie-is+isc-xhalo .ge. i_debug) then
-       if (jsc-yhalo.le.j_debug .and. je-js+jsc-yhalo .ge. j_debug) then
-         dbg=.true.
-         idbg=i_debug+is-isc
-         jdbg=j_debug+js-jsc
+    dbg=.false.
+    if (debug_point) then
+       if (isc-i_offset <= i_debug .and. ie-is+isc-i_offset >= i_debug) then
+         if (jsc-j_offset <= j_debug .and. je-js+jsc-j_offset >= j_debug) then
+           dbg=.true.
+           idbg=i_debug+is-isc
+           jdbg=j_debug+js-jsc
+         endif
        endif
-     endif
-  endif
+    endif
 
-
-  tv%T(is:ie,js:je,:) = tracer_z_init(temp_z(is:ie,js:je,:),-1.0*z_edges_in,zi(is:ie,js:je,:),nkml,nkbl,missing_value,G%mask2dT(is:ie,js:je),nz,nlevs(is:ie,js:je),dbg,idbg,jdbg)
-  tv%S(is:ie,js:je,:) = tracer_z_init(salt_z(is:ie,js:je,:),-1.0*z_edges_in,zi(is:ie,js:je,:),nkml,nkbl,missing_value,G%mask2dT(is:ie,js:je),nz,nlevs(is:ie,js:je))
-
+    tv%T(is:ie,js:je,:) = tracer_z_init(temp_z(is:ie,js:je,:),-1.0*z_edges_in,zi(is:ie,js:je,:),nkml,nkbl,missing_value,G%mask2dT(is:ie,js:je),nz,nlevs(is:ie,js:je),dbg,idbg,jdbg)
+    tv%S(is:ie,js:je,:) = tracer_z_init(salt_z(is:ie,js:je,:),-1.0*z_edges_in,zi(is:ie,js:je,:),nkml,nkbl,missing_value,G%mask2dT(is:ie,js:je),nz,nlevs(is:ie,js:je))
 
 ! In case of a problem , use this.
-
-  if (dbg) then
-    do j=js,je ; do i=is,ie
-      if (i-is+isc-xhalo.eq.i_debug.and. j-js+jsc-yhalo.eq.j_debug) then
-        do k=1,kd
-          print *,'klev,T,S,rho=',k,temp_z(i,j,k),salt_z(i,j,k),rho_z(i,j,k)
-        enddo
-        do k=1,nz
-          print *,'klay,T,S,z=',k,tv%T(i,j,k),tv%S(i,j,k),zi(i,j,k)
-        enddo
-        allocate(tmp1(1,1,nz))
-        tmp1=tracer_z_init(temp_z(i:i,j:j,:),-1.0*z_edges_in,zi(i:i,j:j,:),nkml,nkbl,missing_value,G%mask2dT(i:i,j:j),nz,nlevs(i:i,j:j),debug=.true.)
-        print *,'tmp= ',tmp1
-        deallocate(tmp1)
-      endif
-    enddo ; enddo
-  endif
+    if (dbg) then
+      do j=js,je ; do i=is,ie
+        if (i-is+isc-i_offset == i_debug .and. j-js+jsc-j_offset == j_debug) then
+          do k=1,kd
+            print *,'klev,T,S,rho=',k,temp_z(i,j,k),salt_z(i,j,k),rho_z(i,j,k)
+          enddo
+          do k=1,nz
+            print *,'klay,T,S,z=',k,tv%T(i,j,k),tv%S(i,j,k),zi(i,j,k)
+          enddo
+          allocate(tmp1(1,1,nz))
+          tmp1=tracer_z_init(temp_z(i:i,j:j,:),-1.0*z_edges_in,zi(i:i,j:j,:),nkml,nkbl,missing_value,G%mask2dT(i:i,j:j),nz,nlevs(i:i,j:j),debug=.true.)
+          print *,'tmp= ',tmp1
+          deallocate(tmp1)
+        endif
+      enddo ; enddo
+    endif
+  endif ! useALEremapping
 
 ! Fill land values
-
   do k=1,nz ; do j=js,je ; do i=is,ie
-    if (tv%T(i,j,k).eq.missing_value) then
+    if (tv%T(i,j,k) == missing_value) then
       tv%T(i,j,k)=temp_land_fill
       tv%S(i,j,k)=salt_land_fill
     endif
   enddo ; enddo ; enddo
 
-! finally adjust to target density
+! Finally adjust to target density
+  ks=max(0,nkml)+max(0,nkbl)+1
 
-  ks=nkml+nkbl+1
-
-  if (adjust_temperature) then
+  if (adjust_temperature .and. .not. useALEremapping) then
     call determine_temperature(tv%T(is:ie,js:je,:), tv%S(is:ie,js:je,:), &
             G%Rlay(1:nz), tv%p_ref, niter, missing_value, h(is:ie,js:je,:), ks, eos)
     if (debug_point) then
        do j=js,je ; do i=is,ie
-          if (i-is+isc-xhalo.eq.i_debug.and. j-js+jsc-yhalo.eq.j_debug) then
+          if (i-is+isc-i_offset == i_debug .and. j-js+jsc-j_offset == j_debug) then
              do k=1,nz
                 print *,'after adj klay,T,S,z=',k,tv%T(i,j,k),tv%S(i,j,k),zi(i,j,k)
              enddo
@@ -3849,8 +4138,43 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
   deallocate(temp_out,salt_out,mask_out,temp_prev,salt_prev)
   deallocate(rho_out,fill,mask2dT,good,Depth)
 
-  return
+  call callTree_leave(trim(mod)//'()')
+  call cpu_clock_end(id_clock_routine)
 
+  contains
+  subroutine myStats(array, missing, k, mesg)
+  real, dimension(:,:), intent(in) :: array
+  real, intent(in) :: missing
+  integer :: k
+  character(len=*) :: mesg
+  ! Local variables
+  real :: minA, maxA
+  integer :: i,j
+  logical :: found
+  character(len=120) :: lMesg
+  minA = 9.E24 ; maxA = -9.E24 ; found = .false.
+  do j = 1, ubound(array,2)
+    do i = 1, ubound(array,1)
+      if (abs(array(i,j)-missing)>1.e-6*abs(missing)) then
+        if (found) then
+          minA = min(minA, array(i,j))
+          maxA = max(maxA, array(i,j))
+        else
+          found = .true.
+          minA = array(i,j)
+          maxA = array(i,j)
+        endif
+      endif
+    enddo
+  enddo
+  call min_across_PEs(minA)
+  call max_across_PEs(maxA)
+  if (is_root_pe()) then
+    write(lMesg(1:120),'(2(a,es12.4),a,i3,x,a)') &
+       'init_from_Z: min=',minA,' max=',maxA,' Level=',k,trim(mesg)
+    call MOM_mesg(lMesg,8)
+  endif
+  end subroutine myStats
 end subroutine MOM_temp_salt_initialize_from_Z
 
 end module MOM_initialization

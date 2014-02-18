@@ -22,9 +22,10 @@ module MOM_forcing_type
 use MOM_checksums, only : hchksum, qchksum, uchksum, vchksum
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_alloc
-use MOM_diag_mediator, only : time_type, diag_ptrs
+use MOM_diag_mediator, only : time_type
 use MOM_domains, only : pass_var
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
+use MOM_EOS, only : calculate_density_derivs
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
 use MOM_variables, only : thermo_var_ptrs
@@ -37,6 +38,8 @@ implicit none ; private
 
 public extractFluxes1d, extractFluxes2d
 public MOM_forcing_chksum, absorbRemainingSW
+public calculateBuoyancyFlux1d, calculateBuoyancyFlux2d
+public forcing_SinglePointPrint
 
 integer :: num_msg = 0, max_msg = 2
 
@@ -356,6 +359,117 @@ subroutine extractFluxes2d(G, fluxes, optics, nsw, dt, &
 end subroutine extractFluxes2d
 
 
+subroutine calculateBuoyancyFlux1d(G, fluxes, optics, h, Temp, Salt, tv, j, buoyancyFlux, netHeatMinusSW, netSalt )
+! Calculates buoyancy flux by adding up the heat, FW and salt fluxes and linearizing
+! about the surface state.
+
+! Arguments
+  type(ocean_grid_type),                 intent(in)    :: G      ! Ocean grid
+  type(forcing),                         intent(in)    :: fluxes ! Surface fluxes/forcing type
+  type(optics_type),                     pointer       :: optics ! Optics for penetrating SW
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h      ! Layer/level thicknesses (units of H)
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: Temp   ! Pot. temperature (degrees C)
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: Salt   ! Salinity (ppt)
+  type(thermo_var_ptrs),                 intent(inout) :: tv     ! Thermodynamics type (out needed for tv%TempxPmE ????)
+  integer,                               intent(in)    :: j      ! j-index of row to work on
+  real, dimension(NIMEM_,NK_INTERFACE_), intent(inout) :: buoyancyFlux ! Buoyancy flux (m2/s3)
+  real, dimension(NIMEM_),               intent(inout) :: netHeatMinusSW ! Heat flux excluding SW (K m/s)
+  real, dimension(NIMEM_),               intent(inout) :: netSalt ! Salt flux (ppt m/s)
+
+! Local variables
+  integer :: nsw, start, npts, k
+  real, parameter :: dt = 1. ! This is set to unity to return a rate from extractFluxes1d
+  real, dimension( SZI_(G) ) :: netH, netHeat ! FW, heat fluxes in (m/s, K m/s, ppt m/s)
+  real, dimension( optics%nbands, SZI_(G) ) :: penSWbnd ! SW penetration bands
+  real, dimension( SZI_(G) ) :: pressure ! Pressurea the surface ( Pa )
+  real, dimension( SZI_(G) ) :: dRhodT, dRhodS ! Derivatives of density
+  logical :: useRiverHeatContent, useCalvingHeatContent
+  real :: depthBeforeScalingFluxes, GoRho
+  integer, dimension(SZI_(G),SZK_(G)) :: ksort
+  real, dimension(SZI_(G),SZK_(G)+1) :: netPen
+  real    :: H_limit_fluxes
+
+  nsw = optics%nbands
+  useRiverHeatContent = .False.    !  ????????????????
+  useCalvingHeatContent = .False.  !  ????????????????
+  depthBeforeScalingFluxes = max( G%Angstrom, 1.e-30 )
+  pressure(:) = 0. ! Ignore atmospheric pressure
+  GoRho = G%g_Earth / G%Rho0
+  start = 1 + G%isc - G%isd
+  npts = 1 + G%iec - G%isc
+
+  do k=1, G%ke
+    ksort(:,k) = k
+  enddo
+  H_limit_fluxes = depthBeforeScalingFluxes ! ?????????????
+
+  ! Fetch the fresh-water, heat and salt fluxes
+  ! netH is the fresh-water flux
+  ! netSalt is the salt flux (typically zero except under sea-ice)
+  ! netHeat is the heat flux EXCEPT the penetrating SW
+  ! penSWbnd is the surface SW for each band
+  call extractFluxes1d(G, fluxes, optics, nsw, j, dt, &
+                depthBeforeScalingFluxes, useRiverHeatContent, useCalvingHeatContent, &
+                h(:,j,:), Temp(:,j,:), netH, netHeatMinusSW, netSalt, penSWbnd, tv)
+
+  ! Sum over bands and attenuate as a function of depth
+  ! netPen is the netSW as a function of depth
+  call sumSWoverBands(G, h(:,j,:), 0.*h(:,j,:), 0.*h(:,j,1), optics%opacity_band(:,:,j,:), nsw, j, dt, &
+                      H_limit_fluxes, .true., .true., &
+                      ksort, penSWbnd, netPen)
+
+  ! Density derivatives
+  call calculate_density_derivs(Temp(:,j,1), Salt(:,j,1), pressure, &
+                                dRhodT, dRhodS, start, npts, tv%eqn_of_state)
+
+  ! Adjust netSalt to reflect dillution effect of FW flux
+  netSalt(:) = netSalt(:) - Salt(:,j,1) * netH * G%H_to_m
+
+  ! Add in the SW heating for purposes of calculating the net surface buoyancy flux
+ !netHeat(:) = netHeatMinusSW(:) + sum( penSWbnd(:,:), dim=1 )
+  netHeat(:) = netHeatMinusSW(:) + netPen(:,1)
+
+  ! Convert to a buoyancy flux, excluding penetrating SW heating
+  buoyancyFlux(:,1) = - GoRho * ( dRhodS(:) * netSalt(:) + dRhodT(:) * netHeat(:) ) ! m2/s3
+  ! We also have a penetrative buoyancy flux associaed with penetrative SW
+  do k=2, G%ke+1
+    buoyancyFlux(:,k) = - GoRho * ( dRhodT(:) * netPen(:,k) ) ! m2/s3
+  enddo
+
+end subroutine calculateBuoyancyFlux1d
+
+
+subroutine calculateBuoyancyFlux2d(G, fluxes, optics, h, Temp, Salt, tv, buoyancyFlux, netHeatMinusSW, netSalt )
+! Calculates buoyancy flux by adding up the heat, FW and salt fluxes and linearizing
+! about the surface state.
+
+! Arguments
+  type(ocean_grid_type),                       intent(in)    :: G      ! Ocean grid
+  type(forcing),                               intent(in)    :: fluxes ! Surface fluxes/forcing type
+  type(optics_type),                           pointer       :: optics ! Optics for penetrating SW
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),       intent(in)    :: h      ! Layer/level thicknesses (units of H)
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),       intent(in)    :: Temp   ! Pot. temperature (degrees C)
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),       intent(in)    :: Salt   ! Salinity (ppt)
+  type(thermo_var_ptrs),                       intent(inout) :: tv     ! Thermodynamics type (out needed for tv%TempxPmE ????)
+  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_),intent(inout) :: buoyancyFlux ! Buoyancy flux (m2/s3)
+  real, dimension(NIMEM_,NJMEM_),optional,     intent(inout) :: netHeatMinusSW ! Heat flux excluding SW (K m/s)
+  real, dimension(NIMEM_,NJMEM_),optional,     intent(inout) :: netSalt ! Salt flux (ppt m/s)
+
+! Local variables
+  real, dimension( SZI_(G) ) :: netT, netS ! Fluxes in (K m/s, ppt m/s)
+  integer :: j
+
+  netT(:) = 0. ; netS(:) = 0.
+
+  do j = G%jsc, G%jec
+    call calculateBuoyancyFlux1d(G, fluxes, optics, h, Temp, Salt, tv, j, buoyancyFlux(:,j,:), netT, netS )
+    if (present(netHeatMinusSW)) netHeatMinusSW(:,j) = netT(:)
+    if (present(netSalt)) netSalt(:,j) = netS(:)
+  enddo ! j
+
+end subroutine calculateBuoyancyFlux2d
+
+
 subroutine absorbRemainingSW(G, h, eps, htot, opacity_band, nsw, j, dt, &
                              H_limit_fluxes, correctAbsorption, absorbAllSW, &
                              ksort, T, Ttot, Pen_SW_bnd)
@@ -542,6 +656,163 @@ subroutine absorbRemainingSW(G, h, eps, htot, opacity_band, nsw, j, dt, &
 end subroutine absorbRemainingSW
 
 
+subroutine sumSWoverBands(G, h, eps, htot, opacity_band, nsw, j, dt, &
+                          H_limit_fluxes, correctAbsorption, absorbAllSW, &
+                          ksort, iPen_SW_bnd, netPen)
+  type(ocean_grid_type),          intent(in)    :: G
+  real, dimension(NIMEM_,NKMEM_), intent(in)    :: h, eps
+  real, dimension(NIMEM_),        intent(in)    :: htot
+  real, dimension(:,:,:),         intent(in)    :: opacity_band
+  integer,                        intent(in)    :: nsw
+  integer,                        intent(in)    :: j
+  real,                           intent(in)    :: dt
+  real,                           intent(in)    :: H_limit_fluxes
+  logical,                        intent(in)    :: correctAbsorption
+  logical,                        intent(in)    :: absorbAllSW
+  integer, dimension(NIMEM_,NKMEM_), intent(in) :: ksort
+  real, dimension(:,:),           intent(in)    :: iPen_SW_bnd
+  real, dimension(NIMEM_,NK_INTERFACE_), intent(inout) :: netPen ! Units of K m
+!   This subroutine applies shortwave heating below the mixed layer.  In
+! addition, it causes all of the remaining SW radiation to be absorbed,
+! provided that the total water column thickness is greater than
+! H_limit_fluxes.  For thinner water columns, the heating is scaled down
+! proportionately, the assumption being that the remaining heating (which is
+! left in Pen_SW) should go into an (unincluded) ocean bottom sediment layer.
+
+! Arguments:
+!  (in)      G - The ocean's grid structure.
+!  (in)      h - Layer thickness, in m or kg m-2. (Intent in)  The units
+!                of h are referred to as H below.
+!  (in)      eps - The (small) thickness that must remain in each layer, and
+!                  which will not be subject to heating, in H.
+!  (in)      htot - The total mixed layer thickness, in H.
+!  (in)      opacity_band - The opacity in each band of penetrating shortwave
+!                           radiation, in H-1. The indicies are band, i, k.
+!  (in)      nsw - The number of bands of penetrating shortwave radiation.
+!  (in)      j - The j-index to work on.
+!  (in)      dt - The time step in s.
+!  (inout)   ksort - The density-sorted k-indicies.
+!  (inout)   Pen_SW_bnd - The penetrating shortwave heating in each band that
+!                         hits the bottom and will be redistributed through
+!                         the water column, in K H, size nsw x NIMEM_.
+!  (out)     netPen is the attenuated flux at interfaces, summed over bands (units of K m)
+
+  real :: h_heat(SZI_(G)) !   The thickness of the water column that receives
+                          ! the remaining shortwave radiation, in H.
+  real :: Pen_SW_rem(SZI_(G)) ! The sum across all wavelength bands of the
+                          ! penetrating shortwave heating that hits the bottom
+                          ! and will be redistributed through the water column
+                          ! in units of K H.
+  real, dimension(size(iPen_SW_bnd,1),size(iPen_SW_bnd,2)) :: Pen_SW_bnd
+  real :: SW_trans  !   The fraction of shortwave radiation that is not
+                    ! absorbed in a layer, nondimensional.
+  real :: unabsorbed      !   The fraction of the shortwave radiation that
+                          ! is not absorbed because the layers are too thin.
+  real :: Ih_limit        !   The inverse of the total depth at which the
+                          ! surface fluxes start to be limited, in H-1.
+  real :: h_min_heat      !   The minimum thickness layer that should get
+                          ! heated, in H.
+  real :: opt_depth       !   The optical depth of a layer, non-dim.
+  real :: exp_OD          !   exp(-opt_depth), non-dim.
+  real :: heat_bnd        !   The heating due to absorption in the current
+                          ! layer by the current band, including any piece that
+                          ! is moved upward, in K H.
+  real :: SWa             !   The fraction of the absorbed shortwave that is
+                          ! moved to layers above with correctAbsorption, ND.
+  logical :: SW_Remains   ! If true, some column has shortwave radiation that
+                          ! was not entirely absorbed.
+  integer :: is, ie, nz, i, k, ks, n
+  SW_Remains = .false.
+
+  h_min_heat = 2.0*G%Angstrom + G%H_subroundoff
+  is = G%isc ; ie = G%iec ; nz = G%ke
+
+  pen_SW_bnd(:,:) = iPen_SW_bnd(:,:)
+  do i=is,ie ; h_heat(i) = htot(i) ; enddo
+  netPen(:,1) = sum( pen_SW_bnd(:,:), dim=1 ) ! Surface interface
+
+  ! Apply penetrating SW radiation to remaining parts of layers.  Excessively thin
+  ! isopycnal layers are not heated.
+  do ks=1,nz
+
+    do i=is,ie ; if (ksort(i,ks) > 0) then
+      k = ksort(i,ks)
+      netPen(i,k+1) = 0.
+
+      if (h(i,k) > 1.5*eps(i,k)) then
+        do n=1,nsw ; if (Pen_SW_bnd(n,i) > 0.0) then
+          ! SW_trans is the SW that is transmitted THROUGH the layer
+          opt_depth = h(i,k) * opacity_band(n,i,k)
+          exp_OD = exp(-opt_depth)
+          SW_trans = exp_OD
+          ! Heating at a rate of less than 10-4 W m-2 = 10-3 K m / Century,
+          ! and of the layer in question less than 1 K / Century, can be
+          ! absorbed without further penetration.
+          if ((nsw*Pen_SW_bnd(n,i)*SW_trans < G%m_to_H*2.5e-11*dt) .and. &
+              (nsw*Pen_SW_bnd(n,i)*SW_trans < h(i,k)*dt*2.5e-8)) &
+            SW_trans = 0.0
+
+          if (correctAbsorption .and. (h_heat(i) > 0.0)) then
+            if (opt_depth > 1e-5) then
+              SWa = ((opt_depth + (opt_depth + 2.0)*exp_OD) - 2.0) / &
+                ((opt_depth + opacity_band(n,i,k) * h_heat(i)) * &
+                 (1.0 - exp_OD))
+            else
+              ! Use a Taylor's series expansion of the expression above for a
+              ! more accurate form with very small layer optical depths.
+              SWa = h(i,k) * (opt_depth * (1.0 - opt_depth)) / &
+                ((h_heat(i) + h(i,k)) * (6.0 - 3.0*opt_depth))
+            endif
+            Heat_bnd = Pen_SW_bnd(n,i) * (1.0 - SW_trans)
+          endif
+
+          Pen_SW_bnd(n,i) = Pen_SW_bnd(n,i) * SW_trans
+          netPen(i,k+1) = netPen(i,k+1) + Pen_SW_bnd(n,i)
+        endif ; enddo
+      endif ! h(i,k) > 1.5*eps(i,k)
+
+      ! Add to the accumulated thickness above that could be heated.
+      ! Only layers greater than h_min_heat thick should get heated.
+      if (h(i,k) >= 2.0*h_min_heat) then
+        h_heat(i) = h_heat(i) + h(i,k)
+      elseif (h(i,k) > h_min_heat) then
+        h_heat(i) = h_heat(i) + (2.0*h(i,k) - 2.0*h_min_heat)
+      endif
+    endif ; enddo ! i loop
+  enddo ! k loop
+
+  ! Apply heating above the layers in which it should have occurred to get the
+  ! correct mean depth of the shortwave that should be absorbed by each layer.
+!    if (correctAbsorption) then
+!    endif
+
+! if (.not.absorbAllSW .and. .not.correctAbsorption) return
+  if (absorbAllSW) then
+
+    ! If there is still shortwave radiation at this point, it could go into
+    ! the bottom (with a bottom mud model), or it could be redistributed back
+    ! through the water column.
+    do i=is,ie
+      Pen_SW_rem(i) = Pen_SW_bnd(1,i)
+      do n=2,nsw ; Pen_SW_rem(i) = Pen_SW_rem(i) + Pen_SW_bnd(n,i) ; enddo
+    enddo
+    do i=is,ie ; if (Pen_SW_rem(i) > 0.0) SW_Remains = .true. ; enddo
+
+    Ih_limit = 1.0 / (H_limit_fluxes * G%m_to_H)
+    do i=is,ie ; if ((Pen_SW_rem(i) > 0.0) .and. (h_heat(i) > 0.0)) then
+      if (h_heat(i)*Ih_limit < 1.0) then
+        unabsorbed = 1.0 - h_heat(i)*Ih_limit
+      else
+        unabsorbed = 0.0
+      endif
+      do n=1,nsw ; Pen_SW_bnd(n,i) = unabsorbed * Pen_SW_bnd(n,i) ; enddo
+    endif ; enddo
+
+  endif ! absorbAllSW
+
+end subroutine sumSWoverBands
+
+
 subroutine MOM_forcing_chksum(mesg, fluxes, G, haloshift)
   character(len=*),                    intent(in) :: mesg
   type(forcing),                       intent(in) :: fluxes
@@ -607,6 +878,58 @@ subroutine MOM_forcing_chksum(mesg, fluxes, G, haloshift)
     call hchksum(fluxes%liq_runoff, mesg//" fluxes%liq_runoff",G,haloshift=hshift)
   if (associated(fluxes%froz_runoff)) &
     call hchksum(fluxes%froz_runoff, mesg//" fluxes%froz_runoff",G,haloshift=hshift)
+  if (associated(fluxes%runoff_hflx)) &
+    call hchksum(fluxes%runoff_hflx, mesg//" fluxes%runoff_hflx",G,haloshift=hshift)
+  if (associated(fluxes%calving_hflx)) &
+    call hchksum(fluxes%calving_hflx, mesg//" fluxes%calving_hflx",G,haloshift=hshift)
 end subroutine MOM_forcing_chksum
+
+subroutine forcing_SinglePointPrint(fluxes, G, i, j, mesg)
+  type(forcing),                       intent(in) :: fluxes
+  type(ocean_grid_type),               intent(in) :: G
+  character(len=*),                    intent(in) :: mesg
+  integer,                             intent(in) :: i, j
+!   This subroutine writes out values of the fluxes arrays at
+! the i,j location
+
+  write(0,'(2a)') 'MOM_forcing_type, forcing_SinglePointPrint: Called from ',mesg
+  write(0,'(a,2es15.3)') 'MOM_forcing_type, forcing_SinglePointPrint: lon,lat = ',G%geoLonT(i,j),G%geoLatT(i,j)
+  call locMsg(fluxes%taux,'taux')
+  call locMsg(fluxes%tauy,'tauy')
+  call locMsg(fluxes%ustar,'ustar')
+  call locMsg(fluxes%buoy,'buoy')
+  call locMsg(fluxes%sw,'sw')
+  call locMsg(fluxes%sw_vis_dir,'sw_vis_dir')
+  call locMsg(fluxes%sw_vis_dif,'sw_vis_dif')
+  call locMsg(fluxes%sw_nir_dir,'sw_nir_dir')
+  call locMsg(fluxes%sw_nir_dif,'sw_nir_dif')
+  call locMsg(fluxes%lw,'lw')
+  call locMsg(fluxes%latent,'latent')
+  call locMsg(fluxes%sens,'sens')
+  call locMsg(fluxes%evap,'evap')
+  call locMsg(fluxes%liq_precip,'liq_precip')
+  call locMsg(fluxes%froz_precip,'froz_precip')
+  call locMsg(fluxes%virt_precip,'virt_precip')
+  call locMsg(fluxes%p_surf,'p_surf')
+  call locMsg(fluxes%salt_flux,'salt_flux')
+  call locMsg(fluxes%TKE_tidal,'TKE_tidal')
+  call locMsg(fluxes%ustar_tidal,'ustar_tidal')
+  call locMsg(fluxes%liq_runoff,'liq_runoff')
+  call locMsg(fluxes%froz_runoff,'froz_runoff')
+  call locMsg(fluxes%runoff_hflx,'runoff_hflx')
+  call locMsg(fluxes%calving_hflx,'calving_hflx')
+
+  contains
+
+  subroutine locMsg(array,aname)
+  real, dimension(:,:), pointer :: array
+  character(len=*) :: aname
+  if (associated(array)) then
+    write(0,'(3a,es15.3)') 'MOM_forcing_type, forcing_SinglePointPrint: ',trim(aname),' = ',array(i,j)
+  else
+    write(0,'(4a)') 'MOM_forcing_type, forcing_SinglePointPrint: ',trim(aname),' is not associated.'
+  endif
+  end subroutine locMsg
+end subroutine forcing_SinglePointPrint
 
 end module MOM_forcing_type

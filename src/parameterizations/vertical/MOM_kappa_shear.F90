@@ -44,7 +44,7 @@ module MOM_kappa_shear
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock, only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
-use MOM_diag_mediator, only : diag_ptrs, time_type
+use MOM_diag_mediator, only : diag_ctrl, time_type
 use MOM_checksums, only : hchksum
 use MOM_error_handler, only : MOM_error, is_root_pe, FATAL, WARNING, NOTE
 use MOM_file_parser, only : get_param, log_version, param_file_type
@@ -59,7 +59,7 @@ implicit none ; private
 #include <netcdf.inc>
 #endif
 
-public Calculate_kappa_shear, kappa_shear_init
+public Calculate_kappa_shear, kappa_shear_init, kappa_shear_is_used
 
 type, public :: Kappa_shear_CS ! ; private
   real    :: RiNo_crit       ! The critical shear Richardson number for
@@ -87,6 +87,7 @@ type, public :: Kappa_shear_CS ! ; private
   real    :: TKE_bg          !   The background level of TKE, in m2 s-2.
   real    :: kappa_0         !   The background diapycnal diffusivity, in m2 s-1.
   real    :: kappa_tol_err   !   The fractional error in kappa that is tolerated.
+  real    :: Prandtl_turb    ! Prandtl number used to convert Kd_turb into viscosity.
   integer :: nkml            !   The number of layers in the mixed layer, as
                              ! treated in this routine.  If the pieces of the
                              ! mixed layer are not to be treated collectively,
@@ -100,13 +101,14 @@ type, public :: Kappa_shear_CS ! ; private
                              ! no good reason why this should be false.
   logical :: layer_stagger = .false.
   logical :: debug = .false.
-  type(diag_ptrs), pointer :: diag ! A pointer to a structure of shareable
-                            ! ocean diagnostic fields.
+  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
+                            ! timing of diagnostic output.
   integer :: id_Kd_shear = -1, id_TKE = -1
   integer :: id_ILd2 = -1, id_dz_Int = -1
 end type Kappa_shear_CS
 
 ! integer :: id_clock_project, id_clock_KQ, id_clock_avg, id_clock_setup
+  character(len=40)  :: mod = "MOM_kappa_shear"  ! This module's name.
 
 #undef  DEBUG
 #undef  ADD_DIAGNOSTICS
@@ -114,7 +116,7 @@ end type Kappa_shear_CS
 contains
 
 subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
-                                 dt, G, CS, initialize_all)
+                                 kv_io, dt, G, CS, initialize_all)
   real, dimension(NIMEM_,NJMEM_,NKMEM_),        intent(in)    :: u_in
   real, dimension(NIMEM_,NJMEM_,NKMEM_),        intent(in)    :: v_in
   real, dimension(NIMEM_,NJMEM_,NKMEM_),        intent(in)    :: h
@@ -122,6 +124,7 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
   real, dimension(:,:),                         pointer       :: p_surf
   real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(inout) :: kappa_io
   real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(inout) :: tke_io
+  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(inout) :: kv_io ! really intent(out)
   real,                                         intent(in)    :: dt
   type(ocean_grid_type),                        intent(in)    :: G
   type(Kappa_shear_CS),                         pointer       :: CS
@@ -144,6 +147,9 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
 !                     interface (not layer!) in m2 s-2.  Initially this is the
 !                     value from the previous timestep, which may accelerate
 !                     the iteration toward convergence.
+!  (in/out)  kv_io - The vertical viscosity at each interface
+!                    (not layer!) in m2 s-1. This discards any previous value
+!                    i.e. intent(out) and simply sets Kv = Prandtl * Kd_turb
 !  (in)      dt - Time increment, in s.
 !  (in)      G - The ocean's grid structure.
 !  (in)      CS - The control structure returned by a previous call to
@@ -848,6 +854,7 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
     do K=1,nz+1 ; do i=is,ie
       kappa_io(i,j,K) = G%mask2dT(i,j) * kappa_2d(i,K)
       tke_io(i,j,K) = G%mask2dT(i,j) * tke_2d(i,K)
+      kv_io(i,j,K) = ( G%mask2dT(i,j) * kappa_2d(i,K) ) * CS%Prandtl_turb
 #ifdef ADD_DIAGNOSTICS
       I_Ld2_3d(i,j,K) = I_Ld2_2d(i,K)
       dz_Int_3d(i,j,K) = dz_Int_2d(i,K)
@@ -884,7 +891,7 @@ subroutine calculate_projected_state(kappa, u0, v0, T0, S0, dt, nz, &
   real, dimension(NK_INTERFACE_), intent(in)  :: I_dz_int, dbuoy_dT, dbuoy_dS
   real,                           intent(in)  :: dt
   integer,                        intent(in)  :: nz
-  real, dimension(NKMEM_),        intent(out) :: u, v, T, Sal
+  real, dimension(NKMEM_),        intent(inout) :: u, v, T, Sal
   real, dimension(NK_INTERFACE_), optional, intent(inout) :: N2, S2
   integer, optional,              intent(in)  :: ks_int, ke_int
   ! Arguments: kappa - The diapycnal diffusivity at interfaces, in m2 s-1.
@@ -1614,23 +1621,23 @@ end subroutine find_kappa_tke
 
 end subroutine Calculate_kappa_shear
 
-subroutine kappa_shear_init(Time, G, param_file, diag, CS)
+logical function kappa_shear_init(Time, G, param_file, diag, CS)
   type(time_type),         intent(in)    :: Time
   type(ocean_grid_type),   intent(in)    :: G
   type(param_file_type),   intent(in)    :: param_file
-  type(diag_ptrs), target, intent(inout) :: diag
-  type(Kappa_shear_CS),   pointer       :: CS
+  type(diag_ctrl), target, intent(inout) :: diag
+  type(Kappa_shear_CS),    pointer       :: CS
 ! Arguments: Time - The current model time.
 !  (in)      G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
-!  (in)      diag - A structure containing pointers to common diagnostic fields.
+!  (in)      diag - A structure that is used to regulate diagnostic output.
 !  (in/out)  CS - A pointer that is set to point to the control structure
 !                 for this module
+!  (returns) kappa_shear_init - True if module is to be used, False otherwise
   logical :: merge_mixedlayer
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = "MOM_kappa_shear"  ! This module's name.
   real :: KD_normal ! The KD of the main model, read here only as a parameter
                     ! for setting the default of KD_SMOOTH
   if (associated(CS)) then
@@ -1650,7 +1657,11 @@ subroutine kappa_shear_init(Time, G, param_file, diag, CS)
   ! subgridscale inhomogeneity into account.
 
 ! Set default, read and log parameters
-  call log_version(param_file, mod, version, "")
+  call log_version(param_file, mod, version, &
+    "Parameterization of shear-driven turbulence following Jackson, Hallberg and Legg, JPO 2008")
+  call get_param(param_file, mod, "USE_JACKSON_PARAM", kappa_shear_init, &
+                 "If true, use the Jackson-Hallberg-Legg (JPO 2008) \n"//&
+                 "shear mixing parameterization.", default=.false.)
   call get_param(param_file, mod, "RINO_CRIT", CS%RiNo_crit, &
                  "The critical Richardson number for shear mixing.", &
                  units="nondim", default=0.25)
@@ -1713,6 +1724,9 @@ subroutine kappa_shear_init(Time, G, param_file, diag, CS)
                  "The maximum number of iterations that may be used to \n"//&
                  "estimate the time-averaged diffusivity.", units="nondim", &
                  default=13)
+  call get_param(param_file, mod, "PRANDTL_TURB", CS%Prandtl_turb, &
+                 "The turbulent Prandtl number applied to shear \n"//&
+                 "instability.", units="nondim", default=0.0, do_not_log=.true.)
   call get_param(param_file, mod, "DEBUG_KAPPA_SHEAR", CS%debug, &
                  "If true, write debugging data for the kappa-shear code. \n"//&
                  "Caution: this option is _very_ verbose and should only \n"//&
@@ -1731,21 +1745,31 @@ subroutine kappa_shear_init(Time, G, param_file, diag, CS)
     if (merge_mixedlayer) CS%nkml = G%nkml
   endif
 
+! Forego remainder of initialization if not using this scheme
+  if (.not. kappa_shear_init) return
+
   CS%diag => diag
 
-  CS%id_Kd_shear = register_diag_field('ocean_model','Kd_shear',G%axesTi,Time, &
+  CS%id_Kd_shear = register_diag_field('ocean_model','Kd_shear',diag%axesTi,Time, &
       'Shear-driven Diapycnal Diffusivity', 'meter2 second-1')
-  CS%id_TKE = register_diag_field('ocean_model','TKE_shear',G%axesTi,Time, &
+  CS%id_TKE = register_diag_field('ocean_model','TKE_shear',diag%axesTi,Time, &
       'Shear-driven Turbulent Kinetic Energy', 'meter2 second-2')
 #ifdef ADD_DIAGNOSTICS
-  CS%id_ILd2 = register_diag_field('ocean_model','ILd2_shear',G%axesTi,Time, &
+  CS%id_ILd2 = register_diag_field('ocean_model','ILd2_shear',diag%axesTi,Time, &
       'Inverse kappa decay scale at interfaces', 'meter-2')
-  CS%id_dz_Int = register_diag_field('ocean_model','dz_Int_shear',G%axesTi,Time, &
+  CS%id_dz_Int = register_diag_field('ocean_model','dz_Int_shear',diag%axesTi,Time, &
       'Finite volume thickness of interfaces', 'meter')
 #endif
 
-  ! Write all relevant parameters to the model log.
+end function kappa_shear_init
 
-end subroutine kappa_shear_init
+logical function kappa_shear_is_used(param_file)
+! Reads the parameter "USE_JACKSON_PARAM" and returns state.
+!   This function allows other modules to know whether this parameterization will
+! be used without needing to duplicate the log entry.
+  type(param_file_type), intent(in) :: param_file
+  call get_param(param_file, mod, "USE_JACKSON_PARAM", kappa_shear_is_used, &
+                 default=.false., do_not_log = .true.)
+end function kappa_shear_is_used
 
 end module MOM_kappa_shear

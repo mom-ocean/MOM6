@@ -42,7 +42,8 @@ module MOM_internal_tides
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 use MOM_diag_mediator, only : post_data, query_averaging_enabled, diag_axis_init
-use MOM_diag_mediator, only : register_diag_field, diag_ptrs, safe_alloc_ptr
+use MOM_diag_mediator, only : register_diag_field, diag_ctrl, safe_alloc_ptr
+use MOM_diag_mediator, only : axesType, defineAxes
 use MOM_domains, only : pass_var, pass_vector_start, pass_vector_complete
 use MOM_domains, only : AGRID, To_South, To_West, To_All
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
@@ -91,8 +92,8 @@ type, public :: int_tide_CS ; private
   real, allocatable, dimension(:) :: &
     frequency           ! The frequency of each band.
 
-  type(diag_ptrs), pointer :: diag ! A pointer to a structure of shareable
-                        ! ocean diagnostic fields and control variables.
+  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
+                        ! timing of diagnostic output.
   integer :: id_tot_En = -1, id_itide_drag = -1
   integer, allocatable, dimension(:,:) :: id_En_mode, id_En_ang_mode
 end type int_tide_CS
@@ -959,21 +960,21 @@ subroutine internal_tides_init(Time, G, param_file, diag, CS)
   type(time_type),           intent(in) :: Time
   type(ocean_grid_type),     intent(in) :: G
   type(param_file_type),     intent(in) :: param_file
-  type(diag_ptrs), target,   intent(in) :: diag
+  type(diag_ctrl), target,   intent(in) :: diag
   type(int_tide_CS),     pointer    :: CS
 ! Arguments: Time - The current model time.
 !  (in)      G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
-!  (in)      diag - A structure containing pointers to common diagnostic fields.
+!  (in)      diag - A structure that is used to regulate diagnostic output.
 !  (in/out)  CS - A pointer that is set to point to the control structure
 !                 for this module
   real    :: angle_size
   real, allocatable :: angles(:)
   logical :: use_int_tides, use_temperature
   integer :: num_angle, num_freq, num_mode, m, fr
-  integer :: isd, ied, jsd, jed, a
-  integer :: axes_ang(3), id_ang
+  integer :: isd, ied, jsd, jed, a, id_ang
+  type(axesType) :: axes_ang
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mod = "MOM_internal_tides" ! This module's name.
@@ -1092,9 +1093,9 @@ subroutine internal_tides_init(Time, G, param_file, diag, CS)
                  "If positive, only one angular band of the internal tides \n"//&
                  "gets all of the energy.  (This is for debugging.)", default=-1)
 
-  CS%id_tot_En = register_diag_field('ocean_model', 'ITide_tot_En', G%axesT1, &
+  CS%id_tot_En = register_diag_field('ocean_model', 'ITide_tot_En', diag%axesT1, &
                  Time, 'Internal tide total energy density', 'J m-2')
-  CS%id_itide_drag = register_diag_field('ocean_model', 'ITide_drag', G%axesT1, &
+  CS%id_itide_drag = register_diag_field('ocean_model', 'ITide_drag', diag%axesT1, &
                  Time, 'Interior and bottom drag internal tide decay timescale', 's-1')
 
   allocate(CS%id_En_mode(CS%nFreq,CS%nMode)) ; CS%id_En_mode(:,:) = -1
@@ -1105,14 +1106,14 @@ subroutine internal_tides_init(Time, G, param_file, diag, CS)
   do a=1,num_angle ; angles(a) = (real(a) - 1) * Angle_size ; enddo
 
   id_ang = diag_axis_init("angle", angles, "Radians", "N", "Angular Orienation of Fluxes")
-  axes_ang(:) = (/ G%axesT1(1), G%axesT1(2), id_ang /)
+  call defineAxes(diag, (/ diag%axesT1%handles(1), diag%axesT1%handles(2), id_ang /), axes_ang)
 
   do fr=1,CS%nFreq ; write(freq_name(fr), '("K",i1)') fr ; enddo
   do m=1,CS%nMode ; do fr=1,CS%nFreq
     write(var_name, '("Itide_en_K",i1,"_M",i1)') fr, m
     write(var_descript, '("Internal tide energy density in frequency K",i1," mode ",i1)') fr, m
     CS%id_En_mode(fr,m) = register_diag_field('ocean_model', var_name, &
-                 G%axesT1, Time, var_descript, 'J m-2')
+                 diag%axesT1, Time, var_descript, 'J m-2')
     call MOM_mesg("Registering "//trim(var_name)//", Described as: "//var_descript, 5)
 
     write(var_name, '("Itide_en_ang_K",i1,"_M",i1)') fr, m

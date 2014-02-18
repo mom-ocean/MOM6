@@ -40,7 +40,7 @@ module user_change_diffusivity
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 
-use MOM_diag_mediator, only : diag_ptrs, time_type
+use MOM_diag_mediator, only : diag_ctrl, time_type
 use MOM_error_handler, only : MOM_error, is_root_pe, FATAL, WARNING, NOTE
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
@@ -64,8 +64,8 @@ type, public :: user_change_diff_CS ; private
                         ! Kd_add is added, in kg m-3.
   logical :: use_abs_lat  ! If true, use the absolute value of latitude when
                           ! setting lat_range.
-  type(diag_ptrs), pointer :: diag ! A pointer to a structure of shareable
-                                   ! ocean diagnostic fields.
+  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
+                             ! timing of diagnostic output.
 end type user_change_diff_CS
 
 contains
@@ -224,13 +224,13 @@ subroutine user_change_diff_init(Time, G, param_file, diag, CS)
   type(time_type),           intent(in)    :: Time
   type(ocean_grid_type),     intent(in)    :: G
   type(param_file_type),     intent(in)    :: param_file
-  type(diag_ptrs), target,   intent(inout) :: diag
+  type(diag_ctrl), target,   intent(inout) :: diag
   type(user_change_diff_CS), pointer       :: CS
 ! Arguments: Time - The current model time.
 !  (in)      G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
-!  (in)      diag - A structure containing pointers to common diagnostic fields.
+!  (in)      diag - A structure that is used to regulate diagnostic output.
 !  (in/out)  CS - A pointer that is set to point to the control structure
 !                 for this module
 ! This include declares and sets the variable "version".

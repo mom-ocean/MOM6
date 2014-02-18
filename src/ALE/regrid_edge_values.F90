@@ -10,7 +10,6 @@ module regrid_edge_values
 ! high-order reconstruction schemes.
 !
 !==============================================================================
-use regrid_grid1d_class, only : grid1D_t
 use regrid_solvers, only : solve_linear_system, solve_tridiagonal_system
 use polynomial_functions, only : evaluation_polynomial
 
@@ -46,7 +45,7 @@ contains
 !------------------------------------------------------------------------------
 ! Bound edge values by neighboring cell averages
 !------------------------------------------------------------------------------
-subroutine bound_edge_values( grid, u, edge_values )
+subroutine bound_edge_values( N, h, u, edge_values )
 ! ------------------------------------------------------------------------------
 ! In this routine, we loop on all cells to bound their left and right
 ! edge values by the cell averages. That is, the left edge value must lie
@@ -59,13 +58,13 @@ subroutine bound_edge_values( grid, u, edge_values )
 ! ------------------------------------------------------------------------------
 
   ! Arguments
-  type(grid1D_t), intent(in)            :: grid             
-  real, dimension(:), intent(in)        :: u            ! cell averages
-  real, dimension(:,:), intent(inout)   :: edge_values      
+  integer,              intent(in)    :: N ! Number of cells
+  real, dimension(:),   intent(in)    :: h ! cell widths (size N)
+  real, dimension(:),   intent(in)    :: u ! cell averages (size N)
+  real, dimension(:,:), intent(inout) :: edge_values      
 
   ! Local variables
   integer       :: k            ! loop index
-  integer       :: N            ! number of cells
   integer       :: k0, k1, k2
   real          :: h_l, h_c, h_r
   real          :: u_l, u_c, u_r
@@ -74,7 +73,6 @@ subroutine bound_edge_values( grid, u, edge_values )
                                                 ! van Leer slopes   
   real          :: slope                ! retained PLM slope
 
-  N = grid%nb_cells
 
   ! Loop on cells to bound edge value
   do k = 1,N
@@ -99,9 +97,9 @@ subroutine bound_edge_values( grid, u, edge_values )
     end if
 
     ! All cells can now be treated equally
-    h_l = grid%h(k0)
-    h_c = grid%h(k1)
-    h_r = grid%h(k2)
+    h_l = h(k0)
+    h_c = h(k1)
+    h_r = h(k2)
     
     u_l = u(k0)
     u_c = u(k1)
@@ -146,25 +144,21 @@ end subroutine bound_edge_values
 !------------------------------------------------------------------------------
 ! Average discontinuous edge values (systematically)
 !------------------------------------------------------------------------------
-subroutine average_discontinuous_edge_values( grid, u, edge_values )
+subroutine average_discontinuous_edge_values( N, edge_values )
 ! ------------------------------------------------------------------------------
 ! For each interior edge, check whether the edge values are discontinuous.
 ! If so, compute the average and replace the edge values by the average.!
 ! ------------------------------------------------------------------------------
   
   ! Arguments
-  type(grid1D_t), intent(in)            :: grid             
-  real, dimension(:), intent(in)        :: u            ! cell averages
-  real, dimension(:,:), intent(inout)   :: edge_values      
+  integer,              intent(in)    :: N ! Number of cells
+  real, dimension(:,:), intent(inout) :: edge_values      
 
   ! Local variables
   integer       :: k            ! loop index
-  integer       :: N            ! number of cells
   real          :: u0_minus     ! left value at given edge
   real          :: u0_plus      ! right value at given edge
   real          :: u0_avg       ! avg value at given edge
-
-  N = grid%nb_cells
 
   ! Loop on interior edges
   do k = 1,N-1
@@ -189,27 +183,24 @@ end subroutine average_discontinuous_edge_values
 !------------------------------------------------------------------------------
 ! Check discontinuous edge values and take average is not monotonic
 !------------------------------------------------------------------------------
-subroutine check_discontinuous_edge_values( grid, u, edge_values )
+subroutine check_discontinuous_edge_values( N, u, edge_values )
 ! ------------------------------------------------------------------------------
 ! For each interior edge, check whether the edge values are discontinuous.
 ! If so and if they are not monotonic, replace each edge value by their average.
 ! ------------------------------------------------------------------------------
   
   ! Arguments
-  type(grid1D_t), intent(in)            :: grid             
-  real, dimension(:), intent(in)        :: u            ! cell averages
-  real, dimension(:,:), intent(inout)   :: edge_values      
+  integer,              intent(in)    :: N ! Number of cells
+  real, dimension(:),   intent(in)    :: u ! cell averages (size N)
+  real, dimension(:,:), intent(inout) :: edge_values      
 
   ! Local variables
   integer       :: k            ! loop index
-  integer       :: N            ! number of cells
   real          :: u0_minus     ! left value at given edge
   real          :: u0_plus      ! right value at given edge
   real          :: um_minus     ! left cell average
   real          :: um_plus      ! right cell average
   real          :: u0_avg       ! avg value at given edge
-
-  N = grid%nb_cells
 
   ! Loop on interior cells
   do k = 1,N-1
@@ -240,7 +231,7 @@ end subroutine check_discontinuous_edge_values
 !------------------------------------------------------------------------------
 ! Compute h2 edge values (explicit second order accurate)
 !------------------------------------------------------------------------------
-subroutine edge_values_explicit_h2( grid, u, edge_values )
+subroutine edge_values_explicit_h2( N, h, u, edge_values )
 ! ------------------------------------------------------------------------------
 ! Compute edge values based on second-order explicit estimates.
 ! These estimates are based on a straight line spanning two cells and evaluated
@@ -255,23 +246,21 @@ subroutine edge_values_explicit_h2( grid, u, edge_values )
 ! ------------------------------------------------------------------------------
 
   ! Arguments
-  type(grid1D_t), intent(in)            :: grid             
-  real, dimension(:), intent(in)        :: u            ! cell averages
-  real, dimension(:,:), intent(inout)   :: edge_values      
+  integer,              intent(in)    :: N ! Number of cells
+  real, dimension(:),   intent(in)    :: h ! cell widths (size N)
+  real, dimension(:),   intent(in)    :: u ! cell averages (size N)
+  real, dimension(:,:), intent(inout) :: edge_values      
 
   ! Local variables
   integer   :: k        ! loop index
-  integer   :: N        ! number of cells
   real      :: h0, h1   ! cell widths
   real      :: u0, u1   ! cell averages
-  
-  N = grid%nb_cells
   
   ! Loop on interior cells
   do k = 2,N
   
-    h0 = grid%h(k-1)
-    h1 = grid%h(k)
+    h0 = h(k-1)
+    h1 = h(k)
 
     u0 = u(k-1)
     u1 = u(k)
@@ -295,7 +284,7 @@ end subroutine edge_values_explicit_h2
 !------------------------------------------------------------------------------
 ! Compute h4 edge values (explicit fourth order accurate)
 !------------------------------------------------------------------------------
-subroutine edge_values_explicit_h4( grid, u, edge_values )
+subroutine edge_values_explicit_h4( N, h, u, edge_values )
 ! -----------------------------------------------------------------------------
 ! Compute edge values based on fourth-order explicit estimates.
 ! These estimates are based on a cubic interpolant spanning four cells 
@@ -316,31 +305,28 @@ subroutine edge_values_explicit_h4( grid, u, edge_values )
 ! -----------------------------------------------------------------------------
 
   ! Arguments
-  type(grid1D_t), intent(in)            :: grid             
-  real, dimension(:), intent(in)        :: u            ! cell averages
-  real, dimension(:,:), intent(inout)   :: edge_values      
+  integer,              intent(in)    :: N ! Number of cells
+  real, dimension(:),   intent(in)    :: h ! cell widths (size N)
+  real, dimension(:),   intent(in)    :: u ! cell averages (size N)
+  real, dimension(:,:), intent(inout) :: edge_values      
 
   ! Local variables
   integer               :: i, j
-  integer               :: N                ! number of grid cells
   real                  :: u0, u1, u2, u3
   real                  :: h0, h1, h2, h3
-  real                  :: href
   real                  :: f1, f2, f3       ! auxiliary variables
   real                  :: e                ! edge value    
   real, dimension(5)    :: x                ! used to compute edge
   real, dimension(4,4)  :: A                ! values near the boundaries
   real, dimension(4)    :: B, C
   
-  N = grid%nb_cells
- 
   ! Loop on interior cells
   do i = 3,N-1
     
-    h0 = grid%h(i-2)
-    h1 = grid%h(i-1)
-    h2 = grid%h(i)
-    h3 = grid%h(i+1)
+    h0 = h(i-2)
+    h1 = h(i-1)
+    h2 = h(i)
+    h3 = h(i+1)
     
     u0 = u(i-2)
     u1 = u(i-1)
@@ -373,7 +359,7 @@ subroutine edge_values_explicit_h4( grid, u, edge_values )
   ! Determine first two edge values
   x(1) = 0.0
   do i = 2,5
-    x(i) = x(i-1) + grid%h(i-1)
+    x(i) = x(i-1) + h(i-1)
   end do
 
   do i = 1,4
@@ -382,7 +368,7 @@ subroutine edge_values_explicit_h4( grid, u, edge_values )
       A(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / j
     end do
     
-    B(i) = u(i) * ( grid%h(i) )
+    B(i) = u(i) * ( h(i) )
     
   end do    
 
@@ -398,7 +384,7 @@ subroutine edge_values_explicit_h4( grid, u, edge_values )
   ! Determine last two edge values
   x(1) = 0.0
   do i = 2,5
-    x(i) = x(i-1) + grid%h(N-5+i)
+    x(i) = x(i-1) + h(N-5+i)
   end do
 
   do i = 1,4
@@ -407,7 +393,7 @@ subroutine edge_values_explicit_h4( grid, u, edge_values )
       A(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / j
     end do
     
-    B(i) = u(N-4+i) * ( grid%h(N-4+i) )
+    B(i) = u(N-4+i) * ( h(N-4+i) )
     
   end do    
 
@@ -427,7 +413,7 @@ end subroutine edge_values_explicit_h4
 !------------------------------------------------------------------------------
 ! Compute ih4 edge values (implicit fourth order accurate)
 !------------------------------------------------------------------------------
-subroutine edge_values_implicit_h4( grid, work, u, edge_values )
+subroutine edge_values_implicit_h4( N, h, u, work, edge_values )
 ! -----------------------------------------------------------------------------
 ! Compute edge values based on fourth-order implicit estimates.
 !
@@ -453,14 +439,14 @@ subroutine edge_values_implicit_h4( grid, work, u, edge_values )
 ! -----------------------------------------------------------------------------
 
   ! Arguments
-  type(grid1D_t), intent(in)            :: grid             
-  type(edgeValueArrays), intent(inout)  :: work         ! Work space
-  real, dimension(:), intent(in)        :: u            ! cell averages
-  real, dimension(:,:), intent(inout)   :: edge_values      
+  integer,              intent(in)     :: N ! Number of cells
+  real, dimension(:),   intent(in)     :: h ! cell widths (size N)
+  real, dimension(:),   intent(in)     :: u ! cell averages (size N)
+  type(edgeValueArrays), intent(inout) :: work ! Work space
+  real, dimension(:,:), intent(inout)  :: edge_values      
 
   ! Local variables
   integer               :: i, j                 ! loop indexes
-  integer               :: N                    ! number of cells
   real                  :: h0, h1               ! cell widths
   real                  :: h0_2, h1_2, h0h1
   real                  :: d2, d4
@@ -470,15 +456,12 @@ subroutine edge_values_implicit_h4( grid, work, u, edge_values )
   real, dimension(4,4)  :: Asys                 ! boundary conditions
   real, dimension(4)    :: Bsys, Csys
 
-  ! Get number of cells (there are N+1 edge values to estimate)
-  N = grid%nb_cells
-
   ! Loop on cells (except last one)
   do i = 1,N-1
 
     ! Get cell widths
-    h0 = grid%h(i)
-    h1 = grid%h(i+1)
+    h0 = h(i)
+    h1 = h(i+1)
 
     ! Auxiliary calculations
     d2 = (h0 + h1) ** 2
@@ -504,7 +487,7 @@ subroutine edge_values_implicit_h4( grid, work, u, edge_values )
   ! Boundary conditions: left boundary
   x(1) = 0.0
   do i = 2,5
-    x(i) = x(i-1) + grid%h(i-1)
+    x(i) = x(i-1) + h(i-1)
   end do
 
   do i = 1,4
@@ -513,7 +496,7 @@ subroutine edge_values_implicit_h4( grid, work, u, edge_values )
       Asys(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / j
     end do
     
-    Bsys(i) = u(i) * ( grid%h(i) )
+    Bsys(i) = u(i) * ( h(i) )
     
   end do    
 
@@ -526,7 +509,7 @@ subroutine edge_values_implicit_h4( grid, work, u, edge_values )
   ! Boundary conditions: right boundary
   x(1) = 0.0
   do i = 2,5
-    x(i) = x(i-1) + grid%h(N-5+i)
+    x(i) = x(i-1) + h(N-5+i)
   end do
 
   do i = 1,4
@@ -535,7 +518,7 @@ subroutine edge_values_implicit_h4( grid, work, u, edge_values )
       Asys(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / j
     end do
     
-    Bsys(i) = u(N-4+i) * ( grid%h(N-4+i) )
+    Bsys(i) = u(N-4+i) * ( h(N-4+i) )
     
   end do    
 
@@ -561,7 +544,7 @@ end subroutine edge_values_implicit_h4
 !------------------------------------------------------------------------------
 ! Compute ih6 edge values (implicit sixth order accurate)
 !------------------------------------------------------------------------------
-subroutine edge_values_implicit_h6( grid, work, u, edge_values )
+subroutine edge_values_implicit_h6( N, h, u, work, edge_values )
 ! -----------------------------------------------------------------------------
 ! Sixth-order implicit estimates of edge values are based on a four-cell, 
 ! three-edge stencil. A tridiagonal system is set up and is based on 
@@ -596,14 +579,14 @@ subroutine edge_values_implicit_h6( grid, work, u, edge_values )
 ! -----------------------------------------------------------------------------
 
   ! Arguments
-  type(grid1D_t), intent(in)            :: grid             
-  type(edgeValueArrays), intent(inout)  :: work         ! Work space
-  real, dimension(:), intent(in)        :: u            ! cell averages
-  real, dimension(:,:), intent(inout)   :: edge_values      
+  integer,              intent(in)     :: N ! Number of cells
+  real, dimension(:),   intent(in)     :: h ! cell widths (size N)
+  real, dimension(:),   intent(in)     :: u ! cell averages (size N)
+  type(edgeValueArrays), intent(inout) :: work ! Work space
+  real, dimension(:,:), intent(inout)  :: edge_values      
 
   ! Local variables
   integer               :: i, j, k              ! loop indexes
-  integer               :: N                    ! number of cells
   real                  :: h0, h1, h2, h3       ! cell widths
   real                  :: g, g_2, g_3          ! the following are 
   real                  :: g_4, g_5, g_6        ! auxiliary variables
@@ -625,17 +608,14 @@ subroutine edge_values_implicit_h6( grid, work, u, edge_values )
   real, dimension(6,6)  :: Asys                 ! boundary conditions
   real, dimension(6)    :: Bsys, Csys           ! ...
 
-  ! Get number of cells (there are N+1 edge values to estimate)
-  N = grid%nb_cells
-
   ! Loop on cells (except last one)
   do k = 2,N-2
 
     ! Cell widths
-    h0 = grid%h(k-1)
-    h1 = grid%h(k+0)
-    h2 = grid%h(k+1)
-    h3 = grid%h(k+2)
+    h0 = h(k-1)
+    h1 = h(k+0)
+    h2 = h(k+1)
+    h3 = h(k+2)
 
     ! Auxiliary calculations
     h1_2 = h1 * h1
@@ -740,10 +720,10 @@ subroutine edge_values_implicit_h6( grid, work, u, edge_values )
   ! Use a right-biased stencil for the second row
   
   ! Cell widths
-  h0 = grid%h(1)
-  h1 = grid%h(2)
-  h2 = grid%h(3)
-  h3 = grid%h(4)
+  h0 = h(1)
+  h1 = h(2)
+  h2 = h(3)
+  h3 = h(4)
     
   ! Auxiliary calculations
   h1_2 = h1 * h1
@@ -852,7 +832,7 @@ subroutine edge_values_implicit_h6( grid, work, u, edge_values )
   ! Boundary conditions: left boundary
   x(1) = 0.0
   do i = 2,7
-    x(i) = x(i-1) + grid%h(i-1)
+    x(i) = x(i-1) + h(i-1)
   end do
 
   do i = 1,6
@@ -861,7 +841,7 @@ subroutine edge_values_implicit_h6( grid, work, u, edge_values )
       Asys(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / j
     end do
     
-    Bsys(i) = u(i) * grid%h(i)
+    Bsys(i) = u(i) * h(i)
     
   end do    
 
@@ -875,10 +855,10 @@ subroutine edge_values_implicit_h6( grid, work, u, edge_values )
   ! Use a left-biased stencil for the second to last row
   
   ! Cell widths
-  h0 = grid%h(N-3)
-  h1 = grid%h(N-2)
-  h2 = grid%h(N-1)
-  h3 = grid%h(N)
+  h0 = h(N-3)
+  h1 = h(N-2)
+  h2 = h(N-1)
+  h3 = h(N)
     
   ! Auxiliary calculations
   h1_2 = h1 * h1
@@ -987,7 +967,7 @@ subroutine edge_values_implicit_h6( grid, work, u, edge_values )
   ! Boundary conditions: right boundary
   x(1) = 0.0
   do i = 2,7
-    x(i) = x(i-1) + grid%h(N-7+i)
+    x(i) = x(i-1) + h(N-7+i)
   end do
 
   do i = 1,6
@@ -996,7 +976,7 @@ subroutine edge_values_implicit_h6( grid, work, u, edge_values )
       Asys(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / j
     end do
     
-    Bsys(i) = u(N-6+i) * grid%h(N-6+i)
+    Bsys(i) = u(N-6+i) * h(N-6+i)
     
   end do    
 

@@ -41,7 +41,7 @@ module MOM_open_boundary
 !********+*********+*********+*********+*********+*********+*********+**
 
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
-use MOM_diag_mediator, only : diag_ptrs, time_type
+use MOM_diag_mediator, only : diag_ctrl, time_type
 use MOM_domains, only : pass_var, pass_vector
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_version, param_file_type
@@ -193,13 +193,13 @@ subroutine open_boundary_init(Time, G, param_file, diag, CS)
   type(time_type), target, intent(in)    :: Time
   type(ocean_grid_type),   intent(in)    :: G
   type(param_file_type),   intent(in)    :: param_file
-  type(diag_ptrs), target, intent(inout) :: diag
+  type(diag_ctrl), target, intent(inout) :: diag
   type(open_boundary_CS),  pointer       :: CS
 ! Arguments: Time - The current model time.
 !  (in)      G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
-!  (in)      diag - A structure containing pointers to common diagnostic fields.
+!  (in)      diag - A structure that is used to regulate diagnostic output.
 !  (in/out)  CS - A pointer that is set to point to the control structure
 !                 for this module
 ! This include declares and sets the variable "version".

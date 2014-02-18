@@ -68,7 +68,7 @@ module MOM_entrain_diffusive
 !********+*********+*********+*********+*********+*********+*********+**
 
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
-use MOM_diag_mediator, only : diag_ptrs, time_type
+use MOM_diag_mediator, only : diag_ctrl, time_type
 use MOM_error_handler, only : MOM_error, is_root_pe, FATAL, WARNING, NOTE
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
@@ -92,8 +92,8 @@ type, public :: entrain_diffusive_CS ; private
                              ! used to calculate the diapycnal entrainment.
   real    :: Tolerance_Ent   ! The tolerance with which to solve for entrainment
                              ! values, in m.
-  type(diag_ptrs), pointer :: diag ! A pointer to a structure of shareable
-                             ! ocean diagnostic fields.
+  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
+                             ! timing of diagnostic output.
   integer :: id_Kd = -1, id_diff_work = -1
 end type entrain_diffusive_CS
 
@@ -165,8 +165,11 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, CS, ea, eb, &
   real, dimension(SZI_(G),SZK_(G)+1) :: &
     Ent_bl  ! The average entrainment upward and downward across
             ! each interface around the buffer layers, in H.
-  real, allocatable :: &
-    diff_work(:,:,:) ! The work actually done by diffusion across each
+  real, allocatable, dimension(:,:,:) :: &
+    Kd_eff, &     ! The effective diffusivity that actually applies to each
+                  ! layer after the effects of boundary conditions are
+                  ! considered, in m2 s-1.
+    diff_work     ! The work actually done by diffusion across each
                   ! interface, in W m-2.  Sum vertically for the total work.
 
   real :: hm, fm, fr, fk  ! Work variables with units of H, H, H, and H2.
@@ -287,6 +290,7 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, CS, ea, eb, &
   endif
 
   if (CS%id_diff_work > 0) allocate(diff_work(G%isd:G%ied,G%jsd:G%jed,nz+1))
+  if (CS%id_Kd > 0)        allocate(Kd_eff(G%isd:G%ied,G%jsd:G%jed,nz))
 
   correct_density = (CS%correct_density .and. associated(tv%eqn_of_state))
   if (correct_density) pres(:) = tv%P_Ref
@@ -824,7 +828,7 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, CS, ea, eb, &
 
     endif   ! correct_density
 
-    if (ASSOCIATED(CS%diag%Kd)) then
+    if (CS%id_Kd > 0) then
       Idt = 1.0 / dt
       do k=2,nz-1 ; do i=is,ie
         if (k<kb(i)) then ; Kd_here = 0.0 ; else
@@ -832,11 +836,11 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, CS, ea, eb, &
               (eb(i,j,k) - ea(i,j,k+1))) ) / (I2p2dsp1_ds(i,k) * grats(i,k))
         endif
 
-        CS%diag%Kd(i,j,k) = G%H_to_m**2 * (MAX(dtKd(i,k),Kd_here)*Idt)
+        Kd_eff(i,j,k) = G%H_to_m**2 * (MAX(dtKd(i,k),Kd_here)*Idt)
       enddo ; enddo
       do i=is,ie
-        CS%diag%Kd(i,j,1) = G%H_to_m**2 * (dtKd(i,1)*Idt)
-        CS%diag%Kd(i,j,nz) = G%H_to_m**2 * (dtKd(i,nz)*Idt)
+        Kd_eff(i,j,1) = G%H_to_m**2 * (dtKd(i,1)*Idt)
+        Kd_eff(i,j,nz) = G%H_to_m**2 * (dtKd(i,nz)*Idt)
       enddo
     endif
     
@@ -894,7 +898,8 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, CS, ea, eb, &
   enddo ! end of j loop
 
 ! Offer diagnostic fields for averaging.
-  if (CS%id_Kd > 0) call post_data(CS%id_Kd, CS%diag%Kd, CS%diag)
+  if (CS%id_Kd > 0) call post_data(CS%id_Kd, Kd_eff, CS%diag)
+  if (CS%id_Kd > 0) deallocate(Kd_eff)
   if (CS%id_diff_work > 0) call post_data(CS%id_diff_work, diff_work, CS%diag)
   if (CS%id_diff_work > 0) deallocate(diff_work)
 
@@ -2000,13 +2005,13 @@ subroutine entrain_diffusive_init(Time, G, param_file, diag, CS)
   type(time_type),         intent(in)    :: Time
   type(ocean_grid_type),   intent(in)    :: G
   type(param_file_type),   intent(in)    :: param_file
-  type(diag_ptrs), target, intent(inout) :: diag
+  type(diag_ctrl), target, intent(inout) :: diag
   type(entrain_diffusive_CS), pointer     :: CS
 ! Arguments: Time - The current model time.
 !  (in)      G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
-!  (in)      diag - A structure containing pointers to common diagnostic fields.
+!  (in)      diag - A structure that is used to regulate diagnostic output.
 !  (in/out)  CS - A pointer that is set to point to the control structure
 !                 for this module
   real :: decay_length, dt, Kd
@@ -2045,10 +2050,9 @@ subroutine entrain_diffusive_init(Time, G, param_file, diag, CS)
                  "The tolerance with which to solve for entrainment values.", &
                  units="m", default=MAX(100.0*G%Angstrom,1.0e-4*sqrt(dt*Kd)))
 
-  CS%id_Kd = register_diag_field('ocean_model', 'Kd', G%axesTL, Time, &
-      'Diapycnal diffusivity', 'meter2 second-1')
-  if (CS%id_Kd > 0) call safe_alloc_ptr(diag%Kd,G%isd,G%ied,G%jsd,G%jed,G%ke)
-  CS%id_diff_work = register_diag_field('ocean_model', 'diff_work', G%axesTi, Time, &
+  CS%id_Kd = register_diag_field('ocean_model', 'Kd_effective', diag%axesTL, Time, &
+      'Diapycnal diffusivity as applied', 'meter2 second-1')
+  CS%id_diff_work = register_diag_field('ocean_model', 'diff_work', diag%axesTi, Time, &
       'Work actually done by diapycnal diffusion across each interface', 'W m-2')
 
 end subroutine entrain_diffusive_init

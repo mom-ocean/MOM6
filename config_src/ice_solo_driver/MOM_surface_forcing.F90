@@ -68,7 +68,7 @@ module MOM_surface_forcing
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock, only : CLOCK_MODULE
 use MOM_diag_mediator, only : post_data, query_averaging_enabled
-use MOM_diag_mediator, only : register_diag_field, diag_ptrs, safe_alloc_ptr
+use MOM_diag_mediator, only : register_diag_field, diag_ctrl, safe_alloc_ptr
 use MOM_domains, only : pass_var, pass_vector, AGRID, To_South, To_West, To_All
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
 use MOM_file_parser, only : get_param, log_version, param_file_type
@@ -145,8 +145,8 @@ type, public :: surface_forcing_CS ; private
   type(tracer_flow_control_CS), pointer :: tracer_flow_CSp => NULL()
 !###  type(ctrl_forcing_CS), pointer :: ctrl_forcing_CSp => NULL()
   type(MOM_restart_CS), pointer :: restart_CSp => NULL()
-  type(diag_ptrs), pointer :: diag ! A pointer to a structure of shareable
-                             ! ocean diagnostic fields and control variables.
+  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
+                             ! timing of diagnostic output.
   character(len=200) :: inputdir ! The directory where NetCDF input files are.
   character(len=200) :: wind_config ! Indicator for wind forcing type (2gyre, USER, FILE..)
   character(len=200) :: wind_file   ! If wind_config is "file", file to use
@@ -1216,14 +1216,14 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, tracer_flow_CSp)
   type(time_type),           intent(in) :: Time
   type(ocean_grid_type),     intent(in) :: G
   type(param_file_type),     intent(in) :: param_file
-  type(diag_ptrs), target,   intent(in) :: diag
+  type(diag_ctrl), target,   intent(in) :: diag
   type(surface_forcing_CS),  pointer    :: CS
   type(tracer_flow_control_CS), pointer :: tracer_flow_CSp
 ! Arguments: Time - The current model time.
 !  (in)      G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
-!  (in)      diag - A structure containing pointers to common diagnostic fields.
+!  (in)      diag - A structure that is used to regulate diagnostic output.
 !  (in/out)  CS - A pointer that is set to point to the control structure
 !                 for this module
 !  (in)      tracer_flow_CSp - A pointer to the control structure of the tracer
@@ -1429,59 +1429,59 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, tracer_flow_CSp)
 !    call MESO_surface_forcing_init(Time, G, param_file, diag, CS%MESO_forcing_CSp)
   endif
 
-  CS%id_taux = register_diag_field('ocean_model', 'taux', G%axesCu1, Time, &
+  CS%id_taux = register_diag_field('ocean_model', 'taux', diag%axesCu1, Time, &
         'Zonal Wind Stress', 'Pascal')
-  CS%id_tauy = register_diag_field('ocean_model', 'tauy', G%axesCv1, Time, &
+  CS%id_tauy = register_diag_field('ocean_model', 'tauy', diag%axesCv1, Time, &
         'Meridional Wind Stress', 'Pascal')
-  CS%id_ustar = register_diag_field('ocean_model', 'ustar', G%axesT1, Time, &
+  CS%id_ustar = register_diag_field('ocean_model', 'ustar', diag%axesT1, Time, &
       'Surface friction velocity', 'meter second-1')
 
   if (CS%use_temperature) then
-    CS%id_PminusE = register_diag_field('ocean_model', 'PmE', G%axesT1, Time, &
+    CS%id_PminusE = register_diag_field('ocean_model', 'PmE', diag%axesT1, Time, &
           'Net fresh water flux (P-E+C+R)', 'kilogram meter-2 second-1')
-    CS%id_evap = register_diag_field('ocean_model', 'evap', G%axesT1, Time, &
+    CS%id_evap = register_diag_field('ocean_model', 'evap', diag%axesT1, Time, &
           'Evaporation at ocean surface (usually negative)', 'kilogram meter-2 second-1')
-    CS%id_precip = register_diag_field('ocean_model', 'precip', G%axesT1, Time, &
+    CS%id_precip = register_diag_field('ocean_model', 'precip', diag%axesT1, Time, &
           'Net (liq.+froz.) precipitation into ocean', 'kilogram meter-2 second-1')
-    CS%id_froz_precip = register_diag_field('ocean_model', 'froz_precip', G%axesT1, Time, &
+    CS%id_froz_precip = register_diag_field('ocean_model', 'froz_precip', diag%axesT1, Time, &
           'Frozen Precipitation into ocean', 'kilogram meter-2 second-1')
-    CS%id_liq_precip = register_diag_field('ocean_model', 'liq_precip', G%axesT1, Time, &
+    CS%id_liq_precip = register_diag_field('ocean_model', 'liq_precip', diag%axesT1, Time, &
           'Liquid Precipitation into ocean', 'kilogram meter-2 second-1')
-    CS%id_virt_precip = register_diag_field('ocean_model', 'virt_precip', G%axesT1, Time, &
+    CS%id_virt_precip = register_diag_field('ocean_model', 'virt_precip', diag%axesT1, Time, &
           'Virtual Precipitation due to salt restoring', 'kilogram meter-2 second-1')
-    CS%id_froz_runoff = register_diag_field('ocean_model', 'froz_runoff', G%axesT1, Time, &
+    CS%id_froz_runoff = register_diag_field('ocean_model', 'froz_runoff', diag%axesT1, Time, &
           'Frozen runoff (calving) into ocean', 'kilogram meter-2 second-1')
-    CS%id_liq_runoff = register_diag_field('ocean_model', 'liq_runoff', G%axesT1, Time, &
+    CS%id_liq_runoff = register_diag_field('ocean_model', 'liq_runoff', diag%axesT1, Time, &
           'Liquid runoff (rivers) into ocean', 'kilogram meter-2 second-1')
-    CS%id_runoff_hflx = register_diag_field('ocean_model', 'runoff_hflx', G%axesT1, Time, &
+    CS%id_runoff_hflx = register_diag_field('ocean_model', 'runoff_hflx', diag%axesT1, Time, &
           'Heat content of liquid runoff (rivers) into ocean', 'Watt meter-2')
-    CS%id_calving_hflx = register_diag_field('ocean_model', 'calving_hflx', G%axesT1, Time, &
+    CS%id_calving_hflx = register_diag_field('ocean_model', 'calving_hflx', diag%axesT1, Time, &
           'Heat content of liquid runoff (rivers) into ocean', 'Watt meter-2')
 
-    CS%id_Net_Heating = register_diag_field('ocean_model', 'Net_Heat', G%axesT1, Time, &
+    CS%id_Net_Heating = register_diag_field('ocean_model', 'Net_Heat', diag%axesT1, Time, &
           'Net Surface Heating of Ocean', 'Watt meter-2')
-    CS%id_sw = register_diag_field('ocean_model', 'SW', G%axesT1, Time, &
+    CS%id_sw = register_diag_field('ocean_model', 'SW', diag%axesT1, Time, &
         'Shortwave radiation flux into ocean', 'Watt meter-2')
-    CS%id_LwLatSens = register_diag_field('ocean_model', 'LwLatSens', G%axesT1, Time, &
+    CS%id_LwLatSens = register_diag_field('ocean_model', 'LwLatSens', diag%axesT1, Time, &
           'Combined longwave, latent, and sensible heating', 'Watt meter-2')
-    CS%id_lw = register_diag_field('ocean_model', 'LW', G%axesT1, Time, &
+    CS%id_lw = register_diag_field('ocean_model', 'LW', diag%axesT1, Time, &
         'Longwave radiation flux into ocean', 'Watt meter-2')
-    CS%id_lat = register_diag_field('ocean_model', 'latent', G%axesT1, Time, &
+    CS%id_lat = register_diag_field('ocean_model', 'latent', diag%axesT1, Time, &
         'Latent heat flux into ocean', 'Watt meter-2')
-    CS%id_sens = register_diag_field('ocean_model', 'sensible', G%axesT1, Time, &
+    CS%id_sens = register_diag_field('ocean_model', 'sensible', diag%axesT1, Time, &
         'Sensible heat flux into ocean', 'Watt meter-2')
     if (CS%restorebuoy) &
-      CS%id_heat_rest = register_diag_field('ocean_model', 'heat_rest', G%axesT1, Time, &
+      CS%id_heat_rest = register_diag_field('ocean_model', 'heat_rest', diag%axesT1, Time, &
             'Restoring surface heat flux into ocean', 'Watt meter-2')
 
-    CS%id_psurf = register_diag_field('ocean_model', 'p_surf', G%axesT1, Time, &
+    CS%id_psurf = register_diag_field('ocean_model', 'p_surf', diag%axesT1, Time, &
           'Pressure at ice-ocean or atmosphere-ocean interface', 'Pascal')
-    CS%id_saltflux = register_diag_field('ocean_model', 'salt_flux', G%axesT1, Time, &
+    CS%id_saltflux = register_diag_field('ocean_model', 'salt_flux', diag%axesT1, Time, &
           'Salt flux into ocean at surface', 'kilogram meter-2 second-1')
-    CS%id_TKE_tidal = register_diag_field('ocean_model', 'TKE_tidal', G%axesT1, Time, &
+    CS%id_TKE_tidal = register_diag_field('ocean_model', 'TKE_tidal', diag%axesT1, Time, &
           'Tidal source of BBL mixing', 'Watt meter-2')
   else
-    CS%id_buoy = register_diag_field('ocean_model', 'buoy', G%axesT1, Time, &
+    CS%id_buoy = register_diag_field('ocean_model', 'buoy', diag%axesT1, Time, &
           'Buoyancy forcing', 'meter2 second-3')
   endif
 

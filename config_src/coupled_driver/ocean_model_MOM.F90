@@ -41,6 +41,7 @@ use MOM_diag_mediator, only : enable_averaging, disable_averaging
 use MOM_diag_mediator, only : diag_mediator_close_registration
 use MOM_domains, only : pass_vector, AGRID, BGRID_NE, CGRID_NE
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe
+use MOM_error_handler, only : callTree_enter, callTree_leave
 use MOM_file_parser, only : get_param, log_version, close_param_file, param_file_type
 use MOM_forcing_type, only : forcing
 use MOM_get_input, only : Get_MOM_Input, directories
@@ -49,6 +50,7 @@ use MOM_io, only : close_file, file_exists, read_data, write_version_number
 use MOM_restart, only : save_restart
 use MOM_sum_output, only : write_energy, accumulate_net_input
 use MOM_sum_output, only : MOM_sum_output_init, sum_output_CS
+use MOM_string_functions, only : uppercase
 use MOM_surface_forcing, only : surface_forcing_init, convert_IOB_to_fluxes
 use MOM_surface_forcing, only : average_forcing, ice_ocn_bnd_type_chksum
 use MOM_surface_forcing, only : ice_ocean_boundary_type, surface_forcing_CS
@@ -88,12 +90,13 @@ interface ocean_model_data_get
 end interface
 
 
-
-! For communication with FMS coupler
+! This type is used for communication with other components via the FMS coupler.
+! The element names and types can be changed only with great deliberation, hence
+! the persistnce of things like the cutsy element name "avg_kount".
 type, public ::  ocean_public_type
-  type(domain2d) :: Domain       ! The domain for the surface fields.
-  logical :: is_ocean_pe         ! .true. on processors that run the ocean model.
-  character(len=32) :: instance_name = "" ! A name that can be used to identify
+  type(domain2d) :: Domain    ! The domain for the surface fields.
+  logical :: is_ocean_pe      ! .true. on processors that run the ocean model.
+  character(len=32) :: instance_name = '' ! A name that can be used to identify
                                  ! this instance of an ocean model, for example
                                  ! in ensembles when writing messages.
   integer, pointer, dimension(:) :: pelist => NULL()   ! The list of ocean PEs.
@@ -103,31 +106,30 @@ type, public ::  ocean_public_type
                     ! land points and are not assigned to actual processors.
                     ! This need not be assigned if all logical processors are used.
 
-  integer :: stagger = BGRID_NE  ! The staggering relative to the tracer points
-                                 ! points of the two velocity components. Valid
-                                 ! entries include AGRID, BGRID_NE, CGRID_NE,
-                                 ! BGRID_SW, and CGRID_SW, corresponding to the
-                                 ! community-standard Arakawa notation.  (These
-                                 ! are named integers taken from mpp_parameter_mod.)
-                                 ! Following MOM, this is BGRID_NE by default.
-  real, pointer, dimension(:,:)  :: t_surf =>NULL()  ! SST on t-cell (degrees Kelvin)
-  real, pointer, dimension(:,:)  :: s_surf =>NULL()  ! SSS on t-cell (psu)
-  real, pointer, dimension(:,:)  :: u_surf =>NULL()  ! i-velocity the points indicated
-                                                     ! by velocity_stagger. (m/s)
-  real, pointer, dimension(:,:)  :: v_surf =>NULL()  ! j-velocity the points indicated
-                                                     ! by velocity_stagger. (m/s)
-  real, pointer, dimension(:,:)  :: sea_lev =>NULL() ! Sea level in m after correction
-                                                     ! for surface pressure, i.e.
-                                                     ! dzt(1) + eta_t + patm/rho0/grav (m)
-  real, pointer, dimension(:,:)  :: frazil  =>NULL() ! Accumulated heating (Joules/m^2)
-                                                     ! from frazil formation in the ocean.
-  type(coupler_2d_bc_type)       :: fields    ! A structure that may contain an
-                                              ! array of named tracer-related fields.
-  integer                        :: avg_kount ! Used for accumulating averages of this type.
-  integer, dimension(3)          :: axes = 0  ! Axis numbers that are available
-                                              ! for I/O using this surface data.
-
-  real, pointer, dimension(:,:)  :: area =>NULL() ! cell area of the ocean surface.
+  integer :: stagger = -999   ! The staggering relative to the tracer points
+                    ! points of the two velocity components. Valid entries
+                    ! include AGRID, BGRID_NE, CGRID_NE, BGRID_SW, and CGRID_SW,
+                    ! corresponding to the community-standard Arakawa notation. 
+                    ! (These are named integers taken from mpp_parameter_mod.)
+                    ! Following MOM, this is BGRID_NE by default when the ocean
+                    ! is initialized, but here it is set to -999 so that a
+                    ! global max across ocean and non-ocean processors  can be
+                    ! used to determine its value.
+  real, pointer, dimension(:,:)  :: &
+    t_surf => NULL(), & ! SST on t-cell (degrees Kelvin)
+    s_surf => NULL(), & ! SSS on t-cell (psu)
+    u_surf => NULL(), & ! i-velocity at the locations indicated by stagger, m/s.
+    v_surf => NULL(), & ! j-velocity at the locations indicated by stagger, m/s.
+    sea_lev => NULL(), & ! Sea level in m after correction for surface pressure,
+                        ! i.e. dzt(1) + eta_t + patm/rho0/grav (m)
+    frazil =>NULL(), &  ! Accumulated heating (in Joules/m^2) from frazil
+                        ! formation in the ocean.
+    area => NULL()      ! cell area of the ocean surface, in m2.
+  type(coupler_2d_bc_type) :: fields    ! A structure that may contain an
+                                        ! array of named tracer-related fields.
+  integer                  :: avg_kount ! Used for accumulating averages of this type.
+  integer, dimension(3)    :: axes = 0  ! Axis numbers that are available
+                                        ! for I/O using this surface data.
 
 end type ocean_public_type
 
@@ -161,7 +163,7 @@ type, public :: ocean_state_type ; private
                               ! the ocean forcing fields.
   type(surface)   :: state    ! A structure containing pointers to
                               ! the ocean surface state fields.
-  type(ocean_grid_type), pointer :: grid => NULL() ! A pointer to a structure
+  type(ocean_grid_type), pointer :: grid => NULL() ! A pointer to a grid structure
                               ! containing metrics and related information.
   type(MOM_control_struct), pointer :: MOM_CSp => NULL()
   type(surface_forcing_CS),  pointer :: forcing_CSp => NULL()
@@ -199,9 +201,11 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in)
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mod = "ocean_model_init"  ! This module's name.
+  character(len=48)  :: stagger
   integer :: secs, days
   type(param_file_type) :: param_file
 
+  call callTree_enter("ocean_model_init(), ocean_model_MOM.F90")
   if (associated(OS)) then
     call MOM_error(WARNING, "ocean_model_init called with an associated "// &
                     "ocean_state_type structure. Model is already initialized.")
@@ -215,7 +219,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in)
   OS%state%tr_fields => Ocean_sfc%fields
   OS%Time = Time_in
   call initialize_MOM(OS%Time, param_file, OS%dirs, OS%MOM_CSp, Time_in)
-  OS%grid => OS%MOM_CSp%grid
+  OS%grid => OS%MOM_CSp%G
   OS%C_p = OS%MOM_CSp%tv%C_p
   OS%fluxes%C_p = OS%MOM_CSp%tv%C_p
 
@@ -234,6 +238,18 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in)
                  "The interval in units of TIMEUNIT between saves of the \n"//&
                  "energies of the run and other globally summed diagnostics.", &
                  default=set_time(0,1), timeunit=Time_unit)
+
+  call get_param(param_file, mod, "OCEAN_SURFACE_STAGGER", stagger, &
+                 "A case-insensitive character string to indicate the \n"//&
+                 "staggering of the surface velocity field that is \n"//&
+                 "returned to the coupler.  Valid values include \n"//&
+                 "'A', 'B', or 'C'.", default="B") !### CHANGE THE DEFAULT.
+  if (uppercase(stagger(1:1)) == 'A') then ; Ocean_sfc%stagger = AGRID
+  elseif (uppercase(stagger(1:1)) == 'B') then ; Ocean_sfc%stagger = BGRID_NE
+  elseif (uppercase(stagger(1:1)) == 'C') then ; Ocean_sfc%stagger = CGRID_NE
+  else ; call MOM_error(FATAL,"ocean_model_init: OCEAN_SURFACE_STAGGER = "// &
+                        trim(stagger)//" is invalid.") ; endif
+
   call get_param(param_file, mod, "RESTORE_SALINITY",OS%restore_salinity, &
                  "If true, the coupled driver will add a globally-balanced \n"//&
                  "fresh-water flux that drives sea-surface salinity \n"//&
@@ -262,9 +278,10 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in)
       (1 + (OS%Time - Time_init) / OS%energysavedays)
 
   if(ASSOCIATED(OS%grid%Domain%maskmap)) then
-     call initialize_ocean_public_type(OS%grid%Domain%mpp_domain,Ocean_sfc,maskmap=OS%grid%Domain%maskmap)
+     call initialize_ocean_public_type(OS%grid%Domain%mpp_domain, Ocean_sfc, &
+                                       maskmap=OS%grid%Domain%maskmap)
   else
-     call initialize_ocean_public_type(OS%grid%Domain%mpp_domain,Ocean_sfc)
+     call initialize_ocean_public_type(OS%grid%Domain%mpp_domain, Ocean_sfc)
   endif
 !  call convert_state_to_ocean_type(state, Ocean_sfc, OS%grid)
 
@@ -274,6 +291,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in)
   if (is_root_pe()) &
     write(*,'(/12x,a/)') '======== COMPLETED MOM INITIALIZATION ========'
 
+  call callTree_leave("ocean_model_init(")
 end subroutine ocean_model_init
 ! </SUBROUTINE> NAME="ocean_model_init"
 
@@ -323,6 +341,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   real :: time_step         ! The time step of a call to step_MOM in seconds.
   integer :: secs, days
 
+  call callTree_enter("update_ocean_model(), ocean_model_MOM.F90")
   call get_time(Ocean_coupling_time_step, secs, days)
   time_step = 86400.0*real(days) + real(secs)
   
@@ -340,8 +359,10 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
 !  Translate Ice_ocean_boundary into fluxes.
   call mpp_get_compute_domain(Ocean_sfc%Domain, index_bnds(1), index_bnds(2), &
                               index_bnds(3), index_bnds(4))
+  call enable_averaging(time_step, OS%Time + Ocean_coupling_time_step, OS%MOM_CSp%diag) ! Needed to allow diagnostics in convert_IOB
   call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%fluxes, index_bnds, OS%Time, &
                              OS%grid, OS%forcing_CSp, OS%state, OS%restore_salinity)
+  call disable_averaging(OS%MOM_CSp%diag)
   Master_time = OS%Time ; Time1 = OS%Time
 
   call step_MOM(OS%fluxes, OS%state, Time1, time_step, OS%MOM_CSp)
@@ -367,6 +388,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
 !                                   Ice_ocean_boundary%p, OS%press_to_z)
   call convert_state_to_ocean_type(OS%state, Ocean_sfc, OS%grid)
 
+  call callTree_leave("update_ocean_model()")
 end subroutine update_ocean_model
 ! </SUBROUTINE> NAME="update_ocean_model"
 
@@ -502,10 +524,11 @@ subroutine convert_state_to_ocean_type(state, Ocean_sfc, G, patm, press_to_z)
 ! code that calculates the surface state in the first place.
 ! Note the offset in the arrays because the ocean_data_type has no
 ! halo points in its arrays and always uses absolute indicies.
+  real :: IgR0
+  character(len=48)  :: val_str
   integer :: isc_bnd, iec_bnd, jsc_bnd, jec_bnd
   integer :: i, j, i0, j0, is, ie, js, je
-  real :: IgR0
-
+ 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   call pass_vector(state%u,state%v,G%Domain)
 
@@ -521,14 +544,33 @@ subroutine convert_state_to_ocean_type(state, Ocean_sfc, G, patm, press_to_z)
   do j=jsc_bnd,jec_bnd ; do i=isc_bnd,iec_bnd
     Ocean_sfc%t_surf(i,j) = state%SST(i+i0,j+j0) + CELSIUS_KELVIN_OFFSET
     Ocean_sfc%s_surf(i,j) = state%SSS(i+i0,j+j0)
-    Ocean_sfc%u_surf(i,j) = G%mask2dBu(i+i0,j+j0)*0.5*(state%u(i+i0,j+j0)+state%u(i+i0,j+j0+1))
-    Ocean_sfc%v_surf(i,j) = G%mask2dBu(i+i0,j+j0)*0.5*(state%v(i+i0,j+j0)+state%v(i+i0+1,j+j0))
     Ocean_sfc%sea_lev(i,j) = state%sea_lev(i+i0,j+j0)
     if (present(patm)) &
       Ocean_sfc%sea_lev(i,j) = Ocean_sfc%sea_lev(i,j) + patm(i,j) * press_to_z
     Ocean_sfc%frazil(i,j) = state%frazil(i+i0,j+j0)
     Ocean_sfc%area(i,j)   =  G%areaT(i+i0,j+j0)  
   enddo ; enddo
+  
+  if (Ocean_sfc%stagger == AGRID) then
+    do j=jsc_bnd,jec_bnd ; do i=isc_bnd,iec_bnd
+      Ocean_sfc%u_surf(i,j) = G%mask2dT(i+i0,j+j0)*0.5*(state%u(I+i0,j+j0)+state%u(I-1+i0,j+j0))
+      Ocean_sfc%v_surf(i,j) = G%mask2dT(i+i0,j+j0)*0.5*(state%v(i+i0,J+j0)+state%v(i+i0,J-1+j0))
+    enddo ; enddo
+  elseif (Ocean_sfc%stagger == BGRID_NE) then
+    do j=jsc_bnd,jec_bnd ; do i=isc_bnd,iec_bnd
+      Ocean_sfc%u_surf(i,j) = G%mask2dBu(I+i0,J+j0)*0.5*(state%u(I+i0,j+j0)+state%u(I+i0,j+j0+1))
+      Ocean_sfc%v_surf(i,j) = G%mask2dBu(I+i0,J+j0)*0.5*(state%v(i+i0,J+j0)+state%v(i+i0+1,J+j0))
+    enddo ; enddo
+  elseif (Ocean_sfc%stagger == CGRID_NE) then
+    do j=jsc_bnd,jec_bnd ; do i=isc_bnd,iec_bnd
+      Ocean_sfc%u_surf(i,j) = G%mask2dCu(I+i0,j+j0)*state%u(I+i0,j+j0)
+      Ocean_sfc%v_surf(i,j) = G%mask2dCv(i+i0,J+j0)*state%v(i+i0,J+j0)
+    enddo ; enddo
+  else
+    write(val_str, '(I8)') Ocean_sfc%stagger
+    call MOM_error(FATAL, "convert_state_to_ocean_type: "//&
+      "Ocean_sfc%stagger has the unrecognized value of "//trim(val_str))
+  endif
 
   if (.not.associated(state%tr_fields,Ocean_sfc%fields)) &
     call MOM_error(FATAL,'state%tr_fields is not pointing to Ocean_sfc%fields')

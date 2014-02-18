@@ -50,10 +50,10 @@ module MOM_regularize_layers
 
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
-use MOM_diag_mediator, only : time_type, diag_ptrs
+use MOM_diag_mediator, only : time_type, diag_ctrl
 use MOM_domains, only : pass_var
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
-use MOM_file_parser, only : read_param, get_param, log_version, param_file_type
+use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_EOS, only : calculate_density, calculate_density_derivs
@@ -85,8 +85,8 @@ type, public :: regularize_layers_CS ; private
                              ! h_def_tol1 to 1.
   real    :: Hmix_min        ! The minimum mixed layer thickness in m.
   type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
-  type(diag_ptrs), pointer :: diag ! A pointer to a structure of shareable
-                             ! ocean diagnostic fields.
+  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
+                             ! timing of diagnostic output.
   logical :: debug           ! If true, do more thorough checks for debugging purposes.
 
   integer :: id_def_rat = -1
@@ -520,7 +520,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, CS)
 
               ! Move up to the next target layer.
               k2 = k2-1
-              e_2d(i,k2) = e_2d(i,k2) + h_det_tot
+              if (k2>nkmb+1) e_2d(i,k2) = e_2d(i,k2) + h_det_tot
             else
               h_add = h_2d(i,k1)
               h_prev = h_2d(i,k2)
@@ -542,11 +542,12 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, CS)
           else
             ! Move up to the next target layer.
             k2 = k2-1
-            e_2d(i,k2) = e_2d(i,k2) + h_det_tot
+            if (k2>nkmb+1) e_2d(i,k2) = e_2d(i,k2) + h_det_tot
           endif
 
         enddo ! exit terminated loop.
       endif ; enddo
+      ! ### This could be faster if the deepest k with nonzero d_ea were kept.
       do k=nz-1,nkmb+1,-1 ; do i=is,ie ; if (det_i(i)) then
         d_ea(i,k) = d_ea(i,k) + d_ea(i,k+1)
       endif ; enddo ; enddo
@@ -755,6 +756,11 @@ subroutine find_deficit_ratios(e, def_rat_u, def_rat_v, G, CS, &
   real, dimension(NIMEM_,NJMEMB_), optional, intent(out) :: def_rat_v_2lay
   integer,                         optional, intent(in)  :: halo
   real, dimension(NIMEM_,NJMEM_,NKMEM_), optional, intent(in)  :: h
+!    This subroutine determines the amount by which the harmonic mean
+!  thickness at velocity points differ from the arithmetic means, relative to
+!  the the arithmetic means, after eliminating thickness variations that are
+!  solely due to topography and aggregating all interior layers into one.
+
 ! Arguments: e - Interface depths, in m or kg m-2.
 !  (out)     def_rat_u - The thickness deficit ratio at u points, nondim.
 !  (out)     def_rat_v - The thickness deficit ratio at v points, nondim.
@@ -893,13 +899,13 @@ subroutine regularize_layers_init(Time, G, param_file, diag, CS)
   type(time_type), target, intent(in)    :: Time
   type(ocean_grid_type),   intent(in)    :: G
   type(param_file_type),   intent(in)    :: param_file
-  type(diag_ptrs), target, intent(inout) :: diag
+  type(diag_ctrl), target, intent(inout) :: diag
   type(regularize_layers_CS), pointer    :: CS
 ! Arguments: Time - The current model time.
 !  (in)      G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
-!  (in)      diag - A structure containing pointers to common diagnostic fields.
+!  (in)      diag - A structure that is used to regulate diagnostic output.
 !  (in/out)  CS - A pointer that is set to point to the control structure
 !                  for this module
 ! This include declares and sets the variable "version".
@@ -945,46 +951,49 @@ subroutine regularize_layers_init(Time, G, param_file, diag, CS)
   CS%h_def_tol4 = 0.5 + 0.5*CS%h_def_tol1
 
   call get_param(param_file, mod, "DEBUG", CS%debug, default=.false.)
+!  if (.not. CS%debug) &
+!    call get_param(param_file, mod, "DEBUG_CONSERVATION", CS%debug, &
+!                 "If true, monitor conservation and extrema.", default=.false.)
    
-  CS%id_def_rat = register_diag_field('ocean_model', 'deficit_ratio', G%axesT1, &
+  CS%id_def_rat = register_diag_field('ocean_model', 'deficit_ratio', diag%axesT1, &
       Time, 'Max face thickness deficit ratio', 'Nondim')
 
 #ifdef DEBUG_CODE
-  CS%id_def_rat_2 = register_diag_field('ocean_model', 'deficit_rat2', G%axesT1, &
+  CS%id_def_rat_2 = register_diag_field('ocean_model', 'deficit_rat2', diag%axesT1, &
       Time, 'Corrected thickness deficit ratio', 'Nondim')
-  CS%id_def_rat_3 = register_diag_field('ocean_model', 'deficit_rat3', G%axesT1, &
+  CS%id_def_rat_3 = register_diag_field('ocean_model', 'deficit_rat3', diag%axesT1, &
       Time, 'Filtered thickness deficit ratio', 'Nondim')
-  CS%id_e1 = register_diag_field('ocean_model', 'er_1', G%axesTi, &
+  CS%id_e1 = register_diag_field('ocean_model', 'er_1', diag%axesTi, &
       Time, 'Intial interface depths before remapping', 'm')
-  CS%id_e2 = register_diag_field('ocean_model', 'er_2', G%axesTi, &
+  CS%id_e2 = register_diag_field('ocean_model', 'er_2', diag%axesTi, &
       Time, 'Intial interface depths after remapping', 'm')
-  CS%id_e3 = register_diag_field('ocean_model', 'er_3', G%axesTi, &
+  CS%id_e3 = register_diag_field('ocean_model', 'er_3', diag%axesTi, &
       Time, 'Intial interface depths filtered', 'm')
 
-  CS%id_def_rat_u = register_diag_field('ocean_model', 'defrat_u', G%axesCu1, &
+  CS%id_def_rat_u = register_diag_field('ocean_model', 'defrat_u', diag%axesCu1, &
       Time, 'U-point thickness deficit ratio', 'Nondim')
-  CS%id_def_rat_u_1b = register_diag_field('ocean_model', 'defrat_u_1b', G%axesCu1, &
+  CS%id_def_rat_u_1b = register_diag_field('ocean_model', 'defrat_u_1b', diag%axesCu1, &
       Time, 'U-point 2-layer thickness deficit ratio', 'Nondim')
-  CS%id_def_rat_u_2 = register_diag_field('ocean_model', 'defrat_u_2', G%axesCu1, &
+  CS%id_def_rat_u_2 = register_diag_field('ocean_model', 'defrat_u_2', diag%axesCu1, &
       Time, 'U-point corrected thickness deficit ratio', 'Nondim')
-  CS%id_def_rat_u_2b = register_diag_field('ocean_model', 'defrat_u_2b', G%axesCu1, &
+  CS%id_def_rat_u_2b = register_diag_field('ocean_model', 'defrat_u_2b', diag%axesCu1, &
       Time, 'U-point corrected 2-layer thickness deficit ratio', 'Nondim')
-  CS%id_def_rat_u_3 = register_diag_field('ocean_model', 'defrat_u_3', G%axesCu1, &
+  CS%id_def_rat_u_3 = register_diag_field('ocean_model', 'defrat_u_3', diag%axesCu1, &
       Time, 'U-point filtered thickness deficit ratio', 'Nondim')
-  CS%id_def_rat_u_3b = register_diag_field('ocean_model', 'defrat_u_3b', G%axesCu1, &
+  CS%id_def_rat_u_3b = register_diag_field('ocean_model', 'defrat_u_3b', diag%axesCu1, &
       Time, 'U-point filtered 2-layer thickness deficit ratio', 'Nondim')
 
-  CS%id_def_rat_v = register_diag_field('ocean_model', 'defrat_v', G%axesCv1, &
+  CS%id_def_rat_v = register_diag_field('ocean_model', 'defrat_v', diag%axesCv1, &
       Time, 'V-point thickness deficit ratio', 'Nondim')
-  CS%id_def_rat_v_1b = register_diag_field('ocean_model', 'defrat_v_1b', G%axesCv1, &
+  CS%id_def_rat_v_1b = register_diag_field('ocean_model', 'defrat_v_1b', diag%axesCv1, &
       Time, 'V-point 2-layer thickness deficit ratio', 'Nondim')
-  CS%id_def_rat_v_2 = register_diag_field('ocean_model', 'defrat_v_2', G%axesCv1, &
+  CS%id_def_rat_v_2 = register_diag_field('ocean_model', 'defrat_v_2', diag%axesCv1, &
       Time, 'V-point corrected thickness deficit ratio', 'Nondim')
-  CS%id_def_rat_v_2b = register_diag_field('ocean_model', 'defrat_v_2b', G%axesCv1, &
+  CS%id_def_rat_v_2b = register_diag_field('ocean_model', 'defrat_v_2b', diag%axesCv1, &
       Time, 'V-point corrected 2-layer thickness deficit ratio', 'Nondim')
-  CS%id_def_rat_v_3 = register_diag_field('ocean_model', 'defrat_v_3', G%axesCv1, &
+  CS%id_def_rat_v_3 = register_diag_field('ocean_model', 'defrat_v_3', diag%axesCv1, &
       Time, 'V-point filtered thickness deficit ratio', 'Nondim')
-  CS%id_def_rat_v_3b = register_diag_field('ocean_model', 'defrat_v_3b', G%axesCv1, &
+  CS%id_def_rat_v_3b = register_diag_field('ocean_model', 'defrat_v_3b', diag%axesCv1, &
       Time, 'V-point filtered 2-layer thickness deficit ratio', 'Nondim')
 #endif
  

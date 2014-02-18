@@ -42,10 +42,10 @@ module MOM_wave_speed
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 
-use MOM_diag_mediator, only : post_data, query_averaging_enabled, diag_ptrs
+use MOM_diag_mediator, only : post_data, query_averaging_enabled, diag_ctrl
 use MOM_diag_mediator, only : register_diag_field, safe_alloc_ptr, time_type
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
-use MOM_file_parser, only : read_param, log_param, log_version, param_file_type
+use MOM_file_parser, only : log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_EOS, only : calculate_density, calculate_density_derivs
@@ -57,8 +57,8 @@ implicit none ; private
 public wave_speed, wave_speed_init
 
 type, public :: wave_speed_CS ; private
-  type(diag_ptrs), pointer :: diag ! A pointer to a structure of shareable
-                             ! ocean diagnostic fields and control variables.
+  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
+                             ! timing of diagnostic output.
 end type wave_speed_CS
 
 contains
@@ -381,13 +381,13 @@ subroutine wave_speed_init(Time, G, param_file, diag, CS)
   type(time_type),             intent(in)    :: Time
   type(ocean_grid_type),       intent(in)    :: G
   type(param_file_type),       intent(in)    :: param_file
-  type(diag_ptrs), target,     intent(inout) :: diag
+  type(diag_ctrl), target,     intent(inout) :: diag
   type(wave_speed_CS),         pointer       :: CS
 ! Arguments: Time - The current model time.
 !  (in)      G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
-!  (in)      diag - A structure containing pointers to common diagnostic fields.
+!  (in)      diag - A structure that is used to regulate diagnostic output.
 !  (in/out)  CS - A pointer that is set to point to the control structure
 !                  for this module
 ! This include declares and sets the variable "version".

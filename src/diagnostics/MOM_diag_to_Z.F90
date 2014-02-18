@@ -44,7 +44,8 @@ module MOM_diag_to_Z
 !********+*********+*********+*********+*********+*********+*********+**
 
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
-use MOM_diag_mediator, only : diag_ptrs, time_type, diag_axis_init
+use MOM_diag_mediator, only : diag_ctrl, time_type, diag_axis_init
+use MOM_diag_mediator, only : axesType, defineAxes
 use MOM_diag_mediator, only : ocean_register_diag
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
@@ -83,12 +84,12 @@ type, public :: diag_to_Z_CS ; private
   integer :: nk_zspace = -1
   real, pointer :: Z_int(:) => NULL()  ! The interface depths of the z-space file, in m.
 
-  integer, dimension(3) :: axesBz, axesTz, axesCuz, axesCvz
-  integer, dimension(3) :: axesBzi, axesTzi, axesCuzi, axesCvzi
+  type(axesType) :: axesBz, axesTz, axesCuz, axesCvz
+  type(axesType) :: axesBzi, axesTzi, axesCuzi, axesCvzi
   integer, dimension(1) :: axesz_out
 
-  type(diag_ptrs), pointer :: diag ! A pointer to a structure of shareable
-                             ! ocean diagnostic fields from other modules.
+  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
+                             ! timing of diagnostic output.
 
 end type diag_to_Z_CS
 
@@ -522,7 +523,7 @@ subroutine find_overlap(e, Z_top, Z_bot, k_max, k_start, k_top, k_bot, wt, z1, z
   real, dimension(:), intent(in) :: e
   real, intent(in)   :: Z_top, Z_bot
   integer, intent(in) :: k_max, k_start
-  integer, intent(out) :: k_top, k_bot
+  integer, intent(inout) :: k_top, k_bot
   real, dimension(:), intent(out) :: wt, z1, z2
 
 !   This subroutine determines the layers bounded by interfaces e that overlap
@@ -741,7 +742,7 @@ subroutine register_Z_tracer(tr_ptr, name, long_name, units, Time, G, CS)
     CS%id_tr(m) = register_diag_field('ocean_model', name, CS%axesTz, Time, &
                                       long_name, units, missing_value=CS%missing_tr(m))
   else
-    id_test = register_diag_field('ocean_model', name, G%axesT1, Time, &
+    id_test = register_diag_field('ocean_model', name, CS%diag%axesT1, Time, &
                                   long_name, units, missing_value=CS%missing_tr(m))
     if (id_test>0) call MOM_error(WARNING, &
         "MOM_diag_to_Z_init: "//trim(name)// &
@@ -760,13 +761,13 @@ subroutine MOM_diag_to_Z_init(Time, G, param_file, diag, CS)
   type(time_type),         intent(in)    :: Time
   type(ocean_grid_type),   intent(in)    :: G
   type(param_file_type),   intent(in)    :: param_file
-  type(diag_ptrs), target, intent(inout) :: diag
+  type(diag_ctrl), target, intent(inout) :: diag
   type(diag_to_Z_CS),      pointer       :: CS
 ! Arguments: Time - The current model time.
 !  (in)      G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
-!  (in)      diag - A structure containing pointers to common diagnostic fields.
+!  (in)      diag - A structure that is used to regulate diagnostic output.
 !  (in/out)  CS - A pointer that is set to point to the control structure
 !                 for this module
 ! This include declares and sets the variable "version".
@@ -804,9 +805,9 @@ subroutine MOM_diag_to_Z_init(Time, G, param_file, diag, CS)
     in_dir = slasher(in_dir)  
     call get_Z_depths(trim(in_dir)//trim(zgrid_file), "zw", CS%Z_int, "zt", &
                       z_axis, zint_axis, CS%nk_zspace)
-    call log_param(param_file, mod, "INPUTDIR/Z_OUTPUT_GRID_FILE", &
+    call log_param(param_file, mod, "!INPUTDIR/Z_OUTPUT_GRID_FILE", &
                    trim(in_dir)//trim(zgrid_file))
-    call log_param(param_file, mod, "NK_ZSPACE (from file)", CS%nk_zspace, &
+    call log_param(param_file, mod, "!NK_ZSPACE (from file)", CS%nk_zspace, &
                  "The number of depth-space levels.  This is determined \n"//&
                  "from the size of the variable zw in the output grid file.", &
                  units="nondim")
@@ -815,14 +816,14 @@ subroutine MOM_diag_to_Z_init(Time, G, param_file, diag, CS)
   endif
 
   if (CS%nk_zspace > 0) then
-    CS%axesBz = (/ G%axesB1(1), G%axesB1(2), z_axis /)
-    CS%axesTz = (/ G%axesT1(1), G%axesT1(2), z_axis /)
-    CS%axesCuz = (/ G%axesCu1(1), G%axesCu1(2), z_axis /)
-    CS%axesCvz = (/ G%axesCv1(1), G%axesCv1(2), z_axis /)
-    CS%axesBzi = (/ G%axesB1(1), G%axesB1(2), zint_axis /)
-    CS%axesTzi = (/ G%axesT1(1), G%axesT1(2), zint_axis /)
-    CS%axesCuzi = (/ G%axesCu1(1), G%axesCu1(2), zint_axis /)
-    CS%axesCvzi = (/ G%axesCv1(1), G%axesCv1(2), zint_axis /)
+    call defineAxes(diag, (/ diag%axesB1%handles(1), diag%axesB1%handles(2), z_axis /), CS%axesBz)
+    call defineAxes(diag, (/ diag%axesT1%handles(1), diag%axesT1%handles(2), z_axis /), CS%axesTz)
+    call defineAxes(diag, (/ diag%axesCu1%handles(1), diag%axesCu1%handles(2), z_axis /), CS%axesCuz)
+    call defineAxes(diag, (/ diag%axesCv1%handles(1), diag%axesCv1%handles(2), z_axis /), CS%axesCvz)
+    call defineAxes(diag, (/ diag%axesB1%handles(1), diag%axesB1%handles(2), zint_axis /), CS%axesBzi)
+    call defineAxes(diag, (/ diag%axesT1%handles(1), diag%axesT1%handles(2), zint_axis /), CS%axesTzi)
+    call defineAxes(diag, (/ diag%axesCu1%handles(1), diag%axesCu1%handles(2), zint_axis /), CS%axesCuzi)
+    call defineAxes(diag, (/ diag%axesCv1%handles(1), diag%axesCv1%handles(2), zint_axis /), CS%axesCvzi)
 
     CS%id_u_z = register_diag_field('ocean_model', 'u_z', CS%axesCuz, Time, &
         'Zonal Velocity in Depth Space', 'meter second-1', &
@@ -847,25 +848,25 @@ subroutine MOM_diag_to_Z_init(Time, G, param_file, diag, CS)
   else
     ! Check whether the diag-table is requesting any z-space files, and issue
     ! a warning if it is.
-    id_test = register_diag_field('ocean_model', 'u_z', G%axesCu1, Time, &
+    id_test = register_diag_field('ocean_model', 'u_z', diag%axesCu1, Time, &
         'Zonal Velocity in Depth Space', 'meter second-1')
     if (id_test>0) call MOM_error(WARNING, &
         "MOM_diag_to_Z_init: u_z cannot be output without "//&
         "an appropriate depth-space target file.")
 
-    id_test = register_diag_field('ocean_model', 'v_z', G%axesCv1, Time, &
+    id_test = register_diag_field('ocean_model', 'v_z', diag%axesCv1, Time, &
         'Meridional Velocity in Depth Space', 'meter second-1')
     if (id_test>0) call MOM_error(WARNING, &
         "MOM_diag_to_Z_init: v_z cannot be output without "//&
         "an appropriate depth-space target file.")
 
-    id_test = register_diag_field('ocean_model', 'uh_z', G%axesCu1, Time, &
+    id_test = register_diag_field('ocean_model', 'uh_z', diag%axesCu1, Time, &
         'Meridional Volume Transport in Depth Space', flux_units)
     if (id_test>0) call MOM_error(WARNING, &
         "MOM_diag_to_Z_init: uh_z cannot be output without "//&
         "an appropriate depth-space target file.")
 
-    id_test = register_diag_field('ocean_model', 'vh_z', G%axesCv1, Time, &
+    id_test = register_diag_field('ocean_model', 'vh_z', diag%axesCv1, Time, &
         'Meridional Volume Transport in Depth Space', flux_units)
     if (id_test>0) call MOM_error(WARNING, &
         "MOM_diag_to_Z_init: vh_z cannot be output without "//&
@@ -1029,7 +1030,7 @@ function ocean_register_diag_with_z (tr_ptr, vardesc_tr, G, Time, CS)
   endif
 
 ! Register the layer tracer
-  ocean_register_diag_with_z =  ocean_register_diag(vardesc_tr, G, Time)
+  ocean_register_diag_with_z = ocean_register_diag(vardesc_tr, G, CS%diag, Time)
 
 ! Copy the layer tracer variable descriptor to a z-tracer descriptor
 ! Change the name and layer information.
@@ -1068,7 +1069,7 @@ function register_Z_diag(var_desc, CS, day, missing)
   type(time_type),     intent(in) :: day
   real,                intent(in) :: missing
 
-  integer, dimension(3)  :: axes
+  type(axesType) :: axes
 
   ! Use the hor_grid and z_grid components of vardesc to determine the 
   ! desired axes to register the diagnostic field for.
@@ -1112,7 +1113,7 @@ function register_Zint_diag(var_desc, CS, day)
   type(vardesc),       intent(in) :: var_desc
   type(diag_to_Z_CS),  pointer    :: CS
   type(time_type),     intent(in) :: day
-  integer, dimension(3)  :: axes
+  type(axesType) :: axes
 
   if (CS%nk_zspace < 0) then
     register_Zint_diag = -1 ; return

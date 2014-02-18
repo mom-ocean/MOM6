@@ -65,7 +65,7 @@ module MOM_OCMIP2_CFC
 !********+*********+*********+*********+*********+*********+*********+**
 
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
-use MOM_diag_mediator, only : diag_ptrs
+use MOM_diag_mediator, only : diag_ctrl
 use MOM_diag_to_Z, only : register_Z_tracer, diag_to_Z_CS
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
@@ -140,8 +140,8 @@ type, public :: OCMIP2_CFC_CS ; private
   integer :: ind_cfc_12_flux  ! are used to pack and unpack surface boundary
                               ! condition arrays.
 
-  type(diag_ptrs), pointer :: diag ! A pointer to a structure of shareable
-                             ! ocean diagnostic fields and control variables.
+  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
+                             ! timing of diagnostic output.
   type(MOM_restart_CS), pointer :: restart_CSp => NULL()
   integer :: id_CFC11, id_CFC12
   integer, dimension(NTR) :: id_tr_adx = -1, id_tr_ady = -1
@@ -157,7 +157,7 @@ function register_OCMIP2_CFC(G, param_file, CS, diag, tr_Reg, restart_CS)
   type(ocean_grid_type),   intent(in) :: G
   type(param_file_type),   intent(in) :: param_file
   type(OCMIP2_CFC_CS),     pointer    :: CS
-  type(diag_ptrs), target, intent(in) :: diag
+  type(diag_ctrl), target, intent(in) :: diag
   type(tracer_registry_type),  pointer    :: tr_Reg
   type(MOM_restart_CS),    pointer    :: restart_CS
 ! This subroutine is used to register tracer fields and subroutines
@@ -167,7 +167,7 @@ function register_OCMIP2_CFC(G, param_file, CS, diag, tr_Reg, restart_CS)
 !                         model parameter values.
 !  (in/out)  CS - A pointer that is set to point to the control structure
 !                 for this module
-!  (in)      diag - A structure containing pointers to common diagnostic fields.
+!  (in)      diag - A structure that is used to regulate diagnostic output.
 !  (in/out)  tr_Reg - A pointer to the tracer registry.
 !  (in)      restart_CS - A pointer to the restart control structure.
 
@@ -429,14 +429,14 @@ subroutine initialize_OCMIP2_CFC(restart, day, G, h, OBC, CS, sponge_CSp, &
   ! Register CFC11 for potential diagnostic output.
   name = CS%CFC11_desc%name ; longname = CS%CFC11_desc%longname
   units = CS%CFC11_desc%units
-  CS%id_CFC11 = register_diag_field("ocean_model", trim(name), G%axesTL, &
+  CS%id_CFC11 = register_diag_field("ocean_model", trim(name), CS%diag%axesTL, &
       day, trim(longname) , trim(units))
   call register_Z_tracer(CS%CFC11, trim(name)//"_z", longname, units, &
                          day, G, diag_to_Z_CSp)
   ! Register CFC12 for potential diagnostic output.
   name = CS%CFC12_desc%name ; longname = CS%CFC12_desc%longname
   units = CS%CFC12_desc%units
-  CS%id_CFC12 = register_diag_field("ocean_model", trim(name), G%axesTL, &
+  CS%id_CFC12 = register_diag_field("ocean_model", trim(name), CS%diag%axesTL, &
       day, trim(longname) , trim(units))
   call register_Z_tracer(CS%CFC12, trim(name)//"_z", longname, units, &
                          day, G, diag_to_Z_CSp)
@@ -460,16 +460,16 @@ subroutine initialize_OCMIP2_CFC(restart, day, G, h, OBC, CS, sponge_CSp, &
     endif
 
     CS%id_tr_adx(m) = register_diag_field("ocean_model", trim(name)//"_adx", &
-        G%axesCuL, day, trim(longname)//" advective zonal flux" , &
+        CS%diag%axesCuL, day, trim(longname)//" advective zonal flux" , &
         trim(flux_units))
     CS%id_tr_ady(m) = register_diag_field("ocean_model", trim(name)//"_ady", &
-        G%axesCvL, day, trim(longname)//" advective meridional flux" , &
+        CS%diag%axesCvL, day, trim(longname)//" advective meridional flux" , &
         trim(flux_units))
     CS%id_tr_dfx(m) = register_diag_field("ocean_model", trim(name)//"_dfx", &
-        G%axesCuL, day, trim(longname)//" diffusive zonal flux" , &
+        CS%diag%axesCuL, day, trim(longname)//" diffusive zonal flux" , &
         trim(flux_units))
     CS%id_tr_dfy(m) = register_diag_field("ocean_model", trim(name)//"_dfy", &
-        G%axesCvL, day, trim(longname)//" diffusive zonal flux" , &
+        CS%diag%axesCvL, day, trim(longname)//" diffusive zonal flux" , &
         trim(flux_units))
     if (CS%id_tr_adx(m) > 0) call safe_alloc_ptr(CS%tr_adx(m)%p,IsdB,IedB,jsd,jed,nz)
     if (CS%id_tr_ady(m) > 0) call safe_alloc_ptr(CS%tr_ady(m)%p,isd,ied,JsdB,JedB,nz)

@@ -40,10 +40,10 @@ module MOM_dynamics_legacy_split
 !*  MOM code (although several of these solutions are routinely        *
 !*  verified by comparison with the slower unsplit schemes).           *
 !*                                                                     *
-!*    The subroutine step_MOM_dyn_legacy_split actually does the time     *
-!*  stepping, while register_restarts_dyn_legacy_split sets the fields    *
+!*    The subroutine step_MOM_dyn_legacy_split actually does the time  *
+!*  stepping, while register_restarts_dyn_legacy_split sets the fields *
 !*  that are found in a full restart file with this scheme, and        *
-!*  initialize_dyn_legacy_split initializes the cpu clocks that are       *                                      *
+!*  initialize_dyn_legacy_split initializes the cpu clocks that are    *                                      *
 !*  used in this module.  For largely historical reasons, this module  *
 !*  does not have its own control structure, but shares the same       *
 !*  control structure with MOM.F90 and the other MOM_dynamics_...      *
@@ -68,7 +68,7 @@ module MOM_dynamics_legacy_split
 
 use MOM_variables, only : vertvisc_type, ocean_OBC_type, thermo_var_ptrs
 use MOM_variables, only : BT_cont_type, alloc_bt_cont_type, dealloc_bt_cont_type
-use MOM_variables, only : ocean_internal_state
+use MOM_variables, only : accel_diag_ptrs, ocean_internal_state, cont_diag_ptrs
 use MOM_forcing_type, only : forcing
 
 use MOM_checksum_packages, only : MOM_thermo_chksum, MOM_state_chksum, MOM_accel_chksum
@@ -78,7 +78,7 @@ use MOM_cpu_clock, only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
 use MOM_diag_mediator, only : diag_mediator_init, enable_averaging
 use MOM_diag_mediator, only : disable_averaging, post_data, safe_alloc_ptr
 use MOM_diag_mediator, only : register_diag_field, register_static_field
-use MOM_diag_mediator, only : set_diag_mediator_grid, diag_ptrs
+use MOM_diag_mediator, only : set_diag_mediator_grid, diag_ctrl
 use MOM_domains, only : MOM_domains_init, pass_var, pass_vector
 use MOM_domains, only : pass_var_start, pass_var_complete
 use MOM_domains, only : pass_vector_start, pass_vector_complete
@@ -86,7 +86,7 @@ use MOM_domains, only : To_South, To_West, To_All, CGRID_NE, SCALAR_PAIR
 use MOM_checksums, only : MOM_checksums_init, hchksum, uchksum, vchksum
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
 use MOM_error_handler, only : MOM_set_verbosity
-use MOM_file_parser, only : read_param, get_param, log_version, param_file_type
+use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_get_input, only : directories
 use MOM_io, only : MOM_io_init, vardesc
 use MOM_restart, only : register_restart_field, query_initialized, save_restart
@@ -221,9 +221,16 @@ type, public :: MOM_dyn_legacy_split_CS ; private
   integer :: id_du_adj = -1, id_dv_adj = -1, id_du_adj2 = -1, id_dv_adj2 = -1
   integer :: id_u_BT_accel = -1, id_v_BT_accel = -1
 
-  type(diag_ptrs), pointer :: diag ! A structure containing pointers to
-                                   ! diagnostic fields that might be calculated
-                                   ! and shared between modules.
+  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
+                                   ! timing of diagnostic output.
+  type(accel_diag_ptrs), pointer :: ADp ! A structure pointing to the various
+                                   ! accelerations in the momentum equations,
+                                   ! which can later be used to calculate
+                                   ! derived diagnostics like energy budgets.
+  type(cont_diag_ptrs), pointer :: CDp ! A structure with pointers to various
+                                   ! terms in the continuity equations,
+                                   ! which can later be used to calculate
+                                   ! derived diagnostics like energy budgets.
 ! The remainder of the structure is pointers to child subroutines' control strings.
   type(hor_visc_CS), pointer :: hor_visc_CSp => NULL()
   type(continuity_CS), pointer :: continuity_CSp => NULL()
@@ -345,6 +352,9 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
     ! u_adj and v_adj are the zonal or meridional velocities after u and v
     ! have been barotropically adjusted so the resulting transports match
     ! uhbt_out and vhbt_out, both in m s-1.
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: u_tmp
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: v_tmp
+    ! u_tmp and v_tmp are temporary velocities used in diagnostic calculations.
 
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: u_old_rad_OBC
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: v_old_rad_OBC
@@ -406,6 +416,9 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
       h_old_rad_OBC(i,j,k) = h(i,j,k)
     enddo ; enddo ; enddo
   endif
+
+  if (ASSOCIATED(CS%ADp%du_other)) CS%ADp%du_other(:,:,:) = 0.0
+  if (ASSOCIATED(CS%ADp%dv_other)) CS%ADp%dv_other(:,:,:) = 0.0
 
   BT_cont_BT_thick = .false.
   if (associated(CS%BT_cont)) BT_cont_BT_thick = &
@@ -482,7 +495,8 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
 
 ! CAu = -(f+zeta_av)/h_av vh + d/dx KE_av
   call cpu_clock_begin(id_clock_Cor)
-  call CorAdCalc(u_av, v_av, h_av, uh, vh, CS%CAu, CS%CAv, G,CS%CoriolisAdv_CSp)
+  call CorAdCalc(u_av, v_av, h_av, uh, vh, CS%CAu, CS%CAv, CS%ADp, G, &
+                 CS%CoriolisAdv_CSp)
   call cpu_clock_end(id_clock_Cor)
 
 ! u_bc_accel = CAu + PFu + diffu(u[n-1])
@@ -579,11 +593,11 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
                       CS%visc_rem_u, CS%visc_rem_v, u_adj, v_adj, &
                       BT_cont=CS%BT_cont)
       u_init => u_adj ; v_init => v_adj
-      if (ASSOCIATED(CS%diag%du_adj2)) then ; do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-        CS%diag%du_adj2(I,j,k) = u_adj(I,j,k) - u(I,j,k)
+      if (ASSOCIATED(CS%ADp%du_other)) then ; do k=1,nz ; do j=js,je ; do I=Isq,Ieq
+        CS%ADp%du_other(I,j,k) = u_adj(I,j,k) - u(I,j,k)
       enddo ; enddo ; enddo ; endif
-      if (ASSOCIATED(CS%diag%dv_adj2)) then ; do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-        CS%diag%dv_adj2(i,J,k) = v_adj(i,J,k) - v(i,J,k)
+      if (ASSOCIATED(CS%ADp%dv_other)) then ; do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
+        CS%ADp%dv_other(i,J,k) = v_adj(i,J,k) - v(i,J,k)
       enddo ; enddo ; enddo ; endif
       CS%readjust_velocity = .false.
     else
@@ -679,7 +693,7 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
 ! u_av  <- u_av  + dt_pred d/dz visc d/dz u_av
   call cpu_clock_begin(id_clock_vertvisc)
   call vertvisc_coef(up, vp, h, fluxes, visc, dt_pred, G, CS%vertvisc_CSp)
-  call vertvisc(up, vp, h, fluxes, visc, dt_pred, CS%OBC, G, &
+  call vertvisc(up, vp, h, fluxes, visc, dt_pred, CS%OBC, CS%ADp, CS%CDp, G, &
                 CS%vertvisc_CSp, CS%taux_bot, CS%tauy_bot)
   if (G%nonblocking_updates) then
     call cpu_clock_end(id_clock_vertvisc) ; call cpu_clock_begin(id_clock_pass)
@@ -793,7 +807,8 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
 
 ! CAu = -(f+zeta_av)/h_av vh + d/dx KE_av
   call cpu_clock_begin(id_clock_Cor)
-  call CorAdCalc(u_av, v_av, h_av, uh, vh, CS%CAu, CS%CAv, G,CS%CoriolisAdv_CSp)
+  call CorAdCalc(u_av, v_av, h_av, uh, vh, CS%CAu, CS%CAv, CS%ADp, G, &
+                 CS%CoriolisAdv_CSp)
   call cpu_clock_end(id_clock_Cor)
 
 ! Calculate the momentum forcing terms for the barotropic equations.
@@ -852,23 +867,11 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
     u(i,j,k) = G%mask2dCu(i,j) * (u_init(i,j,k) + dt * &
                     (u_bc_accel(I,j,k) + CS%u_accel_bt(I,j,k)))
   enddo ; enddo ; enddo
-  if (ASSOCIATED(CS%diag%PFu_tot)) then ; do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-      CS%diag%PFu_tot(i,j,k) = CS%PFu(i,j,k)
-  enddo ; enddo ; enddo ; endif
-  if (ASSOCIATED(CS%diag%CAu_tot)) then ; do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-      CS%diag%CAu_tot(i,j,k) = CS%CAu(i,j,k) !+ CS%u_accel_bt(i,j) - CS%diag%PFu_bt(i,j)
-  enddo ; enddo ; enddo ; endif
 
   do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
     v(i,j,k) = G%mask2dCv(i,j) * (v_init(i,j,k) + dt * &
                     (v_bc_accel(i,J,k) + CS%v_accel_bt(i,J,k)))
   enddo ; enddo ; enddo
-  if (ASSOCIATED(CS%diag%PFv_tot)) then ; do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-    CS%diag%PFv_tot(i,j,k) = CS%PFv(i,j,k)
-  enddo ; enddo ; enddo ; endif
-  if (ASSOCIATED(CS%diag%CAv_tot)) then ; do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-    CS%diag%CAv_tot(i,j,k) = CS%CAv(i,j,k) !+ CS%v_accel_bt(i,j) - CS%diag%PFv_bt(i,j)
-  enddo ; enddo ; enddo ; endif
   call cpu_clock_end(id_clock_mom_update)
 
   if (CS%debug) then
@@ -886,7 +889,7 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
 ! u_av <- u_av + dt d/dz visc d/dz u_av
   call cpu_clock_begin(id_clock_vertvisc)
   call vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS%vertvisc_CSp)
-  call vertvisc(u, v, h, fluxes, visc, dt, CS%OBC, G, &
+  call vertvisc(u, v, h, fluxes, visc, dt, CS%OBC, CS%ADp, CS%CDp, G, &
                 CS%vertvisc_CSp, CS%taux_bot, CS%tauy_bot)
   if (G%nonblocking_updates) then
     call cpu_clock_end(id_clock_vertvisc) ; call cpu_clock_begin(id_clock_pass)
@@ -917,11 +920,11 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
     ! u_av and v_av adjusted so their mass transports match uhbt and vhbt.
     ! Also, determine the values of u and v so that their transports
     ! that agree with uhbt_out and vhbt_out.
-    if (ASSOCIATED(CS%diag%du_adj)) then ; do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-      CS%diag%du_adj(I,j,k) = u(I,j,k)
+    if (ASSOCIATED(CS%ADp%du_other)) then ; do k=1,nz ; do j=js,je ; do I=Isq,Ieq
+      u_tmp(I,j,k) = u(I,j,k)
     enddo ; enddo ; enddo ; endif
-    if (ASSOCIATED(CS%diag%dv_adj)) then ; do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-      CS%diag%dv_adj(i,J,k) = v(i,J,k)
+    if (ASSOCIATED(CS%ADp%dv_other)) then ; do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
+      v_tmp(i,J,k) = v(i,J,k)
     enddo ; enddo ; enddo ; endif
     call cpu_clock_begin(id_clock_continuity)
     call continuity(u, v, h, h, uh, vh, dt, G, &
@@ -934,21 +937,21 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
       pid_h = pass_var_start(h, G%Domain)
       call cpu_clock_end(id_clock_pass)
     endif
-    if (ASSOCIATED(CS%diag%du_adj)) then ; do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-      CS%diag%du_adj(I,j,k) = u(I,j,k) - CS%diag%du_adj(I,j,k)
+    if (ASSOCIATED(CS%ADp%du_other)) then ; do k=1,nz ; do j=js,je ; do I=Isq,Ieq
+      CS%ADp%du_other(I,j,k) = CS%ADp%du_other(I,j,k) + (u(I,j,k) - u_tmp(I,j,k))
     enddo ; enddo ; enddo ; endif
-    if (ASSOCIATED(CS%diag%dv_adj)) then ; do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-      CS%diag%dv_adj(i,J,k) = v(i,J,k) - CS%diag%dv_adj(i,J,k)
+    if (ASSOCIATED(CS%ADp%dv_other)) then ; do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
+      CS%ADp%dv_other(i,J,k) = CS%ADp%dv_other(i,J,k) + (v(i,J,k) - v_tmp(i,J,k))
     enddo ; enddo ; enddo ; endif
 
     call cpu_clock_begin(id_clock_vertvisc)
-    call vertvisc_limit_vel(u, v, h_av, fluxes, visc, dt, G, CS%vertvisc_CSp)
+    call vertvisc_limit_vel(u, v, h_av, CS%ADp, CS%CDp, fluxes, visc, dt, G, CS%vertvisc_CSp)
     if (G%nonblocking_updates) then
       call cpu_clock_end(id_clock_vertvisc) ; call cpu_clock_begin(id_clock_pass)
       pid_u = pass_vector_start(u, v, G%Domain)
       call cpu_clock_end(id_clock_pass) ; call cpu_clock_begin(id_clock_vertvisc)
     endif
-    call vertvisc_limit_vel(u_av, v_av, h_av, fluxes, visc, dt, G, CS%vertvisc_CSp)
+    call vertvisc_limit_vel(u_av, v_av, h_av, CS%ADp, CS%CDp, fluxes, visc, dt, G, CS%vertvisc_CSp)
     call cpu_clock_end(id_clock_vertvisc)
 
     call cpu_clock_begin(id_clock_pass)
@@ -1011,10 +1014,10 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
 
 !   Here various terms used in to update the momentum equations are
 ! offered for averaging.
-  if (CS%id_PFu > 0) call post_data(CS%id_PFu, CS%diag%PFu_tot, CS%diag)
-  if (CS%id_PFv > 0) call post_data(CS%id_PFv, CS%diag%PFv_tot, CS%diag)
-  if (CS%id_CAu > 0) call post_data(CS%id_CAu, CS%diag%CAu_tot, CS%diag)
-  if (CS%id_CAv > 0) call post_data(CS%id_CAv, CS%diag%CAv_tot, CS%diag)
+  if (CS%id_PFu > 0) call post_data(CS%id_PFu, CS%PFu, CS%diag)
+  if (CS%id_PFv > 0) call post_data(CS%id_PFv, CS%PFv, CS%diag)
+  if (CS%id_CAu > 0) call post_data(CS%id_CAu, CS%CAu, CS%diag)
+  if (CS%id_CAv > 0) call post_data(CS%id_CAv, CS%CAv, CS%diag)
 
 !   Here the thickness fluxes are offered for averaging.
   if (CS%id_uh > 0) call post_data(CS%id_uh, uh, CS%diag)
@@ -1023,10 +1026,8 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
   if (CS%id_vav > 0) call post_data(CS%id_vav, v_av, CS%diag)
   if (CS%id_u_BT_accel > 0) call post_data(CS%id_u_BT_accel, CS%u_accel_bt, CS%diag)
   if (CS%id_v_BT_accel > 0) call post_data(CS%id_v_BT_accel, CS%v_accel_bt, CS%diag)
-  if (CS%id_du_adj > 0) call post_data(CS%id_du_adj, CS%diag%du_adj, CS%diag)
-  if (CS%id_dv_adj > 0) call post_data(CS%id_dv_adj, CS%diag%dv_adj, CS%diag)
-  if (CS%id_du_adj2 > 0) call post_data(CS%id_du_adj2, CS%diag%du_adj2, CS%diag)
-  if (CS%id_dv_adj2 > 0) call post_data(CS%id_dv_adj2, CS%diag%dv_adj2, CS%diag)
+  if (CS%id_du_adj > 0) call post_data(CS%id_du_adj, CS%ADp%du_other, CS%diag)
+  if (CS%id_dv_adj > 0) call post_data(CS%id_dv_adj, CS%ADp%dv_other, CS%diag)
   if (CS%debug) then
     call MOM_state_chksum("Corrector ", u, v, h, uh, vh, G)
     call uchksum(u_av,"Corrector avg u",G,haloshift=1)
@@ -1119,10 +1120,12 @@ subroutine register_restarts_dyn_legacy_split(G, param_file, CS, restart_CS, uh,
   endif
   allocate(CS)
 
-  flux_BT_coupling = .false. ; readjust_BT_trans = .false. ; adiabatic = .false.
-  call read_param(param_file, "FLUX_BT_COUPLING", flux_BT_coupling)
-  call read_param(param_file, "READJUST_BT_TRANS", readjust_BT_trans)
-  call read_param(param_file, "ADIABATIC", adiabatic)
+  call get_param(param_file, "MOM_legacy_split", "FLUX_BT_COUPLING", flux_BT_coupling, &
+       default=.false., do_not_log=.true.)
+  call get_param(param_file, "MOM_legacy_split", "READJUST_BT_TRANS", readjust_BT_trans, &
+       default=.false., do_not_log=.true.)
+  call get_param(param_file, "MOM_legacy_split", "ADIABATIC", adiabatic, &
+       default=.false., do_not_log=.true.)
   if (.not.flux_BT_coupling .or. adiabatic) readjust_BT_trans = .false.
 
   ALLOC_(CS%diffu(IsdB:IedB,jsd:jed,nz)) ; CS%diffu(:,:,:) = 0.0
@@ -1188,8 +1191,8 @@ subroutine register_restarts_dyn_legacy_split(G, param_file, CS, restart_CS, uh,
 end subroutine register_restarts_dyn_legacy_split
 
 subroutine initialize_dyn_legacy_split(u, v, h, uh, vh, eta, Time, G, param_file, &
-               diag, CS, restart_CS, dt, MIS, VarMix, MEKE, OBC, ALE_CSp, &
-               visc, dirs, ntrunc)
+                      diag, CS, restart_CS, dt, Accel_diag, Cont_diag, MIS, &
+                      VarMix, MEKE, OBC, ALE_CSp, visc, dirs, ntrunc)
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(inout) :: u
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(inout) :: v
   real, dimension(NIMEM_,NJMEM_,NKMEM_) , intent(inout) :: h
@@ -1199,10 +1202,12 @@ subroutine initialize_dyn_legacy_split(u, v, h, uh, vh, eta, Time, G, param_file
   type(time_type),                target, intent(in)    :: Time
   type(ocean_grid_type),                  intent(inout) :: G
   type(param_file_type),                  intent(in)    :: param_file
-  type(diag_ptrs),                target, intent(inout) :: diag
+  type(diag_ctrl),                target, intent(inout) :: diag
   type(MOM_dyn_legacy_split_CS),          pointer       :: CS
   type(MOM_restart_CS),                   pointer       :: restart_CS
   real,                                   intent(in)    :: dt
+  type(accel_diag_ptrs),          target, intent(inout) :: Accel_diag
+  type(cont_diag_ptrs),           target, intent(inout) :: Cont_diag
   type(ocean_internal_state),             intent(inout) :: MIS
   type(VarMix_CS),                        pointer       :: VarMix
   type(MEKE_type),                        pointer       :: MEKE
@@ -1222,9 +1227,14 @@ subroutine initialize_dyn_legacy_split(u, v, h, uh, vh, eta, Time, G, param_file
 !  (in)      G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
-!  (in)      diag - A structure containing pointers to common diagnostic fields.
+!  (in)      diag - A structure that is used to regulate diagnostic output.
 !  (inout)   CS - The control structure set up by initialize_dyn_legacy_split.
 !  (in)      restart_CS - A pointer to the restart control structure.
+!  (inout)   Accel_diag - A set of pointers to the various accelerations in
+!                  the momentum equations, which can be used for later derived
+!                  diagnostics, like energy budgets.
+!  (inout)   Cont_diag - A structure with pointers to various terms in the
+!                   continuity equations.
 !  (inout)   MIS - The "MOM6 Internal State" structure, used to pass around
 !                  pointers to various arrays for diagnostic purposes.
 !  (in)      VarMix - A pointer to a structure with fields that specify the
@@ -1305,7 +1315,7 @@ subroutine initialize_dyn_legacy_split(u, v, h, uh, vh, eta, Time, G, param_file
                  "in the barotropic continuity equation.", default=.true.)
   call get_param(param_file, mod, "DEBUG", CS%debug, &
                  "If true, write out verbose debugging data.", default=.false.)
-  adiabatic=.false. ; call read_param(param_file, "ADIABATIC", adiabatic)
+  call get_param(param_file, mod, "ADIABATIC", adiabatic, default=.false., do_not_log=.true.)
   if (.not.CS%flux_BT_coupling .or. adiabatic) CS%readjust_BT_trans = .false.
   call get_param(param_file, mod, "DEBUG_TRUNCATIONS", debug_truncations, &
                  default=.false.)
@@ -1330,13 +1340,21 @@ subroutine initialize_dyn_legacy_split(u, v, h, uh, vh, eta, Time, G, param_file
   MIS%u_accel_bt => CS%u_accel_bt ; MIS%v_accel_bt => CS%v_accel_bt
   MIS%u_av => CS%u_av ; MIS%v_av => CS%v_av
 
+  CS%ADp => Accel_diag ; CS%CDp => Cont_diag
+  Accel_diag%diffu => CS%diffu ; Accel_diag%diffv => CS%diffv
+  Accel_diag%PFu => CS%PFu ; Accel_diag%PFv => CS%PFv
+  Accel_diag%CAu => CS%CAu ; Accel_diag%CAv => CS%CAv
+!  Accel_diag%pbce => CS%pbce
+!  Accel_diag%u_accel_bt => CS%u_accel_bt ; Accel_diag%v_accel_bt => CS%v_accel_bt
+!  Accel_diag%u_av => CS%u_av ; Accel_diag%v_av => CS%v_av
+
   call continuity_init(Time, G, param_file, diag, CS%continuity_CSp)
-  call CoriolisAdv_init(Time, G, param_file, diag, CS%CoriolisAdv_CSp)
+  call CoriolisAdv_init(Time, G, param_file, diag, CS%ADp, CS%CoriolisAdv_CSp)
   if (use_tides) call tidal_forcing_init(Time, G, param_file, CS%tides_CSp)
   call PressureForce_init(Time, G, param_file, diag, CS%PressureForce_CSp, &
                           CS%tides_CSp)
   call hor_visc_init(Time, G, param_file, diag, CS%hor_visc_CSp)
-  call vertvisc_init(MIS, Time, G, param_file, diag, dirs, &
+  call vertvisc_init(MIS, Time, G, param_file, diag, CS%ADp, dirs, &
                      ntrunc, CS%vertvisc_CSp)
   call set_visc_init(Time, G, param_file, diag, visc, CS%set_visc_CSp)
 
@@ -1408,58 +1426,42 @@ subroutine initialize_dyn_legacy_split(u, v, h, uh, vh, eta, Time, G, param_file
   call cpu_clock_end(id_clock_pass_init)
 
   flux_units = get_flux_units(G)
-  CS%id_uh = register_diag_field('ocean_model', 'uh', G%axesCuL, Time, &
+  CS%id_uh = register_diag_field('ocean_model', 'uh', diag%axesCuL, Time, &
       'Zonal Thickness Flux', flux_units)
-  CS%id_vh = register_diag_field('ocean_model', 'vh', G%axesCvL, Time, &
+  CS%id_vh = register_diag_field('ocean_model', 'vh', diag%axesCvL, Time, &
       'Meridional Thickness Flux', flux_units)
-  CS%id_CAu = register_diag_field('ocean_model', 'CAu', G%axesCuL, Time, &
+  CS%id_CAu = register_diag_field('ocean_model', 'CAu', diag%axesCuL, Time, &
       'Zonal Coriolis and Advective Acceleration', 'meter second-2')
-  CS%id_CAv = register_diag_field('ocean_model', 'CAv', G%axesCvL, Time, &
+  CS%id_CAv = register_diag_field('ocean_model', 'CAv', diag%axesCvL, Time, &
       'Meridional Coriolis and Advective Acceleration', 'meter second-2')
-  CS%id_PFu = register_diag_field('ocean_model', 'PFu', G%axesCuL, Time, &
+  CS%id_PFu = register_diag_field('ocean_model', 'PFu', diag%axesCuL, Time, &
       'Zonal Pressure Force Acceleration', 'meter second-2')
-  CS%id_PFv = register_diag_field('ocean_model', 'PFv', G%axesCvL, Time, &
+  CS%id_PFv = register_diag_field('ocean_model', 'PFv', diag%axesCvL, Time, &
       'Meridional Pressure Force Acceleration', 'meter second-2')
-  if (CS%id_PFu > 0) call safe_alloc_ptr(diag%PFu_tot,IsdB,IedB,jsd,jed,nz)
-  if (CS%id_PFv > 0) call safe_alloc_ptr(diag%PFv_tot,isd,ied,JsdB,JedB,nz)
-  if (CS%id_CAu > 0) call safe_alloc_ptr(diag%CAu_tot,IsdB,IedB,jsd,jed,nz)
-  if (CS%id_CAv > 0) call safe_alloc_ptr(diag%CAv_tot,isd,ied,JsdB,JedB,nz)
 
-  CS%id_uav = register_diag_field('ocean_model', 'uav', G%axesCuL, Time, &
+  CS%id_uav = register_diag_field('ocean_model', 'uav', diag%axesCuL, Time, &
       'Barotropic-step Averaged Zonal Velocity', 'meter second-1')
-  CS%id_vav = register_diag_field('ocean_model', 'vav', G%axesCvL, Time, &
+  CS%id_vav = register_diag_field('ocean_model', 'vav', diag%axesCvL, Time, &
       'Barotropic-step Averaged Meridional Velocity', 'meter second-1')
 
 
   if (CS%flux_BT_coupling) then
-    CS%id_du_adj = register_diag_field('ocean_model', 'du_adj', G%axesCuL, Time, &
-        'Zonal velocity Adjustment 1', 'meter second-1')
-    CS%id_dv_adj = register_diag_field('ocean_model', 'dv_adj', G%axesCvL, Time, &
-        'Meridional velocity Adjustment 1', 'meter second-1')
-    if (CS%id_du_adj > 0) call safe_alloc_ptr(CS%diag%du_adj,IsdB,IedB,jsd,jed,nz)
-    if (CS%id_dv_adj > 0) call safe_alloc_ptr(CS%diag%dv_adj,isd,ied,JsdB,JedB,nz)
-    if (CS%readjust_BT_trans) then
-      CS%id_du_adj2 = register_diag_field('ocean_model', 'du_adj2', G%axesCuL, Time, &
-          'Zonal velocity Adjustment 2', 'meter second-1')
-      CS%id_dv_adj2 = register_diag_field('ocean_model', 'dv_adj2', G%axesCvL, Time, &
-          'Meridional velocity Adjustment 2', 'meter second-1')
-      if (CS%id_du_adj2 > 0) call safe_alloc_ptr(CS%diag%du_adj2,IsdB,IedB,jsd,jed,nz)
-      if (CS%id_dv_adj2 > 0) call safe_alloc_ptr(CS%diag%dv_adj2,isd,ied,JsdB,JedB,nz)
-    endif
+    CS%id_du_adj = register_diag_field('ocean_model', 'du_adj', diag%axesCuL, Time, &
+        'Zonal velocity adjustments due to nonstandard terms', 'meter second-1')
+    CS%id_dv_adj = register_diag_field('ocean_model', 'dv_adj', diag%axesCvL, Time, &
+        'Meridional velocity adjustments due to nonstandard terms', 'meter second-1')
+    if (CS%id_du_adj > 0) call safe_alloc_ptr(CS%ADp%du_other,IsdB,IedB,jsd,jed,nz)
+    if (CS%id_dv_adj > 0) call safe_alloc_ptr(CS%ADp%dv_other,isd,ied,JsdB,JedB,nz)
   endif
-  CS%id_u_BT_accel = register_diag_field('ocean_model', 'u_BT_accel', G%axesCuL, Time, &
+  CS%id_u_BT_accel = register_diag_field('ocean_model', 'u_BT_accel', diag%axesCuL, Time, &
     'Barotropic Anomaly Zonal Acceleration', 'meter second-1')
-  CS%id_v_BT_accel = register_diag_field('ocean_model', 'v_BT_accel', G%axesCvL, Time, &
+  CS%id_v_BT_accel = register_diag_field('ocean_model', 'v_BT_accel', diag%axesCvL, Time, &
     'Barotropic Anomaly Meridional Acceleration', 'meter second-1')
 
   if (debug_truncations) then
     if (CS%flux_BT_coupling) then
-      call safe_alloc_ptr(diag%du_adj,IsdB,IedB,jsd,jed,nz)
-      call safe_alloc_ptr(diag%dv_adj,isd,ied,JsdB,JedB,nz)
-    endif
-    if (CS%flux_BT_coupling .and. CS%readjust_BT_trans) then
-      call safe_alloc_ptr(diag%du_adj2,IsdB,IedB,jsd,jed,nz)
-      call safe_alloc_ptr(diag%dv_adj2,isd,ied,JsdB,JedB,nz)
+      call safe_alloc_ptr(CS%ADp%du_other,IsdB,IedB,jsd,jed,nz)
+      call safe_alloc_ptr(CS%ADp%dv_other,isd,ied,JsdB,JedB,nz)
     endif
   endif
 
@@ -1486,6 +1488,8 @@ subroutine end_dyn_legacy_split(CS)
   DEALLOC_(CS%CAu)   ; DEALLOC_(CS%CAv)
   DEALLOC_(CS%PFu)   ; DEALLOC_(CS%PFv)
   
+  if (associated(CS%taux_bot)) deallocate(CS%taux_bot)
+  if (associated(CS%tauy_bot)) deallocate(CS%tauy_bot)
   DEALLOC_(CS%uhbt) ; DEALLOC_(CS%vhbt)
   DEALLOC_(CS%u_accel_bt) ; DEALLOC_(CS%v_accel_bt)
   DEALLOC_(CS%visc_rem_u) ; DEALLOC_(CS%visc_rem_v)

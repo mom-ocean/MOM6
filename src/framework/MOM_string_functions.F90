@@ -21,11 +21,11 @@ module MOM_string_functions
 
 !********+*********+*********+*********+*********+*********+*********+**
 !*                                                                     *
-!*  By Robert Hallberg, June 2005.                                     *
+!*  By Alistair Adcroft and Robert Hallberg, last updated Sept. 2013.  *
 !*                                                                     *
-!*    The subroutines here parse a set of input files for the value    *
-!*  a named parameter and sets that parameter at run time.  Currently  *
-!*  these files use the same format as the header file MOM_memory.h.   *
+!*    The functions here perform a set of useful manipulations of      *
+!*  character strings.   Although they are a part of MOM6, the do not  *
+!*  require any other MOM software to be useful.                       *
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 
@@ -36,6 +36,7 @@ public left_int, left_ints
 public left_real, left_reals
 public stringFunctionsUnitTests
 public extractWord
+public slasher
 
 contains
 
@@ -219,7 +220,7 @@ function extractWord(string,n)
   lastCharIsSeperator = .true.
   ns = len_trim(string)
   i = 0; b=0; e=0; nw=0;
-  do while (i<=ns)
+  do while (i<ns)
     i = i+1
     if (lastCharIsSeperator) then ! search for end of word
       if (string(i:i)==' ' .or. string(i:i)==',') then
@@ -271,5 +272,18 @@ logical function stringFunctionsUnitTests()
     if (trim(str1)/=trim(str2)) stringFunctionsUnitTests=.true.
   end subroutine localTest
 end function stringFunctionsUnitTests
+
+function slasher(dir)
+  character(len=*), intent(in) :: dir
+  character(len=len(dir)+2) :: slasher
+
+  if (len_trim(dir) == 0) then
+    slasher = "./"
+  elseif (dir(len_trim(dir):len_trim(dir)) == '/') then
+    slasher = trim(dir)
+  else
+    slasher = trim(dir)//"/"
+  endif
+end function slasher
 
 end module MOM_string_functions

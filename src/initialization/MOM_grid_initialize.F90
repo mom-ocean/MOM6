@@ -54,9 +54,9 @@ module MOM_grid_initialize
 !*                                                                     *
 !*     A small fragment of the C-grid is shown below:                  *
 !*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q, dxBu, IdxBu, dyBu, IdyBu, etc.            *
-!*    j+1  > o > o >   At ^:  v, dxCv, IdxCv, dyCv, IdyCv, etc.            *
-!*    j    x ^ x ^ x   At >:  u, dxCu, IdxCu, dyCu, IdyCu, etc.            *
+!*    j+1  x ^ x ^ x   At x:  q, dxBu, IdxBu, dyBu, IdyBu, etc.        *
+!*    j+1  > o > o >   At ^:  v, dxCv, IdxCv, dyCv, IdyCv, etc.        *
+!*    j    x ^ x ^ x   At >:  u, dxCu, IdxCu, dyCu, IdyCu, etc.        *
 !*    j    > o > o >   At o:  h, dxT, IdxT, dyT, IdyT, areaT, etc.     *
 !*    j-1  x ^ x ^ x                                                   *
 !*        i-1  i  i+1  At x & ^:                                       *
@@ -66,7 +66,6 @@ module MOM_grid_initialize
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 
-use MOM_diag_mediator, only : set_axes_info
 use MOM_domains, only : pass_var, pass_vector, pe_here, root_PE, broadcast
 use MOM_checksums, only : hchksum, qchksum, uchksum, vchksum
 use MOM_domains, only : AGRID, BGRID_NE, CGRID_NE, To_All, Scalar_Pair
@@ -74,6 +73,7 @@ use MOM_domains, only : To_North, To_South, To_East, To_West
 use MOM_domains, only : MOM_define_domain, MOM_define_IO_domain
 use MOM_domains, only : MOM_domain_type
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, NOTE, is_root_pe
+use MOM_error_handler, only : callTree_enter, callTree_leave
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : read_data, slasher, file_exists
@@ -350,15 +350,13 @@ end function Int_dj_dy
 
 ! ------------------------------------------------------------------------------
 
-subroutine set_grid_metrics(G, param_file, set_vertical)
+subroutine set_grid_metrics(G, param_file)
   type(ocean_grid_type), intent(inout) :: G
   type(param_file_type), intent(in)    :: param_file
-  logical, optional,     intent(in)    :: set_vertical
 ! Arguments:
 !  (inout)   G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
-!  (in,opt)  set_vertical - If true (or missing), set up the vertical axes.
 
 !    Calculate the values of the metric terms that might be used
 !  and save them in arrays.
@@ -371,10 +369,7 @@ subroutine set_grid_metrics(G, param_file, set_vertical)
   logical :: debug
   character(len=256) :: config
 
-  call MOM_mesg("  MOM_grid_init.F90, set_grid_metrics: allocating metrics", 5)
- 
-  call allocate_metrics(G)
-
+  call callTree_enter("set_grid_metrics(), MOM_grid_initialize.F90")
   call log_version(param_file, "MOM_grid_init", version, "")
   call get_param(param_file, "MOM_grid_init", "GRID_CONFIG", config, &
                  "A character string that determines the method for \n"//&
@@ -403,12 +398,9 @@ subroutine set_grid_metrics(G, param_file, set_vertical)
 ! Calculate derived metrics (i.e. reciprocals and products)
   call set_grid_derived_metrics(G, param_file)
 
-! This call sets up the diagnostic axes.
-  call set_axes_info(G%gridLatB, G%gridLatT, G%gridLonB, G%gridLonT, G, &
-                     param_file, set_vertical=set_vertical)
-
   if (debug) call grid_metrics_chksum('MOM_grid_init/set_grid_metrics',G)
 
+  call callTree_leave("set_grid_metrics()")
 end subroutine set_grid_metrics
 
 ! ------------------------------------------------------------------------------
@@ -424,7 +416,7 @@ subroutine set_grid_derived_metrics(G, param_file)
 !    Calculate the values of the metric terms that might be used
 !  and save them in arrays.
 !    Within this subroutine, the x- and y- grid spacings and their
-!  inverses and the cell areas centered on h, q, u, and v points are
+!  inverses and the cell areas centered on T, Bu, Cu, and Cv points are
 !  calculated, as are the geographic locations of each of these 4
 !  sets of points.
   character( len = 128) :: warnmesg
@@ -436,7 +428,7 @@ subroutine set_grid_derived_metrics(G, param_file)
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
-  call MOM_mesg("  MOM_grid_init.F90, set_grid_derived_metrics: deriving metrics", 5)
+  call callTree_enter("set_grid_derived_metrics(), MOM_grid_initialize.F90")
  
   do j=jsd,jed ; do i=isd,ied
     if (G%dxT(i,j) <= 0.0) then
@@ -505,6 +497,7 @@ subroutine set_grid_derived_metrics(G, param_file)
 68 FORMAT ("WARNING: PE ",I4," ",a3,"(",I4,",",I4,") = ",ES10.4, &
            " is being changed to ",ES10.4,".")
 
+  call callTree_leave("set_grid_derived_metrics()")
 end subroutine set_grid_derived_metrics
 
 ! ------------------------------------------------------------------------------
@@ -618,6 +611,8 @@ end subroutine grid_metrics_chksum
 subroutine set_grid_metrics_from_mosaic(G,param_file)
   type(ocean_grid_type), intent(inout) :: G
   type(param_file_type), intent(in)    :: param_file
+!   This subroutine sets the grid metrics from a mosaic file.
+!  
 ! Arguments:
 !  (inout)   G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
@@ -634,24 +629,22 @@ subroutine set_grid_metrics_from_mosaic(G,param_file)
   real, dimension(G%isd :G%ied ,G%JsdB:G%JedB) :: dxCv, dyCv
   real, dimension(G%IsdB:G%IedB,G%JsdB:G%JedB) :: dxBu, dyBu, areaBu
   ! This are symmetric arrays, corresponding to the data in the mosaic file
-  real, dimension(2*G%isd-1:2*G%ied,2*G%jsd-1:2*G%jed) :: tmpT
-  real, dimension(2*G%isd-2:2*G%ied,2*G%jsd-1:2*G%jed) :: tmpU
-  real, dimension(2*G%isd-1:2*G%ied,2*G%jsd-2:2*G%jed) :: tmpV
-  real, dimension(2*G%isd-2:2*G%ied,2*G%jsd-2:2*G%jed) :: tmpZ
+  real, dimension(2*G%isd-2:2*G%ied+1,2*G%jsd-2:2*G%jed+1) :: tmpT
+  real, dimension(2*G%isd-3:2*G%ied+1,2*G%jsd-2:2*G%jed+1) :: tmpU
+  real, dimension(2*G%isd-2:2*G%ied+1,2*G%jsd-3:2*G%jed+1) :: tmpV
+  real, dimension(2*G%isd-3:2*G%ied+1,2*G%jsd-3:2*G%jed+1) :: tmpZ
   real, dimension(:,:), allocatable :: tmpGlbl
   character(len=200) :: filename, grid_file, inputdir
   character(len=64)  :: mod="MOM_grid_init set_grid_metrics_from_mosaic"
-  integer :: err=0, dv(2,5), ni, nj, global_indices(4)
+  integer :: err=0, ni, nj, global_indices(4)
   type(MOM_domain_type) :: SGdom ! Supergrid domain
-  integer :: i, j
+  integer :: i, j, i2, j2
   integer :: npei,npej
-  integer :: isc,jsc,iec,jec ! Computational domain extents on the supergrid.
-  integer :: isd,jsd,ied,jed ! Memory extents on the supergrid.
   integer, dimension(:), allocatable :: exni,exnj
   type(domain1D) :: domx, domy
   integer        :: start(4), nread(4)
  
-  call MOM_mesg("   MOM_grid_init.F90, set_grid_metrics_from_mosaic: reading grid", 5)
+  call callTree_enter("set_grid_metrics_from_mosaic(), MOM_grid_initialize.F90")
 
   call get_param(param_file, mod, "GRID_FILE", grid_file, &
                  "Name of the file from which to read horizontal grid data.", &
@@ -672,16 +665,6 @@ subroutine set_grid_metrics_from_mosaic(G,param_file)
 !<MISSING CODE TO READ REFINEMENT LEVEL>
   ni=2*(G%iec-G%isc+1) ! i size of supergrid
   nj=2*(G%jec-G%jsc+1) ! j size of supergrid
-  dv(1,1)=2*G%isd-1
-  dv(1,2)=2*G%ied
-  dv(1,3)=2*G%isc-1
-  dv(1,4)=2*G%iec
-  dv(1,5)=2*G%isd_global-1 ! location of tmpT(1,1) in data file
-  dv(2,1)=2*G%jsd-1
-  dv(2,2)=2*G%jed
-  dv(2,3)=2*G%jsc-1
-  dv(2,4)=2*G%jec
-  dv(2,5)=2*G%jsd_global-1 ! location of tmpT(1,1) in data file
 
 ! Define a domain for the supergrid (SGdom)
   npei=G%domain%layout(1)
@@ -692,8 +675,8 @@ subroutine set_grid_metrics_from_mosaic(G,param_file)
   call mpp_get_compute_domains(domx,size=exni)
   call mpp_get_compute_domains(domy,size=exnj)
   allocate(SGdom%mpp_domain)
-  SGdom%nihalo = 2*G%domain%nihalo
-  SGdom%njhalo = 2*G%domain%njhalo
+  SGdom%nihalo = 2*G%domain%nihalo+1
+  SGdom%njhalo = 2*G%domain%njhalo+1
   SGdom%niglobal = 2*G%domain%niglobal
   SGdom%njglobal = 2*G%domain%njglobal
   SGdom%layout(:) = G%domain%layout(:)
@@ -720,85 +703,91 @@ subroutine set_grid_metrics_from_mosaic(G,param_file)
 
   if (SGdom%use_io_layout) &
     call MOM_define_IO_domain(SGdom%mpp_domain, SGdom%io_layout)
-!  call mpp_get_compute_domain(G%domain%mpp_domain,isc,iec,jsc,jec)
-!  call mpp_get_data_domain(G%domain%mpp_domain,isd,ied,jsd,jed)
-!  call mpp_get_compute_domain(SGdom%mpp_domain,isc,iec,jsc,jec)
-!  call mpp_get_data_domain(SGdom%mpp_domain,isd,ied,jsd,jed)
   deallocate(exni)
   deallocate(exnj)
-
-  isc=2*G%isc-1 ; iec=2*G%iec ; jsc=2*G%jsc-1 ; jec=2*G%jec
-  isd=2*G%isd-1 ; ied=2*G%ied ; jsd=2*G%jsd-1 ; jed=2*G%jed
 
 ! Read X from the supergrid
   tmpZ(:,:)=999.
   call read_data(filename,'x',tmpZ,domain=SGdom%mpp_domain,position=CORNER)
- !call read_LRG_supergrid(filename,dv,x=tmpZ,err=err)
- !if (err.ne.0) &
- !  call MOM_error(FATAL," set_grid_metrics_from_mosaic: read_LRG(x) failed!")
 
   call pass_var(tmpZ, SGdom, position=CORNER)
-  call extrapolate_metric(tmpZ,jsc-jsd+1)
-  G%geoLonT(G%isd:G%ied,G%jsd:G%jed)=tmpZ(isd:ied:2,jsd:jed:2)
-  G%geoLonBu(G%isd:G%ied,G%jsd:G%jed)=tmpZ(isd+1:ied:2,jsd+1:jed:2)
-  G%geoLonCu(G%isd:G%ied,G%jsd:G%jed)=tmpZ(isd+1:ied:2,jsd:jed:2)
-  G%geoLonCv(G%isd:G%ied,G%jsd:G%jed)=tmpZ(isd:ied:2,jsd+1:jed:2)
+  call extrapolate_metric(tmpZ,2*(G%jsc-G%jsd)+2)
+  do j=G%jsd,G%jed ; do i=G%isd,G%ied ; i2 = 2*i ; j2 = 2*j
+    G%geoLonT(i,j) = tmpZ(i2-1,j2-1)
+  enddo ; enddo
+  do J=G%JsdB,G%JedB ; do I=G%IsdB,G%IedB ; i2 = 2*I ; j2 = 2*J
+    G%geoLonBu(I,J) = tmpZ(i2,j2)
+  enddo ; enddo
+  do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB ; i2 = 2*i ; j2 = 2*j
+    G%geoLonCu(I,j) = tmpZ(i2,j2-1)
+  enddo ; enddo
+  do J=G%JsdB,G%JedB ; do i=G%isd,G%ied ; i2 = 2*i ; j2 = 2*J
+    G%geoLonCv(i,J) = tmpZ(i2-1,j2)
+  enddo ; enddo
+ ! For some reason, this messes up the solution...
  ! call pass_var(G%geoLonBu, G%domain, position=CORNER)
 
 ! Read Y from the supergrid
   tmpZ(:,:)=999.
   call read_data(filename,'y',tmpZ,domain=SGdom%mpp_domain,position=CORNER)
- !call read_LRG_supergrid(filename,dv,y=tmpZ,err=err)
- !if (err.ne.0) &
- !  call MOM_error(FATAL," set_grid_metrics_from_mosaic: read_LRG(y) failed!")
 
   call pass_var(tmpZ, SGdom, position=CORNER)
-  call extrapolate_metric(tmpZ,jsc-jsd+1)
-  G%geoLatT(G%isd:G%ied,G%jsd:G%jed)=tmpZ(isd:ied:2,jsd:jed:2)
-  G%geoLatBu(G%isd:G%ied,G%jsd:G%jed)=tmpZ(isd+1:ied:2,jsd+1:jed:2)
-  G%geoLatCu(G%isd:G%ied,G%jsd:G%jed)=tmpZ(isd+1:ied:2,jsd:jed:2)
-  G%geoLatCv(G%isd:G%ied,G%jsd:G%jed)=tmpZ(isd:ied:2,jsd+1:jed:2)
+  call extrapolate_metric(tmpZ,2*(G%jsc-G%jsd)+2)
+  do j=G%jsd,G%jed ; do i=G%isd,G%ied ; i2 = 2*i ; j2 = 2*j
+    G%geoLatT(i,j) = tmpZ(i2-1,j2-1)
+  enddo ; enddo
+  do J=G%JsdB,G%JedB ; do I=G%IsdB,G%IedB ; i2 = 2*I ; j2 = 2*J
+    G%geoLatBu(I,J) = tmpZ(i2,j2)
+  enddo ; enddo
+  do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB ; i2 = 2*i ; j2 = 2*j
+    G%geoLatCu(I,j) = tmpZ(i2,j2-1)
+  enddo ; enddo
+  do J=G%JsdB,G%JedB ; do i=G%isd,G%ied ; i2 = 2*i ; j2 = 2*J
+    G%geoLatCv(i,J) = tmpZ(i2-1,j2)
+  enddo ; enddo
 
 ! Read DX,DY from the supergrid
   tmpU(:,:)=0.; tmpV(:,:)=0.
   call read_data(filename,'dx',tmpV,domain=SGdom%mpp_domain,position=NORTH_FACE)
   call read_data(filename,'dy',tmpU,domain=SGdom%mpp_domain,position=EAST_FACE)
- !call read_LRG_supergrid(filename,dv,dx=tmpV,err=err)
- !if (err.ne.0) &
- !  call MOM_error(FATAL," set_grid_metrics_from_mosaic: read_LRG(dx) failed!")
- !call read_LRG_supergrid(filename,dv,dy=tmpU,err=err)
- !if (err.ne.0) &
- !  call MOM_error(FATAL," set_grid_metrics_from_mosaic: read_LRG(dy) failed!")
   call pass_vector(tmpU,tmpV,SGdom,To_All+Scalar_Pair,CGRID_NE)
-  call extrapolate_metric(tmpV,jsc-jsd+1)
-  call extrapolate_metric(tmpU,jsc-jsd+1)
-  dxT(G%isd:G%ied,G%jsd:G%jed)=tmpV(isd:ied:2,jsd:jed:2)+tmpV(isd+1:ied:2,jsd:jed:2)
-  dyT(G%isd:G%ied,G%jsd:G%jed)=tmpU(isd:ied:2,jsd:jed:2)+tmpU(isd:ied:2,jsd+1:jed:2)
+  call extrapolate_metric(tmpV,2*(G%jsc-G%jsd)+2)
+  call extrapolate_metric(tmpU,2*(G%jsc-G%jsd)+2)
 
-  dxCv(G%isd:G%ied,G%jsd:G%jed)=tmpV(isd:ied:2,jsd+1:jed:2)+tmpV(isd+1:ied:2,jsd+1:jed:2)
-  dyCu(G%isd:G%ied,G%jsd:G%jed)=tmpU(isd+1:ied:2,jsd:jed:2)+tmpU(isd+1:ied:2,jsd+1:jed:2)
+  do j=G%jsd,G%jed ; do i=G%isd,G%ied ; i2 = 2*i ; j2 = 2*j
+    dxT(i,j) = tmpV(i2-1,j2-1) + tmpV(i2,j2-1)
+    dyT(i,j) = tmpU(i2-1,j2-1) + tmpU(i2-1,j2)
+  enddo ; enddo
 
-  dxCu(G%isd:G%ied-1,G%jsd:G%jed)=tmpV(isd+1:ied-2:2,jsd:jed:2)+tmpV(isd+2:ied-1:2,jsd:jed:2)
-  dyCv(G%isd:G%ied,G%jsd:G%jed-1)=tmpU(isd:ied:2,jsd+1:jed-2:2)+tmpU(isd:ied:2,jsd+2:jed-1:2)
+  do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB ; i2 = 2*i ; j2 = 2*j
+    dxCu(I,j) = tmpV(i2,j2-1) + tmpV(i2+1,j2-1)
+    dyCu(I,j) = tmpU(i2,j2-1) + tmpU(i2,j2)
+  enddo ; enddo
 
-  dxBu(G%isd:G%ied-1,G%jsd:G%jed-1)=tmpV(isd+1:ied-2:2,jsd+1:jed-2:2)+tmpV(isd+2:ied-1:2,jsd+1:jed-2:2)
-  dyBu(G%isd:G%ied-1,G%jsd:G%jed-1)=tmpU(isd+1:ied-2:2,jsd+1:jed-2:2)+tmpU(isd+1:ied-2:2,jsd+2:jed-1:2)
+  do J=G%JsdB,G%JedB ; do i=G%isd,G%ied ; i2 = 2*i ; j2 = 2*j
+    dxCv(i,J) = tmpV(i2-1,j2) + tmpV(i2,j2)
+    dyCv(i,J) = tmpU(i2-1,j2) + tmpU(i2-1,j2+1)
+  enddo ; enddo
+
+  do J=G%JsdB,G%JedB ; do I=G%IsdB,G%IedB ; i2 = 2*i ; j2 = 2*j
+    dxBu(I,J) = tmpV(i2,j2) + tmpV(i2+1,j2)
+    dyBu(I,J) = tmpU(i2,j2) + tmpU(i2,j2+1)
+  enddo ; enddo
 
 ! Read AREA from the supergrid
   tmpT(:,:)=0.
   call read_data(filename,'area',tmpT,domain=SGdom%mpp_domain)
- !call read_LRG_supergrid(filename,dv,area=tmpT,err=err)
- !if (err.ne.0) &
- !  call MOM_error(FATAL," set_grid_metrics_from_mosaic: read_LRG(A) failed!")
   call pass_var(tmpT, SGdom)
-  call extrapolate_metric(tmpT,jsc-jsd+1)
+  call extrapolate_metric(tmpT,2*(G%jsc-G%jsd)+2)
 
-  areaT(G%isd:G%ied,G%jsd:G%jed)=( &
-        (tmpT(isd:ied-1:2,jsd:jed-1:2)+tmpT(isd+1:ied:2,jsd+1:jed:2)) &
-       +(tmpT(isd+1:ied:2,jsd:jed-1:2)+tmpT(isd:ied-1:2,jsd+1:jed:2)) )
-  areaBu(G%isd:G%ied-1,G%jsd:G%jed-1)=0.*( &
-        (tmpT(isd+1:ied-2:2,jsd+1:jed-2:2)+tmpT(isd+2:ied-1:2,jsd+2:jed-1:2)) &
-       +(tmpT(isd+1:ied-2:2,jsd+2:jed-1:2)+tmpT(isd+2:ied-1:2,jsd+1:jed-2:2)) )
+  do j=G%jsd,G%jed ; do i=G%isd,G%ied ; i2 = 2*i ; j2 = 2*j
+    areaT(i,j) = (tmpT(i2-1,j2-1) + tmpT(i2,j2)) + &
+                 (tmpT(i2-1,j2) + tmpT(i2,j2-1))
+  enddo ; enddo
+  do J=G%JsdB,G%JedB ; do I=G%IsdB,G%IedB ; i2 = 2*i ; j2 = 2*j
+    areaBu(i,j) = (tmpT(i2,j2) + tmpT(i2+1,j2+1)) + &
+                  (tmpT(i2,j2+1) + tmpT(i2+1,j2))
+  enddo ; enddo
 
   ni=SGdom%niglobal
   nj=SGdom%njglobal
@@ -832,10 +821,13 @@ subroutine set_grid_metrics_from_mosaic(G,param_file)
     call read_data(filename, "x", tmpGlbl, start, nread, no_domain=.TRUE.)
   call broadcast(tmpGlbl, 2*(ni+1), root_PE())
   
-  G%gridLonT(G%domain%nihalo+1:G%domain%nihalo+G%domain%niglobal) = &
-    tmpGlbl(2:ni:2,2)
-  G%gridLonB(G%domain%nihalo+0:G%domain%nihalo+G%domain%niglobal) = &
-    tmpGlbl(1:ni+1:2,1)
+  ! I don't know why the second axis is 1 or 2 here.
+  do i=G%isg,G%ieg
+    G%gridLonT(i) = tmpGlbl(2*(i-G%isg)+2,2)
+  enddo
+  do I=G%IsgB,G%IegB
+    G%gridLonB(I) = tmpGlbl(2*(I-G%isg)+3,1)
+  enddo
   deallocate( tmpGlbl )
 
   allocate  ( tmpGlbl(1, nj+1) )  
@@ -845,13 +837,15 @@ subroutine set_grid_metrics_from_mosaic(G,param_file)
     call read_data(filename, "y", tmpGlbl, start, nread, no_domain=.TRUE.)
   call broadcast(tmpGlbl, nj+1, root_PE())
 
-  G%gridLatT(G%domain%njhalo+1:G%domain%njhalo+G%domain%njglobal) = &
-    tmpGlbl(1,2:nj:2)
-  G%gridLatB(G%domain%njhalo+0:G%domain%njhalo+G%domain%njglobal) = &
-    tmpGlbl(1,1:nj+1:2)
+  do j=G%jsg,G%jeg
+    G%gridLatT(j) = tmpGlbl(1,2*(j-G%jsg)+2)
+  enddo
+  do J=G%JsgB,G%JegB
+    G%gridLatB(J) = tmpGlbl(1,2*(j-G%jsg)+3)
+  enddo
   deallocate( tmpGlbl )
 
-
+  call callTree_leave("set_grid_metrics_from_mosaic()")
 end subroutine set_grid_metrics_from_mosaic
 
 
@@ -871,20 +865,19 @@ subroutine set_grid_metrics_cartesian(G, param_file)
 !  inverses and the cell areas centered on h, q, u, and v points are
 !  calculated, as are the geographic locations of each of these 4
 !  sets of points.
-  integer :: i, j, isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, X1off, Y1off
-  integer :: niglobal, njglobal, nihalo, njhalo
-  real :: grid_latq(0:G%Domain%njglobal+2*G%Domain%njhalo)
-  real :: grid_lonq(0:G%Domain%niglobal+2*G%Domain%nihalo)
+  integer :: i, j, isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, I1off, J1off
+  integer :: niglobal, njglobal
+  real :: grid_latT(G%jsd:G%jed), grid_latB(G%JsdB:G%JedB)
+  real :: grid_lonT(G%isd:G%ied), grid_lonB(G%IsdB:G%IedB)
   real :: PI
   character(len=48)  :: mod  = "MOM_grid_init set_grid_metrics_cartesian"
 
   niglobal = G%Domain%niglobal ; njglobal = G%Domain%njglobal
-  nihalo = G%Domain%nihalo ; njhalo = G%Domain%njhalo
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
-  X1off = G%isd_global - isd ; Y1off = G%jsd_global - jsd;
+  I1off = G%isd_global - isd ; J1off = G%jsd_global - jsd;
 
-  call MOM_mesg("  MOM_grid_init.F90, set_grid_metrics_cartesian: setting metrics", 5)
+  call callTree_enter("set_grid_metrics_cartesian(), MOM_grid_initialize.F90")
  
   PI = 4.0*atan(1.0) ;
 
@@ -910,23 +903,34 @@ subroutine set_grid_metrics_cartesian(G, param_file)
                  "The radius of the Earth.", units="m", default=6.378e6)
 
   ! These are larger in case symmetric memory is being used.
-  do J=0,njglobal+2*njhalo
-    grid_latq(J) = G%south_lat + G%len_lat* REAL(J-njhalo)/REAL(njglobal)
-  enddo 
-  do I=0,niglobal+2*nihalo
-    grid_lonq(I) = G%west_lon + G%len_lon*REAL(I-nihalo)/REAL(niglobal)
+  do J=G%JsgB,G%JegB
+    G%gridLatB(j) = G%south_lat + G%len_lat*REAL(J-(G%jsg-1))/REAL(njglobal)
   enddo
-  do j=1,njglobal+2*njhalo
-    G%gridLatB(j) = G%south_lat + G%len_lat* REAL(j-njhalo)/REAL(njglobal)
-    G%gridLatT(j) = G%south_lat + G%len_lat*(REAL(j-njhalo)-0.5)/REAL(njglobal)
+  do j=G%jsg,G%jeg
+    G%gridLatT(j) = G%south_lat + G%len_lat*(REAL(j-G%jsg)+0.5)/REAL(njglobal)
   enddo
-  do i=1,niglobal+2*nihalo
-    G%gridLonB(i) = G%west_lon + G%len_lon*REAL(i-nihalo)/REAL(niglobal)
-    G%gridLonT(i) = G%west_lon + G%len_lon*(REAL(i-nihalo)-0.5)/REAL(niglobal)
+  do I=G%IsgB,G%IegB
+    G%gridLonB(i) = G%west_lon + G%len_lon*REAL(I-(G%isg-1))/REAL(niglobal)
+  enddo
+  do i=G%isg,G%ieg
+    G%gridLonT(i) = G%west_lon + G%len_lon*(REAL(i-G%isg)+0.5)/REAL(niglobal)
+  enddo
+
+  do J=JsdB,JedB
+    grid_latB(J) = G%south_lat + G%len_lat*REAL(J+J1off-(G%jsg-1))/REAL(njglobal)
+  enddo
+  do j=jsd,jed
+    grid_latT(J) = G%south_lat + G%len_lat*(REAL(j+J1off-G%jsg)+0.5)/REAL(njglobal)
+  enddo
+  do I=IsdB,IedB
+    grid_lonB(I) = G%west_lon + G%len_lon*REAL(i+I1off-(G%isg-1))/REAL(niglobal)
+  enddo
+  do i=isd,ied
+    grid_lonT(i) = G%west_lon + G%len_lon*(REAL(i+I1off-G%isg)+0.5)/REAL(niglobal)
   enddo
 
   do J=JsdB,JedB ; do I=IsdB,IedB
-    G%geoLonBu(i,j) = grid_lonq(i+X1off) ; G%geoLatBu(i,j) = grid_latq(j+Y1off)
+    G%geoLonBu(I,J) = grid_lonB(I) ; G%geoLatBu(I,J) = grid_latB(J)
 
     G%dxBu(I,J) = G%Rad_Earth * G%len_lon * PI / (180.0 * niglobal)
     G%dyBu(I,J) = G%Rad_Earth * G%len_lat * PI / (180.0 * njglobal)
@@ -949,26 +953,27 @@ subroutine set_grid_metrics_cartesian(G, param_file)
   enddo ; enddo
 
   do j=jsd,jed ; do i=isd,ied
-    G%geoLonT(i,j) = G%gridLonT(i+X1off) ; G%geoLatT(i,j) = G%gridLatT(j+Y1off)
+    G%geoLonT(i,j) = grid_lonT(i) ; G%geoLatT(i,j) = grid_LatT(j)
     G%dxT(i,j) = G%dxBu(I,J) ; G%IdxT(i,j) = G%IdxBu(I,J)
     G%dyT(i,j) = G%dyBu(I,J) ; G%IdyT(i,j) = G%IdyBu(I,J)
     G%areaT(i,j) = G%areaBu(I,J) ; G%IareaT(i,j) = G%IareaBu(I,J)
   enddo ; enddo
 
   do j=jsd,jed ; do I=IsdB,IedB
-    G%geoLonCu(i,j) = grid_lonq(i+X1off) ; G%geoLatCu(i,j) = G%gridLatT(j+Y1off)
+    G%geoLonCu(I,j) = grid_lonB(I) ; G%geoLatCu(I,j) = grid_LatT(j)
 
     G%dxCu(I,j) = G%dxBu(I,J) ; G%IdxCu(I,j) = G%IdxBu(I,J)
     G%dyCu(I,j) = G%dyBu(I,J) ; G%IdyCu(I,j) = G%IdyBu(I,J)
   enddo ; enddo
 
   do J=JsdB,JedB ; do i=isd,ied
-    G%geoLonCv(i,j) = G%gridLonT(i+X1off) ; G%geoLatCv(i,j) = grid_latq(j+Y1off)
+    G%geoLonCv(i,J) = grid_lonT(i) ; G%geoLatCv(i,J) = grid_latB(J)
 
     G%dxCv(i,J) = G%dxBu(I,J) ; G%IdxCv(i,J) = G%IdxBu(I,J)
     G%dyCv(i,J) = G%dyBu(I,J) ; G%IdyCv(i,J) = G%IdyBu(I,J)
   enddo ; enddo
 
+  call callTree_leave("set_grid_metrics_cartesian()")
 end subroutine set_grid_metrics_cartesian
 
 ! ------------------------------------------------------------------------------
@@ -988,11 +993,11 @@ subroutine set_grid_metrics_spherical(G, param_file)
 !  calculated, as are the geographic locations of each of these 4
 !  sets of points.
   real :: PI, PI_180! PI = 3.1415926... as 4*atan(1)
-  integer :: i,j, isd, ied, jsd, jed
+  integer :: i, j, isd, ied, jsd, jed
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, IsdB, IedB, JsdB, JedB
   integer :: i_offset, j_offset
-  real :: grid_latq(0:G%Domain%njglobal+2*G%Domain%njhalo)
-  real :: grid_lonq(0:G%Domain%niglobal+2*G%Domain%nihalo)
+  real :: grid_latT(G%jsd:G%jed), grid_latB(G%JsdB:G%JedB)
+  real :: grid_lonT(G%isd:G%ied), grid_lonB(G%IsdB:G%IedB)
   real :: dLon,dLat,latitude,longitude,dL_di
   character(len=48)  :: mod  = "MOM_grid_init set_grid_metrics_spherical"
 
@@ -1002,8 +1007,7 @@ subroutine set_grid_metrics_spherical(G, param_file)
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
   i_offset = G%isd_global - isd; j_offset = G%jsd_global - jsd
 
-  call MOM_mesg("  MOM_grid_init.F90, set_grid_metrics_simple_spherical: "// &
-                 "Setting metrics.", 5)
+  call callTree_enter("set_grid_metrics_spherical(), MOM_grid_initialize.F90")
  
 !    Calculate the values of the metric terms that might be used
 !  and save them in arrays.
@@ -1033,28 +1037,40 @@ subroutine set_grid_metrics_spherical(G, param_file)
   dLon = G%len_lon/G%Domain%niglobal
   dLat = G%len_lat/G%Domain%njglobal
 
-  do J=0,G%Domain%njglobal+2*G%Domain%njhalo
-    latitude = G%south_lat + dLat* REAL(J-G%Domain%njhalo)
-    grid_latq(J) = MIN(MAX(latitude,-90.),90.)
+  do j=G%JsgB,G%JegB
+    latitude = G%south_lat + dLat*(REAL(J-(G%jsg-1)))
+    G%gridLatB(J) = MIN(MAX(latitude,-90.),90.)
   enddo
-  do I=1,G%Domain%niglobal+2*G%Domain%nihalo
-    grid_lonq(I) = G%west_lon + dLon*REAL(I-G%Domain%nihalo)
-  enddo
-
-  do j=1,G%Domain%njglobal+2*G%Domain%njhalo
-    G%gridLatB(J) = grid_latq(J)
-    latitude = G%south_lat + dLat*(REAL(j-G%Domain%njhalo)-0.5)
+  do j=G%jsg,G%jeg
+    latitude = G%south_lat + dLat*(REAL(j-G%jsg)+0.5)
     G%gridLatT(j) = MIN(MAX(latitude,-90.),90.)
   enddo
-  do i=1,G%Domain%niglobal+2*G%Domain%nihalo
-    G%gridLonB(I) = grid_lonq(I)
-    G%gridLonT(i) = G%west_lon + dLon*(REAL(i-G%Domain%nihalo)-0.5)
+  do i=G%IegB,G%IegB
+    G%gridLonB(I) = G%west_lon + dLon*(REAL(I-(G%isg-1)))
+  enddo
+  do i=G%ieg,G%ieg
+    G%gridLonT(i) = G%west_lon + dLon*(REAL(i-G%isg)+0.5)
+  enddo
+
+  do J=JsdB,JedB
+    latitude = G%south_lat + dLat* REAL(J+J_offset-(G%jsg-1))
+    grid_LatB(J) = MIN(MAX(latitude,-90.),90.)
+  enddo
+  do j=jsd,jed
+    latitude = G%south_lat + dLat*(REAL(j+J_offset-G%jsg)+0.5)
+    grid_LatT(j) = MIN(MAX(latitude,-90.),90.)
+  enddo
+  do I=IsdB,IedB
+    grid_LonB(I) = G%west_lon + dLon*REAL(I+I_offset-(G%isg-1))
+  enddo
+  do i=isd,ied
+    grid_LonT(i) = G%west_lon + dLon*(REAL(i+I_offset-G%isg)+0.5)
   enddo
 
   dL_di = (G%len_lon * 4.0*atan(1.0)) / (180.0 * G%Domain%niglobal)
   do J=JsdB,JedB ; do I=IsdB,IedB
-    G%geoLonBu(I,J) = grid_lonq(I+I_offset)
-    G%geoLatBu(I,J) = grid_latq(J+J_offset)
+    G%geoLonBu(I,J) = grid_lonB(I)
+    G%geoLatBu(I,J) = grid_latB(J)
 
 ! The following line is needed to reproduce the solution from
 ! set_grid_metrics_mercator when used to generate a simple spherical grid.
@@ -1065,8 +1081,8 @@ subroutine set_grid_metrics_spherical(G, param_file)
   enddo; enddo
 
   do J=JsdB,JedB ; do i=isd,ied
-    G%geoLonCv(i,J) = G%gridLonT(i+i_offset)
-    G%geoLatCv(i,J) = grid_latq(j+j_offset)
+    G%geoLonCv(i,J) = grid_LonT(i)
+    G%geoLatCv(i,J) = grid_latB(J)
 
 ! The following line is needed to reproduce the solution from
 ! set_grid_metrics_mercator when used to generate a simple spherical grid.
@@ -1076,8 +1092,8 @@ subroutine set_grid_metrics_spherical(G, param_file)
   enddo; enddo
 
   do j=jsd,jed ; do I=IsdB,IedB
-    G%geoLonCu(I,j) = grid_lonq(i+i_offset)
-    G%geoLatCu(I,j) = G%gridLatT(j+j_offset)
+    G%geoLonCu(I,j) = grid_lonB(I)
+    G%geoLatCu(I,j) = grid_LatT(j)
 
 ! The following line is needed to reproduce the solution from
 ! set_grid_metrics_mercator when used to generate a simple spherical grid.
@@ -1087,8 +1103,8 @@ subroutine set_grid_metrics_spherical(G, param_file)
   enddo; enddo
 
   do j=jsd,jed ; do i=isd,ied
-    G%geoLonT(i,j) = G%gridLonT(i+i_offset)
-    G%geoLatT(i,j) = G%gridLatT(j+j_offset)
+    G%geoLonT(i,j) = grid_LonT(i)
+    G%geoLatT(i,j) = grid_LatT(j)
 
 ! The following line is needed to reproduce the solution from
 ! set_grid_metrics_mercator when used to generate a simple spherical grid.
@@ -1102,6 +1118,7 @@ subroutine set_grid_metrics_spherical(G, param_file)
     G%areaT(i,j) = G%dxT(i,j) * G%dyT(i,j)
   enddo; enddo
 
+  call callTree_leave("set_grid_metrics_spherical()")
 end subroutine set_grid_metrics_spherical
 
 ! ------------------------------------------------------------------------------
@@ -1120,9 +1137,7 @@ subroutine set_grid_metrics_mercator(G, param_file)
 !  inverses and the cell areas centered on h, q, u, and v points are
 !  calculated, as are the geographic locations of each of these 4
 !  sets of points.
-  real :: grid_latq(0:G%Domain%njglobal+2*G%Domain%njhalo)
-  real :: grid_lonq(0:G%Domain%niglobal+2*G%Domain%nihalo)
-  integer :: i,j, isd, ied, jsd, jed
+  integer :: i, j, isd, ied, jsd, jed
   integer :: X1off, Y1off
   type(GPS) :: GP
   character(len=128) :: warnmesg
@@ -1163,7 +1178,7 @@ subroutine set_grid_metrics_mercator(G, param_file)
   GP%niglobal = G%Domain%niglobal
   GP%njglobal = G%Domain%njglobal
 
-  call MOM_mesg("  MOM_grid_init.F90, set_grid_metrics_mercator: setting metrics", 5)
+  call callTree_enter("set_grid_metrics_mercator(), MOM_grid_initialize.F90")
  
 !    Calculate the values of the metric terms that might be used
 !  and save them in arrays.
@@ -1217,11 +1232,11 @@ subroutine set_grid_metrics_mercator(G, param_file)
 ! With the following expression, the equator will always be placed
 ! on either h or q points, in a position consistent with the ratio
 ! GP%south_lat to GP%len_lat.
-    jRef =  G%Domain%njhalo-1 + 0.5*FLOOR(GP%njglobal*((-1.0*GP%south_lat*2.0)/GP%len_lat)+0.5)
+    jRef =  (G%jsg-1) + 0.5*FLOOR(GP%njglobal*((-1.0*GP%south_lat*2.0)/GP%len_lat)+0.5)
     fnRef = Int_dj_dy(0.0,GP)
   else
-!  The following line sets the refererence latitude GP%south_lat at j=js-1.
-    jRef = G%Domain%njhalo-1
+!  The following line sets the reference latitude GP%south_lat at j=js-1 (or -2?)
+    jRef = (G%jsg-1)
     fnRef = Int_dj_dy((GP%south_lat*PI/180.0),GP)
   endif
 
@@ -1230,15 +1245,15 @@ subroutine set_grid_metrics_mercator(G, param_file)
     do I=IsdB,IedB ; yq(I, -Y1off) = y_q ; enddo
     do i=isd,ied ; yv(i, -Y1off) = y_q ; enddo
   endif
-  do j=1,GP%njglobal+2*G%Domain%njhalo
-    jd = fnRef + (j -1 - jRef) - 0.5
+  do j=G%jsg-G%Domain%njhalo,G%jeg+G%Domain%njhalo
+    jd = fnRef + (j - jRef) - 0.5
     y_h = find_root(Int_dj_dy,dy_dj,GP,jd,y_q,-1.0*PI_2,PI_2,itt1)
 
-    jd = fnRef + (j -1 - jRef)
+    jd = fnRef + (j - jRef)
     y_q = find_root(Int_dj_dy,dy_dj,GP,jd,y_h,-1.0*PI_2,PI_2,itt2)
 
-    G%gridLatB(j) = y_q*180.0/PI
-    G%gridLatT(j) = y_h*180.0/PI
+    if (j>=G%JsgB .and. j<=G%JegB) G%gridLatB(j) = y_q*180.0/PI
+    if (j>=G%jsg .and. j<=G%jeg)   G%gridLatT(j) = y_h*180.0/PI
 
     if ((j >= jsd+Y1off) .and. (j <= jed+Y1off)) then
       do i=isd,ied ; yh(i,j-Y1off) = y_h ; enddo
@@ -1253,7 +1268,7 @@ subroutine set_grid_metrics_mercator(G, param_file)
 ! Determine the longitudes of the various points.
 
 ! These two lines place the western edge of the domain at GP%west_lon.
-  iRef = G%Domain%nihalo -1 + GP%niglobal
+  iRef = (G%isg-1) + GP%niglobal
   fnRef = Int_di_dx(((GP%west_lon+GP%len_lon)*PI/180.0),GP)
 
   x_q = GP%west_lon*PI/180.0
@@ -1264,16 +1279,16 @@ subroutine set_grid_metrics_mercator(G, param_file)
     do J=JsdB,JedB ; xq(-X1off,j) = x_q ; enddo
     do j=jsd,jed ; xu(-X1off,j) = x_q ; enddo
   endif
-  do i=1,GP%niglobal+2*G%Domain%nihalo
-    id = fnRef + (i - 1 - iRef) - 0.5
+  do i=G%isg-G%Domain%nihalo,G%ieg+G%Domain%nihalo
+    id = fnRef + (i - iRef) - 0.5
     x_h = find_root(Int_di_dx,dx_di,GP,id,x_q,-4.0*PI,4.0*PI,itt1)
 
-    id = fnRef + (i - 1 -iRef)
+    id = fnRef + (i - iRef)
     x_q = find_root(Int_di_dx,dx_di,GP,id,x_h,-4.0*PI,4.0*PI,itt2)
     if(i == G%isc) dx_q = x_q - x_q_west
 
-    G%gridLonB(i) = x_q*180.0/PI
-    G%gridLonT(i) = x_h*180.0/PI
+    if (i>=G%IsgB .and. i<=G%IegB) G%gridLonB(i) = x_q*180.0/PI
+    if (i>=G%isg .and. i<=G%ieg)   G%gridLonT(i) = x_h*180.0/PI
 
     if ((i >= isd+X1off) .and. (i <= ied+X1off)) then
       do j=jsd,jed ; xh(i-X1off,j) = x_h ; enddo
@@ -1348,6 +1363,7 @@ subroutine set_grid_metrics_mercator(G, param_file)
     enddo ; enddo
   endif
 
+  call callTree_leave("set_grid_metrics_mercator()")
 end subroutine set_grid_metrics_mercator
 
 ! ------------------------------------------------------------------------------
@@ -1380,60 +1396,6 @@ subroutine extrapolate_metric(var, jh)
 end subroutine extrapolate_metric
 
 
-subroutine allocate_metrics(G)
-  type(ocean_grid_type), intent(inout) :: G
-  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
-
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
-
-  ALLOC_(G%dxT(isd:ied,jsd:jed)) ; G%dxT(:,:) = 0.0
-  ALLOC_(G%dxCu(IsdB:IedB,jsd:jed)) ; G%dxCu(:,:) = 0.0
-  ALLOC_(G%dxCv(isd:ied,JsdB:JedB)) ; G%dxCv(:,:) = 0.0
-  ALLOC_(G%dxBu(IsdB:IedB,JsdB:JedB)) ; G%dxBu(:,:) = 0.0
-  ALLOC_(G%IdxT(isd:ied,jsd:jed)) ; G%IdxT(:,:) = 0.0
-  ALLOC_(G%IdxCu(IsdB:IedB,jsd:jed)) ; G%IdxCu(:,:) = 0.0
-  ALLOC_(G%IdxCv(isd:ied,JsdB:JedB)) ; G%IdxCv(:,:) = 0.0
-  ALLOC_(G%IdxBu(IsdB:IedB,JsdB:JedB)) ; G%IdxBu(:,:) = 0.0
-
-  ALLOC_(G%dyT(isd:ied,jsd:jed)) ; G%dyT(:,:) = 0.0
-  ALLOC_(G%dyCu(IsdB:IedB,jsd:jed)) ; G%dyCu(:,:) = 0.0
-  ALLOC_(G%dyCv(isd:ied,JsdB:JedB)) ; G%dyCv(:,:) = 0.0
-  ALLOC_(G%dyBu(IsdB:IedB,JsdB:JedB)) ; G%dyBu(:,:) = 0.0
-  ALLOC_(G%IdyT(isd:ied,jsd:jed)) ; G%IdyT(:,:) = 0.0
-  ALLOC_(G%IdyCu(IsdB:IedB,jsd:jed)) ; G%IdyCu(:,:) = 0.0
-  ALLOC_(G%IdyCv(isd:ied,JsdB:JedB)) ; G%IdyCv(:,:) = 0.0
-  ALLOC_(G%IdyBu(IsdB:IedB,JsdB:JedB)) ; G%IdyBu(:,:) = 0.0
-
-  ALLOC_(G%areaT(isd:ied,jsd:jed)) ; G%areaT(:,:) = 0.0
-  ALLOC_(G%IareaT(isd:ied,jsd:jed)) ; G%IareaT(:,:) = 0.0
-  ALLOC_(G%areaBu(IsdB:IedB,JsdB:JedB)) ; G%areaBu(:,:) = 0.0
-  ALLOC_(G%IareaBu(IsdB:IedB,JsdB:JedB)) ; G%IareaBu(:,:) = 0.0
-
-  ALLOC_(G%mask2dT(isd:ied,jsd:jed)) ; G%mask2dT(:,:) = 0.0
-  ALLOC_(G%mask2dCu(IsdB:IedB,jsd:jed)) ; G%mask2dCu(:,:) = 0.0
-  ALLOC_(G%mask2dCv(isd:ied,JsdB:JedB)) ; G%mask2dCv(:,:) = 0.0
-  ALLOC_(G%mask2dBu(IsdB:IedB,JsdB:JedB)) ; G%mask2dBu(:,:) = 0.0
-  ALLOC_(G%geoLatT(isd:ied,jsd:jed)) ; G%geoLatT(:,:) = 0.0
-  ALLOC_(G%geoLatCu(IsdB:IedB,jsd:jed)) ; G%geoLatCu(:,:) = 0.0
-  ALLOC_(G%geoLatCv(isd:ied,JsdB:JedB)) ; G%geoLatCv(:,:) = 0.0
-  ALLOC_(G%geoLatBu(IsdB:IedB,JsdB:JedB)) ; G%geoLatBu(:,:) = 0.0
-  ALLOC_(G%geoLonT(isd:ied,jsd:jed)) ; G%geoLonT(:,:) = 0.0
-  ALLOC_(G%geoLonCu(IsdB:IedB,jsd:jed)) ; G%geoLonCu(:,:) = 0.0
-  ALLOC_(G%geoLonCv(isd:ied,JsdB:JedB)) ; G%geoLonCv(:,:) = 0.0
-  ALLOC_(G%geoLonBu(IsdB:IedB,JsdB:JedB)) ; G%geoLonBu(:,:) = 0.0
-
-  ALLOC_(G%dx_Cv(isd:ied,JsdB:JedB)) ; G%dx_Cv(:,:) = 0.0
-  ALLOC_(G%dy_Cu(IsdB:IedB,jsd:jed)) ; G%dy_Cu(:,:) = 0.0
-  ALLOC_(G%dx_Cv_obc(isd:ied,JsdB:JedB)) ; G%dx_Cv_obc(:,:) = 0.0
-  ALLOC_(G%dy_Cu_obc(IsdB:IedB,jsd:jed)) ; G%dy_Cu_obc(:,:) = 0.0  
-  ALLOC_(G%areaCu(IsdB:IedB,jsd:jed)) ; G%areaCu(:,:) = 0.0
-  ALLOC_(G%areaCv(isd:ied,JsdB:JedB)) ; G%areaCv(:,:) = 0.0
-  ALLOC_(G%IareaCu(IsdB:IedB,jsd:jed)) ; G%IareaCu(:,:) = 0.0
-  ALLOC_(G%IareaCv(isd:ied,JsdB:JedB)) ; G%IareaCv(:,:) = 0.0
-
-end subroutine allocate_metrics
-
 
 subroutine initialize_masks(G, PF)
   type(ocean_grid_type), intent(inout) :: G
@@ -1450,18 +1412,24 @@ subroutine initialize_masks(G, PF)
 ! any land or boundary point.  For points in the interior, mask2dCu,
 ! mask2dCv, and mask2dBu are all 1.0.
 
-  real :: Dmin, min_depth
+  real :: Dmin, min_depth, mask_depth
   integer :: i, j
   integer :: isd, isd_global, jsd, jsd_global 
   logical :: apply_OBC_u_flather_east, apply_OBC_u_flather_west
   logical :: apply_OBC_v_flather_north, apply_OBC_v_flather_south
   character(len=40)  :: mod = "MOM_grid_init initialize_masks"
 
-  call get_param(PF, "MOM_grid_init initialize_masks", &
-                 "MINIMUM_DEPTH", min_depth, &
-                 "The minimum ocean depth, anything shallower than which \n"//&
-                 "is assumed to be land and all fluxes are masked out.", &
+  call callTree_enter("initialize_masks(), MOM_grid_initialize.F90")
+  call get_param(PF, "MOM_grid_init initialize_masks", "MINIMUM_DEPTH", min_depth, &
+                 "If MASKING_DEPTH is unspecified, then anything shallower than\n"//&
+                 "MINIMUM_DEPTH is assumed to be land and all fluxes are masked out.\n"//&
+                 "If MASKING_DEPTH is specified, then all depths shallower than\n"//&
+                 "MINIMUM_DEPTH but depper than MASKING_DEPTH are rounded to MINIMUM_DEPTH.", &
                  units="m", default=0.0)
+  call get_param(PF, "MOM_grid_init initialize_masks", "MASKING_DEPTH", mask_depth, &
+                 "The depth below which to mask points as land points, for which all\n"//&
+                 "fluxes are zeroed out. MASKING_DEPTH is ignored if negative.", &
+                 units="m", default=-9999.0)
   call get_param(PF, mod, "APPLY_OBC_U_FLATHER_EAST", apply_OBC_u_flather_east,&
                  "Apply a Flather open boundary condition on the eastern \n"//&
                  "side of the global domain", default=.false.)
@@ -1481,6 +1449,7 @@ subroutine initialize_masks(G, PF)
       "APPLY_OBC_U_FLATHER_WEST or APPLY_OBC_V_FLATHER_SOUTH is true.")
 
   Dmin = MAX(min_depth,2.0*G%Angstrom_z)
+  if (mask_depth>=0.) Dmin = mask_depth
 
   call pass_var(G%bathyT, G%Domain)
   G%mask2dCu(:,:) = 0.0 ; G%mask2dCv(:,:) = 0.0 ; G%mask2dBu(:,:) = 0.0
@@ -1490,7 +1459,7 @@ subroutine initialize_masks(G, PF)
   ! that are not necessarily at the edges of the domain.
   if (apply_OBC_u_flather_west) then
     do j=G%jsd,G%jed ; do I=G%isd+1,G%ied
-      if ((I+G%isd_global-G%isd) == G%domain%nihalo+1) then
+      if ((I+G%isd_global-G%isd) == G%isg) then
         G%bathyT(i-1,j) = G%bathyT(i,j)
       endif
     enddo; enddo       
@@ -1498,7 +1467,7 @@ subroutine initialize_masks(G, PF)
 
   if (apply_OBC_u_flather_east) then
     do j=G%jsd,G%jed ; do I=G%isd,G%ied-1
-      if ((i+G%isd_global-G%isd) == G%domain%niglobal+G%domain%nihalo) then
+      if ((i+G%isd_global-G%isd) == G%ieg) then
         G%bathyT(i+1,j) = G%bathyT(i,j)
       endif
     enddo; enddo    
@@ -1506,7 +1475,7 @@ subroutine initialize_masks(G, PF)
 
   if (apply_OBC_v_flather_north) then
     do J=G%jsd,G%jed-1 ; do i=G%isd,G%ied
-      if ((j+G%jsd_global-G%jsd) == G%domain%njglobal+G%domain%njhalo) then
+      if ((j+G%jsd_global-G%jsd) == G%jeg) then
         G%bathyT(i,j+1) = G%bathyT(i,j)
       endif
     enddo; enddo    
@@ -1514,7 +1483,7 @@ subroutine initialize_masks(G, PF)
 
   if (apply_OBC_v_flather_south) then
     do J=G%jsd+1,G%jed ; do i=G%isd,G%ied
-      if ((J+G%jsd_global-G%jsd) == G%domain%njhalo+1) then
+      if ((J+G%jsd_global-G%jsd) == G%jsg) then
         G%bathyT(i,j-1) = G%bathyT(i,j)
       endif
     enddo; enddo
@@ -1570,6 +1539,7 @@ subroutine initialize_masks(G, PF)
     if (G%areaCu(i,j) > 0.0) G%IareaCu(i,j) = G%mask2dCu(i,j) / G%areaCu(i,j)
   enddo ; enddo
 
+  call callTree_leave("initialize_masks()")
 end subroutine initialize_masks
 
 end module MOM_grid_initialize

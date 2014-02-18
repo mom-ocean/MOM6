@@ -54,7 +54,7 @@ module MOM_PressureForce_AFV
 !********+*********+*********+*********+*********+*********+*********+**
 
 use MOM_diag_mediator, only : post_data, register_diag_field
-use MOM_diag_mediator, only : safe_alloc_ptr, diag_ptrs, time_type
+use MOM_diag_mediator, only : safe_alloc_ptr, diag_ctrl, time_type
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
@@ -84,8 +84,9 @@ type, public :: PressureForce_AFV_CS ; private
   real    :: GFS_scale      !   A scaling of the surface pressure gradients to
                             ! allow the use of a reduced gravity model.
   type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
-  type(diag_ptrs), pointer :: diag ! A pointer to a structure of shareable
-                             ! ocean diagnostic fields.
+  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
+                             ! timing of diagnostic output.
+  logical :: useMassWghtInterp ! Use mass weighting in T/S interpolation
   integer :: id_e_tidal = -1
   type(tidal_forcing_CS), pointer :: tides_CSp => NULL()
 end type PressureForce_AFV_CS
@@ -194,9 +195,6 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
                              ! in roundoff and can be neglected, in Pa.
   real :: alpha_anom         ! The in-situ specific volume, averaged over a
                              ! layer, less alpha_ref, in m3 kg-1.
-  real :: aaL, aaR           ! The in-situ specific volume at the thickness point
-                             ! to the" left" or "right" of a velocity point,
-                             ! averaged over a layer, less Rho_ref, in kg m-3.
   logical :: use_p_atm       ! If true, use the atmospheric pressure.
   logical :: use_EOS    ! If true, density is calculated from T & S using an
                         ! equation of state.
@@ -482,11 +480,6 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
   real :: I_Rho0             ! 1/Rho0.
   real :: G_Rho0             ! G_Earth / Rho0 in m4 s-2 kg-1.
   real :: Rho_ref            ! The reference density in kg m-3.
-  real :: Rho_anom_here      ! The in-situ density, averaged over a layer, less
-                             ! Rho_ref, in kg m-3.
-  real :: raL, raR           ! The in-situ density at the thickness point to the
-                             ! "left" or "right" of a velocity point, averaged
-                             ! over a layer, less Rho_ref, in kg m-3.
   logical :: use_p_atm       ! If true, use the atmospheric pressure.
   logical :: use_ALE         ! If true, use an ALE pressure reconstruction.
   logical :: use_EOS    ! If true, density is calculated from T & S using an
@@ -649,7 +642,8 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
                                             e(:,:,K), e(:,:,K+1), rho_ref, &
                                             CS%Rho0, G%g_Earth, &
                                             G, tv%eqn_of_state, dpa, intz_dpa, &
-                                            intx_dpa, inty_dpa)
+                                            intx_dpa, inty_dpa, &
+                                            useMassWghtInterp = CS%useMassWghtInterp)
         elseif ( pressureReconstructionScheme(ALE_CSp) == PRESSURE_RECONSTRUCTION_PPM ) then
           call int_density_dz_generic_ppm ( tv%T(:,:,k), T_t(:,:,k), T_b(:,:,k), &
                                             tv%S(:,:,k), S_t(:,:,k), S_b(:,:,k), &
@@ -738,17 +732,17 @@ end subroutine PressureForce_AFV_Bouss
 
 
 subroutine PressureForce_AFV_init(Time, G, param_file, diag, CS, tides_CSp)
-  type(time_type), target, intent(in)    :: Time
-  type(ocean_grid_type),   intent(in)    :: G
-  type(param_file_type),   intent(in)    :: param_file
-  type(diag_ptrs), target, intent(inout) :: diag
-  type(PressureForce_AFV_CS),  pointer       :: CS
+  type(time_type), target,    intent(in)    :: Time
+  type(ocean_grid_type),      intent(in)    :: G
+  type(param_file_type),      intent(in)    :: param_file
+  type(diag_ctrl), target,    intent(inout) :: diag
+  type(PressureForce_AFV_CS), pointer       :: CS
   type(tidal_forcing_CS), optional, pointer :: tides_CSp
 ! Arguments: Time - The current model time.
 !  (in)      G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
-!  (in)      diag - A structure containing pointers to common diagnostic fields.
+!  (in)      diag - A structure that is used to regulate diagnostic output.
 !  (in/out)  CS - A pointer that is set to point to the control structure
 !                 for this module.
 !  (in)      tides_CSp - a pointer to the control structure of the tide module.
@@ -777,9 +771,12 @@ subroutine PressureForce_AFV_init(Time, G, param_file, diag, CS, tides_CSp)
                  units="kg m-3", default=1035.0)
   call get_param(param_file, mod, "TIDES", CS%tides, &
                  "If true, apply tidal momentum forcing.", default=.false.)
+  call get_param(param_file, mod, "MASS_WEIGHT_IN_PRESSURE_GRADIENT", CS%useMassWghtInterp, &
+                 "If true, use mass weighting when interpolation T/S for\n"//&
+                 "top/bottom integrals in AFV pressure gradient calculation.", default=.false.)
 
   if (CS%tides) then
-    CS%id_e_tidal = register_diag_field('ocean_model', 'e_tidal', G%axesT1, &
+    CS%id_e_tidal = register_diag_field('ocean_model', 'e_tidal', diag%axesT1, &
         Time, 'Tidal Forcing Astronomical and SAL Height Anomaly', 'meter')
   endif
 

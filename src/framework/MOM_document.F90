@@ -32,6 +32,7 @@ use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe
 implicit none ; private
 
 public doc_param, doc_subroutine, doc_function, doc_module, doc_init, doc_end
+public doc_openBlock, doc_closeBlock
 
 interface doc_param
   module procedure doc_param_none, &
@@ -55,6 +56,7 @@ type, public :: doc_type ; private
   logical :: warnOnConflicts = .false. ! Cause a WARNING error if defaults differ.
   integer :: commentColumn = 32     ! Number of spaces before the comment marker.
   type(link_msg), pointer :: chain_msg => NULL() ! Db of messages
+  character(len=240) :: blockPrefix = '' ! The full name of the current block.
 end type doc_type
 
 type :: link_msg ; private
@@ -316,6 +318,53 @@ subroutine doc_param_char(doc, varname, desc, units, val, default)
 
 end subroutine doc_param_char
 
+subroutine doc_openBlock(doc, blockName, desc)
+  type(doc_type),   pointer    :: doc
+  character(len=*), intent(in) :: blockName
+  character(len=*), optional, intent(in) :: desc
+! This subroutine handles documentation for opening a parameter block.
+  character(len=mLen) :: mesg
+  character(len=doc%commentColumn) :: valstring
+
+  if (.not. (is_root_pe() .and. associated(doc))) return
+  call open_doc_file(doc)
+
+  if (doc%unitAll > 0 .or. doc%unitShort > 0) then
+    mesg = trim(blockName)//'%'
+
+    if (present(desc)) then
+      call writeMessageAndDesc(doc, mesg, desc)
+    else
+      call writeMessageAndDesc(doc, mesg, '')
+    endif
+  endif
+  doc%blockPrefix = trim(doc%blockPrefix)//trim(blockName)//'%'
+end subroutine doc_openBlock
+
+subroutine doc_closeBlock(doc, blockName)
+  type(doc_type),   pointer    :: doc
+  character(len=*), intent(in) :: blockName
+! This subroutine handles documentation for closing a parameter block.
+  character(len=mLen) :: mesg
+  character(len=doc%commentColumn) :: valstring
+  integer :: i
+
+  if (.not. (is_root_pe() .and. associated(doc))) return
+  call open_doc_file(doc)
+
+  if (doc%unitAll > 0 .or. doc%unitShort > 0) then
+    mesg = '%'//trim(blockName)
+
+    call writeMessageAndDesc(doc, mesg, '')
+  endif
+  i = index(trim(doc%blockPrefix), trim(blockName)//'%', .true.)
+  if (i>1) then
+    doc%blockPrefix = trim(doc%blockPrefix(1:i-1))
+  else
+    doc%blockPrefix = ''
+  endif
+end subroutine doc_closeBlock
+
 subroutine doc_param_time(doc, varname, desc, units, val, default)
   type(doc_type),   pointer    :: doc
   character(len=*), intent(in) :: varname, desc, units
@@ -559,8 +608,9 @@ subroutine doc_module(doc, modname, desc)
   call open_doc_file(doc)
 
   if (doc%unitAll > 0 .or. doc%unitShort > 0) then
-    mesg = "    !  Parameters of module "//trim(modname)
-    call writeMessageAndDesc(doc, mesg, desc, indent=8)
+    call writeMessageAndDesc(doc, '', '') ! Blank line for delineation
+    mesg = "! === module "//trim(modname)//" ==="
+    call writeMessageAndDesc(doc, mesg, desc, indent=0)
   endif 
 end subroutine doc_module
 
@@ -690,7 +740,7 @@ function mesgHasBeenDocumented(doc,varName,mesg)
   type(doc_type),   pointer     :: doc
   character(len=*), intent(in)  :: varName, mesg
   logical                       :: mesgHasBeenDocumented
-! Returns true if documentation has lready been written
+! Returns true if documentation has already been written
   type(link_msg), pointer :: newLink, this, last
 
   mesgHasBeenDocumented = .false.
@@ -701,7 +751,7 @@ function mesgHasBeenDocumented(doc,varName,mesg)
   last => NULL()
   this => doc%chain_msg
   do while( associated(this) )
-    if (trim(varName) == trim(this%name)) then
+    if (trim(doc%blockPrefix)//trim(varName) == trim(this%name)) then
       mesgHasBeenDocumented = .true.
       if (trim(mesg) == trim(this%msg)) return
       ! If we fail the above test then cause an error
@@ -717,7 +767,7 @@ function mesgHasBeenDocumented(doc,varName,mesg)
 
   ! Allocate a new link
   allocate(newLink)
-  newLink%name = varName
+  newLink%name = trim(doc%blockPrefix)//trim(varName)
   newLink%msg = trim(mesg)
   newLink%next => NULL()
   if (.not. associated(doc%chain_msg)) then

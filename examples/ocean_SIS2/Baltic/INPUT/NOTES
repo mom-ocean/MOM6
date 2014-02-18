@@ -1,0 +1,10 @@
+ncks -d ny,160,173 -d nx,286,308 /archive/gold/datasets/GOLD_SIS/riga/mosaic.unpacked/topog.nc topog.nc
+ncks -d ny,320,347 -d nx,572,617 -d nyp,320,348 -d nxp,572,618 /archive/gold/datasets/GOLD_SIS/riga/mosaic.unpacked/ocean_hgrid.nc ocean_hgrid.nc
+ncks -d ny,142,155 -d nx,4,23 -d nyp,142,156 -d nxp,4,24 /archive/gold/datasets/GOLD_SIS/riga/mosaic.unpacked/atmos_hgrid.nc atmos_hgrid.nc
+cp atmos_hgrid.nc land_hgrid.nc
+ncks -d GRID_Y_T,160,173 -d GRID_X_T,286,308 .datasets/GOLD_SIS/riga/INPUT/tideamp.nc tideamp.nc
+ncks -d GRID_Y_T,160,173 -d GRID_X_T,286,308 .datasets/GOLD_SIS/riga/INPUT/sgs_h2.nc sgs_h2.nc
+ncks -d grid_y_T,160,173 -d grid_x_T,286,308 .datasets/GOLD_SIS/riga/INPUT/geothermal_heating_cm2g.nc geothermal_heating_cm2g.nc
+ncks -d LAT,160,173 -d LON,286,308 .datasets/GOLD_SIS/riga/INPUT/seawifs_1998-2006_GOLD_smoothed_2X.nc seawifs_1998-2006_GOLD_smoothed_2X.nc
+ncks -d GRID_Y_T,160,173 -d GRID_X_T,286,308 .datasets/GOLD_SIS/riga/INPUT/gustiness_qscat.nc gustiness_qscat.nc
+ncks -d grid_y_T,160,173 -d grid_x_T,286,308 .datasets/GOLD_SIS/riga/INPUT/salt_restore.nc salt_restore.nc

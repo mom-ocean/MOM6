@@ -27,7 +27,7 @@ module DOME2d_initialization
 !********+*********+*********+*********+*********+*********+*********+**
 
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, is_root_pe
-use MOM_file_parser, only : get_param, read_param, log_param, log_version, param_file_type
+use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : close_file, create_file, fieldtype, file_exists
@@ -134,8 +134,7 @@ subroutine DOME2d_initialize_thickness ( h, G, param_file )
 
   call MOM_mesg("MOM_initialization.F90, initialize_thickness_uniform: setting thickness")
 
-  min_thickness = 1.0e-3; 
-  call read_param ( param_file, "MIN_THICKNESS", min_thickness );
+  call get_param(param_file,mod,"MIN_THICKNESS",min_thickness,'Minimum layer thickness',units='m',default=1.e-3)
   call get_param(param_file,mod,"REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
             default=DEFAULT_COORDINATE_MODE)
  
@@ -252,10 +251,10 @@ subroutine DOME2d_initialize_temperature_salinity ( T, S, h, G, param_file, &
 
   call get_param(param_file,mod,"REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
             default=DEFAULT_COORDINATE_MODE)
-  call read_param(param_file,"S_REF",S_ref,.true.)
-  call read_param(param_file,"T_REF",T_ref,.true.)
-  S_range = 2.0; call read_param(param_file,"S_RANGE",S_range,.false.)
-  T_range = 0.0; call read_param(param_file,"T_RANGE",T_range,.false.)
+  call get_param(param_file,mod,"S_REF",S_ref,'Reference salinity',units='1e-3',fail_if_missing=.true.)
+  call get_param(param_file,mod,"T_REF",T_ref,'Refernce temperature',units='C',fail_if_missing=.true.)
+  call get_param(param_file,mod,"S_RANGE",S_range,'Initial salinity range',units='1e-3',default=2.0)
+  call get_param(param_file,mod,"T_RANGE",T_range,'Initial temperature range',units='1e-3',default=0.0)
   
   T(:,:,:) = 0.0
   S(:,:,:) = 0.0

@@ -1,0 +1,58 @@
+
+ &fms_io_nml
+         fms_netcdf_restart=.true.
+         threading_read='multi'
+         threading_write='single'
+         fileset_write='single' /
+
+ &fms_nml
+       clock_grain='MODULE'
+       domains_stack_size = 2000000
+       clock_flags='SYNC' /
+
+ &ice_albedo_nml
+      t_range = 10. /
+
+ &ice_model_nml
+      nsteps_dyn=72
+      nsteps_adv=1
+      num_part = 6
+      wd_turn = 0.0
+      io_layout = 1, 1
+      spec_ice=.false.
+      ice_bulk_salin = 0.005
+      alb_sno = 0.88
+      alb_ice = 0.68
+      t_range_melt = 1.0
+      do_icebergs = .true.
+      cm2_bugs = .false. /
+
+ &icebergs_nml
+    verbose=.false.,
+    verbose_hrs=24,
+    traj_sample_hrs=24,
+    debug=.false.,
+    really_debug=.false.,
+    use_slow_find=.true.,
+    add_weight_to_ocean=.true.,
+    passive_mode=.false.,
+    generate_test_icebergs=.false.,
+    speed_limit=0.,
+    use_roundoff_fix=.true.,
+    make_calving_reproduce=.true.,
+ /
+
+ &monin_obukhov_nml
+            neutral = .true. /
+
+ &ocean_albedo_nml
+      ocean_albedo_option = 5 /
+
+ &sat_vapor_pres_nml
+      construct_table_wrt_liq = .true.,
+      construct_table_wrt_liq_and_ice = .true. /
+
+ &xgrid_nml
+            make_exchange_reproduce = .false.
+            interp_method = 'second_order' /
+

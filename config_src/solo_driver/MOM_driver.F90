@@ -41,86 +41,95 @@ program MOM_main
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 
-  use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
-  use MOM_cpu_clock, only : CLOCK_COMPONENT
-  use MOM_diag_mediator, only : enable_averaging, disable_averaging, diag_mediator_end
-  use MOM_diag_mediator, only : diag_mediator_close_registration, diag_mediator_end
-  use MOM, only : initialize_MOM, step_MOM, MOM_control_struct
-  use MOM, only : calculate_surface_state, MOM_end
-  use MOM_domains, only : MOM_infra_init, MOM_infra_end
-  use MOM_error_handler, only : MOM_error, MOM_mesg, WARNING, FATAL, is_root_pe
-  use MOM_file_parser, only : read_param, get_param, log_param, log_version, param_file_type
-  use MOM_file_parser, only : close_param_file
-  use MOM_forcing_type, only : forcing
-  use MOM_get_input, only : directories
-  use MOM_grid, only : ocean_grid_type
-  use MOM_io, only : file_exists, open_file, close_file
-  use MOM_io, only : check_nml_error, io_infra_init, io_infra_end
-  use MOM_io, only : APPEND_FILE, ASCII_FILE, READONLY_FILE, SINGLE_FILE
-  use MOM_restart, only : save_restart
-  use MOM_sum_output, only : write_energy, accumulate_net_input
-  use MOM_sum_output, only : MOM_sum_output_init, sum_output_CS
+  use MOM_cpu_clock,       only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
+  use MOM_cpu_clock,       only : CLOCK_COMPONENT
+  use MOM_diag_mediator,   only : enable_averaging, disable_averaging, diag_mediator_end
+  use MOM_diag_mediator,   only : diag_mediator_close_registration, diag_mediator_end
+  use MOM,                 only : initialize_MOM, step_MOM, MOM_control_struct
+  use MOM,                 only : calculate_surface_state, MOM_end
+  use MOM_domains,         only : MOM_infra_init, MOM_infra_end
+  use MOM_error_handler,   only : MOM_error, MOM_mesg, WARNING, FATAL, is_root_pe
+  use MOM_error_handler,   only : callTree_enter, callTree_leave, callTree_waypoint
+  use MOM_file_parser,     only : read_param, get_param, log_param, log_version, param_file_type
+  use MOM_file_parser,     only : close_param_file
+  use MOM_forcing_type,    only : forcing
+  use MOM_get_input,       only : directories
+  use MOM_grid,            only : ocean_grid_type
+  use MOM_io,              only : file_exists, open_file, close_file
+  use MOM_io,              only : check_nml_error, io_infra_init, io_infra_end
+  use MOM_io,              only : APPEND_FILE, ASCII_FILE, READONLY_FILE, SINGLE_FILE
+  use MOM_restart,         only : save_restart
+  use MOM_sum_output,      only : write_energy, accumulate_net_input
+  use MOM_sum_output,      only : MOM_sum_output_init, sum_output_CS
   use MOM_surface_forcing, only : set_forcing, average_forcing, forcing_save_restart
   use MOM_surface_forcing, only : surface_forcing_init, surface_forcing_CS
-  use MOM_time_manager, only : time_type, set_date, set_time, get_date, time_type_to_real
-  use MOM_time_manager, only : operator(+), operator(-), operator(*), operator(/)
-  use MOM_time_manager, only : operator(>), operator(<), operator(>=)
-  use MOM_time_manager, only : increment_date, set_calendar_type, month_name
-  use MOM_time_manager, only : JULIAN, NOLEAP, THIRTY_DAY_MONTHS, NO_CALENDAR
-  use MOM_variables, only : surface
-  use MOM_write_cputime, only : write_cputime, MOM_write_cputime_init
-  use MOM_write_cputime, only : write_cputime_start_clock, write_cputime_CS
+  use MOM_time_manager,   only : time_type, set_date, set_time, get_date, time_type_to_real
+  use MOM_time_manager,   only : operator(+), operator(-), operator(*), operator(/)
+  use MOM_time_manager,   only : operator(>), operator(<), operator(>=)
+  use MOM_time_manager,   only : increment_date, set_calendar_type, month_name
+  use MOM_time_manager,   only : JULIAN, NOLEAP, THIRTY_DAY_MONTHS, NO_CALENDAR
+  use MOM_variables,      only : surface
+  use MOM_write_cputime,  only : write_cputime, MOM_write_cputime_init
+  use MOM_write_cputime,  only : write_cputime_start_clock, write_cputime_CS
 
   use MOM_ice_shelf, only : initialize_ice_shelf, ice_shelf_end, ice_shelf_CS
   use MOM_ice_shelf, only : shelf_calc_flux, ice_shelf_save_restart
 ! , add_shelf_flux_forcing, add_shelf_flux_IOB
+
   implicit none
 
 #include <MOM_memory.h>
 
-  type(forcing)         :: fluxes ! A structure containing pointers to
-                                  ! the ocean forcing fields.
-  type(surface)         :: state  ! A structure containing pointers to
-                                  ! the ocean surface state fields.
-  type(ocean_grid_type), pointer :: grid ! A pointer to a structure containing
-                                  ! metrics and related information.
-  logical :: use_ice_shelf = .false. ! If .true., use the ice shelf model for
-                                  ! part of the domain.
-  logical :: permit_incr_restart = .true. ! This is .true. if incremental
-                                  ! restart files may be saved.
+  ! A structure containing pointers to the ocean forcing fields.
+  type(forcing) :: fluxes 
+
+  ! A structure containing pointers to the ocean surface state fields.
+  type(surface) :: state  
+  
+  ! A pointer to a structure containing metrics and related information.
+  type(ocean_grid_type), pointer :: grid 
+                                       
+  ! If .true., use the ice shelf model for part of the domain.
+  logical :: use_ice_shelf = .false. 
+
+  ! This is .true. if incremental restart files may be saved.
+  logical :: permit_incr_restart = .true. 
+                               
   integer :: n
 
-  integer :: nmax=2000000000;   ! nmax is the number of iterations
-                                ! after which to stop so that the
-                                ! simulation does not exceed its CPU
-                                ! time limit.  nmax is determined by
-                                ! evaluating the CPU time used between
-                                ! successive calls to write_energy.
-                                ! Initially it is set to be very large.
-  type(directories) :: dirs     ! A structure containing several relevant directory paths.
+  ! nmax is the number of iterations after which to stop so that the
+  ! simulation does not exceed its CPU time limit.  nmax is determined by
+  ! evaluating the CPU time used between successive calls to write_energy.
+  ! Initially it is set to be very large.
+  integer :: nmax=2000000000;
 
-  type(time_type), target :: Time ! A copy of the ocean model's time.
-                                ! Other modules can set pointers to this and
-                                ! change it to manage diagnostics.
-  type(time_type) :: Master_Time  ! The ocean model's master clock. No other
-                                ! modules are ever given access to this.
-  type(time_type) :: Time1      ! The value of the ocean model's time at the
-                                ! start of a call to step_MOM.
-  type(time_type) :: Start_time ! The start time of the simulation.
+  ! A structure containing several relevant directory paths.
+  type(directories) :: dirs   
+
+  ! A suite of time types for use by MOM 
+  type(time_type), target :: Time       ! A copy of the ocean model's time.
+                                        ! Other modules can set pointers to this and
+                                        ! change it to manage diagnostics.
+  type(time_type) :: Master_Time        ! The ocean model's master clock. No other
+                                        ! modules are ever given access to this.
+  type(time_type) :: Time1              ! The value of the ocean model's time at the
+                                        ! start of a call to step_MOM.
+  type(time_type) :: Start_time         ! The start time of the simulation.
   type(time_type) :: segment_start_time ! The start time of this run segment.
-  type(time_type) :: Time_end     ! End time for the segment or experiment.
-  type(time_type) :: write_energy_time ! The next time to write to the energy file.
-  type(time_type) :: restart_time ! The next time to write restart files.
-  type(time_type) :: Time_step_ocean ! A time_type version of time_step.
-  real :: elapsed_time = 0.0    ! Elapsed time in this run in seconds.
+  type(time_type) :: Time_end           ! End time for the segment or experiment.
+  type(time_type) :: write_energy_time  ! The next time to write to the energy file.
+  type(time_type) :: restart_time       ! The next time to write restart files.
+  type(time_type) :: Time_step_ocean    ! A time_type version of time_step.
+
+  real    :: elapsed_time = 0.0   ! Elapsed time in this run in seconds.
   logical :: elapsed_time_master  ! If true, elapsed time is used to set the
-                                ! model's master clock (Time).  This is needed
-                                ! if Time_step_ocean is not an exact
-                                ! representation of time_step.
-  real :: time_step             ! The time step of a call to step_MOM in seconds.
-  real :: dt                    ! The baroclinic dynamics time step, in seconds.
-  integer :: ntstep             ! The number of baroclinic dynamics time steps
-                                ! within time_step.
+                                  ! model's master clock (Time).  This is needed
+                                  ! if Time_step_ocean is not an exact
+                                  ! representation of time_step.
+  real :: time_step               ! The time step of a call to step_MOM in seconds.
+  real :: dt                      ! The baroclinic dynamics time step, in seconds.
+  integer :: ntstep               ! The number of baroclinic dynamics time steps
+                                  ! within time_step.
 
   integer :: Restart_control    ! An integer that is bit-tested to determine whether
                                 ! incremental restart files are saved and whether they
@@ -128,19 +137,20 @@ program MOM_main
                                 ! files and +2 (bit 1) for time-stamped files.  A
                                 ! restart file is saved at the end of a run segment
                                 ! unless Restart_control is negative.
-  real :: Time_unit             ! The time unit in seconds for the following input fields.
+
+  real            :: Time_unit       ! The time unit in seconds for the following input fields.
   type(time_type) :: restint         ! The time between saves of the restart file.
   type(time_type) :: daymax          ! The final day of the simulation.
   type(time_type) :: energysavedays  ! The interval between writing the energies
                                      ! and other integral quantities of the run.
 
-  integer :: date_init(6)=0     ! The start date of the whole simulation.
-  integer :: date(6)=-1         ! Possibly the start date of this run segment.
+  integer :: date_init(6)=0                ! The start date of the whole simulation.
+  integer :: date(6)=-1                    ! Possibly the start date of this run segment.
   integer :: years=0, months=0, days=0     ! These may determine the segment run
   integer :: hours=0, minutes=0, seconds=0 ! length, if read from a namelist.
-  integer :: yr, mon, day, hr, min, sec  ! Temp variables for writing the date.
-  type(param_file_type) :: param_file ! The structure indicating the file(s)
-                                ! containing all run-time parameters.
+  integer :: yr, mon, day, hr, min, sec    ! Temp variables for writing the date.
+  type(param_file_type) :: param_file      ! The structure indicating the file(s)
+                                           ! containing all run-time parameters.
   character(len=9)  :: month
   character(len=16) :: calendar = 'julian'
   integer :: calendar_type=-1
@@ -149,7 +159,7 @@ program MOM_main
   logical :: unit_in_use
   integer :: initClock, mainClock, termClock
 
-  type(MOM_control_struct), pointer :: MOM_CSp => NULL()
+  type(MOM_control_struct),  pointer :: MOM_CSp => NULL()
   type(surface_forcing_CS),  pointer :: surface_forcing_CSp => NULL()
   type(sum_output_CS),       pointer :: sum_output_CSp => NULL()
   type(write_cputime_CS),    pointer :: write_CPU_CSp => NULL()
@@ -176,6 +186,7 @@ program MOM_main
   call cpu_clock_begin(initClock)
 
   call MOM_mesg('======== Model being driven by MOM_driver ========', 2)
+  call callTree_waypoint("Program MOM_main, MOM_driver.F90")
 
   if (file_exists('input.nml')) then
     ! Provide for namelist specification of the run length and calendar data.
@@ -230,25 +241,25 @@ program MOM_main
   fluxes%C_p = MOM_CSp%tv%C_p  ! Copy the heat capacity for consistency.
 
   Master_Time = Time
-  grid => MOM_CSp%grid
+  grid => MOM_CSp%G
   call calculate_surface_state(state, MOM_CSp%u, MOM_CSp%v, MOM_CSp%h, &
                                MOM_CSp%ave_ssh, grid, MOM_CSp)
 
-  use_ice_shelf=.false. ; call read_param(param_file,"ICE_SHELF",use_ice_shelf)
-  if (use_ice_shelf) then
-    call initialize_ice_shelf(Time, ice_shelf_CSp, fluxes)
-  endif
 
   call surface_forcing_init(Time, grid, param_file, MOM_CSp%diag, &
                             surface_forcing_CSp, MOM_CSp%tracer_flow_CSp)
-  call MOM_mesg("Done surface_forcing_init.", 5)
+  call callTree_waypoint("done surface_forcing_init")
 
-  call MOM_mesg("Call MOM_sum_output_init.", 5)
+  use_ice_shelf=.false. ; call read_param(param_file,"ICE_SHELF",use_ice_shelf)
+  if (use_ice_shelf) then
+    call initialize_ice_shelf(Time, ice_shelf_CSp, MOM_CSp%diag, fluxes)
+  endif
+
   call MOM_sum_output_init(grid, param_file, dirs%output_directory, &
                            MOM_CSp%ntrunc, Start_time, sum_output_CSp)
   call MOM_write_cputime_init(param_file, dirs%output_directory, Start_time, &
                               write_CPU_CSp)
-  call MOM_mesg("Done MOM_sum_output_init.", 5)
+  call callTree_waypoint("done MOM_sum_output_init")
 
   segment_start_time = Time
   elapsed_time = 0.0
@@ -355,6 +366,7 @@ program MOM_main
 
   n = 1
   do while ((n < nmax) .and. (Time < Time_end))
+    call callTree_enter("Main loop, MOM_driver.F90",n)
 
     ! Set the forcing for the next steps.
     call set_forcing(state, fluxes, Time, Time_step_ocean, grid, &
@@ -428,6 +440,7 @@ program MOM_main
     endif
 
     n = n + ntstep
+    call callTree_leave("Main loop")
   enddo
 
   call cpu_clock_end(mainClock)
@@ -466,6 +479,7 @@ program MOM_main
     close(unit)
   endif
 
+  call callTree_waypoint("End MOM_main")
   call diag_mediator_end(Time)
   call cpu_clock_end(termClock)
 

@@ -48,14 +48,12 @@ module MOM_io
 !*                                                                     *
 !*   handle_error: write an error code and quit.                       *
 !*                                                                     *
-!*  Macros written all in capital letters are defined in MOM_memory.h. *
-!*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 
 
 use MOM_error_handler, only : MOM_error, NOTE, FATAL, WARNING
 use MOM_domains, only : MOM_domain_type
-use MOM_file_parser, only : read_param, log_param, log_version, param_file_type
+use MOM_file_parser, only : log_version, param_file_type
 use MOM_string_functions, only : lowercase
 use MOM_grid, only : ocean_grid_type
 
@@ -80,8 +78,6 @@ use mpp_io_mod, only : read_field=>mpp_read, io_infra_init=>mpp_io_init
 use netcdf
 
 implicit none ; private
-
-#include <MOM_memory.h>
 
 public :: close_file, create_file, field_exists, field_size, fieldtype
 public :: file_exists, flush_file, get_file_info, get_file_atts, get_file_fields
@@ -150,7 +146,7 @@ subroutine create_file(unit, filename, vars, novars, G, fields, threading, &
   type(domain1d) :: x_domain, y_domain
   integer :: numaxes, pack, thread, k, nz
   integer :: var_periods, num_periods=0
-  real :: layer_val(SZK_(G)), interface_val(SZK_(G)+1)
+  real :: layer_val(G%ks:G%ke), interface_val(G%ks:G%ke+1)
   real, dimension(:), allocatable :: period_val
   character(len=40) :: time_units
   character(len=8) :: t_grid, t_grid_read
@@ -171,13 +167,8 @@ subroutine create_file(unit, filename, vars, novars, G, fields, threading, &
     call open_file(unit, filename, MPP_OVERWR, MPP_NETCDF, domain=G%Domain%mpp_domain)
   endif
 
-! do k=1,nz ; layer_val(k) = real(k) ; enddo
-! do k=1,nz+1 ; interface_val(k) = real(k) - 0.5 ; enddo
-
-  do k=1,nz ; layer_val(k) = G%Rlay(k) ; enddo
-  interface_val(1) = 1.5*G%Rlay(1) - 0.5*G%Rlay(2)
-  do k=2,nz ; interface_val(k) = 0.5*(G%Rlay(k) + G%Rlay(k-1)) ; enddo
-  interface_val(nz+1) = 1.5*G%Rlay(nz) - 0.5*G%Rlay(nz-1)
+  interface_val(1:nz+1) = G%GV%sInterface(1:nz+1)
+  layer_val(1:nz) = G%GV%sLayer(1:nz)
 
   call mpp_get_domain_components(G%Domain%mpp_domain, x_domain, y_domain)
 
@@ -255,12 +246,12 @@ subroutine create_file(unit, filename, vars, novars, G, fields, threading, &
                    'X', domain = x_domain, data=G%gridLonB(G%IsgB:G%IegB))
 
   if (use_layer) &
-    call mpp_write_meta(unit, axis_layer, "Layer", "kg m-3", &
-          "Layer Target Potential Density", 'Z', sense=1, data=layer_val)
+    call mpp_write_meta(unit, axis_layer, "Layer", trim(G%GV%zAxisUnits), &
+          "Layer "//trim(G%GV%zAxisLongName), 'Z', sense=1, data=layer_val)
 
   if (use_int) &
-    call mpp_write_meta(unit, axis_int, "Interface", "kg m-3", &
-          "Interface Target Potential Density", 'Z', sense=1, data=interface_val)
+    call mpp_write_meta(unit, axis_int, "Interface", trim(G%GV%zAxisUnits), &
+          "Interface "//trim(G%GV%zAxisLongName), 'Z', sense=1, data=interface_val)
 
   if (use_time) then ; if (present(timeunit)) then
     ! Set appropriate units, depending on the value.
@@ -368,8 +359,8 @@ subroutine reopen_file(unit, filename, vars, novars, G, fields, threading, timeu
 !  (in)      threading - SINGLE_FILE or MULTIPLE, optional.
 !  (in,opt)  timeunit - The length, in seconds, of the units for time. The
 !                       default value is 86400.0, for 1 day.
-  character(len=200) :: check_name, mesg, name
-  integer :: i, length, ndim, nvar, natt, ntime, thread
+  character(len=200) :: check_name, mesg
+  integer :: length, ndim, nvar, natt, ntime, thread
   logical :: exists
 
   thread = SINGLE_FILE
@@ -415,7 +406,7 @@ subroutine reopen_file(unit, filename, vars, novars, G, fields, threading, timeu
 end subroutine reopen_file
 
 subroutine read_axis_data(filename, axis_name, var)
-  character(len=*), intent(in) :: filename, axis_name
+  character(len=*),   intent(in)  :: filename, axis_name
   real, dimension(:), intent(out) :: var
 
   integer :: i,len,unit, ndim, nvar, natt, ntime
@@ -452,7 +443,7 @@ subroutine read_axis_data(filename, axis_name, var)
 end subroutine read_axis_data
 
 function num_timelevels(filename, varname, min_dims) result(n_time)
-  character(len=*), intent(in)  :: filename, varname
+  character(len=*),  intent(in) :: filename, varname
   integer, optional, intent(in) :: min_dims
   integer :: n_time
 
@@ -593,7 +584,7 @@ end function slasher
 
 function MOM_file_exists(file_name, MOM_Domain)
   character(len=*),       intent(in) :: file_name
-  type(MOM_domain_type), intent(in) :: MOM_domain
+  type(MOM_domain_type),  intent(in) :: MOM_domain
 
 !   This function uses the fms_io function file_exist to determine whether
 ! a named file (or its decomposed variant) exists.
@@ -616,10 +607,10 @@ subroutine MOM_read_data_1d(filename, fieldname, data)
 end subroutine MOM_read_data_1d
 
 subroutine MOM_read_data_2d(filename, fieldname, data, MOM_Domain, &
-                             timelevel, position)
+                            timelevel, position)
   character(len=*),                 intent(in)    :: filename, fieldname
   real, dimension(:,:),             intent(inout) :: data ! 2 dimensional data
-  type(MOM_domain_type),           intent(in)    :: MOM_Domain
+  type(MOM_domain_type),            intent(in)    :: MOM_Domain
   integer,                optional, intent(in)    :: timelevel, position
 
 !   This function uses the fms_io function read_data to read a distributed
@@ -632,10 +623,10 @@ subroutine MOM_read_data_2d(filename, fieldname, data, MOM_Domain, &
 end subroutine MOM_read_data_2d
 
 subroutine MOM_read_data_3d(filename, fieldname, data, MOM_Domain, &
-                             timelevel, position)
+                            timelevel, position)
   character(len=*),                 intent(in)    :: filename, fieldname
   real, dimension(:,:,:),           intent(inout) :: data ! 2 dimensional data    
-  type(MOM_domain_type),           intent(in)    :: MOM_Domain
+  type(MOM_domain_type),            intent(in)    :: MOM_Domain
   integer,                optional, intent(in)    :: timelevel, position
 
 !   This function uses the fms_io function read_data to read a distributed

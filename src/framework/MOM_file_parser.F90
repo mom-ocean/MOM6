@@ -21,11 +21,27 @@ module MOM_file_parser
 
 !********+*********+*********+*********+*********+*********+*********+**
 !*                                                                     *
-!*  By Robert Hallberg, June 2005.                                     *
+!*  By Robert Hallberg and Alistair Adcroft, updated 9/2013.           *
 !*                                                                     *
 !*    The subroutines here parse a set of input files for the value    *
 !*  a named parameter and sets that parameter at run time.  Currently  *
-!*  these files use the same format as the header file MOM_memory.h.   *
+!*  these files use use one of several formats:                        *
+!*    #define VAR       ! To set the logical VAR to true.              *
+!*    VAR = True        ! To set the logical VAR to true.              *
+!*    #undef VAR        ! To set the logical VAR to false.             *
+!*    VAR = False       ! To set the logical VAR to false.             *
+!*    #define VAR 999   ! To set the real or integer VAR to 999.       *
+!*    VAR = 999         ! To set the real or integer VAR to 999.       *
+!*    #override VAR = 888 ! To override a previously set value.        *
+!*    VAR = 1.1, 2.2, 3.3 ! To set an array of real values.            *
+!*                                                                     *
+!*  In addition, when set by the get_param interface, the values of    *
+!*  parameters are automatically logged, along with defaults, units,   *
+!*  and a description.  It is an error for a variable to be overridden *
+!*  more than once, and MOM6 has a facility to check for unused lines  *
+!*  to set variables, which may indicate miss-spelled or archaic       *
+!*  parameters.  Parameter names are case-specific, and lines may use  *
+!*  a F90 or C++ style comment, starting with ! or //.                 *
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 
@@ -34,6 +50,7 @@ use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg
 use MOM_error_handler, only : is_root_pe, stdlog, stdout
 use MOM_time_manager, only : set_time, get_time, time_type, get_ticks_per_second
 use MOM_document, only : doc_param, doc_module, doc_init, doc_end, doc_type
+use MOM_document, only : doc_openBlock, doc_closeBlock
 use MOM_string_functions, only : left_int, left_ints
 use MOM_string_functions, only : left_real, left_reals
 
@@ -41,6 +58,8 @@ implicit none ; private
 
 integer, parameter, public :: MAX_PARAM_FILES = 5 ! Maximum number of parameter files.
 integer, parameter :: INPUT_STR_LENGTH = 120 ! Maximum linelength in parameter file.
+integer, parameter :: FILENAME_LENGTH = 200  ! Maximum number of characters in
+                                             ! file names.
 
 ! The all_PEs_read option should be eliminated with post-riga shared code.
 logical :: all_PEs_read = .false.
@@ -71,7 +90,7 @@ end type parameter_block
 type, public :: param_file_type ; private
   integer  :: nfiles = 0            ! The number of open files.
   integer  :: iounit(MAX_PARAM_FILES)   ! The unit number of an open file.
-  character(len=200) :: filename(MAX_PARAM_FILES) ! The names of the open files.
+  character(len=FILENAME_LENGTH) :: filename(MAX_PARAM_FILES) ! The names of the open files.
   logical  :: NetCDF_file(MAX_PARAM_FILES)! If true, the input file is in NetCDF.
                                     ! This is not yet implemented.
   type(file_data_type) :: param_data(MAX_PARAM_FILES) ! Structures that contain 
@@ -304,11 +323,9 @@ subroutine close_param_file(CS, quiet_close, component)
       do n=1,CS%param_data(i)%num_lines
         if (.not.CS%param_data(i)%line_used(n)) then
           num_unused = num_unused + 1
-!          call MOM_error(WARNING, "Unused line in "//trim(CS%filename(i))//&
-!                          " : "//trim(CS%param_data(i)%line(n)))
           if (CS%report_unused) &
-            call MOM_mesg("Unused line in "//trim(CS%filename(i))// &
-                            " : "//trim(CS%param_data(i)%line(n)), 0)
+            call MOM_error(WARNING, "Unused line in "//trim(CS%filename(i))// &
+                            " : "//trim(CS%param_data(i)%line(n)))
         endif
       enddo
     endif
@@ -334,8 +351,7 @@ subroutine populate_param_data(iounit, filename, param_data)
   type(file_data_type), intent(inout) :: param_data
 
   character(len=INPUT_STR_LENGTH) :: line
-  integer :: is, isd, isu, icom
-  integer :: last, num_lines
+  integer :: num_lines
   logical :: inMultiLineComment
 
 ! Find the number of keyword lines in a parameter file
@@ -507,7 +523,7 @@ function simplifyWhiteSpace(string)
       i=i+1
       simplifyWhiteSpace(i:i)=string(j:j)
       if (string(j:j)==quoteChar) insideString=.false. ! End of string
-    else ! The following block is outside of strings blocks
+    else ! The following is outside of string delimiters
       if (string(j:j)==" " .or. string(j:j)==achar(9)) then ! Space or tab
         if (nonBlank) then ! Only copy a blank if the preceeding character was non-blank
           i=i+1
@@ -641,8 +657,8 @@ subroutine read_param_real_array(CS, varname, value, fail_if_missing)
 ! which is to be read, the (case-sensitive) variable name, the variable
 ! where the value is to be stored, and (optionally) a flag indicating
 ! whether to fail if this parameter can not be found.
-  character(len=120) :: value_string(1)
-  logical            :: found, defined
+  character(len=INPUT_STR_LENGTH) :: value_string(1)
+  logical                         :: found, defined
 
   call get_variable_line(CS, varname, found, defined, value_string)
   if (found .and. defined .and. (LEN_TRIM(value_string(1)) > 0)) then
@@ -780,15 +796,16 @@ subroutine get_variable_line(CS, varname, found, defined, value_string, paramIsL
   character(len=*),      intent(out) :: value_string(:)
   logical, optional,      intent(in) :: paramIsLogical
 
-  character(len=INPUT_STR_LENGTH) :: val_str, lname, filename
+  character(len=INPUT_STR_LENGTH) :: val_str, lname, origLine
   character(len=INPUT_STR_LENGTH) :: line, continuationBuffer, blockName
-  integer            :: is, id, isd, isu, ise, iso, icom, verbose, ipf
+  character(len=FILENAME_LENGTH)  :: filename
+  integer            :: is, id, isd, isu, ise, iso, verbose, ipf
   integer            :: last, last1, ival, oval, max_vals, count, contBufSize
   character(len=52)  :: set
   logical            :: found_override, found_equals
   logical            :: found_define, found_undef
   logical            :: force_cycle, defined_in_line, continuedLine
-  logical            :: variableKindIsLogical
+  logical            :: variableKindIsLogical, valueIsSame
   logical            :: inWrongBlock, fullPathParameter
   logical, parameter :: requireNamedClose = .false.
   set = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
@@ -812,12 +829,13 @@ subroutine get_variable_line(CS, varname, found, defined, value_string, paramIsL
     continuedLine = .false.
     blockName = ''
 
+    ! Scan through each line of the file
     do count = 1, CS%param_data(ipf)%num_lines
       line = CS%param_data(ipf)%line(count)
       last = len_trim(line)
 
       last1 = max(1,last)
-      ! Check if line ends in continuation character
+      ! Check if line ends in continuation character (either & or \)
       ! Note achar(92) is a backslash
       if (line(last1:last1) == achar(92).or.line(last1:last1) == "&") then
         continuationBuffer(contBufSize+1:contBufSize+len_trim(line))=line(:last-1)
@@ -829,7 +847,7 @@ subroutine get_variable_line(CS, varname, found, defined, value_string, paramIsL
                  " there are no more lines to read. "// &
                  " Line: '"//trim(line(:last))//"'"//&
                  " in file "//trim(filename)//".")
-        cycle
+        cycle ! cycle inorder to append the next line of the file
       elseif (continuedLine) then
         ! If we reached this point then this is the end of line continuation
         continuationBuffer(contBufSize+1:contBufSize+len_trim(line))=line(:last)
@@ -840,7 +858,23 @@ subroutine get_variable_line(CS, varname, found, defined, value_string, paramIsL
         last = len_trim(line)
       endif
 
-      ! Check for start of namelist
+      origLine = trim(line) ! Keep original for error messages
+
+      ! Check for '#override' at start of line
+      found_override = .false.; found_define = .false.; found_undef = .false.
+      iso = index(line(:last), "#override " )!; if (is > 0) found_override = .true.
+      if (iso>1) call MOM_error(FATAL, "MOM_file_parser : #override was found "// &
+                 " but was not the first keyword."// &
+                 " Line: '"//trim(line(:last))//"'"//&
+                 " in file "//trim(filename)//".")
+      if (iso==1) then
+        found_override = .true.
+        if (index(line(:last), "#override define ")==1) found_define = .true.
+        if (index(line(:last), "#override undef ")==1) found_undef = .true.
+        line = trim(adjustl(line(iso+10:last))); last = len_trim(line)
+      endif
+
+      ! Check for start of fortran namelist, ie. '&namelist'
       if (index(line(:last),'&')==1) then
         iso=index(line(:last),' ')
         if (iso>0) then ! possibly simething else on this line
@@ -854,10 +888,12 @@ subroutine get_variable_line(CS, varname, found, defined, value_string, paramIsL
           else
             blockName = trim(line(2:last))
           endif
+          call flag_line_as_read(CS%param_data(ipf)%line_used,count)
           cycle
         endif
       endif
-      ! Newer form of parameter block
+
+      ! Newer form of parameter block, block%, %block or block%param or 
       iso=index(line(:last),'%')
       fullPathParameter = .false.
       if (iso==1) then ! % is first character means this is a close
@@ -871,23 +907,30 @@ subroutine get_variable_line(CS, varname, found, defined, value_string, paramIsL
             call MOM_error(FATAL, 'get_variable_line: A named close for a parameter'// &
             ' block is required but found "%". Block="'//trim(blockName)//'"' )
         blockName = popBlockLevel(blockName)
-      elseif (iso==last) then ! This is a new block
+        call flag_line_as_read(CS%param_data(ipf)%line_used,count)
+      elseif (iso==last) then ! This is a new block if % is last character
         blockName = pushBlockLevel(blockName, line(:iso-1))
-      else ! This is of the form block@parameter = ... (full path parameter)
+        call flag_line_as_read(CS%param_data(ipf)%line_used,count)
+      else ! This is of the form block%parameter = ... (full path parameter)
         iso=index(line(:last),'%',.true.)
-        if (trim(CS%blockName%name)==trim(line(:iso-1))) then
+        ! Check that the parameter block names on the line matches the state set by the caller
+        if (iso>0 .and. trim(CS%blockName%name)==trim(line(:iso-1))) then
           fullPathParameter = .true.
           line = trim(line(iso+1:last)) ! Strip away the block name for subsequent processing
+          last = len_trim(line)
         endif
       endif
 
-      ! We should only read this line if this block is the active block
+      ! We should only interpret this line if this block is the active block
       inWrongBlock = .false.
       if (len_trim(blockName)>0) then ! In a namelist block in file
         if (trim(CS%blockName%name)/=trim(blockName)) inWrongBlock = .true. ! Not in the required block
       endif
+      if (len_trim(CS%blockName%name)>0) then ! In a namelist block in the model
+        if (trim(CS%blockName%name)/=trim(blockName)) inWrongBlock = .true. ! Not in the required block
+      endif
 
-      ! Check for termination of a namelist
+      ! Check for termination of a fortran namelist (with a '/')
       if (line(last:last)=='/') then
         if (len_trim(blockName)==0 .and. is_root_pe()) call MOM_error(FATAL, &
             'get_variable_line: An extra namelist/block end was encountered. Line="'// &
@@ -895,27 +938,23 @@ subroutine get_variable_line(CS, varname, found, defined, value_string, paramIsL
         blockName = popBlockLevel(blockName)
         last = last - 1 ! Ignore the termination character from here on
       endif
-      if (inWrongBlock .and. .not. fullPathParameter) cycle
+      if (inWrongBlock .and. .not. fullPathParameter) then
+        if (index(" "//line(:last+1), " "//trim(varname)//" ")>0) &
+          call MOM_error(WARNING,"MOM_file_parser : "//trim(varname)// &
+               ' found outside of block '//trim(CS%blockName%name)//'%. Ignoring.')
+        cycle
+      endif
 
       ! Determine whether this line mentions the named parameter or not
-      line(last+1:last+1) = " " ! Ensure a blank after last character
-      if (index(" "//line(:last+1), " "//trim(varname)//" ") == 0) cycle
+      if (index(" "//line(:last)//" ", " "//trim(varname)//" ") == 0) cycle
 
       ! Detect keywords
-      found_override = .false.; found_equals = .false.;
-      found_define = .false.; found_undef = .false.
-      iso = index(line(:last), "#override" )!; if (is > 0) found_override = .true.
+      found_equals = .false.
       isd = index(line(:last), "define" )!; if (isd > 0) found_define = .true.
       isu = index(line(:last), "undef" )!; if (isu > 0) found_undef = .true.
       ise = index(line(:last), " = " ); if (ise > 1) found_equals = .true.
-      if (index(line(:last), "#override ")==1) found_override = .true.
-      if (found_override) then
-        if (index(line(:last), "#override define ")==1) found_define = .true.
-        if (index(line(:last), "#override undef ")==1) found_undef = .true.
-      else
-        if (index(line(:last), "#define ")==1) found_define = .true.
-        if (index(line(:last), "#undef ")==1) found_undef = .true.
-      endif
+      if (index(line(:last), "#define ")==1) found_define = .true.
+      if (index(line(:last), "#undef ")==1) found_undef = .true.
 
       ! Check for missing, mutually exclusive or incomplete keywords
       if (is_root_pe()) then
@@ -936,12 +975,6 @@ subroutine get_variable_line(CS, varname, found, defined, value_string, paramIsL
         if (found_override .and. .not. (found_define .or. found_undef .or. found_equals)) &
                call MOM_error(FATAL, "MOM_file_parser : override was found "// &
                  " without a define or undef."// &
-                 " Line: '"//trim(line(:last))//"'"//&
-                 " in file "//trim(filename)//".")
-        if (found_override .and. (found_define .or. found_undef) &
-            .and. (isd+isu<iso)) &
-               call MOM_error(FATAL, "MOM_file_parser : override was found "// &
-                 " but was not the first keyword."// &
                  " Line: '"//trim(line(:last))//"'"//&
                  " in file "//trim(filename)//".")
       endif
@@ -979,13 +1012,15 @@ subroutine get_variable_line(CS, varname, found, defined, value_string, paramIsL
         found = .true. ; defined_in_line = .false.
       elseif (found_equals) then
         ! Move starting pointer to first letter of defined name.
-        is = iso*10 + scan(line((1+iso*10):ise), set)
+        is = scan(line(1:ise), set)
         lname = trim(line(is:ise-1))
         if (trim(lname) /= trim(varname)) cycle
         val_str = trim(adjustl(line(ise+3:last)))
         ! Remove starting and trailing quotes.
-        id = index(val_str,ACHAR(34)) ; if (id > 0) val_str = val_str(id+1:)
-        id = index(val_str,ACHAR(34)) ; if (id > 0) val_str = val_str(:id-1)
+        id = index(val_str,ACHAR(34)) ; if (id > 0) val_str = val_str(id+1:) ! Double quote
+        id = index(val_str,ACHAR(34)) ; if (id > 0) val_str = val_str(:id-1) ! Double quote
+        id = index(val_str,ACHAR(39)) ; if (id > 0) val_str = val_str(id+1:) ! Single quote
+        id = index(val_str,ACHAR(39)) ; if (id > 0) val_str = val_str(:id-1) ! Single quote
         if (variableKindIsLogical) then ! Special handling for logicals
           read(val_str(:len_trim(val_str)),*) defined_in_line
         else
@@ -993,7 +1028,9 @@ subroutine get_variable_line(CS, varname, found, defined, value_string, paramIsL
         endif
         found = .true.
       else
-        call MOM_error(FATAL, "MOM_file_parser: we should never reach this point")
+        call MOM_error(FATAL, "MOM_file_parser (non-root PE?): the parameter name '"// &
+           trim(varname)//"' was found without an assignment, define or undef."// &
+           " Line: '"//trim(line(:last))//"'"//" in file "//trim(filename)//".")
       endif
 
       ! This line has now been used.
@@ -1001,13 +1038,14 @@ subroutine get_variable_line(CS, varname, found, defined, value_string, paramIsL
 
       ! Detect inconsistencies
       force_cycle = .false.
+      valueIsSame = (trim(val_str) == trim(value_string(max_vals)))
       if (found_override .and. (oval >= max_vals)) then
         if (is_root_pe()) then
-          if ((defined_in_line .neqv. defined) .or. &
-              (trim(val_str) /= trim(value_string(max_vals)))) then
+          if ((defined_in_line .neqv. defined) .or. .not. valueIsSame) then
             call MOM_error(FATAL,"MOM_file_parser : "//trim(varname)// &
                      " found with multiple inconsistent overrides."// &
-                     " Line: '"//trim(line(:last))//"'"//&
+                     " Line A: '"//trim(value_string(max_vals))//"'"//&
+                     " Line B: '"//trim(line(:last))//"'"//&
                      " in file "//trim(filename)//" caused the model failure.")
           else
             call MOM_error(WARNING,"MOM_file_parser : "//trim(varname)// &
@@ -1028,11 +1066,11 @@ subroutine get_variable_line(CS, varname, found, defined, value_string, paramIsL
       endif
       if (.not.found_override .and. (ival >= max_vals)) then
         if (is_root_pe()) then
-          if ((defined_in_line .neqv. defined) .or. &
-              (trim(val_str) /= trim(value_string(max_vals)))) then
+          if ((defined_in_line .neqv. defined) .or. .not. valueIsSame) then
             call MOM_error(FATAL,"MOM_file_parser : "//trim(varname)// &
                      " found with multiple inconsistent definitions."// &
-                     " Line: '"//trim(line(:last))//"'"//&
+                     " Line A: '"//trim(value_string(max_vals))//"'"//&
+                     " Line B: '"//trim(line(:last))//"'"//&
                      " in file "//trim(filename)//" caused the model failure.")
           else
             call MOM_error(WARNING,"MOM_file_parser : "//trim(varname)// &
@@ -1344,13 +1382,13 @@ end subroutine log_param_time
 
 
 subroutine get_param_int(CS, modulename, varname, value, desc, units, &
-                         default, fail_if_missing, do_not_read, do_not_log)
+               default, fail_if_missing, do_not_read, do_not_log, static_value)
   type(param_file_type),      intent(in)    :: CS
   character(len=*),           intent(in)    :: modulename
   character(len=*),           intent(in)    :: varname
   integer,                    intent(inout) :: value
   character(len=*), optional, intent(in)    :: desc, units
-  integer,          optional, intent(in)    :: default
+  integer,          optional, intent(in)    :: default, static_value
   logical,          optional, intent(in)    :: fail_if_missing
   logical,          optional, intent(in)    :: do_not_read, do_not_log
 ! This subroutine writes the value of a real parameter to a log file,
@@ -1362,24 +1400,25 @@ subroutine get_param_int(CS, modulename, varname, value, desc, units, &
 
   if (do_read) then
     if (present(default)) value = default
+    if (present(static_value)) value = static_value
     call read_param_int(CS, varname, value, fail_if_missing)
   endif
 
   if (do_log) then
     call log_param_int(CS, modulename, varname, value, desc, units, &
-                        default)
+                       default)
   endif
 
 end subroutine get_param_int
 
 subroutine get_param_int_array(CS, modulename, varname, value, desc, units, &
-                               default, fail_if_missing, do_not_read, do_not_log)
+               default, fail_if_missing, do_not_read, do_not_log, static_value)
   type(param_file_type),      intent(in)    :: CS
   character(len=*),           intent(in)    :: modulename
   character(len=*),           intent(in)    :: varname
   integer,                    intent(inout) :: value(:)
   character(len=*), optional, intent(in)    :: desc, units
-  integer,          optional, intent(in)    :: default
+  integer,          optional, intent(in)    :: default, static_value
   logical,          optional, intent(in)    :: fail_if_missing
   logical,          optional, intent(in)    :: do_not_read, do_not_log
 ! This subroutine writes the value of a real parameter to a log file,
@@ -1391,24 +1430,25 @@ subroutine get_param_int_array(CS, modulename, varname, value, desc, units, &
 
   if (do_read) then
     if (present(default)) then ; value(:) = default ; endif
+    if (present(static_value)) then ; value(:) = static_value ; endif
     call read_param_int_array(CS, varname, value, fail_if_missing)
   endif
 
   if (do_log) then
     call log_param_int_array(CS, modulename, varname, value, desc, &
-                              units, default)
+                             units, default)
   endif
 
 end subroutine get_param_int_array
 
 subroutine get_param_real(CS, modulename, varname, value, desc, units, &
-                          default, fail_if_missing, do_not_read, do_not_log)
+               default, fail_if_missing, do_not_read, do_not_log, static_value)
   type(param_file_type),      intent(in)    :: CS
   character(len=*),           intent(in)    :: modulename
   character(len=*),           intent(in)    :: varname
   real,                       intent(inout) :: value
   character(len=*), optional, intent(in)    :: desc, units
-  real,             optional, intent(in)    :: default
+  real,             optional, intent(in)    :: default, static_value
   logical,          optional, intent(in)    :: fail_if_missing
   logical,          optional, intent(in)    :: do_not_read, do_not_log
 ! This subroutine writes the value of a real parameter to a log file,
@@ -1420,6 +1460,7 @@ subroutine get_param_real(CS, modulename, varname, value, desc, units, &
 
   if (do_read) then
     if (present(default)) value = default
+    if (present(static_value)) value = static_value
     call read_param_real(CS, varname, value, fail_if_missing)
   endif
 
@@ -1431,13 +1472,13 @@ subroutine get_param_real(CS, modulename, varname, value, desc, units, &
 end subroutine get_param_real
 
 subroutine get_param_real_array(CS, modulename, varname, value, desc, units, &
-                                default, fail_if_missing, do_not_read, do_not_log)
+               default, fail_if_missing, do_not_read, do_not_log, static_value)
   type(param_file_type),      intent(in)    :: CS
   character(len=*),           intent(in)    :: modulename
   character(len=*),           intent(in)    :: varname
   real,                       intent(inout) :: value(:)
   character(len=*), optional, intent(in)    :: desc, units
-  real,             optional, intent(in)    :: default
+  real,             optional, intent(in)    :: default, static_value
   logical,          optional, intent(in)    :: fail_if_missing
   logical,          optional, intent(in)    :: do_not_read, do_not_log
 ! This subroutine writes the value of a real parameter to a log file,
@@ -1449,6 +1490,7 @@ subroutine get_param_real_array(CS, modulename, varname, value, desc, units, &
 
   if (do_read) then
     if (present(default)) then ; value(:) = default ; endif
+    if (present(static_value)) then ; value(:) = static_value ; endif
     call read_param_real_array(CS, varname, value, fail_if_missing)
   endif
 
@@ -1460,13 +1502,13 @@ subroutine get_param_real_array(CS, modulename, varname, value, desc, units, &
 end subroutine get_param_real_array
 
 subroutine get_param_char(CS, modulename, varname, value, desc, units, &
-                          default, fail_if_missing, do_not_read, do_not_log)
+               default, fail_if_missing, do_not_read, do_not_log, static_value)
   type(param_file_type),      intent(in)    :: CS
   character(len=*),           intent(in)    :: modulename
   character(len=*),           intent(in)    :: varname
   character(len=*),           intent(inout) :: value
   character(len=*), optional, intent(in)    :: desc, units
-  character(len=*), optional, intent(in)    :: default
+  character(len=*), optional, intent(in)    :: default, static_value
   logical,          optional, intent(in)    :: fail_if_missing
   logical,          optional, intent(in)    :: do_not_read, do_not_log
 ! This subroutine writes the value of a real parameter to a log file,
@@ -1478,6 +1520,7 @@ subroutine get_param_char(CS, modulename, varname, value, desc, units, &
 
   if (do_read) then
     if (present(default)) value = default
+    if (present(static_value)) value = static_value
     call read_param_char(CS, varname, value, fail_if_missing)
   endif
 
@@ -1489,13 +1532,13 @@ subroutine get_param_char(CS, modulename, varname, value, desc, units, &
 end subroutine get_param_char
 
 subroutine get_param_char_array(CS, modulename, varname, value, desc, units, &
-                          default, fail_if_missing, do_not_read, do_not_log)
+               default, fail_if_missing, do_not_read, do_not_log, static_value)
   type(param_file_type),      intent(in)    :: CS
   character(len=*),           intent(in)    :: modulename
   character(len=*),           intent(in)    :: varname
   character(len=*),           intent(inout) :: value(:)
   character(len=*), optional, intent(in)    :: desc, units
-  character(len=*), optional, intent(in)    :: default
+  character(len=*), optional, intent(in)    :: default, static_value
   logical,          optional, intent(in)    :: fail_if_missing
   logical,          optional, intent(in)    :: do_not_read, do_not_log
 ! This subroutine writes the value of a real parameter to a log file,
@@ -1509,6 +1552,7 @@ subroutine get_param_char_array(CS, modulename, varname, value, desc, units, &
 
   if (do_read) then
     if (present(default)) then ; value(:) = default ; endif
+    if (present(static_value)) then ; value(:) = static_value ; endif
     call read_param_char_array(CS, varname, value, fail_if_missing)
   endif
 
@@ -1528,13 +1572,13 @@ subroutine get_param_char_array(CS, modulename, varname, value, desc, units, &
 end subroutine get_param_char_array
 
 subroutine get_param_logical(CS, modulename, varname, value, desc, units, &
-                          default, fail_if_missing, do_not_read, do_not_log)
+               default, fail_if_missing, do_not_read, do_not_log, static_value)
   type(param_file_type),      intent(in)    :: CS
   character(len=*),           intent(in)    :: modulename
   character(len=*),           intent(in)    :: varname
   logical,                    intent(inout) :: value
   character(len=*), optional, intent(in)    :: desc, units
-  logical,          optional, intent(in)    :: default
+  logical,          optional, intent(in)    :: default, static_value
   logical,          optional, intent(in)    :: fail_if_missing
   logical,          optional, intent(in)    :: do_not_read, do_not_log
 ! This subroutine writes the value of a real parameter to a log file,
@@ -1546,6 +1590,7 @@ subroutine get_param_logical(CS, modulename, varname, value, desc, units, &
 
   if (do_read) then
     if (present(default)) value = default
+    if (present(static_value)) value = static_value
     call read_param_logical(CS, varname, value, fail_if_missing)
   endif
 
@@ -1557,13 +1602,14 @@ subroutine get_param_logical(CS, modulename, varname, value, desc, units, &
 end subroutine get_param_logical
 
 subroutine get_param_time(CS, modulename, varname, value, desc, units, &
-                          default, fail_if_missing, do_not_read, do_not_log, timeunit)
+                          default, fail_if_missing, do_not_read, do_not_log, &
+                          timeunit, static_value)
   type(param_file_type),      intent(in)    :: CS
   character(len=*),           intent(in)    :: modulename
   character(len=*),           intent(in)    :: varname
   type(time_type),            intent(inout) :: value
   character(len=*), optional, intent(in)    :: desc, units
-  type(time_type),  optional, intent(in)    :: default
+  type(time_type),  optional, intent(in)    :: default, static_value
   logical,          optional, intent(in)    :: fail_if_missing
   logical,          optional, intent(in)    :: do_not_read, do_not_log
   real,             optional, intent(in)    :: timeunit
@@ -1576,6 +1622,7 @@ subroutine get_param_time(CS, modulename, varname, value, desc, units, &
 
   if (do_read) then
     if (present(default)) value = default
+    if (present(static_value)) value = static_value
     call read_param_time(CS, varname, value, timeunit, fail_if_missing)
   endif
 
@@ -1601,14 +1648,16 @@ subroutine clearParameterBlock(CS)
   endif
 end subroutine clearParameterBlock
 
-subroutine openParameterBlock(CS,blockName)
-  type(param_file_type), intent(in) :: CS
-  character(len=*),      intent(in) :: blockName
+subroutine openParameterBlock(CS,blockName,desc)
+  type(param_file_type),      intent(in) :: CS
+  character(len=*),           intent(in) :: blockName
+  character(len=*), optional, intent(in) :: desc
 ! Tags blockName onto the end of the active parameter block name
   type(parameter_block), pointer :: block
   if (associated(CS%blockName)) then
     block => CS%blockName
     block%name = pushBlockLevel(block%name,blockName)
+    call doc_openBlock(CS%doc,block%name,desc)
   else
     if (is_root_pe()) call MOM_error(FATAL, &
       'openParameterBlock: A push was attempted before allocation.')
@@ -1619,12 +1668,13 @@ subroutine closeParameterBlock(CS)
   type(param_file_type), intent(in) :: CS
 ! Remove the lowest level of recursion from the active block name
   type(parameter_block), pointer :: block
-  integer :: i
+
   if (associated(CS%blockName)) then
     block => CS%blockName
     if (is_root_pe().and.len_trim(block%name)==0) call MOM_error(FATAL, &
       'closeParameterBlock: A pop was attempted on an empty stack. ("'//&
       trim(block%name)//'")')
+    call doc_closeBlock(CS%doc,block%name)
   else
     if (is_root_pe()) call MOM_error(FATAL, &
       'closeParameterBlock: A pop was attempted before allocation.')

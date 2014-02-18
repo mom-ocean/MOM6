@@ -83,7 +83,7 @@ module MOM_hor_visc
 !********+*********+*********+*********+*********+*********+*********+**
 
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
-use MOM_diag_mediator, only : diag_ptrs, time_type
+use MOM_diag_mediator, only : diag_ctrl, time_type
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
@@ -162,10 +162,10 @@ type, public :: hor_visc_CS ; private
 
 ! The following variables are precalculated combinations of metric terms.
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
-    dx2h, dy2h, &              ! dx^2 or dy^2 at h points, in m-2.
+    dx2h, dy2h, &              ! dx^2 or dy^2 at h points, in m2.
     dx_dyT, dy_dxT             ! dx/dy or dy/dx at h points, nondim.
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: &
-    dx2q, dy2q, &              ! dx^2 or dy^2 at q points, in m-2.
+    dx2q, dy2q, &              ! dx^2 or dy^2 at q points, in m2.
     dx_dyBu, dy_dxBu             ! dx/dy or dy/dx at q points, nondim.
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_) :: &
     Idx2dyCu, Idxdy2u           ! 1/(dx^2 dy) and 1/(dx dy^2) at u points, in m-3.
@@ -181,8 +181,8 @@ type, public :: hor_visc_CS ; private
     Laplac_Const_xy, & ! The Laplacian and biharmonic metric-dependent
     Biharm_Const_xy    ! constants, nondim.
 
-  type(diag_ptrs), pointer :: diag ! A pointer to a structure of shareable
-                             ! ocean diagnostic fields.
+  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
+                             ! timing of diagnostic output.
   integer :: id_diffu = -1, id_diffv = -1, id_Ah_h = -1, id_Ah_q = -1
   integer :: id_Kh_h = -1, id_Kh_q = -1, id_FrictWork = -1
 end type hor_visc_CS
@@ -241,8 +241,13 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
     sh_xy, &    ! sh_xy is the horizontal shearing strain (du/dy + dv/dx)
                 ! including all metric terms, in s-1.
     str_xy      ! str_xy is the cross term in the stress tensor, in H m2 s-2.
-  real, dimension(SZIB_(G),SZJB_(G), SZK_(G)) :: &
+  real, dimension(SZIB_(G),SZJB_(G),SZK_(G)) :: &
+    Ah_q, &     ! The biharmonic viscosity at corner points, in m4 s-1.
+    Kh_q, &     ! The Laplacian viscosity at corner points, in m2 s-1.
     FrictWork   ! Work released by lateral friction terms in W m-2.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
+    Ah_h, &     ! The biharmonic viscosity at thickness points, in m4 s-1.
+    Kh_h        ! The Laplacian viscosity at thickness points, in m2 s-1.
   real :: Ah        ! Biharmonic viscosity in m4 s-1.
   real :: Kh        ! Laplacian viscosity in m2 s-1.
   real :: AhSm      ! Smagorinsky biharmonic viscosity in m4 s-1.
@@ -377,7 +382,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
           endif
         endif
 
-        if (ASSOCIATED(CS%diag%Kh_h)) CS%diag%Kh_h(i,j,k) = Kh
+        if (CS%id_Kh_h>0) Kh_h(i,j,k) = Kh
 
         str_xx(i,j) = -Kh * sh_xx(i,j)
       else   ! not Laplacian
@@ -404,7 +409,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
           Ah = MIN(Ah, visc_bound_rem*hrat_min*CS%Ah_Max_xx(i,j))
         endif
 
-        if (ASSOCIATED(CS%diag%Ah_h)) CS%diag%Ah_h(i,j,k) = Ah
+        if (CS%id_Ah_h>0) Ah_h(i,j,k) = Ah
 
         str_xx(i,j) = str_xx(i,j) + Ah * &
           (CS%DY_dxT(i,j)*(G%IdyCu(I,j)*u0(I,j) - G%IdyCu(I-1,j)*u0(I-1,j)) - &
@@ -455,7 +460,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
           endif
         endif
 
-        if (ASSOCIATED(CS%diag%Kh_q)) CS%diag%Kh_q(I,J,k) = Kh
+        if (CS%id_Kh_q>0) Kh_q(I,J,k) = Kh
 
         str_xy(I,J) = -Kh * sh_xy(I,J)
       else   ! not Laplacian
@@ -482,7 +487,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
           Ah = MIN(Ah, visc_bound_rem*hrat_min*CS%Ah_Max_xy(I,J))
         endif
 
-        if (ASSOCIATED(CS%diag%Ah_q)) CS%diag%Ah_q(I,J,k) = Ah
+        if (CS%id_Ah_q>0) Ah_q(I,J,k) = Ah
 
         str_xy(I,J) = str_xy(I,J) + Ah * &
             (CS%DX_dyBu(I,J)*(u0(I,j+1)*G%IdxCu(I,j+1) - u0(I,j)*G%IdxCu(I,j)) + &
@@ -552,10 +557,10 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
   if (CS%id_diffu>0) call post_data(CS%id_diffu, diffu, CS%diag)
   if (CS%id_diffv>0) call post_data(CS%id_diffv, diffv, CS%diag)
   if (CS%id_FrictWork>0) call post_data(CS%id_FrictWork, FrictWork, CS%diag)
-  if (CS%id_Ah_h>0) call post_data(CS%id_Ah_h, CS%diag%Ah_h, CS%diag)
-  if (CS%id_Ah_q>0) call post_data(CS%id_Ah_q, CS%diag%Ah_q, CS%diag)
-  if (CS%id_Kh_h>0) call post_data(CS%id_Kh_h, CS%diag%Kh_h, CS%diag)
-  if (CS%id_Kh_q>0) call post_data(CS%id_Kh_q, CS%diag%Kh_q, CS%diag)
+  if (CS%id_Ah_h>0) call post_data(CS%id_Ah_h, Ah_h, CS%diag)
+  if (CS%id_Ah_q>0) call post_data(CS%id_Ah_q, Ah_q, CS%diag)
+  if (CS%id_Kh_h>0) call post_data(CS%id_Kh_h, Kh_h, CS%diag)
+  if (CS%id_Kh_q>0) call post_data(CS%id_Kh_q, Kh_q, CS%diag)
 
 end subroutine horizontal_viscosity
 
@@ -564,7 +569,7 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
   type(time_type),       intent(in) :: Time
   type(ocean_grid_type), intent(in) :: G
   type(param_file_type), intent(in) :: param_file
-  type(diag_ptrs), target, intent(inout) :: diag
+  type(diag_ctrl), target, intent(inout) :: diag
   type(hor_visc_CS), pointer        :: CS
 !   This subroutine allocates space for and claculates the static variables used
 ! by this module.  The metrics may be effectively 0, 1, or 2-D arrays,
@@ -576,7 +581,7 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
 !  (in)      G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
-!  (in)      diag - A structure containing pointers to common diagnostic fields.
+!  (in)      diag - A structure that is used to regulate diagnostic output.
 !  (in/out)  CS - A pointer that is set to point to the control structure
 !                 for this module
 
@@ -1009,29 +1014,25 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
 
   ! Register fields for output from this module.
 
-  CS%id_diffu = register_diag_field('ocean_model', 'diffu', G%axesCuL, Time, &
+  CS%id_diffu = register_diag_field('ocean_model', 'diffu', diag%axesCuL, Time, &
       'Zonal Acceleration from Horizontal Viscosity', 'meter second-2')
 
-  CS%id_diffv = register_diag_field('ocean_model', 'diffv', G%axesCvL, Time, &
+  CS%id_diffv = register_diag_field('ocean_model', 'diffv', diag%axesCvL, Time, &
       'Meridional Acceleration from Horizontal Viscosity', 'meter second-2')
 
-  CS%id_Ah_h = register_diag_field('ocean_model', 'Ahh', G%axesTL, Time, &
+  CS%id_Ah_h = register_diag_field('ocean_model', 'Ahh', diag%axesTL, Time, &
       'Biharmonic Horizontal Viscosity at h Points', 'meter4 second-1')
-  if (CS%id_Ah_h>0) call safe_alloc_ptr(CS%diag%Ah_h,isd,ied,jsd,jed,nz)
 
-  CS%id_Ah_q = register_diag_field('ocean_model', 'Ahq', G%axesBL, Time, &
+  CS%id_Ah_q = register_diag_field('ocean_model', 'Ahq', diag%axesBL, Time, &
       'Biharmonic Horizontal Viscosity at q Points', 'meter4 second-1')
-  if (CS%id_Ah_q>0) call safe_alloc_ptr(diag%Ah_q,IsdB,IedB,JsdB,JedB,nz)
 
-  CS%id_Kh_h = register_diag_field('ocean_model', 'Khh', G%axesTL, Time, &
+  CS%id_Kh_h = register_diag_field('ocean_model', 'Khh', diag%axesTL, Time, &
       'Laplacian Horizontal Viscosity at h Points', 'meter2 second-1')
-  if (CS%id_Kh_h > 0) call safe_alloc_ptr(diag%Kh_h,isd,ied,jsd,jed,nz)
 
-  CS%id_Kh_q = register_diag_field('ocean_model', 'Khq', G%axesBL, Time, &
+  CS%id_Kh_q = register_diag_field('ocean_model', 'Khq', diag%axesBL, Time, &
       'Laplacian Horizontal Viscosity at q Points', 'meter2 second-1')
-  if (CS%id_Kh_q > 0) call safe_alloc_ptr(diag%Kh_q,IsdB,IedB,JsdB,JedB,nz)
 
-  CS%id_FrictWork =register_diag_field('ocean_model','FrictWork',G%axesTL,Time,&
+  CS%id_FrictWork =register_diag_field('ocean_model','FrictWork',diag%axesTL,Time,&
       'Integral work done by lateral friction terms', 'Watt meter-2')
 
   if (CS%Laplacian .or. get_all) then
