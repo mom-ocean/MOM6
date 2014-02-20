@@ -267,11 +267,12 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, &
 ! fully implicit upwind advection scheme.
  
   real :: sink_dist ! The distance the tracer sinks in a time step, in m or kg m-2.
-  real, dimension(SZI_(G)) :: &
+  real, dimension(SZI_(G),SZJ_(G)) :: &
     sfc_src, &      ! The time-integrated surface source of the tracer, in
                     ! units of m or kg m-2 times a concentration.
-    btm_src, &      ! The time-integrated bottom source of the tracer, in
+    btm_src         ! The time-integrated bottom source of the tracer, in
                     ! units of m or kg m-2  times a concentration.
+  real, dimension(SZI_(G)) :: &
     b1, &           ! b1 is used by the tridiagonal solver, in m-1 or m2 kg-1.
     d1              ! d1=1-c1 is used by the tridiagonal solver, nondimensional.
   real :: c1(SZI_(G),SZK_(G))     ! c1 is used by the tridiagonal solver, ND.
@@ -293,7 +294,18 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, &
 
   sink_dist = 0.0
   if (present(sink_rate)) sink_dist = (dt*sink_rate) * G%m_to_H
-  do i=is,ie ; sfc_src(i) = 0.0 ; btm_src(i) = 0.0 ; enddo
+  do j=js,je; do i=is,ie ; sfc_src(i,j) = 0.0 ; btm_src(i,j) = 0.0 ; enddo; enddo
+  if (present(sfc_flux)) then
+     do j = js, je; do i = is,ie
+        sfc_src(i,j) = (sfc_flux(i,j)*dt) * G%kg_m2_to_H
+     enddo; enddo
+  endif
+  if (present(btm_flux)) then
+     do j = js, je; do i = is,ie
+        btm_src(i,j) = (btm_flux(i,j)*dt) * G%kg_m2_to_H
+     enddo; enddo
+  endif
+
 
   if (present(sink_rate)) then
     do j=js,je
@@ -331,9 +343,8 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, &
         b_denom_1 = h_minus_dsink(i,1) + ea(i,j,1) + h_neglect
         b1(i) = 1.0 / (b_denom_1 + eb(i,j,1))
         d1(i) = b_denom_1 * b1(i)
-        if (present(sfc_flux)) sfc_src(i) = (sfc_flux(i,j)*dt) * G%kg_m2_to_H
         h_tr = h_old(i,j,1) + h_neglect
-        tr(i,j,1) = b1(i)*(h_tr*tr(i,j,1) + sfc_src(i))
+        tr(i,j,1) = b1(i)*(h_tr*tr(i,j,1) + sfc_src(i,j))
       endif ; enddo
       do k=2,nz-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
         c1(i,k) = eb(i,j,k-1) * b1(i)
@@ -351,8 +362,7 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, &
                     h_neglect
         b1(i) = 1.0 / (b_denom_1 + eb(i,j,nz))
         h_tr = h_old(i,j,nz) + h_neglect
-        if (present(btm_flux)) btm_src(i) = (-btm_flux(i,j)*dt) * G%kg_m2_to_H
-        tr(i,j,nz) = b1(i) * ((h_tr * tr(i,j,nz) + btm_src(i)) + &
+        tr(i,j,nz) = b1(i) * ((h_tr * tr(i,j,nz) + btm_src(i,j)) + &
                               (ea(i,j,nz) + sink(i,nz)) * tr(i,j,nz-1))
       endif ; enddo
       if (present(btm_reservoir)) then ; do i=is,ie ; if (G%mask2dT(i,j)>0.5) then
@@ -371,9 +381,9 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, &
         b_denom_1 = h_tr + ea(i,j,1)
         b1(i) = 1.0 / (b_denom_1 + eb(i,j,1))
         d1(i) = b_denom_1 * b1(i)
-        if (present(sfc_flux)) sfc_src(i) = (sfc_flux(i,j)*dt) * G%kg_m2_to_H
-        tr(i,j,1) = b1(i)*(h_tr*tr(i,j,1) + sfc_src(i))
-      endif ; enddo
+        tr(i,j,1) = b1(i)*(h_tr*tr(i,j,1) + sfc_src(i,j))
+       endif 
+      enddo
       do k=2,nz-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
         c1(i,k) = eb(i,j,k-1) * b1(i)
         h_tr = h_old(i,j,k) + h_neglect
@@ -386,8 +396,7 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, &
         c1(i,nz) = eb(i,j,nz-1) * b1(i)
         h_tr = h_old(i,j,nz) + h_neglect
         b1(i) = 1.0 / (h_tr + d1(i) * ea(i,j,nz) + eb(i,j,nz))
-        if (present(btm_flux)) btm_src(i) = (-btm_flux(i,j)*dt) * G%kg_m2_to_H
-        tr(i,j,nz) = b1(i) * ((h_tr * tr(i,j,nz) + btm_src(i)) + &
+        tr(i,j,nz) = b1(i) * ((h_tr * tr(i,j,nz) + btm_src(i,j)) + &
                               ea(i,j,nz) * tr(i,j,nz-1))
       endif ; enddo
       do k=nz-1,1,-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
