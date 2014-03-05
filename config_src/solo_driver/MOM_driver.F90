@@ -196,10 +196,10 @@ program MOM_main
     call open_file(unit, 'input.nml', form=ASCII_FILE, action=READONLY_FILE)
     read(unit, ocean_solo_nml, iostat=io_status)
     call close_file(unit)
-    if (years+months+days+hours+minutes+seconds > 0) then
+!    if (years+months+days+hours+minutes+seconds > 0) then
       ierr = check_nml_error(io_status,'ocean_solo_nml')
       if (is_root_pe()) write(*,ocean_solo_nml)
-    endif
+!    endif
   endif
 
   ! Read ocean_solo restart, which can override settings from the namelist.
