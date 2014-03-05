@@ -144,6 +144,7 @@ program MOM_main
   type(time_type) :: energysavedays  ! The interval between writing the energies
                                      ! and other integral quantities of the run.
 
+  integer :: ocean_nthreads = 1            ! Number of Openmp threads
   integer :: date_init(6)=0                ! The start date of the whole simulation.
   integer :: date(6)=-1                    ! Possibly the start date of this run segment.
   integer :: years=0, months=0, days=0     ! These may determine the segment run
@@ -166,12 +167,14 @@ program MOM_main
   type(ice_shelf_CS),        pointer :: ice_shelf_CSp => NULL()
   !-----------------------------------------------------------------------
 
+  integer :: get_cpu_affinity, base_cpu, omp_get_num_threads, omp_get_thread_num
+
   character(len=4), parameter :: vers_num = 'v2.0'
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mod = "MOM_main (MOM_driver)" ! This module's name.
 
-  namelist /ocean_solo_nml/ date_init, calendar, months, days, hours, minutes, seconds
+  namelist /ocean_solo_nml/ date_init, calendar, months, days, hours, minutes, seconds, ocean_nthreads
 
   !#######################################################################
 
@@ -193,10 +196,10 @@ program MOM_main
     call open_file(unit, 'input.nml', form=ASCII_FILE, action=READONLY_FILE)
     read(unit, ocean_solo_nml, iostat=io_status)
     call close_file(unit)
-    if (years+months+days+hours+minutes+seconds > 0) then
+!    if (years+months+days+hours+minutes+seconds > 0) then
       ierr = check_nml_error(io_status,'ocean_solo_nml')
       if (is_root_pe()) write(*,ocean_solo_nml)
-    endif
+!    endif
   endif
 
   ! Read ocean_solo restart, which can override settings from the namelist.
@@ -219,6 +222,15 @@ program MOM_main
     endif
   endif
   call set_calendar_type(calendar_type)
+
+#ifndef NOT_SET_AFFINITY
+!$      call omp_set_num_threads(ocean_nthreads)
+!$      base_cpu = get_cpu_affinity()
+!$OMP PARALLEL
+!$        call set_cpu_affinity( base_cpu + omp_get_thread_num() )
+!$OMP END PARALLEL
+#endif  
+
 
   if (sum(date_init) > 0) then
     Start_time = set_date(date_init(1),date_init(2), date_init(3), &

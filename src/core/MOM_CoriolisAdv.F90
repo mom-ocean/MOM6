@@ -290,7 +290,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, AD, G, CS)
                   (Area_h(i+1,j) + Area_h(i,j+1))
   enddo ; enddo
 
-!GOMP(parallel do default(private) shared(u,v,h,uh,vh,CAu,CAv,G,CS,Area_h,Area_q,nz))
+!$OMP parallel do default(private) shared(u,v,h,uh,vh,CAu,CAv,G,CS,AD,Area_h,Area_q,nz,RV,PV)
   do k=1,nz
     is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
     Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB

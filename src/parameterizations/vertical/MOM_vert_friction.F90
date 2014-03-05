@@ -262,10 +262,10 @@ subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, ADp, CDp, G, CS, &
   h_neglect = G%H_subroundoff
   Idt = 1.0 / dt
 
-  do k=1,nz ; do i=Isq,Ieq ; Ray(i,k) = 0.0 ; enddo ; enddo
-
   !   Update the zonal velocity component using a modification of a standard
   ! tridagonal solver.
+!$OMP parallel do default(shared) private(do_i,surface_stress,zDS,stress,h_a,hfr, &
+!$OMP                                     Ray,b_denom_1,b1,d1,c1)
   do j=G%jsc,G%jec
     do I=Isq,Ieq ; do_i(I) = (G%mask2dCu(I,j) > 0) ; enddo
 
@@ -292,9 +292,13 @@ subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, ADp, CDp, G, CS, &
       surface_stress(I) = dt_Rho0 * (G%mask2dCu(I,j)*fluxes%taux(I,j))
     enddo ; endif ! direct_stress
 
-    if (CS%Channel_drag) then ; do k=1,nz ; do I=Isq,Ieq
-      Ray(I,k) = visc%Ray_u(I,j,k)
-    enddo ; enddo ; endif
+    if (CS%Channel_drag) then 
+       do k=1,nz ; do I=Isq,Ieq
+         Ray(I,k) = visc%Ray_u(I,j,k)
+       enddo ; enddo ; 
+    else
+       do k=1,nz ; do i=Isq,Ieq ; Ray(i,k) = 0.0 ; enddo ; enddo
+    endif
 
     do I=Isq,Ieq ; if (do_i(I)) then
       b_denom_1 = CS%h_u(I,j,1) + dt_m_to_H * (Ray(I,1) + CS%a_u(I,j,1))
@@ -333,6 +337,8 @@ subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, ADp, CDp, G, CS, &
   enddo ! end u-component j loop
 
   ! Now work on the meridional velocity component.
+!$OMP parallel do default(shared) private(do_i,surface_stress,zDS,stress,h_a,hfr, &
+!$OMP                                     Ray,b_denom_1,b1,d1,c1)
   do J=Jsq,Jeq
     do i=is,ie ; do_i(i) = (G%mask2dCv(i,J) > 0) ; enddo
 
@@ -359,9 +365,15 @@ subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, ADp, CDp, G, CS, &
       surface_stress(i) = dt_Rho0 * (G%mask2dCv(i,J)*fluxes%tauy(i,J))
     enddo ; endif ! direct_stress
 
-    if (CS%Channel_drag) then ; do k=1,nz ; do i=is,ie
-      Ray(i,k) = visc%Ray_v(i,J,k)
-    enddo ; enddo ; endif
+    if (CS%Channel_drag) then 
+       do k=1,nz ; do i=is,ie
+          Ray(i,k) = visc%Ray_v(i,J,k)
+       enddo ; enddo 
+    else
+       do k=1,nz ; do i=is,ie
+          Ray(i,k) = 0.0
+       enddo ; enddo      
+    endif
 
     do i=is,ie ; if (do_i(i)) then
       b_denom_1 = CS%h_v(i,J,1) + dt_m_to_H * (Ray(i,1) + CS%a_v(i,J,1))
@@ -472,15 +484,20 @@ subroutine vertvisc_remnant(visc, visc_rem_u, visc_rem_v, dt, G, CS)
 
   dt_m_to_H = dt*G%m_to_H
 
-  do k=1,nz ; do i=Isq,Ieq ; Ray(i,k) = 0.0 ; enddo ; enddo
-
   ! Find the zonal viscous using a modification of a standard tridagonal solver.
+!$OMP parallel do default(shared) private(do_i,Ray,b_denom_1,b1,d1,c1)
   do j=G%jsc,G%jec
     do I=Isq,Ieq ; do_i(I) = (G%mask2dCu(I,j) > 0) ; enddo
 
-    if (CS%Channel_drag) then ; do k=1,nz ; do I=Isq,Ieq
-      Ray(I,k) = visc%Ray_u(I,j,k)
-    enddo ; enddo ; endif
+    if (CS%Channel_drag) then  
+      do k=1,nz ; do I=Isq,Ieq
+         Ray(I,k) = visc%Ray_u(I,j,k)
+      enddo ; enddo
+    else
+      do k = 1,nz; do i=isq,ieq
+        Ray(i,k) = 0.0
+      enddo; enddo 
+    endif
 
     do I=Isq,Ieq ; if (do_i(I)) then
       b_denom_1 = CS%h_u(I,j,1) + dt_m_to_H * (Ray(I,1) + CS%a_u(I,j,1))
@@ -497,17 +514,25 @@ subroutine vertvisc_remnant(visc, visc_rem_u, visc_rem_v, dt, G, CS)
     endif ; enddo ; enddo
     do k=nz-1,1,-1 ; do I=Isq,Ieq ; if (do_i(I)) then
       visc_rem_u(I,j,k) = visc_rem_u(I,j,k) + c1(I,k+1)*visc_rem_u(I,j,k+1)
-    endif ; enddo ; enddo ! i and k loops
 
+    endif ; enddo ; enddo ! i and k loops
+    
   enddo ! end u-component j loop
 
   ! Now find the meridional viscous using a modification.
+!$OMP parallel do default(shared) private(do_i,Ray,b_denom_1,b1,d1,c1)
   do J=Jsq,Jeq
     do i=is,ie ; do_i(i) = (G%mask2dCv(i,J) > 0) ; enddo
 
-    if (CS%Channel_drag) then ; do k=1,nz ; do i=is,ie
-      Ray(i,k) = visc%Ray_v(i,J,k)
-    enddo ; enddo ; endif
+    if (CS%Channel_drag) then  
+      do k=1,nz ; do I=Is,Ie
+         Ray(I,k) = visc%Ray_v(I,j,k)
+      enddo ; enddo 
+    else
+      do k = 1,nz; do i=is,ie
+        Ray(i,k) = 0.0
+      enddo; enddo
+    endif
 
     do i=is,ie ; if (do_i(i)) then
       b_denom_1 = CS%h_v(i,J,1) + dt_m_to_H * (Ray(i,1) + CS%a_v(i,J,1))
@@ -526,7 +551,6 @@ subroutine vertvisc_remnant(visc, visc_rem_u, visc_rem_v, dt, G, CS)
       visc_rem_v(i,J,k) = visc_rem_v(i,J,k) + c1(i,k+1)*visc_rem_v(i,J,k+1)
     endif ; enddo ; enddo ! i and k loops
   enddo ! end of v-component J loop
-
 
   if (CS%debug) then
     call uchksum(visc_rem_u,"visc_rem_u",G,haloshift=0)
@@ -589,8 +613,9 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
     Ztop_min, &   ! The deeper of the two adjacent surface heights, in H. 
     Dmin, &       ! The shallower of the two adjacent bottom depths converted to
                   ! thickness units, in m or kg m-2.
-    zh            ! An estimate of the interface's distance from the bottom
+    zh, &         ! An estimate of the interface's distance from the bottom
                   ! based on harmonic mean thicknesses, in m or kg m-2.
+    h_ml          ! The mixed layer depth, in m or kg m-2.
   real, allocatable, dimension(:,:) :: hML_u, hML_v
   real :: zcol(SZI_(G)) ! The height of an interface at h-points, in m or kg m-2.
   real :: botfn   ! A function which goes from 1 at the bottom to 0 much more
@@ -631,6 +656,7 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
     allocate(CS%a1_shelf_v(G%isd:G%ied,G%JsdB:G%JedB)) ; CS%a1_shelf_v(:,:)=0.0
   endif
 
+!$OMP parallel do default(private) shared(G,CS,visc,Isq,ieq,nz,u,h,fluxes)
   do j=G%Jsc,G%Jec
     do I=Isq,Ieq ; do_i(I) = (G%mask2dCu(I,j) > 0) ; enddo
 
@@ -683,7 +709,10 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
       enddo ! k loop
     endif
 
-    call find_coupling_coef(a, hvel, do_i, work_on_u=.true.)
+    call find_coupling_coef(a, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i, h_ml, dt, j, G, CS, visc, fluxes, work_on_u=.true.)
+    if (allocated(hML_u)) then
+        do i=is,ie ; if (do_i(i)) then ; hML_u(I,j) = h_ml(I) ; endif ; enddo
+    endif
     do_any_shelf = .false.
     if (associated(fluxes%frac_shelf_u)) then
       do I=Isq,Ieq
@@ -693,7 +722,8 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
       enddo
       if (do_any_shelf) then
         if (CS%harmonic_visc) then
-          call find_coupling_coef(a_shelf, hvel, do_i_shelf, work_on_u=.true., shelf=.true.)
+          call find_coupling_coef(a_shelf, hvel, do_i_shelf, h_harm, bbl_thick, kv_bbl, z_i, h_ml, dt, j, &
+                                  G, CS, visc, fluxes, work_on_u=.true., shelf=.true.)
         else  ! Find upwind-biased thickness near the surface.
           ! Perhaps this needs to be done more carefully, via find_eta.
           do I=Isq,Ieq ; if (do_i_shelf(I)) then
@@ -714,7 +744,8 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
               endif
             endif ; enddo
           enddo
-          call find_coupling_coef(a_shelf, hvel_shelf, do_i_shelf, work_on_u=.true., shelf=.true.)
+          call find_coupling_coef(a_shelf, hvel_shelf, do_i_shelf, h_harm, bbl_thick, kv_bbl, z_i, h_ml, dt, j, &
+                                  G, CS, visc, fluxes, work_on_u=.true., shelf=.true.)
         endif
         do I=Isq,Ieq ; if (do_i_shelf(I)) CS%a1_shelf_u(I,j) = a_shelf(I,1) ; enddo
       endif
@@ -741,6 +772,8 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
 
   enddo
 
+
+!$OMP parallel do default(private) shared(G,CS,visc,is,ie,Jsq,Jeq,nz,v,h,fluxes)
   ! Now work on v-points.
   do J=Jsq,Jeq
     do i=is,ie ; do_i(i) = (G%mask2dCv(i,J) > 0) ; enddo
@@ -794,7 +827,10 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
       endif ; enddo ; enddo ! i & k loops
     endif
 
-    call find_coupling_coef(a, hvel, do_i, work_on_u=.false.)
+    call find_coupling_coef(a, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i, h_ml, dt, j, G, CS, visc, fluxes, work_on_u=.false.)
+    if ( allocated(hML_v)) then
+       do i=is,ie ; if (do_i(i)) then ; hML_v(i,J) = h_ml(i) ; endif ; enddo
+    endif
     do_any_shelf = .false.
     if (associated(fluxes%frac_shelf_v)) then
       do i=is,ie
@@ -804,7 +840,8 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
       enddo
       if (do_any_shelf) then
         if (CS%harmonic_visc) then
-          call find_coupling_coef(a_shelf, hvel, do_i_shelf, work_on_u=.false., shelf=.true.)
+          call find_coupling_coef(a_shelf, hvel, do_i_shelf, h_harm, bbl_thick, kv_bbl, z_i, h_ml, dt, j, &
+                                  G, CS, visc, fluxes, work_on_u=.false., shelf=.true.)
         else  ! Find upwind-biased thickness near the surface.
           ! Perhaps this needs to be done more carefully, via find_eta.
           do i=is,ie ; if (do_i_shelf(i)) then
@@ -825,7 +862,8 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
               endif
             endif ; enddo
           enddo
-          call find_coupling_coef(a_shelf, hvel_shelf, do_i_shelf, work_on_u=.false., shelf=.true.)
+          call find_coupling_coef(a_shelf, hvel_shelf, do_i_shelf, h_harm, bbl_thick, kv_bbl, z_i, h_ml, dt, j, &
+                                  G, CS, visc, fluxes, work_on_u=.false., shelf=.true.)
         endif
         do i=is,ie ; if (do_i_shelf(i)) CS%a1_shelf_v(i,J) = a_shelf(i,1) ; enddo
       endif
@@ -852,6 +890,7 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
 
   enddo ! end of v-point j loop
 
+
   if (CS%debug) then
     call uchksum(CS%h_u,"vertvisc_coef h_u",G,haloshift=0)
     call vchksum(CS%h_v,"vertvisc_coef h_v",G,haloshift=0)
@@ -872,15 +911,26 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
   if (allocated(hML_u)) deallocate(hML_u)
   if (allocated(hML_v)) deallocate(hML_v)
 
-  contains
+end subroutine vertvisc_coef
 
-  subroutine find_coupling_coef(a, hvel, do_i, work_on_u, shelf)
+subroutine find_coupling_coef(a, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i, h_ml, &
+                              dt, j, G, CS, visc, fluxes, work_on_u, shelf)
 !    This subroutine calculates the 'coupling coefficient' (a[k]) at the
 !  interfaces. If BOTTOMDRAGLAW is defined, the minimum of Hbbl and half the
 !  adjacent layer thicknesses are used to calculate a[k] near the bottom.
     real,    dimension(NIMEMB_,NK_INTERFACE_), intent(out) :: a
     real,    dimension(NIMEMB_,NKMEM_),   intent(in)  :: hvel
     logical, dimension(NIMEMB_),          intent(in)  :: do_i
+    real,    dimension(NIMEMB_,NKMEM_),   intent(in)  :: h_harm
+    real,    dimension(NIMEMB_),          intent(in)  :: bbl_thick, kv_bbl
+    real,    dimension(NIMEMB_,NK_INTERFACE_), intent(in)  :: z_i
+    real,    dimension(NIMEMB_),          intent(out) :: h_ml
+    integer,                              intent(in)  :: j
+    real,                                 intent(in)  :: dt
+    type(ocean_grid_type), intent(in)                 :: G
+    type(vertvisc_CS), pointer                        :: CS
+    type(vertvisc_type), intent(in)                   :: visc
+    type(forcing), intent(in)                         :: fluxes
     logical,                              intent(in)  :: work_on_u
     logical, optional,                    intent(in)  :: shelf
 ! Arguments: a - The coupling coefficent across interfaces, in m/s.  Intent out.
@@ -893,7 +943,7 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
     real, dimension(SZIB_(G)) :: &
       u_star, &   ! ustar at a velocity point, in m s-1.
       absf, &     ! The average of the neighboring absolute values of f, in s-1.
-      h_ml, &     ! The mixed layer depth, in m or kg m-2.
+!      h_ml, &     ! The mixed layer depth, in m or kg m-2.
       nk_visc, &  ! The (real) interface index of the base of mixed layer.
       z_t, &      ! The distance from the top, sometimes normalized
                   ! by Hmix, in m or nondimensional.
@@ -915,9 +965,12 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
     real :: a_top
     logical :: do_shelf
     integer :: i, k, is, ie, max_nk
+    integer :: nz
+    real    :: botfn
 
     if (work_on_u) then ; is = G%IscB ; ie = G%IecB
     else ; is = G%isc ; ie = G%iec ; endif
+    nz = G%ke
     h_neglect = G%H_subroundoff
     dz_neglect = G%H_subroundoff*G%H_to_m
 
@@ -1049,11 +1102,6 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
           h_ml(i) = h_ml(i) + (nk_visc(i) - k) * hvel(i,k)
         endif
       endif ; enddo ; enddo
-      if (work_on_u .and. allocated(hML_u)) then
-        do i=is,ie ; if (do_i(i)) then ; hML_u(I,j) = h_ml(I) ; endif ; enddo
-      elseif (.not.work_on_u .and. allocated(hML_v)) then
-        do i=is,ie ; if (do_i(i)) then ; hML_v(i,J) = h_ml(i) ; endif ; enddo
-      endif
 
       do K=2,max_nk ; do i=is,ie ; if (do_i(i)) then ; if (k < nk_visc(i)) then
         ! Set the viscosity at the interfaces.
@@ -1071,9 +1119,9 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
       endif ; endif ; enddo ; enddo
     endif
 
-  end subroutine find_coupling_coef
+end subroutine find_coupling_coef
 
-end subroutine vertvisc_coef
+
 
 subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, fluxes, visc, dt, G, CS)
 !  Within this subroutine, velocity components which exceed a threshold for
@@ -1104,7 +1152,7 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, fluxes, visc, dt, G, CS)
 
   if (len_trim(CS%u_trunc_file) > 0) then
     if (.not.CS%CFL_based_trunc) vel_report(:) = maxvel
-
+!$OMP parallel do default(private) shared(js,je,Isq,Ieq,nz,CS,G,fluxes,u,h)
     do j=js,je
       trunc_any = .false.
       do I=Isq,Ieq ; dowrite(I) = .false. ; enddo
@@ -1154,6 +1202,7 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, fluxes, visc, dt, G, CS)
     enddo ! j-loop
   else
     if (CS%CFL_based_trunc) then
+!$OMP parallel do default(shared) 
       do k=1,nz ; do j=js,je ; do I=Isq,Ieq
         if ((u(I,j,k) * (dt * G%dy_Cu(I,j))) * G%IareaT(i+1,j) < -CS%CFL_trunc) then
           u(I,j,k) = (-0.9*CS%CFL_trunc) * (G%areaT(i+1,j) / (dt * G%dy_Cu(I,j)))
@@ -1164,6 +1213,7 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, fluxes, visc, dt, G, CS)
         endif
       enddo ; enddo ; enddo
     else
+!$OMP parallel do default(shared) 
       do k=1,nz ; do j=js,je ; do I=Isq,Ieq ; if (abs(u(I,j,k)) > maxvel) then
         u(I,j,k) = SIGN(truncvel,u(I,j,k))
         if (h(i,j,k) + h(i+1,j,k) > 6.0*G%Angstrom) CS%ntrunc = CS%ntrunc + 1
@@ -1173,7 +1223,7 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, fluxes, visc, dt, G, CS)
 
   if (len_trim(CS%v_trunc_file) > 0) then
     if (.not.CS%CFL_based_trunc) vel_report(:) = maxvel
-
+!$OMP parallel do default(private) shared(Jsq,Jeq,is,ie,nz,CS,G,fluxes,v,h)
     do J=Jsq,Jeq
       trunc_any = .false.
       do i=is,ie ; dowrite(i) = .false. ; enddo
@@ -1223,6 +1273,7 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, fluxes, visc, dt, G, CS)
     enddo ! J-loop
   else
     if (CS%CFL_based_trunc) then
+!$OMP parallel do default(shared) 
       do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
         if ((v(i,J,k) * (dt * G%dx_Cv(i,J))) * G%IareaT(i,j+1) < -CS%CFL_trunc) then
           v(i,J,k) = (-0.9*CS%CFL_trunc) * (G%areaT(i,j+1) / (dt * G%dx_Cv(i,J)))
@@ -1233,6 +1284,7 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, fluxes, visc, dt, G, CS)
         endif
       enddo ; enddo ; enddo
     else
+!$OMP parallel do default(shared) 
       do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie ; if (abs(v(i,J,k)) > maxvel) then
         v(i,J,k) = SIGN(truncvel,v(i,J,k))
         if (h(i,j,k) + h(i,j+1,k) > 6.0*G%Angstrom) CS%ntrunc = CS%ntrunc + 1
