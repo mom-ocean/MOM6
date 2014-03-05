@@ -144,7 +144,7 @@ program MOM_main
   type(time_type) :: energysavedays  ! The interval between writing the energies
                                      ! and other integral quantities of the run.
 
-  integer :: nthreads = 1                  ! Number of Openmp threads
+  integer :: ocean_nthreads = 1            ! Number of Openmp threads
   integer :: date_init(6)=0                ! The start date of the whole simulation.
   integer :: date(6)=-1                    ! Possibly the start date of this run segment.
   integer :: years=0, months=0, days=0     ! These may determine the segment run
@@ -174,7 +174,7 @@ program MOM_main
 #include "version_variable.h"
   character(len=40)  :: mod = "MOM_main (MOM_driver)" ! This module's name.
 
-  namelist /ocean_solo_nml/ date_init, calendar, months, days, hours, minutes, seconds, nthreads
+  namelist /ocean_solo_nml/ date_init, calendar, months, days, hours, minutes, seconds, ocean_nthreads
 
   !#######################################################################
 
@@ -224,7 +224,7 @@ program MOM_main
   call set_calendar_type(calendar_type)
 
 #ifndef NOT_SET_AFFINITY
-!$      call omp_set_num_threads(nthreads)
+!$      call omp_set_num_threads(ocean_nthreads)
 !$      base_cpu = get_cpu_affinity()
 !$OMP PARALLEL
 !$        call set_cpu_affinity( base_cpu + omp_get_thread_num() )

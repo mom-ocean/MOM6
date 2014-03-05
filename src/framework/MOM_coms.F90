@@ -21,12 +21,12 @@ module MOM_coms
 !***********************************************************************
 
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING
-use fms_mod, only : fms_end
+use fms_mod, only : fms_end, MOM_infra_init => fms_init
 use memutils_mod, only : print_memuse_stats
 use mpp_mod, only : PE_here => mpp_pe, root_PE => mpp_root_pe, num_PEs => mpp_npes
 use mpp_mod, only : broadcast => mpp_broadcast
 use mpp_mod, only : sum_across_PEs => mpp_sum, min_across_PEs => mpp_min
-use mpp_mod, only : max_across_PEs => mpp_max, MOM_infra_init => mpp_init
+use mpp_mod, only : max_across_PEs => mpp_max
 
 implicit none ; private
 
