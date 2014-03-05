@@ -207,7 +207,7 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, CS, uhbt, vhbt, OBC, &
                          u_cor, uhbt_aux, u_cor_aux, BT_cont)
 
     call cpu_clock_begin(id_clock_update)
-!GOMP(parallel do default(shared) private(i, j, k))
+!$OMP parallel do default(shared) private(i, j, k)
     do k=1,nz ; do j=LB%jsh,LB%jeh ; do i=LB%ish,LB%ieh
       h(i,j,k) = hin(i,j,k) - dt* G%IareaT(i,j) * (uh(I,j,k) - uh(I-1,j,k))
   !   Uncomment this line to prevent underflow.
@@ -235,7 +235,7 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, CS, uhbt, vhbt, OBC, &
                               v_cor, vhbt_aux, v_cor_aux, BT_cont)
 
     call cpu_clock_begin(id_clock_update)
-!GOMP(parallel do default(shared) private(i, j, k))
+!$OMP parallel do default(shared) private(i, j, k)
     do k=1,nz ; do j=LB%jsh,LB%jeh ; do i=LB%ish,LB%ieh
       h(i,j,k) = h(i,j,k) - dt*G%IareaT(i,j) * (vh(i,J,k) - vh(i,J-1,k))
   !   This line prevents underflow.
@@ -264,7 +264,7 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, CS, uhbt, vhbt, OBC, &
                               v_cor, vhbt_aux, v_cor_aux, BT_cont)
 
     call cpu_clock_begin(id_clock_update)
-!GOMP(parallel do default(shared) private(i, j, k))
+!$OMP parallel do default(shared) private(i, j, k)
     do k=1,nz ; do j=LB%jsh,LB%jeh ; do i=LB%ish,LB%ieh
       h(i,j,k) = hin(i,j,k) - dt*G%IareaT(i,j) * (vh(i,J,k) - vh(i,J-1,k))
     enddo ; enddo ; enddo
@@ -290,7 +290,7 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, CS, uhbt, vhbt, OBC, &
                          u_cor, uhbt_aux, u_cor_aux, BT_cont)
 
     call cpu_clock_begin(id_clock_update)
-!GOMP(parallel do default(shared) private(i, j, k))
+!$OMP parallel do default(shared) private(i, j, k)
     do k=1,nz ; do j=LB%jsh,LB%jeh ; do i=LB%ish,LB%ieh
       h(i,j,k) = h(i,j,k) - dt* G%IareaT(i,j) * (uh(I,j,k) - uh(I-1,j,k))
   !   This line prevents underflow.
@@ -394,7 +394,7 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, CS, LB, uhbt, OBC, &
   if (CS%aggress_adjust) CFL_dt = I_dt
 
   call cpu_clock_begin(id_clock_update)
-!GOMP(parallel do default(shared) private(i, j, k))
+!$OMP parallel do default(shared) private(i, j, k)
   do k=1,nz
     ! This sets hl and hr.
     if (CS%upwind_1st) then
@@ -410,9 +410,9 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, CS, LB, uhbt, OBC, &
   call cpu_clock_end(id_clock_update)
 
   call cpu_clock_begin(id_clock_correct)
-!GOMP(parallel do default(shared) private(i, j, k, do_i, duhdu, du, &)
-!GOMP(              du_max_CFL, du_min_CFL, uh_tot_0, duhdu_tot_0, visc_rem, &)
-!GOMP(              visc_rem_max, I_vrm, du_lim, dx_E, dx_W ))
+!$OMP parallel do default(shared) private(i, j, k, do_i, duhdu, du, &
+!$OMP               du_max_CFL, du_min_CFL, uh_tot_0, duhdu_tot_0, visc_rem, &
+!$OMP               visc_rem_max, I_vrm, du_lim, dx_E, dx_W )
   do j=jsh,jeh
     do I=ish-1,ieh ; do_i(I) = .true. ; visc_rem_max(I) = 0.0 ; enddo
     ! Set uh and duhdu.
@@ -1129,7 +1129,7 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, CS, LB, vhbt, OBC, &
   if (CS%aggress_adjust) CFL_dt = I_dt
 
   call cpu_clock_begin(id_clock_update)
-!GOMP(parallel do default(shared) private(i, j, k))
+!$OMP parallel do default(shared) private(i, j, k)
   do k=1,nz
     ! This sets hl and hr.
     if (CS%upwind_1st) then
@@ -1145,9 +1145,9 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, CS, LB, vhbt, OBC, &
   call cpu_clock_end(id_clock_update)
 
   call cpu_clock_begin(id_clock_correct)
-!GOMP(parallel do default(shared) private(i, j, k, do_i, dvhdv, dv, &)
-!GOMP(              dv_max_CFL, dv_min_CFL, vh_tot_0, dvhdv_tot_0, visc_rem, &)
-!GOMP(              visc_rem_max, I_vrm, dv_lim, dy_N, dy_S ))
+!$OMP parallel do default(shared) private(i, j, k, do_i, dvhdv, dv, &
+!$OMP               dv_max_CFL, dv_min_CFL, vh_tot_0, dvhdv_tot_0, visc_rem, &
+!$OMP               visc_rem_max, I_vrm, dv_lim, dy_N, dy_S )
   do J=jsh-1,jeh
     do i=ish,ieh ; do_i(i) = .true. ; visc_rem_max(I) = 0.0 ; enddo
     ! This sets vh and dvhdv.

@@ -304,9 +304,9 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, CS)
     enddo ; enddo
   endif
 
-!GOMP(parallel do default(private) shared(u, v, h, tv, visc, G, CS, Rml, is, ie, js, je, nz, &)
-!GOMP(                                    Isq, Ieq, Jsq, Jeq, nkmb, h_neglect, Rho0x400_G,   &)
-!GOMP(                                    Vol_quit, C2pi_3, U_bg_sq, cdrag_sqrt, K2 ))
+!$OMP parallel do default(private) shared(u, v, h, tv, visc, G, CS, Rml, is, ie, js, je, nz, &
+!$OMP                                     Isq, Ieq, Jsq, Jeq, nkmb, h_neglect, Rho0x400_G,   &
+!$OMP                                     Vol_quit, C2pi_3, U_bg_sq, cdrag_sqrt, K2 )
   do j=G%JscB,G%JecB ; do m=1,2
 
     if (m==1) then
@@ -991,8 +991,8 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
   endif
 
 
-!GOMP(parallel do default(private) shared(u, v, h, tv, fluxes, visc, dt, G, CS, use_EOS, &)
-!GOMP(                                    dt_Rho0, h_neglect, h_tiny, g_H_Rho0))
+!$OMP parallel do default(private) shared(u, v, h, tv, fluxes, visc, dt, G, CS, use_EOS, &
+!$OMP                                     dt_Rho0, h_neglect, h_tiny, g_H_Rho0)
   do j=js,je  ! u-point loop
     if (CS%dynamic_viscous_ML) then
       do_any = .false.
@@ -1219,8 +1219,8 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
   enddo ! j-loop at u-points
 
 
-!GOMP(parallel do default(private) shared(u, v, h, tv, fluxes, visc, dt, G, CS, use_EOS, &)
-!GOMP(                                    dt_Rho0, h_neglect, h_tiny, g_H_Rho0))
+!$OMP parallel do default(private) shared(u, v, h, tv, fluxes, visc, dt, G, CS, use_EOS, &
+!$OMP                                     dt_Rho0, h_neglect, h_tiny, g_H_Rho0)
   do J=Jsq,Jeq  ! v-point loop
     if (CS%dynamic_viscous_ML) then
       do_any = .false.
