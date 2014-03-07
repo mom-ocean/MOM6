@@ -304,9 +304,10 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, CS)
     enddo ; enddo
   endif
 
-!GOMP(parallel do default(private) shared(u, v, h, tv, visc, G, CS, Rml, is, ie, js, je, nz, &)
-!GOMP(                                    Isq, Ieq, Jsq, Jeq, nkmb, h_neglect, Rho0x400_G,   &)
-!GOMP(                                    Vol_quit, C2pi_3, U_bg_sq, cdrag_sqrt, K2 ))
+!$OMP parallel do default(private) shared(u, v, h, tv, visc, G, CS, Rml, is, ie, js, je, nz,  &
+!$OMP                                     Isq, Ieq, Jsq, Jeq, nkmb, h_neglect, Rho0x400_G, &
+!$OMP                                     Vol_quit, C2pi_3, U_bg_sq, cdrag_sqrt,           &
+!$OMP                                     K2,use_BBL_EOS,maxitt) 
   do j=G%JscB,G%JecB ; do m=1,2
 
     if (m==1) then
@@ -990,9 +991,9 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
 !    if (CS%linear_drag) ustar(:) = cdrag_sqrt*CS%drag_bg_vel
   endif
 
-
-!GOMP(parallel do default(private) shared(u, v, h, tv, fluxes, visc, dt, G, CS, use_EOS, &)
-!GOMP(                                    dt_Rho0, h_neglect, h_tiny, g_H_Rho0))
+!$OMP  parallel do default(private) shared(u, v, h, tv, fluxes, visc, dt, G, CS, use_EOS, &
+!$OMP                                      dt_Rho0, h_neglect, h_tiny, g_H_Rho0,js,je,    &
+!$OMP                                      Isq,Ieq,nz,U_bg_sq,cdrag_sqrt,Rho0x400_G)   
   do j=js,je  ! u-point loop
     if (CS%dynamic_viscous_ML) then
       do_any = .false.
@@ -1218,9 +1219,9 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
 
   enddo ! j-loop at u-points
 
-
-!GOMP(parallel do default(private) shared(u, v, h, tv, fluxes, visc, dt, G, CS, use_EOS, &)
-!GOMP(                                    dt_Rho0, h_neglect, h_tiny, g_H_Rho0))
+!$OMP parallel do default(private) shared(u, v, h, tv, fluxes, visc, dt, G, CS, use_EOS, &
+!$OMP                                     dt_Rho0, h_neglect, h_tiny, g_H_Rho0,is,ie,    &
+!$OMP                                     Jsq,Jeq,nz,U_bg_sq,cdrag_sqrt,Rho0x400_G)
   do J=Jsq,Jeq  ! v-point loop
     if (CS%dynamic_viscous_ML) then
       do_any = .false.
@@ -1319,7 +1320,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
 
     do_any_shelf = .false.
     if (associated(fluxes%frac_shelf_h)) then
-      do I=Isq,Ieq
+      do I=Is,Ie
         if (fluxes%frac_shelf_v(i,J)*G%mask2dCv(i,J) == 0.0) then
           do_i(I) = .false.
           visc%tbl_thick_shelf_v(i,J) = 0.0 ; visc%kv_tbl_shelf_v(i,J) = 0.0
