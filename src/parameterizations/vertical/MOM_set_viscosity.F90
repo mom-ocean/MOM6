@@ -304,9 +304,10 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, CS)
     enddo ; enddo
   endif
 
-!$OMP parallel do default(private) shared(u, v, h, tv, visc, G, CS, Rml, is, ie, js, je, nz, &
-!$OMP                                     Isq, Ieq, Jsq, Jeq, nkmb, h_neglect, Rho0x400_G,   &
-!$OMP                                     Vol_quit, C2pi_3, U_bg_sq, cdrag_sqrt, K2 )
+!$OMP parallel do default(private) shared(u, v, h, tv, visc, G, CS, Rml, is, ie, js, je, nz,  &
+!$OMP                                     Isq, Ieq, Jsq, Jeq, nkmb, h_neglect, Rho0x400_G, &
+!$OMP                                     Vol_quit, C2pi_3, U_bg_sq, cdrag_sqrt,           &
+!$OMP                                     K2,use_BBL_EOS,maxitt) 
   do j=G%JscB,G%JecB ; do m=1,2
 
     if (m==1) then
