@@ -262,10 +262,12 @@ subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, ADp, CDp, G, CS, &
   h_neglect = G%H_subroundoff
   Idt = 1.0 / dt
 
+  do k=1,nz ; do i=Isq,Ieq ; Ray(i,k) = 0.0 ; enddo ; enddo
+
   !   Update the zonal velocity component using a modification of a standard
   ! tridagonal solver.
-!$OMP parallel do default(shared) private(do_i,surface_stress,zDS,stress,h_a,hfr, &
-!$OMP                                     Ray,b_denom_1,b1,d1,c1)
+!$OMP parallel do default(shared) firstprivate(Ray) private(do_i,surface_stress,zDS,stress,h_a,hfr, &
+!$OMP                                     b_denom_1,b1,d1,c1)
   do j=G%jsc,G%jec
     do I=Isq,Ieq ; do_i(I) = (G%mask2dCu(I,j) > 0) ; enddo
 
@@ -292,13 +294,9 @@ subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, ADp, CDp, G, CS, &
       surface_stress(I) = dt_Rho0 * (G%mask2dCu(I,j)*fluxes%taux(I,j))
     enddo ; endif ! direct_stress
 
-    if (CS%Channel_drag) then 
-       do k=1,nz ; do I=Isq,Ieq
-         Ray(I,k) = visc%Ray_u(I,j,k)
-       enddo ; enddo ; 
-    else
-       do k=1,nz ; do i=Isq,Ieq ; Ray(i,k) = 0.0 ; enddo ; enddo
-    endif
+    if (CS%Channel_drag) then ; do k=1,nz ; do I=Isq,Ieq
+      Ray(I,k) = visc%Ray_u(I,j,k)
+    enddo ; enddo ; endif
 
     do I=Isq,Ieq ; if (do_i(I)) then
       b_denom_1 = CS%h_u(I,j,1) + dt_m_to_H * (Ray(I,1) + CS%a_u(I,j,1))
@@ -337,8 +335,8 @@ subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, ADp, CDp, G, CS, &
   enddo ! end u-component j loop
 
   ! Now work on the meridional velocity component.
-!$OMP parallel do default(shared) private(do_i,surface_stress,zDS,stress,h_a,hfr, &
-!$OMP                                     Ray,b_denom_1,b1,d1,c1)
+!$OMP parallel do default(shared) firstprivate(Ray) private(do_i,surface_stress,zDS,stress,h_a,hfr, &
+!$OMP                                     b_denom_1,b1,d1,c1)
   do J=Jsq,Jeq
     do i=is,ie ; do_i(i) = (G%mask2dCv(i,J) > 0) ; enddo
 
@@ -365,15 +363,9 @@ subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, ADp, CDp, G, CS, &
       surface_stress(i) = dt_Rho0 * (G%mask2dCv(i,J)*fluxes%tauy(i,J))
     enddo ; endif ! direct_stress
 
-    if (CS%Channel_drag) then 
-       do k=1,nz ; do i=is,ie
-          Ray(i,k) = visc%Ray_v(i,J,k)
-       enddo ; enddo 
-    else
-       do k=1,nz ; do i=is,ie
-          Ray(i,k) = 0.0
-       enddo ; enddo      
-    endif
+    if (CS%Channel_drag) then ; do k=1,nz ; do i=is,ie
+      Ray(i,k) = visc%Ray_v(i,J,k)
+    enddo ; enddo ; endif
 
     do i=is,ie ; if (do_i(i)) then
       b_denom_1 = CS%h_v(i,J,1) + dt_m_to_H * (Ray(i,1) + CS%a_v(i,J,1))
@@ -484,20 +476,16 @@ subroutine vertvisc_remnant(visc, visc_rem_u, visc_rem_v, dt, G, CS)
 
   dt_m_to_H = dt*G%m_to_H
 
+  do k=1,nz ; do i=Isq,Ieq ; Ray(i,k) = 0.0 ; enddo ; enddo
+
   ! Find the zonal viscous using a modification of a standard tridagonal solver.
-!$OMP parallel do default(shared) private(do_i,Ray,b_denom_1,b1,d1,c1)
+!$OMP parallel do default(shared) firstprivate(Ray) private(do_i,b_denom_1,b1,d1,c1)
   do j=G%jsc,G%jec
     do I=Isq,Ieq ; do_i(I) = (G%mask2dCu(I,j) > 0) ; enddo
 
-    if (CS%Channel_drag) then  
-      do k=1,nz ; do I=Isq,Ieq
-         Ray(I,k) = visc%Ray_u(I,j,k)
-      enddo ; enddo
-    else
-      do k = 1,nz; do i=isq,ieq
-        Ray(i,k) = 0.0
-      enddo; enddo 
-    endif
+    if (CS%Channel_drag) then ; do k=1,nz ; do I=Isq,Ieq
+      Ray(I,k) = visc%Ray_u(I,j,k)
+    enddo ; enddo ; endif
 
     do I=Isq,Ieq ; if (do_i(I)) then
       b_denom_1 = CS%h_u(I,j,1) + dt_m_to_H * (Ray(I,1) + CS%a_u(I,j,1))
@@ -520,19 +508,13 @@ subroutine vertvisc_remnant(visc, visc_rem_u, visc_rem_v, dt, G, CS)
   enddo ! end u-component j loop
 
   ! Now find the meridional viscous using a modification.
-!$OMP parallel do default(shared) private(do_i,Ray,b_denom_1,b1,d1,c1)
+!$OMP parallel do default(shared) firstprivate(Ray) private(do_i,b_denom_1,b1,d1,c1)
   do J=Jsq,Jeq
     do i=is,ie ; do_i(i) = (G%mask2dCv(i,J) > 0) ; enddo
 
-    if (CS%Channel_drag) then  
-      do k=1,nz ; do I=Is,Ie
-         Ray(I,k) = visc%Ray_v(I,j,k)
-      enddo ; enddo 
-    else
-      do k = 1,nz; do i=is,ie
-        Ray(i,k) = 0.0
-      enddo; enddo
-    endif
+    if (CS%Channel_drag) then ; do k=1,nz ; do i=is,ie
+      Ray(i,k) = visc%Ray_v(i,J,k)
+    enddo ; enddo ; endif
 
     do i=is,ie ; if (do_i(i)) then
       b_denom_1 = CS%h_v(i,J,1) + dt_m_to_H * (Ray(i,1) + CS%a_v(i,J,1))
@@ -656,7 +638,7 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
     allocate(CS%a1_shelf_v(G%isd:G%ied,G%JsdB:G%JedB)) ; CS%a1_shelf_v(:,:)=0.0
   endif
 
-!$OMP parallel do default(private) shared(G,CS,visc,Isq,ieq,nz,u,h,fluxes)
+!$OMP parallel do default(private) shared(G,CS,visc,Isq,ieq,nz,u,h,fluxes,hML_u,h_neglect,dt)
   do j=G%Jsc,G%Jec
     do I=Isq,Ieq ; do_i(I) = (G%mask2dCu(I,j) > 0) ; enddo
 
@@ -773,8 +755,8 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
   enddo
 
 
-!$OMP parallel do default(private) shared(G,CS,visc,is,ie,Jsq,Jeq,nz,v,h,fluxes)
   ! Now work on v-points.
+!$OMP parallel do default(private) shared(G,CS,visc,is,ie,Jsq,Jeq,nz,v,h,fluxes,hML_v,h_neglect,dt)
   do J=Jsq,Jeq
     do i=is,ie ; do_i(i) = (G%mask2dCv(i,J) > 0) ; enddo
 
@@ -887,7 +869,6 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
       do K=1,nz+1 ; do i=is,ie ; if (do_i(i)) CS%a_v(i,J,K) = a(i,K) ; enddo ; enddo
       do k=1,nz ; do i=is,ie ; if (do_i(i)) CS%h_v(i,J,k) = hvel(i,k) ; enddo ; enddo
     endif
-
   enddo ! end of v-point j loop
 
 

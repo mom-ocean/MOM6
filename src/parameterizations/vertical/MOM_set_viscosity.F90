@@ -990,9 +990,9 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
 !    if (CS%linear_drag) ustar(:) = cdrag_sqrt*CS%drag_bg_vel
   endif
 
-
-!$OMP parallel do default(private) shared(u, v, h, tv, fluxes, visc, dt, G, CS, use_EOS, &
-!$OMP                                     dt_Rho0, h_neglect, h_tiny, g_H_Rho0)
+!$OMP  parallel do default(private) shared(u, v, h, tv, fluxes, visc, dt, G, CS, use_EOS, &
+!$OMP                                      dt_Rho0, h_neglect, h_tiny, g_H_Rho0,js,je,    &
+!$OMP                                      Isq,Ieq,nz,U_bg_sq,cdrag_sqrt,Rho0x400_G)   
   do j=js,je  ! u-point loop
     if (CS%dynamic_viscous_ML) then
       do_any = .false.
@@ -1218,9 +1218,9 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
 
   enddo ! j-loop at u-points
 
-
 !$OMP parallel do default(private) shared(u, v, h, tv, fluxes, visc, dt, G, CS, use_EOS, &
-!$OMP                                     dt_Rho0, h_neglect, h_tiny, g_H_Rho0)
+!$OMP                                     dt_Rho0, h_neglect, h_tiny, g_H_Rho0,is,ie,    &
+!$OMP                                     Jsq,Jeq,nz,U_bg_sq,cdrag_sqrt,Rho0x400_G)
   do J=Jsq,Jeq  ! v-point loop
     if (CS%dynamic_viscous_ML) then
       do_any = .false.
@@ -1319,7 +1319,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
 
     do_any_shelf = .false.
     if (associated(fluxes%frac_shelf_h)) then
-      do I=Isq,Ieq
+      do I=Is,Ie
         if (fluxes%frac_shelf_v(i,J)*G%mask2dCv(i,J) == 0.0) then
           do_i(I) = .false.
           visc%tbl_thick_shelf_v(i,J) = 0.0 ; visc%kv_tbl_shelf_v(i,J) = 0.0
