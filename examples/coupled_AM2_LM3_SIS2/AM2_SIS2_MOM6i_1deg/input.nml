@@ -241,6 +241,10 @@
     do_area_weighted_flux = .FALSE.          
 /
  
+ &fms_nml
+    domains_stack_size = 800000
+/
+
   &fms_io_nml
     fms_netcdf_restart=.true.
     threading_read='multi'

@@ -1,0 +1,1 @@
+.datasets/AM2_LM3_MOM6i_1deg/tikal/INPUT/seawifs_1998-2006_GOLD_smoothed_2X.nc

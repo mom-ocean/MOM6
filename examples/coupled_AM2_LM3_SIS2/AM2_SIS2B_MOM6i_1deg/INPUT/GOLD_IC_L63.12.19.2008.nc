@@ -1,0 +1,1 @@
+.datasets/AM2_LM3_MOM6i_1deg/tikal/INPUT/GOLD_IC_L63.12.19.2008.nc
