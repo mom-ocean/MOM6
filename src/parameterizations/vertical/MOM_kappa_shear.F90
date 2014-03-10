@@ -324,12 +324,6 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
 !$OMP parallel do default(private) shared(js,je,is,ie,nz,h,u_in,v_in,use_temperature,new_kappa, &
 !$OMP                                     tv,G,CS,kappa_io,dz_massless,k0dt,p_surf,gR0,g_R0,dt, &
 !$OMP                                     tol_dksrc,tol_dksrc_low,tol2,Ri_crit,dt_refinements)  
-!!$OMP   private(h_2d,u_2d,v_2d,T_2d,S_2d,rho_2d,kappa_2d,nzc,dz,u0xdz,v0xdz,T0xdz,S0xdz, &
-!!$OMP           kc,Idz,kf,dz_in_lay,I_dz_int,dist_from_top,a1,b1,u,v,T,Sal,c1,d1,bd1,  &
-!!$OMP           dz_Int,Norm,dist_from_bot,I_L2_bdry,f2,pressure,T_int,Sal_int,dbuoy_dT,dbuoy_dS, &
-!!$OMP           kappa,K_Q,N2,S2,dt_rem,kappa_avg,tke_avg,local_src_avg,tke,kappa_out,kappa_src,local_src, &
-!!$OMP           ks_kappa,ke_kappa,dt_now,dt_test,tol_max,tol_min,tol_chg,u_test,v_test,T_test,S_test, &
-!!$OMP           valid_dt,Idtt,k_src,dt_inc,dt_wt,kappa_mid,K_Q_tmp,tke_pred,kappa_pred,tke_2d,tke_io,kv_io )
   do j=js,je
     do k=1,nz ; do i=is,ie
       h_2d(i,k) = h(i,j,k)*G%H_to_m
