@@ -693,7 +693,7 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
 
     call find_coupling_coef(a, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i, h_ml, dt, j, G, CS, visc, fluxes, work_on_u=.true.)
     if (allocated(hML_u)) then
-        do i=is,ie ; if (do_i(i)) then ; hML_u(I,j) = h_ml(I) ; endif ; enddo
+        do i=isq,ieq ; if (do_i(i)) then ; hML_u(I,j) = h_ml(I) ; endif ; enddo
     endif
     do_any_shelf = .false.
     if (associated(fluxes%frac_shelf_u)) then
@@ -1122,8 +1122,10 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, fluxes, visc, dt, G, CS)
   real :: maxvel           ! Velocities components greater than maxvel
   real :: truncvel         ! are truncated to truncvel, both in m s-1.
   real :: CFL              ! The local CFL number.
-  real :: vel_report(SZIB_(G))
-  logical :: trunc_any, dowrite(SZIB_(G))
+  real :: vel_report(SZIB_(G),SZJB_(G))
+  real :: u_old(SZIB_(G),SZJ_(G),SZK_(G))
+  real :: v_old(SZI_(G),SZJB_(G),SZK_(G))
+  logical :: trunc_any, dowrite(SZIB_(G),SZJB_(G))
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
@@ -1132,13 +1134,13 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, fluxes, visc, dt, G, CS)
   truncvel = 0.9*maxvel
 
   if (len_trim(CS%u_trunc_file) > 0) then
-    if (.not.CS%CFL_based_trunc) vel_report(:) = maxvel
-!$OMP parallel do default(private) shared(js,je,Isq,Ieq,nz,CS,G,fluxes,u,h)
+!$OMP parallel do default(private) shared(js,je,Isq,Ieq,nz,CS,G,fluxes,u,h,dt,maxvel,ADp,CDp,truncvel, &
+!$OMP                                     u_old,vel_report,dowrite) 
     do j=js,je
       trunc_any = .false.
-      do I=Isq,Ieq ; dowrite(I) = .false. ; enddo
+      do I=Isq,Ieq ; dowrite(I,j) = .false. ; enddo
       if (CS%CFL_based_trunc) then
-        do I=Isq,Ieq ; vel_report(:) = 3.0e8 ; enddo ! Speed of light default.
+        do I=Isq,Ieq ; vel_report(i,j) = 3.0e8 ; enddo ! Speed of light default.
         do k=1,nz ; do I=Isq,Ieq
           if (u(I,j,k) < 0.0) then
             CFL = (-u(I,j,k) * dt) * (G%dy_Cu(I,j) * G%IareaT(i+1,j))
@@ -1147,23 +1149,21 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, fluxes, visc, dt, G, CS)
           endif
           if (CFL > CS%CFL_trunc) trunc_any = .true.
           if (CFL > CS%CFL_report) then
-            dowrite(I) = .true.
-            vel_report(I) = MIN(vel_report(I), abs(u(I,j,k)))
+            dowrite(I,j) = .true.
+            vel_report(I,j) = MIN(vel_report(I,j), abs(u(I,j,k)))
           endif
         enddo ; enddo
       else
+        do I=Isq,Ieq; vel_report(I,j) = maxvel; enddo
         do k=1,nz ; do I=Isq,Ieq ; if (abs(u(I,j,k)) > maxvel) then
-          dowrite(I) = .true. ; trunc_any = .true.
+          dowrite(I,j) = .true. ; trunc_any = .true.
         endif ;enddo ; enddo
       endif
       
-      do I=Isq,Ieq ; if (dowrite(I)) then
-!   Here the diagnostic reporting subroutines are called if
-! unphysically large values were found.
-        call write_u_accel(I, j, u, h, ADp, CDp, dt, G, CS%PointAccel_CSp, &
-               vel_report(I), -vel_report(I), (dt*fluxes%taux(I,j)/G%Rho0), &
-               a=CS%a_u(:,j,:), hv=CS%h_u(:,j,:))
-      endif ; enddo
+      do I=Isq,Ieq ; if (dowrite(I,j)) then
+         u_old(i,j,:) = u(i,j,:)
+      endif; enddo
+
       if (trunc_any) then ; if (CS%CFL_based_trunc) then
         do k=1,nz ; do I=Isq,Ieq
           if ((u(I,j,k) * (dt * G%dy_Cu(I,j))) * G%IareaT(i+1,j) < -CS%CFL_trunc) then
@@ -1183,7 +1183,7 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, fluxes, visc, dt, G, CS)
     enddo ! j-loop
   else
     if (CS%CFL_based_trunc) then
-!$OMP parallel do default(shared) 
+!$OMP parallel do default(shared)
       do k=1,nz ; do j=js,je ; do I=Isq,Ieq
         if ((u(I,j,k) * (dt * G%dy_Cu(I,j))) * G%IareaT(i+1,j) < -CS%CFL_trunc) then
           u(I,j,k) = (-0.9*CS%CFL_trunc) * (G%areaT(i+1,j) / (dt * G%dy_Cu(I,j)))
@@ -1194,7 +1194,7 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, fluxes, visc, dt, G, CS)
         endif
       enddo ; enddo ; enddo
     else
-!$OMP parallel do default(shared) 
+!$OMP parallel do default(shared)
       do k=1,nz ; do j=js,je ; do I=Isq,Ieq ; if (abs(u(I,j,k)) > maxvel) then
         u(I,j,k) = SIGN(truncvel,u(I,j,k))
         if (h(i,j,k) + h(i+1,j,k) > 6.0*G%Angstrom) CS%ntrunc = CS%ntrunc + 1
@@ -1202,14 +1202,25 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, fluxes, visc, dt, G, CS)
     endif
   endif
 
+  if (len_trim(CS%u_trunc_file) > 0) then
+    do j=js,je; do I=Isq,Ieq ; if (dowrite(I,j)) then
+!   Here the diagnostic reporting subroutines are called if
+! unphysically large values were found.
+        call write_u_accel(I, j, u_old, h, ADp, CDp, dt, G, CS%PointAccel_CSp, &
+               vel_report(I,j), -vel_report(I,j), (dt*fluxes%taux(I,j)/G%Rho0), &
+               a=CS%a_u(:,j,:), hv=CS%h_u(:,j,:))
+    endif ; enddo; enddo
+  endif
+
+
   if (len_trim(CS%v_trunc_file) > 0) then
-    if (.not.CS%CFL_based_trunc) vel_report(:) = maxvel
-!$OMP parallel do default(private) shared(Jsq,Jeq,is,ie,nz,CS,G,fluxes,v,h)
+!$OMP parallel do default(private) shared(Jsq,Jeq,is,ie,nz,CS,G,fluxes,v,h,dt,maxvel,ADp,CDp,truncvel, &
+!$OMP                                     v_old,vel_report,dowrite)
     do J=Jsq,Jeq
       trunc_any = .false.
-      do i=is,ie ; dowrite(i) = .false. ; enddo
+      do i=is,ie ; dowrite(i,J) = .false. ; enddo
       if (CS%CFL_based_trunc) then
-        do i=is,ie ; vel_report(:) = 3.0e8 ; enddo ! Speed of light default.
+        do i=is,ie ; vel_report(i,J) = 3.0e8 ; enddo ! Speed of light default.
         do k=1,nz ; do i=is,ie
           if (v(i,J,k) < 0.0) then
             CFL = (-v(i,J,k) * dt) * (G%dx_Cv(i,J) * G%IareaT(i,j+1))
@@ -1218,23 +1229,21 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, fluxes, visc, dt, G, CS)
           endif
           if (CFL > CS%CFL_trunc) trunc_any = .true.
           if (CFL > CS%CFL_report) then
-            dowrite(i) = .true.
-            vel_report(i) = MIN(vel_report(i), abs(v(i,J,k)))
+            dowrite(i,J) = .true.
+            vel_report(i,J) = MIN(vel_report(i,J), abs(v(i,J,k)))
           endif
         enddo ; enddo
       else
+        do i=is,ie ; vel_report(i,J) = maxvel ; enddo
         do k=1,nz ; do i=is,ie ; if (abs(v(i,J,k)) > maxvel) then
-          dowrite(i) = .true. ; trunc_any = .true.
+          dowrite(i,J) = .true. ; trunc_any = .true.
         endif ; enddo ; enddo
       endif
 
-      do i=is,ie ; if (dowrite(i)) then
-!   Here the diagnostic reporting subroutines are called if
-! unphysically large values were found.
-        call write_v_accel(i, J, v, h, ADp, CDp, dt, G, CS%PointAccel_CSp, &
-               vel_report(I), -vel_report(I), (dt*fluxes%tauy(i,J)/G%Rho0), &
-               a=CS%a_v(:,J,:),hv=CS%h_v(:,J,:))
+      do i=is,ie ; if (dowrite(i,J)) then
+         v_old(i,J,:) = v(i,J,:)
       endif ; enddo
+
       if (trunc_any) then ; if (CS%CFL_based_trunc) then
         do k=1,nz; do i=is,ie
           if ((v(i,J,k) * (dt * G%dx_Cv(i,J))) * G%IareaT(i,j+1) < -CS%CFL_trunc) then
@@ -1265,12 +1274,22 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, fluxes, visc, dt, G, CS)
         endif
       enddo ; enddo ; enddo
     else
-!$OMP parallel do default(shared) 
+!$OMP parallel do default(shared)
       do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie ; if (abs(v(i,J,k)) > maxvel) then
         v(i,J,k) = SIGN(truncvel,v(i,J,k))
         if (h(i,j,k) + h(i,j+1,k) > 6.0*G%Angstrom) CS%ntrunc = CS%ntrunc + 1
       endif ; enddo ; enddo ; enddo
     endif
+  endif
+
+  if (len_trim(CS%v_trunc_file) > 0) then
+    do J=Jsq,Jeq; do i=is,ie ; if (dowrite(i,J)) then
+!   Here the diagnostic reporting subroutines are called if
+! unphysically large values were found.
+        call write_v_accel(i, J, v_old, h, ADp, CDp, dt, G, CS%PointAccel_CSp, &
+               vel_report(i,J), -vel_report(i,J), (dt*fluxes%tauy(i,J)/G%Rho0), &
+               a=CS%a_v(:,J,:),hv=CS%h_v(:,J,:))
+    endif ; enddo; enddo
   endif
 
 end subroutine vertvisc_limit_vel
