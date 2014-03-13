@@ -321,6 +321,9 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
   k0dt = dt*CS%kappa_0
   dz_massless = 0.1*sqrt(k0dt)
 
+!$OMP parallel do default(private) shared(js,je,is,ie,nz,h,u_in,v_in,use_temperature,new_kappa, &
+!$OMP                                     tv,G,CS,kappa_io,dz_massless,k0dt,p_surf,gR0,g_R0,dt, &
+!$OMP                                     tol_dksrc,tol_dksrc_low,tol2,Ri_crit,dt_refinements)  
   do j=js,je
     do k=1,nz ; do i=is,ie
       h_2d(i,k) = h(i,j,k)*G%H_to_m
@@ -877,8 +880,7 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
 
   return
 
-contains
-! end subroutine Calculate_kappa_shear
+end subroutine Calculate_kappa_shear
 
 subroutine calculate_projected_state(kappa, u0, v0, T0, S0, dt, nz, &
                                      dz, I_dz_int, dbuoy_dT, dbuoy_dS, &
@@ -919,8 +921,7 @@ subroutine calculate_projected_state(kappa, u0, v0, T0, S0, dt, nz, &
   !  (in,opt)  ke_int - The bottommost k-index with a non-zero diffusivity.
 
  ! UNCOMMENT THE FOLLOWING IF NOT CONTAINED IN THE OUTER SUBROUTINE.
- ! real, dimension(nz+1) :: &
- !   c1
+  real, dimension(nz+1) :: c1
   real :: a_a, a_b, b1, d1, bd1, b1nz_0
   integer :: k, ks, ke
 
@@ -1040,24 +1041,24 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
 !  (out,opt) local_src - The sum of all local sources for kappa, in s-1.
 
 ! UNCOMMENT THE FOLLOWING IF NOT CONTAINED IN Calculate_kappa_shear
-! real, dimension(nz) :: &
-!   aQ, &       ! aQ is the coupling between adjacent interfaces in the TKE
-!               ! equations, in m s-1.
-!   dQdz        ! Half the partial derivative of TKE with depth, m s-2.
-! real, dimension(nz+1) :: &
-!   dK, &         ! The change in kappa, in m2 s-1.
-!   dQ, &         ! The change in TKE, in m2 s-1.
-!   cQ, cK, &     ! cQ and cK are the upward influences in the tridiagonal and
-!                 ! hexadiagonal solvers for the TKE and kappa equations, ND.
-!   I_Ld2, &      ! 1/Ld^2, where Ld is the effective decay length scale
-!                 ! for kappa, in units of m-2.
-!   TKE_decay, &  ! The local TKE decay rate in s-1.
-!   k_src, &      ! The source term in the kappa equation, in s-1.
-!   dQmdK, &      ! With Newton's method the change in dQ(k-1) due to dK(k), s.
-!   dKdQ, &       ! With Newton's method the change in dK(k) due to dQ(k), s-1.
-!   e1            ! The fractional change in a layer TKE due to a change in the
-!                 ! TKE of the layer above when all the kappas below are 0.
-!                 ! e1 is nondimensional, and 0 < e1 < 1.
+  real, dimension(nz) :: &
+    aQ, &       ! aQ is the coupling between adjacent interfaces in the TKE
+                ! equations, in m s-1.
+    dQdz        ! Half the partial derivative of TKE with depth, m s-2.
+  real, dimension(nz+1) :: &
+    dK, &         ! The change in kappa, in m2 s-1.
+    dQ, &         ! The change in TKE, in m2 s-1.
+    cQ, cK, &     ! cQ and cK are the upward influences in the tridiagonal and
+                  ! hexadiagonal solvers for the TKE and kappa equations, ND.
+    I_Ld2, &      ! 1/Ld^2, where Ld is the effective decay length scale
+                  ! for kappa, in units of m-2.
+    TKE_decay, &  ! The local TKE decay rate in s-1.
+    k_src, &      ! The source term in the kappa equation, in s-1.
+    dQmdK, &      ! With Newton's method the change in dQ(k-1) due to dK(k), s.
+    dKdQ, &       ! With Newton's method the change in dK(k) due to dQ(k), s-1.
+    e1            ! The fractional change in a layer TKE due to a change in the
+                  ! TKE of the layer above when all the kappas below are 0.
+                  ! e1 is nondimensional, and 0 < e1 < 1.
   real :: tke_src       ! The net source of TKE due to mixing against the shear
                         ! and stratification, in m2 s-3.  (For convenience,
                         ! a term involving the non-dissipation of q0 is also
@@ -1619,7 +1620,6 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
 
 end subroutine find_kappa_tke
 
-end subroutine Calculate_kappa_shear
 
 logical function kappa_shear_init(Time, G, param_file, diag, CS)
   type(time_type),         intent(in)    :: Time
