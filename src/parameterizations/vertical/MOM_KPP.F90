@@ -614,15 +614,16 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
       Kdiffusivity(:,:) = 0. ! Diffusivities for heat and salt (m2/s)
       Kviscosity(:)     = 0. ! Viscosity (m2/s)
       surfBuoyFlux  = buoyFlux(i,j,1) - buoyFlux(i,j,int(kOBL)+1) ! We know the actual buoyancy flux into the OBL
-      call cvmix_coeffs_kpp(Kdiffusivity, & ! (inout) Total heat/salt diffusivities (m2/s)
-                            Kviscosity,   & ! (inout) Total viscosity (m2/s)
-                            iFaceHeight,  & ! (in) Height of interfaces (m)
-                            cellHeight,   & ! (in) Height of level centers (m)
-                            OBLdepth_0d,  & ! (in) OBL depth (m)
-                            kOBL,         & ! (in) level (+fraction) of OBL extent
-                            nonLocalTrans,& ! (out) Non-local heat/salt transport (non-dimensional)
-                            surfFricVel,  & ! (in) Turbulent friction velocity at surface (m/s)
-                            surfBuoyFlux, & ! (in) Buoyancy flux at surface (m2/s3)
+      call cvmix_coeffs_kpp(Kviscosity,        & ! (inout) Total viscosity (m2/s)
+                            Kdiffusivity(:,1), & ! (inout) Total heat diffusivity (m2/s)
+                            Kdiffusivity(:,2), & ! (inout) Total salt diffusivity (m2/s)
+                            iFaceHeight,       & ! (in) Height of interfaces (m)
+                            cellHeight,        & ! (in) Height of level centers (m)
+                            OBLdepth_0d,       & ! (in) OBL depth (m)
+                            kOBL,              & ! (in) level (+fraction) of OBL extent
+                            nonLocalTrans,     & ! (out) Non-local heat/salt transport (non-dimensional)
+                            surfFricVel,       & ! (in) Turbulent friction velocity at surface (m/s)
+                            surfBuoyFlux,      & ! (in) Buoyancy flux at surface (m2/s3)
                             CVmix_kpp_params_user=CS%KPP_params )
 
 
