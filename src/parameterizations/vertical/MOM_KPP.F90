@@ -621,7 +621,8 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
                             cellHeight,        & ! (in) Height of level centers (m)
                             OBLdepth_0d,       & ! (in) OBL depth (m)
                             kOBL,              & ! (in) level (+fraction) of OBL extent
-                            nonLocalTrans,     & ! (out) Non-local heat/salt transport (non-dimensional)
+                            nonLocalTrans(:,1),& ! (out) Non-local heat transport (non-dimensional)
+                            nonLocalTrans(:,2),& ! (out) Non-local salt transport (non-dimensional)
                             surfFricVel,       & ! (in) Turbulent friction velocity at surface (m/s)
                             surfBuoyFlux,      & ! (in) Buoyancy flux at surface (m2/s3)
                             CVmix_kpp_params_user=CS%KPP_params )
