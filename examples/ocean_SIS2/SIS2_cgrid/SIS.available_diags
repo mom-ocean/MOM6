@@ -151,12 +151,6 @@
 "ice_model", "STRAIN_ANGLE"  [Unused]
     ! long_name: strain angle
     ! units: none
-"ice_model", "FA_X"  [Used]
-    ! long_name: air stress on ice - x component
-    ! units: Pa
-"ice_model", "FA_Y"  [Used]
-    ! long_name: air stress on ice - y component
-    ! units: Pa
 "ice_model", "UO"  [Used]
     ! long_name: surface current - x component
     ! units: m/s
@@ -208,13 +202,19 @@
 "ice_model", "OBI"  [Unused]
     ! long_name: ice observed
     ! units: 0 or 1
-"ice_model", "SIGI"  [Unused]
+"ice_model", "FA_X"  [Used]
+    ! long_name: Air stress on ice on C-grid - x component
+    ! units: Pa
+"ice_model", "FA_Y"  [Used]
+    ! long_name: Air stress on ice on C-grid - y component
+    ! units: Pa
+"ice_model", "SIGI"  [Used]
     ! long_name: first stress invariant
     ! units: none
-"ice_model", "SIGII"  [Unused]
+"ice_model", "SIGII"  [Used]
     ! long_name: second stress invariant
     ! units: none
-"ice_model", "STRENGTH"  [Unused]
+"ice_model", "STRENGTH"  [Used]
     ! long_name: ice strength
     ! units: Pa*m
 "ice_model", "FI_X"  [Used]
@@ -223,16 +223,34 @@
 "ice_model", "FI_Y"  [Used]
     ! long_name: ice internal stress - y component
     ! units: Pa
-"ice_model", "FC_X"  [Unused]
-    ! long_name: coriolis force - x component
+"ice_model", "FC_X"  [Used]
+    ! long_name: Coriolis force - x component
     ! units: Pa
-"ice_model", "FC_Y"  [Unused]
-    ! long_name: coriolis force - y component
+"ice_model", "FC_Y"  [Used]
+    ! long_name: Coriolis force - y component
     ! units: Pa
-"ice_model", "FW_X"  [Unused]
+"ice_model", "Cor_ui"  [Unused]
+    ! long_name: Coriolis ice acceleration - x component
+    ! units: m s-2
+"ice_model", "Cor_vi"  [Unused]
+    ! long_name: Coriolis ice acceleration - y component
+    ! units: m s-2
+"ice_model", "FP_X"  [Used]
+    ! long_name: Pressure force - x component
+    ! units: Pa
+"ice_model", "FP_Y"  [Used]
+    ! long_name: Pressure force - y component
+    ! units: Pa
+"ice_model", "Pfa_ui"  [Unused]
+    ! long_name: Pressure-force ice acceleration - x component
+    ! units: m s-2
+"ice_model", "Pfa_vi"  [Unused]
+    ! long_name: Pressure-force ice acceleration - y component
+    ! units: m s-2
+"ice_model", "FW_X"  [Used]
     ! long_name: water stress on ice - x component
     ! units: Pa
-"ice_model", "FW_Y"  [Unused]
+"ice_model", "FW_Y"  [Used]
     ! long_name: water stress on ice - y component
     ! units: Pa
 "ice_model", "UI"  [Used]
@@ -241,6 +259,78 @@
 "ice_model", "VI"  [Used]
     ! long_name: ice velocity - y component
     ! units: m/s
+"ice_model", "FI_d_X"  [Unused]
+    ! long_name: ice divergence internal stress - x component
+    ! units: Pa
+"ice_model", "FI_d_Y"  [Unused]
+    ! long_name: ice divergence internal stress - y component
+    ! units: Pa
+"ice_model", "FI_t_X"  [Unused]
+    ! long_name: ice tension internal stress - x component
+    ! units: Pa
+"ice_model", "FI_t_Y"  [Unused]
+    ! long_name: ice tension internal stress - y component
+    ! units: Pa
+"ice_model", "FI_s_X"  [Unused]
+    ! long_name: ice shearing internal stress - x component
+    ! units: Pa
+"ice_model", "FI_s_Y"  [Unused]
+    ! long_name: ice shearing internal stress - y component
+    ! units: Pa
+"ice_model", "str_d"  [Used]
+    ! long_name: ice divergence internal stress
+    ! units: Pa
+"ice_model", "str_t"  [Used]
+    ! long_name: ice tension internal stress
+    ! units: Pa
+"ice_model", "str_s"  [Used]
+    ! long_name: ice shearing internal stress
+    ! units: Pa
+"ice_model", "sh_d"  [Used]
+    ! long_name: ice divergence strain rate
+    ! units: s-1
+"ice_model", "sh_t"  [Used]
+    ! long_name: ice tension strain rate
+    ! units: s-1
+"ice_model", "sh_s"  [Used]
+    ! long_name: ice shearing strain rate
+    ! units: s-1
+"ice_model", "del_sh"  [Used]
+    ! long_name: ice strain rate magnitude
+    ! units: s-1
+"ice_model", "del_sh_min"  [Used]
+    ! long_name: minimum ice strain rate magnitude
+    ! units: s-1
+"ice_model", "ui_hf"  [Unused]
+    ! long_name: ice velocity - x component
+    ! units: m/s
+"ice_model", "vi_hf"  [Unused]
+    ! long_name: ice velocity - y component
+    ! units: m/s
+"ice_model", "str_d_hf"  [Unused]
+    ! long_name: ice divergence internal stress
+    ! units: Pa
+"ice_model", "str_t_hf"  [Unused]
+    ! long_name: ice tension internal stress
+    ! units: Pa
+"ice_model", "str_s_hf"  [Unused]
+    ! long_name: ice shearing internal stress
+    ! units: Pa
+"ice_model", "sh_d_hf"  [Unused]
+    ! long_name: ice divergence rate
+    ! units: s-1
+"ice_model", "sh_t_hf"  [Unused]
+    ! long_name: ice tension rate
+    ! units: s-1
+"ice_model", "sh_s_hf"  [Unused]
+    ! long_name: ice shearing rate
+    ! units: s-1
+"ice_model", "sigI_hf"  [Unused]
+    ! long_name: first stress invariant
+    ! units: none
+"ice_model", "sigII_hf"  [Unused]
+    ! long_name: second stress invariant
+    ! units: none
 "ice_model", "U_STAR"  [Unused]
     ! long_name: channel transport velocity - x component
     ! units: m/s
