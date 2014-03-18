@@ -619,6 +619,9 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
                             Kdiffusivity(:,2), & ! (inout) Total salt diffusivity (m2/s)
                             iFaceHeight,       & ! (in) Height of interfaces (m)
                             cellHeight,        & ! (in) Height of level centers (m)
+                            Kviscosity,        & ! (in) Original viscosity (m2/s)
+                            Kdiffusivity(:,1), & ! (in) Original heat diffusivity (m2/s)
+                            Kdiffusivity(:,2), & ! (in) Original salt diffusivity (m2/s)
                             OBLdepth_0d,       & ! (in) OBL depth (m)
                             kOBL,              & ! (in) level (+fraction) of OBL extent
                             nonLocalTrans(:,1),& ! (out) Non-local heat transport (non-dimensional)
