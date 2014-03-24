@@ -1,0 +1,1 @@
+.datasets/MOM6z_SIS_025/siena/INPUT/tidal_amplitude.v20140321.nc

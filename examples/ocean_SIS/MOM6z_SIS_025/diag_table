@@ -65,6 +65,8 @@ MOM_SIS_025_z
  "ocean_model", "vh",           "vh",           "ocean_annual", "all", .true., "none",2
  "ocean_model", "T_ady",        "T_ady",        "ocean_annual", "all", .true., "none",2
  "ocean_model", "S_ady",        "S_ady",        "ocean_annual", "all", .true., "none",2
+ "ocean_model", "TKE_tidal",    "TKE_tidal",    "ocean_annual", "all", .true., "none",2
+ "ocean_model", "TKE_itidal",   "TKE_itidal",   "ocean_annual", "all", .true., "none",2
 
 # Sections
 "ocean_model", "temp", "temp", "_Drake_passage",    "all", .true., "-70. -70. -71. -54.5 -1 -1",2
