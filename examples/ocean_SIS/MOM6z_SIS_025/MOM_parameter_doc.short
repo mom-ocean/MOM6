@@ -483,7 +483,7 @@ INT_TIDE_DECAY_SCALE = 300.3003003003003 !   [m] default = 0.0
 KAPPA_ITIDES = 6.28319E-04      !   [m-1] default = 6.283185307179586E-04
                                 ! A topographic wavenumber used with INT_TIDE_DISSIPATION.
                                 ! The default is 2pi/10 km, as in St.Laurent et al. 2002.
-KAPPA_H2_FACTOR = 0.75          !   [nondim] default = 1.0
+KAPPA_H2_FACTOR = 0.3           !   [nondim] default = 1.0
                                 ! A scaling factor for the roughness amplitude with nINT_TIDE_DISSIPATION.
 TKE_ITIDE_MAX = 0.1             !   [W m-2] default = 1000.0
                                 ! The maximum internal tide energy source availble to mix
