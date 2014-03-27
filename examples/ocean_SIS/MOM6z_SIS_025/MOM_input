@@ -342,10 +342,19 @@ ETA_TOLERANCE_AUX = 0.001       !   [m] default = 1.0E-06
                                 ! layer thicknesses when calculating the auxiliary
                                 ! corrected velocities. By default, this is the same as
                                 ! ETA_TOLERANCE, but can be made larger for efficiency.
-CORIOLIS_EN_DIS = True          !   [Boolean] default = False
+CORIOLIS_EN_DIS = False         !   [Boolean] default = False
                                 ! If true, two estimates of the thickness fluxes are used
                                 ! to estimate the Coriolis term, and the one that
                                 ! dissipates energy relative to the other one is used.
+CORIOLIS_SCHEME = "SADOURNY75_ENSTRO" ! default = "SADOURNY75_ENERGY"
+                                ! CORIOLIS_SCHEME selects the discretization for the
+                                ! Coriolis terms. Valid values are:
+                                !    SADOURNY75_ENERGY - Sadourny, 1975; energy cons.
+                                !    ARAKAWA_HSU90     - Arakawa & Hsu, 1990
+                                !    SADOURNY75_ENSTRO - Sadourny, 1975; enstrophy cons.
+                                !    ARAKAWA_LAMB81    - Arakawa & Lamb, 1981; En. + Enst.
+                                !    ARAKAWA_LAMB_BLEND - A blend of Arakawa & Lamb with
+                                !                         Arakawa & Hsu and Sadourny energy
 BOUND_CORIOLIS = True           !   [Boolean] default = False
                                 ! If true, the Coriolis terms at u-points are bounded by
                                 ! the four estimates of (f+rv)v from the four neighboring

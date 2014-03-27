@@ -741,11 +741,11 @@ NOSLIP = False                  !   [Boolean] default = False
                                 ! cleaner than the no slip BCs. The use of free slip BCs
                                 ! is strongly encouraged, and no slip BCs are not used with
                                 ! the biharmonic viscosity.
-CORIOLIS_EN_DIS = True          !   [Boolean] default = False
+CORIOLIS_EN_DIS = False         !   [Boolean] default = False
                                 ! If true, two estimates of the thickness fluxes are used
                                 ! to estimate the Coriolis term, and the one that
                                 ! dissipates energy relative to the other one is used.
-CORIOLIS_SCHEME = "SADOURNY75_ENERGY" ! default = "SADOURNY75_ENERGY"
+CORIOLIS_SCHEME = "SADOURNY75_ENSTRO" ! default = "SADOURNY75_ENERGY"
                                 ! CORIOLIS_SCHEME selects the discretization for the
                                 ! Coriolis terms. Valid values are:
                                 !    SADOURNY75_ENERGY - Sadourny, 1975; energy cons.
@@ -757,9 +757,9 @@ CORIOLIS_SCHEME = "SADOURNY75_ENERGY" ! default = "SADOURNY75_ENERGY"
 BOUND_CORIOLIS = True           !   [Boolean] default = False
                                 ! If true, the Coriolis terms at u-points are bounded by
                                 ! the four estimates of (f+rv)v from the four neighboring
-                                ! v-points, and similarly at v-points.  This option is
-                                ! always effectively false with CORIOLIS_EN_DIS defined and
-                                ! CORIOLIS_SCHEME set to SADOURNY75_ENERGY.
+                                ! v-points, and similarly at v-points.  This option would
+                                ! have no effect on the SADOURNY Coriolis scheme if it
+                                ! were possible to use centered difference thickness fluxes.
 KE_SCHEME = "KE_ARAKAWA"        ! default = "KE_ARAKAWA"
                                 ! KE_SCHEME selects the discretization for acceleration
                                 ! due to the kinetic energy gradient. Valid values are:
