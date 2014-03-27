@@ -383,7 +383,7 @@ APPLY_OBC_V_FLATHER_NORTH = False !   [Boolean] default = False
 APPLY_OBC_V_FLATHER_SOUTH = False !   [Boolean] default = False
                                 ! Apply a Flather open boundary condition on the southern
                                 ! side of the global domain
-CHANNEL_CONFIG = "none"         ! default = "none"
+CHANNEL_CONFIG = "list"         ! default = "none"
                                 ! A parameter that determines which set of channels are
                                 ! restricted to specific  widths.  Options are:
                                 !     none - All channels have the grid width.
@@ -394,6 +394,11 @@ CHANNEL_CONFIG = "none"         ! default = "none"
                                 !       test case.
                                 !     file - Read open face widths everywhere from a
                                 !       NetCDF file on the model grid.
+CHANNEL_LIST_FILE = "MOM_channels_global_025" ! default = "MOM_channel_list"
+                                ! The file from which the list of narrowed channels is read.
+CHANNEL_LIST_360_LON_CHECK = True !   [Boolean] default = True
+                                ! If true, the channel configuration list works for any
+                                ! longitudes in the range of -360 to 360.
 ROTATION = "2omegasinlat"       ! default = "2omegasinlat"
                                 ! This specifies how the Coriolis parameter is specified:
                                 !     2omegasinlat - Use twice the planetary rotation rate
