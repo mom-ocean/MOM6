@@ -479,10 +479,6 @@ DTBT = -0.9                     !   [s or nondim] default = -0.98
 
 ! === module MOM_diabatic_driver ===
 ! The following parameters are used for diabatic processes.
-BBL_EFFIC = 0.0                 !   [nondim] default = 0.2
-                                ! The efficiency with which the energy extracted by
-                                ! bottom drag drives BBL diffusion.  This is only
-                                ! used if BOTTOMDRAGLAW is true.
 BBL_MIXING_AS_MAX = False       !   [Boolean] default = True
                                 ! If true, take the maximum of the diffusivity from the
                                 ! BBL mixing and the other diffusivities. Otherwise,
@@ -627,7 +623,7 @@ SRESTORE_AS_SFLUX = True        !   [Boolean] default = False
                                 ! flux instead of as a freshwater flux.
 MAX_DELTA_SRESTORE = 5.0        !   [PSU or g kg-1] default = 999.0
                                 ! The maximum salinity difference used in restoring terms.
-CD_TIDES = 0.0025               !   [nondim] default = 1.0E-04
+CD_TIDES = 0.0003               !   [nondim] default = 1.0E-04
                                 ! The drag coefficient that applies to the tides.
 
 ! === module MOM_sum_output ===

@@ -1136,7 +1136,7 @@ ML_RADIATION = False            !   [Boolean] default = False
                                 ! with a vertical decay scale determined by the minimum
                                 ! of: (1) The depth of the mixed layer, (2) an Ekman
                                 ! length scale.
-BBL_EFFIC = 0.0                 !   [nondim] default = 0.2
+BBL_EFFIC = 0.2                 !   [nondim] default = 0.2
                                 ! The efficiency with which the energy extracted by
                                 ! bottom drag drives BBL diffusion.  This is only
                                 ! used if BOTTOMDRAGLAW is true.
@@ -1525,7 +1525,7 @@ MASK_SRESTORE_MARGINAL_SEAS = False !   [Boolean] default = False
                                 ! If true, mask sss restoring in marginal seas.
 BASIN_FILE = "basin.nc"         ! default = "basin.nc"
                                 ! A file in which to find the basin masks, in variable 'basin'.
-CD_TIDES = 0.0025               !   [nondim] default = 1.0E-04
+CD_TIDES = 3.0E-04              !   [nondim] default = 1.0E-04
                                 ! The drag coefficient that applies to the tides.
 READ_GUST_2D = False            !   [Boolean] default = False
                                 ! If true, use a 2-dimensional gustiness supplied from
