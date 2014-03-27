@@ -130,6 +130,14 @@ BAD_VAL_SST_MIN = -3.0          !   [deg C] default = -2.1
                                 ! triggered, if CHECK_BAD_SURFACE_VALS is true.
 
 ! === module MOM_tracer_registry ===
+!TFREEZE_FORM = "MILLERO_78"     ! default = "LINEAR"
+                                ! TFREEZE_FORM determines which expression should be
+                                ! used for the freezing point.  Currently, the valid
+                                ! choices are "LINEAR", "MILLERO_78".
+DTFREEZE_DP = -7.75E-08         !   [deg C Pa-1] default = 0.0
+                                ! When TFREEZE_FORM=LINEAR,
+                                ! this is the derivative of the freezing potential
+                                ! temperature with pressure.
 
 ! === module MOM_tracer_flow_control ===
 USE_IDEAL_AGE_TRACER = True     !   [Boolean] default = False
@@ -479,6 +487,10 @@ DTBT = -0.9                     !   [s or nondim] default = -0.98
 
 ! === module MOM_diabatic_driver ===
 ! The following parameters are used for diabatic processes.
+PRESSURE_DEPENDENT_FRAZIL = True !   [Boolean] default = False
+                                ! If true, use a pressure dependent freezing temperature
+                                ! when making frazil. The default is false, which will be
+                                ! faster but is inappropriate with ice-shelf cavities.
 BBL_MIXING_AS_MAX = False       !   [Boolean] default = True
                                 ! If true, take the maximum of the diffusivity from the
                                 ! BBL mixing and the other diffusivities. Otherwise,
