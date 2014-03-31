@@ -8,12 +8,12 @@ MOM_SIS_025_z
 "ocean_annual",  12, "months", 1, "days", "time"
 "ocean_static",  -1, "months", 1, "days", "time"
 "ocean_scalar_daily", 1, "days",   1, "days", "time"
-"_Drake_passage",    1, "days",   1, "days", "time"
-"_Denmark_Strait",   1, "days",   1, "days", "time"
-"_Iceland_Norway",   1, "days",   1, "days", "time"
-"_Gibraltar_Strait", 1, "days",   1, "days", "time"
-"_Bering_Strait",    1, "days",   1, "days", "time"
-"_Agulhas_section",  1, "days",   1, "days", "time"
+"Drake_passage",    1, "days",   1, "days", "time"
+"Denmark_Strait",   1, "days",   1, "days", "time"
+"Iceland_Norway",   1, "days",   1, "days", "time"
+"Gibraltar_Strait", 1, "days",   1, "days", "time"
+"Bering_Strait",    1, "days",   1, "days", "time"
+"Agulhas_section",  1, "days",   1, "days", "time"
 
 #==================
 # OCEAN DIAGNOSTICS
@@ -35,6 +35,7 @@ MOM_SIS_025_z
  "ocean_model", "SST",          "sst_min",          "ocean_month", "all", "min",  "none",2
  "ocean_model", "KPP_OBLdepth", "KPP_OBLdepth_max", "ocean_month", "all", "max",  "none",2
  "ocean_model", "KPP_OBLdepth", "KPP_OBLdepth_min", "ocean_month", "all", "min",  "none",2
+ "ocean_model", "MLD_0125",     "MLD_0125",         "ocean_month", "all", .true., "none",2
  "ocean_model", "temp",         "temp",             "ocean_month", "all", .true., "none",2
  "ocean_model", "salt",         "salt",             "ocean_month", "all", .true., "none",2
  "ocean_model", "u",            "u",                "ocean_month", "all", .true., "none",2
@@ -70,36 +71,36 @@ MOM_SIS_025_z
  "ocean_model", "TKE_itidal",   "TKE_itidal",   "ocean_annual", "all", .true., "none",2
 
 # Sections
-"ocean_model", "temp", "temp", "_Drake_passage",    "all", .true., "-70. -70. -71. -54.5 -1 -1",2
-"ocean_model", "salt", "salt", "_Drake_passage",    "all", .true., "-70. -70. -71. -54.5 -1 -1",2
-"ocean_model", "uh",   "uh",   "_Drake_passage",    "all", .true., "-70. -70. -71. -54.5 -1 -1",2
-"ocean_model", "u",    "u",    "_Drake_passage",    "all", .true., "-70. -70. -71. -54.5 -1 -1",2
-"ocean_model", "e",    "e",    "_Drake_passage",    "all", .true., "-70. -70. -71. -54.5 -1 -1",2
-"ocean_model", "temp", "temp", "_Denmark_Strait",   "all", .true., "-42.5 -20. 65. 65. -1 -1",2
-"ocean_model", "salt", "salt", "_Denmark_Strait",   "all", .true., "-42.5 -20. 65. 65. -1 -1",2
-"ocean_model", "vh",   "vh",   "_Denmark_Strait",   "all", .true., "-42.5 -20. 65. 65. -1 -1",2
-"ocean_model", "v",    "v",    "_Denmark_Strait",   "all", .true., "-42.5 -20. 65. 65. -1 -1",2
-"ocean_model", "e",    "e",    "_Denmark_Strait",   "all", .true., "-42.5 -20. 65. 65. -1 -1",2
-"ocean_model", "temp", "temp", "_Iceland_Norway",   "all", .true., "-20. 15. 65. 65. -1 -1",2
-"ocean_model", "salt", "salt", "_Iceland_Norway",   "all", .true., "-20. 15. 65. 65. -1 -1",2
-"ocean_model", "vh",   "vh",   "_Iceland_Norway",   "all", .true., "-20. 15. 65. 65. -1 -1",2
-"ocean_model", "v",    "v",    "_Iceland_Norway",   "all", .true., "-20. 15. 65. 65. -1 -1",2
-"ocean_model", "e",    "e",    "_Iceland_Norway",   "all", .true., "-20. 15. 65. 65. -1 -1",2
-"ocean_model", "temp", "temp", "_Gibraltar_Strait", "all", .true., "-5. -5. 35.8 36.2 -1 -1",2
-"ocean_model", "salt", "salt", "_Gibraltar_Strait", "all", .true., "-5. -5. 35.8 36.2 -1 -1",2
-"ocean_model", "uh",   "uh",   "_Gibraltar_Strait", "all", .true., "-5. -5. 35.8 36.2 -1 -1",2
-"ocean_model", "u",    "u",    "_Gibraltar_Strait", "all", .true., "-5. -5. 35.8 36.2 -1 -1",2
-"ocean_model", "e",    "e",    "_Gibraltar_Strait", "all", .true., "-5. -5. 35.8 36.2 -1 -1",2
-"ocean_model", "temp", "temp", "_Bering_Strait",    "all", .true., "-171.4 -168.7 66.1 66.1 -1 -1",2
-"ocean_model", "salt", "salt", "_Bering_Strait",    "all", .true., "-171.4 -168.7 66.1 66.1 -1 -1",2
-"ocean_model", "vh",   "vh",   "_Bering_Strait",    "all", .true., "-171.4 -168.7 66.1 66.1 -1 -1",2
-"ocean_model", "v",    "v",    "_Bering_Strait",    "all", .true., "-171.4 -168.7 66.1 66.1 -1 -1",2
-"ocean_model", "e",    "e",    "_Bering_Strait",    "all", .true., "-171.4 -168.7 66.1 66.1 -1 -1",2
-"ocean_model", "temp", "temp", "_Agulhas_section",  "all", .true., "20. 20. -70.1 -34.5 -1 -1",2
-"ocean_model", "salt", "salt", "_Agulhas_section",  "all", .true., "20. 20. -70.1 -34.5 -1 -1",2
-"ocean_model", "uh",   "uh",   "_Agulhas_section",  "all", .true., "20. 20. -70.1 -34.5 -1 -1",2
-"ocean_model", "u",    "u",    "_Agulhas_section",  "all", .true., "20. 20. -70.1 -34.5 -1 -1",2
-"ocean_model", "e",    "e",    "_Agulhas_section",  "all", .true., "20. 20. -70.1 -34.5 -1 -1",2
+"ocean_model", "temp", "temp", "Drake_passage",    "all", .true., "-70. -70. -71. -54.5 -1 -1",2
+"ocean_model", "salt", "salt", "Drake_passage",    "all", .true., "-70. -70. -71. -54.5 -1 -1",2
+"ocean_model", "uh",   "uh",   "Drake_passage",    "all", .true., "-70. -70. -71. -54.5 -1 -1",2
+"ocean_model", "u",    "u",    "Drake_passage",    "all", .true., "-70. -70. -71. -54.5 -1 -1",2
+"ocean_model", "e",    "e",    "Drake_passage",    "all", .true., "-70. -70. -71. -54.5 -1 -1",2
+"ocean_model", "temp", "temp", "Denmark_Strait",   "all", .true., "-42.5 -20. 65. 65. -1 -1",2
+"ocean_model", "salt", "salt", "Denmark_Strait",   "all", .true., "-42.5 -20. 65. 65. -1 -1",2
+"ocean_model", "vh",   "vh",   "Denmark_Strait",   "all", .true., "-42.5 -20. 65. 65. -1 -1",2
+"ocean_model", "v",    "v",    "Denmark_Strait",   "all", .true., "-42.5 -20. 65. 65. -1 -1",2
+"ocean_model", "e",    "e",    "Denmark_Strait",   "all", .true., "-42.5 -20. 65. 65. -1 -1",2
+"ocean_model", "temp", "temp", "Iceland_Norway",   "all", .true., "-20. 15. 65. 65. -1 -1",2
+"ocean_model", "salt", "salt", "Iceland_Norway",   "all", .true., "-20. 15. 65. 65. -1 -1",2
+"ocean_model", "vh",   "vh",   "Iceland_Norway",   "all", .true., "-20. 15. 65. 65. -1 -1",2
+"ocean_model", "v",    "v",    "Iceland_Norway",   "all", .true., "-20. 15. 65. 65. -1 -1",2
+"ocean_model", "e",    "e",    "Iceland_Norway",   "all", .true., "-20. 15. 65. 65. -1 -1",2
+"ocean_model", "temp", "temp", "Gibraltar_Strait", "all", .true., "-5. -5. 35.8 36.2 -1 -1",2
+"ocean_model", "salt", "salt", "Gibraltar_Strait", "all", .true., "-5. -5. 35.8 36.2 -1 -1",2
+"ocean_model", "uh",   "uh",   "Gibraltar_Strait", "all", .true., "-5. -5. 35.8 36.2 -1 -1",2
+"ocean_model", "u",    "u",    "Gibraltar_Strait", "all", .true., "-5. -5. 35.8 36.2 -1 -1",2
+"ocean_model", "e",    "e",    "Gibraltar_Strait", "all", .true., "-5. -5. 35.8 36.2 -1 -1",2
+"ocean_model", "temp", "temp", "Bering_Strait",    "all", .true., "-171.4 -168.7 66.1 66.1 -1 -1",2
+"ocean_model", "salt", "salt", "Bering_Strait",    "all", .true., "-171.4 -168.7 66.1 66.1 -1 -1",2
+"ocean_model", "vh",   "vh",   "Bering_Strait",    "all", .true., "-171.4 -168.7 66.1 66.1 -1 -1",2
+"ocean_model", "v",    "v",    "Bering_Strait",    "all", .true., "-171.4 -168.7 66.1 66.1 -1 -1",2
+"ocean_model", "e",    "e",    "Bering_Strait",    "all", .true., "-171.4 -168.7 66.1 66.1 -1 -1",2
+"ocean_model", "temp", "temp", "Agulhas_section",  "all", .true., "20. 20. -70.1 -34.5 -1 -1",2
+"ocean_model", "salt", "salt", "Agulhas_section",  "all", .true., "20. 20. -70.1 -34.5 -1 -1",2
+"ocean_model", "uh",   "uh",   "Agulhas_section",  "all", .true., "20. 20. -70.1 -34.5 -1 -1",2
+"ocean_model", "u",    "u",    "Agulhas_section",  "all", .true., "20. 20. -70.1 -34.5 -1 -1",2
+"ocean_model", "e",    "e",    "Agulhas_section",  "all", .true., "20. 20. -70.1 -34.5 -1 -1",2
 
 
 # Static geometry data

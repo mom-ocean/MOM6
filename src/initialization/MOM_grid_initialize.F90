@@ -80,7 +80,7 @@ use MOM_io, only : read_data, slasher, file_exists
 use MOM_io, only : CORNER, NORTH_FACE, EAST_FACE
 use mpp_domains_mod, only : mpp_get_compute_domain,mpp_get_compute_domains
 use mpp_domains_mod, only : mpp_get_data_domain
-use mpp_domains_mod, only : domain1D, mpp_get_domain_components
+use mpp_domains_mod, only : mpp_get_domain_extents, mpp_deallocate_domain
 
 implicit none ; private
 
@@ -641,7 +641,6 @@ subroutine set_grid_metrics_from_mosaic(G,param_file)
   integer :: i, j, i2, j2
   integer :: npei,npej
   integer, dimension(:), allocatable :: exni,exnj
-  type(domain1D) :: domx, domy
   integer        :: start(4), nread(4)
  
   call callTree_enter("set_grid_metrics_from_mosaic(), MOM_grid_initialize.F90")
@@ -671,9 +670,7 @@ subroutine set_grid_metrics_from_mosaic(G,param_file)
   npej=G%domain%layout(2)
   allocate(exni(npei))
   allocate(exnj(npej))
-  call mpp_get_domain_components(G%domain%mpp_domain, domx, domy)
-  call mpp_get_compute_domains(domx,size=exni)
-  call mpp_get_compute_domains(domy,size=exnj)
+  call mpp_get_domain_extents(G%domain%mpp_domain, exni, exnj)
   allocate(SGdom%mpp_domain)
   SGdom%nihalo = 2*G%domain%nihalo+1
   SGdom%njhalo = 2*G%domain%njhalo+1
@@ -791,6 +788,7 @@ subroutine set_grid_metrics_from_mosaic(G,param_file)
 
   ni=SGdom%niglobal
   nj=SGdom%njglobal
+  call mpp_deallocate_domain(SGdom%mpp_domain)
   deallocate(SGdom%mpp_domain)
 
   call pass_vector(dyCu, dxCv, G%Domain, To_All+Scalar_Pair, CGRID_NE)

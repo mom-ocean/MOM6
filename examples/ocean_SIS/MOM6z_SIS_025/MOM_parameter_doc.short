@@ -33,13 +33,13 @@ NJGLOBAL = 1080                 !
                                 ! The total number of thickness grid points in the
                                 ! y-direction in the physical domain. With STATIC_MEMORY_
                                 ! this is set in MOM_memory.h at compile time.
-!NIPROC = 18                    !
+!NIPROC = 16                    !
                                 ! The number of processors in the x-direction. With
                                 ! STATIC_MEMORY_ this is set in MOM_memory.h at compile time.
-!NJPROC = 16                    !
+!NJPROC = 32                    !
                                 ! The number of processors in the x-direction. With
                                 ! STATIC_MEMORY_ this is set in MOM_memory.h at compile time.
-!LAYOUT = 18, 16                !
+!LAYOUT = 16, 32                !
                                 ! The processor layout that was acutally used.
 IO_LAYOUT = 1, 1                ! default = 0
                                 ! The processor layout to be used, or 0,0 to automatically
@@ -119,6 +119,10 @@ BAD_VAL_SST_MIN = -3.0          !   [deg C] default = -2.1
                                 ! triggered, if CHECK_BAD_SURFACE_VALS is true.
 
 ! === module MOM_tracer_registry ===
+DTFREEZE_DP = -7.75E-08         !   [deg C Pa-1] default = 0.0
+                                ! When TFREEZE_FORM=LINEAR,
+                                ! this is the derivative of the freezing potential
+                                ! temperature with pressure.
 
 ! === module MOM_tracer_flow_control ===
 USE_IDEAL_AGE_TRACER = True     !   [Boolean] default = False
@@ -185,6 +189,19 @@ MINIMUM_DEPTH = 9.5             !   [m] default = 0.0
 MASKING_DEPTH = 0.0             !   [m] default = -9999.0
                                 ! The depth below which to mask points as land points, for which all
                                 ! fluxes are zeroed out. MASKING_DEPTH is ignored if negative.
+CHANNEL_CONFIG = "list"         ! default = "none"
+                                ! A parameter that determines which set of channels are
+                                ! restricted to specific  widths.  Options are:
+                                !     none - All channels have the grid width.
+                                !     global_1deg - Sets 16 specific channels appropriate
+                                !       for a 1-degree model, as used in CM2G.
+                                !     list - Read the channel locations and widths from a
+                                !       text file, like MOM_channel_list in the MOM_SIS
+                                !       test case.
+                                !     file - Read open face widths everywhere from a
+                                !       NetCDF file on the model grid.
+CHANNEL_LIST_FILE = "MOM_channels_global_025" ! default = "MOM_channel_list"
+                                ! The file from which the list of narrowed channels is read.
 ALWAYS_WRITE_GEOM = False       !   [Boolean] default = True
                                 ! If true, write the geometry and vertical grid files
                                 ! every time the model is run.  Otherwise, only write
@@ -289,16 +306,21 @@ ETA_TOLERANCE_AUX = 0.001       !   [m] default = 1.0E-06
                                 ! layer thicknesses when calculating the auxiliary
                                 ! corrected velocities. By default, this is the same as
                                 ! ETA_TOLERANCE, but can be made larger for efficiency.
-CORIOLIS_EN_DIS = True          !   [Boolean] default = False
-                                ! If true, two estimates of the thickness fluxes are used
-                                ! to estimate the Coriolis term, and the one that
-                                ! dissipates energy relative to the other one is used.
+CORIOLIS_SCHEME = "SADOURNY75_ENSTRO" ! default = "SADOURNY75_ENERGY"
+                                ! CORIOLIS_SCHEME selects the discretization for the
+                                ! Coriolis terms. Valid values are:
+                                !    SADOURNY75_ENERGY - Sadourny, 1975; energy cons.
+                                !    ARAKAWA_HSU90     - Arakawa & Hsu, 1990
+                                !    SADOURNY75_ENSTRO - Sadourny, 1975; enstrophy cons.
+                                !    ARAKAWA_LAMB81    - Arakawa & Lamb, 1981; En. + Enst.
+                                !    ARAKAWA_LAMB_BLEND - A blend of Arakawa & Lamb with
+                                !                         Arakawa & Hsu and Sadourny energy
 BOUND_CORIOLIS = True           !   [Boolean] default = False
                                 ! If true, the Coriolis terms at u-points are bounded by
                                 ! the four estimates of (f+rv)v from the four neighboring
-                                ! v-points, and similarly at v-points.  This option is
-                                ! always effectively false with CORIOLIS_EN_DIS defined and
-                                ! CORIOLIS_SCHEME set to SADOURNY75_ENERGY.
+                                ! v-points, and similarly at v-points.  This option would
+                                ! have no effect on the SADOURNY Coriolis scheme if it
+                                ! were possible to use centered difference thickness fluxes.
 MASS_WEIGHT_IN_PRESSURE_GRADIENT = True !   [Boolean] default = False
                                 ! If true, use mass weighting when interpolation T/S for
                                 ! top/bottom integrals in AFV pressure gradient calculation.
@@ -434,10 +456,10 @@ DTBT = -0.9                     !   [s or nondim] default = -0.98
 
 ! === module MOM_diabatic_driver ===
 ! The following parameters are used for diabatic processes.
-BBL_EFFIC = 0.0                 !   [nondim] default = 0.2
-                                ! The efficiency with which the energy extracted by
-                                ! bottom drag drives BBL diffusion.  This is only
-                                ! used if BOTTOMDRAGLAW is true.
+PRESSURE_DEPENDENT_FRAZIL = True !   [Boolean] default = False
+                                ! If true, use a pressure dependent freezing temperature
+                                ! when making frazil. The default is false, which will be
+                                ! faster but is inappropriate with ice-shelf cavities.
 BBL_MIXING_AS_MAX = False       !   [Boolean] default = True
                                 ! If true, take the maximum of the diffusivity from the
                                 ! BBL mixing and the other diffusivities. Otherwise,
@@ -470,7 +492,7 @@ INT_TIDE_DECAY_SCALE = 300.3003003003003 !   [m] default = 0.0
 KAPPA_ITIDES = 6.28319E-04      !   [m-1] default = 6.283185307179586E-04
                                 ! A topographic wavenumber used with INT_TIDE_DISSIPATION.
                                 ! The default is 2pi/10 km, as in St.Laurent et al. 2002.
-KAPPA_H2_FACTOR = 0.75          !   [nondim] default = 1.0
+KAPPA_H2_FACTOR = 0.3           !   [nondim] default = 1.0
                                 ! A scaling factor for the roughness amplitude with nINT_TIDE_DISSIPATION.
 TKE_ITIDE_MAX = 0.1             !   [W m-2] default = 1000.0
                                 ! The maximum internal tide energy source availble to mix
@@ -582,7 +604,7 @@ SRESTORE_AS_SFLUX = True        !   [Boolean] default = False
                                 ! flux instead of as a freshwater flux.
 MAX_DELTA_SRESTORE = 5.0        !   [PSU or g kg-1] default = 999.0
                                 ! The maximum salinity difference used in restoring terms.
-CD_TIDES = 0.0025               !   [nondim] default = 1.0E-04
+CD_TIDES = 3.0E-04              !   [nondim] default = 1.0E-04
                                 ! The drag coefficient that applies to the tides.
 
 ! === module MOM_sum_output ===
