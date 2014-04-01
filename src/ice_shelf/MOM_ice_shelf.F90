@@ -4887,6 +4887,12 @@ subroutine calc_shelf_visc_triangular (CS,u,v)
 
   G => CS%grid
 
+  if (G%symmetric) then
+     isym = 1
+  else
+     isym = 0
+  endif
+
   isc = G%isc ; jsc = G%jsc ; iec = G%iec ; jec = G%jec
   iscq = G%iscB ; iecq = G%iecB ; jscq = G%jscB ; jecq = G%jecB
   gjsd = G%jsd_global ; gisd = G%isd_global
