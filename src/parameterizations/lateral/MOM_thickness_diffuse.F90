@@ -100,7 +100,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, MEKE, VarMix, CDp, CS)
   type(thermo_var_ptrs),                  intent(in)    :: tv
   real,                                   intent(in)    :: dt
   type(ocean_grid_type),                  intent(in)    :: G
-  type(MEKE_type),                        pointer       :: MEKE
+  type(MEKE_type),                        intent(inout) :: MEKE
   type(VarMix_CS),                        pointer       :: VarMix
   type(cont_diag_ptrs),                   intent(inout) :: CDp
   type(thickness_diffuse_CS),             pointer       :: CS
@@ -117,7 +117,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, MEKE, VarMix, CDp, CS)
 !  (in)      G - The ocean's grid structure.
 !  (in)      VarMix - A structure containing a number of fields related to
 !                     variable lateral mixing.
-!  (in)      MEKE - A structure containing information about the Mesoscale Eddy
+!  (inout)   MEKE - A structure containing information about the Mesoscale Eddy
 !                   Kinetic Energy parameterization; this might be unassociated.
 !  (inout)   CDp - A structure with pointers to various terms in the continuity
 !                  equations.
@@ -142,22 +142,26 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, MEKE, VarMix, CDp, CS)
                   ! weighting of the interface slopes to that calculated also
                   ! using density gradients at v points.  The physically correct
                   ! slopes occur at 0, while 1 is used for numerical closures.
-  real :: KH_u_CFL(SZIB_(G), SZJ_(G)) ! The maximum stable interface height
-  real :: KH_v_CFL(SZI_(G), SZJB_(G)) ! diffusivities at u & v grid points,
-                                      ! in m2 s-1.
-  real :: Khth_Loc      ! Locally calculated thickness mixing coefficient (m2/s)
+  real, allocatable, save :: KH_u_CFL(:,:)   ! The maximum stable interface height
+  real, allocatable, save :: KH_v_CFL(:,:)   ! diffusivities at u & v grid points,
+                                             ! in m2 s-1.
+  logical, save :: first_call = .TRUE.
+  real :: Khth_Loc_u(SZIB_(G), SZJ_(G))
+  real :: Khth_Loc(SZIB_(G), SZJB_(G))     ! Locally calculated thickness mixing coefficient (m2/s)
   logical :: use_VarMix, Resoln_scaled
   integer :: i, j, k, is, ie, js, je, nz
-
+  logical :: MEKE_not_null
 
   if (.not. ASSOCIATED(CS)) call MOM_error(FATAL, "MOM_thickness_diffuse:"// &
          "Module must be initialized before it is used.")
+  MEKE_not_null = (LOC(MEKE) .NE. 0)
+
   if ((.not.CS%thickness_diffuse) .or. &
-       .not.( CS%Khth > 0.0 .or. associated(VarMix) .or. associated(MEKE) ) ) return
+       .not.( CS%Khth > 0.0 .or. associated(VarMix) .or. MEKE_not_null ) ) return
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
-  if (ASSOCIATED(MEKE)) then
+  if (MEKE_not_null) then
     if (ASSOCIATED(MEKE%GM_src)) then
       do j=js,je ; do i=is,ie ; MEKE%GM_src(i,j) = 0. ; enddo ; enddo
     endif
@@ -169,55 +173,124 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, MEKE, VarMix, CDp, CS)
     Resoln_scaled = VarMix%Resoln_scaled_KhTh
   endif
 
+  if(first_call) then
+    allocate(KH_u_CFL(SZIB_(G), SZJ_(G)) )
+    allocate(KH_v_CFL(SZI_(G), SZJB_(G)) )
+!$OMP parallel do default(shared)
+    do j = js,je; do I=is-1,ie
+      KH_u_CFL(I,j) = 0.2/(dt*(G%IdxCu(I,j)*G%IdxCu(I,j) + G%IdyCu(I,j)*G%IdyCu(I,j)))
+    enddo; enddo
+!$OMP parallel do default(shared)
+    do j = js-1,je; do I=is,ie
+      KH_v_CFL(i,J) = 0.2/(dt*(G%IdxCv(i,J)*G%IdxCv(i,J) + G%IdyCv(i,J)*G%IdyCv(i,J)))
+    enddo; enddo
+    first_call = .false.
+  endif
+
   call find_eta(h, tv, G%g_Earth, G, e, halo_size=1)
 
   ! Set the diffusivities.
-  do j=js,je ; do I=is-1,ie
-    Khth_Loc = CS%Khth
-    if (use_VarMix) &
-      Khth_Loc = Khth_Loc + CS%KHTH_Slope_Cff*VarMix%L2u(I,j)*VarMix%SN_u(I,j)
-    if (ASSOCIATED(MEKE)) then
-      if (associated(MEKE%Kh)) &
-        Khth_Loc = Khth_Loc + MEKE%KhTh_fac*sqrt(MEKE%Kh(i,j)*MEKE%Kh(i+1,j))
-    endif
-    if (Resoln_scaled) &
-      Khth_Loc = Khth_Loc * 0.5*(VarMix%Res_fn_h(i,j) + VarMix%Res_fn_h(i+1,j))
-    if (CS%Khth_Max > 0) then
-      Khth_Loc = max(CS%Khth_min, min(Khth_Loc,CS%Khth_Max))
-    else
-      Khth_Loc = max(CS%Khth_min, Khth_Loc)
-    endif
-    KH_u_CFL(I,j) = 0.2/(dt*(G%IdxCu(I,j)*G%IdxCu(I,j) + G%IdyCu(I,j)*G%IdyCu(I,j)))
-    KH_u(I,j,1) = min(KH_u_CFL(I,j), Khth_Loc)
+!$OMP parallel default(shared)
+!$OMP do
+   do j = js,je; do I=is-1,ie
+      Khth_Loc_u(i,j) = CS%Khth
+   enddo; enddo
+
+   if(use_VarMix) then
+!$OMP do 
+     do j = js,je; do I=is-1,ie
+       Khth_Loc_u(i,j) = Khth_Loc_u(i,j) + CS%KHTH_Slope_Cff*VarMix%L2u(I,j)*VarMix%SN_u(I,j)
+     enddo; enddo
+   endif
+
+   if(MEKE_not_null) then; 
+     if (associated(MEKE%Kh)) then
+!$OMP do
+       do j = js,je; do I=is-1,ie
+         Khth_Loc_u(i,j) = Khth_Loc_u(i,j) + MEKE%KhTh_fac*sqrt(MEKE%Kh(i,j)*MEKE%Kh(i+1,j))
+       enddo; enddo
+     endif
+   endif
+
+   if (Resoln_scaled) then
+!$OMP do
+     do j = js,je; do I=is-1,ie
+       Khth_Loc_u(i,j) = Khth_Loc_u(i,j) * 0.5*(VarMix%Res_fn_h(i,j) + VarMix%Res_fn_h(i+1,j))
+     enddo; enddo
+   endif
+
+   if (CS%Khth_Max > 0) then
+!$OMP do
+     do j = js,je; do I=is-1,ie
+       Khth_Loc_u(i,j) = max(CS%Khth_min, min(Khth_Loc_u(i,j),CS%Khth_Max))
+     enddo; enddo
+   else
+!$OMP do
+     do j = js,je; do I=is-1,ie
+       Khth_Loc_u(i,j) = max(CS%Khth_min, Khth_Loc_u(i,j))
+     enddo; enddo
+   endif
+!$OMP do
+  do j = js,je; do I=is-1,ie
+    KH_u(I,j,1) = min(KH_u_CFL(I,j), Khth_Loc_u(i,j))
   enddo ; enddo
+
+!$OMP do
   do K=2,nz+1 ; do j=js,je ; do I=is-1,ie
     KH_u(I,j,K) = KH_u(I,j,1)
   enddo ; enddo ; enddo
 
+!$OMP do
   do J=js-1,je ; do i=is,ie
-    Khth_Loc = CS%Khth
-    if (use_VarMix) &
-      Khth_Loc = Khth_Loc + CS%KHTH_Slope_Cff*VarMix%L2v(i,J)*VarMix%SN_v(i,J)
-    if (ASSOCIATED(MEKE)) then
-      if (associated(MEKE%Kh)) &
-        Khth_Loc = Khth_Loc + MEKE%KhTh_fac*sqrt(MEKE%Kh(i,j)*MEKE%Kh(i,j+1))
+    Khth_Loc(i,j) = CS%Khth
+  enddo; enddo
+
+  if (use_VarMix) then
+!$OMP do
+   do J=js-1,je ; do i=is,ie
+      Khth_Loc(i,j) = Khth_Loc(i,j) + CS%KHTH_Slope_Cff*VarMix%L2v(i,J)*VarMix%SN_v(i,J)
+   enddo; enddo
+  endif
+  if (MEKE_not_null) then
+    if (associated(MEKE%Kh)) then
+!$OMP do
+      do J=js-1,je ; do i=is,ie
+        Khth_Loc(i,j) = Khth_Loc(i,j) + MEKE%KhTh_fac*sqrt(MEKE%Kh(i,j)*MEKE%Kh(i,j+1))
+      enddo; enddo
     endif
-    if (Resoln_scaled) &
-      Khth_Loc = Khth_Loc * 0.5*(VarMix%Res_fn_h(i,j) + VarMix%Res_fn_h(i,j+1))
-    if (CS%Khth_Max > 0) then
-      Khth_Loc = max(CS%Khth_min, min(Khth_Loc,CS%Khth_Max))
-    else
-      Khth_Loc = max(CS%Khth_min, Khth_Loc)
-    endif
-    KH_v_CFL(i,J) = 0.2/(dt*(G%IdxCv(i,J)*G%IdxCv(i,J) + G%IdyCv(i,J)*G%IdyCv(i,J)))
-    KH_v(i,J,1) = min(KH_v_CFL(i,J), Khth_Loc)
+  endif
+  
+  if (Resoln_scaled) then
+!$OMP do
+    do J=js-1,je ; do i=is,ie
+      Khth_Loc(i,j) = Khth_Loc(i,j) * 0.5*(VarMix%Res_fn_h(i,j) + VarMix%Res_fn_h(i,j+1))
+    enddo; enddo
+  endif
+   
+  if (CS%Khth_Max > 0) then
+!$OMP do
+    do J=js-1,je ; do i=is,ie
+      Khth_Loc(i,j) = max(CS%Khth_min, min(Khth_Loc(i,j),CS%Khth_Max))
+    enddo; enddo
+  else
+!$OMP do
+    do J=js-1,je ; do i=is,ie
+      Khth_Loc(i,j) = max(CS%Khth_min, Khth_Loc(i,j))
+    enddo; enddo
+  endif
+!$OMP do
+  do J=js-1,je ; do i=is,ie
+    KH_v(i,J,1) = min(KH_v_CFL(i,J), Khth_Loc(i,j))
   enddo ; enddo
+!$OMP do
   do K=2,nz+1 ; do J=js-1,je ; do i=is,ie
     KH_v(i,J,K) = KH_v(i,J,1)
   enddo ; enddo ; enddo
-
+!$OMP do
   do K=1,nz+1 ; do j=js,je ; do I=is-1,ie ; int_slope_u(I,j,K) = 0.0 ; enddo ; enddo ; enddo
+!$OMP do
   do K=1,nz+1 ; do J=js-1,je ; do i=is,ie ; int_slope_v(i,J,K) = 0.0 ; enddo ; enddo ; enddo
+!$OMP end parallel
 
   if (CS%detangle_interfaces) then
     call add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, CS, &
@@ -252,7 +325,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, MEKE, VarMix, CDp, CS)
     enddo ; enddo
   enddo
 
-  if (ASSOCIATED(MEKE) .and. ASSOCIATED(VarMix)) then
+  if (MEKE_not_null .AND. ASSOCIATED(VarMix)) then
     if (ASSOCIATED(MEKE%Rd_dx_h) .and. ASSOCIATED(VarMix%Rd_dx_h)) then
       do j=js,je ; do i=is,ie
         MEKE%Rd_dx_h(i,j) = VarMix%Rd_dx_h(i,j)
@@ -292,7 +365,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(out) :: vhD
   real,                                   intent(in)  :: dt
   type(ocean_grid_type),                  intent(in)  :: G
-  type(MEKE_type),                        pointer     :: MEKE
+  type(MEKE_type),                      intent(inout) :: MEKE
   type(thickness_diffuse_CS),             pointer     :: CS
   real, dimension(NIMEMB_,NJMEM_,NK_INTERFACE_), optional, intent(in)  :: int_slope_u
   real, dimension(NIMEM_,NJMEMB_,NK_INTERFACE_), optional, intent(in)  :: int_slope_v
@@ -391,7 +464,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
 ! Diagnostics that should be eliminated altogether later...
  ! real, dimension(SZIB_(G), SZJ_(G), SZK_(G)+1) :: sfn_x, sfn_slope_x
  ! real, dimension(SZI_(G), SZJB_(G), SZK_(G)+1) :: sfn_y, sfn_slope_y
-
+  logical :: MEKE_not_null
   integer :: is, ie, js, je, nz, IsdB
   integer :: i, j, k
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke ; IsdB = G%IsdB
@@ -403,18 +476,21 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
   dz_neglect = G%H_subroundoff*G%H_to_m
 
   use_EOS = associated(tv%eqn_of_state)
+  MEKE_not_null = (LOC(MEKE) .NE. 0)
 
   nk_linear = max(G%nkml, 1)
 
   find_work = .false.
-  if (ASSOCIATED(MEKE)) find_work = ASSOCIATED(MEKE%GM_src)
+  if (MEKE_not_null) find_work = ASSOCIATED(MEKE%GM_src)
   find_work = (ASSOCIATED(CS%GMwork) .or. find_work)
 
   if (use_EOS) then
     call vert_fill_TS(h, tv%T, tv%S, CS%kappa_smooth, dt, T, S, G, 1)
   endif
 
+!$OMP parallel default(shared)
   ! Find the maximum and minimum permitted streamfunction.
+!$OMP do
   do j=js-1,je+1 ; do i=is-1,ie+1
     h_avail_rsum(i,j,1) = 0.0
     pres(i,j,1) = 0.0  ! ### This should be atmospheric pressure.
@@ -424,8 +500,9 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
     h_frac(i,j,1) = 1.0
     pres(i,j,2) = pres(i,j,1) + G%H_to_Pa*h(i,j,1)
   enddo ; enddo
-  do k=2,nz
-    do j=js-1,je+1 ; do i=is-1,ie+1
+!$OMP do
+  do j=js-1,je+1 
+    do k=2,nz ; do i=is-1,ie+1
       h_avail(i,j,k) = max(I4dt*G%areaT(i,j)*(h(i,j,k)-G%Angstrom),0.0)
       h_avail_rsum(i,j,k+1) = h_avail_rsum(i,j,k) + h_avail(i,j,k)
       h_frac(i,j,k) = 0.0 ; if (h_avail(i,j,k) > 0.0) &
@@ -433,18 +510,21 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
       pres(i,j,K+1) = pres(i,j,K) + G%H_to_Pa*h(i,j,k)
     enddo ; enddo
   enddo
-
+!$OMP do
   do j=js,je ; do I=is-1,ie
     uhtot(I,j) = 0.0 ; Work_u(I,j) = 0.0
     ! sfn_x(I,j,1) = 0.0 ; sfn_slope_x(I,j,1) = 0.0
     ! sfn_x(I,j,nz+1) = 0.0 ; sfn_slope_x(I,j,nz+1) = 0.0
   enddo ; enddo
+!$OMP do
   do J=js-1,je ; do i=is,ie
     vhtot(i,J) = 0.0 ; Work_v(i,J) = 0.0
     ! sfn_y(i,J,1) = 0.0 ; sfn_slope_y(i,J,1) = 0.0
     ! sfn_y(i,J,nz+1) = 0.0 ; sfn_slope_y(i,J,nz+1) = 0.0
   enddo ; enddo
+!$OMP end parallel
 
+!!$OMP parallel do default(none) 
   do K=nz,2,-1
     if (find_work .and. .not.(use_EOS)) then
       drdiA = 0.0 ; drdiB = 0.0 ; drdjA = 0.0 ; drdjB = 0.0
@@ -822,7 +902,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
     Work_h = 0.5 * G%IareaT(i,j) * &
       ((Work_u(I-1,j) + Work_u(I,j)) + (Work_v(i,J-1) + Work_v(i,J)))
     if (ASSOCIATED(CS%GMwork)) CS%GMwork(i,j) = Work_h
-    if (ASSOCIATED(MEKE)) then ; if (ASSOCIATED(MEKE%GM_src)) then
+    if (MEKE_not_null) then ; if (ASSOCIATED(MEKE%GM_src)) then
       MEKE%GM_src(i,j) = MEKE%GM_src(i,j) + Work_h
     endif ; endif
   enddo ; enddo ; endif
