@@ -532,7 +532,7 @@ INT_TIDE_DECAY_SCALE = 300.3003003003003 !   [m] default = 0.0
 KAPPA_ITIDES = 6.28319E-04      !   [m-1] default = 6.283185307179586E-04
                                 ! A topographic wavenumber used with INT_TIDE_DISSIPATION.
                                 ! The default is 2pi/10 km, as in St.Laurent et al. 2002.
-KAPPA_H2_FACTOR = 0.3           !   [nondim] default = 1.0
+KAPPA_H2_FACTOR = 0.84          !   [nondim] default = 1.0
                                 ! A scaling factor for the roughness amplitude with nINT_TIDE_DISSIPATION.
 TKE_ITIDE_MAX = 0.1             !   [W m-2] default = 1000.0
                                 ! The maximum internal tide energy source availble to mix
@@ -540,7 +540,7 @@ TKE_ITIDE_MAX = 0.1             !   [W m-2] default = 1000.0
 READ_TIDEAMP = True             !   [Boolean] default = False
                                 ! If true, read a file (given by TIDEAMP_FILE) containing
                                 ! the tidal amplitude with INT_TIDE_DISSIPATION.
-TIDEAMP_FILE = "tidal_amplitude.v20140321.nc" ! default = "tideamp.nc"
+TIDEAMP_FILE = "tidal_amplitude.v20140328.nc" ! default = "tideamp.nc"
                                 ! The path to the file containing the spatially varying
                                 ! tidal amplitudes with INT_TIDE_DISSIPATION.
 H2_FILE = "ocean_topog.nc"      !
@@ -644,7 +644,7 @@ SRESTORE_AS_SFLUX = True        !   [Boolean] default = False
                                 ! flux instead of as a freshwater flux.
 MAX_DELTA_SRESTORE = 5.0        !   [PSU or g kg-1] default = 999.0
                                 ! The maximum salinity difference used in restoring terms.
-CD_TIDES = 0.0003               !   [nondim] default = 1.0E-04
+CD_TIDES = 1.8E-03              !   [nondim] default = 1.0E-04
                                 ! The drag coefficient that applies to the tides.
 
 ! === module MOM_sum_output ===
