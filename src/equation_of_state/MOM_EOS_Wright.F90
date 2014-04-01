@@ -405,22 +405,38 @@ subroutine int_spec_vol_dp_wright(T, S, p_t, p_b, alpha_ref, G, dza, &
   if (present(intx_dza)) then ; ish = MIN(Isq,ish) ; ieh = MAX(Ieq+1,ieh); endif
   if (present(inty_dza)) then ; jsh = MIN(Jsq,jsh) ; jeh = MAX(Jeq+1,jeh); endif
 
-  do j=jsh,jeh ; do i=ish,ieh
-    al0_2d(i,j) = a0 + a1*T(i,j) + a2*S(i,j)
-    p0_2d(i,j) = b0 + b4*S(i,j) + T(i,j) * (b1 + T(i,j)*(b2 + b3*T(i,j)) + b5*S(i,j))
-    lambda_2d(i,j) = c0 +c4*S(i,j) + T(i,j) * (c1 + T(i,j)*(c2 + c3*T(i,j)) + c5*S(i,j))
+  if (present(intp_dza)) then
+    do j=jsh,jeh ; do i=ish,ieh
+      al0_2d(i,j) = a0 + a1*T(i,j) + a2*S(i,j)
+      p0_2d(i,j) = b0 + b4*S(i,j) + T(i,j) * (b1 + T(i,j)*(b2 + b3*T(i,j)) + b5*S(i,j))
+      lambda_2d(i,j) = c0 +c4*S(i,j) + T(i,j) * (c1 + T(i,j)*(c2 + c3*T(i,j)) + c5*S(i,j))
+ 
+      al0 = al0_2d(i,j) ; p0 = p0_2d(i,j) ; lambda = lambda_2d(i,j)
+      dp = p_b(i,j) - p_t(i,j)
+      p_ave = 0.5*(p_t(i,j)+p_b(i,j))
 
-    al0 = al0_2d(i,j) ; p0 = p0_2d(i,j) ; lambda = lambda_2d(i,j)
-    dp = p_b(i,j) - p_t(i,j)
-    p_ave = 0.5*(p_t(i,j)+p_b(i,j))
-
-    eps = 0.5 * dp / (p0 + p_ave) ; eps2 = eps*eps
-    alpha_anom = al0 + lambda / (p0 + p_ave) - alpha_ref
-    rem = lambda * eps2 * (C1_3 + eps2*(0.2 + eps2*(C1_7 + C1_9*eps2)))
-    dza(i,j) = alpha_anom*dp + 2.0*eps*rem
-    if (present(intp_dza)) &
+      eps = 0.5 * dp / (p0 + p_ave) ; eps2 = eps*eps
+      alpha_anom = al0 + lambda / (p0 + p_ave) - alpha_ref
+      rem = lambda * eps2 * (C1_3 + eps2*(0.2 + eps2*(C1_7 + C1_9*eps2)))
+      dza(i,j) = alpha_anom*dp + 2.0*eps*rem
       intp_dza(i,j) = 0.5*alpha_anom*dp**2 - dp*(1.0-eps)*rem
-  enddo ; enddo
+    enddo ; enddo
+  else
+    do j=jsh,jeh ; do i=ish,ieh
+      al0_2d(i,j) = a0 + a1*T(i,j) + a2*S(i,j)
+      p0_2d(i,j) = b0 + b4*S(i,j) + T(i,j) * (b1 + T(i,j)*(b2 + b3*T(i,j)) + b5*S(i,j))
+      lambda_2d(i,j) = c0 +c4*S(i,j) + T(i,j) * (c1 + T(i,j)*(c2 + c3*T(i,j)) + c5*S(i,j))
+
+      al0 = al0_2d(i,j) ; p0 = p0_2d(i,j) ; lambda = lambda_2d(i,j)
+      dp = p_b(i,j) - p_t(i,j)
+      p_ave = 0.5*(p_t(i,j)+p_b(i,j))
+
+      eps = 0.5 * dp / (p0 + p_ave) ; eps2 = eps*eps
+      alpha_anom = al0 + lambda / (p0 + p_ave) - alpha_ref
+      rem = lambda * eps2 * (C1_3 + eps2*(0.2 + eps2*(C1_7 + C1_9*eps2)))
+      dza(i,j) = alpha_anom*dp + 2.0*eps*rem
+    enddo ; enddo
+  endif
 
   if (present(intx_dza)) then ; do j=G%jsc,G%jec ; do I=Isq,Ieq
     intp(1) = dza(i,j) ; intp(5) = dza(i+1,j)
