@@ -956,6 +956,7 @@ subroutine find_coupling_coef(a, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i, h_m
     dz_neglect = G%H_subroundoff*G%H_to_m
 
     do_shelf = .false. ; if (present(shelf)) do_shelf = shelf
+    h_ml(:) = 0.0
 
 !    The following loop calculates the vertical average velocity and
 !  surface mixed layer contributions to the vertical viscosity.
