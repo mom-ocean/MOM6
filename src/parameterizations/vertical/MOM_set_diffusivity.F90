@@ -546,6 +546,9 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, G, C
 
   if (CS%debug) call hchksum(Kd_sfc,"Kd_sfc",G,haloshift=0)
 
+!$OMP parallel do default(private) shared(is,ie,js,je,nz,G,CS,h,tv,T_f,S_f,fluxes,dd, &
+!$OMP                                  Kd,Kd_sfc,epsilon,deg_to_rad,I_2Omega,visc, &
+!$OMP                                  Kd_int,dt,u,v,Omega2) 
   do j=js,je
     ! Set up variables related to the stratification.
     call find_N2(h, tv, T_f, S_f, fluxes, j, G, CS, dRho_int, N2_lay, N2_int, N2_bot)
