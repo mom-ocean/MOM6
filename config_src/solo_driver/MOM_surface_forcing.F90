@@ -1461,7 +1461,7 @@ subroutine buoyancy_forcing_const(state, fluxes, day, dt, G, CS)
 !  (in)      G - The ocean's grid structure.
 !  (in)      CS - A pointer to the control structure returned by a previous
 !                 call to surface_forcing_init.
-  integer :: i, j, is, ie, js, je
+  integer :: i, j
 
   if ( CS%use_temperature ) then
     if (.not.associated(fluxes%evap)) then
@@ -1510,7 +1510,7 @@ subroutine buoyancy_forcing_const(state, fluxes, day, dt, G, CS)
   endif
 
   if (associated(fluxes%p_surf)) then
-    do j=js,je ; do i=is,ie
+    do j=G%jsc,G%jec ; do i=G%isc,G%iec
       fluxes%p_surf(i,j) = 0.0
     enddo ; enddo
   endif
