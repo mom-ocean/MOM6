@@ -300,21 +300,36 @@ subroutine MOM_grid_init(G, param_file)
 
 end subroutine MOM_grid_init
 
+!> Returns true if the coordinates (x,y) are within the h-cell (i,j)
 logical function isPointInCell(G, i, j, x, y)
-! Returns true if the coordinates (x,y) are within the h-cell (i,j)
-  type(ocean_grid_type), intent(in) :: G
-  integer,               intent(in) :: i, j
-  real,                  intent(in) :: x, y
+  type(ocean_grid_type), intent(in) :: G    !< Grid type
+  integer,               intent(in) :: i, j !< i,j indices of cell to test
+  real,                  intent(in) :: x, y !< x,y coordinates of point
 ! This is a crude calculation that assume a geographic coordinate system
-isPointInCell =                        &
-          ( G%geoLonBu(i-1,j-1) <= x ) &
-    .and. ( G%geoLonBu(i-1,j)   <= x ) &
-    .and. ( G%geoLonBu(i,j-1)   >= x ) &
-    .and. ( G%geoLonBu(i,j)     >= x ) &
-    .and. ( G%geoLatBu(i-1,j-1) <= y ) &
-    .and. ( G%geoLatBu(i,j-1)   <= y ) &
-    .and. ( G%geoLatBu(i-1,j)   >= y ) &
-    .and. ( G%geoLatBu(i,j)     >= y )
+  real :: xNE, xNW, xSE, xSW, yNE, yNW, ySE, ySW
+  real :: p0, p1, p2, p3, l0, l1, l2, l3
+  isPointInCell = .false.
+  xNE = G%geoLonBu(i  ,j  ); yNE = G%geoLatBu(i  ,j  )
+  xNW = G%geoLonBu(i-1,j  ); yNW = G%geoLatBu(i-1,j  )
+  xSE = G%geoLonBu(i  ,j-1); ySE = G%geoLatBu(i  ,j-1)
+  xSW = G%geoLonBu(i-1,j-1); ySW = G%geoLatBu(i-1,j-1)
+  if (x<min(xNE,xNW,xSE,xSW) .or. x>max(xNE,xNW,xSE,xSW) .or. &
+      y<min(yNE,yNW,ySE,ySW) .or. y>max(yNE,yNW,ySE,ySW) ) then
+    return ! Avoid the more complicated calculation
+  endif
+  l0=(x-xSW)*(ySE-ySW)-(y-ySW)*(xSE-xSW)
+  l1=(x-xSE)*(yNE-ySE)-(y-ySE)*(xNE-xSE)
+  l2=(x-xNE)*(yNW-yNE)-(y-yNE)*(xNW-xNE)
+  l3=(x-xNW)*(ySW-yNW)-(y-yNW)*(xSW-xNW)
+
+  p0=sign(1., l0); if (l0.eq.0.) p0=0.
+  p1=sign(1., l1); if (l1.eq.0.) p1=0.
+  p2=sign(1., l2); if (l2.eq.0.) p2=0.
+  p3=sign(1., l3); if (l3.eq.0.) p3=0.
+
+  if ( (abs(p0)+abs(p2))+(abs(p1)+abs(p3)) .eq. abs((p0+p2)+(p1+p3)) ) then
+    isPointInCell=.true.
+  endif
 end function isPointInCell
 
 subroutine set_first_direction(G, y_first)

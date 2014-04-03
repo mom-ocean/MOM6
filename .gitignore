@@ -4,7 +4,8 @@
 *.out
 CPU_stats
 exitcode
-available_diags.*
+available_diags*
+SIS.available_diags*
 RESTART
 _read_error.nml
 fort.*

@@ -7,3 +7,6 @@
 [submodule "tools/python/025gridGeneration/MIDAS"]
 	path = tools/python/025gridGeneration/MIDAS
 	url = https://github.com/mjharriso/MIDAS.git
+[submodule "pkg/CVMix-src"]
+	path = pkg/CVMix-src
+	url = https://github.com/CVMix/CVMix-src.git

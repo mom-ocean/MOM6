@@ -57,13 +57,13 @@ MASKTABLE = "MOM_mask_table"    ! default = "MOM_mask_table"
 LAYOUT = 0, 0                   ! default = 0
                                 ! The processor layout to be used, or 0, 0 to automatically
                                 ! set the layout based on the number of processors.
-!NIPROC = 18                    !
+!NIPROC = 16                    !
                                 ! The number of processors in the x-direction. With
                                 ! STATIC_MEMORY_ this is set in MOM_memory.h at compile time.
-!NJPROC = 16                    !
+!NJPROC = 32                    !
                                 ! The number of processors in the x-direction. With
                                 ! STATIC_MEMORY_ this is set in MOM_memory.h at compile time.
-!LAYOUT = 18, 16                !
+!LAYOUT = 16, 32                !
                                 ! The processor layout that was acutally used.
 IO_LAYOUT = 1, 1                ! default = 0
                                 ! The processor layout to be used, or 0,0 to automatically
@@ -246,7 +246,7 @@ DTFREEZE_DS = -0.054            !   [deg C PSU-1] default = -0.054
                                 ! When TFREEZE_FORM=LINEAR,
                                 ! this is the derivative of the freezing potential
                                 ! temperature with salinity.
-DTFREEZE_DP = 0.0               !   [deg C Pa-1] default = 0.0
+DTFREEZE_DP = -7.75E-08         !   [deg C Pa-1] default = 0.0
                                 ! When TFREEZE_FORM=LINEAR,
                                 ! this is the derivative of the freezing potential
                                 ! temperature with pressure.
@@ -383,7 +383,7 @@ APPLY_OBC_V_FLATHER_NORTH = False !   [Boolean] default = False
 APPLY_OBC_V_FLATHER_SOUTH = False !   [Boolean] default = False
                                 ! Apply a Flather open boundary condition on the southern
                                 ! side of the global domain
-CHANNEL_CONFIG = "none"         ! default = "none"
+CHANNEL_CONFIG = "list"         ! default = "none"
                                 ! A parameter that determines which set of channels are
                                 ! restricted to specific  widths.  Options are:
                                 !     none - All channels have the grid width.
@@ -394,6 +394,11 @@ CHANNEL_CONFIG = "none"         ! default = "none"
                                 !       test case.
                                 !     file - Read open face widths everywhere from a
                                 !       NetCDF file on the model grid.
+CHANNEL_LIST_FILE = "MOM_channels_global_025" ! default = "MOM_channel_list"
+                                ! The file from which the list of narrowed channels is read.
+CHANNEL_LIST_360_LON_CHECK = True !   [Boolean] default = True
+                                ! If true, the channel configuration list works for any
+                                ! longitudes in the range of -360 to 360.
 ROTATION = "2omegasinlat"       ! default = "2omegasinlat"
                                 ! This specifies how the Coriolis parameter is specified:
                                 !     2omegasinlat - Use twice the planetary rotation rate
@@ -736,11 +741,11 @@ NOSLIP = False                  !   [Boolean] default = False
                                 ! cleaner than the no slip BCs. The use of free slip BCs
                                 ! is strongly encouraged, and no slip BCs are not used with
                                 ! the biharmonic viscosity.
-CORIOLIS_EN_DIS = True          !   [Boolean] default = False
+CORIOLIS_EN_DIS = False         !   [Boolean] default = False
                                 ! If true, two estimates of the thickness fluxes are used
                                 ! to estimate the Coriolis term, and the one that
                                 ! dissipates energy relative to the other one is used.
-CORIOLIS_SCHEME = "SADOURNY75_ENERGY" ! default = "SADOURNY75_ENERGY"
+CORIOLIS_SCHEME = "SADOURNY75_ENSTRO" ! default = "SADOURNY75_ENERGY"
                                 ! CORIOLIS_SCHEME selects the discretization for the
                                 ! Coriolis terms. Valid values are:
                                 !    SADOURNY75_ENERGY - Sadourny, 1975; energy cons.
@@ -752,9 +757,9 @@ CORIOLIS_SCHEME = "SADOURNY75_ENERGY" ! default = "SADOURNY75_ENERGY"
 BOUND_CORIOLIS = True           !   [Boolean] default = False
                                 ! If true, the Coriolis terms at u-points are bounded by
                                 ! the four estimates of (f+rv)v from the four neighboring
-                                ! v-points, and similarly at v-points.  This option is
-                                ! always effectively false with CORIOLIS_EN_DIS defined and
-                                ! CORIOLIS_SCHEME set to SADOURNY75_ENERGY.
+                                ! v-points, and similarly at v-points.  This option would
+                                ! have no effect on the SADOURNY Coriolis scheme if it
+                                ! were possible to use centered difference thickness fluxes.
 KE_SCHEME = "KE_ARAKAWA"        ! default = "KE_ARAKAWA"
                                 ! KE_SCHEME selects the discretization for acceleration
                                 ! due to the kinetic energy gradient. Valid values are:
@@ -1096,7 +1101,7 @@ RECLAIM_FRAZIL = True           !   [Boolean] default = True
                                 ! overlying layers down to the freezing point, thereby
                                 ! avoiding the creation of thin ice when the SST is above
                                 ! the freezing point.
-PRESSURE_DEPENDENT_FRAZIL = False !   [Boolean] default = False
+PRESSURE_DEPENDENT_FRAZIL = True !   [Boolean] default = False
                                 ! If true, use a pressure dependent freezing temperature
                                 ! when making frazil. The default is false, which will be
                                 ! faster but is inappropriate with ice-shelf cavities.
@@ -1115,6 +1120,11 @@ KD_BBL_TR = 0.0                 !   [m2 s-1] default = 0.0
                                 ! allow for explicitly specified bottom fluxes. The
                                 ! entrainment at the bottom is at least sqrt(Kd_BBL_tr*dt)
                                 ! over the same distance.
+DIAG_MLD_DENSITY_DIFF = 0.1     !   [kg/m3] default = 0.1
+                                ! The density difference used to determine a diagnostic mixed
+                                ! layer depth, MLD_user, following the definition of Levitus 1982.
+                                ! The MLD is the depth at which the density is larger than the
+                                ! surface density by the specified amount.
 FLUX_RI_MAX = 0.2               !   [not defined] default = 0.2
                                 ! The flux Richardson number where the stratification is
                                 ! large enough that N2 > omega2.  The full expression for
@@ -1126,7 +1136,7 @@ ML_RADIATION = False            !   [Boolean] default = False
                                 ! with a vertical decay scale determined by the minimum
                                 ! of: (1) The depth of the mixed layer, (2) an Ekman
                                 ! length scale.
-BBL_EFFIC = 0.0                 !   [nondim] default = 0.2
+BBL_EFFIC = 0.2                 !   [nondim] default = 0.2
                                 ! The efficiency with which the energy extracted by
                                 ! bottom drag drives BBL diffusion.  This is only
                                 ! used if BOTTOMDRAGLAW is true.
@@ -1225,7 +1235,7 @@ KAPPA_ITIDES = 6.28319E-04      !   [m-1] default = 6.283185307179586E-04
                                 ! The default is 2pi/10 km, as in St.Laurent et al. 2002.
 UTIDE = 0.0                     !   [m s-1] default = 0.0
                                 ! The constant tidal amplitude used with INT_TIDE_DISSIPATION.
-KAPPA_H2_FACTOR = 0.75          !   [nondim] default = 1.0
+KAPPA_H2_FACTOR = 0.84          !   [nondim] default = 1.0
                                 ! A scaling factor for the roughness amplitude with nINT_TIDE_DISSIPATION.
 TKE_ITIDE_MAX = 0.1             !   [W m-2] default = 1000.0
                                 ! The maximum internal tide energy source availble to mix
@@ -1233,7 +1243,7 @@ TKE_ITIDE_MAX = 0.1             !   [W m-2] default = 1000.0
 READ_TIDEAMP = True             !   [Boolean] default = False
                                 ! If true, read a file (given by TIDEAMP_FILE) containing
                                 ! the tidal amplitude with INT_TIDE_DISSIPATION.
-TIDEAMP_FILE = "tidal_amplitude.nc" ! default = "tideamp.nc"
+TIDEAMP_FILE = "tidal_amplitude.v20140328.nc" ! default = "tideamp.nc"
                                 ! The path to the file containing the spatially varying
                                 ! tidal amplitudes with INT_TIDE_DISSIPATION.
 H2_FILE = "ocean_topog.nc"      !
@@ -1515,7 +1525,7 @@ MASK_SRESTORE_MARGINAL_SEAS = False !   [Boolean] default = False
                                 ! If true, mask sss restoring in marginal seas.
 BASIN_FILE = "basin.nc"         ! default = "basin.nc"
                                 ! A file in which to find the basin masks, in variable 'basin'.
-CD_TIDES = 0.0025               !   [nondim] default = 1.0E-04
+CD_TIDES = 0.0018               !   [nondim] default = 1.0E-04
                                 ! The drag coefficient that applies to the tides.
 READ_GUST_2D = False            !   [Boolean] default = False
                                 ! If true, use a 2-dimensional gustiness supplied from

@@ -22,19 +22,19 @@ mercator_supergrid.nc ncap_supergrid.nc antarctic_spherical_supergrid.nc scap_su
 interpolated_topog.nc: ncap_topog.nc ncap_topog_gebco.nc mercator_topog_gebco.nc scap_topog_bedmap2.nc so_topog_bedmap2.nc scap_topog_gebco.nc so_topog_gebco.nc
 	python merge_topog_tiles.py
 
-ncap_topog.nc: mercator_supergrid.nc ncap_supergrid.nc antarctic_spherical_supergrid.nc scap_supergrid.nc
+ncap_topog.nc: mercator_supergrid.nc ncap_supergrid.nc antarctic_spherical_supergrid.nc scap_supergrid.nc IBCAO_V3_500m_RR.grd
 	python create_topo.py ncap
 
-ncap_topog_gebco.nc: mercator_supergrid.nc ncap_supergrid.nc antarctic_spherical_supergrid.nc scap_supergrid.nc
+ncap_topog_gebco.nc: mercator_supergrid.nc ncap_supergrid.nc antarctic_spherical_supergrid.nc scap_supergrid.nc GEBCO_08_v1.nc
 	python create_topo.py ncap --use_gebco
 
-mercator_topog_gebco.nc: mercator_supergrid.nc ncap_supergrid.nc antarctic_spherical_supergrid.nc scap_supergrid.nc
+mercator_topog_gebco.nc: mercator_supergrid.nc ncap_supergrid.nc antarctic_spherical_supergrid.nc scap_supergrid.nc GEBCO_08_v1.nc
 	python create_topo.py mercator
 
-scap_topog_bedmap2.nc so_topog_bedmap2.nc: mercator_supergrid.nc ncap_supergrid.nc antarctic_spherical_supergrid.nc scap_supergrid.nc
+scap_topog_bedmap2.nc so_topog_bedmap2.nc: mercator_supergrid.nc ncap_supergrid.nc antarctic_spherical_supergrid.nc scap_supergrid.nc bedmap2.nc
 	python create_topo.py scap
 
-scap_topog_gebco.nc so_topog_gebco.nc: mercator_supergrid.nc ncap_supergrid.nc antarctic_spherical_supergrid.nc scap_supergrid.nc
+scap_topog_gebco.nc so_topog_gebco.nc: mercator_supergrid.nc ncap_supergrid.nc antarctic_spherical_supergrid.nc scap_supergrid.nc GEBCO_08_v1.nc
 	python create_topo.py scap --use_gebco
 
 MIDAS:
@@ -42,6 +42,9 @@ MIDAS:
 
 MIDAS/README.md:
 	cd ../../../; git submodule update
+
+bedmap2.nc GEBCO_08_v1.nc IBCAO_V3_500m_RR.grd:
+	ln -s /archive/gold/datasets/topography/$@ .
 
 md5sums.txt: supergrid.nc interpolated_topog.nc
 	echo Grids > $@

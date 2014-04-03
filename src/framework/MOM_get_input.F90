@@ -41,7 +41,7 @@ public Get_MOM_Input
 ! This structure is to simplify communication with the calling code.
 
 type, public :: directories
-  character(len=120) :: &
+  character(len=240) :: &
     restart_input_dir = ' ',& ! The directory to read restart and input files.
     restart_output_dir = ' ',&! The directory into which to write restart files.
     output_directory = ' ', & ! The directory to use to write the model output.
@@ -61,7 +61,7 @@ subroutine Get_MOM_Input(param_file, dirs, check_params)
 !  subroutine also calls the subroutine that allows run-time changes !
 !  in parameters.                                                    !
   integer, parameter :: npf = 5 ! Maximum number of parameter files
-  character(len=120) :: &
+  character(len=240) :: &
     parameter_filename(npf) = ' ', & ! List of files containing parameters.
     output_directory = ' ', &   ! Directory to use to write the model output.
     restart_input_dir = ' ', &  ! Directory for reading restart and input files.
@@ -84,6 +84,7 @@ subroutine Get_MOM_Input(param_file, dirs, check_params)
     ierr = check_nml_error(io, 'MOM_input_nml')
   enddo
 10 call close_file(unit)
+
   if (present(dirs)) then
     dirs%output_directory = slasher(output_directory)
     dirs%restart_output_dir = slasher(restart_output_dir)

@@ -542,7 +542,7 @@ type, public :: MOM_control_struct
   integer :: id_T = -1, id_S = -1, id_ssh = -1, id_fraz = -1
   integer :: id_salt_deficit = -1, id_Heat_PmE = -1, id_intern_heat = -1
   integer :: id_sst = -1, id_sst_sq = -1,  id_sst_global = -1
-  integer :: id_sss = -1, id_ssu = -1, id_ssv = -1
+  integer :: id_sss = -1, id_sss_global = -1, id_ssu = -1, id_ssv = -1
   integer :: id_speed = -1, id_ssh_inst = -1
 
   integer :: id_Tadx = -1, id_Tady = -1, id_Tdiffx = -1, id_Tdiffy = -1
@@ -645,7 +645,8 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     v, &                     ! v : Meridional velocity, in m s-1.
     h                        ! h : Layer thickness, in m.
   real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)+1) :: eta_predia
-  real :: tot_wt_ssh, Itot_wt_ssh, I_time_int, SST_global
+  real :: tot_wt_ssh, Itot_wt_ssh, I_time_int
+  real :: SST_global, SSS_global
   type(time_type) :: Time_local
   integer :: pid_tau, pid_ustar, pid_psurf, pid_u, pid_h
   integer :: pid_T, pid_S
@@ -1324,6 +1325,16 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       call sum_across_PEs( SST_global )
       SST_global = SST_global * G%IareaT_global
       call post_data(CS%id_sst_global, SST_global, CS%diag)
+    endif
+
+    if (CS%id_sss_global > 0) then
+      SSS_global = 0.0
+      do j=js,je ; do i=is, ie
+        SSS_global = SSS_global + ( state%SSS(i,j) * G%areaT(i,j) * G%mask2dT(i,j) )
+      enddo ; enddo
+      call sum_across_PEs( SSS_global )
+      SSS_global = SSS_global * G%IareaT_global
+      call post_data(CS%id_sss_global, SSS_global, CS%diag)
     endif
 
     if (CS%id_sss > 0) &
@@ -2023,6 +2034,8 @@ subroutine register_diags(Time, G, CS, ADp)
         'Sea Surface Temperature Squared', 'Celsius**2', CS%missing)    
     CS%id_sss = register_diag_field('ocean_model', 'SSS', diag%axesT1, Time, &
         'Sea Surface Salinity', 'PSU', CS%missing)
+    CS%id_sss_global = register_scalar_field('ocean_model', 'SSS_global', Time, diag, &
+        'Global Average Sea Surface Salinity', 'PSU', CS%missing)
     if (CS%id_sst_sq > 0) call safe_alloc_ptr(CS%SST_sq,isd,ied,jsd,jed)    
   endif
   if (CS%use_temperature .and. CS%use_frazil) then

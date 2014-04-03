@@ -1,1 +1,1 @@
-.datasets/CM2G63L/siena/RESTART/CM2G.initCond_2011.12.16.unpacked/coupler.res
+.datasets/AM2_LM3_MOM6i_1deg/tikal/1990_ICs/coupler.res
