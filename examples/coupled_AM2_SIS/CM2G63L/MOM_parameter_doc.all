@@ -1514,6 +1514,9 @@ USE_RIVER_HEAT_CONTENT = False  !   [Boolean] default = False
 USE_CALVING_HEAT_CONTENT = False !   [Boolean] default = False
                                 ! If true, use the fluxes%calving_Hflx field to set the
                                 ! heat carried by runoff, instead of using SST*CP*froz_runoff.
+ALLOW_CLOCKS_IN_OMP_LOOPS = True !   [Boolean] default = True
+                                ! If true, clocks can be called from inside loops that can
+                                ! be threaded. To run with multiple threads, set to False.
 LIMIT_BUFFER_DET_DH_SFC = 0.5   !   [nondim] default = 0.5
                                 ! The fractional limit in the change between grid points
                                 ! of the surface region (mixed & buffer layer) thickness.
