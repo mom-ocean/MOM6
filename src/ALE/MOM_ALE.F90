@@ -49,6 +49,7 @@ use MOM_regridding, only : getCoordinateInterfaces, getCoordinateResolution
 use MOM_regridding, only : getCoordinateUnits, getCoordinateShortName
 use MOM_remapping, only : initialize_remapping, remapping_main, end_remapping
 use MOM_remapping, only : remappingSchemesDoc, remappingDefaultScheme
+use MOM_remapping, only : remapDisableBoundaryExtrapolation, remapEnableBoundaryExtrapolation
 use MOM_remapping, only : remapping_CS
 use regrid_defs, only : PRESSURE_RECONSTRUCTION_PLM
 !use regrid_consts, only : coordinateMode, DEFAULT_COORDINATE_MODE
@@ -208,6 +209,7 @@ subroutine initialize_ALE( param_file, G, CS )
                  "It can be one of the following schemes:\n"//&
                  trim(remappingSchemesDoc), default=remappingDefaultScheme)
   call initialize_remapping( G%ke, string, CS%remapCS )
+  call remapDisableBoundaryExtrapolation( CS%remapCS )
 
   ! Keep a record of values for subsequent queries
   CS%nk = G%ke

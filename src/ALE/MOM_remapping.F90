@@ -42,7 +42,7 @@ type, public :: remapping_CS
   ! Parameters
   integer :: nk = 0                    ! Number of layers/levels in vertical
   integer :: remapping_scheme = -911   ! Determines which reconstruction to use
-  integer :: degree                    ! Degree of polynomical reconstruction
+  integer :: degree                    ! Degree of polynomial reconstruction
   logical :: boundary_extrapolation = .true.  ! If true, extrapolate boundaries
 end type
 
@@ -51,7 +51,7 @@ end type
 ! -----------------------------------------------------------------------------
 public remapping_main, remapping_core
 public initialize_remapping, end_remapping
-public rempaEnableBoundaryExtrapolation, remapDisableBoundaryExtrapolation
+public remapEnableBoundaryExtrapolation, remapDisableBoundaryExtrapolation
 public setReconstructionType
 public remappingUnitTests
 public dzFromH1H2
@@ -200,7 +200,7 @@ subroutine checkConsistantCoords(ns, xs, nf, xf, strict, msg)
 ! Checks that xs and xf are consistent to within roundoff.
 ! If strict=False, the end points of xs and xf are allowed to differ by
 ! numerical roundoff due to the nature of summation to obtain xs, xf.
-! If strict=True, the edn points must be identical.
+! If strict=True, the end points must be identical.
 !------------------------------------------------------------------------------
 
   ! Arguments
@@ -253,7 +253,7 @@ function isPosSumErrSignificant(n1, sum1, n2, sum2)
 ! can be bounded to be proportional to the number of operations.
 ! This function returns true if the difference between sum1 and sum2 is
 ! larger than than the estimated round off bound.
-! NOTE: This estimate/function is only valid for summation of postive data.
+! NOTE: This estimate/function is only valid for summation of positive data.
 !------------------------------------------------------------------------------
   ! Arguments
   integer, intent(in) :: n1, n2
@@ -382,7 +382,7 @@ subroutine remapping_core( CS, n0, h0, u0, n1, dx, u1 )
   real :: z0, z1
 
   if (dx(1) /= 0.) call MOM_error( FATAL, 'MOM_remapping, remapping_core: '//&
-             'Non-zero surface flux!' ) ! This is techically allowed but in avoided practice 
+             'Non-zero surface flux!' ) ! This is technically allowed but in avoided practice 
   totalH0 = 0.
   do k=1, n0
     totalH0 = totalH0 + h0(k)
@@ -598,7 +598,7 @@ subroutine remapByDeltaZ( n0, h0, u0, ppoly0, n1, dx1, method, u1, h1 )
 
   ! Loop on cells in target grid. For each cell, iTarget, the left flux is
   ! the right flux of the cell to the left, iTarget-1.
-  ! The left flux is initialized by started at iTarget=0 to calclate the
+  ! The left flux is initialized by started at iTarget=0 to calculate the
   ! right flux which can take into account the target left boundary being
   ! in the interior of the source domain.
   fluxR = 0.
@@ -640,7 +640,7 @@ subroutine remapByDeltaZ( n0, h0, u0, ppoly0, n1, dx1, method, u1, h1 )
     hFlux = abs(dx1(iTarget+1))
     call integrateReconOnInterval( n0, h0, u0, ppoly0, method, &
                                    xL, xR, hFlux, uAve )
-    ! uAve is the average value of u, indendent of sign of dx1
+    ! uAve is the average value of u, independent of sign of dx1
     fluxR = dx1(iTarget+1)*uAve ! Includes sign of dx1
 
 #ifdef XXX__DO_SAFTEY_CHECKS__
@@ -807,7 +807,7 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0, method, &
 #endif
 
     ! To integrate, two cases must be considered: (1) the target cell is
-    ! entirely comtained within a cell of the source grid and (2) the target
+    ! entirely contained within a cell of the source grid and (2) the target
     ! cell spans at least two cells of the source grid.
 
     if ( jL == jR ) then
@@ -1031,16 +1031,16 @@ subroutine setReconstructionType(string,CS)
 end subroutine setReconstructionType
 
 !------------------------------------------------------------------------------
-! Functino to enable extraplation in boundary cells
+! Function to enable extrapolation in boundary cells
 !------------------------------------------------------------------------------
-subroutine rempaEnableBoundaryExtrapolation(CS)
+subroutine remapEnableBoundaryExtrapolation(CS)
 ! Use this to enable extrapolation at boundaries
   type(remapping_CS), intent(inout) :: CS
   CS%boundary_extrapolation = .true.
-end subroutine rempaEnableBoundaryExtrapolation
+end subroutine remapEnableBoundaryExtrapolation
 
 !------------------------------------------------------------------------------
-! Functino to disable extraplation in boundary cells
+! Function to disable extrapolation in boundary cells
 !------------------------------------------------------------------------------
 subroutine remapDisableBoundaryExtrapolation(CS)
 ! Use this to disable extrapolation at boundaries
