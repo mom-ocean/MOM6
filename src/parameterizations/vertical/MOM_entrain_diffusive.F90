@@ -279,7 +279,7 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, CS, ea, eb, &
   endif
 
   tolerance = G%m_to_H * CS%Tolerance_Ent
-
+  g_2dt = 0.5 * G%g_Earth / dt
   kmb = G%nk_rho_varies
   K2 = max(kmb+1,2) ; kb_min = K2
   if (.not. CS%bulkmixedlayer) then
@@ -287,14 +287,26 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, CS, ea, eb, &
     ! These lines fill in values that are arbitrary, but needed because
     ! they are used to normalize the buoyancy flux in layer nz.
     do i=is,ie ; ds_dsp1(i,nz) = 2.0 ; dsp1_ds(i,nz) = 0.5 ; enddo
+  else
+    kb(:) = 0
+    do i=is,ie ; ds_dsp1(i,nz) = 0.0 ; dsp1_ds(i,nz) = 0.0 ; enddo
   endif
 
   if (CS%id_diff_work > 0) allocate(diff_work(G%isd:G%ied,G%jsd:G%jed,nz+1))
   if (CS%id_Kd > 0)        allocate(Kd_eff(G%isd:G%ied,G%jsd:G%jed,nz))
 
   correct_density = (CS%correct_density .and. associated(tv%eqn_of_state))
-  if (correct_density) pres(:) = tv%P_Ref
+  if (correct_density) then
+    pres(:) = tv%P_Ref
+  else
+    pres(:) = 0.0
+  endif
 
+!$OMP parallel do default(private) shared(is,ie,js,je,nz,Kd_Lay,G,dt,Kd_int,CS,h,tv, &
+!$OMP                                  kmb,Angstrom,fluxes,K2,h_neglect,tolerance, &
+!$OMP                                  ea,eb,correct_density,Kd_eff,diff_work, &
+!$OMP                                  g_2dt, kb_out) &
+!$OMP firstprivate(kb,ds_dsp1,dsp1_ds,pres,kb_min) 
   do j=js,je
     do i=is,ie ; kb(i) = 1 ; enddo
 
@@ -845,7 +857,6 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, CS, ea, eb, &
     endif
     
     if (CS%id_diff_work > 0) then
-      g_2dt = 0.5 * G%g_Earth / dt
       do i=is,ie ; diff_work(i,j,1) = 0.0 ; diff_work(i,j,nz+1) = 0.0 ; enddo
       if (associated(tv%eqn_of_state)) then
         if (associated(fluxes%p_surf)) then

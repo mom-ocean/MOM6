@@ -323,7 +323,11 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
 
 !$OMP parallel do default(private) shared(js,je,is,ie,nz,h,u_in,v_in,use_temperature,new_kappa, &
 !$OMP                                     tv,G,CS,kappa_io,dz_massless,k0dt,p_surf,gR0,g_R0,dt, &
-!$OMP                                     tol_dksrc,tol_dksrc_low,tol2,Ri_crit,dt_refinements)  
+!$OMP                                     tol_dksrc,tol_dksrc_low,tol2,Ri_crit,dt_refinements,  &
+#ifdef ADD_DIAGNOSTICS
+!$OMP                                     I_Ld2_3d,dz_Int_3d,                                   &
+#endif
+!$OMP                                     tke_io,kv_io)  
   do j=js,je
     do k=1,nz ; do i=is,ie
       h_2d(i,k) = h(i,j,k)*G%H_to_m

@@ -117,7 +117,7 @@ subroutine register_tracer(tr1, name, param_file, Reg, ad_x, ad_y, &
 !  (in,opt)  df_2d_y - An array in which the vertically summed meridional diffusive
 !                   fluxes are stored in units of CONC m3 s-1.
 
-  integer :: m, ntr
+  integer :: ntr
   type(tracer_type) :: temp
   character(len=256) :: mesg    ! Message for error messages.
 
@@ -143,10 +143,10 @@ subroutine register_tracer(tr1, name, param_file, Reg, ad_x, ad_y, &
                                     Reg%Tr(ntr)%OBC_in_u => OBC_in_u ; endif
   if (present(OBC_in_v)) then ; if (associated(OBC_in_v)) &
                                     Reg%Tr(ntr)%OBC_in_v => OBC_in_v ; endif
-  if (present(ad_2d_x)) then ; if (associated(ad_2d_x)) Reg%Tr(m)%ad2d_x => ad_2d_x ; endif
-  if (present(ad_2d_y)) then ; if (associated(ad_2d_y)) Reg%Tr(m)%ad2d_y => ad_2d_y ; endif
-  if (present(df_2d_x)) then ; if (associated(df_2d_x)) Reg%Tr(m)%df2d_x => df_2d_x ; endif
-  if (present(df_2d_y)) then ; if (associated(df_2d_y)) Reg%Tr(m)%df2d_y => df_2d_y ; endif
+  if (present(ad_2d_x)) then ; if (associated(ad_2d_x)) Reg%Tr(ntr)%ad2d_x => ad_2d_x ; endif
+  if (present(ad_2d_y)) then ; if (associated(ad_2d_y)) Reg%Tr(ntr)%ad2d_y => ad_2d_y ; endif
+  if (present(df_2d_x)) then ; if (associated(df_2d_x)) Reg%Tr(ntr)%df2d_x => df_2d_x ; endif
+  if (present(df_2d_y)) then ; if (associated(df_2d_y)) Reg%Tr(ntr)%df2d_y => df_2d_y ; endif
 
 end subroutine register_tracer
 
