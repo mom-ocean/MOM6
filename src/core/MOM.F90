@@ -328,6 +328,7 @@ use MOM_variables, only : &
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock, only : CLOCK_COMPONENT, CLOCK_SUBCOMPONENT
 use MOM_cpu_clock, only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
+use MOM_coms, only : reproducing_sum
 use MOM_diag_mediator, only : diag_mediator_init, enable_averaging
 use MOM_diag_mediator, only : disable_averaging, post_data, safe_alloc_ptr
 use MOM_diag_mediator, only : register_diag_field, register_static_field
@@ -646,6 +647,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     h                        ! h : Layer thickness, in m.
   real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)+1) :: eta_predia
   real :: tot_wt_ssh, Itot_wt_ssh, I_time_int
+  real, dimension(SZI_(CS%G),SZJ_(CS%G)) :: tmpForSumming
   real :: SST_global, SSS_global
   type(time_type) :: Time_local
   integer :: pid_tau, pid_ustar, pid_psurf, pid_u, pid_h
@@ -1318,22 +1320,20 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     endif
 
     if (CS%id_sst_global > 0) then
-      SST_global = 0.0
+      tmpForSumming(:,:) = 0.
       do j=js,je ; do i=is, ie
-        SST_global = SST_global + ( state%SST(i,j) * G%areaT(i,j) * G%mask2dT(i,j) )
+        tmpForSumming(i,j) = ( state%SST(i,j) * G%areaT(i,j) * G%mask2dT(i,j) )
       enddo ; enddo
-      call sum_across_PEs( SST_global )
-      SST_global = SST_global * G%IareaT_global
+      SST_global = reproducing_sum( tmpForSumming ) * G%IareaT_global
       call post_data(CS%id_sst_global, SST_global, CS%diag)
     endif
 
     if (CS%id_sss_global > 0) then
-      SSS_global = 0.0
+      tmpForSumming(:,:) = 0.
       do j=js,je ; do i=is, ie
-        SSS_global = SSS_global + ( state%SSS(i,j) * G%areaT(i,j) * G%mask2dT(i,j) )
+        tmpForSumming(i,j) = ( state%SSS(i,j) * G%areaT(i,j) * G%mask2dT(i,j) )
       enddo ; enddo
-      call sum_across_PEs( SSS_global )
-      SSS_global = SSS_global * G%IareaT_global
+      SSS_global = reproducing_sum( tmpForSumming ) * G%IareaT_global
       call post_data(CS%id_sss_global, SSS_global, CS%diag)
     endif
 
