@@ -136,9 +136,11 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, CS, Reg)
   integer :: nsten_halo         ! The number of stensils that fit in the halos.
   integer :: i, j, k, m, is, ie, js, je, isd, ied, jsd, jed, nz, itt, ntr, do_any
   integer :: isv, iev, jsv, jev ! The valid range of the indices.
+  integer :: IsdB, IedB, JsdB, JedB
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
+  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
   landvolfill = 1.0e-20         ! This is arbitrary, but must be positive.
   stensil = 2                   ! The scheme's stensil; 2 for PLM.
 
@@ -156,12 +158,15 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, CS, Reg)
 
   max_iter = 2*INT(CEILING(dt/CS%dt)) + 1
 
+!$OMP parallel default(shared)
+
 ! This initializes the halos of uhr and vhr because pass_vector might do
 ! calculations on them, even though they are never used.
-  uhr(:,:,:) = 0.0 ; vhr(:,:,:) = 0.0
-  hprev(:,:,:) = landvolfill
-
-  do k=1,nz
+!$OMP do
+  do k = 1, nz
+    do j = jsd,  jed;  do i = IsdB, IedB; uhr(i,j,k) = 0.0; enddo ; enddo
+    do j = jsdB, jedB; do i = Isd,  Ied;  vhr(i,j,k) = 0.0; enddo ; enddo
+    do j = jsd,  jed;  do i = Isd,  Ied;  hprev(i,j,k) = 0.0; enddo ; enddo
     domore_k(k)=1
 !  Put the remaining (total) thickness fluxes into uhr and vhr.
     do j=js,je ; do I=is-1,ie ; uhr(I,j,k) = uhtr(I,j,k) ; enddo ; enddo
@@ -179,13 +184,16 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, CS, Reg)
                      max(0.0, 1.0e-13*hprev(i,j,k) - G%areaT(i,j)*h_end(i,j,k))
     enddo ; enddo
   enddo
+
+!$OMP do
   do j=jsd,jed ; do I=isd,ied-1
     uh_neglect(I,j) = G%H_subroundoff*MIN(G%areaT(i,j),G%areaT(i+1,j))
   enddo ; enddo
+!$OMP do
   do J=jsd,jed-1 ; do i=isd,ied
     vh_neglect(i,J) = G%H_subroundoff*MIN(G%areaT(i,j),G%areaT(i,j+1))
   enddo ; enddo
-
+!$OMP do
   do m=1,ntr
     if (associated(Tr(m)%ad_x)) then
       do k=1,nz ; do j=jsd,jed ; do i=isd,ied
@@ -204,6 +212,7 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, CS, Reg)
       do J=jsd,jed ; do i=isd,ied ; Tr(m)%ad2d_y(i,J) = 0.0 ; enddo ; enddo
     endif
   enddo
+!$OMP end parallel
 
   isv = is ; iev = ie ; jsv = js ; jev = je
 
@@ -222,6 +231,7 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, CS, Reg)
       ! Reevaluate domore_u & domore_v unless the valid range is the same size as
       ! before.  Also, do this if there is Strang splitting.
       if ((nsten_halo > 1) .or. (itt==1)) then
+!$OMP parallel do default(shared)
         do k=1,nz ; if (domore_k(k) > 0) then
           do j=jsv,jev ; if (.not.domore_u(j,k)) then
             do i=isv+stensil-1,iev-stensil; if (uhr(I,j,k) /= 0.0) then
@@ -248,6 +258,7 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, CS, Reg)
     isv = isv + stensil ; iev = iev - stensil
     jsv = jsv + stensil ; jev = jev - stensil
 
+!$OMP parallel do default(shared)
     do k=1,nz ; if (domore_k(k) > 0) then
 !    To ensure positive definiteness of the thickness at each iteration, the
 !  mass fluxes out of each layer are checked each step, and limited to keep
