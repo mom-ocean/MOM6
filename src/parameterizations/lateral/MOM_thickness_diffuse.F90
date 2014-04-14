@@ -1399,10 +1399,12 @@ subroutine vert_fill_TS(h, T_in, S_in, kappa, dt, T_f, S_f, G, halo_here)
   h0 = 1.0e-16*sqrt(kappa*dt)*G%m_to_H
 
   if (kap_dt_x2 <= 0.0) then
+!$OMP parallel do default(shared)
     do k=1,nz ; do j=js,je ; do i=is,ie
       T_f(i,j,k) = T_in(i,j,k) ; S_f(i,j,k) = S_in(i,j,k)
     enddo ; enddo ; enddo
   else
+!$OMP parallel do default(shared) private(ent,b1,d1,c1)
     do j=js,je
       do i=is,ie
         ent(i,2) = kap_dt_x2 / ((h(i,j,1)+h(i,j,2)) + h0)
