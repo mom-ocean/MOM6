@@ -175,7 +175,9 @@ subroutine mixedlayer_restrat(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
   ! Fix this later for G%nkml >= 3.
 
   p0(:) = 0.0
-
+!$OMP parallel default(shared) private(Rho0,h_vel,u_star,absf,mom_mixrate,timescale,uDml, &
+!$OMP                                  I2htot,z_topx2,hx2,a,vDml)
+!$OMP do
   do j=js-1,je+1
     do i=is-1,ie+1
       htot(i,j) = 0.0 ; Rml_av(i,j) = 0.0
@@ -198,55 +200,58 @@ subroutine mixedlayer_restrat(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
 !   1. Mixing extends below the mixing layer to the mixed layer.  Find it!
 !   2. Add exponential tail to streamfunction?
 
-  do j=js,je ; do i=is,ie ; utimescale_diag(i,j) = 0.0 ; enddo ; enddo
-  do j=js,je ; do i=is,ie ; vtimescale_diag(i,j) = 0.0 ; enddo ; enddo
-
 !   U - Component
-  do j=js,je ; do I=is-1,ie
-    h_vel = 0.5*(htot(i,j) + htot(i+1,j)) * G%H_to_m
+!$OMP do  
+  do j=js,je 
+    do i=is,ie ; utimescale_diag(i,j) = 0.0 ; enddo
+    do i=is,ie ; vtimescale_diag(i,j) = 0.0 ; enddo
+    do I=is-1,ie
+      h_vel = 0.5*(htot(i,j) + htot(i+1,j)) * G%H_to_m
 
-    u_star = 0.5*(fluxes%ustar(i,j) + fluxes%ustar(i+1,j))
-    absf = 0.5*(abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I,J)))
-    ! peak ML visc: u_star * 0.41 * (h_ml*u_star)/(absf*h_ml + 4.0*u_star)
-    ! momentum mixing rate: pi^2*visc/h_ml^2 
-    ! 0.41 is the von Karmen constant, 9.8696 = pi^2.
-    mom_mixrate = (0.41*9.8696)*u_star**2 / &
-                  (absf*h_vel**2 + 4.0*(h_vel+dz_neglect)*u_star)
-    timescale = 0.0625 * (absf + 2.0*mom_mixrate) / (absf**2 + mom_mixrate**2)
+      u_star = 0.5*(fluxes%ustar(i,j) + fluxes%ustar(i+1,j))
+      absf = 0.5*(abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I,J)))
+      ! peak ML visc: u_star * 0.41 * (h_ml*u_star)/(absf*h_ml + 4.0*u_star)
+      ! momentum mixing rate: pi^2*visc/h_ml^2 
+      ! 0.41 is the von Karmen constant, 9.8696 = pi^2.
+      mom_mixrate = (0.41*9.8696)*u_star**2 / &
+                    (absf*h_vel**2 + 4.0*(h_vel+dz_neglect)*u_star)
+      timescale = 0.0625 * (absf + 2.0*mom_mixrate) / (absf**2 + mom_mixrate**2)
 
-    timescale = timescale * CS%ml_restrat_coef
+      timescale = timescale * CS%ml_restrat_coef
 !        timescale = timescale*(2?)*(L_def/L_MLI)*min(EKE/MKE,1.0 + G%dyCv(i,j)**2/L_def**2))
 
-    utimescale_diag(I,j) = timescale
+      utimescale_diag(I,j) = timescale
 
-    uDml(I) = timescale * G%mask2dCu(I,j)*G%dyCu(I,j)* &
-        G%IdxCu(I,j)*(Rml_av(i+1,j)-Rml_av(i,j)) * (h_vel**2 * G%m_to_H)
+      uDml(I) = timescale * G%mask2dCu(I,j)*G%dyCu(I,j)* &
+          G%IdxCu(I,j)*(Rml_av(i+1,j)-Rml_av(i,j)) * (h_vel**2 * G%m_to_H)
 
-    if (uDml(i) == 0) then
-      do k=1,G%nkml ; uhml(I,j,k) = 0.0 ; enddo
-    else
-      I2htot = 1.0 / (htot(i,j) + htot(i+1,j) + h_neglect)
-      z_topx2 = 0.0
-      ! a(k) relates the sublayer transport to uDml with a linear profile.
-      ! The sum of a through the mixed layers must be 0.
-      do k=1,G%nkml
-        hx2 = (h(i,j,k) + h(i+1,j,k) + h_neglect)
-        a(k) = (hx2 * I2htot) * (2.0 - 4.0*(z_topx2+0.5*hx2)*I2htot)
-        z_topx2 = z_topx2 + hx2
-        if (a(k)*uDml(I) > 0.0) then
-          if (a(k)*uDml(I) > h_avail(i,j,k)) uDml(I) = h_avail(i,j,k) / a(k)
-        else
-          if (-a(k)*uDml(I) > h_avail(i+1,j,k)) uDml(I) = -h_avail(i+1,j,k)/a(k)
-        endif
-      enddo
-      do k=1,G%nkml
-        uhml(I,j,k) = a(k)*uDml(I)
-        uhtr(I,j,k) = uhtr(I,j,k) + uhml(I,j,k)*dt
-      enddo
-    endif
-  enddo ; enddo
+      if (uDml(i) == 0) then
+        do k=1,G%nkml ; uhml(I,j,k) = 0.0 ; enddo
+      else
+        I2htot = 1.0 / (htot(i,j) + htot(i+1,j) + h_neglect)
+        z_topx2 = 0.0
+        ! a(k) relates the sublayer transport to uDml with a linear profile.
+        ! The sum of a through the mixed layers must be 0.
+        do k=1,G%nkml
+          hx2 = (h(i,j,k) + h(i+1,j,k) + h_neglect)
+          a(k) = (hx2 * I2htot) * (2.0 - 4.0*(z_topx2+0.5*hx2)*I2htot)
+          z_topx2 = z_topx2 + hx2
+          if (a(k)*uDml(I) > 0.0) then
+            if (a(k)*uDml(I) > h_avail(i,j,k)) uDml(I) = h_avail(i,j,k) / a(k)
+          else
+            if (-a(k)*uDml(I) > h_avail(i+1,j,k)) uDml(I) = -h_avail(i+1,j,k)/a(k)
+          endif
+        enddo
+        do k=1,G%nkml
+          uhml(I,j,k) = a(k)*uDml(I)
+          uhtr(I,j,k) = uhtr(I,j,k) + uhml(I,j,k)*dt
+        enddo
+      endif
+    enddo 
+  enddo
 
 !  V- component
+!$OMP do
   do J=js-1,je ; do i=is,ie
     h_vel = 0.5*(htot(i,j) + htot(i,j+1)) * G%H_to_m
 
@@ -290,10 +295,12 @@ subroutine mixedlayer_restrat(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
     endif
   enddo ; enddo
 
-  do k=1,G%nkml ; do j=js,je ; do i=is,ie
+!$OMP do
+  do j=js,je ; do k=1,G%nkml ; do i=is,ie
     h(i,j,k) = h(i,j,k) - dt*G%IareaT(i,j) * &
         ((uhml(I,j,k) - uhml(I-1,j,k)) + (vhml(i,J,k) - vhml(i,J-1,k)))
   enddo ; enddo ; enddo
+!$OMP end parallel
 
 ! Offer fields for averaging.
   if (query_averaging_enabled(CS%diag) .and. &
