@@ -1322,7 +1322,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     if (CS%id_sst_global > 0) then
       tmpForSumming(:,:) = 0.
       do j=js,je ; do i=is, ie
-        tmpForSumming(i,j) = ( state%SST(i,j) * G%areaT(i,j) * G%mask2dT(i,j) )
+        tmpForSumming(i,j) = ( state%SST(i,j) * (G%areaT(i,j) * G%mask2dT(i,j)) )
       enddo ; enddo
       SST_global = reproducing_sum( tmpForSumming ) * G%IareaT_global
       call post_data(CS%id_sst_global, SST_global, CS%diag)
@@ -1331,10 +1331,11 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     if (CS%id_sss_global > 0) then
       tmpForSumming(:,:) = 0.
       do j=js,je ; do i=is, ie
-        tmpForSumming(i,j) = ( state%SSS(i,j) * G%areaT(i,j) * G%mask2dT(i,j) )
+        tmpForSumming(i,j) = ( state%SSS(i,j) * (G%areaT(i,j) * G%mask2dT(i,j)) )
       enddo ; enddo
       SSS_global = reproducing_sum( tmpForSumming ) * G%IareaT_global
       call post_data(CS%id_sss_global, SSS_global, CS%diag)
+      if (is_root_pe()) write (*,*) '   GLOBAL SSS = ', SSS_global
     endif
 
     if (CS%id_sss > 0) &
