@@ -271,6 +271,8 @@ subroutine calc_slope_function_(h, tv, G, CS, e)
   real :: one_meter     ! One meter in thickness units of m or kg m-2.
   integer :: is, ie, js, je, nz
   integer :: i, j, k, kb_max
+  real    :: SN_u_local(SZIB_(G), SZJ_(G),SZK_(G))
+  real    :: SN_v_local(SZI_(G), SZJB_(G),SZK_(G))
 
   if (.not. ASSOCIATED(CS)) call MOM_error(FATAL, "calc_slope_function:"// &
          "Module must be initialized before it is used.")
@@ -286,6 +288,8 @@ subroutine calc_slope_function_(h, tv, G, CS, e)
   h_neglect = G%H_subroundoff
   H_cutoff = real(2*nz) * (G%Angstrom + h_neglect)
 
+!$OMP parallel default(shared) private(E_x,E_y,S2,Hdn,Hup,H_geom,N2)
+!$OMP do
   do j=js-1,je+1 ; do i=is-1,ie+1
     CS%SN_u(i,j) = 0.0
     CS%SN_v(i,j) = 0.0
@@ -296,14 +300,16 @@ subroutine calc_slope_function_(h, tv, G, CS, e)
   ! and midlatitude deformation radii, using calc_resoln_function as a template.
 
   ! Set the length scale at u-points.
+!$OMP do
   do j=js,je ; do I=is-1,ie
     CS%L2u(I,j) = CS%Visbeck_L_scale**2
   enddo ; enddo
   ! Set length scale at v-points
+!$OMP do
   do J=js-1,je ; do i=is,ie
     CS%L2v(i,J) = CS%Visbeck_L_scale**2
   enddo ; enddo
-
+!$OMP do
   do k=nz,CS%VarMix_Ktop,-1
 
     ! Calculate the interface slopes E_x and E_y and u- and v- points respectively
@@ -328,7 +334,7 @@ subroutine calc_slope_function_(h, tv, G, CS, e)
       N2 = G%g_prime(k) / (G%H_to_m * max(Hdn,Hup,one_meter))
       if (min(h(i,j,k-1), h(i+1,j,k-1), h(i,j,k), h(i+1,j,k)) < H_cutoff) &
         S2 = 0.0
-      CS%SN_u(I,j) = CS%SN_u(I,j) + (H_geom * G%H_to_m) * S2 * N2
+      SN_u_local(I,j,k) = (H_geom * G%H_to_m) * S2 * N2
     enddo ; enddo
     do J=js-1,je ; do i=is,ie
       S2 = ( E_y(i,J)**2  + 0.25*( &
@@ -339,30 +345,43 @@ subroutine calc_slope_function_(h, tv, G, CS, e)
       N2 = G%g_prime(k) / (G%H_to_m * max(Hdn,Hup,one_meter))
       if (min(h(i,j,k-1), h(i,j+1,k-1), h(i,j,k), h(i,j+1,k)) < H_cutoff) &
         S2 = 0.0
-      CS%SN_v(i,J) = CS%SN_v(i,J) + (H_geom * G%H_to_m) * S2 * N2
+      SN_v_local(i,J,k) = (H_geom * G%H_to_m) * S2 * N2
     enddo ; enddo
 
   enddo ! k
+!$OMP do
+  do j = js,je; 
+    do k=nz,CS%VarMix_Ktop,-1 ; do I=is-1,ie
+      CS%SN_u(I,j) = CS%SN_u(I,j) + SN_u_local(I,j,k)
+    enddo ; enddo
+    ! SN above contains S^2*N^2*H, convert to vertical average of S*N
+    do I=is-1,ie
+      !SN_u(I,j) = sqrt( SN_u(I,j) / ( max(G%bathyT(I,j), G%bathyT(I+1,j)) + G%Angstrom ) )
+      !The code below behaves better than the line above. Not sure why? AJA
+      if ( min(G%bathyT(I,j), G%bathyT(I+1,j)) > H_cutoff ) then
+        CS%SN_u(I,j) = sqrt( CS%SN_u(I,j) / max(G%bathyT(I,j), G%bathyT(I+1,j)) )
+      else
+        CS%SN_u(I,j) = 0.0
+      endif
+    enddo 
+  enddo
+!$OMP do
+  do J=js-1,je 
+    do k=nz,CS%VarMix_Ktop,-1 ; do I=is,ie
+      CS%SN_v(i,J) = CS%SN_v(i,J) + SN_v_local(i,J,k)
+    enddo ; enddo
+    do i=is,ie
+      !SN_v(i,J) = sqrt( SN_v(i,J) / ( max(G%bathyT(i,J), G%bathyT(i,J+1)) + G%Angstrom ) )
+      !The code below behaves better than the line above. Not sure why? AJA
+      if ( min(G%bathyT(I,j), G%bathyT(I+1,j)) > H_cutoff ) then
+        CS%SN_v(i,J) = sqrt( CS%SN_v(i,J) / max(G%bathyT(i,J), G%bathyT(i,J+1)) )
+      else
+        CS%SN_v(I,j) = 0.0
+      endif
+    enddo 
+  enddo
 
-  ! SN above contains S^2*N^2*H, convert to vertical average of S*N
-  do j=js,je ; do I=is-1,ie
-   !SN_u(I,j) = sqrt( SN_u(I,j) / ( max(G%bathyT(I,j), G%bathyT(I+1,j)) + G%Angstrom ) )
-   !The code below behaves better than the line above. Not sure why? AJA
-    if ( min(G%bathyT(I,j), G%bathyT(I+1,j)) > H_cutoff ) then
-      CS%SN_u(I,j) = sqrt( CS%SN_u(I,j) / max(G%bathyT(I,j), G%bathyT(I+1,j)) )
-    else
-      CS%SN_u(I,j) = 0.0
-    endif
-  enddo ; enddo
-  do J=js-1,je ; do i=is,ie
-   !SN_v(i,J) = sqrt( SN_v(i,J) / ( max(G%bathyT(i,J), G%bathyT(i,J+1)) + G%Angstrom ) )
-   !The code below behaves better than the line above. Not sure why? AJA
-    if ( min(G%bathyT(I,j), G%bathyT(I+1,j)) > H_cutoff ) then
-      CS%SN_v(i,J) = sqrt( CS%SN_v(i,J) / max(G%bathyT(i,J), G%bathyT(i,J+1)) )
-    else
-      CS%SN_v(I,j) = 0.0
-    endif
-  enddo ; enddo
+!$OMP end parallel
 
 ! Offer diagnostic fields for averaging.
   if (query_averaging_enabled(CS%diag)) then
