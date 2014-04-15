@@ -445,6 +445,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
 
   real, dimension(SZI_(G), SZJ_(G), SZK_(G)) :: &
     tr_flux_conv  ! The flux convergence of tracers, in TR m3 or TR kg.
+  real, dimension(SZI_(G), SZJ_(G), SZK_(G)) :: Tr_flux_3d, Tr_adj_vert_L, Tr_adj_vert_R
  
   real, dimension(SZI_(G), SZK_(G), SZJ_(G)) :: &
     rho_srt, & ! The density of each layer of the sorted columns, in kg m-3.
@@ -526,12 +527,14 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
   enddo
   call pass_var(Tr(ntr)%t(:,:,:), G%Domain)
   call cpu_clock_end(id_clock_pass)
-
   ! Determine which layers the mixed- and buffer-layers map into...
-  do k=1,nkmb ; do j=js-2,je+2
-    call calculate_density(tv%T(:,j,k),tv%S(:,j,k), p_ref_cv, &
+!$OMP parallel do default(shared) 
+  do k=1,nkmb 
+    do j=js-2,je+2
+       call calculate_density(tv%T(:,j,k),tv%S(:,j,k), p_ref_cv, &
                            rho_coord(:,j,k), is-2, ie-is+5, tv%eqn_of_state)
-  enddo ; enddo
+    enddo 
+ enddo
 
   do j=js-2,je+2 ; do i=is-2,ie+2
     Rml_max(i,j) = rho_coord(i,j,1)
@@ -540,10 +543,10 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
   do k=2,nkmb ; do j=js-2,je+2 ; do i=is-2,ie+2
     if (Rml_max(i,j) < rho_coord(i,j,k)) Rml_max(i,j) = rho_coord(i,j,k)
   enddo ; enddo ; enddo
-
   !   Use bracketing and bisection to find the k-level that the densest of the
   ! mixed and buffer layer corresponds to, such that:
   !     G%Rlay(max_kRho-1) < Rml_max <= G%Rlay(max_kRho)
+!$OMP parallel do default(shared) private(k_min,k_max,k_test)
   do j=js-2,je+2 ; do i=is-2,ie+2 ; if (G%mask2dT(i,j) > 0.5) then
     if (Rml_max(i,j) > G%Rlay(nz)) then ; max_kRho(i,j) = nz+1
     elseif (Rml_max(i,j) <= G%Rlay(nkmb+1)) then ; max_kRho(i,j) = nkmb+1
@@ -569,27 +572,30 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
   if (PEmax_kRho > nz) PEmax_kRho = nz ! PEmax_kRho could have been nz+1.
 
   h_exclude = 10.0*(G%Angstrom + G%H_subroundoff)
-
-  do k=1,nkmb ; do j=js-1,je+1 ; do i=is-1,ie+1 ; if (G%mask2dT(i,j) > 0.5) then
-    if (h(i,j,k) > h_exclude) then
-      num_srt(i,j) = num_srt(i,j) + 1 ; ns = num_srt(i,j)
-      k0_srt(i,ns,j) = k
-      rho_srt(i,ns,j) = rho_coord(i,j,k)
-      h_srt(i,ns,j) = h(i,j,k)
-    endif
-  endif ; enddo ; enddo ; enddo
-  do k=nkmb+1,PEmax_kRho ; do j=js-1,je+1 ; do i=is-1,ie+1 ; if (G%mask2dT(i,j) > 0.5) then
-    if ((k<=k_end_srt(i,j)) .and. (h(i,j,k) > h_exclude)) then
-      num_srt(i,j) = num_srt(i,j) + 1 ; ns = num_srt(i,j)
-      k0_srt(i,ns,j) = k
-      rho_srt(i,ns,j) = G%Rlay(k)
-      h_srt(i,ns,j) = h(i,j,k)
-    endif
-  endif ; enddo ; enddo ; enddo
-
+!$OMP parallel default(shared) private(ns,tmp,itmp)
+!$OMP do
+  do j=js-1,je+1 
+    do k=1,nkmb ; do i=is-1,ie+1 ; if (G%mask2dT(i,j) > 0.5) then
+      if (h(i,j,k) > h_exclude) then
+        num_srt(i,j) = num_srt(i,j) + 1 ; ns = num_srt(i,j)
+        k0_srt(i,ns,j) = k
+        rho_srt(i,ns,j) = rho_coord(i,j,k)
+        h_srt(i,ns,j) = h(i,j,k)
+      endif
+    endif ; enddo ; enddo
+    do k=nkmb+1,PEmax_kRho ; do i=is-1,ie+1 ; if (G%mask2dT(i,j) > 0.5) then
+      if ((k<=k_end_srt(i,j)) .and. (h(i,j,k) > h_exclude)) then
+        num_srt(i,j) = num_srt(i,j) + 1 ; ns = num_srt(i,j)
+        k0_srt(i,ns,j) = k
+        rho_srt(i,ns,j) = G%Rlay(k)
+        h_srt(i,ns,j) = h(i,j,k)
+      endif
+    endif ; enddo ; enddo
+  enddo
   ! Sort each column by increasing density.  This should already be close, 
   ! and the size of the arrays are small, so straight insertion is used.
-  do j=js-1,je+1 ; do i=is-1,ie+1
+!$OMP do
+   do j=js-1,je+1; do i=is-1,ie+1
     do k=2,num_srt(i,j) ; if (rho_srt(i,k,j) < rho_srt(i,k-1,j)) then
       ! The last segment needs to be shuffled earlier in the list.
       do k2 = k,2,-1 ; if (rho_srt(i,k2,j) >= rho_srt(i,k2-1,j)) exit
@@ -598,12 +604,13 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
         tmp = h_srt(i,k2-1,j) ; h_srt(i,k2-1,j) = h_srt(i,k2,j) ; h_srt(i,k2,j) = tmp
       enddo
     endif ; enddo
-  enddo ; enddo
-
+  enddo; enddo
+!$OMP do
   do j=js-1,je+1
     max_srt(j) = 0
     do i=is-1,ie+1 ; max_srt(j) = max(max_srt(j), num_srt(i,j)) ; enddo
   enddo
+!$OMP end parallel
 
   do j=js,je
     k_size = max(2*max_srt(j),1)
@@ -617,6 +624,9 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
     allocate(k0b_Ru(j)%p(IsdB:IedB,k_size))
   enddo
 
+!$OMP parallel do default(private) shared(is,ie,js,je,G,num_srt,rho_srt,k0b_Lu,k0_srt, &
+!$OMP                                     k0b_Ru,k0a_Lu,k0a_Ru,deep_wt_Lu,deep_wt_Ru,  &
+!$OMP                                     h_srt,nkmb,nPu,hP_Lu,hP_Ru) 
   do j=js,je ; do I=is-1,ie ; if (G%mask2dCu(I,j) > 0.5) then
     ! Set up the pairings for fluxes through the zonal faces.
 
@@ -763,6 +773,9 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
     allocate(k0b_Rv(J)%p(isd:ied,k_size))
   enddo
 
+!$OMP parallel do default(private) shared(is,ie,js,je,G,num_srt,rho_srt,k0b_Lv,k0b_Rv, &
+!$OMP                                     k0_srt,k0a_Lv,k0a_Rv,deep_wt_Lv,deep_wt_Rv,  &
+!$OMP                                     h_srt,nkmb,nPv,hP_Lv,hP_Rv)   
   do J=js-1,je ; do i=is,ie ; if (G%mask2dCv(i,J) > 0.5) then
     ! Set up the pairings for fluxes through the meridional faces.
 
@@ -917,7 +930,9 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
     endif
 
     do m=1,ntr
-    
+!$OMP parallel do default(shared) private(Tr_min_face,Tr_max_face,kLa,kLb,kRa,kRb,Tr_La, &
+!$OMP                                     Tr_Lb,Tr_Ra,Tr_Rb,Tr_av_L,wt_b,Tr_av_R,h_L,h_R, &
+!$OMP                                     Tr_flux,Tr_adj_vert,wt_a,vol)
       do j=js,je ; do I=is-1,ie ; if (G%mask2dCu(I,j) > 0.5) then
         ! Determine the fluxes through the zonal faces.
 
@@ -1051,6 +1066,9 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
         enddo ! Loop over pairings at faces.
       endif ; enddo ; enddo ! i- & j- loops over zonal faces.
 
+!$OMP parallel do default(shared) private(Tr_min_face,Tr_max_face,kLa,kLb,kRa,kRb, &
+!$OMP                                     Tr_La,Tr_Lb,Tr_Ra,Tr_Rb,Tr_av_L,wt_b,Tr_av_R, &
+!$OMP                                     h_L,h_R,Tr_flux,Tr_adj_vert,wt_a,vol)
       do J=js-1,je ; do i=is,ie ; if (G%mask2dCv(i,J) > 0.5) then
         ! Determine the fluxes through the meridional faces.
 
@@ -1105,10 +1123,9 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
           h_L = hP_Lv(J)%p(i,k) ; h_R = hP_Rv(J)%p(i,k)
           Tr_flux = I_maxitt * ((2.0 * h_L * h_R) / (h_L + h_R)) * &
                     khdt_epi_y(i,J) * (Tr_av_L - Tr_av_R)
-                    
-          if (deep_wt_Lv(J)%p(i,k) >= 1.0) then
-            tr_flux_conv(i,j,kLb) = tr_flux_conv(i,j,kLb) - Tr_flux
-          else
+          Tr_flux_3d(i,j,k) = Tr_flux
+
+          if (deep_wt_Lv(J)%p(i,k) < 1.0) then
             Tr_adj_vert = 0.0
             wt_b = deep_wt_Lv(J)%p(i,k) ; wt_a = 1.0 - wt_b
             vol = hP_Lv(J)%p(i,k) * G%areaT(i,j)
@@ -1132,14 +1149,10 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
                                           (vol*wt_a)*(Tr_Lb - Tr_La))
               endif
             endif
-
-            tr_flux_conv(i,j,kLa) = tr_flux_conv(i,j,kLa) - (wt_a*Tr_flux + Tr_adj_vert)
-            tr_flux_conv(i,j,kLb) = tr_flux_conv(i,j,kLb) - (wt_b*Tr_flux - Tr_adj_vert)
+            Tr_adj_vert_L(i,j,k) = Tr_adj_vert            
           endif
 
-          if (deep_wt_Rv(J)%p(i,k) >= 1.0) then
-            tr_flux_conv(i,j+1,kRb) = tr_flux_conv(i,j+1,kRb) + Tr_flux
-          else
+          if (deep_wt_Rv(J)%p(i,k) < 1.0) then
             Tr_adj_vert = 0.0
             wt_b = deep_wt_Rv(J)%p(i,k) ; wt_a = 1.0 - wt_b
             vol = hP_Rv(J)%p(i,k) * G%areaT(i,j+1)
@@ -1163,18 +1176,37 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
                                           (vol*wt_a)*(Tr_Rb - Tr_Ra))
               endif
             endif
-
-            tr_flux_conv(i,j+1,kRa) = tr_flux_conv(i,j+1,kRa) + &
-                                            (wt_a*Tr_flux - Tr_adj_vert)
-            tr_flux_conv(i,j+1,kRb) = tr_flux_conv(i,j+1,kRb) + &
-                                            (wt_b*Tr_flux + Tr_adj_vert)
+            Tr_adj_vert_R(i,j,k) = Tr_adj_vert
           endif
           if (associated(Tr(m)%df2d_y)) &
             Tr(m)%df2d_y(i,J) = Tr(m)%df2d_y(i,J) + Tr_flux * Idt
         enddo ! Loop over pairings at faces.
       endif ; enddo ; enddo ! i- & j- loops over meridional faces.
-
-
+!$OMP parallel do default(shared) private(kLa,kLb,kRa,kRb,wt_b,wt_a)
+      do i=is,ie ; do J=js-1,je ; if (G%mask2dCv(i,J) > 0.5) then
+        do k=1,nPv(i,J)
+          kLb = k0b_Lv(J)%p(i,k); kRb = k0b_Rv(J)%p(i,k)
+          if (deep_wt_Lv(J)%p(i,k) >= 1.0) then
+            tr_flux_conv(i,j,kLb) = tr_flux_conv(i,j,kLb) - Tr_flux_3d(i,j,k)
+          else
+            kLa = k0a_Lv(J)%p(i,k)
+            wt_b = deep_wt_Lv(J)%p(i,k) ; wt_a = 1.0 - wt_b 
+            tr_flux_conv(i,j,kLa) = tr_flux_conv(i,j,kLa) - (wt_a*Tr_flux_3d(i,j,k) + Tr_adj_vert_L(i,j,k))
+            tr_flux_conv(i,j,kLb) = tr_flux_conv(i,j,kLb) - (wt_b*Tr_flux_3d(i,j,k) - Tr_adj_vert_L(i,j,k))
+          endif            
+          if (deep_wt_Rv(J)%p(i,k) >= 1.0) then
+            tr_flux_conv(i,j+1,kRb) = tr_flux_conv(i,j+1,kRb) + tr_flux_3d(i,j,k)
+          else          
+            kRa = k0a_Rv(J)%p(i,k) 
+            wt_b = deep_wt_Rv(J)%p(i,k) ; wt_a = 1.0 - wt_b
+            tr_flux_conv(i,j+1,kRa) = tr_flux_conv(i,j+1,kRa) + &
+                                            (wt_a*Tr_flux_3d(i,j,k) - Tr_adj_vert_R(i,j,k))
+            tr_flux_conv(i,j+1,kRb) = tr_flux_conv(i,j+1,kRb) + &
+                                            (wt_b*Tr_flux_3d(i,j,k) + Tr_adj_vert_R(i,j,k))
+          endif
+        enddo
+      endif ; enddo ; enddo
+!$OMP parallel do default(shared)
       do k=1,PEmax_kRho ; do j=js,je ; do i=is,ie
         if ((G%mask2dT(i,j) > 0.5) .and. (h(i,j,k) > 0.0)) then
           Tr(m)%t(i,j,k) = Tr(m)%t(i,j,k) + tr_flux_conv(i,j,k) / &

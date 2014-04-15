@@ -152,15 +152,17 @@ subroutine set_opacity(optics, fluxes, G, CS)
 
     ! Make sure there is no division by 0.
     inv_sw_pen_scale = 1.0 / max(CS%pen_sw_scale, 0.1*G%Angstrom_z, G%H_to_m*G%H_subroundoff)
-
+!$OMP parallel do default(shared)
     do k=1,nz ; do j=js,je ; do i=is,ie  ; do n=1,optics%nbands
       optics%opacity_band(n,i,j,k) = inv_sw_pen_scale
     enddo ; enddo ; enddo ; enddo
     if (.not.associated(fluxes%sw) .or. (CS%pen_SW_scale <= 0.0)) then
+!$OMP parallel do default(shared)
       do j=js,je ; do i=is,ie ; do n=1,optics%nbands
         optics%sw_pen_band(n,i,j) = 0.0
       enddo ; enddo ; enddo
     else
+!$OMP parallel do default(shared)
       do j=js,je ; do i=is,ie ; do n=1,optics%nbands
         optics%sw_pen_band(n,i,j) = CS%pen_SW_frac * Inv_nbands * fluxes%sw(i,j)
       enddo ; enddo ; enddo
@@ -169,6 +171,7 @@ subroutine set_opacity(optics, fluxes, G, CS)
   
   if (query_averaging_enabled(CS%diag)) then
     if (CS%id_sw_pen > 0) then
+!$OMP parallel do default(shared)
       do j=js,je ; do i=is,ie
         Pen_SW_tot(i,j) = 0.0
         do n=1,optics%nbands
@@ -179,6 +182,7 @@ subroutine set_opacity(optics, fluxes, G, CS)
     endif
     if (CS%id_sw_vis_pen > 0) then
       if (CS%opacity_scheme == MANIZZA_05) then
+!$OMP parallel do default(shared)
         do j=js,je ; do i=is,ie
           Pen_SW_tot(i,j) = 0.0
           do n=1,min(optics%nbands,2)
@@ -186,6 +190,7 @@ subroutine set_opacity(optics, fluxes, G, CS)
           enddo
         enddo ; enddo
       else
+!$OMP parallel do default(shared)
         do j=js,je ; do i=is,ie
           Pen_SW_tot(i,j) = 0.0
           do n=1,optics%nbands
@@ -196,6 +201,7 @@ subroutine set_opacity(optics, fluxes, G, CS)
       call post_data(CS%id_sw_vis_pen, Pen_SW_tot, CS%diag)
     endif
     do n=1,optics%nbands ; if (CS%id_opacity(n) > 0) then
+!$OMP parallel do default(shared)
       do k=1,nz ; do j=js,je ; do i=is,ie
         tmp(i,j,k) = optics%opacity_band(n,i,j,k)
       enddo ; enddo ; enddo
@@ -265,62 +271,96 @@ subroutine opacity_from_chl(optics, fluxes, G, CS, chl_in)
   multiband_nir_input = (associated(fluxes%sw_nir_dir) .and. &
                          associated(fluxes%sw_nir_dif))
 
-  do k=1,nz
-
-    if (present(chl_in)) then
-      do j=js,je ; do i=is,ie ; chl_data(i,j) = chl_in(i,j,k) ; enddo ; enddo
-      do j=js,je ; do i=is,ie
-        if ((G%mask2dT(i,j) > 0.5) .and. (chl_data(i,j) < 0.0)) then
+  chl_data(:,:) = 0.0
+  if(present(chl_in)) then
+    do j=js,je ; do i=is,ie ; chl_data(i,j) = chl_in(i,j,1) ; enddo ; enddo
+    do k=1,nz; do j=js,je ; do i=is,ie
+      if ((G%mask2dT(i,j) > 0.5) .and. (chl_in(i,j,k) < 0.0)) then
           write(mesg,'(" Negative chl_in of ",(1pe12.4)," found at i,j,k = ", &
                     & 3(1x,i3), " lon/lat = ",(1pe12.4)," E ", (1pe12.4), " N.")') &
                      chl_data(i,j), i, j, k, G%geoLonT(i,j), G%geoLatT(i,j)
           call MOM_error(FATAL,"MOM_opacity opacity_from_chl: "//trim(mesg))
-        endif
-      enddo ; enddo
-    elseif (k==1) then
-      ! Only the 2-d surface chlorophyll can be read in from a file.  The
-      ! same value is assumed for all layers.
-      call get_time(CS%Time,seconds,days)
-      do j=js,je ; do i=is,ie ; chl_data(i,j) = 0.0 ; enddo ; enddo
-      call time_interp_external(CS%sbc_chl, CS%Time, chl_data)
+      endif
+    enddo; enddo; enddo
+  else
+    ! Only the 2-d surface chlorophyll can be read in from a file.  The
+    ! same value is assumed for all layers.
+    call get_time(CS%Time,seconds,days)
+    call time_interp_external(CS%sbc_chl, CS%Time, chl_data)
+    do j=js,je ; do i=is,ie
+      if ((G%mask2dT(i,j) > 0.5) .and. (chl_data(i,j) < 0.0)) then
+        write(mesg,'(" Time_interp negative chl of ",(1pe12.4)," at i,j = ",&
+                  & 2(i3), "lon/lat = ",(1pe12.4)," E ", (1pe12.4), " N.")') &
+                   chl_data(i,j), i, j, G%geoLonT(i,j), G%geoLatT(i,j)
+        call MOM_error(FATAL,"MOM_opacity opacity_from_chl: "//trim(mesg))
+      endif
+    enddo ; enddo
+  endif
+
+  if (CS%id_chl > 0) then
+    if(present(chl_in)) then
+      call post_data(CS%id_chl, chl_in(:,:,1), CS%diag)
+    else
+      call post_data(CS%id_chl, chl_data, CS%diag)
+    endif
+  endif
+
+  select case (CS%opacity_scheme)
+    case (MANIZZA_05)
+!$OMP parallel do default(shared) private(SW_vis_tot,SW_nir_tot)
       do j=js,je ; do i=is,ie
-        if ((G%mask2dT(i,j) > 0.5) .and. (chl_data(i,j) < 0.0)) then
-          write(mesg,'(" Time_interp negative chl of ",(1pe12.4)," at i,j = ",&
-                    & 2(i3), "lon/lat = ",(1pe12.4)," E ", (1pe12.4), " N.")') &
-                     chl_data(i,j), i, j, G%geoLonT(i,j), G%geoLatT(i,j)
-          call MOM_error(FATAL,"MOM_opacity opacity_from_chl: "//trim(mesg))
+        SW_vis_tot = 0.0 ; SW_nir_tot = 0.0
+        if (G%mask2dT(i,j) > 0.5) then
+          if (multiband_vis_input) then
+            SW_vis_tot = fluxes%sw_vis_dir(i,j) + fluxes%sw_vis_dif(i,j)
+          else  ! Follow Manizza 05 in assuming that 42% of SW is visible.
+            SW_vis_tot = 0.42 * fluxes%sw(i,j)
+          endif
+          if (multiband_nir_input) then
+            SW_nir_tot = fluxes%sw_nir_dir(i,j) + fluxes%sw_nir_dif(i,j)
+          else
+            SW_nir_tot = fluxes%sw(i,j) - SW_vis_tot
+          endif
         endif
+
+        ! Band 1 is Manizza blue.
+        optics%sw_pen_band(1,i,j) = CS%blue_frac*SW_vis_tot
+        ! Band 2 (if used) is Manizza red.
+        if (nbands > 1) &
+          optics%sw_pen_band(2,i,j) = (1.0-CS%blue_frac)*SW_vis_tot
+        ! All remaining bands are NIR, for lack of something better to do.
+        do n=3,nbands
+          optics%sw_pen_band(n,i,j) = Inv_nbands_nir * SW_nir_tot
+        enddo
+      enddo ; enddo 
+    case (MOREL_88)
+!$OMP parallel do default(shared) private(SW_pen_tot)
+      do j=js,je ; do i=is,ie
+        SW_pen_tot = 0.0
+        if (G%mask2dT(i,j) > 0.5) then ; if (multiband_vis_input) then
+            SW_pen_tot = SW_pen_frac_morel(chl_data(i,j)) * &
+                (fluxes%sw_vis_dir(i,j) + fluxes%sw_vis_dif(i,j))
+          else
+            SW_pen_tot = SW_pen_frac_morel(chl_data(i,j)) * &
+                0.5*fluxes%sw(i,j)
+        endif ; endif
+
+        do n=1,nbands
+          optics%sw_pen_band(n,i,j) = Inv_nbands*SW_pen_tot
+        enddo
       enddo ; enddo
+    case default
+        call MOM_error(FATAL, "opacity_from_chl: CS%opacity_scheme is not valid.")
+    end select
+
+!$OMP parallel do default(shared) firstprivate(chl_data)
+  do k=1,nz
+    if (present(chl_in)) then
+      do j=js,je ; do i=is,ie ; chl_data(i,j) = chl_in(i,j,k) ; enddo ; enddo
     endif
 
     select case (CS%opacity_scheme)
       case (MANIZZA_05)
-        if (k==1) then ; do j=js,je ; do i=is,ie
-          SW_vis_tot = 0.0 ; SW_nir_tot = 0.0
-          if (G%mask2dT(i,j) > 0.5) then
-            if (multiband_vis_input) then
-              SW_vis_tot = fluxes%sw_vis_dir(i,j) + fluxes%sw_vis_dif(i,j)
-            else  ! Follow Manizza 05 in assuming that 42% of SW is visible.
-              SW_vis_tot = 0.42 * fluxes%sw(i,j)
-            endif
-            if (multiband_nir_input) then
-              SW_nir_tot = fluxes%sw_nir_dir(i,j) + fluxes%sw_nir_dif(i,j)
-            else
-              SW_nir_tot = fluxes%sw(i,j) - SW_vis_tot
-            endif
-          endif
-
-          ! Band 1 is Manizza blue.
-          optics%sw_pen_band(1,i,j) = CS%blue_frac*SW_vis_tot
-          ! Band 2 (if used) is Manizza red.
-          if (nbands > 1) &
-            optics%sw_pen_band(2,i,j) = (1.0-CS%blue_frac)*SW_vis_tot
-          ! All remaining bands are NIR, for lack of something better to do.
-          do n=3,nbands
-            optics%sw_pen_band(n,i,j) = Inv_nbands_nir * SW_nir_tot
-          enddo
-        enddo ; enddo ; endif
-
         do j=js,je ; do i=is,ie
           if (G%mask2dT(i,j) <= 0.5) then
             do n=1,optics%nbands
@@ -335,25 +375,7 @@ subroutine opacity_from_chl(optics, fluxes, G, CS, chl_in)
             do n=3,nbands ; optics%opacity_band(n,i,j,k) = 2.86 ; enddo
           endif
         enddo ; enddo
-
       case (MOREL_88)
-        if (k==1) then ! Set up the surface fluxes.
-          do j=js,je ; do i=is,ie
-            SW_pen_tot = 0.0
-            if (G%mask2dT(i,j) > 0.5) then ; if (multiband_vis_input) then
-                SW_pen_tot = SW_pen_frac_morel(chl_data(i,j)) * &
-                    (fluxes%sw_vis_dir(i,j) + fluxes%sw_vis_dif(i,j))
-              else
-                SW_pen_tot = SW_pen_frac_morel(chl_data(i,j)) * &
-                    0.5*fluxes%sw(i,j)
-            endif ; endif
-
-            do n=1,optics%nbands
-              optics%sw_pen_band(n,i,j) = Inv_nbands*SW_pen_tot
-            enddo
-          enddo ; enddo
-        endif
-
         do j=js,je ; do i=is,ie
           optics%opacity_band(1,i,j,k) = CS%opacity_land_value
           if (G%mask2dT(i,j) > 0.5) &
@@ -367,11 +389,9 @@ subroutine opacity_from_chl(optics, fluxes, G, CS, chl_in)
       case default
         call MOM_error(FATAL, "opacity_from_chl: CS%opacity_scheme is not valid.")
     end select
-
-    if ((k==1) .and. (CS%id_chl > 0)) then
-      call post_data(CS%id_chl, chl_data, CS%diag)
-    endif
   enddo
+
+
 end subroutine opacity_from_chl
 
 function opacity_morel(chl_data)

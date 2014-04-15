@@ -408,10 +408,10 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
   real, dimension(SZI_(G), SZJ_(G), SZK_(G)+1) :: &
     pres, &       ! The pressure at an interface, in Pa.
     h_avail_rsum  ! The running sum of h_avail above an interface, in m3 s-1.
-  real, dimension(SZIB_(G), SZJ_(G)) :: &
+  real, dimension(SZIB_(G)) :: &
     drho_dT_u, &  ! The derivatives of density with temperature and
     drho_dS_u     ! salinity at u points, in kg m-3 K-1 and kg m-3 psu-1.
-  real, dimension(SZI_(G), SZJB_(G)) :: &
+  real, dimension(SZI_(G)) :: &
     drho_dT_v, &  ! The derivatives of density with temperature and
     drho_dS_v     ! salinity at v points, in kg m-3 K-1 and kg m-3 psu-1.
   real :: uhtot(SZIB_(G), SZJ_(G))  ! The vertical sum of uhD, in m3 s-1.
@@ -464,7 +464,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
 ! Diagnostics that should be eliminated altogether later...
  ! real, dimension(SZIB_(G), SZJ_(G), SZK_(G)+1) :: sfn_x, sfn_slope_x
  ! real, dimension(SZI_(G), SZJB_(G), SZK_(G)+1) :: sfn_y, sfn_slope_y
-  logical :: MEKE_not_null
+  logical :: MEKE_not_null, present_int_slope_u, present_int_slope_v
   integer :: is, ie, js, je, nz, IsdB
   integer :: i, j, k
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke ; IsdB = G%IsdB
@@ -477,6 +477,8 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
 
   use_EOS = associated(tv%eqn_of_state)
   MEKE_not_null = (LOC(MEKE) .NE. 0)
+  present_int_slope_u = PRESENT(int_slope_u)
+  present_int_slope_u = PRESENT(int_slope_v)
 
   nk_linear = max(G%nkml, 1)
 
@@ -524,40 +526,42 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
   enddo ; enddo
 !$OMP end parallel
 
-!!$OMP parallel do default(none) 
-  do K=nz,2,-1
+!$OMP parallel do default(private) shared(nz,is,ie,js,je,find_work,use_EOS,G,pres,T,S, &
+!$OMP                                     nk_linear,IsdB,tv,h,h_neglect,e,dz_neglect, &
+!$OMP                                     I_slope_max2,h_neglect2,present_int_slope_u, &
+!$OMP                                     int_slope_u,KH_u,uhtot,h_frac,h_avail_rsum,  &
+!$OMP                                     uhD,h_avail,G_scale,work_u) 
+  do j = js,je ; do K=nz,2,-1
     if (find_work .and. .not.(use_EOS)) then
-      drdiA = 0.0 ; drdiB = 0.0 ; drdjA = 0.0 ; drdjB = 0.0
+      drdiA = 0.0 ; drdiB = 0.0
 !       drdkL = G%g_prime(k) ; drdkR = G%g_prime(k)
       drdkL = G%Rlay(k)-G%Rlay(k-1) ; drdkR = G%Rlay(k)-G%Rlay(k-1)
     endif
 
     ! Calculate the zonal fluxes and gradients.
     if (use_EOS .and. ((k > nk_linear) .or. find_work)) then
-      do j=js,je
-        do I=is-1,ie
-          pres_u(I) = 0.5*(pres(i,j,K) + pres(i+1,j,K))
-          T_u(I) = 0.25*((T(i,j,k) + T(i+1,j,k)) + (T(i,j,k-1) + T(i+1,j,k-1)))
-          S_u(I) = 0.25*((S(i,j,k) + S(i+1,j,k)) + (S(i,j,k-1) + S(i+1,j,k-1)))
-        enddo
-        call calculate_density_derivs(T_u, S_u, pres_u, drho_dT_u(:,j), &
-                     drho_dS_u(:,j), (is-IsdB+1)-1, ie-is+2, tv%eqn_of_state)
+      do I=is-1,ie
+        pres_u(I) = 0.5*(pres(i,j,K) + pres(i+1,j,K))
+        T_u(I) = 0.25*((T(i,j,k) + T(i+1,j,k)) + (T(i,j,k-1) + T(i+1,j,k-1)))
+        S_u(I) = 0.25*((S(i,j,k) + S(i+1,j,k)) + (S(i,j,k-1) + S(i+1,j,k-1)))
       enddo
+      call calculate_density_derivs(T_u, S_u, pres_u, drho_dT_u, &
+                   drho_dS_u, (is-IsdB+1)-1, ie-is+2, tv%eqn_of_state)
     endif
 
-    do j=js,je ; do I=is-1,ie
+    do I=is-1,ie
       if (use_EOS .and. ((k > nk_linear) .or. find_work)) then
         ! Estimate the horizontal density gradients along layers.
-        drdiA = drho_dT_u(I,j) * (T(i+1,j,k-1)-T(i,j,k-1)) + &
-                drho_dS_u(I,j) * (S(i+1,j,k-1)-S(i,j,k-1))
-        drdiB = drho_dT_u(I,j) * (T(i+1,j,k)-T(i,j,k)) + &
-                drho_dS_u(I,j) * (S(i+1,j,k)-S(i,j,k))
+        drdiA = drho_dT_u(I) * (T(i+1,j,k-1)-T(i,j,k-1)) + &
+                drho_dS_u(I) * (S(i+1,j,k-1)-S(i,j,k-1))
+        drdiB = drho_dT_u(I) * (T(i+1,j,k)-T(i,j,k)) + &
+                drho_dS_u(I) * (S(i+1,j,k)-S(i,j,k))
 
         ! Estimate the vertical density gradients times the grid spacing.
-        drdkL = (drho_dT_u(I,j) * (T(i,j,k)-T(i,j,k-1)) + &
-                 drho_dS_u(I,j) * (S(i,j,k)-S(i,j,k-1)))
-        drdkR = (drho_dT_u(I,j) * (T(i+1,j,k)-T(i+1,j,k-1)) + &
-                 drho_dS_u(I,j) * (S(i+1,j,k)-S(i+1,j,k-1)))
+        drdkL = (drho_dT_u(I) * (T(i,j,k)-T(i,j,k-1)) + &
+                 drho_dS_u(I) * (S(i,j,k)-S(i,j,k-1)))
+        drdkR = (drho_dT_u(I) * (T(i+1,j,k)-T(i+1,j,k-1)) + &
+                 drho_dS_u(I) * (S(i+1,j,k)-S(i+1,j,k-1)))
       endif
 
 
@@ -601,7 +605,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
             slope2_Ratio = 1.0e20  ! Force the use of the safe streamfunction.
           endif
 
-          if (present(int_slope_u)) then
+          if (present_int_slope_u) then
             Slope = (1.0 - int_slope_u(I,j,K)) * Slope + &
                     int_slope_u(I,j,K) * ((e(i+1,j,K)-e(i,j,K)) * G%IdxCu(I,j))
             slope2_Ratio = (1.0 - int_slope_u(I,j,K)) * slope2_Ratio
@@ -690,34 +694,45 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
             (uhD(I,j,K) * drdiB) * 0.25 * &
             ((e(i,j,K) + e(i,j,K+1)) + (e(i+1,j,K) + e(i+1,j,K+1))) )
       endif
-
-    enddo ; enddo
+      
+    enddo
+  enddo ; enddo ! end of j-loop
 
     ! Calculate the meridional fluxes and gradients.
-    if (use_EOS .and. ((k > nk_linear) .or. find_work)) then
-      do J=js-1,je
-        do i=is,ie
-          pres_v(i) = 0.5*(pres(i,j,K) + pres(i,j+1,K))
-          T_v(i) = 0.25*((T(i,j,k) + T(i,j+1,k)) + (T(i,j,k-1) + T(i,j+1,k-1)))
-          S_v(i) = 0.25*((S(i,j,k) + S(i,j+1,k)) + (S(i,j,k-1) + S(i,j+1,k-1)))
-        enddo
-        call calculate_density_derivs(T_v, S_v, pres_v, drho_dT_v(:,J), &
-                     drho_dS_v(:,J), is, ie-is+1, tv%eqn_of_state)
-      enddo
+!$OMP parallel do default(private) shared(nz,is,ie,js,je,find_work,use_EOS,G,pres,T,S, &
+!$OMP                                     nk_linear,IsdB,tv,h,h_neglect,e,dz_neglect, &
+!$OMP                                     I_slope_max2,h_neglect2,present_int_slope_v, &
+!$OMP                                     int_slope_v,KH_v,vhtot,h_frac,h_avail_rsum,  &
+!$OMP                                     vhD,h_avail,G_scale,Work_v) 
+  do j = js-1,je ; do K=nz,2,-1
+    if (find_work .and. .not.(use_EOS)) then
+      drdjA = 0.0 ; drdjB = 0.0
+!       drdkL = G%g_prime(k) ; drdkR = G%g_prime(k)
+      drdkL = G%Rlay(k)-G%Rlay(k-1) ; drdkR = G%Rlay(k)-G%Rlay(k-1)
     endif
-    do J=js-1,je ; do i=is,ie
+
+    if (use_EOS .and. ((k > nk_linear) .or. find_work)) then
+      do i=is,ie
+        pres_v(i) = 0.5*(pres(i,j,K) + pres(i,j+1,K))
+        T_v(i) = 0.25*((T(i,j,k) + T(i,j+1,k)) + (T(i,j,k-1) + T(i,j+1,k-1)))
+        S_v(i) = 0.25*((S(i,j,k) + S(i,j+1,k)) + (S(i,j,k-1) + S(i,j+1,k-1)))
+      enddo
+      call calculate_density_derivs(T_v, S_v, pres_v, drho_dT_v, &
+                   drho_dS_v, is, ie-is+1, tv%eqn_of_state)
+    endif
+    do i=is,ie
       if (use_EOS .and. ((k > nk_linear) .or. find_work)) then
         ! Estimate the horizontal density gradients along layers.
-        drdjA = drho_dT_v(i,J) * (T(i,j+1,k-1)-T(i,j,k-1)) + &
-                drho_dS_v(i,J) * (S(i,j+1,k-1)-S(i,j,k-1))
-        drdjB = drho_dT_v(i,J) * (T(i,j+1,k)-T(i,j,k)) + &
-                drho_dS_v(i,J) * (S(i,j+1,k)-S(i,j,k))
+        drdjA = drho_dT_v(i) * (T(i,j+1,k-1)-T(i,j,k-1)) + &
+                drho_dS_v(i) * (S(i,j+1,k-1)-S(i,j,k-1))
+        drdjB = drho_dT_v(i) * (T(i,j+1,k)-T(i,j,k)) + &
+                drho_dS_v(i) * (S(i,j+1,k)-S(i,j,k))
 
         ! Estimate the vertical density gradients times the grid spacing.
-        drdkL = (drho_dT_v(i,J) * (T(i,j,k)-T(i,j,k-1)) + &
-                 drho_dS_v(i,J) * (S(i,j,k)-S(i,j,k-1)))
-        drdkR = (drho_dT_v(i,J) * (T(i,j+1,k)-T(i,j+1,k-1)) + &
-                 drho_dS_v(i,J) * (S(i,j+1,k)-S(i,j+1,k-1)))
+        drdkL = (drho_dT_v(i) * (T(i,j,k)-T(i,j,k-1)) + &
+                 drho_dS_v(i) * (S(i,j,k)-S(i,j,k-1)))
+        drdkR = (drho_dT_v(i) * (T(i,j+1,k)-T(i,j+1,k-1)) + &
+                 drho_dS_v(i) * (S(i,j+1,k)-S(i,j+1,k-1)))
       endif
 
       if (k > nk_linear) then
@@ -760,7 +775,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
             slope2_Ratio = 1.0e20  ! Force the use of the safe streamfunction.
           endif
 
-          if (present(int_slope_v)) then
+          if (present_int_slope_v) then
             Slope = (1.0 - int_slope_v(i,J,K)) * Slope + &
                     int_slope_v(i,J,K) * ((e(i,j+1,K)-e(i,j,K)) * G%IdyCv(i,J))
             slope2_Ratio = (1.0 - int_slope_v(i,J,K)) * slope2_Ratio
@@ -847,54 +862,59 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
            (vhD(i,J,K) * drdjB) * 0.25 * &
            ((e(i,j,K) + e(i,j,K+1)) + (e(i,j+1,K) + e(i+1,j,K+1))) )
       endif
-    enddo ; enddo
-  enddo ! k-loop
+    enddo
+  enddo ; enddo! j-loop
 
   ! In layer 1, enforce the boundary conditions that Sfn(z=0) = 0.0
   if (.not.find_work .or. .not.(use_EOS)) then
     do j=js,je ; do I=is-1,ie ; uhD(I,j,1) = -uhtot(I,j) ; enddo ; enddo
     do J=js-1,je ; do i=is,ie ; vhD(i,J,1) = -vhtot(i,J) ; enddo ; enddo
   else
-    if (use_EOS) then ; do j=js,je
+!$OMP parallel do default(shared) private(pres_u,T_u,S_u,drho_dT_u,drho_dS_u,drdiB)
+    do j=js,je
+      if (use_EOS) then 
+        do I=is-1,ie
+          pres_u(I) = 0.5*(pres(i,j,1) + pres(i+1,j,1))
+          T_u(I) = 0.5*(T(i,j,1) + T(i+1,j,1))
+          S_u(I) = 0.5*(S(i,j,1) + S(i+1,j,1))
+        enddo
+        call calculate_density_derivs(T_u, S_u, pres_u, drho_dT_u, &
+                   drho_dS_u, (is-IsdB+1)-1, ie-is+2, tv%eqn_of_state)
+      endif
       do I=is-1,ie
-        pres_u(I) = 0.5*(pres(i,j,1) + pres(i+1,j,1))
-        T_u(I) = 0.5*(T(i,j,1) + T(i+1,j,1))
-        S_u(I) = 0.5*(S(i,j,1) + S(i+1,j,1))
-      enddo
-      call calculate_density_derivs(T_u, S_u, pres_u, drho_dT_u(:,j), &
-                   drho_dS_u(:,j), (is-IsdB+1)-1, ie-is+2, tv%eqn_of_state)
-    enddo ; endif
-    do j=js,je ; do I=is-1,ie
-      uhD(I,j,1) = -uhtot(I,j)
+        uhD(I,j,1) = -uhtot(I,j)
 
+        if (use_EOS) then
+          drdiB = drho_dT_u(I) * (T(i+1,j,1)-T(i,j,1)) + &
+                  drho_dS_u(I) * (S(i+1,j,1)-S(i,j,1))
+        endif
+        Work_u(I,j) = Work_u(I,j) + G_scale * ( (uhD(I,j,1) * drdiB) * 0.25 * &
+            ((e(i,j,1) + e(i,j,2)) + (e(i+1,j,1) + e(i+1,j,2))) )
+
+      enddo 
+    enddo
+
+    do J=js-1,je
       if (use_EOS) then
-        drdiB = drho_dT_u(I,j) * (T(i+1,j,1)-T(i,j,1)) + &
-                drho_dS_u(I,j) * (S(i+1,j,1)-S(i,j,1))
+        do i=is,ie
+          pres_v(i) = 0.5*(pres(i,j,1) + pres(i,j+1,1))
+          T_v(i) = 0.5*(T(i,j,1) + T(i,j+1,1))
+          S_v(i) = 0.5*(S(i,j,1) + S(i,j+1,1))
+        enddo
+        call calculate_density_derivs(T_v, S_v, pres_v, drho_dT_v, &
+                   drho_dS_v, is, ie-is+1, tv%eqn_of_state)
       endif
-      Work_u(I,j) = Work_u(I,j) + G_scale * ( (uhD(I,j,1) * drdiB) * 0.25 * &
-          ((e(i,j,1) + e(i,j,2)) + (e(i+1,j,1) + e(i+1,j,2))) )
-
-    enddo ; enddo
-
-    if (use_EOS) then ; do J=js-1,je
       do i=is,ie
-        pres_v(i) = 0.5*(pres(i,j,1) + pres(i,j+1,1))
-        T_v(i) = 0.5*(T(i,j,1) + T(i,j+1,1))
-        S_v(i) = 0.5*(S(i,j,1) + S(i,j+1,1))
-      enddo
-      call calculate_density_derivs(T_v, S_v, pres_v, drho_dT_v(:,J), &
-                   drho_dS_v(:,J), is, ie-is+1, tv%eqn_of_state)
-    enddo ; endif
-    do J=js-1,je ; do i=is,ie
-      vhD(i,J,1) = -vhtot(i,J)
+        vhD(i,J,1) = -vhtot(i,J)
 
-      if (use_EOS) then
-        drdjB = drho_dT_v(i,J) * (T(i,j+1,1)-T(i,j,1)) + &
-                drho_dS_v(i,J) * (S(i,j+1,1)-S(i,j,1))
-      endif
-      Work_v(i,J) = Work_v(i,J) - G_scale * ( (vhD(i,J,1) * drdjB) * 0.25 * &
-          ((e(i,j,1) + e(i,j,2)) + (e(i,j+1,1) + e(i,j+1,2))) )
-    enddo ; enddo
+        if (use_EOS) then
+          drdjB = drho_dT_v(i) * (T(i,j+1,1)-T(i,j,1)) + &
+                  drho_dS_v(i) * (S(i,j+1,1)-S(i,j,1))
+        endif
+        Work_v(i,J) = Work_v(i,J) - G_scale * ( (vhD(i,J,1) * drdjB) * 0.25 * &
+            ((e(i,j,1) + e(i,j,2)) + (e(i,j+1,1) + e(i,j+1,2))) )
+      enddo 
+    enddo
   endif
 
   if (find_work) then ; do j=js,je ; do i=is,ie
@@ -1379,10 +1399,12 @@ subroutine vert_fill_TS(h, T_in, S_in, kappa, dt, T_f, S_f, G, halo_here)
   h0 = 1.0e-16*sqrt(kappa*dt)*G%m_to_H
 
   if (kap_dt_x2 <= 0.0) then
+!$OMP parallel do default(shared)
     do k=1,nz ; do j=js,je ; do i=is,ie
       T_f(i,j,k) = T_in(i,j,k) ; S_f(i,j,k) = S_in(i,j,k)
     enddo ; enddo ; enddo
   else
+!$OMP parallel do default(shared) private(ent,b1,d1,c1)
     do j=js,je
       do i=is,ie
         ent(i,2) = kap_dt_x2 / ((h(i,j,1)+h(i,j,2)) + h0)

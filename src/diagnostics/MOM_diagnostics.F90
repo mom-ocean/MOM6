@@ -141,7 +141,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, dt, G, &
   type(cont_diag_ptrs),                     intent(in)    :: CDp
   real,                                     intent(in)    :: dt
   type(ocean_grid_type),                    intent(inout) :: G
-  type(diagnostics_CS),                     pointer       :: CS
+  type(diagnostics_CS),                     intent(inout)       :: CS
   real, dimension(NIMEM_,NJMEM_), optional, intent(in)    :: eta_bt
 !   Any diagnostic quantities that are not more naturally calculated
 ! in the various other subroutines are calculated here.
@@ -188,7 +188,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, dt, G, &
   ! one iteration which would break the follwoing one-line workaround!
   if (nkmb==0) nkmb = nz
 
-  if (.not.associated(CS)) call MOM_error(FATAL, &
+  if (loc(CS)==0) call MOM_error(FATAL, &
          "calculate_diagnostic_fields: Module must be initialized before it is used.")
 
   call calculate_derivs(dt, G, CS)
@@ -222,6 +222,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, dt, G, &
 
     if (associated(tv%eqn_of_state)) then
       pres(:) = tv%P_Ref
+!$OMP parallel do default(shared)
       do k=1,nz ; do j=js,je+1
         call calculate_density(tv%T(:,j,k),tv%S(:,j,k),pres, &
                                Rcv(:,j,k),is,ie-is+2, tv%eqn_of_state)
@@ -231,82 +232,103 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, dt, G, &
     endif
 
     if (ASSOCIATED(CS%h_Rlay)) then
-      do k=1,nkmb ; do j=js,je; do i=is,ie
-        CS%h_Rlay(i,j,k) = 0.0
-      enddo ; enddo ; enddo
-      do k=nkmb+1,nz ; do j=js,je ; do i=is,ie
-        CS%h_Rlay(i,j,k) = h(i,j,k)
-      enddo ; enddo ; enddo
       k_list = nz/2
-      do j=js,je ; do k=1,nkmb ; do i=is,ie
-        call find_weights(G%Rlay, Rcv(i,j,k), k_list, nz, wt, wt_p)
-        CS%h_Rlay(i,j,k_list)   = CS%h_Rlay(i,j,k_list)   + h(i,j,k)*wt
-        CS%h_Rlay(i,j,k_list+1) = CS%h_Rlay(i,j,k_list+1) + h(i,j,k)*wt_p
-      enddo ; enddo ; enddo
+!$OMP parallel do default(shared) private(wt,wt_p) firstprivate(k_list)
+      do j=js,je 
+        do k=1,nkmb ; do i=is,ie
+          CS%h_Rlay(i,j,k) = 0.0
+        enddo ; enddo
+        do k=nkmb+1,nz ; do i=is,ie
+        CS%h_Rlay(i,j,k) = h(i,j,k)
+        enddo ; enddo 
+        do k=1,nkmb ; do i=is,ie
+          call find_weights(G%Rlay, Rcv(i,j,k), k_list, nz, wt, wt_p)
+          CS%h_Rlay(i,j,k_list)   = CS%h_Rlay(i,j,k_list)   + h(i,j,k)*wt
+          CS%h_Rlay(i,j,k_list+1) = CS%h_Rlay(i,j,k_list+1) + h(i,j,k)*wt_p
+        enddo ; enddo 
+      enddo
+
       if (CS%id_h_Rlay > 0) call post_data(CS%id_h_Rlay, CS%h_Rlay, CS%diag)
     endif
 
     if (ASSOCIATED(CS%uh_Rlay)) then
-      do k=1,nkmb ; do j=js,je; do I=Isq,Ieq
-        CS%uh_Rlay(I,j,k) = 0.0
-      enddo ; enddo ; enddo
-      do k=nkmb+1,nz ; do j=js,je ; do I=Isq,Ieq
-        CS%uh_Rlay(I,j,k) = uh(I,j,k)
-      enddo ; enddo ; enddo
       k_list = nz/2
-      do j=js,je ; do k=1,nkmb ; do I=Isq,Ieq
-        call find_weights(G%Rlay, 0.5*(Rcv(i,j,k)+Rcv(i+1,j,k)), k_list, nz, wt, wt_p)
-        CS%uh_Rlay(I,j,k_list)   = CS%uh_Rlay(I,j,k_list)   + uh(I,j,k)*wt
-        CS%uh_Rlay(I,j,k_list+1) = CS%uh_Rlay(I,j,k_list+1) + uh(I,j,k)*wt_p
-      enddo ; enddo ; enddo
+!$OMP parallel do default(shared) private(wt,wt_p) firstprivate(k_list)
+      do j=js,je
+        do k=1,nkmb ; do I=Isq,Ieq
+          CS%uh_Rlay(I,j,k) = 0.0
+        enddo ; enddo
+        do k=nkmb+1,nz ; do I=Isq,Ieq
+          CS%uh_Rlay(I,j,k) = uh(I,j,k)
+        enddo ; enddo 
+        k_list = nz/2
+        do k=1,nkmb ; do I=Isq,Ieq
+          call find_weights(G%Rlay, 0.5*(Rcv(i,j,k)+Rcv(i+1,j,k)), k_list, nz, wt, wt_p)
+          CS%uh_Rlay(I,j,k_list)   = CS%uh_Rlay(I,j,k_list)   + uh(I,j,k)*wt
+          CS%uh_Rlay(I,j,k_list+1) = CS%uh_Rlay(I,j,k_list+1) + uh(I,j,k)*wt_p
+        enddo ; enddo 
+      enddo
+
       if (CS%id_uh_Rlay > 0) call post_data(CS%id_uh_Rlay, CS%uh_Rlay, CS%diag)
     endif
 
     if (ASSOCIATED(CS%vh_Rlay)) then
-      do k=1,nkmb ; do J=Jsq,Jeq; do i=is,ie
-        CS%vh_Rlay(i,J,k) = 0.0
-      enddo ; enddo ; enddo
-      do k=nkmb+1,nz ; do J=Jsq,Jeq ; do i=is,ie
-        CS%vh_Rlay(i,J,k) = vh(i,J,k)
-      enddo ; enddo ; enddo
       k_list = nz/2
-      do J=Jsq,Jeq ; do k=1,nkmb ; do i=is,ie
-        call find_weights(G%Rlay, 0.5*(Rcv(i,j,k)+Rcv(i,j+1,k)), k_list, nz, wt, wt_p)
-        CS%vh_Rlay(i,J,k_list)   = CS%vh_Rlay(i,J,k_list)   + vh(i,J,k)*wt
-        CS%vh_Rlay(i,J,k_list+1) = CS%vh_Rlay(i,J,k_list+1) + vh(i,J,k)*wt_p
-      enddo ; enddo ; enddo
+!$OMP parallel do default(shared) private(wt,wt_p) firstprivate(k_list)
+      do J=Jsq,Jeq
+        do k=1,nkmb ; do i=is,ie
+          CS%vh_Rlay(i,J,k) = 0.0
+        enddo ; enddo 
+        do k=nkmb+1,nz ; do i=is,ie
+          CS%vh_Rlay(i,J,k) = vh(i,J,k)
+        enddo ; enddo
+        do k=1,nkmb ; do i=is,ie
+          call find_weights(G%Rlay, 0.5*(Rcv(i,j,k)+Rcv(i,j+1,k)), k_list, nz, wt, wt_p)
+          CS%vh_Rlay(i,J,k_list)   = CS%vh_Rlay(i,J,k_list)   + vh(i,J,k)*wt
+          CS%vh_Rlay(i,J,k_list+1) = CS%vh_Rlay(i,J,k_list+1) + vh(i,J,k)*wt_p
+        enddo ; enddo
+      enddo
+
       if (CS%id_vh_Rlay > 0) call post_data(CS%id_vh_Rlay, CS%vh_Rlay, CS%diag)
     endif
 
     if (ASSOCIATED(CS%uhGM_Rlay) .and. ASSOCIATED(CDp%uhGM)) then
-      do k=1,nkmb ; do j=js,je; do I=Isq,Ieq
-        CS%uhGM_Rlay(I,j,k) = 0.0
-      enddo ; enddo ; enddo
-      do k=nkmb+1,nz ; do j=js,je ; do I=Isq,Ieq
-        CS%uhGM_Rlay(I,j,k) = CDp%uhGM(I,j,k)
-      enddo ; enddo ; enddo
       k_list = nz/2
-      do j=js,je ; do k=1,nkmb ; do I=Isq,Ieq
-        call find_weights(G%Rlay, 0.5*(Rcv(i,j,k)+Rcv(i+1,j,k)), k_list, nz, wt, wt_p)
-        CS%uhGM_Rlay(I,j,k_list)   = CS%uhGM_Rlay(I,j,k_list)   + CDp%uhGM(I,j,k)*wt
-        CS%uhGM_Rlay(I,j,k_list+1) = CS%uhGM_Rlay(I,j,k_list+1) + CDp%uhGM(I,j,k)*wt_p
-      enddo ; enddo ; enddo
+!$OMP parallel do default(shared) private(wt,wt_p) firstprivate(k_list)
+      do j=js,je
+        do k=1,nkmb ; do I=Isq,Ieq
+          CS%uhGM_Rlay(I,j,k) = 0.0
+        enddo ; enddo
+        do k=nkmb+1,nz ; do I=Isq,Ieq
+          CS%uhGM_Rlay(I,j,k) = CDp%uhGM(I,j,k)
+        enddo ; enddo
+        do k=1,nkmb ; do I=Isq,Ieq
+          call find_weights(G%Rlay, 0.5*(Rcv(i,j,k)+Rcv(i+1,j,k)), k_list, nz, wt, wt_p)
+          CS%uhGM_Rlay(I,j,k_list)   = CS%uhGM_Rlay(I,j,k_list)   + CDp%uhGM(I,j,k)*wt
+          CS%uhGM_Rlay(I,j,k_list+1) = CS%uhGM_Rlay(I,j,k_list+1) + CDp%uhGM(I,j,k)*wt_p
+        enddo ; enddo
+      enddo
+
       if (CS%id_uh_Rlay > 0) call post_data(CS%id_uhGM_Rlay, CS%uhGM_Rlay, CS%diag)
     endif
 
     if (ASSOCIATED(CS%vhGM_Rlay) .and. ASSOCIATED(CDp%vhGM)) then
-      do k=1,nkmb ; do J=Jsq,Jeq; do i=is,ie
-        CS%vhGM_Rlay(i,J,k) = 0.0
-      enddo ; enddo ; enddo
-      do k=nkmb+1,nz ; do J=Jsq,Jeq ; do i=is,ie
-        CS%vhGM_Rlay(i,J,k) = CDp%vhGM(i,J,k)
-      enddo ; enddo ; enddo
       k_list = nz/2
-      do J=Jsq,Jeq ; do k=1,nkmb ; do i=is,ie
-        call find_weights(G%Rlay, 0.5*(Rcv(i,j,k)+Rcv(i,j+1,k)), k_list, nz, wt, wt_p)
-        CS%vhGM_Rlay(i,J,k_list)   = CS%vhGM_Rlay(i,J,k_list)   + CDp%vhGM(i,J,k)*wt
-        CS%vhGM_Rlay(i,J,k_list+1) = CS%vhGM_Rlay(i,J,k_list+1) + CDp%vhGM(i,J,k)*wt_p
-      enddo ; enddo ; enddo
+!$OMP parallel do default(shared) private(wt,wt_p) firstprivate(k_list)
+      do J=Jsq,Jeq
+        do k=1,nkmb ; do i=is,ie
+          CS%vhGM_Rlay(i,J,k) = 0.0
+        enddo ; enddo
+        do k=nkmb+1,nz ; do i=is,ie
+          CS%vhGM_Rlay(i,J,k) = CDp%vhGM(i,J,k)
+        enddo ; enddo
+        do k=1,nkmb ; do i=is,ie
+          call find_weights(G%Rlay, 0.5*(Rcv(i,j,k)+Rcv(i,j+1,k)), k_list, nz, wt, wt_p)
+          CS%vhGM_Rlay(i,J,k_list)   = CS%vhGM_Rlay(i,J,k_list)   + CDp%vhGM(i,J,k)*wt
+          CS%vhGM_Rlay(i,J,k_list+1) = CS%vhGM_Rlay(i,J,k_list+1) + CDp%vhGM(i,J,k)*wt_p
+        enddo ; enddo
+      enddo
+
       if (CS%id_vhGM_Rlay > 0) call post_data(CS%id_vhGM_Rlay, CS%vhGM_Rlay, CS%diag)
     endif
   endif
@@ -316,6 +338,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, dt, G, &
     call wave_speed(h, tv, G, CS%cg1, CS%wave_speed_CSp)
     if (CS%id_cg1>0) call post_data(CS%id_cg1, CS%cg1, CS%diag)
     if (CS%id_Rd1>0) then
+!$OMP parallel do default(shared) private(f2_h,mag_beta)
       do j=js,je ; do i=is,ie
         ! Blend the equatorial deformation radius with the standard one.
         f2_h = absurdly_small_freq2 + 0.25 * &
@@ -424,7 +447,7 @@ subroutine calculate_vertical_integrals(h, tv, G, CS)
   real, dimension(NIMEM_,NJMEM_,NKMEM_),    intent(in)    :: h
   type(thermo_var_ptrs),                    intent(in)    :: tv
   type(ocean_grid_type),                    intent(inout) :: G
-  type(diagnostics_CS),                     pointer       :: CS
+  type(diagnostics_CS),                     intent(inout) :: CS
 ! This subroutine calculates the vertical integrals of several tracers, along
 ! with the mass-weight of these tracers, the total column mass, and the
 ! carefully calculated column height.
@@ -523,7 +546,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, CS)
   type(accel_diag_ptrs),                  intent(in)    :: ADp
   type(cont_diag_ptrs),                   intent(in)    :: CDp
   type(ocean_grid_type),                  intent(inout) :: G
-  type(diagnostics_CS),                   pointer       :: CS
+  type(diagnostics_CS),                   intent(inout) :: CS
 !   This subroutine calculates a series of terms in the energy
 ! balance equations.
 
@@ -739,7 +762,7 @@ end subroutine register_time_deriv
 subroutine calculate_derivs(dt, G, CS)
   real,                  intent(in)    :: dt
   type(ocean_grid_type), intent(inout) :: G
-  type(diagnostics_CS),  pointer       :: CS
+  type(diagnostics_CS),  intent(inout) :: CS
 ! This subroutine calculates all registered time derivatives.
 ! Arguments: dt - the time interval in s over which differences occur
 !  (in)      G - The ocean's grid structure.

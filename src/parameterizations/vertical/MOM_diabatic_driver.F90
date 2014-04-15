@@ -351,6 +351,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   if (CS%debugConservation) call MOM_state_stats('1st make_frazil', u, v, h, T, S, G)
 
   if ((CS%ML_mix_first > 0.0) .or. CS%use_geothermal) then
+!$OMP parallel do default(shared)
     do k=1,nz ; do j=js,je ; do i=is,ie
       h_orig(i,j,k) = h(i,j,k) ; eaml(i,j,k) = 0.0 ; ebml(i,j,k) = 0.0
     enddo ; enddo ; enddo
@@ -368,7 +369,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   ! biological properties and layer thicknesses.
   if (associated(CS%optics)) &
     call set_opacity(CS%optics, fluxes, G, CS%opacity_CSp)
-  
+
   if (CS%bulkmixedlayer) then
     if (CS%ML_mix_first > 0.0) then
 !  This subroutine (1)  Cools the mixed layer.
@@ -460,28 +461,56 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     ! Thus, KPP is the last contribution to Kd.
     ! Changes: Kd_int. Sets: KPP_NLTheat, KPP_NLTscalar
     if (associated(visc%Kd_turb) .and. CS%matchKPPwithoutKappaShear) then
-      Kd_salt(is:ie,js:je,:) = Kd_int(is:ie,js:je,:) - visc%Kd_turb(is:ie,js:je,:) ! Temporarily remove part due to Kappa-shear
-      Kd_heat(is:ie,js:je,:) = Kd_int(is:ie,js:je,:) - visc%Kd_turb(is:ie,js:je,:) ! Temporarily remove part due to Kappa-shear
+!$OMP parallel do default(shared)
+      do k=1,nz+1 ; do j=js,je ; do i=is,ie
+        Kd_salt(i,j,k) = Kd_int(i,j,k) - visc%Kd_turb(i,j,k) ! Temporarily remove part due to Kappa-shear
+        Kd_heat(i,j,k) = Kd_int(i,j,k) - visc%Kd_turb(i,j,k) ! Temporarily remove part due to Kappa-shear
+      enddo ; enddo ; enddo
     else
-      Kd_salt(is:ie,js:je,:) = Kd_int(is:ie,js:je,:)
-      Kd_heat(is:ie,js:je,:) = Kd_int(is:ie,js:je,:)
+!$OMP parallel do default(shared)
+      do k=1,nz+1 ; do j=js,je ; do i=is,ie
+        Kd_salt(i,j,k) = Kd_int(i,j,k)
+        Kd_heat(i,j,k) = Kd_int(i,j,k)
+      enddo ; enddo ; enddo
     endif
-    if (associated(visc%Kd_extra_S)) &
-        Kd_salt(is:ie,js:je,:) = Kd_salt(is:ie,js:je,:) + visc%Kd_extra_S(is:ie,js:je,:)
-    if (associated(visc%Kd_extra_T)) &
-        Kd_heat(is:ie,js:je,:) = Kd_heat(is:ie,js:je,:) + visc%Kd_extra_T(is:ie,js:je,:)
+    if (associated(visc%Kd_extra_S)) then
+!$OMP parallel do default(shared)
+      do k=1,nz+1 ; do j=js,je ; do i=is,ie
+        Kd_salt(i,j,k) = Kd_salt(i,j,k) + visc%Kd_extra_S(i,j,k)
+      enddo ; enddo ; enddo
+    endif
+    if (associated(visc%Kd_extra_T)) then
+!$OMP parallel do default(shared)
+      do k=1,nz+1 ; do j=js,je ; do i=is,ie
+        Kd_heat(i,j,k) = Kd_heat(i,j,k) + visc%Kd_extra_T(i,j,k)
+      enddo ; enddo ; enddo
+    endif
     call KPP_calculate(CS%KPP_CSp, G, h, tv%T, tv%S, u, v, tv%eqn_of_state, &
            fluxes%ustar, CS%buoyancyFlux, Kd_heat, Kd_salt, visc%Kv_turb, CS%KPP_NLTheat, CS%KPP_NLTscalar)
     if (.not. CS%KPPisPassive) then
       if (associated(visc%Kd_turb) .and. CS%matchKPPwithoutKappaShear) then
-        Kd_salt(is:ie,js:je,:) = ( Kd_salt(is:ie,js:je,:) + visc%Kd_turb(is:ie,js:je,:) )  ! Put back part due to Kappa-shear
-        Kd_heat(is:ie,js:je,:) = ( Kd_heat(is:ie,js:je,:) + visc%Kd_turb(is:ie,js:je,:) )  ! Put back part due to Kappa-shear
+!$OMP parallel do default(shared)
+        do k=1,nz+1 ; do j=js,je ; do i=is,ie
+          Kd_salt(i,j,k) = ( Kd_salt(i,j,k) + visc%Kd_turb(i,j,k) )  ! Put back part due to Kappa-shear
+          Kd_heat(i,j,k) = ( Kd_heat(i,j,k) + visc%Kd_turb(i,j,k) )  ! Put back part due to Kappa-shear
+        enddo ; enddo ; enddo
       endif
-      Kd_int(is:ie,js:je,:) = min( Kd_salt(is:ie,js:je,:),  Kd_heat(is:ie,js:je,:) )
-      if (associated(visc%Kd_extra_S)) &
-          visc%Kd_extra_S(is:ie,js:je,:) = Kd_salt(is:ie,js:je,:) - Kd_int(is:ie,js:je,:)
-      if (associated(visc%Kd_extra_T)) &
-          visc%Kd_extra_T(is:ie,js:je,:) = Kd_heat(is:ie,js:je,:) - Kd_int(is:ie,js:je,:)
+!$OMP parallel do default(shared)
+      do k=1,nz+1 ; do j=js,je ; do i=is,ie
+        Kd_int(i,j,k) = min( Kd_salt(i,j,k),  Kd_heat(i,j,k) )
+      enddo ; enddo ; enddo
+      if (associated(visc%Kd_extra_S)) then
+!$OMP parallel do default(shared)
+        do k=1,nz+1 ; do j=js,je ; do i=is,ie
+          visc%Kd_extra_S(i,j,k) = Kd_salt(i,j,k) - Kd_int(i,j,k)
+        enddo ; enddo ; enddo
+      endif
+      if (associated(visc%Kd_extra_T)) then
+!$OMP parallel do default(shared)
+        do k=1,nz+1 ; do j=js,je ; do i=is,ie
+          visc%Kd_extra_T(i,j,k) = Kd_heat(i,j,k) - Kd_int(i,j,k)
+        enddo ; enddo ; enddo
+      endif
     endif ! not passive
     call cpu_clock_end(id_clock_kpp)
     if (showCallTree) call callTree_waypoint("done with KPP_calculate (diabatic)")
@@ -531,6 +560,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     do j=js,je ; do i=is,ie
       ea(i,j,1) = 0.
     enddo ; enddo
+!$OMP parallel do default(shared) private(hval)
     do k=2,nz ; do j=js,je ; do i=is,ie
       hval=1.0/(h_neglect + 0.5*(h(i,j,k-1) + h(i,j,k)))
       ea(i,j,k) = (G%m_to_H**2) * dt * hval * Kd_int(i,j,k)
@@ -583,6 +613,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   ! enough iterations are permitted in Calculate_Entrainment, and
   ! even if too few iterations are allowed, it is still guarded
   ! against.  In other words the checks are probably unnecessary.
+
+!$OMP parallel do default(shared)
   do j=js,je
     do i=is,ie
       hold(i,j,1) = h(i,j,1)
@@ -618,6 +650,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
       ! are lighter than the mixed layer have temperatures and salinities
       ! that correspond to their prescribed densities.
       if (CS%massless_match_targets) then
+!$OMP parallel do default (shared) private(h_tr,b1,d1,c1,b_denom_1)
         do j=js,je
           do i=is,ie
             h_tr = hold(i,j,1) + h_neglect
@@ -693,6 +726,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     if ((CS%ML_mix_first > 0.0) .or. CS%use_geothermal) then
       ! The mixed layer code has already been called, but there is some needed
       ! bookkeeping.
+!$OMP parallel do default(shared)
       do k=1,nz ; do j=js,je ; do i=is,ie
         hold(i,j,k) = h_orig(i,j,k)
         ea(i,j,k) = ea(i,j,k) + eaml(i,j,k)
@@ -769,6 +803,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
       Tdif_flx(i,j,1) = 0.0 ; Tdif_flx(i,j,nz+1) = 0.0
       Tadv_flx(i,j,1) = 0.0 ; Tadv_flx(i,j,nz+1) = 0.0
     enddo ; enddo
+!$OMP parallel do default(shared)
     do K=2,nz ; do j=js,je ; do i=is,ie
       Tdif_flx(i,j,K) = (Idt * 0.5*(ea(i,j,k) + eb(i,j,k-1))) * &
                         (T(i,j,k-1) - T(i,j,k))
@@ -782,6 +817,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
       Sdif_flx(i,j,1) = 0.0 ; Sdif_flx(i,j,nz+1) = 0.0
       Sadv_flx(i,j,1) = 0.0 ; Sadv_flx(i,j,nz+1) = 0.0
     enddo ; enddo
+!$OMP parallel do default(shared)
     do K=2,nz ; do j=js,je ; do i=is,ie
       Sdif_flx(i,j,K) = (Idt * 0.5*(ea(i,j,k) + eb(i,j,k-1))) * &
                         (S(i,j,k-1) - S(i,j,k))
@@ -793,7 +829,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   call cpu_clock_begin(id_clock_tracers)
   if (CS%mix_boundary_tracers) then
     Tr_ea_BBL = sqrt(dt*CS%Kd_BBL_tr)
-
+!$OMP parallel do default(shared) private(htot,in_boundary,add_ent)
     do j=js,je
       do i=is,ie
         ebtr(i,j,nz) = eb(i,j,nz)
@@ -843,6 +879,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     do j=js,je ; do i=is,ie
       ebtr(i,j,nz) = eb(i,j,nz) ; eatr(i,j,1) = ea(i,j,1)
     enddo ; enddo
+!$OMP parallel do default(shared) private(add_ent)
     do k=nz,2,-1 ; do j=js,je ; do i=is,ie
       if (visc%Kd_extra_S(i,j,k) > 0.0) then
         add_ent = ((dt * visc%Kd_extra_S(i,j,k)) * G%m_to_H**2) / &
@@ -866,6 +903,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     call cpu_clock_begin(id_clock_sponge)
     if (CS%bulkmixedlayer .and. ASSOCIATED(tv%eqn_of_state)) then
       do i=is,ie ; p_ref_cv(i) = tv%P_Ref ; enddo
+!$OMP parallel do default(shared)
       do j=js,je
         call calculate_density(T(:,j,1), S(:,j,1), p_ref_cv, Rcv_ml(:,j), &
                                is, ie-is+1, tv%eqn_of_state)
@@ -881,21 +919,26 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     endif
   endif
 
+!$OMP parallel default(shared)
 !   Save the diapycnal mass fluxes as a diagnostic field.
   if (ASSOCIATED(CDp%diapyc_vel)) then
-    do K=2,nz ; do j=js,je ; do i=is,ie
-      CDp%diapyc_vel(i,j,K) = Idt * (G%H_to_m * (ea(i,j,k) - eb(i,j,k-1)))
-    enddo ; enddo ; enddo
-    do j=js,je ; do i=is,ie
-      CDp%diapyc_vel(i,j,1) = 0.0
-      CDp%diapyc_vel(i,j,nz+1) = 0.0
-    enddo ; enddo
+!$OMP do
+    do j=js,je
+      do K=2,nz ;  do i=is,ie
+        CDp%diapyc_vel(i,j,K) = Idt * (G%H_to_m * (ea(i,j,k) - eb(i,j,k-1)))
+      enddo ; enddo 
+      do i=is,ie
+        CDp%diapyc_vel(i,j,1) = 0.0
+        CDp%diapyc_vel(i,j,nz+1) = 0.0
+      enddo
+    enddo
   endif
 
 !   For momentum, it is only the net flux that homogenizes within
 !  the mixed layer.  Vertical viscosity that is proportional to the
 !  mixed layer turbulence is applied elsewhere.
   if (CS%bulkmixedlayer) then
+!$OMP do
     do k=2,G%nkml ; do j=js,je ; do i=is,ie
       if (ea(i,j,k) >= eb(i,j,k-1)) then
         ea(i,j,k) = ea(i,j,k) - eb(i,j,k-1)
@@ -909,6 +952,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
 
 
 !   This initializes the halo regions of ea, eb, and hold to default values.
+!$OMP do
   do k=1,nz
     do i=is-1,ie+1
       hold(i,js-1,k) = G%Angstrom ; ea(i,js-1,k) = 0.0 ; eb(i,js-1,k) = 0.0
@@ -919,7 +963,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
       hold(ie+1,j,k) = G%Angstrom ; ea(ie+1,j,k) = 0.0 ; eb(ie+1,j,k) = 0.0
     enddo
   enddo
-  
+!$OMP end parallel
+
   call cpu_clock_begin(id_clock_pass)
   if (G%symmetric) then
     call pass_var(hold,G%Domain,complete=.false.)
@@ -940,6 +985,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     call MOM_state_chksum("before u/v tridiag ", u, v, h, G)
   endif
   call cpu_clock_begin(id_clock_tridiag)
+!$OMP parallel do default(shared) private(hval,b1,d1,c1,eaval)
   do j=js,je
     do I=Isq,Ieq
       if (ASSOCIATED(ADp%du_dt_dia)) ADp%du_dt_dia(I,j,1) = u(I,j,1)
@@ -971,6 +1017,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   if (CS%debug) then
     call MOM_state_chksum("aft 1st loop tridiag ", u, v, h, G)
   endif
+!$OMP parallel do default(shared) private(hval,b1,d1,c1,eaval)
   do J=Jsq,Jeq
     do i=is,ie
       if (ASSOCIATED(ADp%dv_dt_dia)) ADp%dv_dt_dia(i,J,1) = v(i,J,1)
@@ -1112,7 +1159,8 @@ subroutine make_frazil(h, tv, G, CS)
   if (.not.CS%pressure_dependent_frazil) then
     do k=1,nz ; do i=is,ie ; pressure(i,k) = 0.0 ; enddo ; enddo
   endif
-
+!$OMP parallel do default(shared) firstprivate(pressure) &
+!$OMP                                  private(fraz_col,T_fr_set,T_freeze,hc)
   do j=js,je
     do i=is,ie ; fraz_col(:) = 0.0 ; enddo
 
@@ -1239,6 +1287,8 @@ subroutine differential_diffuse_T_S(h, tv, visc, dt, G)
 
   T => tv%T ; S => tv%S
   Kd_T => visc%Kd_extra_T ; Kd_S => visc%Kd_extra_S
+!$OMP parallel do default(shared) private(I_h_int,mix_T,mix_S,h_tr,b1_T,b1_S, &
+!$OMP                                     d1_T,d1_S,c1_T,c1_S,b_denom_T,b_denom_S)
   do j=js,je
     do i=is,ie
       I_h_int = 1.0 / (0.5 * (h(i,j,1) + h(i,j,2)) + h_neglect)
@@ -1320,7 +1370,8 @@ subroutine adjust_salt(h, tv, G, CS)
   
   salt_add_col(:,:) = 0.0
 
-  do k=nz,1,-1 ; do j=js,je ; do i=is,ie
+  
+  do j=js,je ; do k=nz,1,-1 ; do i=is,ie
     if ((G%mask2dT(i,j) > 0.0) .and. &
          ((tv%S(i,j,k) < S_min) .or. (salt_add_col(i,j) > 0.0))) then
       mc = G%H_to_kg_m2 * h(i,j,k)
@@ -1752,7 +1803,7 @@ subroutine find_uv_at_h(u, v, h, u_h, v_h, G, ea, eb)
   if (present(ea) .neqv. present(eb)) call MOM_error(FATAL, &
       "find_uv_at_h: Either both ea and eb or neither one must be present "// &
       "in call to find_uv_at_h.")
-
+!$OMP parallel do default(shared) private(s,Idenom,a_w,a_e,a_s,a_n,b_denom_1,b1,d1,c1)
   do j=js,je
     do i=is,ie
       s = G%areaCu(i-1,j)+G%areaCu(i,j)

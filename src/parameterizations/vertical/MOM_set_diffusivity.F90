@@ -522,19 +522,27 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, G, C
 ! the appropriate place to add a depth-dependent parameterization or
 ! another explicit parameterization of Kd.
 
-  if (CS%Bryan_Lewis_diffusivity) then ; do j=js,je ; do i=is,ie
-    Kd_sfc(i,j) = CS%Kd_Bryan_Lewis_surface
-  enddo ; enddo ; else ; do j=js,je ; do i=is,ie
-    Kd_sfc(i,j) = CS%Kd
-  enddo ; enddo ; endif
+  if (CS%Bryan_Lewis_diffusivity) then 
+!$OMP parallel do default(shared)
+    do j=js,je ; do i=is,ie
+      Kd_sfc(i,j) = CS%Kd_Bryan_Lewis_surface
+    enddo ; enddo 
+  else 
+!$OMP parallel do default(shared)
+    do j=js,je ; do i=is,ie
+      Kd_sfc(i,j) = CS%Kd
+    enddo ; enddo 
+  endif
   if (CS%Henyey_IGW_background) then
     I_x30 = 2.0 / invcosh(CS%N0_2Omega*2.0) ! This is evaluated at 30 deg.
+!$OMP parallel do default(shared) private(abs_sin)
     do j=js,je ; do i=is,ie
       abs_sin = abs(sin(G%geoLatT(i,j)*deg_to_rad))
       Kd_sfc(i,j) = max(CS%Kd_min, Kd_sfc(i,j) * &
            ((abs_sin * invcosh(CS%N0_2Omega/max(epsilon,abs_sin))) * I_x30) )
     enddo ; enddo
   elseif (CS%Kd_tanh_lat_fn) then
+!$OMP parallel do default(shared) 
     do j=js,je ; do i=is,ie
       !   The transition latitude and latitude range are hard-scaled here, since
       ! this is not really intended for wide-spread use, but rather for
@@ -728,12 +736,18 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, G, C
   endif
 
   if (CS%Kd_add > 0.0) then
-    if (present(Kd_int)) then ; do k=1,nz ; do j=js,je ; do i=is,ie
-      Kd_int(i,j,K) = Kd_int(i,j,K) + CS%Kd_add
-      Kd(i,j,k) = Kd(i,j,k) + CS%Kd_add
-    enddo ; enddo ; enddo ; else ; do k=1,nz ; do j=js,je ; do i=is,ie
-      Kd(i,j,k) = Kd(i,j,k) + CS%Kd_add
-    enddo ; enddo ; enddo ; endif
+    if (present(Kd_int)) then 
+!$OMP parallel do default(shared)
+      do k=1,nz ; do j=js,je ; do i=is,ie
+        Kd_int(i,j,K) = Kd_int(i,j,K) + CS%Kd_add
+        Kd(i,j,k) = Kd(i,j,k) + CS%Kd_add
+      enddo ; enddo ; enddo 
+    else 
+!$OMP parallel do default(shared)
+      do k=1,nz ; do j=js,je ; do i=is,ie
+        Kd(i,j,k) = Kd(i,j,k) + CS%Kd_add
+      enddo ; enddo ; enddo 
+    endif
   endif
 
   if (CS%user_change_diff) then

@@ -3356,7 +3356,7 @@ subroutine legacy_bt_mass_source(h, eta, fluxes, set_cor, dt_therm, &
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
-!$OMP parallel do default(shared) private(i,j,k,eta_h)
+!$OMP parallel do default(shared) private(eta_h,h_tot,limit_dt,d_eta) 
   do j=js,je
     do i=is,ie ; h_tot(i) = h(i,j,1) ; enddo
     if (G%Boussinesq) then

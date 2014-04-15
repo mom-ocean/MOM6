@@ -115,7 +115,7 @@ subroutine geothermal(h, tv, dt, ea, eb, G, CS)
 !  (in)      CS - The control structure returned by a previous call to
 !                 geothermal_init.
 
-  real :: resid(SZI_(G),SZJ_(G))
+!  real :: resid(SZI_(G),SZJ_(G)) !z1l: never been used.
   real, dimension(SZI_(G)) :: &
     heat_rem, & !   The remaining heat, in H degC.
     h_geo_rem, &!   The remaining thickness to which to apply the geothermal 
@@ -173,11 +173,12 @@ subroutine geothermal(h, tv, dt, ea, eb, G, CS)
   if (.not.ASSOCIATED(tv%T)) call MOM_error(FATAL, "MOM geothermal: "//&
       "Geothermal heating can only be applied if T & S are state variables.")
 
-  do i=is,ie ; do j=js,je
-    resid(i,j) = tv%internal_heat(i,j)
-  enddo ; enddo
+!  do i=is,ie ; do j=js,je
+!    resid(i,j) = tv%internal_heat(i,j)
+!  enddo ; enddo
 
-
+!$OMP parallel do default(private) shared(is,ie,js,je,G,CS,dt,Irho_cp,nkmb,tv,p_Ref, &
+!$OMP                                     h,Angstrom,nz,H_neglect,eb) 
   do j=js,je
     ! 1. Only work on columns that are being heated.
     ! 2. Find the deepest layer with any mass.
@@ -345,10 +346,10 @@ subroutine geothermal(h, tv, dt, ea, eb, G, CS)
     enddo ; endif
   enddo ! j-loop
 
-  do i=is,ie ; do j=js,je
-    resid(i,j) = tv%internal_heat(i,j) - resid(i,j) - G%H_to_kg_m2 * &
-           (G%mask2dT(i,j) * (CS%geo_heat(i,j) * (dt*Irho_cp)))
-  enddo ; enddo
+!  do i=is,ie ; do j=js,je
+!    resid(i,j) = tv%internal_heat(i,j) - resid(i,j) - G%H_to_kg_m2 * &
+!           (G%mask2dT(i,j) * (CS%geo_heat(i,j) * (dt*Irho_cp)))
+!  enddo ; enddo
 
 end subroutine geothermal
 
