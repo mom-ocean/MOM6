@@ -70,7 +70,7 @@ module MOM_initialization
 
 
 use MOM_checksums, only : hchksum, qchksum, uchksum, vchksum, chksum
-use MOM_coms, only : max_across_PEs, min_across_PEs
+use MOM_coms, only : max_across_PEs, min_across_PEs, reproducing_sum
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock, only :  CLOCK_ROUTINE, CLOCK_LOOP
 use MOM_domains, only : pass_var, pass_vector, sum_across_PEs, broadcast
@@ -3236,12 +3236,14 @@ subroutine compute_global_grid_integrals(G)
   ! Subroutine to pre-compute global integrals of grid quantities for
   ! later use in reporting diagnostics
   integer :: i,j
+  real, dimension(G%isc:G%iec,G%jsc:G%jec) :: tmpForSumming
 
   G%areaT_global = 0.0 ; G%IareaT_global = 0.0
+  tmpForSumming(:,:) = 0.
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
-    G%areaT_global = G%areaT_global + ( G%areaT(i,j) * G%mask2dT(i,j) )
+    tmpForSumming(i,j) = G%areaT(i,j) * G%mask2dT(i,j)
   enddo ; enddo
-  call sum_across_PEs( G%areaT_global )
+  G%areaT_global = reproducing_sum( tmpForSumming )
   G%IareaT_global = 1. / G%areaT_global 
 end subroutine compute_global_grid_integrals
 
