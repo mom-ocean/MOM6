@@ -1335,7 +1335,6 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       enddo ; enddo
       SSS_global = reproducing_sum( tmpForSumming ) * G%IareaT_global
       call post_data(CS%id_sss_global, SSS_global, CS%diag)
-      if (is_root_pe()) write (*,*) '   GLOBAL SSS = ', SSS_global
     endif
 
     if (CS%id_sss > 0) &
