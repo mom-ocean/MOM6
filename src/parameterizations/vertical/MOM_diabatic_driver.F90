@@ -1996,7 +1996,7 @@ subroutine applyBoundaryFluxes(CS, G, dt, fluxes, optics, ea, h, tv)
           dThickness = max( fractionOfForcing*netThickness(i), -h2d(i,k) )
           dTemp = fractionOfForcing*netHeat(i)
           ! The following max avoids taking out more salt than is in the layer
-          dSalt = max( fractionOfForcing*netSalt(i), -0.9999*hOld*tv%S(i,j,k))
+          dSalt = max( fractionOfForcing*netSalt(i), -0.9999*h2d(i,k)*tv%S(i,j,k))
 
           ! Update the forcing by the part to be consumed
           netThickness(i) = netThickness(i) - dThickness
