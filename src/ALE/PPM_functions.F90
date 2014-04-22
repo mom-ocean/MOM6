@@ -10,7 +10,6 @@ module PPM_functions
 ! reconstruction using the piecewise parabolic method (PPM).
 !
 !==============================================================================
-use regrid_ppoly_class, only : ppoly_t
 use regrid_edge_values, only : bound_edge_values, check_discontinuous_edge_values
 
 implicit none ; private
@@ -22,7 +21,7 @@ contains
 !------------------------------------------------------------------------------
 ! PPM_reconstruction
 ! -----------------------------------------------------------------------------
-subroutine PPM_reconstruction( N, h, u, ppoly )
+subroutine PPM_reconstruction( N, h, u, ppoly_E, ppoly_coefficients )
 !------------------------------------------------------------------------------
 ! Reconstruction by quadratic polynomials within each cell.
 !
@@ -37,10 +36,11 @@ subroutine PPM_reconstruction( N, h, u, ppoly )
 !------------------------------------------------------------------------------
 
   ! Arguments
-  integer,            intent(in)    :: N ! Number of cells
-  real, dimension(:), intent(in)    :: h ! cell widths (size N)
-  real, dimension(:), intent(in)    :: u ! cell averages (size N)
-  type(ppoly_t),      intent(inout) :: ppoly
+  integer,              intent(in)    :: N ! Number of cells
+  real, dimension(:),   intent(in)    :: h ! cell widths (size N)
+  real, dimension(:),   intent(in)    :: u ! cell averages (size N)
+  real, dimension(:,:), intent(inout) :: ppoly_E
+  real, dimension(:,:), intent(inout) :: ppoly_coefficients
 
   ! Local variables
   integer   :: k            ! loop index
@@ -48,22 +48,22 @@ subroutine PPM_reconstruction( N, h, u, ppoly )
   real      :: a, b, c      ! parabola coefficients
   
   ! PPM limiter
-  call PPM_limiter_standard( N, h, u, ppoly )
+  call PPM_limiter_standard( N, h, u, ppoly_E )
 
   ! Loop on cells to construct the parabola within each cell
   do k = 1,N
   
-    u0_l = ppoly%E(k,1)
-    u0_r = ppoly%E(k,2)
+    u0_l = ppoly_E(k,1)
+    u0_r = ppoly_E(k,2)
 
     a = u0_l
     b = 6.0 * u(k) - 4.0 * u0_l - 2.0 * u0_r
     c = 3.0 * ( u0_r + u0_l - 2.0 * u(k) )
     
     ! Store coefficients
-    ppoly%coefficients(k,1) = a
-    ppoly%coefficients(k,2) = b
-    ppoly%coefficients(k,3) = c
+    ppoly_coefficients(k,1) = a
+    ppoly_coefficients(k,2) = b
+    ppoly_coefficients(k,3) = c
   
   end do ! end loop on interior cells
 
@@ -73,7 +73,7 @@ end subroutine PPM_reconstruction
 !------------------------------------------------------------------------------
 ! Limit ppm
 ! -----------------------------------------------------------------------------
-subroutine PPM_limiter_standard( N, h, u, ppoly )
+subroutine PPM_limiter_standard( N, h, u, ppoly_E )
 !------------------------------------------------------------------------------
 ! Standard PPM limiter (Colella & Woodward, JCP 1984).
 !
@@ -86,10 +86,10 @@ subroutine PPM_limiter_standard( N, h, u, ppoly )
 !------------------------------------------------------------------------------
 
   ! Arguments
-  integer,            intent(in)    :: N ! Number of cells
-  real, dimension(:), intent(in)    :: h ! cell widths (size N)
-  real, dimension(:), intent(in)    :: u ! cell averages (size N)
-  type(ppoly_t),      intent(inout) :: ppoly
+  integer,              intent(in)    :: N ! Number of cells
+  real, dimension(:),   intent(in)    :: h ! cell widths (size N)
+  real, dimension(:),   intent(in)    :: u ! cell averages (size N)
+  real, dimension(:,:), intent(inout) :: ppoly_E
 
   ! Local variables
   integer   :: k                ! loop index
@@ -98,10 +98,10 @@ subroutine PPM_limiter_standard( N, h, u, ppoly )
   real      :: expr1, expr2
   
   ! Bound edge values
-  call bound_edge_values( N, h, u, ppoly%E )
+  call bound_edge_values( N, h, u, ppoly_E )
 
   ! Make discontinuous edge values monotonic
-  call check_discontinuous_edge_values( N, u, ppoly%E )
+  call check_discontinuous_edge_values( N, u, ppoly_E )
 
   ! Loop on interior cells to apply the standard 
   ! PPM limiter (Colella & Woodward, JCP 84)
@@ -112,8 +112,8 @@ subroutine PPM_limiter_standard( N, h, u, ppoly )
     u_c = u(k)
     u_r = u(k+1)
   
-    u0_l = ppoly%E(k,1)
-    u0_r = ppoly%E(k,2)
+    u0_l = ppoly_E(k,1)
+    u0_r = ppoly_E(k,2)
     
     ! Auxiliary variables
     expr1 = (u0_r - u0_l) * (u_c - 0.5*(u0_l+u0_r))
@@ -133,14 +133,14 @@ subroutine PPM_limiter_standard( N, h, u, ppoly )
       u0_r = 3.0 * u_c - 2.0 * u0_l
     end if  
     
-    ppoly%E(k,1) = u0_l
-    ppoly%E(k,2) = u0_r
+    ppoly_E(k,1) = u0_l
+    ppoly_E(k,2) = u0_r
   
   end do ! end loop on interior cells
 
   ! PCM within boundary cells
-  ppoly%E(1,:) = u(1)
-  ppoly%E(N,:) = u(N)
+  ppoly_E(1,:) = u(1)
+  ppoly_E(N,:) = u(N)
 
 end subroutine PPM_limiter_standard
 
@@ -148,7 +148,7 @@ end subroutine PPM_limiter_standard
 !------------------------------------------------------------------------------
 ! ppm boundary extrapolation
 ! -----------------------------------------------------------------------------
-subroutine PPM_boundary_extrapolation( N, h, u, ppoly )
+subroutine PPM_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coefficients )
 !------------------------------------------------------------------------------
 ! Reconstruction by parabolas within boundary cells.
 !
@@ -172,10 +172,11 @@ subroutine PPM_boundary_extrapolation( N, h, u, ppoly )
 !------------------------------------------------------------------------------
 
   ! Arguments
-  integer,            intent(in)    :: N ! Number of cells
-  real, dimension(:), intent(in)    :: h ! cell widths (size N)
-  real, dimension(:), intent(in)    :: u ! cell averages (size N)
-  type(ppoly_t),      intent(inout) :: ppoly
+  integer,              intent(in)    :: N ! Number of cells
+  real, dimension(:),   intent(in)    :: h ! cell widths (size N)
+  real, dimension(:),   intent(in)    :: u ! cell averages (size N)
+  real, dimension(:,:), intent(inout) :: ppoly_E
+  real, dimension(:,:), intent(inout) :: ppoly_coefficients
   
   ! Local variables
   integer       :: i0, i1
@@ -197,7 +198,7 @@ subroutine PPM_boundary_extrapolation( N, h, u, ppoly )
 
   ! Compute the left edge slope in neighboring cell and express it in
   ! the global coordinate system
-  b = ppoly%coefficients(i1,2)
+  b = ppoly_coefficients(i1,2)
   u1_r = b *(h0/h1)     ! derivative evaluated at xi = 0.0, 
                         ! expressed w.r.t. xi (local coord. system)
   
@@ -209,7 +210,7 @@ subroutine PPM_boundary_extrapolation( N, h, u, ppoly )
 
   ! The right edge value in the boundary cell is taken to be the left
   ! edge value in the neighboring cell
-  u0_r = ppoly%E(i1,1)
+  u0_r = ppoly_E(i1,1)
 
   ! Given the right edge value and slope, we determine the left
   ! edge value and slope by computing the parabola as determined by
@@ -228,16 +229,16 @@ subroutine PPM_boundary_extrapolation( N, h, u, ppoly )
     u0_r = 3.0 * u0 - 2.0 * u0_l
   end if  
 
-  ppoly%E(i0,1) = u0_l
-  ppoly%E(i0,2) = u0_r
+  ppoly_E(i0,1) = u0_l
+  ppoly_E(i0,2) = u0_r
     
   a = u0_l
   b = 6.0 * u0 - 4.0 * u0_l - 2.0 * u0_r
   c = 3.0 * ( u0_r + u0_l - 2.0 * u0 )
 
-  ppoly%coefficients(i0,1) = a
-  ppoly%coefficients(i0,2) = b
-  ppoly%coefficients(i0,3) = c
+  ppoly_coefficients(i0,1) = a
+  ppoly_coefficients(i0,2) = b
+  ppoly_coefficients(i0,3) = c
   
   ! ----- Right boundary -----
   i0 = N-1
@@ -249,8 +250,8 @@ subroutine PPM_boundary_extrapolation( N, h, u, ppoly )
 
   ! Compute the right edge slope in neighboring cell and express it in
   ! the global coordinate system
-  b = ppoly%coefficients(i0,2)
-  c = ppoly%coefficients(i0,3)
+  b = ppoly_coefficients(i0,2)
+  c = ppoly_coefficients(i0,3)
   u1_l = (b + 2*c)                  ! derivative evaluated at xi = 1.0
   u1_l = u1_l * (h1/h0)
   
@@ -262,7 +263,7 @@ subroutine PPM_boundary_extrapolation( N, h, u, ppoly )
 
   ! The left edge value in the boundary cell is taken to be the right
   ! edge value in the neighboring cell
-  u0_l = ppoly%E(i0,2)
+  u0_l = ppoly_E(i0,2)
 
   ! Given the left edge value and slope, we determine the right
   ! edge value and slope by computing the parabola as determined by
@@ -281,16 +282,16 @@ subroutine PPM_boundary_extrapolation( N, h, u, ppoly )
     u0_r = 3.0 * u1 - 2.0 * u0_l
   end if  
 
-  ppoly%E(i1,1) = u0_l
-  ppoly%E(i1,2) = u0_r
+  ppoly_E(i1,1) = u0_l
+  ppoly_E(i1,2) = u0_r
     
   a = u0_l
   b = 6.0 * u1 - 4.0 * u0_l - 2.0 * u0_r
   c = 3.0 * ( u0_r + u0_l - 2.0 * u1 )
 
-  ppoly%coefficients(i1,1) = a
-  ppoly%coefficients(i1,2) = b
-  ppoly%coefficients(i1,3) = c
+  ppoly_coefficients(i1,1) = a
+  ppoly_coefficients(i1,2) = b
+  ppoly_coefficients(i1,3) = c
 
 end subroutine PPM_boundary_extrapolation
 

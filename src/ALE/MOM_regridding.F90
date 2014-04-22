@@ -19,7 +19,6 @@ use MOM_variables,     only : ocean_grid_type, thermo_var_ptrs
 use MOM_EOS,           only : calculate_density
 use MOM_string_functions,only : uppercase
 
-use regrid_ppoly_class, only : ppoly_t, ppoly_init, ppoly_destroy
 use regrid_edge_values, only : edgeValueArrays
 use regrid_edge_values, only : edge_values_explicit_h2, edge_values_explicit_h4
 use regrid_edge_values, only : edge_values_implicit_h4, edge_values_implicit_h6
@@ -51,17 +50,6 @@ implicit none ; private
 
 type, public :: regridding_CS
   private
-  ! Generic linear piecewise polynomial used for various purposes throughout 
-  ! the code (the same ppoly is used to avoid having dynamical memory allocation)
-  type(ppoly_t)                   :: ppoly_linear
-
-  ! Generic parabolic piecewise polynomial used for various purposes 
-  ! throughout the code (the same ppoly is used to avoid having dynamical 
-  ! memory allocation)
-  type(ppoly_t)                   :: ppoly_parab
-
-  type(ppoly_t)                   :: ppoly_i         ! interpolation ppoly
-  type(ppoly_t)                   :: ppoly_r         ! reconstruction ppoly
                                                     
   ! This array is set by function setCoordinateResolution
   ! It contains the "resolution" or delta coordinate of the target
@@ -75,6 +63,8 @@ type, public :: regridding_CS
   real, dimension(:), allocatable :: coordinateInterfaces
 
   integer   :: nk ! Number of layers/levels
+
+  integer   :: degree_i !Degree of interpolation polynomial
 
   ! Indicates which grid to use in the vertical (z*, sigma, target interface
   ! densities)
@@ -398,7 +388,7 @@ subroutine buildGridZstar( CS, G, h, dzInterface )
 
   nz = G%ke
   
-
+!$OMP parallel do default(private) shared(G,dzInterface,CS,nz,h)
   do j = G%jsc-1,G%jec+1
     do i = G%isc-1,G%iec+1
 
@@ -595,7 +585,9 @@ subroutine buildGridRho( G, h, tv, dzInterface, remapCS, CS )
   real      :: threshold
   real      :: max_thickness
   real      :: correction
-  
+  real, dimension(CS%nk,2) :: ppoly_i_E            !Edge value of polynomial
+  real, dimension(CS%nk,2) :: ppoly_i_S            !Edge slope of polynomial
+  real, dimension(CS%nk,CS%degree_i+1) :: ppoly_i_coefficients !Coefficients of polynomial
   real, dimension(SZK_(G)) :: p_column, densities, T_column, S_column, Tmp_column
   integer, dimension(SZK_(G)) :: mapping
   real    :: nominalDepth, totalThickness, dh
@@ -692,7 +684,8 @@ subroutine buildGridRho( G, h, tv, dzInterface, remapCS, CS )
         ! One regridding iteration
         call regridding_iteration( densities, CS%coordinateInterfaces, CS,&
                                    count_nonzero_layers, hTmp, xTmp, &
-                                   CS%ppoly_i, nz, h1, x1 )
+                                   ppoly_i_E, ppoly_i_S, ppoly_i_coefficients, &
+                                   nz, h1, x1 )
         
         ! Remap T and S from previous grid to new grid
         do k = 1,nz
@@ -893,7 +886,7 @@ end subroutine build_grid_arbitrary
 ! Regridding iterations
 !------------------------------------------------------------------------------
 subroutine regridding_iteration( densities, target_values, CS, &
-                                 n0, h0, x0, ppoly0, n1, h1, x1 )
+                                 n0, h0, x0, ppoly0_E, ppoly0_S, ppoly0_coefficients, n1, h1, x1 )
 ! ------------------------------------------------------------------------------
 ! This routine performs one single iteration of the regridding based on target
 ! interface densities. Given the set of target values and cell densities, this
@@ -910,7 +903,9 @@ subroutine regridding_iteration( densities, target_values, CS, &
   integer,             intent(in)    :: n0 ! Number of cells on source grid
   real, dimension(:),  intent(in)    :: h0 ! cell widths on source grid
   real, dimension(:),  intent(in)    :: x0 ! interface positions on source grid
-  type(ppoly_t),       intent(inout) :: ppoly0 ! Piecewise polynomial for density interpolation
+  real, dimension(:,:),intent(inout) :: ppoly0_E            !Edge value of polynomial
+  real, dimension(:,:),intent(inout) :: ppoly0_S            !Edge slope of polynomial
+  real, dimension(:,:),intent(inout) :: ppoly0_coefficients !Coefficients of polynomial 
   integer,             intent(in)    :: n1 ! Number of cells on target grid
   real, dimension(:),  intent(out)   :: h1 ! cell widths on target grid
   real, dimension(:),  intent(out)   :: x1 ! interface positions on target grid
@@ -920,66 +915,66 @@ subroutine regridding_iteration( densities, target_values, CS, &
   integer :: degree, k
 
   ! Reset piecewise polynomials
-  ppoly0%E = 0.0
-  ppoly0%S = 0.0
-  ppoly0%coefficients = 0.0
+  ppoly0_E = 0.0
+  ppoly0_S = 0.0
+  ppoly0_coefficients = 0.0
   
   ! 1. Compute the interpolated profile of the density field and build grid
   select case ( CS%interpolation_scheme )
   
     case ( INTERPOLATION_P1M_H2 )
       degree = DEGREE_1
-      call edge_values_explicit_h2( n0, h0, densities, ppoly0%E )
-      call P1M_interpolation( n0, h0, densities, ppoly0 )
+      call edge_values_explicit_h2( n0, h0, densities, ppoly0_E )
+      call P1M_interpolation( n0, h0, densities, ppoly0_E, ppoly0_coefficients )
       if ( CS%boundary_extrapolation) then
-        call P1M_boundary_extrapolation( n0, h0, densities, ppoly0 )
+        call P1M_boundary_extrapolation( n0, h0, densities, ppoly0_E, ppoly0_coefficients )
       end if    
     
     case ( INTERPOLATION_P1M_H4 )
       degree = DEGREE_1
       if ( n0 .ge. 4 ) then
-        call edge_values_explicit_h4( n0, h0, densities, ppoly0%E )
+        call edge_values_explicit_h4( n0, h0, densities, ppoly0_E )
       else
-        call edge_values_explicit_h2( n0, h0, densities, ppoly0%E )
+        call edge_values_explicit_h2( n0, h0, densities, ppoly0_E )
       end if
-      call P1M_interpolation( n0, h0, densities, ppoly0 )
+      call P1M_interpolation( n0, h0, densities, ppoly0_E, ppoly0_coefficients )
       if ( CS%boundary_extrapolation) then
-        call P1M_boundary_extrapolation( n0, h0, densities, ppoly0 )
+        call P1M_boundary_extrapolation( n0, h0, densities, ppoly0_E, ppoly0_coefficients )
       end if    
     
     case ( INTERPOLATION_P1M_IH4 )
       degree = DEGREE_1
       if ( n0 .ge. 4 ) then
-        call edge_values_implicit_h4( n0, h0, densities, CS%edgeValueWrk, ppoly0%E )
+        call edge_values_implicit_h4( n0, h0, densities, CS%edgeValueWrk, ppoly0_E )
       else
-        call edge_values_explicit_h2( n0, h0, densities, ppoly0%E )
+        call edge_values_explicit_h2( n0, h0, densities, ppoly0_E )
       end if
-      call P1M_interpolation( n0, h0, densities, ppoly0 )
+      call P1M_interpolation( n0, h0, densities, ppoly0_E, ppoly0_coefficients )
       if ( CS%boundary_extrapolation) then
-        call P1M_boundary_extrapolation( n0, h0, densities, ppoly0 )
+        call P1M_boundary_extrapolation( n0, h0, densities, ppoly0_E, ppoly0_coefficients )
       end if    
     
     case ( INTERPOLATION_PLM )   
       degree = DEGREE_1
-      call PLM_reconstruction( n0, h0, densities, ppoly0 )
+      call PLM_reconstruction( n0, h0, densities, ppoly0_E, ppoly0_coefficients )
       if ( CS%boundary_extrapolation) then
-        call PLM_boundary_extrapolation( n0, h0, densities, ppoly0 )
+        call PLM_boundary_extrapolation( n0, h0, densities, ppoly0_E, ppoly0_coefficients )
       end if    
     
     case ( INTERPOLATION_PPM_H4 )
       if ( n0 .ge. 4 ) then
         degree = DEGREE_2
-        call edge_values_explicit_h4( n0, h0, densities, ppoly0%E )
-        call PPM_reconstruction( n0, h0, densities, ppoly0 )
+        call edge_values_explicit_h4( n0, h0, densities, ppoly0_E )
+        call PPM_reconstruction( n0, h0, densities, ppoly0_E, ppoly0_coefficients )
         if ( CS%boundary_extrapolation) then
-          call PPM_boundary_extrapolation( n0, h0, densities, ppoly0 )
+          call PPM_boundary_extrapolation( n0, h0, densities, ppoly0_E, ppoly0_coefficients )
         end if  
       else
         degree = DEGREE_1
-        call edge_values_explicit_h2( n0, h0, densities, ppoly0%E )
-        call P1M_interpolation( n0, h0, densities, ppoly0 )
+        call edge_values_explicit_h2( n0, h0, densities, ppoly0_E )
+        call P1M_interpolation( n0, h0, densities, ppoly0_E, ppoly0_coefficients )
         if ( CS%boundary_extrapolation) then
-          call P1M_boundary_extrapolation( n0, h0, densities, ppoly0 )
+          call P1M_boundary_extrapolation( n0, h0, densities, ppoly0_E, ppoly0_coefficients )
         end if
       end if
     
@@ -987,17 +982,17 @@ subroutine regridding_iteration( densities, target_values, CS, &
 
       if ( n0 .ge. 4 ) then
         degree = DEGREE_2
-        call edge_values_implicit_h4( n0, h0, densities, CS%edgeValueWrk, ppoly0%E )
-        call PPM_reconstruction( n0, h0, densities, ppoly0 )
+        call edge_values_implicit_h4( n0, h0, densities, CS%edgeValueWrk, ppoly0_E )
+        call PPM_reconstruction( n0, h0, densities, ppoly0_E, ppoly0_coefficients )
         if ( CS%boundary_extrapolation) then
-          call PPM_boundary_extrapolation( n0, h0, densities, ppoly0 )
+          call PPM_boundary_extrapolation( n0, h0, densities, ppoly0_E, ppoly0_coefficients )
         end if  
       else
         degree = DEGREE_1
-        call edge_values_explicit_h2( n0, h0, densities, ppoly0%E )
-        call P1M_interpolation( n0, h0, densities, ppoly0 )
+        call edge_values_explicit_h2( n0, h0, densities, ppoly0_E )
+        call P1M_interpolation( n0, h0, densities, ppoly0_E, ppoly0_coefficients )
         if ( CS%boundary_extrapolation) then
-          call P1M_boundary_extrapolation( n0, h0, densities, ppoly0 )
+          call P1M_boundary_extrapolation( n0, h0, densities, ppoly0_E, ppoly0_coefficients )
         end if  
       end if
     
@@ -1005,36 +1000,36 @@ subroutine regridding_iteration( densities, target_values, CS, &
       
       if ( n0 .ge. 4 ) then
         degree = DEGREE_3
-        call edge_values_implicit_h4( n0, h0, densities, CS%edgeValueWrk, ppoly0%E )
-        call edge_slopes_implicit_h3( n0, h0, densities, CS%edgeSlopeWrk, ppoly0%S )
-        call P3M_interpolation( n0, h0, densities, ppoly0 )
+        call edge_values_implicit_h4( n0, h0, densities, CS%edgeValueWrk, ppoly0_E )
+        call edge_slopes_implicit_h3( n0, h0, densities, CS%edgeSlopeWrk, ppoly0_S )
+        call P3M_interpolation( n0, h0, densities, ppoly0_E, ppoly0_S, ppoly0_coefficients )
         if ( CS%boundary_extrapolation) then
-          call P3M_boundary_extrapolation( n0, h0, densities, ppoly0 )
+          call P3M_boundary_extrapolation( n0, h0, densities, ppoly0_E, ppoly0_S, ppoly0_coefficients )
         end if  
       else
         degree = DEGREE_1
-        call edge_values_explicit_h2( n0, h0, densities, ppoly0%E )
-        call P1M_interpolation( n0, h0, densities, ppoly0 )
+        call edge_values_explicit_h2( n0, h0, densities, ppoly0_E )
+        call P1M_interpolation( n0, h0, densities, ppoly0_E, ppoly0_coefficients )
         if ( CS%boundary_extrapolation) then
-          call P1M_boundary_extrapolation( n0, h0, densities, ppoly0 )
+          call P1M_boundary_extrapolation( n0, h0, densities, ppoly0_E, ppoly0_coefficients )
         end if  
       end if
       
     case ( INTERPOLATION_P3M_IH6IH5 )
       if ( n0 .ge. 6 ) then
         degree = DEGREE_3
-        call edge_values_implicit_h6( n0, h0, densities, CS%edgeValueWrk, ppoly0%E )
-        call edge_slopes_implicit_h5( n0, h0, densities, CS%edgeSlopeWrk, ppoly0%S )
-        call P3M_interpolation( n0, h0, densities, ppoly0 )
+        call edge_values_implicit_h6( n0, h0, densities, CS%edgeValueWrk, ppoly0_E )
+        call edge_slopes_implicit_h5( n0, h0, densities, CS%edgeSlopeWrk, ppoly0_S )
+        call P3M_interpolation( n0, h0, densities, ppoly0_E, ppoly0_S, ppoly0_coefficients )
         if ( CS%boundary_extrapolation) then
-          call P3M_boundary_extrapolation( n0, h0, densities, ppoly0 )
+          call P3M_boundary_extrapolation( n0, h0, densities, ppoly0_E, ppoly0_S, ppoly0_coefficients )
         end if  
       else
         degree = DEGREE_1
-        call edge_values_explicit_h2( n0, h0, densities, ppoly0%E )
-        call P1M_interpolation( n0, h0, densities, ppoly0 )
+        call edge_values_explicit_h2( n0, h0, densities, ppoly0_E )
+        call P1M_interpolation( n0, h0, densities, ppoly0_E, ppoly0_coefficients )
         if ( CS%boundary_extrapolation) then
-          call P1M_boundary_extrapolation( n0, h0, densities, ppoly0 )
+          call P1M_boundary_extrapolation( n0, h0, densities, ppoly0_E, ppoly0_coefficients )
         end if  
       end if
     
@@ -1042,36 +1037,36 @@ subroutine regridding_iteration( densities, target_values, CS, &
     
       if ( n0 .ge. 4 ) then
         degree = DEGREE_4
-        call edge_values_implicit_h4( n0, h0, densities, CS%edgeValueWrk, ppoly0%E )
-        call edge_slopes_implicit_h3( n0, h0, densities, CS%edgeSlopeWrk, ppoly0%S )
-        call PQM_reconstruction( n0, h0, densities, ppoly0 )
+        call edge_values_implicit_h4( n0, h0, densities, CS%edgeValueWrk, ppoly0_E )
+        call edge_slopes_implicit_h3( n0, h0, densities, CS%edgeSlopeWrk, ppoly0_S )
+        call PQM_reconstruction( n0, h0, densities, ppoly0_E, ppoly0_S, ppoly0_coefficients )
         if ( CS%boundary_extrapolation) then
-          call PQM_boundary_extrapolation_v1( n0, h0, densities, ppoly0 )
+          call PQM_boundary_extrapolation_v1( n0, h0, densities, ppoly0_E, ppoly0_S, ppoly0_coefficients )
         end if  
       else
         degree = DEGREE_1
-        call edge_values_explicit_h2( n0, h0, densities, ppoly0%E )
-        call P1M_interpolation( n0, h0, densities, ppoly0 )
+        call edge_values_explicit_h2( n0, h0, densities, ppoly0_E )
+        call P1M_interpolation( n0, h0, densities, ppoly0_E, ppoly0_coefficients )
         if ( CS%boundary_extrapolation) then
-          call P1M_boundary_extrapolation( n0, h0, densities, ppoly0 )
+          call P1M_boundary_extrapolation( n0, h0, densities, ppoly0_E, ppoly0_coefficients )
         end if  
       end if
     
     case ( INTERPOLATION_PQM_IH6IH5 )
       if ( n0 .ge. 6 ) then
         degree = DEGREE_4
-        call edge_values_implicit_h6( n0, h0, densities, CS%edgeValueWrk, ppoly0%E )
-        call edge_slopes_implicit_h5( n0, h0, densities, CS%edgeSlopeWrk, ppoly0%S )
-        call PQM_reconstruction( n0, h0, densities, ppoly0 )
+        call edge_values_implicit_h6( n0, h0, densities, CS%edgeValueWrk, ppoly0_E )
+        call edge_slopes_implicit_h5( n0, h0, densities, CS%edgeSlopeWrk, ppoly0_S )
+        call PQM_reconstruction( n0, h0, densities, ppoly0_E, ppoly0_S, ppoly0_coefficients )
         if ( CS%boundary_extrapolation) then
-          call PQM_boundary_extrapolation_v1( n0, h0, densities, ppoly0 )
+          call PQM_boundary_extrapolation_v1( n0, h0, densities, ppoly0_E, ppoly0_S, ppoly0_coefficients )
         end if  
       else
         degree = DEGREE_1
-        call edge_values_explicit_h2( n0, h0, densities, ppoly0%E )
-        call P1M_interpolation( n0, h0, densities, ppoly0 )
+        call edge_values_explicit_h2( n0, h0, densities, ppoly0_E )
+        call P1M_interpolation( n0, h0, densities, ppoly0_E, ppoly0_coefficients )
         if ( CS%boundary_extrapolation) then
-          call P1M_boundary_extrapolation( n0, h0, densities, ppoly0 )
+          call P1M_boundary_extrapolation( n0, h0, densities, ppoly0_E, ppoly0_coefficients )
         end if  
       end if
     
@@ -1079,7 +1074,7 @@ subroutine regridding_iteration( densities, target_values, CS, &
   
   ! Based on global density profile, interpolate new grid and 
   ! inflate vanished layers    
-  call interpolate_grid( n0, h0, x0, ppoly0, target_values, degree, n1, h1, x1 )
+  call interpolate_grid( n0, h0, x0, ppoly0_E, ppoly0_coefficients, target_values, degree, n1, h1, x1 )
   call inflate_vanished_layers( CS%min_thickness, n1, h1 )
   x1(1) = 0.0
   do k = 1,n1
@@ -1092,7 +1087,7 @@ end subroutine regridding_iteration
 !------------------------------------------------------------------------------
 ! Given target values (e.g., density), build new grid based on polynomial 
 !------------------------------------------------------------------------------
-subroutine interpolate_grid( n0, h0, x0, ppoly0, target_values, degree, n1, h1, x1 )
+subroutine interpolate_grid( n0, h0, x0, ppoly0_E, ppoly0_coefficients, target_values, degree, n1, h1, x1 )
 ! ------------------------------------------------------------------------------
 ! Given the grid 'grid0' and the piecewise polynomial interpolant 
 ! 'ppoly0' (possibly discontinuous), the coordinates of the new grid 'grid1' 
@@ -1103,7 +1098,8 @@ subroutine interpolate_grid( n0, h0, x0, ppoly0, target_values, degree, n1, h1, 
   integer,            intent(in)    :: n0
   real, dimension(:), intent(in)    :: h0
   real, dimension(:), intent(in)    :: x0
-  type(ppoly_t),      intent(in)    :: ppoly0
+  real, dimension(:,:), intent(in)  :: ppoly0_E            !Edge value of polynomial
+  real, dimension(:,:), intent(in)  :: ppoly0_coefficients !Coefficients of polynomial  
   real, dimension(:), intent(in)    :: target_values
   integer,            intent(in)    :: degree
   integer,            intent(in)    :: n1
@@ -1122,7 +1118,7 @@ subroutine interpolate_grid( n0, h0, x0, ppoly0, target_values, degree, n1, h1, 
   ! Find coordinates for interior target values
   do k = 2,n1
     t = target_values(k)
-    x1(k) = get_polynomial_coordinate ( n0, h0, ppoly0, t, degree )
+    x1(k) = get_polynomial_coordinate ( n0, h0, ppoly0_E, ppoly0_coefficients, t, degree )
     h1(k-1) = x1(k) - x1(k-1)
   end do
   h1(n1) = x1(n1+1) - x1(n1)
@@ -1133,7 +1129,7 @@ end subroutine interpolate_grid
 !------------------------------------------------------------------------------
 ! Given target value, find corresponding coordinate for given polynomial
 !------------------------------------------------------------------------------
-real function get_polynomial_coordinate ( N, h, ppoly, target_value, degree )
+real function get_polynomial_coordinate ( N, h, ppoly_E, ppoly_coefficients, target_value, degree )
 ! ------------------------------------------------------------------------------
 ! Here, 'ppoly' is assumed to be a piecewise discontinuous polynomial of degree
 ! 'degree' throughout the domain defined by 'grid'. A target value is given 
@@ -1154,7 +1150,8 @@ real function get_polynomial_coordinate ( N, h, ppoly, target_value, degree )
   ! Arguments
   integer,        intent(in)  :: N
   real,           intent(in)  :: h(:) ! size n
-  type(ppoly_t),  intent(in)  :: ppoly
+  real,           intent(in)  :: ppoly_E(:,:)            !Edge value of polynomial
+  real,           intent(in)  :: ppoly_coefficients(:,:) !Coefficients of polynomial
   real,           intent(in)  :: target_value
   integer,        intent(in)  :: degree
 
@@ -1181,7 +1178,7 @@ real function get_polynomial_coordinate ( N, h, ppoly, target_value, degree )
   ! If the target value is outside the range of all values, we
   ! force the target coordinate to be equal to the lowest or
   ! largest value, depending on which bound is overtaken
-  if ( target_value .LE. ppoly%E(1,1) ) then
+  if ( target_value .LE. ppoly_E(1,1) ) then
     x = 0. ! Left boundary is at x=0
     get_polynomial_coordinate = x
     return  ! return because there is no need to look further
@@ -1192,8 +1189,8 @@ real function get_polynomial_coordinate ( N, h, ppoly, target_value, degree )
     x = 0. ! Left boundary is at x=0
   do k = 2,N
     x = x + h(k-1) ! Position of interface k
-    if ( ( target_value .GE. ppoly%E(k-1,2) ) .AND. &
-       ( target_value .LE. ppoly%E(k,1) ) ) then
+    if ( ( target_value .GE. ppoly_E(k-1,2) ) .AND. &
+       ( target_value .LE. ppoly_E(k,1) ) ) then
        get_polynomial_coordinate = x
        return   ! return because there is no need to look further
        exit
@@ -1204,7 +1201,7 @@ real function get_polynomial_coordinate ( N, h, ppoly, target_value, degree )
   ! force the target coordinate to be equal to the lowest or
   ! largest value, depending on which bound is overtaken
   x = x + h(N) ! Position of right boundary
-  if ( target_value .GE. ppoly%E(N,2) ) then
+  if ( target_value .GE. ppoly_E(N,2) ) then
     get_polynomial_coordinate = x
     return  ! return because there is no need to look further
   end if
@@ -1218,8 +1215,8 @@ real function get_polynomial_coordinate ( N, h, ppoly, target_value, degree )
   do k = 1,N
     x_l = x_r
     x_r = x_l + h(k)
-    if ( ( target_value .GT. ppoly%E(k,1) ) .AND. &
-       ( target_value .LT. ppoly%E(k,2) ) ) then
+    if ( ( target_value .GT. ppoly_E(k,1) ) .AND. &
+       ( target_value .LT. ppoly_E(k,2) ) ) then
        k_found = k
        exit
     end if   
@@ -1231,7 +1228,7 @@ real function get_polynomial_coordinate ( N, h, ppoly, target_value, degree )
   ! means there is a major problem with the interpolant. This needs to be
   ! reported.
   if ( k_found .EQ. -1 ) then
-      write(*,*) target_value, ppoly%E(1,1), ppoly%E(N,2)
+      write(*,*) target_value, ppoly_E(1,1), ppoly_E(N,2)
       write(*,*) 'Could not find target coordinate in ' //&
                  '"get_polynomial_coordinate". This is caused by an '//&
                  'inconsistent interpolant (perhaps not monotonically '//&
@@ -1243,7 +1240,7 @@ real function get_polynomial_coordinate ( N, h, ppoly, target_value, degree )
   ! the found cell
   a(:) = 0.0
   do i = 1,degree+1
-    a(i) = ppoly%coefficients(k_found,i)
+    a(i) = ppoly_coefficients(k_found,i)
   end do
     
   ! Guess value to start Newton-Raphson iterations (middle of cell) 
@@ -1656,18 +1653,6 @@ subroutine allocate_regridding( CS )
   ! Target values
   allocate( CS%coordinateInterfaces(CS%nk+1) )
 
-  ! Piecewise polynomials used for remapping
-  call ppoly_init( CS%ppoly_r, CS%nk, 4 )
-  
-  ! Piecewise polynomials used for interpolation
-  call ppoly_init( CS%ppoly_i, CS%nk, 4 )
-  
-  ! Generic linear piecewise polynomial
-  call ppoly_init( CS%ppoly_linear, CS%nk, 1 )
-  
-  ! Generic parabolic piecewise polynomial
-  call ppoly_init( CS%ppoly_parab, CS%nk, 2 )
-  
   ! Target resolution (for fixed coordinates)
   allocate( CS%coordinateResolution(CS%nk) ); CS%coordinateResolution(:) = -1.E30
 
@@ -1690,12 +1675,6 @@ subroutine regridding_memory_deallocation( CS )
   
   ! Target values
   deallocate( CS%coordinateInterfaces )
-
-  ! Piecewise polynomials
-  call ppoly_destroy( CS%ppoly_i )
-  call ppoly_destroy( CS%ppoly_r )
-  call ppoly_destroy( CS%ppoly_linear )
-  call ppoly_destroy( CS%ppoly_parab )
 
 end subroutine regridding_memory_deallocation
 

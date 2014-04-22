@@ -24,7 +24,6 @@ use MOM_EOS,           only : calculate_density
 use MOM_string_functions, only : uppercase, extractWord
 use MOM_verticalGrid,  only : verticalGrid_type
 
-use regrid_ppoly_class, only : ppoly_t, ppoly_init, ppoly_destroy
 use regrid_edge_values, only : edgeValueArrays
 use regrid_edge_values, only : edge_values_implicit_h4
 use regrid_edge_values, only : triDiagEdgeWorkAllocate, triDiagEdgeWorkDeallocate
@@ -67,14 +66,6 @@ implicit none ; private
 
 type, public :: ALE_CS
   private
-  ! Generic linear piecewise polynomial used for various purposes throughout 
-  ! the code (the same ppoly is used to avoid having dynamical memory allocation)
-  type(ppoly_t) :: ppoly_linear
-
-  ! Generic parabolic piecewise polynomial used for various purposes 
-  ! throughout the code (the same ppoly is used to avoid having dynamical 
-  ! memory allocation)
-  type(ppoly_t) :: ppoly_parab
 
   ! Indicate whether high-order boundary extrapolation should be used within
   ! boundary cells
@@ -96,6 +87,10 @@ type, public :: ALE_CS
 
   ! Used only for queries, not directly by this module
   integer :: nk
+
+  integer :: degree_linear=1  ! Degree of linear piecewise polynomial
+  integer :: degree_parab=2   ! Degree of parabolic piecewise polynomial
+
 
   ! Work space for communicating between regridding and remapping
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_,NK_INTERFACE_) :: dzRegrid
@@ -325,12 +320,18 @@ subroutine pressure_gradient_plm( CS, S_t, S_b, T_t, T_b, G, tv, h )
   ! Local variables
   integer :: i, j, k
   real    :: hTmp(G%ke)
+  real, dimension(CS%nk,2) :: &
+      ppoly_linear_E            !Edge value of polynomial
+  real, dimension(CS%nk,CS%degree_linear+1) :: &
+      ppoly_linear_coefficients !Coefficients of polynomial
+
 
   ! NOTE: the variables 'CS%grid_generic' and 'CS%ppoly_linear' are declared at
   ! the module level. Memory is allocated once at the beginning of the run
   ! in 'ALE_memory_allocation'.
 
   ! Determine reconstruction within each column
+!$OMP parallel do default(shared) private(hTmp,ppoly_linear_E,ppoly_linear_coefficients)
   do i = G%isc,G%iec+1
     do j = G%jsc,G%jec+1
      
@@ -338,27 +339,27 @@ subroutine pressure_gradient_plm( CS, S_t, S_b, T_t, T_b, G, tv, h )
       hTmp(:) = h(i,j,:)
       
       ! Reconstruct salinity profile    
-      CS%ppoly_linear%E = 0.0
-      CS%ppoly_linear%coefficients = 0.0
-      call PLM_reconstruction( G%ke, hTmp, tv%S(i,j,:), CS%ppoly_linear )
+      ppoly_linear_E = 0.0
+      ppoly_linear_coefficients = 0.0
+      call PLM_reconstruction( G%ke, hTmp, tv%S(i,j,:), ppoly_linear_E, ppoly_linear_coefficients )
       if (CS%boundary_extrapolation_for_pressure) call &
-        PLM_boundary_extrapolation( G%ke, hTmp, tv%S(i,j,:), CS%ppoly_linear )
+        PLM_boundary_extrapolation( G%ke, hTmp, tv%S(i,j,:), ppoly_linear_E, ppoly_linear_coefficients )
       
       do k = 1,G%ke
-        S_t(i,j,k) = CS%ppoly_linear%E(k,1)
-        S_b(i,j,k) = CS%ppoly_linear%E(k,2)
+        S_t(i,j,k) = ppoly_linear_E(k,1)
+        S_b(i,j,k) = ppoly_linear_E(k,2)
       end do
       
       ! Reconstruct temperature profile 
-      CS%ppoly_linear%E = 0.0
-      CS%ppoly_linear%coefficients = 0.0
-      call PLM_reconstruction( G%ke, hTmp, tv%T(i,j,:), CS%ppoly_linear )
+      ppoly_linear_E = 0.0
+      ppoly_linear_coefficients = 0.0
+      call PLM_reconstruction( G%ke, hTmp, tv%T(i,j,:), ppoly_linear_E, ppoly_linear_coefficients )
       if (CS%boundary_extrapolation_for_pressure) call &
-        PLM_boundary_extrapolation( G%ke, hTmp, tv%T(i,j,:), CS%ppoly_linear )
+        PLM_boundary_extrapolation( G%ke, hTmp, tv%T(i,j,:), ppoly_linear_E, ppoly_linear_coefficients )
       
       do k = 1,G%ke
-        T_t(i,j,k) = CS%ppoly_linear%E(k,1)
-        T_b(i,j,k) = CS%ppoly_linear%E(k,2)
+        T_t(i,j,k) = ppoly_linear_E(k,1)
+        T_b(i,j,k) = ppoly_linear_E(k,2)
       end do
       
     end do
@@ -392,12 +393,18 @@ subroutine pressure_gradient_ppm( CS, S_t, S_b, T_t, T_b, G, tv, h )
   ! Local variables
   integer :: i, j, k
   real    :: hTmp(G%ke)
+  real, dimension(CS%nk,2) :: &
+      ppoly_parab_E            !Edge value of polynomial
+  real, dimension(CS%nk,CS%degree_parab+1) :: &
+      ppoly_parab_coefficients !Coefficients of polynomial
+
 
   ! NOTE: the variables 'CS%grid_generic' and 'CS%ppoly_parab' are declared at
   ! the module level. Memory is allocated once at the beginning of the run
   ! in 'ALE_memory_allocation'.
 
   ! Determine reconstruction within each column
+!$OMP parallel do default(shared) private(hTmp,ppoly_parab_E,ppoly_parab_coefficients)
   do i = G%isc,G%iec+1
     do j = G%jsc,G%jec+1
      
@@ -405,29 +412,29 @@ subroutine pressure_gradient_ppm( CS, S_t, S_b, T_t, T_b, G, tv, h )
       hTmp(:) = h(i,j,:)
       
       ! Reconstruct salinity profile    
-      CS%ppoly_parab%E = 0.0
-      CS%ppoly_parab%coefficients = 0.0
-      call edge_values_implicit_h4( G%ke, hTmp, tv%S(i,j,:), CS%edgeValueWrk, CS%ppoly_parab%E )
-      call PPM_reconstruction( G%ke, hTmp, tv%S(i,j,:), CS%ppoly_parab )
+      ppoly_parab_E = 0.0
+      ppoly_parab_coefficients = 0.0
+      call edge_values_implicit_h4( G%ke, hTmp, tv%S(i,j,:), CS%edgeValueWrk, ppoly_parab_E )
+      call PPM_reconstruction( G%ke, hTmp, tv%S(i,j,:), ppoly_parab_E, ppoly_parab_coefficients )
       if (CS%boundary_extrapolation_for_pressure) call &
-        PPM_boundary_extrapolation( G%ke, hTmp, tv%S(i,j,:), CS%ppoly_parab )
+        PPM_boundary_extrapolation( G%ke, hTmp, tv%S(i,j,:), ppoly_parab_E, ppoly_parab_coefficients )
       
       do k = 1,G%ke
-        S_t(i,j,k) = CS%ppoly_parab%E(k,1)
-        S_b(i,j,k) = CS%ppoly_parab%E(k,2)
+        S_t(i,j,k) = ppoly_parab_E(k,1)
+        S_b(i,j,k) = ppoly_parab_E(k,2)
       end do
       
       ! Reconstruct temperature profile 
-      CS%ppoly_parab%E = 0.0
-      CS%ppoly_parab%coefficients = 0.0
-      call edge_values_implicit_h4( G%ke, hTmp, tv%T(i,j,:), CS%edgeValueWrk, CS%ppoly_parab%E )
-      call PPM_reconstruction( G%ke, hTmp, tv%T(i,j,:), CS%ppoly_parab )
+      ppoly_parab_E = 0.0
+      ppoly_parab_coefficients = 0.0
+      call edge_values_implicit_h4( G%ke, hTmp, tv%T(i,j,:), CS%edgeValueWrk, ppoly_parab_E )
+      call PPM_reconstruction( G%ke, hTmp, tv%T(i,j,:), ppoly_parab_E, ppoly_parab_coefficients )
       if (CS%boundary_extrapolation_for_pressure) call &
-        PPM_boundary_extrapolation( G%ke, hTmp, tv%T(i,j,:), CS%ppoly_parab )
+        PPM_boundary_extrapolation( G%ke, hTmp, tv%T(i,j,:), ppoly_parab_E, ppoly_parab_coefficients )
       
       do k = 1,G%ke
-        T_t(i,j,k) = CS%ppoly_parab%E(k,1)
-        T_b(i,j,k) = CS%ppoly_parab%E(k,2)
+        T_t(i,j,k) = ppoly_parab_E(k,1)
+        T_b(i,j,k) = ppoly_parab_E(k,2)
       end do
       
     end do
@@ -462,12 +469,6 @@ subroutine ALE_memory_allocation( G, CS )
   call triDiagEdgeWorkAllocate( nz, CS%edgeValueWrk )
   call triDiagSlopeWorkAllocate( nz, CS%edgeSlopeWrk )
 
-  ! Generic linear piecewise polynomial
-  call ppoly_init( CS%ppoly_linear, nz, 1 )
-  
-  ! Generic parabolic piecewise polynomial
-  call ppoly_init( CS%ppoly_parab, nz, 2 )
-
   ! Work space
   ALLOC_(CS%dzRegrid(G%isd:G%ied,G%jsd:G%jed,nz+1)); CS%dzRegrid(:,:,:) = 0.
   
@@ -488,10 +489,6 @@ subroutine ALE_memory_deallocation( CS )
   call triDiagEdgeWorkDeallocate( CS%edgeValueWrk )
   call triDiagSlopeWorkDeallocate( CS%edgeSlopeWrk )
   
-  ! Piecewise polynomials
-  call ppoly_destroy( CS%ppoly_linear )
-  call ppoly_destroy( CS%ppoly_parab )
-
   ! Work space
   DEALLOC_(CS%dzRegrid)
 

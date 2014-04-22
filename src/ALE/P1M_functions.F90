@@ -25,7 +25,6 @@ module P1M_functions
 ! P1M_boundary_extrapolation (public)
 !
 !==============================================================================
-use regrid_ppoly_class, only : ppoly_t
 use regrid_edge_values, only : bound_edge_values, average_discontinuous_edge_values
 
 implicit none ; private
@@ -41,7 +40,7 @@ contains
 !------------------------------------------------------------------------------
 ! p1m interpolation
 !------------------------------------------------------------------------------
-subroutine P1M_interpolation( N, h, u, ppoly )
+subroutine P1M_interpolation( N, h, u, ppoly_E, ppoly_coefficients )
 ! ------------------------------------------------------------------------------
 ! Linearly interpolate between edge values. 
 ! The resulting piecewise interpolant is stored in 'ppoly'.
@@ -60,27 +59,29 @@ subroutine P1M_interpolation( N, h, u, ppoly )
   integer,            intent(in)    :: N ! Number of cells
   real, dimension(:), intent(in)    :: h ! cell widths (size N)
   real, dimension(:), intent(in)    :: u ! cell averages (size N)
-  type(ppoly_t),      intent(inout) :: ppoly
+  real, dimension(:,:), intent(inout) :: ppoly_E
+  real, dimension(:,:), intent(inout) :: ppoly_coefficients
+
 
   ! Local variables
   integer   :: k            ! loop index
   real      :: u0_l, u0_r   ! edge values (left and right)
 
   ! Bound edge values (routine found in 'edge_values.F90')
-  call bound_edge_values( N, h, u, ppoly%E )
+  call bound_edge_values( N, h, u, ppoly_E )
   
   ! Systematically average discontinuous edge values (routine found in
   ! 'edge_values.F90')
-  call average_discontinuous_edge_values( N, ppoly%E )
+  call average_discontinuous_edge_values( N, ppoly_E )
   
   ! Loop on interior cells to build interpolants
   do k = 1,N
   
-    u0_l = ppoly%E(k,1)
-    u0_r = ppoly%E(k,2)
+    u0_l = ppoly_E(k,1)
+    u0_r = ppoly_E(k,2)
     
-    ppoly%coefficients(k,1) = u0_l
-    ppoly%coefficients(k,2) = u0_r - u0_l
+    ppoly_coefficients(k,1) = u0_l
+    ppoly_coefficients(k,2) = u0_r - u0_l
   
   end do ! end loop on interior cells
 
@@ -90,7 +91,7 @@ end subroutine P1M_interpolation
 !------------------------------------------------------------------------------
 ! p1m boundary extrapolation
 ! -----------------------------------------------------------------------------
-subroutine P1M_boundary_extrapolation( N, h, u, ppoly )
+subroutine P1M_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coefficients )
 !------------------------------------------------------------------------------
 ! Interpolation by linear polynomials within boundary cells.
 ! The left and right edge values in the left and right boundary cells,
@@ -108,7 +109,8 @@ subroutine P1M_boundary_extrapolation( N, h, u, ppoly )
   integer,            intent(in)    :: N ! Number of cells
   real, dimension(:), intent(in)    :: h ! cell widths (size N)
   real, dimension(:), intent(in)    :: u ! cell averages (size N)
-  type(ppoly_t),      intent(inout) :: ppoly
+  real, dimension(:,:), intent(inout) :: ppoly_E
+  real, dimension(:,:), intent(inout) :: ppoly_coefficients
 
   ! Local variables
   real          :: u0, u1               ! cell averages
@@ -136,20 +138,20 @@ subroutine P1M_boundary_extrapolation( N, h, u, ppoly )
   ! by using the edge value in the neighboring cell.
   u0_r = u0 + 0.5 * slope
 
-  if ( (u1 - u0) * (ppoly%E(2,1) - u0_r) .LT. 0.0 ) then
-    slope = 2.0 * ( ppoly%E(2,1) - u0 )
+  if ( (u1 - u0) * (ppoly_E(2,1) - u0_r) .LT. 0.0 ) then
+    slope = 2.0 * ( ppoly_E(2,1) - u0 )
   end if
   
   ! Using the limited slope, the left edge value is reevaluated and 
   ! the interpolant coefficients recomputed
   if ( h0 .NE. 0.0 ) then
-    ppoly%E(1,1) = u0 - 0.5 * slope
+    ppoly_E(1,1) = u0 - 0.5 * slope
   else
-    ppoly%E(1,1) = u0
+    ppoly_E(1,1) = u0
   end if    
   
-  ppoly%coefficients(1,1) = ppoly%E(1,1)
-  ppoly%coefficients(1,2) = ppoly%E(1,2) - ppoly%E(1,1)
+  ppoly_coefficients(1,1) = ppoly_E(1,1)
+  ppoly_coefficients(1,2) = ppoly_E(1,2) - ppoly_E(1,1)
   
   ! ------------------------------------------
   ! Right edge value in the left boundary cell
@@ -164,18 +166,18 @@ subroutine P1M_boundary_extrapolation( N, h, u, ppoly )
   
   u0_l = u1 - 0.5 * slope
 
-  if ( (u1 - u0) * (u0_l - ppoly%E(N-1,2)) .LT. 0.0 ) then
-    slope = 2.0 * ( u1 - ppoly%E(N-1,2) )
+  if ( (u1 - u0) * (u0_l - ppoly_E(N-1,2)) .LT. 0.0 ) then
+    slope = 2.0 * ( u1 - ppoly_E(N-1,2) )
   end if
   
   if ( h1 .NE. 0.0 ) then
-    ppoly%E(N,2) = u1 + 0.5 * slope
+    ppoly_E(N,2) = u1 + 0.5 * slope
   else
-    ppoly%E(N,2) = u1
+    ppoly_E(N,2) = u1
   end if    
   
-  ppoly%coefficients(N,1) = ppoly%E(N,1)
-  ppoly%coefficients(N,2) = ppoly%E(N,2) - ppoly%E(N,1)
+  ppoly_coefficients(N,1) = ppoly_E(N,1)
+  ppoly_coefficients(N,2) = ppoly_E(N,2) - ppoly_E(N,1)
 
 end subroutine P1M_boundary_extrapolation
 
