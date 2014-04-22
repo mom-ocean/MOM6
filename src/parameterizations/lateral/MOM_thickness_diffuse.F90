@@ -478,7 +478,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
   use_EOS = associated(tv%eqn_of_state)
   MEKE_not_null = (LOC(MEKE) .NE. 0)
   present_int_slope_u = PRESENT(int_slope_u)
-  present_int_slope_u = PRESENT(int_slope_v)
+  present_int_slope_v = PRESENT(int_slope_v)
 
   nk_linear = max(G%nkml, 1)
 
