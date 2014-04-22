@@ -699,7 +699,7 @@ subroutine OCMIP2_CFC_surface_state(state, h, G, CS)
   if (.not.associated(CS)) return
 
   do j=js,je ; do i=is,ie
-    ta = (state%SST(i,j) + 273.15) * 0.01 ! Why is this in hectoKelvin?
+    ta = max(0.01, (state%SST(i,j) + 273.15) * 0.01) ! Why is this in hectoKelvin?
     sal = state%SSS(i,j) ; SST = state%SST(i,j)
     !    Calculate solubilities using Warner and Weiss (1985) DSR, vol 32.
     ! The final result is in mol/cm3/pptv (1 part per trillion 1e-12)
@@ -717,11 +717,12 @@ subroutine OCMIP2_CFC_surface_state(state, h, G, CS)
             G%mask2dT(i,j)
     sc_12 = CS%a1_12 + SST * (CS%a2_12 + SST * (CS%a3_12 + SST * CS%a4_12)) * &
             G%mask2dT(i,j)
-    sc_no_term = sqrt(660.0 / (sc_11 + 1.0e-30))
+    ! The abs here is to avoid NaNs. The model should be failing at this point.
+    sc_no_term = sqrt(660.0 / (abs(sc_11) + 1.0e-30))
     CFC11_alpha(i,j) = alpha_11 * sc_no_term
     CFC11_Csurf(i,j) = CS%CFC11(i,j,1) * sc_no_term
 
-    sc_no_term = sqrt(660.0 / (sc_12 + 1.0e-30))
+    sc_no_term = sqrt(660.0 / (abs(sc_12) + 1.0e-30))
     CFC12_alpha(i,j) = alpha_12 * sc_no_term
     CFC12_Csurf(i,j) = CS%CFC12(i,j,1) * sc_no_term
   enddo ; enddo
