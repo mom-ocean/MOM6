@@ -10,7 +10,6 @@ module PLM_functions
 ! reconstruction using the piecewise linear method (PLM).
 !
 !==============================================================================
-use regrid_ppoly_class, only : ppoly_t
 
 implicit none ; private
 
@@ -21,7 +20,7 @@ contains
 !------------------------------------------------------------------------------
 ! PLM_reconstruction
 ! -----------------------------------------------------------------------------
-subroutine PLM_reconstruction( N, h, u, ppoly )
+subroutine PLM_reconstruction( N, h, u, ppoly_E, ppoly_coefficients )
 !------------------------------------------------------------------------------
 ! Reconstruction by linear polynomials within each cell.
 !
@@ -34,10 +33,11 @@ subroutine PLM_reconstruction( N, h, u, ppoly )
 !------------------------------------------------------------------------------
 
   ! Arguments
-  integer,            intent(in)    :: N ! Number of cells
-  real, dimension(:), intent(in)    :: h ! cell widths (size N)
-  real, dimension(:), intent(in)    :: u ! cell averages (size N)
-  type(ppoly_t),      intent(inout) :: ppoly
+  integer,              intent(in)    :: N ! Number of cells
+  real, dimension(:),   intent(in)    :: h ! cell widths (size N)
+  real, dimension(:),   intent(in)    :: u ! cell averages (size N)
+  real, dimension(:,:), intent(inout) :: ppoly_E
+  real, dimension(:,:), intent(inout) :: ppoly_coefficients
 
   ! Local variables
   integer       :: k                    ! loop index
@@ -82,10 +82,10 @@ subroutine PLM_reconstruction( N, h, u, ppoly )
     a = u_c - 0.5 * slope
     b = slope
 
-    ppoly%coefficients(k,1) = a
-    ppoly%coefficients(k,2) = b
-    ppoly%E(k,1) = a
-    ppoly%E(k,2) = a+b
+    ppoly_coefficients(k,1) = a
+    ppoly_coefficients(k,2) = b
+    ppoly_E(k,1) = a
+    ppoly_E(k,2) = a+b
         
   end do ! end loop on interior cells
 
@@ -98,31 +98,31 @@ subroutine PLM_reconstruction( N, h, u, ppoly )
   slope = 0.0
   a = u(1) - 0.5 * slope
   b = slope
-  ppoly%coefficients(1,1) = a
-  ppoly%coefficients(1,2) = b
-  ppoly%E(1,1) = a
-  ppoly%E(1,2) = a+b
+  ppoly_coefficients(1,1) = a
+  ppoly_coefficients(1,2) = b
+  ppoly_E(1,1) = a
+  ppoly_E(1,2) = a+b
   
   ! Right (bottom) boundary cell
   slope = u(N) - u(N-1)
   slope = 0.0
   a = u(N) - 0.5 * slope
   b = slope
-  ppoly%coefficients(N,1) = a
-  ppoly%coefficients(N,2) = b
-  ppoly%E(N,1) = a
-  ppoly%E(N,2) = a+b
+  ppoly_coefficients(N,1) = a
+  ppoly_coefficients(N,2) = b
+  ppoly_E(N,1) = a
+  ppoly_E(N,2) = a+b
 
   ! Second pass: we need to check for nonmonotonic discontinuous edge values.
   ! When this occurs, the PLM slope is redefined so as to ensure monotonic edge
   ! values across edges.
   allocate( E_old(N,2) )
-  E_old = ppoly%E
+  E_old = ppoly_E
   
   do k = 2,N-1
 
     ! By default, the right and left slopes are both equal to the original slope
-    slope = ppoly%coefficients(k,2)
+    slope = ppoly_coefficients(k,2)
     sigma_l = slope
     sigma_r = slope
     
@@ -147,10 +147,10 @@ subroutine PLM_reconstruction( N, h, u, ppoly )
     a = u(k) - 0.5 * slope
     b = slope
 
-    ppoly%coefficients(k,1) = a
-    ppoly%coefficients(k,2) = b
-    ppoly%E(k,1) = a
-    ppoly%E(k,2) = a+b
+    ppoly_coefficients(k,1) = a
+    ppoly_coefficients(k,2) = b
+    ppoly_E(k,1) = a
+    ppoly_E(k,2) = a+b
     
   end do ! end loop on interior cells
 
@@ -162,7 +162,7 @@ end subroutine PLM_reconstruction
 !------------------------------------------------------------------------------
 ! plm boundary extrapolation
 ! -----------------------------------------------------------------------------
-subroutine PLM_boundary_extrapolation( N, h, u, ppoly )
+subroutine PLM_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coefficients )
 !------------------------------------------------------------------------------
 ! Reconstruction by linear polynomials within boundary cells.
 ! The left and right edge values in the left and right boundary cells,
@@ -179,10 +179,11 @@ subroutine PLM_boundary_extrapolation( N, h, u, ppoly )
 !------------------------------------------------------------------------------
 
   ! Arguments
-  integer,            intent(in)    :: N ! Number of cells
-  real, dimension(:), intent(in)    :: h ! cell widths (size N)
-  real, dimension(:), intent(in)    :: u ! cell averages (size N)
-  type(ppoly_t),      intent(inout) :: ppoly
+  integer,              intent(in)    :: N ! Number of cells
+  real, dimension(:),   intent(in)    :: h ! cell widths (size N)
+  real, dimension(:),   intent(in)    :: u ! cell averages (size N)
+  real, dimension(:,:), intent(inout) :: ppoly_E
+  real, dimension(:,:), intent(inout) :: ppoly_coefficients
 
   ! Local variables
   real          :: u0, u1               ! cell averages
@@ -199,17 +200,17 @@ subroutine PLM_boundary_extrapolation( N, h, u, ppoly )
   u1 = u(2)
 
   ! The h2 scheme is used to compute the right edge value
-  ppoly%E(1,2) = (u0*h1 + u1*h0) / (h0 + h1)
+  ppoly_E(1,2) = (u0*h1 + u1*h0) / (h0 + h1)
 
   ! The standard PLM slope is computed as a first estimate for the
   ! reconstruction within the cell
-  slope = 2.0 * ( ppoly%E(1,2) - u0 )
+  slope = 2.0 * ( ppoly_E(1,2) - u0 )
 
-  ppoly%E(1,1) = u0 - 0.5 * slope
-  ppoly%E(1,2) = u0 + 0.5 * slope
+  ppoly_E(1,1) = u0 - 0.5 * slope
+  ppoly_E(1,2) = u0 + 0.5 * slope
   
-  ppoly%coefficients(1,1) = ppoly%E(1,1)
-  ppoly%coefficients(1,2) = ppoly%E(1,2) - ppoly%E(1,1)
+  ppoly_coefficients(1,1) = ppoly_E(1,1)
+  ppoly_coefficients(1,2) = ppoly_E(1,2) - ppoly_E(1,1)
   
   ! ------------------------------------------
   ! Right edge value in the left boundary cell
@@ -221,17 +222,17 @@ subroutine PLM_boundary_extrapolation( N, h, u, ppoly )
   u1 = u(N)
   
   ! The h2 scheme is used to compute the right edge value
-  ppoly%E(N,1) = (u0*h1 + u1*h0) / (h0 + h1)
+  ppoly_E(N,1) = (u0*h1 + u1*h0) / (h0 + h1)
 
   ! The standard PLM slope is computed as a first estimate for the
   ! reconstruction within the cell
-  slope = 2.0 * ( u1 - ppoly%E(N,1) )
+  slope = 2.0 * ( u1 - ppoly_E(N,1) )
   
-  ppoly%E(N,1) = u1 - 0.5 * slope
-  ppoly%E(N,2) = u1 + 0.5 * slope
+  ppoly_E(N,1) = u1 - 0.5 * slope
+  ppoly_E(N,2) = u1 + 0.5 * slope
   
-  ppoly%coefficients(N,1) = ppoly%E(N,1)
-  ppoly%coefficients(N,2) = ppoly%E(N,2) - ppoly%E(N,1)
+  ppoly_coefficients(N,1) = ppoly_E(N,1)
+  ppoly_coefficients(N,2) = ppoly_E(N,2) - ppoly_E(N,1)
 
 end subroutine PLM_boundary_extrapolation
 
