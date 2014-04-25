@@ -64,7 +64,7 @@ type, public :: regridding_CS
 
   integer   :: nk ! Number of layers/levels
 
-  integer   :: degree_i !Degree of interpolation polynomial
+  integer   :: degree_i=4 !Degree of interpolation polynomial
 
   ! Indicates which grid to use in the vertical (z*, sigma, target interface
   ! densities)
