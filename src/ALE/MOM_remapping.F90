@@ -12,7 +12,6 @@ module MOM_remapping
 use MOM_error_handler, only : MOM_error, FATAL
 use MOM_string_functions, only : uppercase
 use MOM_variables,     only : ocean_grid_type, thermo_var_ptrs
-use regrid_ppoly_class, only : ppoly_t, ppoly_init, ppoly_destroy
 use polynomial_functions, only : evaluation_polynomial, integration_polynomial
 use regrid_edge_values, only : edgeValueArrays
 use regrid_edge_values, only : edge_values_explicit_h4, edge_values_implicit_h4
@@ -36,13 +35,12 @@ implicit none ; private
 type, public :: remapping_CS
   private
   ! Work arrays
-  type(ppoly_t)                   :: ppoly_r    ! reconstruction ppoly
   type(edgeValueArrays)           :: edgeValueWrk ! Work space for edge values
   type(edgeSlopeArrays)           :: edgeSlopeWrk ! Work space for edge slopes
   ! Parameters
   integer :: nk = 0                    ! Number of layers/levels in vertical
   integer :: remapping_scheme = -911   ! Determines which reconstruction to use
-  integer :: degree                    ! Degree of polynomial reconstruction
+  integer :: degree=0                  ! Degree of polynomial reconstruction
   logical :: boundary_extrapolation = .true.  ! If true, extrapolate boundaries
 end type
 
@@ -121,6 +119,7 @@ subroutine remapping_main( CS, G, h, dxInterface, tv, u, v )
   nz = G%ke
 
   ! Remap tracer
+!$OMP parallel do default(shared) private(h1,dx,u_column)
   do j = G%jsc,G%jec
     do i = G%isc,G%iec
       if (G%mask2dT(i,j)>0.) then
@@ -137,6 +136,7 @@ subroutine remapping_main( CS, G, h, dxInterface, tv, u, v )
   
   ! Remap u velocity component
   if ( present(u) ) then
+!$OMP parallel do default(shared) private(h1,dx,u_column)
     do j = G%jsc,G%jec
       do i = G%iscB,G%iecB
         if (G%mask2dCu(i,j)>0.) then
@@ -152,6 +152,7 @@ subroutine remapping_main( CS, G, h, dxInterface, tv, u, v )
   
   ! Remap v velocity component
   if ( present(v) ) then
+!$OMP parallel do default(shared) private(h1,dx,u_column)
     do j = G%jscB,G%jecB
       do i = G%isc,G%iec
         if (G%mask2dCv(i,j)>0.) then
@@ -374,6 +375,9 @@ subroutine remapping_core( CS, n0, h0, u0, n1, dx, u1 )
 
   ! Local variables
   integer :: iMethod
+  real, dimension(CS%nk,2)           :: ppoly_r_E            !Edge value of polynomial
+  real, dimension(CS%nk,2)           :: ppoly_r_S            !Edge slope of polynomial
+  real, dimension(CS%nk,CS%degree+1) :: ppoly_r_coefficients !Coefficients of polynomial
 
 #ifdef __DO_SAFTEY_CHECKS__
   integer :: k, remapping_scheme
@@ -417,9 +421,9 @@ subroutine remapping_core( CS, n0, h0, u0, n1, dx, u1 )
   iMethod = -999
   
   ! Reset polynomial
-  CS%ppoly_r%E(:,:) = 0.0
-  CS%ppoly_r%S(:,:) = 0.0
-  CS%ppoly_r%coefficients(:,:) = 0.0
+  ppoly_r_E(:,:) = 0.0
+  ppoly_r_S(:,:) = 0.0
+  ppoly_r_coefficients(:,:) = 0.0
 
   remapping_scheme = CS%remapping_scheme
   if (n0<=1) then
@@ -431,42 +435,42 @@ subroutine remapping_core( CS, n0, h0, u0, n1, dx, u1 )
   endif
   select case ( remapping_scheme )
     case ( REMAPPING_PCM )
-      call PCM_reconstruction( n0, u0, CS%ppoly_r )
+      call PCM_reconstruction( n0, u0, ppoly_r_E, ppoly_r_coefficients)
       iMethod = INTEGRATION_PCM
     case ( REMAPPING_PLM )
-      call PLM_reconstruction( n0, h0, u0, CS%ppoly_r )
+      call PLM_reconstruction( n0, h0, u0, ppoly_r_E, ppoly_r_coefficients )
       if ( CS%boundary_extrapolation) then
-        call PLM_boundary_extrapolation( n0, h0, u0, CS%ppoly_r )
+        call PLM_boundary_extrapolation( n0, h0, u0, ppoly_r_E, ppoly_r_coefficients)
       end if    
       iMethod = INTEGRATION_PLM
     case ( REMAPPING_PPM_H4 )
-      call edge_values_explicit_h4( n0, h0, u0, CS%ppoly_r%E )
-      call PPM_reconstruction( n0, h0, u0, CS%ppoly_r )
+      call edge_values_explicit_h4( n0, h0, u0, ppoly_r_E )
+      call PPM_reconstruction( n0, h0, u0, ppoly_r_E, ppoly_r_coefficients )
       if ( CS%boundary_extrapolation) then
-        call PPM_boundary_extrapolation( n0, h0, u0, CS%ppoly_r )
+        call PPM_boundary_extrapolation( n0, h0, u0, ppoly_r_E, ppoly_r_coefficients )
       end if
       iMethod = INTEGRATION_PPM
     case ( REMAPPING_PPM_IH4 )
-      call edge_values_implicit_h4( n0, h0, u0, CS%edgeValueWrk, CS%ppoly_r%E )
-      call PPM_reconstruction( n0, h0, u0, CS%ppoly_r )
+      call edge_values_implicit_h4( n0, h0, u0, CS%edgeValueWrk, ppoly_r_E )
+      call PPM_reconstruction( n0, h0, u0, ppoly_r_E, ppoly_r_coefficients )
       if ( CS%boundary_extrapolation) then
-        call PPM_boundary_extrapolation( n0, h0, u0, CS%ppoly_r )
+        call PPM_boundary_extrapolation( n0, h0, u0, ppoly_r_E, ppoly_r_coefficients )
       end if    
       iMethod = INTEGRATION_PPM
     case ( REMAPPING_PQM_IH4IH3 )
-      call edge_values_implicit_h4( n0, h0, u0, CS%edgeValueWrk, CS%ppoly_r%E )
-      call edge_slopes_implicit_h3( n0, h0, u0, CS%edgeSlopeWrk, CS%ppoly_r%S )
-      call PQM_reconstruction( n0, h0, u0, CS%ppoly_r )
+      call edge_values_implicit_h4( n0, h0, u0, CS%edgeValueWrk, ppoly_r_E )
+      call edge_slopes_implicit_h3( n0, h0, u0, CS%edgeSlopeWrk, ppoly_r_S )
+      call PQM_reconstruction( n0, h0, u0, ppoly_r_E, ppoly_r_S, ppoly_r_coefficients )
       if ( CS%boundary_extrapolation) then
-        call PQM_boundary_extrapolation_v1( n0, h0, u0, CS%ppoly_r )
+        call PQM_boundary_extrapolation_v1( n0, h0, u0, ppoly_r_E, ppoly_r_S, ppoly_r_coefficients )
       end if    
       iMethod = INTEGRATION_PQM
     case ( REMAPPING_PQM_IH6IH5 )
-      call edge_values_implicit_h6( n0, h0, u0, CS%edgeValueWrk, CS%ppoly_r%E )
-      call edge_slopes_implicit_h5( n0, h0, u0, CS%edgeSlopeWrk, CS%ppoly_r%S )
-      call PQM_reconstruction( n0, h0, u0, CS%ppoly_r )
+      call edge_values_implicit_h6( n0, h0, u0, CS%edgeValueWrk, ppoly_r_E )
+      call edge_slopes_implicit_h5( n0, h0, u0, CS%edgeSlopeWrk, ppoly_r_S )
+      call PQM_reconstruction( n0, h0, u0, ppoly_r_E, ppoly_r_S, ppoly_r_coefficients )
       if ( CS%boundary_extrapolation) then
-        call PQM_boundary_extrapolation_v1( n0, h0, u0, CS%ppoly_r )
+        call PQM_boundary_extrapolation_v1( n0, h0, u0, ppoly_r_E, ppoly_r_S, ppoly_r_coefficients )
       end if    
       iMethod = INTEGRATION_PQM
     case default
@@ -474,7 +478,7 @@ subroutine remapping_core( CS, n0, h0, u0, n1, dx, u1 )
            'The selected remapping method is invalid' )
   end select
 
-  call remapByDeltaZ( n0, h0, u0, CS%ppoly_r, n1, dx, iMethod, u1 )
+  call remapByDeltaZ( n0, h0, u0, ppoly_r_E, ppoly_r_coefficients, n1, dx, iMethod, u1 )
 ! call remapByProjection( n0, h0, u0, CS%ppoly_r, n1, h1, iMethod, u1 )
 
 #ifdef __DO_SAFTEY_CHECKS__
@@ -527,12 +531,13 @@ end subroutine remapping_core
 ! -----------------------------------------------------------------------------
 ! remapByProjection (integration of reconstructed profile)
 ! -----------------------------------------------------------------------------
-subroutine remapByProjection( n0, h0, u0, ppoly0, n1, h1, method, u1 )
+subroutine remapByProjection( n0, h0, u0, ppoly0_E, ppoly0_coefficients, n1, h1, method, u1 )
   ! Arguments
   integer,       intent(in)    :: n0     ! number of cells in source grid
   real,          intent(in)    :: h0(:)  ! source grid widths (size n0)
   real,          intent(in)    :: u0(:)  ! source cell averages (size n0)
-  type(ppoly_t), intent(in)    :: ppoly0 ! source piecewise polynomial
+  real,          intent(in)    :: ppoly0_E(:,:)            !Edge value of polynomial
+  real,          intent(in)    :: ppoly0_coefficients(:,:) !Coefficients of polynomial 
   integer,       intent(in)    :: n1     ! number of cells in target grid
   real,          intent(in)    :: h1(:)  ! target grid widths (size n1)
   integer,       intent(in)    :: method ! remapping scheme to use
@@ -551,7 +556,7 @@ subroutine remapByProjection( n0, h0, u0, ppoly0, n1, h1, method, u1 )
     xL = xR
     xR = xL + h1(iTarget)
 
-    call integrateReconOnInterval( n0, h0, u0, ppoly0, method, &
+    call integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefficients, method, &
                                    xL, xR, h1(iTarget), u1(iTarget) )
     
   end do ! end iTarget loop on target grid cells
@@ -562,7 +567,7 @@ end subroutine remapByProjection
 ! -----------------------------------------------------------------------------
 ! Remap using change in interface positions
 ! -----------------------------------------------------------------------------
-subroutine remapByDeltaZ( n0, h0, u0, ppoly0, n1, dx1, method, u1, h1 )
+subroutine remapByDeltaZ( n0, h0, u0, ppoly0_E, ppoly0_coefficients, n1, dx1, method, u1, h1 )
 ! The new grid is defined relative to the original grid by change
 !  dx1(:) = xNew(:) - xOld(:)
 ! and the remapping calculated so that
@@ -574,7 +579,8 @@ subroutine remapByDeltaZ( n0, h0, u0, ppoly0, n1, dx1, method, u1, h1 )
   integer,        intent(in)  :: n0     ! number of cells in source grid
   real,           intent(in)  :: h0(:)  ! source grid widths (size n0)
   real,           intent(in)  :: u0(:)  ! source cell averages (size n0)
-  type(ppoly_t),  intent(in)  :: ppoly0 ! source piecewise polynomial
+  real,           intent(in)  :: ppoly0_E(:,:)            !Edge value of polynomial
+  real,           intent(in)  :: ppoly0_coefficients(:,:) !Coefficients of polynomial 
   integer,        intent(in)  :: n1     ! number of cells in target grid
   real,           intent(in)  :: dx1(:) ! target grid edge positions (size n1+1)
   integer                     :: method ! remapping scheme to use
@@ -638,7 +644,7 @@ subroutine remapByDeltaZ( n0, h0, u0, ppoly0, n1, dx1, method, u1, h1 )
 
     ! hFlux is the positive width of the remapped volume
     hFlux = abs(dx1(iTarget+1))
-    call integrateReconOnInterval( n0, h0, u0, ppoly0, method, &
+    call integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefficients, method, &
                                    xL, xR, hFlux, uAve )
     ! uAve is the average value of u, independent of sign of dx1
     fluxR = dx1(iTarget+1)*uAve ! Includes sign of dx1
@@ -677,17 +683,18 @@ end subroutine remapByDeltaZ
 ! -----------------------------------------------------------------------------
 ! integrate the reconstructed profile over a single cell
 ! -----------------------------------------------------------------------------
-subroutine integrateReconOnInterval( n0, h0, u0, ppoly0, method, &
+subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefficients, method, &
                                      xL, xR, hC, uAve )
   ! Arguments
-  integer,            intent(in)    :: n0       ! number of cells in source grid
-  real,               intent(in)    :: h0(:)    ! source grid sizes (size n0)
-  real, dimension(:), intent(in)    :: u0       ! source cell averages
-  type(ppoly_t),      intent(in)    :: ppoly0   ! source piecewise polynomial
-  integer,            intent(in)    :: method   ! remapping scheme to use
-  real,               intent(in)    :: xL, xR   ! left/right edges of target cell
-  real,               intent(in)    :: hC       ! cell width hC = xR - xL
-  real,               intent(out)   :: uAve     ! average value on target cell
+  integer, intent(in)  :: n0       ! number of cells in source grid
+  real,    intent(in)  :: h0(:)    ! source grid sizes (size n0)
+  real,    intent(in)  :: u0(:)       ! source cell averages
+  real,    intent(in)  :: ppoly0_E(:,:)            !Edge value of polynomial
+  real,    intent(in)  :: ppoly0_coefficients(:,:) !Coefficients of polynomial 
+  integer, intent(in)  :: method   ! remapping scheme to use
+  real,    intent(in)  :: xL, xR   ! left/right edges of target cell
+  real,    intent(in)  :: hC       ! cell width hC = xR - xL
+  real,    intent(out) :: uAve     ! average value on target cell
   
   ! Local variables
   integer :: j, k
@@ -761,20 +768,20 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0, method, &
     ! value is set to be mean of the edge values (which should be the same).
     ! If it isn't, we simply interpolate.
     if ( h0(jL) == 0.0 ) then
-      uAve = 0.5 * ( ppoly0%E(jL,1) + ppoly0%E(jL,2) )
+      uAve = 0.5 * ( ppoly0_E(jL,1) + ppoly0_E(jL,2) )
     else
       ! WHY IS THIS NOT WRITTEN AS xi0 = ( xL - x0jLl ) / h0(jL) ---AJA
       xi0 = xL / h0(jL) - x0jLl / h0(jL)
   
       select case ( method )
         case ( INTEGRATION_PCM )   
-          uAve = ppoly0%coefficients(jL,1)
+          uAve = ppoly0_coefficients(jL,1)
         case ( INTEGRATION_PLM )  
-          uAve = evaluation_polynomial( ppoly0%coefficients(jL,:), 2, xi0 )
+          uAve = evaluation_polynomial( ppoly0_coefficients(jL,:), 2, xi0 )
         case ( INTEGRATION_PPM )
-          uAve = evaluation_polynomial( ppoly0%coefficients(jL,:), 3, xi0 )
+          uAve = evaluation_polynomial( ppoly0_coefficients(jL,:), 3, xi0 )
         case ( INTEGRATION_PQM )
-          uAve = evaluation_polynomial( ppoly0%coefficients(jL,:), 5, xi0 )
+          uAve = evaluation_polynomial( ppoly0_coefficients(jL,:), 5, xi0 )
         case default
           call MOM_error( FATAL,'The selected integration method is invalid' )
       end select   
@@ -829,16 +836,16 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0, method, &
       ! coordinates, hence: \int_xL^xR p(x) dx = h \int_xi0^xi1 p(xi) dxi
       select case ( method )
         case ( INTEGRATION_PCM )     
-          q = ppoly0%coefficients(jL,1) * ( xR - xL )
+          q = ppoly0_coefficients(jL,1) * ( xR - xL )
         case ( INTEGRATION_PLM )    
           q = h0(jL) * &
-              integration_polynomial( xi0, xi1, ppoly0%coefficients(jL,:), 1 )
+              integration_polynomial( xi0, xi1, ppoly0_coefficients(jL,:), 1 )
         case ( INTEGRATION_PPM )
           q = h0(jL) * &
-              integration_polynomial( xi0, xi1, ppoly0%coefficients(jL,:), 2 )
+              integration_polynomial( xi0, xi1, ppoly0_coefficients(jL,:), 2 )
         case ( INTEGRATION_PQM )
           q = h0(jL) * &
-              integration_polynomial( xi0, xi1, ppoly0%coefficients(jL,:), 4 )
+              integration_polynomial( xi0, xi1, ppoly0_coefficients(jL,:), 4 )
         case default
           call MOM_error( FATAL,'The selected integration method is invalid' )
       end select     
@@ -864,16 +871,16 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0, method, &
       xi1 = 1.0
       select case ( method )
         case ( INTEGRATION_PCM )     
-          q = q + ppoly0%coefficients(jL,1) * ( x0jLr - xL )
+          q = q + ppoly0_coefficients(jL,1) * ( x0jLr - xL )
         case ( INTEGRATION_PLM )    
           q = q + h0(jL) * &
-              integration_polynomial( xi0, xi1, ppoly0%coefficients(jL,:), 1 )
+              integration_polynomial( xi0, xi1, ppoly0_coefficients(jL,:), 1 )
         case ( INTEGRATION_PPM )
           q = q + h0(jL) * &
-              integration_polynomial( xi0, xi1, ppoly0%coefficients(jL,:), 2 )
+              integration_polynomial( xi0, xi1, ppoly0_coefficients(jL,:), 2 )
         case ( INTEGRATION_PQM )
           q = q + h0(jL) * &
-              integration_polynomial( xi0, xi1, ppoly0%coefficients(jL,:), 4 )
+              integration_polynomial( xi0, xi1, ppoly0_coefficients(jL,:), 4 )
         case default
           call MOM_error( FATAL, 'The selected integration method is invalid' )
       end select     
@@ -892,16 +899,16 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0, method, &
     
       select case ( method )
         case ( INTEGRATION_PCM )     
-          q = q + ppoly0%coefficients(jR,1) * ( xR - x0jRl )
+          q = q + ppoly0_coefficients(jR,1) * ( xR - x0jRl )
         case ( INTEGRATION_PLM )    
           q = q + h0(jR) * &
-              integration_polynomial( xi0, xi1, ppoly0%coefficients(jR,:), 1 )
+              integration_polynomial( xi0, xi1, ppoly0_coefficients(jR,:), 1 )
         case ( INTEGRATION_PPM )
           q = q + h0(jR) * &
-              integration_polynomial( xi0, xi1, ppoly0%coefficients(jR,:), 2 )
+              integration_polynomial( xi0, xi1, ppoly0_coefficients(jR,:), 2 )
         case ( INTEGRATION_PQM )
           q = q + h0(jR) * &
-              integration_polynomial( xi0, xi1, ppoly0%coefficients(jR,:), 4 )
+              integration_polynomial( xi0, xi1, ppoly0_coefficients(jR,:), 4 )
         case default
           call MOM_error( FATAL,'The selected integration method is invalid' )
       end select     
@@ -1019,15 +1026,16 @@ subroutine setReconstructionType(string,CS)
        "Unrecognized choice for REMAPPING_SCHEME ("//trim(string)//").")
   end select
 
-  if (allocated(CS%ppoly_r%E) .and. degree/=CS%degree) then
+  if (CS%degree > 0 .and. degree/=CS%degree) then
     ! If the degree has changed then deallocate to force a re-allocation
     call end_remapping(CS)
   endif
-  CS%degree = degree
-  if (.not. allocated(CS%ppoly_r%E)) then
+  if ( CS%degree == 0 ) then
     call allocate_remapping( CS )
   endif
+  CS%degree = degree
   
+
 end subroutine setReconstructionType
 
 !------------------------------------------------------------------------------
@@ -1054,8 +1062,7 @@ end subroutine remapDisableBoundaryExtrapolation
 subroutine allocate_remapping( CS )
   ! Arguments
   type(remapping_CS), intent(inout) :: CS
-  
-  call ppoly_init( CS%ppoly_r, CS%nk, CS%degree )
+
   call triDiagEdgeWorkAllocate( CS%nk, CS%edgeValueWrk )
   call triDiagSlopeWorkAllocate( CS%nk, CS%edgeSlopeWrk )
 
@@ -1070,9 +1077,9 @@ subroutine end_remapping(CS)
   type(remapping_CS), intent(inout) :: CS
 
   ! Deallocate memory for grid
-  call ppoly_destroy( CS%ppoly_r )
   call triDiagEdgeWorkDeallocate( CS%edgeValueWrk )
   call triDiagSlopeWorkDeallocate( CS%edgeSlopeWrk )
+  CS%degree = 0
 
 end subroutine end_remapping
 
@@ -1088,7 +1095,7 @@ logical function remappingUnitTests()
   data h1 /3*1./   ! 3 uniform layers with total depth of 3
   data h2 /6*0.5/  ! 6 uniform layers with total depth of 3
   type(remapping_CS) :: CS 
-  type(ppoly_t) :: ppoly0
+  real, allocatable, dimension(:,:) :: ppoly0_E, ppoly0_S, ppoly0_coefficients
   integer :: i
   real :: err
 
@@ -1119,16 +1126,19 @@ logical function remappingUnitTests()
   write(*,*) 'h1 (by projection)'
   call dumpGrid(n1,h1,x1,u1)
 
-  call ppoly_init( ppoly0, n0, CS%degree )
-  ppoly0%E(:,:) = 0.0
-  ppoly0%S(:,:) = 0.0
-  ppoly0%coefficients(:,:) = 0.0
+  allocate(ppoly0_E(n0,2))
+  allocate(ppoly0_S(n0,2))
+  allocate(ppoly0_coefficients(n0,CS%degree+1))
 
-  call edge_values_explicit_h4( n0, h0, u0, ppoly0%E )
-  call PPM_reconstruction( n0, h0, u0, ppoly0 )
-  call PPM_boundary_extrapolation( n0, h0, u0, ppoly0 )
+  ppoly0_E(:,:) = 0.0
+  ppoly0_S(:,:) = 0.0
+  ppoly0_coefficients(:,:) = 0.0
+
+  call edge_values_explicit_h4( n0, h0, u0, ppoly0_E )
+  call PPM_reconstruction( n0, h0, u0, ppoly0_E, ppoly0_coefficients )
+  call PPM_boundary_extrapolation( n0, h0, u0, ppoly0_E, ppoly0_coefficients )
   u1(:) = 0.
-  call remapByProjection( n0, h0, u0, ppoly0, &
+  call remapByProjection( n0, h0, u0, ppoly0_E, ppoly0_coefficients, &
                           n1, h1, INTEGRATION_PPM, u1 )
   do i=1,n1
     err=u1(i)-8./3.*(0.5*real(1+n1)-real(i))
@@ -1136,7 +1146,7 @@ logical function remappingUnitTests()
   enddo
 
   u1(:) = 0.
-  call remapByDeltaZ( n0, h0, u0, ppoly0, &
+  call remapByDeltaZ( n0, h0, u0, ppoly0_E, ppoly0_coefficients, &
                       n1, x1-x0(1:n1+1), &
                       INTEGRATION_PPM, u1, hn1 )
   write(*,*) 'h1 (by delta)'
@@ -1150,7 +1160,7 @@ logical function remappingUnitTests()
   call buildGridFromH(n2, h2, x2)
   dx2(1:n0+1) = x2(1:n0+1) - x0
   dx2(n0+2:n2+1) = x2(n0+2:n2+1) - x0(n0+1)
-  call remapByDeltaZ( n0, h0, u0, ppoly0, &
+  call remapByDeltaZ( n0, h0, u0, ppoly0_E, ppoly0_coefficients, &
                       n2, dx2, &
                       INTEGRATION_PPM, u2, hn2 )
   write(*,*) 'h2'
@@ -1162,6 +1172,8 @@ logical function remappingUnitTests()
     err=u2(i)-8./6.*(0.5*real(1+n2)-real(i))
     if (abs(err)>2.*epsilon(err)) remappingUnitTests = .true.
   enddo
+
+  deallocate(ppoly0_E, ppoly0_S, ppoly0_coefficients)
 
   write(*,*) '=========================================================='
 
