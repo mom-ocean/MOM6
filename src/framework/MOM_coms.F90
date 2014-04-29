@@ -164,16 +164,20 @@ function reproducing_sum_2d(array, isr, ier, jsr, jer, EFP_sum, reproducing, &
 
     if (present(err)) then
       err = 0
-      if (overflow_error) err = err+2
-      if (NaN_error) err = err+4
+      if (overflow_error) &
+        err = err+2
+      if (NaN_error) &
+        err = err+4
       if (err > 0) then ; do n=1,ni ; ints_sum(n) = 0 ; enddo ; endif
     else
-      if (NaN_error) call MOM_error(FATAL, "NaN in input field of reproducing_sum(_2d).")
+      if (NaN_error) &
+        call MOM_error(FATAL, "NaN in input field of reproducing_sum(_2d).")
       if (abs(max_mag_term) >= prec_error*pr(1)) then
         write(mesg, '(ES13.5)') max_mag_term
         call MOM_error(FATAL,"Overflow in reproducing_sum(_2d) conversion of "//trim(mesg))
       endif
-      if (overflow_error) call MOM_error(FATAL, "Overflow in reproducing_sum(_2d).")
+      if (overflow_error) &
+        call MOM_error(FATAL, "Overflow in reproducing_sum(_2d).")
     endif
 
     call sum_across_PEs(ints_sum, ni)
