@@ -2375,8 +2375,7 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, CS, p_atm)
 
     depth_ml = CS%Hmix
   !   Determine the mean properties of the uppermost depth_ml fluid.
-!$OMP parallel do default(none) shared(is,ie,js,je,CS,state,h,nz,depth_ml,G) &
-!$OMP   private(depth,dh)
+!$OMP parallel do default(shared) private(depth,dh)
     do j=js,je
       do i=is,ie
         depth(i) = 0.0

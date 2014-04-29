@@ -65,7 +65,7 @@ module MOM_dynamics_split_RK2
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 
-use mpp_mod, only : MPP_CLOCK_SYNC
+
 use MOM_variables, only : vertvisc_type, ocean_OBC_type, thermo_var_ptrs
 use MOM_variables, only : BT_cont_type, alloc_bt_cont_type, dealloc_bt_cont_type
 use MOM_variables, only : accel_diag_ptrs, ocean_internal_state, cont_diag_ptrs
@@ -1249,17 +1249,17 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, param_file, &
   CS%id_v_BT_accel = register_diag_field('ocean_model', 'v_BT_accel', diag%axesCvL, Time, &
     'Barotropic Anomaly Meridional Acceleration', 'meter second-1')
 
-  id_clock_Cor = cpu_clock_id('(Ocean Coriolis & mom advection)', grain=CLOCK_MODULE)!, flags=MPP_CLOCK_SYNC)
-  id_clock_continuity = cpu_clock_id('(Ocean continuity equation)', grain=CLOCK_MODULE)!, flags=MPP_CLOCK_SYNC)
-  id_clock_pres = cpu_clock_id('(Ocean pressure force)', grain=CLOCK_MODULE)!, flags=MPP_CLOCK_SYNC)
-  id_clock_vertvisc = cpu_clock_id('(Ocean vertical viscosity)', grain=CLOCK_MODULE)!, flags=MPP_CLOCK_SYNC)
-  id_clock_horvisc = cpu_clock_id('(Ocean horizontal viscosity)', grain=CLOCK_MODULE)!, flags=MPP_CLOCK_SYNC)
-  id_clock_mom_update = cpu_clock_id('(Ocean momentum increments)', grain=CLOCK_MODULE)!, flags=MPP_CLOCK_SYNC)
-  id_clock_pass = cpu_clock_id('(Ocean message passing)', grain=CLOCK_MODULE)!, flags=MPP_CLOCK_SYNC)
-  id_clock_pass_init = cpu_clock_id('(Ocean init message passing)')!, grain=CLOCK_ROUTINE)
-  id_clock_btcalc = cpu_clock_id('(Ocean barotropic mode calc)', grain=CLOCK_MODULE)!, flags=MPP_CLOCK_SYNC)
-  id_clock_btstep = cpu_clock_id('(Ocean barotropic mode stepping)', grain=CLOCK_MODULE)!, flags=MPP_CLOCK_SYNC)
-  id_clock_btforce = cpu_clock_id('(Ocean barotropic forcing calc)', grain=CLOCK_MODULE)!, flags=MPP_CLOCK_SYNC)
+  id_clock_Cor = cpu_clock_id('(Ocean Coriolis & mom advection)', grain=CLOCK_MODULE)
+  id_clock_continuity = cpu_clock_id('(Ocean continuity equation)', grain=CLOCK_MODULE)
+  id_clock_pres = cpu_clock_id('(Ocean pressure force)', grain=CLOCK_MODULE)
+  id_clock_vertvisc = cpu_clock_id('(Ocean vertical viscosity)', grain=CLOCK_MODULE)
+  id_clock_horvisc = cpu_clock_id('(Ocean horizontal viscosity)', grain=CLOCK_MODULE)
+  id_clock_mom_update = cpu_clock_id('(Ocean momentum increments)', grain=CLOCK_MODULE)
+  id_clock_pass = cpu_clock_id('(Ocean message passing)', grain=CLOCK_MODULE)
+  id_clock_pass_init = cpu_clock_id('(Ocean init message passing)', grain=CLOCK_ROUTINE)
+  id_clock_btcalc = cpu_clock_id('(Ocean barotropic mode calc)', grain=CLOCK_MODULE)
+  id_clock_btstep = cpu_clock_id('(Ocean barotropic mode stepping)', grain=CLOCK_MODULE)
+  id_clock_btforce = cpu_clock_id('(Ocean barotropic forcing calc)', grain=CLOCK_MODULE)
 
 
 end subroutine initialize_dyn_split_RK2

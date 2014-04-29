@@ -1959,14 +1959,9 @@ subroutine applyBoundaryFluxes(CS, G, dt, fluxes, optics, ea, h, tv)
   if (CS%id_createdH>0) CS%createdH(:,:) = 0.
 
   numberOfGroundings = 0
-!$OMP parallel do default(none) shared(nz,h,tv,G,CS,optics,is,ie,js,je,fluxes,nsw,dt, &
-!$OMP                                  H_limit_fluxes,use_riverHeatContent,        &
-!$OMP                                  useCalvingHeatContent,ea,IforcingDepthScale, &
-!$OMP                                  numberOfGroundings,iGround,jGround,hGrounding, &
-!$OMP                                  ksort) &
-!$OMP                          private(opacityBand,h2d,T2d,eps,htot,netThickness,  &
-!$OMP                                  netHeat,netSalt,Pen_SW_bnd,fractionOfForcing, &
-!$OMP                                  dThickness,dTemp,dSalt,hOld,Ithickness,Ttot)
+!$OMP parallel do default(shared) private(opacityBand,h2d,T2d,eps,htot,netThickness,  &
+!$OMP                                     netHeat,netSalt,Pen_SW_bnd,fractionOfForcing, &
+!$OMP                                     dThickness,dTemp,dSalt,hOld,Ithickness,Ttot)
   do j=js,je ! Work in vertical slices (this is a hold over from the routines called with a j argument)
     Ttot = 0
     ! Copy state into 2D-slice arrays

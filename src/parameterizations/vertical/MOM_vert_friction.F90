@@ -638,7 +638,8 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
     allocate(CS%a1_shelf_v(G%isd:G%ied,G%JsdB:G%JedB)) ; CS%a1_shelf_v(:,:)=0.0
   endif
 
-!$OMP parallel do default(private) shared(G,CS,visc,Isq,ieq,nz,u,h,fluxes,hML_u,h_neglect,dt)
+!$OMP parallel do default(private) shared(G,CS,visc,Isq,ieq,nz,u,h,fluxes,hML_u,h_neglect,dt) &
+!$OMP                              firstprivate(i_hbbl) 
   do j=G%Jsc,G%Jec
     do I=Isq,Ieq ; do_i(I) = (G%mask2dCu(I,j) > 0) ; enddo
 
@@ -756,7 +757,8 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
 
 
   ! Now work on v-points.
-!$OMP parallel do default(private) shared(G,CS,visc,is,ie,Jsq,Jeq,nz,v,h,fluxes,hML_v,h_neglect,dt)
+!$OMP parallel do default(private) shared(G,CS,visc,is,ie,Jsq,Jeq,nz,v,h,fluxes,hML_v,h_neglect,dt) &
+!$OMP                        firstprivate(i_hbbl)
   do J=Jsq,Jeq
     do i=is,ie ; do_i(i) = (G%mask2dCv(i,J) > 0) ; enddo
 

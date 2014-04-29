@@ -72,8 +72,6 @@ type, public :: tracer_registry_type
                              ! timing of diagnostic output.
 end type tracer_registry_type
 
-integer :: id_tracer_vertdiff
-
 contains
 
 subroutine register_tracer(tr1, name, param_file, Reg, ad_x, ad_y, &
@@ -310,6 +308,8 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, &
         btm_src(i,j) = (btm_flux(i,j)*dt) * G%kg_m2_to_H
      enddo; enddo
   endif
+
+
   if (present(sink_rate)) then
 !$OMP do
     do j=js,je
@@ -457,8 +457,6 @@ subroutine tracer_registry_init(param_file, Reg)
       &" times with different registry pointers.")') init_calls
     if (is_root_pe()) call MOM_error(WARNING,"MOM_tracer"//mesg)
   endif
-
-
 
 end subroutine tracer_registry_init
 

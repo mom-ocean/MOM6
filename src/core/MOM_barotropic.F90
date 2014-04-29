@@ -90,6 +90,7 @@ module MOM_barotropic
 !*  The boundaries always run through q grid points (x).               *
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
+
 use MOM_checksums, only : hchksum, uchksum, vchksum
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
 use MOM_diag_mediator, only : post_data, query_averaging_enabled, register_diag_field
@@ -573,19 +574,11 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
     BTCL_v        ! A repackaged version of the v-point information in BT_cont.
   ! End of wide-sized variables.
 
-  real, dimension(SZIBW_(CS),SZJW_(CS)) :: &
-    ubt_prev, uhbt_prev, ubt_sum_prev, uhbt_sum_prev, ubt_wtd_prev  ! for OBC
-  real, dimension(SZIW_(CS),SZJBW_(CS)) :: &
-    vbt_prev, vhbt_prev, vbt_sum_prev, vhbt_sum_prev, vbt_wtd_prev  ! for OBC
-
-  real, dimension(SZIB_(G),SZJB_(G)) :: &
-    vel_trans_2D, &   ! The combination of the previous and current velocity
-                      ! that does the mass transport, in m s-1.
-    Cor_2D, gradP_2D  ! The Coriolis and pressure gradient accelerations, m s-1.
-
   real :: I_Rho0      ! The inverse of the mean density (Rho0), in m3 kg-1.
   real :: visc_rem    ! A work variable that may equal visc_rem_[uv].  Nondim.
   real :: vel_prev    ! The previous velocity in m s-1.
+  real :: vel_trans   ! The combination of the previous and current velocity
+                      ! that does the mass transport, in m s-1.
   real :: dtbt        ! The barotropic time step in s.
   real :: bebt        ! A copy of CS%bebt.
   real :: be_proj     ! The fractional amount by which velocities are projected
@@ -601,6 +594,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
                       ! than physical problem would suggest.
   real :: Instep      ! The inverse of the number of barotropic time steps
                       ! to take.
+  real :: Cor, gradP  ! The Coriolis and pressure gradient accelerations, m s-1.
   real :: wt_end      ! The weighting of the final value of eta_PF, ND.
   integer :: nstep    ! The number of barotropic time steps to take.
   type(time_type) :: &
@@ -736,42 +730,37 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
 ! barotropic momentum equations.  This has to be done quite early to start
 ! the halo update that needs to be completed before the next calculations.
   if (CS%linearized_BT_PV) then
-!$OMP parallel default(shared)
-!$OMP do
+!$OMP parallel do default(shared) private(i, j)
     do J=jsvf-2,jevf+1 ; do I=isvf-2,ievf+1
       q(I,J) = CS%q_D(I,j)
     enddo ; enddo
-!$OMP do
+!$OMP parallel do default(shared) private(i, j)
     do j=jsvf-1,jevf+1 ; do I=isvf-2,ievf+1
       DCor_u(I,j) = CS%D_u_Cor(I,j)
     enddo ; enddo
-!$OMP do
+!$OMP parallel do default(shared) private(i, j)
     do J=jsvf-2,jevf+1 ; do i=isvf-1,ievf+1
       DCor_v(i,J) = CS%D_v_Cor(i,J)
     enddo ; enddo
-!$OMP end parallel
   else
     q(:,:) = 0.0 ; DCor_u(:,:) = 0.0 ; DCor_v(:,:) = 0.0
     !  This option has not yet been written properly.
     !  D here should be replaced with D+eta(Bous) or eta(non-Bous).
-!$OMP parallel default(shared)
-!$OMP do
+!$OMP parallel do default(shared) private(i, j)
     do j=js,je ; do I=is-1,ie
       DCor_u(I,j) = 0.5 * (G%bathyT(i+1,j) + G%bathyT(i,j))
     enddo ; enddo
-!$OMP do 
+!$OMP parallel do default(shared) private(i, j)
     do J=js-1,je ; do i=is,ie
       DCor_v(i,J) = 0.5 * (G%bathyT(i,j+1) + G%bathyT(i,j))
     enddo ; enddo
-!$OMP do 
+!$OMP parallel do default(shared) private(i, j)
     do J=js-1,je ; do I=is-1,ie
       q(I,J) = 0.25 * G%CoriolisBu(I,J) * &
            ((G%areaT(i,j) + G%areaT(i+1,j+1)) + (G%areaT(i+1,j) + G%areaT(i,j+1))) / &
            ((G%areaT(i,j) * G%bathyT(i,j) + G%areaT(i+1,j+1) * G%bathyT(i+1,j+1)) + &
             (G%areaT(i+1,j) * G%bathyT(i+1,j) + G%areaT(i,j+1) * G%bathyT(i,j+1)))
     enddo ; enddo
-!$OMP end parallel
-
     ! With very wide halos, q and D need to be calculated on the available data
     ! domain and then updated onto the full computational domain.
     ! These calculations can be done almost immediately, but the halo updates
@@ -790,8 +779,6 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   endif
 
   ! Zero out various wide-halo arrays.
-!$OMP parallel default(shared) private(visc_rem)
-!$OMP do 
   do j=CS%jsdw,CS%jedw ; do i=CS%isdw,CS%iedw
     gtot_E(i,j) = 0.0 ; gtot_W(i,j) = 0.0
     gtot_N(i,j) = 0.0 ; gtot_S(i,j) = 0.0
@@ -806,12 +793,10 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   !   The halo regions of various arrays need to be initialized to
   ! non-NaNs in case the neighboring domains are not part of the ocean.
   ! Otherwise a halo update later on fills in the correct values.
-!$OMP do 
   do j=CS%jsdw,CS%jedw ; do I=CS%isdw-1,CS%iedw
     Cor_ref_u(I,j) = 0.0 ; BT_force_u(I,j) = 0.0 ; ubt(I,j) = 0.0
     Datu(I,j) = 0.0 ; bt_rem_u(I,j) = 0.0 ; uhbt0(I,j) = 0.0
   enddo ; enddo
-!$OMP do 
   do J=CS%jsdw-1,CS%jedw ; do i=CS%isdw,CS%iedw
     Cor_ref_v(i,J) = 0.0 ; BT_force_v(i,J) = 0.0 ; vbt(i,J) = 0.0
     Datv(i,J) = 0.0 ; bt_rem_v(i,J) = 0.0 ; vhbt0(I,j) = 0.0
@@ -820,21 +805,19 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   ! Copy input arrays into their wide-halo counterparts.  eta_in and eta_PF_in
   ! have the correct values in their halo regions.
   if (interp_eta_PF) then
-!$OMP do
     do j=G%jsd,G%jed ; do i=G%isd,G%ied
       eta(i,j) = eta_in(i,j)
       eta_PF_1(i,j) = eta_PF_start(i,j)
       d_eta_PF(i,j) = eta_PF_in(i,j) - eta_PF_start(i,j)
     enddo ; enddo
   else
-!$OMP do
     do j=G%jsd,G%jed ; do i=G%isd,G%ied
       eta(i,j) = eta_in(i,j)
       eta_PF(i,j) = eta_PF_in(i,j)
     enddo ; enddo
   endif
 
-!$OMP do
+!$OMP parallel do default(shared) private(i, j, k, visc_rem)
   do k=1,nz ; do j=js-1,je+1 ; do I=Isq-1,Ieq+1
     ! rem needs greater than visc_rem_u and 1-Instep/visc_rem_u.
     ! The 0.5 below is just for safety.
@@ -845,7 +828,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
     else ; visc_rem = 1.0 - 0.5*Instep/visc_rem_u(I,j,k) ; endif
     wt_u(I,j,k) = CS%frhatu(I,j,k) * visc_rem
   enddo ; enddo ; enddo
-!$OMP do
+!$OMP parallel do default(shared) private(i, j, k, visc_rem)
   do k=1,nz ; do J=Jsq-1,Jeq+1 ; do i=is-1,ie+1
     ! rem needs greater than visc_rem_v and 1-Instep/visc_rem_v.
     if (visc_rem_v(i,J,k) <= 0.0) then ; visc_rem = 0.0
@@ -860,23 +843,17 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   ! accelerations across the various faces, with names for the relative
   ! locations of the faces to the pressure point.  They will have their halos
   ! updated later on. 
-!$OMP do
-  do j = js,je
-    do k=1,nz; do I=is-1,ie
+  do k=1,nz
+    do j=js,je ; do I=is-1,ie
       gtot_E(i,j)   = gtot_E(i,j)   + pbce(i,j,k)   * wt_u(I,j,k)
       gtot_W(i+1,j) = gtot_W(i+1,j) + pbce(i+1,j,k) * wt_u(I,j,k)
     enddo ; enddo
-  enddo
-!$OMP do
-  do J=js-1,je 
-     do k=1,nz; do i=is,ie
+    do J=js-1,je ; do i=is,ie
       gtot_N(i,j)   = gtot_N(i,j)   + pbce(i,j,k)   * wt_v(i,J,k)
       gtot_S(i,j+1) = gtot_S(i,j+1) + pbce(i,j+1,k) * wt_v(i,J,k)
     enddo ; enddo
   enddo
   
-!$OMP end parallel
-
   if (CS%tides) then
     call tidal_forcing_sensitivity(G, CS%tides_CSp, det_de)
     dgeo_de = 1.0 + det_de + CS%G_extra
@@ -919,22 +896,17 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
 ! between the accelerations due to the average of the layer equations and the
 ! barotropic calculation.
   !  ### Should IDatu here be replaced with 1/D+eta(Bous) or 1/eta(non-Bous)?
-!$OMP parallel default(shared)
-!$OMP do
   do j=js,je ; do I=is-1,ie
     BT_force_u(I,j) = fluxes%taux(I,j) * I_rho0*CS%IDatu(I,j)*visc_rem_u(I,j,1)
   enddo ; enddo
-!$OMP do
   do J=js-1,je ; do i=is,ie
     BT_force_v(i,J) = fluxes%tauy(i,J) * I_rho0*CS%IDatv(i,J)*visc_rem_v(i,J,1)
   enddo ; enddo
   if (present(taux_bot) .and. present(tauy_bot)) then
     if (associated(taux_bot) .and. associated(tauy_bot)) then
-!$OMP do
       do j=js,je ; do I=is-1,ie
         BT_force_u(I,j) = BT_force_u(I,j) - taux_bot(I,j) * I_rho0 * CS%IDatu(I,j)
       enddo ; enddo
-!$OMP do
       do J=js-1,je ; do i=is,ie
         BT_force_v(i,J) = BT_force_v(i,J) - tauy_bot(i,J) * I_rho0 * CS%IDatv(i,J)
       enddo ; enddo
@@ -943,55 +915,37 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
 
   ! bc_accel_u & bc_accel_v are only available on the potentially
   ! non-symmetric computational domain.
-!$OMP do
-  do j=js,je
-    do k=1,nz ; do I=Isq,Ieq
-       BT_force_u(I,j) = BT_force_u(I,j) + wt_u(I,j,k) * bc_accel_u(I,j,k)
-    enddo ; enddo 
-  enddo
-!$OMP do
-  do J=Jsq,Jeq
-    do k=1,nz ; do i=is,ie
-       BT_force_v(i,J) = BT_force_v(i,J) + wt_v(i,J,k) * bc_accel_v(i,J,k)
-    enddo ; enddo
-  enddo
+  do k=1,nz ; do j=js,je ; do I=Isq,Ieq
+    BT_force_u(I,j) = BT_force_u(I,j) + wt_u(I,j,k) * bc_accel_u(I,j,k)
+  enddo ; enddo ; enddo
+  do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
+    BT_force_v(i,J) = BT_force_v(i,J) + wt_v(i,J,k) * bc_accel_v(i,J,k)
+  enddo ; enddo ; enddo
 
   ! Determine the difference between the sum of the layer fluxes and the 
   ! barotropic fluxes found from the same input velocities.
   if (add_uh0) then
-!$OMP do 
     do j=js,je ; do I=is-1,ie ; uhbt(I,j) = 0.0 ; ubt(I,j) = 0.0 ; enddo ; enddo
-!$OMP do
     do J=js-1,je ; do i=is,ie ; vhbt(i,J) = 0.0 ; vbt(i,J) = 0.0 ; enddo ; enddo
-!$OMP do
-    do j=js,je
-      do k=1,nz ; do I=is-1,ie
-        uhbt(I,j) = uhbt(I,j) + uh0(I,j,k)
-        ubt(I,j) = ubt(I,j) + wt_u(I,j,k) * u_uh0(I,j,k)
-      enddo ; enddo
-    enddo
-!$OMP do
-    do J=js-1,je
-      do k=1,nz ; do i=is,ie
-        vhbt(i,J) = vhbt(i,J) + vh0(i,J,k)
-        vbt(i,J) = vbt(i,J) + wt_v(i,J,k) * v_vh0(i,J,k)
-      enddo ; enddo 
-    enddo
+    do k=1,nz ; do j=js,je ; do I=is-1,ie
+      uhbt(I,j) = uhbt(I,j) + uh0(I,j,k)
+      ubt(I,j) = ubt(I,j) + wt_u(I,j,k) * u_uh0(I,j,k)
+    enddo ; enddo ; enddo
+    do k=1,nz ; do J=js-1,je ; do i=is,ie
+      vhbt(i,J) = vhbt(i,J) + vh0(i,J,k)
+      vbt(i,J) = vbt(i,J) + wt_v(i,J,k) * v_vh0(i,J,k)
+    enddo ; enddo ; enddo
     if (use_BT_cont) then
-!$OMP do
       do j=js,je ; do I=is-1,ie
         uhbt0(I,j) = uhbt(I,j) - find_uhbt(ubt(I,j),BTCL_u(I,j))
       enddo ; enddo
-!$OMP do
       do J=js-1,je ; do i=is,ie
         vhbt0(i,J) = vhbt(i,J) - find_vhbt(vbt(i,J),BTCL_v(i,J))
       enddo ; enddo
     else
-!$OMP do
       do j=js,je ; do I=is-1,ie
         uhbt0(I,j) = uhbt(I,j) - Datu(I,j)*ubt(I,j)
       enddo ; enddo
-!$OMP do
       do J=js-1,je ; do i=is,ie
         vhbt0(i,J) = vhbt(i,J) - Datv(i,J)*vbt(i,J)
       enddo ; enddo
@@ -999,42 +953,30 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   endif
 
 ! Calculate the initial barotropic velocities from the layer's velocities.
-!$OMP do
   do j=jsvf-1,jevf+1 ; do I=isvf-2,ievf+1
     ubt(I,j) = 0.0 ; uhbt(I,j) = 0.0 ; u_accel_bt(I,j) = 0.0
   enddo ; enddo
-!$OMP do
   do J=jsvf-2,jevf+1 ; do i=isvf-1,ievf+1
     vbt(i,J) = 0.0 ; vhbt(i,J) = 0.0 ; v_accel_bt(i,J) = 0.0
   enddo ; enddo
-!$OMP do
-  do j=js,je
-    do k=1,nz ; do I=is-1,ie
-      ubt(I,j) = ubt(I,j) + wt_u(I,j,k) * U_in(I,j,k)
-    enddo ; enddo 
-  enddo
-
-!$OMP do
-  do J=js-1,je
-    do k=1,nz ; do i=is,ie
-      vbt(i,J) = vbt(i,J) + wt_v(i,J,k) * V_in(i,J,k)
-    enddo ; enddo
-  enddo
+  do k=1,nz ; do j=js,je ; do I=is-1,ie
+    ubt(I,j) = ubt(I,j) + wt_u(I,j,k) * U_in(I,j,k)
+  enddo ; enddo ; enddo
+  do k=1,nz ; do J=js-1,je ; do i=is,ie
+    vbt(i,J) = vbt(i,J) + wt_v(i,J,k) * V_in(i,J,k)
+  enddo ; enddo ; enddo
 
   if (CS%gradual_BT_ICs) then
-!$OMP do
     do j=js,je ; do I=is-1,ie
       BT_force_u(I,j) = BT_force_u(I,j) + (ubt(I,j) - CS%ubt_IC(I,j)) * Idt
       ubt(I,j) = CS%ubt_IC(I,j)
     enddo ; enddo
-!$OMP do
     do J=js-1,je ; do i=is,ie
       BT_force_v(i,J) = BT_force_v(i,J) + (vbt(i,J) - CS%vbt_IC(i,J)) * Idt
       vbt(i,J) = CS%vbt_IC(i,J)
     enddo ; enddo
   endif
 
-!$OMP end parallel
   if ((Isq > is-1) .or. (Jsq > js-1)) then
     ! Non-symmetric memory is being used, so the edge values need to be
     ! filled in with a halo update of a non-symmetric array.
@@ -1066,8 +1008,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   endif
 
   ! Determine the weighted Coriolis parameters for the neighboring velocities.
-!$OMP parallel default(shared)
-!$OMP do
+!$OMP parallel do default(shared) private(i, j)
   do J=jsvf-1,jevf ; do i=isvf-1,ievf+1
     if (CS%Sadourny) then
       amer(I-1,j) = DCor_u(I-1,j) * q(I-1,J)
@@ -1086,7 +1027,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
     endif
   enddo ; enddo
 
-!$OMP do
+!$OMP parallel do default(shared) private(i, j)
   do j=jsvf-1,jevf+1 ; do I=isvf-1,ievf
     if (CS%Sadourny) then
       azon(I,j) = DCor_v(i+1,J) * q(I,J)
@@ -1107,36 +1048,28 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
 
   !   If they are present, use u_Cor and v_Cor as the reference values for the
   ! Coriolis terms, including the viscous remnant if it is present.
-!$OMP do
   do j=js-1,je+1 ; do I=is-1,ie ; ubt_Cor(I,j) = 0.0 ; enddo ; enddo
-!$OMP do
   do J=js-1,je ; do i=is-1,ie+1 ; vbt_Cor(i,J) = 0.0 ; enddo ; enddo
-!$OMP do
-  do j=js-1,je+1
-    do k=1,nz ; do I=is-1,ie
-      ubt_Cor(I,j) = ubt_Cor(I,j) + wt_u(I,j,k) * U_Cor(I,j,k)
-    enddo ; enddo
-  enddo
-!$OMP do
-  do J=js-1,je
-    do k=1,nz ; do i=is-1,ie+1
-      vbt_Cor(i,J) = vbt_Cor(i,J) + wt_v(i,J,k) * V_Cor(i,J,k)
-    enddo ; enddo
-  enddo
+  do k=1,nz ; do j=js-1,je+1 ; do I=is-1,ie
+    ubt_Cor(I,j) = ubt_Cor(I,j) + wt_u(I,j,k) * U_Cor(I,j,k)
+  enddo ; enddo ; enddo
+  do k=1,nz ; do J=js-1,je ; do i=is-1,ie+1
+    vbt_Cor(i,J) = vbt_Cor(i,J) + wt_v(i,J,k) * V_Cor(i,J,k)
+  enddo ; enddo ; enddo
 
-!$OMP do
+!$OMP parallel do default(shared) private(i, j)
   do j=js,je ; do I=is-1,ie
     Cor_ref_u(I,j) =  &
         ((azon(I,j) * vbt_Cor(i+1,j) + czon(I,j) * vbt_Cor(i  ,j-1)) + &
          (bzon(I,j) * vbt_Cor(i  ,j) + dzon(I,j) * vbt_Cor(i+1,j-1)))
   enddo ; enddo
-!$OMP do
+!$OMP parallel do default(shared) private(i, j)
   do J=js-1,je ; do i=is,ie
     Cor_ref_v(i,J) = -1.0 * &
         ((amer(I-1,j) * ubt_Cor(I-1,j) + cmer(I  ,j+1) * ubt_Cor(I  ,j+1)) + &
          (bmer(I  ,j) * ubt_Cor(I  ,j) + dmer(I-1,j+1) * ubt_Cor(I-1,j+1)))
   enddo ; enddo
-!$OMP end parallel
+
 ! Complete the previously initiated message passing.
   if (id_clock_calc_pre > 0) call cpu_clock_end(id_clock_calc_pre)
   if (id_clock_pass_pre > 0) call cpu_clock_begin(id_clock_pass_pre)
@@ -1172,67 +1105,48 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   endif
   if (id_clock_pass_pre > 0) call cpu_clock_end(id_clock_pass_pre)
   if (id_clock_calc_pre > 0) call cpu_clock_begin(id_clock_calc_pre)
-!$OMP parallel default(shared)
-!$OMP do
+
   do j=js-1,je+1 ; do I=is-1,ie ; av_rem_u(I,j) = 0.0 ; enddo ; enddo
-!$OMP do
   do J=js-1,je ; do i=is-1,ie+1 ; av_rem_v(i,J) = 0.0 ; enddo ; enddo
-!$OMP do
-  do j=js-1,je+1
-    do k=1,nz ; do I=is-1,ie
-      av_rem_u(I,j) = av_rem_u(I,j) + CS%frhatu(I,j,k) * visc_rem_u(I,j,k)
-    enddo ; enddo 
-  enddo
-!$OMP do
-  do J=js-1,je 
-    do k=1,nz ; do i=is-1,ie+1
-      av_rem_v(i,J) = av_rem_v(i,J) + CS%frhatv(i,J,k) * visc_rem_v(i,J,k)
-    enddo ; enddo 
-  enddo
+  do k=1,nz ; do j=js-1,je+1 ; do I=is-1,ie
+    av_rem_u(I,j) = av_rem_u(I,j) + CS%frhatu(I,j,k) * visc_rem_u(I,j,k)
+  enddo ; enddo ; enddo
+  do k=1,nz ; do J=js-1,je ; do i=is-1,ie+1
+    av_rem_v(i,J) = av_rem_v(i,J) + CS%frhatv(i,J,k) * visc_rem_v(i,J,k)
+  enddo ; enddo ; enddo
   if (CS%strong_drag) then
-!$OMP do
     do j=js-1,je+1 ; do I=is-1,ie
       bt_rem_u(I,j) = G%mask2dCu(I,j) * &
          ((nstep * av_rem_u(I,j)) / (1.0 + (nstep-1)*av_rem_u(I,j)))
     enddo ; enddo
-!$OMP do
     do J=js-1,je ; do i=is-1,ie+1
       bt_rem_v(i,J) = G%mask2dCv(i,J) * &
          ((nstep * av_rem_v(i,J)) / (1.0 + (nstep-1)*av_rem_v(i,J)))
     enddo ; enddo
   else
-!$OMP do
     do j=js-1,je+1 ; do I=is-1,ie
       bt_rem_u(I,j) = 0.0
       if (G%mask2dCu(I,j) * av_rem_u(I,j) > 0.0) &
         bt_rem_u(I,j) = G%mask2dCu(I,j) * (av_rem_u(I,j)**Instep)
     enddo ; enddo
-!$OMP do
     do J=js-1,je ; do i=is-1,ie+1
       bt_rem_v(i,J) = 0.0
       if (G%mask2dCv(i,J) * av_rem_v(i,J) > 0.0) &
         bt_rem_v(i,J) = G%mask2dCv(i,J) * (av_rem_v(i,J)**Instep)
     enddo ; enddo
   endif
+
   ! Zero out the arrays for various time-averaged quantities.
-  if (find_etaav) then  
-!$OMP do
-    do j=jsvf-1,jevf+1 ; do i=isvf-1,ievf+1
-      eta_sum(i,j) = 0.0 ; eta_wtd(i,j) = 0.0
-    enddo ; enddo 
-  else 
-!$OMP do
-    do j=jsvf-1,jevf+1 ; do i=isvf-1,ievf+1
-      eta_wtd(i,j) = 0.0
-    enddo ; enddo 
-   endif
-!$OMP do
+  if (find_etaav) then ; do j=jsvf-1,jevf+1 ; do i=isvf-1,ievf+1
+    eta_sum(i,j) = 0.0 ; eta_wtd(i,j) = 0.0
+  enddo ; enddo ; else ; do j=jsvf-1,jevf+1 ; do i=isvf-1,ievf+1
+    eta_wtd(i,j) = 0.0
+  enddo ; enddo ; endif
   do j=jsvf-1,jevf+1 ; do I=isvf-1,ievf
     ubt_sum(I,j) = 0.0 ; uhbt_sum(I,j) = 0.0
     PFu_bt_sum(I,j) = 0.0 ; Coru_bt_sum(I,j) = 0.0
     ubt_wtd(I,j) = 0.0 ; ubt_trans(I,j) = 0.0
   enddo ; enddo
-!$OMP do
   do J=jsvf-1,jevf ; do i=isvf-1,ievf+1
     vbt_sum(i,J) = 0.0 ; vhbt_sum(i,J) = 0.0
     PFv_bt_sum(i,J) = 0.0 ; Corv_bt_sum(i,J) = 0.0
@@ -1240,17 +1154,14 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   enddo ; enddo
 
   ! Set the mass source, after first initializing the halos to 0.
-!$OMP do
   do j=jsvf-1,jevf+1; do i=isvf-1,ievf+1 ; eta_src(i,j) = 0.0 ; enddo ; enddo
   if (CS%bound_BT_corr) then ; do j=js,je ; do i=is,ie
     if (abs(CS%eta_cor(i,j)) > dt*CS%eta_cor_bound(i,j)) &
       CS%eta_cor(i,j) = sign(dt*CS%eta_cor_bound(i,j),CS%eta_cor(i,j))
   enddo ; enddo ; endif
-!$OMP do
   do j=js,je ; do i=is,ie
     eta_src(i,j) = G%mask2dT(i,j) * (Instep * CS%eta_cor(i,j) + dtbt * CS%eta_source(i,j))
   enddo ; enddo
-!$OMP end parallel
 
   if (CS%dynamic_psurf) then
     ice_is_rigid = (associated(fluxes%rigidity_ice_u) .and. &
@@ -1258,9 +1169,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
     H_min_dyn = G%m_to_H * CS%Dmin_dyn_psurf
     if (ice_is_rigid .and. use_BT_cont) &
       call BT_cont_to_face_areas(BT_cont, Datu, Datv, G, MS, 0, .true.)
-    if (ice_is_rigid) then 
-!$OMP parallel do default(shared) private(Idt_max2,dyn_coef_max,ice_strength)
-      do j=js,je ; do i=is,ie
+    if (ice_is_rigid) then ; do j=js,je ; do i=is,ie
       ! First determine the maximum stable value for dyn_coef_eta.
 
       !   This estimate of the maximum stable time step is pretty accurate for
@@ -1502,7 +1411,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
         call pass_vector_complete(pid_ubt, ubt, vbt, CS%BT_Domain)
         call pass_var_complete(pid_eta, eta, CS%BT_Domain)
       else
-        call do_group_update(group, CS%BT_Domain)
+        call do_group_update(group, CS%BT_Domain, eta(isv-1,jsv-1))
 !        call pass_var(eta, CS%BT_Domain)
 !        call pass_vector(ubt, vbt, CS%BT_Domain)
       endif
@@ -1520,24 +1429,21 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
         call find_face_areas(Datu, Datv, G, CS, MS, eta, 1+iev-ie)
     endif
 
-!$OMP parallel default(shared) private(vel_prev)
     if (CS%dynamic_psurf .or. .not.project_velocity) then
       if (use_BT_cont) then
-!$OMP do
+!$OMP parallel do default(shared) private(i, j)
         do j=jsv-1,jev+1 ; do I=isv-2,iev+1
           uhbt(I,j) = find_uhbt(ubt(I,j),BTCL_u(I,j)) + uhbt0(I,j)
         enddo ; enddo
-!$OMP do
         do J=jsv-2,jev+1 ; do i=isv-1,iev+1
           vhbt(i,J) = find_vhbt(vbt(i,J),BTCL_v(i,J)) + vhbt0(i,J)
         enddo ; enddo
-!$OMP do
         do j=jsv-1,jev+1 ; do i=isv-1,iev+1
           eta_pred(i,j) = (eta(i,j) + eta_src(i,j)) + (dtbt * CS%IareaT(i,j)) * &
                      ((uhbt(I-1,j) - uhbt(I,j)) + (vhbt(i,J-1) - vhbt(i,J)))
         enddo ; enddo
       else
-!$OMP do
+!$OMP parallel do default(shared) private(i, j)
         do j=jsv-1,jev+1 ; do i=isv-1,iev+1
           eta_pred(i,j) = (eta(i,j) + eta_src(i,j)) + (dtbt * CS%IareaT(i,j)) * &
               (((Datu(I-1,j)*ubt(I-1,j) + uhbt0(I-1,j)) - &
@@ -1547,38 +1453,31 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
         enddo ; enddo
       endif
 
-      if (CS%dynamic_psurf) then 
-!$OMP do
-        do j=jsv-1,jev+1 ; do i=isv-1,iev+1
-          p_surf_dyn(i,j) = dyn_coef_eta(I,j) * (eta_pred(i,j) - eta(i,j))
-        enddo ; enddo 
-      endif
+      if (CS%dynamic_psurf) then ; do j=jsv-1,jev+1 ; do i=isv-1,iev+1
+        p_surf_dyn(i,j) = dyn_coef_eta(I,j) * (eta_pred(i,j) - eta(i,j))
+      enddo ; enddo ; endif
     endif
 
     ! Recall that just outside the do n loop, there is code like...
     !  eta_PF_BT => eta_pred ; if (project_velocity) eta_PF_BT => eta
 
-    if (find_etaav) then 
-!$OMP do
-      do j=js,je ; do i=is,ie
-        eta_sum(i,j) = eta_sum(i,j) + wt_accel2(n) * eta_PF_BT(i,j)
-      enddo ; enddo
-    endif
+    if (find_etaav) then ; do j=js,je ; do i=is,ie
+      eta_sum(i,j) = eta_sum(i,j) + wt_accel2(n) * eta_PF_BT(i,j)
+    enddo ; enddo ; endif
 
     if (interp_eta_PF) then
       wt_end = n*Instep  ! This could be (n-0.5)*Instep.
-!$OMP do
       do j=jsv-1,jev+1 ; do i=isv-1,iev+1
         eta_PF(i,j) = eta_PF_1(i,j) + wt_end*d_eta_PF(i,j)
       enddo ; enddo
     endif
 
     if (apply_OBC_flather) then
-!$OMP do
+!$OMP parallel do default(shared) private(i, j)
       do j=jsv,jev ; do I=isv-2,iev+1
         ubt_old(I,j) = ubt(I,j)
       enddo; enddo
-!$OMP do
+!$OMP parallel do default(shared) private(i, j)
       do J=jsv-2,jev+1 ; do i=isv,iev
         vbt_old(i,J) = vbt(i,J)
       enddo ; enddo
@@ -1586,344 +1485,144 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
 
     if (MOD(n+G%first_direction,2)==1) then
       ! On odd-steps, update v first.
-!$OMP do
+!$OMP parallel do default(shared) private(i, j, Cor, gradP, vel_prev, vel_trans )
       do J=jsv-1,jev ; do i=isv-1,iev+1
-        Cor_2D(i,j) = -1.0*((amer(I-1,j) * ubt(I-1,j) + cmer(I,j+1) * ubt(I,j+1)) + &
+        Cor = -1.0*((amer(I-1,j) * ubt(I-1,j) + cmer(I,j+1) * ubt(I,j+1)) + &
                (bmer(I,j) * ubt(I,j) + dmer(I-1,j+1) * ubt(I-1,j+1))) - Cor_ref_v(i,J)
-        gradP_2D(i,j) = ((eta_PF_BT(i,j)-eta_PF(i,j))*gtot_N(i,j) - &
-               (eta_PF_BT(i,j+1)-eta_PF(i,j+1))*gtot_S(i,j+1)) * &
-               dgeo_de * CS%IdyCv(i,J)
-      enddo; enddo
-      if(CS%dynamic_psurf) then
-!$OMP do
-        do J=jsv-1,jev ; do i=isv-1,iev+1
-          gradP_2D(i,j) = gradP_2D(i,j) + (p_surf_dyn(i,j) - p_surf_dyn(i,j+1)) * CS%IdyCv(i,J)
-        enddo; enddo
-      endif
-!$OMP do
-      do J=jsv-1,jev ; do i=isv-1,iev+1
-        v_accel_bt(i,J) = v_accel_bt(i,J) + wt_accel(n) * (Cor_2D(i,j) + gradP_2D(i,j))
-      enddo; enddo
+        gradP = ((eta_PF_BT(i,j)-eta_PF(i,j))*gtot_N(i,j) - &
+                 (eta_PF_BT(i,j+1)-eta_PF(i,j+1))*gtot_S(i,j+1)) * &
+                dgeo_de * CS%IdyCv(i,J)
+        if (CS%dynamic_psurf) &
+          gradP = gradP + (p_surf_dyn(i,j) - p_surf_dyn(i,j+1)) * CS%IdyCv(i,J)
+        v_accel_bt(i,J) = v_accel_bt(i,J) + wt_accel(n) * (Cor + gradP)
+        if (find_PF)  PFv_bt_sum(i,J)  = PFv_bt_sum(i,J) + wt_accel2(n) * gradP
+        if (find_Cor) Corv_bt_sum(i,J) = Corv_bt_sum(i,J) + wt_accel2(n) * Cor
 
-      if (find_PF) then
-!$OMP do
-        do J=jsv-1,jev ; do i=isv-1,iev+1
-          PFv_bt_sum(i,J)  = PFv_bt_sum(i,J) + wt_accel2(n) * gradP_2D(i,j)
-        enddo; enddo
-      endif
-      if (find_Cor) then
-!$OMP do
-        do J=jsv-1,jev ; do i=isv-1,iev+1
-          Corv_bt_sum(i,J) = Corv_bt_sum(i,J) + wt_accel2(n) * Cor_2D(i,j)
-        enddo; enddo
-      endif
-      
-      if(apply_v_OBCs) then  ! save the old value of vbt and vhbt
-!$OMP do
-        do J=jsv-1,jev ; do i=isv-1,iev+1
-          vbt_prev(i,J) = vbt(i,J); vhbt_prev(i,J) = vhbt(i,J)
-          vbt_sum_prev(i,J)=vbt_sum(i,J); vhbt_sum_prev(i,J)=vhbt_sum(i,J) ; vbt_wtd_prev(i,J) = vbt_wtd_prev(i,J)
-        enddo ; enddo
-      endif
+        if (apply_v_OBCs) then ; if (BT_OBC%OBC_mask_v(i,J)) cycle ; endif
 
-      if (project_velocity) then
-!$OMP do
-        do J=jsv-1,jev ; do i=isv-1,iev+1  
-          vel_prev = vbt(i,J)
-          vbt(i,J) = bt_rem_v(i,J) * (vbt(i,J) + &
-                      dtbt * ((BT_force_v(i,J) + Cor_2D(i,j)) + gradP_2D(i,j)))
-          vel_trans_2D(i,j) = (1.0 + be_proj)*vbt(i,J) - be_proj*vel_prev
-        enddo; enddo
-      else
-!$OMP do
-        do J=jsv-1,jev ; do i=isv-1,iev+1  
-          vel_prev = vbt(i,J)
-          vbt(i,J) = bt_rem_v(i,J) * (vbt(i,J) + &
-                      dtbt * ((BT_force_v(i,J) + Cor_2D(i,j)) + gradP_2D(i,j)))
-          vel_trans_2D(i,j) = (1.0-bebt)*vel_prev + bebt*vbt(i,J)
-        enddo; enddo
-      endif
+        vel_prev = vbt(i,J)
+        vbt(i,J) = bt_rem_v(i,J) * (vbt(i,J) + &
+                        dtbt * ((BT_force_v(i,J) + Cor) + gradP))
+        if (project_velocity) then
+          vel_trans = (1.0 + be_proj)*vbt(i,J) - be_proj*vel_prev
+        else
+          vel_trans = (1.0-bebt)*vel_prev + bebt*vbt(i,J)
+        endif
+        if (use_BT_cont) then
+          vhbt(i,J) = find_vhbt(vel_trans,BTCL_v(i,J)) + vhbt0(i,J)
+        else
+          vhbt(i,J) = Datv(i,J)*vel_trans + vhbt0(i,J)
+        endif
 
-      if (use_BT_cont) then
-!$OMP do
-         do J=jsv-1,jev ; do i=isv-1,iev+1  
-            vhbt(i,J) = find_vhbt(vel_trans_2D(i,j),BTCL_v(i,J)) + vhbt0(i,J)
-         enddo; enddo
-      else
-!$OMP do
-         do J=jsv-1,jev ; do i=isv-1,iev+1  
-            vhbt(i,J) = Datv(i,J)*vel_trans_2D(i,j) + vhbt0(i,J)
-         enddo; enddo
-      endif
-!$OMP do
-      do J=jsv-1,jev ; do i=isv-1,iev+1
-        vbt_sum(i,J) = vbt_sum(i,J) + wt_trans(n) * vel_trans_2D(i,j)
+        vbt_sum(i,J) = vbt_sum(i,J) + wt_trans(n) * vel_trans
         vhbt_sum(i,J) = vhbt_sum(i,J) + wt_trans(n) * vhbt(i,J)
         vbt_wtd(i,J) = vbt_wtd(i,J) + wt_vel(n) * vbt(i,J)
-      enddo; enddo
-      if(apply_v_OBCs) then  ! copy back the value for the points that OBC_mask_v is true.
-!$OMP do
-        do J=jsv-1,jev ; do i=isv-1,iev+1
-          if (BT_OBC%OBC_mask_v(i,J)) then          
-            vbt(i,J) = vbt_prev(i,J); vhbt(i,J) = vhbt_prev(i,J)
-            vbt_sum(i,J)=vbt_sum_prev(i,J); vhbt_sum(i,J)=vhbt_sum_prev(i,J) ; vbt_wtd(i,J)=vbt_wtd_prev(i,J)
-          endif
-        enddo ; enddo
-      endif      
+      enddo ; enddo
 
-!$OMP do
+!$OMP parallel do default(shared) private(i, j, Cor, gradP, vel_prev, vel_trans )
       do j=jsv,jev ; do I=isv-1,iev
-        Cor_2D(i,j) = ((azon(I,j) * vbt(i+1,J) + czon(I,j) * vbt(i,J-1)) + &
+        Cor = ((azon(I,j) * vbt(i+1,J) + czon(I,j) * vbt(i,J-1)) + &
                (bzon(I,j) * vbt(i,J) + dzon(I,j) * vbt(i+1,J-1))) - Cor_ref_u(I,j)
-        gradP_2D(i,j) = ((eta_PF_BT(i,j)-eta_PF(i,j))*gtot_E(i,j) - &
+        gradP = ((eta_PF_BT(i,j)-eta_PF(i,j))*gtot_E(i,j) - &
                  (eta_PF_BT(i+1,j)-eta_PF(i+1,j))*gtot_W(i+1,j)) * &
                 dgeo_de * CS%IdxCu(I,j)
-      enddo; enddo
-      if (CS%dynamic_psurf) then
-!$OMP do
-        do j=jsv,jev ; do I=isv-1,iev
-          gradP_2D(i,j) = gradP_2D(i,j) + (p_surf_dyn(i,j) - p_surf_dyn(i+1,j)) * CS%IdxCu(I,j)
-        enddo; enddo
-      endif     
-!$OMP do
-      do j=jsv,jev ; do I=isv-1,iev
-        u_accel_bt(I,j) = u_accel_bt(I,j) + wt_accel(n) * (Cor_2D(i,j) + gradP_2D(i,j))
-      enddo; enddo
+        if (CS%dynamic_psurf) &
+          gradP = gradP + (p_surf_dyn(i,j) - p_surf_dyn(i+1,j)) * CS%IdxCu(I,j)
+        u_accel_bt(I,j) = u_accel_bt(I,j) + wt_accel(n) * (Cor + gradP)
+        if (find_PF)  PFu_bt_sum(I,j)  = PFu_bt_sum(I,j) + wt_accel2(n) * gradP
+        if (find_Cor) Coru_bt_sum(I,j) = Coru_bt_sum(I,j) + wt_accel2(n) * Cor
 
-      if (find_PF) then
-!$OMP do
-        do j=jsv,jev ; do I=isv-1,iev
-           PFu_bt_sum(I,j)  = PFu_bt_sum(I,j) + wt_accel2(n) * gradP_2D(i,j)
-        enddo; enddo
-      endif
-      if (find_Cor) then
-!$OMP do
-        do j=jsv,jev ; do I=isv-1,iev
-          Coru_bt_sum(I,j) = Coru_bt_sum(I,j) + wt_accel2(n) * Cor_2D(i,j)
-        enddo; enddo
-      endif
+        if (apply_u_OBCs) then ; if (BT_OBC%OBC_mask_u(I,j)) cycle ; endif
 
-      if(apply_u_OBCs) then  ! save the old value of vbt and vhbt
-!$OMP do
-        do J=jsv,jev ; do i=isv-1,iev
-          ubt_prev(i,J) = ubt(i,J); uhbt_prev(i,J) = uhbt(i,J)
-          ubt_sum_prev(i,J)=ubt_sum(i,J); uhbt_sum_prev(i,J)=uhbt_sum(i,J) ; ubt_wtd_prev(i,J)=ubt_wtd_prev(i,J)
-        enddo ; enddo
-      endif
-      if (project_velocity) then
-!$OMP do
-        do j=jsv,jev ; do I=isv-1,iev
-          vel_prev = ubt(I,j)
-          ubt(I,j) = bt_rem_u(I,j) * (ubt(I,j) + &
-               dtbt * ((BT_force_u(I,j) + Cor_2D(i,j)) + gradP_2D(i,j)))
-          vel_trans_2D(i,j) = (1.0 + be_proj)*ubt(I,j) - be_proj*vel_prev
-        enddo; enddo
-      else
-!$OMP do
-        do j=jsv,jev ; do I=isv-1,iev
-          vel_prev = ubt(I,j)
-          ubt(I,j) = bt_rem_u(I,j) * (ubt(I,j) + &
-               dtbt * ((BT_force_u(I,j) + Cor_2D(i,j)) + gradP_2D(i,j)))
-          vel_trans_2D(i,j) = (1.0-bebt)*vel_prev + bebt*ubt(I,j)
-        enddo; enddo
-      endif
-      if (use_BT_cont) then
-!$OMP do
-        do j=jsv,jev ; do I=isv-1,iev
-          uhbt(I,j) = find_uhbt(vel_trans_2D(i,j), BTCL_u(I,j)) + uhbt0(I,j)
-        enddo; enddo
-      else
-!$OMP do
-        do j=jsv,jev ; do I=isv-1,iev
-          uhbt(I,j) = Datu(I,j)*vel_trans_2D(i,j) + uhbt0(I,j)
-        enddo; enddo
-      endif
-!$OMP do
-      do j=jsv,jev ; do I=isv-1,iev
-        ubt_sum(I,j) = ubt_sum(I,j) + wt_trans(n) * vel_trans_2D(i,j)
+        vel_prev = ubt(I,j)
+        ubt(I,j) = bt_rem_u(I,j) * (ubt(I,j) + &
+                        dtbt * ((BT_force_u(I,j) + Cor) + gradP))
+        if (project_velocity) then
+          vel_trans = (1.0 + be_proj)*ubt(I,j) - be_proj*vel_prev
+        else
+          vel_trans = (1.0-bebt)*vel_prev + bebt*ubt(I,j)
+        endif
+        if (use_BT_cont) then
+          uhbt(I,j) = find_uhbt(vel_trans, BTCL_u(I,j)) + uhbt0(I,j)
+        else
+          uhbt(I,j) = Datu(I,j)*vel_trans + uhbt0(I,j)
+        endif
+
+        ubt_sum(I,j) = ubt_sum(I,j) + wt_trans(n) * vel_trans
         uhbt_sum(I,j) = uhbt_sum(I,j) + wt_trans(n) * uhbt(I,j)
         ubt_wtd(I,j) = ubt_wtd(I,j) + wt_vel(n) * ubt(I,j)
-      enddo; enddo
+      enddo ; enddo
 
-      if(apply_u_OBCs) then  ! copy back the value for the points that OBC_mask_v is true.
-!$OMP do
-        do J=jsv,jev ; do i=isv-1,iev
-          if (BT_OBC%OBC_mask_u(i,J)) then          
-            ubt(i,J) = ubt_prev(i,J); uhbt(i,J) = uhbt_prev(i,J)
-            ubt_sum(i,J)=ubt_sum_prev(i,J); uhbt_sum(i,J)=uhbt_sum_prev(i,J) ; ubt_wtd(i,J)=ubt_wtd_prev(i,J)
-          endif
-        enddo ; enddo
-      endif      
     else
       ! On even steps, update u first.
-!$OMP do
+!$OMP parallel do default(shared) private(i, j, Cor, gradP, vel_prev, vel_trans )
       do j=jsv-1,jev+1 ; do I=isv-1,iev
-        Cor_2D(i,j) = ((azon(I,j) * vbt(i+1,J) + czon(I,j) * vbt(i,J-1)) + &
+        Cor = ((azon(I,j) * vbt(i+1,J) + czon(I,j) * vbt(i,J-1)) + &
                (bzon(I,j) * vbt(i,J) +  dzon(I,j) * vbt(i+1,J-1))) - Cor_ref_u(I,j)
-        gradP_2D(i,j) = ((eta_PF_BT(i,j)-eta_PF(i,j))*gtot_E(i,j) - &
+        gradP = ((eta_PF_BT(i,j)-eta_PF(i,j))*gtot_E(i,j) - &
                  (eta_PF_BT(i+1,j)-eta_PF(i+1,j))*gtot_W(i+1,j)) * &
-                 dgeo_de * CS%IdxCu(I,j)
-      enddo; enddo
+                dgeo_de * CS%IdxCu(I,j)
+        if (CS%dynamic_psurf) &
+          gradP = gradP + (p_surf_dyn(i,j) - p_surf_dyn(i+1,j)) * CS%IdxCu(I,j)
+        u_accel_bt(I,j) = u_accel_bt(I,j) + wt_accel(n) * (Cor + gradP)
+        if (find_PF)  PFu_bt_sum(I,j)  = PFu_bt_sum(I,j) + wt_accel2(n) * gradP
+        if (find_Cor) Coru_bt_sum(I,j) = Coru_bt_sum(I,j) + wt_accel2(n) * Cor
 
-      if (CS%dynamic_psurf) then
-!$OMP do
-        do j=jsv-1,jev+1 ; do I=isv-1,iev
-          gradP_2D(i,j) = gradP_2D(i,j) + (p_surf_dyn(i,j) - p_surf_dyn(i+1,j)) * CS%IdxCu(I,j)
-        enddo; enddo
-      endif
-!$OMP do
-      do j=jsv-1,jev+1 ; do I=isv-1,iev
-        u_accel_bt(I,j) = u_accel_bt(I,j) + wt_accel(n) * (Cor_2D(i,j) + gradP_2D(i,j))
-      enddo; enddo
+        if (apply_u_OBCs) then ; if (BT_OBC%OBC_mask_u(I,j)) cycle ; endif
 
-      if (find_PF) then
-!$OMP do
-        do j=jsv-1,jev+1 ; do I=isv-1,iev
-          PFu_bt_sum(I,j)  = PFu_bt_sum(I,j) + wt_accel2(n) * gradP_2D(i,j)
-        enddo; enddo
-      endif
-      if (find_Cor) then
-!$OMP do
-        do j=jsv-1,jev+1 ; do I=isv-1,iev
-          Coru_bt_sum(I,j) = Coru_bt_sum(I,j) + wt_accel2(n) * Cor_2D(i,j)
-        enddo; enddo
-      endif
-      if(apply_u_OBCs) then  ! save the old value of vbt and vhbt
-!$OMP do
-        do J=jsv-1,jev+1 ; do i=isv-1,iev
-          ubt_prev(i,J) = ubt(i,J); uhbt_prev(i,J) = uhbt(i,J)
-          ubt_sum_prev(i,J)=ubt_sum(i,J); uhbt_sum_prev(i,J)=uhbt_sum(i,J) ; ubt_wtd_prev(i,J)=ubt_wtd_prev(i,J)
-        enddo ; enddo
-      endif
+        vel_prev = ubt(I,j)
+        ubt(I,j) = bt_rem_u(I,j) * (ubt(I,j) + &
+                        dtbt * ((BT_force_u(I,j) + Cor) + gradP))
+        if (project_velocity) then
+          vel_trans = (1.0 + be_proj)*ubt(I,j) - be_proj*vel_prev
+        else
+          vel_trans = (1.0-bebt)*vel_prev + bebt*ubt(I,j)
+        endif
+        if (use_BT_cont) then
+          uhbt(I,j) = find_uhbt(vel_trans,BTCL_u(I,j)) + uhbt0(I,j)
+        else
+          uhbt(I,j) = Datu(I,j)*vel_trans + uhbt0(I,j)
+        endif
 
-      if (project_velocity) then
-!$OMP do
-        do j=jsv-1,jev+1 ; do I=isv-1,iev
-          vel_prev = ubt(I,j)
-          ubt(I,j) = bt_rem_u(I,j) * (ubt(I,j) + &
-               dtbt * ((BT_force_u(I,j) + Cor_2D(i,j)) + gradP_2D(i,j)))
-          vel_trans_2D(i,j) = (1.0 + be_proj)*ubt(I,j) - be_proj*vel_prev
-        enddo; enddo
-      else
-!$OMP do
-       do j=jsv-1,jev+1 ; do I=isv-1,iev
-          vel_prev = ubt(I,j)
-          ubt(I,j) = bt_rem_u(I,j) * (ubt(I,j) + &
-               dtbt * ((BT_force_u(I,j) + Cor_2D(i,j)) + gradP_2D(i,j)))
-          vel_trans_2D(i,j) = (1.0-bebt)*vel_prev + bebt*ubt(I,j)
-        enddo; enddo
-      endif
-      if (use_BT_cont) then
-!$OMP do
-        do j=jsv-1,jev+1 ; do I=isv-1,iev
-          uhbt(I,j) = find_uhbt(vel_trans_2D(i,j),BTCL_u(I,j)) + uhbt0(I,j)
-        enddo; enddo
-      else
-!$OMP do
-        do j=jsv-1,jev+1 ; do I=isv-1,iev
-          uhbt(I,j) = Datu(I,j)*vel_trans_2D(i,j) + uhbt0(I,j)
-        enddo; enddo
-      endif
-!$OMP do
-      do j=jsv-1,jev+1 ; do I=isv-1,iev
-        ubt_sum(I,j) = ubt_sum(I,j) + wt_trans(n) * vel_trans_2D(i,j)
+        ubt_sum(I,j) = ubt_sum(I,j) + wt_trans(n) * vel_trans
         uhbt_sum(I,j) = uhbt_sum(I,j) + wt_trans(n) * uhbt(I,j)
         ubt_wtd(I,j) = ubt_wtd(I,j) + wt_vel(n) * ubt(I,j)
-      enddo; enddo
-      if(apply_u_OBCs) then  ! copy back the value for the points that OBC_mask_v is true.
-!$OMP do
-        do J=jsv-1,jev+1 ; do i=isv-1,iev
-          if (BT_OBC%OBC_mask_u(i,J)) then          
-            ubt(i,J) = ubt_prev(i,J); uhbt(i,J) = uhbt_prev(i,J)
-            ubt_sum(i,J)=ubt_sum_prev(i,J); uhbt_sum(i,J)=uhbt_sum_prev(i,J) ; ubt_wtd(i,J)=ubt_wtd_prev(i,J)
-          endif
-        enddo ; enddo
-      endif      
+      enddo ; enddo
 
-!$OMP do
+!$OMP parallel do default(shared) private(i, j, Cor, gradP, vel_prev, vel_trans )
       do J=jsv-1,jev ; do i=isv,iev
-        Cor_2D(i,j) = -1.0*((amer(I-1,j) * ubt(I-1,j) + bmer(I,j) * ubt(I,j)) + &
+        Cor = -1.0*((amer(I-1,j) * ubt(I-1,j) + bmer(I,j) * ubt(I,j)) + &
                 (cmer(I,j+1) * ubt(I,j+1) + dmer(I-1,j+1) * ubt(I-1,j+1))) - Cor_ref_v(i,J)
-        gradP_2D(i,j) = ((eta_PF_BT(i,j)-eta_PF(i,j))*gtot_N(i,j) - &
+        gradP = ((eta_PF_BT(i,j)-eta_PF(i,j))*gtot_N(i,j) - &
                  (eta_PF_BT(i,j+1)-eta_PF(i,j+1))*gtot_S(i,j+1)) * &
-                 dgeo_de * CS%IdyCv(i,J)
-      enddo; enddo
+                dgeo_de * CS%IdyCv(i,J)
+        if (CS%dynamic_psurf) &
+          gradP = gradP + (p_surf_dyn(i,j) - p_surf_dyn(i,j+1)) * CS%IdyCv(i,J)
+        v_accel_bt(I,j) = v_accel_bt(I,j) + wt_accel(n) * (Cor + gradP)
+        if (find_PF)  PFv_bt_sum(i,J)  = PFv_bt_sum(i,J) + wt_accel2(n) * gradP
+        if (find_Cor) Corv_bt_sum(i,J) = Corv_bt_sum(i,J) + wt_accel2(n) * Cor
 
-      if (CS%dynamic_psurf) then
-!$OMP do
-        do J=jsv-1,jev ; do i=isv,iev
-          gradP_2D(i,j) = gradP_2D(i,j) + (p_surf_dyn(i,j) - p_surf_dyn(i,j+1)) * CS%IdyCv(i,J)
-        enddo; enddo
-      endif
-!$OMP do
-      do J=jsv-1,jev ; do i=isv,iev
-        v_accel_bt(I,j) = v_accel_bt(I,j) + wt_accel(n) * (Cor_2D(i,j) + gradP_2D(i,j))
-      enddo; enddo
-      if (find_PF) then
-!$OMP do
-        do J=jsv-1,jev ; do i=isv,iev
-          PFv_bt_sum(i,J)  = PFv_bt_sum(i,J) + wt_accel2(n) * gradP_2D(i,j)
-        enddo; enddo
-      endif
-      if (find_Cor) then
-!$OMP do
-        do J=jsv-1,jev ; do i=isv,iev
-          Corv_bt_sum(i,J) = Corv_bt_sum(i,J) + wt_accel2(n) * Cor_2D(i,j)
-        enddo; enddo
-      endif
-      if(apply_v_OBCs) then  ! save the old value of vbt and vhbt
-!$OMP do
-        do J=jsv-1,jev ; do i=isv,iev
-          vbt_prev(i,J) = vbt(i,J); vhbt_prev(i,J) = vhbt(i,J)
-          vbt_sum_prev(i,J)=vbt_sum(i,J); vhbt_sum_prev(i,J)=vhbt_sum(i,J) ; vbt_wtd_prev(i,J)=vbt_wtd_prev(i,J)
-        enddo ; enddo
-      endif
-      if (project_velocity) then
-!$OMP do
-         do J=jsv-1,jev ; do i=isv,iev
-            vel_prev = vbt(i,J)
-            vbt(i,J) = bt_rem_v(i,J) * (vbt(i,J) + &
-                 dtbt * ((BT_force_v(i,J) + Cor_2D(i,j)) + gradP_2D(i,j)))
-            vel_trans_2D(i,j) = (1.0 + be_proj)*vbt(i,J) - be_proj*vel_prev
-         enddo; enddo
-      else
-!$OMP do
-         do J=jsv-1,jev ; do i=isv,iev
-            vel_prev = vbt(i,J)
-            vbt(i,J) = bt_rem_v(i,J) * (vbt(i,J) + &
-                 dtbt * ((BT_force_v(i,J) + Cor_2D(i,j)) + gradP_2D(i,j)))
-            vel_trans_2D(i,j) = (1.0-bebt)*vel_prev + bebt*vbt(i,J)
-         enddo; enddo
-      endif
-      if (use_BT_cont) then
-!$OMP do
-        do J=jsv-1,jev ; do i=isv,iev
-          vhbt(i,J) = find_vhbt(vel_trans_2D(i,j),BTCL_v(i,J)) + vhbt0(i,J)
-        enddo; enddo
-      else
-!$OMP do
-        do J=jsv-1,jev ; do i=isv,iev
-          vhbt(i,J) = Datv(i,J)*vel_trans_2D(i,j) + vhbt0(i,J)
-        enddo; enddo
-      endif
-!$OMP do
-      do J=jsv-1,jev ; do i=isv,iev
-        vbt_sum(i,J) = vbt_sum(i,J) + wt_trans(n) * vel_trans_2D(i,j)
+        if (apply_v_OBCs) then ; if (BT_OBC%OBC_mask_v(i,J)) cycle ; endif
+
+        vel_prev = vbt(i,J)
+        vbt(i,J) = bt_rem_v(i,J) * (vbt(i,J) + &
+                        dtbt * ((BT_force_v(i,J) + Cor) + gradP))
+        if (project_velocity) then
+          vel_trans = (1.0 + be_proj)*vbt(i,J) - be_proj*vel_prev
+        else
+          vel_trans = (1.0-bebt)*vel_prev + bebt*vbt(i,J)
+        endif
+         if (use_BT_cont) then
+          vhbt(i,J) = find_vhbt(vel_trans,BTCL_v(i,J)) + vhbt0(i,J)
+        else
+          vhbt(i,J) = Datv(i,J)*vel_trans + vhbt0(i,J)
+        endif
+
+        vbt_sum(i,J) = vbt_sum(i,J) + wt_trans(n) * vel_trans
         vhbt_sum(i,J) = vhbt_sum(i,J) + wt_trans(n) * vhbt(i,J)
         vbt_wtd(i,J) = vbt_wtd(i,J) + wt_vel(n) * vbt(i,J)
-      enddo; enddo
-
-      if(apply_v_OBCs) then  ! copy back the value for the points that OBC_mask_v is true.
-!$OMP do
-        do J=jsv-1,jev ; do i=isv,iev
-          if (BT_OBC%OBC_mask_v(i,J)) then          
-            vbt(i,J) = vbt_prev(i,J); vhbt(i,J) = vhbt_prev(i,J)
-            vbt_sum(i,J)=vbt_sum_prev(i,J); vhbt_sum(i,J)=vhbt_sum_prev(i,J) ; vbt_wtd(i,J)=vbt_wtd_prev(i,J)
-          endif
-        enddo ; enddo
-      endif      
+      enddo ; enddo
     endif
-!$OMP end parallel
 
     if (apply_OBCs) then
       call apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, &
@@ -3166,32 +2865,23 @@ subroutine set_local_BT_cont_types(BT_cont, BTCL_u, BTCL_v, G, MS, BT_Domain, ha
   hs = 1 ; if (present(halo)) hs = max(halo,0)
 
   ! Copy the BT_cont arrays into symmetric, potentially wide haloed arrays.
-!$OMP parallel default(shared)
-!$OMP do
-  do j=js-hs,je+hs ; do i=is-hs-1,ie+hs
-    u_polarity(i,j) = 1.0
-    uBT_EE(i,j) = 0.0 ; uBT_WW(i,j) = 0.0 
-    FA_u_EE(i,j) = 0.0 ; FA_u_E0(i,j) = 0.0 ; FA_u_W0(i,j) = 0.0 ; FA_u_WW(i,j) = 0.0
-  enddo; enddo
-!$OMP do
-  do j=js-hs-1,je+hs ; do i=is-hs,ie+hs
-    v_polarity(i,j) = 1.0
-    vBT_NN(i,j) = 0.0 ; vBT_SS(i,j) = 0.0
-    FA_v_NN(i,j) = 0.0 ; FA_v_N0(i,j) = 0.0 ; FA_v_S0(i,j) = 0.0 ; FA_v_SS(i,j) = 0.0
-  enddo; enddo
-!$OMP do
-  do j=js,je; do I=is-1,ie
+  u_polarity(:,:) = 1.0
+  uBT_EE(:,:) = 0.0 ; uBT_WW(:,:) = 0.0 
+  FA_u_EE(:,:) = 0.0 ; FA_u_E0(:,:) = 0.0 ; FA_u_W0(:,:) = 0.0 ; FA_u_WW(:,:) = 0.0
+  do I=is-1,ie ; do j=js,je
     uBT_EE(I,j) = BT_cont%uBT_EE(I,j) ; uBT_WW(I,j) = BT_cont%uBT_WW(I,j)
     FA_u_EE(I,j) = BT_cont%FA_u_EE(I,j) ; FA_u_E0(I,j) = BT_cont%FA_u_E0(I,j)
     FA_u_W0(I,j) = BT_cont%FA_u_W0(I,j) ; FA_u_WW(I,j) = BT_cont%FA_u_WW(I,j)
   enddo ; enddo
-!$OMP do
-  do J=js-1,je; do i=is,ie
+
+  v_polarity(:,:) = 1.0
+  vBT_NN(:,:) = 0.0 ; vBT_SS(:,:) = 0.0 
+  FA_v_NN(:,:) = 0.0 ; FA_v_N0(:,:) = 0.0 ; FA_v_S0(:,:) = 0.0 ; FA_v_SS(:,:) = 0.0
+  do i=is,ie ; do J=js-1,je
     vBT_NN(i,J) = BT_cont%vBT_NN(i,J) ; vBT_SS(i,J) = BT_cont%vBT_SS(i,J)
     FA_v_NN(i,J) = BT_cont%FA_v_NN(i,J) ; FA_v_N0(i,J) = BT_cont%FA_v_N0(i,J)
     FA_v_S0(i,J) = BT_cont%FA_v_S0(i,J) ; FA_v_SS(i,J) = BT_cont%FA_v_SS(i,J)
   enddo ; enddo
-!$OMP end parallel
 
   if (id_clock_calc_pre > 0) call cpu_clock_end(id_clock_calc_pre)
   if (id_clock_pass_pre > 0) call cpu_clock_begin(id_clock_pass_pre)
@@ -3207,8 +2897,6 @@ subroutine set_local_BT_cont_types(BT_cont, BTCL_u, BTCL_v, G, MS, BT_Domain, ha
   if (id_clock_pass_pre > 0) call cpu_clock_end(id_clock_pass_pre)
   if (id_clock_calc_pre > 0) call cpu_clock_begin(id_clock_calc_pre)
 
-!$OMP parallel default(shared)
-!$OMP do
   do j=js-hs,je+hs ; do I=is-hs-1,ie+hs
     BTCL_u(I,j)%FA_u_EE = FA_u_EE(I,j) ; BTCL_u(I,j)%FA_u_E0 = FA_u_E0(I,j)
     BTCL_u(I,j)%FA_u_W0 = FA_u_W0(I,j) ; BTCL_u(I,j)%FA_u_WW = FA_u_WW(I,j)
@@ -3231,7 +2919,7 @@ subroutine set_local_BT_cont_types(BT_cont, BTCL_u, BTCL_v, G, MS, BT_Domain, ha
     if (abs(BTCL_u(I,j)%uBT_EE) > 0.0) BTCL_u(I,j)%uh_crvE = &
       (C1_3 * (BTCL_u(I,j)%FA_u_EE - BTCL_u(I,j)%FA_u_E0)) / BTCL_u(I,j)%uBT_EE**2
   enddo ; enddo
-!$OMP do
+
   do J=js-hs-1,je+hs ; do i=is-hs,ie+hs
     BTCL_v(i,J)%FA_v_NN = FA_v_NN(i,J) ; BTCL_v(i,J)%FA_v_N0 = FA_v_N0(i,J)
     BTCL_v(i,J)%FA_v_S0 = FA_v_S0(i,J) ; BTCL_v(i,J)%FA_v_SS = FA_v_SS(i,J)
@@ -3254,7 +2942,7 @@ subroutine set_local_BT_cont_types(BT_cont, BTCL_u, BTCL_v, G, MS, BT_Domain, ha
     if (abs(BTCL_v(i,J)%vBT_NN) > 0.0) BTCL_v(i,J)%vh_crvN = &
       (C1_3 * (BTCL_v(i,J)%FA_v_NN - BTCL_v(i,J)%FA_v_N0)) / BTCL_v(i,J)%vBT_NN**2
   enddo ; enddo
-!$OMP end parallel
+
 end subroutine set_local_BT_cont_types
 
 subroutine BT_cont_to_face_areas(BT_cont, Datu, Datv, G, MS, halo, maximize)
@@ -3290,7 +2978,6 @@ subroutine BT_cont_to_face_areas(BT_cont, Datu, Datv, G, MS, halo, maximize)
       Datv(i,J) = 0.5 * (BT_cont%FA_v_N0(i,J) + BT_cont%FA_v_S0(i,J))
     enddo ; enddo
   endif
-
 end subroutine BT_cont_to_face_areas
 
 subroutine swap(a,b)
@@ -3328,18 +3015,17 @@ subroutine find_face_areas(Datu, Datv, G, CS, MS, eta, halo, add_max)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   hs = 1 ; if (present(halo)) hs = max(halo,0)
 
-!$OMP parallel default(shared) private(H1,H2)
   if (present(eta)) then
     ! The use of harmonic mean thicknesses ensure positive definiteness.
     if (G%Boussinesq) then
-!$OMP do
+!$OMP parallel do default(shared) private(i, j, H1, H2)
       do j=js-hs,je+hs ; do I=is-1-hs,ie+hs
         H1 = CS%bathyT(i,j) + eta(i,j) ; H2 = CS%bathyT(i+1,j) + eta(i+1,j)
         Datu(I,j) = 0.0 ; if ((H1 > 0.0) .and. (H2 > 0.0)) &
         Datu(I,j) = CS%dy_Cu(I,j) * (2.0 * H1 * H2) / (H1 + H2)
 !       Datu(I,j) = CS%dy_Cu(I,j) * 0.5 * (H1 + H2)
       enddo; enddo
-!$OMP do
+!$OMP parallel do default(shared) private(i, j, H1, H2)
       do J=js-1-hs,je+hs ; do i=is-hs,ie+hs
         H1 = CS%bathyT(i,j) + eta(i,j) ; H2 = CS%bathyT(i,j+1) + eta(i,j+1)
         Datv(i,J) = 0.0 ; if ((H1 > 0.0) .and. (H2 > 0.0)) &
@@ -3347,14 +3033,14 @@ subroutine find_face_areas(Datu, Datv, G, CS, MS, eta, halo, add_max)
 !       Datv(i,J) = CS%dy_v(i,J) * 0.5 * (H1 + H2)
       enddo; enddo
     else
-!$OMP do
+!$OMP parallel do default(shared) private(i, j)
       do j=js-hs,je+hs ; do I=is-1-hs,ie+hs
         Datu(I,j) = 0.0 ; if ((eta(i,j) > 0.0) .and. (eta(i+1,j) > 0.0)) &
         Datu(I,j) = CS%dy_Cu(I,j) * (2.0 * eta(i,j) * eta(i+1,j)) / &
                                   (eta(i,j) + eta(i+1,j))
         ! Datu(I,j) = CS%dy_Cu(I,j) * 0.5 * (eta(i,j) + eta(i+1,j))
       enddo; enddo
-!$OMP do
+!$OMP parallel do default(shared) private(i, j)
       do J=js-1-hs,je+hs ; do i=is-hs,ie+hs
         Datv(i,J) = 0.0 ; if ((eta(i,j) > 0.0) .and. (eta(i,j+1) > 0.0)) &
         Datv(i,J) = CS%dx_Cv(i,J) * (2.0 * eta(i,j) * eta(i,j+1)) / &
@@ -3363,18 +3049,18 @@ subroutine find_face_areas(Datu, Datv, G, CS, MS, eta, halo, add_max)
       enddo; enddo
     endif
   elseif (present(add_max)) then
-!$OMP do
+!$OMP parallel do default(shared) private(i, j)
     do j=js-hs,je+hs ; do I=is-1-hs,ie+hs
       Datu(I,j) = CS%dy_Cu(I,j) * G%m_to_H * &
                   (max(CS%bathyT(i+1,j), CS%bathyT(i,j)) + add_max)
     enddo ; enddo
-!$OMP do
+!$OMP parallel do default(shared) private(i, j)
     do J=js-1-hs,je+hs ; do i=is-hs,ie+hs
       Datv(i,J) = CS%dx_Cv(i,J) * G%m_to_H * &
                   (max(CS%bathyT(i,j+1), CS%bathyT(i,j)) + add_max)
     enddo ; enddo
   else
-!$OMP do
+!$OMP parallel do default(shared) private(i, j)
     do j=js-hs,je+hs ; do I=is-1-hs,ie+hs
       !Would be "if (G%mask2dCu(I,j)>0.) &" is G was valid on BT domain
       if (CS%bathyT(i+1,j)+CS%bathyT(i,j)>0.) &
@@ -3382,7 +3068,7 @@ subroutine find_face_areas(Datu, Datv, G, CS, MS, eta, halo, add_max)
                   (CS%bathyT(i+1,j) * CS%bathyT(i,j)) / &
                   (CS%bathyT(i+1,j) + CS%bathyT(i,j))
     enddo ; enddo
-!$OMP do
+!$OMP parallel do default(shared) private(i, j)
     do J=js-1-hs,je+hs ; do i=is-hs,ie+hs
       !Would be "if (G%mask2dCv(i,J)>0.) &" is G was valid on BT domain
       if (CS%bathyT(i,j+1)+CS%bathyT(i,j)>0.) &
@@ -3391,7 +3077,6 @@ subroutine find_face_areas(Datu, Datv, G, CS, MS, eta, halo, add_max)
                   (CS%bathyT(i,j+1) + CS%bathyT(i,j))
     enddo ; enddo
   endif
-!$OMP end parallel
 
 end subroutine find_face_areas
 
@@ -3438,7 +3123,7 @@ subroutine bt_mass_source(h, eta, fluxes, set_cor, dt_therm, dt_since_therm, &
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
-!$OMP parallel do default(shared) private(eta_h,h_tot,limit_dt,d_eta)
+!$OMP parallel do default(shared) private(i,j,k,eta_h)
   do j=js,je
     do i=is,ie ; h_tot(i) = h(i,j,1) ; enddo
     if (G%Boussinesq) then
@@ -4020,6 +3705,7 @@ subroutine barotropic_init(u, v, h, eta, Time, G, param_file, diag, CS, &
   call pass_vector(CS%ubt_IC, CS%vbt_IC, G%Domain, complete=.false.)
   call pass_vector(CS%uhbt_IC, CS%vhbt_IC, G%Domain, complete=.false.)
   call pass_vector(CS%ubtav, CS%vbtav, G%Domain)
+
 
 !  id_clock_pass = cpu_clock_id('(Ocean BT halo updates)', grain=CLOCK_ROUTINE)
   id_clock_calc_pre  = cpu_clock_id('(Ocean BT pre-calcs only)', grain=CLOCK_ROUTINE)

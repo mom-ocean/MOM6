@@ -2,6 +2,7 @@
 module MOM_KPP
 
 ! License goes here?
+
 use MOM_coms, only : max_across_PEs
 use MOM_checksums, only : hchksum, is_NaN
 use MOM_diag_mediator, only : time_type, diag_ctrl, safe_alloc_ptr, post_data
@@ -94,7 +95,7 @@ type, public :: KPP_CS ; private
   real, allocatable, dimension(:,:)   :: Vsurf     !< j-component of velocity for surface layer (m/s)
 
 end type KPP_CS
-integer :: id_clock_kpp
+
 ! Module data used for debugging only
 logical, parameter :: verbose = .False.
 #define __DO_SAFETY_CHECKS__
@@ -750,7 +751,6 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
 
     enddo ! i
   enddo ! j
-
 
 #ifdef __DO_SAFETY_CHECKS__
   if (CS%debug) then
