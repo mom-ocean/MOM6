@@ -6,7 +6,4 @@
          parameter_filename = 'MOM_input',
                               'MOM_override' /
 
- &fms_nml
-         domains_stack_size = 710000,
-         stack_size = 0 /
  

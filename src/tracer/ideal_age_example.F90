@@ -469,6 +469,7 @@ subroutine ideal_age_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, 
   enddo
   do m=1,CS%ntr ; if (CS%tracer_ages(m) .and. &
                       (year>=CS%tracer_start_year(m))) then
+!$OMP parallel do default(shared)
     do k=CS%nkml+1,nz ; do j=js,je ; do i=is,ie
       CS%tr(i,j,k,m) = CS%tr(i,j,k,m) + G%mask2dT(i,j)*dt*Isecs_per_year
     enddo ; enddo ; enddo

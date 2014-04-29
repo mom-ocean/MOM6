@@ -164,6 +164,7 @@ type, public :: diabatic_CS ; private
   type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
                              ! timing of diagnostic output.
   real :: MLDdensityDifference ! Density difference used to determine MLD_user
+  integer :: nsw               ! SW_NBANDS
   integer :: id_dudt_dia = -1, id_dvdt_dia = -1, id_wd = -1
   integer :: id_ea = -1 , id_eb = -1, id_Kd_z = -1, id_Kd_interface = -1
   integer :: id_Tdif_z = -1, id_Tadv_z = -1, id_Sdif_z = -1, id_Sadv_z = -1
@@ -1413,6 +1414,7 @@ subroutine triDiagTS(G, is, ie, js, je, hold, ea, eb, T, S)
   real :: h_tr, b_denom_1
   integer :: i, j, k
 
+!$OMP parallel do default(shared) private(h_tr,b1,d1,c1,b_denom_1)
   do j=js,je
     do i=is,ie
       h_tr = hold(i,j,1) + G%H_subroundoff
@@ -1733,6 +1735,9 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
     endif
   endif
 
+  CS%nsw = 0
+  if (ASSOCIATED(CS%optics)) CS%nsw = CS%optics%nbands
+
 end subroutine diabatic_driver_init
 
 subroutine diabatic_driver_end(CS)
@@ -1915,8 +1920,8 @@ subroutine applyBoundaryFluxes(CS, G, dt, fluxes, optics, ea, h, tv)
   real, dimension(SZI_(G)) :: netThickness, netHeat, netSalt, htot, Ttot
   real, dimension(SZI_(G), SZK_(G)) :: h2d, T2d, eps
   integer, dimension(SZI_(G), SZK_(G)) :: ksort
-  real, allocatable, dimension(:,:) :: Pen_SW_bnd
-  real, allocatable, dimension(:,:,:) :: opacityBand
+  real, dimension(max(CS%nsw,1),SZI_(G))         :: Pen_SW_bnd
+  real, dimension(max(CS%nsw,1),SZI_(G),SZK_(G)) :: opacityBand
   logical :: use_riverHeatContent, useCalvingHeatContent
   integer, parameter :: maxGroundings = 5
   integer :: numberOfGroundings, iGround(maxGroundings), jGround(maxGroundings)
@@ -1928,10 +1933,7 @@ subroutine applyBoundaryFluxes(CS, G, dt, fluxes, optics, ea, h, tv)
   ! Skip applying forcing if fluxes%sw is not associated.
   if (.not.ASSOCIATED(fluxes%sw)) return
 
-  nsw = 0
-  if (ASSOCIATED(optics)) nsw = optics%nbands
-  allocate(Pen_SW_bnd(max(nsw,1),SZI_(G)))
-  allocate(opacityBand(max(nsw,1),SZI_(G),SZK_(G)))
+  nsw = CS%nsw
 
   Irho0 = 1.0 / G%Rho0
   I_Cp = 1.0 / fluxes%C_p
@@ -1957,7 +1959,16 @@ subroutine applyBoundaryFluxes(CS, G, dt, fluxes, optics, ea, h, tv)
   if (CS%id_createdH>0) CS%createdH(:,:) = 0.
 
   numberOfGroundings = 0
+!$OMP parallel do default(none) shared(nz,h,tv,G,CS,optics,is,ie,js,je,fluxes,nsw,dt, &
+!$OMP                                  H_limit_fluxes,use_riverHeatContent,        &
+!$OMP                                  useCalvingHeatContent,ea,IforcingDepthScale, &
+!$OMP                                  numberOfGroundings,iGround,jGround,hGrounding, &
+!$OMP                                  ksort) &
+!$OMP                          private(opacityBand,h2d,T2d,eps,htot,netThickness,  &
+!$OMP                                  netHeat,netSalt,Pen_SW_bnd,fractionOfForcing, &
+!$OMP                                  dThickness,dTemp,dSalt,hOld,Ithickness,Ttot)
   do j=js,je ! Work in vertical slices (this is a hold over from the routines called with a j argument)
+    Ttot = 0
     ! Copy state into 2D-slice arrays
     do k=1,nz
       do i=is,ie
@@ -2026,11 +2037,13 @@ subroutine applyBoundaryFluxes(CS, G, dt, fluxes, optics, ea, h, tv)
           endif
         enddo ! k
         if (netThickness(i)/=0.) then ! If anything remains then we grounded out
+!$OMP critical
           numberOfGroundings = numberOfGroundings +1
+!$OMP end critical
           if (numberOfGroundings<=maxGroundings) then
             iGround(numberOfGroundings) = i ! Record i,j location of event for
             jGround(numberOfGroundings) = j ! warning message
-            hGrounding = netThickness(i)
+            hGrounding(numberOfGroundings) = netThickness(i)
           endif
           if (CS%id_createdH>0) CS%createdH(i,j) = CS%createdH(i,j) - netThickness(i)/dt
         endif
@@ -2057,6 +2070,7 @@ subroutine applyBoundaryFluxes(CS, G, dt, fluxes, optics, ea, h, tv)
     enddo
 
   enddo ! j
+
   if (CS%id_createdH > 0) call post_data(CS%id_createdH, CS%createdH, CS%diag)
 
   if (numberOfGroundings>0) then
@@ -2069,9 +2083,6 @@ subroutine applyBoundaryFluxes(CS, G, dt, fluxes, optics, ea, h, tv)
     enddo
   endif
 
-  deallocate(Pen_SW_bnd)
-  deallocate(opacityBand)
-  
 end subroutine applyBoundaryFluxes
 
 end module MOM_diabatic_driver

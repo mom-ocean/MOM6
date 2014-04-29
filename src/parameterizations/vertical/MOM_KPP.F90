@@ -2,7 +2,6 @@
 module MOM_KPP
 
 ! License goes here?
-
 use MOM_coms, only : max_across_PEs
 use MOM_checksums, only : hchksum, is_NaN
 use MOM_diag_mediator, only : time_type, diag_ctrl, safe_alloc_ptr, post_data
@@ -95,7 +94,7 @@ type, public :: KPP_CS ; private
   real, allocatable, dimension(:,:)   :: Vsurf     !< j-component of velocity for surface layer (m/s)
 
 end type KPP_CS
-
+integer :: id_clock_kpp
 ! Module data used for debugging only
 logical, parameter :: verbose = .False.
 #define __DO_SAFETY_CHECKS__
@@ -380,6 +379,10 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
 
   if (CS%id_Kd_in > 0) call post_data(CS%id_Kd_in, Kt, CS%diag)
 
+!$OMP parallel do default(private) shared(G,CS,EOS,uStar,Temp,Salt,u,v,h,GoRho,buoyFlux, &
+!$OMP                                     const1,nonLocalTransHeat,       &
+!$OMP                                     nonLocalTransScalar,Kt,Ks,Kv) &
+!$OMP                        firstprivate(nonLocalTrans) 
   do j = G%jsc, G%jec
     do i = G%isc, G%iec
       if (G%mask2dT(i,j)==0.) cycle ! Skip calling KPP for land points
@@ -748,6 +751,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
     enddo ! i
   enddo ! j
 
+
 #ifdef __DO_SAFETY_CHECKS__
   if (CS%debug) then
     call hchksum(Kt, "KPP out: Kt",G,haloshift=0)
@@ -826,7 +830,7 @@ subroutine KPP_applyNonLocalTransport(CS, G, h, nonLocalTrans, surfFlux, dt, sca
   endif
 
   if (diagHeat .or. diagSalt) dSdt(:,:,:) = 0. ! Zero halos for diagnostics ???
-
+!$OMP parallel do default(shared)
   do k = 1, G%ke
     do j = G%jsc, G%jec
       do i = G%isc, G%iec

@@ -37,6 +37,7 @@ use mpp_domains_mod, only : mpp_update_domains, CYCLIC_GLOBAL_DOMAIN, FOLD_NORTH
 use mpp_domains_mod, only : mpp_start_update_domains, mpp_complete_update_domains
 use mpp_domains_mod, only : mpp_create_group_update, mpp_do_group_update
 use mpp_domains_mod, only : group_update_type => mpp_group_update_type
+!use mpp_domains_mod, only : mpp_start_group_update, mpp_complete_group_update
 use mpp_parameter_mod, only : AGRID, BGRID_NE, CGRID_NE, SCALAR_PAIR, BITWISE_EXACT_SUM, CORNER
 use mpp_parameter_mod, only : To_East => WUPDATE, To_West => EUPDATE
 use mpp_parameter_mod, only : To_North => SUPDATE, To_South => NUPDATE
@@ -55,6 +56,7 @@ public :: global_field_sum, sum_across_PEs, min_across_PEs, max_across_PEs
 public :: AGRID, BGRID_NE, CGRID_NE, SCALAR_PAIR, BITWISE_EXACT_SUM, CORNER
 public :: To_East, To_West, To_North, To_South, To_All
 public :: create_group_update, do_group_update, group_update_type
+public :: start_group_update, complete_group_update
 
 interface pass_var
   module procedure pass_var_3d, pass_var_2d
@@ -707,20 +709,48 @@ subroutine create_vector_group_update_2d(group, u_cmpt, v_cmpt, MOM_dom, directi
 
 end subroutine create_vector_group_update_2d
 
-subroutine do_group_update(group, MOM_dom, d_type)
+subroutine do_group_update(group, MOM_dom)
   type(group_update_type),intent(inout) :: group
   type(MOM_domain_type),  intent(inout) :: MOM_dom
-  real,                   intent(in   ) :: d_type
+  real                                  :: d_type
 
 ! Arguments: 
 !  (inout)   group - The data type that store information for group update. 
 !  (in)      MOM_dom - The MOM_domain_type containing the mpp_domain needed to
 !                      determine where data should be sent.
-!  (in)      d_type - A scalar variable to indicate the data type.
 
   call mpp_do_group_update(group, MOM_dom%mpp_domain, d_type)
 
 end subroutine do_group_update
+
+subroutine start_group_update(group, MOM_dom)
+  type(group_update_type),intent(inout) :: group
+  type(MOM_domain_type),  intent(inout) :: MOM_dom
+  real                                  :: d_type
+
+! Arguments: 
+!  (inout)   group - The data type that store information for group update. 
+!  (in)      MOM_dom - The MOM_domain_type containing the mpp_domain needed to
+!                      determine where data should be sent.
+
+!  call mpp_start_group_update(group, MOM_dom%mpp_domain, d_type)
+
+end subroutine start_group_update
+
+subroutine complete_group_update(group, MOM_dom)
+  type(group_update_type),intent(inout) :: group
+  type(MOM_domain_type),  intent(inout) :: MOM_dom
+  real                                  :: d_type
+
+! Arguments: 
+!  (inout)   group - The data type that store information for group update. 
+!  (in)      MOM_dom - The MOM_domain_type containing the mpp_domain needed to
+!                      determine where data should be sent.
+
+!  call mpp_complete_group_update(group, MOM_dom%mpp_domain, d_type)
+
+end subroutine complete_group_update
+
 
 subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
                             NIHALO, NJHALO, NIGLOBAL, NJGLOBAL, NIPROC, NJPROC, &

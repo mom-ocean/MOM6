@@ -72,6 +72,8 @@ type, public :: tracer_registry_type
                              ! timing of diagnostic output.
 end type tracer_registry_type
 
+integer :: id_tracer_vertdiff
+
 contains
 
 subroutine register_tracer(tr1, name, param_file, Reg, ad_x, ad_y, &
@@ -291,24 +293,25 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, &
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   h_neglect = G%H_subroundoff
-
   sink_dist = 0.0
   if (present(sink_rate)) sink_dist = (dt*sink_rate) * G%m_to_H
+!$OMP parallel default(shared) private(sink,h_minus_dsink,b_denom_1,b1,d1,h_tr,c1)
+!$OMP do
   do j=js,je; do i=is,ie ; sfc_src(i,j) = 0.0 ; btm_src(i,j) = 0.0 ; enddo; enddo
   if (present(sfc_flux)) then
+!$OMP do 
      do j = js, je; do i = is,ie
         sfc_src(i,j) = (sfc_flux(i,j)*dt) * G%kg_m2_to_H
      enddo; enddo
   endif
   if (present(btm_flux)) then
+!$OMP do
      do j = js, je; do i = is,ie
         btm_src(i,j) = (btm_flux(i,j)*dt) * G%kg_m2_to_H
      enddo; enddo
   endif
-
-
   if (present(sink_rate)) then
-!$OMP parallel do default(shared) private(sink,h_minus_dsink,b_denom_1,b1,d1,h_tr,c1)
+!$OMP do
     do j=js,je
       ! Find the sinking rates at all interfaces, limiting them if necesary
       ! so that the characteristics do not cross within a timestep.
@@ -376,7 +379,7 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, &
       endif ; enddo ; enddo
     enddo
   else
-!$OMP parallel do default(shared) private(h_tr,b_denom_1,b1,d1,c1)
+!$OMP do 
     do j=js,je
       do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
         h_tr = h_old(i,j,1) + h_neglect
@@ -406,6 +409,8 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, &
       endif ; enddo ; enddo
     enddo
   endif
+
+!$OMP end parallel
 
 end subroutine tracer_vertdiff
 
@@ -452,6 +457,8 @@ subroutine tracer_registry_init(param_file, Reg)
       &" times with different registry pointers.")') init_calls
     if (is_root_pe()) call MOM_error(WARNING,"MOM_tracer"//mesg)
   endif
+
+
 
 end subroutine tracer_registry_init
 
