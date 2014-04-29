@@ -45,6 +45,11 @@ ICE_CONSERVATION_CHECK = True   !   [Boolean] default = True
                                 ! internal conservation of heat, salt, and water mass in
                                 ! the sea ice model.  This does not change answers, but
                                 ! can increase model run time.
+ICE_BOUNDS_CHECK = True         !   [Boolean] default = True
+                                ! If true, periodically check the values of ice and snow
+                                ! temperatures and thicknesses to ensure that they are
+                                ! sensible, and issue warnings if they are not.  This
+                                ! does not change answers, but can increase model run time.
 DEBUG = False                   !   [Boolean] default = False
                                 ! If true, write out verbose debugging data.
 ICE_SEES_ATMOS_WINDS = True     !   [Boolean] default = True
