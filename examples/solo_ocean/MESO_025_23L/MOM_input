@@ -224,10 +224,6 @@ SAVE_INITIAL_CONDS = True       !    If defined, the inital conditions are
                                 !  new run.
 IC_OUTPUT_FILE = "MOM_IC"      !  The name-root of a file into which the
                                 !  initial conditions are written for a new run.
-ALWAYS_WRITE_GEOM = False       !    If ALWAYS_WRITE_GEOM is defined, the
-                                !  ocean_geometry file is written anew with each
-                                !  run segment.  Otherwise it is only written for
-                                !  a new run.  The default is defined.
 Z_OUTPUT_GRID_FILE = "OM3_zgrid.nc"
                                 !    The file that specifies the vertical grid
                                 !  for depth-space diagnostics.

@@ -192,7 +192,8 @@ subroutine MOM_initialize(u, v, h, tv, Time, G, PF, dirs, &
   character(len = 200) :: inputdir ! The directory where NetCDF input files are.
   character(len=200) :: config
   logical :: from_Z_file
-  logical :: new_sim, write_geom
+  logical :: new_sim
+  integer :: write_geom
   logical :: use_temperature, use_sponge
   logical :: use_EOS    ! If true, density is calculated from T & S using an
                         ! equation of state.
@@ -344,11 +345,14 @@ subroutine MOM_initialize(u, v, h, tv, Time, G, PF, dirs, &
   call compute_global_grid_integrals(G)
 
 ! Write out all of the grid data used by this run.
-  call get_param(PF, mod, "ALWAYS_WRITE_GEOM", write_geom, &
-                 "If true, write the geometry and vertical grid files \n"//&
-                 "every time the model is run.  Otherwise, only write \n"//&
-                 "them for new runs.", default=.true.)
-  if (write_geom .or. new_sim) then
+  call get_param(PF, mod, "WRITE_GEOM", write_geom, &
+                 "If =0, never write the geometry and vertical grid files.\n"//&
+                 "If =1, write the geometry and vertical grid files only for\n"//&
+                 "a new simulation. If =2, always write the geometry and\n"//&
+                 "vertical grid files. Other values are invalid.", default=1)
+  if (write_geom<0 .or. write_geom>2) call MOM_error(FATAL,"MOM_initialize: "//&
+         "WRITE_GEOM must be equal to 0, 1 or 2.")
+  if ((write_geom==1 .and. new_sim) .or. write_geom==2) then
     call write_ocean_geometry_file(G, PF, dirs%output_directory)
     call write_vertgrid_file(G, PF, dirs%output_directory)
   endif
