@@ -2410,7 +2410,7 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, CS, p_atm)
         else
           state%sfc_density(i,j) = state%sfc_density(i,j) / depth(i)
         endif
-        state%Hml(:,:) = depth(i)
+        state%Hml(i,j) = depth(i)
       enddo
     enddo ! end of j loop
   endif                                             ! end BULKMIXEDLAYER
