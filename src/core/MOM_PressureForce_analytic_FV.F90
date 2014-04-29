@@ -449,24 +449,19 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
                 ! account for a reduced gravity model, in m2 s-2.
     pa, &       ! The pressure anomaly (i.e. pressure + g*RHO_0*e) at the
                 ! the interface atop a layer, in Pa.
-    Rho_cv_BL   !   The coordinate potential density in the deepest variable
-                ! density near-surface layer, in kg m-3.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G))  :: &
     dpa, &      ! The change in pressure anomaly between the top and bottom
                 ! of a layer, in Pa.
-    intz_dpa, & ! The vertical integral in depth of the pressure anomaly less
+    Rho_cv_BL,& !   The coordinate potential density in the deepest variable
+                ! density near-surface layer, in kg m-3.
+    intz_dpa    ! The vertical integral in depth of the pressure anomaly less
                 ! the pressure anomaly at the top of the layer, in m Pa.
-    pa_h_intz_dpa ! pa*h+intz_dpa
-
   real, dimension(SZIB_(G),SZJ_(G)) :: &
-    intx_pa     ! The zonal integral of the pressure anomaly along the interface
+    intx_pa, &  ! The zonal integral of the pressure anomaly along the interface
                 ! atop a layer, divided by the grid spacing, in Pa.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: &
     intx_dpa    ! The change in intx_pa through a layer, in Pa.
   real, dimension(SZI_(G),SZJB_(G)) :: &
-    inty_pa     ! The meridional integral of the pressure anomaly along the
+    inty_pa, &  ! The meridional integral of the pressure anomaly along the
                 ! interface atop a layer, divided by the grid spacing, in Pa.
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: &
     inty_dpa    ! The change in inty_pa through a layer, in Pa.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), target :: &
     T_tmp, &    ! Temporary array of temperatures where layers that are lighter
@@ -493,7 +488,6 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
   real, parameter :: C1_6 = 1.0/6.0
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkmb
   integer :: i, j, k
-  integer :: PRScheme
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   nkmb=G%nk_rho_varies
@@ -507,7 +501,6 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
   if (.not.associated(CS)) call MOM_error(FATAL, &
        "MOM_PressureForce: Module must be initialized before it is used.")
 
-  PRScheme = pressureReconstructionScheme(ALE_CSp)
   h_neglect = G%H_subroundoff
   I_Rho0 = 1.0/G%Rho0
   G_Rho0 = G%g_Earth/G%Rho0
@@ -537,8 +530,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
       e(i,j,nz+1) = -1.0*G%bathyT(i,j)
     enddo ; enddo
   endif
-!$OMP parallel do default(shared)
-   do j=Jsq,Jeq+1; do k=nz,1,-1 ; do i=Isq,Ieq+1
+  do k=nz,1,-1 ; do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
     e(i,j,K) = e(i,j,K+1) + G%H_to_m*h(i,j,k)
   enddo ; enddo ; enddo
 
@@ -576,7 +568,6 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
   if (CS%GFS_scale < 1.0) then
     ! Adjust the Montgomery potential to make this a reduced gravity model.
     if (use_EOS) then
-!$OMP parallel do default(shared)
       do j=Jsq,Jeq+1
         if (use_p_atm) then
           call calculate_density(tv_tmp%T(:,j,1), tv_tmp%S(:,j,1), p_atm(:,j), &
@@ -590,7 +581,6 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
         enddo
       enddo
     else
-!$OMP parallel do default(shared)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
         dM(i,j) = (CS%GFS_scale - 1.0) * (G_Rho0 * G%Rlay(1)) * e(i,j,1)
       enddo ; enddo
@@ -626,19 +616,13 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
   use_ALE = .false.
   if (associated(ALE_CSp)) use_ALE = usePressureReconstruction(ALE_CSp)
   if ( use_ALE ) then
-    if ( PRScheme == PRESSURE_RECONSTRUCTION_PLM ) then
+    if ( pressureReconstructionScheme(ALE_CSp) == PRESSURE_RECONSTRUCTION_PLM ) then
       call pressure_gradient_plm (ALE_CSp, S_t, S_b, T_t, T_b, G, tv, h );
-    elseif ( PRScheme == PRESSURE_RECONSTRUCTION_PPM ) then
+    elseif ( pressureReconstructionScheme(ALE_CSp) == PRESSURE_RECONSTRUCTION_PPM ) then
       call pressure_gradient_ppm (ALE_CSp, S_t, S_b, T_t, T_b, G, tv, h );
     endif
   endif
 
-!$OMP parallel default(shared) private(dz)
-!!ashared(nz,Jsq,Jeq,Isq,Ieq,G,h,use_EOS,use_ALE,PRScheme,&
-!!$OMP                                  T_t,T_b,S_t,S_b,e,rho_ref,CS,tv,js,je,is,ie, &
-!!$OMP                                  dpa,intz_dpa,intx_dpa,inty_dpa,tv_tmp)  &
-!!$OMP                          private(dz)
-!$OMP do
   do k=1,nz
     ! Calculate 4 integrals through the layer that are required in the
     ! subsequent calculation.
@@ -652,75 +636,67 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
       ! is used, whereby densities within each layer are constant no matter
       ! where the layers are located.
       if ( use_ALE ) then
-        if ( PRScheme == PRESSURE_RECONSTRUCTION_PLM ) then
+        if ( pressureReconstructionScheme(ALE_CSp) == PRESSURE_RECONSTRUCTION_PLM ) then
           call int_density_dz_generic_plm ( T_t(:,:,k), T_b(:,:,k), S_t(:,:,k), &
                                             S_b(:,:,k), &
                                             e(:,:,K), e(:,:,K+1), rho_ref, &
                                             CS%Rho0, G%g_Earth, &
-                                            G, tv%eqn_of_state, dpa(:,:,k), intz_dpa(:,:,k), &
-                                            intx_dpa(:,:,k), inty_dpa(:,:,k), &
+                                            G, tv%eqn_of_state, dpa, intz_dpa, &
+                                            intx_dpa, inty_dpa, &
                                             useMassWghtInterp = CS%useMassWghtInterp)
-        elseif ( PRScheme == PRESSURE_RECONSTRUCTION_PPM ) then
+        elseif ( pressureReconstructionScheme(ALE_CSp) == PRESSURE_RECONSTRUCTION_PPM ) then
           call int_density_dz_generic_ppm ( tv%T(:,:,k), T_t(:,:,k), T_b(:,:,k), &
                                             tv%S(:,:,k), S_t(:,:,k), S_b(:,:,k), &
                                             e(:,:,K), e(:,:,K+1), rho_ref, &
                                             CS%Rho0, G%G_Earth, &
-                                            G, tv%eqn_of_state, dpa(:,:,k), intz_dpa(:,:,k), &
-                                            intx_dpa(:,:,k), inty_dpa(:,:,k))
+                                            G, tv%eqn_of_state, dpa, intz_dpa, &
+                                            intx_dpa, inty_dpa)
         endif
       else
         call int_density_dz(tv_tmp%T(:,:,k), tv_tmp%S(:,:,k), e(:,:,K), e(:,:,K+1), &
                             rho_ref, CS%Rho0, G%g_Earth, G, tv%eqn_of_state, &
-                            dpa(:,:,k), intz_dpa(:,:,k), intx_dpa(:,:,k), inty_dpa(:,:,k))
+                            dpa, intz_dpa, intx_dpa, inty_dpa)
       endif
     else
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-        dpa(i,j,k) = (G%Rlay(k) - rho_ref)*dz(i,j)
-        intz_dpa(i,j,k) = 0.5*(G%Rlay(k) - rho_ref)*dz(i,j)*h(i,j,k)
+        dpa(i,j) = (G%Rlay(k) - rho_ref)*dz(i,j)
+        intz_dpa(i,j) = 0.5*(G%Rlay(k) - rho_ref)*dz(i,j)*h(i,j,k)
       enddo ; enddo
       do j=js,je ; do I=Isq,Ieq
-        intx_dpa(I,j,k) = 0.5*(G%Rlay(k) - rho_ref) * (dz(i,j)+dz(i+1,j))
+        intx_dpa(I,j) = 0.5*(G%Rlay(k) - rho_ref) * (dz(i,j)+dz(i+1,j))
       enddo ; enddo
       do J=Jsq,Jeq ; do i=is,ie
-        inty_dpa(i,J,k) = 0.5*(G%Rlay(k) - rho_ref) * (dz(i,j)+dz(i,j+1))
+        inty_dpa(i,J) = 0.5*(G%Rlay(k) - rho_ref) * (dz(i,j)+dz(i,j+1))
       enddo ; enddo
     endif
-  enddo
 
-!$OMP do
-  do j=jsq,Jeq+1; do k=1,nz; do i=Isq,Ieq+1
-     pa_h_intz_dpa(i,j,k) = pa(i,j)*h(i,j,k) + intz_dpa(i,j,k)
-     pa(i,j) = pa(i,j)+dpa(i,j,k)
-  enddo; enddo; enddo
-
-  ! Compute pressure gradient in x direction
-!$OMP do 
-  do j =js,je
-    do k = 1,nz; do I=Isq,Ieq
-      PFu(I,j,k) = ((pa_h_intz_dpa(i,j,k) - pa_h_intz_dpa(i+1,j,k)) + &
+    ! Compute pressure gradient in x direction
+    do j=js,je ; do I=Isq,Ieq
+      PFu(I,j,k) = (((pa(i,j)*h(i,j,k) + intz_dpa(i,j)) - &
+                     (pa(i+1,j)*h(i+1,j,k) + intz_dpa(i+1,j))) + &
                     ((h(i+1,j,k) - h(i,j,k)) * intx_pa(I,j) - &
-                     (e(i+1,j,K+1) - e(i,j,K+1)) * intx_dpa(I,j,k))) * &
+                     (e(i+1,j,K+1) - e(i,j,K+1)) * intx_dpa(I,j))) * &
                    ((2.0*I_Rho0*G%IdxCu(I,j)) / &
                     ((h(i,j,k) + h(i+1,j,k)) + h_neglect))
-      intx_pa(I,j) = intx_pa(I,j) + intx_dpa(I,j,k)
+      intx_pa(I,j) = intx_pa(I,j) + intx_dpa(I,j)
     enddo ; enddo
-  enddo
     ! Compute pressure gradient in y direction
-!$OMP do
-  do J=Jsq,Jeq 
-    do k=1,nz ; do i=is,ie
-      PFv(i,J,k) = ((pa_h_intz_dpa(i,j,k) - pa_h_intz_dpa(i,j+1,k)) + &
+    do J=Jsq,Jeq ; do i=is,ie
+      PFv(i,J,k) = (((pa(i,j)*h(i,j,k) + intz_dpa(i,j)) - &
+                     (pa(i,j+1)*h(i,j+1,k) + intz_dpa(i,j+1))) + &
                     ((h(i,j+1,k) - h(i,j,k)) * inty_pa(i,J) - &
-                     (e(i,j+1,K+1) - e(i,j,K+1)) * inty_dpa(i,J,k))) * &
+                     (e(i,j+1,K+1) - e(i,j,K+1)) * inty_dpa(i,J))) * &
                    ((2.0*I_Rho0*G%IdyCv(i,J)) / &
                     ((h(i,j,k) + h(i,j+1,k)) + h_neglect))
-      inty_pa(i,J) = inty_pa(i,J) + inty_dpa(i,J,k)
+      inty_pa(i,J) = inty_pa(i,J) + inty_dpa(i,J)
+    enddo ; enddo
+    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+      pa(i,j) = pa(i,j) + dpa(i,j)
     enddo ; enddo
   enddo
-!$OMP end parallel
+
 
   if (CS%GFS_scale < 1.0) then
-!$OMP parallel do default(shared)
     do k=1,nz
       do j=js,je ; do I=Isq,Ieq
         PFu(I,j,k) = PFu(I,j,k) - (dM(i+1,j) - dM(i,j)) * G%IdxCu(I,j)
