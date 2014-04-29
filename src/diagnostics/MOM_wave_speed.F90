@@ -163,7 +163,8 @@ subroutine wave_speed(h, tv, G, cg1, CS, full_halos)
   rescale = 1024.0**4 ; I_rescale = 1.0/rescale
 
   min_h_frac = tol1 / real(nz)
-
+!$OMP parallel do default(private) shared(is,ie,js,je,nz,h,G,min_h_frac,use_EOS,T,S, &
+!$OMP                                     H_to_pres,tv,cg1,g_Rho0,rescale,I_rescale) 
   do j=js,je
     !   First merge very thin layers with the one above (or below if they are
     ! at the top).  This also transposes the row order so that columns can

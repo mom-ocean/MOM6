@@ -1257,7 +1257,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
     if (showCallTree) call callTree_leave("DT cycles (step_MOM)")
 
-  call cpu_clock_end(id_clock_other)
+    call cpu_clock_end(id_clock_other)
 
   enddo ! End of n loop
 
@@ -2375,6 +2375,8 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, CS, p_atm)
 
     depth_ml = CS%Hmix
   !   Determine the mean properties of the uppermost depth_ml fluid.
+!$OMP parallel do default(none) shared(is,ie,js,je,CS,state,h,nz,depth_ml,G) &
+!$OMP   private(depth,dh)
     do j=js,je
       do i=is,ie
         depth(i) = 0.0
@@ -2410,7 +2412,7 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, CS, p_atm)
         else
           state%sfc_density(i,j) = state%sfc_density(i,j) / depth(i)
         endif
-        state%Hml(:,:) = depth(i)
+        state%Hml(i,j) = depth(i)
       enddo
     enddo ! end of j loop
   endif                                             ! end BULKMIXEDLAYER
@@ -2420,13 +2422,6 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, CS, p_atm)
   state%frazil => CS%tv%frazil
   state%TempxPmE => CS%tv%TempxPmE
   state%internal_heat => CS%tv%internal_heat
-
-  if (associated(state%salt_deficit) .and. associated(CS%tv%salt_deficit)) then
-    do j=js,je ; do i=is,ie
-      ! Convert from gSalt to kgSalt
-      state%salt_deficit(i,j) = 1000.0 * CS%tv%salt_deficit(i,j)
-    enddo ; enddo
-  endif
 
   ! Allocate structures for ocean_mass, ocean_heat, and ocean_salt.  This could
   ! be wrapped in a run-time flag to disable it for economy, since the 3-d
@@ -2443,13 +2438,24 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, CS, p_atm)
     endif
   endif
 
+!$OMP parallel default(shared) private(mass)
+  if (associated(state%salt_deficit) .and. associated(CS%tv%salt_deficit)) then
+!$OMP do
+    do j=js,je ; do i=is,ie
+      ! Convert from gSalt to kgSalt
+      state%salt_deficit(i,j) = 1000.0 * CS%tv%salt_deficit(i,j)
+    enddo ; enddo
+  endif
+
   if (associated(state%ocean_mass) .and. associated(state%ocean_heat) .and. &
       associated(state%ocean_salt)) then
+!$OMP do
     do j=js,je ; do i=is,ie
       state%ocean_mass(i,j) = 0.0
       state%ocean_heat(i,j) = 0.0 ; state%ocean_salt(i,j) = 0.0
     enddo ; enddo
-    do k=1,nz ; do j=js,je ; do i=is,ie
+!$OMP do
+    do j=js,je ; do k=1,nz; do i=is,ie
       mass = G%H_to_kg_m2*h(i,j,k)
       state%ocean_mass(i,j) = state%ocean_mass(i,j) + mass
       state%ocean_heat(i,j) = state%ocean_heat(i,j) + mass*CS%tv%T(i,j,k)
@@ -2458,27 +2464,34 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, CS, p_atm)
     enddo ; enddo ; enddo
   else
     if (associated(state%ocean_mass)) then
+!$OMP do
       do j=js,je ; do i=is,ie ; state%ocean_mass(i,j) = 0.0 ; enddo ; enddo
-      do k=1,nz ; do j=js,je ; do i=is,ie
+!$OMP do
+      do j=js,je ; do k=1,nz ; do i=is,ie
         state%ocean_mass(i,j) = state%ocean_mass(i,j) + G%H_to_kg_m2*h(i,j,k)
       enddo ; enddo ; enddo
     endif
     if (associated(state%ocean_heat)) then
+!$OMP do
       do j=js,je ; do i=is,ie ; state%ocean_heat(i,j) = 0.0 ; enddo ; enddo
-      do k=1,nz ; do j=js,je ; do i=is,ie
+!$OMP do
+      do j=js,je ; do k=1,nz ; do i=is,ie
         mass = G%H_to_kg_m2*h(i,j,k)
         state%ocean_heat(i,j) = state%ocean_heat(i,j) + mass*CS%tv%T(i,j,k)
       enddo ; enddo ; enddo
     endif
     if (associated(state%ocean_salt)) then
+!$OMP do
       do j=js,je ; do i=is,ie ; state%ocean_salt(i,j) = 0.0 ; enddo ; enddo
-      do k=1,nz ; do j=js,je ; do i=is,ie
+!$OMP do
+      do j=js,je ; do k=1,nz ; do i=is,ie
         mass = G%H_to_kg_m2*h(i,j,k)
         state%ocean_salt(i,j) = state%ocean_salt(i,j) + &
                                 mass * (1.0e-3*CS%tv%S(i,j,k))
       enddo ; enddo ; enddo
     endif
   endif
+!$OMP end parallel
 
   if (associated(CS%visc%taux_shelf)) state%taux_shelf => CS%visc%taux_shelf
   if (associated(CS%visc%tauy_shelf)) state%tauy_shelf => CS%visc%tauy_shelf

@@ -320,6 +320,7 @@ subroutine pressure_gradient_plm( CS, S_t, S_b, T_t, T_b, G, tv, h )
   ! Local variables
   integer :: i, j, k
   real    :: hTmp(G%ke)
+  real    :: tmp(G%ke)
   real, dimension(CS%nk,2) :: &
       ppoly_linear_E            !Edge value of polynomial
   real, dimension(CS%nk,CS%degree_linear+1) :: &
@@ -331,19 +332,18 @@ subroutine pressure_gradient_plm( CS, S_t, S_b, T_t, T_b, G, tv, h )
   ! in 'ALE_memory_allocation'.
 
   ! Determine reconstruction within each column
-!$OMP parallel do default(shared) private(hTmp,ppoly_linear_E,ppoly_linear_coefficients)
-  do i = G%isc,G%iec+1
-    do j = G%jsc,G%jec+1
-     
+!$OMP parallel do default(shared) private(hTmp,ppoly_linear_E,ppoly_linear_coefficients,tmp)
+  do j = G%jsc,G%jec+1
+    do i = G%isc,G%iec+1
       ! Build current grid
       hTmp(:) = h(i,j,:)
-      
+      tmp(:) = tv%S(i,j,:)
       ! Reconstruct salinity profile    
       ppoly_linear_E = 0.0
       ppoly_linear_coefficients = 0.0
-      call PLM_reconstruction( G%ke, hTmp, tv%S(i,j,:), ppoly_linear_E, ppoly_linear_coefficients )
+      call PLM_reconstruction( G%ke, hTmp, tmp, ppoly_linear_E, ppoly_linear_coefficients )
       if (CS%boundary_extrapolation_for_pressure) call &
-        PLM_boundary_extrapolation( G%ke, hTmp, tv%S(i,j,:), ppoly_linear_E, ppoly_linear_coefficients )
+        PLM_boundary_extrapolation( G%ke, hTmp, tmp, ppoly_linear_E, ppoly_linear_coefficients )
       
       do k = 1,G%ke
         S_t(i,j,k) = ppoly_linear_E(k,1)
@@ -353,9 +353,10 @@ subroutine pressure_gradient_plm( CS, S_t, S_b, T_t, T_b, G, tv, h )
       ! Reconstruct temperature profile 
       ppoly_linear_E = 0.0
       ppoly_linear_coefficients = 0.0
-      call PLM_reconstruction( G%ke, hTmp, tv%T(i,j,:), ppoly_linear_E, ppoly_linear_coefficients )
+      tmp(:) = tv%T(i,j,:)
+      call PLM_reconstruction( G%ke, hTmp, tmp, ppoly_linear_E, ppoly_linear_coefficients )
       if (CS%boundary_extrapolation_for_pressure) call &
-        PLM_boundary_extrapolation( G%ke, hTmp, tv%T(i,j,:), ppoly_linear_E, ppoly_linear_coefficients )
+        PLM_boundary_extrapolation( G%ke, hTmp, tmp, ppoly_linear_E, ppoly_linear_coefficients )
       
       do k = 1,G%ke
         T_t(i,j,k) = ppoly_linear_E(k,1)
@@ -393,6 +394,7 @@ subroutine pressure_gradient_ppm( CS, S_t, S_b, T_t, T_b, G, tv, h )
   ! Local variables
   integer :: i, j, k
   real    :: hTmp(G%ke)
+  real    :: tmp(G%ke)
   real, dimension(CS%nk,2) :: &
       ppoly_parab_E            !Edge value of polynomial
   real, dimension(CS%nk,CS%degree_parab+1) :: &
@@ -405,19 +407,20 @@ subroutine pressure_gradient_ppm( CS, S_t, S_b, T_t, T_b, G, tv, h )
 
   ! Determine reconstruction within each column
 !$OMP parallel do default(shared) private(hTmp,ppoly_parab_E,ppoly_parab_coefficients)
-  do i = G%isc,G%iec+1
-    do j = G%jsc,G%jec+1
+  do j = G%jsc,G%jec+1
+    do i = G%isc,G%iec+1
      
       ! Build current grid
       hTmp(:) = h(i,j,:)
+      tmp(:) = tv%S(i,j,:)
       
       ! Reconstruct salinity profile    
       ppoly_parab_E = 0.0
       ppoly_parab_coefficients = 0.0
-      call edge_values_implicit_h4( G%ke, hTmp, tv%S(i,j,:), CS%edgeValueWrk, ppoly_parab_E )
-      call PPM_reconstruction( G%ke, hTmp, tv%S(i,j,:), ppoly_parab_E, ppoly_parab_coefficients )
+      call edge_values_implicit_h4( G%ke, hTmp, tmp, CS%edgeValueWrk, ppoly_parab_E )
+      call PPM_reconstruction( G%ke, hTmp, tmp, ppoly_parab_E, ppoly_parab_coefficients )
       if (CS%boundary_extrapolation_for_pressure) call &
-        PPM_boundary_extrapolation( G%ke, hTmp, tv%S(i,j,:), ppoly_parab_E, ppoly_parab_coefficients )
+        PPM_boundary_extrapolation( G%ke, hTmp, tmp, ppoly_parab_E, ppoly_parab_coefficients )
       
       do k = 1,G%ke
         S_t(i,j,k) = ppoly_parab_E(k,1)
@@ -427,10 +430,11 @@ subroutine pressure_gradient_ppm( CS, S_t, S_b, T_t, T_b, G, tv, h )
       ! Reconstruct temperature profile 
       ppoly_parab_E = 0.0
       ppoly_parab_coefficients = 0.0
-      call edge_values_implicit_h4( G%ke, hTmp, tv%T(i,j,:), CS%edgeValueWrk, ppoly_parab_E )
-      call PPM_reconstruction( G%ke, hTmp, tv%T(i,j,:), ppoly_parab_E, ppoly_parab_coefficients )
+      tmp(:) = tv%T(i,j,:)
+      call edge_values_implicit_h4( G%ke, hTmp, tmp, CS%edgeValueWrk, ppoly_parab_E )
+      call PPM_reconstruction( G%ke, hTmp, tmp, ppoly_parab_E, ppoly_parab_coefficients )
       if (CS%boundary_extrapolation_for_pressure) call &
-        PPM_boundary_extrapolation( G%ke, hTmp, tv%T(i,j,:), ppoly_parab_E, ppoly_parab_coefficients )
+        PPM_boundary_extrapolation( G%ke, hTmp, tmp, ppoly_parab_E, ppoly_parab_coefficients )
       
       do k = 1,G%ke
         T_t(i,j,k) = ppoly_parab_E(k,1)
