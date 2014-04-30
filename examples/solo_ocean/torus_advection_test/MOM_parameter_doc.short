@@ -179,10 +179,6 @@ ROTATION = "beta"               ! default = "2omegasinlat"
                                 !       times the sine of latitude.
                                 !     betaplane - Use a beta-plane or f-plane.
                                 !     USER - call a user modified routine.
-ALWAYS_WRITE_GEOM = False       !   [Boolean] default = True
-                                ! If true, write the geometry and vertical grid files
-                                ! every time the model is run.  Otherwise, only write
-                                ! them for new runs.
 THICKNESS_CONFIG = "uniform"    !
                                 ! A string that determines how the initial layer
                                 ! thicknesses are specified for a new run:

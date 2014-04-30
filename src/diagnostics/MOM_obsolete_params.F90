@@ -132,6 +132,7 @@ subroutine find_obsolete_params(param_file)
   call test_obsolete_logical(param_file, "CONT_PPM_RIGA_BUGS", .false.)
   call test_obsolete_logical(param_file, "USE_REPRODUCING_SUM", .true.)
   call test_obsolete_logical(param_file, "SLOW_BITWISE_GLOBAL_FORCING_SUMS", .false.)
+  call test_obsolete_logical(param_file, "ALWAYS_WRITE_GEOM")
   call test_obsolete_real(param_file, "I_ZETA")
 
   call test_obsolete_logical(param_file, "REF_COMPRESS_3D")

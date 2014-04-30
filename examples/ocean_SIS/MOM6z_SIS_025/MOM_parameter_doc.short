@@ -41,7 +41,7 @@ NJGLOBAL = 1080                 !
                                 ! STATIC_MEMORY_ this is set in MOM_memory.h at compile time.
 !LAYOUT = 16, 32                !
                                 ! The processor layout that was acutally used.
-IO_LAYOUT = 1, 1                ! default = 0
+IO_LAYOUT = 2, 2                ! default = 0
                                 ! The processor layout to be used, or 0,0 to automatically
                                 ! set the io_layout to be the same as the layout.
 
@@ -123,6 +123,9 @@ DTFREEZE_DP = -7.75E-08         !   [deg C Pa-1] default = 0.0
                                 ! When TFREEZE_FORM=LINEAR,
                                 ! this is the derivative of the freezing potential
                                 ! temperature with pressure.
+PARALLEL_RESTARTFILES = True    !   [Boolean] default = False
+                                ! If true, each processor writes its own restart file,
+                                ! otherwise a single restart file is generated
 
 ! === module MOM_tracer_flow_control ===
 USE_IDEAL_AGE_TRACER = True     !   [Boolean] default = False
@@ -202,10 +205,11 @@ CHANNEL_CONFIG = "list"         ! default = "none"
                                 !       NetCDF file on the model grid.
 CHANNEL_LIST_FILE = "MOM_channels_global_025" ! default = "MOM_channel_list"
                                 ! The file from which the list of narrowed channels is read.
-ALWAYS_WRITE_GEOM = False       !   [Boolean] default = True
-                                ! If true, write the geometry and vertical grid files
-                                ! every time the model is run.  Otherwise, only write
-                                ! them for new runs.
+WRITE_GEOM = 0                  ! default = 1
+                                ! If =0, never write the geometry and vertical grid files.
+                                ! If =1, write the geometry and vertical grid files only for
+                                ! a new simulation. If =2, always write the geometry and
+                                ! vertical grid files. Other values are invalid.
 THICKNESS_CONFIG = "file"       !
                                 ! A string that determines how the initial layer
                                 ! thicknesses are specified for a new run:

@@ -229,6 +229,13 @@ ICE_CHANNEL_SMAG_COEF = 0.15    !   [Nondim] default = 0.15
 ICE_CHANNEL_CFL_LIMIT = 0.25    !   [Nondim] default = 0.25
                                 ! The CFL limit that is applied to the parameterized
                                 ! viscous transport in single-point channels.
+SEA_ICE_ROLL_FACTOR = 1.0       !   [Nondim] default = 1.0
+                                ! A factor by which the propensity of small amounts of
+                                ! thick sea-ice to become thinner by rolling is increased
+                                ! or 0 to disable rolling.  This can be thought of as the
+                                ! minimum number of ice floes in a grid cell divided by
+                                ! the horizontal floe aspect ratio.  Sensible values are
+                                ! 0 (no rolling) or larger than 1.
 SIS1_ICE_TRANSPORT = False      !   [Boolean] default = False
                                 ! If true, use SIS1 code to solve the ice continuity
                                 ! equation and transport tracers.
