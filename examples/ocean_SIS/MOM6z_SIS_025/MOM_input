@@ -138,6 +138,9 @@ DTFREEZE_DP = -7.75E-08         !   [deg C Pa-1] default = 0.0
                                 ! When TFREEZE_FORM=LINEAR,
                                 ! this is the derivative of the freezing potential
                                 ! temperature with pressure.
+PARALLEL_RESTARTFILES = True    !   [Boolean] default = False
+                                ! If true, each processor writes its own restart file,
+                                ! otherwise a single restart file is generated
 
 ! === module MOM_tracer_flow_control ===
 USE_IDEAL_AGE_TRACER = True     !   [Boolean] default = False
@@ -217,6 +220,11 @@ CHANNEL_CONFIG = "list"         ! default = "none"
                                 !       NetCDF file on the model grid.
 CHANNEL_LIST_FILE = "MOM_channels_global_025" ! default = "MOM_channel_list"
                                 ! The file from which the list of narrowed channels is read.
+WRITE_GEOM = 0                  ! default = 1
+                                ! If =0, never write the geometry and vertical grid files.
+                                ! If =1, write the geometry and vertical grid files only for
+                                ! a new simulation. If =2, always write the geometry and
+                                ! vertical grid files. Other values are invalid.
 INIT_LAYERS_FROM_Z_FILE = False !   [Boolean] default = False
                                 ! If true, intialize the layer thicknesses, temperatures,
                                 ! and salnities from a Z-space file on a latitude-
