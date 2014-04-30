@@ -3950,17 +3950,17 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
     salt2(:,:)=salt_out(:,:) 
 
 
-    if (use_old_hinterp) then
-       temp2 = fill_miss_2d(temp2,good2,fill2,temp_prev2,G,keep_bug=.true.)
-       call myStats(temp2,missing_value, k,'Temp from fill_miss_2d()')
-       salt2 = fill_miss_2d(salt2,good2,fill2,salt_prev2,G,keep_bug=.true.)
-       call myStats(salt2,missing_value,k,'Salt from fill_miss_2d()')
-    else
-      temp2 = fill_miss_2d(temp2,good2,fill2,temp_prev2,G,smooth=.true.)
-      call myStats(temp2,missing_value,k,'Temp from fill_miss_2d()')
-      salt2 = fill_miss_2d(salt2,good2,fill2,salt_prev2,G,smooth=.true.)
+   if (use_old_hinterp) then
+      call fill_miss_2d(temp2,good2,fill2,temp_prev2,G,keep_bug=.true.)
+      call myStats(temp2,missing_value, k,'Temp from fill_miss_2d()')
+      call fill_miss_2d(salt2,good2,fill2,salt_prev2,G,keep_bug=.true.)
       call myStats(salt2,missing_value,k,'Salt from fill_miss_2d()')
-    endif
+   else
+     call fill_miss_2d(temp2,good2,fill2,temp_prev2,G,smooth=.true.)
+     call myStats(temp2,missing_value,k,'Temp from fill_miss_2d()')
+     call fill_miss_2d(salt2,good2,fill2,salt_prev2,G,smooth=.true.)
+     call myStats(salt2,missing_value,k,'Salt from fill_miss_2d()')
+   endif
 
 
     temp_z(:,:,k) = temp2(:,:)*G%mask2dT(:,:)
@@ -4223,7 +4223,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
   endif
   end subroutine myStats
   
-  function fill_miss_2d(a,good,fill,prev,G,smooth,num_pass,relc,crit,keep_bug,debug) result(aout)
+  subroutine fill_miss_2d(aout,good,fill,prev,G,smooth,num_pass,relc,crit,keep_bug,debug)
 !
 !# Use ICE-9 algorithm to populate points (fill=1) with 
 !# valid data (good=1). If no information is available,
@@ -4238,7 +4238,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
 
     use MOM_coms, only : sum_across_PEs
 
-    real, dimension(NIMEM_,NJMEM_), intent(in) :: a
+    real, dimension(NIMEM_,NJMEM_), intent(inout) :: aout
     real, dimension(NIMEM_,NJMEM_), intent(in) :: good,fill
     real, dimension(NIMEM_,NJMEM_), optional, intent(in) :: prev
     type(ocean_grid_type), intent(inout)  :: G
@@ -4248,7 +4248,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
     logical, intent(in), optional :: keep_bug, debug
     
     
-    real, dimension(SZI_(G),SZJ_(G)) :: aout,b,r
+    real, dimension(SZI_(G),SZJ_(G)) :: b,r
     real, dimension(SZI_(G),SZJ_(G)) :: fill_pts,good_,good_new   
     
     integer :: i,j,k
@@ -4287,7 +4287,6 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
     do_smooth=.false.
     if (PRESENT(smooth)) do_smooth=smooth
    
-    aout(:,:)=a(:,:)
     fill_pts(:,:)=fill(:,:)
 
     nfill = sum(fill(is:ie,js:je))
@@ -4392,7 +4391,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
     
     return
     
-  end function fill_miss_2d
+  end subroutine fill_miss_2d
 
 end subroutine MOM_temp_salt_initialize_from_Z
 
