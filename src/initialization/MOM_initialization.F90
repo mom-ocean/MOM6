@@ -3896,6 +3896,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
 
 
     call cpu_clock_end(id_clock_interp)
+    call cpu_clock_begin(id_clock_fill)
     fill = 0.0; good = 0.0
 
     nPoints = 0 ; tempAvg = 0. ; saltAvg = 0.
@@ -3933,20 +3934,16 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
       call sum_across_PEs(tempAvg)
       call sum_across_PEs(saltAvg)
       if (nPoints>0) then
-        tempAvg = tempAvg/float(nPoints)
-        saltAvg = saltAvg/float(nPoints)
+        tempAvg = tempAvg/real(nPoints)
+        saltAvg = saltAvg/real(nPoints)
       endif
       temp_out(:,:) = tempAvg
       salt_out(:,:) = saltAvg
     endif
 
 
-    call cpu_clock_end(id_clock_fill)
-
-
 ! temp_out,salt_out contain input z-space data on the model grid with missing values
 ! now fill in missing values using "ICE-nine" algorithm. 
-    call cpu_clock_begin(id_clock_fill)
 
 
     temp2(:,:)=temp_out(:,:);good2(:,:)=good(:,:); fill2(:,:)=fill(:,:)
@@ -3972,6 +3969,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
 
     temp_prev2(:,:)=temp_z(:,:,k)
     salt_prev2(:,:)=salt_z(:,:,k)
+    call cpu_clock_end(id_clock_fill)
 
 
     if (debug) then
@@ -4150,8 +4148,8 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
           call sum_across_PEs(tempAvg)
           call sum_across_PEs(saltAvg)
           if (nPoints>0) then
-             tempAvg = tempAvg/float(nPoints)
-             saltAvg = saltAvg/float(nPoints)
+             tempAvg = tempAvg/real(nPoints)
+             saltAvg = saltAvg/real(nPoints)
           endif
           tv%T(:,:,k) = tempAvg
           tv%S(:,:,k) = saltAvg
@@ -4395,29 +4393,6 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
     return
     
   end function fill_miss_2d
-
-  integer function subchk(array,msg)
-
-    use mpp_mod, only : stdout
-
-    real, dimension(1:,1:), intent(inout) :: array
-    character(len=*), intent(in) :: msg
-
-    integer :: bitcount, i, j, bc
-    integer :: ni, nj
-
-    subchk = 0
-    ni=size(array,1);nj=size(array,2)
-
-    do j=1,nj; do i=1,ni
-        bc = bitcount(abs(array(i,j)))
-        subchk = subchk + bc
-    enddo; enddo
-    call sum_across_PEs(subchk)
-    subchk=modulo(subchk,1000000000)
-
-    write(stdout(),*) msg, '= ',subchk
-  end function subchk
 
 end subroutine MOM_temp_salt_initialize_from_Z
 
