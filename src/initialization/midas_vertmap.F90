@@ -255,7 +255,7 @@ integer :: n,i,j,k,l,nx,ny,nz,nt,kz
 integer :: k_top,k_bot,k_bot_prev,kk,kstart
 real    :: sl_tr
 real, dimension(size(tr_in,3)) :: wt,z1,z2
-logical :: debug_msg = .false.,debug_=.false.
+logical :: debug_msg = .true.,debug_=.false.
     
 nx = size(tr_in,1); ny=size(tr_in,2); nz = size(tr_in,3) 
 
@@ -295,8 +295,8 @@ do j=1,ny
       elseif (e_1d(k) < z_edges(nlevs_data(i,j)+1)) then
         if (debug_msg) then
           print *,'*** WARNING : Found interface below valid range of z data '
-          print *,'(i,j,z_bottom,interface)= ',&
-               i,j,z_edges(nlevs_data(i,j)+1),e_1d(k)
+          print *,'(i,j,nlevs,z_bottom,interface)= ',&
+               i,j,nlevs_data(i,j),z_edges(nlevs_data(i,j)+1),e_1d(k)
           print *,'z_edges= ',z_edges
           print *,'e=',e_1d
           print *,'*** I will extrapolate below using the bottom-most valid values'

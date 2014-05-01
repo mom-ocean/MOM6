@@ -182,10 +182,6 @@ MAXIMUM_DEPTH = 6000.0          !   [m]
                                 ! The maximum depth of the ocean.
 MINIMUM_DEPTH = 9.5             !   [m] default = 0.0
                                 ! The minimum depth of the ocean.
-ALWAYS_WRITE_GEOM = False       !   [Boolean] default = True
-                                ! If true, write the geometry and vertical grid files
-                                ! every time the model is run.  Otherwise, only write
-                                ! them for new runs.
 THICKNESS_CONFIG = "file"       !
                                 ! A string that determines how the initial layer
                                 ! thicknesses are specified for a new run:

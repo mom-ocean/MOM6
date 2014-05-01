@@ -148,10 +148,6 @@ ROTATION = "betaplane"          ! default = "2omegasinlat"
                                 !       times the sine of latitude.
                                 !     betaplane - Use a beta-plane or f-plane.
                                 !     USER - call a user modified routine.
-ALWAYS_WRITE_GEOM = False       !   [Boolean] default = True
-                                ! If true, write the geometry and vertical grid files
-                                ! every time the model is run.  Otherwise, only write
-                                ! them for new runs.
 INIT_LAYERS_FROM_Z_FILE = True  !   [Boolean] default = False
                                 ! If true, intialize the layer thicknesses, temperatures,
                                 ! and salnities from a Z-space file on a latitude-
