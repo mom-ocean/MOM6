@@ -412,101 +412,30 @@ WRITE_GEOM = 0                  ! default = 1
                                 ! If =1, write the geometry and vertical grid files only for
                                 ! a new simulation. If =2, always write the geometry and
                                 ! vertical grid files. Other values are invalid.
-INIT_LAYERS_FROM_Z_FILE = False !   [Boolean] default = False
+INIT_LAYERS_FROM_Z_FILE = True  !   [Boolean] default = False
                                 ! If true, intialize the layer thicknesses, temperatures,
                                 ! and salnities from a Z-space file on a latitude-
                                 ! longitude grid.
-THICKNESS_CONFIG = "file"       !
-                                ! A string that determines how the initial layer
-                                ! thicknesses are specified for a new run:
-                                !     file - read interface heights from the file specified
-                                !     thickness_file - read thicknesses from the file specified
-                                !       by (THICKNESS_FILE).
-                                !     uniform - uniform thickness layers evenly distributed
-                                !       between the surface and MAXIMUM_DEPTH.
-                                !     DOME - use a slope and channel configuration for the
-                                !       DOME sill-overflow test case.
-                                !     benchmark - use the benchmark test case thicknesses.
-                                !     search - search a density profile for the interface
-                                !       densities. This is not yet implemented.
-                                !     circle_obcs - the circle_obcs test case is used.
-                                !     DOME2D - 2D version of DOME initialization.
-                                !     adjustment2d - TBD AJA.
-                                !     sloshing - TBD AJA.
-                                !     seamount - TBD AJA.
-                                !     USER - call a user modified routine.
-THICKNESS_FILE = "MOM_IC_4.nc"  !
-                                ! The name of the thickness file.
-ADJUST_THICKNESS = False        !   [Boolean] default = False
-                                ! If true, all mass below the bottom removed if the
-                                ! topography is shallower than the thickness input file
-                                ! would indicate.
-TS_CONFIG = "file"              !
-                                ! A string that determines how the initial tempertures
-                                ! and salinities are specified for a new run:
-                                !     file - read velocities from the file specified
-                                !       by (TS_FILE).
-                                !     fit - find the temperatures that are consistent with
-                                !       the layer densities and salinity S_REF.
-                                !     TS_profile - use temperature and salinity profiles
-                                !       (read from TS_FILE) to set layer densities.
-                                !     benchmark - use the benchmark test case T & S.
-                                !     linear - linear in logical layer space.
-                                !     DOME2D - 2D DOME initialization.
-                                !     adjustment2d - TBD AJA.
-                                !     sloshing - TBD AJA.
-                                !     seamount - TBD AJA.
-                                !     USER - call a user modified routine.
-TS_FILE = "MOM_IC.nc"           !
-                                ! The initial condition file for temperature.
-TEMP_IC_VAR = "Temp"            ! default = "PTEMP"
-                                ! The initial condition variable for potential temperature.
-SALT_IC_VAR = "Salt"            ! default = "SALT"
-                                ! The initial condition variable for salinity.
-SALT_FILE = "MOM_IC.nc"         ! default = "MOM_IC.nc"
-                                ! The initial condition file for salinity.
-VELOCITY_CONFIG = "zero"        ! default = "zero"
-                                ! A string that determines how the initial velocities
-                                ! are specified for a new run:
-                                !     file - read velocities from the file specified
-                                !       by (VELOCITY_FILE).
-                                !     zero - the fluid is initially at rest.
-                                !     uniform - the flow is uniform (determined by
-                                !       paremters TORUS_U and TORUS_V).
-                                !     USER - call a user modified routine.
-CONVERT_THICKNESS_UNITS = False !   [Boolean] default = False
-                                ! If true,  convert the thickness initial conditions from
-                                ! units of m to kg m-2 or vice versa, depending on whether
-                                ! BOUSSINESQ is defined. This does not apply if a restart
-                                ! file is read.
-DEPRESS_INITIAL_SURFACE = False !   [Boolean] default = False
-                                ! If true,  depress the initial surface to avoid huge
-                                ! tsunamis when a large surface pressure is applied.
-SPONGE = False                  !   [Boolean] default = False
-                                ! If true, sponges may be applied anywhere in the domain.
-                                ! The exact location and properties of those sponges are
-                                ! specified via SPONGE_CONFIG.
-APPLY_OBC_U = False             !   [Boolean] default = False
-                                ! If true, open boundary conditions may be set at some
-                                ! u-points, with the configuration controlled by OBC_CONFIG
-APPLY_OBC_V = False             !   [Boolean] default = False
-                                ! If true, open boundary conditions may be set at some
-                                ! v-points, with the configuration controlled by OBC_CONFIG
-BOUNDARY_EXTRAPOLATION_PRESSURE = True !   [Boolean] default = True
-                                ! When defined, the reconstruction is extrapolated
-                                ! within boundary cells rather than assume PCM for the.
-                                ! calculation of pressure. e.g. if PPM is used, a
-                                ! PPM reconstruction will also be used within
-                                ! boundary cells.
-RECONSTRUCT_FOR_PRESSURE = True !   [Boolean] default = True
-                                ! If True, use vertical reconstruction of T/S within
-                                ! the integrals of teh FV pressure gradient calculation.
-                                ! If False, use the constant-by-layer algorithm.
-                                ! By default, this is True when using ALE and False otherwise.
-PRESSURE_RECONSTRUCTION_SCHEME = 1 ! default = 1
-                                ! Type of vertical reconstruction of T/S to use in integrals
-                                ! within the FV pressure gradient calculation. 1: PLM reconstruction.
-                                !  2: PPM reconstruction.
+USE_OLD_HINTERP = True          !   [Boolean] default = True
+                                ! If true, use older version of hinterp,
+                                ! in order to reproduce siena answers.Recommended setting is False
+TEMP_SALT_Z_INIT_FILE = "WOA05_pottemp_salt.nc" ! default = "temp_salt_z.nc"
+                                ! The name of the z-space input file used to initialize
+                                ! the layer thicknesses, temperatures and salinities.
+Z_INIT_FILE_PTEMP_VAR = "PTEMP" ! default = "ptemp"
+                                ! The name of the potential temperature variable in
+                                ! TEMP_SALT_Z_INIT_FILE.
+Z_INIT_FILE_SALT_VAR = "SALT"   ! default = "salt"
+                                ! The name of the salinity variable in
+                                ! TEMP_SALT_Z_INIT_FILE.
+Z_INIT_HOMOGENIZE = False       !   [Boolean] default = False
+                                ! If True, then horizontally homogenize the interpolated
+                                ! initial conditions.
+Z_INIT_ALE_REMAPPING = True     !   [Boolean] default = False
+                                ! If True, then remap straight to model coordinate from file.
+Z_INIT_REMAPPING_SCHEME = "PPM_IH4" ! default = "PPM_IH4"
+                                ! The remapping scheme to use if using Z_INIT_ALE_REMAPPING
+                                ! is True.
 REGRIDDING_COORDINATE_MODE = "Z*" ! default = "LAYER"
                                 ! Coordinate mode for vertical regridding.
                                 ! Choose among the following possibilities:
@@ -555,6 +484,48 @@ BOUNDARY_EXTRAPOLATION = False  !   [Boolean] default = False
                                 ! than PCM. E.g., if PPM is used for remapping, a
                                 ! PPM reconstruction will also be used within
                                 ! boundary cells.
+VELOCITY_CONFIG = "zero"        ! default = "zero"
+                                ! A string that determines how the initial velocities
+                                ! are specified for a new run:
+                                !     file - read velocities from the file specified
+                                !       by (VELOCITY_FILE).
+                                !     zero - the fluid is initially at rest.
+                                !     uniform - the flow is uniform (determined by
+                                !       paremters TORUS_U and TORUS_V).
+                                !     USER - call a user modified routine.
+CONVERT_THICKNESS_UNITS = False !   [Boolean] default = False
+                                ! If true,  convert the thickness initial conditions from
+                                ! units of m to kg m-2 or vice versa, depending on whether
+                                ! BOUSSINESQ is defined. This does not apply if a restart
+                                ! file is read.
+DEPRESS_INITIAL_SURFACE = False !   [Boolean] default = False
+                                ! If true,  depress the initial surface to avoid huge
+                                ! tsunamis when a large surface pressure is applied.
+SPONGE = False                  !   [Boolean] default = False
+                                ! If true, sponges may be applied anywhere in the domain.
+                                ! The exact location and properties of those sponges are
+                                ! specified via SPONGE_CONFIG.
+APPLY_OBC_U = False             !   [Boolean] default = False
+                                ! If true, open boundary conditions may be set at some
+                                ! u-points, with the configuration controlled by OBC_CONFIG
+APPLY_OBC_V = False             !   [Boolean] default = False
+                                ! If true, open boundary conditions may be set at some
+                                ! v-points, with the configuration controlled by OBC_CONFIG
+BOUNDARY_EXTRAPOLATION_PRESSURE = True !   [Boolean] default = True
+                                ! When defined, the reconstruction is extrapolated
+                                ! within boundary cells rather than assume PCM for the.
+                                ! calculation of pressure. e.g. if PPM is used, a
+                                ! PPM reconstruction will also be used within
+                                ! boundary cells.
+RECONSTRUCT_FOR_PRESSURE = True !   [Boolean] default = True
+                                ! If True, use vertical reconstruction of T/S within
+                                ! the integrals of teh FV pressure gradient calculation.
+                                ! If False, use the constant-by-layer algorithm.
+                                ! By default, this is True when using ALE and False otherwise.
+PRESSURE_RECONSTRUCTION_SCHEME = 1 ! default = 1
+                                ! Type of vertical reconstruction of T/S to use in integrals
+                                ! within the FV pressure gradient calculation. 1: PLM reconstruction.
+                                !  2: PPM reconstruction.
 REMAPPING_SCHEME = "PLM"        ! default = "PLM"
                                 ! This sets the reconstruction scheme used
                                 ! for vertical remapping for all variables.
