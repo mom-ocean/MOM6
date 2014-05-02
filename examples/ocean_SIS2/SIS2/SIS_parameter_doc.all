@@ -12,7 +12,8 @@ ICE_OCEAN_STRESS_STAGGER = "B"  ! default = "B"
                                 ! A case-insensitive character string to indicate the
                                 ! staggering of the stress field on the ocean that is
                                 ! returned to the coupler.  Valid values include
-                                ! 'A', 'B', or 'C'.
+                                ! 'A', 'B', or 'C', with a default that follows the
+                                ! value of CGRID_ICE_DYNAMICS.
 RHO_OCEAN = 1030.0              !   [kg m-3] default = 1030.0
                                 ! The nominal density of sea water as used by SIS.
 RHO_ICE = 905.0                 !   [kg m-3] default = 905.0
