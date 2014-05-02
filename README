@@ -13,6 +13,7 @@ examples/   - contains parameters, input data, paths to data, and some source
               * examples/coupled_AM2_SIS - uses MOM6, SIS, LM3 and AM2 code ie. fully coupled
 pkg/        - contains third party (non-MOM6 or FMS) code that can be linked to MOM6
 tools/      - tools for working with MOM6 (not source code and not necessarily supported)
+LICENSE.md  - a copy of the Gnu general public license, version 3.
 
 More information
 ================
