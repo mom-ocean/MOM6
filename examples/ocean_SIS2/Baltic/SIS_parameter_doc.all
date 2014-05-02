@@ -5,6 +5,9 @@ CGRID_ICE_DYNAMICS = False      !   [Boolean] default = False
                                 ! dynamics; if false use a B-grid discretization.
 USE_SLAB_ICE = False            !   [Boolean] default = False
                                 ! If true, use the very old slab-style ice.
+SIS1_THERMODYNAMICS = False     !   [Boolean] default = False
+                                ! If true, use the thermodynamic calculations inhereted
+                                ! from SIS1. Otherwise, use the newer SIS2 version.
 ICE_OCEAN_STRESS_STAGGER = "B"  ! default = "B"
                                 ! A case-insensitive character string to indicate the
                                 ! staggering of the stress field on the ocean that is

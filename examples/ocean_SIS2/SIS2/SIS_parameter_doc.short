@@ -1,3 +1,6 @@
+SIS1_THERMODYNAMICS = True      !   [Boolean] default = False
+                                ! If true, use the thermodynamic calculations inhereted
+                                ! from SIS1. Otherwise, use the newer SIS2 version.
 SNOW_ALBEDO = 0.88              !   [nondim] default = 0.85
                                 ! The albedo of dry snow atop sea ice.
 ICE_ALBEDO = 0.68               !   [nondim] default = 0.5826
