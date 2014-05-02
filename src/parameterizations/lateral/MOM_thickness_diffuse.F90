@@ -306,6 +306,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, MEKE, VarMix, CDp, CS)
     call hchksum(e(:,:,:),"thickness_diffuse_1 e",G,haloshift=0)
   endif
 
+  ! Calculate uhD, vhD from h, e, KH_u, KH_v, tv%T/S
   call thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, CS, &
                               int_slope_u, int_slope_v)
 
@@ -605,6 +606,8 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
             slope2_Ratio = 1.0e20  ! Force the use of the safe streamfunction.
           endif
 
+          ! Adjust real slope by weights that bias towards slope of interfaces
+          ! that ignore density gradients along layers.
           if (present_int_slope_u) then
             Slope = (1.0 - int_slope_u(I,j,K)) * Slope + &
                     int_slope_u(I,j,K) * ((e(i+1,j,K)-e(i,j,K)) * G%IdxCu(I,j))
@@ -775,6 +778,8 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
             slope2_Ratio = 1.0e20  ! Force the use of the safe streamfunction.
           endif
 
+          ! Adjust real slope by weights that bias towards slope of interfaces
+          ! that ignore density gradients along layers.
           if (present_int_slope_v) then
             Slope = (1.0 - int_slope_v(i,J,K)) * Slope + &
                     int_slope_v(i,J,K) * ((e(i,j+1,K)-e(i,j,K)) * G%IdyCv(i,J))
