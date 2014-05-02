@@ -261,6 +261,16 @@ ALE_COORDINATE_CONFIG = "FILE:INPUT/vgrid_cm4.nc,dz" ! default = "UNIFORM"
                                 ! in z-coordinate mode, the parameter is a list of level
                                 ! thicknesses (in m). In sigma-coordinate mode, the list
                                 ! is of non-dimensional fractions of the water column.
+REMAPPING_SCHEME = "PPM_H4"     ! default = "PLM"
+                                ! This sets the reconstruction scheme used
+                                ! for vertical remapping for all variables.
+                                ! It can be one of the following schemes:
+                                ! PCM         (1st-order accurate)
+                                ! PLM         (2nd-order accurate)
+                                ! PPM_H4      (3rd-order accurate)
+                                ! PPM_IH4     (3rd-order accurate)
+                                ! PQM_IH4IH3  (4th-order accurate)
+                                ! PQM_IH6IH5  (5th-order accurate)
 
 ! === module MOM_MEKE ===
 

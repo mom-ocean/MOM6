@@ -526,7 +526,7 @@ PRESSURE_RECONSTRUCTION_SCHEME = 1 ! default = 1
                                 ! Type of vertical reconstruction of T/S to use in integrals
                                 ! within the FV pressure gradient calculation. 1: PLM reconstruction.
                                 !  2: PPM reconstruction.
-REMAPPING_SCHEME = "PLM"        ! default = "PLM"
+REMAPPING_SCHEME = "PPM_H4"     ! default = "PLM"
                                 ! This sets the reconstruction scheme used
                                 ! for vertical remapping for all variables.
                                 ! It can be one of the following schemes:
