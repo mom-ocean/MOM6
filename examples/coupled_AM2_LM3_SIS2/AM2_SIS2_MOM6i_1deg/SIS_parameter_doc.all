@@ -8,11 +8,12 @@ USE_SLAB_ICE = False            !   [Boolean] default = False
 SIS1_THERMODYNAMICS = False     !   [Boolean] default = False
                                 ! If true, use the thermodynamic calculations inhereted
                                 ! from SIS1. Otherwise, use the newer SIS2 version.
-ICE_OCEAN_STRESS_STAGGER = "C"  ! default = "B"
+ICE_OCEAN_STRESS_STAGGER = "C"  ! default = "C"
                                 ! A case-insensitive character string to indicate the
                                 ! staggering of the stress field on the ocean that is
                                 ! returned to the coupler.  Valid values include
-                                ! 'A', 'B', or 'C'.
+                                ! 'A', 'B', or 'C', with a default that follows the
+                                ! value of CGRID_ICE_DYNAMICS.
 RHO_OCEAN = 1030.0              !   [kg m-3] default = 1030.0
                                 ! The nominal density of sea water as used by SIS.
 RHO_ICE = 905.0                 !   [kg m-3] default = 905.0
