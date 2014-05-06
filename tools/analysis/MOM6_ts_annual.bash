@@ -105,7 +105,7 @@ varlist='temp salt'
 # Determine available input variables and generate list of input files
 cd ${in_data_dir}
 in_data_var=''
-filelist='../../../ocean.static.nc'
+filelist='../../../ocean_annual.static.nc'
 for var in ${varlist}
 do
 

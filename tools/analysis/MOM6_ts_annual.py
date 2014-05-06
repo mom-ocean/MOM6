@@ -92,9 +92,9 @@ tmpdir = "./"
 
 # Open input files
 #fstatic = Dataset(tmpdir+'19000101.ocean_geometry.nc', 'r')
-fstatic = Dataset(tmpdir+'ocean.static.nc', 'r')
-ftemp = MFDataset(tmpdir+'ocean.*.temp.nc')
-fsalt = MFDataset(tmpdir+'ocean.*.salt.nc')
+fstatic = Dataset(tmpdir+'ocean_annual.static.nc', 'r')
+ftemp = MFDataset(tmpdir+'ocean_annual.*.temp.nc')
+fsalt = MFDataset(tmpdir+'ocean_annual.*.salt.nc')
 
 # Time info
 time = ftemp.variables["time"]
