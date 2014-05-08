@@ -58,6 +58,7 @@
             fileset_write='single' 
             max_files_r = 200
             max_files_w = 200
+            checksum_required = .false.
 /
 
  &fms_nml

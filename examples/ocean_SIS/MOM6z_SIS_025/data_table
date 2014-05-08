@@ -18,9 +18,6 @@
 "ICE" , "dhdt"          , ""            , ""                             , "none"  , 80.0
 "ICE" , "dedt"          , ""            , ""                             , "none"  ,  2.0e-6
 "ICE" , "drdt"          , ""            , ""                             , "none"  ,  10.0
-"ICE", "sic_obs"        , "sic"         ,"./INPUT/sit_sic_MOM6z_025_v1.nc", "none" ,  0.00
-"ICE", "sit_obs"        , "sit"         ,"./INPUT/sit_sic_MOM6z_025_v1.nc", "none" ,  0.00
-"ICE", "sst_obs"        , "SST"         ,"./INPUT/sst_ice_clim.nc"       , "bilinear" ,  1.0
 "LND" , "t_surf"        , ""            , ""                             , "none"  ,  273.0
 "LND" , "t_ca"          , ""            , ""                             , "none"  ,  273.0
 "LND" , "q_ca"          , ""            , ""                             , "none"  ,  0.0
