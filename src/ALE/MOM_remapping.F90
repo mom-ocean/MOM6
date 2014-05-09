@@ -119,7 +119,9 @@ subroutine remapping_main( CS, G, h, dxInterface, tv, u, v )
   nz = G%ke
 
   ! Remap tracer
-!$OMP parallel do default(shared) private(h1,dx,u_column)
+!$OMP parallel default(none) shared(G,h,dxInterface,CS,nz,tv,u,v) &
+!$OMP                       private(h1,dx,u_column)
+!$OMP do
   do j = G%jsc,G%jec
     do i = G%isc,G%iec
       if (G%mask2dT(i,j)>0.) then
@@ -136,7 +138,7 @@ subroutine remapping_main( CS, G, h, dxInterface, tv, u, v )
   
   ! Remap u velocity component
   if ( present(u) ) then
-!$OMP parallel do default(shared) private(h1,dx,u_column)
+!$OMP do
     do j = G%jsc,G%jec
       do i = G%iscB,G%iecB
         if (G%mask2dCu(i,j)>0.) then
@@ -152,7 +154,7 @@ subroutine remapping_main( CS, G, h, dxInterface, tv, u, v )
   
   ! Remap v velocity component
   if ( present(v) ) then
-!$OMP parallel do default(shared) private(h1,dx,u_column)
+!$OMP do
     do j = G%jscB,G%jecB
       do i = G%isc,G%iec
         if (G%mask2dCv(i,j)>0.) then
@@ -165,6 +167,7 @@ subroutine remapping_main( CS, G, h, dxInterface, tv, u, v )
       enddo
     enddo
   endif
+!$OMP end parallel
 
 end subroutine remapping_main
 

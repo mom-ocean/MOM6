@@ -380,10 +380,19 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
 
   if (CS%id_Kd_in > 0) call post_data(CS%id_Kd_in, Kt, CS%diag)
 
-!$OMP parallel do default(private) shared(G,CS,EOS,uStar,Temp,Salt,u,v,h,GoRho,buoyFlux, &
-!$OMP                                     const1,nonLocalTransHeat,       &
-!$OMP                                     nonLocalTransScalar,Kt,Ks,Kv) &
-!$OMP                        firstprivate(nonLocalTrans) 
+!$OMP parallel do default(none) shared(G,CS,EOS,uStar,Temp,Salt,u,v,h,GoRho,buoyFlux, &
+!$OMP                                  const1,nonLocalTransHeat,                      &
+!$OMP                                  nonLocalTransScalar,Kt,Ks,Kv)                  &
+!$OMP                     firstprivate(nonLocalTrans)                                 &
+!$OMP                          private(Coriolis,surfFricVel,SLdepth_0d,hTot,surfTemp, &
+!$OMP                                  surfHtemp,surfSalt,surfHsalt,hTotU,surfU,      &
+!$OMP                                  surfHu,hTotV,surfV,surfHv,hTotUm1,surfUm1,     &
+!$OMP                                  surfHum1,hTotVm1,surfVm1,surfHvm1,iFaceHeight, &
+!$OMP                                  pRef,km1,cellHeight,Uk,Vk,deltaU2,             &
+!$OMP                                  rho1,rhoK,rhoKm1,deltaRho,N2_1d,N_1d,delH,     &
+!$OMP                                  surfBuoyFlux,Ws_1d,Cv,Vt2_1d,BulkRi_1d,        &
+!$OMP                                  OBLdepth_0d,zBottomMinusOffset,Kdiffusivity,   &
+!$OMP                                  Kviscosity,sigma,kOBL)
   do j = G%jsc, G%jec
     do i = G%isc, G%iec
       if (G%mask2dT(i,j)==0.) cycle ! Skip calling KPP for land points
@@ -830,7 +839,7 @@ subroutine KPP_applyNonLocalTransport(CS, G, h, nonLocalTrans, surfFlux, dt, sca
   endif
 
   if (diagHeat .or. diagSalt) dSdt(:,:,:) = 0. ! Zero halos for diagnostics ???
-!$OMP parallel do default(shared)
+!$OMP parallel do default(none) shared(G,dSdt,nonLocalTrans,h,surfFlux,CS,scalar,dt)
   do k = 1, G%ke
     do j = G%jsc, G%jec
       do i = G%isc, G%iec

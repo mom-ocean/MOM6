@@ -523,26 +523,27 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, G, C
 ! another explicit parameterization of Kd.
 
   if (CS%Bryan_Lewis_diffusivity) then 
-!$OMP parallel do default(shared)
+!$OMP parallel do default(none) shared(is,ie,js,je,CS,Kd_sfc)
     do j=js,je ; do i=is,ie
       Kd_sfc(i,j) = CS%Kd_Bryan_Lewis_surface
     enddo ; enddo 
   else 
-!$OMP parallel do default(shared)
+!$OMP parallel do default(none) shared(is,ie,js,je,CS,Kd_sfc)
     do j=js,je ; do i=is,ie
       Kd_sfc(i,j) = CS%Kd
     enddo ; enddo 
   endif
   if (CS%Henyey_IGW_background) then
     I_x30 = 2.0 / invcosh(CS%N0_2Omega*2.0) ! This is evaluated at 30 deg.
-!$OMP parallel do default(shared) private(abs_sin)
+!$OMP parallel do default(none) shared(is,ie,js,je,Kd_sfc,CS,G,deg_to_rad,epsilon,I_x30) &
+!$OMP                          private(abs_sin)
     do j=js,je ; do i=is,ie
       abs_sin = abs(sin(G%geoLatT(i,j)*deg_to_rad))
       Kd_sfc(i,j) = max(CS%Kd_min, Kd_sfc(i,j) * &
            ((abs_sin * invcosh(CS%N0_2Omega/max(epsilon,abs_sin))) * I_x30) )
     enddo ; enddo
   elseif (CS%Kd_tanh_lat_fn) then
-!$OMP parallel do default(shared) 
+!$OMP parallel do default(none) shared(is,ie,js,je,Kd_sfc,CS,G) 
     do j=js,je ; do i=is,ie
       !   The transition latitude and latitude range are hard-scaled here, since
       ! this is not really intended for wide-spread use, but rather for
@@ -553,10 +554,13 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, G, C
   endif
 
   if (CS%debug) call hchksum(Kd_sfc,"Kd_sfc",G,haloshift=0)
-
-!$OMP parallel do default(private) shared(is,ie,js,je,nz,G,CS,h,tv,T_f,S_f,fluxes,dd, &
+!$OMP parallel do default(none) shared(is,ie,js,je,nz,G,CS,h,tv,T_f,S_f,fluxes,dd, &
 !$OMP                                  Kd,Kd_sfc,epsilon,deg_to_rad,I_2Omega,visc, &
-!$OMP                                  Kd_int,dt,u,v,Omega2) 
+!$OMP                                  Kd_int,dt,u,v,Omega2)   & 
+!$OMP                          private(dRho_int,I_trans,atan_fn_sfc,I_atan_fn,atan_fn_lay, &
+!$OMP                                  I_Hmix,depth_c,depth,N2_lay, N2_int, N2_bot,        &
+!$OMP                                  I_x30,abs_sin,N_2Omega,N02_N2,KT_extra, KS_extra,   &
+!$OMP                                  TKE_to_Kd,maxTKE,dissip,kb)
   do j=js,je
     ! Set up variables related to the stratification.
     call find_N2(h, tv, T_f, S_f, fluxes, j, G, CS, dRho_int, N2_lay, N2_int, N2_bot)
@@ -737,13 +741,13 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, G, C
 
   if (CS%Kd_add > 0.0) then
     if (present(Kd_int)) then 
-!$OMP parallel do default(shared)
+!$OMP parallel do default(none) shared(is,ie,js,je,nz,Kd_int,CS,Kd)
       do k=1,nz ; do j=js,je ; do i=is,ie
         Kd_int(i,j,K) = Kd_int(i,j,K) + CS%Kd_add
         Kd(i,j,k) = Kd(i,j,k) + CS%Kd_add
       enddo ; enddo ; enddo 
     else 
-!$OMP parallel do default(shared)
+!$OMP parallel do default(none) shared(is,ie,js,je,nz,CS,Kd)
       do k=1,nz ; do j=js,je ; do i=is,ie
         Kd(i,j,k) = Kd(i,j,k) + CS%Kd_add
       enddo ; enddo ; enddo 

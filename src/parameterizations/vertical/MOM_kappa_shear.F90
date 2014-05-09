@@ -321,13 +321,27 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
   k0dt = dt*CS%kappa_0
   dz_massless = 0.1*sqrt(k0dt)
 
-!$OMP parallel do default(private) shared(js,je,is,ie,nz,h,u_in,v_in,use_temperature,new_kappa, &
-!$OMP                                     tv,G,CS,kappa_io,dz_massless,k0dt,p_surf,gR0,g_R0,dt, &
-!$OMP                                     tol_dksrc,tol_dksrc_low,tol2,Ri_crit,dt_refinements,  &
+!$OMP parallel do default(none) shared(js,je,is,ie,nz,h,u_in,v_in,use_temperature,new_kappa, &
+!$OMP                                  tv,G,CS,kappa_io,dz_massless,k0dt,p_surf,gR0,g_R0,dt, &
+!$OMP                                  tol_dksrc,tol_dksrc_low,tol2,Ri_crit,dt_refinements,  &
 #ifdef ADD_DIAGNOSTICS
-!$OMP                                     I_Ld2_3d,dz_Int_3d,                                   &
+!$OMP                                  I_Ld2_3d,dz_Int_3d,                                   &
 #endif
-!$OMP                                     tke_io,kv_io)  
+!$OMP                                  tke_io,kv_io)                                         &
+!$OMP                          private(h_2d,u_2d,v_2d,T_2d,S_2d,rho_2d,kappa_2d,nzc,dz,      &
+!$OMP                                  u0xdz,v0xdz,T0xdz,S0xdz,kc,Idz,kf,I_dz_int,dz_in_lay, &
+!$OMP                                  dist_from_top,a1,b1,u,v,T,Sal,c1,d1,bd1,dz_Int,Norm,  &
+!$OMP                                  dist_from_bot,I_L2_bdry,f2,pressure,T_int,Sal_int,    &
+!$OMP                                  dbuoy_dT,dbuoy_dS,kappa,K_Q,N2,S2,dt_rem,kappa_avg,   &
+!$OMP                                  tke_avg,local_src_avg,tke,kappa_out,kappa_src,        &
+!$OMP                                  local_src,ks_kappa,ke_kappa,dt_now,dt_test,tol_max,   &
+!$OMP                                  tol_min,tol_chg,u_test, v_test, T_test, S_test,       &
+!$OMP                                  valid_dt,Idtt,k_src,dt_inc,dt_wt,kappa_mid,K_Q_tmp,   &
+#ifdef ADD_DIAGNOSTICS
+!$OMP                                  I_Ld2_1d,I_Ld2_2d, dz_Int_2d,                         &
+#endif
+!$OMP                                  tke_pred,kappa_pred,tke_2d)
+
   do j=js,je
     do k=1,nz ; do i=is,ie
       h_2d(i,k) = h(i,j,k)*G%H_to_m

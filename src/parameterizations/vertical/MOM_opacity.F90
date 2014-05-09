@@ -152,26 +152,28 @@ subroutine set_opacity(optics, fluxes, G, CS)
 
     ! Make sure there is no division by 0.
     inv_sw_pen_scale = 1.0 / max(CS%pen_sw_scale, 0.1*G%Angstrom_z, G%H_to_m*G%H_subroundoff)
-!$OMP parallel do default(shared)
+!$OMP parallel default(none) shared(is,ie,js,je,nz,optics,inv_sw_pen_scale,fluxes,CS,Inv_nbands)
+!$OMP do
     do k=1,nz ; do j=js,je ; do i=is,ie  ; do n=1,optics%nbands
       optics%opacity_band(n,i,j,k) = inv_sw_pen_scale
     enddo ; enddo ; enddo ; enddo
     if (.not.associated(fluxes%sw) .or. (CS%pen_SW_scale <= 0.0)) then
-!$OMP parallel do default(shared)
+!$OMP do
       do j=js,je ; do i=is,ie ; do n=1,optics%nbands
         optics%sw_pen_band(n,i,j) = 0.0
       enddo ; enddo ; enddo
     else
-!$OMP parallel do default(shared)
+!$OMP do
       do j=js,je ; do i=is,ie ; do n=1,optics%nbands
         optics%sw_pen_band(n,i,j) = CS%pen_SW_frac * Inv_nbands * fluxes%sw(i,j)
       enddo ; enddo ; enddo
     endif
+!$OMP end parallel
   endif
   
   if (query_averaging_enabled(CS%diag)) then
     if (CS%id_sw_pen > 0) then
-!$OMP parallel do default(shared)
+!$OMP parallel do default(none) shared(is,ie,js,je,Pen_SW_tot,optics)
       do j=js,je ; do i=is,ie
         Pen_SW_tot(i,j) = 0.0
         do n=1,optics%nbands
@@ -182,7 +184,7 @@ subroutine set_opacity(optics, fluxes, G, CS)
     endif
     if (CS%id_sw_vis_pen > 0) then
       if (CS%opacity_scheme == MANIZZA_05) then
-!$OMP parallel do default(shared)
+!$OMP parallel do default(none) shared(is,ie,js,je,Pen_SW_tot,optics)
         do j=js,je ; do i=is,ie
           Pen_SW_tot(i,j) = 0.0
           do n=1,min(optics%nbands,2)
@@ -190,7 +192,7 @@ subroutine set_opacity(optics, fluxes, G, CS)
           enddo
         enddo ; enddo
       else
-!$OMP parallel do default(shared)
+!$OMP parallel do default(none) shared(is,ie,js,je,Pen_SW_tot,optics)
         do j=js,je ; do i=is,ie
           Pen_SW_tot(i,j) = 0.0
           do n=1,optics%nbands
@@ -201,7 +203,7 @@ subroutine set_opacity(optics, fluxes, G, CS)
       call post_data(CS%id_sw_vis_pen, Pen_SW_tot, CS%diag)
     endif
     do n=1,optics%nbands ; if (CS%id_opacity(n) > 0) then
-!$OMP parallel do default(shared)
+!$OMP parallel do default(none) shared(nz,is,ie,js,je,tmp,optics,n)
       do k=1,nz ; do j=js,je ; do i=is,ie
         tmp(i,j,k) = optics%opacity_band(n,i,j,k)
       enddo ; enddo ; enddo
@@ -307,7 +309,9 @@ subroutine opacity_from_chl(optics, fluxes, G, CS, chl_in)
 
   select case (CS%opacity_scheme)
     case (MANIZZA_05)
-!$OMP parallel do default(shared) private(SW_vis_tot,SW_nir_tot)
+!$OMP parallel do default(none) shared(is,ie,js,je,fluxes,optics,CS,G,multiband_nir_input, &
+!$OMP                                  nbands,Inv_nbands_nir,multiband_vis_input )         &
+!$OMP                          private(SW_vis_tot,SW_nir_tot)
       do j=js,je ; do i=is,ie
         SW_vis_tot = 0.0 ; SW_nir_tot = 0.0
         if (G%mask2dT(i,j) > 0.5) then
@@ -334,7 +338,9 @@ subroutine opacity_from_chl(optics, fluxes, G, CS, chl_in)
         enddo
       enddo ; enddo 
     case (MOREL_88)
-!$OMP parallel do default(shared) private(SW_pen_tot)
+!$OMP parallel do default(none) shared(is,ie,js,je,G,multiband_vis_input,chl_data, &
+!$OMP                                  fluxes,nbands,optics,Inv_nbands) &
+!$OMP                          private(SW_pen_tot)
       do j=js,je ; do i=is,ie
         SW_pen_tot = 0.0
         if (G%mask2dT(i,j) > 0.5) then ; if (multiband_vis_input) then
@@ -353,7 +359,8 @@ subroutine opacity_from_chl(optics, fluxes, G, CS, chl_in)
         call MOM_error(FATAL, "opacity_from_chl: CS%opacity_scheme is not valid.")
     end select
 
-!$OMP parallel do default(shared) firstprivate(chl_data)
+!$OMP parallel do default(none) shared(nz,is,ie,js,je,CS,G,chl_in,optics,nbands) &
+!$OMP                     firstprivate(chl_data)
   do k=1,nz
     if (present(chl_in)) then
       do j=js,je ; do i=is,ie ; chl_data(i,j) = chl_in(i,j,k) ; enddo ; enddo

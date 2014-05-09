@@ -288,7 +288,9 @@ subroutine calc_slope_function_(h, tv, G, CS, e)
   h_neglect = G%H_subroundoff
   H_cutoff = real(2*nz) * (G%Angstrom + h_neglect)
 
-!$OMP parallel default(shared) private(E_x,E_y,S2,Hdn,Hup,H_geom,N2)
+!$OMP parallel default(none) shared(is,ie,js,je,CS,nz,e,G,h,H_cutoff,h_neglect, &
+!$OMP                               one_meter,SN_u_local,SN_v_local         )   &
+!$OMP                       private(E_x,E_y,S2,Hdn,Hup,H_geom,N2)
 !$OMP do
   do j=js-1,je+1 ; do i=is-1,ie+1
     CS%SN_u(i,j) = 0.0

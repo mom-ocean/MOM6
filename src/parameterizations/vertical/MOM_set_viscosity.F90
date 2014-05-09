@@ -304,10 +304,20 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, CS)
     enddo ; enddo
   endif
 
-!$OMP parallel do default(private) shared(u, v, h, tv, visc, G, CS, Rml, is, ie, js, je, nz,  &
+!$OMP parallel do default(none) shared(u, v, h, tv, visc, G, CS, Rml, is, ie, js, je, nz,  &
 !$OMP                                     Isq, Ieq, Jsq, Jeq, nkmb, h_neglect, Rho0x400_G, &
 !$OMP                                     Vol_quit, C2pi_3, U_bg_sq, cdrag_sqrt,           &
-!$OMP                                     K2,use_BBL_EOS,maxitt) 
+!$OMP                                     K2,use_BBL_EOS,maxitt)                           &
+!$OMP                          private(do_i,h_at_vel,htot_vel,hwtot,hutot,Thtot,Shtot,     &
+!$OMP                                  hweight,v_at_u,u_at_v,ustar,T_EOS,S_EOS,press,      &
+!$OMP                                  dR_dT, dR_dS,ustarsq,htot,TLay,SLay,Tabove,Sabove,  &
+!$OMP                                  oldfn,Dfn,Dh,Rhtot,Rla,Rl,C2f,ustH,root,bbl_thick,  &
+!$OMP                                  D_vel,tmp,Dp,Dm,a_3,a,a_12,slope,Vol_open,Vol_2_reg,&
+!$OMP                                  C24_a,apb_4a,Iapb,a2x48_apb3,ax2_3apb,Vol_direct,   &
+!$OMP                                  L_direct,Ibma_2,L,vol,vol_below,Vol_err,            &
+!$OMP                                  BBL_visc_frac,h_vel,L0,Vol_0,dV_dL2,dVol,L_max,     &
+!$OMP                                  L_min,Vol_err_min,Vol_err_max,BBL_frac,Cell_width,  &
+!$OMP                                  gam,Rayleigh )
   do j=G%JscB,G%JecB ; do m=1,2
 
     if (m==1) then
@@ -991,9 +1001,15 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
 !    if (CS%linear_drag) ustar(:) = cdrag_sqrt*CS%drag_bg_vel
   endif
 
-!$OMP  parallel do default(private) shared(u, v, h, tv, fluxes, visc, dt, G, CS, use_EOS, &
-!$OMP                                      dt_Rho0, h_neglect, h_tiny, g_H_Rho0,js,je,    &
-!$OMP                                      Isq,Ieq,nz,U_bg_sq,cdrag_sqrt,Rho0x400_G)   
+!$OMP parallel do default(none) shared(u, v, h, tv, fluxes, visc, dt, G, CS, use_EOS, &
+!$OMP                                  dt_Rho0, h_neglect, h_tiny, g_H_Rho0,js,je,    &
+!$OMP                                  Isq,Ieq,nz,U_bg_sq,cdrag_sqrt,Rho0x400_G)  &
+!$OMP                          private(do_any,htot,do_i,k_massive,Thtot,uhtot,vhtot,U_Star, &
+!$OMP                                  Idecay_len_TKE,press,k2,I_2hlay,T_EOS,S_EOS,dR_dT,   &
+!$OMP                                  dR_dS,hlay,v_at_u,Uh2,T_lay,S_lay,gHprime,           &
+!$OMP                                  RiBulk,Shtot,Rhtot,absf,do_any_shelf,                &
+!$OMP                                  h_at_vel,ustar,htot_vel,hwtot,hutot,hweight,ustarsq, &
+!$OMP                                  oldfn,Dfn,Dh,Rlay,Rlb)
   do j=js,je  ! u-point loop
     if (CS%dynamic_viscous_ML) then
       do_any = .false.
@@ -1219,9 +1235,15 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
 
   enddo ! j-loop at u-points
 
-!$OMP parallel do default(private) shared(u, v, h, tv, fluxes, visc, dt, G, CS, use_EOS, &
+!$OMP parallel do default(none) shared(u, v, h, tv, fluxes, visc, dt, G, CS, use_EOS,    &
 !$OMP                                     dt_Rho0, h_neglect, h_tiny, g_H_Rho0,is,ie,    &
-!$OMP                                     Jsq,Jeq,nz,U_bg_sq,cdrag_sqrt,Rho0x400_G)
+!$OMP                                     Jsq,Jeq,nz,U_bg_sq,cdrag_sqrt,Rho0x400_G)      &
+!$OMP                          private(do_any,htot,do_i,k_massive,Thtot,vhtot,uhtot,absf,&
+!$OMP                                  U_Star,Idecay_len_TKE,press,k2,I_2hlay,T_EOS,     &
+!$OMP                                  S_EOS,dR_dT, dR_dS,hlay,u_at_v,Uh2,               &
+!$OMP                                  T_lay,S_lay,gHprime,RiBulk,do_any_shelf,          &
+!$OMP                                  Shtot,Rhtot,ustar,h_at_vel,htot_vel,hwtot,        &
+!$OMP                                  hutot,hweight,ustarsq,oldfn,Dh,Rlay,Rlb,Dfn)
   do J=Jsq,Jeq  ! v-point loop
     if (CS%dynamic_viscous_ML) then
       do_any = .false.

@@ -175,8 +175,11 @@ subroutine mixedlayer_restrat(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
   ! Fix this later for G%nkml >= 3.
 
   p0(:) = 0.0
-!$OMP parallel default(shared) private(Rho0,h_vel,u_star,absf,mom_mixrate,timescale,uDml, &
-!$OMP                                  I2htot,z_topx2,hx2,a,vDml)
+!$OMP parallel default(none) shared(is,ie,js,je,G,htot,Rml_av,tv,p0,h,h_avail,         &
+!$OMP                               h_neglect,g_Rho0,I4dt,CS,uhml,uhtr,dt,vhml,vhtr,   &
+!$OMP                               utimescale_diag,vtimescale_diag,fluxes,dz_neglect) &
+!$OMP                       private(Rho0,h_vel,u_star,absf,mom_mixrate,timescale,uDml, &
+!$OMP                               I2htot,z_topx2,hx2,a,vDml)
 !$OMP do
   do j=js-1,je+1
     do i=is-1,ie+1

@@ -388,7 +388,9 @@ subroutine buildGridZstar( CS, G, h, dzInterface )
 
   nz = G%ke
   
-!$OMP parallel do default(private) shared(G,dzInterface,CS,nz,h)
+!$OMP parallel do default(none) shared(G,dzInterface,CS,nz,h)                    &
+!$OMP                          private(nominalDepth,totalThickness,minThickness, &
+!$OMP                                  eta,stretching,zNew,dh,zOld)
   do j = G%jsc-1,G%jec+1
     do i = G%isc-1,G%iec+1
 

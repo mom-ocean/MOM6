@@ -74,6 +74,7 @@ public bulkmixedlayer, bulkmixedlayer_init
 type, public :: bulkmixedlayer_CS ; private
   integer :: nkml            ! The number of layers in the mixed layer.
   integer :: nkbl            ! The number of buffer layers.
+  integer :: nsw             ! The number of bands of penetrating shortwave radiation.
   real    :: mstar           ! The ratio of the friction velocity cubed to the
                              ! TKE input to the mixed layer, nondimensional.
   real    :: nstar           ! The fraction of the TKE input to the mixed layer
@@ -331,10 +332,10 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
     TKE_river   ! The turbulent kinetic energy available for mixing at rivermouths over a
                 ! time step, in m3 s-2.
 
-  real, allocatable, dimension(:,:) :: &
+  real, dimension(max(CS%nsw,1),SZI_(G)) :: &
     Pen_SW_bnd  !   The penetrating fraction of the shortwave heating integrated
                 ! over a time step in each band, in K H.
-  real, allocatable, dimension(:,:,:) :: &
+  real, dimension(max(CS%nsw,1),SZI_(G),SZK_(G)) :: &
     opacity_band ! The opacity in each band, in H-1. The indicies are band, i, k.
  
   real :: cMKE(2,SZI_(G)) ! Coefficients of HpE and HpE^2 in calculating the
@@ -407,11 +408,10 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
   p_ref(:) = 0.0 ; p_ref_cv(:) = tv%P_Ref
  
 
-  nsw = 0
-  if (ASSOCIATED(optics)) nsw = optics%nbands
+  nsw = CS%nsw
 
   if (CS%limit_det .or. (CS%id_Hsfc_min > 0)) then
-!$OMP parallel default(shared)
+!$OMP parallel default(none) shared(is,ie,js,je,nkmb,h_sum,hmbl_prev,h_3d,nz)
 !$OMP do
     do j=js-1,je+1 ; do i=is-1,ie+1
       h_sum(i,j) = 0.0 ; hmbl_prev(i,j) = 0.0
@@ -460,15 +460,20 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
   endif
   max_BL_det(:) = -1
 
-!$OMP parallel default(private) shared(is,ie,js,je,nz,h_3d,u_3d,v_3d,nkmb,G,nsw,optics, &
-!$OMP                                  CS,tv,fluxes,Irho0,dt,Idt_diag,Ih,write_diags,   &
-!$OMP                                  hmbl_prev,h_sum,Hsfc_min,Hsfc_max,dt__diag,      &
-!$OMP                                  Hsfc_used,Inkmlm1,Inkml,ea,eb,h_miss,  &
-!$OMP                                  id_clock_EOS,id_clock_resort,id_clock_adjustment, &
-!$OMP                                  id_clock_conv,id_clock_mech,id_clock_detrain ) &
-!$OMP firstprivate(dKE_CA,cTKE,h_CA,max_BL_det,p_ref,p_ref_cv) 
-  allocate(Pen_SW_bnd(max(nsw,1),SZI_(G)))
-  allocate(opacity_band(max(nsw,1),SZI_(G),SZK_(G)))
+!$OMP parallel default(none) shared(is,ie,js,je,nz,h_3d,u_3d,v_3d,nkmb,G,nsw,optics, &
+!$OMP                               CS,tv,fluxes,Irho0,dt,Idt_diag,Ih,write_diags,   &
+!$OMP                               hmbl_prev,h_sum,Hsfc_min,Hsfc_max,dt__diag,      &
+!$OMP                               Hsfc_used,Inkmlm1,Inkml,ea,eb,h_miss,             &
+!$OMP                               id_clock_EOS,id_clock_resort,id_clock_adjustment, &
+!$OMP                               id_clock_conv,id_clock_mech,id_clock_detrain )    &
+!$OMP                  firstprivate(dKE_CA,cTKE,h_CA,max_BL_det,p_ref,p_ref_cv)       &
+!$OMP                       private(h,h_orig,u,v,eps,T,S,opacity_band,d_ea,d_eb,      &
+!$OMP                               dR0_dT,dR0_dS,dRcv_dT,dRcv_dS,R0,Rcv,ksort,       &
+!$OMP                               RmixConst,TKE_river,Net_H, Net_heat, Net_salt,    &
+!$OMP                               htot,TKE,Pen_SW_bnd,Ttot,Stot, uhtot, vhtot,      &
+!$OMP                               R0_tot, Rcv_tot,Conv_en,dKE_FC,Idecay_len_TKE,    &
+!$OMP                               cMKE,Hsfc,dHsfc,dHD,H_nbr,kU_Star,absf_x_H,       &
+!$OMP                               ebml,eaml)
 !$OMP do
   do j=js,je
     ! Copy the thicknesses and other fields to 2-d arrays.
@@ -778,8 +783,6 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
 
   enddo ! j loop
 
-  deallocate(Pen_SW_bnd)
-  deallocate(opacity_band)
 !$OMP end parallel
 
   if (write_diags) then
@@ -3265,6 +3268,7 @@ subroutine bulkmixedlayer_init(Time, G, param_file, diag, CS)
 #include "version_variable.h"
   character(len=40)  :: mod = "MOM_mixed_layer"  ! This module's name.
   integer :: isd, ied, jsd, jed
+  logical :: use_temperature
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
  
   if (associated(CS)) then
@@ -3449,6 +3453,15 @@ subroutine bulkmixedlayer_init(Time, G, param_file, diag, CS)
                  "of the surface region (mixed & buffer layer) is allowed \n"//&
                  "to change between grid points.", units="nondim", default=0.2)
   endif
+
+  call get_param(param_file, mod, "ENABLE_THERMODYNAMICS", use_temperature, &
+                 "If true, temperature and salinity are used as state \n"//&
+                 "variables.", default=.true.)
+  CS%nsw = 0
+  if (use_temperature) then
+    call get_param(param_file, mod, "PEN_SW_NBANDS", CS%nsw, default=1)
+  endif
+
 
   if (max(CS%id_TKE_wind, CS%id_TKE_RiBulk, CS%id_TKE_conv, &
           CS%id_TKE_mixing, CS%id_TKE_pen_SW, CS%id_TKE_mech_decay, &

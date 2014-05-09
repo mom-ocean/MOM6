@@ -332,7 +332,8 @@ subroutine pressure_gradient_plm( CS, S_t, S_b, T_t, T_b, G, tv, h )
   ! in 'ALE_memory_allocation'.
 
   ! Determine reconstruction within each column
-!$OMP parallel do default(shared) private(hTmp,ppoly_linear_E,ppoly_linear_coefficients,tmp)
+!$OMP parallel do default(none) shared(G,h,tv,CS,S_t,S_b,T_t,T_b)                     &
+!$OMP                          private(hTmp,ppoly_linear_E,ppoly_linear_coefficients,tmp)
   do j = G%jsc,G%jec+1
     do i = G%isc,G%iec+1
       ! Build current grid
@@ -406,7 +407,8 @@ subroutine pressure_gradient_ppm( CS, S_t, S_b, T_t, T_b, G, tv, h )
   ! in 'ALE_memory_allocation'.
 
   ! Determine reconstruction within each column
-!$OMP parallel do default(shared) private(hTmp,ppoly_parab_E,ppoly_parab_coefficients)
+!$OMP parallel do default(none) shared(G,h,tv,CS,S_t,S_b,T_t,T_b) &
+!$OMP                          private(hTmp,tmp,ppoly_parab_E,ppoly_parab_coefficients)
   do j = G%jsc,G%jec+1
     do i = G%isc,G%iec+1
      

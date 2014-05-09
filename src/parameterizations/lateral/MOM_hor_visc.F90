@@ -296,9 +296,13 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
         "VarMix%Res_fn_q both need to be associated with Resoln_scaled_Kh.")
   endif
 
-!$OMP parallel do default(shared) private(i, j, k, u0, v0, sh_xx, str_xx, visc_bound_rem,&
-!$OMP                                     sh_xy, str_xy, Ah, Kh, AhSm, KhSm, &
-!$OMP                                     Shear_mag, huq, hvq, hq, Kh_scale, hrat_min)
+!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,CS,G,u,v,is,js,h,h_neglect, &
+!$OMP                                  rescale_Kh,VarMix,Kh_h,Ah_h,h_neglect3,Kh_q,   &
+!$OMP                                  Ah_q,ie,je,diffu,apply_OBC,OBC,diffv,          &
+!$OMP                                  find_FrictWork,FrictWork)                      &
+!$OMP                          private(u0, v0, sh_xx, str_xx, visc_bound_rem,         &
+!$OMP                                  sh_xy, str_xy, Ah, Kh, AhSm, KhSm,             &
+!$OMP                                  Shear_mag, huq, hvq, hq, Kh_scale, hrat_min)
   do k=1,nz
 
 !    This code uses boundary conditions that are consistent with

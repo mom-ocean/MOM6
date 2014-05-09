@@ -177,8 +177,14 @@ subroutine geothermal(h, tv, dt, ea, eb, G, CS)
 !    resid(i,j) = tv%internal_heat(i,j)
 !  enddo ; enddo
 
-!$OMP parallel do default(private) shared(is,ie,js,je,G,CS,dt,Irho_cp,nkmb,tv,p_Ref, &
-!$OMP                                     h,Angstrom,nz,H_neglect,eb) 
+!$OMP parallel do default(none) shared(is,ie,js,je,G,CS,dt,Irho_cp,nkmb,tv,p_Ref, &
+!$OMP                                  h,Angstrom,nz,H_neglect,eb)                &
+!$OMP                          private(num_start,heat_rem,do_i,h_geo_rem,num_left,&
+!$OMP                                  isj,iej,Rcv_BL,h_heated,heat_avail,k_tgt,  &
+!$OMP                                  Rcv_tgt,Rcv,dRcv_dT,T2,S2,dRcv_dT_,        &
+!$OMP                                  dRcv_dS_,heat_in_place,heat_trans,         &
+!$OMP                                  wt_in_place,dTemp,dRcv,h_transfer,heating, &
+!$OMP                                  I_h)
   do j=js,je
     ! 1. Only work on columns that are being heated.
     ! 2. Find the deepest layer with any mass.

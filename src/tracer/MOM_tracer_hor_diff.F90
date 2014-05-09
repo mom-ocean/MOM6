@@ -528,7 +528,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
   call pass_var(Tr(ntr)%t(:,:,:), G%Domain)
   call cpu_clock_end(id_clock_pass)
   ! Determine which layers the mixed- and buffer-layers map into...
-!$OMP parallel do default(shared) 
+!$OMP parallel do default(none) shared(nkmb,is,ie,js,je,tv,p_ref_cv,rho_coord)
   do k=1,nkmb 
     do j=js-2,je+2
        call calculate_density(tv%T(:,j,k),tv%S(:,j,k), p_ref_cv, &
@@ -546,7 +546,8 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
   !   Use bracketing and bisection to find the k-level that the densest of the
   ! mixed and buffer layer corresponds to, such that:
   !     G%Rlay(max_kRho-1) < Rml_max <= G%Rlay(max_kRho)
-!$OMP parallel do default(shared) private(k_min,k_max,k_test)
+!$OMP parallel do default(none) shared(is,ie,js,je,nz,nkmb,G,Rml_max,max_kRho) &
+!$OMP                          private(k_min,k_max,k_test)
   do j=js-2,je+2 ; do i=is-2,ie+2 ; if (G%mask2dT(i,j) > 0.5) then
     if (Rml_max(i,j) > G%Rlay(nz)) then ; max_kRho(i,j) = nz+1
     elseif (Rml_max(i,j) <= G%Rlay(nkmb+1)) then ; max_kRho(i,j) = nkmb+1
@@ -572,7 +573,9 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
   if (PEmax_kRho > nz) PEmax_kRho = nz ! PEmax_kRho could have been nz+1.
 
   h_exclude = 10.0*(G%Angstrom + G%H_subroundoff)
-!$OMP parallel default(shared) private(ns,tmp,itmp)
+!$OMP parallel default(none) shared(is,ie,js,je,nkmb,G,h,h_exclude,num_srt,k0_srt, &
+!$OMP                               rho_srt,h_srt,PEmax_kRho,k_end_srt,rho_coord,max_srt) &
+!$OMP                       private(ns,tmp,itmp)
 !$OMP do
   do j=js-1,je+1 
     do k=1,nkmb ; do i=is-1,ie+1 ; if (G%mask2dT(i,j) > 0.5) then
@@ -624,9 +627,13 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
     allocate(k0b_Ru(j)%p(IsdB:IedB,k_size))
   enddo
 
-!$OMP parallel do default(private) shared(is,ie,js,je,G,num_srt,rho_srt,k0b_Lu,k0_srt, &
-!$OMP                                     k0b_Ru,k0a_Lu,k0a_Ru,deep_wt_Lu,deep_wt_Ru,  &
-!$OMP                                     h_srt,nkmb,nPu,hP_Lu,hP_Ru) 
+!$OMP parallel do default(none) shared(is,ie,js,je,G,num_srt,rho_srt,k0b_Lu,k0_srt, &
+!$OMP                                  k0b_Ru,k0a_Lu,k0a_Ru,deep_wt_Lu,deep_wt_Ru,  &
+!$OMP                                  h_srt,nkmb,nPu,hP_Lu,hP_Ru)                  &
+!$OMP                          private(h_demand_L,h_used_L,h_demand_R,h_used_R,     &
+!$OMP                                  kR,kL,nP,rho_pair,kbs_Lp,kbs_Rp,rho_a,rho_b, &
+!$OMP                                  wt_b,left_set,right_set,h_supply_frac_R,     &
+!$OMP                                  h_supply_frac_L)
   do j=js,je ; do I=is-1,ie ; if (G%mask2dCu(I,j) > 0.5) then
     ! Set up the pairings for fluxes through the zonal faces.
 
@@ -773,9 +780,13 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
     allocate(k0b_Rv(J)%p(isd:ied,k_size))
   enddo
 
-!$OMP parallel do default(private) shared(is,ie,js,je,G,num_srt,rho_srt,k0b_Lv,k0b_Rv, &
-!$OMP                                     k0_srt,k0a_Lv,k0a_Rv,deep_wt_Lv,deep_wt_Rv,  &
-!$OMP                                     h_srt,nkmb,nPv,hP_Lv,hP_Rv)   
+!$OMP parallel do default(none) shared(is,ie,js,je,G,num_srt,rho_srt,k0b_Lv,k0b_Rv, &
+!$OMP                                  k0_srt,k0a_Lv,k0a_Rv,deep_wt_Lv,deep_wt_Rv,  &
+!$OMP                                  h_srt,nkmb,nPv,hP_Lv,hP_Rv)                  &
+!$OMP                          private(h_demand_L,h_used_L,h_demand_R,h_used_R,     &
+!$OMP                                  kR,kL,nP,rho_pair,kbs_Lp,kbs_Rp,rho_a,rho_b, &
+!$OMP                                  wt_b,left_set,right_set,h_supply_frac_R,     &
+!$OMP                                  h_supply_frac_L)
   do J=js-1,je ; do i=is,ie ; if (G%mask2dCv(i,J) > 0.5) then
     ! Set up the pairings for fluxes through the meridional faces.
 
@@ -930,7 +941,10 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
     endif
 
     do m=1,ntr
-!$OMP parallel do default(shared) private(Tr_min_face,Tr_max_face,kLa,kLb,kRa,kRb,Tr_La, &
+!$OMP parallel do default(none) shared(is,ie,js,je,G,Tr,nkmb,nPu,m,max_kRho,nz,h,h_exclude, &
+!$OMP                                  k0b_Lu,k0b_Ru,deep_wt_Lu,k0a_Lu,deep_wt_Ru,k0a_Ru,   &
+!$OMP                                  hP_Lu,hP_Ru,I_maxitt,khdt_epi_x,tr_flux_conv,Idt) &
+!$OMP                          private(Tr_min_face,Tr_max_face,kLa,kLb,kRa,kRb,Tr_La, &
 !$OMP                                     Tr_Lb,Tr_Ra,Tr_Rb,Tr_av_L,wt_b,Tr_av_R,h_L,h_R, &
 !$OMP                                     Tr_flux,Tr_adj_vert,wt_a,vol)
       do j=js,je ; do I=is-1,ie ; if (G%mask2dCu(I,j) > 0.5) then
@@ -1066,9 +1080,13 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
         enddo ! Loop over pairings at faces.
       endif ; enddo ; enddo ! i- & j- loops over zonal faces.
 
-!$OMP parallel do default(shared) private(Tr_min_face,Tr_max_face,kLa,kLb,kRa,kRb, &
-!$OMP                                     Tr_La,Tr_Lb,Tr_Ra,Tr_Rb,Tr_av_L,wt_b,Tr_av_R, &
-!$OMP                                     h_L,h_R,Tr_flux,Tr_adj_vert,wt_a,vol)
+!$OMP parallel do default(none) shared(is,ie,js,je,G,Tr,nkmb,nPv,m,max_kRho,nz,h,h_exclude, &
+!$OMP                                  k0b_Lv,k0b_Rv,deep_wt_Lv,k0a_Lv,deep_wt_Rv,k0a_Rv,   &
+!$OMP                                  hP_Lv,hP_Rv,I_maxitt,khdt_epi_y,Tr_flux_3d,          &
+!$OMP                                  Tr_adj_vert_L,Tr_adj_vert_R,Idt)                     &
+!$OMP                          private(Tr_min_face,Tr_max_face,kLa,kLb,kRa,kRb,             &
+!$OMP                                  Tr_La,Tr_Lb,Tr_Ra,Tr_Rb,Tr_av_L,wt_b,Tr_av_R,        &
+!$OMP                                  h_L,h_R,Tr_flux,Tr_adj_vert,wt_a,vol)
       do J=js-1,je ; do i=is,ie ; if (G%mask2dCv(i,J) > 0.5) then
         ! Determine the fluxes through the meridional faces.
 
@@ -1182,7 +1200,10 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
             Tr(m)%df2d_y(i,J) = Tr(m)%df2d_y(i,J) + Tr_flux * Idt
         enddo ! Loop over pairings at faces.
       endif ; enddo ; enddo ! i- & j- loops over meridional faces.
-!$OMP parallel do default(shared) private(kLa,kLb,kRa,kRb,wt_b,wt_a)
+!$OMP parallel do default(none) shared(is,ie,js,je,G,nPv,k0b_Lv,k0b_Rv,deep_wt_Lv,  &
+!$OMP                                  tr_flux_conv,Tr_flux_3d,k0a_Lv,Tr_adj_vert_L,&
+!$OMP                                  deep_wt_Rv,k0a_Rv,Tr_adj_vert_R) &
+!$OMP                          private(kLa,kLb,kRa,kRb,wt_b,wt_a)
       do i=is,ie ; do J=js-1,je ; if (G%mask2dCv(i,J) > 0.5) then
         do k=1,nPv(i,J)
           kLb = k0b_Lv(J)%p(i,k); kRb = k0b_Rv(J)%p(i,k)
@@ -1206,7 +1227,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
           endif
         enddo
       endif ; enddo ; enddo
-!$OMP parallel do default(shared)
+!$OMP parallel do default(none) shared(PEmax_kRho,is,ie,js,je,G,h,Tr,tr_flux_conv,m)
       do k=1,PEmax_kRho ; do j=js,je ; do i=is,ie
         if ((G%mask2dT(i,j) > 0.5) .and. (h(i,j,k) > 0.0)) then
           Tr(m)%t(i,j,k) = Tr(m)%t(i,j,k) + tr_flux_conv(i,j,k) / &
