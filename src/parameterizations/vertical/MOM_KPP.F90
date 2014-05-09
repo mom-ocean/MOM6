@@ -835,7 +835,7 @@ subroutine KPP_applyNonLocalTransport(CS, G, h, nonLocalTrans, surfFlux, dt, sca
     do j = G%jsc, G%jec
       do i = G%isc, G%iec
         ! Tendency due to non-local transport of scalar
-        dSdt(i,j,k) = ( nonLocalTrans(i,j,k) - nonLocalTrans(i,j,k+1) ) / h(i,j,k) * surfFlux(i,j)
+        dSdt(i,j,k) = ( nonLocalTrans(i,j,k) - nonLocalTrans(i,j,k+1) ) / ( h(i,j,k) + G%H_subroundoff ) * surfFlux(i,j)
         ! Update the scalar
         if (CS%applyNonLocalTrans) scalar(i,j,k) = scalar(i,j,k) + dt * dSdt(i,j,k)
       enddo ! i
