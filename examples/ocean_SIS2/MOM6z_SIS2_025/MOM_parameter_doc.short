@@ -559,13 +559,18 @@ CHECK_DIFFUSIVE_CFL = True      !   [Boolean] default = False
 ENERGYSAVEDAYS = 0.25           !   [days] default = 1.0
                                 ! The interval in units of TIMEUNIT between saves of the
                                 ! energies of the run and other globally summed diagnostics.
+OCEAN_SURFACE_STAGGER = "C"     ! default = "B"
+                                ! A case-insensitive character string to indicate the
+                                ! staggering of the surface velocity field that is
+                                ! returned to the coupler.  Valid values include
+                                ! 'A', 'B', or 'C'.
 RESTORE_SALINITY = True         !   [Boolean] default = False
                                 ! If true, the coupled driver will add a globally-balanced
                                 ! fresh-water flux that drives sea-surface salinity
                                 ! toward specified values.
 
 ! === module MOM_surface_forcing ===
-MAX_P_SURF = 3.0E+04            !   [Pa] default = -1.0
+MAX_P_SURF = 0.0                !   [Pa] default = -1.0
                                 ! The maximum surface pressure that can be exerted by the
                                 ! atmosphere and floating sea-ice or ice shelves. This is
                                 ! needed because the FMS coupling structure does not
