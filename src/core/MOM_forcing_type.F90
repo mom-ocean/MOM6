@@ -43,6 +43,7 @@ public absorbRemainingSW
 public calculateBuoyancyFlux1d
 public calculateBuoyancyFlux2d
 public forcing_SinglePointPrint
+public deallocate_forcing_type
 
 integer :: num_msg = 0
 integer :: max_msg = 2
@@ -984,5 +985,43 @@ subroutine forcing_SinglePointPrint(fluxes, G, i, j, mesg)
   endif
   end subroutine locMsg
 end subroutine forcing_SinglePointPrint
+
+!> Deallocates the forcing type
+subroutine deallocate_forcing_type(fluxes)
+  type(forcing), intent(inout) :: fluxes
+  if (associated(fluxes%taux))           deallocate(fluxes%taux)
+  if (associated(fluxes%tauy))           deallocate(fluxes%tauy)
+  if (associated(fluxes%ustar))          deallocate(fluxes%ustar)
+  if (associated(fluxes%buoy))           deallocate(fluxes%buoy)
+  if (associated(fluxes%sw))             deallocate(fluxes%sw)
+  if (associated(fluxes%sw_vis_dir))     deallocate(fluxes%sw_vis_dir)
+  if (associated(fluxes%sw_vis_dif))     deallocate(fluxes%sw_vis_dif)
+  if (associated(fluxes%sw_nir_dir))     deallocate(fluxes%sw_nir_dir)
+  if (associated(fluxes%sw_nir_dif))     deallocate(fluxes%sw_nir_dif)
+  if (associated(fluxes%lw))             deallocate(fluxes%lw)
+  if (associated(fluxes%latent))         deallocate(fluxes%latent)
+  if (associated(fluxes%sens))           deallocate(fluxes%sens)
+  if (associated(fluxes%heat_restore))   deallocate(fluxes%heat_restore)
+  if (associated(fluxes%runoff_hflx))    deallocate(fluxes%runoff_hflx)
+  if (associated(fluxes%calving_hflx))   deallocate(fluxes%calving_hflx)
+  if (associated(fluxes%evap))           deallocate(fluxes%evap)
+  if (associated(fluxes%liq_precip))     deallocate(fluxes%liq_precip)
+  if (associated(fluxes%froz_precip))    deallocate(fluxes%froz_precip)
+  if (associated(fluxes%virt_precip))    deallocate(fluxes%virt_precip)
+  if (associated(fluxes%liq_runoff))     deallocate(fluxes%liq_runoff)
+  if (associated(fluxes%froz_runoff))    deallocate(fluxes%froz_runoff)
+  if (associated(fluxes%salt_flux))      deallocate(fluxes%salt_flux)
+  if (associated(fluxes%p_surf_full))    deallocate(fluxes%p_surf_full)
+  if (associated(fluxes%p_surf))         deallocate(fluxes%p_surf)
+  if (associated(fluxes%TKE_tidal))      deallocate(fluxes%TKE_tidal)
+  if (associated(fluxes%ustar_tidal))    deallocate(fluxes%ustar_tidal)
+  if (associated(fluxes%ustar_shelf))    deallocate(fluxes%ustar_shelf)
+  if (associated(fluxes%frac_shelf_h))   deallocate(fluxes%frac_shelf_h)
+  if (associated(fluxes%frac_shelf_u))   deallocate(fluxes%frac_shelf_u)
+  if (associated(fluxes%frac_shelf_v))   deallocate(fluxes%frac_shelf_v)
+  if (associated(fluxes%rigidity_ice_u)) deallocate(fluxes%rigidity_ice_u)
+  if (associated(fluxes%rigidity_ice_v)) deallocate(fluxes%rigidity_ice_v)
+  if (associated(fluxes%tr_fluxes))      deallocate(fluxes%tr_fluxes)
+end subroutine deallocate_forcing_type
 
 end module MOM_forcing_type
