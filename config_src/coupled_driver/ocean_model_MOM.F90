@@ -43,7 +43,7 @@ use MOM_domains, only : pass_vector, AGRID, BGRID_NE, CGRID_NE
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe
 use MOM_error_handler, only : callTree_enter, callTree_leave
 use MOM_file_parser, only : get_param, log_version, close_param_file, param_file_type
-use MOM_forcing_type, only : forcing
+use MOM_forcing_type, only : forcing, average_forcing
 use MOM_get_input, only : Get_MOM_Input, directories
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : close_file, file_exists, read_data, write_version_number
@@ -52,7 +52,7 @@ use MOM_sum_output, only : write_energy, accumulate_net_input
 use MOM_sum_output, only : MOM_sum_output_init, sum_output_CS
 use MOM_string_functions, only : uppercase
 use MOM_surface_forcing, only : surface_forcing_init, convert_IOB_to_fluxes
-use MOM_surface_forcing, only : average_forcing, ice_ocn_bnd_type_chksum
+use MOM_surface_forcing, only : ice_ocn_bnd_type_chksum
 use MOM_surface_forcing, only : ice_ocean_boundary_type, surface_forcing_CS
 use MOM_surface_forcing, only : forcing_save_restart
 use MOM_time_manager, only : time_type, get_time, set_time, operator(>)
@@ -156,7 +156,7 @@ type, public :: ocean_state_type ; private
                               ! restore salinity to a specified value.
   real :: press_to_z          ! A conversion factor between pressure and ocean
                               ! depth in m, usually 1/(rho_0*g), in m Pa-1.
-  real    :: C_p              !   The heat capacity of seawater, in J K-1 kg-1.
+  real :: C_p                 !   The heat capacity of seawater, in J K-1 kg-1.
 
   type(directories) :: dirs   ! A structure containing several relevant directory paths.
   type(forcing)   :: fluxes   ! A structure containing pointers to
@@ -166,8 +166,8 @@ type, public :: ocean_state_type ; private
   type(ocean_grid_type), pointer :: grid => NULL() ! A pointer to a grid structure
                               ! containing metrics and related information.
   type(MOM_control_struct), pointer :: MOM_CSp => NULL()
-  type(surface_forcing_CS),  pointer :: forcing_CSp => NULL()
-  type(sum_output_CS),       pointer :: sum_output_CSp => NULL()
+  type(surface_forcing_CS), pointer :: forcing_CSp => NULL()
+  type(sum_output_CS),      pointer :: sum_output_CSp => NULL()
 end type ocean_state_type
 
 contains
@@ -371,7 +371,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   OS%nstep = OS%nstep + 1
 
   call enable_averaging(time_step, OS%Time, OS%MOM_CSp%diag)
-  call average_forcing(OS%fluxes, time_step, OS%grid, OS%forcing_CSp)
+  call average_forcing(OS%fluxes, time_step, OS%grid, OS%MOM_CSp%diag, OS%forcing_CSp%handles)
   call accumulate_net_input(OS%fluxes, OS%state, time_step, OS%grid, OS%sum_output_CSp)
   call disable_averaging(OS%MOM_CSp%diag)
 
