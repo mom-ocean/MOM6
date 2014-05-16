@@ -63,7 +63,7 @@ set yr2 = $oname
 set databegyr = $oname 
 set dataendyr = $oname 
 set datachunk = 1
-set fremodule = $FREVERSION            #Niki: How to set this to the caller version?
+set fremodule = fre            #Niki: How to set this to the caller version?
 set freanalysismodule = fre-analysis/test
 
 # make sure valid platform and required modules are loaded
