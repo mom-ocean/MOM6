@@ -85,8 +85,8 @@
  "ocean_model", "salt_flux",    "salt_flux",        "ocean_annual", "all", "mean", "none",2
 
 # Annual snapshots
- "ocean_model", "age",          "age",              "ocean_annual_snap", "all", .false., "none",2
-#"ocean_model", "vintage_z",    "vintage",          "ocean_annual_snap", "all", .false., "none",2
+ "ocean_model", "age",          "age",              "ocean_annual_snap", "all", "none", "none",2
+#"ocean_model", "vintage_z",    "vintage",          "ocean_annual_snap", "all", "none", "none",2
 
 # Sections
 "ocean_model", "temp", "temp", "ocean_Drake_passage",    "all", "mean", "-70. -70. -71. -54.5 -1 -1",2
@@ -121,17 +121,17 @@
 "ocean_model", "e",    "e",    "ocean_Agulhas_section",  "all", "mean", "20. 20. -70.1 -34.5 -1 -1",2
 
 # Static geometry data
- "ocean_model", "geolon",      "geolon",      "ocean_static", "all", .false., "none", 2
- "ocean_model", "geolat",      "geolat",      "ocean_static", "all", .false., "none", 2
- "ocean_model", "geolon_c",    "geolon_c",    "ocean_static", "all", .false., "none", 2
- "ocean_model", "geolat_c",    "geolat_c",    "ocean_static", "all", .false., "none", 2
- "ocean_model", "geolon_u",    "geolon_u",    "ocean_static", "all", .false., "none", 2
- "ocean_model", "geolat_u",    "geolat_u",    "ocean_static", "all", .false., "none", 2
- "ocean_model", "geolon_v",    "geolon_v",    "ocean_static", "all", .false., "none", 2
- "ocean_model", "geolat_v",    "geolat_v",    "ocean_static", "all", .false., "none", 2
- "ocean_model", "area_t",      "area_t",      "ocean_static", "all", .false., "none", 2
- "ocean_model", "depth_ocean", "depth_ocean", "ocean_static", "all", .false., "none", 2
- "ocean_model", "wet",         "wet",         "ocean_static", "all", .false., "none", 2
- "ocean_model", "wet_c",       "wet_c",       "ocean_static", "all", .false., "none", 2
- "ocean_model", "wet_u",       "wet_u",       "ocean_static", "all", .false., "none", 2
- "ocean_model", "wet_v",       "wet_v",       "ocean_static", "all", .false., "none", 2
+ "ocean_model", "geolon",      "geolon",      "ocean_static", "all", "none", "none", 2
+ "ocean_model", "geolat",      "geolat",      "ocean_static", "all", "none", "none", 2
+ "ocean_model", "geolon_c",    "geolon_c",    "ocean_static", "all", "none", "none", 2
+ "ocean_model", "geolat_c",    "geolat_c",    "ocean_static", "all", "none", "none", 2
+ "ocean_model", "geolon_u",    "geolon_u",    "ocean_static", "all", "none", "none", 2
+ "ocean_model", "geolat_u",    "geolat_u",    "ocean_static", "all", "none", "none", 2
+ "ocean_model", "geolon_v",    "geolon_v",    "ocean_static", "all", "none", "none", 2
+ "ocean_model", "geolat_v",    "geolat_v",    "ocean_static", "all", "none", "none", 2
+ "ocean_model", "area_t",      "area_t",      "ocean_static", "all", "none", "none", 2
+ "ocean_model", "depth_ocean", "depth_ocean", "ocean_static", "all", "none", "none", 2
+ "ocean_model", "wet",         "wet",         "ocean_static", "all", "none", "none", 2
+ "ocean_model", "wet_c",       "wet_c",       "ocean_static", "all", "none", "none", 2
+ "ocean_model", "wet_u",       "wet_u",       "ocean_static", "all", "none", "none", 2
+ "ocean_model", "wet_v",       "wet_v",       "ocean_static", "all", "none", "none", 2

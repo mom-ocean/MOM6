@@ -6,19 +6,19 @@
 #================
 # ICE DIAGNOSTICS
 #================
- "ice_model", "CELL_AREA",  "CELL_AREA",  "ice_month", "all", .false., "none", 2
-#"ice_model", "COSROT",     "COSROT",     "ice_month", "all", .false., "none", 2
- "ice_model", "GEOLAT",     "GEOLAT",     "ice_month", "all", .false., "none", 2
- "ice_model", "GEOLON",     "GEOLON",     "ice_month", "all", .false., "none", 2
-#"ice_model", "SINROT",     "SINROT",     "ice_month", "all", .false., "none", 2
+ "ice_model", "CELL_AREA",  "CELL_AREA",    "ice_static", "all", "none", "none", 2
+#"ice_model", "COSROT",     "COSROT",       "ice_static", "all", "none", "none", 2
+ "ice_model", "GEOLAT",     "GEOLAT",       "ice_static", "all", "none", "none", 2
+ "ice_model", "GEOLON",     "GEOLON",       "ice_static", "all", "none", "none", 2
+#"ice_model", "SINROT",     "SINROT",       "ice_static", "all", "none", "none", 2
 
 # Daily sea-ice
- "ice_model", "MI",         "MI",           "ice_daily", "all", .false., "none", 2
-#"ice_model", "SSH",        "SSH",          "ice_daily", "all", .false., "none", 2
-#"ice_model", "SSS",        "SSS",          "ice_daily", "all", .false., "none", 2
-#"ice_model", "SST",        "SST",          "ice_daily", "all", .false., "none", 2
-#"ice_model", "UO",         "UO",           "ice_daily", "all", .false., "none", 2
-#"ice_model", "VO",         "VO",           "ice_daily", "all", .false., "none", 2
+ "ice_model", "MI",         "MI",           "ice_daily", "all", "none", "none", 2
+#"ice_model", "SSH",        "SSH",          "ice_daily", "all", "none", "none", 2
+#"ice_model", "SSS",        "SSS",          "ice_daily", "all", "none", "none", 2
+#"ice_model", "SST",        "SST",          "ice_daily", "all", "none", "none", 2
+#"ice_model", "UO",         "UO",           "ice_daily", "all", "none", "none", 2
+#"ice_model", "VO",         "VO",           "ice_daily", "all", "none", "none", 2
 
 # Monthly sea-ice
  "ice_model", "AGE",        "AGE",          "ice_month", "all", "mean", "none", 2
