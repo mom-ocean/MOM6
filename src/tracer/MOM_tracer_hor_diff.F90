@@ -1314,6 +1314,11 @@ subroutine tracer_hor_diff_init(Time, G, param_file, diag, CS)
 
   CS%id_KhTr_u = -1 ; CS%id_KhTr_v = -1
 
+  CS%id_KhTr_u = register_diag_field('ocean_model', 'KHTR_u', diag%axesCu1, Time, &
+     'Epipycnal tracer diffusivity at zonal faces of tracer cell', 'meter2 second-1')
+  CS%id_KhTr_v = register_diag_field('ocean_model', 'KHTR_v', diag%axesCv1, Time, &
+     'Epipycnal tracer diffusivity at meridional faces of tracer cell', 'meter2 second-1')
+
 end subroutine tracer_hor_diff_init
 
 subroutine tracer_hor_diff_end(CS)
