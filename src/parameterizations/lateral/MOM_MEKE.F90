@@ -68,7 +68,7 @@ type, public :: MEKE_CS ; private
                        ! MEKE itself (nondimensional).
   ! Diagnostics
   type(diag_ctrl), pointer :: diag ! A pointer to a structure of shareable
-  integer :: id_MEKE = -1, id_Kh = -1, id_src = -1
+  integer :: id_MEKE = -1, id_Ue = -1, id_Kh = -1, id_src = -1
   integer :: id_GM_src = -1, id_mom_src = -1, id_decay = -1
   integer :: id_KhMEKE_u = -1, id_KhMEKE_v = -1
 end type MEKE_CS
@@ -293,22 +293,25 @@ subroutine step_forward_MEKE(MEKE, h, visc, dt, G, CS)
     call pass_var(MEKE%MEKE, G%Domain)
     call cpu_clock_end(id_clock_pass)
 
-    if (CS%MEKE_KhCoeff>0.) then ; if (CS%Rd_as_max_scale) then
-      do j=js-1,je+1 ; do i=is-1,ie+1
-        MEKE%Kh(i,j) = (CS%MEKE_KhCoeff*sqrt(2.*max(0.,MEKE%MEKE(i,j))*G%areaT(i,j))) * &
-                       min(MEKE%Rd_dx_h(i,j), 1.0)
-      enddo ; enddo
-    else
-      do j=js-1,je+1 ; do i=is-1,ie+1
-        MEKE%Kh(i,j) = CS%MEKE_KhCoeff*sqrt(2.*max(0.,MEKE%MEKE(i,j))*G%areaT(i,j))
-      enddo ; enddo
-    endif ; endif
-    call cpu_clock_begin(id_clock_pass)
-    call pass_var(MEKE%Kh, G%Domain)
-    call cpu_clock_end(id_clock_pass)
+    if (CS%MEKE_KhCoeff>0.) then
+      if (CS%Rd_as_max_scale) then
+        do j=js-1,je+1 ; do i=is-1,ie+1
+          MEKE%Kh(i,j) = (CS%MEKE_KhCoeff*sqrt(2.*max(0.,MEKE%MEKE(i,j))*G%areaT(i,j))) * &
+                         min(MEKE%Rd_dx_h(i,j), 1.0)
+        enddo ; enddo
+      else
+        do j=js-1,je+1 ; do i=is-1,ie+1
+          MEKE%Kh(i,j) = CS%MEKE_KhCoeff*sqrt(2.*max(0.,MEKE%MEKE(i,j))*G%areaT(i,j))
+        enddo ; enddo
+      endif
+      call cpu_clock_begin(id_clock_pass)
+      call pass_var(MEKE%Kh, G%Domain)
+      call cpu_clock_end(id_clock_pass)
+    endif
 
 ! Offer fields for averaging.
     if (CS%id_MEKE>0) call post_data(CS%id_MEKE, MEKE%MEKE, CS%diag)
+    if (CS%id_Ue>0) call post_data(CS%id_Ue, sqrt(2.0*MEKE%MEKE), CS%diag)
     if (CS%id_Kh>0) call post_data(CS%id_Kh, MEKE%Kh, CS%diag)
     if (CS%id_KhMEKE_u>0) call post_data(CS%id_KhMEKE_u, Kh_u, CS%diag)
     if (CS%id_KhMEKE_v>0) call post_data(CS%id_KhMEKE_v, Kh_v, CS%diag)
@@ -444,8 +447,13 @@ subroutine MEKE_init(Time, G, param_file, diag, CS, MEKE)
 ! Register fields for output from this module.
   CS%id_MEKE = register_diag_field('ocean_model', 'MEKE', diag%axesT1, Time, &
      'Mesoscale Eddy Kinetic Energy', 'meter2 second-2')
+  if (.not. associated(MEKE%MEKE)) CS%id_MEKE = -1
   CS%id_Kh = register_diag_field('ocean_model', 'MEKE_KH', diag%axesT1, Time, &
      'MEKE derived diffusivity', 'meter2 second-1')
+  if (.not. associated(MEKE%Kh)) CS%id_Kh = -1
+  CS%id_Ue = register_diag_field('ocean_model', 'MEKE_Ue', diag%axesT1, Time, &
+     'MEKE derived eddy-velocity scale', 'meter second-1')
+  if (.not. associated(MEKE%MEKE)) CS%id_Ue = -1
   CS%id_src = register_diag_field('ocean_model', 'MEKE_src', diag%axesT1, Time, &
      'MEKE energy source', 'meter2 second-3')
   CS%id_decay = register_diag_field('ocean_model', 'MEKE_decay', diag%axesT1, Time, &
@@ -454,12 +462,12 @@ subroutine MEKE_init(Time, G, param_file, diag, CS, MEKE)
      'Zonal diffusivity of MEKE', 'meter2 second-1')
   CS%id_KhMEKE_v = register_diag_field('ocean_model', 'KHMEKE_v', diag%axesCv1, Time, &
      'Meridional diffusivity of MEKE', 'meter2 second-1')
-  if (associated(MEKE%GM_src)) &
-    CS%id_GM_src = register_diag_field('ocean_model', 'MEKE_GM_src', diag%axesT1, &
-        Time, 'MEKE energy available from thickness mixing', 'Watt meter-2')
-  if (associated(MEKE%mom_src)) &
-    CS%id_mom_src = register_diag_field('ocean_model', 'MEKE_mom_src',diag%axesT1,&
-        Time, 'MEKE energy available from momentum', 'Watt meter-2')
+  CS%id_GM_src = register_diag_field('ocean_model', 'MEKE_GM_src', diag%axesT1, Time, &
+     'MEKE energy available from thickness mixing', 'Watt meter-2')
+  if (.not. associated(MEKE%GM_src)) CS%id_GM_src = -1
+  CS%id_mom_src = register_diag_field('ocean_model', 'MEKE_mom_src',diag%axesT1, Time, &
+     'MEKE energy available from momentum', 'Watt meter-2')
+  if (.not. associated(MEKE%mom_src)) CS%id_mom_src = -1
 
   id_clock_pass = cpu_clock_id('(Ocean continuity halo updates)', grain=CLOCK_ROUTINE)
 
