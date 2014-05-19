@@ -1,4 +1,4 @@
-# MOM6 documentation
+# MOM6
 
 # Where to find information
 
@@ -22,7 +22,7 @@ The top level directory structure groups source code and input files as follow:
 | ```README.md```   | this file with basic pointers to more information |
 | ```src/```        | contains the source code for MOM6 that is always compiled |
 | ```config_src/``` | contains optional source code depending on mode and configuration such as dynamic-memory versus static, ocean-only versus coupled. |
-| ```examples/```   | contains parameters, input data, paths to data, and some source code for static compiles. examples/ is sub-divided into four directories named for the style of compiled executable |
+| ```examples/```   | contains parameters, input data, paths to data, and some source code for static compiles. examples/ is sub-divided into six directories named for the style of compiled executable |
 | ```pkg/```        | contains third party (non-MOM6 or FMS) code that is compiled into MOM6 |
 | ```tools/```      | tools for working with MOM6 (not source code and not necessarily supported) |
 
