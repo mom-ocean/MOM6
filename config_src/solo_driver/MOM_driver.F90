@@ -52,7 +52,7 @@ program MOM_main
   use MOM_error_handler,   only : callTree_enter, callTree_leave, callTree_waypoint
   use MOM_file_parser,     only : read_param, get_param, log_param, log_version, param_file_type
   use MOM_file_parser,     only : close_param_file
-  use MOM_forcing_type,    only : forcing, average_forcing
+  use MOM_forcing_type,    only : forcing, forcing_diagnostics
   use MOM_get_input,       only : directories
   use MOM_grid,            only : ocean_grid_type
   use MOM_io,              only : file_exists, open_file, close_file
@@ -416,7 +416,7 @@ program MOM_main
     Time = Master_Time
 
     call enable_averaging(time_step,Time,MOM_CSp%diag)
-    call average_forcing(fluxes, time_step, grid, MOM_CSp%diag, surface_forcing_CSp%handles)
+    call forcing_diagnostics(fluxes, state, time_step, grid, MOM_CSp%diag, surface_forcing_CSp%handles)
     call accumulate_net_input(fluxes, state, time_step, grid, sum_output_CSp)
     call disable_averaging(MOM_CSp%diag)
 

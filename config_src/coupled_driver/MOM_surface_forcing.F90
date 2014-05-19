@@ -167,25 +167,25 @@ type, public :: surface_forcing_CS ; private
 end type surface_forcing_CS
 
 type, public :: ice_ocean_boundary_type
-  real, pointer, dimension(:,:) :: u_flux =>NULL()   ! i-direction wind stress (Pa)
-  real, pointer, dimension(:,:) :: v_flux =>NULL()   ! j-direction wind stress (Pa)
-  real, pointer, dimension(:,:) :: t_flux =>NULL()   ! sensible heat flux (W/m2)
-  real, pointer, dimension(:,:) :: q_flux =>NULL()   ! specific humidity flux (kg/m2/s)
-  real, pointer, dimension(:,:) :: salt_flux =>NULL()! salt flux (kg/m2/s)
-  real, pointer, dimension(:,:) :: lw_flux =>NULL()  ! long wave radiation (w/m2)
-  real, pointer, dimension(:,:) :: sw_flux_vis_dir => NULL() ! direct visible sw radiation (w/m2)
-  real, pointer, dimension(:,:) :: sw_flux_vis_dif => NULL() ! diffuse visible sw radiation (w/m2)
-  real, pointer, dimension(:,:) :: sw_flux_nir_dir => NULL() ! direct Near InfraRed sw radiation (w/m2)
-  real, pointer, dimension(:,:) :: sw_flux_nir_dif => NULL() ! diffuse Near InfraRed sw radiation (w/m2)
-  real, pointer, dimension(:,:) :: lprec =>NULL()    ! mass flux of liquid precip (kg/m2/s)
-  real, pointer, dimension(:,:) :: fprec =>NULL()    ! mass flux of frozen precip (kg/m2/s)
-  real, pointer, dimension(:,:) :: runoff =>NULL()   ! mass flux of liquid runoff (kg/m2/s)
-  real, pointer, dimension(:,:) :: calving =>NULL()  ! mass flux of frozen runoff (kg/m2/s)
-  real, pointer, dimension(:,:) :: runoff_hflx =>NULL() ! heat flux associated with liquid runoff (w/m2)
-  real, pointer, dimension(:,:) :: calving_hflx =>NULL()! heat flux associated with frozen runoff (w/m2)
-  real, pointer, dimension(:,:) :: p =>NULL()        ! pressure of overlying ice and atmosphere
-                                                     ! on ocean surface (Pa)
-  real, pointer, dimension(:,:) :: mi =>NULL()       ! mass of ice (kg/m2)
+  real, pointer, dimension(:,:) :: u_flux               =>NULL() ! i-direction wind stress (Pa)
+  real, pointer, dimension(:,:) :: v_flux               =>NULL() ! j-direction wind stress (Pa)
+  real, pointer, dimension(:,:) :: t_flux               =>NULL() ! sensible heat flux (W/m2)
+  real, pointer, dimension(:,:) :: q_flux               =>NULL() ! specific humidity flux (kg/m2/s)
+  real, pointer, dimension(:,:) :: salt_flux            =>NULL() ! salt flux (kg/m2/s)
+  real, pointer, dimension(:,:) :: lw_flux              =>NULL() ! long wave radiation (W/m2)
+  real, pointer, dimension(:,:) :: sw_flux_vis_dir      =>NULL() ! direct visible sw radiation (W/m2)
+  real, pointer, dimension(:,:) :: sw_flux_vis_dif      =>NULL() ! diffuse visible sw radiation (W/m2)
+  real, pointer, dimension(:,:) :: sw_flux_nir_dir      =>NULL() ! direct Near InfraRed sw radiation (W/m2)
+  real, pointer, dimension(:,:) :: sw_flux_nir_dif      =>NULL() ! diffuse Near InfraRed sw radiation (W/m2)
+  real, pointer, dimension(:,:) :: lprec                =>NULL() ! mass flux of liquid precip (kg/m2/s)
+  real, pointer, dimension(:,:) :: fprec                =>NULL() ! mass flux of frozen precip (kg/m2/s)
+  real, pointer, dimension(:,:) :: runoff               =>NULL() ! mass flux of liquid runoff (kg/m2/s)
+  real, pointer, dimension(:,:) :: calving              =>NULL() ! mass flux of frozen runoff (kg/m2/s)
+  real, pointer, dimension(:,:) :: runoff_hflx          =>NULL() ! heat content of liquid runoff (W/m2)
+  real, pointer, dimension(:,:) :: calving_hflx         =>NULL() ! heat content of frozen runoff (W/m2)
+  real, pointer, dimension(:,:) :: p                    =>NULL() ! pressure of overlying ice and atmosphere
+                                                                 ! on ocean surface (Pa)
+  real, pointer, dimension(:,:) :: mi                   =>NULL() ! mass of ice (kg/m2)
   integer :: xtype                                   ! REGRID, REDIST or DIRECT
   type(coupler_2d_bc_type)      :: fluxes            ! A structure that may contain an
                                                      ! array of named fields used for
@@ -290,35 +290,39 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
   if (present(restore_salt)) restore_salinity = restore_salt
 
   if (CS%first_call) then
-    call safe_alloc_ptr(fluxes%taux,IsdB,IedB,jsd,jed)      ; fluxes%taux(:,:) = 0.0
-    call safe_alloc_ptr(fluxes%tauy,isd,ied,JsdB,JedB)      ; fluxes%tauy(:,:) = 0.0
-    call safe_alloc_ptr(fluxes%ustar,isd,ied,jsd,jed)       ; fluxes%ustar(:,:) = 0.0
-    call safe_alloc_ptr(fluxes%evap,isd,ied,jsd,jed)        ; fluxes%evap(:,:) = 0.0
-    call safe_alloc_ptr(fluxes%liq_precip,isd,ied,jsd,jed)  ; fluxes%liq_precip(:,:) = 0.0
-    call safe_alloc_ptr(fluxes%froz_precip,isd,ied,jsd,jed) ; fluxes%froz_precip(:,:) = 0.0
-    call safe_alloc_ptr(fluxes%virt_precip,isd,ied,jsd,jed) ; fluxes%virt_precip(:,:) = 0.0
-    call safe_alloc_ptr(fluxes%sw,isd,ied,jsd,jed)          ; fluxes%sw(:,:) = 0.0
-    call safe_alloc_ptr(fluxes%sw_vis_dir,isd,ied,jsd,jed)  ; fluxes%sw_vis_dir(:,:) = 0.0
-    call safe_alloc_ptr(fluxes%sw_vis_dif,isd,ied,jsd,jed)  ; fluxes%sw_vis_dif(:,:) = 0.0
-    call safe_alloc_ptr(fluxes%sw_nir_dir,isd,ied,jsd,jed)  ; fluxes%sw_nir_dir(:,:) = 0.0
-    call safe_alloc_ptr(fluxes%sw_nir_dif,isd,ied,jsd,jed)  ; fluxes%sw_nir_dif(:,:) = 0.0
-    call safe_alloc_ptr(fluxes%lw,isd,ied,jsd,jed)          ; fluxes%lw(:,:) = 0.0
-    call safe_alloc_ptr(fluxes%latent,isd,ied,jsd,jed)      ; fluxes%latent(:,:) = 0.0
-    call safe_alloc_ptr(fluxes%sens,isd,ied,jsd,jed)        ; fluxes%sens(:,:) = 0.0
-    call safe_alloc_ptr(fluxes%p_surf,isd,ied,jsd,jed)      ; fluxes%p_surf(:,:) = 0.0
-    call safe_alloc_ptr(fluxes%p_surf_full,isd,ied,jsd,jed) ; fluxes%p_surf_full(:,:) = 0.0
-    call safe_alloc_ptr(fluxes%salt_flux,isd,ied,jsd,jed)   ; fluxes%salt_flux(:,:) = 0.0
-    call safe_alloc_ptr(fluxes%salt_flux_in,isd,ied,jsd,jed); fluxes%salt_flux_in(:,:) = 0.0
-    call safe_alloc_ptr(fluxes%salt_flux_restore,isd,ied,jsd,jed) ; fluxes%salt_flux_restore(:,:) = 0.0
-    call safe_alloc_ptr(fluxes%TKE_tidal,isd,ied,jsd,jed)   ; fluxes%TKE_tidal(:,:) = 0.0
-    call safe_alloc_ptr(fluxes%ustar_tidal,isd,ied,jsd,jed) ; fluxes%ustar_tidal(:,:) = 0.0
-    call safe_alloc_ptr(fluxes%liq_runoff,isd,ied,jsd,jed)  ; fluxes%liq_runoff(:,:) = 0.0        
-    call safe_alloc_ptr(fluxes%froz_runoff,isd,ied,jsd,jed) ; fluxes%froz_runoff(:,:) = 0.0        
+    call safe_alloc_ptr(fluxes%taux,IsdB,IedB,jsd,jed)              ; fluxes%taux(:,:)                = 0.0
+    call safe_alloc_ptr(fluxes%tauy,isd,ied,JsdB,JedB)              ; fluxes%tauy(:,:)                = 0.0
+    call safe_alloc_ptr(fluxes%ustar,isd,ied,jsd,jed)               ; fluxes%ustar(:,:)               = 0.0
+    call safe_alloc_ptr(fluxes%evap,isd,ied,jsd,jed)                ; fluxes%evap(:,:)                = 0.0
+    call safe_alloc_ptr(fluxes%liq_precip,isd,ied,jsd,jed)          ; fluxes%liq_precip(:,:)          = 0.0
+    call safe_alloc_ptr(fluxes%froz_precip,isd,ied,jsd,jed)         ; fluxes%froz_precip(:,:)         = 0.0
+    call safe_alloc_ptr(fluxes%virt_precip,isd,ied,jsd,jed)         ; fluxes%virt_precip(:,:)         = 0.0
+    call safe_alloc_ptr(fluxes%seaice_melt,isd,ied,jsd,jed)         ; fluxes%seaice_melt(:,:)         = 0.0
+    call safe_alloc_ptr(fluxes%sw,isd,ied,jsd,jed)                  ; fluxes%sw(:,:)                  = 0.0
+    call safe_alloc_ptr(fluxes%sw_vis_dir,isd,ied,jsd,jed)          ; fluxes%sw_vis_dir(:,:)          = 0.0
+    call safe_alloc_ptr(fluxes%sw_vis_dif,isd,ied,jsd,jed)          ; fluxes%sw_vis_dif(:,:)          = 0.0
+    call safe_alloc_ptr(fluxes%sw_nir_dir,isd,ied,jsd,jed)          ; fluxes%sw_nir_dir(:,:)          = 0.0
+    call safe_alloc_ptr(fluxes%sw_nir_dif,isd,ied,jsd,jed)          ; fluxes%sw_nir_dif(:,:)          = 0.0
+    call safe_alloc_ptr(fluxes%lw,isd,ied,jsd,jed)                  ; fluxes%lw(:,:)                  = 0.0
+    call safe_alloc_ptr(fluxes%latent,isd,ied,jsd,jed)              ; fluxes%latent(:,:)              = 0.0
+    call safe_alloc_ptr(fluxes%latent_evap,isd,ied,jsd,jed)         ; fluxes%latent_evap(:,:)         = 0.0
+    call safe_alloc_ptr(fluxes%latent_fprec,isd,ied,jsd,jed)        ; fluxes%latent_fprec(:,:)        = 0.0
+    call safe_alloc_ptr(fluxes%latent_calve,isd,ied,jsd,jed)        ; fluxes%latent_calve(:,:)        = 0.0
+    call safe_alloc_ptr(fluxes%sens,isd,ied,jsd,jed)                ; fluxes%sens(:,:)                = 0.0
+    call safe_alloc_ptr(fluxes%p_surf,isd,ied,jsd,jed)              ; fluxes%p_surf(:,:)              = 0.0
+    call safe_alloc_ptr(fluxes%p_surf_full,isd,ied,jsd,jed)         ; fluxes%p_surf_full(:,:)         = 0.0
+    call safe_alloc_ptr(fluxes%salt_flux,isd,ied,jsd,jed)           ; fluxes%salt_flux(:,:)           = 0.0
+    call safe_alloc_ptr(fluxes%salt_flux_in,isd,ied,jsd,jed)        ; fluxes%salt_flux_in(:,:)        = 0.0
+    call safe_alloc_ptr(fluxes%salt_flux_restore,isd,ied,jsd,jed)   ; fluxes%salt_flux_restore(:,:)   = 0.0
+    call safe_alloc_ptr(fluxes%TKE_tidal,isd,ied,jsd,jed)           ; fluxes%TKE_tidal(:,:)           = 0.0
+    call safe_alloc_ptr(fluxes%ustar_tidal,isd,ied,jsd,jed)         ; fluxes%ustar_tidal(:,:)         = 0.0
+    call safe_alloc_ptr(fluxes%liq_runoff,isd,ied,jsd,jed)          ; fluxes%liq_runoff(:,:)          = 0.0        
+    call safe_alloc_ptr(fluxes%froz_runoff,isd,ied,jsd,jed)         ; fluxes%froz_runoff(:,:)         = 0.0        
     if (ASSOCIATED(IOB%calving_hflx)) then
-      call safe_alloc_ptr(fluxes%calving_hflx,isd,ied,jsd,jed) ; fluxes%calving_hflx(:,:) = 0.0        
+      call safe_alloc_ptr(fluxes%calving_heat_content,isd,ied,jsd,jed) ; fluxes%calving_heat_content(:,:) = 0.0        
     endif
     if (ASSOCIATED(IOB%runoff_hflx)) then
-      call safe_alloc_ptr(fluxes%runoff_hflx,isd,ied,jsd,jed) ; fluxes%runoff_hflx(:,:) = 0.0        
+      call safe_alloc_ptr(fluxes%runoff_heat_content,isd,ied,jsd,jed) ; fluxes%runoff_heat_content(:,:) = 0.0        
     endif
     if (CS%rigid_sea_ice) then
       call safe_alloc_ptr(fluxes%rigidity_ice_u,IsdB,IedB,jsd,jed)
@@ -425,10 +429,10 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
       fluxes%virt_precip(i,j) = (pme_adj(i,j) - PmE_adj_total) * G%mask2dT(i,j)
 
     if (ASSOCIATED(IOB%calving_hflx)) &
-      fluxes%calving_hflx(i,j) = IOB%calving_hflx(i-i0,j-j0) * G%mask2dT(i,j)
+      fluxes%calving_heat_content(i,j) = IOB%calving_hflx(i-i0,j-j0) * G%mask2dT(i,j)
 
     if (ASSOCIATED(IOB%runoff_hflx)) &
-      fluxes%runoff_hflx(i,j) = IOB%runoff_hflx(i-i0,j-j0) * G%mask2dT(i,j)
+      fluxes%runoff_heat_content(i,j) = IOB%runoff_hflx(i-i0,j-j0) * G%mask2dT(i,j)
 
     if (ASSOCIATED(IOB%lw_flux)) &
       fluxes%LW(i,j) = IOB%lw_flux(i-i0,j-j0) * G%mask2dT(i,j)
@@ -437,12 +441,16 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
       fluxes%sens(i,j) = - IOB%t_flux(i-i0,j-j0) * G%mask2dT(i,j)
 
     fluxes%latent(i,j) = 0.0
-    if (ASSOCIATED(IOB%fprec)) &
-      fluxes%latent(i,j) = fluxes%latent(i,j) - IOB%fprec(i-i0,j-j0)*hlf
-    if (ASSOCIATED(IOB%calving)) &
-      fluxes%latent(i,j) = fluxes%latent(i,j) - IOB%calving(i-i0,j-j0)*hlf
-    if (ASSOCIATED(IOB%q_flux)) &
-      fluxes%latent(i,j) = fluxes%latent(i,j) - IOB%q_flux(i-i0,j-j0)*hlv
+    if (ASSOCIATED(IOB%fprec))                                                       &
+      fluxes%latent(i,j)       = fluxes%latent(i,j) - IOB%fprec(i-i0,j-j0)*hlf     ; &
+      fluxes%latent_fprec(i,j) = -G%mask2dT(i,j) * IOB%fprec(i-i0,j-j0)*hlf
+    if (ASSOCIATED(IOB%calving))                                                     &
+      fluxes%latent(i,j)         = fluxes%latent(i,j) - IOB%calving(i-i0,j-j0)*hlf ; &
+      fluxes%latent_calve(i,j)   = -G%mask2dT(i,j) * IOB%calving(i-i0,j-j0)*hlf
+    if (ASSOCIATED(IOB%q_flux))                                                      &
+      fluxes%latent(i,j)      = fluxes%latent(i,j) - IOB%q_flux(i-i0,j-j0)*hlv     ; & 
+      fluxes%latent_evap(i,j) = -G%mask2dT(i,j) * IOB%q_flux(i-i0,j-j0)*hlv
+
     fluxes%latent(i,j) = G%mask2dT(i,j) * fluxes%latent(i,j)
 
     if (ASSOCIATED(IOB%sw_flux_vis_dir)) &

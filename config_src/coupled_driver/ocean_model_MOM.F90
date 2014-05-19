@@ -43,7 +43,7 @@ use MOM_domains, only : pass_vector, AGRID, BGRID_NE, CGRID_NE
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe
 use MOM_error_handler, only : callTree_enter, callTree_leave
 use MOM_file_parser, only : get_param, log_version, close_param_file, param_file_type
-use MOM_forcing_type, only : forcing, average_forcing
+use MOM_forcing_type, only : forcing, forcing_diagnostics
 use MOM_get_input, only : Get_MOM_Input, directories
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : close_file, file_exists, read_data, write_version_number
@@ -371,7 +371,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   OS%nstep = OS%nstep + 1
 
   call enable_averaging(time_step, OS%Time, OS%MOM_CSp%diag)
-  call average_forcing(OS%fluxes, time_step, OS%grid, OS%MOM_CSp%diag, OS%forcing_CSp%handles)
+  call forcing_diagnostics(OS%fluxes, OS%state, time_step, OS%grid, OS%MOM_CSp%diag, OS%forcing_CSp%handles)
   call accumulate_net_input(OS%fluxes, OS%state, time_step, OS%grid, OS%sum_output_CSp)
   call disable_averaging(OS%MOM_CSp%diag)
 
