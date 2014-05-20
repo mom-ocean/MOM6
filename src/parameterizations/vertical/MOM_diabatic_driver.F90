@@ -169,7 +169,7 @@ type, public :: diabatic_CS ; private
   integer :: id_ea = -1 , id_eb = -1, id_Kd_z = -1, id_Kd_interface = -1
   integer :: id_Tdif_z = -1, id_Tadv_z = -1, id_Sdif_z = -1, id_Sadv_z = -1
   integer :: id_Tdif = -1, id_Tadv = -1, id_Sdif = -1, id_Sadv = -1
-  integer :: id_createdH = -1, id_MLD_0125 = -1, id_MLD_user = -1
+  integer :: id_createdH = -1, id_MLD_0125 = -1, id_MLD_user = -1, id_subMLN2 = -1
 
   type(entrain_diffusive_CS), pointer :: entrain_diffusive_CSp => NULL()
   type(bulkmixedlayer_CS),    pointer :: bulkmixedlayer_CSp => NULL()
@@ -1087,7 +1087,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   if (CS%id_dvdt_dia > 0) call post_data(CS%id_dvdt_dia, ADp%dv_dt_dia, CS%diag)
   if (CS%id_wd > 0) call post_data(CS%id_wd, CDp%diapyc_vel, CS%diag)
   if (CS%id_MLD_0125 > 0) then
-    call diagnoseMLDbyDensityDifference(CS%id_MLD_0125, h, tv, 0.125, G, CS%diag)
+    call diagnoseMLDbyDensityDifference(CS%id_MLD_0125, h, tv, 0.125, G, CS%diag, CS%id_subMLN2)
   endif
   if (CS%id_MLD_user > 0) then
     call diagnoseMLDbyDensityDifference(CS%id_MLD_user, h, tv, CS%MLDdensityDifference, G, CS%diag)
@@ -1660,6 +1660,8 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
   if (CS%id_createdH>0) allocate(CS%createdH(isd:ied,jsd:jed))
   CS%id_MLD_0125 = register_diag_field('ocean_model','MLD_0125',diag%axesT1,Time, &
       'Mixed layer depth (delta rho = 0.125)', 'meter')
+  CS%id_subMLN2  = register_diag_field('ocean_model','subML_N2',diag%axesT1,Time, &
+      'Squared buoyancy frequency below Mixed layer ', 's-2')
   CS%id_MLD_user = register_diag_field('ocean_model','MLD_user',diag%axesT1,Time, &
       'Mixed layer depth (used defined)', 'meter')
   call get_param(param_file, mod, "DIAG_MLD_DENSITY_DIFF", CS%MLDdensityDifference, &
@@ -1884,18 +1886,32 @@ subroutine find_uv_at_h(u, v, h, u_h, v_h, G, ea, eb)
 end subroutine find_uv_at_h
 
 !> Diagnose a mixed layer depth (MLD) determined by a given density difference with the surface.
-subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, diagPtr)
+subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, diagPtr, id_N2subML)
   integer,                               intent(in) :: id_MLD      !< Handle (ID) of MLD diagnostic
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h           !< Layer thickness
   type(thermo_var_ptrs),                 intent(in) :: tv          !< Thermodynamics type
   real,                                  intent(in) :: densityDiff !< Density difference to determine MLD (kg/m3)
   type(ocean_grid_type),                 intent(in) :: G           !< Grid type
   type(diag_ctrl),                       pointer    :: diagPtr     !< Diagnostics structure
+  integer,                    intent(in), optional  :: id_N2subML  !< Optional handle (ID) of subML stratification
   ! Local variables
   real, dimension(SZI_(G)) :: rhoSurf, deltaRhoAtKm1, deltaRhoAtK, dK, dKm1, pRef
   real, dimension(SZI_(G), SZJ_(G)) :: MLD ! Diagnosed mixed layer depth
+  real, dimension(SZI_(G), SZJ_(G)) :: subMLN2 ! Diagnosed stratification below ML
+
+  real, parameter :: dz_subML = 50.  ! Depth below ML over which to diagnose stratification
+ 
   integer :: i, j, is, ie, js, je, k, nz
-  real :: aFac, ddRho
+  real :: aFac, ddRho,dzML,dzMLm1,ddZ
+  integer :: idn2
+
+
+  idn2 = -1
+  if (PRESENT(id_N2subML)) then
+    idn2 = id_N2subML
+    subMLN2(:,:)=0.
+  endif
+
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   pRef(:) = 0.
   do j = js, je
@@ -1903,6 +1919,7 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, diagPtr
     call calculate_density(tv%T(:,j,1), tv%S(:,j,1), pRef, rhoSurf, is, ie-is+1, tv%eqn_of_state)
     deltaRhoAtK(:) = 0.
     MLD(:,j) = 0.
+    if (idn2>0) subMLN2(:,j) = 0.
     do k = 2, nz
       dKm1(:) = dK(:) ! Center of layer K-1
       dK(:) = dK(:) + 0.5 * ( h(:,j,k) + h(:,j,k-1) ) ! Center of layer K
@@ -1917,12 +1934,28 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, diagPtr
           MLD(i,j) = dK(i) * aFac + dKm1(i) * (1. - aFac)
         endif
       enddo
-    enddo
-    do i = is, ie
-      if ((MLD(i,j)==0.) .and. (deltaRhoAtK(i)<densityDiff)) MLD(i,j) = dK(i) ! Assume mixing to the bottom
+
+      if ((idn2 > 0)) then
+         do i = is, ie
+           if (MLD(i,j)>0.) then
+             dzMLm1 = (dKm1(i) - MLD(i,j)) * G%H_to_m
+             dzML = (dK(i)-MLD(i,j)) * G%H_to_m
+             if (dzML >= dz_subML .and. dzMLm1 < dz_subML) then
+               ddRho = (deltaRhoAtK(i) - deltaRhoAtKm1(i))/(dK(i)-dKm1(i))*(dz_subML-dzMLm1)
+               subMLN2(i,j) = G%g_Earth/ G%Rho0 * (deltaRhoAtKm1(i)-densityDiff+ddRho) / dz_subML
+             endif
+           endif
+         enddo
+      endif
+               
+      do i = is, ie
+         if ((MLD(i,j)==0.) .and. (deltaRhoAtK(i)<densityDiff)) MLD(i,j) = dK(i) ! Assume mixing to the bottom
+      enddo
     enddo
   enddo
   if (id_MLD > 0) call post_data(id_MLD, MLD * G%H_to_m, diagPtr) ! Convert to meters
+  if (idn2 > 0) call post_data(idn2, subMLN2 , diagPtr) 
+
 end subroutine diagnoseMLDbyDensityDifference
 
 subroutine applyBoundaryFluxes(CS, G, dt, fluxes, optics, ea, h, tv)
