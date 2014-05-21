@@ -450,6 +450,15 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   call cpu_clock_end(id_clock_set_diffusivity)
   if (showCallTree) call callTree_waypoint("done with set_diffusivity (diabatic)")
 
+  if (CS%debug) then
+    call MOM_state_chksum("after set_diffusivity ", u(:,:,:), v(:,:,:), h(:,:,:), G)
+    call MOM_forcing_chksum("after set_diffusivity ", fluxes, G, haloshift=0)
+    call MOM_thermovar_chksum("after set_diffusivity ", tv, G)
+    call hchksum(Kd, "after set_diffusivity Kd",G,haloshift=0)
+    call hchksum(Kd_Int, "after set_diffusivity Kd_Int",G,haloshift=0)
+  endif
+
+
   if (CS%useKPP) then
     call cpu_clock_begin(id_clock_kpp)
     ! KPP needs the surface buoyancy flux but does not update state variables.
@@ -520,6 +529,13 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
 !$OMP end parallel
     call cpu_clock_end(id_clock_kpp)
     if (showCallTree) call callTree_waypoint("done with KPP_calculate (diabatic)")
+    if (CS%debug) then
+      call MOM_state_chksum("after KPP", u(:,:,:), v(:,:,:), h(:,:,:), G)
+      call MOM_forcing_chksum("after KPP", fluxes, G, haloshift=0)
+      call MOM_thermovar_chksum("after KPP", tv, G)
+      call hchksum(Kd, "after KPP Kd",G,haloshift=0)
+      call hchksum(Kd_Int, "after KPP Kd_Int",G,haloshift=0)
+    endif
   endif
 
   ! Check for static instabilities and increase Kd_int where unstable
@@ -528,6 +544,12 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
 
   if (CS%useKPP) then
     call cpu_clock_begin(id_clock_kpp)
+    if (CS%debug) then
+      call hchksum(CS%KPP_NLTheat, "before KPP_applyNLT NLTheat",G,haloshift=0)
+      call hchksum(CS%netHeatMinusSW, "before KPP_applyNLT netHeat",G,haloshift=0)
+      call hchksum(CS%KPP_NLTscalar, "before KPP_applyNLT NLTscalar",G,haloshift=0)
+      call hchksum(CS%netSalt, "before KPP_applyNLT netSalt",G,haloshift=0)
+    endif
     ! Apply non-local transport of heat and salt
     ! Changes: tv%T, tv%S
     call KPP_applyNonLocalTransport(CS%KPP_CSp, G, h, CS%KPP_NLTheat, CS%netHeatMinusSW, dt, tv%T, isHeat=.true.)
@@ -535,14 +557,12 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     call cpu_clock_end(id_clock_kpp)
     if (showCallTree) call callTree_waypoint("done with KPP_applyNonLocalTransport (diabatic)")
     if (CS%debugConservation) call MOM_state_stats('KPP_applyNonLocalTransport', u, v, h, T, S, G)
-  endif
 
-  if (CS%debug) then
-    call MOM_state_chksum("after set_diffusivity ", u(:,:,:), v(:,:,:), h(:,:,:), G)
-    call MOM_forcing_chksum("after set_diffusivity ", fluxes, G, haloshift=0)
-    call MOM_thermovar_chksum("after set_diffusivity ", tv, G)
-    call hchksum(Kd, "after set_diffusivity Kd",G,haloshift=0)
-    call hchksum(Kd_Int, "after set_diffusivity Kd_Int",G,haloshift=0)
+    if (CS%debug) then
+      call MOM_state_chksum("after KPP_applyNLT ", u(:,:,:), v(:,:,:), h(:,:,:), G)
+      call MOM_forcing_chksum("after KPP_applyNLT ", fluxes, G, haloshift=0)
+      call MOM_thermovar_chksum("after KPP_applyNLT ", tv, G)
+    endif
   endif
 
   ! When used with KPP this needs to provide a diffusivity and happen before KPP ?????

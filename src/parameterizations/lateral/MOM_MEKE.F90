@@ -1,32 +1,7 @@
+!> Implements the Mesoscale Eddy Kinetic Energy framework
 module MOM_MEKE
-!***********************************************************************
-!*                   GNU General Public License                        *
-!* This file is a part of MOM.                                         *
-!*                                                                     *
-!* MOM is free software; you can redistribute it and/or modify it and  *
-!* are expected to follow the terms of the GNU General Public License  *
-!* as published by the Free Software Foundation; either version 2 of   *
-!* the License, or (at your option) any later version.                 *
-!*                                                                     *
-!* MOM is distributed in the hope that it will be useful, but WITHOUT  *
-!* ANY WARRANTY; without even the implied warranty of MERCHANTABILITY  *
-!* or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public    *
-!* License for more details.                                           *
-!*                                                                     *
-!* For the full text of the GNU General Public License,                *
-!* write to: Free Software Foundation, Inc.,                           *
-!*           675 Mass Ave, Cambridge, MA 02139, USA.                   *
-!* or see:   http://www.gnu.org/licenses/gpl.html                      *
-!***********************************************************************
 
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*    This program contains the subroutine that calculates the         *
-!*  effects of horizontal viscosity, including parameterizations of    *
-!*  the value of the viscosity itself. mesosclae_EKE calculates        *
-!*  the evolution of sub-grid scale mesoscale EKE.                     *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
+! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
@@ -45,8 +20,8 @@ implicit none ; private
 #include <MOM_memory.h>
 
 public step_forward_MEKE, MEKE_init, MEKE_alloc_register_restart, MEKE_end
-! public MEKE_type
 
+!> Control structure that contains MEKE parameters and diagnostics handles
 type, public :: MEKE_CS ; private
   ! Parameters
   real :: MEKE_FrCoeff ! Efficiency of conversion of ME into MEKE (non-dim)
@@ -66,9 +41,10 @@ type, public :: MEKE_CS ; private
   real :: MEKE_KH      ! Background lateral diffusion of MEKE (m^2/s)
   real :: KhMEKE_Fac   ! A factor relating MEKE%Kh to the diffusivity used for
                        ! MEKE itself (nondimensional).
-  ! Diagnostics
-  type(diag_ctrl), pointer :: diag ! A pointer to a structure of shareable
-  integer :: id_MEKE = -1, id_Kh = -1, id_src = -1
+
+  ! Diagnostic handles
+  type(diag_ctrl), pointer :: diag !< A pointer to shared diagnostics data
+  integer :: id_MEKE = -1, id_Ue = -1, id_Kh = -1, id_src = -1
   integer :: id_GM_src = -1, id_mom_src = -1, id_decay = -1
   integer :: id_KhMEKE_u = -1, id_KhMEKE_v = -1
 end type MEKE_CS
@@ -77,27 +53,17 @@ integer :: id_clock_pass
 
 contains
 
+!> Integrates forward-in-time the MEKE eddy energy equation.
+!! See \ref section_MEKE_equations
 subroutine step_forward_MEKE(MEKE, h, visc, dt, G, CS)
-  type(MEKE_type),                       pointer       :: MEKE 
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h
-  type(vertvisc_type),                   intent(in)    :: visc
-  real,                                  intent(in)    :: dt
-  type(ocean_grid_type),                 intent(inout) :: G
-  type(MEKE_CS),                         pointer       :: CS
+  type(MEKE_type),                       pointer       :: MEKE !< @param[inout] MEKE data.
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h    !< Layer thickness (m or kg m-2).
+  type(vertvisc_type),                   intent(in)    :: visc !< The vertical viscosity type.
+  real,                                  intent(in)    :: dt   !< Model(baroclinic) time-step (s).
+  type(ocean_grid_type),                 intent(inout) :: G    !< Ocean grid.
+  type(MEKE_CS),                         pointer       :: CS   !< MEKE control structure.
 
-! Arguments: MEKE - A structure with MEKE-related fields (intent in/out).
-!  (in)      h - Layer thickness, in m or kg m-2.
-!  (in)      visc - A structure containing vertical viscosities and related
-!                   fields.
-!  (in)      dt - The time step in s.
-!  (in)      G -  The ocean's grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 MEKE_init.
-
-!  By A. Adcroft and R. Hallberg, 2006-2009.
-!    This subroutine determines updates the Mesoscale Eddy Kinitic Energy
-! (MEKE).
-
+! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: &
     mass, &         ! The total mass of the water column, in kg m-2.
     I_mass, &       ! The inverse of mass, in m2 kg-1.
@@ -293,22 +259,26 @@ subroutine step_forward_MEKE(MEKE, h, visc, dt, G, CS)
     call pass_var(MEKE%MEKE, G%Domain)
     call cpu_clock_end(id_clock_pass)
 
-    if (CS%MEKE_KhCoeff>0.) then ; if (CS%Rd_as_max_scale) then
-      do j=js-1,je+1 ; do i=is-1,ie+1
-        MEKE%Kh(i,j) = (CS%MEKE_KhCoeff*sqrt(2.*max(0.,MEKE%MEKE(i,j))*G%areaT(i,j))) * &
-                       min(MEKE%Rd_dx_h(i,j), 1.0)
-      enddo ; enddo
-    else
-      do j=js-1,je+1 ; do i=is-1,ie+1
-        MEKE%Kh(i,j) = CS%MEKE_KhCoeff*sqrt(2.*max(0.,MEKE%MEKE(i,j))*G%areaT(i,j))
-      enddo ; enddo
-    endif ; endif
-    call cpu_clock_begin(id_clock_pass)
-    call pass_var(MEKE%Kh, G%Domain)
-    call cpu_clock_end(id_clock_pass)
+    ! Calculate diffusivity for main model to use
+    if (CS%MEKE_KhCoeff>0.) then
+      if (CS%Rd_as_max_scale) then
+        do j=js-1,je+1 ; do i=is-1,ie+1
+          MEKE%Kh(i,j) = (CS%MEKE_KhCoeff*sqrt(2.*max(0.,MEKE%MEKE(i,j))*G%areaT(i,j))) * &
+                         min(MEKE%Rd_dx_h(i,j), 1.0)
+        enddo ; enddo
+      else
+        do j=js-1,je+1 ; do i=is-1,ie+1
+          MEKE%Kh(i,j) = CS%MEKE_KhCoeff*sqrt(2.*max(0.,MEKE%MEKE(i,j))*G%areaT(i,j))
+        enddo ; enddo
+      endif
+      call cpu_clock_begin(id_clock_pass)
+      call pass_var(MEKE%Kh, G%Domain)
+      call cpu_clock_end(id_clock_pass)
+    endif
 
 ! Offer fields for averaging.
     if (CS%id_MEKE>0) call post_data(CS%id_MEKE, MEKE%MEKE, CS%diag)
+    if (CS%id_Ue>0) call post_data(CS%id_Ue, sqrt(2.0*MEKE%MEKE), CS%diag)
     if (CS%id_Kh>0) call post_data(CS%id_Kh, MEKE%Kh, CS%diag)
     if (CS%id_KhMEKE_u>0) call post_data(CS%id_KhMEKE_u, Kh_u, CS%diag)
     if (CS%id_KhMEKE_v>0) call post_data(CS%id_KhMEKE_v, Kh_v, CS%diag)
@@ -444,8 +414,13 @@ subroutine MEKE_init(Time, G, param_file, diag, CS, MEKE)
 ! Register fields for output from this module.
   CS%id_MEKE = register_diag_field('ocean_model', 'MEKE', diag%axesT1, Time, &
      'Mesoscale Eddy Kinetic Energy', 'meter2 second-2')
+  if (.not. associated(MEKE%MEKE)) CS%id_MEKE = -1
   CS%id_Kh = register_diag_field('ocean_model', 'MEKE_KH', diag%axesT1, Time, &
      'MEKE derived diffusivity', 'meter2 second-1')
+  if (.not. associated(MEKE%Kh)) CS%id_Kh = -1
+  CS%id_Ue = register_diag_field('ocean_model', 'MEKE_Ue', diag%axesT1, Time, &
+     'MEKE derived eddy-velocity scale', 'meter second-1')
+  if (.not. associated(MEKE%MEKE)) CS%id_Ue = -1
   CS%id_src = register_diag_field('ocean_model', 'MEKE_src', diag%axesT1, Time, &
      'MEKE energy source', 'meter2 second-3')
   CS%id_decay = register_diag_field('ocean_model', 'MEKE_decay', diag%axesT1, Time, &
@@ -454,12 +429,12 @@ subroutine MEKE_init(Time, G, param_file, diag, CS, MEKE)
      'Zonal diffusivity of MEKE', 'meter2 second-1')
   CS%id_KhMEKE_v = register_diag_field('ocean_model', 'KHMEKE_v', diag%axesCv1, Time, &
      'Meridional diffusivity of MEKE', 'meter2 second-1')
-  if (associated(MEKE%GM_src)) &
-    CS%id_GM_src = register_diag_field('ocean_model', 'MEKE_GM_src', diag%axesT1, &
-        Time, 'MEKE energy available from thickness mixing', 'Watt meter-2')
-  if (associated(MEKE%mom_src)) &
-    CS%id_mom_src = register_diag_field('ocean_model', 'MEKE_mom_src',diag%axesT1,&
-        Time, 'MEKE energy available from momentum', 'Watt meter-2')
+  CS%id_GM_src = register_diag_field('ocean_model', 'MEKE_GM_src', diag%axesT1, Time, &
+     'MEKE energy available from thickness mixing', 'Watt meter-2')
+  if (.not. associated(MEKE%GM_src)) CS%id_GM_src = -1
+  CS%id_mom_src = register_diag_field('ocean_model', 'MEKE_mom_src',diag%axesT1, Time, &
+     'MEKE energy available from momentum', 'Watt meter-2')
+  if (.not. associated(MEKE%mom_src)) CS%id_mom_src = -1
 
   id_clock_pass = cpu_clock_id('(Ocean continuity halo updates)', grain=CLOCK_ROUTINE)
 
@@ -532,4 +507,121 @@ subroutine MEKE_end(MEKE, CS)
 
 end subroutine MEKE_end
 
+!> \class mom_meke
+!!
+!! \section section_MEKE The Mesoscale Eddy Kinetic Energy (MEKE) framework
+!!
+!! The MEKE framework accounts for the mean potential energy removed by
+!! the first order closures used to parameterize mesoscale eddies.
+!! It requires closure at the second order, namely dissipation and transport
+!! of eddy energy.
+!! Monitoring the sub-grid scale eddy energy provides a velocity scale to
+!! use in the lower order closures.
+!!
+!! \subsection section_MEKE_equations MEKE equations
+!!
+!! The eddy kinetic energy equation is:
+!! \f[ \partial_\tilde{t} E = 
+!!   \overbrace{ \dot{E}_b + \gamma_\eta \dot{E}_\eta + \gamma_v \dot{E}_v
+!!             }^\text{sources}
+!! - \overbrace{ ( \lambda + C_d | U_d | ) E 
+!!             }^\text{local dissipation}
+!! + \overbrace{ \nabla \cdot \kappa_E \nabla E
+!!             }^\text{smoothing}
+!! \f]
+!! where \f$ E \f$ is the eddy kinetic energy (variable <code>MEKE</code>) with units of
+!! m<sup>2</sup>s<sup>-2</sup>,
+!! and \f$\tilde{t} = a t\f$ is a scaled time. The non-dimensional factor
+!! \f$ a\geq 1 \f$ is used to accelerate towards equilibrium.
+!! 
+!! The MEKE equation is two-dimensional and obtained by depth averaging the
+!! the three-dimensional eddy energy equation. In the following expressions
+!! \f$ \left< \phi \right> = \frac{1}{H} \int^\eta_{-D} \phi \, dz \f$ maps
+!! three dimensional terms into the two-dimensional quantities needed.
+!!
+!! \subsubsection section_MEKE_source_terms MEKE source terms 
+!!
+!! The source term \f$ \dot{E}_b =\f$ is a constant background source
+!! of energy intended to avoid the limit \f$E\rightarrow 0\f$.
+!!
+!! The "GM" source term
+!! \f[ \dot{E}_\eta = - \left< \overline{w^\prime b^\prime} \right> 
+!! = \left< \kappa_h N^2S^2 \right>
+!! \approx \left< \kappa_h g\prime |\nabla_\sigma \eta|^2 \right>\f]
+!! equals the mean potential energy removed by the Gent-McWilliams closure,
+!! and is excluded/included in the MEKE budget by the efficiency parameter
+!! \f$ \gamma_\eta \in [0,1] \f$.
+!!
+!! The "frictional" source term
+!! \f[ \dot{E}_{v} = \left<  u \cdot \tau_h \right> \f]
+!! equals the mean kinetic energy removed by lateral viscous fluxes, and
+!! is excluded/included in the MEKE budget by the efficiency parameter
+!! \f$ \gamma_v \in [0,1] \f$.
+!!
+!! \subsubsection section_MEKE_dissipation_terms MEKE dissipation terms 
+!!
+!! The local dissipation of \f$ E \f$ is parameterized through a linear
+!! damping (\f$\lambda\f$) and bottom drag, \f$ C_d | U_d | \f$.
+!!
+!! Currently, \f$ \lambda > 0 \f$ is used to turn on the entire MEKE module.
+!!
+!! The bottom drag coefficient, \f$ C_d \f$ is the same as that used in the bottom
+!! friction in the mean model equations.
+!!
+!! \f$ U_b \f$ is a constant offset.
+!!
+!! The bottom drag velocity scale, \f$ U_d \f$, has contributions from the
+!! resolved state and \f$ E \f$:
+!! \f[ U_d = \sqrt{ U_b^2 + |u|^2_{z=-D} + |\gamma_d U_e|^2 } .\f]
+!! where the eddy velocity scale, \f$ U_e \f$, is given by:
+!! \f[ U_e = \sqrt{ 2 E } .\f]
+!!
+!! Note that in steady-state (or when \f$ a>>1 \f$) and no diffusion of \f$ E
+!! \f$ then
+!! \f[ \overline{E} \approx \frac{ \dot{E}_b + \gamma_\eta \dot{E}_\eta + 
+!!               \gamma_v \dot{E}_v }{ \lambda + C_d|U_d| } . \f]
+!!
+!! In the linear drag limit, where \f$ U_e << \min(U_b, C_d^{-1}\lambda) \f$, the equilibrium becomes 
+!! \f$ \overline{E} \approx \frac{ \dot{E}_b + \gamma_\eta \dot{E}_\eta + 
+!!               \gamma_v \dot{E}_v }{ \lambda + C_d U_b } \f$.
+!!
+!! In the nonlinear drag limit, where \f$ U_e >> \max(U_b, C_d^{-1}\lambda) \f$, the equilibrium becomes 
+!! \f$ \overline{E} \approx ( \frac{ \dot{E}_b + \gamma_\eta \dot{E}_\eta +
+!!               \gamma_v \dot{E}_v }{ \sqrt{2} C_d \gamma_d } )^\frac{2}{3} \f$.
+!!
+!! \subsection section_MEKE_diffusivity MEKE diffusivity
+!!
+!! The predicted of a velocity scale, \f$ U_e \f$, can be combined with a
+!! mixing length scale to form a diffusivity:
+!!
+!! \f[  \kappa_M = \gamma_\kappa \sqrt{ U_e^2 A_\Delta } \f]
+!! where \f$ A_\Delta \f$ is the area of the grid cell
+!! and a toggle parameter \f$ \gamma_\kappa \in [0,1] \f$ controls whether
+!! MEKE is active of passive.
+!!
+!! \subsubsection section_MEKE_module_parameters MEKE module parameters
+!!
+!! | Symbol                | Model parameter |
+!! | ------                | --------------- |
+!! | \f$ a \f$             | <code>MEKE_DTSCALE</code> |
+!! | \f$ \dot{E}_b \f$     | <code>MEKE_BGSRC</code> |
+!! | \f$ \gamma_\eta \f$   | <code>MEKE_GMCOEFF</code> |
+!! | \f$ \gamma_v \f$      | <code>MEKE_FrCOEFF</code> |
+!! | \f$ \lambda \f$       | <code>MEKE_DAMPING</code> |
+!! | \f$ U_b \f$           | <code>MEKE_USCALE</code> |
+!! | \f$ \gamma_d \f$      | <code>MEKE_CD_SCALE</code> |
+!! | \f$ \kappa_E \f$      | <code>MEKE_KH</code> |
+!! | \f$ C_d \f$           | <code>CDRAG</code> |
+!! | \f$ \gamma_\kappa \f$ | <code>MEKE_KHCOEFF</code> |
+!! | -                     | <code>MEKE_KVISC_DRAG</code> |
+!! | -                     | <code>MEKE_KHMEKE_FAC</code> |
+!! | -                     | <code>MEKE_KHTH_FAC</code> |
+!! | -                     | <code>MEKE_KHTR_FAC</code> |
+!!
+!! \remark Need to replace \f$ \lambda>0 \f$ for turning on/off MEKE.
+!! \remark \f$ Ub \f$ is currently scaled by \f$ \gamma_d \f$ which we will change soon.
+!! \remark \f$ U_b \f$ is currently exclusive to \f$ C_d u_{z=-D} \f$.
+!!
+
 end module MOM_MEKE
+

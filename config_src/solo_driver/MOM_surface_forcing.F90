@@ -73,7 +73,7 @@ use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
 use MOM_error_handler,   only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_string_functions, only : uppercase
-use MOM_forcing_type, only : forcing
+use MOM_forcing_type, only : forcing, deallocate_forcing_type
 use MOM_grid, only : ocean_grid_type
 use MOM_get_input, only : Get_MOM_Input, directories
 use MOM_io, only : file_exists, read_data, slasher, num_timelevels
@@ -2208,28 +2208,7 @@ subroutine surface_forcing_end(CS, fluxes)
 !  (inout)    fluxes - A structure containing pointers to any possible
 !                     forcing fields.  Unused fields have NULL ptrs.
 
-  if (present(fluxes)) then
-    if (associated(fluxes%taux))        deallocate(fluxes%taux)
-    if (associated(fluxes%tauy))        deallocate(fluxes%tauy)
-    if (associated(fluxes%ustar))       deallocate(fluxes%ustar)
-    if (associated(fluxes%buoy))        deallocate(fluxes%buoy)
-    if (associated(fluxes%sw))          deallocate(fluxes%sw)
-    if (associated(fluxes%lw))          deallocate(fluxes%lw)
-    if (associated(fluxes%latent))      deallocate(fluxes%latent)
-    if (associated(fluxes%sens))        deallocate(fluxes%sens)
-    if (associated(fluxes%evap))        deallocate(fluxes%evap)
-    if (associated(fluxes%liq_precip))  deallocate(fluxes%liq_precip)
-    if (associated(fluxes%froz_precip)) deallocate(fluxes%froz_precip)
-    if (associated(fluxes%liq_runoff))  deallocate(fluxes%liq_runoff)
-    if (associated(fluxes%froz_runoff)) deallocate(fluxes%froz_runoff)
-    if (associated(fluxes%virt_precip)) deallocate(fluxes%virt_precip)
-    if (associated(fluxes%p_surf))      deallocate(fluxes%p_surf)
-    if (associated(fluxes%salt_flux))   deallocate(fluxes%salt_flux)
-    if (associated(fluxes%TKE_tidal))   deallocate(fluxes%TKE_tidal)
-    if (associated(fluxes%ustar_tidal)) deallocate(fluxes%ustar_tidal)
-    ! Deallocate any elements of fluxes%tr_fluxes.
-    if (associated(fluxes%tr_fluxes))   deallocate(fluxes%tr_fluxes)
-  endif
+  if (present(fluxes)) call deallocate_forcing_type(fluxes)
   
 !###  call controlled_forcing_end(CS%ctrl_forcing_CSp)
 

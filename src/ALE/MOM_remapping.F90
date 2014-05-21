@@ -84,7 +84,7 @@ character(len=256), public :: remappingSchemesDoc = &
 character(len=3), public :: remappingDefaultScheme = "PLM"
 
 ! This CPP macro embeds some safety checks
-#define __DO_SAFTEY_CHECKS__
+#undef __DO_SAFTEY_CHECKS__
 
 ! -----------------------------------------------------------------------------
 ! This module contains the following routines
@@ -381,9 +381,10 @@ subroutine remapping_core( CS, n0, h0, u0, n1, dx, u1 )
   real, dimension(CS%nk,2)           :: ppoly_r_E            !Edge value of polynomial
   real, dimension(CS%nk,2)           :: ppoly_r_S            !Edge slope of polynomial
   real, dimension(CS%nk,CS%degree+1) :: ppoly_r_coefficients !Coefficients of polynomial
+  integer :: remapping_scheme
 
 #ifdef __DO_SAFTEY_CHECKS__
-  integer :: k, remapping_scheme
+  integer :: k
   real :: hTmp, totalH0, totalHf, eps
   real :: err0, totalHU0, err2, totalHU2
   real :: z0, z1
