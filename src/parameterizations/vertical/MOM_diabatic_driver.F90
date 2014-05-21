@@ -1406,31 +1406,34 @@ subroutine adjust_salt(h, tv, G, CS)
   
   salt_add_col(:,:) = 0.0
 
-  
-  do j=js,je ; do k=nz,1,-1 ; do i=is,ie
-    if ((G%mask2dT(i,j) > 0.0) .and. &
-         ((tv%S(i,j,k) < S_min) .or. (salt_add_col(i,j) > 0.0))) then
-      mc = G%H_to_kg_m2 * h(i,j,k)
-      if (h(i,j,k) <= 10.0*G%Angstrom) then
-        ! Very thin layers should not be adjusted by the salt flux
-        if (tv%S(i,j,k) < S_min) then
-          salt_add_col(i,j) = salt_add_col(i,j) +  mc * (S_min - tv%S(i,j,k))
-          tv%S(i,j,k) = S_min
-        endif
-      else
-        if (salt_add_col(i,j) + mc * (S_min - tv%S(i,j,k)) <= 0.0) then
-          tv%S(i,j,k) = tv%S(i,j,k) - salt_add_col(i,j)/mc
-          salt_add_col(i,j) = 0.0
+!$OMP parallel do default(none) shared(is,ie,js,je,nz,G,tv,h,salt_add_col, S_min) &
+!$OMP                          private(mc)
+  do j=js,je 
+    do k=nz,1,-1 ; do i=is,ie
+      if ((G%mask2dT(i,j) > 0.0) .and. &
+           ((tv%S(i,j,k) < S_min) .or. (salt_add_col(i,j) > 0.0))) then  
+        mc = G%H_to_kg_m2 * h(i,j,k)
+        if (h(i,j,k) <= 10.0*G%Angstrom) then
+          ! Very thin layers should not be adjusted by the salt flux
+          if (tv%S(i,j,k) < S_min) then
+            salt_add_col(i,j) = salt_add_col(i,j) +  mc * (S_min - tv%S(i,j,k))
+            tv%S(i,j,k) = S_min
+          endif
         else
-          salt_add_col(i,j) = salt_add_col(i,j) + mc * (S_min - tv%S(i,j,k))
-          tv%S(i,j,k) = S_min
+          if (salt_add_col(i,j) + mc * (S_min - tv%S(i,j,k)) <= 0.0) then
+            tv%S(i,j,k) = tv%S(i,j,k) - salt_add_col(i,j)/mc
+            salt_add_col(i,j) = 0.0
+          else
+            salt_add_col(i,j) = salt_add_col(i,j) + mc * (S_min - tv%S(i,j,k))
+            tv%S(i,j,k) = S_min
+          endif
         endif
       endif
-    endif
-  enddo ; enddo ; enddo
-  do j=js,je ; do i=is,ie
-    tv%salt_deficit(i,j) = tv%salt_deficit(i,j) + salt_add_col(i,j)
-  enddo ; enddo
+    enddo ; enddo
+    do i=is,ie
+      tv%salt_deficit(i,j) = tv%salt_deficit(i,j) + salt_add_col(i,j)
+    enddo 
+   enddo
 !  call cpu_clock_end(id_clock_adjust_salt)
 
 end subroutine adjust_salt

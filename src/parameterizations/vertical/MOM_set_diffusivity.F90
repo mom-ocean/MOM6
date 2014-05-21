@@ -1941,6 +1941,11 @@ subroutine set_BBL_diffusivity(u, v, h, fluxes, visc, G, CS)
   endif
 
   cdrag_sqrt = sqrt(CS%cdrag)
+
+!$OMP parallel default(none) shared(cdrag_sqrt,is,ie,js,je,nz,visc,CS,G,vstar,h,v, &
+!$OMP                               v2_bbl,u) &
+!$OMP                       private(do_i,vhtot,htot,domore,hvel,uhtot,ustar,u2_bbl)
+!$OMP do
   do J=js-1,je
     ! Determine ustar and the square magnitude of the velocity in the
     ! bottom boundary layer. Together these give the TKE source and
@@ -1973,7 +1978,7 @@ subroutine set_BBL_diffusivity(u, v, h, fluxes, visc, G, CS)
       v2_bbl(i,J) = 0.0
     endif ; enddo
   enddo
-
+!$OMP do
   do j=js,je
     do I=is-1,ie ; if ((G%mask2dCu(I,j) > 0.5) .and. (cdrag_sqrt*visc%bbl_thick_u(I,j) > 0.0))  then
       do_i(I) = .true. ; uhtot(I) = 0.0 ; htot(I) = 0.0
@@ -2014,6 +2019,7 @@ subroutine set_BBL_diffusivity(u, v, h, fluxes, visc, G, CS)
                     G%areaCv(i,J) * (vstar(i,J)*v2_bbl(i,J))))*G%IareaT(i,j))
     enddo
   enddo
+!$OMP end parallel
 
 end subroutine set_BBL_diffusivity
 

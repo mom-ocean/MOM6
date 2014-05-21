@@ -198,7 +198,11 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, Reg, tv)
     Resoln_scaled = VarMix%Resoln_scaled_KhTr
   endif
 
+!$OMP parallel default(none) shared(is,ie,js,je,use_VarMix,CS,VarMix,MEKE,Resoln_scaled, &
+!$OMP                               Kh_u,Kh_v,khdt_x,dt,G,khdt_y)                        &
+!$OMP                       private(Kh_loc,Rd_dx,Res_fn) 
   if (use_VarMix) then
+!$OMP do
     do j=js,je ; do I=is-1,ie
       Kh_loc = CS%KhTr + CS%KhTr_Slope_Cff*VarMix%L2u(I,j)*VarMix%SN_u(I,j)
       if (associated(MEKE%Kh)) &
@@ -214,6 +218,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, Reg, tv)
         Kh_u(I,j) = max(Kh_loc, CS%KhTr_min) ! Re-apply min
       endif
     enddo ; enddo
+!$OMP do
     do J=js-1,je ;  do i=is,ie
       Kh_loc = CS%KhTr + CS%KhTr_Slope_Cff*VarMix%L2v(i,J)*VarMix%SN_v(i,J)
       if (associated(MEKE%Kh)) &
@@ -229,38 +234,54 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, Reg, tv)
         Kh_v(i,J) = max(Kh_loc, CS%KhTr_min) ! Re-apply min
       endif
     enddo ; enddo
+!$OMP do
     do j=js,je ; do I=is-1,ie
       khdt_x(I,j) = dt*(Kh_u(I,j)*(G%dy_Cu(I,j)*G%IdxCu(I,j)))
     enddo ; enddo
+!$OMP do
     do J=js-1,je ; do i=is,ie
       khdt_y(i,J) = dt*(Kh_v(i,J)*(G%dx_Cv(i,J)*G%IdyCv(i,J)))
     enddo ; enddo
   elseif (Resoln_scaled) then
+!$OMP do
     do j=js,je ; do I=is-1,ie
       Res_fn = 0.5 * (VarMix%Res_fn_h(i,j) + VarMix%Res_fn_h(i+1,j))
       Kh_u(I,j) = max(CS%KhTr * Res_fn, CS%KhTr_min)
       khdt_x(I,j) = dt*(CS%KhTr*(G%dy_Cu(I,j)*G%IdxCu(I,j))) * Res_fn
     enddo ; enddo
+!$OMP do
     do J=js-1,je ;  do i=is,ie
       Res_fn = 0.5*(VarMix%Res_fn_h(i,j) + VarMix%Res_fn_h(i,j+1))
       Kh_v(i,J) = max(CS%KhTr * Res_fn, CS%KhTr_min)
       khdt_y(i,J) = dt*(CS%KhTr*(G%dx_Cv(i,J)*G%IdyCv(i,J))) * Res_fn
     enddo ; enddo
   else
-    if (CS%id_KhTr_u > 0) then ; do j=js,je ; do I=is-1,ie
-      Kh_u(I,j) = CS%KhTr
-      khdt_x(I,j) = dt*(CS%KhTr*(G%dy_Cu(I,j)*G%IdxCu(I,j)))
-    enddo ; enddo ; else ; do j=js,je ; do I=is-1,ie
-      khdt_x(I,j) = dt*(CS%KhTr*(G%dy_Cu(I,j)*G%IdxCu(I,j)))
-    enddo ; enddo ; endif
-    if (CS%id_KhTr_v > 0) then ; do J=js-1,je ;  do i=is,ie
-      Kh_v(i,J) = CS%KhTr
-      khdt_y(i,J) = dt*(CS%KhTr*(G%dx_Cv(i,J)*G%IdyCv(i,J)))
-    enddo ; enddo ; else ; do J=js-1,je ;  do i=is,ie
-      khdt_y(i,J) = dt*(CS%KhTr*(G%dx_Cv(i,J)*G%IdyCv(i,J)))
-    enddo ; enddo ; endif
+    if (CS%id_KhTr_u > 0) then 
+!$OMP do
+      do j=js,je ; do I=is-1,ie
+        Kh_u(I,j) = CS%KhTr
+        khdt_x(I,j) = dt*(CS%KhTr*(G%dy_Cu(I,j)*G%IdxCu(I,j)))
+      enddo ; enddo 
+    else
+!$OMP do 
+      do j=js,je ; do I=is-1,ie
+        khdt_x(I,j) = dt*(CS%KhTr*(G%dy_Cu(I,j)*G%IdxCu(I,j)))
+      enddo ; enddo 
+    endif
+    if (CS%id_KhTr_v > 0) then 
+!$OMP do
+      do J=js-1,je ;  do i=is,ie
+        Kh_v(i,J) = CS%KhTr
+        khdt_y(i,J) = dt*(CS%KhTr*(G%dx_Cv(i,J)*G%IdyCv(i,J)))
+      enddo ; enddo 
+    else 
+!$OMP do
+      do J=js-1,je ;  do i=is,ie
+        khdt_y(i,J) = dt*(CS%KhTr*(G%dx_Cv(i,J)*G%IdyCv(i,J)))
+      enddo ; enddo 
+    endif
   endif
-
+!$OMP end parallel
   if (CS%check_diffusive_CFL) then
     max_CFL = 0.0
     do j=js,je ; do i=is,ie
@@ -303,7 +324,9 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, Reg, tv)
     enddo
     call pass_var(Tr(ntr)%t(:,:,:), G%Domain)
     call cpu_clock_end(id_clock_pass)
-
+!$OMP parallel do default(none) shared(is,ie,js,je,nz,I_numitts,CS,G,khdt_y,h, &
+!$OMP                                  h_neglect,khdt_x,ntr,Tr,Idt )           &
+!$OMP                          private(scale,Coef_y,Coef_x,Ihdxdy,dTr)
     do k=1,nz
       scale = I_numitts
       if (CS%Diffuse_ML_interior) then

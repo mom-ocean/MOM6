@@ -144,6 +144,7 @@ subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, CS)
 
   call find_N2_bottom(h, tv, T_f, S_f, itide%h2, fluxes, G, N2_bot)
 
+!$OMP parallel do default(none) shared(is,ie,js,je,G,itide,N2_bot,CS)
   do j=js,je ; do i=is,ie
     itide%Nb(i,j) = G%mask2dT(i,j) * sqrt(N2_bot(i,j))
     itide%TKE_itidal_input(i,j) = min(CS%TKE_itidal_coef(i,j)*itide%Nb(i,j),CS%TKE_itide_max)
@@ -171,9 +172,7 @@ subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, N2_bot)
   real, dimension(NIMEM_,NJMEM_),        intent(out)  :: N2_bot
 
   real, dimension(SZI_(G),SZK_(G)+1) :: &
-    dRho_int, &   ! The unfiltered density differences across interfaces.
-    dRho_dT, &    ! The partial derivatives of density with temperature and
-    dRho_dS       ! salinity, in kg m-3 degC-1 and kg m-3 PSU-1.
+    dRho_int      ! The unfiltered density differences across interfaces.
   real, dimension(SZI_(G)) :: &
     pres, &       ! The pressure at each interface, in Pa.
     Temp_int, &   ! The temperature at each interface, in degC.
@@ -181,22 +180,28 @@ subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, N2_bot)
     drho_bot, &
     h_amp, &
     hb, &
-    z_from_bot
+    z_from_bot, &
+    dRho_dT, &    ! The partial derivatives of density with temperature and
+    dRho_dS       ! salinity, in kg m-3 degC-1 and kg m-3 PSU-1.
+
   real :: dz_int  ! The thickness associated with an interface, in m.
   real :: G_Rho0  ! The gravitation acceleration divided by the Boussinesq
                   ! density, in m4 s-2 kg-1.
-  real :: H_neglect ! A negligibly small thickness, in the same units as h.
   logical :: do_i(SZI_(G)), do_any
   integer :: i, j, k, is, ie, js, je, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   G_Rho0 = G%g_Earth / G%Rho0
-  H_neglect = G%H_subroundoff
 
   ! Find the (limited) density jump across each interface.
   do i=is,ie
     dRho_int(i,1) = 0.0 ; dRho_int(i,nz+1) = 0.0
   enddo
-
+!$OMP parallel do default(none) shared(is,ie,js,je,nz,tv,fluxes,G,h,T_f,S_f,    &
+!$OMP                                  h2,N2_bot,G_Rho0) &
+!$OMP                          private(pres,Temp_Int,Salin_Int,dRho_dT,dRho_dS, &
+!$OMP                                  hb,dRho_bot,z_from_bot,do_i,h_amp,       &
+!$OMP                                  do_any,dz_int) &
+!$OMP                     firstprivate(dRho_int)
   do j=js,je
     if (associated(tv%eqn_of_state)) then
       if (associated(fluxes%p_surf)) then
@@ -211,10 +216,10 @@ subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, N2_bot)
           Salin_Int(i) = 0.5 * (S_f(i,j,k) + S_f(i,j,k-1))
         enddo
         call calculate_density_derivs(Temp_int, Salin_int, pres, &
-                 dRho_dT(:,K), dRho_dS(:,K), is, ie-is+1, tv%eqn_of_state)
+                 dRho_dT(:), dRho_dS(:), is, ie-is+1, tv%eqn_of_state)
         do i=is,ie
-          dRho_int(i,K) = max(dRho_dT(i,K)*(T_f(i,j,k) - T_f(i,j,k-1)) + &
-                              dRho_dS(i,K)*(S_f(i,j,k) - S_f(i,j,k-1)), 0.0)
+          dRho_int(i,K) = max(dRho_dT(i)*(T_f(i,j,k) - T_f(i,j,k-1)) + &
+                              dRho_dS(i)*(S_f(i,j,k) - S_f(i,j,k-1)), 0.0)
         enddo
       enddo
     else
