@@ -1624,8 +1624,13 @@ subroutine buoyancy_forcing_linear(state, fluxes, day, dt, G, CS)
     if (.not.associated(fluxes%sens)) then
       allocate(fluxes%sens(G%isd:G%ied,G%jsd:G%jed)) ; fluxes%sens(:,:) = 0.0
     endif
-    if (.not.associated(fluxes%heat_restore)) then
-      allocate(fluxes%heat_restore(G%isd:G%ied,G%jsd:G%jed)) ; fluxes%heat_restore(:,:) = 0.0
+    if (CS%restorebuoy) then
+      if (.not.associated(fluxes%heat_restore)) then
+        allocate(fluxes%heat_restore(G%isd:G%ied,G%jsd:G%jed)) ; fluxes%heat_restore(:,:) = 0.0
+      endif
+      if (.not.associated(fluxes%virt_precip)) then
+        allocate(fluxes%virt_precip(G%isd:G%ied,G%jsd:G%jed)) ; fluxes%virt_precip(:,:) = 0.0
+      endif
     endif
   else
     if (.not.associated(fluxes%buoy)) then
