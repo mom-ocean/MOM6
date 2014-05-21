@@ -169,7 +169,7 @@ type, public :: diabatic_CS ; private
   integer :: id_ea = -1 , id_eb = -1, id_Kd_z = -1, id_Kd_interface = -1
   integer :: id_Tdif_z = -1, id_Tadv_z = -1, id_Sdif_z = -1, id_Sadv_z = -1
   integer :: id_Tdif = -1, id_Tadv = -1, id_Sdif = -1, id_Sadv = -1
-  integer :: id_createdH = -1, id_MLD_0125 = -1, id_MLD_user = -1
+  integer :: id_createdH = -1, id_MLD_003 = -1, id_MLD_0125 = -1, id_MLD_user = -1
 
   type(entrain_diffusive_CS), pointer :: entrain_diffusive_CSp => NULL()
   type(bulkmixedlayer_CS),    pointer :: bulkmixedlayer_CSp => NULL()
@@ -1086,6 +1086,9 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   if (CS%id_dudt_dia > 0) call post_data(CS%id_dudt_dia, ADp%du_dt_dia, CS%diag)
   if (CS%id_dvdt_dia > 0) call post_data(CS%id_dvdt_dia, ADp%dv_dt_dia, CS%diag)
   if (CS%id_wd > 0) call post_data(CS%id_wd, CDp%diapyc_vel, CS%diag)
+  if (CS%id_MLD_003 > 0) then
+    call diagnoseMLDbyDensityDifference(CS%id_MLD_003, h, tv, 0.03, G, CS%diag)
+  endif
   if (CS%id_MLD_0125 > 0) then
     call diagnoseMLDbyDensityDifference(CS%id_MLD_0125, h, tv, 0.125, G, CS%diag)
   endif
@@ -1658,6 +1661,8 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
       Time, "The volume flux added to stop the ocean from drying out and becoming negative in depth", &
       "meter second-1")
   if (CS%id_createdH>0) allocate(CS%createdH(isd:ied,jsd:jed))
+  CS%id_MLD_003 = register_diag_field('ocean_model','MLD_003',diag%axesT1,Time, &
+      'Mixed layer depth (delta rho = 0.03)', 'meter')
   CS%id_MLD_0125 = register_diag_field('ocean_model','MLD_0125',diag%axesT1,Time, &
       'Mixed layer depth (delta rho = 0.125)', 'meter')
   CS%id_MLD_user = register_diag_field('ocean_model','MLD_user',diag%axesT1,Time, &

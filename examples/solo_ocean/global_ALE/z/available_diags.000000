@@ -427,6 +427,9 @@
 "ocean_model", "created_H"  [Unused]
     ! long_name: The volume flux added to stop the ocean from drying out and becoming negative in depth
     ! units: meter second-1
+"ocean_model", "MLD_003"  [Unused]
+    ! long_name: Mixed layer depth (delta rho = 0.03)
+    ! units: meter
 "ocean_model", "MLD_0125"  [Unused]
     ! long_name: Mixed layer depth (delta rho = 0.125)
     ! units: meter
