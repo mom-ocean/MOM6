@@ -33,6 +33,7 @@
  "ocean_model", "KPP_OBLdepth", "KPP_OBLdepth_min", "ocean_month", "all", "min",  "none",2
  "ocean_model", "MLD_0125",     "MLD_0125",         "ocean_month", "all", "mean", "none",2
  "ocean_model", "MLD_user",     "MLD_user",         "ocean_month", "all", "mean", "none",2
+ "ocean_model", "subML_N2",     "subML_N2",         "ocean_month", "all", "mean", "none",2
  "ocean_model", "temp",         "temp",             "ocean_month", "all", "mean", "none",2
  "ocean_model", "salt",         "salt",             "ocean_month", "all", "mean", "none",2
  "ocean_model", "u",            "u",                "ocean_month", "all", "mean", "none",2
