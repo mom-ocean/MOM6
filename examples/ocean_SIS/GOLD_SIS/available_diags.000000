@@ -448,6 +448,9 @@
 "ocean_model", "MLD_0125"  [Unused]
     ! long_name: Mixed layer depth (delta rho = 0.125)
     ! units: meter
+"ocean_model", "subML_N2"  [Unused]
+    ! long_name: Squared buoyancy frequency below mixed layer
+    ! units: s-2
 "ocean_model", "MLD_user"  [Unused]
     ! long_name: Mixed layer depth (used defined)
     ! units: meter
