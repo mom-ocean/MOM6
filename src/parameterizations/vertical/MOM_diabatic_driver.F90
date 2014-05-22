@@ -1086,7 +1086,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   if (CS%id_dudt_dia > 0) call post_data(CS%id_dudt_dia, ADp%du_dt_dia, CS%diag)
   if (CS%id_dvdt_dia > 0) call post_data(CS%id_dvdt_dia, ADp%dv_dt_dia, CS%diag)
   if (CS%id_wd > 0) call post_data(CS%id_wd, CDp%diapyc_vel, CS%diag)
-  if (CS%id_MLD_0125 > 0) then
+  if (CS%id_MLD_0125 > 0 .or. CS%id_subMLN2 > 0) then
     call diagnoseMLDbyDensityDifference(CS%id_MLD_0125, h, tv, 0.125, G, CS%diag, CS%id_subMLN2)
   endif
   if (CS%id_MLD_user > 0) then
@@ -1893,38 +1893,58 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, diagPtr
   real,                                  intent(in) :: densityDiff !< Density difference to determine MLD (kg/m3)
   type(ocean_grid_type),                 intent(in) :: G           !< Grid type
   type(diag_ctrl),                       pointer    :: diagPtr     !< Diagnostics structure
-  integer,                    intent(in), optional  :: id_N2subML  !< Optional handle (ID) of subML stratification
+  integer,                     optional, intent(in) :: id_N2subML  !< Optional handle (ID) of subML stratification
   ! Local variables
-  real, dimension(SZI_(G)) :: rhoSurf, deltaRhoAtKm1, deltaRhoAtK, dK, dKm1, pRef
+  real, dimension(SZI_(G)) :: rhoSurf, deltaRhoAtKm1, deltaRhoAtK, dK, dKm1, pRef_MLD ! Used for MLD
+  real, dimension(SZI_(G)) :: rhoAtK, rho1, d1, pRef_N2 ! Used for N2
   real, dimension(SZI_(G), SZJ_(G)) :: MLD ! Diagnosed mixed layer depth
   real, dimension(SZI_(G), SZJ_(G)) :: subMLN2 ! Diagnosed stratification below ML
+  real, parameter :: dz_subML = 50. ! Depth below ML over which to diagnose stratification (m)
+  integer :: i, j, is, ie, js, je, k, nz, id_N2
+  real :: aFac, ddRho
 
-  real, parameter :: dz_subML = 50.  ! Depth below ML over which to diagnose stratification
- 
-  integer :: i, j, is, ie, js, je, k, nz
-  real :: aFac, ddRho,dzML,dzMLm1,ddZ
-  integer :: idn2
-
-
-  idn2 = -1
-  if (PRESENT(id_N2subML)) then
-    idn2 = id_N2subML
-    subMLN2(:,:)=0.
-  endif
+  id_N2 = -1
+  if (PRESENT(id_N2subML)) id_N2 = id_N2subML
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-  pRef(:) = 0.
+  pRef_MLD(:) = 0. ; pRef_N2(:) = 0.
   do j = js, je
-    dK(:) = 0.5 * h(:,j,1) ! Center of surface layer
-    call calculate_density(tv%T(:,j,1), tv%S(:,j,1), pRef, rhoSurf, is, ie-is+1, tv%eqn_of_state)
+    dK(:) = 0.5 * h(:,j,1) * G%H_to_m ! Depth of center of surface layer
+    call calculate_density(tv%T(:,j,1), tv%S(:,j,1), pRef_MLD, rhoSurf, is, ie-is+1, tv%eqn_of_state)
     deltaRhoAtK(:) = 0.
     MLD(:,j) = 0.
-    if (idn2>0) subMLN2(:,j) = 0.
+    if (id_N2>0) then
+      subMLN2(:,j) = 0.
+      rho1(:) = 0.
+      d1(:) = 0.
+      pRef_N2(:) = G%g_Earth * G%Rho0 * h(:,j,1) * G%H_to_m ! Boussinesq approximation!!!! ?????
+    endif
     do k = 2, nz
-      dKm1(:) = dK(:) ! Center of layer K-1
-      dK(:) = dK(:) + 0.5 * ( h(:,j,k) + h(:,j,k-1) ) ! Center of layer K
-      deltaRhoAtKm1(:) = deltaRhoAtK(:)
-      call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pRef, deltaRhoAtK, is, ie-is+1, tv%eqn_of_state)
+      dKm1(:) = dK(:) ! Depth of center of layer K-1
+      dK(:) = dK(:) + 0.5 * ( h(:,j,k) + h(:,j,k-1) ) * G%H_to_m ! Depth of center of layer K
+
+      ! Stratification, N2, immediately below the mixed layer, averaged over at least 50 m.
+      if (id_N2>0) then
+        pRef_N2(:) = pRef_N2(:) + G%g_Earth * G%Rho0 * h(:,j,k) * G%H_to_m ! Boussinesq approximation!!!! ?????
+        call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pRef_N2, rhoAtK, is, ie-is+1, tv%eqn_of_state)
+        do i = is, ie
+          if (MLD(i,j)>0. .and. subMLN2(i,j)==0.) then ! This block is below the mixed layer 
+            if (d1(i)==0.) then ! Record the density, depth and pressure, immediately below the ML
+              rho1(i) = rhoAtK(i)
+              d1(i) = dK(i)
+              ! Use pressure at the bottom of the upper layer used in calculating d/dz rho
+              pRef_N2(i) = pRef_N2(i) + G%g_Earth * G%Rho0 * h(i,j,k) * G%H_to_m ! Boussinesq approximation!!!! ?????
+            endif
+            if (d1(i)>0. .and. dK(i)-d1(i)>=dz_subML) then
+              subMLN2(i,j) = G%g_Earth/ G%Rho0 * (rho1(i)-rhoAtK(i)) / (d1(i) - dK(i))
+            endif
+          endif
+        enddo ! i-loop
+      endif ! id_N2>0
+
+      ! Mixed-layer depth, using sigma-0 (surface reference pressure)
+      deltaRhoAtKm1(:) = deltaRhoAtK(:) ! Store value from previous iteration of K
+      call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pRef_MLD, deltaRhoAtK, is, ie-is+1, tv%eqn_of_state)
       deltaRhoAtK(:) = deltaRhoAtK(:) - rhoSurf(:) ! Density difference between layer K and surface
       do i = is, ie
         ddRho = deltaRhoAtK(i) - deltaRhoAtKm1(i)
@@ -1933,28 +1953,19 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, diagPtr
           aFac = ( densityDiff - deltaRhoAtKm1(i) ) / ddRho
           MLD(i,j) = dK(i) * aFac + dKm1(i) * (1. - aFac)
         endif
-      enddo
+      enddo ! i-loop
 
-      if ((idn2 > 0)) then
-         do i = is, ie
-           if (MLD(i,j)>0.) then
-             dzMLm1 = (dKm1(i) - MLD(i,j)) * G%H_to_m
-             dzML = (dK(i)-MLD(i,j)) * G%H_to_m
-             if (dzML >= dz_subML .and. dzMLm1 < dz_subML) then
-               ddRho = (deltaRhoAtK(i) - deltaRhoAtKm1(i))/(dK(i)-dKm1(i))*(dz_subML-dzMLm1)
-               subMLN2(i,j) = G%g_Earth/ G%Rho0 * (deltaRhoAtKm1(i)-densityDiff+ddRho) / dz_subML
-             endif
-           endif
-         enddo
-      endif
-               
-      do i = is, ie
-         if ((MLD(i,j)==0.) .and. (deltaRhoAtK(i)<densityDiff)) MLD(i,j) = dK(i) ! Assume mixing to the bottom
-      enddo
+    enddo ! k-loop
+    do i = is, ie
+      if ((MLD(i,j)==0.) .and. (deltaRhoAtK(i)<densityDiff)) MLD(i,j) = dK(i) ! Assume mixing to the bottom
+   !  if (id_N2>0 .and. subMLN2(i,j)==0. .and. d1(i)>0. .and. dK(i)-d1(i)>0.) then
+   !    ! Use what ever stratification we can, measured over what ever distance is available
+   !    subMLN2(i,j) = G%g_Earth/ G%Rho0 * (rho1(i)-rhoAtK(i)) / (d1(i) - dK(i))
+   !  endif
     enddo
-  enddo
-  if (id_MLD > 0) call post_data(id_MLD, MLD * G%H_to_m, diagPtr) ! Convert to meters
-  if (idn2 > 0) call post_data(idn2, subMLN2 , diagPtr) 
+  enddo ! j-loop
+  if (id_MLD > 0) call post_data(id_MLD, MLD, diagPtr)
+  if (id_N2 > 0) call post_data(id_N2, subMLN2 , diagPtr) 
 
 end subroutine diagnoseMLDbyDensityDifference
 
