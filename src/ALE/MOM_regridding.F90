@@ -309,7 +309,8 @@ subroutine checkGridsMatch( G, h, dzInterface )
 
   nz = G%ke
   eps =1. ; eps = epsilon(eps)
-
+!$OMP parallel do default(none) shared(G,nz,h,dzInterface,eps) &
+!$OMP                          private(totalHold,zOld,totalHnewF,zNewF,hNewF)
   do j = G%jsc-1,G%jec+1
     do i = G%isc-1,G%iec+1
 
@@ -388,7 +389,9 @@ subroutine buildGridZstar( CS, G, h, dzInterface )
 
   nz = G%ke
   
-!$OMP parallel do default(private) shared(G,dzInterface,CS,nz,h)
+!$OMP parallel do default(none) shared(G,dzInterface,CS,nz,h)                    &
+!$OMP                          private(nominalDepth,totalThickness,minThickness, &
+!$OMP                                  eta,stretching,zNew,dh,zOld)
   do j = G%jsc-1,G%jec+1
     do i = G%isc-1,G%iec+1
 
@@ -456,8 +459,6 @@ subroutine buildGridZstar( CS, G, h, dzInterface )
         call MOM_error( FATAL, &
                'MOM_regridding, buildGridZstar: top surface has moved!!!' )
       endif
-      dzInterface(i,j,1) = 0.
-      dzInterface(i,j,nz+1) = 0.
 #endif
 
     end do

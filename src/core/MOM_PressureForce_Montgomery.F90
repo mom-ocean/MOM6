@@ -665,7 +665,8 @@ subroutine Set_pbce_Bouss(e, tv, G, g_Earth, Rho0, GFS_scale, pbce, rho_star)
 
   if (use_EOS) then
     if (present(rho_star)) then
-!$OMP parallel do default(shared) private(Ihtot)
+!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,e,h_neglect,pbce,rho_star,GFS_scale) &
+!$OMP                          private(Ihtot)
       do j=Jsq,Jeq+1
         do i=Isq,Ieq+1
           Ihtot(i) = 1.0 / ((e(i,j,1)-e(i,j,nz+1)) + h_neglect)
@@ -677,7 +678,8 @@ subroutine Set_pbce_Bouss(e, tv, G, g_Earth, Rho0, GFS_scale, pbce, rho_star)
         enddo ; enddo
       enddo ! end of j loop
     else
-!$OMP parallel do default(shared) private(Ihtot,press,rho_in_situ,T_int,S_int,dR_dT,dR_dS)
+!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,e,tv,h_neglect,G_Rho0,Rho0xG,pbce,GFS_scale) &
+!$OMP                          private(Ihtot,press,rho_in_situ,T_int,S_int,dR_dT,dR_dS)
       do j=Jsq,Jeq+1
         do i=Isq,Ieq+1
           Ihtot(i) = 1.0 / ((e(i,j,1)-e(i,j,nz+1)) + h_neglect)
@@ -706,7 +708,7 @@ subroutine Set_pbce_Bouss(e, tv, G, g_Earth, Rho0, GFS_scale, pbce, rho_star)
       enddo ! end of j loop
     endif
   else ! not use_EOS
-!$OMP parallel do default(shared) private(Ihtot)
+!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,e,G,h_neglect,pbce) private(Ihtot)
     do j=Jsq,Jeq+1
       do i=Isq,Ieq+1
         Ihtot(i) = 1.0 / ((e(i,j,1)-e(i,j,nz+1)) + h_neglect)

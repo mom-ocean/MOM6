@@ -158,7 +158,9 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, CS, Reg)
 
   max_iter = 2*INT(CEILING(dt/CS%dt)) + 1
 
-!$OMP parallel default(shared)
+!$OMP parallel default(none) shared(nz,jsd,jed,IsdB,IedB,uhr,jsdB,jedB,Isd,Ied,vhr, &
+!$OMP                               hprev,domore_k,js,je,is,ie,uhtr,vhtr,G,h_end,   &
+!$OMP                               uh_neglect,vh_neglect,ntr,Tr)
 
 ! This initializes the halos of uhr and vhr because pass_vector might do
 ! calculations on them, even though they are never used.
@@ -231,7 +233,8 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, CS, Reg)
       ! Reevaluate domore_u & domore_v unless the valid range is the same size as
       ! before.  Also, do this if there is Strang splitting.
       if ((nsten_halo > 1) .or. (itt==1)) then
-!$OMP parallel do default(shared)
+!$OMP parallel do default(none) shared(nz,domore_k,jsv,jev,domore_u,isv,iev,stensil, &
+!$OMP                                  uhr,domore_v,vhr)
         do k=1,nz ; if (domore_k(k) > 0) then
           do j=jsv,jev ; if (.not.domore_u(j,k)) then
             do i=isv+stensil-1,iev-stensil; if (uhr(I,j,k) /= 0.0) then
@@ -258,7 +261,9 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, CS, Reg)
     isv = isv + stensil ; iev = iev - stensil
     jsv = jsv + stensil ; jev = jev - stensil
 
-!$OMP parallel do default(shared)
+!$OMP parallel do default(none) shared(nz,domore_k,x_first,Tr,hprev,uhr,uh_neglect,  &
+!$OMP                                  OBC,domore_u,ntr,Idt,isv,iev,jsv,jev,stensil, &
+!$OMP                                  G,CS,vhr,vh_neglect,domore_v)
     do k=1,nz ; if (domore_k(k) > 0) then
 !    To ensure positive definiteness of the thickness at each iteration, the
 !  mass fluxes out of each layer are checked each step, and limited to keep

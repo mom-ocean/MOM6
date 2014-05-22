@@ -507,7 +507,9 @@ subroutine calculateBuoyancyFlux2d(G, fluxes, optics, h, Temp, Salt, tv, buoyanc
 
   netT(:) = 0. ; netS(:) = 0.
 
-!$OMP parallel do default(shared) firstprivate(netT,netS)
+!$OMP parallel do default(none) shared(G,fluxes,optics,h,Temp,Salt,tv,buoyancyFlux,&
+!$OMP                                  netHeatMinusSW,netSalt)                     &
+!$OMP                     firstprivate(netT,netS)
   do j = G%jsc, G%jec
     call calculateBuoyancyFlux1d(G, fluxes, optics, h, Temp, Salt, tv, j, buoyancyFlux(:,j,:), netT, netS )
     if (present(netHeatMinusSW)) netHeatMinusSW(:,j) = netT(:)

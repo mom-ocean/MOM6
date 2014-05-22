@@ -90,6 +90,9 @@ type, public :: regularize_layers_CS ; private
   logical :: debug           ! If true, do more thorough checks for debugging purposes.
 
   integer :: id_def_rat = -1
+  logical :: allow_clocks_in_omp_loops  ! If true, clocks can be called 
+                                        ! from inside loops that can be threaded. 
+                                        ! To run with multiple threads, set to False.
 #ifdef DEBUG_CODE
   integer :: id_def_rat_2 = -1, id_def_rat_3 = -1
   integer :: id_def_rat_u = -1, id_def_rat_v = -1
@@ -342,6 +345,20 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, CS)
 
 
   ! Now restructure the layers.
+!$OMP parallel do default(none) shared(is,ie,js,je,nz,do_j,def_rat_h,CS,nkmb,G,e, &
+!$OMP                                  I_dtol,h,tv,debug,h_neglect,p_ref_cv,ea,   &
+!$OMP                                  eb,id_clock_EOS)                           &
+!$OMP                          private(d_ea,d_eb,max_def_rat,do_i,nz_filt,e_e,e_w,&
+!$OMP                                  e_n,e_s,wt,e_filt,e_2d,h_2d,T_2d,S_2d,     &
+!$OMP                                  h_2d_init,T_2d_init,S_2d_init,ent_any,     &
+!$OMP                                  more_ent_i,ent_i,h_add_tgt,h_add_tot,      &
+!$OMP                                  cols_left,h_add,h_prev,ks,det_any,det_i,   &
+!$OMP                                  Rcv_tol,Rcv,k1,k2,h_det_tot,Rcv_min_det,   &
+!$OMP                                  Rcv_max_det,h_deficit,h_tot3,Th_tot3,      &
+!$OMP                                  Sh_tot3,scale,int_top,int_flux,int_Rflux,  &
+!$OMP                                  int_Tflux,int_Sflux,int_bot,h_prev_1d,     &
+!$OMP                                  h_tot1,Th_tot1,Sh_tot1,h_tot2,Th_tot2,     &
+!$OMP                                  Sh_tot2,h_predicted,fatal_error,mesg )
   do j=js,je ; if (do_j(j)) then
 
 !  call cpu_clock_begin(id_clock_EOS)
@@ -955,6 +972,12 @@ subroutine regularize_layers_init(Time, G, param_file, diag, CS)
 !    call get_param(param_file, mod, "DEBUG_CONSERVATION", CS%debug, &
 !                 "If true, monitor conservation and extrema.", default=.false.)
    
+  call get_param(param_file, mod, "ALLOW_CLOCKS_IN_OMP_LOOPS", &
+                 CS%allow_clocks_in_omp_loops, &
+                 "If true, clocks can be called from inside loops that can \n"//&
+                 "be threaded. To run with multiple threads, set to False.", &
+                 default=.true.)
+
   CS%id_def_rat = register_diag_field('ocean_model', 'deficit_ratio', diag%axesT1, &
       Time, 'Max face thickness deficit ratio', 'Nondim')
 
@@ -996,8 +1019,10 @@ subroutine regularize_layers_init(Time, G, param_file, diag, CS)
   CS%id_def_rat_v_3b = register_diag_field('ocean_model', 'defrat_v_3b', diag%axesCv1, &
       Time, 'V-point filtered 2-layer thickness deficit ratio', 'Nondim')
 #endif
- 
-  id_clock_EOS = cpu_clock_id('(Ocean regularize_layers EOS)', grain=CLOCK_ROUTINE)
+
+  if(CS%allow_clocks_in_omp_loops) then 
+    id_clock_EOS = cpu_clock_id('(Ocean regularize_layers EOS)', grain=CLOCK_ROUTINE)
+  endif
   id_clock_pass = cpu_clock_id('(Ocean regularize_layers halo updates)', grain=CLOCK_ROUTINE)
 
 end subroutine regularize_layers_init

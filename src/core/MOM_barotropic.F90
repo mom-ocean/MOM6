@@ -730,15 +730,15 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
 ! barotropic momentum equations.  This has to be done quite early to start
 ! the halo update that needs to be completed before the next calculations.
   if (CS%linearized_BT_PV) then
-!$OMP parallel do default(shared) private(i, j)
+!$OMP parallel do default(none) shared(jsvf,jevf,isvf,ievf,q,CS)
     do J=jsvf-2,jevf+1 ; do I=isvf-2,ievf+1
       q(I,J) = CS%q_D(I,j)
     enddo ; enddo
-!$OMP parallel do default(shared) private(i, j)
+!$OMP parallel do default(none) shared(jsvf,jevf,isvf,ievf,DCor_u,CS)
     do j=jsvf-1,jevf+1 ; do I=isvf-2,ievf+1
       DCor_u(I,j) = CS%D_u_Cor(I,j)
     enddo ; enddo
-!$OMP parallel do default(shared) private(i, j)
+!$OMP parallel do default(none) shared(jsvf,jevf,isvf,ievf,DCor_v,CS)
     do J=jsvf-2,jevf+1 ; do i=isvf-1,ievf+1
       DCor_v(i,J) = CS%D_v_Cor(i,J)
     enddo ; enddo
@@ -746,15 +746,15 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
     q(:,:) = 0.0 ; DCor_u(:,:) = 0.0 ; DCor_v(:,:) = 0.0
     !  This option has not yet been written properly.
     !  D here should be replaced with D+eta(Bous) or eta(non-Bous).
-!$OMP parallel do default(shared) private(i, j)
+!$OMP parallel do default(none) shared(js,je,is,ie,DCor_u,G)
     do j=js,je ; do I=is-1,ie
       DCor_u(I,j) = 0.5 * (G%bathyT(i+1,j) + G%bathyT(i,j))
     enddo ; enddo
-!$OMP parallel do default(shared) private(i, j)
+!$OMP parallel do default(none) shared(js,je,is,ie,DCor_v,G)
     do J=js-1,je ; do i=is,ie
       DCor_v(i,J) = 0.5 * (G%bathyT(i,j+1) + G%bathyT(i,j))
     enddo ; enddo
-!$OMP parallel do default(shared) private(i, j)
+!$OMP parallel do default(none) shared(js,je,is,ie,q,G)
     do J=js-1,je ; do I=is-1,ie
       q(I,J) = 0.25 * G%CoriolisBu(I,J) * &
            ((G%areaT(i,j) + G%areaT(i+1,j+1)) + (G%areaT(i+1,j) + G%areaT(i,j+1))) / &
@@ -817,7 +817,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
     enddo ; enddo
   endif
 
-!$OMP parallel do default(shared) private(i, j, k, visc_rem)
+!$OMP parallel do default(none) shared(Isq,Ieq,js,je,nz,visc_rem_u,Instep,wt_u,CS) private(visc_rem)
   do k=1,nz ; do j=js-1,je+1 ; do I=Isq-1,Ieq+1
     ! rem needs greater than visc_rem_u and 1-Instep/visc_rem_u.
     ! The 0.5 below is just for safety.
@@ -828,7 +828,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
     else ; visc_rem = 1.0 - 0.5*Instep/visc_rem_u(I,j,k) ; endif
     wt_u(I,j,k) = CS%frhatu(I,j,k) * visc_rem
   enddo ; enddo ; enddo
-!$OMP parallel do default(shared) private(i, j, k, visc_rem)
+!$OMP parallel do default(none) shared(is,ie,Jsq,Jeq,nz,visc_rem_v,Instep,wt_v,CS) private(visc_rem)
   do k=1,nz ; do J=Jsq-1,Jeq+1 ; do i=is-1,ie+1
     ! rem needs greater than visc_rem_v and 1-Instep/visc_rem_v.
     if (visc_rem_v(i,J,k) <= 0.0) then ; visc_rem = 0.0
@@ -1008,7 +1008,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   endif
 
   ! Determine the weighted Coriolis parameters for the neighboring velocities.
-!$OMP parallel do default(shared) private(i, j)
+!$OMP parallel do default(none) shared(isvf,ievf,jsvf,jevf,amer,bmer,cmer,dmer,DCor_u,q,CS)
   do J=jsvf-1,jevf ; do i=isvf-1,ievf+1
     if (CS%Sadourny) then
       amer(I-1,j) = DCor_u(I-1,j) * q(I-1,J)
@@ -1027,7 +1027,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
     endif
   enddo ; enddo
 
-!$OMP parallel do default(shared) private(i, j)
+!$OMP parallel do default(none) shared(isvf,ievf,jsvf,jevf,azon,bzon,czon,dzon,DCor_v,q,CS)
   do j=jsvf-1,jevf+1 ; do I=isvf-1,ievf
     if (CS%Sadourny) then
       azon(I,j) = DCor_v(i+1,J) * q(I,J)
@@ -1057,13 +1057,13 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
     vbt_Cor(i,J) = vbt_Cor(i,J) + wt_v(i,J,k) * V_Cor(i,J,k)
   enddo ; enddo ; enddo
 
-!$OMP parallel do default(shared) private(i, j)
+!$OMP parallel do default(none) shared(is,ie,js,je,Cor_ref_u,azon,bzon,czon,dzon,vbt_Cor)
   do j=js,je ; do I=is-1,ie
     Cor_ref_u(I,j) =  &
         ((azon(I,j) * vbt_Cor(i+1,j) + czon(I,j) * vbt_Cor(i  ,j-1)) + &
          (bzon(I,j) * vbt_Cor(i  ,j) + dzon(I,j) * vbt_Cor(i+1,j-1)))
   enddo ; enddo
-!$OMP parallel do default(shared) private(i, j)
+!$OMP parallel do default(none) shared(is,ie,js,je,Cor_ref_v,amer,bmer,cmer,dmer,ubt_Cor)
   do J=js-1,je ; do i=is,ie
     Cor_ref_v(i,J) = -1.0 * &
         ((amer(I-1,j) * ubt_Cor(I-1,j) + cmer(I  ,j+1) * ubt_Cor(I  ,j+1)) + &
@@ -1431,7 +1431,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
 
     if (CS%dynamic_psurf .or. .not.project_velocity) then
       if (use_BT_cont) then
-!$OMP parallel do default(shared) private(i, j)
+!$OMP parallel do default(none) shared(isv,iev,jsv,jev,uhbt,ubt,BTCL_u,uhbt0)
         do j=jsv-1,jev+1 ; do I=isv-2,iev+1
           uhbt(I,j) = find_uhbt(ubt(I,j),BTCL_u(I,j)) + uhbt0(I,j)
         enddo ; enddo
@@ -1443,7 +1443,8 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
                      ((uhbt(I-1,j) - uhbt(I,j)) + (vhbt(i,J-1) - vhbt(i,J)))
         enddo ; enddo
       else
-!$OMP parallel do default(shared) private(i, j)
+!$OMP parallel do default(none) shared(isv,iev,jsv,jev,eta_pred,eta,eta_src,dtbt,&
+!$OMP                                  CS,Datu,ubt,uhbt0,Datv,vhbt0,vbt)
         do j=jsv-1,jev+1 ; do i=isv-1,iev+1
           eta_pred(i,j) = (eta(i,j) + eta_src(i,j)) + (dtbt * CS%IareaT(i,j)) * &
               (((Datu(I-1,j)*ubt(I-1,j) + uhbt0(I-1,j)) - &
@@ -1473,19 +1474,31 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
     endif
 
     if (apply_OBC_flather) then
-!$OMP parallel do default(shared) private(i, j)
+!$OMP parallel do default(none) shared(isv,iev,jsv,jev,ubt_old,ubt) 
       do j=jsv,jev ; do I=isv-2,iev+1
         ubt_old(I,j) = ubt(I,j)
       enddo; enddo
-!$OMP parallel do default(shared) private(i, j)
+!$OMP parallel do default(none) shared(isv,iev,jsv,jev,vbt_old,vbt)
       do J=jsv-2,jev+1 ; do i=isv,iev
         vbt_old(i,J) = vbt(i,J)
       enddo ; enddo
     endif
 
+!$OMP parallel default(none) shared(isv,iev,jsv,jev,G,amer,ubt,cmer,bmer,dmer,eta_PF_BT, &
+!$OMP                               eta_PF,gtot_N,gtot_S,dgeo_de,CS,p_surf_dyn,n,        &
+!$OMP                               v_accel_bt,wt_accel,PFv_bt_sum,wt_accel2,            &
+!$OMP                               Corv_bt_sum,BT_OBC,vbt,bt_rem_v,BT_force_v,vhbt,     &
+!$OMP                               Cor_ref_v,find_PF,find_Cor,apply_v_OBCs,dtbt,        &
+!$OMP                               project_velocity,be_proj,bebt,use_BT_cont,BTCL_v,    &
+!$OMP                               vhbt0,Datv,vbt_sum,wt_trans,vhbt_sum,vbt_wtd,wt_vel, &
+!$OMP                               azon,bzon,czon,dzon,Cor_ref_u,gtot_E,gtot_W,         &
+!$OMP                               u_accel_bt,PFu_bt_sum,Coru_bt_sum,apply_u_OBCs,      &
+!$OMP                               bt_rem_u,BT_force_u,uhbt,BTCL_u,uhbt0,Datu,ubt_sum,  &
+!$OMP                               uhbt_sum,ubt_wtd)                                    &
+!$OMP                       private(Cor, gradP, vel_prev, vel_trans )
     if (MOD(n+G%first_direction,2)==1) then
       ! On odd-steps, update v first.
-!$OMP parallel do default(shared) private(i, j, Cor, gradP, vel_prev, vel_trans )
+!$OMP do
       do J=jsv-1,jev ; do i=isv-1,iev+1
         Cor = -1.0*((amer(I-1,j) * ubt(I-1,j) + cmer(I,j+1) * ubt(I,j+1)) + &
                (bmer(I,j) * ubt(I,j) + dmer(I-1,j+1) * ubt(I-1,j+1))) - Cor_ref_v(i,J)
@@ -1519,7 +1532,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
         vbt_wtd(i,J) = vbt_wtd(i,J) + wt_vel(n) * vbt(i,J)
       enddo ; enddo
 
-!$OMP parallel do default(shared) private(i, j, Cor, gradP, vel_prev, vel_trans )
+!$OMP do
       do j=jsv,jev ; do I=isv-1,iev
         Cor = ((azon(I,j) * vbt(i+1,J) + czon(I,j) * vbt(i,J-1)) + &
                (bzon(I,j) * vbt(i,J) + dzon(I,j) * vbt(i+1,J-1))) - Cor_ref_u(I,j)
@@ -1555,7 +1568,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
 
     else
       ! On even steps, update u first.
-!$OMP parallel do default(shared) private(i, j, Cor, gradP, vel_prev, vel_trans )
+!$OMP do
       do j=jsv-1,jev+1 ; do I=isv-1,iev
         Cor = ((azon(I,j) * vbt(i+1,J) + czon(I,j) * vbt(i,J-1)) + &
                (bzon(I,j) * vbt(i,J) +  dzon(I,j) * vbt(i+1,J-1))) - Cor_ref_u(I,j)
@@ -1589,7 +1602,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
         ubt_wtd(I,j) = ubt_wtd(I,j) + wt_vel(n) * ubt(I,j)
       enddo ; enddo
 
-!$OMP parallel do default(shared) private(i, j, Cor, gradP, vel_prev, vel_trans )
+!$OMP do
       do J=jsv-1,jev ; do i=isv,iev
         Cor = -1.0*((amer(I-1,j) * ubt(I-1,j) + bmer(I,j) * ubt(I,j)) + &
                 (cmer(I,j+1) * ubt(I,j+1) + dmer(I-1,j+1) * ubt(I-1,j+1))) - Cor_ref_v(i,J)
@@ -1623,6 +1636,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
         vbt_wtd(i,J) = vbt_wtd(i,J) + wt_vel(n) * vbt(i,J)
       enddo ; enddo
     endif
+!$OMP end parallel
 
     if (apply_OBCs) then
       call apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, &
@@ -1650,7 +1664,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
       call vchksum(vhbt, "BT vhbt just after OBC",CS%debug_BT_G,haloshift=iev-ie)
     endif
 
-!$OMP parallel do default(shared) private(i, j)
+!$OMP parallel do default(none) shared(isv,iev,jsv,jev,n,eta,eta_src,dtbt,CS,uhbt,vhbt,eta_wtd,wt_eta)
     do j=jsv,jev ; do i=isv,iev
       eta(i,j) = (eta(i,j) + eta_src(i,j)) + (dtbt * CS%IareaT(i,j)) * &
                  ((uhbt(I-1,j) - uhbt(I,j)) + (vhbt(i,J-1) - vhbt(i,J)))
@@ -1748,7 +1762,9 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   if (id_clock_calc_post > 0) call cpu_clock_begin(id_clock_calc_post)
 
 ! Now calculate each layer's accelerations.
-!$OMP parallel do default(shared) private(i, j, k)
+!$OMP parallel do default(none) shared(is,ie,js,je,nz,accel_layer_u,u_accel_bt,pbce,gtot_W, &
+!$OMP                                  e_anom,gtot_E,CS,accel_layer_v,v_accel_bt,      &
+!$OMP                                  gtot_S,gtot_N)
   do k=1,nz
     do j=js,je ; do I=is-1,ie
       accel_layer_u(I,j,k) = u_accel_bt(I,j) - &
@@ -2468,8 +2484,8 @@ subroutine btcalc(h, G, CS, h_u, h_v, may_use_default)
 
   !   This estimates the fractional thickness of each layer at the velocity
   ! points, using a harmonic mean estimate.
-!$OMP parallel do default(shared) private(i, j, k, hatutot, Ihatutot, e_u, &
-!$OMP                                    D_shallow_u, h_arith, h_harm, wt_arith)
+!$OMP parallel do default(none) shared(is,ie,js,je,nz,h_u,CS,h_neglect,h,use_default,G) &
+!$OMP                          private(hatutot,Ihatutot,e_u,D_shallow_u,h_arith,h_harm,wt_arith)
   do j=js-1,je+1
     if (present(h_u)) then
       do I=is-2,ie+1 ; hatutot(I) = h_u(i,j,1) ; enddo
@@ -2531,8 +2547,8 @@ subroutine btcalc(h, G, CS, h_u, h_v, may_use_default)
     endif
   enddo
 
-!$OMP parallel do default(shared) private(i, j, k, hatvtot, Ihatvtot, e_v, &
-!$OMP                                    D_shallow_v, h_arith, h_harm, wt_arith)
+!$OMP parallel do default(none) shared(is,ie,js,je,nz,CS,G,h_v,h_neglect,h,use_default) &
+!$OMP                          private(hatvtot,Ihatvtot,e_v,D_shallow_v,h_arith,h_harm,wt_arith)
   do J=js-2,je+1
     if (present(h_v)) then
       do i=is-1,ie+1 ; hatvtot(i) = h_v(i,j,1) ; enddo
@@ -3015,17 +3031,19 @@ subroutine find_face_areas(Datu, Datv, G, CS, MS, eta, halo, add_max)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   hs = 1 ; if (present(halo)) hs = max(halo,0)
 
+!$OMP parallel default(none) shared(is,ie,js,je,hs,eta,G,CS,Datu,Datv,add_max) &
+!$OMP                       private(H1,H2)
   if (present(eta)) then
     ! The use of harmonic mean thicknesses ensure positive definiteness.
     if (G%Boussinesq) then
-!$OMP parallel do default(shared) private(i, j, H1, H2)
+!$OMP do
       do j=js-hs,je+hs ; do I=is-1-hs,ie+hs
         H1 = CS%bathyT(i,j) + eta(i,j) ; H2 = CS%bathyT(i+1,j) + eta(i+1,j)
         Datu(I,j) = 0.0 ; if ((H1 > 0.0) .and. (H2 > 0.0)) &
         Datu(I,j) = CS%dy_Cu(I,j) * (2.0 * H1 * H2) / (H1 + H2)
 !       Datu(I,j) = CS%dy_Cu(I,j) * 0.5 * (H1 + H2)
       enddo; enddo
-!$OMP parallel do default(shared) private(i, j, H1, H2)
+!$OMP do
       do J=js-1-hs,je+hs ; do i=is-hs,ie+hs
         H1 = CS%bathyT(i,j) + eta(i,j) ; H2 = CS%bathyT(i,j+1) + eta(i,j+1)
         Datv(i,J) = 0.0 ; if ((H1 > 0.0) .and. (H2 > 0.0)) &
@@ -3033,14 +3051,14 @@ subroutine find_face_areas(Datu, Datv, G, CS, MS, eta, halo, add_max)
 !       Datv(i,J) = CS%dy_v(i,J) * 0.5 * (H1 + H2)
       enddo; enddo
     else
-!$OMP parallel do default(shared) private(i, j)
+!$OMP do
       do j=js-hs,je+hs ; do I=is-1-hs,ie+hs
         Datu(I,j) = 0.0 ; if ((eta(i,j) > 0.0) .and. (eta(i+1,j) > 0.0)) &
         Datu(I,j) = CS%dy_Cu(I,j) * (2.0 * eta(i,j) * eta(i+1,j)) / &
                                   (eta(i,j) + eta(i+1,j))
         ! Datu(I,j) = CS%dy_Cu(I,j) * 0.5 * (eta(i,j) + eta(i+1,j))
       enddo; enddo
-!$OMP parallel do default(shared) private(i, j)
+!$OMP do
       do J=js-1-hs,je+hs ; do i=is-hs,ie+hs
         Datv(i,J) = 0.0 ; if ((eta(i,j) > 0.0) .and. (eta(i,j+1) > 0.0)) &
         Datv(i,J) = CS%dx_Cv(i,J) * (2.0 * eta(i,j) * eta(i,j+1)) / &
@@ -3049,18 +3067,18 @@ subroutine find_face_areas(Datu, Datv, G, CS, MS, eta, halo, add_max)
       enddo; enddo
     endif
   elseif (present(add_max)) then
-!$OMP parallel do default(shared) private(i, j)
+!$OMP do
     do j=js-hs,je+hs ; do I=is-1-hs,ie+hs
       Datu(I,j) = CS%dy_Cu(I,j) * G%m_to_H * &
                   (max(CS%bathyT(i+1,j), CS%bathyT(i,j)) + add_max)
     enddo ; enddo
-!$OMP parallel do default(shared) private(i, j)
+!$OMP do
     do J=js-1-hs,je+hs ; do i=is-hs,ie+hs
       Datv(i,J) = CS%dx_Cv(i,J) * G%m_to_H * &
                   (max(CS%bathyT(i,j+1), CS%bathyT(i,j)) + add_max)
     enddo ; enddo
   else
-!$OMP parallel do default(shared) private(i, j)
+!$OMP do
     do j=js-hs,je+hs ; do I=is-1-hs,ie+hs
       !Would be "if (G%mask2dCu(I,j)>0.) &" is G was valid on BT domain
       if (CS%bathyT(i+1,j)+CS%bathyT(i,j)>0.) &
@@ -3068,7 +3086,7 @@ subroutine find_face_areas(Datu, Datv, G, CS, MS, eta, halo, add_max)
                   (CS%bathyT(i+1,j) * CS%bathyT(i,j)) / &
                   (CS%bathyT(i+1,j) + CS%bathyT(i,j))
     enddo ; enddo
-!$OMP parallel do default(shared) private(i, j)
+!$OMP do
     do J=js-1-hs,je+hs ; do i=is-hs,ie+hs
       !Would be "if (G%mask2dCv(i,J)>0.) &" is G was valid on BT domain
       if (CS%bathyT(i,j+1)+CS%bathyT(i,j)>0.) &
@@ -3077,6 +3095,7 @@ subroutine find_face_areas(Datu, Datv, G, CS, MS, eta, halo, add_max)
                   (CS%bathyT(i,j+1) + CS%bathyT(i,j))
     enddo ; enddo
   endif
+!$OMP end parallel
 
 end subroutine find_face_areas
 
@@ -3123,7 +3142,9 @@ subroutine bt_mass_source(h, eta, fluxes, set_cor, dt_therm, dt_since_therm, &
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
-!$OMP parallel do default(shared) private(i,j,k,eta_h)
+!$OMP parallel do default(none) shared(is,ie,js,je,nz,G,h,set_cor,CS,dt_therm,  &
+!$OMP                                  fluxes,eta,dt_since_therm)               &
+!$OMP                          private(eta_h,h_tot,limit_dt,d_eta)
   do j=js,je
     do i=is,ie ; h_tot(i) = h(i,j,1) ; enddo
     if (G%Boussinesq) then

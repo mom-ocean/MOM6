@@ -293,7 +293,10 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, &
   h_neglect = G%H_subroundoff
   sink_dist = 0.0
   if (present(sink_rate)) sink_dist = (dt*sink_rate) * G%m_to_H
-!$OMP parallel default(shared) private(sink,h_minus_dsink,b_denom_1,b1,d1,h_tr,c1)
+!$OMP parallel default(none) shared(is,ie,js,je,sfc_src,btm_src,sfc_flux,dt,G,btm_flux, &
+!$OMP                               sink_rate,btm_reservoir,nz,sink_dist,h_old,ea,      &
+!$OMP                               h_neglect,eb,tr) & 
+!$OMP                       private(sink,h_minus_dsink,b_denom_1,b1,d1,h_tr,c1)
 !$OMP do
   do j=js,je; do i=is,ie ; sfc_src(i,j) = 0.0 ; btm_src(i,j) = 0.0 ; enddo; enddo
   if (present(sfc_flux)) then

@@ -266,7 +266,11 @@ subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, ADp, CDp, G, CS, &
 
   !   Update the zonal velocity component using a modification of a standard
   ! tridagonal solver.
-!$OMP parallel do default(shared) firstprivate(Ray) private(do_i,surface_stress,zDS,stress,h_a,hfr, &
+!$OMP parallel do default(none) shared(G,Isq,Ieq,ADp,nz,u,CS,dt_Rho0,fluxes,h, &
+!$OMP                                  h_neglect,Hmix,I_Hmix,visc,dt_m_to_H,   &
+!$OMP                                  Idt,taux_bot)                           &
+!$OMP                     firstprivate(Ray)                                    & 
+!$OMP                          private(do_i,surface_stress,zDS,stress,h_a,hfr, &
 !$OMP                                     b_denom_1,b1,d1,c1)
   do j=G%jsc,G%jec
     do I=Isq,Ieq ; do_i(I) = (G%mask2dCu(I,j) > 0) ; enddo
@@ -335,8 +339,12 @@ subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, ADp, CDp, G, CS, &
   enddo ! end u-component j loop
 
   ! Now work on the meridional velocity component.
-!$OMP parallel do default(shared) firstprivate(Ray) private(do_i,surface_stress,zDS,stress,h_a,hfr, &
-!$OMP                                     b_denom_1,b1,d1,c1)
+!$OMP parallel do default(none) shared(G,Jsq,Jeq,ADp,nz,v,CS,dt_Rho0,fluxes,h, &
+!$OMP                                  Hmix,I_Hmix,visc,dt_m_to_H,Idt,         &
+!$OMP                                  tauy_bot,is,ie)                         &
+!$OMP                     firstprivate(Ray)                                    &
+!$OMP                          private(do_i,surface_stress,zDS,stress,h_a,hfr, &
+!$OMP                                  b_denom_1,b1,d1,c1)
   do J=Jsq,Jeq
     do i=is,ie ; do_i(i) = (G%mask2dCv(i,J) > 0) ; enddo
 
@@ -479,7 +487,9 @@ subroutine vertvisc_remnant(visc, visc_rem_u, visc_rem_v, dt, G, CS)
   do k=1,nz ; do i=Isq,Ieq ; Ray(i,k) = 0.0 ; enddo ; enddo
 
   ! Find the zonal viscous using a modification of a standard tridagonal solver.
-!$OMP parallel do default(shared) firstprivate(Ray) private(do_i,b_denom_1,b1,d1,c1)
+!$OMP parallel do default(none) shared(G,Isq,Ieq,CS,nz,visc,dt_m_to_H,visc_rem_u) &
+!$OMP                     firstprivate(Ray)                                       &
+!$OMP                          private(do_i,b_denom_1,b1,d1,c1)
   do j=G%jsc,G%jec
     do I=Isq,Ieq ; do_i(I) = (G%mask2dCu(I,j) > 0) ; enddo
 
@@ -508,7 +518,9 @@ subroutine vertvisc_remnant(visc, visc_rem_u, visc_rem_v, dt, G, CS)
   enddo ! end u-component j loop
 
   ! Now find the meridional viscous using a modification.
-!$OMP parallel do default(shared) firstprivate(Ray) private(do_i,b_denom_1,b1,d1,c1)
+!$OMP parallel do default(none) shared(Jsq,Jeq,is,ie,G,CS,visc,dt_m_to_H,visc_rem_v,nz) &
+!$OMP                     firstprivate(Ray)                                             &
+!$OMP                          private(do_i,b_denom_1,b1,d1,c1)
   do J=Jsq,Jeq
     do i=is,ie ; do_i(i) = (G%mask2dCv(i,J) > 0) ; enddo
 
@@ -638,8 +650,11 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
     allocate(CS%a1_shelf_v(G%isd:G%ied,G%JsdB:G%JedB)) ; CS%a1_shelf_v(:,:)=0.0
   endif
 
-!$OMP parallel do default(private) shared(G,CS,visc,Isq,ieq,nz,u,h,fluxes,hML_u,h_neglect,dt) &
-!$OMP                              firstprivate(i_hbbl) 
+!$OMP parallel do default(none) shared(G,CS,visc,Isq,ieq,nz,u,h,fluxes,hML_u,h_neglect,dt) &
+!$OMP                     firstprivate(i_hbbl)                                             & 
+!$OMP                          private(do_i,kv_bbl,bbl_thick,z_i,h_harm,h_arith,hvel,z2,   &
+!$OMP                                  botfn,zh,Dmin,zcol,a,do_any_shelf,do_i_shelf,       &
+!$OMP                                  a_shelf,Ztop_min,I_HTbl,hvel_shelf,topfn,h_ml)
   do j=G%Jsc,G%Jec
     do I=Isq,Ieq ; do_i(I) = (G%mask2dCu(I,j) > 0) ; enddo
 
@@ -757,8 +772,11 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
 
 
   ! Now work on v-points.
-!$OMP parallel do default(private) shared(G,CS,visc,is,ie,Jsq,Jeq,nz,v,h,fluxes,hML_v,h_neglect,dt) &
-!$OMP                        firstprivate(i_hbbl)
+!$OMP parallel do default(none) shared(G,CS,visc,is,ie,Jsq,Jeq,nz,v,h,fluxes,hML_v,h_neglect,dt) &
+!$OMP                     firstprivate(i_hbbl)                                                & 
+!$OMP                          private(do_i,kv_bbl,bbl_thick,z_i,h_harm,h_arith,hvel,z2,      &
+!$OMP                                  botfn,zh,Dmin,zcol1,zcol2,a,do_any_shelf,do_i_shelf,  &
+!$OMP                                  a_shelf,Ztop_min,I_HTbl,hvel_shelf,topfn,h_ml)
   do J=Jsq,Jeq
     do i=is,ie ; do_i(i) = (G%mask2dCv(i,J) > 0) ; enddo
 
@@ -1137,8 +1155,9 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, fluxes, visc, dt, G, CS)
   truncvel = 0.9*maxvel
 
   if (len_trim(CS%u_trunc_file) > 0) then
-!$OMP parallel do default(private) shared(js,je,Isq,Ieq,nz,CS,G,fluxes,u,h,dt,maxvel,ADp,CDp,truncvel, &
-!$OMP                                     u_old,vel_report,dowrite) 
+!$OMP parallel do default(none) shared(js,je,Isq,Ieq,nz,CS,G,fluxes,u,h,dt,maxvel,ADp,CDp,truncvel, &
+!$OMP                                  u_old,vel_report,dowrite) &
+!$OMP                          private(trunc_any,CFL)
     do j=js,je
       trunc_any = .false.
       do I=Isq,Ieq ; dowrite(I,j) = .false. ; enddo
@@ -1186,7 +1205,7 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, fluxes, visc, dt, G, CS)
     enddo ! j-loop
   else
     if (CS%CFL_based_trunc) then
-!$OMP parallel do default(shared)
+!$OMP parallel do default(none) shared(nz,js,je,Isq,Ieq,u,dt,G,CS,h)
       do k=1,nz ; do j=js,je ; do I=Isq,Ieq
         if ((u(I,j,k) * (dt * G%dy_Cu(I,j))) * G%IareaT(i+1,j) < -CS%CFL_trunc) then
           u(I,j,k) = (-0.9*CS%CFL_trunc) * (G%areaT(i+1,j) / (dt * G%dy_Cu(I,j)))
@@ -1197,7 +1216,7 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, fluxes, visc, dt, G, CS)
         endif
       enddo ; enddo ; enddo
     else
-!$OMP parallel do default(shared)
+!$OMP parallel do default(none) shared(nz,js,je,Isq,Ieq,u,G,CS,truncvel,maxvel,h)
       do k=1,nz ; do j=js,je ; do I=Isq,Ieq ; if (abs(u(I,j,k)) > maxvel) then
         u(I,j,k) = SIGN(truncvel,u(I,j,k))
         if (h(i,j,k) + h(i+1,j,k) > 6.0*G%Angstrom) CS%ntrunc = CS%ntrunc + 1
@@ -1217,8 +1236,9 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, fluxes, visc, dt, G, CS)
 
 
   if (len_trim(CS%v_trunc_file) > 0) then
-!$OMP parallel do default(private) shared(Jsq,Jeq,is,ie,nz,CS,G,fluxes,v,h,dt,maxvel,ADp,CDp,truncvel, &
-!$OMP                                     v_old,vel_report,dowrite)
+!$OMP parallel do default(none) shared(Jsq,Jeq,is,ie,nz,CS,G,fluxes,v,h,dt,maxvel,ADp,CDp,truncvel, &
+!$OMP                                  v_old,vel_report,dowrite)                                    &
+!$OMP                          private(trunc_any,CFL)
     do J=Jsq,Jeq
       trunc_any = .false.
       do i=is,ie ; dowrite(i,J) = .false. ; enddo
@@ -1266,7 +1286,7 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, fluxes, visc, dt, G, CS)
     enddo ! J-loop
   else
     if (CS%CFL_based_trunc) then
-!$OMP parallel do default(shared) 
+!$OMP parallel do default(none) shared(is,ie,Jsq,Jeq,nz,v,dt,G,CS,h)
       do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
         if ((v(i,J,k) * (dt * G%dx_Cv(i,J))) * G%IareaT(i,j+1) < -CS%CFL_trunc) then
           v(i,J,k) = (-0.9*CS%CFL_trunc) * (G%areaT(i,j+1) / (dt * G%dx_Cv(i,J)))
@@ -1277,7 +1297,7 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, fluxes, visc, dt, G, CS)
         endif
       enddo ; enddo ; enddo
     else
-!$OMP parallel do default(shared)
+!$OMP parallel do default(none) shared(is,ie,Jsq,Jeq,nz,v,G,CS,h,truncvel,maxvel)
       do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie ; if (abs(v(i,J,k)) > maxvel) then
         v(i,J,k) = SIGN(truncvel,v(i,J,k))
         if (h(i,j,k) + h(i,j+1,k) > 6.0*G%Angstrom) CS%ntrunc = CS%ntrunc + 1

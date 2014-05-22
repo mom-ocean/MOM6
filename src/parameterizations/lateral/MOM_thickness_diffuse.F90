@@ -176,11 +176,11 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, MEKE, VarMix, CDp, CS)
   if(first_call) then
     allocate(KH_u_CFL(SZIB_(G), SZJ_(G)) )
     allocate(KH_v_CFL(SZI_(G), SZJB_(G)) )
-!$OMP parallel do default(shared)
+!$OMP parallel do default(none) shared(is,ie,js,je,KH_u_CFL,dt,G)
     do j = js,je; do I=is-1,ie
       KH_u_CFL(I,j) = 0.2/(dt*(G%IdxCu(I,j)*G%IdxCu(I,j) + G%IdyCu(I,j)*G%IdyCu(I,j)))
     enddo; enddo
-!$OMP parallel do default(shared)
+!$OMP parallel do default(none) shared(is,ie,js,je,KH_v_CFL,dt,G)
     do j = js-1,je; do I=is,ie
       KH_v_CFL(i,J) = 0.2/(dt*(G%IdxCv(i,J)*G%IdxCv(i,J) + G%IdyCv(i,J)*G%IdyCv(i,J)))
     enddo; enddo
@@ -190,7 +190,10 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, MEKE, VarMix, CDp, CS)
   call find_eta(h, tv, G%g_Earth, G, e, halo_size=1)
 
   ! Set the diffusivities.
-!$OMP parallel default(shared)
+!$OMP parallel default(none) shared(is,ie,js,je,Khth_Loc_u,CS,use_VarMix,VarMix,    &
+!$OMP                               MEKE_not_null,MEKE,Resoln_scaled,KH_u,          &
+!$OMP                               KH_u_CFL,nz,Khth_Loc,KH_v,KH_v_CFL,int_slope_u, &
+!$OMP                               int_slope_v )
 !$OMP do
    do j = js,je; do I=is-1,ie
       Khth_Loc_u(i,j) = CS%Khth
@@ -491,7 +494,8 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
     call vert_fill_TS(h, tv%T, tv%S, CS%kappa_smooth, dt, T, S, G, 1)
   endif
 
-!$OMP parallel default(shared)
+!$OMP parallel default(none) shared(is,ie,js,je,h_avail_rsum,pres,h_avail,I4dt,G,h, &
+!$OMP                               h_frac,nz,uhtot,Work_u,vhtot,Work_v )
   ! Find the maximum and minimum permitted streamfunction.
 !$OMP do
   do j=js-1,je+1 ; do i=is-1,ie+1
@@ -527,11 +531,16 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
   enddo ; enddo
 !$OMP end parallel
 
-!$OMP parallel do default(private) shared(nz,is,ie,js,je,find_work,use_EOS,G,pres,T,S, &
-!$OMP                                     nk_linear,IsdB,tv,h,h_neglect,e,dz_neglect, &
-!$OMP                                     I_slope_max2,h_neglect2,present_int_slope_u, &
-!$OMP                                     int_slope_u,KH_u,uhtot,h_frac,h_avail_rsum,  &
-!$OMP                                     uhD,h_avail,G_scale,work_u) 
+!$OMP parallel do default(none) shared(nz,is,ie,js,je,find_work,use_EOS,G,pres,T,S, &
+!$OMP                                  nk_linear,IsdB,tv,h,h_neglect,e,dz_neglect,  &
+!$OMP                                  I_slope_max2,h_neglect2,present_int_slope_u, &
+!$OMP                                  int_slope_u,KH_u,uhtot,h_frac,h_avail_rsum,  &
+!$OMP                                  uhD,h_avail,G_scale,work_u)                  &
+!$OMP                          private(drdiA,drdiB,drdkL,drdkR,pres_u,T_u,S_u,      &
+!$OMP                                  drho_dT_u,drho_dS_u,hg2A,hg2B,hg2L,hg2R,haA, &
+!$OMP                                  haB,haL,haR,dzaL,dzaR,wtA,wtB,wtL,wtR,drdz,  &
+!$OMP                                  drdx,mag_grad2,Slope,slope2_Ratio,Sfn_unlim, &
+!$OMP                                  Sfn_safe,Sfn_est,Sfn)
   do j = js,je ; do K=nz,2,-1
     if (find_work .and. .not.(use_EOS)) then
       drdiA = 0.0 ; drdiB = 0.0
@@ -702,11 +711,16 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
   enddo ; enddo ! end of j-loop
 
     ! Calculate the meridional fluxes and gradients.
-!$OMP parallel do default(private) shared(nz,is,ie,js,je,find_work,use_EOS,G,pres,T,S, &
-!$OMP                                     nk_linear,IsdB,tv,h,h_neglect,e,dz_neglect, &
-!$OMP                                     I_slope_max2,h_neglect2,present_int_slope_v, &
-!$OMP                                     int_slope_v,KH_v,vhtot,h_frac,h_avail_rsum,  &
-!$OMP                                     vhD,h_avail,G_scale,Work_v) 
+!$OMP parallel do default(none) shared(nz,is,ie,js,je,find_work,use_EOS,G,pres,T,S, &
+!$OMP                                  nk_linear,IsdB,tv,h,h_neglect,e,dz_neglect,  &
+!$OMP                                  I_slope_max2,h_neglect2,present_int_slope_v, &
+!$OMP                                  int_slope_v,KH_v,vhtot,h_frac,h_avail_rsum,  &
+!$OMP                                  vhD,h_avail,G_scale,Work_v)                  &
+!$OMP                          private(drdjA,drdjB,drdkL,drdkR,pres_v,T_v,S_v,      &
+!$OMP                                  drho_dT_v,drho_dS_v,hg2A,hg2B,hg2L,hg2R,haA, &
+!$OMP                                  haB,haL,haR,dzaL,dzaR,wtA,wtB,wtL,wtR,drdz,  &
+!$OMP                                  drdy,mag_grad2,Slope,slope2_Ratio,Sfn_unlim, &
+!$OMP                                  Sfn_safe,Sfn_est,Sfn)
   do j = js-1,je ; do K=nz,2,-1
     if (find_work .and. .not.(use_EOS)) then
       drdjA = 0.0 ; drdjB = 0.0
@@ -875,7 +889,9 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
     do j=js,je ; do I=is-1,ie ; uhD(I,j,1) = -uhtot(I,j) ; enddo ; enddo
     do J=js-1,je ; do i=is,ie ; vhD(i,J,1) = -vhtot(i,J) ; enddo ; enddo
   else
-!$OMP parallel do default(shared) private(pres_u,T_u,S_u,drho_dT_u,drho_dS_u,drdiB)
+!$OMP parallel do default(none) shared(is,ie,js,je,pres,T,S,IsdB,tv,uhD,uhtot, &
+!$OMP                                  Work_u,G_scale,use_EOS,e)   &
+!$OMP                          private(pres_u,T_u,S_u,drho_dT_u,drho_dS_u,drdiB)
     do j=js,je
       if (use_EOS) then 
         do I=is-1,ie
@@ -1404,12 +1420,13 @@ subroutine vert_fill_TS(h, T_in, S_in, kappa, dt, T_f, S_f, G, halo_here)
   h0 = 1.0e-16*sqrt(kappa*dt)*G%m_to_H
 
   if (kap_dt_x2 <= 0.0) then
-!$OMP parallel do default(shared)
+!$OMP parallel do default(none) shared(is,ie,js,je,nz,T_f,T_in,S_f,S_in)
     do k=1,nz ; do j=js,je ; do i=is,ie
       T_f(i,j,k) = T_in(i,j,k) ; S_f(i,j,k) = S_in(i,j,k)
     enddo ; enddo ; enddo
   else
-!$OMP parallel do default(shared) private(ent,b1,d1,c1)
+!$OMP parallel do default(none) private(ent,b1,d1,c1)   &
+!$OMP                            shared(is,ie,js,je,nz,kap_dt_x2,h,h0,T_f,S_f,T_in,S_in)
     do j=js,je
       do i=is,ie
         ent(i,2) = kap_dt_x2 / ((h(i,j,1)+h(i,j,2)) + h0)

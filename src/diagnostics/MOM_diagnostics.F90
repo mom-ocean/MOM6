@@ -222,7 +222,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, dt, G, &
 
     if (associated(tv%eqn_of_state)) then
       pres(:) = tv%P_Ref
-!$OMP parallel do default(shared)
+!$OMP parallel do default(none) shared(tv,Rcv,is,ie,js,je,nz,pres)
       do k=1,nz ; do j=js,je+1
         call calculate_density(tv%T(:,j,k),tv%S(:,j,k),pres, &
                                Rcv(:,j,k),is,ie-is+2, tv%eqn_of_state)
@@ -233,7 +233,8 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, dt, G, &
 
     if (ASSOCIATED(CS%h_Rlay)) then
       k_list = nz/2
-!$OMP parallel do default(shared) private(wt,wt_p) firstprivate(k_list)
+!$OMP parallel do default(none) shared(is,ie,js,je,nz,nkmb,CS,Rcv,h,G) &
+!$OMP                          private(wt,wt_p) firstprivate(k_list)
       do j=js,je 
         do k=1,nkmb ; do i=is,ie
           CS%h_Rlay(i,j,k) = 0.0
@@ -253,7 +254,8 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, dt, G, &
 
     if (ASSOCIATED(CS%uh_Rlay)) then
       k_list = nz/2
-!$OMP parallel do default(shared) private(wt,wt_p) firstprivate(k_list)
+!$OMP parallel do default(none) shared(Isq,Ieq,js,je,nz,nkmb,Rcv,CS,G,uh) &
+!$OMP                          private(wt,wt_p) firstprivate(k_list)
       do j=js,je
         do k=1,nkmb ; do I=Isq,Ieq
           CS%uh_Rlay(I,j,k) = 0.0
@@ -274,7 +276,8 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, dt, G, &
 
     if (ASSOCIATED(CS%vh_Rlay)) then
       k_list = nz/2
-!$OMP parallel do default(shared) private(wt,wt_p) firstprivate(k_list)
+!$OMP parallel do default(none)  shared(Jsq,Jeq,is,ie,nz,nkmb,Rcv,CS,G,vh) &
+!$OMP                          private(wt,wt_p) firstprivate(k_list)
       do J=Jsq,Jeq
         do k=1,nkmb ; do i=is,ie
           CS%vh_Rlay(i,J,k) = 0.0
@@ -294,7 +297,8 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, dt, G, &
 
     if (ASSOCIATED(CS%uhGM_Rlay) .and. ASSOCIATED(CDp%uhGM)) then
       k_list = nz/2
-!$OMP parallel do default(shared) private(wt,wt_p) firstprivate(k_list)
+!$OMP parallel do default(none) shared(Isq,Ieq,js,je,nz,nkmb,Rcv,CDP,CS,G) &
+!$OMP                          private(wt,wt_p) firstprivate(k_list)
       do j=js,je
         do k=1,nkmb ; do I=Isq,Ieq
           CS%uhGM_Rlay(I,j,k) = 0.0
@@ -314,7 +318,8 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, dt, G, &
 
     if (ASSOCIATED(CS%vhGM_Rlay) .and. ASSOCIATED(CDp%vhGM)) then
       k_list = nz/2
-!$OMP parallel do default(shared) private(wt,wt_p) firstprivate(k_list)
+!$OMP parallel do default(none) shared(is,ie,Jsq,Jeq,nz,nkmb,CS,CDp,Rcv,G) &
+!$OMP                          private(wt,wt_p) firstprivate(k_list)
       do J=Jsq,Jeq
         do k=1,nkmb ; do i=is,ie
           CS%vhGM_Rlay(i,J,k) = 0.0
@@ -338,7 +343,8 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, dt, G, &
     call wave_speed(h, tv, G, CS%cg1, CS%wave_speed_CSp)
     if (CS%id_cg1>0) call post_data(CS%id_cg1, CS%cg1, CS%diag)
     if (CS%id_Rd1>0) then
-!$OMP parallel do default(shared) private(f2_h,mag_beta)
+!$OMP parallel do default(none) shared(is,ie,js,je,G,CS) &
+!$OMP                          private(f2_h,mag_beta)
       do j=js,je ; do i=is,ie
         ! Blend the equatorial deformation radius with the standard one.
         f2_h = absurdly_small_freq2 + 0.25 * &

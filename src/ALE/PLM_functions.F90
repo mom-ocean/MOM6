@@ -47,7 +47,7 @@ subroutine PLM_reconstruction( N, h, u, ppoly_E, ppoly_coefficients )
                                                 ! van Leer slopes   
   real          :: slope                ! retained PLM slope
   real          :: a, b                 ! auxiliary variables
-  real, dimension(:,:), allocatable :: E_old
+  real, dimension(N,2) :: E_old
 
   ! Loop on interior cells
   do k = 2,N-1
@@ -116,8 +116,7 @@ subroutine PLM_reconstruction( N, h, u, ppoly_E, ppoly_coefficients )
   ! Second pass: we need to check for nonmonotonic discontinuous edge values.
   ! When this occurs, the PLM slope is redefined so as to ensure monotonic edge
   ! values across edges.
-  allocate( E_old(N,2) )
-  E_old = ppoly_E
+  E_old(1:N,1:2) = ppoly_E(1:N,1:2)
   
   do k = 2,N-1
 
@@ -154,7 +153,6 @@ subroutine PLM_reconstruction( N, h, u, ppoly_E, ppoly_coefficients )
     
   end do ! end loop on interior cells
 
-  deallocate( E_old )
   
 end subroutine PLM_reconstruction
 
