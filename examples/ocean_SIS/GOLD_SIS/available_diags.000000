@@ -298,6 +298,12 @@
 "ocean_model", "KHTH_v1"  [Unused]
     ! long_name: Thickness Diffusivity at V-points (2-D)
     ! units: meter second-2
+"ocean_model", "neutral_slope_x"  [Unused]
+    ! long_name: Zonal slope of neutral surface
+    ! units: nondim
+"ocean_model", "neutral_slope_y"  [Unused]
+    ! long_name: Meridional slope of neutral surface
+    ! units: nondim
 "ocean_model", "uhml"  [Unused]
     ! long_name: Zonal Thickness Flux to Restratify Mixed Layer
     ! units: meter3 second-1
