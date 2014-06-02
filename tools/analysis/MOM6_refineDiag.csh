@@ -29,7 +29,6 @@
 echo ""
 echo "  -- begin MOM6_refineDiag.csh --  "
 echo ""
-
 #Unpack the history files and save them in the archive
 echo ""
 echo "  ---------- begin untar_history_files ----------  "
