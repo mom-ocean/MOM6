@@ -9,7 +9,7 @@
 #   make supergrid.nc
 #   make interpolated_topog.nc
 
-all: supergrid.nc interpolated_topog.nc
+all: supergrid.nc interpolated_topog.nc ocean_hgrid.nc
 
 # Grids
 supergrid.nc: mercator_supergrid.nc ncap_supergrid.nc antarctic_spherical_supergrid.nc scap_supergrid.nc
@@ -36,6 +36,13 @@ scap_topog_bedmap2.nc so_topog_bedmap2.nc: mercator_supergrid.nc ncap_supergrid.
 
 scap_topog_gebco.nc so_topog_gebco.nc: mercator_supergrid.nc ncap_supergrid.nc antarctic_spherical_supergrid.nc scap_supergrid.nc GEBCO_08_v1.nc
 	python create_topo.py scap --use_gebco
+
+ocean_hgrid.nc: supergrid.nc
+	ncks -d ny,80, -d nyp,80, supergrid.nc ocean_hgrid.nc
+	./changeChar.py ocean_hgrid.nc tile tile1                           # Sets char tile='tile1'
+	ncks -d ny,40,  topog.nc ocean_topog.nc                             # Removes rows 1-40
+	ncap -s 'jEdit=jEdit-40' --overwrite ocean_topog.nc ocean_topog.nc  # Adjusts jEdit values
+	./addDimension.py ocean_topog.nc ntiles 1                           # Adds back the dimension "ntiles"
 
 MIDAS:
 	git clone https://github.com/mjharriso/MIDAS.git
