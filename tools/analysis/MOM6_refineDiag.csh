@@ -8,7 +8,7 @@
 #               which happens just before the components are post processed by frepp.
 #               To make this happens a path to the (would be) script should appear 
 #               in the <refineDiag> tag of the xmls, e.g., 
-#      <refineDiag script="/nbhome/$USER/$(FRE_STEM)$(DEBUGLEVEL)/mom6/tools/analysis/untar_history_files.csh"/>
+#      <refineDiag script="$(NB_ROOT)/mom6/tools/analysis/MOM6_refineDiag.csh"/>
 #               Note that the above script should exist when frepp is called.
 #               This could be achieved by cloning the mom6 git repo in the <csh> section of the setup block 
 #               in the corresponding the gfdl platfrom. E.g., 
@@ -22,28 +22,29 @@
 #           setenv NBROOT /nbhome/$USER/$(FRE_STEM)$(DEBUGLEVEL)
 #           mkdir -p $NBROOT
 #           cd $NBROOT
-#           git clone /home/fms/git/ocean/mom6
+#           #bronx-8
+#           #git clone "http://gitlab.gfdl.noaa.gov/github_mirror/noaa-gfdl-mom6.git" mom6
+#           #bronx-7 (due to a bug in interpreting : in the above command)
+#           /home/Niki.Zadeh/bin/git_clone_mom6_fix.csh
 #         ]]></csh>
 #
 #------------------------------------------------------------------------------
 echo ""
 echo "  -- begin MOM6_refineDiag.csh --  "
 echo ""
-#Unpack the history files and save them in the archive
-echo ""
-echo "  ---------- begin untar_history_files ----------  "
-echo ""
-     if (! -d $histDir/unpack) then
-       mkdir -p $histDir/unpack
-     endif
- 
-     foreach f (*.nc)
-      if(! -e $histDir/unpack/${f} ) then
-      gcp -v ${f} gfdl:${histDir}/unpack/
-      endif
-     end
-echo "  ---------- end untar_history_files ----------  "
-echo ""
+#The mere existance of any refineDiag script (as simple as doing a "ls" ) in the xml 
+#causes the history files to be unpacked by frepp, as soon as the data lands on gfdl archive, 
+#in /ptmp/$USER/$ARCHIVE/$year.nc 
+#So, if we want unpaked history files somewhere in /ptmp all we need to have is a non empty refineDiag. 
+#However, if we want to unpack the tar files in /archive we can uncomment the following block:
+#     if (! -d $histDir/unpack) then
+#       mkdir -p $histDir/unpack
+#     endif
+#     foreach f (*.nc)
+#      if(! -e $histDir/unpack/${f} ) then
+#      gcp -v ${f} gfdl:${histDir}/unpack/
+#      endif
+#     end
 echo "  ---------- begin yearly analysis ----------  "
 echo ""
 #
