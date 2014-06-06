@@ -5,9 +5,9 @@ CGRID_ICE_DYNAMICS = False      !   [Boolean] default = False
                                 ! dynamics; if false use a B-grid discretization.
 USE_SLAB_ICE = False            !   [Boolean] default = False
                                 ! If true, use the very old slab-style ice.
-SIS1_THERMODYNAMICS = False     !   [Boolean] default = False
+SIS1_5L_THERMODYNAMICS = False  !   [Boolean] default = False
                                 ! If true, use the thermodynamic calculations inhereted
-                                ! from SIS1. Otherwise, use the newer SIS2 version.
+                                ! from the SIS1 5 layer. Otherwise, use the newer SIS2 version.
 ICE_OCEAN_STRESS_STAGGER = "B"  ! default = "B"
                                 ! A case-insensitive character string to indicate the
                                 ! staggering of the stress field on the ocean that is
@@ -48,6 +48,10 @@ ICE_CONSERVATION_CHECK = True   !   [Boolean] default = True
                                 ! If true, do additional calculations to check for
                                 ! internal conservation of heat, salt, and water mass in
                                 ! the sea ice model.  This does not change answers, but
+                                ! can increase model run time.
+COLUMN_CHECK = False            !   [Boolean] default = False
+                                ! If true, add code to allow debugging of conservation
+                                ! column-by-column.  This does not change answers, but
                                 ! can increase model run time.
 ICE_BOUNDS_CHECK = True         !   [Boolean] default = True
                                 ! If true, periodically check the values of ice and snow
@@ -97,6 +101,21 @@ ICE_DELTA_EDD_R_POND = 0.0      !   [perhaps nondimensional?] default = 0.0
                                 ! A dreadfully documented tuning parameter for the radiative
                                 ! propeties of meltwater ponds on sea ice with the delta-Eddington
                                 ! radiative transfer calculation.
+ENTHALPY_LIQUID_0 = 0.0         !   [J kg-1] default = 0.0
+                                ! The enthalpy of liquid fresh water at 0 C.  The solutions
+                                ! should be physically consistent when this is adjusted,
+                                ! because only the relative value is of physical meaning,
+                                ! but roundoff errors can change the solution.
+ENTHALPY_UNITS = 1.0            !   [J kg-1] default = 1.0
+                                ! A constant that rescales enthalpy from J/kg to a
+                                ! different scale in its internal representation.  Changing
+                                ! this by a power of 2 is useful for debugging, as answers
+                                ! should not change.
+TIMEUNIT = 8.64E+04             !   [s] default = 8.64E+04
+                                ! The time unit for ICE_STATS_INTERVAL.
+ICE_STATS_INTERVAL = 1.0        !   [days] default = 1.0
+                                ! The interval in units of TIMEUNIT between writes of the
+                                ! globally summed ice statistics and conservation checks.
 REENTRANT_X = False             !   [Boolean] default = True
                                 ! If true, the domain is zonally reentrant.
 REENTRANT_Y = False             !   [Boolean] default = False
@@ -235,6 +254,19 @@ CHECK_ICE_TRANSPORT_CONSERVATION = False !   [Boolean] default = False
                                 ! If true, use add multiple diagnostics of ice and snow
                                 ! mass conservation in the sea-ice transport code.  This
                                 ! is expensive and should be used sparingly.
+
+! === module SIS_sum_output ===
+WRITE_STOCKS = True             !   [Boolean] default = True
+                                ! If true, write the integrated tracer amounts to stdout
+                                ! when the statistics files are written.
+STDOUT_HEARTBEAT = True         !   [Boolean] default = True
+                                ! If true, periodically write sea ice statistics to
+                                ! stdout to allow the progress to be seen.
+DT = -1.0                       !   [s] default = -1.0
+                                ! The sea ice dynamics time step.
+STATISTICS_FILE = "seaice.stats" ! default = "seaice.stats"
+                                ! The file to use to write the globally integrated
+                                ! statistics.
 SEND_LOG_TO_STDOUT = False      !   [Boolean] default = False
                                 ! If true, all log messages are also sent to stdout.
 REPORT_UNUSED_PARAMS = False    !   [Boolean] default = False

@@ -71,6 +71,8 @@ NSTEPS_DYN = 72                 ! default = 432
 SIS1_ICE_TRANSPORT = True       !   [Boolean] default = False
                                 ! If true, use SIS1 code to solve the ice continuity
                                 ! equation and transport tracers.
+
+! === module SIS_sum_output ===
 DOCUMENT_FILE = "SIS_parameter_doc" ! default = "MOM_parameter_doc"
                                 ! The basename for files where run-time parameters, their
                                 ! settings, units and defaults are documented. Blank will

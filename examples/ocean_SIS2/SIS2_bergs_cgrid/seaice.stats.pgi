@@ -1,0 +1,4 @@
+  Step,       Day,                    Area(N/S),                      Extent(N/S),                 Mass(N/S),                      Heat(N/S),              Salinty(N/S),   Frac Mass Err,   Temp Err,   Salin Err
+            [days]                       [m2]                            [m2]                        [kg]                             [J]                     [g/kg]          [Nondim]      [Nondim]      [Nondim]
+     0,       0.000, Area 0.000000000000E+00 0.000000000000E+00, Ext 0.0000E+00 0.0000E+00, M 0.00000E+00 0.00000E+00, Enth  0.00000E+00  0.00000E+00, S   0.0000  0.0000, Me  0.00E+00, Te  0.00E+00, Se  0.00E+00
+    12,       1.000, Area 1.042257430262E+13 6.950996979428E+10, Ext 1.0922E+13 9.4248E+10, M 9.72638E+14 5.79972E+12, Enth -3.27181E+20 -1.75262E+18, S   4.9932  4.9629, Me -4.29E-05, Te -2.18E-01, Se -5.72E-17
