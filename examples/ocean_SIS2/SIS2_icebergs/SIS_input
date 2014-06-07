@@ -58,6 +58,9 @@ DEBUG = False                   !    If true, write out verbose debugging data.
 DEBUG_TRUNCATIONS = False       !    If true, calculate all diagnostics that are
                                 !  useful for debugging truncations.
 SEND_LOG_TO_STDOUT = False      !    If true write out log information to stdout.
+ICE_STATS_INTERVAL = 0.25       !    The interval in units of TIMEUNIT between
+                                ! writes of the globally summed ice statistics
+                                ! and conservation checks.
 
 !  Specify the time integration scheme.
 NSTEPS_DYN = 72                 !   The number of iterations in the EVP dynamics
