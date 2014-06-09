@@ -1190,13 +1190,12 @@ subroutine make_frazil(h, tv, G, CS)
 
   call cpu_clock_begin(id_clock_frazil)
 
-!$OMP parallel default(none) shared(is,ie,js,je,CS,G,h,nz,tv) &
-!$OMP                       private(fraz_col,T_fr_set,T_freeze,hc,pressure)
   if (.not.CS%pressure_dependent_frazil) then
-!$OMP do
     do k=1,nz ; do i=is,ie ; pressure(i,k) = 0.0 ; enddo ; enddo
   endif
-!$OMP do
+!$OMP parallel do default(none) shared(is,ie,js,je,CS,G,h,nz,tv) &
+!$OMP                          private(fraz_col,T_fr_set,T_freeze,hc) &
+!$OMP                     firstprivate(pressure)
   do j=js,je
     do i=is,ie ; fraz_col(:) = 0.0 ; enddo
 
@@ -1268,7 +1267,6 @@ subroutine make_frazil(h, tv, G, CS)
       tv%frazil(i,j) = tv%frazil(i,j) + fraz_col(i)
     enddo
   enddo
-!$OMP end parallel
   call cpu_clock_end(id_clock_frazil)
 
 end subroutine make_frazil
