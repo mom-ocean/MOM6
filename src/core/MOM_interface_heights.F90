@@ -91,8 +91,8 @@ subroutine find_eta_3d(h, tv, G_Earth, G, eta, eta_bt, halo_size)
 !  (in,opt)  halo_size - The width of halo points on which to calculate eta.
 
   real :: p(SZI_(G),SZJ_(G),SZK_(G)+1)
-  real :: dz_geo(SZI_(G),SZJ_(G))      ! The change in geopotential height
-                                       ! across a layer, in m2 s-2.
+  real :: dz_geo(SZI_(G),SZJ_(G),SZK_(G)) ! The change in geopotential height
+                                          ! across a layer, in m2 s-2.
   real :: dilate(SZI_(G)), htot(SZI_(G))
   real :: I_gEarth
   integer i, j, k, isv, iev, jsv, jev, nz, halo
@@ -107,15 +107,21 @@ subroutine find_eta_3d(h, tv, G_Earth, G, eta, eta_bt, halo_size)
 
   I_gEarth = 1.0 / G_Earth
 
+!$OMP parallel default(none) shared(isv,iev,jsv,jev,nz,eta,G,h,eta_bt,tv,p, &
+!$OMP                               G_Earth,dz_geo,halo,I_gEarth) &
+!$OMP                       private(dilate,htot)
+!$OMP do
   do j=jsv,jev ; do i=isv,iev ; eta(i,j,nz+1) = -G%bathyT(i,j) ; enddo ; enddo
 
   if (G%Boussinesq) then
-    do k=nz,1,-1 ; do j=jsv,jev ; do i=isv,iev
+!$OMP do
+    do j=jsv,jev ; do k=nz,1,-1; do i=isv,iev
       eta(i,j,K) = eta(i,j,K+1) + h(i,j,k)
     enddo ; enddo ; enddo
     if (present(eta_bt)) then
       ! Dilate the water column to agree with the free surface height
       ! that is used for the dynamics.
+!$OMP do
       do j=jsv,jev
         do i=isv,iev
           dilate(i) = (eta_bt(i,j)+G%bathyT(i,j)) / (eta(i,j,1)+G%bathyT(i,j))
@@ -128,26 +134,34 @@ subroutine find_eta_3d(h, tv, G_Earth, G, eta, eta_bt, halo_size)
   else
     if (associated(tv%eqn_of_state)) then
       ! ### THIS SHOULD BE P_SURF, IF AVAILABLE.
-      do j=jsv,jev ; do i=isv,iev ; p(i,j,1) = 0.0 ; enddo ; enddo
-      do k=1,nz ; do j=jsv,jev ; do i=isv,iev
-        p(i,j,K+1) = p(i,j,K) + G_Earth*G%H_to_kg_m2*h(i,j,k)
-      enddo ; enddo ; enddo
-
-      do k=nz,1,-1
+!$OMP do
+      do j=jsv,jev 
+        do i=isv,iev ; p(i,j,1) = 0.0 ; enddo
+        do k=1,nz ; do i=isv,iev
+          p(i,j,K+1) = p(i,j,K) + G_Earth*G%H_to_kg_m2*h(i,j,k)
+        enddo ; enddo 
+      enddo
+!$OMP do
+      do k=1,nz
         call int_specific_vol_dp(tv%T(:,:,k), tv%S(:,:,k), p(:,:,K), p(:,:,K+1), &
-                                 0.0, G, tv%eqn_of_state, dz_geo, halo_size=halo)
-        do j=jsv,jev ; do i=isv,iev
-          eta(i,j,K) = eta(i,j,K+1) + I_gEarth * dz_geo(i,j)
+                                 0.0, G, tv%eqn_of_state, dz_geo(:,:,k), halo_size=halo)
+      enddo
+!$OMP do
+      do j=jsv,jev 
+        do k=nz,1,-1 ; do i=isv,iev
+          eta(i,j,K) = eta(i,j,K+1) + I_gEarth * dz_geo(i,j,k)
         enddo ; enddo
       enddo
     else
-      do k=nz,1,-1 ; do j=jsv,jev ; do i=isv,iev
+!$OMP do
+      do j=jsv,jev ;  do k=nz,1,-1; do i=isv,iev
         eta(i,j,K) = eta(i,j,K+1) + G%H_to_kg_m2*h(i,j,k)/G%Rlay(k)
       enddo ; enddo ; enddo
     endif
     if (present(eta_bt)) then
       ! Dilate the water column to agree with the free surface height
       ! from the time-averaged barotropic solution.
+!$OMP do
       do j=jsv,jev
         do i=isv,iev ; htot(i) = G%H_subroundoff ; enddo
         do k=1,nz ; do i=isv,iev ; htot(i) = htot(i) + h(i,j,k) ; enddo ; enddo
@@ -158,6 +172,7 @@ subroutine find_eta_3d(h, tv, G_Earth, G, eta, eta_bt, halo_size)
       enddo
     endif
   endif
+!$OMP end parallel
 
 end subroutine find_eta_3d
 
@@ -184,9 +199,9 @@ subroutine find_eta_2d(h, tv, G_Earth, G, eta, eta_bt, halo_size)
 !                     mass per unit aread (non-Boussinesq), in m or kg m-2.
 !  (in,opt)  halo_size - The width of halo points on which to calculate eta.
 
-  real, dimension(SZI_(G),SZJ_(G)) :: &
-    p_top, &   ! The pressure at the interface above a layer, in Pa.
-    p_bot, &   ! The pressure at the interface below a layer, in Pa.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: &
+    p     ! The pressure in Pa.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
     dz_geo     ! The change in geopotential height across a layer, in m2 s-2.
   real :: htot(SZI_(G))  ! The sum of all layers' thicknesses, in kg m-2 or m.
   real :: I_gEarth
@@ -198,42 +213,53 @@ subroutine find_eta_2d(h, tv, G_Earth, G, eta, eta_bt, halo_size)
 
   I_gEarth = 1.0 / G_Earth
 
+!$OMP parallel default(none) shared(is,ie,js,je,nz,eta,G,eta_bt,h,tv,p, &
+!$OMP                               G_Earth,dz_geo,halo,I_gEarth) &
+!$OMP                       private(htot)
+!$OMP do
   do j=js,je ; do i=is,ie ; eta(i,j) = -G%bathyT(i,j) ; enddo ; enddo
 
   if (G%Boussinesq) then
     if (present(eta_bt)) then
+!$OMP do
       do j=js,je ; do i=is,ie
         eta(i,j) = eta_bt(i,j)
       enddo ; enddo
     else
-      do k=1,nz ; do j=js,je ; do i=is,ie
+!$OMP do
+      do j=js,je ; do k=1,nz ; do i=is,ie
         eta(i,j) = eta(i,j) + h(i,j,k)
       enddo ; enddo ; enddo
     endif
   else
     if (associated(tv%eqn_of_state)) then
-      do j=js,je ; do i=is,ie
-        p_top(i,j) = 0.0 ; p_bot(i,j) = 0.0
-      enddo ; enddo
-      do k=1,nz
-        do j=js,je ; do i=is,ie
-          p_top(i,j) = p_bot(i,j)
-          p_bot(i,j) = p_top(i,j) + G_Earth*G%H_to_kg_m2*h(i,j,k)
-        enddo ; enddo
-        call int_specific_vol_dp(tv%T(:,:,k), tv%S(:,:,k), p_top, p_bot, 0.0, &
-                                 G, tv%eqn_of_state, dz_geo, halo_size=halo)
-        do j=js,je ; do i=is,ie
-          eta(i,j) = eta(i,j) + I_gEarth * dz_geo(i,j)
+!$OMP do
+      do j=js,je 
+        do i=is,ie ; p(i,j,1) = 0.0 ; enddo
+      
+        do k=1,nz ; do i=is,ie
+          p(i,j,k+1) = p(i,j,k) + G_Earth*G%H_to_kg_m2*h(i,j,k)
         enddo ; enddo
       enddo
+!$OMP do
+      do k = 1, nz
+        call int_specific_vol_dp(tv%T(:,:,k), tv%S(:,:,k), p(:,:,k), p(:,:,k+1), 0.0, &
+                                 G, tv%eqn_of_state, dz_geo(:,:,k), halo_size=halo)
+      enddo
+!$OMP do
+      do j=js,je ; do k=1,nz ; do i=is,ie
+          eta(i,j) = eta(i,j) + I_gEarth * dz_geo(i,j,k)
+      enddo ; enddo ; enddo
     else
-      do k=1,nz ; do j=js,je ; do i=is,ie
+!$OMP do
+      do j=js,je ; do k=1,nz ; do i=is,ie
         eta(i,j) = eta(i,j) + G%H_to_kg_m2*h(i,j,k)/G%Rlay(k)
       enddo ; enddo ; enddo
     endif
     if (present(eta_bt)) then
       !   Dilate the water column to agree with the the time-averaged column
       ! mass from the barotropic solution.
+!$OMP do
       do j=js,je
         do i=is,ie ; htot(i) = G%H_subroundoff ; enddo
         do k=1,nz ; do i=is,ie ; htot(i) = htot(i) + h(i,j,k) ; enddo ; enddo
@@ -244,7 +270,8 @@ subroutine find_eta_2d(h, tv, G_Earth, G, eta, eta_bt, halo_size)
       enddo
     endif
   endif
-  
+!$OMP end parallel  
+
 end subroutine find_eta_2d
 
 end module MOM_interface_heights

@@ -312,7 +312,6 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
                        ! interpolated into depth space.
   logical :: showCallTree ! If true, show the call tree
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkmb
-  real, pointer :: T(:,:,:), S(:,:,:)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   nkmb = G%nk_rho_varies
@@ -321,9 +320,6 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   if (nz == 1) return
   showCallTree = callTree_showQuery()
   if (showCallTree) call callTree_enter("diabatic(), MOM_diabatic_driver.F90")
-
-  T => tv%T
-  S => tv%S
 
   ! This sets the equivalence between the same bits of memory for these arrays.
   eaml => eatr ; ebml => ebtr
@@ -336,7 +332,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   if (CS%debug) then
     call MOM_state_chksum("Start of diabatic ", u(:,:,:), v(:,:,:), h(:,:,:), G)
   endif
-  if (CS%debugConservation) call MOM_state_stats('Start of diabatic', u, v, h, T, S, G)
+  if (CS%debugConservation) call MOM_state_stats('Start of diabatic', u, v, h, tv%T, tv%S, G)
 
   call cpu_clock_begin(id_clock_set_diffusivity)
   call set_BBL_diffusivity(u, v, h, fluxes, visc, G, CS%set_diff_CSp)
@@ -345,11 +341,11 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   !   Frazil formation keeps the temperature above the freezing point.
   ! make_frazil is deliberately called at both the beginning and at
   ! the end of the diabatic processes.
-  if (ASSOCIATED(T) .AND. ASSOCIATED(tv%frazil)) then
+  if (ASSOCIATED(tv%T) .AND. ASSOCIATED(tv%frazil)) then
     call make_frazil(h,tv,G,CS)
     if (showCallTree) call callTree_waypoint("done with 1st make_frazil (diabatic)")
   endif
-  if (CS%debugConservation) call MOM_state_stats('1st make_frazil', u, v, h, T, S, G)
+  if (CS%debugConservation) call MOM_state_stats('1st make_frazil', u, v, h, tv%T, tv%S, G)
 
   if ((CS%ML_mix_first > 0.0) .or. CS%use_geothermal) then
 !$OMP parallel do default(none) shared(is,ie,js,je,nz,h_orig,h,eaml,ebml)
@@ -362,7 +358,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     call geothermal(h, tv, dt, eaml, ebml, G, CS%geothermal_CSp)
     call cpu_clock_end(id_clock_geothermal)
     if (showCallTree) call callTree_waypoint("geothermal (diabatic)")
-    if (CS%debugConservation) call MOM_state_stats('geothermal', u, v, h, T, S, G)
+    if (CS%debugConservation) call MOM_state_stats('geothermal', u, v, h, tv%T, tv%S, G)
   endif
 
   ! Set_opacity estimates the optical properties of the water column.
@@ -395,12 +391,12 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
 !  Keep salinity from falling below a small but positive threshold.
 !  This occurs when the ice model attempts to extract more salt than
 !  is actually present in the ocean.  
-      if (ASSOCIATED(S) .and. ASSOCIATED(tv%salt_deficit)) &
+      if (ASSOCIATED(tv%S) .and. ASSOCIATED(tv%salt_deficit)) &
         call adjust_salt(h, tv, G, CS)
       call cpu_clock_end(id_clock_mixedlayer)
       if (CS%debug) call MOM_state_chksum("After mixedlayer ", u, v, h, G)
       if (showCallTree) call callTree_waypoint("done with 1st bulkmixedlayer (diabatic)")
-      if (CS%debugConservation) call MOM_state_stats('1st bulkmixedlayer', u, v, h, T, S, G)
+      if (CS%debugConservation) call MOM_state_stats('1st bulkmixedlayer', u, v, h, tv%T, tv%S, G)
     endif
   endif
 
@@ -556,7 +552,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     call KPP_applyNonLocalTransport(CS%KPP_CSp, G, h, CS%KPP_NLTscalar, CS%netSalt, dt, tv%S, isSalt=.true.)
     call cpu_clock_end(id_clock_kpp)
     if (showCallTree) call callTree_waypoint("done with KPP_applyNonLocalTransport (diabatic)")
-    if (CS%debugConservation) call MOM_state_stats('KPP_applyNonLocalTransport', u, v, h, T, S, G)
+    if (CS%debugConservation) call MOM_state_stats('KPP_applyNonLocalTransport', u, v, h, tv%T, tv%S, G)
 
     if (CS%debug) then
       call MOM_state_chksum("after KPP_applyNLT ", u(:,:,:), v(:,:,:), h(:,:,:), G)
@@ -567,13 +563,13 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
 
   ! When used with KPP this needs to provide a diffusivity and happen before KPP ?????
   if (associated(visc%Kd_extra_T) .and. associated(visc%Kd_extra_S) .and. &
-      associated(T)) then
+      associated(tv%T)) then
     call cpu_clock_begin(id_clock_differential_diff)
     ! Changes: tv%T, tv%S
     call differential_diffuse_T_S(h, tv, visc, dt, G)
     call cpu_clock_end(id_clock_differential_diff)
     if (showCallTree) call callTree_waypoint("done with differential_diffuse_T_S (diabatic)")
-    if (CS%debugConservation) call MOM_state_stats('differential_diffuse_T_S', u, v, h, T, S, G)
+    if (CS%debugConservation) call MOM_state_stats('differential_diffuse_T_S', u, v, h, tv%T, tv%S, G)
   endif
 
   ! This block sets ea, eb from Kd or Kd_int.
@@ -629,7 +625,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
       call hchksum(G%H_to_m*ea, "after applyBoundaryFluxes ea",G,haloshift=0)
     endif
     if (showCallTree) call callTree_waypoint("done with applyBoundaryFluxes (diabatic)")
-    if (CS%debugConservation)  call MOM_state_stats('applyBoundaryFluxes', u, v, h, T, S, G)
+    if (CS%debugConservation)  call MOM_state_stats('applyBoundaryFluxes', u, v, h, tv%T, tv%S, G)
   endif
   
   ! Update h according to divergence of the difference between
@@ -664,28 +660,28 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     call MOM_thermovar_chksum("after negative check ", tv, G)
   endif
   if (showCallTree) call callTree_waypoint("done with h=ea-eb (diabatic)")
-  if (CS%debugConservation) call MOM_state_stats('h=ea-eb', u, v, hold, T, S, G)
+  if (CS%debugConservation) call MOM_state_stats('h=ea-eb', u, v, hold, tv%T, tv%S, G)
 
   ! Here, T and S are updated according to ea and eb.
   ! If using the bulk mixed layer, T and S are also updated
   ! by surface fluxes (in fluxes%*).
   if (CS%bulkmixedlayer) then
-    if (ASSOCIATED(T)) then
+    if (ASSOCIATED(tv%T)) then
       call cpu_clock_begin(id_clock_tridiag)
       ! Temperature and salinity (as state variables) are treated slightly
       ! differently from other tracers to insure that massless layers that
       ! are lighter than the mixed layer have temperatures and salinities
       ! that correspond to their prescribed densities.
       if (CS%massless_match_targets) then
-!$OMP parallel do default (none) shared(is,ie,js,je,nkmb,hold,h_neglect,eb,T,ea,S,nz,kb) &
+!$OMP parallel do default (none) shared(is,ie,js,je,nkmb,hold,h_neglect,eb,ea,nz,kb,tv) &
 !$OMP                           private(h_tr,b1,d1,c1,b_denom_1)
         do j=js,je
           do i=is,ie
             h_tr = hold(i,j,1) + h_neglect
             b1(i) = 1.0 / (h_tr + eb(i,j,1))
             d1(i) = h_tr * b1(i)
-            T(i,j,1) = b1(i) * (h_tr*T(i,j,1))
-            S(i,j,1) = b1(i) * (h_tr*S(i,j,1))
+            tv%T(i,j,1) = b1(i) * (h_tr*tv%T(i,j,1))
+            tv%S(i,j,1) = b1(i) * (h_tr*tv%S(i,j,1))
           enddo
           do k=2,nkmb ; do i=is,ie
             c1(i,k) = eb(i,j,k-1) * b1(i)
@@ -693,8 +689,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
             b_denom_1 = h_tr + d1(i)*ea(i,j,k)
             b1(i) = 1.0 / (b_denom_1 + eb(i,j,k))
             if (k<nkmb) d1(i) = b_denom_1 * b1(i)
-            T(i,j,k) = b1(i) * (h_tr*T(i,j,k) + ea(i,j,k)*T(i,j,k-1))
-            S(i,j,k) = b1(i) * (h_tr*S(i,j,k) + ea(i,j,k)*S(i,j,k-1))
+            tv%T(i,j,k) = b1(i) * (h_tr*tv%T(i,j,k) + ea(i,j,k)*tv%T(i,j,k-1))
+            tv%S(i,j,k) = b1(i) * (h_tr*tv%S(i,j,k) + ea(i,j,k)*tv%S(i,j,k-1))
           enddo ; enddo
 
           do k=nkmb+1,nz ; do i=is,ie
@@ -706,49 +702,49 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
               b_denom_1 = h_tr + d1(i)*ea(i,j,k)
               b1(i) = 1.0 / (b_denom_1 + eb(i,j,k))
               d1(i) = b_denom_1 * b1(i)
-              T(i,j,k) = b1(i) * (h_tr*T(i,j,k) + ea(i,j,k)*T(i,j,nkmb))
-              S(i,j,k) = b1(i) * (h_tr*S(i,j,k) + ea(i,j,k)*S(i,j,nkmb))
+              tv%T(i,j,k) = b1(i) * (h_tr*tv%T(i,j,k) + ea(i,j,k)*tv%T(i,j,nkmb))
+              tv%S(i,j,k) = b1(i) * (h_tr*tv%S(i,j,k) + ea(i,j,k)*tv%S(i,j,nkmb))
             elseif (k > kb(i,j)) then
               c1(i,k) = eb(i,j,k-1) * b1(i)
               h_tr = hold(i,j,k) + h_neglect
               b_denom_1 = h_tr + d1(i)*ea(i,j,k)
               b1(i) = 1.0 / (b_denom_1 + eb(i,j,k))
               d1(i) = b_denom_1 * b1(i)
-              T(i,j,k) = b1(i) * (h_tr*T(i,j,k) + ea(i,j,k)*T(i,j,k-1))
-              S(i,j,k) = b1(i) * (h_tr*S(i,j,k) + ea(i,j,k)*S(i,j,k-1))
+              tv%T(i,j,k) = b1(i) * (h_tr*tv%T(i,j,k) + ea(i,j,k)*tv%T(i,j,k-1))
+              tv%S(i,j,k) = b1(i) * (h_tr*tv%S(i,j,k) + ea(i,j,k)*tv%S(i,j,k-1))
             elseif (eb(i,j,k) < eb(i,j,k-1)) then ! (note that k < kb(i,j))
               !   The bottommost buffer layer might entrain all the mass from some
               ! of the interior layers that are thin and lighter in the coordinate
               ! density than that buffer layer.  The T and S of these newly
               ! massless interior layers are unchanged.
-              T(i,j,nkmb) = T(i,j,nkmb) + b1(i) * (eb(i,j,k-1) - eb(i,j,k)) * T(i,j,k)
-              S(i,j,nkmb) = S(i,j,nkmb) + b1(i) * (eb(i,j,k-1) - eb(i,j,k)) * S(i,j,k)
+              tv%T(i,j,nkmb) = tv%T(i,j,nkmb) + b1(i) * (eb(i,j,k-1) - eb(i,j,k)) * tv%T(i,j,k)
+              tv%S(i,j,nkmb) = tv%S(i,j,nkmb) + b1(i) * (eb(i,j,k-1) - eb(i,j,k)) * tv%S(i,j,k)
             endif
           enddo ; enddo
 
           do k=nz-1,nkmb,-1 ; do i=is,ie
             if (k >= kb(i,j)) then
-              T(i,j,k) = T(i,j,k) + c1(i,k+1)*T(i,j,k+1)
-              S(i,j,k) = S(i,j,k) + c1(i,k+1)*S(i,j,k+1)
+              tv%T(i,j,k) = tv%T(i,j,k) + c1(i,k+1)*tv%T(i,j,k+1)
+              tv%S(i,j,k) = tv%S(i,j,k) + c1(i,k+1)*tv%S(i,j,k+1)
             endif
           enddo ; enddo
           do i=is,ie ; if (kb(i,j) <= nz) then
-            T(i,j,nkmb) = T(i,j,nkmb) + c1(i,kb(i,j))*T(i,j,kb(i,j))
-            S(i,j,nkmb) = S(i,j,nkmb) + c1(i,kb(i,j))*S(i,j,kb(i,j))
+            tv%T(i,j,nkmb) = tv%T(i,j,nkmb) + c1(i,kb(i,j))*tv%T(i,j,kb(i,j))
+            tv%S(i,j,nkmb) = tv%S(i,j,nkmb) + c1(i,kb(i,j))*tv%S(i,j,kb(i,j))
           endif ; enddo
           do k=nkmb-1,1,-1 ; do i=is,ie
-            T(i,j,k) = T(i,j,k) + c1(i,k+1)*T(i,j,k+1)
-            S(i,j,k) = S(i,j,k) + c1(i,k+1)*S(i,j,k+1)
+            tv%T(i,j,k) = tv%T(i,j,k) + c1(i,k+1)*tv%T(i,j,k+1)
+            tv%S(i,j,k) = tv%S(i,j,k) + c1(i,k+1)*tv%S(i,j,k+1)
           enddo ; enddo
         enddo ! end of j loop
       else ! .not. massless_match_targets
         ! This simpler form allows T & S to be too dense for the layers
         ! between the buffer layers and the interior.
         ! Changes: T, S
-        call triDiagTS(G, is, ie, js, je, hold, ea, eb, T, S)
+        call triDiagTS(G, is, ie, js, je, hold, ea, eb, tv%T, tv%S)
       endif ! massless_match_targets
       call cpu_clock_end(id_clock_tridiag)
-      if (CS%debugConservation) call MOM_state_stats('BML tridiag', u, v, h, T, S, G)
+      if (CS%debugConservation) call MOM_state_stats('BML tridiag', u, v, h, tv%T, tv%S, G)
     endif ! end of ASSOCIATED(T)
 
     if ((CS%ML_mix_first > 0.0) .or. CS%use_geothermal) then
@@ -787,28 +783,28 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
 !  Keep salinity from falling below a small but positive threshold.
 !  This occurs when the ice model attempts to extract more salt than
 !  is actually present in the ocean.  
-      if (ASSOCIATED(S) .and. ASSOCIATED(tv%salt_deficit)) &
+      if (ASSOCIATED(tv%S) .and. ASSOCIATED(tv%salt_deficit)) &
         call adjust_salt(h, tv, G, CS)
 
       call cpu_clock_end(id_clock_mixedlayer)
       if (showCallTree) call callTree_waypoint("done with 2nd bulkmixedlayer (diabatic)")
-      if (CS%debugConservation) call MOM_state_stats('2nd bulkmixedlayer', u, v, h, T, S, G)
+      if (CS%debugConservation) call MOM_state_stats('2nd bulkmixedlayer', u, v, h, tv%T, tv%S, G)
     endif
 
   else                                             ! Not BULKMIXEDLAYER.
 
 ! Calculate the change in temperature & salinity due to entrainment.
-    if (ASSOCIATED(T)) then
+    if (ASSOCIATED(tv%T)) then
       if (CS%debug) then
         call hchksum(G%H_to_m*ea, "before triDiagTS ea ",G,haloshift=0)
         call hchksum(G%H_to_m*eb, "before triDiagTS eb ",G,haloshift=0)
       endif
       call cpu_clock_begin(id_clock_tridiag)
       ! Changes: T, S
-      call triDiagTS(G, is, ie, js, je, hold, ea, eb, T, S)
+      call triDiagTS(G, is, ie, js, je, hold, ea, eb, tv%T, tv%S)
       call cpu_clock_end(id_clock_tridiag)
       if (showCallTree) call callTree_waypoint("done with triDiagTS (diabatic)")
-      if (CS%debugConservation) call MOM_state_stats('triDiagTS', u, v, h, T, S, G)
+      if (CS%debugConservation) call MOM_state_stats('triDiagTS', u, v, h, tv%T, tv%S, G)
     endif
 
   endif                                          ! end BULKMIXEDLAYER
@@ -822,7 +818,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     call regularize_layers(h, tv, dt, ea, eb, G, CS%regularize_layers_CSp)
     call cpu_clock_end(id_clock_remap)
     if (showCallTree) call callTree_waypoint("done with regularize_layers (diabatic)")
-    if (CS%debugConservation) call MOM_state_stats('regularize_layers', u, v, h, T, S, G)
+    if (CS%debugConservation) call MOM_state_stats('regularize_layers', u, v, h, tv%T, tv%S, G)
   endif
 
   if ((CS%id_Tdif > 0) .or. (CS%id_Tdif_z > 0) .or. &
@@ -831,12 +827,12 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
       Tdif_flx(i,j,1) = 0.0 ; Tdif_flx(i,j,nz+1) = 0.0
       Tadv_flx(i,j,1) = 0.0 ; Tadv_flx(i,j,nz+1) = 0.0
     enddo ; enddo
-!$OMP parallel do default(none) shared(is,ie,js,je,nz,Tdif_flx,Idt,ea,eb,T,Tadv_flx)
+!$OMP parallel do default(none) shared(is,ie,js,je,nz,Tdif_flx,Idt,ea,eb,Tadv_flx,tv)
     do K=2,nz ; do j=js,je ; do i=is,ie
       Tdif_flx(i,j,K) = (Idt * 0.5*(ea(i,j,k) + eb(i,j,k-1))) * &
-                        (T(i,j,k-1) - T(i,j,k))
+                        (tv%T(i,j,k-1) - tv%T(i,j,k))
       Tadv_flx(i,j,K) = (Idt * (ea(i,j,k) - eb(i,j,k-1))) * &
-                    0.5*(T(i,j,k-1) + T(i,j,k))
+                    0.5*(tv%T(i,j,k-1) + tv%T(i,j,k))
     enddo ; enddo ; enddo
   endif
   if ((CS%id_Sdif > 0) .or. (CS%id_Sdif_z > 0) .or. &
@@ -845,12 +841,12 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
       Sdif_flx(i,j,1) = 0.0 ; Sdif_flx(i,j,nz+1) = 0.0
       Sadv_flx(i,j,1) = 0.0 ; Sadv_flx(i,j,nz+1) = 0.0
     enddo ; enddo
-!$OMP parallel do default(none) shared(is,ie,js,je,nz,Sdif_flx,Idt,ea,eb,S,Sadv_flx)
+!$OMP parallel do default(none) shared(is,ie,js,je,nz,Sdif_flx,Idt,ea,eb,Sadv_flx,tv)
     do K=2,nz ; do j=js,je ; do i=is,ie
       Sdif_flx(i,j,K) = (Idt * 0.5*(ea(i,j,k) + eb(i,j,k-1))) * &
-                        (S(i,j,k-1) - S(i,j,k))
+                        (tv%S(i,j,k-1) - tv%S(i,j,k))
       Sadv_flx(i,j,K) = (Idt * (ea(i,j,k) - eb(i,j,k-1))) * &
-                    0.5*(S(i,j,k-1) + S(i,j,k))
+                    0.5*(tv%S(i,j,k-1) + tv%S(i,j,k))
     enddo ; enddo ; enddo
   endif
 
@@ -935,9 +931,9 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     call cpu_clock_begin(id_clock_sponge)
     if (CS%bulkmixedlayer .and. ASSOCIATED(tv%eqn_of_state)) then
       do i=is,ie ; p_ref_cv(i) = tv%P_Ref ; enddo
-!$OMP parallel do default(none) shared(js,je,T,S,p_ref_cv,Rcv_ml,is,ie,tv)
+!$OMP parallel do default(none) shared(js,je,p_ref_cv,Rcv_ml,is,ie,tv)
       do j=js,je
-        call calculate_density(T(:,j,1), S(:,j,1), p_ref_cv, Rcv_ml(:,j), &
+        call calculate_density(tv%T(:,j,1), tv%S(:,j,1), p_ref_cv, Rcv_ml(:,j), &
                                is, ie-is+1, tv%eqn_of_state)
       enddo
       call apply_sponge(h, dt, G, ea, eb, CS%sponge_CSp, Rcv_ml)
@@ -1088,10 +1084,10 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
 !   Frazil formation keeps the temperature above the freezing point.
 ! make_frazil is deliberately called at both the beginning and at
 ! the end of the diabatic processes.
-  if (ASSOCIATED(T) .AND. ASSOCIATED(tv%frazil)) then
+  if (ASSOCIATED(tv%T) .AND. ASSOCIATED(tv%frazil)) then
     call make_frazil(h,tv,G,CS)
     if (showCallTree) call callTree_waypoint("done with 2nd make_frazil (diabatic)")
-    if (CS%debugConservation) call MOM_state_stats('2nd make_frazil', u, v, h, T, S, G)
+    if (CS%debugConservation) call MOM_state_stats('2nd make_frazil', u, v, h, tv%T, tv%S, G)
   endif
 
   if (CS%id_ea > 0) call post_data(CS%id_ea, ea, CS%diag)
@@ -1136,7 +1132,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   if (num_z_diags > 0) &
     call calc_Zint_diags(h, z_ptrs, z_ids, num_z_diags, G, CS%diag_to_Z_CSp)
 
-  if (CS%debugConservation) call MOM_state_stats('leaving diabatic', u, v, h, T, S, G)
+  if (CS%debugConservation) call MOM_state_stats('leaving diabatic', u, v, h, tv%T, tv%S, G)
   if (showCallTree) call callTree_leave("diabatic()")
 end subroutine diabatic
 
@@ -1190,12 +1186,13 @@ subroutine make_frazil(h, tv, G, CS)
 
   call cpu_clock_begin(id_clock_frazil)
 
+!$OMP parallel default(none) shared(is,ie,js,je,CS,G,h,nz,tv) &
+!$OMP                       private(fraz_col,T_fr_set,T_freeze,hc,pressure)
   if (.not.CS%pressure_dependent_frazil) then
+!$OMP do
     do k=1,nz ; do i=is,ie ; pressure(i,k) = 0.0 ; enddo ; enddo
   endif
-!$OMP parallel do default(none) shared(is,ie,js,je,CS,G,h,nz,tv) &
-!$OMP                     firstprivate(pressure) &
-!$OMP                          private(fraz_col,T_fr_set,T_freeze,hc)
+!$OMP do
   do j=js,je
     do i=is,ie ; fraz_col(:) = 0.0 ; enddo
 
@@ -1267,6 +1264,7 @@ subroutine make_frazil(h, tv, G, CS)
       tv%frazil(i,j) = tv%frazil(i,j) + fraz_col(i)
     enddo
   enddo
+!$OMP end parallel
   call cpu_clock_end(id_clock_frazil)
 
 end subroutine make_frazil

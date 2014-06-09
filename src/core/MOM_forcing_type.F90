@@ -388,6 +388,9 @@ subroutine extractFluxes2d(G, fluxes, optics, nsw, dt,                          
 !                         heat flux associated with net mass fluxes into the ocean.
 
   integer :: j
+!$OMP parallel do default(none) shared(G,fluxes, optics, nsw,dt,DepthBeforeScalingFluxes, &
+!$OMP                                  useRiverHeatContent, useCalvingHeatContent,        &
+!$OMP                                  h,T,Net_H,Net_heat,Net_salt,Pen_SW_bnd,tv)
   do j=G%jsc, G%jec
     call extractFluxes1d(G, fluxes, optics, nsw, j, dt,                           &
             DepthBeforeScalingFluxes, useRiverHeatContent, useCalvingHeatContent, &

@@ -283,23 +283,26 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, AD, G, CS)
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB ; nz = G%ke   
   h_neglect = G%H_subroundoff
 
+!$OMP parallel default(none) shared(u,v,h,uh,vh,CAu,CAv,G,CS,AD,Area_h,Area_q,nz,RV,PV, &
+!$OMP                               is,ie,js,je,Isq,Ieq,Jsq,Jeq,h_neglect)              &
+!$OMP                       private(relative_vorticity,absolute_vorticity,Ih,hArea_q,q, &
+!$OMP                               abs_vort,Ih_q,fv1,fv2,fu1,fu2,max_fvq,max_fuq,      &
+!$OMP                               min_fvq,min_fuq,q2,a,b,c,d,ep_u,ep_v,Fe_m2,rat_lin, &
+!$OMP                               min_Ihq,max_Ihq,rat_m1,AL_wt,Sad_wt,c1,c2,c3,slope, &
+!$OMP                               uhc,uhm,uh_min,uh_max,vhc,vhm,vh_min,vh_max,KE,KEx, &
+!$OMP                               KEy,temp1,temp2,Heff1,Heff2,Heff3,Heff4,VHeff,      &
+!$OMP                               QVHeff,max_fv,min_fv,UHeff,QUHeff,max_fu,min_fu)
+!$OMP do
   do j=Jsq-1,Jeq+2 ; do I=Isq-1,Ieq+2
     Area_h(i,j) = G%mask2dT(i,j) * G%areaT(i,j)
   enddo ; enddo
+!$OMP do
   do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
     Area_q(i,j) = (Area_h(i,j) + Area_h(i+1,j+1)) + &
                   (Area_h(i+1,j) + Area_h(i,j+1))
   enddo ; enddo
 
-!$OMP parallel do default(none) shared(u,v,h,uh,vh,CAu,CAv,G,CS,AD,Area_h,Area_q,nz,RV,PV, &
-!$OMP                                  is,ie,js,je,Isq,Ieq,Jsq,Jeq,h_neglect)              &
-!$OMP                          private(relative_vorticity,absolute_vorticity,Ih,hArea_q,q, &
-!$OMP                                  abs_vort,Ih_q,fv1,fv2,fu1,fu2,max_fvq,max_fuq,      &
-!$OMP                                  min_fvq,min_fuq,q2,a,b,c,d,ep_u,ep_v,Fe_m2,rat_lin, &
-!$OMP                                  min_Ihq,max_Ihq,rat_m1,AL_wt,Sad_wt,c1,c2,c3,slope, &
-!$OMP                                  uhc,uhm,uh_min,uh_max,vhc,vhm,vh_min,vh_max,KE,KEx, &
-!$OMP                                  KEy,temp1,temp2,Heff1,Heff2,Heff3,Heff4,VHeff,      &
-!$OMP                                  QVHeff,max_fv,min_fv,UHeff,QUHeff,max_fu,min_fu)
+!$OMP do
   do k=1,nz
 !    Here the second order accurate layer potential vorticities, q,
 ! are calculated.  hq is  second order accurate in space.  Relative
@@ -727,6 +730,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, AD, G, CS)
     endif
 
   enddo ! k-loop.
+!$OMP end parallel
 
 !   Here the various Coriolis-related derived quantities are offered
 ! for averaging.
