@@ -52,13 +52,16 @@ DEBUG = False                   !    If true, write out verbose debugging data.
 DEBUG_TRUNCATIONS = False       !    If true, calculate all diagnostics that are
                                 !  useful for debugging truncations.
 SEND_LOG_TO_STDOUT = False      !    If true write out log information to stdout.
+ICE_STATS_INTERVAL = 0.25       !    The interval in units of TIMEUNIT between
+                                ! writes of the globally summed ice statistics
+                                ! and conservation checks.
 
 !  Specify the time integration scheme.
 NSTEPS_DYN = 72                 !   The number of iterations in the EVP dynamics
                                 ! for each slow time step.
 
 !  Specify the ice properties.
-SIS1_THERMODYNAMICS = True      !    If true, use the thermodynamic calculations
+SIS1_5L_THERMODYNAMICS = True   !    If true, use the thermodynamic calculations
                                 !  inhereted from SIS1. Otherwise, use the newer
                                 !  SIS2 version.
 ICE_STRENGTH_PSTAR = 2.75e4     !    ICE_STRENGTH_PSTAR is a constant in the

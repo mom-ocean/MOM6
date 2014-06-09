@@ -1,6 +1,6 @@
-SIS1_THERMODYNAMICS = True      !   [Boolean] default = False
+SIS1_5L_THERMODYNAMICS = True   !   [Boolean] default = False
                                 ! If true, use the thermodynamic calculations inhereted
-                                ! from SIS1. Otherwise, use the newer SIS2 version.
+                                ! from the SIS1 5 layer. Otherwise, use the newer SIS2 version.
 SNOW_ALBEDO = 0.88              !   [nondim] default = 0.85
                                 ! The albedo of dry snow atop sea ice.
 ICE_ALBEDO = 0.68               !   [nondim] default = 0.5826
@@ -66,6 +66,8 @@ GRID_CONFIG = "mosaic"          !
 NSTEPS_DYN = 72                 ! default = 432
                                 ! The number of iterations in the EVP dynamics for each
                                 ! slow time step.
+
+! === module SIS_sum_output ===
 DOCUMENT_FILE = "SIS_parameter_doc" ! default = "MOM_parameter_doc"
                                 ! The basename for files where run-time parameters, their
                                 ! settings, units and defaults are documented. Blank will
