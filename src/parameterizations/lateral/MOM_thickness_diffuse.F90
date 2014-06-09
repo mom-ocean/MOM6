@@ -86,8 +86,11 @@ type, public :: thickness_diffuse_CS ; private
   type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
                              ! timing of diagnostic output.
   real, pointer :: GMwork(:,:) => NULL()  ! Work by thick. diff. in W m-2.
+  real, pointer :: diagSlopeX(:,:,:) => NULL()  ! diagnostic: zonal neutral slope (nondim).
+  real, pointer :: diagSlopeY(:,:,:) => NULL()  ! diagnostic: zonal neutral slope (nondim).
   integer :: id_uhGM = -1, id_vhGM = -1, id_GMwork = -1, id_KH_u = -1, id_KH_v = -1
   integer :: id_KH_u1 = -1, id_KH_v1 = -1
+  integer :: id_slope_x = -1, id_slope_y = -1
  ! integer :: id_sfn_slope_x = -1, id_sfn_slope_y = -1, id_sfn_x = -1, id_sfn_y = -1
 end type thickness_diffuse_CS
 
@@ -536,7 +539,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
 !$OMP                                  nk_linear,IsdB,tv,h,h_neglect,e,dz_neglect,  &
 !$OMP                                  I_slope_max2,h_neglect2,present_int_slope_u, &
 !$OMP                                  int_slope_u,KH_u,uhtot,h_frac,h_avail_rsum,  &
-!$OMP                                  uhD,h_avail,G_scale,work_u)                  &
+!$OMP                                  uhD,h_avail,G_scale,work_u,CS)               &
 !$OMP                          private(drdiA,drdiB,drdkL,drdkR,pres_u,T_u,S_u,      &
 !$OMP                                  drho_dT_u,drho_dS_u,hg2A,hg2B,hg2L,hg2R,haA, &
 !$OMP                                  haB,haL,haR,dzaL,dzaR,wtA,wtB,wtL,wtR,drdz,  &
@@ -623,6 +626,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
                     int_slope_u(I,j,K) * ((e(i+1,j,K)-e(i,j,K)) * G%IdxCu(I,j))
             slope2_Ratio = (1.0 - int_slope_u(I,j,K)) * slope2_Ratio
           endif
+          if (CS%id_slope_x > 0) CS%diagSlopeX(I,j,k) = Slope
 
           ! Estimate the streamfunction at each interface.
           Sfn_unlim = -((KH_u(I,j,K)*G%dy_Cu(I,j))*Slope) * G%m_to_H
@@ -655,8 +659,10 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
 
           Sfn_est = (Sfn_unlim + slope2_Ratio*Sfn_safe) / (1.0 + slope2_Ratio)
         else  ! With .not.use_EOS, the layers are constant density.
-          Sfn_est = ((KH_u(I,j,K)*G%dy_Cu(I,j)) * &
-                     ((e(i,j,K)-e(i+1,j,K))*G%IdxCu(I,j))) * G%m_to_H
+          Slope = ((e(i,j,K)-e(i+1,j,K))*G%IdxCu(I,j)) * G%m_to_H
+          Sfn_est = (KH_u(I,j,K)*G%dy_Cu(I,j)) * Slope
+                  !  ((e(i,j,K)-e(i+1,j,K))*G%IdxCu(I,j))) * G%m_to_H
+          if (CS%id_slope_x > 0) CS%diagSlopeX(I,j,k) = Slope
         endif
 
         ! Make sure that there is enough mass above to allow the streamfunction
@@ -716,7 +722,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
 !$OMP                                  nk_linear,IsdB,tv,h,h_neglect,e,dz_neglect,  &
 !$OMP                                  I_slope_max2,h_neglect2,present_int_slope_v, &
 !$OMP                                  int_slope_v,KH_v,vhtot,h_frac,h_avail_rsum,  &
-!$OMP                                  vhD,h_avail,G_scale,Work_v)                  &
+!$OMP                                  vhD,h_avail,G_scale,Work_v,CS)               &
 !$OMP                          private(drdjA,drdjB,drdkL,drdkR,pres_v,T_v,S_v,      &
 !$OMP                                  drho_dT_v,drho_dS_v,hg2A,hg2B,hg2L,hg2R,haA, &
 !$OMP                                  haB,haL,haR,dzaL,dzaR,wtA,wtB,wtL,wtR,drdz,  &
@@ -800,6 +806,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
                     int_slope_v(i,J,K) * ((e(i,j+1,K)-e(i,j,K)) * G%IdyCv(i,J))
             slope2_Ratio = (1.0 - int_slope_v(i,J,K)) * slope2_Ratio
           endif
+          if (CS%id_slope_y > 0) CS%diagSlopeY(I,j,k) = Slope
 
           ! Estimate the streamfunction at each interface.
           Sfn_unlim = -((KH_v(i,J,K)*G%dx_Cv(i,J))*Slope) * G%m_to_H
@@ -832,8 +839,10 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
           ! Estimate the streamfunction at each interface.
           Sfn_est = (Sfn_unlim + slope2_Ratio*Sfn_safe) / (1.0 + slope2_Ratio)
         else      ! With .not.use_EOS, the layers are constant density.
-          Sfn_est = ((KH_v(i,J,K)*G%dx_Cv(i,J)) * &
-                     ((e(i,j,K)-e(i,j+1,K))*G%IdyCv(i,J))) * G%m_to_H
+          Slope = ((e(i,j,K)-e(i,j+1,K))*G%IdyCv(i,J)) * G%m_to_H
+          Sfn_est = (KH_v(i,J,K)*G%dx_Cv(i,J)) * Slope
+                  !  ((e(i,j,K)-e(i,j+1,K))*G%IdyCv(i,J))) * G%m_to_H
+          if (CS%id_slope_y > 0) CS%diagSlopeY(I,j,k) = Slope
         endif
 
         ! Make sure that there is enough mass above to allow the streamfunction
@@ -949,6 +958,8 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
     endif ; endif
   enddo ; enddo ; endif
 
+  if (CS%id_slope_x > 0) call post_data(CS%id_slope_x, CS%diagSlopeX, CS%diag)
+  if (CS%id_slope_y > 0) call post_data(CS%id_slope_y, CS%diagSlopeY, CS%diag)
  ! if (CS%id_sfn_x > 0) call post_data(CS%id_sfn_x, sfn_x, CS%diag)
  ! if (CS%id_sfn_y > 0) call post_data(CS%id_sfn_y, sfn_y, CS%diag)
  ! if (CS%id_sfn_slope_x > 0) call post_data(CS%id_sfn_slope_x, sfn_slope_x, CS%diag)
@@ -1551,6 +1562,12 @@ subroutine thickness_diffuse_init(Time, G, param_file, diag, CDp, CS)
   CS%id_KH_v1 = register_diag_field('ocean_model', 'KHTH_v1', diag%axesCv1, Time, &
            'Thickness Diffusivity at V-points (2-D)', 'meter second-2')
 
+  CS%id_slope_x =  register_diag_field('ocean_model', 'neutral_slope_x', diag%axesCui, Time, &
+           'Zonal slope of neutral surface', 'nondim')
+  if (CS%id_slope_x > 0) call safe_alloc_ptr(CS%diagSlopeX,G%IsdB,G%IedB,G%jsd,G%jed,G%ke+1)
+  CS%id_slope_y =  register_diag_field('ocean_model', 'neutral_slope_y', diag%axesCvi, Time, &
+           'Meridional slope of neutral surface', 'nondim')
+  if (CS%id_slope_y > 0) call safe_alloc_ptr(CS%diagSlopeY,G%isd,G%ied,G%JsdB,G%JedB,G%ke+1)
  ! CS%id_sfn_x =  register_diag_field('ocean_model', 'sfn_x', diag%axesCui, Time, &
  !          'Parameterized Zonal Overturning Streamfunction', 'meter3 second-1')
  ! CS%id_sfn_y =  register_diag_field('ocean_model', 'sfn_y', diag%axesCvi, Time, &

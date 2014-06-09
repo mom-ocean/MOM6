@@ -116,7 +116,7 @@ subroutine PLM_reconstruction( N, h, u, ppoly_E, ppoly_coefficients )
   ! Second pass: we need to check for nonmonotonic discontinuous edge values.
   ! When this occurs, the PLM slope is redefined so as to ensure monotonic edge
   ! values across edges.
-  E_old = ppoly_E
+  E_old(1:N,1:2) = ppoly_E(1:N,1:2)
   
   do k = 2,N-1
 

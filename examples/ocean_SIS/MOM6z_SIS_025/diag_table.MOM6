@@ -1,4 +1,4 @@
-## output files
+# Ocean diagnostics files
 "ocean_daily",            1, "days",   1, "days", "time"
 "ocean_month",            1, "months", 1, "days", "time"
 "ocean_annual",          12, "months", 1, "days", "time"
@@ -11,9 +11,7 @@
 "ocean_Bering_Strait",    1, "days",   1, "days", "time"
 "ocean_Agulhas_section",  1, "days",   1, "days", "time"
 
-#==================
-# OCEAN DIAGNOSTICS
-#==================
+# Ocean diagnostics
 
 # High-frequency 2d
  "ocean_model", "SSH",          "ssh",              "ocean_daily", "all", "mean", "none",2
@@ -31,8 +29,8 @@
  "ocean_model", "KPP_OBLdepth", "KPP_OBLdepth",     "ocean_month", "all", "mean", "none",2
  "ocean_model", "KPP_OBLdepth", "KPP_OBLdepth_max", "ocean_month", "all", "max",  "none",2
  "ocean_model", "KPP_OBLdepth", "KPP_OBLdepth_min", "ocean_month", "all", "min",  "none",2
- "ocean_model", "MLD_0125",     "MLD_0125",         "ocean_month", "all", "mean", "none",2
- "ocean_model", "MLD_user",     "MLD_user",         "ocean_month", "all", "mean", "none",2
+ "ocean_model", "MLD_003",      "MLD_003",          "ocean_month", "all", "mean", "none",2
+ "ocean_model", "subML_N2",     "subML_N2",         "ocean_month", "all", "mean", "none",2
  "ocean_model", "temp",         "temp",             "ocean_month", "all", "mean", "none",2
  "ocean_model", "salt",         "salt",             "ocean_month", "all", "mean", "none",2
  "ocean_model", "u",            "u",                "ocean_month", "all", "mean", "none",2
@@ -64,10 +62,8 @@
  "ocean_model", "Kd_shear",     "Kd_shear",         "ocean_annual", "all", "mean", "none",2
  "ocean_model", "Kd_itides",    "Kd_itides",        "ocean_annual", "all", "mean", "none",2
  "ocean_model", "KPP_Kheat",    "KPP_Kheat",        "ocean_annual", "all", "mean", "none",2
- "ocean_model", "MLD_0125",     "MLD_0125_min",     "ocean_annual", "all", "min",  "none",2
- "ocean_model", "MLD_0125",     "MLD_0125_max",     "ocean_annual", "all", "max",  "none",2
- "ocean_model", "MLD_user",     "MLD_user_min",     "ocean_annual", "all", "min",  "none",2
- "ocean_model", "MLD_user",     "MLD_user_max",     "ocean_annual", "all", "max",  "none",2
+ "ocean_model", "MLD_003",      "MLD_003_min",      "ocean_annual", "all", "min",  "none",2
+ "ocean_model", "MLD_003",      "MLD_003_max",      "ocean_annual", "all", "max",  "none",2
  "ocean_model", "uh",           "uh",               "ocean_annual", "all", "mean", "none",2
  "ocean_model", "vh",           "vh",               "ocean_annual", "all", "mean", "none",2
  "ocean_model", "T_ady",        "T_ady",            "ocean_annual", "all", "mean", "none",2

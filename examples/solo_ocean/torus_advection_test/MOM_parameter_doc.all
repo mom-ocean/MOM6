@@ -1198,6 +1198,9 @@ REG_SFC_DEFICIT_TOLERANCE = 0.5 !   [nondim] default = 0.5
                                 ! The value of the relative thickness deficit at which
                                 ! to start modifying the layer structure when
                                 ! REGULARIZE_SURFACE_LAYERS is true.
+ALLOW_CLOCKS_IN_OMP_LOOPS = True !   [Boolean] default = True
+                                ! If true, clocks can be called from inside loops that can
+                                ! be threaded. To run with multiple threads, set to False.
 
 ! === module MOM_opacity ===
 VAR_PEN_SW = False              !   [Boolean] default = False
