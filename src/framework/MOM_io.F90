@@ -228,30 +228,31 @@ subroutine create_file(unit, filename, vars, novars, G, fields, threading, &
                         " has unrecognized t_grid "//trim(vars(k)%t_grid))
     end select
   end do
-
+! Specify all optional arguments to mpp_write_meta: name, units, longname, cartesian, calendar, sense, domain, data, min)
+! Otherwise if optional arguments are added to mpp_write_meta the compiler may (and in case of GNU is) get confused abd crash
   if (use_lath) &
-    call mpp_write_meta(unit, axis_lath, "lath", G%y_axis_units, "Latitude", &
-                   'Y', domain = y_domain, data=G%gridLatT(G%jsg:G%jeg))
+    call mpp_write_meta(unit, axis_lath, name="lath", units=G%y_axis_units, longname="Latitude", &
+                   cartesian='Y', domain = y_domain, data=G%gridLatT(G%jsg:G%jeg))
 
   if (use_lonh) &
-    call mpp_write_meta(unit, axis_lonh, "lonh", G%x_axis_units, "Longitude", &
-                   'X', domain = x_domain, data=G%gridLonT(G%isg:G%ieg))
+    call mpp_write_meta(unit, axis_lonh, name="lonh", units=G%x_axis_units, longname="Longitude", &
+                   cartesian='X', domain = x_domain, data=G%gridLonT(G%isg:G%ieg))
 
   if (use_latq) &
-    call mpp_write_meta(unit, axis_latq, "latq", G%y_axis_units, "Latitude", &
-                   'Y', domain = y_domain, data=G%gridLatB(G%JsgB:G%JegB))
+    call mpp_write_meta(unit, axis_latq, name="latq", units=G%y_axis_units, longname="Latitude", &
+                   cartesian='Y', domain = y_domain, data=G%gridLatB(G%JsgB:G%JegB))
 
   if (use_lonq) &
-    call mpp_write_meta(unit, axis_lonq, "lonq", G%x_axis_units, "Longitude", &
-                   'X', domain = x_domain, data=G%gridLonB(G%IsgB:G%IegB))
+    call mpp_write_meta(unit, axis_lonq, name="lonq", units=G%x_axis_units, longname="Longitude", &
+                   cartesian='X', domain = x_domain, data=G%gridLonB(G%IsgB:G%IegB))
 
   if (use_layer) &
-    call mpp_write_meta(unit, axis_layer, "Layer", trim(G%GV%zAxisUnits), &
-          "Layer "//trim(G%GV%zAxisLongName), 'Z', sense=1, data=layer_val)
+    call mpp_write_meta(unit, axis_layer, name="Layer", units=trim(G%GV%zAxisUnits), &
+          longname="Layer "//trim(G%GV%zAxisLongName), cartesian='Z', sense=1, data=layer_val)
 
   if (use_int) &
-    call mpp_write_meta(unit, axis_int, "Interface", trim(G%GV%zAxisUnits), &
-          "Interface "//trim(G%GV%zAxisLongName), 'Z', sense=1, data=interface_val)
+    call mpp_write_meta(unit, axis_int, name="Interface", units=trim(G%GV%zAxisUnits), &
+          longname="Interface "//trim(G%GV%zAxisLongName), cartesian='Z', sense=1, data=interface_val)
 
   if (use_time) then ; if (present(timeunit)) then
     ! Set appropriate units, depending on the value.
@@ -269,9 +270,9 @@ subroutine create_file(unit, filename, vars, novars, G, fields, threading, &
       write(time_units,'(es8.2," s")') timeunit
     endif
 
-    call mpp_write_meta(unit, axis_time, "Time", time_units, "Time", 'T')
+    call mpp_write_meta(unit, axis_time, name="Time", units=time_units, longname="Time", cartesian='T')
   else
-    call mpp_write_meta(unit, axis_time, "Time", "days", "Time", 'T')
+    call mpp_write_meta(unit, axis_time, name="Time", units="days", longname="Time",cartesian= 'T')
   endif ; endif
 
   if (use_periodic) then
@@ -280,8 +281,8 @@ subroutine create_file(unit, filename, vars, novars, G, fields, threading, &
     ! Define a periodic axis with unit labels.
     allocate(period_val(num_periods))
     do k=1,num_periods ; period_val(k) = real(k) ; enddo
-    call mpp_write_meta(unit, axis_periodic, "Period", "nondimensional", &
-          "Periods for cyclical varaiables", 't', data=period_val)
+    call mpp_write_meta(unit, axis_periodic, name="Period", units="nondimensional", &
+          longname="Periods for cyclical varaiables", cartesian= 't', data=period_val)
     deallocate(period_val)
   endif
 
