@@ -51,7 +51,7 @@ module midas_vertmap
 
   implicit none ; private
   
-  public tracer_z_init, determine_temperature, fill_miss_2d, fill_boundaries
+  public tracer_z_init, determine_temperature, fill_boundaries
   public find_interfaces, meshgrid
 #endif
 
@@ -255,7 +255,7 @@ integer :: n,i,j,k,l,nx,ny,nz,nt,kz
 integer :: k_top,k_bot,k_bot_prev,kk,kstart
 real    :: sl_tr
 real, dimension(size(tr_in,3)) :: wt,z1,z2
-logical :: debug_msg = .true.,debug_=.false.
+logical :: debug_msg = .false.,debug_=.false.
     
 nx = size(tr_in,1); ny=size(tr_in,2); nz = size(tr_in,3) 
 
@@ -295,8 +295,8 @@ do j=1,ny
       elseif (e_1d(k) < z_edges(nlevs_data(i,j)+1)) then
         if (debug_msg) then
           print *,'*** WARNING : Found interface below valid range of z data '
-          print *,'(i,j,nlevs,z_bottom,interface)= ',&
-               i,j,nlevs_data(i,j),z_edges(nlevs_data(i,j)+1),e_1d(k)
+          print *,'(i,j,z_bottom,interface)= ',&
+               i,j,z_edges(nlevs_data(i,j)+1),e_1d(k)
           print *,'z_edges= ',z_edges
           print *,'e=',e_1d
           print *,'*** I will extrapolate below using the bottom-most valid values'
@@ -618,203 +618,6 @@ return
 end subroutine determine_temperature
 
  
-function fill_miss_2d(a,good,fill,prev,cyclic_x,tripolar_n,smooth,num_pass,relc,crit,keep_bug) result(aout)
-!
-!# Use ICE-9 algorithm to populate points (fill=1) with 
-!# valid data (good=1). If no information is available,
-!# Then use a previous guess (prev). Optionally (smooth) 
-!# blend the filled points to achieve a more desirable result.
-!
-!  (in)        a   : input 2-d array with missing values 
-!  (in)     good   : valid data mask for incoming array (1==good data; 0==missing data)
-!  (in)     fill   : same shape array of points which need filling (1==please fill;0==leave it alone)   
-!  (in)     prev   : first guess where isolated holes exist,
-!  (in) cyclic_x   : use cyclic boundary conditions in x direction
-!  (in) tripolar_n : use tripolar boundary condition in y direction   
-!
-#ifdef PY_SOLO
-real(kind=8), dimension(:,:), intent(in) :: a
-integer, dimension(size(a,1),size(a,2)), intent(in) :: good,fill
-real(kind=8), dimension(size(a,1),size(a,2)), optional, intent(in) :: prev
-logical, intent(in), optional :: cyclic_x, tripolar_n
-logical, intent(in), optional :: smooth
-integer, intent(in), optional :: num_pass
-real(kind=8), intent(in), optional    :: relc,crit
-logical, intent(in), optional :: keep_bug
-
-real, dimension(size(a,1),size(a,2)) :: aout,b,r
-integer, dimension(size(a,1),size(a,2)) :: fill_pts,good_,good_new
-#else
-real, dimension(:,:), intent(in) :: a
-integer, dimension(size(a,1),size(a,2)), intent(in) :: good,fill
-real, dimension(size(a,1),size(a,2)), optional, intent(in) :: prev
-logical, intent(in), optional :: cyclic_x, tripolar_n
-logical, intent(in), optional :: smooth
-integer, intent(in), optional :: num_pass
-real, intent(in), optional    :: relc,crit
-logical, intent(in), optional :: keep_bug
-   
-real, dimension(size(a,1),size(a,2)) :: aout,b,r
-integer, dimension(size(a,1),size(a,2)) :: fill_pts,good_,good_new   
-#endif   
-integer :: nfill, i,j,ngood,nfill_prev,nx,ny,ip,jp,im,jm,ijp
-real    :: east,west,north,south,sor
-integer :: g,ge,gw,gn,gs,k
-logical :: xcyclic,tripolar_north,do_smooth,siena_bug
-
-integer, parameter :: num_pass_default = 100
-real, parameter :: relc_default = 0.25, crit_default = 1.e-5
-   
-integer :: npass
-real    :: relax_coeff, acrit
-   
-xcyclic=.false.
-if (PRESENT(cyclic_x)) xcyclic=cyclic_x
-
-npass = num_pass_default
-if (PRESENT(num_pass)) npass = num_pass
-
-relax_coeff = relc_default
-if (PRESENT(relc)) relax_coeff = relc
-
-acrit = crit_default
-if (PRESENT(crit)) acrit = crit
-
-siena_bug=.false.
-if (PRESENT(keep_bug)) siena_bug = keep_bug
-
-tripolar_north=.false.
-if (PRESENT(tripolar_n)) tripolar_north=tripolar_n
-
-do_smooth=.false.
-if (PRESENT(smooth)) do_smooth=smooth
-   
-nx=size(a,1);ny=size(a,2)
-   
-aout(:,:)=a(:,:)
-   
-fill_pts(:,:)=fill(:,:)
-nfill = sum(fill)
-nfill_prev = nfill
-good_(:,:)=good(:,:)
-r(:,:)=0.0
-b(:,:)=aout(:,:)
-good_new(:,:)=good_(:,:)
-
-
-do while (nfill > 0)
-  do j=1,ny
-    i_loop: do i=1,nx
-      g = good_(i,j)
-      if (good_(i,j)>0 .or. fill(i,j) .eq. 0) cycle i_loop
-      ip=i+1;im=i-1            
-      jp=j+1;jm=j-1
-      ijp=i
-      if (xcyclic) then
-        if (ip.eq.nx+1) ip=1
-        if (im.eq.0) im=nx
-      else
-        if (ip.eq.nx+1) ip=nx
-        if (im.eq.0) im=1
-      endif
-      if (jm .eq. 0) jm=1
-      if (tripolar_north) then
-        if (jp.eq.ny+1) then
-          jp=ny;ijp=nx-i+1
-        endif
-      else
-        if (jp.eq.ny+1) then
-          jp=ny;ijp=i
-        endif
-      endif
-      ge=good_(ip,j);gw=good_(im,j)
-      gn=good_(ijp,jp);gs=good_(i,jm)
-      east=0.0;west=0.0;north=0.0;south=0.0
-      if (ge.eq.1) east=aout(ip,j)*ge
-      if (gw.eq.1) west=aout(im,j)*gw
-      if (gn.eq.1) north=aout(ijp,jp)*gn
-      if (gs.eq.1) south=aout(i,jm)*gs                        
-      ngood = ge+gw+gn+gs
-      if (ngood > 0) then
-        b(i,j)=(east+west+north+south)/ngood
-        fill_pts(i,j)=0
-        good_new(i,j)=1
-      endif
-    enddo i_loop
-  enddo
-
-      
-  aout(:,:)=b(:,:)
-  good_(:,:)=good_new(:,:)
-  nfill_prev=nfill
-  nfill = sum(fill_pts)
-
-  if (nfill == nfill_prev .and. PRESENT(prev)) then
-    do j=1,ny
-      do i=1,nx
-        if (fill_pts(i,j).eq.1) then
-          aout(i,j)=prev(i,j)
-          fill_pts(i,j)=0
-        endif
-      enddo
-    enddo
-  else if (nfill .eq. nfill_prev) then
-    print *,&
-        'Unable to fill missing points using either data at the same vertical level from a connected basin'//&
-        'or using a point from a previous vertical level.  Make sure that the original data has some valid'//&
-        'data in all basins.'
-    print *,'nfill=',nfill
-  endif
-
-  nfill = sum(fill_pts)
-      
-end do
-
-if (do_smooth) then
-  do k=1,npass
-    do j=1,ny
-      do i=1,nx
-        sor=0.0
-        if (fill(i,j) .eq. 1 .and. good(i,j) .eq. 0) sor=relax_coeff           
-        ip=i+1;im=i-1
-        jp=j+1;jm=j-1
-        ijp=i
-        if (xcyclic) then
-          if (ip.eq.nx+1) ip=1
-          if (im.eq.0) im=nx
-        else
-          if (ip.eq.nx+1) ip=nx
-          if (im.eq.0) im=1
-        endif
-        if (jm .eq. 0) jm=1
-        if (tripolar_north) then
-           if (jp.eq.ny+1) then
-              jp=ny;ijp=nx-i+1
-           endif
-        else
-           if (jp.eq.ny+1) then
-              jp=ny;ijp=i
-           endif
-        endif
-        east=min(fill(i,j),fill(ip,j));west=min(fill(i,j),fill(im,j))
-        north=min(fill(i,j),fill(ijp,jp));south=min(fill(i,j),fill(i,jm))
-            
-        r(i,j) = sor*(south*aout(i,jm)+north*aout(ijp,jp)+west*aout(im,j)+east*aout(ip,j) - (south+north+west+east)*aout(i,j))
-      enddo
-    enddo
-      
-    aout(:,:)=r(:,:)+aout(:,:)
-    
-    if (maxval(abs(r)) <= acrit) exit
-  enddo
-endif
-
-return
-
-end function fill_miss_2d
-
-
-
 subroutine find_overlap(e, Z_top, Z_bot, k_max, k_start, k_top, k_bot, wt, z1, z2)
 
 !   This subroutine determines the layers bounded by interfaces e that overlap

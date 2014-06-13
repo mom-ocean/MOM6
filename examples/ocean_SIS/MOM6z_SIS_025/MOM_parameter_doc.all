@@ -416,9 +416,6 @@ INIT_LAYERS_FROM_Z_FILE = True  !   [Boolean] default = False
                                 ! If true, intialize the layer thicknesses, temperatures,
                                 ! and salnities from a Z-space file on a latitude-
                                 ! longitude grid.
-USE_OLD_HINTERP = True          !   [Boolean] default = True
-                                ! If true, use older version of hinterp,
-                                ! in order to reproduce siena answers.Recommended setting is False
 TEMP_SALT_Z_INIT_FILE = "WOA05_pottemp_salt.nc" ! default = "temp_salt_z.nc"
                                 ! The name of the z-space input file used to initialize
                                 ! the layer thicknesses, temperatures and salinities.

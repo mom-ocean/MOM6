@@ -107,7 +107,7 @@ ENTHALPY_UNITS = 1.0            !   [J kg-1] default = 1.0
                                 ! A constant that rescales enthalpy from J/kg to a
                                 ! different scale in its internal representation.  Changing
                                 ! this by a power of 2 is useful for debugging, as answers
-                                ! should not change.
+                                ! should not change.  A negative values is taken as an inverse.
 TIMEUNIT = 8.64E+04             !   [s] default = 8.64E+04
                                 ! The time unit for ICE_STATS_INTERVAL.
 ICE_STATS_INTERVAL = 0.25       !   [days] default = 1.0
