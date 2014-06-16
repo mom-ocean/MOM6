@@ -690,6 +690,10 @@ subroutine zonal_face_thickness(u, h, hL, hR, h_u, dt, G, LB, vol_CFL, visc_rem_
   integer :: i, j, k, ish, ieh, jsh, jeh, nz
   ish = LB%ish ; ieh = LB%ieh ; jsh = LB%jsh ; jeh = LB%jeh ; nz = G%ke
 
+!$OMP parallel default(none) shared(ish,ieh,jsh,jeh,nz,u,vol_CFL,dt,G, &
+!$OMP                               hL,hR,h,h_u,visc_rem_u) &
+!$OMP                       private(CFL,curv_3,h_marg)
+!$OMP do
   do k=1,nz ; do j=jsh,jeh ; do I=ish-1,ieh
     if (u(I,j,k) > 0.0) then
       if (vol_CFL) then ; CFL = (u(I,j,k) * dt) * (G%dy_Cu(I,j) * G%IareaT(i,j))
@@ -714,8 +718,14 @@ subroutine zonal_face_thickness(u, h, hL, hR, h_u, dt, G, LB, vol_CFL, visc_rem_
     endif
     !   This could perhaps be replaced by h_avg.
     h_u(I,j,k) = h_marg
-    if (present(visc_rem_u)) h_u(I,j,k) = h_u(I,j,k) * visc_rem_u(I,j,k) 
-  enddo ; enddo ; enddo
+  enddo; enddo ; enddo
+  if (present(visc_rem_u)) then
+!$OMP do
+    do k=1,nz ; do j=jsh,jeh ; do I=ish-1,ieh
+      h_u(I,j,k) = h_u(I,j,k) * visc_rem_u(I,j,k) 
+    enddo ; enddo ; enddo
+  endif
+!$OMP end parallel
 
 end subroutine zonal_face_thickness
 
@@ -1426,6 +1436,10 @@ subroutine merid_face_thickness(v, h, hL, hR, h_v, dt, G, LB, vol_CFL, visc_rem_
   integer :: i, j, k, ish, ieh, jsh, jeh, nz
   ish = LB%ish ; ieh = LB%ieh ; jsh = LB%jsh ; jeh = LB%jeh ; nz = G%ke
 
+!$OMP parallel default(none) shared(ish,ieh,jsh,jeh,nz,v,vol_CFL,dt,G, &
+!$OMP                               hL,hR,h,h_v,visc_rem_v) &
+!$OMP                       private(CFL,curv_3,h_marg)
+!$OMP do
   do k=1,nz ; do J=jsh-1,jeh ; do i=ish,ieh
     if (v(i,J,k) > 0.0) then
       if (vol_CFL) then ; CFL = (v(i,J,k) * dt) * (G%dx_Cv(i,J) * G%IareaT(i,j))
@@ -1451,8 +1465,15 @@ subroutine merid_face_thickness(v, h, hL, hR, h_v, dt, G, LB, vol_CFL, visc_rem_
     endif
     !   This could perhaps be replaced by h_avg.
     h_v(i,J,k) = h_marg
-    if (present(visc_rem_v)) h_v(i,J,k) = h_v(i,J,k) * visc_rem_v(i,J,k)
   enddo ; enddo ; enddo
+    
+  if (present(visc_rem_v)) then
+!$OMP do
+    do k=1,nz ; do J=jsh-1,jeh ; do i=ish,ieh
+      h_v(i,J,k) = h_v(i,J,k) * visc_rem_v(i,J,k)
+    enddo ; enddo ; enddo
+  endif
+!$OMP end parallel
 
 end subroutine merid_face_thickness
 

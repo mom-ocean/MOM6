@@ -370,7 +370,13 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 
   showCallTree = callTree_showQuery()
   if (showCallTree) call callTree_enter("step_MOM_dyn_split_RK2(), MOM_dynamics_split_RK2.F90")
-  up(:,:,:) = 0.0 ; vp(:,:,:) = 0.0 ; hp(:,:,:) = h(:,:,:)
+
+!$OMP parallel do default(none) shared(nz,G,up,vp,hp,h)
+  do k = 1, nz
+    do j=G%jsd,G%jed   ; do i=G%isdB,G%iedB ;  up(i,j,k) = 0.0 ; enddo ; enddo
+    do j=G%jsdB,G%jedB ; do i=G%isd,G%ied   ;  vp(i,j,k) = 0.0 ; enddo ; enddo
+    do j=G%jsd,G%jed   ; do i=G%isd,G%ied   ;  hp(i,j,k) = h(i,j,k) ; enddo ; enddo
+  enddo
 
   ! Update CFL truncation value as function of time
   call updateCFLtruncationValue(Time_local, CS%vertvisc_CSp)
@@ -459,6 +465,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
     else
       Pa_to_eta = 1.0 / G%H_to_Pa
     endif
+!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,eta_PF_start,CS,Pa_to_eta,p_surf_begin,p_surf_end)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       eta_PF_start(i,j) = CS%eta_PF(i,j) - Pa_to_eta * &
                           (p_surf_begin(i,j) - p_surf_end(i,j))

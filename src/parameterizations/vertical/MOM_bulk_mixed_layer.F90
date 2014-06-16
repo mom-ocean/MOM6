@@ -440,18 +440,29 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
     reset_diags = .false.  ! This is the second call to mixedlayer.
 
   if (reset_diags) then
-    if (CS%TKE_diagnostics) then ; do j=js,je ; do i=is,ie
-      CS%diag_TKE_wind(i,j) = 0.0 ; CS%diag_TKE_RiBulk(i,j) = 0.0
-      CS%diag_TKE_conv(i,j) = 0.0 ; CS%diag_TKE_pen_SW(i,j) = 0.0
-      CS%diag_TKE_mixing(i,j) = 0.0 ; CS%diag_TKE_mech_decay(i,j) = 0.0
-      CS%diag_TKE_conv_decay(i,j) = 0.0 ; CS%diag_TKE_conv_s2(i,j) = 0.0
-    enddo ; enddo ; endif
-    if (ALLOCATED(CS%diag_PE_detrain)) then ; do j=js,je ; do i=is,ie
-      CS%diag_PE_detrain(i,j) = 0.0
-    enddo ; enddo ; endif
-    if (ALLOCATED(CS%diag_PE_detrain2)) then ; do j=js,je ; do i=is,ie
-      CS%diag_PE_detrain2(i,j) = 0.0
-    enddo ; enddo ; endif
+!$OMP parallel default(none) shared(is,ie,js,je,CS)
+    if (CS%TKE_diagnostics) then 
+!$OMP do
+      do j=js,je ; do i=is,ie
+        CS%diag_TKE_wind(i,j) = 0.0 ; CS%diag_TKE_RiBulk(i,j) = 0.0
+        CS%diag_TKE_conv(i,j) = 0.0 ; CS%diag_TKE_pen_SW(i,j) = 0.0
+        CS%diag_TKE_mixing(i,j) = 0.0 ; CS%diag_TKE_mech_decay(i,j) = 0.0
+        CS%diag_TKE_conv_decay(i,j) = 0.0 ; CS%diag_TKE_conv_s2(i,j) = 0.0
+      enddo ; enddo 
+    endif
+    if (ALLOCATED(CS%diag_PE_detrain)) then 
+!$OMP do
+      do j=js,je ; do i=is,ie
+        CS%diag_PE_detrain(i,j) = 0.0
+      enddo ; enddo 
+    endif
+    if (ALLOCATED(CS%diag_PE_detrain2)) then 
+!$OMP do
+      do j=js,je ; do i=is,ie
+        CS%diag_PE_detrain2(i,j) = 0.0
+      enddo ; enddo 
+    endif
+!$OMP end parallel
   endif
 
   if (CS%ML_resort) then

@@ -1069,15 +1069,22 @@ subroutine adjustments_dyn_legacy_split(u, v, h, dt, G, CS)
     call continuity(u, v, h, h_temp, uh_temp, vh_temp, dt, G, &
                     CS%continuity_CSp, OBC=CS%OBC)
     call cpu_clock_end(id_clock_continuity)
-
-    do j=js,je ; do I=is-1,ie ; CS%uhbt_in(I,j) = uh_temp(I,j,1) ; enddo ; enddo
-    do k=2,nz ; do j=js,je ; do I=is-1,ie
-      CS%uhbt_in(I,j) = CS%uhbt_in(I,j) + uh_temp(I,j,k)
-    enddo ; enddo ; enddo
-    do J=js-1,je ; do i=is,ie ; CS%vhbt_in(i,J) = vh_temp(i,J,1) ; enddo ; enddo
-    do k=2,nz ; do J=js-1,je ; do i=is,ie
-      CS%vhbt_in(i,J) = CS%vhbt_in(i,J) + vh_temp(i,J,k)
-    enddo ; enddo ; enddo
+!$OMP parallel default(none) shared(is,ie,js,je,nz,CS,uh_temp,vh_temp)
+!$OMP do
+    do j=js,je 
+      do I=is-1,ie ; CS%uhbt_in(I,j) = uh_temp(I,j,1) ; enddo
+      do k=2,nz ; do I=is-1,ie
+        CS%uhbt_in(I,j) = CS%uhbt_in(I,j) + uh_temp(I,j,k)
+      enddo ; enddo 
+    enddo
+!$OMP do
+    do J=js-1,je 
+      do i=is,ie ; CS%vhbt_in(i,J) = vh_temp(i,J,1) ; enddo
+      do k=2,nz ; do i=is,ie
+        CS%vhbt_in(i,J) = CS%vhbt_in(i,J) + vh_temp(i,J,k)
+      enddo ; enddo 
+    enddo
+!$OMP end parallel
     CS%readjust_velocity = .true.
   endif
 
