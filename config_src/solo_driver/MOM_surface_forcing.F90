@@ -67,13 +67,14 @@ module MOM_surface_forcing
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock, only : CLOCK_MODULE
 use MOM_diag_mediator, only : post_data, query_averaging_enabled
-use MOM_diag_mediator, only : register_diag_field, diag_ctrl, safe_alloc_ptr
+use MOM_diag_mediator, only : diag_ctrl, safe_alloc_ptr
 use MOM_domains, only : pass_var, pass_vector, AGRID, To_South, To_West, To_All
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
 use MOM_error_handler,   only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_string_functions, only : uppercase
-use MOM_forcing_type, only : forcing, deallocate_forcing_type
+use MOM_forcing_type, only : forcing, forcing_diags
+use MOM_forcing_type, only : register_forcing_type_diags, deallocate_forcing_type
 use MOM_grid, only : ocean_grid_type
 use MOM_get_input, only : Get_MOM_Input, directories
 use MOM_io, only : file_exists, read_data, slasher, num_timelevels
@@ -100,7 +101,7 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public set_forcing, surface_forcing_init, average_forcing, forcing_save_restart
+public set_forcing, surface_forcing_init, forcing_save_restart
 
 type, public :: surface_forcing_CS ; private
   logical :: use_temperature ! If true, temperature and salinity are used as
@@ -188,14 +189,8 @@ type, public :: surface_forcing_CS ; private
   integer :: evap_last_lev = -1, precip_last_lev = -1, runoff_last_lev = -1
   integer :: SST_last_lev = -1, SSS_last_lev = -1
 
-  integer :: id_taux = -1, id_tauy = -1, id_ustar = -1
-  integer :: id_PminusE = -1, id_evap = -1, id_precip = -1
-  integer :: id_liq_precip = -1, id_froz_precip = -1, id_virt_precip = -1
-  integer :: id_liq_runoff = -1, id_froz_runoff = -1
-  integer :: id_runoff_hflx = -1, id_calving_hflx = -1
-  integer :: id_Net_Heating = -1, id_sw = -1, id_LwLatSens = -1, id_buoy = -1
-  integer :: id_LW = -1, id_lat = -1, id_sens = -1
-  integer :: id_psurf = -1, id_saltflux = -1, id_TKE_tidal = -1, id_heat_rest=-1
+  ! Diagnostics handles
+  type(forcing_diags), public :: handles
 
   type(user_revise_forcing_CS), pointer :: urf_CS => NULL()
   type(user_surface_forcing_CS), pointer :: user_forcing_CSp => NULL()
@@ -848,20 +843,33 @@ subroutine buoyancy_forcing_from_files(state, fluxes, day, dt, G, CS)
       allocate(fluxes%virt_precip(isd:ied,jsd:jed))
       fluxes%virt_precip(:,:) = 0.0
     endif
+    if (.not.associated(fluxes%seaice_melt)) then
+      allocate(fluxes%seaice_melt(isd:ied,jsd:jed))
+      fluxes%seaice_melt(:,:) = 0.0
+    endif
 
     !   Specify the fresh water forcing by setting the following, all in units
     ! of W m-2 and positive for heat fluxes into the ocean.
     if (.not.associated(fluxes%sw)) then
-      allocate(fluxes%sw(isd:ied,jsd:jed)) ; fluxes%sw(:,:) = 0.0
+      allocate(fluxes%sw(isd:ied,jsd:jed))          ; fluxes%sw(:,:)            = 0.0
     endif
     if (.not.associated(fluxes%lw)) then
-      allocate(fluxes%lw(isd:ied,jsd:jed)) ; fluxes%lw(:,:) = 0.0
+      allocate(fluxes%lw(isd:ied,jsd:jed))          ; fluxes%lw(:,:)            = 0.0
     endif
     if (.not.associated(fluxes%latent)) then
-      allocate(fluxes%latent(isd:ied,jsd:jed)) ; fluxes%latent(:,:) = 0.0
+      allocate(fluxes%latent(isd:ied,jsd:jed))      ; fluxes%latent(:,:)        = 0.0
+    endif
+    if (.not.associated(fluxes%latent_evap)) then
+      allocate(fluxes%latent_evap(isd:ied,jsd:jed)) ; fluxes%latent_evap(:,:)   = 0.0
+    endif
+    if (.not.associated(fluxes%latent_fprec)) then
+      allocate(fluxes%latent_fprec(isd:ied,jsd:jed)) ; fluxes%latent_fprec(:,:) = 0.0
+    endif
+    if (.not.associated(fluxes%latent_calve)) then
+      allocate(fluxes%latent_calve(isd:ied,jsd:jed)) ; fluxes%latent_calve(:,:) = 0.0
     endif
     if (.not.associated(fluxes%sens)) then
-      allocate(fluxes%sens(isd:ied,jsd:jed)) ; fluxes%sens(:,:) = 0.0
+      allocate(fluxes%sens(isd:ied,jsd:jed))         ; fluxes%sens(:,:)         = 0.0
     endif
     if (CS%restorebuoy) then
       if (.not.associated(CS%T_Restore)) then
@@ -934,8 +942,9 @@ subroutine buoyancy_forcing_from_files(state, fluxes, day, dt, G, CS)
       call read_data(CS%evaporation_file, CS%evap_var, temp(:,:), &
                      domain=G%Domain%mpp_domain, timelevel=time_lev)
       do j=js,je ; do i=is,ie
-        fluxes%latent(i,j) = -latent_heat_evap*temp(i,j)
-        fluxes%evap(i,j) = -temp(i,j)
+        fluxes%latent(i,j)      = -latent_heat_evap*temp(i,j)
+        fluxes%latent_evap(i,j) = fluxes%latent(i,j)
+        fluxes%evap(i,j)        = -temp(i,j)
       enddo ; enddo
     else
       call read_data(CS%evaporation_file, CS%evap_var, fluxes%evap(:,:), &
@@ -951,6 +960,9 @@ subroutine buoyancy_forcing_from_files(state, fluxes, day, dt, G, CS)
     if (.not.CS%archaic_OMIP_file) then
       call read_data(CS%latentheat_file, CS%latent_var, fluxes%latent(:,:), &
                      domain=G%Domain%mpp_domain, timelevel=time_lev)
+      do j=js,je ; do i=is,ie
+        fluxes%latent_evap(i,j) = fluxes%latent(i,j)
+      enddo ; enddo
     endif
     CS%latent_last_lev = time_lev
 
@@ -1049,15 +1061,16 @@ subroutine buoyancy_forcing_from_files(state, fluxes, day, dt, G, CS)
 
 !   Mask out land points.
     do j=js,je ; do i=is,ie
-      fluxes%evap(i,j) = fluxes%evap(i,j) * G%mask2dT(i,j)
+      fluxes%evap(i,j)        = fluxes%evap(i,j)        * G%mask2dT(i,j)
       fluxes%liq_precip(i,j)  = fluxes%liq_precip(i,j)  * G%mask2dT(i,j)
       fluxes%froz_precip(i,j) = fluxes%froz_precip(i,j) * G%mask2dT(i,j)
       fluxes%liq_runoff(i,j)  = fluxes%liq_runoff(i,j)  * G%mask2dT(i,j)
       fluxes%froz_runoff(i,j) = fluxes%froz_runoff(i,j) * G%mask2dT(i,j)
-      fluxes%LW(i,j) = fluxes%LW(i,j) * G%mask2dT(i,j)
-      fluxes%latent(i,j) = fluxes%latent(i,j) * G%mask2dT(i,j)
-      fluxes%sens(i,j) = fluxes%sens(i,j) * G%mask2dT(i,j)
-      fluxes%sw(i,j) = fluxes%sw(i,j) * G%mask2dT(i,j)
+      fluxes%LW(i,j)          = fluxes%LW(i,j)          * G%mask2dT(i,j)
+      fluxes%latent(i,j)      = fluxes%latent(i,j)      * G%mask2dT(i,j)
+      fluxes%latent_evap(i,j) = fluxes%latent_evap(i,j) * G%mask2dT(i,j)
+      fluxes%sens(i,j)        = fluxes%sens(i,j)        * G%mask2dT(i,j)
+      fluxes%sw(i,j)          = fluxes%sw(i,j)          * G%mask2dT(i,j)
     enddo ; enddo
   endif ! time_lev /= CS%buoy_last_lev_read
 
@@ -1199,6 +1212,10 @@ subroutine buoyancy_forcing_from_data_override(state, fluxes, day, dt, G, CS)
       allocate(fluxes%virt_precip(isd:ied,jsd:jed))
       fluxes%virt_precip(:,:) = 0.0
     endif
+    if (.not.associated(fluxes%seaice_melt)) then
+      allocate(fluxes%seaice_melt(isd:ied,jsd:jed))
+      fluxes%seaice_melt(:,:) = 0.0
+    endif
 
     !   Specify the fresh water forcing by setting the following, all in units
     ! of W m-2 and positive for heat fluxes into the ocean.
@@ -1210,6 +1227,9 @@ subroutine buoyancy_forcing_from_data_override(state, fluxes, day, dt, G, CS)
     endif
     if (.not.associated(fluxes%latent)) then
       allocate(fluxes%latent(isd:ied,jsd:jed)) ; fluxes%latent(:,:) = 0.0
+    endif
+    if (.not.associated(fluxes%latent_evap)) then
+      allocate(fluxes%latent_evap(isd:ied,jsd:jed)) ; fluxes%latent_evap(:,:) = 0.0
     endif
     if (.not.associated(fluxes%sens)) then
       allocate(fluxes%sens(isd:ied,jsd:jed)) ; fluxes%sens(:,:) = 0.0
@@ -1247,7 +1267,8 @@ subroutine buoyancy_forcing_from_data_override(state, fluxes, day, dt, G, CS)
   do j=js,je ; do i=is,ie
      fluxes%evap(i,j) = -fluxes%evap(i,j)  ! Normal convention is positive into the ocean
                                            ! but evap is normally a positive quantity in the files
-     fluxes%latent(i,j) = latent_heat_evap*fluxes%evap(i,j)
+     fluxes%latent(i,j)      = latent_heat_evap*fluxes%evap(i,j)
+     fluxes%latent_evap(i,j) = fluxes%latent(i,j)
   enddo; enddo
 
   call data_override('OCN', 'sens', fluxes%sens(:,:), day, &
@@ -1285,15 +1306,16 @@ subroutine buoyancy_forcing_from_data_override(state, fluxes, day, dt, G, CS)
 
 !   Mask out land points.
   do j=js,je ; do i=is,ie
-     fluxes%evap(i,j) = fluxes%evap(i,j) * G%mask2dT(i,j)
+     fluxes%evap(i,j)        = fluxes%evap(i,j)        * G%mask2dT(i,j)
      fluxes%liq_precip(i,j)  = fluxes%liq_precip(i,j)  * G%mask2dT(i,j)
      fluxes%froz_precip(i,j) = fluxes%froz_precip(i,j) * G%mask2dT(i,j)
      fluxes%liq_runoff(i,j)  = fluxes%liq_runoff(i,j)  * G%mask2dT(i,j)
      fluxes%froz_runoff(i,j) = fluxes%froz_runoff(i,j) * G%mask2dT(i,j)
-     fluxes%LW(i,j) = fluxes%LW(i,j) * G%mask2dT(i,j)
-     fluxes%latent(i,j) = fluxes%latent(i,j) * G%mask2dT(i,j)
-     fluxes%sens(i,j) = fluxes%sens(i,j) * G%mask2dT(i,j)
-     fluxes%sw(i,j) = fluxes%sw(i,j) * G%mask2dT(i,j)
+     fluxes%LW(i,j)          = fluxes%LW(i,j)          * G%mask2dT(i,j)
+     fluxes%latent(i,j)      = fluxes%latent(i,j)      * G%mask2dT(i,j)
+     fluxes%latent_evap(i,j) = fluxes%latent_evap(i,j) * G%mask2dT(i,j)
+     fluxes%sens(i,j)        = fluxes%sens(i,j)        * G%mask2dT(i,j)
+     fluxes%sw(i,j)          = fluxes%sw(i,j)          * G%mask2dT(i,j)
   enddo; enddo
 
 
@@ -1397,6 +1419,10 @@ subroutine buoyancy_forcing_zero(state, fluxes, day, dt, G, CS)
       allocate(fluxes%virt_precip(G%isd:G%ied,G%jsd:G%jed))
       fluxes%virt_precip(:,:) = 0.0
     endif
+    if (.not.associated(fluxes%seaice_melt)) then
+      allocate(fluxes%seaice_melt(G%isd:G%ied,G%jsd:G%jed))
+      fluxes%seaice_melt(:,:) = 0.0
+    endif
 
     !   Specify the heat fluxes by setting the following, all in units
     ! of W m-2 and positive for heat fluxes into the ocean.
@@ -1408,6 +1434,9 @@ subroutine buoyancy_forcing_zero(state, fluxes, day, dt, G, CS)
     endif
     if (.not.associated(fluxes%latent)) then
       allocate(fluxes%latent(G%isd:G%ied,G%jsd:G%jed)) ; fluxes%latent(:,:) = 0.0
+    endif
+    if (.not.associated(fluxes%latent_evap)) then
+      allocate(fluxes%latent_evap(G%isd:G%ied,G%jsd:G%jed)) ; fluxes%latent_evap(:,:) = 0.0
     endif
     if (.not.associated(fluxes%sens)) then
       allocate(fluxes%sens(G%isd:G%ied,G%jsd:G%jed)) ; fluxes%sens(:,:) = 0.0
@@ -1422,10 +1451,11 @@ subroutine buoyancy_forcing_zero(state, fluxes, day, dt, G, CS)
 
   if (CS%use_temperature) then
     do j=js,je ; do i=is,ie
-      fluxes%sw(i,j) = 0.0
-      fluxes%lw(i,j) = 0.0
-      fluxes%latent(i,j) = 0.0
-      fluxes%sens(i,j) = 0.0
+      fluxes%sw(i,j)         = 0.0
+      fluxes%lw(i,j)         = 0.0
+      fluxes%latent(i,j)     = 0.0
+      fluxes%latent_evap(i,j)= 0.0
+      fluxes%sens(i,j)       = 0.0
       fluxes%liq_precip(i,j) = 0.0
     enddo ; enddo
   else
@@ -1488,6 +1518,10 @@ subroutine buoyancy_forcing_const(state, fluxes, day, dt, G, CS)
       allocate(fluxes%virt_precip(G%isd:G%ied,G%jsd:G%jed))
       fluxes%virt_precip(:,:) = 0.0
     endif
+    if (.not.associated(fluxes%seaice_melt)) then
+      allocate(fluxes%seaice_melt(G%isd:G%ied,G%jsd:G%jed))
+      fluxes%seaice_melt(:,:) = 0.0
+    endif
 
     !   Specify the heat fluxes by setting the following, all in units
     ! of W m-2 and positive for heat fluxes into the ocean.
@@ -1499,6 +1533,9 @@ subroutine buoyancy_forcing_const(state, fluxes, day, dt, G, CS)
     endif
     if (.not.associated(fluxes%latent)) then
       allocate(fluxes%latent(G%isd:G%ied,G%jsd:G%jed)) ; fluxes%latent(:,:) = 0.0
+    endif
+    if (.not.associated(fluxes%latent_evap)) then
+      allocate(fluxes%latent_evap(G%isd:G%ied,G%jsd:G%jed)) ; fluxes%latent_evap(:,:) = 0.0
     endif
     if (.not.associated(fluxes%sens)) then
       allocate(fluxes%sens(G%isd:G%ied,G%jsd:G%jed)) ; fluxes%sens(:,:) = CS%constantHeatForcing
@@ -1565,9 +1602,9 @@ subroutine buoyancy_forcing_linear(state, fluxes, day, dt, G, CS)
       allocate(fluxes%froz_runoff(G%isd:G%ied,G%jsd:G%jed))
       fluxes%froz_runoff(:,:) = 0.0
     endif
-    if (.not.associated(fluxes%virt_precip)) then
-      allocate(fluxes%virt_precip(G%isd:G%ied,G%jsd:G%jed))
-      fluxes%virt_precip(:,:) = 0.0
+    if (.not.associated(fluxes%seaice_melt)) then
+      allocate(fluxes%seaice_melt(G%isd:G%ied,G%jsd:G%jed))
+      fluxes%seaice_melt(:,:) = 0.0
     endif
 
     !   Specify the heat fluxes by setting the following, all in units
@@ -1581,11 +1618,19 @@ subroutine buoyancy_forcing_linear(state, fluxes, day, dt, G, CS)
     if (.not.associated(fluxes%latent)) then
       allocate(fluxes%latent(G%isd:G%ied,G%jsd:G%jed)) ; fluxes%latent(:,:) = 0.0
     endif
+    if (.not.associated(fluxes%latent_evap)) then
+      allocate(fluxes%latent_evap(G%isd:G%ied,G%jsd:G%jed)) ; fluxes%latent_evap(:,:) = 0.0
+    endif
     if (.not.associated(fluxes%sens)) then
       allocate(fluxes%sens(G%isd:G%ied,G%jsd:G%jed)) ; fluxes%sens(:,:) = 0.0
     endif
-    if (.not.associated(fluxes%heat_restore)) then
-      allocate(fluxes%heat_restore(G%isd:G%ied,G%jsd:G%jed)) ; fluxes%heat_restore(:,:) = 0.0
+    if (CS%restorebuoy) then
+      if (.not.associated(fluxes%heat_restore)) then
+        allocate(fluxes%heat_restore(G%isd:G%ied,G%jsd:G%jed)) ; fluxes%heat_restore(:,:) = 0.0
+      endif
+      if (.not.associated(fluxes%virt_precip)) then
+        allocate(fluxes%virt_precip(G%isd:G%ied,G%jsd:G%jed)) ; fluxes%virt_precip(:,:) = 0.0
+      endif
     endif
   else
     if (.not.associated(fluxes%buoy)) then
@@ -1596,11 +1641,12 @@ subroutine buoyancy_forcing_linear(state, fluxes, day, dt, G, CS)
   ! This case has no surface buoyancy forcing.
   if (CS%use_temperature) then
     do j=js,je ; do i=is,ie
-      fluxes%sw(i,j) = 0.0
-      fluxes%lw(i,j) = 0.0
-      fluxes%latent(i,j) = 0.0
-      fluxes%sens(i,j) = 0.0
-      fluxes%liq_precip(i,j) = 0.0
+      fluxes%sw(i,j)          = 0.0
+      fluxes%lw(i,j)          = 0.0
+      fluxes%latent(i,j)      = 0.0
+      fluxes%latent_evap(i,j) = 0.0
+      fluxes%sens(i,j)        = 0.0
+      fluxes%liq_precip(i,j)  = 0.0
     enddo ; enddo
   else
     do j=js,je ; do i=is,ie
@@ -1650,109 +1696,6 @@ subroutine buoyancy_forcing_linear(state, fluxes, day, dt, G, CS)
   endif                                             ! end RESTOREBUOY
 
 end subroutine buoyancy_forcing_linear
-
-subroutine average_forcing(fluxes, dt, G, CS)
-  type(forcing),         intent(in) :: fluxes
-  real,                  intent(in) :: dt
-  type(ocean_grid_type), intent(in) :: G
-  type(surface_forcing_CS), pointer    :: CS
-!   This subroutine offers forcing fields for time averaging.  These
-! fields must first be registered in surface_forcing_init (below).
-! This subroutine will typically not be modified, except when new
-! forcing fields are added.
-!
-! Arguments: fluxes - A structure containing pointers to any possible
-!                     forcing fields.  Unused fields are unallocated.
-!  (in)      dt - The amount of time over which to average.
-!  (in)      G - The ocean's grid structure.
-!  (in)      CS - A pointer to the control structure returned by a previous
-!                 call to surface_forcing_init.
-  integer :: i,j
-  real, dimension(SZI_(G),SZJ_(G)) :: sum
-
-  call cpu_clock_begin(id_clock_forcing)
-
-  if (query_averaging_enabled(CS%diag)) then
-    if ((CS%id_taux > 0) .and. ASSOCIATED(fluxes%taux)) &
-      call post_data(CS%id_taux, fluxes%taux, CS%diag)
-    if ((CS%id_tauy > 0) .and. ASSOCIATED(fluxes%tauy)) &
-      call post_data(CS%id_tauy, fluxes%tauy, CS%diag)
-    if ((CS%id_ustar > 0) .and. ASSOCIATED(fluxes%ustar)) &
-      call post_data(CS%id_ustar, fluxes%ustar, CS%diag)
-
-    if (CS%id_PminusE > 0) then
-      sum(:,:) = 0.0
-      if (ASSOCIATED(fluxes%liq_precip)) sum(:,:) = sum(:,:)+fluxes%liq_precip(:,:)
-      if (ASSOCIATED(fluxes%froz_precip)) sum(:,:) = sum(:,:)+fluxes%froz_precip(:,:)
-      if (ASSOCIATED(fluxes%evap)) sum(:,:) = sum(:,:)+fluxes%evap(:,:)
-      if (ASSOCIATED(fluxes%liq_runoff)) sum(:,:) = sum(:,:)+fluxes%liq_runoff(:,:)
-      if (ASSOCIATED(fluxes%froz_runoff)) sum(:,:) = sum(:,:)+fluxes%froz_runoff(:,:)
-      if (ASSOCIATED(fluxes%virt_precip)) sum(:,:) = sum(:,:)+fluxes%virt_precip(:,:)
-      call post_data(CS%id_PminusE, sum, CS%diag)
-    endif
-
-    if ((CS%id_evap > 0) .and. ASSOCIATED(fluxes%evap)) &
-      call post_data(CS%id_evap, fluxes%evap, CS%diag)
-    if ((CS%id_precip > 0) .and. ASSOCIATED(fluxes%liq_precip) &
-         .and. ASSOCIATED(fluxes%froz_precip)) then
-      sum(:,:) = fluxes%liq_precip(:,:) + fluxes%froz_precip(:,:)
-      call post_data(CS%id_precip, sum, CS%diag)
-    endif
-
-    if ((CS%id_liq_precip > 0) .and. ASSOCIATED(fluxes%liq_precip)) &
-      call post_data(CS%id_liq_precip, fluxes%liq_precip, CS%diag)
-    if ((CS%id_froz_precip > 0) .and. ASSOCIATED(fluxes%froz_precip)) &
-      call post_data(CS%id_froz_precip, fluxes%froz_precip, CS%diag)
-    if ((CS%id_virt_precip > 0) .and. ASSOCIATED(fluxes%virt_precip)) &
-      call post_data(CS%id_virt_precip, fluxes%virt_precip, CS%diag)
-    if ((CS%id_liq_runoff > 0) .and. ASSOCIATED(fluxes%liq_runoff)) &
-      call post_data(CS%id_liq_runoff, fluxes%liq_runoff, CS%diag)
-    if ((CS%id_froz_runoff > 0) .and. ASSOCIATED(fluxes%froz_runoff)) &
-      call post_data(CS%id_froz_runoff, fluxes%froz_runoff, CS%diag)
-
-    if ((CS%id_runoff_hflx > 0) .and. ASSOCIATED(fluxes%runoff_hflx)) &
-      call post_data(CS%id_runoff_hflx, fluxes%runoff_hflx, CS%diag)
-    if ((CS%id_calving_hflx > 0) .and. ASSOCIATED(fluxes%calving_hflx)) &
-      call post_data(CS%id_calving_hflx, fluxes%calving_hflx, CS%diag)
-
-    if (CS%id_Net_Heating > 0) then
-      sum(:,:) = 0.0
-      if (ASSOCIATED(fluxes%LW)) sum(:,:) = sum(:,:) + fluxes%LW(:,:)
-      if (ASSOCIATED(fluxes%latent)) sum(:,:) = sum(:,:) + fluxes%latent(:,:)
-      if (ASSOCIATED(fluxes%sens)) sum(:,:) = sum(:,:) + fluxes%sens(:,:)
-      if (ASSOCIATED(fluxes%SW)) sum(:,:) = sum(:,:) + fluxes%SW(:,:)
-      call post_data(CS%id_Net_Heating, sum, CS%diag)
-    endif
-    if ((CS%id_LwLatSens > 0) .and. ASSOCIATED(fluxes%lw) .and. &
-         ASSOCIATED(fluxes%latent) .and. ASSOCIATED(fluxes%sens)) then
-      sum(:,:) = (fluxes%lw(:,:) + fluxes%latent(:,:)) + fluxes%sens(:,:)
-      call post_data(CS%id_LwLatSens, sum, CS%diag)
-    endif
-
-    if ((CS%id_sw > 0) .and. ASSOCIATED(fluxes%sw)) &
-      call post_data(CS%id_sw, fluxes%sw, CS%diag)
-    if ((CS%id_LW > 0) .and. ASSOCIATED(fluxes%lw)) &
-      call post_data(CS%id_LW, fluxes%lw, CS%diag)
-    if ((CS%id_lat > 0) .and. ASSOCIATED(fluxes%latent)) &
-      call post_data(CS%id_lat, fluxes%latent, CS%diag)
-    if ((CS%id_sens > 0) .and. ASSOCIATED(fluxes%sens)) &
-      call post_data(CS%id_sens, fluxes%sens, CS%diag)
-    if ((CS%id_heat_rest > 0) .and. ASSOCIATED(fluxes%heat_restore)) &
-      call post_data(CS%id_heat_rest, fluxes%heat_restore, CS%diag)
-
-    if ((CS%id_psurf > 0) .and. ASSOCIATED(fluxes%p_surf)) &
-      call post_data(CS%id_psurf, fluxes%p_surf, CS%diag)
-    if ((CS%id_saltflux > 0) .and. ASSOCIATED(fluxes%salt_flux)) &
-      call post_data(CS%id_saltflux, fluxes%salt_flux, CS%diag)
-    if ((CS%id_TKE_tidal > 0) .and. ASSOCIATED(fluxes%TKE_tidal)) &
-      call post_data(CS%id_TKE_tidal, fluxes%TKE_tidal, CS%diag)
-
-    if ((CS%id_buoy > 0) .and. ASSOCIATED(fluxes%buoy)) &
-      call post_data(CS%id_buoy, fluxes%buoy, CS%diag)
-  endif
-
-  call cpu_clock_end(id_clock_forcing)
-end subroutine average_forcing
 
 subroutine forcing_save_restart(CS, G, Time, directory, time_stamped, &
                                 filename_suffix)
@@ -2101,61 +2044,7 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, tracer_flow_CSp)
     call MESO_surface_forcing_init(Time, G, param_file, diag, CS%MESO_forcing_CSp)
   endif
 
-  CS%id_taux = register_diag_field('ocean_model', 'taux', diag%axesCu1, Time, &
-        'Zonal Wind Stress', 'Pascal')
-  CS%id_tauy = register_diag_field('ocean_model', 'tauy', diag%axesCv1, Time, &
-        'Meridional Wind Stress', 'Pascal')
-  CS%id_ustar = register_diag_field('ocean_model', 'ustar', diag%axesT1, Time, &
-      'Surface friction velocity', 'meter second-1')
-
-  if (CS%use_temperature) then
-    CS%id_PminusE = register_diag_field('ocean_model', 'PmE', diag%axesT1, Time, &
-          'Net fresh water flux (P-E+C+R)', 'kilogram meter-2 second-1')
-    CS%id_evap = register_diag_field('ocean_model', 'evap', diag%axesT1, Time, &
-          'Evaporation at ocean surface (usually negative)', 'kilogram meter-2 second-1')
-    CS%id_precip = register_diag_field('ocean_model', 'precip', diag%axesT1, Time, &
-          'Net (liq.+froz.) precipitation into ocean', 'kilogram meter-2 second-1')
-    CS%id_froz_precip = register_diag_field('ocean_model', 'froz_precip', diag%axesT1, Time, &
-          'Frozen Precipitation into ocean', 'kilogram meter-2 second-1')
-    CS%id_liq_precip = register_diag_field('ocean_model', 'liq_precip', diag%axesT1, Time, &
-          'Liquid Precipitation into ocean', 'kilogram meter-2 second-1')
-    CS%id_virt_precip = register_diag_field('ocean_model', 'virt_precip', diag%axesT1, Time, &
-          'Virtual Precipitation due to salt restoring', 'kilogram meter-2 second-1')
-    CS%id_froz_runoff = register_diag_field('ocean_model', 'froz_runoff', diag%axesT1, Time, &
-          'Frozen runoff (calving) into ocean', 'kilogram meter-2 second-1')
-    CS%id_liq_runoff = register_diag_field('ocean_model', 'liq_runoff', diag%axesT1, Time, &
-          'Liquid runoff (rivers) into ocean', 'kilogram meter-2 second-1')
-    CS%id_runoff_hflx = register_diag_field('ocean_model', 'runoff_hflx', diag%axesT1, Time, &
-          'Heat content of liquid runoff (rivers) into ocean', 'Watt meter-2')
-    CS%id_calving_hflx = register_diag_field('ocean_model', 'calving_hflx', diag%axesT1, Time, &
-          'Heat content of liquid runoff (rivers) into ocean', 'Watt meter-2')
-
-    CS%id_Net_Heating = register_diag_field('ocean_model', 'Net_Heat', diag%axesT1, Time, &
-          'Net Surface Heating of Ocean', 'Watt meter-2')
-    CS%id_sw = register_diag_field('ocean_model', 'SW', diag%axesT1, Time, &
-        'Shortwave radiation flux into ocean', 'Watt meter-2')
-    CS%id_LwLatSens = register_diag_field('ocean_model', 'LwLatSens', diag%axesT1, Time, &
-          'Combined longwave, latent, and sensible heating', 'Watt meter-2')
-    CS%id_lw = register_diag_field('ocean_model', 'LW', diag%axesT1, Time, &
-        'Longwave radiation flux into ocean', 'Watt meter-2')
-    CS%id_lat = register_diag_field('ocean_model', 'latent', diag%axesT1, Time, &
-        'Latent heat flux into ocean', 'Watt meter-2')
-    CS%id_sens = register_diag_field('ocean_model', 'sensible', diag%axesT1, Time, &
-        'Sensible heat flux into ocean', 'Watt meter-2')
-    if (CS%restorebuoy) &
-      CS%id_heat_rest = register_diag_field('ocean_model', 'heat_rest', diag%axesT1, Time, &
-            'Restoring surface heat flux into ocean', 'Watt meter-2')
-
-    CS%id_psurf = register_diag_field('ocean_model', 'p_surf', diag%axesT1, Time, &
-          'Pressure at ice-ocean or atmosphere-ocean interface', 'Pascal')
-    CS%id_saltflux = register_diag_field('ocean_model', 'salt_flux', diag%axesT1, Time, &
-          'Salt flux into ocean at surface', 'kilogram meter-2 second-1')
-    CS%id_TKE_tidal = register_diag_field('ocean_model', 'TKE_tidal', diag%axesT1, Time, &
-          'Tidal source of BBL mixing', 'Watt meter-2')
-  else
-    CS%id_buoy = register_diag_field('ocean_model', 'buoy', diag%axesT1, Time, &
-          'Buoyancy forcing', 'meter2 second-3')
-  endif
+  call register_forcing_type_diags(Time, diag, CS%use_temperature, CS%handles)
 
   ! Set up any restart fields associated with the forcing.
   call restart_init(param_file, CS%restart_CSp, "MOM_forcing.res")

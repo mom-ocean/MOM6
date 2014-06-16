@@ -29,7 +29,8 @@ module MOM
 !*  With software contributions from:                                  *
 !*    Whit Anderson, Brian Arbic, Will Cooke, Anand Gnanadesikan,      *
 !*    Matthew Harrison, Mehmet Ilicak, Laura Jackson, Jasmine John,    *
-!*    Bonnie Samuels, Harper Simmons, Laurent White and Niki Zadeh     *
+!*    John Krasting, Bonnie Samuels, Harper Simmons, Laurent White     *
+!*    Zhi Liang, and Niki Zadeh                                        *       
 !*                                                                     *
 !*  MOM ice-shelf code by Daniel Goldberg, Robert Hallberg             *
 !*    Chris Little, and Olga Sergienko                                 *
@@ -59,7 +60,7 @@ module MOM
 !*  Layered Dynamics (GOLD) ocean model, which was also primarily      *
 !*  developed at NOAA/GFDL.  MOM has also benefited tremendously from  *
 !*  the FMS infrastructure, which it utilizes and shares with other    *
-!*  component models developed at GFDL.                                *
+!*  component models developed at NOAA/GFDL.                           *
 !*                                                                     *
 !*    When run is isopycnal-coordinate mode, the uppermost few layers  *
 !*  are often used to describe a bulk mixed layer, including the       *
@@ -238,8 +239,8 @@ module MOM
 !*    These files provide infrastructure utilities for MOM.  Many are  *
 !*    simply wrappers for capabilities provided by FMS, although others*
 !*    provide capabilities (like the file_parser) that are unique to   *
-!*    MOM.  When MOM is adapted to use a different modeling            *
-!*    infrastructure, most of the required changes are in this         *
+!*    MOM. When MOM is adapted to use a modeling infrastructure        *
+!*    distinct from FMS, most of the required changes are in this      *
 !*    directory.                                                       *
 !*  src/initialization:                                                *
 !*    These are the files that are used to initialize the MOM grid     *
@@ -281,9 +282,10 @@ module MOM
 !*  step_MOM steps MOM over a specified interval of time.              *
 !*  MOM_initialize calls initialize and does other initialization      *
 !*    that does not warrant user modification.                         *
-!*  calculate_surface_state determines the surface (mixed layer)       *
-!*    properties of the current model state and packages pointers      *
-!*    to these fields into an exported structure.                      *
+!*  calculate_surface_state determines the surface (bulk mixed layer   *
+!*  if traditional isoycnal vertical coordinate) properties of the     *
+!*  current model state and packages pointers to these fields into an  *
+!*  exported structure.                                                *
 !*                                                                     *
 !*    The remaining subroutines in this file (src/core/MOM.F90) are:   *
 !*  find_total_transport determines the barotropic mass transport.     *
@@ -2006,7 +2008,7 @@ subroutine register_diags(Time, G, CS, ADp)
   !call diag_masks_set(G, CS%missing)
 
   CS%id_u = register_diag_field('ocean_model', 'u', diag%axesCuL, Time, &
-      'Zonal velocity', 'meter second-1')
+      'Zonal velocity', 'meter  second-1')
   CS%id_v = register_diag_field('ocean_model', 'v', diag%axesCvL, Time, &
       'Meridional velocity', 'meter second-1')
   CS%id_h = register_diag_field('ocean_model', 'h', diag%axesTL, Time, &

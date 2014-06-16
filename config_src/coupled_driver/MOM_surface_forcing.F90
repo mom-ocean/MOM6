@@ -49,12 +49,13 @@ use MOM_coms, only : reproducing_sum
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock, only : CLOCK_SUBCOMPONENT
 use MOM_diag_mediator, only : post_data, query_averaging_enabled, diag_ctrl
-use MOM_diag_mediator, only : register_diag_field, safe_alloc_ptr, time_type, register_scalar_field
+use MOM_diag_mediator, only : safe_alloc_ptr, time_type, register_scalar_field
 use MOM_domains, only : pass_vector, pass_var, global_field_sum, BITWISE_EXACT_SUM
 use MOM_domains, only : AGRID, BGRID_NE, CGRID_NE
 use MOM_error_handler, only : MOM_error, WARNING, FATAL, is_root_pe, MOM_mesg
 use MOM_file_parser, only : get_param, log_version, param_file_type
-use MOM_forcing_type, only : forcing, deallocate_forcing_type
+use MOM_forcing_type, only : forcing, forcing_diags
+use MOM_forcing_type, only : register_forcing_type_diags, deallocate_forcing_type
 use MOM_get_input, only : Get_MOM_Input, directories
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : slasher, write_version_number
@@ -82,7 +83,7 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public convert_IOB_to_fluxes, surface_forcing_init, average_forcing, ice_ocn_bnd_type_chksum
+public convert_IOB_to_fluxes, surface_forcing_init, ice_ocn_bnd_type_chksum
 public forcing_save_restart
 
 type, public :: surface_forcing_CS ; private
@@ -155,41 +156,36 @@ type, public :: surface_forcing_CS ; private
   logical :: first_call = .true. ! True if convert_IOB_to_fluxes has not been
                                  ! called yet.
 
-  integer :: id_taux = -1, id_tauy = -1, id_ustar = -1
-  integer :: id_PminusE = -1, id_evap = -1, id_precip = -1
-  integer :: id_liq_precip = -1, id_froz_precip = -1, id_virt_precip = -1
-  integer :: id_liq_runoff = -1, id_froz_runoff = -1
-  integer :: id_runoff_hflx = -1, id_calving_hflx = -1
-  integer :: id_Net_Heating = -1, id_sw = -1, id_LwLatSens = -1, id_buoy = -1
-  integer :: id_LW = -1, id_lat = -1, id_sens = -1
-  integer :: id_psurf = -1, id_saltflux = -1, id_saltFluxIn = -1, id_TKE_tidal = -1
-  integer :: id_saltFluxRestore = -1, id_saltFluxGlobalAdj = -1
   integer :: id_srestore = -1  ! An id number for time_interp_external.
+
+  ! Diagnostics handles
+  type(forcing_diags), public :: handles
+
 !###  type(ctrl_forcing_CS), pointer :: ctrl_forcing_CSp => NULL()
   type(MOM_restart_CS), pointer :: restart_CSp => NULL()
   type(user_revise_forcing_CS), pointer :: urf_CS => NULL() 
 end type surface_forcing_CS
 
 type, public :: ice_ocean_boundary_type
-  real, pointer, dimension(:,:) :: u_flux =>NULL()   ! i-direction wind stress (Pa)
-  real, pointer, dimension(:,:) :: v_flux =>NULL()   ! j-direction wind stress (Pa)
-  real, pointer, dimension(:,:) :: t_flux =>NULL()   ! sensible heat flux (W/m2)
-  real, pointer, dimension(:,:) :: q_flux =>NULL()   ! specific humidity flux (kg/m2/s)
-  real, pointer, dimension(:,:) :: salt_flux =>NULL()! salt flux (kg/m2/s)
-  real, pointer, dimension(:,:) :: lw_flux =>NULL()  ! long wave radiation (w/m2)
-  real, pointer, dimension(:,:) :: sw_flux_vis_dir => NULL() ! direct visible sw radiation (w/m2)
-  real, pointer, dimension(:,:) :: sw_flux_vis_dif => NULL() ! diffuse visible sw radiation (w/m2)
-  real, pointer, dimension(:,:) :: sw_flux_nir_dir => NULL() ! direct Near InfraRed sw radiation (w/m2)
-  real, pointer, dimension(:,:) :: sw_flux_nir_dif => NULL() ! diffuse Near InfraRed sw radiation (w/m2)
-  real, pointer, dimension(:,:) :: lprec =>NULL()    ! mass flux of liquid precip (kg/m2/s)
-  real, pointer, dimension(:,:) :: fprec =>NULL()    ! mass flux of frozen precip (kg/m2/s)
-  real, pointer, dimension(:,:) :: runoff =>NULL()   ! mass flux of liquid runoff (kg/m2/s)
-  real, pointer, dimension(:,:) :: calving =>NULL()  ! mass flux of frozen runoff (kg/m2/s)
-  real, pointer, dimension(:,:) :: runoff_hflx =>NULL() ! heat flux associated with liquid runoff (w/m2)
-  real, pointer, dimension(:,:) :: calving_hflx =>NULL()! heat flux associated with frozen runoff (w/m2)
-  real, pointer, dimension(:,:) :: p =>NULL()        ! pressure of overlying ice and atmosphere
-                                                     ! on ocean surface (Pa)
-  real, pointer, dimension(:,:) :: mi =>NULL()       ! mass of ice (kg/m2)
+  real, pointer, dimension(:,:) :: u_flux               =>NULL() ! i-direction wind stress (Pa)
+  real, pointer, dimension(:,:) :: v_flux               =>NULL() ! j-direction wind stress (Pa)
+  real, pointer, dimension(:,:) :: t_flux               =>NULL() ! sensible heat flux (W/m2)
+  real, pointer, dimension(:,:) :: q_flux               =>NULL() ! specific humidity flux (kg/m2/s)
+  real, pointer, dimension(:,:) :: salt_flux            =>NULL() ! salt flux (kg/m2/s)
+  real, pointer, dimension(:,:) :: lw_flux              =>NULL() ! long wave radiation (W/m2)
+  real, pointer, dimension(:,:) :: sw_flux_vis_dir      =>NULL() ! direct visible sw radiation (W/m2)
+  real, pointer, dimension(:,:) :: sw_flux_vis_dif      =>NULL() ! diffuse visible sw radiation (W/m2)
+  real, pointer, dimension(:,:) :: sw_flux_nir_dir      =>NULL() ! direct Near InfraRed sw radiation (W/m2)
+  real, pointer, dimension(:,:) :: sw_flux_nir_dif      =>NULL() ! diffuse Near InfraRed sw radiation (W/m2)
+  real, pointer, dimension(:,:) :: lprec                =>NULL() ! mass flux of liquid precip (kg/m2/s)
+  real, pointer, dimension(:,:) :: fprec                =>NULL() ! mass flux of frozen precip (kg/m2/s)
+  real, pointer, dimension(:,:) :: runoff               =>NULL() ! mass flux of liquid runoff (kg/m2/s)
+  real, pointer, dimension(:,:) :: calving              =>NULL() ! mass flux of frozen runoff (kg/m2/s)
+  real, pointer, dimension(:,:) :: runoff_hflx          =>NULL() ! heat content of liquid runoff (W/m2)
+  real, pointer, dimension(:,:) :: calving_hflx         =>NULL() ! heat content of frozen runoff (W/m2)
+  real, pointer, dimension(:,:) :: p                    =>NULL() ! pressure of overlying ice and atmosphere
+                                                                 ! on ocean surface (Pa)
+  real, pointer, dimension(:,:) :: mi                   =>NULL() ! mass of ice (kg/m2)
   integer :: xtype                                   ! REGRID, REDIST or DIRECT
   type(coupler_2d_bc_type)      :: fluxes            ! A structure that may contain an
                                                      ! array of named fields used for
@@ -257,7 +253,6 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
   real :: PmE_adj_total ! The globally area integrated PmE_adj, in kg s-1.
   real :: net_FW_avg    ! The globally averaged net fresh water input to the 
                         ! ocean/sea-ice system, in kg m-2 s-1.
-  real :: Sflux_adj_total  ! The globally area integrated salt flux adjustment, in kg s-1.  
   real :: Irho0         ! The inverse of the mean density in m3 kg-1.
   real :: taux2, tauy2  ! The squared wind stresses in Pa2.
   real :: tau_mag       ! The magnitude of the wind stress, in Pa.
@@ -289,39 +284,45 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
   open_ocn_mask(:,:) = 1.0
   pme_adj(:,:) = 0.0
   PmE_adj_total = 0.0
-  Sflux_adj_total = 0.0
+  fluxes%Sflux_adj_total = 0.0
   
   restore_salinity = .false.
   if (present(restore_salt)) restore_salinity = restore_salt
 
   if (CS%first_call) then
-    call safe_alloc_ptr(fluxes%taux,IsdB,IedB,jsd,jed)      ; fluxes%taux(:,:) = 0.0
-    call safe_alloc_ptr(fluxes%tauy,isd,ied,JsdB,JedB)      ; fluxes%tauy(:,:) = 0.0
-    call safe_alloc_ptr(fluxes%ustar,isd,ied,jsd,jed)       ; fluxes%ustar(:,:) = 0.0
-    call safe_alloc_ptr(fluxes%evap,isd,ied,jsd,jed)        ; fluxes%evap(:,:) = 0.0
-    call safe_alloc_ptr(fluxes%liq_precip,isd,ied,jsd,jed)  ; fluxes%liq_precip(:,:) = 0.0
-    call safe_alloc_ptr(fluxes%froz_precip,isd,ied,jsd,jed) ; fluxes%froz_precip(:,:) = 0.0
-    call safe_alloc_ptr(fluxes%virt_precip,isd,ied,jsd,jed) ; fluxes%virt_precip(:,:) = 0.0
-    call safe_alloc_ptr(fluxes%sw,isd,ied,jsd,jed)          ; fluxes%sw(:,:) = 0.0
-    call safe_alloc_ptr(fluxes%sw_vis_dir,isd,ied,jsd,jed)  ; fluxes%sw_vis_dir(:,:) = 0.0
-    call safe_alloc_ptr(fluxes%sw_vis_dif,isd,ied,jsd,jed)  ; fluxes%sw_vis_dif(:,:) = 0.0
-    call safe_alloc_ptr(fluxes%sw_nir_dir,isd,ied,jsd,jed)  ; fluxes%sw_nir_dir(:,:) = 0.0
-    call safe_alloc_ptr(fluxes%sw_nir_dif,isd,ied,jsd,jed)  ; fluxes%sw_nir_dif(:,:) = 0.0
-    call safe_alloc_ptr(fluxes%lw,isd,ied,jsd,jed)          ; fluxes%lw(:,:) = 0.0
-    call safe_alloc_ptr(fluxes%latent,isd,ied,jsd,jed)      ; fluxes%latent(:,:) = 0.0
-    call safe_alloc_ptr(fluxes%sens,isd,ied,jsd,jed)        ; fluxes%sens(:,:) = 0.0
-    call safe_alloc_ptr(fluxes%p_surf,isd,ied,jsd,jed)      ; fluxes%p_surf(:,:) = 0.0
-    call safe_alloc_ptr(fluxes%p_surf_full,isd,ied,jsd,jed) ; fluxes%p_surf_full(:,:) = 0.0
-    call safe_alloc_ptr(fluxes%salt_flux,isd,ied,jsd,jed)   ; fluxes%salt_flux(:,:) = 0.0
-    call safe_alloc_ptr(fluxes%TKE_tidal,isd,ied,jsd,jed)   ; fluxes%TKE_tidal(:,:) = 0.0
-    call safe_alloc_ptr(fluxes%ustar_tidal,isd,ied,jsd,jed) ; fluxes%ustar_tidal(:,:) = 0.0
-    call safe_alloc_ptr(fluxes%liq_runoff,isd,ied,jsd,jed)  ; fluxes%liq_runoff(:,:) = 0.0        
-    call safe_alloc_ptr(fluxes%froz_runoff,isd,ied,jsd,jed) ; fluxes%froz_runoff(:,:) = 0.0        
+    call safe_alloc_ptr(fluxes%taux,IsdB,IedB,jsd,jed)              ; fluxes%taux(:,:)                = 0.0
+    call safe_alloc_ptr(fluxes%tauy,isd,ied,JsdB,JedB)              ; fluxes%tauy(:,:)                = 0.0
+    call safe_alloc_ptr(fluxes%ustar,isd,ied,jsd,jed)               ; fluxes%ustar(:,:)               = 0.0
+    call safe_alloc_ptr(fluxes%evap,isd,ied,jsd,jed)                ; fluxes%evap(:,:)                = 0.0
+    call safe_alloc_ptr(fluxes%liq_precip,isd,ied,jsd,jed)          ; fluxes%liq_precip(:,:)          = 0.0
+    call safe_alloc_ptr(fluxes%froz_precip,isd,ied,jsd,jed)         ; fluxes%froz_precip(:,:)         = 0.0
+    call safe_alloc_ptr(fluxes%virt_precip,isd,ied,jsd,jed)         ; fluxes%virt_precip(:,:)         = 0.0
+    call safe_alloc_ptr(fluxes%seaice_melt,isd,ied,jsd,jed)         ; fluxes%seaice_melt(:,:)         = 0.0
+    call safe_alloc_ptr(fluxes%sw,isd,ied,jsd,jed)                  ; fluxes%sw(:,:)                  = 0.0
+    call safe_alloc_ptr(fluxes%sw_vis_dir,isd,ied,jsd,jed)          ; fluxes%sw_vis_dir(:,:)          = 0.0
+    call safe_alloc_ptr(fluxes%sw_vis_dif,isd,ied,jsd,jed)          ; fluxes%sw_vis_dif(:,:)          = 0.0
+    call safe_alloc_ptr(fluxes%sw_nir_dir,isd,ied,jsd,jed)          ; fluxes%sw_nir_dir(:,:)          = 0.0
+    call safe_alloc_ptr(fluxes%sw_nir_dif,isd,ied,jsd,jed)          ; fluxes%sw_nir_dif(:,:)          = 0.0
+    call safe_alloc_ptr(fluxes%lw,isd,ied,jsd,jed)                  ; fluxes%lw(:,:)                  = 0.0
+    call safe_alloc_ptr(fluxes%latent,isd,ied,jsd,jed)              ; fluxes%latent(:,:)              = 0.0
+    call safe_alloc_ptr(fluxes%latent_evap,isd,ied,jsd,jed)         ; fluxes%latent_evap(:,:)         = 0.0
+    call safe_alloc_ptr(fluxes%latent_fprec,isd,ied,jsd,jed)        ; fluxes%latent_fprec(:,:)        = 0.0
+    call safe_alloc_ptr(fluxes%latent_calve,isd,ied,jsd,jed)        ; fluxes%latent_calve(:,:)        = 0.0
+    call safe_alloc_ptr(fluxes%sens,isd,ied,jsd,jed)                ; fluxes%sens(:,:)                = 0.0
+    call safe_alloc_ptr(fluxes%p_surf,isd,ied,jsd,jed)              ; fluxes%p_surf(:,:)              = 0.0
+    call safe_alloc_ptr(fluxes%p_surf_full,isd,ied,jsd,jed)         ; fluxes%p_surf_full(:,:)         = 0.0
+    call safe_alloc_ptr(fluxes%salt_flux,isd,ied,jsd,jed)           ; fluxes%salt_flux(:,:)           = 0.0
+    call safe_alloc_ptr(fluxes%salt_flux_in,isd,ied,jsd,jed)        ; fluxes%salt_flux_in(:,:)        = 0.0
+    call safe_alloc_ptr(fluxes%salt_flux_restore,isd,ied,jsd,jed)   ; fluxes%salt_flux_restore(:,:)   = 0.0
+    call safe_alloc_ptr(fluxes%TKE_tidal,isd,ied,jsd,jed)           ; fluxes%TKE_tidal(:,:)           = 0.0
+    call safe_alloc_ptr(fluxes%ustar_tidal,isd,ied,jsd,jed)         ; fluxes%ustar_tidal(:,:)         = 0.0
+    call safe_alloc_ptr(fluxes%liq_runoff,isd,ied,jsd,jed)          ; fluxes%liq_runoff(:,:)          = 0.0        
+    call safe_alloc_ptr(fluxes%froz_runoff,isd,ied,jsd,jed)         ; fluxes%froz_runoff(:,:)         = 0.0        
     if (ASSOCIATED(IOB%calving_hflx)) then
-      call safe_alloc_ptr(fluxes%calving_hflx,isd,ied,jsd,jed) ; fluxes%calving_hflx(:,:) = 0.0        
+      call safe_alloc_ptr(fluxes%calving_heat_content,isd,ied,jsd,jed) ; fluxes%calving_heat_content(:,:) = 0.0        
     endif
     if (ASSOCIATED(IOB%runoff_hflx)) then
-      call safe_alloc_ptr(fluxes%runoff_hflx,isd,ied,jsd,jed) ; fluxes%runoff_hflx(:,:) = 0.0        
+      call safe_alloc_ptr(fluxes%runoff_heat_content,isd,ied,jsd,jed) ; fluxes%runoff_heat_content(:,:) = 0.0        
     endif
     if (CS%rigid_sea_ice) then
       call safe_alloc_ptr(fluxes%rigidity_ice_u,IsdB,IedB,jsd,jed)
@@ -358,8 +359,9 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
         fluxes%salt_flux(i,j) = 1.e-3*G%mask2dT(i,j) * (CS%Rho0*CS%Flux_const)* &
                   (CS%basin_mask(i,j)*open_ocn_mask(i,j)) *delta_sss  ! kg Salt m-2 s-1
         work_sum(i,j) = G%areaT(i,j)*fluxes%salt_flux(i,j)
+        fluxes%salt_flux_restore(i,j) = fluxes%salt_flux(i,j)
       enddo; enddo
-      Sflux_adj_total = reproducing_sum(work_sum(:,:), isr,ier, jsr,jer) / &
+      fluxes%Sflux_adj_total = reproducing_sum(work_sum(:,:), isr,ier, jsr,jer) / &
                         CS%area_surf
     else
       do j=js,je ; do i=is,ie
@@ -380,8 +382,6 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
       ! for backward compatibility. See section below where
       ! CS%adjust_net_fresh_water_to_zero is tested to be true.
     endif
-    if ((CS%id_saltFluxRestore > 0)) call post_data(CS%id_saltFluxRestore, fluxes%salt_flux, CS%diag)
-    if ((CS%id_saltFluxGlobalAdj > 0)) call post_data(CS%id_saltFluxGlobalAdj, Sflux_adj_total, CS%diag)
   endif
 
   wind_stagger = CS%wind_stagger
@@ -429,10 +429,10 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
       fluxes%virt_precip(i,j) = (pme_adj(i,j) - PmE_adj_total) * G%mask2dT(i,j)
 
     if (ASSOCIATED(IOB%calving_hflx)) &
-      fluxes%calving_hflx(i,j) = IOB%calving_hflx(i-i0,j-j0) * G%mask2dT(i,j)
+      fluxes%calving_heat_content(i,j) = IOB%calving_hflx(i-i0,j-j0) * G%mask2dT(i,j)
 
     if (ASSOCIATED(IOB%runoff_hflx)) &
-      fluxes%runoff_hflx(i,j) = IOB%runoff_hflx(i-i0,j-j0) * G%mask2dT(i,j)
+      fluxes%runoff_heat_content(i,j) = IOB%runoff_hflx(i-i0,j-j0) * G%mask2dT(i,j)
 
     if (ASSOCIATED(IOB%lw_flux)) &
       fluxes%LW(i,j) = IOB%lw_flux(i-i0,j-j0) * G%mask2dT(i,j)
@@ -441,12 +441,16 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
       fluxes%sens(i,j) = - IOB%t_flux(i-i0,j-j0) * G%mask2dT(i,j)
 
     fluxes%latent(i,j) = 0.0
-    if (ASSOCIATED(IOB%fprec)) &
-      fluxes%latent(i,j) = fluxes%latent(i,j) - IOB%fprec(i-i0,j-j0)*hlf
-    if (ASSOCIATED(IOB%calving)) &
-      fluxes%latent(i,j) = fluxes%latent(i,j) - IOB%calving(i-i0,j-j0)*hlf
-    if (ASSOCIATED(IOB%q_flux)) &
-      fluxes%latent(i,j) = fluxes%latent(i,j) - IOB%q_flux(i-i0,j-j0)*hlv
+    if (ASSOCIATED(IOB%fprec))                                                       &
+      fluxes%latent(i,j)       = fluxes%latent(i,j) - IOB%fprec(i-i0,j-j0)*hlf     ; &
+      fluxes%latent_fprec(i,j) = -G%mask2dT(i,j) * IOB%fprec(i-i0,j-j0)*hlf
+    if (ASSOCIATED(IOB%calving))                                                     &
+      fluxes%latent(i,j)         = fluxes%latent(i,j) - IOB%calving(i-i0,j-j0)*hlf ; &
+      fluxes%latent_calve(i,j)   = -G%mask2dT(i,j) * IOB%calving(i-i0,j-j0)*hlf
+    if (ASSOCIATED(IOB%q_flux))                                                      &
+      fluxes%latent(i,j)      = fluxes%latent(i,j) - IOB%q_flux(i-i0,j-j0)*hlv     ; & 
+      fluxes%latent_evap(i,j) = -G%mask2dT(i,j) * IOB%q_flux(i-i0,j-j0)*hlv
+
     fluxes%latent(i,j) = G%mask2dT(i,j) * fluxes%latent(i,j)
 
     if (ASSOCIATED(IOB%sw_flux_vis_dir)) &
@@ -463,7 +467,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
 
   if (restore_salinity .and. CS%salt_restore_as_sflux) then
     do j=js,je ; do i=is,ie
-      fluxes%salt_flux(i,j) = G%mask2dT(i,j)*(fluxes%salt_flux(i,j)-Sflux_adj_total)
+      fluxes%salt_flux(i,j) = G%mask2dT(i,j)*(fluxes%salt_flux(i,j)-fluxes%Sflux_adj_total)
     enddo ; enddo
   else
     do j=js,je ; do i=is,ie
@@ -474,8 +478,8 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
   if (ASSOCIATED(IOB%salt_flux)) then
     do j=js,je ; do i=is,ie
       fluxes%salt_flux(i,j) = G%mask2dT(i,j)*(fluxes%salt_flux(i,j) - IOB%salt_flux(i-i0,j-j0))
+      fluxes%salt_flux_in(i,j) = G%mask2dT(i,j)*( -IOB%salt_flux(i-i0,j-j0) )
     enddo ; enddo
-    if (CS%id_saltFluxIn > 0) call post_data(CS%id_saltFluxIn, -IOB%salt_flux, CS%diag, mask=G%mask2dT(is:ie,js:je))
   endif
 
 !### if (associated(CS%ctrl_forcing_CSp)) then
@@ -648,107 +652,6 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
 
   call cpu_clock_end(id_clock_forcing)
 end subroutine convert_IOB_to_fluxes
-
-subroutine average_forcing(fluxes, dt, G, CS)
-  type(forcing),         intent(in) :: fluxes
-  real,                  intent(in) :: dt
-  type(ocean_grid_type), intent(in) :: G
-  type(surface_forcing_CS), pointer :: CS
-!   This subroutine offers forcing fields for time averaging.  These
-! fields must first be registered in surface_forcing_init (below).
-! This subroutine will typically not be modified, except when new
-! forcing fields are added.
-!
-! Arguments: fluxes - A structure containing pointers to any possible
-!                     forcing fields.  Unused fields are unallocated.
-!  (in)      dt - The amount of time over which to average.
-!  (in)      G - The ocean's grid structure.
-!  (in)      CS - A pointer to the control structure returned by a previous
-!                 call to surface_forcing_init.
-
-  real, dimension(SZI_(G),SZJ_(G)) :: sum
-
-  call cpu_clock_begin(id_clock_forcing)
-
-  if (query_averaging_enabled(CS%diag)) then
-    if ((CS%id_taux > 0) .and. ASSOCIATED(fluxes%taux)) &
-      call post_data(CS%id_taux, fluxes%taux, CS%diag)
-    if ((CS%id_tauy > 0) .and. ASSOCIATED(fluxes%tauy)) &
-      call post_data(CS%id_tauy, fluxes%tauy, CS%diag)
-    if ((CS%id_ustar > 0) .and. ASSOCIATED(fluxes%ustar)) &
-      call post_data(CS%id_ustar, fluxes%ustar, CS%diag)
-
-    if (CS%id_PminusE > 0) then
-      sum(:,:) = 0.0
-      if (ASSOCIATED(fluxes%liq_precip)) sum(:,:) = sum(:,:)+fluxes%liq_precip(:,:)
-      if (ASSOCIATED(fluxes%froz_precip)) sum(:,:) = sum(:,:)+fluxes%froz_precip(:,:)
-      if (ASSOCIATED(fluxes%evap)) sum(:,:) = sum(:,:)+fluxes%evap(:,:)
-      if (ASSOCIATED(fluxes%liq_runoff)) sum(:,:) = sum(:,:)+fluxes%liq_runoff(:,:)
-      if (ASSOCIATED(fluxes%froz_runoff)) sum(:,:) = sum(:,:)+fluxes%froz_runoff(:,:)
-      if (ASSOCIATED(fluxes%virt_precip)) sum(:,:) = sum(:,:)+fluxes%virt_precip(:,:)
-      call post_data(CS%id_PminusE, sum, CS%diag)
-    endif
-
-    if ((CS%id_evap > 0) .and. ASSOCIATED(fluxes%evap)) &
-      call post_data(CS%id_evap, fluxes%evap, CS%diag)
-    if ((CS%id_precip > 0) .and. ASSOCIATED(fluxes%liq_precip) &
-         .and. ASSOCIATED(fluxes%froz_precip)) then
-      sum(:,:) = fluxes%liq_precip(:,:) + fluxes%froz_precip(:,:)
-      call post_data(CS%id_precip, sum, CS%diag)
-    endif
-
-    if ((CS%id_liq_precip > 0) .and. ASSOCIATED(fluxes%liq_precip)) &
-      call post_data(CS%id_liq_precip, fluxes%liq_precip, CS%diag)
-    if ((CS%id_froz_precip > 0) .and. ASSOCIATED(fluxes%froz_precip)) &
-      call post_data(CS%id_froz_precip, fluxes%froz_precip, CS%diag)
-    if ((CS%id_virt_precip > 0) .and. ASSOCIATED(fluxes%virt_precip)) &
-      call post_data(CS%id_virt_precip, fluxes%virt_precip, CS%diag)
-    if ((CS%id_liq_runoff > 0) .and. ASSOCIATED(fluxes%liq_runoff)) &
-      call post_data(CS%id_liq_runoff, fluxes%liq_runoff, CS%diag)
-    if ((CS%id_froz_runoff > 0) .and. ASSOCIATED(fluxes%froz_runoff)) &
-      call post_data(CS%id_froz_runoff, fluxes%froz_runoff, CS%diag)
-
-    if ((CS%id_runoff_hflx > 0) .and. ASSOCIATED(fluxes%runoff_hflx)) &
-      call post_data(CS%id_runoff_hflx, fluxes%runoff_hflx, CS%diag)
-    if ((CS%id_calving_hflx > 0) .and. ASSOCIATED(fluxes%calving_hflx)) &
-      call post_data(CS%id_calving_hflx, fluxes%calving_hflx, CS%diag)
-
-    if (CS%id_Net_Heating > 0) then
-      sum(:,:) = 0.0
-      if (ASSOCIATED(fluxes%LW)) sum(:,:) = sum(:,:) + fluxes%LW(:,:)
-      if (ASSOCIATED(fluxes%latent)) sum(:,:) = sum(:,:) + fluxes%latent(:,:)
-      if (ASSOCIATED(fluxes%sens)) sum(:,:) = sum(:,:) + fluxes%sens(:,:)
-      if (ASSOCIATED(fluxes%SW)) sum(:,:) = sum(:,:) + fluxes%SW(:,:)
-      call post_data(CS%id_Net_Heating, sum, CS%diag)
-    endif
-    if ((CS%id_LwLatSens > 0) .and. ASSOCIATED(fluxes%lw) .and. &
-         ASSOCIATED(fluxes%latent) .and. ASSOCIATED(fluxes%sens)) then
-      sum(:,:) = (fluxes%lw(:,:) + fluxes%latent(:,:)) + fluxes%sens(:,:)
-      call post_data(CS%id_LwLatSens, sum, CS%diag)
-    endif
-
-    if ((CS%id_sw > 0) .and. ASSOCIATED(fluxes%sw)) &
-      call post_data(CS%id_sw, fluxes%sw, CS%diag)
-    if ((CS%id_LW > 0) .and. ASSOCIATED(fluxes%LW)) &
-      call post_data(CS%id_LW, fluxes%LW, CS%diag)
-    if ((CS%id_lat > 0) .and. ASSOCIATED(fluxes%latent)) &
-      call post_data(CS%id_lat, fluxes%latent, CS%diag)
-    if ((CS%id_sens > 0) .and. ASSOCIATED(fluxes%sens)) &
-      call post_data(CS%id_sens, fluxes%sens, CS%diag)
-
-    if ((CS%id_psurf > 0) .and. ASSOCIATED(fluxes%p_surf)) &
-      call post_data(CS%id_psurf, fluxes%p_surf, CS%diag)
-    if ((CS%id_saltflux > 0) .and. ASSOCIATED(fluxes%salt_flux)) &
-      call post_data(CS%id_saltflux, fluxes%salt_flux, CS%diag)
-    if ((CS%id_TKE_tidal > 0) .and. ASSOCIATED(fluxes%TKE_tidal)) &
-      call post_data(CS%id_TKE_tidal, fluxes%TKE_tidal, CS%diag)
-
-    if ((CS%id_buoy > 0) .and. ASSOCIATED(fluxes%buoy)) &
-      call post_data(CS%id_buoy, fluxes%buoy, CS%diag)
-  endif
-
-  call cpu_clock_end(id_clock_forcing)
-end subroutine average_forcing
 
 subroutine forcing_save_restart(CS, G, Time, directory, time_stamped, &
                                 filename_suffix)
@@ -991,71 +894,7 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt)
                  "starts to exhibit rigidity", units="kg m-2", default=1000.0)
   endif
 
-  CS%id_taux = register_diag_field('ocean_model', 'taux', diag%axesCu1, Time, &
-        'Zonal Wind Stress', 'Pascal', standard_name='surface_downward_x_stress')
-  CS%id_tauy = register_diag_field('ocean_model', 'tauy', diag%axesCv1, Time, &
-        'Meridional Wind Stress', 'Pascal', standard_name='surface_downward_y_stress')
-  CS%id_ustar = register_diag_field('ocean_model', 'ustar', diag%axesT1, Time, &
-      'Surface friction velocity', 'meter second-1')
-
-  if (CS%use_temperature) then
-    CS%id_PminusE = register_diag_field('ocean_model', 'PmE', diag%axesT1, Time, &
-          'Net fresh water flux (P-E+C+R)', 'kilogram meter-2 second-1')
-    CS%id_evap = register_diag_field('ocean_model', 'evap', diag%axesT1, Time, &
-          'Evaporation at ocean surface (usually negative)', 'kilogram meter-2 second-1')
-    CS%id_precip = register_diag_field('ocean_model', 'precip', diag%axesT1, Time, &
-          'Precipitation into ocean', 'kilogram meter-2 second-1')
-    CS%id_froz_precip = register_diag_field('ocean_model', 'froz_precip', diag%axesT1, Time, &
-          'Frozen Precipitation into ocean', 'kilogram meter-2 second-1', &
-          standard_name='snowfall_flux')
-    CS%id_liq_precip = register_diag_field('ocean_model', 'liq_precip', diag%axesT1, Time, &
-          'Liquid Precipitation into ocean', 'kilogram meter-2 second-1', &
-          standard_name='rainfall_flux')
-    CS%id_virt_precip = register_diag_field('ocean_model', 'virt_precip', diag%axesT1, Time, &
-          'Virtual Precipitation into ocean (due to salinity restoring)', 'kilogram meter-2 second-1')
-    CS%id_froz_runoff = register_diag_field('ocean_model', 'froz_runoff', diag%axesT1, Time, &
-          'Frozen runoff (calving) into ocean', 'kilogram meter-2 second-1', &
-          standard_name='water_flux_into_sea_water_from_icebergs')
-    CS%id_liq_runoff = register_diag_field('ocean_model', 'liq_runoff', diag%axesT1, Time, &
-          'Liquid runoff (rivers) into ocean', 'kilogram meter-2 second-1', &
-          standard_name='water_flux_into_sea_water_from_rivers')
-    CS%id_calving_hflx = register_diag_field('ocean_model', 'calving_hflx', diag%axesT1, Time, &
-          'Heat content of frozen runoff (calving) into ocean', 'Watt meter-2')
-    CS%id_runoff_hflx = register_diag_field('ocean_model', 'runoff_hflx', diag%axesT1, Time, &
-          'Heat content of liquid runoff (rivers) into ocean', 'Watt meter-2')
-
-    CS%id_Net_Heating = register_diag_field('ocean_model', 'Net_Heat', diag%axesT1, Time, &
-          'Net Surface Heating of Ocean', 'Watt meter-2')
-    CS%id_sw = register_diag_field('ocean_model', 'SW', diag%axesT1, Time, &
-        'Shortwave radiation flux into ocean', 'Watt meter-2', &
-        standard_name='surface_net_downward_shortwave_flux')
-    CS%id_LwLatSens = register_diag_field('ocean_model', 'LwLatSens', diag%axesT1, Time, &
-          'Combined longwave, latent, and sensible heating', 'Watt meter-2')
-    CS%id_lw = register_diag_field('ocean_model', 'LW', diag%axesT1, Time, &
-        'Longwave radiation flux into ocean', 'Watt meter-2', &
-        standard_name='surface_net_downward_longwave_flux')
-    CS%id_lat = register_diag_field('ocean_model', 'latent', diag%axesT1, Time, &
-        'Latent heat flux into ocean due to fusion and evaporation', 'Watt meter-2')
-    CS%id_sens = register_diag_field('ocean_model', 'sensible', diag%axesT1, Time, &
-        'Sensible heat flux into ocean', 'Watt meter-2', &
-        standard_name='surface_downward_sensible_heat_flux')
-
-    CS%id_psurf = register_diag_field('ocean_model', 'p_surf', diag%axesT1, Time, &
-          'Pressure at ice-ocean or atmosphere-ocean interface', 'Pascal')
-    CS%id_saltflux = register_diag_field('ocean_model', 'salt_flux', diag%axesT1, Time, &
-          'Salt flux into ocean at surface', 'kilogram meter-2 second-1')
-    CS%id_saltFluxIn = register_diag_field('ocean_model', 'salt_flux_in', diag%axesT1, Time, &
-          'Salt flux into ocean at surface from coupler', 'kilogram meter-2 second-1')
-    CS%id_saltFluxRestore = register_diag_field('ocean_model', 'salt_flux_restore', diag%axesT1, Time, &
-          'Salt flux into ocean at surface due to restoring term', 'kilogram meter-2 second-1')
-    CS%id_saltFluxGlobalAdj = register_scalar_field('ocean_model', 'salt_flux_global_restoring_adjustment', Time, diag, &
-          'Adjustment needed to balance net global salt flux into ocean at surface', 'kilogram meter-2 second-1')
-    CS%id_TKE_tidal = register_diag_field('ocean_model', 'TKE_tidal', diag%axesT1, Time, &
-          'Tidal source of BBL mixing', 'Watt meter-2')
-  else
-    CS%id_buoy = register_diag_field('ocean_model', 'buoy', diag%axesT1, Time, &
-          'Buoyancy forcing', 'meter2 second-3')
-  endif
+  call register_forcing_type_diags(Time, diag, CS%use_temperature, CS%handles)
 
   if (present(restore_salt)) then ; if (restore_salt) then
     salt_file = trim(CS%inputdir) // trim(CS%salt_restore_file)

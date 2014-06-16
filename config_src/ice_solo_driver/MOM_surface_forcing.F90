@@ -98,7 +98,7 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public set_forcing, surface_forcing_init, average_forcing, forcing_save_restart
+public set_forcing, surface_forcing_init, forcing_diagnostics, forcing_save_restart
 
 type, public :: surface_forcing_CS ; private
   logical :: use_temperature ! If true, temperature and salinity are used as
@@ -165,7 +165,7 @@ type, public :: surface_forcing_CS ; private
   character(len=80)  :: stress_x_var, stress_y_var
 
   integer :: id_taux = -1, id_tauy = -1, id_ustar = -1
-  integer :: id_PminusE = -1, id_evap = -1, id_precip = -1
+  integer :: id_pmepr = -1, id_evap = -1, id_precip = -1
   integer :: id_liq_precip = -1, id_froz_precip = -1, id_virt_precip = -1
   integer :: id_liq_runoff = -1, id_froz_runoff = -1
   integer :: id_runoff_hflx = -1, id_calving_hflx = -1
@@ -669,6 +669,10 @@ subroutine buoyancy_forcing_from_files(state, fluxes, day, dt, G, CS)
       allocate(fluxes%virt_precip(isd:ied,jsd:jed))
       fluxes%virt_precip(:,:) = 0.0
     endif
+    if (.not.associated(fluxes%seaice_melt)) then
+      allocate(fluxes%seaice_melt(isd:ied,jsd:jed))
+      fluxes%seaice_melt(:,:) = 0.0
+    endif
 
     !   Specify the fresh water forcing by setting the following, all in units
     ! of W m-2 and positive for heat fluxes into the ocean.
@@ -904,6 +908,10 @@ subroutine buoyancy_forcing_zero(state, fluxes, day, dt, G, CS)
       allocate(fluxes%virt_precip(G%isd:G%ied,G%jsd:G%jed))
       fluxes%virt_precip(:,:) = 0.0
     endif
+    if (.not.associated(fluxes%seaice_melt)) then
+      allocate(fluxes%seaice_melt(G%isd:G%ied,G%jsd:G%jed))
+      fluxes%seaice_melt(:,:) = 0.0
+    endif
 
     !   Specify the heat fluxes by setting the following, all in units
     ! of W m-2 and positive for heat fluxes into the ocean.
@@ -1000,6 +1008,10 @@ subroutine buoyancy_forcing_linear(state, fluxes, day, dt, G, CS)
       allocate(fluxes%virt_precip(G%isd:G%ied,G%jsd:G%jed))
       fluxes%virt_precip(:,:) = 0.0
     endif
+    if (.not.associated(fluxes%seaice_melt)) then
+      allocate(fluxes%seaice_melt(G%isd:G%ied,G%jsd:G%jed))
+      fluxes%seaice_melt(:,:) = 0.0
+    endif
 
     !   Specify the heat fluxes by setting the following, all in units
     ! of W m-2 and positive for heat fluxes into the ocean.
@@ -1084,7 +1096,7 @@ subroutine buoyancy_forcing_linear(state, fluxes, day, dt, G, CS)
 
 end subroutine buoyancy_forcing_linear
 
-subroutine average_forcing(fluxes, dt, G, CS)
+subroutine forcing_diagnostics(fluxes, dt, G, CS)
   type(forcing),         intent(in) :: fluxes
   real,                  intent(in) :: dt
   type(ocean_grid_type), intent(in) :: G
@@ -1113,15 +1125,15 @@ subroutine average_forcing(fluxes, dt, G, CS)
     if ((CS%id_ustar > 0) .and. ASSOCIATED(fluxes%ustar)) &
       call post_data(CS%id_ustar, fluxes%ustar, CS%diag)
 
-    if (CS%id_PminusE > 0) then
+    if (CS%id_pmepr > 0) then
       sum(:,:) = 0.0
-      if (ASSOCIATED(fluxes%liq_precip)) sum(:,:) = sum(:,:)+fluxes%liq_precip(:,:)
-      if (ASSOCIATED(fluxes%froz_precip)) sum(:,:) = sum(:,:)+fluxes%froz_precip(:,:)
-      if (ASSOCIATED(fluxes%evap)) sum(:,:) = sum(:,:)+fluxes%evap(:,:)
-      if (ASSOCIATED(fluxes%liq_runoff)) sum(:,:) = sum(:,:)+fluxes%liq_runoff(:,:)
-      if (ASSOCIATED(fluxes%froz_runoff)) sum(:,:) = sum(:,:)+fluxes%froz_runoff(:,:)
-      if (ASSOCIATED(fluxes%virt_precip)) sum(:,:) = sum(:,:)+fluxes%virt_precip(:,:)
-      call post_data(CS%id_PminusE, sum, CS%diag)
+      if (ASSOCIATED(fluxes%liq_precip))     sum(:,:) = sum(:,:)+fluxes%liq_precip(:,:)
+      if (ASSOCIATED(fluxes%froz_precip))    sum(:,:) = sum(:,:)+fluxes%froz_precip(:,:)
+      if (ASSOCIATED(fluxes%evap))           sum(:,:) = sum(:,:)+fluxes%evap(:,:)
+      if (ASSOCIATED(fluxes%liq_runoff))     sum(:,:) = sum(:,:)+fluxes%liq_runoff(:,:)
+      if (ASSOCIATED(fluxes%froz_runoff))    sum(:,:) = sum(:,:)+fluxes%froz_runoff(:,:)
+      if (ASSOCIATED(fluxes%virt_precip))    sum(:,:) = sum(:,:)+fluxes%virt_precip(:,:)
+      call post_data(CS%id_pmepr, sum, CS%diag)
     endif
 
     if ((CS%id_evap > 0) .and. ASSOCIATED(fluxes%evap)) &
@@ -1185,7 +1197,7 @@ subroutine average_forcing(fluxes, dt, G, CS)
   endif
 
   call cpu_clock_end(id_clock_forcing)
-end subroutine average_forcing
+end subroutine forcing_diagnostics
 
 subroutine forcing_save_restart(CS, G, Time, directory, time_stamped, &
                                 filename_suffix)
@@ -1437,7 +1449,7 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, tracer_flow_CSp)
       'Surface friction velocity', 'meter second-1')
 
   if (CS%use_temperature) then
-    CS%id_PminusE = register_diag_field('ocean_model', 'PmE', diag%axesT1, Time, &
+    CS%id_pmepr = register_diag_field('ocean_model', 'PmEpR', diag%axesT1, Time, &
           'Net fresh water flux (P-E+C+R)', 'kilogram meter-2 second-1')
     CS%id_evap = register_diag_field('ocean_model', 'evap', diag%axesT1, Time, &
           'Evaporation at ocean surface (usually negative)', 'kilogram meter-2 second-1')
