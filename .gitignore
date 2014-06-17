@@ -9,3 +9,4 @@ SIS.available_diags*
 RESTART
 _read_error.nml
 fort.*
+*.pyc
