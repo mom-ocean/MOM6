@@ -84,7 +84,7 @@ character(len=256), public :: remappingSchemesDoc = &
 character(len=3), public :: remappingDefaultScheme = "PLM"
 
 ! This CPP macro embeds some safety checks
-#undef __DO_SAFTEY_CHECKS__
+#define __DO_SAFETY_CHECKS__
 
 ! -----------------------------------------------------------------------------
 ! This module contains the following routines
@@ -383,7 +383,7 @@ subroutine remapping_core( CS, n0, h0, u0, n1, dx, u1 )
   real, dimension(CS%nk,CS%degree+1) :: ppoly_r_coefficients !Coefficients of polynomial
   integer :: remapping_scheme
 
-#ifdef __DO_SAFTEY_CHECKS__
+#ifdef __DO_SAFETY_CHECKS__
   integer :: k
   real :: hTmp, totalH0, totalHf, eps
   real :: err0, totalHU0, err2, totalHU2
@@ -481,11 +481,21 @@ subroutine remapping_core( CS, n0, h0, u0, n1, dx, u1 )
       call MOM_error( FATAL, 'MOM_remapping, remapping_core: '//&
            'The selected remapping method is invalid' )
   end select
+#ifdef __DO_SAFETY_CHECKS__
+  do k = 1, n0
+    if (ppoly_r_coefficients(k,2) /= ppoly_r_coefficients(k,2)) then
+      write(0,*) 'NaN in PPOLY at k=',k,' extrap=',CS%boundary_extrapolation
+      write(0,*) 'h0=',h0(k),' u0(k)',u0(k)
+      write(0,*) 'ppoly_r_E=',ppoly_r_E(k,:)
+      write(0,*) 'ppoly_r_coefficients(k)=',ppoly_r_coefficients(k,:)
+    endif
+  enddo
+#endif
 
   call remapByDeltaZ( n0, h0, u0, ppoly_r_E, ppoly_r_coefficients, n1, dx, iMethod, u1 )
 ! call remapByProjection( n0, h0, u0, CS%ppoly_r, n1, h1, iMethod, u1 )
 
-#ifdef __DO_SAFTEY_CHECKS__
+#ifdef __DO_SAFETY_CHECKS__
   totalHU0 = 0.
   err0 = 0.
   do k = 1, n0
@@ -511,6 +521,13 @@ subroutine remapping_core( CS, n0, h0, u0, n1, dx, u1 )
       write(0,*) 'z1(k)=',z1,' z1(k+1)=',z1+(h0(k)+(dx(k+1)-dx(k)))
       write(0,*) 'z0(k)+w(k)=',z0-dx(k),' z1(k+1)+w(k+1)=',(z0+h0(k))-dx(k+1)
       write(0,*) 'h1(k)=',h0(k) + ( dx(k+1) - dx(k) )
+      hTmp = 0.;err0 = 0.
+      do iMethod = 1, n1
+        hTmp = hTmp + h0(iMethod)
+        err0 = err0 + (h0(iMethod)+(dx(iMethod+1)-dx(iMethod)))
+        write(0,*) iMethod,hTmp,h0(iMethod),u0(iMethod),err0,h0(iMethod)+(dx(iMethod+1)-dx(iMethod)),u1(iMethod),dx(iMethod)
+      enddo
+      write(0,*) dx(n1+1)
       call MOM_error( FATAL, 'MOM_remapping, remapping_core: '//&
          'NaN detected!' )
     endif
@@ -597,7 +614,8 @@ subroutine remapByDeltaZ( n0, h0, u0, ppoly0_E, ppoly0_coefficients, n1, dx1, me
   real    :: xOld, hOld, uOld
   real    :: xNew, hNew
   real    :: uhNew, hFlux, uAve, fluxL, fluxR
-#ifdef __DO_SAFTEY_CHECKS__
+integer :: k
+#ifdef __DO_SAFETY_CHECKS__
   real    :: h0Total
 
   h0Total = 0.
@@ -631,7 +649,7 @@ subroutine remapByDeltaZ( n0, h0, u0, ppoly0_E, ppoly0_coefficients, n1, dx1, me
     xL = min( xOld, xNew )
     xR = max( xOld, xNew )
 
-#ifdef __DO_SAFTEY_CHECKS__
+#ifdef __DO_SAFETY_CHECKS__
     if (xL < 0.) then
       write(0,*) 'h0=',h0
       write(0,*) 'dx1=',dx1
@@ -653,7 +671,7 @@ subroutine remapByDeltaZ( n0, h0, u0, ppoly0_E, ppoly0_coefficients, n1, dx1, me
     ! uAve is the average value of u, independent of sign of dx1
     fluxR = dx1(iTarget+1)*uAve ! Includes sign of dx1
 
-#ifdef XXX__DO_SAFTEY_CHECKS__
+#ifdef XXX__DO_SAFETY_CHECKS__
     ! Valid for CFL<1
     if (dx1(iTarget+1)<h0(iTarget+1) .and. dx1(iTarget+1)>-hOld) then
       if (uAve<min(u0(iTarget),u0(iTarget+1))) then
@@ -710,7 +728,7 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefficients, 
   real    :: x0jLl, x0jLr ! Left/right position of cell jL
   real    :: x0jRl, x0jRr ! Left/right position of cell jR
 
-#ifdef __DO_SAFTEY_CHECKS__
+#ifdef __DO_SAFETY_CHECKS__
   real    :: h0Total
 
   h0Total = 0.
@@ -747,6 +765,10 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefficients, 
       exit ! once target grid cell is found, exit loop
     endif
   enddo
+
+! ! HACK to handle round-off problems. Need only at  j=n0.
+! ! This moves the effective cell boundary outwards a smidgen.  
+! if (xL>x0jLr) x0jLr = xL
 
   ! If, at this point, jL is equal to -1, it means the vanished
   ! cell lies outside the source grid. In other words, it means that
@@ -811,7 +833,7 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefficients, 
     ! HACK to avoid roundoff problems  THIS NEEDS TO BE REMOVED ---AJA
     if (xR>x0jRr) jR = n0
 
-#ifdef __DO_SAFTEY_CHECKS__
+#ifdef __DO_SAFETY_CHECKS__
     if ( jR == -1 ) call MOM_error(FATAL, &
           'MOM_remapping, integrateReconOnInterval: '//&
           'The location of the right-most cell could not be found')
@@ -853,6 +875,14 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefficients, 
         case default
           call MOM_error( FATAL,'The selected integration method is invalid' )
       end select     
+#ifdef __DO_SAFETY_CHECKS__
+      if (q /= q) then
+        write(0,*) 'Nan at jL==jR: jL=',jL,' jR=',jR
+        write(0,*) 'xL=',XL,' xR=',xR
+        write(0,*) 'xi0=',xi0,' xi1=',xi1
+        stop 'Nan during __DO_SAFETY_CHECKS__'
+      endif
+#endif
 
     else
     ! The target cell spans at least two cells of the source grid.
@@ -888,6 +918,14 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefficients, 
         case default
           call MOM_error( FATAL, 'The selected integration method is invalid' )
       end select     
+#ifdef __DO_SAFETY_CHECKS__
+      if (q /= q) then
+        write(0,*) 'Nan on left segment: jL=',jL,' jR=',jR
+        write(0,*) 'xL=',XL,' xR=',xR
+        write(0,*) 'xi0=',xi0,' xi1=',xi1
+        stop 'Nan during __DO_SAFETY_CHECKS__'
+      endif
+#endif
   
       ! Integrate contents within cells strictly comprised between jL and jR
       if ( jR > (jL+1) ) then
@@ -895,11 +933,19 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefficients, 
           q = q + h0(k) * u0(k)
         end do
       end if
+#ifdef __DO_SAFETY_CHECKS__
+      if (q /= q) then
+        write(0,*) 'Nan on middle segment: jL=',jL,' jR=',jR
+        write(0,*) 'xL=',XL,' xR=',xR
+        stop 'Nan during __DO_SAFETY_CHECKS__'
+      endif
+#endif
 
       ! Integrate from left boundary of cell jR up to xR
       xi0 = 0.0
       !xi1 = xR / h0(jR) - x0jRl / h0(jR)
       xi1 = (xR - x0jRl) / h0(jR)
+      !xi1 =  min( (xR - x0jRl) / h0(jR), 1.) ! Min needed for round-off issues
     
       select case ( method )
         case ( INTEGRATION_PCM )     
@@ -916,6 +962,17 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefficients, 
         case default
           call MOM_error( FATAL,'The selected integration method is invalid' )
       end select     
+#ifdef __DO_SAFETY_CHECKS__
+      if (q /= q) then
+        write(0,*) 'Nan on right segment: jL=',jL,' jR=',jR
+        write(0,*) 'h0(jR)=',h0(jR)
+        write(0,*) 'xL=',xL,' xR=',xR
+        write(0,*) 'xi0=',xi0,' xi1=',xi1
+        write(0,*) 'ppoly0_coeff(jR)=',ppoly0_coefficients(jR,:)
+        stop 'Nan during __DO_SAFETY_CHECKS__'
+      endif
+#endif
+  
       
     end if ! end integration for non-vanished cells 
     
@@ -956,7 +1013,7 @@ subroutine dzFromH1H2( n1, h1, n2, h2, dx )
       dx(k+1) = x2 - x1 ! Change of interface k+1, target - source
     endif
   enddo
-#ifdef __DO_SAFTEY_CHECKS__
+#ifdef __DO_SAFETY_CHECKS__
   if (abs(x2-x1) > 0.5*(real(n1-1)*x1+real(n2-1)*x2)*epsilon(x1)) then
     write(0,'(a4,3a12)') 'k','h1','h2','dh'
     do k = 1,max(n1,n2)
