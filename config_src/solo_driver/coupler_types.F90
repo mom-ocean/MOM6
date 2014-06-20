@@ -17,6 +17,7 @@ implicit none ; private
 type, public :: coupler_2d_bc_type
   integer    :: num_bcs = 0
 end type coupler_2d_bc_type
+
 integer, public :: ind_flux=-1, ind_alpha=-2, ind_csurf=-3
 
 end module coupler_types_mod

@@ -970,11 +970,11 @@ subroutine accumulate_net_input(fluxes, state, dt, G, CS)
 
   FW_in(:,:) = 0.0 ; FW_input = 0.0
   if (ASSOCIATED(fluxes%evap)) then
-    if (ASSOCIATED(fluxes%liq_precip) .and. ASSOCIATED(fluxes%froz_precip)) then
+    if (ASSOCIATED(fluxes%lprec) .and. ASSOCIATED(fluxes%fprec)) then
       do j=js,je ; do i=is,ie
         FW_in(i,j) = dt*G%areaT(i,j)*(fluxes%evap(i,j) + &
-            (((fluxes%liq_precip(i,j) + fluxes%virt_precip(i,j)) + fluxes%liq_runoff(i,j)) + &
-             (fluxes%froz_precip(i,j) + fluxes%froz_runoff(i,j))))
+            (((fluxes%lprec(i,j) + fluxes%vprec(i,j)) + fluxes%lrunoff(i,j)) + &
+             (fluxes%fprec(i,j)  + fluxes%frunoff(i,j))))
       enddo ; enddo
     else
       call MOM_error(WARNING, &
@@ -984,20 +984,17 @@ subroutine accumulate_net_input(fluxes, state, dt, G, CS)
 
   salt_in(:,:) = 0.0 ; heat_in(:,:) = 0.0
   if (CS%use_temperature) then
+
     if (ASSOCIATED(fluxes%sw)) then ; do j=js,je ; do i=is,ie
       heat_in(i,j) = heat_in(i,j) + dt*G%areaT(i,j) * (fluxes%sw(i,j) + &
              (fluxes%lw(i,j) + (fluxes%latent(i,j) + fluxes%sens(i,j))))
     enddo ; enddo ; endif
-    
-    if (ASSOCIATED(state%TempxPmE)) then
-      do j=js,je ; do i=is,ie
-        heat_in(i,j) = heat_in(i,j) + (C_p * G%areaT(i,j)) * state%TempxPmE(i,j)
-      enddo ; enddo
-    elseif (ASSOCIATED(fluxes%evap)) then
-      do j=js,je ; do i=is,ie
-        heat_in(i,j) = heat_in(i,j) + (C_p * state%SST(i,j)) * FW_in(i,j)
-      enddo ; enddo
-    endif
+
+    if (ASSOCIATED(fluxes%heat_content_lprec)) then ; do j=js,je ; do i=is,ie
+      heat_in(i,j) = heat_in(i,j) + dt*G%areaT(i,j) *                        &
+         (fluxes%heat_content_lprec(i,j)   + (fluxes%heat_content_fprec(i,j) &
+       + (fluxes%heat_content_lrunoff(i,j) + fluxes%heat_content_frunoff(i,j))))
+    enddo ; enddo ; endif
 
     ! The following heat sources may or may not be used.
     if (ASSOCIATED(state%internal_heat)) then
@@ -1022,7 +1019,7 @@ subroutine accumulate_net_input(fluxes, state, dt, G, CS)
     enddo ; enddo ; endif
   endif
 
-  if ((CS%use_temperature) .or. ASSOCIATED(fluxes%liq_precip) .or. &
+  if ((CS%use_temperature) .or. ASSOCIATED(fluxes%lprec) .or. &
       ASSOCIATED(fluxes%evap)) then
     if (CS%use_repro_sum) then
       FW_input = reproducing_sum(FW_in, EFP_sum=FW_in_EFP)

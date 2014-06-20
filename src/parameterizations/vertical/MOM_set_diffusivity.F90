@@ -328,7 +328,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, G, C
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)    :: u
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)    :: v
   real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h, u_h, v_h
-  type(thermo_var_ptrs),                  intent(inout) :: tv  ! out is for tv%TempxPmE
+  type(thermo_var_ptrs),                  intent(inout) :: tv  
   type(forcing),                          intent(in)    :: fluxes
   type(optics_type),                      pointer       :: optics
   type(vertvisc_type),                    intent(inout) :: visc

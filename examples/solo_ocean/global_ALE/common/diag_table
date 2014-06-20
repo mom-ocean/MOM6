@@ -8,7 +8,7 @@
 #"bt_mom",   5,"days",1,"days","Time",
 "visc",     1,"days",1,"days","Time",
 #"energy",   5,"days",1,"days","Time",
-#"forcing",  5,"days",1,"days","Time",
+"forcing",  1,"days",1,"days","Time",
 "surface",  12,"hours",1,"days","Time",
 "sfc_ave",  12,"hours",1,"days","Time",
 "ocean_static",       -1,"days",1,"days","time",
@@ -186,16 +186,28 @@
 
 # Surface Forcing:
 #=================
-#"ocean_model","taux","taux","forcing","all",.true.,"none",2
-#"ocean_model","tauy","tauy","forcing","all",.true.,"none",2
-#"ocean_model","ustar","ustar","forcing","all",.true.,"none",2
-#"ocean_model","PmE","PmE","forcing","all",.true.,"none",2
-#"ocean_model","SW","SW","forcing","all",.true.,"none",2
-#"ocean_model","LwLatSens","LwLatSens","forcing","all",.true.,"none",2
-#"ocean_model","p_surf","p_surf","forcing","all",.true.,"none",2
-#"ocean_model","salt_flux","salt_flux","forcing","all",.true.,"none",2
+"ocean_model","taux","taux",                                    "forcing","all",.true.,"none",2
+"ocean_model","tauy","tauy",                                    "forcing","all",.true.,"none",2
+"ocean_model","ustar","ustar",                                  "forcing","all",.true.,"none",2
+"ocean_model","PRCmE","PRCmE",                                  "forcing","all",.true.,"none",2
+"ocean_model","liq_runoff","liq_runoff",                        "forcing","all",.true.,"none",2
+"ocean_model","froz_runoff","froz_runoff",                      "forcing","all",.true.,"none",2
+"ocean_model","liq_precip","liq_precip",                        "forcing","all",.true.,"none",2
+"ocean_model","froz_precip","froz_precip",                      "forcing","all",.true.,"none",2
+"ocean_model","virt_precip","virt_precip",                      "forcing","all",.true.,"none",2
+"ocean_model","net_heat_coupler","net_heat_coupler",            "forcing","all",.true.,"none",2
+"ocean_model","net_heat_surface","net_heat_surface",            "forcing","all",.true.,"none",2
+"ocean_model","SW","SW",                                        "forcing","all",.true.,"none",2
+"ocean_model","LW","LW",                                        "forcing","all",.true.,"none",2
+"ocean_model","LwLatSens","LwLatSens",                          "forcing","all",.true.,"none",2
+"ocean_model","p_surf","p_surf",                                "forcing","all",.true.,"none",2
+"ocean_model","salt_flux","salt_flux",                          "forcing","all",.true.,"none",2
+"ocean_model","Heat_PmE","Heat_PmE",                            "forcing","all",.true.,"none",2
+"ocean_model","evap_heat_content","evap_heat_content",          "forcing","all",.true.,"none",2
+"ocean_model","precip_heat_content","precip_heat_content",      "forcing","all",.true.,"none",2
+"ocean_model","runoff_heat_content","runoff_heat_content",      "forcing","all",.true.,"none",2
+"ocean_model","surfwater_heat_content","surfwater_heat_content","forcing","all",.true.,"none",2
 #
-
 # Static ocean fields:
 #=====================
 "ocean_model", "geolon",      "geolon",      "ocean_static", "all", .false., "none", 2

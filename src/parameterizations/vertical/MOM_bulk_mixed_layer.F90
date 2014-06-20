@@ -142,12 +142,8 @@ type, public :: bulkmixedlayer_CS ; private
                              ! thickness of the surface region (mixed & buffer
                              ! layer) is allowed to change between grid points.
                              ! Nondimensional, 0.2 by default.
-  logical :: use_river_heat_content ! If true, use the fluxes%runoff_Hflx field
-                             ! to set the heat carried by runoff, instead of 
-                             ! using SST for temperature of liq_runoff
-  logical :: use_calving_heat_content ! Use SST for temperature of froz_runoff
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
-                             ! timing of diagnostic output.
+
+  type(diag_ctrl), pointer :: diag    ! structure to regulate timing of diagnostic output
   real    :: Allowed_T_chg   ! The amount by which temperature is allowed
                              ! to exceed previous values during detrainment, K.
   real    :: Allowed_S_chg   ! The amount by which salinity is allowed
@@ -543,7 +539,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
       if(id_clock_adjustment>0) call cpu_clock_end(id_clock_adjustment)
     endif
 
-    if (associated(fluxes%liq_runoff) .and. CS%do_rivermix) then
+    if (associated(fluxes%lrunoff) .and. CS%do_rivermix) then
 
       ! Here we add an additional source of TKE to the mixed layer where river
       ! is present to simulate unresolved estuaries. The TKE input is diagnosed
@@ -558,7 +554,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
       RmixConst = 0.5*CS%rivermix_depth*G%g_Earth*Irho0**2
       do i=is,ie
         TKE_river(i) = max(0.0, RmixConst*dR0_dS(i)* &
-            (fluxes%liq_runoff(i,j) + fluxes%froz_runoff(i,j)) * S(i,1))
+            (fluxes%lrunoff(i,j) + fluxes%frunoff(i,j)) * S(i,1))
       enddo
     else
       do i=is,ie ; TKE_river(i) = 0.0 ; enddo
@@ -568,10 +564,12 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
     if(id_clock_conv>0) call cpu_clock_begin(id_clock_conv)
 
     ! The surface forcing is contained in the fluxes type.
-    ! Here, we "unpack" it and aggregate all the thermodynamic forcing into
-    ! Net_H, Net_heat, Net_salt and the SW penetrative componennts, Pen_SW_bnd.
-    call extractFluxes1d(G, fluxes, optics, nsw, j, dt, &
-                  CS%H_limit_fluxes, CS%use_river_heat_content, CS%use_calving_heat_content, &
+    ! We aggregate the thermodynamic forcing for a time step into the following:
+    ! net_H        = water (H units) added/removed via surface fluxes
+    ! net_heat     = heat (degC * H) via surface fluxes
+    ! net_salt     = salt ( g(salt)/m2 for non-Bouss and ppt*m/s for Bouss ) via surface fluxes
+    ! Pen_SW_bnd   = components to penetrative shortwave radiation
+    call extractFluxes1d(G, fluxes, optics, nsw, j, dt, CS%H_limit_fluxes, &
                   h(:,1:), T(:,1:), Net_H, Net_heat, Net_salt, Pen_SW_bnd, tv)
 
     !   This subroutine causes the mixed layer to entrain to the depth of
@@ -975,6 +973,7 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
   type(ocean_grid_type),          intent(in)    :: G
   type(bulkmixedlayer_CS),        pointer       :: CS
   type(thermo_var_ptrs),          intent(inout) :: tv
+
 !   This subroutine causes the mixed layer to entrain to the depth of free
 ! convection.  The depth of free convection is the shallowest depth at which the
 ! fluid is the denser than the average of the fluid above.
@@ -1063,9 +1062,11 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
     ! Precipitation is assumed to have the same temperature and velocity
     ! as layer 1.  Because layer 1 might not be the topmost layer, this
     ! involves multiple terms.
-    T_precip = T(i,1)
-    Ttot(i) = (Net_heat(i) + (precip * T_precip + h_ent * T(i,k))) + &
-              Pen_absorbed
+! smg: 
+!    T_precip = T(i,1)
+!    Ttot(i) = (Net_heat(i) + (precip * T_precip + h_ent * T(i,k))) + &
+!              Pen_absorbed
+    Ttot(i) = (Net_heat(i) + (h_ent * T(i,k))) + Pen_absorbed
     Stot(i) = h_ent*S(i,k) + Net_salt(i)
     uhtot(i) = u(i,1)*precip + u(i,k)*h_ent
     vhtot(i) = v(i,1)*precip + v(i,k)*h_ent
@@ -1078,8 +1079,7 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
                  (dRcv_dT(i)*(Net_heat(i) + Pen_absorbed) - &
                   dRcv_dS(i) * (precip * S(i,1) - Net_salt(i)))
     Conv_En(i) = 0.0 ; dKE_FC(i) = 0.0
-    if (ASSOCIATED(tv%TempxPmE)) tv%TempxPmE(i,j) = tv%TempxPmE(i,j) + &
-                         T_precip * precip * G%H_to_kg_m2
+
   endif ; enddo
 
 !   At this point, htot contains an Angstrom of fluid from layer 0 plus any
@@ -1122,8 +1122,7 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
         R0_tot(i) = R0_tot(i) + dR0_dS(i)*h_evap*S(i,k)
         Rcv_tot(i) = Rcv_tot(i) + dRcv_dS(i)*h_evap*S(i,k)
         d_eb(i,k) = d_eb(i,k) - h_evap
-        if (ASSOCIATED(tv%TempxPmE)) tv%TempxPmE(i,j) = tv%TempxPmE(i,j) - &
-                                      T(i,k)*h_evap*G%H_to_kg_m2
+
       endif
       h_avail = h(i,k) - eps(i,k)
 ! The following section calculates how much fluid will be entrained.
@@ -3408,14 +3407,6 @@ subroutine bulkmixedlayer_init(Time, G, param_file, diag, CS)
     call get_param(param_file, mod, "RIVERMIX_DEPTH", CS%rivermix_depth, &
                  "The depth to which rivers are mixed if DO_RIVERMIX is \n"//&
                  "defined.", units="m", default=0.0)
-  call get_param(param_file, mod, "USE_RIVER_HEAT_CONTENT", CS%use_river_heat_content, &
-                 "If true, use the fluxes%runoff_Hflx field to set the \n"//&
-                 "heat carried by runoff, instead of using SST*CP*liq_runoff.", &
-                 default=.false.)
-  call get_param(param_file, mod, "USE_CALVING_HEAT_CONTENT", CS%use_calving_heat_content, &
-                 "If true, use the fluxes%calving_Hflx field to set the \n"//&
-                 "heat carried by runoff, instead of using SST*CP*froz_runoff.", &
-                 default=.false.)
 
   call get_param(param_file, mod, "ALLOW_CLOCKS_IN_OMP_LOOPS", &
                  CS%allow_clocks_in_omp_loops, &

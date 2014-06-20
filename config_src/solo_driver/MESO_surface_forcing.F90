@@ -40,7 +40,7 @@ module MESO_surface_forcing
 !*    MESO_buoyancy forcing is used to set the surface buoyancy        *
 !*  forcing, which may include a number of fresh water flux fields     *
 !*  (evap, liq_precip, froz_precip, liq_runoff, froz_runoff, and       *
-!*  virt_precip) and the surface heat fluxes (sw, lw, latent and sens) *
+!*  vprec) and the surface heat fluxes (sw, lw, latent and sens)       *
 !*  if temperature and salinity are state variables, or it may simply  *
 !*  be the buoyancy flux if it is not.  This routine also has coded a  *
 !*  restoring to surface values of temperature and salinity.           *
@@ -191,9 +191,9 @@ subroutine MESO_buoyancy_forcing(state, fluxes, day, dt, G, CS)
 !    When temperature is used, there are long list of fluxes that need to be
 !  set - essentially the same as for a full coupled model, but most of these
 !  can be simply set to zero.  The net fresh water flux should probably be
-!  set in fluxes%evap and fluxes%liq_precip, with any salinity restoring
-!  appearing in fluxes%virt_precip, and the other water flux components
-!  (froz_precip, liq_runoff and froz_runoff) left as arrays full of zeros. 
+!  set in fluxes%evap and fluxes%lprec, with any salinity restoring
+!  appearing in fluxes%vprec, and the other water flux components
+!  (fprec, lrunoff and frunoff) left as arrays full of zeros. 
 !  Evap is usually negative and precip is usually positive.  All heat fluxes
 !  are in W m-2 and positive for heat going into the ocean.  All fresh water
 !  fluxes are in kg m-2 s-1 and positive for water moving into the ocean.
@@ -230,16 +230,17 @@ subroutine MESO_buoyancy_forcing(state, fluxes, day, dt, G, CS)
   ! usually not changed.
   if (CS%use_temperature) then
     call alloc_if_needed(fluxes%evap, isd, ied, jsd, jed)
-    call alloc_if_needed(fluxes%liq_precip, isd, ied, jsd, jed)
-    call alloc_if_needed(fluxes%froz_precip, isd, ied, jsd, jed)
-    call alloc_if_needed(fluxes%liq_runoff, isd, ied, jsd, jed)
-    call alloc_if_needed(fluxes%froz_runoff, isd, ied, jsd, jed)
-    call alloc_if_needed(fluxes%virt_precip, isd, ied, jsd, jed)
+    call alloc_if_needed(fluxes%lprec, isd, ied, jsd, jed)
+    call alloc_if_needed(fluxes%fprec, isd, ied, jsd, jed)
+    call alloc_if_needed(fluxes%lrunoff, isd, ied, jsd, jed)
+    call alloc_if_needed(fluxes%frunoff, isd, ied, jsd, jed)
+    call alloc_if_needed(fluxes%vprec, isd, ied, jsd, jed)
 
     call alloc_if_needed(fluxes%sw, isd, ied, jsd, jed)
     call alloc_if_needed(fluxes%lw, isd, ied, jsd, jed)
     call alloc_if_needed(fluxes%latent, isd, ied, jsd, jed)
     call alloc_if_needed(fluxes%sens, isd, ied, jsd, jed)
+    call alloc_if_needed(fluxes%heat_content_lprec, isd, ied, jsd, jed)
   else ! This is the buoyancy only mode.
     call alloc_if_needed(fluxes%buoy, isd, ied, jsd, jed)
   endif
@@ -273,16 +274,17 @@ subroutine MESO_buoyancy_forcing(state, fluxes, day, dt, G, CS)
       ! Fluxes of fresh water through the surface are in units of kg m-2 s-1
       ! and are positive downward - i.e. evaporation should be negative.
       fluxes%evap(i,j) = -0.0 * G%mask2dT(i,j)
-      fluxes%liq_precip(i,j) = CS%PmE(i,j) * CS%Rho0 * G%mask2dT(i,j)
+      fluxes%lprec(i,j) = CS%PmE(i,j) * CS%Rho0 * G%mask2dT(i,j)
 
-      ! virt_precip will be set later, if it is needed for salinity restoring.
-      fluxes%virt_precip(i,j) = 0.0
+      ! vprec will be set later, if it is needed for salinity restoring.
+      fluxes%vprec(i,j) = 0.0
 
       !   Heat fluxes are in units of W m-2 and are positive into the ocean.
-      fluxes%lw(i,j) = 0.0 * G%mask2dT(i,j)
-      fluxes%latent(i,j) = 0.0 * G%mask2dT(i,j)
-      fluxes%sens(i,j) = CS%Heat(i,j) * G%mask2dT(i,j)
-      fluxes%sw(i,j) = CS%Solar(i,j) * G%mask2dT(i,j)
+      fluxes%lw(i,j)                 = 0.0 * G%mask2dT(i,j)
+      fluxes%latent(i,j)             = 0.0 * G%mask2dT(i,j)
+      fluxes%sens(i,j)               = CS%Heat(i,j) * G%mask2dT(i,j)
+      fluxes%sw(i,j)                 = CS%Solar(i,j) * G%mask2dT(i,j)
+      fluxes%heat_content_lprec(i,j) = fluxes%C_p * fluxes%lprec(i,j) * state%SST(i,j)
     enddo ; enddo
   else ! This is the buoyancy only mode.
     do j=js,je ; do i=is,ie
@@ -307,12 +309,12 @@ subroutine MESO_buoyancy_forcing(state, fluxes, day, dt, G, CS)
         if (G%mask2dT(i,j) > 0) then
           fluxes%heat_restore(i,j) = G%mask2dT(i,j) * &
               ((CS%T_Restore(i,j) - state%SST(i,j)) * rhoXcp * CS%Flux_const)
-          fluxes%virt_precip(i,j) = - (CS%Rho0*CS%Flux_const) * &
+          fluxes%vprec(i,j) = - (CS%Rho0*CS%Flux_const) * &
               (CS%S_Restore(i,j) - state%SSS(i,j)) / &
               (0.5*(state%SSS(i,j) + CS%S_Restore(i,j)))
         else
           fluxes%heat_restore(i,j) = 0.0
-          fluxes%virt_precip(i,j) = 0.0
+          fluxes%vprec(i,j) = 0.0
         endif
       enddo ; enddo
     else
