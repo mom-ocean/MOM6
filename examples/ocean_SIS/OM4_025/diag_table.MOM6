@@ -2,16 +2,14 @@
 "ocean_daily",            1, "days",   1, "days", "time"
 "ocean_month",            1, "months", 1, "days", "time"
 "ocean_annual",          12, "months", 1, "days", "time"
-"ocean_annual_snap",     12, "months", 1, "days", "time"
 "ocean_static",          -1, "months", 1, "days", "time"
+"ocean_month_z",          1, "months", 1, "days", "time"
 "ocean_Drake_passage",    1, "days",   1, "days", "time"
 "ocean_Denmark_Strait",   1, "days",   1, "days", "time"
 "ocean_Iceland_Norway",   1, "days",   1, "days", "time"
 "ocean_Gibraltar_Strait", 1, "days",   1, "days", "time"
 "ocean_Bering_Strait",    1, "days",   1, "days", "time"
 "ocean_Agulhas_section",  1, "days",   1, "days", "time"
-
-# Ocean diagnostics
 
 # High-frequency 2d
  "ocean_model", "SSH",          "ssh",              "ocean_daily", "all", "mean", "none",2
@@ -79,10 +77,14 @@
  "ocean_model", "LwLatSens",    "LwLatSens",        "ocean_annual", "all", "mean", "none",2
  "ocean_model", "p_surf",       "p_surf",           "ocean_annual", "all", "mean", "none",2
  "ocean_model", "salt_flux",    "salt_flux",        "ocean_annual", "all", "mean", "none",2
+ "ocean_model", "age",          "age",              "ocean_annual", "all", "mean", "none",2
+#"ocean_model", "vintage",      "vintage",          "ocean_annual", "all", "mean", "none",2
 
-# Annual snapshots
- "ocean_model", "age",          "age",              "ocean_annual_snap", "all", "none", "none",2
-#"ocean_model", "vintage_z",    "vintage",          "ocean_annual_snap", "all", "none", "none",2
+# Z diagnostics
+ "ocean_model", "temp_z",       "temp",             "ocean_month_z", "all", "mean", "none",2
+ "ocean_model", "salt_z",       "salt",             "ocean_month_z", "all", "mean", "none",2
+ "ocean_model", "age_z",        "age",              "ocean_month_z", "all", "mean", "none",2
+#"ocean_model", "vintage_z",    "vintage",          "ocean_month_z", "all", "mean", "none",2
 
 # Sections
 "ocean_model", "temp", "temp", "ocean_Drake_passage",    "all", "mean", "-70. -70. -71. -54.5 -1 -1",2
