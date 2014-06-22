@@ -97,6 +97,9 @@
 "ice_model", "coszen"  [Unused]
     ! long_name: cosine of zenith
     ! units: -1:1
+"ice_model", "sw_abs_sfc"  [Unused]
+    ! long_name: SW frac. abs. at the ice surface
+    ! units: 0:1
 "ice_model", "sw_abs_snow"  [Unused]
     ! long_name: SW frac. abs. in snow
     ! units: 0:1
@@ -115,8 +118,8 @@
 "ice_model", "sw_pen"  [Unused]
     ! long_name: SW frac. pen. surf.
     ! units: 0:1
-"ice_model", "sw_trn"  [Unused]
-    ! long_name: SW frac. trans. to ice bot.
+"ice_model", "sw_abs_ocn"  [Unused]
+    ! long_name: SW frac. sent to the ocean
     ! units: 0:1
 "ice_model", "alb_vis_dir"  [Unused]
     ! long_name: ice surface albedo vis_dir
