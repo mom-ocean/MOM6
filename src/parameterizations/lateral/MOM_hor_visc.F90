@@ -551,10 +551,13 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
   enddo ! end of k loop
 
   if (associated(MEKE)) then ; if (associated(MEKE%mom_src)) then
-    do j=js,je ; do i=is,ie ; MEKE%mom_src(i,j) = FrictWork(i,j,1) ; enddo ; enddo
-    do k=2,nz ; do j=js,je ; do i=is,ie
-      MEKE%mom_src(i,j) = MEKE%mom_src(i,j) + FrictWork(i,j,k)
-    enddo ; enddo ; enddo
+!$OMP parallel do default(none) shared(is,ie,js,je,nz,MEKE,FrictWork)
+    do j=js,je 
+      do i=is,ie ; MEKE%mom_src(i,j) = FrictWork(i,j,1) ; enddo
+      do k=2,nz ; do i=is,ie
+        MEKE%mom_src(i,j) = MEKE%mom_src(i,j) + FrictWork(i,j,k)
+      enddo ; enddo 
+    enddo
   endif ; endif
 
 ! Offer fields for averaging.

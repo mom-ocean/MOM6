@@ -157,7 +157,7 @@ real, parameter    :: NR_TOLERANCE = 1e-12
 real, parameter    :: NR_OFFSET = 1e-6
 
 ! This CPP macro embeds some safety checks
-#undef __DO_SAFTEY_CHECKS__
+#undef __DO_SAFETY_CHECKS__
 
 ! -----------------------------------------------------------------------------
 ! This module contains the following routines
@@ -282,7 +282,7 @@ subroutine regridding_main( remapCS, CS, G, h, tv, dzInterface )
       
   end select ! type of grid 
   
-#ifdef __DO_SAFTEY_CHECKS__
+#ifdef __DO_SAFETY_CHECKS__
   call checkGridsMatch(G, h, dzInterface)
 #endif
 
@@ -443,7 +443,7 @@ subroutine buildGridZstar( CS, G, h, dzInterface )
       enddo
       dzInterface(i,j,nz+1) = 0.
 
-#ifdef __DO_SAFTEY_CHECKS__
+#ifdef __DO_SAFETY_CHECKS__
       dh=max(nominalDepth,totalThickness)
       if (abs(zNew(1)-zOld(1))>(nz-1)*0.5*epsilon(eta)*dh) then
         write(0,*) 'min_thickness=',minThickness
@@ -522,7 +522,7 @@ subroutine buildGridSigma( CS, G, h, dzInterface )
       enddo
       dzInterface(i,j,nz+1) = 0.
 
-#ifdef __DO_SAFTEY_CHECKS__
+#ifdef __DO_SAFETY_CHECKS__
       dh=max(nominalDepth,totalThickness)
       if (abs(zNew(1)-zOld(1))>(nz-1)*0.5*epsilon(dh)*dh) then
         write(0,*) 'min_thickness=',CS%min_thickness
@@ -741,7 +741,7 @@ subroutine buildGridRho( G, h, tv, dzInterface, remapCS, CS )
       dzInterface(i,j,1) = 0.
       do k = 2,nz
         dzInterface(i,j,k) = zNew(k) - zOld(k)
-#ifdef __DO_SAFTEY_CHECKS__
+#ifdef __DO_SAFETY_CHECKS__
         if (zNew(k) > zOld(1)) then
           write(0,*) 'zOld=',zOld
           write(0,*) 'zNew=',zNew
@@ -758,7 +758,7 @@ subroutine buildGridRho( G, h, tv, dzInterface, remapCS, CS )
       enddo
       dzInterface(i,j,nz+1) = 0.
 
-#ifdef __DO_SAFTEY_CHECKS__
+#ifdef __DO_SAFETY_CHECKS__
       dh=max(nominalDepth,totalThickness)
       if (abs(zNew(1)-zOld(1))>(nz-1)*0.5*epsilon(dh)*dh) then
         write(0,*) 'min_thickness=',CS%min_thickness

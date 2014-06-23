@@ -40,6 +40,8 @@ public edge_values_implicit_h6
 public triDiagEdgeWorkAllocate
 public triDiagEdgeWorkDeallocate
 
+#define __DO_SAFETY_CHECKS__
+
 contains
 
 !------------------------------------------------------------------------------
@@ -319,6 +321,8 @@ subroutine edge_values_explicit_h4( N, h, u, edge_values )
   real, dimension(5)    :: x                ! used to compute edge
   real, dimension(4,4)  :: A                ! values near the boundaries
   real, dimension(4)    :: B, C
+  real, parameter       :: hNegligible = 0.e-10 ! A cut-off minimum thickness
+  real, parameter       :: hMinFrac = 0.e-5 ! A minimum fraction for min(h)/(sum(k-2:k+1)
   
   ! Loop on interior cells
   do i = 3,N-1
@@ -327,12 +331,21 @@ subroutine edge_values_explicit_h4( N, h, u, edge_values )
     h1 = h(i-1)
     h2 = h(i)
     h3 = h(i+1)
+
+    ! Avoid singularities when consecutive pairs of h vanish
+    if (h0+h1==0. .or. h1+h2==0. .or. h2+h3==0.) then
+      f1 = max(hNegligible, h0+h1+h2+h3 )
+      h0 = max(hMinFrac*f1, h(i-2) )
+      h1 = max(hMinFrac*f1, h(i-1) )
+      h2 = max(hMinFrac*f1, h(i) )
+      h3 = max(hMinFrac*f1, h(i+1) )
+    endif
     
     u0 = u(i-2)
     u1 = u(i-1)
     u2 = u(i)
     u3 = u(i+1)
-    
+
     f1 = (h0+h1) * (h2+h3) / (h1+h2)
     f2 = u1 * h2 + u2 * h1
     f3 = 1.0 / (h0+h1+h2) + 1.0 / (h1+h2+h3)
@@ -354,21 +367,32 @@ subroutine edge_values_explicit_h4( N, h, u, edge_values )
     edge_values(i,1) = e
     edge_values(i-1,2) = e
 
+#ifdef __DO_SAFETY_CHECKS__
+    if (e /= e) then
+      write(0,*) 'NaN in explicit_edge_h4 at k=',i
+      write(0,*) 'u0-u3=',u0,u1,u2,u3
+      write(0,*) 'h0-h3=',h0,h1,h2,h3
+      write(0,*) 'f1-f3=',f1,f2,f3
+      stop 'Nan during edge_values_explicit_h4'
+    endif
+#endif
+
   end do ! end loop on interior cells
 
   ! Determine first two edge values
+  f1 = max(hNegligible, hMinFrac*sum(h(1:4)) )
   x(1) = 0.0
   do i = 2,5
-    x(i) = x(i-1) + h(i-1)
+    x(i) = x(i-1) + max(f1, h(i-1))
   end do
 
   do i = 1,4
     
     do j = 1,4
-      A(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / j
+      A(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / real(j)
     end do
     
-    B(i) = u(i) * ( h(i) )
+    B(i) = u(i) * max(f1, h(i) )
     
   end do    
 
@@ -381,19 +405,32 @@ subroutine edge_values_explicit_h4( N, h, u, edge_values )
   edge_values(1,2) = evaluation_polynomial( C, 4, x(2) )
   edge_values(2,1) = edge_values(1,2)
 
+#ifdef __DO_SAFETY_CHECKS__
+  if (edge_values(1,1) /= edge_values(1,1) .or. edge_values(1,2) /= edge_values(1,2)) then
+    write(0,*) 'NaN in explicit_edge_h4 at k=',1
+    write(0,*) 'A=',A
+    write(0,*) 'B=',B
+    write(0,*) 'C=',C
+    write(0,*) 'h(1:4)=',h(1:4)
+    write(0,*) 'x=',x
+    stop 'Nan during edge_values_explicit_h4'
+  endif
+#endif
+
   ! Determine last two edge values
+  f1 = max(hNegligible, hMinFrac*sum(h(N-3:N)) )
   x(1) = 0.0
   do i = 2,5
-    x(i) = x(i-1) + h(N-5+i)
+    x(i) = x(i-1) + max(f1, h(N-5+i))
   end do
 
   do i = 1,4
     
     do j = 1,4
-      A(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / j
+      A(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / real(j)
     end do
     
-    B(i) = u(N-4+i) * ( h(N-4+i) )
+    B(i) = u(N-4+i) * max(f1,  h(N-4+i) )
     
   end do    
 
@@ -404,8 +441,26 @@ subroutine edge_values_explicit_h4( N, h, u, edge_values )
   
   ! Second to last edge value
   edge_values(N,1) = evaluation_polynomial( C, 4, x(4) )
-  
   edge_values(N-1,2) = edge_values(N,1)
+  
+#ifdef __DO_SAFETY_CHECKS__
+  if (edge_values(N,1) /= edge_values(N,1) .or. edge_values(N,2) /= edge_values(N,2)) then
+    write(0,*) 'NaN in explicit_edge_h4 at k=',N
+    write(0,*) 'A='
+    do i = 1,4
+      do j = 1,4
+        A(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / real(j)
+      end do
+      write(0,*) A(i,:)
+      B(i) = u(N-4+i) * ( h(N-4+i) )
+    end do    
+    write(0,*) 'B=',B
+    write(0,*) 'C=',C
+    write(0,*) 'h(:N)=',h(N-3:N)
+    write(0,*) 'x=',x
+    stop 'Nan during edge_values_explicit_h4'
+  endif
+#endif
 
 end subroutine edge_values_explicit_h4
 

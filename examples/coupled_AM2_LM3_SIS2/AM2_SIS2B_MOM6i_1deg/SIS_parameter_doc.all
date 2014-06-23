@@ -44,15 +44,12 @@ ICE_OPTICAL_DEPTH = 0.67        !   [m] default = 0.67
 ALBEDO_T_MELT_RANGE = 1.0       !   [degC] default = 1.0
                                 ! The temperature range below freezing over which the
                                 ! albedos are changed by partial melting.
-ICE_CONSERVATION_CHECK = True   !   [Boolean] default = True
-                                ! If true, do additional calculations to check for
-                                ! internal conservation of heat, salt, and water mass in
-                                ! the sea ice model.  This does not change answers, but
-                                ! can increase model run time.
 COLUMN_CHECK = False            !   [Boolean] default = False
                                 ! If true, add code to allow debugging of conservation
                                 ! column-by-column.  This does not change answers, but
                                 ! can increase model run time.
+IMBALANCE_TOLERANCE = 1.0E-09   !   [nondim] default = 1.0E-09
+                                ! The tolerance for imbalances to be flagged by COLUMN_CHECK.
 ICE_BOUNDS_CHECK = True         !   [Boolean] default = True
                                 ! If true, periodically check the values of ice and snow
                                 ! temperatures and thicknesses to ensure that they are
@@ -110,10 +107,10 @@ ENTHALPY_UNITS = 1.0            !   [J kg-1] default = 1.0
                                 ! A constant that rescales enthalpy from J/kg to a
                                 ! different scale in its internal representation.  Changing
                                 ! this by a power of 2 is useful for debugging, as answers
-                                ! should not change.
+                                ! should not change.  A negative values is taken as an inverse.
 TIMEUNIT = 8.64E+04             !   [s] default = 8.64E+04
                                 ! The time unit for ICE_STATS_INTERVAL.
-ICE_STATS_INTERVAL = 1.0        !   [days] default = 1.0
+ICE_STATS_INTERVAL = 0.25       !   [days] default = 1.0
                                 ! The interval in units of TIMEUNIT between writes of the
                                 ! globally summed ice statistics and conservation checks.
 REENTRANT_X = True              !   [Boolean] default = True

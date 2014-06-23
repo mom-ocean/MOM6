@@ -298,7 +298,8 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, CS)
 
   if ((G%nkml>0) .and. .not.use_BBL_EOS) then
     do i=G%IscB,G%IecB+1 ; p_ref(i) = tv%P_ref ; enddo
-    do k=1,nkmb ; do j=Jsq,Jeq+1
+!$OMP parallel do default(none) shared(Jsq,Jeq,Isq,Ieq,nkmb,tv,p_ref,Rml)    
+    do j=Jsq,Jeq+1 ; do k=1,nkmb 
       call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p_ref, &
                       Rml(:,j,k), Isq, Ieq-Isq+2, tv%eqn_of_state)
     enddo ; enddo

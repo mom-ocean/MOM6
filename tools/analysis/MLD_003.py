@@ -44,7 +44,7 @@ m6plot.xyplot( MLD.min(axis=1).mean(axis=0), x, y, area=area,
       clim=ciMin, extend='max', colormap='dunneRainbow',
       save=cmdLineArgs.outdir+'/MLD_003_minimum.png')
 
-m6plot.setFigureSize(aspect=[3,3], verticalResolution=976, nPanels=0)
+m6plot.setFigureSize(aspect=[3,3], verticalresolution=976, npanels=0)
 ax1 = plt.subplot(2,1,1)
 m6plot.xyplot( numpy.roll(MLD_obs.min(axis=0),300,axis=-1), x_obs-300, y_obs,
       suptitle=rootGroup.title+' '+cmdLineArgs.label, title='Hosoda et al., 2010, annual-minimum MLD$_{0.03}$ [m]',
@@ -62,7 +62,7 @@ m6plot.xyplot( MLD.max(axis=1).mean(axis=0), x, y, area=area,
       clim=ciMax, extend='max', colormap='dunneRainbow',
       save=cmdLineArgs.outdir+'/MLD_003_maximum.png')
 
-m6plot.setFigureSize(aspect=[3,3], verticalResolution=976, nPanels=0)
+m6plot.setFigureSize(aspect=[3,3], verticalresolution=976, npanels=0)
 ax1 = plt.subplot(2,1,1)
 m6plot.xyplot( numpy.roll(MLD_obs.max(axis=0),300,axis=-1), x_obs-300, y_obs,
       suptitle=rootGroup.title+' '+cmdLineArgs.label, title='Hosoda et al., 2010, annual-maximum MLD$_{0.03}$ [m]',

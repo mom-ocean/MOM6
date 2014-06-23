@@ -35,7 +35,7 @@ else: temp = variable[0,0]
 ci=m6plot.pmCI(0.25,4.5,.5)
 m6plot.xyplot( temp - Tobs , x, y, area=area,
       suptitle=rootGroup.title+' '+cmdLineArgs.label, title='SST bias (w.r.t. WOA\'05) [$\degree$C]',
-      clim=ci, colormap='dunnePM', centerCB=True, extend='both',
+      clim=ci, colormap='dunnePM', centerlabels=True, extend='both',
       save=cmdLineArgs.outdir+'/SST_bias_WOA05.png')
 
 m6plot.xycompare( temp, Tobs , x, y, area=area,
@@ -43,5 +43,5 @@ m6plot.xycompare( temp, Tobs , x, y, area=area,
       title1='SST [$\degree$C]',
       title2='WOA\'05 SST [$\degree$C]',
       clim=m6plot.linCI(-2,29,.5), colormap='dunneRainbow', extend='max',
-      dlim=ci, dcolormap='dunnePM', dextend='both', centerDCB=True,
+      dlim=ci, dcolormap='dunnePM', dextend='both', centerdlabels=True,
       save=cmdLineArgs.outdir+'/SST_bias_WOA05.3_panel.png')

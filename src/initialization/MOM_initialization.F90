@@ -3542,9 +3542,6 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
   logical :: reentrant_x, tripolar_n, add_np,dbg
   logical :: debug = .false.  ! manually set this to true for verbose output
 
-  logical :: use_old_hinterp = .true.
-			
-
   ! Local variables for ALE remapping
   real, dimension(:), allocatable :: h1, h2, hTarget, deltaE, tmpT1d, tmpS1d
   real, dimension(:), allocatable :: tmpT1dIn, tmpS1dIn
@@ -3586,12 +3583,6 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
   eos => tv%eqn_of_state
 
   call mpp_get_compute_domain(G%domain%mpp_domain,isc,iec,jsc,jec)
-
-
-  call get_param(PF, mod, "USE_OLD_HINTERP", use_old_hinterp, &
-               "If true, use older version of hinterp, \n"//&
-               "in order to reproduce siena answers."//&
-               "Recommended setting is False", default=.true.)
 
   reentrant_x = .false. ;  call get_param(PF, mod, "REENTRANT_X", reentrant_x,default=.true.)
   tripolar_n = .false. ;  call get_param(PF, mod, "TRIPOLAR_N", tripolar_n, default=.false.)
@@ -3751,7 +3742,6 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
   do k=1,kd
     call cpu_clock_begin(id_clock_read)
     write(laynum,'(I8)') k ; laynum = adjustl(laynum)
-  
 
     if (is_root_pe()) then
       start = 1; start(3) = k; count = 1; count(1) = id; count(2) = jd
@@ -3802,11 +3792,6 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
       else
          salt_in(:,:) = tmp_in(:,:)
       endif
-      
-      
-      
-      
-
     endif
   
     call mpp_sync()
@@ -3819,12 +3804,10 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
     do j=1,jdp
       do i=1,id
          if (abs(temp_in(i,j)-missing_value_temp) .gt. abs(G%Angstrom_Z*missing_value_temp)) then                           
-            mask_in(i,j)=1.0
-         else	    
-            if (.not. use_old_hinterp) then
-               temp_in(i,j)=missing_value
-               salt_in(i,j)=missing_value
-            endif
+           mask_in(i,j)=1.0
+         else
+           temp_in(i,j)=missing_value
+           salt_in(i,j)=missing_value
          endif
       enddo 
     enddo
@@ -3836,20 +3819,8 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
 ! call fms routine horiz_interp to interpolate input level data to model horizontal grid
 
     if (k == 1) then
-
-      if (use_old_hinterp) then
- 
-
-         call horiz_interp_new(Interp,x_in,y_in,lon_out(is:ie,js:je),lat_out(is:ie,js:je), &
-               interp_method='bilinear',src_modulo=reentrant_x, &
-               mask_in=mask_in,mask_out=mask_out(is:ie,js:je))
-
-      else
-
-         call horiz_interp_new(Interp,x_in,y_in,lon_out(is:ie,js:je),lat_out(is:ie,js:je), &
+      call horiz_interp_new(Interp,x_in,y_in,lon_out(is:ie,js:je),lat_out(is:ie,js:je), &
                interp_method='bilinear',src_modulo=reentrant_x)
-      endif
-   
     endif
 
     if (debug) then
@@ -3860,38 +3831,20 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
     temp_out(:,:) = 0.0
     salt_out(:,:) = 0.0
 
-    if (use_old_hinterp) then
-       mask_out = 0.0
-       call horiz_interp(Interp,temp_in,temp_out(is:ie,js:je),mask_in=mask_in, &
-                      mask_out=mask_out(is:ie,js:je),missing_value=missing_value)
+    call horiz_interp(Interp,temp_in,temp_out(is:ie,js:je), missing_value=missing_value, new_missing_handle=.true.)
 
-    else
+    mask_out=1.0
+    do j=js,je
+      do i=is,ie
+        if (abs(temp_out(i,j)-missing_value) .lt. abs(G%Angstrom_Z*missing_value)) mask_out(i,j)=0.
+      enddo
+    enddo
 
-       call horiz_interp(Interp,temp_in,temp_out(is:ie,js:je), missing_value=missing_value, new_missing_handle=.true.)
-
-       mask_out=1.0
-       do j=js,je
-          do i=is,ie
-             if (abs(temp_out(i,j)-missing_value) .lt. abs(G%Angstrom_Z*missing_value)) then
-                mask_out(i,j)=0.
-             endif
-          enddo
-       enddo
-
-    endif
-
-
-    if (use_old_hinterp) then
-       call horiz_interp(Interp,salt_in,salt_out(is:ie,js:je),mask_in=mask_in, &
-                      mask_out=mask_out(is:ie,js:je),missing_value=missing_value)
-    else
-       call horiz_interp(Interp,salt_in,salt_out(is:ie,js:je), missing_value=missing_value, new_missing_handle=.true.)
-    endif
-
+    call horiz_interp(Interp,salt_in,salt_out(is:ie,js:je), missing_value=missing_value, new_missing_handle=.true.)
 
     if (debug) then
-       call hchksum(temp_out,'temperature after hinterp ',G)
-       call hchksum(salt_out,'salinity after hinterp ',G)
+      call hchksum(temp_out,'temperature after hinterp ',G)
+      call hchksum(salt_out,'salinity after hinterp ',G)
     endif
 
 
@@ -3911,22 +3864,16 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
           tempAvg = tempAvg + temp_out(i,j)
           saltAvg = saltAvg + salt_out(i,j)
         endif
-                                              ! vvv  k+1  ???? -AJA
-                                              ! ^^^  correct. (use_old_hinterp=.true. keeps the bug) -MJH
-        if (use_old_hinterp) then
-           if (G%mask2dT(i,j) == 1.0 .and. z_edges_in(k) <= G%bathyT(i,j) .and. mask_out(i,j) .lt. 1.0) fill(i,j)=1.0
-        else
-           if (G%mask2dT(i,j) == 1.0 .and. z_edges_in(k+1) <= G%bathyT(i,j) .and. mask_out(i,j) .lt. 1.0) fill(i,j)=1.0
-        endif
+        if (G%mask2dT(i,j) == 1.0 .and. z_edges_in(k) <= G%bathyT(i,j) .and. mask_out(i,j) .lt. 1.0) fill(i,j)=1.0
       enddo
     enddo
+    call pass_var(fill,G%Domain)
+    call pass_var(good,G%Domain)
 
     if (debug) then
-       call myStats(temp_out,missing_value, k,'Temp from horiz_interp()')
-       call myStats(salt_out,missing_value, k,'Salt from horiz_interp()')
+      call myStats(temp_out,missing_value, k,'Temp from horiz_interp()')
+      call myStats(salt_out,missing_value, k,'Salt from horiz_interp()')
     endif
-
-
 
     ! Horizontally homogenize data to produce perfectly "flat" initial conditions
     if (homogenize) then
@@ -3941,27 +3888,16 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
       salt_out(:,:) = saltAvg
     endif
 
-
 ! temp_out,salt_out contain input z-space data on the model grid with missing values
 ! now fill in missing values using "ICE-nine" algorithm. 
-
 
     temp2(:,:)=temp_out(:,:);good2(:,:)=good(:,:); fill2(:,:)=fill(:,:)
     salt2(:,:)=salt_out(:,:) 
 
-
-   if (use_old_hinterp) then
-      call fill_miss_2d(temp2,good2,fill2,temp_prev2,G,keep_bug=.true.)
-      call myStats(temp2,missing_value, k,'Temp from fill_miss_2d()')
-      call fill_miss_2d(salt2,good2,fill2,salt_prev2,G,keep_bug=.true.)
-      call myStats(salt2,missing_value,k,'Salt from fill_miss_2d()')
-   else
-     call fill_miss_2d(temp2,good2,fill2,temp_prev2,G,smooth=.true.)
-     call myStats(temp2,missing_value,k,'Temp from fill_miss_2d()')
-     call fill_miss_2d(salt2,good2,fill2,salt_prev2,G,smooth=.true.)
-     call myStats(salt2,missing_value,k,'Salt from fill_miss_2d()')
-   endif
-
+    call fill_miss_2d(temp2,good2,fill2,temp_prev2,G,smooth=.true.)
+    call myStats(temp2,missing_value,k,'Temp from fill_miss_2d()')
+    call fill_miss_2d(salt2,good2,fill2,salt_prev2,G,smooth=.true.)
+    call myStats(salt2,missing_value,k,'Salt from fill_miss_2d()')
 
     temp_z(:,:,k) = temp2(:,:)*G%mask2dT(:,:)
     salt_z(:,:,k) = salt2(:,:)*G%mask2dT(:,:)
@@ -3971,10 +3907,9 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
     salt_prev2(:,:)=salt_z(:,:,k)
     call cpu_clock_end(id_clock_fill)
 
-
     if (debug) then
-       call hchksum(temp2,'temperature after fill ',G)
-       call hchksum(salt2,'salinity after fill ',G)
+      call hchksum(temp2,'temperature after fill ',G)
+      call hchksum(salt2,'salinity after fill ',G)
     endif
 
 ! next use the equation of state to create a potential density field using filled z-data
@@ -3983,8 +3918,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
       call calculate_density(temp_z(:,j,k),salt_z(:,j,k), press, rho_z(:,j,k), is, ie, eos)
     enddo
 
-
-  enddo
+  enddo ! kd
 
   call pass_var(temp_z,G%Domain)
   call pass_var(salt_z,G%Domain)
@@ -4200,8 +4134,9 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
 
   is = G%isc;ie=G%iec;js=G%jsc;je=G%jec
 
-  do j = 1, ubound(array,2)
-    do i = 1, ubound(array,1)
+  do j = js, je
+    do i = is, ie
+      if (array(i,j) /= array(i,j)) stop 'Nan!'
       if (abs(array(i,j)-missing)>1.e-6*abs(missing)) then
         if (found) then
           minA = min(minA, array(i,j))
@@ -4256,20 +4191,18 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
     real    :: ge,gw,gn,gs,ngood
     logical :: do_smooth,siena_bug
     real    :: nfill, nfill_prev
-    integer, parameter :: num_pass_default = 100
-    real, parameter :: relc_default = 0.25, crit_default = 1.e-5
+    integer, parameter :: num_pass_default = 10000
+    real, parameter :: relc_default = 0.25, crit_default = 1.e-3
     
     integer :: npass
     integer :: is, ie, js, je, nz
-    real    :: relax_coeff, acrit
+    real    :: relax_coeff, acrit, ares
     logical :: debug_it
 
     debug_it=.false.
     if (PRESENT(debug)) debug_it=debug
 
-
     is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-    
    
     npass = num_pass_default
     if (PRESENT(num_pass)) npass = num_pass
@@ -4283,7 +4216,6 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
     siena_bug=.false.
     if (PRESENT(keep_bug)) siena_bug = keep_bug
 
-
     do_smooth=.false.
     if (PRESENT(smooth)) do_smooth=smooth
    
@@ -4292,11 +4224,9 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
     nfill = sum(fill(is:ie,js:je))
     call sum_across_PEs(nfill)
 
-
     nfill_prev = nfill
     good_(:,:)=good(:,:)
     r(:,:)=0.0
-
 
     do while (nfill > 0.0)
 
@@ -4357,25 +4287,23 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
     end do
 
     if (do_smooth) then
-       fill_pts(is:ie,js:je)=fill(is:ie,js:je)
        do k=1,npass
-          call pass_var(fill_pts,G%Domain)
           call pass_var(aout,G%Domain)
           do j=js,je
              do i=is,ie
-                sor=0.0
-                if (fill_pts(i,j) .eq. 1 .and. good(i,j) .eq. 0) sor=relax_coeff           
-
-                east=min(fill(i,j),fill(i+1,j));west=min(fill(i,j),fill(i-1,j))
-                north=min(fill(i,j),fill(i,j+1));south=min(fill(i,j),fill(i,j-1))
-                
-                r(i,j) = sor*(south*aout(i,j-1)+north*aout(i,j+1)+west*aout(i-1,j)+east*aout(i+1,j) - (south+north+west+east)*aout(i,j))
+                if (fill(i,j) .eq. 1) then
+                east=max(good(i+1,j),fill(i+1,j));west=max(good(i-1,j),fill(i-1,j))
+                north=max(good(i,j+1),fill(i,j+1));south=max(good(i,j-1),fill(i,j-1))
+                r(i,j) = relax_coeff*(south*aout(i,j-1)+north*aout(i,j+1)+west*aout(i-1,j)+east*aout(i+1,j) - (south+north+west+east)*aout(i,j))
+               else
+                r(i,j) = 0.
+               endif
              enddo
           enddo
-      
           aout(is:ie,js:je)=r(is:ie,js:je)+aout(is:ie,js:je)
-    
-          if (maxval(abs(r)) <= acrit) exit
+          ares = maxval(abs(r))
+          call max_across_PEs(ares)
+          if (ares <= acrit) exit
        enddo
     endif
 

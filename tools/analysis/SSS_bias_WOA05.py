@@ -35,7 +35,7 @@ else: salt = variable[0,0]
 ci=m6plot.pmCI(0.125,2.25,.25)
 m6plot.xyplot( salt - Tobs , x, y, area=area,
       suptitle=rootGroup.title+' '+cmdLineArgs.label, title='SST bias (w.r.t. WOA\'05) [ppt]',
-      clim=ci, colormap='dunnePM', centerCB=True, extend='both',
+      clim=ci, colormap='dunnePM', centerlabels=True, extend='both',
       save=cmdLineArgs.outdir+'/SSS_bias_WOA05.png')
 
 m6plot.xycompare( salt, Tobs , x, y, area=area,
@@ -43,5 +43,5 @@ m6plot.xycompare( salt, Tobs , x, y, area=area,
       title1='SSS [ppt]',
       title2='WOA\'05 SSS [ppt]',
       clim=m6plot.linCI(20,30,10, 31,39,.5), colormap='dunneRainbow', extend='both',
-      dlim=ci, dcolormap='dunnePM', dextend='both', centerDCB=True,
+      dlim=ci, dcolormap='dunnePM', dextend='both', centerdlabels=True,
       save=cmdLineArgs.outdir+'/SSS_bias_WOA05.3_panel.png')

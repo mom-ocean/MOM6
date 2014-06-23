@@ -52,7 +52,7 @@ program MOM_main
   use MOM_error_handler,   only : callTree_enter, callTree_leave, callTree_waypoint
   use MOM_file_parser,     only : read_param, get_param, log_param, log_version, param_file_type
   use MOM_file_parser,     only : close_param_file
-  use MOM_forcing_type,    only : forcing
+  use MOM_forcing_type,    only : forcing, forcing_diagnostics
   use MOM_get_input,       only : directories
   use MOM_grid,            only : ocean_grid_type
   use MOM_io,              only : file_exists, open_file, close_file
@@ -61,7 +61,7 @@ program MOM_main
   use MOM_restart,         only : save_restart
   use MOM_sum_output,      only : write_energy, accumulate_net_input
   use MOM_sum_output,      only : MOM_sum_output_init, sum_output_CS
-  use MOM_surface_forcing, only : set_forcing, average_forcing, forcing_save_restart
+  use MOM_surface_forcing, only : set_forcing, forcing_save_restart
   use MOM_surface_forcing, only : surface_forcing_init, surface_forcing_CS
   use MOM_time_manager,   only : time_type, set_date, set_time, get_date, time_type_to_real
   use MOM_time_manager,   only : operator(+), operator(-), operator(*), operator(/)
@@ -416,7 +416,7 @@ program MOM_main
     Time = Master_Time
 
     call enable_averaging(time_step,Time,MOM_CSp%diag)
-    call average_forcing(fluxes, time_step, grid, surface_forcing_CSp)
+    call forcing_diagnostics(fluxes, state, time_step, grid, MOM_CSp%diag, surface_forcing_CSp%handles)
     call accumulate_net_input(fluxes, state, time_step, grid, sum_output_CSp)
     call disable_averaging(MOM_CSp%diag)
 

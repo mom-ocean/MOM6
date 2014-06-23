@@ -145,7 +145,11 @@ subroutine calc_resoln_function(h, tv, G, CS)
   !   Do this calculation on the extent used in MOM_hor_visc.F90, and
   ! MOM_tracer.F90 so that no halo update is needed.
   mod_power_2 = mod(CS%Res_fn_power, 2)
+
+!$OMP parallel default(none) shared(is,ie,js,je,Ieq,Jeq,CS,mod_power_2) &
+!$OMP                       private(dx_term,cg1_q,power_2)
   if (CS%Res_fn_power >= 100) then
+!$OMP do
     do j=js-1,je+1 ; do i=is-1,ie+1
       dx_term = CS%f2_dx2_h(i,j) + CS%cg1(i,j)*CS%beta_dx2_h(i,j)
       if ((CS%Res_coef * CS%cg1(i,j))**2 > dx_term) then
@@ -154,7 +158,7 @@ subroutine calc_resoln_function(h, tv, G, CS)
         CS%Res_fn_h(i,j) = 1.0
       endif 
     enddo ; enddo
-
+!$OMP do
     do J=js-1,Jeq ; do I=is-1,Ieq
       cg1_q = 0.25 * ((CS%cg1(i,j) + CS%cg1(i+1,j+1)) + &
                       (CS%cg1(i+1,j) + CS%cg1(i,j+1)))
@@ -166,11 +170,12 @@ subroutine calc_resoln_function(h, tv, G, CS)
       endif
     enddo ; enddo
   elseif (CS%Res_fn_power == 2) then
+!$OMP do
     do j=js-1,je+1 ; do i=is-1,ie+1
       dx_term = CS%f2_dx2_h(i,j) + CS%cg1(i,j)*CS%beta_dx2_h(i,j)
       CS%Res_fn_h(i,j) = dx_term / (dx_term + (CS%Res_coef * CS%cg1(i,j))**2)
     enddo ; enddo
-
+!$OMP do
     do J=js-1,Jeq ; do I=is-1,Ieq
       cg1_q = 0.25 * ((CS%cg1(i,j) + CS%cg1(i+1,j+1)) + &
                       (CS%cg1(i+1,j) + CS%cg1(i,j+1)))
@@ -179,12 +184,13 @@ subroutine calc_resoln_function(h, tv, G, CS)
     enddo ; enddo
   elseif (mod_power_2 == 0) then
     power_2 = CS%Res_fn_power / 2
+!$OMP do
     do j=js-1,je+1 ; do i=is-1,ie+1
       dx_term = (CS%f2_dx2_h(i,j) + CS%cg1(i,j)*CS%beta_dx2_h(i,j))**power_2
       CS%Res_fn_h(i,j) = dx_term / &
           (dx_term + (CS%Res_coef * CS%cg1(i,j))**CS%Res_fn_power)
     enddo ; enddo
-
+!$OMP do
     do J=js-1,Jeq ; do I=is-1,Ieq
       cg1_q = 0.25 * ((CS%cg1(i,j) + CS%cg1(i+1,j+1)) + &
                       (CS%cg1(i+1,j) + CS%cg1(i,j+1)))
@@ -193,6 +199,7 @@ subroutine calc_resoln_function(h, tv, G, CS)
           (dx_term + (CS%Res_coef * cg1_q)**CS%Res_fn_power)
     enddo ; enddo
   else
+!$OMP do
     do j=js-1,je+1 ; do i=is-1,ie+1
       dx_term = (sqrt(CS%f2_dx2_h(i,j) + &
                       CS%cg1(i,j)*CS%beta_dx2_h(i,j)))**CS%Res_fn_power
@@ -200,7 +207,7 @@ subroutine calc_resoln_function(h, tv, G, CS)
          (dx_term + (CS%Res_coef * CS%cg1(i,j))**CS%Res_fn_power)
     enddo ; enddo
 
-
+!$OMP do
     do J=js-1,Jeq ; do I=is-1,Ieq
       cg1_q = 0.25 * ((CS%cg1(i,j) + CS%cg1(i+1,j+1)) + &
                       (CS%cg1(i+1,j) + CS%cg1(i,j+1)))
@@ -213,10 +220,12 @@ subroutine calc_resoln_function(h, tv, G, CS)
 
   ! Calculate and store the ratio between deformation radius and grid-spacing
   ! at h-points (non-dimensional).
+!$OMP do
   do j=js-1,je+1 ; do i=is-1,ie+1
     CS%Rd_dx_h(i,j) = CS%cg1(i,j) / &
           (sqrt(CS%f2_dx2_h(i,j) + CS%cg1(i,j)*CS%beta_dx2_h(i,j)))
   enddo ; enddo
+!$OMP end parallel
 
   if (query_averaging_enabled(CS%diag)) then
     if (CS%id_Res_fn > 0) call post_data(CS%id_Res_fn, CS%Res_fn_h, CS%diag)

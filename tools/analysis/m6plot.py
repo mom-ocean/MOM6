@@ -10,47 +10,47 @@ import math
 import m6toolbox
 
 def xyplot(field, x=None, y=None, area=None,
-  xLabel=None, xUnits=None, yLabel=None, yUnits=None, axis=None,
+  xlabel=None, xunits=None, ylabel=None, yunits=None, axis=None,
   title='', suptitle='',
-  clim=None, colormap=None, extend=None, centerCB=False,
-  nbins=None, landColor=[.5,.5,.5],
+  clim=None, colormap=None, extend=None, centerlabels=False,
+  nbins=None, landcolor=[.5,.5,.5],
   aspect=[16,9], resolution=576,
   ignore=None, save=None, debug=False, show=False, interactive=False):
   """
   Renders plot of scalar field, field(x,y).
 
   Arguments:
-  field       Scalar 2D array to be plotted.
-  x           x coordinate (1D or 2D array). If x is the same size as field then x is treated as
-              the cell center coordinates.
-  y           y coordinate (1D or 2D array). If x is the same size as field then y is treated as
-              the cell center coordinates.
-  area        2D array of cell areas (used for statistics). Default None.
-  xLabel      The label for the x axis. Default 'Longitude'.
-  xUnits      The units for the x axis. Default 'degrees E'.
-  yLabel      The label for the y axis. Default 'Latitude'.
-  yUnits      The units for the y axis. Default 'degrees N'.
-  axis        The axis handle to plot to. Default None.
-  title       The title to place at the top of the panel. Default ''.
-  suptitle    The super-title to place at the top of the figure. Default ''.
-  clim        A tuple of (min,max) color range OR a list of contour levels. Default None.
-  colormap    The name of the colormap to use. Default None.
-  extend      Can be one of 'both', 'neither', 'max', 'min'. Default None.
-  centerCB    If True, will move the colorbar labels to the middle of the interval. Default False.
-  nbins       The number of colors levels (used is clim is missing or only specifies the color range).
-  landColor   An rgb tuple to use for the color of land (no data). Default [.5,.5,.5].
-  aspect      The aspect ratio of the figure, given as a tuple (W,H). Default [16,9].
-  resolution  The vertical resolution of the figure given in pixels. Default 720.
-  ignore      A value to use as no-data (NaN). Default None.
-  save        Name of file to save figure in. Default None.
-  debug       If true, report stuff for debugging. Default False.
-  show        If true, causes the figure to appear on screen. Used for testing. Default False.
-  interactive If true, adds interactive features such as zoom, close and cursor. Default False.
+  field        Scalar 2D array to be plotted.
+  x            x coordinate (1D or 2D array). If x is the same size as field then x is treated as
+               the cell center coordinates.
+  y            y coordinate (1D or 2D array). If x is the same size as field then y is treated as
+               the cell center coordinates.
+  area         2D array of cell areas (used for statistics). Default None.
+  xlabel       The label for the x axis. Default 'Longitude'.
+  xunits       The units for the x axis. Default 'degrees E'.
+  ylabel       The label for the y axis. Default 'Latitude'.
+  yunits       The units for the y axis. Default 'degrees N'.
+  axis         The axis handle to plot to. Default None.
+  title        The title to place at the top of the panel. Default ''.
+  suptitle     The super-title to place at the top of the figure. Default ''.
+  clim         A tuple of (min,max) color range OR a list of contour levels. Default None.
+  colormap     The name of the colormap to use. Default None.
+  extend       Can be one of 'both', 'neither', 'max', 'min'. Default None.
+  centerlabels If True, will move the colorbar labels to the middle of the interval. Default False.
+  nbins        The number of colors levels (used is clim is missing or only specifies the color range).
+  landcolor    An rgb tuple to use for the color of land (no data). Default [.5,.5,.5].
+  aspect       The aspect ratio of the figure, given as a tuple (W,H). Default [16,9].
+  resolution   The vertical resolution of the figure given in pixels. Default 720.
+  ignore       A value to use as no-data (NaN). Default None.
+  save         Name of file to save figure in. Default None.
+  debug        If true, report stuff for debugging. Default False.
+  show         If true, causes the figure to appear on screen. Used for testing. Default False.
+  interactive  If true, adds interactive features such as zoom, close and cursor. Default False.
   """
 
   # Create coordinates if not provided
-  xLabel, xUnits, yLabel, yUnits = createXYlabels(x, y, xLabel, xUnits, yLabel, yUnits)
-  if debug: print 'x,y label/units=',xLabel,xUnits,yLabel,yUnits
+  xlabel, xunits, ylabel, yunits = createXYlabels(x, y, xlabel, xunits, ylabel, yunits)
+  if debug: print 'x,y label/units=',xlabel,xunits,ylabel,yunits
   xCoord, yCoord = createXYcoords(field, x, y)
 
   # Diagnose statistics
@@ -72,16 +72,16 @@ def xyplot(field, x=None, y=None, area=None,
   plt.pcolormesh(xCoord, yCoord, maskedField, cmap=cmap, norm=norm)
   if interactive: addStatusBar(xCoord, yCoord, maskedField)
   cb = plt.colorbar(fraction=.08, pad=0.02, extend=extend)
-  if centerCB and len(clim)>2: cb.set_ticks(  0.5*(clim[:-1]+clim[1:]) )
-  plt.gca().set_axis_bgcolor(landColor)
+  if centerlabels and len(clim)>2: cb.set_ticks(  0.5*(clim[:-1]+clim[1:]) )
+  plt.gca().set_axis_bgcolor(landcolor)
   plt.xlim( xLims )
   plt.ylim( yLims )
   axis.annotate('max=%.5g\nmin=%.5g'%(sMax,sMin), xy=(0.0,1.01), xycoords='axes fraction', verticalalignment='bottom', fontsize=10)
   if area!=None:
     axis.annotate('mean=%.5g\nrms=%.5g'%(sMean,sRMS), xy=(1.0,1.01), xycoords='axes fraction', verticalalignment='bottom', horizontalalignment='right', fontsize=10)
     axis.annotate(' sd=%.5g\n'%(sStd), xy=(1.0,1.01), xycoords='axes fraction', verticalalignment='bottom', horizontalalignment='left', fontsize=10)
-  if len(xLabel+xUnits)>0: plt.xlabel(label(xLabel, xUnits))
-  if len(yLabel+yUnits)>0: plt.ylabel(label(yLabel, yUnits))
+  if len(xlabel+xunits)>0: plt.xlabel(label(xlabel, xunits))
+  if len(ylabel+yunits)>0: plt.ylabel(label(ylabel, yunits))
   if len(title)>0: plt.title(title)
   if len(suptitle)>0: plt.suptitle(suptitle)
 
@@ -91,58 +91,58 @@ def xyplot(field, x=None, y=None, area=None,
 
 
 def xycompare(field1, field2, x=None, y=None, area=None,
-  xLabel=None, xUnits=None, yLabel=None, yUnits=None,
-  title1='', title2='', title3='A - B', addPlabel=True, suptitle='',
-  clim=None, colormap=None, extend=None, centerCB=False,
-  dlim=None, dcolormap=None, dextend=None, centerDCB=False,
-  nbins=None, landColor=[.5,.5,.5],
-  aspect=None, resolution=None, nPanels=3,
+  xlabel=None, xunits=None, ylabel=None, yunits=None,
+  title1='', title2='', title3='A - B', addplabel=True, suptitle='',
+  clim=None, colormap=None, extend=None, centerlabels=False,
+  dlim=None, dcolormap=None, dextend=None, centerdlabels=False,
+  nbins=None, landcolor=[.5,.5,.5],
+  aspect=None, resolution=None, npanels=3,
   ignore=None, save=None, debug=False, show=False, interactive=False):
   """
   Renders n-panel plot of two scalar fields, field1(x,y) and field2(x,y).
 
   Arguments:
-  field1      Scalar 2D array to be plotted and compared to field2.
-  field2      Scalar 2D array to be plotted and compared to field1.
-  x           x coordinate (1D or 2D array). If x is the same size as field then x is treated as
-              the cell center coordinates.
-  y           y coordinate (1D or 2D array). If x is the same size as field then y is treated as
-              the cell center coordinates.
-  area        2D array of cell areas (used for statistics). Default None.
-  xLabel      The label for the x axis. Default 'Longitude'.
-  xUnits      The units for the x axis. Default 'degrees E'.
-  yLabel      The label for the y axis. Default 'Latitude'.
-  yUnits      The units for the y axis. Default 'degrees N'.
-  title1      The title to place at the top of panel 1. Default ''.
-  title2      The title to place at the top of panel 1. Default ''.
-  title3      The title to place at the top of panel 1. Default 'A-B'.
-  addPlabel   Adds a 'A:' or 'B:' to the title1 and title2. Default True.
-  suptitle    The super-title to place at the top of the figure. Default ''.
-  clim        A tuple of (min,max) color range OR a list of contour levels for the field plots. Default None.
-  colormap    The name of the colormap to use for the field plots. Default None.
-  extend      Can be one of 'both', 'neither', 'max', 'min'. Default None.
-  centerCB    If True, will move the colorbar labels to the middle of the interval. Default False.
-  dlim        A tuple of (min,max) color range OR a list of contour levels for the difference plot. Default None.
-  dcolormap   The name of the colormap to use for the difference plot. Default None.
-  dextend     For the difference colorbar. Can be one of 'both', 'neither', 'max', 'min'. Default None.
-  centerDCB   If True, will move the difference colorbar labels to the middle of the interval. Default False.
-  nbins       The number of colors levels (used is clim is missing or only specifies the color range).
-  landColor   An rgb tuple to use for the color of land (no data). Default [.5,.5,.5].
-  aspect      The aspect ratio of the figure, given as a tuple (W,H). Default [16,9].
-  resolution  The vertical resolution of the figure given in pixels. Default 1280.
-  nPanels     Number of panels to display (1, 2 or 3). Default 3.
-  ignore      A value to use as no-data (NaN). Default None.
-  save        Name of file to save figure in. Default None.
-  debug       If true, report stuff for debugging. Default False.
-  show        If true, causes the figure to appear on screen. Used for testing. Default False.
-  interactive If true, adds interactive features such as zoom, close and cursor. Default False.
+  field1        Scalar 2D array to be plotted and compared to field2.
+  field2        Scalar 2D array to be plotted and compared to field1.
+  x             x coordinate (1D or 2D array). If x is the same size as field then x is treated as
+                the cell center coordinates.
+  y             y coordinate (1D or 2D array). If x is the same size as field then y is treated as
+                the cell center coordinates.
+  area          2D array of cell areas (used for statistics). Default None.
+  xlabel        The label for the x axis. Default 'Longitude'.
+  xunits        The units for the x axis. Default 'degrees E'.
+  ylabel        The label for the y axis. Default 'Latitude'.
+  yunits        The units for the y axis. Default 'degrees N'.
+  title1        The title to place at the top of panel 1. Default ''.
+  title2        The title to place at the top of panel 1. Default ''.
+  title3        The title to place at the top of panel 1. Default 'A-B'.
+  addplabel     Adds a 'A:' or 'B:' to the title1 and title2. Default True.
+  suptitle      The super-title to place at the top of the figure. Default ''.
+  clim          A tuple of (min,max) color range OR a list of contour levels for the field plots. Default None.
+  colormap      The name of the colormap to use for the field plots. Default None.
+  extend        Can be one of 'both', 'neither', 'max', 'min'. Default None.
+  centerlabels  If True, will move the colorbar labels to the middle of the interval. Default False.
+  dlim          A tuple of (min,max) color range OR a list of contour levels for the difference plot. Default None.
+  dcolormap     The name of the colormap to use for the difference plot. Default None.
+  dextend       For the difference colorbar. Can be one of 'both', 'neither', 'max', 'min'. Default None.
+  centerdlabels If True, will move the difference colorbar labels to the middle of the interval. Default False.
+  nbins         The number of colors levels (used is clim is missing or only specifies the color range).
+  landcolor     An rgb tuple to use for the color of land (no data). Default [.5,.5,.5].
+  aspect        The aspect ratio of the figure, given as a tuple (W,H). Default [16,9].
+  resolution    The vertical resolution of the figure given in pixels. Default 1280.
+  npanels       Number of panels to display (1, 2 or 3). Default 3.
+  ignore        A value to use as no-data (NaN). Default None.
+  save          Name of file to save figure in. Default None.
+  debug         If true, report stuff for debugging. Default False.
+  show          If true, causes the figure to appear on screen. Used for testing. Default False.
+  interactive   If true, adds interactive features such as zoom, close and cursor. Default False.
   """
 
   if (field1.shape)!=(field2.shape): raise Exception('field1 and field2 must be the same shape')
 
   # Create coordinates if not provided
-  xLabel, xUnits, yLabel, yUnits = createXYlabels(x, y, xLabel, xUnits, yLabel, yUnits)
-  if debug: print 'x,y label/units=',xLabel,xUnits,yLabel,yUnits
+  xlabel, xunits, ylabel, yunits = createXYlabels(x, y, xlabel, xunits, ylabel, yunits)
+  if debug: print 'x,y label/units=',xlabel,xunits,ylabel,yunits
   xCoord, yCoord = createXYcoords(field1, x, y)
 
   # Diagnose statistics
@@ -175,52 +175,52 @@ def xycompare(field1, field2, x=None, y=None, area=None,
       axis.annotate('mean=%.5g\nrms=%.5g'%(sMean,sRMS), xy=(1.0,1.025), xycoords='axes fraction', verticalalignment='bottom', horizontalalignment='right', fontsize=10)
       axis.annotate(' sd=%.5g\n'%(sStd), xy=(1.0,1.025), xycoords='axes fraction', verticalalignment='bottom', horizontalalignment='left', fontsize=10)
 
-  if addPlabel: preTitleA = 'A: '; preTitleB = 'B: '
+  if addplabel: preTitleA = 'A: '; preTitleB = 'B: '
   else: preTitleA = ''; preTitleB = ''
 
-  setFigureSize(aspect, resolution, nPanels=nPanels, debug=debug)
+  setFigureSize(aspect, resolution, npanels=npanels, debug=debug)
 
-  if nPanels in [2,3]:
-    plt.subplot(nPanels,1,1)
+  if npanels in [2,3]:
+    plt.subplot(npanels,1,1)
     plt.pcolormesh(xCoord, yCoord, maskedField1, cmap=cmap, norm=norm)
     if interactive: addStatusBar(xCoord, yCoord, maskedField1)
     cb1 = plt.colorbar(fraction=.08, pad=0.02, extend=extend)
-    if centerCB and len(clim)>2: cb1.set_ticks(  0.5*(clim[:-1]+clim[1:]) )
-    plt.gca().set_axis_bgcolor(landColor)
+    if centerlabels and len(clim)>2: cb1.set_ticks(  0.5*(clim[:-1]+clim[1:]) )
+    plt.gca().set_axis_bgcolor(landcolor)
     plt.xlim( xLims ); plt.ylim( yLims )
     annotateStats(plt.gca(), s1Min, s1Max, s1Mean, s1Std, s1RMS)
     plt.gca().set_xticklabels([''])
-    if len(yLabel+yUnits)>0: plt.ylabel(label(yLabel, yUnits))
+    if len(ylabel+yunits)>0: plt.ylabel(label(ylabel, yunits))
     if len(title1)>0: plt.title(preTitleA+title1)
 
-    plt.subplot(nPanels,1,2)
+    plt.subplot(npanels,1,2)
     plt.pcolormesh(xCoord, yCoord, maskedField2, cmap=cmap, norm=norm)
     if interactive: addStatusBar(xCoord, yCoord, maskedField2)
     cb2 = plt.colorbar(fraction=.08, pad=0.02, extend=extend)
-    if centerCB and len(clim)>2: cb2.set_ticks(  0.5*(clim[:-1]+clim[1:]) )
-    plt.gca().set_axis_bgcolor(landColor)
+    if centerlabels and len(clim)>2: cb2.set_ticks(  0.5*(clim[:-1]+clim[1:]) )
+    plt.gca().set_axis_bgcolor(landcolor)
     plt.xlim( xLims ); plt.ylim( yLims )
     annotateStats(plt.gca(), s2Min, s2Max, s2Mean, s2Std, s2RMS)
-    if nPanels>2: plt.gca().set_xticklabels([''])
-    if len(yLabel+yUnits)>0: plt.ylabel(label(yLabel, yUnits))
+    if npanels>2: plt.gca().set_xticklabels([''])
+    if len(ylabel+yunits)>0: plt.ylabel(label(ylabel, yunits))
     if len(title2)>0: plt.title(preTitleB+title2)
 
-  if nPanels in [1,3]:
-    plt.subplot(nPanels,1,nPanels)
+  if npanels in [1,3]:
+    plt.subplot(npanels,1,npanels)
     if dcolormap==None: dcolormap = chooseColorMap(dMin, dMax)
     cmap, norm, extend = chooseColorLevels(dMin, dMax, dcolormap, clim=dlim, nbins=nbins, extend=dextend)
     plt.pcolormesh(xCoord, yCoord, maskedField1 - maskedField2, cmap=cmap, norm=norm)
     if interactive: addStatusBar(xCoord, yCoord, maskedField1 - maskedField2)
     cb3 = plt.colorbar(fraction=.08, pad=0.02, extend=extend)
-    if centerDCB and len(dlim)>2: cb3.set_ticks(  0.5*(dlim[:-1]+dlim[1:]) )
-    plt.gca().set_axis_bgcolor(landColor)
+    if centerdlabels and len(dlim)>2: cb3.set_ticks(  0.5*(dlim[:-1]+dlim[1:]) )
+    plt.gca().set_axis_bgcolor(landcolor)
     plt.xlim( xLims ); plt.ylim( yLims )
     annotateStats(plt.gca(), dMin, dMax, dMean, dStd, dRMS)
-    if len(yLabel+yUnits)>0: plt.ylabel(label(yLabel, yUnits))
+    if len(ylabel+yunits)>0: plt.ylabel(label(ylabel, yunits))
     if len(title3)>0: plt.title(title3)
 
   if dRxy!=None: plt.gca().annotate(' r(A,B)=%.5g\n'%(dRxy), xy=(1.0,-0.20), xycoords='axes fraction', verticalalignment='bottom', horizontalalignment='center', fontsize=10)
-  if len(xLabel+xUnits)>0: plt.xlabel(label(xLabel, xUnits))
+  if len(xlabel+xunits)>0: plt.xlabel(label(xlabel, xunits))
   if len(suptitle)>0: plt.suptitle(suptitle)
 
   if save!=None: plt.savefig(save)
@@ -229,8 +229,8 @@ def xycompare(field1, field2, x=None, y=None, area=None,
 
 
 def yzplot(field, y=None, z=None,
-  yLabel=None, yUnits=None, zLabel=None, zUnits=None,
-  title='', suptitle='', nbins=None, clim=None, landColor=[.5,.5,.5], colormap=None, extend=None,
+  ylabel=None, yunits=None, zlabel=None, zunits=None,
+  title='', suptitle='', nbins=None, clim=None, landcolor=[.5,.5,.5], colormap=None, extend=None,
   aspect=[16,9], resolution=576, newFigure=True,
   ignore=None, save=None, debug=False, show=False, interactive=False):
   """
@@ -242,15 +242,15 @@ def yzplot(field, y=None, z=None,
               the cell center coordinates.
   z           z coordinate (1D or 2D array). If z is the same size as field then y is treated as
               the cell center coordinates.
-  xLabel      The label for the x axis. Default 'Latitude'.
-  xUnits      The units for the x axis. Default 'degrees N'.
-  zLabel      The label for the z axis. Default 'Elevation'.
-  zUnits      The units for the z axis. Default 'm'.
+  xlabel      The label for the x axis. Default 'Latitude'.
+  xunits      The units for the x axis. Default 'degrees N'.
+  zlabel      The label for the z axis. Default 'Elevation'.
+  zunits      The units for the z axis. Default 'm'.
   title       The title to place at the top of the panel. Default ''.
   suptitle    The super-title to place at the top of the figure. Default ''.
   nbins       The number of colors levels (used is clim is missing or only specifies the color range).
   clim        A tuple of (min,max) color range OR a list of contour levels. Default None.
-  landColor   An rgb tuple to use for the color of land (no data). Default [.5,.5,.5].
+  landcolor   An rgb tuple to use for the color of land (no data). Default [.5,.5,.5].
   colormap    The name of the colormap to use. Default None.
   extend      Can be one of 'both', 'neither', 'max', 'min'. Default None.
   aspect      The aspect ratio of the figure, given as a tuple (W,H). Default [16,9].
@@ -263,8 +263,8 @@ def yzplot(field, y=None, z=None,
   """
 
   # Create coordinates if not provided
-  yLabel, yUnits, zLabel, zUnits = createYZlabels(y, z, yLabel, yUnits, zLabel, zUnits)
-  if debug: print 'y,z label/units=',yLabel,yUnits,zLabel,zUnits
+  ylabel, yunits, zlabel, zunits = createYZlabels(y, z, ylabel, yunits, zlabel, zunits)
+  if debug: print 'y,z label/units=',ylabel,yunits,zlabel,zunits
   if len(y)==z.shape[-1]: y = expand(y)
   elif len(y)==z.shape[-1]+1: y = y
   else: raise Exception('Length of y coordinate should be equal or 1 longer than horizontal length of z')
@@ -288,15 +288,15 @@ def yzplot(field, y=None, z=None,
   plt.pcolormesh(yCoord, zCoord, field2, cmap=cmap, norm=norm)
   if interactive: addStatusBar(yCoord, zCoord, field2)
   plt.colorbar(fraction=.08, pad=0.02, extend=extend)
-  plt.gca().set_axis_bgcolor(landColor)
+  plt.gca().set_axis_bgcolor(landcolor)
   plt.xlim( yLims )
   plt.ylim( zLims )
   axis.annotate('max=%.5g\nmin=%.5g'%(sMax,sMin), xy=(0.0,1.01), xycoords='axes fraction', verticalalignment='bottom', fontsize=10)
   if sMean!=None:
     axis.annotate('mean=%.5g\nrms=%.5g'%(sMean,sRMS), xy=(1.0,1.01), xycoords='axes fraction', verticalalignment='bottom', horizontalalignment='right', fontsize=10)
     axis.annotate(' sd=%.5g\n'%(sStd), xy=(1.0,1.01), xycoords='axes fraction', verticalalignment='bottom', horizontalalignment='left', fontsize=10)
-  if len(yLabel+yUnits)>0: plt.xlabel(label(yLabel, yUnits))
-  if len(zLabel+zUnits)>0: plt.ylabel(label(zLabel, zUnits))
+  if len(ylabel+yunits)>0: plt.xlabel(label(ylabel, yunits))
+  if len(zlabel+zunits)>0: plt.ylabel(label(zlabel, zunits))
   if len(title)>0: plt.title(title)
   if len(suptitle)>0: plt.suptitle(suptitle)
 
@@ -306,10 +306,10 @@ def yzplot(field, y=None, z=None,
 
 
 def yzcompare(field1, field2, y=None, z=None,
-  yLabel=None, yUnits=None, zLabel=None, zUnits=None,
-  title1='', title2='', title3='A - B', addPlabel=True, suptitle='',
-  nbins=None, clim=None, dlim=None, landColor=[.5,.5,.5], colormap=None, dcolormap=None, extend=None,
-  aspect=None, resolution=None, nPanels=3,
+  ylabel=None, yunits=None, zlabel=None, zunits=None,
+  title1='', title2='', title3='A - B', addplabel=True, suptitle='',
+  nbins=None, clim=None, dlim=None, landcolor=[.5,.5,.5], colormap=None, dcolormap=None, extend=None,
+  aspect=None, resolution=None, npanels=3,
   ignore=None, save=None, debug=False, show=False, interactive=False):
   """
   Renders n-panel plot of two scalar fields, field1(x,y) and field2(x,y).
@@ -321,25 +321,25 @@ def yzcompare(field1, field2, y=None, z=None,
               the cell center coordinates.
   z           z coordinate (1D or 2D array). If z is the same size as field then z is treated as
               the cell center coordinates.
-  yLabel      The label for the y axis. Default 'Latitude'.
-  yUnits      The units for the y axis. Default 'degrees N'.
-  zLabel      The label for the z axis. Default 'Elevation'.
-  zUnits      The units for the z axis. Default 'm'.
+  ylabel      The label for the y axis. Default 'Latitude'.
+  yunits      The units for the y axis. Default 'degrees N'.
+  zlabel      The label for the z axis. Default 'Elevation'.
+  zunits      The units for the z axis. Default 'm'.
   title1      The title to place at the top of panel 1. Default ''.
   title2      The title to place at the top of panel 1. Default ''.
   title3      The title to place at the top of panel 1. Default 'A-B'.
-  addPlabel   Adds a 'A:' or 'B:' to the title1 and title2. Default True.
+  addplabel   Adds a 'A:' or 'B:' to the title1 and title2. Default True.
   suptitle    The super-title to place at the top of the figure. Default ''.
   nbins       The number of colors levels (used is clim is missing or only specifies the color range).
   clim        A tuple of (min,max) color range OR a list of contour levels for the field plots. Default None.
   dlim        A tuple of (min,max) color range OR a list of contour levels for the difference plot. Default None.
-  landColor   An rgb tuple to use for the color of land (no data). Default [.5,.5,.5].
+  landcolor   An rgb tuple to use for the color of land (no data). Default [.5,.5,.5].
   colormap    The name of the colormap to use for the field plots. Default None.
   dcolormap   The name of the colormap to use for the differece plot. Default None.
   extend      Can be one of 'both', 'neither', 'max', 'min'. Default None.
   aspect      The aspect ratio of the figure, given as a tuple (W,H). Default [16,9].
   resolution  The vertical resolution of the figure given in pixels. Default 1280.
-  nPanels     Number of panels to display (1, 2 or 3). Default 3.
+  npanels     Number of panels to display (1, 2 or 3). Default 3.
   ignore      A value to use as no-data (NaN). Default None.
   save        Name of file to save figure in. Default None.
   debug       If true, report stuff for debugging. Default False.
@@ -350,8 +350,8 @@ def yzcompare(field1, field2, y=None, z=None,
   if (field1.shape)!=(field2.shape): raise Exception('field1 and field2 must be the same shape')
 
   # Create coordinates if not provided
-  yLabel, yUnits, zLabel, zUnits = createYZlabels(y, z, yLabel, yUnits, zLabel, zUnits)
-  if debug: print 'y,z label/units=',yLabel,yUnits,zLabel,zUnits
+  ylabel, yunits, zlabel, zunits = createYZlabels(y, z, ylabel, yunits, zlabel, zunits)
+  if debug: print 'y,z label/units=',ylabel,yunits,zlabel,zunits
   if len(y)==z.shape[-1]: y= expand(y)
   elif len(y)==z.shape[-1]+1: y= y
   else: raise Exception('Length of y coordinate should be equal or 1 longer than horizontal length of z')
@@ -388,49 +388,49 @@ def yzcompare(field1, field2, y=None, z=None,
       axis.annotate('mean=%.5g\nrms=%.5g'%(sMean,sRMS), xy=(1.0,1.025), xycoords='axes fraction', verticalalignment='bottom', horizontalalignment='right', fontsize=10)
       axis.annotate(' sd=%.5g\n'%(sStd), xy=(1.0,1.025), xycoords='axes fraction', verticalalignment='bottom', horizontalalignment='left', fontsize=10)
 
-  if addPlabel: preTitleA = 'A: '; preTitleB = 'B: '
+  if addplabel: preTitleA = 'A: '; preTitleB = 'B: '
   else: preTitleA = ''; preTitleB = ''
 
-  setFigureSize(aspect, resolution, nPanels, debug=debug)
+  setFigureSize(aspect, resolution, npanels, debug=debug)
   #plt.gcf().subplots_adjust(left=.13, right=.94, wspace=0, bottom=.05, top=.94, hspace=0.15)
 
-  if nPanels in [2, 3]:
-    plt.subplot(nPanels,1,1)
+  if npanels in [2, 3]:
+    plt.subplot(npanels,1,1)
     plt.pcolormesh(yCoord, zCoord, field1, cmap=cmap, norm=norm)
     if interactive: addStatusBar(yCoord, zCoord, field1)
     plt.colorbar(fraction=.08, pad=0.02, extend=extend)
-    plt.gca().set_axis_bgcolor(landColor)
+    plt.gca().set_axis_bgcolor(landcolor)
     plt.xlim( xLims ); plt.ylim( yLims )
     annotateStats(plt.gca(), s1Min, s1Max, s1Mean, s1Std, s1RMS)
     plt.gca().set_xticklabels([''])
-    if len(zLabel+zUnits)>0: plt.ylabel(label(zLabel, zUnits))
+    if len(zlabel+zunits)>0: plt.ylabel(label(zlabel, zunits))
     if len(title1)>0: plt.title(preTitleA+title1)
 
-    plt.subplot(nPanels,1,2)
+    plt.subplot(npanels,1,2)
     plt.pcolormesh(yCoord, zCoord, field2, cmap=cmap, norm=norm)
     if interactive: addStatusBar(yCoord, zCoord, field2)
     plt.colorbar(fraction=.08, pad=0.02, extend=extend)
-    plt.gca().set_axis_bgcolor(landColor)
+    plt.gca().set_axis_bgcolor(landcolor)
     plt.xlim( xLims ); plt.ylim( yLims )
     annotateStats(plt.gca(), s2Min, s2Max, s2Mean, s2Std, s2RMS)
-    if nPanels==2: plt.gca().set_xticklabels([''])
-    if len(zLabel+zUnits)>0: plt.ylabel(label(zLabel, zUnits))
+    if npanels==2: plt.gca().set_xticklabels([''])
+    if len(zlabel+zunits)>0: plt.ylabel(label(zlabel, zunits))
     if len(title2)>0: plt.title(preTitleB+title2)
 
-  if nPanels in [1, 3]:
-    plt.subplot(nPanels,1,nPanels)
+  if npanels in [1, 3]:
+    plt.subplot(npanels,1,npanels)
     if dcolormap==None: dcolormap = chooseColorMap(dMin, dMax)
     cmap, norm, extend = chooseColorLevels(dMin, dMax, dcolormap, clim=dlim, nbins=nbins, extend=extend)
     plt.pcolormesh(yCoord, zCoord, field1 - field2, cmap=cmap, norm=norm)
     if interactive: addStatusBar(yCoord, zCoord, field1 - field2)
     plt.colorbar(fraction=.08, pad=0.02, extend=extend)
-    plt.gca().set_axis_bgcolor(landColor)
+    plt.gca().set_axis_bgcolor(landcolor)
     plt.xlim( xLims ); plt.ylim( yLims )
     annotateStats(plt.gca(), dMin, dMax, dMean, dStd, dRMS)
-    if len(zLabel+zUnits)>0: plt.ylabel(label(zLabel, zUnits))
+    if len(zlabel+zunits)>0: plt.ylabel(label(zlabel, zunits))
 
   plt.gca().annotate(' r(A,B)=%.5g\n'%(dRxy), xy=(1.0,-0.20), xycoords='axes fraction', verticalalignment='bottom', horizontalalignment='center', fontsize=10)
-  if len(yLabel+yUnits)>0: plt.xlabel(label(yLabel, yUnits))
+  if len(ylabel+yunits)>0: plt.xlabel(label(ylabel, yunits))
   if len(title3)>0: plt.title(title3)
   if len(suptitle)>0: plt.suptitle(suptitle)
 
@@ -627,29 +627,29 @@ def boundaryStats(a):
   return amin, amax
 
 
-def setFigureSize(aspect=None, verticalResolution=None, horizontalResolution=None,
-  nPanels=1, debug=False):
+def setFigureSize(aspect=None, verticalresolution=None, horiztonalresolution=None,
+  npanels=1, debug=False):
   """
   Set the figure size based on vertical resolution and aspect ratio (tuple of W,H).
   """
-  if (not horizontalResolution==None) and (not verticalResolution==None):
-    if aspect==None: aspect=[horizontalResolution, verticalResolution]
+  if (not horiztonalresolution==None) and (not verticalresolution==None):
+    if aspect==None: aspect=[horiztonalresolution, verticalresolution]
     else: raise Exception('Aspect-ratio and both h-/v- resolutions can not be specified together')
-  if aspect==None: aspect = {1:[16,9], 2:[1,1], 3:[7,10]}[nPanels]
-  if (not horizontalResolution==None) and (verticalResolution==None):
-    verticalResolution = int(1.*aspect[1]/aspect[0] * horizontalResolution)
-  if verticalResolution==None: verticalResolution = {1:576, 2:720, 3:1200}[nPanels]
-  width = int(1.*aspect[0]/aspect[1] * verticalResolution) # First guess
+  if aspect==None: aspect = {1:[16,9], 2:[1,1], 3:[7,10]}[npanels]
+  if (not horiztonalresolution==None) and (verticalresolution==None):
+    verticalresolution = int(1.*aspect[1]/aspect[0] * horiztonalresolution)
+  if verticalresolution==None: verticalresolution = {1:576, 2:720, 3:1200}[npanels]
+  width = int(1.*aspect[0]/aspect[1] * verticalresolution) # First guess
   if debug: print 'setFigureSize: first guess width =',width
   width = width + ( width % 2 ) # Make even
   if debug: print 'setFigureSize: corrected width =',width
-  if debug: print 'setFigureSize: height =',verticalResolution
-  plt.figure(figsize=(width/100., verticalResolution/100.)) # 100 dpi always?
-  if nPanels==1: plt.gcf().subplots_adjust(left=.08, right=.99, wspace=0, bottom=.09, top=.9, hspace=0)
-  elif nPanels==2: plt.gcf().subplots_adjust(left=.11, right=.94, wspace=0, bottom=.09, top=.9, hspace=0.15)
-  elif nPanels==3: plt.gcf().subplots_adjust(left=.11, right=.94, wspace=0, bottom=.05, top=.93, hspace=0.15)
-  elif nPanels==0: pass
-  else: raise Exception('nPanels out of range')
+  if debug: print 'setFigureSize: height =',verticalresolution
+  plt.figure(figsize=(width/100., verticalresolution/100.)) # 100 dpi always?
+  if npanels==1: plt.gcf().subplots_adjust(left=.08, right=.99, wspace=0, bottom=.09, top=.9, hspace=0)
+  elif npanels==2: plt.gcf().subplots_adjust(left=.11, right=.94, wspace=0, bottom=.09, top=.9, hspace=0.15)
+  elif npanels==3: plt.gcf().subplots_adjust(left=.11, right=.94, wspace=0, bottom=.05, top=.93, hspace=0.15)
+  elif npanels==0: pass
+  else: raise Exception('npanels out of range')
 
 
 def label(label, units):
@@ -662,23 +662,23 @@ def label(label, units):
   return string
 
 
-def createXYlabels(x, y, xLabel, xUnits, yLabel, yUnits):
+def createXYlabels(x, y, xlabel, xunits, ylabel, yunits):
   """
   Checks that x and y labels are appropriate and tries to make some if they are not.
   """
   if x==None:
-    if xLabel==None: xLabel='i'
-    if xUnits==None: xUnits=''
+    if xlabel==None: xlabel='i'
+    if xunits==None: xunits=''
   else:
-    if xLabel==None: xLabel=u'Longitude'
-    if xUnits==None: xUnits=u'\u00B0E'
+    if xlabel==None: xlabel=u'Longitude'
+    if xunits==None: xunits=u'\u00B0E'
   if y==None:
-    if yLabel==None: yLabel='j'
-    if yUnits==None: yUnits=''
+    if ylabel==None: ylabel='j'
+    if yunits==None: yunits=''
   else:
-    if yLabel==None: yLabel=u'Latitude'
-    if yUnits==None: yUnits=u'\u00B0N'
-  return xLabel, xUnits, yLabel, yUnits
+    if ylabel==None: ylabel=u'Latitude'
+    if yunits==None: yunits=u'\u00B0N'
+  return xlabel, xunits, ylabel, yunits
 
 
 def addInteractiveCallbacks():
@@ -768,28 +768,28 @@ def newLims(cur_xlim, cur_ylim, cursor, xlim, ylim, scale_factor):
   return (xL, xR), (yL, yR)
 
 
-def createYZlabels(y, z, yLabel, yUnits, zLabel, zUnits):
+def createYZlabels(y, z, ylabel, yunits, zlabel, zunits):
   """
   Checks that y and z labels are appropriate and tries to make some if they are not.
   """
   if y==None:
-    if yLabel==None: yLabel='j'
-    if yUnits==None: yUnits=''
+    if ylabel==None: ylabel='j'
+    if yunits==None: yunits=''
   else:
-    if yLabel==None: yLabel=u'Latitude'
-    if yUnits==None: yUnits=u'\u00B0N'
+    if ylabel==None: ylabel=u'Latitude'
+    if yunits==None: yunits=u'\u00B0N'
   if z==None:
-    if zLabel==None: zLabel='k'
-    if zUnits==None: zUnits=''
+    if zlabel==None: zlabel='k'
+    if zunits==None: zunits=''
   else:
-    if zLabel==None: zLabel='Elevation'
-    if zUnits==None: zUnits='m'
-  return yLabel, yUnits, zLabel, zUnits
+    if zlabel==None: zlabel='Elevation'
+    if zunits==None: zunits='m'
+  return ylabel, yunits, zlabel, zunits
 
 
 def yzWeight(y, z):
   """
-  Calculates the wieghts to use when calculating the statistics of a y-z section.
+  Calculates the weights to use when calculating the statistics of a y-z section.
 
   y(nj+1) is a 1D vector of column edge positions and z(nk+1,nj) is the interface
   elevations of each column. Returns weight(nk,nj).
@@ -889,6 +889,6 @@ if __name__ == '__main__':
   temp2,(t,z,y,x),_ = nccf.readVar(monthly,'temp',11,None,None,1100)
   yzplot(temp, y, e)
   yzcompare(temp, temp2, y, e, interactive=True)
-  yzcompare(temp, temp2, y, e, nPanels=2)
-  yzcompare(temp, temp2, y, e, nPanels=1)
+  yzcompare(temp, temp2, y, e, npanels=2)
+  yzcompare(temp, temp2, y, e, npanels=1)
   plt.show()

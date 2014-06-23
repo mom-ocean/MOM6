@@ -4,9 +4,9 @@
 #
 #  DESCRIPTION: This is a script that is inteded to drive all the 
 #               pre-postprocessing stages of data manipulations on analysis nodes.
-#               It is intended to be called by frepp at the "refineDiag" stage 
+#               It is intended to be called by FRE at the "refineDiag" stage 
 #               which happens just before the components are post processed by frepp.
-#               To make this happens a path to the (would be) script should appear 
+#               To make this happen a path to the (would be) script should appear 
 #               in the <refineDiag> tag of the xmls, e.g., 
 #      <refineDiag script="$(NB_ROOT)/mom6/tools/analysis/MOM6_refineDiag.csh"/>
 #               Note that the above script should exist when frepp is called.
@@ -32,10 +32,24 @@
 echo ""
 echo "  -- begin MOM6_refineDiag.csh --  "
 echo ""
-#The mere existance of any refineDiag script (as simple as doing a "ls" ) in the xml 
-#causes the history files to be unpacked by frepp, as soon as the data lands on gfdl archive, 
-#in /ptmp/$USER/$ARCHIVE/$year.nc 
-#So, if we want unpaked history files somewhere in /ptmp all we need to have is a non empty refineDiag. 
+#The mere existance of a refineDiag section in the xml pointing to any non-empty refineDiag
+#script (as simple as doing a "echo" above)
+#causes the history files to be unpacked by frepp in /ptmp/$USER/$ARCHIVE/$year.nc
+#when the current year data lands on gfdl archive.
+#
+#At present there is no candidate script to be run annually by refineDiag for MOM6. Exit!
+
+exit 0
+
+#
+#At present there is no candidate script to be run annually by refineDiag.
+#The following content is meant to serve as a template for future
+#when annual (analysis) scripts become necessary. 
+#Such calls should appear before the "exit 0" above.
+#
+#
+#
+#If we want unpaked history files somewhere in /ptmp all we need to have is a non empty refineDiag. 
 #However, if we want to unpack the tar files in /archive we can uncomment the following block:
 #     if (! -d $histDir/unpack) then
 #       mkdir -p $histDir/unpack
@@ -54,8 +68,8 @@ echo ""
 #      NBROOT should be set as an environ vatiable at the setup in the xml
 #      setenv NBROOT /nbhome/$USER/$(FRE_STEM)$(DEBUGLEVEL)
 set src_dir=$NBROOT/mom6/tools/analysis 
-# The following variables are set by frepp, but frepp is not called at refineDiag stage, so wee need to set them here
-set in_data_dir = $histDir/unpack
+# The following variables are set by frepp, but frepp is not called yet at refineDiag stage of FRE workflow,
+#  so we need to explicitly set them here
 set descriptor = $name   
 set out_dir = $NBROOT                  #Niki: How can we set this to frepp analysisdir /nbhome/...
 set yr1 = $oname 
@@ -87,20 +101,29 @@ if (! $?FRE_ANALYSIS_HOME) then
    exit 1
 endif
 
+#
+#At this point of the FRE workflow we are in a /vftmp directory on an analysis node 
+#with all the history files for the current finished year ${yr1} unpacked and present
+#
+echo "We are inside the refineDiag script"
+pwd
+ls -l
+
+set script_dir=${out_dir}/mom6/tools/analysis
+
+echo '==Run some example annual scripts. These are not reviewed by scientists.' 
+
+echo '====annual mean Eddy Kinetic Energy======'
+mkdir -p $out_dir/ocean_${yr1}/EddyKineticEnergy
+
+$script_dir/EddyKineticEnergy.py  -g /archive/gold/datasets/OM4_025/mosaic.v20140610.unpacked -o $out_dir/ocean_${yr1}/EddyKineticEnergy -l ${yr1} $yr1.ocean_daily.nc
+
+echo '====annual mean global mean T&S depth profile======'
+
 # List of variables
 set varlist='temp salt'
 # Determine available input variables and generate list of input files
 set filelist="$yr1.ocean_static.nc $yr1.ocean_annual.nc" 
-
-# Prepare workdir
-set workdir=$TMPDIR/nnz_ocean_ts_annual
-rm -rf $workdir
-mkdir -p $workdir
-# dmget and copy files
-cd ${in_data_dir}
-dmget ${filelist}
-gcp ${filelist} $workdir
-cd $workdir
 
 # Generate include file common to all scripts
 cat > files.txt << EOF
@@ -109,8 +132,8 @@ cat > files.txt << EOF
 EOF
 
 # Generate plots using python
-cp ${src_dir}/MOM6_annual_analysis.py .
-python MOM6_annual_analysis.py
+$script_dir/MOM6_annual_analysis.py
+
 
 # Copy output files to their destination
 set dest_dir=${out_dir}/ocean_${yr1}/MOM6_test.ts/
@@ -122,4 +145,4 @@ echo "  ---------- end yearly analysis ----------  "
 
 echo "  -- end   MOM6_refineDiag.csh --  "
 
-exit
+exit 0
