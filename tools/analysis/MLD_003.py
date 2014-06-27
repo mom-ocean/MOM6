@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 
 import netCDF4
-import matplotlib.pyplot as plt
 import numpy
 import m6plot
+import matplotlib.pyplot as plt
 
 try: import argparse
 except: raise Exception('This version of python is not new enough. python 2.7 or newer is required.')
@@ -33,8 +33,8 @@ shape = variable.shape
 MLD = variable[:].reshape(shape[0]/12,12,shape[1],shape[2])
 
 MLD_obs = netCDF4.Dataset(cmdLineArgs.obsdata).variables['MLD'][:]
-x_obs = netCDF4.Dataset('/net2/jpd/input_fields/Hosada_ml_MLD_CLIM.nc').variables['LONGITUDE'][:]
-y_obs = netCDF4.Dataset('/net2/jpd/input_fields/Hosada_ml_MLD_CLIM.nc').variables['LATITUDE'][:]
+x_obs = netCDF4.Dataset('/archive/gold/datasets/obs/Hosada2010_MLD_climatology.v20140515.nc').variables['LONGITUDE'][:]
+y_obs = netCDF4.Dataset('/archive/gold/datasets/obs/Hosada2010_MLD_climatology.v20140515.nc').variables['LATITUDE'][:]
 
 
 ciMin = m6plot.linCI(0,95,5)
