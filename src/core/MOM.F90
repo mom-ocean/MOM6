@@ -543,7 +543,7 @@ type, public :: MOM_control_struct
 ! The following are the ids of various diagnostics.
   integer :: id_u = -1, id_v = -1, id_h = -1
   integer :: id_T = -1, id_S = -1, id_ssh = -1, id_fraz = -1
-  integer :: id_salt_deficit = -1, id_intern_heat = -1
+  integer :: id_salt_deficit = -1, id_Heat_PmE = -1, id_intern_heat = -1
   integer :: id_sst = -1, id_sst_sq = -1,  id_sst_global = -1
   integer :: id_sss = -1, id_sss_global = -1, id_ssu = -1, id_ssv = -1
   integer :: id_speed = -1, id_ssh_inst = -1
@@ -638,6 +638,9 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
                     ! required to keep the temperature above freezing, in W m-2.
     salt_deficit_ave, &  ! The average salt flux required to keep the
                     ! salinity above 0.01 PSU, in gSalt m-2 s-1.
+    Heat_PmE_ave, & !   The average effective heat flux into the ocean due to
+                    ! the exchange of water with other components, times the
+                    ! heat capacity of water, in W m-2.   
     intern_heat_ave !   The average heat flux into the ocean from geothermal or
                     ! other internal heat sources, in W m-2.   
   real, pointer, dimension(:,:,:) :: &
@@ -696,8 +699,9 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     if (ASSOCIATED(fluxes%p_surf)) call pass_var(fluxes%p_surf(:,:), G%Domain)
   endif
   call cpu_clock_end(id_clock_pass)
-  if (ASSOCIATED(CS%tv%frazil))        CS%tv%frazil(:,:)        = 0.0
-  if (ASSOCIATED(CS%tv%salt_deficit))  CS%tv%salt_deficit(:,:)  = 0.0   
+  if (ASSOCIATED(CS%tv%frazil)) CS%tv%frazil(:,:) = 0.0
+  if (ASSOCIATED(CS%tv%salt_deficit)) CS%tv%salt_deficit(:,:) = 0.0   
+  if (ASSOCIATED(CS%tv%TempxPmE)) CS%tv%TempxPmE(:,:) = 0.0
   if (ASSOCIATED(CS%tv%internal_heat)) CS%tv%internal_heat(:,:) = 0.0
 
   CS%rel_time = 0.0
@@ -1286,6 +1290,14 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       call post_data(CS%id_salt_deficit, salt_deficit_ave, CS%diag, mask=G%mask2dT)
       deallocate(salt_deficit_ave)
     endif
+    if (ASSOCIATED(CS%tv%TempxPmE) .and. (CS%id_Heat_PmE > 0)) then
+      allocate(Heat_PmE_ave(G%isd:G%ied,G%jsd:G%jed))
+      do j=js,je ; do i=is,ie
+        Heat_PmE_ave(i,j) = CS%tv%TempxPmE(i,j) * (CS%tv%C_p * I_time_int)
+      enddo ; enddo
+      call post_data(CS%id_Heat_PmE, Heat_PmE_ave, CS%diag, mask=G%mask2dT)      
+      deallocate(Heat_PmE_ave)
+    endif
     if (ASSOCIATED(CS%tv%internal_heat) .and. (CS%id_intern_heat > 0)) then
       allocate(intern_heat_ave(G%isd:G%ied,G%jsd:G%jed))
       do j=js,je ; do i=is,ie
@@ -1710,6 +1722,8 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
 ! initialization routine for tv.
   if (use_EOS) call select_eqn_of_state(param_file,CS%tv%eqn_of_state)
   if (CS%use_temperature) then
+    allocate(CS%tv%TempxPmE(isd:ied,jsd:jed))
+    CS%tv%TempxPmE(:,:) = 0.0
     if (use_geothermal) then
       allocate(CS%tv%internal_heat(isd:ied,jsd:jed))
       CS%tv%internal_heat(:,:) = 0.0
@@ -2033,6 +2047,8 @@ subroutine register_diags(Time, G, CS, ADp)
 
   CS%id_salt_deficit = register_diag_field('ocean_model', 'salt_deficit', diag%axesT1, Time, &
          'Salt sink in ocean due to ice flux', 'g Salt meter-2 s-1')
+  CS%id_Heat_PmE = register_diag_field('ocean_model', 'Heat_PmE', diag%axesT1, Time, &
+         'Heat flux into ocean from mass flux into ocean', 'Watt meter-2')
   CS%id_intern_heat = register_diag_field('ocean_model', 'internal_heat', diag%axesT1, Time, &
          'Heat flux into ocean from geothermal or other internal sources', &
          'Watt meter-2')
@@ -2402,9 +2418,10 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, CS, p_atm)
     enddo ! end of j loop
   endif                                             ! end BULKMIXEDLAYER
 
-  state%u             => u(:,:,1)
-  state%v             => v(:,:,1)
-  state%frazil        => CS%tv%frazil
+  state%u => u(:,:,1)
+  state%v => v(:,:,1)
+  state%frazil => CS%tv%frazil
+  state%TempxPmE => CS%tv%TempxPmE
   state%internal_heat => CS%tv%internal_heat
 
   ! Allocate structures for ocean_mass, ocean_heat, and ocean_salt.  This could

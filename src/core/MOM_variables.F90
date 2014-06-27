@@ -64,6 +64,12 @@ type, public :: surface
     salt_deficit => NULL(), & ! The salt needed to maintain the ocean column
                          ! at a minimum salinity of 0.01 PSU over the call to
                          ! step_MOM, in kgSalt m-2.
+    TempxPmE => NULL(), &  ! The net inflow of water into the ocean times
+                         ! the temperature at which this inflow occurs during
+                         ! the call to step_MOM, in deg C kg m-2.
+                         !   This should be prescribed in the forcing fields,
+                         ! but as it often is not, this is a useful heat budget
+                         ! diagnostic.
     internal_heat => NULL() , & ! Any internal or geothermal heat sources that
                          ! are applied to the ocean integrated over the call
                          ! to step_MOM, in deg C kg m-2.
@@ -108,6 +114,12 @@ type, public :: thermo_var_ptrs
                          ! at a minumum salinity of 0.01 PSU since the last time
                          ! that calculate_surface_state was called, in units
                          ! of gSalt m-2.
+    TempxPmE => NULL(), &!   The net inflow of water into the ocean times the
+                         ! temperature at which this inflow occurs since the
+                         ! last call to calculate_surface_state, in units of
+                         ! deg C kg m-2. This should be prescribed in the
+                         ! forcing fields, but as it often is not, this is a
+                         ! useful heat budget diagnostic.
     internal_heat => NULL() ! Any internal or geothermal heat sources that
                          ! have been applied to the ocean since the last call to
                          ! calculate_surface_state, in units of deg C kg m-2.
@@ -406,6 +418,8 @@ subroutine MOM_thermovar_chksum(mesg, tv, G)
     call hchksum(tv%frazil, mesg//" tv%frazil",G)
   if (associated(tv%salt_deficit)) &
     call hchksum(tv%salt_deficit, mesg//" tv%salt_deficit",G)
+  if (associated(tv%TempxPmE)) &
+    call hchksum(tv%TempxPmE, mesg//" tv%TempxPmE",G)
 end subroutine MOM_thermovar_chksum
 
 end module MOM_variables

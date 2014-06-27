@@ -93,13 +93,6 @@ type, public :: forcing
     latent_fprec_diag   => NULL(), & ! latent (W/m^2) from melting fprec  (typically < 0)
     latent_frunoff_diag => NULL(), & ! latent (W/m^2) from melting frunoff (calving) (typically < 0)
 
-    ! heat associated with water crossing ocean surface 
-    heat_content_lrunoff => NULL(), & ! heat content associated with liquid runoff (W/m^2)
-    heat_content_frunoff => NULL(), & ! heat content associated with frozen runoff (W/m^2)
-    heat_content_lprec   => NULL(), & ! heat content associated with liquid precip (W/m^2)
-    heat_content_fprec   => NULL(), & ! heat content associated with frozen precip (W/m^2)
-    heat_content_evap    => NULL(), & ! heat content associated with evaportation (W/m^2)
-
     ! water mass fluxes into the ocean ( kg/(m^2 s) )
     ! these mass fluxes impact the ocean mass
     evap          => NULL(), & ! (-1)*fresh water flux evaporated out of the ocean ( kg/(m^2 s) )
@@ -109,6 +102,16 @@ type, public :: forcing
     lrunoff       => NULL(), & ! liquid river runoff entering ocean ( kg/(m^2 s) )
     frunoff       => NULL(), & ! frozen river runoff (calving) entering ocean ( kg/(m^2 s) )
     seaice_melt   => NULL(), & ! seaice melt (positive) or formation (negative) ( kg/(m^2 s) )
+
+    ! heat associated with water crossing ocean surface 
+    heat_content_cond    => NULL(), & ! heat content associated with condensating water (W/m^2)
+    heat_content_lprec   => NULL(), & ! heat content associated with liquid >0 precip   (W/m^2)
+    heat_content_fprec   => NULL(), & ! heat content associated with frozen precip      (W/m^2)
+    heat_content_vprec   => NULL(), & ! heat content associated with virtual >0 precip  (W/m^2)
+    heat_content_lrunoff => NULL(), & ! heat content associated with liquid runoff      (W/m^2)
+    heat_content_frunoff => NULL(), & ! heat content associated with frozen runoff      (W/m^2)
+    heat_content_icemelt => NULL(), & ! heat content associated with liquid sea ice     (W/m^2)
+    heat_content_massout => NULL(), & ! heat content associated with mass leaving ocean (W/m^2)
 
     ! salt mass flux (contributes to ocean mass only if non-Bouss )
     salt_flux         => NULL(), & ! net salt flux into the ocean ( kg salt/(m^2 s) )
@@ -162,15 +165,16 @@ type, public :: forcing_diags
   integer :: id_lrunoff      = -1, id_frunoff = -1
   integer :: id_seaice_melt  = -1
 
-  integer :: id_net_heat_coupler       = -1, id_net_heat_surface       = -1
-  integer :: id_sens                   = -1, id_LwLatSens              = -1
-  integer :: id_sw                     = -1, id_lw                     = -1
-  integer :: id_lat_evap               = -1, id_lat_calve              = -1
-  integer :: id_lat                    = -1, id_lat_fprec              = -1
-  integer :: id_heat_content_lrunoff   = -1, id_heat_content_frunoff   = -1
-  integer :: id_heat_content_lprec     = -1, id_heat_content_fprec     = -1
-  integer :: id_heat_content_evap      = -1, id_surfwater_heat_content = -1
-  integer :: id_heat_restore           = -1
+  integer :: id_net_heat_coupler    = -1, id_net_heat_surface      = -1
+  integer :: id_sens                = -1, id_LwLatSens             = -1
+  integer :: id_sw                  = -1, id_lw                    = -1
+  integer :: id_lat_evap            = -1, id_lat_calve             = -1
+  integer :: id_lat                 = -1, id_lat_fprec             = -1
+  integer :: id_heat_content_lrunoff= -1, id_heat_content_frunoff  = -1
+  integer :: id_heat_content_lprec  = -1, id_heat_content_fprec    = -1
+  integer :: id_heat_content_cond   = -1, id_heat_content_surfwater= -1
+  integer :: id_heat_content_vprec  = -1, id_heat_content_massout  =-1  
+  integer :: id_heat_restore        = -1
 
   integer :: id_saltflux        = -1, id_saltFluxIn        = -1
   integer :: id_saltFluxRestore = -1, id_saltFluxGlobalAdj = -1
@@ -213,22 +217,26 @@ end type optics_type
 contains
 
 !> Extract fluxes from surface fluxes type. 
-subroutine extractFluxes1d(G, fluxes, optics, nsw, j, dt, DepthBeforeScalingFluxes, &
-                           h, T, net_H, net_heat, net_salt, pen_SW_bnd, tv)
+subroutine extractFluxes1d(G, fluxes, optics, nsw, j, dt,                               &
+                  DepthBeforeScalingFluxes, useRiverHeatContent, useCalvingHeatContent, &
+                  h, T, netMassInOut, netMassOut, net_heat, net_salt, pen_SW_bnd, tv)
 
 !  This subroutine extracts fluxes from the surface fluxes type. It works on a j-row
 !  for optimization purposes.  The 2d (i,j) wrapper is the next subroutine below. 
 
   type(ocean_grid_type),          intent(in)    :: G
-  type(forcing),                  intent(in)    :: fluxes 
+  type(forcing),                  intent(inout) :: fluxes 
   type(optics_type),              pointer       :: optics
   integer,                        intent(in)    :: nsw
   integer,                        intent(in)    :: j
   real,                           intent(in)    :: dt
   real,                           intent(in)    :: DepthBeforeScalingFluxes
+  logical,                        intent(in)    :: useRiverHeatContent
+  logical,                        intent(in)    :: useCalvingHeatContent
   real, dimension(NIMEM_,NKMEM_), intent(in)    :: h
   real, dimension(NIMEM_,NKMEM_), intent(in)    :: T
-  real, dimension(NIMEM_),        intent(out)   :: net_H
+  real, dimension(NIMEM_),        intent(out)   :: netMassInOut
+  real, dimension(NIMEM_),        intent(out)   :: netMassOut 
   real, dimension(NIMEM_),        intent(out)   :: net_heat
   real, dimension(NIMEM_),        intent(out)   :: net_salt
   real, dimension(:,:),           intent(out)   :: pen_SW_bnd
@@ -244,11 +252,15 @@ subroutine extractFluxes1d(G, fluxes, optics, nsw, j, dt, DepthBeforeScalingFlux
 !  (in)      h                        =  layer thickness, in m for Bouss or (kg/m^2) for non-Bouss
 !  (in)      T                        =  layer temperatures, in deg C
 
-!  (out)     net_H            = net mass flux (if non-Boussinesq) or volume flux (if Boussinesq)
-!                               i.e. fresh water flux (P+R-E) into ocean over a time step (H units)
-!  (out)     net_heat         = net heating at the surface over a time step associated with coupler
-!                               and restoring;  i.e., net_heat=SW+LW+Latent+Sensible+river (K * H).
-!                               This term misses the heat from precip-evap.  
+!  (out)     netMassInOut     = net mass flux (if non-Boussinesq) or volume flux (if Boussinesq)
+!                               of water in/out of ocean over a time step (H units)
+!  (out)     netMassOut       = net mass flux (if non-Boussinesq) or volume flux (if Boussinesq)
+!                               of water leaving ocean surface over a time step (H units)
+!  (out)     net_heat         = net heat at the surface over a time step associated with coupler
+!                               and restoring. We exclude two terms form net_heat: (1) heat that 
+!                               can leave bottom of surface cell via penetrative SW, (2) 
+!                               evaporation heat content, since do not yet know temp of evapration. 
+!                               Units are (K * H).
 !  (out)     net_salt         = surface salt flux into the ocean over a time step (psu * H)
 !  (out)     pen_SW_bnd       = penetrating shortwave heating at the sea surface
 !                               in each penetrating band, in K H, size nsw x NIMEM_.
@@ -265,7 +277,7 @@ subroutine extractFluxes1d(G, fluxes, optics, nsw, j, dt, DepthBeforeScalingFlux
   real :: I_Cp                 !  1.0 / C_p
 
   character(len=200) :: mesg
-  integer :: is, ie, nz, i, k, n
+  integer            :: is, ie, nz, i, k, n
   Ih_limit    = 1.0 / (DepthBeforeScalingFluxes * G%m_to_H)
   Irho0       = 1.0 / G%Rho0 
   I_Cp        = 1.0 / fluxes%C_p
@@ -323,23 +335,49 @@ subroutine extractFluxes1d(G, fluxes, optics, nsw, j, dt, DepthBeforeScalingFlux
       Pen_SW_bnd(1,i) = 0.0
     endif
  
-    ! net volume/mass of liquid and solid boundary fluxes 
-    net_H(i) = dt * (scale * ((((( fluxes%lprec(i,j)        &
-                                 + fluxes%fprec(i,j))       &
-                                 + fluxes%evap(i,j))        &
-                                 + fluxes%lrunoff(i,j))     &
-                                 + fluxes%vprec(i,j))       &
+    ! net volume/mass of liquid and solid passing through surface boundary fluxes 
+    netMassInOut(i) = dt * (scale * ((((( fluxes%lprec(i,j)  &
+                                 + fluxes%fprec(i,j))        &
+                                 + fluxes%evap(i,j)        ) &
+                                 + fluxes%lrunoff(i,j))      &
+                                 + fluxes%vprec(i,j))        &
                                  + fluxes%frunoff(i,j) ) )
 
-    ! convert to H units ( Bouss=meter or non-Bouss=kg/m^2 )
-    net_H(i) = G%kg_m2_to_H * net_H(i)
-
     ! smg: 
-    ! for non-Bouss, we add salt mass to total ocean mass. to conserve
+    ! for non-Bouss, we add/remove salt mass to total ocean mass. to conserve
     ! total salt mass ocean+ice, the sea ice model must lose mass when
     ! salt mass is added to the ocean, which may still need to be coded.
-    if (.not.G%Boussinesq .and. ASSOCIATED(fluxes%salt_flux)) &
-      net_H(i) = net_H(i) + (dt * G%kg_m2_to_H) * (scale * fluxes%salt_flux(i,j))
+    if (.not.G%Boussinesq .and. ASSOCIATED(fluxes%salt_flux)) then 
+      netMassInOut(i) = netMassInOut(i) + (dt * G%kg_m2_to_H) * (scale * fluxes%salt_flux(i,j))
+    endif 
+
+    ! net volume/mass of water leaving the ocean. 
+    ! check that fluxes are < 0, which means mass is indeed leaving. 
+    netMassOut(i) = 0.0
+
+    ! evap > 0 means condensating water added into ocean. 
+    if(fluxes%evap(i,j) < 0.0) then 
+      netMassOut(i) = netMassOut(i) + fluxes%evap(i,j)
+      if(ASSOCIATED(fluxes%heat_content_cond)) fluxes%heat_content_cond(i,j) = 0.0
+    endif 
+
+    ! lprec < 0 means sea ice formation taking water from the ocean.
+    ! smg: we should split the ice melt/formation from the lprec 
+    if(fluxes%lprec(i,j) < 0.0) then
+      netMassOut(i) = netMassOut(i) + fluxes%lprec(i,j)
+      if(ASSOCIATED(fluxes%heat_content_lprec)) fluxes%heat_content_lprec(i,j) = 0.0
+    endif 
+
+    ! vprec < 0 means virtual evaporation arising from surface salinity restoring.  
+    if(fluxes%vprec(i,j) < 0.0) then 
+      netMassOut(i) = netMassOut(i) + fluxes%vprec(i,j)
+      if(ASSOCIATED(fluxes%heat_content_vprec)) fluxes%heat_content_vprec(i,j) = 0.0
+    endif 
+    netMassOut(i) = dt * scale * netMassOut(i)  
+
+    ! convert to H units (Bouss=meter or non-Bouss=kg/m^2)
+    netMassInOut(i) = G%kg_m2_to_H * netMassInOut(i)
+    netMassOut(i)   = G%kg_m2_to_H * netMassOut(i)
 
 
     ! surface heat fluxes from radiation and turbulent fluxes (K * H)
@@ -351,12 +389,42 @@ subroutine extractFluxes1d(G, fluxes, optics, nsw, j, dt, DepthBeforeScalingFlux
     if (ASSOCIATED(fluxes%heat_restore)) net_heat(i) = net_heat(i) &
       + (scale * (dt * J_m2_to_H)) * fluxes%heat_restore(i,j)
 
-    ! add heat from liquid precip, frozen precip, liquid runoff, frozen runoff  (K * H)
+    ! smg: old code 
+!    if (useRiverHeatContent) then
+!      ! remove lrunoff*SST here, to counteract its addition elsewhere
+!      net_heat(i) = (net_heat(i) + (scale*(dt*J_m2_to_H)) * fluxes%heat_content_lrunoff(i,j)) - &
+!                     (G%kg_m2_to_H * (scale * dt)) * fluxes%lrunoff(i,j) * T(i,1)
+!      if (ASSOCIATED(tv%TempxPmE)) then
+!        tv%TempxPmE(i,j) = tv%TempxPmE(i,j) + (scale * dt) * &
+!            (I_Cp*fluxes%heat_content_lrunoff(i,j) - fluxes%lrunoff(i,j)*T(i,1))
+!      endif
+!    endif
+!    ! smg: old code 
+!    if (useCalvingHeatContent) then
+!      ! remove frunoff*SST here, to counteract its addition elsewhere
+!      net_heat(i) = net_heat(i) + (scale*(dt*J_m2_to_H)) * fluxes%heat_content_frunoff(i,j) - &
+!                    (G%kg_m2_to_H * (scale * dt)) * fluxes%frunoff(i,j) * T(i,1)
+!      if (ASSOCIATED(tv%TempxPmE)) then
+!        tv%TempxPmE(i,j) = tv%TempxPmE(i,j) + (scale * dt) * &
+!            (I_Cp*fluxes%heat_content_frunoff(i,j) - fluxes%frunoff(i,j)*T(i,1))
+!      endif
+!    endif
+
+    ! smg: new code 
+    ! add heat from all terms that may add mass to the ocean (K * H).
+    ! if evap, lprec, or vprec < 0, then compute their heat content 
+    ! inside MOM_diabatic_driver.F90 and fill in fluxes%heat_content_massout.
+    ! we do so since we do not here know the temperature 
+    ! that water is leaving the ocean, as it could be leaving from more than 
+    ! one layer of the upper ocean in the case of very thin layers.   
+    ! When evap, lprec, or vprec > 0, then we know their heat content here
+    ! via setting from inside one of the config_src driver files.  
     if (ASSOCIATED(fluxes%heat_content_lprec)) then 
-    net_heat(i) = net_heat(i) + scale * dt * J_m2_to_H *                                  &
-                  ( fluxes%heat_content_lprec(i,j)    +  ((fluxes%heat_content_fprec(i,j) &
-                  + fluxes%heat_content_lrunoff(i,j)) + fluxes%heat_content_frunoff(i,j)) )
-    endif 
+      net_heat(i) = net_heat(i) + scale * dt * J_m2_to_H *                   &            
+     (fluxes%heat_content_lprec(i,j)   + (fluxes%heat_content_fprec(i,j)   + & 
+     (fluxes%heat_content_lrunoff(i,j) + (fluxes%heat_content_frunoff(i,j) + &
+     (fluxes%heat_content_cond(i,j)    +  fluxes%heat_content_vprec(i,j))))))
+    endif
 
     if (num_msg < max_msg) then
       if (Pen_SW_tot(i) > 1.000001*J_m2_to_H*scale*dt*fluxes%sw(i,j)) then
@@ -370,6 +438,7 @@ subroutine extractFluxes1d(G, fluxes, optics, nsw, j, dt, DepthBeforeScalingFlux
       endif
     endif
 
+    ! remove the penetrative portion of the SW that can leave the top cell
     net_heat(i) = net_heat(i) - Pen_SW_tot(i)
 
 
@@ -383,25 +452,30 @@ subroutine extractFluxes1d(G, fluxes, optics, nsw, j, dt, DepthBeforeScalingFlux
 
   enddo ! i-loop
 
+
 end subroutine extractFluxes1d
 
 
 !> 2d wrapper for 1d extract fluxes from surface fluxes type. 
-subroutine extractFluxes2d(G, fluxes, optics, nsw, dt, DepthBeforeScalingFluxes, &
-                           h, T, net_H, net_heat, Net_salt, Pen_SW_bnd, tv)
+subroutine extractFluxes2d(G, fluxes, optics, nsw, dt,                                  &
+                  DepthBeforeScalingFluxes, useRiverHeatContent, useCalvingHeatContent, &
+                  h, T, netMassInOut, netMassOut, net_heat, Net_salt, Pen_SW_bnd, tv)
 
   !  This subroutine extracts fluxes from the surface fluxes type. It is a 
   !  wrapper for the 1d routine extractFluxes1d.
 
   type(ocean_grid_type),                 intent(in)    :: G
-  type(forcing),                         intent(in)    :: fluxes
+  type(forcing),                         intent(inout) :: fluxes
   type(optics_type),                     pointer       :: optics
   integer,                               intent(in)    :: nsw
   real,                                  intent(in)    :: dt
   real,                                  intent(in)    :: DepthBeforeScalingFluxes
+  logical,                               intent(in)    :: useRiverHeatContent
+  logical,                               intent(in)    :: useCalvingHeatContent
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: T
-  real, dimension(NIMEM_,NJMEM_),        intent(out)   :: net_H
+  real, dimension(NIMEM_,NJMEM_),        intent(out)   :: netMassInOut
+  real, dimension(NIMEM_,NJMEM_),        intent(out)   :: netMassOut
   real, dimension(NIMEM_,NJMEM_),        intent(out)   :: net_heat
   real, dimension(NIMEM_,NJMEM_),        intent(out)   :: net_salt
   real, dimension(:,:,:),                intent(out)   :: pen_SW_bnd
@@ -417,24 +491,28 @@ subroutine extractFluxes2d(G, fluxes, optics, nsw, dt, DepthBeforeScalingFluxes,
 !  (in)      h                        =  layer thickness, in m for Bouss or (kg/m^2) for non-Bouss
 !  (in)      T                        =  layer temperatures, in deg C
 
-!  (out)     net_H      = net mass flux (if non-Boussinesq) or volume flux (if Boussinesq)
-!                         i.e. fresh water flux (P+R-E) into ocean over a time step (units of H)
-!  (out)     net_heat   = net heating at the surface over a time step associated with coupler
-!                         and restoring;  i.e., net_heat=SW+LW+Latent+Sensible+river (K * H).
-!                         This term misses the heat from precip-evap.
-!  (out)     net_salt   = surface salt flux into the ocean over a time step (psu * H)
-!  (out)     pen_SW_bnd = penetrating shortwave heating at the sea surface
-!                         in each penetrating band, in K H, size nsw x NIMEM_.
-!  (inout)   tv         = structure containing pointers to any available
-!                         thermodynamic fields. Here it is used to keep track of the
-!                         heat flux associated with net mass fluxes into the ocean.
+!  (out)     netMassInOut = net mass flux (if non-Boussinesq) or volume flux (if Boussinesq)
+!                           of water in/out of ocean surface over a time step (H)
+!  (out)     netMassOut   = net mass flux (if non-Boussinesq) or volume flux (if Boussinesq)
+!                           of water leaving ocean surface over a time step (H)
+!  (out)     net_heat     = net heating at the surface over a time step associated with coupler
+!                           and restoring;  i.e., net_heat=SW+LW+Latent+Sensible+river (K * H).
+!                           This term misses the heat from precip-evap.
+!  (out)     net_salt     = surface salt flux into the ocean over a time step (psu * H)
+!  (out)     pen_SW_bnd   = penetrating shortwave heating at the sea surface
+!                           in each penetrating band, in K H, size nsw x NIMEM_.
+!  (inout)   tv           = structure containing pointers to any available
+!                           thermodynamic fields. Here it is used to keep track of the
+!                           heat flux associated with net mass fluxes into the ocean.
 
   integer :: j
-!$OMP parallel do default(none) shared(G,fluxes, optics, nsw,dt, DepthBeforeScalingFluxes, &
-!$OMP                                  h,T,Net_H,Net_heat,Net_salt,Pen_SW_bnd,tv)
+!$OMP parallel do default(none) shared(G,fluxes, optics, nsw,dt,DepthBeforeScalingFluxes, &
+!$OMP                                  useRiverHeatContent, useCalvingHeatContent,        &
+!$OMP                                  h,T,netMassInOut,netMassOut,Net_heat,Net_salt,Pen_SW_bnd,tv)
   do j=G%jsc, G%jec
-    call extractFluxes1d(G, fluxes, optics, nsw, j, dt, DepthBeforeScalingFluxes, &
-            h(:,j,:), T(:,j,:), net_H(:,j), net_heat(:,j), net_salt(:,j),         &
+    call extractFluxes1d(G, fluxes, optics, nsw, j, dt,                                 &
+            DepthBeforeScalingFluxes, useRiverHeatContent, useCalvingHeatContent,       &
+            h(:,j,:), T(:,j,:), netMassInOut(:,j), netMassOut(:,j), net_heat(:,j), net_salt(:,j),&
             pen_SW_bnd(:,:,j), tv)
   enddo
 
@@ -449,7 +527,7 @@ subroutine calculateBuoyancyFlux1d(G, fluxes, optics, h, Temp, Salt, tv, j, &
   ! FW and salt fluxes and linearizing about the surface state.
 
   type(ocean_grid_type),                 intent(in)    :: G              ! ocean grid
-  type(forcing),                         intent(in)    :: fluxes         ! surface fluxes
+  type(forcing),                         intent(inout) :: fluxes         ! surface fluxes
   type(optics_type),                     pointer       :: optics         ! penetrating SW optics 
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h              ! layer/level thickness (H)
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: Temp           ! prognostic temp(deg C)
@@ -465,6 +543,7 @@ subroutine calculateBuoyancyFlux1d(G, fluxes, optics, h, Temp, Salt, tv, j, &
   integer, dimension(SZI_(G),SZK_(G))       :: ksort
   real, parameter                           :: dt = 1.    ! to return a rate from extractFluxes1d
   real, dimension( SZI_(G) )                :: netH       ! net FW flux (m/s for Bouss)
+  real, dimension( SZI_(G) )                :: netEvap    ! net FW flux leaving ocean via evaporation (m/s for Bouss)
   real, dimension( SZI_(G) )                :: netHeat    ! net temp flux (K m/s)
   real, dimension( optics%nbands, SZI_(G) ) :: penSWbnd   ! SW penetration bands
   real, dimension( SZI_(G) )                :: pressure   ! pressurea the surface (Pa)
@@ -472,16 +551,22 @@ subroutine calculateBuoyancyFlux1d(G, fluxes, optics, h, Temp, Salt, tv, j, &
   real, dimension( SZI_(G) )                :: dRhodS     ! density partial derivative wrt saln
   real, dimension(SZI_(G),SZK_(G)+1)        :: netPen 
 
+  logical :: useRiverHeatContent
+  logical :: useCalvingHeatContent
   real    :: depthBeforeScalingFluxes, GoRho
   real    :: H_limit_fluxes
 
   nsw = optics%nbands
 
+  !  smg: what do we do when have heat fluxes from calving and river?  
+  useRiverHeatContent   = .False.    
+  useCalvingHeatContent = .False.  
+
   depthBeforeScalingFluxes = max( G%Angstrom, 1.e-30 )
-  pressure(:)              = 0. ! Ignore atmospheric pressure
-  GoRho                    = G%g_Earth / G%Rho0
-  start                    = 1 + G%isc - G%isd
-  npts                     = 1 + G%iec - G%isc
+  pressure(:) = 0. ! Ignore atmospheric pressure
+  GoRho       = G%g_Earth / G%Rho0
+  start       = 1 + G%isc - G%isd
+  npts        = 1 + G%iec - G%isc
 
   do k=1, G%ke
     ksort(:,k) = k
@@ -493,9 +578,9 @@ subroutine calculateBuoyancyFlux1d(G, fluxes, optics, h, Temp, Salt, tv, j, &
   ! netH       = water (H units) added/removed via surface fluxes
   ! netHeat    = heat (degC * H) via surface fluxes
   ! netSalt    = salt ( g(salt)/m2 for non-Bouss and ppt*m/s for Bouss ) via surface fluxes
-  ! Pen_SW_bnd = components to penetrative shortwave radiation for each radiation band 
-  call extractFluxes1d(G, fluxes, optics, nsw, j, dt, depthBeforeScalingFluxes, &
-                h(:,j,:), Temp(:,j,:), netH, netHeatMinusSW, netSalt, penSWbnd, tv)
+  call extractFluxes1d(G, fluxes, optics, nsw, j, dt,                                &
+                depthBeforeScalingFluxes, useRiverHeatContent, useCalvingHeatContent,&
+                h(:,j,:), Temp(:,j,:), netH, netEvap, netHeatMinusSW, netSalt, penSWbnd, tv)
 
   ! Sum over bands and attenuate as a function of depth
   ! netPen is the netSW as a function of depth
@@ -533,7 +618,7 @@ subroutine calculateBuoyancyFlux2d(G, fluxes, optics, h, Temp, Salt, tv, &
 ! This routine is a wrapper for calculateBuoyancyFlux1d.
 
   type(ocean_grid_type),                       intent(in)    :: G              ! ocean grid
-  type(forcing),                               intent(in)    :: fluxes         ! surface fluxes
+  type(forcing),                               intent(inout) :: fluxes         ! surface fluxes
   type(optics_type),                           pointer       :: optics         ! SW ocean optics
   real, dimension(NIMEM_,NJMEM_,NKMEM_),       intent(in)    :: h              ! layer thickness (H)
   real, dimension(NIMEM_,NJMEM_,NKMEM_),       intent(in)    :: Temp           ! temperature (deg C)
@@ -551,7 +636,7 @@ subroutine calculateBuoyancyFlux2d(G, fluxes, optics, h, Temp, Salt, tv, &
 
 !$OMP parallel do default(none) shared(G,fluxes,optics,h,Temp,Salt,tv,buoyancyFlux,&
 !$OMP                                  netHeatMinusSW,netSalt)                     &
-!$OMP                                  firstprivate(netT,netS)
+!$OMP                     firstprivate(netT,netS)
   do j = G%jsc, G%jec
     call calculateBuoyancyFlux1d(G, fluxes, optics, h, Temp, Salt, tv, j, buoyancyFlux(:,j,:), netT, netS )
     if (present(netHeatMinusSW)) netHeatMinusSW(:,j) = netT(:)
@@ -995,8 +1080,10 @@ subroutine MOM_forcing_chksum(mesg, fluxes, G, haloshift)
     call hchksum(fluxes%heat_content_lprec, mesg//" fluxes%heat_content_lprec",G,haloshift=hshift)
   if (associated(fluxes%heat_content_fprec)) &
     call hchksum(fluxes%heat_content_fprec, mesg//" fluxes%heat_content_fprec",G,haloshift=hshift)
-  if (associated(fluxes%heat_content_evap)) &
-    call hchksum(fluxes%heat_content_evap, mesg//" fluxes%heat_content_evap",G,haloshift=hshift)
+  if (associated(fluxes%heat_content_cond)) &
+    call hchksum(fluxes%heat_content_cond, mesg//" fluxes%heat_content_cond",G,haloshift=hshift)
+  if (associated(fluxes%heat_content_massout)) &
+    call hchksum(fluxes%heat_content_massout, mesg//" fluxes%heat_content_massout",G,haloshift=hshift)
 end subroutine MOM_forcing_chksum
 
 
@@ -1040,7 +1127,9 @@ subroutine forcing_SinglePointPrint(fluxes, G, i, j, mesg)
   call locMsg(fluxes%heat_content_frunoff,'heat_content_frunoff')
   call locMsg(fluxes%heat_content_lprec,'heat_content_lprec')
   call locMsg(fluxes%heat_content_fprec,'heat_content_fprec')
-  call locMsg(fluxes%heat_content_evap,'heat_content_evap')
+  call locMsg(fluxes%heat_content_vprec,'heat_content_vprec')
+  call locMsg(fluxes%heat_content_cond,'heat_content_cond')
+  call locMsg(fluxes%heat_content_cond,'heat_content_massout')
   contains
 
   subroutine locMsg(array,aname)
@@ -1087,11 +1176,11 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
   endif 
 
 
-  handles%id_prcme = register_diag_field('ocean_model', 'PRCmE', diag%axesT1, Time, &
+  handles%id_prcme = register_diag_field('ocean_model', 'PRCmE', diag%axesT1, Time,                 &
         'Net surface water flux (precip+liq runoff+ice calving-evap)',              &
         'kilogram/(meter^2 * second)', standard_name='water_flux_into_sea_water')
 
-  handles%id_evap = register_diag_field('ocean_model', 'evap', diag%axesT1, Time,&
+  handles%id_evap = register_diag_field('ocean_model', 'evap', diag%axesT1, Time,                         &
        'Evaporation/condensation at ocean surface (evaporation is negative)',    &
        'kilogram/(meter^2 * second)', standard_name='water_evaporation_flux')
 
@@ -1099,7 +1188,7 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
   handles%id_seaice_melt = register_diag_field('ocean_model', 'seaice_melt',       &
      diag%axesT1, Time, 'water flux to ocean from sea ice melt(> 0) or form(< 0)', &
      'kilogram/(meter^2 * second)',                                                &
-     standard_name='water_flux_into_sea_water_due_to_sea_ice_thermodynamics')
+         standard_name='water_flux_into_sea_water_due_to_sea_ice_thermodynamics')
 
   handles%id_precip = register_diag_field('ocean_model', 'precip', diag%axesT1, Time, &
         'Liquid + frozen precipitation into ocean', 'kilogram/(meter^2 * second)')
@@ -1126,7 +1215,7 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
   handles%id_heat_content_frunoff = register_diag_field('ocean_model', 'heat_content_frunoff',     &
          diag%axesT1, Time,'Heat content (relative to 0degC)of frozen runoff (calving) into ocean',&
         'Watt/m^2',                                                                                &
-         standard_name='temperature_flux_due_to_icebergs_expressed_as_heat_flux_into_sea_water')
+        standard_name='temperature_flux_due_to_icebergs_expressed_as_heat_flux_into_sea_water')
 
   handles%id_heat_content_lrunoff = register_diag_field('ocean_model', 'heat_content_lrunoff',&
         diag%axesT1,Time,'Heat content of liquid river runoff into ocean', 'Watt/m^2',        &
@@ -1141,14 +1230,21 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
         diag%axesT1,Time,'Heat content (relative to 0degC) of frozen prec entering ocean',&
         'Watt/m^2')
 
-  handles%id_heat_content_evap = register_diag_field('ocean_model', 'heat_content_evap',&
-        diag%axesT1,Time,'Heat content (relative to 0degC) of evaporation into ocean',  &
-        'Watt/m^2',                                                                     &
-        standard_name='temperature_flux_due_to_evaporation_expressed_as_heat_flux_into_sea_water')
+  handles%id_heat_content_vprec = register_diag_field('ocean_model', 'heat_content_vprec',   &
+        diag%axesT1,Time,'Heat content (relative to 0degC) of virtual precip entering ocean',&
+        'Watt/m^2')
 
-  handles%id_surfwater_heat_content = register_diag_field('ocean_model', 'surfwater_heat_content',&
+  handles%id_heat_content_cond = register_diag_field('ocean_model', 'heat_content_cond',   &
+        diag%axesT1,Time,'Heat content (relative to 0degC) of water condensing into ocean',&
+        'Watt/m^2')
+
+  handles%id_heat_content_surfwater = register_diag_field('ocean_model', 'heat_content_surfwater',&
          diag%axesT1, Time,                                                                       &
-        'Heat content (relative to 0degC) of water crossing ocean surface (frozen+liquid)',       &
+        'Heat content (relative to 0degC) of net water crossing ocean surface (frozen+liquid)',   &
+        'Watt/m^2')
+
+  handles%id_heat_content_massout = register_diag_field('ocean_model', 'heat_content_massout',&
+         diag%axesT1, Time,'Heat content (relative to 0degC)of net mass leaving ocean ocean', &
         'Watt/m^2')
 
   handles%id_net_heat_coupler = register_diag_field('ocean_model', 'net_heat_coupler',          &
@@ -1169,7 +1265,7 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
         'Longwave radiation flux into ocean', 'Watt/m^2',                     &
         standard_name='surface_net_downward_longwave_flux')
 
-  handles%id_lat = register_diag_field('ocean_model', 'latent', diag%axesT1, Time,                &
+  handles%id_lat = register_diag_field('ocean_model', 'latent', diag%axesT1, Time,                    &
         'Latent heat flux into ocean due to fusion/evaporation (negative means ocean losses heat)'&
         ,'Watt/m^2')
 
@@ -1287,12 +1383,16 @@ subroutine forcing_diagnostics(fluxes, state, dt, G, diag, handles)
     if ((handles%id_heat_content_frunoff > 0) .and. ASSOCIATED(fluxes%heat_content_frunoff))  &
       call post_data(handles%id_heat_content_frunoff, fluxes%heat_content_frunoff, diag)
 
-    if ((handles%id_heat_content_lprec > 0) .and. ASSOCIATED(fluxes%heat_content_lprec))   &
+    if ((handles%id_heat_content_lprec > 0) .and. ASSOCIATED(fluxes%heat_content_lprec))      & 
       call post_data(handles%id_heat_content_lprec, fluxes%heat_content_lprec, diag)
-    if ((handles%id_heat_content_fprec > 0) .and. ASSOCIATED(fluxes%heat_content_fprec))   &
+    if ((handles%id_heat_content_fprec > 0) .and. ASSOCIATED(fluxes%heat_content_fprec))      & 
       call post_data(handles%id_heat_content_fprec, fluxes%heat_content_fprec, diag)
-    if ((handles%id_heat_content_evap > 0) .and. ASSOCIATED(fluxes%heat_content_evap))   &
-      call post_data(handles%id_heat_content_evap, fluxes%heat_content_evap, diag)
+    if ((handles%id_heat_content_vprec > 0) .and. ASSOCIATED(fluxes%heat_content_vprec))      &
+      call post_data(handles%id_heat_content_vprec, fluxes%heat_content_vprec, diag)
+    if ((handles%id_heat_content_cond > 0) .and. ASSOCIATED(fluxes%heat_content_cond))        &
+      call post_data(handles%id_heat_content_cond, fluxes%heat_content_cond, diag)
+    if ((handles%id_heat_content_massout > 0) .and. ASSOCIATED(fluxes%heat_content_massout))  &
+      call post_data(handles%id_heat_content_massout, fluxes%heat_content_massout, diag)
 
     if (handles%id_net_heat_coupler > 0) then
       sum(:,:) = 0.0
@@ -1313,19 +1413,23 @@ subroutine forcing_diagnostics(fluxes, state, dt, G, diag, handles)
       if (ASSOCIATED(fluxes%heat_content_frunoff)) sum(:,:) = sum(:,:) + fluxes%heat_content_frunoff(:,:)
       if (ASSOCIATED(fluxes%heat_content_lprec))   sum(:,:) = sum(:,:) + fluxes%heat_content_lprec(:,:)
       if (ASSOCIATED(fluxes%heat_content_fprec))   sum(:,:) = sum(:,:) + fluxes%heat_content_fprec(:,:)
-      if (ASSOCIATED(fluxes%heat_content_evap))    sum(:,:) = sum(:,:) + fluxes%heat_content_evap(:,:)
+      if (ASSOCIATED(fluxes%heat_content_vprec))   sum(:,:) = sum(:,:) + fluxes%heat_content_vprec(:,:)
+      if (ASSOCIATED(fluxes%heat_content_cond))    sum(:,:) = sum(:,:) + fluxes%heat_content_cond(:,:)
+      if (ASSOCIATED(fluxes%heat_content_massout)) sum(:,:) = sum(:,:) + fluxes%heat_content_massout(:,:)
       if (ASSOCIATED(state%frazil))                sum(:,:) = sum(:,:) + state%frazil(:,:) * I_dt
       call post_data(handles%id_net_heat_surface, sum, diag)
     endif
 
-    if (handles%id_surfwater_heat_content > 0) then
+    if (handles%id_heat_content_surfwater > 0) then
       sum(:,:) = 0.0
       if (ASSOCIATED(fluxes%heat_content_lrunoff)) sum(:,:) = sum(:,:) + fluxes%heat_content_lrunoff(:,:)
       if (ASSOCIATED(fluxes%heat_content_frunoff)) sum(:,:) = sum(:,:) + fluxes%heat_content_frunoff(:,:)
       if (ASSOCIATED(fluxes%heat_content_lprec))   sum(:,:) = sum(:,:) + fluxes%heat_content_lprec(:,:)
       if (ASSOCIATED(fluxes%heat_content_fprec))   sum(:,:) = sum(:,:) + fluxes%heat_content_fprec(:,:)
-      if (ASSOCIATED(fluxes%heat_content_evap))    sum(:,:) = sum(:,:) + fluxes%heat_content_evap(:,:)
-      call post_data(handles%id_surfwater_heat_content, sum, diag)
+      if (ASSOCIATED(fluxes%heat_content_vprec))   sum(:,:) = sum(:,:) + fluxes%heat_content_vprec(:,:)
+      if (ASSOCIATED(fluxes%heat_content_cond))    sum(:,:) = sum(:,:) + fluxes%heat_content_cond(:,:)
+      if (ASSOCIATED(fluxes%heat_content_massout)) sum(:,:) = sum(:,:) + fluxes%heat_content_massout(:,:)
+      call post_data(handles%id_heat_content_surfwater, sum, diag)
     endif
     if ((handles%id_LwLatSens > 0) .and. ASSOCIATED(fluxes%lw) .and. &
          ASSOCIATED(fluxes%latent) .and. ASSOCIATED(fluxes%sens)) then
@@ -1333,21 +1437,21 @@ subroutine forcing_diagnostics(fluxes, state, dt, G, diag, handles)
       call post_data(handles%id_LwLatSens, sum, diag)
     endif
 
-    if ((handles%id_sw > 0) .and. ASSOCIATED(fluxes%sw))                          &
-      call post_data(handles%id_sw, fluxes%sw, diag) 
-    if ((handles%id_lw > 0) .and. ASSOCIATED(fluxes%lw))                          &
+    if ((handles%id_sw > 0) .and. ASSOCIATED(fluxes%sw))                             &
+      call post_data(handles%id_sw, fluxes%sw, diag)
+    if ((handles%id_lw > 0) .and. ASSOCIATED(fluxes%lw))                             &
       call post_data(handles%id_lw, fluxes%lw, diag)
-    if ((handles%id_lat > 0) .and. ASSOCIATED(fluxes%latent))                     &
+    if ((handles%id_lat > 0) .and. ASSOCIATED(fluxes%latent))                        &
       call post_data(handles%id_lat, fluxes%latent, diag)
-    if ((handles%id_lat_evap > 0) .and. ASSOCIATED(fluxes%latent_evap_diag))      &
+    if ((handles%id_lat_evap > 0) .and. ASSOCIATED(fluxes%latent_evap_diag))         &
       call post_data(handles%id_lat_evap, fluxes%latent_evap_diag, diag)
-    if ((handles%id_lat_fprec > 0) .and. ASSOCIATED(fluxes%latent_fprec_diag))    &
+    if ((handles%id_lat_fprec > 0) .and. ASSOCIATED(fluxes%latent_fprec_diag))       &
       call post_data(handles%id_lat_fprec, fluxes%latent_fprec_diag, diag)
-    if ((handles%id_lat_fprec > 0) .and. ASSOCIATED(fluxes%latent_fprec_diag))    &
+    if ((handles%id_lat_fprec > 0) .and. ASSOCIATED(fluxes%latent_fprec_diag))       &
       call post_data(handles%id_lat_calve, fluxes%latent_frunoff_diag, diag)
-    if ((handles%id_sens > 0) .and. ASSOCIATED(fluxes%sens))                      &
-      call post_data(handles%id_sens, fluxes%sens, diag)  
-    if ((handles%id_heat_restore > 0) .and. ASSOCIATED(fluxes%heat_restore))      &
+    if ((handles%id_sens > 0) .and. ASSOCIATED(fluxes%sens))                         &
+      call post_data(handles%id_sens, fluxes%sens, diag)
+    if ((handles%id_heat_restore > 0) .and. ASSOCIATED(fluxes%heat_restore))         &
       call post_data(handles%id_heat_restore, fluxes%heat_restore, diag)
 
     if ((handles%id_psurf > 0) .and. ASSOCIATED(fluxes%p_surf))                      &
@@ -1360,11 +1464,11 @@ subroutine forcing_diagnostics(fluxes, state, dt, G, diag, handles)
       call post_data(handles%id_saltFluxGlobalAdj, fluxes%Sflux_adj_total, diag)
     if (handles%id_saltFluxIn > 0 .and. ASSOCIATED(fluxes%salt_flux_in))             &
       call post_data(handles%id_saltFluxIn, fluxes%salt_flux_in, diag)
-    
-    if ((handles%id_TKE_tidal > 0) .and. ASSOCIATED(fluxes%TKE_tidal)) &
+
+    if ((handles%id_TKE_tidal > 0) .and. ASSOCIATED(fluxes%TKE_tidal))               &
       call post_data(handles%id_TKE_tidal, fluxes%TKE_tidal, diag)
 
-    if ((handles%id_buoy > 0) .and. ASSOCIATED(fluxes%buoy)) &
+    if ((handles%id_buoy > 0) .and. ASSOCIATED(fluxes%buoy))                         &
       call post_data(handles%id_buoy, fluxes%buoy, diag)
 
   endif
@@ -1377,7 +1481,7 @@ end subroutine forcing_diagnostics
 !> Deallocates the forcing type
 subroutine deallocate_forcing_type(fluxes)
   type(forcing), intent(inout) :: fluxes
-  if (associated(fluxes%taux))                 deallocate(fluxes%taux)
+  if (associated(fluxes%taux))                deallocate(fluxes%taux)
   if (associated(fluxes%tauy))                 deallocate(fluxes%tauy)
   if (associated(fluxes%ustar))                deallocate(fluxes%ustar)
   if (associated(fluxes%buoy))                 deallocate(fluxes%buoy)
@@ -1397,7 +1501,8 @@ subroutine deallocate_forcing_type(fluxes)
   if (associated(fluxes%heat_content_frunoff)) deallocate(fluxes%heat_content_frunoff)
   if (associated(fluxes%heat_content_lprec))   deallocate(fluxes%heat_content_lprec)
   if (associated(fluxes%heat_content_fprec))   deallocate(fluxes%heat_content_fprec)
-  if (associated(fluxes%heat_content_evap))    deallocate(fluxes%heat_content_evap)
+  if (associated(fluxes%heat_content_cond))    deallocate(fluxes%heat_content_cond)
+  if (associated(fluxes%heat_content_massout)) deallocate(fluxes%heat_content_massout)
   if (associated(fluxes%evap))                 deallocate(fluxes%evap)
   if (associated(fluxes%lprec))                deallocate(fluxes%lprec)
   if (associated(fluxes%fprec))                deallocate(fluxes%fprec)

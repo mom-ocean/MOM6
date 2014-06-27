@@ -423,9 +423,9 @@ subroutine buoyancy_forcing_allocate(fluxes, G, CS)
       allocate(fluxes%sens(isd:ied,jsd:jed))
       fluxes%sens(:,:) = 0.0
     endif
-    if (.not.associated(fluxes%heat_content_evap)) then
-      allocate(fluxes%heat_content_evap(isd:ied,jsd:jed))
-      fluxes%heat_content_evap(:,:) = 0.0
+    if (.not.associated(fluxes%heat_content_cond)) then
+      allocate(fluxes%heat_content_cond(isd:ied,jsd:jed))
+      fluxes%heat_content_cond(:,:) = 0.0
     endif
     if (.not.associated(fluxes%heat_content_lprec)) then
       allocate(fluxes%heat_content_lprec(isd:ied,jsd:jed))
@@ -435,6 +435,10 @@ subroutine buoyancy_forcing_allocate(fluxes, G, CS)
       allocate(fluxes%heat_content_fprec(isd:ied,jsd:jed))
       fluxes%heat_content_fprec(:,:) = 0.0
     endif
+    if (.not.associated(fluxes%heat_content_vprec)) then
+      allocate(fluxes%heat_content_vprec(isd:ied,jsd:jed))
+      fluxes%heat_content_vprec(:,:) = 0.0
+    endif
     if (.not.associated(fluxes%heat_content_lrunoff)) then
       allocate(fluxes%heat_content_lrunoff(isd:ied,jsd:jed))
       fluxes%heat_content_lrunoff(:,:) = 0.0
@@ -442,6 +446,10 @@ subroutine buoyancy_forcing_allocate(fluxes, G, CS)
     if (.not.associated(fluxes%heat_content_frunoff)) then
       allocate(fluxes%heat_content_frunoff(isd:ied,jsd:jed))
       fluxes%heat_content_frunoff(:,:) = 0.0
+    endif
+    if (.not.associated(fluxes%heat_content_massout)) then
+      allocate(fluxes%heat_content_massout(isd:ied,jsd:jed))
+      fluxes%heat_content_massout(:,:) = 0.0
     endif
 
     ! surface restoring fields 
@@ -956,6 +964,12 @@ subroutine buoyancy_forcing_from_files(state, fluxes, day, dt, G, CS)
   integer :: days, seconds
   integer :: i, j, is, ie, js, je
 
+  ! latent heat of vaporization 
+  ! smg:
+  real :: latent_heat_evap=2.4663e6   ! value at 15 deg C according to appendix of Gill
+!   real :: latent_heat_evap = hlv 
+
+
   call callTree_enter("buoyancy_forcing_from_files, MOM_surface_forcing.F90")
 
   is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je = G%jec
@@ -1015,7 +1029,7 @@ subroutine buoyancy_forcing_from_files(state, fluxes, day, dt, G, CS)
       call read_data(CS%evaporation_file, CS%evap_var, temp(:,:), &
                      domain=G%Domain%mpp_domain, timelevel=time_lev)
       do j=js,je ; do i=is,ie
-        fluxes%latent(i,j)           = -hlv*temp(i,j)
+        fluxes%latent(i,j)           = -latent_heat_evap*temp(i,j)
         fluxes%evap(i,j)             = -temp(i,j)
         fluxes%latent_evap_diag(i,j) = fluxes%latent(i,j)
       enddo ; enddo
@@ -1133,23 +1147,44 @@ subroutine buoyancy_forcing_from_files(state, fluxes, day, dt, G, CS)
     CS%buoy_last_lev_read = time_lev_daily
 
     ! mask out land points and compute heat content of water fluxes 
-    ! evaporation leaves ocean surface at SST; fluxes%evap is < 0 for water leaving ocean
     ! assume liquid precip enters ocean at SST
     ! assume frozen precip enters ocean at 0degC
     ! assume liquid runoff enters ocean at SST
     ! assume solid runoff (calving) enters ocean at 0degC
+    ! mass leaving the ocean has heat_content determined in MOM_diabatic_driver.F90
     do j=js,je ; do i=is,ie
-      fluxes%evap(i,j)                 = fluxes%evap(i,j)             * G%mask2dT(i,j)
-      fluxes%lprec(i,j)                = fluxes%lprec(i,j)            * G%mask2dT(i,j)
-      fluxes%fprec(i,j)                = fluxes%fprec(i,j)            * G%mask2dT(i,j)
-      fluxes%lrunoff(i,j)              = fluxes%lrunoff(i,j)          * G%mask2dT(i,j)
-      fluxes%frunoff(i,j)              = fluxes%frunoff(i,j)          * G%mask2dT(i,j)
-      fluxes%LW(i,j)                   = fluxes%LW(i,j)               * G%mask2dT(i,j)
-      fluxes%sens(i,j)                 = fluxes%sens(i,j)             * G%mask2dT(i,j)
-      fluxes%sw(i,j)                   = fluxes%sw(i,j)               * G%mask2dT(i,j)
-      fluxes%latent(i,j)               = fluxes%latent(i,j)           * G%mask2dT(i,j)
-      fluxes%heat_content_evap(i,j)    = fluxes%C_p*fluxes%evap(i,j)*state%SST(i,j) 
-      fluxes%heat_content_lprec(i,j)   = fluxes%C_p*fluxes%lprec(i,j)*state%SST(i,j) 
+      fluxes%evap(i,j)    = fluxes%evap(i,j)    * G%mask2dT(i,j)
+      fluxes%lprec(i,j)   = fluxes%lprec(i,j)   * G%mask2dT(i,j)
+      fluxes%fprec(i,j)   = fluxes%fprec(i,j)   * G%mask2dT(i,j)
+      fluxes%lrunoff(i,j) = fluxes%lrunoff(i,j) * G%mask2dT(i,j)
+      fluxes%frunoff(i,j) = fluxes%frunoff(i,j) * G%mask2dT(i,j)
+      fluxes%LW(i,j)      = fluxes%LW(i,j)      * G%mask2dT(i,j)
+      fluxes%sens(i,j)    = fluxes%sens(i,j)    * G%mask2dT(i,j)
+      fluxes%sw(i,j)      = fluxes%sw(i,j)      * G%mask2dT(i,j)
+      fluxes%latent(i,j)  = fluxes%latent(i,j)  * G%mask2dT(i,j)
+
+      ! lprec < 0 may arise when ice formation takes lots of water from ocean, in which 
+      ! case the heat_content_massout is determined inside MOM_diabatic_driver.F90. 
+      ! smg: we should split ice melt/form out of lprec 
+      if(fluxes%lprec(i,j) > 0.0) then 
+         fluxes%heat_content_lprec(i,j) = fluxes%C_p*fluxes%lprec(i,j)*state%SST(i,j) 
+      else 
+         fluxes%heat_content_lprec(i,j) = 0.0
+      endif 
+      ! If vprec < 0, heat_content_massout is determined inside MOM_diabatic_driver.F90.
+      if(fluxes%vprec(i,j) > 0.0) then 
+         fluxes%heat_content_vprec(i,j) = fluxes%C_p*fluxes%vprec(i,j)*state%SST(i,j) 
+      else 
+         fluxes%heat_content_vprec(i,j) = 0.0
+      endif 
+      ! evap > 0 may arise when condensation/fog adds water to ocean. If evap < 0, 
+      ! heat_content_massout is determined inside MOM_diabatic_driver.F90.
+      if(fluxes%evap(i,j) > 0.0) then 
+         fluxes%heat_content_cond(i,j) = fluxes%C_p*fluxes%evap(i,j)*state%SST(i,j) 
+      else 
+         fluxes%heat_content_cond(i,j) = 0.0
+      endif 
+
       fluxes%heat_content_fprec(i,j)   = 0.0
       fluxes%heat_content_lrunoff(i,j) = fluxes%C_p*fluxes%lrunoff(i,j)*state%SST(i,j) 
       fluxes%heat_content_frunoff(i,j) = 0.0
@@ -1160,7 +1195,10 @@ subroutine buoyancy_forcing_from_files(state, fluxes, day, dt, G, CS)
 
   endif ! time_lev /= CS%buoy_last_lev_read
 
+
+  ! restoring surface boundary fluxes 
   if (CS%restorebuoy) then
+
     if (CS%use_temperature) then
       do j=js,je ; do i=is,ie
         if (G%mask2dT(i,j) > 0) then
@@ -1184,11 +1222,13 @@ subroutine buoyancy_forcing_from_files(state, fluxes, day, dt, G, CS)
         endif
       enddo ; enddo
     endif
+
   else                                              ! not RESTOREBUOY
     if (.not.CS%use_temperature) then
       call MOM_error(FATAL, "buoyancy_forcing in MOM_surface_forcing: "// &
                      "The fluxes need to be defined without RESTOREBUOY.")
     endif
+
   endif                                             ! end RESTOREBUOY
 
 !### if (associated(CS%ctrl_forcing_CSp)) then
@@ -1200,6 +1240,18 @@ subroutine buoyancy_forcing_from_files(state, fluxes, day, dt, G, CS)
 !###   call apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, fluxes%heat_restore, &
 !###                           fluxes%vprec, day, dt, G, CS%ctrl_forcing_CSp)
 !### endif
+
+  ! fill heat content for vprec when it is > 0 
+  ! if vprec < 0, heat_content_vprec filled in MOM_diabatic_driver.F90 
+  do j=js,je ; do i=is,ie
+    fluxes%vprec(i,j) = fluxes%vprec(i,j)*G%mask2dT(i,j)
+    if(fluxes%vprec(i,j) > 0.0) then 
+       fluxes%heat_content_vprec(i,j) = fluxes%C_p*fluxes%vprec(i,j)*state%SST(i,j) 
+    else 
+       fluxes%heat_content_vprec(i,j) = 0.0
+    endif 
+  enddo ; enddo  
+
 
   call callTree_leave("buoyancy_forcing_from_files")
 end subroutine buoyancy_forcing_from_files
@@ -1246,6 +1298,13 @@ subroutine buoyancy_forcing_from_data_override(state, fluxes, day, dt, G, CS)
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
   integer :: is_in, ie_in, js_in, je_in
 
+  ! latent heat of vaporization
+  ! smg:
+  real :: latent_heat_evap=2.4663e6   ! value at 15 deg C according to appendix of Gill
+!   real :: latent_heat_evap = hlv
+
+
+
   call callTree_enter("buoyancy_forcing_from_data_override, MOM_surface_forcing.F90")
 
   is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec
@@ -1276,7 +1335,7 @@ subroutine buoyancy_forcing_from_data_override(state, fluxes, day, dt, G, CS)
   do j=js,je ; do i=is,ie
      fluxes%evap(i,j) = -fluxes%evap(i,j)  ! Normal convention is positive into the ocean
                                            ! but evap is normally a positive quantity in the files
-     fluxes%latent(i,j)           = hlv*fluxes%evap(i,j)
+     fluxes%latent(i,j)           = latent_heat_evap*fluxes%evap(i,j)
      fluxes%latent_evap_diag(i,j) = fluxes%latent(i,j)
   enddo; enddo
 
@@ -1314,32 +1373,6 @@ subroutine buoyancy_forcing_from_data_override(state, fluxes, day, dt, G, CS)
 
   endif
 
-  ! mask out land points and compute heat content of water fluxes 
-  ! evaporation leaves ocean surface at SST; fluxes%evap is < 0 for water leaving ocean
-  ! assume liquid precip enters ocean at SST
-  ! assume frozen precip enters ocean at 0degC
-  ! assume liquid runoff enters ocean at SST
-  ! assume solid runoff (calving) enters ocean at 0degC
-  do j=js,je ; do i=is,ie
-    fluxes%evap(i,j)                 = fluxes%evap(i,j)        * G%mask2dT(i,j)
-    fluxes%lprec(i,j)                = fluxes%lprec(i,j)       * G%mask2dT(i,j)
-    fluxes%fprec(i,j)                = fluxes%fprec(i,j)       * G%mask2dT(i,j)
-    fluxes%lrunoff(i,j)              = fluxes%lrunoff(i,j)     * G%mask2dT(i,j)
-    fluxes%frunoff(i,j)              = fluxes%frunoff(i,j)     * G%mask2dT(i,j)
-    fluxes%LW(i,j)                   = fluxes%LW(i,j)          * G%mask2dT(i,j)
-    fluxes%latent(i,j)               = fluxes%latent(i,j)      * G%mask2dT(i,j)
-    fluxes%sens(i,j)                 = fluxes%sens(i,j)        * G%mask2dT(i,j)
-    fluxes%sw(i,j)                   = fluxes%sw(i,j)          * G%mask2dT(i,j)
-    fluxes%heat_content_evap(i,j)    = fluxes%C_p*fluxes%evap(i,j)*state%SST(i,j) 
-    fluxes%heat_content_lprec(i,j)   = fluxes%C_p*fluxes%lprec(i,j)*state%SST(i,j) 
-    fluxes%heat_content_fprec(i,j)   = 0.0
-    fluxes%heat_content_lrunoff(i,j) = fluxes%C_p*fluxes%lrunoff(i,j)*state%SST(i,j) 
-    fluxes%heat_content_frunoff(i,j) = 0.0
-    fluxes%latent_evap_diag(i,j)     = fluxes%latent_evap_diag(i,j) * G%mask2dT(i,j)
-    fluxes%latent_fprec_diag(i,j)    = -fluxes%fprec(i,j)*hlf
-    fluxes%latent_frunoff_diag(i,j)  = -fluxes%frunoff(i,j)*hlf
-  enddo ; enddo
-
   ! restoring boundary fluxes 
   if (CS%restorebuoy) then
     if (CS%use_temperature) then
@@ -1372,6 +1405,49 @@ subroutine buoyancy_forcing_from_data_override(state, fluxes, day, dt, G, CS)
     endif
   endif                                             ! end RESTOREBUOY
 
+
+  ! mask out land points and compute heat content of water fluxes 
+  ! assume liquid precip enters ocean at SST
+  ! assume frozen precip enters ocean at 0degC
+  ! assume liquid runoff enters ocean at SST
+  ! assume solid runoff (calving) enters ocean at 0degC
+  ! mass leaving ocean has heat_content determined in MOM_diabatic_driver.F90
+  do j=js,je ; do i=is,ie
+    fluxes%evap(i,j)    = fluxes%evap(i,j)    * G%mask2dT(i,j)
+    fluxes%lprec(i,j)   = fluxes%lprec(i,j)   * G%mask2dT(i,j)
+    fluxes%fprec(i,j)   = fluxes%fprec(i,j)   * G%mask2dT(i,j)
+    fluxes%lrunoff(i,j) = fluxes%lrunoff(i,j) * G%mask2dT(i,j)
+    fluxes%frunoff(i,j) = fluxes%frunoff(i,j) * G%mask2dT(i,j)
+    fluxes%LW(i,j)      = fluxes%LW(i,j)      * G%mask2dT(i,j)
+    fluxes%latent(i,j)  = fluxes%latent(i,j)  * G%mask2dT(i,j)
+    fluxes%sens(i,j)    = fluxes%sens(i,j)    * G%mask2dT(i,j)
+    fluxes%sw(i,j)      = fluxes%sw(i,j)      * G%mask2dT(i,j)
+
+    ! lprec < 0 may arise when ice formation takes lots of water from ocean, in which 
+    ! case the heat_content_massout is determined inside MOM_diabatic_driver.F90. 
+    ! smg: we should split ice melt/form out of lprec 
+    if(fluxes%lprec(i,j) > 0.0) then 
+       fluxes%heat_content_lprec(i,j) = fluxes%C_p*fluxes%lprec(i,j)*state%SST(i,j) 
+    else 
+       fluxes%heat_content_lprec(i,j) = 0.0
+    endif 
+    ! evap > 0 may arise when condensation/fog adds water to ocean. If evap < 0, 
+    ! heat_content_massout is determined inside MOM_diabatic_driver.F90.
+    if(fluxes%evap(i,j) > 0.0) then 
+       fluxes%heat_content_cond(i,j) = fluxes%C_p*fluxes%evap(i,j)*state%SST(i,j) 
+    else 
+       fluxes%heat_content_cond(i,j)   = 0.0
+    endif 
+
+    fluxes%heat_content_fprec(i,j)   = 0.0
+    fluxes%heat_content_lrunoff(i,j) = fluxes%C_p*fluxes%lrunoff(i,j)*state%SST(i,j) 
+    fluxes%heat_content_frunoff(i,j) = 0.0
+    fluxes%latent_evap_diag(i,j)     = fluxes%latent_evap_diag(i,j) * G%mask2dT(i,j)
+    fluxes%latent_fprec_diag(i,j)    = -fluxes%fprec(i,j)*hlf
+    fluxes%latent_frunoff_diag(i,j)  = -fluxes%frunoff(i,j)*hlf
+  enddo ; enddo
+
+
 !### if (associated(CS%ctrl_forcing_CSp)) then
 !###   do j=js,je ; do i=is,ie
 !###     SST_anom(i,j) = state%SST(i,j) - CS%T_Restore(i,j)
@@ -1381,6 +1457,18 @@ subroutine buoyancy_forcing_from_data_override(state, fluxes, day, dt, G, CS)
 !###   call apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, fluxes%heat_restore, &
 !###                           fluxes%vprec, day, dt, G, CS%ctrl_forcing_CSp)
 !### endif
+
+  ! fill heat content for vprec when it is > 0 
+  ! if vprec < 0, heat_content_massout filled in MOM_diabatic_driver.F90 
+  do j=js,je ; do i=is,ie
+    fluxes%vprec(i,j) = fluxes%vprec(i,j)*G%mask2dT(i,j)
+    ! If vprec < 0, heat_content_vprec is determined inside MOM_diabatic_driver.F90.
+    if(fluxes%vprec(i,j) > 0.0) then 
+       fluxes%heat_content_vprec(i,j) = fluxes%C_p*fluxes%vprec(i,j)*state%SST(i,j) 
+    else 
+       fluxes%heat_content_vprec(i,j) = 0.0
+    endif 
+  enddo ; enddo  
 
 
   call callTree_leave("buoyancy_forcing_from_data_override")
@@ -1421,15 +1509,17 @@ subroutine buoyancy_forcing_zero(state, fluxes, day, dt, G, CS)
       fluxes%evap(i,j)                 = 0.0
       fluxes%lprec(i,j)                = 0.0
       fluxes%fprec(i,j)                = 0.0
+      fluxes%vprec(i,j)                = 0.0
       fluxes%lrunoff(i,j)              = 0.0
       fluxes%frunoff(i,j)              = 0.0
       fluxes%lw(i,j)                   = 0.0
       fluxes%latent(i,j)               = 0.0
       fluxes%sens(i,j)                 = 0.0
       fluxes%sw(i,j)                   = 0.0
-      fluxes%heat_content_evap(i,j)    = 0.0
+      fluxes%heat_content_cond(i,j)    = 0.0
       fluxes%heat_content_lprec(i,j)   = 0.0
       fluxes%heat_content_fprec(i,j)   = 0.0
+      fluxes%heat_content_vprec(i,j)   = 0.0
       fluxes%heat_content_lrunoff(i,j) = 0.0
       fluxes%heat_content_frunoff(i,j) = 0.0
       fluxes%latent_evap_diag(i,j)     = 0.0
@@ -1467,8 +1557,8 @@ subroutine buoyancy_forcing_const(state, fluxes, day, dt, G, CS)
 !  (in)      G       = ocean grid structure
 !  (in)      CS      = pointer to control struct returned by previous surface_forcing_init call 
 
-  call callTree_enter("buoyancy_forcing_const, MOM_surface_forcing.F90")
   integer :: i, j, is, ie, js, je
+  call callTree_enter("buoyancy_forcing_const, MOM_surface_forcing.F90")
 
   ! allocate and initialize arrays 
   call buoyancy_forcing_allocate(fluxes, G, CS)
@@ -1478,15 +1568,17 @@ subroutine buoyancy_forcing_const(state, fluxes, day, dt, G, CS)
       fluxes%evap(i,j)                 = 0.0
       fluxes%lprec(i,j)                = 0.0
       fluxes%fprec(i,j)                = 0.0
+      fluxes%vprec(i,j)                = 0.0
       fluxes%lrunoff(i,j)              = 0.0
       fluxes%frunoff(i,j)              = 0.0
       fluxes%lw(i,j)                   = 0.0
       fluxes%latent(i,j)               = 0.0
       fluxes%sens(i,j)                 = CS%constantHeatForcing * G%mask2dT(i,j)
       fluxes%sw(i,j)                   = 0.0
-      fluxes%heat_content_evap(i,j)    = 0.0
+      fluxes%heat_content_cond(i,j)    = 0.0
       fluxes%heat_content_lprec(i,j)   = 0.0
       fluxes%heat_content_fprec(i,j)   = 0.0
+      fluxes%heat_content_vprec(i,j)   = 0.0
       fluxes%heat_content_lrunoff(i,j) = 0.0
       fluxes%heat_content_frunoff(i,j) = 0.0
       fluxes%latent_evap_diag(i,j)     = 0.0
@@ -1538,15 +1630,17 @@ subroutine buoyancy_forcing_linear(state, fluxes, day, dt, G, CS)
       fluxes%evap(i,j)                 = 0.0
       fluxes%lprec(i,j)                = 0.0
       fluxes%fprec(i,j)                = 0.0
+      fluxes%vprec(i,j)                = 0.0
       fluxes%lrunoff(i,j)              = 0.0
       fluxes%frunoff(i,j)              = 0.0
       fluxes%lw(i,j)                   = 0.0
       fluxes%latent(i,j)               = 0.0
       fluxes%sens(i,j)                 = 0.0
       fluxes%sw(i,j)                   = 0.0
-      fluxes%heat_content_evap(i,j)    = 0.0
+      fluxes%heat_content_cond(i,j)    = 0.0
       fluxes%heat_content_lprec(i,j)   = 0.0
       fluxes%heat_content_fprec(i,j)   = 0.0
+      fluxes%heat_content_vprec(i,j)   = 0.0
       fluxes%heat_content_lrunoff(i,j) = 0.0
       fluxes%heat_content_frunoff(i,j) = 0.0
       fluxes%latent_evap_diag(i,j)     = 0.0

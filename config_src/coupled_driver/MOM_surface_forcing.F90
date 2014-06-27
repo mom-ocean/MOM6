@@ -352,16 +352,20 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
     call safe_alloc_ptr(fluxes%frunoff,isd,ied,jsd,jed)          
        fluxes%frunoff(:,:)             = 0.0        
 
-    call safe_alloc_ptr(fluxes%heat_content_frunoff,isd,ied,jsd,jed) 
-       fluxes%heat_content_frunoff(:,:)= 0.0        
-    call safe_alloc_ptr(fluxes%heat_content_lrunoff,isd,ied,jsd,jed)  
-       fluxes%heat_content_lrunoff(:,:) = 0.0        
+    call safe_alloc_ptr(fluxes%heat_content_cond,isd,ied,jsd,jed)  
+       fluxes%heat_content_cond(:,:)   = 0.0        
     call safe_alloc_ptr(fluxes%heat_content_lprec,isd,ied,jsd,jed)  
        fluxes%heat_content_lprec(:,:)  = 0.0        
     call safe_alloc_ptr(fluxes%heat_content_fprec,isd,ied,jsd,jed)  
        fluxes%heat_content_fprec(:,:)  = 0.0        
-    call safe_alloc_ptr(fluxes%heat_content_evap,isd,ied,jsd,jed)  
-       fluxes%heat_content_evap(:,:)   = 0.0        
+    call safe_alloc_ptr(fluxes%heat_content_vprec,isd,ied,jsd,jed)  
+       fluxes%heat_content_vprec(:,:)  = 0.0        
+    call safe_alloc_ptr(fluxes%heat_content_frunoff,isd,ied,jsd,jed) 
+       fluxes%heat_content_frunoff(:,:)= 0.0        
+    call safe_alloc_ptr(fluxes%heat_content_lrunoff,isd,ied,jsd,jed)  
+       fluxes%heat_content_lrunoff(:,:) = 0.0        
+    call safe_alloc_ptr(fluxes%heat_content_massout,isd,ied,jsd,jed)  
+       fluxes%heat_content_massout(:,:) = 0.0        
 
     if (CS%rigid_sea_ice) then
       call safe_alloc_ptr(fluxes%rigidity_ice_u,IsdB,IedB,jsd,jed)
@@ -525,16 +529,19 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
     enddo ; enddo
   endif 
 
-  ! evaporation leaves ocean surface at SST; fluxes%evap is < 0 for water leaving ocean
+  ! smg: we should remove sea ice melt from lprec!!! 
+  ! fluxes%lprec > 0 means ocean gains mass via liquid precipitation and/or sea ice melt. 
+  ! When atmosphere does not provide heat of this precipitation, the ocean assumes
+  ! it enters the ocean at the SST.  
+  ! fluxes%lprec < 0 means ocean loses mass via sea ice formation. As we do not yet know
+  ! the layer at which this mass is removed, we cannot compute it heat content. We must 
+  ! wait until MOM_diabatic_driver.F90. 
   do j=js,je ; do i=is,ie
-    fluxes%heat_content_evap(i,j) = C_p*fluxes%evap(i,j)*state%SST(i,j)*G%mask2dT(i,j)
-  enddo ; enddo
-
-  ! assume lprec enters ocean at SST if atmos model does not provide lprec heat content.
-  ! include vprec (from saln restoring) as part of the liquid precip heat content. 
-  do j=js,je ; do i=is,ie
-    fluxes%heat_content_lprec(i,j) = &
-      C_p*(fluxes%vprec(i,j)+fluxes%lprec(i,j))*state%SST(i,j)*G%mask2dT(i,j)
+      if(fluxes%lprec(i,j) > 0.0) then 
+        fluxes%heat_content_lprec(i,j) = C_p*fluxes%lprec(i,j)*state%SST(i,j)*G%mask2dT(i,j)
+      else 
+        fluxes%heat_content_lprec(i,j) = 0.0  
+      endif 
   enddo ; enddo
 
   ! assume fprec enters ocean at 0degC if atmos model does not provide fprec heat content.
@@ -542,7 +549,32 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
     fluxes%heat_content_fprec(i,j) = 0.0
   enddo ; enddo
 
+  ! fluxes%evap < 0 means ocean loses mass due to evaporation.
+  ! Evaporation leaves ocean surface at a temperature that has yet to be determined,
+  ! since we do not know the precise layer that the water evaporates.  We therefore 
+  ! compute fluxes%heat_content_massout at the relevant point inside MOM_diabatic_driver.F90.
+  ! fluxes%evap > 0 means ocean gains moisture via condensation.
+  ! Condensation is assumed to drop into the ocean at the SST, just like lprec.  
+  do j=js,je ; do i=is,ie
+    if(fluxes%evap(i,j) > 0.0) then 
+      fluxes%heat_content_cond(i,j) = C_p*fluxes%evap(i,j)*state%SST(i,j)*G%mask2dT(i,j)
+    else 
+      fluxes%heat_content_cond(i,j) = 0.0
+    endif 
+  enddo ; enddo
 
+  ! virtual precip associated with salinity restoring 
+  ! vprec > 0 means add water to ocean, assumed to be at SST 
+  ! vprec < 0 means remove water from ocean; heat_content_massout in MOM_diabatic_driver.F90
+  do j=js,je ; do i=is,ie
+    if(fluxes%vprec(i,j) > 0.0) then 
+      fluxes%heat_content_vprec(i,j) = C_p*fluxes%vprec(i,j)*state%SST(i,j)*G%mask2dT(i,j)
+    else 
+      fluxes%heat_content_vprec(i,j) = 0.0
+    endif  
+  enddo ; enddo
+
+ 
   ! more salt restoring logic 
   if (restore_salinity .and. CS%salt_restore_as_sflux) then
     do j=js,je ; do i=is,ie
@@ -710,7 +742,8 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
       if (mass_ice > CS%rigid_sea_ice_mass) then
         mass_eff = (mass_ice - CS%rigid_sea_ice_mass) **2 / &
                    (mass_ice + CS%rigid_sea_ice_mass)
-        ! Alistar thinks that for simplicity this should be
+        ! smg: clean this up
+        ! Alistiar thinks that for simplicity this should be
         !   mass_eff = (mass_ice - CS%rigid_sea_ice_mass)
         ! but Bob thinks it should vary smoothly, like (m-m1)^2/(m+m1) does.
       endif
