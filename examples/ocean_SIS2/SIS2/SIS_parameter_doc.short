@@ -1,10 +1,6 @@
 SIS1_5L_THERMODYNAMICS = True   !   [Boolean] default = False
                                 ! If true, use the thermodynamic calculations inhereted
                                 ! from the SIS1 5 layer. Otherwise, use the newer SIS2 version.
-SNOW_ALBEDO = 0.88              !   [nondim] default = 0.85
-                                ! The albedo of dry snow atop sea ice.
-ICE_ALBEDO = 0.68               !   [nondim] default = 0.5826
-                                ! The albedo of dry bare sea ice.
 ICE_BULK_SALINITY = 0.005       !   [kg/kg] default = 0.004
                                 ! The fixed bulk salinity of sea ice.
 ICE_STATS_INTERVAL = 0.25       !   [days] default = 1.0
