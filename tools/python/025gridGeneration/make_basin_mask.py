@@ -190,8 +190,8 @@ var_dict['T']=None
 var_dict['_FillValue']=None
 var_dict['missing_value']=None
 var_dict['flag_values']='1,2,3,4,5,6,7,8,9,10,11'
-var_dict['flag_meanings']='Southern Ocean,Atlantic Ocean, Pacific Ocean, Arctic Ocean, Indian Ocean, Mediterranean Sea, Black Sea, Hudson Bay, Baltic Sea, Red Sea, Persian Gulf'
+var_dict['flag_meanings']='1:Southern Ocean, 2:Atlantic Ocean, 3:Pacific Ocean, 4:Arctic Ocean, 5:Indian Ocean, 6:Mediterranean Sea, 7:Black Sea, 8:Hudson Bay, 9:Baltic Sea, 10:Red Sea, 11:Persian Gulf'
 
 S.add_field_from_array(mask,'basin',var_dict=var_dict)
 
-S.write_nc('basin_mask.nc',['basin'])
+S.write_nc('basin_codes.nc',['basin'])
