@@ -35,7 +35,6 @@ MLD_obs = netCDF4.Dataset(cmdLineArgs.obsdata).variables['MLD'][:]
 x_obs = netCDF4.Dataset(cmdLineArgs.obsdata).variables['LONGITUDE'][:]
 y_obs = netCDF4.Dataset(cmdLineArgs.obsdata).variables['LATITUDE'][:]
 
-
 ciMin = m6plot.linCI(0,95,5)
 ciMax = m6plot.linCI(0,680,20)
 m6plot.xyplot( MLD.min(axis=1).mean(axis=0), x, y, area=area,
