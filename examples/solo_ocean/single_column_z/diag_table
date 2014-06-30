@@ -162,6 +162,7 @@
 "ocean_model","KPP_Ssurf","KPP_Ssurf","visc","all",.true.,"none",2
 "ocean_model","KPP_Usurf","KPP_Usurf","visc","all",.true.,"none",2
 "ocean_model","KPP_Vsurf","KPP_Vsurf","visc","all",.true.,"none",2
+"ocean_model","MLD_003","MLD_003","visc","all",.true.,"none",2
 
 #
 # Kinetic Energy Balance Terms:
