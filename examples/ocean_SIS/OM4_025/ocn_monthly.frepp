@@ -94,17 +94,12 @@ if (! $?FRE_ANALYSIS_HOME) then
 endif
 
 # Run script
-set src_dir = ${out_dir}/mom6/tools/analysis
-set script_bash = ${src_dir}/MOM6_ts_annual.bash
 set script_dir = ${out_dir}/mom6/tools/analysis
 
-setenv PYTHONDIR ${out_dir}/mom6/tools/python
+#setenv PYTHONDIR ${out_dir}/mom6/tools/python
 
 echo The following command is going to be invoked
 
-mkdir -p $out_dir/ocean_${yr1}-${yr2}/ptemp
-$script_dir/SST_bias_WOA05.py -o $out_dir/ocean_${yr1}-${yr2}/ptemp -l ${yr1}-${yr2} $in_data_dir/ocean_annual.$yr1-$yr2.temp.nc
-
-mkdir -p $out_dir/ocean_${yr1}-${yr2}/salinity
-$script_dir/SSS_bias_WOA05.py -o $out_dir/ocean_${yr1}-${yr2}/salinity -l ${yr1}-${yr2} $in_data_dir/ocean_annual.$yr1-$yr2.salt.nc
+mkdir -p $out_dir/ocean_${yr1}-${yr2}/Hosoda_MLD
+$script_dir/MLD_003.py -g /archive/gold/datasets/OM4_025/mosaic.v20140610.unpacked -o $out_dir/ocean_${yr1}-${yr2}/Hosoda_MLD -l ${yr1}-${yr2} $in_data_dir/ocean_monthly.${yr1}01-${yr2}12.MLD_003.nc
 

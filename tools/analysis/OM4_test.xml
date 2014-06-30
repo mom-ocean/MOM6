@@ -915,19 +915,20 @@ cd $work
       <!--PostProcessing component models-->
       <component type="ocean_monthly"   start="$(PP_START_YEAR)" source="ocean_month">
         <timeSeries freq="monthly" chunkLength="$(CHUNK_LENGTH_A)" source="ocean_month">
-          <analysis switch="$(ANALYSIS_SWITCH)" cumulative="no"  script="$(NB_ROOT)/mom6/examples/ocean_SIS/MOM6z_SIS_025/ocn_monthly.frepp"/>
+          <analysis switch="$(ANALYSIS_SWITCH)" cumulative="no"  script="$(NB_ROOT)/mom6/examples/ocean_SIS/OM4_025/ocn_monthly.frepp"/>
         </timeSeries>
         <timeSeries freq="monthly" chunkLength="$(CHUNK_LENGTH_B)" source="ocean_month">
-          <analysis switch="$(ANALYSIS_SWITCH)" cumulative="no" script="$(NB_ROOT)/mom6/examples/ocean_SIS/MOM6z_SIS_025/ocn_monthly.frepp"/>
+          <analysis switch="$(ANALYSIS_SWITCH)" cumulative="no" script="$(NB_ROOT)/mom6/examples/ocean_SIS/OM4_025/ocn_monthly.frepp"/>
         </timeSeries>
       </component>
+
       <component type="ocean_annual" start="$(PP_START_YEAR)"  source="ocean_annual"> 
-        <timeSeries freq="annual"  chunkLength="$(CHUNK_LENGTH_A)" source="ocean_annual">
-          <analysis switch="$(ANALYSIS_SWITCH)" cumulative="no" script="$(NB_ROOT)/mom6/examples/ocean_SIS/MOM6z_SIS_025/ocn_annual.frepp"/>
-        </timeSeries>
-        <timeSeries freq="annual"  chunkLength="$(CHUNK_LENGTH_B)" source="ocean_annual">
-          <analysis switch="$(ANALYSIS_SWITCH)" cumulative="no" script="$(NB_ROOT)/mom6/examples/ocean_SIS/MOM6z_SIS_025/ocn_annual.frepp"/>
-        </timeSeries>
+        <timeAverage source="annual"  interval="$(CHUNK_LENGTH_A)">
+          <analysis switch="$(ANALYSIS_SWITCH)" cumulative="no" script="$(NB_ROOT)/mom6/examples/ocean_SIS/OM4_025/ocn_annual.frepp"/>
+        </timeAverage>
+        <timeAverage source="annual"  interval="$(CHUNK_LENGTH_B)">
+          <analysis switch="$(ANALYSIS_SWITCH)" cumulative="no" script="$(NB_ROOT)/mom6/examples/ocean_SIS/OM4_025/ocn_annual.frepp"/>
+        </timeAverage>
       </component>
 
       <component type="ice"  start="$(PP_START_YEAR)"  source="ice_month">
