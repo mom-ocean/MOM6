@@ -579,10 +579,15 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   real, dimension(SZIW_(CS),SZJBW_(CS)) :: &
     vbt_prev, vhbt_prev, vbt_sum_prev, vhbt_sum_prev, vbt_wtd_prev  ! for OBC
 
-  real, dimension(SZIB_(G),SZJB_(G)) :: &
-    vel_trans_2D, &   ! The combination of the previous and current velocity
+  real, dimension(SZIBW_(CS),SZJW_(CS)) :: &
+    vel_trans_u, &    ! The combination of the previous and current u-point velocity
                       ! that does the mass transport, in m s-1.
-    Cor_2D, gradP_2D  ! The Coriolis and pressure gradient accelerations, m s-1.
+    Cor_u, gradP_u    ! The Coriolis and pressure gradient accelerations, m s-1 at u-point
+
+  real, dimension(SZIW_(CS),SZJBW_(CS)) :: &
+    vel_trans_v, &    ! The combination of the previous and current v-point velocity
+                      ! that does the mass transport, in m s-1.
+    Cor_v, gradP_v    ! The Coriolis and pressure gradient accelerations, m s-1 at v-point
 
   real :: I_Rho0      ! The inverse of the mean density (Rho0), in m3 kg-1.
   real :: visc_rem    ! A work variable that may equal visc_rem_[uv].  Nondim.
@@ -1628,42 +1633,42 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
 !$OMP                               azon,bzon,czon,dzon,Cor_ref_u,gtot_E,gtot_W,         &
 !$OMP                               u_accel_bt,PFu_bt_sum,Coru_bt_sum,apply_u_OBCs,      &
 !$OMP                               bt_rem_u,BT_force_u,uhbt,BTCL_u,uhbt0,Datu,ubt_sum,  &
-!$OMP                               uhbt_sum,ubt_wtd,Cor_2D,gradP_2D,vbt_prev,vhbt_prev, &
-!$OMP                               vbt_sum_prev,vhbt_sum_prev,vbt_wtd_prev,vel_trans_2D,&
+!$OMP                               uhbt_sum,ubt_wtd,Cor_u,gradP_u,vbt_prev,vhbt_prev,   &
+!$OMP                               vbt_sum_prev,vhbt_sum_prev,vbt_wtd_prev,vel_trans_u, &
 !$OMP                               ubt_prev,uhbt_prev,ubt_sum_prev,uhbt_sum_prev,       &
-!$OMP                               ubt_wtd_prev )                                       &
+!$OMP                               ubt_wtd_prev,Cor_v,gradP_v,vel_trans_v )             &
 !$OMP                       private(vel_prev)
     if (MOD(n+G%first_direction,2)==1) then
       ! On odd-steps, update v first.
 !$OMP do
       do J=jsv-1,jev ; do i=isv-1,iev+1
-        Cor_2D(i,j) = -1.0*((amer(I-1,j) * ubt(I-1,j) + cmer(I,j+1) * ubt(I,j+1)) + &
+        Cor_v(i,J) = -1.0*((amer(I-1,j) * ubt(I-1,j) + cmer(I,j+1) * ubt(I,j+1)) + &
                (bmer(I,j) * ubt(I,j) + dmer(I-1,j+1) * ubt(I-1,j+1))) - Cor_ref_v(i,J)
-        gradP_2D(i,j) = ((eta_PF_BT(i,j)-eta_PF(i,j))*gtot_N(i,j) - &
+        gradP_v(i,J) = ((eta_PF_BT(i,j)-eta_PF(i,j))*gtot_N(i,j) - &
                (eta_PF_BT(i,j+1)-eta_PF(i,j+1))*gtot_S(i,j+1)) * &
                dgeo_de * CS%IdyCv(i,J)
       enddo; enddo
       if(CS%dynamic_psurf) then
 !$OMP do
         do J=jsv-1,jev ; do i=isv-1,iev+1
-          gradP_2D(i,j) = gradP_2D(i,j) + (p_surf_dyn(i,j) - p_surf_dyn(i,j+1)) * CS%IdyCv(i,J)
+          gradP_v(i,J) = gradP_v(i,J) + (p_surf_dyn(i,j) - p_surf_dyn(i,j+1)) * CS%IdyCv(i,J)
         enddo; enddo
       endif
 !$OMP do
       do J=jsv-1,jev ; do i=isv-1,iev+1
-        v_accel_bt(i,J) = v_accel_bt(i,J) + wt_accel(n) * (Cor_2D(i,j) + gradP_2D(i,j))
+        v_accel_bt(i,J) = v_accel_bt(i,J) + wt_accel(n) * (Cor_v(i,J) + gradP_v(i,J))
       enddo; enddo
 
       if (find_PF) then
 !$OMP do
         do J=jsv-1,jev ; do i=isv-1,iev+1
-          PFv_bt_sum(i,J)  = PFv_bt_sum(i,J) + wt_accel2(n) * gradP_2D(i,j)
+          PFv_bt_sum(i,J)  = PFv_bt_sum(i,J) + wt_accel2(n) * gradP_v(i,J)
         enddo; enddo
       endif
       if (find_Cor) then
 !$OMP do
         do J=jsv-1,jev ; do i=isv-1,iev+1
-          Corv_bt_sum(i,J) = Corv_bt_sum(i,J) + wt_accel2(n) * Cor_2D(i,j)
+          Corv_bt_sum(i,J) = Corv_bt_sum(i,J) + wt_accel2(n) * Cor_v(i,J)
         enddo; enddo
       endif
       
@@ -1680,33 +1685,33 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
         do J=jsv-1,jev ; do i=isv-1,iev+1  
           vel_prev = vbt(i,J)
           vbt(i,J) = bt_rem_v(i,J) * (vbt(i,J) + &
-                      dtbt * ((BT_force_v(i,J) + Cor_2D(i,j)) + gradP_2D(i,j)))
-          vel_trans_2D(i,j) = (1.0 + be_proj)*vbt(i,J) - be_proj*vel_prev
+                      dtbt * ((BT_force_v(i,J) + Cor_v(i,J)) + gradP_v(i,J)))
+          vel_trans_v(i,J) = (1.0 + be_proj)*vbt(i,J) - be_proj*vel_prev
         enddo; enddo
       else
 !$OMP do
         do J=jsv-1,jev ; do i=isv-1,iev+1  
           vel_prev = vbt(i,J)
           vbt(i,J) = bt_rem_v(i,J) * (vbt(i,J) + &
-                      dtbt * ((BT_force_v(i,J) + Cor_2D(i,j)) + gradP_2D(i,j)))
-          vel_trans_2D(i,j) = (1.0-bebt)*vel_prev + bebt*vbt(i,J)
+                      dtbt * ((BT_force_v(i,J) + Cor_v(i,J)) + gradP_v(i,J)))
+          vel_trans_v(i,J) = (1.0-bebt)*vel_prev + bebt*vbt(i,J)
         enddo; enddo
       endif
 
       if (use_BT_cont) then
 !$OMP do
          do J=jsv-1,jev ; do i=isv-1,iev+1  
-            vhbt(i,J) = find_vhbt(vel_trans_2D(i,j),BTCL_v(i,J)) + vhbt0(i,J)
+            vhbt(i,J) = find_vhbt(vel_trans_v(i,J),BTCL_v(i,J)) + vhbt0(i,J)
          enddo; enddo
       else
 !$OMP do
          do J=jsv-1,jev ; do i=isv-1,iev+1  
-            vhbt(i,J) = Datv(i,J)*vel_trans_2D(i,j) + vhbt0(i,J)
+            vhbt(i,J) = Datv(i,J)*vel_trans_v(i,J) + vhbt0(i,J)
          enddo; enddo
       endif
 !$OMP do
       do J=jsv-1,jev ; do i=isv-1,iev+1
-        vbt_sum(i,J) = vbt_sum(i,J) + wt_trans(n) * vel_trans_2D(i,j)
+        vbt_sum(i,J) = vbt_sum(i,J) + wt_trans(n) * vel_trans_v(i,J)
         vhbt_sum(i,J) = vhbt_sum(i,J) + wt_trans(n) * vhbt(i,J)
         vbt_wtd(i,J) = vbt_wtd(i,J) + wt_vel(n) * vbt(i,J)
       enddo; enddo
@@ -1722,41 +1727,41 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
 
 !$OMP do
       do j=jsv,jev ; do I=isv-1,iev
-        Cor_2D(i,j) = ((azon(I,j) * vbt(i+1,J) + czon(I,j) * vbt(i,J-1)) + &
+        Cor_u(I,j) = ((azon(I,j) * vbt(i+1,J) + czon(I,j) * vbt(i,J-1)) + &
                (bzon(I,j) * vbt(i,J) + dzon(I,j) * vbt(i+1,J-1))) - Cor_ref_u(I,j)
-        gradP_2D(i,j) = ((eta_PF_BT(i,j)-eta_PF(i,j))*gtot_E(i,j) - &
+        gradP_u(I,j) = ((eta_PF_BT(i,j)-eta_PF(i,j))*gtot_E(i,j) - &
                  (eta_PF_BT(i+1,j)-eta_PF(i+1,j))*gtot_W(i+1,j)) * &
                 dgeo_de * CS%IdxCu(I,j)
       enddo; enddo
       if (CS%dynamic_psurf) then
 !$OMP do
         do j=jsv,jev ; do I=isv-1,iev
-          gradP_2D(i,j) = gradP_2D(i,j) + (p_surf_dyn(i,j) - p_surf_dyn(i+1,j)) * CS%IdxCu(I,j)
+          gradP_u(I,j) = gradP_u(I,j) + (p_surf_dyn(i,j) - p_surf_dyn(i+1,j)) * CS%IdxCu(I,j)
         enddo; enddo
       endif     
 !$OMP do
       do j=jsv,jev ; do I=isv-1,iev
-        u_accel_bt(I,j) = u_accel_bt(I,j) + wt_accel(n) * (Cor_2D(i,j) + gradP_2D(i,j))
+        u_accel_bt(I,j) = u_accel_bt(I,j) + wt_accel(n) * (Cor_u(I,j) + gradP_u(I,j))
       enddo; enddo
 
       if (find_PF) then
 !$OMP do
         do j=jsv,jev ; do I=isv-1,iev
-           PFu_bt_sum(I,j)  = PFu_bt_sum(I,j) + wt_accel2(n) * gradP_2D(i,j)
+           PFu_bt_sum(I,j)  = PFu_bt_sum(I,j) + wt_accel2(n) * gradP_u(I,j)
         enddo; enddo
       endif
       if (find_Cor) then
 !$OMP do
         do j=jsv,jev ; do I=isv-1,iev
-          Coru_bt_sum(I,j) = Coru_bt_sum(I,j) + wt_accel2(n) * Cor_2D(i,j)
+          Coru_bt_sum(I,j) = Coru_bt_sum(I,j) + wt_accel2(n) * Cor_u(I,j)
         enddo; enddo
       endif
 
       if(apply_u_OBCs) then  ! save the old value of vbt and vhbt
 !$OMP do
-        do J=jsv,jev ; do i=isv-1,iev
-          ubt_prev(i,J) = ubt(i,J); uhbt_prev(i,J) = uhbt(i,J)
-          ubt_sum_prev(i,J)=ubt_sum(i,J); uhbt_sum_prev(i,J)=uhbt_sum(i,J) ; ubt_wtd_prev(i,J)=ubt_wtd_prev(i,J)
+        do j=jsv,jev ; do I=isv-1,iev
+          ubt_prev(I,j) = ubt(I,j); uhbt_prev(I,j) = uhbt(I,j)
+          ubt_sum_prev(I,j)=ubt_sum(I,j); uhbt_sum_prev(I,j)=uhbt_sum(I,j) ; ubt_wtd_prev(I,j)=ubt_wtd_prev(I,j)
         enddo ; enddo
       endif
       if (project_velocity) then
@@ -1764,42 +1769,42 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
         do j=jsv,jev ; do I=isv-1,iev
           vel_prev = ubt(I,j)
           ubt(I,j) = bt_rem_u(I,j) * (ubt(I,j) + &
-               dtbt * ((BT_force_u(I,j) + Cor_2D(i,j)) + gradP_2D(i,j)))
-          vel_trans_2D(i,j) = (1.0 + be_proj)*ubt(I,j) - be_proj*vel_prev
+               dtbt * ((BT_force_u(I,j) + Cor_u(I,j)) + gradP_u(I,j)))
+          vel_trans_u(I,j) = (1.0 + be_proj)*ubt(I,j) - be_proj*vel_prev
         enddo; enddo
       else
 !$OMP do
         do j=jsv,jev ; do I=isv-1,iev
           vel_prev = ubt(I,j)
           ubt(I,j) = bt_rem_u(I,j) * (ubt(I,j) + &
-               dtbt * ((BT_force_u(I,j) + Cor_2D(i,j)) + gradP_2D(i,j)))
-          vel_trans_2D(i,j) = (1.0-bebt)*vel_prev + bebt*ubt(I,j)
+               dtbt * ((BT_force_u(I,j) + Cor_u(I,j)) + gradP_u(I,j)))
+          vel_trans_u(I,j) = (1.0-bebt)*vel_prev + bebt*ubt(I,j)
         enddo; enddo
       endif
       if (use_BT_cont) then
 !$OMP do
         do j=jsv,jev ; do I=isv-1,iev
-          uhbt(I,j) = find_uhbt(vel_trans_2D(i,j), BTCL_u(I,j)) + uhbt0(I,j)
+          uhbt(I,j) = find_uhbt(vel_trans_u(I,j), BTCL_u(I,j)) + uhbt0(I,j)
         enddo; enddo
       else
 !$OMP do
         do j=jsv,jev ; do I=isv-1,iev
-          uhbt(I,j) = Datu(I,j)*vel_trans_2D(i,j) + uhbt0(I,j)
+          uhbt(I,j) = Datu(I,j)*vel_trans_u(I,j) + uhbt0(I,j)
         enddo; enddo
       endif
 !$OMP do
       do j=jsv,jev ; do I=isv-1,iev
-        ubt_sum(I,j) = ubt_sum(I,j) + wt_trans(n) * vel_trans_2D(i,j)
+        ubt_sum(I,j) = ubt_sum(I,j) + wt_trans(n) * vel_trans_u(I,j)
         uhbt_sum(I,j) = uhbt_sum(I,j) + wt_trans(n) * uhbt(I,j)
         ubt_wtd(I,j) = ubt_wtd(I,j) + wt_vel(n) * ubt(I,j)
       enddo; enddo
 
       if(apply_u_OBCs) then  ! copy back the value for the points that OBC_mask_v is true.
 !$OMP do
-        do J=jsv,jev ; do i=isv-1,iev
-          if (BT_OBC%OBC_mask_u(i,J)) then          
-            ubt(i,J) = ubt_prev(i,J); uhbt(i,J) = uhbt_prev(i,J)
-            ubt_sum(i,J)=ubt_sum_prev(i,J); uhbt_sum(i,J)=uhbt_sum_prev(i,J) ; ubt_wtd(i,J)=ubt_wtd_prev(i,J)
+        do j=jsv,jev ; do I=isv-1,iev
+          if (BT_OBC%OBC_mask_u(I,j)) then          
+            ubt(I,j) = ubt_prev(I,j); uhbt(I,j) = uhbt_prev(I,j)
+            ubt_sum(I,j)=ubt_sum_prev(I,j); uhbt_sum(I,j)=uhbt_sum_prev(I,j) ; ubt_wtd(I,j)=ubt_wtd_prev(I,j)
           endif
         enddo ; enddo
       endif      
@@ -1807,9 +1812,9 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
       ! On even steps, update u first.
 !$OMP do
       do j=jsv-1,jev+1 ; do I=isv-1,iev
-        Cor_2D(i,j) = ((azon(I,j) * vbt(i+1,J) + czon(I,j) * vbt(i,J-1)) + &
+        Cor_u(I,j) = ((azon(I,j) * vbt(i+1,J) + czon(I,j) * vbt(i,J-1)) + &
                (bzon(I,j) * vbt(i,J) +  dzon(I,j) * vbt(i+1,J-1))) - Cor_ref_u(I,j)
-        gradP_2D(i,j) = ((eta_PF_BT(i,j)-eta_PF(i,j))*gtot_E(i,j) - &
+        gradP_u(I,j) = ((eta_PF_BT(i,j)-eta_PF(i,j))*gtot_E(i,j) - &
                  (eta_PF_BT(i+1,j)-eta_PF(i+1,j))*gtot_W(i+1,j)) * &
                  dgeo_de * CS%IdxCu(I,j)
       enddo; enddo
@@ -1817,31 +1822,31 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
       if (CS%dynamic_psurf) then
 !$OMP do
         do j=jsv-1,jev+1 ; do I=isv-1,iev
-          gradP_2D(i,j) = gradP_2D(i,j) + (p_surf_dyn(i,j) - p_surf_dyn(i+1,j)) * CS%IdxCu(I,j)
+          gradP_u(I,j) = gradP_u(I,j) + (p_surf_dyn(i,j) - p_surf_dyn(i+1,j)) * CS%IdxCu(I,j)
         enddo; enddo
       endif
 !$OMP do
       do j=jsv-1,jev+1 ; do I=isv-1,iev
-        u_accel_bt(I,j) = u_accel_bt(I,j) + wt_accel(n) * (Cor_2D(i,j) + gradP_2D(i,j))
+        u_accel_bt(I,j) = u_accel_bt(I,j) + wt_accel(n) * (Cor_u(I,j) + gradP_u(I,j))
       enddo; enddo
 
       if (find_PF) then
 !$OMP do
         do j=jsv-1,jev+1 ; do I=isv-1,iev
-          PFu_bt_sum(I,j)  = PFu_bt_sum(I,j) + wt_accel2(n) * gradP_2D(i,j)
+          PFu_bt_sum(I,j)  = PFu_bt_sum(I,j) + wt_accel2(n) * gradP_u(I,j)
         enddo; enddo
       endif
       if (find_Cor) then
 !$OMP do
         do j=jsv-1,jev+1 ; do I=isv-1,iev
-          Coru_bt_sum(I,j) = Coru_bt_sum(I,j) + wt_accel2(n) * Cor_2D(i,j)
+          Coru_bt_sum(I,j) = Coru_bt_sum(I,j) + wt_accel2(n) * Cor_u(I,j)
         enddo; enddo
       endif
       if(apply_u_OBCs) then  ! save the old value of vbt and vhbt
 !$OMP do
-        do J=jsv-1,jev+1 ; do i=isv-1,iev
-          ubt_prev(i,J) = ubt(i,J); uhbt_prev(i,J) = uhbt(i,J)
-          ubt_sum_prev(i,J)=ubt_sum(i,J); uhbt_sum_prev(i,J)=uhbt_sum(i,J) ; ubt_wtd_prev(i,J)=ubt_wtd_prev(i,J)
+        do j=jsv-1,jev+1 ; do I=isv-1,iev
+          ubt_prev(I,j) = ubt(I,j); uhbt_prev(I,j) = uhbt(I,j)
+          ubt_sum_prev(I,j)=ubt_sum(I,j); uhbt_sum_prev(I,j)=uhbt_sum(I,j) ; ubt_wtd_prev(I,j)=ubt_wtd_prev(I,j)
         enddo ; enddo
       endif
 
@@ -1850,50 +1855,50 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
         do j=jsv-1,jev+1 ; do I=isv-1,iev
           vel_prev = ubt(I,j)
           ubt(I,j) = bt_rem_u(I,j) * (ubt(I,j) + &
-               dtbt * ((BT_force_u(I,j) + Cor_2D(i,j)) + gradP_2D(i,j)))
-          vel_trans_2D(i,j) = (1.0 + be_proj)*ubt(I,j) - be_proj*vel_prev
+               dtbt * ((BT_force_u(I,j) + Cor_u(I,j)) + gradP_u(I,j)))
+          vel_trans_u(I,j) = (1.0 + be_proj)*ubt(I,j) - be_proj*vel_prev
         enddo; enddo
       else
 !$OMP do
        do j=jsv-1,jev+1 ; do I=isv-1,iev
           vel_prev = ubt(I,j)
           ubt(I,j) = bt_rem_u(I,j) * (ubt(I,j) + &
-               dtbt * ((BT_force_u(I,j) + Cor_2D(i,j)) + gradP_2D(i,j)))
-          vel_trans_2D(i,j) = (1.0-bebt)*vel_prev + bebt*ubt(I,j)
+               dtbt * ((BT_force_u(I,j) + Cor_u(I,j)) + gradP_u(I,j)))
+          vel_trans_u(I,j) = (1.0-bebt)*vel_prev + bebt*ubt(I,j)
         enddo; enddo
       endif
       if (use_BT_cont) then
 !$OMP do
         do j=jsv-1,jev+1 ; do I=isv-1,iev
-          uhbt(I,j) = find_uhbt(vel_trans_2D(i,j),BTCL_u(I,j)) + uhbt0(I,j)
+          uhbt(I,j) = find_uhbt(vel_trans_u(I,j),BTCL_u(I,j)) + uhbt0(I,j)
         enddo; enddo
       else
 !$OMP do
         do j=jsv-1,jev+1 ; do I=isv-1,iev
-          uhbt(I,j) = Datu(I,j)*vel_trans_2D(i,j) + uhbt0(I,j)
+          uhbt(I,j) = Datu(I,j)*vel_trans_u(I,j) + uhbt0(I,j)
         enddo; enddo
       endif
 !$OMP do
       do j=jsv-1,jev+1 ; do I=isv-1,iev
-        ubt_sum(I,j) = ubt_sum(I,j) + wt_trans(n) * vel_trans_2D(i,j)
+        ubt_sum(I,j) = ubt_sum(I,j) + wt_trans(n) * vel_trans_u(I,j)
         uhbt_sum(I,j) = uhbt_sum(I,j) + wt_trans(n) * uhbt(I,j)
         ubt_wtd(I,j) = ubt_wtd(I,j) + wt_vel(n) * ubt(I,j)
       enddo; enddo
       if(apply_u_OBCs) then  ! copy back the value for the points that OBC_mask_v is true.
 !$OMP do
-        do J=jsv-1,jev+1 ; do i=isv-1,iev
-          if (BT_OBC%OBC_mask_u(i,J)) then          
-            ubt(i,J) = ubt_prev(i,J); uhbt(i,J) = uhbt_prev(i,J)
-            ubt_sum(i,J)=ubt_sum_prev(i,J); uhbt_sum(i,J)=uhbt_sum_prev(i,J) ; ubt_wtd(i,J)=ubt_wtd_prev(i,J)
+        do j=jsv-1,jev+1 ; do I=isv-1,iev
+          if (BT_OBC%OBC_mask_u(I,j)) then          
+            ubt(I,j) = ubt_prev(I,j); uhbt(I,j) = uhbt_prev(I,j)
+            ubt_sum(I,j)=ubt_sum_prev(I,j); uhbt_sum(I,j)=uhbt_sum_prev(I,j) ; ubt_wtd(I,j)=ubt_wtd_prev(I,j)
           endif
         enddo ; enddo
       endif      
 
 !$OMP do
       do J=jsv-1,jev ; do i=isv,iev
-        Cor_2D(i,j) = -1.0*((amer(I-1,j) * ubt(I-1,j) + bmer(I,j) * ubt(I,j)) + &
+        Cor_v(i,J) = -1.0*((amer(I-1,j) * ubt(I-1,j) + bmer(I,j) * ubt(I,j)) + &
                 (cmer(I,j+1) * ubt(I,j+1) + dmer(I-1,j+1) * ubt(I-1,j+1))) - Cor_ref_v(i,J)
-        gradP_2D(i,j) = ((eta_PF_BT(i,j)-eta_PF(i,j))*gtot_N(i,j) - &
+        gradP_v(i,J) = ((eta_PF_BT(i,j)-eta_PF(i,j))*gtot_N(i,j) - &
                  (eta_PF_BT(i,j+1)-eta_PF(i,j+1))*gtot_S(i,j+1)) * &
                  dgeo_de * CS%IdyCv(i,J)
       enddo; enddo
@@ -1901,23 +1906,23 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
       if (CS%dynamic_psurf) then
 !$OMP do
         do J=jsv-1,jev ; do i=isv,iev
-          gradP_2D(i,j) = gradP_2D(i,j) + (p_surf_dyn(i,j) - p_surf_dyn(i,j+1)) * CS%IdyCv(i,J)
+          gradP_v(i,J) = gradP_v(i,J) + (p_surf_dyn(i,j) - p_surf_dyn(i,j+1)) * CS%IdyCv(i,J)
         enddo; enddo
       endif
 !$OMP do
       do J=jsv-1,jev ; do i=isv,iev
-        v_accel_bt(I,j) = v_accel_bt(I,j) + wt_accel(n) * (Cor_2D(i,j) + gradP_2D(i,j))
+        v_accel_bt(I,j) = v_accel_bt(I,j) + wt_accel(n) * (Cor_v(i,J) + gradP_v(i,J))
       enddo; enddo
       if (find_PF) then
 !$OMP do
         do J=jsv-1,jev ; do i=isv,iev
-          PFv_bt_sum(i,J)  = PFv_bt_sum(i,J) + wt_accel2(n) * gradP_2D(i,j)
+          PFv_bt_sum(i,J)  = PFv_bt_sum(i,J) + wt_accel2(n) * gradP_v(i,J)
         enddo; enddo
       endif
       if (find_Cor) then
 !$OMP do
         do J=jsv-1,jev ; do i=isv,iev
-          Corv_bt_sum(i,J) = Corv_bt_sum(i,J) + wt_accel2(n) * Cor_2D(i,j)
+          Corv_bt_sum(i,J) = Corv_bt_sum(i,J) + wt_accel2(n) * Cor_v(i,J)
         enddo; enddo
       endif
       if(apply_v_OBCs) then  ! save the old value of vbt and vhbt
@@ -1932,32 +1937,32 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
          do J=jsv-1,jev ; do i=isv,iev
             vel_prev = vbt(i,J)
             vbt(i,J) = bt_rem_v(i,J) * (vbt(i,J) + &
-                 dtbt * ((BT_force_v(i,J) + Cor_2D(i,j)) + gradP_2D(i,j)))
-            vel_trans_2D(i,j) = (1.0 + be_proj)*vbt(i,J) - be_proj*vel_prev
+                 dtbt * ((BT_force_v(i,J) + Cor_v(i,J)) + gradP_v(i,J)))
+            vel_trans_v(i,J) = (1.0 + be_proj)*vbt(i,J) - be_proj*vel_prev
          enddo; enddo
       else
 !$OMP do
          do J=jsv-1,jev ; do i=isv,iev
             vel_prev = vbt(i,J)
             vbt(i,J) = bt_rem_v(i,J) * (vbt(i,J) + &
-                 dtbt * ((BT_force_v(i,J) + Cor_2D(i,j)) + gradP_2D(i,j)))
-            vel_trans_2D(i,j) = (1.0-bebt)*vel_prev + bebt*vbt(i,J)
+                 dtbt * ((BT_force_v(i,J) + Cor_v(i,J)) + gradP_v(i,J)))
+            vel_trans_v(i,J) = (1.0-bebt)*vel_prev + bebt*vbt(i,J)
          enddo; enddo
       endif
       if (use_BT_cont) then
 !$OMP do
         do J=jsv-1,jev ; do i=isv,iev
-          vhbt(i,J) = find_vhbt(vel_trans_2D(i,j),BTCL_v(i,J)) + vhbt0(i,J)
+          vhbt(i,J) = find_vhbt(vel_trans_v(i,J),BTCL_v(i,J)) + vhbt0(i,J)
         enddo; enddo
       else
 !$OMP do
         do J=jsv-1,jev ; do i=isv,iev
-          vhbt(i,J) = Datv(i,J)*vel_trans_2D(i,j) + vhbt0(i,J)
+          vhbt(i,J) = Datv(i,J)*vel_trans_v(i,J) + vhbt0(i,J)
         enddo; enddo
       endif
 !$OMP do
       do J=jsv-1,jev ; do i=isv,iev
-        vbt_sum(i,J) = vbt_sum(i,J) + wt_trans(n) * vel_trans_2D(i,j)
+        vbt_sum(i,J) = vbt_sum(i,J) + wt_trans(n) * vel_trans_v(i,J)
         vhbt_sum(i,J) = vhbt_sum(i,J) + wt_trans(n) * vhbt(i,J)
         vbt_wtd(i,J) = vbt_wtd(i,J) + wt_vel(n) * vbt(i,J)
       enddo; enddo
