@@ -1,0 +1,1 @@
+.datasets/GOLD_SIS/riga/mosaic.unpacked/ocean_mask.nc

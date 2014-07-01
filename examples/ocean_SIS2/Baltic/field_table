@@ -1,0 +1,71 @@
+"diag_tracers","ocean_mod","frazil"
+
+file_in  = INPUT/ocean_frazil.res.nc
+file_out = RESTART/ocean_frazil.res.nc
+/
+
+
+"prog_tracers","ocean_mod","temp"
+
+horizontal-advection-scheme = mdfl_sweby
+vertical-advection-scheme = mdfl_sweby
+file_in  = INPUT/ocean_temp_salt.res.nc
+file_out = RESTART/ocean_temp_salt.res.nc
+/
+
+"prog_tracers","ocean_mod","salt"
+
+rizontal-advection-scheme = mdfl_sweby
+vertical-advection-scheme = mdfl_sweby
+file_in  = INPUT/ocean_temp_salt.res.nc
+file_out = RESTART/ocean_temp_salt.res.nc
+/
+
+
+"tracer_packages","ocean_mod","ocean_age_tracer"
+
+names = global
+horizontal-advection-scheme = mdfl_sweby
+vertical-advection-scheme = mdfl_sweby
+file_in  = INPUT/ocean_age.res.nc
+file_out = RESTART/ocean_age.res.nc
+min_tracer_limit=0.0
+/
+
+"prog_tracers","ocean_mod","age_global"
+
+const_init_tracer = t
+const_init_value = 0.0
+/
+
+"namelists","ocean_mod","ocean_age_tracer/global"
+
+slat = -90.0
+nlat =  90.0
+wlon =   0.0
+elon = 360.0
+/
+
+ "TRACER", "atmos_mod", "sphum"
+           "longname",     "specific humidity"
+           "units",        "kg/kg" /
+
+# prognotic cloud scheme tracers
+  "TRACER", "atmos_mod", "liq_wat"
+            "longname",     "cloud liquid specific humidity"
+            "units",        "kg/kg" /
+  "TRACER", "atmos_mod", "ice_wat"
+            "longname",     "cloud ice water specific humidity"
+            "units",        "kg/kg" /
+  "TRACER", "atmos_mod", "cld_amt"
+            "longname",     "cloud fraction"
+            "units",        "none" /
+
+# test tracer for radon
+
+# "TRACER", "atmos_mod", "radon"
+#           "longname",     "radon test tracer"
+#           "units",        "kg/kg" /
+
+ "TRACER", "land_mod", "sphum"/
+

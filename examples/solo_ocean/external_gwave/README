@@ -1,0 +1,3 @@
+Simple gravitational adjustment to sea-surface displacement
+ - interior interfaces are proportionally displaced to reduce 
+   any baroclinic signature

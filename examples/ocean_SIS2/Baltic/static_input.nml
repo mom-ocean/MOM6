@@ -1,0 +1,32 @@
+
+ &fms_io_nml
+         fms_netcdf_restart=.true.
+         threading_read='multi'
+         threading_write='single'
+         fileset_write='single' /
+
+ &fms_nml
+       clock_grain='MODULE'
+       domains_stack_size = 2000000
+       clock_flags='SYNC' /
+
+ &ice_albedo_nml
+      t_range = 10. /
+
+ &ice_model_nml
+           /
+
+ &monin_obukhov_nml
+            neutral = .true. /
+
+ &ocean_albedo_nml
+      ocean_albedo_option = 5 /
+
+ &sat_vapor_pres_nml
+      construct_table_wrt_liq = .true.,
+      construct_table_wrt_liq_and_ice = .true. /
+
+ &xgrid_nml
+            make_exchange_reproduce = .false.
+            interp_method = 'second_order' /
+

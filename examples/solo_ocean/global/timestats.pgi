@@ -1,0 +1,7 @@
+  Step,       Day,  Truncs,      Energy/Mass,      Maximum CFL,  Mean Sea Level,  Total Mass,  Mean Salin, Mean Temp, Frac Mass Err,   Salin Err,    Temp Err
+            [days]                 [m2 s-2]           [Nondim]       [m]             [kg]         [PSU]      [degC]       [Nondim]        [PSU]        [degC]
+     0,       0.000,     0, En 6.974470353868E-01, CFL  0.00000, SL  1.8221E-09, M 1.37957E+21, S 34.7200, T  3.6134, Me  0.00E+00, Se  0.00E+00, Te  0.00E+00
+    12,       0.500,     0, En 7.092267953106E-01, CFL  0.14285, SL -4.9099E-05, M 1.37957E+21, S 34.7200, T  3.6134, Me  4.25E-16, Se  1.49E-14, Te  4.51E-15
+    24,       1.000,     0, En 7.126940638886E-01, CFL  0.14469, SL -8.1125E-05, M 1.37957E+21, S 34.7200, T  3.6134, Me  6.86E-16, Se  2.34E-14, Te  4.77E-15
+    36,       1.500,     0, En 7.152401078664E-01, CFL  0.13359, SL -2.6881E-04, M 1.37957E+21, S 34.7200, T  3.6134, Me  1.08E-15, Se  3.69E-14, Te  7.45E-15
+    48,       2.000,     0, En 7.156071718070E-01, CFL  0.10490, SL -4.1530E-04, M 1.37957E+21, S 34.7200, T  3.6134, Me  1.34E-15, Se  4.58E-14, Te  9.58E-15

@@ -1,0 +1,6 @@
+Second experiment from White, Adcroft and Hallberg, 2009. http://dx.doi.org/10.1016/j.jcp.2009.08.016
+Internal wave "sloshing" in a box, using continuous-rho coordinates,
+from section 5.3.
+
+mk_plots.m	- generates following plot
+results.png	- initial conditions and end state (see Fig. 9)

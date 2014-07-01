@@ -1,0 +1,31 @@
+
+# specific humidity for moist runs
+
+ "TRACER", "atmos_mod", "sphum" 
+           "longname",     "specific humidity"
+           "units",        "kg/kg" 
+	   "profile_type", "fixed", "surface_value=3.e-6" /
+
+# prognotic cloud scheme tracers
+
+  "TRACER", "atmos_mod", "liq_wat"
+            "longname",     "cloud liquid specific humidity"
+            "units",        "kg/kg" /
+  "TRACER", "atmos_mod", "ice_wat"
+            "longname",     "cloud ice water specific humidity"
+            "units",        "kg/kg" /
+  "TRACER", "atmos_mod", "cld_amt"
+            "longname",     "cloud fraction"
+            "units",        "none" /
+
+# test tracer for radon
+
+# "TRACER", "atmos_mod", "radon"
+#           "longname",     "radon test tracer"
+#           "units",        "kg/kg" /      
+      
+# added by FRE: sphum must be present on land 
+ "TRACER", "land_mod",     "sphum"
+           "longname",     "specific humidity"
+           "units",        "kg/kg" /
+

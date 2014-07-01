@@ -1,0 +1,21 @@
+1.4 degree MOM_SIS configuration
+
+For the following, ARCHDIR = /lustre/fs/pdata/gfdl_O on gaea,
+                or ARCHDIR = /archive/gold at GFDL
+
+Model grid:
+$(ARCHDIR)/datasets/MOM_SIS_025/siena/mosaic.unpacked/*.nc
+ (also in $(ARCHDIR)/datasets/MOM_SIS_025/siena/mosaic.tar)
+
+Initial conditions and ocean parameterization data:
+$(ARCHRID)/datasets/MOM_SIS_025/siena/INPUT/*.nc
+
+CORE forcing data:
+$(ARCHDIR)/datasets/CORE/NYF_v2.0/*.nc
+not $(ARCHDIR)/datasets/CORE/NYF_v1/*.nc
+
+e.g. To set up the INPUT/ directory
+cd INPUT
+ln -s /lustre/fs/pdata/gfdl_O/datasets/MOM_SIS_025/siena/mosaic.unpacked/*.nc .
+ln -s /lustre/fs/pdata/gfdl_O/datasets/MOM_SIS_025/siena/INPUT/*.nc .
+ln -s /lustre/fs/pdata/gfdl_O/datasets/CORE/NYF_v2.0/*.nc .

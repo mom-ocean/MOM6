@@ -1,0 +1,11 @@
+# gridname, fieldname_code, fieldname_file, file_name,       ongrid, factor
+"OCN" , "lw",      "netlwdn_sfc", "./INPUT/BATS/forcing.nc", .true., 1.0
+"OCN" , "sw",      "netswdn_sfc", "./INPUT/BATS/forcing.nc", .true., 1.0
+"OCN" , "rain",    "precip",      "./INPUT/BATS/forcing.nc", .true., 1.0
+"OCN" , "evap",    "evap",        "./INPUT/BATS/forcing.nc", .true., 1.0
+"OCN" , "sens",    "shflx",       "./INPUT/BATS/forcing.nc", .true., 1.0
+"OCN" , "taux",    "STRESS_X",    "./INPUT/BATS/forcing.nc", .true., 1.0
+"OCN" , "tauy",    "STRESS_Y",    "./INPUT/BATS/forcing.nc", .true., 1.0
+"OCN" , "snow",    "snow",        "./INPUT/BATS/forcing.nc", .true., 0.0
+"OCN" , "runoff",  "",            ""                       , .true., 0.0
+"OCN" , "calving", "",            ""                       , .true., 0.0

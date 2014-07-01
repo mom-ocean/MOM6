@@ -1,0 +1,535 @@
+
+ &aerosol_nml
+    use_aerosol_timeseries = .false.
+    aerosol_dataset_entry =  1990, 1, 1, 0, 0, 0,
+                             1990, 1, 1, 0, 0, 0,
+                             1990, 1, 1, 0, 0, 0,
+                             1990, 1, 1, 0, 0, 0,
+                             1990, 1, 1, 0, 0, 0,
+                             1990, 1, 1, 0, 0, 0,
+                             1990, 1, 1, 0, 0, 0,
+                             1990, 1, 1, 0, 0, 0,
+                             1990, 1, 1, 0, 0, 0,
+                             1990, 1, 1, 0, 0, 0,
+                             1990, 1, 1, 0, 0, 0,
+                             1990, 1, 1, 0, 0, 0,
+                             1990, 1, 1, 0, 0, 0,
+                             1990, 1, 1, 0, 0, 0,
+                             1990, 1, 1, 0, 0, 0,
+                             1990, 1, 1, 0, 0, 0,
+                             1990, 1, 1, 0, 0, 0,
+                             1990, 1, 1, 0, 0, 0,
+                             1990, 1, 1, 0, 0, 0,
+                             1990, 1, 1, 0, 0, 0,
+                             1990, 1, 1, 0, 0, 0,
+    family_names = "small_dust", "large_dust", "sulfate", "aerosol"
+    in_family1 = F,F,F,F,F,T,T,T,T,T,F,F,F,T,T,T,T,T,F,F,F,
+    in_family2 = F,F,F,F,F,F,F,F,F,F,T,T,T,F,F,F,F,F,T,T,T,
+    in_family3 = T,T,F,F,F,F,F,F,F,F,F,F,F,F,F,F,F,F,F,F,F,
+    in_family4 = T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,
+    data_names = "so4_anthro", "so4_natural", "organic_carbon", "black_carbon", "sea_salt",
+                 "anthro_dust_0.1", "anthro_dust_0.2", "anthro_dust_0.4", "anthro_dust_0.8",
+                 "anthro_dust_1.0", "anthro_dust_2.0", "anthro_dust_4.0", "anthro_dust_8.0",
+                 "natural_dust_0.1", "natural_dust_0.2", "natural_dust_0.4", "natural_dust_0.8",
+                 "natural_dust_1.0", "natural_dust_2.0", "natural_dust_4.0", "natural_dust_8.0",
+    filename = "aerosol.climatology.nc"
+/
+
+ &aerosolrad_package_nml
+    volcanic_dataset_entry = 1, 1, 1, 0, 0, 0,
+    using_volcanic_lw_files = .false.,
+    lw_ext_filename = "             "
+    lw_ext_root = "     "
+    lw_asy_filename = "             "
+    lw_asy_root = "     "
+    lw_ssa_filename = "             "
+    lw_ssa_root = "     "
+    using_volcanic_sw_files = .false.,
+    sw_ext_filename = "             "
+    sw_ext_root = "     "
+    sw_ssa_filename = "             "
+    sw_ssa_root = "     "
+    sw_asy_filename = "             "
+    sw_asy_root = "     "
+    do_lwaerosol = .true.,
+    do_swaerosol = .true.,
+    aerosol_data_set = 'shettle_fenn',
+    optical_filename = "aerosol.optical.dat",
+    aerosol_optical_names = "sulfate_30%", "sulfate_35%", "sulfate_40%", "sulfate_45%",
+                            "sulfate_50%", "sulfate_55%", "sulfate_60%", "sulfate_65%",
+                            "sulfate_70%", "sulfate_75%", "sulfate_80%", "sulfate_82%",
+                            "sulfate_84%", "sulfate_86%", "sulfate_88%", "sulfate_90%",
+                            "sulfate_91%", "sulfate_92%", "sulfate_93%", "sulfate_94%",
+                            "sulfate_95%", "sulfate_96%", "sulfate_97%", "sulfate_98%",
+                            "sulfate_99%", "sulfate_100%","organic_carbon","soot",
+                            "sea_salt",    "dust_0.1",    "dust_0.2",    "dust_0.4",
+                            "dust_0.8",    "dust_1.0",    "dust_2.0",    "dust_4.0",
+                            "dust_8.0"
+/
+
+ &atmosphere_nml
+    physics_window = 0,0
+/
+
+ &amip_interp_nml
+    data_set = 'reynolds_oi',
+    date_out_of_range = 'fail'
+/
+
+ &cg_drag_nml
+   cg_drag_freq = 1800,
+   cg_drag_offset = 0,
+   debug = .false.,
+   calculate_ked = .false.,
+   itest = 12,
+   jtest = 42,
+   ktest = 9,
+   Bt_0 = 0.0015,
+   lat_limit = 25.0
+/
+
+ &cloud_rad_nml
+       overlap = 2,
+       do_brenguier = .false.
+/
+
+ &cloud_spec_nml
+       cloud_type_form = 'strat'
+       do_legacy_seed_generation = .true.
+/
+
+ &cloudrad_package_nml
+       microphys_form = 'predicted'
+/
+
+ &clouds_nml
+       do_zonal_clouds = .false.,
+       do_obs_clouds  = .false.
+/
+
+
+ &cu_mo_trans_nml
+     diff_norm = 2.0
+/
+
+ &damping_driver_nml
+      trayfric = -40.,
+      nlev_rayfric = 1,
+      do_mg_drag = .true.,
+      do_cg_drag = .false.,
+      do_topo_drag = .false.,
+      do_conserve_energy = .true.
+/
+
+ &data_override_nml
+
+/
+
+ &diag_cloud_nml
+       linvers = .false., lcnvcld = .false.,
+       l_theqv = .true., lomega = .true.,
+       low_lev_cloud_index = 16, nofog = .false.
+/
+
+ &diag_cloud_rad_nml
+       l_har_anvil   = .true.,
+       l_har_coldcld = .true.,
+       l_anom_abs_v  = .true.
+/
+
+ &diag_integral_nml
+     file_name  = 'diag_integral.out',
+     time_units = 'days',
+     output_interval = 1.0
+/
+
+ &diag_manager_nml
+        max_input_fields = 400
+        max_output_fields = 500
+        mix_snapshot_average_fields=.false.
+/
+
+ &donner_deep_clouds_W_nml
+    using_dge_sw = .true.,
+    using_dge_lw = .true.
+/
+
+ &donner_deep_nml
+    donner_deep_offset = 0
+    donner_deep_freq = 1800
+    save_donner_deep_diagnostics=.true.
+    cell_liquid_size_type = 'bower'
+    cell_ice_size_type = 'default'
+    debug = .false.
+    kttest=5
+    itest=53
+    jtest=32
+    ktest_model=17
+/
+
+ &edt_nml
+    n_print_levels = 14,
+    use_qcmin = .true.,
+    num_pts_ij = 0,
+    min_adj_time = 1.0,
+    do_gaussian_cloud = .false.,
+    use_extrapolated_ql = .false.
+/
+
+ &entrain_nml
+    convect_shutoff = .true.,
+    apply_entrain = .true.,
+    parcel_buoy   = 0.25,
+    parcel_option = 2,
+    beta_rad      = 0.5,
+    Ashear        = 25.0,
+    radperturb    = 0.10,
+    critjump      = 0.10,
+    num_pts_ij    = 0,
+    i_entprt_gl   = 112, 96, 89,105, 81, 97,
+    j_entprt_gl   =  71, 61, 56, 64, 53, 46
+/
+
+ &esfsw_parameters_nml
+       sw_resolution = 'low',
+       sw_diff_streams = 1
+/
+
+ &flux_exchange_nml
+
+/
+
+ &fms_io_nml
+         fms_netcdf_restart=.true.
+         threading_read='multi'
+         threading_write='single'
+         fileset_write='single'
+/
+
+ &fv_core_nml
+     LAYOUT = 0,30 !! will be overwritten by atmos_layout ! pre-M
+     nlon =144
+     mlat=90
+     nlev = 24
+     ncnst = 4
+     pnats = 0
+     n_split = 5
+     change_time = .true.
+     consv_te = 0.7
+     restart_format='NETCDF'
+/
+
+ &gas_tf_nml
+       interp_form = 'log' ,
+       do_calcstdco2tfs = .true.,
+       do_writestdco2tfs= .false.,
+       do_readstdco2tfs = .false.,
+       do_calcstdch4tfs = .true.,
+       do_writestdch4tfs= .false.,
+       do_readstdch4tfs = .false.,
+       do_calcstdn2otfs = .true.,
+       do_writestdn2otfs= .false.,
+       do_readstdn2otfs = .false.
+/
+
+ &horiz_interp_nml
+      reproduce_siena=.true.
+/
+
+ &ice_albedo_nml
+         t_range = 10.
+/
+
+ &ice_model_nml
+        nsteps_dyn=72
+        nsteps_adv=1
+        num_part = 6
+        wd_turn = 0.0
+        io_layout = 1,1
+        spec_ice=.false.
+        ice_bulk_salin = 0.005
+        alb_sno = 0.88
+        alb_ice = 0.68
+        t_range_melt = 1.0
+        cm2_bugs = .false.
+/
+
+ &land_properties_nml
+        use_topo_rough    = .true.,
+        max_topo_rough    = 100.0,
+        topo_rough_factor = 0.01,
+        crit_snowmass_vec = 60.,   10., 25.,  40.,   40.,  5.,  5.,     5.,  5.,  5.,   5.,  100., 5.,  5.,
+        veg_rs_min_vec    = 43.6, 131., 87.1, 69.7, 218., 56.6, 0.01, 170., 56.6, 0.01, 0.01, 67., 0.,  0.,
+        min_nosnow_alb_vec= 0.149, 0.130, 0.132, 0.126, 0.143, 0.182, 0.333, 0.139, 0.160, 0.65, 0.06, 0.12, 999., 0.55,
+        max_nosnow_alb_vec= 0.149, 0.130, 0.132, 0.126, 0.143, 0.182, 0.333, 0.139, 0.160, 0.80, 0.06, 0.12, 999., 0.65,
+        factor_stomata = 0.2,
+        num_sfc_layers = 6,
+        sfc_heat_factor = 0.25,
+        use_desert_albedo_map = .true.
+        cover_dataset_entry = 1990, 1, 1, 0, 0, 0
+        dynamic_cover_type=.false.
+/
+
+ &lscale_cond_nml
+       do_evap = .true.
+/
+
+ &lw_gases_stdtf_nml
+       NSTDCO2LVLS=496
+/
+
+ &mg_drag_nml
+    gmax  = 1.,
+    acoef = 1.,
+    do_conserve_energy = .true.,
+    source_of_sgsmtn = 'computed'
+/
+
+ &microphys_rad_nml
+       lwem_form = 'fuliou'
+/
+
+ &moist_conv_nml
+       beta = 0.0
+/
+
+ &moist_processes_nml
+     do_lsc=.false., do_strat=.true., do_mca=.false., do_ras=.true.,
+     do_donner_deep = .false.,
+     do_diag_clouds = .false., do_cmt=.true.,
+     do_rh_clouds = .false.,
+     do_gust_cv = .false.
+/
+
+ &monin_obukhov_nml
+    stable_option =  2,
+    rich_crit = 10.0,
+    zeta_trans =  0.5
+/
+
+ &my25_turb_nml
+    do_thv_stab = .true.,
+    TKEmin = 1.e-8,
+    AKmin_land = 5.,
+    AKmin_sea  = 0.
+/
+
+ &ocean_albedo_nml
+          ocean_albedo_option = 5
+/
+
+ &ocean_model_nml
+      interp_method = 'bilinear',
+      layout = 1, 0 ,
+      use_climo_sst = .false.
+/
+
+ &ocean_rough_nml
+      rough_scheme = 'beljaars'
+/
+
+ &ozone_nml
+       basic_ozone_type = 'fixed_year' ,
+       ozone_dataset_entry = 1990, 1, 1, 0, 0, 0,
+       data_name = "ozone",
+       filename = "o3.climatology.nc"
+/
+
+ &physics_driver_nml
+       do_modis_yim = .false.
+/
+
+ &rad_output_file_nml
+       write_data_file=.true.
+/
+
+ &rad_utilities_nml
+
+/
+
+ &radiation_diag_nml
+       iradprt_gl = 20, 6,
+       jradprt_gl = 12, 20,
+       num_pts_ij = 0
+/
+
+ &radiation_driver_nml
+       rad_time_step= 10800,
+       time_varying_solar_constant = .false.,
+       solar_dataset_entry = 1990,1,1,0,0,0,
+       rad_package = 'sea_esf',
+       do_clear_sky_pass=.true.,
+       calc_hemi_integrals = .false.,
+       renormalize_sw_fluxes=.true.,
+       all_step_diagnostics = .true.,
+       zenith_spec = 'diurnally_varying',
+       using_restart_file = .false.
+/
+
+ &radiative_gases_nml
+       verbose = 3
+       gas_printout_freq = 240
+
+       time_varying_co2 = .false.,
+       co2_variation_type = 'linear',
+       co2_dataset_entry = 1990,1,1,0,0,0,
+       co2_specification_type = 'time_series',
+       co2_floor = 100.0E-06,
+       co2_ceiling = 1600.0E-06,
+       co2_data_source = 'input'
+
+       time_varying_ch4 = .false.,
+       ch4_variation_type = 'linear'
+       ch4_dataset_entry = 1990, 1, 1, 0, 0, 0,
+       ch4_specification_type = 'time_series'
+       ch4_data_source = 'input'
+
+       time_varying_n2o = .false.,
+       n2o_variation_type = 'linear'
+       n2o_dataset_entry = 1990, 1, 1, 0, 0, 0,
+       n2o_specification_type = 'time_series'
+       n2o_data_source = 'input'
+
+       time_varying_f11 = .false.,
+       f11_variation_type = 'linear'
+       f11_dataset_entry = 1990, 1, 1, 0, 0, 0,
+       f11_specification_type = 'time_series'
+       f11_data_source = 'input'
+
+       time_varying_f12 = .false.,
+       f12_variation_type = 'linear'
+       f12_dataset_entry = 1990, 1, 1, 0, 0, 0,
+       f12_specification_type = 'time_series'
+       f12_data_source = 'input'
+
+       time_varying_f113 = .false.,
+       f113_variation_type = 'linear'
+       f113_dataset_entry = 1990, 1, 1, 0, 0, 0,
+       f113_specification_type = 'time_series'
+       f113_data_source = 'input'
+
+       time_varying_f22 = .false.,
+       f22_variation_type = 'linear'
+       f22_dataset_entry = 1990, 1, 1, 0, 0, 0,
+       f22_specification_type = 'time_series'
+       f22_data_source = 'input'
+/
+
+ &ras_nml
+    aratio = 1.0,
+    modify_pbl=.true.
+    rn_frac_bot = 0.5,
+    rn_pbot = 800.0e2,
+    puplim =  20.0e02,
+    rn_ptop = 500.0e2,
+    rn_frac_top = 0.975,
+    Tokioka_on = .true.,
+    Tokioka_con = 0.025,
+    Tokioka_plim = 500.0e2,
+    a = 1.6851, 1.1686, 0.7663, 0.5255, 0.4100, 0.3677,
+        0.3151, 0.2216, 0.1521, 0.0750, 0.0000, 0.0000,
+        0.0000, 0.0000, 0.0000
+/
+
+ &rh_based_clouds_nml
+       cirrus_cld_prop_form = 'part',
+       cldht_type_form = '93'
+/
+
+ &rivers_nml
+      min_land_frac  = 0.699,
+      min_water_frac = 0.3
+/
+
+ &sat_vapor_pres_nml
+      construct_table_wrt_liq = .true.,
+      construct_table_wrt_liq_and_ice = .true.
+/
+
+ &sealw99_nml
+       do_thick = .false.,
+       do_nlte = .false.,
+       do_lwcldemiss = .true.,
+       do_n2olbltmpint = .false.,
+       continuum_form = 'ckd2.1',
+       linecatalog_form = 'hitran_2000',
+       calc_co2_tfs_on_first_step = .true.,
+       calc_co2_tfs_monthly = .false.,
+       co2_tf_time_displacement = 0.0,
+       calc_ch4_tfs_on_first_step = .true.,
+       calc_ch4_tfs_monthly = .false.,
+       ch4_tf_time_displacement = 0.0,
+       calc_n2o_tfs_on_first_step = .true.,
+       calc_n2o_tfs_monthly = .false.,
+       n2o_tf_time_displacement = 0.0,
+       verbose = 5
+/
+
+ &shortwave_driver_nml
+       do_cmip_diagnostics = .true.,
+       calculate_volcanic_sw_heating = .false.,
+       swform = 'esfsw99'
+/
+
+ &soil_nml
+      conserve_glacier_mass = .true.,
+      n_levels = 18,
+      dz              = 0.02, 0.04, 0.04, 0.05, 0.05, 0.1, 0.1, 0.2, 0.2, 0.2, 0.4, 0.4, 0.4, 0.4, 0.4, 1.,  1.,  1.,
+      freezable_water = 0,    300,  300,  300,  300,  300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300
+/
+
+ &stable_bl_turb_nml
+    alsm = 500.0,
+    alsh = 500.0
+/
+
+ &strat_cloud_nml
+       do_old_snowmelt = .true.
+       U00 = 0.800,
+       U00_profile = .true.,
+       rthresh =  8.0,
+       Dmin = 1.0e-07,
+       n_land = 300.e6,
+       diff_thresh = 0.1,
+       mc_thresh = 0.001,
+       eros_scale = 1.e-6,
+       eros_choice = .true.,
+       eros_scale_c = 8.e-6,
+       eros_scale_t = 5.e-5,
+       super_choice = .true.,
+       tracer_advec = .true.
+       retain_cm3_bug = .true.
+/
+
+ &time_manager_nml
+
+/
+
+ &topography_nml
+        topog_file = 'INPUT/navy_topography.data.nc'
+/
+
+ &vegetation_nml
+       klev = 7
+/
+
+ &vert_diff_driver_nml
+       do_conserve_energy = .true.
+/
+
+ &vert_turb_driver_nml
+       use_tau          = .false.,
+       gust_scheme      = 'beljaars',
+       do_mellor_yamada = .false.,
+       do_entrain       = .true.,
+       do_edt           = .false.,
+       do_diffusivity   = .false.,
+       do_stable_bl = .true.,
+       do_shallow_conv  = .false.
+/
+
+ &xgrid_nml
+        make_exchange_reproduce = .false.
+        interp_method = 'second_order'
+/
+
