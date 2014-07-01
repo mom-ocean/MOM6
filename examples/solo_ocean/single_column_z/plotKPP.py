@@ -37,7 +37,7 @@ plt.ylabel('z [m]'); plt.title(r'$log_{10}|N|$ [s$^{-1}$]')
 plt.xlabel('Time [days]')
 plt.subplot(2,2,4)
 plt.plot(t,T[:,0]); plt.ylim(18,30)
-plt.ylabel('$\theta$ [$\degree$C]'); plt.title(r'SST [s$\degree$C]')
+plt.ylabel(r'$\theta$ [$\degree$C]'); plt.title('SST')
 plt.xlabel('Time [days]')
 
 plt.tight_layout()
