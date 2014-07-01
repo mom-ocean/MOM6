@@ -444,7 +444,7 @@ DTBT = -0.9                     !   [s or nondim] default = -0.98
                                 ! integer fraction of DT, rounding down.
 
 ! === module MOM_thickness_diffuse ===
-Z_OUTPUT_GRID_FILE = "vgrid_cm4.nc" ! default = ""
+Z_OUTPUT_GRID_FILE = "vgrid_75_2m.nc" ! default = ""
                                 ! The file that specifies the vertical grid for
                                 ! depth-space diagnostics, or blank to disable
                                 ! depth-space output.

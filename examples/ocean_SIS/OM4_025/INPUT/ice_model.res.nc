@@ -1,1 +1,1 @@
-.datasets/OM4_025/INPUT/ice_model.res.v20140620.nc
+ice_model.res.v20140620.nc
