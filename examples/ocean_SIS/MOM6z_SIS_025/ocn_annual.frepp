@@ -75,8 +75,10 @@ setenv PYTHONDIR ${out_dir}/mom6/tools/python
 echo The following command is going to be invoked
 
 mkdir -p $out_dir/ocean_${yr1}-${yr2}/ptemp
-$script_dir/SST_bias_WOA05.py -o $out_dir/ocean_${yr1}-${yr2}/ptemp -l ${yr1}-${yr2} $in_data_dir/ocean_annual.$yr1-$yr2.temp.nc
+$script_dir/SST_bias_WOA05.py -w /archive/gold/datasets/MOM6z_SIS_025/siena/obs/WOA05_ptemp_salt_annual_v1.nc -g /archive/gold/datasets/MOM6z_SIS_025/siena/mosaic.unpacked -o $out_dir/ocean_${yr1}-${yr2}/ptemp -l ${yr1}-${yr2} $in_data_dir/ocean_annual.$yr1-$yr2.temp.nc
+$script_dir/zonal_T_bias_WOA05.py -w /archive/gold/datasets/MOM6z_SIS_025/siena/obs/WOA05_ptemp_salt_annual_v1.nc -g /archive/gold/datasets/MOM6z_SIS_025/siena/mosaic.unpacked -o $out_dir/ocean_${yr1}-${yr2}/ptemp -l ${yr1}-${yr2} $in_data_dir/ocean_annual.$yr1-$yr2.temp.nc
 
 mkdir -p $out_dir/ocean_${yr1}-${yr2}/salinity
-$script_dir/SSS_bias_WOA05.py -o $out_dir/ocean_${yr1}-${yr2}/salinity -l ${yr1}-${yr2} $in_data_dir/ocean_annual.$yr1-$yr2.salt.nc
+$script_dir/SSS_bias_WOA05.py -w /archive/gold/datasets/MOM6z_SIS_025/siena/obs/WOA05_ptemp_salt_annual_v1.nc -g /archive/gold/datasets/MOM6z_SIS_025/siena/mosaic.unpacked -o $out_dir/ocean_${yr1}-${yr2}/salinity -l ${yr1}-${yr2} $in_data_dir/ocean_annual.$yr1-$yr2.salt.nc
+$script_dir/zonal_S_bias_WOA05.py -w /archive/gold/datasets/MOM6z_SIS_025/siena/obs/WOA05_ptemp_salt_annual_v1.nc -g /archive/gold/datasets/MOM6z_SIS_025/siena/mosaic.unpacked -o $out_dir/ocean_${yr1}-${yr2}/salinity -l ${yr1}-${yr2} $in_data_dir/ocean_annual.$yr1-$yr2.salt.nc
 
