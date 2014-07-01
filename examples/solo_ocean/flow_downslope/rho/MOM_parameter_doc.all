@@ -292,7 +292,7 @@ COORD_CONFIG = "linear"         !
                                 !     ts_profile - use temperature and salinity profiles
                                 !       (read from COORD_FILE) to set layer densities.
                                 !     USER - call a user modified routine.
-LIGHTEST_DENSITY = 1035.0       !   [kg m-3] default = 1035.0
+LIGHTEST_DENSITY = 1034.0       !   [kg m-3] default = 1035.0
                                 ! The reference potential density used for layer 1.
 DENSITY_RANGE = 1.0             !   [kg m-3] default = 2.0
                                 ! The range of reference potential densities in the layers.
@@ -493,7 +493,7 @@ REGRIDDING_COORDINATE_MODE = "RHO" ! default = "LAYER"
                                 !  RHO   - continuous isopycnal
 REGRIDDING_COORDINATE_UNITS = "kg m^-3" ! default = "kg m^-3"
                                 ! Units of the regridding coordinuate.
-INTERPOLATION_SCHEME = "PLM"    ! default = "P1M_H2"
+INTERPOLATION_SCHEME = "PQM_IH4IH3" ! default = "P1M_H2"
                                 ! This sets the interpolation scheme to use to
                                 ! determine the new grid. These parameters are
                                 ! only relevant when REGRIDDING_COORDINATE_MODE is
@@ -529,7 +529,7 @@ BOUNDARY_EXTRAPOLATION = True   !   [Boolean] default = False
                                 ! than PCM. E.g., if PPM is used for remapping, a
                                 ! PPM reconstruction will also be used within
                                 ! boundary cells.
-REMAPPING_SCHEME = "PLM"        ! default = "PLM"
+REMAPPING_SCHEME = "PQM_IH4IH3" ! default = "PLM"
                                 ! This sets the reconstruction scheme used
                                 ! for vertical remapping for all variables.
                                 ! It can be one of the following schemes:
