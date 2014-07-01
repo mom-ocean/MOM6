@@ -86,6 +86,11 @@ character(len=3), public :: remappingDefaultScheme = "PLM"
 ! This CPP macro embeds some safety checks
 #define __DO_SAFETY_CHECKS__
 
+! This CPP macro turns on/off bounding of integrations limits so that they are
+! always within the cell. Roundoff can lead to the non-dimensional bounds being
+! outside of the range 0 to 1.
+#define __USE_ROUNDOFF_SAFE_ADJUSTMENTS__
+
 ! -----------------------------------------------------------------------------
 ! This module contains the following routines
 ! -----------------------------------------------------------------------------
@@ -727,6 +732,8 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefficients, 
                           ! -- coordinates)
   real    :: x0jLl, x0jLr ! Left/right position of cell jL
   real    :: x0jRl, x0jRr ! Left/right position of cell jR
+  real    :: hAct         ! The distance actually used in the integration
+                          ! (notionally xR - xL) which differs due to roundoff.
 
 #ifdef __DO_SAFETY_CHECKS__
   real    :: h0Total
@@ -830,7 +837,9 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefficients, 
       endif
     enddo ! end loop on source grid cells
 
-    ! HACK to avoid roundoff problems  THIS NEEDS TO BE REMOVED ---AJA
+    ! If xR>x0jRr then the previous loop reached j=n0 and the target
+    ! position, xR, was beyond the right edge of the source grid (h0).
+    ! This can happen due to roundoff, in which case we set jR=n0.
     if (xR>x0jRr) jR = n0
 
 #ifdef __DO_SAFETY_CHECKS__
@@ -852,10 +861,15 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefficients, 
       !           xL       xR
       !
       ! Determine normalized coordinates
-      ! WHY IS THIS NOT WRITTEN AS xi0 = ( xL - x0jLl ) / h0(jL) ---AJA
-      ! WHY IS THIS NOT WRITTEN AS xi0 = ( xR - x0jLl ) / h0(jL) ---AJA
+#ifdef __USE_ROUNDOFF_SAFE_ADJUSTMENTS__
+      xi0 = max( 0., min( 1., ( xL - x0jLl ) / h0(jL) ) )
+      xi1 = max( 0., min( 1., ( xR - x0jLl ) / h0(jL) ) )
+#else
       xi0 = xL / h0(jL) - x0jLl / h0(jL)
       xi1 = xR / h0(jL) - x0jLl / h0(jL)
+#endif
+
+      hAct = h0(jL) * ( xi1 - xi0 )
 
       ! Depending on which polynomial is used, integrate quantity
       ! between xi0 and xi1. Integration is carried out in normalized
@@ -900,9 +914,15 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefficients, 
       q = 0.0
 
       ! Integrate from xL up to right boundary of cell jL
-      !xi0 = xL / h0(jL) - x0jLl / h0(jL)
+#ifdef __USE_ROUNDOFF_SAFE_ADJUSTMENTS__
+      xi0 = max( 0., min( 1., ( xL - x0jLl ) / h0(jL) ) )
+#else
       xi0 = (xL - x0jLl) / h0(jL)
+#endif
       xi1 = 1.0
+
+      hAct = h0(jL) * ( xi1 - xi0 )
+
       select case ( method )
         case ( INTEGRATION_PCM )     
           q = q + ppoly0_coefficients(jL,1) * ( x0jLr - xL )
@@ -931,6 +951,7 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefficients, 
       if ( jR > (jL+1) ) then
         do k = jL+1,jR-1
           q = q + h0(k) * u0(k)
+          hAct = hAct + h0(k)
         end do
       end if
 #ifdef __DO_SAFETY_CHECKS__
@@ -943,9 +964,13 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefficients, 
 
       ! Integrate from left boundary of cell jR up to xR
       xi0 = 0.0
-      !xi1 = xR / h0(jR) - x0jRl / h0(jR)
+#ifdef __USE_ROUNDOFF_SAFE_ADJUSTMENTS__
+      xi1 = max( 0., min( 1., ( xR - x0jRl ) / h0(jR) ) )
+#else
       xi1 = (xR - x0jRl) / h0(jR)
-      !xi1 =  min( (xR - x0jRl) / h0(jR), 1.) ! Min needed for round-off issues
+#endif
+
+      hAct = hAct + h0(jR) * ( xi1 - xi0 )
     
       select case ( method )
         case ( INTEGRATION_PCM )     
@@ -972,12 +997,15 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefficients, 
         stop 'Nan during __DO_SAFETY_CHECKS__'
       endif
 #endif
-  
-      
+
     end if ! end integration for non-vanished cells 
-    
+
     ! The cell average is the integrated value divided by the cell width
+#ifdef __USE_ROUNDOFF_SAFE_ADJUSTMENTS__
+    uAve = q / hAct
+#else
     uAve = q / hC
+#endif
   
   end if ! end if clause to check if cell is vanished
     
