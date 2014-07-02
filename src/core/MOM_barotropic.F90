@@ -627,6 +627,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   real :: sum_wt_vel, sum_wt_eta, sum_wt_accel, sum_wt_trans
   real :: I_sum_wt_vel, I_sum_wt_eta, I_sum_wt_accel, I_sum_wt_trans
   real :: dt_filt     ! The half-width of the barotropic filter, in s.
+  real :: trans_wt1, trans_wt2 ! weight used to compute ubt_trans and vbt_trans
   integer :: nfilter
 
   logical :: apply_OBCs, apply_u_OBCs, apply_v_OBCs, apply_OBC_flather
@@ -646,6 +647,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   integer :: i, j, k, n
   integer :: is, ie, js, je, nz, Isq, Ieq, Jsq, Jeq
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
+  integer :: ioff, joff
 
   if (.not.associated(CS)) call MOM_error(FATAL, &
       "btstep: Module MOM_barotropic must be initialized before it is used.")
@@ -722,6 +724,13 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   bebt = CS%bebt
   be_proj = CS%bebt
   I_Rho0 = 1.0/G%Rho0
+
+  !--- setup the weight when computing vbt_trans and ubt_trans
+  if (project_velocity) then
+    trans_wt1 = (1.0 + be_proj); trans_wt2 = -be_proj
+  else
+    trans_wt1 = (1.0-bebt);      trans_wt2 = bebt
+  endif 
 
   do_hifreq_output = .false.
   if ((CS%id_ubt_hifreq > 0) .or. (CS%id_vbt_hifreq > 0) .or. &
@@ -1617,20 +1626,42 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
     endif
 !$OMP end parallel
 
+    if (apply_OBCs) then
+      if(MOD(n+G%first_direction,2)==1) then
+        ioff = 1; joff = 0
+      else        
+        ioff = 0; joff = 1
+      endif 
+
+      if (apply_u_OBCs) then  ! save the old value of vbt and vhbt
+!$OMP parallel do default(none) shared(isv,iev,jsv,jev,ioff,joff,ubt_prev,ubt,uhbt_prev,  &
+!$OMP                                  uhbt,ubt_sum_prev,ubt_sum,uhbt_sum_prev, &
+!$OMP                                  uhbt_sum,ubt_wtd_prev,ubt_wtd)
+        do J=jsv-joff,jev+joff ; do i=isv-1,iev
+          ubt_prev(i,J) = ubt(i,J); uhbt_prev(i,J) = uhbt(i,J)
+          ubt_sum_prev(i,J)=ubt_sum(i,J); uhbt_sum_prev(i,J)=uhbt_sum(i,J) ; ubt_wtd_prev(i,J)=ubt_wtd(i,J)
+        enddo ; enddo
+      endif
+
+      if (apply_v_OBCs) then  ! save the old value of vbt and vhbt
+!$OMP parallel do default(none) shared(isv,iev,jsv,jev,ioff,joff,vbt_prev,vbt,vhbt_prev,  &
+!$OMP                                  vhbt,vbt_sum_prev,vbt_sum,vhbt_sum_prev, &
+!$OMP                                  vhbt_sum,vbt_wtd_prev,vbt_wtd)
+        do J=jsv-1,jev ; do i=isv-ioff,iev+ioff
+          vbt_prev(i,J) = vbt(i,J); vhbt_prev(i,J) = vhbt(i,J)
+          vbt_sum_prev(i,J)=vbt_sum(i,J); vhbt_sum_prev(i,J)=vhbt_sum(i,J) ; vbt_wtd_prev(i,J) = vbt_wtd(i,J)
+        enddo ; enddo
+      endif
+    endif
+
 !$OMP parallel default(none) shared(isv,iev,jsv,jev,G,amer,ubt,cmer,bmer,dmer,eta_PF_BT, &
 !$OMP                               eta_PF,gtot_N,gtot_S,dgeo_de,CS,p_surf_dyn,n,        &
-!$OMP                               v_accel_bt,wt_accel,PFv_bt_sum,wt_accel2,            &
-!$OMP                               Corv_bt_sum,BT_OBC,vbt,bt_rem_v,BT_force_v,vhbt,     &
-!$OMP                               Cor_ref_v,find_PF,find_Cor,apply_v_OBCs,dtbt,        &
-!$OMP                               project_velocity,be_proj,bebt,use_BT_cont,BTCL_v,    &
-!$OMP                               vhbt0,Datv,vbt_sum,wt_trans,vhbt_sum,vbt_wtd,wt_vel, &
-!$OMP                               azon,bzon,czon,dzon,Cor_ref_u,gtot_E,gtot_W,         &
-!$OMP                               u_accel_bt,PFu_bt_sum,Coru_bt_sum,apply_u_OBCs,      &
-!$OMP                               bt_rem_u,BT_force_u,uhbt,BTCL_u,uhbt0,Datu,ubt_sum,  &
-!$OMP                               uhbt_sum,ubt_wtd,Cor_u,Cor_v,PFu,PFv,vbt_prev,       &
-!$OMP                               vhbt_prev,vbt_sum_prev,vhbt_sum_prev,vbt_wtd_prev,   &
-!$OMP                               ubt_trans,vbt_trans,ubt_prev,uhbt_prev,ubt_sum_prev, &
-!$OMP                               uhbt_sum_prev, ubt_wtd_prev )                        &
+!$OMP                               v_accel_bt,wt_accel,wt_accel2,vbt,bt_rem_v,          &
+!$OMP                               BT_force_v,vhbt,Cor_ref_v,dtbt,trans_wt1,trans_wt2,  &
+!$OMP                               use_BT_cont,BTCL_v,vhbt0,Datv,wt_vel,azon,bzon,czon, &
+!$OMP                               dzon,Cor_ref_u,gtot_E,gtot_W,u_accel_bt,bt_rem_u,    &
+!$OMP                               BT_force_u,uhbt,BTCL_u,uhbt0,Datu,Cor_u,Cor_v,       &
+!$OMP                               PFu,PFv,ubt_trans,vbt_trans )                        &
 !$OMP                       private(vel_prev)
     if (MOD(n+G%first_direction,2)==1) then
       ! On odd-steps, update v first.
@@ -1651,46 +1682,11 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
 !$OMP do
       do J=jsv-1,jev ; do i=isv-1,iev+1
         v_accel_bt(i,J) = v_accel_bt(i,J) + wt_accel(n) * (Cor_v(i,J) + PFv(i,J))
+        vel_prev = vbt(i,J)
+        vbt(i,J) = bt_rem_v(i,J) * (vbt(i,J) + &
+                    dtbt * ((BT_force_v(i,J) + Cor_v(i,J)) + PFv(i,J)))
+        vbt_trans(i,J) = trans_wt1*vbt(i,J) + trans_wt2*vel_prev
       enddo ; enddo
-
-      if (find_PF) then
-!$OMP do
-        do J=jsv-1,jev ; do i=isv-1,iev+1
-          PFv_bt_sum(i,J)  = PFv_bt_sum(i,J) + wt_accel2(n) * PFv(i,J)
-        enddo ; enddo
-      endif
-      if (find_Cor) then
-!$OMP do
-        do J=jsv-1,jev ; do i=isv-1,iev+1
-          Corv_bt_sum(i,J) = Corv_bt_sum(i,J) + wt_accel2(n) * Cor_v(i,J)
-        enddo ; enddo
-      endif
-
-      if(apply_v_OBCs) then  ! save the old value of vbt and vhbt
-!$OMP do
-        do J=jsv-1,jev ; do i=isv-1,iev+1
-          vbt_prev(i,J) = vbt(i,J); vhbt_prev(i,J) = vhbt(i,J)
-          vbt_sum_prev(i,J)=vbt_sum(i,J); vhbt_sum_prev(i,J)=vhbt_sum(i,J) ; vbt_wtd_prev(i,J) = vbt_wtd_prev(i,J)
-        enddo ; enddo
-      endif
-
-      if (project_velocity) then
-!$OMP do
-        do J=jsv-1,jev ; do i=isv-1,iev+1
-          vel_prev = vbt(i,J)
-          vbt(i,J) = bt_rem_v(i,J) * (vbt(i,J) + &
-                      dtbt * ((BT_force_v(i,J) + Cor_v(i,J)) + PFv(i,J)))
-          vbt_trans(i,J) = (1.0 + be_proj)*vbt(i,J) - be_proj*vel_prev
-        enddo ; enddo
-      else
-!$OMP do
-        do J=jsv-1,jev ; do i=isv-1,iev+1
-          vel_prev = vbt(i,J)
-          vbt(i,J) = bt_rem_v(i,J) * (vbt(i,J) + &
-                      dtbt * ((BT_force_v(i,J) + Cor_v(i,J)) + PFv(i,J)))
-          vbt_trans(i,J) = (1.0-bebt)*vel_prev + bebt*vbt(i,J)
-        enddo ; enddo
-      endif
 
       if (use_BT_cont) then
 !$OMP do
@@ -1701,21 +1697,6 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
 !$OMP do
         do J=jsv-1,jev ; do i=isv-1,iev+1
           vhbt(i,J) = Datv(i,J)*vbt_trans(i,J) + vhbt0(i,J)
-        enddo ; enddo
-      endif
-!$OMP do
-      do J=jsv-1,jev ; do i=isv-1,iev+1
-        vbt_sum(i,J) = vbt_sum(i,J) + wt_trans(n) * vbt_trans(i,J)
-        vhbt_sum(i,J) = vhbt_sum(i,J) + wt_trans(n) * vhbt(i,J)
-        vbt_wtd(i,J) = vbt_wtd(i,J) + wt_vel(n) * vbt(i,J)
-      enddo ; enddo
-      if(apply_v_OBCs) then  ! copy back the value for the points that OBC_mask_v is true.
-!$OMP do
-        do J=jsv-1,jev ; do i=isv-1,iev+1
-          if (BT_OBC%OBC_mask_v(i,J)) then
-            vbt(i,J) = vbt_prev(i,J); vhbt(i,J) = vhbt_prev(i,J)
-            vbt_sum(i,J)=vbt_sum_prev(i,J); vhbt_sum(i,J)=vhbt_sum_prev(i,J) ; vbt_wtd(i,J)=vbt_wtd_prev(i,J)
-          endif
         enddo ; enddo
       endif
 
@@ -1738,45 +1719,12 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
 !$OMP do
       do j=jsv,jev ; do I=isv-1,iev
         u_accel_bt(I,j) = u_accel_bt(I,j) + wt_accel(n) * (Cor_u(I,j) + PFu(I,j))
+        vel_prev = ubt(I,j)
+        ubt(I,j) = bt_rem_u(I,j) * (ubt(I,j) + &
+             dtbt * ((BT_force_u(I,j) + Cor_u(I,j)) + PFu(I,j)))
+        ubt_trans(I,j) = trans_wt1*ubt(I,j) + trans_wt2*vel_prev
       enddo ; enddo
 
-      if (find_PF) then
-!$OMP do
-        do j=jsv,jev ; do I=isv-1,iev
-          PFu_bt_sum(I,j)  = PFu_bt_sum(I,j) + wt_accel2(n) * PFu(I,j)
-        enddo ; enddo
-      endif
-      if (find_Cor) then
-!$OMP do
-        do j=jsv,jev ; do I=isv-1,iev
-          Coru_bt_sum(I,j) = Coru_bt_sum(I,j) + wt_accel2(n) * Cor_u(I,j)
-        enddo ; enddo
-      endif
-
-      if(apply_u_OBCs) then  ! save the old value of vbt and vhbt
-!$OMP do
-        do J=jsv,jev ; do i=isv-1,iev
-          ubt_prev(i,J) = ubt(i,J); uhbt_prev(i,J) = uhbt(i,J)
-          ubt_sum_prev(i,J)=ubt_sum(i,J); uhbt_sum_prev(i,J)=uhbt_sum(i,J) ; ubt_wtd_prev(i,J)=ubt_wtd_prev(i,J)
-        enddo ; enddo
-      endif
-      if (project_velocity) then
-!$OMP do
-        do j=jsv,jev ; do I=isv-1,iev
-          vel_prev = ubt(I,j)
-          ubt(I,j) = bt_rem_u(I,j) * (ubt(I,j) + &
-               dtbt * ((BT_force_u(I,j) + Cor_u(I,j)) + PFu(I,j)))
-          ubt_trans(I,j) = (1.0 + be_proj)*ubt(I,j) - be_proj*vel_prev
-        enddo ; enddo
-      else
-!$OMP do
-        do j=jsv,jev ; do I=isv-1,iev
-          vel_prev = ubt(I,j)
-          ubt(I,j) = bt_rem_u(I,j) * (ubt(I,j) + &
-               dtbt * ((BT_force_u(I,j) + Cor_u(I,j)) + PFu(I,j)))
-          ubt_trans(I,j) = (1.0-bebt)*vel_prev + bebt*ubt(I,j)
-        enddo ; enddo
-      endif
       if (use_BT_cont) then
 !$OMP do
         do j=jsv,jev ; do I=isv-1,iev
@@ -1786,22 +1734,6 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
 !$OMP do
         do j=jsv,jev ; do I=isv-1,iev
           uhbt(I,j) = Datu(I,j)*ubt_trans(I,j) + uhbt0(I,j)
-        enddo ; enddo
-      endif
-!$OMP do
-      do j=jsv,jev ; do I=isv-1,iev
-        ubt_sum(I,j) = ubt_sum(I,j) + wt_trans(n) * ubt_trans(I,j)
-        uhbt_sum(I,j) = uhbt_sum(I,j) + wt_trans(n) * uhbt(I,j)
-        ubt_wtd(I,j) = ubt_wtd(I,j) + wt_vel(n) * ubt(I,j)
-      enddo ; enddo
-
-      if(apply_u_OBCs) then  ! copy back the value for the points that OBC_mask_v is true.
-!$OMP do
-        do J=jsv,jev ; do i=isv-1,iev
-          if (BT_OBC%OBC_mask_u(i,J)) then
-            ubt(i,J) = ubt_prev(i,J); uhbt(i,J) = uhbt_prev(i,J)
-            ubt_sum(i,J)=ubt_sum_prev(i,J); uhbt_sum(i,J)=uhbt_sum_prev(i,J) ; ubt_wtd(i,J)=ubt_wtd_prev(i,J)
-          endif
         enddo ; enddo
       endif
 
@@ -1826,45 +1758,12 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
 !$OMP do
       do j=jsv-1,jev+1 ; do I=isv-1,iev
         u_accel_bt(I,j) = u_accel_bt(I,j) + wt_accel(n) * (Cor_u(I,j) + PFu(I,j))
+        vel_prev = ubt(I,j)
+        ubt(I,j) = bt_rem_u(I,j) * (ubt(I,j) + &
+             dtbt * ((BT_force_u(I,j) + Cor_u(I,j)) + PFu(I,j)))
+        ubt_trans(I,j) = trans_wt1*ubt(I,j) + trans_wt2*vel_prev
       enddo ; enddo
 
-      if (find_PF) then
-!$OMP do
-        do j=jsv-1,jev+1 ; do I=isv-1,iev
-          PFu_bt_sum(I,j)  = PFu_bt_sum(I,j) + wt_accel2(n) * PFu(I,j)
-        enddo ; enddo
-      endif
-      if (find_Cor) then
-!$OMP do
-        do j=jsv-1,jev+1 ; do I=isv-1,iev
-          Coru_bt_sum(I,j) = Coru_bt_sum(I,j) + wt_accel2(n) * Cor_u(I,j)
-        enddo ; enddo
-      endif
-      if(apply_u_OBCs) then  ! save the old value of vbt and vhbt
-!$OMP do
-        do J=jsv-1,jev+1 ; do i=isv-1,iev
-          ubt_prev(i,J) = ubt(i,J); uhbt_prev(i,J) = uhbt(i,J)
-          ubt_sum_prev(i,J)=ubt_sum(i,J); uhbt_sum_prev(i,J)=uhbt_sum(i,J) ; ubt_wtd_prev(i,J)=ubt_wtd_prev(i,J)
-        enddo ; enddo
-      endif
-
-      if (project_velocity) then
-!$OMP do
-        do j=jsv-1,jev+1 ; do I=isv-1,iev
-          vel_prev = ubt(I,j)
-          ubt(I,j) = bt_rem_u(I,j) * (ubt(I,j) + &
-               dtbt * ((BT_force_u(I,j) + Cor_u(I,j)) + PFu(I,j)))
-          ubt_trans(I,j) = (1.0 + be_proj)*ubt(I,j) - be_proj*vel_prev
-        enddo ; enddo
-      else
-!$OMP do
-        do j=jsv-1,jev+1 ; do I=isv-1,iev
-          vel_prev = ubt(I,j)
-          ubt(I,j) = bt_rem_u(I,j) * (ubt(I,j) + &
-               dtbt * ((BT_force_u(I,j) + Cor_u(I,j)) + PFu(I,j)))
-          ubt_trans(I,j) = (1.0-bebt)*vel_prev + bebt*ubt(I,j)
-        enddo ; enddo
-      endif
       if (use_BT_cont) then
 !$OMP do
         do j=jsv-1,jev+1 ; do I=isv-1,iev
@@ -1874,21 +1773,6 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
 !$OMP do
         do j=jsv-1,jev+1 ; do I=isv-1,iev
           uhbt(I,j) = Datu(I,j)*ubt_trans(I,j) + uhbt0(I,j)
-        enddo ; enddo
-      endif
-!$OMP do
-      do j=jsv-1,jev+1 ; do I=isv-1,iev
-        ubt_sum(I,j) = ubt_sum(I,j) + wt_trans(n) * ubt_trans(I,j)
-        uhbt_sum(I,j) = uhbt_sum(I,j) + wt_trans(n) * uhbt(I,j)
-        ubt_wtd(I,j) = ubt_wtd(I,j) + wt_vel(n) * ubt(I,j)
-      enddo ; enddo
-      if(apply_u_OBCs) then  ! copy back the value for the points that OBC_mask_v is true.
-!$OMP do
-        do J=jsv-1,jev+1 ; do i=isv-1,iev
-          if (BT_OBC%OBC_mask_u(i,J)) then
-            ubt(i,J) = ubt_prev(i,J); uhbt(i,J) = uhbt_prev(i,J)
-            ubt_sum(i,J)=ubt_sum_prev(i,J); uhbt_sum(i,J)=uhbt_sum_prev(i,J) ; ubt_wtd(i,J)=ubt_wtd_prev(i,J)
-          endif
         enddo ; enddo
       endif
 
@@ -1911,43 +1795,11 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
 !$OMP do
       do J=jsv-1,jev ; do i=isv,iev
         v_accel_bt(I,j) = v_accel_bt(I,j) + wt_accel(n) * (Cor_v(i,J) + PFv(i,J))
+        vel_prev = vbt(i,J)
+        vbt(i,J) = bt_rem_v(i,J) * (vbt(i,J) + &
+             dtbt * ((BT_force_v(i,J) + Cor_v(i,J)) + PFv(i,J)))
+        vbt_trans(i,J) = trans_wt1*vbt(i,J) + trans_wt2*vel_prev
       enddo ; enddo
-      if (find_PF) then
-!$OMP do
-        do J=jsv-1,jev ; do i=isv,iev
-          PFv_bt_sum(i,J)  = PFv_bt_sum(i,J) + wt_accel2(n) * PFv(i,J)
-        enddo ; enddo
-      endif
-      if (find_Cor) then
-!$OMP do
-        do J=jsv-1,jev ; do i=isv,iev
-          Corv_bt_sum(i,J) = Corv_bt_sum(i,J) + wt_accel2(n) * Cor_v(i,J)
-        enddo ; enddo
-      endif
-      if(apply_v_OBCs) then  ! save the old value of vbt and vhbt
-!$OMP do
-        do J=jsv-1,jev ; do i=isv,iev
-          vbt_prev(i,J) = vbt(i,J); vhbt_prev(i,J) = vhbt(i,J)
-          vbt_sum_prev(i,J)=vbt_sum(i,J); vhbt_sum_prev(i,J)=vhbt_sum(i,J) ; vbt_wtd_prev(i,J)=vbt_wtd_prev(i,J)
-        enddo ; enddo
-      endif
-      if (project_velocity) then
-!$OMP do
-        do J=jsv-1,jev ; do i=isv,iev
-          vel_prev = vbt(i,J)
-          vbt(i,J) = bt_rem_v(i,J) * (vbt(i,J) + &
-               dtbt * ((BT_force_v(i,J) + Cor_v(i,J)) + PFv(i,J)))
-          vbt_trans(i,J) = (1.0 + be_proj)*vbt(i,J) - be_proj*vel_prev
-        enddo ; enddo
-      else
-!$OMP do
-        do J=jsv-1,jev ; do i=isv,iev
-          vel_prev = vbt(i,J)
-          vbt(i,J) = bt_rem_v(i,J) * (vbt(i,J) + &
-               dtbt * ((BT_force_v(i,J) + Cor_v(i,J)) + PFv(i,J)))
-          vbt_trans(i,J) = (1.0-bebt)*vel_prev + bebt*vbt(i,J)
-        enddo ; enddo
-      endif
       if (use_BT_cont) then
 !$OMP do
         do J=jsv-1,jev ; do i=isv,iev
@@ -1959,26 +1811,89 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
           vhbt(i,J) = Datv(i,J)*vbt_trans(i,J) + vhbt0(i,J)
         enddo ; enddo
       endif
-!$OMP do
-      do J=jsv-1,jev ; do i=isv,iev
-        vbt_sum(i,J) = vbt_sum(i,J) + wt_trans(n) * vbt_trans(i,J)
-        vhbt_sum(i,J) = vhbt_sum(i,J) + wt_trans(n) * vhbt(i,J)
-        vbt_wtd(i,J) = vbt_wtd(i,J) + wt_vel(n) * vbt(i,J)
-      enddo ; enddo
-
-      if(apply_v_OBCs) then  ! copy back the value for the points that OBC_mask_v is true.
-!$OMP do
-        do J=jsv-1,jev ; do i=isv,iev
-          if (BT_OBC%OBC_mask_v(i,J)) then
-            vbt(i,J) = vbt_prev(i,J); vhbt(i,J) = vhbt_prev(i,J)
-            vbt_sum(i,J)=vbt_sum_prev(i,J); vhbt_sum(i,J)=vhbt_sum_prev(i,J) ; vbt_wtd(i,J)=vbt_wtd_prev(i,J)
-          endif
-        enddo ; enddo
-      endif
     endif
 !$OMP end parallel
 
+!$OMP parallel default(none) shared(is,ie,js,je,find_PF,PFu_bt_sum,wt_accel2, &
+!$OMP                               PFu,PFv_bt_sum,PFv,find_Cor,Coru_bt_sum,  &
+!$OMP                               Cor_u,Corv_bt_sum,Cor_v,ubt_sum,wt_trans, &
+!$OMP                               ubt_trans,uhbt_sum,uhbt,ubt_wtd,wt_vel,   &
+!$OMP                               ubt,vbt_sum,vbt_trans,vhbt_sum,vhbt,      &
+!$OMP                               vbt_wtd,vbt,n )
+    if (find_PF) then
+!$OMP do
+      do j=js,je ; do I=is-1,ie
+        PFu_bt_sum(I,j)  = PFu_bt_sum(I,j) + wt_accel2(n) * PFu(I,j)
+      enddo ; enddo
+!$OMP do
+      do J=js-1,je ; do i=is,ie
+        PFv_bt_sum(i,J)  = PFv_bt_sum(i,J) + wt_accel2(n) * PFv(i,J)
+      enddo ; enddo
+    endif
+    if (find_Cor) then
+!$OMP do
+      do j=js,je ; do I=is-1,ie
+        Coru_bt_sum(I,j) = Coru_bt_sum(I,j) + wt_accel2(n) * Cor_u(I,j)
+      enddo ; enddo
+!$OMP do
+      do J=js-1,je ; do i=is,ie
+        Corv_bt_sum(i,J) = Corv_bt_sum(i,J) + wt_accel2(n) * Cor_v(i,J)
+      enddo ; enddo
+    endif
+
+!$OMP do
+    do j=js,je ; do I=is-1,ie
+      ubt_sum(I,j) = ubt_sum(I,j) + wt_trans(n) * ubt_trans(I,j)
+      uhbt_sum(I,j) = uhbt_sum(I,j) + wt_trans(n) * uhbt(I,j)
+      ubt_wtd(I,j) = ubt_wtd(I,j) + wt_vel(n) * ubt(I,j)
+    enddo ; enddo
+!$OMP do
+    do J=js-1,je ; do i=is,ie
+      vbt_sum(i,J) = vbt_sum(i,J) + wt_trans(n) * vbt_trans(i,J)
+      vhbt_sum(i,J) = vhbt_sum(i,J) + wt_trans(n) * vhbt(i,J)
+      vbt_wtd(i,J) = vbt_wtd(i,J) + wt_vel(n) * vbt(i,J)
+    enddo ; enddo
+!$OMP end parallel
+
     if (apply_OBCs) then
+      if (apply_u_OBCs) then  ! copy back the value for the points that OBC_mask_v is true.
+!$OMP parallel default(none) shared(isv,iev,jsv,jev,ioff,joff,ubt_prev,ubt,uhbt_prev,  &
+!$OMP                               uhbt,is,ie,js,je,ubt_sum_prev,ubt_sum,             &
+!$OMP                               uhbt_sum_prev,uhbt_sum,ubt_wtd_prev,ubt_wtd,BT_OBC)
+!$OMP do
+        do J=jsv-joff,jev+joff ; do i=isv-1,iev
+          if (BT_OBC%OBC_mask_u(i,J)) then
+            ubt(i,J) = ubt_prev(i,J); uhbt(i,J) = uhbt_prev(i,J)
+          endif
+        enddo ; enddo
+!$OMP do
+        do j=js,je ; do I=is-1,ie
+          if (BT_OBC%OBC_mask_u(i,J)) then
+            ubt_sum(i,J)=ubt_sum_prev(i,J); uhbt_sum(i,J)=uhbt_sum_prev(i,J) ; ubt_wtd(i,J)=ubt_wtd_prev(i,J)
+          endif
+        enddo ; enddo
+!$OMP end parallel
+      endif
+
+      if (apply_v_OBCs) then  ! copy back the value for the points that OBC_mask_v is true.
+!$OMP parallel default(none) shared(isv,iev,jsv,jev,ioff,joff,vbt_prev,vbt,vhbt_prev,  &
+!$OMP                               vhbt,is,ie,js,je,vbt_sum_prev,vbt_sum,             &
+!$OMP                               vhbt_sum_prev,vhbt_sum,vbt_wtd_prev,vbt_wtd,BT_OBC)
+!$OMP do
+        do J=jsv-1,jev ; do i=isv-ioff,iev-ioff
+          if (BT_OBC%OBC_mask_v(i,J)) then
+            vbt(i,J) = vbt_prev(i,J); vhbt(i,J) = vhbt_prev(i,J)
+          endif
+        enddo ; enddo
+!$OMP do
+        do J=js-1,je ; do I=is,ie
+          if (BT_OBC%OBC_mask_v(i,J)) then
+            vbt_sum(i,J)=vbt_sum_prev(i,J); vhbt_sum(i,J)=vhbt_sum_prev(i,J) ; vbt_wtd(i,J)=vbt_wtd_prev(i,J)
+          endif
+        enddo ; enddo
+!$OMP end parallel
+      endif    
+
       call apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, &
            ubt_trans, vbt_trans, eta, ubt_old, vbt_old, BT_OBC, &
            G, MS, iev-ie, dtbt, bebt, use_BT_cont, Datu, Datv, BTCL_u, BTCL_v, &
