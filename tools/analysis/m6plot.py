@@ -2,8 +2,12 @@
 A method for producing a standardized pseudo-color plot of 2D data
 """
 
-import matplotlib
-matplotlib.use('Agg')
+import os
+try: 
+  if os.environ['DISPLAY'] != None: pass
+except: 
+  import matplotlib
+  matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib.colors import BoundaryNorm, ListedColormap
 from matplotlib.ticker import MaxNLocator
