@@ -529,6 +529,42 @@ function register_diag_field(module_name, field_name, axes, init_time, &
   !  (out,opt) err_msg - An character string into which an error message might be placed. (Not used in MOM.)
   !  (in,opt)  interp_method - No clue. (Not used in MOM.)
   !  (in,opt)  tile_count - No clue. (Not used in MOM.)
+  register_diag_field = register_diag_field_low(module_name, field_name, axes, init_time,        &
+     long_name=long_name, units=units, missing_value=missing_value, range=range,                 &
+     mask_variant=mask_variant, standard_name=standard_name, verbose=verbose,                    &
+     do_not_log=do_not_log, err_msg=err_msg, interp_method=interp_method, tile_count=tile_count)
+  
+end function register_diag_field
+
+function register_diag_field_low(module_name, field_name, axes, init_time, &
+     long_name, units, missing_value, range, mask_variant, standard_name, &
+     verbose, do_not_log, err_msg, interp_method, tile_count)
+  integer :: register_diag_field_low
+  character(len=*), intent(in) :: module_name, field_name
+  type(axesType),   intent(in) :: axes
+  type(time_type),  intent(in) :: init_time
+  character(len=*), optional, intent(in) :: long_name, units, standard_name
+  real,             optional, intent(in) :: missing_value, range(2)
+  logical,          optional, intent(in) :: mask_variant, verbose, do_not_log
+  character(len=*), optional, intent(out):: err_msg
+  character(len=*), optional, intent(in) :: interp_method
+  integer,          optional, intent(in) :: tile_count
+  ! Output:    An integer handle for a diagnostic array.
+  ! Arguments: module_name - The name of this module, usually "ocean_model" or "ice_shelf_model".
+  !  (in)      field_name - The name of the diagnostic field.
+  !  (in)      axes - A container with up to 3 integer handles that indicates the axes for this field.
+  !  (in)      init_time - The time at which a field is first available?
+  !  (in,opt)  long_name - The long name of a field.
+  !  (in,opt)  units - The units of a field.
+  !  (in,opt)  standard_name - The standardized name associated with a field. (Not yet used in MOM.)
+  !  (in,opt)  missing_value - A value that indicates missing values.
+  !  (in,opt)  range - The valid range of a variable. (Not used in MOM.)
+  !  (in,opt)  mask_variant - If true a logical mask must be provided with post_data calls.  (Not used in MOM.)
+  !  (in,opt)  verbose - If true, FMS is verbosed. (Not used in MOM.)
+  !  (in,opt)  do_not_log - If true, do not log something. (Not used in MOM.)
+  !  (out,opt) err_msg - An character string into which an error message might be placed. (Not used in MOM.)
+  !  (in,opt)  interp_method - No clue. (Not used in MOM.)
+  !  (in,opt)  tile_count - No clue. (Not used in MOM.)
   character(len=240) :: mesg
   real :: MOM_missing_value
   type(diag_ctrl), pointer :: diag
@@ -536,14 +572,14 @@ function register_diag_field(module_name, field_name, axes, init_time, &
   MOM_missing_value = axes%diag%missing_value
   if(present(missing_value)) MOM_missing_value = missing_value
 
-  register_diag_field = register_diag_field_fms(module_name, field_name, axes%handles, &
+  register_diag_field_low = register_diag_field_fms(module_name, field_name, axes%handles, &
        init_time, long_name=long_name, units=units, missing_value=MOM_missing_value, &
        range=range, mask_variant=mask_variant, standard_name=standard_name, &
        verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
        interp_method=interp_method, tile_count=tile_count)
 
   if (is_root_pe() .and. doc_unit > 0) then
-     if (register_diag_field > 0) then
+     if (register_diag_field_low > 0) then
         mesg = '"'//trim(module_name)//'", "'//trim(field_name)//'"  [Used]'
      else
         mesg = '"'//trim(module_name)//'", "'//trim(field_name)//'"  [Unused]'
@@ -555,62 +591,62 @@ function register_diag_field(module_name, field_name, axes, init_time, &
   endif
 
   !Decide what mask to use based on the axes info
-  if (register_diag_field>-1) then
+  if (register_diag_field_low>-1) then
   !3d masks
   if(axes%rank .eq. 3) then
     diag => axes%diag
-    diag%maskList(register_diag_field)%mask2d => null()
-    diag%maskList(register_diag_field)%mask3d => null()
-    if (register_diag_field>MAX_NUM_DIAGNOSTICS) call MOM_error(FATAL, &
-         "MOM_diag_mediator, register_diag_field: " // &
+    diag%maskList(register_diag_field_low)%mask2d => null()
+    diag%maskList(register_diag_field_low)%mask3d => null()
+    if (register_diag_field_low>MAX_NUM_DIAGNOSTICS) call MOM_error(FATAL, &
+         "MOM_diag_mediator, register_diag_field_low: " // &
          "Too many diagnostics. Make MAX_NUM_DIAGNOSTICS bigger! "//trim(field_name))     
     if    (axes%id .eq. diag%axesTL%id) then
-        diag%maskList(register_diag_field)%mask3d =>  diag%mask3dTL
+        diag%maskList(register_diag_field_low)%mask3d =>  diag%mask3dTL
     elseif(axes%id .eq. diag%axesBL%id) then
-        diag%maskList(register_diag_field)%mask3d =>  diag%mask3dBuL
+        diag%maskList(register_diag_field_low)%mask3d =>  diag%mask3dBuL
     elseif(axes%id .eq. diag%axesCuL%id ) then
-        diag%maskList(register_diag_field)%mask3d =>  diag%mask3dCuL
+        diag%maskList(register_diag_field_low)%mask3d =>  diag%mask3dCuL
     elseif(axes%id .eq. diag%axesCvL%id) then
-        diag%maskList(register_diag_field)%mask3d =>  diag%mask3dCvL
+        diag%maskList(register_diag_field_low)%mask3d =>  diag%mask3dCvL
     elseif(axes%id .eq. diag%axesTi%id) then
-        diag%maskList(register_diag_field)%mask3d =>  diag%mask3dTi
+        diag%maskList(register_diag_field_low)%mask3d =>  diag%mask3dTi
     elseif(axes%id .eq. diag%axesBi%id) then
-        diag%maskList(register_diag_field)%mask3d =>  diag%mask3dBui
+        diag%maskList(register_diag_field_low)%mask3d =>  diag%mask3dBui
     elseif(axes%id .eq. diag%axesCui%id ) then
-        diag%maskList(register_diag_field)%mask3d =>  diag%mask3dCui
+        diag%maskList(register_diag_field_low)%mask3d =>  diag%mask3dCui
     elseif(axes%id .eq. diag%axesCvi%id) then
-        diag%maskList(register_diag_field)%mask3d =>  diag%mask3dCvi
+        diag%maskList(register_diag_field_low)%mask3d =>  diag%mask3dCvi
 !    else
-!       call MOM_error(FATAL, "MOM_diag_mediator:register_diag_field: " // &
+!       call MOM_error(FATAL, "MOM_diag_mediator:register_diag_field_low: " // &
 !            "unknown axes for diagnostic variable "//trim(field_name))     
     endif
   !2d masks
   elseif(axes%rank .eq. 2) then
     diag => axes%diag
-    diag%maskList(register_diag_field)%mask2d => null()
-    diag%maskList(register_diag_field)%mask3d => null()
-    if (register_diag_field>MAX_NUM_DIAGNOSTICS) call MOM_error(FATAL, &
-         "MOM_diag_mediator, register_diag_field: " // &
+    diag%maskList(register_diag_field_low)%mask2d => null()
+    diag%maskList(register_diag_field_low)%mask3d => null()
+    if (register_diag_field_low>MAX_NUM_DIAGNOSTICS) call MOM_error(FATAL, &
+         "MOM_diag_mediator, register_diag_field_low: " // &
          "Too many diagnostics. Make MAX_NUM_DIAGNOSTICS bigger! "//trim(field_name))     
     if    (axes%id .eq. diag%axesT1%id) then
-        diag%maskList(register_diag_field)%mask2d =>  diag%mask2dT
+        diag%maskList(register_diag_field_low)%mask2d =>  diag%mask2dT
     elseif(axes%id .eq. diag%axesB1%id) then
-        diag%maskList(register_diag_field)%mask2d =>  diag%mask2dBu
+        diag%maskList(register_diag_field_low)%mask2d =>  diag%mask2dBu
     elseif(axes%id .eq. diag%axesCu1%id) then
-        diag%maskList(register_diag_field)%mask2d =>  diag%mask2dCu
+        diag%maskList(register_diag_field_low)%mask2d =>  diag%mask2dCu
     elseif(axes%id .eq. diag%axesCv1%id) then
-        diag%maskList(register_diag_field)%mask2d =>  diag%mask2dCv
+        diag%maskList(register_diag_field_low)%mask2d =>  diag%mask2dCv
 !    else
-!       call MOM_error(FATAL, "MOM_diag_mediator:register_diag_field: " // &
+!       call MOM_error(FATAL, "MOM_diag_mediator:register_diag_field_low: " // &
 !            "unknown axes for diagnostic variable "//trim(field_name))     
     endif
   else
-        call MOM_error(FATAL, "MOM_diag_mediator:register_diag_field: " // &
+        call MOM_error(FATAL, "MOM_diag_mediator:register_diag_field_low: " // &
              "unknown axes for diagnostic variable "//trim(field_name))          
   endif
-  endif ! if (register_diag_field>-1)
+  endif ! if (register_diag_field_low>-1)
 
-end function register_diag_field
+end function register_diag_field_low
 
 function register_static_field(module_name, field_name, axes, &
      long_name, units, missing_value, range, mask_variant, standard_name, &
