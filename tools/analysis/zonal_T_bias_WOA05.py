@@ -20,6 +20,7 @@ cmdLineArgs = parser.parse_args()
 
 rootGroup = netCDF4.Dataset( cmdLineArgs.annual_file )
 if 'temp' not in rootGroup.variables: raise Exception('Could not find "temp" in file "%s"'%(cmdLineArgs.annual_file))
+if 'e' not in rootGroup.variables: raise Exception('Could not find "e" in file "%s"'%(cmdLineArgs.annual_file))
 
 y = netCDF4.Dataset(cmdLineArgs.gridspecdir+'/ocean_hgrid.nc').variables['y'][1::2,1::2].max(axis=-1)
 msk = netCDF4.Dataset(cmdLineArgs.gridspecdir+'/ocean_mask.nc').variables['mask'][:]
@@ -33,12 +34,11 @@ def zonalAverage(T, eta, area, mask=1.):
 Tobs = netCDF4.Dataset( cmdLineArgs.woa ).variables['temp'][:]
 Zobs = netCDF4.Dataset( cmdLineArgs.woa ).variables['eta'][:]
 
-variable = rootGroup.variables['temp']
-if variable.shape[0]>1:
-  Tmod = variable[:,:].mean(axis=0)
+if rootGroup.variables['temp'].shape[0]>1:
+  Tmod = rootGroup.variables['temp'][:,:].mean(axis=0)
   Zmod = rootGroup.variables['e'][0]
 else:
-  Tmod = variable[0]
+  Tmod = rootGroup.variables['temp'][0]
   Zmod = rootGroup.variables['e'][0]
 
 ci=m6plot.pmCI(0.25,4.5,.5)
