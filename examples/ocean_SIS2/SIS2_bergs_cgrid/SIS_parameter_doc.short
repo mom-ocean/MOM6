@@ -64,6 +64,8 @@ ICE_TDAMP_ELASTIC = 1000.0      !   [s] default = 0.0
                                 ! The damping timescale associated with the elastic terms
                                 ! in the sea-ice dynamics equations.
 
+! === module SIS_tracer_registry ===
+
 ! === module SIS_sum_output ===
 DOCUMENT_FILE = "SIS_parameter_doc" ! default = "MOM_parameter_doc"
                                 ! The basename for files where run-time parameters, their

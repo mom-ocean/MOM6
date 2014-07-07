@@ -252,6 +252,8 @@ CHECK_ICE_TRANSPORT_CONSERVATION = False !   [Boolean] default = False
                                 ! mass conservation in the sea-ice transport code.  This
                                 ! is expensive and should be used sparingly.
 
+! === module SIS_tracer_registry ===
+
 ! === module SIS_sum_output ===
 WRITE_STOCKS = True             !   [Boolean] default = True
                                 ! If true, write the integrated tracer amounts to stdout

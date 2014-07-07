@@ -53,6 +53,8 @@ NSTEPS_DYN = 72                 ! default = 432
                                 ! The number of iterations in the EVP dynamics for each
                                 ! slow time step.
 
+! === module SIS_tracer_registry ===
+
 ! === module SIS_sum_output ===
 DOCUMENT_FILE = "SIS_parameter_doc" ! default = "MOM_parameter_doc"
                                 ! The basename for files where run-time parameters, their
