@@ -433,6 +433,9 @@ def yzcompare(field1, field2, y=None, z=None,
     if centerlabels and len(clim)>2: cb1.set_ticks(  0.5*(clim[:-1]+clim[1:]) )
     axis.set_axis_bgcolor(landcolor)
     plt.xlim( xLims ); plt.ylim( yLims )
+    if splitscale!=None:
+      for zzz in splitscale[1:-1]: plt.axhline(zzz,color='k',linestyle='--')
+      axis.set_yscale('splitscale', zval=splitscale)
     annotateStats(axis, s1Min, s1Max, s1Mean, s1Std, s1RMS)
     axis.set_xticklabels([''])
     if len(zlabel+zunits)>0: plt.ylabel(label(zlabel, zunits))
@@ -445,6 +448,9 @@ def yzcompare(field1, field2, y=None, z=None,
     if centerlabels and len(clim)>2: cb2.set_ticks(  0.5*(clim[:-1]+clim[1:]) )
     axis.set_axis_bgcolor(landcolor)
     plt.xlim( xLims ); plt.ylim( yLims )
+    if splitscale!=None:
+      for zzz in splitscale[1:-1]: plt.axhline(zzz,color='k',linestyle='--')
+      axis.set_yscale('splitscale', zval=splitscale)
     annotateStats(axis, s2Min, s2Max, s2Mean, s2Std, s2RMS)
     if npanels>2: axis.set_xticklabels([''])
     if len(zlabel+zunits)>0: plt.ylabel(label(zlabel, zunits))
