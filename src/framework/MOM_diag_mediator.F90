@@ -500,14 +500,17 @@ function get_diag_time_end(diag)
   get_diag_time_end = diag%time_end
 end function get_diag_time_end
 
-function register_diag_field(module_name, field_name, axes, init_time, &
-     long_name, units, missing_value, range, mask_variant, standard_name, &
-     verbose, do_not_log, err_msg, interp_method, tile_count)
+function register_diag_field(module_name, field_name, axes, init_time,         &
+     long_name, units, missing_value, range, mask_variant, standard_name,      &
+     verbose, do_not_log, err_msg, interp_method, tile_count, cmor_field_name, &
+     cmor_long_name, cmor_units, cmor_standard_name)
   integer :: register_diag_field
   character(len=*), intent(in) :: module_name, field_name
   type(axesType),   intent(in) :: axes
   type(time_type),  intent(in) :: init_time
   character(len=*), optional, intent(in) :: long_name, units, standard_name
+  character(len=*), optional, intent(in) :: cmor_field_name, cmor_long_name
+  character(len=*), optional, intent(in) :: cmor_units, cmor_standard_name
   real,             optional, intent(in) :: missing_value, range(2)
   logical,          optional, intent(in) :: mask_variant, verbose, do_not_log
   character(len=*), optional, intent(out):: err_msg
@@ -521,6 +524,9 @@ function register_diag_field(module_name, field_name, axes, init_time, &
   !  (in,opt)  long_name - The long name of a field.
   !  (in,opt)  units - The units of a field.
   !  (in,opt)  standard_name - The standardized name associated with a field. (Not yet used in MOM.)
+  !  (in,opt)  cmor_long_name - The cmor long name of a field.
+  !  (in,opt)  cmor_units - The cmor units of a field.
+  !  (in,opt)  cmor_standard_name - The cmor standardized name associated with a field. 
   !  (in,opt)  missing_value - A value that indicates missing values.
   !  (in,opt)  range - The valid range of a variable. (Not used in MOM.)
   !  (in,opt)  mask_variant - If true a logical mask must be provided with post_data calls.  (Not used in MOM.)
@@ -529,10 +535,13 @@ function register_diag_field(module_name, field_name, axes, init_time, &
   !  (out,opt) err_msg - An character string into which an error message might be placed. (Not used in MOM.)
   !  (in,opt)  interp_method - No clue. (Not used in MOM.)
   !  (in,opt)  tile_count - No clue. (Not used in MOM.)
+
   register_diag_field = register_diag_field_low(module_name, field_name, axes, init_time,        &
      long_name=long_name, units=units, missing_value=missing_value, range=range,                 &
      mask_variant=mask_variant, standard_name=standard_name, verbose=verbose,                    &
      do_not_log=do_not_log, err_msg=err_msg, interp_method=interp_method, tile_count=tile_count)
+
+  
   
 end function register_diag_field
 
