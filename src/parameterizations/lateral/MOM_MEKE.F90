@@ -6,7 +6,8 @@ module MOM_MEKE
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator, only : diag_ctrl, time_type
-use MOM_domains, only : pass_var !, pass_vector
+use MOM_domains,       only : create_group_pass, do_group_pass
+use MOM_domains,       only : group_pass_type
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, NOTE, MOM_mesg
 use MOM_file_parser, only : read_param, get_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
@@ -50,6 +51,7 @@ type, public :: MEKE_CS ; private
 end type MEKE_CS
 
 integer :: id_clock_pass
+type(group_pass_type) :: pass_MEKE, pass_Kh !For group halo pass
 
 contains
 
@@ -221,7 +223,7 @@ subroutine step_forward_MEKE(MEKE, h, visc, dt, G, CS)
 !$OMP end parallel
     if (CS%MEKE_KH >= 0.0) then
       call cpu_clock_begin(id_clock_pass)
-      call pass_var(MEKE%MEKE, G%Domain)
+      call do_group_pass(pass_MEKE, G%Domain)
       call cpu_clock_end(id_clock_pass)
       
       ! ### More elaborate prescriptions for Kh could be used here.
@@ -294,7 +296,7 @@ subroutine step_forward_MEKE(MEKE, h, visc, dt, G, CS)
     endif
 
     call cpu_clock_begin(id_clock_pass)
-    call pass_var(MEKE%MEKE, G%Domain)
+    call do_group_pass(pass_MEKE, G%Domain)
     call cpu_clock_end(id_clock_pass)
 
     ! Calculate diffusivity for main model to use
@@ -312,7 +314,7 @@ subroutine step_forward_MEKE(MEKE, h, visc, dt, G, CS)
         enddo ; enddo
       endif
       call cpu_clock_begin(id_clock_pass)
-      call pass_var(MEKE%Kh, G%Domain)
+      call do_group_pass(pass_Kh, G%Domain)
       call cpu_clock_end(id_clock_pass)
     endif
 
@@ -448,8 +450,14 @@ subroutine MEKE_init(Time, G, param_file, diag, CS, MEKE)
                  "the deformation radius.", units="nondim", default=.true.)
 
 ! In the case of a restart, these fields need a halo update
-  if (associated(MEKE%MEKE)) call pass_var(MEKE%MEKE, G%Domain)
-  if (associated(MEKE%Kh)) call pass_var(MEKE%Kh, G%Domain)
+  if (associated(MEKE%MEKE)) then
+    call create_group_pass(pass_MEKE, MEKE%MEKE, G%Domain)
+    call do_group_pass(pass_MEKE, G%Domain)
+  endif
+  if (associated(MEKE%Kh)) then
+    call create_group_pass(pass_Kh, MEKE%Kh, G%Domain)
+    call do_group_pass(pass_Kh, G%Domain)
+  endif
 
 ! Register fields for output from this module.
   CS%id_MEKE = register_diag_field('ocean_model', 'MEKE', diag%axesT1, Time, &

@@ -36,7 +36,10 @@ use mpp_domains_mod, only : global_field_sum => mpp_global_sum
 use mpp_domains_mod, only : mpp_update_domains, CYCLIC_GLOBAL_DOMAIN, FOLD_NORTH_EDGE
 use mpp_domains_mod, only : mpp_start_update_domains, mpp_complete_update_domains
 use mpp_domains_mod, only : mpp_create_group_update, mpp_do_group_update
-use mpp_domains_mod, only : group_update_type => mpp_group_update_type
+use mpp_domains_mod, only : group_pass_type => mpp_group_update_type
+use mpp_domains_mod, only : mpp_reset_group_update_field
+use mpp_domains_mod, only : mpp_group_update_initialized
+use mpp_domains_mod, only : mpp_start_group_update, mpp_complete_group_update
 use mpp_parameter_mod, only : AGRID, BGRID_NE, CGRID_NE, SCALAR_PAIR, BITWISE_EXACT_SUM, CORNER
 use mpp_parameter_mod, only : To_East => WUPDATE, To_West => EUPDATE
 use mpp_parameter_mod, only : To_North => SUPDATE, To_South => NUPDATE
@@ -54,7 +57,8 @@ public :: pass_vector_start, pass_vector_complete
 public :: global_field_sum, sum_across_PEs, min_across_PEs, max_across_PEs
 public :: AGRID, BGRID_NE, CGRID_NE, SCALAR_PAIR, BITWISE_EXACT_SUM, CORNER
 public :: To_East, To_West, To_North, To_South, To_All
-public :: create_group_update, do_group_update, group_update_type
+public :: create_group_pass, do_group_pass, group_pass_type
+public :: start_group_pass, complete_group_pass
 
 interface pass_var
   module procedure pass_var_3d, pass_var_2d
@@ -80,10 +84,12 @@ interface pass_vector_complete
   module procedure pass_vector_complete_3d, pass_vector_complete_2d
 end interface pass_vector_complete
 
-interface create_group_update
-  module procedure create_var_group_update_2d
-  module procedure create_vector_group_update_2d
-end interface create_group_update
+interface create_group_pass
+  module procedure create_var_group_pass_2d
+  module procedure create_var_group_pass_3d
+  module procedure create_vector_group_pass_2d
+  module procedure create_vector_group_pass_3d
+end interface create_group_pass
 
 interface fill_symmetric_edges
   module procedure fill_vector_symmetric_edges_2d !, fill_vector_symmetric_edges_3d
@@ -640,15 +646,15 @@ subroutine pass_vector_complete_3d(id_update, u_cmpt, v_cmpt, MOM_dom, direction
 
 end subroutine pass_vector_complete_3d
 
-subroutine create_var_group_update_2d(group, array, MOM_dom, sideflag, position)
-  type(group_update_type),intent(inout) :: group
+subroutine create_var_group_pass_2d(group, array, MOM_dom, sideflag, position)
+  type(group_pass_type),  intent(inout) :: group
   real, dimension(:,:),   intent(inout) :: array
   type(MOM_domain_type),  intent(inout) :: MOM_dom
   integer,      optional, intent(in)    :: sideflag
   integer,      optional, intent(in)    :: position
 ! Arguments: 
 !  (inout)   group - The data type that store information for group update. 
-!                    This data will be used in do_group_update.
+!                    This data will be used in do_group_pass.
 !  (inout)   array - The array which is having its halos points exchanged.
 !  (in)      MOM_dom - The MOM_domain_type containing the mpp_domain needed to
 !                      determine where data should be sent.
@@ -660,20 +666,64 @@ subroutine create_var_group_update_2d(group, array, MOM_dom, sideflag, position)
 !                       the default if sideflag is omitted.
 !  (in)      position - An optional argument indicating the position.  This is
 !                       may be CORNER, but is CENTER by default.
+  integer :: dirflag
 
-  call mpp_create_group_update(group, array, MOM_dom%mpp_domain, flags=sideflag, position=position) 
+  dirflag = To_All ! 60
+  if (PRESENT(sideflag)) then ; if (sideflag > 0) dirflag = sideflag ; endif
 
-end subroutine create_var_group_update_2d
+  if (mpp_group_update_initialized(group)) then
+    call mpp_reset_group_update_field(group,array)
+  else
+    call mpp_create_group_update(group, array, MOM_dom%mpp_domain, flags=dirflag, &
+                                 position=position) 
+  endif
 
-subroutine create_vector_group_update_2d(group, u_cmpt, v_cmpt, MOM_dom, direction, stagger)
-  type(group_update_type),intent(inout) :: group
+end subroutine create_var_group_pass_2d
+
+subroutine create_var_group_pass_3d(group, array, MOM_dom, sideflag, position)
+  type(group_pass_type),  intent(inout) :: group
+  real, dimension(:,:,:), intent(inout) :: array
+  type(MOM_domain_type),  intent(inout) :: MOM_dom
+  integer,      optional, intent(in)    :: sideflag
+  integer,      optional, intent(in)    :: position
+! Arguments: 
+!  (inout)   group - The data type that store information for group update. 
+!                    This data will be used in do_group_pass.
+!  (inout)   array - The array which is having its halos points exchanged.
+!  (in)      MOM_dom - The MOM_domain_type containing the mpp_domain needed to
+!                      determine where data should be sent.
+!  (in)      sideflag - An optional integer indicating which directions the
+!                       data should be sent.  It is TO_ALL or the sum of any of
+!                       TO_EAST, TO_WEST, TO_NORTH, and TO_SOUTH.  For example,
+!                       TO_EAST sends the data to the processor to the east, so
+!                       the halos on the western side are filled.  TO_ALL is
+!                       the default if sideflag is omitted.
+!  (in)      position - An optional argument indicating the position.  This is
+!                       may be CORNER, but is CENTER by default.
+  integer :: dirflag
+
+  dirflag = To_All ! 60
+  if (PRESENT(sideflag)) then ; if (sideflag > 0) dirflag = sideflag ; endif
+
+  if (mpp_group_update_initialized(group)) then
+    call mpp_reset_group_update_field(group,array)
+  else
+    call mpp_create_group_update(group, array, MOM_dom%mpp_domain, flags=dirflag, &
+                                 position=position)
+  endif
+
+end subroutine create_var_group_pass_3d
+
+
+subroutine create_vector_group_pass_2d(group, u_cmpt, v_cmpt, MOM_dom, direction, stagger)
+  type(group_pass_type),  intent(inout) :: group
   real, dimension(:,:),   intent(inout) :: u_cmpt, v_cmpt
   type(MOM_domain_type),  intent(inout) :: MOM_dom
   integer,      optional, intent(in)    :: direction
   integer,      optional, intent(in)    :: stagger
 ! Arguments: 
 !  (inout)   group - The data type that store information for group update. 
-!                    This data will be used in do_group_update.
+!                    This data will be used in do_group_pass.
 !  (inout)   u_cmpt - The nominal zonal (u) component of the vector pair which
 !                     is having its halos points exchanged.
 !  (inout)   v_cmpt - The nominal meridional (v) component of the vector pair
@@ -701,26 +751,103 @@ subroutine create_vector_group_update_2d(group, u_cmpt, v_cmpt, MOM_dom, directi
   dirflag = To_All ! 60
   if (PRESENT(direction)) then ; if (direction > 0) dirflag = direction ; endif
 
-
-  call mpp_create_group_update(group, u_cmpt, v_cmpt, MOM_dom%mpp_domain, &
+  if (mpp_group_update_initialized(group)) then
+    call mpp_reset_group_update_field(group,u_cmpt, v_cmpt)
+  else
+    call mpp_create_group_update(group, u_cmpt, v_cmpt, MOM_dom%mpp_domain, &
             flags=dirflag, gridtype=stagger_local)
+  endif
 
-end subroutine create_vector_group_update_2d
+end subroutine create_vector_group_pass_2d
 
-subroutine do_group_update(group, MOM_dom, d_type)
-  type(group_update_type),intent(inout) :: group
+subroutine create_vector_group_pass_3d(group, u_cmpt, v_cmpt, MOM_dom, direction, stagger)
+  type(group_pass_type),  intent(inout) :: group
+  real, dimension(:,:,:), intent(inout) :: u_cmpt, v_cmpt
   type(MOM_domain_type),  intent(inout) :: MOM_dom
-  real,                   intent(in   ) :: d_type
+  integer,      optional, intent(in)    :: direction
+  integer,      optional, intent(in)    :: stagger
+! Arguments: 
+!  (inout)   group - The data type that store information for group update. 
+!                    This data will be used in do_group_pass.
+!  (inout)   u_cmpt - The nominal zonal (u) component of the vector pair which
+!                     is having its halos points exchanged.
+!  (inout)   v_cmpt - The nominal meridional (v) component of the vector pair
+!                     which is having its halos points exchanged. 
+!  (in)      MOM_dom - The MOM_domain_type containing the mpp_domain needed to
+!                      determine where data should be sent.
+!  (in)      direction - An optional integer indicating which directions the
+!                        data should be sent.  It is TO_ALL or the sum of any of
+!                        TO_EAST, TO_WEST, TO_NORTH, and TO_SOUTH, possibly
+!                        plus SCALAR_PAIR if these are paired non-directional
+!                        scalars discretized at the typical vector component
+!                        locations.  For example, TO_EAST sends the data to the
+!                        processor to the east, so the halos on the western
+!                        side are filled.  TO_ALL is the default if omitted.
+!  (in)      stagger - An optional flag, which may be one of A_GRID, BGRID_NE,
+!                      or CGRID_NE, indicating where the two components of the
+!                      vector are discretized.  Omitting stagger is the same as
+!                      setting it to CGRID_NE.
+
+  integer :: stagger_local
+  integer :: dirflag
+
+  stagger_local = CGRID_NE ! Default value for type of grid
+  if (present(stagger)) stagger_local = stagger
+
+  dirflag = To_All ! 60
+  if (PRESENT(direction)) then ; if (direction > 0) dirflag = direction ; endif
+
+  if (mpp_group_update_initialized(group)) then
+    call mpp_reset_group_update_field(group,u_cmpt, v_cmpt)
+  else
+    call mpp_create_group_update(group, u_cmpt, v_cmpt, MOM_dom%mpp_domain, &
+            flags=dirflag, gridtype=stagger_local)
+  endif
+
+end subroutine create_vector_group_pass_3d
+
+subroutine do_group_pass(group, MOM_dom)
+  type(group_pass_type), intent(inout) :: group
+  type(MOM_domain_type), intent(inout) :: MOM_dom
+  real                                 :: d_type
 
 ! Arguments: 
 !  (inout)   group - The data type that store information for group update. 
 !  (in)      MOM_dom - The MOM_domain_type containing the mpp_domain needed to
 !                      determine where data should be sent.
-!  (in)      d_type - A scalar variable to indicate the data type.
 
   call mpp_do_group_update(group, MOM_dom%mpp_domain, d_type)
 
-end subroutine do_group_update
+end subroutine do_group_pass
+
+subroutine start_group_pass(group, MOM_dom)
+  type(group_pass_type), intent(inout) :: group
+  type(MOM_domain_type), intent(inout) :: MOM_dom
+  real                                 :: d_type
+
+! Arguments: 
+!  (inout)   group - The data type that store information for group update. 
+!  (in)      MOM_dom - The MOM_domain_type containing the mpp_domain needed to
+!                      determine where data should be sent.
+
+  call mpp_start_group_update(group, MOM_dom%mpp_domain, d_type)
+
+end subroutine start_group_pass
+
+subroutine complete_group_pass(group, MOM_dom)
+  type(group_pass_type), intent(inout) :: group
+  type(MOM_domain_type), intent(inout) :: MOM_dom
+  real                                 :: d_type
+
+! Arguments: 
+!  (inout)   group - The data type that store information for group update. 
+!  (in)      MOM_dom - The MOM_domain_type containing the mpp_domain needed to
+!                      determine where data should be sent.
+
+  call mpp_complete_group_update(group, MOM_dom%mpp_domain, d_type)
+
+end subroutine complete_group_pass
+
 
 subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
                             NIHALO, NJHALO, NIGLOBAL, NJGLOBAL, NIPROC, NJPROC, &

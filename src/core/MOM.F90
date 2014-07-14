@@ -336,10 +336,11 @@ use MOM_diag_mediator, only : disable_averaging, post_data, safe_alloc_ptr
 use MOM_diag_mediator, only : register_diag_field, register_static_field
 use MOM_diag_mediator, only : register_scalar_field
 use MOM_diag_mediator, only : set_axes_info, diag_ctrl, diag_masks_set
-use MOM_domains, only : MOM_domains_init, clone_MOM_domain, pass_var, pass_vector
-use MOM_domains, only : pass_var_start, pass_var_complete, sum_across_PEs
-use MOM_domains, only : pass_vector_start, pass_vector_complete
+use MOM_domains, only : MOM_domains_init, clone_MOM_domain
+use MOM_domains, only : sum_across_PEs
 use MOM_domains, only : To_South, To_West, To_All, CGRID_NE, SCALAR_PAIR
+use MOM_domains, only : create_group_pass, do_group_pass, group_pass_type
+use MOM_domains, only : start_group_pass, complete_group_pass
 use MOM_checksums, only : MOM_checksums_init, hchksum, uchksum, vchksum
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe
 use MOM_error_handler, only : MOM_set_verbosity, callTree_showQuery
@@ -387,7 +388,7 @@ use MOM_tracer_registry, only : add_tracer_diagnostics, tracer_registry_type
 use MOM_tracer_registry, only : tracer_registry_end
 use MOM_tracer_flow_control, only : call_tracer_register, tracer_flow_control_CS
 use MOM_tracer_flow_control, only : tracer_flow_control_init, call_tracer_surface_state
-use MOM_vert_friction, only : vertvisc, vertvisc_coef, vertvisc_remnant
+use MOM_vert_friction, only : vertvisc, vertvisc_remnant
 use MOM_vert_friction, only : vertvisc_limit_vel, vertvisc_init
 use MOM_set_visc, only : set_viscous_BBL, set_viscous_ML, set_visc_init
 use MOM_set_visc, only : set_visc_register_restarts, set_visc_CS
@@ -589,6 +590,9 @@ integer :: id_clock_pass, id_clock_pass_init ! Also in dynamics d/r
 integer :: id_clock_ALE
 integer :: id_clock_other
 
+!--- for group halo pass, used in both step_MOM and initialize_MOM
+type(group_pass_type) :: pass_uv_T_S_h
+
 contains
 
 subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
@@ -652,10 +656,16 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
   real, dimension(SZI_(CS%G),SZJ_(CS%G)) :: tmpForSumming
   real :: SST_global, SSS_global
   type(time_type) :: Time_local
-  integer :: pid_tau, pid_ustar, pid_psurf, pid_u, pid_h
-  integer :: pid_T, pid_S
   logical :: showCallTree
-  real :: temporary
+  !--- for group halo pass
+  type(group_pass_type), save :: pass_tau_ustar_psurf
+  type(group_pass_type), save :: pass_h
+  type(group_pass_type), save :: pass_ray
+  type(group_pass_type), save :: pass_bbl_thick_kv_bbl
+  type(group_pass_type), save :: pass_T_S_h
+  type(group_pass_type), save :: pass_T_S
+  type(group_pass_type), save :: pass_kd_kv_turb
+  logical                     :: do_pass_kd_kv_turb
 
   G => CS%G
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -687,16 +697,46 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
   if (.not.ASSOCIATED(fluxes%p_surf)) CS%interp_p_surf = .false.
 
   call cpu_clock_begin(id_clock_pass)
+  !--- Begin setup for group halo pass
+  call create_group_pass(pass_tau_ustar_psurf, fluxes%taux, fluxes%tauy, G%Domain)
+  if (ASSOCIATED(fluxes%ustar)) &
+    call create_group_pass(pass_tau_ustar_psurf, fluxes%ustar(:,:), G%Domain)
+  if (ASSOCIATED(fluxes%p_surf)) &
+    call create_group_pass(pass_tau_ustar_psurf, fluxes%p_surf(:,:), G%Domain)
+  call create_group_pass(pass_h, h, G%Domain)
+  if (CS%diabatic_first) then
+    if (associated(CS%visc%Ray_u) .and. associated(CS%visc%Ray_v)) &
+      call create_group_pass(pass_ray, CS%visc%Ray_u, CS%visc%Ray_v, G%Domain, &
+                             To_All+SCALAR_PAIR, CGRID_NE)
+    if (associated(CS%visc%kv_bbl_u) .and. associated(CS%visc%kv_bbl_v)) then
+      call create_group_pass(pass_bbl_thick_kv_bbl, CS%visc%bbl_thick_u, &
+                             CS%visc%bbl_thick_v, G%Domain, To_All+SCALAR_PAIR, CGRID_NE)
+      call create_group_pass(pass_bbl_thick_kv_bbl, CS%visc%kv_bbl_u, &
+                             CS%visc%kv_bbl_v, G%Domain, To_All+SCALAR_PAIR, CGRID_NE)
+    endif
+  endif
+  if (.not.CS%adiabatic .AND. CS%useALEalgorithm ) then
+    call create_group_pass(pass_T_S_h, CS%tv%T, G%Domain)
+    call create_group_pass(pass_T_S_h, CS%tv%S, G%Domain)
+    call create_group_pass(pass_T_S_h, h, G%Domain)
+  endif
+  if (CS%adiabatic ) then
+    call create_group_pass(pass_T_S, CS%tv%T, G%Domain)
+    call create_group_pass(pass_T_S, CS%tv%S, G%Domain)
+  endif
+  if ((CS%visc%Prandtl_turb > 0) .and. associated(CS%visc%Kd_turb)) &
+    call create_group_pass(pass_kd_kv_turb, CS%visc%Kd_turb, G%Domain)
+  if (associated(CS%visc%Kv_turb)) &
+    call create_group_pass(pass_kd_kv_turb, CS%visc%Kv_turb, G%Domain)
+  !--- End setup for group halo pass
+
+  do_pass_kd_kv_turb = ((CS%visc%Prandtl_turb > 0) .and. associated(CS%visc%Kd_turb)) &
+                       .OR. associated(CS%visc%Kv_turb)
+
   if (G%nonblocking_updates) then
-    pid_tau = pass_vector_start(fluxes%taux, fluxes%tauy, G%Domain)
-    if (ASSOCIATED(fluxes%ustar)) &
-      pid_ustar = pass_var_start(fluxes%ustar(:,:), G%Domain)
-    if (ASSOCIATED(fluxes%p_surf)) &
-      pid_psurf = pass_var_start(fluxes%p_surf(:,:), G%Domain)
+    call start_group_pass(pass_tau_ustar_psurf, G%Domain)
   else
-    call pass_vector(fluxes%taux, fluxes%tauy, G%Domain)
-    if (ASSOCIATED(fluxes%ustar)) call pass_var(fluxes%ustar(:,:), G%Domain)
-    if (ASSOCIATED(fluxes%p_surf)) call pass_var(fluxes%p_surf(:,:), G%Domain)
+    call do_group_pass(pass_tau_ustar_psurf, G%Domain)
   endif
   call cpu_clock_end(id_clock_pass)
   if (ASSOCIATED(CS%tv%frazil)) CS%tv%frazil(:,:) = 0.0
@@ -737,11 +777,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
   if (G%nonblocking_updates) then
     call cpu_clock_begin(id_clock_pass)
-    call pass_vector_complete(pid_tau, fluxes%taux, fluxes%tauy, G%Domain)
-    if (ASSOCIATED(fluxes%ustar)) &
-      call pass_var_complete(pid_ustar, fluxes%ustar(:,:), G%Domain)
-    if (ASSOCIATED(fluxes%p_surf)) &
-      call pass_var_complete(pid_psurf, fluxes%p_surf(:,:), G%Domain)
+    call complete_group_pass(pass_tau_ustar_psurf, G%Domain)
     call cpu_clock_end(id_clock_pass)
   endif
   call cpu_clock_end(id_clock_other)
@@ -777,15 +813,10 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         !call cpu_clock_end(id_clock_vertvisc)
     
         call cpu_clock_begin(id_clock_pass)
-        if (associated(CS%visc%Ray_u) .and. associated(CS%visc%Ray_v)) &
-          call pass_vector(CS%visc%Ray_u, CS%visc%Ray_v, G%Domain, &
-                         To_All+SCALAR_PAIR, CGRID_NE)
-        if (associated(CS%visc%kv_bbl_u) .and. associated(CS%visc%kv_bbl_v)) then
-          call pass_vector(CS%visc%bbl_thick_u, CS%visc%bbl_thick_v, G%Domain, &
-                         To_All+SCALAR_PAIR, CGRID_NE, complete=.false.)
-          call pass_vector(CS%visc%kv_bbl_u, CS%visc%kv_bbl_v, G%Domain, &
-                         To_All+SCALAR_PAIR, CGRID_NE)
-        endif
+        if(associated(CS%visc%Ray_u) .and. associated(CS%visc%Ray_v)) &
+          call do_group_pass(pass_ray, G%Domain )
+        if(associated(CS%visc%kv_bbl_u) .and. associated(CS%visc%kv_bbl_v))  &
+          call do_group_pass(pass_bbl_thick_kv_bbl, G%Domain )
         call cpu_clock_end(id_clock_pass)
         if (showCallTree) call callTree_wayPoint("done with set_viscous_BBL (step_MOM_dyn_split_RK2)")
       !endif
@@ -813,9 +844,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         ! The routine 'ALE_main' can be found in 'MOM_ALE.F90'.
         if ( CS%useALEalgorithm ) then 
 !         call pass_vector(u, v, G%Domain)
-          call pass_var(CS%tv%T, G%Domain, complete=.false.)
-          call pass_var(CS%tv%S, G%Domain, complete=.false.)
-          call pass_var(h, G%Domain)
+          call do_group_pass(pass_T_S_h, G%Domain)
           if (CS%debug) then
             call MOM_state_chksum("Pre-ALE 1 ", u, v, h, CS%uh, CS%vh, G)
             call hchksum(CS%tv%T,"Pre-ALE 1 T", G, haloshift=1)
@@ -834,28 +863,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         endif   
 
         call cpu_clock_begin(id_clock_pass)
-        if (G%nonblocking_updates) then        
-          pid_u = pass_vector_start(u, v, G%Domain)
-          if (CS%use_temperature) then
-            pid_T = pass_var_start(CS%tv%T, G%Domain)
-            pid_S = pass_var_start(CS%tv%S, G%Domain)
-          endif
-          pid_h = pass_var_start(h, G%Domain)
-
-          call pass_vector_complete(pid_u, u, v, G%Domain)
-          if (CS%use_temperature) then
-            call pass_var_complete(pid_T, CS%tv%T, G%Domain)
-            call pass_var_complete(pid_S, CS%tv%S, G%Domain)
-          endif
-          call pass_var_complete(pid_h, h, G%Domain)
-        else 
-          call pass_vector(u, v, G%Domain)
-          if (CS%use_temperature) then
-            call pass_var(CS%tv%T, G%Domain, complete=.false.)
-            call pass_var(CS%tv%S, G%Domain, complete=.false.)
-          endif
-          call pass_var(h, G%Domain)
-        endif
+        call do_group_pass(pass_uv_T_S_h, G%Domain)
         call cpu_clock_end(id_clock_pass)
 
         if (CS%debug) then
@@ -883,8 +891,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
         if (CS%use_temperature) then
           call cpu_clock_begin(id_clock_pass)
-          call pass_var(CS%tv%T, G%Domain, complete=.false.)
-          call pass_var(CS%tv%S, G%Domain, complete=.true.)
+          call do_group_pass(pass_T_S, G%Domain)
           call cpu_clock_end(id_clock_pass)
           if (CS%debug) then
             if (associated(CS%tv%T)) call hchksum(CS%tv%T, "Post-dia first T", G, haloshift=1)
@@ -900,9 +907,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     call cpu_clock_begin(id_clock_other)
 
     call cpu_clock_begin(id_clock_pass)
-    if ((CS%visc%Prandtl_turb > 0) .and. associated(CS%visc%Kd_turb)) &
-         call pass_var(CS%visc%Kd_turb, G%Domain)
-    if (associated(CS%visc%Kv_turb)) call pass_var(CS%visc%Kv_turb, G%Domain)
+    if (do_pass_kd_kv_turb) call do_group_pass(pass_kd_kv_turb, G%Domain)
     call cpu_clock_end(id_clock_pass)
 
     call cpu_clock_end(id_clock_other)
@@ -922,7 +927,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
                                CS%MEKE, CS%VarMix, CS%CDp, CS%thickness_diffuse_CSp)
         call cpu_clock_end(id_clock_thick_diff)
         call cpu_clock_begin(id_clock_pass)
-        call pass_var(h, G%Domain)
+        call do_group_pass(pass_h, G%Domain)
         call cpu_clock_end(id_clock_pass)
         call disable_averaging(CS%diag)
         if (showCallTree) call callTree_waypoint("finished thickness_diffuse_first (step_MOM)")
@@ -1005,7 +1010,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
                              CS%MEKE, CS%VarMix, CS%CDp, CS%thickness_diffuse_CSp)
       call cpu_clock_end(id_clock_thick_diff)
       call cpu_clock_begin(id_clock_pass)
-      call pass_var(h, G%Domain)
+      call do_group_pass(pass_h, G%Domain)
       call cpu_clock_end(id_clock_pass)
       if (showCallTree) call callTree_waypoint("finished thickness_diffuse (step_MOM)")
     endif
@@ -1016,7 +1021,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
                               G, CS%mixedlayer_restrat_CSp)
       call cpu_clock_end(id_clock_ml_restrat)
       call cpu_clock_begin(id_clock_pass)
-      call pass_var(h, G%Domain)
+      call do_group_pass(pass_h, G%Domain)
       call cpu_clock_end(id_clock_pass)
     endif
 
@@ -1104,9 +1109,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         ! The routine 'ALE_main' can be found in 'MOM_ALE.F90'.
         if ( CS%useALEalgorithm ) then 
 !         call pass_vector(u, v, G%Domain)
-          call pass_var(CS%tv%T, G%Domain, complete=.false.)
-          call pass_var(CS%tv%S, G%Domain, complete=.false.)
-          call pass_var(h, G%Domain)
+          call do_group_pass(pass_T_S_h, G%Domain)
           if (CS%debug) then
             call MOM_state_chksum("Pre-ALE ", u, v, h, CS%uh, CS%vh, G)
             call hchksum(CS%tv%T,"Pre-ALE T", G, haloshift=1)
@@ -1125,28 +1128,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         endif   
 
         call cpu_clock_begin(id_clock_pass)
-        if (G%nonblocking_updates) then        
-          pid_u = pass_vector_start(u, v, G%Domain)
-          if (CS%use_temperature) then
-            pid_T = pass_var_start(CS%tv%T, G%Domain)
-            pid_S = pass_var_start(CS%tv%S, G%Domain)
-          endif
-          pid_h = pass_var_start(h, G%Domain)
-
-          call pass_vector_complete(pid_u, u, v, G%Domain)
-          if (CS%use_temperature) then
-            call pass_var_complete(pid_T, CS%tv%T, G%Domain)
-            call pass_var_complete(pid_S, CS%tv%S, G%Domain)
-          endif
-          call pass_var_complete(pid_h, h, G%Domain)
-        else 
-          call pass_vector(u, v, G%Domain)
-          if (CS%use_temperature) then
-            call pass_var(CS%tv%T, G%Domain, complete=.false.)
-            call pass_var(CS%tv%S, G%Domain, complete=.false.)
-          endif
-          call pass_var(h, G%Domain)
-        endif
+        call do_group_pass(pass_uv_T_S_h, G%Domain)
         call cpu_clock_end(id_clock_pass)
 
         if (CS%debug) then
@@ -1175,8 +1157,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
         if (CS%use_temperature) then
           call cpu_clock_begin(id_clock_pass)
-          call pass_var(CS%tv%T, G%Domain, complete=.false.)
-          call pass_var(CS%tv%S, G%Domain, complete=.true.)
+          call do_group_pass(pass_T_S, G%Domain)
           call cpu_clock_end(id_clock_pass)
           if (CS%debug) then
             if (associated(CS%tv%T)) call hchksum(CS%tv%T, "Post-diabatic T", G, haloshift=1)
@@ -1412,6 +1393,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   type(time_type) :: Start_time
   type(MOM_initialization_struct) :: init_CS
   type(ocean_internal_state) :: MOM_internal_state
+  type(group_pass_type) :: pass_p_surf_prev
 
   if (associated(CS)) then
     call MOM_error(WARNING, "initialize_MOM called with an associated "// &
@@ -1891,13 +1873,14 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
            CS%tracer_flow_CSp, init_CS%sponge_CSp, CS%diag_to_Z_CSp)
 
   call cpu_clock_begin(id_clock_pass_init)
-  call pass_vector(CS%u, CS%v, G%Domain)
-  call pass_var(CS%h, G%Domain)
-
+  !--- set up group pass for u,v,T,S and h. pass_uv_T_S_h also is used in step_MOM
+  call create_group_pass(pass_uv_T_S_h, CS%u, CS%v, G%Domain)
   if (CS%use_temperature) then
-    call pass_var(CS%tv%T, G%Domain)
-    call pass_var(CS%tv%S, G%Domain)
+    call create_group_pass(pass_uv_T_S_h, CS%tv%T, G%Domain)
+    call create_group_pass(pass_uv_T_S_h, CS%tv%S, G%Domain)
   endif
+  call create_group_pass(pass_uv_T_S_h, CS%h, G%Domain)
+  call do_group_pass(pass_uv_T_S_h, G%Domain)
   call cpu_clock_end(id_clock_pass_init)
 
   call write_static_fields(G, CS%diag)
@@ -1923,7 +1906,10 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     CS%p_surf_prev_set = &
       query_initialized(CS%p_surf_prev,"p_surf_prev",CS%restart_CSp)
 
-    if (CS%p_surf_prev_set) call pass_var(CS%p_surf_prev,G%domain)
+    if (CS%p_surf_prev_set) then
+      call create_group_pass(pass_p_surf_prev, CS%p_surf_prev,G%domain)
+      call do_group_pass(pass_p_surf_prev, G%domain)
+    endif
   endif
   
   if (.not.query_initialized(CS%ave_ssh,"ave_ssh",CS%restart_CSp)) then
@@ -2577,6 +2563,7 @@ subroutine smooth_SSH(ssh, G, smooth_passes)
   real :: wt
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed, isl, iel, jsl, jel, halo
   integer :: pass, tot_pass
+  type(group_pass_type), save :: pass_ssh
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -2595,9 +2582,11 @@ subroutine smooth_SSH(ssh, G, smooth_passes)
     area_y(i,J) = min(G%dx_Cv(i,J)*G%dyCv(i,J), G%areaT(i,j), G%areaT(i,j+1))
   enddo ; enddo
 
+  call create_group_pass(pass_ssh, ssh, G%domain)
+
   do pass=1,tot_pass
     if (halo < 0) then
-      call pass_var(ssh, G%domain)
+      call do_group_pass(pass_ssh, G%domain)
       halo = min(is-isd-1, ied-ie-1, js-jsd-1, jed-je-1, tot_pass-pass)
     endif
     isl = is-halo ; iel = ie+halo ; jsl = js-halo ; jel = je+halo
