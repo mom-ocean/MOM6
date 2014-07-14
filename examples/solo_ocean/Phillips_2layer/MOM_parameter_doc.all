@@ -350,6 +350,7 @@ THICKNESS_CONFIG = "phillips"   !
                                 !     adjustment2d - TBD AJA.
                                 !     sloshing - TBD AJA.
                                 !     seamount - TBD AJA.
+                                !     rossby_front - a mixed layer front in thermal wind balance.
                                 !     USER - call a user modified routine.
 HALF_STRAT_DEPTH = 0.25         !   [nondim] default = 0.5
                                 ! The maximum depth of the ocean.
@@ -365,7 +366,8 @@ VELOCITY_CONFIG = "phillips"    ! default = "zero"
                                 !       by (VELOCITY_FILE).
                                 !     zero - the fluid is initially at rest.
                                 !     uniform - the flow is uniform (determined by
-                                !       paremters TORUS_U and TORUS_V).
+                                !       parameters TORUS_U and TORUS_V).
+                                !     rossby_front - a mixed layer front in thermal wind balance.
                                 !     USER - call a user modified routine.
 VELOCITY_IC_PERTURB_AMP = 0.001 !   [m s-1] default = 0.001
                                 ! The magnitude of the initial velocity perturbation.

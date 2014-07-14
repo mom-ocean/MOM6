@@ -193,6 +193,7 @@ THICKNESS_CONFIG = "adjustment2d" !
                                 !     adjustment2d - TBD AJA.
                                 !     sloshing - TBD AJA.
                                 !     seamount - TBD AJA.
+                                !     rossby_front - a mixed layer front in thermal wind balance.
                                 !     USER - call a user modified routine.
 MIN_THICKNESS = 1.0E-04         !   [m] default = 0.001
                                 ! Minimum layer thickness
@@ -217,6 +218,7 @@ TS_CONFIG = "adjustment2d"      !
                                 !     adjustment2d - TBD AJA.
                                 !     sloshing - TBD AJA.
                                 !     seamount - TBD AJA.
+                                !     rossby_front - a mixed layer front in thermal wind balance.
                                 !     USER - call a user modified routine.
 S_REF = 0.0                     !   [1e-3]
                                 ! Reference salinity

@@ -185,6 +185,7 @@ THICKNESS_CONFIG = "seamount"   !
                                 !     adjustment2d - TBD AJA.
                                 !     sloshing - TBD AJA.
                                 !     seamount - TBD AJA.
+                                !     rossby_front - a mixed layer front in thermal wind balance.
                                 !     USER - call a user modified routine.
 MIN_THICKNESS = 0.1             !   [m] default = 0.001
                                 ! Minimum thickness for layer
@@ -203,6 +204,7 @@ TS_CONFIG = "seamount"          !
                                 !     adjustment2d - TBD AJA.
                                 !     sloshing - TBD AJA.
                                 !     seamount - TBD AJA.
+                                !     rossby_front - a mixed layer front in thermal wind balance.
                                 !     USER - call a user modified routine.
 REGRIDDING_COORDINATE_MODE = "SIGMA" ! default = "LAYER"
                                 ! Coordinate mode for vertical regridding.

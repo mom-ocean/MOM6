@@ -188,6 +188,7 @@ THICKNESS_CONFIG = "external_gwave" !
                                 !     adjustment2d - TBD AJA.
                                 !     sloshing - TBD AJA.
                                 !     seamount - TBD AJA.
+                                !     rossby_front - a mixed layer front in thermal wind balance.
                                 !     USER - call a user modified routine.
 SSH_ANOMALY_HEIGHT = 1.0        !   [m]
                                 ! The vertical displacement of the SSH anomaly.
@@ -208,6 +209,7 @@ TS_CONFIG = "fit"               !
                                 !     adjustment2d - TBD AJA.
                                 !     sloshing - TBD AJA.
                                 !     seamount - TBD AJA.
+                                !     rossby_front - a mixed layer front in thermal wind balance.
                                 !     USER - call a user modified routine.
 T_REF = 5.0                     !   [degC]
                                 ! A reference temperature used in initialization.

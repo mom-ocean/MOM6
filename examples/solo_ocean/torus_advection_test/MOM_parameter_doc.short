@@ -197,6 +197,7 @@ THICKNESS_CONFIG = "uniform"    !
                                 !     adjustment2d - TBD AJA.
                                 !     sloshing - TBD AJA.
                                 !     seamount - TBD AJA.
+                                !     rossby_front - a mixed layer front in thermal wind balance.
                                 !     USER - call a user modified routine.
 TS_CONFIG = "fit"               !
                                 ! A string that determines how the initial tempertures
@@ -213,6 +214,7 @@ TS_CONFIG = "fit"               !
                                 !     adjustment2d - TBD AJA.
                                 !     sloshing - TBD AJA.
                                 !     seamount - TBD AJA.
+                                !     rossby_front - a mixed layer front in thermal wind balance.
                                 !     USER - call a user modified routine.
 VELOCITY_CONFIG = "uniform"     ! default = "zero"
                                 ! A string that determines how the initial velocities
@@ -221,7 +223,8 @@ VELOCITY_CONFIG = "uniform"     ! default = "zero"
                                 !       by (VELOCITY_FILE).
                                 !     zero - the fluid is initially at rest.
                                 !     uniform - the flow is uniform (determined by
-                                !       paremters TORUS_U and TORUS_V).
+                                !       parameters TORUS_U and TORUS_V).
+                                !     rossby_front - a mixed layer front in thermal wind balance.
                                 !     USER - call a user modified routine.
 INITIAL_U_CONST = 0.2           !   [m s-1]
                                 ! A initial uniform value for the zonal flow.

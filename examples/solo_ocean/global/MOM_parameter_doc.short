@@ -195,6 +195,7 @@ THICKNESS_CONFIG = "file"       !
                                 !     adjustment2d - TBD AJA.
                                 !     sloshing - TBD AJA.
                                 !     seamount - TBD AJA.
+                                !     rossby_front - a mixed layer front in thermal wind balance.
                                 !     USER - call a user modified routine.
 THICKNESS_FILE = "GOLD_IC.2010.11.15.nc" !
                                 ! The name of the thickness file.
@@ -217,6 +218,7 @@ TS_CONFIG = "file"              !
                                 !     adjustment2d - TBD AJA.
                                 !     sloshing - TBD AJA.
                                 !     seamount - TBD AJA.
+                                !     rossby_front - a mixed layer front in thermal wind balance.
                                 !     USER - call a user modified routine.
 TS_FILE = "GOLD_IC.2010.11.15.nc" !
                                 ! The initial condition file for temperature.
