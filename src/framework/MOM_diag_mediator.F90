@@ -601,6 +601,7 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
   !  (in,opt)  tile_count - No clue. (Not used in MOM.)
   type(diag_ctrl), pointer :: diag
   integer :: CMORid
+  character(len=256) :: posted_cmor_units, posted_cmor_standard_name, posted_cmor_long_name
 
   register_diag_field = register_diag_field_low(module_name, field_name, axes, init_time,        &
      long_name=long_name, units=units, missing_value=missing_value, range=range,                 &
@@ -610,17 +611,27 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
   diag => axes%diag
   CMORid = -1
   if (present(cmor_field_name)) then
-    if (present(cmor_units)) then
-      CMORid = register_diag_field_low(module_name, cmor_field_name, axes, init_time,            &
-        long_name=long_name, units=cmor_units, missing_value=missing_value, range=range,         &
-        mask_variant=mask_variant, standard_name=standard_name, verbose=verbose,                 &
-        do_not_log=do_not_log, err_msg=err_msg, interp_method=interp_method, tile_count=tile_count)
-    else ! use units instead of cmor_units
-        CMORid = register_diag_field_low(module_name, cmor_field_name, axes, init_time,          &
-        long_name=long_name, units=units, missing_value=missing_value, range=range,              &
-        mask_variant=mask_variant, standard_name=standard_name, verbose=verbose,                 &
-        do_not_log=do_not_log, err_msg=err_msg, interp_method=interp_method, tile_count=tile_count)
-    endif
+    ! Fallback values for strings set to "NULL"
+    posted_cmor_units = "NULL"           !
+    posted_cmor_standard_name = "NULL"   ! Values might be able to be replaced with a CS%missing field?
+    posted_cmor_long_name = "NULL"       !
+
+    ! If attributes are present for MOM variable names, use them first for the register_diag_field 
+    ! call for CMOR verison of the variable
+    if (present(units)) posted_cmor_units = units
+    if (present(standard_name)) posted_cmor_standard_name = standard_name
+    if (present(long_name)) posted_cmor_long_name = long_name
+
+    ! If specified in the call to register_diag_field, override attributes with the CMOR versions 
+    if (present(cmor_units)) posted_cmor_units = cmor_units
+    if (present(cmor_standard_name)) posted_cmor_standard_name = cmor_standard_name
+    if (present(cmor_long_name)) posted_cmor_long_name = cmor_long_name
+
+    CMORid = register_diag_field_low(module_name, cmor_field_name, axes, init_time,            &
+      long_name=posted_cmor_long_name, units=posted_cmor_units, missing_value=missing_value,   &
+      range=range, mask_variant=mask_variant, standard_name=posted_cmor_standard_name,         &
+      verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, interp_method=interp_method,    &
+      tile_count=tile_count)
   endif
 
   ! If the diag_table contains both the normal field_name and CMOR name then we must
