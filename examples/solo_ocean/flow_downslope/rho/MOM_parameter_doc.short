@@ -390,6 +390,8 @@ DTBT = 20.0                     !   [s or nondim] default = -0.98
 KHTH = 1.0E-04                  !   [m2 s-1] default = 0.0
                                 ! The background horizontal thickness diffusivity.
 
+! === module MOM_mixed_layer_restrat ===
+
 ! === module MOM_diabatic_driver ===
 ! The following parameters are used for diabatic processes.
 KD = 0.0                        !   [m2 s-1]

@@ -154,9 +154,10 @@ subroutine mixedlayer_restrat(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
                                             ! arrays for diagnostic purposes.
   logical :: use_EOS    ! If true, density is calculated from T & S using an
                         ! equation of state.
-  integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
+  integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkml
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
+  nkml = G%nkml
 
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_mixedlayer_restrat: "// &
          "Module must be initialized before it is used.")
@@ -323,7 +324,7 @@ subroutine mixedlayer_restrat(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
 
 end subroutine mixedlayer_restrat
 
-subroutine mixedlayer_restrat_init(Time, G, param_file, diag, CS)
+logical function mixedlayer_restrat_init(Time, G, param_file, diag, CS)
   type(time_type),             intent(in)    :: Time
   type(ocean_grid_type),       intent(in)    :: G
   type(param_file_type),       intent(in)    :: param_file
@@ -354,8 +355,13 @@ subroutine mixedlayer_restrat_init(Time, G, param_file, diag, CS)
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mod, version, "")
-  call get_param(param_file, mod, "FOX_KEMPER_ML_RESTRAT_COEF", &
-                 CS%ml_restrat_coef, &
+  call get_param(param_file, mod, "MIXEDLAYER_RESTRAT", mixedlayer_restrat_init, &
+             "If true, a density-gradient dependent re-stratifying \n"//&
+             "flow is imposed in the mixed layer. \n"//&
+             "This is only used if BULKMIXEDLAYER is true.", default=.false.)
+  if (.not. mixedlayer_restrat_init) return
+
+  call get_param(param_file, mod, "FOX_KEMPER_ML_RESTRAT_COEF", CS%ml_restrat_coef, &
              "A nondimensional coefficient that is proportional to \n"//&
              "the ratio of the deformation radius to the dominant \n"//&
              "lengthscale of the submesoscale mixed layer \n"//&
@@ -374,6 +380,6 @@ subroutine mixedlayer_restrat_init(Time, G, param_file, diag, CS)
   CS%id_vrestrat_time = register_diag_field('ocean_model', 'MLv_restrat_time', diag%axesCu1, Time, &
       'Mixed Layer Meridional Restratification Timescale', 'second')
 
-end subroutine mixedlayer_restrat_init
+end function mixedlayer_restrat_init
 
 end module MOM_mixed_layer_restrat

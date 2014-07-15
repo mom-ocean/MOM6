@@ -142,10 +142,6 @@ THICKNESSDIFFUSE = True         !   [Boolean] default = False
 THICKNESSDIFFUSE_FIRST = True   !   [Boolean] default = False
                                 ! If true, do thickness diffusion before dynamics.
                                 ! This is only used if THICKNESSDIFFUSE is true.
-MIXEDLAYER_RESTRAT = True       !   [Boolean] default = False
-                                ! If true, a density-gradient dependent re-stratifying
-                                ! flow is imposed in the mixed layer.
-                                ! This is only used if BULKMIXEDLAYER is true.
 DEBUG = False                   !   [Boolean] default = False
                                 ! If true, write out verbose debugging data.
 DEBUG_TRUNCATIONS = False       !   [Boolean] default = False
@@ -1028,6 +1024,10 @@ KD_SMOOTH = 1.0E-06             !   [not defined] default = 1.0E-06
                                 ! more sensible values of T & S into thin layers.
 
 ! === module MOM_mixed_layer_restrat ===
+MIXEDLAYER_RESTRAT = True       !   [Boolean] default = False
+                                ! If true, a density-gradient dependent re-stratifying
+                                ! flow is imposed in the mixed layer.
+                                ! This is only used if BULKMIXEDLAYER is true.
 FOX_KEMPER_ML_RESTRAT_COEF = 20.0 !   [nondim] default = 0.0
                                 ! A nondimensional coefficient that is proportional to
                                 ! the ratio of the deformation radius to the dominant

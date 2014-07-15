@@ -332,6 +332,8 @@ DTBT = -0.9                     !   [s or nondim] default = -0.98
 KHTH = 1.0E-04                  !   [m2 s-1] default = 0.0
                                 ! The background horizontal thickness diffusivity.
 
+! === module MOM_mixed_layer_restrat ===
+
 ! === module MOM_wave_speed ===
 
 ! === module MOM_diabatic_driver ===

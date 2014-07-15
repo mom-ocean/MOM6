@@ -357,6 +357,8 @@ DTBT = -0.9                     !   [s or nondim] default = -0.98
 
 ! === module MOM_thickness_diffuse ===
 
+! === module MOM_mixed_layer_restrat ===
+
 ! === module MOM_diabatic_driver ===
 ! The following parameters are used for diabatic processes.
 KD = 0.0                        !   [m2 s-1]

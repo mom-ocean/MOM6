@@ -1520,10 +1520,6 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
                  "If true, do thickness diffusion before dynamics.\n"//&
                  "This is only used if THICKNESSDIFFUSE is true.", &
                  default=.false.)
-  call get_param(param_file, "MOM", "MIXEDLAYER_RESTRAT",CS%mixedlayer_restrat, &
-                 "If true, a density-gradient dependent re-stratifying \n"//&
-                 "flow is imposed in the mixed layer. \n"//&
-                 "This is only used if BULKMIXEDLAYER is true.", default=.false.)
 
   call get_param(param_file, "MOM", "DEBUG", CS%debug, &
                  "If true, write out verbose debugging data.", default=.false.)
@@ -1652,8 +1648,6 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     "MOM: ENABLE_THERMODYNAMICS must be defined to use USE_EOS.")
   if (CS%adiabatic .and. CS%bulkmixedlayer) call MOM_error(FATAL, &
     "MOM: ADIABATIC and BULKMIXEDLAYER can not both be defined.")
-  if (CS%mixedlayer_restrat .and. .not.CS%bulkmixedlayer) call MOM_error(FATAL, &
-    "MOM: MIXEDLAYER_RESTRAT true requires BULKMIXEDLAYER to be true to work.")
 
   ! Allocate the auxiliary non-symmetric domain for debugging or I/O purposes.
   if (CS%debug .or. G%symmetric) &
@@ -1840,8 +1834,9 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call callTree_waypoint("dynamics initialized (initialize_MOM)")
 
   call thickness_diffuse_init(Time, G, param_file, diag, CS%CDp, CS%thickness_diffuse_CSp)
-  if (CS%mixedlayer_restrat) &
-    call mixedlayer_restrat_init(Time, G, param_file, diag, CS%mixedlayer_restrat_CSp)
+  CS%mixedlayer_restrat = mixedlayer_restrat_init(Time, G, param_file, diag, CS%mixedlayer_restrat_CSp)
+  if (CS%mixedlayer_restrat .and. .not.CS%bulkmixedlayer) call MOM_error(FATAL, &
+    "MOM: MIXEDLAYER_RESTRAT true requires BULKMIXEDLAYER to be true to work.")
   if (associated(init_CS%OBC)) CS%OBC => init_CS%OBC
 
   call MOM_diagnostics_init(MOM_internal_state, CS%ADp, CS%CDp, Time, G, &
@@ -2151,7 +2146,7 @@ subroutine MOM_timing_init(CS)
  id_clock_pass_init = cpu_clock_id('(Ocean init message passing *)', grain=CLOCK_ROUTINE)
  if (CS%thickness_diffuse) &
    id_clock_thick_diff = cpu_clock_id('(Ocean thickness diffusion *)', grain=CLOCK_MODULE)
- if (CS%mixedlayer_restrat) &
+!if (CS%mixedlayer_restrat) &
    id_clock_ml_restrat = cpu_clock_id('(Ocean mixed layer restrat)', grain=CLOCK_MODULE)
  id_clock_diagnostics = cpu_clock_id('(Ocean collective diagnostics)', grain=CLOCK_MODULE)
  id_clock_Z_diag = cpu_clock_id('(Ocean Z-space diagnostics)', grain=CLOCK_MODULE)

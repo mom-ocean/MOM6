@@ -62,10 +62,6 @@ THICKNESSDIFFUSE = True         !   [Boolean] default = False
 THICKNESSDIFFUSE_FIRST = True   !   [Boolean] default = False
                                 ! If true, do thickness diffusion before dynamics.
                                 ! This is only used if THICKNESSDIFFUSE is true.
-MIXEDLAYER_RESTRAT = True       !   [Boolean] default = False
-                                ! If true, a density-gradient dependent re-stratifying
-                                ! flow is imposed in the mixed layer.
-                                ! This is only used if BULKMIXEDLAYER is true.
 DT = 3600.0                     !   [s]
                                 ! The (baroclinic) dynamics time step.  The time-step that
                                 ! is actually used will be an integer fraction of the
@@ -376,6 +372,10 @@ KHTH_MAX = 900.0                !   [m2 s-1] default = 0.0
                                 ! The maximum horizontal thickness diffusivity.
 
 ! === module MOM_mixed_layer_restrat ===
+MIXEDLAYER_RESTRAT = True       !   [Boolean] default = False
+                                ! If true, a density-gradient dependent re-stratifying
+                                ! flow is imposed in the mixed layer.
+                                ! This is only used if BULKMIXEDLAYER is true.
 FOX_KEMPER_ML_RESTRAT_COEF = 20.0 !   [nondim] default = 0.0
                                 ! A nondimensional coefficient that is proportional to
                                 ! the ratio of the deformation radius to the dominant
