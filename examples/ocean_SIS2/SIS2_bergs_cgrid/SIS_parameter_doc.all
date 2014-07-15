@@ -49,8 +49,11 @@ ICE_SEES_ATMOS_WINDS = True     !   [Boolean] default = True
                                 ! If true, the sea ice is being given wind stresses with
                                 ! the atmospheric sign convention, and need to have their
                                 ! sign changed.
-ICE_BULK_SALINITY = 0.005       !   [kg/kg] default = 0.004
+ICE_BULK_SALINITY = 5.0         !   [g/kg] default = 4.0
                                 ! The fixed bulk salinity of sea ice.
+ICE_RELATIVE_SALINITY = 0.0     !   [nondim] default = 0.0
+                                ! The initial salinity of sea ice as a fraction of the
+                                ! salinity of the seawater from which it formed.
 DO_ICE_RESTORE = False          !   [Boolean] default = False
                                 ! If true, restore the sea ice state toward climatology.
 APPLY_ICE_LIMIT = False         !   [Boolean] default = False
@@ -264,6 +267,16 @@ CHECK_ICE_TRANSPORT_CONSERVATION = False !   [Boolean] default = False
                                 ! mass conservation in the sea-ice transport code.  This
                                 ! is expensive and should be used sparingly.
 
+! === module SIS_tracer_advect ===
+DT = -1.0                       !   [s] default = -1.0
+                                ! The (baroclinic) dynamics time step.
+SIS_TRACER_ADVECTION_SCHEME = "UPWIND_2D" ! default = "UPWIND_2D"
+                                ! The horizontal transport scheme for tracers:
+                                !   UPWIND_2D - Non-directionally split upwind
+                                !   PCM    - Directionally split peicewise constant
+                                !   PLM    - Piecewise Linear Method
+                                !   PPM:H3 - Piecewise Parabolic Method (Huyhn 3rd order)
+
 ! === module SIS_tracer_registry ===
 
 ! === module SIS_sum_output ===
@@ -273,8 +286,6 @@ WRITE_STOCKS = True             !   [Boolean] default = True
 STDOUT_HEARTBEAT = True         !   [Boolean] default = True
                                 ! If true, periodically write sea ice statistics to
                                 ! stdout to allow the progress to be seen.
-DT = -1.0                       !   [s] default = -1.0
-                                ! The sea ice dynamics time step.
 STATISTICS_FILE = "seaice.stats" ! default = "seaice.stats"
                                 ! The file to use to write the globally integrated
                                 ! statistics.

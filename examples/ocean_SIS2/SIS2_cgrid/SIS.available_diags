@@ -27,31 +27,31 @@
     ! units: C
 "ice_model", "S_bulkice"  [Unused]
     ! long_name: Volume-averaged ice salinity
-    ! units: kg/kg
+    ! units: g/kg
 "ice_model", "T1"  [Used]
     ! long_name: ice layer 1 temperature
     ! units: C
 "ice_model", "Sal1"  [Unused]
     ! long_name: ice layer 1 salinity
-    ! units: kg/kg
+    ! units: g/kg
 "ice_model", "T2"  [Used]
     ! long_name: ice layer 2 temperature
     ! units: C
 "ice_model", "Sal2"  [Unused]
     ! long_name: ice layer 2 salinity
-    ! units: kg/kg
+    ! units: g/kg
 "ice_model", "T3"  [Unused]
     ! long_name: ice layer 3 temperature
     ! units: C
 "ice_model", "Sal3"  [Unused]
     ! long_name: ice layer 3 salinity
-    ! units: kg/kg
+    ! units: g/kg
 "ice_model", "T4"  [Unused]
     ! long_name: ice layer 4 temperature
     ! units: C
 "ice_model", "Sal4"  [Unused]
     ! long_name: ice layer 4 salinity
-    ! units: kg/kg
+    ! units: g/kg
 "ice_model", "TS"  [Used]
     ! long_name: surface temperature
     ! units: C

@@ -1,4 +1,4 @@
-ICE_BULK_SALINITY = 0.005       !   [kg/kg] default = 0.004
+ICE_BULK_SALINITY = 5.0         !   [g/kg] default = 4.0
                                 ! The fixed bulk salinity of sea ice.
 DO_ICEBERGS = True              !   [Boolean] default = False
                                 ! If true, call the iceberg module.
@@ -70,6 +70,8 @@ NSTEPS_DYN = 72                 ! default = 432
 SIS1_ICE_TRANSPORT = True       !   [Boolean] default = False
                                 ! If true, use SIS1 code to solve the ice continuity
                                 ! equation and transport tracers.
+
+! === module SIS_tracer_advect ===
 
 ! === module SIS_tracer_registry ===
 

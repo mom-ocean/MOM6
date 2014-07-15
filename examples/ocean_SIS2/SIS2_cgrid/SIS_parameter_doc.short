@@ -1,7 +1,7 @@
 CGRID_ICE_DYNAMICS = True       !   [Boolean] default = False
                                 ! If true, use a C-grid discretization of the sea-ice
                                 ! dynamics; if false use a B-grid discretization.
-ICE_BULK_SALINITY = 0.0         !   [kg/kg] default = 0.004
+ICE_BULK_SALINITY = 0.0         !   [g/kg] default = 4.0
                                 ! The fixed bulk salinity of sea ice.
 ICE_RELATIVE_SALINITY = 0.1     !   [nondim] default = 0.0
                                 ! The initial salinity of sea ice as a fraction of the
