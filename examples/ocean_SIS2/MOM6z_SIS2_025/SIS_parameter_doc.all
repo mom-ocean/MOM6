@@ -49,7 +49,7 @@ ICE_SEES_ATMOS_WINDS = True     !   [Boolean] default = True
                                 ! If true, the sea ice is being given wind stresses with
                                 ! the atmospheric sign convention, and need to have their
                                 ! sign changed.
-ICE_BULK_SALINITY = 0.005       !   [kg/kg] default = 0.004
+ICE_BULK_SALINITY = 5.0         !   [g/kg] default = 4.0
                                 ! The fixed bulk salinity of sea ice.
 ICE_RELATIVE_SALINITY = 0.0     !   [nondim] default = 0.0
                                 ! The initial salinity of sea ice as a fraction of the
