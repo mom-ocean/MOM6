@@ -807,7 +807,7 @@
 "ocean_model", "ustar"  [Used]
     ! long_name: Surface friction velocity = [(gustiness + tau_magnitude)/rho0]^(1/2)
     ! units: meter second-1
-"ocean_model", "PRCmE"  [Unused]
+"ocean_model", "PRCmE"  [Used]
     ! long_name: Net surface water flux (precip+liq runoff+ice calving-evap)
     ! units: kilogram meter-2 second-1
     ! standard_name: water_flux_into_sea_water
