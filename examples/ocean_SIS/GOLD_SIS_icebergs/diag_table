@@ -177,7 +177,7 @@ GOLD_SIS
 "ocean_model","taux",     "taux",     "ocean_day","all",.true.,"none",2
 "ocean_model","tauy",     "tauy",     "ocean_day","all",.true.,"none",2
 "ocean_model","ustar",    "ustar",    "ocean_day","all",.true.,"none",2
-"ocean_model","PmE",      "PmE",      "ocean_day","all",.true.,"none",2
+"ocean_model","PRCmE",    "PRCmE",    "ocean_day","all",.true.,"none",2
 "ocean_model","SW",       "SW",       "ocean_day","all",.true.,"none",2
 "ocean_model","LwLatSens","LwLatSens","ocean_day","all",.true.,"none",2
 "ocean_model","p_surf",   "p_surf",   "ocean_day","all",.true.,"none",2

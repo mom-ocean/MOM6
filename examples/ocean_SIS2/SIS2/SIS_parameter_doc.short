@@ -1,7 +1,7 @@
 SIS1_5L_THERMODYNAMICS = True   !   [Boolean] default = False
                                 ! If true, use the thermodynamic calculations inhereted
                                 ! from the SIS1 5 layer. Otherwise, use the newer SIS2 version.
-ICE_BULK_SALINITY = 0.005       !   [kg/kg] default = 0.004
+ICE_BULK_SALINITY = 5.0         !   [g/kg] default = 4.0
                                 ! The fixed bulk salinity of sea ice.
 ICE_STATS_INTERVAL = 0.25       !   [days] default = 1.0
                                 ! The interval in units of TIMEUNIT between writes of the
@@ -65,6 +65,10 @@ GRID_CONFIG = "mosaic"          !
 NSTEPS_DYN = 72                 ! default = 432
                                 ! The number of iterations in the EVP dynamics for each
                                 ! slow time step.
+
+! === module SIS_tracer_advect ===
+
+! === module SIS_tracer_registry ===
 
 ! === module SIS_sum_output ===
 DOCUMENT_FILE = "SIS_parameter_doc" ! default = "MOM_parameter_doc"

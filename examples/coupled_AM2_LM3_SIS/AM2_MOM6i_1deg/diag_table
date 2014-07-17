@@ -33,7 +33,7 @@ CM2.2
 #
 # Auxilary Tracers:
 #==================
-"ocean_model","vintage","vintage","ocean_month","all",.true.,"none",2
+#"ocean_model","vintage","vintage","ocean_month","all",.true.,"none",2
 "ocean_model","age","age","ocean_month","all",.true.,"none",2
 "ocean_model","CFC11","CFC11","ocean_month","all",.true.,"none",2
 "ocean_model","CFC12","CFC12","ocean_month","all",.true.,"none",2
@@ -137,8 +137,8 @@ CM2.2
 #"ocean_model","gKEv","gKEv","ocean_month","all",.true.,"none",2
 #"ocean_model","rvxu","rvxu","ocean_month","all",.true.,"none",2
 #"ocean_model","rvxv","rvxv","ocean_month","all",.true.,"none",2
-"ocean_model","PFu_bc","PFu_bc","ocean_month","all",.true.,"none",2
-"ocean_model","PFv_bc","PFv_bc","ocean_month","all",.true.,"none",2
+#"ocean_model","PFu_bc","PFu_bc","ocean_month","all",.true.,"none",2
+#"ocean_model","PFv_bc","PFv_bc","ocean_month","all",.true.,"none",2
 
 # Barotropic Momentum Balance Terms:
 # (only available with split time stepping.)
@@ -194,7 +194,7 @@ CM2.2
 "ocean_model","taux",     "taux",     "ocean_month","all",.true.,"none",2
 "ocean_model","tauy",     "tauy",     "ocean_month","all",.true.,"none",2
 "ocean_model","ustar",    "ustar",    "ocean_month","all",.true.,"none",2
-"ocean_model","PmE",      "PmE",      "ocean_month","all",.true.,"none",2
+"ocean_model","PRCmE",    "PRCmE",    "ocean_month","all",.true.,"none",2
 "ocean_model","SW",       "SW",       "ocean_month","all",.true.,"none",2
 "ocean_model","LwLatSens","LwLatSens","ocean_month","all",.true.,"none",2
 "ocean_model","p_surf",   "p_surf",   "ocean_month","all",.true.,"none",2
@@ -465,18 +465,18 @@ CM2.2
  "radiation","swnt_sfc_vis_cf",   "swnt_sfc_vis_cf",   "atmos_month_aer",  "all", .true.,"none", 2
  "radiation","swnt_sfc_1p6_cf",   "swnt_sfc_1p6_cf",   "atmos_month_aer",  "all", .true.,"none", 2
 
- "radiation", "bnd5_extopdep_vlcno", "bnd5_exopd_vl",     "atmos_month_aer", "all", .true.,"none", 2
- "radiation", "lw_b5_extopdep_vlcno_c", "b5_exopd_vl_c",  "atmos_month_aer", "all", .true.,"none", 2
- "radiation", "bnd6_lwext_vlcno", "bnd6_lwext_vl",        "atmos_month_aer", "all", .true.,"none", 2
- "radiation", "bnd6_extopdep_vlcno_c", "bnd6_exopd_vl_c", "atmos_month_aer", "all", .true.,"none", 2
- "radiation", "visband_swext_vlcno", "vis_swext_vl",      "atmos_month_aer", "all", .true.,"none", 2
- "radiation", "visband_swssa_vlcno", "vis_swssa_vl",      "atmos_month_aer", "all", .true.,"none", 2
- "radiation", "visband_swasy_vlcno", "vis_swasy_vl",      "atmos_month_aer", "all", .true.,"none", 2
- "radiation", "vis_extopdep_vlcno_c", "vis_exopd_vl_c",   "atmos_month_aer", "all", .true.,"none", 2
- "radiation", "nirband_swext_vlcno", "nir_swext_vl",      "atmos_month_aer", "all", .true.,"none", 2
- "radiation", "nirband_swssa_vlcno", "nir_swssa_vl",      "atmos_month_aer", "all", .true.,"none", 2
- "radiation", "nirband_swasy_vlcno", "nir_swasy_vl",      "atmos_month_aer", "all", .true.,"none", 2
- "radiation", "nir_extopdep_vlcno_c", "nir_exopd_vl_c",   "atmos_month_aer", "all", .true.,"none", 2
+#"radiation", "bnd5_extopdep_vlcno", "bnd5_exopd_vl",     "atmos_month_aer", "all", .true.,"none", 2
+#"radiation", "lw_b5_extopdep_vlcno_c", "b5_exopd_vl_c",  "atmos_month_aer", "all", .true.,"none", 2
+#"radiation", "bnd6_lwext_vlcno", "bnd6_lwext_vl",        "atmos_month_aer", "all", .true.,"none", 2
+#"radiation", "bnd6_extopdep_vlcno_c", "bnd6_exopd_vl_c", "atmos_month_aer", "all", .true.,"none", 2
+#"radiation", "visband_swext_vlcno", "vis_swext_vl",      "atmos_month_aer", "all", .true.,"none", 2
+#"radiation", "visband_swssa_vlcno", "vis_swssa_vl",      "atmos_month_aer", "all", .true.,"none", 2
+#"radiation", "visband_swasy_vlcno", "vis_swasy_vl",      "atmos_month_aer", "all", .true.,"none", 2
+#"radiation", "vis_extopdep_vlcno_c", "vis_exopd_vl_c",   "atmos_month_aer", "all", .true.,"none", 2
+#"radiation", "nirband_swext_vlcno", "nir_swext_vl",      "atmos_month_aer", "all", .true.,"none", 2
+#"radiation", "nirband_swssa_vlcno", "nir_swssa_vl",      "atmos_month_aer", "all", .true.,"none", 2
+#"radiation", "nirband_swasy_vlcno", "nir_swasy_vl",      "atmos_month_aer", "all", .true.,"none", 2
+#"radiation", "nir_extopdep_vlcno_c", "nir_exopd_vl_c",   "atmos_month_aer", "all", .true.,"none", 2
 
  "radiation", "small_dust",         "sm_dust",     "atmos_month_aer", "all", .true.,"none", 2
  "radiation", "small_dust_col",     "sm_dust_col", "atmos_month_aer", "all", .true.,"none", 2

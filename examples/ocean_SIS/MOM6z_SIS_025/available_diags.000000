@@ -130,12 +130,6 @@
 "ocean_model", "Rayleigh_v"  [Unused]
     ! long_name: Rayleigh drag velocity at v points
     ! units: meter second-1
-"ocean_model", "nkml_visc_u"  [Unused]
-    ! long_name: Number of layers in viscous mixed layer at u points
-    ! units: meter
-"ocean_model", "nkml_visc_v"  [Unused]
-    ! long_name: Number of layers in viscous mixed layer at v points
-    ! units: meter
 "ocean_model", "PFuBT"  [Unused]
     ! long_name: Zonal Anomalous Barotropic Pressure Force Force Acceleration
     ! units: meter second-2
@@ -241,10 +235,10 @@
 "ocean_model", "vhbt"  [Unused]
     ! long_name: Barotropic meridional transport averaged over a baroclinic step
     ! units: meter3 second-1
-"ocean_model", "uh"  [Used]
+"ocean_model", "uh"  [Unused]
     ! long_name: Zonal Thickness Flux
     ! units: meter3 second-1
-"ocean_model", "vh"  [Used]
+"ocean_model", "vh"  [Unused]
     ! long_name: Meridional Thickness Flux
     ! units: meter3 second-1
 "ocean_model", "CAu"  [Unused]
@@ -265,12 +259,6 @@
 "ocean_model", "vav"  [Unused]
     ! long_name: Barotropic-step Averaged Meridional Velocity
     ! units: meter second-1
-"ocean_model", "du_adj"  [Unused]
-    ! long_name: Zonal velocity adjustments due to nonstandard terms
-    ! units: meter second-1
-"ocean_model", "dv_adj"  [Unused]
-    ! long_name: Meridional velocity adjustments due to nonstandard terms
-    ! units: meter second-1
 "ocean_model", "u_BT_accel"  [Unused]
     ! long_name: Barotropic Anomaly Zonal Acceleration
     ! units: meter second-1
@@ -283,13 +271,13 @@
 "ocean_model", "vhGM"  [Unused]
     ! long_name: Time Mean Diffusive Meridional Thickness Flux
     ! units: meter3 second-1
-"ocean_model", "GMwork"  [Used]
+"ocean_model", "GMwork"  [Unused]
     ! long_name: Time Mean Integral Work done by Diffusive Thickness Flux
     ! units: Watt meter-2
-"ocean_model", "KHTH_u"  [Used]
+"ocean_model", "KHTH_u"  [Unused]
     ! long_name: Thickness Diffusivity at U-point
     ! units: meter second-2
-"ocean_model", "KHTH_v"  [Used]
+"ocean_model", "KHTH_v"  [Unused]
     ! long_name: Thickness Diffusivity at V-point
     ! units: meter second-2
 "ocean_model", "KHTH_u1"  [Unused]
@@ -304,19 +292,7 @@
 "ocean_model", "neutral_slope_y"  [Unused]
     ! long_name: Meridional slope of neutral surface
     ! units: nondim
-"ocean_model", "uhml"  [Unused]
-    ! long_name: Zonal Thickness Flux to Restratify Mixed Layer
-    ! units: meter3 second-1
-"ocean_model", "vhml"  [Unused]
-    ! long_name: Meridional Thickness Flux to Restratify Mixed Layer
-    ! units: meter3 second-1
-"ocean_model", "MLu_restrat_time"  [Unused]
-    ! long_name: Mixed Layer Zonal Restratification Timescale
-    ! units: second
-"ocean_model", "MLv_restrat_time"  [Unused]
-    ! long_name: Mixed Layer Meridional Restratification Timescale
-    ! units: second
-"ocean_model", "e"  [Used]
+"ocean_model", "e"  [Unused]
     ! long_name: Interface Height Relative to Mean Sea Level
     ! units: meter
 "ocean_model", "e_D"  [Unused]
@@ -406,10 +382,10 @@
 "ocean_model", "col_height"  [Unused]
     ! long_name: The height of the water column
     ! units: m
-"ocean_model", "u_z"  [Used]
+"ocean_model", "u_z"  [Unused]
     ! long_name: Zonal Velocity in Depth Space
     ! units: meter second-1
-"ocean_model", "v_z"  [Used]
+"ocean_model", "v_z"  [Unused]
     ! long_name: Meridional Velocity in Depth Space
     ! units: meter second-1
 "ocean_model", "uh_z"  [Unused]
@@ -535,57 +511,87 @@
 "ocean_model", "Kd_interface"  [Unused]
     ! long_name: Total diapycnal diffusivity at interfaces
     ! units: meter2 second-1
+"ocean_model", "KPP_OBLdepth"  [Unused]
+    ! long_name: Thickness of the surface Ocean Boundary Layer calculated by [CVmix] KPP
+    ! units: meter
+"ocean_model", "KPP_BulkDrho"  [Unused]
+    ! long_name: Bulk difference in density used in Bulk Richardson number, as used by [CVmix] KPP
+    ! units: kg/m3
+"ocean_model", "KPP_BulkUz2"  [Unused]
+    ! long_name: Square of bulk difference in resolved velocity used in Bulk Richardson number, as used by [CVmix] KPP
+    ! units: m2/s2
+"ocean_model", "KPP_BulkRi"  [Unused]
+    ! long_name: Bulk Richardson number used to find the OBL depth used by [CVmix] KPP
+    ! units: nondim
+"ocean_model", "KPP_sigma"  [Unused]
+    ! long_name: Sigma coordinate used by [CVmix] KPP
+    ! units: nondim
+"ocean_model", "KPP_Ws"  [Unused]
+    ! long_name: Turbulent vertical velocity scale for scalars used by [CVmix] KPP
+    ! units: m/s
+"ocean_model", "KPP_N"  [Unused]
+    ! long_name: (Adjusted) Brunt-Vaisala frequency used by [CVmix] KPP
+    ! units: 1/s
+"ocean_model", "KPP_N2"  [Unused]
+    ! long_name: Square of Brunt-Vaisala frequency used by [CVmix] KPP
+    ! units: 1/s2
+"ocean_model", "KPP_Vt2"  [Unused]
+    ! long_name: Unresolved shear turbulence used by [CVmix] KPP
+    ! units: m2/s2
+"ocean_model", "KPP_uStar"  [Unused]
+    ! long_name: Frictional velocity, u*, as used by [CVmix] KPP
+    ! units: m/s
+"ocean_model", "KPP_buoyFlux"  [Unused]
+    ! long_name: Surface (and penetrating) buoyancy flux, as used by [CVmix] KPP
+    ! units: m2/s3
+"ocean_model", "KPP_QminusSW"  [Unused]
+    ! long_name: Net temperature flux ignoring short-wave, as used by [CVmix] KPP
+    ! units: K m/s
+"ocean_model", "KPP_netSalt"  [Unused]
+    ! long_name: Effective net surface salt flux, as used by [CVmix] KPP
+    ! units: ppt m/s
+"ocean_model", "KPP_Kheat"  [Unused]
+    ! long_name: Heat diffusivity due to KPP, as calculated by [CVmix] KPP
+    ! units: m2/s
+"ocean_model", "KPP_Kd_in"  [Unused]
+    ! long_name: Diffusivity passed to KPP
+    ! units: m2/s
+"ocean_model", "KPP_Ksalt"  [Unused]
+    ! long_name: Salt diffusivity due to KPP, as calculated by [CVmix] KPP
+    ! units: m2/s
+"ocean_model", "KPP_Kv"  [Unused]
+    ! long_name: Vertical viscosity due to KPP, as calculated by [CVmix] KPP
+    ! units: m2/s
+"ocean_model", "KPP_NLtransport_heat"  [Unused]
+    ! long_name: Non-local transport (Cs*G(sigma)) for heat, as calculated by [CVmix] KPP
+    ! units: nondim
+"ocean_model", "KPP_NLtransport_salt"  [Unused]
+    ! long_name: Non-local tranpsort (Cs*G(sigma)) for scalars, as calculated by [CVmix] KPP
+    ! units: nondim
+"ocean_model", "KPP_dTdt"  [Unused]
+    ! long_name: Temperature tendency due to non-local transport of heat, as calculated by [CVmix] KPP
+    ! units: K/s
+"ocean_model", "KPP_dSdt"  [Unused]
+    ! long_name: Salinity tendency due to non-local transport of heat, as calculated by [CVmix] KPP
+    ! units: ppt/s
+"ocean_model", "KPP_Tsurf"  [Unused]
+    ! long_name: Temperature of surface layer (10% of OBL depth) as passed to [CVmix] KPP
+    ! units: C
+"ocean_model", "KPP_Ssurf"  [Unused]
+    ! long_name: Salinity of surface layer (10% of OBL depth) as passed to [CVmix] KPP
+    ! units: ppt
+"ocean_model", "KPP_Usurf"  [Unused]
+    ! long_name: i-component flow of surface layer (10% of OBL depth) as passed to [CVmix] KPP
+    ! units: m/s
+"ocean_model", "KPP_Vsurf"  [Unused]
+    ! long_name: j-component flow of surface layer (10% of OBL depth) as passed to [CVmix] KPP
+    ! units: m/s
 "ocean_model", "Kd_effective"  [Unused]
     ! long_name: Diapycnal diffusivity as applied
     ! units: meter2 second-1
 "ocean_model", "diff_work"  [Unused]
     ! long_name: Work actually done by diapycnal diffusion across each interface
     ! units: W m-2
-"ocean_model", "h_ML"  [Unused]
-    ! long_name: Surface mixed layer depth
-    ! units: meter
-"ocean_model", "TKE_wind"  [Unused]
-    ! long_name: Wind-stirring source of mixed layer TKE
-    ! units: meter3 second-3
-"ocean_model", "TKE_RiBulk"  [Unused]
-    ! long_name: Mean kinetic energy source of mixed layer TKE
-    ! units: meter3 second-3
-"ocean_model", "TKE_conv"  [Unused]
-    ! long_name: Convective source of mixed layer TKE
-    ! units: meter3 second-3
-"ocean_model", "TKE_pen_SW"  [Unused]
-    ! long_name: TKE consumed by mixing penetrative shortwave radation through the mixed layer
-    ! units: meter3 second-3
-"ocean_model", "TKE_mixing"  [Unused]
-    ! long_name: TKE consumed by mixing that deepens the mixed layer
-    ! units: meter3 second-3
-"ocean_model", "TKE_mech_decay"  [Unused]
-    ! long_name: Mechanical energy decay sink of mixed layer TKE
-    ! units: meter3 second-3
-"ocean_model", "TKE_conv_decay"  [Unused]
-    ! long_name: Convective energy decay sink of mixed layer TKE
-    ! units: meter3 second-3
-"ocean_model", "TKE_conv_s2"  [Unused]
-    ! long_name: Spurious source of mixed layer TKE from sigma2
-    ! units: meter3 second-3
-"ocean_model", "PE_detrain"  [Unused]
-    ! long_name: Spurious source of potential energy from mixed layer detrainment
-    ! units: Watt meter-2
-"ocean_model", "PE_detrain2"  [Unused]
-    ! long_name: Spurious source of potential energy from mixed layer only detrainment
-    ! units: Watt meter-2
-"ocean_model", "h_miss_ML"  [Unused]
-    ! long_name: Summed absolute mismatch in entrainment terms
-    ! units: meter
-"ocean_model", "Hs_used"  [Unused]
-    ! long_name: Surface region thickness that is used
-    ! units: meter
-"ocean_model", "Hs_max"  [Unused]
-    ! long_name: Maximum surface region thickness
-    ! units: meter
-"ocean_model", "Hs_min"  [Unused]
-    ! long_name: Minimum surface region thickness
-    ! units: meter
 "ocean_model", "deficit_ratio"  [Unused]
     ! long_name: Max face thickness deficit ratio
     ! units: Nondim
@@ -607,43 +613,43 @@
 "ocean_model", "Chl_opac"  [Unused]
     ! long_name: Surface chlorophyll A concentration used to find opacity
     ! units: mg meter-3
-"ocean_model", "KHTR_u"  [Used]
+"ocean_model", "KHTR_u"  [Unused]
     ! long_name: Epipycnal tracer diffusivity at zonal faces of tracer cell
     ! units: meter2 second-1
-"ocean_model", "KHTR_v"  [Used]
+"ocean_model", "KHTR_v"  [Unused]
     ! long_name: Epipycnal tracer diffusivity at meridional faces of tracer cell
     ! units: meter2 second-1
-"ocean_model", "u"  [Used]
+"ocean_model", "u"  [Unused]
     ! long_name: Zonal velocity
     ! units: meter  second-1
-"ocean_model", "v"  [Used]
+"ocean_model", "v"  [Unused]
     ! long_name: Meridional velocity
     ! units: meter second-1
-"ocean_model", "h"  [Used]
+"ocean_model", "h"  [Unused]
     ! long_name: Layer Thickness
     ! units: meter
-"ocean_model", "SSH"  [Used]
+"ocean_model", "SSH"  [Unused]
     ! long_name: Sea Surface Height
     ! units: meter
 "ocean_model", "SSH_inst"  [Unused]
     ! long_name: Instantaneous Sea Surface Height
     ! units: meter
-"ocean_model", "SSU"  [Used]
+"ocean_model", "SSU"  [Unused]
     ! long_name: Sea Surface Zonal Velocity
     ! units: meter second-1
-"ocean_model", "SSV"  [Used]
+"ocean_model", "SSV"  [Unused]
     ! long_name: Sea Surface Meridional Velocity
     ! units: meter second-1
-"ocean_model", "speed"  [Used]
+"ocean_model", "speed"  [Unused]
     ! long_name: Sea Surface Speed
     ! units: meter second-1
-"ocean_model", "temp"  [Used]
+"ocean_model", "temp"  [Unused]
     ! long_name: Potential Temperature
     ! units: Celsius
-"ocean_model", "salt"  [Used]
+"ocean_model", "salt"  [Unused]
     ! long_name: Salinity
     ! units: PSU
-"ocean_model", "SST"  [Used]
+"ocean_model", "SST"  [Unused]
     ! long_name: Sea Surface Temperature
     ! units: Celsius
 "ocean_model", "SST_global"  [Unused]
@@ -652,7 +658,7 @@
 "ocean_model", "SST_sq"  [Unused]
     ! long_name: Sea Surface Temperature Squared
     ! units: Celsius**2
-"ocean_model", "SSS"  [Used]
+"ocean_model", "SSS"  [Unused]
     ! long_name: Sea Surface Salinity
     ! units: PSU
 "ocean_model", "SSS_global"  [Unused]
@@ -736,10 +742,10 @@
 "ocean_model", "salt_predia"  [Unused]
     ! long_name: Salinity
     ! units: PSU
-"ocean_model", "temp_z"  [Used]
+"ocean_model", "temp_z"  [Unused]
     ! long_name: Potential Temperature
     ! units: degC
-"ocean_model", "salt_z"  [Used]
+"ocean_model", "salt_z"  [Unused]
     ! long_name: Salinity
     ! units: PSU
 "ocean_model", "age"  [Unused]
@@ -757,57 +763,21 @@
 "ocean_model", "age_dfy"  [Unused]
     ! long_name: Ideal Age Tracer diffusive zonal flux
     ! units: years m3 s-1
-"ocean_model", "age_z"  [Used]
+"ocean_model", "age_z"  [Unused]
     ! long_name: Ideal Age Tracer
     ! units: years
-"ocean_model", "CFC11"  [Unused]
-    ! long_name: CFC-11 Concentration
-    ! units: mol m-3
-"ocean_model", "CFC11_z"  [Unused]
-    ! long_name: CFC-11 Concentration
-    ! units: mol m-3
-"ocean_model", "CFC12"  [Unused]
-    ! long_name: CFC-12 Concentration
-    ! units: mol m-3
-"ocean_model", "CFC12_z"  [Unused]
-    ! long_name: CFC-12 Concentration
-    ! units: mol m-3
-"ocean_model", "CFC11_adx"  [Unused]
-    ! long_name: CFC-11 Concentration advective zonal flux
-    ! units: mol s-1
-"ocean_model", "CFC11_ady"  [Unused]
-    ! long_name: CFC-11 Concentration advective meridional flux
-    ! units: mol s-1
-"ocean_model", "CFC11_dfx"  [Unused]
-    ! long_name: CFC-11 Concentration diffusive zonal flux
-    ! units: mol s-1
-"ocean_model", "CFC11_dfy"  [Unused]
-    ! long_name: CFC-11 Concentration diffusive zonal flux
-    ! units: mol s-1
-"ocean_model", "CFC12_adx"  [Unused]
-    ! long_name: CFC-12 Concentration advective zonal flux
-    ! units: mol s-1
-"ocean_model", "CFC12_ady"  [Unused]
-    ! long_name: CFC-12 Concentration advective meridional flux
-    ! units: mol s-1
-"ocean_model", "CFC12_dfx"  [Unused]
-    ! long_name: CFC-12 Concentration diffusive zonal flux
-    ! units: mol s-1
-"ocean_model", "CFC12_dfy"  [Unused]
-    ! long_name: CFC-12 Concentration diffusive zonal flux
-    ! units: mol s-1
-"ocean_model", "taux"  [Used]
+"ocean_model", "taux"  [Unused]
     ! long_name: Zonal surface stress from ocean interactions with atmos and ice
     ! units: Pascal
     ! standard_name: surface_downward_x_stress
-"ocean_model", "tauy"  [Used]
+"ocean_model", "tauy"  [Unused]
     ! long_name: Meridional surface stress ocean interactions with atmos and ice
     ! units: Pascal
     ! standard_name: surface_downward_y_stress
-"ocean_model", "ustar"  [Used]
+"ocean_model", "ustar"  [Unused]
     ! long_name: Surface friction velocity = [(gustiness + tau_magnitude)/rho0]^(1/2)
     ! units: meter second-1
-"ocean_model", "PRCmE"  [Used]
+"ocean_model", "PRCmE"  [Unused]
     ! long_name: Net surface water flux (precip+liq runoff+ice calving-evap)
     ! units: kilogram meter-2 second-1
     ! standard_name: water_flux_into_sea_water
@@ -863,11 +833,11 @@
 "ocean_model", "net_heat_surface"  [Unused]
     ! long_name: Surface ocean heat flux from SW+LW+latent+sensible+mass transfer+frazil
     ! units: Watt meter-2
-"ocean_model", "SW"  [Used]
+"ocean_model", "SW"  [Unused]
     ! long_name: Shortwave radiation flux into ocean
     ! units: Watt meter-2
     ! standard_name: surface_net_downward_shortwave_flux
-"ocean_model", "LwLatSens"  [Used]
+"ocean_model", "LwLatSens"  [Unused]
     ! long_name: Combined longwave, latent, and sensible heating
     ! units: Watt meter-2
 "ocean_model", "LW"  [Unused]
@@ -893,10 +863,10 @@
 "ocean_model", "heat_rest"  [Unused]
     ! long_name: Restoring surface heat flux into ocean
     ! units: Watt meter-2
-"ocean_model", "p_surf"  [Used]
+"ocean_model", "p_surf"  [Unused]
     ! long_name: Pressure at ice-ocean or atmosphere-ocean interface
     ! units: Pascal
-"ocean_model", "salt_flux"  [Used]
+"ocean_model", "salt_flux"  [Unused]
     ! long_name: Salt flux into ocean at surface
     ! units: kilogram meter-2 second-1
 "ocean_model", "salt_flux_in"  [Unused]

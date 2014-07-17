@@ -21,7 +21,7 @@
 "ocean_model","e","e","prog","all",.false.,"none",2
 "ocean_model","temp","temp","prog","all",.false.,"none",2
 "ocean_model","salt","salt","prog","all",.false.,"none",2
-"ocean_model","sigma","sigma","prog","all",.false.,"none",2
+#"ocean_model","sigma","sigma","prog","all",.false.,"none",2
 #"ocean_model","Rml","Rml","prog","all",.false.,"none",2
 #"ocean_model","tr1","tr1","prog","all",.false.,"none",1
 
@@ -145,7 +145,7 @@
 #"ocean_model","taux","taux","forcing","all",.true.,"none",2
 #"ocean_model","tauy","tauy","forcing","all",.true.,"none",2
 #"ocean_model","ustar","ustar","forcing","all",.true.,"none",2
-#"ocean_model","PmE","PmE","forcing","all",.true.,"none",2
+#"ocean_model","PRCmE","PRCmE","forcing","all",.true.,"none",2
 #"ocean_model","SW","SW","forcing","all",.true.,"none",2
 #"ocean_model","LwLatSens","LwLatSens","forcing","all",.true.,"none",2
 #"ocean_model","p_surf","p_surf","forcing","all",.true.,"none",2

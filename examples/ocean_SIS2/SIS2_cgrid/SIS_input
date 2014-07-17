@@ -83,7 +83,10 @@ C_P = 3925.0                    !    C_P is the heat capacity of sea water in
                                 !  J kg-1 K-1, approximated as a constant.
 SNOW_ALBEDO = 0.88              !    The albedo of dry snow atop sea ice, ND.
 ICE_ALBEDO  = 0.68              !    The albedo of dry bare sea ice, ND.
-ICE_BULK_SALINITY = 0.005       !    The fixed bulk salinity of sea ice, in kg/kg.
+ICE_BULK_SALINITY = 0.0         !    The fixed bulk salinity of sea ice, in g/kg.
+ICE_RELATIVE_SALINITY = 0.10    !    The initial salinity of sea ice as a
+                                ! fraction of the salinity of the seawater from
+                                ! which it formed.
 
 !  Specify the properties of the surface forcing.
 WIND_STAGGER = "B"              !  "A", "B", or "C" to indicate the
