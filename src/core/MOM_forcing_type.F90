@@ -1072,7 +1072,7 @@ end subroutine forcing_SinglePointPrint
 !> Register members of the forcing type for diagnostics
 subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
   type(time_type),     intent(in)    :: Time
-  type(diag_ctrl),     intent(in)    :: diag
+  type(diag_ctrl),     intent(inout) :: diag
   logical,             intent(in)    :: use_temperature !< True if T/S are in use
   type(forcing_diags), intent(inout) :: handles
 
