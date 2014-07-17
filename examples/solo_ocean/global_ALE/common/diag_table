@@ -13,6 +13,11 @@
 "sfc_ave",  12,"hours",1,"days","Time",
 "ocean_static",       -1,"days",1,"days","time",
 
+"prog_cmor",     1,"days",1,"days","Time",
+"prog_z_cmor",   1,"days",1,"days","Time",
+"scalar_cmor",   1,"days",1,"days","Time",
+"ocean_static_cmor",     -1,"days",1,"days","time",
+
 #This is the field section of the diag_table.
 
 # Prognostic Ocean fields:
@@ -52,12 +57,22 @@
 "ocean_model","SSU","SSU","sfc_ave","all",.true.,"none",2
 "ocean_model","SSV","SSV","sfc_ave","all",.true.,"none",2
 
+# Prognostic Ocean fields (CMOR Names):
+#=========================
+"ocean_model","so","so","prog_cmor","all",.false.,"none",2		#GFDL Name: salt
+
+
 # Z-space fields:
 #==================
 "ocean_model","u_z","u","prog_z","all",.true.,"none",2
 "ocean_model","v_z","v","prog_z","all",.true.,"none",2
 "ocean_model","temp_z","temp","prog_z","all",.true.,"none",2
 "ocean_model","salt_z","salt","prog_z","all",.true.,"none",2
+
+# Z-space fields (CMOR Names):
+#==================
+"ocean_model","so_z","so","prog_z_cmor","all",.true.,"none",2		#GFDL Name: salt_z
+
 
 # Auxilary Tracers:
 #==================
@@ -213,6 +228,14 @@
 "ocean_model", "wet_u",       "wet_u",       "ocean_static", "all", .false., "none", 2
 "ocean_model", "wet_v",       "wet_v",       "ocean_static", "all", .false., "none", 2
 "ocean_model", "Coriolis",    "Coriolis",    "ocean_static", "all", .false., "none", 2
+
+# Static ocean fields:
+#=====================
+"ocean_model", "areacello",      "areacello",      "ocean_static_cmor", "all", .false., "none", 2
+
+# Scalar ocean fields (CMOR Names):
+#=====================
+"ocean_model", "tosga",       "tosga",       "scalar_cmor",  "all", .true.,  "none",2		#GFDL Name:  SST_global
 
 #=============================================================================================
 #
