@@ -957,8 +957,11 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, param_file, diag, CS)
     if (CS%id_cfl_cg1_y>0) call safe_alloc_ptr(CS%cfl_cg1_y,isd,ied,jsd,jed)
   endif
 
-  CS%id_mass_wt = register_diag_field('ocean_model', 'mass_wt', diag%axesT1, Time, &
-      'The column mass for calculating mass-weighted average properties', 'kg m-2')
+  CS%id_mass_wt = register_diag_field('ocean_model', 'mass_wt', diag%axesT1, Time,   &
+      'The column mass for calculating mass-weighted average properties', 'kg m-2',  &
+      cmor_field_name='masscello', cmor_units='kg m-2',                              &
+      cmor_standard_name='sea_water_mass_per_unit_area',                             &
+      cmor_long_name='Sea Water Mass Per Unit Area')
   CS%id_temp_int = register_diag_field('ocean_model', 'temp_int', diag%axesT1, Time, &
       'The mass weighted column integrated temperature', 'degC kg m-2')
   CS%id_salt_int = register_diag_field('ocean_model', 'salt_int', diag%axesT1, Time, &

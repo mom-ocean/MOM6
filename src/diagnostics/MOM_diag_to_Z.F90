@@ -890,12 +890,14 @@ subroutine MOM_diag_to_Z_init(Time, G, param_file, diag, CS)
 
     CS%id_u_z = register_diag_field('ocean_model', 'u_z', CS%axesCuz, Time, &
         'Zonal Velocity in Depth Space', 'meter second-1', &
-        missing_value=CS%missing_vel)
+        missing_value=CS%missing_vel, cmor_field_name='uo_z', cmor_units='m s-1', &
+        cmor_standard_name='sea_water_x_velocity', cmor_long_name='Sea Water X Velocity')
     if (CS%id_u_z>0) call safe_alloc_ptr(CS%u_z,IsdB,IedB,jsd,jed,CS%nk_zspace)
 
     CS%id_v_z = register_diag_field('ocean_model', 'v_z', CS%axesCvz, Time, &
         'Meridional Velocity in Depth Space', 'meter second-1', &
-        missing_value=CS%missing_vel)
+        missing_value=CS%missing_vel, cmor_field_name='vo_z', cmor_units='m s-1', &
+        cmor_standard_name='sea_water_y_velocity', cmor_long_name='Sea Water Y Velocity')
     if (CS%id_v_z>0) call safe_alloc_ptr(CS%v_z,isd,ied,JsdB,JedB,CS%nk_zspace)
 
     CS%id_uh_z = register_diag_field('ocean_model', 'uh_z', CS%axesCuz, Time, &

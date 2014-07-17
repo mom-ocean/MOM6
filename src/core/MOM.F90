@@ -2010,9 +2010,11 @@ subroutine register_diags(Time, G, CS, ADp)
   !call diag_masks_set(G, CS%missing)
 
   CS%id_u = register_diag_field('ocean_model', 'u', diag%axesCuL, Time, &
-      'Zonal velocity', 'meter  second-1')
+      'Zonal velocity', 'meter  second-1', cmor_field_name='uo', cmor_units='m s-1', &
+      cmor_standard_name='sea_water_x_velocity', cmor_long_name='Sea Water X Velocity')
   CS%id_v = register_diag_field('ocean_model', 'v', diag%axesCvL, Time, &
-      'Meridional velocity', 'meter second-1')
+      'Meridional velocity', 'meter second-1', cmor_field_name='vo', cmor_units='m s-1', &
+      cmor_standard_name='sea_water_y_velocity', cmor_long_name='Sea Water Y Velocity')
   CS%id_h = register_diag_field('ocean_model', 'h', diag%axesTL, Time, &
       'Layer Thickness', thickness_units)
   CS%id_ssh = register_diag_field('ocean_model', 'SSH', diag%axesT1, Time, &
@@ -2047,8 +2049,10 @@ subroutine register_diags(Time, G, CS, ADp)
     if (CS%id_sst_sq > 0) call safe_alloc_ptr(CS%SST_sq,isd,ied,jsd,jed)    
   endif
   if (CS%use_temperature .and. CS%use_frazil) then
-    CS%id_fraz = register_diag_field('ocean_model', 'frazil', diag%axesT1, Time, &
-          'Heat sink from frazil formation', 'Watt meter-2')
+    CS%id_fraz = register_diag_field('ocean_model', 'frazil', diag%axesT1, Time,                           &
+          'Heat sink from frazil formation', 'Watt meter-2', cmor_field_name='hfsifrazil',                 &
+          cmor_units='W m-2', cmor_standard_name='heat_flux_into_sea_water_due_to_freezing_of_frazil_ice', &
+          cmor_long_name='Heat Flux into Sea Water due to Frazil Ice Formation"')
   endif
 
   CS%id_salt_deficit = register_diag_field('ocean_model', 'salt_deficit', diag%axesT1, Time, &
