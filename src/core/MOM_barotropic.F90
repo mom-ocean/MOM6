@@ -745,7 +745,8 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
     call create_group_pass(pass_q_DCor, DCor_u, DCor_v, CS%BT_Domain, &
          To_All+Scalar_Pair)
   endif
-  call create_group_pass(pass_tmp_uv, tmp_u, tmp_v, G%Domain)
+  if ((Isq > is-1) .or. (Jsq > js-1)) &
+    call create_group_pass(pass_tmp_uv, tmp_u, tmp_v, G%Domain)
   call create_group_pass(pass_gtot, gtot_E, gtot_N, CS%BT_Domain, &
        To_All+Scalar_Pair, AGRID)
   call create_group_pass(pass_gtot, gtot_W, gtot_S, CS%BT_Domain, &
