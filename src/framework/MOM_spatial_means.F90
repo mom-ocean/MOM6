@@ -67,7 +67,7 @@ function global_volume_mean(var,h,G)
     weight(i,j,k)  =  h(i,j,k) * (G%areaT(i,j) * G%mask2dT(i,j))
     tmpForSumming(i,j,k) =  var(i,j,k) * weight(i,j,k)
   enddo ; enddo ; enddo
-  global_volume_mean = reproducing_sum(tmpForSumming) / reproducing_sum(weight)
+  global_volume_mean = (reproducing_sum(sum(tmpForSumming,3))) / (reproducing_sum(sum(weight,3)))
 
 end function global_volume_mean
 
