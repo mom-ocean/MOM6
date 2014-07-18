@@ -1011,13 +1011,22 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     endif
 
     if (CS%mixedlayer_restrat) then
+      if (CS%debug) then
+        call hchksum(h,"Pre-mixedlayer_restrat h", G, haloshift=1)
+        call uchksum(CS%uhtr,"Pre-mixedlayer_restrat uhtr", G, haloshift=0)
+        call vchksum(CS%vhtr,"Pre-mixedlayer_restrat vhtr", G, haloshift=0)
+      endif
       call cpu_clock_begin(id_clock_ml_restrat)
-      call mixedlayer_restrat(h, CS%uhtr ,CS%vhtr, CS%tv, fluxes, dt, &
-                              G, CS%mixedlayer_restrat_CSp)
+      call mixedlayer_restrat(h, CS%uhtr ,CS%vhtr, CS%tv, fluxes, dt, G, CS%mixedlayer_restrat_CSp)
       call cpu_clock_end(id_clock_ml_restrat)
       call cpu_clock_begin(id_clock_pass)
       call pass_var(h, G%Domain)
       call cpu_clock_end(id_clock_pass)
+      if (CS%debug) then
+        call hchksum(h,"Post-mixedlayer_restrat h", G, haloshift=1)
+        call uchksum(CS%uhtr,"Post-mixedlayer_restrat uhtr", G, haloshift=0)
+        call vchksum(CS%vhtr,"Post-mixedlayer_restrat vhtr", G, haloshift=0)
+      endif
     endif
 
     if (associated(CS%MEKE)) then
@@ -1037,8 +1046,8 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         call uchksum(u,"Pre-advection u", G, haloshift=2)
         call vchksum(v,"Pre-advection v", G, haloshift=2)
         call hchksum(h,"Pre-advection h", G, haloshift=1)
-        call uchksum(CS%uhtr,"Pre-advection uh", G, haloshift=0)
-        call vchksum(CS%vhtr,"Pre-advection vh", G, haloshift=0)
+        call uchksum(CS%uhtr,"Pre-advection uhtr", G, haloshift=0)
+        call vchksum(CS%vhtr,"Pre-advection vhtr", G, haloshift=0)
       ! call MOM_state_chksum("Pre-advection ", u, v, &
       !                       h, CS%uhtr, CS%vhtr, G, haloshift=1)
           if (associated(CS%tv%T)) call hchksum(CS%tv%T, "Pre-advection T", G, haloshift=1)
@@ -1823,20 +1832,21 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   else
     if (CS%use_RK2) then
       call initialize_dyn_unsplit_RK2(CS%u, CS%v, CS%h, Time, G, &
-                param_file, diag, CS%dyn_unsplit_RK2_CSp, CS%restart_CSp, &
-                CS%ADp, CS%CDp, MOM_internal_state, init_CS%OBC, CS%ALE_CSp, CS%visc, dirs, CS%ntrunc)
+              param_file, diag, CS%dyn_unsplit_RK2_CSp, CS%restart_CSp, &
+              CS%ADp, CS%CDp, MOM_internal_state, init_CS%OBC, CS%ALE_CSp, CS%visc, dirs, CS%ntrunc)
     else
       call initialize_dyn_unsplit(CS%u, CS%v, CS%h, Time, G, &
-                param_file, diag, CS%dyn_unsplit_CSp, CS%restart_CSp, &
-                CS%ADp, CS%CDp, MOM_internal_state, init_CS%OBC, CS%ALE_CSp, CS%visc, dirs, CS%ntrunc)
+              param_file, diag, CS%dyn_unsplit_CSp, CS%restart_CSp, &
+              CS%ADp, CS%CDp, MOM_internal_state, init_CS%OBC, CS%ALE_CSp, CS%visc, dirs, CS%ntrunc)
     endif
   endif
   call callTree_waypoint("dynamics initialized (initialize_MOM)")
 
   call thickness_diffuse_init(Time, G, param_file, diag, CS%CDp, CS%thickness_diffuse_CSp)
-  CS%mixedlayer_restrat = mixedlayer_restrat_init(Time, G, param_file, diag, CS%mixedlayer_restrat_CSp)
-  if (CS%mixedlayer_restrat .and. .not.CS%bulkmixedlayer) call MOM_error(FATAL, &
-    "MOM: MIXEDLAYER_RESTRAT true requires BULKMIXEDLAYER to be true to work.")
+  CS%mixedlayer_restrat = mixedlayer_restrat_init(Time, G, param_file, diag, &
+                                                  CS%mixedlayer_restrat_CSp)
+  if (CS%mixedlayer_restrat .and. .not.(CS%bulkmixedlayer .or. CS%useALEalgorithm)) &
+     call MOM_error(FATAL, "MOM: MIXEDLAYER_RESTRAT true requires a boundary layer scheme.")
   if (associated(init_CS%OBC)) CS%OBC => init_CS%OBC
 
   call MOM_diagnostics_init(MOM_internal_state, CS%ADp, CS%CDp, Time, G, &

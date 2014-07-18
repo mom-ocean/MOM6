@@ -2,7 +2,7 @@
    the Modular Ocean Model (MOM6), a numerical ocean model developed at NOAA-GFDL.
    Where appropriate, parameters use usually given in MKS units.
 
-   This particular file is for the example in flow_downslope.
+   This particular file is for the example in solo_ocean/mixed_layer_restrat_2d.
 
    This MOM_input file typically contains only the non-default values that are
    needed to reproduce this example.  A full list of parameters for this example
@@ -41,13 +41,13 @@ NJGLOBAL = 80                   !
                                 ! The total number of thickness grid points in the
                                 ! y-direction in the physical domain. With STATIC_MEMORY_
                                 ! this is set in MOM_memory.h at compile time.
-!NIPROC = 2                     !
+!NIPROC = 1                     !
                                 ! The number of processors in the x-direction. With
                                 ! STATIC_MEMORY_ this is set in MOM_memory.h at compile time.
-!NJPROC = 1                     !
+!NJPROC = 2                     !
                                 ! The number of processors in the x-direction. With
                                 ! STATIC_MEMORY_ this is set in MOM_memory.h at compile time.
-!LAYOUT = 2, 1                  !
+!LAYOUT = 1, 2                  !
                                 ! The processor layout that was acutally used.
 IO_LAYOUT = 1, 1                ! default = 0
                                 ! The processor layout to be used, or 0,0 to automatically
@@ -55,6 +55,11 @@ IO_LAYOUT = 1, 1                ! default = 0
 
 ! === module MOM_grid ===
 ! Parameters providing information about the vertical grid.
+RHO_0 = 1000.0                  !   [kg m-3] default = 1035.0
+                                ! The mean ocean density used with BOUSSINESQ true to
+                                ! calculate accelerations and the mass for conservation
+                                ! properties, or with BOUSSINSEQ false to convert some
+                                ! parameters from vertical units of m to kg m-2.
 NK = 40                         !   [nondim]
                                 ! The number of model layers.
 
@@ -71,17 +76,11 @@ BULKMIXEDLAYER = False          !   [Boolean] default = True
 USE_REGRIDDING = True           !   [Boolean] default = False
                                 ! If True, use the ALE algorithm (regridding/remapping).
                                 ! If False, use the layered isopycnal algorithm.
-DT = 300.0                      !   [s]
+DT = 3600.0                     !   [s]
                                 ! The (baroclinic) dynamics time step.  The time-step that
                                 ! is actually used will be an integer fraction of the
                                 ! forcing time-step (DT_FORCING in ocean-only mode or the
                                 ! coupling timestep in coupled mode.)
-RHO_0 = 1000.0
-!DT_THERM = 900.0                !   [s] default = 300.0
-                                ! The thermodynamic and tracer advection time step.
-                                ! Ideally DT_THERM should be an integer multiple of DT
-                                ! and less than the forcing or coupling time-step.
-                                ! By default DT_THERM is set to DT.
 SAVE_INITIAL_CONDS = True       !   [Boolean] default = False
                                 ! If true, write the initial conditions to a file given
                                 ! by IC_OUTPUT_FILE.
@@ -154,13 +153,10 @@ TOPO_CONFIG = "flat"            !
                                 !       DOME2D gravity current/overflow test case.
                                 !     seamount - Gaussian bump for spontaneous motion test case.
                                 !     USER - call a user modified routine.
+MINIMUM_DEPTH = 1.0             !   [m] default = 0.0
+                                ! The minimum depth of the ocean.
 MAXIMUM_DEPTH = 400.0           !   [m]
                                 ! The maximum depth of the ocean.
-MINIMUM_DEPTH = 1.0             !   [m] default = 0.0
-                                ! If MASKING_DEPTH is unspecified, then anything shallower than
-                                ! MINIMUM_DEPTH is assumed to be land and all fluxes are masked out.
-                                ! If MASKING_DEPTH is specified, then all depths shallower than
-                                ! MINIMUM_DEPTH but depper than MASKING_DEPTH are rounded to MINIMUM_DEPTH.
 ROTATION = "betaplane"          ! default = "2omegasinlat"
                                 ! This specifies how the Coriolis parameter is specified:
                                 !     2omegasinlat - Use twice the planetary rotation rate
@@ -170,7 +166,7 @@ ROTATION = "betaplane"          ! default = "2omegasinlat"
 F_0 = 1.0E-04                   !   [s-1] default = 0.0
                                 ! The reference value of the Coriolis parameter with the
                                 ! betaplane option.
-THICKNESS_CONFIG = "rossby_front"!
+THICKNESS_CONFIG = "rossby_front" !
                                 ! A string that determines how the initial layer
                                 ! thicknesses are specified for a new run:
                                 !     file - read interface heights from the file specified
@@ -188,7 +184,10 @@ THICKNESS_CONFIG = "rossby_front"!
                                 !     adjustment2d - TBD AJA.
                                 !     sloshing - TBD AJA.
                                 !     seamount - TBD AJA.
+                                !     rossby_front - a mixed layer front in thermal wind balance.
                                 !     USER - call a user modified routine.
+T_RANGE = 5.0                   !   [C] default = 0.0
+                                ! Initial temperature range
 TS_CONFIG = "rossby_front"      !
                                 ! A string that determines how the initial tempertures
                                 ! and salinities are specified for a new run:
@@ -204,15 +203,22 @@ TS_CONFIG = "rossby_front"      !
                                 !     adjustment2d - TBD AJA.
                                 !     sloshing - TBD AJA.
                                 !     seamount - TBD AJA.
+                                !     rossby_front - a mixed layer front in thermal wind balance.
                                 !     USER - call a user modified routine.
-VELOCITY_CONFIG = "rossby_front"      !
 S_REF = 34.0                    !   [1e-3]
                                 ! Reference salinity
 T_REF = 20.0                    !   [C]
-                                ! Refernce temperature
-T_RANGE = 5.0                   !   [1e-3] default = 2.0
-                                ! Initial salinity range
-
+                                ! Reference temperature
+VELOCITY_CONFIG = "rossby_front" ! default = "zero"
+                                ! A string that determines how the initial velocities
+                                ! are specified for a new run:
+                                !     file - read velocities from the file specified
+                                !       by (VELOCITY_FILE).
+                                !     zero - the fluid is initially at rest.
+                                !     uniform - the flow is uniform (determined by
+                                !       parameters TORUS_U and TORUS_V).
+                                !     rossby_front - a mixed layer front in thermal wind balance.
+                                !     USER - call a user modified routine.
 REGRIDDING_COORDINATE_MODE = "Z*" ! default = "LAYER"
                                 ! Coordinate mode for vertical regridding.
                                 ! Choose among the following possibilities:
@@ -220,7 +226,7 @@ REGRIDDING_COORDINATE_MODE = "Z*" ! default = "LAYER"
                                 !  Z*    - stetched geopotential z*
                                 !  SIGMA - terrain following coordinates
                                 !  RHO   - continuous isopycnal
-!ALE_RESOLUTION = 25*0.8        !   [m]
+!ALE_RESOLUTION = 40*10.0       !   [m]
                                 ! The distribution of vertical resolution for the target
                                 ! grid used for Eulerian-like coordinates. For example,
                                 ! in z-coordinate mode, the parameter is a list of level
@@ -298,14 +304,14 @@ V_TRUNC_FILE = "V_velocity_truncations" ! default = ""
                                 ! leading to meridional velocity truncations are written.
                                 ! Undefine this for efficiency if this diagnostic is not
                                 ! needed.
-HMIX_FIXED = 20.0               !   [m]
+HMIX_FIXED = 0.001              !   [m]
                                 ! The prescribed depth over which the near-surface
                                 ! viscosity and diffusivity are elevated when the bulk
                                 ! mixed layer is not used.
 KV = 1.0E-04                    !   [m2 s-1]
                                 ! The background kinematic viscosity in the interior.
                                 ! The molecular value, ~1e-6 m2 s-1, may be used.
-HBBL = 1.0                      !   [m]
+HBBL = 0.001                    !   [m]
                                 ! The thickness of a bottom boundary layer with a
                                 ! viscosity of KVBBL if BOTTOMDRAGLAW is not defined, or
                                 ! the thickness over which near-bottom velocities are
@@ -321,7 +327,7 @@ MAXVEL = 10.0                   !   [m s-1] default = 3.0E+08
 LINEAR_DRAG = True              !   [Boolean] default = False
                                 ! If LINEAR_DRAG and BOTTOMDRAGLAW are defined the drag
                                 ! law is cdrag*DRAG_BG_VEL*u.
-DRAG_BG_VEL = 0.0001            !   [m s-1] default = 0.0
+DRAG_BG_VEL = 1.0E-04           !   [m s-1] default = 0.0
                                 ! DRAG_BG_VEL is either the assumed bottom velocity (with
                                 ! LINEAR_DRAG) or an unresolved  velocity that is
                                 ! combined with the resolved velocity to estimate the
@@ -349,18 +355,25 @@ BEBT = 0.2                      !   [nondim] default = 0.1
                                 ! 0 (for a forward-backward treatment of nonrotating
                                 ! gravity waves) to 1 (for a backward Euler treatment).
                                 ! In practice, BEBT must be greater than about 0.05.
-DTBT = 20.0                     !   [s or nondim] default = -0.98
-                                ! The barotropic time step, in s. DTBT is only used with
-                                ! the split explicit time stepping. To set the time step
-                                ! automatically based the maximum stable value use 0, or
-                                ! a negative value gives the fraction of the stable value.
-                                ! Setting DTBT to 0 is the same as setting it to -0.98.
-                                ! The value of DTBT that will actually be used is an
-                                ! integer fraction of DT, rounding down.
 
 ! === module MOM_thickness_diffuse ===
 KHTH = 1.0E-04                  !   [m2 s-1] default = 0.0
                                 ! The background horizontal thickness diffusivity.
+
+! === module MOM_mixed_layer_restrat ===
+MIXEDLAYER_RESTRAT = True       !   [Boolean] default = False
+                                ! If true, a density-gradient dependent re-stratifying
+                                ! flow is imposed in the mixed layer.
+                                ! This is only used if BULKMIXEDLAYER is true.
+FOX_KEMPER_ML_RESTRAT_COEF = 10.0 !   [nondim] default = 0.0
+                                ! A nondimensional coefficient that is proportional to
+                                ! the ratio of the deformation radius to the dominant
+                                ! lengthscale of the submesoscale mixed layer
+                                ! instabilities, times the minimum of the ratio of the
+                                ! mesoscale eddy kinetic energy to the large-scale
+                                ! geostrophic kinetic energy or 1 plus the square of the
+                                ! grid spacing over the deformation radius, as detailed
+                                ! by Fox-Kemper et al. (2010)
 
 ! === module MOM_diabatic_driver ===
 ! The following parameters are used for diabatic processes.
@@ -368,6 +381,9 @@ KD = 0.0                        !   [m2 s-1]
                                 ! The background diapycnal diffusivity of density in the
                                 ! interior. Zero or the molecular value, ~1e-7 m2 s-1,
                                 ! may be used.
+
+! === module MOM_kappa_shear ===
+! Parameterization of shear-driven turbulence following Jackson, Hallberg and Legg, JPO 2008
 
 ! === module MOM_KPP ===
 ! This is the MOM wrapper to CVmix:KPP
@@ -435,11 +451,7 @@ MAXCPU = 2.88E+04               !   [wall-clock seconds] default = -1.0
                                 ! factor of the number of processors used.
 
 ! === module MOM_main (MOM_driver) ===
-DT_FORCING = 1800.0             !   [s] default = 300.0
-                                ! The time step for changing forcing, coupling with other
-                                ! components, or potentially writing certain diagnostics.
-                                ! The default value is given by DT.
-DAYMAX = 10.0                   !   [hours] default = 12.0
+DAYMAX = 10.0                   !   [hours] default = 120.0
                                 ! The final time of the whole simulation, in units of
                                 ! TIMEUNIT seconds.  This also sets the potential end
                                 ! time of the present run segment if the end time is
@@ -454,6 +466,6 @@ RESTINT = 240.0                 !   [hours] default = 0.0
                                 ! The interval between saves of the restart file in units
                                 ! of TIMEUNIT.  Use 0 (the default) to not save
                                 ! incremental restart files at all.
-ENERGYSAVEDAYS = 1.0            !   [hours] default = 4.32E+04
+ENERGYSAVEDAYS = 1.0            !   [hours] default = 8.64E+04
                                 ! The interval in units of TIMEUNIT between saves of the
                                 ! energies of the run and other globally summed diagnostics.

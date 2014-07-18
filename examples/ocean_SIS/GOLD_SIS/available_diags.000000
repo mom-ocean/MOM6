@@ -316,6 +316,9 @@
 "ocean_model", "MLv_restrat_time"  [Unused]
     ! long_name: Mixed Layer Meridional Restratification Timescale
     ! units: second
+"ocean_model", "MLD_restrat"  [Unused]
+    ! long_name: Mixed Layer Depth as used in the mixed-layer restratification parameterization
+    ! units: meter
 "ocean_model", "e"  [Used]
     ! long_name: Interface Height Relative to Mean Sea Level
     ! units: meter

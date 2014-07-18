@@ -144,7 +144,7 @@ subroutine Rossby_front_initialize_velocity(u, v, h, G, param_file)
   real    :: y              ! Non-dimensional coordinate across channel, 0..pi
   real    :: T_range        ! Range of salinities and temperatures over the vertical
   real    :: dUdT           ! Factor to convert dT/dy into dU/dz, g*alpha/f
-  real    :: dRho_dT, zi, zc, zm, f, Ty, Dml
+  real    :: dRho_dT, zi, zc, zm, f, Ty, Dml, hAtU
   integer :: i, j, k, is, ie, js, je, nz
   character(len=40) :: verticalCoordinate
   
@@ -158,15 +158,16 @@ subroutine Rossby_front_initialize_velocity(u, v, h, G, param_file)
   v(:,:,:) = 0.0
   u(:,:,:) = 0.0
   
-  do j = G%jsc,G%jec ; do I = G%isc-1,G%iec
+  do j = G%jsc,G%jec ; do I = G%isc-1,G%iec+1
     f = 0.5*( G%CoriolisBu(I,j) + G%CoriolisBu(I,j-1) )
     dUdT = ( G%g_Earth * dRho_dT ) / ( f * G%Rho0 )
     Dml = Hml( G, G%geoLatT(i,j) )
     Ty = dTdy( G, T_range, G%geoLatT(i,j) )
     zi = 0.
     do k = 1, nz
-      zi = zi - h(i,j,k)          ! Bottom interface position
-      zc = zi - 0.5*h(i,j,k)      ! Position of middle of cell
+      hAtU = 0.5*(h(i,j,k)+h(i+1,j,k))
+      zi = zi - hAtU              ! Bottom interface position
+      zc = zi - 0.5*hAtU          ! Position of middle of cell
       zm = max( zc + Dml, 0. )    ! Height above bottom of mixed layer
       u(I,j,k) = dUdT * Ty * zm   ! Thermal wind starting at base of ML
     enddo

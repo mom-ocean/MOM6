@@ -21,6 +21,12 @@
 "ocean_model","u_BT_accel","u_BT_accel","prog","all",.false.,"none",2
 "ocean_model","v_BT_accel","v_BT_accel","prog","all",.false.,"none",2
 
+"ocean_model","Kd_interface","Kd_interface","prog","all",.false.,"none",2
+"ocean_model","MLD_restrat","MLD_restrat","prog","all",.false.,"none",2
+"ocean_model","ML_buoy_restrat","ML_buoy_restrat","prog","all",.false.,"none",2
+"ocean_model","uhml","uhml","prog","all",.false.,"none",2
+"ocean_model","vhml","vhml","prog","all",.false.,"none",2
+
 #=============================================================================================
 #
 #====> This file can be used with diag_manager/v2.0a (or higher) <====

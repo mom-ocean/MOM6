@@ -478,9 +478,9 @@ subroutine MOM_initialize(u, v, h, tv, Time, G, PF, dirs, &
     endif  ! not from_Z_file.
 
     if (debug) then
-      call hchksum(h, "MOM_initialize: h ", G)
-      if ( use_temperature ) call hchksum(tv%T, "MOM_initialize: T ", G)
-      if ( use_temperature ) call hchksum(tv%S, "MOM_initialize: S ", G)
+      call hchksum(h, "MOM_initialize: h ", G, haloshift=1)
+      if ( use_temperature ) call hchksum(tv%T, "MOM_initialize: T ", G, haloshift=1)
+      if ( use_temperature ) call hchksum(tv%S, "MOM_initialize: S ", G, haloshift=1)
     endif
 
 !   Initialize velocity components, u and v
@@ -507,10 +507,8 @@ subroutine MOM_initialize(u, v, h, tv, Time, G, PF, dirs, &
     end select
 
     call pass_vector(u, v, G%Domain)
-    if (debug) call uchksum(u, "MOM_initialize: u ", G)
-    if (debug) call vchksum(v, "MOM_initialize: v ", G)
-
-
+    if (debug) call uchksum(u, "MOM_initialize: u ", G, haloshift=1)
+    if (debug) call vchksum(v, "MOM_initialize: v ", G, haloshift=1)
 
 
 !   Optionally convert the thicknesses from m to kg m-2.  This is particularly

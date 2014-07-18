@@ -7,6 +7,8 @@
                               'MOM_override' /
 
  &fms_nml
+         clock_grain='ROUTINE'
+         clock_flags='NONE'
          domains_stack_size = 710000,
          stack_size = 0 /
 
