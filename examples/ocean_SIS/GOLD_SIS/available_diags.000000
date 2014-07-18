@@ -316,6 +316,12 @@
 "ocean_model", "MLv_restrat_time"  [Unused]
     ! long_name: Mixed Layer Meridional Restratification Timescale
     ! units: second
+"ocean_model", "temp_global"  [Unused]
+    ! long_name: Global Volume Mean Ocean Temperature
+    ! units: Celsius
+"ocean_model", "salt_global"  [Unused]
+    ! long_name: Global Volume Mean Ocean Salinity
+    ! units: PSU
 "ocean_model", "e"  [Used]
     ! long_name: Interface Height Relative to Mean Sea Level
     ! units: meter
