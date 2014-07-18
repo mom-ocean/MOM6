@@ -45,12 +45,13 @@ module MOM_diagnostics
 !********+*********+*********+*********+*********+*********+*********+**
 
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
-use MOM_diag_mediator, only : diag_ctrl, time_type
+use MOM_diag_mediator, only : diag_ctrl, time_type, register_scalar_field
 use MOM_domains, only : pass_vector, To_North, To_East
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
 use MOM_interface_heights, only : find_eta
+use MOM_spatial_means, only : global_volume_mean, global_area_mean
 use MOM_variables, only : thermo_var_ptrs, ocean_internal_state, p3d
 use MOM_variables, only : accel_diag_ptrs, cont_diag_ptrs
 use MOM_wave_speed, only : wave_speed, wave_speed_init, wave_speed_CS
@@ -116,6 +117,7 @@ type, public :: diagnostics_CS ; private
   integer :: id_cg1 = -1, id_Rd1 = -1, id_cfl_cg1 = -1, id_cfl_cg1_x = -1, id_cfl_cg1_y = -1
   integer :: id_mass_wt = -1, id_temp_int = -1, id_salt_int = -1
   integer :: id_col_ht = -1, id_col_mass = -1
+  integer :: id_temp_global = -1, id_salt_global = -1
 
   type(wave_speed_CS), pointer :: wave_speed_CSp => NULL()  
   ! The following pointers are used the calculation of time derivatives.
@@ -177,6 +179,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, dt, G, &
              ! squared that is used to avoid division by 0, in s-2.  This
              ! value is roughly (pi / (the age of the universe) )^2.
   integer :: k_list
+  real :: temp_global, salt_global
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   nz = G%ke ; nkmb = G%nk_rho_varies
@@ -213,7 +216,17 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, dt, G, &
 
     if (CS%id_e_D > 0) call post_data(CS%id_e_D, CS%e_D, CS%diag)
   endif
-     
+
+  if (CS%id_temp_global>0) then
+    temp_global = global_volume_mean(tv%T, h, G)
+    call post_data(CS%id_temp_global, temp_global, CS%diag)
+  endif
+
+  if (CS%id_salt_global>0) then
+    salt_global = global_volume_mean(tv%S, h, G)
+    call post_data(CS%id_salt_global, salt_global, CS%diag)
+  endif
+
   call calculate_vertical_integrals(h, tv, G, CS)
 
   if ((CS%id_Rml > 0) .or. (CS%id_Rcv > 0) .or. ASSOCIATED(CS%h_Rlay) .or. &
@@ -844,6 +857,12 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, param_file, diag, CS)
   else
     thickness_units = "kilogram meter-2" ; flux_units = "kilogram second-1"
   endif
+
+  CS%id_temp_global = register_scalar_field('ocean_model', 'temp_global',  &
+      Time, diag, 'Global Volume Mean Ocean Temperature', 'Celsius')
+
+  CS%id_salt_global = register_scalar_field('ocean_model', 'salt_global',  &
+      Time, diag, 'Global Volume Mean Ocean Salinity', 'PSU')
 
   CS%id_e = register_diag_field('ocean_model', 'e', diag%axesTi, Time, &
       'Interface Height Relative to Mean Sea Level', 'meter')

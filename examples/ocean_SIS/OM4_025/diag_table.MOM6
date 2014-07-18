@@ -2,6 +2,8 @@
 "ocean_daily",            1, "days",   1, "days", "time"
 "ocean_month",            1, "months", 1, "days", "time"
 "ocean_annual",          12, "months", 1, "days", "time"
+"ocean_scalar_month",     1, "months", 1, "days", "time"
+"ocean_scalar_annual",   12, "months", 1, "days", "time"
 "ocean_static",          -1, "months", 1, "days", "time"
 "ocean_month_z",          1, "months", 1, "days", "time"
 "ocean_Drake_passage",    1, "days",   1, "days", "time"
@@ -49,6 +51,12 @@
  "ocean_model", "p_surf",           "p_surf",           "ocean_month", "all", "mean", "none",2
  "ocean_model", "salt_flux",        "salt_flux",        "ocean_month", "all", "mean", "none",2
 
+# Monthly scalars
+ "ocean_model", "SST_global",       "SST_global",       "ocean_scalar_month", "all", "mean", "none",2
+ "ocean_model", "SSS_global",       "SSS_global",       "ocean_scalar_month", "all", "mean", "none",2
+ "ocean_model", "temp_global",      "temp_global",      "ocean_scalar_month", "all", "mean", "none",2
+ "ocean_model", "salt_global",      "salt_global",      "ocean_scalar_month", "all", "mean", "none",2
+
 # Annual averages
  "ocean_model", "e",                "e",                "ocean_annual", "all", "mean", "none",2
  "ocean_model", "h",                "h",                "ocean_annual", "all", "mean", "none",2
@@ -79,6 +87,12 @@
  "ocean_model", "salt_flux",        "salt_flux",        "ocean_annual", "all", "mean", "none",2
  "ocean_model", "age",              "age",              "ocean_annual", "all", "mean", "none",2
 #"ocean_model", "vintage",          "vintage",          "ocean_annual", "all", "mean", "none",2
+
+# Annual scalars
+ "ocean_model", "SST_global",       "SST_global",       "ocean_scalar_annual", "all", "mean", "none",2
+ "ocean_model", "SSS_global",       "SSS_global",       "ocean_scalar_annual", "all", "mean", "none",2
+ "ocean_model", "temp_global",      "temp_global",      "ocean_scalar_annual", "all", "mean", "none",2
+ "ocean_model", "salt_global",      "salt_global",      "ocean_scalar_annual", "all", "mean", "none",2
 
 # Z diagnostics
  "ocean_model", "temp_z",       "temp",             "ocean_month_z", "all", "mean", "none",2

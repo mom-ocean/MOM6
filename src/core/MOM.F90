@@ -392,6 +392,7 @@ use MOM_vert_friction, only : vertvisc_limit_vel, vertvisc_init
 use MOM_set_visc, only : set_viscous_BBL, set_viscous_ML, set_visc_init
 use MOM_set_visc, only : set_visc_register_restarts, set_visc_CS
 use MOM_sponge, only : init_sponge_diags, sponge_CS
+use MOM_spatial_means, only : global_area_mean, global_volume_mean
 use MOM_checksum_packages, only : MOM_thermo_chksum, MOM_state_chksum, MOM_accel_chksum
 use MOM_dynamics_unsplit, only : step_MOM_dyn_unsplit, register_restarts_dyn_unsplit
 use MOM_dynamics_unsplit, only : initialize_dyn_unsplit, end_dyn_unsplit
@@ -649,13 +650,11 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     h                        ! h : Layer thickness, in m.
   real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)+1) :: eta_predia
   real :: tot_wt_ssh, Itot_wt_ssh, I_time_int
-  real, dimension(SZI_(CS%G),SZJ_(CS%G)) :: tmpForSumming
   real :: SST_global, SSS_global
   type(time_type) :: Time_local
   integer :: pid_tau, pid_ustar, pid_psurf, pid_u, pid_h
   integer :: pid_T, pid_S
   logical :: showCallTree
-  real :: temporary
 
   G => CS%G
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -1331,22 +1330,16 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     endif
 
     if (CS%id_sst_global > 0) then
-      tmpForSumming(:,:) = 0.
-      do j=js,je ; do i=is, ie
-        tmpForSumming(i,j) = ( state%SST(i,j) * (G%areaT(i,j) * G%mask2dT(i,j)) )
-      enddo ; enddo
-      SST_global = reproducing_sum( tmpForSumming ) * G%IareaT_global
+      SST_global = global_area_mean(state%SST, G)
       call post_data(CS%id_sst_global, SST_global, CS%diag)
     endif
 
     if (CS%id_sss_global > 0) then
-      tmpForSumming(:,:) = 0.
-      do j=js,je ; do i=is, ie
-        tmpForSumming(i,j) = ( state%SSS(i,j) * (G%areaT(i,j) * G%mask2dT(i,j)) )
-      enddo ; enddo
-      SSS_global = reproducing_sum( tmpForSumming ) * G%IareaT_global
+      SSS_global = global_area_mean(state%SSS, G)
       call post_data(CS%id_sss_global, SSS_global, CS%diag)
     endif
+
+
 
     if (CS%id_sss > 0) &
       call post_data(CS%id_sss, state%SSS, CS%diag, mask=G%mask2dT)

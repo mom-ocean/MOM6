@@ -292,6 +292,12 @@
 "ocean_model", "neutral_slope_y"  [Unused]
     ! long_name: Meridional slope of neutral surface
     ! units: nondim
+"ocean_model", "temp_global"  [Unused]
+    ! long_name: Global Volume Mean Ocean Temperature
+    ! units: Celsius
+"ocean_model", "salt_global"  [Unused]
+    ! long_name: Global Volume Mean Ocean Salinity
+    ! units: PSU
 "ocean_model", "e"  [Unused]
     ! long_name: Interface Height Relative to Mean Sea Level
     ! units: meter
