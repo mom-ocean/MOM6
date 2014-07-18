@@ -22,6 +22,7 @@ module MOM_spatial_means
 
 use MOM_coms, only : EFP_type, operator(+), operator(-), assignment(=)
 use MOM_coms, only : EFP_to_real, real_to_EFP, EFP_list_sum_across_PEs
+use MOM_coms, only : reproducing_sum
 use MOM_coms, only : query_EFP_overflow_error, reset_EFP_overflow_error
 use MOM_error_handler, only : MOM_error, NOTE, WARNING, FATAL, is_root_pe
 use MOM_file_parser, only : get_param, log_version, param_file_type
@@ -31,9 +32,45 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public :: global_i_mean, global_j_mean
+public :: global_i_mean, global_j_mean, global_ij_mean, global_volume_mean
 
 contains
+
+function global_ij_mean(var,G)
+  type(ocean_grid_type),                       intent(in)  :: G
+  real, dimension(SZI_(G), SZJ_(G)),           intent(in)  :: var
+  real, dimension(SZI_(G), SZJ_(G))                        :: tmpForSumming
+  integer :: i, j, is, ie, js, je
+  real :: global_ij_mean
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+
+  tmpForSumming(:,:) = 0.
+  do j=js,je ; do i=is, ie
+    tmpForSumming(i,j) = ( var(i,j) * (G%areaT(i,j) * G%mask2dT(i,j)) )
+  enddo ; enddo
+  global_ij_mean = reproducing_sum( tmpForSumming ) * G%IareaT_global
+
+end function global_ij_mean
+
+function global_volume_mean(var,h,G)
+  type(ocean_grid_type),                       intent(in)  :: G
+  real, dimension(SZI_(G), SZJ_(G), SZK_(G)),  intent(in)  :: var
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),       intent(in)  :: h
+  real, dimension(SZI_(G), SZJ_(G), SZK_(G))               :: tmpForSumming, weight
+  integer :: i, j, k, is, ie, js, je, nz
+  real :: global_volume_mean
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+
+  tmpForSumming(:,:,:) = 0. ; weight(:,:,:) = 0.
+
+  do k=1, nz ; do j=js,je ; do i=is, ie
+    weight(i,j,k)  =  h(i,j,k) * (G%areaT(i,j) * G%mask2dT(i,j))
+    tmpForSumming(i,j,k) =  var(i,j,k) * weight(i,j,k)
+  enddo ; enddo ; enddo
+  global_volume_mean = reproducing_sum(tmpForSumming) / reproducing_sum(weight)
+
+end function global_volume_mean
+
 
 subroutine global_i_mean(array, i_mean, G, mask)
   real, dimension(NIMEM_,NJMEM_), intent(in)    :: array
