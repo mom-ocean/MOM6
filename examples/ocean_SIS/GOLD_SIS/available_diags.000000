@@ -319,6 +319,21 @@
 "ocean_model", "MLD_restrat"  [Unused]
     ! long_name: Mixed Layer Depth as used in the mixed-layer restratification parameterization
     ! units: meter
+"ocean_model", "ML_buoy_restrat"  [Unused]
+    ! long_name: Mixed Layer Buoyancy as used in the mixed-layer restratification parameterization
+    ! units: m/s^2
+"ocean_model", "udml_restrat"  [Unused]
+    ! long_name: Transport stream function amplitude for zonal restratification of mixed layer
+    ! units: m3/s
+"ocean_model", "vdml_restrat"  [Unused]
+    ! long_name: Transport stream function amplitude for meridional restratification of mixed layer
+    ! units: m3/s
+"ocean_model", "uml_restrat"  [Unused]
+    ! long_name: Surface zonal velocity component of mixed layer restratification
+    ! units: m/s
+"ocean_model", "vml_restrat"  [Unused]
+    ! long_name: Surface meridional velocity component of mixed layer restratification
+    ! units: m/s
 "ocean_model", "e"  [Used]
     ! long_name: Interface Height Relative to Mean Sea Level
     ! units: meter

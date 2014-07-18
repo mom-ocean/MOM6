@@ -85,6 +85,8 @@ type, public :: mixedlayer_restrat_CS ; private
   integer :: id_urestrat_time , id_vrestrat_time 
   integer :: id_uhml = -1, id_vhml = -1
   integer :: id_MLD = -1, id_Rml = -1
+  integer :: id_uDml = -1, id_vDml = -1
+  integer :: id_uml = -1, id_vml = -1
 end type mixedlayer_restrat_CS
 
 contains
@@ -188,8 +190,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
   real :: vtimescale_diag(SZI_(G),SZJB_(G)) ! in the zonal and meridional
                                             ! directions, in s, stored in 2-D
                                             ! arrays for diagnostic purposes.
-  logical :: use_EOS    ! If true, density is calculated from T & S using an
-                        ! equation of state.
+  real :: uDml_diag(SZIB_(G),SZJ_(G)), vDml_diag(SZI_(G),SZJB_(G))
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   real, dimension(SZI_(G)) :: rhoSurf, deltaRhoAtKm1, deltaRhoAtK, dK, dKm1, pRef_MLD ! Used for MLD
   real, dimension(SZI_(G)) :: rhoAtK, rho1, d1, pRef_N2 ! Used for N2
@@ -324,6 +325,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
         enddo
       endif
     enddo 
+    uDml_diag(is:ie,j) = uDml(is:ie)
   enddo
 
 !  V- component
@@ -370,7 +372,9 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
         vhtr(i,J,k) = vhtr(i,J,k) + vhml(i,J,k)*dt
       enddo
     endif
-  enddo ; enddo
+    enddo
+    vDml_diag(is:ie,j) = vDml(is:ie)
+  enddo
 
 !$OMP do
   do j=js,je ; do k=1,nz ; do i=is,ie
@@ -387,6 +391,22 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
     if (CS%id_vhml > 0) call post_data(CS%id_vhml, vhml, CS%diag)
     if (CS%id_MLD > 0) call post_data(CS%id_MLD, MLD, CS%diag)
     if (CS%id_Rml > 0) call post_data(CS%id_Rml, Rml_av, CS%diag)
+    if (CS%id_uDml > 0) call post_data(CS%id_uDml, uDml_diag, CS%diag)
+    if (CS%id_vDml > 0) call post_data(CS%id_vDml, vDml_diag, CS%diag)
+    if (CS%id_uml > 0) then
+      do J=js,je ; do i=is,ie
+        h_vel = 0.5*((htot(i,j) + htot(i+1,j)) + h_neglect)
+        uDml_diag(I,j) = uDml_diag(I,j) / (0.01*h_vel) * G%IdyCu(I,j) * (PSI(0.)-PSI(-.01))
+      enddo ; enddo
+      call post_data(CS%id_uml, uDml_diag, CS%diag)
+    endif
+    if (CS%id_vml > 0) then
+      do J=js,je ; do i=is,ie
+        h_vel = 0.5*((htot(i,j) + htot(i,j+1)) + h_neglect) 
+        vDml_diag(i,J) = vDml_diag(i,J) / (0.01*h_vel) * G%IdxCv(i,J) * (PSI(0.)-PSI(-.01))
+      enddo ; enddo
+      call post_data(CS%id_vml, vDml_diag, CS%diag)
+    endif
   endif
 
 end subroutine mixedlayer_restrat_general
@@ -455,6 +475,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
   real :: vtimescale_diag(SZI_(G),SZJB_(G)) ! in the zonal and meridional
                                             ! directions, in s, stored in 2-D
                                             ! arrays for diagnostic purposes.
+  real :: uDml_diag(SZIB_(G),SZJ_(G)), vDml_diag(SZI_(G),SZJB_(G))
   logical :: use_EOS    ! If true, density is calculated from T & S using an
                         ! equation of state.
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
@@ -554,6 +575,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
         enddo
       endif
     enddo 
+    uDml_diag(is:ie,j) = uDml(is:ie)
   enddo
 
 !  V- component
@@ -599,7 +621,9 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
         vhtr(i,J,k) = vhtr(i,J,k) + vhml(i,J,k)*dt
       enddo
     endif
-  enddo ; enddo
+    enddo
+    vDml_diag(is:ie,j) = vDml(is:ie)
+  enddo
 
 !$OMP do
   do j=js,je ; do k=1,G%nkml ; do i=is,ie
@@ -624,6 +648,8 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
     if (CS%id_vhml > 0) call post_data(CS%id_vhml, vhml, CS%diag)
     if (CS%id_MLD > 0) call post_data(CS%id_MLD, htot, CS%diag)
     if (CS%id_Rml > 0) call post_data(CS%id_Rml, Rml_av, CS%diag)
+    if (CS%id_uDml > 0) call post_data(CS%id_uDml, uDml_diag, CS%diag)
+    if (CS%id_vDml > 0) call post_data(CS%id_vDml, vDml_diag, CS%diag)
   endif
 
 end subroutine mixedlayer_restrat_BML
@@ -688,6 +714,14 @@ logical function mixedlayer_restrat_init(Time, G, param_file, diag, CS)
       'Mixed Layer Depth as used in the mixed-layer restratification parameterization', 'meter')
   CS%id_Rml = register_diag_field('ocean_model', 'ML_buoy_restrat', diag%axesT1, Time, &
       'Mixed Layer Buoyancy as used in the mixed-layer restratification parameterization', 'm/s^2')
+  CS%id_uDml = register_diag_field('ocean_model', 'udml_restrat', diag%axesCu1, Time, &
+      'Transport stream function amplitude for zonal restratification of mixed layer', 'm3/s')
+  CS%id_vDml = register_diag_field('ocean_model', 'vdml_restrat', diag%axesCv1, Time, &
+      'Transport stream function amplitude for meridional restratification of mixed layer', 'm3/s')
+  CS%id_uml = register_diag_field('ocean_model', 'uml_restrat', diag%axesCu1, Time, &
+      'Surface zonal velocity component of mixed layer restratification', 'm/s')
+  CS%id_vml = register_diag_field('ocean_model', 'vml_restrat', diag%axesCv1, Time, &
+      'Surface meridional velocity component of mixed layer restratification', 'm/s')
 
 end function mixedlayer_restrat_init
 
