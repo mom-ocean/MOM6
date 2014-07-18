@@ -1072,7 +1072,7 @@ end subroutine forcing_SinglePointPrint
 !> Register members of the forcing type for diagnostics
 subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
   type(time_type),     intent(in)    :: Time
-  type(diag_ctrl),     intent(in)    :: diag
+  type(diag_ctrl),     intent(inout) :: diag
   logical,             intent(in)    :: use_temperature !< True if T/S are in use
   type(forcing_diags), intent(inout) :: handles
 
@@ -1082,11 +1082,15 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
 
   handles%id_taux = register_diag_field('ocean_model', 'taux', diag%axesCu1, Time,  &
         'Zonal surface stress from ocean interactions with atmos and ice', 'Pascal',&
-        standard_name='surface_downward_x_stress')
+        standard_name='surface_downward_x_stress', cmor_field_name='tauuo',         &
+        cmor_units='N m-2', cmor_long_name='Surface Downward X Stress',             &
+        cmor_standard_name='surface_downward_x_stress')
 
   handles%id_tauy = register_diag_field('ocean_model', 'tauy', diag%axesCv1, Time,  &
         'Meridional surface stress ocean interactions with atmos and ice', 'Pascal',&
-         standard_name='surface_downward_y_stress')
+         standard_name='surface_downward_y_stress', cmor_field_name='tauvo',        &
+         cmor_units='N m-2', cmor_long_name='Surface Downward Y Stress',            &
+         cmor_standard_name='surface_downward_y_stress')
 
   handles%id_ustar = register_diag_field('ocean_model', 'ustar', diag%axesT1, Time, &
       'Surface friction velocity = [(gustiness + tau_magnitude)/rho0]^(1/2)', 'meter second-1')
@@ -1100,11 +1104,14 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
 
   handles%id_prcme = register_diag_field('ocean_model', 'PRCmE', diag%axesT1, Time,                 &
         'Net surface water flux (precip+liq runoff+ice calving-evap)', 'kilogram meter-2 second-1', &
-        standard_name='water_flux_into_sea_water')
+        standard_name='water_flux_into_sea_water', cmor_field_name='wfo', cmor_units='kg m-2 s-1',  &
+        cmor_standard_name='water_flux_into_sea_water',cmor_long_name='Water Flux Into Sea Water')
 
   handles%id_evap = register_diag_field('ocean_model', 'evap', diag%axesT1, Time,                         &
        'Evaporation/condensation at ocean surface (evaporation is negative)', 'kilogram meter-2 second-1',&
-       standard_name='water_evaporation_flux')
+       standard_name='water_evaporation_flux', cmor_field_name='evs', cmor_units='kg m-2 s-1',            &
+       cmor_standard_name='water_evaporation_flux',                                                       &
+       cmor_long_name='Water Evaporation Flux Where Ice Free Ocean over Sea')
 
   ! smg: seaice_melt field requires updates to the sea ice model 
   handles%id_seaice_melt = register_diag_field('ocean_model', 'seaice_melt', diag%axesT1, Time, &
@@ -1116,7 +1123,8 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
 
   handles%id_froz_precip = register_diag_field('ocean_model', 'froz_precip', diag%axesT1, Time, &
         'Frozen precipitation into ocean', 'kilogram meter-2 second-1',                         &
-        standard_name='snowfall_flux')
+        standard_name='snowfall_flux', cmor_field_name='prsn', cmor_units='kg m-2 s-1',         &
+        cmor_standard_name='snowfall_flux', cmor_long_name='Snowfall Flux where Ice Free Ocean over Sea')
 
   handles%id_liq_precip = register_diag_field('ocean_model', 'liq_precip', diag%axesT1, Time, &
         'Liquid precipitation into ocean', 'kilogram meter-2 second-1',                       &
@@ -1131,15 +1139,23 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
 
   handles%id_liq_runoff = register_diag_field('ocean_model', 'liq_runoff', diag%axesT1, Time, &
         'Liquid runoff (rivers) into ocean', 'kilogram meter-2 second-1',                     &
-        standard_name='water_flux_into_sea_water_from_rivers')
+        standard_name='water_flux_into_sea_water_from_rivers', cmor_field_name='friver',      &
+        cmor_units='kg m-2 s-1', cmor_standard_name='water_flux_into_sea_water_from_rivers',  &
+        cmor_long_name='Water Flux into Sea Water From Rivers')
 
   handles%id_calving_heat_content = register_diag_field('ocean_model', 'calving_heat_content', diag%axesT1, Time, &
         'Heat content of frozen runoff (calving) into ocean', 'Watt meter-2',                                     &
-        standard_name='temperature_flux_due_to_icebergs_expressed_as_heat_flux_into_sea_water')
+        standard_name='temperature_flux_due_to_icebergs_expressed_as_heat_flux_into_sea_water',                   &
+        cmor_field_name='hfibthermds', cmor_units='W m-2',                                                        &
+        cmor_standard_name='heat_flux_into_sea_water_due_to_iceberg_thermodynamics',                              &
+        cmor_long_name='Heat Flux into Sea Water due to Iceberg Thermodynamics')
 
   handles%id_runoff_heat_content = register_diag_field('ocean_model', 'runoff_heat_content', diag%axesT1, Time, &
         'Heat content of liquid river runoff into ocean', 'Watt meter-2',                                       &
-        standard_name='temperature_flux_due_to_runoff_expressed_as_heat_flux_into_sea_water')
+        standard_name='temperature_flux_due_to_runoff_expressed_as_heat_flux_into_sea_water',                   &
+        cmor_field_name='hfrunoffds', cmor_units='W m-2',                                                       &
+        cmor_standard_name='temperature_flux_due_to_runoff_expressed_as_heat_flux_into_sea_water',              &
+        cmor_long_name='Temperature Flux due to Runoff Expressed as Heat Flux into Sea Water')
 
   handles%id_precip_heat_content = register_diag_field('ocean_model', 'precip_heat_content', diag%axesT1, Time, &
         'Heat content (relative to oC) of precipitation entering ocean', 'Watt meter-2',                        &
@@ -1155,20 +1171,26 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
   handles%id_net_heat_surface = register_diag_field('ocean_model', 'net_heat_surface', diag%axesT1, Time, &
         'Surface ocean heat flux from SW+LW+latent+sensible+mass transfer+frazil', 'Watt meter-2')
 
-  handles%id_sw = register_diag_field('ocean_model', 'SW', diag%axesT1, Time, &
-        'Shortwave radiation flux into ocean', 'Watt meter-2', &
-        standard_name='surface_net_downward_shortwave_flux')
+  handles%id_sw = register_diag_field('ocean_model', 'SW', diag%axesT1, Time,                              &
+        'Shortwave radiation flux into ocean', 'Watt meter-2',                                             &
+        standard_name='surface_net_downward_shortwave_flux', cmor_field_name='rsntds', cmor_units='W m-2', &
+        cmor_standard_name='net_downward_shortwave_flux_at_sea_water_surface',                             &
+        cmor_long_name='Net Downward Shortwave Radiation at Sea Water Surface')
 
   handles%id_LwLatSens = register_diag_field('ocean_model', 'LwLatSens', diag%axesT1, Time, &
         'Combined longwave, latent, and sensible heating', 'Watt meter-2')
 
-  handles%id_lw = register_diag_field('ocean_model', 'LW', diag%axesT1, Time, &
-        'Longwave radiation flux into ocean', 'Watt meter-2', &
-        standard_name='surface_net_downward_longwave_flux')
+  handles%id_lw = register_diag_field('ocean_model', 'LW', diag%axesT1, Time,                            &
+        'Longwave radiation flux into ocean', 'Watt meter-2',                                            &
+        standard_name='surface_net_downward_longwave_flux', cmor_field_name='rlds', cmor_units='W m-2',  &
+        cmor_standard_name='surface_net_downward_longwave_flux',                                         &
+        cmor_long_name='Surface Net Downward Longwave Radiation')
 
-  handles%id_lat = register_diag_field('ocean_model', 'latent', diag%axesT1, Time,                    &
-        'Latent heat flux into ocean due to fusion and evaporation (negative means ocean losses heat)'&
-        , 'Watt meter-2')
+  handles%id_lat = register_diag_field('ocean_model', 'latent', diag%axesT1, Time,                      &
+        'Latent heat flux into ocean due to fusion and evaporation (negative means ocean losses heat)', &
+        'Watt meter-2', cmor_field_name='hfls', cmor_units='W m-2',                                     &
+        cmor_standard_name='surface_downward_latent_heat_flux',                                         &
+        cmor_long_name='Surface Downward Latent Heat Flux')
 
   handles%id_lat_evap = register_diag_field('ocean_model', 'latent_evap', diag%axesT1, Time, &
         'Latent heat flux into ocean due to evaporation/condensation', 'Watt meter-2')
@@ -1179,9 +1201,10 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
   handles%id_lat_calve = register_diag_field('ocean_model', 'latent_calve', diag%axesT1, Time, &
         'Latent heat flux into ocean due to melting of frozen ice calving', 'Watt meter-2')
 
-  handles%id_sens = register_diag_field('ocean_model', 'sensible', diag%axesT1, Time, &
-        'Sensible heat flux into ocean', 'Watt meter-2', &
-        standard_name='surface_downward_sensible_heat_flux')
+  handles%id_sens = register_diag_field('ocean_model', 'sensible', diag%axesT1, Time,                    &
+        'Sensible heat flux into ocean', 'Watt meter-2',                                                 &
+        standard_name='surface_downward_sensible_heat_flux', cmor_field_name='hfss', cmor_units='W m-2', &
+        cmor_long_name='Surface Downward Sensible Heat Flux')
 
   handles%id_heat_rest = register_diag_field('ocean_model', 'heat_rest', diag%axesT1, Time, &
         'Restoring surface heat flux into ocean', 'Watt meter-2')
@@ -1189,8 +1212,10 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
   handles%id_psurf = register_diag_field('ocean_model', 'p_surf', diag%axesT1, Time, &
         'Pressure at ice-ocean or atmosphere-ocean interface', 'Pascal')
 
-  handles%id_saltflux = register_diag_field('ocean_model', 'salt_flux', diag%axesT1, Time, &
-        'Salt flux into ocean at surface', 'kilogram meter-2 second-1')
+  handles%id_saltflux = register_diag_field('ocean_model', 'salt_flux', diag%axesT1, Time,        &
+        'Salt flux into ocean at surface', 'kilogram meter-2 second-1', cmor_field_name='sfdsi',  &
+        cmor_units='kg m-2 s-1', cmor_standard_name='downward_sea_ice_basal_salt_flux',           &
+        cmor_long_name='Downward Sea Ice Basal Salt Flux')
 
   handles%id_saltFluxIn = register_diag_field('ocean_model', 'salt_flux_in', diag%axesT1, Time, &
         'Salt flux into ocean at surface from coupler', 'kilogram meter-2 second-1')

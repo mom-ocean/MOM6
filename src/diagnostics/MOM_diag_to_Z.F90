@@ -705,13 +705,73 @@ subroutine calc_Zint_diags(h, in_ptrs, ids, num_diags, &
   enddo
 
 end subroutine calc_Zint_diags
-
                           
-subroutine register_Z_tracer(tr_ptr, name, long_name, units, Time, G, CS)
+subroutine register_Z_tracer(tr_ptr, name, long_name, units, Time, G, CS, standard_name,   &
+     cmor_field_name, cmor_long_name, cmor_units, cmor_standard_name)
   real, dimension(NIMEM_,NJMEM_,NKMEM_), target, intent(in) :: tr_ptr
   character(len=*),                           intent(in) :: name
   character(len=*),                           intent(in) :: long_name
   character(len=*),                           intent(in) :: units
+  character(len=*), optional, intent(in)                 :: standard_name
+  type(time_type),                            intent(in) :: Time
+  type(ocean_grid_type),                      intent(in) :: G
+  type(diag_to_Z_CS),                         pointer    :: CS
+  character(len=*), optional, intent(in) :: cmor_field_name, cmor_long_name
+  character(len=*), optional, intent(in) :: cmor_units, cmor_standard_name
+!   This subroutine registers a tracer to be output in depth space.
+! Arguments: tr_ptr - the tracer that is being offered for translation to Z-space.
+!  (in)      name - The name to be used for the output tracer.
+!  (in)      long_name - The long name to be used for the output tracer.
+!  (in)      units - The units of the output tracer.
+!  (in)      Time - The current model time.
+!  (in)      G - The ocean's grid structure.
+!  (in)      CS - The control structure returned by a previous call to
+!                 diagnostics_init.
+!  (in,opt)  cmor_field_name - The cmor name of a field.
+!  (in,opt)  cmor_long_name - The cmor long name of a field.
+!  (in,opt)  cmor_units - The cmor units of a field.
+!  (in,opt)  cmor_standard_name - The cmor standardized name associated with a field. 
+  character(len=256) :: posted_standard_name
+  character(len=256) :: posted_cmor_units, posted_cmor_standard_name, posted_cmor_long_name
+
+  if (present(standard_name)) then
+    posted_standard_name = standard_name
+  else
+    posted_standard_name = 'not provided'
+  endif
+
+  call register_Z_tracer_low(tr_ptr, name, long_name, units, trim(posted_standard_name), Time, G, CS)
+ 
+ if (present(cmor_field_name)) then
+    ! Fallback values for strings set to "NULL"
+    posted_cmor_units = "not provided"           !
+    posted_cmor_standard_name = "not provided"   ! Values might be able to be replaced with a CS%missing field?
+    posted_cmor_long_name = "not provided"       !
+
+    ! If attributes are present for MOM variable names, use them first for the register_diag_field 
+    ! call for CMOR verison of the variable
+    posted_cmor_units = units
+    posted_cmor_long_name = long_name
+    posted_cmor_standard_name = posted_standard_name
+
+    ! If specified in the call to register_diag_field, override attributes with the CMOR versions 
+    if (present(cmor_units)) posted_cmor_units = cmor_units
+    if (present(cmor_standard_name)) posted_cmor_standard_name = cmor_standard_name
+    if (present(cmor_long_name)) posted_cmor_long_name = cmor_long_name
+
+    call register_Z_tracer_low(tr_ptr, trim(cmor_field_name), trim(posted_cmor_long_name),     &
+         trim(posted_cmor_units), trim(posted_cmor_standard_name), Time, G, CS)
+
+  endif
+
+end subroutine register_Z_tracer
+
+subroutine register_Z_tracer_low(tr_ptr, name, long_name, units, standard_name, Time, G, CS)
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), target, intent(in) :: tr_ptr
+  character(len=*),                           intent(in) :: name
+  character(len=*),                           intent(in) :: long_name
+  character(len=*),                           intent(in) :: units
+  character(len=*),                           intent(in) :: standard_name
   type(time_type),                            intent(in) :: Time
   type(ocean_grid_type),                      intent(in) :: G
   type(diag_to_Z_CS),                         pointer    :: CS
@@ -724,6 +784,7 @@ subroutine register_Z_tracer(tr_ptr, name, long_name, units, Time, G, CS)
 !  (in)      G - The ocean's grid structure.
 !  (in)      CS - The control structure returned by a previous call to
 !                 diagnostics_init.
+  character(len=256) :: posted_standard_name
   integer :: isd, ied, jsd, jed, nk, m, id_test
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nk = G%ke
   if (.not.associated(CS)) call MOM_error(FATAL, &
@@ -740,10 +801,12 @@ subroutine register_Z_tracer(tr_ptr, name, long_name, units, Time, G, CS)
   CS%missing_tr(m) = CS%missing_value ! This could be changed later, if desired.
   if (CS%nk_zspace > 0) then
     CS%id_tr(m) = register_diag_field('ocean_model', name, CS%axesTz, Time, &
-                                      long_name, units, missing_value=CS%missing_tr(m))
+                                      long_name, units, missing_value=CS%missing_tr(m), &
+                                      standard_name=standard_name)
   else
     id_test = register_diag_field('ocean_model', name, CS%diag%axesT1, Time, &
-                                  long_name, units, missing_value=CS%missing_tr(m))
+                                  long_name, units, missing_value=CS%missing_tr(m),     &
+                                  standard_name=standard_name)
     if (id_test>0) call MOM_error(WARNING, &
         "MOM_diag_to_Z_init: "//trim(name)// &
         " cannot be output without an appropriate depth-space target file.")
@@ -755,7 +818,7 @@ subroutine register_Z_tracer(tr_ptr, name, long_name, units, Time, G, CS)
   call safe_alloc_ptr(CS%tr_z(m)%p,isd,ied,jsd,jed,CS%nk_zspace)
   CS%tr_model(m)%p => tr_ptr
 
-end subroutine register_Z_tracer
+end subroutine register_Z_tracer_low
 
 subroutine MOM_diag_to_Z_init(Time, G, param_file, diag, CS)
   type(time_type),         intent(in)    :: Time
@@ -827,12 +890,14 @@ subroutine MOM_diag_to_Z_init(Time, G, param_file, diag, CS)
 
     CS%id_u_z = register_diag_field('ocean_model', 'u_z', CS%axesCuz, Time, &
         'Zonal Velocity in Depth Space', 'meter second-1', &
-        missing_value=CS%missing_vel)
+        missing_value=CS%missing_vel, cmor_field_name='uo_z', cmor_units='m s-1', &
+        cmor_standard_name='sea_water_x_velocity', cmor_long_name='Sea Water X Velocity')
     if (CS%id_u_z>0) call safe_alloc_ptr(CS%u_z,IsdB,IedB,jsd,jed,CS%nk_zspace)
 
     CS%id_v_z = register_diag_field('ocean_model', 'v_z', CS%axesCvz, Time, &
         'Meridional Velocity in Depth Space', 'meter second-1', &
-        missing_value=CS%missing_vel)
+        missing_value=CS%missing_vel, cmor_field_name='vo_z', cmor_units='m s-1', &
+        cmor_standard_name='sea_water_y_velocity', cmor_long_name='Sea Water Y Velocity')
     if (CS%id_v_z>0) call safe_alloc_ptr(CS%v_z,isd,ied,JsdB,JedB,CS%nk_zspace)
 
     CS%id_uh_z = register_diag_field('ocean_model', 'uh_z', CS%axesCuz, Time, &
