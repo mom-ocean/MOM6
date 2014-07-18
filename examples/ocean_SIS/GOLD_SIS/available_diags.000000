@@ -394,6 +394,10 @@
 "ocean_model", "mass_wt"  [Unused]
     ! long_name: The column mass for calculating mass-weighted average properties
     ! units: kg m-2
+"ocean_model", "masscello"  [Unused]
+    ! long_name: Sea Water Mass Per Unit Area
+    ! units: kg m-2
+    ! standard_name: sea_water_mass_per_unit_area
 "ocean_model", "temp_int"  [Unused]
     ! long_name: The mass weighted column integrated temperature
     ! units: degC kg m-2
@@ -409,9 +413,17 @@
 "ocean_model", "u_z"  [Used]
     ! long_name: Zonal Velocity in Depth Space
     ! units: meter second-1
+"ocean_model", "uo_z"  [Unused]
+    ! long_name: Sea Water X Velocity
+    ! units: m s-1
+    ! standard_name: sea_water_x_velocity
 "ocean_model", "v_z"  [Used]
     ! long_name: Meridional Velocity in Depth Space
     ! units: meter second-1
+"ocean_model", "vo_z"  [Unused]
+    ! long_name: Sea Water Y Velocity
+    ! units: m s-1
+    ! standard_name: sea_water_y_velocity
 "ocean_model", "uh_z"  [Unused]
     ! long_name: Zonal Volume Transport in Depth Space
     ! units: meter3 second-1
@@ -616,9 +628,17 @@
 "ocean_model", "u"  [Used]
     ! long_name: Zonal velocity
     ! units: meter  second-1
+"ocean_model", "uo"  [Unused]
+    ! long_name: Sea Water X Velocity
+    ! units: m s-1
+    ! standard_name: sea_water_x_velocity
 "ocean_model", "v"  [Used]
     ! long_name: Meridional velocity
     ! units: meter second-1
+"ocean_model", "vo"  [Unused]
+    ! long_name: Sea Water Y Velocity
+    ! units: m s-1
+    ! standard_name: sea_water_y_velocity
 "ocean_model", "h"  [Used]
     ! long_name: Layer Thickness
     ! units: meter
@@ -643,12 +663,20 @@
 "ocean_model", "salt"  [Used]
     ! long_name: Salinity
     ! units: PSU
+"ocean_model", "so"  [Unused]
+    ! long_name: Sea Water Salinity
+    ! units: psu
+    ! standard_name: sea_water_salinity
 "ocean_model", "SST"  [Used]
     ! long_name: Sea Surface Temperature
     ! units: Celsius
 "ocean_model", "SST_global"  [Unused]
     ! long_name: Global Average Sea Surface Temperature
     ! units: Celsius
+"ocean_model", "tosga"  [Unused]
+    ! long_name: Global Average Sea Surface Temperature
+    ! units: deg C
+    ! standard_name: global_average_sea_surface_temperature
 "ocean_model", "SST_sq"  [Unused]
     ! long_name: Sea Surface Temperature Squared
     ! units: Celsius**2
@@ -661,6 +689,10 @@
 "ocean_model", "frazil"  [Unused]
     ! long_name: Heat sink from frazil formation
     ! units: Watt meter-2
+"ocean_model", "hfsifrazil"  [Unused]
+    ! long_name: Heat Flux into Sea Water due to Frazil Ice Formation"
+    ! units: W m-2
+    ! standard_name: heat_flux_into_sea_water_due_to_freezing_of_frazil_ice
 "ocean_model", "salt_deficit"  [Unused]
     ! long_name: Salt sink in ocean due to ice flux
     ! units: g Salt meter-2 s-1
@@ -739,9 +771,15 @@
 "ocean_model", "temp_z"  [Used]
     ! long_name: Potential Temperature
     ! units: degC
+    ! standard_name: not provided
 "ocean_model", "salt_z"  [Used]
     ! long_name: Salinity
     ! units: PSU
+    ! standard_name: not provided
+"ocean_model", "so_z"  [Unused]
+    ! long_name: Sea Water Salinity
+    ! units: psu
+    ! standard_name: sea_water_salinity
 "ocean_model", "age"  [Unused]
     ! long_name: Ideal Age Tracer
     ! units: years
@@ -760,18 +798,21 @@
 "ocean_model", "age_z"  [Used]
     ! long_name: Ideal Age Tracer
     ! units: years
+    ! standard_name: not provided
 "ocean_model", "CFC11"  [Unused]
     ! long_name: CFC-11 Concentration
     ! units: mol m-3
 "ocean_model", "CFC11_z"  [Unused]
     ! long_name: CFC-11 Concentration
     ! units: mol m-3
+    ! standard_name: not provided
 "ocean_model", "CFC12"  [Unused]
     ! long_name: CFC-12 Concentration
     ! units: mol m-3
 "ocean_model", "CFC12_z"  [Unused]
     ! long_name: CFC-12 Concentration
     ! units: mol m-3
+    ! standard_name: not provided
 "ocean_model", "CFC11_adx"  [Unused]
     ! long_name: CFC-11 Concentration advective zonal flux
     ! units: mol s-1
@@ -800,9 +841,17 @@
     ! long_name: Zonal surface stress from ocean interactions with atmos and ice
     ! units: Pascal
     ! standard_name: surface_downward_x_stress
+"ocean_model", "tauuo"  [Unused]
+    ! long_name: Surface Downward X Stress
+    ! units: N m-2
+    ! standard_name: surface_downward_x_stress
 "ocean_model", "tauy"  [Used]
     ! long_name: Meridional surface stress ocean interactions with atmos and ice
     ! units: Pascal
+    ! standard_name: surface_downward_y_stress
+"ocean_model", "tauvo"  [Unused]
+    ! long_name: Surface Downward Y Stress
+    ! units: N m-2
     ! standard_name: surface_downward_y_stress
 "ocean_model", "ustar"  [Used]
     ! long_name: Surface friction velocity = [(gustiness + tau_magnitude)/rho0]^(1/2)
@@ -811,9 +860,17 @@
     ! long_name: Net surface water flux (precip+liq runoff+ice calving-evap)
     ! units: kilogram meter-2 second-1
     ! standard_name: water_flux_into_sea_water
+"ocean_model", "wfo"  [Unused]
+    ! long_name: Water Flux Into Sea Water
+    ! units: kg m-2 s-1
+    ! standard_name: water_flux_into_sea_water
 "ocean_model", "evap"  [Unused]
     ! long_name: Evaporation/condensation at ocean surface (evaporation is negative)
     ! units: kilogram meter-2 second-1
+    ! standard_name: water_evaporation_flux
+"ocean_model", "evs"  [Unused]
+    ! long_name: Water Evaporation Flux Where Ice Free Ocean over Sea
+    ! units: kg m-2 s-1
     ! standard_name: water_evaporation_flux
 "ocean_model", "seaice_melt"  [Unused]
     ! long_name: water flux to ocean from sea ice melt(> 0) or form(< 0)
@@ -825,6 +882,10 @@
 "ocean_model", "froz_precip"  [Unused]
     ! long_name: Frozen precipitation into ocean
     ! units: kilogram meter-2 second-1
+    ! standard_name: snowfall_flux
+"ocean_model", "prsn"  [Unused]
+    ! long_name: Snowfall Flux where Ice Free Ocean over Sea
+    ! units: kg m-2 s-1
     ! standard_name: snowfall_flux
 "ocean_model", "liq_precip"  [Unused]
     ! long_name: Liquid precipitation into ocean
@@ -841,13 +902,25 @@
     ! long_name: Liquid runoff (rivers) into ocean
     ! units: kilogram meter-2 second-1
     ! standard_name: water_flux_into_sea_water_from_rivers
+"ocean_model", "friver"  [Unused]
+    ! long_name: Water Flux into Sea Water From Rivers
+    ! units: kg m-2 s-1
+    ! standard_name: water_flux_into_sea_water_from_rivers
 "ocean_model", "calving_heat_content"  [Unused]
     ! long_name: Heat content of frozen runoff (calving) into ocean
     ! units: Watt meter-2
     ! standard_name: temperature_flux_due_to_icebergs_expressed_as_heat_flux_into_sea_water
+"ocean_model", "hfibthermds"  [Unused]
+    ! long_name: Heat Flux into Sea Water due to Iceberg Thermodynamics
+    ! units: W m-2
+    ! standard_name: heat_flux_into_sea_water_due_to_iceberg_thermodynamics
 "ocean_model", "runoff_heat_content"  [Unused]
     ! long_name: Heat content of liquid river runoff into ocean
     ! units: Watt meter-2
+    ! standard_name: temperature_flux_due_to_runoff_expressed_as_heat_flux_into_sea_water
+"ocean_model", "hfrunoffds"  [Unused]
+    ! long_name: Temperature Flux due to Runoff Expressed as Heat Flux into Sea Water
+    ! units: W m-2
     ! standard_name: temperature_flux_due_to_runoff_expressed_as_heat_flux_into_sea_water
 "ocean_model", "precip_heat_content"  [Unused]
     ! long_name: Heat content (relative to oC) of precipitation entering ocean
@@ -867,6 +940,10 @@
     ! long_name: Shortwave radiation flux into ocean
     ! units: Watt meter-2
     ! standard_name: surface_net_downward_shortwave_flux
+"ocean_model", "rsntds"  [Unused]
+    ! long_name: Net Downward Shortwave Radiation at Sea Water Surface
+    ! units: W m-2
+    ! standard_name: net_downward_shortwave_flux_at_sea_water_surface
 "ocean_model", "LwLatSens"  [Used]
     ! long_name: Combined longwave, latent, and sensible heating
     ! units: Watt meter-2
@@ -874,9 +951,17 @@
     ! long_name: Longwave radiation flux into ocean
     ! units: Watt meter-2
     ! standard_name: surface_net_downward_longwave_flux
+"ocean_model", "rlds"  [Unused]
+    ! long_name: Surface Net Downward Longwave Radiation
+    ! units: W m-2
+    ! standard_name: surface_net_downward_longwave_flux
 "ocean_model", "latent"  [Unused]
     ! long_name: Latent heat flux into ocean due to fusion and evaporation (negative means ocean losses heat)
     ! units: Watt meter-2
+"ocean_model", "hfls"  [Unused]
+    ! long_name: Surface Downward Latent Heat Flux
+    ! units: W m-2
+    ! standard_name: surface_downward_latent_heat_flux
 "ocean_model", "latent_evap"  [Unused]
     ! long_name: Latent heat flux into ocean due to evaporation/condensation
     ! units: Watt meter-2
@@ -890,6 +975,10 @@
     ! long_name: Sensible heat flux into ocean
     ! units: Watt meter-2
     ! standard_name: surface_downward_sensible_heat_flux
+"ocean_model", "hfss"  [Unused]
+    ! long_name: Surface Downward Sensible Heat Flux
+    ! units: W m-2
+    ! standard_name: surface_downward_sensible_heat_flux
 "ocean_model", "heat_rest"  [Unused]
     ! long_name: Restoring surface heat flux into ocean
     ! units: Watt meter-2
@@ -899,6 +988,10 @@
 "ocean_model", "salt_flux"  [Used]
     ! long_name: Salt flux into ocean at surface
     ! units: kilogram meter-2 second-1
+"ocean_model", "sfdsi"  [Unused]
+    ! long_name: Downward Sea Ice Basal Salt Flux
+    ! units: kg m-2 s-1
+    ! standard_name: downward_sea_ice_basal_salt_flux
 "ocean_model", "salt_flux_in"  [Unused]
     ! long_name: Salt flux into ocean at surface from coupler
     ! units: kilogram meter-2 second-1
