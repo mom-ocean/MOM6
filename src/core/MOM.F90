@@ -721,7 +721,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     call create_group_pass(pass_T_S_h, CS%tv%S, G%Domain)
     call create_group_pass(pass_T_S_h, h, G%Domain)
   endif
-  if (CS%adiabatic ) then
+  if (CS%adiabatic .AND. CS%use_temperature) then
     call create_group_pass(pass_T_S, CS%tv%T, G%Domain)
     call create_group_pass(pass_T_S, CS%tv%S, G%Domain)
   endif
