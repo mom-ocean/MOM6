@@ -1,5 +1,6 @@
 "GOLD Experiment"
 1 1 1 0 0 0
+"scalar",   1,"days",1,"days","Time",
 "prog",     1,"days",1,"days","Time",
 "prog_z",   1,"days",1,"days","Time",
 "ave_prog", 1,"days",1,"days","Time",
@@ -14,6 +15,13 @@
 "ocean_static",       -1,"days",1,"days","time",
 
 #This is the field section of the diag_table.
+
+# Scalar Diagnostics:
+#====================
+"ocean_model","SST_global","SST_global","scalar","all",.false.,"none",2
+"ocean_model","SSS_global","SSS_global","scalar","all",.false.,"none",2
+"ocean_model","temp_global","temp_global","scalar","all",.false.,"none",2
+"ocean_model","salt_global","salt_global","scalar","all",.false.,"none",2
 
 # Prognostic Ocean fields:
 #=========================

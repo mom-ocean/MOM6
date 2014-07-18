@@ -32,25 +32,25 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public :: global_i_mean, global_j_mean, global_ij_mean, global_volume_mean
+public :: global_i_mean, global_j_mean, global_area_mean, global_volume_mean
 
 contains
 
-function global_ij_mean(var,G)
+function global_area_mean(var,G)
   type(ocean_grid_type),                       intent(in)  :: G
   real, dimension(SZI_(G), SZJ_(G)),           intent(in)  :: var
   real, dimension(SZI_(G), SZJ_(G))                        :: tmpForSumming
   integer :: i, j, is, ie, js, je
-  real :: global_ij_mean
+  real :: global_area_mean
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
   tmpForSumming(:,:) = 0.
   do j=js,je ; do i=is, ie
     tmpForSumming(i,j) = ( var(i,j) * (G%areaT(i,j) * G%mask2dT(i,j)) )
   enddo ; enddo
-  global_ij_mean = reproducing_sum( tmpForSumming ) * G%IareaT_global
+  global_area_mean = reproducing_sum( tmpForSumming ) * G%IareaT_global
 
-end function global_ij_mean
+end function global_area_mean
 
 function global_volume_mean(var,h,G)
   type(ocean_grid_type),                       intent(in)  :: G

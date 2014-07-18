@@ -51,7 +51,7 @@ use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
 use MOM_interface_heights, only : find_eta
-use MOM_spatial_means, only : global_volume_mean, global_ij_mean
+use MOM_spatial_means, only : global_volume_mean, global_area_mean
 use MOM_variables, only : thermo_var_ptrs, ocean_internal_state, p3d
 use MOM_variables, only : accel_diag_ptrs, cont_diag_ptrs
 use MOM_wave_speed, only : wave_speed, wave_speed_init, wave_speed_CS
