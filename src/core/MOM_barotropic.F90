@@ -726,7 +726,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   if (project_velocity) then
     trans_wt1 = (1.0 + be_proj); trans_wt2 = -be_proj
   else
-    trans_wt1 = (1.0-bebt);      trans_wt2 = bebt
+    trans_wt1 = bebt ;           trans_wt2 = (1.0-bebt)
   endif 
 
   do_hifreq_output = .false.
