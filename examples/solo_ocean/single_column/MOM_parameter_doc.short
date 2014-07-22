@@ -247,6 +247,8 @@ BBL_THICK_MIN = 0.1             !   [m] default = 0.0
                                 ! near-bottom viscosity.
 
 ! === module MOM_thickness_diffuse ===
+
+! === module MOM_mixed_layer_restrat ===
 Z_OUTPUT_GRID_FILE = "../zgrid.nc" ! default = ""
                                 ! The file that specifies the vertical grid for
                                 ! depth-space diagnostics, or blank to disable

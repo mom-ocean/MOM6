@@ -393,6 +393,7 @@ use MOM_vert_friction, only : vertvisc_limit_vel, vertvisc_init
 use MOM_set_visc, only : set_viscous_BBL, set_viscous_ML, set_visc_init
 use MOM_set_visc, only : set_visc_register_restarts, set_visc_CS
 use MOM_sponge, only : init_sponge_diags, sponge_CS
+use MOM_spatial_means, only : global_area_mean, global_volume_mean
 use MOM_checksum_packages, only : MOM_thermo_chksum, MOM_state_chksum, MOM_accel_chksum
 use MOM_dynamics_unsplit, only : step_MOM_dyn_unsplit, register_restarts_dyn_unsplit
 use MOM_dynamics_unsplit, only : initialize_dyn_unsplit, end_dyn_unsplit
@@ -653,7 +654,6 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     h                        ! h : Layer thickness, in m.
   real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)+1) :: eta_predia
   real :: tot_wt_ssh, Itot_wt_ssh, I_time_int
-  real, dimension(SZI_(CS%G),SZJ_(CS%G)) :: tmpForSumming
   real :: SST_global, SSS_global
   type(time_type) :: Time_local
   logical :: showCallTree
@@ -1017,13 +1017,22 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     endif
 
     if (CS%mixedlayer_restrat) then
+      if (CS%debug) then
+        call hchksum(h,"Pre-mixedlayer_restrat h", G, haloshift=1)
+        call uchksum(CS%uhtr,"Pre-mixedlayer_restrat uhtr", G, haloshift=0)
+        call vchksum(CS%vhtr,"Pre-mixedlayer_restrat vhtr", G, haloshift=0)
+      endif
       call cpu_clock_begin(id_clock_ml_restrat)
-      call mixedlayer_restrat(h, CS%uhtr ,CS%vhtr, CS%tv, fluxes, dt, &
-                              G, CS%mixedlayer_restrat_CSp)
+      call mixedlayer_restrat(h, CS%uhtr ,CS%vhtr, CS%tv, fluxes, dt, G, CS%mixedlayer_restrat_CSp)
       call cpu_clock_end(id_clock_ml_restrat)
       call cpu_clock_begin(id_clock_pass)
       call do_group_pass(pass_h, G%Domain)
       call cpu_clock_end(id_clock_pass)
+      if (CS%debug) then
+        call hchksum(h,"Post-mixedlayer_restrat h", G, haloshift=1)
+        call uchksum(CS%uhtr,"Post-mixedlayer_restrat uhtr", G, haloshift=0)
+        call vchksum(CS%vhtr,"Post-mixedlayer_restrat vhtr", G, haloshift=0)
+      endif
     endif
 
     if (associated(CS%MEKE)) then
@@ -1043,8 +1052,8 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         call uchksum(u,"Pre-advection u", G, haloshift=2)
         call vchksum(v,"Pre-advection v", G, haloshift=2)
         call hchksum(h,"Pre-advection h", G, haloshift=1)
-        call uchksum(CS%uhtr,"Pre-advection uh", G, haloshift=0)
-        call vchksum(CS%vhtr,"Pre-advection vh", G, haloshift=0)
+        call uchksum(CS%uhtr,"Pre-advection uhtr", G, haloshift=0)
+        call vchksum(CS%vhtr,"Pre-advection vhtr", G, haloshift=0)
       ! call MOM_state_chksum("Pre-advection ", u, v, &
       !                       h, CS%uhtr, CS%vhtr, G, haloshift=1)
           if (associated(CS%tv%T)) call hchksum(CS%tv%T, "Pre-advection T", G, haloshift=1)
@@ -1304,22 +1313,16 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     endif
 
     if (CS%id_sst_global > 0) then
-      tmpForSumming(:,:) = 0.
-      do j=js,je ; do i=is, ie
-        tmpForSumming(i,j) = ( state%SST(i,j) * (G%areaT(i,j) * G%mask2dT(i,j)) )
-      enddo ; enddo
-      SST_global = reproducing_sum( tmpForSumming ) * G%IareaT_global
+      SST_global = global_area_mean(state%SST, G)
       call post_data(CS%id_sst_global, SST_global, CS%diag)
     endif
 
     if (CS%id_sss_global > 0) then
-      tmpForSumming(:,:) = 0.
-      do j=js,je ; do i=is, ie
-        tmpForSumming(i,j) = ( state%SSS(i,j) * (G%areaT(i,j) * G%mask2dT(i,j)) )
-      enddo ; enddo
-      SSS_global = reproducing_sum( tmpForSumming ) * G%IareaT_global
+      SSS_global = global_area_mean(state%SSS, G)
       call post_data(CS%id_sss_global, SSS_global, CS%diag)
     endif
+
+
 
     if (CS%id_sss > 0) &
       call post_data(CS%id_sss, state%SSS, CS%diag, mask=G%mask2dT)
@@ -1503,10 +1506,6 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
                  "If true, do thickness diffusion before dynamics.\n"//&
                  "This is only used if THICKNESSDIFFUSE is true.", &
                  default=.false.)
-  call get_param(param_file, "MOM", "MIXEDLAYER_RESTRAT",CS%mixedlayer_restrat, &
-                 "If true, a density-gradient dependent re-stratifying \n"//&
-                 "flow is imposed in the mixed layer. \n"//&
-                 "This is only used if BULKMIXEDLAYER is true.", default=.false.)
 
   call get_param(param_file, "MOM", "DEBUG", CS%debug, &
                  "If true, write out verbose debugging data.", default=.false.)
@@ -1635,8 +1634,6 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     "MOM: ENABLE_THERMODYNAMICS must be defined to use USE_EOS.")
   if (CS%adiabatic .and. CS%bulkmixedlayer) call MOM_error(FATAL, &
     "MOM: ADIABATIC and BULKMIXEDLAYER can not both be defined.")
-  if (CS%mixedlayer_restrat .and. .not.CS%bulkmixedlayer) call MOM_error(FATAL, &
-    "MOM: MIXEDLAYER_RESTRAT true requires BULKMIXEDLAYER to be true to work.")
 
   ! Allocate the auxiliary non-symmetric domain for debugging or I/O purposes.
   if (CS%debug .or. G%symmetric) &
@@ -1812,19 +1809,21 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   else
     if (CS%use_RK2) then
       call initialize_dyn_unsplit_RK2(CS%u, CS%v, CS%h, Time, G, &
-                param_file, diag, CS%dyn_unsplit_RK2_CSp, CS%restart_CSp, &
-                CS%ADp, CS%CDp, MOM_internal_state, init_CS%OBC, CS%ALE_CSp, CS%visc, dirs, CS%ntrunc)
+              param_file, diag, CS%dyn_unsplit_RK2_CSp, CS%restart_CSp, &
+              CS%ADp, CS%CDp, MOM_internal_state, init_CS%OBC, CS%ALE_CSp, CS%visc, dirs, CS%ntrunc)
     else
       call initialize_dyn_unsplit(CS%u, CS%v, CS%h, Time, G, &
-                param_file, diag, CS%dyn_unsplit_CSp, CS%restart_CSp, &
-                CS%ADp, CS%CDp, MOM_internal_state, init_CS%OBC, CS%ALE_CSp, CS%visc, dirs, CS%ntrunc)
+              param_file, diag, CS%dyn_unsplit_CSp, CS%restart_CSp, &
+              CS%ADp, CS%CDp, MOM_internal_state, init_CS%OBC, CS%ALE_CSp, CS%visc, dirs, CS%ntrunc)
     endif
   endif
   call callTree_waypoint("dynamics initialized (initialize_MOM)")
 
   call thickness_diffuse_init(Time, G, param_file, diag, CS%CDp, CS%thickness_diffuse_CSp)
-  if (CS%mixedlayer_restrat) &
-    call mixedlayer_restrat_init(Time, G, param_file, diag, CS%mixedlayer_restrat_CSp)
+  CS%mixedlayer_restrat = mixedlayer_restrat_init(Time, G, param_file, diag, &
+                                                  CS%mixedlayer_restrat_CSp)
+  if (CS%mixedlayer_restrat .and. .not.(CS%bulkmixedlayer .or. CS%useALEalgorithm)) &
+     call MOM_error(FATAL, "MOM: MIXEDLAYER_RESTRAT true requires a boundary layer scheme.")
   if (associated(init_CS%OBC)) CS%OBC => init_CS%OBC
 
   call MOM_diagnostics_init(MOM_internal_state, CS%ADp, CS%CDp, Time, G, &
@@ -1863,8 +1862,10 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
                        CS%S_diffx_2d, CS%S_diffy_2d)
     call register_Z_tracer(CS%tv%T, "temp_z", "Potential Temperature", "degC", Time, &
                            G, CS%diag_to_Z_CSp)
-    call register_Z_tracer(CS%tv%S, "salt_z", "Salinity", "PSU", Time, &
-                           G, CS%diag_to_Z_CSp)
+    call register_Z_tracer(CS%tv%S, "salt_z", "Salinity", "PSU", Time,                    &
+                           G, CS%diag_to_Z_CSp, cmor_field_name="so_z", cmor_units="psu", &
+                           cmor_standard_name="sea_water_salinity",                       &
+                           cmor_long_name ="Sea Water Salinity")
   endif
 
   ! This subroutine initializes any tracer packages.
@@ -1995,9 +1996,11 @@ subroutine register_diags(Time, G, CS, ADp)
   !call diag_masks_set(G, CS%missing)
 
   CS%id_u = register_diag_field('ocean_model', 'u', diag%axesCuL, Time, &
-      'Zonal velocity', 'meter  second-1')
+      'Zonal velocity', 'meter  second-1', cmor_field_name='uo', cmor_units='m s-1', &
+      cmor_standard_name='sea_water_x_velocity', cmor_long_name='Sea Water X Velocity')
   CS%id_v = register_diag_field('ocean_model', 'v', diag%axesCvL, Time, &
-      'Meridional velocity', 'meter second-1')
+      'Meridional velocity', 'meter second-1', cmor_field_name='vo', cmor_units='m s-1', &
+      cmor_standard_name='sea_water_y_velocity', cmor_long_name='Sea Water Y Velocity')
   CS%id_h = register_diag_field('ocean_model', 'h', diag%axesTL, Time, &
       'Layer Thickness', thickness_units)
   CS%id_ssh = register_diag_field('ocean_model', 'SSH', diag%axesT1, Time, &
@@ -2014,11 +2017,15 @@ subroutine register_diags(Time, G, CS, ADp)
     CS%id_T = register_diag_field('ocean_model', 'temp', diag%axesTL, Time, &
         'Potential Temperature', 'Celsius')
     CS%id_S = register_diag_field('ocean_model', 'salt', diag%axesTL, Time, &
-        'Salinity', 'PSU')
+        long_name='Salinity', units='PSU', cmor_field_name='so',            &
+        cmor_long_name='Sea Water Salinity', cmor_units='psu',              &
+        cmor_standard_name='sea_water_salinity')
     CS%id_sst = register_diag_field('ocean_model', 'SST', diag%axesT1, Time, &
         'Sea Surface Temperature', 'Celsius', CS%missing)
-    CS%id_sst_global = register_scalar_field('ocean_model', 'SST_global', Time, diag, &
-        'Global Average Sea Surface Temperature', 'Celsius', CS%missing)
+    CS%id_sst_global = register_scalar_field('ocean_model', field_name='SST_global',   &
+        init_time=Time, diag=diag, long_name='Global Average Sea Surface Temperature', &
+        units='Celsius', missing_value=CS%missing, cmor_field_name='tosga',            &
+        cmor_units='deg C', cmor_standard_name='global_average_sea_surface_temperature')
     CS%id_sst_sq = register_diag_field('ocean_model', 'SST_sq', diag%axesT1, Time, &
         'Sea Surface Temperature Squared', 'Celsius**2', CS%missing)    
     CS%id_sss = register_diag_field('ocean_model', 'SSS', diag%axesT1, Time, &
@@ -2028,8 +2035,10 @@ subroutine register_diags(Time, G, CS, ADp)
     if (CS%id_sst_sq > 0) call safe_alloc_ptr(CS%SST_sq,isd,ied,jsd,jed)    
   endif
   if (CS%use_temperature .and. CS%use_frazil) then
-    CS%id_fraz = register_diag_field('ocean_model', 'frazil', diag%axesT1, Time, &
-          'Heat sink from frazil formation', 'Watt meter-2')
+    CS%id_fraz = register_diag_field('ocean_model', 'frazil', diag%axesT1, Time,                           &
+          'Heat sink from frazil formation', 'Watt meter-2', cmor_field_name='hfsifrazil',                 &
+          cmor_units='W m-2', cmor_standard_name='heat_flux_into_sea_water_due_to_freezing_of_frazil_ice', &
+          cmor_long_name='Heat Flux into Sea Water due to Frazil Ice Formation"')
   endif
 
   CS%id_salt_deficit = register_diag_field('ocean_model', 'salt_deficit', diag%axesT1, Time, &
@@ -2138,7 +2147,7 @@ subroutine MOM_timing_init(CS)
  id_clock_pass_init = cpu_clock_id('(Ocean init message passing *)', grain=CLOCK_ROUTINE)
  if (CS%thickness_diffuse) &
    id_clock_thick_diff = cpu_clock_id('(Ocean thickness diffusion *)', grain=CLOCK_MODULE)
- if (CS%mixedlayer_restrat) &
+!if (CS%mixedlayer_restrat) &
    id_clock_ml_restrat = cpu_clock_id('(Ocean mixed layer restrat)', grain=CLOCK_MODULE)
  id_clock_diagnostics = cpu_clock_id('(Ocean collective diagnostics)', grain=CLOCK_MODULE)
  id_clock_Z_diag = cpu_clock_id('(Ocean Z-space diagnostics)', grain=CLOCK_MODULE)
@@ -2196,8 +2205,10 @@ subroutine write_static_fields(G, diag)
         'Longitude of zonal velocity (Cu) points', 'degrees_E')
   if (id > 0) call post_data(id, G%geoLonCu, diag, .true.)
 
-  id = register_static_field('ocean_model', 'area_t', diag%axesT1, &
-        'Surface area of tracer (T) cells', 'degrees_E')
+  id = register_static_field('ocean_model', 'area_t', diag%axesT1,   &
+        'Surface area of tracer (T) cells', 'degrees_E',             &
+        cmor_field_name='areacello', cmor_standard_name='cell_area', &
+        cmor_units='m-2', cmor_long_name='Ocean Grid-Cell Area')
   if (id > 0) then
     do j=js,je ; do i=is,ie ; out_h(i,j) = G%areaT(i,j) ; enddo ; enddo
     call post_data(id, out_h, diag, .true.)

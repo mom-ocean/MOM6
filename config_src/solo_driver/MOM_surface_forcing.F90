@@ -1726,7 +1726,7 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, tracer_flow_CSp)
   type(time_type),           intent(in) :: Time
   type(ocean_grid_type),     intent(in) :: G
   type(param_file_type),     intent(in) :: param_file
-  type(diag_ctrl), target,   intent(in) :: diag
+  type(diag_ctrl), target,intent(inout) :: diag
   type(surface_forcing_CS),  pointer    :: CS
   type(tracer_flow_control_CS), pointer :: tracer_flow_CSp
 ! Arguments: Time - The current model time.
