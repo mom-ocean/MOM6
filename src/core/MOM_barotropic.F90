@@ -1661,7 +1661,8 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
 !$OMP                               use_BT_cont,BTCL_v,vhbt0,Datv,wt_vel,azon,bzon,czon, &
 !$OMP                               dzon,Cor_ref_u,gtot_E,gtot_W,u_accel_bt,bt_rem_u,    &
 !$OMP                               BT_force_u,uhbt,BTCL_u,uhbt0,Datu,Cor_u,Cor_v,       &
-!$OMP                               PFu,PFv,ubt_trans,vbt_trans )                        &
+!$OMP                               PFu,PFv,ubt_trans,vbt_trans,apply_v_OBCs,BT_OBC,     &
+!$OMP                               vbt_prev,vhbt_prev,apply_u_OBCs,ubt_prev,uhbt_prev ) &
 !$OMP                       private(vel_prev)
     if (MOD(n+G%first_direction,2)==1) then
       ! On odd-steps, update v first.
@@ -1699,7 +1700,12 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
           vhbt(i,J) = Datv(i,J)*vbt_trans(i,J) + vhbt0(i,J)
         enddo ; enddo
       endif
-
+      if(apply_v_OBCs) then  ! copy back the value for the points that OBC_mask_v is true.
+!$OMP do
+        do J=jsv-1,jev ; do i=isv-1,iev+1 ; if (BT_OBC%OBC_mask_v(i,J)) then
+          vbt(i,J) = vbt_prev(i,J); vhbt(i,J) = vhbt_prev(i,J)
+        endif ; enddo ; enddo
+      endif
       ! Now update the zonal velocity.
 !$OMP do
       do j=jsv,jev ; do I=isv-1,iev
@@ -1736,7 +1742,12 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
           uhbt(I,j) = Datu(I,j)*ubt_trans(I,j) + uhbt0(I,j)
         enddo ; enddo
       endif
-
+     if(apply_u_OBCs) then  ! copy back the value for the points that OBC_mask_v is true.
+!$OMP do
+        do j=jsv,jev ; do I=isv-1,iev ; if (BT_OBC%OBC_mask_u(I,j)) then
+          ubt(I,j) = ubt_prev(I,j); uhbt(I,j) = uhbt_prev(I,j)
+        endif ; enddo ; enddo
+      endif
     else
       ! On even steps, update u first.
 !$OMP do
@@ -1775,6 +1786,12 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
           uhbt(I,j) = Datu(I,j)*ubt_trans(I,j) + uhbt0(I,j)
         enddo ; enddo
       endif
+      if(apply_u_OBCs) then  ! copy back the value for the points that OBC_mask_v is true.
+!$OMP do
+        do j=jsv-1,jev+1 ; do I=isv-1,iev ; if (BT_OBC%OBC_mask_u(I,j)) then
+          ubt(I,j) = ubt_prev(I,j); uhbt(I,j) = uhbt_prev(I,j)
+        endif ; enddo ; enddo
+      endif
 
       ! Now update the meridional velocity.
 !$OMP do
@@ -1810,6 +1827,12 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
         do J=jsv-1,jev ; do i=isv,iev
           vhbt(i,J) = Datv(i,J)*vbt_trans(i,J) + vhbt0(i,J)
         enddo ; enddo
+      endif
+      if(apply_v_OBCs) then  ! copy back the value for the points that OBC_mask_v is true.
+!$OMP do
+        do J=jsv-1,jev ; do i=isv,iev ; if (BT_OBC%OBC_mask_v(i,J)) then
+          vbt(i,J) = vbt_prev(i,J); vhbt(i,J) = vhbt_prev(i,J)
+        endif ; enddo ; enddo
       endif
     endif
 !$OMP end parallel
@@ -1857,41 +1880,23 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
 
     if (apply_OBCs) then
       if (apply_u_OBCs) then  ! copy back the value for the points that OBC_mask_v is true.
-!$OMP parallel default(none) shared(isv,iev,jsv,jev,ioff,joff,ubt_prev,ubt,uhbt_prev,  &
-!$OMP                               uhbt,is,ie,js,je,ubt_sum_prev,ubt_sum,             &
-!$OMP                               uhbt_sum_prev,uhbt_sum,ubt_wtd_prev,ubt_wtd,BT_OBC)
-!$OMP do
-        do J=jsv-joff,jev+joff ; do i=isv-1,iev
-          if (BT_OBC%OBC_mask_u(i,J)) then
-            ubt(i,J) = ubt_prev(i,J); uhbt(i,J) = uhbt_prev(i,J)
-          endif
-        enddo ; enddo
-!$OMP do
+!$OMP parallel do default(none) shared(is,ie,js,je,ubt_sum_prev,ubt_sum,uhbt_sum_prev,&
+!$OMP                                  uhbt_sum,ubt_wtd_prev,ubt_wtd,BT_OBC)
         do j=js,je ; do I=is-1,ie
           if (BT_OBC%OBC_mask_u(i,J)) then
             ubt_sum(i,J)=ubt_sum_prev(i,J); uhbt_sum(i,J)=uhbt_sum_prev(i,J) ; ubt_wtd(i,J)=ubt_wtd_prev(i,J)
           endif
         enddo ; enddo
-!$OMP end parallel
       endif
 
       if (apply_v_OBCs) then  ! copy back the value for the points that OBC_mask_v is true.
-!$OMP parallel default(none) shared(isv,iev,jsv,jev,ioff,joff,vbt_prev,vbt,vhbt_prev,  &
-!$OMP                               vhbt,is,ie,js,je,vbt_sum_prev,vbt_sum,             &
-!$OMP                               vhbt_sum_prev,vhbt_sum,vbt_wtd_prev,vbt_wtd,BT_OBC)
-!$OMP do
-        do J=jsv-1,jev ; do i=isv-ioff,iev-ioff
-          if (BT_OBC%OBC_mask_v(i,J)) then
-            vbt(i,J) = vbt_prev(i,J); vhbt(i,J) = vhbt_prev(i,J)
-          endif
-        enddo ; enddo
-!$OMP do
+!$OMP parallel do default(none) shared(is,ie,js,je,vbt_sum_prev,vbt_sum,vhbt_sum_prev, &
+!$OMP                                  vhbt_sum,vbt_wtd_prev,vbt_wtd,BT_OBC)
         do J=js-1,je ; do I=is,ie
           if (BT_OBC%OBC_mask_v(i,J)) then
             vbt_sum(i,J)=vbt_sum_prev(i,J); vhbt_sum(i,J)=vhbt_sum_prev(i,J) ; vbt_wtd(i,J)=vbt_wtd_prev(i,J)
           endif
         enddo ; enddo
-!$OMP end parallel
       endif    
 
       call apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, &
