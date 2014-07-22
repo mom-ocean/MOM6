@@ -75,7 +75,8 @@ use MOM_diag_mediator, only : diag_ctrl, time_type
 use MOM_diag_to_Z, only : diag_to_Z_CS, register_Zint_diag, calc_Zint_diags
 use MOM_diffConvection, only : diffConvection_CS, diffConvection_init
 use MOM_diffConvection, only : diffConvection_calculate, diffConvection_end
-use MOM_domains, only : pass_var, To_West, To_South
+use MOM_domains, only : To_West, To_South
+use MOM_domains, only : create_group_pass, do_group_pass, group_pass_type
 use MOM_entrain_diffusive, only : entrainment_diffusive, entrain_diffusive_init
 use MOM_entrain_diffusive, only : entrain_diffusive_end, entrain_diffusive_CS
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, callTree_showQuery
@@ -312,6 +313,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   integer :: z_ids(7)  ! The id numbers of the diagnostics that are to be
                        ! interpolated into depth space.
   logical :: showCallTree ! If true, show the call tree
+  type(group_pass_type), save :: pass_hold_eb_ea ! For group halo pass
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkmb
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
@@ -996,14 +998,15 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
 
   call cpu_clock_begin(id_clock_pass)
   if (G%symmetric) then
-    call pass_var(hold,G%Domain,complete=.false.)
-    call pass_var(eb,G%Domain,complete=.false.)
-    call pass_var(ea,G%Domain)
+    call create_group_pass(pass_hold_eb_ea,hold,G%Domain)
+    call create_group_pass(pass_hold_eb_ea,eb,G%Domain)
+    call create_group_pass(pass_hold_eb_ea,ea,G%Domain)
   else
-    call pass_var(hold,G%Domain,To_West+To_South,complete=.false.)
-    call pass_var(eb,G%Domain,To_West+To_South,complete=.false.)
-    call pass_var(ea,G%Domain,To_West+To_South)
+    call create_group_pass(pass_hold_eb_ea,hold,G%Domain,To_West+To_South)
+    call create_group_pass(pass_hold_eb_ea,eb,G%Domain,To_West+To_South)
+    call create_group_pass(pass_hold_eb_ea,ea,G%Domain,To_West+To_South)
   endif  
+  call do_group_pass(pass_hold_eb_ea,G%Domain)
   call cpu_clock_end(id_clock_pass)
 
 !  Use a tridiagonal solver to determine the effect of the diapycnal

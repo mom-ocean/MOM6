@@ -49,7 +49,8 @@ use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock, only : CLOCK_MODULE, CLOCK_ROUTINE
 use MOM_diag_mediator, only : post_data, diag_ctrl
 use MOM_diag_mediator, only : register_diag_field, safe_alloc_ptr, time_type
-use MOM_domains, only : pass_var, pass_vector, sum_across_PEs, max_across_PEs
+use MOM_domains, only : sum_across_PEs, max_across_PEs
+use MOM_domains, only : create_group_pass, do_group_pass, group_pass_type
 use MOM_checksums, only : hchksum
 use MOM_EOS, only : calculate_density
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
@@ -101,6 +102,8 @@ end type p2di
 
 integer :: id_clock_diffuse, id_clock_epimix, id_clock_pass, id_clock_sync
 
+type(group_pass_type) :: pass_t !For group halo pass, used in both 
+                                !tracer_hordiff and tracer_epipycnal_ML_diff
 contains
 
 subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, Reg, tv)
@@ -195,6 +198,12 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, Reg, tv)
     use_VarMix = VarMix%use_variable_mixing
     Resoln_scaled = VarMix%Resoln_scaled_KhTr
   endif
+
+  call cpu_clock_begin(id_clock_pass)
+  do m=1,ntr
+    call create_group_pass(pass_t, Reg%Tr(m)%t(:,:,:), G%Domain)
+  enddo
+  call cpu_clock_end(id_clock_pass)
 
   if (use_VarMix) then
 !$OMP parallel default(none) shared(is,ie,js,je,CS,VarMix,MEKE,Resoln_scaled, &
@@ -323,10 +332,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, Reg, tv)
 
   do itt=1,num_itts
     call cpu_clock_begin(id_clock_pass)
-    do m=1,ntr-1
-      call pass_var(Reg%Tr(m)%t(:,:,:), G%Domain, complete=.false.)
-    enddo
-    call pass_var(Reg%Tr(ntr)%t(:,:,:), G%Domain)
+    call do_group_pass(pass_t, G%Domain)
     call cpu_clock_end(id_clock_pass)
 !$OMP parallel do default(none) shared(is,ie,js,je,nz,I_numitts,CS,G,khdt_y,h, &
 !$OMP                                  h_neglect,khdt_x,ntr,Idt,Reg)           &
@@ -549,10 +555,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
   do i=is-2,ie+2 ; p_ref_cv(i) = tv%P_Ref ; enddo
 
   call cpu_clock_begin(id_clock_pass)
-  do m=1,ntr-1
-    call pass_var(Tr(m)%t(:,:,:), G%Domain, complete=.false.)
-  enddo
-  call pass_var(Tr(ntr)%t(:,:,:), G%Domain)
+  call do_group_pass(pass_t, G%Domain)
   call cpu_clock_end(id_clock_pass)
   ! Determine which layers the mixed- and buffer-layers map into...
 !$OMP parallel do default(none) shared(nkmb,is,ie,js,je,tv,p_ref_cv,rho_coord)
@@ -960,10 +963,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
 
     if (itt > 1) then ! The halos have already been filled if itt==1.
       call cpu_clock_begin(id_clock_pass)
-      do m=1,ntr-1
-        call pass_var(Tr(m)%t(:,:,:), G%Domain, complete=.false.)
-      enddo
-      call pass_var(Tr(ntr)%t(:,:,:), G%Domain)
+      call do_group_pass(pass_t, G%Domain)
       call cpu_clock_end(id_clock_pass)
     endif
 
