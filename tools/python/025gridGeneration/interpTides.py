@@ -85,9 +85,8 @@ Sv.add_field_from_array(va,'va',var_dict=vdict_v)
 grid=rectgrid(lon=lon_v,lat=lat_u,cyclic=True)
 grid.wet=np.ones((grid.jm,grid.im))
 
-
-S=Su.horiz_interp('ua',target=grid,src_modulo=True,method=1)
-S=Sv.horiz_interp('va',target=grid,src_modulo=True,method=1,PrevState=S)
+S=Su.horiz_interp('ua',target=grid,src_modulo=True,method='bilinear')
+S=Sv.horiz_interp('va',target=grid,src_modulo=True,method='bilinear',PrevState=S)
 
 u2mod = (S.ua**2.0 + S.va**2.0)
 umod=np.sum(u2mod,axis=1)**0.5
@@ -108,7 +107,7 @@ output_grid.wet[output_grid.D>0.]=1.
 
 S.fill_interior('umod')
 
-T=S.horiz_interp('umod',target=output_grid,src_modulo=True,method=1)
+T=S.horiz_interp('umod',target=output_grid,src_modulo=True,method='bilinear')
 
 T.fill_interior('umod')
 

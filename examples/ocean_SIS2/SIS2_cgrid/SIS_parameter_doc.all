@@ -32,18 +32,6 @@ ICE_KMELT = 240.0               !   [W m-2 K-1] default = 240.0
                                 ! water times a molecular diffusive piston velocity.
 SNOW_CONDUCT = 0.31             !   [W m-1 K-1] default = 0.31
                                 ! The conductivity of heat in snow.
-SNOW_ALBEDO = 0.88              !   [nondim] default = 0.85
-                                ! The albedo of dry snow atop sea ice.
-ICE_ALBEDO = 0.68               !   [nondim] default = 0.5826
-                                ! The albedo of dry bare sea ice.
-ICE_SW_PEN_FRAC = 0.3           !   [Nondimensional] default = 0.3
-                                ! The fraction of the unreflected shortwave radiation that
-                                ! penetrates into the ice.
-ICE_OPTICAL_DEPTH = 0.67        !   [m] default = 0.67
-                                ! The optical depth of shortwave radiation in sea ice.
-ALBEDO_T_MELT_RANGE = 1.0       !   [degC] default = 1.0
-                                ! The temperature range below freezing over which the
-                                ! albedos are changed by partial melting.
 COLUMN_CHECK = False            !   [Boolean] default = False
                                 ! If true, add code to allow debugging of conservation
                                 ! column-by-column.  This does not change answers, but
@@ -61,8 +49,11 @@ ICE_SEES_ATMOS_WINDS = True     !   [Boolean] default = True
                                 ! If true, the sea ice is being given wind stresses with
                                 ! the atmospheric sign convention, and need to have their
                                 ! sign changed.
-ICE_BULK_SALINITY = 0.005       !   [kg/kg] default = 0.004
+ICE_BULK_SALINITY = 0.0         !   [g/kg] default = 4.0
                                 ! The fixed bulk salinity of sea ice.
+ICE_RELATIVE_SALINITY = 0.1     !   [nondim] default = 0.0
+                                ! The initial salinity of sea ice as a fraction of the
+                                ! salinity of the seawater from which it formed.
 DO_ICE_RESTORE = False          !   [Boolean] default = False
                                 ! If true, restore the sea ice state toward climatology.
 APPLY_ICE_LIMIT = False         !   [Boolean] default = False
@@ -83,31 +74,6 @@ ADD_DIURNAL_SW = False          !   [Boolean] default = False
 DO_SUN_ANGLE_FOR_ALB = False    !   [Boolean] default = False
                                 ! If true, find the sun angle for calculating the ocean
                                 ! albedo within the sea ice model.
-DO_DELTA_EDDINGTON_SW = True    !   [Boolean] default = True
-                                ! If true, a delta-Eddington radiative transfer calculation
-                                ! for the shortwave radiation within the sea-ice.
-ICE_DELTA_EDD_R_ICE = 0.0       !   [perhaps nondimensional?] default = 0.0
-                                ! A dreadfully documented tuning parameter for the radiative
-                                ! propeties of sea ice with the delta-Eddington radiative
-                                ! transfer calculation.
-ICE_DELTA_EDD_R_SNOW = 0.0      !   [perhaps nondimensional?] default = 0.0
-                                ! A dreadfully documented tuning parameter for the radiative
-                                ! propeties of snow on sea ice with the delta-Eddington
-                                ! radiative transfer calculation.
-ICE_DELTA_EDD_R_POND = 0.0      !   [perhaps nondimensional?] default = 0.0
-                                ! A dreadfully documented tuning parameter for the radiative
-                                ! propeties of meltwater ponds on sea ice with the delta-Eddington
-                                ! radiative transfer calculation.
-ENTHALPY_LIQUID_0 = 0.0         !   [J kg-1] default = 0.0
-                                ! The enthalpy of liquid fresh water at 0 C.  The solutions
-                                ! should be physically consistent when this is adjusted,
-                                ! because only the relative value is of physical meaning,
-                                ! but roundoff errors can change the solution.
-ENTHALPY_UNITS = 1.0            !   [J kg-1] default = 1.0
-                                ! A constant that rescales enthalpy from J/kg to a
-                                ! different scale in its internal representation.  Changing
-                                ! this by a power of 2 is useful for debugging, as answers
-                                ! should not change.  A negative values is taken as an inverse.
 TIMEUNIT = 8.64E+04             !   [s] default = 8.64E+04
                                 ! The time unit for ICE_STATS_INTERVAL.
 ICE_STATS_INTERVAL = 0.25       !   [days] default = 1.0
@@ -209,6 +175,43 @@ GRID_CONFIG = "mosaic"          !
                                 !    cartesian - a Cartesian grid
                                 !    spherical - a spherical grid
                                 !    mercator  - a Mercator grid
+CP_WATER = 4200.0               !   [J kg-1 K-1] default = 4200.0
+                                ! The heat capacity of sea water, approximated as a
+                                ! constant.
+CP_ICE = 2100.0                 !   [J kg-1 K-1] default = 2100.0
+                                ! The heat capacity of fresh ice, approximated as a
+                                ! constant.
+DTFREEZE_DS = -0.054            !   [deg C PSU-1] default = -0.054
+                                ! The derivative of the freezing temperature with salinity.
+ENTHALPY_LIQUID_0 = 0.0         !   [J kg-1] default = 0.0
+                                ! The enthalpy of liquid fresh water at 0 C.  The solutions
+                                ! should be physically consistent when this is adjusted,
+                                ! because only the relative value is of physical meaning,
+                                ! but roundoff errors can change the solution.
+ENTHALPY_UNITS = 1.0            !   [J kg-1] default = 1.0
+                                ! A constant that rescales enthalpy from J/kg to a
+                                ! different scale in its internal representation.  Changing
+                                ! this by a power of 2 is useful for debugging, as answers
+                                ! should not change.  A negative values is taken as an inverse.
+SNOW_CONDUCTIVITY = 0.31        !   [W m-1 K-1] default = 0.31
+                                ! The conductivity of heat in snow.
+ICE_CONDUCTIVITY = 2.03         !   [W m-1 K-1] default = 2.03
+                                ! The conductivity of heat in ice.
+DO_DELTA_EDDINGTON_SW = True    !   [Boolean] default = True
+                                ! If true, a delta-Eddington radiative transfer calculation
+                                ! for the shortwave radiation within the sea-ice.
+ICE_DELTA_EDD_R_ICE = 0.0       !   [perhaps nondimensional?] default = 0.0
+                                ! A dreadfully documented tuning parameter for the radiative
+                                ! propeties of sea ice with the delta-Eddington radiative
+                                ! transfer calculation.
+ICE_DELTA_EDD_R_SNOW = 0.0      !   [perhaps nondimensional?] default = 0.0
+                                ! A dreadfully documented tuning parameter for the radiative
+                                ! propeties of snow on sea ice with the delta-Eddington
+                                ! radiative transfer calculation.
+ICE_DELTA_EDD_R_POND = 0.0      !   [perhaps nondimensional?] default = 0.0
+                                ! A dreadfully documented tuning parameter for the radiative
+                                ! propeties of meltwater ponds on sea ice with the delta-Eddington
+                                ! radiative transfer calculation.
 NSTEPS_DYN = 72                 ! default = 432
                                 ! The number of iterations in the EVP dynamics for each
                                 ! slow time step.
@@ -264,6 +267,18 @@ CHECK_ICE_TRANSPORT_CONSERVATION = False !   [Boolean] default = False
                                 ! mass conservation in the sea-ice transport code.  This
                                 ! is expensive and should be used sparingly.
 
+! === module SIS_tracer_advect ===
+DT = -1.0                       !   [s] default = -1.0
+                                ! The (baroclinic) dynamics time step.
+SIS_TRACER_ADVECTION_SCHEME = "UPWIND_2D" ! default = "UPWIND_2D"
+                                ! The horizontal transport scheme for tracers:
+                                !   UPWIND_2D - Non-directionally split upwind
+                                !   PCM    - Directionally split peicewise constant
+                                !   PLM    - Piecewise Linear Method
+                                !   PPM:H3 - Piecewise Parabolic Method (Huyhn 3rd order)
+
+! === module SIS_tracer_registry ===
+
 ! === module SIS_sum_output ===
 WRITE_STOCKS = True             !   [Boolean] default = True
                                 ! If true, write the integrated tracer amounts to stdout
@@ -271,8 +286,6 @@ WRITE_STOCKS = True             !   [Boolean] default = True
 STDOUT_HEARTBEAT = True         !   [Boolean] default = True
                                 ! If true, periodically write sea ice statistics to
                                 ! stdout to allow the progress to be seen.
-DT = -1.0                       !   [s] default = -1.0
-                                ! The sea ice dynamics time step.
 STATISTICS_FILE = "seaice.stats" ! default = "seaice.stats"
                                 ! The file to use to write the globally integrated
                                 ! statistics.

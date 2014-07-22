@@ -185,6 +185,7 @@ THICKNESS_CONFIG = "seamount"   !
                                 !     adjustment2d - TBD AJA.
                                 !     sloshing - TBD AJA.
                                 !     seamount - TBD AJA.
+                                !     rossby_front - a mixed layer front in thermal wind balance.
                                 !     USER - call a user modified routine.
 MIN_THICKNESS = 0.1             !   [m] default = 0.001
                                 ! Minimum thickness for layer
@@ -203,6 +204,7 @@ TS_CONFIG = "seamount"          !
                                 !     adjustment2d - TBD AJA.
                                 !     sloshing - TBD AJA.
                                 !     seamount - TBD AJA.
+                                !     rossby_front - a mixed layer front in thermal wind balance.
                                 !     USER - call a user modified routine.
 REGRIDDING_COORDINATE_MODE = "SIGMA" ! default = "LAYER"
                                 ! Coordinate mode for vertical regridding.
@@ -378,6 +380,8 @@ DTBT = 10.0                     !   [s or nondim] default = -0.98
 ! === module MOM_thickness_diffuse ===
 KHTH = 500.0                    !   [m2 s-1] default = 0.0
                                 ! The background horizontal thickness diffusivity.
+
+! === module MOM_mixed_layer_restrat ===
 
 ! === module MOM_diabatic_driver ===
 ! The following parameters are used for diabatic processes.

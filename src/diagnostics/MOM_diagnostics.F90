@@ -45,12 +45,14 @@ module MOM_diagnostics
 !********+*********+*********+*********+*********+*********+*********+**
 
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
-use MOM_diag_mediator, only : diag_ctrl, time_type
-use MOM_domains, only : pass_vector, To_North, To_East
+use MOM_domains, only : create_group_pass, do_group_pass, group_pass_type
+use MOM_diag_mediator, only : diag_ctrl, time_type, register_scalar_field
+use MOM_domains, only : To_North, To_East
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
 use MOM_interface_heights, only : find_eta
+use MOM_spatial_means, only : global_volume_mean, global_area_mean
 use MOM_variables, only : thermo_var_ptrs, ocean_internal_state, p3d
 use MOM_variables, only : accel_diag_ptrs, cont_diag_ptrs
 use MOM_wave_speed, only : wave_speed, wave_speed_init, wave_speed_CS
@@ -116,6 +118,7 @@ type, public :: diagnostics_CS ; private
   integer :: id_cg1 = -1, id_Rd1 = -1, id_cfl_cg1 = -1, id_cfl_cg1_x = -1, id_cfl_cg1_y = -1
   integer :: id_mass_wt = -1, id_temp_int = -1, id_salt_int = -1
   integer :: id_col_ht = -1, id_col_mass = -1
+  integer :: id_temp_global = -1, id_salt_global = -1
 
   type(wave_speed_CS), pointer :: wave_speed_CSp => NULL()  
   ! The following pointers are used the calculation of time derivatives.
@@ -177,6 +180,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, dt, G, &
              ! squared that is used to avoid division by 0, in s-2.  This
              ! value is roughly (pi / (the age of the universe) )^2.
   integer :: k_list
+  real :: temp_global, salt_global
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   nz = G%ke ; nkmb = G%nk_rho_varies
@@ -213,7 +217,17 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, dt, G, &
 
     if (CS%id_e_D > 0) call post_data(CS%id_e_D, CS%e_D, CS%diag)
   endif
-     
+
+  if (CS%id_temp_global>0) then
+    temp_global = global_volume_mean(tv%T, h, G)
+    call post_data(CS%id_temp_global, temp_global, CS%diag)
+  endif
+
+  if (CS%id_salt_global>0) then
+    salt_global = global_volume_mean(tv%S, h, G)
+    call post_data(CS%id_salt_global, salt_global, CS%diag)
+  endif
+
   call calculate_vertical_integrals(h, tv, G, CS)
 
   if ((CS%id_Rml > 0) .or. (CS%id_Rcv > 0) .or. ASSOCIATED(CS%h_Rlay) .or. &
@@ -571,6 +585,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, CS)
   real :: KE_u(SZIB_(G),SZJ_(G))
   real :: KE_v(SZI_(G),SZJB_(G))
   real :: KE_h(SZI_(G),SZJ_(G))
+  type(group_pass_type), save :: pass_KE_uv ! for group halo pass
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
@@ -590,6 +605,14 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, CS)
     if (CS%id_KE > 0) call post_data(CS%id_KE, CS%KE, CS%diag)
   endif
 
+  if(.not.G%symmetric) then
+    if(ASSOCIATED(CS%dKE_dt) .OR. ASSOCIATED(CS%PE_to_KE) .OR. ASSOCIATED(CS%KE_CorAdv) .OR. &
+        ASSOCIATED(CS%KE_adv) .OR. ASSOCIATED(CS%KE_visc) .OR. ASSOCIATED(CS%KE_horvisc) .OR.  &
+        ASSOCIATED(CS%KE_dia) ) then
+        call create_group_pass(pass_KE_uv, KE_u, KE_v, G%Domain, To_North+To_East)
+    endif
+  endif
+
   if (ASSOCIATED(CS%dKE_dt)) then
     do k=1,nz
       do j=js,je ; do I=Isq,Ieq
@@ -602,7 +625,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, CS)
         KE_h(i,j) = CS%KE(i,j,k)*CS%dh_dt(i,j,k)
       enddo ; enddo
       if (.not.G%symmetric) &      
-         call pass_vector(KE_u, KE_v, G%Domain, To_North+To_East)     
+         call do_group_pass(pass_KE_uv, G%domain)
       do j=js,je ; do i=is,ie
         CS%dKE_dt(i,j,k) = KE_h(i,j) + 0.5 * G%IareaT(i,j) * &
             (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1))
@@ -620,7 +643,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, CS)
         KE_v(i,J) = vh(i,J,k)*G%dyCv(i,J)*ADp%PFv(i,J,k)
       enddo ; enddo
       if (.not.G%symmetric) &
-         call pass_vector(KE_u, KE_v, G%Domain, To_North+To_East)
+         call do_group_pass(pass_KE_uv, G%domain)
       do j=js,je ; do i=is,ie
         CS%PE_to_KE(i,j,k) = 0.5 * G%IareaT(i,j) * &
             (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1))
@@ -642,7 +665,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, CS)
             (uh(I,j,k) - uh(I-1,j,k) + vh(i,J,k) - vh(i,J-1,k))
       enddo ; enddo
       if (.not.G%symmetric) &
-         call pass_vector(KE_u, KE_v, G%Domain, To_North+To_East)
+         call do_group_pass(pass_KE_uv, G%domain)
       do j=js,je ; do i=is,ie
         CS%KE_CorAdv(i,j,k) = KE_h(i,j) + 0.5 * G%IareaT(i,j) * &
             (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1))
@@ -664,7 +687,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, CS)
             (uh(I,j,k) - uh(I-1,j,k) + vh(i,J,k) - vh(i,J-1,k))
       enddo ; enddo
       if (.not.G%symmetric) &
-         call pass_vector(KE_u, KE_v, G%Domain, To_North+To_East)
+         call do_group_pass(pass_KE_uv, G%domain)
       do j=js,je ; do i=is,ie
         CS%KE_adv(i,j,k) = KE_h(i,j) + 0.5 * G%IareaT(i,j) * &
             (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1))
@@ -682,7 +705,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, CS)
         KE_v(i,J) = vh(i,J,k)*G%dyCv(i,J)*ADp%dv_dt_visc(i,J,k)
       enddo ; enddo
       if (.not.G%symmetric) &
-         call pass_vector(KE_u, KE_v, G%Domain, To_North+To_East)
+         call do_group_pass(pass_KE_uv, G%domain)
       do j=js,je ; do i=is,ie
         CS%KE_visc(i,j,k) = 0.5 * G%IareaT(i,j) * &
             (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1))
@@ -700,7 +723,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, CS)
         KE_v(i,J) = vh(i,J,k)*G%dyCv(i,J)*ADp%diffv(i,J,k)
       enddo ; enddo
       if (.not.G%symmetric) &
-         call pass_vector(KE_u, KE_v, G%Domain, To_North+To_East)
+         call do_group_pass(pass_KE_uv, G%domain)
       do j=js,je ; do i=is,ie
         CS%KE_horvisc(i,j,k) = 0.5 * G%IareaT(i,j) * &
             (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1))
@@ -722,7 +745,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, CS)
             (CDp%diapyc_vel(i,j,k) - CDp%diapyc_vel(i,j,k+1))
       enddo ; enddo
       if (.not.G%symmetric) &
-         call pass_vector(KE_u, KE_v, G%Domain, To_North+To_East) 
+         call do_group_pass(pass_KE_uv, G%domain)
       do j=js,je ; do i=is,ie
         CS%KE_dia(i,j,k) = KE_h(i,j) + 0.5 * G%IareaT(i,j) * &
             (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1))
@@ -845,6 +868,12 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, param_file, diag, CS)
     thickness_units = "kilogram meter-2" ; flux_units = "kilogram second-1"
   endif
 
+  CS%id_temp_global = register_scalar_field('ocean_model', 'temp_global',  &
+      Time, diag, 'Global Volume Mean Ocean Temperature', 'Celsius')
+
+  CS%id_salt_global = register_scalar_field('ocean_model', 'salt_global',  &
+      Time, diag, 'Global Volume Mean Ocean Salinity', 'PSU')
+
   CS%id_e = register_diag_field('ocean_model', 'e', diag%axesTi, Time, &
       'Interface Height Relative to Mean Sea Level', 'meter')
   if (CS%id_e>0) call safe_alloc_ptr(CS%e,isd,ied,jsd,jed,nz+1)
@@ -957,8 +986,11 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, param_file, diag, CS)
     if (CS%id_cfl_cg1_y>0) call safe_alloc_ptr(CS%cfl_cg1_y,isd,ied,jsd,jed)
   endif
 
-  CS%id_mass_wt = register_diag_field('ocean_model', 'mass_wt', diag%axesT1, Time, &
-      'The column mass for calculating mass-weighted average properties', 'kg m-2')
+  CS%id_mass_wt = register_diag_field('ocean_model', 'mass_wt', diag%axesT1, Time,   &
+      'The column mass for calculating mass-weighted average properties', 'kg m-2',  &
+      cmor_field_name='masscello', cmor_units='kg m-2',                              &
+      cmor_standard_name='sea_water_mass_per_unit_area',                             &
+      cmor_long_name='Sea Water Mass Per Unit Area')
   CS%id_temp_int = register_diag_field('ocean_model', 'temp_int', diag%axesT1, Time, &
       'The mass weighted column integrated temperature', 'degC kg m-2')
   CS%id_salt_int = register_diag_field('ocean_model', 'salt_int', diag%axesT1, Time, &

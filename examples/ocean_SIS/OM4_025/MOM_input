@@ -52,7 +52,7 @@ NJGLOBAL = 1080                 !
                                 ! STATIC_MEMORY_ this is set in MOM_memory.h at compile time.
 !LAYOUT = 16, 32                !
                                 ! The processor layout that was acutally used.
-IO_LAYOUT = 2, 2                ! default = 0
+IO_LAYOUT = 1, 1                ! default = 0
                                 ! The processor layout to be used, or 0,0 to automatically
                                 ! set the io_layout to be the same as the layout.
 
@@ -444,6 +444,13 @@ DTBT = -0.9                     !   [s or nondim] default = -0.98
                                 ! integer fraction of DT, rounding down.
 
 ! === module MOM_thickness_diffuse ===
+Z_OUTPUT_GRID_FILE = "vgrid_75_2m.nc" ! default = ""
+                                ! The file that specifies the vertical grid for
+                                ! depth-space diagnostics, or blank to disable
+                                ! depth-space output.
+!NK_ZSPACE (from file) = 50     !   [nondim]
+                                ! The number of depth-space levels.  This is determined
+                                ! from the size of the variable zw in the output grid file.
 
 ! === module MOM_diabatic_driver ===
 ! The following parameters are used for diabatic processes.

@@ -183,6 +183,7 @@ THICKNESS_CONFIG = "lock_exchange" !
                                 !     adjustment2d - TBD AJA.
                                 !     sloshing - TBD AJA.
                                 !     seamount - TBD AJA.
+                                !     rossby_front - a mixed layer front in thermal wind balance.
                                 !     USER - call a user modified routine.
 FRONT_DISPLACEMENT = 20.0       !   [m]
                                 ! The vertical displacement of interfaces across the front.
@@ -202,6 +203,7 @@ TS_CONFIG = "fit"               !
                                 !     adjustment2d - TBD AJA.
                                 !     sloshing - TBD AJA.
                                 !     seamount - TBD AJA.
+                                !     rossby_front - a mixed layer front in thermal wind balance.
                                 !     USER - call a user modified routine.
 T_REF = 5.0                     !   [degC]
                                 ! A reference temperature used in initialization.
@@ -330,6 +332,8 @@ DTBT = 25.0                     !   [s or nondim] default = -0.98
                                 ! integer fraction of DT, rounding down.
 
 ! === module MOM_thickness_diffuse ===
+
+! === module MOM_mixed_layer_restrat ===
 
 ! === module MOM_diabatic_driver ===
 ! The following parameters are used for diabatic processes.

@@ -31,7 +31,8 @@ module MOM_lateral_mixing_coeffs
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg
 use MOM_diag_mediator, only : register_diag_field, safe_alloc_ptr, post_data
 use MOM_diag_mediator, only : diag_ctrl, time_type, query_averaging_enabled
-use MOM_domains, only : pass_var, pass_vector, CGRID_NE, To_All, Scalar_Pair
+use MOM_domains,       only : create_group_pass, do_group_pass
+use MOM_domains,       only : group_pass_type
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_interface_heights, only : find_eta
 use MOM_grid, only : ocean_grid_type
@@ -111,6 +112,7 @@ subroutine calc_resoln_function(h, tv, G, CS)
 !  (in)      CS - The control structure returned by a previous call to
 !                 VarMix_init.
 
+  type(group_pass_type), save :: pass_cg1 ! for group halo pass
   real :: cg1_q  ! The gravity wave speed interpolated to q points, in m s-1.
   real :: dx_term
   integer :: mod_power_2, power_2
@@ -140,7 +142,8 @@ subroutine calc_resoln_function(h, tv, G, CS)
 
   call wave_speed(h, tv, G, CS%cg1, CS%wave_speed_CSp)
 
-  call pass_var(CS%cg1, G%Domain)
+  call create_group_pass(pass_cg1, CS%cg1, G%Domain)
+  call do_group_pass(pass_cg1, G%Domain)
 
   !   Do this calculation on the extent used in MOM_hor_visc.F90, and
   ! MOM_tracer.F90 so that no halo update is needed.

@@ -56,7 +56,7 @@ module MOM_bulk_mixed_layer
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_alloc
 use MOM_diag_mediator, only : time_type, diag_ctrl
-use MOM_domains, only : pass_var
+use MOM_domains,       only : create_group_pass, do_group_pass, group_pass_type
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : absorbRemainingSW, extractFluxes1d, forcing, optics_type
@@ -382,6 +382,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
   logical :: reset_diags  ! If true, zero out the accumulated diagnostics.
   integer :: i, j, k, is, ie, js, je, nz, nkmb, n
   integer :: nsw    ! The number of bands of penetrating shortwave radiation.
+  type(group_pass_type), save :: pass_h_sum_hmbl_prev ! For group halo pass
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
@@ -429,8 +430,9 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
 !$OMP end parallel
 
     call cpu_clock_begin(id_clock_pass)
-    call pass_var(h_sum,G%Domain,complete=.false.)
-    call pass_var(hmbl_prev,G%Domain)
+    call create_group_pass(pass_h_sum_hmbl_prev, h_sum,G%Domain)
+    call create_group_pass(pass_h_sum_hmbl_prev, hmbl_prev,G%Domain)
+    call do_group_pass(pass_h_sum_hmbl_prev, G%Domain)
     call cpu_clock_end(id_clock_pass)
   endif
 

@@ -28,29 +28,22 @@ msk = netCDF4.Dataset(cmdLineArgs.gridspec+'/ocean_mask.nc').variables['mask'][:
 area = msk*netCDF4.Dataset(cmdLineArgs.gridspec+'/ocean_hgrid.nc').variables['area'][:,:].reshape([msk.shape[0], 2, msk.shape[1], 2]).sum(axis=-3).sum(axis=-1)
 msk = numpy.ma.array(msk, mask=(msk==0))
 
-#Tobs = netCDF4.Dataset( '/archive/gold/datasets/MOM6z_SIS_025/siena/obs/WOA05_ptemp_salt_annual_v1.nc' ).variables['temp'][1]
+#[t,z,y,x] corresponds to axis [0,1,2,3] which can be indexed by [-4,-3,-2,-1]
 
 ssu = rootGroup.variables['ssu']
 ssu_mean = ssu[:].mean(axis=0)
+eke_u = (0.5*(ssu-ssu_mean)**2).mean(axis=0)
+eke = (eke_u + numpy.roll(eke_u,1,axis=-1))/2 # U-point to T-point transform
+
 ssv = rootGroup.variables['ssv']
 ssv_mean = ssv[:].mean(axis=0)
-
-eke = ((ssu[:] - ssu_mean)**2 +  (ssv[:] - ssv_mean)**2)/2
-
-eke_mean = 10000 * eke[:].mean(axis=0)
-#eke_mean = numpy.log10(eke_mean[:]) 
+eke_v = (0.5*(ssv-ssv_mean)**2).mean(axis=0)
+eke = eke + (eke_v + numpy.roll(eke_v,1,axis=-2))/2 
 
 ci=m6plot.pmCI(0.0,0.5,0.1)
 
-m6plot.xyplot( eke_mean , x, y, area=area,
+m6plot.xyplot( 10000*eke, x, y, area=area,
       suptitle=rootGroup.title+' '+cmdLineArgs.label, title='Eddy Kinetic Energy annual mean [(cm/s)^2]',
       clim=ci, logscale=True,
       save=cmdLineArgs.outdir+'/EKE_mean.png')
 
-#m6plot.xycompare( temp, Tobs , x, y, area=area,
-#      suptitle=rootGroup.title+' '+cmdLineArgs.label,
-#      title1='SST [$\degree$C]',
-#      title2='WOA\'05 SST [$\degree$C]',
-#      clim=m6plot.linCI(-2,29,.5), colormap='dunneRainbow', extend='max',
-#      dlim=ci, dcolormap='dunnePM', dextend='both', centerDCB=True,
-#      save=cmdLineArgs.outdir+'/SST_bias_WOA05.3_panel.png')

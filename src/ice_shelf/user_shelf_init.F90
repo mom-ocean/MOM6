@@ -91,7 +91,6 @@ use mpp_mod, only : mpp_pe, mpp_sync
 ! use MOM_io, only : close_file, create_file, fieldtype, file_exists
 ! use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE
 ! use MOM_io, only : write_field, slasher, vardesc
-! use MOM_domains, only : pass_var, pass_vector
 implicit none ; private
 
 #include <MOM_memory.h>

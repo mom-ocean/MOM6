@@ -40,6 +40,15 @@ public edge_values_implicit_h6
 public triDiagEdgeWorkAllocate
 public triDiagEdgeWorkDeallocate
 
+#define __DO_SAFETY_CHECKS__
+
+! The following parameters are used to avoid singular matrices for boundary
+! extrapolation. The are needed only in the case where thicknesses vanish
+! to a small enough values such that the eigenvalues of the matrix can not
+! be separated.
+real, parameter :: hNegligible = 1.e-10 ! A cut-off minimum thickness for sum(h)
+real, parameter :: hMinFrac    = 1.e-5  ! A minimum fraction for min(h)/(sum(h)
+
 contains
 
 !------------------------------------------------------------------------------
@@ -262,6 +271,12 @@ subroutine edge_values_explicit_h2( N, h, u, edge_values )
     h0 = h(k-1)
     h1 = h(k)
 
+    ! Avoid singularities when h0+h1=0
+    if (h0+h1==0.) then
+      h0 = hNegligible
+      h1 = hNegligible
+    endif
+
     u0 = u(k-1)
     u1 = u(k)
 
@@ -327,12 +342,21 @@ subroutine edge_values_explicit_h4( N, h, u, edge_values )
     h1 = h(i-1)
     h2 = h(i)
     h3 = h(i+1)
+
+    ! Avoid singularities when consecutive pairs of h vanish
+    if (h0+h1==0. .or. h1+h2==0. .or. h2+h3==0.) then
+      f1 = max( hNegligible, h0+h1+h2+h3 )
+      h0 = max( hMinFrac*f1, h(i-2) )
+      h1 = max( hMinFrac*f1, h(i-1) )
+      h2 = max( hMinFrac*f1, h(i) )
+      h3 = max( hMinFrac*f1, h(i+1) )
+    endif
     
     u0 = u(i-2)
     u1 = u(i-1)
     u2 = u(i)
     u3 = u(i+1)
-    
+
     f1 = (h0+h1) * (h2+h3) / (h1+h2)
     f2 = u1 * h2 + u2 * h1
     f3 = 1.0 / (h0+h1+h2) + 1.0 / (h1+h2+h3)
@@ -354,21 +378,32 @@ subroutine edge_values_explicit_h4( N, h, u, edge_values )
     edge_values(i,1) = e
     edge_values(i-1,2) = e
 
+#ifdef __DO_SAFETY_CHECKS__
+    if (e /= e) then
+      write(0,*) 'NaN in explicit_edge_h4 at k=',i
+      write(0,*) 'u0-u3=',u0,u1,u2,u3
+      write(0,*) 'h0-h3=',h0,h1,h2,h3
+      write(0,*) 'f1-f3=',f1,f2,f3
+      stop 'Nan during edge_values_explicit_h4'
+    endif
+#endif
+
   end do ! end loop on interior cells
 
   ! Determine first two edge values
+  f1 = max( hNegligible, hMinFrac*sum(h(1:4)) )
   x(1) = 0.0
   do i = 2,5
-    x(i) = x(i-1) + h(i-1)
+    x(i) = x(i-1) + max(f1, h(i-1))
   end do
 
   do i = 1,4
     
     do j = 1,4
-      A(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / j
+      A(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / real(j)
     end do
     
-    B(i) = u(i) * ( h(i) )
+    B(i) = u(i) * max(f1, h(i) )
     
   end do    
 
@@ -381,19 +416,32 @@ subroutine edge_values_explicit_h4( N, h, u, edge_values )
   edge_values(1,2) = evaluation_polynomial( C, 4, x(2) )
   edge_values(2,1) = edge_values(1,2)
 
+#ifdef __DO_SAFETY_CHECKS__
+  if (edge_values(1,1) /= edge_values(1,1) .or. edge_values(1,2) /= edge_values(1,2)) then
+    write(0,*) 'NaN in explicit_edge_h4 at k=',1
+    write(0,*) 'A=',A
+    write(0,*) 'B=',B
+    write(0,*) 'C=',C
+    write(0,*) 'h(1:4)=',h(1:4)
+    write(0,*) 'x=',x
+    stop 'Nan during edge_values_explicit_h4'
+  endif
+#endif
+
   ! Determine last two edge values
+  f1 = max( hNegligible, hMinFrac*sum(h(N-3:N)) )
   x(1) = 0.0
   do i = 2,5
-    x(i) = x(i-1) + h(N-5+i)
+    x(i) = x(i-1) + max(f1, h(N-5+i))
   end do
 
   do i = 1,4
     
     do j = 1,4
-      A(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / j
+      A(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / real(j)
     end do
     
-    B(i) = u(N-4+i) * ( h(N-4+i) )
+    B(i) = u(N-4+i) * max(f1,  h(N-4+i) )
     
   end do    
 
@@ -404,8 +452,26 @@ subroutine edge_values_explicit_h4( N, h, u, edge_values )
   
   ! Second to last edge value
   edge_values(N,1) = evaluation_polynomial( C, 4, x(4) )
-  
   edge_values(N-1,2) = edge_values(N,1)
+  
+#ifdef __DO_SAFETY_CHECKS__
+  if (edge_values(N,1) /= edge_values(N,1) .or. edge_values(N,2) /= edge_values(N,2)) then
+    write(0,*) 'NaN in explicit_edge_h4 at k=',N
+    write(0,*) 'A='
+    do i = 1,4
+      do j = 1,4
+        A(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / real(j)
+      end do
+      write(0,*) A(i,:)
+      B(i) = u(N-4+i) * ( h(N-4+i) )
+    end do    
+    write(0,*) 'B=',B
+    write(0,*) 'C=',C
+    write(0,*) 'h(:N)=',h(N-3:N)
+    write(0,*) 'x=',x
+    stop 'Nan during edge_values_explicit_h4'
+  endif
+#endif
 
 end subroutine edge_values_explicit_h4
 
@@ -463,6 +529,12 @@ subroutine edge_values_implicit_h4( N, h, u, work, edge_values )
     h0 = h(i)
     h1 = h(i+1)
 
+    ! Avoid singularities when h0+h1=0
+    if (h0+h1==0.) then
+      h0 = hNegligible
+      h1 = hNegligible
+    endif
+
     ! Auxiliary calculations
     d2 = (h0 + h1) ** 2
     d4 = d2 ** 2
@@ -485,9 +557,10 @@ subroutine edge_values_implicit_h4( N, h, u, work, edge_values )
   end do ! end loop on cells
 
   ! Boundary conditions: left boundary
+  h0 = max( hNegligible, hMinFrac*sum(h(1:4)) )
   x(1) = 0.0
   do i = 2,5
-    x(i) = x(i-1) + h(i-1)
+    x(i) = x(i-1) + max( h0, h(i-1) )
   end do
 
   do i = 1,4
@@ -496,7 +569,7 @@ subroutine edge_values_implicit_h4( N, h, u, work, edge_values )
       Asys(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / j
     end do
     
-    Bsys(i) = u(i) * ( h(i) )
+    Bsys(i) = u(i) * max( h0, h(i) )
     
   end do    
 
@@ -507,9 +580,10 @@ subroutine edge_values_implicit_h4( N, h, u, work, edge_values )
   work%tri_b(1) = evaluation_polynomial( Csys, 4, x(1) )        ! first edge value
   
   ! Boundary conditions: right boundary
+  h0 = max( hNegligible, hMinFrac*sum(h(N-3:N)) )
   x(1) = 0.0
   do i = 2,5
-    x(i) = x(i-1) + h(N-5+i)
+    x(i) = x(i-1) + max( h0, h(N-5+i) )
   end do
 
   do i = 1,4
@@ -518,7 +592,7 @@ subroutine edge_values_implicit_h4( N, h, u, work, edge_values )
       Asys(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / j
     end do
     
-    Bsys(i) = u(N-4+i) * ( h(N-4+i) )
+    Bsys(i) = u(N-4+i) * max( h0, h(N-4+i) )
     
   end do    
 
@@ -616,6 +690,15 @@ subroutine edge_values_implicit_h6( N, h, u, work, edge_values )
     h1 = h(k+0)
     h2 = h(k+1)
     h3 = h(k+2)
+
+    ! Avoid singularities when h0=0 or h3=0
+    if (h0*h3==0.) then
+      g = max( hNegligible, h0+h1+h2+h3 )
+      h0 = max( hMinFrac*g, h0 )
+      h1 = max( hMinFrac*g, h1 )
+      h2 = max( hMinFrac*g, h2 )
+      h3 = max( hMinFrac*g, h3 )
+    endif
 
     ! Auxiliary calculations
     h1_2 = h1 * h1
@@ -724,20 +807,29 @@ subroutine edge_values_implicit_h6( N, h, u, work, edge_values )
   h1 = h(2)
   h2 = h(3)
   h3 = h(4)
-    
+
+  ! Avoid singularities when h0=0 or h3=0
+  if (h0*h3==0.) then
+    g = max( hNegligible, h0+h1+h2+h3 )
+    h0 = max( hMinFrac*g, h0 )
+    h1 = max( hMinFrac*g, h1 )
+    h2 = max( hMinFrac*g, h2 )
+    h3 = max( hMinFrac*g, h3 )
+  endif
+
   ! Auxiliary calculations
   h1_2 = h1 * h1
   h1_3 = h1_2 * h1
   h1_4 = h1_2 * h1_2
   h1_5 = h1_3 * h1_2
   h1_6 = h1_3 * h1_3
-    
+
   h2_2 = h2 * h2
   h2_3 = h2_2 * h2
   h2_4 = h2_2 * h2_2
   h2_5 = h2_3 * h2_2
   h2_6 = h2_3 * h2_3
-    
+
   g   = h0 + h1
   g_2 = g * g
   g_3 = g * g_2
@@ -830,9 +922,10 @@ subroutine edge_values_implicit_h6( N, h, u, work, edge_values )
   work%tri_b(2) = a * u(1) + b * u(2) + c * u(3) + d * u(4)
   
   ! Boundary conditions: left boundary
+  g = max( hNegligible, hMinFrac*sum(h(1:6)) )
   x(1) = 0.0
   do i = 2,7
-    x(i) = x(i-1) + h(i-1)
+    x(i) = x(i-1) + max( g, h(i-1) )
   end do
 
   do i = 1,6
@@ -841,7 +934,7 @@ subroutine edge_values_implicit_h6( N, h, u, work, edge_values )
       Asys(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / j
     end do
     
-    Bsys(i) = u(i) * h(i)
+    Bsys(i) = u(i) * max( g, h(i) )
     
   end do    
 
@@ -859,7 +952,16 @@ subroutine edge_values_implicit_h6( N, h, u, work, edge_values )
   h1 = h(N-2)
   h2 = h(N-1)
   h3 = h(N)
-    
+
+  ! Avoid singularities when h0=0 or h3=0
+  if (h0*h3==0.) then
+    g = max( hNegligible, h0+h1+h2+h3 )
+    h0 = max( hMinFrac*g, h0 )
+    h1 = max( hMinFrac*g, h1 )
+    h2 = max( hMinFrac*g, h2 )
+    h3 = max( hMinFrac*g, h3 )
+  endif
+
   ! Auxiliary calculations
   h1_2 = h1 * h1
   h1_3 = h1_2 * h1
@@ -965,9 +1067,10 @@ subroutine edge_values_implicit_h6( N, h, u, work, edge_values )
   work%tri_b(N) = a * u(N-3) + b * u(N-2) + c * u(N-1) + d * u(N)
 
   ! Boundary conditions: right boundary
+  g = max( hNegligible, hMinFrac*sum(h(N-5:N)) )
   x(1) = 0.0
   do i = 2,7
-    x(i) = x(i-1) + h(N-7+i)
+    x(i) = x(i-1) + max( g, h(N-7+i) )
   end do
 
   do i = 1,6
@@ -976,7 +1079,7 @@ subroutine edge_values_implicit_h6( N, h, u, work, edge_values )
       Asys(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / j
     end do
     
-    Bsys(i) = u(N-6+i) * h(N-6+i)
+    Bsys(i) = u(N-6+i) * max( g, h(N-6+i) )
     
   end do    
 

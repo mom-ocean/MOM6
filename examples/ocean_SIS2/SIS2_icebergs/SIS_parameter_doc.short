@@ -1,8 +1,4 @@
-SNOW_ALBEDO = 0.88              !   [nondim] default = 0.85
-                                ! The albedo of dry snow atop sea ice.
-ICE_ALBEDO = 0.68               !   [nondim] default = 0.5826
-                                ! The albedo of dry bare sea ice.
-ICE_BULK_SALINITY = 0.005       !   [kg/kg] default = 0.004
+ICE_BULK_SALINITY = 5.0         !   [g/kg] default = 4.0
                                 ! The fixed bulk salinity of sea ice.
 DO_ICEBERGS = True              !   [Boolean] default = False
                                 ! If true, call the iceberg module.
@@ -74,6 +70,10 @@ NSTEPS_DYN = 72                 ! default = 432
 SIS1_ICE_TRANSPORT = True       !   [Boolean] default = False
                                 ! If true, use SIS1 code to solve the ice continuity
                                 ! equation and transport tracers.
+
+! === module SIS_tracer_advect ===
+
+! === module SIS_tracer_registry ===
 
 ! === module SIS_sum_output ===
 DOCUMENT_FILE = "SIS_parameter_doc" ! default = "MOM_parameter_doc"
