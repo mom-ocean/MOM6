@@ -1,8 +1,11 @@
 CGRID_ICE_DYNAMICS = True       !   [Boolean] default = False
                                 ! If true, use a C-grid discretization of the sea-ice
                                 ! dynamics; if false use a B-grid discretization.
-ICE_BULK_SALINITY = 0.005       !   [kg/kg] default = 0.004
+ICE_BULK_SALINITY = 0.0         !   [g/kg] default = 4.0
                                 ! The fixed bulk salinity of sea ice.
+ICE_RELATIVE_SALINITY = 0.1     !   [nondim] default = 0.0
+                                ! The initial salinity of sea ice as a fraction of the
+                                ! salinity of the seawater from which it formed.
 ICE_STATS_INTERVAL = 0.25       !   [days] default = 1.0
                                 ! The interval in units of TIMEUNIT between writes of the
                                 ! globally summed ice statistics and conservation checks.
@@ -58,6 +61,10 @@ NSTEPS_DYN = 72                 ! default = 432
 ICE_TDAMP_ELASTIC = 1000.0      !   [s] default = 0.0
                                 ! The damping timescale associated with the elastic terms
                                 ! in the sea-ice dynamics equations.
+
+! === module SIS_tracer_advect ===
+
+! === module SIS_tracer_registry ===
 
 ! === module SIS_sum_output ===
 DOCUMENT_FILE = "SIS_parameter_doc" ! default = "MOM_parameter_doc"

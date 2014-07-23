@@ -142,10 +142,6 @@ THICKNESSDIFFUSE = False        !   [Boolean] default = False
 THICKNESSDIFFUSE_FIRST = False  !   [Boolean] default = False
                                 ! If true, do thickness diffusion before dynamics.
                                 ! This is only used if THICKNESSDIFFUSE is true.
-MIXEDLAYER_RESTRAT = False      !   [Boolean] default = False
-                                ! If true, a density-gradient dependent re-stratifying
-                                ! flow is imposed in the mixed layer.
-                                ! This is only used if BULKMIXEDLAYER is true.
 DEBUG = False                   !   [Boolean] default = False
                                 ! If true, write out verbose debugging data.
 DEBUG_TRUNCATIONS = False       !   [Boolean] default = False
@@ -432,6 +428,7 @@ THICKNESS_CONFIG = "uniform"    !
                                 !     adjustment2d - TBD AJA.
                                 !     sloshing - TBD AJA.
                                 !     seamount - TBD AJA.
+                                !     rossby_front - a mixed layer front in thermal wind balance.
                                 !     USER - call a user modified routine.
 TS_CONFIG = "fit"               !
                                 ! A string that determines how the initial tempertures
@@ -448,6 +445,7 @@ TS_CONFIG = "fit"               !
                                 !     adjustment2d - TBD AJA.
                                 !     sloshing - TBD AJA.
                                 !     seamount - TBD AJA.
+                                !     rossby_front - a mixed layer front in thermal wind balance.
                                 !     USER - call a user modified routine.
 VELOCITY_CONFIG = "uniform"     ! default = "zero"
                                 ! A string that determines how the initial velocities
@@ -456,7 +454,8 @@ VELOCITY_CONFIG = "uniform"     ! default = "zero"
                                 !       by (VELOCITY_FILE).
                                 !     zero - the fluid is initially at rest.
                                 !     uniform - the flow is uniform (determined by
-                                !       paremters TORUS_U and TORUS_V).
+                                !       parameters TORUS_U and TORUS_V).
+                                !     rossby_front - a mixed layer front in thermal wind balance.
                                 !     USER - call a user modified routine.
 INITIAL_U_CONST = 0.2           !   [m s-1]
                                 ! A initial uniform value for the zonal flow.
@@ -932,6 +931,12 @@ KHTH_SLOPE_MAX = 0.01           !   [nondim] default = 0.01
 KD_SMOOTH = 1.0E-06             !   [not defined] default = 1.0E-06
                                 ! A diapycnal diffusivity that is used to interpolate
                                 ! more sensible values of T & S into thin layers.
+
+! === module MOM_mixed_layer_restrat ===
+MIXEDLAYER_RESTRAT = False      !   [Boolean] default = False
+                                ! If true, a density-gradient dependent re-stratifying
+                                ! flow is imposed in the mixed layer.
+                                ! This is only used if BULKMIXEDLAYER is true.
 Z_OUTPUT_GRID_FILE = ""         ! default = ""
                                 ! The file that specifies the vertical grid for
                                 ! depth-space diagnostics, or blank to disable

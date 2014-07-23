@@ -162,7 +162,7 @@
 #"ocean_model","taux","taux","forcing_%4yr_%3dy","all",.true.,"none",2
 #"ocean_model","tauy","tauy","forcing_%4yr_%3dy","all",.true.,"none",2
 #"ocean_model","ustar","ustar","forcing_%4yr_%3dy","all",.true.,"none",2
-#"ocean_model","PmE","PmE","forcing_%4yr_%3dy","all",.true.,"none",2
+#"ocean_model","PRCmE","PRCmE","forcing_%4yr_%3dy","all",.true.,"none",2
 #"ocean_model","SW","SW","forcing_%4yr_%3dy","all",.true.,"none",2
 #"ocean_model","LwLatSens","LwLatSens","forcing_%4yr_%3dy","all",.true.,"none",2
 #"ocean_model","p_surf","p_surf","forcing_%4yr_%3dy","all",.true.,"none",2

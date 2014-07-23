@@ -1,0 +1,67 @@
+"MOM resting experiment"
+1 1 1 0 0 0
+"prog",    6,"hours",1,"days","Time"
+
+#This is the field section of the diag_table.
+
+# Prognostic Ocean fields:
+#=========================
+
+"ocean_model","u","u","prog","all",.true.,"none",2
+"ocean_model","v","v","prog","all",.true.,"none",2
+"ocean_model","h","h","prog","all",.true.,"none",1
+"ocean_model","e","e","prog","all",.true.,"none",2
+"ocean_model","temp","temp","prog","all",.true.,"none",2
+"ocean_model","salt","salt","prog","all",.true.,"none",2
+
+"ocean_model","CAu","CAu","prog","all",.true.,"none",2
+"ocean_model","CAv","CAv","prog","all",.true.,"none",2
+"ocean_model","PFu","PFu","prog","all",.true.,"none",2
+"ocean_model","PFv","PFv","prog","all",.true.,"none",2
+"ocean_model","u_BT_accel","u_BT_accel","prog","all",.true.,"none",2
+"ocean_model","v_BT_accel","v_BT_accel","prog","all",.true.,"none",2
+
+"ocean_model","Kd_interface","Kd_interface","prog","all",.true.,"none",2
+"ocean_model","MLD_restrat","MLD_restrat","prog","all",.true.,"none",2
+"ocean_model","ML_buoy_restrat","ML_buoy_restrat","prog","all",.true.,"none",2
+"ocean_model","uhml","uhml","prog","all",.true.,"none",2
+"ocean_model","vhml","vhml","prog","all",.true.,"none",2
+"ocean_model","udml_restrat","udml_restrat","prog","all",.true.,"none",2
+"ocean_model","vdml_restrat","vdml_restrat","prog","all",.true.,"none",2
+"ocean_model","uml_restrat","uml_restrat","prog","all",.true.,"none",2
+"ocean_model","vml_restrat","vml_restrat","prog","all",.true.,"none",2
+
+#=============================================================================================
+#
+#====> This file can be used with diag_manager/v2.0a (or higher) <====
+#
+#
+#  FORMATS FOR FILE ENTRIES (not all input values are used)
+#  ------------------------
+#
+#"file_name", output_freq, "output_units", format, "time_units", "time_long_name", ...
+#   (opt) new_file_frequecy, (opt) "new_file_freq_units", "new_file_start_date"
+#
+#
+#output_freq:  > 0  output frequency in "output_units"
+#              = 0  output frequency every time step
+#              =-1  output frequency at end of run
+#
+#output_units = units used for output frequency
+#               (years, months, days, minutes, hours, seconds)
+#
+#time_units   = units used to label the time axis
+#               (days, minutes, hours, seconds)
+#
+#
+#  FORMAT FOR FIELD ENTRIES (not all input values are used)
+#  ------------------------
+#
+#"module_name", "field_name", "output_name", "file_name" "time_sampling", time_avg, "other_opts", packing
+#
+#time_avg = .true. or .false.
+#
+#packing  = 1  double precision
+#         = 2  float
+#         = 4  packed 16-bit integers
+#         = 8  packed 1-byte (not tested?)

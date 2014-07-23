@@ -1,7 +1,7 @@
 CGRID_ICE_DYNAMICS = True       !   [Boolean] default = False
                                 ! If true, use a C-grid discretization of the sea-ice
                                 ! dynamics; if false use a B-grid discretization.
-ICE_BULK_SALINITY = 0.005       !   [kg/kg] default = 0.004
+ICE_BULK_SALINITY = 5.0         !   [g/kg] default = 4.0
                                 ! The fixed bulk salinity of sea ice.
 DO_ICEBERGS = True              !   [Boolean] default = False
                                 ! If true, call the iceberg module.
@@ -63,6 +63,10 @@ NSTEPS_DYN = 72                 ! default = 432
 ICE_TDAMP_ELASTIC = 1000.0      !   [s] default = 0.0
                                 ! The damping timescale associated with the elastic terms
                                 ! in the sea-ice dynamics equations.
+
+! === module SIS_tracer_advect ===
+
+! === module SIS_tracer_registry ===
 
 ! === module SIS_sum_output ===
 DOCUMENT_FILE = "SIS_parameter_doc" ! default = "MOM_parameter_doc"

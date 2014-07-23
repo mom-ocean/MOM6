@@ -22,18 +22,36 @@
 "ice_model", "HIO"  [Unused]
     ! long_name: ice thickness
     ! units: m-ice
+"ice_model", "T_bulkice"  [Unused]
+    ! long_name: Volume-averaged ice temperature
+    ! units: C
+"ice_model", "S_bulkice"  [Unused]
+    ! long_name: Volume-averaged ice salinity
+    ! units: g/kg
 "ice_model", "T1"  [Used]
-    ! long_name: top ice layer temperature
+    ! long_name: ice layer 1 temperature
     ! units: C
+"ice_model", "Sal1"  [Unused]
+    ! long_name: ice layer 1 salinity
+    ! units: g/kg
 "ice_model", "T2"  [Used]
-    ! long_name: second ice layer temperature
+    ! long_name: ice layer 2 temperature
     ! units: C
+"ice_model", "Sal2"  [Unused]
+    ! long_name: ice layer 2 salinity
+    ! units: g/kg
 "ice_model", "T3"  [Unused]
-    ! long_name: third ice layer temperature
+    ! long_name: ice layer 3 temperature
     ! units: C
+"ice_model", "Sal3"  [Unused]
+    ! long_name: ice layer 3 salinity
+    ! units: g/kg
 "ice_model", "T4"  [Unused]
-    ! long_name: bottom ice layer temperature
+    ! long_name: ice layer 4 temperature
     ! units: C
+"ice_model", "Sal4"  [Unused]
+    ! long_name: ice layer 4 salinity
+    ! units: g/kg
 "ice_model", "TS"  [Used]
     ! long_name: surface temperature
     ! units: C
@@ -104,16 +122,16 @@
     ! long_name: SW frac. abs. in snow
     ! units: 0:1
 "ice_model", "sw_abs_ice1"  [Unused]
-    ! long_name: SW frac. abs. in ice1
+    ! long_name: SW frac. abs. in ice layer 1
     ! units: 0:1
 "ice_model", "sw_abs_ice2"  [Unused]
-    ! long_name: SW frac. abs. in ice2
+    ! long_name: SW frac. abs. in ice layer 2
     ! units: 0:1
 "ice_model", "sw_abs_ice3"  [Unused]
-    ! long_name: SW frac. abs. in ice3
+    ! long_name: SW frac. abs. in ice layer 3
     ! units: 0:1
 "ice_model", "sw_abs_ice4"  [Unused]
-    ! long_name: SW frac. abs. in ice4
+    ! long_name: SW frac. abs. in ice layer 4
     ! units: 0:1
 "ice_model", "sw_pen"  [Unused]
     ! long_name: SW frac. pen. surf.

@@ -39,46 +39,46 @@
  "ocean_model", "KPP_Kheat",    "KPP_Kheat",        "ocean_month", "all", "mean", "none",2
 
 # Monthly surface forcing
- "ocean_model", "taux",         "taux",             "ocean_month", "all", "mean", "none",2
- "ocean_model", "tauy",         "tauy",             "ocean_month", "all", "mean", "none",2
- "ocean_model", "ustar",        "ustar",            "ocean_month", "all", "mean", "none",2
- "ocean_model", "PmE",          "PmE",              "ocean_month", "all", "mean", "none",2
- "ocean_model", "SW",           "SW",               "ocean_month", "all", "mean", "none",2
- "ocean_model", "Net_Heat",     "Net_Heat",         "ocean_month", "all", "mean", "none",2
- "ocean_model", "LwLatSens",    "LwLatSens",        "ocean_month", "all", "mean", "none",2
- "ocean_model", "p_surf",       "p_surf",           "ocean_month", "all", "mean", "none",2
- "ocean_model", "salt_flux",    "salt_flux",        "ocean_month", "all", "mean", "none",2
+ "ocean_model", "taux",             "taux",             "ocean_month", "all", "mean", "none",2
+ "ocean_model", "tauy",             "tauy",             "ocean_month", "all", "mean", "none",2
+ "ocean_model", "ustar",            "ustar",            "ocean_month", "all", "mean", "none",2
+ "ocean_model", "PRCmE",            "PRCmE",            "ocean_month", "all", "mean", "none",2
+ "ocean_model", "SW",               "SW",               "ocean_month", "all", "mean", "none",2
+ "ocean_model", "net_heat_surface", "net_heat_surface", "ocean_month", "all", "mean", "none",2
+ "ocean_model", "LwLatSens",        "LwLatSens",        "ocean_month", "all", "mean", "none",2
+ "ocean_model", "p_surf",           "p_surf",           "ocean_month", "all", "mean", "none",2
+ "ocean_model", "salt_flux",        "salt_flux",        "ocean_month", "all", "mean", "none",2
 
 # Annual averages
- "ocean_model", "e",            "e",                "ocean_annual", "all", "mean", "none",2
- "ocean_model", "h",            "h",                "ocean_annual", "all", "mean", "none",2
- "ocean_model", "temp",         "temp",             "ocean_annual", "all", "mean", "none",2
- "ocean_model", "salt",         "salt",             "ocean_annual", "all", "mean", "none",2
- "ocean_model", "u",            "u",                "ocean_annual", "all", "mean", "none",2
- "ocean_model", "v",            "v",                "ocean_annual", "all", "mean", "none",2
- "ocean_model", "Kd_interface", "Kd_interface",     "ocean_annual", "all", "mean", "none",2
- "ocean_model", "Kd_shear",     "Kd_shear",         "ocean_annual", "all", "mean", "none",2
- "ocean_model", "Kd_itides",    "Kd_itides",        "ocean_annual", "all", "mean", "none",2
- "ocean_model", "KPP_Kheat",    "KPP_Kheat",        "ocean_annual", "all", "mean", "none",2
- "ocean_model", "MLD_003",      "MLD_003_min",      "ocean_annual", "all", "min",  "none",2
- "ocean_model", "MLD_003",      "MLD_003_max",      "ocean_annual", "all", "max",  "none",2
- "ocean_model", "uh",           "uh",               "ocean_annual", "all", "mean", "none",2
- "ocean_model", "vh",           "vh",               "ocean_annual", "all", "mean", "none",2
- "ocean_model", "T_ady",        "T_ady",            "ocean_annual", "all", "mean", "none",2
- "ocean_model", "S_ady",        "S_ady",            "ocean_annual", "all", "mean", "none",2
- "ocean_model", "TKE_tidal",    "TKE_tidal",        "ocean_annual", "all", "mean", "none",2
- "ocean_model", "TKE_itidal",   "TKE_itidal",       "ocean_annual", "all", "mean", "none",2
- "ocean_model", "taux",         "taux",             "ocean_annual", "all", "mean", "none",2
- "ocean_model", "tauy",         "tauy",             "ocean_annual", "all", "mean", "none",2
- "ocean_model", "ustar",        "ustar",            "ocean_annual", "all", "mean", "none",2
- "ocean_model", "PmE",          "PmE",              "ocean_annual", "all", "mean", "none",2
- "ocean_model", "SW",           "SW",               "ocean_annual", "all", "mean", "none",2
- "ocean_model", "Net_Heat",     "Net_Heat",         "ocean_annual", "all", "mean", "none",2
- "ocean_model", "LwLatSens",    "LwLatSens",        "ocean_annual", "all", "mean", "none",2
- "ocean_model", "p_surf",       "p_surf",           "ocean_annual", "all", "mean", "none",2
- "ocean_model", "salt_flux",    "salt_flux",        "ocean_annual", "all", "mean", "none",2
- "ocean_model", "age",          "age",              "ocean_annual", "all", "mean", "none",2
-#"ocean_model", "vintage",      "vintage",          "ocean_annual", "all", "mean", "none",2
+ "ocean_model", "e",                "e",                "ocean_annual", "all", "mean", "none",2
+ "ocean_model", "h",                "h",                "ocean_annual", "all", "mean", "none",2
+ "ocean_model", "temp",             "temp",             "ocean_annual", "all", "mean", "none",2
+ "ocean_model", "salt",             "salt",             "ocean_annual", "all", "mean", "none",2
+ "ocean_model", "u",                "u",                "ocean_annual", "all", "mean", "none",2
+ "ocean_model", "v",                "v",                "ocean_annual", "all", "mean", "none",2
+ "ocean_model", "Kd_interface",     "Kd_interface",     "ocean_annual", "all", "mean", "none",2
+ "ocean_model", "Kd_shear",         "Kd_shear",         "ocean_annual", "all", "mean", "none",2
+ "ocean_model", "Kd_itides",        "Kd_itides",        "ocean_annual", "all", "mean", "none",2
+ "ocean_model", "KPP_Kheat",        "KPP_Kheat",        "ocean_annual", "all", "mean", "none",2
+ "ocean_model", "MLD_003",          "MLD_003_min",      "ocean_annual", "all", "min",  "none",2
+ "ocean_model", "MLD_003",          "MLD_003_max",      "ocean_annual", "all", "max",  "none",2
+ "ocean_model", "uh",               "uh",               "ocean_annual", "all", "mean", "none",2
+ "ocean_model", "vh",               "vh",               "ocean_annual", "all", "mean", "none",2
+ "ocean_model", "T_ady",            "T_ady",            "ocean_annual", "all", "mean", "none",2
+ "ocean_model", "S_ady",            "S_ady",            "ocean_annual", "all", "mean", "none",2
+ "ocean_model", "TKE_tidal",        "TKE_tidal",        "ocean_annual", "all", "mean", "none",2
+ "ocean_model", "TKE_itidal",       "TKE_itidal",       "ocean_annual", "all", "mean", "none",2
+ "ocean_model", "taux",             "taux",             "ocean_annual", "all", "mean", "none",2
+ "ocean_model", "tauy",             "tauy",             "ocean_annual", "all", "mean", "none",2
+ "ocean_model", "ustar",            "ustar",            "ocean_annual", "all", "mean", "none",2
+ "ocean_model", "PRCmE",            "PRCmE",            "ocean_annual", "all", "mean", "none",2
+ "ocean_model", "SW",               "SW",               "ocean_annual", "all", "mean", "none",2
+ "ocean_model", "net_heat_surface", "net_heat_surface", "ocean_annual", "all", "mean", "none",2
+ "ocean_model", "LwLatSens",        "LwLatSens",        "ocean_annual", "all", "mean", "none",2
+ "ocean_model", "p_surf",           "p_surf",           "ocean_annual", "all", "mean", "none",2
+ "ocean_model", "salt_flux",        "salt_flux",        "ocean_annual", "all", "mean", "none",2
+ "ocean_model", "age",              "age",              "ocean_annual", "all", "mean", "none",2
+#"ocean_model", "vintage",          "vintage",          "ocean_annual", "all", "mean", "none",2
 
 # Z diagnostics
  "ocean_model", "temp_z",       "temp",             "ocean_month_z", "all", "mean", "none",2

@@ -9,7 +9,7 @@ except:
   import matplotlib
   matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-from matplotlib.colors import BoundaryNorm, ListedColormap
+from matplotlib.colors import BoundaryNorm, ListedColormap, LogNorm
 from matplotlib.ticker import MaxNLocator
 import math
 import numpy, numpy.matlib
@@ -22,7 +22,7 @@ def xyplot(field, x=None, y=None, area=None,
   clim=None, colormap=None, extend=None, centerlabels=False,
   nbins=None, landcolor=[.5,.5,.5],
   aspect=[16,9], resolution=576, axis=None,
-  ignore=None, save=None, debug=False, show=False, interactive=False):
+  ignore=None, save=None, debug=False, show=False, interactive=False, logscale=False):
   """
   Renders plot of scalar field, field(x,y).
 
@@ -53,6 +53,7 @@ def xyplot(field, x=None, y=None, area=None,
   debug        If true, report stuff for debugging. Default False.
   show         If true, causes the figure to appear on screen. Used for testing. Default False.
   interactive  If true, adds interactive features such as zoom, close and cursor. Default False.
+  logscale     If true, use logaritmic coloring scheme. Default False.
   """
 
   # Create coordinates if not provided
@@ -71,6 +72,8 @@ def xyplot(field, x=None, y=None, area=None,
   if nbins==None and (clim==None or len(clim)==2): nbins=35
   if colormap==None: colormap = chooseColorMap(sMin, sMax)
   cmap, norm, extend = chooseColorLevels(sMin, sMax, colormap, clim=clim, nbins=nbins, extend=extend)
+
+  if logscale: norm = LogNorm()
 
   if axis==None:
     setFigureSize(aspect, resolution, debug=debug)
