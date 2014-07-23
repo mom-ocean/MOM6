@@ -77,6 +77,7 @@ use MOM_diag_to_Z,           only : diag_to_Z_CS, register_Zint_diag, calc_Zint_
 use MOM_diffConvection,      only : diffConvection_CS, diffConvection_init
 use MOM_diffConvection,      only : diffConvection_calculate, diffConvection_end
 use MOM_domains,             only : pass_var, To_West, To_South
+use MOM_domains,             only : create_group_pass, do_group_pass, group_pass_type
 use MOM_entrain_diffusive,   only : entrainment_diffusive, entrain_diffusive_init
 use MOM_entrain_diffusive,   only : entrain_diffusive_end, entrain_diffusive_CS
 use MOM_EOS,                 only : calculate_density, calculate_2_densities, calculate_TFreeze
