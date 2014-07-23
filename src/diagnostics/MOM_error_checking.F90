@@ -29,7 +29,8 @@ module MOM_error_checking
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 
-use MOM_domains, only : pass_vector, pe_here, BGRID_NE, To_All, Scalar_Pair
+use MOM_domains, only : pe_here, BGRID_NE, To_All, Scalar_Pair
+use MOM_domains, only : create_group_pass, do_group_pass, group_pass_type
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_grid, only : ocean_grid_type
 
@@ -99,7 +100,8 @@ subroutine check_redundant_v2d(mesg, u_comp, v_comp, G, is, ie, js, je, &
   real :: u_resym(SZIB_(G),SZJ_(G))
   real :: v_resym(SZI_(G),SZJB_(G))
   character(len=128) :: mesg2
- 
+  type(group_pass_type), save :: pass_nonsym_uv, pass_resym_uv !For group halo pass
+
   integer :: i, j, is_ch, ie_ch, js_ch, je_ch
   integer :: Isq, Ieq, Jsq, Jeq, isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
@@ -114,14 +116,19 @@ subroutine check_redundant_v2d(mesg, u_comp, v_comp, G, is, ie, js, je, &
 
   if (.not.associated(G%Domain_aux)) call MOM_error(FATAL," check_redundant"//&
     " called with a non-associated auxiliary domain the grid type.")
-  call pass_vector(u_nonsym, v_nonsym, G%Domain_aux, direction, stagger)
+
+  call create_group_pass(pass_nonsym_uv, u_nonsym, v_nonsym, G%Domain_aux, &
+                         direction, stagger)
+  call create_group_pass(pass_resym_uv, u_resym, v_resym, G%Domain,  &
+                         direction, stagger)
+  call do_group_pass(pass_nonsym_uv, G%Domain_aux)
 
   do I=IsdB,IedB ; do j=jsd,jed ; u_resym(I,j) = u_comp(I,j) ; enddo ; enddo
   do i=isd,ied ; do J=JsdB,JedB ; v_resym(i,J) = v_comp(i,J) ; enddo ; enddo
   do i=isd,ied ; do j=jsd,jed
     u_resym(i,j) = u_nonsym(i,j) ; v_resym(i,j) = v_nonsym(i,j)
   enddo ; enddo
-  call pass_vector(u_resym, v_resym, G%Domain, direction, stagger)
+  call do_group_pass(pass_resym_uv, G%Domain)
 
   is_ch = Isq ; ie_ch = Ieq ; js_ch = Jsq ; je_ch = Jeq
   if (present(is)) is_ch = is ; if (present(ie)) ie_ch = ie
@@ -191,7 +198,8 @@ subroutine check_redundant_s2d(mesg, array, G, is, ie, js, je, stagger)
   real :: a_nonsym(SZI_(G),SZJ_(G))
   real :: a_resym(SZIB_(G),SZJB_(G))
   character(len=128) :: mesg2
- 
+  type(group_pass_type), save :: pass_a_nonsym, pass_a_resym !For group halo pass
+
   integer :: i, j, is_ch, ie_ch, js_ch, je_ch
   integer :: Isq, Ieq, Jsq, Jeq, isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
@@ -206,15 +214,17 @@ subroutine check_redundant_s2d(mesg, array, G, is, ie, js, je, stagger)
 
   if (.not.associated(G%Domain_aux)) call MOM_error(FATAL," check_redundant"//&
     " called with a non-associated auxiliary domain the grid type.")
-  call pass_vector(a_nonsym, a_nonsym, G%Domain_aux, &
-                   direction=To_All+Scalar_Pair, stagger=BGRID_NE)
+  call create_group_pass(pass_a_nonsym, a_nonsym, a_nonsym, G%Domain_aux, &
+                         direction=To_All+Scalar_Pair, stagger=BGRID_NE)
+  call create_group_pass(pass_a_resym, a_resym, a_resym, G%Domain,     &
+                         direction=To_All+Scalar_Pair, stagger=BGRID_NE)
+  call do_group_pass(pass_a_nonsym, G%Domain_aux)
 
   do I=IsdB,IedB ; do J=JsdB,JedB ; a_resym(I,J) = array(I,J) ; enddo ; enddo
   do i=isd,ied ; do j=jsd,jed
     a_resym(i,j) = a_nonsym(i,j)
   enddo ; enddo
-  call pass_vector(a_resym, a_resym, G%Domain, direction=To_All+Scalar_Pair, &
-                   stagger=BGRID_NE)
+  call do_group_pass(pass_a_resym, G%Domain) 
 
   is_ch = Isq ; ie_ch = Ieq ; js_ch = Jsq ; je_ch = Jeq
   if (present(is)) is_ch = is ; if (present(ie)) ie_ch = ie

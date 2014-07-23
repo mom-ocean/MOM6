@@ -59,7 +59,8 @@ use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock, only : CLOCK_MODULE, CLOCK_ROUTINE
 use MOM_diag_mediator, only : post_data, query_averaging_enabled, diag_ctrl
 use MOM_diag_mediator, only : register_diag_field, safe_alloc_ptr, time_type
-use MOM_domains, only : pass_var, pass_vector, sum_across_PEs, max_across_PEs
+use MOM_domains, only : sum_across_PEs, max_across_PEs
+use MOM_domains, only : create_group_pass, do_group_pass, group_pass_type
 use MOM_checksums, only : hchksum
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
 use MOM_file_parser, only : get_param, log_version, param_file_type
@@ -137,6 +138,7 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, CS, Reg)
   integer :: i, j, k, m, is, ie, js, je, isd, ied, jsd, jed, nz, itt, ntr, do_any
   integer :: isv, iev, jsv, jev ! The valid range of the indices.
   integer :: IsdB, IedB, JsdB, JedB
+  type(group_pass_type), save :: pass_uhr_vhr_t_hprev
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -157,6 +159,14 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, CS, Reg)
   Idt = 1.0/dt
 
   max_iter = 2*INT(CEILING(dt/CS%dt)) + 1
+
+  call cpu_clock_begin(id_clock_pass)
+  call create_group_pass(pass_uhr_vhr_t_hprev, uhr, vhr, G%Domain)
+  call create_group_pass(pass_uhr_vhr_t_hprev, hprev, G%Domain)
+  do m=1,ntr 
+    call create_group_pass(pass_uhr_vhr_t_hprev, Tr(m)%t, G%Domain) 
+  enddo
+  call cpu_clock_end(id_clock_pass)
 
 !$OMP parallel default(none) shared(nz,jsd,jed,IsdB,IedB,uhr,jsdB,jedB,Isd,Ied,vhr, &
 !$OMP                               hprev,domore_k,js,je,is,ie,uhtr,vhtr,G,h_end,   &
@@ -222,9 +232,7 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, CS, Reg)
 
     if (isv > is-stensil) then
       call cpu_clock_begin(id_clock_pass)
-      call pass_vector(uhr, vhr, G%Domain)
-      do m=1,ntr ; call pass_var(Tr(m)%t, G%Domain, complete=.false.) ; enddo
-      call pass_var(hprev, G%Domain)
+      call do_group_pass(pass_uhr_vhr_t_hprev, G%Domain)
       call cpu_clock_end(id_clock_pass)
 
       nsten_halo = min(is-isd,ied-ie,js-jsd,jed-je)/stensil

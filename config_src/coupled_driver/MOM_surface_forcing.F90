@@ -800,12 +800,12 @@ subroutine forcing_save_restart(CS, G, Time, directory, time_stamped, &
 end subroutine forcing_save_restart
 
 subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt)
-  type(time_type),          intent(in) :: Time
-  type(ocean_grid_type),    intent(in) :: G
-  type(param_file_type),    intent(in) :: param_file
-  type(diag_ctrl), target,  intent(in) :: diag
-  type(surface_forcing_CS), pointer    :: CS
-  logical, optional,       intent(in) :: restore_salt
+  type(time_type),          intent(in)    :: Time
+  type(ocean_grid_type),    intent(in)    :: G
+  type(param_file_type),    intent(in)    :: param_file
+  type(diag_ctrl), target,  intent(inout) :: diag
+  type(surface_forcing_CS), pointer       :: CS
+  logical, optional,        intent(in)    :: restore_salt
 ! Arguments: Time - The current model time.
 !  (in)      G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for

@@ -72,6 +72,7 @@ subroutine solve_linear_system( A, B, X, system_size )
     ! If no pivot could be found, the system is singular and we need
     ! to end the execution
     if ( .NOT. found_pivot ) then
+      write(0,*) ' A=',A
       call MOM_error( FATAL, 'The linear system is singular !' )
     end if
 
@@ -88,7 +89,7 @@ subroutine solve_linear_system( A, B, X, system_size )
       B(k) = swap_b
     end if
             
-    ! Trasnform pivot to 1 by dividing the entire row 
+    ! Transform pivot to 1 by dividing the entire row 
     ! (right-hand side included) by the pivot
     pivot = A(i,i)
     do j = i,system_size

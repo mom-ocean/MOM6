@@ -49,7 +49,8 @@ use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock, only : CLOCK_MODULE, CLOCK_ROUTINE
 use MOM_diag_mediator, only : post_data, diag_ctrl
 use MOM_diag_mediator, only : register_diag_field, safe_alloc_ptr, time_type
-use MOM_domains, only : pass_var, pass_vector, sum_across_PEs, max_across_PEs
+use MOM_domains, only : sum_across_PEs, max_across_PEs
+use MOM_domains, only : create_group_pass, do_group_pass, group_pass_type
 use MOM_checksums, only : hchksum
 use MOM_EOS, only : calculate_density
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
@@ -101,6 +102,8 @@ end type p2di
 
 integer :: id_clock_diffuse, id_clock_epimix, id_clock_pass, id_clock_sync
 
+type(group_pass_type) :: pass_t !For group halo pass, used in both 
+                                !tracer_hordiff and tracer_epipycnal_ML_diff
 contains
 
 subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, Reg, tv)
@@ -110,7 +113,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, Reg, tv)
   type(VarMix_CS),                       pointer       :: VarMix
   type(ocean_grid_type),                 intent(inout) :: G
   type(tracer_hor_diff_CS),              pointer       :: CS
-  type(tracer_registry_type),            pointer       :: Reg
+  type(tracer_registry_type),            intent(inout) :: Reg
   type(thermo_var_ptrs),                 intent(in)    :: tv
 
 !   This subroutine does along-coordinate diffusion of all tracers,
@@ -132,7 +135,6 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, Reg, tv)
 !                 and these may (probably will) point to some of the same arrays
 !                 as Tr does.  tv is required for epipycnal mixing between the
 !                 mixed layer and the interior.
-  type(tracer_type) :: Tr(MAX_FIELDS_) ! The array of registered tracers.
   real, dimension(SZI_(G),SZJ_(G)) :: &
     Ihdxdy, &     ! The inverse of the volume or mass of fluid in a layer in a
                   ! grid cell, in m-3 or kg-1.
@@ -169,20 +171,19 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, Reg, tv)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_tracer_hor_diff: "// &
        "register_tracer must be called before tracer_hordiff.")
-  if (.not. associated(Reg)) call MOM_error(FATAL, "MOM_tracer_hor_diff: "// &
+  if (LOC(Reg)==0) call MOM_error(FATAL, "MOM_tracer_hor_diff: "// &
        "register_tracer must be called before tracer_hordiff.")
   if ((Reg%ntr==0) .or. ((CS%KhTr <= 0.0) .and. .not.associated(VarMix)) ) return
 
   call cpu_clock_begin(id_clock_diffuse)
 
   ntr = Reg%ntr
-  do m=1,ntr ; Tr(m) = Reg%Tr(m) ; enddo
   Idt = 1.0/dt
   h_neglect = G%H_subroundoff
 
   if (CS%Diffuse_ML_interior .and. CS%first_call) then ; if (is_root_pe()) then
-    do m=1,ntr ; if (associated(Tr(m)%df_x) .or. associated(Tr(m)%df_y)) &
-      call MOM_error(WARNING, "tracer_hordiff: Tracer "//trim(Tr(m)%name)// &
+    do m=1,ntr ; if (associated(Reg%Tr(m)%df_x) .or. associated(Reg%Tr(m)%df_y)) &
+      call MOM_error(WARNING, "tracer_hordiff: Tracer "//trim(Reg%Tr(m)%name)// &
           " has associated 3-d diffusive flux diagnostics.  These are not "//&
           "valid when DIFFUSE_ML_TO_INTERIOR is defined. Use 2-d tracer "//&
           "diffusion diagnostics instead to get accurate total fluxes.")
@@ -190,7 +191,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, Reg, tv)
   endif ; endif
   CS%first_call = .false.
 
-  if (CS%debug) call MOM_tracer_chksum("Before tracer diffusion ", Tr, ntr, G)
+  if (CS%debug) call MOM_tracer_chksum("Before tracer diffusion ", Reg%Tr, ntr, G)
 
   use_VarMix = .false. ; Resoln_scaled = .false.
   if (Associated(VarMix)) then
@@ -198,10 +199,16 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, Reg, tv)
     Resoln_scaled = VarMix%Resoln_scaled_KhTr
   endif
 
-!$OMP parallel default(none) shared(is,ie,js,je,use_VarMix,CS,VarMix,MEKE,Resoln_scaled, &
-!$OMP                               Kh_u,Kh_v,khdt_x,dt,G,khdt_y)                        &
-!$OMP                       private(Kh_loc,Rd_dx,Res_fn) 
+  call cpu_clock_begin(id_clock_pass)
+  do m=1,ntr
+    call create_group_pass(pass_t, Reg%Tr(m)%t(:,:,:), G%Domain)
+  enddo
+  call cpu_clock_end(id_clock_pass)
+
   if (use_VarMix) then
+!$OMP parallel default(none) shared(is,ie,js,je,CS,VarMix,MEKE,Resoln_scaled, &
+!$OMP                               Kh_u,Kh_v,khdt_x,dt,G,khdt_y)                        &
+!$OMP                       private(Kh_loc,Rd_dx) 
 !$OMP do
     do j=js,je ; do I=is-1,ie
       Kh_loc = CS%KhTr + CS%KhTr_Slope_Cff*VarMix%L2u(I,j)*VarMix%SN_u(I,j)
@@ -242,7 +249,10 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, Reg, tv)
     do J=js-1,je ; do i=is,ie
       khdt_y(i,J) = dt*(Kh_v(i,J)*(G%dx_Cv(i,J)*G%IdyCv(i,J)))
     enddo ; enddo
+!$OMP end parallel
   elseif (Resoln_scaled) then
+!$OMP parallel default(none) shared(is,ie,js,je,VarMix,Kh_u,Kh_v,khdt_x,khdt_y,CS,dt,G) &
+!$OMP                       private(Res_fn)
 !$OMP do
     do j=js,je ; do I=is-1,ie
       Res_fn = 0.5 * (VarMix%Res_fn_h(i,j) + VarMix%Res_fn_h(i+1,j))
@@ -255,7 +265,9 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, Reg, tv)
       Kh_v(i,J) = max(CS%KhTr * Res_fn, CS%KhTr_min)
       khdt_y(i,J) = dt*(CS%KhTr*(G%dx_Cv(i,J)*G%IdyCv(i,J))) * Res_fn
     enddo ; enddo
+!$OMP end parallel
   else
+!$OMP parallel default(none) shared(is,ie,js,je,Kh_u,Kh_v,khdt_x,khdt_y,CS,G,dt)
     if (CS%id_KhTr_u > 0) then 
 !$OMP do
       do j=js,je ; do I=is-1,ie
@@ -280,8 +292,9 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, Reg, tv)
         khdt_y(i,J) = dt*(CS%KhTr*(G%dx_Cv(i,J)*G%IdyCv(i,J)))
       enddo ; enddo 
     endif
-  endif
 !$OMP end parallel
+  endif
+
   if (CS%check_diffusive_CFL) then
     max_CFL = 0.0
     do j=js,je ; do i=is,ie
@@ -299,33 +312,30 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, Reg, tv)
   endif
 
   do m=1,ntr
-    if (associated(Tr(m)%df_x)) then
+    if (associated(Reg%Tr(m)%df_x)) then
       do k=1,nz ; do j=js,je ; do I=is-1,ie
-        Tr(m)%df_x(I,j,k) = 0.0
+        Reg%Tr(m)%df_x(I,j,k) = 0.0
       enddo ; enddo ; enddo
     endif
-    if (associated(Tr(m)%df_y)) then
+    if (associated(Reg%Tr(m)%df_y)) then
       do k=1,nz ; do J=js-1,je ; do i=is,ie
-        Tr(m)%df_y(i,J,k) = 0.0
+        Reg%Tr(m)%df_y(i,J,k) = 0.0
       enddo ; enddo ; enddo
     endif
-    if (associated(Tr(m)%df2d_x)) then
-      do j=js,je ; do I=is-1,ie ; Tr(m)%df2d_x(I,j) = 0.0 ; enddo ; enddo
+    if (associated(Reg%Tr(m)%df2d_x)) then
+      do j=js,je ; do I=is-1,ie ; Reg%Tr(m)%df2d_x(I,j) = 0.0 ; enddo ; enddo
     endif
-    if (associated(Tr(m)%df2d_y)) then
-      do J=js-1,je ; do i=is,ie ; Tr(m)%df2d_y(i,J) = 0.0 ; enddo ; enddo
+    if (associated(Reg%Tr(m)%df2d_y)) then
+      do J=js-1,je ; do i=is,ie ; Reg%Tr(m)%df2d_y(i,J) = 0.0 ; enddo ; enddo
     endif
   enddo
 
   do itt=1,num_itts
     call cpu_clock_begin(id_clock_pass)
-    do m=1,ntr-1
-      call pass_var(Tr(m)%t(:,:,:), G%Domain, complete=.false.)
-    enddo
-    call pass_var(Tr(ntr)%t(:,:,:), G%Domain)
+    call do_group_pass(pass_t, G%Domain)
     call cpu_clock_end(id_clock_pass)
 !$OMP parallel do default(none) shared(is,ie,js,je,nz,I_numitts,CS,G,khdt_y,h, &
-!$OMP                                  h_neglect,khdt_x,ntr,Tr,Idt )           &
+!$OMP                                  h_neglect,khdt_x,ntr,Idt,Reg)           &
 !$OMP                          private(scale,Coef_y,Coef_x,Ihdxdy,dTr)
     do k=1,nz
       scale = I_numitts
@@ -356,29 +366,29 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, Reg, tv)
       do m=1,ntr
         do j=js,je ; do i=is,ie
           dTr(i,j) = Ihdxdy(i,j) * &
-            ((Coef_x(I-1,j) * (Tr(m)%t(i-1,j,k) - Tr(m)%t(i,j,k)) - &
-              Coef_x(I,j) * (Tr(m)%t(i,j,k) - Tr(m)%t(i+1,j,k))) + &
-             (Coef_y(i,J-1) * (Tr(m)%t(i,j-1,k) - Tr(m)%t(i,j,k)) - &
-              Coef_y(i,J) * (Tr(m)%t(i,j,k) - Tr(m)%t(i,j+1,k))))
+            ((Coef_x(I-1,j) * (Reg%Tr(m)%t(i-1,j,k) - Reg%Tr(m)%t(i,j,k)) - &
+              Coef_x(I,j) * (Reg%Tr(m)%t(i,j,k) - Reg%Tr(m)%t(i+1,j,k))) + &
+             (Coef_y(i,J-1) * (Reg%Tr(m)%t(i,j-1,k) - Reg%Tr(m)%t(i,j,k)) - &
+              Coef_y(i,J) * (Reg%Tr(m)%t(i,j,k) - Reg%Tr(m)%t(i,j+1,k))))
         enddo ; enddo
-        if (associated(Tr(m)%df_x)) then ; do j=js,je ; do I=G%IscB,G%IecB
-          Tr(m)%df_x(I,j,k) = Tr(m)%df_x(I,j,k) + Coef_x(I,j) * &
-                              (Tr(m)%t(i,j,k) - Tr(m)%t(i+1,j,k))*Idt
+        if (associated(Reg%Tr(m)%df_x)) then ; do j=js,je ; do I=G%IscB,G%IecB
+          Reg%Tr(m)%df_x(I,j,k) = Reg%Tr(m)%df_x(I,j,k) + Coef_x(I,j) * &
+                              (Reg%Tr(m)%t(i,j,k) - Reg%Tr(m)%t(i+1,j,k))*Idt
         enddo ; enddo ; endif
-        if (associated(Tr(m)%df_y)) then ; do J=G%JscB,G%JecB ; do i=is,ie
-          Tr(m)%df_y(i,J,k) = Tr(m)%df_y(i,J,k) + Coef_y(i,J) * &
-                              (Tr(m)%t(i,j,k) - Tr(m)%t(i,j+1,k))*Idt
+        if (associated(Reg%Tr(m)%df_y)) then ; do J=G%JscB,G%JecB ; do i=is,ie
+          Reg%Tr(m)%df_y(i,J,k) = Reg%Tr(m)%df_y(i,J,k) + Coef_y(i,J) * &
+                              (Reg%Tr(m)%t(i,j,k) - Reg%Tr(m)%t(i,j+1,k))*Idt
         enddo ; enddo ; endif
-        if (associated(Tr(m)%df2d_x)) then ; do j=js,je ; do I=G%IscB,G%IecB
-          Tr(m)%df2d_x(I,j) = Tr(m)%df2d_x(I,j) + Coef_x(I,j) * &
-                              (Tr(m)%t(i,j,k) - Tr(m)%t(i+1,j,k))*Idt
+        if (associated(Reg%Tr(m)%df2d_x)) then ; do j=js,je ; do I=G%IscB,G%IecB
+          Reg%Tr(m)%df2d_x(I,j) = Reg%Tr(m)%df2d_x(I,j) + Coef_x(I,j) * &
+                              (Reg%Tr(m)%t(i,j,k) - Reg%Tr(m)%t(i+1,j,k))*Idt
         enddo ; enddo ; endif
-        if (associated(Tr(m)%df2d_y)) then ; do J=G%JscB,G%JecB ; do i=is,ie
-          Tr(m)%df2d_y(i,J) = Tr(m)%df2d_y(i,J) + Coef_y(i,J) * &
-                              (Tr(m)%t(i,j,k) - Tr(m)%t(i,j+1,k))*Idt
+        if (associated(Reg%Tr(m)%df2d_y)) then ; do J=G%JscB,G%JecB ; do i=is,ie
+          Reg%Tr(m)%df2d_y(i,J) = Reg%Tr(m)%df2d_y(i,J) + Coef_y(i,J) * &
+                              (Reg%Tr(m)%t(i,j,k) - Reg%Tr(m)%t(i,j+1,k))*Idt
         enddo ; enddo ; endif
         do j=js,je ; do i=is,ie
-          Tr(m)%t(i,j,k) = Tr(m)%t(i,j,k) + dTr(i,j)
+          Reg%Tr(m)%t(i,j,k) = Reg%Tr(m)%t(i,j,k) + dTr(i,j)
         enddo ; enddo
       enddo
 
@@ -388,14 +398,14 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, Reg, tv)
   call cpu_clock_end(id_clock_diffuse)
 
   if (CS%Diffuse_ML_interior) then
-    if (CS%debug) call MOM_tracer_chksum("Before epipycnal diff ", Tr, ntr, G)
+    if (CS%debug) call MOM_tracer_chksum("Before epipycnal diff ", Reg%Tr, ntr, G)
 
     call cpu_clock_begin(id_clock_epimix)
-    call tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_x, khdt_y, G, CS, tv, num_itts)
+    call tracer_epipycnal_ML_diff(h, dt, Reg%Tr, ntr, khdt_x, khdt_y, G, CS, tv, num_itts)
     call cpu_clock_end(id_clock_epimix)
   endif
 
-  if (CS%debug) call MOM_tracer_chksum("After tracer diffusion ", Tr, ntr, G)
+  if (CS%debug) call MOM_tracer_chksum("After tracer diffusion ", Reg%Tr, ntr, G)
 
   if (CS%id_KhTr_u > 0) then
     do j=js,je ; do I=is-1,ie
@@ -545,10 +555,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
   do i=is-2,ie+2 ; p_ref_cv(i) = tv%P_Ref ; enddo
 
   call cpu_clock_begin(id_clock_pass)
-  do m=1,ntr-1
-    call pass_var(Tr(m)%t(:,:,:), G%Domain, complete=.false.)
-  enddo
-  call pass_var(Tr(ntr)%t(:,:,:), G%Domain)
+  call do_group_pass(pass_t, G%Domain)
   call cpu_clock_end(id_clock_pass)
   ! Determine which layers the mixed- and buffer-layers map into...
 !$OMP parallel do default(none) shared(nkmb,is,ie,js,je,tv,p_ref_cv,rho_coord)
@@ -956,10 +963,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
 
     if (itt > 1) then ! The halos have already been filled if itt==1.
       call cpu_clock_begin(id_clock_pass)
-      do m=1,ntr-1
-        call pass_var(Tr(m)%t(:,:,:), G%Domain, complete=.false.)
-      enddo
-      call pass_var(Tr(ntr)%t(:,:,:), G%Domain)
+      call do_group_pass(pass_t, G%Domain)
       call cpu_clock_end(id_clock_pass)
     endif
 

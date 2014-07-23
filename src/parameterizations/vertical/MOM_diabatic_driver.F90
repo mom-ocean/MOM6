@@ -325,7 +325,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   integer :: num_z_diags  ! number of diagnostics to be interpolated to depth
   integer :: z_ids(7)     ! id numbers of diagnostics to be interpolated to depth
   logical :: showCallTree ! If true, show the call tree
-
+  type(group_pass_type), save :: pass_hold_eb_ea ! For group halo pass
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkmb
 
   is   = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = G%ke
@@ -1019,14 +1019,15 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
 
   call cpu_clock_begin(id_clock_pass)
   if (G%symmetric) then
-    call pass_var(hold,G%Domain,complete=.false.)
-    call pass_var(eb,G%Domain,complete=.false.)
-    call pass_var(ea,G%Domain)
+    call create_group_pass(pass_hold_eb_ea,hold,G%Domain)
+    call create_group_pass(pass_hold_eb_ea,eb,G%Domain)
+    call create_group_pass(pass_hold_eb_ea,ea,G%Domain)
   else
-    call pass_var(hold,G%Domain,To_West+To_South,complete=.false.)
-    call pass_var(eb,G%Domain,To_West+To_South,complete=.false.)
-    call pass_var(ea,G%Domain,To_West+To_South)
+    call create_group_pass(pass_hold_eb_ea,hold,G%Domain,To_West+To_South)
+    call create_group_pass(pass_hold_eb_ea,eb,G%Domain,To_West+To_South)
+    call create_group_pass(pass_hold_eb_ea,ea,G%Domain,To_West+To_South)
   endif  
+  call do_group_pass(pass_hold_eb_ea,G%Domain)
   call cpu_clock_end(id_clock_pass)
 
 !  Use a tridiagonal solver to determine the effect of the diapycnal

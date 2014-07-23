@@ -51,7 +51,8 @@ module MOM_regularize_layers
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator, only : time_type, diag_ctrl
-use MOM_domains, only : pass_var
+use MOM_domains,       only : create_group_pass, do_group_pass
+use MOM_domains,       only : group_pass_type
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
@@ -136,6 +137,7 @@ subroutine regularize_layers(h, tv, dt, ea, eb, G, CS)
 !                 regularize_layers_init.
 
   integer :: i, j, k, is, ie, js, je, nz
+  type(group_pass_type), save :: pass_h
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
@@ -144,7 +146,8 @@ subroutine regularize_layers(h, tv, dt, ea, eb, G, CS)
 
   if (CS%regularize_surface_layers) then
     call cpu_clock_begin(id_clock_pass)
-    call pass_var(h,G%Domain)
+    call create_group_pass(pass_h,h,G%Domain)
+    call do_group_pass(pass_h,G%Domain)
     call cpu_clock_end(id_clock_pass)
   endif
 

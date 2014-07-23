@@ -440,6 +440,15 @@ DTBT = -0.9                     !   [s or nondim] default = -0.98
 
 ! === module MOM_thickness_diffuse ===
 
+! === module MOM_mixed_layer_restrat ===
+Z_OUTPUT_GRID_FILE = "vgrid_cm4.nc" ! default = ""
+                                ! The file that specifies the vertical grid for
+                                ! depth-space diagnostics, or blank to disable
+                                ! depth-space output.
+!NK_ZSPACE (from file) = 50     !   [nondim]
+                                ! The number of depth-space levels.  This is determined
+                                ! from the size of the variable zw in the output grid file.
+
 ! === module MOM_diabatic_driver ===
 ! The following parameters are used for diabatic processes.
 PRESSURE_DEPENDENT_FRAZIL = True !   [Boolean] default = False

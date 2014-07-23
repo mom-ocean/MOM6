@@ -161,7 +161,7 @@ HiRes_025_SIS_1440
 #"ocean_model","taux",     "taux",     "ocean_month","all",.true.,"none",2
 #"ocean_model","tauy",     "tauy",     "ocean_month","all",.true.,"none",2
 #"ocean_model","ustar",    "ustar",    "ocean_month","all",.true.,"none",2
-#"ocean_model","PmE",      "PmE",      "ocean_month","all",.true.,"none",2
+#"ocean_model","PRCmE",    "PRCmE",    "ocean_month","all",.true.,"none",2
 #"ocean_model","SW",       "SW",       "ocean_month","all",.true.,"none",2
 #"ocean_model","LwLatSens","LwLatSens","ocean_month","all",.true.,"none",2
 "ocean_model","p_surf",   "p_surf",   "ocean_month","all",.false.,"none",2

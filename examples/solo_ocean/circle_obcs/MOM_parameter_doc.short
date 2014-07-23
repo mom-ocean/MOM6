@@ -184,6 +184,7 @@ THICKNESS_CONFIG = "circle_obcs" !
                                 !     adjustment2d - TBD AJA.
                                 !     sloshing - TBD AJA.
                                 !     seamount - TBD AJA.
+                                !     rossby_front - a mixed layer front in thermal wind balance.
                                 !     USER - call a user modified routine.
 
 ! === module circle_obcs_initialize_thickness ===
@@ -335,6 +336,8 @@ DTBT = -0.95                    !   [s or nondim] default = -0.98
                                 ! integer fraction of DT, rounding down.
 
 ! === module MOM_thickness_diffuse ===
+
+! === module MOM_mixed_layer_restrat ===
 
 ! === module MOM_diabatic_driver ===
 ! The following parameters are used for diabatic processes.

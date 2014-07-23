@@ -9,6 +9,6 @@
  &fms_nml
          clock_grain='MODULE',
          clock_flags='NONE',
-         domains_stack_size = 710000,
+         domains_stack_size = 810000,
          stack_size = 0 /
 
