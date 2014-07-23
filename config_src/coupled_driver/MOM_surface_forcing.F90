@@ -565,7 +565,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
 
   ! virtual precip associated with salinity restoring 
   ! vprec > 0 means add water to ocean, assumed to be at SST 
-  ! vprec < 0 means remove water from ocean; heat_content_massout in MOM_diabatic_driver.F90
+  ! vprec < 0 means remove water from ocean; set heat_content_vprec in MOM_diabatic_driver.F90
   do j=js,je ; do i=is,ie
     if(fluxes%vprec(i,j) > 0.0) then 
       fluxes%heat_content_vprec(i,j) = C_p*fluxes%vprec(i,j)*state%SST(i,j)*G%mask2dT(i,j)

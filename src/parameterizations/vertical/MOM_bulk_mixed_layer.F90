@@ -584,22 +584,23 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
 
     ! smg: remove this call and this routine when wish to switch to mixedlayerConvectionInOut
     ! This subroutine causes the mixed layer to entrain to depth of free convection.    
-!    call mixedlayer_convection(h(:,1:), d_eb, htot, Ttot, Stot, uhtot, vhtot, &
-!                               R0_tot, Rcv_tot, u, v, T(:,1:), S(:,1:),       &
-!                               R0(:,1:), Rcv(:,1:), eps,                      &
-!                               dR0_dT, dRcv_dT, dR0_dS, dRcv_dS,              &
-!                               netMassInOut, Net_heat, Net_salt,              &
-!                               nsw, Pen_SW_bnd, opacity_band, Conv_en,        &
-!                               dKE_FC, j, ksort, G, CS, tv)
+    call mixedlayer_convection(h(:,1:), d_eb, htot, Ttot, Stot, uhtot, vhtot, &
+                               R0_tot, Rcv_tot, u, v, T(:,1:), S(:,1:),       &
+                               R0(:,1:), Rcv(:,1:), eps,                      &
+                               dR0_dT, dRcv_dT, dR0_dS, dRcv_dS,              &
+                               netMassInOut, Net_heat, Net_salt,              &
+                               nsw, Pen_SW_bnd, opacity_band, Conv_en,        &
+                               dKE_FC, j, ksort, G, CS, tv)
 
     ! This subroutine causes the mixed layer to entrain to depth of free convection.    
-    call mixedlayerConvectionInOut(h(:,1:), d_eb, htot, Ttot, Stot, uhtot, vhtot,&
-                               R0_tot, Rcv_tot, u, v, T(:,1:), S(:,1:),          &
-                               R0(:,1:), Rcv(:,1:), eps,                         &
-                               dR0_dT, dRcv_dT, dR0_dS, dRcv_dS,                 &
-                               netMassInOut, netMassOut, Net_heat, Net_salt,     &
-                               nsw, Pen_SW_bnd, opacity_band, Conv_en,           &
-                               dKE_FC, j, ksort, G, CS, tv, fluxes, dt)
+    ! smg: new routine; it is incomplete, as it does not preperly handle layer=0.  
+!    call mixedlayerConvectionInOut(h(:,1:), d_eb, htot, Ttot, Stot, uhtot, vhtot,&
+!                               R0_tot, Rcv_tot, u, v, T(:,1:), S(:,1:),          &
+!                               R0(:,1:), Rcv(:,1:), eps,                         &
+!                               dR0_dT, dRcv_dT, dR0_dS, dRcv_dS,                 &
+!                               netMassInOut, netMassOut, Net_heat, Net_salt,     &
+!                               nsw, Pen_SW_bnd, opacity_band, Conv_en,           &
+!                               dKE_FC, j, ksort, G, CS, tv, fluxes, dt)
 
     if(id_clock_conv>0) call cpu_clock_end(id_clock_conv)
 
@@ -1264,6 +1265,8 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,   &
 end subroutine mixedlayer_convection
 
 
+! smg: new version of subroutine mixedlayer_convection
+! work remains to be done to properly handle layer=0.
 subroutine mixedlayerConvectionInOut(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,  &
                                  R0_tot, Rcv_tot, u, v, T, S, R0, Rcv, eps,    &
                                  dR0_dT, dRcv_dT, dR0_dS, dRcv_dS,             &

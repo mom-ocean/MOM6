@@ -518,7 +518,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
       if (associated(visc%Kd_turb) .and. CS%matchKPPwithoutKappaShear) then
 !$OMP do
         do k=1,nz+1 ; do j=js,je ; do i=is,ie
-          Kd_salt(i,j,k) = ( Kd_salt(i,j,k) + visc%Kd_turb(i,j,k) )  ! Put back part due to Kappa-shear   smg: clean this up!
+          Kd_salt(i,j,k) = ( Kd_salt(i,j,k) + visc%Kd_turb(i,j,k) )  ! Put back part due to Kappa-shear  smg: clean this up!
           Kd_heat(i,j,k) = ( Kd_heat(i,j,k) + visc%Kd_turb(i,j,k) )  ! Put back part due to Kappa-shear  smg: clean this up!
         enddo ; enddo ; enddo
       endif
@@ -636,10 +636,10 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     ! Changes: ea(:,:,1), h, tv%T and tv%S.
 
     ! smg: old code 
-    ! call applyBoundaryFluxes(CS, G, dt, fluxes, CS%optics, ea, h, tv)
+    call applyBoundaryFluxes(CS, G, dt, fluxes, CS%optics, ea, h, tv)
 
     ! smg: new code 
-    call applyBoundaryFluxesInOut(CS, G, dt, fluxes, CS%optics, ea, h, tv)
+    ! call applyBoundaryFluxesInOut(CS, G, dt, fluxes, CS%optics, ea, h, tv)
 
     call cpu_clock_end(id_clock_remap)
     if (CS%debug) then
@@ -2026,61 +2026,30 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, diagPtr
 end subroutine diagnoseMLDbyDensityDifference
 
 
-! smg: this routine is obsolete
+! smg: old version of this routine
 subroutine applyBoundaryFluxes(CS, G, dt, fluxes, optics, ea, h, tv)
   type(diabatic_CS),                     pointer       :: CS
   type(ocean_grid_type),                 intent(in)    :: G
   real,                                  intent(in)    :: dt
   type(forcing),                         intent(inout) :: fluxes
   type(optics_type),                     pointer       :: optics
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: ea
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: h
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: ea, h
   type(thermo_var_ptrs),                 intent(inout) :: tv
-!
-! Update the thickness, temperature, and salinity due to 
-! thermodynamic forcing (contained in fluxes type) to h, tv%T and tv%S. 
-!
-! Apply the surface boundary fluxes in two steps:
-! A/ update mass, temp, and salinity due to all terms except 
-!    penetrative SW
-! B/ update temp due to penetrative SW  
-!
-! This routine is only used if CS%useALEalgorithm == .true. 
-!
-! smg: if applyBoundaryFluxesInOut proves of use, then 
-! applyBoundaryFluxes will become obsolete. 
-!
-! Arguments: 
-!  (in)      CS     = control structure returned by a previous diabatic_driver_init call
-!  (in)      G      = ocean grid structure
-!  (in)      dt     = Time increment (seconds)
-!  (in)      fluxes = structure containing pointers to forcing fields; NULL ptrs for unused fields
-!            optics = pointer to the optics 
-!  (inout)   ea     = amount of fluid entrained from the layer above within
-!                     one time step  (m for Bouss, kg/m^2 for non-Bouss)
-!  (inout)   h      = layer thickness (m for Bouss and kg/m^2 for non-Bouss)
-!  (inout)   tv     = structure containing pointers to any available
-!                     thermodynamic fields; unused fields have NULL ptrs.
-
-  integer, parameter :: maxGroundings = 5
-  integer, dimension(SZI_(G), SZK_(G)) :: ksort
-  integer :: numberOfGroundings, iGround(maxGroundings), jGround(maxGroundings)
-
-  real :: H_limit_fluxes, IforcingDepthScale
+  !   This subroutine applies thermodynamic forcing (contained in fluxes type)
+  ! to h, tv%T and tv%S. 
+  real :: Irho0, I_Cp, Irho_cp, H_limit_fluxes, IforcingDepthScale
   real :: dThickness, dTemp, dSalt, fractionOfForcing, hOld, Ithickness
-
-  real, dimension(SZI_(G))                       :: netMassInOut, netMassOut
-  real, dimension(SZI_(G))                       :: netHeat, netSalt
-  real, dimension(SZI_(G))                       :: htot, Ttot
-  real, dimension(SZI_(G), SZK_(G))              :: h2d, T2d, eps
+  real, dimension(SZI_(G)) :: netThickness, netMassOut, netHeat, netSalt, htot, Ttot
+  real, dimension(SZI_(G), SZK_(G)) :: h2d, T2d, eps
+  integer, dimension(SZI_(G), SZK_(G)) :: ksort
   real, dimension(max(CS%nsw,1),SZI_(G))         :: Pen_SW_bnd
   real, dimension(max(CS%nsw,1),SZI_(G),SZK_(G)) :: opacityBand
   logical :: use_riverHeatContent, useCalvingHeatContent
-  real                                           :: hGrounding(maxGroundings)
-
+  integer, parameter :: maxGroundings = 5
+  integer :: numberOfGroundings, iGround(maxGroundings), jGround(maxGroundings)
+  real :: hGrounding(maxGroundings)
   integer :: i, j, is, ie, js, je, k, nz, n, nsw
   character(len=45) :: mesg
-
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   ! Skip applying forcing if fluxes%sw is not associated.
@@ -2088,39 +2057,39 @@ subroutine applyBoundaryFluxes(CS, G, dt, fluxes, optics, ea, h, tv)
 
   nsw = CS%nsw
 
-  ! H_limit_fluxes is used by extractFluxes1d to scale down fluxes if the total
-  ! depth of the ocean is vanishing. It does not (yet) handle a value of zero.
+  Irho0 = 1.0 / G%Rho0
+  I_Cp = 1.0 / fluxes%C_p
+  Irho_cp = 1.0 / (G%H_to_kg_m2 * fluxes%C_p)
+  ! H_limit_fluxes is used by extractFluxes1d to scale away fluxes if the total
+  ! depth of the ocean is vanishing. It does not (yet) handle a value of zero!
+  H_limit_fluxes = max(G%Angstrom, 1.E-30) ! This is a hack to avoid division by zero
   ! To accomodate vanishing upper layers, we need to allow for an instantaneous
   ! distribution of forcing over some finite vertical extent. The bulk mixed layer
-  ! code handles this issue properly. 
-  H_limit_fluxes = max(G%Angstrom, 1.E-30) 
+  ! code handled this properly. The inverse scale, IforcingDepthScale, is a hack which 
+  ! should not be tickled in Eulerian mode. It stops all the forcing going into a
+  ! vanish(ed/ing) layer.
+  IforcingDepthScale = 1000. ! Use 1 mm to distribute the surface fluxes uniformly
 
-  ! The inverse scale, IforcingDepthScale, is a hack which 
-  ! should not be tickled in Eulerian mode. It stops all of the forcing from 
-  ! being deposited into a vanish(ed/ing) layer. We presently use here
-  ! 1/10^-3 = 1000 to correspond to a 1mm thick layer over which to distribute
-  ! the surface fluxes uniformly.
-  IforcingDepthScale = 1000. 
+  use_riverHeatContent = .false.              ! ?????????????????
+  useCalvingHeatContent = .false.             ! ?????????????????
 
-  ! subroutine "absorbRemaining" uses an indirect indexing in the vertical
-  ! as in bulk mixed layer.
+  ! s/r aborbRemaining uses an indirect indexing in the vertical, a hold over for use
+  ! with the bulk mixed layer
   do k=1,nz ; do i=is,ie
       ksort(i,k) = k
   enddo ; enddo
   if (CS%id_createdH>0) CS%createdH(:,:) = 0.
 
   numberOfGroundings = 0
-!$OMP parallel do default(none) shared(is,ie,js,je,nz,h,tv,nsw,G,optics,fluxes,dt,          &
-!$OMP                                  H_limit_fluxes,use_riverHeatContent,                 &
-!$OMP                                  useCalvingHeatContent,ea,IforcingDepthScale,         &
-!$OMP                                  numberOfGroundings,iGround,jGround,                  &
-!$OMP                                  hGrounding,CS,ksort)                                 &
-!$OMP                          private(opacityBand,h2d,T2d,eps,htot,netMassInOut,netMassOut &
-!$OMP                                  netHeat,netSalt,Pen_SW_bnd,fractionOfForcing,        &
+!$OMP parallel do default(none) shared(is,ie,js,je,nz,h,tv,nsw,G,optics,fluxes,dt,   &
+!$OMP                                  H_limit_fluxes,use_riverHeatContent,          &
+!$OMP                                  useCalvingHeatContent,ea,IforcingDepthScale,  &
+!$OMP                                  numberOfGroundings,iGround,jGround,           &
+!$OMP                                  hGrounding,CS,ksort)                          &
+!$OMP                          private(opacityBand,h2d,T2d,eps,htot,netThickness,    &
+!$OMP                                  netHeat,netSalt,Pen_SW_bnd,fractionOfForcing, &
 !$OMP                                  dThickness,dTemp,dSalt,hOld,Ithickness,Ttot)
-
   do j=js,je ! Work in vertical slices (this is a hold over from the routines called with a j argument)
-
     Ttot = 0
     ! Copy state into 2D-slice arrays
     do k=1,nz
@@ -2136,105 +2105,77 @@ subroutine applyBoundaryFluxes(CS, G, dt, fluxes, optics, ea, h, tv)
     do i=is,ie ; htot(i) = 0. ; enddo
 
     ! The surface forcing is contained in the fluxes type.
-    ! We aggregate the thermodynamic forcing for a time step into the following:
-    ! netMassInOut = water (H units) added/removed via surface fluxes 
-    ! netMassOut   = water (H units) removed via evaporation 
-    ! netHeat      = heat (degC * H) via surface fluxes, excluding the piece contained 
-    !                in Pen_SW_bnd, and excluding the fluxes%heat_content_evap. 
-    ! netSalt      = salt ( g(salt)/m2 for non-Bouss and ppt*m/s for Bouss ) via surface fluxes
-    ! Pen_SW_bnd   = components to penetrative shortwave radiation 
+    ! Here, we "unpack" it and aggregate all the thermodynamic forcing into
+    ! netThickness, netHeat, netSalt and the SW penetrative componennts, Pen_SW_bnd.
     call extractFluxes1d(G, fluxes, optics, nsw, j, dt, &
                   H_limit_fluxes, use_riverHeatContent, useCalvingHeatContent, &
-                  h2d, T2d, netMassInOut, netMassOut, netHeat, netSalt, Pen_SW_bnd, tv)
+                  h2d, T2d, netThickness, netMassOut, netHeat, netSalt, Pen_SW_bnd, tv)
  
-    ! for passive tracers
+    ! For passive tracers
     do i=is,ie
-      ea(i,j,1) = netMassInOut(i)
+      ea(i,j,1) = netThickness(i)
     enddo
 
-    ! Apply the boundary forcing according to whether the layer thickness is able
-    ! to incorporate the forcing.  If layer too thin, then distribute the forcing 
-    ! into deeper layers.      
     do i=is,ie
       if (G%mask2dT(i,j)>0.) then
-
         do k=1,nz
-
-          ! Place forcing into top layer if this layer has nontrivial thickness. 
-          ! For layers thin relative to 1/IforcingDepthScale, then distribute 
-          ! forcing into deeper layers. 
-          ! fractionOfForcing = 1.0, unless h2d is less than IforcingDepthScale.
+          ! Fraction of forcing that we put into this layer is normally 100%, unless the
+          ! layer is thin relative to 1/IforcingDepthScale
           fractionOfForcing = min(1.0, h2d(i,k)*IforcingDepthScale)
- 
-          ! In the case with (-1)*netMassInOut greater than 0.8*h, then we limit 
-          ! the fluxes applied to the top cell, since we cannot take more mass out
-          ! of this layer than is available. We then distribute the fluxes downwards,
-          ! thus taking mass from deeper layers.
-          if (-netMassInOut(i) > 0.8*h2d(i,k)) then 
-            fractionOfForcing = -0.8*h2d(i,k)/netMassInOut(i) 
-          endif 
+          if (-netThickness(i)>0.8*h2d(i,k)) fractionOfForcing=-0.8*h2d(i,k)/netThickness(i) ! Restrict volume loss
 
-          ! change in state due to forcing. The following limits mass loss
-          ! to be no more than the available mass in the layer.
-          dThickness = max( fractionOfForcing*netMassInOut(i), -h2d(i,k) )
-          dTemp      = fractionOfForcing*netHeat(i)
+          ! Change in state due to forcing
+          ! (Limit mass loss to the available mass in layer)
+          dThickness = max( fractionOfForcing*netThickness(i), -h2d(i,k) )
+          dTemp = fractionOfForcing*netHeat(i)
           ! The following max avoids taking out more salt than is in the layer
           dSalt = max( fractionOfForcing*netSalt(i), -0.9999*h2d(i,k)*tv%S(i,j,k))
 
-          ! Update the forcing by the part to be consumed within the present k-layer.  
-          ! If fractionOfForcing = 1, then new netMassInOut, netHeat, and netSalt vanish.
-          netMassInOut(i) = netMassInOut(i) - dThickness
-          netHeat(i)      = netHeat(i)      - dTemp
-          netSalt(i)      = netSalt(i)      - dSalt
+          ! Update the forcing by the part to be consumed
+          netThickness(i) = netThickness(i) - dThickness
+          netHeat(i) = netHeat(i) - dTemp
+          netSalt(i) = netSalt(i) - dSalt
 
           ! Adjust heating by the temperature of rain/water vapor
           dTemp = dTemp + dThickness*tv%T(i,j,k)
-
-          ! smg: this code is obsolete 
           if (ASSOCIATED(tv%TempxPmE)) tv%TempxPmE(i,j) = tv%TempxPmE(i,j) + &
                          tv%T(i,j,k) * dThickness * G%H_to_kg_m2
 
           ! Update state by the appropriate delta (change in state calculated above)
-          hOld     = h2d(i,k) ! Need to keep original thickness in hand
+          hOld = h2d(i,k) ! Need to keep original thickness in hand
           h2d(i,k) = h2d(i,k) + dThickness
           if (h2d(i,k) > 0.) then
-            Ithickness  = 1./h2d(i,k) ! Inverse of new thickness
-            T2d(i,k)    = (hOld*T2d(i,k) + dTemp)*Ithickness
+            Ithickness = 1./h2d(i,k) ! Inverse of new thickness
+            T2d(i,k) = (hOld*T2d(i,k) + dTemp)*Ithickness
             tv%S(i,j,k) = (hOld*tv%S(i,j,k) + dSalt)*Ithickness
           else!if (h2d(i,k) < 0.) then ! h2d==0 is a special limit that need no extra handling
             call forcing_SinglePointPrint(fluxes,G,i,j,'applyBoundaryFluxes')
             write(0,*) 'applyBoundaryFluxes(): lon,lat=',G%geoLonT(i,j),G%geoLatT(i,j)
-            write(0,*) 'applyBoundaryFluxes(): netT,netS,netH=',netHeat(i),netSalt(i),netMassInOut(i)
+            write(0,*) 'applyBoundaryFluxes(): netT,netS,netH=',netHeat(i),netSalt(i),netThickness(i)
             write(0,*) 'applyBoundaryFluxes(): dT,dS,dH=',dTemp,dSalt,dThickness
             write(0,*) 'applyBoundaryFluxes(): h(n),h(n+1),k=',hOld,h2d(i,k),k
             call MOM_error(FATAL, "MOM_diabatic_driver.F90, applyBoundaryFluxes(): "//&
                            "Complete mass loss in column!")
           endif
-        
         enddo ! k
-
-        ! If anything remains then we have grounded out, which is a problem. 
-        if (netMassInOut(i)/=0.) then 
+        if (netThickness(i)/=0.) then ! If anything remains then we grounded out
 !$OMP critical
           numberOfGroundings = numberOfGroundings +1
           if (numberOfGroundings<=maxGroundings) then
             iGround(numberOfGroundings) = i ! Record i,j location of event for
             jGround(numberOfGroundings) = j ! warning message
-            hGrounding(numberOfGroundings) = netMassInOut(i)
+            hGrounding(numberOfGroundings) = netThickness(i)
           endif
 !$OMP end critical
-          if (CS%id_createdH>0) CS%createdH(i,j) = CS%createdH(i,j) - netMassInOut(i)/dt
+          if (CS%id_createdH>0) CS%createdH(i,j) = CS%createdH(i,j) - netThickness(i)/dt
         endif
-
-      ! check if trying to apply fluxes over land points 
-      elseif( (abs(netHeat(i))+abs(netSalt(i))+abs(netMassInOut(i)))>0. ) then
+      elseif( (abs(netHeat(i))+abs(netSalt(i))+abs(netThickness(i)))>0. ) then
         call forcing_SinglePointPrint(fluxes,G,i,j,'applyBoundaryFluxes')
         write(0,*) 'applyBoundaryFluxes(): lon,lat=',G%geoLonT(i,j),G%geoLatT(i,j)
-        write(0,*) 'applyBoundaryFluxes(): netT,netS,netH=',netHeat(i),netSalt(i),netMassInOut(i)
+        write(0,*) 'applyBoundaryFluxes(): netT,netS,netH=',netHeat(i),netSalt(i),netThickness(i)
         call MOM_error(FATAL, "MOM_diabatic_driver.F90, applyBoundaryFluxes(): "//&
                               "Mass loss over land?")
       endif
-
     enddo ! i
 
     ! Heat by the divergence of penetrating SW (this uses the updated thicknesses)
@@ -2250,7 +2191,7 @@ subroutine applyBoundaryFluxes(CS, G, dt, fluxes, optics, ea, h, tv)
       enddo
     enddo
 
-  enddo ! j-loop finish 
+  enddo ! j
 
   if (CS%id_createdH > 0) call post_data(CS%id_createdH, CS%createdH, CS%diag)
 
@@ -2267,6 +2208,7 @@ subroutine applyBoundaryFluxes(CS, G, dt, fluxes, optics, ea, h, tv)
 end subroutine applyBoundaryFluxes
 
 
+! smg: new version of subroutine applyBoundaryFluxes
 subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv)
   type(diabatic_CS),                     pointer       :: CS
   type(ocean_grid_type),                 intent(in)    :: G

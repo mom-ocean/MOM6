@@ -995,24 +995,25 @@ subroutine accumulate_net_input(fluxes, state, dt, G, CS)
 
     ! smg: new code 
     ! include heat content from water transport across ocean surface 
-    if (ASSOCIATED(fluxes%heat_content_lprec)) then ; do j=js,je ; do i=is,ie
-      heat_in(i,j) = heat_in(i,j) + dt*G%areaT(i,j) *                          &
-         (fluxes%heat_content_lprec(i,j)   + (fluxes%heat_content_fprec(i,j)   &
-       + (fluxes%heat_content_lrunoff(i,j) + (fluxes%heat_content_frunoff(i,j) &
-       + (fluxes%heat_content_cond(i,j)    + (fluxes%heat_content_vprec(i,j)   &
-       +  fluxes%heat_content_massout(i,j)))))))
-    enddo ; enddo ; endif
+!    if (ASSOCIATED(fluxes%heat_content_lprec)) then ; do j=js,je ; do i=is,ie
+!      heat_in(i,j) = heat_in(i,j) + dt*G%areaT(i,j) *                          &
+!         (fluxes%heat_content_lprec(i,j)   + (fluxes%heat_content_fprec(i,j)   &
+!       + (fluxes%heat_content_lrunoff(i,j) + (fluxes%heat_content_frunoff(i,j) &
+!       + (fluxes%heat_content_cond(i,j)    + (fluxes%heat_content_vprec(i,j)   &
+!       +  fluxes%heat_content_massout(i,j)))))))
+!    enddo ; enddo ; endif
 
     ! smg: old code 
-!    if (ASSOCIATED(state%TempxPmE)) then
-!      do j=js,je ; do i=is,ie
-!        heat_in(i,j) = heat_in(i,j) + (C_p * G%areaT(i,j)) * state%TempxPmE(i,j)
-!      enddo ; enddo
-!    elseif (ASSOCIATED(fluxes%evap)) then
-!      do j=js,je ; do i=is,ie
-!        heat_in(i,j) = heat_in(i,j) + (C_p * state%SST(i,j)) * FW_in(i,j)
-!      enddo ; enddo
-!    endif
+    if (ASSOCIATED(state%TempxPmE)) then
+      do j=js,je ; do i=is,ie
+        heat_in(i,j) = heat_in(i,j) + (C_p * G%areaT(i,j)) * state%TempxPmE(i,j)
+      enddo ; enddo
+    elseif (ASSOCIATED(fluxes%evap)) then
+      do j=js,je ; do i=is,ie
+        heat_in(i,j) = heat_in(i,j) + (C_p * state%SST(i,j)) * FW_in(i,j)
+      enddo ; enddo
+    endif
+
 
     ! The following heat sources may or may not be used.
     if (ASSOCIATED(state%internal_heat)) then
