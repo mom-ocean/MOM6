@@ -32,25 +32,53 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public :: global_i_mean, global_j_mean, global_area_mean, global_volume_mean
+public :: global_i_mean, global_j_mean
+public :: global_area_mean_2d, global_area_mean_3d
+public :: global_volume_mean
 
 contains
 
-function global_area_mean(var,G)
+function global_area_mean_2d(var,G)
   type(ocean_grid_type),                       intent(in)  :: G
   real, dimension(SZI_(G), SZJ_(G)),           intent(in)  :: var
   real, dimension(SZI_(G), SZJ_(G))                        :: tmpForSumming
   integer :: i, j, is, ie, js, je
-  real :: global_area_mean
+  real :: global_area_mean_2d
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
   tmpForSumming(:,:) = 0.
   do j=js,je ; do i=is, ie
     tmpForSumming(i,j) = ( var(i,j) * (G%areaT(i,j) * G%mask2dT(i,j)) )
   enddo ; enddo
-  global_area_mean = reproducing_sum( tmpForSumming ) * G%IareaT_global
+  global_area_mean_2d = reproducing_sum( tmpForSumming ) * G%IareaT_global
 
-end function global_area_mean
+end function global_area_mean_2d
+
+function global_area_mean_3d(var,h,G)
+  type(ocean_grid_type),                       intent(in)  :: G
+  real, dimension(SZI_(G), SZJ_(G), SZK_(G)),  intent(in)  :: var
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),       intent(in)  :: h
+  real, dimension(SZI_(G), SZJ_(G), SZK_(G))               :: tmpForSumming, weight
+  real, dimension(SZK_(G))                                 :: global_area_mean_3d, scalarij, weightij
+  real, dimension(SZK_(G))  :: global_temp_scalar, global_weight_scalar
+  integer :: i, j, k, is, ie, js, je, nz
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+
+  tmpForSumming(:,:,:) = 0. ; weight(:,:,:) = 0.
+
+  do k=1, nz ; do j=js,je ; do i=is, ie
+    weight(i,j,k)  =  h(i,j,k) * (G%areaT(i,j) * G%mask2dT(i,j))
+    tmpForSumming(i,j,k) =  var(i,j,k) * weight(i,j,k)
+  enddo ; enddo ; enddo
+
+  global_temp_scalar   = reproducing_sum(tmpForSumming,sums=scalarij)
+  global_weight_scalar = reproducing_sum(weight,sums=weightij)
+
+  do k=1, nz
+    global_area_mean_3d(k) = scalarij(k) / weightij(k)
+  enddo
+
+end function global_area_mean_3d
 
 function global_volume_mean(var,h,G)
   type(ocean_grid_type),                       intent(in)  :: G

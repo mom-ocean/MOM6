@@ -44,6 +44,7 @@ use diag_manager_mod, only : register_static_field_fms=>register_static_field
 implicit none ; private
 
 public set_axes_info, post_data, register_diag_field, time_type
+public post_data_1d_k
 public safe_alloc_ptr, safe_alloc_alloc
 public enable_averaging, disable_averaging, query_averaging_enabled
 public diag_mediator_init, diag_mediator_end, set_diag_mediator_grid
@@ -295,6 +296,49 @@ subroutine post_data_0d_low(diag_field_id, field, diag, is_static, mask)
   endif
 
 end subroutine post_data_0d_low
+
+subroutine post_data_1d_k(diag_field_id, field, diag, is_static)
+  integer,           intent(in) :: diag_field_id
+  real,              intent(in) :: field(:)
+  type(diag_ctrl),   intent(in) :: diag
+  logical, optional, intent(in) :: is_static
+! Arguments: diag_field_id - the id for an output variable returned by a
+!                            previous call to register_diag_field.
+!  (in)      field - The 3-d array being offered for output or averaging.
+!  (inout)   diag - A structure that is used to regulate diagnostic output.
+!  (in)      static - If true, this is a static field that is always offered.
+  integer :: altId
+
+  call post_data_1d_k_low(diag_field_id, field, diag, is_static)
+  altId = diag%CMORid(diag_field_id)
+  if (altId>0) then
+    call post_data_1d_k_low(altId, field, diag, is_static)
+  endif
+
+end subroutine post_data_1d_k
+
+subroutine post_data_1d_k_low(diag_field_id, field, diag, is_static)
+  integer,           intent(in) :: diag_field_id
+  real,              intent(in) :: field(:)
+  type(diag_ctrl),   intent(in) :: diag
+  logical, optional, intent(in) :: is_static
+! Arguments: diag_field_id - the id for an output variable returned by a
+!                            previous call to register_diag_field.
+!  (in)      field - The 3-d array being offered for output or averaging.
+!  (inout)   diag - A structure that is used to regulate diagnostic output.
+!  (in)      static - If true, this is a static field that is always offered.
+  logical :: used  ! The return value of send_data is not used for anything.
+  logical :: is_stat
+  integer :: isv, iev, jsv, jev
+  is_stat = .false. ; if (present(is_static)) is_stat = is_static 
+  
+  if (is_stat) then
+    used = send_data(diag_field_id, field)
+  elseif (diag%ave_enabled) then
+    used = send_data(diag_field_id, field, diag%time_end, weight=diag%time_int)
+  endif
+
+end subroutine post_data_1d_k_low
 
 subroutine post_data_2d(diag_field_id, field, diag, is_static, mask)
   integer,           intent(in) :: diag_field_id
@@ -750,7 +794,7 @@ function register_diag_field_low(module_name, field_name, axes, init_time, &
 !       call MOM_error(FATAL, "MOM_diag_mediator:register_diag_field_low: " // &
 !            "unknown axes for diagnostic variable "//trim(field_name))     
     endif
-  else
+  elseif(axes%rank .ne. 1) then
         call MOM_error(FATAL, "MOM_diag_mediator:register_diag_field_low: " // &
              "unknown axes for diagnostic variable "//trim(field_name))          
   endif

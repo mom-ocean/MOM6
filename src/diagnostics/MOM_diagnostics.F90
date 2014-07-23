@@ -44,7 +44,8 @@ module MOM_diagnostics
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 
-use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
+use MOM_diag_mediator, only : post_data, post_data_1d_k
+use MOM_diag_mediator, only : register_diag_field, safe_alloc_ptr
 use MOM_domains, only : create_group_pass, do_group_pass, group_pass_type
 use MOM_diag_mediator, only : diag_ctrl, time_type, register_scalar_field
 use MOM_domains, only : To_North, To_East
@@ -52,7 +53,8 @@ use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
 use MOM_interface_heights, only : find_eta
-use MOM_spatial_means, only : global_volume_mean, global_area_mean
+use MOM_spatial_means, only : global_area_mean_2d, global_area_mean_3d
+use MOM_spatial_means, only : global_volume_mean
 use MOM_variables, only : thermo_var_ptrs, ocean_internal_state, p3d
 use MOM_variables, only : accel_diag_ptrs, cont_diag_ptrs
 use MOM_wave_speed, only : wave_speed, wave_speed_init, wave_speed_CS
@@ -119,6 +121,7 @@ type, public :: diagnostics_CS ; private
   integer :: id_mass_wt = -1, id_temp_int = -1, id_salt_int = -1
   integer :: id_col_ht = -1, id_col_mass = -1
   integer :: id_temp_global = -1, id_salt_global = -1
+  integer :: id_temp_layer_ave = -1, id_salt_layer_ave = -1
 
   type(wave_speed_CS), pointer :: wave_speed_CSp => NULL()  
   ! The following pointers are used the calculation of time derivatives.
@@ -180,6 +183,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, dt, G, &
              ! squared that is used to avoid division by 0, in s-2.  This
              ! value is roughly (pi / (the age of the universe) )^2.
   integer :: k_list
+  real, dimension(SZK_(G))   :: temp_layer_ave, salt_layer_ave
   real :: temp_global, salt_global
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
@@ -221,6 +225,16 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, dt, G, &
   if (CS%id_temp_global>0) then
     temp_global = global_volume_mean(tv%T, h, G)
     call post_data(CS%id_temp_global, temp_global, CS%diag)
+  endif
+
+  if (CS%id_temp_layer_ave>0) then
+    temp_layer_ave = global_area_mean_3d(tv%T, h, G)
+    call post_data_1d_k(CS%id_temp_layer_ave, temp_layer_ave, CS%diag)
+  endif
+
+  if (CS%id_salt_layer_ave>0) then
+    salt_layer_ave = global_area_mean_3d(tv%S, h, G)
+    call post_data_1d_k(CS%id_salt_layer_ave, salt_layer_ave, CS%diag)
   endif
 
   if (CS%id_salt_global>0) then
@@ -873,6 +887,12 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, param_file, diag, CS)
 
   CS%id_salt_global = register_scalar_field('ocean_model', 'salt_global',  &
       Time, diag, 'Global Volume Mean Ocean Salinity', 'PSU')
+
+  CS%id_temp_layer_ave = register_diag_field('ocean_model', 'temp_layer_ave', diag%axesZL, Time, &
+      'Layer Average Ocean Temperature', 'Celsius')
+
+  CS%id_salt_layer_ave = register_diag_field('ocean_model', 'salt_layer_ave', diag%axesZL, Time, &
+      'Layer Average Ocean Salinity', 'PSU')
 
   CS%id_e = register_diag_field('ocean_model', 'e', diag%axesTi, Time, &
       'Interface Height Relative to Mean Sea Level', 'meter')
