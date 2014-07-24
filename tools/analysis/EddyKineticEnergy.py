@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 
 import netCDF4
-import matplotlib.pyplot as plt
 import numpy
 import m6plot
 import math
