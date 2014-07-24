@@ -1759,7 +1759,7 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, tracer_flow_CSp)
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mod, version, '')
   call get_param(param_file, mod, "ENABLE_THERMODYNAMICS", CS%use_temperature, &
-                 "if true, Temperature and salinity are used as state \n"//&
+                 "If true, Temperature and salinity are used as state \n"//&
                  "variables.", default=.true.)
   call get_param(param_file, mod, "INPUTDIR", CS%inputdir, &
                  "The directory in which all input files are found.", &
@@ -1772,10 +1772,10 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, tracer_flow_CSp)
                  "there is no buoyancy forcing, but makes the model \n"//&
                  "faster by eliminating subroutine calls.", default=.false.)
   call get_param(param_file, mod, "VARIABLE_WINDS", CS%variable_winds, &
-                 "if true, the winds vary in time after the initialization.", &
+                 "If true, the winds vary in time after the initialization.", &
                  default=.true.)
   call get_param(param_file, mod, "VARIABLE_BUOYFORCE", CS%variable_buoyforce, &
-                 "if true, the buoyancy forcing varies in time after the \n"//&
+                 "If true, the buoyancy forcing varies in time after the \n"//&
                  "initialization of the model.", default=.true.)
 
   call get_param(param_file, mod, "BUOY_CONFIG", CS%buoy_config, &
@@ -1784,7 +1784,7 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, tracer_flow_CSp)
                  "(linear), (USER), and (NONE).", fail_if_missing=.true.)
   if (trim(CS%buoy_config) == "file") then
     call get_param(param_file, mod, "ARCHAIC_OMIP_FORCING_FILE", CS%archaic_OMIP_file, &
-                 "if true, use the forcing variable decomposition from \n"//&
+                 "If true, use the forcing variable decomposition from \n"//&
                  "the old German OMIP prescription that predated CORE. If \n"//&
                  "false, use the variable groupings available from MOM \n"//&
                  "output diagnostics of forcing variables.", default=.true.)
@@ -1983,7 +1983,7 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, tracer_flow_CSp)
                  "parameters from vertical units of m to kg m-2.", &
                  units="kg m-3", default=1035.0)
   call get_param(param_file, mod, "RESTOREBUOY", CS%restorebuoy, &
-                 "if true, the buoyancy fluxes drive the model back \n"//&
+                 "If true, the buoyancy fluxes drive the model back \n"//&
                  "toward some specified surface state with a rate \n"//&
                  "given by FLUXCONST.", default= .false.)
   if (CS%restorebuoy) then
@@ -2021,7 +2021,7 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, tracer_flow_CSp)
                  "The background gustiness in the winds.", units="Pa", &
                  default=0.02)
   call get_param(param_file, mod, "READ_GUST_2D", CS%read_gust_2d, &
-                 "if true, use a 2-dimensional gustiness supplied from \n"//&
+                 "If true, use a 2-dimensional gustiness supplied from \n"//&
                  "an input file", default=.false.)
   if (CS%read_gust_2d) then
     call get_param(param_file, mod, "GUST_2D_FILE", gust_file, &
