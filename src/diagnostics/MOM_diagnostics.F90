@@ -53,7 +53,7 @@ use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
 use MOM_interface_heights, only : find_eta
-use MOM_spatial_means, only : global_area_mean_2d, global_area_mean_3d
+use MOM_spatial_means, only : global_area_mean, global_layer_mean
 use MOM_spatial_means, only : global_volume_mean
 use MOM_variables, only : thermo_var_ptrs, ocean_internal_state, p3d
 use MOM_variables, only : accel_diag_ptrs, cont_diag_ptrs
@@ -228,12 +228,12 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, dt, G, &
   endif
 
   if (CS%id_temp_layer_ave>0) then
-    temp_layer_ave = global_area_mean_3d(tv%T, h, G)
+    temp_layer_ave = global_layer_mean(tv%T, h, G)
     call post_data_1d_k(CS%id_temp_layer_ave, temp_layer_ave, CS%diag)
   endif
 
   if (CS%id_salt_layer_ave>0) then
-    salt_layer_ave = global_area_mean_3d(tv%S, h, G)
+    salt_layer_ave = global_layer_mean(tv%S, h, G)
     call post_data_1d_k(CS%id_salt_layer_ave, salt_layer_ave, CS%diag)
   endif
 

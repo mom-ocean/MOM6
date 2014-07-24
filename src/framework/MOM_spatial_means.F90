@@ -33,33 +33,33 @@ implicit none ; private
 #include <MOM_memory.h>
 
 public :: global_i_mean, global_j_mean
-public :: global_area_mean_2d, global_area_mean_3d
+public :: global_area_mean, global_layer_mean
 public :: global_volume_mean
 
 contains
 
-function global_area_mean_2d(var,G)
+function global_area_mean(var,G)
   type(ocean_grid_type),                       intent(in)  :: G
   real, dimension(SZI_(G), SZJ_(G)),           intent(in)  :: var
   real, dimension(SZI_(G), SZJ_(G))                        :: tmpForSumming
   integer :: i, j, is, ie, js, je
-  real :: global_area_mean_2d
+  real :: global_area_mean
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
   tmpForSumming(:,:) = 0.
   do j=js,je ; do i=is, ie
     tmpForSumming(i,j) = ( var(i,j) * (G%areaT(i,j) * G%mask2dT(i,j)) )
   enddo ; enddo
-  global_area_mean_2d = reproducing_sum( tmpForSumming ) * G%IareaT_global
+  global_area_mean = reproducing_sum( tmpForSumming ) * G%IareaT_global
 
-end function global_area_mean_2d
+end function global_area_mean
 
-function global_area_mean_3d(var,h,G)
+function global_layer_mean(var,h,G)
   type(ocean_grid_type),                       intent(in)  :: G
   real, dimension(SZI_(G), SZJ_(G), SZK_(G)),  intent(in)  :: var
   real, dimension(NIMEM_,NJMEM_,NKMEM_),       intent(in)  :: h
   real, dimension(SZI_(G), SZJ_(G), SZK_(G))               :: tmpForSumming, weight
-  real, dimension(SZK_(G))                                 :: global_area_mean_3d, scalarij, weightij
+  real, dimension(SZK_(G))                                 :: global_layer_mean, scalarij, weightij
   real, dimension(SZK_(G))  :: global_temp_scalar, global_weight_scalar
   integer :: i, j, k, is, ie, js, je, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -75,10 +75,10 @@ function global_area_mean_3d(var,h,G)
   global_weight_scalar = reproducing_sum(weight,sums=weightij)
 
   do k=1, nz
-    global_area_mean_3d(k) = scalarij(k) / weightij(k)
+    global_layer_mean(k) = scalarij(k) / weightij(k)
   enddo
 
-end function global_area_mean_3d
+end function global_layer_mean
 
 function global_volume_mean(var,h,G)
   type(ocean_grid_type),                       intent(in)  :: G
