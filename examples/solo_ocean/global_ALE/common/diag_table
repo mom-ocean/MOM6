@@ -233,13 +233,13 @@
 "ocean_model","tauvo","tauvo","cmor","all",.true.,"none",2
 "ocean_model","wfo","wfo","cmor","all",.true.,"none",2  			# GFDL Name: PRCmE
 "ocean_model","rsntds","rsntds","cmor","all",.true.,"none",2               	# GFDL Name: SW
-"ocean_model","hfibthermds","hfibthermds","cmor","all",.true.,"none",2          # GFDL Name: calving_heat_content
+"ocean_model","hfibthermds","hfibthermds","cmor","all",.true.,"none",2          # GFDL Name: heat_content_frunoff
 "ocean_model","hfrunoffds","hfrunoffds","cmor","all",.true.,"none",2            # GFDL Name: runoff_heat_content
 "ocean_model","hfsifrazil","hfsifrazil","cmor","all",.true.,"none",2            # GFDL Name: frazil
 "ocean_model","evs","evs","cmor","all",.true.,"none",2            	   	# GFDL Name: evap
-"ocean_model","prsn","prsn","cmor","all",.true.,"none",2               		# GFDL Name: froz_precip
+"ocean_model","prsn","prsn","cmor","all",.true.,"none",2               		# GFDL Name: fprec
 "ocean_model","hfls","hfls","cmor","all",.true.,"none",2       	        	# GFDL Name: latent
-"ocean_model","friver","friver","cmor","all",.true.,"none",2               	# GFDL Name: liq_runoff
+"ocean_model","friver","friver","cmor","all",.true.,"none",2               	# GFDL Name: lrunoff
 "ocean_model","rlds","rlds","cmor","all",.true.,"none",2        	       	# GFDL Name: LW
 "ocean_model","hfss","hfss","cmor","all",.true.,"none",2               		# GFDL Name: sensible
 "ocean_model","sfdsi","sfdsi","cmor","all",.true.,"none",2               	# GFDL Name: salt_flux
