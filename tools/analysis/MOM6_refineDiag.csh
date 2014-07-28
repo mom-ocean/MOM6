@@ -37,28 +37,6 @@ echo ""
 #causes the history files to be unpacked by frepp in /ptmp/$USER/$ARCHIVE/$year.nc
 #when the current year data lands on gfdl archive.
 #
-#At present there is no candidate script to be run annually by refineDiag for MOM6. Exit!
-
-exit 0
-
-#
-#At present there is no candidate script to be run annually by refineDiag.
-#The following content is meant to serve as a template for future
-#when annual (analysis) scripts become necessary. 
-#Such calls should appear before the "exit 0" above.
-#
-#
-#
-#If we want unpaked history files somewhere in /ptmp all we need to have is a non empty refineDiag. 
-#However, if we want to unpack the tar files in /archive we can uncomment the following block:
-#     if (! -d $histDir/unpack) then
-#       mkdir -p $histDir/unpack
-#     endif
-#     foreach f (*.nc)
-#      if(! -e $histDir/unpack/${f} ) then
-#      gcp -v ${f} gfdl:${histDir}/unpack/
-#      endif
-#     end
 echo "  ---------- begin yearly analysis ----------  "
 echo ""
 #
@@ -117,29 +95,6 @@ echo '====annual mean Eddy Kinetic Energy======'
 mkdir -p $out_dir/ocean_${yr1}/EddyKineticEnergy
 
 $script_dir/EddyKineticEnergy.py  -g /archive/gold/datasets/OM4_025/mosaic.v20140610.unpacked -o $out_dir/ocean_${yr1}/EddyKineticEnergy -l ${yr1} $yr1.ocean_daily.nc
-
-echo '====annual mean global mean T&S depth profile======'
-
-# List of variables
-set varlist='temp salt'
-# Determine available input variables and generate list of input files
-set filelist="$yr1.ocean_static.nc $yr1.ocean_annual.nc" 
-
-# Generate include file common to all scripts
-cat > files.txt << EOF
-   descriptor = "${descriptor}"
-   years = "${yr1}"
-EOF
-
-# Generate plots using python
-$script_dir/MOM6_annual_analysis.py
-
-
-# Copy output files to their destination
-set dest_dir=${out_dir}/ocean_${yr1}/MOM6_test.ts/
-if( ! -d $dest_dir ) mkdir -p $dest_dir
-gcp -cd *.ps ${dest_dir}
-
 
 echo "  ---------- end yearly analysis ----------  "
 
