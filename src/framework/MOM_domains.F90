@@ -40,6 +40,7 @@ use mpp_domains_mod, only : group_pass_type => mpp_group_update_type
 use mpp_domains_mod, only : mpp_reset_group_update_field
 use mpp_domains_mod, only : mpp_group_update_initialized
 use mpp_domains_mod, only : mpp_start_group_update, mpp_complete_group_update
+use mpp_domains_mod, only : compute_extent => mpp_compute_extent
 use mpp_parameter_mod, only : AGRID, BGRID_NE, CGRID_NE, SCALAR_PAIR, BITWISE_EXACT_SUM, CORNER
 use mpp_parameter_mod, only : To_East => WUPDATE, To_West => EUPDATE
 use mpp_parameter_mod, only : To_North => SUPDATE, To_South => NUPDATE
@@ -59,6 +60,7 @@ public :: AGRID, BGRID_NE, CGRID_NE, SCALAR_PAIR, BITWISE_EXACT_SUM, CORNER
 public :: To_East, To_West, To_North, To_South, To_All
 public :: create_group_pass, do_group_pass, group_pass_type
 public :: start_group_pass, complete_group_pass
+public :: compute_extent
 
 interface pass_var
   module procedure pass_var_3d, pass_var_2d
