@@ -19,13 +19,9 @@ use MOM_variables,     only : ocean_grid_type, thermo_var_ptrs
 use MOM_EOS,           only : calculate_density
 use MOM_string_functions,only : uppercase
 
-use regrid_edge_values, only : edgeValueArrays
 use regrid_edge_values, only : edge_values_explicit_h2, edge_values_explicit_h4
 use regrid_edge_values, only : edge_values_implicit_h4, edge_values_implicit_h6
-use regrid_edge_values, only : triDiagEdgeWorkAllocate, triDiagEdgeWorkDeallocate
-use regrid_edge_slopes, only : edgeSlopeArrays
 use regrid_edge_slopes, only : edge_slopes_implicit_h3, edge_slopes_implicit_h5
-use regrid_edge_slopes, only : triDiagSlopeWorkAllocate, triDiagSlopeWorkDeallocate
 
 use PLM_functions, only : PLM_reconstruction, PLM_boundary_extrapolation
 use PPM_functions, only : PPM_reconstruction, PPM_boundary_extrapolation
@@ -56,6 +52,7 @@ type, public :: regridding_CS
   ! coorindate. It has the units of the target coordiante, e.g.
   ! meters for z*, non-dimensional for sigma, etc.
   real, dimension(:), allocatable :: coordinateResolution
+  ! This array is set by function setcoordinateInterfaces
   ! This array is nominal coordinate of interfaces and is the
   ! running sum of coordinateResolution. i.e.
   !  coordinateInterfaces(k) = coordinateResolution(k+1)-coordinateResolution(k)
@@ -82,8 +79,6 @@ type, public :: regridding_CS
   ! Minimum thickness allowed when building the new grid through regridding
   real      :: min_thickness
 
-  type(edgeValueArrays) :: edgeValueWrk ! Work space for edge values
-  type(edgeSlopeArrays) :: edgeSlopeWrk ! Work space for edge slopes
 end type
 
 ! -----------------------------------------------------------------------------
@@ -97,6 +92,7 @@ public setRegriddingBoundaryExtrapolation
 public setRegriddingMinimumThickness
 public uniformResolution
 public setCoordinateResolution
+public setCoordinateInterfaces
 public getCoordinateResolution
 public getCoordinateInterfaces
 public getCoordinateUnits
@@ -250,8 +246,8 @@ subroutine regridding_main( remapCS, CS, G, h, tv, dzInterface )
 !------------------------------------------------------------------------------
   
   ! Arguments
-  type(remapping_CS),                      intent(inout) :: remapCS ! Remapping parameters and options
-  type(regridding_CS),                     intent(inout) :: CS     ! Regridding parameters and options
+  type(remapping_CS),                      intent(in)    :: remapCS ! Remapping parameters and options
+  type(regridding_CS),                     intent(in)    :: CS     ! Regridding parameters and options
   type(ocean_grid_type),                   intent(in)    :: G      ! Ocean grid informations
   real, dimension(NIMEM_,NJMEM_, NKMEM_),  intent(inout) :: h      ! Current 3D grid obtained after the last time step
   type(thermo_var_ptrs),                   intent(inout) :: tv     ! Thermodynamical variables (T, S, ...)  
@@ -571,8 +567,8 @@ subroutine buildGridRho( G, h, tv, dzInterface, remapCS, CS )
   real, dimension(NIMEM_,NJMEM_, NKMEM_),        intent(in)    :: h
   type(thermo_var_ptrs),                         intent(in)    :: tv     
   real, dimension(NIMEM_,NJMEM_, NK_INTERFACE_), intent(inout) :: dzInterface
-  type(remapping_CS),                            intent(inout) :: remapCS
-  type(regridding_CS),                           intent(inout) :: CS
+  type(remapping_CS),                            intent(in)    :: remapCS
+  type(regridding_CS),                           intent(in)    :: CS
   
   ! Local variables
   integer   :: i, j, k, m
@@ -600,13 +596,6 @@ subroutine buildGridRho( G, h, tv, dzInterface, remapCS, CS )
   threshold = CS%min_thickness
   p_column(:) = 0.
 
-  ! Prescribe target values
-  CS%coordinateInterfaces(1)    = G%Rlay(1)+0.5*(G%Rlay(1)-G%Rlay(2))
-  CS%coordinateInterfaces(nz+1) = G%Rlay(nz)+0.5*(G%Rlay(nz)-G%Rlay(nz-1))
-  do k = 2,nz
-    CS%coordinateInterfaces(k) = CS%coordinateInterfaces(k-1) + CS%coordinateResolution(k)
-  end do
-  
   ! Build grid based on target interface densities
   do i = G%isc-1,G%iec+1
     do j = G%jsc-1,G%jec+1
@@ -910,7 +899,7 @@ subroutine regridding_iteration( densities, target_values, CS, &
   integer,             intent(in)    :: n1 ! Number of cells on target grid
   real, dimension(:),  intent(out)   :: h1 ! cell widths on target grid
   real, dimension(:),  intent(out)   :: x1 ! interface positions on target grid
-  type(regridding_CS), intent(inout) :: CS   ! Parameters used for regridding
+  type(regridding_CS), intent(in)    :: CS   ! Parameters used for regridding
 
   ! Local variables
   integer :: degree, k
@@ -946,7 +935,7 @@ subroutine regridding_iteration( densities, target_values, CS, &
     case ( INTERPOLATION_P1M_IH4 )
       degree = DEGREE_1
       if ( n0 .ge. 4 ) then
-        call edge_values_implicit_h4( n0, h0, densities, CS%edgeValueWrk, ppoly0_E )
+        call edge_values_implicit_h4( n0, h0, densities, ppoly0_E )
       else
         call edge_values_explicit_h2( n0, h0, densities, ppoly0_E )
       end if
@@ -983,7 +972,7 @@ subroutine regridding_iteration( densities, target_values, CS, &
 
       if ( n0 .ge. 4 ) then
         degree = DEGREE_2
-        call edge_values_implicit_h4( n0, h0, densities, CS%edgeValueWrk, ppoly0_E )
+        call edge_values_implicit_h4( n0, h0, densities, ppoly0_E )
         call PPM_reconstruction( n0, h0, densities, ppoly0_E, ppoly0_coefficients )
         if ( CS%boundary_extrapolation) then
           call PPM_boundary_extrapolation( n0, h0, densities, ppoly0_E, ppoly0_coefficients )
@@ -1001,8 +990,8 @@ subroutine regridding_iteration( densities, target_values, CS, &
       
       if ( n0 .ge. 4 ) then
         degree = DEGREE_3
-        call edge_values_implicit_h4( n0, h0, densities, CS%edgeValueWrk, ppoly0_E )
-        call edge_slopes_implicit_h3( n0, h0, densities, CS%edgeSlopeWrk, ppoly0_S )
+        call edge_values_implicit_h4( n0, h0, densities, ppoly0_E )
+        call edge_slopes_implicit_h3( n0, h0, densities, ppoly0_S )
         call P3M_interpolation( n0, h0, densities, ppoly0_E, ppoly0_S, ppoly0_coefficients )
         if ( CS%boundary_extrapolation) then
           call P3M_boundary_extrapolation( n0, h0, densities, ppoly0_E, ppoly0_S, ppoly0_coefficients )
@@ -1019,8 +1008,8 @@ subroutine regridding_iteration( densities, target_values, CS, &
     case ( INTERPOLATION_P3M_IH6IH5 )
       if ( n0 .ge. 6 ) then
         degree = DEGREE_3
-        call edge_values_implicit_h6( n0, h0, densities, CS%edgeValueWrk, ppoly0_E )
-        call edge_slopes_implicit_h5( n0, h0, densities, CS%edgeSlopeWrk, ppoly0_S )
+        call edge_values_implicit_h6( n0, h0, densities, ppoly0_E )
+        call edge_slopes_implicit_h5( n0, h0, densities, ppoly0_S )
         call P3M_interpolation( n0, h0, densities, ppoly0_E, ppoly0_S, ppoly0_coefficients )
         if ( CS%boundary_extrapolation) then
           call P3M_boundary_extrapolation( n0, h0, densities, ppoly0_E, ppoly0_S, ppoly0_coefficients )
@@ -1038,8 +1027,8 @@ subroutine regridding_iteration( densities, target_values, CS, &
     
       if ( n0 .ge. 4 ) then
         degree = DEGREE_4
-        call edge_values_implicit_h4( n0, h0, densities, CS%edgeValueWrk, ppoly0_E )
-        call edge_slopes_implicit_h3( n0, h0, densities, CS%edgeSlopeWrk, ppoly0_S )
+        call edge_values_implicit_h4( n0, h0, densities, ppoly0_E )
+        call edge_slopes_implicit_h3( n0, h0, densities, ppoly0_S )
         call PQM_reconstruction( n0, h0, densities, ppoly0_E, ppoly0_S, ppoly0_coefficients )
         if ( CS%boundary_extrapolation) then
           call PQM_boundary_extrapolation_v1( n0, h0, densities, ppoly0_E, ppoly0_S, ppoly0_coefficients )
@@ -1056,8 +1045,8 @@ subroutine regridding_iteration( densities, target_values, CS, &
     case ( INTERPOLATION_PQM_IH6IH5 )
       if ( n0 .ge. 6 ) then
         degree = DEGREE_4
-        call edge_values_implicit_h6( n0, h0, densities, CS%edgeValueWrk, ppoly0_E )
-        call edge_slopes_implicit_h5( n0, h0, densities, CS%edgeSlopeWrk, ppoly0_S )
+        call edge_values_implicit_h6( n0, h0, densities, ppoly0_E )
+        call edge_slopes_implicit_h5( n0, h0, densities, ppoly0_S )
         call PQM_reconstruction( n0, h0, densities, ppoly0_E, ppoly0_S, ppoly0_coefficients )
         if ( CS%boundary_extrapolation) then
           call PQM_boundary_extrapolation_v1( n0, h0, densities, ppoly0_E, ppoly0_S, ppoly0_coefficients )
@@ -1527,6 +1516,23 @@ subroutine setCoordinateResolution( dz, CS )
   
 end subroutine setCoordinateResolution
 
+!-----------------------------------------------------------------------------
+! Set the running sum of coordinateResolution
+!-----------------------------------------------------------------------------
+subroutine setCoordinateInterfaces( G, CS )
+  type(ocean_grid_type),  intent(in) :: G      ! Ocean grid informations
+  type(regridding_CS), intent(inout) :: CS
+  integer :: k, nz
+
+  nz = CS%nk
+  CS%coordinateInterfaces(1)    = G%Rlay(1)+0.5*(G%Rlay(1)-G%Rlay(2))
+  CS%coordinateInterfaces(nz+1) = G%Rlay(nz)+0.5*(G%Rlay(nz)-G%Rlay(nz-1))
+  do k = 2,nz
+    CS%coordinateInterfaces(k) = CS%coordinateInterfaces(k-1) + CS%coordinateResolution(k)
+  end do
+
+end subroutine setCoordinateInterfaces
+
 !------------------------------------------------------------------------------
 ! Query the fixed resolution data
 !------------------------------------------------------------------------------
@@ -1647,10 +1653,6 @@ subroutine allocate_regridding( CS )
 
   ! Local variables
 
-  ! Allocate memory for the tridiagonal system
-  call triDiagEdgeWorkAllocate( CS%nk, CS%edgeValueWrk )
-  call triDiagSlopeWorkAllocate( CS%nk, CS%edgeSlopeWrk )
-
   ! Target values
   allocate( CS%coordinateInterfaces(CS%nk+1) )
 
@@ -1670,12 +1672,9 @@ subroutine regridding_memory_deallocation( CS )
   
   type(regridding_CS), intent(inout) :: CS
   
-  ! Reclaim memory for the tridiagonal system
-  call triDiagEdgeWorkDeallocate( CS%edgeValueWrk )
-  call triDiagSlopeWorkDeallocate( CS%edgeSlopeWrk )
-  
   ! Target values
   deallocate( CS%coordinateInterfaces )
+  deallocate( CS%coordinateResolution )
 
 end subroutine regridding_memory_deallocation
 
