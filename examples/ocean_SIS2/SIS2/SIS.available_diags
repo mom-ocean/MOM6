@@ -19,9 +19,6 @@
 "ice_model", "HI"  [Used]
     ! long_name: ice thickness
     ! units: m-ice
-"ice_model", "HIO"  [Unused]
-    ! long_name: ice thickness
-    ! units: m-ice
 "ice_model", "T_bulkice"  [Unused]
     ! long_name: Volume-averaged ice temperature
     ! units: C
