@@ -74,6 +74,8 @@ ADD_DIURNAL_SW = False          !   [Boolean] default = False
 DO_SUN_ANGLE_FOR_ALB = False    !   [Boolean] default = False
                                 ! If true, find the sun angle for calculating the ocean
                                 ! albedo within the sea ice model.
+DO_RIDGING = False              !   [Boolean] default = False
+                                ! If true, call the ridging routines.
 TIMEUNIT = 8.64E+04             !   [s] default = 8.64E+04
                                 ! The time unit for ICE_STATS_INTERVAL.
 ICE_STATS_INTERVAL = 0.25       !   [days] default = 1.0

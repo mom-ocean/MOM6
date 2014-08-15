@@ -229,6 +229,18 @@
 "ice_model", "FA_Y"  [Used]
     ! long_name: air stress on ice - y component
     ! units: Pa
+"ice_model", "RDG_RATE"  [Unused]
+    ! long_name: ice ridging rate
+    ! units: 1/sec
+"ice_model", "RDG_OPEN"  [Unused]
+    ! long_name: opening due to ridging
+    ! units: 1/s
+"ice_model", "RDG_VOSH"  [Unused]
+    ! long_name: volume shifted from level to ridged ice
+    ! units: m^3/s
+"ice_model", "AGE"  [Unused]
+    ! long_name: ice age
+    ! units: days
 "ice_model", "SIGI"  [Unused]
     ! long_name: first stress invariant
     ! units: none
