@@ -164,6 +164,9 @@ NK_SNOW = 1                     !   [nondim] default = 1
 SET_GRID_LIKE_SIS1 = False      !   [Boolean] default = False
                                 ! If true, use SIS1 code to set the grid values.  Otherwise
                                 ! use code derived from MOM6.
+H_TO_KG_M2 = 1.0                !   [kg m-2 H-1] default = 1.0
+                                ! A constant that translates thicknesses from the model's
+                                ! internal units of thickness to kg m-2.
 GRID_FILE = "ocean_hgrid.nc"    !
                                 ! Name of the file from which to read horizontal grid data.
 AVAILABLE_DIAGS_FILE = "SIS.available_diags" ! default = "SIS.available_diags"
