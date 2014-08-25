@@ -22,6 +22,7 @@ module MOM_diabatic_driver
 !********+*********+*********+*********+*********+*********+*********+**
 !*                                                                     *
 !*  By Robert Hallberg, April 1994 - July 2000                         *
+!*     Alistair Adcroft, and Stephen Griffies                          *
 !*                                                                     *
 !*    This program contains the subroutine that, along with the        *
 !*  subroutines that it calls, implements diapycnal mass and momentum  *
@@ -65,46 +66,47 @@ module MOM_diabatic_driver
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 
-use MOM_bulk_mixed_layer, only : bulkmixedlayer, bulkmixedlayer_init, bulkmixedlayer_CS
-use MOM_checksums, only : hchksum, uchksum, vchksum
-use MOM_checksum_packages, only : MOM_state_chksum, MOM_state_stats
-use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
-use MOM_cpu_clock, only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
-use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
-use MOM_diag_mediator, only : diag_ctrl, time_type
-use MOM_diag_to_Z, only : diag_to_Z_CS, register_Zint_diag, calc_Zint_diags
-use MOM_diffConvection, only : diffConvection_CS, diffConvection_init
-use MOM_diffConvection, only : diffConvection_calculate, diffConvection_end
-use MOM_domains, only : To_West, To_South
-use MOM_domains, only : create_group_pass, do_group_pass, group_pass_type
-use MOM_entrain_diffusive, only : entrainment_diffusive, entrain_diffusive_init
-use MOM_entrain_diffusive, only : entrain_diffusive_end, entrain_diffusive_CS
-use MOM_error_handler, only : MOM_error, FATAL, WARNING, callTree_showQuery
-use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
-use MOM_file_parser, only : get_param, log_version, param_file_type
-use MOM_forcing_type, only : forcing, optics_type, MOM_forcing_chksum
-use MOM_forcing_type, only : extractFluxes1d, absorbRemainingSW, calculateBuoyancyFlux2d
-use MOM_forcing_type, only : forcing_SinglePointPrint
-use MOM_geothermal, only : geothermal, geothermal_init, geothermal_end, geothermal_CS
-use MOM_grid, only : ocean_grid_type
-use MOM_io, only : vardesc
-use MOM_int_tide_input, only : set_int_tide_input, int_tide_input_init
-use MOM_int_tide_input, only : int_tide_input_end, int_tide_input_CS, int_tide_input_type
-use MOM_internal_tides, only : propagate_int_tide, register_int_tide_restarts
-use MOM_internal_tides, only : internal_tides_init, internal_tides_end, int_tide_CS
-use MOM_kappa_shear, only : kappa_shear_is_used
-use MOM_KPP, only : KPP_CS, KPP_init, KPP_calculate, KPP_end, KPP_applyNonLocalTransport
-use MOM_opacity, only : opacity_init, set_opacity, opacity_end, opacity_CS
-use MOM_set_diffusivity, only : set_diffusivity, set_BBL_diffusivity
-use MOM_set_diffusivity, only : set_diffusivity_init, set_diffusivity_end
-use MOM_set_diffusivity, only : set_diffusivity_CS
-use MOM_sponge, only : apply_sponge, sponge_CS
+use MOM_bulk_mixed_layer,    only : bulkmixedlayer, bulkmixedlayer_init, bulkmixedlayer_CS
+use MOM_checksums,           only : hchksum, uchksum, vchksum
+use MOM_checksum_packages,   only : MOM_state_chksum, MOM_state_stats
+use MOM_cpu_clock,           only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
+use MOM_cpu_clock,           only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
+use MOM_diag_mediator,       only : post_data, register_diag_field, safe_alloc_ptr
+use MOM_diag_mediator,       only : diag_ctrl, time_type
+use MOM_diag_to_Z,           only : diag_to_Z_CS, register_Zint_diag, calc_Zint_diags
+use MOM_diffConvection,      only : diffConvection_CS, diffConvection_init
+use MOM_diffConvection,      only : diffConvection_calculate, diffConvection_end
+use MOM_domains,             only : pass_var, To_West, To_South
+use MOM_domains,             only : create_group_pass, do_group_pass, group_pass_type
+use MOM_entrain_diffusive,   only : entrainment_diffusive, entrain_diffusive_init
+use MOM_entrain_diffusive,   only : entrain_diffusive_end, entrain_diffusive_CS
+use MOM_EOS,                 only : calculate_density, calculate_2_densities, calculate_TFreeze
+use MOM_error_handler,       only : MOM_error, FATAL, WARNING, callTree_showQuery
+use MOM_error_handler,       only : callTree_enter, callTree_leave, callTree_waypoint
+use MOM_file_parser,         only : get_param, log_version, param_file_type
+use MOM_forcing_type,        only : forcing, optics_type, MOM_forcing_chksum
+use MOM_forcing_type,        only : extractFluxes1d, absorbRemainingSW, calculateBuoyancyFlux2d
+use MOM_forcing_type,        only : forcing_SinglePointPrint
+use MOM_geothermal,          only : geothermal, geothermal_init, geothermal_end, geothermal_CS
+use MOM_grid,                only : ocean_grid_type
+use MOM_io,                  only : vardesc
+use MOM_int_tide_input,      only : set_int_tide_input, int_tide_input_init
+use MOM_int_tide_input,      only : int_tide_input_end, int_tide_input_CS, int_tide_input_type
+use MOM_internal_tides,      only : propagate_int_tide, register_int_tide_restarts
+use MOM_internal_tides,      only : internal_tides_init, internal_tides_end, int_tide_CS
+use MOM_kappa_shear,         only : kappa_shear_is_used
+use MOM_KPP,                 only : KPP_CS, KPP_init, KPP_calculate, KPP_end
+use MOM_KPP,                 only : KPP_applyNonLocalTransport
+use MOM_opacity,             only : opacity_init, set_opacity, opacity_end, opacity_CS
+use MOM_set_diffusivity,     only : set_diffusivity, set_BBL_diffusivity
+use MOM_set_diffusivity,     only : set_diffusivity_init, set_diffusivity_end
+use MOM_set_diffusivity,     only : set_diffusivity_CS
+use MOM_sponge,              only : apply_sponge, sponge_CS
 use MOM_tracer_flow_control, only : call_tracer_column_fns, tracer_flow_control_CS
-use MOM_variables, only : thermo_var_ptrs, vertvisc_type, accel_diag_ptrs
-use MOM_variables, only : cont_diag_ptrs, MOM_thermovar_chksum, p3d
-use MOM_regularize_layers, only : regularize_layers, regularize_layers_init, regularize_layers_CS
-use MOM_wave_speed, only : wave_speed
-use MOM_EOS, only : calculate_density, calculate_2_densities, calculate_TFreeze
+use MOM_variables,           only : thermo_var_ptrs, vertvisc_type, accel_diag_ptrs
+use MOM_variables,           only : cont_diag_ptrs, MOM_thermovar_chksum, p3d
+use MOM_regularize_layers,   only : regularize_layers, regularize_layers_init, regularize_layers_CS
+use MOM_wave_speed,          only : wave_speed
 
 implicit none ; private
 
@@ -127,14 +129,14 @@ type, public :: diabatic_CS ; private
   logical :: useALEalgorithm ! If true, use the ALE algorithm rather than layered
                              ! isopycnal/stacked shallow water mode. This logical
                              ! passed by argument to diabatic_driver_init.
-  real :: ML_mix_first       !   The nondimensional fraction of the mixed layer
+  real :: ML_mix_first       ! The nondimensional fraction of the mixed layer
                              ! algorithm that is applied before diffusive mixing.
                              ! The default is 0, while 0.5 gives Strang splitting
                              ! and 1 is a sensible value too.  Note that if there
                              ! are convective instabilities in the initial state,
                              ! the first call may do much more than the second.
   logical :: massless_match_targets  ! If true (the default), keep the T & S
-                             ! consistent with the target values.
+                                     ! consistent with the target values.
   logical :: mix_boundary_tracers ! If true, mix the passive tracers in massless
                              ! layers at the bottom into the interior as though
                              ! a diffusivity of Kd_min_tr (see below) were
@@ -146,6 +148,7 @@ type, public :: diabatic_CS ; private
   real    :: Kd_min_tr       !   A minimal diffusivity that should always be
                              ! applied to tracers, especially in massless layers
                              ! near the bottom, in m2 s-1.
+
   logical :: reclaim_frazil  !   If true, try to use any frazil heat deficit to
                              ! to cool the topmost layer down to the freezing
                              ! point.  The default is false.                           
@@ -153,51 +156,55 @@ type, public :: diabatic_CS ; private
                              ! freezing temperature when making frazil.  The
                              ! default is false, which will be faster but is
                              ! inappropriate with ice-shelf cavities.
+
   logical :: useKPP          ! If true, use [CVmix] KPP diffusivities and non-local
                              ! transport.
   logical :: KPPisPassive    ! If true, KPP is in passive mode, not changing answers.
   logical :: useConvection   ! If true, calculate large diffusivities when column
                              ! is statically unstable.
   logical :: matchKPPwithoutKappaShear ! If true, KPP is matched to interior diffusivities
-                             ! that do NOT include kappa-shear diffusivity.
-  logical :: debug           ! If true, write verbose checksums for debugging purposes.
-  logical :: debugConservation! If true, monitor conservation and extrema.
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
-                             ! timing of diagnostic output.
+                                       ! that do NOT include kappa-shear diffusivity.
+                                       ! Generally run with this option false.  
+
+  logical :: debug                 ! If true, write verbose checksums for debugging purposes.
+  logical :: debugConservation     ! If true, monitor conservation and extrema.
+  type(diag_ctrl), pointer :: diag ! structure used to regulate timing of diagnostic output
   real :: MLDdensityDifference ! Density difference used to determine MLD_user
   integer :: nsw               ! SW_NBANDS
-  integer :: id_dudt_dia = -1, id_dvdt_dia = -1, id_wd = -1
-  integer :: id_ea = -1 , id_eb = -1, id_Kd_z = -1, id_Kd_interface = -1
-  integer :: id_Tdif_z = -1, id_Tadv_z = -1, id_Sdif_z = -1, id_Sadv_z = -1
-  integer :: id_Tdif = -1, id_Tadv = -1, id_Sdif = -1, id_Sadv = -1
-  integer :: id_createdH = -1, id_subMLN2 = -1
-  integer :: id_MLD_003 = -1, id_MLD_0125 = -1, id_MLD_user = -1
 
-  type(entrain_diffusive_CS), pointer :: entrain_diffusive_CSp => NULL()
-  type(bulkmixedlayer_CS),    pointer :: bulkmixedlayer_CSp => NULL()
-  type(regularize_layers_CS), pointer :: regularize_layers_CSp => NULL()
-  type(geothermal_CS),        pointer :: geothermal_CSp => NULL()
-  type(int_tide_CS),          pointer :: int_tide_CSp => NULL()
-  type(int_tide_input_CS),    pointer :: int_tide_input_CSp => NULL()
-  type(int_tide_input_type),  pointer :: int_tide_input => NULL()
-  type(opacity_CS),           pointer :: opacity_CSp => NULL()
-  type(set_diffusivity_CS),   pointer :: set_diff_CSp => NULL()
-  type(sponge_CS),            pointer :: sponge_CSp => NULL()
-  type(tracer_flow_control_CS), pointer :: tracer_flow_CSp => NULL()
-  type(optics_type),          pointer :: optics => NULL()
-  type(diag_to_Z_CS),         pointer :: diag_to_Z_CSp => NULL()
-  type(KPP_CS),               pointer :: KPP_CSp => NULL()
-  type(diffConvection_CS),    pointer :: Conv_CSp => NULL()
+  integer :: id_dudt_dia = -1, id_dvdt_dia = -1, id_wd     = -1
+  integer :: id_ea       = -1, id_eb       = -1, id_Kd_z   = -1, id_Kd_interface = -1
+  integer :: id_Tdif_z   = -1, id_Tadv_z   = -1, id_Sdif_z = -1, id_Sadv_z = -1
+  integer :: id_Tdif     = -1, id_Tadv     = -1, id_Sdif   = -1, id_Sadv = -1
+  integer :: id_createdH = -1, id_subMLN2  = -1
+  integer :: id_MLD_003  = -1, id_MLD_0125 = -1, id_MLD_user = -1
+
+  type(entrain_diffusive_CS),   pointer :: entrain_diffusive_CSp => NULL()
+  type(bulkmixedlayer_CS),      pointer :: bulkmixedlayer_CSp    => NULL()
+  type(regularize_layers_CS),   pointer :: regularize_layers_CSp => NULL()
+  type(geothermal_CS),          pointer :: geothermal_CSp        => NULL()
+  type(int_tide_CS),            pointer :: int_tide_CSp          => NULL()
+  type(int_tide_input_CS),      pointer :: int_tide_input_CSp    => NULL()
+  type(int_tide_input_type),    pointer :: int_tide_input        => NULL()
+  type(opacity_CS),             pointer :: opacity_CSp           => NULL()
+  type(set_diffusivity_CS),     pointer :: set_diff_CSp          => NULL()
+  type(sponge_CS),              pointer :: sponge_CSp            => NULL()
+  type(tracer_flow_control_CS), pointer :: tracer_flow_CSp       => NULL()
+  type(optics_type),            pointer :: optics                => NULL()
+  type(diag_to_Z_CS),           pointer :: diag_to_Z_CSp         => NULL()
+  type(KPP_CS),                 pointer :: KPP_CSp               => NULL()
+  type(diffConvection_CS),      pointer :: Conv_CSp              => NULL()
 
   ! Data arrays for communicating between components
-  real, allocatable, dimension(:,:,:) :: KPP_NLTheat ! Non-local transport for heat due to KPP (m/s)
-  real, allocatable, dimension(:,:,:) :: KPP_NLTscalar ! Non-local transport for scalars due to KPP (m/s)
-  real, allocatable, dimension(:,:,:) :: buoyancyFlux ! Fordcing buoyancy flux for KPP (m2/s3)
-  real, allocatable, dimension(:,:) :: netHeatMinusSW ! Effective temperature flux for KPP (K m/s)
-  real, allocatable, dimension(:,:) :: netSalt ! Effective salt flux for KPP (ppt m/s)
+  real, allocatable, dimension(:,:,:) :: KPP_NLTheat    ! KPP non-local transport for heat (m/s)
+  real, allocatable, dimension(:,:,:) :: KPP_NLTscalar  ! KPP non-local transport for scalars (m/s)
+  real, allocatable, dimension(:,:,:) :: buoyancyFlux   ! KPP forcing buoyancy flux (m^2/s^3)
+  real, allocatable, dimension(:,:)   :: netHeatMinusSW ! KPP effective temperature flux (K m/s)
+  real, allocatable, dimension(:,:)   :: netSalt        ! KPP effective salt flux (ppt m/s)
 
   ! Optional diagnostic arrays
   real, allocatable, dimension(:,:) :: createdH ! The amount of volume added in order to avoid grounding (m/s)
+
 end type diabatic_CS
 
 integer :: id_clock_entrain, id_clock_mixedlayer, id_clock_set_diffusivity
@@ -220,103 +227,110 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   real,                                   intent(in)    :: dt
   type(ocean_grid_type),                  intent(inout) :: G
   type(diabatic_CS),                      pointer       :: CS
-!    This subroutine imposes the diapycnal mass fluxes and the
+
+!  This subroutine imposes the diapycnal mass fluxes and the
 !  accompanying diapycnal advection of momentum and tracers.
 
-! Arguments: u - Zonal velocity, in m s-1. (Intent in/out)
-!  (in/out)  v - Meridional velocity, in m s-1.
-!  (in/out)  h - Layer thickness, in m or kg m-2.
-!  (in)      tv - A structure containing pointers to any available
-!                 thermodynamic fields. Absent fields have NULL ptrs.
-!  (in)      fluxes - A structure containing pointers to any possible
-!                     forcing fields.  Unused fields have NULL ptrs.
-!  (in/out)  visc - A structure containing vertical viscosities, bottom boundary
-!                   layer properies, and related fields.
-!  (inout)   ADp - A structure with pointers to the various accelerations in
-!                  the momentum equations, to enable the later calculation
-!                  of derived diagnostics, like energy budgets.
-!  (inout)   CDp - A structure with pointers to various terms in the continuity
-!                  equations.
-!  (in)      dt - Time increment, in s.
-!  (in)      G - The ocean's grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 diabatic_driver_init.
+! Arguments: 
+!  (in/out)  u      = Zonal velocity (m/s)
+!  (in/out)  v      = Meridional velocity (m/s)
+!  (in/out)  h      = Layer thickness (m for Bouss and kg/m^2 for non-Bouss)
+!  (in)      tv     = A structure containing pointers to any available
+!                     thermodynamic fields; unused fields have NULL ptrs.
+!  (in)      fluxes = A structure containing pointers to any possible
+!                     forcing fields; unused fields have NULL ptrs.
+!  (in/out)  visc   = A structure containing vertical viscosities, bottom boundary
+!                     layer properies, and related fields
+!  (inout)   ADp    = A structure with pointers to the various accelerations in
+!                     the momentum equations, to enable the later calculation
+!                     of derived diagnostics, like energy budgets
+!  (inout)   CDp    = structure with pointers to terms in continuity equations
+!  (in)      dt     = Time increment (seconds)
+!  (in)      G      = ocean grid structure
+!  (in)      CS     = control structure returned by a previous diabatic_driver_init call
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
-    ea, &    ! ea is the amount of fluid entrained from the layer above within
-             ! one time step, in units of m or kg m-2.
-    eb, &    ! eb is the amount of fluid entrained from the layer below within
-             ! one time step, in units of m or kg m-2.
-    Kd, &    ! The diapycnal diffusivity of layers, in m2 s-1.
-    h_orig, &  ! The initial layer thicknesses, in m or kg m-2.
-    hold, &  ! The layer thickness before diapycnal entrainment, and later
-             ! the initial layer thicknesses (if a mixed layer is used),
-             ! in units of m or kg m-2.
-    u_h, &   ! Zonal and meridional velocities at thickness points after
-    v_h      ! entrainment, in m s-1.
+    ea,     &    ! amount of fluid entrained from the layer above within
+                 ! one time step  (m for Bouss, kg/m^2 for non-Bouss)
+    eb,     &    ! amount of fluid entrained from the layer below within
+                 ! one time step  (m for Bouss, kg/m^2 for non-Bouss)
+    Kd,     &    ! diapycnal diffusivity of layers (m^2/sec)
+    h_orig, &    ! initial layer thicknesses (m for Bouss, kg/m^2 for non-Bouss)
+    hold,   &    ! layer thickness before diapycnal entrainment, and later
+                 ! the initial layer thicknesses (if a mixed layer is used),
+                 ! (m for Bouss, kg/m^2 for non-Bouss)
+    u_h,   &     ! zonal and meridional velocities at thickness points after 
+    v_h          ! entrainment (m/s)
+
   real, dimension(SZI_(G),SZJ_(G)) :: &
-    cg1, &   ! The first baroclinic gravity wave speed.
-    Rcv_ml   ! The coordinate density of the mixed layer, used only for applying
-             ! sponges.
+    cg1, &   ! first baroclinic gravity wave speed.
+    Rcv_ml   ! coordinate density of mixed layer, used for applying sponges.
+
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), target :: &
     ! These are targets so that the space can be shared with eaml & ebml.
     eatr, &  ! The equivalent of ea and eb for tracers, which differ from ea and
     ebtr     ! eb in that they tend to homogenize tracers in massless layers
-             ! near the boundaries, in units of m or kg m-2.
+             ! near the boundaries (m for Bouss and kg/m^2 for non-Bouss)
+
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), target :: &
-    Kd_int, &  ! The diapycnal diffusivity of interfaces, in m2 s-1.
-    Kd_heat, &  ! The diapycnal diffusivity of heat, in m2 s-1.
-    Kd_salt, &  ! The diapycnal diffusivity of heat, in m2 s-1.
-    Tdif_flx, &! The diffusive diapycnal heat flux across interfaces, in K m s-1.
-    Tadv_flx, &! The advective diapycnal heat flux across interfaces, in K m s-1.
-    Sdif_flx, &! The diffusive diapycnal salt flux across interfaces, in PSU m s-1.
-    Sadv_flx   ! The advective diapycnal salt flux across interfaces, in PSU m s-1.
+    Kd_int,   & ! diapycnal diffusivity of interfaces (m^2/s)
+    Kd_heat,  & ! diapycnal diffusivity of heat (m^2/s)
+    Kd_salt,  & ! diapycnal diffusivity of salt and passive tracers (m^2/s)
+    Tdif_flx, & ! diffusive diapycnal heat flux across interfaces (K * m/s)
+    Tadv_flx, & ! advective diapycnal heat flux across interfaces (K * m/s)
+    Sdif_flx, & ! diffusive diapycnal salt flux across interfaces (ppt * m/s)
+    Sadv_flx    ! advective diapycnal salt flux across interfaces (ppt * m/s)
 
   ! The following 5 variables are only used with a bulk mixed layer.
   real, pointer, dimension(:,:,:) :: &
     eaml, &  ! The equivalent of ea and eb due to mixed layer processes,
-    ebml     ! in m or kg m-2.  These will be pointers to eatr and ebtr so
-             ! as to reuse the memory as the arrays are not needed at the
-             ! same time.
+    ebml     ! (m for Bouss and kg/m^2 for non-Bouss).  These will be 
+             ! pointers to eatr and ebtr so as to reuse the memory as 
+             ! the arrays are not needed at the same time.
 
-  integer :: kb(SZI_(G),SZJ_(G)) ! The index of the lightest layer denser
-                              ! than the buffer layer.  Nondimensional.
-  real :: p_ref_cv(SZI_(G))   ! Reference pressure for the potential
-                              ! density which defines the coordinate
-                              ! variable, set to P_Ref, in Pa.
+  integer :: kb(SZI_(G),SZJ_(G)) ! index of the lightest layer denser
+                                 ! than the buffer laye (nondimensional)
+
+  real :: p_ref_cv(SZI_(G))      ! Reference pressure for the potential
+                                 ! density which defines the coordinate
+                                 ! variable, set to P_Ref, in Pa.
 
   logical :: in_boundary(SZI_(G)) ! True if there are no massive layers below,
                        ! where massive is defined as sufficiently thick that
                        ! the no-flux boundary conditions have not restricted
                        ! the entrainment - usually sqrt(Kd*dt).
-  real :: b_denom_1    ! The first term in the denominator of b1 in m or kg m-2.
+
+  real :: b_denom_1    ! The first term in the denominator of b1 
+                       ! (m for Bouss, kg/m^2 for non-Bouss)
   real :: h_neglect    ! A thickness that is so small it is usually lost
-                       ! in roundoff and can be neglected, in m or kg m-2.
-  real :: h_neglect2   ! h_neglect^2, in m2 or kg2 m-4.
-  real :: add_ent      ! Entrainment that needs to be added when mixing tracers,
-                       ! in units of m or kg m-2.
-  real :: eaval        ! eaval is 2*ea at velocity grid points, in m or kg m-2.
-  real :: hval         ! hval is 2*h at velocity grid points, in m or kg m-2.
+                       ! in roundoff and can be neglected
+                       ! (m for Bouss and kg/m^2 for non-Bouss)
+  real :: h_neglect2   ! h_neglect^2  (m^2 for Bouss, kg^2/m^4 for non-Bouss)
+  real :: add_ent      ! Entrainment that needs to be added when mixing tracers
+                       ! (m for Bouss and kg/m^2 for non-Bouss)
+  real :: eaval        ! eaval is 2*ea at velocity grid points (m for Bouss, kg/m^2 for non-Bouss)
+  real :: hval         ! hval is 2*h at velocity grid points (m for Bouss, kg/m^2 for non-Bouss)
   real :: h_tr         ! h_tr is h at tracer points with a tiny thickness
-                       ! added to ensure positive definiteness, in m or kg m-2.
+                       ! added to ensure positive definiteness (m for Bouss, kg/m^2 for non-Bouss)
   real :: Tr_ea_BBL    ! The diffusive tracer thickness in the BBL that is
-                       ! coupled to the bottom within a timestep, in m.
+                       ! coupled to the bottom within a timestep (m)
+
   real :: htot(SZIB_(G))  ! The summed thickness from the bottom, in m.
   real :: b1(SZIB_(G)), d1(SZIB_(G)) ! b1, c1, and d1 are variables used by the
   real :: c1(SZIB_(G),SZK_(G))       ! tridiagonal solver.
-  real :: dt_mix       ! The amount of time over which to apply mixing, in s.
-  real :: Idt          ! The inverse of the time step, in s-1.
-  type(p3d) :: z_ptrs(7) ! Pointers to the diagnostics that are to be
-                       ! interpolated into depth space.
-  integer :: num_z_diags  ! The number of diagnostics that are to be
-                       ! interpolated into depth space.
-  integer :: z_ids(7)  ! The id numbers of the diagnostics that are to be
-                       ! interpolated into depth space.
+
+  real :: dt_mix       ! amount of time over which to apply mixing (seconds)
+  real :: Idt          ! inverse time step (1/s)
+
+  type(p3d) :: z_ptrs(7)  ! pointers to diagnostics to be interpolated to depth
+  integer :: num_z_diags  ! number of diagnostics to be interpolated to depth
+  integer :: z_ids(7)     ! id numbers of diagnostics to be interpolated to depth
   logical :: showCallTree ! If true, show the call tree
   type(group_pass_type), save :: pass_hold_eb_ea ! For group halo pass
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkmb
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
+
+  is   = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = G%ke
+  Isq  = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   nkmb = G%nk_rho_varies
   h_neglect = G%H_subroundoff ; h_neglect2 = h_neglect*h_neglect
 
@@ -324,7 +338,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   showCallTree = callTree_showQuery()
   if (showCallTree) call callTree_enter("diabatic(), MOM_diabatic_driver.F90")
 
-  ! This sets the equivalence between the same bits of memory for these arrays.
+  ! set equivalence between the same bits of memory for these arrays
   eaml => eatr ; ebml => ebtr
 
   Idt = 1.0 / dt
@@ -341,7 +355,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   call set_BBL_diffusivity(u, v, h, fluxes, visc, G, CS%set_diff_CSp)
   call cpu_clock_end(id_clock_set_diffusivity)
 
-  !   Frazil formation keeps the temperature above the freezing point.
+  ! Frazil formation keeps the temperature above the freezing point.
   ! make_frazil is deliberately called at both the beginning and at
   ! the end of the diabatic processes.
   if (ASSOCIATED(tv%T) .AND. ASSOCIATED(tv%frazil)) then
@@ -365,7 +379,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   endif
 
   ! Set_opacity estimates the optical properties of the water column.
-  !   It will need to be modified later to include information about the
+  ! It will need to be modified later to include information about the
   ! biological properties and layer thicknesses.
   if (associated(CS%optics)) &
     call set_opacity(CS%optics, fluxes, G, CS%opacity_CSp)
@@ -377,7 +391,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
 !    (3) Heats the mixed layer and causes it to detrain to
 !        Monin-Obukhov depth or minimum mixed layer depth.
 !    (4) Uses any remaining TKE to drive mixed layer entrainment.
-!    (5) Possibly splits the buffer layer into two isopycnal layers.
+!    (5) Possibly splits buffer layer into two isopycnal layers (when using isopycnal coordinate)
       call find_uv_at_h(u, v, h, u_h, v_h, G)
 
       call cpu_clock_begin(id_clock_mixedlayer)
@@ -403,7 +417,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     endif
   endif
 
-!    This following subroutine applies diapycnal diffusion and the
+!  This subroutine applies diapycnal diffusion and the
 !  surface buoyancy forcing.  No layer is less than an Angstrom thick at
 !  the end, and total density (heat or salt) is conserved unless all
 !  of the mass is in the lightest or densest layer.
@@ -412,7 +426,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
 !  effectively removed from the calculation.  Also, buoyancy forcing
 !  is applied to the bulk mixed layer elsewhere.
 
-!   Calculate appropriately limited diapycnal mass fluxes to account
+! Calculate appropriately limited diapycnal mass fluxes to account
 ! for diapycnal diffusion and advection.
   if (CS%debug) then
     call MOM_state_chksum("before find_uv_at_h", u(:,:,:), v(:,:,:), h(:,:,:), G)
@@ -464,18 +478,19 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     ! We could make this call higher up to avoid a repeat unpacking of the surface fluxes.  ????
     ! Sets: CS%buoyancyFlux, CS%netHeatMinusSW, CS%netSalt
     call calculateBuoyancyFlux2d(G, fluxes, CS%optics, h, tv%T, tv%S, tv, &
-              CS%buoyancyFlux, CS%netHeatMinusSW, CS%netSalt)
-    ! The KPP scheme calculates the mixed layer diffusivities and non-local transport
-    ! and requires the interior diffusivity to be complete so that KPP can match profiles.
-    ! Thus, KPP is the last contribution to Kd.
+                                 CS%buoyancyFlux, CS%netHeatMinusSW, CS%netSalt)
+    ! The KPP scheme calculates the boundary layer diffusivities and non-local transport.
+    ! If have KPP matching to interior, then KPP must be last contribution to Kd.
+    ! But generally MOM does not insist on matching KPP boundary layer diffusivities to 
+    ! the interior, as that matching can be problematic.
     ! Changes: Kd_int. Sets: KPP_NLTheat, KPP_NLTscalar
 
 !$OMP parallel default(none) shared(is,ie,js,je,nz,Kd_salt,Kd_int,visc,CS,Kd_heat)
     if (associated(visc%Kd_turb) .and. CS%matchKPPwithoutKappaShear) then
 !$OMP do
       do k=1,nz+1 ; do j=js,je ; do i=is,ie
-        Kd_salt(i,j,k) = Kd_int(i,j,k) - visc%Kd_turb(i,j,k) ! Temporarily remove part due to Kappa-shear
-        Kd_heat(i,j,k) = Kd_int(i,j,k) - visc%Kd_turb(i,j,k) ! Temporarily remove part due to Kappa-shear
+        Kd_salt(i,j,k) = Kd_int(i,j,k) - visc%Kd_turb(i,j,k) ! Temporarily remove part due to Kappa-shear   smg: clean this up!   
+        Kd_heat(i,j,k) = Kd_int(i,j,k) - visc%Kd_turb(i,j,k) ! Temporarily remove part due to Kappa-shear   smg: clean thus up! 
       enddo ; enddo ; enddo
     else
 !$OMP do
@@ -498,14 +513,14 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     endif
 !$OMP end parallel
     call KPP_calculate(CS%KPP_CSp, G, h, tv%T, tv%S, u, v, tv%eqn_of_state, &
-           fluxes%ustar, CS%buoyancyFlux, Kd_heat, Kd_salt, visc%Kv_turb, CS%KPP_NLTheat, CS%KPP_NLTscalar)
+      fluxes%ustar, CS%buoyancyFlux, Kd_heat, Kd_salt, visc%Kv_turb, CS%KPP_NLTheat, CS%KPP_NLTscalar)
 !$OMP parallel default(none) shared(is,ie,js,je,nz,Kd_salt,Kd_int,visc,CS,Kd_heat)
     if (.not. CS%KPPisPassive) then
       if (associated(visc%Kd_turb) .and. CS%matchKPPwithoutKappaShear) then
 !$OMP do
         do k=1,nz+1 ; do j=js,je ; do i=is,ie
-          Kd_salt(i,j,k) = ( Kd_salt(i,j,k) + visc%Kd_turb(i,j,k) )  ! Put back part due to Kappa-shear
-          Kd_heat(i,j,k) = ( Kd_heat(i,j,k) + visc%Kd_turb(i,j,k) )  ! Put back part due to Kappa-shear
+          Kd_salt(i,j,k) = ( Kd_salt(i,j,k) + visc%Kd_turb(i,j,k) )  ! Put back part due to Kappa-shear  smg: clean this up!
+          Kd_heat(i,j,k) = ( Kd_heat(i,j,k) + visc%Kd_turb(i,j,k) )  ! Put back part due to Kappa-shear  smg: clean this up!
         enddo ; enddo ; enddo
       endif
 !$OMP do
@@ -564,9 +579,10 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     endif
   endif
 
-  ! When used with KPP this needs to provide a diffusivity and happen before KPP ?????
-  if (associated(visc%Kd_extra_T) .and. associated(visc%Kd_extra_S) .and. &
-      associated(tv%T)) then
+  ! if using matching within the KPP scheme, then this step needs to provide 
+  ! a diffusivity and happen before KPP.  But generally in MOM, we do not match
+  ! KPP boundary layer to interior, so this diffusivity can be computed when convenient.  
+  if (associated(visc%Kd_extra_T) .and. associated(visc%Kd_extra_S) .and. associated(tv%T)) then
     call cpu_clock_begin(id_clock_differential_diff)
     ! Changes: tv%T, tv%S
     call differential_diffuse_T_S(h, tv, visc, dt, G)
@@ -619,7 +635,13 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   if (CS%useALEalgorithm) then
     call cpu_clock_begin(id_clock_remap)
     ! Changes: ea(:,:,1), h, tv%T and tv%S.
+
+    ! smg: old code 
     call applyBoundaryFluxes(CS, G, dt, fluxes, CS%optics, ea, h, tv)
+
+    ! smg: new code 
+    ! call applyBoundaryFluxesInOut(CS, G, dt, fluxes, CS%optics, ea, h, tv)
+
     call cpu_clock_end(id_clock_remap)
     if (CS%debug) then
       call MOM_forcing_chksum("after applyBoundaryFluxes ", fluxes, G, haloshift=0)
@@ -1490,21 +1512,22 @@ subroutine adiabatic_driver_init(Time, G, param_file, diag, CS, &
   type(diabatic_CS),       pointer       :: CS
   type(tracer_flow_control_CS), pointer  :: tracer_flow_CSp
   type(diag_to_Z_CS),      pointer       :: diag_to_Z_CSp
-! Arguments: Time - The current model time.
-!  (in)      G - The ocean's grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (in)      diag - A structure that is used to regulate diagnostic output.
-!  (in/out)  CS - A pointer that is set to point to the control structure
-!                 for this module
-!  (in)      tracer_flow_CSp - A pointer to the control structure of the tracer
-!                              flow control module.
-!  (in)      diag_to_Z_CSp - A pointer to the Z-diagnostics control structure.
 
-!   This is a highly simplified version of diabatic_driver_init that will allow
-! the tracer column functions to be called without allowing any of the diabatic
+! Arguments: 
+!  (in)      Time       = current model time
+!  (in)      G          = ocean grid structure
+!  (in)      param_file = structure indicating the open file to parse for parameter values
+!  (in)      diag       = structure used to regulate diagnostic output
+!  (in/out)  CS         = pointer set to point to the control structure for this module
+!  (in)      tracer_flow_CSp = A pointer to the control structure of the tracer
+!                              flow control module.
+!  (in)      diag_to_Z_CSp   = A pointer to the Z-diagnostics control structure.
+
+! This is a simplified version of diabatic_driver_init that will allow
+! tracer column functions to be called without allowing any of the diabatic
 ! processes to be used.
-! This include declares and sets the variable "version".
+
+! This "include" declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mod  = "MOM_diabatic_driver" ! This module's name.
 
@@ -1524,8 +1547,9 @@ subroutine adiabatic_driver_init(Time, G, param_file, diag, CS, &
 
 end subroutine adiabatic_driver_init
 
+
 subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
-                     ADp, CDp, CS, tracer_flow_CSp, sponge_CSp, diag_to_Z_CSp)
+                                ADp, CDp, CS, tracer_flow_CSp, sponge_CSp, diag_to_Z_CSp)
   type(time_type),         intent(in)    :: Time
   type(ocean_grid_type),   intent(in)    :: G
   type(param_file_type),   intent(in)    :: param_file
@@ -1537,43 +1561,45 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
   type(tracer_flow_control_CS), pointer  :: tracer_flow_CSp
   type(sponge_CS),         pointer       :: sponge_CSp
   type(diag_to_Z_CS),      pointer       :: diag_to_Z_CSp
-! Arguments: Time - The current model time.
-!  (in)      G - The ocean's grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (in)      diag - A structure that is used to regulate diagnostic output.
-!  (inout)   ADp - A structure with pointers to the various accelerations in
-!                  the momentum equations, to enable the later calculation
-!                  of derived diagnostics, like energy budgets.
-!  (inout)   CDp - A structure with pointers to various terms in the continuity
-!                  equations.
-!  (in/out)  CS - A pointer that is set to point to the control structure
-!                 for this module
-!  (in)      tracer_flow_CSp - A pointer to the control structure of the tracer
-!                              flow control module.
-!  (in)      sponge_CSp - A pointer to the sponge module control structure.
-!  (in)      diag_to_Z_CSp - A pointer to the Z-diagnostics control structure.
+
+! Arguments: 
+!  (in)      Time            = current model time
+!  (in)      G               = ocean grid structure
+!  (in)      param_file      = structure indicating the open file to parse for parameter values
+!  (in)      useALEalgorithm = logical determining whether to use ALE vertical remapping
+!  (in)      diag            = structure used to regulate diagnostic output
+!  (inout)   ADp             = structure with pointers to accelerations in momentum equations, 
+!                              to enable later calculation of diagnostics, like energy budgets
+!  (inout)   CDp             = structure with pointers to terms in continuity equations
+!  (in/out)  CS              = pointer set to point to the control structure for this module
+!  (in)      tracer_flow_CSp = pointer to control structure of tracer flow control module
+!  (in)      sponge_CSp      = pointer to the sponge module control structure
+!  (in)      diag_to_Z_CSp   = A pointer to the Z-diagnostics control structure.
+
   real :: Kd
   logical :: use_temperature, differentialDiffusion
   type(vardesc) :: vd
-! This include declares and sets the variable "version".
+
+! This "include" declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mod  = "MOM_diabatic_driver" ! This module's name.
   character(len=48)  :: thickness_units
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz, nbands
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = G%ke
+  isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed ; nz = G%ke
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   if (associated(CS)) then
     call MOM_error(WARNING, "diabatic_driver_init called with an "// &
                             "associated control structure.")
     return
-  else ; allocate(CS) ; endif
+  else 
+    allocate(CS) 
+   endif
 
   CS%diag => diag
   if (associated(tracer_flow_CSp)) CS%tracer_flow_CSp => tracer_flow_CSp
-  if (associated(sponge_CSp)) CS%sponge_CSp => sponge_CSp
-  if (associated(diag_to_Z_CSp)) CS%diag_to_Z_CSp => diag_to_Z_CSp
+  if (associated(sponge_CSp))      CS%sponge_CSp      => sponge_CSp
+  if (associated(diag_to_Z_CSp))   CS%diag_to_Z_CSp   => diag_to_Z_CSp
 
   CS%useALEalgorithm = useALEalgorithm
   CS%bulkmixedlayer = (G%nkml > 0)
@@ -1637,6 +1663,7 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
                  "If true, mix the passive tracers in massless layers at \n"//&
                  "the bottom into the interior as though a diffusivity of \n"//&
                  "KD_MIN_TR were operating.", default=.true.)
+
   if (CS%mix_boundary_tracers) then
     call get_param(param_file, mod, "KD", Kd, fail_if_missing=.true.)
     call get_param(param_file, mod, "KD_MIN_TR", CS%Kd_min_tr, &
@@ -1714,7 +1741,7 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
 
   if (CS%id_dudt_dia > 0) call safe_alloc_ptr(ADp%du_dt_dia,IsdB,IedB,jsd,jed,nz)
   if (CS%id_dvdt_dia > 0) call safe_alloc_ptr(ADp%dv_dt_dia,isd,ied,JsdB,JedB,nz)
-  if (CS%id_wd > 0) call safe_alloc_ptr(CDp%diapyc_vel,isd,ied,jsd,jed,nz+1)
+  if (CS%id_wd > 0)       call safe_alloc_ptr(CDp%diapyc_vel,isd,ied,jsd,jed,nz+1)
 
   call set_diffusivity_init(Time, G, param_file, diag, CS%set_diff_CSp, diag_to_Z_CSp)
   CS%id_Kd_interface = register_diag_field('ocean_model', 'Kd_interface', diag%axesTi, Time, &
@@ -1786,6 +1813,7 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
 
 end subroutine diabatic_driver_init
 
+
 subroutine diabatic_driver_end(CS)
   type(diabatic_CS), pointer :: CS
 
@@ -1809,6 +1837,7 @@ subroutine diabatic_driver_end(CS)
   if (associated(CS)) deallocate(CS)
 
 end subroutine diabatic_driver_end
+
 
 subroutine find_uv_at_h(u, v, h, u_h, v_h, G, ea, eb)
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)  :: u
@@ -1911,6 +1940,8 @@ subroutine find_uv_at_h(u, v, h, u_h, v_h, G, ea, eb)
   call cpu_clock_end(id_clock_uv_at_h)
 end subroutine find_uv_at_h
 
+
+! smg: this routine should be moved to a diagnostics module 
 !> Diagnose a mixed layer depth (MLD) determined by a given density difference with the surface.
 subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, diagPtr, id_N2subML)
   integer,                               intent(in) :: id_MLD      !< Handle (ID) of MLD diagnostic
@@ -1995,11 +2026,13 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, diagPtr
 
 end subroutine diagnoseMLDbyDensityDifference
 
+
+! smg: old version of this routine
 subroutine applyBoundaryFluxes(CS, G, dt, fluxes, optics, ea, h, tv)
   type(diabatic_CS),                     pointer       :: CS
   type(ocean_grid_type),                 intent(in)    :: G
   real,                                  intent(in)    :: dt
-  type(forcing),                         intent(in)    :: fluxes
+  type(forcing),                         intent(inout) :: fluxes
   type(optics_type),                     pointer       :: optics
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: ea, h
   type(thermo_var_ptrs),                 intent(inout) :: tv
@@ -2007,7 +2040,7 @@ subroutine applyBoundaryFluxes(CS, G, dt, fluxes, optics, ea, h, tv)
   ! to h, tv%T and tv%S. 
   real :: Irho0, I_Cp, Irho_cp, H_limit_fluxes, IforcingDepthScale
   real :: dThickness, dTemp, dSalt, fractionOfForcing, hOld, Ithickness
-  real, dimension(SZI_(G)) :: netThickness, netHeat, netSalt, htot, Ttot
+  real, dimension(SZI_(G)) :: netThickness, netMassOut, netHeat, netSalt, htot, Ttot
   real, dimension(SZI_(G), SZK_(G)) :: h2d, T2d, eps
   integer, dimension(SZI_(G), SZK_(G)) :: ksort
   real, dimension(max(CS%nsw,1),SZI_(G))         :: Pen_SW_bnd
@@ -2077,7 +2110,7 @@ subroutine applyBoundaryFluxes(CS, G, dt, fluxes, optics, ea, h, tv)
     ! netThickness, netHeat, netSalt and the SW penetrative componennts, Pen_SW_bnd.
     call extractFluxes1d(G, fluxes, optics, nsw, j, dt, &
                   H_limit_fluxes, use_riverHeatContent, useCalvingHeatContent, &
-                  h2d, T2d, netThickness, netHeat, netSalt, Pen_SW_bnd, tv)
+                  h2d, T2d, netThickness, netMassOut, netHeat, netSalt, Pen_SW_bnd, tv)
  
     ! For passive tracers
     do i=is,ie
@@ -2174,5 +2207,315 @@ subroutine applyBoundaryFluxes(CS, G, dt, fluxes, optics, ea, h, tv)
   endif
 
 end subroutine applyBoundaryFluxes
+
+
+! smg: new version of subroutine applyBoundaryFluxes
+subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv)
+  type(diabatic_CS),                     pointer       :: CS
+  type(ocean_grid_type),                 intent(in)    :: G
+  real,                                  intent(in)    :: dt
+  type(forcing),                         intent(inout) :: fluxes
+  type(optics_type),                     pointer       :: optics
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: ea
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: h
+  type(thermo_var_ptrs),                 intent(inout) :: tv
+
+! Update the thickness, temperature, and salinity due to 
+! thermodynamic boundary forcing (contained in fluxes type) applied
+! to h, tv%T and tv%S. 
+!
+! This routine is only used if CS%useALEalgorithm == .true. 
+!
+! Apply the surface boundary fluxes in three steps:
+! A/ update mass, temp, and salinity due to all terms except 
+!    netMassOut, fluxes%heat_content_evap < 0, and penetrative SW
+! B/ update mass, temp, and salinity from netMassOut and fluxes%heat_content_evap
+! C/ update temp due to penetrative SW  
+!
+! Arguments: 
+!  (in)      CS     = control structure returned by a previous diabatic_driver_init call
+!  (in)      G      = ocean grid structure
+!  (in)      dt     = Time increment (seconds)
+!  (in)      fluxes = structure containing pointers to forcing fields; NULL ptrs for unused fields
+!            optics = pointer to the optics 
+!  (inout)   ea     = amount of fluid entrained from the layer above within
+!                     one time step  (m for Bouss, kg/m^2 for non-Bouss)
+!  (inout)   h      = layer thickness (m for Bouss and kg/m^2 for non-Bouss)
+!  (inout)   tv     = structure containing pointers to any available
+!                     thermodynamic fields; unused fields have NULL ptrs.
+
+  integer, parameter :: maxGroundings = 5
+  integer, dimension(SZI_(G), SZK_(G)) :: ksort
+  integer :: numberOfGroundings, iGround(maxGroundings), jGround(maxGroundings)
+
+  real :: H_limit_fluxes, IforcingDepthScale, Idt
+  real :: dThickness, dTemp, dSalt
+  real :: netHeatOut, netMassOut0 
+  real :: fractionOfForcing, hOld, Ithickness
+
+  real, dimension(SZI_(G))                       :: netMassInOut, netMassIn, netMassOut
+  real, dimension(SZI_(G))                       :: netHeat, netSalt, htot, Ttot
+  real, dimension(SZI_(G), SZK_(G))              :: h2d, T2d, eps
+  real, dimension(max(CS%nsw,1),SZI_(G))         :: Pen_SW_bnd
+  real, dimension(max(CS%nsw,1),SZI_(G),SZK_(G)) :: opacityBand
+  real                                           :: hGrounding(maxGroundings)
+
+  ! smg: obsolete logicals
+  logical :: use_riverHeatContent, useCalvingHeatContent
+
+  integer :: i, j, is, ie, js, je, k, nz, n, nsw
+  character(len=45) :: mesg
+
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+
+  ! only apply forcing if fluxes%sw is associated.
+  if (.not.ASSOCIATED(fluxes%sw)) return
+
+  nsw = CS%nsw
+  Idt = 1.0/dt 
+
+  ! H_limit_fluxes is used by extractFluxes1d to scale down fluxes if the total
+  ! depth of the ocean is vanishing. It does not (yet) handle a value of zero.
+  ! To accomodate vanishing upper layers, we need to allow for an instantaneous
+  ! distribution of forcing over some finite vertical extent. The bulk mixed layer
+  ! code handles this issue properly. 
+  H_limit_fluxes = max(G%Angstrom, 1.E-30) 
+
+  ! The inverse scale, IforcingDepthScale, is a hack which 
+  ! should not be tickled in Eulerian mode. It stops all of the forcing from 
+  ! being deposited into a vanish(ed/ing) layer. We presently use here
+  ! 1/10^-3 = 1000 to correspond to a 1mm thick layer over which to distribute
+  ! the surface fluxes uniformly.
+  IforcingDepthScale = 1000. 
+
+  ! subroutine "absorbRemaining" uses an indirect indexing in the vertical
+  ! as in bulk mixed layer.
+  do k=1,nz ; do i=is,ie
+      ksort(i,k) = k
+  enddo ; enddo
+
+  ! diagnostic to see if need to create mass to avoid grounding 
+  if (CS%id_createdH>0) CS%createdH(:,:) = 0.
+  numberOfGroundings = 0
+
+!$OMP parallel do default(none) shared(is,ie,js,je,nz,h,tv,nsw,G,optics,fluxes,dt,           &
+!$OMP                                  H_limit_fluxes,use_riverHeatContent,                  &
+!$OMP                                  useCalvingHeatContent,ea,IforcingDepthScale,          &
+!$OMP                                  numberOfGroundings,iGround,jGround,                   &
+!$OMP                                  hGrounding,CS,ksort)                                  &
+!$OMP                          private(opacityBand,h2d,T2d,eps,htot,netMassInOut,netMassOut, &
+!$OMP                                  netHeat,netSalt,Pen_SW_bnd,fractionOfForcing,         &
+!$OMP                                  dThickness,dTemp,dSalt,hOld,Ithickness,Ttot)
+
+  ! work in vertical slices for efficiency 
+  do j=js,je 
+
+    Ttot = 0
+    ! Copy state into 2D-slice arrays
+    do k=1,nz
+      do i=is,ie
+        h2d(i,k) = h(i,j,k)
+        T2d(i,k) = tv%T(i,j,k)
+        do n=1,nsw
+          opacityBand(n,i,k) = G%H_to_m*optics%opacity_band(n,i,j,k)
+        enddo
+        eps(i,k) = 0.
+      enddo
+    enddo
+    do i=is,ie ; htot(i) = 0. ; enddo
+
+    ! The surface forcing is contained in the fluxes type.
+    ! We aggregate the thermodynamic forcing for a time step into the following:
+    ! netMassInOut = surface water fluxes (H units) over time step 
+    !              = lprec + fprec + vprec + evap + lrunoff + frunoff
+    !                note that lprec generally has sea ice melt/form included.  
+    ! netMassOut   = net mass leaving ocean surface (H units) over a time step. 
+    !                netMassOut < 0 means mass leaves ocean. 
+    ! netHeat      = heat (degC * H) via surface fluxes, excluding the part 
+    !                contained in Pen_SW_bnd; and excluding heat_content of netMassOut < 0. 
+    ! netSalt      = surface salt fluxes ( g(salt)/m2 for non-Bouss and ppt*m/s for Bouss )
+    ! Pen_SW_bnd   = components to penetrative shortwave radiation 
+    call extractFluxes1d(G, fluxes, optics, nsw, j, dt,                        &
+                  H_limit_fluxes, use_riverHeatContent, useCalvingHeatContent, &
+                  h2d, T2d, netMassInOut, netMassOut, netHeat, netSalt, Pen_SW_bnd, tv)
+ 
+    ! ea is for passive tracers
+    do i=is,ie
+      ea(i,j,1)    = netMassInOut(i)
+      netMassIn(i) = netMassInOut(i) - netMassOut(i)   
+    enddo
+
+    ! Apply the surface boundary fluxes in three steps:
+    ! A/ update mass, temp, and salinity due to all terms except mass
+    !    leaving ocean (and corresponding heat content), and penetrative SW.
+    ! B/ update mass, salt, temp from mass leaving ocean.
+    ! C/ update temp due to penetrative SW  
+
+    do i=is,ie
+      if (G%mask2dT(i,j)>0.) then
+
+        ! step A/ in the application of surface boundary fluxes 
+        do k=1,nz
+
+          ! Place forcing into top layer if this layer has nontrivial thickness. 
+          ! If layer is thin relative to 1/IforcingDepthScale, then distribute 
+          ! forcing into deeper layers.  
+          ! fractionOfForcing=1.0 unless h2d is less than IforcingDepthScale.
+          fractionOfForcing = min(1.0, h2d(i,k)*IforcingDepthScale)
+ 
+          ! change in state due to forcing
+          dThickness = fractionOfForcing*netMassIn(i)
+          dTemp      = fractionOfForcing*netHeat(i)
+          ! The following max avoids taking out more salt than is in the layer.
+          dSalt = max( fractionOfForcing*netSalt(i), -0.9999*h2d(i,k)*tv%S(i,j,k))
+
+          ! Update the forcing by the part to be consumed within the present k-layer.  
+          ! If fractionOfForcing = 1, then updated netMassIn, netHeat, and netSalt vanish. 
+          netMassIn(i) = netMassIn(i) - dThickness
+          netHeat(i)   = netHeat(i)   - dTemp
+          netSalt(i)   = netSalt(i)   - dSalt
+
+          ! Update state 
+          hOld     = h2d(i,k)                ! keep original thickness in hand
+          h2d(i,k) = h2d(i,k) + dThickness   ! new thickness 
+          if (h2d(i,k) > 0.0) then
+            Ithickness  = 1.0/h2d(i,k)      ! inverse new thickness
+            T2d(i,k)    = (hOld*T2d(i,k)    + dTemp)*Ithickness
+            tv%S(i,j,k) = (hOld*tv%S(i,j,k) + dSalt)*Ithickness
+          else!if (h2d(i,k) < 0.0) then ! h2d==0 is a special limit that need no extra handling
+            call forcing_SinglePointPrint(fluxes,G,i,j,'applyBoundaryFluxesInOut')
+            write(0,*) 'applyBoundaryFluxesInOut(): lon,lat=',G%geoLonT(i,j),G%geoLatT(i,j)
+            write(0,*) 'applyBoundaryFluxesInOut(): netT,netS,netH=',netHeat(i),netSalt(i),netMassInOut(i)
+            write(0,*) 'applyBoundaryFluxesInOut(): dT,dS,dH=',dTemp,dSalt,dThickness
+            write(0,*) 'applyBoundaryFluxesInOut(): h(n),h(n+1),k=',hOld,h2d(i,k),k
+            call MOM_error(FATAL, "MOM_diabatic_driver.F90, applyBoundaryFluxesInOut(): "//&
+                           "Complete mass loss in column!")
+          endif
+
+          ! exit the k-loop after applied 100% of fluxes 
+          if(abs(netMassIn(i))+abs(netHeat(i))+abs(netSalt(i)) == 0.0) exit 
+
+        enddo ! k
+
+        ! step B/ in the application of surface boundary fluxes 
+        fluxes%heat_content_massout(i,j) = 0.0
+        if(netMassOut(i) < 0.0) then 
+          netHeatOut  = 0.0 
+          netMassOut0 = netMassOut(i) 
+
+          do k=1,nz
+
+            ! Place forcing into top layer if this layer has nontrivial thickness. 
+            ! For layers thin relative to 1/IforcingDepthScale, then distribute 
+            ! forcing into deeper layers. 
+            ! fractionOfForcing = 1.0, unless h2d is less than IforcingDepthScale.
+            fractionOfForcing = min(1.0, h2d(i,k)*IforcingDepthScale)
+
+            ! In the case with (-1)*netMassOut greater than 0.8*h, then we limit 
+            ! applied to the top cell, and distribute the fluxes downwards. 
+            if (-netMassOut(i) > 0.8*h2d(i,k)) then 
+              fractionOfForcing = -0.8*h2d(i,k)/netMassOut(i) 
+            endif 
+ 
+            ! incremental change in h2d and T2d due to forcing.
+            ! evaluate heat_content_evap for diagnostic purposes.  
+            dThickness = fractionOfForcing*netMassOut(i)
+            dTemp      = dThickness*T2d(i,k)
+
+            ! accumulate diagnostic heat flux
+            netHeatOut = netHeatOut + Idt * G%H_to_kg_m2 * fluxes%C_p * dTemp
+
+            ! Update the forcing by the part to be consumed within the present k-layer.  
+            ! If fractionOfForcing = 1, then new netMassOut vanishes. 
+            netMassOut(i) = netMassOut(i) - dThickness
+
+            ! Update state by the appropriate increment. 
+            ! Note that salinity is changed only via concentration due to evaporation, 
+            ! since we have already applied the salt flux in Step A above. 
+            hOld     = h2d(i,k) ! keep original thickness in hand
+            h2d(i,k) = h2d(i,k) + dThickness
+            if (h2d(i,k) > 0.) then
+              Ithickness  = 1.0/h2d(i,k) ! Inverse of new thickness
+              T2d(i,k)    = (hOld*T2d(i,k) + dTemp)*Ithickness
+              tv%S(i,j,k) = hOld*tv%S(i,j,k)*Ithickness
+            else!if (h2d(i,k) < 0.0) then ! h2d==0 is a special limit that needs no extra handling
+              call forcing_SinglePointPrint(fluxes,G,i,j,'applyBoundaryFluxesInOut')
+              write(0,*) 'applyBoundaryFluxesInOut(): lon,lat=',G%geoLonT(i,j),G%geoLatT(i,j)
+              write(0,*) 'applyBoundaryFluxesInOut(): netT,netS,netH=',netHeat(i),netSalt(i),netMassInOut(i)
+              write(0,*) 'applyBoundaryFluxesInOut(): dT,dS,dH=',dTemp,dSalt,dThickness
+	                    write(0,*) 'applyBoundaryFluxesInOut(): h(n),h(n+1),k=',hOld,h2d(i,k),k
+              call MOM_error(FATAL, "MOM_diabatic_driver.F90, applyBoundaryFluxesInOut(): "//&
+                             "Complete mass loss in column!")
+            endif
+
+            ! diagnose heat fluxes and exit k-loop
+            if(abs(netMassOut(i)) == 0.0) then 
+              fluxes%heat_content_massout(i,j) = netHeatOut
+              exit 
+            endif 
+        
+          enddo ! k
+        endif     ! check for if(netMassOut(i) < 0.0)
+
+
+        ! check if trying to apply fluxes over land points 
+        elseif((abs(netHeat(i))+abs(netSalt(i))+abs(netMassIn(i))+abs(netMassOut(i)))>0.) then
+          call forcing_SinglePointPrint(fluxes,G,i,j,'applyBoundaryFluxesInOut')
+          write(0,*) 'applyBoundaryFluxesInOut(): lon,lat=',G%geoLonT(i,j),G%geoLatT(i,j)
+          write(0,*) 'applyBoundaryFluxesInOut(): netHeat,netSalt,netMassIn,netMassOut=',&
+                     netHeat(i),netSalt(i),netMassIn(i),netMassOut(i)
+          call MOM_error(FATAL, "MOM_diabatic_driver.F90, applyBoundaryFluxesInOut(): "//&
+                                "Mass loss over land?")
+        endif      
+
+        ! if anything remains after the k-loop, then we have grounded out, which is a problem. 
+        if (netMassIn(i)+netMassOut(i) /= 0.0) then 
+!$OMP critical
+          numberOfGroundings = numberOfGroundings +1
+          if (numberOfGroundings<=maxGroundings) then
+            iGround(numberOfGroundings) = i ! Record i,j location of event for
+            jGround(numberOfGroundings) = j ! warning message
+            hGrounding(numberOfGroundings) = netMassIn(i)+netMassOut(i)
+          endif
+!$OMP end critical
+          if (CS%id_createdH>0) CS%createdH(i,j) = CS%createdH(i,j) - netMassInOut(i)/dt
+        endif
+
+    enddo ! i
+
+    ! step C/ in the application of fluxes 
+    ! Heat by the divergence of penetrating SW (this uses the updated thicknesses)
+    call absorbRemainingSW(G, h2d, eps, htot, opacityBand, nsw, j, dt, &
+                           H_limit_fluxes, .true., .true., &
+                           ksort, T2d, Ttot, Pen_SW_bnd)
+ 
+    ! Copy slice back into model state
+    do k=1,nz
+      do i=is,ie
+        h(i,j,k)    = h2d(i,k)
+        tv%T(i,j,k) = T2d(i,k)
+      enddo
+    enddo
+
+
+  enddo ! j-loop finish 
+
+  if (CS%id_createdH > 0) call post_data(CS%id_createdH, CS%createdH, CS%diag)
+
+  if (numberOfGroundings>0) then
+    do i = 1, numberOfGroundings
+      call forcing_SinglePointPrint(fluxes,G,iGround(i),jGround(i),'applyBoundaryFluxesInOut')
+      write(mesg(1:45),'(3es15.3)') G%geoLonT( iGround(i), jGround(i) ), &
+                             G%geoLatT( iGround(i), jGround(i)) , hGrounding(i)
+      call MOM_error(WARNING, "MOM_diabatic_driver.F90, applyBoundaryFluxesInOut(): "//&
+                              "Mass created. x,y,dh= "//trim(mesg), all_print=.true.)
+    enddo
+  endif
+
+
+end subroutine applyBoundaryFluxesInOut
+
+
+
 
 end module MOM_diabatic_driver

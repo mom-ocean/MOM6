@@ -1437,6 +1437,9 @@ CHECK_DIFFUSIVE_CFL = False     !   [Boolean] default = False
                                 ! If true, use enough iterations the diffusion to ensure
                                 ! that the diffusive equivalent of the CFL limit is not
                                 ! violated.  If false, always use 1 iteration.
+OBSOLETE_DIAGNOSTIC_IS_FATAL = True !   [Boolean] default = True
+                                ! If an obsolete diagnostic variable appears in the diag_table
+                                ! then cause a FATAL error rather than issue a WARNING.
 
 ! === module MOM_surface_forcing ===
 VARIABLE_WINDS = False          !   [Boolean] default = True

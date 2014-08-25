@@ -1572,6 +1572,9 @@ ML_KHTR_SCALE = 0.0             !   [nondim] default = 1.0
                                 ! With Diffuse_ML_interior, the ratio of the truly
                                 ! horizontal diffusivity in the mixed layer to the
                                 ! epipycnal diffusivity.  The valid range is 0 to 1.
+OBSOLETE_DIAGNOSTIC_IS_FATAL = True !   [Boolean] default = True
+                                ! If an obsolete diagnostic variable appears in the diag_table
+                                ! then cause a FATAL error rather than issue a WARNING.
 
 ! === module ocean_model_init ===
 RESTART_CONTROL = 1             ! default = 1

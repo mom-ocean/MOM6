@@ -834,7 +834,7 @@ subroutine add_shelf_flux(G, CS, state, fluxes)
       if (associated(fluxes%sw_nir_dif)) fluxes%sw_nir_dif(i,j) = 0.0
 
       if (CS%lprec(i,j) > 0.0 ) then
-        fluxes%liq_precip(i,j) =  frac_area*CS%lprec(i,j)*CS%flux_factor
+        fluxes%lprec(i,j) =  frac_area*CS%lprec(i,j)*CS%flux_factor
       else
         fluxes%evap(i,j) = frac_area*CS%lprec(i,j)*CS%flux_factor
       endif
@@ -959,7 +959,7 @@ end subroutine add_shelf_flux
 !       fluxes%ustar_shelf(i,j) = MAX(CS%ustar_bg, sqrt(Irho0 * sqrt(taux2 + tauy2)))
 
 !       if (CS%lprec(i,j) > 0.0) then
-!         fluxes%liq_precip(i,j) = fluxes%liq_precip(i,j) + frac_area*CS%lprec(i,j)
+!         fluxes%lprec(i,j) = fluxes%lprec(i,j) + frac_area*CS%lprec(i,j)
 !         ! Same for IOB%lprec
 !       else
 !         fluxes%evap(i,j) = fluxes%evap(i,j) + frac_area*CS%lprec(i,j)
