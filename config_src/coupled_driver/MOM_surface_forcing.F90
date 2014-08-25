@@ -742,10 +742,6 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
       if (mass_ice > CS%rigid_sea_ice_mass) then
         mass_eff = (mass_ice - CS%rigid_sea_ice_mass) **2 / &
                    (mass_ice + CS%rigid_sea_ice_mass)
-        ! smg: clean this up
-        ! Alistiar thinks that for simplicity this should be
-        !   mass_eff = (mass_ice - CS%rigid_sea_ice_mass)
-        ! but Bob thinks it should vary smoothly, like (m-m1)^2/(m+m1) does.
       endif
       ! CAUTION: with both rigid_sea_ice and ice shelves, we will need to make this
       ! a maximum for the second call.
