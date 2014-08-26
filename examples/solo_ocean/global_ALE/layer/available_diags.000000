@@ -574,6 +574,81 @@
 "ocean_model", "Kd_interface"  [Used]
     ! long_name: Total diapycnal diffusivity at interfaces
     ! units: meter2 second-1
+"ocean_model", "KPP_OBLdepth"  [Used]
+    ! long_name: Thickness of the surface Ocean Boundary Layer calculated by [CVmix] KPP
+    ! units: meter
+"ocean_model", "KPP_BulkDrho"  [Used]
+    ! long_name: Bulk difference in density used in Bulk Richardson number, as used by [CVmix] KPP
+    ! units: kg/m3
+"ocean_model", "KPP_BulkUz2"  [Used]
+    ! long_name: Square of bulk difference in resolved velocity used in Bulk Richardson number, as used by [CVmix] KPP
+    ! units: m2/s2
+"ocean_model", "KPP_BulkRi"  [Used]
+    ! long_name: Bulk Richardson number used to find the OBL depth used by [CVmix] KPP
+    ! units: nondim
+"ocean_model", "KPP_sigma"  [Unused]
+    ! long_name: Sigma coordinate used by [CVmix] KPP
+    ! units: nondim
+"ocean_model", "KPP_Ws"  [Used]
+    ! long_name: Turbulent vertical velocity scale for scalars used by [CVmix] KPP
+    ! units: m/s
+"ocean_model", "KPP_N"  [Used]
+    ! long_name: (Adjusted) Brunt-Vaisala frequency used by [CVmix] KPP
+    ! units: 1/s
+"ocean_model", "KPP_N2"  [Unused]
+    ! long_name: Square of Brunt-Vaisala frequency used by [CVmix] KPP
+    ! units: 1/s2
+"ocean_model", "KPP_Vt2"  [Used]
+    ! long_name: Unresolved shear turbulence used by [CVmix] KPP
+    ! units: m2/s2
+"ocean_model", "KPP_uStar"  [Used]
+    ! long_name: Frictional velocity, u*, as used by [CVmix] KPP
+    ! units: m/s
+"ocean_model", "KPP_buoyFlux"  [Used]
+    ! long_name: Surface (and penetrating) buoyancy flux, as used by [CVmix] KPP
+    ! units: m2/s3
+"ocean_model", "KPP_QminusSW"  [Unused]
+    ! long_name: Net temperature flux ignoring short-wave, as used by [CVmix] KPP
+    ! units: K m/s
+"ocean_model", "KPP_netSalt"  [Unused]
+    ! long_name: Effective net surface salt flux, as used by [CVmix] KPP
+    ! units: ppt m/s
+"ocean_model", "KPP_Kheat"  [Used]
+    ! long_name: Heat diffusivity due to KPP, as calculated by [CVmix] KPP
+    ! units: m2/s
+"ocean_model", "KPP_Kd_in"  [Unused]
+    ! long_name: Diffusivity passed to KPP
+    ! units: m2/s
+"ocean_model", "KPP_Ksalt"  [Used]
+    ! long_name: Salt diffusivity due to KPP, as calculated by [CVmix] KPP
+    ! units: m2/s
+"ocean_model", "KPP_Kv"  [Unused]
+    ! long_name: Vertical viscosity due to KPP, as calculated by [CVmix] KPP
+    ! units: m2/s
+"ocean_model", "KPP_NLtransport_heat"  [Used]
+    ! long_name: Non-local transport (Cs*G(sigma)) for heat, as calculated by [CVmix] KPP
+    ! units: nondim
+"ocean_model", "KPP_NLtransport_salt"  [Used]
+    ! long_name: Non-local tranpsort (Cs*G(sigma)) for scalars, as calculated by [CVmix] KPP
+    ! units: nondim
+"ocean_model", "KPP_dTdt"  [Unused]
+    ! long_name: Temperature tendency due to non-local transport of heat, as calculated by [CVmix] KPP
+    ! units: K/s
+"ocean_model", "KPP_dSdt"  [Unused]
+    ! long_name: Salinity tendency due to non-local transport of heat, as calculated by [CVmix] KPP
+    ! units: ppt/s
+"ocean_model", "KPP_Tsurf"  [Unused]
+    ! long_name: Temperature of surface layer (10% of OBL depth) as passed to [CVmix] KPP
+    ! units: C
+"ocean_model", "KPP_Ssurf"  [Unused]
+    ! long_name: Salinity of surface layer (10% of OBL depth) as passed to [CVmix] KPP
+    ! units: ppt
+"ocean_model", "KPP_Usurf"  [Unused]
+    ! long_name: i-component flow of surface layer (10% of OBL depth) as passed to [CVmix] KPP
+    ! units: m/s
+"ocean_model", "KPP_Vsurf"  [Unused]
+    ! long_name: j-component flow of surface layer (10% of OBL depth) as passed to [CVmix] KPP
+    ! units: m/s
 "ocean_model", "Kd_effective"  [Used]
     ! long_name: Diapycnal diffusivity as applied
     ! units: meter2 second-1

@@ -1302,13 +1302,13 @@ KAPPA_SHEAR_MERGE_ML = True     !   [Boolean] default = True
 ! === module MOM_KPP ===
 ! This is the MOM wrapper to CVmix:KPP
 ! See http://code.google.com/p/cvmix/
-USE_KPP = False                 !   [Boolean] default = False
+USE_KPP = True                  !   [Boolean] default = False
                                 ! If true, turns on the [CVmix] KPP scheme of Large et al., 1984,
                                 ! to calculate diffusivities and non-local transport in the OBL.
 KPP%
-PASSIVE = False                 !   [Boolean] default = False
+PASSIVE = True                  !   [Boolean] default = False
                                 ! If True, puts KPP into a passive-diagnostic mode.
-APPLY_NONLOCAL_TRANSPORT = True !   [Boolean] default = True
+APPLY_NONLOCAL_TRANSPORT = False !   [Boolean] default = False
                                 ! If True, applies the non-local transport to heat and scalars.
                                 ! If False, calculates the non-local transport and tendencies but
                                 ! purely for diagnostic purposes.
@@ -1351,6 +1351,9 @@ KPP_ZERO_DIFFUSIVITY = False    !   [Boolean] default = False
 KPP_IS_ADDITIVE = False         !   [Boolean] default = False
                                 ! If true, adds KPP diffusivity to the existing diffusivity. If false, replaces exisiting diffusivity with KPP diffusivity wherever the latter is non-zero.
 %KPP
+KPP_BEFORE_KAPPA_SHEAR = True   !   [Boolean] default = True
+                                ! If true, KPP matches interior diffusivity that EXCLUDES any
+                                ! diffusivity from kappa-shear.
 
 ! === module MOM_diffConvection ===
 ! This module implements enhanced diffusivity as a

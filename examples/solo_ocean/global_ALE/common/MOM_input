@@ -473,7 +473,9 @@ H2_FILE = "sgs_h2.nc"           !
 ! === module MOM_KPP ===
 ! This is the MOM wrapper to CVmix:KPP
 ! See http://code.google.com/p/cvmix/
+USE_KPP = True
 KPP%
+PASSIVE = True
 %KPP
 
 ! === module MOM_diffConvection ===

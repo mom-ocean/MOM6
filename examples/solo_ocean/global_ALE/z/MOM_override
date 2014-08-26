@@ -2,8 +2,6 @@
 #override NK = 50
 #override USE_REGRIDDING = True
 #override BULKMIXEDLAYER = False
-USE_KPP = True
-KPP%PASSIVE = True
 #override MIXEDLAYER_RESTRAT = False
 #override COORD_FILE = "Layer_coord50.nc"
 REGRIDDING_COORDINATE_MODE = "Z*"
