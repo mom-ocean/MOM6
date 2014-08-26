@@ -23,21 +23,15 @@ use MOM_io,            only : create_file, write_field, close_file
 use MOM_EOS,           only : calculate_density
 use MOM_string_functions, only : uppercase, extractWord
 use MOM_verticalGrid,  only : verticalGrid_type
-
-use regrid_edge_values, only : edgeValueArrays
 use regrid_edge_values, only : edge_values_implicit_h4
-use regrid_edge_values, only : triDiagEdgeWorkAllocate, triDiagEdgeWorkDeallocate
-use regrid_edge_slopes, only : edgeSlopeArrays
-use regrid_edge_slopes, only : triDiagSlopeWorkAllocate, triDiagSlopeWorkDeallocate
-
 use PLM_functions, only : PLM_reconstruction, PLM_boundary_extrapolation
 use PPM_functions, only : PPM_reconstruction, PPM_boundary_extrapolation
-
 use P1M_functions, only : P1M_interpolation, P1M_boundary_extrapolation
 use P3M_functions, only : P3M_interpolation, P3M_boundary_extrapolation
 use MOM_regridding, only : initialize_regridding, regridding_main , end_regridding
 use MOM_regridding, only : uniformResolution
 use MOM_regridding, only : check_grid_integrity, setCoordinateResolution
+use MOM_regridding, only : setcoordinateinterfaces
 use MOM_regridding, only : regriddingCoordinateModeDoc, DEFAULT_COORDINATE_MODE
 use MOM_regridding, only : regriddingInterpSchemeDoc, regriddingDefaultInterpScheme
 use MOM_regridding, only : setRegriddingBoundaryExtrapolation
@@ -82,8 +76,6 @@ type, public :: ALE_CS
 
   type(regridding_CS) :: regridCS ! Regridding parameters and work arrays
   type(remapping_CS) :: remapCS ! Remapping parameters and work arrays
-  type(edgeValueArrays) :: edgeValueWrk ! Work space for edge values
-  type(edgeSlopeArrays) :: edgeSlopeWrk ! Work space for edge slopes
 
   ! Used only for queries, not directly by this module
   integer :: nk
@@ -424,7 +416,7 @@ subroutine pressure_gradient_ppm( CS, S_t, S_b, T_t, T_b, G, tv, h )
       ! Reconstruct salinity profile    
       ppoly_parab_E = 0.0
       ppoly_parab_coefficients = 0.0
-      call edge_values_implicit_h4( G%ke, hTmp, tmp, CS%edgeValueWrk, ppoly_parab_E )
+      call edge_values_implicit_h4( G%ke, hTmp, tmp, ppoly_parab_E )
       call PPM_reconstruction( G%ke, hTmp, tmp, ppoly_parab_E, ppoly_parab_coefficients )
       if (CS%boundary_extrapolation_for_pressure) call &
         PPM_boundary_extrapolation( G%ke, hTmp, tmp, ppoly_parab_E, ppoly_parab_coefficients )
@@ -438,7 +430,7 @@ subroutine pressure_gradient_ppm( CS, S_t, S_b, T_t, T_b, G, tv, h )
       ppoly_parab_E = 0.0
       ppoly_parab_coefficients = 0.0
       tmp(:) = tv%T(i,j,:)
-      call edge_values_implicit_h4( G%ke, hTmp, tmp, CS%edgeValueWrk, ppoly_parab_E )
+      call edge_values_implicit_h4( G%ke, hTmp, tmp, ppoly_parab_E )
       call PPM_reconstruction( G%ke, hTmp, tmp, ppoly_parab_E, ppoly_parab_coefficients )
       if (CS%boundary_extrapolation_for_pressure) call &
         PPM_boundary_extrapolation( G%ke, hTmp, tmp, ppoly_parab_E, ppoly_parab_coefficients )
@@ -476,10 +468,6 @@ subroutine ALE_memory_allocation( G, CS )
   
   nz = G%ke
 
-  ! Allocate memory for the tridiagonal system
-  call triDiagEdgeWorkAllocate( nz, CS%edgeValueWrk )
-  call triDiagSlopeWorkAllocate( nz, CS%edgeSlopeWrk )
-
   ! Work space
   ALLOC_(CS%dzRegrid(G%isd:G%ied,G%jsd:G%jed,nz+1)); CS%dzRegrid(:,:,:) = 0.
   
@@ -495,10 +483,6 @@ subroutine ALE_memory_deallocation( CS )
 !------------------------------------------------------------------------------
   
   type(ALE_CS), intent(inout) :: CS
-  
-  ! Reclaim memory for the tridiagonal system
-  call triDiagEdgeWorkDeallocate( CS%edgeValueWrk )
-  call triDiagSlopeWorkDeallocate( CS%edgeSlopeWrk )
   
   ! Work space
   DEALLOC_(CS%dzRegrid)
@@ -623,6 +607,7 @@ subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
     endif
   endif
   call setCoordinateResolution( dz, regridCS )
+  call setCoordinateInterfaces( G, regridCS )
 
   call get_param(param_file, mod, "MIN_THICKNESS", tmpReal, &
                  "When regridding, this is the minimum layer\n"//&

@@ -1010,13 +1010,13 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
   ! 1. Compute vertical integrals
   ! =============================
   do j=Jsq,Jeq+1
-     do i = Isq,Ieq+1
-        dz(i) = z_t(i,j) - z_b(i,j)
-    do n=1,5
-           p5(i*5+n) = -GxRho*(z_t(i,j) - 0.25*real(n-1)*dz(i))
-      ! Salinity and temperature points are linearly interpolated
-           S5(i*5+n) = wt_t(n) * S_t(i,j) + wt_b(n) * S_b(i,j)
-           T5(i*5+n) = wt_t(n) * T_t(i,j) + wt_b(n) * T_b(i,j)
+    do i = Isq,Ieq+1
+      dz(i) = z_t(i,j) - z_b(i,j)
+      do n=1,5
+        p5(i*5+n) = -GxRho*(z_t(i,j) - 0.25*real(n-1)*dz(i))
+        ! Salinity and temperature points are linearly interpolated
+        S5(i*5+n) = wt_t(n) * S_t(i,j) + wt_b(n) * S_b(i,j)
+        T5(i*5+n) = wt_t(n) * T_t(i,j) + wt_b(n) * T_b(i,j)
       enddo
     enddo
     call calculate_density_array(T5, S5, p5, r5, 1, (ieq-isq+2)*5, EOS )
@@ -1024,15 +1024,15 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
     
     do i = isq, ieq+1
     ! Use Bode's rule to estimate the pressure anomaly change.
-       rho_anom = C1_90*(7.0*(r5(i*5+1)+r5(i*5+5)) + 32.0*(r5(i*5+2)+r5(i*5+4)) + 12.0*r5(i*5+3)) - &
+      rho_anom = C1_90*(7.0*(r5(i*5+1)+r5(i*5+5)) + 32.0*(r5(i*5+2)+r5(i*5+4)) + 12.0*r5(i*5+3)) - &
            rho_ref
-       dpa(i,j) = G_e*dz(i)*rho_anom
-       if(present(intz_dpa)) then
-    ! Use a Bode's-rule-like fifth-order accurate estimate of 
-    ! the double integral of the pressure anomaly.
-          intz_dpa(i,j) = 0.5*G_e*dz(i)**2 * &
+      dpa(i,j) = G_e*dz(i)*rho_anom
+      if (present(intz_dpa)) then
+      ! Use a Bode's-rule-like fifth-order accurate estimate of 
+      ! the double integral of the pressure anomaly.
+        intz_dpa(i,j) = 0.5*G_e*dz(i)**2 * &
                 (rho_anom - C1_90*(16.0*(u5(i*5+4)-u5(i*5+2)) + 7.0*(u5(i*5+5)-u5(i*5+1))) )
-       endif
+      endif
     enddo
   enddo ! end loops on j 
 

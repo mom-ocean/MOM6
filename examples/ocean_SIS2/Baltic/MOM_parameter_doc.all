@@ -727,6 +727,10 @@ ANALYTIC_FV_PGF = True          !   [Boolean] default = True
 MASS_WEIGHT_IN_PRESSURE_GRADIENT = False !   [Boolean] default = False
                                 ! If true, use mass weighting when interpolation T/S for
                                 ! top/bottom integrals in AFV pressure gradient calculation.
+NI_BLOCK = 1                    ! default = 1
+                                ! The number of blocks in the x-direction on each processor(for openmp).
+NJ_BLOCK = 1                    ! default = 1
+                                ! The number of blocks in the y-direction on each processor(for openmp).
 
 ! === module MOM_hor_visc ===
 LAPLACIAN = True                !   [Boolean] default = False
@@ -1572,6 +1576,9 @@ ML_KHTR_SCALE = 0.0             !   [nondim] default = 1.0
                                 ! With Diffuse_ML_interior, the ratio of the truly
                                 ! horizontal diffusivity in the mixed layer to the
                                 ! epipycnal diffusivity.  The valid range is 0 to 1.
+OBSOLETE_DIAGNOSTIC_IS_FATAL = True !   [Boolean] default = True
+                                ! If an obsolete diagnostic variable appears in the diag_table
+                                ! then cause a FATAL error rather than issue a WARNING.
 
 ! === module ocean_model_init ===
 RESTART_CONTROL = 1             ! default = 1

@@ -375,6 +375,7 @@ use MOM_interface_heights, only : find_eta
 use MOM_MEKE, only : MEKE_init, MEKE_alloc_register_restart, step_forward_MEKE, MEKE_CS
 use MOM_MEKE_types, only : MEKE_type
 use MOM_mixed_layer_restrat, only : mixedlayer_restrat, mixedlayer_restrat_init, mixedlayer_restrat_CS
+use MOM_obsolete_diagnostics, only : register_obsolete_diagnostics
 use MOM_open_boundary, only : Radiation_Open_Bdry_Conds, open_boundary_init
 use MOM_PressureForce, only : PressureForce, PressureForce_init, PressureForce_CS
 use MOM_thickness_diffuse, only : thickness_diffuse, thickness_diffuse_init, thickness_diffuse_CS
@@ -1884,6 +1885,8 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call create_group_pass(pass_uv_T_S_h, CS%h, G%Domain)
   call do_group_pass(pass_uv_T_S_h, G%Domain)
   call cpu_clock_end(id_clock_pass_init)
+
+  call register_obsolete_diagnostics(param_file, CS%diag)
 
   call write_static_fields(G, CS%diag)
   call callTree_waypoint("static fields written (initialize_MOM)")

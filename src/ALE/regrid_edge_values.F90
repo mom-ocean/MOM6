@@ -16,18 +16,6 @@ use polynomial_functions, only : evaluation_polynomial
 implicit none ; private
 
 ! -----------------------------------------------------------------------------
-! Private variables used only in this module
-! -----------------------------------------------------------------------------
-type, public :: edgeValueArrays
-  private
-  real, dimension(:), allocatable :: tri_l    ! trid. system (lower diagonal)
-  real, dimension(:), allocatable :: tri_d    ! trid. system (middle diagonal)
-  real, dimension(:), allocatable :: tri_u    ! trid. system (upper diagonal)
-  real, dimension(:), allocatable :: tri_x    ! trid. system (unknowns vector)
-  real, dimension(:), allocatable :: tri_b    ! trid. system (rhs)
-end type edgeValueArrays
-
-! -----------------------------------------------------------------------------
 ! The following routines are visible to the outside world
 ! -----------------------------------------------------------------------------
 public bound_edge_values
@@ -37,8 +25,6 @@ public edge_values_explicit_h2
 public edge_values_explicit_h4
 public edge_values_implicit_h4
 public edge_values_implicit_h6
-public triDiagEdgeWorkAllocate
-public triDiagEdgeWorkDeallocate
 
 #define __DO_SAFETY_CHECKS__
 
@@ -479,7 +465,7 @@ end subroutine edge_values_explicit_h4
 !------------------------------------------------------------------------------
 ! Compute ih4 edge values (implicit fourth order accurate)
 !------------------------------------------------------------------------------
-subroutine edge_values_implicit_h4( N, h, u, work, edge_values )
+subroutine edge_values_implicit_h4( N, h, u, edge_values )
 ! -----------------------------------------------------------------------------
 ! Compute edge values based on fourth-order implicit estimates.
 !
@@ -508,7 +494,6 @@ subroutine edge_values_implicit_h4( N, h, u, work, edge_values )
   integer,              intent(in)     :: N ! Number of cells
   real, dimension(:),   intent(in)     :: h ! cell widths (size N)
   real, dimension(:),   intent(in)     :: u ! cell averages (size N)
-  type(edgeValueArrays), intent(inout) :: work ! Work space
   real, dimension(:,:), intent(inout)  :: edge_values      
 
   ! Local variables
@@ -521,6 +506,11 @@ subroutine edge_values_implicit_h4( N, h, u, work, edge_values )
   real, dimension(5)    :: x                    ! system used to enforce
   real, dimension(4,4)  :: Asys                 ! boundary conditions
   real, dimension(4)    :: Bsys, Csys
+  real, dimension(N+1)  :: tri_l, &             ! trid. system (lower diagonal)
+                           tri_d, &             ! trid. system (middle diagonal)
+                           tri_u, &             ! trid. system (upper diagonal)
+                           tri_b, &             ! trid. system (unknowns vector)
+                           tri_x                ! trid. system (rhs)
 
   ! Loop on cells (except last one)
   do i = 1,N-1
@@ -548,11 +538,11 @@ subroutine edge_values_implicit_h4( N, h, u, work, edge_values )
     a = 2.0 * h1_2 * ( h1_2 + 2.0 * h0_2 + 3.0 * h0h1 ) / d4
     b = 2.0 * h0_2 * ( h0_2 + 2.0 * h1_2 + 3.0 * h0h1 ) / d4
     
-    work%tri_l(i+1) = alpha
-    work%tri_d(i+1) = 1.0
-    work%tri_u(i+1) = beta
+    tri_l(i+1) = alpha
+    tri_d(i+1) = 1.0
+    tri_u(i+1) = beta
     
-    work%tri_b(i+1) = a * u(i) + b * u(i+1)
+    tri_b(i+1) = a * u(i) + b * u(i+1)
     
   end do ! end loop on cells
 
@@ -575,9 +565,9 @@ subroutine edge_values_implicit_h4( N, h, u, work, edge_values )
 
   call solve_linear_system( Asys, Bsys, Csys, 4 )
   
-  work%tri_d(1) = 1.0
-  work%tri_u(1) = 0.0
-  work%tri_b(1) = evaluation_polynomial( Csys, 4, x(1) )        ! first edge value
+  tri_d(1) = 1.0
+  tri_u(1) = 0.0
+  tri_b(1) = evaluation_polynomial( Csys, 4, x(1) )        ! first edge value
   
   ! Boundary conditions: right boundary
   h0 = max( hNegligible, hMinFrac*sum(h(N-3:N)) )
@@ -598,19 +588,19 @@ subroutine edge_values_implicit_h4( N, h, u, work, edge_values )
 
   call solve_linear_system( Asys, Bsys, Csys, 4 )
   
-  work%tri_l(N+1) = 0.0
-  work%tri_d(N+1) = 1.0
-  work%tri_b(N+1) = evaluation_polynomial( Csys, 4, x(5) )      ! last edge value
+  tri_l(N+1) = 0.0
+  tri_d(N+1) = 1.0
+  tri_b(N+1) = evaluation_polynomial( Csys, 4, x(5) )      ! last edge value
 
   ! Solve tridiagonal system and assign edge values
-  call solve_tridiagonal_system( work%tri_l, work%tri_d, work%tri_u, work%tri_b, work%tri_x, N+1 )
+  call solve_tridiagonal_system( tri_l, tri_d, tri_u, tri_b, tri_x, N+1 )
 
   do i = 2,N
-    edge_values(i,1)   = work%tri_x(i)
-    edge_values(i-1,2) = work%tri_x(i)
+    edge_values(i,1)   = tri_x(i)
+    edge_values(i-1,2) = tri_x(i)
   end do
-  edge_values(1,1) = work%tri_x(1)
-  edge_values(N,2) = work%tri_x(N+1)
+  edge_values(1,1) = tri_x(1)
+  edge_values(N,2) = tri_x(N+1)
 
 end subroutine edge_values_implicit_h4
 
@@ -618,7 +608,7 @@ end subroutine edge_values_implicit_h4
 !------------------------------------------------------------------------------
 ! Compute ih6 edge values (implicit sixth order accurate)
 !------------------------------------------------------------------------------
-subroutine edge_values_implicit_h6( N, h, u, work, edge_values )
+subroutine edge_values_implicit_h6( N, h, u, edge_values )
 ! -----------------------------------------------------------------------------
 ! Sixth-order implicit estimates of edge values are based on a four-cell, 
 ! three-edge stencil. A tridiagonal system is set up and is based on 
@@ -656,7 +646,6 @@ subroutine edge_values_implicit_h6( N, h, u, work, edge_values )
   integer,              intent(in)     :: N ! Number of cells
   real, dimension(:),   intent(in)     :: h ! cell widths (size N)
   real, dimension(:),   intent(in)     :: u ! cell averages (size N)
-  type(edgeValueArrays), intent(inout) :: work ! Work space
   real, dimension(:,:), intent(inout)  :: edge_values      
 
   ! Local variables
@@ -681,6 +670,11 @@ subroutine edge_values_implicit_h6( N, h, u, work, edge_values )
   real, dimension(7)    :: x                    ! system used to enforce
   real, dimension(6,6)  :: Asys                 ! boundary conditions
   real, dimension(6)    :: Bsys, Csys           ! ...
+  real, dimension(N+1)  :: tri_l, &             ! trid. system (lower diagonal)
+                           tri_d, &             ! trid. system (middle diagonal)
+                           tri_u, &             ! trid. system (upper diagonal)
+                           tri_b, &             ! trid. system (unknowns vector)
+                           tri_x                ! trid. system (rhs)
 
   ! Loop on cells (except last one)
   do k = 2,N-2
@@ -793,10 +787,10 @@ subroutine edge_values_implicit_h6( N, h, u, work, edge_values )
     c = Csys(5)
     d = Csys(6)
 
-    work%tri_l(k+1) = alpha
-    work%tri_d(k+1) = 1.0
-    work%tri_u(k+1) = beta
-    work%tri_b(k+1) = a * u(k-1) + b * u(k) + c * u(k+1) + d * u(k+2)
+    tri_l(k+1) = alpha
+    tri_d(k+1) = 1.0
+    tri_u(k+1) = beta
+    tri_b(k+1) = a * u(k-1) + b * u(k) + c * u(k+1) + d * u(k+2)
     
   end do ! end loop on cells
   
@@ -916,10 +910,10 @@ subroutine edge_values_implicit_h6( N, h, u, work, edge_values )
   c = Csys(5)
   d = Csys(6)
 
-  work%tri_l(2) = alpha
-  work%tri_d(2) = 1.0
-  work%tri_u(2) = beta
-  work%tri_b(2) = a * u(1) + b * u(2) + c * u(3) + d * u(4)
+  tri_l(2) = alpha
+  tri_d(2) = 1.0
+  tri_u(2) = beta
+  tri_b(2) = a * u(1) + b * u(2) + c * u(3) + d * u(4)
   
   ! Boundary conditions: left boundary
   g = max( hNegligible, hMinFrac*sum(h(1:6)) )
@@ -940,10 +934,10 @@ subroutine edge_values_implicit_h6( N, h, u, work, edge_values )
 
   call solve_linear_system( Asys, Bsys, Csys, 6 )
   
-  work%tri_l(1) = 0.0
-  work%tri_d(1) = 1.0
-  work%tri_u(1) = 0.0
-  work%tri_b(1) = evaluation_polynomial( Csys, 6, x(1) )        ! first edge value
+  tri_l(1) = 0.0
+  tri_d(1) = 1.0
+  tri_u(1) = 0.0
+  tri_b(1) = evaluation_polynomial( Csys, 6, x(1) )        ! first edge value
   
   ! Use a left-biased stencil for the second to last row
   
@@ -1061,10 +1055,10 @@ subroutine edge_values_implicit_h6( N, h, u, work, edge_values )
   c = Csys(5)
   d = Csys(6)
 
-  work%tri_l(N) = alpha
-  work%tri_d(N) = 1.0
-  work%tri_u(N) = beta
-  work%tri_b(N) = a * u(N-3) + b * u(N-2) + c * u(N-1) + d * u(N)
+  tri_l(N) = alpha
+  tri_d(N) = 1.0
+  tri_u(N) = beta
+  tri_b(N) = a * u(N-3) + b * u(N-2) + c * u(N-1) + d * u(N)
 
   ! Boundary conditions: right boundary
   g = max( hNegligible, hMinFrac*sum(h(N-5:N)) )
@@ -1085,59 +1079,22 @@ subroutine edge_values_implicit_h6( N, h, u, work, edge_values )
 
   call solve_linear_system( Asys, Bsys, Csys, 6 )
   
-  work%tri_l(N+1) = 0.0
-  work%tri_d(N+1) = 1.0
-  work%tri_u(N+1) = 0.0
-  work%tri_b(N+1) = evaluation_polynomial( Csys, 6, x(7) )      ! last edge value
+  tri_l(N+1) = 0.0
+  tri_d(N+1) = 1.0
+  tri_u(N+1) = 0.0
+  tri_b(N+1) = evaluation_polynomial( Csys, 6, x(7) )      ! last edge value
   
   ! Solve tridiagonal system and assign edge values
-  call solve_tridiagonal_system( work%tri_l, work%tri_d, work%tri_u, work%tri_b, work%tri_x, N+1 )
+  call solve_tridiagonal_system( tri_l, tri_d, tri_u, tri_b, tri_x, N+1 )
 
   do i = 2,N
-    edge_values(i,1)   = work%tri_x(i)
-    edge_values(i-1,2) = work%tri_x(i)
+    edge_values(i,1)   = tri_x(i)
+    edge_values(i-1,2) = tri_x(i)
   end do
-  edge_values(1,1) = work%tri_x(1)
-  edge_values(N,2) = work%tri_x(N+1)
+  edge_values(1,1) = tri_x(1)
+  edge_values(N,2) = tri_x(N+1)
 
 end subroutine edge_values_implicit_h6
-
-
-!------------------------------------------------------------------------------
-! Allocate memory for tridiagonal system used to compute edge values
-!------------------------------------------------------------------------------
-subroutine triDiagEdgeWorkAllocate( N, work )
-!------------------------------------------------------------------------------
-! In this routine, we allocate memory for the tridiagonal system that will
-! be used to compute implicit edge-value estimates. The argument 'N' is the
-! number of layers and therefore, the size of the system is N+1.
-!------------------------------------------------------------------------------
-
-  ! Argument
-  integer, intent(in)   :: N
-  type(edgeValueArrays), intent(inout)  :: work          ! Work space
-
-  allocate( work%tri_l(N+1) )
-  allocate( work%tri_d(N+1) )
-  allocate( work%tri_u(N+1) )
-  allocate( work%tri_b(N+1) )
-  allocate( work%tri_x(N+1) )
-
-end subroutine triDiagEdgeWorkAllocate
-
-!------------------------------------------------------------------------------
-! Deallocate memory for tridiagonal system used to compute edge values
-!------------------------------------------------------------------------------
-subroutine triDiagEdgeWorkDeallocate( work )
-  type(edgeValueArrays), intent(inout)  :: work          ! Work space
-
-  deallocate( work%tri_l )
-  deallocate( work%tri_d )
-  deallocate( work%tri_u )
-  deallocate( work%tri_b )
-  deallocate( work%tri_x )
-
-end subroutine triDiagEdgeWorkDeallocate
 
 
 end module regrid_edge_values

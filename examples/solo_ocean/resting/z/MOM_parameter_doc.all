@@ -734,6 +734,10 @@ ANALYTIC_FV_PGF = True          !   [Boolean] default = True
 MASS_WEIGHT_IN_PRESSURE_GRADIENT = False !   [Boolean] default = False
                                 ! If true, use mass weighting when interpolation T/S for
                                 ! top/bottom integrals in AFV pressure gradient calculation.
+NI_BLOCK = 1                    ! default = 1
+                                ! The number of blocks in the x-direction on each processor(for openmp).
+NJ_BLOCK = 1                    ! default = 1
+                                ! The number of blocks in the y-direction on each processor(for openmp).
 
 ! === module MOM_hor_visc ===
 LAPLACIAN = True                !   [Boolean] default = False
@@ -1335,6 +1339,9 @@ CHECK_DIFFUSIVE_CFL = False     !   [Boolean] default = False
                                 ! If true, use enough iterations the diffusion to ensure
                                 ! that the diffusive equivalent of the CFL limit is not
                                 ! violated.  If false, always use 1 iteration.
+OBSOLETE_DIAGNOSTIC_IS_FATAL = True !   [Boolean] default = True
+                                ! If an obsolete diagnostic variable appears in the diag_table
+                                ! then cause a FATAL error rather than issue a WARNING.
 
 ! === module MOM_surface_forcing ===
 VARIABLE_WINDS = False          !   [Boolean] default = True

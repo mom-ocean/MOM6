@@ -178,8 +178,8 @@
 "ocean_model","PRCmE","PRCmE","surffluxes","all",.true.,"none",2
 "ocean_model","evap","evap","surffluxes","all",.true.,"none",2
 "ocean_model","precip","precip","surffluxes","all",.true.,"none",2
-"ocean_model","froz_precip","froz_precip","surffluxes","all",.true.,"none",2
-"ocean_model","liq_precip","liq_precip","surffluxes","all",.true.,"none",2
+"ocean_model","fprec","fprec","surffluxes","all",.true.,"none",2
+"ocean_model","lprec","lprec","surffluxes","all",.true.,"none",2
 "ocean_model","net_heat_surface","net_heat_surface","surffluxes","all",.true.,"none",2
 "ocean_model","SW","SW","surffluxes","all",.true.,"none",2
 "ocean_model","LwLatSens","LwLatSens","surffluxes","all",.true.,"none",2
