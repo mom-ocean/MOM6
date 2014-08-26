@@ -32,7 +32,9 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public :: global_i_mean, global_j_mean, global_area_mean, global_volume_mean
+public :: global_i_mean, global_j_mean
+public :: global_area_mean, global_layer_mean
+public :: global_volume_mean
 
 contains
 
@@ -51,6 +53,32 @@ function global_area_mean(var,G)
   global_area_mean = reproducing_sum( tmpForSumming ) * G%IareaT_global
 
 end function global_area_mean
+
+function global_layer_mean(var,h,G)
+  type(ocean_grid_type),                       intent(in)  :: G
+  real, dimension(SZI_(G), SZJ_(G), SZK_(G)),  intent(in)  :: var
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),       intent(in)  :: h
+  real, dimension(SZI_(G), SZJ_(G), SZK_(G))               :: tmpForSumming, weight
+  real, dimension(SZK_(G))                                 :: global_layer_mean, scalarij, weightij
+  real, dimension(SZK_(G))  :: global_temp_scalar, global_weight_scalar
+  integer :: i, j, k, is, ie, js, je, nz
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+
+  tmpForSumming(:,:,:) = 0. ; weight(:,:,:) = 0.
+
+  do k=1, nz ; do j=js,je ; do i=is, ie
+    weight(i,j,k)  =  h(i,j,k) * (G%areaT(i,j) * G%mask2dT(i,j))
+    tmpForSumming(i,j,k) =  var(i,j,k) * weight(i,j,k)
+  enddo ; enddo ; enddo
+
+  global_temp_scalar   = reproducing_sum(tmpForSumming,sums=scalarij)
+  global_weight_scalar = reproducing_sum(weight,sums=weightij)
+
+  do k=1, nz
+    global_layer_mean(k) = scalarij(k) / weightij(k)
+  enddo
+
+end function global_layer_mean
 
 function global_volume_mean(var,h,G)
   type(ocean_grid_type),                       intent(in)  :: G
