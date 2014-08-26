@@ -752,10 +752,6 @@ ANALYTIC_FV_PGF = True          !   [Boolean] default = True
 MASS_WEIGHT_IN_PRESSURE_GRADIENT = False !   [Boolean] default = False
                                 ! If true, use mass weighting when interpolation T/S for
                                 ! top/bottom integrals in AFV pressure gradient calculation.
-NI_BLOCK = 1                    ! default = 1
-                                ! The number of blocks in the x-direction on each processor(for openmp).
-NJ_BLOCK = 1                    ! default = 1
-                                ! The number of blocks in the y-direction on each processor(for openmp).
 
 ! === module MOM_hor_visc ===
 LAPLACIAN = True                !   [Boolean] default = False
