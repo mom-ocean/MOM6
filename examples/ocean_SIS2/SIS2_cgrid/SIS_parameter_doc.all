@@ -74,6 +74,8 @@ ADD_DIURNAL_SW = False          !   [Boolean] default = False
 DO_SUN_ANGLE_FOR_ALB = False    !   [Boolean] default = False
                                 ! If true, find the sun angle for calculating the ocean
                                 ! albedo within the sea ice model.
+DO_RIDGING = False              !   [Boolean] default = False
+                                ! If true, call the ridging routines.
 TIMEUNIT = 8.64E+04             !   [s] default = 8.64E+04
                                 ! The time unit for ICE_STATS_INTERVAL.
 ICE_STATS_INTERVAL = 0.25       !   [days] default = 1.0
@@ -162,6 +164,9 @@ NK_SNOW = 1                     !   [nondim] default = 1
 SET_GRID_LIKE_SIS1 = False      !   [Boolean] default = False
                                 ! If true, use SIS1 code to set the grid values.  Otherwise
                                 ! use code derived from MOM6.
+H_TO_KG_M2 = 1.0                !   [kg m-2 H-1] default = 1.0
+                                ! A constant that translates thicknesses from the model's
+                                ! internal units of thickness to kg m-2.
 GRID_FILE = "ocean_hgrid.nc"    !
                                 ! Name of the file from which to read horizontal grid data.
 AVAILABLE_DIAGS_FILE = "SIS.available_diags" ! default = "SIS.available_diags"

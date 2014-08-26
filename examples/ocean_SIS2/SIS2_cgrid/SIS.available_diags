@@ -19,9 +19,6 @@
 "ice_model", "HI"  [Used]
     ! long_name: ice thickness
     ! units: m-ice
-"ice_model", "HIO"  [Unused]
-    ! long_name: ice thickness
-    ! units: m-ice
 "ice_model", "T_bulkice"  [Unused]
     ! long_name: Volume-averaged ice temperature
     ! units: C
@@ -229,6 +226,18 @@
 "ice_model", "FA_Y"  [Used]
     ! long_name: Air stress on ice on C-grid - y component
     ! units: Pa
+"ice_model", "RDG_RATE"  [Unused]
+    ! long_name: ice ridging rate
+    ! units: 1/sec
+"ice_model", "RDG_OPEN"  [Unused]
+    ! long_name: opening due to ridging
+    ! units: 1/s
+"ice_model", "RDG_VOSH"  [Unused]
+    ! long_name: volume shifted from level to ridged ice
+    ! units: m^3/s
+"ice_model", "AGE"  [Unused]
+    ! long_name: ice age
+    ! units: days
 "ice_model", "SIGI"  [Used]
     ! long_name: first stress invariant
     ! units: none

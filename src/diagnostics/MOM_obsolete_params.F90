@@ -107,6 +107,16 @@ subroutine find_obsolete_params(param_file)
           "USE_EOS to use an equation of state to calculate density.")
   endif
 
+  test_logic = .true. ; call read_param(param_file,"USE_RIVER_HEAT_CONTENT",test_logic)
+  test_logic2 = .false. ; call read_param(param_file,"USE_RIVER_HEAT_CONTENT",test_logic2)
+  if (test_logic .eqv. test_logic2) call MOM_ERROR(FATAL, "find_obsolete_params: "// &
+         "USE_RIVER_HEAT_CONTENT, is an obsolete run-time flag.")
+
+  test_logic = .true. ; call read_param(param_file,"USE_CALVING_HEAT_CONTENT",test_logic)
+  test_logic2 = .false. ; call read_param(param_file,"USE_CALVING_HEAT_CONTENT",test_logic2)
+  if (test_logic .eqv. test_logic2) call MOM_ERROR(FATAL, "find_obsolete_params: "// &
+         "USE_CALVING_HEAT_CONTENT, is an obsolete run-time flag.")
+
   call test_obsolete_int(param_file, "NXTOT")
   call test_obsolete_int(param_file, "NYTOT")
   call test_obsolete_int(param_file, "NZ")
