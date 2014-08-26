@@ -4,7 +4,7 @@ module MOM_obsolete_diagnostics
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_error_handler, only : MOM_error, FATAL, WARNING
+use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe
 use MOM_file_parser,   only : param_file_type, log_version, get_param
 use MOM_diag_mediator, only : diag_ctrl, register_static_field
 
@@ -51,8 +51,10 @@ subroutine register_obsolete_diagnostics(param_file, diag)
   if (found_in_diagtable(diag, 'heat_rest', 'heat_restore')) foundEntry = .true.
 
   if (causeFatal) then; errType = FATAL
-  else; errType = WARNING; endif
-  if (foundEntry) call MOM_error(errType, 'MOM_obsolete_params: Obsolete diagnostics found in diag_table')
+  else ; errType = WARNING ; endif
+  if (foundEntry .and. is_root_pe()) &
+    call MOM_error(errType, 'MOM_obsolete_diagnostics: '//&
+                            'Obsolete diagnostics found in diag_table')
 
 end subroutine register_obsolete_diagnostics
 
@@ -72,8 +74,10 @@ logical function found_in_diagtable(diag, varName, newVarName)
   ! IOW, this is a leveraging a "feature" that might go away. -AJA
   handle = register_static_field('ocean_model', varName, diag%axesT1, &
           'Obsolete parameter', 'N/A')
-  if (handle>0) then
-    found_in_diagtable = .True.
+          
+  found_in_diagtable = (handle>0)
+
+  if (handle>0 .and. is_root_pe()) then
     if (present(newVarName)) then
       call MOM_error(WARNING, 'MOM_obsolete_params: '//                        &
           'diag_table entry "'//trim(varName)//'" found. Use '// &
@@ -82,8 +86,6 @@ logical function found_in_diagtable(diag, varName, newVarName)
       call MOM_error(WARNING, 'MOM_obsolete_params: '//                        &
           'diag_table entry "'//trim(varName)//'" is obsolete.' )
     endif
-  else
-    found_in_diagtable = .False.
   endif
 
 end function found_in_diagtable
