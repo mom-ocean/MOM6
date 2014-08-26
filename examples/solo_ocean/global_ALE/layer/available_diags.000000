@@ -337,6 +337,12 @@
 "ocean_model", "salt_global"  [Used]
     ! long_name: Global Volume Mean Ocean Salinity
     ! units: PSU
+"ocean_model", "temp_layer_ave"  [Used]
+    ! long_name: Layer Average Ocean Temperature
+    ! units: Celsius
+"ocean_model", "salt_layer_ave"  [Used]
+    ! long_name: Layer Average Ocean Salinity
+    ! units: PSU
 "ocean_model", "e"  [Used]
     ! long_name: Interface Height Relative to Mean Sea Level
     ! units: meter
