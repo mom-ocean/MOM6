@@ -2089,7 +2089,8 @@ subroutine applyBoundaryFluxes(CS, G, dt, fluxes, optics, ea, h, tv)
 !$OMP                                  hGrounding,CS,ksort)                          &
 !$OMP                          private(opacityBand,h2d,T2d,eps,htot,netThickness,    &
 !$OMP                                  netHeat,netSalt,Pen_SW_bnd,fractionOfForcing, &
-!$OMP                                  dThickness,dTemp,dSalt,hOld,Ithickness,Ttot)
+!$OMP                                  dThickness,dTemp,dSalt,hOld,Ithickness,Ttot,  &
+!$OMP                                  netMassOut)
   do j=js,je ! Work in vertical slices (this is a hold over from the routines called with a j argument)
     Ttot = 0
     ! Copy state into 2D-slice arrays
@@ -2302,10 +2303,11 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv)
 !$OMP                                  H_limit_fluxes,use_riverHeatContent,                  &
 !$OMP                                  useCalvingHeatContent,ea,IforcingDepthScale,          &
 !$OMP                                  numberOfGroundings,iGround,jGround,                   &
-!$OMP                                  hGrounding,CS,ksort)                                  &
+!$OMP                                  hGrounding,CS,ksort,Idt)                              &
 !$OMP                          private(opacityBand,h2d,T2d,eps,htot,netMassInOut,netMassOut, &
 !$OMP                                  netHeat,netSalt,Pen_SW_bnd,fractionOfForcing,         &
-!$OMP                                  dThickness,dTemp,dSalt,hOld,Ithickness,Ttot)
+!$OMP                                  dThickness,dTemp,dSalt,hOld,Ithickness,Ttot,          &
+!$OMP                                  netMassIn,netHeatOut,netMassOut0)
 
   ! work in vertical slices for efficiency 
   do j=js,je 
