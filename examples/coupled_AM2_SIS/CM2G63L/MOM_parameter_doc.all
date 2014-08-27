@@ -208,7 +208,7 @@ CHECK_BAD_SURFACE_VALS = False  !   [Boolean] default = False
 SAVE_INITIAL_CONDS = True       !   [Boolean] default = False
                                 ! If true, write the initial conditions to a file given
                                 ! by IC_OUTPUT_FILE.
-IC_OUTPUT_FILE = "GOLD_IC"      ! default = "MOM_IC"
+IC_OUTPUT_FILE = "MOM_IC"       ! default = "MOM_IC"
                                 ! The file into which to write the initial conditions.
 
 ! === module MOM_tracer_registry ===
@@ -359,7 +359,7 @@ COORD_CONFIG = "file"           !
                                 !     USER - call a user modified routine.
 GFS = 9.8                       !   [m s-2] default = 9.8
                                 ! The reduced gravity at the free surface.
-COORD_FILE = "GOLD_IC.2010.11.15.nc" !
+COORD_FILE = "Vertical_coordinate.nc" !
                                 ! The file from which the coordinate densities are read.
 COORD_VAR = "Layer"             ! default = "Layer"
                                 ! The variable in COORD_FILE that is to be used for the
@@ -444,61 +444,36 @@ WRITE_GEOM = 1                  ! default = 1
                                 ! If =1, write the geometry and vertical grid files only for
                                 ! a new simulation. If =2, always write the geometry and
                                 ! vertical grid files. Other values are invalid.
-INIT_LAYERS_FROM_Z_FILE = False !   [Boolean] default = False
+INIT_LAYERS_FROM_Z_FILE = True  !   [Boolean] default = False
                                 ! If true, intialize the layer thicknesses, temperatures,
                                 ! and salnities from a Z-space file on a latitude-
                                 ! longitude grid.
-THICKNESS_CONFIG = "file"       !
-                                ! A string that determines how the initial layer
-                                ! thicknesses are specified for a new run:
-                                !     file - read interface heights from the file specified
-                                !     thickness_file - read thicknesses from the file specified
-                                !       by (THICKNESS_FILE).
-                                !     uniform - uniform thickness layers evenly distributed
-                                !       between the surface and MAXIMUM_DEPTH.
-                                !     DOME - use a slope and channel configuration for the
-                                !       DOME sill-overflow test case.
-                                !     benchmark - use the benchmark test case thicknesses.
-                                !     search - search a density profile for the interface
-                                !       densities. This is not yet implemented.
-                                !     circle_obcs - the circle_obcs test case is used.
-                                !     DOME2D - 2D version of DOME initialization.
-                                !     adjustment2d - TBD AJA.
-                                !     sloshing - TBD AJA.
-                                !     seamount - TBD AJA.
-                                !     rossby_front - a mixed layer front in thermal wind balance.
-                                !     USER - call a user modified routine.
-THICKNESS_FILE = "GOLD_IC.2010.11.15.nc" !
-                                ! The name of the thickness file.
+TEMP_SALT_Z_INIT_FILE = "WOA05_pottemp_salt.nc" ! default = "temp_salt_z.nc"
+                                ! The name of the z-space input file used to initialize
+                                ! the layer thicknesses, temperatures and salinities.
+Z_INIT_FILE_PTEMP_VAR = "PTEMP" ! default = "ptemp"
+                                ! The name of the potential temperature variable in
+                                ! TEMP_SALT_Z_INIT_FILE.
+Z_INIT_FILE_SALT_VAR = "SALT"   ! default = "salt"
+                                ! The name of the salinity variable in
+                                ! TEMP_SALT_Z_INIT_FILE.
+Z_INIT_HOMOGENIZE = False       !   [Boolean] default = False
+                                ! If True, then horizontally homogenize the interpolated
+                                ! initial conditions.
+Z_INIT_ALE_REMAPPING = False    !   [Boolean] default = False
+                                ! If True, then remap straight to model coordinate from file.
+Z_INIT_REMAPPING_SCHEME = "PPM_IH4" ! default = "PPM_IH4"
+                                ! The remapping scheme to use if using Z_INIT_ALE_REMAPPING
+                                ! is True.
 ADJUST_THICKNESS = True         !   [Boolean] default = False
                                 ! If true, all mass below the bottom removed if the
                                 ! topography is shallower than the thickness input file
                                 ! would indicate.
-TS_CONFIG = "file"              !
-                                ! A string that determines how the initial tempertures
-                                ! and salinities are specified for a new run:
-                                !     file - read velocities from the file specified
-                                !       by (TS_FILE).
-                                !     fit - find the temperatures that are consistent with
-                                !       the layer densities and salinity S_REF.
-                                !     TS_profile - use temperature and salinity profiles
-                                !       (read from TS_FILE) to set layer densities.
-                                !     benchmark - use the benchmark test case T & S.
-                                !     linear - linear in logical layer space.
-                                !     DOME2D - 2D DOME initialization.
-                                !     adjustment2d - TBD AJA.
-                                !     sloshing - TBD AJA.
-                                !     seamount - TBD AJA.
-                                !     rossby_front - a mixed layer front in thermal wind balance.
-                                !     USER - call a user modified routine.
-TS_FILE = "GOLD_IC.2010.11.15.nc" !
-                                ! The initial condition file for temperature.
-TEMP_IC_VAR = "PTEMP"           ! default = "PTEMP"
-                                ! The initial condition variable for potential temperature.
-SALT_IC_VAR = "SALT"            ! default = "SALT"
-                                ! The initial condition variable for salinity.
-SALT_FILE = "GOLD_IC.2010.11.15.nc" ! default = "GOLD_IC.2010.11.15.nc"
-                                ! The initial condition file for salinity.
+FIT_TO_TARGET_DENSITY_IC = True !   [Boolean] default = True
+                                ! If true, all the interior layers are adjusted to
+                                ! their target densities using mostly temperature
+                                ! This approach can be problematic, particularly in the
+                                ! high latitudes.
 VELOCITY_CONFIG = "zero"        ! default = "zero"
                                 ! A string that determines how the initial velocities
                                 ! are specified for a new run:
