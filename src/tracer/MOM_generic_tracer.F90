@@ -522,7 +522,7 @@ contains
           call g_tracer_get_pointer(g_tracer,g_tracer_name,'trunoff',trunoff_array)
           call g_tracer_get_pointer(g_tracer,g_tracer_name,'runoff_tracer_flux',runoff_tracer_flux_array)
           !nnz: Why is fluxes%river = 0?
-          runoff_tracer_flux_array = trunoff_array * fluxes%liq_runoff
+          runoff_tracer_flux_array = trunoff_array * fluxes%lrunoff
           stf_array = stf_array + runoff_tracer_flux_array
        endif
 
