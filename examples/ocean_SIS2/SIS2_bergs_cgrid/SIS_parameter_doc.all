@@ -169,6 +169,17 @@ H_TO_KG_M2 = 1.0                !   [kg m-2 H-1] default = 1.0
                                 ! internal units of thickness to kg m-2.
 GRID_FILE = "ocean_hgrid.nc"    !
                                 ! Name of the file from which to read horizontal grid data.
+AVAILABLE_DIAGS_FILE = "SIS.available_diags" ! default = "SIS.available_diags"
+                                ! A file into which to write a list of all available
+                                ! ocean diagnostics that can be included in a diag_table.
+GRID_CONFIG = "mosaic"          !
+                                ! The method for defining the horizontal grid.  Valid
+                                ! entries include:
+                                !    file - read the grid from GRID_FILE
+                                !    mosaic - read the grid from a mosaic grid file
+                                !    cartesian - a Cartesian grid
+                                !    spherical - a spherical grid
+                                !    mercator  - a Mercator grid
 CP_WATER = 4200.0               !   [J kg-1 K-1] default = 4200.0
                                 ! The heat capacity of sea water, approximated as a
                                 ! constant.
@@ -206,17 +217,6 @@ ICE_DELTA_EDD_R_POND = 0.0      !   [perhaps nondimensional?] default = 0.0
                                 ! A dreadfully documented tuning parameter for the radiative
                                 ! propeties of meltwater ponds on sea ice with the delta-Eddington
                                 ! radiative transfer calculation.
-AVAILABLE_DIAGS_FILE = "SIS.available_diags" ! default = "SIS.available_diags"
-                                ! A file into which to write a list of all available
-                                ! ocean diagnostics that can be included in a diag_table.
-GRID_CONFIG = "mosaic"          !
-                                ! The method for defining the horizontal grid.  Valid
-                                ! entries include:
-                                !    file - read the grid from GRID_FILE
-                                !    mosaic - read the grid from a mosaic grid file
-                                !    cartesian - a Cartesian grid
-                                !    spherical - a spherical grid
-                                !    mercator  - a Mercator grid
 NSTEPS_DYN = 72                 ! default = 432
                                 ! The number of iterations in the EVP dynamics for each
                                 ! slow time step.
