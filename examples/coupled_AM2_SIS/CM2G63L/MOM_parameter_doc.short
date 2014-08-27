@@ -278,10 +278,15 @@ ETA_TOLERANCE = 1.0E-06         !   [m] default = 3.15E-09
                                 ! tolerance for SSH is 4 times this value.  The default
                                 ! is 0.5*NK*ANGSTROM, and this should not be set less x
                                 ! than about 10^-15*MAXIMUM_DEPTH.
-VELOCITY_TOLERANCE = 1.0E-04    !   [m s-1] default = 3.0E+08
-                                ! The tolerance for barotropic velocity discrepancies
-                                ! between the barotropic solution and  the sum of the
-                                ! layer thicknesses.
+CONTINUITY_CFL_LIMIT = 1.0      !   [nondim] default = 0.5
+                                ! The maximum CFL of the adjusted velocities.
+CONT_PPM_BETTER_ITER = False    !   [Boolean] default = True
+                                ! If true, stop corrective iterations using a velocity
+                                ! based criterion and only stop if the iteration is
+                                ! better than all predecessors.
+CONT_PPM_USE_VISC_REM_MAX = False !   [Boolean] default = True
+                                ! If true, use more appropriate limiting bounds for
+                                ! corrections in strongly viscous columns.
 CORIOLIS_EN_DIS = True          !   [Boolean] default = False
                                 ! If true, two estimates of the thickness fluxes are used
                                 ! to estimate the Coriolis term, and the one that
@@ -372,12 +377,22 @@ BOUND_BT_CORRECTION = True      !   [Boolean] default = False
                                 ! The barotropic x-halo size that is actually used.
 !BT y-halo = 0                  !
                                 ! The barotropic y-halo size that is actually used.
-BT_STRONG_DRAG = True           !   [Boolean] default = False
-                                ! If true, use a stronger estimate of the retarding
-                                ! effects of strong bottom drag, by making it implicit
-                                ! with the barotropic time-step instead of implicit with
-                                ! the baroclinic time-step and dividing by the number of
-                                ! barotropic steps.
+USE_BT_CONT_TYPE = False        !   [Boolean] default = True
+                                ! If true, use a structure with elements that describe
+                                ! effective face areas from the summed continuity solver
+                                ! as a function the barotropic flow in coupling between
+                                ! the barotropic and baroclinic flow.  This is only used
+                                ! if SPLIT is true.
+NONLINEAR_BT_CONTINUITY = True  !   [Boolean] default = False
+                                ! If true, use nonlinear transports in the barotropic
+                                ! continuity equation.  This does not apply if
+                                ! USE_BT_CONT_TYPE is true.
+RESCALE_BT_FACE_AREAS = True    !   [Boolean] default = False
+                                ! If true, the face areas used by the barotropic solver
+                                ! are rescaled to approximately reflect the open face
+                                ! areas of the interior layers.  This probably requires
+                                ! FLUX_BT_COUPLING to work, and should not be used with
+                                ! USE_BT_CONT_TYPE.
 DT_BT_FILTER = 0.0              !   [sec or nondim] default = -0.25
                                 ! A time-scale over which the barotropic mode solutions
                                 ! are filtered, in seconds if positive, or as a fraction

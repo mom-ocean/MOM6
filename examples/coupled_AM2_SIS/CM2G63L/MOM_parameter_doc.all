@@ -688,7 +688,7 @@ ETA_TOLERANCE_AUX = 1.0E-06     !   [m] default = 1.0E-06
                                 ! layer thicknesses when calculating the auxiliary
                                 ! corrected velocities. By default, this is the same as
                                 ! ETA_TOLERANCE, but can be made larger for efficiency.
-VELOCITY_TOLERANCE = 1.0E-04    !   [m s-1] default = 3.0E+08
+VELOCITY_TOLERANCE = 3.0E+08    !   [m s-1] default = 3.0E+08
                                 ! The tolerance for barotropic velocity discrepancies
                                 ! between the barotropic solution and  the sum of the
                                 ! layer thicknesses.
@@ -699,13 +699,13 @@ CONT_PPM_VOLUME_BASED_CFL = False !   [Boolean] default = False
                                 ! If true, use the ratio of the open face lengths to the
                                 ! tracer cell areas when estimating CFL numbers.  The
                                 ! default is set by CONT_PPM_AGGRESS_ADJUST.
-CONTINUITY_CFL_LIMIT = 0.5      !   [nondim] default = 0.5
+CONTINUITY_CFL_LIMIT = 1.0      !   [nondim] default = 0.5
                                 ! The maximum CFL of the adjusted velocities.
-CONT_PPM_BETTER_ITER = True     !   [Boolean] default = True
+CONT_PPM_BETTER_ITER = False    !   [Boolean] default = True
                                 ! If true, stop corrective iterations using a velocity
                                 ! based criterion and only stop if the iteration is
                                 ! better than all predecessors.
-CONT_PPM_USE_VISC_REM_MAX = True !   [Boolean] default = True
+CONT_PPM_USE_VISC_REM_MAX = False !   [Boolean] default = True
                                 ! If true, use more appropriate limiting bounds for
                                 ! corrections in strongly viscous columns.
 NOSLIP = False                  !   [Boolean] default = False
@@ -953,17 +953,21 @@ BTHALO = 0                      ! default = 0
                                 ! The barotropic x-halo size that is actually used.
 !BT y-halo = 0                  !
                                 ! The barotropic y-halo size that is actually used.
-USE_BT_CONT_TYPE = True         !   [Boolean] default = True
+USE_BT_CONT_TYPE = False        !   [Boolean] default = True
                                 ! If true, use a structure with elements that describe
                                 ! effective face areas from the summed continuity solver
                                 ! as a function the barotropic flow in coupling between
                                 ! the barotropic and baroclinic flow.  This is only used
                                 ! if SPLIT is true.
-NONLINEAR_BT_CONTINUITY = False !   [Boolean] default = False
+NONLINEAR_BT_CONTINUITY = True  !   [Boolean] default = False
                                 ! If true, use nonlinear transports in the barotropic
                                 ! continuity equation.  This does not apply if
                                 ! USE_BT_CONT_TYPE is true.
-RESCALE_BT_FACE_AREAS = False   !   [Boolean] default = False
+NONLIN_BT_CONT_UPDATE_PERIOD = 1 !   [nondim] default = 1
+                                ! If NONLINEAR_BT_CONTINUITY is true, this is the number
+                                ! of barotropic time steps between updates to the face
+                                ! areas, or 0 to update only before the barotropic stepping.
+RESCALE_BT_FACE_AREAS = True    !   [Boolean] default = False
                                 ! If true, the face areas used by the barotropic solver
                                 ! are rescaled to approximately reflect the open face
                                 ! areas of the interior layers.  This probably requires
@@ -1006,7 +1010,7 @@ BT_THICK_SCHEME = "HYBRID"      ! default = "HYBRID"
 APPLY_BT_DRAG = True            !   [Boolean] default = True
                                 ! If defined, bottom drag is applied within the
                                 ! barotropic solver.
-BT_STRONG_DRAG = True           !   [Boolean] default = False
+BT_STRONG_DRAG = False          !   [Boolean] default = False
                                 ! If true, use a stronger estimate of the retarding
                                 ! effects of strong bottom drag, by making it implicit
                                 ! with the barotropic time-step instead of implicit with
