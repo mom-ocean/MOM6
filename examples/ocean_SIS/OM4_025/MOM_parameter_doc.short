@@ -33,13 +33,28 @@ NJGLOBAL = 1080                 !
                                 ! The total number of thickness grid points in the
                                 ! y-direction in the physical domain. With STATIC_MEMORY_
                                 ! this is set in MOM_memory.h at compile time.
-!NIPROC = 16                    !
+MASKTABLE = "mask_table.96.32x18" ! default = "MOM_mask_table"
+                                ! A text file to specify n_mask, layout and mask_list.
+                                ! This feature masks out processors that contain only land points.
+                                ! The first line of mask_table is the number of regions to be masked out.
+                                ! The second line is the layout of the model and must be
+                                ! consistent with the actual model layout.
+                                ! The following (n_mask) lines give the logical positions
+                                ! of the processors that are masked out. The mask_table
+                                ! can be created by tools like check_mask. The
+                                ! following example of mask_table masks out 2 processors,
+                                ! (1,2) and (3,6), out of the 24 in a 4x6 layout:
+                                !  2
+                                !  4,6
+                                !  1,2
+                                !  3,6
+!NIPROC = 32                    !
                                 ! The number of processors in the x-direction. With
                                 ! STATIC_MEMORY_ this is set in MOM_memory.h at compile time.
-!NJPROC = 32                    !
+!NJPROC = 18                    !
                                 ! The number of processors in the x-direction. With
                                 ! STATIC_MEMORY_ this is set in MOM_memory.h at compile time.
-!LAYOUT = 16, 32                !
+!LAYOUT = 32, 18                !
                                 ! The processor layout that was acutally used.
 IO_LAYOUT = 2, 2                ! default = 0
                                 ! The processor layout to be used, or 0,0 to automatically
