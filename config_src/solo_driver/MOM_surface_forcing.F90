@@ -325,18 +325,9 @@ subroutine wind_forcing_allocate(fluxes, G)
   isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
-  if (.not.associated(fluxes%taux)) then
-    allocate(fluxes%taux(IsdB:IedB,jsd:jed)) 
-    fluxes%taux(:,:) = 0.0
-  endif
-  if (.not.associated(fluxes%tauy)) then
-    allocate(fluxes%tauy(isd:ied,JsdB:JedB)) 
-    fluxes%tauy(:,:) = 0.0
-  endif
-  if (.not.associated(fluxes%ustar)) then
-    allocate(fluxes%ustar(isd:ied,jsd:jed)) 
-    fluxes%ustar(:,:) = 0.0
-  endif
+  call safe_alloc_ptr(fluxes%taux,IsdB,IedB,jsd,jed)
+  call safe_alloc_ptr(fluxes%tauy,isd,ied,JsdB,JedB)
+  call safe_alloc_ptr(fluxes%ustar,isd,ied,jsd,jed)
 
 end subroutine wind_forcing_allocate
 
@@ -366,120 +357,42 @@ subroutine buoyancy_forcing_allocate(fluxes, G, CS)
 
     ! specify surface freshwater forcing by setting the following (kg/(m^2 * s))
     ! with convention that positive values for water entering ocean.
-    if (.not.associated(fluxes%evap)) then
-      allocate(fluxes%evap(isd:ied,jsd:jed))
-      fluxes%evap(:,:) = 0.0
-    endif
-    if (.not.associated(fluxes%lprec)) then
-      allocate(fluxes%lprec(isd:ied,jsd:jed))
-      fluxes%lprec(:,:) = 0.0
-    endif
-    if (.not.associated(fluxes%fprec)) then
-      allocate(fluxes%fprec(isd:ied,jsd:jed))
-      fluxes%fprec(:,:) = 0.0
-    endif
-    if (.not.associated(fluxes%vprec)) then
-      allocate(fluxes%vprec(isd:ied,jsd:jed))
-      fluxes%vprec(:,:) = 0.0
-    endif
-    if (.not.associated(fluxes%lrunoff)) then
-      allocate(fluxes%lrunoff(isd:ied,jsd:jed))
-      fluxes%lrunoff(:,:) = 0.0
-    endif
-    if (.not.associated(fluxes%frunoff)) then
-      allocate(fluxes%frunoff(isd:ied,jsd:jed))
-      fluxes%frunoff(:,:) = 0.0
-    endif
-    if (.not.associated(fluxes%seaice_melt)) then
-      allocate(fluxes%seaice_melt(isd:ied,jsd:jed))
-      fluxes%seaice_melt(:,:) = 0.0
-    endif
+    call safe_alloc_ptr(fluxes%evap,isd,ied,jsd,jed)
+    call safe_alloc_ptr(fluxes%lprec,isd,ied,jsd,jed)
+    call safe_alloc_ptr(fluxes%fprec,isd,ied,jsd,jed)
+    call safe_alloc_ptr(fluxes%vprec,isd,ied,jsd,jed)
+    call safe_alloc_ptr(fluxes%lrunoff,isd,ied,jsd,jed)
+    call safe_alloc_ptr(fluxes%frunoff,isd,ied,jsd,jed)
+    call safe_alloc_ptr(fluxes%seaice_melt,isd,ied,jsd,jed)
 
     ! specify surface heat fluxes by setting the following (Watts/m^2)
     ! with convention that positive values for heat fluxes into the ocean.
-    if (.not.associated(fluxes%sw)) then
-      allocate(fluxes%sw(isd:ied,jsd:jed))          
-      fluxes%sw(:,:) = 0.0
-    endif
-    if (.not.associated(fluxes%lw)) then
-      allocate(fluxes%lw(isd:ied,jsd:jed)) 
-      fluxes%lw(:,:) = 0.0
-    endif
-    if (.not.associated(fluxes%latent)) then
-      allocate(fluxes%latent(isd:ied,jsd:jed))
-      fluxes%latent(:,:) = 0.0
-    endif
-    if (.not.associated(fluxes%latent_evap_diag)) then
-      allocate(fluxes%latent_evap_diag(isd:ied,jsd:jed))
-      fluxes%latent_evap_diag(:,:) = 0.0
-    endif
-    if (.not.associated(fluxes%latent_fprec_diag)) then
-      allocate(fluxes%latent_fprec_diag(isd:ied,jsd:jed))
-      fluxes%latent_fprec_diag(:,:) = 0.0
-    endif
-    if (.not.associated(fluxes%latent_frunoff_diag)) then
-      allocate(fluxes%latent_frunoff_diag(isd:ied,jsd:jed))
-      fluxes%latent_frunoff_diag(:,:) = 0.0
-    endif
-    if (.not.associated(fluxes%sens)) then
-      allocate(fluxes%sens(isd:ied,jsd:jed))
-      fluxes%sens(:,:) = 0.0
-    endif
-    if (.not.associated(fluxes%heat_content_cond)) then
-      allocate(fluxes%heat_content_cond(isd:ied,jsd:jed))
-      fluxes%heat_content_cond(:,:) = 0.0
-    endif
-    if (.not.associated(fluxes%heat_content_lprec)) then
-      allocate(fluxes%heat_content_lprec(isd:ied,jsd:jed))
-      fluxes%heat_content_lprec(:,:) = 0.0
-    endif
-    if (.not.associated(fluxes%heat_content_fprec)) then
-      allocate(fluxes%heat_content_fprec(isd:ied,jsd:jed))
-      fluxes%heat_content_fprec(:,:) = 0.0
-    endif
-    if (.not.associated(fluxes%heat_content_vprec)) then
-      allocate(fluxes%heat_content_vprec(isd:ied,jsd:jed))
-      fluxes%heat_content_vprec(:,:) = 0.0
-    endif
-    if (.not.associated(fluxes%heat_content_lrunoff)) then
-      allocate(fluxes%heat_content_lrunoff(isd:ied,jsd:jed))
-      fluxes%heat_content_lrunoff(:,:) = 0.0
-    endif
-    if (.not.associated(fluxes%heat_content_frunoff)) then
-      allocate(fluxes%heat_content_frunoff(isd:ied,jsd:jed))
-      fluxes%heat_content_frunoff(:,:) = 0.0
-    endif
-    if (.not.associated(fluxes%heat_content_massout)) then
-      allocate(fluxes%heat_content_massout(isd:ied,jsd:jed))
-      fluxes%heat_content_massout(:,:) = 0.0
-    endif
+    call safe_alloc_ptr(fluxes%sw,isd,ied,jsd,jed)          
+    call safe_alloc_ptr(fluxes%lw,isd,ied,jsd,jed) 
+    call safe_alloc_ptr(fluxes%latent,isd,ied,jsd,jed)
+    call safe_alloc_ptr(fluxes%latent_evap_diag,isd,ied,jsd,jed)
+    call safe_alloc_ptr(fluxes%latent_fprec_diag,isd,ied,jsd,jed)
+    call safe_alloc_ptr(fluxes%latent_frunoff_diag,isd,ied,jsd,jed)
+    call safe_alloc_ptr(fluxes%sens,isd,ied,jsd,jed)
+    call safe_alloc_ptr(fluxes%heat_content_cond,isd,ied,jsd,jed)
+    call safe_alloc_ptr(fluxes%heat_content_lprec,isd,ied,jsd,jed)
+    call safe_alloc_ptr(fluxes%heat_content_fprec,isd,ied,jsd,jed)
+    call safe_alloc_ptr(fluxes%heat_content_vprec,isd,ied,jsd,jed)
+    call safe_alloc_ptr(fluxes%heat_content_lrunoff,isd,ied,jsd,jed)
+    call safe_alloc_ptr(fluxes%heat_content_frunoff,isd,ied,jsd,jed)
+    call safe_alloc_ptr(fluxes%heat_content_massout,isd,ied,jsd,jed)
 
     ! surface restoring fields 
     if (CS%restorebuoy) then
-      if (.not.associated(CS%T_Restore)) then
-        allocate(CS%T_Restore(isd:ied,jsd:jed))
-        CS%T_Restore(:,:) = 0.0
-      endif
-      if (.not.associated(fluxes%heat_restore)) then
-        allocate(fluxes%heat_restore(isd:ied,jsd:jed))
-        fluxes%heat_restore(:,:) = 0.0
-      endif
-      if (.not.associated(CS%S_Restore)) then
-        allocate(CS%S_Restore(isd:ied,jsd:jed))
-        CS%S_Restore(:,:) = 0.0
-      endif
+      call safe_alloc_ptr(CS%T_Restore,isd,ied,jsd,jed)
+      call safe_alloc_ptr(fluxes%heat_restore,isd,ied,jsd,jed)
+      call safe_alloc_ptr(CS%S_Restore,isd,ied,jsd,jed)
     endif
 
   else ! CS%use_temperature false.
 
-    if (.not.associated(fluxes%buoy)) then
-      allocate(fluxes%buoy(isd:ied,jsd:jed)) 
-      fluxes%buoy(:,:) = 0.0
-    endif
-    if (CS%restorebuoy .and. .not.associated(CS%Dens_Restore)) then
-      allocate(CS%Dens_Restore(isd:ied,jsd:jed))
-      CS%Dens_Restore(:,:) = 0.0
-    endif
+    call safe_alloc_ptr(fluxes%buoy,isd,ied,jsd,jed) 
+    if (CS%restorebuoy) call safe_alloc_ptr(CS%Dens_Restore,isd,ied,jsd,jed)
 
   endif  ! endif for  CS%use_temperature
 
@@ -868,15 +781,9 @@ subroutine wind_forcing_by_data_override(state, fluxes, day, G, CS)
   logical :: read_uStar
 
   call callTree_enter("wind_forcing_by_data_override, MOM_surface_forcing.F90")
-  if (.not.associated(fluxes%taux)) then
-    allocate(fluxes%taux(G%IsdB:G%IedB,G%jsd:G%jed)) ; fluxes%taux(:,:) = 0.0
-  endif
-  if (.not.associated(fluxes%tauy)) then
-    allocate(fluxes%tauy(G%isd:G%ied,G%JsdB:G%JedB)) ; fluxes%tauy(:,:) = 0.0
-  endif
-  if (.not.associated(fluxes%ustar)) then
-    allocate(fluxes%ustar(G%isd:G%ied,G%jsd:G%jed)) ; fluxes%ustar(:,:) = 0.0
-  endif
+  call safe_alloc_ptr(fluxes%taux,G%IsdB,G%IedB,G%jsd,G%jed)
+  call safe_alloc_ptr(fluxes%tauy,G%isd,G%ied,G%JsdB,G%JedB)
+  call safe_alloc_ptr(fluxes%ustar,G%isd,G%ied,G%jsd,G%jed)
 
   if (.not.CS%dataOverrideIsInitialized) then
     call data_override_init(Ocean_domain_in=G%Domain%mpp_domain)
@@ -2020,7 +1927,7 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, tracer_flow_CSp)
     call get_param(param_file, mod, "GUST_2D_FILE", gust_file, &
                  "The file in which the wind gustiness is found in \n"//&
                  "variable gustiness.", fail_if_missing=.true.)
-    call safe_alloc_ptr(CS%gust,G%isd,G%ied,G%jsd,G%jed) ; CS%gust(:,:) = 0.0
+    call safe_alloc_ptr(CS%gust,G%isd,G%ied,G%jsd,G%jed)
     filename = trim(CS%inputdir) // trim(gust_file)
     call read_data(filename,'gustiness',CS%gust,domain=G%domain%mpp_domain, &
                    timelevel=1) ! units should be Pa

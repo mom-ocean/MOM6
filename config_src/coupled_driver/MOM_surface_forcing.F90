@@ -292,87 +292,51 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
   ! allocation and initialization on first call to this routine 
   if (CS%first_call) then
     call safe_alloc_ptr(fluxes%taux,IsdB,IedB,jsd,jed)               
-       fluxes%taux(:,:)                = 0.0
     call safe_alloc_ptr(fluxes%tauy,isd,ied,JsdB,JedB)   
-       fluxes%tauy(:,:)                = 0.0
     call safe_alloc_ptr(fluxes%ustar,isd,ied,jsd,jed)                
-       fluxes%ustar(:,:)               = 0.0
 
     call safe_alloc_ptr(fluxes%evap,isd,ied,jsd,jed)                 
-       fluxes%evap(:,:)                = 0.0
     call safe_alloc_ptr(fluxes%lprec,isd,ied,jsd,jed)           
-       fluxes%lprec(:,:)               = 0.0
     call safe_alloc_ptr(fluxes%fprec,isd,ied,jsd,jed)          
-       fluxes%fprec(:,:)               = 0.0
     call safe_alloc_ptr(fluxes%vprec,isd,ied,jsd,jed)          
-       fluxes%vprec(:,:)               = 0.0
     call safe_alloc_ptr(fluxes%seaice_melt,isd,ied,jsd,jed)          
-       fluxes%seaice_melt(:,:)         = 0.0
 
     call safe_alloc_ptr(fluxes%sw,isd,ied,jsd,jed)                   
-       fluxes%sw(:,:)                  = 0.0
     call safe_alloc_ptr(fluxes%sw_vis_dir,isd,ied,jsd,jed)           
-       fluxes%sw_vis_dir(:,:)          = 0.0
     call safe_alloc_ptr(fluxes%sw_vis_dif,isd,ied,jsd,jed)           
-       fluxes%sw_vis_dif(:,:)          = 0.0
     call safe_alloc_ptr(fluxes%sw_nir_dir,isd,ied,jsd,jed)          
-       fluxes%sw_nir_dir(:,:)          = 0.0
     call safe_alloc_ptr(fluxes%sw_nir_dif,isd,ied,jsd,jed)           
-       fluxes%sw_nir_dif(:,:)          = 0.0
     call safe_alloc_ptr(fluxes%lw,isd,ied,jsd,jed)                   
-       fluxes%lw(:,:)                  = 0.0
     call safe_alloc_ptr(fluxes%latent,isd,ied,jsd,jed)               
-       fluxes%latent(:,:)              = 0.0
     call safe_alloc_ptr(fluxes%latent_evap_diag,isd,ied,jsd,jed)          
-       fluxes%latent_evap_diag(:,:)         = 0.0
     call safe_alloc_ptr(fluxes%latent_fprec_diag,isd,ied,jsd,jed)         
-       fluxes%latent_fprec_diag(:,:)        = 0.0
     call safe_alloc_ptr(fluxes%latent_frunoff_diag,isd,ied,jsd,jed)         
-       fluxes%latent_frunoff_diag(:,:)      = 0.0
     call safe_alloc_ptr(fluxes%sens,isd,ied,jsd,jed)                 
-       fluxes%sens(:,:)                = 0.0
 
     call safe_alloc_ptr(fluxes%p_surf,isd,ied,jsd,jed)               
-       fluxes%p_surf(:,:)              = 0.0
     call safe_alloc_ptr(fluxes%p_surf_full,isd,ied,jsd,jed)          
-       fluxes%p_surf_full(:,:)         = 0.0
 
     call safe_alloc_ptr(fluxes%salt_flux,isd,ied,jsd,jed)            
-       fluxes%salt_flux(:,:)           = 0.0
     call safe_alloc_ptr(fluxes%salt_flux_in,isd,ied,jsd,jed)         
-       fluxes%salt_flux_in(:,:)        = 0.0
     call safe_alloc_ptr(fluxes%salt_flux_restore,isd,ied,jsd,jed)    
-       fluxes%salt_flux_restore(:,:)   = 0.0
 
     call safe_alloc_ptr(fluxes%TKE_tidal,isd,ied,jsd,jed)            
-       fluxes%TKE_tidal(:,:)           = 0.0
     call safe_alloc_ptr(fluxes%ustar_tidal,isd,ied,jsd,jed)          
-       fluxes%ustar_tidal(:,:)         = 0.0
 
     call safe_alloc_ptr(fluxes%lrunoff,isd,ied,jsd,jed)           
-       fluxes%lrunoff(:,:)             = 0.0        
     call safe_alloc_ptr(fluxes%frunoff,isd,ied,jsd,jed)          
-       fluxes%frunoff(:,:)             = 0.0        
 
     call safe_alloc_ptr(fluxes%heat_content_cond,isd,ied,jsd,jed)  
-       fluxes%heat_content_cond(:,:)   = 0.0        
     call safe_alloc_ptr(fluxes%heat_content_lprec,isd,ied,jsd,jed)  
-       fluxes%heat_content_lprec(:,:)  = 0.0        
     call safe_alloc_ptr(fluxes%heat_content_fprec,isd,ied,jsd,jed)  
-       fluxes%heat_content_fprec(:,:)  = 0.0        
     call safe_alloc_ptr(fluxes%heat_content_vprec,isd,ied,jsd,jed)  
-       fluxes%heat_content_vprec(:,:)  = 0.0        
     call safe_alloc_ptr(fluxes%heat_content_frunoff,isd,ied,jsd,jed) 
-       fluxes%heat_content_frunoff(:,:)= 0.0        
     call safe_alloc_ptr(fluxes%heat_content_lrunoff,isd,ied,jsd,jed)  
-       fluxes%heat_content_lrunoff(:,:) = 0.0        
     call safe_alloc_ptr(fluxes%heat_content_massout,isd,ied,jsd,jed)  
-       fluxes%heat_content_massout(:,:) = 0.0        
 
     if (CS%rigid_sea_ice) then
       call safe_alloc_ptr(fluxes%rigidity_ice_u,IsdB,IedB,jsd,jed)
       call safe_alloc_ptr(fluxes%rigidity_ice_v,isd,ied,JsdB,JedB)
-      fluxes%rigidity_ice_u(:,:) = 0.0 ; fluxes%rigidity_ice_v(:,:) = 0.0  
     endif
 
     CS%first_call = .false.
@@ -961,8 +925,8 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt)
                  units="m s-1", default=0.0)
   endif
 
-  call safe_alloc_ptr(CS%TKE_tidal,isd,ied,jsd,jed)   ; CS%TKE_tidal(:,:) = 0.0
-  call safe_alloc_ptr(CS%ustar_tidal,isd,ied,jsd,jed) ; CS%ustar_tidal(:,:) = 0.0
+  call safe_alloc_ptr(CS%TKE_tidal,isd,ied,jsd,jed)
+  call safe_alloc_ptr(CS%ustar_tidal,isd,ied,jsd,jed)
   
   if (CS%read_TIDEAMP) then    
     TideAmp_file = trim(CS%inputdir) // trim(TideAmp_file)
@@ -996,7 +960,7 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt)
                  "The file in which the wind gustiness is found in \n"//&
                  "variable gustiness.")
 
-    call safe_alloc_ptr(CS%gust,isd,ied,jsd,jed) ; CS%gust(:,:) = 0.0
+    call safe_alloc_ptr(CS%gust,isd,ied,jsd,jed)
     gust_file = trim(CS%inputdir) // trim(gust_file)
     call read_data(gust_file,'gustiness',CS%gust,domain=G%domain%mpp_domain, &
                    timelevel=1) ! units should be Pa

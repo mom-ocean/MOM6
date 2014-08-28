@@ -1512,7 +1512,7 @@ end subroutine forcing_diagnostics
 !> Deallocates the forcing type
 subroutine deallocate_forcing_type(fluxes)
   type(forcing), intent(inout) :: fluxes
-  if (associated(fluxes%taux))                deallocate(fluxes%taux)
+  if (associated(fluxes%taux))                 deallocate(fluxes%taux)
   if (associated(fluxes%tauy))                 deallocate(fluxes%tauy)
   if (associated(fluxes%ustar))                deallocate(fluxes%ustar)
   if (associated(fluxes%buoy))                 deallocate(fluxes%buoy)
