@@ -1599,6 +1599,10 @@ RESTORE_SALINITY = True         !   [Boolean] default = False
                                 ! toward specified values.
 
 ! === module MOM_surface_forcing ===
+LATENT_HEAT_FUSION = 3.34E+05   !   [J/kg] default = 3.34E+05
+                                ! The latent heat of fusion.
+LATENT_HEAT_VAPORIZATION = 2.5E+06 !   [J/kg] default = 2.5E+06
+                                ! The latent heat of fusion.
 MAX_P_SURF = 7.0E+04            !   [Pa] default = -1.0
                                 ! The maximum surface pressure that can be exerted by the
                                 ! atmosphere and floating sea-ice or ice shelves. This is

@@ -119,6 +119,8 @@ type, public :: surface_forcing_CS ; private
   real :: Rho0                  ! Boussinesq reference density (kg/m^3)
   real :: G_Earth               ! gravitational acceleration (m/s^2)
   real :: Flux_const            ! piston velocity for surface restoring (m/s)
+  real :: latent_heat_fusion    ! latent heat of fusion (J/kg)
+  real :: latent_heat_vapor     ! latent heat of vaporization (J/kg)
 
   real    :: gust_const                 ! constant unresolved background gustiness for ustar (Pa)
   logical :: read_gust_2d               ! if true, use 2-dimensional gustiness supplied from a file
@@ -964,12 +966,6 @@ subroutine buoyancy_forcing_from_files(state, fluxes, day, dt, G, CS)
   integer :: days, seconds
   integer :: i, j, is, ie, js, je
 
-  ! latent heat of vaporization 
-  ! smg:
-  real :: latent_heat_evap=2.4663e6   ! value at 15 deg C according to appendix of Gill
-!   real :: latent_heat_evap = hlv 
-
-
   call callTree_enter("buoyancy_forcing_from_files, MOM_surface_forcing.F90")
 
   is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je = G%jec
@@ -1029,7 +1025,7 @@ subroutine buoyancy_forcing_from_files(state, fluxes, day, dt, G, CS)
       call read_data(CS%evaporation_file, CS%evap_var, temp(:,:), &
                      domain=G%Domain%mpp_domain, timelevel=time_lev)
       do j=js,je ; do i=is,ie
-        fluxes%latent(i,j)           = -latent_heat_evap*temp(i,j)
+        fluxes%latent(i,j)           = -CS%latent_heat_vapor*temp(i,j)
         fluxes%evap(i,j)             = -temp(i,j)
         fluxes%latent_evap_diag(i,j) = fluxes%latent(i,j)
       enddo ; enddo
@@ -1189,8 +1185,8 @@ subroutine buoyancy_forcing_from_files(state, fluxes, day, dt, G, CS)
       fluxes%heat_content_lrunoff(i,j) = fluxes%C_p*fluxes%lrunoff(i,j)*state%SST(i,j) 
       fluxes%heat_content_frunoff(i,j) = 0.0
       fluxes%latent_evap_diag(i,j)     = fluxes%latent_evap_diag(i,j) * G%mask2dT(i,j)
-      fluxes%latent_fprec_diag(i,j)    = -fluxes%fprec(i,j)*hlf
-      fluxes%latent_frunoff_diag(i,j)  = -fluxes%frunoff(i,j)*hlf
+      fluxes%latent_fprec_diag(i,j)    = -fluxes%fprec(i,j)*CS%latent_heat_fusion
+      fluxes%latent_frunoff_diag(i,j)  = -fluxes%frunoff(i,j)*CS%latent_heat_fusion
     enddo ; enddo
 
   endif ! time_lev /= CS%buoy_last_lev_read
@@ -1298,13 +1294,6 @@ subroutine buoyancy_forcing_from_data_override(state, fluxes, day, dt, G, CS)
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
   integer :: is_in, ie_in, js_in, je_in
 
-  ! latent heat of vaporization
-  ! smg:
-  real :: latent_heat_evap=2.4663e6   ! value at 15 deg C according to appendix of Gill
-!   real :: latent_heat_evap = hlv
-
-
-
   call callTree_enter("buoyancy_forcing_from_data_override, MOM_surface_forcing.F90")
 
   is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec
@@ -1335,7 +1324,7 @@ subroutine buoyancy_forcing_from_data_override(state, fluxes, day, dt, G, CS)
   do j=js,je ; do i=is,ie
      fluxes%evap(i,j) = -fluxes%evap(i,j)  ! Normal convention is positive into the ocean
                                            ! but evap is normally a positive quantity in the files
-     fluxes%latent(i,j)           = latent_heat_evap*fluxes%evap(i,j)
+     fluxes%latent(i,j)           = CS%latent_heat_vapor*fluxes%evap(i,j)
      fluxes%latent_evap_diag(i,j) = fluxes%latent(i,j)
   enddo; enddo
 
@@ -1443,8 +1432,8 @@ subroutine buoyancy_forcing_from_data_override(state, fluxes, day, dt, G, CS)
     fluxes%heat_content_lrunoff(i,j) = fluxes%C_p*fluxes%lrunoff(i,j)*state%SST(i,j) 
     fluxes%heat_content_frunoff(i,j) = 0.0
     fluxes%latent_evap_diag(i,j)     = fluxes%latent_evap_diag(i,j) * G%mask2dT(i,j)
-    fluxes%latent_fprec_diag(i,j)    = -fluxes%fprec(i,j)*hlf
-    fluxes%latent_frunoff_diag(i,j)  = -fluxes%frunoff(i,j)*hlf
+    fluxes%latent_fprec_diag(i,j)    = -fluxes%fprec(i,j)*CS%latent_heat_fusion
+    fluxes%latent_frunoff_diag(i,j)  = -fluxes%frunoff(i,j)*CS%latent_heat_fusion
   enddo ; enddo
 
 
@@ -1986,6 +1975,10 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, tracer_flow_CSp)
                  "If true, the buoyancy fluxes drive the model back \n"//&
                  "toward some specified surface state with a rate \n"//&
                  "given by FLUXCONST.", default= .false.)
+  call get_param(param_file, mod, "LATENT_HEAT_FUSION", CS%latent_heat_fusion, &
+                 "The latent heat of fusion.", units="J/kg", default=hlf)
+  call get_param(param_file, mod, "LATENT_HEAT_VAPORIZATION", CS%latent_heat_vapor, &
+                 "The latent heat of fusion.", units="J/kg", default=hlv)
   if (CS%restorebuoy) then
     call get_param(param_file, mod, "FLUXCONST", CS%Flux_const, &
                  "The constant that relates the restoring surface fluxes \n"//&

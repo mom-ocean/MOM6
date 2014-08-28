@@ -1274,6 +1274,10 @@ RESTOREBUOY = False             !   [Boolean] default = False
                                 ! If true, the buoyancy fluxes drive the model back
                                 ! toward some specified surface state with a rate
                                 ! given by FLUXCONST.
+LATENT_HEAT_FUSION = 3.34E+05   !   [J/kg] default = 3.34E+05
+                                ! The latent heat of fusion.
+LATENT_HEAT_VAPORIZATION = 2.5E+06 !   [J/kg] default = 2.5E+06
+                                ! The latent heat of fusion.
 GUST_CONST = 0.02               !   [Pa] default = 0.02
                                 ! The background gustiness in the winds.
 READ_GUST_2D = False            !   [Boolean] default = False

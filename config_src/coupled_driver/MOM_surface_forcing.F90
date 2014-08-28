@@ -94,6 +94,8 @@ type, public :: surface_forcing_CS ; private
 
   real :: Rho0                  ! Boussinesq reference density (kg/m^3)
   real :: area_surf             ! total ocean surface area (m^2)
+  real :: latent_heat_fusion    ! latent heat of fusion (J/kg)
+  real :: latent_heat_vapor     ! latent heat of vaporization (J/kg)
 
   real :: max_p_surf            ! maximum surface pressure that can be
                                 ! exerted by the atmosphere and floating sea-ice,
@@ -489,15 +491,18 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
       fluxes%sens(i,j) = - IOB%t_flux(i-i0,j-j0) * G%mask2dT(i,j)
 
     fluxes%latent(i,j) = 0.0
-    if (ASSOCIATED(IOB%fprec))                                                             &
-      fluxes%latent(i,j)            = fluxes%latent(i,j) - IOB%fprec(i-i0,j-j0)*hlf      ; &
-      fluxes%latent_fprec_diag(i,j) = -G%mask2dT(i,j) * IOB%fprec(i-i0,j-j0)*hlf
-    if (ASSOCIATED(IOB%calving))                                                           &
-      fluxes%latent(i,j)              = fluxes%latent(i,j) - IOB%calving(i-i0,j-j0)*hlf  ; &
-      fluxes%latent_frunoff_diag(i,j) = -G%mask2dT(i,j) * IOB%calving(i-i0,j-j0)*hlf
-    if (ASSOCIATED(IOB%q_flux))                                                            &
-      fluxes%latent(i,j)           = fluxes%latent(i,j) - IOB%q_flux(i-i0,j-j0)*hlv      ; & 
-      fluxes%latent_evap_diag(i,j) = -G%mask2dT(i,j) * IOB%q_flux(i-i0,j-j0)*hlv
+    if (ASSOCIATED(IOB%fprec)) then
+      fluxes%latent(i,j)            = fluxes%latent(i,j) - IOB%fprec(i-i0,j-j0)*CS%latent_heat_fusion
+      fluxes%latent_fprec_diag(i,j) = -G%mask2dT(i,j) * IOB%fprec(i-i0,j-j0)*CS%latent_heat_fusion
+    endif
+    if (ASSOCIATED(IOB%calving)) then
+      fluxes%latent(i,j)              = fluxes%latent(i,j) - IOB%calving(i-i0,j-j0)*CS%latent_heat_fusion
+      fluxes%latent_frunoff_diag(i,j) = -G%mask2dT(i,j) * IOB%calving(i-i0,j-j0)*CS%latent_heat_fusion
+    endif
+    if (ASSOCIATED(IOB%q_flux)) then
+      fluxes%latent(i,j)           = fluxes%latent(i,j) - IOB%q_flux(i-i0,j-j0)*CS%latent_heat_vapor
+      fluxes%latent_evap_diag(i,j) = -G%mask2dT(i,j) * IOB%q_flux(i-i0,j-j0)*CS%latent_heat_vapor
+    endif
 
     fluxes%latent(i,j) = G%mask2dT(i,j) * fluxes%latent(i,j)
 
@@ -854,6 +859,10 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt)
                  "properties, or with BOUSSINSEQ false to convert some \n"//&
                  "parameters from vertical units of m to kg m-2.", &
                  units="kg m-3", default=1035.0)
+  call get_param(param_file, mod, "LATENT_HEAT_FUSION", CS%latent_heat_fusion, &
+                 "The latent heat of fusion.", units="J/kg", default=hlf)
+  call get_param(param_file, mod, "LATENT_HEAT_VAPORIZATION", CS%latent_heat_vapor, &
+                 "The latent heat of fusion.", units="J/kg", default=hlv)
   call get_param(param_file, mod, "MAX_P_SURF", CS%max_p_surf, &
                  "The maximum surface pressure that can be exerted by the \n"//&
                  "atmosphere and floating sea-ice or ice shelves. This is \n"//&
