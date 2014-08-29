@@ -242,6 +242,7 @@ subroutine set_forcing(state, fluxes, day_start, day_interval, G, CS)
 
   ! calls to various wind options 
   if (CS%variable_winds .or. CS%first_call_set_forcing) then
+    if (CS%first_call_set_forcing) call wind_forcing_allocate(fluxes, G)
     if (trim(CS%wind_config) == "file") then
       call wind_forcing_from_file(state, fluxes, day_center, G, CS)
     elseif (trim(CS%wind_config) == "data_override") then
@@ -271,14 +272,19 @@ subroutine set_forcing(state, fluxes, day_start, day_interval, G, CS)
   if ((CS%variable_buoyforce .or. CS%first_call_set_forcing) .and. &
       (.not.CS%adiabatic)) then
     if (trim(CS%buoy_config) == "file") then
+      if (CS%first_call_set_forcing) call buoyancy_forcing_allocate(fluxes, G, CS)
       call buoyancy_forcing_from_files(state, fluxes, day_center, dt, G, CS)
     elseif (trim(CS%buoy_config) == "data_override") then
+      if (CS%first_call_set_forcing) call buoyancy_forcing_allocate(fluxes, G, CS)
       call buoyancy_forcing_from_data_override(state, fluxes, day_center, dt, G, CS)
     elseif (trim(CS%buoy_config) == "zero") then
+      if (CS%first_call_set_forcing) call buoyancy_forcing_allocate(fluxes, G, CS)
       call buoyancy_forcing_zero(state, fluxes, day_center, dt, G, CS)
     elseif (trim(CS%buoy_config) == "const") then
+      if (CS%first_call_set_forcing) call buoyancy_forcing_allocate(fluxes, G, CS)
       call buoyancy_forcing_const(state, fluxes, day_center, dt, G, CS)
     elseif (trim(CS%buoy_config) == "linear") then
+      if (CS%first_call_set_forcing) call buoyancy_forcing_allocate(fluxes, G, CS)
       call buoyancy_forcing_linear(state, fluxes, day_center, dt, G, CS)
     elseif (trim(CS%buoy_config) == "MESO") then
       call MESO_buoyancy_forcing(state, fluxes, day_center, dt, G, CS%MESO_forcing_CSp)
@@ -425,8 +431,6 @@ subroutine wind_forcing_zero(state, fluxes, day, G, CS)
   isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
-  call wind_forcing_allocate(fluxes, G)
-
   !set steady surface wind stresses, in units of Pa.
   PI = 4.0*atan(1.0)
 
@@ -478,8 +482,6 @@ subroutine wind_forcing_2gyre(state, fluxes, day, G, CS)
   isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
-  call wind_forcing_allocate(fluxes, G)
-
   !set the steady surface wind stresses, in units of Pa.
   PI = 4.0*atan(1.0)
 
@@ -522,8 +524,6 @@ subroutine wind_forcing_1gyre(state, fluxes, day, G, CS)
   isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
-  call wind_forcing_allocate(fluxes, G)
-
   ! set the steady surface wind stresses, in units of Pa.
   PI = 4.0*atan(1.0)
 
@@ -564,8 +564,6 @@ subroutine wind_forcing_gyres(state, fluxes, day, G, CS)
   Isq  = G%IscB ; Ieq  = G%IecB ; Jsq  = G%JscB ; Jeq  = G%JecB
   isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
-
-  call wind_forcing_allocate(fluxes, G)
 
   ! steady surface wind stresses (Pa)
   PI = 4.0*atan(1.0)
@@ -624,8 +622,6 @@ subroutine wind_forcing_from_file(state, fluxes, day, G, CS)
   Isq  = G%IscB ; Ieq  = G%IecB ; Jsq  = G%JscB ; Jeq  = G%JecB
   isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
-
-  call wind_forcing_allocate(fluxes, G)
 
   call get_time(day,seconds,days)
   time_lev_daily = days - 365*floor(real(days) / 365.0)
@@ -879,9 +875,6 @@ subroutine buoyancy_forcing_from_files(state, fluxes, day, dt, G, CS)
 
   if (CS%use_temperature) rhoXcp = CS%Rho0 * fluxes%C_p
   Irho0 = 1.0/CS%Rho0
-
-  ! allocate and initialize arrays 
-  call buoyancy_forcing_allocate(fluxes, G, CS)
 
   ! Read the buoyancy forcing file 
   call get_time(day,seconds,days)
@@ -1219,9 +1212,6 @@ subroutine buoyancy_forcing_from_data_override(state, fluxes, day, dt, G, CS)
   js_in = G%jsc - G%jsd + 1
   je_in = G%jec - G%jsd + 1
 
-  ! allocate and initialize arrays 
-  call buoyancy_forcing_allocate(fluxes, G, CS)
-
   call data_override('OCN', 'lw', fluxes%LW(:,:), day, &
        is_in=is_in, ie_in=ie_in, js_in=js_in, je_in=je_in)
   call data_override('OCN', 'evap', fluxes%evap(:,:), day, &
@@ -1397,9 +1387,6 @@ subroutine buoyancy_forcing_zero(state, fluxes, day, dt, G, CS)
   call callTree_enter("buoyancy_forcing_zero, MOM_surface_forcing.F90")
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
-  ! allocate and initialize arrays 
-  call buoyancy_forcing_allocate(fluxes, G, CS)
-
   if (CS%use_temperature) then
     do j=js,je ; do i=is,ie
       fluxes%evap(i,j)                 = 0.0
@@ -1455,9 +1442,6 @@ subroutine buoyancy_forcing_const(state, fluxes, day, dt, G, CS)
 
   integer :: i, j, is, ie, js, je
   call callTree_enter("buoyancy_forcing_const, MOM_surface_forcing.F90")
-
-  ! allocate and initialize arrays 
-  call buoyancy_forcing_allocate(fluxes, G, CS)
 
   if (CS%use_temperature) then
     do j=js,je ; do i=is,ie
@@ -1516,9 +1500,6 @@ subroutine buoyancy_forcing_linear(state, fluxes, day, dt, G, CS)
 
   call callTree_enter("buoyancy_forcing_linear, MOM_surface_forcing.F90")
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
-
-  ! allocate and initialize arrays 
-  call buoyancy_forcing_allocate(fluxes, G, CS)
 
   ! This case has no surface buoyancy forcing.
   if (CS%use_temperature) then
