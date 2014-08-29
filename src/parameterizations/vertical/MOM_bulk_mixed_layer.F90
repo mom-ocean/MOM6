@@ -590,7 +590,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
                                dR0_dT, dRcv_dT, dR0_dS, dRcv_dS,              &
                                netMassInOut, Net_heat, Net_salt,              &
                                nsw, Pen_SW_bnd, opacity_band, Conv_en,        &
-                               dKE_FC, j, ksort, G, CS, tv)
+                               dKE_FC, j, ksort, G, CS, tv, fluxes, dt)
 
     ! This subroutine causes the mixed layer to entrain to depth of free convection.    
     ! smg: new routine; it is incomplete, as it does not preperly handle layer=0.  
@@ -972,13 +972,12 @@ subroutine convective_adjustment(h, u, v, R0, Rcv, T, S, eps, d_eb, &
 
 end subroutine convective_adjustment
 
-
 subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,   &
                                  R0_tot, Rcv_tot, u, v, T, S, R0, Rcv, eps, &
                                  dR0_dT, dRcv_dT, dR0_dS, dRcv_dS,          &
                                  netMassInOut, Net_heat, Net_salt,          &
                                  nsw, Pen_SW_bnd, opacity_band, Conv_en,    &
-                                 dKE_FC, j, ksort, G, CS, tv)
+                                 dKE_FC, j, ksort, G, CS, tv, fluxes, dt)
   real, dimension(NIMEM_,NKMEM_), intent(inout) :: h, d_eb
   real, dimension(NIMEM_),        intent(out)   :: htot, Ttot, Stot
   real, dimension(NIMEM_),        intent(out)   :: uhtot, vhtot, R0_tot, Rcv_tot
@@ -994,15 +993,17 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,   &
   type(ocean_grid_type),          intent(in)    :: G
   type(bulkmixedlayer_CS),        pointer       :: CS
   type(thermo_var_ptrs),          intent(inout) :: tv
+  type(forcing),                  intent(inout) :: fluxes
+  real,                           intent(in)    :: dt
 
 !   This subroutine causes the mixed layer to entrain to the depth of free
 ! convection.  The depth of free convection is the shallowest depth at which the
-! fluid is the denser than the average of the fluid above.
+! fluid is denser than the average of the fluid above.
 ! Arguments: h - Layer thickness, in m or kg m-2. (Intent in/out)  The units
 !                of h are referred to as H below.
 !  (in/out)  d_eb - The downward increase across a layer in the entrainment from
 !                   below, in H. Positive values go with mass gain by a layer.
-!  (out)     htot - The accumlated mixed layer thickness, in H.
+!  (out)     htot - The accumulated mixed layer thickness, in H.
 !  (out)     Ttot - The depth integrated mixed layer temperature, in deg C H.
 !  (out)     Stot - The depth integrated mixed layer salinity, in psu H.
 !  (out)     uhtot - The depth integrated mixed layer zonal velocity, H m s-1.
@@ -1019,11 +1020,13 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,   &
 !  (out)     dKE_FC - The vertically integrated change in kinetic energy due
 !                     to free convection, in m3 s-2.
 !  (in)      j - The j-index to work on.
-!  (in)      ksort - The density-sorted k-indicies.
+!  (in)      ksort - The density-sorted k-indices.
 !  (in)      G - The ocean's grid structure.
 !  (in)      CS - The control structure for this module.
+
   real, dimension(SZI_(G)) :: &
-    Evap_rem           !   Evaporation that remains to be supplied, in H.
+    massOutRem, &      !   Evaporation that remains to be supplied, in H.
+    netMassIn          ! mass entering through ocean surface (H)
   real :: SW_trans     !   The fraction of shortwave radiation
                        ! that is not absorbed in a layer, ND.
   real :: Pen_absorbed !   The amount of penetrative shortwave radiation
@@ -1031,7 +1034,6 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,   &
   real :: h_avail      !   The thickness in a layer available for
                        ! entrainment, in H.
   real :: h_ent        !   The thickness from a layer that is entrained, in H.
-  real :: precip       !   The amount of net precipation, in H.
   real :: T_precip     !   The temperature of the precipitation, in deg C.
   real :: C1_3, C1_6   !  1/3 and 1/6.
   real :: En_fn, Frac, x1 !  Nondimensional temporary variables.
@@ -1051,6 +1053,8 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,   &
   real :: sum_Pen_En   !   The potential energy change due to penetrating
                        ! shortwave radiation, integrated over a layer, in
                        ! H kg m-3.
+  real :: Idt          ! 1.0/dt 
+  real :: netHeatOut   ! accumulated heat content of mass leaving ocean 
   integer :: is, ie, nz, i, k, ks, itt, n
   real, dimension(max(nsw,1)) :: &
     C2, &              ! Temporary variable with units of kg m-3 H-1.
@@ -1059,17 +1063,23 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,   &
   Angstrom = G%Angstrom
   C1_3 = 1.0/3.0 ; C1_6 = 1.0/6.0
   g_H2_2Rho0 = (G%g_Earth * G%H_to_m**2) / (2.0 * G%Rho0)
+  Idt        = 1.0/dt
   is = G%isc ; ie = G%iec ; nz = G%ke
 
   do i=is,ie ; if (ksort(i,1) > 0) then
     k = ksort(i,1)
 
-    Evap_rem(i) = 0.0
-    if (netMassInOut(i) < 0.0) Evap_rem(i) = -netMassInOut(i)
-    precip = netMassInOut(i) + Evap_rem(i)
+    massOutRem(i) = 0.0
+    if (netMassInOut(i) < 0.0) massOutRem(i) = -netMassInOut(i)
+    netMassIn(i) = netMassInOut(i) + massOutRem(i)
+  ! smg:
+  ! massOutRem(i) = -netMassOut(i)
+  ! netMassIn(i)  = netMassInOut(i) - netMassOut(i)
+    if(ASSOCIATED(fluxes%heat_content_massout)) fluxes%heat_content_massout(i,j) = 0.0
+
     ! htot is an Angstrom (taken from layer 1) plus any net precipitation.
     h_ent     = max(min(Angstrom,h(i,k)-eps(i,k)),0.0)
-    htot(i)   = h_ent + precip
+    htot(i)   = h_ent + netMassIn(i)
     h(i,k)    = h(i,k) - h_ent
     d_eb(i,k) = d_eb(i,k) - h_ent
 
@@ -1084,27 +1094,32 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,   &
     ! as layer 1.  Because layer 1 might not be the topmost layer, this
     ! involves multiple terms.
     T_precip = T(i,1)
-    Ttot(i) = (Net_heat(i) + (precip * T_precip + h_ent * T(i,k))) + &
+    Ttot(i) = (Net_heat(i) + (netMassIn(i) * T_precip + h_ent * T(i,k))) + &
               Pen_absorbed
+    ! Net_heat contains both heat fluxes and the heat content of mass fluxes.
+ !! Ttot(i) = netMassIn(i) * T_precip + h_ent * T(i,k)
+ !! Ttot(i) = Net_heat(i) + Ttot(i)
+ !! Ttot(i) = Ttot(i) + Pen_absorbed
+  ! smg:
+  ! Ttot(i)   = (Net_heat(i) + (h_ent * T(i,k))) + Pen_absorbed
     Stot(i)   = h_ent*S(i,k) + Net_salt(i)
-    uhtot(i)  = u(i,1)*precip + u(i,k)*h_ent
-    vhtot(i)  = v(i,1)*precip + v(i,k)*h_ent
-    R0_tot(i) = (h_ent*R0(i,k) + precip*R0(i,1)) + &
-!                   dR0_dT(i)*precip*(T_precip - T(i,1)) + &      
+    uhtot(i)  = u(i,1)*netMassIn(i) + u(i,k)*h_ent
+    vhtot(i)  = v(i,1)*netMassIn(i) + v(i,k)*h_ent
+    R0_tot(i) = (h_ent*R0(i,k) + netMassIn(i)*R0(i,1)) + &
+!                   dR0_dT(i)*netMassIn(i)*(T_precip - T(i,1)) + &      
                 (dR0_dT(i)*(Net_heat(i) + Pen_absorbed) - &
-                 dR0_dS(i) * (precip * S(i,1) - Net_salt(i)))
-    Rcv_tot(i) = (h_ent*Rcv(i,k) + precip*Rcv(i,1)) + &
-!                    dRcv_dT(i)*precip*(T_precip - T(i,1)) + &      
+                 dR0_dS(i) * (netMassIn(i) * S(i,1) - Net_salt(i)))
+    Rcv_tot(i) = (h_ent*Rcv(i,k) + netMassIn(i)*Rcv(i,1)) + &
+!                    dRcv_dT(i)*netMassIn(i)*(T_precip - T(i,1)) + &      
                  (dRcv_dT(i)*(Net_heat(i) + Pen_absorbed) - &
-                  dRcv_dS(i) * (precip * S(i,1) - Net_salt(i)))
+                  dRcv_dS(i) * (netMassIn(i) * S(i,1) - Net_salt(i)))
     Conv_En(i) = 0.0 ; dKE_FC(i) = 0.0
     if (ASSOCIATED(tv%TempxPmE)) tv%TempxPmE(i,j) = tv%TempxPmE(i,j) + &
-                         T_precip * precip * G%H_to_kg_m2
+                         T_precip * netMassIn(i) * G%H_to_kg_m2
   endif ; enddo
 
-!   At this point, htot contains an Angstrom of fluid from layer 0 plus any
-! net precipitation.
-
+  ! Now do netMassOut case in this block.
+  ! At this point htot contains an Angstrom of fluid from layer 0 plus netMassIn.
   do ks=1,nz
     do i=is,ie ; if (ksort(i,ks) > 0) then
       k = ksort(i,ks)
@@ -1125,28 +1140,35 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,   &
         Ttot(i) = Ttot(i) + h_ent*T(i,k)
         Stot(i) = Stot(i) + h_ent*S(i,k)
       endif
-! Evaporation occurs from the topmost layers with any mass.  The
-! salt that is left behind goes into Stot.
-      if ((Evap_rem(i) > 0.0) .and. (h(i,k) > eps(i,k))) then
-        if (Evap_rem(i) > (h(i,k) - eps(i,k))) then
+
+      ! Water is removed from the topmost layers with any mass.
+      ! We may lose layers if they are thin enough.  
+      ! The salt that is left behind goes into Stot.
+      if ((massOutRem(i) > 0.0) .and. (h(i,k) > eps(i,k))) then
+        if (massOutRem(i) > (h(i,k) - eps(i,k))) then
           h_evap = h(i,k) - eps(i,k)
           h(i,k) = eps(i,k)
-          Evap_rem(i) = Evap_rem(i) - h_evap
+          massOutRem(i) = massOutRem(i) - h_evap
         else
-          h_evap = Evap_rem(i)
+          h_evap = massOutRem(i)
           h(i,k) = h(i,k) - h_evap
-          Evap_rem(i) = 0.0
+          massOutRem(i) = 0.0
         endif
 
         Stot(i) = Stot(i) + h_evap*S(i,k)
         R0_tot(i) = R0_tot(i) + dR0_dS(i)*h_evap*S(i,k)
         Rcv_tot(i) = Rcv_tot(i) + dRcv_dS(i)*h_evap*S(i,k)
         d_eb(i,k) = d_eb(i,k) - h_evap
+
         if (ASSOCIATED(tv%TempxPmE)) tv%TempxPmE(i,j) = tv%TempxPmE(i,j) - &
                                       T(i,k)*h_evap*G%H_to_kg_m2
+        if(ASSOCIATED(fluxes%heat_content_massout))                            &
+           fluxes%heat_content_massout(i,j) = fluxes%heat_content_massout(i,j) &
+           - T(i,k)*h_evap*G%H_to_kg_m2*fluxes%C_p*Idt
       endif
+
+      ! The following section calculates how much fluid will be entrained.
       h_avail = h(i,k) - eps(i,k)
-! The following section calculates how much fluid will be entrained.
       if (h_avail > 0.0) then
         dr = R0_tot(i) - htot(i)*R0(i,k)
         h_ent = 0.0
@@ -1157,8 +1179,8 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,   &
                       opacity_band(n,i,k)*htot(i)
         endif ; enddo
 
+        ! Some entrainment will occur from this layer.
         if (dr0 > 0.0) then
-! Some entrainment will occur from this layer.
           dr_comp = dr
           do n=1,nsw ; if (Pen_SW_bnd(n,i) > 0.0) then
             !   Compare the density at the bottom of a layer with the
@@ -1169,15 +1191,15 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,   &
                 ((1.0 - SW_trans) - opacity*(htot(i)+h_avail)*SW_trans)
           endif ; enddo
           if (dr_comp >= 0.0) then
-! The entire layer is entrained.
+            ! The entire layer is entrained.
             h_ent = h_avail
           else
-!  The layer is partially entrained.   Iterate to determine how much
-!  entrainment occurs.  Solve for the h_ent at which dr_ent = 0.
+            !  The layer is partially entrained.   Iterate to determine how much
+            !  entrainment occurs.  Solve for the h_ent at which dr_ent = 0.
 
-! Instead of assuming that the curve is linear between the two end
-! points, assume that the change is concentrated near small values
-! of entrainment.  On average, this saves about 1 iteration.
+            ! Instead of assuming that the curve is linear between the two end
+            ! points, assume that the change is concentrated near small values
+            ! of entrainment.  On average, this saves about 1 iteration.
             Frac = dr0 / (dr0 - dr_comp)
             h_ent = h_avail * Frac*Frac
             h_min = 0.0 ; h_max = h_avail
@@ -1215,8 +1237,8 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,   &
 
           endif
 
-!  Now that the amount of entrainment (h_ent) has been determined,
-!  calculate changes in various terms.
+          !  Now that the amount of entrainment (h_ent) has been determined,
+          !  calculate changes in various terms.
           sum_Pen_En = 0.0 ; Pen_absorbed = 0.0
           do n=1,nsw ; if (Pen_SW_bnd(n,i) > 0.0) then
             opacity = opacity_band(n,i,k)
