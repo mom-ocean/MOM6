@@ -205,6 +205,13 @@ ICE_CONDUCTIVITY = 2.03         !   [W m-1 K-1] default = 2.03
 DO_DELTA_EDDINGTON_SW = True    !   [Boolean] default = True
                                 ! If true, a delta-Eddington radiative transfer calculation
                                 ! for the shortwave radiation within the sea-ice.
+ICE_TEMP_RANGE_ESTIMATE = 40.0  !   [degC] default = 40.0
+                                ! An estimate of the range of snow and ice temperatures
+                                ! that is used to evaluate whether an explicit diffusive
+                                ! form of the heat fluxes or an inversion based on the
+                                ! layer heat budget is more likely to be more accurate.
+                                ! Setting this to 0 causes the explicit diffusive form.
+                                ! to always be used.
 ICE_DELTA_EDD_R_ICE = 0.0       !   [perhaps nondimensional?] default = 0.0
                                 ! A dreadfully documented tuning parameter for the radiative
                                 ! propeties of sea ice with the delta-Eddington radiative
