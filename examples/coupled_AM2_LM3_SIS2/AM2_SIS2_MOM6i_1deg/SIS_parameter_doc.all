@@ -271,9 +271,6 @@ SEA_ICE_ROLL_FACTOR = 1.0       !   [Nondim] default = 1.0
                                 ! minimum number of ice floes in a grid cell divided by
                                 ! the horizontal floe aspect ratio.  Sensible values are
                                 ! 0 (no rolling) or larger than 1.
-SIS1_ICE_TRANSPORT = False      !   [Boolean] default = False
-                                ! If true, use SIS1 code to solve the ice continuity
-                                ! equation and transport tracers.
 CHECK_ICE_TRANSPORT_CONSERVATION = False !   [Boolean] default = False
                                 ! If true, use add multiple diagnostics of ice and snow
                                 ! mass conservation in the sea-ice transport code.  This
