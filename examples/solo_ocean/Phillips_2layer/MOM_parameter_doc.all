@@ -31,11 +31,11 @@ NJHALO = 4                      ! default = 2
                                 ! y-direction.  With STATIC_MEMORY_ this is set as NJHALO_
                                 ! in MOM_memory.h at compile time; without STATIC_MEMORY_
                                 ! the default is NJHALO_ in MOM_memory.h (if defined) or 2.
-NIGLOBAL = 160                  !
+NIGLOBAL = 60                   !
                                 ! The total number of thickness grid points in the
                                 ! x-direction in the physical domain. With STATIC_MEMORY_
                                 ! this is set in MOM_memory.h at compile time.
-NJGLOBAL = 120                  !
+NJGLOBAL = 80                   !
                                 ! The total number of thickness grid points in the
                                 ! y-direction in the physical domain. With STATIC_MEMORY_
                                 ! this is set in MOM_memory.h at compile time.
@@ -57,13 +57,13 @@ MASKTABLE = "MOM_mask_table"    ! default = "MOM_mask_table"
 LAYOUT = 0, 0                   ! default = 0
                                 ! The processor layout to be used, or 0, 0 to automatically
                                 ! set the layout based on the number of processors.
-!NIPROC = 8                     !
+!NIPROC = 4                     !
                                 ! The number of processors in the x-direction. With
                                 ! STATIC_MEMORY_ this is set in MOM_memory.h at compile time.
-!NJPROC = 8                     !
+!NJPROC = 16                    !
                                 ! The number of processors in the x-direction. With
                                 ! STATIC_MEMORY_ this is set in MOM_memory.h at compile time.
-!LAYOUT = 8, 8                  !
+!LAYOUT = 4, 16                 !
                                 ! The processor layout that was acutally used.
 IO_LAYOUT = 1, 1                ! default = 0
                                 ! The processor layout to be used, or 0,0 to automatically
@@ -197,7 +197,7 @@ RESTARTFILE = "MOM.res"         ! default = "MOM.res"
 LARGE_FILE_SUPPORT = True       !   [Boolean] default = True
                                 ! If true, use the file-size limits with NetCDF large
                                 ! file support (4Gb), otherwise the limit is 2Gb.
-MAX_FIELDS = 100                ! default = 100
+MAX_FIELDS = 50                 ! default = 100
                                 ! The maximum number of restart fields that can be used.
 
 ! === module MOM_tracer_flow_control ===
@@ -254,7 +254,7 @@ AXIS_UNITS = "k"                ! default = "degrees"
 SOUTHLAT = 0.0                  !   [k]
                                 ! The southern latitude of the domain or the equivalent
                                 ! starting value for the y-axis.
-LENLAT = 800.0                  !   [k]
+LENLAT = 1600.0                 !   [k]
                                 ! The latitudinal or y-direction length of the domain.
 WESTLON = 0.0                   !   [k] default = 0.0
                                 ! The western longitude of the domain or the equivalent
@@ -317,7 +317,7 @@ ROTATION = "beta"               ! default = "2omegasinlat"
                                 !       times the sine of latitude.
                                 !     betaplane - Use a beta-plane or f-plane.
                                 !     USER - call a user modified routine.
-F_0 = 7.29E-05                  !   [s-1] default = 0.0
+F_0 = 6.49E-05                  !   [s-1] default = 0.0
                                 ! The reference value of the Coriolis parameter with the
                                 ! betaplane option.
 BETA = 2.0E-11                  !   [m-1 s-1] default = 0.0
@@ -354,9 +354,9 @@ THICKNESS_CONFIG = "phillips"   !
                                 !     USER - call a user modified routine.
 HALF_STRAT_DEPTH = 0.25         !   [nondim] default = 0.5
                                 ! The maximum depth of the ocean.
-JET_WIDTH = 100.0               !   [km]
+JET_WIDTH = 200.0               !   [km]
                                 ! The width of the zonal-mean jet.
-JET_HEIGHT = 200.0              !   [m]
+JET_HEIGHT = 300.0              !   [m]
                                 ! The interface height scale associated with the
                                 ! zonal-mean jet.
 VELOCITY_CONFIG = "phillips"    ! default = "zero"
@@ -457,11 +457,11 @@ USE_VARIABLE_MIXING = False     !   [Boolean] default = False
                                 ! not used.  If KHTR_SLOPE_CFF>0 or  KhTh_Slope_Cff>0,
                                 ! this is set to true regardless of what is in the
                                 ! parameter file.
-RESOLN_SCALED_KH = False        !   [Boolean] default = False
+RESOLN_SCALED_KH = True         !   [Boolean] default = False
                                 ! If true, the Laplacian lateral viscosity is scaled away
                                 ! when the first baroclinic deformation radius is well
                                 ! resolved.
-RESOLN_SCALED_KHTH = False      !   [Boolean] default = False
+RESOLN_SCALED_KHTH = True       !   [Boolean] default = False
                                 ! If true, the interface depth diffusivity is scaled away
                                 ! when the first baroclinic deformation radius is well
                                 ! resolved.
@@ -475,6 +475,17 @@ KHTH_SLOPE_CFF = 0.0            !   [nondim] default = 0.0
 KHTR_SLOPE_CFF = 0.0            !   [nondim] default = 0.0
                                 ! The nondimensional coefficient in the Visbeck formula
                                 ! for the epipycnal tracer diffusivity
+
+! === module MOM_wave_speed ===
+KH_RES_SCALE_COEF = 0.707106781 !   [nondim] default = 1.0
+                                ! A coefficient that determines how Kh is scaled away if
+                                ! RESOLN_SCALED_... is true, as
+                                ! F = 1 / (1 + (KH_RES_SCALE_COEF*Rd/dx)^KH_RES_FN_POWER).
+KH_RES_FN_POWER = 100           !   [nondim] default = 2
+                                ! The power of dx/Ld in the resolution function.  Any
+                                ! positive integer may be used, although even integers
+                                ! are more efficient to calculate.  Setting this greater
+                                ! than 100 results in a step-function being used.
 TIDES = False                   !   [Boolean] default = False
                                 ! If true, apply tidal momentum forcing.
 BE = 0.6                        !   [nondim] default = 0.6
@@ -856,7 +867,7 @@ DTBT = -0.9                     !   [s or nondim] default = -0.98
                                 ! integer fraction of DT, rounding down.
 
 ! === module MOM_thickness_diffuse ===
-KHTH = 1.0E-04                  !   [m2 s-1] default = 0.0
+KHTH = 8000.0                   !   [m2 s-1] default = 0.0
                                 ! The background horizontal thickness diffusivity.
 KHTH_MIN = 0.0                  !   [m2 s-1] default = 0.0
                                 ! The minimum horizontal thickness diffusivity.
@@ -1251,7 +1262,7 @@ READ_DEPTH_LIST = False         !   [Boolean] default = False
 DEPTH_LIST_MIN_INC = 1.0E-10    !   [m] default = 1.0E-10
                                 ! The minimum increment between the depths of the
                                 ! entries in the depth-list file.
-MAXCPU = 2.88E+04               !   [wall-clock seconds] default = -1.0
+MAXCPU = -1.0                   !   [wall-clock seconds] default = -1.0
                                 ! The maximum amount of cpu time per processor for which
                                 ! MOM should run before saving a restart file and
                                 ! quitting with a return value that indicates that a
@@ -1268,7 +1279,7 @@ DT_FORCING = 3600.0             !   [s] default = 600.0
                                 ! The time step for changing forcing, coupling with other
                                 ! components, or potentially writing certain diagnostics.
                                 ! The default value is given by DT.
-DAYMAX = 5.0                    !   [days]
+DAYMAX = 20.0                   !   [days]
                                 ! The final time of the whole simulation, in units of
                                 ! TIMEUNIT seconds.  This also sets the potential end
                                 ! time of the present run segment if the end time is
