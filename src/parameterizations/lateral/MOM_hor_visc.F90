@@ -267,6 +267,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
   real :: Kh_scale  ! A factor between 0 and 1 by which the horizontal
                     ! Laplacian viscosity is rescaled.
   logical :: rescale_Kh, find_FrictWork, apply_OBC = .false.
+  logical :: use_MEKE_Ah
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   integer :: i, j, k
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -296,6 +297,9 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
         "VarMix%Res_fn_q both need to be associated with Resoln_scaled_Kh.")
   endif
 
+  ! Toggle whether to use a Laplacian viscosity derived from MEKE
+  use_MEKE_Ah = associated(MEKE%Ah)
+
 !$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,CS,G,u,v,is,js,h,h_neglect, &
 !$OMP                                  rescale_Kh,VarMix,Kh_h,Ah_h,h_neglect3,Kh_q,   &
 !$OMP                                  Ah_q,ie,je,diffu,apply_OBC,OBC,diffv,          &
@@ -323,7 +327,6 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
                                     G%IdyCu(I-1,j) * u(I-1,j,k)) - &
                     CS%DX_dyT(i,j)*(G%IdxCv(i,J) * v(i,J,k) - &
                                     G%IdxCv(i,J-1)*v(i,J-1,k)))
-
     enddo ; enddo
 
     if (CS%no_slip) then
@@ -377,11 +380,15 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
         else
           Kh = Kh_scale * CS%Kh_bg_xx(i,j)
         endif
+        if (use_MEKE_Ah) then
+          Kh = Kh + MEKE%Ah(i,j)
+        endif
         if (CS%better_bound_Kh) then
           if (Kh >= hrat_min*CS%Kh_Max_xx(i,j)) then
             visc_bound_rem = 0.0
             Kh = hrat_min*CS%Kh_Max_xx(i,j)
           else
+           !visc_bound_rem = 1.0 - abs(Kh) / (hrat_min*CS%Kh_Max_xx(i,j))
             visc_bound_rem = 1.0 - Kh / (hrat_min*CS%Kh_Max_xx(i,j))
           endif
         endif
@@ -455,11 +462,16 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
         else
           Kh = Kh_scale * CS%Kh_bg_xy(I,J)
         endif
+        if (use_MEKE_Ah) then
+          Kh = Kh + 0.25*( (MEKE%Ah(I,J)+MEKE%Ah(I+1,J+1))    &
+                          +(MEKE%Ah(I+1,J)+MEKE%Ah(I,J+1)) )
+        endif
         if (CS%better_bound_Kh) then
           if (Kh >= hrat_min*CS%Kh_Max_xy(I,J)) then
             visc_bound_rem = 0.0
             Kh = hrat_min*CS%Kh_Max_xy(I,J)
           else
+           !visc_bound_rem = 1.0 - abs(Kh) / (hrat_min*CS%Kh_Max_xy(I,J))
             visc_bound_rem = 1.0 - Kh / (hrat_min*CS%Kh_Max_xy(I,J))
           endif
         endif

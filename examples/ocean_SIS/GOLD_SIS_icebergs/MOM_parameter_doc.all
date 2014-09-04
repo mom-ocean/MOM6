@@ -576,6 +576,11 @@ MEKE_KHMEKE_FAC = 0.0           !   [nondim] default = 0.0
 MEKE_RD_MAX_SCALE = True        !   [nondim] default = True
                                 ! If true, the maximum length scale used by MEKE is
                                 ! the deformation radius.
+MEKE_VISCOSITY_COEFF = 0.0      !   [nondim] default = 0.0
+                                ! If non-zero, is the scaling coefficient in the expression for
+                                ! viscosity used to parameterize lateral momentum mixing by
+                                ! unresolved eddies represented by MEKE. Can be negative to
+                                ! represent backscatter from the unresolved eddies.
 
 ! === module MOM_lateral_mixing_coeffs ===
 USE_VARIABLE_MIXING = True      !   [Boolean] default = False

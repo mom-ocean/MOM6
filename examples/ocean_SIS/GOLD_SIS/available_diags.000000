@@ -4,6 +4,9 @@
 "ocean_model", "MEKE_KH"  [Unused]
     ! long_name: MEKE derived diffusivity
     ! units: meter2 second-1
+"ocean_model", "MEKE_AH"  [Unused]
+    ! long_name: MEKE derived lateral viscosity
+    ! units: meter2 second-1
 "ocean_model", "MEKE_Ue"  [Unused]
     ! long_name: MEKE derived eddy-velocity scale
     ! units: meter second-1
