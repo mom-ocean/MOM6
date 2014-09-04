@@ -67,8 +67,6 @@ NSTEPS_DYN = 72                 !   The number of iterations in the EVP dynamics
                                 ! for each slow time step.
 
 !  Specify the ice properties.
-SIS1_ICE_TRANSPORT = True       !    If true, use SIS1 code to solve the ice
-                                !  continuity equation and transport tracers.
 ICE_STRENGTH_PSTAR = 2.75e4     !    ICE_STRENGTH_PSTAR is a constant in the
                                 !  expression for the ice strength, P* in
                                 !  Hunke & Dukowics '97, in Pa.
