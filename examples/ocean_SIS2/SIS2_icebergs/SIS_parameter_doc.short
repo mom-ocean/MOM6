@@ -67,9 +67,6 @@ GRID_CONFIG = "mosaic"          !
 NSTEPS_DYN = 72                 ! default = 432
                                 ! The number of iterations in the EVP dynamics for each
                                 ! slow time step.
-SIS1_ICE_TRANSPORT = True       !   [Boolean] default = False
-                                ! If true, use SIS1 code to solve the ice continuity
-                                ! equation and transport tracers.
 
 ! === module SIS_tracer_advect ===
 
