@@ -21,6 +21,15 @@
 "ocean_model","v","v","prog","all",.false.,"none",2
 "ocean_model","h","h","prog","all",.false.,"none",1
 "ocean_model","e","e","prog","all",.false.,"none",2
+"ocean_model","Khh","Khh","prog","all",.false.,"none",2
+"ocean_model","Khq","Khq","prog","all",.false.,"none",2
+"ocean_model","Ahh","Ahh","prog","all",.false.,"none",2
+"ocean_model","Ahq","Ahq","prog","all",.false.,"none",2
+"ocean_model","KHTH_u1","KHTH_u1","prog","all",.false.,"none",2
+"ocean_model","KHTH_v1","KHTH_v1","prog","all",.false.,"none",2
+"ocean_model","Res_fn","Res_fn","prog","all",.false.,"none",2
+"ocean_model","Rd_dx","Rd_dx","prog","all",.false.,"none",2
+"ocean_model","cg1","cg1","prog","all",.false.,"none",2
 #"ocean_model","temp","temp","prog","all",.false.,"none",2
 #"ocean_model","salt","salt","prog","all",.false.,"none",2
 #"ocean_model","Rml","Rml","prog","all",.false.,"none",2

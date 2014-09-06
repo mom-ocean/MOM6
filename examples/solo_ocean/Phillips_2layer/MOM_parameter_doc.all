@@ -491,12 +491,12 @@ KH_RES_FN_POWER = 100           !   [nondim] default = 2
                                 ! positive integer may be used, although even integers
                                 ! are more efficient to calculate.  Setting this greater
                                 ! than 100 results in a step-function being used.
-INTERPOLATE_RES_FN = True       !   [Boolean] default = True
+INTERPOLATE_RES_FN = False      !   [Boolean] default = True
                                 ! If true, interpolate the resolution function to the
                                 ! velocity points from the thickness points; otherwise
                                 ! interpolate the wave speed and calculate the resolution
                                 ! function independently at each point.
-GILL_EQUATORIAL_LD = False      !   [Boolean] default = False
+GILL_EQUATORIAL_LD = True       !   [Boolean] default = False
                                 ! If true, uses Gill's definition of the baroclinic
                                 ! equatorial deformation radius, otherwise, if false, use
                                 ! Pedlosky's definition. These definitions differ by a factor
