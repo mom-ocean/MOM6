@@ -523,11 +523,11 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
 !  (in)      diag - A structure that is used to regulate diagnostic output.
 !  (in/out)  CS - A pointer that is set to point to the control structure
 !                 for this module
-  real :: KhTr_Slope_Cff, KhTh_Slope_Cff
+  real :: KhTr_Slope_Cff, KhTh_Slope_Cff, oneOrTwo
   real, parameter :: absurdly_small_freq2 = 1e-34  ! A miniscule frequency
              ! squared that is used to avoid division by 0, in s-2.  This
              ! value is roughly (pi / (the age of the universe) )^2.
-  logical :: use_variable_mixing
+  logical :: use_variable_mixing, Gill_equatorial_Ld
   logical :: Resoln_scaled_Kh, Resoln_scaled_KhTh, Resoln_scaled_KhTr
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
@@ -658,14 +658,23 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
                  "velocity points from the thickness points; otherwise \n"//&
                  "interpolate the wave speed and calculate the resolution \n"//&
                  "function independently at each point.", default=.true.)
+    call get_param(param_file, mod, "GILL_EQUATORIAL_LD", Gill_equatorial_Ld, &
+                 "If true, uses Gill's definition of the baroclinic\n"//&
+                 "equatorial deformation radius, otherwise, if false, use\n"//&
+                 "Pedlosky's definition. These definitions differ by a factor\n"//&
+                 "of 2 infront of the beta term in the denominator. Gill's"//&
+                 "is the more appropriate definition.\n", default=.false.)
 
     ! Pre-calculate several static expressions for later use.
+    if (Gill_equatorial_Ld) then; oneOrTwo = 2.0
+      else; oneOrTwo = 1.0; endif
+
     do j=js-1,je+1 ; do i=is-1,ie+1
       CS%f2_dx2_h(i,j) = (G%dxT(i,j)**2 + G%dyT(i,j)**2) * &
           max(0.25 * ((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
                       (G%CoriolisBu(I-1,J)**2 + G%CoriolisBu(I,J-1)**2)), &
               absurdly_small_freq2)
-      CS%beta_dx2_h(i,j) = (G%dxT(i,j)**2 + G%dyT(i,j)**2) * (sqrt(0.5 * &
+      CS%beta_dx2_h(i,j) = oneOrTwo * (G%dxT(i,j)**2 + G%dyT(i,j)**2) * (sqrt(0.5 * &
           ( (((G%CoriolisBu(I,J)-G%CoriolisBu(I-1,J)) * G%IdxCv(i,J))**2 + &
              ((G%CoriolisBu(I,J-1)-G%CoriolisBu(I-1,J-1)) * G%IdxCv(i,J-1))**2) + &
             (((G%CoriolisBu(I,J)-G%CoriolisBu(I,J-1)) * G%IdyCu(I,j))**2 + &
@@ -675,7 +684,7 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
     do J=js-1,Jeq ; do I=is-1,Ieq
       CS%f2_dx2_q(I,J) = (G%dxBu(I,J)**2 + G%dyBu(I,J)**2) * &
                          max(G%CoriolisBu(I,J)**2, absurdly_small_freq2)
-      CS%beta_dx2_q(I,J) = (G%dxBu(I,J)**2 + G%dyBu(I,J)**2) * (sqrt(0.5 * &
+      CS%beta_dx2_q(I,J) = oneOrTwo * (G%dxBu(I,J)**2 + G%dyBu(I,J)**2) * (sqrt(0.5 * &
           ( (((G%CoriolisBu(I,J)-G%CoriolisBu(I-1,J)) * G%IdxCv(i,J))**2 + &
              ((G%CoriolisBu(I+1,J)-G%CoriolisBu(I,J)) * G%IdxCv(i+1,J))**2) + &
             (((G%CoriolisBu(I,J)-G%CoriolisBu(I,J-1)) * G%IdyCu(I,j))**2 + &
@@ -685,7 +694,7 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
     do j=js,je ; do I=is-1,Ieq
       CS%f2_dx2_u(I,j) = (G%dxCu(I,j)**2 + G%dyCu(I,j)**2) * &
           max(0.5*(G%CoriolisBu(I,J)**2+G%CoriolisBu(I,J-1)**2), absurdly_small_freq2)
-      CS%beta_dx2_u(I,j) = (G%dxCu(I,j)**2 + G%dyCu(I,j)**2) * (sqrt( &
+      CS%beta_dx2_u(I,j) = oneOrTwo * (G%dxCu(I,j)**2 + G%dyCu(I,j)**2) * (sqrt( &
           0.25*( (((G%CoriolisBu(I,J-1)-G%CoriolisBu(I-1,J-1)) * G%IdxCv(i,J-1))**2 + &
                   ((G%CoriolisBu(I+1,J)-G%CoriolisBu(I,J)) * G%IdxCv(i+1,J))**2) + &
                  (((G%CoriolisBu(I+1,J-1)-G%CoriolisBu(I,J-1)) * G%IdxCv(i+1,J-1))**2 + &
@@ -696,7 +705,7 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
     do J=js-1,Jeq ; do i=is,ie
       CS%f2_dx2_v(i,J) = (G%dxCv(i,J)**2 + G%dyCv(i,J)**2) * &
           max(0.5*(G%CoriolisBu(I,J)**2+G%CoriolisBu(I-1,J)**2), absurdly_small_freq2)
-      CS%beta_dx2_v(i,J) = (G%dxCv(i,J)**2 + G%dyCv(i,J)**2) * (sqrt( &
+      CS%beta_dx2_v(i,J) = oneOrTwo * (G%dxCv(i,J)**2 + G%dyCv(i,J)**2) * (sqrt( &
           ((G%CoriolisBu(I,J)-G%CoriolisBu(I-1,J)) * G%IdxCv(i,J))**2 + &
           0.25*( (((G%CoriolisBu(I,J)-G%CoriolisBu(I,J-1)) * G%IdyCu(I,j))**2 + &
                   ((G%CoriolisBu(I-1,J+1)-G%CoriolisBu(I-1,J)) * G%IdyCu(I-1,j+1))**2) + &

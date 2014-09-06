@@ -577,6 +577,11 @@ INTERPOLATE_RES_FN = True       !   [Boolean] default = True
                                 ! velocity points from the thickness points; otherwise
                                 ! interpolate the wave speed and calculate the resolution
                                 ! function independently at each point.
+GILL_EQUATORIAL_LD = False      !   [Boolean] default = False
+                                ! If true, uses Gill's definition of the baroclinic
+                                ! equatorial deformation radius, otherwise, if false, use
+                                ! Pedlosky's definition. These definitions differ by a factor
+                                ! of 2 infront of the beta term in the denominator. Gill'sis the more appropriate definition.
 TIDES = True                    !   [Boolean] default = False
                                 ! If true, apply tidal momentum forcing.
 BE = 0.6                        !   [nondim] default = 0.6
