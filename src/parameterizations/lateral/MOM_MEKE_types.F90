@@ -40,7 +40,7 @@ type, public :: MEKE_type
     Kh => NULL(), &     ! The MEKE-derived lateral mixing coefficient in m2 s-1.
     Rd_dx_h => NULL(), &! The deformation radius compared with the grid
                         ! spacing, copied from VarMix_CS, nondim.
-    Ah => NULL()        ! The MEKE-derived lateral viscosity coefficient in m2 s-1.
+    Ku => NULL()        ! The MEKE-derived lateral viscosity coefficient in m2 s-1.
                         ! This viscosity can be negative when representing backscatter
                         ! from unresolved eddies (see Jansen and Held, 2014).
   ! Parameters

@@ -50,7 +50,7 @@ type, public :: MEKE_CS ; private
   type(diag_ctrl), pointer :: diag !< A pointer to shared diagnostics data
   integer :: id_MEKE = -1, id_Ue = -1, id_Kh = -1, id_src = -1
   integer :: id_GM_src = -1, id_mom_src = -1, id_decay = -1
-  integer :: id_KhMEKE_u = -1, id_KhMEKE_v = -1, id_Ah = -1
+  integer :: id_KhMEKE_u = -1, id_KhMEKE_v = -1, id_Ku = -1
 end type MEKE_CS
 
 integer :: id_clock_pass
@@ -325,7 +325,7 @@ subroutine step_forward_MEKE(MEKE, h, visc, dt, G, CS)
     if (CS%viscosity_coeff/=0.) then
 !aja: should make range js:jeq, is:ieq
       do j=js-1,je+1 ; do i=is-1,ie+1
-        MEKE%Ah(i,j) = CS%viscosity_coeff*sqrt(2.*max(0.,MEKE%MEKE(i,j))*G%areaT(i,j))
+        MEKE%Ku(i,j) = CS%viscosity_coeff*sqrt(2.*max(0.,MEKE%MEKE(i,j))*G%areaT(i,j))
       enddo ; enddo
     endif
 
@@ -333,7 +333,7 @@ subroutine step_forward_MEKE(MEKE, h, visc, dt, G, CS)
     if (CS%id_MEKE>0) call post_data(CS%id_MEKE, MEKE%MEKE, CS%diag)
     if (CS%id_Ue>0) call post_data(CS%id_Ue, sqrt(2.0*MEKE%MEKE), CS%diag)
     if (CS%id_Kh>0) call post_data(CS%id_Kh, MEKE%Kh, CS%diag)
-    if (CS%id_Ah>0) call post_data(CS%id_Ah, MEKE%Ah, CS%diag)
+    if (CS%id_Ku>0) call post_data(CS%id_Ku, MEKE%Ku, CS%diag)
     if (CS%id_KhMEKE_u>0) call post_data(CS%id_KhMEKE_u, Kh_u, CS%diag)
     if (CS%id_KhMEKE_v>0) call post_data(CS%id_KhMEKE_v, Kh_v, CS%diag)
     if (CS%id_src>0) call post_data(CS%id_src, src, CS%diag)
@@ -468,7 +468,7 @@ subroutine MEKE_init(Time, G, param_file, diag, CS, MEKE)
                  "represent backscatter from the unresolved eddies.", &
                  units="nondim", default=0.0)
   call get_param(param_file, mod, "LAPLACIAN", laplacian, default=.false., do_not_log=.true.)
-  if (CS%viscosity_coeff>0. .and. .not. laplacian) call MOM_error(FATAL, &
+  if (CS%viscosity_coeff/=0. .and. .not. laplacian) call MOM_error(FATAL, &
                  "LAPLACIAN must be true if MEKE_VISCOSITY_COEFF is true.")
 
 ! In the case of a restart, these fields need a halo update
@@ -480,8 +480,8 @@ subroutine MEKE_init(Time, G, param_file, diag, CS, MEKE)
     call create_group_pass(pass_Kh, MEKE%Kh, G%Domain)
     call do_group_pass(pass_Kh, G%Domain)
   endif
-  if (associated(MEKE%Ah)) then
-    call create_group_pass(pass_Ah, MEKE%Ah, G%Domain)
+  if (associated(MEKE%Ku)) then
+    call create_group_pass(pass_Ah, MEKE%Ku, G%Domain)
     call do_group_pass(pass_Ah, G%Domain)
   endif
 
@@ -492,9 +492,9 @@ subroutine MEKE_init(Time, G, param_file, diag, CS, MEKE)
   CS%id_Kh = register_diag_field('ocean_model', 'MEKE_KH', diag%axesT1, Time, &
      'MEKE derived diffusivity', 'meter2 second-1')
   if (.not. associated(MEKE%Kh)) CS%id_Kh = -1
-  CS%id_Ah = register_diag_field('ocean_model', 'MEKE_AH', diag%axesT1, Time, &
+  CS%id_Ku = register_diag_field('ocean_model', 'MEKE_KU', diag%axesT1, Time, &
      'MEKE derived lateral viscosity', 'meter2 second-1')
-  if (.not. associated(MEKE%Ah)) CS%id_Ah = -1
+  if (.not. associated(MEKE%Ku)) CS%id_Ku = -1
   CS%id_Ue = register_diag_field('ocean_model', 'MEKE_Ue', diag%axesT1, Time, &
      'MEKE derived eddy-velocity scale', 'meter second-1')
   if (.not. associated(MEKE%MEKE)) CS%id_Ue = -1
@@ -562,10 +562,10 @@ subroutine MEKE_alloc_register_restart(G, param_file, MEKE, restart_CS)
     call register_restart_field(MEKE%Kh, vd, .false., restart_CS)
   endif
   allocate(MEKE%Rd_dx_h(isd:ied,jsd:jed)) ; MEKE%Rd_dx_h(:,:) = 0.0
-  if (MEKE_KhCoeff>=0.) then
-    allocate(MEKE%Ah(isd:ied,jsd:jed)) ; MEKE%Ah(:,:) = 0.0
+  if (MEKE_viscCoeff/=0.) then
+    allocate(MEKE%Ku(isd:ied,jsd:jed)) ; MEKE%Ku(:,:) = 0.0
     vd = vardesc("MEKE_Ah","Lateral viscosity from Mesoscale Eddy Kinetic Energy",'h','1','s',"m2 s-1")
-    call register_restart_field(MEKE%Ah, vd, .false., restart_CS)
+    call register_restart_field(MEKE%Ku, vd, .false., restart_CS)
   endif
 
 end subroutine MEKE_alloc_register_restart
@@ -586,7 +586,7 @@ subroutine MEKE_end(MEKE, CS)
   if (associated(MEKE%GM_src)) deallocate(MEKE%GM_src)
   if (associated(MEKE%mom_src)) deallocate(MEKE%mom_src)
   if (associated(MEKE%Kh)) deallocate(MEKE%Kh)
-  if (associated(MEKE%Ah)) deallocate(MEKE%Ah)
+  if (associated(MEKE%Ku)) deallocate(MEKE%Ku)
   deallocate(MEKE)
 
 end subroutine MEKE_end
