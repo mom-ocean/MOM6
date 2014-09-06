@@ -598,6 +598,11 @@ KH_RES_FN_POWER = 2             !   [nondim] default = 2
                                 ! positive integer may be used, although even integers
                                 ! are more efficient to calculate.  Setting this greater
                                 ! than 100 results in a step-function being used.
+INTERPOLATE_RES_FN = True       !   [Boolean] default = True
+                                ! If true, interpolate the resolution function to the
+                                ! velocity points from the thickness points; otherwise
+                                ! interpolate the wave speed and calculate the resolution
+                                ! function independently at each point.
 TIDES = False                   !   [Boolean] default = False
                                 ! If true, apply tidal momentum forcing.
 BE = 0.6                        !   [nondim] default = 0.6

@@ -221,7 +221,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, MEKE, VarMix, CDp, CS)
    if (Resoln_scaled) then
 !$OMP do
      do j = js,je; do I=is-1,ie
-       Khth_Loc_u(i,j) = Khth_Loc_u(i,j) * 0.5*(VarMix%Res_fn_h(i,j) + VarMix%Res_fn_h(i+1,j))
+       Khth_Loc_u(i,j) = Khth_Loc_u(i,j) * VarMix%Res_fn_u(i,j)
      enddo; enddo
    endif
 
@@ -269,7 +269,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, MEKE, VarMix, CDp, CS)
   if (Resoln_scaled) then
 !$OMP do
     do J=js-1,je ; do i=is,ie
-      Khth_Loc(i,j) = Khth_Loc(i,j) * 0.5*(VarMix%Res_fn_h(i,j) + VarMix%Res_fn_h(i,j+1))
+      Khth_Loc(i,j) = Khth_Loc(i,j) * VarMix%Res_fn_v(i,J)
     enddo; enddo
   endif
    
