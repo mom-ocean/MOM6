@@ -2217,9 +2217,11 @@ subroutine write_static_fields(G, diag)
     call post_data(id, out_h, diag, .true.)
   endif
 
-  id = register_static_field('ocean_model', 'depth_ocean', diag%axesT1, &
-        'Depth of the ocean at tracer points', 'm', &
-        standard_name='sea_floor_depth_below_geoid')
+  id = register_static_field('ocean_model', 'depth_ocean', diag%axesT1,  &
+        'Depth of the ocean at tracer points', 'm',                      &
+        standard_name='sea_floor_depth_below_geoid',                     &
+        cmor_field_name='deptho', cmor_long_name='Sea Floor Depth',      &
+        cmor_units='m', cmor_standard_name='sea_floor_depth_below_geoid')
   if (id > 0) call post_data(id, G%bathyT, diag, .true.)
 
   id = register_static_field('ocean_model', 'wet', diag%axesT1, &
