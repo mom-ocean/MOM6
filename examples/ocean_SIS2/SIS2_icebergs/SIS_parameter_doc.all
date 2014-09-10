@@ -180,11 +180,16 @@ GRID_CONFIG = "mosaic"          !
                                 !    cartesian - a Cartesian grid
                                 !    spherical - a spherical grid
                                 !    mercator  - a Mercator grid
-CP_WATER = 4200.0               !   [J kg-1 K-1] default = 4200.0
-                                ! The heat capacity of sea water, approximated as a
-                                ! constant.
 CP_ICE = 2100.0                 !   [J kg-1 K-1] default = 2100.0
                                 ! The heat capacity of fresh ice, approximated as a
+                                ! constant.
+CP_WATER = 2100.0               !   [J kg-1 K-1] default = 2100.0
+                                ! The heat capacity of water in sea-ice, approximated as
+                                ! a constant.  CP_WATER and CP_SEAWATER should be equal,
+                                ! but for computational convenience CP_WATER has often
+                                ! been set equal to CP_ICE instead.
+CP_SEAWATER = 4200.0            !   [J kg-1 K-1] default = 4200.0
+                                ! The heat capacity of sea water, approximated as a
                                 ! constant.
 DTFREEZE_DS = -0.054            !   [deg C PSU-1] default = -0.054
                                 ! The derivative of the freezing temperature with salinity.
