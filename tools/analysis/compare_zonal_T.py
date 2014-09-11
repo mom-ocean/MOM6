@@ -3,7 +3,6 @@
 import netCDF4
 import numpy
 import m6plot
-import matplotlib.pyplot as plt
 
 try: import argparse
 except: raise Exception('This version of python is not new enough. python 2.7 or newer is required.')

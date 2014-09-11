@@ -3,7 +3,6 @@
 import netCDF4
 import numpy
 import m6plot
-import matplotlib.pyplot as plt
 
 try: import argparse
 except: raise Exception('This version of python is not new enough. python 2.7 or newer is required.')
@@ -27,9 +26,9 @@ msk = netCDF4.Dataset(cmdLineArgs.gridspecdir+'/ocean_mask.nc').variables['mask'
 area = msk*netCDF4.Dataset(cmdLineArgs.gridspecdir+'/ocean_hgrid.nc').variables['area'][:,:].reshape([msk.shape[0], 2, msk.shape[1], 2]).sum(axis=-3).sum(axis=-1)
 basin = netCDF4.Dataset(cmdLineArgs.gridspecdir+'/basin_codes.nc').variables['basin'][:]
 
-def zonalAverage(T, eta, area, mask=1.):
+def zonalAverage(S, eta, area, mask=1.):
   vols = ( mask * area ) * ( eta[:-1] - eta[1:] ) # mask * area * level thicknesses
-  return numpy.sum( vols * T, axis=-1 ) / numpy.sum( vols, axis=-1 ), (mask*eta).min(axis=-1)
+  return numpy.sum( vols * S, axis=-1 ) / numpy.sum( vols, axis=-1 ), (mask*eta).min(axis=-1)
 
 Sobs = netCDF4.Dataset( cmdLineArgs.woa ).variables['salt'][:]
 Zobs = netCDF4.Dataset( cmdLineArgs.woa ).variables['eta'][:]
