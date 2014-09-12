@@ -188,6 +188,11 @@ CP_WATER = 2100.0               !   [J kg-1 K-1] default = 2100.0
                                 ! a constant.  CP_WATER and CP_SEAWATER should be equal,
                                 ! but for computational convenience CP_WATER has often
                                 ! been set equal to CP_ICE instead.
+CP_BRINE = 2100.0               !   [J kg-1 K-1] default = 2100.0
+                                ! The heat capacity of water in brine pockets within the
+                                ! sea-ice, approximated as a constant.  CP_BRINE and
+                                ! CP_WATER should be equal, but for computational
+                                ! convenience CP_BRINE has often been set equal to CP_ICE.
 CP_SEAWATER = 4200.0            !   [J kg-1 K-1] default = 4200.0
                                 ! The heat capacity of sea water, approximated as a
                                 ! constant.
