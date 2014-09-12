@@ -174,7 +174,7 @@ subroutine calc_resoln_function(h, tv, G, CS)
   mod_power_2 = mod(CS%Res_fn_power, 2)
 
 !$OMP parallel default(none) shared(is,ie,js,je,Ieq,Jeq,CS,mod_power_2) &
-!$OMP                       private(dx_term,cg1_q,power_2)
+!$OMP                       private(dx_term,cg1_q,power_2,cg1_u,cg1_v)
   if (CS%Res_fn_power >= 100) then
 !$OMP do
     do j=js-1,je+1 ; do i=is-1,ie+1
