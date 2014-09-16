@@ -1708,7 +1708,7 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
       "meter second-1")
   if (CS%id_createdH>0) allocate(CS%createdH(isd:ied,jsd:jed))
   CS%id_MLD_003 = register_diag_field('ocean_model','MLD_003',diag%axesT1,Time, &
-      'Mixed layer depth (delta rho = 0.03)', 'meter')
+      'Mixed layer depth (delta rho = 0.03)', 'meter', cmor_field_name='mlotst', cmor_long_name='Ocean Mixed Layer Thickness Defined by Sigma T', cmor_units='m', cmor_standard_name='ocean_mixed_layer_thickness_defined_by_sigma_t')
   CS%id_MLD_0125 = register_diag_field('ocean_model','MLD_0125',diag%axesT1,Time, &
       'Mixed layer depth (delta rho = 0.125)', 'meter')
   CS%id_subMLN2  = register_diag_field('ocean_model','subML_N2',diag%axesT1,Time, &

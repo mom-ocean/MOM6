@@ -2023,18 +2023,26 @@ subroutine register_diags(Time, G, CS, ADp)
         long_name='Salinity', units='PSU', cmor_field_name='so',            &
         cmor_long_name='Sea Water Salinity', cmor_units='psu',              &
         cmor_standard_name='sea_water_salinity')
-    CS%id_sst = register_diag_field('ocean_model', 'SST', diag%axesT1, Time, &
-        'Sea Surface Temperature', 'Celsius', CS%missing)
+    CS%id_sst = register_diag_field('ocean_model', 'SST', diag%axesT1, Time,     &
+        'Sea Surface Temperature', 'Celsius', CS%missing, cmor_field_name='tos', &
+        cmor_long_name='Sea Surface Temperature', cmor_units='degC',             &
+        cmor_standard_name='sea_surface_temperature')
     CS%id_sst_global = register_scalar_field('ocean_model', field_name='SST_global',   &
         init_time=Time, diag=diag, long_name='Global Average Sea Surface Temperature', &
         units='Celsius', missing_value=CS%missing, cmor_field_name='tosga',            &
-        cmor_units='deg C', cmor_standard_name='global_average_sea_surface_temperature')
+        cmor_units='degC', cmor_standard_name='sea_surface_temperature')
     CS%id_sst_sq = register_diag_field('ocean_model', 'SST_sq', diag%axesT1, Time, &
-        'Sea Surface Temperature Squared', 'Celsius**2', CS%missing)    
+        'Sea Surface Temperature Squared', 'Celsius**2', CS%missing, cmor_field_name='tossq', &
+        cmor_long_name='Square of Sea Surface Temperature ', cmor_units='degC^2', &
+        cmor_standard_name='square_of_sea_surface_temperature')    
     CS%id_sss = register_diag_field('ocean_model', 'SSS', diag%axesT1, Time, &
-        'Sea Surface Salinity', 'PSU', CS%missing)
+        'Sea Surface Salinity', 'PSU', CS%missing, cmor_field_name='sos', &
+        cmor_long_name='Sea Surface Salinity', cmor_units='psu',          &
+        cmor_standard_name='sea_surface_salinity')
     CS%id_sss_global = register_scalar_field('ocean_model', 'SSS_global', Time, diag, &
-        'Global Average Sea Surface Salinity', 'PSU', CS%missing)
+        'Global Average Sea Surface Salinity', 'PSU', CS%missing, cmor_field_name='sosga', &
+        cmor_long_name='Global Average Sea Surface Salinity', cmor_units='psu',  &
+        cmor_standard_name='global_average_sea_surface_salinity')
     if (CS%id_sst_sq > 0) call safe_alloc_ptr(CS%SST_sq,isd,ied,jsd,jed)    
   endif
   if (CS%use_temperature .and. CS%use_frazil) then
