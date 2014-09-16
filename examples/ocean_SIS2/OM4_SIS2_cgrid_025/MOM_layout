@@ -1,0 +1,6 @@
+! These parameters are for testing mask_tables in a non-FRE environment.
+! This file should not be used in production unless you really want to
+! use this layout.
+#override NIPROC = 32
+#override NJPROC = 18
+#override MASKTABLE = "mask_table.96.32x18" ! 32*18-96 = 480 PEs
