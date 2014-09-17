@@ -707,13 +707,14 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
       "implemented for a non-Boussinesq model.")
   endif ; endif
 
-  nstep = CEILING(dt/CS%dtbt - 0.0001)
+  nstep = max(CEILING(dt/CS%dtbt - 0.0001),4)
   if (is_root_PE() .and. (nstep /= CS%nstep_last)) then
     write(mesg,'("btstep is using a dynamic barotropic timestep of ", ES12.6, &
                & " seconds, max ", ES12.6, ".")') (dt/nstep), CS%dtbt_max
     call MOM_mesg(mesg, 3)
   endif
   CS%nstep_last = nstep
+
 
   ! Set the actual barotropic time step.
   Instep = 1.0 / real(nstep)
@@ -775,8 +776,6 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   if (.not. use_BT_cont) then
     call  create_group_pass(pass_Dat_uv, Datu, Datv, CS%BT_Domain, To_All+Scalar_Pair)
   endif
-  call create_group_pass(pass_eta_ubt, eta, CS%BT_Domain)
-  call create_group_pass(pass_eta_ubt, ubt, vbt, CS%BT_Domain)
   if (find_etaav) then
     call create_group_pass(pass_etaav, etaav, G%Domain)
   endif
@@ -1440,6 +1439,10 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
     dt_filt = 0.5 * max(0.0, dt * min(-CS%dt_bt_filter, 2.0))
   endif
   nfilter = ceiling(dt_filt / dtbt)
+
+  call create_group_pass(pass_eta_ubt, eta, CS%BT_Domain)
+  call create_group_pass(pass_eta_ubt, ubt, vbt, CS%BT_Domain)
+
 
   ! Set up the normalized weights for the filtered velocity.
   sum_wt_vel = 0.0 ; sum_wt_eta = 0.0 ; sum_wt_accel = 0.0 ; sum_wt_trans = 0.0
@@ -2203,6 +2206,8 @@ subroutine set_dtbt(G, CS, eta, pbce, BT_cont, gtot_est, SSH_add)
 
   CS%dtbt = CS%dtbt_fraction * dtbt_max
   CS%dtbt_max = dtbt_max
+
+
 end subroutine set_dtbt
 
 ! The following 4 subroutines apply the open boundary conditions.
