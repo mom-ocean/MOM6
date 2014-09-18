@@ -52,12 +52,6 @@
 "ocean_model", "diffv"  [Unused]
     ! long_name: Meridional Acceleration from Horizontal Viscosity
     ! units: meter second-2
-"ocean_model", "Ahh"  [Unused]
-    ! long_name: Biharmonic Horizontal Viscosity at h Points
-    ! units: meter4 second-1
-"ocean_model", "Ahq"  [Unused]
-    ! long_name: Biharmonic Horizontal Viscosity at q Points
-    ! units: meter4 second-1
 "ocean_model", "Khh"  [Unused]
     ! long_name: Laplacian Horizontal Viscosity at h Points
     ! units: meter2 second-1
@@ -407,16 +401,16 @@
 "ocean_model", "col_height"  [Unused]
     ! long_name: The height of the water column
     ! units: m
-"ocean_model", "u_z"  [Unused]
+"ocean_model_z", "u"  [Unused]
     ! long_name: Zonal Velocity in Depth Space
     ! units: meter second-1
-"ocean_model", "v_z"  [Unused]
+"ocean_model_z", "v"  [Unused]
     ! long_name: Meridional Velocity in Depth Space
     ! units: meter second-1
-"ocean_model", "uh_z"  [Unused]
+"ocean_model_z", "uh"  [Unused]
     ! long_name: Meridional Volume Transport in Depth Space
     ! units: meter3 second-1
-"ocean_model", "vh_z"  [Unused]
+"ocean_model_z", "vh"  [Unused]
     ! long_name: Meridional Volume Transport in Depth Space
     ! units: meter3 second-1
 "ocean_model", "ea"  [Unused]
@@ -669,15 +663,19 @@
 "ocean_model", "salt_predia"  [Unused]
     ! long_name: Salinity
     ! units: PSU
-"ocean_model", "temp_z"  [Unused]
+"ocean_model_z", "temp"  [Unused]
     ! long_name: Potential Temperature
     ! units: degC
     ! standard_name: not provided
-"ocean_model", "salt_z"  [Unused]
+"ocean_model_z", "thetao"  [Unused]
+    ! long_name: Sea Water Potential Temperature
+    ! units: C
+    ! standard_name: sea_water_potential_temperature
+"ocean_model_z", "salt"  [Unused]
     ! long_name: Salinity
     ! units: PSU
     ! standard_name: not provided
-"ocean_model", "so_z"  [Unused]
+"ocean_model_z", "so"  [Unused]
     ! long_name: Sea Water Salinity
     ! units: psu
     ! standard_name: sea_water_salinity

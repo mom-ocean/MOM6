@@ -38,10 +38,10 @@
 
 # Z level output
 #================
-"ocean_model","u_z","u","prog_z","all",.false.,"none",2
-"ocean_model","v_z","v","prog_z","all",.false.,"none",2
-"ocean_model","temp_z","temp","prog_z","all",.false.,"none",2
-"ocean_model","salt_z","salt","prog_z","all",.false.,"none",2
+"ocean_model_z","u","u","prog_z","all",.false.,"none",2
+"ocean_model_z","v","v","prog_z","all",.false.,"none",2
+"ocean_model_z","temp","temp","prog_z","all",.false.,"none",2
+"ocean_model_z","salt","salt","prog_z","all",.false.,"none",2
 
 # Auxilary Tracers:
 #==================

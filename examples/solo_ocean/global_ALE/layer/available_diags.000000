@@ -440,24 +440,24 @@
 "ocean_model", "col_height"  [Unused]
     ! long_name: The height of the water column
     ! units: m
-"ocean_model", "u_z"  [Used]
+"ocean_model_z", "u"  [Unused]
     ! long_name: Zonal Velocity in Depth Space
     ! units: meter second-1
-"ocean_model", "uo_z"  [Used]
+"ocean_model_z", "uo"  [Unused]
     ! long_name: Sea Water X Velocity
     ! units: m s-1
     ! standard_name: sea_water_x_velocity
-"ocean_model", "v_z"  [Used]
+"ocean_model_z", "v"  [Unused]
     ! long_name: Meridional Velocity in Depth Space
     ! units: meter second-1
-"ocean_model", "vo_z"  [Used]
+"ocean_model_z", "vo_z"  [Unused]
     ! long_name: Sea Water Y Velocity
     ! units: m s-1
     ! standard_name: sea_water_y_velocity
-"ocean_model", "uh_z"  [Unused]
+"ocean_model_z", "uh"  [Unused]
     ! long_name: Zonal Volume Transport in Depth Space
     ! units: meter3 second-1
-"ocean_model", "vh_z"  [Unused]
+"ocean_model_z", "vh"  [Unused]
     ! long_name: Meridional Volume Transport in Depth Space
     ! units: meter3 second-1
 "ocean_model", "ea"  [Unused]
@@ -873,15 +873,19 @@
 "ocean_model", "salt_predia"  [Unused]
     ! long_name: Salinity
     ! units: PSU
-"ocean_model", "temp_z"  [Used]
+"ocean_model_z", "temp"  [Unused]
     ! long_name: Potential Temperature
     ! units: degC
     ! standard_name: not provided
-"ocean_model", "salt_z"  [Used]
+"ocean_model_z", "thetao"  [Unused]
+    ! long_name: Sea Water Potential Temperature
+    ! units: C
+    ! standard_name: sea_water_potential_temperature
+"ocean_model_z", "salt"  [Unused]
     ! long_name: Salinity
     ! units: PSU
     ! standard_name: not provided
-"ocean_model", "so_z"  [Used]
+"ocean_model_z", "so"  [Unused]
     ! long_name: Sea Water Salinity
     ! units: psu
     ! standard_name: sea_water_salinity
@@ -900,7 +904,7 @@
 "ocean_model", "age_dfy"  [Unused]
     ! long_name: Ideal Age Tracer diffusive zonal flux
     ! units: years m3 s-1
-"ocean_model", "age_z"  [Unused]
+"ocean_model_z", "age_z"  [Unused]
     ! long_name: Ideal Age Tracer
     ! units: years
     ! standard_name: not provided
