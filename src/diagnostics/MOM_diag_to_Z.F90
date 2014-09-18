@@ -896,7 +896,7 @@ subroutine MOM_diag_to_Z_init(Time, G, param_file, diag, CS)
 
     CS%id_v_z = register_diag_field('ocean_model_z', 'v', CS%axesCvz, Time, &
         'Meridional Velocity in Depth Space', 'meter second-1', &
-        missing_value=CS%missing_vel, cmor_field_name='vo_z', cmor_units='m s-1', &
+        missing_value=CS%missing_vel, cmor_field_name='vo', cmor_units='m s-1', &
         cmor_standard_name='sea_water_y_velocity', cmor_long_name='Sea Water Y Velocity')
     if (CS%id_v_z>0) call safe_alloc_ptr(CS%v_z,isd,ied,JsdB,JedB,CS%nk_zspace)
 
@@ -1100,7 +1100,7 @@ function ocean_register_diag_with_z (tr_ptr, vardesc_tr, G, Time, CS)
 ! Copy the layer tracer variable descriptor to a z-tracer descriptor
 ! Change the name and layer information.
   vardesc_z = vardesc_tr
-  vardesc_z%name = trim(vardesc_tr%name)//"_z"
+  vardesc_z%name = trim(vardesc_tr%name)
   vardesc_z%z_grid = "z"
   m = CS%num_tr_used + 1
   CS%missing_tr(m) = CS%missing_value ! This could be changed later, if desired.
@@ -1200,7 +1200,7 @@ function register_Zint_diag(var_desc, CS, day)
         "register_Z_diag: unknown hor_grid component "//trim(var_desc%hor_grid))
   end select
 
-  register_Zint_diag = register_diag_field("ocean_model", trim(var_desc%name), &
+  register_Zint_diag = register_diag_field("ocean_model_z", trim(var_desc%name), &
         axes, day, trim(var_desc%longname), trim(var_desc%units), &
         missing_value=CS%missing_value)
 

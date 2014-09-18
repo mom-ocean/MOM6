@@ -342,7 +342,7 @@ subroutine initialize_oil_tracer(restart, day, G, h, OBC, CS, sponge_CSp, &
                              G, -1e34, 0.0) ! CS%land_val(m))
           if (.not.OK) then
             OK = tracer_Z_init(CS%tr(:,:,:,m), h, CS%IC_file, &
-                     trim(CS%tr_desc(m)%name)//"_z", G, -1e34, 0.0) ! CS%land_val(m))
+                     trim(CS%tr_desc(m)%name), G, -1e34, 0.0) ! CS%land_val(m))
             if (.not.OK) call MOM_error(FATAL,"initialize_oil_tracer: "//&
                     "Unable to read "//trim(CS%tr_desc(m)%name)//" from "//&
                     trim(CS%IC_file)//".")
@@ -405,7 +405,7 @@ subroutine initialize_oil_tracer(restart, day, G, h, OBC, CS, sponge_CSp, &
       call add_tracer_diagnostics(name, CS%tr_Reg, CS%tr_adx(m)%p, &
                                   CS%tr_ady(m)%p,CS%tr_dfx(m)%p,CS%tr_dfy(m)%p)
 
-    call register_Z_tracer(CS%tr(:,:,:,m), trim(name)//"_z", longname, units, &
+    call register_Z_tracer(CS%tr(:,:,:,m), trim(name), longname, units, &
                            day, G, diag_to_Z_CSp)
   enddo
 

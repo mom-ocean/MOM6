@@ -95,10 +95,17 @@
  "ocean_model", "salt_global",      "salt_global",      "ocean_scalar_annual", "all", "mean", "none",2
 
 # Z diagnostics
- "ocean_model", "temp_z",       "temp",             "ocean_month_z", "all", "mean", "none",2
- "ocean_model", "salt_z",       "salt",             "ocean_month_z", "all", "mean", "none",2
- "ocean_model", "age_z",        "age",              "ocean_month_z", "all", "mean", "none",2
-#"ocean_model", "vintage_z",    "vintage",          "ocean_month_z", "all", "mean", "none",2
+ "ocean_model_z", "thetao",         "thetao",           "ocean_month_z", "all", "mean", "none",2
+ "ocean_model_z", "so",             "so",               "ocean_month_z", "all", "mean", "none",2
+ "ocean_model_z", "age",            "age",              "ocean_month_z", "all", "mean", "none",2
+ "ocean_model_z", "uo",             "uo",               "ocean_month_z", "all", "mean", "none",2
+ "ocean_model_z", "vo",             "vo",               "ocean_month_z", "all", "mean", "none",2
+ "ocean_model_z", "uh",             "uh",               "ocean_month_z", "all", "mean", "none",2
+ "ocean_model_z", "vh",             "vh",               "ocean_month_z", "all", "mean", "none",2
+ "ocean_model_z", "N2",             "N2",               "ocean_month_z", "all", "mean", "none",2
+ "ocean_model_z", "Kd",             "Kd",               "ocean_month_z", "all", "mean", "none",2
+ "ocean_model_z", "Kd_itides",      "Kd_itides",        "ocean_month_z", "all", "mean", "none",2
+#"ocean_model_z", "vintage",        "vintage",          "ocean_month_z", "all", "mean", "none",2
 
 # Sections
 "ocean_model", "temp", "temp", "ocean_Drake_passage",    "all", "mean", "-70. -70. -71. -54.5 -1 -1",2

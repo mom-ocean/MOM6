@@ -366,7 +366,7 @@ subroutine USER_initialize_tracer(restart, day, G, h, OBC, CS, sponge_CSp, &
       call add_tracer_diagnostics(name, CS%tr_Reg, CS%tr_adx(m)%p, &
                                   CS%tr_ady(m)%p,CS%tr_dfx(m)%p,CS%tr_dfy(m)%p)
 
-    call register_Z_tracer(CS%tr(:,:,:,m), trim(name)//"_z", longname, units, &
+    call register_Z_tracer(CS%tr(:,:,:,m), trim(name), longname, units, &
                            day, G, diag_to_Z_CSp)
   enddo
 

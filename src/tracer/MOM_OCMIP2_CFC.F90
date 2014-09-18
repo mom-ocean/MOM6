@@ -431,14 +431,14 @@ subroutine initialize_OCMIP2_CFC(restart, day, G, h, OBC, CS, sponge_CSp, &
   units = CS%CFC11_desc%units
   CS%id_CFC11 = register_diag_field("ocean_model", trim(name), CS%diag%axesTL, &
       day, trim(longname) , trim(units))
-  call register_Z_tracer(CS%CFC11, trim(name)//"_z", longname, units, &
+  call register_Z_tracer(CS%CFC11, trim(name), longname, units, &
                          day, G, diag_to_Z_CSp)
   ! Register CFC12 for potential diagnostic output.
   name = CS%CFC12_desc%name ; longname = CS%CFC12_desc%longname
   units = CS%CFC12_desc%units
   CS%id_CFC12 = register_diag_field("ocean_model", trim(name), CS%diag%axesTL, &
       day, trim(longname) , trim(units))
-  call register_Z_tracer(CS%CFC12, trim(name)//"_z", longname, units, &
+  call register_Z_tracer(CS%CFC12, trim(name), longname, units, &
                          day, G, diag_to_Z_CSp)
  
   ! This needs to be changed if the units of tracer are changed above.
@@ -506,7 +506,7 @@ subroutine init_tracer_CFC(h, tr, tr_desc, land_val, IC_val, G, CS)
     if (CS%Z_IC_file) then
       OK = tracer_Z_init(tr, h, CS%IC_file, tr_desc%name, G)
       if (.not.OK) then
-        OK = tracer_Z_init(tr, h, CS%IC_file, trim(tr_desc%name)//"_z", G)
+        OK = tracer_Z_init(tr, h, CS%IC_file, trim(tr_desc%name), G)
         if (.not.OK) call MOM_error(FATAL,"initialize_OCMIP2_CFC: "//&
                 "Unable to read "//trim(tr_desc%name)//" from "//&
                 trim(CS%IC_file)//".")

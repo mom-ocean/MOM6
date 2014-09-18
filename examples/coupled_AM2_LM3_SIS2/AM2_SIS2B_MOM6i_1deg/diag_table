@@ -45,7 +45,7 @@ CM2.2
 "ocean_model_z","v","v","ocean_month_z","all",.true.,"none",2
 "ocean_model_z","temp","temp","ocean_month_z","all",.true.,"none",2
 "ocean_model_z","salt","salt","ocean_month_z","all",.true.,"none",2
-"ocean_model_z","vintage","vintage","ocean_month_z","all",.true.,"none",2
+#"ocean_model_z","vintage","vintage","ocean_month_z","all",.true.,"none",2
 "ocean_model_z","age","age","ocean_month_z","all",.true.,"none",2
 "ocean_model_z","CFC11","CFC11","ocean_month_z","all",.true.,"none",2
 "ocean_model_z","CFC12","CFC12","ocean_month_z","all",.true.,"none",2

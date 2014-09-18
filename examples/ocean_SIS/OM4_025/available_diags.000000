@@ -411,7 +411,7 @@
 "ocean_model_z", "v"  [Unused]
     ! long_name: Meridional Velocity in Depth Space
     ! units: meter second-1
-"ocean_model_z", "vo_z"  [Unused]
+"ocean_model_z", "vo"  [Unused]
     ! long_name: Sea Water Y Velocity
     ! units: m s-1
     ! standard_name: sea_water_y_velocity
@@ -463,19 +463,19 @@
 "ocean_model", "MLD_user"  [Unused]
     ! long_name: Mixed layer depth (used defined)
     ! units: meter
-"ocean_model", "Kd_z"  [Unused]
+"ocean_model_z", "Kd"  [Unused]
     ! long_name: Diapycnal diffusivity at interfaces, interpolated to z
     ! units: meter2 second-1
-"ocean_model", "Tflx_dia_dif_z"  [Unused]
+"ocean_model_z", "Tflx_dia_dif"  [Unused]
     ! long_name: Diffusive diapycnal temperature flux across interfaces, interpolated to z
     ! units: degC meter second-1
-"ocean_model", "Tflx_dia_adv_z"  [Unused]
+"ocean_model_z", "Tflx_dia_adv"  [Unused]
     ! long_name: Advective diapycnal temperature flux across interfaces, interpolated to z
     ! units: degC meter second-1
-"ocean_model", "Sflx_dia_dif_z"  [Unused]
+"ocean_model_z", "Sflx_dia_dif"  [Unused]
     ! long_name: Diffusive diapycnal salinity flux across interfaces, interpolated to z
     ! units: PSU meter second-1
-"ocean_model", "Sflx_dia_adv_z"  [Unused]
+"ocean_model_z", "Sflx_dia_adv"  [Unused]
     ! long_name: Advective diapycnal salinity flux across interfaces, interpolated to z
     ! units: PSU meter second-1
 "ocean_model", "Kd_layer"  [Unused]
@@ -523,10 +523,10 @@
 "ocean_model", "N2"  [Unused]
     ! long_name: Buoyancy frequency squared
     ! units: sec-2
-"ocean_model", "N2_z"  [Unused]
+"ocean_model_z", "N2"  [Unused]
     ! long_name: Buoyancy frequency, interpolated to z
     ! units: second-2
-"ocean_model", "Kd_itides_z"  [Unused]
+"ocean_model_z", "Kd_itides"  [Unused]
     ! long_name: Internal Tide Driven Diffusivity, interpolated to z
     ! units: meter2 second-1
 "ocean_model", "Kd_shear"  [Unused]
@@ -820,7 +820,7 @@
 "ocean_model", "age_dfy"  [Unused]
     ! long_name: Ideal Age Tracer diffusive zonal flux
     ! units: years m3 s-1
-"ocean_model_z", "age_z"  [Unused]
+"ocean_model_z", "age"  [Unused]
     ! long_name: Ideal Age Tracer
     ! units: years
     ! standard_name: not provided
