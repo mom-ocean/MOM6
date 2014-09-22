@@ -1,0 +1,20 @@
+! These parameters are used in CORE mode but should not be used in
+! the coupled model (CM4).
+RESTORE_SALINITY = True         !   [Boolean] default = False
+                                ! If true, the coupled driver will add a globally-balanced
+                                ! fresh-water flux that drives sea-surface salinity
+                                ! toward specified values.
+ADJUST_NET_FRESH_WATER_TO_ZERO = True !   [Boolean] default = False
+                                ! If true, adjusts the net fresh-water forcing seen
+                                ! by the ocean (including restoring) to zero.
+FLUXCONST = 0.1667              !   [m day-1]
+                                ! The constant that relates the restoring surface fluxes
+                                ! to the relative surface anomalies (akin to a piston
+                                ! velocity).  Note the non-MKS units.
+SALT_RESTORE_FILE = "salt_restore.v20140616.nc" ! default = "salt_restore.nc"
+                                ! A file in which to find the surface salinity to use for restoring.
+SRESTORE_AS_SFLUX = True        !   [Boolean] default = False
+                                ! If true, the restoring of salinity is applied as a salt
+                                ! flux instead of as a freshwater flux.
+MAX_DELTA_SRESTORE = 5.0        !   [PSU or g kg-1] default = 999.0
+                                ! The maximum salinity difference used in restoring terms.
