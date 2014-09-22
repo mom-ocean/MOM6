@@ -1149,11 +1149,16 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,   &
         Rcv_tot(i) = Rcv_tot(i) + dRcv_dS(i)*h_evap*S(i,k)
         d_eb(i,k) = d_eb(i,k) - h_evap
 
+        ! smg: when resolve the A=B code, we will set 
+        ! heat_content_massout = heat_content_massout - T(i,k)*h_evap*G%H_to_kg_m2*fluxes%C_p*Idt
+        ! by uncommenting the lines here.  
+        ! we will also then completely remove TempXpme from the model. 
+!        if(ASSOCIATED(fluxes%heat_content_massout))                            &
+!           fluxes%heat_content_massout(i,j) = fluxes%heat_content_massout(i,j) &
+!           - T(i,k)*h_evap*G%H_to_kg_m2*fluxes%C_p*Idt
         if (ASSOCIATED(tv%TempxPmE)) tv%TempxPmE(i,j) = tv%TempxPmE(i,j) - &
                                       T(i,k)*h_evap*G%H_to_kg_m2
-        if(ASSOCIATED(fluxes%heat_content_massout))                            &
-           fluxes%heat_content_massout(i,j) = fluxes%heat_content_massout(i,j) &
-           - T(i,k)*h_evap*G%H_to_kg_m2*fluxes%C_p*Idt
+
       endif
 
       ! The following section calculates how much fluid will be entrained.

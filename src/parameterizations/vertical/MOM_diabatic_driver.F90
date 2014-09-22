@@ -637,10 +637,10 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     ! Changes: ea(:,:,1), h, tv%T and tv%S.
 
     ! smg: old code 
-    call applyBoundaryFluxes(CS, G, dt, fluxes, CS%optics, ea, h, tv)
+    ! call applyBoundaryFluxes(CS, G, dt, fluxes, CS%optics, ea, h, tv)
 
     ! smg: new code 
-    ! call applyBoundaryFluxesInOut(CS, G, dt, fluxes, CS%optics, ea, h, tv)
+      call applyBoundaryFluxesInOut(CS, G, dt, fluxes, CS%optics, ea, h, tv)
 
     call cpu_clock_end(id_clock_remap)
     if (CS%debug) then
@@ -2140,8 +2140,10 @@ subroutine applyBoundaryFluxes(CS, G, dt, fluxes, optics, ea, h, tv)
 
           ! Adjust heating by the temperature of rain/water vapor
           dTemp = dTemp + dThickness*tv%T(i,j,k)
-          if (ASSOCIATED(tv%TempxPmE)) tv%TempxPmE(i,j) = tv%TempxPmE(i,j) + &
+          if(CS%bulkmixedlayer) then 
+            if (ASSOCIATED(tv%TempxPmE)) tv%TempxPmE(i,j) = tv%TempxPmE(i,j) + &
                          tv%T(i,j,k) * dThickness * G%H_to_kg_m2
+          endif 
 
           ! Update state by the appropriate delta (change in state calculated above)
           hOld = h2d(i,k) ! Need to keep original thickness in hand
@@ -2455,8 +2457,9 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv)
               fluxes%heat_content_massout(i,j) = netHeatOut
               exit 
             endif 
-        
+
           enddo ! k
+
         endif     ! check for if(netMassOut(i) < 0.0)
 
 
