@@ -716,7 +716,7 @@
 "ocean_model", "SSS_global"  [Used]
     ! long_name: Global Average Sea Surface Salinity
     ! units: PSU
-"ocean_model", "frazil"  [Unused]
+"ocean_model", "frazil"  [Used]
     ! long_name: Heat sink from frazil formation
     ! units: Watt meter-2
 "ocean_model", "hfsifrazil"  [Used]
@@ -902,6 +902,12 @@
     ! long_name: Water Flux into Sea Water From Rivers
     ! units: kg m-2 s-1
     ! standard_name: water_flux_into_sea_water_from_rivers
+"ocean_model", "net_massout"  [Used]
+    ! long_name: Net mass leaving the ocean due to evaporation, ice formation
+    ! units: kilogram meter-2 second-1
+"ocean_model", "net_massin"  [Used]
+    ! long_name: Net mass entering ocean due to precip, runoff, ice melt
+    ! units: kilogram meter-2 second-1
 "ocean_model", "heat_content_frunoff"  [Used]
     ! long_name: Heat content of frozen runoff (calving) into ocean
     ! units: Watt meter-2
@@ -910,7 +916,7 @@
     ! long_name: Heat Flux into Sea Water due to Iceberg Thermodynamics
     ! units: W m-2
     ! standard_name: heat_flux_into_sea_water_due_to_iceberg_thermodynamics
-"ocean_model", "runoff_heat_content"  [Unused]
+"ocean_model", "heat_content_lrunoff"  [Used]
     ! long_name: Heat content of liquid river runoff into ocean
     ! units: Watt meter-2
     ! standard_name: temperature_flux_due_to_runoff_expressed_as_heat_flux_into_sea_water
