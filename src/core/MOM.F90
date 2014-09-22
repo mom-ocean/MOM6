@@ -1282,7 +1282,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       call post_data(CS%id_salt_deficit, salt_deficit_ave, CS%diag, mask=G%mask2dT)
       deallocate(salt_deficit_ave)
     endif
-    if (ASSOCIATED(CS%tv%TempxPmE) .and. (CS%id_Heat_PmE > 0) .and. CS%bulkmixedlayer) then
+    if (ASSOCIATED(CS%tv%TempxPmE) .and. (CS%id_Heat_PmE > 0)) then
       allocate(Heat_PmE_ave(G%isd:G%ied,G%jsd:G%jed))
       do j=js,je ; do i=is,ie
         Heat_PmE_ave(i,j) = CS%tv%TempxPmE(i,j) * (CS%tv%C_p * I_time_int)
