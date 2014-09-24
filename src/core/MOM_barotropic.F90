@@ -775,6 +775,8 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   if (.not. use_BT_cont) then
     call  create_group_pass(pass_Dat_uv, Datu, Datv, CS%BT_Domain, To_All+Scalar_Pair)
   endif
+  call create_group_pass(pass_eta_ubt, eta, CS%BT_Domain)
+  call create_group_pass(pass_eta_ubt, ubt, vbt, CS%BT_Domain)
   if (find_etaav) then
     call create_group_pass(pass_etaav, etaav, G%Domain)
   endif
@@ -1439,11 +1441,8 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   endif
   nfilter = ceiling(dt_filt / dtbt)
 
-  !--- setup group update for pass_eta_ubt only when nstep+nfilter>0 
-  if(nstep+nfilter>0) then
-    call create_group_pass(pass_eta_ubt, eta, CS%BT_Domain)
-    call create_group_pass(pass_eta_ubt, ubt, vbt, CS%BT_Domain)
-  endif
+  if (nstep+nfilter==0 ) call MOM_error(FATAL, &
+      "btstep: number of barotropic step (nstep+nfilter) is 0")
 
   ! Set up the normalized weights for the filtered velocity.
   sum_wt_vel = 0.0 ; sum_wt_eta = 0.0 ; sum_wt_accel = 0.0 ; sum_wt_trans = 0.0
