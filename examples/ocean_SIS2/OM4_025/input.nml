@@ -15,7 +15,7 @@
         restart_input_dir = 'INPUT/',
         restart_output_dir = 'RESTART/',
         parameter_filename = 'SIS_input',
-!                             'SIS_layout',
+                             'SIS_layout',
                              'SIS_override' /
 
  &atmos_model_nml
