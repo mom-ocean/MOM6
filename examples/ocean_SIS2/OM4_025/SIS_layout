@@ -1,7 +1,10 @@
 ! These parameters are for testing mask_tables in a non-FRE environment.
 ! This file should not be used in production unless you really want to
 ! use this layout.
-#override undef LAYOUT
-#override NIPROC = 32
-#override NJPROC = 18
+#override undef NIPROC
+#override undef NJPROC
+#override undef NIPROC_IO
+#override undef NJPROC_IO
+#override LAYOUT = 32,18
+#override IO_LAYOUT = 2,2
 #override MASKTABLE = "mask_table.96.32x18" ! 32*18-96 = 480 PEs
