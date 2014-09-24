@@ -78,6 +78,7 @@ S.add_field_from_array(O.temp,'temp_obs',var_dict=vdict)
 vdict=S.var_dict['salt'].copy()
 S.add_field_from_array(O.salt,'salt_obs',var_dict=vdict)
 
+
 S.write_nc('tmp.nc',['temp','salt','temp_obs','salt_obs'],write_interface_positions=True)
 
 
@@ -88,6 +89,7 @@ else:
     
 cp = 3989.0;rho0=1.035e3
 S=state('tmp.nc',fields=['temp','salt','temp_obs','salt_obs'],grid=grid,z_indices=z_indices,interfaces='eta',verbose=False)
+
 
 S.volume_integral('temp','Z',normalize=False)
 S.temp_zint = S.temp_zint * rho0 * cp*1.e-10
@@ -110,8 +112,7 @@ S.add_field_from_array(S.hc-S.hc_obs,'hc_bias',var_dict=vdict)
 vdict=S.var_dict['sc'].copy()
 S.add_field_from_array(S.sc-S.sc_obs,'sc_bias',var_dict=vdict)
 fnam_out=cmdLineArgs.outdir+'/'+cmdLineArgs.label+'_heat_salt_'+str(int(cmdLineArgs.start_depth))+'_'+str(int(cmdLineArgs.end_depth))+'.nc'
-print fnam_out
-S.write_nc(fnam_out,['hc','sc','hc_bias','sc_bias'])
+S.write_nc(fnam_out,['hc','sc','hc_bias','sc_bias'],write_interface_positions=True)
 
 
 fig=plt.figure(1,figsize=(8.5,11))
@@ -128,6 +129,5 @@ tit=cmdLineArgs.label+' Salt Content (10^9 gSalt) Bias z= '+str(cmdLineArgs.star
 tit='Salt Content Bias z= '+str(cmdLineArgs.start_depth)+' to '+str(cmdLineArgs.end_depth)
 ax2.set_title(tit,fontsize=10)
 plt.colorbar(cf,ax=ax2)
-print fnam_out
 fnam_out=cmdLineArgs.outdir+'/'+cmdLineArgs.label+'_heat_salt_'+str(int(cmdLineArgs.start_depth))+'_'+str(int(cmdLineArgs.end_depth))+'.png'
 plt.savefig(fnam_out)
