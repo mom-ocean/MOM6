@@ -1,14 +1,14 @@
 "GOLD Experiment"
 1 1 1 0 0 0
 "prog",     10,"days",1,"days","Time",
-"ave_prog", 10,"days",1,"days","Time",
-"cont",     10,"days",1,"days","Time",
+"ave_prog", 365,"days",1,"days","Time",
+"cont",     365,"days",1,"days","Time",
 #"diag",    10,"days",1,"days","Time",
 #"trac",    10,"days",1,"days","Time",
 #"mom",     10,"days",1,"days","Time",
 #"bt_mom",  10,"days",1,"days","Time",
-"visc",     10,"days",1,"days","Time",
-#"energy",  10,"days",1,"days","Time",
+"visc",     365,"days",1,"days","Time",
+"energy",   365,"days",1,"days","Time",
 #"ML_TKE",  10,"days",1,"days","Time",
 #"forcing", 10,"days",1,"days","Time",
 
@@ -25,11 +25,11 @@
 "ocean_model","Khq","Khq","prog","all",.false.,"none",2
 "ocean_model","Ahh","Ahh","prog","all",.false.,"none",2
 "ocean_model","Ahq","Ahq","prog","all",.false.,"none",2
-"ocean_model","KHTH_u1","KHTH_u1","prog","all",.false.,"none",2
+#"ocean_model","KHTH_u1","KHTH_u1","prog","all",.false.,"none",2
 "ocean_model","KHTH_v1","KHTH_v1","prog","all",.false.,"none",2
-"ocean_model","Res_fn","Res_fn","prog","all",.false.,"none",2
-"ocean_model","Rd_dx","Rd_dx","prog","all",.false.,"none",2
-"ocean_model","cg1","cg1","prog","all",.false.,"none",2
+#"ocean_model","Res_fn","Res_fn","prog","all",.false.,"none",2
+#"ocean_model","Rd_dx","Rd_dx","prog","all",.false.,"none",2
+#"ocean_model","cg1","cg1","prog","all",.false.,"none",2
 #"ocean_model","temp","temp","prog","all",.false.,"none",2
 #"ocean_model","salt","salt","prog","all",.false.,"none",2
 #"ocean_model","Rml","Rml","prog","all",.false.,"none",2
@@ -40,6 +40,11 @@
 #"ocean_model","Rd1","Rd1","prog","all",.false.,"none",2
 # "ocean_model","cg1","cg1","prog","all",.false.,"none",2
 #"ocean_model","e_D","e_D","prog","all",.false.,"none",2
+
+"ocean_model","uh","uh","prog","all",.false.,"none",2
+"ocean_model","vh","vh","prog","all",.false.,"none",2
+"ocean_model","MEKE","MEKE","prog","all",.false.,"none",2
+"ocean_model","MEKE_mom_src","MEKE_mom_src","prog","all",.false.,"none",2
 
 "ocean_model","u","u","ave_prog","all",.true.,"none",2
 "ocean_model","v","v","ave_prog","all",.true.,"none",2
@@ -55,6 +60,9 @@
 "ocean_model","KHTH_v","KHTH_v","ave_prog","all",.true.,"none",2
 "ocean_model","KHTH_u1","KHTH_u1","ave_prog","all",.true.,"none",2
 "ocean_model","KHTH_v1","KHTH_v1","ave_prog","all",.true.,"none",2
+
+"ocean_model","MEKE","MEKE","ave_prog","all",.true.,"none",2
+"ocean_model","Res_fn","Res_fn","ave_prog","all",.true.,"none",2
 
 #"ocean_model","w_sponge","w_sponge","diag","all",.true.,"none",2
 #"ocean_model","Rd1","Rd1","diag","all",.true.,"none",2
@@ -95,8 +103,8 @@
 #"ocean_model","h_rho","h_rho","cont","all",.true.,"none",2
 #"ocean_model","uh_rho","uh_rho","cont","all",.true.,"none",2
 #"ocean_model","vh_rho","vh_rho","cont","all",.true.,"none",2
-"ocean_model","uhGM_rho","uhGM_rho","cont","all",.true.,"none",2
-"ocean_model","vhGM_rho","vhGM_rho","cont","all",.true.,"none",2
+#"ocean_model","uhGM_rho","uhGM_rho","cont","all",.true.,"none",2
+#"ocean_model","vhGM_rho","vhGM_rho","cont","all",.true.,"none",2
 
 #
 # Tracer Fluxes:
@@ -148,8 +156,8 @@
 # Viscosities and diffusivities:
 #===============================
 #"ocean_model","Kd_effective","Kd_effective","visc","all",.true.,"none",2
-#"ocean_model","Ahh","Ahh","visc","all",.true.,"none",2
-#"ocean_model","Ahq","Ahq","visc","all",.true.,"none",2
+"ocean_model","Ahh","Ahh","visc","all",.true.,"none",2
+"ocean_model","Ahq","Ahq","visc","all",.true.,"none",2
 "ocean_model","Khh","Khh","visc","all",.true.,"none",2
 "ocean_model","Khq","Khq","visc","all",.true.,"none",2
 #"ocean_model","bbl_thick_u","bbl_thick_u","visc","all",.true.,"none",2
@@ -161,15 +169,17 @@
 #
 # Kinetic Energy Balance Terms:
 #=============================
-#"ocean_model","KE","KE","energy","all",.true.,"none",2
-#"ocean_model","dKE_dt","dKE_dt","energy","all",.true.,"none",2
-#"ocean_model","PE_to_KE","PE_to_KE","energy","all",.true.,"none",2
-#"ocean_model","KE_Coradv","KE_Coradv","energy","all",.true.,"none",2
-#"ocean_model","KE_adv","KE_adv","energy","all",.true.,"none",2
-#"ocean_model","KE_visc","KE_visc","energy","all",.true.,"none",2
-#"ocean_model","KE_horvisc","KE_horvisc","energy","all",.true.,"none",2
+"ocean_model","KE","KE","energy","all",.true.,"none",2
+"ocean_model","dKE_dt","dKE_dt","energy","all",.true.,"none",2
+"ocean_model","PE_to_KE","PE_to_KE","energy","all",.true.,"none",2
+"ocean_model","KE_Coradv","KE_Coradv","energy","all",.true.,"none",2
+"ocean_model","KE_adv","KE_adv","energy","all",.true.,"none",2
+"ocean_model","KE_visc","KE_visc","energy","all",.true.,"none",2
+"ocean_model","KE_horvisc","KE_horvisc","energy","all",.true.,"none",2
 #"ocean_model","KE_dia","KE_dia","energy","all",.true.,"none",2
-#
+"ocean_model","MEKE_mom_src","MEKE_mom_src","energy","all",.true.,"none",2
+"ocean_model","FrictWork","FrictWork","energy","all",.true.,"none",2
+
 # Mixed Layer TKE Budget Terms:
 #===========================
 #"ocean_model","TKE_wind","TKE_wind","ML_TKE","all",.true.,"none",2
