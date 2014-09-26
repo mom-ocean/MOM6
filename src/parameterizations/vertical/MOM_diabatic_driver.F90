@@ -1777,11 +1777,7 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
                  "The fraction of the mixed layer mixing that is applied \n"//&
                  "before interior diapycnal mixing.  0 by default.", &
                  units="nondim", default=0.0)
-
-    call get_param(param_file, mod, "NKBL", CS%nkbl, &
-                 "The number of variable density buffer layers if \n"//&
-                 "BULKMIXEDLAYER is true.", default=2)
-
+    call get_param(param_file, mod, "NKBL", CS%nkbl, default=2, do_not_log=.true.)
   else
     CS%ML_mix_first = 0.0
   endif
