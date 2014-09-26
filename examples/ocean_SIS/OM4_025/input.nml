@@ -5,6 +5,7 @@
          restart_output_dir = 'RESTART',
          parameter_filename = 'MOM_input',
                               'MOM_layout',
+                              'MOM_saltrestore',
                               'MOM_override'
 /
 

@@ -158,10 +158,11 @@ type, public :: forcing_diags
   ! id handles for the forcing type
 
   ! diagnostic manager id handles 
-  integer :: id_prcme        = -1, id_evap    = -1
-  integer :: id_precip       = -1, id_vprec   = -1
-  integer :: id_lprec        = -1, id_fprec   = -1
-  integer :: id_lrunoff      = -1, id_frunoff = -1
+  integer :: id_prcme        = -1, id_evap        = -1
+  integer :: id_precip       = -1, id_vprec       = -1
+  integer :: id_lprec        = -1, id_fprec       = -1
+  integer :: id_lrunoff      = -1, id_frunoff     = -1
+  integer :: id_net_massout  = -1, id_net_massin  = -1
   integer :: id_seaice_melt  = -1
 
   integer :: id_net_heat_coupler    = -1, id_net_heat_surface      = -1
@@ -172,7 +173,7 @@ type, public :: forcing_diags
   integer :: id_heat_content_lrunoff= -1, id_heat_content_frunoff  = -1
   integer :: id_heat_content_lprec  = -1, id_heat_content_fprec    = -1
   integer :: id_heat_content_cond   = -1, id_heat_content_surfwater= -1
-  integer :: id_heat_content_vprec  = -1, id_heat_content_massout  =-1  
+  integer :: id_heat_content_vprec  = -1, id_heat_content_massout  = -1  
   integer :: id_heat_restore        = -1
 
   integer :: id_saltflux        = -1, id_saltFluxIn        = -1
@@ -254,7 +255,8 @@ subroutine extractFluxes1d(G, fluxes, optics, nsw, j, dt,                       
 !  (out)     netMassInOut     = net mass flux (if non-Boussinesq) or volume flux (if Boussinesq)
 !                               of water in/out of ocean over a time step (H units)
 !  (out)     netMassOut       = net mass flux (if non-Boussinesq) or volume flux (if Boussinesq)
-!                               of water leaving ocean surface over a time step (H units)
+!                               of water leaving ocean surface over a time step (H units).
+!                               netMassOut < 0 means mass leaves ocean.  
 !  (out)     net_heat         = net heat at the surface over a time step associated with coupler
 !                               and restoring. We exclude two terms form net_heat: (1) heat that 
 !                               can leave bottom of surface cell via penetrative SW, (2) 
@@ -1229,6 +1231,12 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
         cmor_units='kg m-2 s-1', cmor_standard_name='water_flux_into_sea_water_from_rivers',  &
         cmor_long_name='Water Flux into Sea Water From Rivers')
 
+  handles%id_net_massout = register_diag_field('ocean_model', 'net_massout', diag%axesT1, Time, &
+        'Net mass leaving the ocean due to evaporation, ice formation', 'kilogram meter-2 second-1')
+
+  handles%id_net_massin  = register_diag_field('ocean_model', 'net_massin', diag%axesT1, Time, &
+        'Net mass entering ocean due to precip, runoff, ice melt', 'kilogram meter-2 second-1')
+
   handles%id_heat_content_frunoff = register_diag_field('ocean_model', 'heat_content_frunoff',   &
         diag%axesT1, Time, 'Heat content of frozen runoff (calving) into ocean', 'Watt meter-2', &
         standard_name='temperature_flux_due_to_icebergs_expressed_as_heat_flux_into_sea_water',  &
@@ -1236,7 +1244,7 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
         cmor_standard_name='heat_flux_into_sea_water_due_to_iceberg_thermodynamics',             &
         cmor_long_name='Heat Flux into Sea Water due to Iceberg Thermodynamics')
 
-  handles%id_heat_content_lrunoff = register_diag_field('ocean_model', 'runoff_heat_content',      &
+  handles%id_heat_content_lrunoff = register_diag_field('ocean_model', 'heat_content_lrunoff',     &
         diag%axesT1, Time, 'Heat content of liquid river runoff into ocean', 'Watt meter-2',       &
         standard_name='temperature_flux_due_to_runoff_expressed_as_heat_flux_into_sea_water',      &
         cmor_field_name='hfrunoffds', cmor_units='W m-2',                                          &
@@ -1364,11 +1372,14 @@ subroutine forcing_diagnostics(fluxes, state, dt, G, diag, handles)
   real, dimension(SZI_(G),SZJ_(G)) :: sum
   real :: C_p         ! seawater heat capacity (J/(deg K * kg))
   real :: I_dt        ! inverse time step 
+  integer :: i,j,is,ie,js,je
  
   call cpu_clock_begin(handles%id_clock_forcing)
 
   C_p  = fluxes%C_p
   I_dt = 1.0/dt 
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+
 
   if (query_averaging_enabled(diag)) then
 
@@ -1388,6 +1399,27 @@ subroutine forcing_diagnostics(fluxes, state, dt, G, diag, handles)
       if (ASSOCIATED(fluxes%frunoff))     sum(:,:) = sum(:,:)+fluxes%frunoff(:,:)
       if (ASSOCIATED(fluxes%vprec))       sum(:,:) = sum(:,:)+fluxes%vprec(:,:)
       call post_data(handles%id_prcme, sum, diag)
+    endif
+
+    if(handles%id_net_massout > 0) then
+      sum(:,:) = 0.0 
+      do j=js,je ; do i=is,ie
+        if(fluxes%lprec(i,j) < 0.0) sum(i,j) = sum(i,j) + fluxes%lprec(i,j)
+        if(fluxes%vprec(i,j) < 0.0) sum(i,j) = sum(i,j) + fluxes%vprec(i,j)
+        if(fluxes%evap(i,j)  < 0.0) sum(i,j) = sum(i,j) + fluxes%evap(i,j)
+      enddo ; enddo 
+      call post_data(handles%id_net_massout, sum, diag)
+    endif
+
+    if(handles%id_net_massin > 0) then
+      sum(:,:) = 0.0 
+      do j=js,je ; do i=is,ie
+        sum(i,j) = sum(i,j) + fluxes%fprec(i,j) + fluxes%lrunoff(i,j) + fluxes%frunoff(i,j) 
+        if(fluxes%lprec(i,j) > 0.0) sum(i,j) = sum(i,j) + fluxes%lprec(i,j)
+        if(fluxes%vprec(i,j) > 0.0) sum(i,j) = sum(i,j) + fluxes%vprec(i,j)
+        if(fluxes%evap(i,j)  > 0.0) sum(i,j) = sum(i,j) + fluxes%evap(i,j)
+      enddo ; enddo 
+      call post_data(handles%id_net_massin, sum, diag)
     endif
 
     if ((handles%id_evap > 0) .and. ASSOCIATED(fluxes%evap)) &
@@ -1440,28 +1472,37 @@ subroutine forcing_diagnostics(fluxes, state, dt, G, diag, handles)
       if (ASSOCIATED(fluxes%latent))               sum(:,:) = sum(:,:) + fluxes%latent(:,:)
       if (ASSOCIATED(fluxes%sens))                 sum(:,:) = sum(:,:) + fluxes%sens(:,:)
       if (ASSOCIATED(fluxes%SW))                   sum(:,:) = sum(:,:) + fluxes%SW(:,:)
-      if (ASSOCIATED(fluxes%heat_content_lrunoff)) sum(:,:) = sum(:,:) + fluxes%heat_content_lrunoff(:,:)
-      if (ASSOCIATED(fluxes%heat_content_frunoff)) sum(:,:) = sum(:,:) + fluxes%heat_content_frunoff(:,:)
-      if (ASSOCIATED(fluxes%heat_content_lprec))   sum(:,:) = sum(:,:) + fluxes%heat_content_lprec(:,:)
-      if (ASSOCIATED(fluxes%heat_content_fprec))   sum(:,:) = sum(:,:) + fluxes%heat_content_fprec(:,:)
-      if (ASSOCIATED(fluxes%heat_content_vprec))   sum(:,:) = sum(:,:) + fluxes%heat_content_vprec(:,:)
-      if (ASSOCIATED(fluxes%heat_content_cond))    sum(:,:) = sum(:,:) + fluxes%heat_content_cond(:,:)
-      if (ASSOCIATED(fluxes%heat_content_massout)) sum(:,:) = sum(:,:) + fluxes%heat_content_massout(:,:)
       if (ASSOCIATED(state%frazil))                sum(:,:) = sum(:,:) + state%frazil(:,:) * I_dt
+      if (ASSOCIATED(state%TempXpme)) then 
+         sum(:,:) = sum(:,:) + state%TempXpme(:,:) * fluxes%C_p * I_dt
+      else
+        if (ASSOCIATED(fluxes%heat_content_lrunoff)) sum(:,:) = sum(:,:) + fluxes%heat_content_lrunoff(:,:)
+        if (ASSOCIATED(fluxes%heat_content_frunoff)) sum(:,:) = sum(:,:) + fluxes%heat_content_frunoff(:,:)
+        if (ASSOCIATED(fluxes%heat_content_lprec))   sum(:,:) = sum(:,:) + fluxes%heat_content_lprec(:,:)
+        if (ASSOCIATED(fluxes%heat_content_fprec))   sum(:,:) = sum(:,:) + fluxes%heat_content_fprec(:,:)
+        if (ASSOCIATED(fluxes%heat_content_vprec))   sum(:,:) = sum(:,:) + fluxes%heat_content_vprec(:,:)
+        if (ASSOCIATED(fluxes%heat_content_cond))    sum(:,:) = sum(:,:) + fluxes%heat_content_cond(:,:)
+        if (ASSOCIATED(fluxes%heat_content_massout)) sum(:,:) = sum(:,:) + fluxes%heat_content_massout(:,:)
+      endif 
       call post_data(handles%id_net_heat_surface, sum, diag)
     endif
 
     if (handles%id_heat_content_surfwater > 0) then
       sum(:,:) = 0.0
-      if (ASSOCIATED(fluxes%heat_content_lrunoff)) sum(:,:) = sum(:,:) + fluxes%heat_content_lrunoff(:,:)
-      if (ASSOCIATED(fluxes%heat_content_frunoff)) sum(:,:) = sum(:,:) + fluxes%heat_content_frunoff(:,:)
-      if (ASSOCIATED(fluxes%heat_content_lprec))   sum(:,:) = sum(:,:) + fluxes%heat_content_lprec(:,:)
-      if (ASSOCIATED(fluxes%heat_content_fprec))   sum(:,:) = sum(:,:) + fluxes%heat_content_fprec(:,:)
-      if (ASSOCIATED(fluxes%heat_content_vprec))   sum(:,:) = sum(:,:) + fluxes%heat_content_vprec(:,:)
-      if (ASSOCIATED(fluxes%heat_content_cond))    sum(:,:) = sum(:,:) + fluxes%heat_content_cond(:,:)
-      if (ASSOCIATED(fluxes%heat_content_massout)) sum(:,:) = sum(:,:) + fluxes%heat_content_massout(:,:)
+      if (ASSOCIATED(state%TempXpme)) then 
+        sum(:,:) = sum(:,:) + state%TempXpme(:,:) * fluxes%C_p * I_dt 
+      else 
+        if (ASSOCIATED(fluxes%heat_content_lrunoff)) sum(:,:) = sum(:,:) + fluxes%heat_content_lrunoff(:,:)
+        if (ASSOCIATED(fluxes%heat_content_frunoff)) sum(:,:) = sum(:,:) + fluxes%heat_content_frunoff(:,:)
+        if (ASSOCIATED(fluxes%heat_content_lprec))   sum(:,:) = sum(:,:) + fluxes%heat_content_lprec(:,:)
+        if (ASSOCIATED(fluxes%heat_content_fprec))   sum(:,:) = sum(:,:) + fluxes%heat_content_fprec(:,:)
+        if (ASSOCIATED(fluxes%heat_content_vprec))   sum(:,:) = sum(:,:) + fluxes%heat_content_vprec(:,:)
+        if (ASSOCIATED(fluxes%heat_content_cond))    sum(:,:) = sum(:,:) + fluxes%heat_content_cond(:,:)
+        if (ASSOCIATED(fluxes%heat_content_massout)) sum(:,:) = sum(:,:) + fluxes%heat_content_massout(:,:)
+      endif 
       call post_data(handles%id_heat_content_surfwater, sum, diag)
     endif
+
     if ((handles%id_LwLatSens > 0) .and. ASSOCIATED(fluxes%lw) .and. &
          ASSOCIATED(fluxes%latent) .and. ASSOCIATED(fluxes%sens)) then
       sum(:,:) = (fluxes%lw(:,:) + fluxes%latent(:,:)) + fluxes%sens(:,:)

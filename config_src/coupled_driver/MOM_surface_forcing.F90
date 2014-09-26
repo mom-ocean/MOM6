@@ -92,6 +92,9 @@ type, public :: surface_forcing_CS ; private
                                 ! update_ocean_model.
   logical :: use_temperature    ! If true, temp and saln used as state variables
 
+  ! smg: remove when have A=B code reconciled 
+  logical :: bulkmixedlayer     ! If true, model based on bulk mixed layer code
+
   real :: Rho0                  ! Boussinesq reference density (kg/m^3)
   real :: area_surf             ! total ocean surface area (m^2)
   real :: latent_heat_fusion    ! latent heat of fusion (J/kg)
@@ -543,6 +546,19 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
     endif  
   enddo ; enddo
 
+  ! smg: remove this when have A=B code reconciled. 
+  ! we set these fields to zero here, since heat content when using bulkmixed layer code
+  ! is fully computed in parameterizations/vertical/MOM_bulk_mixed_layer.F90 and housed
+  ! in TempXpme.  When have reconciliation complete, TempXpme will be removed from the code.  
+  if(CS%bulkmixedlayer) then 
+      fluxes%heat_content_lprec(:,:)   = 0.0
+      fluxes%heat_content_fprec(:,:)   = 0.0
+      fluxes%heat_content_vprec(:,:)   = 0.0
+      fluxes%heat_content_lrunoff(:,:) = 0.0
+      fluxes%heat_content_frunoff(:,:) = 0.0
+      fluxes%heat_content_cond(:,:)    = 0.0
+  endif 
+
  
   ! more salt restoring logic 
   if (restore_salinity .and. CS%salt_restore_as_sflux) then
@@ -849,6 +865,11 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt)
                  "correction for the atmospheric (and sea-ice) pressure \n"//&
                  "limited by max_p_surf instead of the full atmospheric \n"//&
                  "pressure.", default=.true.)
+
+! smg: should get_param call should be removed when have A=B code reconciled.
+! this param is used to distinguish how to diagnose surface heat content from water.  
+  call get_param(param_file, mod, "BULKMIXEDLAYER", CS%bulkmixedlayer, &
+                 default=CS%use_temperature,do_not_log=.true.)
 
   call get_param(param_file, mod, "WIND_STAGGER", stagger, &
                  "A case-insensitive character string to indicate the \n"//&

@@ -1856,17 +1856,19 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   if (CS%use_temperature) then
     ! If needed T_adx, etc., would have been allocated in register_diags.
     call add_tracer_diagnostics("T", CS%tracer_Reg, CS%T_adx, CS%T_ady, &
-                       CS%T_diffx, CS%T_diffy, CS%T_adx_2d, CS%T_ady_2d, &
-                       CS%T_diffx_2d, CS%T_diffy_2d)
+                      CS%T_diffx, CS%T_diffy, CS%T_adx_2d, CS%T_ady_2d, &
+                      CS%T_diffx_2d, CS%T_diffy_2d)
     call add_tracer_diagnostics("S", CS%tracer_Reg, CS%S_adx, CS%S_ady, &
-                       CS%S_diffx, CS%S_diffy, CS%S_adx_2d, CS%S_ady_2d, &
-                       CS%S_diffx_2d, CS%S_diffy_2d)
-    call register_Z_tracer(CS%tv%T, "temp_z", "Potential Temperature", "degC", Time, &
-                           G, CS%diag_to_Z_CSp)
-    call register_Z_tracer(CS%tv%S, "salt_z", "Salinity", "PSU", Time,                    &
-                           G, CS%diag_to_Z_CSp, cmor_field_name="so_z", cmor_units="psu", &
-                           cmor_standard_name="sea_water_salinity",                       &
-                           cmor_long_name ="Sea Water Salinity")
+                      CS%S_diffx, CS%S_diffy, CS%S_adx_2d, CS%S_ady_2d, &
+                      CS%S_diffx_2d, CS%S_diffy_2d)
+    call register_Z_tracer(CS%tv%T, "temp", "Potential Temperature", "degC", Time,   &
+                      G, CS%diag_to_Z_CSp, cmor_field_name="thetao", cmor_units="C", &
+                      cmor_standard_name="sea_water_potential_temperature",          &
+                      cmor_long_name ="Sea Water Potential Temperature")
+    call register_Z_tracer(CS%tv%S, "salt", "Salinity", "PSU", Time,               &
+                      G, CS%diag_to_Z_CSp, cmor_field_name="so", cmor_units="psu", &
+                      cmor_standard_name="sea_water_salinity",                     &
+                      cmor_long_name ="Sea Water Salinity")
   endif
 
   ! This subroutine initializes any tracer packages.

@@ -13,7 +13,7 @@ CM2.2
 "land_instant",   1,  "months", 1, "days", "time",
 "land_month",     1,  "months", 1, "days", "time",
 "ocean_month",    1,  "months", 1, "days", "time"
-"ocean_month_z",    1,  "months", 1, "days", "time"
+"ocean_month_z",  1,  "months", 1, "days", "time"
 #"ocean_scalar",   1,  "months", 1, "days", "time"
 #
 #output variables
@@ -41,14 +41,14 @@ CM2.2
 
 # Z-space fields:
 #==================
-"ocean_model","u_z","u","ocean_month_z","all",.true.,"none",2
-"ocean_model","v_z","v","ocean_month_z","all",.true.,"none",2
-"ocean_model","temp_z","temp","ocean_month_z","all",.true.,"none",2
-"ocean_model","salt_z","salt","ocean_month_z","all",.true.,"none",2
-"ocean_model","vintage_z","vintage","ocean_month_z","all",.true.,"none",2
-"ocean_model","age_z","age","ocean_month_z","all",.true.,"none",2
-"ocean_model","CFC11_z","CFC11","ocean_month_z","all",.true.,"none",2
-"ocean_model","CFC12_z","CFC12","ocean_month_z","all",.true.,"none",2
+"ocean_model_z","u","u","ocean_month_z","all",.true.,"none",2
+"ocean_model_z","v","v","ocean_month_z","all",.true.,"none",2
+"ocean_model_z","temp","temp","ocean_month_z","all",.true.,"none",2
+"ocean_model_z","salt","salt","ocean_month_z","all",.true.,"none",2
+#"ocean_model_z","vintage","vintage","ocean_month_z","all",.true.,"none",2
+"ocean_model_z","age","age","ocean_month_z","all",.true.,"none",2
+"ocean_model_z","CFC11","CFC11","ocean_month_z","all",.true.,"none",2
+"ocean_model_z","CFC12","CFC12","ocean_month_z","all",.true.,"none",2
 "ocean_model","geolon","geolon","ocean_month_z","all",.false.,"none",2
 "ocean_model","geolat","geolat","ocean_month_z","all",.false.,"none",2
 "ocean_model","geolon_u","geolon_u","ocean_month_z","all",.false.,"none",2

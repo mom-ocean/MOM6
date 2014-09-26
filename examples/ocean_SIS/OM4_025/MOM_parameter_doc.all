@@ -1072,7 +1072,7 @@ Z_OUTPUT_GRID_FILE = "vgrid_75_2m.nc" ! default = ""
                                 ! The file that specifies the vertical grid for
                                 ! depth-space diagnostics, or blank to disable
                                 ! depth-space output.
-!NK_ZSPACE (from file) = 50     !   [nondim]
+!NK_ZSPACE (from file) = 35     !   [nondim]
                                 ! The number of depth-space levels.  This is determined
                                 ! from the size of the variable zw in the output grid file.
 
@@ -1331,6 +1331,9 @@ CS = 98.96                      !   [nondim] default = 98.96
 DEEP_OBL_OFFSET = 0.0           !   [m] default = 0.0
                                 ! If non-zero, the distance above the bottom to which the OBL is clipped
                                 ! if it would otherwise reach the bottom. The smaller of this and 0.1D is used.
+MINIMUM_OBL_DEPTH = 0.0         !   [m] default = 0.0
+                                ! If non-zero, a minimum depth to use for KPP OBL depth. Independent of
+                                ! this parameter, the OBL depth is always at least as deep as the first layer.
 CORRECT_SURFACE_LAYER_AVERAGE = False !   [Boolean] default = False
                                 ! If true, applies a correction step to the averaging of surface layer
                                 ! properties.

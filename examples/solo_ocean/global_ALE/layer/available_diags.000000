@@ -440,24 +440,24 @@
 "ocean_model", "col_height"  [Unused]
     ! long_name: The height of the water column
     ! units: m
-"ocean_model", "u_z"  [Used]
+"ocean_model_z", "u"  [Unused]
     ! long_name: Zonal Velocity in Depth Space
     ! units: meter second-1
-"ocean_model", "uo_z"  [Used]
+"ocean_model_z", "uo"  [Unused]
     ! long_name: Sea Water X Velocity
     ! units: m s-1
     ! standard_name: sea_water_x_velocity
-"ocean_model", "v_z"  [Used]
+"ocean_model_z", "v"  [Unused]
     ! long_name: Meridional Velocity in Depth Space
     ! units: meter second-1
-"ocean_model", "vo_z"  [Used]
+"ocean_model_z", "vo"  [Unused]
     ! long_name: Sea Water Y Velocity
     ! units: m s-1
     ! standard_name: sea_water_y_velocity
-"ocean_model", "uh_z"  [Unused]
+"ocean_model_z", "uh"  [Unused]
     ! long_name: Zonal Volume Transport in Depth Space
     ! units: meter3 second-1
-"ocean_model", "vh_z"  [Unused]
+"ocean_model_z", "vh"  [Unused]
     ! long_name: Meridional Volume Transport in Depth Space
     ! units: meter3 second-1
 "ocean_model", "ea"  [Unused]
@@ -502,19 +502,19 @@
 "ocean_model", "MLD_user"  [Unused]
     ! long_name: Mixed layer depth (used defined)
     ! units: meter
-"ocean_model", "Kd_z"  [Unused]
+"ocean_model_z", "Kd"  [Unused]
     ! long_name: Diapycnal diffusivity at interfaces, interpolated to z
     ! units: meter2 second-1
-"ocean_model", "Tflx_dia_dif_z"  [Unused]
+"ocean_model_z", "Tflx_dia_dif"  [Unused]
     ! long_name: Diffusive diapycnal temperature flux across interfaces, interpolated to z
     ! units: degC meter second-1
-"ocean_model", "Tflx_dia_adv_z"  [Unused]
+"ocean_model_z", "Tflx_dia_adv"  [Unused]
     ! long_name: Advective diapycnal temperature flux across interfaces, interpolated to z
     ! units: degC meter second-1
-"ocean_model", "Sflx_dia_dif_z"  [Unused]
+"ocean_model_z", "Sflx_dia_dif"  [Unused]
     ! long_name: Diffusive diapycnal salinity flux across interfaces, interpolated to z
     ! units: PSU meter second-1
-"ocean_model", "Sflx_dia_adv_z"  [Unused]
+"ocean_model_z", "Sflx_dia_adv"  [Unused]
     ! long_name: Advective diapycnal salinity flux across interfaces, interpolated to z
     ! units: PSU meter second-1
 "ocean_model", "Kd_layer"  [Used]
@@ -562,10 +562,10 @@
 "ocean_model", "N2"  [Unused]
     ! long_name: Buoyancy frequency squared
     ! units: sec-2
-"ocean_model", "N2_z"  [Unused]
+"ocean_model_z", "N2"  [Unused]
     ! long_name: Buoyancy frequency, interpolated to z
     ! units: second-2
-"ocean_model", "Kd_itides_z"  [Unused]
+"ocean_model_z", "Kd_itides"  [Unused]
     ! long_name: Internal Tide Driven Diffusivity, interpolated to z
     ! units: meter2 second-1
 "ocean_model", "Kd_shear"  [Unused]
@@ -791,7 +791,7 @@
 "ocean_model", "SSS_global"  [Used]
     ! long_name: Global Average Sea Surface Salinity
     ! units: PSU
-"ocean_model", "frazil"  [Unused]
+"ocean_model", "frazil"  [Used]
     ! long_name: Heat sink from frazil formation
     ! units: Watt meter-2
 "ocean_model", "hfsifrazil"  [Used]
@@ -873,15 +873,19 @@
 "ocean_model", "salt_predia"  [Unused]
     ! long_name: Salinity
     ! units: PSU
-"ocean_model", "temp_z"  [Used]
+"ocean_model_z", "temp"  [Unused]
     ! long_name: Potential Temperature
     ! units: degC
     ! standard_name: not provided
-"ocean_model", "salt_z"  [Used]
+"ocean_model_z", "thetao"  [Unused]
+    ! long_name: Sea Water Potential Temperature
+    ! units: C
+    ! standard_name: sea_water_potential_temperature
+"ocean_model_z", "salt"  [Unused]
     ! long_name: Salinity
     ! units: PSU
     ! standard_name: not provided
-"ocean_model", "so_z"  [Used]
+"ocean_model_z", "so"  [Unused]
     ! long_name: Sea Water Salinity
     ! units: psu
     ! standard_name: sea_water_salinity
@@ -900,7 +904,7 @@
 "ocean_model", "age_dfy"  [Unused]
     ! long_name: Ideal Age Tracer diffusive zonal flux
     ! units: years m3 s-1
-"ocean_model", "age_z"  [Unused]
+"ocean_model_z", "age"  [Unused]
     ! long_name: Ideal Age Tracer
     ! units: years
     ! standard_name: not provided
@@ -973,6 +977,12 @@
     ! long_name: Water Flux into Sea Water From Rivers
     ! units: kg m-2 s-1
     ! standard_name: water_flux_into_sea_water_from_rivers
+"ocean_model", "net_massout"  [Used]
+    ! long_name: Net mass leaving the ocean due to evaporation, ice formation
+    ! units: kilogram meter-2 second-1
+"ocean_model", "net_massin"  [Used]
+    ! long_name: Net mass entering ocean due to precip, runoff, ice melt
+    ! units: kilogram meter-2 second-1
 "ocean_model", "heat_content_frunoff"  [Used]
     ! long_name: Heat content of frozen runoff (calving) into ocean
     ! units: Watt meter-2
@@ -981,7 +991,7 @@
     ! long_name: Heat Flux into Sea Water due to Iceberg Thermodynamics
     ! units: W m-2
     ! standard_name: heat_flux_into_sea_water_due_to_iceberg_thermodynamics
-"ocean_model", "runoff_heat_content"  [Unused]
+"ocean_model", "heat_content_lrunoff"  [Used]
     ! long_name: Heat content of liquid river runoff into ocean
     ! units: Watt meter-2
     ! standard_name: temperature_flux_due_to_runoff_expressed_as_heat_flux_into_sea_water

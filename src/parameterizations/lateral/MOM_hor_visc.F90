@@ -303,7 +303,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
 !$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,CS,G,u,v,is,js,h,h_neglect, &
 !$OMP                                  rescale_Kh,VarMix,Kh_h,Ah_h,h_neglect3,Kh_q,   &
 !$OMP                                  Ah_q,ie,je,diffu,apply_OBC,OBC,diffv,          &
-!$OMP                                  find_FrictWork,FrictWork)                      &
+!$OMP                                  find_FrictWork,FrictWork,use_MEKE_Ku,MEKE)     &
 !$OMP                          private(u0, v0, sh_xx, str_xx, visc_bound_rem,         &
 !$OMP                                  sh_xy, str_xy, Ah, Kh, AhSm, KhSm,             &
 !$OMP                                  Shear_mag, huq, hvq, hq, Kh_scale, hrat_min)
@@ -1040,16 +1040,20 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
       'Meridional Acceleration from Horizontal Viscosity', 'meter second-2')
 
   CS%id_Ah_h = register_diag_field('ocean_model', 'Ahh', diag%axesTL, Time, &
-      'Biharmonic Horizontal Viscosity at h Points', 'meter4 second-1')
+      'Biharmonic Horizontal Viscosity at h Points', 'meter4 second-1',     &
+      available=CS%biharmonic)
 
   CS%id_Ah_q = register_diag_field('ocean_model', 'Ahq', diag%axesBL, Time, &
-      'Biharmonic Horizontal Viscosity at q Points', 'meter4 second-1')
+      'Biharmonic Horizontal Viscosity at q Points', 'meter4 second-1',     &
+      available=CS%biharmonic)
 
   CS%id_Kh_h = register_diag_field('ocean_model', 'Khh', diag%axesTL, Time, &
-      'Laplacian Horizontal Viscosity at h Points', 'meter2 second-1')
+      'Laplacian Horizontal Viscosity at h Points', 'meter2 second-1',      &
+      available=CS%Laplacian)
 
   CS%id_Kh_q = register_diag_field('ocean_model', 'Khq', diag%axesBL, Time, &
-      'Laplacian Horizontal Viscosity at q Points', 'meter2 second-1')
+      'Laplacian Horizontal Viscosity at q Points', 'meter2 second-1',      &
+      available=CS%Laplacian)
 
   CS%id_FrictWork =register_diag_field('ocean_model','FrictWork',diag%axesTL,Time,&
       'Integral work done by lateral friction terms', 'Watt meter-2')

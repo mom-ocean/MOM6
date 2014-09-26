@@ -1,4 +1,6 @@
+# Allow users to add their own .gitignore lower down the directory tree
 .gitignore
+# Ignore all model output
 *.nc.*
 *.nc
 *.out
@@ -9,4 +11,5 @@ SIS.available_diags*
 RESTART
 _read_error.nml
 fort.*
+# Ignore intermediate files generated while testing
 *.pyc

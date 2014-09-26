@@ -1,0 +1,1 @@
+.datasets/CORE/NYF_v2.0/ncar_precip.clim.nc
