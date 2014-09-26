@@ -1372,6 +1372,9 @@ KPP_IS_ADDITIVE = False         !   [Boolean] default = False
 KPP_BEFORE_KAPPA_SHEAR = True   !   [Boolean] default = True
                                 ! If true, KPP matches interior diffusivity that EXCLUDES any
                                 ! diffusivity from kappa-shear.
+SALT_REJECT_BELOW_ML = False    !   [Boolean] default = False
+                                ! If true, place salt from brine rejection below the mixed layer,
+                                ! into the first non-vanished layer for which the column remains stable
 
 ! === module MOM_diffConvection ===
 ! This module implements enhanced diffusivity as a

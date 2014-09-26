@@ -1397,6 +1397,9 @@ KPP_ZERO_DIFFUSIVITY = False    !   [Boolean] default = False
 KPP_IS_ADDITIVE = False         !   [Boolean] default = False
                                 ! If true, adds KPP diffusivity to the existing diffusivity. If false, replaces exisiting diffusivity with KPP diffusivity wherever the latter is non-zero.
 %KPP
+SALT_REJECT_BELOW_ML = False    !   [Boolean] default = False
+                                ! If true, place salt from brine rejection below the mixed layer,
+                                ! into the first non-vanished layer for which the column remains stable
 
 ! === module MOM_diffConvection ===
 ! This module implements enhanced diffusivity as a
