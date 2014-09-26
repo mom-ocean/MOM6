@@ -6,4 +6,5 @@
          parameter_filename = 'MOM_input',
                               'MOM_override' /
 
- 
+ &diag_manager_nml
+ /

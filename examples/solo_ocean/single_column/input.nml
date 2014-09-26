@@ -7,6 +7,9 @@
                               'MOM_override',
                               'MOM_override2' /
 
+ &diag_manager_nml
+ /
+
  &fms_nml
          clock_grain = 'LOOP',
          domains_stack_size = 710000,
