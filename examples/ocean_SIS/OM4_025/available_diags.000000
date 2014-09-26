@@ -454,6 +454,10 @@
 "ocean_model", "MLD_003"  [Unused]
     ! long_name: Mixed layer depth (delta rho = 0.03)
     ! units: meter
+"ocean_model", "mlotst"  [Unused]
+    ! long_name: Ocean Mixed Layer Thickness Defined by Sigma T
+    ! units: m
+    ! standard_name: ocean_mixed_layer_thickness_defined_by_sigma_t
 "ocean_model", "MLD_0125"  [Unused]
     ! long_name: Mixed layer depth (delta rho = 0.125)
     ! units: meter
@@ -541,6 +545,10 @@
 "ocean_model", "KPP_OBLdepth"  [Unused]
     ! long_name: Thickness of the surface Ocean Boundary Layer calculated by [CVmix] KPP
     ! units: meter
+"ocean_model", "oml"  [Unused]
+    ! long_name: ocean_mixed_layer_thickness_defined_by_mixing_scheme
+    ! units: m
+    ! standard_name: Ocean Mixed Layer Thickness Defined by Mixing Scheme
 "ocean_model", "KPP_BulkDrho"  [Unused]
     ! long_name: Bulk difference in density used in Bulk Richardson number, as used by [CVmix] KPP
     ! units: kg/m3
@@ -691,22 +699,38 @@
 "ocean_model", "SST"  [Unused]
     ! long_name: Sea Surface Temperature
     ! units: Celsius
+"ocean_model", "tos"  [Unused]
+    ! long_name: Sea Surface Temperature
+    ! units: degC
+    ! standard_name: sea_surface_temperature
 "ocean_model", "SST_global"  [Unused]
     ! long_name: Global Average Sea Surface Temperature
     ! units: Celsius
 "ocean_model", "tosga"  [Unused]
     ! long_name: Global Average Sea Surface Temperature
-    ! units: deg C
-    ! standard_name: global_average_sea_surface_temperature
+    ! units: degC
+    ! standard_name: sea_surface_temperature
 "ocean_model", "SST_sq"  [Unused]
     ! long_name: Sea Surface Temperature Squared
     ! units: Celsius**2
+"ocean_model", "tossq"  [Unused]
+    ! long_name: Square of Sea Surface Temperature
+    ! units: degC^2
+    ! standard_name: square_of_sea_surface_temperature
 "ocean_model", "SSS"  [Unused]
     ! long_name: Sea Surface Salinity
     ! units: PSU
+"ocean_model", "sos"  [Unused]
+    ! long_name: Sea Surface Salinity
+    ! units: psu
+    ! standard_name: sea_surface_salinity
 "ocean_model", "SSS_global"  [Unused]
     ! long_name: Global Average Sea Surface Salinity
     ! units: PSU
+"ocean_model", "sosga"  [Unused]
+    ! long_name: Global Average Sea Surface Salinity
+    ! units: psu
+    ! standard_name: global_average_sea_surface_salinity
 "ocean_model", "frazil"  [Unused]
     ! long_name: Heat sink from frazil formation
     ! units: Watt meter-2
@@ -989,6 +1013,10 @@
 "ocean_model", "p_surf"  [Unused]
     ! long_name: Pressure at ice-ocean or atmosphere-ocean interface
     ! units: Pascal
+"ocean_model", "pso"  [Unused]
+    ! long_name: Sea Water Pressure at Sea Water Surface
+    ! units: Pa
+    ! standard_name: sea_water_pressure_at_sea_water_surface
 "ocean_model", "salt_flux"  [Unused]
     ! long_name: Salt flux into ocean at surface
     ! units: kilogram meter-2 second-1
