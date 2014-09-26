@@ -60,7 +60,8 @@ use MOM_time_manager, only : operator(+), operator(-), operator(*), operator(/)
 use MOM_time_manager, only : operator(/=)
 use MOM_tracer_flow_control, only : call_tracer_register, tracer_flow_control_init
 use MOM_variables, only : surface
-
+use MOM_ice_shelf, only : initialize_ice_shelf, shelf_calc_flux, ice_shelf_CS
+use MOM_ice_shelf, only : ice_shelf_end, ice_shelf_save_restart
 use coupler_types_mod, only : coupler_2d_bc_type
 use mpp_domains_mod, only : domain2d, mpp_get_layout, mpp_get_global_domain
 use mpp_domains_mod, only : mpp_define_domains, mpp_get_compute_domain, mpp_get_data_domain
@@ -151,7 +152,8 @@ type, public :: ocean_state_type ; private
   type(time_type) :: write_energy_time ! The next time to write to the energy file.
 
   integer :: nstep = 0        ! The number of calls to update_ocean.
-
+  logical :: use_ice_shelf = .false. ! If true, the ice shelf model is enabled.
+  type(ice_shelf_CS), pointer :: Ice_shelf_CSp => NULL()
   logical :: restore_salinity ! If true, the coupled MOM driver adds a term to
                               ! restore salinity to a specified value.
   real :: press_to_z          ! A conversion factor between pressure and ocean
@@ -263,10 +265,19 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in)
   call get_param(param_file, mod, "G_EARTH", G_Earth, &
                  "The gravitational acceleration of the Earth.", &
                  units="m s-2", default = 9.80)
+
+  call get_param(param_file,mod,"ICE_SHELF",OS%use_ice_shelf)
+
+
   OS%press_to_z = 1.0/(Rho0*G_Earth)
 
   call surface_forcing_init(Time_in, OS%grid, param_file, OS%MOM_CSp%diag, &
                             OS%forcing_CSp, OS%restore_salinity)
+
+  if (OS%use_ice_shelf)  then
+     call initialize_ice_shelf(OS%Time, OS%ice_shelf_CSp,OS%MOM_CSp%diag, OS%fluxes)
+  endif
+
   call MOM_sum_output_init(OS%grid, param_file, OS%dirs%output_directory, &
                             OS%MOM_CSp%ntrunc, Time_init, OS%sum_output_CSp)
 
@@ -362,6 +373,14 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   call enable_averaging(time_step, OS%Time + Ocean_coupling_time_step, OS%MOM_CSp%diag) ! Needed to allow diagnostics in convert_IOB
   call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%fluxes, index_bnds, OS%Time, &
                              OS%grid, OS%forcing_CSp, OS%state, OS%restore_salinity)
+
+! Add ice shelf fluxes
+
+  if (OS%use_ice_shelf) then
+    call shelf_calc_flux(OS%State, OS%fluxes, OS%Time, time_step, OS%Ice_shelf_CSp)
+  endif
+
+
   call disable_averaging(OS%MOM_CSp%diag)
   Master_time = OS%Time ; Time1 = OS%Time
 
@@ -412,12 +431,18 @@ subroutine ocean_model_restart(OS, timestamp)
                        OS%MOM_CSp%restart_CSp, .true.)
      call forcing_save_restart(OS%forcing_CSp, OS%grid, OS%Time, &
                                OS%dirs%restart_output_dir, .true.)
+     if (OS%use_ice_shelf) then
+        call  ice_shelf_save_restart(OS%Ice_shelf_CSp, OS%Time, OS%dirs%restart_output_dir, .true.)
+     endif
    endif
    if (BTEST(OS%Restart_control,0)) then
      call save_restart(OS%dirs%restart_output_dir, OS%Time, OS%grid, &
                        OS%MOM_CSp%restart_CSp)
      call forcing_save_restart(OS%forcing_CSp, OS%grid, OS%Time, &
                                OS%dirs%restart_output_dir)
+     if (OS%use_ice_shelf) then
+        call  ice_shelf_save_restart(OS%Ice_shelf_CSp, OS%Time, OS%dirs%restart_output_dir)
+     endif
    endif
   
 end subroutine ocean_model_restart
@@ -445,6 +470,7 @@ subroutine ocean_model_end(Ocean_sfc, Ocean_state, Time)
 
   call ocean_model_save_restart(Ocean_state, Time)
   call MOM_end(Ocean_state%MOM_CSp)
+  if (Ocean_state%use_ice_shelf) call ice_shelf_end(Ocean_state%Ice_shelf_CSp)
 end subroutine ocean_model_end
 ! </SUBROUTINE> NAME="ocean_model_end"
 
@@ -471,6 +497,10 @@ subroutine ocean_model_save_restart(OS, Time, directory, filename_suffix)
   call save_restart(restart_dir, Time, OS%grid, OS%MOM_CSp%restart_CSp)
 
   call forcing_save_restart(OS%forcing_CSp, OS%grid, Time, restart_dir)
+
+  if (OS%use_ice_shelf) then
+     call  ice_shelf_save_restart(OS%Ice_shelf_CSp, OS%Time, OS%dirs%restart_output_dir)
+  endif
 
 end subroutine ocean_model_save_restart
 

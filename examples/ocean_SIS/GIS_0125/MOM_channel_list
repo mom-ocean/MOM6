@@ -1,0 +1,9 @@
+! This file specifies restricted channel widths in MOM.  The order is:
+!  [UV]_WIDTH,  min_longitude, max_longitude, min_latitude, max_latitude, width
+
+U_width,  -6.1,  -5.4, 35.8, 36.0,  12000.0  ! Gibraltar
+U_width,  26.4,  26.8, 40.4, 40.6,   5000.0  ! Dardanelles
+
+V_width,  28.8,  29.0, 41.1, 41.2,   2500.0  ! Bosporus - should be 1km wide.
+V_width,  43.25, 43.5, 12.6, 12.8,  10000.0  ! Red Sea, Bab-el-Mendeb
+V_width, 141.5, 141.7, 52.0,  52.15, 2500.0  ! Between Sakhalin & Russia
