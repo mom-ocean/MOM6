@@ -235,6 +235,10 @@ TS_FILE = "GOLD_IC.2010.11.15.nc" !
                                 ! The initial condition file for temperature.
 
 ! === module MOM_MEKE ===
+USE_MEKE = True                 !   [Boolean] default = False
+                                ! If true, turns on the MEKE scheme which calculates
+                                ! a sub-grid mesoscale eddy kinetic energy budget.
+
 
 ! === module MOM_lateral_mixing_coeffs ===
 USE_VARIABLE_MIXING = True      !   [Boolean] default = False
