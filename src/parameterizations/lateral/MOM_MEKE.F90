@@ -400,6 +400,7 @@ logical function MEKE_init(Time, G, param_file, diag, CS, MEKE)
   if (.not. MEKE_init) return
 
   if (.not. associated(MEKE)) then
+    ! The MEKE structure should have been allocated in MEKE_alloc_register_restart()
     call MOM_error(WARNING, "MEKE_init called with NO associated "// &
                             "MEKE-type structure.")
     return
@@ -417,11 +418,10 @@ logical function MEKE_init(Time, G, param_file, diag, CS, MEKE)
                  "The local depth-indepented MEKE dissipation rate.", &
                  units="s-1", default=0.0)
   call get_param(param_file, mod, "MEKE_CD_SCALE", CS%MEKE_Cd_scale, &
-                 "A scaling for the bottom drag applied to MEKE.  This \n"//&
-                 "should be less than 1 to account for the surface \n"//&
-                 "intensification of MEKE and the fraction of MEKE that \n"//&
-                 "may be temporarily stored as potential energy.", &
-                 units="nondim", default=0.0)
+                 "The ratio of the bottom eddy velocity to the column mean\n"//&
+                 "eddy velocity, i.e. sqrt(2*MEKE). This should be less than 1\n"//&
+                 "to account for the surface intensification of MEKE.", &
+                 units="nondim", default=0.3)
   call get_param(param_file, mod, "MEKE_GMCOEFF", CS%MEKE_GMcoeff, &
                  "The efficiency of the conversion of potential energy \n"//&
                  "into MEKE by the thickness mixing parameterization. \n"//&
@@ -450,14 +450,10 @@ logical function MEKE_init(Time, G, param_file, diag, CS, MEKE)
                  units="nondim", default=-1.0)
   call get_param(param_file, mod, "MEKE_USCALE", CS%MEKE_Uscale, &
                  "The background velocity that is combined with MEKE to \n"//&
-                 "calculate the bottom drag.", units="m s-1", default=1.0)
-  call get_param(param_file, mod, "CDRAG", CS%cdrag, &
-                 "CDRAG is the drag coefficient relating the magnitude of \n"//&
-                 "the velocity field to the bottom stress.", units="nondim", &
-                 default=0.003)
+                 "calculate the bottom drag.", units="m s-1", default=0.0)
   call get_param(param_file, mod, "MEKE_VISC_DRAG", CS%visc_drag, &
                  "If true, use the vertvisc_type to calculate the bottom \n"//&
-                 "drag acting on MEKE.", default=.false.)
+                 "drag acting on MEKE.", default=.true.)
   call get_param(param_file, mod, "MEKE_KHTH_FAC", MEKE%KhTh_fac, &
                  "A factor that maps MEKE%Kh to KhTh.", units="nondim", &
                  default=1.0)
@@ -476,6 +472,12 @@ logical function MEKE_init(Time, G, param_file, diag, CS, MEKE)
                  "unresolved eddies represented by MEKE. Can be negative to\n"//&
                  "represent backscatter from the unresolved eddies.", &
                  units="nondim", default=0.0)
+
+  ! Nonlocal module parameters
+  call get_param(param_file, mod, "CDRAG", CS%cdrag, &
+                 "CDRAG is the drag coefficient relating the magnitude of \n"//&
+                 "the velocity field to the bottom stress.", units="nondim", &
+                 default=0.003)
   call get_param(param_file, mod, "LAPLACIAN", laplacian, default=.false., do_not_log=.true.)
   if (CS%viscosity_coeff/=0. .and. .not. laplacian) call MOM_error(FATAL, &
                  "LAPLACIAN must be true if MEKE_VISCOSITY_COEFF is true.")
@@ -535,7 +537,7 @@ subroutine MEKE_alloc_register_restart(G, param_file, MEKE, restart_CS)
   type(MOM_restart_CS), pointer       :: restart_CS
 ! Local variables
   type(vardesc) :: vd
-  real :: MEKE_damping, MEKE_GMcoeff, MEKE_FrCoeff, MEKE_KHCoeff, MEKE_viscCoeff
+  real :: MEKE_GMcoeff, MEKE_FrCoeff, MEKE_KHCoeff, MEKE_viscCoeff
   logical :: useMEKE
   integer :: isd, ied, jsd, jed
 
@@ -543,7 +545,6 @@ subroutine MEKE_alloc_register_restart(G, param_file, MEKE, restart_CS)
   useMEKE = .false.; call read_param(param_file,"USE_MEKE",useMEKE)
 
 ! Read these parameters to determine what should be in the restarts
-  MEKE_damping =-1.; call read_param(param_file,"MEKE_DAMPING",MEKE_damping)
   MEKE_GMcoeff =-1.; call read_param(param_file,"MEKE_GMCOEFF",MEKE_GMcoeff)
   MEKE_FrCoeff =-1.; call read_param(param_file,"MEKE_FRCOEFF",MEKE_FrCoeff)
   MEKE_KhCoeff =-1.; call read_param(param_file,"MEKE_KHCOEFF",MEKE_KhCoeff)
@@ -561,11 +562,9 @@ subroutine MEKE_alloc_register_restart(G, param_file, MEKE, restart_CS)
 ! Allocate memory
   call MOM_mesg("MEKE_alloc_register_restart: allocating and registering", 5)
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  if (MEKE_damping>=0.) then
-    allocate(MEKE%MEKE(isd:ied,jsd:jed)) ; MEKE%MEKE(:,:) = 0.0
-    vd = vardesc("MEKE","Mesoscale Eddy Kinetic Energy",'h','1','s',"m2 s-2")
-    call register_restart_field(MEKE%MEKE, vd, .false., restart_CS)
-  endif
+  allocate(MEKE%MEKE(isd:ied,jsd:jed)) ; MEKE%MEKE(:,:) = 0.0
+  vd = vardesc("MEKE","Mesoscale Eddy Kinetic Energy",'h','1','s',"m2 s-2")
+  call register_restart_field(MEKE%MEKE, vd, .false., restart_CS)
   if (MEKE_GMcoeff>=0.) then
     allocate(MEKE%GM_src(isd:ied,jsd:jed)) ; MEKE%GM_src(:,:) = 0.0
   endif
