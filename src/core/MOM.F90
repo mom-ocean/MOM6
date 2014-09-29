@@ -477,6 +477,7 @@ type, public :: MOM_control_struct
   logical :: thickness_diffuse_first ! If true, diffuse thickness before dynamics.
   logical :: mixedlayer_restrat ! If true, a density-gradient dependent
                              ! restratifying flow is imposed in the mixed layer.
+  logical :: useMEKE         ! If true, call the MEKE parameterization.
   logical :: debug           ! If true, write verbose checksums for debugging purposes.
   logical :: debug_truncations  ! If true, make sure that all diagnostics that
                              ! could be useful for debugging any truncations are
@@ -1036,9 +1037,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       endif
     endif
 
-    if (associated(CS%MEKE)) then
-      call step_forward_MEKE(CS%MEKE, h, CS%visc, dt, G, CS%MEKE_CSp)
-    endif
+    if (CS%useMEKE) call step_forward_MEKE(CS%MEKE, h, CS%visc, dt, G, CS%MEKE_CSp)
 
     call disable_averaging(CS%diag)
     call cpu_clock_end(id_clock_dynamics)
@@ -1786,7 +1785,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call cpu_clock_end(id_clock_MOM_init)
   call callTree_waypoint("ALE initialized (initialize_MOM)")
 
-  call MEKE_init(Time, G, param_file, diag, CS%MEKE_CSp, CS%MEKE)
+  CS%useMEKE = MEKE_init(Time, G, param_file, diag, CS%MEKE_CSp, CS%MEKE)
   call VarMix_init(Time, G, param_file, diag, CS%VarMix)
 
   if (associated(init_CS%tracer_Reg)) &

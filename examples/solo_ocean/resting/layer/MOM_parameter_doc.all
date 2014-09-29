@@ -465,58 +465,9 @@ APPLY_OBC_V = False             !   [Boolean] default = False
                                 ! v-points, with the configuration controlled by OBC_CONFIG
 
 ! === module MOM_MEKE ===
-MEKE_DAMPING = 0.0              !   [s-1] default = 0.0
-                                ! The local depth-indepented MEKE dissipation rate.
-MEKE_CD_SCALE = 0.0             !   [nondim] default = 0.0
-                                ! A scaling for the bottom drag applied to MEKE.  This
-                                ! should be less than 1 to account for the surface
-                                ! intensification of MEKE and the fraction of MEKE that
-                                ! may be temporarily stored as potential energy.
-MEKE_GMCOEFF = -1.0             !   [nondim] default = -1.0
-                                ! The efficiency of the conversion of potential energy
-                                ! into MEKE by the thickness mixing parameterization.
-                                ! If MEKE_GMCOEFF is negative, this conversion is not
-                                ! used or calculated.
-MEKE_FRCOEFF = -1.0             !   [nondim] default = -1.0
-                                ! The efficiency of the conversion of mean energy into
-                                ! MEKE.  If MEKE_FRCOEFF is negative, this conversion
-                                ! is not used or calculated.
-MEKE_BGSRC = 0.0                !   [W kg-1] default = 0.0
-                                ! A background energy source for MEKE.
-MEKE_KH = -1.0                  !   [m2 s-1] default = -1.0
-                                ! A background lateral diffusivity of MEKE, or a
-                                ! Use a negative value to not apply lateral diffusion to MEKE.
-MEKE_DTSCALE = 1.0              !   [nondim] default = 1.0
-                                ! A scaling factor to accelerate the time evolution of MEKE.
-MEKE_KHCOEFF = -1.0             !   [nondim] default = -1.0
-                                ! A scaling factor which is combined with the square root
-                                ! of MEKE times the grid-cell area to give MEKE%Kh, or a
-                                ! negative value not to calculate MEKE%Kh.
-                                ! This factor must be >0 for MEKE to contribute to the
-                                ! thickness/tracer mixing in the rest of the model.
-MEKE_USCALE = 1.0               !   [m s-1] default = 1.0
-                                ! The background velocity that is combined with MEKE to
-                                ! calculate the bottom drag.
-CDRAG = 0.0                     !   [nondim] default = 0.003
-                                ! CDRAG is the drag coefficient relating the magnitude of
-                                ! the velocity field to the bottom stress.
-MEKE_VISC_DRAG = False          !   [Boolean] default = False
-                                ! If true, use the vertvisc_type to calculate the bottom
-                                ! drag acting on MEKE.
-MEKE_KHTH_FAC = 1.0             !   [nondim] default = 1.0
-                                ! A factor that maps MEKE%Kh to KhTh.
-MEKE_KHTR_FAC = 1.0             !   [nondim] default = 1.0
-                                ! A factor that maps MEKE%Kh to KhTr.
-MEKE_KHMEKE_FAC = 0.0           !   [nondim] default = 0.0
-                                ! A factor that maps MEKE%Kh to Kh for MEKE itself.
-MEKE_RD_MAX_SCALE = True        !   [nondim] default = True
-                                ! If true, the maximum length scale used by MEKE is
-                                ! the deformation radius.
-MEKE_VISCOSITY_COEFF = 0.0      !   [nondim] default = 0.0
-                                ! If non-zero, is the scaling coefficient in the expression for
-                                ! viscosity used to parameterize lateral momentum mixing by
-                                ! unresolved eddies represented by MEKE. Can be negative to
-                                ! represent backscatter from the unresolved eddies.
+USE_MEKE = False                !   [Boolean] default = False
+                                ! If true, turns on the MEKE scheme which calculates
+                                ! a sub-grid mesoscale eddy kinetic energy budget.
 
 ! === module MOM_lateral_mixing_coeffs ===
 USE_VARIABLE_MIXING = False     !   [Boolean] default = False
@@ -778,6 +729,10 @@ DOUBLE_DIFFUSION = False        !   [Boolean] default = False
 PRANDTL_TURB = 0.0              !   [nondim] default = 0.0
                                 ! The turbulent Prandtl number applied to shear
                                 ! instability.
+CDRAG = 0.0                     !   [nondim] default = 0.003
+                                ! CDRAG is the drag coefficient relating the magnitude of
+                                ! the velocity field to the bottom stress. CDRAG is only
+                                ! used if BOTTOMDRAGLAW is defined.
 DRAG_BG_VEL = 0.1               !   [m s-1] default = 0.0
                                 ! DRAG_BG_VEL is either the assumed bottom velocity (with
                                 ! LINEAR_DRAG) or an unresolved  velocity that is

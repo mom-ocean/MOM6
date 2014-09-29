@@ -209,9 +209,6 @@ T_REF = 5.0                     !   [degC]
                                 ! A reference temperature used in initialization.
 
 ! === module MOM_MEKE ===
-CDRAG = 0.0                     !   [nondim] default = 0.003
-                                ! CDRAG is the drag coefficient relating the magnitude of
-                                ! the velocity field to the bottom stress.
 
 ! === module MOM_lateral_mixing_coeffs ===
 BOUND_CORIOLIS = True           !   [Boolean] default = False
@@ -268,6 +265,10 @@ MAXVEL = 10.0                   !   [m s-1] default = 3.0E+08
 ! === module MOM_PointAccel ===
 
 ! === module MOM_set_visc ===
+CDRAG = 0.0                     !   [nondim] default = 0.003
+                                ! CDRAG is the drag coefficient relating the magnitude of
+                                ! the velocity field to the bottom stress. CDRAG is only
+                                ! used if BOTTOMDRAGLAW is defined.
 DRAG_BG_VEL = 0.05              !   [m s-1] default = 0.0
                                 ! DRAG_BG_VEL is either the assumed bottom velocity (with
                                 ! LINEAR_DRAG) or an unresolved  velocity that is

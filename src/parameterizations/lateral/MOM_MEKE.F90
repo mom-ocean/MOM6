@@ -51,10 +51,11 @@ type, public :: MEKE_CS ; private
   integer :: id_MEKE = -1, id_Ue = -1, id_Kh = -1, id_src = -1
   integer :: id_GM_src = -1, id_mom_src = -1, id_decay = -1
   integer :: id_KhMEKE_u = -1, id_KhMEKE_v = -1, id_Ku = -1
-end type MEKE_CS
 
-integer :: id_clock_pass
-type(group_pass_type) :: pass_MEKE, pass_Kh, pass_Ah !For group halo pass
+  ! Infrastructure
+  integer :: id_clock_pass !< Clock for group pass calls
+  type(group_pass_type) :: pass_MEKE, pass_Kh, pass_Ku !< Type for group-halo pass calls
+end type MEKE_CS
 
 contains
 
@@ -225,9 +226,9 @@ subroutine step_forward_MEKE(MEKE, h, visc, dt, G, CS)
     endif
 !$OMP end parallel
     if (CS%MEKE_KH >= 0.0) then
-      call cpu_clock_begin(id_clock_pass)
-      call do_group_pass(pass_MEKE, G%Domain)
-      call cpu_clock_end(id_clock_pass)
+      call cpu_clock_begin(CS%id_clock_pass)
+      call do_group_pass(CS%pass_MEKE, G%Domain)
+      call cpu_clock_end(CS%id_clock_pass)
       
       ! ### More elaborate prescriptions for Kh could be used here.
       Kh_here = CS%MEKE_Kh
@@ -298,9 +299,9 @@ subroutine step_forward_MEKE(MEKE, h, visc, dt, G, CS)
 !$OMP end parallel
     endif
 
-    call cpu_clock_begin(id_clock_pass)
-    call do_group_pass(pass_MEKE, G%Domain)
-    call cpu_clock_end(id_clock_pass)
+    call cpu_clock_begin(CS%id_clock_pass)
+    call do_group_pass(CS%pass_MEKE, G%Domain)
+    call cpu_clock_end(CS%id_clock_pass)
 
     ! Calculate diffusivity for main model to use
     if (CS%MEKE_KhCoeff>0.) then
@@ -316,9 +317,9 @@ subroutine step_forward_MEKE(MEKE, h, visc, dt, G, CS)
           MEKE%Kh(i,j) = CS%MEKE_KhCoeff*sqrt(2.*max(0.,MEKE%MEKE(i,j))*G%areaT(i,j))
         enddo ; enddo
       endif
-      call cpu_clock_begin(id_clock_pass)
-      call do_group_pass(pass_Kh, G%Domain)
-      call cpu_clock_end(id_clock_pass)
+      call cpu_clock_begin(CS%id_clock_pass)
+      call do_group_pass(CS%pass_Kh, G%Domain)
+      call cpu_clock_end(CS%id_clock_pass)
     endif
 
     ! Calculate viscosity for the main model to use
@@ -327,6 +328,9 @@ subroutine step_forward_MEKE(MEKE, h, visc, dt, G, CS)
       do j=js-1,je+1 ; do i=is-1,ie+1
         MEKE%Ku(i,j) = CS%viscosity_coeff*sqrt(2.*max(0.,MEKE%MEKE(i,j))*G%areaT(i,j))
       enddo ; enddo
+      call cpu_clock_begin(CS%id_clock_pass)
+      call do_group_pass(CS%pass_Ku, G%Domain)
+      call cpu_clock_end(CS%id_clock_pass)
     endif
 
 ! Offer fields for averaging.
@@ -353,7 +357,7 @@ end subroutine step_forward_MEKE
 
 ! ------------------------------------------------------------------------------
 
-subroutine MEKE_init(Time, G, param_file, diag, CS, MEKE)
+logical function MEKE_init(Time, G, param_file, diag, CS, MEKE)
   type(time_type),         intent(in)    :: Time
   type(ocean_grid_type),   intent(inout) :: G
   type(param_file_type),   intent(in)    :: param_file
@@ -387,6 +391,14 @@ subroutine MEKE_init(Time, G, param_file, diag, CS, MEKE)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
+  ! Determine whether this module will be used
+  call log_version(param_file, mod, version, "")
+  call get_param(param_file, mod, "USE_MEKE", MEKE_init, &
+                 "If true, turns on the MEKE scheme which calculates\n"// &
+                 "a sub-grid mesoscale eddy kinetic energy budget.", &
+                 default=.false.)
+  if (.not. MEKE_init) return
+
   if (.not. associated(MEKE)) then
     call MOM_error(WARNING, "MEKE_init called with NO associated "// &
                             "MEKE-type structure.")
@@ -400,10 +412,7 @@ subroutine MEKE_init(Time, G, param_file, diag, CS, MEKE)
 
   call MOM_mesg("MEKE_init: reading parameters ", 5)
 
-  CS%diag => diag
-
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, "")
   call get_param(param_file, mod, "MEKE_DAMPING", CS%MEKE_damping, &
                  "The local depth-indepented MEKE dissipation rate.", &
                  units="s-1", default=0.0)
@@ -473,19 +482,20 @@ subroutine MEKE_init(Time, G, param_file, diag, CS, MEKE)
 
 ! In the case of a restart, these fields need a halo update
   if (associated(MEKE%MEKE)) then
-    call create_group_pass(pass_MEKE, MEKE%MEKE, G%Domain)
-    call do_group_pass(pass_MEKE, G%Domain)
+    call create_group_pass(CS%pass_MEKE, MEKE%MEKE, G%Domain)
+    call do_group_pass(CS%pass_MEKE, G%Domain)
   endif
   if (associated(MEKE%Kh)) then
-    call create_group_pass(pass_Kh, MEKE%Kh, G%Domain)
-    call do_group_pass(pass_Kh, G%Domain)
+    call create_group_pass(CS%pass_Kh, MEKE%Kh, G%Domain)
+    call do_group_pass(CS%pass_Kh, G%Domain)
   endif
   if (associated(MEKE%Ku)) then
-    call create_group_pass(pass_Ah, MEKE%Ku, G%Domain)
-    call do_group_pass(pass_Ah, G%Domain)
+    call create_group_pass(CS%pass_Ku, MEKE%Ku, G%Domain)
+    call do_group_pass(CS%pass_Ku, G%Domain)
   endif
 
 ! Register fields for output from this module.
+  CS%diag => diag
   CS%id_MEKE = register_diag_field('ocean_model', 'MEKE', diag%axesT1, Time, &
      'Mesoscale Eddy Kinetic Energy', 'meter2 second-2')
   if (.not. associated(MEKE%MEKE)) CS%id_MEKE = -1
@@ -513,9 +523,9 @@ subroutine MEKE_init(Time, G, param_file, diag, CS, MEKE)
      'MEKE energy available from momentum', 'Watt meter-2')
   if (.not. associated(MEKE%mom_src)) CS%id_mom_src = -1
 
-  id_clock_pass = cpu_clock_id('(Ocean continuity halo updates)', grain=CLOCK_ROUTINE)
+  CS%id_clock_pass = cpu_clock_id('(Ocean continuity halo updates)', grain=CLOCK_ROUTINE)
 
-end subroutine MEKE_init
+end function MEKE_init
 
 subroutine MEKE_alloc_register_restart(G, param_file, MEKE, restart_CS)
 ! Arguments
@@ -526,7 +536,11 @@ subroutine MEKE_alloc_register_restart(G, param_file, MEKE, restart_CS)
 ! Local variables
   type(vardesc) :: vd
   real :: MEKE_damping, MEKE_GMcoeff, MEKE_FrCoeff, MEKE_KHCoeff, MEKE_viscCoeff
+  logical :: useMEKE
   integer :: isd, ied, jsd, jed
+
+! Determine whether this module will be used
+  useMEKE = .false.; call read_param(param_file,"USE_MEKE",useMEKE)
 
 ! Read these parameters to determine what should be in the restarts
   MEKE_damping =-1.; call read_param(param_file,"MEKE_DAMPING",MEKE_damping)
@@ -541,6 +555,8 @@ subroutine MEKE_alloc_register_restart(G, param_file, MEKE, restart_CS)
                              "MEKE type.")
     return
   else; allocate(MEKE); endif
+
+  if (.not. useMEKE) return
 
 ! Allocate memory
   call MOM_mesg("MEKE_alloc_register_restart: allocating and registering", 5)
