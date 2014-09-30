@@ -110,12 +110,12 @@ CM2.2
 #==================
 "ocean_model","T_adx",  "T_adx",  "ocean_month","all",.true.,"none",2
 "ocean_model","T_ady",  "T_ady",  "ocean_month","all",.true.,"none",2
-"ocean_model","T_diffx","T_diffx","ocean_month","all",.true.,"none",2
-"ocean_model","T_diffy","T_diffy","ocean_month","all",.true.,"none",2
+"ocean_model","T_diffx_2d","T_diffx_2d","ocean_month","all",.true.,"none",2
+"ocean_model","T_diffy_2d","T_diffy_2d","ocean_month","all",.true.,"none",2
 "ocean_model","S_adx",  "S_adx",  "ocean_month","all",.true.,"none",2
 "ocean_model","S_ady",  "S_ady",  "ocean_month","all",.true.,"none",2
-"ocean_model","S_diffx","S_diffx","ocean_month","all",.true.,"none",2
-"ocean_model","S_diffy","S_diffy","ocean_month","all",.true.,"none",2
+"ocean_model","S_diffx_2d","S_diffx_2d","ocean_month","all",.true.,"none",2
+"ocean_model","S_diffy_2d","S_diffy_2d","ocean_month","all",.true.,"none",2
 
 
 # Momentum Balance Terms:
