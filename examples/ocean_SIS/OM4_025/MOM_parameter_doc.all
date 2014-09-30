@@ -54,7 +54,7 @@ MASKTABLE = "mask_table.96.32x18" ! default = "MOM_mask_table"
                                 !  4,6
                                 !  1,2
                                 !  3,6
-LAYOUT = 0, 0                   ! default = 0
+LAYOUT = 32, 18                 ! default = 0
                                 ! The processor layout to be used, or 0, 0 to automatically
                                 ! set the layout based on the number of processors.
 !NIPROC = 32                    !
