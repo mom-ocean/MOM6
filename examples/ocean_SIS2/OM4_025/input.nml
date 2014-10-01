@@ -73,9 +73,6 @@
             stack_size =0
 /
 
- &horiz_interp_nml
- /
-
  &ice_albedo_nml
             t_range = 10.
 /
