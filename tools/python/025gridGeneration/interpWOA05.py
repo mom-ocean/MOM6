@@ -1,8 +1,11 @@
 #!/usr/bin/env python
 
-from midas import *
+from midas.rectgrid import *
+import netCDF4 as nc
+import numpy as np
+
 sgrid=supergrid(file='/archive/gold/datasets/OM4_025/mosaic.v20140610.unpacked/ocean_hgrid.nc',cyclic_x=True,tripolar_n=True)
-grid=rectgrid(supergrid=sgrid)
+grid=quadmesh(supergrid=sgrid)
 grid.lath=grid.y_T[:,grid.im/4]
 grid.latq=grid.y_T_bounds[:,grid.im/4]
 grid.D=nc.Dataset('/archive/gold/datasets/OM4_025/mosaic.v20140610.unpacked/ocean_topog.nc').variables['depth'][:]

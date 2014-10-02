@@ -50,8 +50,8 @@ topog.nc: edit_topog.nc
 	./ice9.py edit_topog.nc --output topog.nc
 
 ocean_topog.nc: topog.nc
-	module load nco; /usr/local/nco-4.0.3/bin/ncks -h -d ny,40,  topog.nc ocean_topog.nc
-	/usr/local/nco-4.0.3/bin/ncap -h -s 'jEdit=jEdit-40' --overwrite ocean_topog.nc ocean_topog.nc
+	module load nco; ncks -h -d ny,40,  topog.nc ocean_topog.nc
+	module load nco;ncap -h -s 'jEdit=jEdit-40' --overwrite ocean_topog.nc ocean_topog.nc
 	./addDimension.py ocean_topog.nc ntiles 1
 # Removes rows 1-40
 # Adjusts jEdit values
