@@ -6,6 +6,9 @@
          parameter_filename = 'MOM_input',
                               'MOM_override' /
 
+ &diag_manager_nml
+ /
+
  &fms_nml
         clock_grain='ROUTINE'
         clock_flags='SYNC'

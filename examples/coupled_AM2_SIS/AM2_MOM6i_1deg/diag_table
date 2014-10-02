@@ -110,12 +110,12 @@ CM2.2
 #==================
 "ocean_model","T_adx",  "T_adx",  "ocean_month","all",.true.,"none",2
 "ocean_model","T_ady",  "T_ady",  "ocean_month","all",.true.,"none",2
-"ocean_model","T_diffx","T_diffx","ocean_month","all",.true.,"none",2
-"ocean_model","T_diffy","T_diffy","ocean_month","all",.true.,"none",2
+"ocean_model","T_diffx_2d","T_diffx_2d","ocean_month","all",.true.,"none",2
+"ocean_model","T_diffy_2d","T_diffy_2d","ocean_month","all",.true.,"none",2
 "ocean_model","S_adx",  "S_adx",  "ocean_month","all",.true.,"none",2
 "ocean_model","S_ady",  "S_ady",  "ocean_month","all",.true.,"none",2
-"ocean_model","S_diffx","S_diffx","ocean_month","all",.true.,"none",2
-"ocean_model","S_diffy","S_diffy","ocean_month","all",.true.,"none",2
+"ocean_model","S_diffx_2d","S_diffx_2d","ocean_month","all",.true.,"none",2
+"ocean_model","S_diffy_2d","S_diffy_2d","ocean_month","all",.true.,"none",2
 
 
 # Momentum Balance Terms:
@@ -172,9 +172,9 @@ CM2.2
 
 # MEKE:
 #======
-"ocean_model","MEKE","MEKE","ocean_month","all",.true.,"none",2
-"ocean_model","MEKE_src","MEKE_src","ocean_month","all",.true.,"none",2
-"ocean_model","MEKE_Kh","MEKE_Kh","ocean_month","all",.true.,"none",2
+#"ocean_model","MEKE","MEKE","ocean_month","all",.true.,"none",2
+#"ocean_model","MEKE_src","MEKE_src","ocean_month","all",.true.,"none",2
+#"ocean_model","MEKE_Kh","MEKE_Kh","ocean_month","all",.true.,"none",2
 
 #
 # Kinetic Energy Balance Terms:
@@ -448,14 +448,14 @@ CM2.2
 #
 ## aerosols
 ## for the aerosol fields, set do_cmip_diagnostics=.true. in shortwave_driver_nml
- "radiation","olr_800_1200",      "olr_800_1200",      "atmos_month_aer",  "all", .true.,"none", 2
- "radiation","olr_900_990",       "olr_900_990",       "atmos_month_aer",  "all", .true.,"none", 2
- "radiation","sfc_800_1200",      "sfc_800_1200",      "atmos_month_aer",  "all", .true.,"none", 2
- "radiation","sfc_900_990",       "sfc_900_990",       "atmos_month_aer",  "all", .true.,"none", 2
- "radiation","olr_800_1200_cf",   "olr_800_1200_cf",   "atmos_month_aer",  "all", .true.,"none", 2
- "radiation","olr_900_990_cf",    "olr_900_990_cf",    "atmos_month_aer",  "all", .true.,"none", 2
- "radiation","sfc_800_1200_cf",   "sfc_800_1200_cf",   "atmos_month_aer",  "all", .true.,"none", 2
- "radiation","sfc_900_990_cf",    "sfc_900_990_cf",    "atmos_month_aer",  "all", .true.,"none", 2
+#"radiation","olr_800_1200",      "olr_800_1200",      "atmos_month_aer",  "all", .true.,"none", 2
+#"radiation","olr_900_990",       "olr_900_990",       "atmos_month_aer",  "all", .true.,"none", 2
+#"radiation","sfc_800_1200",      "sfc_800_1200",      "atmos_month_aer",  "all", .true.,"none", 2
+#"radiation","sfc_900_990",       "sfc_900_990",       "atmos_month_aer",  "all", .true.,"none", 2
+#"radiation","olr_800_1200_cf",   "olr_800_1200_cf",   "atmos_month_aer",  "all", .true.,"none", 2
+#"radiation","olr_900_990_cf",    "olr_900_990_cf",    "atmos_month_aer",  "all", .true.,"none", 2
+#"radiation","sfc_800_1200_cf",   "sfc_800_1200_cf",   "atmos_month_aer",  "all", .true.,"none", 2
+#"radiation","sfc_900_990_cf",    "sfc_900_990_cf",    "atmos_month_aer",  "all", .true.,"none", 2
  "radiation","swup_toa_vis",      "swup_toa_vis",      "atmos_month_aer",  "all", .true.,"none", 2
  "radiation","swup_toa_1p6",      "swup_toa_1p6",      "atmos_month_aer",  "all", .true.,"none", 2
  "radiation","swnt_sfc_vis",      "swnt_sfc_vis",      "atmos_month_aer",  "all", .true.,"none", 2

@@ -6,6 +6,9 @@
          parameter_filename = 'MOM_input',
                               'MOM_override' /
 
+ &diag_manager_nml
+ /
+
  &coupler_nml
             months = 0,
             days   = 1,

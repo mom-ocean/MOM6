@@ -1322,8 +1322,10 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
   handles%id_heat_restore = register_diag_field('ocean_model', 'heat_restore', diag%axesT1, Time, &
         'Restoring surface heat flux into ocean', 'Watt/m^2')
 
-  handles%id_psurf = register_diag_field('ocean_model', 'p_surf', diag%axesT1, Time, &
-        'Pressure at ice-ocean or atmosphere-ocean interface', 'Pascal')
+  handles%id_psurf = register_diag_field('ocean_model', 'p_surf', diag%axesT1, Time,      &
+        'Pressure at ice-ocean or atmosphere-ocean interface', 'Pascal', cmor_field_name='pso', & 
+        cmor_long_name='Sea Water Pressure at Sea Water Surface', cmor_units='Pa',        &
+        cmor_standard_name='sea_water_pressure_at_sea_water_surface')
 
   handles%id_saltflux = register_diag_field('ocean_model', 'salt_flux', diag%axesT1, Time,        &
         'Salt flux into ocean at surface', 'kilogram meter-2 second-1', cmor_field_name='sfdsi',  &

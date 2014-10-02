@@ -1,33 +1,3 @@
-"ocean_model", "MEKE"  [Unused]
-    ! long_name: Mesoscale Eddy Kinetic Energy
-    ! units: meter2 second-2
-"ocean_model", "MEKE_KH"  [Unused]
-    ! long_name: MEKE derived diffusivity
-    ! units: meter2 second-1
-"ocean_model", "MEKE_KU"  [Unused]
-    ! long_name: MEKE derived lateral viscosity
-    ! units: meter2 second-1
-"ocean_model", "MEKE_Ue"  [Unused]
-    ! long_name: MEKE derived eddy-velocity scale
-    ! units: meter second-1
-"ocean_model", "MEKE_src"  [Unused]
-    ! long_name: MEKE energy source
-    ! units: meter2 second-3
-"ocean_model", "MEKE_decay"  [Unused]
-    ! long_name: MEKE decay rate
-    ! units: second-1
-"ocean_model", "KHMEKE_u"  [Unused]
-    ! long_name: Zonal diffusivity of MEKE
-    ! units: meter2 second-1
-"ocean_model", "KHMEKE_v"  [Unused]
-    ! long_name: Meridional diffusivity of MEKE
-    ! units: meter2 second-1
-"ocean_model", "MEKE_GM_src"  [Unused]
-    ! long_name: MEKE energy available from thickness mixing
-    ! units: Watt meter-2
-"ocean_model", "MEKE_mom_src"  [Unused]
-    ! long_name: MEKE energy available from momentum
-    ! units: Watt meter-2
 "ocean_model", "SN_u"  [Unused]
     ! long_name: Inverse eddy time-scale, S*N, at u-points
     ! units: s^-1
@@ -454,6 +424,10 @@
 "ocean_model", "MLD_003"  [Unused]
     ! long_name: Mixed layer depth (delta rho = 0.03)
     ! units: meter
+"ocean_model", "mlotst"  [Unused]
+    ! long_name: Ocean Mixed Layer Thickness Defined by Sigma T
+    ! units: m
+    ! standard_name: ocean_mixed_layer_thickness_defined_by_sigma_t
 "ocean_model", "MLD_0125"  [Unused]
     ! long_name: Mixed layer depth (delta rho = 0.125)
     ! units: meter
@@ -541,6 +515,10 @@
 "ocean_model", "KPP_OBLdepth"  [Unused]
     ! long_name: Thickness of the surface Ocean Boundary Layer calculated by [CVmix] KPP
     ! units: meter
+"ocean_model", "oml"  [Unused]
+    ! long_name: ocean_mixed_layer_thickness_defined_by_mixing_scheme
+    ! units: m
+    ! standard_name: Ocean Mixed Layer Thickness Defined by Mixing Scheme
 "ocean_model", "KPP_BulkDrho"  [Unused]
     ! long_name: Bulk difference in density used in Bulk Richardson number, as used by [CVmix] KPP
     ! units: kg/m3
@@ -691,22 +669,38 @@
 "ocean_model", "SST"  [Unused]
     ! long_name: Sea Surface Temperature
     ! units: Celsius
+"ocean_model", "tos"  [Unused]
+    ! long_name: Sea Surface Temperature
+    ! units: degC
+    ! standard_name: sea_surface_temperature
 "ocean_model", "SST_global"  [Unused]
     ! long_name: Global Average Sea Surface Temperature
     ! units: Celsius
 "ocean_model", "tosga"  [Unused]
     ! long_name: Global Average Sea Surface Temperature
-    ! units: deg C
-    ! standard_name: global_average_sea_surface_temperature
+    ! units: degC
+    ! standard_name: sea_surface_temperature
 "ocean_model", "SST_sq"  [Unused]
     ! long_name: Sea Surface Temperature Squared
     ! units: Celsius**2
+"ocean_model", "tossq"  [Unused]
+    ! long_name: Square of Sea Surface Temperature
+    ! units: degC^2
+    ! standard_name: square_of_sea_surface_temperature
 "ocean_model", "SSS"  [Unused]
     ! long_name: Sea Surface Salinity
     ! units: PSU
+"ocean_model", "sos"  [Unused]
+    ! long_name: Sea Surface Salinity
+    ! units: psu
+    ! standard_name: sea_surface_salinity
 "ocean_model", "SSS_global"  [Unused]
     ! long_name: Global Average Sea Surface Salinity
     ! units: PSU
+"ocean_model", "sosga"  [Unused]
+    ! long_name: Global Average Sea Surface Salinity
+    ! units: psu
+    ! standard_name: global_average_sea_surface_salinity
 "ocean_model", "frazil"  [Unused]
     ! long_name: Heat sink from frazil formation
     ! units: Watt meter-2
@@ -989,6 +983,10 @@
 "ocean_model", "p_surf"  [Unused]
     ! long_name: Pressure at ice-ocean or atmosphere-ocean interface
     ! units: Pascal
+"ocean_model", "pso"  [Unused]
+    ! long_name: Sea Water Pressure at Sea Water Surface
+    ! units: Pa
+    ! standard_name: sea_water_pressure_at_sea_water_surface
 "ocean_model", "salt_flux"  [Unused]
     ! long_name: Salt flux into ocean at surface
     ! units: kilogram meter-2 second-1

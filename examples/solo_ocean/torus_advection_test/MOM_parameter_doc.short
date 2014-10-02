@@ -232,9 +232,6 @@ INITIAL_V_CONST = 0.2           !   [m s-1]
                                 ! A initial uniform value for the meridional flow.
 
 ! === module MOM_MEKE ===
-CDRAG = 0.0                     !   [nondim] default = 0.003
-                                ! CDRAG is the drag coefficient relating the magnitude of
-                                ! the velocity field to the bottom stress.
 
 ! === module MOM_lateral_mixing_coeffs ===
 BOUND_CORIOLIS = True           !   [Boolean] default = False

@@ -122,7 +122,7 @@ NJGLOBAL = 1080                 !
                                 ! The total number of thickness grid points in the
                                 ! y-direction in the physical domain. With STATIC_MEMORY_
                                 ! this is set in SIS2_memory.h at compile time.
-MASKTABLE = "MOM_mask_table"    ! default = "MOM_mask_table"
+MASKTABLE = "mask_table.96.32x18" ! default = "MOM_mask_table"
                                 ! A text file to specify n_mask, layout and mask_list.
                                 ! This feature masks out processors that contain only land points.
                                 ! The first line of mask_table is the number of regions to be masked out.
@@ -137,18 +137,18 @@ MASKTABLE = "MOM_mask_table"    ! default = "MOM_mask_table"
                                 !  4,6
                                 !  1,2
                                 !  3,6
-LAYOUT = 0, 1                   ! default = 0
+LAYOUT = 32, 18                 ! default = 0
                                 ! The processor layout to be used, or 0, 0 to automatically
                                 ! set the layout based on the number of processors.
-!NIPROC = 480                   !
+!NIPROC = 32                    !
                                 ! The number of processors in the x-direction. With
                                 ! STATIC_MEMORY_ this is set in SIS2_memory.h at compile time.
-!NJPROC = 1                     !
+!NJPROC = 18                    !
                                 ! The number of processors in the x-direction. With
                                 ! STATIC_MEMORY_ this is set in SIS2_memory.h at compile time.
-!LAYOUT = 480, 1                !
+!LAYOUT = 32, 18                !
                                 ! The processor layout that was acutally used.
-IO_LAYOUT = 1, 1                ! default = 0
+IO_LAYOUT = 2, 2                ! default = 0
                                 ! The processor layout to be used, or 0,0 to automatically
                                 ! set the io_layout to be the same as the layout.
 GLOBAL_INDEXING = False         !   [Boolean] default = False

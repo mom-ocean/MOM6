@@ -532,7 +532,7 @@ subroutine remapping_core( CS, n0, h0, u0, n1, dx, u1 )
     if (k<=n0) then; hTmp = h0(k); else; hTmp = 0.; endif
     z0 = z0 + hTmp ; z1 = z1 + ( hTmp + ( dx(k+1) - dx(k) ) )
   enddo
-  if (abs(totalHU2-totalHU0) > (err0+err2)*real(n1)) then
+  if (abs(totalHU2-totalHU0) > (err0+err2)*real(n1) .and. (err0+err2)/=0.) then
     write(0,*) 'h0=',h0
     write(0,*) 'hf=',h0+dx(2:n1+1)-dx(1:n1)
     write(0,*) 'u0=',u0

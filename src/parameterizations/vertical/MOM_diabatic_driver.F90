@@ -135,6 +135,7 @@ type, public :: diabatic_CS ; private
                              ! and 1 is a sensible value too.  Note that if there
                              ! are convective instabilities in the initial state,
                              ! the first call may do much more than the second.
+  integer :: NKBL            ! The number of buffer layers (if bulk_mixed_layer)
   logical :: massless_match_targets  ! If true (the default), keep the T & S
                                      ! consistent with the target values.
   logical :: mix_boundary_tracers ! If true, mix the passive tracers in massless
@@ -159,6 +160,7 @@ type, public :: diabatic_CS ; private
 
   logical :: useKPP          ! If true, use [CVmix] KPP diffusivities and non-local
                              ! transport.
+  logical :: salt_reject_below_ML ! It true, add salt below mixed layer (layer mode only)
   logical :: KPPisPassive    ! If true, KPP is in passive mode, not changing answers.
   logical :: useConvection   ! If true, calculate large diffusivities when column
                              ! is statically unstable.
@@ -176,7 +178,7 @@ type, public :: diabatic_CS ; private
   integer :: id_ea       = -1, id_eb       = -1, id_Kd_z   = -1, id_Kd_interface = -1
   integer :: id_Tdif_z   = -1, id_Tadv_z   = -1, id_Sdif_z = -1, id_Sadv_z = -1
   integer :: id_Tdif     = -1, id_Tadv     = -1, id_Sdif   = -1, id_Sadv = -1
-  integer :: id_createdH = -1, id_subMLN2  = -1
+  integer :: id_createdH = -1, id_subMLN2  = -1, id_brine_lay = -1
   integer :: id_MLD_003  = -1, id_MLD_0125 = -1, id_MLD_user = -1
 
   type(entrain_diffusive_CS),   pointer :: entrain_diffusive_CSp => NULL()
@@ -359,7 +361,11 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   ! make_frazil is deliberately called at both the beginning and at
   ! the end of the diabatic processes.
   if (ASSOCIATED(tv%T) .AND. ASSOCIATED(tv%frazil)) then
-    call make_frazil(h,tv,G,CS)
+    if (ASSOCIATED(fluxes%p_surf_full)) then                                                                                                                                                       
+        call make_frazil(h,tv,G,CS,fluxes%p_surf_full)                                                                                                                                              
+    else                                                                                                                                                                                           
+        call make_frazil(h,tv,G,CS)                                                                                                                                                                 
+    endif   
     if (showCallTree) call callTree_waypoint("done with 1st make_frazil (diabatic)")
   endif
   if (CS%debugConservation) call MOM_state_stats('1st make_frazil', u, v, h, tv%T, tv%S, G)
@@ -400,6 +406,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
         call bulkmixedlayer(h, u_h, v_h, tv, fluxes, dt*CS%ML_mix_first, &
                             eaml,ebml, G, CS%bulkmixedlayer_CSp, CS%optics, dt, &
                             last_call=.false.)
+        if (CS%salt_reject_below_ML) &
+             call insert_brine(h,tv,G,fluxes,CS,dt*CS%ML_mix_first)
       else
         ! Changes: h, tv%T, tv%S, eaml and ebml  (G is also inout???)
         call bulkmixedlayer(h, u_h, v_h, tv, fluxes, dt, eaml, ebml, &
@@ -801,6 +809,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
       call bulkmixedlayer(h, u_h, v_h, tv, fluxes, dt_mix, ea, eb, &
                       G, CS%bulkmixedlayer_CSp, CS%optics, dt, last_call=.true.)
 
+      if (CS%salt_reject_below_ML) &
+           call insert_brine(h,tv,G,fluxes,CS,dt_mix)
 !  Keep salinity from falling below a small but positive threshold.
 !  This occurs when the ice model attempts to extract more salt than
 !  is actually present in the ocean.  
@@ -1107,7 +1117,12 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
 ! make_frazil is deliberately called at both the beginning and at
 ! the end of the diabatic processes.
   if (ASSOCIATED(tv%T) .AND. ASSOCIATED(tv%frazil)) then
-    call make_frazil(h,tv,G,CS)
+    if (ASSOCIATED(fluxes%p_surf_full)) then
+       call make_frazil(h,tv,G,CS,fluxes%p_surf_full)
+    else
+       call make_frazil(h,tv,G,CS)
+    endif
+
     if (showCallTree) call callTree_waypoint("done with 2nd make_frazil (diabatic)")
     if (CS%debugConservation) call MOM_state_stats('2nd make_frazil', u, v, h, tv%T, tv%S, G)
   endif
@@ -1179,11 +1194,12 @@ subroutine adiabatic(h, tv, fluxes, dt, G, CS)
 
 end subroutine adiabatic
 
-subroutine make_frazil(h, tv, G, CS)
+subroutine make_frazil(h, tv, G, CS, p_surf)
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h
   type(thermo_var_ptrs),                 intent(inout) :: tv
   type(ocean_grid_type),                 intent(in)    :: G
   type(diabatic_CS),                     intent(in)    :: CS
+  real, dimension(NIMEM_,NJMEM_), intent(in), optional    :: p_surf
 
 !   Frazil formation keeps the temperature above the freezing point.
 ! This subroutine warms any water that is colder than the (currently
@@ -1200,7 +1216,8 @@ subroutine make_frazil(h, tv, G, CS)
 !                 diabatic_driver_init.
   real, dimension(SZI_(G)) :: &
     fraz_col, & ! The accumulated heat requirement due to frazil, in J.
-    T_freeze    ! The freezing potential temperature at the current salinity, C.
+    T_freeze, & ! The freezing potential temperature at the current salinity, C.
+    ps          ! pressure
   real, dimension(SZI_(G),SZK_(G)) :: &
     pressure    ! The pressure at the middle of each layer in Pa.
   real :: hc    ! A layer's heat capacity in J m-2 K-1.
@@ -1218,11 +1235,16 @@ subroutine make_frazil(h, tv, G, CS)
 !$OMP                          private(fraz_col,T_fr_set,T_freeze,hc) &
 !$OMP                     firstprivate(pressure)
   do j=js,je
+     ps(:) = 0.0
+     if (PRESENT(p_surf)) then
+        ps(:) = p_surf(:,j)
+     endif
+
     do i=is,ie ; fraz_col(:) = 0.0 ; enddo
 
     if (CS%pressure_dependent_frazil) then
       do i=is,ie
-        pressure(i,1) = (0.5*G%H_to_Pa)*h(i,j,1)
+        pressure(i,1) = ps(i)+(0.5*G%H_to_Pa)*h(i,j,1)
       enddo
       do k=2,nz ; do i=is,ie
         pressure(i,k) = pressure(i,k-1) + &
@@ -1459,6 +1481,140 @@ subroutine adjust_salt(h, tv, G, CS)
 
 end subroutine adjust_salt
 
+subroutine insert_brine(h, tv, G, fluxes, CS, dt)
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h
+  type(thermo_var_ptrs),                 intent(inout) :: tv
+  type(ocean_grid_type),                 intent(in)    :: G
+  type(forcing),                         intent(in)    :: fluxes
+  type(diabatic_CS),                     intent(in)    :: CS
+  real,                                  intent(in)    :: dt
+
+! Insert salt from brine rejection into the first layer below 
+! the mixed layer which both contains mass and in which the 
+! change in layer density remains stable after the addition 
+! of salt via brine rejection.
+
+! Arguments: h - Layer thickness, in m.
+!  (in/out)  tv - A structure containing pointers to any available
+!                 thermodynamic fields. Absent fields have NULL ptrs.
+!  (in)      G - The ocean's grid structure.
+!  (in)      CS - The control structure returned by a previous call to
+!                 diabatic_driver_init.
+
+  real :: salt(SZI_(G)) ! The amount of salt rejected from
+                        !  sea ice. [grams]
+  real :: dzbr(SZI_(G)) ! cumulative depth over which brine is distributed
+  real :: inject_layer(SZI_(G),SZJ_(G)) ! diagnostic
+
+  
+  real :: p_ref_cv(SZI_(G)) 
+  real :: T(SZI_(G),SZK_(G))
+  real :: S(SZI_(G),SZK_(G))
+  real :: h_2d(SZI_(G),SZK_(G))
+  real :: Rcv(SZI_(G),SZK_(G))
+  real :: mc  ! A layer's mass kg  m-2 .
+  real :: s_new,R_new,t0,scale, cdz
+  integer :: i, j, k, is, ie, js, je, nz, nkmb, ks
+
+  real, parameter :: brine_dz = 1.0  ! minumum thickness over which to distribute brine
+  real, parameter :: s_max = 45.0    ! salinity bound
+
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+
+  if (.not.ASSOCIATED(fluxes%salt_flux)) return
+
+  nkmb = G%nkml + CS%nkbl
+
+  p_ref_cv(:)  = tv%P_ref
+
+  inject_layer = nz
+
+  do j=js,je
+
+     salt(:)=0.0;dzbr(:)=0.0
+
+     do i=is,ie
+       if (G%mask2dT(i,j) > 0.) then
+         salt(i) = dt * (1000. * fluxes%salt_flux(i,j))
+       endif
+     enddo
+
+     do k=1,nz
+       do i=is,ie
+         T(i,k)=tv%T(i,j,k); S(i,k)=tv%S(i,j,k); h_2d(i,k)=h(i,j,k)
+       enddo
+       
+       call calculate_density(T(:,k), S(:,k), p_ref_cv, Rcv(:,k), is, &
+           ie-is+1, tv%eqn_of_state)
+     enddo
+
+! First, try to find an interior layer where inserting all the salt
+! will not cause the layer to become statically unstable. 
+! Bias towards deeper layers.
+
+     do k=nkmb+1,nz-1
+       do i=is,ie
+         if ((G%mask2dT(i,j) > 0.0) .and. dzbr(i) < brine_dz .and. salt(i) > 0.) then
+           mc = G%H_to_kg_m2 * h_2d(i,k)
+           s_new = S(i,k) + salt(i)/mc
+           t0 = T(i,k)
+           call calculate_density(t0,s_new,tv%P_Ref,R_new,tv%eqn_of_state)
+           if (R_new < 0.5*(Rcv(i,k)+Rcv(i,k+1)) .and. s_new<s_max) then
+             dzbr(i)=dzbr(i)+h_2d(i,k)
+             inject_layer(i,j) = min(inject_layer(i,j),float(k))
+           endif
+         endif
+       enddo
+     enddo
+
+! Then try to insert into buffer layers if they exist
+     do k=nkmb,G%nkml+1,-1
+       do i=is,ie
+         if ((G%mask2dT(i,j) > 0.0) .and. dzbr(i) < brine_dz .and. salt(i) > 0.) then
+           mc = G%H_to_kg_m2 * h_2d(i,k)
+           dzbr(i)=dzbr(i)+h_2d(i,k)
+           inject_layer(i,j) = min(inject_layer(i,j),float(k))
+         endif
+       enddo
+     enddo
+
+! finally if unable to find a layer to insert, then place in mixed layer
+
+     do k=1,G%nkml
+        do i=is,ie
+           if ((G%mask2dT(i,j) > 0.0) .and. dzbr(i) < brine_dz .and. salt(i) > 0.) then
+              mc = G%H_to_kg_m2 * h_2d(i,k)          
+              dzbr(i)=dzbr(i)+h_2d(i,k)
+              inject_layer(i,j) = min(inject_layer(i,j),float(k))
+           endif
+        enddo
+     enddo
+
+     
+     do i=is,ie
+        if ((G%mask2dT(i,j) > 0.0) .and. salt(i) > 0.) then
+!           if (dzbr(i)< brine_dz) call MOM_error(FATAL,"insert_brine: failed")
+           ks=inject_layer(i,j)
+           cdz=0.0
+           do k=ks,nz
+              mc = G%H_to_kg_m2 * h_2d(i,k)
+              scale = h_2d(i,k)/dzbr(i)
+              cdz=cdz+h_2d(i,k)
+              if (cdz > 1.0) exit
+              tv%S(i,j,k) = tv%S(i,j,k) + scale*salt(i)/mc           
+           enddo
+        endif
+     enddo
+
+
+   enddo
+
+
+   if (CS%id_brine_lay > 0) call post_data(CS%id_brine_lay,inject_layer,CS%diag)
+   return
+
+end subroutine insert_brine
+
 subroutine triDiagTS(G, is, ie, js, je, hold, ea, eb, T, S)
 ! Simple tri-diagnonal solver for T and S
 ! "Simple" means it only uses arrays hold, ea and eb
@@ -1621,6 +1777,7 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
                  "The fraction of the mixed layer mixing that is applied \n"//&
                  "before interior diapycnal mixing.  0 by default.", &
                  units="nondim", default=0.0)
+    call get_param(param_file, mod, "NKBL", CS%nkbl, default=2, do_not_log=.true.)
   else
     CS%ML_mix_first = 0.0
   endif
@@ -1704,7 +1861,7 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
       "meter second-1")
   if (CS%id_createdH>0) allocate(CS%createdH(isd:ied,jsd:jed))
   CS%id_MLD_003 = register_diag_field('ocean_model','MLD_003',diag%axesT1,Time, &
-      'Mixed layer depth (delta rho = 0.03)', 'meter')
+      'Mixed layer depth (delta rho = 0.03)', 'meter', cmor_field_name='mlotst', cmor_long_name='Ocean Mixed Layer Thickness Defined by Sigma T', cmor_units='m', cmor_standard_name='ocean_mixed_layer_thickness_defined_by_sigma_t')
   CS%id_MLD_0125 = register_diag_field('ocean_model','MLD_0125',diag%axesT1,Time, &
       'Mixed layer depth (delta rho = 0.125)', 'meter')
   CS%id_subMLN2  = register_diag_field('ocean_model','subML_N2',diag%axesT1,Time, &
@@ -1756,6 +1913,20 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
       call get_param(param_file, mod, "KPP_BEFORE_KAPPA_SHEAR", CS%matchKPPwithoutKappaShear, &
                  "If true, KPP matches interior diffusivity that EXCLUDES any\n"// &
                  "diffusivity from kappa-shear.", default=.true.)
+  endif
+
+  CS%salt_reject_below_ML = .false.
+  call get_param(param_file, mod, "SALT_REJECT_BELOW_ML", CS%salt_reject_below_ML, &
+                 "If true, place salt from brine rejection below the mixed layer,\n"// &
+                 "into the first non-vanished layer for which the column remains stable", &
+                 default=.false.)
+
+
+  
+  if (CS%salt_reject_below_ML) then
+
+     CS%id_brine_lay = register_diag_field('ocean_model','brine_layer',diag%axesT1,Time, &
+      'Brine insertion layer','none')
   endif
 
   ! CS%useConvection is set to True IF convection will be used, otherwise False.
