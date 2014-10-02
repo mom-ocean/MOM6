@@ -89,7 +89,7 @@ MIDAS:
 
 local: MIDAS 
 	-rm -rf MIDAS/build/*
-	module load python netcdf/4.2 intel_compilers; setenv INSTALL_DIR `pwd`/local ; cd MIDAS;make -f Makefile_GFDL;cd ..;touch local
+	module load python netcdf/4.2 intel_compilers; if (! -f local) mkdir local;cd MIDAS;make -f Makefile_GFDL INSTALL_PATH=../local;cd ..;touch local
 
 
 
