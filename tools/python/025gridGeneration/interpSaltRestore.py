@@ -1,8 +1,11 @@
 #!/usr/bin/env python
 
-from midas import *
+from midas.rectgrid import *
+import numpy as np
+import netCDF4 as nc
+
 sgrid=supergrid(file='ocean_hgrid.nc',cyclic_x=True,tripolar_n=True)
-grid=rectgrid(supergrid=sgrid)
+grid=quadmesh(supergrid=sgrid)
 O=state('/archive/gold/datasets/obs/WOA05_pottemp_salt.nc',fields=['SALT'],z_indices=np.arange(0,1),default_calendar='noleap')
 O.grid.cyclic_x=True
 O.var_dict['SALT']['Z'] = None

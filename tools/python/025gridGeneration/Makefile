@@ -43,15 +43,15 @@ scap_topog_gebco.nc so_topog_gebco.nc: mercator_supergrid.nc ncap_supergrid.nc a
 
 # Sets char tile='tile1'
 ocean_hgrid.nc: supergrid.nc
-	ncks -h -d ny,80, -d nyp,80, supergrid.nc ocean_hgrid.nc
+	module load nco; ncks -h -d ny,80, -d nyp,80, supergrid.nc ocean_hgrid.nc
 	./changeChar.py ocean_hgrid.nc tile tile1
 
 topog.nc: edit_topog.nc
 	./ice9.py edit_topog.nc --output topog.nc
 
 ocean_topog.nc: topog.nc
-	ncks -h -d ny,40,  topog.nc ocean_topog.nc
-	ncap -h -s 'jEdit=jEdit-40' --overwrite ocean_topog.nc ocean_topog.nc
+	module load nco; /usr/local/nco-4.0.3/bin/ncks -h -d ny,40,  topog.nc ocean_topog.nc
+	/usr/local/nco-4.0.3/bin/ncap -h -s 'jEdit=jEdit-40' --overwrite ocean_topog.nc ocean_topog.nc
 	./addDimension.py ocean_topog.nc ntiles 1
 # Removes rows 1-40
 # Adjusts jEdit values
@@ -87,20 +87,11 @@ tpxo7_atlas_netcdf.tar.Z:
 MIDAS:
 	git clone https://github.com/mjharriso/MIDAS.git
 
-local: MIDAS MIDAS/fms_build/libfms.a MIDAS/MOM6_ALE/build_ale/libale.a
+local: MIDAS 
 	-rm -rf MIDAS/build/*
-	module load python netcdf/4.2 intel_compilers; cd MIDAS ; python setup.py config_fc --f90flags="-i4 -r8 -DPY_SOLO" --fcompiler=intelem build
-	cd MIDAS; python setup.py install --home=../local
-	touch local
+	module load python netcdf/4.2 intel_compilers; setenv INSTALL_DIR `pwd`/local ; cd MIDAS;make -f Makefile_GFDL;cd ..;touch local
 
-MIDAS/fms_build/libfms.a:
-	cd MIDAS/fms;tar xvf fms_tikal_201312.tar
-	module load python netcdf/4.2 intel_compilers; cd MIDAS ; (cd fms_build;./build_fms.csh)
-MIDAS/MOM6_ALE/build_ale/libale.a: MIDAS/MOM6_ALE/src/*
-	module load python netcdf/4.2 intel_compilers; cd MIDAS ; (cd MOM6_ALE/build_ale;./build_ale.csh)
 
-MIDAS/README.md:
-	cd ../../../; git submodule update
 
 bedmap2.nc GEBCO_08_v1.nc IBCAO_V3_500m_RR.grd:
 	cp /archive/gold/datasets/topography/$@ .
