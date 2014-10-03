@@ -17,7 +17,7 @@ SHELL=tcsh
 all: input forcing obs
 	md5sum -c md5sums.txt
 
-input: ocean_hgrid.nc ocean_topog.nc
+input: ocean_hgrid.nc ocean_topog.nc basin_codes.nc
 
 forcing: salt_restore.nc seawifs_1998-2006_smoothed_2X.nc tidal_amplitude.nc
 
@@ -54,7 +54,7 @@ ocean_hgrid.nc: supergrid.nc
 	module load $(NCO); ncks -h -d ny,80, -d nyp,80, supergrid.nc ocean_hgrid.nc
 	./changeChar.py ocean_hgrid.nc tile tile1
 
-topog.nc: edit_topog.nc
+topog.nc: edit_topog.nc interpolated_topog.nc
 	./ice9.py edit_topog.nc --output topog.nc
 
 ocean_topog.nc: topog.nc
