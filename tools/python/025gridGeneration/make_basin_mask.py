@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
-from midas import *
+from midas.rectgrid import *
+from midas.rectgrid_gen import *
 import netCDF4
 import numpy
 
@@ -168,9 +169,9 @@ if j:
 else: print 'All points assigned a basin code'
 
 sgrid=supergrid(file='ocean_hgrid.nc',cyclic_x=True,tripolar_n=True)
-grid=rectgrid(supergrid=sgrid)
-grid.D=nc.Dataset('ocean_topog.nc').variables['depth'][:]
-grid.wet=np.zeros(grid.D.shape)
+grid=quadmesh(supergrid=sgrid)
+grid.D=netCDF4.Dataset('ocean_topog.nc').variables['depth'][:]
+grid.wet=numpy.zeros(grid.D.shape)
 grid.wet[grid.D>0.]=1.0
 grid.lath=grid.y_T[:,grid.im/4]  # should not be needed
 grid.latq=grid.y_T_bounds[:,grid.im/4+1] # ditto

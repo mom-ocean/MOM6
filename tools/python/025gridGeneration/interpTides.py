@@ -1,6 +1,9 @@
 #!/usr/bin/env python
 
-from midas import *
+from midas.rectgrid import *
+import netCDF4 as nc
+import numpy as np
+
 f=nc.Dataset('DATA/grid_tpxo7_atlas.nc')
 
 lon_u=f.variables['lon_u'][:].T
@@ -8,8 +11,8 @@ lat_u=f.variables['lat_u'][:].T
 lon_v=f.variables['lon_v'][:].T
 lat_v=f.variables['lat_v'][:].T
 
-grid_u=rectgrid(lon=lon_u,lat=lat_u,cyclic=True)
-grid_v=rectgrid(lon=lon_v,lat=lat_v,cyclic=True)
+grid_u=quadmesh(lon=lon_u,lat=lat_u,cyclic=True)
+grid_v=quadmesh(lon=lon_v,lat=lat_v,cyclic=True)
 
 Su=state(grid=grid_u)
 Sv=state(grid=grid_v)
@@ -82,7 +85,7 @@ vdict_v['masked']=True
 Su.add_field_from_array(ua,'ua',var_dict=vdict_u)
 Sv.add_field_from_array(va,'va',var_dict=vdict_v)
 
-grid=rectgrid(lon=lon_v,lat=lat_u,cyclic=True)
+grid=quadmesh(lon=lon_v,lat=lat_u,cyclic=True)
 grid.wet=np.ones((grid.jm,grid.im))
 
 S=Su.horiz_interp('ua',target=grid,src_modulo=True,method='bilinear')
@@ -100,7 +103,7 @@ vdict['Z'] = None
 S.add_field_from_array(umod,'umod',var_dict=vdict)
 
 sgrid=supergrid(file='ocean_hgrid.nc',cyclic_x=True,tripolar_n=True)
-output_grid = rectgrid(supergrid=sgrid,cyclic=True)
+output_grid = quadmesh(supergrid=sgrid,cyclic=True)
 output_grid.D=nc.Dataset('ocean_topog.nc').variables['depth'][:]
 output_grid.wet = np.zeros(output_grid.D.shape)
 output_grid.wet[output_grid.D>0.]=1.
