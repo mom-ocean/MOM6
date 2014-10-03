@@ -14,9 +14,14 @@ NCO = nco/4.3.1
 
 SHELL=tcsh
 
-all: md5sums.txt ocean_hgrid.nc ocean_topog.nc
+all: input forcing obs
+	md5sum -c md5sums.txt
+
+input: ocean_hgrid.nc ocean_topog.nc
 
 forcing: salt_restore.nc seawifs_1998-2006_smoothed_2X.nc tidal_amplitude.nc
+
+obs: WOA05_ptemp_salt_monthly.nc
 
 # Grids
 supergrid.nc: mercator_supergrid.nc ncap_supergrid.nc antarctic_spherical_supergrid.nc scap_supergrid.nc local
@@ -99,7 +104,7 @@ local: MIDAS
 bedmap2.nc GEBCO_08_v1.nc IBCAO_V3_500m_RR.grd:
 	cp /archive/gold/datasets/topography/$@ .
 
-md5sums.txt: ocean_hgrid.nc antarctic_spherical_supergrid.nc mercator_supergrid.nc ncap_supergrid.nc scap_supergrid.nc supergrid.nc interpolated_topog.nc mercator_topog_gebco.nc ncap_topog_gebco.nc ncap_topog.nc scap_topog_bedmap2.nc scap_topog_gebco.nc so_topog_bedmap2.nc so_topog_gebco.nc ocean_topog.nc basin_codes.nc salt_restore.nc seawifs_1998-2006_smoothed_2X.nc tidal_amplitude.nc
+md5sums.txt: ocean_hgrid.nc antarctic_spherical_supergrid.nc mercator_supergrid.nc ncap_supergrid.nc scap_supergrid.nc supergrid.nc interpolated_topog.nc mercator_topog_gebco.nc ncap_topog_gebco.nc ncap_topog.nc scap_topog_bedmap2.nc scap_topog_gebco.nc so_topog_bedmap2.nc so_topog_gebco.nc ocean_topog.nc basin_codes.nc salt_restore.nc seawifs_1998-2006_smoothed_2X.nc tidal_amplitude.nc WOA05_ptemp_salt_monthly.nc
 	echo Grids > $@
 	md5sum *supergrid.nc ocean_hgrid.nc >> $@
 	echo >> $@
@@ -109,3 +114,6 @@ md5sums.txt: ocean_hgrid.nc antarctic_spherical_supergrid.nc mercator_supergrid.
 	echo >> $@
 	echo Data >> $@
 	md5sum salt_restore.nc seawifs_1998-2006_smoothed_2X.nc tidal_amplitude.nc >> $@
+	echo >> $@
+	echo Obs >> $@
+	md5sum WOA05_ptemp_salt_monthly.nc >> $@
