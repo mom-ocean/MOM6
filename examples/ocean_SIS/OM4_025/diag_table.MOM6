@@ -39,8 +39,8 @@
  "ocean_model", "Kd_shear",     "Kd_shear",         "ocean_month", "all", "mean", "none",2
  "ocean_model", "Kd_itides",    "Kd_itides",        "ocean_month", "all", "mean", "none",2
  "ocean_model", "KPP_Kheat",    "KPP_Kheat",        "ocean_month", "all", "mean", "none",2
- "ocean_model", "masscello",    "masscello",        "ocean_month", "all", "none", "none", 2  #should this be mean?
- "ocean_model", "pso",          "pso",              "ocean_month", "all", "none", "none", 2  #should this be mean?
+ "ocean_model", "masscello",    "masscello",        "ocean_month", "all", "mean", "none",2
+ "ocean_model", "pso",          "pso",              "ocean_month", "all", "mean", "none",2
 
 # Monthly surface forcing
  "ocean_model", "taux",             "taux",             "ocean_month", "all", "mean", "none",2
@@ -156,4 +156,4 @@
  "ocean_model", "wet_c",       "wet_c",       "ocean_static", "all", "none", "none", 2
  "ocean_model", "wet_u",       "wet_u",       "ocean_static", "all", "none", "none", 2
  "ocean_model", "wet_v",       "wet_v",       "ocean_static", "all", "none", "none", 2
- "ocean_model", "deptho",      "deptho",      "ocean_static_cmor", "all", "none", "none", 2
+ "ocean_model", "deptho",      "deptho",      "ocean_static", "all", "none", "none", 2
