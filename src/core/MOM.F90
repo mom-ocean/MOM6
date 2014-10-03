@@ -2218,9 +2218,9 @@ subroutine write_static_fields(G, diag)
   if (id > 0) call post_data(id, G%geoLonCu, diag, .true.)
 
   id = register_static_field('ocean_model', 'area_t', diag%axesT1,   &
-        'Surface area of tracer (T) cells', 'degrees_E',             &
+        'Surface area of tracer (T) cells', 'm2',                    &
         cmor_field_name='areacello', cmor_standard_name='cell_area', &
-        cmor_units='m-2', cmor_long_name='Ocean Grid-Cell Area')
+        cmor_units='m2', cmor_long_name='Ocean Grid-Cell Area')
   if (id > 0) then
     do j=js,je ; do i=is,ie ; out_h(i,j) = G%areaT(i,j) ; enddo ; enddo
     call post_data(id, out_h, diag, .true.)
