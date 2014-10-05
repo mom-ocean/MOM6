@@ -4,14 +4,14 @@ from midas.rectgrid import *
 import netCDF4 as nc
 import numpy as np
 
-sgrid=supergrid(file='/archive/gold/datasets/OM4_025/mosaic.v20140610.unpacked/ocean_hgrid.nc',cyclic_x=True,tripolar_n=True)
+sgrid=supergrid(file='ocean_hgrid.nc',cyclic_x=True,tripolar_n=True)
 grid=quadmesh(supergrid=sgrid)
 grid.lath=grid.y_T[:,grid.im/4]
 grid.latq=grid.y_T_bounds[:,grid.im/4]
-grid.D=nc.Dataset('/archive/gold/datasets/OM4_025/mosaic.v20140610.unpacked/ocean_topog.nc').variables['depth'][:]
+grid.D=nc.Dataset('ocean_topog.nc').variables['depth'][:]
 grid.wet=np.zeros(grid.D.shape)
 grid.wet[grid.D>0.]=1
-S=state(grid=grid)                                                                                                                                                                                                                                                                                                                             
+S=state(grid=grid)
 
 dz=nc.Dataset('../../../examples/ocean_SIS/OM4_025/INPUT/vgrid_75_2m.nc').variables['dz'][:]
 nk = dz.shape[0]
@@ -30,11 +30,10 @@ for n in np.arange(0,12):
    O.rename_field('SALT','salt')
    OM=O.horiz_interp('salt',target=S.grid,method='bilinear')
    OM=O.horiz_interp('ptemp',target=S.grid,method='bilinear',PrevState=OM)
-   OM.adjust_thickness('ptemp')                                                                                                                                                                                                                                                                                                                
-   OM.adjust_thickness('salt')                                                                                                                                                                                                                                                                                                                 
+   OM.adjust_thickness('ptemp')
+   OM.adjust_thickness('salt')
    OM.fill_interior('salt',smooth=True,num_pass=10000)
    OM.fill_interior('ptemp',smooth=True,num_pass=10000)
-
 
    OM.remap_ALE(fields=['ptemp','salt'],z_bounds=zb,zbax_data=-zi,method='ppm_h4',bndy_extrapolation=False)
    OM.rename_field('ptemp_remap','ptemp')
@@ -46,4 +45,3 @@ for n in np.arange(0,12):
       OM.write_nc('WOA05_ptemp_salt_monthly.nc',['ptemp','salt'],append=False,write_interface_positions=True)
    else:
       OM.write_nc('WOA05_ptemp_salt_monthly.nc',['ptemp','salt'],append=True,write_interface_positions=True)
-
