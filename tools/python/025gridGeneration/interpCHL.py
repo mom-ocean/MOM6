@@ -1,9 +1,11 @@
 #!/usr/bin/env python
 
-from midas import *
+from midas.rectgrid import *
+import netCDF4 as nc
+import numpy as np
 
 sgrid=supergrid(file='ocean_hgrid.nc')
-grid=rectgrid(supergrid=sgrid,cyclic=True)
+grid=quadmesh(supergrid=sgrid,cyclic=True)
 O=state('/archive/gold/datasets/global/siena_201204/INPUT/seawifs_1998-2006_GOLD_smoothed_2X.nc',fields=['CHL_A'])
 O.var_dict['CHL_A']['Z']=None
 OM=O.horiz_interp('CHL_A',target=grid,src_modulo=True)

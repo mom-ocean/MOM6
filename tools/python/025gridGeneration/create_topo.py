@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!python
 
 #============================================================
 # Generate tiles for the northern/southern caps
@@ -20,7 +20,10 @@
 
 
 
-from midas import *
+from midas.rectgrid import *
+from midas.rectgrid_gen import *
+import numpy as np
+import matplotlib.pyplot as plt
 from mpl_toolkits.basemap import Basemap, cm
 from mpl_toolkits.basemap import interp 
 import argparse
@@ -63,20 +66,20 @@ if tile == 'scap':
 #### Begin Mercator Grid
 
 mercator=supergrid(file='mercator_supergrid.nc')
-mercator_grid=rectgrid(supergrid=mercator,is_latlon=True,cyclic=True)
+mercator_grid=quadmesh(supergrid=mercator,is_latlon=True,cyclic=True)
 
 #### Begin Tripolar Cap
 
 tripolar_n=supergrid(file='ncap_supergrid.nc')
-tripolar_n_grid=rectgrid(supergrid=tripolar_n,is_latlon=True,cyclic=True)
+tripolar_n_grid=quadmesh(supergrid=tripolar_n,is_latlon=True,cyclic=True)
 
 #### Begin Antarctic Cap
 
 antarctic_sph=supergrid(file='antarctic_spherical_supergrid.nc')
-antarctic_sph_grid=rectgrid(supergrid=antarctic_sph,is_latlon=True,cyclic=True)
+antarctic_sph_grid=quadmesh(supergrid=antarctic_sph,is_latlon=True,cyclic=True)
 
 antarctic_cap=supergrid(file='scap_supergrid.nc')
-antarctic_cap_grid=rectgrid(supergrid=antarctic_cap,is_latlon=True,cyclic=True)
+antarctic_cap_grid=quadmesh(supergrid=antarctic_cap,is_latlon=True,cyclic=True)
 
 
 if do_ncap:
@@ -85,7 +88,7 @@ if do_ncap:
 ######## on a np stereo projection
       
    if use_gebco:
-      ingrid=rectgrid('GEBCO_08_v1.nc',var='depth',simple_grid=True,cyclic=True)
+      ingrid=quadmesh('GEBCO_08_v1.nc',var='depth',simple_grid=True,cyclic=True)
 #      np_reg=ingrid.geo_region(y=(mercator.y.max()-1.0,90.0))
       np_reg=ingrid.indexed_region(j=(18360,21599),i=(0,43199))      
       print np_reg['y'][0],np_reg['x'][0]
@@ -105,14 +108,14 @@ if do_ncap:
       
       fnam = 'ncap_topog_gebco.nc'
    
-      R=TOPO.grid_overlay('topo',target=tripolar_n_grid)
+      R=TOPO.subtile('topo',target=tripolar_n_grid)
       R.write_nc(fnam,['mean','max','min','std','count'])
 
    else:
       xlen=2904000.0*2.0
       x=np.linspace(0.0,xlen,11617)
       X,Y=np.meshgrid(x,x)
-      grid_ibcao = rectgrid(lon=X,lat=Y,is_latlon=False,is_cartesian=True)
+      grid_ibcao = quadmesh(lon=X,lat=Y,is_latlon=False,is_cartesian=True)
    
       m = Basemap(projection='stere',width=xlen,height=xlen,lon_0=0.0,lat_0=90.0,resolution='l')
 
@@ -130,23 +133,22 @@ if do_ncap:
 
       fnam = 'ncap_topog.nc'
       
-      R=IBCAO.grid_overlay('topo',target=cart_grid_ncap)
+      R=IBCAO.subtile('topo',target=cart_grid_ncap)
       R.write_nc(fnam,['mean','max','min','std','count'])   
 
 #### Begin Mercator
    
 if do_mercator:
 
-   ingrid=rectgrid('GEBCO_08_v1.nc',var='depth',simple_grid=True,cyclic=True)
+   ingrid=quadmesh('GEBCO_08_v1.nc',var='depth',simple_grid=True,cyclic=True)
    merc_reg=ingrid.geo_region(y=(mercator.y.min()-1.0,mercator.y.max()+1.0))
-
    TOPO=state('GEBCO_08_v1.nc',grid=ingrid,geo_region=merc_reg,fields=['depth'])
    TOPO.rename_field('depth','topo')
    TOPO.var_dict['topo']['Ztype']='Fixed'
       
    fnam = 'mercator_topog_gebco.nc'
    
-   R=TOPO.grid_overlay('topo',target=mercator_grid)
+   R=TOPO.subtile('topo',target=mercator_grid)
    R.write_nc(fnam,['mean','max','min','std','count'])
 
 
@@ -161,7 +163,7 @@ if do_scap:
 
    if use_gebco:
 
-      ingrid=rectgrid('GEBCO_08_v1.nc',var='depth',simple_grid=True,cyclic=True)
+      ingrid=quadmesh('GEBCO_08_v1.nc',var='depth',simple_grid=True,cyclic=True)
       sp_reg=ingrid.geo_region(y=(-90.0,antarctic_sph.y.max()+1.0))
 
       TOPO=state('GEBCO_08_v1.nc',grid=ingrid,geo_region=sp_reg,fields=['depth'])
@@ -171,10 +173,10 @@ if do_scap:
       fnam = 'scap_topog_gebco.nc'
       fnam2 = 'so_topog_gebco.nc'      
    
-      R=TOPO.grid_overlay('topo',target=antarctic_cap_grid)
+      R=TOPO.subtile('topo',target=antarctic_cap_grid)
       R.write_nc(fnam,['mean','max','min','std','count'])
 
-      R=TOPO.grid_overlay('topo',target=antarctic_sph_grid)
+      R=TOPO.subtile('topo',target=antarctic_sph_grid)
       R.write_nc(fnam2,['mean','max','min','std','count'])      
 
       
@@ -184,7 +186,7 @@ if do_scap:
       ht=6667000.0
       m = Basemap(projection='stere',width=wd,height=ht,lon_0=0.0,lat_ts=-71.,lat_0=-90.,resolution='l')   
 
-      f=nc.Dataset('bedmap2.nc')
+      f=netCDF4.Dataset('bedmap2.nc')
       x1=sq(f.variables['x'][:])*1000 + 3333000.0
       y1=x1
       nx1=len(x1)
@@ -192,7 +194,7 @@ if do_scap:
       wd=6667000.0
       ht=6667000.0
       x1,y1=np.meshgrid(x1,y1)      
-      grid_bedmap = rectgrid(lon=x1,lat=y1,is_latlon=False,is_cartesian=True,simple_grid=True)
+      grid_bedmap = quadmesh(lon=x1,lat=y1,is_latlon=False,is_cartesian=True,simple_grid=True)
 
       if use_ice_sheet_mask:
          TOPO=state('bedmap2.nc',grid=grid_bedmap,fields=['elev_bed','mask_ice','elev_surf','height_gl04c_wgs84'])
@@ -221,7 +223,7 @@ if do_scap:
 
       cart_grid_so = supergrid(config='cartesian',axis_units='none',xdat=x2,ydat=y2)
 
-      R=TOPO.grid_overlay('topo',target=cart_grid_so)
+      R=TOPO.subtile('topo',target=cart_grid_so)
          
       R.write_nc(fnam2,['mean','max','min','std','count'])   
 
@@ -236,7 +238,7 @@ if do_scap:
 
       cart_grid_cap = supergrid(config='cartesian',axis_units='none',xdat=x2,ydat=y2)
       
-      R=TOPO.grid_overlay('topo',target=cart_grid_cap)
+      R=TOPO.subtile('topo',target=cart_grid_cap)
       R.write_nc(fnam,['mean','max','min','std','count'])
 
 
