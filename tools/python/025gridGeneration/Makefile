@@ -21,7 +21,7 @@ input: ocean_hgrid.nc ocean_topog.nc basin_codes.nc
 
 forcing: salt_restore.nc seawifs_1998-2006_smoothed_2X.nc tidal_amplitude.nc
 
-obs: WOA05_ptemp_salt_monthly.nc
+obs: WOA05_ptemp_salt_monthly.nc WOA05_ptemp_salt_annual.nc
 
 # Grids
 supergrid.nc: mercator_supergrid.nc ncap_supergrid.nc antarctic_spherical_supergrid.nc scap_supergrid.nc local
@@ -70,6 +70,9 @@ basin_codes.nc: ocean_topog.nc
 	module load $(NCO); ncatted -h -a flag_meanings,basin,c,c,'1:Southern Ocean, 2:Atlantic Ocean, 3:Pacific Ocean, 4:Arctic Ocean, 5:Indian Ocean, 6:Mediterranean Sea, 7:Black Sea, 8:Hudson Bay, 9:Baltic Sea, 10:Red Sea, 11:Persian Gulf' basin_codes.nc
 	module load $(NCO); ncatted -h -a flag_values,basin,c,c,'1,2,3,4,5,6,7,8,9,10,11' basin_codes.nc
 
+WOA05_ptemp_salt_annual.nc: WOA05_ptemp_salt_monthly.nc
+	module load $(NCO); ncra -h -O $< $@
+
 WOA05_ptemp_salt_monthly.nc: ocean_hgrid.nc ocean_topog.nc /archive/gold/datasets/obs/WOA05_pottemp_salt.nc interpWOA05.py local
 	unlimit stacksize; setenv PYTHONPATH ./local/lib/python; python interpWOA05.py
 	module load $(NCO); ncatted -h -a modulo,TIME,c,c,' ' WOA05_ptemp_salt_monthly.nc
@@ -104,7 +107,7 @@ local: MIDAS
 bedmap2.nc GEBCO_08_v1.nc IBCAO_V3_500m_RR.grd:
 	cp /archive/gold/datasets/topography/$@ .
 
-md5sums.txt: ocean_hgrid.nc antarctic_spherical_supergrid.nc mercator_supergrid.nc ncap_supergrid.nc scap_supergrid.nc supergrid.nc interpolated_topog.nc mercator_topog_gebco.nc ncap_topog_gebco.nc ncap_topog.nc scap_topog_bedmap2.nc scap_topog_gebco.nc so_topog_bedmap2.nc so_topog_gebco.nc ocean_topog.nc basin_codes.nc salt_restore.nc seawifs_1998-2006_smoothed_2X.nc tidal_amplitude.nc WOA05_ptemp_salt_monthly.nc
+md5sums.txt: ocean_hgrid.nc antarctic_spherical_supergrid.nc mercator_supergrid.nc ncap_supergrid.nc scap_supergrid.nc supergrid.nc interpolated_topog.nc mercator_topog_gebco.nc ncap_topog_gebco.nc ncap_topog.nc scap_topog_bedmap2.nc scap_topog_gebco.nc so_topog_bedmap2.nc so_topog_gebco.nc ocean_topog.nc basin_codes.nc salt_restore.nc seawifs_1998-2006_smoothed_2X.nc tidal_amplitude.nc WOA05_ptemp_salt_monthly.nc WOA05_ptemp_salt_annual.nc
 	echo Grids > $@
 	md5sum *supergrid.nc ocean_hgrid.nc >> $@
 	echo >> $@
@@ -116,4 +119,4 @@ md5sums.txt: ocean_hgrid.nc antarctic_spherical_supergrid.nc mercator_supergrid.
 	md5sum salt_restore.nc seawifs_1998-2006_smoothed_2X.nc tidal_amplitude.nc >> $@
 	echo >> $@
 	echo Obs >> $@
-	md5sum WOA05_ptemp_salt_monthly.nc >> $@
+	md5sum WOA05_ptemp_salt_{monthly,annual}.nc >> $@
