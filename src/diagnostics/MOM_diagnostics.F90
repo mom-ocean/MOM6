@@ -1007,14 +1007,15 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, param_file, diag, CS)
   endif
 
   CS%id_mass_wt = register_diag_field('ocean_model', 'mass_wt', diag%axesT1, Time,   &
-      'The column mass for calculating mass-weighted average properties', 'kg m-2',  &
-      cmor_field_name='masscello', cmor_units='kg m-2',                              &
-      cmor_standard_name='sea_water_mass_per_unit_area',                             &
-      cmor_long_name='Sea Water Mass Per Unit Area')
+      'The column mass for calculating mass-weighted average properties', 'kg m-2')
   CS%id_temp_int = register_diag_field('ocean_model', 'temp_int', diag%axesT1, Time, &
-      'The mass weighted column integrated temperature', 'degC kg m-2')
+      'The mass weighted column integrated temperature', 'degC kg m-2',              &
+      cmor_field_name='tomint', cmor_long_name='sea_water_prognostic_temperature_mass_integrated', &
+      cmor_units='degC kg m-2', cmor_standard_name='Sea Water Prognostic Temperature Mass Integrated')
   CS%id_salt_int = register_diag_field('ocean_model', 'salt_int', diag%axesT1, Time, &
-      'The mass weighted column integrated salinity', 'PSU kg m-2')
+      'The mass weighted column integrated salinity', 'PSU kg m-2',                  &
+      cmor_field_name='somint', cmor_long_name='sea_water_salinity_mass_integrated', &
+      cmor_units='psu kg m-2', cmor_standard_name='Sea Water Salinity Mass Integrated')
   CS%id_col_mass = register_diag_field('ocean_model', 'col_mass', diag%axesT1, Time, &
       'The column integrated in situ density', 'kg m-2')
   CS%id_col_ht = register_diag_field('ocean_model', 'col_height', diag%axesT1, Time, &
