@@ -40,6 +40,8 @@ for n in np.arange(0,12):
    OM.rename_field('salt_remap','salt')
    OM.mask_where('ptemp','grid.wet==0.')
    OM.mask_where('salt','grid.wet==0.')
+   OM.ptemp=np.ma.masked_where(OM.var_dict['ptemp']['dz'][np.newaxis,:]<1.e-2, OM.ptemp)
+   OM.salt=np.ma.masked_where(OM.var_dict['ptemp']['dz'][np.newaxis,:]<1.e-2, OM.salt)
 
    if n==0:
       OM.write_nc('WOA05_ptemp_salt_monthly.nc',['ptemp','salt'],append=False,write_interface_positions=True)
