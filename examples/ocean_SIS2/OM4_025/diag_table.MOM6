@@ -5,7 +5,7 @@
 "ocean_scalar_month",     1, "months", 1, "days", "time"
 "ocean_scalar_annual",   12, "months", 1, "days", "time"
 "ocean_static",          -1, "months", 1, "days", "time"
-"ocean_month_z",          1, "months", 1, "days", "time"
+"ocean_annual_z",        12, "months", 1, "days", "time"
 "ocean_Drake_passage",    1, "days",   1, "days", "time"
 "ocean_Denmark_Strait",   1, "days",   1, "days", "time"
 "ocean_Iceland_Norway",   1, "days",   1, "days", "time"
@@ -39,6 +39,8 @@
  "ocean_model", "Kd_shear",     "Kd_shear",         "ocean_month", "all", "mean", "none",2
  "ocean_model", "Kd_itides",    "Kd_itides",        "ocean_month", "all", "mean", "none",2
  "ocean_model", "KPP_Kheat",    "KPP_Kheat",        "ocean_month", "all", "mean", "none",2
+ "ocean_model", "masscello",    "masscello",        "ocean_month", "all", "mean", "none",2
+ "ocean_model", "pso",          "pso",              "ocean_month", "all", "mean", "none",2
 
 # Monthly surface forcing
  "ocean_model", "taux",             "taux",             "ocean_month", "all", "mean", "none",2
@@ -95,17 +97,17 @@
  "ocean_model", "salt_global",      "salt_global",      "ocean_scalar_annual", "all", "mean", "none",2
 
 # Z diagnostics
- "ocean_model_z", "thetao",         "thetao",           "ocean_month_z", "all", "mean", "none",2
- "ocean_model_z", "so",             "so",               "ocean_month_z", "all", "mean", "none",2
- "ocean_model_z", "age",            "age",              "ocean_month_z", "all", "mean", "none",2
- "ocean_model_z", "uo",             "uo",               "ocean_month_z", "all", "mean", "none",2
- "ocean_model_z", "vo",             "vo",               "ocean_month_z", "all", "mean", "none",2
- "ocean_model_z", "uh",             "uh",               "ocean_month_z", "all", "mean", "none",2
- "ocean_model_z", "vh",             "vh",               "ocean_month_z", "all", "mean", "none",2
- "ocean_model_z", "N2",             "N2",               "ocean_month_z", "all", "mean", "none",2
- "ocean_model_z", "Kd",             "Kd",               "ocean_month_z", "all", "mean", "none",2
- "ocean_model_z", "Kd_itides",      "Kd_itides",        "ocean_month_z", "all", "mean", "none",2
-#"ocean_model_z", "vintage",        "vintage",          "ocean_month_z", "all", "mean", "none",2
+ "ocean_model_z", "thetao",         "thetao",           "ocean_annual_z", "all", "mean", "none",2
+ "ocean_model_z", "so",             "so",               "ocean_annual_z", "all", "mean", "none",2
+ "ocean_model_z", "age",            "age",              "ocean_annual_z", "all", "mean", "none",2
+ "ocean_model_z", "uo",             "uo",               "ocean_annual_z", "all", "mean", "none",2
+ "ocean_model_z", "vo",             "vo",               "ocean_annual_z", "all", "mean", "none",2
+ "ocean_model_z", "uh",             "uh",               "ocean_annual_z", "all", "mean", "none",2
+ "ocean_model_z", "vh",             "vh",               "ocean_annual_z", "all", "mean", "none",2
+ "ocean_model_z", "N2",             "N2",               "ocean_annual_z", "all", "mean", "none",2
+ "ocean_model_z", "Kd",             "Kd",               "ocean_annual_z", "all", "mean", "none",2
+ "ocean_model_z", "Kd_itides",      "Kd_itides",        "ocean_annual_z", "all", "mean", "none",2
+#"ocean_model_z", "vintage",        "vintage",          "ocean_annual_z", "all", "mean", "none",2
 
 # Sections
 "ocean_model", "temp", "temp", "ocean_Drake_passage",    "all", "mean", "-70. -70. -71. -54.5 -1 -1",2
@@ -154,3 +156,4 @@
  "ocean_model", "wet_c",       "wet_c",       "ocean_static", "all", "none", "none", 2
  "ocean_model", "wet_u",       "wet_u",       "ocean_static", "all", "none", "none", 2
  "ocean_model", "wet_v",       "wet_v",       "ocean_static", "all", "none", "none", 2
+ "ocean_model", "deptho",      "deptho",      "ocean_static", "all", "none", "none", 2
