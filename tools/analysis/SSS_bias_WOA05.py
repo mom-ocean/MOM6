@@ -23,12 +23,16 @@ msk = netCDF4.Dataset(cmdLineArgs.gridspecdir+'/ocean_mask.nc').variables['mask'
 area = msk*netCDF4.Dataset(cmdLineArgs.gridspecdir+'/ocean_hgrid.nc').variables['area'][:,:].reshape([msk.shape[0], 2, msk.shape[1], 2]).sum(axis=-3).sum(axis=-1)
 msk = numpy.ma.array(msk, mask=(msk==0))
 
-Sobs = netCDF4.Dataset( cmdLineArgs.woa ).variables['salt'][0]
+Sobs = netCDF4.Dataset( cmdLineArgs.woa ).variables['salt']
+if len(Sobs.shape)==3: Sobs = Sobs[0]
+else: Sobs = Sobs[:,0].mean(axis=0)
 
 rootGroup = netCDF4.Dataset( cmdLineArgs.annual_file )
-if 'salt' not in rootGroup.variables: raise Exception('Could not find "salt" in file "%s"'%(cmdLineArgs.annual_file))
-if rootGroup.variables['salt'].shape[0]>1: salt = rootGroup.variables['salt'][:,0].mean(axis=0)
-else: Smod = rootGroup.variables['salt'][0,0]
+if 'salt' in rootGroup.variables: varName = 'salt'
+elif 'so' in rootGroup.variables: varName = 'so'
+else: raise Exception('Could not find "salt" or "so" in file "%s"'%(cmdLineArgs.annual_file))
+if rootGroup.variables[varName].shape[0]>1: salt = rootGroup.variables[varName][:,0].mean(axis=0)
+else: Smod = rootGroup.variables[varName][0,0]
 
 ci=m6plot.pmCI(0.125,2.25,.25)
 m6plot.xyplot( Smod - Sobs , x, y, area=area,

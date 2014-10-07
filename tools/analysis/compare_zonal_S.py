@@ -19,36 +19,37 @@ parser.add_argument('-r','--ref', type=str, required=True,
   help='''File containing reference experiment to compare against.''')
 cmdLineArgs = parser.parse_args()
 
-rootGroup = netCDF4.Dataset( cmdLineArgs.annual_file )
-if 'salt' not in rootGroup.variables: raise Exception('Could not find "salt" in file "%s"'%(cmdLineArgs.annual_file))
-if 'e' not in rootGroup.variables: raise Exception('Could not find "e" in file "%s"'%(cmdLineArgs.annual_file))
-
-rootGroupRef = netCDF4.Dataset( cmdLineArgs.ref )
-if 'salt' not in rootGroupRef.variables: raise Exception('Could not find "salt" in file "%s"'%(cmdLineArgs.ref))
-if 'e' not in rootGroupRef.variables: raise Exception('Could not find "e" in file "%s"'%(cmdLineArgs.ref))
-
 y = netCDF4.Dataset(cmdLineArgs.gridspecdir+'/ocean_hgrid.nc').variables['y'][1::2,1::2].max(axis=-1)
 msk = netCDF4.Dataset(cmdLineArgs.gridspecdir+'/ocean_mask.nc').variables['mask'][:]
 area = msk*netCDF4.Dataset(cmdLineArgs.gridspecdir+'/ocean_hgrid.nc').variables['area'][:,:].reshape([msk.shape[0], 2, msk.shape[1], 2]).sum(axis=-3).sum(axis=-1)
 basin = netCDF4.Dataset(cmdLineArgs.gridspecdir+'/basin_codes.nc').variables['basin'][:]
 
+rootGroupRef = netCDF4.Dataset( cmdLineArgs.ref )
+if 'salt' in rootGroupRef.variables: varName = 'salt'
+elif 'so' in rootGroupRef.variables: varName = 'so'
+else: raise Exception('Could not find "salt" or "so" in file "%s"'%(cmdLineArgs.ref))
+if len(rootGroupRef.variables[varName].shape)==4: Sref = rootGroupRef.variables[varName][:].mean(axis=0)
+else: Sref = rootGroupRef.variables[varName][:]
+if 'e' in rootGroupRef.variables: Zref = rootGroupRef.variables['e'][0]
+else:
+  D = -netCDF4.Dataset(cmdLineArgs.gridspecdir+'/ocean_topog.nc').variables['depth'][:]
+  zw = -rootGroupRef.variables['zw'][:]
+  Zref = numpy.zeros((Sref.shape[0]+1,Sref.shape[1],Sref.shape[2]))
+  for k in range(Sref.shape[0]):
+    Zref[k+1] = numpy.maximum( Zref[k] - abs(zw[k+1] - zw[k]), D)
+
+rootGroup = netCDF4.Dataset( cmdLineArgs.annual_file )
+if 'salt' in rootGroup.variables: varName = 'salt'
+elif 'so' in rootGroup.variables: varName = 'so'
+else: raise Exception('Could not find "salt" or "so" in file "%s"'%(cmdLineArgs.annual_file))
+if len(rootGroup.variables[varName].shape)==4: Smod = rootGroup.variables[varName][:].mean(axis=0)
+else: Smod = rootGroup.variables[varName][:]
+if 'e' in rootGroup.variables: Zmod = rootGroup.variables['e'][0]
+else: Zmod = Zref
+
 def zonalAverage(T, eta, area, mask=1.):
   vols = ( mask * area ) * ( eta[:-1] - eta[1:] ) # mask * area * level thicknesses
   return numpy.sum( vols * T, axis=-1 ) / numpy.sum( vols, axis=-1 ), (mask*eta).min(axis=-1)
-
-if rootGroupRef.variables['salt'].shape[0]>1:
-  Sref = rootGroupRef.variables['salt'][:,:].mean(axis=0)
-  Zref = rootGroupRef.variables['e'][0]
-else:
-  Sref = rootGroupRef.variables['salt'][0]
-  Zref = rootGroupRef.variables['e'][0]
-
-if rootGroup.variables['salt'].shape[0]>1:
-  Smod = rootGroup.variables['salt'][:,:].mean(axis=0)
-  Zmod = rootGroup.variables['e'][0]
-else:
-  Smod = rootGroup.variables['salt'][0]
-  Zmod = rootGroup.variables['e'][0]
 
 ci=m6plot.pmCI(0.0125,.225,.025)
 if len(cmdLineArgs.label1): title1 = cmdLineArgs.label1

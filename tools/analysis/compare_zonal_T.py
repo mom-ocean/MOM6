@@ -19,36 +19,39 @@ parser.add_argument('-r','--ref', type=str, required=True,
   help='''File containing reference experiment to compare against.''')
 cmdLineArgs = parser.parse_args()
 
-rootGroup = netCDF4.Dataset( cmdLineArgs.annual_file )
-if 'temp' not in rootGroup.variables: raise Exception('Could not find "temp" in file "%s"'%(cmdLineArgs.annual_file))
-if 'e' not in rootGroup.variables: raise Exception('Could not find "e" in file "%s"'%(cmdLineArgs.annual_file))
-
-rootGroupRef = netCDF4.Dataset( cmdLineArgs.ref )
-if 'temp' not in rootGroupRef.variables: raise Exception('Could not find "temp" in file "%s"'%(cmdLineArgs.ref))
-if 'e' not in rootGroupRef.variables: raise Exception('Could not find "e" in file "%s"'%(cmdLineArgs.ref))
-
 y = netCDF4.Dataset(cmdLineArgs.gridspecdir+'/ocean_hgrid.nc').variables['y'][1::2,1::2].max(axis=-1)
 msk = netCDF4.Dataset(cmdLineArgs.gridspecdir+'/ocean_mask.nc').variables['mask'][:]
 area = msk*netCDF4.Dataset(cmdLineArgs.gridspecdir+'/ocean_hgrid.nc').variables['area'][:,:].reshape([msk.shape[0], 2, msk.shape[1], 2]).sum(axis=-3).sum(axis=-1)
 basin = netCDF4.Dataset(cmdLineArgs.gridspecdir+'/basin_codes.nc').variables['basin'][:]
 
+rootGroupRef = netCDF4.Dataset( cmdLineArgs.ref )
+if 'temp' in rootGroupRef.variables: varName = 'temp'
+elif 'ptemp' in rootGroupRef.variables: varName = 'ptemp'
+elif 'thetao' in rootGroupRef.variables: varName = 'thetao'
+else: raise Exception('Could not find "temp", "ptemp" or "thetao" in file "%s"'%(cmdLineArgs.ref))
+if len(rootGroupRef.variables[varName].shape)==4: Tref = rootGroupRef.variables[varName][:].mean(axis=0)
+else: Tref = rootGroupRef.variables[varName][:]
+if 'e' in rootGroupRef.variables: Zref = rootGroupRef.variables['e'][0]
+else:
+  D = -netCDF4.Dataset(cmdLineArgs.gridspecdir+'/ocean_topog.nc').variables['depth'][:]
+  zw = -rootGroupRef.variables['zw'][:]
+  Zref = numpy.zeros((Tref.shape[0]+1,Tref.shape[1],Tref.shape[2]))
+  for k in range(Tref.shape[0]):
+    Zref[k+1] = numpy.maximum( Zref[k] - abs(zw[k+1] - zw[k]), D)
+
+rootGroup = netCDF4.Dataset( cmdLineArgs.annual_file )
+if 'temp' in rootGroup.variables: varName = 'temp'
+elif 'ptemp' in rootGroup.variables: varName = 'ptemp'
+elif 'thetao' in rootGroup.variables: varName = 'thetao'
+else: raise Exception('Could not find "temp", "ptemp" or "thetao" in file "%s"'%(cmdLineArgs.annual_file))
+if len(rootGroup.variables[varName].shape)==4: Tmod = rootGroup.variables[varName][:].mean(axis=0)
+else: Tmod = rootGroup.variables[varName][:]
+if 'e' in rootGroup.variables: Zmod = rootGroup.variables['e'][0]
+else: Zmod = Zref
+
 def zonalAverage(T, eta, area, mask=1.):
   vols = ( mask * area ) * ( eta[:-1] - eta[1:] ) # mask * area * level thicknesses
   return numpy.sum( vols * T, axis=-1 ) / numpy.sum( vols, axis=-1 ), (mask*eta).min(axis=-1)
-
-if rootGroupRef.variables['temp'].shape[0]>1:
-  Tref = rootGroupRef.variables['temp'][:,:].mean(axis=0)
-  Zref = rootGroupRef.variables['e'][0]
-else:
-  Tref = rootGroupRef.variables['temp'][0]
-  Zref = rootGroupRef.variables['e'][0]
-
-if rootGroup.variables['temp'].shape[0]>1:
-  Tmod = rootGroup.variables['temp'][:,:].mean(axis=0)
-  Zmod = rootGroup.variables['e'][0]
-else:
-  Tmod = rootGroup.variables['temp'][0]
-  Zmod = rootGroup.variables['e'][0]
 
 ci=m6plot.pmCI(0.025,.45,.05)
 if len(cmdLineArgs.label1): title1 = cmdLineArgs.label1

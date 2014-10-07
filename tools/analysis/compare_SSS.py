@@ -26,14 +26,18 @@ area = msk*netCDF4.Dataset(cmdLineArgs.gridspecdir+'/ocean_hgrid.nc').variables[
 msk = numpy.ma.array(msk, mask=(msk==0))
 
 rootGroupRef = netCDF4.Dataset( cmdLineArgs.ref )
-if 'salt' not in rootGroupRef.variables: raise Exception('Could not find "salt" in file "%s"'%(cmdLineArgs.annual_file))
-if rootGroupRef.variables['salt'].shape[0]>1: Sref = variable[:,0].mean(axis=0)
-else: Sref = rootGroupRef.variables['salt'][0,0]
+if 'salt' in rootGroupRef.variables: varName='salt'
+elif 'so' in rootGroupRef.variables: varName='so'
+else: raise Exception('Could not find "salt" or "so" in file "%s"'%(cmdLineArgs.ref))
+if rootGroupRef.variables[varName].shape[0]>1: Sref = rootGroupRef.variables[varName][:,0].mean(axis=0)
+else: Sref = rootGroupRef.variables[varName][0,0]
 
 rootGroup = netCDF4.Dataset( cmdLineArgs.annual_file )
-if 'salt' not in rootGroup.variables: raise Exception('Could not find "salt" in file "%s"'%(cmdLineArgs.annual_file))
-if rootGroup.variables['salt'].shape[0]>1: Smod = variable[:,0].mean(axis=0)
-else: Smod = rootGroup.variables['salt'][0,0]
+if 'salt' in rootGroup.variables: varName='salt'
+elif 'so' in rootGroup.variables: varName='so'
+else: raise Exception('Could not find "salt" or "so" in file "%s"'%(cmdLineArgs.annual_file))
+if len(rootGroup.variables[varName].shape)==4: Smod = rootGroup.variables[varName][:,0].mean(axis=0)
+else: Smod = rootGroup.variables[varName][0]
 
 if len(cmdLineArgs.label1): title1 = cmdLineArgs.label1
 else: title1 = rootGroup.title

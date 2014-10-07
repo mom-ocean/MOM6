@@ -26,14 +26,20 @@ area = msk*netCDF4.Dataset(cmdLineArgs.gridspecdir+'/ocean_hgrid.nc').variables[
 msk = numpy.ma.array(msk, mask=(msk==0))
 
 rootGroupRef = netCDF4.Dataset( cmdLineArgs.ref )
-if 'temp' not in rootGroupRef.variables: raise Exception('Could not find "temp" in file "%s"'%(cmdLineArgs.annual_file))
-if rootGroupRef.variables['temp'].shape[0]>1: Tref = variable[:,0].mean(axis=0)
-else: Tref = rootGroupRef.variables['temp'][0,0]
+if 'temp' in rootGroupRef.variables: varName='temp'
+elif 'ptemp' in rootGroupRef.variables: varName='ptemp'
+elif 'thetao' in rootGroupRef.variables: varName='thetao'
+else: raise Exception('Could not find "temp", "ptemp" or "thetao" in file "%s"'%(cmdLineArgs.ref))
+if rootGroupRef.variables[varName].shape[0]>1: Tref = rootGroupRef.variables[varName][:,0].mean(axis=0)
+else: Tref = rootGroupRef.variables[varName][0,0]
 
 rootGroup = netCDF4.Dataset( cmdLineArgs.annual_file )
-if 'temp' not in rootGroup.variables: raise Exception('Could not find "temp" in file "%s"'%(cmdLineArgs.annual_file))
-if rootGroup.variables['temp'].shape[0]>1: Tmod = variable[:,0].mean(axis=0)
-else: Tmod = rootGroup.variables['temp'][0,0]
+if 'temp' in rootGroup.variables: varName='temp'
+elif 'ptemp' in rootGroup.variables: varName='ptemp'
+elif 'thetao' in rootGroup.variables: varName='thetao'
+else: raise Exception('Could not find "temp", "ptemp" or "thetao" in file "%s"'%(cmdLineArgs.annual_file))
+if len(rootGroup.variables[varName].shape)==4: Tmod = rootGroup.variables[varName][:,0].mean(axis=0)
+else: Tmod = rootGroup.variables[varName][0]
 
 if len(cmdLineArgs.label1): title1 = cmdLineArgs.label1
 else: title1 = rootGroup.title
