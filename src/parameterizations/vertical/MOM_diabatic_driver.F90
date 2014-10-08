@@ -1231,8 +1231,8 @@ subroutine make_frazil(h, tv, G, CS, p_surf)
   if (.not.CS%pressure_dependent_frazil) then
     do k=1,nz ; do i=is,ie ; pressure(i,k) = 0.0 ; enddo ; enddo
   endif
-!$OMP parallel do default(none) shared(is,ie,js,je,CS,G,h,nz,tv) &
-!$OMP                          private(fraz_col,T_fr_set,T_freeze,hc) &
+!$OMP parallel do default(none) shared(is,ie,js,je,CS,G,h,nz,tv,p_surf) &
+!$OMP                          private(fraz_col,T_fr_set,T_freeze,hc,ps) &
 !$OMP                     firstprivate(pressure)
   do j=js,je
      ps(:) = 0.0
