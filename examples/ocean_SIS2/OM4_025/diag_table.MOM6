@@ -39,7 +39,6 @@
  "ocean_model", "Kd_shear",     "Kd_shear",         "ocean_month", "all", "mean", "none",2
  "ocean_model", "Kd_itides",    "Kd_itides",        "ocean_month", "all", "mean", "none",2
  "ocean_model", "KPP_Kheat",    "KPP_Kheat",        "ocean_month", "all", "mean", "none",2
- "ocean_model", "masscello",    "masscello",        "ocean_month", "all", "mean", "none",2
  "ocean_model", "pso",          "pso",              "ocean_month", "all", "mean", "none",2
 
 # Monthly surface forcing
