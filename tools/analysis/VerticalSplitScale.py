@@ -84,6 +84,8 @@ class VerticalSplitScale(mscale.ScaleBase):
           newticks = MaxNLocator(nbins=nbins, steps=[1,2,2.5,5,10]).tick_values(self.zval[k-1], self.zval[k])
           if ticks==None: ticks = newticks
           else: ticks = np.append( ticks, newticks )
+        ticks = [x for x in ticks if (x>+self.zval.min() and x<=self.zval.max())] # Only used tickes within range
+        ticks = np.sort( ticks ) # Fix due to different python versions on PP and workstations!
         axis.set_major_locator( FixedLocator( ticks ) )
         #axis.set_major_locator(AutoLocator())
         #deg2rad = np.pi / 180.0

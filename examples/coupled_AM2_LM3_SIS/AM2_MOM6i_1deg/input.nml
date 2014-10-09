@@ -236,8 +236,6 @@
   &fms_io_nml
     fms_netcdf_restart=.true.
     threading_read='multi'
-    threading_write='single'
-    fileset_write='single'
     max_files_r = 300
     max_files_w = 300
 /

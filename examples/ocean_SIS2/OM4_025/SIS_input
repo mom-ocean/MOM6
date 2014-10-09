@@ -30,7 +30,7 @@ CGRID_ICE_DYNAMICS = True       !   If true, use a C-grid discretization of the
                                 ! discretization.
 
 !  Specify the numerical domain.
-LAYOUT = 0,1                    !    LAYOUT specifies the grid layout for the
+!LAYOUT = 0,1                    !    LAYOUT specifies the grid layout for the
                                 !  sea-ice, with 0 indicating a PE count in one
                                 !  or both directions that is automatically
                                 !  generated.
@@ -44,10 +44,10 @@ NJHALO = 2                      !  points on each side in the x- and y-direction
                                 !  If static memory allocation is used, these
                                 !  must match the values of NIHALO_ and NJHALO_
                                 !  in MOM_memory.h.
-NIPROC_IO = 1                   !    The number of processors used for I/O in the
+!NIPROC_IO = 1                   !    The number of processors used for I/O in the
                                 !  x-direction, or 0 to equal NIPROC.  NIPROC_IO
                                 !  must be a factor of NIPROC.
-NJPROC_IO = 1                   !    The number of processors used for I/O in the
+!NJPROC_IO = 1                   !    The number of processors used for I/O in the
                                 !  y-direction, or 0 to equal NJPROC.  NJPROC_IO
                                 !  must be a factor of NJPROC.
 

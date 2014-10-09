@@ -15,7 +15,7 @@
         restart_input_dir = 'INPUT/',
         restart_output_dir = 'RESTART/',
         parameter_filename = 'SIS_input',
-!                             'SIS_layout',
+                             'SIS_layout',
                              'SIS_override' /
 
  &atmos_model_nml
@@ -59,8 +59,6 @@
  &fms_io_nml
             fms_netcdf_restart=.true.
             threading_read='multi'
-            threading_write='single'
-            fileset_write='single' 
             max_files_r = 200
             max_files_w = 200
             checksum_required = .false.
@@ -72,9 +70,6 @@
             domains_stack_size = 5000000
             stack_size =0
 /
-
- &horiz_interp_nml
- /
 
  &ice_albedo_nml
             t_range = 10.

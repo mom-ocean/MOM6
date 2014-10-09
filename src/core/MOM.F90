@@ -477,6 +477,7 @@ type, public :: MOM_control_struct
   logical :: thickness_diffuse_first ! If true, diffuse thickness before dynamics.
   logical :: mixedlayer_restrat ! If true, a density-gradient dependent
                              ! restratifying flow is imposed in the mixed layer.
+  logical :: useMEKE         ! If true, call the MEKE parameterization.
   logical :: debug           ! If true, write verbose checksums for debugging purposes.
   logical :: debug_truncations  ! If true, make sure that all diagnostics that
                              ! could be useful for debugging any truncations are
@@ -1036,9 +1037,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       endif
     endif
 
-    if (associated(CS%MEKE)) then
-      call step_forward_MEKE(CS%MEKE, h, CS%visc, dt, G, CS%MEKE_CSp)
-    endif
+    if (CS%useMEKE) call step_forward_MEKE(CS%MEKE, h, CS%visc, dt, G, CS%MEKE_CSp)
 
     call disable_averaging(CS%diag)
     call cpu_clock_end(id_clock_dynamics)
@@ -1786,7 +1785,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call cpu_clock_end(id_clock_MOM_init)
   call callTree_waypoint("ALE initialized (initialize_MOM)")
 
-  call MEKE_init(Time, G, param_file, diag, CS%MEKE_CSp, CS%MEKE)
+  CS%useMEKE = MEKE_init(Time, G, param_file, diag, CS%MEKE_CSp, CS%MEKE)
   call VarMix_init(Time, G, param_file, diag, CS%VarMix)
 
   if (associated(init_CS%tracer_Reg)) &
@@ -2025,18 +2024,26 @@ subroutine register_diags(Time, G, CS, ADp)
         long_name='Salinity', units='PSU', cmor_field_name='so',            &
         cmor_long_name='Sea Water Salinity', cmor_units='psu',              &
         cmor_standard_name='sea_water_salinity')
-    CS%id_sst = register_diag_field('ocean_model', 'SST', diag%axesT1, Time, &
-        'Sea Surface Temperature', 'Celsius', CS%missing)
+    CS%id_sst = register_diag_field('ocean_model', 'SST', diag%axesT1, Time,     &
+        'Sea Surface Temperature', 'Celsius', CS%missing, cmor_field_name='tos', &
+        cmor_long_name='Sea Surface Temperature', cmor_units='degC',             &
+        cmor_standard_name='sea_surface_temperature')
     CS%id_sst_global = register_scalar_field('ocean_model', field_name='SST_global',   &
         init_time=Time, diag=diag, long_name='Global Average Sea Surface Temperature', &
         units='Celsius', missing_value=CS%missing, cmor_field_name='tosga',            &
-        cmor_units='deg C', cmor_standard_name='global_average_sea_surface_temperature')
+        cmor_units='degC', cmor_standard_name='sea_surface_temperature')
     CS%id_sst_sq = register_diag_field('ocean_model', 'SST_sq', diag%axesT1, Time, &
-        'Sea Surface Temperature Squared', 'Celsius**2', CS%missing)    
+        'Sea Surface Temperature Squared', 'Celsius**2', CS%missing, cmor_field_name='tossq', &
+        cmor_long_name='Square of Sea Surface Temperature ', cmor_units='degC^2', &
+        cmor_standard_name='square_of_sea_surface_temperature')    
     CS%id_sss = register_diag_field('ocean_model', 'SSS', diag%axesT1, Time, &
-        'Sea Surface Salinity', 'PSU', CS%missing)
+        'Sea Surface Salinity', 'PSU', CS%missing, cmor_field_name='sos', &
+        cmor_long_name='Sea Surface Salinity', cmor_units='psu',          &
+        cmor_standard_name='sea_surface_salinity')
     CS%id_sss_global = register_scalar_field('ocean_model', 'SSS_global', Time, diag, &
-        'Global Average Sea Surface Salinity', 'PSU', CS%missing)
+        'Global Average Sea Surface Salinity', 'PSU', CS%missing, cmor_field_name='sosga', &
+        cmor_long_name='Global Average Sea Surface Salinity', cmor_units='psu',  &
+        cmor_standard_name='global_average_sea_surface_salinity')
     if (CS%id_sst_sq > 0) call safe_alloc_ptr(CS%SST_sq,isd,ied,jsd,jed)    
   endif
   if (CS%use_temperature .and. CS%use_frazil) then
@@ -2211,17 +2218,19 @@ subroutine write_static_fields(G, diag)
   if (id > 0) call post_data(id, G%geoLonCu, diag, .true.)
 
   id = register_static_field('ocean_model', 'area_t', diag%axesT1,   &
-        'Surface area of tracer (T) cells', 'degrees_E',             &
+        'Surface area of tracer (T) cells', 'm2',                    &
         cmor_field_name='areacello', cmor_standard_name='cell_area', &
-        cmor_units='m-2', cmor_long_name='Ocean Grid-Cell Area')
+        cmor_units='m2', cmor_long_name='Ocean Grid-Cell Area')
   if (id > 0) then
     do j=js,je ; do i=is,ie ; out_h(i,j) = G%areaT(i,j) ; enddo ; enddo
     call post_data(id, out_h, diag, .true.)
   endif
 
-  id = register_static_field('ocean_model', 'depth_ocean', diag%axesT1, &
-        'Depth of the ocean at tracer points', 'm', &
-        standard_name='sea_floor_depth_below_geoid')
+  id = register_static_field('ocean_model', 'depth_ocean', diag%axesT1,  &
+        'Depth of the ocean at tracer points', 'm',                      &
+        standard_name='sea_floor_depth_below_geoid',                     &
+        cmor_field_name='deptho', cmor_long_name='Sea Floor Depth',      &
+        cmor_units='m', cmor_standard_name='sea_floor_depth_below_geoid')
   if (id > 0) call post_data(id, G%bathyT, diag, .true.)
 
   id = register_static_field('ocean_model', 'wet', diag%axesT1, &

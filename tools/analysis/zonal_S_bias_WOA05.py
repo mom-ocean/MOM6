@@ -3,7 +3,6 @@
 import netCDF4
 import numpy
 import m6plot
-import matplotlib.pyplot as plt
 
 try: import argparse
 except: raise Exception('This version of python is not new enough. python 2.7 or newer is required.')
@@ -18,28 +17,28 @@ parser.add_argument('-w','--woa', type=str, required=True,
   help='''File containing WOA (or obs) data to compare against.''')
 cmdLineArgs = parser.parse_args()
 
-rootGroup = netCDF4.Dataset( cmdLineArgs.annual_file )
-if 'salt' not in rootGroup.variables: raise Exception('Could not find "salt" in file "%s"'%(cmdLineArgs.annual_file))
-
 y = netCDF4.Dataset(cmdLineArgs.gridspecdir+'/ocean_hgrid.nc').variables['y'][1::2,1::2].max(axis=-1)
 msk = netCDF4.Dataset(cmdLineArgs.gridspecdir+'/ocean_mask.nc').variables['mask'][:]
 area = msk*netCDF4.Dataset(cmdLineArgs.gridspecdir+'/ocean_hgrid.nc').variables['area'][:,:].reshape([msk.shape[0], 2, msk.shape[1], 2]).sum(axis=-3).sum(axis=-1)
 basin = netCDF4.Dataset(cmdLineArgs.gridspecdir+'/basin_codes.nc').variables['basin'][:]
 
-def zonalAverage(T, eta, area, mask=1.):
-  vols = ( mask * area ) * ( eta[:-1] - eta[1:] ) # mask * area * level thicknesses
-  return numpy.sum( vols * T, axis=-1 ) / numpy.sum( vols, axis=-1 ), (mask*eta).min(axis=-1)
-
-Sobs = netCDF4.Dataset( cmdLineArgs.woa ).variables['salt'][:]
+Sobs = netCDF4.Dataset( cmdLineArgs.woa ).variables['salt']
+if len(Sobs.shape)==3: Sobs = Sobs[:]
+else: Sobs = Sobs[:].mean(axis=0)
 Zobs = netCDF4.Dataset( cmdLineArgs.woa ).variables['eta'][:]
 
-variable = rootGroup.variables['salt']
-if variable.shape[0]>1:
-  Smod = variable[:,:].mean(axis=0)
-  Zmod = rootGroup.variables['e'][0]
-else:
-  Smod = variable[0]
-  Zmod = rootGroup.variables['e'][0]
+rootGroup = netCDF4.Dataset( cmdLineArgs.annual_file )
+if 'salt' in rootGroup.variables: varName = 'salt'
+elif 'so' in rootGroup.variables: varName = 'so'
+else:raise Exception('Could not find "salt" or "so" in file "%s"'%(cmdLineArgs.annual_file))
+if len(rootGroup.variables[varName].shape)==4: Smod = rootGroup.variables[varName][:].mean(axis=0)
+else: Smod = rootGroup.variables[varName][:]
+if 'e' in rootGroup.variables: Zmod = rootGroup.variables['e'][0]
+else: Zmod = Zobs # Using model z-output
+
+def zonalAverage(S, eta, area, mask=1.):
+  vols = ( mask * area ) * ( eta[:-1] - eta[1:] ) # mask * area * level thicknesses
+  return numpy.sum( vols * S, axis=-1 ) / numpy.sum( vols, axis=-1 ), (mask*eta).min(axis=-1)
 
 ci=m6plot.pmCI(0.125,2.25,.25)
 

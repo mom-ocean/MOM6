@@ -3,6 +3,7 @@
 "prog_%4yr_%3dy",     5,"days",1,"days","Time",365,"days"
 "ave_prog_%4yr_%3dy", 5,"days",1,"days","Time",365,"days"
 "cont_%4yr_%3dy",     5,"days",1,"days","Time",365,"days"
+"meke_%4yr_%3dy",     5,"days",1,"days","Time",365,"days"
 #"mom_%4yr_%3dy",      5,"days",1,"days","Time",10,"days"
 #"bt_mom_%4yr_%3dy",   5,"days",1,"days","Time",10,"days"
 #"visc_%4yr_%3dy",     5,"days",1,"days","Time",10,"days"
@@ -144,6 +145,18 @@
 #"ocean_model","av_visc","av_visc","visc_%4yr_%3dy","all",.true.,"none",2
 #"ocean_model","au_visc","au_visc","visc_%4yr_%3dy","all",.true.,"none",2
 #"ocean_model","FrictWork","FrictWork","visc_%4yr_%3dy","all",.true.,"none",2
+#
+# MEKE:
+#===============================
+"ocean_model","MEKE","MEKE","meke_%4yr_%3dy","all",.true.,"none",2
+"ocean_model","MEKE_KH","MEKE_KH","meke_%4yr_%3dy","all",.true.,"none",2
+"ocean_model","MEKE_Ue","MEKE_Ue","meke_%4yr_%3dy","all",.true.,"none",2
+"ocean_model","MEKE_src","MEKE_src","meke_%4yr_%3dy","all",.true.,"none",2
+"ocean_model","MEKE_decay","MEKE_decay","meke_%4yr_%3dy","all",.true.,"none",2
+"ocean_model","SN_u","SN_u","meke_%4yr_%3dy","all",.true.,"none",2
+"ocean_model","SN_v","SN_v","meke_%4yr_%3dy","all",.true.,"none",2
+"ocean_model","Res_fn","Res_fn","meke_%4yr_%3dy","all",.true.,"none",2
+"ocean_model","Rd1","Rd1","meke_%4yr_%3dy","all",.true.,"none",2
 #
 # Kinetic Energy Balance Terms:
 #=============================

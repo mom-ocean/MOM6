@@ -224,6 +224,14 @@ TS_FILE = "GOLD_IC.2010.11.15.nc" !
                                 ! The initial condition file for temperature.
 
 ! === module MOM_MEKE ===
+USE_MEKE = True                 !   [Boolean] default = False
+                                ! If true, turns on the MEKE scheme which calculates
+                                ! a sub-grid mesoscale eddy kinetic energy budget.
+MEKE_GMCOEFF = 1.0              !   [nondim] default = -1.0
+                                ! The efficiency of the conversion of potential energy
+                                ! into MEKE by the thickness mixing parameterization.
+                                ! If MEKE_GMCOEFF is negative, this conversion is not
+                                ! used or calculated.
 
 ! === module MOM_lateral_mixing_coeffs ===
 USE_VARIABLE_MIXING = True      !   [Boolean] default = False
@@ -424,6 +432,8 @@ FOX_KEMPER_ML_RESTRAT_COEF = 20.0 !   [nondim] default = 0.0
                                 ! geostrophic kinetic energy or 1 plus the square of the
                                 ! grid spacing over the deformation radius, as detailed
                                 ! by Fox-Kemper et al. (2010)
+
+! === module MOM_wave_speed ===
 Z_OUTPUT_GRID_FILE = "OM3_zgrid.nc" ! default = ""
                                 ! The file that specifies the vertical grid for
                                 ! depth-space diagnostics, or blank to disable

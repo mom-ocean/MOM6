@@ -233,10 +233,6 @@ SPONGE_STATE_FILE = "MESO_025_63L_IC.nc" ! default = "MESO_Sponge_025mNG.nc"
                                 ! The total number of columns where sponges are applied.
 
 ! === module MOM_MEKE ===
-MEKE_KHTH_FAC = 0.0             !   [nondim] default = 1.0
-                                ! A factor that maps MEKE%Kh to KhTh.
-MEKE_KHTR_FAC = 0.0             !   [nondim] default = 1.0
-                                ! A factor that maps MEKE%Kh to KhTr.
 
 ! === module MOM_lateral_mixing_coeffs ===
 ETA_TOLERANCE = 1.0E-06         !   [m] default = 3.15E-09

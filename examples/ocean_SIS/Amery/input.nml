@@ -1,0 +1,119 @@
+ &MOM_input_nml
+        output_directory = 'RESTART/',
+        input_filename = 'n'
+        restart_input_dir = 'INPUT/',
+        restart_output_dir = 'RESTART/',
+        parameter_filename = 'MOM_input',
+                             'MOM_override'
+/
+
+ &coupler_nml
+            months = 12,
+            days   = 0,
+            current_date = 1992,1,1,0,0,0,
+            calendar = 'JULIAN',
+            dt_cpld = 3600,
+            dt_atmos = 3600,
+            do_atmos = .true.,
+            do_land = .false.,
+            do_ice = .true.,
+            do_ocean = .true.,
+            do_flux = .true.,
+            atmos_npes = 32,
+            ocean_npes = 240,
+            concurrent = .true.     
+            use_lag_fluxes=.true.    
+            check_stocks = 0
+/
+
+ &diag_manager_nml
+            max_axes = 100,
+            max_num_axis_sets = 100,
+            max_input_fields = 699
+            max_output_fields = 699
+            mix_snapshot_average_fields=.false.
+	    conserve_water=.true.
+/
+
+ &flux_exchange_nml
+            debug_stocks = .FALSE.
+            divert_stocks_report = .TRUE.            
+            do_area_weighted_flux = .FALSE.
+/
+
+ &fms_io_nml
+            fms_netcdf_restart=.true.
+            threading_read='multi'
+            max_files_r = 200
+            max_files_w = 200
+/
+
+ &fms_nml
+            clock_grain='ROUTINE'
+            clock_flags='NONE'
+            domains_stack_size = 5000000
+            stack_size =0
+/
+
+ &ice_albedo_nml
+            t_range = 10.
+/
+
+ &ice_model_nml
+           layout=8,4
+           nsteps_dyn=144
+           nsteps_adv=2
+           num_part = 6
+           wd_turn = 0.0
+           spec_ice=.false.
+           ice_bulk_salin = 0.010
+           alb_sno = 0.85                    ! keep CM2 setting
+           alb_ice = 0.65                    ! keep CM2 setting
+           t_range_melt = 1.0                ! NOTE: CM2 uses 1.0
+           heat_rough_ice = 5.0e-4           
+           cm2_bugs = .false.
+           do_icebergs = .false.             
+           atmos_winds=.true.  
+           add_diurnal_sw = .false.        
+           do_ice_limit=.false.
+           max_ice_limit=10.0
+           channel_viscosity=5.e-5
+           chan_cfl_limit=0.001
+           h_lo_lim = 1.e-10   
+           io_layout=1,1
+/
+
+ &icebergs_nml
+            verbose=.FALSE.
+            traj_sample_hrs=0
+            verbose_hrs=2400
+/
+
+ &monin_obukhov_nml
+          stable_option =  2,
+          rich_crit = 10.0,
+          zeta_trans =  0.5
+/
+
+ &ocean_albedo_nml
+            ocean_albedo_option = 2
+/
+
+ &ocean_rough_nml
+            rough_scheme = 'beljaars'
+/
+
+ &sat_vapor_pres_nml
+            construct_table_wrt_liq = .true.
+            construct_table_wrt_liq_and_ice = .true.
+/
+
+ &surface_flux_nml
+	   gust_min = 1.e-10
+/
+
+ &xgrid_nml
+            make_exchange_reproduce = .false.
+            interp_method = 'second_order'
+/
+

@@ -29,7 +29,7 @@ area = msk*netCDF4.Dataset(cmdLineArgs.gridspecdir+'/ocean_hgrid.nc').variables[
 
 variable = rootGroup.variables['MLD_003']
 shape = variable.shape
-MLD = variable[:].reshape(shape[0]/12,12,shape[1],shape[2])
+MLD = variable[:].reshape(shape[0]/12,12,shape[1],shape[2]).mean(axis=0)
 
 MLD_obs = netCDF4.Dataset(cmdLineArgs.obsdata).variables['MLD'][:]
 x_obs = netCDF4.Dataset(cmdLineArgs.obsdata).variables['LONGITUDE'][:]
@@ -37,11 +37,14 @@ y_obs = netCDF4.Dataset(cmdLineArgs.obsdata).variables['LATITUDE'][:]
 
 ciMin = m6plot.linCI(0,95,5)
 ciMax = m6plot.linCI(0,680,20)
-m6plot.xyplot( MLD.min(axis=1).mean(axis=0), x, y, area=area,
+
+# Plot of shallowest model MLD (summer)
+m6plot.xyplot( MLD.min(axis=0), x, y, area=area,
       suptitle=rootGroup.title+' '+cmdLineArgs.label, title='Annual-minimum MLD$_{0.03}$ [m]',
       clim=ciMin, extend='max', colormap='dunneRainbow',
       save=cmdLineArgs.outdir+'/MLD_003_minimum.png')
 
+# 2-panel plot of shallowest model MLD + obs (summer)
 m6plot.setFigureSize(aspect=[3,3], verticalresolution=976, npanels=0)
 ax1 = plt.subplot(2,1,1)
 m6plot.xyplot( numpy.roll(MLD_obs.min(axis=0),300,axis=-1), x_obs-300, y_obs,
@@ -49,17 +52,19 @@ m6plot.xyplot( numpy.roll(MLD_obs.min(axis=0),300,axis=-1), x_obs-300, y_obs,
       clim=ciMin, extend='max', colormap='dunneRainbow',
       axis=ax1)
 ax2 = plt.subplot(2,1,2)
-m6plot.xyplot( MLD.min(axis=1).mean(axis=0), x, y, area=area,
+m6plot.xyplot( MLD.min(axis=0), x, y, area=area,
       suptitle=rootGroup.title+' '+cmdLineArgs.label, title='Annual-minimum MLD$_{0.03}$ [m]',
       clim=ciMin, extend='max', colormap='dunneRainbow',
       axis=ax2,
       save=cmdLineArgs.outdir+'/MLD_003_minimum.2_panel.png')
 
-m6plot.xyplot( MLD.max(axis=1).mean(axis=0), x, y, area=area,
+# Plot of deepest model MLD (winter)
+m6plot.xyplot( MLD.max(axis=0), x, y, area=area,
       suptitle=rootGroup.title+' '+cmdLineArgs.label, title='Annual-maximum MLD$_{0.03}$ [m]',
       clim=ciMax, extend='max', colormap='dunneRainbow',
       save=cmdLineArgs.outdir+'/MLD_003_maximum.png')
 
+# 2-panel plot of deepest model MLD + obs (winter)
 m6plot.setFigureSize(aspect=[3,3], verticalresolution=976, npanels=0)
 ax1 = plt.subplot(2,1,1)
 m6plot.xyplot( numpy.roll(MLD_obs.max(axis=0),300,axis=-1), x_obs-300, y_obs,
@@ -67,7 +72,7 @@ m6plot.xyplot( numpy.roll(MLD_obs.max(axis=0),300,axis=-1), x_obs-300, y_obs,
       clim=ciMax, extend='max', colormap='dunneRainbow',
       axis=ax1)
 ax2 = plt.subplot(2,1,2)
-m6plot.xyplot( MLD.max(axis=1).mean(axis=0), x, y, area=area,
+m6plot.xyplot( MLD.max(axis=0), x, y, area=area,
       suptitle=rootGroup.title+' '+cmdLineArgs.label, title='Annual-maximum MLD$_{0.03}$ [m]',
       clim=ciMax, extend='max', colormap='dunneRainbow',
       axis=ax2,
