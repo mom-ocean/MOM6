@@ -34,7 +34,9 @@ grid.wet=np.zeros(grid.D.shape)
 grid.wet[grid.D>0.]=1.
 
 S=state(path_ann,grid=grid,fields=['temp','salt'],interfaces='e',verbose=False)
-O=state(path_obs,grid=grid,fields=['temp','salt'],interfaces='eta',verbose=False)
+O=state(path_obs,grid=grid,fields=['ptemp','salt'],interfaces='eta',verbose=False)
+
+O.rename_field('ptemp','temp')
 
 max_depth=numpy.max(-S.var_dict['temp']['z_interfaces'][:,-1,:])
 S.grid.D[S.grid.D>max_depth]=max_depth
