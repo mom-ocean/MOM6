@@ -25,7 +25,7 @@ module MOM_EOS_linear
 !*  state for sea water with constant coefficients set as parameters.  *
 !***********************************************************************
 
-use MOM_grid, only : ocean_grid_type
+use MOM_grid, only : ocean_grid_type, ocean_block_type
 
 implicit none ; private
 
@@ -183,16 +183,16 @@ subroutine calculate_2_densities_linear(T, S, pressure1, pressure2, rho1, rho2,&
   enddo
 end subroutine calculate_2_densities_linear
 
-subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, G, &
+subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, B, &
                  Rho_T0_S0, dRho_dT, dRho_dS, dpa, intz_dpa, intx_dpa, inty_dpa)
-  real, dimension(NIMEM_,NJMEM_),  intent(in)  :: T, S, z_t, z_b
-  real,                            intent(in)  :: rho_ref, rho_0_pres, G_e
-  type(ocean_grid_type),           intent(in)  :: G
-  real,                            intent(in)  :: Rho_T0_S0, dRho_dT, dRho_dS
-  real, dimension(NIMEM_,NJMEM_),  intent(out) :: dpa
-  real, dimension(NIMEM_,NJMEM_),  optional, intent(out) :: intz_dpa
-  real, dimension(NIMEMB_,NJMEM_), optional, intent(out) :: intx_dpa
-  real, dimension(NIMEM_,NJMEMB_), optional, intent(out) :: inty_dpa
+  real, dimension(NIMEM_BK_,NJMEM_BK_),  intent(in)  :: T, S, z_t, z_b
+  real,                                  intent(in)  :: rho_ref, rho_0_pres, G_e
+  type(ocean_block_type),                intent(in)  :: B
+  real,                                  intent(in)  :: Rho_T0_S0, dRho_dT, dRho_dS
+  real, dimension(NIMEM_BK_,NJMEM_BK_),  intent(out) :: dpa
+  real, dimension(NIMEM_BK_,NJMEM_BK_),  optional, intent(out) :: intz_dpa
+  real, dimension(NIMEMB_BK_,NJMEM_BK_), optional, intent(out) :: intx_dpa
+  real, dimension(NIMEM_BK_,NJMEMB_BK_), optional, intent(out) :: inty_dpa
 !   This subroutine calculates analytical and nearly-analytical integrals of
 ! pressure anomalies across layers, which are required for calculating the
 ! finite-volume form pressure accelerations in a Boussinesq model.
@@ -227,7 +227,7 @@ subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, G, &
   real :: C1_6
   integer :: Isq, Ieq, Jsq, Jeq, i, j
 
-  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
+  Isq = B%IscB ; Ieq = B%IecB ; Jsq = B%JscB ; Jeq = B%JecB
   C1_6 = 1.0 / 6.0
 
   do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
@@ -237,7 +237,7 @@ subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, G, &
     if (present(intz_dpa)) intz_dpa(i,j) = 0.5*G_e*rho_anom*dz**2
   enddo ; enddo
 
-  if (present(intx_dpa)) then ; do j=G%jsc,G%jec ; do I=Isq,Ieq
+  if (present(intx_dpa)) then ; do j=B%jsc,B%jec ; do I=Isq,Ieq
     dzL = z_t(i,j) - z_b(i,j) ; dzR = z_t(i+1,j) - z_b(i+1,j)
     raL = (Rho_T0_S0 - rho_ref) + (dRho_dT*T(i,j) + dRho_dS*S(i,j))
     raR = (Rho_T0_S0 - rho_ref) + (dRho_dT*T(i+1,j) + dRho_dS*S(i+1,j))
@@ -245,7 +245,7 @@ subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, G, &
     intx_dpa(i,j) = G_e*C1_6 * (dzL*(2.0*raL + raR) + dzR*(2.0*raR + raL))
   enddo ; enddo ; endif
 
-  if (present(inty_dpa)) then ; do J=Jsq,Jeq ; do i=G%isc,G%iec
+  if (present(inty_dpa)) then ; do J=Jsq,Jeq ; do i=B%isc,B%iec
     dzL = z_t(i,j) - z_b(i,j) ; dzR = z_t(i,j+1) - z_b(i,j+1)
     raL = (Rho_T0_S0 - rho_ref) + (dRho_dT*T(i,j) + dRho_dS*S(i,j))
     raR = (Rho_T0_S0 - rho_ref) + (dRho_dT*T(i,j+1) + dRho_dS*S(i,j+1))

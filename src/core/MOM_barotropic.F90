@@ -1441,6 +1441,9 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   endif
   nfilter = ceiling(dt_filt / dtbt)
 
+  if (nstep+nfilter==0 ) call MOM_error(FATAL, &
+      "btstep: number of barotropic step (nstep+nfilter) is 0")
+
   ! Set up the normalized weights for the filtered velocity.
   sum_wt_vel = 0.0 ; sum_wt_eta = 0.0 ; sum_wt_accel = 0.0 ; sum_wt_trans = 0.0
   allocate(wt_vel(nstep+nfilter)) ; allocate(wt_eta(nstep+nfilter))

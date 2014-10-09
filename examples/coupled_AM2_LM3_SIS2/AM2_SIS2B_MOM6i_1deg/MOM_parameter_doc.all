@@ -93,6 +93,10 @@ BATHYMETRY_AT_VEL = False       !   [Boolean] default = False
                                 ! topography are entirely determined from thickness points.
 NK = 63                         !   [nondim]
                                 ! The number of model layers.
+NIBLOCK = 1                     ! default = 1
+                                ! The number of blocks in the x-direction on each processor (for openmp).
+NJBLOCK = 1                     ! default = 1
+                                ! The number of blocks in the y-direction on each processor (for openmp).
 
 ! === module MOM_verticalGrid ===
 ! Parameters providing information about the vertical grid.
