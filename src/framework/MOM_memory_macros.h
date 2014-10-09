@@ -111,5 +111,5 @@
 #  define SZI_BK_(G)     G%isd_bk:G%ied_bk
 #  define SZJ_BK_(G)     G%jsd_bk:G%jed_bk
 #  define SZIB_BK_(G)    G%isdB_bk:G%iedB_bk
-#  define SZJB_BK_(G)    G%isdB_bk:G%iedB_bk
+#  define SZJB_BK_(G)    G%jsdB_bk:G%jedB_bk
 #endif
