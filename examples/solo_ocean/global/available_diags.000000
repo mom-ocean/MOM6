@@ -424,16 +424,20 @@
 "ocean_model", "mass_wt"  [Unused]
     ! long_name: The column mass for calculating mass-weighted average properties
     ! units: kg m-2
-"ocean_model", "masscello"  [Unused]
-    ! long_name: Sea Water Mass Per Unit Area
-    ! units: kg m-2
-    ! standard_name: sea_water_mass_per_unit_area
 "ocean_model", "temp_int"  [Unused]
     ! long_name: The mass weighted column integrated temperature
     ! units: degC kg m-2
+"ocean_model", "tomint"  [Unused]
+    ! long_name: sea_water_prognostic_temperature_mass_integrated
+    ! units: degC kg m-2
+    ! standard_name: Sea Water Prognostic Temperature Mass Integrated
 "ocean_model", "salt_int"  [Unused]
     ! long_name: The mass weighted column integrated salinity
     ! units: PSU kg m-2
+"ocean_model", "somint"  [Unused]
+    ! long_name: sea_water_salinity_mass_integrated
+    ! units: psu kg m-2
+    ! standard_name: Sea Water Salinity Mass Integrated
 "ocean_model", "col_mass"  [Unused]
     ! long_name: The column integrated in situ density
     ! units: kg m-2

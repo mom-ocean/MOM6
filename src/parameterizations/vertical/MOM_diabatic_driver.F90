@@ -1231,8 +1231,8 @@ subroutine make_frazil(h, tv, G, CS, p_surf)
   if (.not.CS%pressure_dependent_frazil) then
     do k=1,nz ; do i=is,ie ; pressure(i,k) = 0.0 ; enddo ; enddo
   endif
-!$OMP parallel do default(none) shared(is,ie,js,je,CS,G,h,nz,tv) &
-!$OMP                          private(fraz_col,T_fr_set,T_freeze,hc) &
+!$OMP parallel do default(none) shared(is,ie,js,je,CS,G,h,nz,tv,p_surf) &
+!$OMP                          private(fraz_col,T_fr_set,T_freeze,hc,ps) &
 !$OMP                     firstprivate(pressure)
   do j=js,je
      ps(:) = 0.0
@@ -1860,8 +1860,10 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
       Time, "The volume flux added to stop the ocean from drying out and becoming negative in depth", &
       "meter second-1")
   if (CS%id_createdH>0) allocate(CS%createdH(isd:ied,jsd:jed))
-  CS%id_MLD_003 = register_diag_field('ocean_model','MLD_003',diag%axesT1,Time, &
-      'Mixed layer depth (delta rho = 0.03)', 'meter', cmor_field_name='mlotst', cmor_long_name='Ocean Mixed Layer Thickness Defined by Sigma T', cmor_units='m', cmor_standard_name='ocean_mixed_layer_thickness_defined_by_sigma_t')
+  CS%id_MLD_003 = register_diag_field('ocean_model','MLD_003',diag%axesT1,Time,        &
+      'Mixed layer depth (delta rho = 0.03)', 'meter', cmor_field_name='mlotst',       &
+      cmor_long_name='Ocean Mixed Layer Thickness Defined by Sigma T', cmor_units='m', &
+      cmor_standard_name='ocean_mixed_layer_thickness_defined_by_sigma_t')
   CS%id_MLD_0125 = register_diag_field('ocean_model','MLD_0125',diag%axesT1,Time, &
       'Mixed layer depth (delta rho = 0.125)', 'meter')
   CS%id_subMLN2  = register_diag_field('ocean_model','subML_N2',diag%axesT1,Time, &

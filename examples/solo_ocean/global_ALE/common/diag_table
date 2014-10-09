@@ -252,7 +252,6 @@
 "ocean_model","rlds","rlds","cmor","all",.true.,"none",2        	       	# GFDL Name: LW
 "ocean_model","hfss","hfss","cmor","all",.true.,"none",2               		# GFDL Name: sensible
 "ocean_model","sfdsi","sfdsi","cmor","all",.true.,"none",2               	# GFDL Name: salt_flux
-"ocean_model","masscello","masscello","cmor","all",.true.,"none",2              # GFDL Name: mass_wt
 "ocean_model","uo","uo","cmor","all",.true.,"none",2				# GFDL Name: u
 "ocean_model","vo","vo","cmor","all",.true.,"none",2				# GFDL Name: v
 "ocean_model","so","so","cmor","all",.true.,"none",2				# GFDL Name: salt

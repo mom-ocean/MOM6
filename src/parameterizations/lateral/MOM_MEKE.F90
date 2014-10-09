@@ -129,7 +129,7 @@ subroutine step_forward_MEKE(MEKE, h, visc, dt, G, CS)
 
 !$OMP parallel default(none) shared(MEKE,CS,is,ie,js,je,nz,src,mass,G,h,I_mass, &
 !$OMP                               sdt,drag_vel_u,visc,drag_vel_v,drag_rate_visc, &
-!$OMP                               drag_rate,Rho0,MEKE_decay,sdt_damp,cdrag2, *
+!$OMP                               drag_rate,Rho0,MEKE_decay,sdt_damp,cdrag2, &
 !$OMP                               bottomFac2) &
 !$OMP                       private(ldamping)
 
@@ -152,7 +152,7 @@ subroutine step_forward_MEKE(MEKE, h, visc, dt, G, CS)
     enddo
 
     if (associated(MEKE%mom_src)) then
-!$OMP do
+   !!$OMP do
    !  do j=js,je ; do i=is,ie
    !    MEKE%MEKE(i,j) = MEKE%MEKE(i,j) - I_mass(i,j) * &
    !        (sdt*CS%MEKE_FrCoeff)*MEKE%mom_src(i,j)
@@ -164,7 +164,7 @@ subroutine step_forward_MEKE(MEKE, h, visc, dt, G, CS)
     endif
 
     if (associated(MEKE%GM_src)) then
-!$OMP do
+   !!$OMP do
    !  do j=js,je ; do i=is,ie
    !    MEKE%MEKE(i,j) = MEKE%MEKE(i,j) - I_mass(i,j) * &
    !        (sdt*CS%MEKE_GMcoeff)*MEKE%GM_src(i,j)
@@ -175,10 +175,11 @@ subroutine step_forward_MEKE(MEKE, h, visc, dt, G, CS)
       enddo ; enddo
     endif
 
-!$OMP do
+   !!$OMP do
    !do j=js,je ; do i=is,ie
    !  MEKE%MEKE(i,j) = max(0.0,MEKE%MEKE(i,j) + (sdt*CS%MEKE_BGsrc)*G%mask2dT(i,j))
    !enddo ; enddo
+!$OMP do
     do j=js,je ; do i=is,ie
       MEKE%MEKE(i,j) = max(0.0, MEKE%MEKE(i,j) + sdt*src(i,j) )*G%mask2dT(i,j)
     enddo ; enddo
