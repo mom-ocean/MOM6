@@ -453,6 +453,19 @@ DTBT = -0.9                     !   [s or nondim] default = -0.98
 ! === module MOM_thickness_diffuse ===
 
 ! === module MOM_mixed_layer_restrat ===
+MIXEDLAYER_RESTRAT = True       !   [Boolean] default = False
+                                ! If true, a density-gradient dependent re-stratifying
+                                ! flow is imposed in the mixed layer.
+                                ! This is only used if BULKMIXEDLAYER is true.
+FOX_KEMPER_ML_RESTRAT_COEF = 10.0 !   [nondim] default = 0.0
+                                ! A nondimensional coefficient that is proportional to
+                                ! the ratio of the deformation radius to the dominant
+                                ! lengthscale of the submesoscale mixed layer
+                                ! instabilities, times the minimum of the ratio of the
+                                ! mesoscale eddy kinetic energy to the large-scale
+                                ! geostrophic kinetic energy or 1 plus the square of the
+                                ! grid spacing over the deformation radius, as detailed
+                                ! by Fox-Kemper et al. (2010)
 Z_OUTPUT_GRID_FILE = "vgrid_75_2m.nc" ! default = ""
                                 ! The file that specifies the vertical grid for
                                 ! depth-space diagnostics, or blank to disable

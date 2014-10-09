@@ -265,6 +265,36 @@
 "ocean_model", "neutral_slope_y"  [Unused]
     ! long_name: Meridional slope of neutral surface
     ! units: nondim
+"ocean_model", "uhml"  [Unused]
+    ! long_name: Zonal Thickness Flux to Restratify Mixed Layer
+    ! units: meter3 second-1
+"ocean_model", "vhml"  [Unused]
+    ! long_name: Meridional Thickness Flux to Restratify Mixed Layer
+    ! units: meter3 second-1
+"ocean_model", "MLu_restrat_time"  [Unused]
+    ! long_name: Mixed Layer Zonal Restratification Timescale
+    ! units: second
+"ocean_model", "MLv_restrat_time"  [Unused]
+    ! long_name: Mixed Layer Meridional Restratification Timescale
+    ! units: second
+"ocean_model", "MLD_restrat"  [Unused]
+    ! long_name: Mixed Layer Depth as used in the mixed-layer restratification parameterization
+    ! units: meter
+"ocean_model", "ML_buoy_restrat"  [Unused]
+    ! long_name: Mixed Layer Buoyancy as used in the mixed-layer restratification parameterization
+    ! units: m/s^2
+"ocean_model", "udml_restrat"  [Unused]
+    ! long_name: Transport stream function amplitude for zonal restratification of mixed layer
+    ! units: m3/s
+"ocean_model", "vdml_restrat"  [Unused]
+    ! long_name: Transport stream function amplitude for meridional restratification of mixed layer
+    ! units: m3/s
+"ocean_model", "uml_restrat"  [Unused]
+    ! long_name: Surface zonal velocity component of mixed layer restratification
+    ! units: m/s
+"ocean_model", "vml_restrat"  [Unused]
+    ! long_name: Surface meridional velocity component of mixed layer restratification
+    ! units: m/s
 "ocean_model", "temp_global"  [Unused]
     ! long_name: Global Volume Mean Ocean Temperature
     ! units: Celsius
