@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+#
 # Written by Matthew Harrison (matthew.harrison@noaa.gov)
 # Calculate depth-integrated heat and salt content
 # over a limited depth range.  
