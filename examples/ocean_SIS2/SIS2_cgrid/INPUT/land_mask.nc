@@ -1,1 +1,0 @@
-.datasets/GOLD_SIS/riga/mosaic.unpacked/land_mask.nc

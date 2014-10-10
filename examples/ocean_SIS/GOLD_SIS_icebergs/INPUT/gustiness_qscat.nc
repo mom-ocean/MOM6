@@ -1,1 +1,0 @@
-.datasets/GOLD_SIS/riga/INPUT/gustiness_qscat.nc

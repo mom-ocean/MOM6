@@ -1,1 +1,0 @@
-.datasets/CM2G63L/siena/mosaic.unpacked/grid_spec.nc

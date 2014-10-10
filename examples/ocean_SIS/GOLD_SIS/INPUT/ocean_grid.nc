@@ -1,1 +1,0 @@
-.datasets/GOLD_SIS/riga/INPUT/ocean_grid.nc

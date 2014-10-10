@@ -1,7 +1,0 @@
-
-"ICE", "sic_obs", "SIC","./INPUT/sst_ice_clim.nc",.false.,0.01
-"ICE", "sit_obs", "SIT","./INPUT/sst_ice_clim.nc",.false.,1.06
-"ICE", "sst_obs", "SST","./INPUT/sst_ice_clim.nc",.false.,1
-"ATM", "cfc_11_flux_pcair_atm","CFC_11","INPUT/cfc.bc.nc",.false., 1
-"ATM", "cfc_12_flux_pcair_atm","CFC_12","INPUT/cfc.bc.nc",.false., 1
-      

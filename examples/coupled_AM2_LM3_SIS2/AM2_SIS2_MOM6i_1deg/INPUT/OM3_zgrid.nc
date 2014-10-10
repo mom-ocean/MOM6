@@ -1,1 +1,0 @@
-.datasets/AM2_LM3_MOM6i_1deg/tikal/INPUT/OM3_zgrid.nc

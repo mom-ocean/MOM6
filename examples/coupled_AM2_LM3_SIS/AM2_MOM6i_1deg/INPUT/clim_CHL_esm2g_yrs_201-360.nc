@@ -1,1 +1,0 @@
-.datasets/AM2_LM3_MOM6i_1deg/tikal/INPUT/clim_CHL_esm2g_yrs_201-360.nc

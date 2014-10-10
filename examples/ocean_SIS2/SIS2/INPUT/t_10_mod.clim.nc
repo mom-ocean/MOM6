@@ -1,1 +1,0 @@
-.datasets/GOLD_SIS/riga/INPUT/t_10_mod.clim.nc

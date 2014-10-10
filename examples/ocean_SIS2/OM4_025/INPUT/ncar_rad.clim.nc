@@ -1,1 +1,0 @@
-.datasets/CORE/NYF_v2.0/ncar_rad.clim.nc
