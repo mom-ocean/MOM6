@@ -52,7 +52,7 @@ module MOM_tidal_forcing
 
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_MODULE
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
-use MOM_file_parser, only : read_param, get_param, log_param, log_version, param_file_type
+use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : field_exists, file_exists, read_data
 use MOM_time_manager, only : time_type, time_type_to_real
@@ -258,12 +258,9 @@ subroutine tidal_forcing_init(Time, G, param_file, CS)
   do c=1,4*MAX_CONSTITUENTS ; tidal_input_files(c) = "" ; enddo
 
   if (CS%tidal_sal_from_file .or. CS%use_prev_tides) then
-    call read_param(param_file,"TIDAL_INPUT_FILE",tidal_input_files,FAIL_IF_MISSING)
-    do c=1,4*MAX_CONSTITUENTS
-      if (len_trim(tidal_input_files(c)) > 0) &
-        call log_param(param_file, mod, "TIDAL_INPUT_FILE", tidal_input_files(c), &
-                 "An input file for tidal information.")
-    enddo
+    call get_param(param_file, mod, "TIDAL_INPUT_FILE", tidal_input_files, &
+                   "A list of input files for tidal information.",         &
+                   default = "", fail_if_missing=.true.)
   endif
 
   ! Set the parameters for all components that are in use.
