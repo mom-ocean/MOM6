@@ -20,7 +20,7 @@ module MOM_grid
 !* or see:   http://www.gnu.org/licenses/gpl.html                      *
 !***********************************************************************
 
-use MOM_domains, only : MOM_domain_type, get_domain_extent
+use MOM_domains, only : MOM_domain_type, get_domain_extent, compute_block_extent
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_verticalGrid, only : verticalGrid_type
@@ -33,6 +33,16 @@ implicit none ; private
 public MOM_grid_init, MOM_grid_end, set_first_direction
 public get_flux_units, get_thickness_units, get_tr_flux_units
 public isPointInCell
+
+type, public :: ocean_block_type
+  integer :: isc, iec, jsc, jec     ! The range of the computational indices and 
+  integer :: isd, ied, jsd, jed     ! data indices at tracer cell enters for each block.
+  integer :: IscB, IecB, JscB, JecB ! The range of the computational indices and 
+  integer :: IsdB, IedB, JsdB, JedB ! data indices at tracer cell vertices 
+                                    ! for each block.
+  integer :: ioff, joff             ! index offset of block indices relative to 
+                                    ! domain indices
+end type ocean_block_type
 
 type, public :: ocean_grid_type
   type(MOM_domain_type), pointer :: Domain => NULL()
@@ -170,6 +180,13 @@ type, public :: ocean_grid_type
   real :: areaT_global  ! Global sum of h-cell area in m2
   real :: IareaT_global ! Global sum of inverse h-cell area (1/areaT_global)
                         ! in m2
+  ! These variables are for block strucutre.
+  integer                   :: nblocks
+  type(ocean_block_type), pointer :: Block(:) => NULL() ! store indices for each block
+  integer :: isd_bk, ied_bk, jsd_bk, jed_bk     ! block data domain indices at 
+                                                ! tracer cell centers.
+  integer :: isdB_bk, iedB_bk, jsdB_bk, jedB_bk ! block data domain indices at 
+                                                ! tracer cell vertices.
 end type ocean_grid_type
 
 contains
@@ -184,6 +201,8 @@ subroutine MOM_grid_init(G, param_file)
 #include "version_variable.h"
   integer :: isd, ied, jsd, jed, nk, idg_off, jdg_off
   integer :: IsdB, IedB, JsdB, JedB
+  integer :: niblock, njblock, nihalo, njhalo, nblocks, n, i, j
+  integer, allocatable, dimension(:) :: ibegin, iend, jbegin, jend
 
   ! get_domain_extent ensures that domains start at 1 for compatibility between
   ! static and dynamically allocated arrays.
@@ -232,10 +251,15 @@ subroutine MOM_grid_init(G, param_file)
                  static_value=NK_)
   if (nk /= NK_) call MOM_error(FATAL, "MOM_grid_init: " // &
        "Mismatched number of layers NK_ between MOM_memory.h and param_file")
-
+  niblock = NIBLOCK_
+  njblock = NJBLOCK_
 #else
   call get_param(param_file, "MOM_grid", "NK", nk, &
                  "The number of model layers.", units="nondim", fail_if_missing=.true.)
+  call get_param(param_file, "MOM_grid", "NIBLOCK", niblock, "The number of blocks "// &
+                 "in the x-direction on each processor (for openmp).", default=1)
+  call get_param(param_file, "MOM_grid", "NJBLOCK", njblock, "The number of blocks "// &
+                 "in the y-direction on each processor (for openmp).", default=1)
 #endif
 
   G%ks = 1 ; G%ke = nk
@@ -292,6 +316,81 @@ subroutine MOM_grid_init(G, param_file)
   allocate(G%gridLonT(G%isg:G%ieg))
   allocate(G%gridLonB(G%IsgB:G%IegB))
   G%gridLonT(:) = 0.0 ; G%gridLonB(:) = 0.0
+
+! setup block indices.
+  nihalo = G%Domain%nihalo
+  njhalo = G%Domain%njhalo
+  nblocks = niblock * njblock
+  if (nblocks < 1) call MOM_error(FATAL, "MOM_grid_init: " // &
+       "nblocks(=NI_BLOCK*NJ_BLOCK) must be no less than 1")
+
+  allocate(ibegin(niblock), iend(niblock), jbegin(njblock), jend(njblock))
+  call compute_block_extent(G%isc,G%iec,niblock,ibegin,iend)
+  call compute_block_extent(G%jsc,G%jec,njblock,jbegin,jend)
+
+  G%nblocks = nblocks
+  allocate(G%Block(nblocks))
+  do n = 1,nblocks
+    i = mod((n-1), niblock) + 1
+    j = (n-1)/niblock + 1
+    !--- isd and jsd are always 1 for each block
+    G%Block(n)%isd = 1 ; G%Block(n)%jsd = 1
+    G%Block(n)%isc = G%Block(n)%isd+nihalo 
+    G%Block(n)%jsc = G%Block(n)%jsd+njhalo
+    G%Block(n)%iec = G%Block(n)%isc + iend(i) - ibegin(i)
+    G%Block(n)%jec = G%Block(n)%jsc + jend(j) - jbegin(j)
+    G%Block(n)%ied = G%Block(n)%iec + nihalo
+    G%Block(n)%jed = G%Block(n)%jec + njhalo
+    G%Block(n)%IscB = G%Block(n)%isc; G%Block(n)%IecB = G%Block(n)%iec
+    G%Block(n)%JscB = G%Block(n)%jsc; G%Block(n)%JecB = G%Block(n)%jec
+    !--- For symmetry domain, the first block will have the extra point.
+    if (G%symmetric) then
+      if (i==1) G%Block(n)%IscB = G%Block(n)%IscB-1
+      if (j==1) G%Block(n)%JscB = G%Block(n)%JscB-1
+    endif
+    G%Block(n)%IsdB = G%Block(n)%isd; G%Block(n)%IedB = G%Block(n)%ied
+    G%Block(n)%JsdB = G%Block(n)%jsd; G%Block(n)%JedB = G%Block(n)%jed
+    !--- For symmetry domain, every block will have the extra point.
+    if (G%symmetric) then
+      G%Block(n)%IsdB = G%Block(n)%IsdB-1
+      G%Block(n)%JsdB = G%Block(n)%JsdB-1
+    endif
+    G%Block(n)%ioff = ibegin(i) - G%Block(n)%isc
+    G%Block(n)%joff = jbegin(j) - G%Block(n)%jsc
+  enddo
+
+  !-- make sure the last block is the largest.
+  do i = 1, niblock-1
+    if (iend(i)-ibegin(i) > iend(niblock)-ibegin(niblock) ) call MOM_error(FATAL, &
+       "MOM_grid_init: the last block size in x-direction is not the largest")
+  enddo
+  do j = 1, njblock-1
+    if (jend(j)-jbegin(j) > jend(njblock)-jbegin(njblock) ) call MOM_error(FATAL, &
+       "MOM_grid_init: the last block size in y-direction is not the largest")
+  enddo
+
+  !-- make sure
+
+  !--- define the block memory domain ( maximum data domain size of all blocks )
+  G%isd_bk  = G%block(nblocks)%isd  ; G%ied_bk  = G%block(nblocks)%ied
+  G%jsd_bk  = G%block(nblocks)%jsd  ; G%jed_bk  = G%block(nblocks)%jed
+  G%isdB_bk = G%block(nblocks)%isdB ; G%iedB_bk = G%block(nblocks)%iedB
+  G%jsdB_bk = G%block(nblocks)%jsdB ; G%jedB_bk = G%block(nblocks)%jedB
+
+  !-- do some bound check
+  if ( G%ied_bk+G%block(nblocks)%ioff > G%ied ) call MOM_error(FATAL, &
+       "MOM_grid_init: G%ied_bk+G%block(nblocks)%ioff > G%ied")
+  if ( G%jed_bk+G%block(nblocks)%joff > G%jed ) call MOM_error(FATAL, &
+       "MOM_grid_init: G%jed_bk+G%block(nblocks)%joff > G%jed")
+
+  !--- For static memory, make sure G%iem_bk - G%ism_bk + 1 = NI_MEM_BK_
+  !---                         and  G%jem_bk - G%jsm_bk + 1 = NJ_MEM_BK_
+#ifdef STATIC_MEMORY_
+  if ( (G%ied_bk-G%isd_bk+1) .NE. NIMEM_BK_ ) call MOM_error(FATAL, &
+       "MOM_grid_init:  (G%ied_bk-G%isd_bk+1) .NE. NIMEM_BK_ for static memory ")
+  if ( (G%jed_bk-G%jsd_bk+1) .NE. NJMEM_BK_ ) call MOM_error(FATAL, &
+       "MOM_grid_init:  (G%jed_bk-G%jsd_bk+1) .NE. NJMEM_BK_ for static memory ")
+#endif
 
 ! Log derivative values.
   call log_param(param_file, "MOM_grid", "M to THICKNESS", G%m_to_H)

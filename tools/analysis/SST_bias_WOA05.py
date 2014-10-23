@@ -17,28 +17,34 @@ parser.add_argument('-w','--woa', type=str, required=True,
   help='''File containing WOA (or obs) data to compare against.''')
 cmdLineArgs = parser.parse_args()
 
-rootGroup = netCDF4.Dataset( cmdLineArgs.annual_file )
-if 'temp' not in rootGroup.variables: raise Exception('Could not find "temp" in file "%s"'%(cmdLineArgs.annual_file))
-
 x = netCDF4.Dataset(cmdLineArgs.gridspecdir+'/ocean_hgrid.nc').variables['x'][::2,::2]
 y = netCDF4.Dataset(cmdLineArgs.gridspecdir+'/ocean_hgrid.nc').variables['y'][::2,::2]
 msk = netCDF4.Dataset(cmdLineArgs.gridspecdir+'/ocean_mask.nc').variables['mask'][:]
 area = msk*netCDF4.Dataset(cmdLineArgs.gridspecdir+'/ocean_hgrid.nc').variables['area'][:,:].reshape([msk.shape[0], 2, msk.shape[1], 2]).sum(axis=-3).sum(axis=-1)
 msk = numpy.ma.array(msk, mask=(msk==0))
 
-Tobs = netCDF4.Dataset( cmdLineArgs.woa ).variables['temp'][0]
+Tobs = netCDF4.Dataset( cmdLineArgs.woa )
+if 'temp' in Tobs.variables: Tobs = Tobs.variables['temp']
+elif 'ptemp' in Tobs.variables: Tobs = Tobs.variables['ptemp']
+else: raise Exception('Could not find "temp" or "ptemp" in file "%s"'%(cmdLineArgs.woa))
+if len(Tobs.shape)==3: Tobs = Tobs[0]
+else: Tobs = Tobs[:,0].mean(axis=0)
 
-variable = rootGroup.variables['temp']
-if variable.shape[0]>1: temp = variable[:,0].mean(axis=0)
-else: temp = variable[0,0]
+rootGroup = netCDF4.Dataset( cmdLineArgs.annual_file )
+if 'temp' in rootGroup.variables: varName = 'temp'
+elif 'ptemp' in rootGroup.variables: varName = 'ptemp'
+elif 'thetao' in rootGroup.variables: varName = 'thetao'
+else: raise Exception('Could not find "temp", "ptemp" or "thetao" in file "%s"'%(cmdLineArgs.annual_file))
+if rootGroup.variables[varName].shape[0]>1: salt = rootGroup.variables[varName][:,0].mean(axis=0)
+else: Tmod = rootGroup.variables[varName][0,0]
 
 ci=m6plot.pmCI(0.25,4.5,.5)
-m6plot.xyplot( temp - Tobs , x, y, area=area,
+m6plot.xyplot( Tmod - Tobs , x, y, area=area,
       suptitle=rootGroup.title+' '+cmdLineArgs.label, title='SST bias (w.r.t. WOA\'05) [$\degree$C]',
       clim=ci, colormap='dunnePM', centerlabels=True, extend='both',
       save=cmdLineArgs.outdir+'/SST_bias_WOA05.png')
 
-m6plot.xycompare( temp, Tobs , x, y, area=area,
+m6plot.xycompare( Tmod, Tobs , x, y, area=area,
       suptitle=rootGroup.title+' '+cmdLineArgs.label,
       title1='SST [$\degree$C]',
       title2='WOA\'05 SST [$\degree$C]',

@@ -41,6 +41,26 @@
 #  define SZJB_(G)    NJMEMB_
 #  define SZIBS_(G)   0:NIMEM_
 #  define SZJBS_(G)   0:NJMEM_
+! These macros are for block structure.
+#  ifndef NIBLOCK_
+#    define NIBLOCK_ 1
+#  endif
+#  ifndef NJBLOCK_
+#    define NJBLOCK_ 1
+#  endif
+#  define NIMEM_BK_ ((((NIGLOBAL_-1)/NIPROC_)/NIBLOCK_)+1+2*NIHALO_)
+#  define NJMEM_BK_ ((((NJGLOBAL_-1)/NJPROC_)/NJBLOCK_)+1+2*NJHALO_)
+#  ifdef SYMMETRIC_MEMORY_
+#    define NIMEMB_BK_   0:NIMEM_BK_
+#    define NJMEMB_BK_   0:NJMEM_BK_
+#  else
+#    define NIMEMB_BK_   NIMEM_BK_
+#    define NJMEMB_BK_   NJMEM_BK_
+#  endif
+#  define SZI_BK_(G)     NIMEM_BK_
+#  define SZJ_BK_(G)     NJMEM_BK_
+#  define SZIB_BK_(G)    NIMEMB_BK_
+#  define SZJB_BK_(G)    NJMEMB_BK_
 
 #else
 ! Dynamic memory allocation
@@ -78,4 +98,18 @@
 #  define SZIBS_(G)   G%isd-1:G%ied
 #  define SZJBS_(G)   G%jsd-1:G%jed
 
+! These macros are for block structure.
+#  define NIMEM_BK_       :
+#  define NJMEM_BK_       :
+#  ifdef SYMMETRIC_MEMORY_
+#    define NIMEMB_BK_   0:
+#    define NJMEMB_BK_   0:
+#  else
+#    define NIMEMB_BK_   :
+#    define NJMEMB_BK_  :
+#  endif
+#  define SZI_BK_(G)     G%isd_bk:G%ied_bk
+#  define SZJ_BK_(G)     G%jsd_bk:G%jed_bk
+#  define SZIB_BK_(G)    G%isdB_bk:G%iedB_bk
+#  define SZJB_BK_(G)    G%jsdB_bk:G%jedB_bk
 #endif

@@ -71,10 +71,6 @@ THICKNESSDIFFUSE = True         !   [Boolean] default = False
 THICKNESSDIFFUSE_FIRST = True   !   [Boolean] default = False
                                 ! If true, do thickness diffusion before dynamics.
                                 ! This is only used if THICKNESSDIFFUSE is true.
-MIXEDLAYER_RESTRAT = True       !   [Boolean] default = False
-                                ! If true, a density-gradient dependent re-stratifying
-                                ! flow is imposed in the mixed layer.
-                                ! This is only used if BULKMIXEDLAYER is true.
 DT = 3600.0                     !   [s]
                                 ! The (baroclinic) dynamics time step.  The time-step that
                                 ! is actually used will be an integer fraction of the
@@ -210,6 +206,7 @@ THICKNESS_CONFIG = "file"       !
                                 !     adjustment2d - TBD AJA.
                                 !     sloshing - TBD AJA.
                                 !     seamount - TBD AJA.
+                                !     rossby_front - a mixed layer front in thermal wind balance.
                                 !     USER - call a user modified routine.
 THICKNESS_FILE = "GOLD_IC.2010.11.15.nc" !
                                 ! The name of the thickness file.
@@ -232,11 +229,20 @@ TS_CONFIG = "file"              !
                                 !     adjustment2d - TBD AJA.
                                 !     sloshing - TBD AJA.
                                 !     seamount - TBD AJA.
+                                !     rossby_front - a mixed layer front in thermal wind balance.
                                 !     USER - call a user modified routine.
 TS_FILE = "GOLD_IC.2010.11.15.nc" !
                                 ! The initial condition file for temperature.
 
 ! === module MOM_MEKE ===
+USE_MEKE = True                 !   [Boolean] default = False
+                                ! If true, turns on the MEKE scheme which calculates
+                                ! a sub-grid mesoscale eddy kinetic energy budget.
+MEKE_GMCOEFF = 1.0              !   [nondim] default = -1.0
+                                ! The efficiency of the conversion of potential energy
+                                ! into MEKE by the thickness mixing parameterization.
+                                ! If MEKE_GMCOEFF is negative, this conversion is not
+                                ! used or calculated.
 
 ! === module MOM_lateral_mixing_coeffs ===
 USE_VARIABLE_MIXING = True      !   [Boolean] default = False
@@ -350,9 +356,6 @@ MAXVEL = 6.0                    !   [m s-1] default = 3.0E+08
 ! === module MOM_PointAccel ===
 
 ! === module MOM_set_visc ===
-USE_JACKSON_PARAM = True        !   [Boolean] default = False
-                                ! If true, use the Jackson-Hallberg-Legg (JPO 2008)
-                                ! shear mixing parameterization.
 ML_USE_OMEGA = True             !   [Boolean] default = False
                                 ! If true, use the absolute rotation rate instead of the
                                 ! vertical component of rotation when setting the decay
@@ -427,6 +430,10 @@ KHTH_MAX = 900.0                !   [m2 s-1] default = 0.0
                                 ! The maximum horizontal thickness diffusivity.
 
 ! === module MOM_mixed_layer_restrat ===
+MIXEDLAYER_RESTRAT = True       !   [Boolean] default = False
+                                ! If true, a density-gradient dependent re-stratifying
+                                ! flow is imposed in the mixed layer.
+                                ! This is only used if BULKMIXEDLAYER is true.
 FOX_KEMPER_ML_RESTRAT_COEF = 20.0 !   [nondim] default = 0.0
                                 ! A nondimensional coefficient that is proportional to
                                 ! the ratio of the deformation radius to the dominant
@@ -506,6 +513,15 @@ H2_FILE = "sgs_h2.nc"           !
                                 ! The path to the file containing the sub-grid-scale
                                 ! topographic roughness amplitude with INT_TIDE_DISSIPATION.
 
+! === module MOM_kappa_shear ===
+! Parameterization of shear-driven turbulence following Jackson, Hallberg and Legg, JPO 2008
+USE_JACKSON_PARAM = True        !   [Boolean] default = False
+                                ! If true, use the Jackson-Hallberg-Legg (JPO 2008)
+                                ! shear mixing parameterization.
+MAX_RINO_IT = 25                !   [nondim] default = 50
+                                ! The maximum number of iterations that may be used to
+                                ! estimate the Richardson number driven mixing.
+
 ! === module MOM_KPP ===
 ! This is the MOM wrapper to CVmix:KPP
 ! See http://code.google.com/p/cvmix/
@@ -533,11 +549,6 @@ GEOTHERMAL_SCALE = 0.001        !   [W m-2 or various] default = 0.0
 GEOTHERMAL_FILE = "geothermal_heating_cm2g.nc" ! default = ""
                                 ! The file from which the geothermal heating is to be
                                 ! read, or blank to use a constant heating rate.
-
-! === module MOM_kappa_shear ===
-MAX_RINO_IT = 25                !   [nondim] default = 50
-                                ! The maximum number of iterations that may be used to
-                                ! estimate the Richardson number driven mixing.
 
 ! === module MOM_mixed_layer ===
 BULK_RI_ML = 0.05               !   [nondim]
@@ -705,7 +716,7 @@ DAYMAX = 2.0                    !   [days]
                                 ! The final time of the whole simulation, in units of
                                 ! TIMEUNIT seconds.  This also sets the potential end
                                 ! time of the present run segment if the end time is
-                                ! not set (as it was here) via ocean_solo_nml in input.nml.
+                                ! not set via ocean_solo_nml in input.nml.
 RESTART_CONTROL = 3             ! default = 1
                                 ! An integer whose bits encode which restart files are
                                 ! written. Add 2 (bit 1) for a time-stamped file, and odd

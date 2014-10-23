@@ -3,7 +3,6 @@
 import netCDF4
 import numpy
 import m6plot
-import matplotlib.pyplot as plt
 
 try: import argparse
 except: raise Exception('This version of python is not new enough. python 2.7 or newer is required.')
@@ -18,28 +17,31 @@ parser.add_argument('-w','--woa', type=str, required=True,
   help='''File containing WOA (or obs) data to compare against.''')
 cmdLineArgs = parser.parse_args()
 
-rootGroup = netCDF4.Dataset( cmdLineArgs.annual_file )
-if 'temp' not in rootGroup.variables: raise Exception('Could not find "temp" in file "%s"'%(cmdLineArgs.annual_file))
-
 y = netCDF4.Dataset(cmdLineArgs.gridspecdir+'/ocean_hgrid.nc').variables['y'][1::2,1::2].max(axis=-1)
 msk = netCDF4.Dataset(cmdLineArgs.gridspecdir+'/ocean_mask.nc').variables['mask'][:]
 area = msk*netCDF4.Dataset(cmdLineArgs.gridspecdir+'/ocean_hgrid.nc').variables['area'][:,:].reshape([msk.shape[0], 2, msk.shape[1], 2]).sum(axis=-3).sum(axis=-1)
 basin = netCDF4.Dataset(cmdLineArgs.gridspecdir+'/basin_codes.nc').variables['basin'][:]
 
+Tobs = netCDF4.Dataset( cmdLineArgs.woa )
+if 'temp' in Tobs.variables: Tobs = Tobs.variables['temp']
+else: Tobs = Tobs.variables['ptemp']
+if len(Tobs.shape)==3: Tobs = Tobs[:]
+else: Tobs = Tobs[:].mean(axis=0)
+Zobs = netCDF4.Dataset( cmdLineArgs.woa ).variables['eta'][:]
+
+rootGroup = netCDF4.Dataset( cmdLineArgs.annual_file )
+if 'temp' in rootGroup.variables: varName = 'temp'
+elif 'ptemp' in rootGroup.variables: varName = 'ptemp'
+elif 'thetao' in rootGroup.variables: varName = 'thetao'
+else: raise Exception('Could not find "temp", "ptemp" or "thetao" in file "%s"'%(cmdLineArgs.annual_file))
+if len(rootGroup.variables[varName].shape)==4: Tmod = rootGroup.variables[varName][:].mean(axis=0)
+else: Tmod = rootGroup.variables[varName][:]
+if 'e' in rootGroup.variables: Zmod = rootGroup.variables['e'][0]
+else: Zmod = Zobs # Using model z-ou:put
+
 def zonalAverage(T, eta, area, mask=1.):
   vols = ( mask * area ) * ( eta[:-1] - eta[1:] ) # mask * area * level thicknesses
   return numpy.sum( vols * T, axis=-1 ) / numpy.sum( vols, axis=-1 ), (mask*eta).min(axis=-1)
-
-Tobs = netCDF4.Dataset( cmdLineArgs.woa ).variables['temp'][:]
-Zobs = netCDF4.Dataset( cmdLineArgs.woa ).variables['eta'][:]
-
-variable = rootGroup.variables['temp']
-if variable.shape[0]>1:
-  Tmod = variable[:,:].mean(axis=0)
-  Zmod = rootGroup.variables['e'][0]
-else:
-  Tmod = variable[0]
-  Zmod = rootGroup.variables['e'][0]
 
 ci=m6plot.pmCI(0.25,4.5,.5)
 

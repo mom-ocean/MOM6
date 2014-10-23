@@ -47,12 +47,12 @@ GOLD_SIS
 #
 # Z-space fields:
 #==================
-"ocean_model","u_z","u","ocean_day_z","all",.true.,"none",2
-"ocean_model","v_z","v","ocean_day_z","all",.true.,"none",2
-"ocean_model","temp_z","temp","ocean_day_z","all",.true.,"none",2
-"ocean_model","salt_z","salt","ocean_day_z","all",.true.,"none",2
-#"ocean_model","vintage_z","vintage","ocean_day_z","all",.true.,"none",2
-"ocean_model","age_z","age","ocean_day_z","all",.true.,"none",2
+"ocean_model_z","u","u","ocean_day_z","all",.true.,"none",2
+"ocean_model_z","v","v","ocean_day_z","all",.true.,"none",2
+"ocean_model_z","temp","temp","ocean_day_z","all",.true.,"none",2
+"ocean_model_z","salt","salt","ocean_day_z","all",.true.,"none",2
+#"ocean_model_z","vintage","vintage","ocean_day_z","all",.true.,"none",2
+"ocean_model_z","age","age","ocean_day_z","all",.true.,"none",2
 
 # Continuity Equation Terms:
 #===========================

@@ -226,8 +226,6 @@
  &fms_io_nml
          fms_netcdf_restart=.true.
          threading_read='multi'
-         threading_write='single'
-         fileset_write='single'
 /
 
  &fms_nml
@@ -261,10 +259,6 @@
        do_calcstdn2otfs = .true.,
        do_writestdn2otfs= .false.,
        do_readstdn2otfs = .false.
-/
-
- &horiz_interp_nml
-      reproduce_siena=.true.
 /
 
  &ice_albedo_nml

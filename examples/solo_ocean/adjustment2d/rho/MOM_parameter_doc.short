@@ -276,9 +276,6 @@ REMAPPING_SCHEME = "PPM_IH4"    ! default = "PLM"
                                 ! PQM_IH6IH5  (5th-order accurate)
 
 ! === module MOM_MEKE ===
-CDRAG = 0.0                     !   [nondim] default = 0.003
-                                ! CDRAG is the drag coefficient relating the magnitude of
-                                ! the velocity field to the bottom stress.
 
 ! === module MOM_lateral_mixing_coeffs ===
 ETA_TOLERANCE = 1.0E-12         !   [m] default = 1.25E-14
@@ -350,6 +347,10 @@ MAXVEL = 10.0                   !   [m s-1] default = 3.0E+08
 ! === module MOM_PointAccel ===
 
 ! === module MOM_set_visc ===
+CDRAG = 0.0                     !   [nondim] default = 0.003
+                                ! CDRAG is the drag coefficient relating the magnitude of
+                                ! the velocity field to the bottom stress. CDRAG is only
+                                ! used if BOTTOMDRAGLAW is defined.
 BBL_THICK_MIN = 0.01            !   [m] default = 0.0
                                 ! The minimum bottom boundary layer thickness that can be
                                 ! used with BOTTOMDRAGLAW. This might be

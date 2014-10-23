@@ -28,7 +28,7 @@ module MOM_diag_mediator
 !********+*********+*********+*********+*********+*********+*********+**
 
 use MOM_coms, only : PE_here
-use MOM_error_handler, only : MOM_error, FATAL, is_root_pe
+use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : vardesc
@@ -611,7 +611,7 @@ end function get_diag_time_end
 function register_diag_field(module_name, field_name, axes, init_time,         &
      long_name, units, missing_value, range, mask_variant, standard_name,      &
      verbose, do_not_log, err_msg, interp_method, tile_count, cmor_field_name, &
-     cmor_long_name, cmor_units, cmor_standard_name)
+     cmor_long_name, cmor_units, cmor_standard_name, available)
   integer :: register_diag_field
   character(len=*), intent(in) :: module_name, field_name
   type(axesType),   intent(in) :: axes
@@ -624,6 +624,7 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
   integer,          optional, intent(in) :: tile_count
   character(len=*), optional, intent(in) :: cmor_field_name, cmor_long_name
   character(len=*), optional, intent(in) :: cmor_units, cmor_standard_name
+  logical,          optional, intent(in) :: available
   ! Output:    An integer handle for a diagnostic array.
   ! Arguments: module_name - The name of this module, usually "ocean_model" or "ice_shelf_model".
   !  (in)      field_name - The name of the diagnostic field.
@@ -651,7 +652,8 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
   register_diag_field = register_diag_field_low(module_name, field_name, axes, init_time,        &
      long_name=long_name, units=units, missing_value=missing_value, range=range,                 &
      mask_variant=mask_variant, standard_name=standard_name, verbose=verbose,                    &
-     do_not_log=do_not_log, err_msg=err_msg, interp_method=interp_method, tile_count=tile_count)
+     do_not_log=do_not_log, err_msg=err_msg, interp_method=interp_method, tile_count=tile_count, &
+     available=available)
 
   diag => axes%diag
   CMORid = -1
@@ -676,7 +678,7 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
       long_name=trim(posted_cmor_long_name), units=trim(posted_cmor_units),                    &
       missing_value=missing_value, range=range, mask_variant=mask_variant,                     &
       standard_name=trim(posted_cmor_standard_name), verbose=verbose, do_not_log=do_not_log,   &
-      err_msg=err_msg, interp_method=interp_method, tile_count=tile_count)
+      err_msg=err_msg, interp_method=interp_method, tile_count=tile_count, available=available)
   endif
 
   ! If the diag_table contains both the normal field_name and CMOR name then we must
@@ -692,7 +694,7 @@ end function register_diag_field
 
 function register_diag_field_low(module_name, field_name, axes, init_time, &
      long_name, units, missing_value, range, mask_variant, standard_name, &
-     verbose, do_not_log, err_msg, interp_method, tile_count)
+     verbose, do_not_log, err_msg, interp_method, tile_count, available)
   integer :: register_diag_field_low
   character(len=*), intent(in) :: module_name, field_name
   type(axesType),   intent(in) :: axes
@@ -703,6 +705,7 @@ function register_diag_field_low(module_name, field_name, axes, init_time, &
   character(len=*), optional, intent(out):: err_msg
   character(len=*), optional, intent(in) :: interp_method
   integer,          optional, intent(in) :: tile_count
+  logical,          optional, intent(in) :: available
   ! Output:    An integer handle for a diagnostic array.
   ! Arguments: module_name - The name of this module, usually "ocean_model" or "ice_shelf_model".
   !  (in)      field_name - The name of the diagnostic field.
@@ -722,6 +725,10 @@ function register_diag_field_low(module_name, field_name, axes, init_time, &
   character(len=240) :: mesg
   real :: MOM_missing_value
   type(diag_ctrl), pointer :: diag
+  logical :: unavailable
+
+  unavailable = .false.
+  if (present(available)) unavailable = .not. available
 
   MOM_missing_value = axes%diag%missing_value
   if(present(missing_value)) MOM_missing_value = missing_value
@@ -732,6 +739,17 @@ function register_diag_field_low(module_name, field_name, axes, init_time, &
        verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
        interp_method=interp_method, tile_count=tile_count)
 
+  ! Catch requests for diagnostics that are unavailable with this configuration
+  if (unavailable) then
+    if (register_diag_field_low>0) then
+      register_diag_field_low = -1
+      call MOM_error(WARNING,'register_diag_field: Variable "'//trim(field_name)// &
+                             '" is not available in this MOM6 configuration!')
+    endif
+    return ! Do nothing else in this function
+  endif
+
+  ! Document in a list of available diagnostics
   if (is_root_pe() .and. doc_unit > 0) then
      if (register_diag_field_low > 0) then
         mesg = '"'//trim(module_name)//'", "'//trim(field_name)//'"  [Used]'

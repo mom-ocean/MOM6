@@ -210,6 +210,8 @@
 "ocean_model","tauy","tauy",                                    "forcing","all",.true.,"none",2
 "ocean_model","ustar","ustar",                                  "forcing","all",.true.,"none",2
 "ocean_model","PRCmE","PRCmE",                                  "forcing","all",.true.,"none",2
+"ocean_model","net_massin","net_massin",                        "forcing","all",.true.,"none",2
+"ocean_model","net_massout","net_massout",                      "forcing","all",.true.,"none",2
 "ocean_model","lrunoff","lrunoff",                              "forcing","all",.true.,"none",2
 "ocean_model","frunoff","frunoff",                              "forcing","all",.true.,"none",2
 "ocean_model","lprec","lprec",                                  "forcing","all",.true.,"none",2
@@ -224,6 +226,7 @@
 "ocean_model","p_surf","p_surf",                                "forcing","all",.true.,"none",2
 "ocean_model","salt_flux","salt_flux",                          "forcing","all",.true.,"none",2
 "ocean_model","Heat_PmE","Heat_PmE",                            "forcing","all",.true.,"none",2
+"ocean_model","frazil","frazil",                                "forcing","all",.true.,"none",2
 "ocean_model","heat_content_cond","heat_content_cond",          "forcing","all",.true.,"none",2
 "ocean_model","heat_content_lprec","heat_content_lprec",        "forcing","all",.true.,"none",2
 "ocean_model","heat_content_fprec","heat_content_fprec",        "forcing","all",.true.,"none",2
@@ -249,7 +252,6 @@
 "ocean_model","rlds","rlds","cmor","all",.true.,"none",2        	       	# GFDL Name: LW
 "ocean_model","hfss","hfss","cmor","all",.true.,"none",2               		# GFDL Name: sensible
 "ocean_model","sfdsi","sfdsi","cmor","all",.true.,"none",2               	# GFDL Name: salt_flux
-"ocean_model","masscello","masscello","cmor","all",.true.,"none",2              # GFDL Name: mass_wt
 "ocean_model","uo","uo","cmor","all",.true.,"none",2				# GFDL Name: u
 "ocean_model","vo","vo","cmor","all",.true.,"none",2				# GFDL Name: v
 "ocean_model","so","so","cmor","all",.true.,"none",2				# GFDL Name: salt

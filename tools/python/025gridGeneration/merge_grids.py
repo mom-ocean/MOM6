@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 
 from midas import *
+import netCDF4 as nc
+import numpy as np
 
 f=nc.Dataset('scap_supergrid.nc')
 f2=nc.Dataset('antarctic_spherical_supergrid.nc')

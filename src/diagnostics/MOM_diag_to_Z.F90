@@ -800,11 +800,11 @@ subroutine register_Z_tracer_low(tr_ptr, name, long_name, units, standard_name, 
 
   CS%missing_tr(m) = CS%missing_value ! This could be changed later, if desired.
   if (CS%nk_zspace > 0) then
-    CS%id_tr(m) = register_diag_field('ocean_model', name, CS%axesTz, Time, &
+    CS%id_tr(m) = register_diag_field('ocean_model_z', name, CS%axesTz, Time, &
                                       long_name, units, missing_value=CS%missing_tr(m), &
                                       standard_name=standard_name)
   else
-    id_test = register_diag_field('ocean_model', name, CS%diag%axesT1, Time, &
+    id_test = register_diag_field('ocean_model_z', name, CS%diag%axesT1, Time, &
                                   long_name, units, missing_value=CS%missing_tr(m),     &
                                   standard_name=standard_name)
     if (id_test>0) call MOM_error(WARNING, &
@@ -888,24 +888,24 @@ subroutine MOM_diag_to_Z_init(Time, G, param_file, diag, CS)
     call defineAxes(diag, (/ diag%axesCu1%handles(1), diag%axesCu1%handles(2), zint_axis /), CS%axesCuzi)
     call defineAxes(diag, (/ diag%axesCv1%handles(1), diag%axesCv1%handles(2), zint_axis /), CS%axesCvzi)
 
-    CS%id_u_z = register_diag_field('ocean_model', 'u_z', CS%axesCuz, Time, &
+    CS%id_u_z = register_diag_field('ocean_model_z', 'u', CS%axesCuz, Time, &
         'Zonal Velocity in Depth Space', 'meter second-1', &
-        missing_value=CS%missing_vel, cmor_field_name='uo_z', cmor_units='m s-1', &
+        missing_value=CS%missing_vel, cmor_field_name='uo', cmor_units='m s-1', &
         cmor_standard_name='sea_water_x_velocity', cmor_long_name='Sea Water X Velocity')
     if (CS%id_u_z>0) call safe_alloc_ptr(CS%u_z,IsdB,IedB,jsd,jed,CS%nk_zspace)
 
-    CS%id_v_z = register_diag_field('ocean_model', 'v_z', CS%axesCvz, Time, &
+    CS%id_v_z = register_diag_field('ocean_model_z', 'v', CS%axesCvz, Time, &
         'Meridional Velocity in Depth Space', 'meter second-1', &
-        missing_value=CS%missing_vel, cmor_field_name='vo_z', cmor_units='m s-1', &
+        missing_value=CS%missing_vel, cmor_field_name='vo', cmor_units='m s-1', &
         cmor_standard_name='sea_water_y_velocity', cmor_long_name='Sea Water Y Velocity')
     if (CS%id_v_z>0) call safe_alloc_ptr(CS%v_z,isd,ied,JsdB,JedB,CS%nk_zspace)
 
-    CS%id_uh_z = register_diag_field('ocean_model', 'uh_z', CS%axesCuz, Time, &
+    CS%id_uh_z = register_diag_field('ocean_model_z', 'uh', CS%axesCuz, Time, &
         'Zonal Volume Transport in Depth Space', flux_units, &
         missing_value=CS%missing_trans)
     if (CS%id_uh_z>0) call safe_alloc_ptr(CS%uh_z,IsdB,IedB,jsd,jed,CS%nk_zspace)
 
-    CS%id_vh_z = register_diag_field('ocean_model', 'vh_z', CS%axesCvz, Time, &
+    CS%id_vh_z = register_diag_field('ocean_model_z', 'vh', CS%axesCvz, Time, &
         'Meridional Volume Transport in Depth Space', flux_units, &
         missing_value=CS%missing_trans)
     if (CS%id_vh_z>0) call safe_alloc_ptr(CS%vh_z,isd,ied,JsdB,JedB,CS%nk_zspace)
@@ -913,28 +913,28 @@ subroutine MOM_diag_to_Z_init(Time, G, param_file, diag, CS)
   else
     ! Check whether the diag-table is requesting any z-space files, and issue
     ! a warning if it is.
-    id_test = register_diag_field('ocean_model', 'u_z', diag%axesCu1, Time, &
+    id_test = register_diag_field('ocean_model_z', 'u', diag%axesCu1, Time, &
         'Zonal Velocity in Depth Space', 'meter second-1')
     if (id_test>0) call MOM_error(WARNING, &
-        "MOM_diag_to_Z_init: u_z cannot be output without "//&
+        "MOM_diag_to_Z_init: u cannot be output without "//&
         "an appropriate depth-space target file.")
 
-    id_test = register_diag_field('ocean_model', 'v_z', diag%axesCv1, Time, &
+    id_test = register_diag_field('ocean_model_z', 'v', diag%axesCv1, Time, &
         'Meridional Velocity in Depth Space', 'meter second-1')
     if (id_test>0) call MOM_error(WARNING, &
-        "MOM_diag_to_Z_init: v_z cannot be output without "//&
+        "MOM_diag_to_Z_init: v cannot be output without "//&
         "an appropriate depth-space target file.")
 
-    id_test = register_diag_field('ocean_model', 'uh_z', diag%axesCu1, Time, &
+    id_test = register_diag_field('ocean_model_z', 'uh', diag%axesCu1, Time, &
         'Meridional Volume Transport in Depth Space', flux_units)
     if (id_test>0) call MOM_error(WARNING, &
-        "MOM_diag_to_Z_init: uh_z cannot be output without "//&
+        "MOM_diag_to_Z_init: uh cannot be output without "//&
         "an appropriate depth-space target file.")
 
-    id_test = register_diag_field('ocean_model', 'vh_z', diag%axesCv1, Time, &
+    id_test = register_diag_field('ocean_model_z', 'vh', diag%axesCv1, Time, &
         'Meridional Volume Transport in Depth Space', flux_units)
     if (id_test>0) call MOM_error(WARNING, &
-        "MOM_diag_to_Z_init: vh_z cannot be output without "//&
+        "MOM_diag_to_Z_init: vh cannot be output without "//&
         "an appropriate depth-space target file.")
   endif
 
@@ -1100,7 +1100,7 @@ function ocean_register_diag_with_z (tr_ptr, vardesc_tr, G, Time, CS)
 ! Copy the layer tracer variable descriptor to a z-tracer descriptor
 ! Change the name and layer information.
   vardesc_z = vardesc_tr
-  vardesc_z%name = trim(vardesc_tr%name)//"_z"
+  vardesc_z%name = trim(vardesc_tr%name)
   vardesc_z%z_grid = "z"
   m = CS%num_tr_used + 1
   CS%missing_tr(m) = CS%missing_value ! This could be changed later, if desired.
@@ -1168,7 +1168,7 @@ function register_Z_diag(var_desc, CS, day, missing)
           "register_Z_diag: unknown z_grid component "//trim(var_desc%z_grid))
   end select
 
-  register_Z_diag = register_diag_field("ocean_model", trim(var_desc%name), axes, &
+  register_Z_diag = register_diag_field("ocean_model_z", trim(var_desc%name), axes, &
         day, trim(var_desc%longname), trim(var_desc%units), missing_value=missing)
 
 end function register_Z_diag
@@ -1200,7 +1200,7 @@ function register_Zint_diag(var_desc, CS, day)
         "register_Z_diag: unknown hor_grid component "//trim(var_desc%hor_grid))
   end select
 
-  register_Zint_diag = register_diag_field("ocean_model", trim(var_desc%name), &
+  register_Zint_diag = register_diag_field("ocean_model_z", trim(var_desc%name), &
         axes, day, trim(var_desc%longname), trim(var_desc%units), &
         missing_value=CS%missing_value)
 

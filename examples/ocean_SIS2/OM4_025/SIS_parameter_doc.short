@@ -1,0 +1,90 @@
+CGRID_ICE_DYNAMICS = True       !   [Boolean] default = False
+                                ! If true, use a C-grid discretization of the sea-ice
+                                ! dynamics; if false use a B-grid discretization.
+ICE_BULK_SALINITY = 5.0         !   [g/kg] default = 4.0
+                                ! The fixed bulk salinity of sea ice.
+DO_ICEBERGS = True              !   [Boolean] default = False
+                                ! If true, call the iceberg module.
+ICE_STATS_INTERVAL = 0.25       !   [days] default = 1.0
+                                ! The interval in units of TIMEUNIT between writes of the
+                                ! globally summed ice statistics and conservation checks.
+TRIPOLAR_N = True               !   [Boolean] default = False
+                                ! Use tripolar connectivity at the northern edge of the
+                                ! domain.  With TRIPOLAR_N, NIGLOBAL must be even.
+!SYMMETRIC_MEMORY_ = False      !   [Boolean]
+                                ! If defined, the velocity point data domain includes
+                                ! every face of the thickness points. In other words,
+                                ! some arrays are larger than others, depending on where
+                                ! they are on the staggered grid.  Also, the starting
+                                ! index of the velocity-point arrays is usually 0, not 1.
+                                ! This can only be set at compile time.
+!STATIC_MEMORY_ = False         !   [Boolean]
+                                ! If STATIC_MEMORY_ is defined, the principle variables
+                                ! will have sizes that are statically determined at
+                                ! compile time.  Otherwise the sizes are not determined
+                                ! until run time. The STATIC option is substantially
+                                ! faster, but does not allow the PE count to be changed
+                                ! at run time.  This can only be set at compile time.
+NIGLOBAL = 1440                 !
+                                ! The total number of thickness grid points in the
+                                ! x-direction in the physical domain. With STATIC_MEMORY_
+                                ! this is set in SIS2_memory.h at compile time.
+NJGLOBAL = 1080                 !
+                                ! The total number of thickness grid points in the
+                                ! y-direction in the physical domain. With STATIC_MEMORY_
+                                ! this is set in SIS2_memory.h at compile time.
+MASKTABLE = "mask_table.96.32x18" ! default = "MOM_mask_table"
+                                ! A text file to specify n_mask, layout and mask_list.
+                                ! This feature masks out processors that contain only land points.
+                                ! The first line of mask_table is the number of regions to be masked out.
+                                ! The second line is the layout of the model and must be
+                                ! consistent with the actual model layout.
+                                ! The following (n_mask) lines give the logical positions
+                                ! of the processors that are masked out. The mask_table
+                                ! can be created by tools like check_mask. The
+                                ! following example of mask_table masks out 2 processors,
+                                ! (1,2) and (3,6), out of the 24 in a 4x6 layout:
+                                !  2
+                                !  4,6
+                                !  1,2
+                                !  3,6
+LAYOUT = 32, 18                 ! default = 0
+                                ! The processor layout to be used, or 0, 0 to automatically
+                                ! set the layout based on the number of processors.
+!NIPROC = 32                    !
+                                ! The number of processors in the x-direction. With
+                                ! STATIC_MEMORY_ this is set in SIS2_memory.h at compile time.
+!NJPROC = 18                    !
+                                ! The number of processors in the x-direction. With
+                                ! STATIC_MEMORY_ this is set in SIS2_memory.h at compile time.
+!LAYOUT = 32, 18                !
+                                ! The processor layout that was acutally used.
+IO_LAYOUT = 2, 2                ! default = 0
+                                ! The processor layout to be used, or 0,0 to automatically
+                                ! set the io_layout to be the same as the layout.
+GRID_FILE = "ocean_hgrid.nc"    !
+                                ! Name of the file from which to read horizontal grid data.
+GRID_CONFIG = "mosaic"          !
+                                ! The method for defining the horizontal grid.  Valid
+                                ! entries include:
+                                !    file - read the grid from GRID_FILE
+                                !    mosaic - read the grid from a mosaic grid file
+                                !    cartesian - a Cartesian grid
+                                !    spherical - a spherical grid
+                                !    mercator  - a Mercator grid
+NSTEPS_DYN = 72                 ! default = 432
+                                ! The number of iterations in the EVP dynamics for each
+                                ! slow time step.
+ICE_TDAMP_ELASTIC = 1000.0      !   [s] default = 0.0
+                                ! The damping timescale associated with the elastic terms
+                                ! in the sea-ice dynamics equations.
+
+! === module SIS_tracer_advect ===
+
+! === module SIS_tracer_registry ===
+
+! === module SIS_sum_output ===
+DOCUMENT_FILE = "SIS_parameter_doc" ! default = "MOM_parameter_doc"
+                                ! The basename for files where run-time parameters, their
+                                ! settings, units and defaults are documented. Blank will
+                                ! disable all parameter documentation.

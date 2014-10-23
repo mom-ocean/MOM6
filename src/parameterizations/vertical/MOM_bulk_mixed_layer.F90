@@ -146,6 +146,8 @@ type, public :: bulkmixedlayer_CS ; private
                              ! to set the heat carried by runoff, instead of 
                              ! using SST for temperature of liq_runoff
   logical :: use_calving_heat_content ! Use SST for temperature of froz_runoff
+  logical :: salt_reject_below_ML ! It true, add salt below mixed layer (layer mode only)
+
   type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
                              ! timing of diagnostic output.
   real    :: Allowed_T_chg   ! The amount by which temperature is allowed
@@ -1149,11 +1151,16 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,   &
         Rcv_tot(i) = Rcv_tot(i) + dRcv_dS(i)*h_evap*S(i,k)
         d_eb(i,k) = d_eb(i,k) - h_evap
 
+        ! smg: when resolve the A=B code, we will set 
+        ! heat_content_massout = heat_content_massout - T(i,k)*h_evap*G%H_to_kg_m2*fluxes%C_p*Idt
+        ! by uncommenting the lines here.  
+        ! we will also then completely remove TempXpme from the model. 
+!        if(ASSOCIATED(fluxes%heat_content_massout))                            &
+!           fluxes%heat_content_massout(i,j) = fluxes%heat_content_massout(i,j) &
+!           - T(i,k)*h_evap*G%H_to_kg_m2*fluxes%C_p*Idt
         if (ASSOCIATED(tv%TempxPmE)) tv%TempxPmE(i,j) = tv%TempxPmE(i,j) - &
                                       T(i,k)*h_evap*G%H_to_kg_m2
-        if(ASSOCIATED(fluxes%heat_content_massout))                            &
-           fluxes%heat_content_massout(i,j) = fluxes%heat_content_massout(i,j) &
-           - T(i,k)*h_evap*G%H_to_kg_m2*fluxes%C_p*Idt
+
       endif
 
       ! The following section calculates how much fluid will be entrained.
@@ -1611,7 +1618,7 @@ subroutine mechanical_entrainment(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
         EF4_val = EF4(htot(i)+h_neglect,h_avail,Idecay_len_TKE(i))
         TKE_full_ent = (exp_kh*TKE(i) - (h_avail*G%H_to_m)*(dRL*f1_kh + Pen_En_Contrib)) + &
             MKE_rate*dMKE*EF4_val
-        if ((TKE_full_ent > 0.0) .or. (h_avail+htot(i) <= Hmix_min)) then
+        if ((TKE_full_ent >= 0.0) .or. (h_avail+htot(i) <= Hmix_min)) then
           ! The layer will be fully entrained.
           h_ent = h_avail
 
@@ -1636,88 +1643,92 @@ subroutine mechanical_entrainment(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
 ! entrained is determined iteratively.  No further layers will be
 ! entrained.
           h_min = 0.0 ; h_max = h_avail
-          h_ent = h_avail * TKE(i) / (TKE(i) - TKE_full_ent)
+	  if (TKE(i) <= 0.0) then
+            h_ent = 0.0
+          else
+             h_ent = h_avail * TKE(i) / (TKE(i) - TKE_full_ent)
 
-          do itt=1,15
-! Evaluate the TKE that would remain if h_ent were entrained.
+             do itt=1,15
+	        ! Evaluate the TKE that would remain if h_ent were entrained.
 
-            kh = Idecay_len_TKE(i)*h_ent ; exp_kh = exp(-kh)
-            if (kh >= 2.0e-5) then
-              f1_kh = (1.0-exp_kh) / kh
-            else
-              f1_kh = (1.0 - kh*(0.5 - C1_6*kh))
-            endif
-
-
-            Pen_En_Contrib = 0.0 ; Pen_dTKE_dh_Contrib = 0.0
-            do n=1,nsw ; if (Pen_SW_bnd(n,i) > 0.0) then
-! Two different forms are used here to make sure that only negative
-! values are taken into exponentials to avoid excessively large
-! numbers.  They are, of course, mathematically identical.
-              opacity = opacity_band(n,i,k)
-              SW_trans = exp(-h_ent*opacity)
-              if (Idecay_len_TKE(i) > opacity) then
-                x1 = (Idecay_len_TKE(i) - opacity) * h_ent
-                if (x1 >= 2.0e-5) then
-                  e_x1 = exp(-x1) ; f1_x1 = ((1.0-e_x1)/(x1))
-                  f3_x1 = ((e_x1-(1.0-x1))/(x1*x1))
-                else
-                  f1_x1 = (1.0 - x1*(0.5 - C1_6*x1))
-                  f3_x1 = (0.5 - x1*(C1_6 - C1_24*x1))
+                kh = Idecay_len_TKE(i)*h_ent ; exp_kh = exp(-kh)
+             	if (kh >= 2.0e-5) then
+                   f1_kh = (1.0-exp_kh) / kh
+                else  
+                   f1_kh = (1.0 - kh*(0.5 - C1_6*kh))
                 endif
-                Pen_En1 = SW_trans * ((1.0+opacity*htot(i))*f1_x1 + &
+
+
+                Pen_En_Contrib = 0.0 ; Pen_dTKE_dh_Contrib = 0.0
+                do n=1,nsw ; if (Pen_SW_bnd(n,i) > 0.0) then
+	        ! Two different forms are used here to make sure that only negative
+	        ! values are taken into exponentials to avoid excessively large
+	        ! numbers.  They are, of course, mathematically identical.
+                   opacity = opacity_band(n,i,k)
+                   SW_trans = exp(-h_ent*opacity)
+                   if (Idecay_len_TKE(i) > opacity) then
+                      x1 = (Idecay_len_TKE(i) - opacity) * h_ent
+                      if (x1 >= 2.0e-5) then
+                         e_x1 = exp(-x1) ; f1_x1 = ((1.0-e_x1)/(x1))
+                         f3_x1 = ((e_x1-(1.0-x1))/(x1*x1))
+                      else
+                         f1_x1 = (1.0 - x1*(0.5 - C1_6*x1))
+                         f3_x1 = (0.5 - x1*(C1_6 - C1_24*x1))
+                      endif
+                      Pen_En1 = SW_trans * ((1.0+opacity*htot(i))*f1_x1 + &
                                       opacity*h_ent*f3_x1)
-              else
-                x1 = (opacity - Idecay_len_TKE(i)) * h_ent
-                if (x1 >= 2.0e-5) then
-                  e_x1 = exp(-x1) ; f1_x1 = ((1.0-e_x1)/(x1))
-                  f2_x1 = ((1.0-(1.0+x1)*e_x1)/(x1*x1))
-                else
-                  f1_x1 = (1.0 - x1*(0.5 - C1_6*x1))
-                  f2_x1 = (0.5 - x1*(C1_3 - 0.125*x1))
-                endif
+                   else
+                      x1 = (opacity - Idecay_len_TKE(i)) * h_ent
+                      if (x1 >= 2.0e-5) then
+                         e_x1 = exp(-x1) ; f1_x1 = ((1.0-e_x1)/(x1))
+                         f2_x1 = ((1.0-(1.0+x1)*e_x1)/(x1*x1))
+                      else
+                         f1_x1 = (1.0 - x1*(0.5 - C1_6*x1))
+                         f2_x1 = (0.5 - x1*(C1_3 - 0.125*x1))
+                      endif
 
-                Pen_En1 = exp_kh * ((1.0+opacity*htot(i))*f1_x1 + &
+                      Pen_En1 = exp_kh * ((1.0+opacity*htot(i))*f1_x1 + &
                                      opacity*h_ent*f2_x1)
-              endif
-              C1 = g_H_2Rho0*dR0_dT(i)*Pen_SW_bnd(n,i)
-              Pen_En_Contrib = Pen_En_Contrib + C1*(Pen_En1 - f1_kh)
-              Pen_dTKE_dh_Contrib = Pen_dTKE_dh_Contrib + &
-                  C1*((1.0-SW_trans) - opacity*(htot(i) + h_ent)*SW_trans)
-            endif ; enddo ! (Pen_SW_bnd(n,i) > 0.0)
+                   endif
+                   C1 = g_H_2Rho0*dR0_dT(i)*Pen_SW_bnd(n,i)
+                   Pen_En_Contrib = Pen_En_Contrib + C1*(Pen_En1 - f1_kh)
+                   Pen_dTKE_dh_Contrib = Pen_dTKE_dh_Contrib + &
+                        C1*((1.0-SW_trans) - opacity*(htot(i) + h_ent)*SW_trans)
+                endif ; enddo ! (Pen_SW_bnd(n,i) > 0.0)
 
-            TKE_ent1 = exp_kh*TKE(i) - (h_ent*G%H_to_m)*(dRL*f1_kh + Pen_En_Contrib)
-            EF4_val = EF4(htot(i)+h_neglect,h_ent,Idecay_len_TKE(i),dEF4_dh)
-            HpE = htot(i)+h_ent
-            MKE_rate = 1.0/(1.0 + (cMKE(1,i)*HpE + cMKE(2,i)*HpE**2))
-            TKE_ent = TKE_ent1 + dMKE*EF4_val*MKE_rate
-! TKE_ent is the TKE that would remain if h_ent were entrained.
+                TKE_ent1 = exp_kh*TKE(i) - (h_ent*G%H_to_m)*(dRL*f1_kh + Pen_En_Contrib)
+                EF4_val = EF4(htot(i)+h_neglect,h_ent,Idecay_len_TKE(i),dEF4_dh)
+                HpE = htot(i)+h_ent
+                MKE_rate = 1.0/(1.0 + (cMKE(1,i)*HpE + cMKE(2,i)*HpE**2))
+                TKE_ent = TKE_ent1 + dMKE*EF4_val*MKE_rate
+	        ! TKE_ent is the TKE that would remain if h_ent were entrained.
 
-            dTKE_dh = ((-Idecay_len_TKE(i)*TKE_ent1 - dRL*G%H_to_m) + &
-                      Pen_dTKE_dh_Contrib*G%H_to_m) + dMKE * MKE_rate* &
-                      (dEF4_dh - EF4_val*MKE_rate*(cMKE(1,i)+2.0*cMKE(2,i)*HpE))
-!              dh_Newt = -TKE_ent / dTKE_dh
+                dTKE_dh = ((-Idecay_len_TKE(i)*TKE_ent1 - dRL*G%H_to_m) + &
+                       Pen_dTKE_dh_Contrib*G%H_to_m) + dMKE * MKE_rate* &
+                       (dEF4_dh - EF4_val*MKE_rate*(cMKE(1,i)+2.0*cMKE(2,i)*HpE))
+!               dh_Newt = -TKE_ent / dTKE_dh
 
 ! Bisect if the Newton's method prediction is outside of the bounded range.
-            if (TKE_ent > 0.0) then
-              if ((h_max-h_ent)*(-dTKE_dh) > TKE_ent) then
-                dh_Newt = -TKE_ent / dTKE_dh
-              else
-                dh_Newt = 0.5*(h_max-h_ent)
-              endif
-              h_min = h_ent
-            else
-              if ((h_min-h_ent)*(-dTKE_dh) < TKE_ent) then
-                dh_Newt = -TKE_ent / dTKE_dh
-              else
-                dh_Newt = 0.5*(h_min-h_ent)
-              endif
-              h_max = h_ent
-            endif
-            h_ent = h_ent + dh_Newt
+                if (TKE_ent > 0.0) then
+                   if ((h_max-h_ent)*(-dTKE_dh) > TKE_ent) then
+                      dh_Newt = -TKE_ent / dTKE_dh
+                   else
+                      dh_Newt = 0.5*(h_max-h_ent)
+                   endif
+                   h_min = h_ent
+                else
+                  if ((h_min-h_ent)*(-dTKE_dh) < TKE_ent) then
+                     dh_Newt = -TKE_ent / dTKE_dh
+                  else
+                     dh_Newt = 0.5*(h_min-h_ent)
+                  endif
+                  h_max = h_ent
+                endif
+                h_ent = h_ent + dh_Newt
 
-            if (ABS(dh_Newt) < 0.2*G%Angstrom) exit
-          enddo
+                if (ABS(dh_Newt) < 0.2*G%Angstrom) exit
+             enddo
+          endif
 
           if (h_ent < Hmix_min-htot(i)) h_ent = Hmix_min - htot(i)
 

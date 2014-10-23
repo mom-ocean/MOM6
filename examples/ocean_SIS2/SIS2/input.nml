@@ -42,8 +42,7 @@
  &fms_io_nml
          fms_netcdf_restart=.true.
          threading_read='multi'
-         threading_write='single'
-         fileset_write='single' /
+ /
 
  &fms_nml
        clock_grain='MODULE'

@@ -24,3 +24,7 @@ Data
 7d2993615f5225ae43659a1b39b12423  salt_restore.nc
 f07acf60f16f3addf77b906c45349626  seawifs_1998-2006_smoothed_2X.nc
 27b75fed981c011654a3512bcc094100  tidal_amplitude.nc
+
+Obs
+4839232c744cccb020428ffa08c1a47d  WOA05_ptemp_salt_monthly.nc
+52fb83fdccdc0fe0c9de7ce1350da0f6  WOA05_ptemp_salt_annual.nc

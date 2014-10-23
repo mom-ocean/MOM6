@@ -15,8 +15,9 @@
 
 
 
-from midas import *
-
+from midas.rectgrid_gen import *
+from midas.rectgrid import *
+import numpy as np
 
 
 refine=2  # Set to 2 for GIS_025 grid and 4 for GIS_0125

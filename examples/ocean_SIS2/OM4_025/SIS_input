@@ -1,0 +1,102 @@
+!********+*********+*********+*********+*********+*********+*********+*
+!*   This file determines the adjustable run-time parameters for the  *
+!* Sea Ice Simulator (SIS), versions 2 and later.  Where              *
+!* appropriate, MKS units are used.                                   *
+!********+*********+*********+*********+*********+*********+*********+*
+! >>> Global coupled ice-ocean SIS2 5 layer ice, 63 layer ocean test case.
+
+DO_ICEBERGS = True              !   If true, use the icebergs module.
+
+!  Specify properties of the physical domain.
+OMEGA = 7.2921e-5               !   The rotation rate of the earth in s-1.
+ROTATION = "2omegasinlat"       !   Rotation approximation (2omegasinlat,
+                                !  betaplane or USER).
+G_EARTH = 9.80                  !    G_EARTH is the Earth's gravitational
+                                !  acceleration, in m s-2.
+GRID_CONFIG = "mosaic"          !    Method for defining horizontal grid
+                                !  = file|cartesian|spherical|mercator
+                                !  file - read grid from file "GRID_FILE"
+                                !  cartesian - a Cartesian grid
+                                !  spherical - a spherical grid
+                                !  mercator  - a Mercator grid
+GRID_FILE = "ocean_hgrid.nc"
+                                !    Name of file to read horizontal grid data
+INPUTDIR = "INPUT"
+                                !    INPUTDIR is a directory in which NetCDF
+                                !  input files might be found.
+
+CGRID_ICE_DYNAMICS = True       !   If true, use a C-grid discretization of the
+                                ! sea-ice dynamics; if false use a B-grid
+                                ! discretization.
+
+!  Specify the numerical domain.
+!LAYOUT = 0,1                    !    LAYOUT specifies the grid layout for the
+                                !  sea-ice, with 0 indicating a PE count in one
+                                !  or both directions that is automatically
+                                !  generated.
+NIGLOBAL = 1440                  !    NIGLOBAL and NJGLOBAL are the number of thickness
+NJGLOBAL = 1080                  !  grid points in the zonal and meridional
+                                !  directions of the physical domain.
+NK = 63                         !    The number of layers.
+NCAT_ICE = 5                    !    The number of sea ice thickness categories.
+NIHALO = 2                      !    NIHALO and NJHALO are the number of halo
+NJHALO = 2                      !  points on each side in the x- and y-directions.
+                                !  If static memory allocation is used, these
+                                !  must match the values of NIHALO_ and NJHALO_
+                                !  in MOM_memory.h.
+!NIPROC_IO = 1                   !    The number of processors used for I/O in the
+                                !  x-direction, or 0 to equal NIPROC.  NIPROC_IO
+                                !  must be a factor of NIPROC.
+!NJPROC_IO = 1                   !    The number of processors used for I/O in the
+                                !  y-direction, or 0 to equal NJPROC.  NJPROC_IO
+                                !  must be a factor of NJPROC.
+
+REENTRANT_X = True              !    If defined, the domain is zonally reentrant.
+REENTRANT_Y = False             !    If defined, the domain is meridionally
+                                !  reentrant.
+TRIPOLAR_N = True               !    Use tripolar connectivity at the northern
+                                !  edge of the domain.  With TRIPOLAR_N, NIGLOBAL
+                                !  must be even.
+
+DEBUG = False                   !    If true, write out verbose debugging data.
+DEBUG_TRUNCATIONS = False       !    If true, calculate all diagnostics that are
+                                !  useful for debugging truncations.
+SEND_LOG_TO_STDOUT = False      !    If true write out log information to stdout.
+ICE_STATS_INTERVAL = 0.25       !    The interval in units of TIMEUNIT between
+                                ! writes of the globally summed ice statistics
+                                ! and conservation checks.
+
+!  Specify the time integration scheme for the ice dynamics.
+NSTEPS_DYN = 72                 !   The number of iterations in the EVP dynamics
+                                ! for each slow time step.
+ICE_TDAMP_ELASTIC = 1000.0      !   The damping timescale associated with the
+                                ! elastic terms in the sea-ice dynamics.
+
+!  Specify the ice properties.
+ICE_STRENGTH_PSTAR = 2.75e4     !    ICE_STRENGTH_PSTAR is a constant in the
+                                !  expression for the ice strength, P* in
+                                !  Hunke & Dukowics '97, in Pa.
+RHO_OCEAN = 1030.0              !    RHO_OCEAN is used in the Boussinesq
+                                !  approximation to calculations of pressure and
+                                !  pressure gradients, in units of kg m-3.
+RHO_ICE = 905.0                 !    RHO_ICE is the nominal density of sea ice
+                                !  used in SIS, in units of kg m-3.
+RHO_SNOW = 330.0                !    RHO_SNOW is the nominal density of snow
+                                !  used in SIS, in units of kg m-3.
+C_P_ICE = 2100.0                !    C_P_ICE is the heat capacity of fresh ice
+                                !  in J kg-1 K-1, approximated as a constant.
+C_P = 3925.0                    !    C_P is the heat capacity of sea water in
+                                !  J kg-1 K-1, approximated as a constant.
+SNOW_ALBEDO = 0.88              !    The albedo of dry snow atop sea ice, ND.
+ICE_ALBEDO  = 0.68              !    The albedo of dry bare sea ice, ND.
+ICE_BULK_SALINITY = 5.0         !    The fixed bulk salinity of sea ice, in g/kg.
+
+!  Specify the properties of the surface forcing.
+WIND_STAGGER = "B"              !  "A", "B", or "C" to indicate the
+                                !  staggering of the wind stresses between the
+                                !  sea ice and ocean.
+ICE_OCEAN_STRESS_STAGGER = "C"  ! default = "B"
+                                ! A case-insensitive character string to indicate the
+                                ! staggering of the stress field on the ocean that is
+                                ! returned to the coupler.  Valid values include
+                                ! 'A', 'B', or 'C'.

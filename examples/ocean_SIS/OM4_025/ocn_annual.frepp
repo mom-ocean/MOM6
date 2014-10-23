@@ -75,7 +75,7 @@ set freanalysismodule = fre-analysis/test
 # make sure valid platform and required modules are loaded
 if (`gfdl_platform` == "hpcs-csc") then
    source $MODULESHOME/init/csh
-   module use -a /home/fms/local/modulefiles /usr/local/paida/Modules
+   module use -a /home/fms/local/modulefiles #/usr/local/paida/Modules
    module purge
    module load $fremodule
    module load $freanalysismodule
@@ -97,16 +97,19 @@ endif
 set src_dir = ${out_dir}/mom6/tools/analysis
 set script_bash = ${src_dir}/MOM6_ts_annual.bash
 set script_dir = ${out_dir}/mom6/tools/analysis
-
-setenv PYTHONDIR ${out_dir}/mom6/tools/python
+setenv PYTHONPATH ${out_dir}/mom6/tools/python/025gridGeneration/local/lib/python
+set woa05=/archive/gold/datasets/OM4_025/obs/WOA05_ptemp_salt_annual.v20141006.nc
+set mosaicDir=/archive/gold/datasets/OM4_025/mosaic.v20140610.unpacked
 
 echo The following command is going to be invoked
 
-mkdir -p $out_dir/ocean_${yr1}-${yr2}/ptemp
-$script_dir/SST_bias_WOA05.py -w /archive/gold/datasets/OM4_025/obs/WOA05_ptemp_salt_annual.nc -g /archive/gold/datasets/OM4_025/mosaic.v20140610.unpacked -o $out_dir/ocean_${yr1}-${yr2}/ptemp -l ${yr1}-${yr2} $in_data_dir/ocean_annual.$yr1-$yr2.ann.nc
-$script_dir/zonal_T_bias_WOA05.py -w /archive/gold/datasets/OM4_025/obs/WOA05_ptemp_salt_annual.nc -g /archive/gold/datasets/OM4_025/mosaic.v20140610.unpacked -o $out_dir/ocean_${yr1}-${yr2}/ptemp -l ${yr1}-${yr2} $in_data_dir/ocean_annual.$yr1-$yr2.ann.nc
+#mkdir -p $out_dir/ocean_${yr1}-${yr2}/ptemp
+#$script_dir/SST_bias_WOA05.py -w $woa05 -g $mosaicDir -o $out_dir/ocean_${yr1}-${yr2}/ptemp -l ${yr1}-${yr2} $in_data_dir/ocean_annual.$yr1-$yr2.ann.nc
+#$script_dir/zonal_T_bias_WOA05.py -w $woa05 -g $mosaicDir -o $out_dir/ocean_${yr1}-${yr2}/ptemp -l ${yr1}-${yr2} $in_data_dir/ocean_annual.$yr1-$yr2.ann.nc
 
-mkdir -p $out_dir/ocean_${yr1}-${yr2}/salinity
-$script_dir/SSS_bias_WOA05.py -w /archive/gold/datasets/OM4_025/obs/WOA05_ptemp_salt_annual.nc -g /archive/gold/datasets/OM4_025/mosaic.v20140610.unpacked -o $out_dir/ocean_${yr1}-${yr2}/salinity -l ${yr1}-${yr2} $in_data_dir/ocean_annual.$yr1-$yr2.ann.nc
-$script_dir/zonal_S_bias_WOA05.py -w /archive/gold/datasets/OM4_025/obs/WOA05_ptemp_salt_annual.nc -g /archive/gold/datasets/OM4_025/mosaic.v20140610.unpacked -o $out_dir/ocean_${yr1}-${yr2}/salinity -l ${yr1}-${yr2} $in_data_dir/ocean_annual.$yr1-$yr2.ann.nc
+#mkdir -p $out_dir/ocean_${yr1}-${yr2}/salinity
+#$script_dir/SSS_bias_WOA05.py -w $woa05 -g $mosaicDir -o $out_dir/ocean_${yr1}-${yr2}/salinity -l ${yr1}-${yr2} $in_data_dir/ocean_annual.$yr1-$yr2.ann.nc
+#$script_dir/zonal_S_bias_WOA05.py -w $woa05 -g $mosaicDir -o $out_dir/ocean_${yr1}-${yr2}/salinity -l ${yr1}-${yr2} $in_data_dir/ocean_annual.$yr1-$yr2.ann.nc
 
+mkdir -p $out_dir/ocean_${yr1}-${yr2}/heat_salt_0_300m
+$script_dir/TS_depth_integrals.py -r $woa05 -s 0 -e 300 -g $mosaicDir -o $out_dir/ocean_${yr1}-${yr2}/heat_salt_0_300m -l ${yr1}-${yr2} $in_data_dir/ocean_annual.$yr1-$yr2.ann.nc

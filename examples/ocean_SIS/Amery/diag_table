@@ -1,0 +1,78 @@
+Amery_baseline
+1992 1 1 0 0 0
+## output files
+"ocean_month",            1,  "months", 1, "days", "time"
+"ocean_month_snap",            1,  "months", 1, "days", "time"
+"ocean_daily",            1,  "days", 1, "days", "time"
+## output variables
+#
+#==================
+# OCEAN DIAGNOSTICS
+#==================
+# Monthly snapshots of tracers, interface positions and Kd
+"ocean_model","e","e","ocean_month_snap","all",.false.,"none",2
+"ocean_model","temp","temp","ocean_month_snap","all",.false.,"none",2
+"ocean_model","salt","salt","ocean_month_snap","all",.false.,"none",2
+"ocean_model","u","u","ocean_month_snap","all",.false.,"none",2
+"ocean_model","v","v","ocean_month_snap","all",.false.,"none",2
+"ocean_model","salt_int","salt_int","ocean_month_snap","all",.false.,"none",2
+"ocean_model","temp_int","temp_int","ocean_month_snap","all",.false.,"none",2
+#"ocean_model","Kd_shear","Kd_shear","ocean_month_snap","all",.false.,"none",2
+"ocean_model","Kd_layer","Kd_layer","ocean_month_snap","all",.false.,"none",2
+#"ocean_model","Kd_work","Kd_work","ocean_month_snap","all",.false.,"none",2
+# Monthly Avg transports in sigma2
+"ocean_model","uh","uh","ocean_month","all",.true.,"none",2
+"ocean_model","vh","vh","ocean_month","all",.true.,"none",2
+"ocean_model","wd","wd","ocean_month","all",.true.,"none",2
+#"ocean_model","Res_fn","Res_fn","ocean_month","all",.true.,"none",2
+#"ocean_model","col_mass","col_mass","ocean_month","all",.true.,"none",2
+#"ocean_model","Tflx_dia_diff","Tflx_dia_diff","ocean_month","all",.true.,"none",2
+#"ocean_model","Tflx_dia_adv","Tflx_dia_adv","ocean_month","all",.true.,"none",2
+#"ocean_model","Sflx_dia_diff","Sflx_dia_diff","ocean_month","all",.true.,"none",2
+#"ocean_model","Sflx_dia_adv","Sflx_dia_adv","ocean_month","all",.true.,"none",2
+#"ocean_model","T_adx_2d","T_adx_2d","ocean_month","all",.true.,"none",2
+#"ocean_model","T_ady_2d","T_ady_2d","ocean_month","all",.true.,"none",2
+#"ocean_model","S_adx_2d","S_adx_2d","ocean_month","all",.true.,"none",2
+#"ocean_model","S_ady_2d","S_ady_2d","ocean_month","all",.true.,"none",2
+#"ocean_model","T_diffx_2d","T_diffx_2d","ocean_month","all",.true.,"none",2
+#"ocean_model","T_diffy_2d","T_diffy_2d","ocean_month","all",.true.,"none",2
+#"ocean_model","S_diffx_2d","S_diffx_2d","ocean_month","all",.true.,"none",2
+#"ocean_model","S_diffy_2d","S_diffy_2d","ocean_month","all",.true.,"none",2
+"ocean_model","age","age","ocean_month","all",.true.,"none",2
+"ocean_model","temp_h","temp_h","ocean_month","all",.true.,"none",2
+"ocean_model","salt_h","salt_h","ocean_month","all",.true.,"none",2
+"ocean_model","h","h","ocean_month","all",.true.,"none",2
+"ocean_model","Kd_work","Kd_work","ocean_month","all",.true.,"none",2
+# Monthly Avg Stress
+#"ocean_model","taux",     "taux",     "ocean_month","all",.true.,"none",2
+#"ocean_model","tauy",     "tauy",     "ocean_month","all",.true.,"none",2
+#===========================
+# Mixed Layer and TKE Budget Terms:
+#===========================
+"ocean_model","h_ML","h_ML","ocean_daily","all",.true.,"none",2
+"ocean_model","ustar_shelf","ustar_shelf","ocean_daily","all",.true.,"none",2
+"ocean_model","SST","SST","ocean_daily","all",.true.,"none",2
+"ocean_model","SST","SST_max","ocean_daily","all",max,"none",2
+"ocean_model","SST","SST_min","ocean_daily","all",min,"none",2
+"ocean_model","SSS","SSS","ocean_daily","all",.true.,"none",2
+"ocean_model","SSH","SSH","ocean_daily","all",.true.,"none",2
+"ocean_model","SSU","SSU","ocean_daily","all",.true.,"none",2
+"ocean_model","SSV","SSV","ocean_daily","all",.true.,"none",2
+"ocean_model","melt","melt","ocean_daily","all",.true.,"none",2
+"ocean_model","uhbt","uhbt","ocean_daily","all",.true.,"none",2
+"ocean_model","vhbt","vhbt","ocean_daily","all",.true.,"none",2
+#==================
+# Surface Forcing:
+#=================
+"ocean_model","taux",     "taux",     "ocean_daily","all",.true.,"none",2
+"ocean_model","tauy",     "tauy",     "ocean_daily","all",.true.,"none",2
+"ocean_model","ustar",    "ustar",    "ocean_daily","all",.true.,"none",2
+"ocean_model","PRCmE",      "PmE",      "ocean_daily","all",.true.,"none",2
+#"ocean_model","SW",       "SW",       "ocean_daily","all",.true.,"none",2
+#"ocean_model","LwLatSens","LwLatSens","ocean_daily","all",.true.,"none",2
+#"ocean_model","salt_flux","salt_flux","ocean_daily","all",.true.,"none",2
+"ocean_model","exch_vel_t",    "exch_vel_t",    "ocean_daily","all",.true.,"none",2
+"ocean_model","exch_vel_s",    "exch_vel_s",    "ocean_daily","all",.true.,"none",2
+"ocean_model","frazil",   "frazil",   "ocean_daily","all",.true.,"none",2
+#"ocean_model","net_heat_surface","net_heat_surface","ocean_daily","all",.true.,"none",2
+#

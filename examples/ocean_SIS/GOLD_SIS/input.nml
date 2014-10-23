@@ -6,6 +6,9 @@
          parameter_filename = 'MOM_input',
                               'MOM_override' /
 
+ &diag_manager_nml
+ /
+
  &coupler_nml
             months = 0,
             days   = 1,
@@ -28,8 +31,7 @@
  &fms_io_nml
          fms_netcdf_restart=.true.
          threading_read='multi'
-         threading_write='single'
-         fileset_write='single' /
+ /
 
  &fms_nml
        clock_grain='MODULE'
