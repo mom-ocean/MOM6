@@ -248,6 +248,7 @@ subroutine step_forward_MEKE(MEKE, h, visc, dt, G, CS)
 
     if (CS%MEKE_K4 >= 0.0) then
       ! Calculate Laplacian of MEKE
+!$OMP parallel default(none) shared(is,ie,js,je,MEKE_uflux,G,MEKE,MEKE_vflux,CS)
 !$OMP do
       do j=js,je ; do I=is-1,ie
         MEKE_uflux(I,j) = ((G%dy_Cu(I,j)*G%IdxCu(I,j)) * G%mask2dCu(I,j)) * &
@@ -271,11 +272,15 @@ subroutine step_forward_MEKE(MEKE, h, visc, dt, G, CS)
       ! CS%del2MEKE(i,j) = (G%IareaT(i,j)*I_mass(i,j)) * &
       !     ((MEKE_uflux(I,j) - MEKE_uflux(I-1,j)) + (MEKE_vflux(i,J) - MEKE_vflux(i,J-1)))
       enddo ; enddo
+!$OMP end parallel
       call cpu_clock_begin(CS%id_clock_pass)
       call do_group_pass(CS%pass_del2MEKE, G%Domain)
       call cpu_clock_end(CS%id_clock_pass)
 
       ! Bi-harmonic diffusion of MEKE
+!$OMP parallel default(none) shared(is,ie,js,je,MEKE_uflux,G,CS,sdt,mass, &
+!$OMP                               mass_neglect,MEKE_vflux,I_mass)       &
+!$OMP                       private(K4_here,Inv_Kh_max) 
 !$OMP do
       do j=js,je ; do I=is-1,ie
         K4_here = CS%MEKE_K4
@@ -306,17 +311,17 @@ subroutine step_forward_MEKE(MEKE, h, visc, dt, G, CS)
             ((MEKE_uflux(I-1,j) - MEKE_uflux(I,j)) + &
              (MEKE_vflux(i,J-1) - MEKE_vflux(i,J)))
       enddo ; enddo
-
+!$OMP end parallel
     endif ! 
-      
-    if (CS%MEKE_KH >= 0.0) then
-      ! Lateral diffusion of MEKE
-      Kh_here = CS%MEKE_Kh
+     
 !$OMP parallel default(none) shared(is,ie,js,je,MEKE,CS,sdt,G,Kh_u,MEKE_uflux, &
 !$OMP                               mass,mass_neglect,Kh_v,MEKE_vflux,I_mass, &
 !$OMP                               sdt_damp,drag_rate,Rho0,drag_rate_visc,   &
 !$OMP                               cdrag2,bottomFac2,MEKE_decay) &
-!$OMP                       private(Kh_here,Inv_Kh_max,ldamping)
+!$OMP                       private(Kh_here,Inv_Kh_max,ldamping) 
+    if (CS%MEKE_KH >= 0.0) then
+      ! Lateral diffusion of MEKE
+      Kh_here = CS%MEKE_Kh
 !$OMP do
       do j=js,je ; do I=is-1,ie
         ! Limit Kh to avoid CFL violations.
@@ -382,8 +387,9 @@ subroutine step_forward_MEKE(MEKE, h, visc, dt, G, CS)
           MEKE_decay(i,j) = 0.5 * G%mask2dT(i,j) * (MEKE_decay(i,j) + ldamping)
         enddo ; enddo
       endif
-!$OMP end parallel
     endif ! MEKE_KH>=0
+!$OMP end parallel
+
 
 ! DO WE NEED THIS HALO UPDATE ??? -AJA #####################################################
     call cpu_clock_begin(CS%id_clock_pass)
