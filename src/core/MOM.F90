@@ -369,7 +369,7 @@ use MOM_error_checking, only : check_redundant
 use MOM_grid, only : MOM_grid_init, ocean_grid_type, get_thickness_units
 use MOM_grid, only : get_flux_units, get_tr_flux_units
 use MOM_hor_visc, only : horizontal_viscosity, hor_visc_init
-use MOM_lateral_mixing_coeffs, only : calc_slope_function, VarMix_init
+use MOM_lateral_mixing_coeffs, only : calc_slope_functions, VarMix_init
 use MOM_lateral_mixing_coeffs, only : calc_resoln_function, VarMix_CS
 use MOM_interface_heights, only : find_eta
 use MOM_MEKE, only : MEKE_init, MEKE_alloc_register_restart, step_forward_MEKE, MEKE_CS
@@ -924,8 +924,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         dtth = dt*min(ntstep,n_max-n+1)
         call enable_averaging(dtth,Time_local+set_time(int(floor(dtth-dt+0.5))), CS%diag)
         call cpu_clock_begin(id_clock_thick_diff)
-        if (associated(CS%VarMix)) &
-          call calc_slope_function(h, CS%tv, G, CS%VarMix)
+        if (associated(CS%VarMix)) call calc_slope_functions(h, CS%tv, dt, G, CS%VarMix)
         call thickness_diffuse(h, CS%uhtr, CS%vhtr, CS%tv, dtth, G, &
                                CS%MEKE, CS%VarMix, CS%CDp, CS%thickness_diffuse_CSp)
         call cpu_clock_end(id_clock_thick_diff)
@@ -1007,8 +1006,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
     if (CS%thickness_diffuse .and. .not.CS%thickness_diffuse_first) then
       call cpu_clock_begin(id_clock_thick_diff)
-      if (associated(CS%VarMix)) &
-        call calc_slope_function(h, CS%tv, G, CS%VarMix)
+      if (associated(CS%VarMix)) call calc_slope_functions(h, CS%tv, dt, G, CS%VarMix)
       call thickness_diffuse(h, CS%uhtr, CS%vhtr, CS%tv, dt, G, &
                              CS%MEKE, CS%VarMix, CS%CDp, CS%thickness_diffuse_CSp)
       call cpu_clock_end(id_clock_thick_diff)

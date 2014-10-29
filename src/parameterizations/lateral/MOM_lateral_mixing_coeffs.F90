@@ -35,6 +35,7 @@ use MOM_domains,       only : create_group_pass, do_group_pass
 use MOM_domains,       only : group_pass_type
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_interface_heights, only : find_eta
+use MOM_isopycnal_slopes, only : find_slopes
 use MOM_grid, only : ocean_grid_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_wave_speed, only : wave_speed_init, wave_speed, wave_speed_CS
@@ -56,13 +57,14 @@ type, public :: VarMix_CS ;
                                   ! points; otherwise interpolate the wave
                                   ! speed and calculate the resolution function
                                   ! independently at each point.   
+  logical :: use_stored_slopes    ! If true, stores isopycnal slopes in this structure.
   real, dimension(:,:), pointer :: &
     SN_u => NULL(), &   ! S*N at u-points (s^-1)
     SN_v => NULL(), &  ! S*N at v-points (s^-1)
     L2u => NULL(), &   ! Length scale^2 at u-points (m^2)
     L2v => NULL(), &   ! Length scale^2 at v-points (m^2)
     cg1 => NULL(), &   ! The first baroclinic gravity wave speed in m s-1.
-    Res_fn_h => NULL(), & ! Res_fn_h and Res_fn_q are nondimensional functions
+    Res_fn_h => NULL(), & ! Res_fn_h and Res_fn_q are non-dimensional functions
     Res_fn_q => NULL(), & ! of the ratio the first baroclinic deformation
     Res_fn_u => NULL(), & ! radius to the grid spacing at h and q points,
     Res_fn_v => NULL(), & ! respectively. These can be used to scale away
@@ -79,13 +81,18 @@ type, public :: VarMix_CS ;
     f2_dx2_u => NULL(), & ! The Coriolis parameter squared times the grid
     f2_dx2_v => NULL(), & ! spacing squared at u and v points, in m2 s-2.
     Rd_dx_h => NULL()     ! Deformation radius over grid spacing (non-dim.)
+
+  real, dimension(:,:,:), pointer :: &
+    slope_x => NULL(), &  ! Zonal isopycnal slope (non-dimensional)
+    slope_y => NULL()     ! Meridional isopycnal slope (non-dimensional)
+
   ! Parameters
   integer :: VarMix_Ktop  ! Top layer to start downward integrals
   real :: Visbeck_L_scale ! Fixed length scale in Visbeck formula
-  real :: Res_coef        ! A nondimensional number that determines the function
+  real :: Res_coef        ! A non-dimensional number that determines the function
                           ! of resolution as:
                           !  F = 1 / (1 + (Res_coef*Ld/dx)^Res_fn_power)
-                          
+  real :: kappa_smooth    ! A diffusivity for smoothing T/S in vanished layers (m2/s)
   integer :: Res_fn_power ! The power of dx/Ld in the resolution function.  Any
                           ! positive integer power may be used, but even powers
                           ! and especially 2 are coded to be more efficient.
@@ -98,11 +105,7 @@ type, public :: VarMix_CS ;
   integer :: id_Rd_dx=-1
 end type VarMix_CS
 
-public VarMix_init, calc_slope_function, calc_resoln_function
-
-interface calc_slope_function
-  module procedure calc_slope_function_, calc_slope_function_need_e
-end interface calc_slope_function
+public VarMix_init, calc_slope_functions, calc_resoln_function
 
 contains
 
@@ -340,9 +343,10 @@ subroutine calc_resoln_function(h, tv, G, CS)
 
 end subroutine calc_resoln_function
 
-subroutine calc_slope_function_need_e(h, tv, G, CS)
+subroutine calc_slope_functions(h, tv, dt, G, CS)
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: h
   type(thermo_var_ptrs),                 intent(in)    :: tv
+  real,                                  intent(in)    :: dt
   type(ocean_grid_type),                 intent(inout) :: G
   type(VarMix_CS),                       pointer       :: CS
 !    This subroutine calls for the calculation of the interface heights, and
@@ -352,12 +356,12 @@ subroutine calc_slope_function_need_e(h, tv, G, CS)
     e             ! The interface heights relative to mean sea level, in m.
 
   call find_eta(h, tv, G%g_Earth, G, e, halo_size=1)
-  
-  call calc_slope_function_(h, tv, G, CS, e)
+  if (CS%use_stored_slopes) call find_slopes(G, h, e, tv, dt*CS%kappa_smooth, CS%slope_x, CS%slope_y)
+  call calc_slope_function_with_e(h, tv, G, CS, e)
 
-end subroutine calc_slope_function_need_e
+end subroutine calc_slope_functions
 
-subroutine calc_slope_function_(h, tv, G, CS, e)
+subroutine calc_slope_function_with_e(h, tv, G, CS, e)
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: h
   type(thermo_var_ptrs),                 intent(in)    :: tv
   type(ocean_grid_type),                 intent(inout) :: G
@@ -508,7 +512,7 @@ subroutine calc_slope_function_(h, tv, G, CS, e)
     if (CS%id_L2v > 0) call post_data(CS%id_L2v, CS%L2v, CS%diag)
   endif
 
-end subroutine calc_slope_function_
+end subroutine calc_slope_function_with_e
 
 subroutine VarMix_init(Time, G, param_file, diag, CS)
   type(time_type),            intent(in) :: Time
@@ -527,7 +531,7 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
   real, parameter :: absurdly_small_freq2 = 1e-34  ! A miniscule frequency
              ! squared that is used to avoid division by 0, in s-2.  This
              ! value is roughly (pi / (the age of the universe) )^2.
-  logical :: use_variable_mixing, Gill_equatorial_Ld
+  logical :: use_variable_mixing, Gill_equatorial_Ld, use_stored_slopes
   logical :: Resoln_scaled_Kh, Resoln_scaled_KhTh, Resoln_scaled_KhTr
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
@@ -575,22 +579,36 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
                  "The nondimensional coefficient in the Visbeck formula \n"//&
                  "for the epipycnal tracer diffusivity", units="nondim", &
                  default=0.0)
-
+  call get_param(param_file, mod, "USE_STORED_SLOPES", use_stored_slopes,&
+                 "If true, the isopycnal slopes are calculated once and\n"//&
+                 "stored for re-use. This uses more memory but avoids calling\n"//&
+                 "the equation of state more times than should be necessary.", &
+                 default=.false.)
   if (KhTr_Slope_Cff>0. .or. KhTh_Slope_Cff>0.) use_variable_mixing = .true.
 
   if (use_variable_mixing .or. Resoln_scaled_Kh .or. Resoln_scaled_KhTh .or. &
-      Resoln_scaled_KhTr) then
+      Resoln_scaled_KhTr .or. use_stored_slopes) then
     allocate(CS)
     CS%diag => diag ! Diagnostics pointer
     CS%Resoln_scaled_Kh = Resoln_scaled_Kh
     CS%Resoln_scaled_KhTh = Resoln_scaled_KhTh
     CS%Resoln_scaled_KhTr = Resoln_scaled_KhTr
     CS%use_variable_mixing = use_variable_mixing
+    CS%use_stored_slopes = use_stored_slopes
   else
     return
   endif
 
 ! Allocate CS and memory
+  if (CS%use_stored_slopes) then
+    allocate(CS%slope_x(IsdB:IedB,jsd:jed,G%ke+1)) ; CS%slope_x(:,:,:) = 0.0
+    allocate(CS%slope_y(isd:ied,JsdB:JedB,G%ke+1)) ; CS%slope_y(:,:,:) = 0.0
+    call get_param(param_file, mod, "KD_SMOOTH", CS%kappa_smooth, &
+                 "A diapycnal diffusivity that is used to interpolate \n"//&
+                 "more sensible values of T & S into thin layers.", &
+                 default=1.0e-6)
+  endif
+
   if (CS%use_variable_mixing) then
     allocate(CS%SN_u(IsdB:IedB,jsd:jed)) ; CS%SN_u(:,:) = 0.0
     allocate(CS%SN_v(isd:ied,JsdB:JedB)) ; CS%SN_v(:,:) = 0.0

@@ -151,7 +151,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, MEKE, VarMix, CDp, CS)
   logical, save :: first_call = .TRUE.
   real :: Khth_Loc_u(SZIB_(G), SZJ_(G))
   real :: Khth_Loc(SZIB_(G), SZJB_(G))     ! Locally calculated thickness mixing coefficient (m2/s)
-  logical :: use_VarMix, Resoln_scaled
+  logical :: use_VarMix, Resoln_scaled, use_stored_slopes
   integer :: i, j, k, is, ie, js, je, nz
   logical :: MEKE_not_null
 
@@ -170,10 +170,11 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, MEKE, VarMix, CDp, CS)
     endif
   endif
 
-  use_VarMix = .false. ; Resoln_scaled = .false.
+  use_VarMix = .false. ; Resoln_scaled = .false. ; use_stored_slopes = .false.
   if (Associated(VarMix)) then
     use_VarMix = VarMix%use_variable_mixing
     Resoln_scaled = VarMix%Resoln_scaled_KhTh
+    use_stored_slopes = VarMix%use_stored_slopes
   endif
 
   if(first_call) then
@@ -313,8 +314,13 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, MEKE, VarMix, CDp, CS)
   endif
 
   ! Calculate uhD, vhD from h, e, KH_u, KH_v, tv%T/S
-  call thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, CS, &
-                              int_slope_u, int_slope_v)
+  if (use_stored_slopes) then
+    call thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, CS, &
+                                int_slope_u, int_slope_v, VarMix%slope_x, VarMix%slope_y)
+  else
+    call thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, CS, &
+                                int_slope_u, int_slope_v)
+  endif
 !$OMP parallel do default(none) shared(is,ie,js,je,nz,uhtr,uhD,dt,vhtr,CDp,vhD,h,G)
   do k=1,nz
     do j=js,je ; do I=is-1,ie
@@ -363,7 +369,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, MEKE, VarMix, CDp, CS)
 end subroutine thickness_diffuse
 
 subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
-                                  CS, int_slope_u, int_slope_v)
+                                  CS, int_slope_u, int_slope_v, slope_x, slope_y)
   real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)  :: h
   real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_),   intent(in)  :: e
   real, dimension(NIMEMB_,NJMEM_,NK_INTERFACE_),  intent(in)  :: Kh_u
@@ -377,6 +383,8 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
   type(thickness_diffuse_CS),             pointer     :: CS
   real, dimension(NIMEMB_,NJMEM_,NK_INTERFACE_), optional, intent(in)  :: int_slope_u
   real, dimension(NIMEM_,NJMEMB_,NK_INTERFACE_), optional, intent(in)  :: int_slope_v
+  real, dimension(NIMEMB_,NJMEM_,NK_INTERFACE_), optional, intent(in)  :: slope_x
+  real, dimension(NIMEM_,NJMEMB_,NK_INTERFACE_), optional, intent(in)  :: slope_y
 !    This subroutine does interface depth diffusion.  The fluxes are
 !  limited to give positive definiteness, and the diffusivities are
 !  limited to guarantee stability.
@@ -473,6 +481,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
  ! real, dimension(SZIB_(G), SZJ_(G), SZK_(G)+1) :: sfn_x, sfn_slope_x
  ! real, dimension(SZI_(G), SZJB_(G), SZK_(G)+1) :: sfn_y, sfn_slope_y
   logical :: MEKE_not_null, present_int_slope_u, present_int_slope_v
+  logical :: present_slope_x, present_slope_y, calc_derivatives
   integer :: is, ie, js, je, nz, IsdB
   integer :: i, j, k
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke ; IsdB = G%IsdB
@@ -487,6 +496,8 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
   MEKE_not_null = (LOC(MEKE) .NE. 0)
   present_int_slope_u = PRESENT(int_slope_u)
   present_int_slope_v = PRESENT(int_slope_v)
+  present_slope_x = PRESENT(slope_x)
+  present_slope_y = PRESENT(slope_y)
 
   nk_linear = max(G%nkml, 1)
 
@@ -552,8 +563,11 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
       drdkL = G%Rlay(k)-G%Rlay(k-1) ; drdkR = G%Rlay(k)-G%Rlay(k-1)
     endif
 
+    calc_derivatives = use_EOS .and. ((k > nk_linear) .or. find_work) &
+                       .and. .not. present_slope_x
+
     ! Calculate the zonal fluxes and gradients.
-    if (use_EOS .and. ((k > nk_linear) .or. find_work)) then
+    if (calc_derivatives) then
       do I=is-1,ie
         pres_u(I) = 0.5*(pres(i,j,K) + pres(i+1,j,K))
         T_u(I) = 0.25*((T(i,j,k) + T(i+1,j,k)) + (T(i,j,k-1) + T(i+1,j,k-1)))
@@ -564,7 +578,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
     endif
 
     do I=is-1,ie
-      if (use_EOS .and. ((k > nk_linear) .or. find_work)) then
+      if (calc_derivatives) then
         ! Estimate the horizontal density gradients along layers.
         drdiA = drho_dT_u(I) * (T(i+1,j,k-1)-T(i,j,k-1)) + &
                 drho_dS_u(I) * (S(i+1,j,k-1)-S(i,j,k-1))
@@ -578,45 +592,49 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
                  drho_dS_u(I) * (S(i+1,j,k)-S(i+1,j,k-1)))
       endif
 
-
       if (k > nk_linear) then
         if (use_EOS) then
-          hg2A = h(i,j,k-1)*h(i+1,j,k-1) + h_neglect2
-          hg2B = h(i,j,k)*h(i+1,j,k) + h_neglect2
-          hg2L = h(i,j,k-1)*h(i,j,k) + h_neglect2
-          hg2R = h(i+1,j,k-1)*h(i+1,j,k) + h_neglect2
-          haA = 0.5*(h(i,j,k-1) + h(i+1,j,k-1))
-          haB = 0.5*(h(i,j,k) + h(i+1,j,k)) + h_neglect
-          haL = 0.5*(h(i,j,k-1) + h(i,j,k)) + h_neglect
-          haR = 0.5*(h(i+1,j,k-1) + h(i+1,j,k)) + h_neglect
-          if (G%Boussinesq) then
-            dzaL = haL * G%H_to_m ; dzaR = haR * G%H_to_m
-          else
-            dzaL = 0.5*(e(i,j,K-1) - e(i,j,K+1)) + dz_neglect
-            dzaR = 0.5*(e(i+1,j,K-1) - e(i+1,j,K+1)) + dz_neglect
-          endif
-          ! Use the harmonic mean thicknesses to weight the horizontal gradients.
-          ! These unnormalized weights have been rearranged to minimize divisions.
-          wtA = hg2A*haB ; wtB = hg2B*haA
-          wtL = hg2L*(haR*dzaR) ; wtR = hg2R*(haL*dzaL)
-
-          drdz = (wtL * drdkL + wtR * drdkR) / (dzaL*wtL + dzaR*wtR)
-          ! The expression for drdz above is mathematically equivalent to:
-          !   drdz = ((hg2L/haL) * drdkL/dzaL + (hg2R/haR) * drdkR/dzaR) / &
-          !          ((hg2L/haL) + (hg2R/haR))
-          ! This is the gradient of density along geopotentials.
-          drdx = ((wtA * drdiA + wtB * drdiB) / (wtA + wtB) - &
-                  drdz * (e(i,j,K)-e(i+1,j,K))) * G%IdxCu(I,j)
-
-          ! This estimate of slope is accurate for small slopes, but bounded
-          ! to be between -1 and 1.
-          mag_grad2 = drdx**2 + drdz**2
-          if (mag_grad2 > 0.0) then
-            Slope = drdx / sqrt(mag_grad2)
+          if (present_slope_x) then
+            Slope = slope_x(I,j,k)
             slope2_Ratio = Slope**2 * I_slope_max2
-          else ! Just in case mag_grad2 = 0 ever.
-            Slope = 0.0
-            slope2_Ratio = 1.0e20  ! Force the use of the safe streamfunction.
+          else
+            hg2A = h(i,j,k-1)*h(i+1,j,k-1) + h_neglect2
+            hg2B = h(i,j,k)*h(i+1,j,k) + h_neglect2
+            hg2L = h(i,j,k-1)*h(i,j,k) + h_neglect2
+            hg2R = h(i+1,j,k-1)*h(i+1,j,k) + h_neglect2
+            haA = 0.5*(h(i,j,k-1) + h(i+1,j,k-1))
+            haB = 0.5*(h(i,j,k) + h(i+1,j,k)) + h_neglect
+            haL = 0.5*(h(i,j,k-1) + h(i,j,k)) + h_neglect
+            haR = 0.5*(h(i+1,j,k-1) + h(i+1,j,k)) + h_neglect
+            if (G%Boussinesq) then
+              dzaL = haL * G%H_to_m ; dzaR = haR * G%H_to_m
+            else
+              dzaL = 0.5*(e(i,j,K-1) - e(i,j,K+1)) + dz_neglect
+              dzaR = 0.5*(e(i+1,j,K-1) - e(i+1,j,K+1)) + dz_neglect
+            endif
+            ! Use the harmonic mean thicknesses to weight the horizontal gradients.
+            ! These unnormalized weights have been rearranged to minimize divisions.
+            wtA = hg2A*haB ; wtB = hg2B*haA
+            wtL = hg2L*(haR*dzaR) ; wtR = hg2R*(haL*dzaL)
+
+            drdz = (wtL * drdkL + wtR * drdkR) / (dzaL*wtL + dzaR*wtR)
+            ! The expression for drdz above is mathematically equivalent to:
+            !   drdz = ((hg2L/haL) * drdkL/dzaL + (hg2R/haR) * drdkR/dzaR) / &
+            !          ((hg2L/haL) + (hg2R/haR))
+            ! This is the gradient of density along geopotentials.
+            drdx = ((wtA * drdiA + wtB * drdiB) / (wtA + wtB) - &
+                    drdz * (e(i,j,K)-e(i+1,j,K))) * G%IdxCu(I,j)
+
+            ! This estimate of slope is accurate for small slopes, but bounded
+            ! to be between -1 and 1.
+            mag_grad2 = drdx**2 + drdz**2
+            if (mag_grad2 > 0.0) then
+              Slope = drdx / sqrt(mag_grad2)
+              slope2_Ratio = Slope**2 * I_slope_max2
+            else ! Just in case mag_grad2 = 0 ever.
+              Slope = 0.0
+              slope2_Ratio = 1.0e20  ! Force the use of the safe streamfunction.
+            endif
           endif
 
           ! Adjust real slope by weights that bias towards slope of interfaces
@@ -659,7 +677,11 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
 
           Sfn_est = (Sfn_unlim + slope2_Ratio*Sfn_safe) / (1.0 + slope2_Ratio)
         else  ! With .not.use_EOS, the layers are constant density.
-          Slope = ((e(i,j,K)-e(i+1,j,K))*G%IdxCu(I,j)) * G%m_to_H
+          if (present_slope_x) then
+            Slope = slope_x(I,j,k)
+          else
+            Slope = ((e(i,j,K)-e(i+1,j,K))*G%IdxCu(I,j)) * G%m_to_H
+          endif
           Sfn_est = (KH_u(I,j,K)*G%dy_Cu(I,j)) * Slope
                   !  ((e(i,j,K)-e(i+1,j,K))*G%IdxCu(I,j))) * G%m_to_H
           if (CS%id_slope_x > 0) CS%diagSlopeX(I,j,k) = Slope
@@ -735,7 +757,10 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
       drdkL = G%Rlay(k)-G%Rlay(k-1) ; drdkR = G%Rlay(k)-G%Rlay(k-1)
     endif
 
-    if (use_EOS .and. ((k > nk_linear) .or. find_work)) then
+    calc_derivatives = use_EOS .and. ((k > nk_linear) .or. find_work) &
+                       .and. .not. present_slope_y
+
+    if (calc_derivatives) then
       do i=is,ie
         pres_v(i) = 0.5*(pres(i,j,K) + pres(i,j+1,K))
         T_v(i) = 0.25*((T(i,j,k) + T(i,j+1,k)) + (T(i,j,k-1) + T(i,j+1,k-1)))
@@ -745,7 +770,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
                    drho_dS_v, is, ie-is+1, tv%eqn_of_state)
     endif
     do i=is,ie
-      if (use_EOS .and. ((k > nk_linear) .or. find_work)) then
+      if (calc_derivatives) then
         ! Estimate the horizontal density gradients along layers.
         drdjA = drho_dT_v(i) * (T(i,j+1,k-1)-T(i,j,k-1)) + &
                 drho_dS_v(i) * (S(i,j+1,k-1)-S(i,j,k-1))
@@ -761,42 +786,47 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
 
       if (k > nk_linear) then
         if (use_EOS) then
-          hg2A = h(i,j,k-1)*h(i,j+1,k-1) + h_neglect2
-          hg2B = h(i,j,k)*h(i,j+1,k) + h_neglect2
-          hg2L = h(i,j,k-1)*h(i,j,k) + h_neglect2
-          hg2R = h(i,j+1,k-1)*h(i,j+1,k) + h_neglect2
-          haA = 0.5*(h(i,j,k-1) + h(i,j+1,k-1)) + h_neglect
-          haB = 0.5*(h(i,j,k) + h(i,j+1,k)) + h_neglect
-          haL = 0.5*(h(i,j,k-1) + h(i,j,k)) + h_neglect
-          haR = 0.5*(h(i,j+1,k-1) + h(i,j+1,k)) + h_neglect
-          if (G%Boussinesq) then
-            dzaL = haL * G%H_to_m ; dzaR = haR * G%H_to_m
-          else
-            dzaL = 0.5*(e(i,j,K-1) - e(i,j,K+1)) + dz_neglect
-            dzaR = 0.5*(e(i,j+1,K-1) - e(i,j+1,K+1)) + dz_neglect
-          endif
-          ! Use the harmonic mean thicknesses to weight the horizontal gradients.
-          ! These unnormalized weights have been rearranged to minimize divisions.
-          wtA = hg2A*haB ; wtB = hg2B*haA
-          wtL = hg2L*(haR*dzaR) ; wtR = hg2R*(haL*dzaL)
-
-          drdz = (wtL * drdkL + wtR * drdkR) / (dzaL*wtL + dzaR*wtR)
-          ! The expression for drdz above is mathematically equivalent to:
-          !   drdz = ((hg2L/haL) * drdkL/dzaL + (hg2R/haR) * drdkR/dzaR) / &
-          !          ((hg2L/haL) + (hg2R/haR))
-          ! This is the gradient of density along geopotentials.
-          drdy = ((wtA * drdjA + wtB * drdjB) / (wtA + wtB) - &
-                  drdz * (e(i,j,K)-e(i,j+1,K))) * G%IdyCv(i,J)
-
-          ! This estimate of slope is accurate for small slopes, but bounded
-          ! to be between -1 and 1.
-          mag_grad2 = drdy**2 + drdz**2
-          if (mag_grad2 > 0.0) then
-            Slope = drdy / sqrt(mag_grad2)
+          if (present_slope_y) then
+            Slope = slope_y(i,J,k)
             slope2_Ratio = Slope**2 * I_slope_max2
-          else ! Just in case mag_grad2 = 0 ever.
-            Slope = 0.0
-            slope2_Ratio = 1.0e20  ! Force the use of the safe streamfunction.
+          else
+            hg2A = h(i,j,k-1)*h(i,j+1,k-1) + h_neglect2
+            hg2B = h(i,j,k)*h(i,j+1,k) + h_neglect2
+            hg2L = h(i,j,k-1)*h(i,j,k) + h_neglect2
+            hg2R = h(i,j+1,k-1)*h(i,j+1,k) + h_neglect2
+            haA = 0.5*(h(i,j,k-1) + h(i,j+1,k-1)) + h_neglect
+            haB = 0.5*(h(i,j,k) + h(i,j+1,k)) + h_neglect
+            haL = 0.5*(h(i,j,k-1) + h(i,j,k)) + h_neglect
+            haR = 0.5*(h(i,j+1,k-1) + h(i,j+1,k)) + h_neglect
+            if (G%Boussinesq) then
+              dzaL = haL * G%H_to_m ; dzaR = haR * G%H_to_m
+            else
+              dzaL = 0.5*(e(i,j,K-1) - e(i,j,K+1)) + dz_neglect
+              dzaR = 0.5*(e(i,j+1,K-1) - e(i,j+1,K+1)) + dz_neglect
+            endif
+            ! Use the harmonic mean thicknesses to weight the horizontal gradients.
+            ! These unnormalized weights have been rearranged to minimize divisions.
+            wtA = hg2A*haB ; wtB = hg2B*haA
+            wtL = hg2L*(haR*dzaR) ; wtR = hg2R*(haL*dzaL)
+
+            drdz = (wtL * drdkL + wtR * drdkR) / (dzaL*wtL + dzaR*wtR)
+            ! The expression for drdz above is mathematically equivalent to:
+            !   drdz = ((hg2L/haL) * drdkL/dzaL + (hg2R/haR) * drdkR/dzaR) / &
+            !          ((hg2L/haL) + (hg2R/haR))
+            ! This is the gradient of density along geopotentials.
+            drdy = ((wtA * drdjA + wtB * drdjB) / (wtA + wtB) - &
+                    drdz * (e(i,j,K)-e(i,j+1,K))) * G%IdyCv(i,J)
+
+            ! This estimate of slope is accurate for small slopes, but bounded
+            ! to be between -1 and 1.
+            mag_grad2 = drdy**2 + drdz**2
+            if (mag_grad2 > 0.0) then
+              Slope = drdy / sqrt(mag_grad2)
+              slope2_Ratio = Slope**2 * I_slope_max2
+            else ! Just in case mag_grad2 = 0 ever.
+              Slope = 0.0
+              slope2_Ratio = 1.0e20  ! Force the use of the safe streamfunction.
+            endif
           endif
 
           ! Adjust real slope by weights that bias towards slope of interfaces
@@ -839,7 +869,11 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
           ! Estimate the streamfunction at each interface.
           Sfn_est = (Sfn_unlim + slope2_Ratio*Sfn_safe) / (1.0 + slope2_Ratio)
         else      ! With .not.use_EOS, the layers are constant density.
-          Slope = ((e(i,j,K)-e(i,j+1,K))*G%IdyCv(i,J)) * G%m_to_H
+          if (present_slope_y) then
+            Slope = slope_y(i,J,k)
+          else
+            Slope = ((e(i,j,K)-e(i,j+1,K))*G%IdyCv(i,J)) * G%m_to_H
+          endif
           Sfn_est = (KH_v(i,J,K)*G%dx_Cv(i,J)) * Slope
                   !  ((e(i,j,K)-e(i,j+1,K))*G%IdyCv(i,J))) * G%m_to_H
           if (CS%id_slope_y > 0) CS%diagSlopeY(I,j,k) = Slope
