@@ -11,11 +11,12 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public find_slopes
+public calc_isoneutral_slopes
 
 contains
 
-subroutine find_slopes(G, h, e, tv, dt_kappa_smooth, slope_x, slope_y)
+subroutine calc_isoneutral_slopes(G, h, e, tv, dt_kappa_smooth, slope_x, slope_y, &
+                                  N2_u, N2_v, halo)
   type(ocean_grid_type),                         intent(in)    :: G
   real, dimension(NIMEM_,NJMEM_,NKMEM_),         intent(in)    :: h
   real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_),  intent(in)    :: e
@@ -23,6 +24,10 @@ subroutine find_slopes(G, h, e, tv, dt_kappa_smooth, slope_x, slope_y)
   real,                                          intent(in)    :: dt_kappa_smooth
   real, dimension(NIMEMB_,NJMEM_,NK_INTERFACE_), intent(inout) :: slope_x
   real, dimension(NIMEM_,NJMEMB_,NK_INTERFACE_), intent(inout) :: slope_y
+  real, dimension(NIMEMB_,NJMEM_,NK_INTERFACE_), intent(inout) :: N2_u
+  real, dimension(NIMEM_,NJMEMB_,NK_INTERFACE_), intent(inout) :: N2_v
+  optional                                                     :: N2_u, N2_v
+  integer, optional,                             intent(in)    :: halo
   ! Local variables
   real, dimension(SZI_(G), SZJ_(G), SZK_(G)) :: &
     T, &          ! The temperature (or density) in C, with the values in
@@ -69,11 +74,18 @@ subroutine find_slopes(G, h, e, tv, dt_kappa_smooth, slope_x, slope_y)
                         ! equation of state.
   integer :: nk_linear  ! The number of layers over which the streamfunction
                         ! goes to 0.
-  real ::  H_x(SZIB_(G)), H_y(SZI_(G))
+  real :: G_Rho0, N2, dzN2,  H_x(SZIB_(G)), H_y(SZI_(G))
 
+  logical :: present_N2_u, present_N2_v
   integer :: is, ie, js, je, nz, IsdB
   integer :: i, j, k
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke ; IsdB = G%IsdB
+
+  if (present(halo)) then
+    is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo
+  else
+    is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+  endif
+  nz = G%ke ; IsdB = G%IsdB
 
   h_neglect = G%H_subroundoff ; h_neglect2 = h_neglect**2
   dz_neglect = G%H_subroundoff*G%H_to_m
@@ -81,6 +93,22 @@ subroutine find_slopes(G, h, e, tv, dt_kappa_smooth, slope_x, slope_y)
   use_EOS = associated(tv%eqn_of_state)
 
   nk_linear = 1 ! Was max(G%nkml, 1) -AJA ???? ##############
+
+  present_N2_u = PRESENT(N2_u)
+  present_N2_v = PRESENT(N2_v)
+  G_Rho0 = G%g_Earth / G%Rho0
+  if (present_N2_u) then
+    do j=js,je ; do I=is-1,ie
+      N2_u(I,j,1) = 0.
+      N2_u(I,j,nz+1) = 0.
+    enddo ; enddo
+  endif
+  if (present_N2_v) then
+    do J=js-1,je ; do i=is,ie
+      N2_v(i,J,1) = 0.
+      N2_v(i,J,nz+1) = 0.
+    enddo ; enddo
+  endif
 
   if (use_EOS) then
     call vert_fill_TS(h, tv%T, tv%S, dt_kappa_smooth, 1.0, T, S, G, 1)
@@ -180,7 +208,9 @@ subroutine find_slopes(G, h, e, tv, dt_kappa_smooth, slope_x, slope_y)
             slope_x(I,j,k) = 0.0
           endif
 
-        else  ! With .not.use_EOS, the layers are constant density.
+          if (present_N2_u) N2_u(I,j,k) = G_Rho0 * drdz ! Square of Brunt-Vaisala frequency (s-2)
+
+        else ! With .not.use_EOS, the layers are constant density.
           slope_x(I,j,k) = ((e(i,j,K)-e(i+1,j,K))*G%IdxCu(I,j)) * G%m_to_H
         endif
 
@@ -188,7 +218,7 @@ subroutine find_slopes(G, h, e, tv, dt_kappa_smooth, slope_x, slope_y)
         slope_x(I,j,k) = 0.
       endif
       
-    enddo
+    enddo ! i
   enddo ; enddo ! end of j-loop
 
     ! Calculate the meridional isopycnal slope.
@@ -201,88 +231,88 @@ subroutine find_slopes(G, h, e, tv, dt_kappa_smooth, slope_x, slope_y)
 !$OMP                                  drho_dT_v,drho_dS_v,hg2A,hg2B,hg2L,hg2R,haA, &
 !$OMP                                  haB,haL,haR,dzaL,dzaR,wtA,wtB,wtL,wtR,drdz,  &
 !$OMP                                  drdy,mag_grad2,Slope,slope2_Ratio)
-  do j = js-1,je
-    do K=nz,2,-1
-      if (.not.(use_EOS)) then
-        drdjA = 0.0 ; drdjB = 0.0
-        drdkL = G%Rlay(k)-G%Rlay(k-1) ; drdkR = G%Rlay(k)-G%Rlay(k-1)
-      endif
+  do j = js-1,je ; do K=nz,2,-1
+    if (.not.(use_EOS)) then
+      drdjA = 0.0 ; drdjB = 0.0
+      drdkL = G%Rlay(k)-G%Rlay(k-1) ; drdkR = G%Rlay(k)-G%Rlay(k-1)
+    endif
 
-      if (use_EOS .and. (k > nk_linear)) then
-        do i=is,ie
-          pres_v(i) = 0.5*(pres(i,j,K) + pres(i,j+1,K))
-          T_v(i) = 0.25*((T(i,j,k) + T(i,j+1,k)) + (T(i,j,k-1) + T(i,j+1,k-1)))
-          S_v(i) = 0.25*((S(i,j,k) + S(i,j+1,k)) + (S(i,j,k-1) + S(i,j+1,k-1)))
-        enddo
-        call calculate_density_derivs(T_v, S_v, pres_v, drho_dT_v, &
-                     drho_dS_v, is, ie-is+1, tv%eqn_of_state)
-      endif
+    if (use_EOS .and. (k > nk_linear)) then
       do i=is,ie
-        if (use_EOS .and. (k > nk_linear)) then
-          ! Estimate the horizontal density gradients along layers.
-          drdjA = drho_dT_v(i) * (T(i,j+1,k-1)-T(i,j,k-1)) + &
-                  drho_dS_v(i) * (S(i,j+1,k-1)-S(i,j,k-1))
-          drdjB = drho_dT_v(i) * (T(i,j+1,k)-T(i,j,k)) + &
-                  drho_dS_v(i) * (S(i,j+1,k)-S(i,j,k))
+        pres_v(i) = 0.5*(pres(i,j,K) + pres(i,j+1,K))
+        T_v(i) = 0.25*((T(i,j,k) + T(i,j+1,k)) + (T(i,j,k-1) + T(i,j+1,k-1)))
+        S_v(i) = 0.25*((S(i,j,k) + S(i,j+1,k)) + (S(i,j,k-1) + S(i,j+1,k-1)))
+      enddo
+      call calculate_density_derivs(T_v, S_v, pres_v, drho_dT_v, &
+                   drho_dS_v, is, ie-is+1, tv%eqn_of_state)
+    endif
+    do i=is,ie
+      if (use_EOS .and. (k > nk_linear)) then
+        ! Estimate the horizontal density gradients along layers.
+        drdjA = drho_dT_v(i) * (T(i,j+1,k-1)-T(i,j,k-1)) + &
+                drho_dS_v(i) * (S(i,j+1,k-1)-S(i,j,k-1))
+        drdjB = drho_dT_v(i) * (T(i,j+1,k)-T(i,j,k)) + &
+                drho_dS_v(i) * (S(i,j+1,k)-S(i,j,k))
 
-          ! Estimate the vertical density gradients times the grid spacing.
-          drdkL = (drho_dT_v(i) * (T(i,j,k)-T(i,j,k-1)) + &
-                   drho_dS_v(i) * (S(i,j,k)-S(i,j,k-1)))
-          drdkR = (drho_dT_v(i) * (T(i,j+1,k)-T(i,j+1,k-1)) + &
-                   drho_dS_v(i) * (S(i,j+1,k)-S(i,j+1,k-1)))
-        endif
+        ! Estimate the vertical density gradients times the grid spacing.
+        drdkL = (drho_dT_v(i) * (T(i,j,k)-T(i,j,k-1)) + &
+                 drho_dS_v(i) * (S(i,j,k)-S(i,j,k-1)))
+        drdkR = (drho_dT_v(i) * (T(i,j+1,k)-T(i,j+1,k-1)) + &
+                 drho_dS_v(i) * (S(i,j+1,k)-S(i,j+1,k-1)))
+      endif
 
-        if (k > nk_linear) then
-          if (use_EOS) then
-            hg2A = h(i,j,k-1)*h(i,j+1,k-1) + h_neglect2
-            hg2B = h(i,j,k)*h(i,j+1,k) + h_neglect2
-            hg2L = h(i,j,k-1)*h(i,j,k) + h_neglect2
-            hg2R = h(i,j+1,k-1)*h(i,j+1,k) + h_neglect2
-            haA = 0.5*(h(i,j,k-1) + h(i,j+1,k-1)) + h_neglect
-            haB = 0.5*(h(i,j,k) + h(i,j+1,k)) + h_neglect
-            haL = 0.5*(h(i,j,k-1) + h(i,j,k)) + h_neglect
-            haR = 0.5*(h(i,j+1,k-1) + h(i,j+1,k)) + h_neglect
-            if (G%Boussinesq) then
-              dzaL = haL * G%H_to_m ; dzaR = haR * G%H_to_m
-            else
-              dzaL = 0.5*(e(i,j,K-1) - e(i,j,K+1)) + dz_neglect
-              dzaR = 0.5*(e(i,j+1,K-1) - e(i,j+1,K+1)) + dz_neglect
-            endif
-            ! Use the harmonic mean thicknesses to weight the horizontal gradients.
-            ! These unnormalized weights have been rearranged to minimize divisions.
-            wtA = hg2A*haB ; wtB = hg2B*haA
-            wtL = hg2L*(haR*dzaR) ; wtR = hg2R*(haL*dzaL)
+      if (k > nk_linear) then
+        if (use_EOS) then
+          hg2A = h(i,j,k-1)*h(i,j+1,k-1) + h_neglect2
+          hg2B = h(i,j,k)*h(i,j+1,k) + h_neglect2
+          hg2L = h(i,j,k-1)*h(i,j,k) + h_neglect2
+          hg2R = h(i,j+1,k-1)*h(i,j+1,k) + h_neglect2
+          haA = 0.5*(h(i,j,k-1) + h(i,j+1,k-1)) + h_neglect
+          haB = 0.5*(h(i,j,k) + h(i,j+1,k)) + h_neglect
+          haL = 0.5*(h(i,j,k-1) + h(i,j,k)) + h_neglect
+          haR = 0.5*(h(i,j+1,k-1) + h(i,j+1,k)) + h_neglect
+          if (G%Boussinesq) then
+            dzaL = haL * G%H_to_m ; dzaR = haR * G%H_to_m
+          else
+            dzaL = 0.5*(e(i,j,K-1) - e(i,j,K+1)) + dz_neglect
+            dzaR = 0.5*(e(i,j+1,K-1) - e(i,j+1,K+1)) + dz_neglect
+          endif
+          ! Use the harmonic mean thicknesses to weight the horizontal gradients.
+          ! These unnormalized weights have been rearranged to minimize divisions.
+          wtA = hg2A*haB ; wtB = hg2B*haA
+          wtL = hg2L*(haR*dzaR) ; wtR = hg2R*(haL*dzaL)
 
-            drdz = (wtL * drdkL + wtR * drdkR) / (dzaL*wtL + dzaR*wtR)
-            ! The expression for drdz above is mathematically equivalent to:
-            !   drdz = ((hg2L/haL) * drdkL/dzaL + (hg2R/haR) * drdkR/dzaR) / &
-            !          ((hg2L/haL) + (hg2R/haR))
-            ! This is the gradient of density along geopotentials.
-            drdy = ((wtA * drdjA + wtB * drdjB) / (wtA + wtB) - &
-                    drdz * (e(i,j,K)-e(i,j+1,K))) * G%IdyCv(i,J)
+          drdz = (wtL * drdkL + wtR * drdkR) / (dzaL*wtL + dzaR*wtR)
+          ! The expression for drdz above is mathematically equivalent to:
+          !   drdz = ((hg2L/haL) * drdkL/dzaL + (hg2R/haR) * drdkR/dzaR) / &
+          !          ((hg2L/haL) + (hg2R/haR))
+          ! This is the gradient of density along geopotentials.
+          drdy = ((wtA * drdjA + wtB * drdjB) / (wtA + wtB) - &
+                  drdz * (e(i,j,K)-e(i,j+1,K))) * G%IdyCv(i,J)
 
-            ! This estimate of slope is accurate for small slopes, but bounded
-            ! to be between -1 and 1.
-            mag_grad2 = drdy**2 + drdz**2
-            if (mag_grad2 > 0.0) then
-              slope_y(i,J,k) = drdy / sqrt(mag_grad2)
-            else ! Just in case mag_grad2 = 0 ever.
-              slope_y(i,J,k) = 0.0
-            endif
-
-          else      ! With .not.use_EOS, the layers are constant density.
-            slope_y(i,J,k) = ((e(i,j,K)-e(i,j+1,K))*G%IdyCv(i,J)) * G%m_to_H
+          ! This estimate of slope is accurate for small slopes, but bounded
+          ! to be between -1 and 1.
+          mag_grad2 = drdy**2 + drdz**2
+          if (mag_grad2 > 0.0) then
+            slope_y(i,J,k) = drdy / sqrt(mag_grad2)
+          else ! Just in case mag_grad2 = 0 ever.
+            slope_y(i,J,k) = 0.0
           endif
 
-        else  ! k <= nk_linear
-          slope_y(i,J,k) = 0.
+          if (present_N2_v) N2_v(i,J,k) = G_Rho0 * drdz ! Square of Brunt-Vaisala frequency (s-2)
+
+        else ! With .not.use_EOS, the layers are constant density.
+          slope_y(i,J,k) = ((e(i,j,K)-e(i,j+1,K))*G%IdyCv(i,J)) * G%m_to_H
         endif
 
-      enddo ! i
-    enddo ! k-loop
-  enddo ! j-loop
+      else ! k <= nk_linear
+        slope_y(i,J,k) = 0.
+      endif
 
-end subroutine find_slopes
+    enddo ! i
+  enddo ; enddo ! end of j-loop
+
+end subroutine calc_isoneutral_slopes
 
 subroutine vert_fill_TS(h, T_in, S_in, kappa, dt, T_f, S_f, G, halo_here)
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h
