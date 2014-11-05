@@ -57,7 +57,7 @@ use MOM_string_functions, only : left_real, left_reals
 implicit none ; private
 
 integer, parameter, public :: MAX_PARAM_FILES = 5 ! Maximum number of parameter files.
-integer, parameter :: INPUT_STR_LENGTH = 120 ! Maximum linelength in parameter file.
+integer, parameter :: INPUT_STR_LENGTH = 200 ! Maximum linelength in parameter file.
 integer, parameter :: FILENAME_LENGTH = 200  ! Maximum number of characters in
                                              ! file names.
 
@@ -692,7 +692,7 @@ subroutine read_param_char(CS, varname, value, fail_if_missing)
 
   call get_variable_line(CS, varname, found, defined, value_string)
   if (found) then
-    value = trim(value_string(1))
+    value = trim(strip_quotes(value_string(1)))
   elseif (present(fail_if_missing)) then ; if (fail_if_missing) then
     call MOM_error(FATAL,'Unable to find variable '//trim(varname)// &
                          ' in any input files.')
@@ -710,16 +710,25 @@ subroutine read_param_char_array(CS, varname, value, fail_if_missing)
 ! which is to be read, the (case-sensitive) variable name, the variable
 ! where the value is to be stored, and (optionally) a flag indicating
 ! whether to fail if this parameter can not be found.
-  character(len=INPUT_STR_LENGTH) :: value_string(SIZE(value))
+  character(len=INPUT_STR_LENGTH) :: value_string(1), loc_string
   logical            :: found, defined
   integer            :: i, i_out
 
   call get_variable_line(CS, varname, found, defined, value_string)
   if (found) then
+    loc_string = trim(value_string(1))
+    i = index(loc_string,",")
     i_out = 1
-    do i=1,SIZE(value) ; if (len_trim(value_string(i)) > 0) then
-      value(i_out) = trim(value_string(i)) ; i_out = i_out + 1
-    endif ; enddo
+    do while(i>0)
+      value(i_out) = trim(strip_quotes(loc_string(:i-1)))
+      i_out = i_out+1
+      loc_string = trim(adjustl(loc_string(i+1:)))
+      i = index(loc_string,",")
+    enddo
+    if (len_trim(loc_string)>0) then
+      value(i_out) = trim(strip_quotes(adjustl(loc_string)))
+      i_out = i_out+1
+    endif
     do i=i_out,SIZE(value) ; value(i) = " " ; enddo
   elseif (present(fail_if_missing)) then ; if (fail_if_missing) then
     call MOM_error(FATAL,'Unable to find variable '//trim(varname)// &
@@ -788,6 +797,25 @@ subroutine read_param_time(CS, varname, value, timeunit, fail_if_missing)
   endif
 end subroutine read_param_time
 
+function strip_quotes(val_str)
+  character(len=*) :: val_str
+  character(len=INPUT_STR_LENGTH) :: strip_quotes
+  ! Local variables
+  integer :: i
+  strip_quotes = val_str
+  i = index(strip_quotes,ACHAR(34)) ! Double quote
+  do while (i>0)
+    if (i > 1) then ; strip_quotes = strip_quotes(:i-1)//strip_quotes(i+1:)
+    else ; strip_quotes = strip_quotes(2:) ; endif
+    i = index(strip_quotes,ACHAR(34)) ! Double quote
+  enddo
+  i = index(strip_quotes,ACHAR(39)) ! Single quote
+  do while (i>0)
+    if (i > 1) then ; strip_quotes = strip_quotes(:i-1)//strip_quotes(i+1:)
+    else ; strip_quotes = strip_quotes(2:) ; endif
+    i = index(strip_quotes,ACHAR(39)) ! Single quote
+  enddo
+end function strip_quotes
 
 subroutine get_variable_line(CS, varname, found, defined, value_string, paramIsLogical)
   type(param_file_type),  intent(in) :: CS
@@ -995,9 +1023,6 @@ subroutine get_variable_line(CS, varname, found, defined, value_string, paramIsL
           lname = trim(line(is:is+id-1))
           if (trim(lname) /= trim(varname)) cycle
           val_str = trim(adjustl(line(is+id:last)))
-          ! Remove starting and trailing quotes.
-          id = index(val_str,ACHAR(34)) ; if (id > 0) val_str = val_str(id+1:)
-          id = index(val_str,ACHAR(34)) ; if (id > 0) val_str = val_str(:id-1)
         endif
         found = .true. ; defined_in_line = .true.
       elseif (found_undef) then
@@ -1016,11 +1041,6 @@ subroutine get_variable_line(CS, varname, found, defined, value_string, paramIsL
         lname = trim(line(is:ise-1))
         if (trim(lname) /= trim(varname)) cycle
         val_str = trim(adjustl(line(ise+3:last)))
-        ! Remove starting and trailing quotes.
-        id = index(val_str,ACHAR(34)) ; if (id > 0) val_str = val_str(id+1:) ! Double quote
-        id = index(val_str,ACHAR(34)) ; if (id > 0) val_str = val_str(:id-1) ! Double quote
-        id = index(val_str,ACHAR(39)) ; if (id > 0) val_str = val_str(id+1:) ! Single quote
-        id = index(val_str,ACHAR(39)) ; if (id > 0) val_str = val_str(:id-1) ! Single quote
         if (variableKindIsLogical) then ! Special handling for logicals
           read(val_str(:len_trim(val_str)),*) defined_in_line
         else
@@ -1561,7 +1581,7 @@ subroutine get_param_char_array(CS, modulename, varname, value, desc, units, &
     do i=2,size(value)
       len_val = len_trim(value(i))
       if ((len_val > 0) .and. (len_tot + len_val + 2 < 240)) then
-        cat_val = trim(cat_val) // ", "//trim(value(i))
+        cat_val = trim(cat_val)//ACHAR(34)// ", "//ACHAR(34)//trim(value(i))
         len_tot = len_tot + len_val
       endif
     enddo
