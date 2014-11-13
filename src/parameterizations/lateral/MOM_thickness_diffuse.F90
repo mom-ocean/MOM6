@@ -550,12 +550,13 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
 !$OMP                                  nk_linear,IsdB,tv,h,h_neglect,e,dz_neglect,  &
 !$OMP                                  I_slope_max2,h_neglect2,present_int_slope_u, &
 !$OMP                                  int_slope_u,KH_u,uhtot,h_frac,h_avail_rsum,  &
-!$OMP                                  uhD,h_avail,G_scale,work_u,CS)               &
+!$OMP                                  uhD,h_avail,G_scale,work_u,CS,slope_x,       &
+!$OMP                                  slope_y,present_slope_x) &
 !$OMP                          private(drdiA,drdiB,drdkL,drdkR,pres_u,T_u,S_u,      &
 !$OMP                                  drho_dT_u,drho_dS_u,hg2A,hg2B,hg2L,hg2R,haA, &
 !$OMP                                  haB,haL,haR,dzaL,dzaR,wtA,wtB,wtL,wtR,drdz,  &
 !$OMP                                  drdx,mag_grad2,Slope,slope2_Ratio,Sfn_unlim, &
-!$OMP                                  Sfn_safe,Sfn_est,Sfn)
+!$OMP                                  Sfn_safe,Sfn_est,Sfn,calc_derivatives)
   do j = js,je ; do K=nz,2,-1
     if (find_work .and. .not.(use_EOS)) then
       drdiA = 0.0 ; drdiB = 0.0
@@ -744,12 +745,13 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
 !$OMP                                  nk_linear,IsdB,tv,h,h_neglect,e,dz_neglect,  &
 !$OMP                                  I_slope_max2,h_neglect2,present_int_slope_v, &
 !$OMP                                  int_slope_v,KH_v,vhtot,h_frac,h_avail_rsum,  &
-!$OMP                                  vhD,h_avail,G_scale,Work_v,CS)               &
+!$OMP                                  vhD,h_avail,G_scale,Work_v,CS,slope_y,       &
+!$OMP                                  present_slope_y                      )       &
 !$OMP                          private(drdjA,drdjB,drdkL,drdkR,pres_v,T_v,S_v,      &
 !$OMP                                  drho_dT_v,drho_dS_v,hg2A,hg2B,hg2L,hg2R,haA, &
 !$OMP                                  haB,haL,haR,dzaL,dzaR,wtA,wtB,wtL,wtR,drdz,  &
 !$OMP                                  drdy,mag_grad2,Slope,slope2_Ratio,Sfn_unlim, &
-!$OMP                                  Sfn_safe,Sfn_est,Sfn)
+!$OMP                                  Sfn_safe,Sfn_est,Sfn,calc_derivatives)
   do j = js-1,je ; do K=nz,2,-1
     if (find_work .and. .not.(use_EOS)) then
       drdjA = 0.0 ; drdjB = 0.0

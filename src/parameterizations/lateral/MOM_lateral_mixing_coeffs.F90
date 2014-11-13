@@ -433,8 +433,10 @@ subroutine calc_Visbeck_coeffs(h, e, slope_x, slope_y, N2_u, N2_v, G, CS)
   H_cutoff = real(2*nz) * (G%Angstrom + h_neglect)
 
 !$OMP parallel default(none) shared(is,ie,js,je,CS,nz,e,G,h,H_cutoff,h_neglect, &
-!$OMP                               SN_u_local,SN_v_local         )   &
-!$OMP                       private(E_x,E_y,S2,Hdn,Hup,H_geom,N2)
+!$OMP                               H_u,H_v,S2_u,S2_v,slope_x,slope_y,   &
+!$OMP                               SN_u_local,SN_v_local,N2_u,N2_v        )   &
+!$OMP                       private(E_x,E_y,S2,Hdn,Hup,H_geom,N2, &
+!$OMP                       wNE, wSE, wSW, wNW, S2max)
 !$OMP do
   do j=js-1,je+1 ; do i=is-1,ie+1
     CS%SN_u(i,j) = 0.0
@@ -656,7 +658,7 @@ subroutine calc_slope_functions_using_just_e(h, G, CS, e, calculate_slopes)
   H_cutoff = real(2*nz) * (G%Angstrom + h_neglect)
 
 !$OMP parallel default(none) shared(is,ie,js,je,CS,nz,e,G,h,H_cutoff,h_neglect, &
-!$OMP                               one_meter,SN_u_local,SN_v_local         )   &
+!$OMP                               one_meter,SN_u_local,SN_v_local,calculate_slopes)   &
 !$OMP                       private(E_x,E_y,S2,Hdn,Hup,H_geom,N2)
 !$OMP do
   do j=js-1,je+1 ; do i=is-1,ie+1
