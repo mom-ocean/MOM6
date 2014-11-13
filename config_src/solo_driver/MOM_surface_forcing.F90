@@ -1442,6 +1442,7 @@ subroutine buoyancy_forcing_const(state, fluxes, day, dt, G, CS)
 
   integer :: i, j, is, ie, js, je
   call callTree_enter("buoyancy_forcing_const, MOM_surface_forcing.F90")
+  is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec
 
   if (CS%use_temperature) then
     do j=js,je ; do i=is,ie
