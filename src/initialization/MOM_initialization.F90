@@ -130,6 +130,7 @@ use Phillips_initialization, only : Phillips_initialize_sponges
 use Rossby_front_2d_initialization, only : Rossby_front_initialize_thickness
 use Rossby_front_2d_initialization, only : Rossby_front_initialize_temperature_salinity
 use Rossby_front_2d_initialization, only : Rossby_front_initialize_velocity
+use SCM_idealized_hurricane, only : SCM_idealized_hurricane_TS_init
 
 use midas_vertmap, only : find_interfaces, tracer_Z_init, meshgrid
 use midas_vertmap, only : determine_temperature
@@ -451,6 +452,7 @@ subroutine MOM_initialize(u, v, h, tv, Time, G, PF, dirs, &
                " \t sloshing - TBD AJA. \n"//&
                " \t seamount - TBD AJA. \n"//&
                " \t rossby_front - a mixed layer front in thermal wind balance.\n"//&
+               " \t SCM_ideal_hurr - used in the SCM idealized hurricane test.\n"//&
                " \t USER - call a user modified routine.", &
                fail_if_missing=.true.)
         select case (trim(config))
@@ -461,15 +463,17 @@ subroutine MOM_initialize(u, v, h, tv, Time, G, PF, dirs, &
           case ("TS_profile") ; call initialize_temp_salt_from_profile(tv%T, tv%S, G, PF)
           case ("linear"); call initialize_temp_salt_linear(tv%T, tv%S, G, PF)
           case ("DOME2D"); call DOME2d_initialize_temperature_salinity ( tv%T, &
-                                tv%S, h, G, PF, eos )
+                                tv%S, h, G, PF, eos)
           case ("adjustment2d"); call adjustment_initialize_temperature_salinity ( tv%T, &
-                                      tv%S, h, G, PF, eos )
+                                      tv%S, h, G, PF, eos)
           case ("sloshing"); call sloshing_initialize_temperature_salinity(tv%T, &
-                                  tv%S, h, G, PF, eos )
+                                  tv%S, h, G, PF, eos)
           case ("seamount"); call seamount_initialize_temperature_salinity(tv%T, &
-                                  tv%S, h, G, PF, eos )
+                                  tv%S, h, G, PF, eos)
           case ("rossby_front"); call Rossby_front_initialize_temperature_salinity ( tv%T, &
-                                tv%S, h, G, PF, eos )
+                                tv%S, h, G, PF, eos)
+          case ("SCM_ideal_hurr"); call SCM_idealized_hurricane_TS_init ( tv%T, &
+                                tv%S, h, G, PF)
           case ("USER"); call user_init_temperature_salinity(tv%T, tv%S, G, PF, eos)
           case default ; call MOM_error(FATAL,  "MOM_initialize: "//&
                  "Unrecognized Temp & salt configuration "//trim(config))

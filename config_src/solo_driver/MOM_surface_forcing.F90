@@ -93,6 +93,9 @@ use user_surface_forcing,    only : USER_wind_forcing, USER_buoyancy_forcing
 use user_surface_forcing,    only : USER_surface_forcing_init, user_surface_forcing_CS
 use user_revise_forcing,     only : user_alter_forcing, user_revise_forcing_init
 use user_revise_forcing,     only : user_revise_forcing_CS
+use SCM_idealized_hurricane, only : SCM_idealized_hurricane_wind_init
+use SCM_idealized_hurricane, only : SCM_idealized_hurricane_wind_forcing
+use SCM_idealized_hurricane, only : SCM_idealized_hurricane_CS
 
 use data_override_mod, only : data_override_init, data_override
 
@@ -202,6 +205,7 @@ type, public :: surface_forcing_CS ; private
   type(user_revise_forcing_CS),  pointer :: urf_CS => NULL()
   type(user_surface_forcing_CS), pointer :: user_forcing_CSp => NULL()
   type(MESO_surface_forcing_CS), pointer :: MESO_forcing_CSp => NULL()
+  type(SCM_idealized_hurricane_CS), pointer :: SCM_idealized_hurricane_CSp => NULL()
 
 end type surface_forcing_CS
 
@@ -257,6 +261,8 @@ subroutine set_forcing(state, fluxes, day_start, day_interval, G, CS)
       call wind_forcing_zero(state, fluxes, day_center, G, CS)
     elseif (trim(CS%wind_config) == "MESO") then
       call MESO_wind_forcing(state, fluxes, day_center, G, CS%MESO_forcing_CSp)
+    elseif (trim(CS%wind_config) == "SCM_ideal_hurr") then
+      call SCM_idealized_hurricane_wind_forcing(state, fluxes, day_center, G, CS%SCM_idealized_hurricane_CSp)
     elseif (trim(CS%wind_config) == "USER") then
       call USER_wind_forcing(state, fluxes, day_center, G, CS%user_forcing_CSp)
     elseif (CS%variable_winds .and. .not.CS%first_call_set_forcing) then
@@ -1921,6 +1927,8 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, tracer_flow_CSp)
     call USER_surface_forcing_init(Time, G, param_file, diag, CS%user_forcing_CSp)
   elseif (trim(CS%wind_config) == "MESO" .or. trim(CS%buoy_config) == "MESO" ) then
     call MESO_surface_forcing_init(Time, G, param_file, diag, CS%MESO_forcing_CSp)
+  elseif (trim(CS%wind_config) == "SCM_ideal_hurr") then
+    call SCM_idealized_hurricane_wind_init(Time, G, param_file, CS%SCM_idealized_hurricane_CSp)
   endif
 
   call register_forcing_type_diags(Time, diag, CS%use_temperature, CS%handles)
