@@ -28,7 +28,7 @@ type SCM_idealized_hurricane_CS ; private
   real :: p_c    !< Central pressure
   real :: r_max  !< Radius of maximum winds
   real :: U_max  !< Maximum wind speeds
-  real :: YY     !< Distance (north) of storm center
+  real :: YY     !< Distance (positive north) of storm center
   real :: gust_const !< Gustiness (used in u*)
 end type
 
@@ -160,19 +160,32 @@ subroutine SCM_idealized_hurricane_wind_forcing(state, fluxes, day, G, CS)
   call safe_alloc_ptr(fluxes%tauy, isd, ied, JsdB, JedB)
   call safe_alloc_ptr(fluxes%ustar, isd, ied, jsd, jed)
 
+  !/ BR
+  ! Implementing Holland (1980) parameteric wind profile
   dp = CS%p_n - CS%p_c
   C = CS%U_max / sqrt( dp )
   B = C**2 * CS%rho_a * exp(1.0)
   A = (CS%r_max/1000.)**B
-  f = 5.5659e-05!G%CoriolisBu(is,js) ! f=f(x,y) but in the SCM is constant
-  !yy = 50.e3 !radius = 50 km
-  t0 = 129600. !crosses 0 at 36 hours
+  f = G%CoriolisBu(is,js) ! f=f(x,y) but in the SCM is constant
+  t0 = 129600. !TC 'eye' crosses (0,0) at 36 hours
   transpeed = 5.0 ! translation speed - 5 m/s
-  transdir = pie
-  xx = ( t0 - time_type_to_real(day)) * transpeed*cos(transdir)
+  transdir = pie ! translation direction (-x)
+  !/ BR
+  ! Calculate x position as a function of time.
+  xx = ( t0 - time_type_to_real(day)) * transpeed * cos(transdir)
   r = sqrt(xx**2.+CS%YY**2.)
+  !/ BR
+  ! rkm - r converted to km for Holland prof.
+  !       used in km due to error, correct implementation should
+  !       not need rkm, but to match winds w/ experiment this must
+  !       be maintained.  Causes winds far from storm center to be a
+  !       couple of m/s higher than the correct Holland prof. 
   rkm = r/1000.
   rB = (rkm)**B
+  !/ BR
+  ! Calculate U10 in the interior (inside of 10x radius of maximum wind),
+  ! while adjusting U10 to 0 outside of 12x radius of maximum wind.
+  !
   if (r/CS%r_max.gt.0.001 .AND. r/CS%r_max.lt.10.) then
      U10 = sqrt( A*B*dp*exp(-A/rB)/(CS%rho_a*rB) + 0.25*(rkm*f)**2 ) - 0.5*rkm*f
   elseif (r/CS%r_max.gt.10. .AND. r/CS%r_max.lt.12.) then
@@ -187,7 +200,9 @@ subroutine SCM_idealized_hurricane_wind_forcing(state, fluxes, day, G, CS)
   Adir = atan2(CS%YY,xx)
   Udir = 1./2.*pie + Adir
   
-  ! BR Wind angle model
+  !/ BR 
+  ! Wind angle model following Zhang and Ulhorn (2012) 
+  ! ALPH is inflow angle positive inward.
   RSTR = min(10.,r / CS%r_max)
   A0 = -0.9*RSTR +-0.09*CS%U_max + -14.33
   A1 = -A0 *(0.04*RSTR +0.05*transpeed+0.14)
@@ -204,9 +219,15 @@ subroutine SCM_idealized_hurricane_wind_forcing(state, fluxes, day, G, CS)
   !   The i-loop extends to is-1 so that taux can be used later in the
   ! calculation of ustar - otherwise the lower bound would be Isq.
   do j=js,je ; do I=is-1,Ieq
+    !/BR
+    ! Turn off surface current for stress calculation to be 
+    ! consistent with test case.
     Uocn = 0.!state%u(I,j)
     Vocn = 0.!0.25*( (state%v(i,J) + state%v(i+1,J-1)) &
              !    +(state%v(i+1,J) + state%v(i,J-1)) )
+    !/BR
+    ! Wind vector calculated from location/direction (sin/cos flipped b/c
+    ! cyclonic wind is 90 deg. phase shifted from position angle).
     dU = U10*sin(Adir-pie-Alph*pie/180.) - Uocn + transpeed/2.*cos(transdir)
     dV = U10*cos(Adir-Alph*pie/180.) - Vocn + transpeed/2.*sin(transdir)
     !/----------------------------------------------------|
@@ -215,7 +236,7 @@ subroutine SCM_idealized_hurricane_wind_forcing(state, fluxes, day, G, CS)
     !/----------------------------------------------------|
     du10=sqrt(du**2+dv**2)
     if (du10.LT.11.) then
-       Cd = 1.2e-3 ! Probably should be a function of sea-state, U10, etc.
+       Cd = 1.2e-3 
     elseif (du10.LT.20.) then
        Cd = (0.59 + 0.065 * U10 )*0.001
     else
@@ -223,29 +244,24 @@ subroutine SCM_idealized_hurricane_wind_forcing(state, fluxes, day, G, CS)
     endif
     fluxes%taux(I,j) = CS%rho_a * G%mask2dCu(I,j) * Cd*sqrt(du**2+dV**2)*dU
   enddo ; enddo
+  !/BR
+  ! See notes above
   do J=js-1,Jeq ; do i=is,ie
     Uocn = 0.!0.25*( (state%u(I,j) + state%u(I-1,j+1)) &
              !    +(state%u(I-1,j) + state%u(I,j+1)) )
     Vocn = 0.!state%v(i,J)
     dU = U10*sin(Adir-pie-Alph*pie/180.) - Uocn + transpeed/2.*cos(transdir)
     dV = U10*cos(Adir-Alph*pie/180.) - Vocn + transpeed/2.*sin(transdir)
-    !/----------------------------------------------------|
-    !BR
-    !  Add a simple drag coefficient as a function of U10 |
-    !/----------------------------------------------------|
     du10=sqrt(du**2+dv**2)
     if (du10.LT.11.) then
-       Cd = 1.2e-3 ! Probably should be a function of sea-state, U10, etc.
+       Cd = 1.2e-3 
     elseif (du10.LT.20.) then
        Cd = (0.59 + 0.065 * U10 )*0.001
     else
        Cd = 0.0018
     endif
-    !fluxes%taux(I,j) = G%mask2dCu(I,j) * Cd*abs(du**2+dV**2)*dU
-    !BR change abs to sqrt
     fluxes%tauy(I,j) = CS%rho_a * G%mask2dCv(I,j) * Cd*du10*dV
   enddo ; enddo
-  print*,'Alph',Alph,G%mask2dCv(I,j)
   ! Set the surface friction velocity, in units of m s-1. ustar is always positive.
   do j=js,je ; do i=is,ie
     !  This expression can be changed if desired, but need not be.
