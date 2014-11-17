@@ -9,7 +9,8 @@ use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_safe_alloc, only : safe_alloc_ptr
-use MOM_time_manager, only : time_type, operator(+), operator(/), get_time
+use MOM_time_manager, only : time_type, operator(+), operator(/), get_time,&
+                             time_type_to_real
 use MOM_variables, only : thermo_var_ptrs, surface
 implicit none ; private
 
@@ -27,6 +28,7 @@ type SCM_idealized_hurricane_CS ; private
   real :: p_c    !< Central pressure
   real :: r_max  !< Radius of maximum winds
   real :: U_max  !< Maximum wind speeds
+  real :: YY     !< Distance (north) of storm center
   real :: gust_const !< Gustiness (used in u*)
 end type
 
@@ -115,6 +117,10 @@ subroutine SCM_idealized_hurricane_wind_init(Time, G, param_file, CS)
                  "Maximum wind speed "//                              &
                  "used in the SCM idealized hurricane wind profile.", &
                  units='m/s', default=65.)
+  call get_param(param_file, mod, "SCM_YY", CS%YY,     &
+                 "Y distance of station "//                             &
+                 "used in the SCM idealized hurricane wind profile.", &
+                 units='m', default=50.e3)
   ! The following parameter is a model run-time parameter which is used
   ! and logged elsewhere and so should not be logged here. The default
   ! value should be consistent with the rest of the model.
@@ -134,12 +140,15 @@ subroutine SCM_idealized_hurricane_wind_forcing(state, fluxes, day, G, CS)
   ! Local variables
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
-  real :: U10, A, B, C, r, f ! For wind profile expression
+  real, parameter :: pie=3.141592653589793
+  real :: U10, A, B, C, r, f,du10,rkm ! For wind profile expression
+  real :: xx, transpeed, t0, Udir !for location
   real :: dp, rB
   real :: Cd ! Air-sea drag coefficient
   real :: Uocn, Vocn ! Surface ocean velocity components
   real :: dU, dV ! Air-sea differential motion
-
+  !Wind angle variables
+  real :: Alph,Rstr, A0, A1, P1, Adir, transdir
   ! Bounds for loops and memory allocation
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
@@ -154,37 +163,89 @@ subroutine SCM_idealized_hurricane_wind_forcing(state, fluxes, day, G, CS)
   dp = CS%p_n - CS%p_c
   C = CS%U_max / sqrt( dp )
   B = C**2 * CS%rho_a * exp(1.0)
-  A = CS%r_max**B
-  f = G%CoriolisBu(is,js) ! f=f(x,y) but in the SCM is constant
-
-  r = 70.e3 ! Should be function of time
-
-  rB = r**B
-  U10 = sqrt( A*B*dp*exp(-A/rB)/(CS%rho_a*rB) + 0.25*(r*f)**2 ) - 0.5*r*f
-
-  Cd = 1.e-3 ! Probably should be a function of sea-state, U10, etc.
+  A = (CS%r_max/1000.)**B
+  f = 5.5659e-05!G%CoriolisBu(is,js) ! f=f(x,y) but in the SCM is constant
+  !yy = 50.e3 !radius = 50 km
+  t0 = 129600. !crosses 0 at 36 hours
+  transpeed = 5.0 ! translation speed - 5 m/s
+  transdir = pie
+  xx = ( t0 - time_type_to_real(day)) * transpeed*cos(transdir)
+  r = sqrt(xx**2.+CS%YY**2.)
+  rkm = r/1000.
+  rB = (rkm)**B
+  if (r/CS%r_max.gt.0.001 .AND. r/CS%r_max.lt.10.) then
+     U10 = sqrt( A*B*dp*exp(-A/rB)/(CS%rho_a*rB) + 0.25*(rkm*f)**2 ) - 0.5*rkm*f
+  elseif (r/CS%r_max.gt.10. .AND. r/CS%r_max.lt.12.) then
+     r=CS%r_max*10.
+     rkm = r/1000.
+     rB=rkm**B
+     U10 = ( sqrt( A*B*dp*exp(-A/rB)/(CS%rho_a*rB) + 0.25*(rkm*f)**2 ) - 0.5*rkm*f) &
+           * (12. - r/CS%r_max)/2.
+  else
+     U10 = 0.
+  end if
+  Adir = atan2(CS%YY,xx)
+  Udir = 1./2.*pie + Adir
+  
+  ! BR Wind angle model
+  RSTR = min(10.,r / CS%r_max)
+  A0 = -0.9*RSTR +-0.09*CS%U_max + -14.33
+  A1 = -A0 *(0.04*RSTR +0.05*transpeed+0.14)
+  P1 = (6.88*RSTR +-9.60*transpeed+85.31)*pie/180.
+  ALPH = A0 - A1*cos( (TRANSDIR - ADIR ) - P1)
+  if (r/CS%r_max.gt.10. .AND. r/CS%r_max.lt.12.) then
+     ALPH = ALPH* (12. - r/CS%r_max)/2.
+  elseif (r/CS%r_max.gt.12.) then
+     ALPH = 0.0
+  endif
 
   ! Set the surface wind stresses, in units of Pa. A positive taux
   ! accelerates the ocean to the (pseudo-)east.
   !   The i-loop extends to is-1 so that taux can be used later in the
   ! calculation of ustar - otherwise the lower bound would be Isq.
   do j=js,je ; do I=is-1,Ieq
-    Uocn = state%u(I,j)
-    Vocn = 0.25*( (state%v(i,J) + state%v(i+1,J-1)) &
-                 +(state%v(i+1,J) + state%v(i,J-1)) )
-    dU = U10 - Uocn
-    dV = 0. - Uocn
-    fluxes%taux(I,j) = G%mask2dCu(I,j) * Cd*abs(du**2+dV**2)*dU
+    Uocn = 0.!state%u(I,j)
+    Vocn = 0.!0.25*( (state%v(i,J) + state%v(i+1,J-1)) &
+             !    +(state%v(i+1,J) + state%v(i,J-1)) )
+    dU = U10*sin(Adir-pie-Alph*pie/180.) - Uocn + transpeed/2.*cos(transdir)
+    dV = U10*cos(Adir-Alph*pie/180.) - Vocn + transpeed/2.*sin(transdir)
+    !/----------------------------------------------------|
+    !BR
+    !  Add a simple drag coefficient as a function of U10 |
+    !/----------------------------------------------------|
+    du10=sqrt(du**2+dv**2)
+    if (du10.LT.11.) then
+       Cd = 1.2e-3 ! Probably should be a function of sea-state, U10, etc.
+    elseif (du10.LT.20.) then
+       Cd = (0.59 + 0.065 * U10 )*0.001
+    else
+       Cd = 0.0018
+    endif
+    fluxes%taux(I,j) = CS%rho_a * G%mask2dCu(I,j) * Cd*sqrt(du**2+dV**2)*dU
   enddo ; enddo
   do J=js-1,Jeq ; do i=is,ie
-    Uocn = 0.25*( (state%u(I,j) + state%u(I-1,j+1)) &
-                 +(state%u(I-1,j) + state%u(I,j+1)) )
-    Vocn = state%v(i,J)
-    dU = U10 - Uocn
-    dV = 0. - Uocn
-    fluxes%tauy(i,J) = G%mask2dCv(i,J) * Cd*abs(du**2+dV**2)*dV
+    Uocn = 0.!0.25*( (state%u(I,j) + state%u(I-1,j+1)) &
+             !    +(state%u(I-1,j) + state%u(I,j+1)) )
+    Vocn = 0.!state%v(i,J)
+    dU = U10*sin(Adir-pie-Alph*pie/180.) - Uocn + transpeed/2.*cos(transdir)
+    dV = U10*cos(Adir-Alph*pie/180.) - Vocn + transpeed/2.*sin(transdir)
+    !/----------------------------------------------------|
+    !BR
+    !  Add a simple drag coefficient as a function of U10 |
+    !/----------------------------------------------------|
+    du10=sqrt(du**2+dv**2)
+    if (du10.LT.11.) then
+       Cd = 1.2e-3 ! Probably should be a function of sea-state, U10, etc.
+    elseif (du10.LT.20.) then
+       Cd = (0.59 + 0.065 * U10 )*0.001
+    else
+       Cd = 0.0018
+    endif
+    !fluxes%taux(I,j) = G%mask2dCu(I,j) * Cd*abs(du**2+dV**2)*dU
+    !BR change abs to sqrt
+    fluxes%tauy(I,j) = CS%rho_a * G%mask2dCv(I,j) * Cd*du10*dV
   enddo ; enddo
-
+  print*,'Alph',Alph,G%mask2dCv(I,j)
   ! Set the surface friction velocity, in units of m s-1. ustar is always positive.
   do j=js,je ; do i=is,ie
     !  This expression can be changed if desired, but need not be.
