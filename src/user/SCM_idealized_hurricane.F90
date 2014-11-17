@@ -100,7 +100,7 @@ subroutine SCM_idealized_hurricane_wind_init(Time, G, param_file, CS)
   call get_param(param_file, mod, "SCM_RHO_AIR", CS%rho_a,            &
                  "Air density "//                                     &
                  "used in the SCM idealized hurricane wind profile.", &
-                 units='kg/m3', default=1.25)
+                 units='kg/m3', default=1.2)
   call get_param(param_file, mod, "SCM_AMBIENT_PRESSURE", CS%p_n,     &
                  "Ambient pressure "//                                &
                  "used in the SCM idealized hurricane wind profile.", &
@@ -164,9 +164,12 @@ subroutine SCM_idealized_hurricane_wind_forcing(state, fluxes, day, G, CS)
   ! Implementing Holland (1980) parameteric wind profile
   dp = CS%p_n - CS%p_c
   C = CS%U_max / sqrt( dp )
-  B = C**2 * CS%rho_a * exp(1.0)
+  !B = C**2 * CS%rho_a * exp(1.0)
+  B = C**2 * 1.2 * exp(1.0) !rho_a used as 1.2 to generate wind
   A = (CS%r_max/1000.)**B
-  f = G%CoriolisBu(is,js) ! f=f(x,y) but in the SCM is constant
+  !/ BR
+  ! f set to value used in generated wind
+  f = 5.5659e-05 !G%CoriolisBu(is,js) ! f=f(x,y) but in the SCM is constant
   t0 = 129600. !TC 'eye' crosses (0,0) at 36 hours
   transpeed = 5.0 ! translation speed - 5 m/s
   transdir = pie ! translation direction (-x)
@@ -185,14 +188,14 @@ subroutine SCM_idealized_hurricane_wind_forcing(state, fluxes, day, G, CS)
   !/ BR
   ! Calculate U10 in the interior (inside of 10x radius of maximum wind),
   ! while adjusting U10 to 0 outside of 12x radius of maximum wind.
-  !
+  ! Note that rho_a is set to 1.2 following generated wind for experiment
   if (r/CS%r_max.gt.0.001 .AND. r/CS%r_max.lt.10.) then
-     U10 = sqrt( A*B*dp*exp(-A/rB)/(CS%rho_a*rB) + 0.25*(rkm*f)**2 ) - 0.5*rkm*f
+     U10 = sqrt( A*B*dp*exp(-A/rB)/(1.2*rB) + 0.25*(rkm*f)**2 ) - 0.5*rkm*f
   elseif (r/CS%r_max.gt.10. .AND. r/CS%r_max.lt.12.) then
      r=CS%r_max*10.
      rkm = r/1000.
      rB=rkm**B
-     U10 = ( sqrt( A*B*dp*exp(-A/rB)/(CS%rho_a*rB) + 0.25*(rkm*f)**2 ) - 0.5*rkm*f) &
+     U10 = ( sqrt( A*B*dp*exp(-A/rB)/(1.2*rB) + 0.25*(rkm*f)**2 ) - 0.5*rkm*f) &
            * (12. - r/CS%r_max)/2.
   else
      U10 = 0.
