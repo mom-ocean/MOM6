@@ -29,6 +29,7 @@ type SCM_idealized_hurricane_CS ; private
   real :: r_max  !< Radius of maximum winds
   real :: U_max  !< Maximum wind speeds
   real :: YY     !< Distance (positive north) of storm center
+  real :: tran_speed !< Hurricane translation speed
   real :: gust_const !< Gustiness (used in u*)
 end type
 
@@ -118,15 +119,19 @@ subroutine SCM_idealized_hurricane_wind_init(Time, G, param_file, CS)
                  "used in the SCM idealized hurricane wind profile.", &
                  units='m/s', default=65.)
   call get_param(param_file, mod, "SCM_YY", CS%YY,     &
-                 "Y distance of station "//                             &
+                 "Y distance of station "//                           &
                  "used in the SCM idealized hurricane wind profile.", &
                  units='m', default=50.e3)
+  call get_param(param_file, mod, "SCM_TRAN_SPEED", CS%TRAN_SPEED,     &
+                 "Translation speed of hurricane"//                   &
+                 "used in the SCM idealized hurricane wind profile.", &
+                 units='m/s', default=5.0)
   ! The following parameter is a model run-time parameter which is used
   ! and logged elsewhere and so should not be logged here. The default
   ! value should be consistent with the rest of the model.
   call get_param(param_file, mod, "GUST_CONST", CS%gust_const, &
                  "The background gustiness in the winds.", units="Pa", &
-                 default=0.02, do_not_log=.true.)
+                 default=0.00, do_not_log=.true.)
 
 
 end subroutine SCM_idealized_hurricane_wind_init
@@ -141,14 +146,16 @@ subroutine SCM_idealized_hurricane_wind_forcing(state, fluxes, day, G, CS)
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   real, parameter :: pie=3.141592653589793
+  real, parameter :: Deg2Rad = pie/180.
   real :: U10, A, B, C, r, f,du10,rkm ! For wind profile expression
-  real :: xx, transpeed, t0, Udir !for location
+  real :: xx, t0 !for location
   real :: dp, rB
   real :: Cd ! Air-sea drag coefficient
   real :: Uocn, Vocn ! Surface ocean velocity components
   real :: dU, dV ! Air-sea differential motion
   !Wind angle variables
-  real :: Alph,Rstr, A0, A1, P1, Adir, transdir
+  real :: Alph,Rstr, A0, A1, P1, Adir, transdir, V_TS, U_TS
+  logical :: BR_Bench
   ! Bounds for loops and memory allocation
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
@@ -162,20 +169,27 @@ subroutine SCM_idealized_hurricane_wind_forcing(state, fluxes, day, G, CS)
 
   !/ BR
   ! Implementing Holland (1980) parameteric wind profile
+  !------------------------------------------------------|
+  BR_Bench = .true.   !true if comparing to LES runs     | 
+  t0 = 129600.        !TC 'eye' crosses (0,0) at 36 hours|
+  transdir = pie      !translation direction (-x)        |
+  !------------------------------------------------------|
   dp = CS%p_n - CS%p_c
   C = CS%U_max / sqrt( dp )
-  !B = C**2 * CS%rho_a * exp(1.0)
-  B = C**2 * 1.2 * exp(1.0) !rho_a used as 1.2 to generate wind
+  B = C**2 * CS%rho_a * exp(1.0)
+  if (BR_Bench) then
+     ! rho_a reset to value used in generated wind for benchmark test
+     B = C**2 * 1.2 * exp(1.0)
+  endif
   A = (CS%r_max/1000.)**B
-  !/ BR
-  ! f set to value used in generated wind
-  f = 5.5659e-05 !G%CoriolisBu(is,js) ! f=f(x,y) but in the SCM is constant
-  t0 = 129600. !TC 'eye' crosses (0,0) at 36 hours
-  transpeed = 5.0 ! translation speed - 5 m/s
-  transdir = pie ! translation direction (-x)
+  f =G%CoriolisBu(is,js) ! f=f(x,y) but in the SCM is constant
+  if (BR_Bench) then
+     ! f reset to value used in generated wind for benchmark test
+     f = 5.5659e-05
+  endif
   !/ BR
   ! Calculate x position as a function of time.
-  xx = ( t0 - time_type_to_real(day)) * transpeed * cos(transdir)
+  xx = ( t0 - time_type_to_real(day)) * CS%tran_speed * cos(transdir)
   r = sqrt(xx**2.+CS%YY**2.)
   !/ BR
   ! rkm - r converted to km for Holland prof.
@@ -183,8 +197,14 @@ subroutine SCM_idealized_hurricane_wind_forcing(state, fluxes, day, G, CS)
   !       not need rkm, but to match winds w/ experiment this must
   !       be maintained.  Causes winds far from storm center to be a
   !       couple of m/s higher than the correct Holland prof. 
-  rkm = r/1000.
-  rB = (rkm)**B
+  if (BR_Bench) then
+     rkm = r/1000.
+     rB = (rkm)**B
+  else
+     ! if not comparing to benchmark, then use correct Holland prof.
+     rkm = r
+     rB = r**B
+  endif
   !/ BR
   ! Calculate U10 in the interior (inside of 10x radius of maximum wind),
   ! while adjusting U10 to 0 outside of 12x radius of maximum wind.
@@ -193,29 +213,41 @@ subroutine SCM_idealized_hurricane_wind_forcing(state, fluxes, day, G, CS)
      U10 = sqrt( A*B*dp*exp(-A/rB)/(1.2*rB) + 0.25*(rkm*f)**2 ) - 0.5*rkm*f
   elseif (r/CS%r_max.gt.10. .AND. r/CS%r_max.lt.12.) then
      r=CS%r_max*10.
-     rkm = r/1000.
-     rB=rkm**B
+     if (BR_Bench) then
+        rkm = r/1000.
+        rB=rkm**B
+     else
+        rkm = r
+        rB = r**B
+     endif
      U10 = ( sqrt( A*B*dp*exp(-A/rB)/(1.2*rB) + 0.25*(rkm*f)**2 ) - 0.5*rkm*f) &
            * (12. - r/CS%r_max)/2.
   else
      U10 = 0.
   end if
   Adir = atan2(CS%YY,xx)
-  Udir = 1./2.*pie + Adir
   
   !/ BR 
   ! Wind angle model following Zhang and Ulhorn (2012) 
-  ! ALPH is inflow angle positive inward.
+  ! ALPH is inflow angle positive outward.
   RSTR = min(10.,r / CS%r_max)
   A0 = -0.9*RSTR +-0.09*CS%U_max + -14.33
-  A1 = -A0 *(0.04*RSTR +0.05*transpeed+0.14)
-  P1 = (6.88*RSTR +-9.60*transpeed+85.31)*pie/180.
+  A1 = -A0 *(0.04*RSTR +0.05*CS%tran_speed+0.14)
+  P1 = (6.88*RSTR +-9.60*CS%tran_speed+85.31)*pie/180.
   ALPH = A0 - A1*cos( (TRANSDIR - ADIR ) - P1)
   if (r/CS%r_max.gt.10. .AND. r/CS%r_max.lt.12.) then
      ALPH = ALPH* (12. - r/CS%r_max)/2.
   elseif (r/CS%r_max.gt.12.) then
      ALPH = 0.0
   endif
+  ALPH = ALPH * Deg2Rad
+
+  !/BR
+  ! Prepare for wind calculation
+  ! X_TS is component of translation speed added to wind vector
+  ! due to background steering wind.
+  U_TS = CS%tran_speed/2.*cos(transdir)
+  V_TS = CS%tran_speed/2.*sin(transdir)
 
   ! Set the surface wind stresses, in units of Pa. A positive taux
   ! accelerates the ocean to the (pseudo-)east.
@@ -231,8 +263,8 @@ subroutine SCM_idealized_hurricane_wind_forcing(state, fluxes, day, G, CS)
     !/BR
     ! Wind vector calculated from location/direction (sin/cos flipped b/c
     ! cyclonic wind is 90 deg. phase shifted from position angle).
-    dU = U10*sin(Adir-pie-Alph*pie/180.) - Uocn + transpeed/2.*cos(transdir)
-    dV = U10*cos(Adir-Alph*pie/180.) - Vocn + transpeed/2.*sin(transdir)
+    dU = U10*sin(Adir-pie-Alph) - Uocn + U_TS
+    dV = U10*cos(Adir-Alph) - Vocn + V_TS
     !/----------------------------------------------------|
     !BR
     !  Add a simple drag coefficient as a function of U10 |
@@ -241,7 +273,7 @@ subroutine SCM_idealized_hurricane_wind_forcing(state, fluxes, day, G, CS)
     if (du10.LT.11.) then
        Cd = 1.2e-3 
     elseif (du10.LT.20.) then
-       Cd = (0.59 + 0.065 * U10 )*0.001
+       Cd = (0.49 + 0.065 * U10 )*0.001
     else
        Cd = 0.0018
     endif
@@ -253,13 +285,13 @@ subroutine SCM_idealized_hurricane_wind_forcing(state, fluxes, day, G, CS)
     Uocn = 0.!0.25*( (state%u(I,j) + state%u(I-1,j+1)) &
              !    +(state%u(I-1,j) + state%u(I,j+1)) )
     Vocn = 0.!state%v(i,J)
-    dU = U10*sin(Adir-pie-Alph*pie/180.) - Uocn + transpeed/2.*cos(transdir)
-    dV = U10*cos(Adir-Alph*pie/180.) - Vocn + transpeed/2.*sin(transdir)
+    dU = U10*sin(Adir-pie-Alph) - Uocn + U_TS
+    dV = U10*cos(Adir-Alph) - Vocn + V_TS
     du10=sqrt(du**2+dv**2)
     if (du10.LT.11.) then
        Cd = 1.2e-3 
     elseif (du10.LT.20.) then
-       Cd = (0.59 + 0.065 * U10 )*0.001
+       Cd = (0.49 + 0.065 * U10 )*0.001
     else
        Cd = 0.0018
     endif
