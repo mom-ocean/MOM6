@@ -231,9 +231,9 @@ subroutine SCM_idealized_hurricane_wind_forcing(state, fluxes, day, G, CS)
   ! Wind angle model following Zhang and Ulhorn (2012) 
   ! ALPH is inflow angle positive outward.
   RSTR = min(10.,r / CS%r_max)
-  A0 = -0.9*RSTR +-0.09*CS%U_max + -14.33
+  A0 = -0.9*RSTR -0.09*CS%U_max -14.33
   A1 = -A0 *(0.04*RSTR +0.05*CS%tran_speed+0.14)
-  P1 = (6.88*RSTR +-9.60*CS%tran_speed+85.31)*pie/180.
+  P1 = (6.88*RSTR -9.60*CS%tran_speed+85.31)*pie/180.
   ALPH = A0 - A1*cos( (TRANSDIR - ADIR ) - P1)
   if (r/CS%r_max.gt.10. .AND. r/CS%r_max.lt.12.) then
      ALPH = ALPH* (12. - r/CS%r_max)/2.
