@@ -9,7 +9,8 @@ use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_safe_alloc, only : safe_alloc_ptr
-use MOM_time_manager, only : time_type, operator(+), operator(/), get_time
+use MOM_time_manager, only : time_type, operator(+), operator(/), get_time,&
+                             time_type_to_real
 use MOM_variables, only : thermo_var_ptrs, surface
 implicit none ; private
 
@@ -27,6 +28,8 @@ type SCM_idealized_hurricane_CS ; private
   real :: p_c    !< Central pressure
   real :: r_max  !< Radius of maximum winds
   real :: U_max  !< Maximum wind speeds
+  real :: YY     !< Distance (positive north) of storm center
+  real :: tran_speed !< Hurricane translation speed
   real :: gust_const !< Gustiness (used in u*)
 end type
 
@@ -98,7 +101,7 @@ subroutine SCM_idealized_hurricane_wind_init(Time, G, param_file, CS)
   call get_param(param_file, mod, "SCM_RHO_AIR", CS%rho_a,            &
                  "Air density "//                                     &
                  "used in the SCM idealized hurricane wind profile.", &
-                 units='kg/m3', default=1.25)
+                 units='kg/m3', default=1.2)
   call get_param(param_file, mod, "SCM_AMBIENT_PRESSURE", CS%p_n,     &
                  "Ambient pressure "//                                &
                  "used in the SCM idealized hurricane wind profile.", &
@@ -115,12 +118,20 @@ subroutine SCM_idealized_hurricane_wind_init(Time, G, param_file, CS)
                  "Maximum wind speed "//                              &
                  "used in the SCM idealized hurricane wind profile.", &
                  units='m/s', default=65.)
+  call get_param(param_file, mod, "SCM_YY", CS%YY,     &
+                 "Y distance of station "//                           &
+                 "used in the SCM idealized hurricane wind profile.", &
+                 units='m', default=50.e3)
+  call get_param(param_file, mod, "SCM_TRAN_SPEED", CS%TRAN_SPEED,     &
+                 "Translation speed of hurricane"//                   &
+                 "used in the SCM idealized hurricane wind profile.", &
+                 units='m/s', default=5.0)
   ! The following parameter is a model run-time parameter which is used
   ! and logged elsewhere and so should not be logged here. The default
   ! value should be consistent with the rest of the model.
   call get_param(param_file, mod, "GUST_CONST", CS%gust_const, &
                  "The background gustiness in the winds.", units="Pa", &
-                 default=0.02, do_not_log=.true.)
+                 default=0.00, do_not_log=.true.)
 
 
 end subroutine SCM_idealized_hurricane_wind_init
@@ -134,12 +145,17 @@ subroutine SCM_idealized_hurricane_wind_forcing(state, fluxes, day, G, CS)
   ! Local variables
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
-  real :: U10, A, B, C, r, f ! For wind profile expression
+  real, parameter :: pie=3.141592653589793
+  real, parameter :: Deg2Rad = pie/180.
+  real :: U10, A, B, C, r, f,du10,rkm ! For wind profile expression
+  real :: xx, t0 !for location
   real :: dp, rB
   real :: Cd ! Air-sea drag coefficient
   real :: Uocn, Vocn ! Surface ocean velocity components
   real :: dU, dV ! Air-sea differential motion
-
+  !Wind angle variables
+  real :: Alph,Rstr, A0, A1, P1, Adir, transdir, V_TS, U_TS
+  logical :: BR_Bench
   ! Bounds for loops and memory allocation
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
@@ -151,40 +167,136 @@ subroutine SCM_idealized_hurricane_wind_forcing(state, fluxes, day, G, CS)
   call safe_alloc_ptr(fluxes%tauy, isd, ied, JsdB, JedB)
   call safe_alloc_ptr(fluxes%ustar, isd, ied, jsd, jed)
 
+  !/ BR
+  ! Implementing Holland (1980) parameteric wind profile
+  !------------------------------------------------------|
+  BR_Bench = .true.   !true if comparing to LES runs     | 
+  t0 = 129600.        !TC 'eye' crosses (0,0) at 36 hours|
+  transdir = pie      !translation direction (-x)        |
+  !------------------------------------------------------|
   dp = CS%p_n - CS%p_c
   C = CS%U_max / sqrt( dp )
   B = C**2 * CS%rho_a * exp(1.0)
-  A = CS%r_max**B
-  f = G%CoriolisBu(is,js) ! f=f(x,y) but in the SCM is constant
+  if (BR_Bench) then
+     ! rho_a reset to value used in generated wind for benchmark test
+     B = C**2 * 1.2 * exp(1.0)
+  endif
+  A = (CS%r_max/1000.)**B
+  f =G%CoriolisBu(is,js) ! f=f(x,y) but in the SCM is constant
+  if (BR_Bench) then
+     ! f reset to value used in generated wind for benchmark test
+     f = 5.5659e-05
+  endif
+  !/ BR
+  ! Calculate x position as a function of time.
+  xx = ( t0 - time_type_to_real(day)) * CS%tran_speed * cos(transdir)
+  r = sqrt(xx**2.+CS%YY**2.)
+  !/ BR
+  ! rkm - r converted to km for Holland prof.
+  !       used in km due to error, correct implementation should
+  !       not need rkm, but to match winds w/ experiment this must
+  !       be maintained.  Causes winds far from storm center to be a
+  !       couple of m/s higher than the correct Holland prof. 
+  if (BR_Bench) then
+     rkm = r/1000.
+     rB = (rkm)**B
+  else
+     ! if not comparing to benchmark, then use correct Holland prof.
+     rkm = r
+     rB = r**B
+  endif
+  !/ BR
+  ! Calculate U10 in the interior (inside of 10x radius of maximum wind),
+  ! while adjusting U10 to 0 outside of 12x radius of maximum wind.
+  ! Note that rho_a is set to 1.2 following generated wind for experiment
+  if (r/CS%r_max.gt.0.001 .AND. r/CS%r_max.lt.10.) then
+     U10 = sqrt( A*B*dp*exp(-A/rB)/(1.2*rB) + 0.25*(rkm*f)**2 ) - 0.5*rkm*f
+  elseif (r/CS%r_max.gt.10. .AND. r/CS%r_max.lt.12.) then
+     r=CS%r_max*10.
+     if (BR_Bench) then
+        rkm = r/1000.
+        rB=rkm**B
+     else
+        rkm = r
+        rB = r**B
+     endif
+     U10 = ( sqrt( A*B*dp*exp(-A/rB)/(1.2*rB) + 0.25*(rkm*f)**2 ) - 0.5*rkm*f) &
+           * (12. - r/CS%r_max)/2.
+  else
+     U10 = 0.
+  end if
+  Adir = atan2(CS%YY,xx)
+  
+  !/ BR 
+  ! Wind angle model following Zhang and Ulhorn (2012) 
+  ! ALPH is inflow angle positive outward.
+  RSTR = min(10.,r / CS%r_max)
+  A0 = -0.9*RSTR +-0.09*CS%U_max + -14.33
+  A1 = -A0 *(0.04*RSTR +0.05*CS%tran_speed+0.14)
+  P1 = (6.88*RSTR +-9.60*CS%tran_speed+85.31)*pie/180.
+  ALPH = A0 - A1*cos( (TRANSDIR - ADIR ) - P1)
+  if (r/CS%r_max.gt.10. .AND. r/CS%r_max.lt.12.) then
+     ALPH = ALPH* (12. - r/CS%r_max)/2.
+  elseif (r/CS%r_max.gt.12.) then
+     ALPH = 0.0
+  endif
+  ALPH = ALPH * Deg2Rad
 
-  r = 70.e3 ! Should be function of time
-
-  rB = r**B
-  U10 = sqrt( A*B*dp*exp(-A/rB)/(CS%rho_a*rB) + 0.25*(r*f)**2 ) - 0.5*r*f
-
-  Cd = 1.e-3 ! Probably should be a function of sea-state, U10, etc.
+  !/BR
+  ! Prepare for wind calculation
+  ! X_TS is component of translation speed added to wind vector
+  ! due to background steering wind.
+  U_TS = CS%tran_speed/2.*cos(transdir)
+  V_TS = CS%tran_speed/2.*sin(transdir)
 
   ! Set the surface wind stresses, in units of Pa. A positive taux
   ! accelerates the ocean to the (pseudo-)east.
   !   The i-loop extends to is-1 so that taux can be used later in the
   ! calculation of ustar - otherwise the lower bound would be Isq.
   do j=js,je ; do I=is-1,Ieq
-    Uocn = state%u(I,j)
-    Vocn = 0.25*( (state%v(i,J) + state%v(i+1,J-1)) &
-                 +(state%v(i+1,J) + state%v(i,J-1)) )
-    dU = U10 - Uocn
-    dV = 0. - Uocn
-    fluxes%taux(I,j) = G%mask2dCu(I,j) * Cd*abs(du**2+dV**2)*dU
+    !/BR
+    ! Turn off surface current for stress calculation to be 
+    ! consistent with test case.
+    Uocn = 0.!state%u(I,j)
+    Vocn = 0.!0.25*( (state%v(i,J) + state%v(i+1,J-1)) &
+             !    +(state%v(i+1,J) + state%v(i,J-1)) )
+    !/BR
+    ! Wind vector calculated from location/direction (sin/cos flipped b/c
+    ! cyclonic wind is 90 deg. phase shifted from position angle).
+    dU = U10*sin(Adir-pie-Alph) - Uocn + U_TS
+    dV = U10*cos(Adir-Alph) - Vocn + V_TS
+    !/----------------------------------------------------|
+    !BR
+    !  Add a simple drag coefficient as a function of U10 |
+    !/----------------------------------------------------|
+    du10=sqrt(du**2+dv**2)
+    if (du10.LT.11.) then
+       Cd = 1.2e-3 
+    elseif (du10.LT.20.) then
+       Cd = (0.49 + 0.065 * U10 )*0.001
+    else
+       Cd = 0.0018
+    endif
+    fluxes%taux(I,j) = CS%rho_a * G%mask2dCu(I,j) * Cd*sqrt(du**2+dV**2)*dU
   enddo ; enddo
+  !/BR
+  ! See notes above
   do J=js-1,Jeq ; do i=is,ie
-    Uocn = 0.25*( (state%u(I,j) + state%u(I-1,j+1)) &
-                 +(state%u(I-1,j) + state%u(I,j+1)) )
-    Vocn = state%v(i,J)
-    dU = U10 - Uocn
-    dV = 0. - Uocn
-    fluxes%tauy(i,J) = G%mask2dCv(i,J) * Cd*abs(du**2+dV**2)*dV
+    Uocn = 0.!0.25*( (state%u(I,j) + state%u(I-1,j+1)) &
+             !    +(state%u(I-1,j) + state%u(I,j+1)) )
+    Vocn = 0.!state%v(i,J)
+    dU = U10*sin(Adir-pie-Alph) - Uocn + U_TS
+    dV = U10*cos(Adir-Alph) - Vocn + V_TS
+    du10=sqrt(du**2+dv**2)
+    if (du10.LT.11.) then
+       Cd = 1.2e-3 
+    elseif (du10.LT.20.) then
+       Cd = (0.49 + 0.065 * U10 )*0.001
+    else
+       Cd = 0.0018
+    endif
+    fluxes%tauy(I,j) = CS%rho_a * G%mask2dCv(I,j) * Cd*du10*dV
   enddo ; enddo
-
   ! Set the surface friction velocity, in units of m s-1. ustar is always positive.
   do j=js,je ; do i=is,ie
     !  This expression can be changed if desired, but need not be.
