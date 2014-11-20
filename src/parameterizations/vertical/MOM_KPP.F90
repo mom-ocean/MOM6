@@ -624,8 +624,10 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
             delH = min( max(0., SLdepth_0d - hTotVm1), 0.5*(h(i,j-1,k)+h(i,j,k))*G%H_to_m )
             hTotVm1 = hTotVm1 + delH
             surfHvm1 = surfHvm1 + v(i,j-1,k) * delH ; surfVm1 = surfHvm1 / hTotVm1
-          else
-            exit ! Avoid unnecessary calculations
+            !Bugfix: Eliminate exit so that all vertical levels are calculated
+            !        using the updated surface averages. /BGR
+          !else
+          !  exit ! Avoid unnecessary calculations
           endif
         enddo
 
