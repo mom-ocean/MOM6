@@ -146,6 +146,8 @@ type, public :: ocean_grid_type
     Dopen_v       ! (Dblock_v) and open at width dx_Cv (Dopen_v), both in m.
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: &
     CoriolisBu    ! The Coriolis parameter at corner points, in s-1.
+  real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
+    dF_dx, dF_dy  ! Derivatives of f (Coriolis parameter) at h-points, in s-1 m-1.
 
   ! The following variables give information about the vertical grid.
   logical :: Boussinesq     ! If true, make the Boussinesq approximation.
@@ -586,6 +588,8 @@ subroutine allocate_metrics(G)
   ALLOC_(G%IareaCv(isd:ied,JsdB:JedB)) ; G%IareaCv(:,:) = 0.0
 
   ALLOC_(G%CoriolisBu(IsdB:IedB, JsdB:JedB)) ; G%CoriolisBu(:,:) = 0.0
+  ALLOC_(G%dF_dx(isd:ied, jsd:jed)) ; G%dF_dx(:,:) = 0.0
+  ALLOC_(G%dF_dy(isd:ied, jsd:jed)) ; G%dF_dy(:,:) = 0.0
 
 end subroutine allocate_metrics
 
@@ -616,6 +620,7 @@ subroutine MOM_grid_end(G)
   DEALLOC_(G%dx_Cv_obc) ; DEALLOC_(G%dy_Cu_obc)
 
   DEALLOC_(G%bathyT)  ; DEALLOC_(G%CoriolisBu)
+  DEALLOC_(G%dF_dx)  ; DEALLOC_(G%dF_dy)
   DEALLOC_(G%g_prime) ; DEALLOC_(G%Rlay)
   deallocate(G%gridLonT) ; deallocate(G%gridLatT)
   deallocate(G%gridLonB) ; deallocate(G%gridLatB)

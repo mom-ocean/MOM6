@@ -74,7 +74,7 @@ use MOM_coms, only : max_across_PEs, min_across_PEs
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock, only :  CLOCK_ROUTINE, CLOCK_LOOP
 use MOM_domains, only : pass_var, pass_vector, sum_across_PEs, broadcast
-use MOM_domains, only : root_PE, To_All, SCALAR_PAIR, CGRID_NE
+use MOM_domains, only : root_PE, To_All, SCALAR_PAIR, CGRID_NE, AGRID
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser, only : get_param, read_param, log_param, param_file_type
@@ -344,8 +344,12 @@ subroutine MOM_initialize(u, v, h, tv, Time, G, PF, dirs, &
 !    Calculate the value of the Coriolis parameter at the latitude   !
 !  of the q grid points, in s-1.
   call MOM_initialize_rotation(G%CoriolisBu, G, PF)
+!   Calculate the components of grad f (beta)
+  call MOM_calculate_grad_Coriolis(G%dF_dx, G%dF_dy, G)
   if (debug) then
     call qchksum(G%CoriolisBu, "MOM_initialize: f ", G)
+    call hchksum(G%dF_dx, "MOM_initialize: dF_dx ", G)
+    call hchksum(G%dF_dy, "MOM_initialize: dF_dy ", G)
   endif
 
 ! Compute global integrals of grid values for later use in scalar diagnostics !
@@ -1037,6 +1041,25 @@ subroutine MOM_initialize_rotation(f, G, PF)
   end select
   call callTree_leave(trim(mod)//'()')
 end subroutine MOM_initialize_rotation
+
+!> Calculates the components of grad f (Coriolis parameter)
+subroutine MOM_calculate_grad_Coriolis(dF_dx, dF_dy, G)
+  real, dimension(NIMEM_,NJMEM_), intent(out)   :: dF_dx !< x-component of grad f
+  real, dimension(NIMEM_,NJMEM_), intent(out)   :: dF_dy !< y-component of grad f
+  type(ocean_grid_type),          intent(inout) :: G !< Grid type
+  ! Local variables
+  integer :: i,j
+  real :: f1, f2
+  do j=G%jsc, G%jec ; do i=G%isc, G%iec
+    f1 = 0.5*( G%CoriolisBu(I,J) + G%CoriolisBu(I,J-1) )
+    f2 = 0.5*( G%CoriolisBu(I-1,J) + G%CoriolisBu(I-1,J-1) )
+    dF_dx(i,j) = G%IdxT(i,j) * ( f1 - f2 )
+    f1 = 0.5*( G%CoriolisBu(I,J) + G%CoriolisBu(I-1,J) )
+    f2 = 0.5*( G%CoriolisBu(I,J-1) + G%CoriolisBu(I-1,J-1) )
+    dF_dy(i,j) = G%IdyT(i,j) * ( f1 - f2 )
+  enddo ; enddo
+  call pass_vector(dF_dx, dF_dy, G%Domain, stagger=AGRID)
+end subroutine MOM_calculate_grad_Coriolis
 
 subroutine MOM_initialize_topography(D, max_depth, G, PF)
   real, dimension(NIMEM_,NJMEM_), intent(out) :: D
