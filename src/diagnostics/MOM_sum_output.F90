@@ -311,6 +311,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
 !                 MOM_sum_output_init.
 
   real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! The height of interfaces, in m.
+  real :: areaTm(SZI_(G),SZJ_(G)) ! A masked version of areaT, in m2.
   real :: KE(SZK_(G))  ! The total kinetic energy of a layer, in J.
   real :: PE(SZK_(G)+1)! The available potential energy of an interface, in J.
   real :: KE_tot       ! The total kinetic energy, in J.
@@ -426,11 +427,15 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
   if (.not.associated(CS)) call MOM_error(FATAL, &
          "write_energy: Module must be initialized before it is used.")
 
+  do j=js,je ; do i=is,ie
+    areaTm(i,j) = G%mask2dT(i,j)*G%areaT(i,j)
+  enddo ; enddo
+
   if (G%Boussinesq) then
     if (CS%use_repro_sum) then
       tmp1(:,:,:) = 0.0
       do k=1,nz ; do j=js,je ; do i=is,ie
-        tmp1(i,j,k) = h(i,j,k) * (G%H_to_kg_m2*G%areaT(i,j))
+        tmp1(i,j,k) = h(i,j,k) * (G%H_to_kg_m2*areaTm(i,j))
       enddo ; enddo ; enddo
       mass_tot = reproducing_sum(tmp1, sums=mass_lay, EFP_sum=mass_EFP)
       do k=1,nz ; vol_lay(k) = (G%H_to_m/G%H_to_kg_m2)*mass_lay(k) ; enddo
@@ -438,7 +443,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
       do k=1,nz
         vol_lay(k) = 0.0
         do j=js,je ; do i=is,ie
-          vol_lay(k) = vol_lay(k) + h(i,j,k) * G%areaT(i,j)
+          vol_lay(k) = vol_lay(k) + h(i,j,k) * areaTm(i,j)
         enddo ; enddo
       enddo
       call sum_across_PEs(vol_lay,nz)
@@ -450,18 +455,18 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
       tmp1(:,:,:) = 0.0
       if (CS%do_APE_calc) then
         do k=1,nz ; do j=js,je ; do i=is,ie
-          tmp1(i,j,k) = G%H_to_kg_m2 * h(i,j,k) * G%areaT(i,j)
+          tmp1(i,j,k) = G%H_to_kg_m2 * h(i,j,k) * areaTm(i,j)
         enddo ; enddo ; enddo
         mass_tot = reproducing_sum(tmp1, sums=mass_lay, EFP_sum=mass_EFP)
 
         call find_eta(h, tv, G%g_Earth, G, eta)
         do k=1,nz ; do j=js,je ; do i=is,ie
-          tmp1(i,j,k) = (eta(i,j,K)-eta(i,j,K+1)) * G%areaT(i,j)
+          tmp1(i,j,k) = (eta(i,j,K)-eta(i,j,K+1)) * areaTm(i,j)
         enddo ; enddo ; enddo
         vol_tot = G%H_to_m*reproducing_sum(tmp1, sums=vol_lay)
       else
         do k=1,nz ; do j=js,je ; do i=is,ie
-          tmp1(i,j,k) = G%H_to_kg_m2 * h(i,j,k) * G%areaT(i,j)
+          tmp1(i,j,k) = G%H_to_kg_m2 * h(i,j,k) * areaTm(i,j)
         enddo ; enddo ; enddo
         mass_tot = reproducing_sum(tmp1, sums=mass_lay, EFP_sum=mass_EFP)
         do k=1,nz ; vol_lay(k) = mass_lay(k) / G%Rho0 ; enddo
@@ -470,7 +475,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
       do k=1,nz
         mass_lay(k) = 0.0
         do j=js,je ; do i=is,ie
-          mass_lay(k) = mass_lay(k) + G%H_to_kg_m2 * h(i,j,k) * G%areaT(i,j)
+          mass_lay(k) = mass_lay(k) + G%H_to_kg_m2 * h(i,j,k) * areaTm(i,j)
         enddo ; enddo
       enddo
       if (CS%do_APE_calc) then
@@ -479,7 +484,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
         do k=1,nz
           vol_lay(k) = 0.0
           do j=js,je ; do i=is,ie
-            vol_lay(k) = vol_lay(k) + (eta(i,j,K)-eta(i,j,K+1)) * G%areaT(i,j)
+            vol_lay(k) = vol_lay(k) + (eta(i,j,K)-eta(i,j,K+1)) * areaTm(i,j)
           enddo ; enddo
         enddo
         call sum_across_PEs(vol_lay,nz)
@@ -607,14 +612,14 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
   if (CS%use_repro_sum) then
     tmp1(:,:,:) = 0.0
     do k=1,nz ; do j=js,je ; do i=is,ie
-      tmp1(i,j,k) = (0.25 * G%H_to_kg_m2 * (G%areaT(i,j) * h(i,j,k))) * &
+      tmp1(i,j,k) = (0.25 * G%H_to_kg_m2 * (areaTm(i,j) * h(i,j,k))) * &
               (u(I-1,j,k)**2 + u(I,j,k)**2 + v(i,J-1,k)**2 + v(i,J,k)**2)
     enddo ; enddo ; enddo
   else
     do k=1,nz
       KE(k) = 0.0
       do j=js,je ; do i=is,ie
-         KE(k) = KE(k) + 0.25 * (G%areaT(i,j) * h(i,j,k)) * &
+         KE(k) = KE(k) + 0.25 * (areaTm(i,j) * h(i,j,k)) * &
               (u(I-1,j,k)**2 + u(I,j,k)**2 + v(i,J-1,k)**2 + v(i,J,k)**2)
       enddo ; enddo
       KE(k) = G%H_to_kg_m2 * KE(k)
@@ -635,7 +640,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
           hint = (H_0APE(K) + hbelow - G%bathyT(i,j))
           hbot = H_0APE(K) - G%bathyT(i,j)
           hbot = (hbot + ABS(hbot)) * 0.5
-          PE_pt(i,j,K) = 0.5 * G%areaT(i,j) * (G%Rho0*G%g_prime(K)) * &
+          PE_pt(i,j,K) = 0.5 * areaTm(i,j) * (G%Rho0*G%g_prime(K)) * &
                   (hint * hint - hbot * hbot)
         enddo
       enddo ; enddo
@@ -645,7 +650,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
         do k=nz,1,-1
           hint = H_0APE(K) + eta(i,j,K)  ! eta and H_0 have opposite signs.
           hbot = max(H_0APE(K) - G%bathyT(i,j), 0.0)
-          PE_pt(i,j,K) = 0.5 * (G%areaT(i,j) * (G%Rho0*G%g_prime(K))) * &
+          PE_pt(i,j,K) = 0.5 * (areaTm(i,j) * (G%Rho0*G%g_prime(K))) * &
                   (hint * hint - hbot * hbot)
         enddo
       enddo ; enddo
@@ -684,16 +689,16 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
       Temp_int(:,:) = 0.0 ; Salt_int(:,:) = 0.0
       do k=1,nz ; do j=js,je ; do i=is,ie
         Salt_int(i,j) = Salt_int(i,j) + tv%S(i,j,k) * &
-                        (h(i,j,k)*(G%H_to_kg_m2 * G%areaT(i,j)))
+                        (h(i,j,k)*(G%H_to_kg_m2 * areaTm(i,j)))
         Temp_int(i,j) = Temp_int(i,j) + (tv%C_p * tv%T(i,j,k)) * &
-                        (h(i,j,k)*(G%H_to_kg_m2 * G%areaT(i,j)))
+                        (h(i,j,k)*(G%H_to_kg_m2 * areaTm(i,j)))
       enddo ; enddo ; enddo
       Salt = reproducing_sum(Salt_int, EFP_sum=salt_EFP)
       Heat = reproducing_sum(Temp_int, EFP_sum=heat_EFP)
     else
       do k=1,nz ; do j=js,je ; do i=is,ie
-        Salt = Salt + tv%S(i,j,k)*h(i,j,k)*G%areaT(i,j)
-        Heat = Heat + tv%T(i,j,k)*h(i,j,k)*G%areaT(i,j)
+        Salt = Salt + tv%S(i,j,k)*h(i,j,k)*areaTm(i,j)
+        Heat = Heat + tv%T(i,j,k)*h(i,j,k)*areaTm(i,j)
       enddo ; enddo ; enddo
       Salt = G%H_to_kg_m2 * Salt
       Heat = (G%H_to_kg_m2) * (tv%C_p * Heat)
@@ -1132,7 +1137,7 @@ subroutine create_depth_list(G, CS, max_list_size)
   this_pe = pe_here()-root_pe()
 
   do j=js,je ; do i=is,ie
-    temp(i,j) = G%areaT(i,j)
+    temp(i,j) = G%mask2dT(i,j)*G%areaT(i,j)
   enddo ; enddo
 
 ! Need to transfer the compute domain to a 1D array for sorting.
