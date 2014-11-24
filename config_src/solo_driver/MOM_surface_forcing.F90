@@ -274,6 +274,26 @@ subroutine set_forcing(state, fluxes, day_start, day_interval, G, CS)
     endif
   endif
 
+! ! calls to various buoyancy forcing options 
+! if ((CS%variable_buoyforce .or. CS%first_call_set_forcing) .and. &
+!     (.not.CS%adiabatic)) then
+!   if (trim(CS%buoy_config) == "file") then
+!     if (CS%first_call_set_forcing) call buoyancy_forcing_allocate(fluxes, G, CS)
+!   elseif (trim(CS%wind_config) == "MESO") then
+!     call MESO_wind_forcing(state, fluxes, day_center, G, CS%MESO_forcing_CSp)
+!   elseif (trim(CS%wind_config) == "SCM_ideal_hurr") then
+!     call SCM_idealized_hurricane_wind_forcing(state, fluxes, day_center, G, CS%SCM_idealized_hurricane_CSp)
+!   elseif (trim(CS%wind_config) == "USER") then
+!     call USER_wind_forcing(state, fluxes, day_center, G, CS%user_forcing_CSp)
+!   elseif (CS%variable_winds .and. .not.CS%first_call_set_forcing) then
+!     call MOM_error(FATAL, &
+!      "MOM_surface_forcing: Variable winds defined with no wind config")
+!   else
+!      call MOM_error(FATAL, &
+!      "MOM_surface_forcing:Unrecognized wind config "//trim(CS%wind_config))
+!   endif
+! endif
+
   ! calls to various buoyancy forcing options 
   if ((CS%variable_buoyforce .or. CS%first_call_set_forcing) .and. &
       (.not.CS%adiabatic)) then
