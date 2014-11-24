@@ -124,6 +124,7 @@ type, public :: surface_forcing_CS ; private
   real :: Flux_const            ! piston velocity for surface restoring (m/s)
   real :: latent_heat_fusion    ! latent heat of fusion (J/kg)
   real :: latent_heat_vapor     ! latent heat of vaporization (J/kg)
+  real :: tau_x0, tau_y0        ! Constant wind stresses used in the WIND_CONFIG="const" forcing
 
   real    :: gust_const                 ! constant unresolved background gustiness for ustar (Pa)
   logical :: read_gust_2d               ! if true, use 2-dimensional gustiness supplied from a file
@@ -258,7 +259,9 @@ subroutine set_forcing(state, fluxes, day_start, day_interval, G, CS)
     elseif (trim(CS%wind_config) == "gyres") then
       call wind_forcing_gyres(state, fluxes, day_center, G, CS)
     elseif (trim(CS%wind_config) == "zero") then
-      call wind_forcing_zero(state, fluxes, day_center, G, CS)
+      call wind_forcing_const(state, fluxes, 0., 0., day_center, G, CS)
+    elseif (trim(CS%wind_config) == "const") then
+      call wind_forcing_const(state, fluxes, CS%tau_x0, CS%tau_y0, day_center, G, CS)
     elseif (trim(CS%wind_config) == "MESO") then
       call MESO_wind_forcing(state, fluxes, day_center, G, CS%MESO_forcing_CSp)
     elseif (trim(CS%wind_config) == "SCM_ideal_hurr") then
@@ -431,9 +434,11 @@ subroutine buoyancy_forcing_allocate(fluxes, G, CS)
 end subroutine buoyancy_forcing_allocate 
 
 
-subroutine wind_forcing_zero(state, fluxes, day, G, CS)
+subroutine wind_forcing_const(state, fluxes, tau_x0, tau_y0, day, G, CS)
   type(surface),            intent(inout) :: state
   type(forcing),            intent(inout) :: fluxes
+  real,                     intent(in)    :: tau_x0
+  real,                     intent(in)    :: tau_y0
   type(time_type),          intent(in)    :: day
   type(ocean_grid_type),    intent(in)    :: G
   type(surface_forcing_CS), pointer       :: CS
@@ -447,39 +452,39 @@ subroutine wind_forcing_zero(state, fluxes, day, G, CS)
 !  (in)      G            = ocean grid structure
 !  (in)      CS           = pointer to control returned by previous surface_forcing_init call 
 
-  real :: PI
+  real :: mag_tau
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
 
-  call callTree_enter("wind_forcing_zero, MOM_surface_forcing.F90")
+  call callTree_enter("wind_forcing_const, MOM_surface_forcing.F90")
   is   = G%isc  ; ie   = G%iec  ; js   = G%jsc  ; je   = G%jec
   Isq  = G%IscB ; Ieq  = G%IecB ; Jsq  = G%JscB ; Jeq  = G%JecB
   isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   !set steady surface wind stresses, in units of Pa.
-  PI = 4.0*atan(1.0)
+  mag_tau = sqrt( tau_x0**2 + tau_y0**2)
 
   do j=js,je ; do I=Isq,Ieq
-    fluxes%taux(I,j) = 0.0
+    fluxes%taux(I,j) = tau_x0
   enddo ; enddo
 
   do J=Jsq,Jeq ; do i=is,ie
-    fluxes%tauy(i,J) = 0.0
+    fluxes%tauy(i,J) = tau_y0
   enddo ; enddo
 
   if (CS%read_gust_2d) then
     if (associated(fluxes%ustar)) then ; do j=js,je ; do i=is,ie
-      fluxes%ustar(i,j) = sqrt(CS%gust(i,j)/CS%Rho0)
+      fluxes%ustar(i,j) = sqrt( ( mag_tau + CS%gust(i,j) ) / CS%Rho0 )
     enddo ; enddo ; endif
   else
     if (associated(fluxes%ustar)) then ; do j=js,je ; do i=is,ie
-      fluxes%ustar(i,j) = sqrt(CS%gust_const/CS%Rho0)
+      fluxes%ustar(i,j) = sqrt( ( mag_tau + CS%gust_const ) / CS%Rho0 )
     enddo ; enddo ; endif
   endif
 
-  call callTree_leave("wind_forcing_zero")
-end subroutine wind_forcing_zero
+  call callTree_leave("wind_forcing_const")
+end subroutine wind_forcing_const
 
 
 subroutine wind_forcing_2gyre(state, fluxes, day, G, CS)
@@ -1949,6 +1954,13 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, tracer_flow_CSp)
     call MESO_surface_forcing_init(Time, G, param_file, diag, CS%MESO_forcing_CSp)
   elseif (trim(CS%wind_config) == "SCM_ideal_hurr") then
     call SCM_idealized_hurricane_wind_init(Time, G, param_file, CS%SCM_idealized_hurricane_CSp)
+  elseif (trim(CS%wind_config) == "const") then
+    call get_param(param_file, mod, "CONST_WIND_TAUX", CS%tau_x0, &
+                 "With wind_config const, this is the constant zonal\n"//&
+                 "wind-stress", units="Pa", fail_if_missing=.true.)
+    call get_param(param_file, mod, "CONST_WIND_TAUY", CS%tau_y0, &
+                 "With wind_config const, this is the constant zonal\n"//&
+                 "wind-stress", units="Pa", fail_if_missing=.true.)
   endif
 
   call register_forcing_type_diags(Time, diag, CS%use_temperature, CS%handles)
