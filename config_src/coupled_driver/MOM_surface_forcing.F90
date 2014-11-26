@@ -64,6 +64,7 @@ use MOM_io,               only : slasher, write_version_number
 use MOM_restart,          only : register_restart_field, restart_init, MOM_restart_CS
 use MOM_restart,          only : restart_init_end, save_restart, restore_state
 use MOM_string_functions, only : uppercase
+use MOM_spatial_means,    only : adjust_area_mean_to_zero
 use MOM_variables,        only : surface
 use user_revise_forcing,  only : user_alter_forcing, user_revise_forcing_init, user_revise_forcing_CS
 
@@ -141,6 +142,7 @@ type, public :: surface_forcing_CS ; private
   real    :: Flux_const                     ! piston velocity for surface restoring (m/s)
   logical :: salt_restore_as_sflux          ! If true, SSS restore as salt flux instead of water flux
   logical :: adjust_net_fresh_water_to_zero ! adjust net surface fresh-water (w/ restoring) to zero
+  logical :: adjust_net_fwf_by_scaling      ! adjust net surface fresh-water w/o moving zero contour
   logical :: mask_srestore_under_ice        ! If true, use an ice mask defined by frazil 
                                             ! criteria for salinity restoring.
   real    :: ice_salt_concentration         ! salt concentration for sea ice (kg/kg)
@@ -271,6 +273,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
   real :: delta_sss           ! temporary storage for sss diff from restoring value
 
   real :: C_p                 ! heat capacity of seawater ( J/(K kg) )
+  real :: FWscaling
   
   call cpu_clock_begin(id_clock_forcing)
 
@@ -390,11 +393,16 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
         endif
         work_sum(i,j) = G%areaT(i,j) * pme_adj(i,j)
       enddo; enddo
-      PmE_adj_total = reproducing_sum(work_sum(:,:), isr, ier, jsr, jer) / CS%area_surf
-      ! Note that when CS%adjust_net_fresh_water_to_zero is true, this adjustment
-      ! of the net salt-restoring to zero is redundant but has been left here
-      ! for backward compatibility. See section below where
-      ! CS%adjust_net_fresh_water_to_zero is tested to be true.
+      if (CS%adjust_net_fwf_by_scaling) then
+        call adjust_area_mean_to_zero(pme_adj, G, FWscaling)
+        PmE_adj_total = 0.
+      else
+        PmE_adj_total = reproducing_sum(work_sum(:,:), isr, ier, jsr, jer) / CS%area_surf
+        ! Note that when CS%adjust_net_fresh_water_to_zero is true, this adjustment
+        ! of the net salt-restoring to zero is redundant but has been left here
+        ! for backward compatibility. See section below where
+        ! CS%adjust_net_fresh_water_to_zero is tested to be true.
+      endif
     endif
   endif
 
@@ -599,11 +607,15 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
      
     enddo ; enddo
   
-    net_FW_avg = reproducing_sum(net_FW(:,:), isr, ier, jsr, jer) / &
-                 CS%area_surf
-    do j=js,je ; do i=is,ie
-      if (G%mask2dT(i,j) > 0.5) fluxes%vprec(i,j) = fluxes%vprec(i,j) - net_FW_avg
-    enddo; enddo
+    net_FW_avg = reproducing_sum(net_FW(:,:), isr, ier, jsr, jer) / CS%area_surf
+
+    if (CS%adjust_net_fwf_by_scaling) then
+      call adjust_area_mean_to_zero(net_FW, G, FWscaling)
+    else
+      do j=js,je ; do i=is,ie
+        if (G%mask2dT(i,j) > 0.5) fluxes%vprec(i,j) = fluxes%vprec(i,j) - net_FW_avg
+      enddo; enddo
+    endif
 
   endif
 
@@ -855,6 +867,10 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt)
                  CS%adjust_net_fresh_water_to_zero, &
                  "If true, adjusts the net fresh-water forcing seen \n"//&
                  "by the ocean (including restoring) to zero.", default=.false.)
+  call get_param(param_file, mod, "ADJUST_NET_FWF_BY_SCALING", &
+                 CS%adjust_net_fwf_by_scaling, &
+                 "If true, adjusts the net fresh-water forcing without\n"//&
+                 "moving the zero contour.", default=.false.)
   call get_param(param_file, mod, "ICE_SALT_CONCENTRATION", &
                  CS%ice_salt_concentration, &
                  "The assumed sea-ice salinity needed to reverse engineer the \n"//&

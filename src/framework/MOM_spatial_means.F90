@@ -35,6 +35,7 @@ implicit none ; private
 public :: global_i_mean, global_j_mean
 public :: global_area_mean, global_layer_mean
 public :: global_volume_mean
+public :: adjust_area_mean_to_zero
 
 contains
 
@@ -255,5 +256,46 @@ subroutine global_j_mean(array, j_mean, G, mask)
   deallocate(sum)
 
 end subroutine global_j_mean
+
+!> Adjust 2d array such that area mean is zero without moving the zero contour
+subroutine adjust_area_mean_to_zero(array, G, scaling)
+  real, dimension(NIMEM_,NJMEM_), intent(inout) :: array   !< 2D array to be adjusted
+  type(ocean_grid_type),          intent(inout) :: G       !< Grid structure
+  real, optional,                 intent(out)   :: scaling !< The scaling factor used
+  ! Local variables
+  real, dimension(SZI_(G), SZJ_(G)) :: posVals, negVals, areaXposVals, areaXnegVals
+  integer :: i,j
+  real :: areaIntPosVals, areaIntNegVals, posScale, negScale
+
+  areaXposVals(:,:) = 0.
+  areaXnegVals(:,:) = 0.
+  
+  do j=G%jsc,G%jec ; do i=G%isc,G%iec
+    posVals(i,j) = max(0., array(i,j))
+    areaXposVals(i,j) = G%areaT(i,j) * posVals(i,j)
+    negVals(i,j) = min(0., array(i,j))
+    areaXnegVals(i,j) = G%areaT(i,j) * negVals(i,j)
+  enddo ; enddo
+
+  areaIntPosVals = reproducing_sum( areaXposVals )
+  areaIntNegVals = reproducing_sum( areaXnegVals )
+
+  posScale = 0.0 ; negScale = 0.0
+  if ((areaIntPosVals>0.).and.(areaIntNegVals<0.)) then ! Only adjust if possible
+    if (areaIntPosVals>-areaIntNegVals) then ! Scale down positive values
+      posScale = - areaIntNegVals / areaIntPosVals
+      do j=G%jsc,G%jec ; do i=G%isc,G%iec
+        array(i,j) = (posScale * posVals(i,j)) + negVals(i,j)
+      enddo ; enddo
+    elseif (areaIntPosVals<-areaIntNegVals) then ! Scale down negative values
+      negScale = - areaIntPosVals / areaIntNegVals
+      do j=G%jsc,G%jec ; do i=G%isc,G%iec
+        array(i,j) = posVals(i,j) + (negScale * negVals(i,j))
+      enddo ; enddo
+    endif
+  endif
+  if (present(scaling)) scaling = posScale - negScale
+
+end subroutine adjust_area_mean_to_zero
 
 end module MOM_spatial_means
