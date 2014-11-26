@@ -3632,7 +3632,7 @@ subroutine barotropic_init(u, v, h, eta, Time, G, param_file, diag, CS, &
                  "\t    layers that straddle that depth \n"//&
                  "\t FROM_BT_CONT - use the average thicknesses kept \n"//&
                  "\t    in the h_u and h_v fields of the BT_cont_type", &
-                 default=HYBRID_STRING)
+                 default=BT_CONT_STRING)
   select case (hvel_str)
     case (HYBRID_STRING) ; CS%hvel_scheme = HYBRID
     case (HARMONIC_STRING) ; CS%hvel_scheme = HARMONIC
