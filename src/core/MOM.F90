@@ -1035,7 +1035,8 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       endif
     endif
 
-    if (CS%useMEKE) call step_forward_MEKE(CS%MEKE, h, CS%visc, dt, G, CS%MEKE_CSp)
+    if (CS%useMEKE) call step_forward_MEKE(CS%MEKE, h, CS%VarMix%SN_u, CS%VarMix%SN_v, &
+                                           CS%visc, dt, G, CS%MEKE_CSp)
 
     call disable_averaging(CS%diag)
     call cpu_clock_end(id_clock_dynamics)
