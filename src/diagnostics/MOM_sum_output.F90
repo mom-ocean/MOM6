@@ -842,21 +842,21 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
 
     if (CS%write_stocks) then
       write(*,'("    Total Energy: ",Z16.16,ES24.16)') toten, toten
-      write(*,'("    Total Mass: ",ES24.16,", Change: ",ES12.5," Error: ",ES12.5," (",ES8.1,")")') &
+      write(*,'("    Total Mass: ",ES24.16,", Change: ",ES24.16," Error: ",ES12.5," (",ES8.1,")")') &
             mass_tot, mass_chg, mass_anom, mass_anom/mass_tot
       if (CS%use_temperature) then
         if (Salt == 0.) then
-          write(*,'("    Total Salt: ",ES24.16,", Change: ",ES12.5," Error: ",ES12.5)') &
+          write(*,'("    Total Salt: ",ES24.16,", Change: ",ES24.16," Error: ",ES12.5)') &
               Salt*0.001, Salt_chg*0.001, Salt_anom*0.001
         else
-          write(*,'("    Total Salt: ",ES24.16,", Change: ",ES12.5," Error: ",ES12.5," (",ES8.1,")")') &
+          write(*,'("    Total Salt: ",ES24.16,", Change: ",ES24.16," Error: ",ES12.5," (",ES8.1,")")') &
               Salt*0.001, Salt_chg*0.001, Salt_anom*0.001, Salt_anom/Salt
         endif
         if (Heat == 0.) then
-          write(*,'("    Total Heat: ",ES24.16,", Change: ",ES12.5," Error: ",ES12.5)') &
+          write(*,'("    Total Heat: ",ES24.16,", Change: ",ES24.16," Error: ",ES12.5)') &
               Heat, Heat_chg, Heat_anom
         else
-          write(*,'("    Total Heat: ",ES24.16,", Change: ",ES12.5," Error: ",ES12.5," (",ES8.1,")")') &
+          write(*,'("    Total Heat: ",ES24.16,", Change: ",ES24.16," Error: ",ES12.5," (",ES8.1,")")') &
               Heat, Heat_chg, Heat_anom, Heat_anom/Heat
         endif
       endif
