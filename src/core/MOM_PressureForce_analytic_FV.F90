@@ -690,7 +690,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
 !$OMP                          private(is_bk,ie_bk,js_bk,je_bk,Isq_bk,Ieq_bk,Jsq_bk,  &
 !$OMP                                  Jeq_bk,ioff_bk,joff_bk,isd,ied,jsd,jed,pa_bk,  &
 !$OMP                                  intx_pa_bk,inty_pa_bk,dpa_bk,intz_dpa_bk,      &
-!$OMP                                  intx_dpa_bk,inty_dpa_bk,dz_bk)
+!$OMP                                  intx_dpa_bk,inty_dpa_bk,dz_bk,i,j)
   do n = 1, G%nblocks
     is_bk=G%Block(n)%isc      ; ie_bk=G%Block(n)%iec 
     js_bk=G%Block(n)%jsc      ; je_bk=G%Block(n)%jec

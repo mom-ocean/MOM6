@@ -405,7 +405,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, CS)
 ! Length scale for MEKE derived diffusivity
     if (CS%MEKE_KhCoeff>=0.) then
 !$OMP parallel do default(none) shared(is,ie,js,je,MEKE,LmixScale,CS,G), &
-!$OMP                           private(Lgrid,Ldeform,LdeformLim)
+!$OMP                           private(Lgrid,Ldeform,LdeformLim,Lfrict,Ue,beta,Lrhines,SN,SN_u,SN_v,Leady)
       do j=js-1,je+1 ; do i=is-1,ie+1
         Lgrid = sqrt(G%areaT(i,j))                       ! Grid scale
         Ldeform = Lgrid * MEKE%Rd_dx_h(i,j)              ! Deformation scale
@@ -455,7 +455,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, CS)
           enddo ; enddo
         endif
       else
-!$OMP parallel do default(none) shared(is,ie,js,je,MEKE,LmixScale,CSG)
+!$OMP parallel do default(none) shared(is,ie,js,je,MEKE,LmixScale,CS,G)
         do j=js-1,je+1 ; do i=is-1,ie+1
           MEKE%Kh(i,j) = (CS%MEKE_KhCoeff*sqrt(2.*max(0.,MEKE%MEKE(i,j)))*LmixScale(i,j))
         enddo ; enddo
