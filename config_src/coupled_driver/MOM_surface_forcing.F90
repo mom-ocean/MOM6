@@ -359,12 +359,16 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
 
   endif    ! endif for allocation and initialization 
 
+  do j=js,je ; do i=is,ie
+    fluxes%salt_flux(i,j) = 0.0
+  enddo; enddo
 
-  ! salinity restoring logic 
+  ! Salinity restoring logic
   if (restore_salinity) then
     call time_interp_external(CS%id_srestore,Time,data_srestore)
+    ! open_ocn_mask indicates where to restore salinity (1 means restore, 0 does not)
     open_ocn_mask(:,:) = 1.0
-    if (CS%mask_srestore_under_ice) then
+    if (CS%mask_srestore_under_ice) then ! Do not restore under sea-ice
       do j=js,je ; do i=is,ie
         if (state%SST(i,j) .le. -0.0539*state%SSS(i,j)) open_ocn_mask(i,j)=0.0
       enddo; enddo
@@ -376,10 +380,10 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
         fluxes%salt_flux(i,j) = 1.e-3*G%mask2dT(i,j) * (CS%Rho0*CS%Flux_const)* &
                   (CS%basin_mask(i,j)*open_ocn_mask(i,j)) *delta_sss  ! kg Salt m-2 s-1
         work_sum(i,j) = G%areaT(i,j)*fluxes%salt_flux(i,j)
-        fluxes%salt_flux_restore(i,j) = fluxes%salt_flux(i,j)
       enddo; enddo
-      fluxes%saltFluxGlobalAdj = reproducing_sum(work_sum(:,:), isr,ier, jsr,jer) / &
-                        CS%area_surf
+      fluxes%saltFluxGlobalAdj = reproducing_sum(work_sum(:,:), isr,ier, jsr,jer)/CS%area_surf
+      fluxes%salt_flux(is:ie,js:je) = fluxes%salt_flux(is:ie,js:je) - fluxes%saltFluxGlobalAdj
+      fluxes%salt_flux_restore(is:ie,js:je) = fluxes%salt_flux(is:ie,js:je) ! Diagnostic
     else
       do j=js,je ; do i=is,ie
         if (G%mask2dT(i,j) > 0.5) then
@@ -405,7 +409,6 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
       endif
     endif
   endif
-
 
   wind_stagger = CS%wind_stagger
   if ((IOB%wind_stagger == AGRID) .or. (IOB%wind_stagger == BGRID_NE) .or. &
@@ -569,15 +572,6 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
 
  
   ! more salt restoring logic 
-  if (restore_salinity .and. CS%salt_restore_as_sflux) then
-    do j=js,je ; do i=is,ie
-      fluxes%salt_flux(i,j) = G%mask2dT(i,j)*(fluxes%salt_flux(i,j)-fluxes%saltFluxGlobalAdj)
-    enddo ; enddo
-  else
-    do j=js,je ; do i=is,ie
-      fluxes%salt_flux(i,j) = 0.0
-    enddo ; enddo
-  endif
   if (ASSOCIATED(IOB%salt_flux)) then
     do j=js,je ; do i=is,ie
       fluxes%salt_flux(i,j)    = G%mask2dT(i,j)*(fluxes%salt_flux(i,j) - IOB%salt_flux(i-i0,j-j0))
@@ -601,6 +595,12 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
       net_FW(i,j) = (((fluxes%lprec(i,j)   + fluxes%fprec(i,j)) + &
                       (fluxes%lrunoff(i,j) + fluxes%frunoff(i,j))) + &
                       (fluxes%evap(i,j)    + fluxes%vprec(i,j)) ) * G%areaT(i,j)
+      !   The following contribution appears to be calculating the volume flux of sea-ice
+      ! melt. This calculation is clearly WRONG if either sea-ice has variable
+      ! salinity or the sea-ice is completely fresh.
+      !   Bob thinks this is trying ensure the net fresh-water of the ocean + sea-ice system
+      ! is constant.
+      !   To do this correctly we will need a sea-ice melt field added to IOB. -AJA
       if (ASSOCIATED(IOB%salt_flux) .and. (CS%ice_salt_concentration>0.0)) &
         net_FW(i,j) = net_FW(i,j) - G%areaT(i,j) * &
                      (IOB%salt_flux(i-i0,j-j0) / CS%ice_salt_concentration)
@@ -921,11 +921,13 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt)
                  units="PSU or g kg-1", default=999.0)
     call get_param(param_file, mod, "MASK_SRESTORE_UNDER_ICE", &
                  CS%mask_srestore_under_ice, &
-                 " If true, use an ice mask defined by frazil criteria to \n"//&
-                 "determine where to apply salinity restoring.", default=.false.)
+                 "If true, disables SSS restoring under sea-ice based on a frazil\n"//&
+                 "criteria (SST<=Tf). Only used when RESTORE_SALINITY is True.",      &
+                 default=.false.)
     call get_param(param_file, mod, "MASK_SRESTORE_MARGINAL_SEAS", &
                  CS%mask_srestore_marginal_seas, &
-                 "If true, mask sss restoring in marginal seas.", default=.false.)
+                 "If true, disable SSS restoring in marginal seas. Only used when\n"//&
+                 "RESTORE_SALINITY is True.", default=.false.)
     call get_param(param_file, mod, "BASIN_FILE", basin_file, &
                  "A file in which to find the basin masks, in variable 'basin'.", &
                  default="basin.nc")
