@@ -290,7 +290,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
   open_ocn_mask(:,:)     = 1.0
   pme_adj(:,:)           = 0.0
   PmE_adj_total          = 0.0
-  fluxes%Sflux_adj_total = 0.0
+  fluxes%saltFluxGlobalAdj = 0.0
   
   restore_salinity = .false.
   if (present(restore_salt)) restore_salinity = restore_salt
@@ -378,7 +378,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
         work_sum(i,j) = G%areaT(i,j)*fluxes%salt_flux(i,j)
         fluxes%salt_flux_restore(i,j) = fluxes%salt_flux(i,j)
       enddo; enddo
-      fluxes%Sflux_adj_total = reproducing_sum(work_sum(:,:), isr,ier, jsr,jer) / &
+      fluxes%saltFluxGlobalAdj = reproducing_sum(work_sum(:,:), isr,ier, jsr,jer) / &
                         CS%area_surf
     else
       do j=js,je ; do i=is,ie
@@ -571,7 +571,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
   ! more salt restoring logic 
   if (restore_salinity .and. CS%salt_restore_as_sflux) then
     do j=js,je ; do i=is,ie
-      fluxes%salt_flux(i,j) = G%mask2dT(i,j)*(fluxes%salt_flux(i,j)-fluxes%Sflux_adj_total)
+      fluxes%salt_flux(i,j) = G%mask2dT(i,j)*(fluxes%salt_flux(i,j)-fluxes%saltFluxGlobalAdj)
     enddo ; enddo
   else
     do j=js,je ; do i=is,ie

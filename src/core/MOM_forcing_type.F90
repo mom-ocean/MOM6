@@ -140,7 +140,7 @@ type, public :: forcing
     rigidity_ice_v => NULL()   ! ice shelves at u- or v-points (m3/s)
 
     ! Scalars set by surface forcing modules
-    real :: Sflux_adj_total    ! adjustment to restoring salt flux to zero out global net ( kg salt/(m^2 s) )
+    real :: saltFluxGlobalAdj  ! adjustment to restoring salt flux to zero out global net ( kg salt/(m^2 s) )
 
     ! heat capacity 
     real :: C_p                ! heat capacity of seawater ( J/(K kg) )
@@ -1535,7 +1535,7 @@ subroutine forcing_diagnostics(fluxes, state, dt, G, diag, handles)
     if ((handles%id_saltFluxRestore > 0) .and. ASSOCIATED(fluxes%salt_flux_restore)) &
       call post_data(handles%id_saltFluxRestore, fluxes%salt_flux_restore, diag)
     if ((handles%id_saltFluxGlobalAdj > 0))                                          &
-      call post_data(handles%id_saltFluxGlobalAdj, fluxes%Sflux_adj_total, diag)
+      call post_data(handles%id_saltFluxGlobalAdj, fluxes%saltFluxGlobalAdj, diag)
     if (handles%id_saltFluxIn > 0 .and. ASSOCIATED(fluxes%salt_flux_in))             &
       call post_data(handles%id_saltFluxIn, fluxes%salt_flux_in, diag)
 
