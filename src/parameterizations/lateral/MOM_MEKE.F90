@@ -197,7 +197,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, CS)
    !enddo ; enddo
 !$OMP do
     do j=js,je ; do i=is,ie
-      MEKE%MEKE(i,j) = max(0.0, MEKE%MEKE(i,j) + sdt*src(i,j) )*G%mask2dT(i,j)
+      MEKE%MEKE(i,j) = (MEKE%MEKE(i,j) + sdt*src(i,j) )*G%mask2dT(i,j)
     enddo ; enddo
 
 ! Following 3 lines seem identical to those above -AJA #######################################################
@@ -245,7 +245,10 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, CS)
 !$OMP do
       do j=js,je ; do i=is,ie
         ldamping = CS%MEKE_damping + drag_rate(i,j) * bottomFac2
-        MEKE%MEKE(i,j) = MEKE%MEKE(i,j) / (1.0 + sdt_damp*ldamping)
+        if (MEKE%MEKE(i,j)<0.) ldamping = 0.
+        ! notice that the above line ensures a damping only if MEKE is positive,
+        ! while leaving MEKE unchanged if it is negative
+        MEKE%MEKE(i,j) =  MEKE%MEKE(i,j) / (1.0 + sdt_damp*ldamping)
         MEKE_decay(i,j) = ldamping*G%mask2dT(i,j)
       enddo ; enddo
     endif
@@ -395,7 +398,10 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, CS)
 !$OMP do
         do j=js,je ; do i=is,ie
           ldamping = CS%MEKE_damping + drag_rate(i,j) * bottomFac2
-          MEKE%MEKE(i,j) = MEKE%MEKE(i,j) / (1.0 + sdt_damp*ldamping)
+          if (MEKE%MEKE(i,j)<0.) ldamping = 0.
+          ! notice that the above line ensures a damping only if MEKE is positive,
+          ! while leaving MEKE unchanged if it is negative
+          MEKE%MEKE(i,j) =  MEKE%MEKE(i,j) / (1.0 + sdt_damp*ldamping)
           MEKE_decay(i,j) = 0.5 * G%mask2dT(i,j) * (MEKE_decay(i,j) + ldamping)
         enddo ; enddo
       endif
@@ -478,7 +484,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, CS)
 
 ! Offer fields for averaging.
     if (CS%id_MEKE>0) call post_data(CS%id_MEKE, MEKE%MEKE, CS%diag)
-    if (CS%id_Ue>0) call post_data(CS%id_Ue, sqrt(2.0*MEKE%MEKE), CS%diag)
+    if (CS%id_Ue>0) call post_data(CS%id_Ue, sqrt(max(0.,2.0*MEKE%MEKE)), CS%diag)
     if (CS%id_Kh>0) call post_data(CS%id_Kh, MEKE%Kh, CS%diag)
     if (CS%id_Ku>0) call post_data(CS%id_Ku, MEKE%Ku, CS%diag)
     if (CS%id_KhMEKE_u>0) call post_data(CS%id_KhMEKE_u, Kh_u, CS%diag)
