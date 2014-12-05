@@ -300,9 +300,9 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, CS)
       do j=js,je ; do I=is-1,ie
         K4_here = CS%MEKE_K4
         ! Limit Kh to avoid CFL violations.
-        Inv_Kh_max = 2.0*sdt * ((G%dy_Cu(I,j)*G%IdxCu(I,j)) * &
-                     max(G%IareaT(i,j),G%IareaT(i+1,j)))
-        if (K4_here*Inv_Kh_max > 0.25) K4_here = 0.25 / Inv_Kh_max
+        Inv_Kh_max = 64.0*sdt * (((G%dy_Cu(I,j)*G%IdxCu(I,j)) * &
+                     max(G%IareaT(i,j),G%IareaT(i+1,j))))**2.0
+        if (K4_here*Inv_Kh_max > 0.3) K4_here = 0.3 / Inv_Kh_max
 
         MEKE_uflux(I,j) = ((K4_here * (G%dy_Cu(I,j)*G%IdxCu(I,j))) * &
             ((2.0*mass(i,j)*mass(i+1,j)) / ((mass(i,j)+mass(i+1,j)) + mass_neglect)) ) * &
@@ -311,9 +311,9 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, CS)
 !$OMP do
       do J=js-1,je ; do i=is,ie
         K4_here = CS%MEKE_K4
-        Inv_Kh_max = 2.0*sdt * ((G%dx_Cv(i,J)*G%IdyCv(i,J)) * &
-                     max(G%IareaT(i,j),G%IareaT(i,j+1)))
-        if (K4_here*Inv_Kh_max > 0.25) K4_here = 0.25 / Inv_Kh_max
+        Inv_Kh_max = 64.0*sdt * (((G%dx_Cv(i,J)*G%IdyCv(i,J)) * &
+                     max(G%IareaT(i,j),G%IareaT(i,j+1))))**2.0
+        if (K4_here*Inv_Kh_max > 0.3) K4_here = 0.3 / Inv_Kh_max
 
         MEKE_vflux(i,J) = ((K4_here * (G%dx_Cv(i,J)*G%IdyCv(i,J))) * &
             ((2.0*mass(i,j)*mass(i,j+1)) / ((mass(i,j)+mass(i,j+1)) + mass_neglect)) ) * &
