@@ -127,6 +127,7 @@ use seamount_initialization, only : seamount_initialize_temperature_salinity
 use Phillips_initialization, only : Phillips_initialize_thickness
 use Phillips_initialization, only : Phillips_initialize_velocity
 use Phillips_initialization, only : Phillips_initialize_sponges
+use Phillips_initialization, only : Phillips_initialize_topography
 use Rossby_front_2d_initialization, only : Rossby_front_initialize_thickness
 use Rossby_front_2d_initialization, only : Rossby_front_initialize_temperature_salinity
 use Rossby_front_2d_initialization, only : Rossby_front_initialize_velocity
@@ -1095,6 +1096,7 @@ subroutine MOM_initialize_topography(D, max_depth, G, PF)
                  " \t DOME2D - use a shelf and slope configuration for the \n"//&
                  " \t\t DOME2D gravity current/overflow test case. \n"//&
                  " \t seamount - Gaussian bump for spontaneous motion test case.\n"//&
+                 " \t Phillips - ACC-like idealized topography used in the Phillips config.\n"//&
                  " \t USER - call a user modified routine.", &
                  fail_if_missing=.true.)
   max_depth = -1.e9; call read_param(PF, "MAXIMUM_DEPTH", max_depth)
@@ -1109,6 +1111,7 @@ subroutine MOM_initialize_topography(D, max_depth, G, PF)
     case ("DOME2D");    call DOME2d_initialize_topography(D, G, PF, max_depth)
     case ("sloshing");  call sloshing_initialize_topography(D, G, PF, max_depth)
     case ("seamount");  call seamount_initialize_topography(D, G, PF, max_depth)
+    case ("Phillips");  call Phillips_initialize_topography(D, G, PF)
     case ("USER");      call user_initialize_topography(D, G, PF)
     case default ;      call MOM_error(FATAL,"MOM_initialize_topography: "// &
       "Unrecognized topography setup '"//trim(config)//"'")

@@ -98,6 +98,7 @@ implicit none ; private
 public Phillips_initialize_thickness
 public Phillips_initialize_velocity
 public Phillips_initialize_sponges
+public Phillips_initialize_topography
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
@@ -115,12 +116,12 @@ subroutine Phillips_initialize_thickness(h, G, param_file)
                             ! positive upward, in m.
   real :: damp_rate, jet_width, jet_height, y_2
   real :: half_strat, half_depth
-  character(len=40)  :: mod = "USER_initialize_sponges" ! This subroutine's name.
+  character(len=40)  :: mod = "Phillips_initialize_thickness" ! This subroutine's name.
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  
+
   eta_im(:,:) = 0.0
 
   call log_version(param_file, mod, version)
@@ -252,7 +253,7 @@ subroutine Phillips_initialize_sponges(G, use_temperature, tv, param_file, CSp, 
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  
+
   eta(:,:,:) = 0.0 ; temp(:,:,:) = 0.0 ; Idamp(:,:) = 0.0
   eta_im(:,:) = 0.0 ; Idamp_im(:) = 0.0
 
@@ -301,7 +302,7 @@ function sech(x)
   real, intent(in) :: x
   real             :: sech
   ! sech calculates the hyperbolic secant.
-  
+
   ! This is here to prevent overflows or underflows.
   if (abs(x) > 228.) then
     sech = 0.0
@@ -309,5 +310,48 @@ function sech(x)
     sech = 2.0 / (exp(x) + exp(-x))
   endif
 end function sech
+
+subroutine Phillips_initialize_topography(D, G, param_file)
+  real, dimension(NIMEM_,NJMEM_), intent(out) :: D
+  type(ocean_grid_type), intent(in) :: G
+  type(param_file_type), intent(in) :: param_file
+  real :: PI, Htop, Wtop, Ltop, offset, dist, &
+          x1, x2, x3, x4, y1, y2
+  integer :: i,j,is,ie,js,je
+  character(len=40)  :: mod = "Phillips_initialize_topography" ! This subroutine's name.
+
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+
+  PI = 4.0*atan(1.0)
+
+  call get_param(param_file, mod, "PHILLIPS_HTOP", Htop,             &
+                 "The maximum height of the topography.", units="m", &
+                 fail_if_missing=.true.)
+! Htop=0.375*G%max_depth     ! max height of topog. above max_depth
+  Wtop=0.5*G%len_lat       ! meridional width of drake and mount
+  Ltop=0.25*G%len_lon      ! zonal width of topographic features
+  offset=0.1*G%len_lat ! meridional offset from center
+  dist=0.333*G%len_lon       ! distance between drake and mount
+                           ! should be longer than Ltop/2
+
+  y1=G%south_lat+0.5*G%len_lat+offset-0.5*Wtop; y2=y1+Wtop
+  x1=G%west_lon+0.1*G%len_lon; x2=x1+Ltop; x3=x1+dist; x4=x3+3.0/2.0*Ltop
+
+  do i=is,ie ; do j=js,je
+     D(i,j)=0.0
+     if (G%geoLonT(i,j)>x1 .and. G%geoLonT(i,j)<x2) then
+       D(i,j) = Htop*sin(PI*(G%geoLonT(i,j)-x1)/(x2-x1))**2
+       if (G%geoLatT(i,j)>y1 .and. G%geoLatT(i,j)<y2) then
+          D(i,j)=D(i,j)*(1-sin(PI*(G%geoLatT(i,j)-y1)/(y2-y1))**2)
+       end if
+     else if (G%geoLonT(i,j)>x3 .and. G%geoLonT(i,j)<x4 .and. &
+              G%geoLatT(i,j)>y1 .and. G%geoLatT(i,j)<y2) then
+       D(i,j) = 2.0/3.0*Htop*sin(PI*(G%geoLonT(i,j)-x3)/(x4-x3))**2 &
+                    *sin(PI*(G%geoLatT(i,j)-y1)/(y2-y1))**2
+     end if
+     D(i,j)=G%max_depth-D(i,j)
+  enddo; enddo
+
+end subroutine Phillips_initialize_topography
 
 end module Phillips_initialization
