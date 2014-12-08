@@ -141,8 +141,10 @@ type, public :: surface_forcing_CS ; private
 
   real    :: Flux_const                     ! piston velocity for surface restoring (m/s)
   logical :: salt_restore_as_sflux          ! If true, SSS restore as salt flux instead of water flux
+  logical :: adjust_net_srestore_to_zero    ! adjust srestore to zero (for both salt_flux or vprec)
+  logical :: adjust_net_srestore_by_scaling ! adjust srestore w/o moving zero contour
   logical :: adjust_net_fresh_water_to_zero ! adjust net surface fresh-water (w/ restoring) to zero
-  logical :: adjust_net_fwf_by_scaling      ! adjust net surface fresh-water w/o moving zero contour
+  logical :: adjust_net_fresh_water_by_scaling ! adjust net surface fresh-water  w/o moving zero contour
   logical :: mask_srestore_under_ice        ! If true, use an ice mask defined by frazil 
                                             ! criteria for salinity restoring.
   real    :: ice_salt_concentration         ! salt concentration for sea ice (kg/kg)
@@ -248,13 +250,12 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
     PmE_adj,       & ! The adjustment to PminusE that will cause the salinity
                      ! to be restored toward its target value (kg/(m^2 * s))
     net_FW,        & ! The area integrated net freshwater flux into the ocean (kg/s)
+    net_FW2,       & ! The area integrated net freshwater flux into the ocean (kg/s)
     work_sum,      & ! A 2-d array that is used as the work space for a global
                      ! sum, used with units of m2 or (kg/s)
     open_ocn_mask    ! a binary field indicating where ice is present based on frazil criteria
 
   real :: gustiness     ! unresolved gustiness that contributes to ustar (Pa)
-  real :: PmE_adj_total ! global area integrated PmE_adj (kg/s)
-  real :: net_FW_avg    ! global ave net fresh water input to ocean/sea-ice system (kg/(m^2 * s))
   real :: Irho0         ! inverse of the mean density in (m^3/kg)
   real :: taux2, tauy2  ! squared wind stresses (Pa^2)
   real :: tau_mag       ! magnitude of the wind stress (Pa)
@@ -273,7 +274,6 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
   real :: delta_sss           ! temporary storage for sss diff from restoring value
 
   real :: C_p                 ! heat capacity of seawater ( J/(K kg) )
-  real :: FWscaling
   
   call cpu_clock_begin(id_clock_forcing)
 
@@ -289,8 +289,12 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
   Irho0                  = 1.0/CS%Rho0
   open_ocn_mask(:,:)     = 1.0
   pme_adj(:,:)           = 0.0
-  PmE_adj_total          = 0.0
+  fluxes%vPrecGlobalAdj  = 0.0
+  fluxes%vPrecGlobalScl  = 0.0
   fluxes%saltFluxGlobalAdj = 0.0
+  fluxes%saltFluxGlobalScl = 0.0
+  fluxes%netFWGlobalAdj = 0.0
+  fluxes%netFWGlobalScl = 0.0
   
   restore_salinity = .false.
   if (present(restore_salt)) restore_salinity = restore_salt
@@ -361,6 +365,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
 
   do j=js,je ; do i=is,ie
     fluxes%salt_flux(i,j) = 0.0
+    fluxes%vprec(i,j) = 0.0
   enddo; enddo
 
   ! Salinity restoring logic
@@ -379,33 +384,39 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
         delta_sss = sign(1.0,delta_sss)*min(abs(delta_sss),CS%max_delta_srestore)
         fluxes%salt_flux(i,j) = 1.e-3*G%mask2dT(i,j) * (CS%Rho0*CS%Flux_const)* &
                   (CS%basin_mask(i,j)*open_ocn_mask(i,j)) *delta_sss  ! kg Salt m-2 s-1
-        work_sum(i,j) = G%areaT(i,j)*fluxes%salt_flux(i,j)
       enddo; enddo
-      fluxes%saltFluxGlobalAdj = reproducing_sum(work_sum(:,:), isr,ier, jsr,jer)/CS%area_surf
-      fluxes%salt_flux(is:ie,js:je) = fluxes%salt_flux(is:ie,js:je) - fluxes%saltFluxGlobalAdj
+      if (CS%adjust_net_srestore_to_zero) then
+        if (CS%adjust_net_srestore_by_scaling) then
+          call adjust_area_mean_to_zero(fluxes%salt_flux, G, fluxes%saltFluxGlobalScl)
+          fluxes%saltFluxGlobalAdj = 0.
+        else
+          work_sum(is:ie,js:je) = G%areaT(is:ie,js:je)*fluxes%salt_flux(is:ie,js:je)
+          fluxes%saltFluxGlobalAdj = reproducing_sum(work_sum(:,:), isr,ier, jsr,jer)/CS%area_surf
+          fluxes%salt_flux(is:ie,js:je) = fluxes%salt_flux(is:ie,js:je) - fluxes%saltFluxGlobalAdj
+        endif
+      endif
       fluxes%salt_flux_restore(is:ie,js:je) = fluxes%salt_flux(is:ie,js:je) ! Diagnostic
     else
       do j=js,je ; do i=is,ie
         if (G%mask2dT(i,j) > 0.5) then
           delta_sss = state%SSS(i,j) - data_srestore(i,j)
           delta_sss = sign(1.0,delta_sss)*min(abs(delta_sss),CS%max_delta_srestore)
-          pme_adj(i,j) = (CS%basin_mask(i,j)*open_ocn_mask(i,j))* &
+          fluxes%vprec(i,j) = (CS%basin_mask(i,j)*open_ocn_mask(i,j))* &
                       (CS%Rho0*CS%Flux_const) * &
                       delta_sss / (0.5*(state%SSS(i,j) + data_srestore(i,j)))
-        else
-          pme_adj(i,j) = 0.0
         endif
-        work_sum(i,j) = G%areaT(i,j) * pme_adj(i,j)
       enddo; enddo
-      if (CS%adjust_net_fwf_by_scaling) then
-        call adjust_area_mean_to_zero(pme_adj, G, FWscaling)
-        PmE_adj_total = 0.
-      else
-        PmE_adj_total = reproducing_sum(work_sum(:,:), isr, ier, jsr, jer) / CS%area_surf
-        ! Note that when CS%adjust_net_fresh_water_to_zero is true, this adjustment
-        ! of the net salt-restoring to zero is redundant but has been left here
-        ! for backward compatibility. See section below where
-        ! CS%adjust_net_fresh_water_to_zero is tested to be true.
+      if (CS%adjust_net_srestore_to_zero) then
+        if (CS%adjust_net_srestore_by_scaling) then
+          call adjust_area_mean_to_zero(fluxes%vprec, G, fluxes%vPrecGlobalScl)
+          fluxes%vPrecGlobalAdj = 0.
+        else
+          work_sum(is:ie,js:je) = G%areaT(is:ie,js:je)*fluxes%vprec(is:ie,js:je)
+          fluxes%vPrecGlobalAdj = reproducing_sum(work_sum(:,:), isr, ier, jsr, jer) / CS%area_surf
+          do j=js,je ; do i=is,ie
+            fluxes%vprec(i,j) = ( fluxes%vprec(i,j) - fluxes%vPrecGlobalAdj ) * G%mask2dT(i,j)
+          enddo; enddo
+        endif
       endif
     endif
   endif
@@ -452,9 +463,6 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
 
     if (ASSOCIATED(IOB%calving)) &
       fluxes%frunoff(i,j) = IOB%calving(i-i0,j-j0) * G%mask2dT(i,j)
-
-    if (restore_salinity) &
-      fluxes%vprec(i,j) = (pme_adj(i,j) - PmE_adj_total) * G%mask2dT(i,j)
 
     if (ASSOCIATED(IOB%runoff_hflx)) &
       fluxes%heat_content_lrunoff(i,j) = IOB%runoff_hflx(i-i0,j-j0) * G%mask2dT(i,j)
@@ -604,16 +612,18 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
       if (ASSOCIATED(IOB%salt_flux) .and. (CS%ice_salt_concentration>0.0)) &
         net_FW(i,j) = net_FW(i,j) - G%areaT(i,j) * &
                      (IOB%salt_flux(i-i0,j-j0) / CS%ice_salt_concentration)
-     
+      net_FW2(i,j) = net_FW(i,j)
     enddo ; enddo
-  
-    net_FW_avg = reproducing_sum(net_FW(:,:), isr, ier, jsr, jer) / CS%area_surf
 
-    if (CS%adjust_net_fwf_by_scaling) then
-      call adjust_area_mean_to_zero(net_FW, G, FWscaling)
-    else
+    if (CS%adjust_net_fresh_water_by_scaling) then
+      call adjust_area_mean_to_zero(net_FW2, G, fluxes%netFWGlobalScl)
       do j=js,je ; do i=is,ie
-        if (G%mask2dT(i,j) > 0.5) fluxes%vprec(i,j) = fluxes%vprec(i,j) - net_FW_avg
+        fluxes%vprec(i,j) = fluxes%vprec(i,j) + (net_FW2(i,j) - net_FW(i,j)) * G%mask2dT(i,j)
+      enddo; enddo
+    else
+      fluxes%netFWGlobalAdj = reproducing_sum(net_FW(:,:), isr, ier, jsr, jer) / CS%area_surf
+      do j=js,je ; do i=is,ie
+        fluxes%vprec(i,j) = ( fluxes%vprec(i,j) - fluxes%netFWGlobalAdj ) * G%mask2dT(i,j)
       enddo; enddo
     endif
 
@@ -863,14 +873,25 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt)
                  "the ice-ocean heat fluxes are treated explicitly.  No \n"//&
                  "limit is applied if a negative value is used.", units="Pa", &
                  default=-1.0)
+  call get_param(param_file, mod, "ADJUST_NET_SRESTORE_TO_ZERO", &
+                 CS%adjust_net_srestore_to_zero, &
+                 "If true, adjusts the salinity restoring seen to zero\n"//&
+                 "whether restoring is via a salt flux or virtual precip.",&
+                 default=restore_salt)
+  call get_param(param_file, mod, "ADJUST_NET_SRESTORE_BY_SCALING", &
+                 CS%adjust_net_srestore_by_scaling, &
+                 "If true, adjustments to salt restoring to achieve zero net are\n"//&
+                 "made by scaling values without moving the zero contour.",&
+                 default=.false.)
   call get_param(param_file, mod, "ADJUST_NET_FRESH_WATER_TO_ZERO", &
                  CS%adjust_net_fresh_water_to_zero, &
                  "If true, adjusts the net fresh-water forcing seen \n"//&
                  "by the ocean (including restoring) to zero.", default=.false.)
-  call get_param(param_file, mod, "ADJUST_NET_FWF_BY_SCALING", &
-                 CS%adjust_net_fwf_by_scaling, &
-                 "If true, adjusts the net fresh-water forcing without\n"//&
-                 "moving the zero contour.", default=.false.)
+  call get_param(param_file, mod, "ADJUST_NET_FRESH_WATER_BY_SCALING", &
+                 CS%adjust_net_fresh_water_by_scaling, &
+                 "If true, adjustments to net fresh water to achieve zero net are\n"//&
+                 "made by scaling values without moving the zero contour.",&
+                 default=.false.)
   call get_param(param_file, mod, "ICE_SALT_CONCENTRATION", &
                  CS%ice_salt_concentration, &
                  "The assumed sea-ice salinity needed to reverse engineer the \n"//&

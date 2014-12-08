@@ -140,7 +140,12 @@ type, public :: forcing
     rigidity_ice_v => NULL()   ! ice shelves at u- or v-points (m3/s)
 
     ! Scalars set by surface forcing modules
+    real :: vPrecGlobalAdj     ! adjustment to restoring vprec to zero out global net ( kg/(m^2 s) )
     real :: saltFluxGlobalAdj  ! adjustment to restoring salt flux to zero out global net ( kg salt/(m^2 s) )
+    real :: netFWGlobalAdj     ! adjustment to net fresh water to zero out global net ( kg/(m^2 s) )
+    real :: vPrecGlobalScl     ! scaling of restoring vprec to zero out global net ( -1..1 )
+    real :: saltFluxGlobalScl  ! scaling of restoring salt flux to zero out global net ( -1..1 )
+    real :: netFWGlobalScl     ! scaling of net fresh water to zero out global net ( -1..1 )
 
     ! heat capacity 
     real :: C_p                ! heat capacity of seawater ( J/(K kg) )
@@ -177,7 +182,10 @@ type, public :: forcing_diags
   integer :: id_heat_restore        = -1
 
   integer :: id_saltflux        = -1, id_saltFluxIn        = -1
-  integer :: id_saltFluxRestore = -1, id_saltFluxGlobalAdj = -1
+  integer :: id_saltFluxRestore = -1
+  integer :: id_vPrecGlobalAdj  = -1, id_vPrecGlobalScl  = -1
+  integer :: id_saltFluxGlobalAdj = -1, id_saltFluxGlobalScl = -1
+  integer :: id_netFWGlobalAdj  = -1, id_netFWGlobalScl  = -1
 
   integer :: id_taux  = -1, id_tauy = -1
   integer :: id_ustar = -1
@@ -1344,6 +1352,31 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
         'Adjustment needed to balance net global salt flux into ocean at surface', &
         'kilogram/(meter^2 * second)')
 
+  handles%id_vPrecGlobalAdj = register_scalar_field('ocean_model',  &
+        'vprec_global_adjustment', Time, diag,                      &
+        'Adjustment needed to adjust net vprec into ocean to zero', &
+        'kilogram/(meter^2 * second)')
+
+  handles%id_netFWGlobalAdj = register_scalar_field('ocean_model',  &
+        'vprec_global_adjustment', Time, diag,                      &
+        'Adjustment needed to adjust net fresh water into ocean to zero', &
+        'kilogram/(meter^2 * second)')
+
+  handles%id_saltFluxGlobalScl = register_scalar_field('ocean_model',            &
+        'salt_flux_global_restoring_scaling', Time, diag,                        &
+        'Scaling applied to balance net global salt flux into ocean at surface', &
+        '(nondim)')
+
+  handles%id_vPrecGlobalScl = register_scalar_field('ocean_model',&
+        'vprec_global_scaling', Time, diag,                       &
+        'Scaling applied to adjust net vprec into ocean to zero', &
+        '(nondim)')
+
+  handles%id_netFWGlobalScl = register_scalar_field('ocean_model',      &
+        'vprec_global_scaling', Time, diag,                             &
+        'Scaling applied to adjust net fresh water into ocean to zero', &
+        '(nondim)')
+
   handles%id_TKE_tidal = register_diag_field('ocean_model', 'TKE_tidal', diag%axesT1, Time, &
         'Tidal source of BBL mixing', 'Watt/m^2')
 
@@ -1534,8 +1567,18 @@ subroutine forcing_diagnostics(fluxes, state, dt, G, diag, handles)
       call post_data(handles%id_saltflux, fluxes%salt_flux, diag)
     if ((handles%id_saltFluxRestore > 0) .and. ASSOCIATED(fluxes%salt_flux_restore)) &
       call post_data(handles%id_saltFluxRestore, fluxes%salt_flux_restore, diag)
-    if ((handles%id_saltFluxGlobalAdj > 0))                                          &
+    if (handles%id_saltFluxGlobalAdj > 0)                                            &
       call post_data(handles%id_saltFluxGlobalAdj, fluxes%saltFluxGlobalAdj, diag)
+    if (handles%id_vPrecGlobalAdj > 0)                                               &
+      call post_data(handles%id_vPrecGlobalAdj, fluxes%vPrecGlobalAdj, diag)
+    if (handles%id_netFWGlobalAdj > 0)                                               &
+      call post_data(handles%id_netFWGlobalAdj, fluxes%netFWGlobalAdj, diag)
+    if (handles%id_saltFluxGlobalScl > 0)                                            &
+      call post_data(handles%id_saltFluxGlobalScl, fluxes%saltFluxGlobalScl, diag)
+    if (handles%id_vPrecGlobalScl > 0)                                               &
+      call post_data(handles%id_vPrecGlobalScl, fluxes%vPrecGlobalScl, diag)
+    if (handles%id_netFWGlobalScl > 0)                                               &
+      call post_data(handles%id_netFWGlobalScl, fluxes%netFWGlobalScl, diag)
     if (handles%id_saltFluxIn > 0 .and. ASSOCIATED(fluxes%salt_flux_in))             &
       call post_data(handles%id_saltFluxIn, fluxes%salt_flux_in, diag)
 
