@@ -63,7 +63,7 @@ type, public :: MEKE_CS ; private
   integer :: id_MEKE = -1, id_Ue = -1, id_Kh = -1, id_src = -1
   integer :: id_GM_src = -1, id_mom_src = -1, id_decay = -1
   integer :: id_KhMEKE_u = -1, id_KhMEKE_v = -1, id_Ku = -1
-  integer :: id_Le = -1
+  integer :: id_Le = -1, id_gamma = -1
 
   ! Infrastructure
   integer :: id_clock_pass !< Clock for group pass calls
@@ -510,6 +510,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, CS)
     if (CS%id_GM_src>0) call post_data(CS%id_GM_src, MEKE%GM_src, CS%diag)
     if (CS%id_mom_src>0) call post_data(CS%id_mom_src, MEKE%mom_src, CS%diag)
     if (CS%id_Le>0) call post_data(CS%id_Le, LmixScale, CS%diag)
+    if (CS%id_gamma>0) call post_data(CS%id_gamma, sqrt(bottomFac2), CS%diag)
 
 ! else ! if MEKE%MEKE
 !   call MOM_error(FATAL, "MOM_MEKE: MEKE%MEKE is not associated!")
@@ -718,6 +719,8 @@ logical function MEKE_init(Time, G, param_file, diag, CS, MEKE)
   if (.not. associated(MEKE%mom_src)) CS%id_mom_src = -1
   CS%id_Le = register_diag_field('ocean_model', 'MEKE_Le', diag%axesT1, Time, &
      'Eddy mixing length used in the MEKE derived eddy diffusivity', 'meter')
+  CS%id_gamma = register_diag_field('ocean_model', 'MEKE_gamma_d', diag%axesT1, Time, &
+     'Ratio of bottom-projected eddy velocity to column-mean eddy velocity', 'nondim')
 
   CS%id_clock_pass = cpu_clock_id('(Ocean continuity halo updates)', grain=CLOCK_ROUTINE)
 
