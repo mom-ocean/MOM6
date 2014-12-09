@@ -31,6 +31,7 @@ type, public :: MEKE_CS ; private
   real :: MEKE_Cd_scale !< The ratio of the bottom eddy velocity to the column mean
                         !! eddy velocity, i.e. sqrt(2*MEKE). This should be less than 1
                         !! to account for the surface intensification of MEKE.
+  real :: MEKE_Cbt      !< Coefficient in the \f$\gamma_d\f$ expression (non-dim)
   logical :: visc_drag  !< If true use the vertvisc_type to calculate bottom drag.
   logical :: Rd_as_max_scale !< If true the length scale can not exceed the
                         !! first baroclinic deformation radius.
@@ -93,7 +94,8 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, CS)
     MEKE_mom_src, & ! The MEKE source from momentum, in m2 s-3.
     drag_rate_visc, &
     drag_rate, &    ! The MEKE spindown timescale due to bottom drag, in s-1.
-    LmixScale       ! Square of eddy mixing length, in m2.
+    LmixScale, &    ! Square of eddy mixing length, in m2.
+    bottomFac2      ! Ratio of EKE_bottom / EKE (nondim)
   real, dimension(SZIB_(G),SZJ_(G)) :: &
     MEKE_uflux, &   ! The zonal diffusive flux of MEKE, in kg m2 s-3.
     Kh_u, &         ! The zonal diffusivity that is actually used, in m2 s-1.
@@ -105,13 +107,14 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, CS)
     drag_vel_v      ! A (vertical) viscosity associated with bottom drag at
                     ! v-points, in m s-1.
   real :: Kh_here, Inv_Kh_max, K4_here
-  real :: cdrag2, bottomFac2
+  real :: cdrag2
   real :: mass_neglect ! A negligible mass, in kg m-2.
   real :: ldamping  ! The MEKE damping rate in s-1.
   real :: Rho0      ! A density used to convert mass to distance, in kg m-3.
   real :: sdt  ! dt to use locally (could be scaled to accelerate)
   real :: sdt_damp  ! dt for damping (sdt could be split).
   real :: Lgrid, Ldeform, LdeformLim, Lrhines, Ue, beta, Lfrict, Leady, SN
+  logical :: use_drag_rate ! Flag to indicate drag_rate is finite
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
@@ -123,6 +126,13 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, CS)
          "MOM_MEKE: Module must be initialized before it is used.")
   if (.not.associated(MEKE)) call MOM_error(FATAL, &
          "MOM_MEKE: MEKE must be initialized before it is used.")
+
+  if (CS%MEKE_damping + CS%MEKE_Cd_scale > 0.0 .or. CS%MEKE_Cbt>0. &
+      .or. CS%visc_drag) then
+    use_drag_rate = .true.
+  else
+    use_drag_rate = .false.
+  endif
 
   ! Only integerate the MEKE equations if MEKE is required.
   if (associated(MEKE%MEKE)) then
@@ -138,7 +148,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, CS)
     Rho0 = G%H_to_kg_m2 * G%m_to_H
     mass_neglect = G%H_to_kg_m2 * G%H_subroundoff
     cdrag2 = CS%cdrag**2
-    bottomFac2 = CS%MEKE_CD_SCALE**2
+    
     ! With a depth-dependent (and possibly strong) damping, it seems
     ! advisable to use Strang splitting between the damping and diffusion.
     sdt_damp = sdt ; if (CS%MEKE_KH >= 0.0) sdt_damp = 0.5*sdt
@@ -152,6 +162,12 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, CS)
 !$OMP do
     do j=js,je ; do i=is,ie
       src(i,j) = CS%MEKE_BGsrc
+      bottomFac2(i,j) = CS%MEKE_CD_SCALE**2
+      Lgrid = sqrt(G%areaT(i,j))                       ! Grid scale
+      Ldeform = Lgrid * MEKE%Rd_dx_h(i,j)              ! Deformation scale
+      Lfrict = G%bathyT(i,j) / CS%cdrag                ! Frictional arrest scale
+      if (Lfrict>0.) bottomFac2(i,j) = bottomFac2(i,j) + &
+                          1./sqrt( 1 + CS%MEKE_Cbt*(Ldeform/Lfrict) )
     enddo ; enddo 
 
 !$OMP do
@@ -230,21 +246,21 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, CS)
                   G%areaCv(i,J)*drag_vel_v(i,J)) ) )
         drag_rate(i,j) = (Rho0 * I_mass(i,j)) * sqrt( &
                  drag_rate_visc(i,j)**2               &
-               + cdrag2 * ( max(0.0, 2.0*bottomFac2*MEKE%MEKE(i,j)) + CS%MEKE_Uscale**2 ) )
+               + cdrag2 * ( max(0.0, 2.0*bottomFac2(i,j)*MEKE%MEKE(i,j)) + CS%MEKE_Uscale**2 ) )
       enddo ; enddo
-    elseif (CS%MEKE_Cd_scale >= 0.0) then
+    else!if (CS%MEKE_Cd_scale >= 0.0) then
 !$OMP do
       do j=js,je ; do i=is,ie
         drag_rate(i,j) = (Rho0 * I_mass(i,j)) * sqrt( &
-                 cdrag2 * ( max(0.0, 2.0*bottomFac2*MEKE%MEKE(i,j)) + CS%MEKE_Uscale**2 ) )
+                 cdrag2 * ( max(0.0, 2.0*bottomFac2(i,j)*MEKE%MEKE(i,j)) + CS%MEKE_Uscale**2 ) )
       enddo ; enddo
     endif
 
-    if (CS%MEKE_damping + CS%MEKE_Cd_scale > 0.0) then
+    if (use_drag_rate) then
       ! First stage of Strang splitting
 !$OMP do
       do j=js,je ; do i=is,ie
-        ldamping = CS%MEKE_damping + drag_rate(i,j) * bottomFac2
+        ldamping = CS%MEKE_damping + drag_rate(i,j) * bottomFac2(i,j)
         if (MEKE%MEKE(i,j)<0.) ldamping = 0.
         ! notice that the above line ensures a damping only if MEKE is positive,
         ! while leaving MEKE unchanged if it is negative
@@ -378,26 +394,26 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, CS)
       enddo ; enddo
     endif
     if (CS%MEKE_KH >= 0.0 .or. CS%MEKE_K4 >= 0.0) then
-      if ((CS%MEKE_damping + CS%MEKE_Cd_scale > 0.0) .and. (sdt>sdt_damp)) then
+      if (use_drag_rate .and. (sdt>sdt_damp)) then
         ! Recalculate the drag rate, since MEKE has changed.
         if (CS%visc_drag) then
 !$OMP do
           do j=js,je ; do i=is,ie
             drag_rate(i,j) = (Rho0 * I_mass(i,j)) * sqrt( &
                      drag_rate_visc(i,j)**2               &
-                   + cdrag2 * ( max(0.0, 2.0*bottomFac2*MEKE%MEKE(i,j)) + CS%MEKE_Uscale**2 ) )
+                   + cdrag2 * ( max(0.0, 2.0*bottomFac2(i,j)*MEKE%MEKE(i,j)) + CS%MEKE_Uscale**2 ) )
           enddo ; enddo
-        elseif (CS%MEKE_Cd_scale >= 0.0) then
+        else
 !$OMP do
           do j=js,je ; do i=is,ie
             drag_rate(i,j) = (Rho0 * I_mass(i,j)) * sqrt( &
-                     cdrag2 * ( max(0.0, 2.0*bottomFac2*MEKE%MEKE(i,j)) + CS%MEKE_Uscale**2 ) )
+                     cdrag2 * ( max(0.0, 2.0*bottomFac2(i,j)*MEKE%MEKE(i,j)) + CS%MEKE_Uscale**2 ) )
           enddo ; enddo
         endif
         ! Second stage of Strang splitting
 !$OMP do
         do j=js,je ; do i=is,ie
-          ldamping = CS%MEKE_damping + drag_rate(i,j) * bottomFac2
+          ldamping = CS%MEKE_damping + drag_rate(i,j) * bottomFac2(i,j)
           if (MEKE%MEKE(i,j)<0.) ldamping = 0.
           ! notice that the above line ensures a damping only if MEKE is positive,
           ! while leaving MEKE unchanged if it is negative
@@ -551,6 +567,11 @@ logical function MEKE_init(Time, G, param_file, diag, CS, MEKE)
                  "eddy velocity, i.e. sqrt(2*MEKE). This should be less than 1\n"//&
                  "to account for the surface intensification of MEKE.", &
                  units="nondim", default=0.3)
+  call get_param(param_file, mod, "MEKE_CBT", CS%MEKE_Cbt, &
+                 "A coefficient in the expression for the ratio of bottom projected\n"//&
+                 "eddy energy and mean column energy (see Jansen et al. 2015).",&
+                 units="nondim", default=0.)
+  ! TODO: Change defaults for MEKE_CD_SCALE -> 0. and MEKE_CBT -> 20.
   call get_param(param_file, mod, "MEKE_GMCOEFF", CS%MEKE_GMcoeff, &
                  "The efficiency of the conversion of potential energy \n"//&
                  "into MEKE by the thickness mixing parameterization. \n"//&
@@ -850,6 +871,12 @@ end subroutine MEKE_end
 !! \f$ U_b \f$ is a constant background bottom velocity scale and is
 !! typically not used (i.e. set to zero).
 !!
+!! Following Jansen et al., 2015, the projection of eddy energy on to the bottom
+!! is given by
+!! \f[
+!! \gamma_d^2 = \gamma_{d0} + \left( 1 + c_{bt} \frac{L_d}{L_f} \right)^{-\frac{1}{2}}
+!! \f]
+!!
 !! \subsection section_MEKE_smoothing MEKE smoothing terms
 !!
 !! \f$ E \f$ is laterally diffused by a diffusivity \f$ \kappa_E + \gamma_M
@@ -902,7 +929,8 @@ end subroutine MEKE_end
 !! | \f$ \gamma_v \f$      | <code>MEKE_FrCOEFF</code> |
 !! | \f$ \lambda \f$       | <code>MEKE_DAMPING</code> |
 !! | \f$ U_b \f$           | <code>MEKE_USCALE</code> |
-!! | \f$ \gamma_d \f$      | <code>MEKE_CD_SCALE</code> |
+!! | \f$ \gamma_d0 \f$     | <code>MEKE_CD_SCALE</code> |
+!! | \f$ c_{bt} \f$        | <code>MEKE_CBT</code> |
 !! | \f$ \kappa_E \f$      | <code>MEKE_KH</code> |
 !! | \f$ \kappa_4 \f$      | <code>MEKE_K4</code> |
 !! | \f$ \gamma_\kappa \f$ | <code>MEKE_KHCOEFF</code> |
