@@ -1358,7 +1358,7 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
         'kilogram/(meter^2 * second)')
 
   handles%id_netFWGlobalAdj = register_scalar_field('ocean_model',  &
-        'vprec_global_adjustment', Time, diag,                      &
+        'net_fresh_water_global_adjustment', Time, diag,                      &
         'Adjustment needed to adjust net fresh water into ocean to zero', &
         'kilogram/(meter^2 * second)')
 
@@ -1373,7 +1373,7 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
         '(nondim)')
 
   handles%id_netFWGlobalScl = register_scalar_field('ocean_model',      &
-        'vprec_global_scaling', Time, diag,                             &
+        'net_fresh_water_global_scaling', Time, diag,                             &
         'Scaling applied to adjust net fresh water into ocean to zero', &
         '(nondim)')
 
