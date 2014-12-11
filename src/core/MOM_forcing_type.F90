@@ -111,6 +111,7 @@ type, public :: forcing
     heat_content_frunoff => NULL(), & ! heat content associated with frozen runoff      (W/m^2)
     heat_content_icemelt => NULL(), & ! heat content associated with liquid sea ice     (W/m^2)
     heat_content_massout => NULL(), & ! heat content associated with mass leaving ocean (W/m^2)
+    heat_content_massin  => NULL(), & ! heat content associated with mass entering ocean (W/m^2)
 
     ! salt mass flux (contributes to ocean mass only if non-Bouss )
     salt_flux         => NULL(), & ! net salt flux into the ocean ( kg salt/(m^2 s) )
@@ -178,8 +179,8 @@ type, public :: forcing_diags
   integer :: id_heat_content_lrunoff= -1, id_heat_content_frunoff  = -1
   integer :: id_heat_content_lprec  = -1, id_heat_content_fprec    = -1
   integer :: id_heat_content_cond   = -1, id_heat_content_surfwater= -1
-  integer :: id_heat_content_vprec  = -1, id_heat_content_massout  = -1  
-  integer :: id_heat_restore        = -1
+  integer :: id_heat_content_vprec  = -1, id_heat_content_massout  = -1
+  integer :: id_heat_restore        = -1, id_heat_content_massin   = -1
 
   integer :: id_saltflux        = -1, id_saltFluxIn        = -1
   integer :: id_saltFluxRestore = -1
@@ -1337,6 +1338,10 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
          diag%axesT1, Time,'Heat content (relative to 0degC)of net mass leaving ocean ocean', &
         'Watt/m^2')
 
+  handles%id_heat_content_massin = register_diag_field('ocean_model', 'heat_content_massin',&
+         diag%axesT1, Time,'Heat content (relative to 0degC)of net mass entering ocean ocean', &
+        'Watt/m^2')
+
   handles%id_net_heat_coupler = register_diag_field('ocean_model', 'net_heat_coupler',          &
         diag%axesT1,Time,'Surface ocean heat flux from SW+LW+latent+sensible (via the coupler)',&
         'Watt/m^2')
@@ -1543,6 +1548,8 @@ subroutine forcing_diagnostics(fluxes, state, dt, G, diag, handles)
       call post_data(handles%id_heat_content_cond, fluxes%heat_content_cond, diag)
     if ((handles%id_heat_content_massout > 0) .and. ASSOCIATED(fluxes%heat_content_massout))  &
       call post_data(handles%id_heat_content_massout, fluxes%heat_content_massout, diag)
+    if ((handles%id_heat_content_massin > 0) .and. ASSOCIATED(fluxes%heat_content_massin))  &
+      call post_data(handles%id_heat_content_massin, fluxes%heat_content_massin, diag)
 
     if (handles%id_net_heat_coupler > 0) then
       sum(:,:) = 0.0
@@ -1672,6 +1679,7 @@ subroutine deallocate_forcing_type(fluxes)
   if (associated(fluxes%heat_content_fprec))   deallocate(fluxes%heat_content_fprec)
   if (associated(fluxes%heat_content_cond))    deallocate(fluxes%heat_content_cond)
   if (associated(fluxes%heat_content_massout)) deallocate(fluxes%heat_content_massout)
+  if (associated(fluxes%heat_content_massin))  deallocate(fluxes%heat_content_massin)
   if (associated(fluxes%evap))                 deallocate(fluxes%evap)
   if (associated(fluxes%lprec))                deallocate(fluxes%lprec)
   if (associated(fluxes%fprec))                deallocate(fluxes%fprec)

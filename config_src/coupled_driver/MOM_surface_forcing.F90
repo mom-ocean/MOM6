@@ -343,6 +343,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
     call safe_alloc_ptr(fluxes%heat_content_frunoff,isd,ied,jsd,jed) 
     call safe_alloc_ptr(fluxes%heat_content_lrunoff,isd,ied,jsd,jed)  
     call safe_alloc_ptr(fluxes%heat_content_massout,isd,ied,jsd,jed)  
+    call safe_alloc_ptr(fluxes%heat_content_massin,isd,ied,jsd,jed)  
 
     if (CS%rigid_sea_ice) then
       call safe_alloc_ptr(fluxes%rigidity_ice_u,IsdB,IedB,jsd,jed)

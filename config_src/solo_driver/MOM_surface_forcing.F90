@@ -416,6 +416,7 @@ subroutine buoyancy_forcing_allocate(fluxes, G, CS)
     call safe_alloc_ptr(fluxes%heat_content_lrunoff,isd,ied,jsd,jed)
     call safe_alloc_ptr(fluxes%heat_content_frunoff,isd,ied,jsd,jed)
     call safe_alloc_ptr(fluxes%heat_content_massout,isd,ied,jsd,jed)
+    call safe_alloc_ptr(fluxes%heat_content_massin,isd,ied,jsd,jed)
 
     ! surface restoring fields 
     if (CS%restorebuoy) then

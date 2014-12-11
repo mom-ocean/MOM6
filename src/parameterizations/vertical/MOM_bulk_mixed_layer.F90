@@ -1067,6 +1067,7 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,   &
   ! massOutRem(i) = -netMassOut(i)
   ! netMassIn(i)  = netMassInOut(i) - netMassOut(i)
     if(ASSOCIATED(fluxes%heat_content_massout)) fluxes%heat_content_massout(i,j) = 0.0
+    if(ASSOCIATED(fluxes%heat_content_massin)) fluxes%heat_content_massin(i,j) = 0.0
 
     ! htot is an Angstrom (taken from layer 1) plus any net precipitation.
     h_ent     = max(min(Angstrom,h(i,k)-eps(i,k)),0.0)
@@ -1105,6 +1106,9 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,   &
                  (dRcv_dT(i)*(Net_heat(i) + Pen_absorbed) - &
                   dRcv_dS(i) * (netMassIn(i) * S(i,1) - Net_salt(i)))
     Conv_En(i) = 0.0 ; dKE_FC(i) = 0.0
+    if(ASSOCIATED(fluxes%heat_content_massin))                            &
+           fluxes%heat_content_massin(i,j) = fluxes%heat_content_massin(i,j) &
+                       + T_precip * netMassIn(i) * G%H_to_kg_m2 * fluxes%C_p * Idt
     if (ASSOCIATED(tv%TempxPmE)) tv%TempxPmE(i,j) = tv%TempxPmE(i,j) + &
                          T_precip * netMassIn(i) * G%H_to_kg_m2
   endif ; enddo
@@ -1155,9 +1159,9 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,   &
         ! heat_content_massout = heat_content_massout - T(i,k)*h_evap*G%H_to_kg_m2*fluxes%C_p*Idt
         ! by uncommenting the lines here.  
         ! we will also then completely remove TempXpme from the model. 
-!        if(ASSOCIATED(fluxes%heat_content_massout))                            &
-!           fluxes%heat_content_massout(i,j) = fluxes%heat_content_massout(i,j) &
-!           - T(i,k)*h_evap*G%H_to_kg_m2*fluxes%C_p*Idt
+        if(ASSOCIATED(fluxes%heat_content_massout))                            &
+           fluxes%heat_content_massout(i,j) = fluxes%heat_content_massout(i,j) &
+                                    - T(i,k)*h_evap*G%H_to_kg_m2 * fluxes%C_p * Idt
         if (ASSOCIATED(tv%TempxPmE)) tv%TempxPmE(i,j) = tv%TempxPmE(i,j) - &
                                       T(i,k)*h_evap*G%H_to_kg_m2
 
