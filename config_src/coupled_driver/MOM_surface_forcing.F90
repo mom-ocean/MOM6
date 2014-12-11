@@ -520,11 +520,6 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
     enddo ; enddo
   endif 
 
-  ! assume fprec enters ocean at 0degC if atmos model does not provide fprec heat content.
-  do j=js,je ; do i=is,ie
-    fluxes%heat_content_fprec(i,j) = 0.0
-  enddo ; enddo
-
   ! fluxes%evap < 0 means ocean loses mass due to evaporation.
   ! Evaporation leaves ocean surface at a temperature that has yet to be determined,
   ! since we do not know the precise layer that the water evaporates.  We therefore 
@@ -555,7 +550,6 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
   ! is fully computed in parameterizations/vertical/MOM_bulk_mixed_layer.F90 and housed
   ! in TempXpme.  When have reconciliation complete, TempXpme will be removed from the code.  
   if(CS%bulkmixedlayer) then 
-      fluxes%heat_content_fprec(:,:)   = 0.0
       fluxes%heat_content_vprec(:,:)   = 0.0
       fluxes%heat_content_lrunoff(:,:) = 0.0
       fluxes%heat_content_frunoff(:,:) = 0.0

@@ -481,6 +481,9 @@ subroutine extractFluxes1d(G, fluxes, optics, nsw, j, dt,                       
       endif
     endif
 
+    ! assume fprec enters ocean at 0degC if atmos model does not provide fprec heat content.
+    if(ASSOCIATED(fluxes%heat_content_fprec)) fluxes%heat_content_fprec(i,j) = 0.0
+
   enddo ! i-loop
 
 

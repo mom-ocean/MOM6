@@ -1104,7 +1104,6 @@ subroutine buoyancy_forcing_from_files(state, fluxes, day, dt, G, CS)
          fluxes%heat_content_cond(i,j) = 0.0
       endif 
 
-      fluxes%heat_content_fprec(i,j)   = 0.0
       fluxes%heat_content_lrunoff(i,j) = fluxes%C_p*fluxes%lrunoff(i,j)*state%SST(i,j) 
       fluxes%heat_content_frunoff(i,j) = 0.0
       fluxes%latent_evap_diag(i,j)     = fluxes%latent_evap_diag(i,j) * G%mask2dT(i,j)
@@ -1340,7 +1339,6 @@ subroutine buoyancy_forcing_from_data_override(state, fluxes, day, dt, G, CS)
        fluxes%heat_content_cond(i,j)   = 0.0
     endif 
 
-    fluxes%heat_content_fprec(i,j)   = 0.0
     fluxes%heat_content_lrunoff(i,j) = fluxes%C_p*fluxes%lrunoff(i,j)*state%SST(i,j) 
     fluxes%heat_content_frunoff(i,j) = 0.0
     fluxes%latent_evap_diag(i,j)     = fluxes%latent_evap_diag(i,j) * G%mask2dT(i,j)
@@ -1415,7 +1413,6 @@ subroutine buoyancy_forcing_zero(state, fluxes, day, dt, G, CS)
       fluxes%sens(i,j)                 = 0.0
       fluxes%sw(i,j)                   = 0.0
       fluxes%heat_content_cond(i,j)    = 0.0
-      fluxes%heat_content_fprec(i,j)   = 0.0
       fluxes%heat_content_vprec(i,j)   = 0.0
       fluxes%heat_content_lrunoff(i,j) = 0.0
       fluxes%heat_content_frunoff(i,j) = 0.0
@@ -1471,7 +1468,6 @@ subroutine buoyancy_forcing_const(state, fluxes, day, dt, G, CS)
       fluxes%sens(i,j)                 = CS%constantHeatForcing * G%mask2dT(i,j)
       fluxes%sw(i,j)                   = 0.0
       fluxes%heat_content_cond(i,j)    = 0.0
-      fluxes%heat_content_fprec(i,j)   = 0.0
       fluxes%heat_content_vprec(i,j)   = 0.0
       fluxes%heat_content_lrunoff(i,j) = 0.0
       fluxes%heat_content_frunoff(i,j) = 0.0
@@ -1529,7 +1525,6 @@ subroutine buoyancy_forcing_linear(state, fluxes, day, dt, G, CS)
       fluxes%sens(i,j)                 = 0.0
       fluxes%sw(i,j)                   = 0.0
       fluxes%heat_content_cond(i,j)    = 0.0
-      fluxes%heat_content_fprec(i,j)   = 0.0
       fluxes%heat_content_vprec(i,j)   = 0.0
       fluxes%heat_content_lrunoff(i,j) = 0.0
       fluxes%heat_content_frunoff(i,j) = 0.0

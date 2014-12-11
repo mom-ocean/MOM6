@@ -1016,7 +1016,6 @@ subroutine buoyancy_forcing_zero(state, fluxes, day, dt, G, CS)
       fluxes%sw(i,j)                   = 0.0
       fluxes%heat_content_cond(i,j)    = 0.0
       fluxes%heat_content_vprec(i,j)   = 0.0
-      fluxes%heat_content_fprec(i,j)   = 0.0
       fluxes%heat_content_lrunoff(i,j) = 0.0
       fluxes%heat_content_frunoff(i,j) = 0.0
       fluxes%latent_evap_diag(i,j)     = 0.0
@@ -1076,7 +1075,6 @@ subroutine buoyancy_forcing_linear(state, fluxes, day, dt, G, CS)
       fluxes%sens(i,j)                 = 0.0
       fluxes%sw(i,j)                   = 0.0
       fluxes%heat_content_cond(i,j)    = 0.0
-      fluxes%heat_content_fprec(i,j)   = 0.0
       fluxes%heat_content_vprec(i,j)   = 0.0
       fluxes%heat_content_lrunoff(i,j) = 0.0
       fluxes%heat_content_frunoff(i,j) = 0.0
