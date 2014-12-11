@@ -513,6 +513,11 @@ subroutine extractFluxes1d(G, fluxes, optics, nsw, j, dt,                       
       fluxes%heat_content_lrunoff(i,j) = fluxes%C_p*fluxes%lrunoff(i,j)*T(i,1)
     endif
 
+    ! Assume solid runoff enters ocean at 0degC if land model does not provide calving heat content.
+    if (.not. useCalvingHeatContent) then
+      fluxes%heat_content_frunoff(i,j) = 0.0
+    endif
+
   enddo ! i-loop
 
 end subroutine extractFluxes1d

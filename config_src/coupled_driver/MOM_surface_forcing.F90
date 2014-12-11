@@ -505,13 +505,6 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
 
   enddo ; enddo   
 
-  ! assume solid runoff enters ocean at 0degC if land model does not provide calving heat content.
-  if (.not. ASSOCIATED(IOB%calving_hflx)) then 
-    do j=js,je ; do i=is,ie
-      fluxes%heat_content_frunoff(i,j) = 0.0
-    enddo ; enddo
-  endif 
-
   ! more salt restoring logic 
   if (ASSOCIATED(IOB%salt_flux)) then
     do j=js,je ; do i=is,ie
