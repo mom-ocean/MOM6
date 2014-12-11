@@ -505,14 +505,6 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
 
   enddo ; enddo   
 
-
-  ! assume liquid runoff enters ocean at SST if land model does not provide runoff heat content.
-  if (.not. ASSOCIATED(IOB%runoff_hflx)) then 
-    do j=js,je ; do i=is,ie
-      fluxes%heat_content_lrunoff(i,j) =  C_p*fluxes%lrunoff(i,j)*state%SST(i,j)*G%mask2dT(i,j)
-    enddo ; enddo
-  endif 
-
   ! assume solid runoff enters ocean at 0degC if land model does not provide calving heat content.
   if (.not. ASSOCIATED(IOB%calving_hflx)) then 
     do j=js,je ; do i=is,ie
@@ -520,16 +512,6 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
     enddo ; enddo
   endif 
 
-  ! smg: remove this when have A=B code reconciled. 
-  ! we set these fields to zero here, since heat content when using bulkmixed layer code
-  ! is fully computed in parameterizations/vertical/MOM_bulk_mixed_layer.F90 and housed
-  ! in TempXpme.  When have reconciliation complete, TempXpme will be removed from the code.  
-  if(CS%bulkmixedlayer) then 
-      fluxes%heat_content_lrunoff(:,:) = 0.0
-      fluxes%heat_content_frunoff(:,:) = 0.0
-  endif 
-
- 
   ! more salt restoring logic 
   if (ASSOCIATED(IOB%salt_flux)) then
     do j=js,je ; do i=is,ie

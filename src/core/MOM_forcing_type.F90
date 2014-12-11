@@ -508,8 +508,12 @@ subroutine extractFluxes1d(G, fluxes, optics, nsw, j, dt,                       
       endif
     endif
 
-  enddo ! i-loop
+    ! Assume liquid runoff enters ocean at SST if land model does not provide runoff heat content.
+    if (.not. useRiverHeatContent) then
+      fluxes%heat_content_lrunoff(i,j) = fluxes%C_p*fluxes%lrunoff(i,j)*T(i,1)
+    endif
 
+  enddo ! i-loop
 
 end subroutine extractFluxes1d
 
