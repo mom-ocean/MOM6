@@ -520,21 +520,6 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
     enddo ; enddo
   endif 
 
-  ! smg: we should remove sea ice melt from lprec!!! 
-  ! fluxes%lprec > 0 means ocean gains mass via liquid precipitation and/or sea ice melt. 
-  ! When atmosphere does not provide heat of this precipitation, the ocean assumes
-  ! it enters the ocean at the SST.  
-  ! fluxes%lprec < 0 means ocean loses mass via sea ice formation. As we do not yet know
-  ! the layer at which this mass is removed, we cannot compute it heat content. We must 
-  ! wait until MOM_diabatic_driver.F90. 
-  do j=js,je ; do i=is,ie
-      if(fluxes%lprec(i,j) > 0.0) then 
-        fluxes%heat_content_lprec(i,j) = C_p*fluxes%lprec(i,j)*state%SST(i,j)*G%mask2dT(i,j)
-      else 
-        fluxes%heat_content_lprec(i,j) = 0.0  
-      endif 
-  enddo ; enddo
-
   ! assume fprec enters ocean at 0degC if atmos model does not provide fprec heat content.
   do j=js,je ; do i=is,ie
     fluxes%heat_content_fprec(i,j) = 0.0
@@ -570,7 +555,6 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
   ! is fully computed in parameterizations/vertical/MOM_bulk_mixed_layer.F90 and housed
   ! in TempXpme.  When have reconciliation complete, TempXpme will be removed from the code.  
   if(CS%bulkmixedlayer) then 
-      fluxes%heat_content_lprec(:,:)   = 0.0
       fluxes%heat_content_fprec(:,:)   = 0.0
       fluxes%heat_content_vprec(:,:)   = 0.0
       fluxes%heat_content_lrunoff(:,:) = 0.0

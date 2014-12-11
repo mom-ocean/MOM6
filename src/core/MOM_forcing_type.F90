@@ -104,7 +104,7 @@ type, public :: forcing
 
     ! heat associated with water crossing ocean surface 
     heat_content_cond    => NULL(), & ! heat content associated with condensating water (W/m^2)
-    heat_content_lprec   => NULL(), & ! heat content associated with liquid >0 precip   (W/m^2)
+    heat_content_lprec   => NULL(), & ! heat content associated with liquid >0 precip   (W/m^2) (diagnostic)
     heat_content_fprec   => NULL(), & ! heat content associated with frozen precip      (W/m^2)
     heat_content_vprec   => NULL(), & ! heat content associated with virtual >0 precip  (W/m^2)
     heat_content_lrunoff => NULL(), & ! heat content associated with liquid runoff      (W/m^2)
@@ -376,7 +376,6 @@ subroutine extractFluxes1d(G, fluxes, optics, nsw, j, dt,                       
     ! smg: we should split the ice melt/formation from the lprec 
     if(fluxes%lprec(i,j) < 0.0) then
       netMassOut(i) = netMassOut(i) + fluxes%lprec(i,j)
-      if(ASSOCIATED(fluxes%heat_content_lprec)) fluxes%heat_content_lprec(i,j) = 0.0
     endif 
 
     ! vprec < 0 means virtual evaporation arising from surface salinity restoring,
@@ -464,6 +463,23 @@ subroutine extractFluxes1d(G, fluxes, optics, nsw, j, dt,                       
     ! non-Bouss:  (g/m^2)
     if (ASSOCIATED(fluxes%salt_flux)) &
       Net_salt(i) = (scale * dt * (1000.0 * fluxes%salt_flux(i,j))) * G%kg_m2_to_H
+
+    ! Diagnostics follow...
+
+    ! smg: we should remove sea ice melt from lprec!!! 
+    ! fluxes%lprec > 0 means ocean gains mass via liquid precipitation and/or sea ice melt. 
+    ! When atmosphere does not provide heat of this precipitation, the ocean assumes
+    ! it enters the ocean at the SST.  
+    ! fluxes%lprec < 0 means ocean loses mass via sea ice formation. As we do not yet know
+    ! the layer at which this mass is removed, we cannot compute it heat content. We must 
+    ! wait until MOM_diabatic_driver.F90. 
+    if(ASSOCIATED(fluxes%heat_content_lprec)) then
+      if (fluxes%lprec(i,j) > 0.0) then
+        fluxes%heat_content_lprec(i,j) = fluxes%C_p*fluxes%lprec(i,j)*T(i,1)
+      else
+        fluxes%heat_content_lprec(i,j) = 0.0
+      endif
+    endif
 
   enddo ! i-loop
 

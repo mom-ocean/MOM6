@@ -284,7 +284,6 @@ subroutine MESO_buoyancy_forcing(state, fluxes, day, dt, G, CS)
       fluxes%latent(i,j)             = 0.0 * G%mask2dT(i,j)
       fluxes%sens(i,j)               = CS%Heat(i,j) * G%mask2dT(i,j)
       fluxes%sw(i,j)                 = CS%Solar(i,j) * G%mask2dT(i,j)
-      fluxes%heat_content_lprec(i,j) = fluxes%C_p * fluxes%lprec(i,j) * state%SST(i,j)
     enddo ; enddo
   else ! This is the buoyancy only mode.
     do j=js,je ; do i=is,ie

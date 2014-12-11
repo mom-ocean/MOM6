@@ -1090,14 +1090,6 @@ subroutine buoyancy_forcing_from_files(state, fluxes, day, dt, G, CS)
       fluxes%sw(i,j)      = fluxes%sw(i,j)      * G%mask2dT(i,j)
       fluxes%latent(i,j)  = fluxes%latent(i,j)  * G%mask2dT(i,j)
 
-      ! lprec < 0 may arise when ice formation takes lots of water from ocean, in which 
-      ! case the heat_content_massout is determined inside MOM_diabatic_driver.F90. 
-      ! smg: we should split ice melt/form out of lprec 
-      if(fluxes%lprec(i,j) > 0.0) then 
-         fluxes%heat_content_lprec(i,j) = fluxes%C_p*fluxes%lprec(i,j)*state%SST(i,j) 
-      else 
-         fluxes%heat_content_lprec(i,j) = 0.0
-      endif 
       ! If vprec < 0, heat_content_massout is determined inside MOM_diabatic_driver.F90.
       if(fluxes%vprec(i,j) > 0.0) then 
          fluxes%heat_content_vprec(i,j) = fluxes%C_p*fluxes%vprec(i,j)*state%SST(i,j) 
@@ -1340,14 +1332,6 @@ subroutine buoyancy_forcing_from_data_override(state, fluxes, day, dt, G, CS)
     fluxes%sens(i,j)    = fluxes%sens(i,j)    * G%mask2dT(i,j)
     fluxes%sw(i,j)      = fluxes%sw(i,j)      * G%mask2dT(i,j)
 
-    ! lprec < 0 may arise when ice formation takes lots of water from ocean, in which 
-    ! case the heat_content_massout is determined inside MOM_diabatic_driver.F90. 
-    ! smg: we should split ice melt/form out of lprec 
-    if(fluxes%lprec(i,j) > 0.0) then 
-       fluxes%heat_content_lprec(i,j) = fluxes%C_p*fluxes%lprec(i,j)*state%SST(i,j) 
-    else 
-       fluxes%heat_content_lprec(i,j) = 0.0
-    endif 
     ! evap > 0 may arise when condensation/fog adds water to ocean. If evap < 0, 
     ! heat_content_massout is determined inside MOM_diabatic_driver.F90.
     if(fluxes%evap(i,j) > 0.0) then 
@@ -1431,7 +1415,6 @@ subroutine buoyancy_forcing_zero(state, fluxes, day, dt, G, CS)
       fluxes%sens(i,j)                 = 0.0
       fluxes%sw(i,j)                   = 0.0
       fluxes%heat_content_cond(i,j)    = 0.0
-      fluxes%heat_content_lprec(i,j)   = 0.0
       fluxes%heat_content_fprec(i,j)   = 0.0
       fluxes%heat_content_vprec(i,j)   = 0.0
       fluxes%heat_content_lrunoff(i,j) = 0.0
@@ -1488,7 +1471,6 @@ subroutine buoyancy_forcing_const(state, fluxes, day, dt, G, CS)
       fluxes%sens(i,j)                 = CS%constantHeatForcing * G%mask2dT(i,j)
       fluxes%sw(i,j)                   = 0.0
       fluxes%heat_content_cond(i,j)    = 0.0
-      fluxes%heat_content_lprec(i,j)   = 0.0
       fluxes%heat_content_fprec(i,j)   = 0.0
       fluxes%heat_content_vprec(i,j)   = 0.0
       fluxes%heat_content_lrunoff(i,j) = 0.0
@@ -1547,7 +1529,6 @@ subroutine buoyancy_forcing_linear(state, fluxes, day, dt, G, CS)
       fluxes%sens(i,j)                 = 0.0
       fluxes%sw(i,j)                   = 0.0
       fluxes%heat_content_cond(i,j)    = 0.0
-      fluxes%heat_content_lprec(i,j)   = 0.0
       fluxes%heat_content_fprec(i,j)   = 0.0
       fluxes%heat_content_vprec(i,j)   = 0.0
       fluxes%heat_content_lrunoff(i,j) = 0.0
