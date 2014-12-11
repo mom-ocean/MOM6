@@ -487,13 +487,26 @@ subroutine extractFluxes1d(G, fluxes, optics, nsw, j, dt,                       
     ! vprec > 0 means add water to ocean, assumed to be at SST 
     ! vprec < 0 means remove water from ocean; set heat_content_vprec in MOM_diabatic_driver.F90
     if(ASSOCIATED(fluxes%heat_content_vprec)) then
-      if(fluxes%vprec(i,j) > 0.0) then
-        fluxes%heat_content_vprec(i,j) = fluxes%C_p*fluxes%vprec(i,j)*T(i,1)*G%mask2dT(i,j)
+      if (fluxes%vprec(i,j) > 0.0) then
+        fluxes%heat_content_vprec(i,j) = fluxes%C_p*fluxes%vprec(i,j)*T(i,1)
       else
         fluxes%heat_content_vprec(i,j) = 0.0
       endif
     endif
 
+    ! fluxes%evap < 0 means ocean loses mass due to evaporation.
+    ! Evaporation leaves ocean surface at a temperature that has yet to be determined,
+    ! since we do not know the precise layer that the water evaporates.  We therefore 
+    ! compute fluxes%heat_content_massout at the relevant point inside MOM_diabatic_driver.F90.
+    ! fluxes%evap > 0 means ocean gains moisture via condensation.
+    ! Condensation is assumed to drop into the ocean at the SST, just like lprec.  
+    if(ASSOCIATED(fluxes%heat_content_cond)) then
+      if (fluxes%evap(i,j) > 0.0) then
+        fluxes%heat_content_cond(i,j) = fluxes%C_p*fluxes%evap(i,j)*T(i,1)
+      else
+        fluxes%heat_content_cond(i,j) = 0.0
+      endif
+    endif
 
   enddo ! i-loop
 

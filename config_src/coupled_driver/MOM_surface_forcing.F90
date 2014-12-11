@@ -520,20 +520,6 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
     enddo ; enddo
   endif 
 
-  ! fluxes%evap < 0 means ocean loses mass due to evaporation.
-  ! Evaporation leaves ocean surface at a temperature that has yet to be determined,
-  ! since we do not know the precise layer that the water evaporates.  We therefore 
-  ! compute fluxes%heat_content_massout at the relevant point inside MOM_diabatic_driver.F90.
-  ! fluxes%evap > 0 means ocean gains moisture via condensation.
-  ! Condensation is assumed to drop into the ocean at the SST, just like lprec.  
-  do j=js,je ; do i=is,ie
-    if(fluxes%evap(i,j) > 0.0) then 
-      fluxes%heat_content_cond(i,j) = C_p*fluxes%evap(i,j)*state%SST(i,j)*G%mask2dT(i,j)
-    else 
-      fluxes%heat_content_cond(i,j) = 0.0
-    endif 
-  enddo ; enddo
-
   ! smg: remove this when have A=B code reconciled. 
   ! we set these fields to zero here, since heat content when using bulkmixed layer code
   ! is fully computed in parameterizations/vertical/MOM_bulk_mixed_layer.F90 and housed
@@ -541,7 +527,6 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
   if(CS%bulkmixedlayer) then 
       fluxes%heat_content_lrunoff(:,:) = 0.0
       fluxes%heat_content_frunoff(:,:) = 0.0
-      fluxes%heat_content_cond(:,:)    = 0.0
   endif 
 
  
