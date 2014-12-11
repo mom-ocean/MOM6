@@ -892,12 +892,6 @@ subroutine buoyancy_forcing_from_files(state, fluxes, day, dt, G, CS)
       fluxes%sw(i,j)                   = fluxes%sw(i,j)               * G%mask2dT(i,j)
       fluxes%latent(i,j)               = fluxes%latent(i,j)           * G%mask2dT(i,j)
 
-      ! If vprec < 0, heat_content_massou is determined inside MOM_diabatic_driver.F90.
-      if(fluxes%vprec(i,j) > 0.0) then 
-         fluxes%heat_content_vprec(i,j) = fluxes%C_p*fluxes%vprec(i,j)*state%SST(i,j) 
-      else 
-         fluxes%heat_content_vprec(i,j) = 0.0
-      endif 
       ! evap > 0 may arise when condensation/fog adds water to ocean. If evap < 0, 
       ! heat_content_massout is determined inside MOM_diabatic_driver.F90.
       if(fluxes%evap(i,j) > 0.0) then 
@@ -956,18 +950,6 @@ subroutine buoyancy_forcing_from_files(state, fluxes, day, dt, G, CS)
 !###                           fluxes%vprec, day, dt, G, CS%ctrl_forcing_CSp)
 !### endif
 
-  ! fill heat content for vprec when it is > 0 
-  ! if vprec < 0, heat_content_massout filled in MOM_diabatic_driver.F90 
-  do j=js,je ; do i=is,ie
-    fluxes%vprec(i,j) = fluxes%vprec(i,j)*G%mask2dT(i,j)
-    if(fluxes%vprec(i,j) > 0.0) then 
-       fluxes%heat_content_vprec(i,j) = fluxes%C_p*fluxes%vprec(i,j)*state%SST(i,j) 
-    else 
-       fluxes%heat_content_vprec(i,j) = 0.0
-    endif 
-  enddo ; enddo  
-
-
   call callTree_leave("buoyancy_forcing_from_files")
 end subroutine buoyancy_forcing_from_files
 
@@ -1015,7 +997,6 @@ subroutine buoyancy_forcing_zero(state, fluxes, day, dt, G, CS)
       fluxes%sens(i,j)                 = 0.0
       fluxes%sw(i,j)                   = 0.0
       fluxes%heat_content_cond(i,j)    = 0.0
-      fluxes%heat_content_vprec(i,j)   = 0.0
       fluxes%heat_content_lrunoff(i,j) = 0.0
       fluxes%heat_content_frunoff(i,j) = 0.0
       fluxes%latent_evap_diag(i,j)     = 0.0
@@ -1075,7 +1056,6 @@ subroutine buoyancy_forcing_linear(state, fluxes, day, dt, G, CS)
       fluxes%sens(i,j)                 = 0.0
       fluxes%sw(i,j)                   = 0.0
       fluxes%heat_content_cond(i,j)    = 0.0
-      fluxes%heat_content_vprec(i,j)   = 0.0
       fluxes%heat_content_lrunoff(i,j) = 0.0
       fluxes%heat_content_frunoff(i,j) = 0.0
       fluxes%latent_evap_diag(i,j)     = 0.0
@@ -1123,17 +1103,6 @@ subroutine buoyancy_forcing_linear(state, fluxes, day, dt, G, CS)
                      "The fluxes need to be defined without RESTOREBUOY.")
     endif
   endif                                             ! end RESTOREBUOY
-
-  ! fill heat content for vprec when it is > 0 
-  ! if vprec < 0, heat_content_massout filled in MOM_diabatic_driver.F90 
-  do j=js,je ; do i=is,ie
-    fluxes%vprec(i,j) = fluxes%vprec(i,j)*G%mask2dT(i,j)
-    if(fluxes%vprec(i,j) > 0.0) then 
-       fluxes%heat_content_vprec(i,j) = fluxes%C_p*fluxes%vprec(i,j)*state%SST(i,j) 
-    else 
-       fluxes%heat_content_vprec(i,j) = 0.0
-    endif 
-  enddo ; enddo  
 
   call callTree_leave("buoyancy_forcing_linear")
 end subroutine buoyancy_forcing_linear

@@ -382,7 +382,6 @@ subroutine extractFluxes1d(G, fluxes, optics, nsw, j, dt,                       
     ! in which case heat_content_vprec is computed in MOM_diabatic_driver.F90. 
     if(fluxes%vprec(i,j) < 0.0) then 
       netMassOut(i) = netMassOut(i) + fluxes%vprec(i,j)
-      if(ASSOCIATED(fluxes%heat_content_vprec)) fluxes%heat_content_vprec(i,j) = 0.0
     endif 
     netMassOut(i) = dt * scale * netMassOut(i)  
 
@@ -483,6 +482,18 @@ subroutine extractFluxes1d(G, fluxes, optics, nsw, j, dt,                       
 
     ! assume fprec enters ocean at 0degC if atmos model does not provide fprec heat content.
     if(ASSOCIATED(fluxes%heat_content_fprec)) fluxes%heat_content_fprec(i,j) = 0.0
+
+    ! virtual precip associated with salinity restoring 
+    ! vprec > 0 means add water to ocean, assumed to be at SST 
+    ! vprec < 0 means remove water from ocean; set heat_content_vprec in MOM_diabatic_driver.F90
+    if(ASSOCIATED(fluxes%heat_content_vprec)) then
+      if(fluxes%vprec(i,j) > 0.0) then
+        fluxes%heat_content_vprec(i,j) = fluxes%C_p*fluxes%vprec(i,j)*T(i,1)*G%mask2dT(i,j)
+      else
+        fluxes%heat_content_vprec(i,j) = 0.0
+      endif
+    endif
+
 
   enddo ! i-loop
 
