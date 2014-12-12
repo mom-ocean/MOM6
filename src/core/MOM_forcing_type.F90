@@ -481,8 +481,16 @@ subroutine extractFluxes1d(G, fluxes, optics, nsw, j, dt,                       
       endif
     endif
 
-    ! assume fprec enters ocean at 0degC if atmos model does not provide fprec heat content.
-    if(ASSOCIATED(fluxes%heat_content_fprec)) fluxes%heat_content_fprec(i,j) = 0.0
+    ! fprec SHOULD enter ocean at 0degC if atmos model does not provide fprec heat content.
+    ! However, we need to adjust netHeat above to reflect the difference between 0decC and SST
+    ! and until we do so fprec is treated like lprec and enters at SST. -AJA
+    if(ASSOCIATED(fluxes%heat_content_fprec)) then
+      if (fluxes%fprec(i,j) > 0.0) then
+        fluxes%heat_content_fprec(i,j) = fluxes%C_p*fluxes%fprec(i,j)*T(i,1)
+      else
+        fluxes%heat_content_fprec(i,j) = 0.0
+      endif
+    endif
 
     ! virtual precip associated with salinity restoring 
     ! vprec > 0 means add water to ocean, assumed to be at SST 
