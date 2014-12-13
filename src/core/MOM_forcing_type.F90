@@ -370,7 +370,7 @@ subroutine extractFluxes1d(G, fluxes, optics, nsw, j, dt,                       
     ! which case heat_content_evap is computed in MOM_diabatic_driver.F90
     if(fluxes%evap(i,j) < 0.0) then 
       netMassOut(i) = netMassOut(i) + fluxes%evap(i,j)
-      if(ASSOCIATED(fluxes%heat_content_cond)) fluxes%heat_content_cond(i,j) = 0.0
+  !   if(ASSOCIATED(fluxes%heat_content_cond)) fluxes%heat_content_cond(i,j) = 0.0 !??? --AJA
     endif 
 
     ! lprec < 0 means sea ice formation taking water from the ocean.
@@ -465,6 +465,28 @@ subroutine extractFluxes1d(G, fluxes, optics, nsw, j, dt,                       
       Net_salt(i) = (scale * dt * (1000.0 * fluxes%salt_flux(i,j))) * G%kg_m2_to_H
 
     ! Diagnostics follow...
+
+    ! Initialize heat_content_massin that is diagnosed in mixedlayer_convection or
+    ! applyBoundaryFluxes uch that the meaning is as the sum of all incoming components.
+    if(ASSOCIATED(fluxes%heat_content_massin))  then
+      !fluxes%heat_content_massin(i,j) = 0.
+      if (netMassInOut(i) > 0.0) then ! net is "in"
+        fluxes%heat_content_massin(i,j) = -fluxes%C_p * netMassOut(i) * T(i,1) * G%H_to_kg_m2 / dt
+      else ! net is "out"
+        fluxes%heat_content_massin(i,j) = fluxes%C_p * ( netMassInout(i) - netMassOut(i) ) * T(i,1) * G%H_to_kg_m2 / dt
+      endif
+    endif
+
+    ! Initialize heat_content_massout that is diagnosed in mixedlayer_convection or
+    ! applyBoundaryFluxes uch that the meaning is as the sum of all outgoing components.
+    if(ASSOCIATED(fluxes%heat_content_massout)) then
+      !fluxes%heat_content_massout(i,j) = 0.0
+      if (netMassInOut(i) > 0.0) then ! net is "in"
+        fluxes%heat_content_massout(i,j) = fluxes%C_p * netMassOut(i) * T(i,1) * G%H_to_kg_m2 / dt
+      else ! net is "out"
+        fluxes%heat_content_massout(i,j) = -fluxes%C_p * ( netMassInout(i) - netMassOut(i) ) * T(i,1) * G%H_to_kg_m2 / dt
+      endif
+    endif
 
     ! smg: we should remove sea ice melt from lprec!!! 
     ! fluxes%lprec > 0 means ocean gains mass via liquid precipitation and/or sea ice melt. 
@@ -1494,6 +1516,7 @@ subroutine forcing_diagnostics(fluxes, state, dt, G, diag, handles)
       sum(:,:) = 0.0
       if (ASSOCIATED(fluxes%lprec))       sum(:,:) = sum(:,:)+fluxes%lprec(:,:)
       if (ASSOCIATED(fluxes%fprec))       sum(:,:) = sum(:,:)+fluxes%fprec(:,:)
+      ! fluxes%cond is not needed because it is derived from %evap > 0
       if (ASSOCIATED(fluxes%evap))        sum(:,:) = sum(:,:)+fluxes%evap(:,:)
       if (ASSOCIATED(fluxes%lrunoff))     sum(:,:) = sum(:,:)+fluxes%lrunoff(:,:)
       if (ASSOCIATED(fluxes%frunoff))     sum(:,:) = sum(:,:)+fluxes%frunoff(:,:)
@@ -1517,6 +1540,7 @@ subroutine forcing_diagnostics(fluxes, state, dt, G, diag, handles)
         sum(i,j) = sum(i,j) + fluxes%fprec(i,j) + fluxes%lrunoff(i,j) + fluxes%frunoff(i,j) 
         if(fluxes%lprec(i,j) > 0.0) sum(i,j) = sum(i,j) + fluxes%lprec(i,j)
         if(fluxes%vprec(i,j) > 0.0) sum(i,j) = sum(i,j) + fluxes%vprec(i,j)
+        ! fluxes%cond is not needed because it is derived from %evap > 0
         if(fluxes%evap(i,j)  > 0.0) sum(i,j) = sum(i,j) + fluxes%evap(i,j)
       enddo ; enddo 
       call post_data(handles%id_net_massin, sum, diag)
@@ -1575,9 +1599,9 @@ subroutine forcing_diagnostics(fluxes, state, dt, G, diag, handles)
       if (ASSOCIATED(fluxes%sens))                 sum(:,:) = sum(:,:) + fluxes%sens(:,:)
       if (ASSOCIATED(fluxes%SW))                   sum(:,:) = sum(:,:) + fluxes%SW(:,:)
       if (ASSOCIATED(state%frazil))                sum(:,:) = sum(:,:) + state%frazil(:,:) * I_dt
-      if (ASSOCIATED(state%TempXpme)) then 
-         sum(:,:) = sum(:,:) + state%TempXpme(:,:) * fluxes%C_p * I_dt
-      else
+    ! if (ASSOCIATED(state%TempXpme)) then 
+    !    sum(:,:) = sum(:,:) + state%TempXpme(:,:) * fluxes%C_p * I_dt
+    ! else
         if (ASSOCIATED(fluxes%heat_content_lrunoff)) sum(:,:) = sum(:,:) + fluxes%heat_content_lrunoff(:,:)
         if (ASSOCIATED(fluxes%heat_content_frunoff)) sum(:,:) = sum(:,:) + fluxes%heat_content_frunoff(:,:)
         if (ASSOCIATED(fluxes%heat_content_lprec))   sum(:,:) = sum(:,:) + fluxes%heat_content_lprec(:,:)
@@ -1585,15 +1609,15 @@ subroutine forcing_diagnostics(fluxes, state, dt, G, diag, handles)
         if (ASSOCIATED(fluxes%heat_content_vprec))   sum(:,:) = sum(:,:) + fluxes%heat_content_vprec(:,:)
         if (ASSOCIATED(fluxes%heat_content_cond))    sum(:,:) = sum(:,:) + fluxes%heat_content_cond(:,:)
         if (ASSOCIATED(fluxes%heat_content_massout)) sum(:,:) = sum(:,:) + fluxes%heat_content_massout(:,:)
-      endif 
+    ! endif 
       call post_data(handles%id_net_heat_surface, sum, diag)
     endif
 
     if (handles%id_heat_content_surfwater > 0) then
       sum(:,:) = 0.0
-      if (ASSOCIATED(state%TempXpme)) then 
-        sum(:,:) = sum(:,:) + state%TempXpme(:,:) * fluxes%C_p * I_dt 
-      else 
+    ! if (ASSOCIATED(state%TempXpme)) then 
+    !   sum(:,:) = sum(:,:) + state%TempXpme(:,:) * fluxes%C_p * I_dt 
+    ! else 
         if (ASSOCIATED(fluxes%heat_content_lrunoff)) sum(:,:) = sum(:,:) + fluxes%heat_content_lrunoff(:,:)
         if (ASSOCIATED(fluxes%heat_content_frunoff)) sum(:,:) = sum(:,:) + fluxes%heat_content_frunoff(:,:)
         if (ASSOCIATED(fluxes%heat_content_lprec))   sum(:,:) = sum(:,:) + fluxes%heat_content_lprec(:,:)
@@ -1601,7 +1625,7 @@ subroutine forcing_diagnostics(fluxes, state, dt, G, diag, handles)
         if (ASSOCIATED(fluxes%heat_content_vprec))   sum(:,:) = sum(:,:) + fluxes%heat_content_vprec(:,:)
         if (ASSOCIATED(fluxes%heat_content_cond))    sum(:,:) = sum(:,:) + fluxes%heat_content_cond(:,:)
         if (ASSOCIATED(fluxes%heat_content_massout)) sum(:,:) = sum(:,:) + fluxes%heat_content_massout(:,:)
-      endif 
+    ! endif 
       call post_data(handles%id_heat_content_surfwater, sum, diag)
     endif
 

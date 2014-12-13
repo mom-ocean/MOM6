@@ -589,7 +589,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
                                R0_tot, Rcv_tot, u, v, T(:,1:), S(:,1:),       &
                                R0(:,1:), Rcv(:,1:), eps,                      &
                                dR0_dT, dRcv_dT, dR0_dS, dRcv_dS,              &
-                               netMassInOut, Net_heat, Net_salt,              &
+                               netMassInOut, netMassOut, Net_heat, Net_salt,  &
                                nsw, Pen_SW_bnd, opacity_band, Conv_en,        &
                                dKE_FC, j, ksort, G, CS, tv, fluxes, dt)
 
@@ -963,18 +963,19 @@ subroutine convective_adjustment(h, u, v, R0, Rcv, T, S, eps, d_eb, &
 
 end subroutine convective_adjustment
 
-subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,   &
-                                 R0_tot, Rcv_tot, u, v, T, S, R0, Rcv, eps, &
-                                 dR0_dT, dRcv_dT, dR0_dS, dRcv_dS,          &
-                                 netMassInOut, Net_heat, Net_salt,          &
-                                 nsw, Pen_SW_bnd, opacity_band, Conv_en,    &
+subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,      &
+                                 R0_tot, Rcv_tot, u, v, T, S, R0, Rcv, eps,    &
+                                 dR0_dT, dRcv_dT, dR0_dS, dRcv_dS,             &
+                                 netMassInOut, netMassOut, Net_heat, Net_salt, &
+                                 nsw, Pen_SW_bnd, opacity_band, Conv_en,       &
                                  dKE_FC, j, ksort, G, CS, tv, fluxes, dt)
   real, dimension(NIMEM_,NKMEM_), intent(inout) :: h, d_eb
   real, dimension(NIMEM_),        intent(out)   :: htot, Ttot, Stot
   real, dimension(NIMEM_),        intent(out)   :: uhtot, vhtot, R0_tot, Rcv_tot
   real, dimension(NIMEM_,NKMEM_), intent(in)    :: u, v, T, S, R0, Rcv, eps
   real, dimension(NIMEM_),        intent(in)    :: dR0_dT, dRcv_dT, dR0_dS, dRcv_dS
-  real, dimension(NIMEM_),        intent(in)    :: netMassInOut, Net_heat, Net_salt
+  real, dimension(NIMEM_),        intent(in)    :: netMassInOut, netMassOut
+  real, dimension(NIMEM_),        intent(in)    :: Net_heat, Net_salt
   integer,                        intent(in)    :: nsw
   real, dimension(:,:),           intent(inout) :: Pen_SW_bnd
   real, dimension(:,:,:),         intent(in)    :: opacity_band
@@ -1066,8 +1067,6 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,   &
   ! smg:
   ! massOutRem(i) = -netMassOut(i)
   ! netMassIn(i)  = netMassInOut(i) - netMassOut(i)
-    if(ASSOCIATED(fluxes%heat_content_massout)) fluxes%heat_content_massout(i,j) = 0.0
-    if(ASSOCIATED(fluxes%heat_content_massin)) fluxes%heat_content_massin(i,j) = 0.0
 
     ! htot is an Angstrom (taken from layer 1) plus any net precipitation.
     h_ent     = max(min(Angstrom,h(i,k)-eps(i,k)),0.0)
