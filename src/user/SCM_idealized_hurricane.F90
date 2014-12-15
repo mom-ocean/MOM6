@@ -6,7 +6,7 @@ module SCM_idealized_hurricane
 
 use MOM_error_handler, only : MOM_error, FATAL
 use MOM_file_parser, only : get_param, log_version, param_file_type
-use MOM_forcing_type, only : forcing
+use MOM_forcing_type, only : forcing, allocate_forcing_type
 use MOM_grid, only : ocean_grid_type
 use MOM_safe_alloc, only : safe_alloc_ptr
 use MOM_time_manager, only : time_type, operator(+), operator(/), get_time,&
@@ -163,9 +163,7 @@ subroutine SCM_idealized_hurricane_wind_forcing(state, fluxes, day, G, CS)
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   ! Allocate the forcing arrays, if necessary.
-  call safe_alloc_ptr(fluxes%taux, IsdB, IedB, jsd, jed)
-  call safe_alloc_ptr(fluxes%tauy, isd, ied, JsdB, JedB)
-  call safe_alloc_ptr(fluxes%ustar, isd, ied, jsd, jed)
+  call allocate_forcing_type(G, fluxes, stress=.true., ustar=.true.)
 
   !/ BR
   ! Implementing Holland (1980) parameteric wind profile

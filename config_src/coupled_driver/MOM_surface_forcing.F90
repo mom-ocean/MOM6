@@ -56,8 +56,8 @@ use MOM_domains,          only : pass_vector, pass_var, global_field_sum, BITWIS
 use MOM_domains,          only : AGRID, BGRID_NE, CGRID_NE
 use MOM_error_handler,    only : MOM_error, WARNING, FATAL, is_root_pe, MOM_mesg
 use MOM_file_parser,      only : get_param, log_version, param_file_type
-use MOM_forcing_type,     only : forcing, forcing_diags
-use MOM_forcing_type,     only : register_forcing_type_diags, deallocate_forcing_type
+use MOM_forcing_type,     only : forcing, forcing_diags, register_forcing_type_diags
+use MOM_forcing_type,     only : allocate_forcing_type, deallocate_forcing_type
 use MOM_get_input,        only : Get_MOM_Input, directories
 use MOM_grid,             only : ocean_grid_type
 use MOM_io,               only : slasher, write_version_number
@@ -93,7 +93,7 @@ type, public :: surface_forcing_CS ; private
                                 ! update_ocean_model.
   logical :: use_temperature    ! If true, temp and saln used as state variables
 
-  ! smg: remove when have A=B code reconciled 
+  ! smg: remove when have A=B code reconciled
   logical :: bulkmixedlayer     ! If true, model based on bulk mixed layer code
 
   real :: Rho0                  ! Boussinesq reference density (kg/m^3)
@@ -112,7 +112,7 @@ type, public :: surface_forcing_CS ; private
                                 ! pressure limited by max_p_surf instead of the
                                 ! full atmospheric pressure.  The default is true.
 
-  real :: gust_const            ! constant unresolved background gustiness for ustar (Pa) 
+  real :: gust_const            ! constant unresolved background gustiness for ustar (Pa)
   logical :: read_gust_2d       ! If true, use a 2-dimensional gustiness supplied
                                 ! from an input file.
   real, pointer, dimension(:,:) :: &
@@ -132,12 +132,12 @@ type, public :: surface_forcing_CS ; private
                                 ! to damp surface deflections (especially surface
                                 ! gravity waves).  The default is false.
   real    :: Kv_sea_ice         ! viscosity in sea-ice that resists sheared vertical motions (m^2/s)
-  real    :: density_sea_ice    ! typical density of sea-ice (kg/m^3). The value is 
+  real    :: density_sea_ice    ! typical density of sea-ice (kg/m^3). The value is
                                 ! only used to convert the ice pressure into
                                 ! appropriate units for use with Kv_sea_ice.
   real    :: rigid_sea_ice_mass ! A mass per unit area of sea-ice beyond which
                                 ! sea-ice viscosity becomes effective, in kg m-2,
-                                ! typically of order 1000 kg m-2.       
+                                ! typically of order 1000 kg m-2.
 
   real    :: Flux_const                     ! piston velocity for surface restoring (m/s)
   logical :: salt_restore_as_sflux          ! If true, SSS restore as salt flux instead of water flux
@@ -145,11 +145,11 @@ type, public :: surface_forcing_CS ; private
   logical :: adjust_net_srestore_by_scaling ! adjust srestore w/o moving zero contour
   logical :: adjust_net_fresh_water_to_zero ! adjust net surface fresh-water (w/ restoring) to zero
   logical :: adjust_net_fresh_water_by_scaling ! adjust net surface fresh-water  w/o moving zero contour
-  logical :: mask_srestore_under_ice        ! If true, use an ice mask defined by frazil 
+  logical :: mask_srestore_under_ice        ! If true, use an ice mask defined by frazil
                                             ! criteria for salinity restoring.
   real    :: ice_salt_concentration         ! salt concentration for sea ice (kg/kg)
   logical :: mask_srestore_marginal_seas    ! if true, then mask SSS restoring in marginal seas
-  real    :: max_delta_srestore             ! maximum delta salinity used for restoring 
+  real    :: max_delta_srestore             ! maximum delta salinity used for restoring
   real, pointer, dimension(:,:) :: basin_mask => NULL() ! mask for SSS restoring
 
   type(diag_ctrl), pointer :: diag                  ! structure to regulate diagnostic output timing
@@ -165,7 +165,7 @@ type, public :: surface_forcing_CS ; private
 
 !###  type(ctrl_forcing_CS), pointer :: ctrl_forcing_CSp => NULL()
   type(MOM_restart_CS), pointer :: restart_CSp => NULL()
-  type(user_revise_forcing_CS), pointer :: urf_CS => NULL() 
+  type(user_revise_forcing_CS), pointer :: urf_CS => NULL()
 end type surface_forcing_CS
 
 
@@ -221,7 +221,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
 ! MOM forcing type, including changes of units, sign conventions,
 ! and puting the fields into arrays with MOM-standard halos.
 
-! Arguments: 
+! Arguments:
 !   IOB  ice-ocean boundary type w/ fluxes to drive ocean in a coupled model
 !  (out) fluxes - A structure containing pointers to any possible
 !                 forcing fields.  Unused fields have NULL ptrs.
@@ -274,7 +274,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
   real :: delta_sss           ! temporary storage for sss diff from restoring value
 
   real :: C_p                 ! heat capacity of seawater ( J/(K kg) )
-  
+
   call cpu_clock_begin(id_clock_forcing)
 
   isc_bnd = index_bounds(1) ; iec_bnd = index_bounds(2)
@@ -295,55 +295,53 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
   fluxes%saltFluxGlobalScl = 0.0
   fluxes%netFWGlobalAdj = 0.0
   fluxes%netFWGlobalScl = 0.0
-  
+
   restore_salinity = .false.
   if (present(restore_salt)) restore_salinity = restore_salt
 
-  ! allocation and initialization on first call to this routine 
+  ! allocation and initialization on first call to this routine
   if (CS%first_call) then
-    call safe_alloc_ptr(fluxes%taux,IsdB,IedB,jsd,jed)               
-    call safe_alloc_ptr(fluxes%tauy,isd,ied,JsdB,JedB)   
-    call safe_alloc_ptr(fluxes%ustar,isd,ied,jsd,jed)                
+    call allocate_forcing_type(G, fluxes, stress=.true., ustar=.true.)
 
-    call safe_alloc_ptr(fluxes%evap,isd,ied,jsd,jed)                 
-    call safe_alloc_ptr(fluxes%lprec,isd,ied,jsd,jed)           
-    call safe_alloc_ptr(fluxes%fprec,isd,ied,jsd,jed)          
-    call safe_alloc_ptr(fluxes%vprec,isd,ied,jsd,jed)          
-    call safe_alloc_ptr(fluxes%seaice_melt,isd,ied,jsd,jed)          
+    call safe_alloc_ptr(fluxes%evap,isd,ied,jsd,jed)
+    call safe_alloc_ptr(fluxes%lprec,isd,ied,jsd,jed)
+    call safe_alloc_ptr(fluxes%fprec,isd,ied,jsd,jed)
+    call safe_alloc_ptr(fluxes%vprec,isd,ied,jsd,jed)
+    call safe_alloc_ptr(fluxes%seaice_melt,isd,ied,jsd,jed)
 
-    call safe_alloc_ptr(fluxes%sw,isd,ied,jsd,jed)                   
-    call safe_alloc_ptr(fluxes%sw_vis_dir,isd,ied,jsd,jed)           
-    call safe_alloc_ptr(fluxes%sw_vis_dif,isd,ied,jsd,jed)           
-    call safe_alloc_ptr(fluxes%sw_nir_dir,isd,ied,jsd,jed)          
-    call safe_alloc_ptr(fluxes%sw_nir_dif,isd,ied,jsd,jed)           
-    call safe_alloc_ptr(fluxes%lw,isd,ied,jsd,jed)                   
-    call safe_alloc_ptr(fluxes%latent,isd,ied,jsd,jed)               
-    call safe_alloc_ptr(fluxes%latent_evap_diag,isd,ied,jsd,jed)          
-    call safe_alloc_ptr(fluxes%latent_fprec_diag,isd,ied,jsd,jed)         
-    call safe_alloc_ptr(fluxes%latent_frunoff_diag,isd,ied,jsd,jed)         
-    call safe_alloc_ptr(fluxes%sens,isd,ied,jsd,jed)                 
+    call safe_alloc_ptr(fluxes%sw,isd,ied,jsd,jed)
+    call safe_alloc_ptr(fluxes%sw_vis_dir,isd,ied,jsd,jed)
+    call safe_alloc_ptr(fluxes%sw_vis_dif,isd,ied,jsd,jed)
+    call safe_alloc_ptr(fluxes%sw_nir_dir,isd,ied,jsd,jed)
+    call safe_alloc_ptr(fluxes%sw_nir_dif,isd,ied,jsd,jed)
+    call safe_alloc_ptr(fluxes%lw,isd,ied,jsd,jed)
+    call safe_alloc_ptr(fluxes%latent,isd,ied,jsd,jed)
+    call safe_alloc_ptr(fluxes%latent_evap_diag,isd,ied,jsd,jed)
+    call safe_alloc_ptr(fluxes%latent_fprec_diag,isd,ied,jsd,jed)
+    call safe_alloc_ptr(fluxes%latent_frunoff_diag,isd,ied,jsd,jed)
+    call safe_alloc_ptr(fluxes%sens,isd,ied,jsd,jed)
 
-    call safe_alloc_ptr(fluxes%p_surf,isd,ied,jsd,jed)               
-    call safe_alloc_ptr(fluxes%p_surf_full,isd,ied,jsd,jed)          
+    call safe_alloc_ptr(fluxes%p_surf,isd,ied,jsd,jed)
+    call safe_alloc_ptr(fluxes%p_surf_full,isd,ied,jsd,jed)
 
-    call safe_alloc_ptr(fluxes%salt_flux,isd,ied,jsd,jed)            
-    call safe_alloc_ptr(fluxes%salt_flux_in,isd,ied,jsd,jed)         
-    call safe_alloc_ptr(fluxes%salt_flux_restore,isd,ied,jsd,jed)    
+    call safe_alloc_ptr(fluxes%salt_flux,isd,ied,jsd,jed)
+    call safe_alloc_ptr(fluxes%salt_flux_in,isd,ied,jsd,jed)
+    call safe_alloc_ptr(fluxes%salt_flux_restore,isd,ied,jsd,jed)
 
-    call safe_alloc_ptr(fluxes%TKE_tidal,isd,ied,jsd,jed)            
-    call safe_alloc_ptr(fluxes%ustar_tidal,isd,ied,jsd,jed)          
+    call safe_alloc_ptr(fluxes%TKE_tidal,isd,ied,jsd,jed)
+    call safe_alloc_ptr(fluxes%ustar_tidal,isd,ied,jsd,jed)
 
-    call safe_alloc_ptr(fluxes%lrunoff,isd,ied,jsd,jed)           
-    call safe_alloc_ptr(fluxes%frunoff,isd,ied,jsd,jed)          
+    call safe_alloc_ptr(fluxes%lrunoff,isd,ied,jsd,jed)
+    call safe_alloc_ptr(fluxes%frunoff,isd,ied,jsd,jed)
 
-    call safe_alloc_ptr(fluxes%heat_content_cond,isd,ied,jsd,jed)  
-    call safe_alloc_ptr(fluxes%heat_content_lprec,isd,ied,jsd,jed)  
-    call safe_alloc_ptr(fluxes%heat_content_fprec,isd,ied,jsd,jed)  
-    call safe_alloc_ptr(fluxes%heat_content_vprec,isd,ied,jsd,jed)  
-    call safe_alloc_ptr(fluxes%heat_content_frunoff,isd,ied,jsd,jed) 
-    call safe_alloc_ptr(fluxes%heat_content_lrunoff,isd,ied,jsd,jed)  
-    call safe_alloc_ptr(fluxes%heat_content_massout,isd,ied,jsd,jed)  
-    call safe_alloc_ptr(fluxes%heat_content_massin,isd,ied,jsd,jed)  
+    call safe_alloc_ptr(fluxes%heat_content_cond,isd,ied,jsd,jed)
+    call safe_alloc_ptr(fluxes%heat_content_lprec,isd,ied,jsd,jed)
+    call safe_alloc_ptr(fluxes%heat_content_fprec,isd,ied,jsd,jed)
+    call safe_alloc_ptr(fluxes%heat_content_vprec,isd,ied,jsd,jed)
+    call safe_alloc_ptr(fluxes%heat_content_frunoff,isd,ied,jsd,jed)
+    call safe_alloc_ptr(fluxes%heat_content_lrunoff,isd,ied,jsd,jed)
+    call safe_alloc_ptr(fluxes%heat_content_massout,isd,ied,jsd,jed)
+    call safe_alloc_ptr(fluxes%heat_content_massin,isd,ied,jsd,jed)
 
     if (CS%rigid_sea_ice) then
       call safe_alloc_ptr(fluxes%rigidity_ice_u,IsdB,IedB,jsd,jed)
@@ -362,7 +360,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
       fluxes%ustar_tidal(i,j) = CS%ustar_tidal(i,j)
     enddo; enddo
 
-  endif    ! endif for allocation and initialization 
+  endif    ! endif for allocation and initialization
 
   do j=js,je ; do i=is,ie
     fluxes%salt_flux(i,j) = 0.0
@@ -435,7 +433,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
   endif
 
 
-  ! obtain fluxes from IOB; note the staggering of indices 
+  ! obtain fluxes from IOB; note the staggering of indices
   i0 = is - isc_bnd ; j0 = js - jsc_bnd
   do j=js,je ; do i=is,ie
 
@@ -504,9 +502,9 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
     fluxes%sw(i,j) = fluxes%sw_vis_dir(i,j) + fluxes%sw_vis_dif(i,j) + &
                      fluxes%sw_nir_dir(i,j) + fluxes%sw_nir_dif(i,j)
 
-  enddo ; enddo   
+  enddo ; enddo
 
-  ! more salt restoring logic 
+  ! more salt restoring logic
   if (ASSOCIATED(IOB%salt_flux)) then
     do j=js,je ; do i=is,ie
       fluxes%salt_flux(i,j)    = G%mask2dT(i,j)*(fluxes%salt_flux(i,j) - IOB%salt_flux(i-i0,j-j0))
@@ -556,7 +554,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
 
   endif
 
-  ! applied surface pressure from atmosphere and cryosphere 
+  ! applied surface pressure from atmosphere and cryosphere
   if (ASSOCIATED(IOB%p) .and. (CS%max_p_surf >= 0.0)) then
     if (CS%use_limited_P_SSH) then
       do j=js,je ; do i=is,ie
@@ -577,7 +575,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
   endif
 
 
-  ! surface momentum stress related fields as function of staggering  
+  ! surface momentum stress related fields as function of staggering
   if (wind_stagger == BGRID_NE) then
     call pass_vector(taux_at_q,tauy_at_q,G%Domain,stagger=BGRID_NE)
 
@@ -662,10 +660,10 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
       endif
     enddo ; enddo
 
-  endif   ! endif for wind related fields 
+  endif   ! endif for wind related fields
 
 
-  ! sea ice related fields 
+  ! sea ice related fields
   if (CS%rigid_sea_ice) then
     call pass_var(fluxes%p_surf_full, G%Domain)
     I_GEarth = 1.0 / G%G_Earth
@@ -756,9 +754,9 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt)
   character(len=48)  :: stagger
   character(len=128) :: basin_file
   integer :: i, j, isd, ied, jsd, jed
-  
+
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  
+
   if (associated(CS)) then
     call MOM_error(WARNING, "surface_forcing_init called with an associated "// &
                             "control structure.")
@@ -831,7 +829,7 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt)
                  "pressure.", default=.true.)
 
 ! smg: should get_param call should be removed when have A=B code reconciled.
-! this param is used to distinguish how to diagnose surface heat content from water.  
+! this param is used to distinguish how to diagnose surface heat content from water.
   call get_param(param_file, mod, "BULKMIXEDLAYER", CS%bulkmixedlayer, &
                  default=CS%use_temperature,do_not_log=.true.)
 
@@ -914,8 +912,8 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt)
 
   call safe_alloc_ptr(CS%TKE_tidal,isd,ied,jsd,jed)
   call safe_alloc_ptr(CS%ustar_tidal,isd,ied,jsd,jed)
-  
-  if (CS%read_TIDEAMP) then    
+
+  if (CS%read_TIDEAMP) then
     TideAmp_file = trim(CS%inputdir) // trim(TideAmp_file)
     call read_data(TideAmp_file,'tideamp',CS%TKE_tidal,domain=G%domain%mpp_domain,timelevel=1)
     do j=jsd, jed; do i=isd, ied
@@ -928,14 +926,14 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt)
       utide=CS%utide
       CS%TKE_tidal(i,j) = CS%Rho0*CS%cd_tides*(utide*utide*utide)
       CS%ustar_tidal(i,j)=sqrt(CS%cd_tides)*utide
-    enddo ; enddo      
+    enddo ; enddo
   endif
-  
+
   call time_interp_external_init
 
 ! Optionally read a x-y gustiness field in place of a global
 ! constant.
-  
+
   call get_param(param_file, mod, "READ_GUST_2D", CS%read_gust_2d, &
                  "If true, use a 2-dimensional gustiness supplied from \n"//&
                  "an input file", default=.false.)
@@ -1016,7 +1014,7 @@ subroutine surface_forcing_end(CS, fluxes)
   if (present(fluxes)) call deallocate_forcing_type(fluxes)
 
 !###  call controlled_forcing_end(CS%ctrl_forcing_CSp)
- 
+
   if (associated(CS)) deallocate(CS)
   CS => NULL()
 
@@ -1027,8 +1025,8 @@ subroutine ice_ocn_bnd_type_chksum(id, timestep, iobt)
     character(len=*), intent(in) :: id
     integer         , intent(in) :: timestep
     type(ice_ocean_boundary_type), intent(in) :: iobt
-    integer ::   n,m, outunit 
- 
+    integer ::   n,m, outunit
+
     outunit = stdout()
 
     write(outunit,*) "BEGIN CHECKSUM(ice_ocean_boundary_type):: ", id, timestep

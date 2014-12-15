@@ -75,7 +75,7 @@ use MOM_error_handler,       only : callTree_enter, callTree_leave
 use MOM_error_handler,       only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
 use MOM_file_parser,         only : get_param, log_version, param_file_type
 use MOM_string_functions,    only : uppercase
-use MOM_forcing_type,        only : forcing, deallocate_forcing_type
+use MOM_forcing_type,        only : forcing, allocate_forcing_type, deallocate_forcing_type
 use MOM_get_input,           only : Get_MOM_Input, directories
 use MOM_grid,                only : ocean_grid_type
 use MOM_io,                  only : file_exists, read_data, slasher
@@ -266,37 +266,6 @@ subroutine set_forcing(state, fluxes, day_start, day_interval, G, CS)
   call cpu_clock_end(id_clock_forcing)
 end subroutine set_forcing
 
-
-subroutine wind_forcing_allocate(fluxes, G)
-  type(forcing),            intent(inout) :: fluxes
-  type(ocean_grid_type),    intent(in)    :: G
-
-! subroutine allocates and initializes wind forcing arrays 
-
-! Arguments: 
-!  (inout)  fluxes = structure with pointers to forcing fields; unused have NULL ptrs
-!  (in)     G      = ocean grid structure
-
-  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
-  isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed = G%jed
-  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
-
-  if (.not.associated(fluxes%taux)) then
-    allocate(fluxes%taux(IsdB:IedB,jsd:jed)) 
-    fluxes%taux(:,:) = 0.0
-  endif
-  if (.not.associated(fluxes%tauy)) then
-    allocate(fluxes%tauy(isd:ied,JsdB:JedB)) 
-    fluxes%tauy(:,:) = 0.0
-  endif
-  if (.not.associated(fluxes%ustar)) then
-    allocate(fluxes%ustar(isd:ied,jsd:jed)) 
-    fluxes%ustar(:,:) = 0.0
-  endif
-
-end subroutine wind_forcing_allocate
-
-
 subroutine buoyancy_forcing_allocate(fluxes, G, CS)
   type(forcing),         intent(inout) :: fluxes
   type(ocean_grid_type), intent(in)    :: G
@@ -468,7 +437,7 @@ subroutine wind_forcing_zero(state, fluxes, day, G, CS)
   isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
-  call wind_forcing_allocate(fluxes, G)
+  call allocate_forcing_type(G, fluxes, stress=.true., ustar=.true.)
 
   !set steady surface wind stresses, in units of Pa.
   PI = 4.0*atan(1.0)
@@ -521,7 +490,7 @@ subroutine wind_forcing_2gyre(state, fluxes, day, G, CS)
   isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
-  call wind_forcing_allocate(fluxes, G)
+  call allocate_forcing_type(G, fluxes, stress=.true., ustar=.true.)
 
   !set the steady surface wind stresses, in units of Pa.
   PI = 4.0*atan(1.0)
@@ -565,7 +534,7 @@ subroutine wind_forcing_1gyre(state, fluxes, day, G, CS)
   isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
-  call wind_forcing_allocate(fluxes, G)
+  call allocate_forcing_type(G, fluxes, stress=.true., ustar=.true.)
 
   ! set the steady surface wind stresses, in units of Pa.
   PI = 4.0*atan(1.0)
@@ -608,7 +577,7 @@ subroutine wind_forcing_gyres(state, fluxes, day, G, CS)
   isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
-  call wind_forcing_allocate(fluxes, G)
+  call allocate_forcing_type(G, fluxes, stress=.true., ustar=.true.)
 
   ! steady surface wind stresses (Pa)
   PI = 4.0*atan(1.0)
@@ -667,7 +636,7 @@ subroutine wind_forcing_from_file(state, fluxes, day, G, CS)
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
-  call wind_forcing_allocate(fluxes, G)
+  call allocate_forcing_type(G, fluxes, stress=.true., ustar=.true.)
   call get_time(day,seconds,days)
   time_lev = days - 365*floor(real(days) / 365.0) +1
 

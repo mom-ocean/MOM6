@@ -65,7 +65,7 @@ use MOM_diag_mediator, only : register_diag_field, diag_ctrl
 use MOM_domains, only : pass_var, pass_vector, AGRID
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe
 use MOM_file_parser, only : get_param, param_file_type, log_version
-use MOM_forcing_type, only : forcing
+use MOM_forcing_type, only : forcing, allocate_forcing_type
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : file_exists, read_data
 use MOM_time_manager, only : time_type, operator(+), operator(/), get_time
@@ -137,9 +137,7 @@ subroutine USER_wind_forcing(state, fluxes, day, G, CS)
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   ! Allocate the forcing arrays, if necessary.
-  call alloc_if_needed(fluxes%taux, IsdB, IedB, jsd, jed)
-  call alloc_if_needed(fluxes%tauy, isd, ied, JsdB, JedB)
-  call alloc_if_needed(fluxes%ustar, isd, ied, jsd, jed)
+  call allocate_forcing_type(G, fluxes, stress=.true., ustar=.true.)
 
   !  Set the surface wind stresses, in units of Pa.  A positive taux
   !  accelerates the ocean to the (pseudo-)east.

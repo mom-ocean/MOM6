@@ -75,8 +75,8 @@ use MOM_error_handler,       only : MOM_error, FATAL, WARNING, MOM_mesg, is_root
 use MOM_error_handler,       only : callTree_enter, callTree_leave
 use MOM_file_parser,         only : get_param, log_version, param_file_type
 use MOM_string_functions,    only : uppercase
-use MOM_forcing_type,        only : forcing, forcing_diags
-use MOM_forcing_type,        only : register_forcing_type_diags, deallocate_forcing_type
+use MOM_forcing_type,        only : forcing, forcing_diags, register_forcing_type_diags, deallocate_forcing_type
+use MOM_forcing_type,        only : allocate_forcing_type, deallocate_forcing_type
 use MOM_grid,                only : ocean_grid_type
 use MOM_get_input,           only : Get_MOM_Input, directories
 use MOM_io,                  only : file_exists, read_data, slasher, num_timelevels
@@ -247,7 +247,7 @@ subroutine set_forcing(state, fluxes, day_start, day_interval, G, CS)
 
   ! calls to various wind options 
   if (CS%variable_winds .or. CS%first_call_set_forcing) then
-    if (CS%first_call_set_forcing) call wind_forcing_allocate(fluxes, G)
+    if (CS%first_call_set_forcing) call allocate_forcing_type(G, fluxes, stress=.true., ustar=.true.)
     if (trim(CS%wind_config) == "file") then
       call wind_forcing_from_file(state, fluxes, day_center, G, CS)
     elseif (trim(CS%wind_config) == "data_override") then
@@ -344,28 +344,6 @@ subroutine set_forcing(state, fluxes, day_start, day_interval, G, CS)
   call callTree_leave("set_forcing")
 
 end subroutine set_forcing
-
-
-subroutine wind_forcing_allocate(fluxes, G)
-  type(forcing),            intent(inout) :: fluxes
-  type(ocean_grid_type),    intent(in)    :: G
-
-! subroutine allocates and initializes wind forcing arrays 
-
-! Arguments: 
-!  (out)     fluxes       = structure with pointers to forcing fields; unused have NULL ptrs
-!  (in)      G            = ocean grid structure
-
-  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
-  isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed = G%jed
-  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
-
-  call safe_alloc_ptr(fluxes%taux,IsdB,IedB,jsd,jed)
-  call safe_alloc_ptr(fluxes%tauy,isd,ied,JsdB,JedB)
-  call safe_alloc_ptr(fluxes%ustar,isd,ied,jsd,jed)
-
-end subroutine wind_forcing_allocate
-
 
 subroutine buoyancy_forcing_allocate(fluxes, G, CS)
   type(forcing),         intent(inout) :: fluxes
@@ -809,11 +787,9 @@ subroutine wind_forcing_by_data_override(state, fluxes, day, G, CS)
   logical :: read_uStar
 
   call callTree_enter("wind_forcing_by_data_override, MOM_surface_forcing.F90")
-  call safe_alloc_ptr(fluxes%taux,G%IsdB,G%IedB,G%jsd,G%jed)
-  call safe_alloc_ptr(fluxes%tauy,G%isd,G%ied,G%JsdB,G%JedB)
-  call safe_alloc_ptr(fluxes%ustar,G%isd,G%ied,G%jsd,G%jed)
 
   if (.not.CS%dataOverrideIsInitialized) then
+    call allocate_forcing_type(G, fluxes, stress=.true., ustar=.true.)
     call data_override_init(Ocean_domain_in=G%Domain%mpp_domain)
     CS%dataOverrideIsInitialized = .True.
   endif

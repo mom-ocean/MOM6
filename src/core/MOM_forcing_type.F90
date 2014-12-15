@@ -44,6 +44,7 @@ public calculateBuoyancyFlux2d
 public forcing_SinglePointPrint
 public forcing_diagnostics
 public register_forcing_type_diags
+public allocate_forcing_type
 public deallocate_forcing_type
 
 integer :: num_msg = 0
@@ -1689,10 +1690,47 @@ subroutine forcing_diagnostics(fluxes, state, dt, G, diag, handles)
 end subroutine forcing_diagnostics
 
 
+!> Conditionally allocates fields within the forcing type
+subroutine allocate_forcing_type(G, fluxes, &
+    stress, ustar &
+    )
+  type(ocean_grid_type), intent(in) :: G !< Ocean grid structure
+  type(forcing),      intent(inout) :: fluxes !< Forcing fields structure
+  logical, optional,     intent(in) :: stress !< If present and true, allocate taux, tauy
+  logical, optional,     intent(in) :: ustar !< If present and true, allocate ustar
+  ! Local variables
+  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
+
+  isd  = G%isd   ; ied  = G%ied    ; jsd  = G%jsd   ; jed  = G%jed
+  IsdB = G%IsdB  ; IedB = G%IedB   ; JsdB = G%JsdB  ; JedB = G%JedB
+
+  call myAlloc(fluxes%taux,IsdB,IedB,jsd,jed, stress)
+  call myAlloc(fluxes%tauy,isd,ied,JsdB,JedB, stress)
+  call myAlloc(fluxes%ustar,isd,ied,jsd,jed, ustar)
+ 
+  contains
+
+  subroutine myAlloc(array, is, ie, js, je, flag)
+    real, dimension(:,:), pointer :: array
+    integer,           intent(in) :: is, ie, js, je !< Bounds
+    logical, optional, intent(in) :: flag !< Flag to indicate to allocate
+
+    if (present(flag)) then
+      if (flag) then
+        if (.not.associated(array)) then
+          ALLOCATE(array(is:ie,js:je))
+          array(is:ie,js:je) = 0.
+        endif
+      endif
+    endif
+  end subroutine myAlloc
+
+end subroutine allocate_forcing_type
+
 
 !> Deallocates the forcing type
 subroutine deallocate_forcing_type(fluxes)
-  type(forcing), intent(inout) :: fluxes
+  type(forcing), intent(inout) :: fluxes !< Forcing fields structure
   if (associated(fluxes%taux))                 deallocate(fluxes%taux)
   if (associated(fluxes%tauy))                 deallocate(fluxes%tauy)
   if (associated(fluxes%ustar))                deallocate(fluxes%ustar)
