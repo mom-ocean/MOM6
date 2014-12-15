@@ -541,12 +541,16 @@ subroutine extractFluxes1d(G, fluxes, optics, nsw, j, dt,                       
 
     ! Assume liquid runoff enters ocean at SST if land model does not provide runoff heat content.
     if (.not. useRiverHeatContent) then
-      fluxes%heat_content_lrunoff(i,j) = fluxes%C_p*fluxes%lrunoff(i,j)*T(i,1)
+      if (ASSOCIATED(fluxes%lrunoff) .and. ASSOCIATED(fluxes%heat_content_lrunoff)) then
+        fluxes%heat_content_lrunoff(i,j) = fluxes%C_p*fluxes%lrunoff(i,j)*T(i,1)
+      endif
     endif
 
     ! Assume solid runoff enters ocean at 0degC if land model does not provide calving heat content.
     if (.not. useCalvingHeatContent) then
-      fluxes%heat_content_frunoff(i,j) = 0.0
+      if (ASSOCIATED(fluxes%heat_content_lrunoff)) then
+        fluxes%heat_content_frunoff(i,j) = 0.0
+      endif
     endif
 
   enddo ! i-loop
