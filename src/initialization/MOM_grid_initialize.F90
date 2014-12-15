@@ -708,7 +708,6 @@ subroutine set_grid_metrics_from_mosaic(G,param_file)
   call read_data(filename,'x',tmpZ,domain=SGdom%mpp_domain,position=CORNER)
 
   call pass_var(tmpZ, SGdom, position=CORNER)
-  call extrapolate_metric(tmpZ,2*(G%jsc-G%jsd)+2)
   do j=G%jsd,G%jed ; do i=G%isd,G%ied ; i2 = 2*i ; j2 = 2*j
     G%geoLonT(i,j) = tmpZ(i2-1,j2-1)
   enddo ; enddo
@@ -729,7 +728,6 @@ subroutine set_grid_metrics_from_mosaic(G,param_file)
   call read_data(filename,'y',tmpZ,domain=SGdom%mpp_domain,position=CORNER)
 
   call pass_var(tmpZ, SGdom, position=CORNER)
-  call extrapolate_metric(tmpZ,2*(G%jsc-G%jsd)+2)
   do j=G%jsd,G%jed ; do i=G%isd,G%ied ; i2 = 2*i ; j2 = 2*j
     G%geoLatT(i,j) = tmpZ(i2-1,j2-1)
   enddo ; enddo
