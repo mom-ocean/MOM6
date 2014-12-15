@@ -1,1 +1,0 @@
-.datasets/MOM6z_SIS_025/siena/mosaic.unpacked/atmos_mosaic_tile1Xland_mosaic_tile1.nc

@@ -1,1 +1,0 @@
-.datasets/global/siena_201204/mosaic.unpacked/land_mosaic_tile1Xocean_mosaic_tile1.nc

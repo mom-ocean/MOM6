@@ -167,6 +167,7 @@ type, public :: ice_shelf_CS ; private
     ! Perhaps these diagnostics should only be kept with the call?
     exch_vel_t => NULL(), &
     exch_vel_s => NULL(), &
+    utide   => NULL(), &
     tfreeze => NULL(), &  ! The freezing point potential temperature an the ice-ocean
                     ! interface, in deg C.
     tflux_shelf => NULL(), & ! The UPWARD diffusive heat flux in the ice shelf at the
@@ -234,6 +235,7 @@ type, public :: ice_shelf_CS ; private
                        !! [if float_frac = 1 ==> grounded; obv. counterintuitive; might fix]
 
   real :: ustar_bg     ! A minimum value for ustar under ice shelves, in m s-1.
+  real :: cdrag        ! drag coefficient under ice shelves , non-dimensional.
   real :: Cp           ! The heat capacity of sea water, in J kg-1 K-1.
   real :: Cp_ice       ! The heat capacity of fresh ice, in J kg-1 K-1.
   real :: gamma_t      !   The (fixed) turbulent exchange velocity in the
@@ -455,6 +457,7 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS)
   ! Variables used in iterating for wB_flux.
   real :: wB_flux_new, DwB, dDwB_dwB_in
   real :: I_Gam_T, I_Gam_S, dG_dwB, iDens
+  real :: u_at_h, v_at_h, Isqrt2
   logical :: Sb_min_set, Sb_max_set
   character(4) :: stepnum
   character(2) :: procnum
@@ -478,6 +481,7 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS)
   PR = CS%kv_molec/CS%kd_molec_temp
   I_VK = 1.0/VK
   RhoCp = G%Rho0 * CS%Cp
+  Isqrt2 = 1.0/sqrt(2.0)
 
 !first calculate molecular component  
   Gam_mol_t = 12.5 * (PR**c2_3) - 6
@@ -511,7 +515,22 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS)
           ! salinity just below the ice-shelf as the variable that is being
           ! iterated for.
 ! ### SHOULD I SET USTAR_SHELF YET?
+
+          u_at_h = state%u(i,j)
+          v_at_h = state%v(i,j)
+
+          fluxes%ustar_shelf(i,j)= sqrt(CS%cdrag)*((u_at_h**2.0 + v_at_h**2.0)**0.5 +&
+                                                    CS%utide(i,j))
           ustar_h = MAX(CS%ustar_bg, fluxes%ustar_shelf(i,j))
+
+	  fluxes%ustar_shelf(i,j) = ustar_h
+
+          if (associated(state%taux_shelf) .and. associated(state%tauy_shelf)) then
+            state%taux_shelf(i,j) = ustar_h*ustar_h*G%Rho0*Isqrt2
+            state%tauy_shelf(i,j) = state%taux_shelf(i,j)
+          endif
+
+
           ! Estimate the neutral ocean boundary layer thickness as the minimum of the
           ! reported ocean mixed layer thickness and the neutral Ekman depth.
           absf = 0.25*((abs(G%CoriolisBu(I,J)) + abs(G%CoriolisBu(I-1,J-1))) + &
@@ -743,7 +762,7 @@ end subroutine shelf_calc_flux
 
 subroutine add_shelf_flux(G, CS, state, fluxes)
   type(ocean_grid_type),              intent(inout)    :: G
-  type(ice_shelf_CS),                 intent(in)    :: CS
+  type(ice_shelf_CS),                 intent(inout)    :: CS
   type(surface),                      intent(inout)    :: state
   type(forcing),                      intent(inout) :: fluxes
 ! Arguments:
@@ -759,6 +778,7 @@ subroutine add_shelf_flux(G, CS, state, fluxes)
   real :: taux2, tauy2  ! The squared surface stresses, in Pa.
   real :: asu1, asu2    ! Ocean areas covered by ice shelves at neighboring u-
   real :: asv1, asv2    ! and v-points, in m2.
+  real :: fraz          ! refreezing rate in kg m-2 s-1
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; jsd = G%jsd ; ied = G%ied ; jed = G%jed
@@ -788,9 +808,21 @@ subroutine add_shelf_flux(G, CS, state, fluxes)
         fluxes%frac_shelf_v(i,J) = ((CS%area_shelf_h(i,j) + CS%area_shelf_h(i,j+1)) / &
                                     (G%areaT(i,j) + G%areaT(i,j+1)))
       fluxes%rigidity_ice_v(i,J) = (CS%kv_ice / CS%density_ice) * &
-                                    min(CS%mass_shelf(i,j), CS%mass_shelf(i,j+1))
+                                    max(CS%mass_shelf(i,j), CS%mass_shelf(i,j+1))
     enddo ; enddo
     call pass_vector(fluxes%frac_shelf_u, fluxes%frac_shelf_v, G%domain, TO_ALL, CGRID_NE)
+  else
+    ! This is needed because rigidity is potentially modified in the coupler. Reset
+    ! in the ice shelf cavity: MJH
+    do j=isd,jed ; do i=isd,ied-1 ! changed stride
+      fluxes%rigidity_ice_u(I,j) = (CS%kv_ice / CS%density_ice) * &
+                    min(CS%mass_shelf(i,j), CS%mass_shelf(i+1,j))
+    enddo ; enddo
+  
+    do j=jsd,jed-1 ; do i=isd,ied ! changed stride
+      fluxes%rigidity_ice_v(i,J) = (CS%kv_ice / CS%density_ice) * &
+                    max(CS%mass_shelf(i,j), CS%mass_shelf(i,j+1))
+    enddo ; enddo
   endif
 
   if (CS%debug) then
@@ -804,6 +836,15 @@ subroutine add_shelf_flux(G, CS, state, fluxes)
 
   if (associated(state%taux_shelf) .and. associated(state%tauy_shelf)) then
     call pass_vector(state%taux_shelf, state%tauy_shelf, G%domain, TO_ALL, CGRID_NE)
+  endif
+
+  if (associated(fluxes%sw_vis_dir)) fluxes%sw_vis_dir = 0.0
+  if (associated(fluxes%sw_vis_dif)) fluxes%sw_vis_dif = 0.0
+  if (associated(fluxes%sw_nir_dir)) fluxes%sw_nir_dir = 0.0
+  if (associated(fluxes%sw_nir_dif)) fluxes%sw_nir_dif = 0.0
+
+  if (.NOT.ASSOCIATED(state%frazil)) then
+    call MOM_error (FATAL, "FRAZIL NEEDS TO BE TURNED ON FOR THE ICE SHELF MODEL. ")
   endif
 
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
@@ -828,16 +869,23 @@ subroutine add_shelf_flux(G, CS, state, fluxes)
       fluxes%latent(i,j) = 0.0
       fluxes%evap(i,j) = 0.0
 
-      if (associated(fluxes%sw_vis_dir)) fluxes%sw_vis_dir(i,j) = 0.0
-      if (associated(fluxes%sw_vis_dif)) fluxes%sw_vis_dif(i,j) = 0.0
-      if (associated(fluxes%sw_nir_dir)) fluxes%sw_nir_dir(i,j) = 0.0
-      if (associated(fluxes%sw_nir_dif)) fluxes%sw_nir_dif(i,j) = 0.0
 
       if (CS%lprec(i,j) > 0.0 ) then
-        fluxes%liq_precip(i,j) =  frac_area*CS%lprec(i,j)*CS%flux_factor
+        fluxes%lprec(i,j) =  frac_area*CS%lprec(i,j)*CS%flux_factor
       else
         fluxes%evap(i,j) = frac_area*CS%lprec(i,j)*CS%flux_factor
       endif
+
+      ! Add frazil formation diagnosed by the ocean model (J m-2) in the
+      ! form of surface layer evaporation (kg m-2 s-1). Update lprec in the
+      ! control structure for diagnostic purposes.
+
+      fraz= state%frazil(i,j) / CS%time_step / CS%Lat_fusion
+      fluxes%evap(i,j) = fluxes%evap(i,j) - fraz
+      CS%lprec(i,j)=CS%lprec(i,j) - fraz  
+
+                                             
+      state%frazil(i,j) = 0.0
 
       fluxes%sens(i,j) = -frac_area*CS%t_flux(i,j)*CS%flux_factor
 
@@ -862,12 +910,12 @@ subroutine add_shelf_flux(G, CS, state, fluxes)
   if (CS%shelf_mass_is_dynamic) then
     do j=G%jsc,G%jec ; do i=G%isc-1,G%iec
       fluxes%rigidity_ice_u(I,j) = (CS%kv_ice / CS%density_ice) * &
-                                    min(CS%mass_shelf(i,j), CS%mass_shelf(i+1,j))
+                                    max(CS%mass_shelf(i,j), CS%mass_shelf(i+1,j))
     enddo ; enddo
 
     do j=G%jsc-1,G%jec ; do i=G%isc,G%iec
       fluxes%rigidity_ice_v(i,J) = (CS%kv_ice / CS%density_ice) * &
-                                    min(CS%mass_shelf(i,j), CS%mass_shelf(i,j+1))
+                                    max(CS%mass_shelf(i,j), CS%mass_shelf(i,j+1))
     enddo ; enddo
   endif
 end subroutine add_shelf_flux
@@ -959,7 +1007,7 @@ end subroutine add_shelf_flux
 !       fluxes%ustar_shelf(i,j) = MAX(CS%ustar_bg, sqrt(Irho0 * sqrt(taux2 + tauy2)))
 
 !       if (CS%lprec(i,j) > 0.0) then
-!         fluxes%liq_precip(i,j) = fluxes%liq_precip(i,j) + frac_area*CS%lprec(i,j)
+!         fluxes%lprec(i,j) = fluxes%lprec(i,j) + frac_area*CS%lprec(i,j)
 !         ! Same for IOB%lprec
 !       else
 !         fluxes%evap(i,j) = fluxes%evap(i,j) + frac_area*CS%lprec(i,j)
@@ -1025,7 +1073,9 @@ subroutine initialize_ice_shelf(Time, CS, diag, fluxes, Time_in, solo_mode_in)
   character(len=2)   :: procnum
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed, Isdq, Iedq, Jsdq, Jedq, iters
   integer :: wd_halos(2)
-  logical :: solo_mode
+  logical :: solo_mode, read_TideAmp
+  character(len=128) :: Tideamp_file
+  real    :: utide
 
   if (associated(CS)) then
     call MOM_error(WARNING, "shelf_model_init called with an associated "// &
@@ -1159,6 +1209,28 @@ subroutine initialize_ice_shelf(Time, CS, diag, fluxes, Time_in, solo_mode_in)
                  "The minimum ML thickness where melting is allowed.", units="m", &
                  default=0.0)
 
+  call get_param(param_file, mod, "READ_TIDEAMP", read_TIDEAMP, &
+                 "If true, read a file (given by TIDEAMP_FILE) containing \n"//&
+                 "the tidal amplitude with INT_TIDE_DISSIPATION.", default=.false.)
+
+  call safe_alloc_ptr(CS%utide,isd,ied,jsd,jed)   ; CS%utide(:,:) = 0.0
+
+  if (read_TIDEAMP) then
+    call get_param(param_file, mod, "TIDEAMP_FILE", TideAmp_file, &
+                 "The path to the file containing the spatially varying \n"//&
+                 "tidal amplitudes.", &
+                 default="tideamp.nc")
+    call get_param(param_file, mod, "INPUTDIR", inputdir, default=".")
+    inputdir = slasher(inputdir)
+    TideAmp_file = trim(inputdir) // trim(TideAmp_file)
+    call read_data(TideAmp_file,'tideamp',CS%utide,domain=G%domain%mpp_domain,timelevel=1)
+  else
+    call get_param(param_file, mod, "UTIDE", utide, &
+                 "The constant tidal amplitude used with INT_TIDE_DISSIPATION.", &
+                 units="m s-1", default=0.0)
+    CS%utide = utide
+  endif
+
   call select_eqn_of_state(param_file, CS%eqn_of_state)
 
   !! new parameters that need to be in MOM_input
@@ -1241,17 +1313,19 @@ subroutine initialize_ice_shelf(Time, CS, diag, fluxes, Time_in, solo_mode_in)
   call get_param(param_file, mod, "USTAR_SHELF_BG", CS%ustar_bg, &
                  "The minimum value of ustar under ice sheves.", units="m s-1", &
                  default=0.0)
+  call get_param(param_file, mod, "CDRAG_SHELF", cdrag, &
+       "CDRAG is the drag coefficient relating the magnitude of \n"//&
+       "the velocity field to the surface stress.", units="nondim", &
+       default=0.003)
+  CS%cdrag = cdrag
   if (CS%ustar_bg <= 0.0) then
-    call get_param(param_file, mod, "CDRAG", cdrag, &
-                 "CDRAG is the drag coefficient relating the magnitude of \n"//&
-                 "the velocity field to the surface stress.", units="nondim", &
-                 default=0.003)
-    call get_param(param_file, mod, "DRAG_BG_VEL", drag_bg_vel, &
+    call get_param(param_file, mod, "DRAG_BG_VEL_SHELF", drag_bg_vel, &
                  "DRAG_BG_VEL is either the assumed bottom velocity (with \n"//&
                  "LINEAR_DRAG) or an unresolved  velocity that is \n"//&
                  "combined with the resolved velocity to estimate the \n"//&
                  "velocity magnitude.", units="m s-1", default=0.0)
-    if (cdrag*drag_bg_vel > 0.0) CS%ustar_bg = sqrt(cdrag*drag_bg_vel)
+    if (CS%cdrag*drag_bg_vel > 0.0) CS%ustar_bg = sqrt(CS%cdrag)*drag_bg_vel
+
   endif
 
   ! Allocate  and initialize variables

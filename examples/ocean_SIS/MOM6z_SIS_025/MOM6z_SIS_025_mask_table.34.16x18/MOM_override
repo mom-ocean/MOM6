@@ -1,4 +1,0 @@
-#override NIPROC = 16
-#override NJPROC = 18
-#override IO_LAYOUT = 2, 2
-#override MASKTABLE = "mask_table.34.16x18"

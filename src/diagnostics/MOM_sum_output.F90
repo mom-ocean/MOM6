@@ -949,32 +949,35 @@ subroutine accumulate_net_input(fluxes, state, dt, G, CS)
   real, dimension(SZI_(G),SZJ_(G)) :: &
     FW_in, &   ! The net fresh water input, integrated over a timestep in kg.
     salt_in, & ! The total salt added by surface fluxes, integrated
-               ! over a time step in PSU kg.
+               ! over a time step in ppt*kg.
     heat_in    ! The total heat added by surface fluxes, integrated
                ! over a time step in Joules.
   real :: FW_input   ! The net fresh water input, integrated over a timestep
-                  ! and summed over space, in kg.
+                     ! and summed over space, in kg.
   real :: salt_input ! The total salt added by surface fluxes, integrated
-                  ! over a time step and summed over space, in PSU kg.
-  real :: heat_input ! The total heat added by surface fluxes, integrated
-                  ! over a time step and summed over space, in Joules.
-  real :: C_p         ! The heat capacity of seawater, in J K-1 kg-1.
+                     ! over a time step and summed over space, in ppt * kg.
+  real :: heat_input ! The total heat added by boundary fluxes, integrated
+                     ! over a time step and summed over space, in Joules.
+  real :: C_p        ! The heat capacity of seawater, in J K-1 kg-1.
+
   type(EFP_type) :: &
-    FW_in_EFP, &   ! Extended fixed point versions of FW_input, salt_input, and 
-    salt_in_EFP, & ! heat_input, in kg, PSU kg, and Joules.
-    heat_in_EFP    ! 
+    FW_in_EFP,      &  ! Extended fixed point versions of FW_input, salt_input, and 
+    salt_in_EFP,    &  ! heat_input, in kg, ppt*kg, and Joules.
+    heat_in_EFP     
+
   real :: inputs(3)   ! A mixed array for combining the sums
   integer :: i, j, is, ie, js, je
+
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   C_p = fluxes%C_p
 
   FW_in(:,:) = 0.0 ; FW_input = 0.0
   if (ASSOCIATED(fluxes%evap)) then
-    if (ASSOCIATED(fluxes%liq_precip) .and. ASSOCIATED(fluxes%froz_precip)) then
+    if (ASSOCIATED(fluxes%lprec) .and. ASSOCIATED(fluxes%fprec)) then
       do j=js,je ; do i=is,ie
         FW_in(i,j) = dt*G%areaT(i,j)*(fluxes%evap(i,j) + &
-            (((fluxes%liq_precip(i,j) + fluxes%virt_precip(i,j)) + fluxes%liq_runoff(i,j)) + &
-             (fluxes%froz_precip(i,j) + fluxes%froz_runoff(i,j))))
+            (((fluxes%lprec(i,j) + fluxes%vprec(i,j)) + fluxes%lrunoff(i,j)) + &
+              (fluxes%fprec(i,j) + fluxes%frunoff(i,j))))
       enddo ; enddo
     else
       call MOM_error(WARNING, &
@@ -984,11 +987,23 @@ subroutine accumulate_net_input(fluxes, state, dt, G, CS)
 
   salt_in(:,:) = 0.0 ; heat_in(:,:) = 0.0
   if (CS%use_temperature) then
+
     if (ASSOCIATED(fluxes%sw)) then ; do j=js,je ; do i=is,ie
       heat_in(i,j) = heat_in(i,j) + dt*G%areaT(i,j) * (fluxes%sw(i,j) + &
              (fluxes%lw(i,j) + (fluxes%latent(i,j) + fluxes%sens(i,j))))
     enddo ; enddo ; endif
-    
+
+    ! smg: new code 
+    ! include heat content from water transport across ocean surface 
+!    if (ASSOCIATED(fluxes%heat_content_lprec)) then ; do j=js,je ; do i=is,ie
+!      heat_in(i,j) = heat_in(i,j) + dt*G%areaT(i,j) *                          &
+!         (fluxes%heat_content_lprec(i,j)   + (fluxes%heat_content_fprec(i,j)   &
+!       + (fluxes%heat_content_lrunoff(i,j) + (fluxes%heat_content_frunoff(i,j) &
+!       + (fluxes%heat_content_cond(i,j)    + (fluxes%heat_content_vprec(i,j)   &
+!       +  fluxes%heat_content_massout(i,j)))))))
+!    enddo ; enddo ; endif
+
+    ! smg: old code 
     if (ASSOCIATED(state%TempxPmE)) then
       do j=js,je ; do i=is,ie
         heat_in(i,j) = heat_in(i,j) + (C_p * G%areaT(i,j)) * state%TempxPmE(i,j)
@@ -998,6 +1013,7 @@ subroutine accumulate_net_input(fluxes, state, dt, G, CS)
         heat_in(i,j) = heat_in(i,j) + (C_p * state%SST(i,j)) * FW_in(i,j)
       enddo ; enddo
     endif
+
 
     ! The following heat sources may or may not be used.
     if (ASSOCIATED(state%internal_heat)) then
@@ -1017,21 +1033,21 @@ subroutine accumulate_net_input(fluxes, state, dt, G, CS)
 !    enddo ; enddo ; endif
 
     if (ASSOCIATED(fluxes%salt_flux)) then ; do j=js,je ; do i=is,ie
-      ! Convert salt_flux from kg (salt) m-2 s-1 to PSU m s-1.
+      ! convert salt_flux from kg (salt)/(m^2 s) to ppt * (m/s).
       salt_in(i,j) = dt*G%areaT(i,j)*(1000.0*fluxes%salt_flux(i,j))
     enddo ; enddo ; endif
   endif
 
-  if ((CS%use_temperature) .or. ASSOCIATED(fluxes%liq_precip) .or. &
+  if ((CS%use_temperature) .or. ASSOCIATED(fluxes%lprec) .or. &
       ASSOCIATED(fluxes%evap)) then
     if (CS%use_repro_sum) then
-      FW_input = reproducing_sum(FW_in, EFP_sum=FW_in_EFP)
+      FW_input   = reproducing_sum(FW_in,   EFP_sum=FW_in_EFP)
       heat_input = reproducing_sum(heat_in, EFP_sum=heat_in_EFP)
       salt_input = reproducing_sum(salt_in, EFP_sum=salt_in_EFP)
     else
       FW_input = 0.0 ; heat_input = 0.0 ; salt_input = 0.0
       do j=js,je ; do i=is,ie
-        FW_input = FW_input + FW_in(i,j)
+        FW_input   = FW_input   + FW_in(i,j)
         heat_input = heat_input + heat_in(i,j)
         salt_input = salt_input + salt_in(i,j)
       enddo ; enddo
@@ -1041,16 +1057,17 @@ subroutine accumulate_net_input(fluxes, state, dt, G, CS)
     endif
 
     CS%fresh_water_input = CS%fresh_water_input + FW_input
-    CS%net_salt_input = CS%net_salt_input + salt_input
-    CS%net_heat_input = CS%net_heat_input + heat_input
+    CS%net_salt_input    = CS%net_salt_input    + salt_input
+    CS%net_heat_input    = CS%net_heat_input    + heat_input
     if (CS%use_repro_sum) then
       CS%fresh_water_in_EFP = CS%fresh_water_in_EFP + FW_in_EFP
-      CS%net_salt_in_EFP = CS%net_salt_in_EFP + salt_in_EFP
-      CS%net_heat_in_EFP = CS%net_heat_in_EFP + heat_in_EFP
+      CS%net_salt_in_EFP    = CS%net_salt_in_EFP    + salt_in_EFP
+      CS%net_heat_in_EFP    = CS%net_heat_in_EFP    + heat_in_EFP
     endif
   endif
 
 end subroutine accumulate_net_input
+
 
 subroutine depth_list_setup(G, CS)
   type(ocean_grid_type), intent(in) :: G

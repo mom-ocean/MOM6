@@ -1,1 +1,0 @@
-.datasets/AM2_LM3_MOM6i_1deg/tikal/INPUT/emissions.ch3i.GEOS4x5.nc

@@ -1,1 +1,0 @@
-.datasets/GOLD_SIS/riga/INPUT/ncar_precip_clim.nc

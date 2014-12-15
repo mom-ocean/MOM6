@@ -1,1 +1,0 @@
-.datasets/GOLD_SIS/riga/INPUT/geothermal_heating_cm2g.nc

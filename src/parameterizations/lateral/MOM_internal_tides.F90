@@ -44,8 +44,9 @@ module MOM_internal_tides
 use MOM_diag_mediator, only : post_data, query_averaging_enabled, diag_axis_init
 use MOM_diag_mediator, only : register_diag_field, diag_ctrl, safe_alloc_ptr
 use MOM_diag_mediator, only : axesType, defineAxes
-use MOM_domains, only : pass_var, pass_vector_start, pass_vector_complete
 use MOM_domains, only : AGRID, To_South, To_West, To_All
+use MOM_domains, only : create_group_pass, do_group_pass
+use MOM_domains, only : group_pass_type, start_group_pass, complete_group_pass
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
 use MOM_file_parser, only : read_param, get_param, log_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
@@ -129,8 +130,8 @@ subroutine propagate_int_tide(cg1, En_in, vel_btTide, dt, G, CS)
     tot_En, drag_scale
   real :: frac_per_sector, f2, I_rho0, I_D_here
 
-  integer :: id_test
   integer :: a, m, fr, i, j, is, ie, js, je, isd, ied, jsd, jed, nAngle
+  type(group_pass_type), save :: pass_test, pass_En
 
   if (.not.associated(CS)) return
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
@@ -171,18 +172,21 @@ subroutine propagate_int_tide(cg1, En_in, vel_btTide, dt, G, CS)
                             "band that does not exist.")
   endif
 
-  
   ! Pass a test vector to check for grid rotation in the halo updates.
   do j=jsd,jed ; do i=isd,ied ; test(i,j,1) = 1.0 ; test(i,j,2) = 0.0 ; enddo ; enddo
-  id_test = pass_vector_start(test(:,:,1), test(:,:,2), G%domain, stagger=AGRID)
+  do m=1,CS%nMode ; do fr=1,CS%nFreq
+    call create_group_pass(pass_En, CS%En(:,:,:,fr,m), G%domain)
+  enddo; enddo
+  call create_group_pass(pass_test, test(:,:,1), test(:,:,2), G%domain, stagger=AGRID)
+  call start_group_pass(pass_test, G%domain)
   
   ! Apply half the refraction.
   do m=1,CS%nMode ; do fr=1,CS%nFreq
     call refract(CS%En(:,:,:,fr,m), c1(:,:,m), CS%frequency(fr), 0.5*dt, G, CS%nAngle)
-
-    call pass_var(CS%En(:,:,:,fr,m), G%domain, complete=(m==CS%nMode.and.fr==CS%nFreq))
   enddo ; enddo
-  call pass_vector_complete(id_test, test(:,:,1), test(:,:,2), G%domain, stagger=AGRID)
+  call do_group_pass(pass_En, G%domain)
+
+  call complete_group_pass(pass_test, G%domain)
 
   ! Rotate points in the halos as necessary.
   call correct_halo_rotation(CS%En, test, G, CS%nAngle)

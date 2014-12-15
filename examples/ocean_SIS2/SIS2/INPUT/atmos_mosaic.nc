@@ -1,1 +1,0 @@
-.datasets/GOLD_SIS/riga/mosaic.unpacked/atmos_mosaic.nc

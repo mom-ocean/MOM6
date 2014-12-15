@@ -1,1 +1,0 @@
-.datasets/GOLD_SIS_025/siena/INPUT/GOLD_IC.nc

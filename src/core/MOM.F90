@@ -336,10 +336,11 @@ use MOM_diag_mediator, only : disable_averaging, post_data, safe_alloc_ptr
 use MOM_diag_mediator, only : register_diag_field, register_static_field
 use MOM_diag_mediator, only : register_scalar_field
 use MOM_diag_mediator, only : set_axes_info, diag_ctrl, diag_masks_set
-use MOM_domains, only : MOM_domains_init, clone_MOM_domain, pass_var, pass_vector
-use MOM_domains, only : pass_var_start, pass_var_complete, sum_across_PEs
-use MOM_domains, only : pass_vector_start, pass_vector_complete
+use MOM_domains, only : MOM_domains_init, clone_MOM_domain
+use MOM_domains, only : sum_across_PEs
 use MOM_domains, only : To_South, To_West, To_All, CGRID_NE, SCALAR_PAIR
+use MOM_domains, only : create_group_pass, do_group_pass, group_pass_type
+use MOM_domains, only : start_group_pass, complete_group_pass
 use MOM_checksums, only : MOM_checksums_init, hchksum, uchksum, vchksum
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe
 use MOM_error_handler, only : MOM_set_verbosity, callTree_showQuery
@@ -368,12 +369,13 @@ use MOM_error_checking, only : check_redundant
 use MOM_grid, only : MOM_grid_init, ocean_grid_type, get_thickness_units
 use MOM_grid, only : get_flux_units, get_tr_flux_units
 use MOM_hor_visc, only : horizontal_viscosity, hor_visc_init
-use MOM_lateral_mixing_coeffs, only : calc_slope_function, VarMix_init
+use MOM_lateral_mixing_coeffs, only : calc_slope_functions, VarMix_init
 use MOM_lateral_mixing_coeffs, only : calc_resoln_function, VarMix_CS
 use MOM_interface_heights, only : find_eta
 use MOM_MEKE, only : MEKE_init, MEKE_alloc_register_restart, step_forward_MEKE, MEKE_CS
 use MOM_MEKE_types, only : MEKE_type
 use MOM_mixed_layer_restrat, only : mixedlayer_restrat, mixedlayer_restrat_init, mixedlayer_restrat_CS
+use MOM_obsolete_diagnostics, only : register_obsolete_diagnostics
 use MOM_open_boundary, only : Radiation_Open_Bdry_Conds, open_boundary_init
 use MOM_PressureForce, only : PressureForce, PressureForce_init, PressureForce_CS
 use MOM_thickness_diffuse, only : thickness_diffuse, thickness_diffuse_init, thickness_diffuse_CS
@@ -387,11 +389,12 @@ use MOM_tracer_registry, only : add_tracer_diagnostics, tracer_registry_type
 use MOM_tracer_registry, only : tracer_registry_end
 use MOM_tracer_flow_control, only : call_tracer_register, tracer_flow_control_CS
 use MOM_tracer_flow_control, only : tracer_flow_control_init, call_tracer_surface_state
-use MOM_vert_friction, only : vertvisc, vertvisc_coef, vertvisc_remnant
+use MOM_vert_friction, only : vertvisc, vertvisc_remnant
 use MOM_vert_friction, only : vertvisc_limit_vel, vertvisc_init
 use MOM_set_visc, only : set_viscous_BBL, set_viscous_ML, set_visc_init
 use MOM_set_visc, only : set_visc_register_restarts, set_visc_CS
 use MOM_sponge, only : init_sponge_diags, sponge_CS
+use MOM_spatial_means, only : global_area_mean, global_volume_mean
 use MOM_checksum_packages, only : MOM_thermo_chksum, MOM_state_chksum, MOM_accel_chksum
 use MOM_dynamics_unsplit, only : step_MOM_dyn_unsplit, register_restarts_dyn_unsplit
 use MOM_dynamics_unsplit, only : initialize_dyn_unsplit, end_dyn_unsplit
@@ -474,6 +477,7 @@ type, public :: MOM_control_struct
   logical :: thickness_diffuse_first ! If true, diffuse thickness before dynamics.
   logical :: mixedlayer_restrat ! If true, a density-gradient dependent
                              ! restratifying flow is imposed in the mixed layer.
+  logical :: useMEKE         ! If true, call the MEKE parameterization.
   logical :: debug           ! If true, write verbose checksums for debugging purposes.
   logical :: debug_truncations  ! If true, make sure that all diagnostics that
                              ! could be useful for debugging any truncations are
@@ -589,6 +593,9 @@ integer :: id_clock_pass, id_clock_pass_init ! Also in dynamics d/r
 integer :: id_clock_ALE
 integer :: id_clock_other
 
+!--- for group halo pass, used in both step_MOM and initialize_MOM
+type(group_pass_type) :: pass_uv_T_S_h
+
 contains
 
 subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
@@ -649,13 +656,18 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     h                        ! h : Layer thickness, in m.
   real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)+1) :: eta_predia
   real :: tot_wt_ssh, Itot_wt_ssh, I_time_int
-  real, dimension(SZI_(CS%G),SZJ_(CS%G)) :: tmpForSumming
   real :: SST_global, SSS_global
   type(time_type) :: Time_local
-  integer :: pid_tau, pid_ustar, pid_psurf, pid_u, pid_h
-  integer :: pid_T, pid_S
   logical :: showCallTree
-  real :: temporary
+  !--- for group halo pass
+  type(group_pass_type), save :: pass_tau_ustar_psurf
+  type(group_pass_type), save :: pass_h
+  type(group_pass_type), save :: pass_ray
+  type(group_pass_type), save :: pass_bbl_thick_kv_bbl
+  type(group_pass_type), save :: pass_T_S_h
+  type(group_pass_type), save :: pass_T_S
+  type(group_pass_type), save :: pass_kd_kv_turb
+  logical                     :: do_pass_kd_kv_turb
 
   G => CS%G
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -687,16 +699,47 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
   if (.not.ASSOCIATED(fluxes%p_surf)) CS%interp_p_surf = .false.
 
   call cpu_clock_begin(id_clock_pass)
+  !--- Begin setup for group halo pass
+  call create_group_pass(pass_tau_ustar_psurf, fluxes%taux, fluxes%tauy, G%Domain)
+  if (ASSOCIATED(fluxes%ustar)) &
+    call create_group_pass(pass_tau_ustar_psurf, fluxes%ustar(:,:), G%Domain)
+  if (ASSOCIATED(fluxes%p_surf)) &
+    call create_group_pass(pass_tau_ustar_psurf, fluxes%p_surf(:,:), G%Domain)
+  if (CS%thickness_diffuse .OR. CS%mixedlayer_restrat) &
+    call create_group_pass(pass_h, h, G%Domain)
+  if (CS%diabatic_first) then
+    if (associated(CS%visc%Ray_u) .and. associated(CS%visc%Ray_v)) &
+      call create_group_pass(pass_ray, CS%visc%Ray_u, CS%visc%Ray_v, G%Domain, &
+                             To_All+SCALAR_PAIR, CGRID_NE)
+    if (associated(CS%visc%kv_bbl_u) .and. associated(CS%visc%kv_bbl_v)) then
+      call create_group_pass(pass_bbl_thick_kv_bbl, CS%visc%bbl_thick_u, &
+                             CS%visc%bbl_thick_v, G%Domain, To_All+SCALAR_PAIR, CGRID_NE)
+      call create_group_pass(pass_bbl_thick_kv_bbl, CS%visc%kv_bbl_u, &
+                             CS%visc%kv_bbl_v, G%Domain, To_All+SCALAR_PAIR, CGRID_NE)
+    endif
+  endif
+  if (.not.CS%adiabatic .AND. CS%useALEalgorithm ) then
+    call create_group_pass(pass_T_S_h, CS%tv%T, G%Domain)
+    call create_group_pass(pass_T_S_h, CS%tv%S, G%Domain)
+    call create_group_pass(pass_T_S_h, h, G%Domain)
+  endif
+  if (CS%adiabatic .AND. CS%use_temperature) then
+    call create_group_pass(pass_T_S, CS%tv%T, G%Domain)
+    call create_group_pass(pass_T_S, CS%tv%S, G%Domain)
+  endif
+  if ((CS%visc%Prandtl_turb > 0) .and. associated(CS%visc%Kd_turb)) &
+    call create_group_pass(pass_kd_kv_turb, CS%visc%Kd_turb, G%Domain)
+  if (associated(CS%visc%Kv_turb)) &
+    call create_group_pass(pass_kd_kv_turb, CS%visc%Kv_turb, G%Domain)
+  !--- End setup for group halo pass
+
+  do_pass_kd_kv_turb = ((CS%visc%Prandtl_turb > 0) .and. associated(CS%visc%Kd_turb)) &
+                       .OR. associated(CS%visc%Kv_turb)
+
   if (G%nonblocking_updates) then
-    pid_tau = pass_vector_start(fluxes%taux, fluxes%tauy, G%Domain)
-    if (ASSOCIATED(fluxes%ustar)) &
-      pid_ustar = pass_var_start(fluxes%ustar(:,:), G%Domain)
-    if (ASSOCIATED(fluxes%p_surf)) &
-      pid_psurf = pass_var_start(fluxes%p_surf(:,:), G%Domain)
+    call start_group_pass(pass_tau_ustar_psurf, G%Domain)
   else
-    call pass_vector(fluxes%taux, fluxes%tauy, G%Domain)
-    if (ASSOCIATED(fluxes%ustar)) call pass_var(fluxes%ustar(:,:), G%Domain)
-    if (ASSOCIATED(fluxes%p_surf)) call pass_var(fluxes%p_surf(:,:), G%Domain)
+    call do_group_pass(pass_tau_ustar_psurf, G%Domain)
   endif
   call cpu_clock_end(id_clock_pass)
   if (ASSOCIATED(CS%tv%frazil)) CS%tv%frazil(:,:) = 0.0
@@ -737,11 +780,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
   if (G%nonblocking_updates) then
     call cpu_clock_begin(id_clock_pass)
-    call pass_vector_complete(pid_tau, fluxes%taux, fluxes%tauy, G%Domain)
-    if (ASSOCIATED(fluxes%ustar)) &
-      call pass_var_complete(pid_ustar, fluxes%ustar(:,:), G%Domain)
-    if (ASSOCIATED(fluxes%p_surf)) &
-      call pass_var_complete(pid_psurf, fluxes%p_surf(:,:), G%Domain)
+    call complete_group_pass(pass_tau_ustar_psurf, G%Domain)
     call cpu_clock_end(id_clock_pass)
   endif
   call cpu_clock_end(id_clock_other)
@@ -777,15 +816,10 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         !call cpu_clock_end(id_clock_vertvisc)
     
         call cpu_clock_begin(id_clock_pass)
-        if (associated(CS%visc%Ray_u) .and. associated(CS%visc%Ray_v)) &
-          call pass_vector(CS%visc%Ray_u, CS%visc%Ray_v, G%Domain, &
-                         To_All+SCALAR_PAIR, CGRID_NE)
-        if (associated(CS%visc%kv_bbl_u) .and. associated(CS%visc%kv_bbl_v)) then
-          call pass_vector(CS%visc%bbl_thick_u, CS%visc%bbl_thick_v, G%Domain, &
-                         To_All+SCALAR_PAIR, CGRID_NE, complete=.false.)
-          call pass_vector(CS%visc%kv_bbl_u, CS%visc%kv_bbl_v, G%Domain, &
-                         To_All+SCALAR_PAIR, CGRID_NE)
-        endif
+        if(associated(CS%visc%Ray_u) .and. associated(CS%visc%Ray_v)) &
+          call do_group_pass(pass_ray, G%Domain )
+        if(associated(CS%visc%kv_bbl_u) .and. associated(CS%visc%kv_bbl_v))  &
+          call do_group_pass(pass_bbl_thick_kv_bbl, G%Domain )
         call cpu_clock_end(id_clock_pass)
         if (showCallTree) call callTree_wayPoint("done with set_viscous_BBL (step_MOM_dyn_split_RK2)")
       !endif
@@ -813,9 +847,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         ! The routine 'ALE_main' can be found in 'MOM_ALE.F90'.
         if ( CS%useALEalgorithm ) then 
 !         call pass_vector(u, v, G%Domain)
-          call pass_var(CS%tv%T, G%Domain, complete=.false.)
-          call pass_var(CS%tv%S, G%Domain, complete=.false.)
-          call pass_var(h, G%Domain)
+          call do_group_pass(pass_T_S_h, G%Domain)
           if (CS%debug) then
             call MOM_state_chksum("Pre-ALE 1 ", u, v, h, CS%uh, CS%vh, G)
             call hchksum(CS%tv%T,"Pre-ALE 1 T", G, haloshift=1)
@@ -834,28 +866,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         endif   
 
         call cpu_clock_begin(id_clock_pass)
-        if (G%nonblocking_updates) then        
-          pid_u = pass_vector_start(u, v, G%Domain)
-          if (CS%use_temperature) then
-            pid_T = pass_var_start(CS%tv%T, G%Domain)
-            pid_S = pass_var_start(CS%tv%S, G%Domain)
-          endif
-          pid_h = pass_var_start(h, G%Domain)
-
-          call pass_vector_complete(pid_u, u, v, G%Domain)
-          if (CS%use_temperature) then
-            call pass_var_complete(pid_T, CS%tv%T, G%Domain)
-            call pass_var_complete(pid_S, CS%tv%S, G%Domain)
-          endif
-          call pass_var_complete(pid_h, h, G%Domain)
-        else 
-          call pass_vector(u, v, G%Domain)
-          if (CS%use_temperature) then
-            call pass_var(CS%tv%T, G%Domain, complete=.false.)
-            call pass_var(CS%tv%S, G%Domain, complete=.false.)
-          endif
-          call pass_var(h, G%Domain)
-        endif
+        call do_group_pass(pass_uv_T_S_h, G%Domain)
         call cpu_clock_end(id_clock_pass)
 
         if (CS%debug) then
@@ -883,8 +894,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
         if (CS%use_temperature) then
           call cpu_clock_begin(id_clock_pass)
-          call pass_var(CS%tv%T, G%Domain, complete=.false.)
-          call pass_var(CS%tv%S, G%Domain, complete=.true.)
+          call do_group_pass(pass_T_S, G%Domain)
           call cpu_clock_end(id_clock_pass)
           if (CS%debug) then
             if (associated(CS%tv%T)) call hchksum(CS%tv%T, "Post-dia first T", G, haloshift=1)
@@ -900,9 +910,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     call cpu_clock_begin(id_clock_other)
 
     call cpu_clock_begin(id_clock_pass)
-    if ((CS%visc%Prandtl_turb > 0) .and. associated(CS%visc%Kd_turb)) &
-         call pass_var(CS%visc%Kd_turb, G%Domain)
-    if (associated(CS%visc%Kv_turb)) call pass_var(CS%visc%Kv_turb, G%Domain)
+    if (do_pass_kd_kv_turb) call do_group_pass(pass_kd_kv_turb, G%Domain)
     call cpu_clock_end(id_clock_pass)
 
     call cpu_clock_end(id_clock_other)
@@ -916,13 +924,12 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         dtth = dt*min(ntstep,n_max-n+1)
         call enable_averaging(dtth,Time_local+set_time(int(floor(dtth-dt+0.5))), CS%diag)
         call cpu_clock_begin(id_clock_thick_diff)
-        if (associated(CS%VarMix)) &
-          call calc_slope_function(h, CS%tv, G, CS%VarMix)
+        if (associated(CS%VarMix)) call calc_slope_functions(h, CS%tv, dt, G, CS%VarMix)
         call thickness_diffuse(h, CS%uhtr, CS%vhtr, CS%tv, dtth, G, &
                                CS%MEKE, CS%VarMix, CS%CDp, CS%thickness_diffuse_CSp)
         call cpu_clock_end(id_clock_thick_diff)
         call cpu_clock_begin(id_clock_pass)
-        call pass_var(h, G%Domain)
+        call do_group_pass(pass_h, G%Domain)
         call cpu_clock_end(id_clock_pass)
         call disable_averaging(CS%diag)
         if (showCallTree) call callTree_waypoint("finished thickness_diffuse_first (step_MOM)")
@@ -999,30 +1006,36 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
     if (CS%thickness_diffuse .and. .not.CS%thickness_diffuse_first) then
       call cpu_clock_begin(id_clock_thick_diff)
-      if (associated(CS%VarMix)) &
-        call calc_slope_function(h, CS%tv, G, CS%VarMix)
+      if (associated(CS%VarMix)) call calc_slope_functions(h, CS%tv, dt, G, CS%VarMix)
       call thickness_diffuse(h, CS%uhtr, CS%vhtr, CS%tv, dt, G, &
                              CS%MEKE, CS%VarMix, CS%CDp, CS%thickness_diffuse_CSp)
       call cpu_clock_end(id_clock_thick_diff)
       call cpu_clock_begin(id_clock_pass)
-      call pass_var(h, G%Domain)
+      call do_group_pass(pass_h, G%Domain)
       call cpu_clock_end(id_clock_pass)
       if (showCallTree) call callTree_waypoint("finished thickness_diffuse (step_MOM)")
     endif
 
     if (CS%mixedlayer_restrat) then
+      if (CS%debug) then
+        call hchksum(h,"Pre-mixedlayer_restrat h", G, haloshift=1)
+        call uchksum(CS%uhtr,"Pre-mixedlayer_restrat uhtr", G, haloshift=0)
+        call vchksum(CS%vhtr,"Pre-mixedlayer_restrat vhtr", G, haloshift=0)
+      endif
       call cpu_clock_begin(id_clock_ml_restrat)
-      call mixedlayer_restrat(h, CS%uhtr ,CS%vhtr, CS%tv, fluxes, dt, &
-                              G, CS%mixedlayer_restrat_CSp)
+      call mixedlayer_restrat(h, CS%uhtr ,CS%vhtr, CS%tv, fluxes, dt, G, CS%mixedlayer_restrat_CSp)
       call cpu_clock_end(id_clock_ml_restrat)
       call cpu_clock_begin(id_clock_pass)
-      call pass_var(h, G%Domain)
+      call do_group_pass(pass_h, G%Domain)
       call cpu_clock_end(id_clock_pass)
+      if (CS%debug) then
+        call hchksum(h,"Post-mixedlayer_restrat h", G, haloshift=1)
+        call uchksum(CS%uhtr,"Post-mixedlayer_restrat uhtr", G, haloshift=0)
+        call vchksum(CS%vhtr,"Post-mixedlayer_restrat vhtr", G, haloshift=0)
+      endif
     endif
 
-    if (associated(CS%MEKE)) then
-      call step_forward_MEKE(CS%MEKE, h, CS%visc, dt, G, CS%MEKE_CSp)
-    endif
+    if (CS%useMEKE) call step_forward_MEKE(CS%MEKE, h, CS%visc, dt, G, CS%MEKE_CSp)
 
     call disable_averaging(CS%diag)
     call cpu_clock_end(id_clock_dynamics)
@@ -1037,8 +1050,8 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         call uchksum(u,"Pre-advection u", G, haloshift=2)
         call vchksum(v,"Pre-advection v", G, haloshift=2)
         call hchksum(h,"Pre-advection h", G, haloshift=1)
-        call uchksum(CS%uhtr,"Pre-advection uh", G, haloshift=0)
-        call vchksum(CS%vhtr,"Pre-advection vh", G, haloshift=0)
+        call uchksum(CS%uhtr,"Pre-advection uhtr", G, haloshift=0)
+        call vchksum(CS%vhtr,"Pre-advection vhtr", G, haloshift=0)
       ! call MOM_state_chksum("Pre-advection ", u, v, &
       !                       h, CS%uhtr, CS%vhtr, G, haloshift=1)
           if (associated(CS%tv%T)) call hchksum(CS%tv%T, "Pre-advection T", G, haloshift=1)
@@ -1104,9 +1117,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         ! The routine 'ALE_main' can be found in 'MOM_ALE.F90'.
         if ( CS%useALEalgorithm ) then 
 !         call pass_vector(u, v, G%Domain)
-          call pass_var(CS%tv%T, G%Domain, complete=.false.)
-          call pass_var(CS%tv%S, G%Domain, complete=.false.)
-          call pass_var(h, G%Domain)
+          call do_group_pass(pass_T_S_h, G%Domain)
           if (CS%debug) then
             call MOM_state_chksum("Pre-ALE ", u, v, h, CS%uh, CS%vh, G)
             call hchksum(CS%tv%T,"Pre-ALE T", G, haloshift=1)
@@ -1125,28 +1136,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         endif   
 
         call cpu_clock_begin(id_clock_pass)
-        if (G%nonblocking_updates) then        
-          pid_u = pass_vector_start(u, v, G%Domain)
-          if (CS%use_temperature) then
-            pid_T = pass_var_start(CS%tv%T, G%Domain)
-            pid_S = pass_var_start(CS%tv%S, G%Domain)
-          endif
-          pid_h = pass_var_start(h, G%Domain)
-
-          call pass_vector_complete(pid_u, u, v, G%Domain)
-          if (CS%use_temperature) then
-            call pass_var_complete(pid_T, CS%tv%T, G%Domain)
-            call pass_var_complete(pid_S, CS%tv%S, G%Domain)
-          endif
-          call pass_var_complete(pid_h, h, G%Domain)
-        else 
-          call pass_vector(u, v, G%Domain)
-          if (CS%use_temperature) then
-            call pass_var(CS%tv%T, G%Domain, complete=.false.)
-            call pass_var(CS%tv%S, G%Domain, complete=.false.)
-          endif
-          call pass_var(h, G%Domain)
-        endif
+        call do_group_pass(pass_uv_T_S_h, G%Domain)
         call cpu_clock_end(id_clock_pass)
 
         if (CS%debug) then
@@ -1175,8 +1165,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
         if (CS%use_temperature) then
           call cpu_clock_begin(id_clock_pass)
-          call pass_var(CS%tv%T, G%Domain, complete=.false.)
-          call pass_var(CS%tv%S, G%Domain, complete=.true.)
+          call do_group_pass(pass_T_S, G%Domain)
           call cpu_clock_end(id_clock_pass)
           if (CS%debug) then
             if (associated(CS%tv%T)) call hchksum(CS%tv%T, "Post-diabatic T", G, haloshift=1)
@@ -1322,22 +1311,16 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     endif
 
     if (CS%id_sst_global > 0) then
-      tmpForSumming(:,:) = 0.
-      do j=js,je ; do i=is, ie
-        tmpForSumming(i,j) = ( state%SST(i,j) * (G%areaT(i,j) * G%mask2dT(i,j)) )
-      enddo ; enddo
-      SST_global = reproducing_sum( tmpForSumming ) * G%IareaT_global
+      SST_global = global_area_mean(state%SST, G)
       call post_data(CS%id_sst_global, SST_global, CS%diag)
     endif
 
     if (CS%id_sss_global > 0) then
-      tmpForSumming(:,:) = 0.
-      do j=js,je ; do i=is, ie
-        tmpForSumming(i,j) = ( state%SSS(i,j) * (G%areaT(i,j) * G%mask2dT(i,j)) )
-      enddo ; enddo
-      SSS_global = reproducing_sum( tmpForSumming ) * G%IareaT_global
+      SSS_global = global_area_mean(state%SSS, G)
       call post_data(CS%id_sss_global, SSS_global, CS%diag)
     endif
+
+
 
     if (CS%id_sss > 0) &
       call post_data(CS%id_sss, state%SSS, CS%diag, mask=G%mask2dT)
@@ -1412,6 +1395,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   type(time_type) :: Start_time
   type(MOM_initialization_struct) :: init_CS
   type(ocean_internal_state) :: MOM_internal_state
+  type(group_pass_type) :: pass_p_surf_prev
 
   if (associated(CS)) then
     call MOM_error(WARNING, "initialize_MOM called with an associated "// &
@@ -1520,10 +1504,6 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
                  "If true, do thickness diffusion before dynamics.\n"//&
                  "This is only used if THICKNESSDIFFUSE is true.", &
                  default=.false.)
-  call get_param(param_file, "MOM", "MIXEDLAYER_RESTRAT",CS%mixedlayer_restrat, &
-                 "If true, a density-gradient dependent re-stratifying \n"//&
-                 "flow is imposed in the mixed layer. \n"//&
-                 "This is only used if BULKMIXEDLAYER is true.", default=.false.)
 
   call get_param(param_file, "MOM", "DEBUG", CS%debug, &
                  "If true, write out verbose debugging data.", default=.false.)
@@ -1652,8 +1632,6 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     "MOM: ENABLE_THERMODYNAMICS must be defined to use USE_EOS.")
   if (CS%adiabatic .and. CS%bulkmixedlayer) call MOM_error(FATAL, &
     "MOM: ADIABATIC and BULKMIXEDLAYER can not both be defined.")
-  if (CS%mixedlayer_restrat .and. .not.CS%bulkmixedlayer) call MOM_error(FATAL, &
-    "MOM: MIXEDLAYER_RESTRAT true requires BULKMIXEDLAYER to be true to work.")
 
   ! Allocate the auxiliary non-symmetric domain for debugging or I/O purposes.
   if (CS%debug .or. G%symmetric) &
@@ -1805,7 +1783,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call cpu_clock_end(id_clock_MOM_init)
   call callTree_waypoint("ALE initialized (initialize_MOM)")
 
-  call MEKE_init(Time, G, param_file, diag, CS%MEKE_CSp, CS%MEKE)
+  CS%useMEKE = MEKE_init(Time, G, param_file, diag, CS%MEKE_CSp, CS%MEKE)
   call VarMix_init(Time, G, param_file, diag, CS%VarMix)
 
   if (associated(init_CS%tracer_Reg)) &
@@ -1829,19 +1807,21 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   else
     if (CS%use_RK2) then
       call initialize_dyn_unsplit_RK2(CS%u, CS%v, CS%h, Time, G, &
-                param_file, diag, CS%dyn_unsplit_RK2_CSp, CS%restart_CSp, &
-                CS%ADp, CS%CDp, MOM_internal_state, init_CS%OBC, CS%ALE_CSp, CS%visc, dirs, CS%ntrunc)
+              param_file, diag, CS%dyn_unsplit_RK2_CSp, CS%restart_CSp, &
+              CS%ADp, CS%CDp, MOM_internal_state, init_CS%OBC, CS%ALE_CSp, CS%visc, dirs, CS%ntrunc)
     else
       call initialize_dyn_unsplit(CS%u, CS%v, CS%h, Time, G, &
-                param_file, diag, CS%dyn_unsplit_CSp, CS%restart_CSp, &
-                CS%ADp, CS%CDp, MOM_internal_state, init_CS%OBC, CS%ALE_CSp, CS%visc, dirs, CS%ntrunc)
+              param_file, diag, CS%dyn_unsplit_CSp, CS%restart_CSp, &
+              CS%ADp, CS%CDp, MOM_internal_state, init_CS%OBC, CS%ALE_CSp, CS%visc, dirs, CS%ntrunc)
     endif
   endif
   call callTree_waypoint("dynamics initialized (initialize_MOM)")
 
   call thickness_diffuse_init(Time, G, param_file, diag, CS%CDp, CS%thickness_diffuse_CSp)
-  if (CS%mixedlayer_restrat) &
-    call mixedlayer_restrat_init(Time, G, param_file, diag, CS%mixedlayer_restrat_CSp)
+  CS%mixedlayer_restrat = mixedlayer_restrat_init(Time, G, param_file, diag, &
+                                                  CS%mixedlayer_restrat_CSp)
+  if (CS%mixedlayer_restrat .and. .not.(CS%bulkmixedlayer .or. CS%useALEalgorithm)) &
+     call MOM_error(FATAL, "MOM: MIXEDLAYER_RESTRAT true requires a boundary layer scheme.")
   if (associated(init_CS%OBC)) CS%OBC => init_CS%OBC
 
   call MOM_diagnostics_init(MOM_internal_state, CS%ADp, CS%CDp, Time, G, &
@@ -1873,15 +1853,19 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   if (CS%use_temperature) then
     ! If needed T_adx, etc., would have been allocated in register_diags.
     call add_tracer_diagnostics("T", CS%tracer_Reg, CS%T_adx, CS%T_ady, &
-                       CS%T_diffx, CS%T_diffy, CS%T_adx_2d, CS%T_ady_2d, &
-                       CS%T_diffx_2d, CS%T_diffy_2d)
+                      CS%T_diffx, CS%T_diffy, CS%T_adx_2d, CS%T_ady_2d, &
+                      CS%T_diffx_2d, CS%T_diffy_2d)
     call add_tracer_diagnostics("S", CS%tracer_Reg, CS%S_adx, CS%S_ady, &
-                       CS%S_diffx, CS%S_diffy, CS%S_adx_2d, CS%S_ady_2d, &
-                       CS%S_diffx_2d, CS%S_diffy_2d)
-    call register_Z_tracer(CS%tv%T, "temp_z", "Potential Temperature", "degC", Time, &
-                           G, CS%diag_to_Z_CSp)
-    call register_Z_tracer(CS%tv%S, "salt_z", "Salinity", "PSU", Time, &
-                           G, CS%diag_to_Z_CSp)
+                      CS%S_diffx, CS%S_diffy, CS%S_adx_2d, CS%S_ady_2d, &
+                      CS%S_diffx_2d, CS%S_diffy_2d)
+    call register_Z_tracer(CS%tv%T, "temp", "Potential Temperature", "degC", Time,   &
+                      G, CS%diag_to_Z_CSp, cmor_field_name="thetao", cmor_units="C", &
+                      cmor_standard_name="sea_water_potential_temperature",          &
+                      cmor_long_name ="Sea Water Potential Temperature")
+    call register_Z_tracer(CS%tv%S, "salt", "Salinity", "PSU", Time,               &
+                      G, CS%diag_to_Z_CSp, cmor_field_name="so", cmor_units="psu", &
+                      cmor_standard_name="sea_water_salinity",                     &
+                      cmor_long_name ="Sea Water Salinity")
   endif
 
   ! This subroutine initializes any tracer packages.
@@ -1891,14 +1875,17 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
            CS%tracer_flow_CSp, init_CS%sponge_CSp, CS%diag_to_Z_CSp)
 
   call cpu_clock_begin(id_clock_pass_init)
-  call pass_vector(CS%u, CS%v, G%Domain)
-  call pass_var(CS%h, G%Domain)
-
+  !--- set up group pass for u,v,T,S and h. pass_uv_T_S_h also is used in step_MOM
+  call create_group_pass(pass_uv_T_S_h, CS%u, CS%v, G%Domain)
   if (CS%use_temperature) then
-    call pass_var(CS%tv%T, G%Domain)
-    call pass_var(CS%tv%S, G%Domain)
+    call create_group_pass(pass_uv_T_S_h, CS%tv%T, G%Domain)
+    call create_group_pass(pass_uv_T_S_h, CS%tv%S, G%Domain)
   endif
+  call create_group_pass(pass_uv_T_S_h, CS%h, G%Domain)
+  call do_group_pass(pass_uv_T_S_h, G%Domain)
   call cpu_clock_end(id_clock_pass_init)
+
+  call register_obsolete_diagnostics(param_file, CS%diag)
 
   call write_static_fields(G, CS%diag)
   call callTree_waypoint("static fields written (initialize_MOM)")
@@ -1923,7 +1910,10 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     CS%p_surf_prev_set = &
       query_initialized(CS%p_surf_prev,"p_surf_prev",CS%restart_CSp)
 
-    if (CS%p_surf_prev_set) call pass_var(CS%p_surf_prev,G%domain)
+    if (CS%p_surf_prev_set) then
+      call create_group_pass(pass_p_surf_prev, CS%p_surf_prev,G%domain)
+      call do_group_pass(pass_p_surf_prev, G%domain)
+    endif
   endif
   
   if (.not.query_initialized(CS%ave_ssh,"ave_ssh",CS%restart_CSp)) then
@@ -2008,9 +1998,11 @@ subroutine register_diags(Time, G, CS, ADp)
   !call diag_masks_set(G, CS%missing)
 
   CS%id_u = register_diag_field('ocean_model', 'u', diag%axesCuL, Time, &
-      'Zonal velocity', 'meter  second-1')
+      'Zonal velocity', 'meter  second-1', cmor_field_name='uo', cmor_units='m s-1', &
+      cmor_standard_name='sea_water_x_velocity', cmor_long_name='Sea Water X Velocity')
   CS%id_v = register_diag_field('ocean_model', 'v', diag%axesCvL, Time, &
-      'Meridional velocity', 'meter second-1')
+      'Meridional velocity', 'meter second-1', cmor_field_name='vo', cmor_units='m s-1', &
+      cmor_standard_name='sea_water_y_velocity', cmor_long_name='Sea Water Y Velocity')
   CS%id_h = register_diag_field('ocean_model', 'h', diag%axesTL, Time, &
       'Layer Thickness', thickness_units)
   CS%id_ssh = register_diag_field('ocean_model', 'SSH', diag%axesT1, Time, &
@@ -2027,22 +2019,36 @@ subroutine register_diags(Time, G, CS, ADp)
     CS%id_T = register_diag_field('ocean_model', 'temp', diag%axesTL, Time, &
         'Potential Temperature', 'Celsius')
     CS%id_S = register_diag_field('ocean_model', 'salt', diag%axesTL, Time, &
-        'Salinity', 'PSU')
-    CS%id_sst = register_diag_field('ocean_model', 'SST', diag%axesT1, Time, &
-        'Sea Surface Temperature', 'Celsius', CS%missing)
-    CS%id_sst_global = register_scalar_field('ocean_model', 'SST_global', Time, diag, &
-        'Global Average Sea Surface Temperature', 'Celsius', CS%missing)
+        long_name='Salinity', units='PSU', cmor_field_name='so',            &
+        cmor_long_name='Sea Water Salinity', cmor_units='psu',              &
+        cmor_standard_name='sea_water_salinity')
+    CS%id_sst = register_diag_field('ocean_model', 'SST', diag%axesT1, Time,     &
+        'Sea Surface Temperature', 'Celsius', CS%missing, cmor_field_name='tos', &
+        cmor_long_name='Sea Surface Temperature', cmor_units='degC',             &
+        cmor_standard_name='sea_surface_temperature')
+    CS%id_sst_global = register_scalar_field('ocean_model', field_name='SST_global',   &
+        init_time=Time, diag=diag, long_name='Global Average Sea Surface Temperature', &
+        units='Celsius', missing_value=CS%missing, cmor_field_name='tosga',            &
+        cmor_units='degC', cmor_standard_name='sea_surface_temperature')
     CS%id_sst_sq = register_diag_field('ocean_model', 'SST_sq', diag%axesT1, Time, &
-        'Sea Surface Temperature Squared', 'Celsius**2', CS%missing)    
+        'Sea Surface Temperature Squared', 'Celsius**2', CS%missing, cmor_field_name='tossq', &
+        cmor_long_name='Square of Sea Surface Temperature ', cmor_units='degC^2', &
+        cmor_standard_name='square_of_sea_surface_temperature')    
     CS%id_sss = register_diag_field('ocean_model', 'SSS', diag%axesT1, Time, &
-        'Sea Surface Salinity', 'PSU', CS%missing)
+        'Sea Surface Salinity', 'PSU', CS%missing, cmor_field_name='sos', &
+        cmor_long_name='Sea Surface Salinity', cmor_units='psu',          &
+        cmor_standard_name='sea_surface_salinity')
     CS%id_sss_global = register_scalar_field('ocean_model', 'SSS_global', Time, diag, &
-        'Global Average Sea Surface Salinity', 'PSU', CS%missing)
+        'Global Average Sea Surface Salinity', 'PSU', CS%missing, cmor_field_name='sosga', &
+        cmor_long_name='Global Average Sea Surface Salinity', cmor_units='psu',  &
+        cmor_standard_name='global_average_sea_surface_salinity')
     if (CS%id_sst_sq > 0) call safe_alloc_ptr(CS%SST_sq,isd,ied,jsd,jed)    
   endif
   if (CS%use_temperature .and. CS%use_frazil) then
-    CS%id_fraz = register_diag_field('ocean_model', 'frazil', diag%axesT1, Time, &
-          'Heat sink from frazil formation', 'Watt meter-2')
+    CS%id_fraz = register_diag_field('ocean_model', 'frazil', diag%axesT1, Time,                           &
+          'Heat sink from frazil formation', 'Watt meter-2', cmor_field_name='hfsifrazil',                 &
+          cmor_units='W m-2', cmor_standard_name='heat_flux_into_sea_water_due_to_freezing_of_frazil_ice', &
+          cmor_long_name='Heat Flux into Sea Water due to Frazil Ice Formation"')
   endif
 
   CS%id_salt_deficit = register_diag_field('ocean_model', 'salt_deficit', diag%axesT1, Time, &
@@ -2151,7 +2157,7 @@ subroutine MOM_timing_init(CS)
  id_clock_pass_init = cpu_clock_id('(Ocean init message passing *)', grain=CLOCK_ROUTINE)
  if (CS%thickness_diffuse) &
    id_clock_thick_diff = cpu_clock_id('(Ocean thickness diffusion *)', grain=CLOCK_MODULE)
- if (CS%mixedlayer_restrat) &
+!if (CS%mixedlayer_restrat) &
    id_clock_ml_restrat = cpu_clock_id('(Ocean mixed layer restrat)', grain=CLOCK_MODULE)
  id_clock_diagnostics = cpu_clock_id('(Ocean collective diagnostics)', grain=CLOCK_MODULE)
  id_clock_Z_diag = cpu_clock_id('(Ocean Z-space diagnostics)', grain=CLOCK_MODULE)
@@ -2209,16 +2215,20 @@ subroutine write_static_fields(G, diag)
         'Longitude of zonal velocity (Cu) points', 'degrees_E')
   if (id > 0) call post_data(id, G%geoLonCu, diag, .true.)
 
-  id = register_static_field('ocean_model', 'area_t', diag%axesT1, &
-        'Surface area of tracer (T) cells', 'degrees_E')
+  id = register_static_field('ocean_model', 'area_t', diag%axesT1,   &
+        'Surface area of tracer (T) cells', 'm2',                    &
+        cmor_field_name='areacello', cmor_standard_name='cell_area', &
+        cmor_units='m2', cmor_long_name='Ocean Grid-Cell Area')
   if (id > 0) then
     do j=js,je ; do i=is,ie ; out_h(i,j) = G%areaT(i,j) ; enddo ; enddo
     call post_data(id, out_h, diag, .true.)
   endif
 
-  id = register_static_field('ocean_model', 'depth_ocean', diag%axesT1, &
-        'Depth of the ocean at tracer points', 'm', &
-        standard_name='sea_floor_depth_below_geoid')
+  id = register_static_field('ocean_model', 'depth_ocean', diag%axesT1,  &
+        'Depth of the ocean at tracer points', 'm',                      &
+        standard_name='sea_floor_depth_below_geoid',                     &
+        cmor_field_name='deptho', cmor_long_name='Sea Floor Depth',      &
+        cmor_units='m', cmor_standard_name='sea_floor_depth_below_geoid')
   if (id > 0) call post_data(id, G%bathyT, diag, .true.)
 
   id = register_static_field('ocean_model', 'wet', diag%axesT1, &
@@ -2577,6 +2587,7 @@ subroutine smooth_SSH(ssh, G, smooth_passes)
   real :: wt
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed, isl, iel, jsl, jel, halo
   integer :: pass, tot_pass
+  type(group_pass_type), save :: pass_ssh
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -2595,9 +2606,11 @@ subroutine smooth_SSH(ssh, G, smooth_passes)
     area_y(i,J) = min(G%dx_Cv(i,J)*G%dyCv(i,J), G%areaT(i,j), G%areaT(i,j+1))
   enddo ; enddo
 
+  call create_group_pass(pass_ssh, ssh, G%domain)
+
   do pass=1,tot_pass
     if (halo < 0) then
-      call pass_var(ssh, G%domain)
+      call do_group_pass(pass_ssh, G%domain)
       halo = min(is-isd-1, ied-ie-1, js-jsd-1, jed-je-1, tot_pass-pass)
     endif
     isl = is-halo ; iel = ie+halo ; jsl = js-halo ; jel = je+halo

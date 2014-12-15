@@ -1,1 +1,0 @@
-.datasets/GOLD_SIS_025/siena/mosaic.unpacked/grid_spec.nc

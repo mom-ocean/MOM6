@@ -127,6 +127,10 @@ use seamount_initialization, only : seamount_initialize_temperature_salinity
 use Phillips_initialization, only : Phillips_initialize_thickness
 use Phillips_initialization, only : Phillips_initialize_velocity
 use Phillips_initialization, only : Phillips_initialize_sponges
+use Rossby_front_2d_initialization, only : Rossby_front_initialize_thickness
+use Rossby_front_2d_initialization, only : Rossby_front_initialize_temperature_salinity
+use Rossby_front_2d_initialization, only : Rossby_front_initialize_velocity
+use SCM_idealized_hurricane, only : SCM_idealized_hurricane_TS_init
 
 use midas_vertmap, only : find_interfaces, tracer_Z_init, meshgrid
 use midas_vertmap, only : determine_temperature
@@ -404,6 +408,7 @@ subroutine MOM_initialize(u, v, h, tv, Time, G, PF, dirs, &
                " \t adjustment2d - TBD AJA. \n"//&
                " \t sloshing - TBD AJA. \n"//&
                " \t seamount - TBD AJA. \n"//&
+               " \t rossby_front - a mixed layer front in thermal wind balance.\n"//&
                " \t USER - call a user modified routine.", &
                fail_if_missing=.true.)
       select case (trim(config))
@@ -422,6 +427,7 @@ subroutine MOM_initialize(u, v, h, tv, Time, G, PF, dirs, &
          case ("sloshing"); call sloshing_initialize_thickness(h, G, PF)
          case ("seamount"); call seamount_initialize_thickness(h, G, PF)
          case ("phillips"); call Phillips_initialize_thickness(h, G, PF)
+         case ("rossby_front"); call Rossby_front_initialize_thickness(h, G, PF)
          case ("USER"); call user_initialize_thickness(h, G, PF, tv%T)
          case default ; call MOM_error(FATAL,  "MOM_initialize: "//&
               "Unrecognized layer thickness configuration "//trim(config))
@@ -445,6 +451,8 @@ subroutine MOM_initialize(u, v, h, tv, Time, G, PF, dirs, &
                " \t adjustment2d - TBD AJA. \n"//&
                " \t sloshing - TBD AJA. \n"//&
                " \t seamount - TBD AJA. \n"//&
+               " \t rossby_front - a mixed layer front in thermal wind balance.\n"//&
+               " \t SCM_ideal_hurr - used in the SCM idealized hurricane test.\n"//&
                " \t USER - call a user modified routine.", &
                fail_if_missing=.true.)
         select case (trim(config))
@@ -455,13 +463,17 @@ subroutine MOM_initialize(u, v, h, tv, Time, G, PF, dirs, &
           case ("TS_profile") ; call initialize_temp_salt_from_profile(tv%T, tv%S, G, PF)
           case ("linear"); call initialize_temp_salt_linear(tv%T, tv%S, G, PF)
           case ("DOME2D"); call DOME2d_initialize_temperature_salinity ( tv%T, &
-                                tv%S, h, G, PF, eos )
+                                tv%S, h, G, PF, eos)
           case ("adjustment2d"); call adjustment_initialize_temperature_salinity ( tv%T, &
-                                      tv%S, h, G, PF, eos )
+                                      tv%S, h, G, PF, eos)
           case ("sloshing"); call sloshing_initialize_temperature_salinity(tv%T, &
-                                  tv%S, h, G, PF, eos )
+                                  tv%S, h, G, PF, eos)
           case ("seamount"); call seamount_initialize_temperature_salinity(tv%T, &
-                                  tv%S, h, G, PF, eos )
+                                  tv%S, h, G, PF, eos)
+          case ("rossby_front"); call Rossby_front_initialize_temperature_salinity ( tv%T, &
+                                tv%S, h, G, PF, eos)
+          case ("SCM_ideal_hurr"); call SCM_idealized_hurricane_TS_init ( tv%T, &
+                                tv%S, h, G, PF)
           case ("USER"); call user_init_temperature_salinity(tv%T, tv%S, G, PF, eos)
           case default ; call MOM_error(FATAL,  "MOM_initialize: "//&
                  "Unrecognized Temp & salt configuration "//trim(config))
@@ -470,9 +482,9 @@ subroutine MOM_initialize(u, v, h, tv, Time, G, PF, dirs, &
     endif  ! not from_Z_file.
 
     if (debug) then
-      call hchksum(h, "MOM_initialize: h ", G)
-      if ( use_temperature ) call hchksum(tv%T, "MOM_initialize: T ", G)
-      if ( use_temperature ) call hchksum(tv%S, "MOM_initialize: S ", G)
+      call hchksum(h, "MOM_initialize: h ", G, haloshift=1)
+      if ( use_temperature ) call hchksum(tv%T, "MOM_initialize: T ", G, haloshift=1)
+      if ( use_temperature ) call hchksum(tv%S, "MOM_initialize: S ", G, haloshift=1)
     endif
 
 !   Initialize velocity components, u and v
@@ -483,7 +495,8 @@ subroutine MOM_initialize(u, v, h, tv, Time, G, PF, dirs, &
          " \t\t by (VELOCITY_FILE). \n"//&
          " \t zero - the fluid is initially at rest. \n"//&
          " \t uniform - the flow is uniform (determined by\n"//&
-         " \t\t paremters TORUS_U and TORUS_V).\n"//&
+         " \t\t parameters TORUS_U and TORUS_V).\n"//&
+         " \t rossby_front - a mixed layer front in thermal wind balance.\n"//&
          " \t USER - call a user modified routine.", default="zero")
     select case (trim(config))
        case ("file"); call initialize_velocity_from_file(u, v, G, PF)
@@ -491,16 +504,15 @@ subroutine MOM_initialize(u, v, h, tv, Time, G, PF, dirs, &
        case ("uniform"); call initialize_velocity_uniform(u, v, G, PF)
        case ("circular"); call initialize_velocity_circular(u, v, G, PF)
        case ("phillips"); call Phillips_initialize_velocity(u, v, G, PF)
+       case ("rossby_front"); call Rossby_front_initialize_velocity(u, v, h, G, PF)
        case ("USER"); call user_initialize_velocity(u, v, G, PF)
        case default ; call MOM_error(FATAL,  "MOM_initialize: "//&
             "Unrecognized velocity configuration "//trim(config))
     end select
 
     call pass_vector(u, v, G%Domain)
-    if (debug) call uchksum(u, "MOM_initialize: u ", G)
-    if (debug) call vchksum(v, "MOM_initialize: v ", G)
-
-
+    if (debug) call uchksum(u, "MOM_initialize: u ", G, haloshift=1)
+    if (debug) call vchksum(v, "MOM_initialize: v ", G, haloshift=1)
 
 
 !   Optionally convert the thicknesses from m to kg m-2.  This is particularly

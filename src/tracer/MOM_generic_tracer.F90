@@ -342,7 +342,7 @@ contains
           if (CS%Z_IC_file) then
             OK = tracer_Z_init(tr_ptr, h, CS%IC_file, g_tracer_name, G)
             if (.not.OK) then
-              OK = tracer_Z_init(tr_ptr, h, CS%IC_file, trim(g_tracer_name)//"_z", G)
+              OK = tracer_Z_init(tr_ptr, h, CS%IC_file, trim(g_tracer_name), G)
               if (.not.OK) call MOM_error(FATAL,"initialize_MOM_Generic_tracer: "//&
                       "Unable to read "//trim(g_tracer_name)//" from "//&
                       trim(CS%IC_file)//".")
@@ -404,7 +404,7 @@ contains
        call g_tracer_get_values(g_tracer,g_tracer_name,'longname', longname)
        call g_tracer_get_values(g_tracer,g_tracer_name,'units',units )
 
-       call register_Z_tracer(tr_ptr, trim(g_tracer_name)//"_z",longname , units, &
+       call register_Z_tracer(tr_ptr, trim(g_tracer_name),longname , units, &
             day, G, diag_to_Z_CSp)
 
        !traverse the linked list till hit NULL
@@ -421,7 +421,7 @@ contains
        g_diag=>CS%g_diag_list
        do
           if(g_diag%Z_diag .ne. 0) &
-               call register_Z_tracer(g_diag%field_ptr, trim(g_diag%name)//"_z",g_diag%longname , g_diag%units, &
+               call register_Z_tracer(g_diag%field_ptr, trim(g_diag%name),g_diag%longname , g_diag%units, &
                day, G, diag_to_Z_CSp)
 
           !traverse the linked list till hit NULL
@@ -522,7 +522,7 @@ contains
           call g_tracer_get_pointer(g_tracer,g_tracer_name,'trunoff',trunoff_array)
           call g_tracer_get_pointer(g_tracer,g_tracer_name,'runoff_tracer_flux',runoff_tracer_flux_array)
           !nnz: Why is fluxes%river = 0?
-          runoff_tracer_flux_array = trunoff_array * fluxes%liq_runoff
+          runoff_tracer_flux_array = trunoff_array * fluxes%lrunoff
           stf_array = stf_array + runoff_tracer_flux_array
        endif
 

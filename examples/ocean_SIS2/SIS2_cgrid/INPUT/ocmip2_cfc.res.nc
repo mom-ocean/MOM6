@@ -1,1 +1,0 @@
-.datasets/GOLD_SIS/riga/INPUT/ocmip2_cfc.res.nc

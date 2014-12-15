@@ -3396,20 +3396,20 @@ subroutine legacy_bt_mass_source(h, eta, fluxes, set_cor, dt_therm, &
       do i=is,ie ; CS%eta_source(i,j) = 0.0 ; enddo
       if (CS%eta_source_limit > 0.0) then
         limit_dt = CS%eta_source_limit/dt_therm
-        if (associated(fluxes%liq_precip)) then ; do i=is,ie
-          CS%eta_source(i,j) = CS%eta_source(i,j) + fluxes%liq_precip(i,j)
+        if (associated(fluxes%lprec)) then ; do i=is,ie
+          CS%eta_source(i,j) = CS%eta_source(i,j) + fluxes%lprec(i,j)
         enddo ; endif
-        if (associated(fluxes%froz_precip)) then ; do i=is,ie
-          CS%eta_source(i,j) = CS%eta_source(i,j) + fluxes%froz_precip(i,j)
+        if (associated(fluxes%fprec)) then ; do i=is,ie
+          CS%eta_source(i,j) = CS%eta_source(i,j) + fluxes%fprec(i,j)
         enddo ; endif
-        if (associated(fluxes%virt_precip)) then ; do i=is,ie
-          CS%eta_source(i,j) = CS%eta_source(i,j) + fluxes%virt_precip(i,j)
+        if (associated(fluxes%vprec)) then ; do i=is,ie
+          CS%eta_source(i,j) = CS%eta_source(i,j) + fluxes%vprec(i,j)
         enddo ; endif
-        if (associated(fluxes%liq_runoff)) then ; do i=is,ie
-          CS%eta_source(i,j) = CS%eta_source(i,j) + fluxes%liq_runoff(i,j)
+        if (associated(fluxes%lrunoff)) then ; do i=is,ie
+          CS%eta_source(i,j) = CS%eta_source(i,j) + fluxes%lrunoff(i,j)
         enddo ; endif
-        if (associated(fluxes%froz_runoff)) then ; do i=is,ie
-          CS%eta_source(i,j) = CS%eta_source(i,j) + fluxes%froz_runoff(i,j)
+        if (associated(fluxes%frunoff)) then ; do i=is,ie
+          CS%eta_source(i,j) = CS%eta_source(i,j) + fluxes%frunoff(i,j)
         enddo ; endif
         if (associated(fluxes%evap)) then ; do i=is,ie
           CS%eta_source(i,j) = CS%eta_source(i,j) + fluxes%evap(i,j)

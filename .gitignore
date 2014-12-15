@@ -1,12 +1,3 @@
-.gitignore
-*.nc.*
-*.nc
-*.out
-CPU_stats
-exitcode
-available_diags*
-SIS.available_diags*
-RESTART
-_read_error.nml
-fort.*
-*.pyc
+# Ignore vim and emacs files
+*.swp
+*~

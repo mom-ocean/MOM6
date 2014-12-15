@@ -1,1 +1,0 @@
-.datasets/CM2G63L/siena/INPUT/zonal_ozone_data.nc

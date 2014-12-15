@@ -267,6 +267,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
   real :: Kh_scale  ! A factor between 0 and 1 by which the horizontal
                     ! Laplacian viscosity is rescaled.
   logical :: rescale_Kh, find_FrictWork, apply_OBC = .false.
+  logical :: use_MEKE_Ku
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   integer :: i, j, k
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -296,10 +297,13 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
         "VarMix%Res_fn_q both need to be associated with Resoln_scaled_Kh.")
   endif
 
+  ! Toggle whether to use a Laplacian viscosity derived from MEKE
+  use_MEKE_Ku = associated(MEKE%Ku)
+
 !$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,CS,G,u,v,is,js,h,h_neglect, &
 !$OMP                                  rescale_Kh,VarMix,Kh_h,Ah_h,h_neglect3,Kh_q,   &
 !$OMP                                  Ah_q,ie,je,diffu,apply_OBC,OBC,diffv,          &
-!$OMP                                  find_FrictWork,FrictWork)                      &
+!$OMP                                  find_FrictWork,FrictWork,use_MEKE_Ku,MEKE)     &
 !$OMP                          private(u0, v0, sh_xx, str_xx, visc_bound_rem,         &
 !$OMP                                  sh_xy, str_xy, Ah, Kh, AhSm, KhSm,             &
 !$OMP                                  Shear_mag, huq, hvq, hq, Kh_scale, hrat_min)
@@ -323,7 +327,6 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
                                     G%IdyCu(I-1,j) * u(I-1,j,k)) - &
                     CS%DX_dyT(i,j)*(G%IdxCv(i,J) * v(i,J,k) - &
                                     G%IdxCv(i,J-1)*v(i,J-1,k)))
-
     enddo ; enddo
 
     if (CS%no_slip) then
@@ -377,11 +380,15 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
         else
           Kh = Kh_scale * CS%Kh_bg_xx(i,j)
         endif
+        if (use_MEKE_Ku) then
+          Kh = Kh + MEKE%Ku(i,j)
+        endif
         if (CS%better_bound_Kh) then
           if (Kh >= hrat_min*CS%Kh_Max_xx(i,j)) then
             visc_bound_rem = 0.0
             Kh = hrat_min*CS%Kh_Max_xx(i,j)
           else
+           !visc_bound_rem = 1.0 - abs(Kh) / (hrat_min*CS%Kh_Max_xx(i,j))
             visc_bound_rem = 1.0 - Kh / (hrat_min*CS%Kh_Max_xx(i,j))
           endif
         endif
@@ -455,11 +462,16 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
         else
           Kh = Kh_scale * CS%Kh_bg_xy(I,J)
         endif
+        if (use_MEKE_Ku) then
+          Kh = Kh + 0.25*( (MEKE%Ku(I,J)+MEKE%Ku(I+1,J+1))    &
+                          +(MEKE%Ku(I+1,J)+MEKE%Ku(I,J+1)) )
+        endif
         if (CS%better_bound_Kh) then
           if (Kh >= hrat_min*CS%Kh_Max_xy(I,J)) then
             visc_bound_rem = 0.0
             Kh = hrat_min*CS%Kh_Max_xy(I,J)
           else
+           !visc_bound_rem = 1.0 - abs(Kh) / (hrat_min*CS%Kh_Max_xy(I,J))
             visc_bound_rem = 1.0 - Kh / (hrat_min*CS%Kh_Max_xy(I,J))
           endif
         endif
@@ -1028,16 +1040,20 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
       'Meridional Acceleration from Horizontal Viscosity', 'meter second-2')
 
   CS%id_Ah_h = register_diag_field('ocean_model', 'Ahh', diag%axesTL, Time, &
-      'Biharmonic Horizontal Viscosity at h Points', 'meter4 second-1')
+      'Biharmonic Horizontal Viscosity at h Points', 'meter4 second-1',     &
+      available=CS%biharmonic)
 
   CS%id_Ah_q = register_diag_field('ocean_model', 'Ahq', diag%axesBL, Time, &
-      'Biharmonic Horizontal Viscosity at q Points', 'meter4 second-1')
+      'Biharmonic Horizontal Viscosity at q Points', 'meter4 second-1',     &
+      available=CS%biharmonic)
 
   CS%id_Kh_h = register_diag_field('ocean_model', 'Khh', diag%axesTL, Time, &
-      'Laplacian Horizontal Viscosity at h Points', 'meter2 second-1')
+      'Laplacian Horizontal Viscosity at h Points', 'meter2 second-1',      &
+      available=CS%Laplacian)
 
   CS%id_Kh_q = register_diag_field('ocean_model', 'Khq', diag%axesBL, Time, &
-      'Laplacian Horizontal Viscosity at q Points', 'meter2 second-1')
+      'Laplacian Horizontal Viscosity at q Points', 'meter2 second-1',      &
+      available=CS%Laplacian)
 
   CS%id_FrictWork =register_diag_field('ocean_model','FrictWork',diag%axesTL,Time,&
       'Integral work done by lateral friction terms', 'Watt meter-2')

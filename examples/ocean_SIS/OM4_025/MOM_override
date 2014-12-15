@@ -1,3 +1,0 @@
-! Blank file in which we can put "overrides" for parameters
-#override IO_LAYOUT = 2, 2
-!VERBOSITY = 9

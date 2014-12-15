@@ -1,1 +1,0 @@
-.datasets/MOM6z_SIS_025/siena/INPUT/seawifs_1998-2006_smoothed_2x_v2.nc

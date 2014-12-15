@@ -13,13 +13,9 @@ use MOM_error_handler, only : MOM_error, FATAL
 use MOM_string_functions, only : uppercase
 use MOM_variables,     only : ocean_grid_type, thermo_var_ptrs
 use polynomial_functions, only : evaluation_polynomial, integration_polynomial
-use regrid_edge_values, only : edgeValueArrays
 use regrid_edge_values, only : edge_values_explicit_h4, edge_values_implicit_h4
 use regrid_edge_values, only : edge_values_implicit_h4, edge_values_implicit_h6
-use regrid_edge_values, only : triDiagEdgeWorkAllocate, triDiagEdgeWorkDeallocate
-use regrid_edge_slopes, only : edgeSlopeArrays
 use regrid_edge_slopes, only : edge_slopes_implicit_h3, edge_slopes_implicit_h5
-use regrid_edge_slopes, only : triDiagSlopeWorkAllocate, triDiagSlopeWorkDeallocate
 use PCM_functions, only : PCM_reconstruction
 use PLM_functions, only : PLM_reconstruction, PLM_boundary_extrapolation
 use PPM_functions, only : PPM_reconstruction, PPM_boundary_extrapolation
@@ -34,9 +30,6 @@ implicit none ; private
 ! -----------------------------------------------------------------------------
 type, public :: remapping_CS
   private
-  ! Work arrays
-  type(edgeValueArrays)           :: edgeValueWrk ! Work space for edge values
-  type(edgeSlopeArrays)           :: edgeSlopeWrk ! Work space for edge slopes
   ! Parameters
   integer :: nk = 0                    ! Number of layers/levels in vertical
   integer :: remapping_scheme = -911   ! Determines which reconstruction to use
@@ -107,7 +100,7 @@ subroutine remapping_main( CS, G, h, dxInterface, tv, u, v )
 !------------------------------------------------------------------------------
   
   ! Arguments
-  type(remapping_CS),                               intent(inout) :: CS
+  type(remapping_CS),                               intent(in)    :: CS
   type(ocean_grid_type),                            intent(in)    :: G
   real, dimension(NIMEM_,NJMEM_,NKMEM_),            intent(in)    :: h
   real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_),     intent(in)    :: dxInterface
@@ -373,7 +366,7 @@ subroutine remapping_core( CS, n0, h0, u0, n1, dx, u1 )
 !------------------------------------------------------------------------------
 
   ! Arguments
-  type(remapping_CS), intent(inout) :: CS
+  type(remapping_CS), intent(in)    :: CS
   integer,            intent(in)    :: n0 ! Number of cells on source grid
   real, dimension(:), intent(in)    :: h0 ! cell widths on source grid
   real, dimension(:), intent(in)    :: u0 ! cell averages on source grid
@@ -460,23 +453,23 @@ subroutine remapping_core( CS, n0, h0, u0, n1, dx, u1 )
       end if
       iMethod = INTEGRATION_PPM
     case ( REMAPPING_PPM_IH4 )
-      call edge_values_implicit_h4( n0, h0, u0, CS%edgeValueWrk, ppoly_r_E )
+      call edge_values_implicit_h4( n0, h0, u0, ppoly_r_E )
       call PPM_reconstruction( n0, h0, u0, ppoly_r_E, ppoly_r_coefficients )
       if ( CS%boundary_extrapolation) then
         call PPM_boundary_extrapolation( n0, h0, u0, ppoly_r_E, ppoly_r_coefficients )
       end if    
       iMethod = INTEGRATION_PPM
     case ( REMAPPING_PQM_IH4IH3 )
-      call edge_values_implicit_h4( n0, h0, u0, CS%edgeValueWrk, ppoly_r_E )
-      call edge_slopes_implicit_h3( n0, h0, u0, CS%edgeSlopeWrk, ppoly_r_S )
+      call edge_values_implicit_h4( n0, h0, u0, ppoly_r_E )
+      call edge_slopes_implicit_h3( n0, h0, u0, ppoly_r_S )
       call PQM_reconstruction( n0, h0, u0, ppoly_r_E, ppoly_r_S, ppoly_r_coefficients )
       if ( CS%boundary_extrapolation) then
         call PQM_boundary_extrapolation_v1( n0, h0, u0, ppoly_r_E, ppoly_r_S, ppoly_r_coefficients )
       end if    
       iMethod = INTEGRATION_PQM
     case ( REMAPPING_PQM_IH6IH5 )
-      call edge_values_implicit_h6( n0, h0, u0, CS%edgeValueWrk, ppoly_r_E )
-      call edge_slopes_implicit_h5( n0, h0, u0, CS%edgeSlopeWrk, ppoly_r_S )
+      call edge_values_implicit_h6( n0, h0, u0, ppoly_r_E )
+      call edge_slopes_implicit_h5( n0, h0, u0, ppoly_r_S )
       call PQM_reconstruction( n0, h0, u0, ppoly_r_E, ppoly_r_S, ppoly_r_coefficients )
       if ( CS%boundary_extrapolation) then
         call PQM_boundary_extrapolation_v1( n0, h0, u0, ppoly_r_E, ppoly_r_S, ppoly_r_coefficients )
@@ -539,7 +532,7 @@ subroutine remapping_core( CS, n0, h0, u0, n1, dx, u1 )
     if (k<=n0) then; hTmp = h0(k); else; hTmp = 0.; endif
     z0 = z0 + hTmp ; z1 = z1 + ( hTmp + ( dx(k+1) - dx(k) ) )
   enddo
-  if (abs(totalHU2-totalHU0) > (err0+err2)*real(n1)) then
+  if (abs(totalHU2-totalHU0) > (err0+err2)*real(n1) .and. (err0+err2)/=0.) then
     write(0,*) 'h0=',h0
     write(0,*) 'hf=',h0+dx(2:n1+1)-dx(1:n1)
     write(0,*) 'u0=',u0
@@ -1115,13 +1108,6 @@ subroutine setReconstructionType(string,CS)
        "Unrecognized choice for REMAPPING_SCHEME ("//trim(string)//").")
   end select
 
-  if (CS%degree > 0 .and. degree/=CS%degree) then
-    ! If the degree has changed then deallocate to force a re-allocation
-    call end_remapping(CS)
-  endif
-  if ( CS%degree == 0 ) then
-    call allocate_remapping( CS )
-  endif
   CS%degree = degree
   
 
@@ -1146,28 +1132,12 @@ subroutine remapDisableBoundaryExtrapolation(CS)
 end subroutine remapDisableBoundaryExtrapolation
 
 !------------------------------------------------------------------------------
-! Memory allocation for remapping
-!------------------------------------------------------------------------------
-subroutine allocate_remapping( CS )
-  ! Arguments
-  type(remapping_CS), intent(inout) :: CS
-
-  call triDiagEdgeWorkAllocate( CS%nk, CS%edgeValueWrk )
-  call triDiagSlopeWorkAllocate( CS%nk, CS%edgeSlopeWrk )
-
-end subroutine allocate_remapping
-
-
-!------------------------------------------------------------------------------
 ! Memory deallocation for remapping
 !------------------------------------------------------------------------------
 subroutine end_remapping(CS)
   ! Arguments
   type(remapping_CS), intent(inout) :: CS
 
-  ! Deallocate memory for grid
-  call triDiagEdgeWorkDeallocate( CS%edgeValueWrk )
-  call triDiagSlopeWorkDeallocate( CS%edgeSlopeWrk )
   CS%degree = 0
 
 end subroutine end_remapping
