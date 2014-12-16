@@ -4037,7 +4037,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
     deallocate( deltaE )
 
     do k=1,nz
-      call myStats(tv%T(is:ie,js:je,k),missing_value,k,'Temp from ALE()')
+      call myStats(tv%T(:,:,k),missing_value,k,'Temp from ALE()')
     enddo
     call cpu_clock_end(id_clock_ALE)
   else ! remap to isopycnal layer space
