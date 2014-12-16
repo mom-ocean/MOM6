@@ -564,8 +564,8 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
       drdkL = G%Rlay(k)-G%Rlay(k-1) ; drdkR = G%Rlay(k)-G%Rlay(k-1)
     endif
 
-    calc_derivatives = use_EOS .and. ((k > nk_linear) .or. find_work) &
-                       .and. .not. present_slope_x
+    calc_derivatives = use_EOS .and. (k >= nk_linear) .and. &
+                (find_work .or. .not. present_slope_x)
 
     ! Calculate the zonal fluxes and gradients.
     if (calc_derivatives) then
@@ -759,8 +759,8 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
       drdkL = G%Rlay(k)-G%Rlay(k-1) ; drdkR = G%Rlay(k)-G%Rlay(k-1)
     endif
 
-    calc_derivatives = use_EOS .and. ((k > nk_linear) .or. find_work) &
-                       .and. .not. present_slope_y
+    calc_derivatives = use_EOS .and. (k >= nk_linear) .and. &
+                (find_work .or. .not. present_slope_x)
 
     if (calc_derivatives) then
       do i=is,ie
