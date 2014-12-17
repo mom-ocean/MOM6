@@ -188,8 +188,12 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, CS)
         Ue = sqrt( 2.0 * max( 0., MEKE%MEKE(i,j) ) )     ! Eddy flow scale
         beta = sqrt( G%dF_dx(i,j)**2 + G%dF_dy(i,j)**2 )
         Lrhines = sqrt( Ue / max( beta, 1.e-30 ) )       ! Rhines scale
-        SN = 0.25*( (SN_u(I,j) + SN_u(I-1,j)) + (SN_v(i,J) + SN_v(i,J-1)) )
-        Leady = Ue / max( SN, 1.e-15 ) ! Bound Eady time-scale < 1e15 seconds
+        if (CS%aEady > 0.) then
+          SN = 0.25*( (SN_u(I,j) + SN_u(I-1,j)) + (SN_v(i,J) + SN_v(i,J-1)) )
+          Leady = Ue / max( SN, 1.e-15 ) ! Bound Eady time-scale < 1e15 seconds
+        else
+          Leady = 0.
+        endif
         LmixScale(i,j) = 0.
         if (CS%aDeform*Ldeform > 0.) LmixScale(i,j) = LmixScale(i,j) + 1./(CS%aDeform*Ldeform)
         if (CS%aFrict*Lfrict > 0.)   LmixScale(i,j) = LmixScale(i,j) + 1./(CS%aFrict*Lfrict)
@@ -521,7 +525,7 @@ logical function MEKE_init(Time, G, param_file, diag, CS, MEKE)
   type(MEKE_type),         pointer       :: MEKE       !< MEKE-related fields.
 ! Local variables
   integer :: is, ie, js, je, isd, ied, jsd, jed, nz
-  logical :: laplacian
+  logical :: laplacian, useVarMix
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mod = "MOM_MEKE" ! This module's name.
@@ -661,6 +665,9 @@ logical function MEKE_init(Time, G, param_file, diag, CS, MEKE)
   if (CS%viscosity_coeff/=0. .and. .not. laplacian) call MOM_error(FATAL, &
                  "LAPLACIAN must be true if MEKE_VISCOSITY_COEFF is true.")
 
+  call get_param(param_file, mod, "USE_VARIABLE_MIXING", useVarMix, default=.false., do_not_log=.true.)
+  if (.not. useVarMix .and. CS%aEady>0.) call MOM_error(FATAL, &
+                 "USE_VARIABLE_MIXING must be true if USE_MEKE is true and MEKE_ALPHA_EADY>0.")
   call get_param(param_file, mod, "DEBUG", CS%debug, default=.false., do_not_log=.true.)
 
   ! Allocation of storage NOT shared with other modules
