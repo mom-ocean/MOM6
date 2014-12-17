@@ -178,6 +178,15 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, CS)
       Lgrid = sqrt(G%areaT(i,j))                       ! Grid scale
       Ldeform = Lgrid * MEKE%Rd_dx_h(i,j)              ! Deformation scale
       Lfrict = G%bathyT(i,j) / CS%cdrag                ! Frictional arrest scale
+      ! gamma_b^2 is the ratio of bottom eddy energy to mean column eddy energy
+      ! used in calculating bottom drag
+      bottomFac2(i,j) = CS%MEKE_CD_SCALE**2
+      if (Lfrict>0.) bottomFac2(i,j) = bottomFac2(i,j) + &
+                        1./( 1. + CS%MEKE_Cb*(Ldeform/Lfrict) )**0.8
+      ! gamma_t^2 is the ratio of barotropic eddy energy to mean column eddy energy
+      ! used in the velocity scale for diffusivity
+      barotrFac2(i,j) = 1.
+      if (Lfrict>0.) barotrFac2(i,j) = 1./( 1. + CS%MEKE_Ct*(Ldeform/Lfrict) )**0.25
       if (CS%use_old_lscale) then
         if (CS%Rd_as_max_scale) then
           LmixScale(i,j) = Lgrid * min(MEKE%Rd_dx_h(i,j), 1.0) ! The smaller of Ld or dx
@@ -185,7 +194,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, CS)
           LmixScale(i,j) = Lgrid
         endif
       else
-        Ue = sqrt( 2.0 * max( 0., MEKE%MEKE(i,j) ) )     ! Eddy flow scale
+        Ue = sqrt( 2.0 * max( 0., barotrFac2(i,j)*MEKE%MEKE(i,j) ) ) ! Barotropic eddy flow scale
         beta = sqrt( G%dF_dx(i,j)**2 + G%dF_dy(i,j)**2 )
         Lrhines = sqrt( Ue / max( beta, 1.e-30 ) )       ! Rhines scale
         if (CS%aEady > 0.) then
@@ -203,15 +212,6 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, CS)
         if (CS%Lfixed > 0.)          LmixScale(i,j) = LmixScale(i,j) + 1./CS%Lfixed
         if (LmixScale(i,j) > 0.) LmixScale(i,j) = 1. / LmixScale(i,j)
       endif
-      ! gamma_b^2 is the ratio of bottom eddy energy to mean column eddy energy
-      ! used in calculating bottom drag
-      bottomFac2(i,j) = CS%MEKE_CD_SCALE**2
-      if (Lfrict>0.) bottomFac2(i,j) = bottomFac2(i,j) + &
-                        1./( 1. + CS%MEKE_Cb*(Ldeform/Lfrict) )**0.8
-      ! gamma_t^2 is the ratio of barotropic eddy energy to mean column eddy energy
-      ! used in the velocity scale for diffusivity
-      barotrFac2(i,j) = 1.
-      if (Lfrict>0.) barotrFac2(i,j) = 1./( 1. + CS%MEKE_Ct*(Ldeform/Lfrict) )**0.25
     enddo ; enddo 
 
 !$OMP do
@@ -466,13 +466,13 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, CS)
         else
 !$OMP parallel do default(none) shared(is,ie,js,je,MEKE,CS,G)
           do j=js-1,je+1 ; do i=is-1,ie+1
-            MEKE%Kh(i,j) = CS%MEKE_KhCoeff*sqrt(2.*max(0.,MEKE%MEKE(i,j))*G%areaT(i,j))
+            MEKE%Kh(i,j) = CS%MEKE_KhCoeff*sqrt(2.*max(0.,barotrFac2(i,j)*MEKE%MEKE(i,j))*G%areaT(i,j))
           enddo ; enddo
         endif
       else
 !$OMP parallel do default(none) shared(is,ie,js,je,MEKE,LmixScale,CS,G)
         do j=js-1,je+1 ; do i=is-1,ie+1
-          MEKE%Kh(i,j) = (CS%MEKE_KhCoeff*sqrt(2.*max(0.,MEKE%MEKE(i,j)))*LmixScale(i,j))
+          MEKE%Kh(i,j) = (CS%MEKE_KhCoeff*sqrt(2.*max(0.,barotrFac2(i,j)*MEKE%MEKE(i,j)))*LmixScale(i,j))
         enddo ; enddo
       endif
       call cpu_clock_begin(CS%id_clock_pass)
