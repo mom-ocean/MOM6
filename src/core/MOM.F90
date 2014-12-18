@@ -1784,7 +1784,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call cpu_clock_end(id_clock_MOM_init)
   call callTree_waypoint("ALE initialized (initialize_MOM)")
 
-  CS%useMEKE = MEKE_init(Time, G, param_file, diag, CS%MEKE_CSp, CS%MEKE)
+  CS%useMEKE = MEKE_init(Time, G, param_file, diag, CS%MEKE_CSp, CS%MEKE, CS%restart_CSp)
   call VarMix_init(Time, G, param_file, diag, CS%VarMix)
 
   if (associated(init_CS%tracer_Reg)) &
