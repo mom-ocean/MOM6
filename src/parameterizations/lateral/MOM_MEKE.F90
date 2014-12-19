@@ -33,6 +33,7 @@ type, public :: MEKE_CS ; private
                         !! eddy velocity, i.e. sqrt(2*MEKE). This should be less than 1
                         !! to account for the surface intensification of MEKE.
   real :: MEKE_Cb       !< Coefficient in the \f$\gamma_{bot}\f$ expression (non-dim)
+  real :: MEKE_min_gamma!< Minimum value of gamma_b^2 allowed (non-dim)
   real :: MEKE_Ct       !< Coefficient in the \f$\gamma_{bt}\f$ expression (non-dim)
   logical :: visc_drag  !< If true use the vertvisc_type to calculate bottom drag.
   logical :: Rd_as_max_scale !< If true the length scale can not exceed the
@@ -210,12 +211,23 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, CS)
       do i=is-1,ie+1
         I_mass(i,j) = 0.0
         if (mass(i,j) > 0.0) I_mass(i,j) = 1.0 / mass(i,j)
-        if (mass(i,j) < 0.0) mass(i,j) = 0.0  ! Should be unnecessary?
       enddo
     enddo
+!$OMP end parallel
+
+    if (CS%initialize) then
+      call MEKE_equilibrium(CS, MEKE, G, SN_u, SN_v, drag_rate_visc, I_mass)
+      CS%initialize = .false.
+    endif
 
     ! Calculates bottomFac2, barotrFac2 and LmixScale
     call MEKE_lengthScales(CS, MEKE, G, SN_u, SN_v, MEKE%MEKE, bottomFac2, barotrFac2, LmixScale)
+
+!$OMP parallel default(none) shared(MEKE,CS,is,ie,js,je,nz,src,mass,G,h,I_mass, &
+!$OMP                               sdt,drag_vel_u,visc,drag_vel_v,drag_rate_visc, &
+!$OMP                               drag_rate,Rho0,MEKE_decay,sdt_damp,cdrag2, &
+!$OMP                               bottomFac2) &
+!$OMP                       private(ldamping)
 
     ! Aggregate sources of MEKE (background, frictional and GM)
 !$OMP do
@@ -479,6 +491,122 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, CS)
 
 end subroutine step_forward_MEKE
 
+!> Calculates the equilibrium solutino where the source depends only on MEKE diffusivity
+!! and there is no lateral diffusion of MEKE.
+!! Results is in MEKE%MEKE.
+subroutine MEKE_equilibrium(CS, MEKE, G, SN_u, SN_v, drag_rate_visc, I_mass)
+  type(MEKE_CS),                   pointer       :: CS   !< MEKE control structure.
+  type(MEKE_type),                 pointer       :: MEKE !< MEKE data.
+  type(ocean_grid_type),           intent(inout) :: G    !< Ocean grid.
+  real, dimension(NIMEMB_,NJMEM_), intent(in)    :: SN_u !< Eady growth rate at u-points (s-1).
+  real, dimension(NIMEM_,NJMEMB_), intent(in)    :: SN_v !< Eady growth rate at u-points (s-1).
+  real, dimension(NIMEM_,NJMEM_),  intent(in)    :: drag_rate_visc  !< Mean flow contrib. to drag rate
+  real, dimension(NIMEM_,NJMEM_),  intent(in)    :: I_mass  !< Inverse of column mass.
+  ! Local variables
+  real :: beta, SN, bottomFac2, barotrFac2, LmixScale
+  real :: I_H, KhCoeff, Kh, Ubg2, cd2, drag_rate, ldamping, src
+  real :: EKE, EKEmin, EKEmax, resid, ResMin, ResMax, EKEerr
+  integer :: i, j, is, ie, js, je, n1, n2
+  real, parameter :: tolerance = 1.e-12 ! Width of EKE bracket in m^2 s^-2.
+  logical :: useSecant, debugIteration
+
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+
+  debugIteration = .false.
+  KhCoeff = CS%MEKE_KhCoeff
+  Ubg2 = CS%MEKE_Uscale**2
+  cd2 = CS%cdrag**2
+
+!$OMP do
+  do j=js,je ; do i=is,ie
+    SN = 0.25*max( (SN_u(I,j) + SN_u(I-1,j)) + (SN_v(i,J) + SN_v(i,J-1)), 0.)
+    beta = sqrt( G%dF_dx(i,j)**2 + G%dF_dy(i,j)**2 )
+    I_H = G%Rho0 * I_mass(i,j)
+
+    if (KhCoeff*SN*I_H>0.) then
+      ! Solve resid(E) = 0, where resid = Kh(E) * (SN)^2 - damp_rate(E) E
+      EKEmin = 0.   ! Use the trivial root as the left bracket
+      ResMin = 0.   ! Need to detect direction of left residual
+      EKEmax = 0.01 ! First guess at right bracket
+      useSecant = .false. ! Start using a bisection method
+
+      ! First find right bracket for which resid<0
+      resid = 1. ; n1 = 0
+      do while (resid>0.)
+        n1 = n1 + 1
+        EKE = EKEmax
+        call MEKE_lengthScales_0d(CS, G%areaT(i,j), beta, G%bathyT(i,j), &
+                                  MEKE%Rd_dx_h(i,j), SN, EKE,            &
+                                  bottomFac2, barotrFac2, LmixScale)
+        ! TODO: Should include resolution function in Kh
+        Kh = (KhCoeff * sqrt(2.*barotrFac2*EKE) * LmixScale)
+        src = Kh * (SN * SN)
+        drag_rate = I_H * sqrt( drag_rate_visc(i,j)**2 + cd2 * ( 2.0*bottomFac2*EKE + Ubg2 ) )
+        ldamping = CS%MEKE_damping + drag_rate * bottomFac2
+        resid = src - ldamping * EKE
+        if (debugIteration) then
+          write(0,*) n1, 'EKE=',EKE,'resid=',resid
+          write(0,*) 'EKEmin=',EKEmin,'ResMin=',ResMin
+          write(0,*) 'src=',src,'ldamping=',ldamping
+          write(0,*) 'gamma-b=',bottomFac2,'gamma-t=',barotrFac2
+          write(0,*) 'drag_visc=',drag_rate_visc(i,j),'Ubg2=',Ubg2
+        endif
+        if (resid>0.) then    ! EKE is to the left of the root
+          EKEmin = EKE        ! so we move the left bracket here
+          EKEmax = 10. * EKE  ! and guess again for the right bracket
+          if (resid<ResMin) useSecant = .true.
+          ResMin = resid
+          if (EKEmax > 2.e17) then
+            if (debugIteration) stop 'Something has gone very wrong'
+            debugIteration = .true.
+            resid = 1. ; n1 = 0
+            EKEmin = 0. ; ResMin = 0.
+            EKEmax = 0.01
+            useSecant = .false.
+          endif
+        endif
+      enddo ! while(resid>0.) searching for right bracket
+      ResMax = resid
+
+      ! Bisect the bracket
+      n2 = 0 ; EKEerr = EKEmax - EKEmin
+      do while (EKEerr>tolerance)
+        n2 = n2 + 1
+        if (useSecant) then
+          EKE = EKEmin + (EKEmax - EKEmin) * (ResMin / (ResMin - ResMax))
+        else
+          EKE = 0.5 * (EKEmin + EKEmax)
+        endif
+        EKEerr = min( EKE-EKEmin, EKEmax-EKE )
+        ! TODO: Should include resolution function in Kh
+        Kh = (KhCoeff * sqrt(2.*barotrFac2*EKE) * LmixScale)
+        src = Kh * (SN * SN)
+        drag_rate = I_H * sqrt( drag_rate_visc(i,j)**2 + cd2 * ( 2.0*bottomFac2*EKE + Ubg2 ) )
+        ldamping = CS%MEKE_damping + drag_rate * bottomFac2
+        resid = src - ldamping * EKE
+        if (useSecant.and.resid>ResMin) useSecant = .false.
+        if (resid>0.) then              ! EKE is to the left of the root
+          EKEmin = EKE                  ! so we move the left bracket here
+          if (resid<ResMin) useSecant = .true.
+          ResMin = resid                ! Save this for the secant method
+        elseif (resid<0.) then          ! EKE is to the right of the root
+          EKEmax = EKE                  ! so we move the right bracket here
+          ResMax = resid                ! Save this for the secant method
+        else
+          exit                          ! resid=0 => EKE is exactly at the root
+        endif
+        if (n2>200) stop 'Failing to converge?'
+      enddo ! while(EKEmax-EKEmin>tolerance)
+      
+    else
+      EKE = 0.
+    endif
+    MEKE%MEKE(i,j) = EKE
+  enddo ; enddo
+
+end subroutine MEKE_equilibrium
+
+
 !> Calculates the eddy mixing length scale and \f$\gamma_b\f$ and \f$\gamma_t\f$
 !! functions that are ratios of either bottom or barotropic eddy energy to the
 !! column eddy energy, respectively.  See \ref section_MEKE_equations.
@@ -494,7 +622,7 @@ subroutine MEKE_lengthScales(CS, MEKE, G, SN_u, SN_v, &
   real, dimension(NIMEM_,NJMEM_),        intent(out)   :: barotrFac2 !< gamma_t^2
   real, dimension(NIMEM_,NJMEM_),        intent(out)   :: LmixScale !< Eddy mixing length (m).
   ! Local variables
-  real :: Lgrid, Ldeform, LdeformLim, Lrhines, Ue, beta, Lfrict, Leady, SN
+  real :: beta, SN
   integer :: i, j, is, ie, js, je
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
@@ -509,6 +637,7 @@ subroutine MEKE_lengthScales(CS, MEKE, G, SN_u, SN_v, &
       endif
       beta = sqrt( G%dF_dx(i,j)**2 + G%dF_dy(i,j)**2 )
     endif
+    ! Returns bottomFac2, barotrFac2 and LmixScale
     call MEKE_lengthScales_0d(CS, G%areaT(i,j), beta, G%bathyT(i,j), &
                               MEKE%Rd_dx_h(i,j), SN, MEKE%MEKE(i,j), &
                               bottomFac2(i,j), barotrFac2(i,j), LmixScale(i,j))
@@ -542,10 +671,12 @@ subroutine MEKE_lengthScales_0d(CS, area, beta, depth, Rd_dx, SN,  &
   ! used in calculating bottom drag
   bottomFac2 = CS%MEKE_CD_SCALE**2
   if (Lfrict>0.) bottomFac2 = bottomFac2 + 1./( 1. + CS%MEKE_Cb*(Ldeform/Lfrict) )**0.8
+  bottomFac2 = max(bottomFac2, CS%MEKE_min_gamma)
   ! gamma_t^2 is the ratio of barotropic eddy energy to mean column eddy energy
   ! used in the velocity scale for diffusivity
   barotrFac2 = 1.
   if (Lfrict>0.) barotrFac2 = 1./( 1. + CS%MEKE_Ct*(Ldeform/Lfrict) )**0.25
+  barotrFac2 = max(barotrFac2, CS%MEKE_min_gamma)
   if (CS%use_old_lscale) then
     if (CS%Rd_as_max_scale) then
       LmixScale = min(Ldeform, Lgrid) ! The smaller of Ld or dx
@@ -584,7 +715,7 @@ logical function MEKE_init(Time, G, param_file, diag, CS, MEKE, restart_CS)
   type(MOM_restart_CS),    pointer       :: restart_CS !< Restart control structure for MOM_MEKE.
 ! Local variables
   integer :: is, ie, js, je, isd, ied, jsd, jed, nz
-  logical :: laplacian, useVarMix
+  logical :: laplacian, useVarMix, coldStart
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mod = "MOM_MEKE" ! This module's name.
@@ -627,6 +758,9 @@ logical function MEKE_init(Time, G, param_file, diag, CS, MEKE, restart_CS)
                  "A coefficient in the expression for the ratio of bottom projected\n"//&
                  "eddy energy and mean column energy (see Jansen et al. 2015).",&
                  units="nondim", default=25.)
+  call get_param(param_file, mod, "MEKE_MIN_GAMMA2", CS%MEKE_min_gamma, &
+                 "The minimum allowed value of gamma_b^2.",&
+                 units="nondim", default=0.0001)
   call get_param(param_file, mod, "MEKE_CT", CS%MEKE_Ct, &
                  "A coefficient in the expression for the ratio of barotropic\n"//&
                  "eddy energy and mean column energy (see Jansen et al. 2015).",&
@@ -679,7 +813,7 @@ logical function MEKE_init(Time, G, param_file, diag, CS, MEKE, restart_CS)
   call get_param(param_file, mod, "MEKE_OLD_LSCALE", CS%use_old_lscale, &
                  "If true, use the old formula for length scale which is\n"//&
                  "a function of grid spacing and deformation radius.",  &
-                 units="nondim", default=.false.)
+                 default=.false.)
   call get_param(param_file, mod, "MEKE_RD_MAX_SCALE", CS%Rd_as_max_scale, &
                  "If true, the length scale used by MEKE is the minimum of\n"//&
                  "the deformation radius or grid-spacing. Only used if\n"//&
@@ -714,6 +848,9 @@ logical function MEKE_init(Time, G, param_file, diag, CS, MEKE, restart_CS)
                  "If positive, is a coefficient weighting the grid-spacing as a scale\n"//&
                  "in the expression for mixing length used in MEKE-derived diffusiviity.", &
                  units="nondim", default=0.0)
+  call get_param(param_file, mod, "MEKE_COLD_START", coldStart, &
+                 "If true, initialize EKE to zero. Otherwise a local equilibrium solution\n"//&
+                 "is used as an initial condition for EKE.", default=.false.)
 
   ! Nonlocal module parameters
   call get_param(param_file, mod, "CDRAG", CS%cdrag, &
@@ -799,8 +936,9 @@ logical function MEKE_init(Time, G, param_file, diag, CS, MEKE, restart_CS)
   ! or after a restart. If at the beginning, we will initialize MEKE to a local
   ! equilibrium.
   CS%initialize = .not.query_initialized(MEKE%MEKE,"MEKE",restart_CS)
+  if (coldStart) CS%initialize = .false.
   if (CS%initialize) call MOM_error(WARNING, &
-                       "MEKE_init: Initializing MEKE to steady state balance.")
+                       "MEKE_init: Initializing MEKE with a local equilibrium balance.")
 
 end function MEKE_init
 
