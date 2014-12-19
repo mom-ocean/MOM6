@@ -70,6 +70,7 @@ type, public :: MEKE_CS ; private
   integer :: id_GM_src = -1, id_mom_src = -1, id_decay = -1
   integer :: id_KhMEKE_u = -1, id_KhMEKE_v = -1, id_Ku = -1
   integer :: id_Le = -1, id_gamma_b = -1, id_gamma_t = -1
+  integer :: id_Lrhines = -1, id_Leady = -1
 
   ! Infrastructure
   integer :: id_clock_pass !< Clock for group pass calls
@@ -503,7 +504,7 @@ subroutine MEKE_equilibrium(CS, MEKE, G, SN_u, SN_v, drag_rate_visc, I_mass)
   real, dimension(NIMEM_,NJMEM_),  intent(in)    :: drag_rate_visc  !< Mean flow contrib. to drag rate
   real, dimension(NIMEM_,NJMEM_),  intent(in)    :: I_mass  !< Inverse of column mass.
   ! Local variables
-  real :: beta, SN, bottomFac2, barotrFac2, LmixScale
+  real :: beta, SN, bottomFac2, barotrFac2, LmixScale, Lrhines, Leady
   real :: I_H, KhCoeff, Kh, Ubg2, cd2, drag_rate, ldamping, src
   real :: EKE, EKEmin, EKEmax, resid, ResMin, ResMax, EKEerr
   integer :: i, j, is, ie, js, je, n1, n2
@@ -519,7 +520,9 @@ subroutine MEKE_equilibrium(CS, MEKE, G, SN_u, SN_v, drag_rate_visc, I_mass)
 
 !$OMP do
   do j=js,je ; do i=is,ie
-    SN = 0.25*max( (SN_u(I,j) + SN_u(I-1,j)) + (SN_v(i,J) + SN_v(i,J-1)), 0.)
+    !SN = 0.25*max( (SN_u(I,j) + SN_u(I-1,j)) + (SN_v(i,J) + SN_v(i,J-1)), 0.)
+    ! This avoids extremes values in equilibrium solution due to bad values in SN_u, SN_v
+    SN = min( min(SN_u(I,j) , SN_u(I-1,j)) , min(SN_v(i,J), SN_v(i,J-1)) )
     beta = sqrt( G%dF_dx(i,j)**2 + G%dF_dy(i,j)**2 )
     I_H = G%Rho0 * I_mass(i,j)
 
@@ -537,7 +540,8 @@ subroutine MEKE_equilibrium(CS, MEKE, G, SN_u, SN_v, drag_rate_visc, I_mass)
         EKE = EKEmax
         call MEKE_lengthScales_0d(CS, G%areaT(i,j), beta, G%bathyT(i,j), &
                                   MEKE%Rd_dx_h(i,j), SN, EKE,            &
-                                  bottomFac2, barotrFac2, LmixScale)
+                                  bottomFac2, barotrFac2, LmixScale,     &
+                                  Lrhines, Leady)
         ! TODO: Should include resolution function in Kh
         Kh = (KhCoeff * sqrt(2.*barotrFac2*EKE) * LmixScale)
         src = Kh * (SN * SN)
@@ -622,6 +626,7 @@ subroutine MEKE_lengthScales(CS, MEKE, G, SN_u, SN_v, &
   real, dimension(NIMEM_,NJMEM_),        intent(out)   :: barotrFac2 !< gamma_t^2
   real, dimension(NIMEM_,NJMEM_),        intent(out)   :: LmixScale !< Eddy mixing length (m).
   ! Local variables
+  real, dimension(SZI_(G),SZJ_(G)) :: Lrhines, Leady
   real :: beta, SN
   integer :: i, j, is, ie, js, je
 
@@ -631,17 +636,20 @@ subroutine MEKE_lengthScales(CS, MEKE, G, SN_u, SN_v, &
   do j=js,je ; do i=is,ie
     if (.not.CS%use_old_lscale) then
       if (CS%aEady > 0.) then
-        SN = 0.25*( (SN_u(I,j) + SN_u(I-1,j)) + (SN_v(i,J) + SN_v(i,J-1)) )
+         SN = 0.25*( (SN_u(I,j) + SN_u(I-1,j)) + (SN_v(i,J) + SN_v(i,J-1)) )
       else
         SN = 0.
       endif
       beta = sqrt( G%dF_dx(i,j)**2 + G%dF_dy(i,j)**2 )
     endif
     ! Returns bottomFac2, barotrFac2 and LmixScale
-    call MEKE_lengthScales_0d(CS, G%areaT(i,j), beta, G%bathyT(i,j), &
-                              MEKE%Rd_dx_h(i,j), SN, MEKE%MEKE(i,j), &
-                              bottomFac2(i,j), barotrFac2(i,j), LmixScale(i,j))
+    call MEKE_lengthScales_0d(CS, G%areaT(i,j), beta, G%bathyT(i,j),            &
+                              MEKE%Rd_dx_h(i,j), SN, MEKE%MEKE(i,j),            &
+                              bottomFac2(i,j), barotrFac2(i,j), LmixScale(i,j), &
+                              Lrhines(i,j), Leady(i,j))
   enddo ; enddo
+  if (CS%id_Lrhines>0) call post_data(CS%id_Lrhines, Lrhines, CS%diag)
+  if (CS%id_Leady>0) call post_data(CS%id_Leady, Leady, CS%diag)
 
 end subroutine MEKE_lengthScales
 
@@ -649,7 +657,7 @@ end subroutine MEKE_lengthScales
 !! functions that are ratios of either bottom or barotropic eddy energy to the
 !! column eddy energy, respectively.  See \ref section_MEKE_equations.
 subroutine MEKE_lengthScales_0d(CS, area, beta, depth, Rd_dx, SN,  &
-            EKE, bottomFac2, barotrFac2, LmixScale)
+            EKE, bottomFac2, barotrFac2, LmixScale, Lrhines, Leady)
   type(MEKE_CS), pointer       :: CS         !< MEKE control structure.
   real,          intent(in)    :: area       !< Grid cell area (m2)
   real,          intent(in)    :: beta       !< Planetary beta = |grad F| (s-1 m-1)
@@ -660,8 +668,10 @@ subroutine MEKE_lengthScales_0d(CS, area, beta, depth, Rd_dx, SN,  &
   real,          intent(out)   :: bottomFac2 !< gamma_b^2
   real,          intent(out)   :: barotrFac2 !< gamma_t^2
   real,          intent(out)   :: LmixScale  !< Eddy mixing length (m).
+  real,          intent(out)   :: Lrhines    !< Rhines length scale (m).
+  real,          intent(out)   :: Leady      !< Eady length scale (m).
   ! Local variables
-  real :: Lgrid, Ldeform, LdeformLim, Lrhines, Ue, Lfrict, Leady
+  real :: Lgrid, Ldeform, LdeformLim, Ue, Lfrict
 
   ! Length scale for MEKE derived diffusivity
   Lgrid = sqrt(area)               ! Grid scale
@@ -670,12 +680,12 @@ subroutine MEKE_lengthScales_0d(CS, area, beta, depth, Rd_dx, SN,  &
   ! gamma_b^2 is the ratio of bottom eddy energy to mean column eddy energy
   ! used in calculating bottom drag
   bottomFac2 = CS%MEKE_CD_SCALE**2
-  if (Lfrict>0.) bottomFac2 = bottomFac2 + 1./( 1. + CS%MEKE_Cb*(Ldeform/Lfrict) )**0.8
+  if (Lfrict*CS%MEKE_Cb>0.) bottomFac2 = bottomFac2 + 1./( 1. + CS%MEKE_Cb*(Ldeform/Lfrict) )**0.8
   bottomFac2 = max(bottomFac2, CS%MEKE_min_gamma)
   ! gamma_t^2 is the ratio of barotropic eddy energy to mean column eddy energy
   ! used in the velocity scale for diffusivity
   barotrFac2 = 1.
-  if (Lfrict>0.) barotrFac2 = 1./( 1. + CS%MEKE_Ct*(Ldeform/Lfrict) )**0.25
+  if (Lfrict*CS%MEKE_Ct>0.) barotrFac2 = 1./( 1. + CS%MEKE_Ct*(Ldeform/Lfrict) )**0.25
   barotrFac2 = max(barotrFac2, CS%MEKE_min_gamma)
   if (CS%use_old_lscale) then
     if (CS%Rd_as_max_scale) then
@@ -925,6 +935,10 @@ logical function MEKE_init(Time, G, param_file, diag, CS, MEKE, restart_CS)
   if (.not. associated(MEKE%mom_src)) CS%id_mom_src = -1
   CS%id_Le = register_diag_field('ocean_model', 'MEKE_Le', diag%axesT1, Time, &
      'Eddy mixing length used in the MEKE derived eddy diffusivity', 'meter')
+  CS%id_Lrhines = register_diag_field('ocean_model', 'MEKE_Lrhines', diag%axesT1, Time, &
+     'Rhines length scale used in the MEKE derived eddy diffusivity', 'meter')
+  CS%id_Leady = register_diag_field('ocean_model', 'MEKE_Leady', diag%axesT1, Time, &
+     'Eady length scale used in the MEKE derived eddy diffusivity', 'meter')
   CS%id_gamma_b = register_diag_field('ocean_model', 'MEKE_gamma_b', diag%axesT1, Time, &
      'Ratio of bottom-projected eddy velocity to column-mean eddy velocity', 'nondim')
   CS%id_gamma_t = register_diag_field('ocean_model', 'MEKE_gamma_t', diag%axesT1, Time, &
