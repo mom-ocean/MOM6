@@ -845,11 +845,11 @@ logical function MEKE_init(Time, G, param_file, diag, CS, MEKE, restart_CS)
   call get_param(param_file, mod, "MEKE_ALPHA_RHINES", CS%aRhines, &
                  "If positive, is a coefficient weighting the Rhines scale\n"//&
                  "in the expression for mixing length used in MEKE-derived diffusiviity.", &
-                 units="nondim", default=0.5)
+                 units="nondim", default=0.05)
   call get_param(param_file, mod, "MEKE_ALPHA_EADY", CS%aEady, &
                  "If positive, is a coefficient weighting the Eady length scale\n"//&
                  "in the expression for mixing length used in MEKE-derived diffusiviity.", &
-                 units="nondim", default=2.0)
+                 units="nondim", default=0.05)
   call get_param(param_file, mod, "MEKE_ALPHA_FRICT", CS%aFrict, &
                  "If positive, is a coefficient weighting the frictional arrest scale\n"//&
                  "in the expression for mixing length used in MEKE-derived diffusiviity.", &
