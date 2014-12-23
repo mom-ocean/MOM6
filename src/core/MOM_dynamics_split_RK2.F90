@@ -116,13 +116,13 @@ use MOM_tidal_forcing, only : tidal_forcing_init, tidal_forcing_CS
 use MOM_vert_friction, only : vertvisc, vertvisc_coef, vertvisc_remnant
 use MOM_vert_friction, only : vertvisc_limit_vel, vertvisc_init, vertvisc_CS
 use MOM_vert_friction, only : updateCFLtruncationValue
-use MOM_set_visc, only : set_viscous_BBL, set_viscous_ML, set_visc_init, set_visc_CS
+use MOM_set_visc, only : set_viscous_BBL, set_viscous_ML, set_visc_CS
 
 implicit none ; private
 
 #include <MOM_memory.h>
 
-type, public :: MOM_dyn_split_RK2_CS !; private
+type, public :: MOM_dyn_split_RK2_CS ; private
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: &
     CAu, &    ! CAu = f*v - u.grad(u) in m s-2.
     PFu, &    ! PFu = -dM/dx, in m s-2.
@@ -1057,7 +1057,7 @@ end subroutine register_restarts_dyn_split_RK2
 
 subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, param_file, &
                       diag, CS, restart_CS, dt, Accel_diag, Cont_diag, MIS, &
-                      VarMix, MEKE, OBC, ALE_CSp, visc, dirs, ntrunc)
+                      VarMix, MEKE, OBC, ALE_CSp, setVisc_CSp, visc, dirs, ntrunc)
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(inout) :: u
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(inout) :: v
   real, dimension(NIMEM_,NJMEM_,NKMEM_) , intent(inout) :: h
@@ -1078,6 +1078,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, param_file, &
   type(MEKE_type),                        pointer       :: MEKE
   type(ocean_OBC_type),                   pointer       :: OBC
   type(ALE_CS),                           pointer       :: ALE_CSp
+  type(set_visc_CS),                      pointer       :: setVisc_CSp
   type(vertvisc_type),                    intent(inout) :: visc
   type(directories),                      intent(in)    :: dirs
   integer, target,                        intent(inout) :: ntrunc
@@ -1109,6 +1110,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, param_file, &
 !  (in)      OBC - If open boundary conditions are used, this points to the
 !                  ocean_OBC_type that was set up in MOM_initialization.
 !  (in)      ALE_CS - This points to the ALE control structure.
+!  (in)      setVisc_CSp - This points to the set_visc control structure.
 !  (inout)   visc - A structure containing vertical viscosities, bottom drag
 !                   viscosities, and related fields.
 !  (in)      dirs - A structure containing several relevant directory paths.
@@ -1209,7 +1211,9 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, param_file, &
   call hor_visc_init(Time, G, param_file, diag, CS%hor_visc_CSp)
   call vertvisc_init(MIS, Time, G, param_file, diag, CS%ADp, dirs, &
                      ntrunc, CS%vertvisc_CSp)
-  call set_visc_init(Time, G, param_file, diag, visc, CS%set_visc_CSp)
+  if (.not.associated(setVisc_CSp)) call MOM_error(FATAL, &
+    "initialize_dyn_split_RK2 called with setVisc_CSp unassociated.")
+  CS%set_visc_CSp => setVisc_CSp
   call updateCFLtruncationValue(Time, CS%vertvisc_CSp, activate= &
             ((dirs%input_filename(1:1) == 'n') .and. &
              (LEN_TRIM(dirs%input_filename) == 1))   )

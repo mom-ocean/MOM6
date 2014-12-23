@@ -565,6 +565,7 @@ type, public :: MOM_control_struct
   type(MOM_dyn_split_RK2_CS),   pointer :: dyn_split_RK2_CSp => NULL()
   type(MOM_dyn_legacy_split_CS),   pointer :: dyn_legacy_split_CSp => NULL()
 
+  type(set_visc_CS), pointer :: set_visc_CSp => NULL()
   type(diabatic_CS), pointer :: diabatic_CSp => NULL()
   type(thickness_diffuse_CS), pointer :: thickness_diffuse_CSp => NULL()
   type(mixedlayer_restrat_CS), pointer :: mixedlayer_restrat_CSp => NULL()
@@ -803,26 +804,22 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       call enable_averaging(dtdia, Time_local + &
                                    set_time(int(floor(dtdia-dt+0.5))), CS%diag)
 
-      ! This block has been duplicated from MOM_dynamics_split_RK2.F90 and uses
-      ! what would otherwise be a private member of CS%dyn_split_RK2_CSp.
-      ! This is a [temporary] workaround to needing CS%visc to be updated
-      ! before diabatic() when DIABATIC_FIRST=True. If False, diabatic() is
-      ! called after set_viscous_BBL.
+      !   Calculate the BBL properties and store them inside visc (u,h).
+      ! This is here so that CS%visc is updated before diabatic() when 
+      ! DIABATIC_FIRST=True. Otherwise diabatic() is called after the dynamics
+      ! and set_viscous_BBL is called as a part of the dynamic stepping.
 
-      !if (visc%calc_bbl) then
-        ! Calculate the BBL properties and store them inside visc (u,h).
-        !call cpu_clock_begin(id_clock_vertvisc)
-        call set_viscous_BBL(u, v, h, CS%tv, CS%visc, G, CS%dyn_split_RK2_CSp%set_visc_CSp)
-        !call cpu_clock_end(id_clock_vertvisc)
-    
-        call cpu_clock_begin(id_clock_pass)
-        if(associated(CS%visc%Ray_u) .and. associated(CS%visc%Ray_v)) &
-          call do_group_pass(pass_ray, G%Domain )
-        if(associated(CS%visc%kv_bbl_u) .and. associated(CS%visc%kv_bbl_v))  &
-          call do_group_pass(pass_bbl_thick_kv_bbl, G%Domain )
-        call cpu_clock_end(id_clock_pass)
-        if (showCallTree) call callTree_wayPoint("done with set_viscous_BBL (step_MOM_dyn_split_RK2)")
-      !endif
+      !call cpu_clock_begin(id_clock_vertvisc)
+      call set_viscous_BBL(u, v, h, CS%tv, CS%visc, G, CS%set_visc_CSp)
+      !call cpu_clock_end(id_clock_vertvisc)
+
+      call cpu_clock_begin(id_clock_pass)
+      if(associated(CS%visc%Ray_u) .and. associated(CS%visc%Ray_v)) &
+        call do_group_pass(pass_ray, G%Domain )
+      if(associated(CS%visc%kv_bbl_u) .and. associated(CS%visc%kv_bbl_v))  &
+        call do_group_pass(pass_bbl_thick_kv_bbl, G%Domain )
+      call cpu_clock_end(id_clock_pass)
+      if (showCallTree) call callTree_wayPoint("done with set_viscous_BBL (step_MOM_dyn_split_RK2)")
 
       call cpu_clock_begin(id_clock_thermo)
 
@@ -1786,6 +1783,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
 
   CS%useMEKE = MEKE_init(Time, G, param_file, diag, CS%MEKE_CSp, CS%MEKE, CS%restart_CSp)
   call VarMix_init(Time, G, param_file, diag, CS%VarMix)
+  call set_visc_init(Time, G, param_file, diag, CS%visc, CS%set_visc_CSp)
 
   if (associated(init_CS%tracer_Reg)) &
     CS%tracer_Reg => init_CS%tracer_Reg
@@ -1798,22 +1796,24 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
       call initialize_dyn_legacy_split(CS%u, CS%v, CS%h, CS%uh, CS%vh, eta, Time, &
                   G, param_file, diag, CS%dyn_legacy_split_CSp, CS%restart_CSp, &
                   CS%dt, CS%ADp, CS%CDp, MOM_internal_state, CS%VarMix, CS%MEKE, &
-                  init_CS%OBC, CS%ALE_CSp, CS%visc, dirs, CS%ntrunc)
+                  init_CS%OBC, CS%ALE_CSp, CS%set_visc_CSp, CS%visc, dirs, CS%ntrunc)
     else
       call initialize_dyn_split_RK2(CS%u, CS%v, CS%h, CS%uh, CS%vh, eta, Time, &
                   G, param_file, diag, CS%dyn_split_RK2_CSp, CS%restart_CSp, &
                   CS%dt, CS%ADp, CS%CDp, MOM_internal_state, CS%VarMix, CS%MEKE, &
-                  init_CS%OBC, CS%ALE_CSp, CS%visc, dirs, CS%ntrunc)
+                  init_CS%OBC, CS%ALE_CSp, CS%set_visc_CSp, CS%visc, dirs, CS%ntrunc)
     endif
   else
     if (CS%use_RK2) then
       call initialize_dyn_unsplit_RK2(CS%u, CS%v, CS%h, Time, G, &
               param_file, diag, CS%dyn_unsplit_RK2_CSp, CS%restart_CSp, &
-              CS%ADp, CS%CDp, MOM_internal_state, init_CS%OBC, CS%ALE_CSp, CS%visc, dirs, CS%ntrunc)
+              CS%ADp, CS%CDp, MOM_internal_state, init_CS%OBC, CS%ALE_CSp, &
+              CS%set_visc_CSp, CS%visc, dirs, CS%ntrunc)
     else
       call initialize_dyn_unsplit(CS%u, CS%v, CS%h, Time, G, &
               param_file, diag, CS%dyn_unsplit_CSp, CS%restart_CSp, &
-              CS%ADp, CS%CDp, MOM_internal_state, init_CS%OBC, CS%ALE_CSp, CS%visc, dirs, CS%ntrunc)
+              CS%ADp, CS%CDp, MOM_internal_state, init_CS%OBC, CS%ALE_CSp, &
+              CS%set_visc_CSp, CS%visc, dirs, CS%ntrunc)
     endif
   endif
   call callTree_waypoint("dynamics initialized (initialize_MOM)")
