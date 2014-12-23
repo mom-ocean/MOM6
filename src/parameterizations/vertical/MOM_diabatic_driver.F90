@@ -2235,7 +2235,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv)
 
   real :: H_limit_fluxes, IforcingDepthScale, Idt
   real :: dThickness, dTemp, dSalt
-  real :: netHeatOut
+! real :: netHeatOut
   real :: fractionOfForcing, hOld, Ithickness
 
   real, dimension(SZI_(G))                       :: netMassInOut, netMassIn, netMassOut
@@ -2402,12 +2402,12 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv)
 #endif
 
         ! B/ update mass, salt, temp from mass leaving ocean.
-        fluxes%heat_content_massout(i,j) = 0.0
+!       fluxes%heat_content_massout(i,j) = 0.0
 #ifdef _OLD_ALG_
 #else
         if(netMassOut(i) < 0.0) then 
 #endif
-          netHeatOut  = 0.0 
+!         netHeatOut  = 0.0 
 
           do k=1,nz
 
@@ -2435,7 +2435,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv)
 #endif
 
             ! accumulate diagnostic heat flux (W/m2)
-            netHeatOut = netHeatOut + Idt * G%H_to_kg_m2 * fluxes%C_p * dTemp
+!           netHeatOut = netHeatOut + Idt * G%H_to_kg_m2 * fluxes%C_p * dTemp
 
             ! Update the forcing by the part to be consumed within the present k-layer.  
             ! If fractionOfForcing = 1, then new netMassOut vanishes. 
@@ -2444,6 +2444,12 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv)
             netHeat(i) = netHeat(i) - dTemp
             netSalt(i) = netSalt(i) - dSalt
             dTemp = dTemp + dThickness*T2d(i,k)
+            if (ASSOCIATED(fluxes%heat_content_massin))                             &
+              fluxes%heat_content_massin(i,j) = fluxes%heat_content_massin(i,j) +   &
+                           tv%T(i,j,k) * max(0.,dThickness) * G%H_to_kg_m2 * fluxes%C_p * Idt
+            if (ASSOCIATED(fluxes%heat_content_massout))                            &
+              fluxes%heat_content_massout(i,j) = fluxes%heat_content_massout(i,j) + &
+                           tv%T(i,j,k) * min(0.,dThickness) * G%H_to_kg_m2 * fluxes%C_p * Idt
             if (ASSOCIATED(tv%TempxPmE)) tv%TempxPmE(i,j) = tv%TempxPmE(i,j) + &
                            tv%T(i,j,k) * dThickness * G%H_to_kg_m2
 #endif
@@ -2479,7 +2485,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv)
           enddo ! k
 
           ! diagnose heat fluxes and exit k-loop
-          fluxes%heat_content_massout(i,j) = netHeatOut
+!         fluxes%heat_content_massout(i,j) = netHeatOut
 
 #ifdef _OLD_ALG_
 #else

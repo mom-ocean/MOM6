@@ -1615,6 +1615,7 @@ subroutine forcing_diagnostics(fluxes, state, dt, G, diag, handles)
         if (ASSOCIATED(fluxes%heat_content_cond))    sum(:,:) = sum(:,:) + fluxes%heat_content_cond(:,:)
         if (ASSOCIATED(fluxes%heat_content_massout)) sum(:,:) = sum(:,:) + fluxes%heat_content_massout(:,:)
     ! endif 
+      if (ASSOCIATED(fluxes%heat_restore))         sum(:,:) = sum(:,:) + fluxes%heat_restore(:,:)
       call post_data(handles%id_net_heat_surface, sum, diag)
     endif
 
