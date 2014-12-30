@@ -659,17 +659,6 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mod, version, "")
-  call get_param(param_file, mod, "LAPLACIAN", CS%Laplacian, &
-                 "If true, use a Laplacian horizontal viscosity.", &
-                 default=.false.)
-  call get_param(param_file, mod, "BIHARMONIC", CS%biharmonic, &
-                 "If true, se a biharmonic horizontal viscosity. \n"//&
-                 "BIHARMONIC may be used with LAPLACIAN.", &
-                 default=.true.)
-
-  if (.not.(CS%Laplacian .or. CS%biharmonic)) call MOM_error(WARNING, &
-    "hor_visc_init:  It is usually a very bad idea not to use either "//&
-    "LAPLACIAN or BIHARMONIC viscosity.")
 
   !   It is not clear whether these initialization lines are needed for the
   ! cases where the corresponding parameters are not read.
@@ -682,6 +671,9 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
   ! parameter spelling checks.
   call get_param(param_file, mod, "GET_ALL_PARAMS", get_all, default=.false.)
 
+  call get_param(param_file, mod, "LAPLACIAN", CS%Laplacian, &
+                 "If true, use a Laplacian horizontal viscosity.", &
+                 default=.false.)
   if (CS%Laplacian .or. get_all) then
     call get_param(param_file, mod, "KH", Kh, &
                  "The background Laplacian horizontal viscosity.", &
@@ -711,13 +703,17 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
                  default=CS%bound_Kh)
   endif
 
+  call get_param(param_file, mod, "BIHARMONIC", CS%biharmonic, &
+                 "If true, use a biharmonic horizontal viscosity. \n"//&
+                 "BIHARMONIC may be used with LAPLACIAN.", &
+                 default=.true.)
   if (CS%biharmonic .or. get_all) then
     call get_param(param_file, mod, "AH", Ah, &
                  "The background biharmonic horizontal viscosity.", &
                  units = "m4 s-1", default=0.0)
     call get_param(param_file, mod, "AH_VEL_SCALE", Ah_vel_scale, &
                  "The velocity scale which is multiplied by the cube of \n"//&
-                 "the grid spacing to calculate the Laplacian viscosity. \n"//&
+                 "the grid spacing to calculate the biharmonic viscosity. \n"//&
                  "The final viscosity is the largest of this scaled \n"//&
                  "viscosity, the Smagorinsky viscosity and AH.", &
                  units="m s-1", default=0.0)
@@ -782,6 +778,10 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
   if (CS%no_slip .and. CS%biharmonic) &
     call MOM_error(FATAL,"ERROR: NOSLIP and BIHARMONIC cannot be defined "// &
                           "at the same time in MOM.")
+
+  if (.not.(CS%Laplacian .or. CS%biharmonic)) call MOM_error(WARNING, &
+    "hor_visc_init:  It is usually a very bad idea not to use either "//&
+    "LAPLACIAN or BIHARMONIC viscosity.")
 
   ALLOC_(CS%dx2h(isd:ied,jsd:jed))     ; CS%dx2h(:,:) = 0.0
   ALLOC_(CS%dy2h(isd:ied,jsd:jed))     ; CS%dy2h(:,:) = 0.0
