@@ -227,7 +227,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, CS)
 !$OMP parallel default(none) shared(MEKE,CS,is,ie,js,je,nz,src,mass,G,h,I_mass, &
 !$OMP                               sdt,drag_vel_u,visc,drag_vel_v,drag_rate_visc, &
 !$OMP                               drag_rate,Rho0,MEKE_decay,sdt_damp,cdrag2, &
-!$OMP                               bottomFac2) &
+!$OMP                               bottomFac2,barotrFac2,use_drag_rate) &
 !$OMP                       private(ldamping)
 
     ! Aggregate sources of MEKE (background, frictional and GM)
@@ -355,7 +355,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, CS)
 !$OMP parallel default(none) shared(is,ie,js,je,MEKE,CS,sdt,G,Kh_u,MEKE_uflux, &
 !$OMP                               mass,mass_neglect,Kh_v,MEKE_vflux,I_mass, &
 !$OMP                               sdt_damp,drag_rate,Rho0,drag_rate_visc,   &
-!$OMP                               cdrag2,bottomFac2,MEKE_decay) &
+!$OMP                               cdrag2,bottomFac2,MEKE_decay,barotrFac2,use_drag_rate) &
 !$OMP                       private(Kh_here,Inv_Kh_max,ldamping)
     if (CS%MEKE_KH >= 0.0) then
       ! Lateral diffusion of MEKE
@@ -407,8 +407,8 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, CS)
     if (CS%MEKE_KH >= 0.0 .or. CS%MEKE_K4 >= 0.0) then
       if (sdt>sdt_damp) then
         ! Recalculate the drag rate, since MEKE has changed.
-!$OMP do
         if (use_drag_rate) then
+!$OMP do
           do j=js,je ; do i=is,ie
             drag_rate(i,j) = (Rho0 * I_mass(i,j)) * sqrt( drag_rate_visc(i,j)**2 &
                  + cdrag2 * ( max(0.0, 2.0*bottomFac2(i,j)*MEKE%MEKE(i,j)) + CS%MEKE_Uscale**2 ) )
@@ -435,20 +435,20 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, CS)
     if (CS%MEKE_KhCoeff>0.) then
       if (CS%use_old_lscale) then
         if (CS%Rd_as_max_scale) then
-!$OMP parallel do default(none) shared(is,ie,js,je,MEKE,CS,G)
+!$OMP parallel do default(none) shared(is,ie,js,je,MEKE,CS,G,barotrFac2)
           do j=js-1,je+1 ; do i=is-1,ie+1
             MEKE%Kh(i,j) = (CS%MEKE_KhCoeff &
                          * sqrt(2.*max(0.,barotrFac2(i,j)*MEKE%MEKE(i,j))*G%areaT(i,j))) &
                          * min(MEKE%Rd_dx_h(i,j), 1.0)
           enddo ; enddo
         else
-!$OMP parallel do default(none) shared(is,ie,js,je,MEKE,CS,G)
+!$OMP parallel do default(none) shared(is,ie,js,je,MEKE,CS,G,barotrFac2)
           do j=js-1,je+1 ; do i=is-1,ie+1
             MEKE%Kh(i,j) = CS%MEKE_KhCoeff*sqrt(2.*max(0.,barotrFac2(i,j)*MEKE%MEKE(i,j))*G%areaT(i,j))
           enddo ; enddo
         endif
       else
-!$OMP parallel do default(none) shared(is,ie,js,je,MEKE,LmixScale,CS,G)
+!$OMP parallel do default(none) shared(is,ie,js,je,MEKE,LmixScale,CS,G,barotrFac2)
         do j=js-1,je+1 ; do i=is-1,ie+1
           MEKE%Kh(i,j) = (CS%MEKE_KhCoeff*sqrt(2.*max(0.,barotrFac2(i,j)*MEKE%MEKE(i,j)))*LmixScale(i,j))
         enddo ; enddo

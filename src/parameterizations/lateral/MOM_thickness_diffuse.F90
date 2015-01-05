@@ -746,7 +746,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
 !$OMP                                  I_slope_max2,h_neglect2,present_int_slope_v, &
 !$OMP                                  int_slope_v,KH_v,vhtot,h_frac,h_avail_rsum,  &
 !$OMP                                  vhD,h_avail,G_scale,Work_v,CS,slope_y,       &
-!$OMP                                  present_slope_y                      )       &
+!$OMP                                  present_slope_y,present_slope_x      )       &
 !$OMP                          private(drdjA,drdjB,drdkL,drdkR,pres_v,T_v,S_v,      &
 !$OMP                                  drho_dT_v,drho_dS_v,hg2A,hg2B,hg2L,hg2R,haA, &
 !$OMP                                  haB,haL,haR,dzaL,dzaR,wtA,wtB,wtL,wtR,drdz,  &
