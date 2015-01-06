@@ -2300,7 +2300,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv)
 !$OMP                          private(opacityBand,h2d,T2d,eps,htot,netMassInOut,netMassOut, &
 !$OMP                                  netHeat,netSalt,Pen_SW_bnd,fractionOfForcing,         &
 !$OMP                                  dThickness,dTemp,dSalt,hOld,Ithickness,Ttot,          &
-!$OMP                                  netMassIn,netHeatOut)
+!$OMP                                  netMassIn)
 
   ! work in vertical slices for efficiency 
   do j=js,je 
