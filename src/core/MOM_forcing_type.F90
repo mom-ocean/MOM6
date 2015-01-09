@@ -229,7 +229,8 @@ contains
 !> Extract fluxes from surface fluxes type. 
 subroutine extractFluxes1d(G, fluxes, optics, nsw, j, dt,                               &
                   DepthBeforeScalingFluxes, useRiverHeatContent, useCalvingHeatContent, &
-                  h, T, netMassInOut, netMassOut, net_heat, net_salt, pen_SW_bnd, tv)
+                  h, T, netMassInOut, netMassOut, net_heat, net_salt, pen_SW_bnd, tv,   &
+                  aggregate_FW_forcing)
 
 !  This subroutine extracts fluxes from the surface fluxes type. It works on a j-row
 !  for optimization purposes.  The 2d (i,j) wrapper is the next subroutine below. 
@@ -251,6 +252,7 @@ subroutine extractFluxes1d(G, fluxes, optics, nsw, j, dt,                       
   real, dimension(NIMEM_),        intent(out)   :: net_salt
   real, dimension(:,:),           intent(out)   :: pen_SW_bnd
   type(thermo_var_ptrs),          intent(inout) :: tv
+  logical,                        intent(in)    :: aggregate_FW_forcing
 
 !  (in)      G                        = ocean grid structure
 !  (in)      fluxes                   = structure containing pointers to possible
@@ -468,24 +470,30 @@ subroutine extractFluxes1d(G, fluxes, optics, nsw, j, dt,                       
     ! Diagnostics follow...
 
     ! Initialize heat_content_massin that is diagnosed in mixedlayer_convection or
-    ! applyBoundaryFluxes uch that the meaning is as the sum of all incoming components.
+    ! applyBoundaryFluxes such that the meaning is as the sum of all incoming components.
     if(ASSOCIATED(fluxes%heat_content_massin))  then
-      !fluxes%heat_content_massin(i,j) = 0.
-      if (netMassInOut(i) > 0.0) then ! net is "in"
-        fluxes%heat_content_massin(i,j) = -fluxes%C_p * netMassOut(i) * T(i,1) * G%H_to_kg_m2 / dt
-      else ! net is "out"
-        fluxes%heat_content_massin(i,j) = fluxes%C_p * ( netMassInout(i) - netMassOut(i) ) * T(i,1) * G%H_to_kg_m2 / dt
+      if (aggregate_FW_forcing) then
+        if (netMassInOut(i) > 0.0) then ! net is "in"
+          fluxes%heat_content_massin(i,j) = -fluxes%C_p * netMassOut(i) * T(i,1) * G%H_to_kg_m2 / dt
+        else ! net is "out"
+          fluxes%heat_content_massin(i,j) = fluxes%C_p * ( netMassInout(i) - netMassOut(i) ) * T(i,1) * G%H_to_kg_m2 / dt
+        endif
+      else
+        fluxes%heat_content_massin(i,j) = 0.
       endif
     endif
 
     ! Initialize heat_content_massout that is diagnosed in mixedlayer_convection or
-    ! applyBoundaryFluxes uch that the meaning is as the sum of all outgoing components.
+    ! applyBoundaryFluxes such that the meaning is as the sum of all outgoing components.
     if(ASSOCIATED(fluxes%heat_content_massout)) then
-      !fluxes%heat_content_massout(i,j) = 0.0
-      if (netMassInOut(i) > 0.0) then ! net is "in"
-        fluxes%heat_content_massout(i,j) = fluxes%C_p * netMassOut(i) * T(i,1) * G%H_to_kg_m2 / dt
-      else ! net is "out"
-        fluxes%heat_content_massout(i,j) = -fluxes%C_p * ( netMassInout(i) - netMassOut(i) ) * T(i,1) * G%H_to_kg_m2 / dt
+      if (aggregate_FW_forcing) then
+        if (netMassInOut(i) > 0.0) then ! net is "in"
+          fluxes%heat_content_massout(i,j) = fluxes%C_p * netMassOut(i) * T(i,1) * G%H_to_kg_m2 / dt
+        else ! net is "out"
+          fluxes%heat_content_massout(i,j) = -fluxes%C_p * ( netMassInout(i) - netMassOut(i) ) * T(i,1) * G%H_to_kg_m2 / dt
+        endif
+      else
+        fluxes%heat_content_massout(i,j) = 0.0
       endif
     endif
 
@@ -562,7 +570,8 @@ end subroutine extractFluxes1d
 !> 2d wrapper for 1d extract fluxes from surface fluxes type. 
 subroutine extractFluxes2d(G, fluxes, optics, nsw, dt,                                  &
                   DepthBeforeScalingFluxes, useRiverHeatContent, useCalvingHeatContent, &
-                  h, T, netMassInOut, netMassOut, net_heat, Net_salt, Pen_SW_bnd, tv)
+                  h, T, netMassInOut, netMassOut, net_heat, Net_salt, Pen_SW_bnd, tv,   &
+                  aggregate_FW_forcing)
 
   !  This subroutine extracts fluxes from the surface fluxes type. It is a 
   !  wrapper for the 1d routine extractFluxes1d.
@@ -583,6 +592,7 @@ subroutine extractFluxes2d(G, fluxes, optics, nsw, dt,                          
   real, dimension(NIMEM_,NJMEM_),        intent(out)   :: net_salt
   real, dimension(:,:,:),                intent(out)   :: pen_SW_bnd
   type(thermo_var_ptrs),                 intent(inout) :: tv
+  logical,                               intent(in)    :: aggregate_FW_forcing
 
 
 !  (in)      G                        = ocean grid structure
@@ -616,7 +626,7 @@ subroutine extractFluxes2d(G, fluxes, optics, nsw, dt,                          
     call extractFluxes1d(G, fluxes, optics, nsw, j, dt,                          &
             DepthBeforeScalingFluxes, useRiverHeatContent, useCalvingHeatContent,&
             h(:,j,:), T(:,j,:), netMassInOut(:,j), netMassOut(:,j),              &
-            net_heat(:,j), net_salt(:,j), pen_SW_bnd(:,:,j), tv)
+            net_heat(:,j), net_salt(:,j), pen_SW_bnd(:,:,j), tv, aggregate_FW_forcing)
   enddo
 
 end subroutine extractFluxes2d
@@ -685,7 +695,7 @@ subroutine calculateBuoyancyFlux1d(G, fluxes, optics, h, Temp, Salt, tv, j, &
   call extractFluxes1d(G, fluxes, optics, nsw, j, dt,                                 &
                 depthBeforeScalingFluxes, useRiverHeatContent, useCalvingHeatContent, &
                 h(:,j,:), Temp(:,j,:), netH, netEvap, netHeatMinusSW,                 &
-                netSalt, penSWbnd, tv)
+                netSalt, penSWbnd, tv, .false.)
 
   ! Sum over bands and attenuate as a function of depth
   ! netPen is the netSW as a function of depth

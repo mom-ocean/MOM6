@@ -193,7 +193,7 @@ integer :: num_msg = 0, max_msg = 2
 contains
 
 subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
-                          optics, dt_diag, last_call)
+                          optics, aggregate_FW_forcing, dt_diag, last_call)
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: h_3d
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: u_3d, v_3d
   type(thermo_var_ptrs),                 intent(inout) :: tv
@@ -203,6 +203,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
   type(ocean_grid_type),                 intent(inout) :: G
   type(bulkmixedlayer_CS),               pointer       :: CS
   type(optics_type),                     pointer       :: optics
+  logical,                               intent(in)    :: aggregate_FW_forcing
   real,                        optional, intent(in)    :: dt_diag
   logical,                     optional, intent(in)    :: last_call
 
@@ -582,7 +583,8 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
     ! Pen_SW_bnd   = components to penetrative shortwave radiation
     call extractFluxes1d(G, fluxes, optics, nsw, j, dt, &
                   CS%H_limit_fluxes, CS%use_river_heat_content, CS%use_calving_heat_content, &
-                  h(:,1:), T(:,1:), netMassInOut, netMassOut, Net_heat, Net_salt, Pen_SW_bnd, tv)
+                  h(:,1:), T(:,1:), netMassInOut, netMassOut, Net_heat, Net_salt, Pen_SW_bnd,&
+                  tv, aggregate_FW_forcing)
 
     ! This subroutine causes the mixed layer to entrain to depth of free convection.    
     call mixedlayer_convection(h(:,1:), d_eb, htot, Ttot, Stot, uhtot, vhtot, &
@@ -591,7 +593,8 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
                                dR0_dT, dRcv_dT, dR0_dS, dRcv_dS,              &
                                netMassInOut, netMassOut, Net_heat, Net_salt,  &
                                nsw, Pen_SW_bnd, opacity_band, Conv_en,        &
-                               dKE_FC, j, ksort, G, CS, tv, fluxes, dt)
+                               dKE_FC, j, ksort, G, CS, tv, fluxes, dt,       &
+                               aggregate_FW_forcing)
 
     if(id_clock_conv>0) call cpu_clock_end(id_clock_conv)
 
@@ -968,7 +971,8 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,      &
                                  dR0_dT, dRcv_dT, dR0_dS, dRcv_dS,             &
                                  netMassInOut, netMassOut, Net_heat, Net_salt, &
                                  nsw, Pen_SW_bnd, opacity_band, Conv_en,       &
-                                 dKE_FC, j, ksort, G, CS, tv, fluxes, dt)
+                                 dKE_FC, j, ksort, G, CS, tv, fluxes, dt,      &
+                                 aggregate_FW_forcing)
   real, dimension(NIMEM_,NKMEM_), intent(inout) :: h, d_eb
   real, dimension(NIMEM_),        intent(out)   :: htot, Ttot, Stot
   real, dimension(NIMEM_),        intent(out)   :: uhtot, vhtot, R0_tot, Rcv_tot
@@ -987,6 +991,7 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,      &
   type(thermo_var_ptrs),          intent(inout) :: tv
   type(forcing),                  intent(inout) :: fluxes
   real,                           intent(in)    :: dt
+  logical,                        intent(in)    :: aggregate_FW_forcing
 
 !   This subroutine causes the mixed layer to entrain to the depth of free
 ! convection.  The depth of free convection is the shallowest depth at which the
@@ -1061,12 +1066,14 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,      &
   do i=is,ie ; if (ksort(i,1) > 0) then
     k = ksort(i,1)
 
-    massOutRem(i) = 0.0
-    if (netMassInOut(i) < 0.0) massOutRem(i) = -netMassInOut(i)
-    netMassIn(i) = netMassInOut(i) + massOutRem(i)
-  ! smg:
-  ! massOutRem(i) = -netMassOut(i)
-  ! netMassIn(i)  = netMassInOut(i) - netMassOut(i)
+    if (aggregate_FW_forcing) then
+      massOutRem(i) = 0.0
+      if (netMassInOut(i) < 0.0) massOutRem(i) = -netMassInOut(i)
+      netMassIn(i) = netMassInOut(i) + massOutRem(i)
+    else
+      massOutRem(i) = -netMassOut(i)
+      netMassIn(i)  = netMassInOut(i) - netMassOut(i)
+    endif
 
     ! htot is an Angstrom (taken from layer 1) plus any net precipitation.
     h_ent     = max(min(Angstrom,h(i,k)-eps(i,k)),0.0)
