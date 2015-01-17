@@ -903,7 +903,7 @@ subroutine KPP_end(CS)
   deallocate(CS)
 end subroutine KPP_end
 
-!> \class mom_kpp
+!> \namespace mom_kpp
 !!
 !! \section section_KPP The K-Profile Parameterization
 !!

@@ -1033,7 +1033,7 @@ subroutine MEKE_end(MEKE, CS)
 
 end subroutine MEKE_end
 
-!> \class mom_meke
+!> \namespace mom_meke
 !!
 !! \section section_MEKE The Mesoscale Eddy Kinetic Energy (MEKE) framework
 !!
