@@ -366,10 +366,8 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
   real :: hTot, delH                 ! The running total of thickness used in the surface layer average (m), the thickness from this layer (m)
   real :: surfHtemp, surfTemp        ! Integral and average of temperature over the surface layer
   real :: surfHsalt, surfSalt        ! Integral and average of salinity over the surface layer
-  real :: hTotU, surfHu, surfU       ! Thickness, integral and average of U over the surface layer
-  real :: hTotV, surfHv, surfV       ! Thickness, integral and average of V over the surface layer
-  real :: hTotUm1, surfHum1, surfUm1 ! Same fo i-1,j or U
-  real :: hTotVm1, surfHvm1, surfVm1 ! Same fo i,j-1 of V
+  real :: surfHu, surfU              ! Thickness, integral and average of U over the surface layer
+  real :: surfHv, surfV              ! Thickness, integral and average of V over the surface layer
   integer :: kk
 #ifdef __DO_SAFETY_CHECKS__
   if (CS%debug) then
@@ -398,8 +396,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
 !$OMP                     firstprivate(nonLocalTrans)                                 &
 !$OMP                          private(Coriolis,surfFricVel,SLdepth_0d,hTot,surfTemp, &
 !$OMP                                  surfHtemp,surfSalt,surfHsalt,hTotU,surfU,      &
-!$OMP                                  surfHu,hTotV,surfV,surfHv,hTotUm1,surfUm1,     &
-!$OMP                                  surfHum1,hTotVm1,surfVm1,surfHvm1,iFaceHeight, &
+!$OMP                                  surfHu,hTotV,surfV,surfHv,iFaceHeight,         &
 !$OMP                                  pRef,km1,cellHeight,Uk,Vk,deltaU2,             &
 !$OMP                                  rho1,rhoK,rhoKm1,deltaRho,N2_1d,N_1d,delH,     &
 !$OMP                                  surfBuoyFlux,Ws_1d,Cv,Vt2_1d,BulkRi_1d,        &
@@ -420,10 +417,8 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
       hTot = 1.e-16 ! We initialize to non-zero to avoid divide by zero within the k-loop
       surfTemp = Temp(i,j,1) ; surfHtemp = surfTemp * hTot
       surfSalt = Salt(i,j,1) ; surfHsalt = surfSalt * hTot
-      hTotU = hTot ; surfU = u(i,j,1) ; surfHu = surfU * hTotU
-      hTotV = hTot ; surfV = v(i,j,1) ; surfHv = surfV * hTotV
-      hTotUm1 = hTot ; surfUm1 = u(i-1,j,1) ; surfHum1 = surfUm1 * hTotUm1
-      hTotVm1 = hTot ; surfVm1 = v(i,j-1,1) ; surfHvm1 = surfVm1 * hTotVm1
+      surfU = 0.5*(u(i,j,1)+u(i-1,j,1)) ; surfHu = surfU * hTot
+      surfV = 0.5*(v(i,j,1)+v(i,j-1,1)) ; surfHv = surfV * hTot
 
       ! This k-loop calculates quantities that will be passed to KPP
       iFaceHeight(1) = 0.
@@ -452,8 +447,8 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
         ! will be needed for fine vertical resolution or arbitrary coordinates.   ???????
 
         ! Compute shear between surface layer and this layer for use in the Bulk Richardson number
-        Uk = 0.5 * ( abs( u(i,j,k) - surfU ) + abs( u(i-1,j,k) - surfUm1 ) ) ! delta_k U  w/ C-grid average
-        Vk = 0.5 * ( abs( v(i,j,k) - surfV ) + abs( v(i,j-1,k) - surfVm1 ) ) ! delta_k V  w/ C-grid average
+        Uk = 0.5*(u(i,j,k)+u(i-1,j,k)) - surfU ! delta_k U w/ C-grid average
+        Vk = 0.5*(v(i,j,k)+v(i,j-1,k)) - surfV ! delta_k V w/ C-grid average
         deltaU2(k) = Uk**2 + Vk**2
 
         ! Pressure at bottom of level k will become pressure at top of level on next iteration
@@ -465,26 +460,8 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
           hTot = hTot + delH
           surfHtemp = surfHtemp + Temp(i,j,k) * delH ; surfTemp = surfHtemp / hTot
           surfHsalt = surfHsalt + Salt(i,j,k) * delH ; surfSalt = surfHsalt / hTot
-        endif
-        if (hTotU < SLdepth_0d) then
-          delH = min( max(0., SLdepth_0d - hTotU), 0.5*(h(i,j,k)+h(i+1,j,k))*G%H_to_m )
-          hTotU = hTotU + delH
-          surfHu = surfHu + u(i,j,k) * delH ; surfU = surfHu / hTotU
-        endif
-        if (hTotV < SLdepth_0d) then
-          delH = min( max(0., SLdepth_0d - hTotV), 0.5*(h(i,j,k)+h(i,j+1,k))*G%H_to_m )
-          hTotV = hTotV + delH
-          surfHv = surfHv + v(i,j,k) * delH ; surfV = surfHv / hTotV
-        endif
-        if (hTotUm1 < SLdepth_0d) then
-          delH = min( max(0., SLdepth_0d - hTotUm1), 0.5*(h(i-1,j,k)+h(i,j,k))*G%H_to_m )
-          hTotUm1 = hTotUm1 + delH
-          surfHum1 = surfHum1 + u(i-1,j,k) * delH ; surfUm1 = surfHum1 / hTotUm1
-        endif
-        if (hTotVm1 < SLdepth_0d) then
-          delH = min( max(0., SLdepth_0d - hTotVm1), 0.5*(h(i,j-1,k)+h(i,j,k))*G%H_to_m )
-          hTotVm1 = hTotVm1 + delH
-          surfHvm1 = surfHvm1 + v(i,j-1,k) * delH ; surfVm1 = surfHvm1 / hTotVm1
+          surfHu = surfHu + 0.5*(u(i,j,k)+u(i-1,j,k)) * delH ; surfU = surfHu / hTot
+          surfHv = surfHv + 0.5*(v(i,j,k)+v(i,j-1,k)) * delH ; surfV = surfHv / hTot
         endif
       enddo ! k
       call calculate_density(Temp_1D, Salt_1D, pres_1D, rho_1D, 1, 3*G%ke, EOS)
@@ -583,15 +560,13 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
         hTot = h(i,j,1) ! We initialize to first layer
         surfTemp = Temp(i,j,1) ; surfHtemp = surfTemp * hTot
         surfSalt = Salt(i,j,1) ; surfHsalt = surfSalt * hTot
-        hTotU = hTot ; surfU = u(i,j,1) ; surfHu = surfU * hTotU
-        hTotV = hTot ; surfV = v(i,j,1) ; surfHv = surfV * hTotV
-        hTotUm1 = hTot ; surfUm1 = u(i-1,j,1) ; surfHum1 = surfUm1 * hTotUm1
-        hTotVm1 = hTot ; surfVm1 = v(i,j-1,1) ; surfHvm1 = surfVm1 * hTotVm1
+        surfU = 0.5*(u(i,j,1)+u(i-1,j,1)) ; surfHu = surfU * hTot
+        surfV = 0.5*(v(i,j,1)+v(i,j-1,1)) ; surfHv = surfV * hTot
         pRef = 0.
         do k = 2, G%ke
           ! Recalculate differences with surface layer
-          Uk = 0.5 * ( abs( u(i,j,k) - surfU ) + abs( u(i-1,j,k) - surfUm1 ) ) ! delta_k U
-          Vk = 0.5 * ( abs( v(i,j,k) - surfV ) + abs( v(i,j-1,k) - surfVm1 ) ) ! delta_k V
+          Uk = 0.5*(u(i,j,k)+u(i-1,j,k)) - surfU ! delta_k U w/ C-grid average
+          Vk = 0.5*(v(i,j,k)+v(i,j-1,k)) - surfV ! delta_k V w/ C-grid average
           deltaU2(k) = Uk**2 + Vk**2
           pRef = pRef + G%g_Earth * G%Rho0 * h(i,j,k) * G%H_to_m ! Boussinesq approximation!!!! ?????
           call calculate_density(surfTemp, surfSalt, pRef, rho1, EOS)
@@ -604,30 +579,8 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Kt, K
             hTot = hTot + delH
             surfHtemp = surfHtemp + Temp(i,j,k) * delH ; surfTemp = surfHtemp / hTot
             surfHsalt = surfHsalt + Salt(i,j,k) * delH ; surfSalt = surfHsalt / hTot
-          endif
-          if (hTotU < SLdepth_0d) then
-            delH = min( max(0., SLdepth_0d - hTotU), 0.5*(h(i,j,k)+h(i+1,j,k))*G%H_to_m )
-            hTotU = hTotU + delH
-            surfHu = surfHu + u(i,j,k) * delH ; surfU = surfHu / hTotU
-          endif
-          if (hTotV < SLdepth_0d) then
-            delH = min( max(0., SLdepth_0d - hTotV), 0.5*(h(i,j,k)+h(i,j+1,k))*G%H_to_m )
-            hTotV = hTotV + delH
-            surfHv = surfHv + v(i,j,k) * delH ; surfV = surfHv / hTotV
-          endif
-          if (hTotUm1 < SLdepth_0d) then
-            delH = min( max(0., SLdepth_0d - hTotUm1), 0.5*(h(i-1,j,k)+h(i,j,k))*G%H_to_m )
-            hTotUm1 = hTotUm1 + delH
-            surfHum1 = surfHum1 + u(i-1,j,k) * delH ; surfUm1 = surfHum1 / hTotUm1
-          endif
-          if (hTotVm1 < SLdepth_0d) then
-            delH = min( max(0., SLdepth_0d - hTotVm1), 0.5*(h(i,j-1,k)+h(i,j,k))*G%H_to_m )
-            hTotVm1 = hTotVm1 + delH
-            surfHvm1 = surfHvm1 + v(i,j-1,k) * delH ; surfVm1 = surfHvm1 / hTotVm1
-            !Bugfix: Eliminate exit so that all vertical levels are calculated
-            !        using the updated surface averages. /BGR
-          !else
-          !  exit ! Avoid unnecessary calculations
+            surfHu = surfHu + 0.5*(u(i,j,k)+u(i-1,j,k)) * delH ; surfU = surfHu / hTot
+            surfHv = surfHv + 0.5*(v(i,j,k)+v(i,j-1,k)) * delH ; surfV = surfHv / hTot
           endif
         enddo
 
