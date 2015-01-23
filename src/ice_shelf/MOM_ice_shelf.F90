@@ -104,8 +104,8 @@ use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
 use MOM_file_parser, only : read_param, get_param, log_param, log_version, param_file_type
 use MOM_grid, only : MOM_grid_init, ocean_grid_type
 use MOM_grid_initialize, only : set_grid_metrics
-use MOM_initialization, only : MOM_initialize_topography
-use MOM_initialization, only : MOM_initialize_rotation
+use MOM_fixed_initialization, only : MOM_initialize_topography
+use MOM_fixed_initialization, only : MOM_initialize_rotation
 use user_initialization, only : user_initialize_topography
 use MOM_io, only : field_exists, file_exists, read_data, write_version_number
 use MOM_io, only : slasher, vardesc, fieldtype

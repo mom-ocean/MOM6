@@ -346,14 +346,15 @@ use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe
 use MOM_error_handler, only : MOM_set_verbosity, callTree_showQuery
 use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser, only : read_param, get_param, log_version, param_file_type
+use MOM_fixed_initialization, only : MOM_initialize_fixed
 use MOM_get_input, only : Get_MOM_Input, directories
 use MOM_io, only : MOM_io_init, vardesc
 use MOM_obsolete_params, only : find_obsolete_params
 use MOM_restart, only : register_restart_field, query_initialized, save_restart
 use MOM_restart, only : restart_init, MOM_restart_CS
+use MOM_state_initialization, only : MOM_initialize_state, MOM_initialization_struct
 use MOM_time_manager, only : time_type, set_time, time_type_to_real, operator(+)
 use MOM_time_manager, only : operator(-), operator(>), operator(*), operator(/)
-use MOM_initialization, only : MOM_initialize, MOM_initialization_struct
 
 use MOM_continuity, only : continuity, continuity_init, continuity_CS
 use MOM_CoriolisAdv, only : CorAdCalc, CoriolisAdv_init, CoriolisAdv_CS
@@ -482,7 +483,7 @@ type, public :: MOM_control_struct
   logical :: debug_truncations  ! If true, make sure that all diagnostics that
                              ! could be useful for debugging any truncations are
                              ! calculated.
-  logical :: useALEalgorithm ! If true, use the ALE algorithm rather than layered
+  logical :: use_ALE_algorithm ! If true, use the ALE algorithm rather than layered
                              ! isopycnal/stacked shallow water mode. This logical is
                              ! set by calling the function useRegridding() from the
                              ! MOM_regridding module.
@@ -719,7 +720,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
                              CS%visc%kv_bbl_v, G%Domain, To_All+SCALAR_PAIR, CGRID_NE)
     endif
   endif
-  if (.not.CS%adiabatic .AND. CS%useALEalgorithm ) then
+  if (.not.CS%adiabatic .AND. CS%use_ALE_algorithm ) then
     call create_group_pass(pass_T_S_h, CS%tv%T, G%Domain)
     call create_group_pass(pass_T_S_h, CS%tv%S, G%Domain)
     call create_group_pass(pass_T_S_h, h, G%Domain)
@@ -842,7 +843,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         ! Regridding/remapping is done here, at the end of the thermodynamics time step
         ! (that may comprise several dynamical time steps)
         ! The routine 'ALE_main' can be found in 'MOM_ALE.F90'.
-        if ( CS%useALEalgorithm ) then 
+        if ( CS%use_ALE_algorithm ) then 
 !         call pass_vector(u, v, G%Domain)
           call do_group_pass(pass_T_S_h, G%Domain)
           if (CS%debug) then
@@ -1113,7 +1114,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         ! Regridding/remapping is done here, at the end of the thermodynamics time step
         ! (that may comprise several dynamical time steps)
         ! The routine 'ALE_main' can be found in 'MOM_ALE.F90'.
-        if ( CS%useALEalgorithm ) then 
+        if ( CS%use_ALE_algorithm ) then 
 !         call pass_vector(u, v, G%Domain)
           call do_group_pass(pass_T_S_h, G%Domain)
           if (CS%debug) then
@@ -1361,7 +1362,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
 !                         model parameter values.
 !  (in)      dirs - A structure containing several relevant directory paths.
 !  (out)     CS - A pointer set in this routine to the MOM control structure.
-!  (in)      Time_in - An optional time passed to MOM_initialize to use when
+!  (in)      Time_in - An optional time passed to MOM_initialize_state to use when
 !                      the model is not being started from a restart file.
   type(ocean_grid_type), pointer :: G ! A pointer to a structure containing
                                   ! metrics and related information.
@@ -1488,10 +1489,10 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
                  "The default is the same setting as ENABLE_THERMODYNAMICS.", &
                  default=CS%use_temperature)
   call get_param(param_file, "MOM", "USE_REGRIDDING", &
-                 CS%useALEalgorithm , &
+                 CS%use_ALE_algorithm , &
                  "If True, use the ALE algorithm (regridding/remapping).\n"//&
                  "If False, use the layered isopycnal algorithm.", default=.false. )
-  if (CS%useALEalgorithm .and. CS%bulkmixedlayer) call MOM_error(FATAL, &
+  if (CS%use_ALE_algorithm .and. CS%bulkmixedlayer) call MOM_error(FATAL, &
                  "MOM: BULKMIXEDLAYER can not currently be used with the ALE algotihrm.")
   call get_param(param_file, "MOM", "THICKNESSDIFFUSE", CS%thickness_diffuse, &
                  "If true, interfaces or isopycnal surfaces are diffused, \n"//&
@@ -1740,25 +1741,32 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call callTree_waypoint("restart registration complete (initialize_MOM)")
 
   call cpu_clock_begin(id_clock_MOM_init)
-  call MOM_initialize(CS%u, CS%v, CS%h, CS%tv, Time, G, param_file, dirs, &
+  call MOM_initialize_fixed(G, param_file, dirs, CS%tv)
+  call callTree_waypoint("returned from MOM_initialize_fixed() (initialize_MOM)")
+
+  if (CS%use_ALE_algorithm) then
+    call initialize_ALE(param_file, G, CS%ALE_CSp)
+    call callTree_waypoint("returned from initialize_ALE() (initialize_MOM)")
+  endif
+
+  call MOM_initialize_state(CS%u, CS%v, CS%h, CS%tv, Time, G, param_file, dirs, &
                       CS%restart_CSp, init_CS, Time_in)
   call cpu_clock_end(id_clock_MOM_init)
-  call callTree_waypoint("returned from MOM_initialize() (initialize_MOM)")
+  call callTree_waypoint("returned from MOM_initialize_state() (initialize_MOM)")
 
-  !Initialize the diagnostics mask arrays. This has to be done after MOM_initialize call and before MOM_diagnostics_init
+  !Initialize the diagnostics mask arrays. This has to be done after MOM_initialize_state call and before MOM_diagnostics_init
   call diag_masks_set(G, CS%missing, diag)
 
-  if (CS%useALEalgorithm) then
-    ! For now, this has to follow immediately after MOM_initialize because
+  if (CS%use_ALE_algorithm) then
+    ! For now, this has to follow immediately after MOM_initialize_state because
     ! the call to initialize_ALE can change CS%h, etc.  initialize_ALE should
     ! be broken into two separate steps, with the regridding step optionally
-    ! occuring inside of MOM_initialize.
+    ! occuring inside of MOM_initialize_state.
     if (CS%debug) then
       call uchksum(CS%u,"Pre initialize_ALE u", G, haloshift=1)
       call vchksum(CS%v,"Pre initialize_ALE v", G, haloshift=1)
       call hchksum(CS%h, "Pre initialize_ALE h", G, haloshift=1)
     endif
-    call initialize_ALE(param_file, G, CS%ALE_CSp)
     if (.not. query_initialized(CS%h,"h",CS%restart_CSp)) then
       ! This is a not a restart so we do the following...
       call adjustGridForIntegrity(CS%ALE_CSp, G, CS%h )
@@ -1775,7 +1783,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   ! This call sets up the diagnostic axes.
   call cpu_clock_begin(id_clock_MOM_init)
   call set_axes_info(G, param_file, diag)
-  if (CS%useALEalgorithm) then
+  if (CS%use_ALE_algorithm) then
     call ALE_writeCoordinateFile( CS%ALE_CSp, G, dirs%output_directory )
   endif
   call cpu_clock_end(id_clock_MOM_init)
@@ -1821,7 +1829,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call thickness_diffuse_init(Time, G, param_file, diag, CS%CDp, CS%thickness_diffuse_CSp)
   CS%mixedlayer_restrat = mixedlayer_restrat_init(Time, G, param_file, diag, &
                                                   CS%mixedlayer_restrat_CSp)
-  if (CS%mixedlayer_restrat .and. .not.(CS%bulkmixedlayer .or. CS%useALEalgorithm)) &
+  if (CS%mixedlayer_restrat .and. .not.(CS%bulkmixedlayer .or. CS%use_ALE_algorithm)) &
      call MOM_error(FATAL, "MOM: MIXEDLAYER_RESTRAT true requires a boundary layer scheme.")
   if (associated(init_CS%OBC)) CS%OBC => init_CS%OBC
 
@@ -1841,7 +1849,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     call adiabatic_driver_init(Time, G, param_file, diag, CS%diabatic_CSp, &
                                CS%tracer_flow_CSp, CS%diag_to_Z_CSp)
   else
-    call diabatic_driver_init(Time, G, param_file, CS%useALEalgorithm, diag, &
+    call diabatic_driver_init(Time, G, param_file, CS%use_ALE_algorithm, diag, &
                               CS%ADp, CS%CDp, CS%diabatic_CSp, CS%tracer_flow_CSp, &
                               init_CS%sponge_CSp, CS%diag_to_Z_CSp)
   endif
@@ -1995,7 +2003,7 @@ subroutine register_diags(Time, G, CS, ADp)
   T_flux_units = get_tr_flux_units(G, "Celsius")
   S_flux_units = get_tr_flux_units(G, "PSU")
 
-  !Initialize the diagnostics mask arrays. This has to be done after MOM_initialize call
+  !Initialize the diagnostics mask arrays. This has to be done after MOM_initialize_state call
   !call diag_masks_set(G, CS%missing)
 
   CS%id_u = register_diag_field('ocean_model', 'u', diag%axesCuL, Time, &
@@ -2154,7 +2162,7 @@ subroutine MOM_timing_init(CS)
 
  id_clock_continuity = cpu_clock_id('(Ocean continuity equation *)', grain=CLOCK_MODULE)
  id_clock_pass = cpu_clock_id('(Ocean message passing *)', grain=CLOCK_MODULE)
- id_clock_MOM_init = cpu_clock_id('(Ocean MOM_initialize)', grain=CLOCK_MODULE)
+ id_clock_MOM_init = cpu_clock_id('(Ocean MOM_initialize_state)', grain=CLOCK_MODULE)
  id_clock_pass_init = cpu_clock_id('(Ocean init message passing *)', grain=CLOCK_ROUTINE)
  if (CS%thickness_diffuse) &
    id_clock_thick_diff = cpu_clock_id('(Ocean thickness diffusion *)', grain=CLOCK_MODULE)
@@ -2639,7 +2647,7 @@ end subroutine smooth_SSH
 subroutine MOM_end(CS)
   type(MOM_control_struct), pointer      :: CS
 
-  if (CS%useALEalgorithm) then
+  if (CS%use_ALE_algorithm) then
     call end_ALE(CS%ALE_CSp)
   endif
 
