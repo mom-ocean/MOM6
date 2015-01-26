@@ -97,6 +97,7 @@ public getCoordinateResolution
 public getCoordinateInterfaces
 public getCoordinateUnits
 public getCoordinateShortName
+public getStaticThickness
 
 public DEFAULT_COORDINATE_MODE
 character(len=158), parameter, public :: regriddingCoordinateModeDoc = &
@@ -1634,6 +1635,44 @@ subroutine setRegriddingMinimumThickness( minThickness, CS )
   
 end subroutine setRegriddingMinimumThickness
 
+!------------------------------------------------------------------------------
+! Query the fixed resolution data
+!------------------------------------------------------------------------------
+function getStaticThickness( CS, SSH, depth )
+  type(regridding_CS), intent(in) :: CS
+  real,                intent(in) :: SSH
+  real,                intent(in) :: depth
+  real, dimension(CS%nk)          :: getStaticThickness
+  ! Local
+  integer :: k
+  real :: z, dz
+
+  select case ( CS%regridding_scheme )
+    case ( REGRIDDING_ZSTAR )
+      if (depth>0.) then
+        z = ssh
+        do k = 1, CS%nk
+          dz = CS%coordinateResolution(k) * ( 1. + ssh/depth ) ! Nominal dz*
+          dz = max(dz, 0.)                                     ! Avoid negative incase ssh=-depth
+          dz = min(dz, depth - z)                              ! Clip if below topography
+          z = z + dz                                           ! Bottom of layer
+          getStaticThickness(k) = dz
+        enddo
+      else
+        getStaticThickness(:) = 0. ! On land ...
+      endif
+    case ( REGRIDDING_SIGMA )
+      getStaticThickness(:) = CS%coordinateResolution(:) * ( depth + ssh )
+    case ( REGRIDDING_RHO )  
+      getStaticThickness(:) = 0. ! Not applicable
+    case ( REGRIDDING_ARBITRARY )
+      getStaticThickness(:) = 0  ! Not applicable
+    case default
+      call MOM_error(FATAL,'MOM_regridding, getStaticThickness: '//&
+                     'Unknown regridding scheme selected!')
+  end select ! type of grid 
+  
+end function getStaticThickness
 
 !------------------------------------------------------------------------------
 ! Allocate memory for regridding

@@ -63,7 +63,7 @@ use SCM_idealized_hurricane, only : SCM_idealized_hurricane_TS_init
 use midas_vertmap, only : find_interfaces, tracer_Z_init, meshgrid
 use midas_vertmap, only : determine_temperature
 
-use MOM_ALE, only : ALE_initRegridding
+use MOM_ALE, only : ALE_initRegridding, ALE_CS, ALE_initThicknessToCoord
 use MOM_regridding, only : regridding_CS
 use MOM_remapping, only : remapping_CS, remapping_core, initialize_remapping
 use MOM_remapping, only : dzFromH1H2, remapDisableBoundaryExtrapolation
@@ -96,7 +96,7 @@ contains
 
 ! -----------------------------------------------------------------------------
 subroutine MOM_initialize_state(u, v, h, tv, Time, G, PF, dirs, &
-                              restart_CS, CS, Time_in)
+                              restart_CS, ALE_CSp, CS, Time_in)
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(out)   :: u
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(out)   :: v
   real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(out)   :: h
@@ -106,6 +106,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, PF, dirs, &
   type(param_file_type),                  intent(in)    :: PF
   type(directories),                      intent(in)    :: dirs
   type(MOM_restart_CS),                   pointer       :: restart_CS
+  type(ALE_CS),                           pointer       :: ALE_CSp
   type(MOM_initialization_struct),        intent(inout) :: CS
   type(time_type), optional,              intent(in)    :: Time_in
 ! Arguments: u  - Zonal velocity, in m s-1.
@@ -222,7 +223,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, PF, dirs, &
       select case (trim(config))
          case ("file"); call initialize_thickness_from_file(h, G, PF, .false.)
          case ("thickness_file"); call initialize_thickness_from_file(h, G, PF, .true.)
-         case ("coord"); call initialize_thickness_uniform(h, G, PF)
+         case ("coord"); call ALE_initThicknessToCoord( ALE_CSp, G, h )
          case ("uniform"); call initialize_thickness_uniform(h, G, PF)
          case ("DOME"); call DOME_initialize_thickness(h, G, PF)
          case ("benchmark"); call benchmark_initialize_thickness(h, G, PF, &

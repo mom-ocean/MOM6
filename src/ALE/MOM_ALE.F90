@@ -40,6 +40,7 @@ use MOM_regridding, only : setRegriddingMinimumThickness, regriddingDefaultMinTh
 use MOM_regridding, only : regridding_CS
 use MOM_regridding, only : getCoordinateInterfaces, getCoordinateResolution
 use MOM_regridding, only : getCoordinateUnits, getCoordinateShortName
+use MOM_regridding, only : getStaticThickness
 use MOM_remapping, only : initialize_remapping, remapping_main, end_remapping
 use MOM_remapping, only : remappingSchemesDoc, remappingDefaultScheme
 use MOM_remapping, only : remapDisableBoundaryExtrapolation, remapEnableBoundaryExtrapolation
@@ -105,6 +106,7 @@ public ALE_getCoordinate
 public ALE_getCoordinateUnits
 public ALE_writeCoordinateFile
 public ALE_updateVerticalGridType
+public ALE_initThicknessToCoord
 
 ! -----------------------------------------------------------------------------
 ! The following are private constants
@@ -699,5 +701,22 @@ subroutine ALE_writeCoordinateFile( CS, G, directory )
   call close_file(unit)
 
 end subroutine ALE_writeCoordinateFile
+
+!------------------------------------------------------------------------------
+! Set h to coordinate values for fixed coordinate systems
+!------------------------------------------------------------------------------
+subroutine ALE_initThicknessToCoord( CS, G, h )
+  ! Arguments
+  type(ALE_CS), intent(inout) :: CS ! Regridding parameters and options
+  type(ocean_grid_type), intent(in)                  :: G
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(out) :: h ! Three-dimensional ocean grid
+  ! Local variables
+  integer :: i, j, k
+
+  do j = G%jsd,G%jed ; do i = G%isd,G%ied
+    h(i,j,:) = getStaticThickness( CS%regridCS, 0., G%bathyT(i,j) )
+  enddo; enddo
+
+end subroutine ALE_initThicknessToCoord
 
 end module MOM_ALE

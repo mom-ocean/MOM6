@@ -1750,7 +1750,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   endif
 
   call MOM_initialize_state(CS%u, CS%v, CS%h, CS%tv, Time, G, param_file, dirs, &
-                      CS%restart_CSp, init_CS, Time_in)
+                      CS%restart_CSp, CS%ALE_CSp, init_CS, Time_in)
   call cpu_clock_end(id_clock_MOM_init)
   call callTree_waypoint("returned from MOM_initialize_state() (initialize_MOM)")
 
