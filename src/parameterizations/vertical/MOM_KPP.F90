@@ -766,7 +766,10 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, &
       if (CS%id_BulkDrho > 0) CS%dRho(i,j,:)   = deltaRho(:)
       if (CS%id_BulkUz2 > 0)  CS%Uz2(i,j,:)    = deltaU2(:)
       if (CS%id_BulkRi > 0)   CS%BulkRi(i,j,:) = BulkRi_1d(:)
-      if (CS%id_sigma > 0)    CS%sigma(i,j,:)  = -iFaceHeight/OBLdepth_0d
+      if (CS%id_sigma > 0) then
+        CS%sigma(i,j,:)  = 0.
+        if (OBLdepth_0d>0.)   CS%sigma(i,j,:)  = -iFaceHeight/OBLdepth_0d
+      endif
       if (CS%id_N > 0)        CS%N(i,j,:)      = N_1d(:)
       if (CS%id_N2 > 0)       CS%N2(i,j,:)     = N2_1d(:)
       if (CS%id_Vt2 > 0)      CS%Vt2(i,j,:)    = Vt2_1d(:)
