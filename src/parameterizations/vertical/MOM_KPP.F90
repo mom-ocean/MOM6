@@ -154,7 +154,7 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive)
   call get_param(paramFile, mod, 'INTERP_TYPE', CS%interpType,                  &
                  'Type of interpolation to use to determine the OBL depth.\n'// &
                  'Allowed types are: linear, quadratic, cubic.',                &
-                 default='quadratic')
+                 default='cubic')
   call get_param(paramFile, mod, 'COMPUTE_EKMAN', CS%computeEkman,                     &
                  'If True, limit the OBL depth to be shallower than the Ekman depth.', &
                  default=.False.)
