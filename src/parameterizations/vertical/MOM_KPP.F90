@@ -73,11 +73,15 @@ type, public :: KPP_CS ; private
   integer :: id_QminusSW = -1, id_netS     = -1
   integer :: id_sigma    = -1, id_Kv_KPP   = -1
   integer :: id_Kt_KPP   = -1, id_Ks_KPP   = -1
-  integer :: id_NLTt     = -1, id_NLTs     = -1
   integer :: id_Tsurf    = -1, id_Ssurf    = -1
   integer :: id_Usurf    = -1, id_Vsurf    = -1
-  integer :: id_dSdt     = -1, id_dTdt     = -1
   integer :: id_Kd_in    = -1
+  integer :: id_NLTt     = -1
+  integer :: id_NLTs     = -1
+  integer :: id_NLT_dSdt = -1
+  integer :: id_NLT_dTdt = -1
+  integer :: id_NLT_temp_budget = -1
+  integer :: id_NLT_saln_budget = -1
 
   ! Diagnostics arrays
   real, allocatable, dimension(:,:)   :: OBLdepth  !< Depth (positive) of OBL (m)
@@ -266,10 +270,14 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive)
       'Non-local transport (Cs*G(sigma)) for heat, as calculated by [CVmix] KPP', 'nondim')
   CS%id_NLTs = register_diag_field('ocean_model', 'KPP_NLtransport_salt', diag%axesTi, Time, &
       'Non-local tranpsort (Cs*G(sigma)) for scalars, as calculated by [CVmix] KPP', 'nondim')
-  CS%id_dTdt = register_diag_field('ocean_model', 'KPP_dTdt', diag%axesTL, Time, &
+  CS%id_NLT_dTdt = register_diag_field('ocean_model', 'KPP_NLT_dTdt', diag%axesTL, Time, &
       'Temperature tendency due to non-local transport of heat, as calculated by [CVmix] KPP', 'K/s')
-  CS%id_dSdt = register_diag_field('ocean_model', 'KPP_dSdt', diag%axesTL, Time, &
-      'Salinity tendency due to non-local transport of heat, as calculated by [CVmix] KPP', 'ppt/s')
+  CS%id_NLT_dSdt = register_diag_field('ocean_model', 'KPP_NLT_dSdt', diag%axesTL, Time, &
+      'Salinity tendency due to non-local transport of salt, as calculated by [CVmix] KPP', 'ppt/s')
+  CS%id_NLT_temp_budget = register_diag_field('ocean_model', 'KPP_NLT_temp_budget', diag%axesTL, Time, &
+      'Heat content change due to non-local transport, as calculated by [CVmix] KPP', 'W/m^2')
+  CS%id_NLT_saln_budget = register_diag_field('ocean_model', 'KPP_NLT_saln_budget', diag%axesTL, Time, &
+      'Salt content change due to non-local transport, as calculated by [CVmix] KPP', 'kg/(sec*m^2)')
   CS%id_Tsurf = register_diag_field('ocean_model', 'KPP_Tsurf', diag%axesT1, Time, &
       'Temperature of surface layer (10% of OBL depth) as passed to [CVmix] KPP', 'C')
   CS%id_Ssurf = register_diag_field('ocean_model', 'KPP_Ssurf', diag%axesT1, Time, &
@@ -852,54 +860,71 @@ end subroutine KPP_calculate
 !end subroutine fixNLTamplitude
 
 
-!> Applies the KPP non-local transport of surface fluxes; only available for tracers
-subroutine KPP_applyNonLocalTransport(CS, G, h, nonLocalTrans, surfFlux, dt, scalar, isHeat, isSalt)
+!> Apply KPP non-local transport of surface fluxes.
+!> Nonlocal KPP transport only available for temperature and salinity  
+subroutine KPP_applyNonLocalTransport(CS, G, h, nonLocalTrans, surfFlux, dt, scalar, C_p, iTRACER)
 
   type(KPP_CS),                                 intent(in)    :: CS            !< Control structure
   type(ocean_grid_type),                        intent(in)    :: G             !< Ocean grid
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),        intent(in)    :: h             !< Layer/level thicknesses (units of H)
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),        intent(in)    :: h             !< Layer/level thickness (units of H)
   real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(in)    :: nonLocalTrans !< Non-local transport (non-dimensional)
-  real, dimension(NIMEM_,NJMEM_),               intent(in)    :: surfFlux      !< Surface source of scalar (m/s * scalar)
+  real, dimension(NIMEM_,NJMEM_),               intent(in)    :: surfFlux      !< Surface flux of scalar (H/s * scalar)
   real,                                         intent(in)    :: dt            !< Time-step (s)
   real, dimension(NIMEM_,NJMEM_,NKMEM_),        intent(inout) :: scalar        !< Scalar or temperature (scalar units)
-  logical, optional,                            intent(in)    :: isHeat        !< Indicates scalar is heat for diagnostics
-  logical, optional,                            intent(in)    :: isSalt        !< Indicates scalar is salt for diagnostics
+  real,                                         intent(in)    :: C_p           !< Seawater specific heat capacity (J/(kg*K))
+  integer,                                      intent(in)    :: iTRACER       !< =1 for temp, =2 for salinity 
 
   integer :: i, j, k
-  logical :: diagHeat, diagSalt
   logical :: debugColumn
-  real, dimension( SZI_(G), SZJ_(G), SZK_(G) ) :: dSdt ! Tendency in scalar due to non-local transport (scalar/s)
+  real, dimension( SZI_(G), SZJ_(G), SZK_(G) ) :: dSdt  ! Tendency in scalar due to KPP NLT (scalar/sec)
 
-  diagHeat = .False.
-  if (present(isHeat)) then
-    if (isHeat) then
-      if (CS%id_dTdt > 0) diagHeat = .True.
-      if (CS%id_QminusSW > 0) call post_data(CS%id_QminusSW, surfFlux, CS%diag)
-    endif
-  endif
-  diagSalt = .False.
-  if (present(isSalt)) then
-    if (isSalt) then
-      if (CS%id_dSdt > 0) diagSalt = .True.
-      if (CS%id_netS > 0) call post_data(CS%id_netS, surfFlux, CS%diag)
-    endif
-  endif
 
-  if (diagHeat .or. diagSalt) dSdt(:,:,:) = 0. ! Zero halos for diagnostics ???
+  !  Update scalar due to non-local transport of tracer 
+  dSdt(:,:,:) = 0.0 
 !$OMP parallel do default(none) shared(G,dSdt,nonLocalTrans,h,surfFlux,CS,scalar,dt)
   do k = 1, G%ke
     do j = G%jsc, G%jec
       do i = G%isc, G%iec
-        ! Tendency due to non-local transport of scalar
         dSdt(i,j,k) = ( nonLocalTrans(i,j,k) - nonLocalTrans(i,j,k+1) ) / ( h(i,j,k) + G%H_subroundoff ) * surfFlux(i,j)
-        ! Update the scalar
         if (CS%applyNonLocalTrans) scalar(i,j,k) = scalar(i,j,k) + dt * dSdt(i,j,k)
-      enddo ! i
-    enddo ! j
-  enddo ! k
+      enddo 
+    enddo
+  enddo 
 
-  if (diagHeat) call post_data(CS%id_dTdt, dSdt, CS%diag)
-  if (diagSalt) call post_data(CS%id_dSdt, dSdt, CS%diag)
+  ! temperature 
+  if (iTRACER==1) then 
+    if (CS%id_QminusSW    > 0) call post_data(CS%id_QminusSW, surfFlux, CS%diag)
+    if (CS%id_NLT_dTdt    > 0) call post_data(CS%id_NLT_dTdt, dSdt, CS%diag)
+    if (CS%id_NLT_temp_budget > 0) then 
+      dSdt(:,:,:) = 0.0 
+      do k = 1, G%ke
+        do j = G%jsc, G%jec
+          do i = G%isc, G%iec
+            dSdt(i,j,k) = (nonLocalTrans(i,j,k) - nonLocalTrans(i,j,k+1)) * surfFlux(i,j) * C_p * G%H_to_kg_m2
+          enddo 
+        enddo 
+      enddo 
+      call post_data(CS%id_NLT_temp_budget, dSdt, CS%diag) 
+    endif 
+  endif  
+
+  ! salinity 
+  if (iTRACER==2) then 
+    if (CS%id_netS        > 0) call post_data(CS%id_netS, surfFlux, CS%diag)
+    if (CS%id_NLT_dSdt    > 0) call post_data(CS%id_NLT_dSdt, dSdt, CS%diag)
+    if (CS%id_NLT_saln_budget > 0) then 
+      dSdt(:,:,:) = 0.0 
+      do k = 1, G%ke
+        do j = G%jsc, G%jec
+          do i = G%isc, G%iec
+            dSdt(i,j,k) = (nonLocalTrans(i,j,k) - nonLocalTrans(i,j,k+1)) * surfFlux(i,j) * G%H_to_kg_m2
+          enddo 
+        enddo 
+      enddo 
+      call post_data(CS%id_NLT_saln_budget, dSdt, CS%diag) 
+    endif 
+  endif  
+
 
 end subroutine KPP_applyNonLocalTransport
 

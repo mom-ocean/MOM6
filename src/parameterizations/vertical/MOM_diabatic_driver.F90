@@ -578,8 +578,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     endif
     ! Apply non-local transport of heat and salt
     ! Changes: tv%T, tv%S
-    call KPP_applyNonLocalTransport(CS%KPP_CSp, G, h, CS%KPP_NLTheat, CS%netHeatMinusSW, dt, tv%T, isHeat=.true.)
-    call KPP_applyNonLocalTransport(CS%KPP_CSp, G, h, CS%KPP_NLTscalar, CS%netSalt, dt, tv%S, isSalt=.true.)
+    call KPP_applyNonLocalTransport(CS%KPP_CSp, G, h, CS%KPP_NLTheat,   CS%netHeatMinusSW, dt, tv%T, tv%C_p, 1)
+    call KPP_applyNonLocalTransport(CS%KPP_CSp, G, h, CS%KPP_NLTscalar, CS%netSalt,        dt, tv%S, tv%C_p, 2)
     call cpu_clock_end(id_clock_kpp)
     if (showCallTree) call callTree_waypoint("done with KPP_applyNonLocalTransport (diabatic)")
     if (CS%debugConservation) call MOM_state_stats('KPP_applyNonLocalTransport', u, v, h, tv%T, tv%S, G)
