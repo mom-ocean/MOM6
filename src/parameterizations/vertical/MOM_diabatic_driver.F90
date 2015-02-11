@@ -96,7 +96,7 @@ use MOM_internal_tides,      only : propagate_int_tide, register_int_tide_restar
 use MOM_internal_tides,      only : internal_tides_init, internal_tides_end, int_tide_CS
 use MOM_kappa_shear,         only : kappa_shear_is_used
 use MOM_KPP,                 only : KPP_CS, KPP_init, KPP_calculate, KPP_end
-use MOM_KPP,                 only : KPP_applyNonLocalTransport
+use MOM_KPP,                 only : KPP_NonLocalTransport_temp, KPP_NonLocalTransport_saln
 use MOM_opacity,             only : opacity_init, set_opacity, opacity_end, opacity_CS
 use MOM_set_diffusivity,     only : set_diffusivity, set_BBL_diffusivity
 use MOM_set_diffusivity,     only : set_diffusivity_init, set_diffusivity_end
@@ -578,8 +578,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     endif
     ! Apply non-local transport of heat and salt
     ! Changes: tv%T, tv%S
-    call KPP_applyNonLocalTransport(CS%KPP_CSp, G, h, CS%KPP_NLTheat,   CS%netHeatMinusSW, dt, tv%T, tv%C_p, 1)
-    call KPP_applyNonLocalTransport(CS%KPP_CSp, G, h, CS%KPP_NLTscalar, CS%netSalt,        dt, tv%S, tv%C_p, 2)
+    call KPP_NonLocalTransport_temp(CS%KPP_CSp, G, h, CS%KPP_NLTheat,   CS%netHeatMinusSW, dt, tv%T, tv%C_p)
+    call KPP_NonLocalTransport_saln(CS%KPP_CSp, G, h, CS%KPP_NLTscalar, CS%netSalt,        dt, tv%S)
     call cpu_clock_end(id_clock_kpp)
     if (showCallTree) call callTree_waypoint("done with KPP_applyNonLocalTransport (diabatic)")
     if (CS%debugConservation) call MOM_state_stats('KPP_applyNonLocalTransport', u, v, h, tv%T, tv%S, G)
