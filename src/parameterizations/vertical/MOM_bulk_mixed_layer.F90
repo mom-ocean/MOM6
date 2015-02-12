@@ -178,6 +178,7 @@ type, public :: bulkmixedlayer_CS ; private
   logical :: allow_clocks_in_omp_loops  ! If true, clocks can be called 
                                         ! from inside loops that can be threaded. 
                                         ! To run with multiple threads, set to False.
+  type(group_pass_type) :: pass_h_sum_hmbl_prev ! For group halo pass
   integer :: id_ML_depth = -1, id_TKE_wind = -1, id_TKE_mixing = -1
   integer :: id_TKE_RiBulk = -1, id_TKE_conv = -1, id_TKE_pen_SW = -1
   integer :: id_TKE_mech_decay = -1, id_TKE_conv_decay = -1, id_TKE_conv_s2 = -1
@@ -387,7 +388,6 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
   logical :: reset_diags  ! If true, zero out the accumulated diagnostics.
   integer :: i, j, k, is, ie, js, je, nz, nkmb, n
   integer :: nsw    ! The number of bands of penetrating shortwave radiation.
-  type(group_pass_type), save :: pass_h_sum_hmbl_prev ! For group halo pass
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
@@ -435,9 +435,9 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
 !$OMP end parallel
 
     call cpu_clock_begin(id_clock_pass)
-    call create_group_pass(pass_h_sum_hmbl_prev, h_sum,G%Domain)
-    call create_group_pass(pass_h_sum_hmbl_prev, hmbl_prev,G%Domain)
-    call do_group_pass(pass_h_sum_hmbl_prev, G%Domain)
+    call create_group_pass(CS%pass_h_sum_hmbl_prev, h_sum,G%Domain)
+    call create_group_pass(CS%pass_h_sum_hmbl_prev, hmbl_prev,G%Domain)
+    call do_group_pass(CS%pass_h_sum_hmbl_prev, G%Domain)
     call cpu_clock_end(id_clock_pass)
   endif
 

@@ -90,6 +90,8 @@ type, public :: regularize_layers_CS ; private
                              ! timing of diagnostic output.
   logical :: debug           ! If true, do more thorough checks for debugging purposes.
 
+  type(group_pass_type) :: pass_h ! For group pass
+
   integer :: id_def_rat = -1
   logical :: allow_clocks_in_omp_loops  ! If true, clocks can be called 
                                         ! from inside loops that can be threaded. 
@@ -137,7 +139,6 @@ subroutine regularize_layers(h, tv, dt, ea, eb, G, CS)
 !                 regularize_layers_init.
 
   integer :: i, j, k, is, ie, js, je, nz
-  type(group_pass_type), save :: pass_h
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
@@ -146,8 +147,8 @@ subroutine regularize_layers(h, tv, dt, ea, eb, G, CS)
 
   if (CS%regularize_surface_layers) then
     call cpu_clock_begin(id_clock_pass)
-    call create_group_pass(pass_h,h,G%Domain)
-    call do_group_pass(pass_h,G%Domain)
+    call create_group_pass(CS%pass_h,h,G%Domain)
+    call do_group_pass(CS%pass_h,G%Domain)
     call cpu_clock_end(id_clock_pass)
   endif
 
