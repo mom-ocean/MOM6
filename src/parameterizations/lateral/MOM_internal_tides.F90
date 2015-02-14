@@ -93,6 +93,8 @@ type, public :: int_tide_CS ; private
   real, allocatable, dimension(:) :: &
     frequency           ! The frequency of each band.
 
+  type(group_pass_type) :: pass_test, pass_En
+
   type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
                         ! timing of diagnostic output.
   integer :: id_tot_En = -1, id_itide_drag = -1
@@ -131,7 +133,6 @@ subroutine propagate_int_tide(cg1, En_in, vel_btTide, dt, G, CS)
   real :: frac_per_sector, f2, I_rho0, I_D_here
 
   integer :: a, m, fr, i, j, is, ie, js, je, isd, ied, jsd, jed, nAngle
-  type(group_pass_type), save :: pass_test, pass_En
 
   if (.not.associated(CS)) return
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
@@ -175,18 +176,18 @@ subroutine propagate_int_tide(cg1, En_in, vel_btTide, dt, G, CS)
   ! Pass a test vector to check for grid rotation in the halo updates.
   do j=jsd,jed ; do i=isd,ied ; test(i,j,1) = 1.0 ; test(i,j,2) = 0.0 ; enddo ; enddo
   do m=1,CS%nMode ; do fr=1,CS%nFreq
-    call create_group_pass(pass_En, CS%En(:,:,:,fr,m), G%domain)
+    call create_group_pass(CS%pass_En, CS%En(:,:,:,fr,m), G%domain)
   enddo; enddo
-  call create_group_pass(pass_test, test(:,:,1), test(:,:,2), G%domain, stagger=AGRID)
-  call start_group_pass(pass_test, G%domain)
+  call create_group_pass(CS%pass_test, test(:,:,1), test(:,:,2), G%domain, stagger=AGRID)
+  call start_group_pass(CS%pass_test, G%domain)
   
   ! Apply half the refraction.
   do m=1,CS%nMode ; do fr=1,CS%nFreq
     call refract(CS%En(:,:,:,fr,m), c1(:,:,m), CS%frequency(fr), 0.5*dt, G, CS%nAngle)
   enddo ; enddo
-  call do_group_pass(pass_En, G%domain)
+  call do_group_pass(CS%pass_En, G%domain)
 
-  call complete_group_pass(pass_test, G%domain)
+  call complete_group_pass(CS%pass_test, G%domain)
 
   ! Rotate points in the halos as necessary.
   call correct_halo_rotation(CS%En, test, G, CS%nAngle)

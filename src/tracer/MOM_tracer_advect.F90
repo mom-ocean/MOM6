@@ -81,6 +81,7 @@ type, public :: tracer_advect_CS ; private
                             ! timing of diagnostic output.
   logical :: debug          ! If true, write verbose checksums for debugging purposes.
   logical :: usePPM         ! If true, use PPM instead of PLM
+  type(group_pass_type) :: pass_uhr_vhr_t_hprev ! For group pass
 end type tracer_advect_CS
 
 integer :: id_clock_advect, id_clock_pass, id_clock_sync
@@ -138,7 +139,6 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, CS, Reg)
   integer :: i, j, k, m, is, ie, js, je, isd, ied, jsd, jed, nz, itt, ntr, do_any
   integer :: isv, iev, jsv, jev ! The valid range of the indices.
   integer :: IsdB, IedB, JsdB, JedB
-  type(group_pass_type), save :: pass_uhr_vhr_t_hprev
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -161,10 +161,10 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, CS, Reg)
   max_iter = 2*INT(CEILING(dt/CS%dt)) + 1
 
   call cpu_clock_begin(id_clock_pass)
-  call create_group_pass(pass_uhr_vhr_t_hprev, uhr, vhr, G%Domain)
-  call create_group_pass(pass_uhr_vhr_t_hprev, hprev, G%Domain)
+  call create_group_pass(CS%pass_uhr_vhr_t_hprev, uhr, vhr, G%Domain)
+  call create_group_pass(CS%pass_uhr_vhr_t_hprev, hprev, G%Domain)
   do m=1,ntr 
-    call create_group_pass(pass_uhr_vhr_t_hprev, Tr(m)%t, G%Domain) 
+    call create_group_pass(CS%pass_uhr_vhr_t_hprev, Tr(m)%t, G%Domain) 
   enddo
   call cpu_clock_end(id_clock_pass)
 
@@ -232,7 +232,7 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, CS, Reg)
 
     if (isv > is-stensil) then
       call cpu_clock_begin(id_clock_pass)
-      call do_group_pass(pass_uhr_vhr_t_hprev, G%Domain)
+      call do_group_pass(CS%pass_uhr_vhr_t_hprev, G%Domain)
       call cpu_clock_end(id_clock_pass)
 
       nsten_halo = min(is-isd,ied-ie,js-jsd,jed-je)/stensil

@@ -98,6 +98,8 @@ type, public :: VarMix_CS ;
                           ! and especially 2 are coded to be more efficient.
   real :: Visbeck_S_max   ! Upper bound on slope used in Eady growth rate (nondim).
 
+  type(group_pass_type) :: pass_cg1 ! for group halo pass
+
   ! Diagnostics
   type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
                           ! timing of diagnostic output.
@@ -127,7 +129,6 @@ subroutine calc_resoln_function(h, tv, G, CS)
 !  (in)      CS - The control structure returned by a previous call to
 !                 VarMix_init.
 
-  type(group_pass_type), save :: pass_cg1 ! for group halo pass
   real :: cg1_q  ! The gravity wave speed interpolated to q points, in m s-1.
   real :: cg1_u  ! The gravity wave speed interpolated to u points, in m s-1.
   real :: cg1_v  ! The gravity wave speed interpolated to v points, in m s-1.
@@ -171,8 +172,8 @@ subroutine calc_resoln_function(h, tv, G, CS)
 
   call wave_speed(h, tv, G, CS%cg1, CS%wave_speed_CSp)
 
-  call create_group_pass(pass_cg1, CS%cg1, G%Domain)
-  call do_group_pass(pass_cg1, G%Domain)
+  call create_group_pass(CS%pass_cg1, CS%cg1, G%Domain)
+  call do_group_pass(CS%pass_cg1, G%Domain)
 
   !   Do this calculation on the extent used in MOM_hor_visc.F90, and
   ! MOM_tracer.F90 so that no halo update is needed.

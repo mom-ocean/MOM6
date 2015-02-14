@@ -297,6 +297,13 @@ type, public :: barotropic_CS ; private
 
   integer :: isdw, iedw, jsdw, jedw ! The memory limits of the wide halo arrays.
 
+  !--- for group halo pass
+  type(group_pass_type) :: pass_q_DCor, pass_gtot
+  type(group_pass_type) :: pass_tmp_uv, pass_eta_bt_rem
+  type(group_pass_type) :: pass_force_hbt0_Cor_ref, pass_Dat_uv
+  type(group_pass_type) :: pass_eta_ubt, pass_etaav
+  type(group_pass_type) :: pass_ubta_uhbta, pass_e_anom
+
   integer :: id_PFu_bt = -1, id_PFv_bt = -1, id_Coru_bt = -1, id_Corv_bt = -1
   integer :: id_ubtforce = -1, id_vbtforce = -1, id_uaccel = -1, id_vaccel = -1
   integer :: id_visc_rem_u = -1, id_visc_rem_v = -1, id_eta_cor = -1
@@ -639,12 +646,6 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   integer :: is, ie, js, je, nz, Isq, Ieq, Jsq, Jeq
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   integer :: ioff, joff
-  !--- for group halo pass
-  type(group_pass_type), save :: pass_q_DCor, pass_gtot
-  type(group_pass_type), save :: pass_tmp_uv, pass_eta_bt_rem
-  type(group_pass_type), save :: pass_force_hbt0_Cor_ref, pass_Dat_uv
-  type(group_pass_type), save :: pass_eta_ubt, pass_etaav
-  type(group_pass_type), save :: pass_ubta_uhbta, pass_e_anom
 
   if (.not.associated(CS)) call MOM_error(FATAL, &
       "btstep: Module MOM_barotropic must be initialized before it is used.")
@@ -741,48 +742,48 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
 !--- begin setup for group halo update
   if (id_clock_pass_pre > 0) call cpu_clock_begin(id_clock_pass_pre)
   if (.not. CS%linearized_BT_PV) then
-    call create_group_pass(pass_q_DCor, q, CS%BT_Domain, To_All, position=CORNER)
-    call create_group_pass(pass_q_DCor, DCor_u, DCor_v, CS%BT_Domain, &
+    call create_group_pass(CS%pass_q_DCor, q, CS%BT_Domain, To_All, position=CORNER)
+    call create_group_pass(CS%pass_q_DCor, DCor_u, DCor_v, CS%BT_Domain, &
          To_All+Scalar_Pair)
   endif
   if ((Isq > is-1) .or. (Jsq > js-1)) &
-    call create_group_pass(pass_tmp_uv, tmp_u, tmp_v, G%Domain)
-  call create_group_pass(pass_gtot, gtot_E, gtot_N, CS%BT_Domain, &
+    call create_group_pass(CS%pass_tmp_uv, tmp_u, tmp_v, G%Domain)
+  call create_group_pass(CS%pass_gtot, gtot_E, gtot_N, CS%BT_Domain, &
        To_All+Scalar_Pair, AGRID)
-  call create_group_pass(pass_gtot, gtot_W, gtot_S, CS%BT_Domain, &
+  call create_group_pass(CS%pass_gtot, gtot_W, gtot_S, CS%BT_Domain, &
        To_All+Scalar_Pair, AGRID)
 
   if (CS%dynamic_psurf) &
-    call create_group_pass(pass_eta_bt_rem, dyn_coef_eta, CS%BT_Domain)
+    call create_group_pass(CS%pass_eta_bt_rem, dyn_coef_eta, CS%BT_Domain)
   if (interp_eta_PF) then
-    call create_group_pass(pass_eta_bt_rem, eta_PF_1, CS%BT_Domain)
-    call create_group_pass(pass_eta_bt_rem, d_eta_PF, CS%BT_Domain)
+    call create_group_pass(CS%pass_eta_bt_rem, eta_PF_1, CS%BT_Domain)
+    call create_group_pass(CS%pass_eta_bt_rem, d_eta_PF, CS%BT_Domain)
   else
     !   eta_PF_in had correct values in its halos, so only update eta_PF with 
     ! extra-wide halo arrays.  This could have started almost immediately.
     if ((G%isd > CS%isdw) .or. (G%jsd > CS%jsdw)) &
-      call create_group_pass(pass_eta_bt_rem, eta_PF, CS%BT_Domain)
+      call create_group_pass(CS%pass_eta_bt_rem, eta_PF, CS%BT_Domain)
   endif
-  call create_group_pass(pass_eta_bt_rem, eta_src, CS%BT_Domain)
+  call create_group_pass(CS%pass_eta_bt_rem, eta_src, CS%BT_Domain)
   ! The following halo update is not needed without wide halos.  RWH
-  if (ievf > ie) call create_group_pass(pass_eta_bt_rem, bt_rem_u, bt_rem_v, &
+  if (ievf > ie) call create_group_pass(CS%pass_eta_bt_rem, bt_rem_u, bt_rem_v, &
                       CS%BT_Domain, To_All+Scalar_Pair)
   ! The following halo update is not needed without wide halos.  RWH
   if (((G%isd > CS%isdw) .or. (G%jsd > CS%jsdw)) .or. (Isq <= is-1) .or. (Jsq <= js-1)) &
-    call create_group_pass(pass_force_hbt0_Cor_ref, BT_force_u, BT_force_v, CS%BT_Domain)
-  if (add_uh0) call create_group_pass(pass_force_hbt0_Cor_ref, uhbt0, vhbt0, CS%BT_Domain)
-  call create_group_pass(pass_force_hbt0_Cor_ref, Cor_ref_u, Cor_ref_v, CS%BT_Domain)
+    call create_group_pass(CS%pass_force_hbt0_Cor_ref, BT_force_u, BT_force_v, CS%BT_Domain)
+  if (add_uh0) call create_group_pass(CS%pass_force_hbt0_Cor_ref, uhbt0, vhbt0, CS%BT_Domain)
+  call create_group_pass(CS%pass_force_hbt0_Cor_ref, Cor_ref_u, Cor_ref_v, CS%BT_Domain)
   if (.not. use_BT_cont) then
-    call  create_group_pass(pass_Dat_uv, Datu, Datv, CS%BT_Domain, To_All+Scalar_Pair)
+    call  create_group_pass(CS%pass_Dat_uv, Datu, Datv, CS%BT_Domain, To_All+Scalar_Pair)
   endif
-  call create_group_pass(pass_eta_ubt, eta, CS%BT_Domain)
-  call create_group_pass(pass_eta_ubt, ubt, vbt, CS%BT_Domain)
+  call create_group_pass(CS%pass_eta_ubt, eta, CS%BT_Domain)
+  call create_group_pass(CS%pass_eta_ubt, ubt, vbt, CS%BT_Domain)
   if (find_etaav) then
-    call create_group_pass(pass_etaav, etaav, G%Domain)
+    call create_group_pass(CS%pass_etaav, etaav, G%Domain)
   endif
-  call create_group_pass(pass_e_anom, e_anom, G%Domain)
-  call create_group_pass(pass_ubta_uhbta, CS%ubtav, CS%vbtav, G%Domain)
-  call create_group_pass(pass_ubta_uhbta, uhbtav, vhbtav, G%Domain)
+  call create_group_pass(CS%pass_e_anom, e_anom, G%Domain)
+  call create_group_pass(CS%pass_ubta_uhbta, CS%ubtav, CS%vbtav, G%Domain)
+  call create_group_pass(CS%pass_ubta_uhbta, uhbtav, vhbtav, G%Domain)
 
   if (id_clock_pass_pre > 0) call cpu_clock_end(id_clock_pass_pre)
 !--- end setup for group halo update
@@ -834,9 +835,9 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
     if (id_clock_calc_pre > 0) call cpu_clock_end(id_clock_calc_pre)
     if (id_clock_pass_pre > 0) call cpu_clock_begin(id_clock_pass_pre)
     if (nonblock_setup) then
-      call start_group_pass(pass_q_DCor, CS%BT_Domain)
+      call start_group_pass(CS%pass_q_DCor, CS%BT_Domain)
     else
-      call do_group_pass(pass_q_DCor, CS%BT_Domain)
+      call do_group_pass(CS%pass_q_DCor, CS%BT_Domain)
     endif
     if (id_clock_pass_pre > 0) call cpu_clock_end(id_clock_pass_pre)
     if (id_clock_calc_pre > 0) call cpu_clock_begin(id_clock_calc_pre)
@@ -947,7 +948,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   if (nonblock_setup .and. .not.CS%linearized_BT_PV) then
     if (id_clock_calc_pre > 0) call cpu_clock_end(id_clock_calc_pre)
     if (id_clock_pass_pre > 0) call cpu_clock_begin(id_clock_pass_pre)
-    call complete_group_pass(pass_q_DCor, CS%BT_Domain)
+    call complete_group_pass(CS%pass_q_DCor, CS%BT_Domain)
     if (id_clock_pass_pre > 0) call cpu_clock_end(id_clock_pass_pre)
     if (id_clock_calc_pre > 0) call cpu_clock_begin(id_clock_calc_pre)
   endif
@@ -1111,9 +1112,9 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
     do j=js,je ; do I=Isq,Ieq ; tmp_u(I,j) = BT_force_u(I,j) ; enddo ; enddo
     do J=Jsq,Jeq ; do i=is,ie ; tmp_v(i,J) = BT_force_v(i,J) ; enddo ; enddo
     if (nonblock_setup) then
-      call start_group_pass(pass_tmp_uv, G%Domain)
+      call start_group_pass(CS%pass_tmp_uv, G%Domain)
     else
-      call do_group_pass(pass_tmp_uv, G%Domain)
+      call do_group_pass(CS%pass_tmp_uv, G%Domain)
       do j=jsd,jed ; do I=IsdB,IedB ; BT_force_u(I,j) = tmp_u(I,j) ; enddo ; enddo
       do J=JsdB,JedB ; do i=isd,ied ; BT_force_v(i,J) = tmp_v(i,J) ; enddo ; enddo
     endif
@@ -1124,7 +1125,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   if (nonblock_setup) then
     if (id_clock_calc_pre > 0) call cpu_clock_end(id_clock_calc_pre)
     if (id_clock_pass_pre > 0) call cpu_clock_begin(id_clock_pass_pre)
-    call start_group_pass(pass_gtot, CS%BT_Domain)
+    call start_group_pass(CS%pass_gtot, CS%BT_Domain)
     if (id_clock_pass_pre > 0) call cpu_clock_end(id_clock_pass_pre)
     if (id_clock_calc_pre > 0) call cpu_clock_begin(id_clock_calc_pre)
   endif
@@ -1209,13 +1210,13 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   if (id_clock_pass_pre > 0) call cpu_clock_begin(id_clock_pass_pre)
   if (nonblock_setup) then
     if ((Isq > is-1) .or. (Jsq > js-1)) then
-      call complete_group_pass(pass_tmp_uv, G%Domain)
+      call complete_group_pass(CS%pass_tmp_uv, G%Domain)
       do j=jsd,jed ; do I=IsdB,IedB ; BT_force_u(I,j) = tmp_u(I,j) ; enddo ; enddo
       do J=JsdB,JedB ; do i=isd,ied ; BT_force_v(i,J) = tmp_v(i,J) ; enddo ; enddo
     endif
-    call complete_group_pass(pass_gtot, CS%BT_Domain)
+    call complete_group_pass(CS%pass_gtot, CS%BT_Domain)
   else
-    call do_group_pass(pass_gtot, CS%BT_Domain)
+    call do_group_pass(CS%pass_gtot, CS%BT_Domain)
   endif
   ! The various elements of gtot are positive definite but directional, so use
   ! the polarity arrays to sort out when the directions have shifted.
@@ -1227,10 +1228,10 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   ! Now start new halo updates.
   if (nonblock_setup) then
     if (.not.use_BT_cont) &
-      call start_group_pass(pass_Dat_uv, CS%BT_Domain)
+      call start_group_pass(CS%pass_Dat_uv, CS%BT_Domain)
 
     ! The following halo update is not needed without wide halos.  RWH
-    call start_group_pass(pass_force_hbt0_Cor_ref, CS%BT_Domain)
+    call start_group_pass(CS%pass_force_hbt0_Cor_ref, CS%BT_Domain)
   endif
   if (id_clock_pass_pre > 0) call cpu_clock_end(id_clock_pass_pre)
   if (id_clock_calc_pre > 0) call cpu_clock_begin(id_clock_calc_pre)
@@ -1363,13 +1364,13 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   if (id_clock_calc_pre > 0) call cpu_clock_end(id_clock_calc_pre)
   if (id_clock_pass_pre > 0) call cpu_clock_begin(id_clock_pass_pre)
   if (nonblock_setup) then
-    call start_group_pass(pass_eta_bt_rem, CS%BT_Domain)
+    call start_group_pass(CS%pass_eta_bt_rem, CS%BT_Domain)
     ! The following halo update is not needed without wide halos.  RWH
   else
-    call do_group_pass(pass_eta_bt_rem, CS%BT_Domain)
+    call do_group_pass(CS%pass_eta_bt_rem, CS%BT_Domain)
     if (.not.use_BT_cont) &
-      call do_group_pass(pass_Dat_uv, CS%BT_Domain)
-    call do_group_pass(pass_force_hbt0_Cor_ref, CS%BT_Domain)
+      call do_group_pass(CS%pass_Dat_uv, CS%BT_Domain)
+    call do_group_pass(CS%pass_force_hbt0_Cor_ref, CS%BT_Domain)
   endif
   if (id_clock_pass_pre > 0) call cpu_clock_end(id_clock_pass_pre)
   if (id_clock_calc_pre > 0) call cpu_clock_begin(id_clock_calc_pre)
@@ -1380,9 +1381,9 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
     if (id_clock_pass_pre > 0) call cpu_clock_begin(id_clock_pass_pre)
 
     if (.not.use_BT_cont) &  !### IS THIS OK HERE?
-      call complete_group_pass(pass_Dat_uv, CS%BT_Domain)
-    call complete_group_pass(pass_force_hbt0_Cor_ref, CS%BT_Domain)
-    call complete_group_pass(pass_eta_bt_rem, CS%BT_Domain)
+      call complete_group_pass(CS%pass_Dat_uv, CS%BT_Domain)
+    call complete_group_pass(CS%pass_force_hbt0_Cor_ref, CS%BT_Domain)
+    call complete_group_pass(CS%pass_eta_bt_rem, CS%BT_Domain)
 
     if (id_clock_pass_pre > 0) call cpu_clock_end(id_clock_pass_pre)
     if (id_clock_calc_pre > 0) call cpu_clock_begin(id_clock_calc_pre)
@@ -1511,7 +1512,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
     if ((iev - stensil < ie) .or. (jev - stensil < je)) then
       if (id_clock_calc > 0) call cpu_clock_end(id_clock_calc)
       if (id_clock_pass_step > 0) call cpu_clock_begin(id_clock_pass_step)
-      call do_group_pass(pass_eta_ubt, CS%BT_Domain)
+      call do_group_pass(CS%pass_eta_ubt, CS%BT_Domain)
       isv = isvf ; iev = ievf ; jsv = jsvf ; jev = jevf
       if (id_clock_pass_step > 0) call cpu_clock_end(id_clock_pass_step)
       if (id_clock_calc > 0) call cpu_clock_begin(id_clock_calc)
@@ -1955,10 +1956,10 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   if (id_clock_calc_post > 0) call cpu_clock_end(id_clock_calc_post)
   if (id_clock_pass_post > 0) call cpu_clock_begin(id_clock_pass_post)
   if (G%nonblocking_updates) then
-    call start_group_pass(pass_e_anom, G%Domain)
+    call start_group_pass(CS%pass_e_anom, G%Domain)
   else
-    if (find_etaav) call do_group_pass(pass_etaav, G%Domain)
-    call do_group_pass(pass_e_anom, G%Domain)
+    if (find_etaav) call do_group_pass(CS%pass_etaav, G%Domain)
+    call do_group_pass(CS%pass_e_anom, G%Domain)
   endif
   if (id_clock_pass_post > 0) call cpu_clock_end(id_clock_pass_post)
   if (id_clock_calc_post > 0) call cpu_clock_begin(id_clock_calc_post)
@@ -1980,11 +1981,11 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   if (id_clock_calc_post > 0) call cpu_clock_end(id_clock_calc_post)
   if (id_clock_pass_post > 0) call cpu_clock_begin(id_clock_pass_post)
   if (G%nonblocking_updates) then
-    call complete_group_pass(pass_e_anom, G%Domain)
-    if (find_etaav) call start_group_pass(pass_etaav, G%Domain)
-    call start_group_pass(pass_ubta_uhbta, G%Domain)
+    call complete_group_pass(CS%pass_e_anom, G%Domain)
+    if (find_etaav) call start_group_pass(CS%pass_etaav, G%Domain)
+    call start_group_pass(CS%pass_ubta_uhbta, G%Domain)
   else
-    call do_group_pass(pass_ubta_uhbta, G%Domain)
+    call do_group_pass(CS%pass_ubta_uhbta, G%Domain)
   endif
   if (id_clock_pass_post > 0) call cpu_clock_end(id_clock_pass_post)
   if (id_clock_calc_post > 0) call cpu_clock_begin(id_clock_calc_post)
@@ -2085,8 +2086,8 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   endif
 
   if (G%nonblocking_updates) then
-    if (find_etaav) call complete_group_pass(pass_etaav, G%Domain)
-    call complete_group_pass(pass_ubta_uhbta, G%Domain)
+    if (find_etaav) call complete_group_pass(CS%pass_etaav, G%Domain)
+    call complete_group_pass(CS%pass_ubta_uhbta, G%Domain)
   endif
 
   if (apply_OBCs) call destroy_BT_OBC(BT_OBC)
@@ -3098,7 +3099,6 @@ subroutine set_local_BT_cont_types(BT_cont, BTCL_u, BTCL_v, G, MS, BT_Domain, ha
 !  (in)      MS - A type that describes the memory sizes of the argument arrays.
 !  (in)      BT_Domain - The domain to use for updating the halos of wide arrays.
 !  (in)      halo - The extra halo size to use here.
-  type(group_pass_type), save :: pass_polarity_BT, pass_FA_uv
   real, dimension(SZIBW_(MS),SZJW_(MS)) :: &
     u_polarity, uBT_EE, uBT_WW, FA_u_EE, FA_u_E0, FA_u_W0, FA_u_WW
   real, dimension(SZIW_(MS),SZJBW_(MS)) :: &
@@ -3141,18 +3141,18 @@ subroutine set_local_BT_cont_types(BT_cont, BTCL_u, BTCL_v, G, MS, BT_Domain, ha
   if (id_clock_calc_pre > 0) call cpu_clock_end(id_clock_calc_pre)
   if (id_clock_pass_pre > 0) call cpu_clock_begin(id_clock_pass_pre)
 !--- begin setup for group halo update
-  call create_group_pass(pass_polarity_BT, u_polarity, v_polarity, BT_Domain)
-  call create_group_pass(pass_polarity_BT, uBT_EE, vBT_NN, BT_Domain)
-  call create_group_pass(pass_polarity_BT, uBT_WW, vBT_SS, BT_Domain)
+  call create_group_pass(BT_cont%pass_polarity_BT, u_polarity, v_polarity, BT_Domain)
+  call create_group_pass(BT_cont%pass_polarity_BT, uBT_EE, vBT_NN, BT_Domain)
+  call create_group_pass(BT_cont%pass_polarity_BT, uBT_WW, vBT_SS, BT_Domain)
 
-  call create_group_pass(pass_FA_uv, FA_u_EE, FA_v_NN, BT_Domain, To_All+Scalar_Pair)
-  call create_group_pass(pass_FA_uv, FA_u_E0, FA_v_N0, BT_Domain, To_All+Scalar_Pair)
-  call create_group_pass(pass_FA_uv, FA_u_W0, FA_v_S0, BT_Domain, To_All+Scalar_Pair)
-  call create_group_pass(pass_FA_uv, FA_u_WW, FA_v_SS, BT_Domain, To_All+Scalar_Pair)
+  call create_group_pass(BT_cont%pass_FA_uv, FA_u_EE, FA_v_NN, BT_Domain, To_All+Scalar_Pair)
+  call create_group_pass(BT_cont%pass_FA_uv, FA_u_E0, FA_v_N0, BT_Domain, To_All+Scalar_Pair)
+  call create_group_pass(BT_cont%pass_FA_uv, FA_u_W0, FA_v_S0, BT_Domain, To_All+Scalar_Pair)
+  call create_group_pass(BT_cont%pass_FA_uv, FA_u_WW, FA_v_SS, BT_Domain, To_All+Scalar_Pair)
 !--- end setup for group halo update
   ! Do halo updates on BT_cont.
-  call do_group_pass(pass_polarity_BT, BT_Domain)
-  call do_group_pass(pass_FA_uv, BT_Domain)
+  call do_group_pass(BT_cont%pass_polarity_BT, BT_Domain)
+  call do_group_pass(BT_cont%pass_FA_uv, BT_Domain)
   if (id_clock_pass_pre > 0) call cpu_clock_end(id_clock_pass_pre)
   if (id_clock_calc_pre > 0) call cpu_clock_begin(id_clock_calc_pre)
 

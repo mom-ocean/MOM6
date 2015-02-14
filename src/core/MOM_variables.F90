@@ -20,7 +20,7 @@ module MOM_variables
 !* or see:   http://www.gnu.org/licenses/gpl.html                      *
 !***********************************************************************
 
-use MOM_domains, only : MOM_domain_type, get_domain_extent
+use MOM_domains, only : MOM_domain_type, get_domain_extent, group_pass_type
 use MOM_checksums, only : hchksum, qchksum, uchksum, vchksum
 use MOM_error_handler, only : MOM_error, FATAL
 use MOM_grid, only : ocean_grid_type, MOM_variables_init => MOM_grid_init
@@ -333,6 +333,7 @@ type, public :: BT_cont_type
   real, pointer, dimension(:,:,:) :: &
     h_u => NULL(), &      ! An effective thickness at zonal faces, in H.
     h_v => NULL()         ! An effective thickness at meridional faces, in H.
+  type(group_pass_type) :: pass_polarity_BT, pass_FA_uv ! For group halo updates
 end type BT_cont_type
 
 contains
