@@ -225,7 +225,7 @@ type, public :: barotropic_CS ; private
                              ! in the barotropic equation that drives the two
                              ! estimates of the free surface height toward each
                              ! other is bounded to avoid driving corrective
-                             ! velocities that exceed 0.1*MAXVEL.
+                             ! velocities that exceed MAXCFL_BT_CONT.
   logical :: gradual_BT_ICs  ! If true, adjust the initial conditions for the
                              ! barotropic solver to the values from the layered
                              ! solution over a whole timestep instead of
@@ -275,18 +275,25 @@ type, public :: barotropic_CS ; private
                              ! invariant and linearized.
   logical :: use_wide_halos  ! If true, use wide halos and march in during the
                              ! barotropic time stepping for efficiency.
-  logical :: clip_velocity   ! If true, limit any velocity components that
-                             ! exceed maxvel.  This should only be used as a
+  logical :: clip_velocity   ! If true, limit any velocity components that are
+                             ! are large enough for a CFL number to exceed
+                             ! CFL_trunc.  This should only be used as a
                              ! desperate debugging measure.
   logical :: debug           ! If true, write verbose checksums for debugging purposes.
   logical :: debug_bt        ! If true, write verbose checksums for debugging purposes.
   real    :: maxvel          ! Velocity components greater than maxvel are
                              ! truncated to maxvel, in m s-1.
+  real    :: CFL_trunc       ! If clip_velocity is true, velocity components will
+                             ! be truncated when they are large enough that the
+                             ! corresponding CFL number exceeds this value, nondim. 
   real    :: maxCFL_BT_cont  ! The maximum permitted CFL number associated with the
                              ! barotropic accelerations from the summed velocities
                              ! times the time-derivatives of thicknesses.  The
                              ! default is 0.1, and there will probably be real
                              ! problems if this were set close to 1.
+  logical :: BT_cont_bounds  ! If true, use the BT_cont_type variables to set
+                             ! limits on the magnitude of the corrective mass
+                             ! fluxes.
   type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
   type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
                              ! timing of diagnostic output.
@@ -626,6 +633,9 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   real :: H_eff_dx2   ! The effective total thickness divided by the grid spacing
                       ! squared, in H m-2.
   real :: vel_tmp     ! A temporary velocity, in m s-1.
+  real :: u_max_cor, v_max_cor ! The maximum corrective velocities, in m s-1.
+  real :: Htot        ! The total thickness, in units of H.
+  real :: eta_cor_max ! The maximum fluid that can be added as a correction to eta, in H.
 
   real, allocatable, dimension(:) :: wt_vel, wt_eta, wt_accel, wt_trans, wt_accel2
   real :: sum_wt_vel, sum_wt_eta, sum_wt_accel, sum_wt_trans
@@ -809,7 +819,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   else
     q(:,:) = 0.0 ; DCor_u(:,:) = 0.0 ; DCor_v(:,:) = 0.0
     !  This option has not yet been written properly.
-    !  D here should be replaced with D+eta(Bous) or eta(non-Bous).
+    !  ### bathyT here should be replaced with bathyT+eta(Bous) or eta(non-Bous).
 !$OMP parallel default(none) shared(js,je,is,ie,DCor_u,DCor_v,G,q)
 !$OMP do
     do j=js,je ; do I=is-1,ie
@@ -978,7 +988,6 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
 ! equations are calculated.  These will be used to determine the difference
 ! between the accelerations due to the average of the layer equations and the
 ! barotropic calculation.
-  !  ### Should IDatu here be replaced with 1/D+eta(Bous) or 1/eta(non-Bous)?
 
 !$OMP parallel default(none) shared(is,ie,js,je,BT_force_u,BT_force_v,fluxes, &
 !$OMP                               I_rho0,CS,visc_rem_u,visc_rem_v,taux_bot, &
@@ -990,10 +999,16 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
 !$OMP                               v_accel_bt,U_in,V_in,Idt)
 !$OMP do
   do j=js,je ; do I=is-1,ie
+    ! ### IDatu here should be replaced with 1/D+eta(Bous) or 1/eta(non-Bous).
+    ! ### although with BT_cont_types IDatu should be replaced by
+    ! ###   CS%dy_Cu(I,j) / (d(uhbt)/du) (with appropriate bounds).
     BT_force_u(I,j) = fluxes%taux(I,j) * I_rho0*CS%IDatu(I,j)*visc_rem_u(I,j,1)
   enddo ; enddo
 !$OMP do
   do J=js-1,je ; do i=is,ie
+    ! ### IDatv here should be replaced with 1/D+eta(Bous) or 1/eta(non-Bous).
+    ! ### although with BT_cont_types IDatv should be replaced by
+    ! ###   CS%dx_Cv(I,j) / (d(vhbt)/dv) (with appropriate bounds).
     BT_force_v(i,J) = fluxes%tauy(i,J) * I_rho0*CS%IDatv(i,J)*visc_rem_v(i,J,1)
   enddo ; enddo
   if (present(taux_bot) .and. present(tauy_bot)) then
@@ -1310,10 +1325,34 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   ! Set the mass source, after first initializing the halos to 0.
 !$OMP do
   do j=jsvf-1,jevf+1; do i=isvf-1,ievf+1 ; eta_src(i,j) = 0.0 ; enddo ; enddo
-  if (CS%bound_BT_corr) then ; do j=js,je ; do i=is,ie
+  if (CS%bound_BT_corr) then ; if (use_BT_Cont .and. CS%BT_cont_bounds) then
+    do j=js,je ; do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
+      if (CS%eta_cor(i,j) > 0.0) then
+        !   Limit the source (outward) correction to be a fraction the mass that
+        ! can be transported out of the cell by velocities with a CFL number of
+        ! CFL_cor.
+        u_max_cor = G%dxT(i,j) * (CS%maxCFL_BT_cont*Idt)
+        v_max_cor = G%dyT(i,j) * (CS%maxCFL_BT_cont*Idt)
+        eta_cor_max = dt * (CS%IareaT(i,j) * &
+                   (((find_uhbt(u_max_cor,BTCL_u(I,j)) + uhbt0(I,j)) - &
+                     (find_uhbt(-u_max_cor,BTCL_u(I-1,j)) + uhbt0(I-1,j))) + &
+                    ((find_vhbt(v_max_cor,BTCL_v(i,J)) + vhbt0(i,J)) - &
+                     (find_vhbt(-v_max_cor,BTCL_v(i,J-1)) + vhbt0(i,J-1))) ) - &
+                   CS%eta_source(i,j))
+        CS%eta_cor(i,j) = min(CS%eta_cor(i,j), max(0.0, eta_cor_max))
+      else
+        ! Limit the sink (inward) correction to the amount of mass that is already
+        ! inside the cell, plus any mass added by eta_source.
+        Htot = eta(i,j)
+        if (G%Boussinesq) Htot = CS%bathyT(i,j) + eta(i,j)
+
+        CS%eta_cor(i,j) = max(CS%eta_cor(i,j), -max(0.0,Htot + dt*CS%eta_source(i,j)))
+      endif
+    endif ; enddo ; enddo
+  else ; do j=js,je ; do i=is,ie
     if (abs(CS%eta_cor(i,j)) > dt*CS%eta_cor_bound(i,j)) &
       CS%eta_cor(i,j) = sign(dt*CS%eta_cor_bound(i,j),CS%eta_cor(i,j))
-  enddo ; enddo ; endif
+  enddo ; enddo ; endif ; endif
 !$OMP do
   do j=js,je ; do i=is,ie
     eta_src(i,j) = G%mask2dT(i,j) * (Instep * CS%eta_cor(i,j) + dtbt * CS%eta_source(i,j))
@@ -1496,15 +1535,21 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
 
     if (CS%clip_velocity) then
       do j=jsv,jev ; do I=isv-1,iev
-        if (abs(ubt(I,j)) > CS%maxvel) then
-          ! Add some error handling later.
-          ubt(I,j) = SIGN(CS%maxvel,ubt(I,j))
+        if ((ubt(I,j) * (dt * G%dy_Cu(I,j))) * G%IareaT(i+1,j) < -CS%CFL_trunc) then
+          ! Add some error reporting later.
+          ubt(I,j) = (-0.95*CS%CFL_trunc) * (G%areaT(i+1,j) / (dt * G%dy_Cu(I,j)))
+        elseif ((ubt(I,j) * (dt * G%dy_Cu(I,j))) * G%IareaT(i,j) > CS%CFL_trunc) then
+          ! Add some error reporting later.
+          ubt(I,j) = (0.95*CS%CFL_trunc) * (G%areaT(i,j) / (dt * G%dy_Cu(I,j)))
         endif
       enddo ; enddo
       do J=jsv-1,jev ; do i=isv,iev
-        if (abs(vbt(i,J)) > CS%maxvel) then
-          ! Add some error handling later.
-          vbt(i,J) = SIGN(CS%maxvel,vbt(i,J))
+        if ((vbt(i,J) * (dt * G%dx_Cv(i,J))) * G%IareaT(i,j+1) < -CS%CFL_trunc) then
+          ! Add some error reporting later.
+          vbt(i,J) = (-0.9*CS%CFL_trunc) * (G%areaT(i,j+1) / (dt * G%dx_Cv(i,J)))
+        elseif ((vbt(i,J) * (dt * G%dx_Cv(i,J))) * G%IareaT(i,j) > CS%CFL_trunc) then
+          ! Add some error reporting later.
+          vbt(i,J) = (0.9*CS%CFL_trunc) * (G%areaT(i,j) / (dt * G%dx_Cv(i,J)))
         endif
       enddo ; enddo
     endif
@@ -1901,6 +1946,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
       eta(i,j) = (eta(i,j) + eta_src(i,j)) + (dtbt * CS%IareaT(i,j)) * &
                  ((uhbt(I-1,j) - uhbt(I,j)) + (vhbt(i,J-1) - vhbt(i,J)))
       eta_wtd(i,j) = eta_wtd(i,j) + eta(i,j) * wt_eta(n)
+      ! Should there be a concern if eta drops below 0 or G%bathyT?
     enddo ; enddo
     if (apply_OBCs) call apply_eta_OBCs(OBC, eta, ubt_old, vbt_old, BT_OBC, &
                                         G, MS, iev-ie, dtbt)
@@ -3528,11 +3574,16 @@ subroutine barotropic_init(u, v, h, eta, Time, G, param_file, diag, CS, &
                  "Use the split time stepping if true.", default=.true.)
   if (.not.CS%split) return
 
-  ! ### USE SOMETHING OTHER THAN MAXVEL FOR THIS...
   call get_param(param_file, mod, "BOUND_BT_CORRECTION", CS%bound_BT_corr, &
                  "If true, the corrective pseudo mass-fluxes into the \n"//&
                  "barotropic solver are limited to values that require \n"//&
-                 "less than 0.1*MAXVEL to be accommodated.",default=.false.)
+                 "less than maxCFL_BT_cont to be accommodated.",default=.false.)
+  call get_param(param_file, mod, "BT_CONT_CORR_BOUNDS", CS%BT_cont_bounds, &
+                 "If true, and BOUND_BT_CORRECTION is true, use the \n"//&
+                 "BT_cont_type variables to set limits determined by \n"//&
+                 "MAXCFL_BT_CONT on the CFL number of the velocites \n"//&
+                 "that are likely to be driven by the corrective mass fluxes.", &
+                 default=.true.) !, do_not_log=.not.CS%bound_BT_corr)
   call get_param(param_file, mod, "GRADUAL_BT_ICS", CS%gradual_BT_ICs, &
                  "If true, adjust the initial conditions for the \n"//&
                  "barotropic solver to the values from the layered \n"//&
@@ -3656,8 +3707,12 @@ subroutine barotropic_init(u, v, h, eta, Time, G, param_file, diag, CS, &
 
   call get_param(param_file, mod, "CLIP_BT_VELOCITY", CS%clip_velocity, &
                  "If true, limit any velocity components that exceed \n"//&
-                 "MAXVEL.  This should only be used as a desperate \n"//&
+                 "CFL_TRUNCATE.  This should only be used as a desperate \n"//&
                  "debugging measure.", default=.false.)
+  call get_param(param_file, mod, "CFL_TRUNCATE", CS%CFL_trunc, &
+                 "The value of the CFL number that will cause velocity \n"//&
+                 "components to be truncated; instability can occur past 0.5.", &
+                 units="nondim", default=0.5, do_not_log=.not.CS%clip_velocity)
   call get_param(param_file, mod, "MAXVEL", CS%maxvel, &
                  "The maximum velocity allowed before the velocity \n"//&
                  "components are truncated.", units="m s-1", default=3.0e8, &
@@ -3666,7 +3721,7 @@ subroutine barotropic_init(u, v, h, eta, Time, G, param_file, diag, CS, &
                  "The maximum permitted CFL number associated with the \n"//&
                  "barotropic accelerations from the summed velocities \n"//&
                  "times the time-derivatives of thicknesses.", units="nondim", &
-                 default=0.1)
+                 default=0.25)
 
   call get_param(param_file, mod, "DT_BT_FILTER", CS%dt_bt_filter, &
                  "A time-scale over which the barotropic mode solutions \n"//&
@@ -3968,6 +4023,8 @@ subroutine barotropic_init(u, v, h, eta, Time, G, param_file, diag, CS, &
 
   call find_face_areas(Datu, Datv, G, CS, MS, halo=1)
   if (CS%bound_BT_corr) then
+    ! ### Consider replacing maxvel with G%dxT(i,j) * (CS%maxCFL_BT_cont*Idt)
+    ! ### and G%dyT(i,j) * (CS%maxCFL_BT_cont*Idt)
     do j=js,je ; do i=is,ie
       CS%eta_cor_bound(i,j) = G%m_to_H * G%IareaT(i,j) * 0.1 * CS%maxvel * &
          ((Datu(I-1,j) + Datu(I,j)) + (Datv(i,J) + Datv(i,J-1)))
