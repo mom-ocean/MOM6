@@ -52,6 +52,8 @@ type, public :: KPP_CS ; private
   logical :: passiveMode               !< If True, makes KPP passive meaning it does NOT alter the diffusivity
   real    :: deepOBLoffset             !< If non-zero, is a distance from the bottom that the OBL can not penetrate through (m)
   real    :: minOBLdepth               !< If non-zero, is a minimum depth for the OBL (m)
+  logical :: fixedOBLdepth             !< If True, will fix the OBL depth at fixedOBLdepth_value
+  real    :: fixedOBLdepth_value       !< value for the fixed OBL depth when fixedOBLdepth==True.
   logical :: debug                     !< If True, calculate checksums and write debugging information
   logical :: correctSurfLayerAvg       !< If true, applies a correction to the averaging of surface layer properties
   real    :: surfLayerDepth            !< A guess at the depth of the surface layer (which should 0.1 of OBLdepth) (m)
@@ -176,6 +178,16 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive)
                  'If non-zero, the distance above the bottom to which the OBL is clipped\n'//     &
                  'if it would otherwise reach the bottom. The smaller of this and 0.1D is used.', &
                  units='m',default=0.)
+  call get_param(paramFile, mod, 'FIXED_OBLDEPTH', CS%fixedOBLdepth,       &
+                 'If True, fix the OBL depth to FIXED_OBLDEPTH_VALUE\n'//  &
+                 'rather than using the OBL depth from CVMix.\n'//         &
+                 'This option is just for testing purposes.',              &
+                 default=.False.)
+  call get_param(paramFile, mod, 'FIXED_OBLDEPTH_VALUE', CS%fixedOBLdepth_value,  &
+                 'Value for the fixed OBL depth when fixedOBLdepth==True. \n'//   &
+                 'This parameter is for just for testing purposes. \n'//          &
+                 'It will over-ride the OBLdepth computed from CVMix.',           &
+                 units='m',default=30.0)
   call get_param(paramFile, mod, 'MINIMUM_OBL_DEPTH', CS%minOBLdepth,                            &
                  'If non-zero, a minimum depth to use for KPP OBL depth. Independent of\n'//     &
                  'this parameter, the OBL depth is always at least as deep as the first layer.', &
@@ -215,13 +227,13 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive)
                  '\t ParabolicNonLocal = sigma*(1-sigma)^2 for diffusivity; (1-sigma)^2 for NLT',         &
                  default='SimpleShapes')
 
-  call get_param(paramFile, mod, 'KPP_ZERO_DIFFUSIVITY', CS%KPPzeroDiffusivity,                    &
-                 'If true, sets both the diffusivity and viscosity from KPP to zero; for testing.',&
+  call get_param(paramFile, mod, 'KPP_ZERO_DIFFUSIVITY', CS%KPPzeroDiffusivity,            &
+                 'If True, zeroes the KPP diffusivity and viscosity; for testing purpose.',&
                  default=.False.)
-  call get_param(paramFile, mod, 'KPP_IS_ADDITIVE', CS%KPPisAdditive,                              &
-                 'If true, adds KPP diffusivity to the existing diffusivity. If false, replaces '//&
-                 'exisiting diffusivity with KPP diffusivity wherever the latter is non-zero.',    &
-                 default=.False.)
+  call get_param(paramFile, mod, 'KPP_IS_ADDITIVE', CS%KPPisAdditive,                &
+                 'If true, adds KPP diffusivity to diffusivity from other schemes.'//&
+                 'If false, KPP is the only diffusivity wherever KPP is non-zero.',  &
+                 default=.True.)
 
   call closeParameterBlock(paramFile)
   call get_param(paramFile, mod, 'DEBUG', CS%debug, default=.False., do_not_log=.True.)
@@ -620,11 +632,11 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, &
       endif
 
       ! apply some constraints on OBLdepth 
+      if(CS%fixedOBLdepth)  OBLdepth_0d = CS%fixedOBLdepth_value 
       OBLdepth_0d = max( OBLdepth_0d, -iFaceHeight(2) )      ! no shallower than top layer
       OBLdepth_0d = max( OBLdepth_0d, CS%minOBLdepth )       ! user specified floor 
       OBLdepth_0d = min( OBLdepth_0d, -iFaceHeight(G%ke+1) ) ! no deeper than bottom
       kOBL        = CVmix_kpp_compute_kOBL_depth( iFaceHeight, cellHeight, OBLdepth_0d )
-
 
       ! smg: 
       ! The following "correction" step has been found to be unnecessary. 
@@ -689,6 +701,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, &
         endif
 
         ! apply some constraints on OBLdepth 
+        if(CS%fixedOBLdepth)  OBLdepth_0d = CS%fixedOBLdepth_value 
         OBLdepth_0d = max( OBLdepth_0d, -iFaceHeight(2) )      ! no shallower than top layer
         OBLdepth_0d = max( OBLdepth_0d, CS%minOBLdepth )       ! user specified floor 
         OBLdepth_0d = min( OBLdepth_0d, -iFaceHeight(G%ke+1) ) ! no deep than bottom
