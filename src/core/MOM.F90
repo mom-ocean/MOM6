@@ -487,6 +487,8 @@ type, public :: MOM_control_struct
                              ! isopycnal/stacked shallow water mode. This logical is
                              ! set by calling the function useRegridding() from the
                              ! MOM_regridding module.
+  logical :: do_dynamics     ! If false, does not call step_MOM_dyn_*. This is an
+                             ! undocumented run-time flag since it is fragile.
 
   real    :: dt              ! The (baroclinic) dynamics time step, in s.
   real    :: dt_therm        ! The thermodynamics time step, in s.
@@ -960,7 +962,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       enddo ; enddo ; enddo
     endif
 
-    if (CS%split) then !--------------------------- start SPLIT
+    if (CS%do_dynamics .and. CS%split) then !--------------------------- start SPLIT
       ! This section uses a split time stepping scheme for the dynamic equations,
       ! basically the stacked shallow water equations with viscosity.
 
@@ -984,7 +986,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
                     eta_av, G, CS%dyn_split_RK2_CSp, calc_dtbt, CS%VarMix, CS%MEKE)
       endif
       if (showCallTree) call callTree_waypoint("finished step_MOM_dyn_split (step_MOM)")
-    else ! --------------------------------------------------- not SPLIT
+    elseif (CS%do_dynamics) then ! --------------------------------------------------- not SPLIT
       !   This section uses a simple unsplit stepping scheme for the dynamic
       ! equations, basically the stacked shallow water equations with viscosity. 
       ! Because the  time step is limited by CFL restrictions on the external
@@ -1497,6 +1499,10 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
                  "If False, use the layered isopycnal algorithm.", default=.false. )
   if (CS%use_ALE_algorithm .and. CS%bulkmixedlayer) call MOM_error(FATAL, &
                  "MOM: BULKMIXEDLAYER can not currently be used with the ALE algotihrm.")
+  call get_param(param_file, "MOM", "DO_DYNAMICS", CS%do_dynamics, &
+                 "If False, skips the dynamics calls that update u & v, as well as\n"//&
+                 "the gravity wave adjustment to h. This is a fragile feature and\n"//&
+                 "thus undocumented.", default=.true., do_not_log=.true. )
   call get_param(param_file, "MOM", "THICKNESSDIFFUSE", CS%thickness_diffuse, &
                  "If true, interfaces or isopycnal surfaces are diffused, \n"//&
                  "depending on the value of FULL_THICKNESSDIFFUSE.", &
