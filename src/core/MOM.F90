@@ -1679,6 +1679,9 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   else
     G%nkml = 0 ; G%nk_rho_varies = 0
   endif
+  if (CS%use_ALE_algorithm) then
+    call get_param(param_file, "MOM", "NK_RHO_VARIES", G%nk_rho_varies, default=0) ! Will default to nz later... -AJA
+  endif
 
   ALLOC_(CS%uhtr(IsdB:IedB,jsd:jed,nz)) ; CS%uhtr(:,:,:) = 0.0
   ALLOC_(CS%vhtr(isd:ied,JsdB:JedB,nz)) ; CS%vhtr(:,:,:) = 0.0
