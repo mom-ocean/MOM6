@@ -1636,7 +1636,7 @@ subroutine setRegriddingMinimumThickness( minThickness, CS )
 end subroutine setRegriddingMinimumThickness
 
 !------------------------------------------------------------------------------
-! Query the fixed resolution data
+! Return coordinate-derived thicknesses for fixed coordinate systems
 !------------------------------------------------------------------------------
 function getStaticThickness( CS, SSH, depth )
   type(regridding_CS), intent(in) :: CS
@@ -1666,7 +1666,7 @@ function getStaticThickness( CS, SSH, depth )
     case ( REGRIDDING_RHO )  
       getStaticThickness(:) = 0. ! Not applicable
     case ( REGRIDDING_ARBITRARY )
-      getStaticThickness(:) = 0  ! Not applicable
+      getStaticThickness(:) = 0.  ! Not applicable
     case default
       call MOM_error(FATAL,'MOM_regridding, getStaticThickness: '//&
                      'Unknown regridding scheme selected!')
