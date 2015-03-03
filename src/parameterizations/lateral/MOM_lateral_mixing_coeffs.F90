@@ -398,7 +398,7 @@ subroutine calc_Visbeck_coeffs(h, e, slope_x, slope_y, N2_u, N2_v, G, CS)
   real, dimension(NIMEM_,NJMEMB_,NK_INTERFACE_), intent(in)    :: slope_y
   real, dimension(NIMEM_,NJMEMB_,NK_INTERFACE_), intent(in)    :: N2_v
   type(ocean_grid_type),                         intent(inout) :: G
-  type(VarMix_CS),                               pointer       :: CS
+  type(VarMix_CS),                               intent(inout) :: CS
   ! Local variables
   real :: E_x(SZIB_(G), SZJ_(G))  ! X-slope of interface at u points (for diagnostics)
   real :: E_y(SZI_(G), SZJB_(G))  ! Y-slope of interface at u points (for diagnostics)
@@ -419,7 +419,7 @@ subroutine calc_Visbeck_coeffs(h, e, slope_x, slope_y, N2_u, N2_v, G, CS)
   real :: S2_u(SZIB_(G), SZJ_(G))
   real :: S2_v(SZI_(G), SZJB_(G))
 
-  if (.not. ASSOCIATED(CS)) call MOM_error(FATAL, "calc_slope_function:"// &
+  if (LOC(CS)==0) call MOM_error(FATAL, "calc_slope_function:"// &
          "Module must be initialized before it is used.")
   if (.not. CS%use_variable_mixing) return
   if (.not. ASSOCIATED(CS%SN_u)) call MOM_error(FATAL, "calc_slope_function:"// &

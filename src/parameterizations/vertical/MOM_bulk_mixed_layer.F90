@@ -483,7 +483,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
 !$OMP                               hmbl_prev,h_sum,Hsfc_min,Hsfc_max,dt__diag,              &
 !$OMP                               Hsfc_used,Inkmlm1,Inkml,ea,eb,h_miss,                    &
 !$OMP                               id_clock_EOS,id_clock_resort,id_clock_adjustment,        &
-!$OMP                               id_clock_conv,id_clock_mech,id_clock_detrain )           &
+!$OMP                               id_clock_conv,id_clock_mech,id_clock_detrain,aggregate_FW_forcing ) &
 !$OMP                  firstprivate(dKE_CA,cTKE,h_CA,max_BL_det,p_ref,p_ref_cv)              &
 !$OMP                       private(h,h_orig,u,v,eps,T,S,opacity_band,d_ea,d_eb,             &
 !$OMP                               dR0_dT,dR0_dS,dRcv_dT,dRcv_dS,R0,Rcv,ksort,              &

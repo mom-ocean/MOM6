@@ -131,11 +131,11 @@ subroutine calc_isoneutral_slopes(G, h, e, tv, dt_kappa_smooth, slope_x, slope_y
 
 !$OMP parallel do default(none) shared(nz,is,ie,js,je,use_EOS,G,pres,T,S, &
 !$OMP                                  nk_linear,IsdB,tv,h,h_neglect,e,dz_neglect,  &
-!$OMP                                  h_neglect2,present_N2_u,G_Rho0) &
+!$OMP                                  h_neglect2,present_N2_u,G_Rho0,N2_u) &
 !$OMP                          private(drdiA,drdiB,drdkL,drdkR,pres_u,T_u,S_u,      &
 !$OMP                                  drho_dT_u,drho_dS_u,hg2A,hg2B,hg2L,hg2R,haA, &
 !$OMP                                  haB,haL,haR,dzaL,dzaR,wtA,wtB,wtL,wtR,drdz,  &
-!$OMP                                  drdx,mag_grad2,Slope,slope2_Ratio,slope_x,N2_u)
+!$OMP                                  drdx,mag_grad2,Slope,slope2_Ratio,slope_x)
   do j = js,je ; do K=nz,2,-1
     if (.not.(use_EOS)) then
       drdiA = 0.0 ; drdiB = 0.0
@@ -223,11 +223,11 @@ subroutine calc_isoneutral_slopes(G, h, e, tv, dt_kappa_smooth, slope_x, slope_y
     ! Calculate the meridional isopycnal slope.
 !$OMP parallel do default(none) shared(nz,is,ie,js,je,use_EOS,G,pres,T,S, &
 !$OMP                                  nk_linear,IsdB,tv,h,h_neglect,e,dz_neglect,  &
-!$OMP                                  h_neglect2,present_N2_v,G_Rho0) &
+!$OMP                                  h_neglect2,present_N2_v,G_Rho0,N2_v)         &
 !$OMP                          private(drdjA,drdjB,drdkL,drdkR,pres_v,T_v,S_v,      &
 !$OMP                                  drho_dT_v,drho_dS_v,hg2A,hg2B,hg2L,hg2R,haA, &
 !$OMP                                  haB,haL,haR,dzaL,dzaR,wtA,wtB,wtL,wtR,drdz,  &
-!$OMP                                  drdy,mag_grad2,Slope,slope2_Ratio,slope_y,N2_v)
+!$OMP                                  drdy,mag_grad2,Slope,slope2_Ratio,slope_y)
   do j = js-1,je ; do K=nz,2,-1
     if (.not.(use_EOS)) then
       drdjA = 0.0 ; drdjB = 0.0

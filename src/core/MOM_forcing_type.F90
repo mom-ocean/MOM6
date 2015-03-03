@@ -621,7 +621,8 @@ subroutine extractFluxes2d(G, fluxes, optics, nsw, dt,                          
   integer :: j
 !$OMP parallel do default(none) shared(G,fluxes, optics, nsw,dt,DepthBeforeScalingFluxes, &
 !$OMP                                  useRiverHeatContent, useCalvingHeatContent,        &
-!$OMP                                  h,T,netMassInOut,netMassOut,Net_heat,Net_salt,Pen_SW_bnd,tv)
+!$OMP                                  h,T,netMassInOut,netMassOut,Net_heat,Net_salt,Pen_SW_bnd,tv, &
+!$OMP                                  aggregate_FW_forcing)
   do j=G%jsc, G%jec
     call extractFluxes1d(G, fluxes, optics, nsw, j, dt,                          &
             DepthBeforeScalingFluxes, useRiverHeatContent, useCalvingHeatContent,&

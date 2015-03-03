@@ -2306,7 +2306,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, aggreg
 !$OMP                                  H_limit_fluxes,use_riverHeatContent,                  &
 !$OMP                                  useCalvingHeatContent,ea,IforcingDepthScale,          &
 !$OMP                                  numberOfGroundings,iGround,jGround,                   &
-!$OMP                                  hGrounding,CS,ksort,Idt)                              &
+!$OMP                                  hGrounding,CS,ksort,Idt,aggregate_FW_forcing)         &
 !$OMP                          private(opacityBand,h2d,T2d,eps,htot,netMassInOut,netMassOut, &
 !$OMP                                  netHeat,netSalt,Pen_SW_bnd,fractionOfForcing,         &
 !$OMP                                  dThickness,dTemp,dSalt,hOld,Ithickness,Ttot,          &
