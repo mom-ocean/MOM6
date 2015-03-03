@@ -444,14 +444,14 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, &
 !$OMP                                  nonLocalTransScalar,Kt,Ks,Kv)                  &
 !$OMP                     firstprivate(nonLocalTrans)                                 &
 !$OMP                          private(Coriolis,surfFricVel,SLdepth_0d,hTot,surfTemp, &
-!$OMP                                  surfHtemp,surfSalt,surfHsalt,hTotU,surfU,      &
-!$OMP                                  surfHu,hTotV,surfV,surfHv,iFaceHeight,         &
+!$OMP                                  surfHtemp,surfSalt,surfHsalt,surfU,      &
+!$OMP                                  surfHu,surfV,surfHv,iFaceHeight,         &
 !$OMP                                  pRef,km1,cellHeight,Uk,Vk,deltaU2,             &
 !$OMP                                  rho1,rhoK,rhoKm1,deltaRho,N2_1d,N_1d,delH,     &
 !$OMP                                  surfBuoyFlux,Ws_1d,Cv,Vt2_1d,BulkRi_1d,        &
 !$OMP                                  OBLdepth_0d,zBottomMinusOffset,Kdiffusivity,   &
 !$OMP                                  Kviscosity,sigma,kOBL,kk,pres_1D,Temp_1D,      &
-!$OMP                                  Salt_1D,rho_1D,surfBuoyFlux2)
+!$OMP                                  Salt_1D,rho_1D,surfBuoyFlux2,ksfc)
 
   ! loop over horizontal points on processor 
   do j = G%jsc, G%jec
