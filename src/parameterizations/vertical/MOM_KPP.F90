@@ -54,6 +54,7 @@ type, public :: KPP_CS ; private
   real    :: minOBLdepth               !< If non-zero, is a minimum depth for the OBL (m)
   logical :: fixedOBLdepth             !< If True, will fix the OBL depth at fixedOBLdepth_value
   real    :: fixedOBLdepth_value       !< value for the fixed OBL depth when fixedOBLdepth==True.
+  real    :: RibDepthRatio             !< value between 0 and 1 for setting depth factor in bulk Ri calculation 
   logical :: debug                     !< If True, calculate checksums and write debugging information
   logical :: correctSurfLayerAvg       !< If true, applies a correction to the averaging of surface layer properties
   real    :: surfLayerDepth            !< A guess at the depth of the surface layer (which should 0.1 of OBLdepth) (m)
@@ -188,6 +189,9 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive)
                  'This parameter is for just for testing purposes. \n'//          &
                  'It will over-ride the OBLdepth computed from CVMix.',           &
                  units='m',default=30.0)
+  call get_param(paramFile, mod, 'RIB_DEPTH_RATIO', CS%RibDepthRatio,          &
+                 'Value between 0 and 1 for scaling depth in Rib calculation.',&
+                 units='nondim',default=0.95)
   call get_param(paramFile, mod, 'MINIMUM_OBL_DEPTH', CS%minOBLdepth,                            &
                  'If non-zero, a minimum depth to use for KPP OBL depth. Independent of\n'//     &
                  'this parameter, the OBL depth is always at least as deep as the first layer.', &
@@ -466,8 +470,9 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, &
       surfFricVel = uStar(i,j)
 
       ! Richardson number computed for each cell in a column, 
-      ! assuming OBLdepth = -cellHeight(k). After Rib(k) is 
-      ! known for the column, then let CVMix compute actual OBLdepth.
+      ! assuming OBLdepth = grid cell depth. After Rib(k) is 
+      ! known for the column, then let CVMix interpolates to find
+      ! the actual OBLdepth.
       iFaceHeight(1) = 0.0
       pRef = 0.
       do k=1,G%ke
@@ -548,8 +553,9 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, &
       ! compute in-situ density 
       call calculate_density(Temp_1D, Salt_1D, pres_1D, rho_1D, 1, 3*G%ke, EOS)
 
-      ! N2 (can be negative) and N (non-negative) on interfaces for diagnostics. 
-      ! deltaRho for bulk Richardson number. 
+      ! N2 (can be negative) and N (non-negative) on interfaces. 
+      ! deltaRho is non-local rho difference used for bulk Richardson number. 
+      ! N_1d is local N used for unresolved shear calculation. 
       do k = 1, G%ke
         km1 = max(1, k-1)
         kk = 3*(k-1)
@@ -562,6 +568,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, &
 
 
       ! turbulent velocity scales w_s and w_m.
+      ! computed at the cell centers.  
       ! Note that if sigma > eps, then CVmix_kpp_compute_turbulent_scales 
       ! computes w_s and w_m velocity scale at sigma=eps. So we only pass
       ! sigma=eps for this calculation.    
@@ -578,13 +585,11 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, &
 
         ! MOM5 used  Cv = 1.8
         ! Here we use Cv from eq (A3) of Danabasoglu et al. (2006)
-        Cv = max( 1.7, 2.1 - 200. * N_1d(k) )
+        Cv = max( 1.7, 2.1 - 200. * 0.5*(N_1d(k)+N_1d(k+1)) )   ! cell centred
 
         ! Unresolved squared velocity, Vt^2, eq (23) from LMD94.
-        ! Calculation is for Vt^2 at level center but uses N from the interface below
-        ! (and depth of lower interface) to bias towards higher estimates.  One would
-        ! otherwise use d=-cellHeight(k) and a vertical average of N. 
-        Vt2_1d(k) = Vt2_min + const1 * Cv * ( -iFaceHeight(k+1) ) * N_1d(k+1) * Ws_1d(k)
+        ! Calculation is for Vt^2 at level center. 
+        Vt2_1d(k) = Vt2_min + const1 * Cv * ( -cellHeight(k) ) * 0.5*(N_1d(k)+N_1d(k+1)) * Ws_1d(k)
 
       enddo ! k
 
@@ -598,10 +603,10 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, &
 
       ! Calculate Bulk Richardson number from eq (21) of LMD94
       BulkRi_1d = CVmix_kpp_compute_bulk_Richardson( &
-                    iFaceHeight(1:G%ke), & ! Height of level centers (m) intentional discrepency to bias Rib bit smaller 
-                    GoRho*deltaRho,      & ! Bulk buoyancy difference, Br -B(z) (1/s)
-                    deltaU2,             & ! Square of bulk shear (m/s)
-                    Vt2_1d )               ! Square of unresolved turbulence (m2/s2)
+      CS%RibDepthRatio*cellHeight(1:G%ke),  & ! Depth scale appearing in Rib calculation (m)
+                       GoRho*deltaRho,      & ! Bulk buoyancy difference, Br -B(z) (1/s)
+                       deltaU2,             & ! Square of resolved velocity difference (m2/s2)
+                       Vt2_1d )               ! Square of unresolved turbulent velocity (m2/s2)
 
       ! Notes:
       !   BulRi(k=1)=0 because rho1=rhoK
@@ -640,7 +645,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, &
 
       ! smg: 
       ! The following "correction" step has been found to be unnecessary. 
-      ! Code to be removed soon after further testing...
+      ! Code should be removed after further testing...
       if (CS%correctSurfLayerAvg) then
 
         SLdepth_0d = eps * OBLdepth_0d 
