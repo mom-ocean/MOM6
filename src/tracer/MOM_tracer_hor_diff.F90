@@ -92,7 +92,7 @@ type, public :: tracer_hor_diff_CS ; private
   logical :: first_call = .true.
   integer :: id_KhTr_u = -1, id_KhTr_v = -1
 
-  type(group_pass_type) :: pass_t !For group halo pass, used in both
+  type(group_pass_type) :: pass_t !For group halo pass, used in both 
                                   !tracer_hordiff and tracer_epipycnal_ML_diff
 end type tracer_hor_diff_CS
 
