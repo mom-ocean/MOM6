@@ -2211,7 +2211,10 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
 
 end subroutine initialize_MOM
 
-
+subroutine unitTests
+  use MOM_string_functions, only : stringFunctionsUnitTests
+  use MOM_remapping, only : remappingUnitTests
+  use MOM_isoneutral_mixing, only : isoneutralMixingUnitTests
 ! This s/r calls unit tests for other modules. These are NOT normally invoked
 ! and so we provide the module use statments here rather than in the module
 ! header. This is an exception to our usual coding standards.
@@ -2225,6 +2228,8 @@ subroutine unitTests
        "MOM/initialize_MOM/unitTests: stringFunctionsUnitTests FAILED")
     if (remappingUnitTests()) call MOM_error(FATAL, &
        "MOM/initialize_MOM/unitTests: remappingUnitTests FAILED")
+    if (isoneutralMixingUnitTests()) call MOM_error(FATAL, &
+       "MOM/initialize_MOM/unitTests: isoneutralMixingUnitTests FAILED")
   endif
 
 end subroutine unitTests
