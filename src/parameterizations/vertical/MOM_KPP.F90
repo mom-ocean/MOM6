@@ -473,7 +473,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, &
       ! assuming OBLdepth = grid cell depth. After Rib(k) is 
       ! known for the column, then let CVMix interpolates to find
       ! the actual OBLdepth.
-      iFaceHeight(1) = 0.0
+      iFaceHeight(1) = 0.0 ! BBL is all relative to the surface
       pRef = 0.
       do k=1,G%ke
 
