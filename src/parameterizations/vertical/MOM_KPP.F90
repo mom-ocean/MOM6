@@ -473,10 +473,12 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, &
                        +(G%CoriolisBu(i-1,j) + G%CoriolisBu(i,j-1)) )
       surfFricVel = uStar(i,j)
 
-      ! Richardson number computed for each cell in a column, 
+      ! Bullk Richardson number computed for each cell in a column, 
       ! assuming OBLdepth = grid cell depth. After Rib(k) is 
-      ! known for the column, then let CVMix interpolates to find
-      ! the actual OBLdepth.
+      ! known for the column, then CVMix interpolates to find
+      ! the actual OBLdepth. This approach avoids need to iterate
+      ! on the OBLdepth calculation. It follows that used in MOM5
+      ! and POP.   
       iFaceHeight(1) = 0.0 ! BBL is all relative to the surface
       pRef = 0.
       do k=1,G%ke
@@ -559,7 +561,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, &
 
       ! N2 (can be negative) and N (non-negative) on interfaces. 
       ! deltaRho is non-local rho difference used for bulk Richardson number. 
-      ! N_1d is local N used for unresolved shear calculation. 
+      ! N_1d is local N (with floor) used for unresolved shear calculation. 
       do k = 1, G%ke
         km1 = max(1, k-1)
         kk = 3*(k-1)
@@ -589,7 +591,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, &
                   GoRho*deltaRho,                    & ! Bulk buoyancy difference, Br-B(z) (1/s)
                   deltaU2,                           & ! Square of resolved velocity difference (m2/s2)
                   ws_cntr=Ws_1d,                     & ! Turbulent velocity scale profile (m/s)
-                  N_iface=N_1d )                       ! Buoyancy frequency (1/s)
+                  N_iface=N_1d)                        ! Buoyancy frequency (1/s)
         
 
       surfBuoyFlux = buoyFlux(i,j,1) ! This is only used in kpp_compute_OBL_depth to limit
@@ -697,7 +699,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, &
 ! **********************************************************************
 
 
-      ! Now call KPP to obtain BL diffusivities, viscosities and non-local transports
+      ! Call CVMix/KPP to obtain OBL diffusivities, viscosities and non-local transports
 
       ! Unlike LMD94, we do not match to interior diffusivities. If using the original
       ! LMD94 shape function, not matching is equivalent to matching to a zero diffusivity.
@@ -724,12 +726,13 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, &
 
 
       ! Over-write CVMix NLT shape function with one of the following choices. 
+      ! The CVMix code has yet to update for thse options, so we compute in MOM6. 
       ! Note that nonLocalTrans = Cs * G(sigma) (LMD94 notation), with 
       ! Cs = 6.32739901508.
       ! Start do-loop at k=2, since k=1 is ocean surface (sigma=0) 
       ! and we do not wish to double-count the surface forcing.  
       ! Only compute nonlocal transport for 0 <= sigma <= 1. 
-      ! Recommended shape is the parabolic; it gives deeper boundary layer
+      ! MOM6 recommended shape is the parabolic; it gives deeper boundary layer
       ! and no spurious extrema.  
       if (surfBuoyFlux < 0.0) then
         if (CS%NLT_shape == NLT_SHAPE_CUBIC) then
