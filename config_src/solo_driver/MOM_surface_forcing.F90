@@ -370,31 +370,9 @@ subroutine buoyancy_forcing_allocate(fluxes, G, CS)
 
     ! specify surface freshwater forcing by setting the following (kg/(m^2 * s))
     ! with convention that positive values for water entering ocean.
-    call safe_alloc_ptr(fluxes%evap,isd,ied,jsd,jed)
-    call safe_alloc_ptr(fluxes%lprec,isd,ied,jsd,jed)
-    call safe_alloc_ptr(fluxes%fprec,isd,ied,jsd,jed)
-    call safe_alloc_ptr(fluxes%vprec,isd,ied,jsd,jed)
-    call safe_alloc_ptr(fluxes%lrunoff,isd,ied,jsd,jed)
-    call safe_alloc_ptr(fluxes%frunoff,isd,ied,jsd,jed)
-    call safe_alloc_ptr(fluxes%seaice_melt,isd,ied,jsd,jed)
-
     ! specify surface heat fluxes by setting the following (Watts/m^2)
     ! with convention that positive values for heat fluxes into the ocean.
-    call safe_alloc_ptr(fluxes%sw,isd,ied,jsd,jed)          
-    call safe_alloc_ptr(fluxes%lw,isd,ied,jsd,jed) 
-    call safe_alloc_ptr(fluxes%latent,isd,ied,jsd,jed)
-    call safe_alloc_ptr(fluxes%latent_evap_diag,isd,ied,jsd,jed)
-    call safe_alloc_ptr(fluxes%latent_fprec_diag,isd,ied,jsd,jed)
-    call safe_alloc_ptr(fluxes%latent_frunoff_diag,isd,ied,jsd,jed)
-    call safe_alloc_ptr(fluxes%sens,isd,ied,jsd,jed)
-    call safe_alloc_ptr(fluxes%heat_content_cond,isd,ied,jsd,jed)
-    call safe_alloc_ptr(fluxes%heat_content_lprec,isd,ied,jsd,jed)
-    call safe_alloc_ptr(fluxes%heat_content_fprec,isd,ied,jsd,jed)
-    call safe_alloc_ptr(fluxes%heat_content_vprec,isd,ied,jsd,jed)
-    call safe_alloc_ptr(fluxes%heat_content_lrunoff,isd,ied,jsd,jed)
-    call safe_alloc_ptr(fluxes%heat_content_frunoff,isd,ied,jsd,jed)
-    call safe_alloc_ptr(fluxes%heat_content_massout,isd,ied,jsd,jed)
-    call safe_alloc_ptr(fluxes%heat_content_massin,isd,ied,jsd,jed)
+    call allocate_forcing_type(G, fluxes, water=.true., heat=.true.)
 
     ! surface restoring fields 
     if (CS%restorebuoy) then

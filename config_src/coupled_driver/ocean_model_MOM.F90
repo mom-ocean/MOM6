@@ -370,6 +370,8 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
 !  Translate Ice_ocean_boundary into fluxes.
   call mpp_get_compute_domain(Ocean_sfc%Domain, index_bnds(1), index_bnds(2), &
                               index_bnds(3), index_bnds(4))
+
+!### if (OS%fluxes%flux_adds == 0) then
   call enable_averaging(time_step, OS%Time + Ocean_coupling_time_step, OS%MOM_CSp%diag) ! Needed to allow diagnostics in convert_IOB
   call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%fluxes, index_bnds, OS%Time, &
                              OS%grid, OS%forcing_CSp, OS%state, OS%restore_salinity)
@@ -379,7 +381,16 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   if (OS%use_ice_shelf) then
     call shelf_calc_flux(OS%State, OS%fluxes, OS%Time, time_step, OS%Ice_shelf_CSp)
   endif
-
+!### else
+!  call convert_IOB_to_fluxes(Ice_ocean_boundary, tmp_fluxes, index_bnds, OS%Time, &
+!                             OS%grid, OS%forcing_CSp, OS%state, OS%restore_salinity)
+!
+!  if (OS%use_ice_shelf) then
+!    call shelf_calc_flux(OS%State, tmp_fluxes, OS%Time, time_step, OS%Ice_shelf_CSp)
+!  endif
+!
+!  call forcing_accumulate(tmp_fluxes, OS%fluxes)
+!###
 
   call disable_averaging(OS%MOM_CSp%diag)
   Master_time = OS%Time ; Time1 = OS%Time
@@ -389,6 +400,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   OS%Time = Master_time + Ocean_coupling_time_step
   OS%nstep = OS%nstep + 1
 
+!### FIX THIS WITH MULTIPLE TIME STEPS.
   call enable_averaging(time_step, OS%Time, OS%MOM_CSp%diag)
   call forcing_diagnostics(OS%fluxes, OS%state, time_step, OS%grid, OS%MOM_CSp%diag, OS%forcing_CSp%handles)
   call accumulate_net_input(OS%fluxes, OS%state, time_step, OS%grid, OS%sum_output_CSp)

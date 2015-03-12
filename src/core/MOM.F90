@@ -492,6 +492,11 @@ type, public :: MOM_control_struct
 
   real    :: dt              ! The (baroclinic) dynamics time step, in s.
   real    :: dt_therm        ! The thermodynamics time step, in s.
+  logical :: thermo_spans_coupling ! If true, the thermodynamic and tracer time
+                             ! steps can span multiple coupled time steps.
+  real    :: dt_trans        ! The elapsed time since updating the tracers and
+                             ! applying diabatic processes, in s.  This may
+                             ! span multiple timesteps.
   type(time_type) :: Z_diag_interval  !   The amount of time between calls to
                              ! calculate Z-space diagnostics.
   type(time_type) :: Z_diag_time  ! The next time at which Z-space diagnostics
@@ -641,14 +646,14 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   real :: dt        ! The baroclinic time step in s.
   real :: dtth      ! The time step used for thickness diffusion, in s.
-  real :: dtnt      ! The elapsed time since updating the tracers and applying
-                    ! diabatic processes, in s.
   real :: dtdia     ! The time step used for diabatic processes, in s.
+  real :: dt_therm  ! A limited and quantized version of CS%dt_therm, in s.
   real :: dtbt_reset_time ! The value of CS%rel_time when DTBT was last
                     ! calculated, in s.
   real :: wt_end, wt_beg
   logical :: calc_dtbt ! This indicates whether the dynamically adjusted
                     ! barotropic time step needs to be updated.
+  logical :: do_advection ! If true, it is time to advect tracers.
   real, dimension(SZI_(CS%G),SZJ_(CS%G)) :: &
     eta_av, &       ! The average sea surface height or column mass over
                     ! a time step, in m or kg m-2.
@@ -673,8 +678,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
   real :: SST_global, SSS_global
   type(time_type) :: Time_local
   logical :: showCallTree
-  !--- for group halo pass
-  logical                     :: do_pass_kd_kv_turb
+  logical :: do_pass_kd_kv_turb ! This is used for a group halo pass.
 
   G => CS%G
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -698,9 +702,16 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     n_max = ceiling(time_interval/CS%dt - 0.001)
   endif
 
-  dt = real(time_interval) / real(n_max)
-  dtnt = 0.0 ; dtdia = 0.0
-  ntstep = MAX(1,MIN(n_max,floor(CS%dt_therm/dt + 0.001)))
+  dt = time_interval / real(n_max)
+  dtdia = 0.0
+  if (CS%thermo_spans_coupling .and. (CS%dt_therm > 1.5*time_interval)) then
+    ! Set dt_therm to be an integer multiple of the coupling time step.
+    dt_therm = time_interval * floor(CS%dt_therm / time_interval + 0.001)
+    ntstep = floor(dt_therm/dt + 0.001)
+  else
+    ntstep = MAX(1,MIN(n_max,floor(CS%dt_therm/dt + 0.001)))
+    dt_therm = dt*ntstep
+  endif
 
   CS%visc%calc_bbl = .true.
   if (.not.ASSOCIATED(fluxes%p_surf)) CS%interp_p_surf = .false.
@@ -803,8 +814,12 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     if (showCallTree) call callTree_enter("DT cycles (step_MOM) n=",n)
     call cpu_clock_end(id_clock_other)
 
-    if (CS%diabatic_first .and. ((n==1) .or. MOD(n-1,ntstep)==0)) then ! do thermodynamics.
-      dtdia = dt*min(ntstep,n_max-(n-1))
+    if (CS%diabatic_first .and. (CS%dt_trans==0.0)) then ! do thermodynamics.
+      if (CS%thermo_spans_coupling) then
+        dtdia = dt_therm
+      else
+        dtdia = dt*min(ntstep,n_max-(n-1))
+      endif
       ! The end-time of the diagnostic interval needs to be set ahead if there
       ! are multiple dynamic time steps worth of dynamics applied here.
       call enable_averaging(dtdia, Time_local + &
@@ -843,6 +858,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         call cpu_clock_begin(id_clock_diabatic)
         call diabatic(u, v, h, CS%tv, fluxes, CS%visc, CS%ADp, CS%CDp, &
                       dtdia, G, CS%diabatic_CSp)
+        fluxes%flux_adds = 0
         call cpu_clock_end(id_clock_diabatic)
 
         ! Regridding/remapping is done here, at the end of the thermodynamics time step
@@ -893,6 +909,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
         call cpu_clock_begin(id_clock_diabatic)
         call adiabatic(h, CS%tv, fluxes, dtdia, G, CS%diabatic_CSp)
+        fluxes%flux_adds = 0
         call cpu_clock_end(id_clock_diabatic)
 
         if (CS%use_temperature) then
@@ -923,8 +940,12 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     call disable_averaging(CS%diag)
 
     if (CS%thickness_diffuse .and. CS%thickness_diffuse_first) then
-      if (MOD(n-1,ntstep) == 0) then
-        dtth = dt*min(ntstep,n_max-n+1)
+      if (CS%dt_trans == 0.0) then
+        if (CS%thermo_spans_coupling) then
+          dtth = dt_therm
+        else
+          dtth = dt*min(ntstep,n_max-n+1)
+        endif
         call enable_averaging(dtth,Time_local+set_time(int(floor(dtth-dt+0.5))), CS%diag)
         call cpu_clock_begin(id_clock_thick_diff)
         if (associated(CS%VarMix)) call calc_slope_functions(h, CS%tv, dt, G, CS%VarMix)
@@ -950,7 +971,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       enddo ; enddo
     endif
 
-    if (CS%visc%calc_bbl) &
+    if (CS%visc%calc_bbl) &  !### DOES THIS NEED TO BE REVISED WITH THERMO_SPANS?
       CS%visc%bbl_calc_time_interval = dt*real(1+MIN(ntstep-MOD(n,ntstep),n_max-n))
 
     if (associated(CS%u_prev) .and. associated(CS%v_prev)) then
@@ -977,12 +998,12 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       if (CS%legacy_split) then
         call step_MOM_dyn_legacy_split(u, v, h, CS%tv, CS%visc, &
                     Time_local, dt, fluxes, CS%p_surf_begin, CS%p_surf_end, &
-                    dtnt, dt*ntstep, CS%uh, CS%vh, CS%uhtr, CS%vhtr, &
+                    CS%dt_trans, dt_therm, CS%uh, CS%vh, CS%uhtr, CS%vhtr, &
                     eta_av, G, CS%dyn_legacy_split_CSp, calc_dtbt, CS%VarMix, CS%MEKE)
       else
         call step_MOM_dyn_split_RK2(u, v, h, CS%tv, CS%visc, &
                     Time_local, dt, fluxes, CS%p_surf_begin, CS%p_surf_end, &
-                    dtnt, dt*ntstep, CS%uh, CS%vh, CS%uhtr, CS%vhtr, &
+                    CS%dt_trans, dt_therm, CS%uh, CS%vh, CS%uhtr, CS%vhtr, &
                     eta_av, G, CS%dyn_split_RK2_CSp, calc_dtbt, CS%VarMix, CS%MEKE)
       endif
       if (showCallTree) call callTree_waypoint("finished step_MOM_dyn_split (step_MOM)")
@@ -1045,8 +1066,13 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     call cpu_clock_end(id_clock_dynamics)
 
 
-    dtnt = dtnt + dt
-    if ((MOD(n,ntstep) == 0) .or. (n==n_max)) then ! Do advection and thermo.
+    CS%dt_trans = CS%dt_trans + dt
+    if (CS%thermo_spans_coupling) then
+      do_advection = (CS%dt_trans + 0.5*dt > dt_therm)
+    else
+      do_advection = ((MOD(n,ntstep) == 0) .or. (n==n_max))
+    endif
+    if (do_advection) then ! Do advection and (perhaps) thermodynamics.
 
       call cpu_clock_begin(id_clock_other)
 
@@ -1071,17 +1097,17 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       call cpu_clock_end(id_clock_other)
 
       call cpu_clock_begin(id_clock_thermo)
-      call enable_averaging(dtnt,Time_local, CS%diag)
+      call enable_averaging(CS%dt_trans, Time_local, CS%diag)  !### REVISIT WHEN ACROSS COUPLING STEPS.
 
       call cpu_clock_begin(id_clock_tracer)
-      call advect_tracer(h, CS%uhtr, CS%vhtr, CS%OBC, dtnt, G, &
+      call advect_tracer(h, CS%uhtr, CS%vhtr, CS%OBC, CS%dt_trans, G, &
                          CS%tracer_adv_CSp, CS%tracer_Reg)
-      call tracer_hordiff(h, dtnt, CS%MEKE, CS%VarMix, G, &
+      call tracer_hordiff(h, CS%dt_trans, CS%MEKE, CS%VarMix, G, &
                           CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv)
       call cpu_clock_end(id_clock_tracer)
 
       call cpu_clock_begin(id_clock_Z_diag)
-      call calculate_Z_transport(CS%uhtr, CS%vhtr, h, dtnt, G, &
+      call calculate_Z_transport(CS%uhtr, CS%vhtr, h, CS%dt_trans, G, &
                                  CS%diag_to_Z_CSp)
       call cpu_clock_end(id_clock_Z_diag)
 
@@ -1107,13 +1133,14 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
           call check_redundant("Pre-diabatic ", u, v, G)
         endif
 
-        if (CS%split .and. CS%legacy_split) then
+        if (CS%split .and. CS%legacy_split) then  ! The dt here is correct. -RWH
           call adjustments_dyn_legacy_split(u, v, h, dt, G, CS%dyn_legacy_split_CSp)
         endif
 
         call cpu_clock_begin(id_clock_diabatic)
         call diabatic(u, v, h, CS%tv, fluxes, CS%visc, CS%ADp, CS%CDp, &
-                      dtnt, G, CS%diabatic_CSp)
+                      CS%dt_trans, G, CS%diabatic_CSp)
+        fluxes%flux_adds = 0
         call cpu_clock_end(id_clock_diabatic)
 
         ! Regridding/remapping is done here, at the end of the thermodynamics time step
@@ -1164,7 +1191,8 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       else
 
         call cpu_clock_begin(id_clock_diabatic)
-        call adiabatic(h, CS%tv, fluxes, dtnt, G, CS%diabatic_CSp)
+        call adiabatic(h, CS%tv, fluxes, CS%dt_trans, G, CS%diabatic_CSp)
+        fluxes%flux_adds = 0
         call cpu_clock_end(id_clock_diabatic)
 
         if (CS%use_temperature) then
@@ -1178,15 +1206,13 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         endif
         if (showCallTree) call callTree_waypoint("finished adiabatic (step_MOM)")
       endif ; endif ! Adiabatic and diabatic_first.
-      CS%uhtr(:,:,:) = 0.0
-      CS%vhtr(:,:,:) = 0.0
       call cpu_clock_end(id_clock_thermo)
 
       call cpu_clock_begin(id_clock_other)
 
       call cpu_clock_begin(id_clock_diagnostics)
       call calculate_diagnostic_fields(u, v, h, CS%uh, CS%vh, CS%tv, &
-                          CS%ADp, CS%CDp, dtnt, G, CS%diagnostics_CSp)
+                          CS%ADp, CS%CDp, CS%dt_trans, G, CS%diagnostics_CSp)
       if (showCallTree) call callTree_waypoint("finished calculate_diagnostic_fields (step_MOM)")
       call cpu_clock_end(id_clock_diagnostics)
 
@@ -1218,10 +1244,10 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
       call cpu_clock_begin(id_clock_Z_diag)
 
-      if (Time_local + set_time(int(0.5*CS%dt_therm)) > CS%Z_diag_time) then
+      if (Time_local + set_time(int(0.5*dt_therm)) > CS%Z_diag_time) then
         call enable_averaging(real(time_type_to_real(CS%Z_diag_interval)), &
                               CS%Z_diag_time, CS%diag)
-        call calculate_Z_diag_fields(u,v,h, dtnt, &
+        call calculate_Z_diag_fields(u, v, h, CS%dt_trans, &
                                      G, CS%diag_to_Z_CSp)
         CS%Z_diag_time = CS%Z_diag_time + CS%Z_diag_interval
         call disable_averaging(CS%diag)
@@ -1231,7 +1257,13 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
       call cpu_clock_end(id_clock_other)
 
-      dtnt = 0.0
+      call cpu_clock_begin(id_clock_thermo)
+      ! Reset the accumulated transports to 0.
+      CS%uhtr(:,:,:) = 0.0
+      CS%vhtr(:,:,:) = 0.0
+      CS%dt_trans = 0.0
+      call cpu_clock_end(id_clock_thermo)
+
       CS%visc%calc_bbl = .true.
     endif  ! End do advection and thermo.
 
@@ -1530,6 +1562,12 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
                  "Ideally DT_THERM should be an integer multiple of DT \n"//&
                  "and less than the forcing or coupling time-step. \n"//&
                  "By default DT_THERM is set to DT.", units="s", default=CS%dt)
+  call get_param(param_file, "MOM", "THERMO_SPANS_COUPLING", CS%thermo_spans_coupling, &
+                 "If true, the MOM will take thermodynamic and tracer \n"//&
+                 "timesteps that can be longer than the coupling timestep. \n"//&
+                 "The actual thermodynamic timestep that is used in this \n"//&
+                 "case is the largest integer multiple of the coupling \n"//&
+                 "timestep that is less than or equal to DT_THERM.", default=.false.)
 
   if (.not.CS%bulkmixedlayer) then
     call get_param(param_file, "MOM", "HMIX_SFC_PROP", CS%Hmix, &
@@ -1685,6 +1723,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
 
   ALLOC_(CS%uhtr(IsdB:IedB,jsd:jed,nz)) ; CS%uhtr(:,:,:) = 0.0
   ALLOC_(CS%vhtr(isd:ied,JsdB:JedB,nz)) ; CS%vhtr(:,:,:) = 0.0
+  CS%dt_trans = 0.0
 
   if (CS%debug_truncations) then
     allocate(CS%u_prev(IsdB:IedB,jsd:jed,nz)) ; CS%u_prev(:,:,:) = 0.0

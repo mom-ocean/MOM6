@@ -141,23 +141,31 @@ type, public :: forcing
     rigidity_ice_u => NULL(),& ! Depth-integrated lateral viscosity of
     rigidity_ice_v => NULL()   ! ice shelves at u- or v-points (m3/s)
 
-    ! Scalars set by surface forcing modules
-    real :: vPrecGlobalAdj     ! adjustment to restoring vprec to zero out global net ( kg/(m^2 s) )
-    real :: saltFluxGlobalAdj  ! adjustment to restoring salt flux to zero out global net ( kg salt/(m^2 s) )
-    real :: netFWGlobalAdj     ! adjustment to net fresh water to zero out global net ( kg/(m^2 s) )
-    real :: vPrecGlobalScl     ! scaling of restoring vprec to zero out global net ( -1..1 )
-    real :: saltFluxGlobalScl  ! scaling of restoring salt flux to zero out global net ( -1..1 )
-    real :: netFWGlobalScl     ! scaling of net fresh water to zero out global net ( -1..1 )
+  ! Scalars set by surface forcing modules
+  real :: vPrecGlobalAdj     ! adjustment to restoring vprec to zero out global net ( kg/(m^2 s) )
+  real :: saltFluxGlobalAdj  ! adjustment to restoring salt flux to zero out global net ( kg salt/(m^2 s) )
+  real :: netFWGlobalAdj     ! adjustment to net fresh water to zero out global net ( kg/(m^2 s) )
+  real :: vPrecGlobalScl     ! scaling of restoring vprec to zero out global net ( -1..1 )
+  real :: saltFluxGlobalScl  ! scaling of restoring salt flux to zero out global net ( -1..1 )
+  real :: netFWGlobalScl     ! scaling of net fresh water to zero out global net ( -1..1 )
 
-    ! heat capacity 
-    real :: C_p                ! heat capacity of seawater ( J/(K kg) )
-                               ! C_p is is the same value as in thermovar_ptrs_type.
+  integer :: flux_adds = -1  ! The number of times the mass, heat, and salt fluxes
+                             ! have been augmented since being used by MOM.  Surface
+                             ! pressure and stresses are used primarily by the
+                             ! dynamics and are updated (not averaged) every time,
+                             ! but ustar is a running average like the heat fluxes.
+                             ! This is set initially to a negative number to
+                             ! indicate that this type has not been initialized.
 
-    ! passive tracer surface fluxes 
-    type(coupler_2d_bc_type), pointer :: tr_fluxes  => NULL()
-       ! This structure may contain an array of named fields used for passive tracer fluxes.
-       ! All arrays in tr_fluxes use the coupler indexing, which has no halos. This is not 
-       ! a convenient convention, but imposed on MOM6 by the coupler.  
+  ! heat capacity
+  real :: C_p                ! heat capacity of seawater ( J/(K kg) )
+                             ! C_p is is the same value as in thermovar_ptrs_type.
+
+  ! passive tracer surface fluxes 
+  type(coupler_2d_bc_type), pointer :: tr_fluxes  => NULL()
+     ! This structure may contain an array of named fields used for passive tracer fluxes.
+     ! All arrays in tr_fluxes use the coupler indexing, which has no halos. This is not 
+     ! a convenient convention, but imposed on MOM6 by the coupler.  
 
 end type forcing
 
@@ -1486,6 +1494,9 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
 
 end subroutine register_forcing_type_diags
 
+!### subroutine forcing_accumulate(tmp_fluxes, fluxes)
+!### end subroutine forcing_accumulate
+
 
 !> Offers forcing fields for diagnostics
 subroutine forcing_diagnostics(fluxes, state, dt, G, diag, handles)
@@ -1703,15 +1714,16 @@ end subroutine forcing_diagnostics
 
 
 !> Conditionally allocates fields within the forcing type
-subroutine allocate_forcing_type(G, fluxes, &
-    stress, ustar &
-    )
+subroutine allocate_forcing_type(G, fluxes, stress, ustar, water, heat)
   type(ocean_grid_type), intent(in) :: G !< Ocean grid structure
   type(forcing),      intent(inout) :: fluxes !< Forcing fields structure
   logical, optional,     intent(in) :: stress !< If present and true, allocate taux, tauy
   logical, optional,     intent(in) :: ustar !< If present and true, allocate ustar
+  logical, optional,     intent(in) :: water !< If present and true, allocate water fluxes
+  logical, optional,     intent(in) :: heat  !< If present and true, allocate heat fluxes
   ! Local variables
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
+  logical :: heat_water
 
   isd  = G%isd   ; ied  = G%ied    ; jsd  = G%jsd   ; jed  = G%jed
   IsdB = G%IsdB  ; IedB = G%IedB   ; JsdB = G%JsdB  ; JedB = G%JedB
@@ -1719,6 +1731,33 @@ subroutine allocate_forcing_type(G, fluxes, &
   call myAlloc(fluxes%taux,IsdB,IedB,jsd,jed, stress)
   call myAlloc(fluxes%tauy,isd,ied,JsdB,JedB, stress)
   call myAlloc(fluxes%ustar,isd,ied,jsd,jed, ustar)
+
+  call myAlloc(fluxes%evap,isd,ied,jsd,jed, water)
+  call myAlloc(fluxes%lprec,isd,ied,jsd,jed, water)
+  call myAlloc(fluxes%fprec,isd,ied,jsd,jed, water)
+  call myAlloc(fluxes%vprec,isd,ied,jsd,jed, water)
+  call myAlloc(fluxes%lrunoff,isd,ied,jsd,jed, water)
+  call myAlloc(fluxes%frunoff,isd,ied,jsd,jed, water)
+  call myAlloc(fluxes%seaice_melt,isd,ied,jsd,jed, water)
+
+  call myAlloc(fluxes%sw,isd,ied,jsd,jed, heat)          
+  call myAlloc(fluxes%lw,isd,ied,jsd,jed, heat) 
+  call myAlloc(fluxes%latent,isd,ied,jsd,jed, heat)
+  call myAlloc(fluxes%sens,isd,ied,jsd,jed, heat)
+  call myAlloc(fluxes%latent_evap_diag,isd,ied,jsd,jed, heat)
+  call myAlloc(fluxes%latent_fprec_diag,isd,ied,jsd,jed, heat)
+  call myAlloc(fluxes%latent_frunoff_diag,isd,ied,jsd,jed, heat)
+  
+  if (present(heat) .and. present(water)) then ; if (heat .and. water) then
+    call myAlloc(fluxes%heat_content_cond,isd,ied,jsd,jed, .true.)
+    call myAlloc(fluxes%heat_content_lprec,isd,ied,jsd,jed, .true.)
+    call myAlloc(fluxes%heat_content_fprec,isd,ied,jsd,jed, .true.)
+    call myAlloc(fluxes%heat_content_vprec,isd,ied,jsd,jed, .true.)
+    call myAlloc(fluxes%heat_content_lrunoff,isd,ied,jsd,jed, .true.)
+    call myAlloc(fluxes%heat_content_frunoff,isd,ied,jsd,jed, .true.)
+    call myAlloc(fluxes%heat_content_massout,isd,ied,jsd,jed, .true.)
+    call myAlloc(fluxes%heat_content_massin,isd,ied,jsd,jed, .true.)
+  endif ; endif
  
   contains
 
@@ -1731,7 +1770,7 @@ subroutine allocate_forcing_type(G, fluxes, &
       if (flag) then
         if (.not.associated(array)) then
           ALLOCATE(array(is:ie,js:je))
-          array(is:ie,js:je) = 0.
+          array(is:ie,js:je) = 0.0
         endif
       endif
     endif

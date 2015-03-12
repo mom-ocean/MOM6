@@ -97,7 +97,7 @@ type, public :: surface_forcing_CS ; private
   logical :: bulkmixedlayer     ! If true, model based on bulk mixed layer code
 
   real :: Rho0                  ! Boussinesq reference density (kg/m^3)
-  real :: area_surf             ! total ocean surface area (m^2)
+  real :: area_surf = -1.0      ! total ocean surface area (m^2)
   real :: latent_heat_fusion    ! latent heat of fusion (J/kg)
   real :: latent_heat_vapor     ! latent heat of vaporization (J/kg)
 
@@ -157,7 +157,6 @@ type, public :: surface_forcing_CS ; private
   character(len=200)       :: salt_restore_file     ! filename for salt restoring data
   character(len=30)        :: salt_restore_var_name ! name of surface salinity in salt_restore_file
 
-  logical :: first_call  = .true. ! True if convert_IOB_to_fluxes has not been called yet
   integer :: id_srestore = -1     ! id number for time_interp_external.
 
   ! Diagnostics handles
@@ -299,27 +298,16 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
   restore_salinity = .false.
   if (present(restore_salt)) restore_salinity = restore_salt
 
-  ! allocation and initialization on first call to this routine
-  if (CS%first_call) then
-    call allocate_forcing_type(G, fluxes, stress=.true., ustar=.true.)
+  ! allocation and initialization if this is the first time that this
+  ! flux type has been used.
+  if (fluxes%flux_adds < 0) then
+    call allocate_forcing_type(G, fluxes, stress=.true., ustar=.true., &
+                               water=.true., heat=.true.)
 
-    call safe_alloc_ptr(fluxes%evap,isd,ied,jsd,jed)
-    call safe_alloc_ptr(fluxes%lprec,isd,ied,jsd,jed)
-    call safe_alloc_ptr(fluxes%fprec,isd,ied,jsd,jed)
-    call safe_alloc_ptr(fluxes%vprec,isd,ied,jsd,jed)
-    call safe_alloc_ptr(fluxes%seaice_melt,isd,ied,jsd,jed)
-
-    call safe_alloc_ptr(fluxes%sw,isd,ied,jsd,jed)
     call safe_alloc_ptr(fluxes%sw_vis_dir,isd,ied,jsd,jed)
     call safe_alloc_ptr(fluxes%sw_vis_dif,isd,ied,jsd,jed)
     call safe_alloc_ptr(fluxes%sw_nir_dir,isd,ied,jsd,jed)
     call safe_alloc_ptr(fluxes%sw_nir_dif,isd,ied,jsd,jed)
-    call safe_alloc_ptr(fluxes%lw,isd,ied,jsd,jed)
-    call safe_alloc_ptr(fluxes%latent,isd,ied,jsd,jed)
-    call safe_alloc_ptr(fluxes%latent_evap_diag,isd,ied,jsd,jed)
-    call safe_alloc_ptr(fluxes%latent_fprec_diag,isd,ied,jsd,jed)
-    call safe_alloc_ptr(fluxes%latent_frunoff_diag,isd,ied,jsd,jed)
-    call safe_alloc_ptr(fluxes%sens,isd,ied,jsd,jed)
 
     call safe_alloc_ptr(fluxes%p_surf,isd,ied,jsd,jed)
     call safe_alloc_ptr(fluxes%p_surf_full,isd,ied,jsd,jed)
@@ -331,41 +319,31 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
     call safe_alloc_ptr(fluxes%TKE_tidal,isd,ied,jsd,jed)
     call safe_alloc_ptr(fluxes%ustar_tidal,isd,ied,jsd,jed)
 
-    call safe_alloc_ptr(fluxes%lrunoff,isd,ied,jsd,jed)
-    call safe_alloc_ptr(fluxes%frunoff,isd,ied,jsd,jed)
-
-    call safe_alloc_ptr(fluxes%heat_content_cond,isd,ied,jsd,jed)
-    call safe_alloc_ptr(fluxes%heat_content_lprec,isd,ied,jsd,jed)
-    call safe_alloc_ptr(fluxes%heat_content_fprec,isd,ied,jsd,jed)
-    call safe_alloc_ptr(fluxes%heat_content_vprec,isd,ied,jsd,jed)
-    call safe_alloc_ptr(fluxes%heat_content_frunoff,isd,ied,jsd,jed)
-    call safe_alloc_ptr(fluxes%heat_content_lrunoff,isd,ied,jsd,jed)
-    call safe_alloc_ptr(fluxes%heat_content_massout,isd,ied,jsd,jed)
-    call safe_alloc_ptr(fluxes%heat_content_massin,isd,ied,jsd,jed)
+    do j=js-2,je+2 ; do i=is-2,ie+2
+      fluxes%TKE_tidal(i,j)   = CS%TKE_tidal(i,j)
+      fluxes%ustar_tidal(i,j) = CS%ustar_tidal(i,j)
+    enddo; enddo
 
     if (CS%rigid_sea_ice) then
       call safe_alloc_ptr(fluxes%rigidity_ice_u,IsdB,IedB,jsd,jed)
       call safe_alloc_ptr(fluxes%rigidity_ice_v,isd,ied,JsdB,JedB)
     endif
 
-    CS%first_call = .false.
+    fluxes%flux_adds = 0
+  endif   ! endif for allocation and initialization
 
+  ! allocation and initialization on first call to this routine
+  if (CS%area_surf < 0.0) then
     do j=js,je ; do i=is,ie
       work_sum(i,j) = G%areaT(i,j) * G%mask2dT(i,j)
     enddo ; enddo
     CS%area_surf = reproducing_sum(work_sum, isr, ier, jsr, jer)
-
-    do j=js-2,je+2 ; do i=is-2,ie+2
-      fluxes%TKE_tidal(i,j)   = CS%TKE_tidal(i,j)
-      fluxes%ustar_tidal(i,j) = CS%ustar_tidal(i,j)
-    enddo; enddo
-
   endif    ! endif for allocation and initialization
 
-  do j=js,je ; do i=is,ie
+  if (fluxes%flux_adds == 0) then ; do j=js,je ; do i=is,ie
     fluxes%salt_flux(i,j) = 0.0
     fluxes%vprec(i,j) = 0.0
-  enddo; enddo
+  enddo ; enddo ; endif
 
   ! Salinity restoring logic
   if (restore_salinity) then
