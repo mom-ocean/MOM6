@@ -145,6 +145,8 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive)
                  "If true, turns on the [CVmix] KPP scheme of Large et al., 1994,\n"// &
                  "to calculate diffusivities and non-local transport in the OBL.",     &
                  default=.false.)
+  ! Forego remainder of initialization if not using this scheme
+  if (.not. KPP_init) return
 
   call openParameterBlock(paramFile,'KPP')
   call get_param(paramFile, mod, 'PASSIVE', CS%passiveMode,           &
@@ -252,9 +254,6 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive)
 
   call closeParameterBlock(paramFile)
   call get_param(paramFile, mod, 'DEBUG', CS%debug, default=.False., do_not_log=.True.)
-
-  ! Forego remainder of initialization if not using this scheme
-  if (.not. KPP_init) return
 
   call CVmix_init_kpp( Ri_crit=CS%Ri_crit,                 &
                        minOBLdepth=CS%minOBLdepth,         &
