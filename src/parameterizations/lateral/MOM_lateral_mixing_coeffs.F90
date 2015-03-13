@@ -89,13 +89,19 @@ type, public :: VarMix_CS ;
   ! Parameters
   integer :: VarMix_Ktop  ! Top layer to start downward integrals
   real :: Visbeck_L_scale ! Fixed length scale in Visbeck formula
-  real :: Res_coef        ! A non-dimensional number that determines the function
-                          ! of resolution as:
-                          !  F = 1 / (1 + (Res_coef*Ld/dx)^Res_fn_power)
+  real :: Res_coef_khth   ! A non-dimensional number that determines the function
+                          ! of resolution, used for thickness and tracer mixing, as:
+                          !  F = 1 / (1 + (Res_coef_khth*Ld/dx)^Res_fn_power)
+  real :: Res_coef_visc   ! A non-dimensional number that determines the function
+                          ! of resolution, used for lateral viscosity, as:
+                          !  F = 1 / (1 + (Res_coef_visc*Ld/dx)^Res_fn_power)
   real :: kappa_smooth    ! A diffusivity for smoothing T/S in vanished layers (m2/s)
-  integer :: Res_fn_power ! The power of dx/Ld in the resolution function.  Any
-                          ! positive integer power may be used, but even powers
-                          ! and especially 2 are coded to be more efficient.
+  integer :: Res_fn_power_khth ! The power of dx/Ld in the KhTh resolution function.  Any
+                               ! positive integer power may be used, but even powers
+                               ! and especially 2 are coded to be more efficient.
+  integer :: Res_fn_power_visc ! The power of dx/Ld in the Kh resolution function.  Any
+                               ! positive integer power may be used, but even powers
+                               ! and especially 2 are coded to be more efficient.
   real :: Visbeck_S_max   ! Upper bound on slope used in Eady growth rate (nondim).
 
   type(group_pass_type) :: pass_cg1 ! for group halo pass
@@ -133,7 +139,7 @@ subroutine calc_resoln_function(h, tv, G, CS)
   real :: cg1_u  ! The gravity wave speed interpolated to u points, in m s-1.
   real :: cg1_v  ! The gravity wave speed interpolated to v points, in m s-1.
   real :: dx_term
-  integer :: mod_power_2, power_2
+  integer :: power_2
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   integer :: i, j, k
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -177,15 +183,14 @@ subroutine calc_resoln_function(h, tv, G, CS)
 
   !   Do this calculation on the extent used in MOM_hor_visc.F90, and
   ! MOM_tracer.F90 so that no halo update is needed.
-  mod_power_2 = mod(CS%Res_fn_power, 2)
 
-!$OMP parallel default(none) shared(is,ie,js,je,Ieq,Jeq,CS,mod_power_2) &
+!$OMP parallel default(none) shared(is,ie,js,je,Ieq,Jeq,CS) &
 !$OMP                       private(dx_term,cg1_q,power_2,cg1_u,cg1_v)
-  if (CS%Res_fn_power >= 100) then
+  if (CS%Res_fn_power_visc >= 100) then
 !$OMP do
     do j=js-1,je+1 ; do i=is-1,ie+1
       dx_term = CS%f2_dx2_h(i,j) + CS%cg1(i,j)*CS%beta_dx2_h(i,j)
-      if ((CS%Res_coef * CS%cg1(i,j))**2 > dx_term) then
+      if ((CS%Res_coef_visc * CS%cg1(i,j))**2 > dx_term) then
         CS%Res_fn_h(i,j) = 0.0
       else
         CS%Res_fn_h(i,j) = 1.0
@@ -196,68 +201,32 @@ subroutine calc_resoln_function(h, tv, G, CS)
       cg1_q = 0.25 * ((CS%cg1(i,j) + CS%cg1(i+1,j+1)) + &
                       (CS%cg1(i+1,j) + CS%cg1(i,j+1)))
       dx_term = CS%f2_dx2_q(I,J) +  cg1_q * CS%beta_dx2_q(I,J)
-      if ((CS%Res_coef * cg1_q)**2 > dx_term) then
+      if ((CS%Res_coef_visc * cg1_q)**2 > dx_term) then
         CS%Res_fn_q(I,J) = 0.0
       else
         CS%Res_fn_q(I,J) = 1.0
       endif
     enddo ; enddo
-    if (.not.CS%interpolate_Res_fn) then
-      do j=js,je ; do I=is-1,Ieq
-        cg1_u = 0.5 * (CS%cg1(i,j) + CS%cg1(i+1,j))
-        dx_term = CS%f2_dx2_u(I,j) + cg1_u * CS%beta_dx2_u(I,j)
-        if ((CS%Res_coef * cg1_u)**2 > dx_term) then
-          CS%Res_fn_u(I,j) = 0.0
-        else
-          CS%Res_fn_u(I,j) = 1.0
-        endif
-      enddo ; enddo
-
-      do J=js-1,Jeq ; do i=is,ie
-        cg1_v = 0.5 * (CS%cg1(i,j) + CS%cg1(i,j+1))
-        dx_term = CS%f2_dx2_v(i,J) + cg1_v * CS%beta_dx2_v(i,J)
-        if ((CS%Res_coef * cg1_v)**2 > dx_term) then
-          CS%Res_fn_v(i,J) = 0.0
-        else
-          CS%Res_fn_v(i,J) = 1.0
-        endif
-      enddo ; enddo
-    endif
-  elseif (CS%Res_fn_power == 2) then
+  elseif (CS%Res_fn_power_visc == 2) then
 !$OMP do
     do j=js-1,je+1 ; do i=is-1,ie+1
       dx_term = CS%f2_dx2_h(i,j) + CS%cg1(i,j)*CS%beta_dx2_h(i,j)
-      CS%Res_fn_h(i,j) = dx_term / (dx_term + (CS%Res_coef * CS%cg1(i,j))**2)
+      CS%Res_fn_h(i,j) = dx_term / (dx_term + (CS%Res_coef_visc * CS%cg1(i,j))**2)
     enddo ; enddo
 !$OMP do
     do J=js-1,Jeq ; do I=is-1,Ieq
       cg1_q = 0.25 * ((CS%cg1(i,j) + CS%cg1(i+1,j+1)) + &
                       (CS%cg1(i+1,j) + CS%cg1(i,j+1)))
       dx_term = CS%f2_dx2_q(I,J) +  cg1_q * CS%beta_dx2_q(I,J)
-      CS%Res_fn_q(I,J) = dx_term / (dx_term + (CS%Res_coef * cg1_q)**2)
+      CS%Res_fn_q(I,J) = dx_term / (dx_term + (CS%Res_coef_visc * cg1_q)**2)
     enddo ; enddo
-    if (.not.CS%interpolate_Res_fn) then
-      do j=js,je ; do I=is-1,Ieq
-        cg1_u = 0.5 * (CS%cg1(i,j) + CS%cg1(i+1,j))
-        dx_term = CS%f2_dx2_u(I,j) + cg1_u * CS%beta_dx2_u(I,j)
-
-        CS%Res_fn_u(I,j) = dx_term / (dx_term + (CS%Res_coef * cg1_u)**2)
-      enddo ; enddo
-
-      do J=js-1,Jeq ; do i=is,ie
-        cg1_v = 0.5 * (CS%cg1(i,j) + CS%cg1(i,j+1))
-        dx_term = CS%f2_dx2_v(i,J) + cg1_v * CS%beta_dx2_v(i,J)
-
-        CS%Res_fn_v(i,J) = dx_term / (dx_term + (CS%Res_coef * cg1_v)**2)
-      enddo ; enddo
-    endif
-  elseif (mod_power_2 == 0) then
-    power_2 = CS%Res_fn_power / 2
+  elseif (mod(CS%Res_fn_power_visc, 2) == 0) then
+    power_2 = CS%Res_fn_power_visc / 2
 !$OMP do
     do j=js-1,je+1 ; do i=is-1,ie+1
       dx_term = (CS%f2_dx2_h(i,j) + CS%cg1(i,j)*CS%beta_dx2_h(i,j))**power_2
       CS%Res_fn_h(i,j) = dx_term / &
-          (dx_term + (CS%Res_coef * CS%cg1(i,j))**CS%Res_fn_power)
+          (dx_term + (CS%Res_coef_visc * CS%cg1(i,j))**CS%Res_fn_power_visc)
     enddo ; enddo
 !$OMP do
     do J=js-1,Jeq ; do I=is-1,Ieq
@@ -265,60 +234,25 @@ subroutine calc_resoln_function(h, tv, G, CS)
                       (CS%cg1(i+1,j) + CS%cg1(i,j+1)))
       dx_term = (CS%f2_dx2_q(I,J) +  cg1_q * CS%beta_dx2_q(I,J))**power_2
       CS%Res_fn_q(I,J) = dx_term / &
-          (dx_term + (CS%Res_coef * cg1_q)**CS%Res_fn_power)
+          (dx_term + (CS%Res_coef_visc * cg1_q)**CS%Res_fn_power_visc)
     enddo ; enddo
-    if (.not.CS%interpolate_Res_fn) then
-      do j=js,je ; do I=is-1,Ieq
-        cg1_u = 0.5 * (CS%cg1(i,j) + CS%cg1(i+1,j))
-        dx_term = (CS%f2_dx2_u(I,j) + cg1_u * CS%beta_dx2_u(I,j))**power_2
-
-        CS%Res_fn_u(I,j) = dx_term / &
-            (dx_term + (CS%Res_coef * cg1_u)**CS%Res_fn_power)
-      enddo ; enddo
-
-      do J=js-1,Jeq ; do i=is,ie
-        cg1_v = 0.5 * (CS%cg1(i,j) + CS%cg1(i,j+1))
-        dx_term = (CS%f2_dx2_v(i,J) + cg1_v * CS%beta_dx2_v(i,J))**power_2
-
-        CS%Res_fn_v(i,J) = dx_term / &
-            (dx_term + (CS%Res_coef * cg1_v)**CS%Res_fn_power)
-      enddo ; enddo
-    endif
   else
 !$OMP do
     do j=js-1,je+1 ; do i=is-1,ie+1
       dx_term = (sqrt(CS%f2_dx2_h(i,j) + &
-                      CS%cg1(i,j)*CS%beta_dx2_h(i,j)))**CS%Res_fn_power
+                      CS%cg1(i,j)*CS%beta_dx2_h(i,j)))**CS%Res_fn_power_visc
       CS%Res_fn_h(i,j) = dx_term / &
-         (dx_term + (CS%Res_coef * CS%cg1(i,j))**CS%Res_fn_power)
+         (dx_term + (CS%Res_coef_visc * CS%cg1(i,j))**CS%Res_fn_power_visc)
     enddo ; enddo
-
 !$OMP do
     do J=js-1,Jeq ; do I=is-1,Ieq
       cg1_q = 0.25 * ((CS%cg1(i,j) + CS%cg1(i+1,j+1)) + &
                       (CS%cg1(i+1,j) + CS%cg1(i,j+1)))
       dx_term = (sqrt(CS%f2_dx2_q(I,J) + &
-                      cg1_q * CS%beta_dx2_q(I,J)))**CS%Res_fn_power
+                      cg1_q * CS%beta_dx2_q(I,J)))**CS%Res_fn_power_visc
       CS%Res_fn_q(I,J) = dx_term / &
-          (dx_term + (CS%Res_coef * cg1_q)**CS%Res_fn_power)
+          (dx_term + (CS%Res_coef_visc * cg1_q)**CS%Res_fn_power_visc)
     enddo ; enddo
-    if (.not.CS%interpolate_Res_fn) then
-      do j=js,je ; do I=is-1,Ieq
-        cg1_u = 0.5 * (CS%cg1(i,j) + CS%cg1(i+1,j))
-        dx_term = (sqrt(CS%f2_dx2_u(I,j) + &
-                        cg1_u * CS%beta_dx2_u(I,j)))**CS%Res_fn_power
-        CS%Res_fn_u(I,j) = dx_term / &
-            (dx_term + (CS%Res_coef * cg1_u)**CS%Res_fn_power)
-      enddo ; enddo
-
-      do J=js-1,Jeq ; do i=is,ie
-        cg1_v = 0.5 * (CS%cg1(i,j) + CS%cg1(i,j+1))
-        dx_term = (sqrt(CS%f2_dx2_v(i,J) + &
-                        cg1_v * CS%beta_dx2_v(i,J)))**CS%Res_fn_power
-        CS%Res_fn_v(i,J) = dx_term / &
-            (dx_term + (CS%Res_coef * cg1_v)**CS%Res_fn_power)
-      enddo ; enddo
-    endif
   endif
 
   if (CS%interpolate_Res_fn) then
@@ -328,6 +262,77 @@ subroutine calc_resoln_function(h, tv, G, CS)
     do J=js-1,Jeq ; do i=is,ie
       CS%Res_fn_v(i,J) = 0.5*(CS%Res_fn_h(i,j) + CS%Res_fn_h(i,j+1))
     enddo ; enddo
+  else ! .not.CS%interpolate_Res_fn
+!$OMP parallel default(none) shared(is,ie,js,je,Ieq,Jeq,CS) &
+!$OMP                       private(dx_term,cg1_q,power_2,cg1_u,cg1_v)
+    if (CS%Res_fn_power_khth >= 100) then
+!$OMP do
+      do j=js,je ; do I=is-1,Ieq
+        cg1_u = 0.5 * (CS%cg1(i,j) + CS%cg1(i+1,j))
+        dx_term = CS%f2_dx2_u(I,j) + cg1_u * CS%beta_dx2_u(I,j)
+        if ((CS%Res_coef_khth * cg1_u)**2 > dx_term) then
+          CS%Res_fn_u(I,j) = 0.0
+        else
+          CS%Res_fn_u(I,j) = 1.0
+        endif
+      enddo ; enddo
+!$OMP do
+      do J=js-1,Jeq ; do i=is,ie
+        cg1_v = 0.5 * (CS%cg1(i,j) + CS%cg1(i,j+1))
+        dx_term = CS%f2_dx2_v(i,J) + cg1_v * CS%beta_dx2_v(i,J)
+        if ((CS%Res_coef_khth * cg1_v)**2 > dx_term) then
+          CS%Res_fn_v(i,J) = 0.0
+        else
+          CS%Res_fn_v(i,J) = 1.0
+        endif
+      enddo ; enddo
+    elseif (CS%Res_fn_power_khth == 2) then
+!$OMP do
+      do j=js,je ; do I=is-1,Ieq
+        cg1_u = 0.5 * (CS%cg1(i,j) + CS%cg1(i+1,j))
+        dx_term = CS%f2_dx2_u(I,j) + cg1_u * CS%beta_dx2_u(I,j)
+        CS%Res_fn_u(I,j) = dx_term / (dx_term + (CS%Res_coef_khth * cg1_u)**2)
+      enddo ; enddo
+!$OMP do
+      do J=js-1,Jeq ; do i=is,ie
+        cg1_v = 0.5 * (CS%cg1(i,j) + CS%cg1(i,j+1))
+        dx_term = CS%f2_dx2_v(i,J) + cg1_v * CS%beta_dx2_v(i,J)
+        CS%Res_fn_v(i,J) = dx_term / (dx_term + (CS%Res_coef_khth * cg1_v)**2)
+      enddo ; enddo
+    elseif (mod(CS%Res_fn_power_khth, 2) == 0) then
+      power_2 = CS%Res_fn_power_khth / 2
+!$OMP do
+      do j=js,je ; do I=is-1,Ieq
+        cg1_u = 0.5 * (CS%cg1(i,j) + CS%cg1(i+1,j))
+        dx_term = (CS%f2_dx2_u(I,j) + cg1_u * CS%beta_dx2_u(I,j))**power_2
+        CS%Res_fn_u(I,j) = dx_term / &
+            (dx_term + (CS%Res_coef_khth * cg1_u)**CS%Res_fn_power_khth)
+      enddo ; enddo
+!$OMP do
+      do J=js-1,Jeq ; do i=is,ie
+        cg1_v = 0.5 * (CS%cg1(i,j) + CS%cg1(i,j+1))
+        dx_term = (CS%f2_dx2_v(i,J) + cg1_v * CS%beta_dx2_v(i,J))**power_2
+        CS%Res_fn_v(i,J) = dx_term / &
+            (dx_term + (CS%Res_coef_khth * cg1_v)**CS%Res_fn_power_khth)
+      enddo ; enddo
+    else
+!$OMP do
+      do j=js,je ; do I=is-1,Ieq
+        cg1_u = 0.5 * (CS%cg1(i,j) + CS%cg1(i+1,j))
+        dx_term = (sqrt(CS%f2_dx2_u(I,j) + &
+                        cg1_u * CS%beta_dx2_u(I,j)))**CS%Res_fn_power_khth
+        CS%Res_fn_u(I,j) = dx_term / &
+            (dx_term + (CS%Res_coef_khth * cg1_u)**CS%Res_fn_power_khth)
+      enddo ; enddo
+!$OMP do
+      do J=js-1,Jeq ; do i=is,ie
+        cg1_v = 0.5 * (CS%cg1(i,j) + CS%cg1(i,j+1))
+        dx_term = (sqrt(CS%f2_dx2_v(i,J) + &
+                        cg1_v * CS%beta_dx2_v(i,J)))**CS%Res_fn_power_khth
+        CS%Res_fn_v(i,J) = dx_term / &
+            (dx_term + (CS%Res_coef_khth * cg1_v)**CS%Res_fn_power_khth)
+      enddo ; enddo
+    endif
   endif
 
   ! Calculate and store the ratio between deformation radius and grid-spacing
@@ -855,22 +860,43 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
     CS%id_Rd_dx = register_diag_field('ocean_model', 'Rd_dx', diag%axesT1, Time, &
        'Ratio between deformation radius and grid spacing', 'Nondim')
 
-    call get_param(param_file, mod, "KH_RES_SCALE_COEF", CS%Res_coef, &
-                 "A coefficient that determines how Kh is scaled away if \n"//&
+    call get_param(param_file, mod, "KH_RES_SCALE_COEF", CS%Res_coef_khth, &
+                 "A coefficient that determines how KhTh is scaled away if \n"//&
                  "RESOLN_SCALED_... is true, as \n"//&
                  "F = 1 / (1 + (KH_RES_SCALE_COEF*Rd/dx)^KH_RES_FN_POWER).", &
                  units="nondim", default=1.0)
-    call get_param(param_file, mod, "KH_RES_FN_POWER", CS%Res_fn_power, &
-                 "The power of dx/Ld in the resolution function.  Any \n"//&
+    call get_param(param_file, mod, "KH_RES_FN_POWER", CS%Res_fn_power_khth, &
+                 "The power of dx/Ld in the Kh resolution function.  Any \n"//&
                  "positive integer may be used, although even integers \n"//&
                  "are more efficient to calculate.  Setting this greater \n"//&
                  "than 100 results in a step-function being used.", &
                  units="nondim", default=2)
+    call get_param(param_file, mod, "VISC_RES_SCALE_COEF", CS%Res_coef_visc, &
+                 "A coefficient that determines how Kh is scaled away if \n"//&
+                 "RESOLN_SCALED_... is true, as \n"//&
+                 "F = 1 / (1 + (KH_RES_SCALE_COEF*Rd/dx)^KH_RES_FN_POWER).\n"//&
+                 "This function affects lateral viscosity, Kh, and not KhTh.", &
+                 units="nondim", default=CS%Res_coef_khth)
+    call get_param(param_file, mod, "VISC_RES_FN_POWER", CS%Res_fn_power_visc, &
+                 "The power of dx/Ld in the Kh resolution function.  Any \n"//&
+                 "positive integer may be used, although even integers \n"//&
+                 "are more efficient to calculate.  Setting this greater \n"//&
+                 "than 100 results in a step-function being used.\n"//&
+                 "This function affects lateral viscosity, Kh, and not KhTh.", &
+                 units="nondim", default=CS%Res_fn_power_khth)
     call get_param(param_file, mod, "INTERPOLATE_RES_FN", CS%interpolate_Res_fn, &
                  "If true, interpolate the resolution function to the \n"//&
                  "velocity points from the thickness points; otherwise \n"//&
                  "interpolate the wave speed and calculate the resolution \n"//&
                  "function independently at each point.", default=.true.)
+    if (CS%interpolate_Res_fn) then
+      if (CS%Res_coef_visc .ne. CS%Res_coef_khth) call MOM_error(FATAL, &
+           "MOM_lateral_mixing_coeffs.F90, VarMix_init:"//&
+           "When INTERPOLATE_RES_FN=True, VISC_RES_FN_POWER must equal KH_RES_SCALE_COEF.")
+      if (CS%Res_fn_power_visc .ne. CS%Res_fn_power_khth) call MOM_error(FATAL, &
+           "MOM_lateral_mixing_coeffs.F90, VarMix_init:"//&
+           "When INTERPOLATE_RES_FN=True, VISC_RES_FN_POWER must equal KH_RES_FN_POWER.")
+    endif
     call get_param(param_file, mod, "GILL_EQUATORIAL_LD", Gill_equatorial_Ld, &
                  "If true, uses Gill's definition of the baroclinic\n"//&
                  "equatorial deformation radius, otherwise, if false, use\n"//&
