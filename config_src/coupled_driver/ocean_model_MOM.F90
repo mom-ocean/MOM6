@@ -43,7 +43,7 @@ use MOM_domains, only : pass_vector, AGRID, BGRID_NE, CGRID_NE
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe
 use MOM_error_handler, only : callTree_enter, callTree_leave
 use MOM_file_parser, only : get_param, log_version, close_param_file, param_file_type
-use MOM_forcing_type, only : forcing, forcing_diagnostics
+use MOM_forcing_type, only : forcing, forcing_diagnostics, mech_forcing_diags, forcing_accumulate
 use MOM_get_input, only : Get_MOM_Input, directories
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : close_file, file_exists, read_data, write_version_number
@@ -86,8 +86,8 @@ public ice_ocn_bnd_type_chksum
 public ocean_public_type_chksum
 public    ocean_model_data_get
 interface ocean_model_data_get
-   module procedure ocean_model_data1D_get 
-   module procedure ocean_model_data2D_get 
+  module procedure ocean_model_data1D_get 
+  module procedure ocean_model_data2D_get 
 end interface
 
 
@@ -163,6 +163,9 @@ type, public :: ocean_state_type ; private
   type(directories) :: dirs   ! A structure containing several relevant directory paths.
   type(forcing)   :: fluxes   ! A structure containing pointers to
                               ! the ocean forcing fields.
+  type(forcing)   :: flux_tmp ! A secondary structure containing pointers to the
+                              ! ocean forcing fields for when multiple coupled
+                              ! timesteps are taken per thermodynamic step.
   type(surface)   :: state    ! A structure containing pointers to
                               ! the ocean surface state fields.
   type(ocean_grid_type), pointer :: grid => NULL() ! A pointer to a grid structure
@@ -371,26 +374,31 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   call mpp_get_compute_domain(Ocean_sfc%Domain, index_bnds(1), index_bnds(2), &
                               index_bnds(3), index_bnds(4))
 
-!### if (OS%fluxes%flux_adds == 0) then
-  call enable_averaging(time_step, OS%Time + Ocean_coupling_time_step, OS%MOM_CSp%diag) ! Needed to allow diagnostics in convert_IOB
-  call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%fluxes, index_bnds, OS%Time, &
-                             OS%grid, OS%forcing_CSp, OS%state, OS%restore_salinity)
+  if (OS%fluxes%fluxes_used) then
+    call enable_averaging(time_step, OS%Time + Ocean_coupling_time_step, OS%MOM_CSp%diag) ! Needed to allow diagnostics in convert_IOB
+    call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%fluxes, index_bnds, OS%Time, &
+                               OS%grid, OS%forcing_CSp, OS%state, OS%restore_salinity)
 
-! Add ice shelf fluxes
+  ! Add ice shelf fluxes
 
-  if (OS%use_ice_shelf) then
-    call shelf_calc_flux(OS%State, OS%fluxes, OS%Time, time_step, OS%Ice_shelf_CSp)
+    if (OS%use_ice_shelf) then
+      call shelf_calc_flux(OS%State, OS%fluxes, OS%Time, time_step, OS%Ice_shelf_CSp)
+    endif
+
+    ! Indicate that there are new unused fluxes.
+    OS%fluxes%fluxes_used = .false.
+    OS%fluxes%dt_buoy_accum = time_step
+  else
+    OS%flux_tmp%C_p = OS%fluxes%C_p
+    call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%flux_tmp, index_bnds, OS%Time, &
+                               OS%grid, OS%forcing_CSp, OS%state, OS%restore_salinity)
+  
+    if (OS%use_ice_shelf) then
+      call shelf_calc_flux(OS%State, OS%flux_tmp, OS%Time, time_step, OS%Ice_shelf_CSp)
+    endif
+  
+    call forcing_accumulate(OS%flux_tmp, OS%fluxes, time_step, OS%grid)
   endif
-!### else
-!  call convert_IOB_to_fluxes(Ice_ocean_boundary, tmp_fluxes, index_bnds, OS%Time, &
-!                             OS%grid, OS%forcing_CSp, OS%state, OS%restore_salinity)
-!
-!  if (OS%use_ice_shelf) then
-!    call shelf_calc_flux(OS%State, tmp_fluxes, OS%Time, time_step, OS%Ice_shelf_CSp)
-!  endif
-!
-!  call forcing_accumulate(tmp_fluxes, OS%fluxes)
-!###
 
   call disable_averaging(OS%MOM_CSp%diag)
   Master_time = OS%Time ; Time1 = OS%Time
@@ -400,14 +408,23 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   OS%Time = Master_time + Ocean_coupling_time_step
   OS%nstep = OS%nstep + 1
 
-!### FIX THIS WITH MULTIPLE TIME STEPS.
   call enable_averaging(time_step, OS%Time, OS%MOM_CSp%diag)
-  call forcing_diagnostics(OS%fluxes, OS%state, time_step, OS%grid, OS%MOM_CSp%diag, OS%forcing_CSp%handles)
-  call accumulate_net_input(OS%fluxes, OS%state, time_step, OS%grid, OS%sum_output_CSp)
+  call mech_forcing_diags(OS%fluxes, time_step, OS%grid, &
+                          OS%MOM_CSp%diag, OS%forcing_CSp%handles)
   call disable_averaging(OS%MOM_CSp%diag)
 
+  if (OS%fluxes%fluxes_used) then
+    call enable_averaging(OS%fluxes%dt_buoy_accum, OS%Time, OS%MOM_CSp%diag)
+    call forcing_diagnostics(OS%fluxes, OS%state, OS%fluxes%dt_buoy_accum, &
+                             OS%grid, OS%MOM_CSp%diag, OS%forcing_CSp%handles)
+    call accumulate_net_input(OS%fluxes, OS%state, OS%fluxes%dt_buoy_accum, &
+                              OS%grid, OS%sum_output_CSp)
+    call disable_averaging(OS%MOM_CSp%diag)
+  endif
+
 !  See if it is time to write out the energy.
-  if (OS%Time + ((Ocean_coupling_time_step)/2) > OS%write_energy_time) then
+  if ((OS%Time + ((Ocean_coupling_time_step)/2) > OS%write_energy_time) .and. &
+      (OS%MOM_CSp%dt_trans==0.0)) then
     call write_energy(OS%MOM_CSp%u, OS%MOM_CSp%v, OS%MOM_CSp%h, OS%MOM_CSp%tv, &
                       OS%Time, OS%nstep, OS%grid, OS%sum_output_CSp, &
                       OS%MOM_CSp%tracer_flow_CSp)
@@ -437,6 +454,12 @@ end subroutine update_ocean_model
 subroutine ocean_model_restart(OS, timestamp)
    type(ocean_state_type),        pointer :: OS
    character(len=*), intent(in), optional :: timestamp
+
+   if (OS%MOM_CSp%dt_trans > 0.0) call MOM_error(WARNING, "ocean_model_restart "//&
+       "called with a non-zero dt_trans.  Additional restart fields are required.")
+   if (.not.OS%fluxes%fluxes_used) call MOM_error(FATAL, "ocean_model_restart "//&
+       "was called with unused buoyancy fluxes.  For conservation, the ocean "//&
+       "restart files can only be created after the buoyancy forcing is applied.")
 
    if (BTEST(OS%Restart_control,1)) then
      call save_restart(OS%dirs%restart_output_dir, OS%Time, OS%grid, &
@@ -502,6 +525,12 @@ subroutine ocean_model_save_restart(OS, Time, directory, filename_suffix)
 !   checkpointing.  It will also be called by ocean_model_end, giving the same
 !   restart behavior as now in FMS.
   character(len=200) :: restart_dir
+
+  if (OS%MOM_CSp%dt_trans > 0.0) call MOM_error(WARNING, "ocean_model_save_restart "//&
+       "called with a non-zero dt_trans.  Additional restart fields are required.")
+   if (.not.OS%fluxes%fluxes_used) call MOM_error(FATAL, "ocean_model_save_restart "//&
+       "was called with unused buoyancy fluxes.  For conservation, the ocean "//&
+       "restart files can only be created after the buoyancy forcing is applied.")
 
   if (present(directory)) then ; restart_dir = directory
   else ; restart_dir = OS%dirs%restart_output_dir ; endif

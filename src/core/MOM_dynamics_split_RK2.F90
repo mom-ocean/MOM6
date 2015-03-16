@@ -472,7 +472,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
     ! Calculate the BBL properties and store them inside visc (u,h).
     call cpu_clock_begin(id_clock_vertvisc)
     call enable_averaging(visc%bbl_calc_time_interval, &
-                          Time_local-set_time(int(dt)), CS%diag)
+              Time_local+set_time(int(visc%bbl_calc_time_interval-dt)), CS%diag)
     call set_viscous_BBL(u, v, h, tv, visc, G, CS%set_visc_CSp)
     call disable_averaging(CS%diag)
     call cpu_clock_end(id_clock_vertvisc)

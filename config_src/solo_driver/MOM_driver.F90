@@ -52,7 +52,7 @@ program MOM_main
   use MOM_error_handler,   only : callTree_enter, callTree_leave, callTree_waypoint
   use MOM_file_parser,     only : read_param, get_param, log_param, log_version, param_file_type
   use MOM_file_parser,     only : close_param_file
-  use MOM_forcing_type,    only : forcing, forcing_diagnostics
+  use MOM_forcing_type,    only : forcing, forcing_diagnostics, mech_forcing_diags
   use MOM_get_input,       only : directories
   use MOM_grid,            only : ocean_grid_type
   use MOM_io,              only : file_exists, open_file, close_file
@@ -389,7 +389,8 @@ program MOM_main
 !###IS  ! With a coupled ice/ocean run, use the following call.
 !###IS      call add_shelf_flux_IOB(ice_ocean_bdry_type, ice_shelf_CSp)
     endif
-
+    fluxes%fluxes_used = .false.
+    fluxes%dt_buoy_accum = time_step
 
     ! This call steps the model over a time time_step.
     Time1 = Master_Time ; Time = Master_Time
@@ -415,13 +416,25 @@ program MOM_main
     endif
     Time = Master_Time
 
-    call enable_averaging(time_step,Time,MOM_CSp%diag)
-    call forcing_diagnostics(fluxes, state, time_step, grid, MOM_CSp%diag, surface_forcing_CSp%handles)
-    call accumulate_net_input(fluxes, state, time_step, grid, sum_output_CSp)
+    call enable_averaging(time_step, Time, MOM_CSp%diag)
+    call mech_forcing_diags(fluxes, time_step, grid, MOM_CSp%diag, &
+                            surface_forcing_CSp%handles)
     call disable_averaging(MOM_CSp%diag)
 
+    if (fluxes%fluxes_used) then
+      call enable_averaging(fluxes%dt_buoy_accum, Time, MOM_CSp%diag)
+      call forcing_diagnostics(fluxes, state, fluxes%dt_buoy_accum, grid, &
+                               MOM_CSp%diag, surface_forcing_CSp%handles)
+      call accumulate_net_input(fluxes, state, fluxes%dt_buoy_accum, grid, sum_output_CSp)
+      call disable_averaging(MOM_CSp%diag)
+    else
+      call MOM_error(FATAL, "The solo MOM_driver is not yet set up to handle "//&
+             "thermodynamic time steps that are longer than the couping timestep.")
+    endif
+
 !  See if it is time to write out the energy.
-    if (Time + (Time_step_ocean/2) > write_energy_time) then
+    if ((Time + (Time_step_ocean/2) > write_energy_time) .and. &
+        (MOM_CSp%dt_trans == 0.0)) then
       call write_energy(MOM_CSp%u, MOM_CSp%v, MOM_CSp%h, &
                         MOM_CSp%tv, Time, n+ntstep-1, grid, sum_output_CSp, &
                         MOM_CSp%tracer_flow_CSp)
@@ -430,7 +443,7 @@ program MOM_main
     endif
 
 !  See if it is time to write out a restart file - timestamped or not.
-    if ((permit_incr_restart) .and. &
+    if ((permit_incr_restart) .and. (fluxes%fluxes_used) .and. &
         (Time + (Time_step_ocean/2) > restart_time)) then
       if (BTEST(Restart_control,1)) then
         call save_restart(dirs%restart_output_dir, Time, grid, &
@@ -458,6 +471,12 @@ program MOM_main
   call cpu_clock_end(mainClock)
   call cpu_clock_begin(termClock)
   if (Restart_control>=0) then
+    if (MOM_CSp%dt_trans > 0.0) call MOM_error(WARNING, "End of MOM_main reached "//&
+         "with a non-zero dt_trans.  Additional restart fields are required.")
+     if (.not.fluxes%fluxes_used) call MOM_error(FATAL, "End of MOM_main reached "//&
+         "with unused buoyancy fluxes.  For conservation, the ocean restart "//&
+         "files can only be created after the buoyancy forcing is applied.")
+
     call save_restart(dirs%restart_output_dir, Time, grid, MOM_CSp%restart_CSp)
     if (use_ice_shelf) call ice_shelf_save_restart(ice_shelf_CSp, Time, &
                                 dirs%restart_output_dir)

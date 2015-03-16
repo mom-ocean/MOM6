@@ -35,21 +35,13 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public extractFluxes1d
-public extractFluxes2d
-public MOM_forcing_chksum
-public absorbRemainingSW
-public calculateBuoyancyFlux1d
-public calculateBuoyancyFlux2d
-public forcing_SinglePointPrint
-public forcing_diagnostics
-public register_forcing_type_diags
-public allocate_forcing_type
-public deallocate_forcing_type
+public extractFluxes1d, extractFluxes2d, absorbRemainingSW, MOM_forcing_chksum
+public calculateBuoyancyFlux1d, calculateBuoyancyFlux2d, forcing_accumulate
+public forcing_SinglePointPrint, mech_forcing_diags, forcing_diagnostics
+public register_forcing_type_diags, allocate_forcing_type, deallocate_forcing_type
 
 integer :: num_msg = 0
 integer :: max_msg = 2
-
 
 type, public :: forcing
   ! This structure contains pointers to the boundary 
@@ -149,13 +141,11 @@ type, public :: forcing
   real :: saltFluxGlobalScl  ! scaling of restoring salt flux to zero out global net ( -1..1 )
   real :: netFWGlobalScl     ! scaling of net fresh water to zero out global net ( -1..1 )
 
-  integer :: flux_adds = -1  ! The number of times the mass, heat, and salt fluxes
-                             ! have been augmented since being used by MOM.  Surface
-                             ! pressure and stresses are used primarily by the
-                             ! dynamics and are updated (not averaged) every time,
-                             ! but ustar is a running average like the heat fluxes.
-                             ! This is set initially to a negative number to
-                             ! indicate that this type has not been initialized.
+  logical :: fluxes_used = .true. ! If true, all of the heat, salt, and mass
+                             ! fluxes have been applied to the ocean.
+  real :: dt_buoy_accum  = -1.0 ! The amount of time over which the buoyancy fluxes
+                             ! should be applied, in s.  If negative, this forcing
+                             ! type variable has not yet been inialized.
 
   ! heat capacity
   real :: C_p                ! heat capacity of seawater ( J/(K kg) )
@@ -1494,11 +1484,184 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
 
 end subroutine register_forcing_type_diags
 
-!### subroutine forcing_accumulate(tmp_fluxes, fluxes)
-!### end subroutine forcing_accumulate
+subroutine forcing_accumulate(flux_tmp, fluxes, dt, G)
+  type(forcing),         intent(in)    :: flux_tmp
+  type(forcing),         intent(inout) :: fluxes
+  real,                  intent(in)    :: dt
+  type(ocean_grid_type), intent(inout) :: G
+  !   This subroutine copies mechancal forcing from flux_tmp to fluxes and
+  ! stores the time-weighted averages of the various buoyancy fluxes in fluxes,
+  ! and increments the amount of time over which the buoyancy forcing should be
+  ! applied.
+
+  real :: wt1, wt2
+  integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq, i0, j0
+  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, isr, ier, jsr, jer
+  is   = G%isc   ; ie   = G%iec    ; js   = G%jsc   ; je   = G%jec
+  Isq  = G%IscB  ; Ieq  = G%IecB   ; Jsq  = G%JscB  ; Jeq  = G%JecB
+  isd  = G%isd   ; ied  = G%ied    ; jsd  = G%jsd   ; jed  = G%jed
+  IsdB = G%IsdB  ; IedB = G%IedB   ; JsdB = G%JsdB  ; JedB = G%JedB
 
 
-!> Offers forcing fields for diagnostics
+  if (fluxes%dt_buoy_accum < 0) call MOM_error(FATAL, "forcing_accumulate: "//&
+     "fluxes must be initialzed before it can be augmented.")
+
+  wt1 = dt / (fluxes%dt_buoy_accum + dt)
+  wt2 = 1.0 - wt1 ! = fluxes%dt_buoy_accum / (fluxes%dt_buoy_accum + dt)
+  fluxes%dt_buoy_accum = fluxes%dt_buoy_accum + dt
+
+  ! Copy over the pressure and momentum flux fields.
+  do j=js,je ; do i=is,ie
+    fluxes%p_surf(i,j) = flux_tmp%p_surf(i,j)
+    fluxes%p_surf_full(i,j) = flux_tmp%p_surf_full(i,j)
+  enddo ; enddo
+  do j=js,je ; do I=Isq,Ieq
+    fluxes%taux(I,j) = flux_tmp%taux(I,j)
+  enddo ; enddo
+  do J=Jsq,Jeq ; do i=is,ie
+    fluxes%tauy(i,J) = flux_tmp%tauy(i,J)
+  enddo ; enddo
+
+  ! Average the water, heat, and salt fluxes, and ustar.
+  do j=js,je ; do i=is,ie
+    fluxes%ustar(i,j) = wt1*fluxes%ustar(i,j) + wt2*flux_tmp%ustar(i,j)
+
+    fluxes%evap(i,j) = wt1*fluxes%evap(i,j) + wt2*flux_tmp%evap(i,j)
+    fluxes%lprec(i,j) = wt1*fluxes%lprec(i,j) + wt2*flux_tmp%lprec(i,j)
+    fluxes%fprec(i,j) = wt1*fluxes%fprec(i,j) + wt2*flux_tmp%fprec(i,j)
+    fluxes%vprec(i,j) = wt1*fluxes%vprec(i,j) + wt2*flux_tmp%vprec(i,j)
+    fluxes%lrunoff(i,j) = wt1*fluxes%lrunoff(i,j) + wt2*flux_tmp%lrunoff(i,j)
+    fluxes%frunoff(i,j) = wt1*fluxes%frunoff(i,j) + wt2*flux_tmp%frunoff(i,j)
+ ! ### ADD LATER fluxes%seaice_melt(i,j) = wt1*fluxes%seaice_melt(i,j) + wt2*flux_tmp%seaice_melt(i,j)
+
+    fluxes%sw(i,j) = wt1*fluxes%sw(i,j) + wt2*flux_tmp%sw(i,j)
+    fluxes%sw_vis_dir(i,j) = wt1*fluxes%sw_vis_dir(i,j) + wt2*flux_tmp%sw_vis_dir(i,j)
+    fluxes%sw_vis_dif(i,j) = wt1*fluxes%sw_vis_dif(i,j) + wt2*flux_tmp%sw_vis_dif(i,j)
+    fluxes%sw_nir_dir(i,j) = wt1*fluxes%sw_nir_dir(i,j) + wt2*flux_tmp%sw_nir_dir(i,j)
+    fluxes%sw_nir_dif(i,j) = wt1*fluxes%sw_nir_dif(i,j) + wt2*flux_tmp%sw_nir_dif(i,j)
+    fluxes%lw(i,j) = wt1*fluxes%lw(i,j) + wt2*flux_tmp%lw(i,j)
+    fluxes%latent(i,j) = wt1*fluxes%latent(i,j) + wt2*flux_tmp%latent(i,j)
+    fluxes%sens(i,j) = wt1*fluxes%sens(i,j) + wt2*flux_tmp%sens(i,j)
+
+    fluxes%salt_flux(i,j) = wt1*fluxes%salt_flux(i,j) + wt2*flux_tmp%salt_flux(i,j)
+  enddo ; enddo
+  if (associated(fluxes%heat_restore) .and. associated(flux_tmp%heat_restore)) then
+    do j=js,je ; do i=is,ie
+      fluxes%heat_restore(i,j) = wt1*fluxes%heat_restore(i,j) + wt2*flux_tmp%heat_restore(i,j)
+    enddo ; enddo
+  endif
+  ! These might always be associated, in which case they can be combined?
+  if (associated(fluxes%heat_content_cond) .and. associated(flux_tmp%heat_content_cond)) then
+    do j=js,je ; do i=is,ie
+      fluxes%heat_content_cond(i,j) = wt1*fluxes%heat_content_cond(i,j) + wt2*flux_tmp%heat_content_cond(i,j)
+    enddo ; enddo
+  endif
+  if (associated(fluxes%heat_content_lprec) .and. associated(flux_tmp%heat_content_lprec)) then
+    do j=js,je ; do i=is,ie
+      fluxes%heat_content_lprec(i,j) = wt1*fluxes%heat_content_lprec(i,j) + wt2*flux_tmp%heat_content_lprec(i,j)
+    enddo ; enddo
+  endif
+  if (associated(fluxes%heat_content_fprec) .and. associated(flux_tmp%heat_content_fprec)) then
+    do j=js,je ; do i=is,ie
+      fluxes%heat_content_fprec(i,j) = wt1*fluxes%heat_content_fprec(i,j) + wt2*flux_tmp%heat_content_fprec(i,j)
+    enddo ; enddo
+  endif
+  if (associated(fluxes%heat_content_vprec) .and. associated(flux_tmp%heat_content_vprec)) then
+    do j=js,je ; do i=is,ie
+      fluxes%heat_content_vprec(i,j) = wt1*fluxes%heat_content_vprec(i,j) + wt2*flux_tmp%heat_content_vprec(i,j)
+    enddo ; enddo
+  endif
+  if (associated(fluxes%heat_content_lrunoff) .and. associated(flux_tmp%heat_content_lrunoff)) then
+    do j=js,je ; do i=is,ie
+      fluxes%heat_content_lrunoff(i,j) = wt1*fluxes%heat_content_lrunoff(i,j) + wt2*flux_tmp%heat_content_lrunoff(i,j)
+    enddo ; enddo
+  endif
+  if (associated(fluxes%heat_content_frunoff) .and. associated(flux_tmp%heat_content_frunoff)) then
+    do j=js,je ; do i=is,ie
+      fluxes%heat_content_frunoff(i,j) = wt1*fluxes%heat_content_frunoff(i,j) + wt2*flux_tmp%heat_content_frunoff(i,j)
+    enddo ; enddo
+  endif
+  if (associated(fluxes%heat_content_icemelt) .and. associated(flux_tmp%heat_content_icemelt)) then
+    do j=js,je ; do i=is,ie
+      fluxes%heat_content_icemelt(i,j) = wt1*fluxes%heat_content_icemelt(i,j) + wt2*flux_tmp%heat_content_icemelt(i,j)
+    enddo ; enddo
+  endif
+
+  if (associated(fluxes%ustar_shelf) .and. associated(flux_tmp%ustar_shelf)) then
+    do i=isd,ied ; do j=jsd,jed
+      fluxes%ustar_shelf(i,j)  = flux_tmp%ustar_shelf(i,j)
+    enddo ; enddo
+  endif
+  if (associated(fluxes%frac_shelf_h) .and. associated(flux_tmp%frac_shelf_h)) then
+    do i=isd,ied ; do j=jsd,jed
+      fluxes%frac_shelf_h(i,j)  = flux_tmp%frac_shelf_h(i,j)
+    enddo ; enddo
+  endif
+  if (associated(fluxes%frac_shelf_u) .and. associated(flux_tmp%frac_shelf_u)) then
+    do I=IsdB,IedB ; do j=jsd,jed
+      fluxes%frac_shelf_u(I,j)  = flux_tmp%frac_shelf_u(I,j)
+    enddo ; enddo
+  endif
+  if (associated(fluxes%frac_shelf_v) .and. associated(flux_tmp%frac_shelf_v)) then
+    do i=isd,ied ; do J=JsdB,JedB
+      fluxes%frac_shelf_v(i,J)  = flux_tmp%frac_shelf_v(i,J)
+    enddo ; enddo
+  endif
+  if (associated(fluxes%rigidity_ice_u) .and. associated(flux_tmp%rigidity_ice_u)) then
+    do I=isd,ied-1 ; do j=jsd,jed
+      fluxes%rigidity_ice_u(I,j)  = flux_tmp%rigidity_ice_u(I,j)
+    enddo ; enddo
+  endif
+  if (associated(fluxes%rigidity_ice_v) .and. associated(flux_tmp%rigidity_ice_v)) then
+    do i=isd,ied ; do J=jsd,jed-1
+      fluxes%rigidity_ice_v(i,J)  = flux_tmp%rigidity_ice_v(i,J)
+    enddo ; enddo
+  endif
+
+  !### This needs to be replaced with an appropriate copy and average.
+   fluxes%tr_fluxes => flux_tmp%tr_fluxes
+
+end subroutine forcing_accumulate
+
+
+!> Offers mechanical forcing fields for diagnostics
+subroutine mech_forcing_diags(fluxes, dt, G, diag, handles)
+
+! This subroutine offers forcing fields for diagnostics. 
+! These fields must be registered in register_forcing_type_diags.
+
+  type(forcing),         intent(in)    :: fluxes
+  real,                  intent(in)    :: dt
+  type(ocean_grid_type), intent(in)    :: G
+  type(diag_ctrl),       intent(in)    :: diag
+  type(forcing_diags),   intent(inout) :: handles
+
+!  fluxes  = A structure containing pointers to any possible
+!            forcing fields.  Unused fields are unallocated.
+!  dt      = time step 
+!  G       = ocean grid structure
+!  diag    = structure used to regulate diagnostic output 
+!  handles = ids for diagnostic manager 
+
+  real, dimension(SZI_(G),SZJ_(G)) :: sum
+  integer :: i,j,is,ie,js,je
+ 
+  call cpu_clock_begin(handles%id_clock_forcing)
+
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+  if (query_averaging_enabled(diag)) then
+
+    if ((handles%id_taux > 0) .and. ASSOCIATED(fluxes%taux)) &
+      call post_data(handles%id_taux, fluxes%taux, diag)
+    if ((handles%id_tauy > 0) .and. ASSOCIATED(fluxes%tauy)) &
+      call post_data(handles%id_tauy, fluxes%tauy, diag)
+
+  endif
+
+  call cpu_clock_end(handles%id_clock_forcing)
+end subroutine mech_forcing_diags
+
+!> Offers buoyancy forcing fields for diagnostics
 subroutine forcing_diagnostics(fluxes, state, dt, G, diag, handles)
 
 ! This subroutine offers forcing fields for diagnostics. 
@@ -1532,10 +1695,10 @@ subroutine forcing_diagnostics(fluxes, state, dt, G, diag, handles)
 
   if (query_averaging_enabled(diag)) then
 
-    if ((handles%id_taux > 0) .and. ASSOCIATED(fluxes%taux)) &
-      call post_data(handles%id_taux, fluxes%taux, diag)
-    if ((handles%id_tauy > 0) .and. ASSOCIATED(fluxes%tauy)) &
-      call post_data(handles%id_tauy, fluxes%tauy, diag)
+!    if ((handles%id_taux > 0) .and. ASSOCIATED(fluxes%taux)) &
+!      call post_data(handles%id_taux, fluxes%taux, diag)
+!    if ((handles%id_tauy > 0) .and. ASSOCIATED(fluxes%tauy)) &
+!      call post_data(handles%id_tauy, fluxes%tauy, diag)
     if ((handles%id_ustar > 0) .and. ASSOCIATED(fluxes%ustar)) &
       call post_data(handles%id_ustar, fluxes%ustar, diag)
 
@@ -1597,9 +1760,9 @@ subroutine forcing_diagnostics(fluxes, state, dt, G, diag, handles)
     if ((handles%id_heat_content_frunoff > 0) .and. ASSOCIATED(fluxes%heat_content_frunoff))  &
       call post_data(handles%id_heat_content_frunoff, fluxes%heat_content_frunoff, diag)
 
-    if ((handles%id_heat_content_lprec > 0) .and. ASSOCIATED(fluxes%heat_content_lprec))      & 
+    if ((handles%id_heat_content_lprec > 0) .and. ASSOCIATED(fluxes%heat_content_lprec))      &
       call post_data(handles%id_heat_content_lprec, fluxes%heat_content_lprec, diag)
-    if ((handles%id_heat_content_fprec > 0) .and. ASSOCIATED(fluxes%heat_content_fprec))      & 
+    if ((handles%id_heat_content_fprec > 0) .and. ASSOCIATED(fluxes%heat_content_fprec))      &
       call post_data(handles%id_heat_content_fprec, fluxes%heat_content_fprec, diag)
     if ((handles%id_heat_content_vprec > 0) .and. ASSOCIATED(fluxes%heat_content_vprec))      &
       call post_data(handles%id_heat_content_vprec, fluxes%heat_content_vprec, diag)
