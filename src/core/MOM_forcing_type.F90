@@ -1506,8 +1506,9 @@ subroutine forcing_accumulate(flux_tmp, fluxes, dt, G)
   if (fluxes%dt_buoy_accum < 0) call MOM_error(FATAL, "forcing_accumulate: "//&
      "fluxes must be initialzed before it can be augmented.")
 
-  wt1 = dt / (fluxes%dt_buoy_accum + dt)
-  wt2 = 1.0 - wt1 ! = fluxes%dt_buoy_accum / (fluxes%dt_buoy_accum + dt)
+  ! wt1 is the relative weight of the previous fluxes.
+  wt1 = fluxes%dt_buoy_accum / (fluxes%dt_buoy_accum + dt)
+  wt2 = 1.0 - wt1 ! = dt / (fluxes%dt_buoy_accum + dt)
   fluxes%dt_buoy_accum = fluxes%dt_buoy_accum + dt
 
   ! Copy over the pressure and momentum flux fields.
