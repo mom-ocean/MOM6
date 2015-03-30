@@ -117,22 +117,24 @@ subroutine remapping_main( CS, G, h, dxInterface, tv, u, v )
   nz = G%ke
 
   ! Remap tracer
+  if (associated(tv%S)) then ! Assume T and S are either both associated or both not
 !$OMP parallel default(none) shared(G,h,dxInterface,CS,nz,tv,u,v) &
 !$OMP                       private(h1,dx,u_column)
 !$OMP do
-  do j = G%jsc,G%jec
-    do i = G%isc,G%iec
-      if (G%mask2dT(i,j)>0.) then
-        ! Build the start and final grids
-        h1(:) = h(i,j,:)
-        dx(:) = dxInterface(i,j,:)
-        call remapping_core(CS, nz, h1, tv%S(i,j,:), nz, dx, u_column)
-        tv%S(i,j,:) = u_column(:)
-        call remapping_core(CS, nz, h1, tv%T(i,j,:), nz, dx, u_column)
-        tv%T(i,j,:) = u_column(:)
-      endif
+    do j = G%jsc,G%jec
+      do i = G%isc,G%iec
+        if (G%mask2dT(i,j)>0.) then
+          ! Build the start and final grids
+          h1(:) = h(i,j,:)
+          dx(:) = dxInterface(i,j,:)
+          call remapping_core(CS, nz, h1, tv%S(i,j,:), nz, dx, u_column)
+          tv%S(i,j,:) = u_column(:)
+          call remapping_core(CS, nz, h1, tv%T(i,j,:), nz, dx, u_column)
+          tv%T(i,j,:) = u_column(:)
+        endif
+      enddo
     enddo
-  enddo
+  endif
   
   ! Remap u velocity component
   if ( present(u) ) then

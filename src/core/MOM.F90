@@ -741,8 +741,10 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     endif
   endif
   if (.not.CS%adiabatic .AND. CS%use_ALE_algorithm ) then
-    call create_group_pass(CS%pass_T_S_h, CS%tv%T, G%Domain)
-    call create_group_pass(CS%pass_T_S_h, CS%tv%S, G%Domain)
+    if (CS%use_temperature) then
+      call create_group_pass(CS%pass_T_S_h, CS%tv%T, G%Domain)
+      call create_group_pass(CS%pass_T_S_h, CS%tv%S, G%Domain)
+    endif
     call create_group_pass(CS%pass_T_S_h, h, G%Domain)
   endif
   if (CS%adiabatic .AND. CS%use_temperature) then
@@ -1546,8 +1548,12 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
                  CS%use_ALE_algorithm , &
                  "If True, use the ALE algorithm (regridding/remapping).\n"//&
                  "If False, use the layered isopycnal algorithm.", default=.false. )
-  if (CS%use_ALE_algorithm .and. CS%bulkmixedlayer) call MOM_error(FATAL, &
-                 "MOM: BULKMIXEDLAYER can not currently be used with the ALE algotihrm.")
+  if (CS%use_ALE_algorithm) then
+    if (CS%bulkmixedlayer) call MOM_error(FATAL, &
+                 "MOM: BULKMIXEDLAYER can not currently be used with the ALE algorithm.")
+    if (.not. CS%use_temperature) call MOM_error(FATAL, &
+                 "MOM: At this time, USE_EOS should be True when using the ALE algorithm.")
+  endif
   call get_param(param_file, "MOM", "DO_DYNAMICS", CS%do_dynamics, &
                  "If False, skips the dynamics calls that update u & v, as well as\n"//&
                  "the gravity wave adjustment to h. This is a fragile feature and\n"//&
