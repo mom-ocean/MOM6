@@ -594,15 +594,19 @@ subroutine calculate_vertical_integrals(h, tv, fluxes, G, CS)
         mass(i,j) = mass(i,j) + G%H_to_kg_m2*h(i,j,k)
       enddo ; enddo ; enddo
     endif
-    call post_data(CS%id_col_mass, mass, CS%diag)
+    if (CS%id_col_mass > 0) then
+      call post_data(CS%id_col_mass, mass, CS%diag)
+    endif
     if (CS%id_pbo > 0) then
+      do j=js,je ; do i=is,ie ; btm_pres(i,j) = 0.0 ; enddo ; enddo
       ! 'pbo' is defined as the sea water pressure at the sea floor
       !     pbo = (mass * g) + pso
       ! where pso is the sea water pressure at sea water surface
       ! note that pso is equivalent to fluxes%p_surf
       do j=js,je ; do i=is,ie
-        btm_pres(i,j) = ( mass(i,j) * G%g_Earth ) + fluxes%p_surf(i,j)
+        btm_pres(i,j) = ( mass(i,j) * G%g_Earth ) ! + fluxes%p_surf(i,j)
       enddo ; enddo
+      call post_data(CS%id_pbo, btm_pres, CS%diag)
     endif
   endif
 
