@@ -300,7 +300,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
 
   ! allocation and initialization if this is the first time that this
   ! flux type has been used.
-  if (fluxes%flux_adds < 0) then
+  if (fluxes%dt_buoy_accum < 0) then
     call allocate_forcing_type(G, fluxes, stress=.true., ustar=.true., &
                                water=.true., heat=.true.)
 
@@ -329,7 +329,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
       call safe_alloc_ptr(fluxes%rigidity_ice_v,isd,ied,JsdB,JedB)
     endif
 
-    fluxes%flux_adds = 0
+    fluxes%dt_buoy_accum = 0.0
   endif   ! endif for allocation and initialization
 
   ! allocation and initialization on first call to this routine
@@ -340,10 +340,10 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
     CS%area_surf = reproducing_sum(work_sum, isr, ier, jsr, jer)
   endif    ! endif for allocation and initialization
 
-  if (fluxes%flux_adds == 0) then ; do j=js,je ; do i=is,ie
+  do j=js,je ; do i=is,ie
     fluxes%salt_flux(i,j) = 0.0
     fluxes%vprec(i,j) = 0.0
-  enddo ; enddo ; endif
+  enddo ; enddo
 
   ! Salinity restoring logic
   if (restore_salinity) then

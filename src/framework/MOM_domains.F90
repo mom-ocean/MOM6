@@ -1098,6 +1098,13 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
   call log_param(param_file, mod, "!LAYOUT", layout, &
                  "The processor layout that was acutally used.")
 
+  ! Idiot check that fewer PEs than columns have been requested
+  if (layout(1)*layout(2)>MOM_dom%niglobal*MOM_dom%njglobal)  then
+    write(mesg,'(a,2(i5,x,a))') 'You requested to use',layout(1)*layout(2), &
+      'PEs but there are only',MOM_dom%niglobal*MOM_dom%njglobal,'columns in the model'
+    call MOM_error(FATAL, mesg)
+  endif
+
   if (mask_table_exists) then
     call MOM_error(NOTE, 'MOM_domains_init: reading maskmap information from '//&
                          trim(mask_table))

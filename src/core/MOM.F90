@@ -654,6 +654,8 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
   logical :: calc_dtbt ! This indicates whether the dynamically adjusted
                     ! barotropic time step needs to be updated.
   logical :: do_advection ! If true, it is time to advect tracers.
+  logical :: thermo_does_span_coupling ! If true, the thermodynamic forcing
+                    ! actually does span multiple dynamic timesteps.
   real, dimension(SZI_(CS%G),SZJ_(CS%G)) :: &
     eta_av, &       ! The average sea surface height or column mass over
                     ! a time step, in m or kg m-2.
@@ -704,7 +706,9 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
   dt = time_interval / real(n_max)
   dtdia = 0.0
-  if (CS%thermo_spans_coupling .and. (CS%dt_therm > 1.5*time_interval)) then
+  thermo_does_span_coupling = (CS%thermo_spans_coupling .and. &
+                               (CS%dt_therm > 1.5*time_interval))
+  if (thermo_does_span_coupling) then
     ! Set dt_therm to be an integer multiple of the coupling time step.
     dt_therm = time_interval * floor(CS%dt_therm / time_interval + 0.001)
     ntstep = floor(dt_therm/dt + 0.001)
@@ -737,8 +741,10 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     endif
   endif
   if (.not.CS%adiabatic .AND. CS%use_ALE_algorithm ) then
-    call create_group_pass(CS%pass_T_S_h, CS%tv%T, G%Domain)
-    call create_group_pass(CS%pass_T_S_h, CS%tv%S, G%Domain)
+    if (CS%use_temperature) then
+      call create_group_pass(CS%pass_T_S_h, CS%tv%T, G%Domain)
+      call create_group_pass(CS%pass_T_S_h, CS%tv%S, G%Domain)
+    endif
     call create_group_pass(CS%pass_T_S_h, h, G%Domain)
   endif
   if (CS%adiabatic .AND. CS%use_temperature) then
@@ -815,8 +821,15 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     call cpu_clock_end(id_clock_other)
 
     if (CS%diabatic_first .and. (CS%dt_trans==0.0)) then ! do thermodynamics.
-      if (CS%thermo_spans_coupling) then
+      if (thermo_does_span_coupling) then
         dtdia = dt_therm
+        if ((fluxes%dt_buoy_accum > 0.0) .and. (dtdia > time_interval) .and. &
+            (abs(fluxes%dt_buoy_accum - dtdia) > 1e-6*dtdia)) then
+          call MOM_error(FATAL, "step_MOM: Mismatch between long thermodynamic "//&
+            "timestep and time over which buoyancy fluxes have been accumulated.")
+        endif
+        call MOM_error(FATAL, "MOM is not yet set up to have restarts that work "//&
+          "with THERMO_SPANS_COUPLING and DIABATIC_FIRST.")
       else
         dtdia = dt*min(ntstep,n_max-(n-1))
       endif
@@ -858,7 +871,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         call cpu_clock_begin(id_clock_diabatic)
         call diabatic(u, v, h, CS%tv, fluxes, CS%visc, CS%ADp, CS%CDp, &
                       dtdia, G, CS%diabatic_CSp)
-        fluxes%flux_adds = 0
+        fluxes%fluxes_used = .true.
         call cpu_clock_end(id_clock_diabatic)
 
         ! Regridding/remapping is done here, at the end of the thermodynamics time step
@@ -909,7 +922,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
         call cpu_clock_begin(id_clock_diabatic)
         call adiabatic(h, CS%tv, fluxes, dtdia, G, CS%diabatic_CSp)
-        fluxes%flux_adds = 0
+        fluxes%fluxes_used = .true.
         call cpu_clock_end(id_clock_diabatic)
 
         if (CS%use_temperature) then
@@ -941,7 +954,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
     if (CS%thickness_diffuse .and. CS%thickness_diffuse_first) then
       if (CS%dt_trans == 0.0) then
-        if (CS%thermo_spans_coupling) then
+        if (thermo_does_span_coupling) then
           dtth = dt_therm
         else
           dtth = dt*min(ntstep,n_max-n+1)
@@ -971,8 +984,11 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       enddo ; enddo
     endif
 
-    if (CS%visc%calc_bbl) &  !### DOES THIS NEED TO BE REVISED WITH THERMO_SPANS?
+    if (CS%visc%calc_bbl) then ; if (thermo_does_span_coupling) then
+      CS%visc%bbl_calc_time_interval = dt_therm
+    else
       CS%visc%bbl_calc_time_interval = dt*real(1+MIN(ntstep-MOD(n,ntstep),n_max-n))
+    endif ; endif
 
     if (associated(CS%u_prev) .and. associated(CS%v_prev)) then
       do k=1,nz ; do j=jsd,jed ; do I=IsdB,IedB
@@ -1067,7 +1083,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
 
     CS%dt_trans = CS%dt_trans + dt
-    if (CS%thermo_spans_coupling) then
+    if (thermo_does_span_coupling) then
       do_advection = (CS%dt_trans + 0.5*dt > dt_therm)
     else
       do_advection = ((MOD(n,ntstep) == 0) .or. (n==n_max))
@@ -1097,7 +1113,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       call cpu_clock_end(id_clock_other)
 
       call cpu_clock_begin(id_clock_thermo)
-      call enable_averaging(CS%dt_trans, Time_local, CS%diag)  !### REVISIT WHEN ACROSS COUPLING STEPS.
+      call enable_averaging(CS%dt_trans, Time_local, CS%diag)
 
       call cpu_clock_begin(id_clock_tracer)
       call advect_tracer(h, CS%uhtr, CS%vhtr, CS%OBC, CS%dt_trans, G, &
@@ -1121,6 +1137,10 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         call post_data(CS%id_e_predia, eta_predia, CS%diag)
       endif
 
+      if (thermo_does_span_coupling .and. (abs(dt_therm - CS%dt_trans) > 1e-6*dt_therm)) then
+        call MOM_error(FATAL, "step_MOM: Mismatch between dt_therm and CS%dt_trans "//&
+                       "before call to diabatic.")
+      endif
       if (.not.CS%diabatic_first) then ; if (.not.CS%adiabatic) then
         if (CS%debug) then
           call uchksum(u,"Pre-diabatic u", G, haloshift=2)
@@ -1136,11 +1156,10 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         if (CS%split .and. CS%legacy_split) then  ! The dt here is correct. -RWH
           call adjustments_dyn_legacy_split(u, v, h, dt, G, CS%dyn_legacy_split_CSp)
         endif
-
         call cpu_clock_begin(id_clock_diabatic)
         call diabatic(u, v, h, CS%tv, fluxes, CS%visc, CS%ADp, CS%CDp, &
                       CS%dt_trans, G, CS%diabatic_CSp)
-        fluxes%flux_adds = 0
+        fluxes%fluxes_used = .true.
         call cpu_clock_end(id_clock_diabatic)
 
         ! Regridding/remapping is done here, at the end of the thermodynamics time step
@@ -1192,7 +1211,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
         call cpu_clock_begin(id_clock_diabatic)
         call adiabatic(h, CS%tv, fluxes, CS%dt_trans, G, CS%diabatic_CSp)
-        fluxes%flux_adds = 0
+        fluxes%fluxes_used = .true.
         call cpu_clock_end(id_clock_diabatic)
 
         if (CS%use_temperature) then
@@ -1529,8 +1548,12 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
                  CS%use_ALE_algorithm , &
                  "If True, use the ALE algorithm (regridding/remapping).\n"//&
                  "If False, use the layered isopycnal algorithm.", default=.false. )
-  if (CS%use_ALE_algorithm .and. CS%bulkmixedlayer) call MOM_error(FATAL, &
-                 "MOM: BULKMIXEDLAYER can not currently be used with the ALE algotihrm.")
+  if (CS%use_ALE_algorithm) then
+    if (CS%bulkmixedlayer) call MOM_error(FATAL, &
+                 "MOM: BULKMIXEDLAYER can not currently be used with the ALE algorithm.")
+    if (.not. CS%use_temperature) call MOM_error(FATAL, &
+                 "MOM: At this time, USE_EOS should be True when using the ALE algorithm.")
+  endif
   call get_param(param_file, "MOM", "DO_DYNAMICS", CS%do_dynamics, &
                  "If False, skips the dynamics calls that update u & v, as well as\n"//&
                  "the gravity wave adjustment to h. This is a fragile feature and\n"//&
@@ -1560,8 +1583,10 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call get_param(param_file, "MOM", "DT_THERM", CS%dt_therm, &
                  "The thermodynamic and tracer advection time step. \n"//&
                  "Ideally DT_THERM should be an integer multiple of DT \n"//&
-                 "and less than the forcing or coupling time-step. \n"//&
-                 "By default DT_THERM is set to DT.", units="s", default=CS%dt)
+                 "and less than the forcing or coupling time-step, unless \n"//&
+                 "THERMO_SPANS_COUPLING is true, in which case DT_THERM \n"//&
+                 "can be an integer multiple of the coupling timestep.  By \n"//&
+                 "default DT_THERM is set to DT.", units="s", default=CS%dt)
   call get_param(param_file, "MOM", "THERMO_SPANS_COUPLING", CS%thermo_spans_coupling, &
                  "If true, the MOM will take thermodynamic and tracer \n"//&
                  "timesteps that can be longer than the coupling timestep. \n"//&

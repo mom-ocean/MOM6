@@ -554,13 +554,15 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
   nkmb=G%nk_rho_varies
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
+  if (.not.associated(CS)) call MOM_error(FATAL, &
+       "MOM_PressureForce: Module must be initialized before it is used.")
+
   use_p_atm = .false.
   if (present(p_atm)) then ; if (associated(p_atm)) use_p_atm = .true. ; endif
   use_EOS = associated(tv%eqn_of_state)
   do i=Isq,Ieq+1 ; p0(i) = 0.0 ; enddo
-
-  if (.not.associated(CS)) call MOM_error(FATAL, &
-       "MOM_PressureForce: Module must be initialized before it is used.")
+  use_ALE = .false.
+  if (associated(ALE_CSp)) use_ALE = usePressureReconstruction(ALE_CSp) .and. use_EOS
 
   PRScheme = pressureReconstructionScheme(ALE_CSp)
   h_neglect = G%H_subroundoff
@@ -673,9 +675,6 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
   ! and temperature across each layer. The subscripts 't' and 'b' refer
   ! to top and bottom values within each layer (these are the only degrees
   ! of freedeom needed to know the linear profile).
-  
-  use_ALE = .false.
-  if (associated(ALE_CSp)) use_ALE = usePressureReconstruction(ALE_CSp)
   if ( use_ALE ) then
     if ( PRScheme == PRESSURE_RECONSTRUCTION_PLM ) then
       call pressure_gradient_plm (ALE_CSp, S_t, S_b, T_t, T_b, G, tv, h );
