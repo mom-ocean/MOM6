@@ -240,7 +240,7 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive)
                  'as well as matching across OBL base. Allowed values are: \n'//                          &
                  '\t SimpleShapes      = sigma*(1-sigma)^2 for both diffusivity and NLT\n'//              &
                  '\t MatchGradient     = sigma*(1-sigma)^2 for NLT; diffusivity profile from matching\n'//&
-                 '\t MatchBoth         = match gradoemt for both diffusivity and NLT\n'//                 &
+                 '\t MatchBoth         = match gradient for both diffusivity and NLT\n'//                 &
                  '\t ParabolicNonLocal = sigma*(1-sigma)^2 for diffusivity; (1-sigma)^2 for NLT',         &
                  default='SimpleShapes')
 
@@ -619,7 +619,6 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, &
       OBLdepth_0d = max( OBLdepth_0d, -iFaceHeight(2) )      ! no shallower than top layer
       OBLdepth_0d = min( OBLdepth_0d, -iFaceHeight(G%ke+1) ) ! no deeper than bottom
       kOBL        = CVmix_kpp_compute_kOBL_depth( iFaceHeight, cellHeight, OBLdepth_0d )
-
 
 !*************************************************************************
 ! smg: remove code below 
