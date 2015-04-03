@@ -252,6 +252,8 @@ type, public :: set_diffusivity_CS ; private
                               ! shear-driven diapycnal diffusivity.
 
   logical :: double_diffusion           ! If true, enable double-diffusive mixing.
+  logical :: simple_TKE_to_Kd ! If true, uses a simple estimate of Kd/TKE that
+                              ! does not rely on a layer-formulation.
   real    :: Max_Rrho_salt_fingers      ! max density ratio for salt fingering
   real    :: Max_salt_diff_salt_fingers ! max salt diffusivity for salt fingers (m2/s)
   real    :: Kv_molecular               ! molecular visc for double diff convect (m2/s)
@@ -935,6 +937,7 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, CS, TKE_to_Kd, maxT
   real :: I_Rho0      ! inverse of Boussinesq reference density (m3/kg)
   real :: I_dt        ! 1/dt (1/sec)
   real :: H_neglect   ! negligibly small thickness (units as h)
+  real :: hN2pO2      ! h * (N^2 + Omega^2), in m s-2.
   logical :: do_i(SZI_(G))
 
   integer :: i, k, is, ie, nz, i_rem, kmb, kb_min
@@ -946,7 +949,22 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, CS, TKE_to_Kd, maxT
   H_neglect = G%H_subroundoff
   I_Rho0    = 1.0/G%Rho0
 
-  ! determine kb = index of shallowest active interior layer
+  ! Simple but coordinate-independent estimate of Kd/TKE
+  if (CS%simple_TKE_to_Kd) then
+    do k=1,nz ; do i=is,ie
+      hN2pO2 = h(i,j,k) * ( N2_lay(i,k) + Omega2 ) ! Units of m s-2.
+      if (hN2pO2>0.) then
+        TKE_to_Kd(i,k) = 1./ hN2pO2 ! Units of s2 m-1.
+      else; TKE_to_Kd(i,k) = 0.; endif
+      ! The maximum TKE conversion we allow is really a statement
+      ! about the upper diffusivity we allow. Kd_max must be set.
+      maxTKE(i,k) = hN2pO2 * CS%Kd_max ! Units of m3 s-3.
+    enddo ; enddo
+    kb(is:ie) = -1 ! kb should not be used by any code in non-layered mode -AJA
+    return
+  endif
+
+  ! Determine kb - the index of the shallowest active interior layer.
   if (CS%bulkmixedlayer) then
     kmb = G%nk_rho_varies
     do i=is,ie ; p_0(i) = 0.0 ; p_ref(i) = tv%P_Ref ; enddo
@@ -2448,6 +2466,12 @@ subroutine set_diffusivity_init(Time, G, param_file, diag, CS, diag_to_Z_CSp)
   endif
   CS%id_Kd_BBL = register_diag_field('ocean_model','Kd_BBL',diag%axesTi,Time, &
        'Bottom Boundary Layer Diffusivity', 'meter2 sec-1')
+  call get_param(param_file, mod, "SIMPLE_TKE_TO_KD", CS%simple_TKE_to_Kd, &
+                 "If true, uses a simple estimate of Kd/TKE that will\n"//&
+                 "work for arbitrary vertical coordinates. If false,\n"//&
+                 "calculates Kd/TKE and bounds based on exact energetics/n"//&
+                 "for an isopycnal layer-formulation.", &
+                 default=.false.)
 
   call get_param(param_file, mod, "BRYAN_LEWIS_DIFFUSIVITY", &
                                 CS%Bryan_Lewis_diffusivity, &
@@ -2534,6 +2558,8 @@ subroutine set_diffusivity_init(Time, G, param_file, diag, CS, diag_to_Z_CSp)
                  "The maximum permitted increment for the diapycnal \n"//&
                  "diffusivity from TKE-based parameterizations, or a \n"//&
                  "negative value for no limit.", units="m2 s-1", default=-1.0)
+  if (CS%simple_TKE_to_Kd .and. CS%Kd_max<=0.) call MOM_error(FATAL, &
+         "set_diffusivity_init: To use SIMPLE_TKE_TO_KD, KD_MAX must be set to >0.")
   call get_param(param_file, mod, "KD_ADD", CS%Kd_add, &
                  "A uniform diapycnal diffusivity that is added \n"//&
                  "everywhere without any filtering or scaling.", &
