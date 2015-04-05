@@ -674,7 +674,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
   real, pointer, dimension(:,:,:) :: &
     u, &                     ! u : Zonal velocity, in m s-1.
     v, &                     ! v : Meridional velocity, in m s-1.
-    h                        ! h : Layer thickness, in m.
+    h                        ! h : Layer thickness, in metre (Bouss) or kg/m2 (non-Bouss)
   real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)+1) :: eta_predia
   real :: tot_wt_ssh, Itot_wt_ssh, I_time_int
   real :: SST_global, SSS_global
