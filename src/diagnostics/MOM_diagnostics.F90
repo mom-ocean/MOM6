@@ -939,11 +939,15 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, param_file, diag, CS)
     thickness_units = "kilogram meter-2" ; flux_units = "kilogram second-1"
   endif
 
-  CS%id_temp_global = register_scalar_field('ocean_model', 'temp_global',  &
-      Time, diag, 'Global Mean Ocean Temperature', 'Celsius')
+  CS%id_temp_global = register_scalar_field('ocean_model', 'temp_global',           &
+      Time, diag, 'Global Mean Ocean Temperature', 'Celsius',                       &
+      cmor_field_name='thetaoga', cmor_long_name='sea_water_potential_temperature', &
+      cmor_units='degC', cmor_standard_name='Sea Water Potential Temperature')
 
   CS%id_salt_global = register_scalar_field('ocean_model', 'salt_global',  &
-      Time, diag, 'Global Mean Ocean Salinity', 'ppt')
+      Time, diag, 'Global Mean Ocean Salinity', 'ppt',                     &
+      cmor_field_name='soga', cmor_long_name='sea_water_salinity',         &
+      cmor_units='ppt', cmor_standard_name='Sea Water Salinity')
 
   CS%id_temp_layer_ave = register_diag_field('ocean_model', 'temp_layer_ave', diag%axesZL, Time, &
       'Layer Average Ocean Temperature', 'Celsius')
