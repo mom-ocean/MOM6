@@ -1410,7 +1410,8 @@ end subroutine log_param_time
 
 
 subroutine get_param_int(CS, modulename, varname, value, desc, units, &
-               default, fail_if_missing, do_not_read, do_not_log, static_value)
+               default, fail_if_missing, do_not_read, do_not_log, &
+               static_value, layoutParam)
   type(param_file_type),      intent(in)    :: CS
   character(len=*),           intent(in)    :: modulename
   character(len=*),           intent(in)    :: varname
@@ -1419,6 +1420,7 @@ subroutine get_param_int(CS, modulename, varname, value, desc, units, &
   integer,          optional, intent(in)    :: default, static_value
   logical,          optional, intent(in)    :: fail_if_missing
   logical,          optional, intent(in)    :: do_not_read, do_not_log
+  logical,          optional, intent(in)    :: layoutParam
 ! This subroutine writes the value of a real parameter to a log file,
 ! along with its name and the module it came from.
   logical :: do_read, do_log
@@ -1434,13 +1436,14 @@ subroutine get_param_int(CS, modulename, varname, value, desc, units, &
 
   if (do_log) then
     call log_param_int(CS, modulename, varname, value, desc, units, &
-                       default)
+                       default, layoutParam)
   endif
 
 end subroutine get_param_int
 
 subroutine get_param_int_array(CS, modulename, varname, value, desc, units, &
-               default, fail_if_missing, do_not_read, do_not_log, static_value)
+               default, fail_if_missing, do_not_read, do_not_log, &
+               static_value, layoutParam)
   type(param_file_type),      intent(in)    :: CS
   character(len=*),           intent(in)    :: modulename
   character(len=*),           intent(in)    :: varname
@@ -1449,6 +1452,7 @@ subroutine get_param_int_array(CS, modulename, varname, value, desc, units, &
   integer,          optional, intent(in)    :: default, static_value
   logical,          optional, intent(in)    :: fail_if_missing
   logical,          optional, intent(in)    :: do_not_read, do_not_log
+  logical,          optional, intent(in)    :: layoutParam
 ! This subroutine writes the value of a real parameter to a log file,
 ! along with its name and the module it came from.
   logical :: do_read, do_log
@@ -1464,7 +1468,7 @@ subroutine get_param_int_array(CS, modulename, varname, value, desc, units, &
 
   if (do_log) then
     call log_param_int_array(CS, modulename, varname, value, desc, &
-                             units, default)
+                             units, default, layoutParam)
   endif
 
 end subroutine get_param_int_array
@@ -1530,7 +1534,8 @@ subroutine get_param_real_array(CS, modulename, varname, value, desc, units, &
 end subroutine get_param_real_array
 
 subroutine get_param_char(CS, modulename, varname, value, desc, units, &
-               default, fail_if_missing, do_not_read, do_not_log, static_value)
+               default, fail_if_missing, do_not_read, do_not_log, &
+               static_value, layoutParam)
   type(param_file_type),      intent(in)    :: CS
   character(len=*),           intent(in)    :: modulename
   character(len=*),           intent(in)    :: varname
@@ -1539,6 +1544,7 @@ subroutine get_param_char(CS, modulename, varname, value, desc, units, &
   character(len=*), optional, intent(in)    :: default, static_value
   logical,          optional, intent(in)    :: fail_if_missing
   logical,          optional, intent(in)    :: do_not_read, do_not_log
+  logical,          optional, intent(in)    :: layoutParam
 ! This subroutine writes the value of a real parameter to a log file,
 ! along with its name and the module it came from.
   logical :: do_read, do_log
@@ -1554,7 +1560,7 @@ subroutine get_param_char(CS, modulename, varname, value, desc, units, &
 
   if (do_log) then
     call log_param_char(CS, modulename, varname, value, desc, units, &
-                        default)
+                        default, layoutParam)
   endif
 
 end subroutine get_param_char
@@ -1600,7 +1606,8 @@ subroutine get_param_char_array(CS, modulename, varname, value, desc, units, &
 end subroutine get_param_char_array
 
 subroutine get_param_logical(CS, modulename, varname, value, desc, units, &
-               default, fail_if_missing, do_not_read, do_not_log, static_value)
+               default, fail_if_missing, do_not_read, do_not_log, &
+               static_value, layoutParam)
   type(param_file_type),      intent(in)    :: CS
   character(len=*),           intent(in)    :: modulename
   character(len=*),           intent(in)    :: varname
@@ -1609,6 +1616,7 @@ subroutine get_param_logical(CS, modulename, varname, value, desc, units, &
   logical,          optional, intent(in)    :: default, static_value
   logical,          optional, intent(in)    :: fail_if_missing
   logical,          optional, intent(in)    :: do_not_read, do_not_log
+  logical,          optional, intent(in)    :: layoutParam
 ! This subroutine writes the value of a real parameter to a log file,
 ! along with its name and the module it came from.
   logical :: do_read, do_log
@@ -1624,7 +1632,7 @@ subroutine get_param_logical(CS, modulename, varname, value, desc, units, &
 
   if (do_log) then
     call log_param_logical(CS, modulename, varname, value, desc, &
-                           units, default)
+                           units, default, layoutParam)
   endif
 
 end subroutine get_param_logical
