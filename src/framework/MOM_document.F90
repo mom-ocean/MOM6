@@ -46,12 +46,15 @@ end interface
 integer, parameter :: mLen = 1240 ! Length of interface/message strings
 
 type, public :: doc_type ; private
-  integer :: unitAll = -1           ! The open unit number for docFileBase (.all).
-  integer :: unitShort = -1         ! The open unit number for docFileBase (.short).
+  integer :: unitAll = -1           ! The open unit number for docFileBase + .all.
+  integer :: unitShort = -1         ! The open unit number for docFileBase + .short.
+  integer :: unitLayout = -1        ! The open unit number for docFileBase + .layout.
+  logical :: filesAreOpen = .false. ! True if any files were successfully opened.
   character(len=mLen) :: docFileBase = '' ! The basename of the files where run-time
                                     ! parameters, settings and defaults are documented.
-  logical :: complete = .true.      ! If true, document  non-default parameters.
-  logical :: minimal = .true.       ! If true, document  non-default parameters.
+  logical :: complete = .true.      ! If true, document all parameters.
+  logical :: minimal = .true.       ! If true, document non-default parameters.
+  logical :: layout = .true.        ! If true, document layout parameters.
   logical :: defineSyntax = .false. ! If true, use #def syntax instead of a=b syntax
   logical :: warnOnConflicts = .false. ! Cause a WARNING error if defaults differ.
   integer :: commentColumn = 32     ! Number of spaces before the comment marker.
@@ -82,7 +85,7 @@ subroutine doc_param_none(doc, varname, desc, units)
   if (.not. (is_root_pe() .and. associated(doc))) return
   call open_doc_file(doc)
 
-  if (doc%unitAll > 0 .or. doc%unitShort > 0) then
+  if (doc%filesAreOpen) then
     numspc = max(1,doc%commentColumn-8-len_trim(varname))
     mesg = "#define "//trim(varname)//repeat(" ",numspc)//"!"
     if (len_trim(units) > 0) mesg = trim(mesg)//"   ["//trim(units)//"]"
@@ -92,11 +95,12 @@ subroutine doc_param_none(doc, varname, desc, units)
   endif 
 end subroutine doc_param_none
 
-subroutine doc_param_logical(doc, varname, desc, units, val, default)
+subroutine doc_param_logical(doc, varname, desc, units, val, default, layoutParam)
   type(doc_type),   pointer    :: doc
   character(len=*), intent(in) :: varname, desc, units
   logical,          intent(in) :: val
   logical,          optional, intent(in) :: default
+  logical,          optional, intent(in) :: layoutParam
 ! This subroutine handles parameter documentation for logicals.
   character(len=mLen) :: mesg
   logical :: equalsDefault
@@ -104,7 +108,7 @@ subroutine doc_param_logical(doc, varname, desc, units, val, default)
   if (.not. (is_root_pe() .and. associated(doc))) return
   call open_doc_file(doc)
 
-  if (doc%unitAll > 0 .or. doc%unitShort > 0) then
+  if (doc%filesAreOpen) then
     if (val) then
       mesg = define_string(doc,varname,STRING_TRUE,units)
     else
@@ -122,15 +126,16 @@ subroutine doc_param_logical(doc, varname, desc, units, val, default)
     endif
 
     if (mesgHasBeenDocumented(doc, varName, mesg)) return ! Avoid duplicates
-    call writeMessageAndDesc(doc, mesg, desc, equalsDefault)
+    call writeMessageAndDesc(doc, mesg, desc, equalsDefault, layoutParam=layoutParam)
   endif
 end subroutine doc_param_logical
 
-subroutine doc_param_logical_array(doc, varname, desc, units, vals, default)
+subroutine doc_param_logical_array(doc, varname, desc, units, vals, default, layoutParam)
   type(doc_type),   pointer    :: doc
   character(len=*), intent(in) :: varname, desc, units
   logical,          intent(in) :: vals(:)
   logical,          optional, intent(in) :: default
+  logical,          optional, intent(in) :: layoutParam
 ! This subroutine handles parameter documentation for arrays of logicals.
   integer :: i
   character(len=mLen) :: mesg
@@ -140,7 +145,7 @@ subroutine doc_param_logical_array(doc, varname, desc, units, vals, default)
   if (.not. (is_root_pe() .and. associated(doc))) return
   call open_doc_file(doc)
 
-  if (doc%unitAll > 0 .or. doc%unitShort > 0) then
+  if (doc%filesAreOpen) then
     if (vals(1)) then ; valstring = STRING_TRUE ; else ; valstring = STRING_FALSE ; endif
     do i=2,min(size(vals),128)
       if (vals(i)) then
@@ -164,15 +169,16 @@ subroutine doc_param_logical_array(doc, varname, desc, units, vals, default)
     endif
 
     if (mesgHasBeenDocumented(doc, varName, mesg)) return ! Avoid duplicates
-    call writeMessageAndDesc(doc, mesg, desc, equalsDefault)
+    call writeMessageAndDesc(doc, mesg, desc, equalsDefault, layoutParam=layoutParam)
   endif
 end subroutine doc_param_logical_array
 
-subroutine doc_param_int(doc, varname, desc, units, val, default)
+subroutine doc_param_int(doc, varname, desc, units, val, default, layoutParam)
   type(doc_type),   pointer    :: doc
   character(len=*), intent(in) :: varname, desc, units
   integer,          intent(in) :: val
   integer,          optional, intent(in) :: default
+  logical,          optional, intent(in) :: layoutParam
 ! This subroutine handles parameter documentation for integers.
   character(len=mLen) :: mesg
   character(len=doc%commentColumn)  :: valstring
@@ -181,7 +187,7 @@ subroutine doc_param_int(doc, varname, desc, units, val, default)
   if (.not. (is_root_pe() .and. associated(doc))) return
   call open_doc_file(doc)
 
-  if (doc%unitAll > 0 .or. doc%unitShort > 0) then
+  if (doc%filesAreOpen) then
     valstring = int_string(val)
     mesg = define_string(doc,varname,valstring,units)
 
@@ -192,15 +198,16 @@ subroutine doc_param_int(doc, varname, desc, units, val, default)
     endif
 
     if (mesgHasBeenDocumented(doc, varName, mesg)) return ! Avoid duplicates
-    call writeMessageAndDesc(doc, mesg, desc, equalsDefault)
+    call writeMessageAndDesc(doc, mesg, desc, equalsDefault, layoutParam=layoutParam)
   endif
 end subroutine doc_param_int
 
-subroutine doc_param_int_array(doc, varname, desc, units, vals, default)
+subroutine doc_param_int_array(doc, varname, desc, units, vals, default, layoutParam)
   type(doc_type),   pointer    :: doc
   character(len=*), intent(in) :: varname, desc, units
   integer,          intent(in) :: vals(:)
   integer,          optional, intent(in) :: default
+  logical,          optional, intent(in) :: layoutParam
 ! This subroutine handles parameter documentation for arrays of integers.
   integer :: i
   character(len=mLen) :: mesg
@@ -210,7 +217,7 @@ subroutine doc_param_int_array(doc, varname, desc, units, vals, default)
   if (.not. (is_root_pe() .and. associated(doc))) return
   call open_doc_file(doc)
 
-  if (doc%unitAll > 0 .or. doc%unitShort > 0) then
+  if (doc%filesAreOpen) then
     valstring = int_string(vals(1))
     do i=2,min(size(vals),128)
       valstring = trim(valstring)//", "//trim(int_string(vals(i)))
@@ -226,7 +233,7 @@ subroutine doc_param_int_array(doc, varname, desc, units, vals, default)
     endif
 
     if (mesgHasBeenDocumented(doc, varName, mesg)) return ! Avoid duplicates
-    call writeMessageAndDesc(doc, mesg, desc, equalsDefault)
+    call writeMessageAndDesc(doc, mesg, desc, equalsDefault, layoutParam=layoutParam)
   endif
 
 end subroutine doc_param_int_array
@@ -244,7 +251,7 @@ subroutine doc_param_real(doc, varname, desc, units, val, default)
   if (.not. (is_root_pe() .and. associated(doc))) return
   call open_doc_file(doc)
 
-  if (doc%unitAll > 0 .or. doc%unitShort > 0) then
+  if (doc%filesAreOpen) then
     valstring = real_string(val)
     mesg = define_string(doc,varname,valstring,units)
 
@@ -273,7 +280,7 @@ subroutine doc_param_real_array(doc, varname, desc, units, vals, default)
   if (.not. (is_root_pe() .and. associated(doc))) return
   call open_doc_file(doc)
 
-  if (doc%unitAll > 0 .or. doc%unitShort > 0) then
+  if (doc%filesAreOpen) then
     valstring = trim(real_array_string(vals(:)))
 
     mesg = define_string(doc,varname,valstring,units)
@@ -291,11 +298,12 @@ subroutine doc_param_real_array(doc, varname, desc, units, vals, default)
 
 end subroutine doc_param_real_array
 
-subroutine doc_param_char(doc, varname, desc, units, val, default)
+subroutine doc_param_char(doc, varname, desc, units, val, default, layoutParam)
   type(doc_type),   pointer    :: doc
   character(len=*), intent(in) :: varname, desc, units
   character(len=*), intent(in) :: val
   character(len=*), optional, intent(in) :: default
+  logical,          optional, intent(in) :: layoutParam
 ! This subroutine handles parameter documentation for character strings.
   character(len=mLen) :: mesg
   logical :: equalsDefault
@@ -303,7 +311,7 @@ subroutine doc_param_char(doc, varname, desc, units, val, default)
   if (.not. (is_root_pe() .and. associated(doc))) return
   call open_doc_file(doc)
 
-  if (doc%unitAll > 0 .or. doc%unitShort > 0) then
+  if (doc%filesAreOpen) then
     mesg = define_string(doc,varname,'"'//trim(val)//'"',units)
 
     equalsDefault = .false.
@@ -313,7 +321,7 @@ subroutine doc_param_char(doc, varname, desc, units, val, default)
     endif
 
     if (mesgHasBeenDocumented(doc, varName, mesg)) return ! Avoid duplicates
-    call writeMessageAndDesc(doc, mesg, desc, equalsDefault)
+    call writeMessageAndDesc(doc, mesg, desc, equalsDefault, layoutParam=layoutParam)
   endif
 
 end subroutine doc_param_char
@@ -329,7 +337,7 @@ subroutine doc_openBlock(doc, blockName, desc)
   if (.not. (is_root_pe() .and. associated(doc))) return
   call open_doc_file(doc)
 
-  if (doc%unitAll > 0 .or. doc%unitShort > 0) then
+  if (doc%filesAreOpen) then
     mesg = trim(blockName)//'%'
 
     if (present(desc)) then
@@ -352,7 +360,7 @@ subroutine doc_closeBlock(doc, blockName)
   if (.not. (is_root_pe() .and. associated(doc))) return
   call open_doc_file(doc)
 
-  if (doc%unitAll > 0 .or. doc%unitShort > 0) then
+  if (doc%filesAreOpen) then
     mesg = '%'//trim(blockName)
 
     call writeMessageAndDesc(doc, mesg, '')
@@ -380,7 +388,7 @@ subroutine doc_param_time(doc, varname, desc, units, val, default)
   call open_doc_file(doc)
 
   equalsDefault = .false.
-  if (doc%unitAll > 0 .or. doc%unitShort > 0) then
+  if (doc%filesAreOpen) then
     numspc = max(1,doc%commentColumn-18-len_trim(varname))
     mesg = "#define "//trim(varname)//" Time-type"//repeat(" ",numspc)//"!"
     if (len_trim(units) > 0) mesg = trim(mesg)//"   ["//trim(units)//"]"
@@ -391,21 +399,25 @@ subroutine doc_param_time(doc, varname, desc, units, val, default)
 
 end subroutine doc_param_time
 
-subroutine writeMessageAndDesc(doc, vmesg, desc, valueWasDefault, indent)
+subroutine writeMessageAndDesc(doc, vmesg, desc, valueWasDefault, indent, layoutParam)
   type(doc_type),             intent(in) :: doc
   character(len=*),           intent(in) :: vmesg, desc
   logical,          optional, intent(in) :: valueWasDefault
   integer,          optional, intent(in) :: indent
+  logical,          optional, intent(in) :: layoutParam
   character(len=mLen) :: mesg
   integer :: start_ind = 1, end_ind, indnt, tab, len_tab, len_nl
-  logical :: all, short
+  logical :: all, short, layout
 
-  all = doc%complete .and. (doc%unitAll > 0)
-  short = doc%minimal .and. (doc%unitShort > 0)
+  layout = .false.
+  if (present(layoutParam)) layout = layoutParam
+  all = doc%complete .and. (doc%unitAll > 0) .and. .not. layout
+  short = doc%minimal .and. (doc%unitShort > 0) .and. .not. layout
   if (present(valueWasDefault)) short = short .and. (.not. valueWasDefault)
 
   if (all) write(doc%unitAll, '(a)') trim(vmesg)
   if (short) write(doc%unitShort, '(a)') trim(vmesg)
+  if (layout) write(doc%unitLayout, '(a)') trim(vmesg)
 
   if (len_trim(desc) == 0) return
 
@@ -429,6 +441,7 @@ subroutine writeMessageAndDesc(doc, vmesg, desc, valueWasDefault, indent)
       enddo
       if (all) write(doc%unitAll, '(a)') trim(mesg)
       if (short) write(doc%unitShort, '(a)') trim(mesg)
+      if (layout) write(doc%unitLayout, '(a)') trim(mesg)
     else
       mesg = repeat(" ",indnt)//"! "//trim(desc(start_ind:))
       do ; tab = index(mesg, "\t")
@@ -437,6 +450,7 @@ subroutine writeMessageAndDesc(doc, vmesg, desc, valueWasDefault, indent)
       enddo
       if (all) write(doc%unitAll, '(a)') trim(mesg)
       if (short) write(doc%unitShort, '(a)') trim(mesg)
+      if (layout) write(doc%unitLayout, '(a)') trim(mesg)
       exit
     endif
 
@@ -607,7 +621,7 @@ subroutine doc_module(doc, modname, desc)
   if (.not. (is_root_pe() .and. associated(doc))) return
   call open_doc_file(doc)
 
-  if (doc%unitAll > 0 .or. doc%unitShort > 0) then
+  if (doc%filesAreOpen) then
     call writeMessageAndDesc(doc, '', '') ! Blank line for delineation
     mesg = "! === module "//trim(modname)//" ==="
     call writeMessageAndDesc(doc, mesg, desc, indent=0)
@@ -667,6 +681,8 @@ subroutine open_doc_file(doc)
     if (new_file) then
       open(doc%unitAll, file=trim(fileName), access='SEQUENTIAL', form='FORMATTED', &
            action='WRITE', status='REPLACE', iostat=ios)
+      write(doc%unitAll, '(a)') &
+       '! This file was written by the model and records all non-layout parameters used at run-time.'
     else ! This file is being reopened, and should be appended.
       open(doc%unitAll, file=trim(fileName), access='SEQUENTIAL', form='FORMATTED', &
            action='WRITE', status='OLD', position='APPEND', iostat=ios)
@@ -675,6 +691,7 @@ subroutine open_doc_file(doc)
     if ((.not.opened) .or. (ios /= 0)) then
       call MOM_error(FATAL, "Failed to open doc file "//trim(fileName)//".")
     endif
+    doc%filesAreOpen = .true.
   endif
 
   if ((len_trim(doc%docFileBase) > 0) .and. doc%minimal .and. (doc%unitShort<0)) then
@@ -685,6 +702,8 @@ subroutine open_doc_file(doc)
     if (new_file) then
       open(doc%unitShort, file=trim(fileName), access='SEQUENTIAL', form='FORMATTED', &
            action='WRITE', status='REPLACE', iostat=ios)
+      write(doc%unitShort, '(a)') &
+       '! This file was written by the model and records the non-default parameters used at run-time.'
     else ! This file is being reopened, and should be appended.
       open(doc%unitShort, file=trim(fileName), access='SEQUENTIAL', form='FORMATTED', &
            action='WRITE', status='OLD', position='APPEND', iostat=ios)
@@ -693,6 +712,28 @@ subroutine open_doc_file(doc)
     if ((.not.opened) .or. (ios /= 0)) then
       call MOM_error(FATAL, "Failed to open doc file "//trim(fileName)//".")
     endif
+    doc%filesAreOpen = .true.
+  endif
+
+  if ((len_trim(doc%docFileBase) > 0) .and. doc%layout .and. (doc%unitLayout<0)) then
+    new_file = .true. ; if (doc%unitLayout /= -1) new_file = .false.
+    doc%unitLayout = find_unused_unit_number()
+
+    write(fileName(1:120),'(a)') trim(doc%docFileBase)//'.layout'
+    if (new_file) then
+      open(doc%unitLayout, file=trim(fileName), access='SEQUENTIAL', form='FORMATTED', &
+           action='WRITE', status='REPLACE', iostat=ios)
+      write(doc%unitLayout, '(a)') &
+       '! This file was written by the model and records the layout parameters used at run-time.'
+    else ! This file is being reopened, and should be appended.
+      open(doc%unitLayout, file=trim(fileName), access='SEQUENTIAL', form='FORMATTED', &
+           action='WRITE', status='OLD', position='APPEND', iostat=ios)
+    endif
+    inquire(doc%unitLayout, opened=opened)
+    if ((.not.opened) .or. (ios /= 0)) then
+      call MOM_error(FATAL, "Failed to open doc file "//trim(fileName)//".")
+    endif
+    doc%filesAreOpen = .true.
   endif
 
 end subroutine open_doc_file
@@ -725,6 +766,13 @@ subroutine doc_end(doc)
     close(doc%unitShort)
     doc%unitShort = -2
   endif
+
+  if (doc%unitLayout > 0) then
+    close(doc%unitLayout)
+    doc%unitLayout = -2
+  endif
+
+  doc%filesAreOpen = .false.
 
   this => doc%chain_msg
   do while( associated(this) )
