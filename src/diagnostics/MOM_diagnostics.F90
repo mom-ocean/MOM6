@@ -604,7 +604,10 @@ subroutine calculate_vertical_integrals(h, tv, fluxes, G, CS)
       ! where pso is the sea water pressure at sea water surface
       ! note that pso is equivalent to fluxes%p_surf
       do j=js,je ; do i=is,ie
-        btm_pres(i,j) = ( mass(i,j) * G%g_Earth ) ! + fluxes%p_surf(i,j)
+        btm_pres(i,j) = mass(i,j) * G%g_Earth
+        if (ASSOCIATED(fluxes%p_surf)) then
+          btm_pres(i,j) = btm_pres(i,j) + fluxes%p_surf(i,j)
+        endif
       enddo ; enddo
       call post_data(CS%id_pbo, btm_pres, CS%diag)
     endif
