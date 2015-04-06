@@ -298,12 +298,14 @@ program MOM_main
   if (years+months+days+hours+minutes+seconds > 0) then
     Time_end = increment_date(Time, years, months, days, hours, minutes, seconds)
     call MOM_mesg('Segment run length determined from ocean_solo_nml.', 2)
-    call get_param(param_file, mod, "DAYMAX", daymax, &
+    call get_param(param_file, mod, "DAYMAX", daymax, timeunit=Time_unit, &
+                   default=Time_end, do_not_log=.true.)
+    call log_param(param_file, mod, "DAYMAX", daymax, &
                  "The final time of the whole simulation, in units of \n"//&
                  "TIMEUNIT seconds.  This also sets the potential end \n"//&
                  "time of the present run segment if the end time is \n"//&
-                 "not set (as it was here) via ocean_solo_nml in input.nml.", &
-                 timeunit=Time_unit, default=Time_end)
+                 "not set via ocean_solo_nml in input.nml.", &
+                 timeunit=Time_unit)
   else
     call get_param(param_file, mod, "DAYMAX", daymax, &
                  "The final time of the whole simulation, in units of \n"//&

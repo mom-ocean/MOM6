@@ -959,7 +959,7 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
                  layoutParam=.true.)
   call get_param(param_file, mod, "NONBLOCKING_UPDATES", MOM_dom%nonblocking_updates, &
                  "If true, non-blocking halo updates may be used.", &
-                 default=.false.)
+                 default=.false., layoutParam=.true.)
 
   nihalo_dflt = 2 ; njhalo_dflt = 2
   if (present(NIHALO)) nihalo_dflt = NIHALO
@@ -979,13 +979,13 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
                  "x-direction.  With STATIC_MEMORY_ this is set as NIHALO_ \n"//&
                  "in "//trim(inc_nm)//" at compile time; without STATIC_MEMORY_ \n"//&
                  "the default is NIHALO_ in "//trim(inc_nm)//" (if defined) or 2.", &
-                 default=2, static_value=nihalo_dflt)
+                 default=2, static_value=nihalo_dflt, layoutParam=.true.)
   call get_param(param_file, mod, "NJHALO", MOM_dom%njhalo, &
                  "The number of halo points on each side in the \n"//&
                  "y-direction.  With STATIC_MEMORY_ this is set as NJHALO_ \n"//&
                  "in "//trim(inc_nm)//" at compile time; without STATIC_MEMORY_ \n"//&
                  "the default is NJHALO_ in "//trim(inc_nm)//" (if defined) or 2.", &
-                 default=2, static_value=njhalo_dflt)
+                 default=2, static_value=njhalo_dflt, layoutParam=.true.)
   if (present(min_halo)) then
     MOM_dom%nihalo = max(MOM_dom%nihalo, min_halo(1))
     min_halo(1) = MOM_dom%nihalo
@@ -1046,7 +1046,8 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
                  "can be created by tools like check_mask. The \n"//&
                  "following example of mask_table masks out 2 processors, \n"//&
                  "(1,2) and (3,6), out of the 24 in a 4x6 layout: \n"//&
-                 " 2\n 4,6\n 1,2\n 3,6\n", default="MOM_mask_table" )
+                 " 2\n 4,6\n 1,2\n 3,6\n", default="MOM_mask_table", &
+                 layoutParam=.true.)
   mask_table = trim(inputdir)//trim(mask_table)
   mask_table_exists = file_exist(mask_table)
 
