@@ -1229,7 +1229,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
       call cpu_clock_begin(id_clock_diagnostics)
       call calculate_diagnostic_fields(u, v, h, CS%uh, CS%vh, CS%tv, &
-                          CS%ADp, CS%CDp, CS%dt_trans, G, CS%diagnostics_CSp)
+                          CS%ADp, CS%CDp, fluxes, CS%dt_trans, G, CS%diagnostics_CSp)
       if (showCallTree) call callTree_waypoint("finished calculate_diagnostic_fields (step_MOM)")
       call cpu_clock_end(id_clock_diagnostics)
 
