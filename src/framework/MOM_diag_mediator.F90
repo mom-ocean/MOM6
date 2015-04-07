@@ -27,14 +27,14 @@ module MOM_diag_mediator
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 
-use MOM_coms, only : PE_here
-use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe
-use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
-use MOM_grid, only : ocean_grid_type
-use MOM_io, only : vardesc
-use MOM_safe_alloc, only : safe_alloc_ptr, safe_alloc_alloc
+use MOM_coms,             only : PE_here
+use MOM_error_handler,    only : MOM_error, FATAL, WARNING, is_root_pe
+use MOM_file_parser,      only : get_param, log_param, log_version, param_file_type
+use MOM_grid,             only : ocean_grid_type
+use MOM_io,               only : vardesc
+use MOM_safe_alloc,       only : safe_alloc_ptr, safe_alloc_alloc
 use MOM_string_functions, only : lowercase
-use MOM_time_manager, only : time_type
+use MOM_time_manager,     only : time_type
 
 use diag_manager_mod, only : diag_manager_init, diag_manager_end
 use diag_manager_mod, only : send_data, diag_axis_init
@@ -59,8 +59,8 @@ end interface post_data
 
 ! 2D/3D axes type to contain 1D axes handles and pointers to masks
 type, public :: axesType
-  character(len=15) :: id ! This is the id string for this particular combination of handles
-  integer :: rank ! The number of dimensions in the list of axes
+  character(len=15) :: id   ! the id string for this particular combination of handles
+  integer           :: rank ! number of dimensions in the list of axes
   integer, dimension(:), allocatable :: handles ! Handles to 1D axes
   type(diag_ctrl), pointer :: diag => null()
 end type axesType
@@ -71,8 +71,8 @@ type, private :: maskContainer
   real,pointer, dimension(:,:,:) :: mask3d => null()
 end type maskContainer
 
-!   The following data type contains pointers to diagnostic fields that might
-! be shared between modules, and also to the variables that control the handling
+! The following data type contains pointers to diagnostic fields that might
+! be shared between modules, and to the variables that control the handling
 ! of model output.
 type, public :: diag_ctrl
 
@@ -109,7 +109,7 @@ type, public :: diag_ctrl
   type(maskContainer), dimension(MAX_NUM_DIAGNOSTICS) :: maskList
   integer, dimension(MAX_NUM_DIAGNOSTICS) :: CMORid
 
-  !default missing value to be sent to ALL diagnostics registerations 
+  !default missing value to be sent to ALL diagnostics registrations 
   real :: missing_value = 1.0e+20
 
 end type diag_ctrl
@@ -123,18 +123,23 @@ subroutine set_axes_info(G, param_file, diag, set_vertical)
   type(param_file_type),        intent(in)    :: param_file
   type(diag_ctrl),              intent(inout) :: diag
   logical, optional,            intent(in)    :: set_vertical
-! Arguments: G - The ocean's grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (inout)   diag - A structure that is used to regulate diagnostic output.
-!  (in,opt)  set_vertical - If true (or missing), set up the vertical axes.
+
+! Arguments: 
+!  (inout)  G            - ocean grid structure.
+!  (in)     param_file   - structure indicating the open file to parse for
+!                          model parameter values.
+!  (inout)          diag - structure used to regulate diagnostic output.
+!  (in,opt) set_vertical - If true (or missing), set up the vertical axes.
+
   integer :: id_xq, id_yq, id_zl, id_zi, id_xh, id_yh, k, nz
   real :: zlev(G%ks:G%ke), zinter(G%ks:G%ke+1)
   logical :: set_vert, Cartesian_grid
   character(len=80) :: grid_config, units_temp
+
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mod  = "MOM_diag_mediator" ! This module's name.
+
   nz = G%ke
 
   set_vert = .true. ; if (present(set_vertical)) set_vert = set_vertical
@@ -176,6 +181,7 @@ subroutine set_axes_info(G, param_file, diag, set_vertical)
 
 !  do i=1,nz ; zlev(i) = real(i) ; enddo
 !  do i=1,nz+1 ; zinter(i) = real(i) - 0.5 ; enddo
+
   if(G%symmetric) then 
     id_xq = diag_axis_init('xq', G%gridLonB(G%isgB:G%iegB), G%x_axis_units, 'x', &
               'q point nominal longitude', Domain2=G%Domain%mpp_domain)
@@ -203,23 +209,23 @@ subroutine set_axes_info(G, param_file, diag, set_vertical)
     id_zl = -1 ; id_zi = -1
   endif
 
-  ! Vertical axes for the interfaces and layers.
+  ! Vertical axes for the interfaces and layers
   call defineAxes(diag, (/ id_zi /), diag%axesZi)
   call defineAxes(diag, (/ id_zL /), diag%axesZL)
 
-  ! Axis groupings for the model layers.
+  ! Axis groupings for the model layers
   call defineAxes(diag, (/ id_xh, id_yh, id_zL /), diag%axesTL)
   call defineAxes(diag, (/ id_xq, id_yq, id_zL /), diag%axesBL)
   call defineAxes(diag, (/ id_xq, id_yh, id_zL /), diag%axesCuL)
   call defineAxes(diag, (/ id_xh, id_yq, id_zL /), diag%axesCvL)
 
-  ! Axis groupings for the model interfaces.
+  ! Axis groupings for the model interfaces
   call defineAxes(diag, (/ id_xh, id_yh, id_zi /), diag%axesTi)
   call defineAxes(diag, (/ id_xq, id_yh, id_zi /), diag%axesCui)
   call defineAxes(diag, (/ id_xh, id_yq, id_zi /), diag%axesCvi)
   call defineAxes(diag, (/ id_xq, id_yq, id_zi /), diag%axesBi)
 
-  ! Axis groupings for 2-D arrays.
+  ! Axis groupings for 2-D arrays
   call defineAxes(diag, (/ id_xh, id_yh /), diag%axesT1)
   call defineAxes(diag, (/ id_xq, id_yq /), diag%axesB1)
   call defineAxes(diag, (/ id_xq, id_yh /), diag%axesCu1)
@@ -229,9 +235,10 @@ end subroutine set_axes_info
 
 subroutine defineAxes(diag, handles, axes)
   ! Defines "axes" from list of handle and associates mask
-  type(diag_ctrl), target, intent(in) :: diag
+  type(diag_ctrl), target, intent(in)  :: diag
   integer, dimension(:),   intent(in)  :: handles
   type(axesType),          intent(out) :: axes
+
   ! Local variables
   integer :: n
   n = size(handles)
@@ -241,16 +248,22 @@ subroutine defineAxes(diag, handles, axes)
   axes%rank = n
   axes%handles(:) = handles(:)
   axes%diag => diag ! A [circular] link back to the diag_ctrl structure
+
 end subroutine defineAxes
+
 
 subroutine set_diag_mediator_grid(G, diag)
   type(ocean_grid_type), intent(inout) :: G
   type(diag_ctrl),       intent(inout) :: diag
-! Arguments: G - The ocean's grid structure.
-!  (inout)   diag - A structure that is used to regulate diagnostic output.
+
+! Arguments: 
+!  (inout)    G   - ocean grid structure
+!  (inout)   diag - structure used to regulate diagnostic output
+
   diag%is = G%isc - (G%isd-1) ; diag%ie = G%iec - (G%isd-1)
   diag%js = G%jsc - (G%jsd-1) ; diag%je = G%jec - (G%jsd-1)
   diag%isd = G%isd ; diag%ied = G%ied ; diag%jsd = G%jsd ; diag%jed = G%jed
+
 end subroutine set_diag_mediator_grid
 
 subroutine post_data_0d(diag_field_id, field, diag, is_static, mask)
@@ -259,17 +272,22 @@ subroutine post_data_0d(diag_field_id, field, diag, is_static, mask)
   type(diag_ctrl),   intent(in) :: diag
   logical, optional, intent(in) :: is_static
   real,    optional, intent(in) :: mask(:,:)
-! Arguments: diag_field_id - the id for an output variable returned by a
-!                            previous call to register_diag_field.
-!  (in)      field - The 0-d array being offered for output or averaging.
-!  (inout)   diag - A structure that is used to regulate diagnostic output.
+
+! Arguments: 
+!  (in)  diag_field_id - id for an output variable returned by a
+!                        previous call to register_diag_field
+!  (in)      field     - 0-d array being offered for output or averaging
+!  (inout)   diag      - structure used to regulate diagnostic output
 !  (in,opt)  is_static - If true, this is a static field that is always offered.
-!  (in,opt)  mask - If present, use this real array as the data mask.
+!  (in,opt)  mask      - If present, use this real array as the data mask.
+
   integer :: altId
 
   call post_data_0d_low(diag_field_id, field, diag, is_static, mask)
+
+  ! for CMOR output 
   altId = diag%CMORid(diag_field_id)
-! if (altid>0) call post_data_0d_low(altId, field, diag, is_static, mask)
+  if (altid>0) call post_data_0d_low(altId, field, diag, is_static, mask)
 
 end subroutine post_data_0d
 
@@ -279,12 +297,15 @@ subroutine post_data_0d_low(diag_field_id, field, diag, is_static, mask)
   type(diag_ctrl),   intent(in) :: diag
   logical, optional, intent(in) :: is_static
   real,    optional, intent(in) :: mask(:,:)
-! Arguments: diag_field_id - the id for an output variable returned by a
+
+! Arguments: 
+!  (in) diag_field_id  - the id for an output variable returned by a
 !                            previous call to register_diag_field.
-!  (in)      field - The 0-d array being offered for output or averaging.
-!  (inout)   diag - A structure that is used to regulate diagnostic output.
+!  (in)      field     - 0-d array being offered for output or averaging.
+!  (inout)   diag      - structure used to regulate diagnostic output.
 !  (in,opt)  is_static - If true, this is a static field that is always offered.
-!  (in,opt)  mask - If present, use this real array as the data mask.
+!  (in,opt)  mask      - If present, use this real array as the data mask.
+
   logical :: used, is_stat
 
   is_stat = .false. ; if (present(is_static)) is_stat = is_static 
@@ -302,11 +323,14 @@ subroutine post_data_1d_k(diag_field_id, field, diag, is_static)
   real,              intent(in) :: field(:)
   type(diag_ctrl),   intent(in) :: diag
   logical, optional, intent(in) :: is_static
-! Arguments: diag_field_id - the id for an output variable returned by a
-!                            previous call to register_diag_field.
-!  (in)      field - The 3-d array being offered for output or averaging.
-!  (inout)   diag - A structure that is used to regulate diagnostic output.
-!  (in)      static - If true, this is a static field that is always offered.
+
+! Arguments: 
+!  (in) diag_field_id - id for an output variable returned by a
+!                       previous call to register_diag_field.
+!  (in)         field - 3-d array being offered for output or averaging.
+!  (inout)       diag - structure used to regulate diagnostic output.
+!  (in)        static - If true, this is a static field that is always offered.
+
   integer :: altId
 
   call post_data_1d_k_low(diag_field_id, field, diag, is_static)
@@ -322,11 +346,14 @@ subroutine post_data_1d_k_low(diag_field_id, field, diag, is_static)
   real,              intent(in) :: field(:)
   type(diag_ctrl),   intent(in) :: diag
   logical, optional, intent(in) :: is_static
-! Arguments: diag_field_id - the id for an output variable returned by a
-!                            previous call to register_diag_field.
-!  (in)      field - The 3-d array being offered for output or averaging.
-!  (inout)   diag - A structure that is used to regulate diagnostic output.
-!  (in)      static - If true, this is a static field that is always offered.
+
+! Arguments: 
+!  (in) diag_field_id - id for an output variable returned by a
+!                       previous call to register_diag_field.
+!  (in)         field - 3-d array being offered for output or averaging
+!  (inout)       diag - structure used to regulate diagnostic output
+!  (in)        static - If true, this is a static field that is always offered.
+
   logical :: used  ! The return value of send_data is not used for anything.
   logical :: is_stat
   integer :: isv, iev, jsv, jev
@@ -346,12 +373,15 @@ subroutine post_data_2d(diag_field_id, field, diag, is_static, mask)
   type(diag_ctrl),   intent(in) :: diag
   logical, optional, intent(in) :: is_static
   real,    optional, intent(in) :: mask(:,:)
-! Arguments: diag_field_id - the id for an output variable returned by a
-!                            previous call to register_diag_field.
-!  (in)      field - The 2-d array being offered for output or averaging.
-!  (inout)   diag - A structure that is used to regulate diagnostic output.
+
+! Arguments: 
+!  (in) diag_field_id  - id for an output variable returned by a
+!                        previous call to register_diag_field.
+!  (in)         field  - 2-d array being offered for output or averaging.
+!  (inout)       diag  - structure used to regulate diagnostic output.
 !  (in,opt)  is_static - If true, this is a static field that is always offered.
-!  (in,opt)  mask - If present, use this real array as the data mask.
+!  (in,opt)  mask     - If present, use this real array as the data mask.
+
   integer :: altId
 
   call post_data_2d_low(diag_field_id, field, diag, is_static, mask)
@@ -368,12 +398,15 @@ subroutine post_data_2d_low(diag_field_id, field, diag, is_static, mask)
   type(diag_ctrl),   intent(in) :: diag
   logical, optional, intent(in) :: is_static
   real,    optional, intent(in) :: mask(:,:)
-! Arguments: diag_field_id - the id for an output variable returned by a
-!                            previous call to register_diag_field.
-!  (in)      field - The 2-d array being offered for output or averaging.
-!  (inout)   diag - A structure that is used to regulate diagnostic output.
-!  (in,opt)  is_static - If true, this is a static field that is always offered.
-!  (in,opt)  mask - If present, use this real array as the data mask.
+
+! Arguments: 
+! (in) diag_field_id  - id for an output variable returned by a
+!                       previous call to register_diag_field.
+!  (in)        field  - 2-d array being offered for output or averaging
+!  (inout)      diag  - structure used to regulate diagnostic output
+!  (in,opt) is_static - If true, this is a static field that is always offered.
+!  (in,opt)  mask     - If present, use this real array as the data mask.
+
   logical :: used, is_stat
   integer :: isv, iev, jsv, jev
 
@@ -452,12 +485,15 @@ subroutine post_data_3d(diag_field_id, field, diag, is_static, mask)
   type(diag_ctrl),   intent(in) :: diag
   logical, optional, intent(in) :: is_static
   real,    optional, intent(in) :: mask(:,:,:)
-! Arguments: diag_field_id - the id for an output variable returned by a
-!                            previous call to register_diag_field.
-!  (in)      field - The 3-d array being offered for output or averaging.
-!  (inout)   diag - A structure that is used to regulate diagnostic output.
-!  (in)      static - If true, this is a static field that is always offered.
-!  (in,opt)  mask - If present, use this real array as the data mask.
+
+! Arguments: 
+!  (in) diag_field_id - id for an output variable returned by a
+!                       previous call to register_diag_field.
+!  (in)         field - 3-d array being offered for output or averaging
+!  (inout)       diag - structure used to regulate diagnostic output
+!  (in)        static - If true, this is a static field that is always offered.
+!  (in,opt)      mask - If present, use this real array as the data mask.
+
   integer :: altId
 
   call post_data_3d_low(diag_field_id, field, diag, is_static, mask)
@@ -474,12 +510,15 @@ subroutine post_data_3d_low(diag_field_id, field, diag, is_static, mask)
   type(diag_ctrl),   intent(in) :: diag
   logical, optional, intent(in) :: is_static
   real,    optional, intent(in) :: mask(:,:,:)
-! Arguments: diag_field_id - the id for an output variable returned by a
-!                            previous call to register_diag_field.
-!  (in)      field - The 3-d array being offered for output or averaging.
-!  (inout)   diag - A structure that is used to regulate diagnostic output.
-!  (in)      static - If true, this is a static field that is always offered.
-!  (in,opt)  mask - If present, use this real array as the data mask.
+
+! Arguments: 
+!  (in) diag_field_id - id for an output variable returned by a
+!                       previous call to register_diag_field.
+!  (in)         field - 3-d array being offered for output or averaging
+!  (inout)       diag - structure used to regulate diagnostic output
+!  (in)        static - If true, this is a static field that is always offered.
+!  (in,opt)      mask - If present, use this real array as the data mask.
+
   logical :: used  ! The return value of send_data is not used for anything.
   logical :: is_stat
   integer :: isv, iev, jsv, jev
@@ -557,13 +596,15 @@ subroutine enable_averaging(time_int_in, time_end_in, diag)
   real, intent(in) :: time_int_in
   type(time_type), intent(in) :: time_end_in
   type(diag_ctrl), intent(inout) :: diag
+
 ! This subroutine enables the accumulation of time averages over the
 ! specified time interval.
 
-! Arguments: time_int_in - the time interval in s over which any
+! Arguments: 
+!  (in)      time_int_in - time interval in s over which any
 !                          values that are offered are valid.
-!  (in)      time_end_in - the end time in s of the valid interval.
-!  (inout)   diag - A structure that is used to regulate diagnostic output.
+!  (in)      time_end_in - end time in s of the valid interval
+!  (inout)   diag        - structure used to regulate diagnostic output
 
 !  if (num_file==0) return
   diag%time_int = time_int_in
@@ -574,7 +615,9 @@ end subroutine enable_averaging
 ! Call this subroutine to avoid averaging any offered fields.
 subroutine disable_averaging(diag)
   type(diag_ctrl), intent(inout) :: diag
-! Argument: diag - A structure that is used to regulate diagnostic output.
+
+! Argument: 
+! diag - structure used to regulate diagnostic output
 
   diag%time_int = 0.0
   diag%ave_enabled = .false.
@@ -588,9 +631,11 @@ function query_averaging_enabled(diag, time_int, time_end)
   real,            optional, intent(out) :: time_int
   type(time_type), optional, intent(out) :: time_end
   logical :: query_averaging_enabled
-! Arguments: diag - A structure that is used to regulate diagnostic output.
-!  (out,opt) time_int - The current setting of diag%time_int, in s.
-!  (out,opt) time_end - The current setting of diag%time_end.
+
+! Arguments: 
+!  (in)          diag - structure used to regulate diagnostic output
+!  (out,opt) time_int - current setting of diag%time_int, in s
+!  (out,opt) time_end - current setting of diag%time_end
 
   if (present(time_int)) time_int = diag%time_int
   if (present(time_end)) time_end = diag%time_end
@@ -600,7 +645,9 @@ end function query_averaging_enabled
 function get_diag_time_end(diag)
   type(diag_ctrl),           intent(in)  :: diag
   type(time_type) :: get_diag_time_end
-! Argument: diag - A structure that is used to regulate diagnostic output.
+
+! Argument: 
+! (in) diag - structure used to regulate diagnostic output
 
 !   This function returns the valid end time for diagnostics that are handled
 ! outside of the MOM6 infrastructure, such as via the generic tracer code.
@@ -625,26 +672,33 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
   character(len=*), optional, intent(in) :: cmor_field_name, cmor_long_name
   character(len=*), optional, intent(in) :: cmor_units, cmor_standard_name
   logical,          optional, intent(in) :: available
+
   ! Output:    An integer handle for a diagnostic array.
-  ! Arguments: module_name - The name of this module, usually "ocean_model" or "ice_shelf_model".
-  !  (in)      field_name - The name of the diagnostic field.
-  !  (in)      axes - A container with up to 3 integer handles that indicates the axes for this field.
-  !  (in)      init_time - The time at which a field is first available?
-  !  (in,opt)  long_name - The long name of a field.
-  !  (in,opt)  units - The units of a field.
-  !  (in,opt)  standard_name - The standardized name associated with a field. (Not yet used in MOM.)
-  !  (in,opt)  cmor_field_name - The cmor name of a field.
-  !  (in,opt)  cmor_long_name - The cmor long name of a field.
-  !  (in,opt)  cmor_units - The cmor units of a field.
-  !  (in,opt)  cmor_standard_name - The cmor standardized name associated with a field. 
+  ! Arguments: 
+  !  (in)      module_name   - name of this module, usually "ocean_model" or "ice_shelf_model"
+  !  (in)      field_name    - name of the diagnostic field
+  !  (in)      axes          - container w/ up to 3 integer handles that indicates axes for this field
+  !  (in)      init_time     - time at which a field is first available?
+  !  (in,opt)  long_name     - long name of a field.
+  !  (in,opt)  units         - units of a field.
+  !  (in,opt)  standard_name - standardized name associated with a field
+
+  !  (in,opt)  cmor_field_name    - CMOR name of a field
+  !  (in,opt)  cmor_long_name     - CMOR long name of a field
+  !  (in,opt)  cmor_units         - CMOR units of a field
+  !  (in,opt)  cmor_standard_name - CMOR standardized name associated with a field 
+
   !  (in,opt)  missing_value - A value that indicates missing values.
-  !  (in,opt)  range - The valid range of a variable. (Not used in MOM.)
-  !  (in,opt)  mask_variant - If true a logical mask must be provided with post_data calls.  (Not used in MOM.)
-  !  (in,opt)  verbose - If true, FMS is verbosed. (Not used in MOM.)
-  !  (in,opt)  do_not_log - If true, do not log something. (Not used in MOM.)
-  !  (out,opt) err_msg - An character string into which an error message might be placed. (Not used in MOM.)
-  !  (in,opt)  interp_method - No clue. (Not used in MOM.)
-  !  (in,opt)  tile_count - No clue. (Not used in MOM.)
+
+  ! Following params have yet to be used in MOM. 
+  !  (in,opt)  range         - valid range of a variable
+  !  (in,opt)  mask_variant  - If true a logical mask must be provided with post_data calls
+  !  (in,opt)  verbose       - If true, FMS is verbose
+  !  (in,opt)  do_not_log    - If true, do not log something
+  !  (out,opt) err_msg       - character string into which an error message might be placed
+  !  (in,opt)  interp_method - no clue
+  !  (in,opt)  tile_count    - no clue
+
   type(diag_ctrl), pointer :: diag
   integer :: CMORid
   character(len=256) :: posted_cmor_units, posted_cmor_standard_name, posted_cmor_long_name
@@ -706,22 +760,27 @@ function register_diag_field_low(module_name, field_name, axes, init_time, &
   character(len=*), optional, intent(in) :: interp_method
   integer,          optional, intent(in) :: tile_count
   logical,          optional, intent(in) :: available
+
   ! Output:    An integer handle for a diagnostic array.
-  ! Arguments: module_name - The name of this module, usually "ocean_model" or "ice_shelf_model".
-  !  (in)      field_name - The name of the diagnostic field.
-  !  (in)      axes - A container with up to 3 integer handles that indicates the axes for this field.
-  !  (in)      init_time - The time at which a field is first available?
-  !  (in,opt)  long_name - The long name of a field.
-  !  (in,opt)  units - The units of a field.
-  !  (in,opt)  standard_name - The standardized name associated with a field. (Not yet used in MOM.)
-  !  (in,opt)  missing_value - A value that indicates missing values.
-  !  (in,opt)  range - The valid range of a variable. (Not used in MOM.)
-  !  (in,opt)  mask_variant - If true a logical mask must be provided with post_data calls.  (Not used in MOM.)
-  !  (in,opt)  verbose - If true, FMS is verbosed. (Not used in MOM.)
-  !  (in,opt)  do_not_log - If true, do not log something. (Not used in MOM.)
-  !  (out,opt) err_msg - An character string into which an error message might be placed. (Not used in MOM.)
-  !  (in,opt)  interp_method - No clue. (Not used in MOM.)
-  !  (in,opt)  tile_count - No clue. (Not used in MOM.)
+  ! Arguments: 
+  !  (in)      module_name   - name of this module, usually "ocean_model" or "ice_shelf_model"
+  !  (in)      field_name    - name of the diagnostic field
+  !  (in)      axes          - container with up to 3 integer handles that indicates axes for this field.
+  !  (in)      init_time     - time at which a field is first available?
+  !  (in,opt)  long_name     - long name of a field
+  !  (in,opt)  units         - units of a field
+  !  (in,opt)  standard_name - standardized name associated with a field (not yet used in MOM).
+  !  (in,opt)  missing_value - A value that indicates missing values
+
+  ! Following params have yet to be used in MOM. 
+  !  (in,opt)  range         - valid range of a variable
+  !  (in,opt)  mask_variant  - If true a logical mask must be provided with post_data calls
+  !  (in,opt)  verbose       - If true, FMS is verbose
+  !  (in,opt)  do_not_log    - If true, do not log something
+  !  (out,opt) err_msg       - character string into which an error message might be placed
+  !  (in,opt)  interp_method - no clue
+  !  (in,opt)  tile_count    - no clue
+
   character(len=240) :: mesg
   real :: MOM_missing_value
   type(diag_ctrl), pointer :: diag
@@ -834,19 +893,24 @@ function register_static_field(module_name, field_name, axes, &
   integer,          optional, intent(in) :: tile_count
   character(len=*), optional, intent(in) :: cmor_field_name, cmor_long_name
   character(len=*), optional, intent(in) :: cmor_units, cmor_standard_name
+
   ! Output:    An integer handle for a diagnostic array.
-  ! Arguments: module_name - The name of this module, usually "ocean_model" or "ice_shelf_model".
-  !  (in)      field_name - The name of the diagnostic field.
-  !  (in)      axes - A container with up to 3 integer handles that indicates the axes for this field.
-  !  (in,opt)  long_name - The long name of a field.
-  !  (in,opt)  units - The units of a field.
-  !  (in,opt)  standard_name - The standardized name associated with a field. (Not yet used in MOM.)
+  ! Arguments: 
+  !  (in)      module_name   - name of this module, usually "ocean_model" or "ice_shelf_model".
+  !  (in)      field_name    - name of the diagnostic field
+  !  (in)      axes          - container with up to 3 integer handles that indicates axes for this field
+  !  (in,opt)  long_name     - long name of a field
+  !  (in,opt)  units         - units of a field
   !  (in,opt)  missing_value - A value that indicates missing values.
-  !  (in,opt)  range - The valid range of a variable. (Not used in MOM.)
-  !  (in,opt)  mask_variant - If true a logical mask must be provided with post_data calls.  (Not used in MOM.)
-  !  (in,opt)  do_not_log - If true, do not log something. (Not used in MOM.)
-  !  (in,opt)  interp_method - No clue. (Not used in MOM.)
-  !  (in,opt)  tile_count - No clue. (Not used in MOM.)
+
+  ! Following params have yet to be used in MOM. 
+  !  (in,opt)  standard_name - standardized name associated with a field
+  !  (in,opt)  range          - valid range of a variable
+  !  (in,opt)  mask_variant   - If true a logical mask must be provided with post_data calls
+  !  (in,opt)  do_not_log     - If true, do not log something
+  !  (in,opt)  interp_method  - no clue
+  !  (in,opt)  tile_count     - no clue
+
   character(len=240) :: mesg
   real :: MOM_missing_value
   type(diag_ctrl), pointer :: diag
@@ -915,22 +979,27 @@ function register_scalar_field(module_name, field_name, init_time, diag, &
   integer,          optional, intent(in) :: tile_count
   character(len=*), optional, intent(in) :: cmor_field_name, cmor_long_name
   character(len=*), optional, intent(in) :: cmor_units, cmor_standard_name
+
   ! Output:    An integer handle for a diagnostic array.
-  ! Arguments: module_name - The name of this module, usually "ocean_model" or "ice_shelf_model".
-  !  (in)      field_name - The name of the diagnostic field.
-  !  (in)      init_time - The time at which a field is first available?
-  !  (inout)   diag - A structure that is used to regulate diagnostic output.
-  !  (in,opt)  long_name - The long name of a field.
-  !  (in,opt)  units - The units of a field.
-  !  (in,opt)  standard_name - The standardized name associated with a field. (Not yet used in MOM.)
-  !  (in,opt)  missing_value - A value that indicates missing values.
-  !  (in,opt)  range - The valid range of a variable. (Not used in MOM.)
-  !  (in,opt)  mask_variant - If true a logical mask must be provided with post_data calls.  (Not used in MOM.)
-  !  (in,opt)  verbose - If true, FMS is verbosed. (Not used in MOM.)
-  !  (in,opt)  do_not_log - If true, do not log something. (Not used in MOM.)
-  !  (out,opt) err_msg - An character string into which an error message might be placed. (Not used in MOM.)
-  !  (in,opt)  interp_method - No clue. (Not used in MOM.)
-  !  (in,opt)  tile_count - No clue. (Not used in MOM.)
+  ! Arguments: 
+  !  (in)      module_name   - name of this module, usually "ocean_model" or "ice_shelf_model".
+  !  (in)      field_name    - name of the diagnostic field.
+  !  (in)      init_time     - time at which a field is first available?
+  !  (inout)   diag          - structure used to regulate diagnostic output
+  !  (in,opt)  long_name     - long name of a field
+  !  (in,opt)  units         - units of a field
+  !  (in,opt)  missing_value - indicates missing values
+
+  ! Following params have yet to be used in MOM. 
+  !  (in,opt)  standard_name - standardized name associated with a field
+  !  (in,opt)  range         - valid range of a variable
+  !  (in,opt)  mask_variant  - If true a logical mask must be provided with post_data calls
+  !  (in,opt)  verbose       - If true, FMS is verbosed
+  !  (in,opt)  do_not_log    - If true, do not log something
+  !  (out,opt) err_msg       - character string into which an error message might be placed
+  !  (in,opt)  interp_method - no clue
+  !  (in,opt)  tile_count    - no clue
+
   character(len=240) :: mesg
   real :: MOM_missing_value
   integer :: CMORid
@@ -1190,7 +1259,7 @@ subroutine diag_masks_set(G, missing_value, diag)
   allocate(diag%mask3dCuL(G%IsdB:G%IedB,G%jsd:G%jed,1:G%ke)) 
   allocate(diag%mask3dCvL(G%isd:G%ied,G%JsdB:G%JedB,1:G%ke)) 
   do k = 1,G%ke
-    diag%mask3dTL(:,:,k) = diag%mask2dT (:,:)
+    diag%mask3dTL(:,:,k)  = diag%mask2dT (:,:)
     diag%mask3dBuL(:,:,k) = diag%mask2dBu(:,:)
     diag%mask3dCuL(:,:,k) = diag%mask2dCu(:,:)
     diag%mask3dCvL(:,:,k) = diag%mask2dCv(:,:)
@@ -1200,7 +1269,7 @@ subroutine diag_masks_set(G, missing_value, diag)
   allocate(diag%mask3dCui(G%IsdB:G%IedB,G%jsd:G%jed,1:G%ke+1)) 
   allocate(diag%mask3dCvi(G%isd:G%ied,G%JsdB:G%JedB,1:G%ke+1)) 
   do k = 1,G%ke+1
-    diag%mask3dTi(:,:,k) = diag%mask2dT (:,:)
+    diag%mask3dTi(:,:,k)  = diag%mask2dT (:,:)
     diag%mask3dBui(:,:,k) = diag%mask2dBu(:,:)
     diag%mask3dCui(:,:,k) = diag%mask2dCu(:,:)
     diag%mask3dCvi(:,:,k) = diag%mask2dCv(:,:)

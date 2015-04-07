@@ -395,7 +395,6 @@ use MOM_vert_friction, only : vertvisc_limit_vel, vertvisc_init
 use MOM_set_visc, only : set_viscous_BBL, set_viscous_ML, set_visc_init
 use MOM_set_visc, only : set_visc_register_restarts, set_visc_CS
 use MOM_sponge, only : init_sponge_diags, sponge_CS
-use MOM_spatial_means, only : global_area_mean, global_volume_mean
 use MOM_checksum_packages, only : MOM_thermo_chksum, MOM_state_chksum, MOM_accel_chksum
 use MOM_dynamics_unsplit, only : step_MOM_dyn_unsplit, register_restarts_dyn_unsplit
 use MOM_dynamics_unsplit, only : initialize_dyn_unsplit, end_dyn_unsplit
@@ -556,8 +555,8 @@ type, public :: MOM_control_struct
   integer :: id_u = -1, id_v = -1, id_h = -1
   integer :: id_T = -1, id_S = -1, id_ssh = -1, id_fraz = -1
   integer :: id_salt_deficit = -1, id_Heat_PmE = -1, id_intern_heat = -1
-  integer :: id_sst = -1, id_sst_sq = -1,  id_sst_global = -1
-  integer :: id_sss = -1, id_sss_global = -1, id_ssu = -1, id_ssv = -1
+  integer :: id_sst = -1, id_sst_sq = -1
+  integer :: id_sss = -1, id_ssu = -1, id_ssv = -1
   integer :: id_speed = -1, id_ssh_inst = -1
 
   integer :: id_Tadx = -1, id_Tady = -1, id_Tdiffx = -1, id_Tdiffy = -1
@@ -677,7 +676,6 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     h                        ! h : Layer thickness, in metre (Bouss) or kg/m2 (non-Bouss)
   real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)+1) :: eta_predia
   real :: tot_wt_ssh, Itot_wt_ssh, I_time_int
-  real :: SST_global, SSS_global
   type(time_type) :: Time_local
   logical :: showCallTree
   logical :: do_pass_kd_kv_turb ! This is used for a group halo pass.
@@ -1364,18 +1362,6 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       enddo ; enddo
       call post_data(CS%id_sst_sq, CS%SST_sq, CS%diag, mask=G%mask2dT)
     endif
-
-    if (CS%id_sst_global > 0) then
-      SST_global = global_area_mean(state%SST, G)
-      call post_data(CS%id_sst_global, SST_global, CS%diag)
-    endif
-
-    if (CS%id_sss_global > 0) then
-      SSS_global = global_area_mean(state%SSS, G)
-      call post_data(CS%id_sss_global, SSS_global, CS%diag)
-    endif
-
-
 
     if (CS%id_sss > 0) &
       call post_data(CS%id_sss, state%SSS, CS%diag, mask=G%mask2dT)
@@ -2111,23 +2097,15 @@ subroutine register_diags(Time, G, CS, ADp)
         'Sea Surface Temperature', 'Celsius', CS%missing, cmor_field_name='tos', &
         cmor_long_name='Sea Surface Temperature', cmor_units='degC',             &
         cmor_standard_name='sea_surface_temperature')
-    CS%id_sst_global = register_scalar_field('ocean_model', field_name='SST_global',   &
-        init_time=Time, diag=diag, long_name='Global Average Sea Surface Temperature', &
-        units='Celsius', missing_value=CS%missing, cmor_field_name='tosga',            &
-        cmor_units='degC', cmor_standard_name='sea_surface_temperature')
     CS%id_sst_sq = register_diag_field('ocean_model', 'SST_sq', diag%axesT1, Time, &
         'Sea Surface Temperature Squared', 'Celsius**2', CS%missing, cmor_field_name='tossq', &
         cmor_long_name='Square of Sea Surface Temperature ', cmor_units='degC^2', &
         cmor_standard_name='square_of_sea_surface_temperature')    
+    if (CS%id_sst_sq > 0) call safe_alloc_ptr(CS%SST_sq,isd,ied,jsd,jed)    
     CS%id_sss = register_diag_field('ocean_model', 'SSS', diag%axesT1, Time, &
         'Sea Surface Salinity', 'PSU', CS%missing, cmor_field_name='sos', &
         cmor_long_name='Sea Surface Salinity', cmor_units='psu',          &
         cmor_standard_name='sea_surface_salinity')
-    CS%id_sss_global = register_scalar_field('ocean_model', 'SSS_global', Time, diag, &
-        'Global Average Sea Surface Salinity', 'PSU', CS%missing, cmor_field_name='sosga', &
-        cmor_long_name='Global Average Sea Surface Salinity', cmor_units='psu',  &
-        cmor_standard_name='global_average_sea_surface_salinity')
-    if (CS%id_sst_sq > 0) call safe_alloc_ptr(CS%SST_sq,isd,ied,jsd,jed)    
   endif
   if (CS%use_temperature .and. CS%use_frazil) then
     CS%id_fraz = register_diag_field('ocean_model', 'frazil', diag%axesT1, Time,                           &
