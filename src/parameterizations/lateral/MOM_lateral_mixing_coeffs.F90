@@ -836,8 +836,8 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
        'Depth average square of slope magnitude, S^2, at v-points, as used in Visbeck et al.', 's^-2')
   endif
 
+  call wave_speed_init(Time, G, param_file, diag, CS%wave_speed_CSp)
   if (CS%Resoln_scaled_Kh .or. Resoln_scaled_KhTh .or. Resoln_scaled_KhTr) then
-    call wave_speed_init(Time, G, param_file, diag, CS%wave_speed_CSp)
 
     ! Allocate and initialize various arrays.
     allocate(CS%Res_fn_h(isd:ied,jsd:jed))       ; CS%Res_fn_h(:,:) = 0.0
