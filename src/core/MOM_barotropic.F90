@@ -3595,9 +3595,11 @@ subroutine barotropic_init(u, v, h, eta, Time, G, param_file, diag, CS, &
                  default=.false.)
   call get_param(param_file, mod, "BT_USE_WIDE_HALOS", CS%use_wide_halos, &
                  "If true, use wide halos and march in during the \n"//&
-                 "barotropic time stepping for efficiency.", default=.true.)
+                 "barotropic time stepping for efficiency.", default=.true., &
+                 layoutParam=.true.)
   call get_param(param_file, mod, "BTHALO", bt_halo_sz, &
-                 "The minimum halo size for the barotropic solver.", default=0)
+                 "The minimum halo size for the barotropic solver.", default=0, &
+                 layoutParam=.true.)
 #ifdef STATIC_MEMORY_
   if ((bt_halo_sz > 0) .and. (bt_halo_sz /= BTHALO_)) call MOM_error(FATAL, &
       "barotropic_init: Run-time values of BTHALO must agree with the \n"//&
@@ -3607,9 +3609,11 @@ subroutine barotropic_init(u, v, h, eta, Time, G, param_file, diag, CS, &
   wd_halos(1) = bt_halo_sz; wd_halos(2) =  bt_halo_sz
 #endif
   call log_param(param_file, mod, "!BT x-halo", wd_halos(1), &
-                 "The barotropic x-halo size that is actually used.")
+                 "The barotropic x-halo size that is actually used.", &
+                 layoutParam=.true.)
   call log_param(param_file, mod, "!BT y-halo", wd_halos(2), &
-                 "The barotropic y-halo size that is actually used.")
+                 "The barotropic y-halo size that is actually used.", &
+                 layoutParam=.true.)
 
   call get_param(param_file, mod, "USE_BT_CONT_TYPE", use_BT_cont_type, &
                "If true, use a structure with elements that describe \n"//&

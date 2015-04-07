@@ -955,10 +955,11 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
                  "some arrays are larger than others, depending on where \n"//&
                  "they are on the staggered grid.  Also, the starting \n"//&
                  "index of the velocity-point arrays is usually 0, not 1. \n"//&
-                 "This can only be set at compile time.")
+                 "This can only be set at compile time.",&
+                 layoutParam=.true.)
   call get_param(param_file, mod, "NONBLOCKING_UPDATES", MOM_dom%nonblocking_updates, &
                  "If true, non-blocking halo updates may be used.", &
-                 default=.false.)
+                 default=.false., layoutParam=.true.)
 
   nihalo_dflt = 2 ; njhalo_dflt = 2
   if (present(NIHALO)) nihalo_dflt = NIHALO
@@ -970,27 +971,28 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
                  "compile time.  Otherwise the sizes are not determined \n"//&
                  "until run time. The STATIC option is substantially \n"//&
                  "faster, but does not allow the PE count to be changed \n"//&
-                 "at run time.  This can only be set at compile time.")
+                 "at run time.  This can only be set at compile time.",&
+                 layoutParam=.true.)
 
   call get_param(param_file, mod, "NIHALO", MOM_dom%nihalo, &
                  "The number of halo points on each side in the \n"//&
                  "x-direction.  With STATIC_MEMORY_ this is set as NIHALO_ \n"//&
                  "in "//trim(inc_nm)//" at compile time; without STATIC_MEMORY_ \n"//&
                  "the default is NIHALO_ in "//trim(inc_nm)//" (if defined) or 2.", &
-                 default=2, static_value=nihalo_dflt)
+                 default=2, static_value=nihalo_dflt, layoutParam=.true.)
   call get_param(param_file, mod, "NJHALO", MOM_dom%njhalo, &
                  "The number of halo points on each side in the \n"//&
                  "y-direction.  With STATIC_MEMORY_ this is set as NJHALO_ \n"//&
                  "in "//trim(inc_nm)//" at compile time; without STATIC_MEMORY_ \n"//&
                  "the default is NJHALO_ in "//trim(inc_nm)//" (if defined) or 2.", &
-                 default=2, static_value=njhalo_dflt)
+                 default=2, static_value=njhalo_dflt, layoutParam=.true.)
   if (present(min_halo)) then
     MOM_dom%nihalo = max(MOM_dom%nihalo, min_halo(1))
     min_halo(1) = MOM_dom%nihalo
     MOM_dom%njhalo = max(MOM_dom%njhalo, min_halo(2))
     min_halo(2) = MOM_dom%njhalo
-    call log_param(param_file, mod, "!NIHALO min_halo", MOM_dom%nihalo)
-    call log_param(param_file, mod, "!NJHALO min_halo", MOM_dom%nihalo)
+    call log_param(param_file, mod, "!NIHALO min_halo", MOM_dom%nihalo, layoutParam=.true.)
+    call log_param(param_file, mod, "!NJHALO min_halo", MOM_dom%nihalo, layoutParam=.true.)
   endif
   if (is_static) then
     call get_param(param_file, mod, "NIGLOBAL", MOM_dom%niglobal, &
@@ -1044,7 +1046,8 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
                  "can be created by tools like check_mask. The \n"//&
                  "following example of mask_table masks out 2 processors, \n"//&
                  "(1,2) and (3,6), out of the 24 in a 4x6 layout: \n"//&
-                 " 2\n 4,6\n 1,2\n 3,6\n", default="MOM_mask_table" )
+                 " 2\n 4,6\n 1,2\n 3,6\n", default="MOM_mask_table", &
+                 layoutParam=.true.)
   mask_table = trim(inputdir)//trim(mask_table)
   mask_table_exists = file_exist(mask_table)
 
@@ -1053,7 +1056,8 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
   else
     call get_param(param_file, mod, "LAYOUT", layout, &
                  "The processor layout to be used, or 0, 0 to automatically \n"//&
-                 "set the layout based on the number of processors.", default=0)
+                 "set the layout based on the number of processors.", default=0, &
+                 do_not_log=.true.)
     call get_param(param_file, mod, "NIPROC", nip_parsed, &
                  "The number of processors in the x-direction.", default=-1, &
                  do_not_log=.true.)
@@ -1089,14 +1093,17 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
       call MOM_error(FATAL, mesg)
     endif
   endif
-  call log_param(param_file, mod, "!NIPROC", layout(1), &
+  call log_param(param_file, mod, "NIPROC", layout(1), &
                  "The number of processors in the x-direction. With \n"//&
-                 "STATIC_MEMORY_ this is set in "//trim(inc_nm)//" at compile time.")
-  call log_param(param_file, mod, "!NJPROC", layout(2), &
+                 "STATIC_MEMORY_ this is set in "//trim(inc_nm)//" at compile time.",&
+                 layoutParam=.true.)
+  call log_param(param_file, mod, "NJPROC", layout(2), &
                  "The number of processors in the x-direction. With \n"//&
-                 "STATIC_MEMORY_ this is set in "//trim(inc_nm)//" at compile time.")
-  call log_param(param_file, mod, "!LAYOUT", layout, &
-                 "The processor layout that was acutally used.")
+                 "STATIC_MEMORY_ this is set in "//trim(inc_nm)//" at compile time.",&
+                 layoutParam=.true.)
+  call log_param(param_file, mod, "LAYOUT", layout, &
+                 "The processor layout that was acutally used.",&
+                 layoutParam=.true.)
 
   ! Idiot check that fewer PEs than columns have been requested
   if (layout(1)*layout(2)>MOM_dom%niglobal*MOM_dom%njglobal)  then
@@ -1143,7 +1150,8 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
   endif
   call log_param(param_file, mod, "IO_LAYOUT", io_layout, &
                  "The processor layout to be used, or 0,0 to automatically \n"//&
-                 "set the io_layout to be the same as the layout.", default=0)
+                 "set the io_layout to be the same as the layout.", default=0,&
+                 layoutParam=.true.)
 
   if (io_layout(1) < 0) then
     write(mesg,'("MOM_domains_init: NIPROC_IO = ",i4,".  Negative values of "//&
