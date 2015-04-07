@@ -255,13 +255,21 @@ subroutine MOM_grid_init(G, param_file)
        "Mismatched number of layers NK_ between MOM_memory.h and param_file")
   niblock = NIBLOCK_
   njblock = NJBLOCK_
+  call log_param(param_file, "MOM_grid", "NIBLOCK", niblock, "The number of blocks "// &
+                 "in the x-direction on each processor (for openmp).", default=1, &
+                 layoutParam=.true.)
+  call log_param(param_file, "MOM_grid", "NJBLOCK", njblock, "The number of blocks "// &
+                 "in the y-direction on each processor (for openmp).", default=1, &
+                 layoutParam=.true.)
 #else
   call get_param(param_file, "MOM_grid", "NK", nk, &
                  "The number of model layers.", units="nondim", fail_if_missing=.true.)
   call get_param(param_file, "MOM_grid", "NIBLOCK", niblock, "The number of blocks "// &
-                 "in the x-direction on each processor (for openmp).", default=1)
+                 "in the x-direction on each processor (for openmp).", default=1, &
+                 layoutParam=.true.)
   call get_param(param_file, "MOM_grid", "NJBLOCK", njblock, "The number of blocks "// &
-                 "in the y-direction on each processor (for openmp).", default=1)
+                 "in the y-direction on each processor (for openmp).", default=1, &
+                 layoutParam=.true.)
 #endif
 
   G%ks = 1 ; G%ke = nk
