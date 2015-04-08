@@ -555,6 +555,7 @@ type, public :: MOM_control_struct
   integer :: id_u = -1, id_v = -1, id_h = -1
   integer :: id_T = -1, id_S = -1, id_ssh = -1, id_fraz = -1
   integer :: id_salt_deficit = -1, id_Heat_PmE = -1, id_intern_heat = -1
+  integer :: id_tob = -1, id_sob = -1
   integer :: id_sst = -1, id_sst_sq = -1
   integer :: id_sss = -1, id_ssu = -1, id_ssv = -1
   integer :: id_speed = -1, id_ssh_inst = -1
@@ -1235,6 +1236,9 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
       if (CS%id_T > 0) call post_data(CS%id_T, CS%tv%T, CS%diag)
       if (CS%id_S > 0) call post_data(CS%id_S, CS%tv%S, CS%diag)
+
+      if (CS%id_tob > 0) call post_data(CS%id_tob, CS%tv%T(:,:,G%ke), CS%diag, mask=G%mask2dT)
+      if (CS%id_sob > 0) call post_data(CS%id_sob, CS%tv%S(:,:,G%ke), CS%diag, mask=G%mask2dT)
 
       if (CS%id_Tadx > 0) call post_data(CS%id_Tadx, CS%T_adx, CS%diag)
       if (CS%id_Tady > 0) call post_data(CS%id_Tady, CS%T_ady, CS%diag)
@@ -2093,6 +2097,12 @@ subroutine register_diags(Time, G, CS, ADp)
         long_name='Salinity', units='PSU', cmor_field_name='so',            &
         cmor_long_name='Sea Water Salinity', cmor_units='psu',              &
         cmor_standard_name='sea_water_salinity')
+    CS%id_tob = register_diag_field('ocean_model','tob', diag%axesT1, Time,          &
+        long_name='Sea Water Potential Temperature at Sea Floor',                    &
+        standard_name='sea_water_potential_temperature_at_sea_floor', units='degC')
+    CS%id_sob = register_diag_field('ocean_model','sob',diag%axesT1, Time,           &
+        long_name='Sea Water Salinity at Sea Floor',                                 &
+        standard_name='sea_water_salinity_at_sea_floor', units='psu')
     CS%id_sst = register_diag_field('ocean_model', 'SST', diag%axesT1, Time,     &
         'Sea Surface Temperature', 'Celsius', CS%missing, cmor_field_name='tos', &
         cmor_long_name='Sea Surface Temperature', cmor_units='degC',             &
