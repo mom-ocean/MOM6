@@ -2282,6 +2282,8 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, dt, dt_diag, d_ea, j, G, CS, &
                                   ! to m divided by the time step in m2 H-2 s-1.
   logical :: stable_Rcv           ! If true, the buffer layers are stable with
                                   ! respect to the coordinate potential density.
+  real :: h_neglect ! A thickness that is so small it is usually lost
+                    ! in roundoff and can be neglected, in H.
 
   real :: s1en                    ! A work variable with units of H2 kg m s-3.
   real :: s1, s2, bh0             ! Work variables with units of H.
@@ -2300,6 +2302,7 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, dt, dt_diag, d_ea, j, G, CS, &
   is = G%isc ; ie = G%iec ; nz = G%ke
   kb1 = CS%nkml+1; kb2 = CS%nkml+2
   nkmb = CS%nkml+CS%nkbl
+  h_neglect = G%H_subroundoff
   G_2 = 0.5*G%g_Earth
   Rho0xG = G%Rho0 * G%g_Earth
   Idt_H2 = G%H_to_m**2 / dt_diag
@@ -2503,25 +2506,25 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, dt, dt_diag, d_ea, j, G, CS, &
  
         h1_to_h2 = b1*h2*h2_to_k1 / (h2 - (1.0+b1)*h2_to_k1)
 
-        Ihk1 = 1.0 / (h(i,k1) + h2_to_k1)
+        Ihk1 = 1.0 / (h(i,k1) + h_neglect + h2_to_k1)
         Ih2f = 1.0 / ((h(i,kb2) - h2_to_k1) + h1_to_h2)
 
         Rcv(i,kb2) = ((h(i,kb2)*Rcv(i,kb2) - h2_to_k1*G%Rlay(k1)) + &
                       h1_to_h2*Rcv(i,kb1))*Ih2f
-        Rcv(i,k1) = (h(i,k1)*Rcv(i,k1) + h2_to_k1*G%Rlay(k1)) * Ihk1
+        Rcv(i,k1) = ((h(i,k1)+h_neglect)*Rcv(i,k1) + h2_to_k1*G%Rlay(k1)) * Ihk1
 
         T(i,kb2) = ((h(i,kb2)*T(i,kb2) - h2_to_k1*T_det) + &
                     h1_to_h2*T(i,kb1)) * Ih2f
-        T(i,k1) = (h(i,k1)*T(i,k1) + h2_to_k1*T_det) * Ihk1
+        T(i,k1) = ((h(i,k1)+h_neglect)*T(i,k1) + h2_to_k1*T_det) * Ihk1
 
         S(i,kb2) = ((h(i,kb2)*S(i,kb2) - h2_to_k1*S_det) + &
                     h1_to_h2*S(i,kb1)) * Ih2f
-        S(i,k1) = (h(i,k1)*S(i,k1) + h2_to_k1*S_det) * Ihk1
+        S(i,k1) = ((h(i,k1)+h_neglect)*S(i,k1) + h2_to_k1*S_det) * Ihk1
 
         ! Changes in R0 are based on changes in T and S.
         R0(i,kb2) = ((h(i,kb2)*R0(i,kb2) - h2_to_k1*R0_det) + &
                      h1_to_h2*R0(i,kb1)) * Ih2f
-        R0(i,k1) = (h(i,k1)*R0(i,k1) + h2_to_k1*R0_det) * Ihk1
+        R0(i,k1) = ((h(i,k1)+h_neglect)*R0(i,k1) + h2_to_k1*R0_det) * Ihk1
 
         h(i,kb1) = h(i,kb1) - h1_to_h2 ; h1 = h(i,kb1)
         h(i,kb2) = (h(i,kb2) - h2_to_k1) + h1_to_h2 ; h2 = h(i,kb2)
@@ -2656,19 +2659,19 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, dt, dt_diag, d_ea, j, G, CS, &
               Ih2f = 1.0 / (h2 - h2_to_k1)
             endif
 
-            Ihk1 = 1.0 / (h(i,k1) + h2_to_k1)
-            Rcv(i,k1) = (h(i,k1)*Rcv(i,k1) + h2_to_k1*G%Rlay(k1)) * Ihk1
+            Ihk1 = 1.0 / (h(i,k1) + h_neglect + h2_to_k1)
+            Rcv(i,k1) = ((h(i,k1)+h_neglect)*Rcv(i,k1) + h2_to_k1*G%Rlay(k1)) * Ihk1
             Rcv(i,kb2) = Rcv(i,kb2) - h2_to_k1*dRcv*Ih2f
 
             T(i,kb2) = (h2*T(i,kb2) - h2_to_k1*T_det)*Ih2f
-            T(i,k1) = (h(i,k1)*T(i,k1) + h2_to_k1*T_det) * Ihk1
+            T(i,k1) = ((h(i,k1)+h_neglect)*T(i,k1) + h2_to_k1*T_det) * Ihk1
 
             S(i,kb2) = (h2*S(i,kb2) - h2_to_k1*S_det) * Ih2f
-            S(i,k1) = (h(i,k1)*S(i,k1) + h2_to_k1*S_det) * Ihk1
+            S(i,k1) = ((h(i,k1)+h_neglect)*S(i,k1) + h2_to_k1*S_det) * Ihk1
 
             ! Changes in R0 are based on changes in T and S.
             R0(i,kb2) = (h2*R0(i,kb2) - h2_to_k1*R0_det) * Ih2f
-            R0(i,k1) = (h(i,k1)*R0(i,k1) + h2_to_k1*R0_det) * Ihk1
+            R0(i,k1) = ((h(i,k1)+h_neglect)*R0(i,k1) + h2_to_k1*R0_det) * Ihk1
           else
             ! h2==h2_to_k1 can happen if dR2b = 0 exactly, but this is very
             ! unlikely.  In this case the entirety of layer kb2 is detrained.
