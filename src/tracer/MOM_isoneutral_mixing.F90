@@ -139,6 +139,7 @@ subroutine projected_positions(nk, rhoir, Pir, rhoil, Pil, drdpil, Po)
     ! Search for a left column layer whose interface densities
     ! span rhoir(kr) when referenced to Pir(kr).
     search_for_kl: do while(.true.)
+      !kl = min(nk+1, kl)
 
       ! Density of interface kl at reference pressure, pr(kr)
       ! The use of compressibility avoids the call
@@ -149,28 +150,33 @@ subroutine projected_positions(nk, rhoir, Pir, rhoil, Pil, drdpil, Po)
       ! The use of compressibility avoids the call
       !  call calculate_density( Til(kl), Sil(kl), Pir(kr), sigma_kl )
       sigma_kl_p1 = rhoil(kl+1) + drdpil(kl+1) * ( P_target - Pil(kl+1) )
+                                               if (debug) write(*,'(2(x,a,i2),3(x,a,f10.3))') 'kr=',kr,'kl=',kl,'sigma_kl=',sigma_kl,'sigma_kl_p1=',sigma_kl_p1,'sigma_target=',sigma_target
+                                               if (debug) write(*,'(12x,3(x,a,f10.3))') 'Pil(kl)=',Pil(kl),'Pil(kl+1)=',Pil(kl+1),'P_target=',P_target
 
       if (sigma_target <= sigma_kl) then
         ! The density we are searching for is lighter that the left column pair
         ! which should only happen at the surface when beginning the search
-       !P = Pil(kl) ! Would match the surface
-        P = P_target ! Effectively creates a new layer above surface
+        P = Pil(kl) ! Would match the surface
+                                               if (debug) write(*,'(4x,a)') 'lighter or match'
         exit search_for_kl
       else
         if (sigma_kl_p1 > sigma_kl) then
           ! The left column is stably stratified
           if (sigma_target > sigma_kl_p1) then
             ! The lower of the pair is lighter than the density we need so move kl down
-            if (kl <= nk) then
+            if (kl < nk) then
+                                               if (debug) write(*,'(4x,a)') 'stable kl,kl+1 heavier than kl+1, increment'
               kl = kl + 1
               cycle search_for_kl
             else ! kl = nk+1
+                                               if (debug) write(*,'(4x,a)') 'stable kl,kl+1 heavier than kl+1, at bottom'
               ! We have reached the bottom and so sigma_target is outside of the range of left densities
              !P = Pil(nk+1) ! Would match the bottom
-              P = P_target ! Effectively creates a new layer below bottom
+              P = Pil(kl+1) ! Effectively creates a new layer below bottom
               exit search_for_kl
             endif
           elseif (sigma_target >= sigma_kl) then
+                                               if (debug) write(*,'(4x,a)') 'stable kl,kl+1 heavier than kl, interpolate'
             ! The density we are searching for is bounded by sigma_kl < rho < sigma_kl_p1.
             ! Interpolate for the position of the right density between the left pair.
             ! a and b are weights such that a>=0, b>=0 and a + b = 1.
@@ -188,16 +194,19 @@ subroutine projected_positions(nk, rhoir, Pir, rhoil, Pil, drdpil, Po)
             stop 'sigma_target < sigma_kl is impossible!'
           endif
         elseif (sigma_kl_p1 < sigma_kl) then
+                                               if (debug) write(*,'(4x,a)') 'unstable kl,kl+1'
           ! The left column is unstably stratified
           P = Po_last ! Not sure what to do here???
           exit search_for_kl
         else ! (sigma_kl_p1 == sigma_kl)
           ! The left column is neutrally stratified
           if (sigma_target > sigma_kl_p1) then
+                                               if (debug) write(*,'(4x,a)') 'neutral kl,kl+1, increment'
             ! The lower of the pair is lighter than the density we need so move kl down
             kl = kl + 1
             cycle search_for_kl
           elseif (sigma_target == sigma_kl) then
+                                               if (debug) write(*,'(4x,a)') 'neutral kl,kl+1, at bottom'
             P = 0.5*( Pil(kl) + Pil(kl+1) ) ! No better choice but to split the layer?
             exit search_for_kl
           else ! (sigma_target < sigma_kl)
@@ -205,7 +214,7 @@ subroutine projected_positions(nk, rhoir, Pir, rhoil, Pil, drdpil, Po)
             stop 'sigma_target < sigma_kl and sigma_kl_p1 == sigma_kl is impossible!'
           endif
         endif
-      endif
+      endif ! if (sigma_target > sigma_kl)
 
     enddo search_for_kl
     P = max(Po_last, P) ! Avoid possible tangles
@@ -232,7 +241,7 @@ subroutine project_thicknesses(nk, Pi, Pp, dP, Ks)
   real :: Ptop, Pbot ! Top and bottom positions of union layer
   real :: Ppkp, Piki, Ppkpp1, Pikip1
   logical :: move_forward_P, move_forward_L
-  logical, parameter :: debug = .true.
+  logical, parameter :: debug = .false.
 
   ki = 1 ; kp = 1
   Ptop = max(Pp(1), Pi(1)) ! Top of intersection of columns
@@ -349,9 +358,12 @@ end subroutine isoneutral_mixing_end
 !> Returns true if unit tests of isoneutral_mixing functions fail. Otherwise returns false.
 logical function isoneutralMixingUnitTests()
   integer, parameter :: nk = 4
-  real, dimension(nk+1) :: zl, zr1, zr2 ! Test interface positions
+  real, dimension(nk+1) :: zl, zr1, zr2, zr3 ! Test interface positions
   real, dimension(2*nk+1) :: dP, dP1, dP2 ! Test thicknesses
   integer, dimension(2*nk+1) :: Ko, Kl1, Kr1, Kl2, Kr2 ! Test indexes
+  real, dimension(nk+1) :: rhol, rhor1, rhor3 ! Test interface densities
+  real, dimension(nk+1) :: drdpl ! Test interface compressibility
+  real, dimension(nk+1) :: Po ! Test positions
   data zl / 0., 10., 20., 30., 40. /
   data zr1 / -2., -1., 4., 42., 43. /
   data zr2 / 0., 0., 20., 20., 25. /
@@ -361,18 +373,23 @@ logical function isoneutralMixingUnitTests()
   data dP2 / 0., 0., 10., 10., 0., 0., 5., 0., 0. /
   data Kl2 / 1, 1, 1, 2, 3, 3, 3, 3, 4 /
   data Kr2 / 1, 1, 2, 2, 3, 3, 4, 4, 4 /
+  data rhol / 1., 1.5, 2.5, 3.5, 4. /
+  data drdpl / 0.1, 0.1, 0.1, 0.1, 0.1 /
+  data rhor1 / 0.5, 1.25, 3.0, 3.5, 5.0 /
+  data zr3 / 0., 0., 40., 40., 40. /
+  data rhor3 / 1., 1.5, 2.5, 3.5, 4. /
   integer :: k
 
   isoneutralMixingUnitTests = .false. ! Normally return false
-  write(*,*) '===== MOM_remapping: remappingUnitTests =================='
-  write(*,*) 'Project left->right'
+  write(*,*) '===== MOM_remapping: isoneutralMixingUnitTests =================='
+  write(*,*) 'Project left->right 1'
   call project_thicknesses(nk, zl, zr1, dP, Ko)
   do k = 1,2*nk+1
     if (dP(k) /= dP1(k)) isoneutralMixingUnitTests = .true.
     if (Ko(k) /= Kl1(k)) isoneutralMixingUnitTests = .true.
     write(*,*) k, dP(k), Ko(k), .not.isoneutralMixingUnitTests
   enddo
-  write(*,*) 'Project right->left'
+  write(*,*) 'Project right->left 1'
   call project_thicknesses(nk, zr1, zl, dP, Ko)
   do k = 1,2*nk+1
     if (dP(k) /= dP1(k)) isoneutralMixingUnitTests = .true.
@@ -393,9 +410,40 @@ logical function isoneutralMixingUnitTests()
     if (Ko(k) /= Kr2(k)) isoneutralMixingUnitTests = .true.
     write(*,*) k, dP(k), Ko(k), .not.isoneutralMixingUnitTests
   enddo
+  write(*,*) 'Find positions right->left, 0.0 compressibility'
+  call projected_positions(nk, rhor1, zr1, rhol, zl, 0.*drdpl, Po)
+  do k = 1,nk+1
+    write(*,*) k, Po(k), .not.isoneutralMixingUnitTests
+  enddo
+  write(*,*) 'Find positions left->right, 0.0 compressibility 3'
+  call projected_positions(nk, rhol, zl, rhor3, zr3, 0.*drdpl, Po)
+  do k = 1,nk+1
+    write(*,*) k, Po(k), .not.isoneutralMixingUnitTests
+  enddo
+  write(*,*) 'Find positions right->left, 0.0 compressibility 3'
+  call projected_positions(nk, rhor3, zr3, rhol, zl, 0.*drdpl, Po)
+  do k = 1,nk+1
+    write(*,*) k, Po(k), .not.isoneutralMixingUnitTests
+  enddo
+  write(*,*) 'Find positions right->left, 0.25 compressibility'
+  call projected_positions(nk, rhor1, zr1, rhol, zl, 0.25*drdpl, Po)
+  do k = 1,nk+1
+    write(*,*) k, Po(k), .not.isoneutralMixingUnitTests
+  enddo
+  write(*,*) 'Find positions left->right, 0.25 compressibility 3'
+  call projected_positions(nk, rhol, zl, rhor3, zr3, 0.25*drdpl, Po)
+  do k = 1,nk+1
+    write(*,*) k, Po(k), .not.isoneutralMixingUnitTests
+  enddo
+  write(*,*) 'Find positions right->left, 0.25 compressibility 3'
+  call projected_positions(nk, rhor3, zr3, rhol, zl, 0.25*drdpl, Po)
+  do k = 1,nk+1
+    write(*,*) k, Po(k), .not.isoneutralMixingUnitTests
+  enddo
 
   write(*,*) '=========================================================='
 
 end function isoneutralMixingUnitTests
+
 
 end module MOM_isoneutral_mixing
