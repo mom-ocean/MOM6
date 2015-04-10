@@ -34,15 +34,17 @@ implicit none ; private
 
 public :: global_i_mean, global_j_mean
 public :: global_area_mean, global_layer_mean
+public :: global_area_integral 
 public :: global_volume_mean
 public :: adjust_area_mean_to_zero
 
 contains
 
 function global_area_mean(var,G)
-  type(ocean_grid_type),                       intent(in)  :: G
-  real, dimension(SZI_(G), SZJ_(G)),           intent(in)  :: var
-  real, dimension(SZI_(G), SZJ_(G))                        :: tmpForSumming
+  type(ocean_grid_type),              intent(in)  :: G
+  real, dimension(SZI_(G), SZJ_(G)),  intent(in)  :: var
+  real, dimension(SZI_(G), SZJ_(G))               :: tmpForSumming
+
   integer :: i, j, is, ie, js, je
   real :: global_area_mean
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
@@ -54,6 +56,23 @@ function global_area_mean(var,G)
   global_area_mean = reproducing_sum( tmpForSumming ) * G%IareaT_global
 
 end function global_area_mean
+
+function global_area_integral(var,G)
+  type(ocean_grid_type),              intent(in)  :: G
+  real, dimension(SZI_(G), SZJ_(G)),  intent(in)  :: var
+  real, dimension(SZI_(G), SZJ_(G))               :: tmpForSumming
+
+  integer :: i, j, is, ie, js, je
+  real :: global_area_integral
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+
+  tmpForSumming(:,:) = 0.
+  do j=js,je ; do i=is, ie
+    tmpForSumming(i,j) = ( var(i,j) * (G%areaT(i,j) * G%mask2dT(i,j)) )
+  enddo ; enddo
+  global_area_integral = reproducing_sum( tmpForSumming )
+
+end function global_area_integral
 
 function global_layer_mean(var,h,G)
   type(ocean_grid_type),                       intent(in)  :: G

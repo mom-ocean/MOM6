@@ -681,14 +681,13 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
   !  (in)      init_time     - time at which a field is first available?
   !  (in,opt)  long_name     - long name of a field.
   !  (in,opt)  units         - units of a field.
+  !  (in,opt)  missing_value - A value that indicates missing values.
   !  (in,opt)  standard_name - standardized name associated with a field
 
   !  (in,opt)  cmor_field_name    - CMOR name of a field
   !  (in,opt)  cmor_long_name     - CMOR long name of a field
   !  (in,opt)  cmor_units         - CMOR units of a field
   !  (in,opt)  cmor_standard_name - CMOR standardized name associated with a field 
-
-  !  (in,opt)  missing_value - A value that indicates missing values.
 
   ! Following params have yet to be used in MOM. 
   !  (in,opt)  range         - valid range of a variable
@@ -902,9 +901,9 @@ function register_static_field(module_name, field_name, axes, &
   !  (in,opt)  long_name     - long name of a field
   !  (in,opt)  units         - units of a field
   !  (in,opt)  missing_value - A value that indicates missing values.
+  !  (in,opt)  standard_name - standardized name associated with a field
 
   ! Following params have yet to be used in MOM. 
-  !  (in,opt)  standard_name - standardized name associated with a field
   !  (in,opt)  range          - valid range of a variable
   !  (in,opt)  mask_variant   - If true a logical mask must be provided with post_data calls
   !  (in,opt)  do_not_log     - If true, do not log something
@@ -989,9 +988,9 @@ function register_scalar_field(module_name, field_name, init_time, diag, &
   !  (in,opt)  long_name     - long name of a field
   !  (in,opt)  units         - units of a field
   !  (in,opt)  missing_value - indicates missing values
+  !  (in,opt)  standard_name - standardized name associated with a field
 
   ! Following params have yet to be used in MOM. 
-  !  (in,opt)  standard_name - standardized name associated with a field
   !  (in,opt)  range         - valid range of a variable
   !  (in,opt)  mask_variant  - If true a logical mask must be provided with post_data calls
   !  (in,opt)  verbose       - If true, FMS is verbosed
