@@ -1457,13 +1457,20 @@ subroutine vert_fill_TS(h, T_in, S_in, kappa, dt, T_f, S_f, G, halo_here)
                                    ! the same units as h, in m2 or kg2 m-4.
   real :: h0                       ! A negligible thickness, in m or kg m-2, to
                                    ! allow for zero thicknesses.
+  real :: h_neglect                ! A thickness that is so small it is usually
+                                   ! lost in roundoff and can be neglected
+                                   ! (m for Bouss and kg/m^2 for non-Bouss).
+                                   ! 0 < h_neglect << h0.
+  real :: h_tr                     ! h_tr is h at tracer points with a tiny thickness
+                                   ! added to ensure positive definiteness
+                                   ! (m for Bouss, kg/m^2 for non-Bouss)
   integer :: i, j, k, is, ie, js, je, nz, halo
 
   halo=0 ; if (present(halo_here)) halo = max(halo_here,0)
 
   is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo
   nz = G%ke
-
+  h_neglect = G%H_subroundoff
   kap_dt_x2 = (2.0*kappa*dt)*G%m_to_H**2
   h0 = 1.0e-16*sqrt(kappa*dt)*G%m_to_H
 
@@ -1473,29 +1480,32 @@ subroutine vert_fill_TS(h, T_in, S_in, kappa, dt, T_f, S_f, G, halo_here)
       T_f(i,j,k) = T_in(i,j,k) ; S_f(i,j,k) = S_in(i,j,k)
     enddo ; enddo ; enddo
   else
-!$OMP parallel do default(none) private(ent,b1,d1,c1)   &
-!$OMP                            shared(is,ie,js,je,nz,kap_dt_x2,h,h0,T_f,S_f,T_in,S_in)
+!$OMP parallel do default(none) private(ent,b1,d1,c1,h_tr)   &
+!$OMP             shared(is,ie,js,je,nz,kap_dt_x2,h,h0,h_neglect,T_f,S_f,T_in,S_in)
     do j=js,je
       do i=is,ie
         ent(i,2) = kap_dt_x2 / ((h(i,j,1)+h(i,j,2)) + h0)
-        b1(i) = 1.0 / (h(i,j,1)+ent(i,2))
+        h_tr = h(i,j,1) + h_neglect
+        b1(i) = 1.0 / (h_tr + ent(i,2))
         d1(i) = b1(i) * h(i,j,1)
-        T_f(i,j,1) = (b1(i)*h(i,j,1))*T_in(i,j,1)
-        S_f(i,j,1) = (b1(i)*h(i,j,1))*S_in(i,j,1)
+        T_f(i,j,1) = (b1(i)*h_tr)*T_in(i,j,1)
+        S_f(i,j,1) = (b1(i)*h_tr)*S_in(i,j,1)
       enddo
       do k=2,nz-1 ; do i=is,ie
         ent(i,K+1) = kap_dt_x2 / ((h(i,j,k)+h(i,j,k+1)) + h0)
+        h_tr = h(i,j,k) + h_neglect
         c1(i,k) = ent(i,K) * b1(i)
-        b1(i) = 1.0 / ((h(i,j,k) + d1(i)*ent(i,K)) + ent(i,K+1))
-        d1(i) = b1(i) * (h(i,j,k) + d1(i)*ent(i,K))
-        T_f(i,j,k) = b1(i) * (h(i,j,k)*T_in(i,j,k) + ent(i,K)*T_f(i,j,k-1))
-        S_f(i,j,k) = b1(i) * (h(i,j,k)*S_in(i,j,k) + ent(i,K)*S_f(i,j,k-1))
+        b1(i) = 1.0 / ((h_tr + d1(i)*ent(i,K)) + ent(i,K+1))
+        d1(i) = b1(i) * (h_tr + d1(i)*ent(i,K))
+        T_f(i,j,k) = b1(i) * (h_tr*T_in(i,j,k) + ent(i,K)*T_f(i,j,k-1))
+        S_f(i,j,k) = b1(i) * (h_tr*S_in(i,j,k) + ent(i,K)*S_f(i,j,k-1))
       enddo ; enddo
       do i=is,ie
         c1(i,nz) = ent(i,nz) * b1(i)
-        b1(i) = 1.0 / (h(i,j,nz) + d1(i)*ent(i,nz))
-        T_f(i,j,nz) = b1(i) * (h(i,j,nz)*T_in(i,j,nz) + ent(i,nz)*T_f(i,j,nz-1))
-        S_f(i,j,nz) = b1(i) * (h(i,j,nz)*S_in(i,j,nz) + ent(i,nz)*S_f(i,j,nz-1))
+        h_tr = h(i,j,nz) + h_neglect
+        b1(i) = 1.0 / (h_tr + d1(i)*ent(i,nz))
+        T_f(i,j,nz) = b1(i) * (h_tr*T_in(i,j,nz) + ent(i,nz)*T_f(i,j,nz-1))
+        S_f(i,j,nz) = b1(i) * (h_tr*S_in(i,j,nz) + ent(i,nz)*S_f(i,j,nz-1))
       enddo
       do k=nz-1,1,-1 ; do i=is,ie
         T_f(i,j,k) = T_f(i,j,k) + c1(i,k+1)*T_f(i,j,k+1)

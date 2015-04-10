@@ -53,6 +53,7 @@ use MOM_domains,           only : To_North, To_East
 use MOM_EOS,               only : calculate_density, int_density_dz
 use MOM_error_handler,     only : MOM_error, FATAL, WARNING
 use MOM_file_parser,       only : get_param, log_version, param_file_type
+use MOM_forcing_type,      only : forcing
 use MOM_grid,              only : ocean_grid_type
 use MOM_interface_heights, only : find_eta
 use MOM_spatial_means,     only : global_area_mean, global_layer_mean, global_volume_mean
@@ -141,6 +142,7 @@ type, public :: diagnostics_CS ; private
   integer :: id_thetaoga       = -1, id_soga           = -1
   integer :: id_sosga          = -1, id_tosga          = -1
   integer :: id_temp_layer_ave = -1, id_salt_layer_ave = -1
+  integer :: id_pbo         = -1
 
   type(wave_speed_CS), pointer :: wave_speed_CSp => NULL()  
 
@@ -158,8 +160,8 @@ end type diagnostics_CS
 
 contains
 
-subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, dt, G, &
-                                       CS, eta_bt)
+subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
+                                       dt, G, CS, eta_bt)
   real, dimension(NIMEMB_,NJMEM_,NKMEM_),   intent(in)    :: u
   real, dimension(NIMEM_,NJMEMB_,NKMEM_),   intent(in)    :: v
   real, dimension(NIMEM_,NJMEM_,NKMEM_),    intent(in)    :: h
@@ -168,6 +170,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, dt, G, &
   type(thermo_var_ptrs),                    intent(in)    :: tv
   type(accel_diag_ptrs),                    intent(in)    :: ADp
   type(cont_diag_ptrs),                     intent(in)    :: CDp
+  type(forcing),                            intent(in)    :: fluxes
   real,                                     intent(in)    :: dt
   type(ocean_grid_type),                    intent(inout) :: G
   type(diagnostics_CS),                     intent(inout) :: CS
@@ -307,7 +310,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, dt, G, &
     call post_data_1d_k(CS%id_salt_layer_ave, salt_layer_ave, CS%diag)
   endif
 
-  call calculate_vertical_integrals(h, tv, G, CS)
+  call calculate_vertical_integrals(h, tv, fluxes, G, CS)
 
   if ((CS%id_Rml > 0) .or. (CS%id_Rcv > 0) .or. ASSOCIATED(CS%h_Rlay) .or. &
       ASSOCIATED(CS%uh_Rlay) .or. ASSOCIATED(CS%vh_Rlay) .or. &
@@ -546,41 +549,46 @@ subroutine find_weights(Rlist, R_in, k, nz, wt, wt_p)
 
 end subroutine find_weights
 
-subroutine calculate_vertical_integrals(h, tv, G, CS)
+subroutine calculate_vertical_integrals(h, tv, fluxes, G, CS)
   real, dimension(NIMEM_,NJMEM_,NKMEM_),    intent(in)    :: h
   type(thermo_var_ptrs),                    intent(in)    :: tv
+  type(forcing),                            intent(in)    :: fluxes
   type(ocean_grid_type),                    intent(inout) :: G
   type(diagnostics_CS),                     intent(inout) :: CS
 
-! subroutine calculates vertical integrals of several tracers, along
+! Subroutine calculates vertical integrals of several tracers, along
 ! with the mass-weight of these tracers, the total column mass, and the
 ! carefully calculated column height.
 
 ! Arguments: 
 !  (in)      h  - layer thickness: metre (Bouss) or kg/ m2 (non-Bouss)
 !  (in)      tv - structure pointing to thermodynamic variables
+!  (in)      fluxes - a structure containing the surface fluxes.
 !  (in)      G  - ocean grid structure
 !  (in)      CS - control structure returned by a previous call to diagnostics_init
 
   real, dimension(SZI_(G), SZJ_(G)) :: &
-    z_top, &  ! height of the top of a layer or the ocean, in m.
-    z_bot, &  ! height of the bottom of a layer (for id_mass) or the
+    z_top, &  ! Height of the top of a layer or the ocean, in m.
+    z_bot, &  ! Height of the bottom of a layer (for id_mass) or the
               ! (positive) depth of the ocean (for id_col_ht), in m.
     mass, &   ! integrated mass of the water column, in kg m-2.  For
               ! non-Boussinesq models this is rho*dz. For Boussiensq
               ! models, this is either the integral of in-situ density
               ! (rho*dz for col_mass) or reference dens (Rho_0*dz for mass_wt).
+    btm_pres,&! The pressure at the ocean bottom, or CMIP variable 'pbo'.
+              ! This is the column mass multiplied by gravity plus the pressure
+              ! at the ocean surface.
     tr_int    ! vertical integral of a tracer times density,
               ! (Rho_0 in a Boussinesq model) in TR kg m-2.
 
-  ! these variables are on block indices
+  ! These variables are on block indices
   real, dimension(SZI_BK_(G),SZJ_BK_(G)) :: & 
-    z_top_bk, &  ! height of the top of a layer or the ocean, in m.
-    z_bot_bk, &  ! height of the bottom of a layer (for id_mass) or the
+    z_top_bk, &  ! Height of the top of a layer or the ocean, in m.
+    z_bot_bk, &  ! Height of the bottom of a layer (for id_mass) or the
                  ! (positive) depth of the ocean (for id_col_ht), in m.
-    dpress_bk    ! change in hydrostatic pressure across a layer, in Pa.
+    dpress_bk    ! Change in hydrostatic pressure across a layer, in Pa.
 
-  real    :: IG_Earth  ! inverse of gravitational acceleration, in s2 m-1.
+  real    :: IG_Earth  ! Inverse of gravitational acceleration, in s2 m-1.
 
   integer :: i, j, k, is, ie, js, je, nz
   integer :: is_bk, ie_bk, js_bk, je_bk, ib, jb, isd, ied, jsd, jed, n
@@ -619,7 +627,7 @@ subroutine calculate_vertical_integrals(h, tv, G, CS)
     call post_data(CS%id_col_ht, z_bot, CS%diag)
   endif
 
-  if (CS%id_col_mass > 0) then
+  if (CS%id_col_mass > 0 .or. CS%id_pbo > 0) then
     do j=js,je ; do i=is,ie ; mass(i,j) = 0.0 ; enddo ; enddo
     if (G%Boussinesq) then
       if (associated(tv%eqn_of_state)) then
@@ -660,7 +668,23 @@ subroutine calculate_vertical_integrals(h, tv, G, CS)
         mass(i,j) = mass(i,j) + G%H_to_kg_m2*h(i,j,k)
       enddo ; enddo ; enddo
     endif
-    call post_data(CS%id_col_mass, mass, CS%diag)
+    if (CS%id_col_mass > 0) then
+      call post_data(CS%id_col_mass, mass, CS%diag)
+    endif
+    if (CS%id_pbo > 0) then
+      do j=js,je ; do i=is,ie ; btm_pres(i,j) = 0.0 ; enddo ; enddo
+      ! 'pbo' is defined as the sea water pressure at the sea floor
+      !     pbo = (mass * g) + pso
+      ! where pso is the sea water pressure at sea water surface
+      ! note that pso is equivalent to fluxes%p_surf
+      do j=js,je ; do i=is,ie
+        btm_pres(i,j) = mass(i,j) * G%g_Earth
+        if (ASSOCIATED(fluxes%p_surf)) then
+          btm_pres(i,j) = btm_pres(i,j) + fluxes%p_surf(i,j)
+        endif
+      enddo ; enddo
+      call post_data(CS%id_pbo, btm_pres, CS%diag)
+    endif
   endif
 
 end subroutine calculate_vertical_integrals
@@ -1153,6 +1177,9 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, param_file, diag, CS)
 
   CS%id_col_ht = register_diag_field('ocean_model', 'col_height', diag%axesT1, Time, &
       'The height of the water column', 'm')
+  CS%id_pbo = register_diag_field('ocean_model', 'pbo', diag%axesT1, Time, &
+      long_name='Sea Water Pressure at Sea Floor', standard_name='sea_water_pressure_at_sea_floor', &
+      units='Pa')
 
   call set_dependent_diagnostics(MIS, ADp, CDp, G, CS)
 

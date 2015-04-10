@@ -557,12 +557,17 @@ subroutine adjustEtaToFitBathymetry(G, eta, h)
 
   dilations = 0
   do j=js,je ; do i=is,ie
-    !   The whole column is dilated to accomodate deeper topography than
+    !   The whole column is dilated to accommodate deeper topography than
     ! the bathymetry would indicate.
+    ! This should be...  if ((G%mask2dt(i,j)*(eta(i,j,1)-eta(i,j,nz+1)) > 0.0) .and. &
     if (-eta(i,j,nz+1) < G%bathyT(i,j) - hTolerance) then
       dilations = dilations + 1
-      dilate = (eta(i,j,1)+G%bathyT(i,j)) / (eta(i,j,1)-eta(i,j,nz+1))
-      do k=1,nz ; h(i,j,k) = h(i,j,k) * dilate ; enddo
+      if (eta(i,j,1) <= eta(i,j,nz+1)) then
+        do k=1,nz ; h(i,j,k) = (eta(i,j,1)+G%bathyT(i,j)) / real(nz) ; enddo
+      else
+        dilate = (eta(i,j,1)+G%bathyT(i,j)) / (eta(i,j,1)-eta(i,j,nz+1))
+        do k=1,nz ; h(i,j,k) = h(i,j,k) * dilate ; enddo
+      endif
       do k=nz, 2, -1; eta(i,j,K) = eta(i,j,K+1) + h(i,j,k); enddo
     endif
   enddo ; enddo
