@@ -188,6 +188,10 @@ function register_advection_test_tracer(G, param_file, CS, diag, tr_Reg, &
                  "The exact location and properties of those sponges are \n"//&
                  "specified from MOM_initialization.F90.", default=.false.)
 
+  call get_param(param_file, mod, "MASK_TRACERS_IN_MASSLESS_LAYERS", CS%mask_tracers, &
+                 "If true, tracers will be masked out in massless layers. \n", &
+                 default=.false.)
+
   allocate(CS%tr(isd:ied,jsd:jed,nz,NTR)) ; CS%tr(:,:,:,:) = 0.0
   if (CS%mask_tracers) then
     allocate(CS%tr_aux(isd:ied,jsd:jed,nz,NTR)) ; CS%tr_aux(:,:,:,:) = 0.0
