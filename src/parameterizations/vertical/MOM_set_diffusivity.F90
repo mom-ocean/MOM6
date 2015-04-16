@@ -69,7 +69,7 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public set_diffusivity, set_BBL_diffusivity, set_diffusivity_init, set_diffusivity_end
+public set_diffusivity, set_BBL_TKE, set_diffusivity_init, set_diffusivity_end
 
 type, public :: set_diffusivity_CS ; private
   logical :: bulkmixedlayer  ! If true, a refined bulk mixed layer is used with
@@ -1896,7 +1896,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, CS, &
 
 end subroutine add_int_tide_diffusivity
 
-subroutine set_BBL_diffusivity(u, v, h, fluxes, visc, G, CS)
+subroutine set_BBL_TKE(u, v, h, fluxes, visc, G, CS)
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)    :: u
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)    :: v
   real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h
@@ -1927,7 +1927,7 @@ subroutine set_BBL_diffusivity(u, v, h, fluxes, visc, G, CS)
   integer :: i, j, k, is, ie, js, je, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
-  if (.not.associated(CS)) call MOM_error(FATAL,"set_BBL_diffusivity: "//&
+  if (.not.associated(CS)) call MOM_error(FATAL,"set_BBL_TKE: "//&
          "Module must be initialized before it is used.")
 
   if (.not.CS%bottomdraglaw .or. (CS%BBL_effic<=0.0)) then
@@ -2021,7 +2021,7 @@ subroutine set_BBL_diffusivity(u, v, h, fluxes, visc, G, CS)
   enddo
 !$OMP end parallel
 
-end subroutine set_BBL_diffusivity
+end subroutine set_BBL_TKE
 
 subroutine set_density_ratios(h, tv, kb, G, CS, j, ds_dsp1, rho_0)
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h

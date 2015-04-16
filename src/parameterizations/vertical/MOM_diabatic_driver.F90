@@ -98,7 +98,7 @@ use MOM_kappa_shear,         only : kappa_shear_is_used
 use MOM_KPP,                 only : KPP_CS, KPP_init, KPP_calculate, KPP_end
 use MOM_KPP,                 only : KPP_NonLocalTransport_temp, KPP_NonLocalTransport_saln
 use MOM_opacity,             only : opacity_init, set_opacity, opacity_end, opacity_CS
-use MOM_set_diffusivity,     only : set_diffusivity, set_BBL_diffusivity
+use MOM_set_diffusivity,     only : set_diffusivity, set_BBL_TKE
 use MOM_set_diffusivity,     only : set_diffusivity_init, set_diffusivity_end
 use MOM_set_diffusivity,     only : set_diffusivity_CS
 use MOM_sponge,              only : apply_sponge, sponge_CS
@@ -358,7 +358,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   if (CS%debugConservation) call MOM_state_stats('Start of diabatic', u, v, h, tv%T, tv%S, G)
 
   call cpu_clock_begin(id_clock_set_diffusivity)
-  call set_BBL_diffusivity(u, v, h, fluxes, visc, G, CS%set_diff_CSp)
+  call set_BBL_TKE(u, v, h, fluxes, visc, G, CS%set_diff_CSp)
   call cpu_clock_end(id_clock_set_diffusivity)
 
   ! Frazil formation keeps the temperature above the freezing point.
