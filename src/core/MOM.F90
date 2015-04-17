@@ -357,7 +357,7 @@ use MOM_io,                   only : MOM_io_init, vardesc
 use MOM_obsolete_params,      only : find_obsolete_params
 use MOM_restart,              only : register_restart_field, query_initialized, save_restart
 use MOM_restart,              only : restart_init, MOM_restart_CS
-use MOM_spatial_means,        only : global_area_mean
+use MOM_spatial_means,        only : global_area_mean, global_area_integral 
 use MOM_state_initialization, only : MOM_initialize_state, MOM_initialization_struct
 use MOM_time_manager,         only : time_type, set_time, time_type_to_real, operator(+)
 use MOM_time_manager,         only : operator(-), operator(>), operator(*), operator(/)
@@ -550,6 +550,8 @@ type, public :: MOM_control_struct
   ! 2-d surface and bottom fields 
   integer :: id_zos      = -1
   integer :: id_zossq    = -1
+  integer :: id_volo     = -1
+  integer :: id_thkcello = -1 
   integer :: id_ssh      = -1
   integer :: id_sst      = -1 
   integer :: id_sst_sq   = -1
@@ -701,6 +703,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     ssh             ! sea surface height based on eta_av (meter)
 
   real, allocatable, dimension(:,:) :: &
+    tmp,              &  ! temporary 2d field 
     zos,              &  ! dynamic sea lev (zero area mean) from inverse-barometer adjusted ssh (meter)
     zossq,            &  ! square of zos (m^2)
     sfc_speed,        &  ! sea surface speed at h-points (m/s)
@@ -720,7 +723,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
   real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)+1) :: eta_predia
 
   real :: tot_wt_ssh, Itot_wt_ssh, I_time_int
-  real :: zos_area_mean
+  real :: zos_area_mean, volo
   type(time_type) :: Time_local
   logical :: showCallTree
   logical :: do_pass_kd_kv_turb ! This is used for a group halo pass.
@@ -1367,6 +1370,9 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     if (CS%id_v > 0) call post_data(CS%id_v, v, CS%diag)
     if (CS%id_h > 0) call post_data(CS%id_h, h, CS%diag)
 
+    ! smg: this needs to be generalized for non-Bouss
+    if (CS%id_thkcello > 0) call post_data(CS%id_thkcello, h, CS%diag)
+
     ! compute ssh, which is either eta_av for Bouss, or 
     ! diagnosed ssh for non-Bouss; call "find_eta" for this 
     ! purpose.  
@@ -1428,6 +1434,17 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
        deallocate(zossq)
      endif 
      deallocate(zos)
+  endif 
+
+  ! post total volume of the liquid ocean 
+  if(CS%id_volo > 0) then
+    allocate(tmp(G%isd:G%ied,G%jsd:G%jed))
+    do j=js,je ; do i=is,ie
+      tmp(i,j) = G%mask2dT(i,j)*(CS%ave_ssh(i,j) + G%bathyT(i,j))
+    enddo ; enddo
+    volo = global_area_integral(tmp, G)
+    call post_data(CS%id_volo, volo, CS%diag)
+    deallocate(tmp)
   endif 
 
   ! post frazil 
@@ -1788,7 +1805,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
                  default=20.0)
     call get_param(param_file, "MOM", "BAD_VAL_SSS_MAX", CS%bad_val_sss_max, &
                  "The value of SSS above which a bad value message is \n"//&
-                 "triggered, if CHECK_BAD_SURFACE_VALS is true.", units="PSU", &
+                 "triggered, if CHECK_BAD_SURFACE_VALS is true.", units="PPT", &
                  default=45.0)
     call get_param(param_file, "MOM", "BAD_VAL_SST_MAX", CS%bad_val_sst_max, &
                  "The value of SST above which a bad value message is \n"//&
@@ -1956,7 +1973,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     if (CS%debug) then
       call uchksum(CS%u,"Pre initialize_ALE u", G, haloshift=1)
       call vchksum(CS%v,"Pre initialize_ALE v", G, haloshift=1)
-      call hchksum(CS%h, "Pre initialize_ALE h", G, haloshift=1)
+      call hchksum(CS%h,"Pre initialize_ALE h", G, haloshift=1)
     endif
     if (.not. query_initialized(CS%h,"h",CS%restart_CSp)) then
       ! This is a not a restart so we do the following...
@@ -2062,8 +2079,8 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
                       G, CS%diag_to_Z_CSp, cmor_field_name="thetao", cmor_units="C", &
                       cmor_standard_name="sea_water_potential_temperature",          &
                       cmor_long_name ="Sea Water Potential Temperature")
-    call register_Z_tracer(CS%tv%S, "salt", "Salinity", "PSU", Time,               &
-                      G, CS%diag_to_Z_CSp, cmor_field_name="so", cmor_units="psu", &
+    call register_Z_tracer(CS%tv%S, "salt", "Salinity", "PPT", Time,               &
+                      G, CS%diag_to_Z_CSp, cmor_field_name="so", cmor_units="ppt", &
                       cmor_standard_name="sea_water_salinity",                     &
                       cmor_long_name ="Sea Water Salinity")
   endif
@@ -2194,7 +2211,7 @@ subroutine register_diags(Time, G, CS, ADp)
   thickness_units = get_thickness_units(G)
   flux_units = get_flux_units(G)
   T_flux_units = get_tr_flux_units(G, "Celsius")
-  S_flux_units = get_tr_flux_units(G, "PSU")
+  S_flux_units = get_tr_flux_units(G, "PPT")
 
   !Initialize the diagnostics mask arrays.
   !This has to be done after MOM_initialize_state call.
@@ -2209,6 +2226,11 @@ subroutine register_diags(Time, G, CS, ADp)
   CS%id_h = register_diag_field('ocean_model', 'h', diag%axesTL, Time, &
       'Layer Thickness', thickness_units)
 
+  CS%id_thkcello = register_diag_field('ocean_model', 'thkcello', diag%axesTL, Time, &
+      long_name = 'Cell Thickness', standard_name='cell_thickness', units='m')
+  CS%id_volo = register_scalar_field('ocean_model', 'volo', Time, diag,&
+      long_name='Total volume of liquid ocean', units='m3',            &
+      standard_name='sea_water_volume')
   CS%id_zos = register_diag_field('ocean_model', 'zos', diag%axesT1, Time,&
       standard_name = 'sea_surface_height_above_geoid',                   &
       long_name= 'Sea surface height above geoid', units='meter', missing_value=CS%missing)
@@ -2230,15 +2252,15 @@ subroutine register_diags(Time, G, CS, ADp)
     CS%id_T = register_diag_field('ocean_model', 'temp', diag%axesTL, Time, &
         'Potential Temperature', 'Celsius')
     CS%id_S = register_diag_field('ocean_model', 'salt', diag%axesTL, Time, &
-        long_name='Salinity', units='PSU', cmor_field_name='so',            &
-        cmor_long_name='Sea Water Salinity', cmor_units='psu',              &
+        long_name='Salinity', units='PPT', cmor_field_name='so',            &
+        cmor_long_name='Sea Water Salinity', cmor_units='ppt',              &
         cmor_standard_name='sea_water_salinity')
     CS%id_tob = register_diag_field('ocean_model','tob', diag%axesT1, Time,          &
         long_name='Sea Water Potential Temperature at Sea Floor',                    &
         standard_name='sea_water_potential_temperature_at_sea_floor', units='degC')
     CS%id_sob = register_diag_field('ocean_model','sob',diag%axesT1, Time,           &
         long_name='Sea Water Salinity at Sea Floor',                                 &
-        standard_name='sea_water_salinity_at_sea_floor', units='psu')
+        standard_name='sea_water_salinity_at_sea_floor', units='ppt')
     CS%id_sst = register_diag_field('ocean_model', 'SST', diag%axesT1, Time,     &
         'Sea Surface Temperature', 'Celsius', CS%missing, cmor_field_name='tos', &
         cmor_long_name='Sea Surface Temperature', cmor_units='degC',             &
@@ -2249,8 +2271,8 @@ subroutine register_diags(Time, G, CS, ADp)
         cmor_standard_name='square_of_sea_surface_temperature')    
     if (CS%id_sst_sq > 0) call safe_alloc_ptr(CS%SST_sq,isd,ied,jsd,jed)    
     CS%id_sss = register_diag_field('ocean_model', 'SSS', diag%axesT1, Time, &
-        'Sea Surface Salinity', 'PSU', CS%missing, cmor_field_name='sos', &
-        cmor_long_name='Sea Surface Salinity', cmor_units='psu',          &
+        'Sea Surface Salinity', 'PPT', CS%missing, cmor_field_name='sos', &
+        cmor_long_name='Sea Surface Salinity', cmor_units='ppt',          &
         cmor_standard_name='sea_surface_salinity')
   endif
   if (CS%use_temperature .and. CS%use_frazil) then
@@ -2339,7 +2361,7 @@ subroutine register_diags(Time, G, CS, ADp)
     CS%id_T_predia = register_diag_field('ocean_model', 'temp_predia', diag%axesTL, Time, &
         'Potential Temperature', 'Celsius')
     CS%id_S_predia = register_diag_field('ocean_model', 'salt_predia', diag%axesTL, Time, &
-        'Salinity', 'PSU')
+        'Salinity', 'PPT')
   endif
 
 end subroutine register_diags
@@ -2488,7 +2510,7 @@ subroutine set_restart_fields(G, param_file, CS)
     vd = vardesc("Temp","Potential Temperature",'h','L','s',"degC")
     call register_restart_field(CS%tv%T, vd, .true., CS%restart_CSp)
 
-    vd = vardesc("Salt","Salinity",'h','L','s',"PSU")
+    vd = vardesc("Salt","Salinity",'h','L','s',"PPT")
     call register_restart_field(CS%tv%S, vd, .true., CS%restart_CSp)
   endif
 

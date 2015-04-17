@@ -81,11 +81,11 @@ subroutine find_eta_3d(h, tv, G_Earth, G, eta, eta_bt, halo_size)
 ! calculation.
 
 ! Arguments:
-!  (in)       h      - Layer thickness (meter or kg/m2)
+!  (in)       h      - layer thickness (meter or kg/m2)
 !  (in)      tv      - structure pointing to thermodynamic variables
-!  (in)      G_Earth - Earth gravitational acceleration, in m s-2
+!  (in)      G_Earth - Earth gravitational acceleration (m/s2)
 !  (in)      G       - ocean grid structure
-!  (out)     eta     - free surface height relative to z=0 (meter)
+!  (out)     eta     - layer interface heights (meter or kg/m2) 
 !  (in,opt)  eta_bt  - optional barotropic variable that gives the "correct"
 !                      free surface height (Boussinesq) or total water column
 !                      mass per unit aread (non-Boussinesq).  This is used to
@@ -179,6 +179,7 @@ subroutine find_eta_3d(h, tv, G_Earth, G, eta, eta_bt, halo_size)
 
 end subroutine find_eta_3d
 
+
 subroutine find_eta_2d(h, tv, G_Earth, G, eta, eta_bt, halo_size)
   real, dimension(NIMEM_,NJMEM_,NKMEM_),    intent(in)  :: h
   type(thermo_var_ptrs),                    intent(in)  :: tv
@@ -187,20 +188,22 @@ subroutine find_eta_2d(h, tv, G_Earth, G, eta, eta_bt, halo_size)
   real, dimension(NIMEM_,NJMEM_),           intent(out) :: eta
   real, dimension(NIMEM_,NJMEM_), optional, intent(in)  :: eta_bt
   integer,                        optional, intent(in)  :: halo_size
+
 !   This subroutine determines the free surface height, using the appropriate
 ! form for consistency with the calculation of the pressure gradient forces.
 ! Additionally, the sea surface height may be adjusted for consistency with the
 ! corresponding time-average quantity from the barotropic calculation.
 
-! Arguments: h - Layer thickness, in m.  Intent in.
-!  (in)      tv - a structure pointing to various thermodynamic variables.
-!  (in)      G_Earth - The Earth's gravitational acceleration, in m s-2.
-!  (in)      G - The ocean's grid structure.
-!  (out)     eta - The free surface height relative to mean sea level, in m.
-!  (in,opt)  eta_bt - An optional barotropic variable that gives the "correct"
-!                     free surface height (Boussinesq) or total water column
-!                     mass per unit aread (non-Boussinesq), in m or kg m-2.
-!  (in,opt)  halo_size - The width of halo points on which to calculate eta.
+! Arguments: 
+!  (in)       h      - layer thickness (meter or kg/m2)
+!  (in)      tv      - structure pointing to various thermodynamic variables
+!  (in)      G_Earth - Earth gravitational acceleration (m/s2)
+!  (in)      G       - ocean grid structure
+!  (out)     eta     - free surface height relative to mean sea level (z=0) (m or kg/m2)
+!  (in,opt)  eta_bt  - optional barotropic variable that gives the "correct"
+!                      free surface height (Boussinesq) or total water column
+!                      mass per unit aread (non-Boussinesq), in m or kg m-2.
+!  (in,opt)  halo_size - width of halo points on which to calculate eta
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: &
     p     ! The pressure in Pa.

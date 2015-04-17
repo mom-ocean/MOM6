@@ -142,7 +142,7 @@ type, public :: diagnostics_CS ; private
   integer :: id_thetaoga       = -1, id_soga           = -1
   integer :: id_sosga          = -1, id_tosga          = -1
   integer :: id_temp_layer_ave = -1, id_salt_layer_ave = -1
-  integer :: id_pbo         = -1
+  integer :: id_pbo            = -1
 
   type(wave_speed_CS), pointer :: wave_speed_CSp => NULL()  
 
@@ -259,6 +259,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
     if (CS%id_e_D > 0) call post_data(CS%id_e_D, CS%e_D, CS%diag)
   endif
 
+  ! mass per area of grid cell (for Bouss, use Rho0)
   if (CS%id_masscello > 0) then
     do k=1,nz; do j=js,je ; do i=is,ie 
        CS%masscello(i,j,k) = G%H_to_kg_m2*h(i,j,k)
@@ -266,6 +267,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
     call post_data(CS%id_masscello, CS%masscello, CS%diag)
   endif
 
+  ! mass of liquid ocean (for Bouss, use Rho0)
   if (CS%id_masso > 0) then
     do k=1,nz; do j=js,je ; do i=is,ie 
        CS%masscello(i,j,k) = G%H_to_kg_m2*h(i,j,k)*G%areaT(i,j)
@@ -274,11 +276,13 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
     call post_data(CS%id_masso, masso, CS%diag)
   endif
 
+  ! volume mean potential temperature 
   if (CS%id_thetaoga>0) then
     thetaoga = global_volume_mean(tv%T, h, G)
     call post_data(CS%id_thetaoga, thetaoga, CS%diag)
   endif
 
+  ! area mean SST 
   if (CS%id_tosga > 0) then
     do j=js,je ; do i=is,ie 
        surface_field(i,j) = tv%T(i,j,1)
@@ -287,6 +291,13 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
     call post_data(CS%id_tosga, tosga, CS%diag)
   endif
 
+  ! volume mean salinity 
+  if (CS%id_soga>0) then
+    soga = global_volume_mean(tv%S, h, G)
+    call post_data(CS%id_soga, soga, CS%diag)
+  endif
+
+  ! area mean SSS 
   if (CS%id_sosga > 0) then
     do j=js,je ; do i=is,ie 
        surface_field(i,j) = tv%S(i,j,1)
@@ -295,16 +306,13 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
     call post_data(CS%id_sosga, sosga, CS%diag)
   endif
 
+  ! layer mean potential temperature 
   if (CS%id_temp_layer_ave>0) then
     temp_layer_ave = global_layer_mean(tv%T, h, G)
     call post_data_1d_k(CS%id_temp_layer_ave, temp_layer_ave, CS%diag)
   endif
 
-  if (CS%id_soga>0) then
-    soga = global_volume_mean(tv%S, h, G)
-    call post_data(CS%id_soga, soga, CS%diag)
-  endif
-
+  ! layer mean salinity 
   if (CS%id_salt_layer_ave>0) then
     salt_layer_ave = global_layer_mean(tv%S, h, G)
     call post_data_1d_k(CS%id_salt_layer_ave, salt_layer_ave, CS%diag)

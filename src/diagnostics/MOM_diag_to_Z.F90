@@ -48,10 +48,10 @@ use MOM_diag_mediator, only : diag_ctrl, time_type, diag_axis_init
 use MOM_diag_mediator, only : axesType, defineAxes
 use MOM_diag_mediator, only : ocean_register_diag
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
-use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
-use MOM_grid, only : ocean_grid_type
-use MOM_io, only : slasher, vardesc
-use MOM_variables, only : p3d
+use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
+use MOM_grid,          only : ocean_grid_type
+use MOM_io,            only : slasher, vardesc
+use MOM_variables,     only : p3d
 
 use netcdf
 
@@ -59,37 +59,50 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public calculate_Z_diag_fields, register_Z_tracer, MOM_diag_to_Z_init
-public calculate_Z_transport, MOM_diag_to_Z_end, ocean_register_diag_with_z
-public find_overlap, find_limited_slope, register_Zint_diag, calc_Zint_diags
+public calculate_Z_diag_fields
+public register_Z_tracer
+public MOM_diag_to_Z_init
+public calculate_Z_transport
+public MOM_diag_to_Z_end
+public ocean_register_diag_with_z
+public find_overlap
+public find_limited_slope
+public register_Zint_diag
+public calc_Zint_diags
 
 type, public :: diag_to_Z_CS ; private
   ! The following arrays are used to store diagnostics calculated in this
   ! module and unavailable outside of it.
+
   real, pointer, dimension(:,:,:) :: &
-    u_z => NULL(), &    ! The zonal velocity remapped to depth space, in m s-1.
-    v_z => NULL(), &    ! The meridional velocity remapped to depth space, in m s-1.
-    uh_z => NULL(), &   ! The zonal transport remapped to depth space, in m3 s-1.
-    vh_z => NULL()      ! The meridional transport remapped to depth space, in m3 s-1.
-  type(p3d) :: tr_z(MAX_FIELDS_)  ! An array of tracers, remapped to depth space.
-  type(p3d) :: tr_model(MAX_FIELDS_) ! Pointers to an array of tracers.
-  real    :: missing_vel = -1.0e34
-  real    :: missing_trans = -1.0e34
-  real    :: missing_value = -1.0e34
+    u_z  => NULL(), &   ! zonal velocity remapped to depth space (m/s)
+    v_z  => NULL(), &   ! meridional velocity remapped to depth space (m/s)
+    uh_z => NULL(), &   ! zonal transport remapped to depth space (m3/s or kg/s)
+    vh_z => NULL()      ! meridional transport remapped to depth space (m3/s or kg/s)
+
+  type(p3d) :: tr_z(MAX_FIELDS_)     ! array of tracers, remapped to depth space
+  type(p3d) :: tr_model(MAX_FIELDS_) ! pointers to an array of tracers
+
+  real    :: missing_vel             = -1.0e34
+  real    :: missing_trans           = -1.0e34
+  real    :: missing_value           = -1.0e34
   real    :: missing_tr(MAX_FIELDS_) = -1.0e34
-  integer :: id_u_z = -1, id_v_z = -1
+
+  integer :: id_u_z  = -1
+  integer :: id_v_z  = -1
+  integer :: id_uh_Z = -1
+  integer :: id_vh_Z = -1
   integer :: id_tr(MAX_FIELDS_) = -1
-  integer :: id_uh_Z = -1, id_vh_Z = -1
   integer :: num_tr_used = 0
   integer :: nk_zspace = -1
-  real, pointer :: Z_int(:) => NULL()  ! The interface depths of the z-space file, in m.
 
-  type(axesType) :: axesBz, axesTz, axesCuz, axesCvz
+  real, pointer :: Z_int(:) => NULL()  ! interface depths of the z-space file (meter)
+
+  type(axesType) :: axesBz,  axesTz,  axesCuz,  axesCvz
   type(axesType) :: axesBzi, axesTzi, axesCuzi, axesCvzi
   integer, dimension(1) :: axesz_out
 
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
-                             ! timing of diagnostic output.
+  type(diag_ctrl), pointer :: diag ! structure to regulate diagnostic output timing
 
 end type diag_to_Z_CS
 
@@ -97,50 +110,56 @@ integer, parameter :: NO_ZSPACE = -1
 
 contains
 
+
 subroutine calculate_Z_diag_fields(u, v, h, dt, G, CS)
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)  :: u
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)  :: v
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)  :: h
-  real,                                 intent(in)    :: dt
-  type(ocean_grid_type),                intent(inout) :: G
-  type(diag_to_Z_CS),                   pointer       :: CS
-!   This subroutine maps tracers and velocities into depth space for output.
+  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)    :: u
+  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)    :: v
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h
+  real,                                   intent(in)    :: dt
+  type(ocean_grid_type),                  intent(inout) :: G
+  type(diag_to_Z_CS),                     pointer       :: CS
 
-! Arguments: u - Zonal velocity, in m s-1.
-!  (in)      v - Meridional velocity, in m s-1.
-!  (in)      h - Layer thickness, in m.
-!  (in)      dt - the time difference in s since the last call to
-!                 this subroutine.
-!  (in)      G - The ocean's grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 diagnostics_init.
-  real :: e(SZK_(G)+2)        ! The z-star interface heights in m.
-  real :: h_f(SZK_(G)+1,SZI_(G)) ! The thicknesses of massive layers in m.
-  real :: u_f(SZK_(G)+1,SZIB_(G))! The zonal and meridional velocities in any
-  real :: v_f(SZK_(G)+1,SZI_(G)) ! massive layers.
-  real :: tr_f(SZK_(G),max(CS%num_tr_used,1),SZI_(G)) ! The tracer
-                                 ! concentrations in massive layers.
-    ! Note the deliberately reversed axes in h_f, u_f, v_f, and tr_f.
-  integer :: nk_valid(SZIB_(G))  ! The number of massive layers in a column.
+! This subroutine maps tracers and velocities into depth space for diagnostics. 
 
-  real :: D_pt(SZIB_(G))       ! The bottom depth in m.
-  real :: htot                 ! The summed layer thicknesses in m.
-  real :: dilate               ! The proportion by which to dilate every layer.
-  real :: wt(SZK_(G)+1)        ! The fractional weight for each layer in the
-                               ! range between k_top and k_bot, nondim.
-  real :: z1(SZK_(G)+1)        ! z1 and z2 are the depths of the top and bottom
-  real :: z2(SZK_(G)+1)        ! limits of the part of a layer that contributes
-                               ! to a depth level, relative to the cell center
-                               ! and normalized by the cell thickness, nondim.
-                               ! Note that -1/2 <= z1 < z2 <= 1/2.
-  real :: sl_tr(max(CS%num_tr_used,1)) ! The normalized slope of the tracer
-                                       ! within the cell, in tracer units.
-  real :: slope ! A normalized slope of a variable within the cell.
+! Arguments: 
+!  (in)  u  - zonal velocity component (m/s)
+!  (in)  v  - meridional velocity component (m/s)
+!  (in)  h  - layer thickness (meter or kg/m2)
+!  (in)  dt - time difference in sec since last call to this subroutine
+!  (in)  G  - ocean grid structure
+!  (in)  CS - control structure returned by previous call to diagnostics_init
+
+  ! Note the deliberately reversed axes in h_f, u_f, v_f, and tr_f.
+  real :: e(SZK_(G)+2)           ! z-star interface heights (meter or kg/m2)
+  real :: h_f(SZK_(G)+1,SZI_(G)) ! thicknesses of massive layers (meter or kg/m2)
+  real :: u_f(SZK_(G)+1,SZIB_(G))! zonal velocity component in any massive layer
+  real :: v_f(SZK_(G)+1,SZI_(G)) ! meridional velocity component in any massive layer
+
+  real :: tr_f(SZK_(G),max(CS%num_tr_used,1),SZI_(G)) ! tracer concentration in massive layers
+  integer :: nk_valid(SZIB_(G))  ! number of massive layers in a column
+
+  real :: D_pt(SZIB_(G)) ! bottom depth (meter or kg/m2)
+  real :: htot           ! summed layer thicknesses (meter or kg/m2)
+  real :: dilate         ! proportion by which to dilate every layer
+  real :: wt(SZK_(G)+1)  ! fractional weight for each layer in the
+                         ! range between k_top and k_bot (nondim)
+  real :: z1(SZK_(G)+1)  ! z1 and z2 are the depths of the top and bottom
+  real :: z2(SZK_(G)+1)  ! limits of the part of a layer that contributes
+                         ! to a depth level, relative to the cell center
+                         ! and normalized by the cell thickness (nondim)
+                         ! Note that -1/2 <= z1 < z2 <= 1/2.
+  real :: sl_tr(max(CS%num_tr_used,1)) ! normalized slope of the tracer
+                                       ! within the cell, in tracer units
+
+  real :: slope ! normalized slope of a variable within the cell
+
   logical :: linear_velocity_profiles = .true.
+
   integer :: k_top, k_bot, k_bot_prev
   integer :: i, j, k, k2, kz, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nk, m, nkml
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nk = G%ke
-  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
+
+  is   = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nk = G%ke
+  Isq  = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   nkml = max(G%nkml, 1)
 
   if (.not.associated(CS)) call MOM_error(FATAL, &
@@ -149,7 +168,9 @@ subroutine calculate_Z_diag_fields(u, v, h, dt, G, CS)
   ! If no fields are needed, return
   if ((CS%id_u_z <= 0) .and. (CS%id_v_z <= 0) .and. (CS%num_tr_used < 1)) return
 
+  ! zonal velocity component 
   if (CS%id_u_z > 0) then
+
     do kz=1,CS%nk_zspace ; do j=js,je ; do I=Isq,Ieq
       CS%u_z(I,j,kz) = CS%missing_vel
     enddo ; enddo ; enddo
@@ -227,6 +248,7 @@ subroutine calculate_Z_diag_fields(u, v, h, dt, G, CS)
     call post_data(CS%id_u_z, CS%u_z, CS%diag)
   endif
 
+  ! meridional velocity component 
   if (CS%id_v_z > 0) then
     do kz=1,CS%nk_zspace ; do J=Jsq,Jeq ; do i=is,ie
       CS%v_z(i,J,kz) = CS%missing_vel
@@ -305,6 +327,7 @@ subroutine calculate_Z_diag_fields(u, v, h, dt, G, CS)
     call post_data(CS%id_v_z, CS%v_z, CS%diag)
   endif
 
+  ! tracer concentrations 
   if (CS%num_tr_used > 0) then
   
     do m=1,CS%num_tr_used ; do kz=1,CS%nk_zspace ; do j=js,je ; do i=is,ie
@@ -379,51 +402,57 @@ subroutine calculate_Z_diag_fields(u, v, h, dt, G, CS)
 
 end subroutine calculate_Z_diag_fields
 
-subroutine calculate_Z_transport(uh_int, vh_int, h, dt, G, CS)
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)  :: uh_int
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)  :: vh_int
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)  :: h
-  real,                                 intent(in)    :: dt
-  type(ocean_grid_type),                intent(inout) :: G
-  type(diag_to_Z_CS),                   pointer       :: CS
-!   This subroutine maps tracers and velocities into depth space for output.
 
-! Arguments: uh_int - Time integrated zonal transport, in m3.
-!  (in)      vh_int - Time integrated meridional transport, in m3.
-!  (in)      h - Layer thickness, in m.
-!  (in)      dt - the time difference in s since the last call to
-!                 this subroutine.
-!  (in)      G - The ocean's grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 diagnostics_init.
+subroutine calculate_Z_transport(uh_int, vh_int, h, dt, G, CS)
+  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)    :: uh_int
+  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)    :: vh_int
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h
+  real,                                   intent(in)    :: dt
+  type(ocean_grid_type),                  intent(inout) :: G
+  type(diag_to_Z_CS),                     pointer       :: CS
+
+!   This subroutine maps horizontal transport into depth space for diagnostic output.
+
+! Arguments: 
+!  (in)      uh_int - time integrated zonal transport (m3 or kg)
+!  (in)      vh_int - time integrated meridional transport (m3 or kg)
+!  (in)      h      - layer thickness (meter or kg/m2)
+!  (in)      dt     - time difference (sec) since last call to this routine
+!  (in)      G      - ocean grid structure
+!  (in)      CS     - control structure returned by previous call to diagnostics_init
+
   real, dimension(SZI_(G), SZJ_(G)) :: &
-    htot, &        ! The total layer thickness in m.
-    dilate         ! A nondimensional factor by which to dilate layers to
+    htot, &        ! total layer thickness (meter or kg/m2)
+    dilate         ! nondimensional factor by which to dilate layers to
                    ! convert them into z* space.  (-G%D < z* < 0)
+
   real, dimension(SZI_(G), max(CS%nk_zspace,1)) :: &
-    uh_Z           ! uh_int interpolated into depth space, in m3.
+    uh_Z           ! uh_int interpolated into depth space (m3 or kg)
   real, dimension(SZIB_(G), max(CS%nk_zspace,1)) :: &
-    vh_Z           ! vh_int interpolated into depth space, in m3.
-  real :: h_rem    ! The dilated thickness of a layer that has yet to be mapped
-                   ! into depth space, in m.
-  real :: uh_rem   ! The integrated zonal transport of a layer that has yet to be
-                   ! mapped into depth space, in m3.
-  real :: vh_rem   ! The integrated meridional transport of a layer that has yet
-                   ! to be mapped into depth space, in m3.
-  real :: h_here   ! The thickness of a layer that is within the range of the
-                   ! current depth level, in m.
-  real :: h_above  ! The thickness of a layer that is above the current depth
-                   ! level, in m.
-  real :: uh_here  ! The zonal transport of a layer that is attributed to the
-                   ! current depth level, in m3.
-  real :: vh_here  ! The meridional transport of a layer that is attributed to
-                   ! the current depth level, in m3.
-  real :: Idt      ! The inverse of the time step in s.
-  real :: Z_int_above(SZIB_(G)) ! The height of the interface atop a layer, m.
-  integer :: kz(SZIB_(G)) ! The index of the depth level that is being
-                 ! contributed to.
+    vh_Z           ! vh_int interpolated into depth space (m3 or kg)
+
+  real :: h_rem    ! dilated thickness of a layer that has yet to be mapped
+                   ! into depth space (meter or kg/m2)
+  real :: uh_rem   ! integrated zonal transport of a layer that has yet to be
+                   ! mapped into depth space (m3 or kg)
+  real :: vh_rem   ! integrated meridional transport of a layer that has yet
+                   ! to be mapped into depth space (m3 or kg)
+  real :: h_here   ! thickness of a layer that is within the range of the
+                   ! current depth level (meter or kg/m2)
+  real :: h_above  ! thickness of a layer that is above the current depth
+                   ! level (meter or kg.m2)
+  real :: uh_here  ! zonal transport of a layer that is attributed to the
+                   ! current depth level (m3 or kg)
+  real :: vh_here  ! meridional transport of a layer that is attributed to
+                   ! the current depth level (m3 or kg)
+  real :: Idt      ! inverse of the time step (sec)
+
+  real :: Z_int_above(SZIB_(G)) ! height of the interface atop a layer (meter or kg/m2)
+
+  integer :: kz(SZIB_(G)) ! index of depth level that is being contributed to
+
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nk, nk_z
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nk = G%ke
+  is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nk = G%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
   if (.not.associated(CS)) call MOM_error(FATAL, &
@@ -447,6 +476,7 @@ subroutine calculate_Z_transport(uh_int, vh_int, h, dt, G, CS)
     dilate(i,j) = G%bathyT(i,j) / htot(i,j)
   enddo ; enddo
 
+  ! zonal transport 
   if (CS%id_uh_Z > 0) then ; do j=js,je
     do I=Isq,Ieq
       kz(I) = nk_z ; z_int_above(I) = -0.5*(G%bathyT(i,j)+G%bathyT(i+1,j))
@@ -480,6 +510,8 @@ subroutine calculate_Z_transport(uh_int, vh_int, h, dt, G, CS)
       CS%uh_z(I,j,k) = uh_Z(I,k)*Idt
     enddo ; enddo
   enddo ; endif
+
+  ! meridional transport 
   if (CS%id_vh_Z > 0) then ; do J=Jsq,Jeq
     do i=is,ie
       kz(i) = nk_z ; z_int_above(i) = -0.5*(G%bathyT(i,j)+G%bathyT(i,j+1))
@@ -514,37 +546,52 @@ subroutine calculate_Z_transport(uh_int, vh_int, h, dt, G, CS)
     enddo ; enddo
   enddo ; endif
 
-  if (CS%id_uh_Z > 0) call post_data(CS%id_uh_Z, CS%uh_z, CS%diag)
-  if (CS%id_vh_Z > 0) call post_data(CS%id_vh_Z, CS%vh_z, CS%diag)
+  if (CS%id_uh_Z > 0) then 
+    do k=1,nk_z ; do j=js,je ; do I=Isq,Ieq
+      CS%uh_z(i,j,k) = CS%uh_z(i,j,k)*G%H_to_kg_m2 
+    enddo ; enddo ; enddo
+    call post_data(CS%id_uh_Z, CS%uh_z, CS%diag)
+  endif 
+
+  if (CS%id_vh_Z > 0) then
+    do k=1,nk_z ; do j=Jsq,Jeq ; do I=is,ie
+      CS%vh_z(i,j,k) = CS%vh_z(i,j,k)*G%H_to_kg_m2 
+    enddo ; enddo ; enddo
+    call post_data(CS%id_vh_Z, CS%vh_z, CS%diag)
+  endif 
 
 end subroutine calculate_Z_transport
 
+
 subroutine find_overlap(e, Z_top, Z_bot, k_max, k_start, k_top, k_bot, wt, z1, z2)
-  real, dimension(:), intent(in) :: e
-  real, intent(in)   :: Z_top, Z_bot
-  integer, intent(in) :: k_max, k_start
-  integer, intent(inout) :: k_top, k_bot
-  real, dimension(:), intent(out) :: wt, z1, z2
+  real, dimension(:), intent(in)    :: e
+  real,               intent(in)    :: Z_top, Z_bot
+  integer,            intent(in)    :: k_max, k_start
+  integer,            intent(inout) :: k_top, k_bot
+  real, dimension(:), intent(out)   :: wt, z1, z2
 
 !   This subroutine determines the layers bounded by interfaces e that overlap
-! with the depth range between Z_top and Z_bot, and also the fractional weights
+! with the depth range between Z_top and Z_bot, and the fractional weights
 ! of each layer. It also calculates the normalized relative depths of the range
 ! of each layer that overlaps that depth range.
+
 !   Note that by convention, e decreases with increasing k and Z_top > Z_bot.
 !
-! Arguments: e - A column's interface heights, in m.
-!  (in)      Z_top - The top of the range being mapped to, in m.
-!  (in)      Z_bot - The bottom of the range being mapped to, in m.
-!  (in)      k_max - The number of valid layers.
-!  (in)      k_start - The layer at which to start searching.
-!  (out)     k_top, k_bot - The indices of the top and bottom layers that
-!                           overlap with the depth range.
-!  (out)     wt - The relative weights of each layer from k_top to k_bot.
-!  (out)     z1, z2 - z1 and z2 are the depths of the top and bottom limits of
-!                     the part of a layer that contributes to a depth level, 
-!                     relative to the cell center and normalized by the cell
-!                     thickness, nondim.  Note that -1/2 <= z1 < z2 <= 1/2.
-  real :: Ih, e_c, tot_wt, I_totwt
+! Arguments: 
+!  (in)          e        - column interface heights (meter or kg/m2)
+!  (in)      Z_top        - top of range being mapped to (meter or kg/m2)
+!  (in)      Z_bot        - bottom of range being mapped to (meter or kg/m2)
+!  (in)      k_max        - number of valid layers
+!  (in)      k_start      - layer at which to start searching
+!  (out)     k_top, k_bot - indices of top and bottom layers that
+!                           overlap with the depth range
+!  (out)     wt           - relative weights of each layer from k_top to k_bot
+!  (out)     z1, z2       - depths of the top and bottom limits of
+!                           the part of a layer that contributes to a depth level, 
+!                           relative to the cell center and normalized by the cell
+!                           thickness (nondim).  Note that -1/2 <= z1 < z2 <= 1/2.
+
+  real    :: Ih, e_c, tot_wt, I_totwt
   integer :: k
   
   do k=k_start,k_max ; if (e(K+1)<Z_top) exit ; enddo
@@ -584,17 +631,20 @@ end subroutine find_overlap
   
 
 subroutine find_limited_slope(val, e, slope, k)
-  real, dimension(:), intent(in) :: val
-  real, dimension(:), intent(in) :: e
-  real, intent(out) :: slope
-  integer, intent(in) :: k
+  real, dimension(:), intent(in)  :: val
+  real, dimension(:), intent(in)  :: e
+  real,               intent(out) :: slope
+  integer,            intent(in)  :: k
+
 !   This subroutine determines a limited slope for val to be advected with
 ! a piecewise limited scheme.
 
-! Arguments: val - An column the values that are being interpolated.
-!  (in)      e - A column's interface heights, in m.
-!  (in)      slope - The normalized slope in the intracell distribution of val.
-!  (in)      k - The layer whose slope is being determined.
+! Arguments: 
+!  (in)      val   - a column of values that are being interpolated
+!  (in)      e     - column interface heights (meter or kg/m2)
+!  (in)      slope - normalized slope in the intracell distribution of val
+!  (in)      k     - layer whose slope is being determined
+
   real :: d1, d2
 
   if ((val(k)-val(k-1)) * (val(k)-val(k+1)) >= 0.0) then
@@ -616,23 +666,25 @@ end subroutine find_limited_slope
 subroutine calc_Zint_diags(h, in_ptrs, ids, num_diags, &
                                        G, CS)
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h
-  type(p3d), dimension(:),            intent(in) :: in_ptrs
-  integer,   dimension(:),            intent(in) :: ids
-  integer,                            intent(in) :: num_diags
-  type(ocean_grid_type),              intent(in) :: G
-  type(diag_to_Z_CS),                 pointer    :: CS
+  type(p3d), dimension(:),               intent(in) :: in_ptrs
+  integer,   dimension(:),               intent(in) :: ids
+  integer,                               intent(in) :: num_diags
+  type(ocean_grid_type),                 intent(in) :: G
+  type(diag_to_Z_CS),                    pointer    :: CS
   
   real, dimension(SZI_(G),SZJ_(G),max(CS%nk_zspace+1,1),max(num_diags,1)) :: &
-    diag_on_Z  ! The diagnostics interpolated to depth space.
+    diag_on_Z  ! diagnostics interpolated to depth space
   real, dimension(SZI_(G),SZK_(G)+1) :: e
   real, dimension(max(num_diags,1),SZI_(G),SZK_(G)+1) :: diag2d
+
   real, dimension(SZI_(G)) :: &
-    htot, &              ! The summed layer thicknesses in m or kg m-2.
-    dilate               ! The proportion by which to dilate every layer.
-  real :: wt             ! The weighting of the interface above in the
-                         ! interpolation to the target depths.
-  integer :: kL(SZI_(G)) ! The layer-space index of the shallowest interface
-                         ! below the target depth.
+    htot, &              ! summed layer thicknesses (meter or kg/m2)
+    dilate               ! proportion by which to dilate every layer
+  real :: wt             ! weighting of the interface above in the
+                         ! interpolation to target depths
+  integer :: kL(SZI_(G)) ! layer-space index of shallowest interface
+                         ! below the target depth
+
   integer :: i, j, k, k2, kz, is, ie, js, je, nk, m
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nk = G%ke
     
@@ -709,30 +761,36 @@ end subroutine calc_Zint_diags
 subroutine register_Z_tracer(tr_ptr, name, long_name, units, Time, G, CS, standard_name,   &
      cmor_field_name, cmor_long_name, cmor_units, cmor_standard_name)
   real, dimension(NIMEM_,NJMEM_,NKMEM_), target, intent(in) :: tr_ptr
-  character(len=*),                           intent(in) :: name
-  character(len=*),                           intent(in) :: long_name
-  character(len=*),                           intent(in) :: units
-  character(len=*), optional, intent(in)                 :: standard_name
-  type(time_type),                            intent(in) :: Time
-  type(ocean_grid_type),                      intent(in) :: G
-  type(diag_to_Z_CS),                         pointer    :: CS
-  character(len=*), optional, intent(in) :: cmor_field_name, cmor_long_name
-  character(len=*), optional, intent(in) :: cmor_units, cmor_standard_name
+  character(len=*),                              intent(in) :: name
+  character(len=*),                              intent(in) :: long_name
+  character(len=*),                              intent(in) :: units
+  character(len=*), optional,                    intent(in) :: standard_name
+  type(time_type),                               intent(in) :: Time
+  type(ocean_grid_type),                         intent(in) :: G
+  type(diag_to_Z_CS),                            pointer    :: CS
+  character(len=*), optional,                    intent(in) :: cmor_field_name
+  character(len=*), optional,                    intent(in) :: cmor_long_name
+  character(len=*), optional,                    intent(in) :: cmor_units
+  character(len=*), optional,                    intent(in) :: cmor_standard_name
+
 !   This subroutine registers a tracer to be output in depth space.
-! Arguments: tr_ptr - the tracer that is being offered for translation to Z-space.
-!  (in)      name - The name to be used for the output tracer.
-!  (in)      long_name - The long name to be used for the output tracer.
-!  (in)      units - The units of the output tracer.
-!  (in)      Time - The current model time.
-!  (in)      G - The ocean's grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 diagnostics_init.
-!  (in,opt)  cmor_field_name - The cmor name of a field.
-!  (in,opt)  cmor_long_name - The cmor long name of a field.
-!  (in,opt)  cmor_units - The cmor units of a field.
-!  (in,opt)  cmor_standard_name - The cmor standardized name associated with a field. 
+! Arguments: 
+!  (in)      tr_ptr    - tracer for translation to Z-space
+!  (in)      name      - name for the output tracer
+!  (in)      long_name - long name for the output tracer
+!  (in)      units     - units of output tracer
+!  (in)      Time      - current model time
+!  (in)      G         - ocean grid structure
+!  (in)      CS        - control struct returned by previous call to diagnostics_init
+!  (in,opt)  cmor_field_name    - cmor name of a field
+!  (in,opt)  cmor_long_name     - cmor long name of a field
+!  (in,opt)  cmor_units         - cmor units of a field
+!  (in,opt)  cmor_standard_name - cmor standardized name associated with a field
+ 
   character(len=256) :: posted_standard_name
-  character(len=256) :: posted_cmor_units, posted_cmor_standard_name, posted_cmor_long_name
+  character(len=256) :: posted_cmor_units
+  character(len=256) :: posted_cmor_standard_name
+  character(len=256) :: posted_cmor_long_name
 
   if (present(standard_name)) then
     posted_standard_name = standard_name
@@ -744,22 +802,22 @@ subroutine register_Z_tracer(tr_ptr, name, long_name, units, Time, G, CS, standa
  
  if (present(cmor_field_name)) then
     ! Fallback values for strings set to "NULL"
-    posted_cmor_units = "not provided"           !
-    posted_cmor_standard_name = "not provided"   ! Values might be able to be replaced with a CS%missing field?
-    posted_cmor_long_name = "not provided"       !
+    posted_cmor_units         = "not provided"   !
+    posted_cmor_standard_name = "not provided"   ! values might be replaced with a CS%missing field?
+    posted_cmor_long_name     = "not provided"   !
 
     ! If attributes are present for MOM variable names, use them first for the register_diag_field 
     ! call for CMOR verison of the variable
-    posted_cmor_units = units
-    posted_cmor_long_name = long_name
+    posted_cmor_units         = units
+    posted_cmor_long_name     = long_name
     posted_cmor_standard_name = posted_standard_name
 
     ! If specified in the call to register_diag_field, override attributes with the CMOR versions 
-    if (present(cmor_units)) posted_cmor_units = cmor_units
+    if (present(cmor_units)) posted_cmor_units                 = cmor_units
     if (present(cmor_standard_name)) posted_cmor_standard_name = cmor_standard_name
-    if (present(cmor_long_name)) posted_cmor_long_name = cmor_long_name
+    if (present(cmor_long_name)) posted_cmor_long_name         = cmor_long_name
 
-    call register_Z_tracer_low(tr_ptr, trim(cmor_field_name), trim(posted_cmor_long_name),     &
+    call register_Z_tracer_low(tr_ptr, trim(cmor_field_name), trim(posted_cmor_long_name),&
          trim(posted_cmor_units), trim(posted_cmor_standard_name), Time, G, CS)
 
   endif
@@ -768,25 +826,29 @@ end subroutine register_Z_tracer
 
 subroutine register_Z_tracer_low(tr_ptr, name, long_name, units, standard_name, Time, G, CS)
   real, dimension(NIMEM_,NJMEM_,NKMEM_), target, intent(in) :: tr_ptr
-  character(len=*),                           intent(in) :: name
-  character(len=*),                           intent(in) :: long_name
-  character(len=*),                           intent(in) :: units
-  character(len=*),                           intent(in) :: standard_name
-  type(time_type),                            intent(in) :: Time
-  type(ocean_grid_type),                      intent(in) :: G
-  type(diag_to_Z_CS),                         pointer    :: CS
+  character(len=*),                              intent(in) :: name
+  character(len=*),                              intent(in) :: long_name
+  character(len=*),                              intent(in) :: units
+  character(len=*),                              intent(in) :: standard_name
+  type(time_type),                               intent(in) :: Time
+  type(ocean_grid_type),                         intent(in) :: G
+  type(diag_to_Z_CS),                            pointer    :: CS
+
 !   This subroutine registers a tracer to be output in depth space.
-! Arguments: tr_ptr - the tracer that is being offered for translation to Z-space.
-!  (in)      name - The name to be used for the output tracer.
-!  (in)      long_name - The long name to be used for the output tracer.
-!  (in)      units - The units of the output tracer.
-!  (in)      Time - The current model time.
-!  (in)      G - The ocean's grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 diagnostics_init.
+
+! Arguments: 
+!  (in)      tr_ptr    - tracer for translation to Z-space
+!  (in)      name      - name for the output tracer
+!  (in)      long_name - long name for output tracer
+!  (in)      units     - units of output tracer
+!  (in)      Time      - current model time
+!  (in)      G         - ocean grid structure
+!  (in)      CS        - control struct returned by previous call to diagnostics_init
+
   character(len=256) :: posted_standard_name
   integer :: isd, ied, jsd, jed, nk, m, id_test
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nk = G%ke
+
   if (.not.associated(CS)) call MOM_error(FATAL, &
          "register_Z_tracer: Module must be initialized before it is used.")
 
@@ -800,12 +862,12 @@ subroutine register_Z_tracer_low(tr_ptr, name, long_name, units, standard_name, 
 
   CS%missing_tr(m) = CS%missing_value ! This could be changed later, if desired.
   if (CS%nk_zspace > 0) then
-    CS%id_tr(m) = register_diag_field('ocean_model_z', name, CS%axesTz, Time, &
+    CS%id_tr(m) = register_diag_field('ocean_model_z', name, CS%axesTz, Time,           &
                                       long_name, units, missing_value=CS%missing_tr(m), &
                                       standard_name=standard_name)
   else
-    id_test = register_diag_field('ocean_model_z', name, CS%diag%axesT1, Time, &
-                                  long_name, units, missing_value=CS%missing_tr(m),     &
+    id_test = register_diag_field('ocean_model_z', name, CS%diag%axesT1, Time,      &
+                                  long_name, units, missing_value=CS%missing_tr(m), &
                                   standard_name=standard_name)
     if (id_test>0) call MOM_error(WARNING, &
         "MOM_diag_to_Z_init: "//trim(name)// &
@@ -826,21 +888,23 @@ subroutine MOM_diag_to_Z_init(Time, G, param_file, diag, CS)
   type(param_file_type),   intent(in)    :: param_file
   type(diag_ctrl), target, intent(inout) :: diag
   type(diag_to_Z_CS),      pointer       :: CS
-! Arguments: Time - The current model time.
-!  (in)      G - The ocean's grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (in)      diag - A structure that is used to regulate diagnostic output.
-!  (in/out)  CS - A pointer that is set to point to the control structure
-!                 for this module
+
+! Arguments: 
+!  (in)      Time       - current model time
+!  (in)      G          - ocean grid structure
+!  (in)      param_file - struct indicating open file to parse for model param values
+!  (in)      diag       - struct to regulate diagnostic output
+!  (in/out)  CS         - pointer to point to control structure for this module
+
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = "MOM_diag_to_Z" ! This module's name.
-  character(len=200) :: in_dir, zgrid_file   ! Strings for directory/file.
+
+  character(len=40)  :: mod = "MOM_diag_to_Z" ! module name
+  character(len=200) :: in_dir, zgrid_file    ! strings for directory/file
   character(len=48)  :: flux_units
   integer :: z_axis, zint_axis
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nk, id_test
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nk = G%ke
+  isd  = G%isd   ; ied = G%ied  ; jsd  = G%jsd  ; jed  = G%jed ; nk = G%ke
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   if (associated(CS)) then
@@ -855,7 +919,7 @@ subroutine MOM_diag_to_Z_init(Time, G, param_file, diag, CS)
 
   CS%diag => diag
 
-  ! Read all relevant parameters and write them to the model log.
+  ! Read parameters and write them to the model log.
   call log_version(param_file, mod, version)
   ! Read in z-space info from a NetCDF file.
   call get_param(param_file, mod, "Z_OUTPUT_GRID_FILE", zgrid_file, &
@@ -879,40 +943,44 @@ subroutine MOM_diag_to_Z_init(Time, G, param_file, diag, CS)
   endif
 
   if (CS%nk_zspace > 0) then
-    call defineAxes(diag, (/ diag%axesB1%handles(1), diag%axesB1%handles(2), z_axis /), CS%axesBz)
-    call defineAxes(diag, (/ diag%axesT1%handles(1), diag%axesT1%handles(2), z_axis /), CS%axesTz)
-    call defineAxes(diag, (/ diag%axesCu1%handles(1), diag%axesCu1%handles(2), z_axis /), CS%axesCuz)
-    call defineAxes(diag, (/ diag%axesCv1%handles(1), diag%axesCv1%handles(2), z_axis /), CS%axesCvz)
-    call defineAxes(diag, (/ diag%axesB1%handles(1), diag%axesB1%handles(2), zint_axis /), CS%axesBzi)
-    call defineAxes(diag, (/ diag%axesT1%handles(1), diag%axesT1%handles(2), zint_axis /), CS%axesTzi)
+
+    call defineAxes(diag, (/ diag%axesB1%handles(1),  diag%axesB1%handles(2),  z_axis /),    CS%axesBz)
+    call defineAxes(diag, (/ diag%axesT1%handles(1),  diag%axesT1%handles(2),  z_axis /),    CS%axesTz)
+    call defineAxes(diag, (/ diag%axesCu1%handles(1), diag%axesCu1%handles(2), z_axis /),    CS%axesCuz)
+    call defineAxes(diag, (/ diag%axesCv1%handles(1), diag%axesCv1%handles(2), z_axis /),    CS%axesCvz)
+    call defineAxes(diag, (/ diag%axesB1%handles(1),  diag%axesB1%handles(2),  zint_axis /), CS%axesBzi)
+    call defineAxes(diag, (/ diag%axesT1%handles(1),  diag%axesT1%handles(2),  zint_axis /), CS%axesTzi)
     call defineAxes(diag, (/ diag%axesCu1%handles(1), diag%axesCu1%handles(2), zint_axis /), CS%axesCuzi)
     call defineAxes(diag, (/ diag%axesCv1%handles(1), diag%axesCv1%handles(2), zint_axis /), CS%axesCvzi)
 
-    CS%id_u_z = register_diag_field('ocean_model_z', 'u', CS%axesCuz, Time, &
-        'Zonal Velocity in Depth Space', 'meter second-1', &
-        missing_value=CS%missing_vel, cmor_field_name='uo', cmor_units='m s-1', &
+    CS%id_u_z = register_diag_field('ocean_model_z', 'u', CS%axesCuz, Time,    &
+        'Zonal Velocity in Depth Space', 'meter second-1',                     &
+        missing_value=CS%missing_vel, cmor_field_name='uo', cmor_units='m s-1',&
         cmor_standard_name='sea_water_x_velocity', cmor_long_name='Sea Water X Velocity')
     if (CS%id_u_z>0) call safe_alloc_ptr(CS%u_z,IsdB,IedB,jsd,jed,CS%nk_zspace)
 
-    CS%id_v_z = register_diag_field('ocean_model_z', 'v', CS%axesCvz, Time, &
-        'Meridional Velocity in Depth Space', 'meter second-1', &
-        missing_value=CS%missing_vel, cmor_field_name='vo', cmor_units='m s-1', &
+    CS%id_v_z = register_diag_field('ocean_model_z', 'v', CS%axesCvz, Time,    &
+        'Meridional Velocity in Depth Space', 'meter second-1',                &
+        missing_value=CS%missing_vel, cmor_field_name='vo', cmor_units='m s-1',&
         cmor_standard_name='sea_water_y_velocity', cmor_long_name='Sea Water Y Velocity')
     if (CS%id_v_z>0) call safe_alloc_ptr(CS%v_z,isd,ied,JsdB,JedB,CS%nk_zspace)
 
-    CS%id_uh_z = register_diag_field('ocean_model_z', 'uh', CS%axesCuz, Time, &
-        'Zonal Volume Transport in Depth Space', flux_units, &
-        missing_value=CS%missing_trans)
+    CS%id_uh_z = register_diag_field('ocean_model_z', 'uh', CS%axesCuz, Time,    &
+        'Zonal Mass Transport in Depth Space', flux_units,                       &
+        missing_value=CS%missing_trans, cmor_field_name='umo', cmor_units='kg/s',&
+        cmor_standard_name='ocean_mass_x_transport', cmor_long_name='Ocean Mass X Transport')
     if (CS%id_uh_z>0) call safe_alloc_ptr(CS%uh_z,IsdB,IedB,jsd,jed,CS%nk_zspace)
 
-    CS%id_vh_z = register_diag_field('ocean_model_z', 'vh', CS%axesCvz, Time, &
-        'Meridional Volume Transport in Depth Space', flux_units, &
-        missing_value=CS%missing_trans)
+    CS%id_vh_z = register_diag_field('ocean_model_z', 'vh', CS%axesCvz, Time,    &
+        'Meridional Mass Transport in Depth Space', flux_units,                  &
+        missing_value=CS%missing_trans, cmor_field_name='vmo', cmor_units='kg/s',&
+        cmor_standard_name='ocean_mass_y_transport', cmor_long_name='Ocean Mass Y Transport')
     if (CS%id_vh_z>0) call safe_alloc_ptr(CS%vh_z,isd,ied,JsdB,JedB,CS%nk_zspace)
 
   else
-    ! Check whether the diag-table is requesting any z-space files, and issue
-    ! a warning if it is.
+
+    ! Check whether diag-table is requesting any z-space files; issue a warning if it is.
+
     id_test = register_diag_field('ocean_model_z', 'u', diag%axesCu1, Time, &
         'Zonal Velocity in Depth Space', 'meter second-1')
     if (id_test>0) call MOM_error(WARNING, &
@@ -921,38 +989,42 @@ subroutine MOM_diag_to_Z_init(Time, G, param_file, diag, CS)
 
     id_test = register_diag_field('ocean_model_z', 'v', diag%axesCv1, Time, &
         'Meridional Velocity in Depth Space', 'meter second-1')
-    if (id_test>0) call MOM_error(WARNING, &
+    if (id_test>0) call MOM_error(WARNING,                 &
         "MOM_diag_to_Z_init: v cannot be output without "//&
         "an appropriate depth-space target file.")
 
     id_test = register_diag_field('ocean_model_z', 'uh', diag%axesCu1, Time, &
         'Meridional Volume Transport in Depth Space', flux_units)
-    if (id_test>0) call MOM_error(WARNING, &
+    if (id_test>0) call MOM_error(WARNING,                  &
         "MOM_diag_to_Z_init: uh cannot be output without "//&
         "an appropriate depth-space target file.")
 
     id_test = register_diag_field('ocean_model_z', 'vh', diag%axesCv1, Time, &
         'Meridional Volume Transport in Depth Space', flux_units)
-    if (id_test>0) call MOM_error(WARNING, &
+    if (id_test>0) call MOM_error(WARNING,                  &
         "MOM_diag_to_Z_init: vh cannot be output without "//&
         "an appropriate depth-space target file.")
   endif
 
 end subroutine MOM_diag_to_Z_init
 
+
 subroutine get_Z_depths(depth_file, int_depth_name, int_depth, cell_depth_name, &
                         z_axis_index, edge_index, nk_out)
-  character(len=*), intent(in) :: depth_file
-  character(len=*), intent(in) :: int_depth_name
-  real, dimension(:), pointer  :: int_depth
-  character(len=*), intent(in) :: cell_depth_name
-  integer, intent(out) :: z_axis_index, edge_index
-  integer, intent(out) :: nk_out
+  character(len=*),   intent(in)  :: depth_file
+  character(len=*),   intent(in)  :: int_depth_name
+  real, dimension(:), pointer     :: int_depth
+  character(len=*),   intent(in)  :: cell_depth_name
+  integer,            intent(out) :: z_axis_index
+  integer,            intent(out) :: edge_index
+  integer,            intent(out) :: nk_out
+
 !   This subroutine reads the depths of the interfaces bounding the intended
 ! layers from a NetCDF file.  If no appropriate file is found, -1 is returned
 ! as the number of layers in the output file.  Also, a diag_manager axis is set
 ! up with the same information as this axis.
-  real, allocatable :: cell_depth(:)
+
+  real, allocatable   :: cell_depth(:)
   character (len=200) :: units, long_name
   integer :: ncid, status, intid, intvid, layid, layvid, k, ni
 
@@ -973,6 +1045,7 @@ subroutine get_Z_depths(depth_file, int_depth_name, int_depth, cell_depth_name, 
       trim(int_depth_name)//" in "//trim(depth_file))
     nk_out = -1 ; return
   endif
+
   status = nf90_Inquire_Dimension(ncid, intid, len=ni)
   if (status /= NF90_NOERR) then
     call MOM_error(WARNING,"MOM_diag_to_Z get_Z_depths: "//&
@@ -991,10 +1064,12 @@ subroutine get_Z_depths(depth_file, int_depth_name, int_depth, cell_depth_name, 
   if (status /= NF90_NOERR) call MOM_error(WARNING,"MOM_diag_to_Z get_Z_depths: "//&
       trim(NF90_STRERROR(status))//" Getting ID of dimension "//&
       trim(cell_depth_name)//" in "//trim(depth_file))
+
   status = nf90_Inquire_Dimension(ncid, layid, len=nk_out)
   if (status /= NF90_NOERR) call MOM_error(WARNING,"MOM_diag_to_Z get_Z_depths: "//&
       trim(NF90_STRERROR(status))//" Getting number of interfaces of "//&
       trim(cell_depth_name)//" in "//trim(depth_file))
+
   if (ni /= nk_out+1) then
     call MOM_error(WARNING,"MOM_diag_to_Z get_Z_depths: "//&
         "The interface depths must have one more point than cell centers in "//&
@@ -1070,18 +1145,20 @@ end subroutine MOM_diag_to_Z_end
 
 function ocean_register_diag_with_z (tr_ptr, vardesc_tr, G, Time, CS)
   real, dimension(NIMEM_,NJMEM_,NKMEM_), target, intent(in) :: tr_ptr
-  type(vardesc),                              intent(in) :: vardesc_tr
-  type(ocean_grid_type),                      intent(in) :: G
-  type(time_type),                            intent(in) :: Time
-  type(diag_to_Z_CS),                         pointer    :: CS
-  integer                                     :: ocean_register_diag_with_z
+  type(vardesc),                                 intent(in) :: vardesc_tr
+  type(ocean_grid_type),                         intent(in) :: G
+  type(time_type),                               intent(in) :: Time
+  type(diag_to_Z_CS),                            pointer    :: CS
+  integer                                                   :: ocean_register_diag_with_z
+
 !   This subroutine registers a tracer to be output in depth space.
-! Arguments: tr_ptr - the tracer that is being offered for translation to Z-space.
-!  (in)      vardesc_tr - The descriptor of the variable.
-!  (in)      Time - The current model time.
-!  (in)      G - The ocean's grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 diagnostics_init.
+! Arguments: 
+!  (in)      tr_ptr     - tracer for translation to Z-space
+!  (in)      vardesc_tr - variable descriptor
+!  (in)      Time       - current model time
+!  (in)      G          - ocean grid structure
+!  (in)      CS         - control struct returned by a previous call to diagnostics_init
+
   type(vardesc) :: vardesc_z
   integer :: isd, ied, jsd, jed, nk, m, id_test
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nk = G%ke
@@ -1094,11 +1171,11 @@ function ocean_register_diag_with_z (tr_ptr, vardesc_tr, G, Time, CS)
     return
   endif
 
-! Register the layer tracer
+  ! register the layer tracer
   ocean_register_diag_with_z = ocean_register_diag(vardesc_tr, G, CS%diag, Time)
 
-! Copy the layer tracer variable descriptor to a z-tracer descriptor
-! Change the name and layer information.
+  ! copy layer tracer variable descriptor to a z-tracer descriptor;
+  ! change the name and layer information.
   vardesc_z = vardesc_tr
   vardesc_z%name = trim(vardesc_tr%name)
   vardesc_z%z_grid = "z"
@@ -1128,7 +1205,7 @@ function ocean_register_diag_with_z (tr_ptr, vardesc_tr, G, Time, CS)
 end function ocean_register_diag_with_z
 
 function register_Z_diag(var_desc, CS, day, missing)
-  integer :: register_Z_diag
+  integer                         :: register_Z_diag
   type(vardesc),       intent(in) :: var_desc
   type(diag_to_Z_CS),  pointer    :: CS
   type(time_type),     intent(in) :: day
@@ -1174,10 +1251,11 @@ function register_Z_diag(var_desc, CS, day, missing)
 end function register_Z_diag
 
 function register_Zint_diag(var_desc, CS, day)
-  integer :: register_Zint_diag
+  integer                         :: register_Zint_diag
   type(vardesc),       intent(in) :: var_desc
   type(diag_to_Z_CS),  pointer    :: CS
   type(time_type),     intent(in) :: day
+
   type(axesType) :: axes
 
   if (CS%nk_zspace < 0) then
@@ -1200,8 +1278,8 @@ function register_Zint_diag(var_desc, CS, day)
         "register_Z_diag: unknown hor_grid component "//trim(var_desc%hor_grid))
   end select
 
-  register_Zint_diag = register_diag_field("ocean_model_z", trim(var_desc%name), &
-        axes, day, trim(var_desc%longname), trim(var_desc%units), &
+  register_Zint_diag = register_diag_field("ocean_model_z", trim(var_desc%name),&
+        axes, day, trim(var_desc%longname), trim(var_desc%units),               &
         missing_value=CS%missing_value)
 
 end function register_Zint_diag
