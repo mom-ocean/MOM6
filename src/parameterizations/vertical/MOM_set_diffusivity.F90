@@ -262,7 +262,7 @@ type, public :: set_diffusivity_CS ; private
   real, pointer, dimension(:,:) :: tideamp => NULL() ! RMS tidal amplitude (m s-1)
   integer :: id_TKE_itidal = -1, id_TKE_leewave = -1, id_Nb = -1, id_N2 = -1
   integer :: id_Kd_itidal = -1, id_Kd_Niku = -1, id_Kd_user = -1
-  integer :: id_Kd_layer = -1
+  integer :: id_Kd_layer = -1, id_Kd_BBL = -1, id_Kd_BBL_z = -1
   integer :: id_N2_z = -1, id_Kd_itidal_z = -1, id_Kd_Niku_z = -1, id_Kd_user_z = -1
   integer :: id_Kd_Work = -1, id_Kd_Itidal_Work = -1, id_Kd_Niku_Work = -1
   integer :: id_maxTKE = -1, id_TKE_to_Kd = -1, id_Fl_itidal = -1
@@ -288,6 +288,7 @@ type diffusivity_diags
                                 ! units of m2 s-1.
     Kd_user => NULL(), &        ! The user-added diffusivity at interfaces, in
                                 ! units of m2 s-1.
+    Kd_BBL => NULL(), &         ! The BBL diffusivity at interfaces, in units of m2 s-1.
     Kd_work => NULL(), &        ! The work done by diapycnal mixing integrated
                                 ! through layers, in W m-2.
     Kd_Niku_work => NULL(), &   ! The work done by lee-wave driven mixing
@@ -490,6 +491,9 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, G, C
   endif
   if ((CS%id_KS_extra > 0) .or. (CS%id_KS_extra_z > 0)) then
     allocate(dd%KS_extra(isd:ied,jsd:jed,nz+1)) ; dd%KS_extra(:,:,:) = 0.0
+  endif
+  if ((CS%id_Kd_BBL > 0) .or. (CS%id_Kd_BBL_z > 0)) then
+    allocate(dd%Kd_BBL(isd:ied,jsd:jed,nz+1)) ; dd%Kd_BBL(:,:,:) = 0.0
   endif
 
   ! Smooth the properties through massless layers.
@@ -695,7 +699,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, G, C
     ! by the bottom drag.
     if (CS%bottomdraglaw .and. (CS%BBL_effic>0.0)) &
       call add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, &
-                                TKE_to_Kd, maxTKE, kb, G, CS, Kd, Kd_int)
+                                  TKE_to_Kd, maxTKE, kb, G, CS, Kd, Kd_int, dd%Kd_BBL)
 
     if (CS%limit_dissipation) then
       do k=2,nz-1 ; do i=is,ie
@@ -824,6 +828,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, G, C
 
   if (CS%id_KT_extra > 0) call post_data(CS%id_KT_extra, dd%KT_extra, CS%diag)
   if (CS%id_KS_extra > 0) call post_data(CS%id_KS_extra, dd%KS_extra, CS%diag)
+  if (CS%id_Kd_BBL > 0) call post_data(CS%id_Kd_BBL, dd%Kd_BBL, CS%diag)
 
   if (CS%id_KT_extra_z > 0) then
       num_z_diags = num_z_diags + 1
@@ -834,6 +839,12 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, G, C
   if (CS%id_KS_extra_z > 0) then
       num_z_diags = num_z_diags + 1
       z_ids(num_z_diags) = CS%id_KS_extra_z
+      z_ptrs(num_z_diags)%p => dd%KS_extra
+  endif
+
+  if (CS%id_Kd_BBL_z > 0) then
+      num_z_diags = num_z_diags + 1
+      z_ids(num_z_diags) = CS%id_Kd_BBL_z
       z_ptrs(num_z_diags)%p => dd%KS_extra
   endif
 
@@ -856,6 +867,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, G, C
   if (associated(dd%TKE_to_Kd)) deallocate(dd%TKE_to_Kd)
   if (associated(dd%KT_extra)) deallocate(dd%KT_extra)
   if (associated(dd%KS_extra)) deallocate(dd%KS_extra)
+  if (associated(dd%Kd_BBL)) deallocate(dd%Kd_BBL)
 
   if (showCallTree) call callTree_leave("set_diffusivity()")
 
@@ -1278,7 +1290,7 @@ subroutine double_diffusion(tv, h, T_f, S_f, j, G, CS, Kd_T_dd, Kd_S_dd)
 end subroutine double_diffusion
 
 subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, &
-                                TKE_to_Kd, maxTKE, kb, G, CS, Kd, Kd_int)
+                                TKE_to_Kd, maxTKE, kb, G, CS, Kd, Kd_int, Kd_BBL)
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)    :: u
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)    :: v
   real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h
@@ -1291,7 +1303,8 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, &
   type(ocean_grid_type),                  intent(in)    :: G
   type(set_diffusivity_CS),               pointer       :: CS
   real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(inout) :: Kd
-  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), optional, intent(inout) :: Kd_int
+  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(inout) :: Kd_int
+  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), pointer :: Kd_BBL
 
   real, dimension(SZK_(G)+1) :: &
     Rint          ! The coordinate density of an interface in kg m-3.
@@ -1322,10 +1335,13 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, &
                             ! defined in visc, on the assumption that this
                             ! extracted energy also drives diapycnal mixing.
   logical :: domore, do_i(SZI_(G))
+  logical :: do_diag_Kd_BBL
 
   integer :: i, k, is, ie, nz, i_rem, kb_min
   is = G%isc ; ie = G%iec ; nz = G%ke
 
+  do_diag_Kd_BBL = associated(Kd_BBL)
+  
 ! This adds the diffusion sustained by the energy extracted from the flow
 ! by the bottom drag.
 
@@ -1441,9 +1457,11 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, &
             else
               Kd(i,j,k) = (TKE_to_layer+TKE_Ray)*TKE_to_Kd(i,k)
             endif
-            if (present(Kd_int)) then
-              Kd_int(i,j,K) = Kd_int(i,j,K) + 0.5*delta_Kd
-              Kd_int(i,j,K+1) = Kd_int(i,j,K+1) + 0.5*delta_Kd
+            Kd_int(i,j,K) = Kd_int(i,j,K) + 0.5*delta_Kd
+            Kd_int(i,j,K+1) = Kd_int(i,j,K+1) + 0.5*delta_Kd
+            if (do_diag_Kd_BBL) then
+              Kd_BBL(i,j,K) = Kd_BBL(i,j,K) + 0.5*delta_Kd
+              Kd_BBL(i,j,K+1) = Kd_BBL(i,j,K+1) + 0.5*delta_Kd
             endif
           endif
         else
@@ -1465,9 +1483,11 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, &
             delta_Kd = TKE_here*TKE_to_Kd(i,k)
             if (CS%Kd_max >= 0.0) delta_Kd = min(delta_Kd, CS%Kd_max)
             Kd(i,j,k) = Kd(i,j,k) + delta_Kd
-            if (present(Kd_int)) then
-              Kd_int(i,j,K) = Kd_int(i,j,K) + 0.5*delta_Kd
-              Kd_int(i,j,K+1) = Kd_int(i,j,K+1) + 0.5*delta_Kd
+            Kd_int(i,j,K) = Kd_int(i,j,K) + 0.5*delta_Kd
+            Kd_int(i,j,K+1) = Kd_int(i,j,K+1) + 0.5*delta_Kd
+            if (do_diag_Kd_BBL) then
+              Kd_BBL(i,j,K) = Kd_BBL(i,j,K) + 0.5*delta_Kd
+              Kd_BBL(i,j,K+1) = Kd_BBL(i,j,K+1) + 0.5*delta_Kd
             endif
           endif
         endif
@@ -2260,6 +2280,8 @@ subroutine set_diffusivity_init(Time, G, param_file, diag, CS, diag_to_Z_CSp)
                  "diffusiviy from the BBL_mixing is simply added.", &
                  default=.true.)
   endif
+  CS%id_Kd_BBL = register_diag_field('ocean_model','Kd_BBL',diag%axesTi,Time, &
+       'Bottom Boundary Layer Diffusivity', 'meter2 sec-1')
 
   call get_param(param_file, mod, "BRYAN_LEWIS_DIFFUSIVITY", &
                                 CS%Bryan_Lewis_diffusivity, &
@@ -2675,6 +2697,8 @@ subroutine set_diffusivity_init(Time, G, param_file, diag, CS, diag_to_Z_CSp)
       vd = vardesc("KS_extra","Double-Diffusive Salinity Diffusivity, interpolated to z",&
            'h','z','s',"meter2 second-1")
       CS%id_KS_extra_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
+      vd = vardesc("Kd_BBL","Bottom Boundary Layer Diffusivity", 'h','z','s',"meter2 second-1")
+      CS%id_Kd_BBL_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
     endif
   endif
 
