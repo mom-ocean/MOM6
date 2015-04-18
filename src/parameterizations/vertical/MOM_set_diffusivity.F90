@@ -123,6 +123,7 @@ type, public :: set_diffusivity_CS ; private
                              ! from the BBL mixing and the other diffusivities.
                              ! Otherwise, diffusivities from the BBL_mixing is
                              ! simply added.
+  logical :: use_LOTW_BBL_diffusivity ! If true, use a simpler, albeit imprecise, BBL diffusivity.
   logical :: debug           ! If true, write verbose checksums for debugging.
   real    :: Kd              ! The interior diapycnal diffusivity in m2 s-1.
   real    :: Kd_min          ! The minimum permitted value for the diapycnal
@@ -697,9 +698,14 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, G, C
 
     ! This adds the diffusion sustained by the energy extracted from the flow
     ! by the bottom drag.
-    if (CS%bottomdraglaw .and. (CS%BBL_effic>0.0)) &
-      call add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, &
+    if (CS%bottomdraglaw .and. (CS%BBL_effic>0.0)) then
+      if (CS%use_LOTW_BBL_diffusivity) then
+        call add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, G, CS, Kd, Kd_int, dd%Kd_BBL)
+      else
+        call add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, &
                                   TKE_to_Kd, maxTKE, kb, G, CS, Kd, Kd_int, dd%Kd_BBL)
+      endif
+    endif
 
     if (CS%limit_dissipation) then
       do k=2,nz-1 ; do i=is,ie
@@ -1507,6 +1513,144 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, &
 
 end subroutine add_drag_diffusivity
 
+!> Calculates a BBL diffusivity use a Prandtl number 1 diffusivitiy with a law of the
+!! wall turbulent viscosity, up to a BBL height where the energy used for mixing has
+!! consumed the mechanical TKE input. 
+subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, G, CS, Kd, Kd_int, Kd_BBL)
+  real, dimension(NIMEMB_,NJMEM_,NKMEM_),       intent(in)    :: u !< u component of flow (m s-1)
+  real, dimension(NIMEM_,NJMEMB_,NKMEM_),       intent(in)    :: v !< v component of flow (m s-1)
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),        intent(in)    :: h !< Layer thickness (m or kg m-2)
+  type(thermo_var_ptrs),                        intent(in)    :: tv !< Thermodynamic variables structure
+  type(forcing),                                intent(in)    :: fluxes !< Surface fluxes structure
+  type(vertvisc_type),                          intent(in)    :: visc !< Vertical viscosity structure
+  integer,                                      intent(in)    :: j !< j-index of row to work on
+  real, dimension(NIMEM_,NK_INTERFACE_),        intent(in)    :: N2_int !< Square of Brunt-Vaisala at interfaces (s-2)
+  type(ocean_grid_type),                        intent(in)    :: G !< Grid structure
+  type(set_diffusivity_CS),                     pointer       :: CS !< Diffusivity control structure
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),        intent(inout) :: Kd !< Layer net diffusivity (m2 s-1)
+  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(inout) :: Kd_int !< Interface net diffusivity (m2 s-1)
+  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), pointer       :: Kd_BBL !< Interface BBL diffusivity (m2 s-1)
+  ! Local variables
+  real :: TKE_column    ! The net TKE input into the column , in m3 s-3.
+  real :: TKE_to_layer  ! The TKE used to drive mixing in a layer, in m3 s-3.
+  real :: TKE_Ray       ! The TKE from a layer's Rayleigh drag that is used to drive mixing in that layer, in m3 s-3.
+  real :: TKE_remaining ! The remaining TKE available for mixing in this layer and above, in m3 s-3.
+  real :: TKE_consumed  ! The TKE used for mixing in this layer, in m3 s-3.
+  real :: TKE_Kd_wall   ! The TKE associated with unlimited law of the wall mixing, in m3 s-3.
+  real :: cdrag_sqrt    ! Square root of the drag coefficient, nondimensional.
+  real :: ustar         ! The value of ustar at a thickness point, in m s-1.
+  real :: ustar2        ! Square of ustar, for convenience, in m2 s-2.
+  real :: absf          ! The average absolute value of the Coriolis parameter around a thickness point, in s-1.
+  real :: dh, dhm1      ! Thickness of layers k and k-1, respecitvely, in m.
+  real :: z             ! Distance to interface k from bottom, in m.
+  real :: D_minus_z     ! Distance to interface k from surface, in m.
+  real :: total_thickness   ! Total thickness of water column, in m.
+  real :: Idecay        ! Inverse of decay scale used for "Joule heating" loss of TKE with heighti, in m-1.
+  real :: Kd_wall       ! Law of the wall diffusivity, in m2 s-1.
+  real :: Kd_lower      ! Diffusivity or lower interface, in m2 s-1.
+  real :: ustar_D       ! u* x D, in m2 s-1.
+  real :: I_Rho0        ! 1 / rho0
+  logical :: Rayleigh_drag  ! Set to true if there are Rayleigh drag velocities defined in visc, on
+                        ! the assumption that this extracted energy also drives diapycnal mixing.
+  integer :: i, k, km1
+  real, parameter :: von_karm = 0.41 ! Von Karman constant (http://en.wikipedia.org/wiki/Von_Karman_constant)
+  logical :: do_diag_Kd_BBL
+
+  if (.not.(CS%bottomdraglaw .and. (CS%BBL_effic>0.0))) return
+  do_diag_Kd_BBL = associated(Kd_BBL)
+
+  ! Determine whether to add Rayleigh drag contribution to TKE
+  Rayleigh_drag = .false.
+  if (associated(visc%Ray_u) .and. associated(visc%Ray_v)) Rayleigh_drag = .true.
+  I_Rho0 = 1.0/G%Rho0
+  cdrag_sqrt = sqrt(CS%cdrag)
+
+  TKE_Ray = 0. ! In case Rayleigh_drag is not used.
+  do i=G%isc,G%iec ! Developed in single-column mode
+
+    ! Column-wise parameters.
+    absf = 0.25*((abs(G%CoriolisBu(I-1,J-1)) + abs(G%CoriolisBu(I,J))) + &
+                 (abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J-1)))) ! Non-zero on equator!
+
+    ! u* at the bottom, in m s-1.
+    ustar = visc%ustar_BBL(i,j)
+    ustar2 = ustar**2
+    ! In add_drag_diffusivity(), fluxes%ustar_tidal is added in. This might be double counting
+    ! since ustar_BBL should already include all contributions to u*? -AJA
+    if (ASSOCIATED(fluxes%ustar_tidal)) ustar = ustar + fluxes%ustar_tidal(i,j)
+
+    ! The maximum decay scale should be something of order 200 m. We use the smaller of u*/f and
+    ! (IMax_decay)^-1 as the decay scale. If ustar = 0, this is land so this value doesn't matter.
+    Idecay = CS%IMax_decay
+    if ((ustar > 0.0) .and. (absf > CS%IMax_decay*ustar)) Idecay = absf / ustar
+
+    ! Energy input at the bottom, in m3 s-3.
+    ! (Note that visc%TKE_BBL is in m3 s-3, set in set_BBL_TKE().)
+    ! I am still unsure about sqrt(cdrag) in this expressions - AJA
+    TKE_column = cdrag_sqrt * visc%TKE_BBL(i,j)
+    ! Add in tidal dissipation energy at the bottom, in m3 s-3.
+    ! Note that TKE_tidal is in W m-2.
+    if (ASSOCIATED(fluxes%TKE_tidal)) TKE_column = TKE_column + fluxes%TKE_tidal(i,j) * I_Rho0
+    TKE_column = CS%BBL_effic * TKE_column ! Only use a fraction of the mechanical dissipation for mixing.
+
+    TKE_remaining = TKE_column
+    total_thickness = sum(h(i,j,:)) * G%H_to_m ! Total column thickness, in m.
+    ustar_D = ustar * total_thickness
+    z = 0.
+    Kd_lower = 0. ! Diffusivity on bottom boundary.
+
+    ! Work upwards from the bottom, accumulating work used until it exceeds the available TKE input
+    ! at the bottom.
+    do k=G%ke,1,-1
+      dh = G%H_to_m * h(i,j,k) ! Thickness of this level in m.
+      km1 = max(k-1, 1)
+      dhm1 = G%H_to_m * h(i,j,km1) ! Thickness of level above in m.
+
+      ! Add in additional energy input from bottom-drag against slopes (sides)
+      if (Rayleigh_drag) TKE_remaining = TKE_remaining + 0.5*CS%BBL_effic * G%IareaT(i,j) * &
+            ((G%areaCu(i-1,j) * visc%Ray_u(i-1,j,k) * u(i-1,j,k)**2 + &
+              G%areaCu(i,j)   * visc%Ray_u(i,j,k)   * u(i,j,k)**2) + &
+             (G%areaCv(i,j-1) * visc%Ray_v(i,j-1,k) * v(i,j-1,k)**2 + &
+              G%areaCv(i,j)   * visc%Ray_v(i,j,k)   * v(i,j,k)**2))
+
+      ! Exponentially decay TKE across the thickness of the layer.
+      ! This is energy loss in addition to work done as mixing, apparently to Joule heating.
+      TKE_remaining = exp(-Idecay*dh) * TKE_remaining
+
+      z = z + h(i,j,k) ! Distance between upper interface of layer and the bottom, in m.
+      D_minus_z = max(total_thickness - z, 0.) ! Thickness above layer, m.
+
+      ! Diffusivity using law of the wall, limited by rotation, at height z, in m2/s.
+      ! This calculation is at the upper interface of the layer
+      Kd_wall = ( ( von_karm * ustar2 ) * ( z * D_minus_z ) )/( ustar_D + absf * ( z * D_minus_z ) )
+
+      ! TKE associated with Kd_wall, in m3 s-2.
+      ! This calculation if for the volume spanning the interface.
+      TKE_Kd_wall = Kd_wall * 0.5 * (dh + dhm1) * max(N2_int(i,k), 0.)
+
+      ! Now bound Kd such that the associated TKE is no greater than available TKE for mixing.
+      if (TKE_Kd_wall>0.) then
+        TKE_consumed = min(TKE_Kd_wall, TKE_remaining)
+        Kd_wall = (TKE_consumed/TKE_Kd_wall) * Kd_wall ! Scale Kd so that only TKE_consumed is used.
+      else
+        ! Either N2=0 or dh = 0.
+        Kd_wall = CS%Kd_max
+        TKE_consumed = 0.
+      endif
+
+      ! Now use up the appropriate about of TKE associated with the diffusivity chosen
+      TKE_remaining = TKE_remaining - TKE_consumed ! Note this will be non-negative
+
+      ! Add this BBL diffusivity to the model net diffusivity.
+      Kd_int(i,j,k) = Kd_int(i,j,k) + Kd_wall
+      Kd(i,j,k) = Kd(i,j,k) + 0.5*(Kd_wall + Kd_lower)
+      Kd_lower = Kd_wall ! Store for next level up.
+      if (do_diag_Kd_BBL) Kd_BBL(i,j,k) = Kd_wall
+    enddo ! k
+  enddo ! i
+
+end subroutine add_LOTW_BBL_diffusivity
+
 subroutine add_MLrad_diffusivity(h, fluxes, j, G, CS, Kd, TKE_to_Kd, Kd_int)
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h
   type(forcing),                         intent(in)    :: fluxes
@@ -2272,6 +2416,7 @@ subroutine set_diffusivity_init(Time, G, param_file, diag, CS, diag_to_Z_CSp)
                  "stratification and rotation permit.  The default is 0. \n"//&
                  "This is only used if BOTTOMDRAGLAW is true.", units="m", &
                  default=0.0)
+
     CS%IMax_decay = 1.0/200.0
     if (decay_length > 0.0) CS%IMax_decay = 1.0/decay_length
     call get_param(param_file, mod, "BBL_MIXING_AS_MAX", CS%BBL_mixing_as_max, &
@@ -2279,6 +2424,12 @@ subroutine set_diffusivity_init(Time, G, param_file, diag, CS, diag_to_Z_CSp)
                  "BBL mixing and the other diffusivities. Otherwise, \n"//&
                  "diffusiviy from the BBL_mixing is simply added.", &
                  default=.true.)
+    call get_param(param_file, mod, "USE_LOTW_BBL_DIFFUSIVITY", CS%use_LOTW_BBL_diffusivity, &
+                 "If true, uses a simple, imprecise but non-coordinate dependent, model\n"//&
+                 "of BBL mixing diffusivity based on Law of the Wall. Otherwise, uses\n"//&
+                 "the original BBL scheme.", default=.false.)
+  else
+    CS%use_LOTW_BBL_diffusivity = .false. ! This parameterization depends on a u* from viscous BBL
   endif
   CS%id_Kd_BBL = register_diag_field('ocean_model','Kd_BBL',diag%axesTi,Time, &
        'Bottom Boundary Layer Diffusivity', 'meter2 sec-1')
@@ -2364,6 +2515,9 @@ subroutine set_diffusivity_init(Time, G, param_file, diag, CS, diag_to_Z_CSp)
                  "A uniform diapycnal diffusivity that is added \n"//&
                  "everywhere without any filtering or scaling.", &
                  units="m2 s-1", default=0.0)
+  if (CS%use_LOTW_BBL_diffusivity .and. CS%Kd_max<=0.) call MOM_error(FATAL, &
+                 "set_diffusivity_init: KD_MAX must be set (positive) when "// &
+                 "USE_LOTW_BBL_DIFFUSIVITY=True.")
 
   if (CS%bulkmixedlayer) then
     ! Check that Kdml is not set when using bulk mixed layer
