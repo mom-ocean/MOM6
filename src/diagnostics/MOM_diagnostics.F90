@@ -1170,15 +1170,17 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, param_file, diag, CS)
   CS%id_mass_wt = register_diag_field('ocean_model', 'mass_wt', diag%axesT1, Time,  &
       'The column mass for calculating mass-weighted average properties', 'kg m-2')
 
-  CS%id_temp_int = register_diag_field('ocean_model', 'temp_int', diag%axesT1, Time,              &
-      'The mass weighted column integrated temperature', 'degC kg m-2',                           &
-      cmor_field_name='tomint', cmor_long_name='sea_water_prognostic_temperature_mass_integrated',&
-      cmor_units='degC kg m-2', cmor_standard_name='Sea Water Prognostic Temperature Mass Integrated')
+  CS%id_temp_int = register_diag_field('ocean_model', 'temp_int', diag%axesT1, Time,                &
+      'Density weighted column integrated potential temperature', 'degC kg m-2',                    &
+      cmor_field_name='opottempmint',                                                               &
+      cmor_long_name='integral_wrt_depth_of_product_of_sea_water_density_and_potential_temperature',&
+      cmor_units='degC kg m-2', cmor_standard_name='Depth integrated density times potential temperature')
 
-  CS%id_salt_int = register_diag_field('ocean_model', 'salt_int', diag%axesT1, Time, &
-      'The mass weighted column integrated salinity', 'ppt kg m-2',                  &
-      cmor_field_name='somint', cmor_long_name='sea_water_salinity_mass_integrated', &
-      cmor_units='ppt kg m-2', cmor_standard_name='Sea Water Salinity Mass Integrated')
+  CS%id_salt_int = register_diag_field('ocean_model', 'salt_int', diag%axesT1, Time,   &
+      'Density weighted column integrated salinity', 'ppt kg m-2',                     &
+      cmor_field_name='somint',                                                        &
+      cmor_long_name='integral_wrt_depth_of_product_of_sea_water_density_and_salinity',&
+      cmor_units='ppt kg m-2', cmor_standard_name='Depth integrated density times salinity')
 
   CS%id_col_mass = register_diag_field('ocean_model', 'col_mass', diag%axesT1, Time, &
       'The column integrated in situ density', 'kg m-2')

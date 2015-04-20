@@ -2276,9 +2276,9 @@ subroutine register_diags(Time, G, CS, ADp)
         cmor_standard_name='sea_surface_salinity')
   endif
   if (CS%use_temperature .and. CS%use_frazil) then
-    CS%id_fraz = register_diag_field('ocean_model', 'frazil', diag%axesT1, Time,                           &
-          'Heat sink from frazil formation', 'Watt meter-2', cmor_field_name='hfsifrazil',                 &
-          cmor_units='W m-2', cmor_standard_name='heat_flux_into_sea_water_due_to_freezing_of_frazil_ice', &
+    CS%id_fraz = register_diag_field('ocean_model', 'frazil', diag%axesT1, Time,                         &
+          'Heat from frazil formation', 'Watt meter-2', cmor_field_name='hfsifrazil',                    &
+          cmor_units='W m-2', cmor_standard_name='heat_flux_into_sea_water_due_to_frazil_ice_formation', &
           cmor_long_name='Heat Flux into Sea Water due to Frazil Ice Formation')
   endif
 

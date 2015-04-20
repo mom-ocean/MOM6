@@ -177,12 +177,12 @@ type, public :: diabatic_CS ; private
   real :: MLDdensityDifference ! Density difference used to determine MLD_user
   integer :: nsw               ! SW_NBANDS
 
-  integer :: id_dudt_dia = -1, id_dvdt_dia = -1, id_wd     = -1
-  integer :: id_ea       = -1, id_eb       = -1, id_Kd_z   = -1, id_Kd_interface = -1
-  integer :: id_Tdif_z   = -1, id_Tadv_z   = -1, id_Sdif_z = -1, id_Sadv_z = -1
-  integer :: id_Tdif     = -1, id_Tadv     = -1, id_Sdif   = -1, id_Sadv = -1
+  integer :: id_dudt_dia = -1, id_dvdt_dia = -1, id_wd        = -1
+  integer :: id_ea       = -1, id_eb       = -1, id_Kd_z      = -1, id_Kd_interface = -1
+  integer :: id_Tdif_z   = -1, id_Tadv_z   = -1, id_Sdif_z    = -1, id_Sadv_z       = -1
+  integer :: id_Tdif     = -1, id_Tadv     = -1, id_Sdif      = -1, id_Sadv         = -1
   integer :: id_createdH = -1, id_subMLN2  = -1, id_brine_lay = -1
-  integer :: id_MLD_003  = -1, id_MLD_0125 = -1, id_MLD_user = -1, id_mlotstsq = -1
+  integer :: id_MLD_003  = -1, id_MLD_0125 = -1, id_MLD_user  = -1, id_mlotstsq     = -1
 
   type(entrain_diffusive_CS),   pointer :: entrain_diffusive_CSp => NULL()
   type(bulkmixedlayer_CS),      pointer :: bulkmixedlayer_CSp    => NULL()
@@ -2124,8 +2124,8 @@ subroutine find_uv_at_h(u, v, h, u_h, v_h, G, ea, eb)
 end subroutine find_uv_at_h
 
 
-! smg: this routine should be moved to a diagnostics module 
 !> Diagnose a mixed layer depth (MLD) determined by a given density difference with the surface.
+!> This routine is appropriate in MOM_diabatic_driver due to its position within the time stepping.  
 subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, diagPtr, id_N2subML, id_MLDsq)
   integer,                               intent(in) :: id_MLD      !< Handle (ID) of MLD diagnostic
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h           !< Layer thickness
@@ -2135,12 +2135,13 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, diagPtr
   type(diag_ctrl),                       pointer    :: diagPtr     !< Diagnostics structure
   integer,                     optional, intent(in) :: id_N2subML  !< Optional handle (ID) of subML stratification
   integer,                     optional, intent(in) :: id_MLDsq    !< Optional handle (ID) of squared MLD
+
   ! Local variables
-  real, dimension(SZI_(G)) :: rhoSurf, deltaRhoAtKm1, deltaRhoAtK, dK, dKm1, pRef_MLD ! Used for MLD
-  real, dimension(SZI_(G)) :: rhoAtK, rho1, d1, pRef_N2 ! Used for N2
+  real, dimension(SZI_(G))          :: rhoSurf, deltaRhoAtKm1, deltaRhoAtK, dK, dKm1, pRef_MLD 
+  real, dimension(SZI_(G))          :: rhoAtK, rho1, d1, pRef_N2 ! Used for N2
   real, dimension(SZI_(G), SZJ_(G)) :: MLD ! Diagnosed mixed layer depth
   real, dimension(SZI_(G), SZJ_(G)) :: subMLN2 ! Diagnosed stratification below ML
-  real, parameter :: dz_subML = 50. ! Depth below ML over which to diagnose stratification (m)
+  real, parameter                   :: dz_subML = 50. ! Depth below ML over which to diagnose stratification (m)
   integer :: i, j, is, ie, js, je, k, nz, id_N2, id_SQ
   real :: aFac, ddRho
 
@@ -2208,9 +2209,10 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, diagPtr
    !  endif
     enddo
   enddo ! j-loop
+
   if (id_MLD > 0) call post_data(id_MLD, MLD, diagPtr)
-  if (id_N2 > 0) call post_data(id_N2, subMLN2 , diagPtr) 
-  if (id_SQ > 0) call post_data(id_SQ, (MLD*MLD), diagPtr)
+  if (id_N2 > 0)  call post_data(id_N2, subMLN2 , diagPtr) 
+  if (id_SQ > 0)  call post_data(id_SQ, (MLD*MLD), diagPtr)
 
 end subroutine diagnoseMLDbyDensityDifference
 
