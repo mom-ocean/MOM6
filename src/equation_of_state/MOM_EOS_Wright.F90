@@ -114,9 +114,9 @@ subroutine calculate_density_array_wright(T, S, pressure, rho, start, npts)
   integer :: j
 
   do j=start,start+npts-1
-    al0 = a0 + a1*T(j) +a2*S(j)
-    p0 = b0 + b4*S(j) + T(j) * (b1 + T(j)*(b2 + b3*T(j)) + b5*S(j))
-    lambda = c0 +c4*S(j) + T(j) * (c1 + T(j)*(c2 + c3*T(j)) + c5*S(j))
+    al0 = (a0 + a1*T(j)) +a2*S(j)
+    p0 = (b0 + b4*S(j)) + T(j) * (b1 + T(j)*((b2 + b3*T(j))) + b5*S(j))
+    lambda = (c0 +c4*S(j)) + T(j) * (c1 + T(j)*((c2 + c3*T(j))) + c5*S(j))
 
     rho(j) = (pressure(j) + p0) / (lambda + al0*(pressure(j) + p0))
   enddo
@@ -139,9 +139,9 @@ subroutine calculate_density_derivs_wright(T, S, pressure, drho_dT, drho_dS, sta
   integer :: j
 
   do j=start,start+npts-1
-    al0 = a0 + a1*T(j) + a2*S(j)
-    p0 = b0 + b4*S(j) + T(j) * (b1 + T(j)*(b2 + b3*T(j)) + b5*S(j))
-    lambda = c0 +c4*S(j) + T(j) * (c1 + T(j)*(c2 + c3*T(j)) + c5*S(j))
+    al0 = (a0 + a1*T(j)) + a2*S(j)
+    p0 = (b0 + b4*S(j)) + T(j) * (b1 + T(j)*((b2 + b3*T(j))) + b5*S(j))
+    lambda = (c0 +c4*S(j)) + T(j) * (c1 + T(j)*((c2 + c3*T(j))) + c5*S(j))
 
     I_denom2 = 1.0 / (lambda + al0*(pressure(j) + p0))
     I_denom2 = I_denom2 *I_denom2
@@ -180,9 +180,9 @@ subroutine calculate_compress_wright(T, S, pressure, rho, drho_dp, start, npts)
   integer :: j
 
   do j=start,start+npts-1
-    al0 = a0 + a1*T(j) +a2*S(j)
-    p0 = b0 + b4*S(j) + T(j) * (b1 + T(j)*(b2 + b3*T(j)) + b5*S(j))
-    lambda = c0 +c4*S(j) + T(j) * (c1 + T(j)*(c2 + c3*T(j)) + c5*S(j))
+    al0 = (a0 + a1*T(j)) +a2*S(j)
+    p0 = (b0 + b4*S(j)) + T(j) * (b1 + T(j)*((b2 + b3*T(j))) + b5*S(j))
+    lambda = (c0 +c4*S(j)) + T(j) * (c1 + T(j)*((c2 + c3*T(j))) + c5*S(j))
 
     I_denom = 1.0 / (lambda + al0*(pressure(j) + p0))
     rho(j) = (pressure(j) + p0) * I_denom
@@ -215,9 +215,9 @@ subroutine calculate_2_densities_wright( T, S, pressure1, pressure2, rho1, rho2,
   integer :: j
 
   do j=start, start+npts-1
-    al0 = a0 + a1*T(j) + a2*S(j)
-    p0 = b0 + b4*S(j) + T(j) * (b1 + T(j)*(b2 + b3*T(j)) + b5*S(j))
-    lambda = c0 +c4*S(j) + T(j) * (c1 + T(j)*(c2 + c3*T(j)) + c5*S(j))
+    al0 = (a0 + a1*T(j)) + a2*S(j)
+    p0 = (b0 + b4*S(j)) + T(j) * (b1 + T(j)*((b2 + b3*T(j))) + b5*S(j))
+    lambda = (c0 +c4*S(j)) + T(j) * (c1 + T(j)*((c2 + c3*T(j))) + c5*S(j))
 
     rho1(j) = (pressure1 + p0) / (lambda + al0*(pressure1 + p0))
     rho2(j) = (pressure2 + p0) / (lambda + al0*(pressure2 + p0))
@@ -276,9 +276,9 @@ subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, B, dpa, in
   I_Rho = 1.0 / rho_0
 
   do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-    al0_2d(i,j) = a0 + a1*T(i,j) + a2*S(i,j)
-    p0_2d(i,j) = b0 + b4*S(i,j) + T(i,j) * (b1 + T(i,j)*(b2 + b3*T(i,j)) + b5*S(i,j))
-    lambda_2d(i,j) = c0 +c4*S(i,j) + T(i,j) * (c1 + T(i,j)*(c2 + c3*T(i,j)) + c5*S(i,j))
+    al0_2d(i,j) = (a0 + a1*T(i,j)) + a2*S(i,j)
+    p0_2d(i,j) = (b0 + b4*S(i,j)) + T(i,j) * (b1 + T(i,j)*((b2 + b3*T(i,j))) + b5*S(i,j))
+    lambda_2d(i,j) = (c0 +c4*S(i,j)) + T(i,j) * (c1 + T(i,j)*((c2 + c3*T(i,j))) + c5*S(i,j))
 
     al0 = al0_2d(i,j) ; p0 = p0_2d(i,j) ; lambda = lambda_2d(i,j)
 
@@ -407,9 +407,9 @@ subroutine int_spec_vol_dp_wright(T, S, p_t, p_b, alpha_ref, G, dza, &
 
   if (present(intp_dza)) then
     do j=jsh,jeh ; do i=ish,ieh
-      al0_2d(i,j) = a0 + a1*T(i,j) + a2*S(i,j)
-      p0_2d(i,j) = b0 + b4*S(i,j) + T(i,j) * (b1 + T(i,j)*(b2 + b3*T(i,j)) + b5*S(i,j))
-      lambda_2d(i,j) = c0 +c4*S(i,j) + T(i,j) * (c1 + T(i,j)*(c2 + c3*T(i,j)) + c5*S(i,j))
+      al0_2d(i,j) = (a0 + a1*T(i,j)) + a2*S(i,j)
+      p0_2d(i,j) = (b0 + b4*S(i,j)) + T(i,j) * (b1 + T(i,j)*((b2 + b3*T(i,j))) + b5*S(i,j))
+      lambda_2d(i,j) = (c0 +c4*S(i,j)) + T(i,j) * (c1 + T(i,j)*((c2 + c3*T(i,j))) + c5*S(i,j))
  
       al0 = al0_2d(i,j) ; p0 = p0_2d(i,j) ; lambda = lambda_2d(i,j)
       dp = p_b(i,j) - p_t(i,j)
@@ -423,9 +423,9 @@ subroutine int_spec_vol_dp_wright(T, S, p_t, p_b, alpha_ref, G, dza, &
     enddo ; enddo
   else
     do j=jsh,jeh ; do i=ish,ieh
-      al0_2d(i,j) = a0 + a1*T(i,j) + a2*S(i,j)
-      p0_2d(i,j) = b0 + b4*S(i,j) + T(i,j) * (b1 + T(i,j)*(b2 + b3*T(i,j)) + b5*S(i,j))
-      lambda_2d(i,j) = c0 +c4*S(i,j) + T(i,j) * (c1 + T(i,j)*(c2 + c3*T(i,j)) + c5*S(i,j))
+      al0_2d(i,j) = (a0 + a1*T(i,j)) + a2*S(i,j)
+      p0_2d(i,j) = (b0 + b4*S(i,j)) + T(i,j) * (b1 + T(i,j)*((b2 + b3*T(i,j))) + b5*S(i,j))
+      lambda_2d(i,j) = (c0 +c4*S(i,j)) + T(i,j) * (c1 + T(i,j)*((c2 + c3*T(i,j))) + c5*S(i,j))
 
       al0 = al0_2d(i,j) ; p0 = p0_2d(i,j) ; lambda = lambda_2d(i,j)
       dp = p_b(i,j) - p_t(i,j)
