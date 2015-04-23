@@ -244,13 +244,14 @@ subroutine USER_initialize_tracer(restart, day, G, h, OBC, CS, sponge_CSp, &
   real :: tr_y   ! Initial zonally uniform tracer concentrations.
   real :: dist2  ! The distance squared from a line, in m2.
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz, m
-  integer :: IsdB, IedB, JsdB, JedB
+  integer :: IsdB, IedB, JsdB, JedB, lntr
 
   if (.not.associated(CS)) return
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
+  lntr = NTR ! Avoids compile-time warning when NTR<2
   CS%Time => day
 
   if (.not.restart) then
@@ -328,7 +329,7 @@ subroutine USER_initialize_tracer(restart, day, G, h, OBC, CS, sponge_CSp, &
     endif
     ! All tracers but the first have 0 concentration in their inflows. As this
     ! is the default value, the following calls are unnecessary.
-    do m=2,NTR
+    do m=2,lntr
       call add_tracer_OBC_values(trim(CS%tr_desc(m)%name), CS%tr_Reg, 0.0)
     enddo
   endif
