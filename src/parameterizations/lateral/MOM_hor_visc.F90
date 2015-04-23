@@ -127,6 +127,8 @@ type, public :: hor_visc_CS ; private
   logical :: bound_Coriolis  ! If true & SMAGORINSKY_AH is used, the biharmonic
                              ! viscosity is modified to include a term that
                              ! scales quadratically with the velocity shears.
+  logical :: side_drag       ! Use side drag (Deremble et al., 2011)
+  real :: Cd                 ! Drag coefficient for side drag, nondimensional.
 
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
     Kh_bg_xx,        &! The background Laplacian viscosity at h points, in units
@@ -244,7 +246,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
 
   real, dimension(SZIB_(G),SZJB_(G)) :: &
     sh_xy,  &     ! horizontal shearing strain (du/dy + dv/dx) (1/sec) including metric terms
-    str_xy, &     ! str_xy is the cross term in the stress tensor (H m2 s-2)
+    str_xy, &     ! str_xy and str_yx are cross terms in the stress tensor (H m2 s-2)
+    str_yx, &
     FrictWorkIntz ! depth integrated energy dissipated by lateral friction (W/m2)
 
   real, dimension(SZIB_(G),SZJB_(G),SZK_(G)) :: &
@@ -277,6 +280,9 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
   logical :: rescale_Kh
   logical :: find_FrictWork
   logical :: apply_OBC = .false.
+  real :: vel_gam                      ! drag scaling factor in H m s-1.
+  real :: u_loc, v_loc, uvmag          ! velocity at boundary and magnitude in m s-1.
+  real :: drag_stress_u, drag_stress_v ! side drag stresses in H m2 s-2.
   logical :: use_MEKE_Ku
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   integer :: i, j, k
@@ -525,7 +531,30 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
       endif  ! biharmonic
 
       str_xy(I,J) = str_xy(I,J) * (hq * G%mask2dBu(I,J) * CS%reduction_xy(I,J))
-    enddo ; enddo
+
+      ! stress tensor is symmetric except when side drag is applied
+      str_yx(i,j) = str_xy(i,j)
+
+      if (CS%side_drag) then
+        ! since drag is applied on mask2dBu, at most one of the surrounding
+        ! velocity components is non-zero
+        u_loc = u(i,j,k) + u(i,j+1,k)
+        v_loc = v(i,j,k) + v(i+1,j,k)
+        uvmag = sqrt(u_loc**2 + v_loc**2)
+        vel_gam = hq * CS%Cd * uvmag
+
+        ! calculate the stress due to drag from the wall. we need to take into
+        ! account the orientation of the wall relative to the current cell
+        ! corner on which the stress is being calculated
+        drag_stress_u = vel_gam * u_loc * (2.0 * G%mask2dT(i,j) - 1.0)
+        drag_stress_v = vel_gam * v_loc * (2.0 * G%mask2dT(i,j) - 1.0)
+
+        ! modify the str_xy and str_yx terms to include a drag
+        ! when next to a wall
+        str_xy(i,j) = str_xy(i,j) + drag_stress_u*(1.0 - G%mask2dBu(i,j))
+        str_yx(i,j) = str_yx(i,j) + drag_stress_v*(1.0 - G%mask2dBu(i,j))
+      endif
+    enddo; enddo
 
     do j=js,je ; do i=isq,ieq
 !  Evaluate 1/h x.Div(h Grad u) or the biharmonic equivalent.
@@ -543,8 +572,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
 
 !  Evaluate 1/h y.Div(h Grad u) or the biharmonic equivalent.
     do J=Jsq,Jeq ; do i=is,ie
-      diffv(i,J,k) = ((G%IdyCv(i,J)*(CS%DY2q(I-1,J)*str_xy(I-1,J) - &
-                                    CS%DY2q(I,J) *str_xy(I,J)) - &
+      diffv(i,J,k) = ((G%IdyCv(i,J)*(CS%DY2q(I-1,J)*str_yx(I-1,J) - &
+                                    CS%DY2q(I,J) *str_yx(I,J)) - &
                        G%IdxCv(i,J)*(CS%DX2h(i,j) *str_xx(i,j) - &
                                     CS%DX2h(i,j+1)*str_xx(i,j+1))) * &
                      G%IareaCv(i,J)) / (0.5*(h(i,j+1,k) + h(i,j,k)) + h_neglect)
@@ -794,6 +823,15 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
                  "cleaner than the no slip BCs. The use of free slip BCs \n"//&
                  "is strongly encouraged, and no slip BCs are not used with \n"//&
                  "the biharmonic viscosity.", default=.false.)
+
+  call get_param(param_file, mod, "SIDE_DRAG", CS%side_drag, &
+                 "If true, a drag is applied to horizontal boundaries \n"//&
+                 "proportional to velocity through SIDE_DRAG_CD.", &
+                 default=.false.)
+  if (CS%side_drag) &
+    call get_param(param_file, mod, "SIDE_DRAG_CD", CS%Cd, &
+                   "Drag coefficient to use for SIDE_DRAG.", &
+                   units="nondim", default=0.0)
 
   if (CS%bound_Kh .or. CS%bound_Ah .or. CS%better_bound_Kh .or. CS%better_bound_Ah) &
     call get_param(param_file, mod, "DT", dt, &
