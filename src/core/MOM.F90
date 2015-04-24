@@ -1369,9 +1369,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     if (CS%id_u > 0) call post_data(CS%id_u, u, CS%diag)
     if (CS%id_v > 0) call post_data(CS%id_v, v, CS%diag)
     if (CS%id_h > 0) call post_data(CS%id_h, h, CS%diag)
-
-    ! smg: this needs to be generalized for non-Bouss
-    if (CS%id_thkcello > 0) call post_data(CS%id_thkcello, h, CS%diag)
+    if (CS%id_thkcello > 0) call post_data(CS%id_thkcello, G%H_to_m*h, CS%diag)
 
     ! compute ssh, which is either eta_av for Bouss, or 
     ! diagnosed ssh for non-Bouss; call "find_eta" for this 
