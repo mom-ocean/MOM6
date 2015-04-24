@@ -263,8 +263,6 @@ subroutine calc_resoln_function(h, tv, G, CS)
       CS%Res_fn_v(i,J) = 0.5*(CS%Res_fn_h(i,j) + CS%Res_fn_h(i,j+1))
     enddo ; enddo
   else ! .not.CS%interpolate_Res_fn
-!$OMP parallel default(none) shared(is,ie,js,je,Ieq,Jeq,CS) &
-!$OMP                       private(dx_term,cg1_q,power_2,cg1_u,cg1_v)
     if (CS%Res_fn_power_khth >= 100) then
 !$OMP do
       do j=js,je ; do I=is-1,Ieq

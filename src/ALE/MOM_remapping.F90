@@ -117,9 +117,9 @@ subroutine remapping_main( CS, G, h, dxInterface, tv, u, v )
   nz = G%ke
 
   ! Remap tracer
-  if (associated(tv%S)) then ! Assume T and S are either both associated or both not
 !$OMP parallel default(none) shared(G,h,dxInterface,CS,nz,tv,u,v) &
 !$OMP                       private(h1,dx,u_column)
+  if (associated(tv%S)) then ! Assume T and S are either both associated or both not
 !$OMP do
     do j = G%jsc,G%jec
       do i = G%isc,G%iec
