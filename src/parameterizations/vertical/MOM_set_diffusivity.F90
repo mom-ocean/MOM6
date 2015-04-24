@@ -1310,7 +1310,7 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, &
   type(set_diffusivity_CS),               pointer       :: CS
   real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(inout) :: Kd
   real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(inout) :: Kd_int
-  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), pointer :: Kd_BBL
+  real, dimension(:,:,:),                 pointer       :: Kd_BBL
 
   real, dimension(SZK_(G)+1) :: &
     Rint          ! The coordinate density of an interface in kg m-3.
@@ -1529,7 +1529,7 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, G, CS,
   type(set_diffusivity_CS),                     pointer       :: CS !< Diffusivity control structure
   real, dimension(NIMEM_,NJMEM_,NKMEM_),        intent(inout) :: Kd !< Layer net diffusivity (m2 s-1)
   real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(inout) :: Kd_int !< Interface net diffusivity (m2 s-1)
-  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), pointer       :: Kd_BBL !< Interface BBL diffusivity (m2 s-1)
+  real, dimension(:,:,:),                       pointer       :: Kd_BBL !< Interface BBL diffusivity (m2 s-1)
   ! Local variables
   real :: TKE_column    ! The net TKE input into the column , in m3 s-3.
   real :: TKE_to_layer  ! The TKE used to drive mixing in a layer, in m3 s-3.
