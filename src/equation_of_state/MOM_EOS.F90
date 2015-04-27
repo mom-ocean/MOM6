@@ -42,6 +42,7 @@ implicit none ; private
 
 public calculate_compress, calculate_density, query_compressible
 public calculate_density_derivs, calculate_2_densities
+public calculate_specific_vol_derivs
 public select_eqn_of_state, deselect_eqn_of_state
 public int_density_dz, int_specific_vol_dp
 public int_density_dz_generic_plm, int_density_dz_generic_ppm
@@ -261,6 +262,53 @@ subroutine calculate_density_derivs(T, S, pressure, drho_dT, drho_dS, start, npt
   end select
 
 end subroutine calculate_density_derivs
+
+subroutine calculate_specific_vol_derivs(T, S, pressure, dSV_dT, dSV_dS, start, npts, EOS)
+  real,    intent(in),  dimension(:) ::  T, S, pressure
+  real,    intent(out), dimension(:) :: dSV_dT, dSV_dS
+  integer, intent(in)                :: start, npts
+  type(EOS_type),        pointer     :: EOS
+! * Arguments: T - potential temperature relative to the surface in C. *
+! *  (in)      S - salinity in PSU.                                    *
+! *  (in)      pressure - pressure in Pa.                              *
+! *  (out)     dSV_dT - the partial derivative of specific volume with *
+! *                     potential temperature, in m3 kg-1 K-1.         *
+! *  (out)     dSV_dS - the partial derivative of specific volume with *
+! *                      salinity, in m3 kg-1 / (g/kg).                *
+! *  (in)      start - the starting point in the arrays.               *
+! *  (in)      npts - the number of values to calculate.               *
+! *  (in)      EOS - the equation of state type.                       *
+! *====================================================================*
+! *  This subroutine the appropriate subroutine to calculate specific  *
+! *  volume derivatives for an array.                                  *
+! *====================================================================*
+
+  real, dimension(size(T)) :: &
+    dRho_dT, dRho_dS, rho
+  integer :: j
+
+  if (.not.associated(EOS)) call MOM_error(FATAL, &
+    "calculate_density_derivs called with an unassociated EOS_type EOS.")
+
+  select case (EOS%form_of_EOS)
+    case (EOS_LINEAR)
+      call calculate_specvol_derivs_linear(T, S, pressure, dSV_dT, dSV_dS, start, &
+                                           npts, EOS%Rho_T0_S0, EOS%dRho_dT, EOS%dRho_dS)
+    case (EOS_UNESCO)
+      call calculate_density_unesco(T, S, pressure, rho, start, npts)
+      call calculate_density_derivs_unesco(T, S, pressure, drho_dT, drho_dS, start, npts)
+      do j=start,start+npts-1
+        dSV_dT(j) = -dRho_DT(j)/(rho(j)**2)
+        dSV_dS(j) = -dRho_DS(j)/(rho(j)**2)
+      enddo
+    case (EOS_WRIGHT)
+      call calculate_specvol_derivs_wright(T, S, pressure, dSV_dT, dSV_dS, start, npts)
+    case default
+      call MOM_error(FATAL, &
+           "calculate_density_derivs: EOS%form_of_EOS is not valid.")
+  end select
+
+end subroutine calculate_specific_vol_derivs
 
 subroutine calculate_compress(T, S, pressure, rho, drho_dp, start, npts, EOS)
   real,    intent(in),  dimension(:) :: T, S, pressure

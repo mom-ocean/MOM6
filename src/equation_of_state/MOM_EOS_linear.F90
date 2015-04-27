@@ -33,6 +33,7 @@ implicit none ; private
 
 public calculate_compress_linear, calculate_density_linear
 public calculate_density_derivs_linear, calculate_2_densities_linear
+public calculate_specvol_derivs_linear
 public calculate_density_scalar_linear, calculate_density_array_linear
 public int_density_dz_linear, int_spec_vol_dp_linear
 
@@ -121,6 +122,33 @@ subroutine calculate_density_derivs_linear(T, S, pressure, drho_dT_out, &
   enddo
 
 end subroutine calculate_density_derivs_linear
+
+subroutine calculate_specvol_derivs_linear(T, S, pressure, dSV_dT, dSV_dS, &
+                             start, npts, Rho_T0_S0, dRho_dT, dRho_dS)
+  real,    intent(in),  dimension(:) ::  T, S, pressure
+  real,    intent(out), dimension(:) :: dSV_dT, dSV_dS
+  integer, intent(in)                :: start, npts
+  real,    intent(in)                :: Rho_T0_S0, dRho_dT, dRho_dS
+! * Arguments: T - potential temperature relative to the surface in C. *
+! *  (in)      S - salinity in g/kg.                                   *
+! *  (in)      pressure - pressure in Pa.                              *
+! *  (out)     dSV_dT - the partial derivative of specific volume with *
+! *                     potential temperature, in m3 kg-1 K-1.         *
+! *  (out)     dSV_dS - the partial derivative of specific volume with *
+! *                      salinity, in m3 kg-1 / (g/kg).                *
+! *  (in)      start - the starting point in the arrays.               *
+! *  (in)      npts - the number of values to calculate.               *
+  real :: I_rho2
+  integer :: j
+
+  do j=start,start+npts-1
+    ! Sv = 1.0 / (Rho_T0_S0 + dRho_dT*T(j) + dRho_dS*S(j))
+    I_rho2 = 1.0 / (Rho_T0_S0 + (dRho_dT*T(j) + dRho_dS*S(j)))**2
+    dSV_dT(j) = -dRho_dT * I_rho2
+    dSV_dS(j) = -dRho_dS * I_rho2
+  enddo
+
+end subroutine calculate_specvol_derivs_linear
 
 subroutine calculate_compress_linear(T, S, pressure, rho, drho_dp, start, npts,&
                                      Rho_T0_S0, dRho_dT, dRho_dS)

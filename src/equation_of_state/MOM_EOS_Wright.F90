@@ -33,6 +33,7 @@ implicit none ; private
 
 public calculate_compress_wright, calculate_density_wright
 public calculate_density_derivs_wright, calculate_2_densities_wright
+public calculate_specvol_derivs_wright
 public calculate_density_scalar_wright, calculate_density_array_wright
 public int_density_dz_wright, int_spec_vol_dp_wright
 
@@ -130,7 +131,7 @@ subroutine calculate_density_derivs_wright(T, S, pressure, drho_dT, drho_dS, sta
 ! *  (in)      S - salinity in PSU.                                    *
 ! *  (in)      pressure - pressure in Pa.                              *
 ! *  (out)     drho_dT - the partial derivative of density with        *
-! *                      potential tempetature, in kg m-3 K-1.         *
+! *                      potential temperature, in kg m-3 K-1.         *
 ! *  (out)     drho_dS - the partial derivative of density with        *
 ! *                      salinity, in kg m-3 psu-1.                    *
 ! *  (in)      start - the starting point in the arrays.               *
@@ -154,6 +155,38 @@ subroutine calculate_density_derivs_wright(T, S, pressure, drho_dT, drho_dS, sta
   enddo
 
 end subroutine calculate_density_derivs_wright
+
+subroutine calculate_specvol_derivs_wright(T, S, pressure, dSV_dT, dSV_dS, start, npts)
+  real,    intent(in),  dimension(:) ::  T, S, pressure
+  real,    intent(out), dimension(:) :: dSV_dT, dSV_dS
+  integer, intent(in)                :: start, npts
+! * Arguments: T - potential temperature relative to the surface in C. *
+! *  (in)      S - salinity in g/kg.                                   *
+! *  (in)      pressure - pressure in Pa.                              *
+! *  (out)     dSV_dT - the partial derivative of specific volume with *
+! *                     potential temperature, in m3 kg-1 K-1.         *
+! *  (out)     dSV_dS - the partial derivative of specific volume with *
+! *                      salinity, in m3 kg-1 / (g/kg).                *
+! *  (in)      start - the starting point in the arrays.               *
+! *  (in)      npts - the number of values to calculate.               *
+  real :: al0, p0, lambda, I_denom
+  integer :: j
+
+  do j=start,start+npts-1
+!    al0 = (a0 + a1*T(j)) + a2*S(j)
+    p0 = (b0 + b4*S(j)) + T(j) * (b1 + T(j)*((b2 + b3*T(j))) + b5*S(j))
+    lambda = (c0 +c4*S(j)) + T(j) * (c1 + T(j)*((c2 + c3*T(j))) + c5*S(j))
+
+    ! SV = al0 + lambda / (pressure(j) + p0)
+
+    I_denom = 1.0 / (pressure(j) + p0)
+    dSV_dT(j) = (a1 + I_denom * (c1 + T(j)*((2.0*c2 + 3.0*c3*T(j))) + c5*S(j))) - &
+                (I_denom**2 * lambda) *  (b1 + T(j)*((2.0*b2 + 3.0*b3*T(j))) + b5*S(j))
+    dSV_dS(j) = (a2 + I_denom * (c4 + c5*T(j))) - &
+                (I_denom**2 * lambda) *  (b4 + b5*T(j))
+  enddo
+
+end subroutine calculate_specvol_derivs_wright
 
 subroutine calculate_compress_wright(T, S, pressure, rho, drho_dp, start, npts)
   real,    intent(in),  dimension(:) :: T, S, pressure
