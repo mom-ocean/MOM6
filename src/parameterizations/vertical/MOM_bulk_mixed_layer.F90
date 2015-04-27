@@ -616,9 +616,9 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
                                 cMKE, Idt_diag, nsw, Pen_SW_bnd, opacity_band, TKE, &
                                 Idecay_len_TKE, j, ksort, G, CS)
 
-    call absorbRemainingSW(G, h(:,1:), eps, htot, opacity_band, nsw, j, dt, &
-                           CS%H_limit_fluxes, CS%correct_absorption, CS%absorb_all_SW, &
-                           ksort, T(:,1:), Ttot, Pen_SW_bnd)
+    call absorbRemainingSW(G, h(:,1:), opacity_band, nsw, j, dt, CS%H_limit_fluxes, &
+                           CS%correct_absorption, CS%absorb_all_SW, &
+                           T(:,1:), Pen_SW_bnd, eps, ksort, htot, Ttot)
 
     if (CS%TKE_diagnostics) then ; do i=is,ie
       CS%diag_TKE_mech_decay(i,j) = CS%diag_TKE_mech_decay(i,j) - Idt_diag*TKE(i)

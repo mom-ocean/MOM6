@@ -81,6 +81,7 @@ use MOM_domains,             only : create_group_pass, do_group_pass, group_pass
 use MOM_entrain_diffusive,   only : entrainment_diffusive, entrain_diffusive_init
 use MOM_entrain_diffusive,   only : entrain_diffusive_end, entrain_diffusive_CS
 use MOM_EOS,                 only : calculate_density, calculate_2_densities, calculate_TFreeze
+use MOM_EOS,                 only : calculate_specific_vol_derivs
 use MOM_error_handler,       only : MOM_error, FATAL, WARNING, callTree_showQuery
 use MOM_error_handler,       only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser,         only : get_param, log_version, param_file_type
@@ -2216,7 +2217,8 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, diagPtr
 
 end subroutine diagnoseMLDbyDensityDifference
 
-subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, aggregate_FW_forcing)
+subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
+                                    aggregate_FW_forcing)
   type(diabatic_CS),                     pointer       :: CS
   type(ocean_grid_type),                 intent(in)    :: G
   real,                                  intent(in)    :: dt
@@ -2227,9 +2229,8 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, aggreg
   type(thermo_var_ptrs),                 intent(inout) :: tv
   logical, intent(in) :: aggregate_FW_forcing
 
-! Update the thickness, temperature, and salinity due to 
-! thermodynamic boundary forcing (contained in fluxes type) applied
-! to h, tv%T and tv%S. 
+!   Update the thickness, temperature, and salinity due to thermodynamic
+! boundary forcing (contained in fluxes type) applied to h, tv%T and tv%S.
 !
 ! This routine is only used if CS%useALEalgorithm == .true. 
 !
@@ -2240,28 +2241,28 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, aggreg
 ! C/ update temp due to penetrative SW  
 !
 ! Arguments: 
-!  (in)      CS     = control structure returned by a previous diabatic_driver_init call
-!  (in)      G      = ocean grid structure
+!  (in)      CS     = Control structure returned by a previous diabatic_driver_init call
+!  (in)      G      = The ocean grid structure
 !  (in)      dt     = Time increment (seconds)
-!  (in)      fluxes = structure containing pointers to forcing fields; NULL ptrs for unused fields
-!            optics = pointer to the optics 
-!  (inout)   ea     = amount of fluid entrained from the layer above within
+!  (in)      fluxes = Structure containing pointers to forcing fields; NULL ptrs for unused fields
+!  (in)      optics = A pointer to the optics structure
+!  (inout)   ea     = The amount of fluid entrained from the layer above within
 !                     one time step  (m for Bouss, kg/m^2 for non-Bouss)
-!  (inout)   h      = layer thickness (m for Bouss and kg/m^2 for non-Bouss)
-!  (inout)   tv     = structure containing pointers to any available
+!  (inout)   h      = Layer thickness (m for Bouss and kg/m^2 for non-Bouss)
+!  (inout)   tv     = A structure containing pointers to any available
 !                     thermodynamic fields; unused fields have NULL ptrs.
 
   integer, parameter :: maxGroundings = 5
-  integer, dimension(SZI_(G), SZK_(G)) :: ksort
   integer :: numberOfGroundings, iGround(maxGroundings), jGround(maxGroundings)
 
   real :: H_limit_fluxes, IforcingDepthScale, Idt
   real :: dThickness, dTemp, dSalt
   real :: fractionOfForcing, hOld, Ithickness
 
-  real, dimension(SZI_(G))                       :: netMassInOut, netMassIn, netMassOut
-  real, dimension(SZI_(G))                       :: netHeat, netSalt, htot, Ttot
-  real, dimension(SZI_(G), SZK_(G))              :: h2d, T2d, eps
+  real, dimension(SZI_(G)) :: &
+    netMassInOut, netMassIn, netMassOut, &
+    netHeat, netSalt
+  real, dimension(SZI_(G), SZK_(G))              :: h2d, T2d
   real, dimension(max(CS%nsw,1),SZI_(G))         :: Pen_SW_bnd
   real, dimension(max(CS%nsw,1),SZI_(G),SZK_(G)) :: opacityBand
   real                                           :: hGrounding(maxGroundings)
@@ -2303,42 +2304,31 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, aggreg
   ! the surface fluxes uniformly.
   IforcingDepthScale = 1000. 
 
-  ! subroutine "absorbRemaining" uses an indirect indexing in the vertical
-  ! as in bulk mixed layer.
-  do k=1,nz ; do i=is,ie
-      ksort(i,k) = k
-  enddo ; enddo
-
   ! diagnostic to see if need to create mass to avoid grounding 
   if (CS%id_createdH>0) CS%createdH(:,:) = 0.
   numberOfGroundings = 0
 
-!$OMP parallel do default(none) shared(is,ie,js,je,nz,h,tv,nsw,G,optics,fluxes,dt,           &
-!$OMP                                  H_limit_fluxes,use_riverHeatContent,                  &
-!$OMP                                  useCalvingHeatContent,ea,IforcingDepthScale,          &
-!$OMP                                  numberOfGroundings,iGround,jGround,                   &
-!$OMP                                  hGrounding,CS,ksort,Idt,aggregate_FW_forcing)         &
-!$OMP                          private(opacityBand,h2d,T2d,eps,htot,netMassInOut,netMassOut, &
-!$OMP                                  netHeat,netSalt,Pen_SW_bnd,fractionOfForcing,         &
-!$OMP                                  dThickness,dTemp,dSalt,hOld,Ithickness,Ttot,          &
+!$OMP parallel do default(none) shared(is,ie,js,je,nz,h,tv,nsw,G,optics,fluxes,dt,       &
+!$OMP                                  H_limit_fluxes,use_riverHeatContent,              &
+!$OMP                                  useCalvingHeatContent,ea,IforcingDepthScale,      &
+!$OMP                                  numberOfGroundings,iGround,jGround,               &
+!$OMP                                  hGrounding,CS,Idt,aggregate_FW_forcing)           &
+!$OMP                          private(opacityBand,h2d,T2d,netMassInOut,netMassOut,      &
+!$OMP                                  netHeat,netSalt,Pen_SW_bnd,fractionOfForcing,     &
+!$OMP                                  dThickness,dTemp,dSalt,hOld,Ithickness,           &
 !$OMP                                  netMassIn)
 
   ! work in vertical slices for efficiency 
   do j=js,je 
 
-    Ttot = 0
     ! Copy state into 2D-slice arrays
-    do k=1,nz
-      do i=is,ie
-        h2d(i,k) = h(i,j,k)
-        T2d(i,k) = tv%T(i,j,k)
-        do n=1,nsw
-          opacityBand(n,i,k) = G%H_to_m*optics%opacity_band(n,i,j,k)
-        enddo
-        eps(i,k) = 0.
+    do k=1,nz ; do i=is,ie
+      h2d(i,k) = h(i,j,k)
+      T2d(i,k) = tv%T(i,j,k)
+      do n=1,nsw
+        opacityBand(n,i,k) = G%H_to_m*optics%opacity_band(n,i,j,k)
       enddo
-    enddo
-    do i=is,ie ; htot(i) = 0. ; enddo
+    enddo ; enddo
 
     ! The surface forcing is contained in the fluxes type.
     ! We aggregate the thermodynamic forcing for a time step into the following:
@@ -2358,7 +2348,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, aggreg
  
     ! ea is for passive tracers
     do i=is,ie
-      ea(i,j,1)    = netMassInOut(i)
+      ea(i,j,1) = netMassInOut(i)
       if (aggregate_FW_forcing) then
         netMassOut(i) = netMassInOut(i)
         netMassIn(i) = 0.
@@ -2514,9 +2504,8 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, aggreg
 
     ! step C/ in the application of fluxes 
     ! Heat by the divergence of penetrating SW (this uses the updated thicknesses)
-    call absorbRemainingSW(G, h2d, eps, htot, opacityBand, nsw, j, dt, &
-                           H_limit_fluxes, .true., .true., &
-                           ksort, T2d, Ttot, Pen_SW_bnd)
+    call absorbRemainingSW(G, h2d, opacityBand, nsw, j, dt, H_limit_fluxes, &
+                           .true., .true., T2d, Pen_SW_bnd)
  
     ! Copy slice back into model state
     do k=1,nz
