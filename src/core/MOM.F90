@@ -551,7 +551,6 @@ type, public :: MOM_control_struct
   integer :: id_zos      = -1
   integer :: id_zossq    = -1
   integer :: id_volo     = -1
-  integer :: id_thkcello = -1 
   integer :: id_ssh      = -1
   integer :: id_sst      = -1 
   integer :: id_sst_sq   = -1
@@ -1369,7 +1368,6 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     if (CS%id_u > 0) call post_data(CS%id_u, u, CS%diag)
     if (CS%id_v > 0) call post_data(CS%id_v, v, CS%diag)
     if (CS%id_h > 0) call post_data(CS%id_h, h, CS%diag)
-    if (CS%id_thkcello > 0) call post_data(CS%id_thkcello, G%H_to_m*h, CS%diag)
 
     ! compute ssh, which is either eta_av for Bouss, or 
     ! diagnosed ssh for non-Bouss; call "find_eta" for this 
@@ -2224,8 +2222,6 @@ subroutine register_diags(Time, G, CS, ADp)
   CS%id_h = register_diag_field('ocean_model', 'h', diag%axesTL, Time, &
       'Layer Thickness', thickness_units)
 
-  CS%id_thkcello = register_diag_field('ocean_model', 'thkcello', diag%axesTL, Time, &
-      long_name = 'Cell Thickness', standard_name='cell_thickness', units='m')
   CS%id_volo = register_scalar_field('ocean_model', 'volo', Time, diag,&
       long_name='Total volume of liquid ocean', units='m3',            &
       standard_name='sea_water_volume')
