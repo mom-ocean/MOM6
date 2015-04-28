@@ -255,20 +255,21 @@ integer :: n,i,j,k,l,nx,ny,nz,nt,kz
 integer :: k_top,k_bot,k_bot_prev,kk,kstart
 real    :: sl_tr
 real, dimension(size(tr_in,3)) :: wt,z1,z2
-logical :: debug_msg = .false.,debug_=.false.
+logical :: debug_msg, debug_
     
 nx = size(tr_in,1); ny=size(tr_in,2); nz = size(tr_in,3) 
 
 nlevs_data = size(tr_in,3)
-
 if (PRESENT(nlevs)) then
   nlevs_data  = anint(nlevs)
 endif
 
+debug_=.false.
 if (PRESENT(debug)) then
   debug_=debug
 endif
 
+debug_msg = .false.
 if (debug_) then
   debug_msg=.true.
 endif
