@@ -277,32 +277,46 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
     call post_data(CS%id_masso, masso, CS%diag)
   endif
 
-  ! Thickness of cells in meters
+  ! diagnose thickness of grid cells (meter)
   if (CS%id_thkcello > 0) then
-    if (G%Boussinesq) then ! thkcello is just h, in m.
+
+    ! thkcello = h for Boussinesq 
+    if (G%Boussinesq) then 
       call post_data(CS%id_thkcello, G%H_to_m*h, CS%diag)
-    else ! non-Boussinesq, thkcello is the actual thickness in m.
+
+    ! thkcello = dp/(rho*g) for non-Boussinesq
+    else 
       do j=js,je
-        do i=is,ie
-          pressure_1d(i) = fluxes%p_surf(i,j) ! Pressure loading at the surface, in Pa
-        enddo
+
+        ! pressure loading at top of surface layer (Pa) 
+        if(ASSOCIATED(fluxes%p_surf)) then
+          do i=is,ie
+            pressure_1d(i) = fluxes%p_surf(i,j) 
+          enddo
+        else
+          do i=is,ie
+            pressure_1d(i) = 0.0
+          enddo
+        endif 
+
         do k=1,nz
-          ! Pressure for EOS at the layer center, in Pa.
+          ! pressure for EOS at the layer center (Pa)
           do i=is,ie
             pressure_1d(i) = pressure_1d(i) + 0.5*(G%G_Earth*G%H_to_kg_m2)*h(i,j,k)
           enddo
-          ! Store in-situ density in diag_tmp3d, in kg/m3.
+          ! store in-situ density (kg/m3) in diag_tmp3d
           call calculate_density(tv%T(:,j,k),tv%S(:,j,k), pressure_1d, &
                                  CS%diag_tmp3d(:,j,k), is, ie-is+1, tv%eqn_of_state)
-          ! Infer cell thickness as dp(g*rho), in m. Store in diag_tmp3d
+          ! cell thickness = dz = dp/(g*rho) (meter); store in diag_tmp3d
           do i=is,ie
             CS%diag_tmp3d(i,j,k) = (G%H_to_kg_m2*h(i,j,k))/CS%diag_tmp3d(i,j,k)
           enddo
-          ! Pressure for EOS at the bottom interface, in Pa.
+          ! pressure for EOS at the bottom interface (Pa)
           do i=is,ie
             pressure_1d(i) = pressure_1d(i) + 0.5*(G%G_Earth*G%H_to_kg_m2)*h(i,j,k)
           enddo
         enddo ! k
+
       enddo ! j
       call post_data(CS%id_thkcello, CS%diag_tmp3d, CS%diag)
     endif
