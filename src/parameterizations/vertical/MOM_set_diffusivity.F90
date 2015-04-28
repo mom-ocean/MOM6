@@ -2471,6 +2471,14 @@ subroutine set_diffusivity_init(Time, G, param_file, diag, CS, diag_to_Z_CSp)
                  "If true, use a latitude-dependent scaling for the near \n"//&
                  "surface background diffusivity, as described in \n"//&
                  "Harrison & Hallberg, JPO 2008.", default=.false.)
+  call get_param(param_file, mod, "HENYEY_IGW_BACKGROUND_NEW", &
+                                CS%Henyey_IGW_background_new, &
+                 "If true, use a better latitude-dependent scaling for the\n"//&
+                 "background diffusivity, as described in \n"//&
+                 "Harrison & Hallberg, JPO 2008.", default=.false.)
+  if (CS%Henyey_IGW_background .and. CS%Henyey_IGW_background_new) call MOM_error(FATAL, &
+                 "set_diffusivity_init: HENYEY_IGW_BACKGROUND and HENYEY_IGW_BACKGROUND_NEW "// &
+                 "are mutually exclusive. Set only one or none.")
   if (CS%Henyey_IGW_background) &
     call get_param(param_file, mod, "HENYEY_N0_2OMEGA", CS%N0_2Omega, &
                   "The ratio of the typical Buoyancy frequency to twice \n"//&
@@ -2760,6 +2768,8 @@ subroutine set_diffusivity_init(Time, G, param_file, diag, CS, diag_to_Z_CSp)
         'Lee wave Driven Turbulent Kinetic Energy', 'Watt meter-2')
     CS%id_Kd_Niku = register_diag_field('ocean_model','Kd_Nikurashin',diag%axesTi,Time, &
          'Lee Wave Driven Diffusivity', 'meter2 sec-1')
+  else
+    CS%Decay_scale_factor_lee = -9.e99 ! This should never be used if CS%Lee_wave_dissipation = False
   endif
 
   CS%id_TKE_itidal = register_diag_field('ocean_model','TKE_itidal',diag%axesT1,Time, &
