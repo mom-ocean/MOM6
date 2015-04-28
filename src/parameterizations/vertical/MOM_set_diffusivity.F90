@@ -2760,6 +2760,8 @@ subroutine set_diffusivity_init(Time, G, param_file, diag, CS, diag_to_Z_CSp)
         'Lee wave Driven Turbulent Kinetic Energy', 'Watt meter-2')
     CS%id_Kd_Niku = register_diag_field('ocean_model','Kd_Nikurashin',diag%axesTi,Time, &
          'Lee Wave Driven Diffusivity', 'meter2 sec-1')
+  else
+    CS%Decay_scale_factor_lee = -9.e99 ! This should never be used if CS%Lee_wave_dissipation = False
   endif
 
   CS%id_TKE_itidal = register_diag_field('ocean_model','TKE_itidal',diag%axesT1,Time, &
