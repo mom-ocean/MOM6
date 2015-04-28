@@ -94,9 +94,7 @@ type, public :: diagnostics_CS ; private
     uh_Rlay   => NULL(), & ! zonal and meridional transports in layered 
     vh_Rlay   => NULL(), & ! potential rho coordinates: m3/s(Bouss) kg/s(non-Bouss)
     uhGM_Rlay => NULL(), & ! zonal and meridional Gent-McWilliams transports in layered 
-    vhGM_Rlay => NULL(), & ! potential density coordinates, m3/s (Bouss) kg/s(non-Bouss)
-
-    masscello => NULL()    ! mass per unit area of grid cell kg/m2
+    vhGM_Rlay => NULL()    ! potential density coordinates, m3/s (Bouss) kg/s(non-Bouss)
 
   ! following fields are 2-D.
   real, pointer, dimension(:,:) :: &
@@ -120,7 +118,8 @@ type, public :: diagnostics_CS ; private
     KE_adv     => NULL(),&  ! KE source from along-layer advection
     KE_visc    => NULL(),&  ! KE source from vertical viscosity
     KE_horvisc => NULL(),&  ! KE source from horizontal viscosity
-    KE_dia     => NULL()    ! KE source from diapycnal diffusion
+    KE_dia     => NULL(),&  ! KE source from diapycnal diffusion
+    diag_tmp3d => NULL()    ! 3D re-usable arrays for diagnostics
 
   ! diagnostic IDs
   integer :: id_e              = -1, id_e_D            = -1
@@ -143,6 +142,7 @@ type, public :: diagnostics_CS ; private
   integer :: id_sosga          = -1, id_tosga          = -1
   integer :: id_temp_layer_ave = -1, id_salt_layer_ave = -1
   integer :: id_pbo            = -1
+  integer :: id_thkcello       = -1
 
   type(wave_speed_CS), pointer :: wave_speed_CSp => NULL()  
 
@@ -203,6 +203,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
                                    
   ! tmp array for surface properties 
   real :: surface_field(SZI_(G),SZJ_(G)) 
+  real :: pressure_1d(SZI_(G)) ! Temporary array for pressure when calling EOS
                                    
   real :: pres(SZI_(G))
   real :: wt, wt_p
@@ -262,18 +263,63 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
   ! mass per area of grid cell (for Bouss, use Rho0)
   if (CS%id_masscello > 0) then
     do k=1,nz; do j=js,je ; do i=is,ie 
-       CS%masscello(i,j,k) = G%H_to_kg_m2*h(i,j,k)
+       CS%diag_tmp3d(i,j,k) = G%H_to_kg_m2*h(i,j,k)
     enddo ; enddo ; enddo
-    call post_data(CS%id_masscello, CS%masscello, CS%diag)
+    call post_data(CS%id_masscello, CS%diag_tmp3d, CS%diag)
   endif
 
   ! mass of liquid ocean (for Bouss, use Rho0)
   if (CS%id_masso > 0) then
-    do k=1,nz; do j=js,je ; do i=is,ie 
-       CS%masscello(i,j,k) = G%H_to_kg_m2*h(i,j,k)*G%areaT(i,j)
+    do k=1,nz; do j=js,je ; do i=is,ie
+       CS%diag_tmp3d(i,j,k) = G%H_to_kg_m2*h(i,j,k)*G%areaT(i,j)
     enddo ; enddo ; enddo
-    masso = (reproducing_sum(sum(CS%masscello,3)))
+    masso = (reproducing_sum(sum(CS%diag_tmp3d,3)))
     call post_data(CS%id_masso, masso, CS%diag)
+  endif
+
+  ! diagnose thickness of grid cells (meter)
+  if (CS%id_thkcello > 0) then
+
+    ! thkcello = h for Boussinesq 
+    if (G%Boussinesq) then 
+      call post_data(CS%id_thkcello, G%H_to_m*h, CS%diag)
+
+    ! thkcello = dp/(rho*g) for non-Boussinesq
+    else 
+      do j=js,je
+
+        ! pressure loading at top of surface layer (Pa) 
+        if(ASSOCIATED(fluxes%p_surf)) then
+          do i=is,ie
+            pressure_1d(i) = fluxes%p_surf(i,j) 
+          enddo
+        else
+          do i=is,ie
+            pressure_1d(i) = 0.0
+          enddo
+        endif 
+
+        do k=1,nz
+          ! pressure for EOS at the layer center (Pa)
+          do i=is,ie
+            pressure_1d(i) = pressure_1d(i) + 0.5*(G%G_Earth*G%H_to_kg_m2)*h(i,j,k)
+          enddo
+          ! store in-situ density (kg/m3) in diag_tmp3d
+          call calculate_density(tv%T(:,j,k),tv%S(:,j,k), pressure_1d, &
+                                 CS%diag_tmp3d(:,j,k), is, ie-is+1, tv%eqn_of_state)
+          ! cell thickness = dz = dp/(g*rho) (meter); store in diag_tmp3d
+          do i=is,ie
+            CS%diag_tmp3d(i,j,k) = (G%H_to_kg_m2*h(i,j,k))/CS%diag_tmp3d(i,j,k)
+          enddo
+          ! pressure for EOS at the bottom interface (Pa)
+          do i=is,ie
+            pressure_1d(i) = pressure_1d(i) + 0.5*(G%G_Earth*G%H_to_kg_m2)*h(i,j,k)
+          enddo
+        enddo ! k
+
+      enddo ! j
+      call post_data(CS%id_thkcello, CS%diag_tmp3d, CS%diag)
+    endif
   endif
 
   ! volume mean potential temperature 
@@ -1027,8 +1073,12 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, param_file, diag, CS)
   CS%id_masso = register_scalar_field('ocean_model', 'masso', Time,  &
       diag, 'Mass of liquid ocean', 'kg', standard_name='sea_water_mass')
 
-  if ((CS%id_masscello>0) .or. (CS%id_masso>0) .and. .not.ASSOCIATED(CS%masscello)) then
-    call safe_alloc_ptr(CS%masscello,isd,ied,jsd,jed,nz)
+  CS%id_thkcello = register_diag_field('ocean_model', 'thkcello', diag%axesTL, Time, &
+      long_name = 'Cell Thickness', standard_name='cell_thickness', units='m')
+
+  if (((CS%id_masscello>0) .or. (CS%id_masso>0) .or. (CS%id_thkcello>0.and..not.G%Boussinesq)) &
+      .and. .not.ASSOCIATED(CS%diag_tmp3d)) then
+    call safe_alloc_ptr(CS%diag_tmp3d,isd,ied,jsd,jed,nz)
   endif
 
   CS%id_thetaoga = register_scalar_field('ocean_model', 'thetaoga',    &
@@ -1281,7 +1331,7 @@ subroutine MOM_diagnostics_end(CS, ADp)
   if (ASSOCIATED(CS%vh_Rlay))    deallocate(CS%vh_Rlay)
   if (ASSOCIATED(CS%uhGM_Rlay))  deallocate(CS%uhGM_Rlay)
   if (ASSOCIATED(CS%vhGM_Rlay))  deallocate(CS%vhGM_Rlay)
-  if (ASSOCIATED(CS%masscello))  deallocate(CS%masscello)
+  if (ASSOCIATED(CS%diag_tmp3d)) deallocate(CS%diag_tmp3d)
 
   if (ASSOCIATED(ADp%gradKEu))    deallocate(ADp%gradKEu)
   if (ASSOCIATED(ADp%gradKEu))    deallocate(ADp%gradKEu)
