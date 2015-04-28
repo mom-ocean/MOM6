@@ -2471,6 +2471,14 @@ subroutine set_diffusivity_init(Time, G, param_file, diag, CS, diag_to_Z_CSp)
                  "If true, use a latitude-dependent scaling for the near \n"//&
                  "surface background diffusivity, as described in \n"//&
                  "Harrison & Hallberg, JPO 2008.", default=.false.)
+  call get_param(param_file, mod, "HENYEY_IGW_BACKGROUND_NEW", &
+                                CS%Henyey_IGW_background_new, &
+                 "If true, use a better latitude-dependent scaling for the\n"//&
+                 "background diffusivity, as described in \n"//&
+                 "Harrison & Hallberg, JPO 2008.", default=.false.)
+  if (CS%Henyey_IGW_background .and. CS%Henyey_IGW_background_new) call MOM_error(FATAL, &
+                 "set_diffusivity_init: HENYEY_IGW_BACKGROUND and HENYEY_IGW_BACKGROUND_NEW "// &
+                 "are mutually exclusive. Set only one or none.")
   if (CS%Henyey_IGW_background) &
     call get_param(param_file, mod, "HENYEY_N0_2OMEGA", CS%N0_2Omega, &
                   "The ratio of the typical Buoyancy frequency to twice \n"//&
