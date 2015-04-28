@@ -534,10 +534,10 @@ old_fit = .true.   ! reproduces siena behavior
                     
 nx=size(temp,1);ny=size(temp,2); nz=size(temp,3)
 
-
 press(:) = p_ref
    
 do j=1,ny
+  dS(:,:) = 0. ! Needs to be zero everywhere since there is a maxval(abs(dS)) later...
   T=temp(:,j,:)
   S=salt(:,j,:)
   hin=h(:,j,:)
