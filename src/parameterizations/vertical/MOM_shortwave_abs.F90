@@ -267,8 +267,7 @@ end subroutine absorbRemainingSW
 
 
 subroutine sumSWoverBands(G, h, opacity_band, nsw, j, dt, &
-                          H_limit_fluxes, correctAbsorption, absorbAllSW, &
-                          iPen_SW_bnd, netPen)
+                          H_limit_fluxes, absorbAllSW, iPen_SW_bnd, netPen)
 !   This subroutine calculates the total shortwave heat flux integrated over
 ! bands as a function of depth.
   type(ocean_grid_type),                 intent(in)    :: G
@@ -278,7 +277,6 @@ subroutine sumSWoverBands(G, h, opacity_band, nsw, j, dt, &
   integer,                               intent(in)    :: j
   real,                                  intent(in)    :: dt
   real,                                  intent(in)    :: H_limit_fluxes
-  logical,                               intent(in)    :: correctAbsorption
   logical,                               intent(in)    :: absorbAllSW
   real, dimension(:,:),                  intent(in)    :: iPen_SW_bnd
   real, dimension(NIMEM_,NK_INTERFACE_), intent(inout) :: netPen ! Units of K m
@@ -314,11 +312,6 @@ subroutine sumSWoverBands(G, h, opacity_band, nsw, j, dt, &
   real :: h_min_heat      ! minimum thickness layer that should get heated (H units)
   real :: opt_depth       ! optical depth of a layer (non-dim)
   real :: exp_OD          ! exp(-opt_depth) (non-dim)
-  real :: heat_bnd        ! heating due to absorption in the current
-                          ! layer by the current band, including any piece that
-                          ! is moved upward (K H units)
-  real :: SWa             ! fraction of the absorbed shortwave that is
-                          ! moved to layers above with correctAbsorption (non-dim)
   logical :: SW_Remains   ! If true, some column has shortwave radiation that
                           ! was not entirely absorbed.
 
@@ -352,20 +345,6 @@ subroutine sumSWoverBands(G, h, opacity_band, nsw, j, dt, &
               (nsw*Pen_SW_bnd(n,i)*SW_trans < h(i,k)*dt*2.5e-8)) &
             SW_trans = 0.0
 
-          if (correctAbsorption .and. (h_heat(i) > 0.0)) then
-            if (opt_depth > 1e-5) then
-              SWa = ((opt_depth + (opt_depth + 2.0)*exp_OD) - 2.0) / &
-                ((opt_depth + opacity_band(n,i,k) * h_heat(i)) * &
-                 (1.0 - exp_OD))
-            else
-              ! Use a Taylor's series expansion of the expression above for a
-              ! more accurate form with very small layer optical depths.
-              SWa = h(i,k) * (opt_depth * (1.0 - opt_depth)) / &
-                ((h_heat(i) + h(i,k)) * (6.0 - 3.0*opt_depth))
-            endif
-            Heat_bnd = Pen_SW_bnd(n,i) * (1.0 - SW_trans)
-          endif
-
           Pen_SW_bnd(n,i) = Pen_SW_bnd(n,i) * SW_trans
           netPen(i,k+1) = netPen(i,k+1) + Pen_SW_bnd(n,i)
         endif ; enddo
@@ -381,12 +360,6 @@ subroutine sumSWoverBands(G, h, opacity_band, nsw, j, dt, &
     enddo ! i loop
   enddo ! k loop
 
-  ! Apply heating above the layers in which it should have occurred to get the
-  ! correct mean depth of the shortwave that should be absorbed by each layer.
-!    if (correctAbsorption) then
-!    endif
-
-! if (.not.absorbAllSW .and. .not.correctAbsorption) return
   if (absorbAllSW) then
 
     ! If there is still shortwave radiation at this point, it could go into

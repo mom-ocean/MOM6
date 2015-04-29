@@ -708,7 +708,7 @@ subroutine calculateBuoyancyFlux1d(G, fluxes, optics, h, Temp, Salt, tv, j, &
   ! Sum over bands and attenuate as a function of depth
   ! netPen is the netSW as a function of depth
   call sumSWoverBands(G, h(:,j,:), optics%opacity_band(:,:,j,:), nsw, j, dt, &
-                      H_limit_fluxes, .true., .true., penSWbnd, netPen)
+                      H_limit_fluxes, .true., penSWbnd, netPen)
 
   ! Density derivatives
   call calculate_density_derivs(Temp(:,j,1), Salt(:,j,1), pressure, &
