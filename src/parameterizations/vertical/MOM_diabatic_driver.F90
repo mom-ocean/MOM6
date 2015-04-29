@@ -85,8 +85,8 @@ use MOM_EOS,                 only : calculate_specific_vol_derivs
 use MOM_error_handler,       only : MOM_error, FATAL, WARNING, callTree_showQuery
 use MOM_error_handler,       only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser,         only : get_param, log_version, param_file_type
-use MOM_forcing_type,        only : forcing, optics_type, MOM_forcing_chksum
-use MOM_forcing_type,        only : extractFluxes1d, absorbRemainingSW, calculateBuoyancyFlux2d
+use MOM_forcing_type,        only : forcing, MOM_forcing_chksum
+use MOM_forcing_type,        only : extractFluxes1d, calculateBuoyancyFlux2d
 use MOM_forcing_type,        only : forcing_SinglePointPrint
 use MOM_geothermal,          only : geothermal, geothermal_init, geothermal_end, geothermal_CS
 use MOM_grid,                only : ocean_grid_type
@@ -102,6 +102,7 @@ use MOM_opacity,             only : opacity_init, set_opacity, opacity_end, opac
 use MOM_set_diffusivity,     only : set_diffusivity, set_BBL_TKE
 use MOM_set_diffusivity,     only : set_diffusivity_init, set_diffusivity_end
 use MOM_set_diffusivity,     only : set_diffusivity_CS
+use MOM_shortwave_abs,       only : absorbRemainingSW, optics_type
 use MOM_sponge,              only : apply_sponge, sponge_CS
 use MOM_tracer_flow_control, only : call_tracer_column_fns, tracer_flow_control_CS
 use MOM_variables,           only : thermo_var_ptrs, vertvisc_type, accel_diag_ptrs

@@ -58,10 +58,11 @@ use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_alloc
 use MOM_diag_mediator, only : time_type, diag_ctrl
 use MOM_domains,       only : create_group_pass, do_group_pass, group_pass_type
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
-use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
-use MOM_forcing_type, only : absorbRemainingSW, extractFluxes1d, forcing, optics_type
-use MOM_grid, only : ocean_grid_type
-use MOM_variables, only : thermo_var_ptrs
+use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
+use MOM_forcing_type,  only : extractFluxes1d, forcing
+use MOM_grid,          only : ocean_grid_type
+use MOM_shortwave_abs, only : absorbRemainingSW, optics_type
+use MOM_variables,     only : thermo_var_ptrs
 use MOM_EOS, only : calculate_density, calculate_density_derivs
 use MOM_EOS, only : calculate_2_densities
 

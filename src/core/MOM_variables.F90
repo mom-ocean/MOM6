@@ -286,21 +286,6 @@ type, public :: ocean_OBC_type
     vh => NULL()    ! volume transports at OBC points, in m3 s-1.
 end type ocean_OBC_type
 
-type, public :: optics_type
-  integer :: nbands    ! The number of penetrating bands of SW radiation.
-  real, pointer, dimension(:,:,:,:) :: &
-    opacity_band => NULL()  ! The SW optical depth per unit thickness, m-1.
-                       ! The number of bands of radiation is the most rapidly
-                       ! varying (first) index.
-  real, pointer, dimension(:,:,:) :: &
-    SW_pen_band => NULL()  ! The shortwave radiation at the surface in each of
-                       ! the nbands bands that penetrates beyond the surface,
-                       ! in W m-2. The most rapidly varying dimension is the
-                       ! band.
-  real, pointer, dimension(:) :: &
-    min_wavelength_band => NULL(), & ! The range of wavelengths in each band of
-    max_wavelength_band => NULL()    ! penetrating shortwave radiation, in nm.
-end type optics_type
 
 type, public :: BT_cont_type
   real, pointer, dimension(:,:) :: &
