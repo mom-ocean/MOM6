@@ -41,29 +41,29 @@ module MOM_set_diffusivity
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 
-use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
-use MOM_cpu_clock, only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
-use MOM_diag_mediator, only : diag_ctrl, time_type
-use MOM_diag_mediator, only : safe_alloc_ptr, post_data, register_diag_field
-use MOM_diag_to_Z, only : diag_to_Z_CS, register_Zint_diag, calc_Zint_diags
-use MOM_checksums, only : hchksum, uchksum, vchksum
-use MOM_error_handler, only : MOM_error, is_root_pe, FATAL, WARNING, NOTE
-use MOM_error_handler, only : callTree_showQuery
-use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
-use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
-use MOM_forcing_type, only : forcing, optics_type
-use MOM_grid, only : ocean_grid_type
+use MOM_cpu_clock,           only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
+use MOM_cpu_clock,           only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
+use MOM_diag_mediator,       only : diag_ctrl, time_type
+use MOM_diag_mediator,       only : safe_alloc_ptr, post_data, register_diag_field
+use MOM_diag_to_Z,           only : diag_to_Z_CS, register_Zint_diag, calc_Zint_diags
+use MOM_checksums,           only : hchksum, uchksum, vchksum
+use MOM_EOS,                 only : calculate_density, calculate_density_derivs
+use MOM_error_handler,       only : MOM_error, is_root_pe, FATAL, WARNING, NOTE
+use MOM_error_handler,       only : callTree_showQuery
+use MOM_error_handler,       only : callTree_enter, callTree_leave, callTree_waypoint
+use MOM_file_parser,         only : get_param, log_param, log_version, param_file_type
+use MOM_forcing_type,        only : forcing, optics_type
+use MOM_grid,                only : ocean_grid_type
 use MOM_intrinsic_functions, only : invcosh
-use MOM_kappa_shear, only : calculate_kappa_shear, kappa_shear_init, Kappa_shear_CS
-use MOM_io, only : slasher, vardesc
-use MOM_string_functions, only : uppercase
-use MOM_thickness_diffuse, only : vert_fill_TS
-use MOM_variables, only : thermo_var_ptrs, vertvisc_type, p3d
-use MOM_EOS, only : calculate_density, calculate_density_derivs
+use MOM_io,                  only : slasher, vardesc
+use MOM_kappa_shear,         only : calculate_kappa_shear, kappa_shear_init, Kappa_shear_CS
+use MOM_string_functions,    only : uppercase
+use MOM_thickness_diffuse,   only : vert_fill_TS
+use MOM_variables,           only : thermo_var_ptrs, vertvisc_type, p3d
 use user_change_diffusivity, only : user_change_diff, user_change_diff_init
 use user_change_diffusivity, only : user_change_diff_end, user_change_diff_CS
 
-use fms_mod, only : read_data
+use fms_mod,                 only : read_data
 
 implicit none ; private
 
@@ -72,6 +72,8 @@ implicit none ; private
 public set_diffusivity, set_BBL_TKE, set_diffusivity_init, set_diffusivity_end
 
 type, public :: set_diffusivity_CS ; private
+  logical :: debug           ! If true, write verbose checksums for debugging.
+
   logical :: bulkmixedlayer  ! If true, a refined bulk mixed layer is used with
                              ! G%nk_rho_varies variable density mixed & buffer
                              ! layers.
@@ -97,228 +99,238 @@ type, public :: set_diffusivity_CS ; private
                              ! e_0 is the reference dissipation at (N_0,f_0). In the
                              ! previous version, N=N_0.
                              !
-                             ! Additionally, the squared inverse  relationship between
-                             ! diapycnal diffusivities and stratification.
+                             ! Additionally, the squared inverse relationship between
+                             ! diapycnal diffusivities and stratification is included
                              !
-                             ! kd = e/N^2, where,
+                             ! kd = e/N^2
                              !
-                             ! kd is the diapycnal diffusivity, is included.
-                             ! This assumes that work done
+                             ! where kd is the diapycnal diffusivity.
+                             ! This approach assumes that work done
                              ! against gravity is uniformly distributed
                              ! throughout the column. Whereas, kd=kd_0*e,
                              ! as in the original version, concentrates buoyancy
                              ! work in regions of strong stratification.
+
   logical :: Kd_tanh_lat_fn  ! If true, use the tanh dependence of Kd_sfc on
-                             ! latitude, like CM2.1/CM2M.  There is no physical
+                             ! latitude, like GFDL CM2.1/CM2M.  There is no physical
                              ! justification for this form, and it can not be
                              ! used with Henyey_IGW_background.
   real :: Kd_tanh_lat_scale  ! A nondimensional scaling for the range of
                              ! diffusivities with Kd_tanh_lat_fn. Valid values
                              ! are in the range of -2 to 2; 0.4 reproduces CM2M.
-  logical :: Bryan_Lewis_diffusivity   ! If true, the background diffusivity uses
-                             ! a Bryan-Lewis (1979) like tanh profile.
+
   logical :: bottomdraglaw   ! If true, the  bottom stress is calculated with a
                              ! drag law c_drag*|u|*u.
   logical :: BBL_mixing_as_max !  If true, take the maximum of the diffusivity
                              ! from the BBL mixing and the other diffusivities.
                              ! Otherwise, diffusivities from the BBL_mixing is
-                             ! simply added.
-  logical :: use_LOTW_BBL_diffusivity ! If true, use a simpler, albeit imprecise, BBL diffusivity.
-  logical :: debug           ! If true, write verbose checksums for debugging.
-  real    :: Kd              ! The interior diapycnal diffusivity in m2 s-1.
-  real    :: Kd_min          ! The minimum permitted value for the diapycnal
-                             ! diffusivity, in m2 s-1.
-  real    :: Kd_max          ! The maximum permitted increment for the diapycnal
-                             ! diffusivity, in m2 s-1. Use a negative value to
-                             ! have no limit.
-  real    :: Kd_add          !   A uniform diffusivity that is added everywhere
-                             ! without any filtering or scaling, in m2 s-1.
-  real    :: Kv              ! The interior vertical viscosity in m2 s-1.
-  real    :: Kdml            ! The mixed layer diapycnal diffusivity in m2 s-1
-                             ! when bulkmixedlayer is .false.
-  real    :: Hmix            ! The mixed layer thickness in m when
-                             ! bulkmixedlayer is .false.
-  real    :: BBL_effic       ! The efficiency with which the energy extracted
-                             ! by bottom drag drives BBL diffusion, nondim.
-  real    :: cdrag           ! The quadratic drag coefficient.
-  real    :: IMax_decay      ! The inverse of a maximum decay scale for the
-                             ! bottom-drag driven turbulence, in m-1.
-  real    :: Kd_Bryan_Lewis_deep     ! The abyssal value of a Bryan-Lewis
-                                     ! diffusivity profile, in m2 s-1.
-  real    :: Kd_Bryan_Lewis_surface  ! The surface value of a Bryan-Lewis
-                                     ! diffusivity profile, in m2 s-1.
-  real    :: Bryan_Lewis_depth_cent  ! The depth about which the transition in
-                                     ! the Bryan-Lewis profile is centered in m.
-  real    :: Bryan_Lewis_width_trans ! The width of the transition in the
-                                     ! Bryan-Lewis diffusivity profile, in m.
-  real    :: N0_2Omega       ! The ratio of the typical Buoyancy frequency to
+                             ! added.
+  logical :: use_LOTW_BBL_diffusivity ! If true, use simpler/less precise, BBL diffusivity.
+  real    :: BBL_effic       ! efficiency with which the energy extracted
+                             ! by bottom drag drives BBL diffusion (nondim)
+  real    :: cdrag           ! quadratic drag coefficient (nondim)
+  real    :: IMax_decay      ! inverse of a maximum decay scale for 
+                             ! bottom-drag driven turbulence, (1/m)
+
+  real    :: Kd              ! interior diapycnal diffusivity (m2/s)
+  real    :: Kd_min          ! minimum diapycnal diffusivity (m2/s)
+  real    :: Kd_max          ! maximum increment for diapycnal diffusivity (m2/s)
+                             ! Set to a negative value to have no limit.
+  real    :: Kd_add          ! uniform diffusivity added everywhere without
+                             ! filtering or scaling (m2/s)
+  real    :: Kv              ! interior vertical viscosity (m2/s)
+  real    :: Kdml            ! mixed layer diapycnal diffusivity (m2/s)
+                             ! when bulkmixedlayer==.false.
+  real    :: Hmix            ! mixed layer thickness (meter) when
+                             ! bulkmixedlayer==.false.
+
+  logical :: Bryan_Lewis_diffusivity ! If true, background vertical diffusivity 
+                                     ! uses Bryan-Lewis (1979) like tanh profile.
+  real    :: Kd_Bryan_Lewis_deep     ! abyssal value of Bryan-Lewis profile (m2/s)
+  real    :: Kd_Bryan_Lewis_surface  ! surface value of Bryan-Lewis profile (m2/s)
+  real    :: Bryan_Lewis_depth_cent  ! center of transition depth in Bryan-Lewis (meter)
+  real    :: Bryan_Lewis_width_trans ! width of transition for Bryan-Lewis (meter)
+
+  real    :: N0_2Omega       ! ratio of the typical Buoyancy frequency to
                              ! twice the Earth's rotation period, used with the
-                             ! Henyey scaling from the mixing.
-  real    :: N2_FLOOR_IOMEGA2 ! The floor applied to N2(k) scaled by Omega^2
-                             ! If =0., N2(k) is simply positive definite
-                             ! If =1., N2(k) > Omega^2 everywhere
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
-                             ! timing of diagnostic output.
-  real :: Int_tide_decay_scale ! The decay scale for internal wave TKE, in m.
-  real :: Mu_itides          ! Efficiency factor for conversion of dissipation
-                             ! to potential energy, nondimensional.
-  real :: Gamma_itides       ! Fraction of local dissipation, nondimensional.
-  real :: Gamma_lee          ! Fraction of local dissipation for lee waves
-                             ! (Nikurashin's energy input), nondimensional.
+                             ! Henyey scaling from the mixing
+  real    :: N2_FLOOR_IOMEGA2 ! floor applied to N2(k) scaled by Omega^2
+                              ! If =0., N2(k) is positive definite
+                              ! If =1., N2(k) > Omega^2 everywhere
+
+  type(diag_ctrl), pointer :: diag ! structure to regulate diagn output timing
+
+  real :: Int_tide_decay_scale ! decay scale for internal wave TKE (meter)
+  real :: Mu_itides          ! efficiency for conversion of dissipation
+                             ! to potential energy (nondimensional)
+  real :: Gamma_itides       ! fraction of local dissipation (nondimensional)
+  real :: Gamma_lee          ! fraction of local dissipation for lee waves
+                             ! (Nikurashin's energy input) (nondimensional)
   real :: Decay_scale_factor_lee ! Scaling factor for the decay scale of lee
-                             ! wave energy dissipation, nondimensional.
-  real :: min_zbot_itides    ! Minimum ocean depth for internal tide conversion,
-                             ! in m.
+                             ! wave energy dissipation (nondimensional)
+  real :: min_zbot_itides    ! minimum depth for internal tide conversion (meter)
   logical :: Int_tide_dissipation  ! Internal tide conversion with the schemes
-                             ! of St Laurent et al (2002) / Simmons et al (2004)
+                                   ! of St Laurent et al (2002) / Simmons et al (2004)
   integer :: Int_tide_profile ! A coded integer indicating the vertical profile
-                         ! for dissipation of the internal waves.  Schemes that
-                         ! are currently encoded are St Laurent et al (2002) and
-                         ! Polzin (2009).
+                              ! for dissipation of the internal waves.  Schemes that
+                              ! are currently encoded are St Laurent et al (2002) and
+                              ! Polzin (2009).
   real :: Nu_Polzin      ! The non-dimensional constant used in Polzin form of
                          ! the vertical scale of decay of tidal dissipation
   real :: Nbotref_Polzin ! Reference value for the buoyancy frequency at the
                          ! ocean bottom used in Polzin formulation of the
-                         ! vertical scale of decay of tidal dissipation, in s-1.
-  real :: Polzin_decay_scale_factor  ! Scaling factor for the decay length scale
-                         ! of the tidal dissipation profile in Polzin
-                         ! formulation, nondimensional.
-  real :: Polzin_decay_scale_max_factor  ! The decay length scale of the tidal
+                         ! vertical scale of decay of tidal dissipation (1/s)
+  real :: Polzin_decay_scale_factor ! Scaling factor for the decay length scale
+                                    ! of the tidal dissipation profile in Polzin
+                                    ! (nondimensional)
+  real :: Polzin_decay_scale_max_factor  ! The decay length scale of tidal
                          ! dissipation profile in Polzin formulation should not
                          ! exceed Polzin_decay_scale_max_factor * depth of the
-                         ! ocean, nondimensional.
-  real :: Polzin_min_decay_scale    ! The minimum decay scale of the tidal
-                         ! dissipation profile in Polzin formulation, in m.
-  logical :: Lee_wave_dissipation   ! Enable lee-wave driven mixing, following
-                         ! Nikurashin (2010), with a vertical profile of energy
-                         ! deposition specified by Lee_wave_profile.
-                         ! St Laurent et al (2002) or
-                         ! Simmons et al (2004) scheme
+                         ! ocean (nondimensional).
+  real :: Polzin_min_decay_scale ! minimum decay scale of the tidal dissipation
+                                 ! profile in Polzin formulation (meter)
+  logical :: Lee_wave_dissipation ! Enable lee-wave driven mixing, following
+                                  ! Nikurashin (2010), with a vertical energy
+                                  ! deposition profile specified by Lee_wave_profile.
+                                  ! St Laurent et al (2002) or
+                                  ! Simmons et al (2004) scheme
   integer :: Lee_wave_profile ! A coded integer indicating the vertical profile
-                         ! for dissipation of the lee waves.  Schemes that are
-                         ! currently encoded are St Laurent et al (2002) and
-                         ! Polzin (2009).
+                              ! for dissipation of the lee waves.  Schemes that are
+                              ! currently encoded are St Laurent et al (2002) and
+                              ! Polzin (2009).
   logical :: limit_dissipation ! If enabled, dissipation is limited to be larger
-                        ! than the following:
+                               ! than the following:
   real :: dissip_min    ! Minimum dissipation (W/m3)
   real :: dissip_N0     ! Coefficient a in minimum dissipation = a+b*N (W/m3)
   real :: dissip_N1     ! Coefficient b in minimum dissipation = a+b*N (J/m3)
   real :: dissip_N2     ! Coefficient c in minimum dissipation = c*N2 (W m-3 s2)
   real :: dissip_Kd_min ! Minimum Kd (m2/s) with dissipatio Rho0*Kd_min*N^2
 
-  real :: TKE_itide_max ! Maximum Internal tide conversion (W m-2)
-                        ! available to mix above the BBL
-  real :: omega              ! Earth's rotation frequency (s-1)
-  real :: utide              ! constant tidal amplitude (m s-1) to be used if
-                             ! tidal amplitude file is not present.
-  real :: kappa_itides       ! topographic wavenumber and non-dimensional scaling
-  real :: kappa_h2_factor    ! factor for the product of wavenumber * rms sgs height.
-  logical :: ML_radiation    ! Allow a fraction of TKE available from wind work
-                 ! to penetrate below the base of the mixed layer with a vertical
-                 ! decay scale determined by the minimum of
-                 ! (1) The depth of the mixed layer, or
-                 ! (2) An Ekman length scale.
-                 !   The energy availble to drive mixing below the mixed layer is
-                 ! given by E = ML_RAD_COEFF*MSTAR*USTAR**3.  Optionally, if
-                 ! ML_rad_TKE_decay is true, this is further reduced by a factor
-                 ! of exp(-h_ML*Idecay_len_TkE), where Idecay_len_TKE is
-                 ! calculated the same way as in the mixed layer code.
-                 !   The diapycnal diffusivity is KD(k) = E/(N2(k)+OMEGA2),
-                 ! where N2 is the squared buoyancy frequency (s-2) and OMEGA2
-                 ! is the rotation rate of the earth squared.
-  real :: ML_rad_kd_max    ! Maximum diapycnal diffusivity due to turbulence
-                           ! radiated from the base of the mixed layer, m2 s-1.
-  real :: ML_rad_efold_coeff ! The non-dimensional coefficient that is used to
-                           ! scale the penetration depth.
-  real :: ML_rad_coeff     ! The coefficient which scales MSTAR*USTAR^3 to
-                           ! obtain the energy available for mixing below
-                           ! the base of the mixed layer, nondimensional.
-  logical :: ML_rad_TKE_decay ! If true, apply the same exponential decay
-                              ! to ML_rad as is applied to the other surface
+  real :: TKE_itide_max       ! maximum internal tide conversion (W m-2)
+                              ! available to mix above the BBL
+  real :: omega               ! Earth's rotation frequency (s-1)
+  real :: utide               ! constant tidal amplitude (m s-1) used if
+                              ! tidal amplitude file is not present
+  real :: kappa_itides        ! topographic wavenumber and non-dimensional scaling
+  real :: kappa_h2_factor     ! factor for the product of wavenumber * rms sgs height
+  logical :: ML_radiation     ! allow a fraction of TKE available from wind work
+                              ! to penetrate below mixed layer base with a vertical
+                              ! decay scale determined by the minimum of
+                              ! (1) The depth of the mixed layer, or
+                              ! (2) An Ekman length scale.
+                              ! Energy availble to drive mixing below the mixed layer is
+                              ! given by E = ML_RAD_COEFF*MSTAR*USTAR**3.  Optionally, if
+                              ! ML_rad_TKE_decay is true, this is further reduced by a factor
+                              ! of exp(-h_ML*Idecay_len_TkE), where Idecay_len_TKE is
+                              ! calculated the same way as in the mixed layer code.
+                              ! The diapycnal diffusivity is KD(k) = E/(N2(k)+OMEGA2),
+                              ! where N2 is the squared buoyancy frequency (s-2) and OMEGA2
+                              ! is the rotation rate of the earth squared.
+  real :: ML_rad_kd_max       ! Maximum diapycnal diffusivity due to turbulence
+                              ! radiated from the base of the mixed layer (m2/s)
+  real :: ML_rad_efold_coeff  ! non-dim coefficient to scale penetration depth
+  real :: ML_rad_coeff        ! coefficient, which scales MSTAR*USTAR^3 to
+                              ! obtain energy available for mixing below
+                              ! mixed layer base (nondimensional)
+  logical :: ML_rad_TKE_decay ! If true, apply same exponential decay
+                              ! to ML_rad as applied to the other surface
                               ! sources of TKE in the mixed layer code.
-  real    :: ustar_min       ! A minimum value of ustar to avoid numerical
-                             ! problems, in m s-1.  If the value is small enough,
-                             ! this should not affect the solution.
-  real    :: TKE_decay       ! The ratio of the natural Ekman depth to the TKE
-                             ! decay scale, nondimensional.
-  real    :: mstar           ! The ratio of the friction velocity cubed to the
-                             ! TKE input to the mixed layer, nondimensional.
-  logical :: ML_use_omega    !   If true, use the absolute rotation rate instead
-                             ! of the vertical component of rotation when
-                             ! setting the decay scale for turbulence in the
-                             ! mixed layer.
-  logical :: user_change_diff  !   If true, call user-defined code to change the
-                               ! diffusivity.
-  logical :: double_diffusion  ! If true, enable double-diffusive mixing.
-  logical :: useKappaShear   ! If true, use the kappa_shear module to find the
-                             ! shear-driven diapycnal diffusivity.
-  real    :: Max_Rrho_salt_fingers    ! maximum density ratio for salt fingering
-  real    :: Max_salt_diff_salt_fingers ! maximum salt diffusivity for salt fingers
-  real    :: Kv_molecular    ! molecular viscosity for double diffusive convection
+  real    :: ustar_min        ! A minimum value of ustar to avoid numerical
+                              ! problems (m/s).  If the value is small enough,
+                              ! this parameter should not affect the solution.
+  real    :: TKE_decay        ! ratio of natural Ekman depth to TKE decay scale (nondim)
+  real    :: mstar            ! ratio of friction velocity cubed to 
+                              ! TKE input to the mixed layer (nondim)
+  logical :: ML_use_omega     ! If true, use absolute rotation rate instead
+                              ! of the vertical component of rotation when
+                              ! setting the decay scale for mixed layer turbulence.
+  logical :: user_change_diff ! If true, call user-defined code to change diffusivity.
+  logical :: useKappaShear    ! If true, use the kappa_shear module to find the
+                              ! shear-driven diapycnal diffusivity.
 
-  real, pointer, dimension(:,:) :: TKE_Niku => NULL() !
-  real, pointer, dimension(:,:) :: TKE_itidal => NULL(), Nb => NULL()
+  logical :: double_diffusion           ! If true, enable double-diffusive mixing.
+  real    :: Max_Rrho_salt_fingers      ! max density ratio for salt fingering
+  real    :: Max_salt_diff_salt_fingers ! max salt diffusivity for salt fingers (m2/s)
+  real    :: Kv_molecular               ! molecular visc for double diff convect (m2/s)
+
+  real, pointer, dimension(:,:) :: TKE_Niku    => NULL() !
+  real, pointer, dimension(:,:) :: TKE_itidal  => NULL()
+  real, pointer, dimension(:,:) :: Nb          => NULL()
   real, pointer, dimension(:,:) :: mask_itidal => NULL()
-  real, pointer, dimension(:,:) :: h2 => NULL()
-  real, pointer, dimension(:,:) :: tideamp => NULL() ! RMS tidal amplitude (m s-1)
-  integer :: id_TKE_itidal = -1, id_TKE_leewave = -1, id_Nb = -1, id_N2 = -1
-  integer :: id_Kd_itidal = -1, id_Kd_Niku = -1, id_Kd_user = -1
-  integer :: id_Kd_layer = -1, id_Kd_BBL = -1, id_Kd_BBL_z = -1
-  integer :: id_N2_z = -1, id_Kd_itidal_z = -1, id_Kd_Niku_z = -1, id_Kd_user_z = -1
-  integer :: id_Kd_Work = -1, id_Kd_Itidal_Work = -1, id_Kd_Niku_Work = -1
-  integer :: id_maxTKE = -1, id_TKE_to_Kd = -1, id_Fl_itidal = -1
-  integer :: id_Polzin_decay_scale = -1, id_Polzin_decay_scale_scaled = -1
-  integer :: id_N2_bot = -1, id_N2_meanz = -1
-  integer :: id_KT_extra = -1, id_KS_extra = -1
-  integer :: id_KT_extra_z = -1, id_KS_extra_z = -1
-  character(len=200) :: inputdir
+  real, pointer, dimension(:,:) :: h2          => NULL()
+  real, pointer, dimension(:,:) :: tideamp     => NULL() ! RMS tidal amplitude (m/s)
+
+  character(len=200)                 :: inputdir
   type(user_change_diff_CS), pointer :: user_change_diff_CSp => NULL()
-  type(diag_to_Z_CS), pointer :: diag_to_Z_CSp => NULL()
-  type(Kappa_shear_CS), pointer :: kappaShear_CSp => NULL()
+  type(diag_to_Z_CS),        pointer :: diag_to_Z_CSp        => NULL()
+  type(Kappa_shear_CS),      pointer :: kappaShear_CSp       => NULL()
+
+  integer :: id_TKE_itidal  = -1
+  integer :: id_TKE_leewave = -1
+  integer :: id_maxTKE      = -1
+  integer :: id_TKE_to_Kd   = -1
+
+  integer :: id_Kd_itidal      = -1
+  integer :: id_Kd_Niku        = -1
+  integer :: id_Kd_user        = -1
+  integer :: id_Kd_layer       = -1
+  integer :: id_Kd_BBL         = -1
+  integer :: id_Kd_BBL_z       = -1
+  integer :: id_Kd_itidal_z    = -1
+  integer :: id_Kd_Niku_z      = -1
+  integer :: id_Kd_user_z      = -1
+  integer :: id_Kd_Work        = -1
+  integer :: id_Kd_Itidal_Work = -1
+  integer :: id_Kd_Niku_Work   = -1
+
+  integer :: id_Fl_itidal                 = -1
+  integer :: id_Polzin_decay_scale        = -1
+  integer :: id_Polzin_decay_scale_scaled = -1
+
+  integer :: id_Nb       = -1
+  integer :: id_N2       = -1
+  integer :: id_N2_z     = -1
+  integer :: id_N2_bot   = -1
+  integer :: id_N2_meanz = -1
+
+  integer :: id_KT_extra   = -1
+  integer :: id_KS_extra   = -1
+  integer :: id_KT_extra_z = -1
+  integer :: id_KS_extra_z = -1
+
 end type set_diffusivity_CS
 
 type diffusivity_diags
   real, pointer, dimension(:,:,:) :: &
-    N2_3d => NULL(), &          ! The squared buoyancy frequency at interfaces,
-                                ! in units of s-2.
-    Kd_itidal => NULL(), &      ! The internal tide diffusivity at interfaces,
-                                ! in units of m2 s-1.
-    Fl_itidal => NULL(), &      ! Vertical flux of tidal turbulent dissipation,
-                                ! in units of m3 s-3
-    Kd_Niku => NULL(), &        ! The lee-wave diffusivity at interfaces, in
-                                ! units of m2 s-1.
-    Kd_user => NULL(), &        ! The user-added diffusivity at interfaces, in
-                                ! units of m2 s-1.
-    Kd_BBL => NULL(), &         ! The BBL diffusivity at interfaces, in units of m2 s-1.
-    Kd_work => NULL(), &        ! The work done by diapycnal mixing integrated
-                                ! through layers, in W m-2.
-    Kd_Niku_work => NULL(), &   ! The work done by lee-wave driven mixing
-                                ! integrated through layers, in W m-2.
-    Kd_Itidal_Work => NULL(), & ! The work done by lee-wave driven mixing
-                                ! integrated through layers, in W m-2.
-    maxTKE => NULL(), &         ! The energy required to entrain to h_max, in
-                                ! units of m3 s-3.
-    TKE_to_Kd => NULL(), &      ! The conversion rate (~1.0 / (G_Earth + dRho_lay))
-                                ! between TKE dissipated within a layer and Kd
-                                ! in that layer, in m2 s-1 / m3 s-3 = s2 m-1.
-    KT_extra => NULL(), &       ! Additional diffusivities due to double-diffusion
-    KS_extra => NULL()          ! of temperature and salinity, in m2 s-1.
+    N2_3d          => NULL(),& ! squared buoyancy frequency at interfaces (1/s2)
+    Kd_itidal      => NULL(),& ! internal tide diffusivity at interfaces (m2/s)
+    Fl_itidal      => NULL(),& ! vertical flux of tidal turbulent dissipation (m3/s3)
+    Kd_Niku        => NULL(),& ! lee-wave diffusivity at interfaces (m2/s)
+    Kd_user        => NULL(),& ! user-added diffusivity at interfaces (m2/s)
+    Kd_BBL         => NULL(),& ! BBL diffusivity at interfaces (m2/s)
+    Kd_work        => NULL(),& ! layer integrated work by diapycnal mixing (W/m2)
+    Kd_Niku_work   => NULL(),& ! layer integrated work by lee-wave driven mixing (W/m2)
+    Kd_Itidal_Work => NULL(),& ! layer integrated work by lee-wave driven mixing (W/m2)
+    maxTKE         => NULL(),& ! energy required to entrain to h_max (m3/s3)
+    TKE_to_Kd      => NULL(),& ! conversion rate (~1.0 / (G_Earth + dRho_lay))
+                               ! between TKE dissipated within a layer and Kd
+                               ! in that layer, in m2 s-1 / m3 s-3 = s2 m-1
+    KT_extra       => NULL(),& ! double diffusion diffusivity for temp (m2/s)
+    KS_extra       => NULL()   ! double diffusion diffusivity for saln (m2/s)
+
   real, pointer, dimension(:,:) :: &
-    TKE_itidal_used => NULL() , & ! The internal tide TKE input at the bottom of
-                                ! the ocean, in W m-2.
-    N2_bot => NULL() , &        ! The bottom stratification, in s-2.
-    N2_meanz => NULL() , &      ! Vertically averaged stratification
-    Polzin_decay_scale_scaled => NULL(), &  ! Vertical scale of decay for the
-                                ! tidal dissipation
-    Polzin_decay_scale => NULL()  ! Vertical scale of decay for the tidal
-                                ! dissipation profile with the Polzin
-                                ! parameterization, in m.
+    TKE_itidal_used           => NULL(),& ! internal tide TKE input at ocean bottom (W/m2)
+    N2_bot                    => NULL(),& ! bottom stratification (1/s2)
+    N2_meanz                  => NULL(),& ! vertically averaged stratification
+    Polzin_decay_scale_scaled => NULL(),& ! vertical scale of decay for tidal dissipation
+    Polzin_decay_scale        => NULL()   ! vertical decay scale for tidal diss with Polzin (meter)
+
 end type diffusivity_diags
 
 character*(20), parameter :: STLAURENT_PROFILE_STRING = "STLAURENT_02"
 character*(20), parameter :: POLZIN_PROFILE_STRING = "POLZIN_09"
-integer, parameter :: STLAURENT_02 = 1
-integer, parameter :: POLZIN_09    = 2
+integer,        parameter :: STLAURENT_02 = 1
+integer,        parameter :: POLZIN_09    = 2
 
 ! Clocks
 integer :: id_clock_kappaShear
@@ -340,80 +352,78 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, G, C
   real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(out)   :: Kd
   real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), optional, intent(out) :: Kd_int
 
-! Arguments: u - Zonal velocity, in m s-1.
-!  (in)      v - Meridional velocity, in m s-1.
-!  (in)      h - Layer thickness, in m or kg m-2.
-!  (in)      tv - A structure containing pointers to any available
-!                 thermodynamic fields. Absent fields have NULL ptrs.
-!  (in)      fluxes - A structure of surface fluxes that may be used.
-!  (in)      visc - A structure containing vertical viscosities, bottom boundary
-!                   layer properies, and related fields.
-!  (in)      dt - The time increment in s.
-!  (in)      G - The ocean's grid structure.
-!  (in)      CS - This module's control structure.
-!  (in)      j - The meridional index upon which to work.
-!  (out)     Kd - The diapycnal diffusivity of each layer in m2 s-1.
-!  (out,opt) Kd_int - The diapycnal diffusivity at each interface in m2 s-1.
+! Arguments: 
+!  (in)      u      - zonal velocity (m/s)
+!  (in)      v      - meridional velocity (m/s)
+!  (in)      h      - Layer thickness (m or kg/m2)
+!  (in)      tv     - structure with pointers to thermodynamic fields
+!  (in)      fluxes - structure of surface fluxes that may be used
+!  (in)      visc   - structure containing vertical viscosities, bottom boundary
+!                     layer properies, and related fields
+!  (in)      dt     - time increment (sec)
+!  (in)      G      - ocean grid structure
+!  (in)      CS     - module control structure
+!  (in)      j      - meridional index upon which to work
+!  (out)     Kd     - diapycnal diffusivity of each layer (m2/sec)
+!  (out,opt) Kd_int - diapycnal diffusivity at each interface (m2/sec)
 
   real, dimension(SZI_(G)) :: &
-    depth, &      ! The distance from the surface of an interface, in m.
-    N2_bot        ! The bottom squared buoyancy frequency, in s-2.
+    depth, &      ! distance from surface of an interface (meter)
+    N2_bot        ! bottom squared buoyancy frequency (1/s2)
   real, dimension(SZI_(G), SZJ_(G)) :: &
-    Kd_sfc        ! The surface value of the diffusivity, in m2 s-1.
+    Kd_sfc        ! surface value of the diffusivity (m2/s)
 
-  type(diffusivity_diags) :: dd ! A structure with arrays of pointers to
-                                ! diagnostics that might be used.
+  type(diffusivity_diags) :: dd ! structure w/ arrays of pointers to avail diags 
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
-    T_f, S_f      ! The temperature and salinity in C and PSU with the values in
-                  ! the massless layers filled vertically by diffusion.
+    T_f, S_f      ! temperature and salinity (deg C and ppt); 
+                  ! massless layers filled vertically by diffusion.
+
   real, dimension(SZI_(G),SZK_(G)) :: &
-    N2_lay, &     ! The squared buoyancy frequency associated with layers, in s-2.
-    maxTKE, &     ! The energy required to entrain to h_max, in m3 s-3.
-    TKE_to_Kd     ! The conversion rate (~1.0 / (G_Earth + dRho_lay)) between
+    N2_lay, &     ! squared buoyancy frequency associated with layers (1/s2)
+    maxTKE, &     ! energy required to entrain to h_max (m3/s3)
+    TKE_to_Kd     ! conversion rate (~1.0 / (G_Earth + dRho_lay)) between
                   ! TKE dissipated within a layer and Kd in that layer, in
                   ! m2 s-1 / m3 s-3 = s2 m-1.
+
   real, dimension(SZI_(G),SZK_(G)+1) :: &
-    N2_int, &     ! The squared buoyancy frequency associated at interfaces, in s-2.
-    dRho_int, &   ! The locally referenced potential density difference across
-                  ! interfaces, in s-2.
-    KT_extra, &   ! Additional diffusivities due to double-diffusion acting on
-    KS_extra      ! temperature and salinity, in m2 s-1.
-  real :: I_trans       ! The inverse of the transitional width in the Bryan-
-                        ! Lewis diffusivity profile, in m-1.
-  real :: depth_c       ! The depth of the center of a layer, in m.
-  real :: I_Hmix        ! The inverse of the fixed mixed layer thickness in m-1.
-  real :: I_Rho0        ! The inverse of the Boussinesq density, in m3 kg-1.
+    N2_int,   &   ! squared buoyancy frequency associated at interfaces (1/s2)
+    dRho_int, &   ! locally ref potential density difference across interfaces (in s-2) smg: or kg/m3? 
+    KT_extra, &   ! double difusion diffusivity on temperature (m2/sec)
+    KS_extra      ! double difusion diffusivity on salinity (m2/sec)
+
+  real :: I_trans       ! inverse of the transitional for Bryan-Lewis (1/m)
+  real :: depth_c       ! depth of the center of a layer (meter)
+  real :: I_Hmix        ! inverse of fixed mixed layer thickness (1/m)
+  real :: I_Rho0        ! inverse of Boussinesq density (m3/kg)
   real :: I_x30         ! 2/acos(2) = 1/(sin(30 deg) * acosh(1/sin(30 deg)))
-  real :: abs_sin       ! The absolute value of the sine of latitude, ND.
-  real :: atan_fn_sfc   ! The surface value of the Bryan-Lewis profile, ND.
-  real :: atan_fn_lay   ! The value of the Bryan-Lewis profile in the middle of
-                        ! a layer, ND.
-  real :: I_atan_fn     ! The inverse of the change in the Bryan-Lewis profile
-                        ! from the surface to infinite depth, ND.
-  real :: deg_to_rad    ! The factor that converts degrees to radians, pi/180.
-  real :: dissip        ! local variable for dissipation calculations, W m-3.
-  real :: Omega2        ! The squared absolute rotation rate, in s-2.
-  real :: I_2Omega      ! 1/(2 Omega), in s.
-  real :: N_2Omega, N02_N2, epsilon
-  logical :: use_EOS    ! If true, density is calculated from T & S using an
-                        ! equation of state.
-  type(p3d) :: z_ptrs(6) ! Pointers to the diagnostics that are to be
-                         ! interpolated into depth space.
-  integer :: kb(SZI_(G)) ! The index of the lightest layer denser than the
-                         ! buffer layer.
-  integer :: num_z_diags ! The number of diagnostics that are to be
-                         ! interpolated into depth space.
-  integer :: z_ids(6)    ! The id numbers of the diagnostics that are to be
-                         ! interpolated into depth space.
-  logical :: showCallTree ! If true, show the call tree
+  real :: abs_sin       ! absolute value of sine of latitude (nondim)
+  real :: atan_fn_sfc   ! surface value of Bryan-Lewis profile (nondim)
+  real :: atan_fn_lay   ! value of Bryan-Lewis profile in layer middle (nondim)
+  real :: I_atan_fn     ! inverse of change in Bryan-Lewis profile from surface to infinite depth (nondim)
+  real :: deg_to_rad    ! factor converting degrees to radians, pi/180.
+  real :: dissip        ! local variable for dissipation calculations (W/m3)
+  real :: Omega2        ! squared absolute rotation rate (1/s2)
+  real :: I_2Omega      ! 1/(2 Omega) (sec)
+  real :: N_2Omega
+  real :: N02_N2
+  real :: epsilon
+
+  logical   :: use_EOS      ! If true, compute density from T/S using equation of state.
+  type(p3d) :: z_ptrs(6)    ! pointers to diagns to be interpolated into depth space
+  integer   :: kb(SZI_(G))  ! The index of the lightest layer denser than the
+                            ! buffer layer.
+  integer   :: num_z_diags  ! number of diagns to be interpolated to depth space
+  integer   :: z_ids(6)     ! id numbers of diagns to be interpolated to depth space
+  logical   :: showCallTree ! If true, show the call tree.
+
   integer :: i, j, k, is, ie, js, je, nz
   integer :: isd, ied, jsd, jed
 
-  real :: kappa_fill  ! diffusivity used to fill massless layers
-  real :: dt_fill     ! timestep used to fill massless layers
+  real      :: kappa_fill   ! diffusivity used to fill massless layers
+  real      :: dt_fill      ! timestep used to fill massless layers
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   showCallTree = callTree_showQuery()
   if (showCallTree) call callTree_enter("set_diffusivity(), MOM_set_diffusivity.F90")
@@ -421,13 +431,13 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, G, C
   if (.not.associated(CS)) call MOM_error(FATAL,"set_diffusivity: "//&
          "Module must be initialized before it is used.")
 
-  I_Rho0 = 1.0/G%Rho0
+  I_Rho0     = 1.0/G%Rho0
   kappa_fill = 1.e-3 ! m2 s-1
-  dt_fill = 7200.
+  dt_fill    = 7200.
   deg_to_rad = atan(1.0)/45.0 ! = PI/180
-  Omega2 = CS%Omega*CS%Omega
-  I_2Omega = 0.5/CS%Omega
-  epsilon = 1.e-10
+  Omega2     = CS%Omega*CS%Omega
+  I_2Omega   = 0.5/CS%Omega
+  epsilon    = 1.e-10
 
   use_EOS = associated(tv%eqn_of_state)
 
@@ -436,7 +446,8 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, G, C
     call MOM_error(FATAL, "set_diffusivity: visc%Kd_extra_T and "//&
          "visc%Kd_extra_S must be associated when DOUBLE_DIFFUSION is true.")
 
-! Set up arrays for diagnostics.
+  ! Set up arrays for diagnostics.
+
   if ((CS%id_N2 > 0) .or. (CS%id_N2_z > 0)) then
     allocate(dd%N2_3d(isd:ied,jsd:jed,nz+1)) ; dd%N2_3d(:,:,:) = 0.0
   endif
@@ -892,46 +903,45 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, CS, TKE_to_Kd, maxT
   integer, dimension(NIMEM_),           intent(out)   :: kb
 
   real, dimension(SZI_(G),SZK_(G)) :: &
-    ds_dsp1, &    ! The coordinate variable (sigma-2) difference across an
+    ds_dsp1, &    ! coordinate variable (sigma-2) difference across an
                   ! interface divided by the difference across the interface
-                  ! below it. Nondimensional.
-    dsp1_ds, &    ! The inverse coordinate variable (sigma-2) difference
+                  ! below it (nondimensional)
+    dsp1_ds, &    ! inverse coordinate variable (sigma-2) difference
                   ! across an interface times the difference across the
-                  ! interface above it. Nondimensional.
-    rho_0, &      ! Layer potential densities relative to surface pressure,
-                  ! in units of kg m-3.
+                  ! interface above it (nondimensional)
+    rho_0, &      ! Layer potential densities relative to surface pressure (kg/m3)
     maxEnt        ! maxEnt is the maximum value of entrainment from below (with
                   ! compensating entrainment from above to keep the layer
                   ! density from changing) that will not deplete all of the
-                  ! layers above or below a layer within a timestep, in m.
+                  ! layers above or below a layer within a timestep (meter)
   real, dimension(SZI_(G)) :: &
-    htot, &       ! The total thickness above or below a layer, or the
-                  ! integrated thickness in the BBL, in m.
-    mFkb, &       ! The total thickness in the mixed and buffer layers
-                  ! times ds_dsp1, in m.
-    p_ref, &      ! An array of tv%P_Ref pressures.
-    Rcv_kmb, &    ! The coordinate density in the lowest buffer layer.
-    p_0           ! An array of 0 pressures.
-  real :: dh_max      ! The maximum amount of entrainment a layer could
+    htot,    &    ! total thickness above or below a layer, or the
+                  ! integrated thickness in the BBL (meter)
+    mFkb,    &    ! total thickness in the mixed and buffer layers
+                  ! times ds_dsp1 (meter)
+    p_ref,   &   ! array of tv%P_Ref pressures
+    Rcv_kmb, &    ! coordinate density in the lowest buffer layer
+    p_0           ! An array of 0 pressures
+
+  real :: dh_max      ! maximum amount of entrainment a layer could
                       ! undergo before entraining all fluid in the layers
-                      ! above or below, in m.
-  real :: dRho_lay    ! The density change across a layer, in kg m-3.
-  real :: Omega2      ! The rotation rate squared, in s-2.
-  real :: G_Rho0      ! The gravitation acceleration divided by the Boussinesq
-                      ! density, in m4 s-2 kg-1.
-  real :: I_Rho0      ! The inverse of the Boussinesq density, in m3 kg-1.
-  real :: I_dt        ! 1/dt in s-1.
-  real :: H_neglect   ! A negligibly small thickness, in the same units as h.
+                      ! above or below (meter)
+  real :: dRho_lay    ! density change across a layer (kg/m3)
+  real :: Omega2      ! rotation rate squared (1/s2)
+  real :: G_Rho0      ! gravitation accel divided by Bouss ref density (m4 s-2 kg-1)
+  real :: I_Rho0      ! inverse of Boussinesq density (m3/kg)
+  real :: I_dt        ! 1/dt (1/sec)
+  real :: H_neglect   ! negligibly small thickness, in the same units as h
   logical :: do_i(SZI_(G))
 
   integer :: i, k, is, ie, nz, i_rem, kmb, kb_min
   is = G%isc ; ie = G%iec ; nz = G%ke
 
-  I_dt = 1.0/dt
-  Omega2 = CS%Omega**2
-  G_Rho0 = G%g_Earth / G%Rho0
-  H_neglect = G%H_subroundoff
-  I_Rho0 = 1.0/G%Rho0
+  I_dt       = 1.0/dt
+  Omega2     = CS%Omega**2
+  G_Rho0     = G%g_Earth / G%Rho0
+  H_neglect  = G%H_subroundoff
+  I_Rho0     = 1.0/G%Rho0
 
   ! determine kb - the index of the shallowest active interior layer.
   if (CS%bulkmixedlayer) then
@@ -1066,26 +1076,29 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, CS, dRho_int, N2_lay, N2_int, 
   real, dimension(NIMEM_),               intent(out)  :: N2_bot
 
   real, dimension(SZI_(G),SZK_(G)+1) :: &
-    dRho_int_unfilt, & ! The unfiltered density differences across interfaces.
-    dRho_dT, &    ! The partial derivatives of density with temperature and
-    dRho_dS       ! salinity, in kg m-3 degC-1 and kg m-3 PSU-1.
+    dRho_int_unfilt, & ! unfiltered density differences across interfaces
+    dRho_dT,         & ! partial derivative of density wrt temp (kg m-3 degC-1)
+    dRho_dS            ! partial derivative of density wrt saln (kg m-3 PPT-1)
+
   real, dimension(SZI_(G)) :: &
-    pres, &       ! The pressure at each interface, in Pa.
-    Temp_int, &   ! The temperature at each interface, in degC.
-    Salin_int, &  ! The salinity at each interface, in PSU.
-    drho_bot, &
-    h_amp, &
-    hb, &
+    pres,      &  ! pressure at each interface (Pa)
+    Temp_int,  &  ! temperature at each interface (degC)
+    Salin_int, &  ! salinity at each interface (PPT)
+    drho_bot,  &
+    h_amp,     &
+    hb,        &
     z_from_bot
-  real :: Rml_base  ! The density of the deepest variable density layer.
-  real :: dz_int  ! The thickness associated with an interface, in m.
-  real :: G_Rho0  ! The gravitation acceleration divided by the Boussinesq
-                  ! density, in m4 s-2 kg-1.
-  real :: H_neglect ! A negligibly small thickness, in the same units as h.
+
+  real :: Rml_base  ! density of the deepest variable density layer
+  real :: dz_int    ! thickness associated with an interface (meter)
+  real :: G_Rho0    ! gravitation acceleration divided by Bouss reference density (m4 s-2 kg-1)
+  real :: H_neglect ! negligibly small thickness, in the same units as h.
+
   logical :: do_i(SZI_(G)), do_any
   integer :: i, k, is, ie, nz
+
   is = G%isc ; ie = G%iec ; nz = G%ke
-  G_Rho0 = G%g_Earth / G%Rho0
+  G_Rho0    = G%g_Earth / G%Rho0
   H_neglect = G%H_subroundoff
 
   ! Find the (limited) density jump across each interface.
@@ -1202,6 +1215,7 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, CS, dRho_int, N2_lay, N2_int, 
 
 end subroutine find_N2
 
+
 subroutine double_diffusion(tv, h, T_f, S_f, j, G, CS, Kd_T_dd, Kd_S_dd)
   type(thermo_var_ptrs),                 intent(in)  :: tv
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)  :: h
@@ -1211,46 +1225,43 @@ subroutine double_diffusion(tv, h, T_f, S_f, j, G, CS, Kd_T_dd, Kd_S_dd)
   type(set_diffusivity_CS),              pointer     :: CS
   real, dimension(NIMEM_,NK_INTERFACE_), intent(out) :: Kd_T_dd, Kd_S_dd
 
-! Arguments: tv - A structure containing pointers to any available
-!                 thermodynamic fields. Absent fields have NULL ptrs.
-!  (in)      h - Layer thickness, in m or kg m-2.
-!  (in)      T_f - The layer temperatures in C with the values in the
-!                  massless layers filled vertically by diffusion.
-!  (in)      S_f - The layer salinities in PSU with the values in the
-!                  massless layers filled vertically by diffusion.
-!  (in)      G - The ocean's grid structure.
-!  (in)      CS - This module's control structure.
-!  (in)      j - The meridional index upon which to work.
-!  (out)     Kd_T_dd - The diapycnal diffusivity of temperature due to double
-!                      diffusion across each interface in m2 s-1.
-!  (out)     Kd_S_dd - The diapycnal diffusivity of salinity due to double
-!                      diffusion across each interface in m2 s-1.
+! Arguments: 
+!  (in)      tv      - structure containing pointers to any available
+!                      thermodynamic fields; absent fields have NULL ptrs
+!  (in)      h       - layer thickness (m or kg m-2)
+!  (in)      T_f     - layer temp in C with the values in massless layers 
+!                      filled vertically by diffusion
+!  (in)      S_f     - layer salinities in PPT with values in massless layers 
+!                      filled vertically by diffusion
+!  (in)      G       - ocean grid structure
+!  (in)      CS      - module control structure
+!  (in)      j       - meridional index upon which to work
+!  (out)     Kd_T_dd - interface double diffusion diapycnal diffusivity for temp (m2/sec)
+!  (out)     Kd_S_dd - interface double diffusion diapycnal diffusivity for saln (m2/sec)
 
-!   This subroutine sets the additional diffusivities of temperature and
+! This subroutine sets the additional diffusivities of temperature and
 ! salinity due to double diffusion, using the same functional form as is
 ! used in MOM4.1, and taken from an NCAR technical note (###REF?) that updates
 ! what was in Large et al. (1994).  All the coefficients here should probably
 ! be made run-time variables rather than hard-coded constants.
 
   real, dimension(SZI_(G)) :: &
-    dRho_dT, &    ! The partial derivatives of density with temperature and
-    dRho_dS, &    ! salinity, in kg m-3 degC-1 and kg m-3 PSU-1.
-    pres, &          ! The pressure at each interface, in Pa.
-    Temp_int, &      ! Temperature and salinity at interfaces
+    dRho_dT,  &    ! partial derivatives of density wrt temp (kg m-3 degC-1)
+    dRho_dS,  &    ! partial derivatives of density wrt saln (kg m-3 PPT-1)
+    pres,     &    ! pressure at each interface (Pa)
+    Temp_int, &    ! temp and saln at interfaces
     Salin_int
 
-  real ::  alpha_dT   ! The density difference between layers due to
-                      ! temperature differences, in kg m-3.
-  real ::  beta_dS    ! The density difference between layers due to
-                      ! salinity differences, in kg m-3.
+  real ::  alpha_dT ! density difference between layers due to temp diffs (kg/m3)
+  real ::  beta_dS  ! density difference between layers due to saln diffs (kg/m3)
 
   real  :: Rrho    ! vertical density ratio
   real  :: diff_dd ! factor for double-diffusion
-  real  :: prandtl ! Flux ratio for diffusive convection regime
+  real  :: prandtl ! flux ratio for diffusive convection regime
 
-  real, parameter :: Rrho0  = 1.9          ! Limit for double-diffusive density ratio
-  real, parameter :: dsfmax = 1.e-4        ! Max diffusivity in case of salt fingering
-  real, parameter :: Kv_molecular = 1.5e-6 ! The molecular viscosity in m2 s-1.
+  real, parameter :: Rrho0  = 1.9          ! limit for double-diffusive density ratio
+  real, parameter :: dsfmax = 1.e-4        ! max diffusivity in case of salt fingering
+  real, parameter :: Kv_molecular = 1.5e-6 ! molecular viscosity  (m2/sec)
 
   integer :: i, k, is, ie, nz
   is = G%isc ; ie = G%iec ; nz = G%ke
@@ -1312,34 +1323,35 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, &
   real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(inout) :: Kd_int
   real, dimension(:,:,:),                 pointer       :: Kd_BBL
 
+! This routine adds diffusion sustained by flow energy extracted by bottom drag.
+
   real, dimension(SZK_(G)+1) :: &
-    Rint          ! The coordinate density of an interface in kg m-3.
+    Rint          ! coordinate density of an interface (kg/m3)
   real, dimension(SZI_(G)) :: &
-    htot, &       ! The total thickness above or below a layer, or the
-                  ! integrated thickness in the BBL, in m.
-    rho_htot, &   ! The running integral with depth of density, kg m-2.
-    gh_sum_top, & ! The BBL value of g'h that can be supported by
-                  ! the local ustar, times R0_g, in kg m-2.
-    Rho_top, &    ! The density at the top of the BBL, in kg m-3.
-    TKE, &        ! The turbulent kinetic energy available to drive
-                  ! bottom-boundary layer mixing in a layer, in m3 s-3.
-    I2decay       ! The inverse of twice the TKE decay scale, in m-1.
-  real :: TKE_to_layer  ! The TKE used to drive mixing in a layer, in m3 s-3.
-  real :: TKE_Ray       ! The TKE from a layer's Rayleigh drag that is used to
-                        ! drive mixing in that layer, in m3 s-3.
-  real :: TKE_here      ! The TKE that goes into mixing in this layer, in m3 s-3.
-  real :: dRl, dRbot    ! Temporaries holding density differences, in kg m-3.
-  real :: cdrag_sqrt    ! Square root of the drag coefficient, nondimensional.
-  real :: ustar_h       ! The value of ustar at a thickness point, in m s-1.
-  real :: absf          ! The average absolute value of the Coriolis parameter
-                        ! around a thickness point, in s-1.
-  real :: R0_g          ! Rho0 / G_Earth in kg s2 m-2.
-  real :: I_rho0        ! 1 / RHO0
-  real :: delta_Kd      ! The increment to Kd from the bottom boundary layer
-                        ! mixing, in m2 s-1.
-  logical :: Rayleigh_drag  ! Set to true if there are Rayleigh drag velocities
+    htot, &       ! total thickness above or below a layer, or the
+                  ! integrated thickness in the BBL (meter)
+    rho_htot, &   ! running integral with depth of density (kg/m2)
+    gh_sum_top, & ! BBL value of g'h that can be supported by
+                  ! the local ustar, times R0_g (kg/m2)
+    Rho_top, &    ! density at top of the BBL (kg/m3)
+    TKE, &        ! turbulent kinetic energy available to drive
+                  ! bottom-boundary layer mixing in a layer (m3/s3)
+    I2decay       ! inverse of twice the TKE decay scale (1/m)
+
+  real    :: TKE_to_layer   ! TKE used to drive mixing in a layer (m3/s3)
+  real    :: TKE_Ray        ! TKE from layer Rayleigh drag used to drive mixing in layer (m3/s3)
+  real    :: TKE_here       ! TKE that goes into mixing in this layer (m3/s3)
+  real    :: dRl, dRbot     ! temporaries holding density differences (kg/m3)
+  real    :: cdrag_sqrt     ! square root of the drag coefficient (nondimensional)
+  real    :: ustar_h        ! value of ustar at a thickness point (m/s)
+  real    :: absf           ! average absolute Coriolis parameter around a thickness point (1/s)
+  real    :: R0_g           ! Rho0 / G_Earth (kg s2 m-2)
+  real    :: I_rho0         ! 1 / RHO0
+  real    :: delta_Kd       ! increment to Kd from the bottom boundary layer mixing (m2/s)
+  logical :: Rayleigh_drag  ! Set to true if Rayleigh drag velocities
                             ! defined in visc, on the assumption that this
                             ! extracted energy also drives diapycnal mixing.
+
   logical :: domore, do_i(SZI_(G))
   logical :: do_diag_Kd_BBL
 
@@ -1348,9 +1360,6 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, &
 
   do_diag_Kd_BBL = associated(Kd_BBL)
   
-! This adds the diffusion sustained by the energy extracted from the flow
-! by the bottom drag.
-
   if (.not.(CS%bottomdraglaw .and. (CS%BBL_effic>0.0))) return
 
   cdrag_sqrt = sqrt(CS%cdrag)
@@ -1530,28 +1539,29 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, G, CS,
   real, dimension(NIMEM_,NJMEM_,NKMEM_),        intent(inout) :: Kd !< Layer net diffusivity (m2 s-1)
   real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(inout) :: Kd_int !< Interface net diffusivity (m2 s-1)
   real, dimension(:,:,:),                       pointer       :: Kd_BBL !< Interface BBL diffusivity (m2 s-1)
+
   ! Local variables
-  real :: TKE_column    ! The net TKE input into the column , in m3 s-3.
-  real :: TKE_to_layer  ! The TKE used to drive mixing in a layer, in m3 s-3.
-  real :: TKE_Ray       ! The TKE from a layer's Rayleigh drag that is used to drive mixing in that layer, in m3 s-3.
-  real :: TKE_remaining ! The remaining TKE available for mixing in this layer and above, in m3 s-3.
-  real :: TKE_consumed  ! The TKE used for mixing in this layer, in m3 s-3.
-  real :: TKE_Kd_wall   ! The TKE associated with unlimited law of the wall mixing, in m3 s-3.
-  real :: cdrag_sqrt    ! Square root of the drag coefficient, nondimensional.
-  real :: ustar         ! The value of ustar at a thickness point, in m s-1.
-  real :: ustar2        ! Square of ustar, for convenience, in m2 s-2.
-  real :: absf          ! The average absolute value of the Coriolis parameter around a thickness point, in s-1.
-  real :: dh, dhm1      ! Thickness of layers k and k-1, respecitvely, in m.
-  real :: z             ! Distance to interface k from bottom, in m.
-  real :: D_minus_z     ! Distance to interface k from surface, in m.
-  real :: total_thickness   ! Total thickness of water column, in m.
-  real :: Idecay        ! Inverse of decay scale used for "Joule heating" loss of TKE with heighti, in m-1.
-  real :: Kd_wall       ! Law of the wall diffusivity, in m2 s-1.
-  real :: Kd_lower      ! Diffusivity or lower interface, in m2 s-1.
-  real :: ustar_D       ! u* x D, in m2 s-1.
-  real :: I_Rho0        ! 1 / rho0
-  logical :: Rayleigh_drag  ! Set to true if there are Rayleigh drag velocities defined in visc, on
-                        ! the assumption that this extracted energy also drives diapycnal mixing.
+  real :: TKE_column       ! net TKE input into the column (m3 s-3)
+  real :: TKE_to_layer     ! TKE used to drive mixing in a layer (m3 s-3)
+  real :: TKE_Ray          ! TKE from a layer Rayleigh drag used to drive mixing in that layer (m3 s-3)
+  real :: TKE_remaining    ! remaining TKE available for mixing in this layer and above (m3 s-3)
+  real :: TKE_consumed     ! TKE used for mixing in this layer (m3 s-3)
+  real :: TKE_Kd_wall      ! TKE associated with unlimited law of the wall mixing (m3 s-3)
+  real :: cdrag_sqrt       ! square root of the drag coefficient (nondimensional)
+  real :: ustar            ! value of ustar at a thickness point (m/s)
+  real :: ustar2           ! square of ustar, for convenience (m2/s2)
+  real :: absf             ! average absolute value of Coriolis parameter around a thickness point (1/sec)
+  real :: dh, dhm1         ! thickness of layers k and k-1, respecitvely (meter)
+  real :: z                ! distance to interface k from bottom (meter)
+  real :: D_minus_z        ! distance to interface k from surface (meter)
+  real :: total_thickness  ! total thickness of water column (meter)
+  real :: Idecay           ! inverse of decay scale used for "Joule heating" loss of TKE with height (1/m)
+  real :: Kd_wall          ! Law of the wall diffusivity (m2/s)
+  real :: Kd_lower         ! diffusivity for lower interface (m2/sec)
+  real :: ustar_D          ! u* x D  (m2/s)
+  real :: I_Rho0           ! 1 / rho0
+  logical :: Rayleigh_drag ! Set to true if there are Rayleigh drag velocities defined in visc, on
+                           ! the assumption that this extracted energy also drives diapycnal mixing.
   integer :: i, k, km1
   real, parameter :: von_karm = 0.41 ! Von Karman constant (http://en.wikipedia.org/wiki/Von_Karman_constant)
   logical :: do_diag_Kd_BBL
@@ -1661,30 +1671,32 @@ subroutine add_MLrad_diffusivity(h, fluxes, j, G, CS, Kd, TKE_to_Kd, Kd_int)
   real, dimension(NIMEM_,NKMEM_),        intent(in)    :: TKE_to_Kd
   real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), optional, intent(inout) :: Kd_int
 
-  real, dimension(SZI_(G)) :: &
-    h_ml, &
-    TKE_ml_flux, &
-    I_decay, &
-    Kd_mlr_ml
-  real :: Omega2      ! The rotation rate squared, in s-2.
+! This routine adds effects of mixed layer radiation to the layer diffusivities.
+
+  real, dimension(SZI_(G)) ::         &
+                         h_ml,        &
+                         TKE_ml_flux, &
+                         I_decay,     &
+                         Kd_mlr_ml
+
   real :: f_sq, h_ml_sq, ustar_sq, Kd_mlr, C1_6
-  real :: z1          ! The layer thickness times I_decay, ND.
-  real :: dzL         ! The thickness converted to m.
-  real :: I_decay_len2_TKE  ! The squared inverse decay lengthscale for
-                            ! TKE, as used in the mixed layer code, in m-2.
-  real :: h_neglect ! A negligibly small thickness, in m.
+  real :: Omega2            ! rotation rate squared (1/s2)
+  real :: z1                ! layer thickness times I_decay (nondim)
+  real :: dzL               ! thickness converted to meter
+  real :: I_decay_len2_TKE  ! squared inverse decay lengthscale for
+                            ! TKE, as used in the mixed layer code (1/m2)
+  real :: h_neglect         ! negligibly small thickness (meter)
 
   logical :: do_any, do_i(SZI_(G))
   integer :: i, k, is, ie, nz, kml
   is = G%isc ; ie = G%iec ; nz = G%ke
-  Omega2 = CS%Omega**2
-  C1_6 = 1.0 / 6.0
-  kml = G%nkml
+
+  Omega2    = CS%Omega**2
+  C1_6      = 1.0 / 6.0
+  kml       = G%nkml
   h_neglect = G%H_subroundoff*G%H_to_m
 
   if (.not.CS%ML_radiation) return
-
-  ! This adds the effects of mixed layer radiation to the layer diffusivities.
 
   do i=is,ie ; h_ml(i) = 0.0 ; do_i(i) = (G%mask2dT(i,j) > 0.5) ; enddo
   do k=1,kml ; do i=is,ie ; h_ml(i) = h_ml(i) + G%H_to_m*h(i,j,k) ; enddo ; enddo
@@ -1777,37 +1789,35 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, CS, &
   real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), optional, intent(inout) :: Kd_int
 
   real, dimension(SZI_(G)) :: &
-    htot, &               ! The total thickness above or below a layer, or the
-                          ! integrated thickness in the BBL, in m.
-    htot_WKB, &           ! The distance from top to bottom, in m, WKB scaled.
-    TKE_itidal_bot, &     ! The internal tide TKE at the bottom of the ocean, in m3 s-3.
-    TKE_Niku_bot, &       ! The lee-wave TKE at the bottom of the ocean, in m3 s-3.
-    Inv_int, &            ! The inverse of the TKE decay over the depth of the ocean, ND.
-    Inv_int_lee, &        ! The inverse of the TKE decay for lee waves over the
-                          ! depth of the ocean, ND,
-    z0_Polzin, &          ! The TKE decay scale in Polzin formulation, in m.
-    z0_Polzin_scaled, &   ! The TKE decay scale in Polzin formulation, in m
-                          ! multiplied by N2_bot/N2_meanz to be coherent with the WKB scaled z
-                          ! z*=int(N2/N2_bot) * N2_bot/N2_meanz = int(N2/N2_meanz)
-                          ! z0_Polzin_scaled = z0_Polzin * N2_bot/N2_meanz
-    N2_meanz, &           ! Vertically averaged squared buoyancy frequency,
-                          ! in s-2, used for WKB scaling.
-    TKE_itidal_rem, &     ! The remaining internal tide TKE, in
-    TKE_Niku_rem, &       ! The remaining lee-wave TKE, in .
-    TKE_frac_top, &       ! The fraction of the bottom TKE that should appear
-                          ! at the top of a layer, nondim
-    TKE_frac_top_lee, &   ! The fraction of the bottom TKE that should appear
-                          ! at the top of a layer, nondim
-    z_from_bot, &         ! The distance from the bottom, in m.
-    z_from_bot_WKB        ! The distance from the bottom, in m, WKB scaled.
-  real :: I_rho0          ! 1 / RHO0, in m3 kg-1
-  real :: Kd_add          ! The diffusivity to add in a layer, in m2 s-1.
-  real :: TKE_itide_lay   ! The internal tide TKE imparted to a layer, in m3 s-3.
-  real :: TKE_Niku_lay    ! The lee-wave TKE imparted to a layer, in m3 s-3.
-  real :: frac_used       ! The fraction of the TKE that can be used in a layer, ND.
-  real :: Izeta           ! The inverse of the TKE decay scale, in m-1.
-  real :: Izeta_lee       ! The inverse of the TKE decay scale for lee waves, in m-1.
-  real :: z0_psl          ! A temporary variable with units of m.
+    htot,             & ! total thickness above or below a layer, or the
+                        ! integrated thickness in the BBL (meter)
+    htot_WKB,         & ! distance from top to bottom (meter) WKB scaled
+    TKE_itidal_bot,   & ! internal tide TKE at ocean bottom (m3/s3)
+    TKE_Niku_bot,     & ! lee-wave TKE at ocean bottom (m3/s3)
+    Inv_int,          & ! inverse of TKE decay for int tide over the depth of the ocean (nondim)
+    Inv_int_lee,      & ! inverse of TKE decay for lee waves over the depth of the ocean (nondim)
+    z0_Polzin,        & ! TKE decay scale in Polzin formulation (meter)
+    z0_Polzin_scaled, & ! TKE decay scale in Polzin formulation (meter)
+                        ! multiplied by N2_bot/N2_meanz to be coherent with the WKB scaled z
+                        ! z*=int(N2/N2_bot) * N2_bot/N2_meanz = int(N2/N2_meanz)
+                        ! z0_Polzin_scaled = z0_Polzin * N2_bot/N2_meanz
+    N2_meanz,         & ! vertically averaged squared buoyancy frequency (1/s2) for WKB scaling
+    TKE_itidal_rem,   & ! remaining internal tide TKE 
+    TKE_Niku_rem,     & ! remaining lee-wave TKE
+    TKE_frac_top,     & ! fraction of bottom TKE that should appear at top of a layer (nondim)
+    TKE_frac_top_lee, & ! fraction of bottom TKE that should appear at top of a layer (nondim)
+    z_from_bot,       & ! distance from bottom (meter)
+    z_from_bot_WKB      ! distance from bottom (meter), WKB scaled
+
+  real :: I_rho0        ! 1 / RHO0, (m3/kg)
+  real :: Kd_add        ! diffusivity to add in a layer (m2/sec)
+  real :: TKE_itide_lay ! internal tide TKE imparted to a layer (m3/s)
+  real :: TKE_Niku_lay  ! lee-wave TKE imparted to a layer (m3/s3)
+  real :: frac_used     ! fraction of TKE that can be used in a layer (nondim)
+  real :: Izeta         ! inverse of TKE decay scale (1/meter)
+  real :: Izeta_lee     ! inverse of TKE decay scale for lee waves (1/meter)
+  real :: z0_psl        ! temporary variable with units of meter
+
   logical :: use_Polzin, use_Simmons
   integer :: i, k, is, ie, nz
   is = G%isc ; ie = G%iec ; nz = G%ke
@@ -2069,24 +2079,27 @@ subroutine set_BBL_TKE(u, v, h, fluxes, visc, G, CS)
   type(ocean_grid_type),                  intent(in)    :: G
   type(set_diffusivity_CS),               pointer       :: CS
 
-  !   This subroutine calculates several properties related to bottom
+  ! This subroutine calculates several properties related to bottom
   ! boundary layer turbulence.
 
   real, dimension(SZI_(G)) :: &
-    htot          ! The total thickness above or below a layer, or the
-                  ! integrated thickness in the BBL, in m.
+    htot          ! total thickness above or below a layer, or the
+                  ! integrated thickness in the BBL (meter)
+
   real, dimension(SZIB_(G)) :: &
-    uhtot, &      ! The running integral of u in the BBL in m2 s-1.
-    ustar, &      ! The bottom boundary layer turbulence velocity in m s-1.
-    u2_bbl        ! The square of the mean zonal velocity in the bottom
-                  ! boundary layer in m2 s-2.
-  real :: vhtot(SZI_(G))  ! The running integral of v in the BBL, in m2 s-1.
+    uhtot, &      ! running integral of u in the BBL (m2/s)
+    ustar, &      ! bottom boundary layer turbulence speed (m/s)
+    u2_bbl        ! square of the mean zonal velocity in the BBL (m2/s2)
+
+  real :: vhtot(SZI_(G)) ! running integral of v in the BBL (m2/sec)
+
   real, dimension(SZI_(G),SZJB_(G)) :: &
-    vstar, &      ! ustar at at v-points in 2 j-rows, in m s-1.
-    v2_bbl        ! The square of the average meridional velocity in the
-                  ! bottom boundary layer, in m2 s-2.
-  real :: cdrag_sqrt  ! Square root of the drag coefficient, nondimensional.
-  real :: hvel    ! The thickness at velocity points, in m.
+    vstar, & ! ustar at at v-points in 2 j-rows (m/s)
+    v2_bbl   ! square of average meridional velocity in BBL (m2/s2)
+
+  real :: cdrag_sqrt  ! square root of the drag coefficient (nondim)
+  real :: hvel        ! thickness at velocity points (meter)
+
   logical :: domore, do_i(SZI_(G))
   integer :: i, j, k, is, ie, js, je, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -2197,28 +2210,26 @@ subroutine set_density_ratios(h, tv, kb, G, CS, j, ds_dsp1, rho_0)
   real, dimension(NIMEM_,NKMEM_),        intent(out)   :: ds_dsp1
   real, dimension(NIMEM_,NKMEM_), optional, intent(in) :: rho_0
 
-! Arguments: h - Layer thickness, in m.
-!  (in)      tv - A structure containing pointers to any available
-!                 thermodynamic fields. Absent fields have NULL ptrs.
-!  (in)      kb - The index of the lightest layer denser than the
-!                 buffer layer.
-!  (in)      G - The ocean's grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 diabatic_entrain_init.
-!  (in)      j - The meridional index upon which to work.
-!  (in)      ds_dsp1 - The coordinate variable (sigma-2) difference across an
+! Arguments: 
+!  (in)      h       - layer thickness (meter)
+!  (in)      tv      - structure containing pointers to any available
+!                      thermodynamic fields; absent fields have NULL ptrs
+!  (in)      kb      - index of lightest layer denser than the buffer layer
+!  (in)      G       - ocean grid structure
+!  (in)      CS      - control structure returned by previous call to diabatic_entrain_init
+!  (in)      j       - meridional index upon which to work
+!  (in)      ds_dsp1 - coordinate variable (sigma-2) difference across an
 !                      interface divided by the difference across the interface
-!                      below it. Nondimensional.
-!  (in)      rho_0 - Layer potential densities relative to surface pressure,
-!                    in units of kg m-3.
+!                      below it (nondimensional)
+!  (in)      rho_0   - layer potential densities relative to surface press (kg/m3)
 
-  real :: g_R0            ! g_R0 is g/Rho in m4 kg-1 s-2.
-  real :: eps, tmp        ! Nondimensional temproray variables.
-  real :: a(SZK_(G)), a_0(SZK_(G)) ! Nondimensional temporary variables.
-  real :: p_ref(SZI_(G))  ! An array of tv%P_Ref pressures.
-  real :: Rcv(SZI_(G),SZK_(G)) ! The coordinate density in the mixed and
-                          ! buffer layers in kg m-3.
-  real :: I_Drho          ! Temporary variable in m3 kg-1.
+  real :: g_R0                     ! g_R0 is g/Rho (m4 kg-1 s-2)
+  real :: eps, tmp                 ! nondimensional temproray variables
+  real :: a(SZK_(G)), a_0(SZK_(G)) ! nondimensional temporary variables
+  real :: p_ref(SZI_(G))           ! an array of tv%P_Ref pressures
+  real :: Rcv(SZI_(G),SZK_(G))     ! coordinate density in the mixed and buffer layers (kg/m3)
+  real :: I_Drho                   ! temporary variable (m3/kg)
+
   integer :: i, k, k3, is, ie, nz, kmb
   is = G%isc ; ie = G%iec ; nz = G%ke
 
@@ -2301,14 +2312,15 @@ subroutine set_diffusivity_init(Time, G, param_file, diag, CS, diag_to_Z_CSp)
   type(diag_ctrl), target,  intent(inout) :: diag
   type(set_diffusivity_CS), pointer       :: CS
   type(diag_to_Z_CS),       pointer       :: diag_to_Z_CSp
-! Arguments: Time - The current model time.
-!  (in)      G - The ocean's grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (in)      diag - A structure that is used to regulate diagnostic output.
-!  (in/out)  CS - A pointer that is set to point to the control structure
-!                 for this module
-!  (in)      diag_to_Z_CSp - A pointer to the Z-diagnostics control structure.
+
+! Arguments:
+!  (in)      Time          - current model time
+!  (in)      G             - ocean grid structure
+!  (in)      param_file    - structure indicating open file to parse for params
+!  (in)      diag          - structure used to regulate diagnostic output
+!  (in/out)  CS            - pointer set to point to the module control structure
+!  (in)      diag_to_Z_CSp - pointer to the Z-diagnostics control structure
+
   real :: decay_length, utide, zbot, hamp
   type(vardesc) :: vd
   logical :: read_tideamp
@@ -2809,8 +2821,10 @@ subroutine set_diffusivity_init(Time, G, param_file, diag, CS, diag_to_Z_CSp)
   CS%id_Kd_Niku_Work = register_diag_field('ocean_model','Kd_Nikurashin_Work',diag%axesTL,Time, &
        'Work done by Nikurashin Lee Wave Drag Scheme', 'Watts m-2')
 
-  CS%id_N2 = register_diag_field('ocean_model','N2',diag%axesTi,Time, &
-       'Buoyancy frequency squared', 'sec-2')
+  CS%id_N2 = register_diag_field('ocean_model','N2',diag%axesTi,Time,            &
+       'Buoyancy frequency squared', 'sec-2', cmor_field_name='obvfsq',          &
+        cmor_units='s-2', cmor_long_name='Square of seawater buoyancy frequency',&
+        cmor_standard_name='square_of_brunt_vaisala_frequency_in_sea_water')
 
   if (CS%user_change_diff) &
     CS%id_Kd_user = register_diag_field('ocean_model','Kd_user',diag%axesTi,Time, &
