@@ -179,12 +179,13 @@ type, public :: diabatic_CS ; private
   real :: MLDdensityDifference ! Density difference used to determine MLD_user
   integer :: nsw               ! SW_NBANDS
 
-  integer :: id_dudt_dia = -1, id_dvdt_dia = -1, id_wd        = -1
-  integer :: id_ea       = -1, id_eb       = -1, id_Kd_z      = -1, id_Kd_interface = -1
-  integer :: id_Tdif_z   = -1, id_Tadv_z   = -1, id_Sdif_z    = -1, id_Sadv_z       = -1
-  integer :: id_Tdif     = -1, id_Tadv     = -1, id_Sdif      = -1, id_Sadv         = -1
-  integer :: id_createdH = -1, id_subMLN2  = -1, id_brine_lay = -1
-  integer :: id_MLD_003  = -1, id_MLD_0125 = -1, id_MLD_user  = -1, id_mlotstsq     = -1
+  integer :: id_dudt_dia = -1, id_dvdt_dia = -1, id_wd           = -1
+  integer :: id_ea       = -1, id_eb       = -1, id_Kd_z         = -1
+  integer :: id_Kd_heat  = -1, id_Kd_salt  = -1, id_Kd_interface = -1
+  integer :: id_Tdif_z   = -1, id_Tadv_z   = -1, id_Sdif_z       = -1, id_Sadv_z       = -1
+  integer :: id_Tdif     = -1, id_Tadv     = -1, id_Sdif         = -1, id_Sadv         = -1
+  integer :: id_createdH = -1, id_subMLN2  = -1, id_brine_lay    = -1
+  integer :: id_MLD_003  = -1, id_MLD_0125 = -1, id_MLD_user     = -1, id_mlotstsq     = -1
 
   type(entrain_diffusive_CS),   pointer :: entrain_diffusive_CSp => NULL()
   type(bulkmixedlayer_CS),      pointer :: bulkmixedlayer_CSp    => NULL()
@@ -565,7 +566,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
       call hchksum(Kd, "after KPP Kd",G,haloshift=0)
       call hchksum(Kd_Int, "after KPP Kd_Int",G,haloshift=0)
     endif
-  endif
+
+  endif  ! endif for KPP 
 
   ! Check for static instabilities and increase Kd_int where unstable
   if (CS%useConvection) call diffConvection_calculate(CS%Conv_CSp, &
@@ -605,13 +607,17 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     if (showCallTree) call callTree_waypoint("done with differential_diffuse_T_S (diabatic)")
     if (CS%debugConservation) call MOM_state_stats('differential_diffuse_T_S', u, v, h, tv%T, tv%S, G)
   endif
+  
+  ! diagnose the net diapycnal diffusivities
+  if (CS%id_Kd_interface > 0) call post_data(CS%id_Kd_interface, Kd_int, CS%diag)
+  if (CS%id_Kd_heat > 0)      call post_data(CS%id_Kd_heat,     Kd_heat, CS%diag)
+  if (CS%id_Kd_salt > 0)      call post_data(CS%id_Kd_salt,     Kd_salt, CS%diag)
 
   ! This block sets ea, eb from Kd or Kd_int.
   !   If using the ALE algorithm, set ea=eb=Kd_int on interfaces for
   ! use in the tri-diagonal solver.
   !   Otherwise, call entrainment_diffusive() which sets ea and eb
   ! based on KD and target densities (ie. does remapping as well).
-  if (CS%id_Kd_interface > 0) call post_data(CS%id_Kd_interface, Kd_int, CS%diag)
   if (CS%useALEalgorithm) then
     do j=js,je ; do i=is,ie
       ea(i,j,1) = 0.
@@ -1920,6 +1926,18 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
   call set_diffusivity_init(Time, G, param_file, diag, CS%set_diff_CSp, diag_to_Z_CSp)
   CS%id_Kd_interface = register_diag_field('ocean_model', 'Kd_interface', diag%axesTi, Time, &
       'Total diapycnal diffusivity at interfaces', 'meter2 second-1')
+
+  CS%id_Kd_heat = register_diag_field('ocean_model', 'Kd_heat', diag%axesTi, Time, &
+      'Total diapycnal diffusivity for heat at interfaces', 'meter2 second-1',     &
+       cmor_field_name='difvho', cmor_units='m2 s-1',                              &
+       cmor_standard_name='ocean_vertical_heat_diffusivity',                       &
+       cmor_long_name='Net diapycnal diffusivity for ocean heat')
+
+  CS%id_Kd_salt = register_diag_field('ocean_model', 'Kd_salt', diag%axesTi, Time, &
+      'Total diapycnal diffusivity for salt at interfaces', 'meter2 second-1',     &
+       cmor_field_name='difvso', cmor_units='m2 s-1',                              &
+       cmor_standard_name='ocean_vertical_salt_diffusivity',                       &
+       cmor_long_name='Net diapycnal diffusivity for ocean salt')
 
   ! CS%useKPP is set to True if KPP-scheme is to be used, False otherwise.
   ! KPP_init() allocated CS%KPP_Csp and also sets CS%KPPisPassive

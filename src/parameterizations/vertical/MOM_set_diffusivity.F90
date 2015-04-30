@@ -69,7 +69,10 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public set_diffusivity, set_BBL_TKE, set_diffusivity_init, set_diffusivity_end
+public set_diffusivity
+public set_BBL_TKE
+public set_diffusivity_init
+public set_diffusivity_end
 
 type, public :: set_diffusivity_CS ; private
   logical :: debug           ! If true, write verbose checksums for debugging.
@@ -253,7 +256,7 @@ type, public :: set_diffusivity_CS ; private
   real    :: Max_salt_diff_salt_fingers ! max salt diffusivity for salt fingers (m2/s)
   real    :: Kv_molecular               ! molecular visc for double diff convect (m2/s)
 
-  real, pointer, dimension(:,:) :: TKE_Niku    => NULL() !
+  real, pointer, dimension(:,:) :: TKE_Niku    => NULL()
   real, pointer, dimension(:,:) :: TKE_itidal  => NULL()
   real, pointer, dimension(:,:) :: Nb          => NULL()
   real, pointer, dimension(:,:) :: mask_itidal => NULL()
@@ -320,8 +323,8 @@ type diffusivity_diags
 
   real, pointer, dimension(:,:) :: &
     TKE_itidal_used           => NULL(),& ! internal tide TKE input at ocean bottom (W/m2)
-    N2_bot                    => NULL(),& ! bottom stratification (1/s2)
-    N2_meanz                  => NULL(),& ! vertically averaged stratification
+    N2_bot                    => NULL(),& ! bottom squared buoyancy frequency (1/s2)
+    N2_meanz                  => NULL(),& ! vertically averaged buoyancy frequency (1/s2)
     Polzin_decay_scale_scaled => NULL(),& ! vertical scale of decay for tidal dissipation
     Polzin_decay_scale        => NULL()   ! vertical decay scale for tidal diss with Polzin (meter)
 
@@ -794,18 +797,18 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, G, C
 
   num_z_diags = 0
   if (CS%Int_tide_dissipation .or. CS%Lee_wave_dissipation) then
-    if (CS%id_TKE_itidal > 0) call post_data(CS%id_TKE_itidal, dd%TKE_itidal_used, CS%diag)
-    if (CS%id_TKE_leewave > 0) call post_data(CS%id_TKE_leewave, CS%TKE_Niku, CS%diag)
-    if (CS%id_Nb > 0) call post_data(CS%id_Nb, CS%Nb, CS%diag)
-    if (CS%id_N2 > 0) call post_data(CS%id_N2, dd%N2_3d, CS%diag)
-    if (CS%id_N2_bot > 0 ) call post_data(CS%id_N2_bot,dd%N2_bot,CS%diag)
-    if (CS%id_N2_meanz > 0 ) call post_data(CS%id_N2_meanz,dd%N2_meanz,CS%diag)
+    if (CS%id_TKE_itidal  > 0) call post_data(CS%id_TKE_itidal,  dd%TKE_itidal_used, CS%diag)
+    if (CS%id_TKE_leewave > 0) call post_data(CS%id_TKE_leewave, CS%TKE_Niku,        CS%diag)
+    if (CS%id_Nb          > 0) call post_data(CS%id_Nb,      CS%Nb,      CS%diag)
+    if (CS%id_N2          > 0) call post_data(CS%id_N2,      dd%N2_3d,   CS%diag)
+    if (CS%id_N2_bot      > 0) call post_data(CS%id_N2_bot,  dd%N2_bot,  CS%diag)
+    if (CS%id_N2_meanz    > 0) call post_data(CS%id_N2_meanz,dd%N2_meanz,CS%diag)
 
     if (CS%id_Fl_itidal > 0) call post_data(CS%id_Fl_itidal, dd%Fl_itidal, CS%diag)
     if (CS%id_Kd_itidal > 0) call post_data(CS%id_Kd_itidal, dd%Kd_itidal, CS%diag)
-    if (CS%id_Kd_Niku > 0) call post_data(CS%id_Kd_Niku, dd%Kd_Niku, CS%diag)
-    if (CS%id_Kd_user > 0) call post_data(CS%id_Kd_user, dd%Kd_user, CS%diag)
-    if (CS%id_Kd_Work > 0) call post_data(CS%id_Kd_Work, dd%Kd_Work, CS%diag)
+    if (CS%id_Kd_Niku   > 0) call post_data(CS%id_Kd_Niku,   dd%Kd_Niku,   CS%diag)
+    if (CS%id_Kd_user   > 0) call post_data(CS%id_Kd_user,   dd%Kd_user,   CS%diag)
+    if (CS%id_Kd_Work   > 0) call post_data(CS%id_Kd_Work,   dd%Kd_Work,   CS%diag)
     if (CS%id_Kd_Itidal_Work > 0) &
       call post_data(CS%id_Kd_Itidal_Work, dd%Kd_Itidal_Work, CS%diag)
     if (CS%id_Kd_Niku_Work > 0) call post_data(CS%id_Kd_Niku_Work, dd%Kd_Niku_Work, CS%diag)
@@ -818,13 +821,13 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, G, C
       call post_data(CS%id_Polzin_decay_scale_scaled, dd%Polzin_decay_scale_scaled, CS%diag)
 
     if (CS%id_Kd_itidal_z > 0) then
-      num_z_diags = num_z_diags + 1
+      num_z_diags        = num_z_diags + 1
       z_ids(num_z_diags) = CS%id_Kd_itidal_z
       z_ptrs(num_z_diags)%p => dd%Kd_itidal
     endif
 
     if (CS%id_Kd_Niku_z > 0) then
-      num_z_diags = num_z_diags + 1
+      num_z_diags        = num_z_diags + 1
       z_ids(num_z_diags) = CS%id_Kd_Niku_z
       z_ptrs(num_z_diags)%p => dd%Kd_Niku
     endif
@@ -836,7 +839,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, G, C
     endif
 
     if (CS%id_Kd_user_z > 0) then
-      num_z_diags = num_z_diags + 1
+      num_z_diags        = num_z_diags + 1
       z_ids(num_z_diags) = CS%id_Kd_user_z
       z_ptrs(num_z_diags)%p => dd%Kd_user
     endif
@@ -845,7 +848,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, G, C
 
   if (CS%id_KT_extra > 0) call post_data(CS%id_KT_extra, dd%KT_extra, CS%diag)
   if (CS%id_KS_extra > 0) call post_data(CS%id_KS_extra, dd%KS_extra, CS%diag)
-  if (CS%id_Kd_BBL > 0) call post_data(CS%id_Kd_BBL, dd%Kd_BBL, CS%diag)
+  if (CS%id_Kd_BBL > 0)   call post_data(CS%id_Kd_BBL, dd%Kd_BBL, CS%diag)
 
   if (CS%id_KT_extra_z > 0) then
       num_z_diags = num_z_diags + 1
@@ -909,7 +912,7 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, CS, TKE_to_Kd, maxT
     dsp1_ds, &    ! inverse coordinate variable (sigma-2) difference
                   ! across an interface times the difference across the
                   ! interface above it (nondimensional)
-    rho_0, &      ! Layer potential densities relative to surface pressure (kg/m3)
+    rho_0,   &    ! Layer potential densities relative to surface pressure (kg/m3)
     maxEnt        ! maxEnt is the maximum value of entrainment from below (with
                   ! compensating entrainment from above to keep the layer
                   ! density from changing) that will not deplete all of the
@@ -919,7 +922,7 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, CS, TKE_to_Kd, maxT
                   ! integrated thickness in the BBL (meter)
     mFkb,    &    ! total thickness in the mixed and buffer layers
                   ! times ds_dsp1 (meter)
-    p_ref,   &   ! array of tv%P_Ref pressures
+    p_ref,   &    ! array of tv%P_Ref pressures
     Rcv_kmb, &    ! coordinate density in the lowest buffer layer
     p_0           ! An array of 0 pressures
 
@@ -929,21 +932,21 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, CS, TKE_to_Kd, maxT
   real :: dRho_lay    ! density change across a layer (kg/m3)
   real :: Omega2      ! rotation rate squared (1/s2)
   real :: G_Rho0      ! gravitation accel divided by Bouss ref density (m4 s-2 kg-1)
-  real :: I_Rho0      ! inverse of Boussinesq density (m3/kg)
+  real :: I_Rho0      ! inverse of Boussinesq reference density (m3/kg)
   real :: I_dt        ! 1/dt (1/sec)
-  real :: H_neglect   ! negligibly small thickness, in the same units as h
+  real :: H_neglect   ! negligibly small thickness (units as h)
   logical :: do_i(SZI_(G))
 
   integer :: i, k, is, ie, nz, i_rem, kmb, kb_min
   is = G%isc ; ie = G%iec ; nz = G%ke
 
-  I_dt       = 1.0/dt
-  Omega2     = CS%Omega**2
-  G_Rho0     = G%g_Earth / G%Rho0
-  H_neglect  = G%H_subroundoff
-  I_Rho0     = 1.0/G%Rho0
+  I_dt      = 1.0/dt
+  Omega2    = CS%Omega**2
+  G_Rho0    = G%g_Earth / G%Rho0
+  H_neglect = G%H_subroundoff
+  I_Rho0    = 1.0/G%Rho0
 
-  ! determine kb - the index of the shallowest active interior layer.
+  ! determine kb = index of shallowest active interior layer
   if (CS%bulkmixedlayer) then
     kmb = G%nk_rho_varies
     do i=is,ie ; p_0(i) = 0.0 ; p_ref(i) = tv%P_Ref ; enddo
