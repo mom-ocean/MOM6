@@ -1120,8 +1120,11 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
         diag%axesT1,Time,'Surface ocean heat flux from SW+LW+latent+sensible (via the coupler)',&
         'Watt/m^2')
 
-  handles%id_net_heat_surface = register_diag_field('ocean_model', 'net_heat_surface',diag%axesT1,&
-        Time,'Surface ocean heat flux from SW+LW+latent+sensible+mass transfer+frazil', 'Watt/m^2')
+  handles%id_net_heat_surface = register_diag_field('ocean_model', 'net_heat_surface',diag%axesT1,  &
+        Time,'Surface ocean heat flux from SW+LW+lat+sens+mass transfer+frazil+restore', 'Watt/m^2',&
+        standard_name='surface_downward_heat_flux_in_sea_water', cmor_field_name='hfds',            &
+        cmor_units='W m-2', cmor_standard_name='surface_downard_heat_flux_in_sea_water',            &
+        cmor_long_name='Surface ocean heat flux from SW+LW+latent+sensible+mass transfer+frazil')
 
   handles%id_sw = register_diag_field('ocean_model', 'SW', diag%axesT1, Time,                              &
         'Shortwave radiation flux into ocean', 'Watt meter-2',                                             &
@@ -1223,9 +1226,9 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
       long_name='Area integrated surface heat flux from SW+LW+latent+sensible (via the coupler)',&
       units='Watt')
 
-  handles%id_total_net_heat_surface = register_scalar_field('ocean_model',          &
-      'total_net_heat_surface', Time, diag,                                         &
-      long_name='Area integrated surface heat flux from SW+LW+latent+sensible+mass',&
+  handles%id_total_net_heat_surface = register_scalar_field('ocean_model',                  &
+      'total_net_heat_surface', Time, diag,                                                 &
+      long_name='Area integrated surface heat flux from SW+LW+lat+sens+mass+frazil+restore',&
       units='Watt')
 
   handles%id_total_sw = register_scalar_field('ocean_model',                  &
@@ -1737,20 +1740,21 @@ subroutine forcing_diagnostics(fluxes, state, dt, G, diag, handles)
     ! if (ASSOCIATED(state%TempXpme)) then 
     !    sum(:,:) = sum(:,:) + state%TempXpme(:,:) * fluxes%C_p * I_dt
     ! else
-        if (ASSOCIATED(fluxes%heat_content_lrunoff)) sum(:,:) = sum(:,:) + fluxes%heat_content_lrunoff(:,:)
-        if (ASSOCIATED(fluxes%heat_content_frunoff)) sum(:,:) = sum(:,:) + fluxes%heat_content_frunoff(:,:)
-        if (ASSOCIATED(fluxes%heat_content_lprec))   sum(:,:) = sum(:,:) + fluxes%heat_content_lprec(:,:)
-        if (ASSOCIATED(fluxes%heat_content_fprec))   sum(:,:) = sum(:,:) + fluxes%heat_content_fprec(:,:)
-        if (ASSOCIATED(fluxes%heat_content_vprec))   sum(:,:) = sum(:,:) + fluxes%heat_content_vprec(:,:)
-        if (ASSOCIATED(fluxes%heat_content_cond))    sum(:,:) = sum(:,:) + fluxes%heat_content_cond(:,:)
-        if (ASSOCIATED(fluxes%heat_content_massout)) sum(:,:) = sum(:,:) + fluxes%heat_content_massout(:,:)
+      if (ASSOCIATED(fluxes%heat_content_lrunoff)) sum(:,:) = sum(:,:) + fluxes%heat_content_lrunoff(:,:)
+      if (ASSOCIATED(fluxes%heat_content_frunoff)) sum(:,:) = sum(:,:) + fluxes%heat_content_frunoff(:,:)
+      if (ASSOCIATED(fluxes%heat_content_lprec))   sum(:,:) = sum(:,:) + fluxes%heat_content_lprec(:,:)
+      if (ASSOCIATED(fluxes%heat_content_fprec))   sum(:,:) = sum(:,:) + fluxes%heat_content_fprec(:,:)
+      if (ASSOCIATED(fluxes%heat_content_vprec))   sum(:,:) = sum(:,:) + fluxes%heat_content_vprec(:,:)
+      if (ASSOCIATED(fluxes%heat_content_cond))    sum(:,:) = sum(:,:) + fluxes%heat_content_cond(:,:)
+      if (ASSOCIATED(fluxes%heat_content_massout)) sum(:,:) = sum(:,:) + fluxes%heat_content_massout(:,:)
     ! endif 
       if (ASSOCIATED(fluxes%heat_restore))         sum(:,:) = sum(:,:) + fluxes%heat_restore(:,:)
       call post_data(handles%id_net_heat_surface, sum, diag)
+
       if(handles%id_total_net_heat_surface > 0) then 
         total_transport = global_area_integral(sum,G)   
         call post_data(handles%id_total_net_heat_surface, total_transport, diag)
-      endif 
+      endif
     endif
 
     if (handles%id_heat_content_surfwater > 0 .or. handles%id_total_heat_content_surfwater > 0) then
