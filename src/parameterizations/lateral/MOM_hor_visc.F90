@@ -82,15 +82,15 @@ module MOM_hor_visc
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 
-use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
-use MOM_diag_mediator, only : diag_ctrl, time_type
-use MOM_error_handler, only : MOM_error, FATAL, WARNING
-use MOM_file_parser, only : get_param, log_version, param_file_type
-use MOM_grid, only : ocean_grid_type
+use MOM_diag_mediator,         only : post_data, register_diag_field, safe_alloc_ptr
+use MOM_diag_mediator,         only : diag_ctrl, time_type
+use MOM_error_handler,         only : MOM_error, FATAL, WARNING
+use MOM_file_parser,           only : get_param, log_version, param_file_type
+use MOM_grid,                  only : ocean_grid_type
 use MOM_lateral_mixing_coeffs, only : VarMix_CS
-use MOM_MEKE_types, only : MEKE_type
-use MOM_variables, only : ocean_OBC_type, OBC_FLATHER_E, OBC_FLATHER_W
-use MOM_variables, only : OBC_FLATHER_N, OBC_FLATHER_S
+use MOM_MEKE_types,            only : MEKE_type
+use MOM_variables,             only : ocean_OBC_type, OBC_FLATHER_E, OBC_FLATHER_W
+use MOM_variables,             only : OBC_FLATHER_N, OBC_FLATHER_S
 
 implicit none ; private
 
@@ -120,23 +120,23 @@ type, public :: hor_visc_CS ; private
                              ! the viscosity bounds to the theoretical maximum
                              ! for stability without considering other terms.
                              ! The default is 0.8.                         
-  logical :: Smagorinsky_Kh  ! If true, use Smagorinskys nonlinear eddy
+  logical :: Smagorinsky_Kh  ! If true, use Smagorinsky nonlinear eddy
                              ! viscosity. KH is the background value.
-  logical :: Smagorinsky_Ah  ! If true, use a biharmonic form of Smagorinskys
+  logical :: Smagorinsky_Ah  ! If true, use a biharmonic form of Smagorinsky
                              ! nonlinear eddy viscosity. AH is the background.
   logical :: bound_Coriolis  ! If true & SMAGORINSKY_AH is used, the biharmonic
                              ! viscosity is modified to include a term that
                              ! scales quadratically with the velocity shears.
 
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
-    Kh_bg_xx, &       ! The background Laplacian viscosity at h points, in units
+    Kh_bg_xx,        &! The background Laplacian viscosity at h points, in units
                       ! of m2 s-1. The actual viscosity may be the larger of this
                       ! viscosity and the Smagorinsky viscosity.
-    Ah_bg_xx, &       ! The background biharmonic viscosity at h points, in units
+    Ah_bg_xx,        &! The background biharmonic viscosity at h points, in units
                       ! of m4 s-1. The actual viscosity may be the larger of this
                       ! viscosity and the Smagorinsky viscosity.
-    Kh_Max_xx, &      ! The maximum permitted Laplacian viscosity, m2 s-1.
-    Ah_Max_xx, &      ! The maximum permitted biharmonic viscosity, m4 s-1.
+    Kh_Max_xx,       &! The maximum permitted Laplacian viscosity, m2 s-1.
+    Ah_Max_xx,       &! The maximum permitted biharmonic viscosity, m4 s-1.
     Biharm_Const2_xx,&! A constant relating the biharmonic viscosity to the
                       ! square of the velocity shear, in m4 s.  This value is
                       ! set to be the magnitude of the Coriolis terms once the
@@ -144,15 +144,16 @@ type, public :: hor_visc_CS ; private
 
     reduction_xx      ! The amount by which stresses through h points are reduced
                       ! due to partial barriers. Nondimensional.
+
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: &
-    Kh_bg_xy, &       ! The background Laplacian viscosity at q points, in units
+    Kh_bg_xy,        &! The background Laplacian viscosity at q points, in units
                       ! of m2 s-1. The actual viscosity may be the larger of this
                       ! viscosity and the Smagorinsky viscosity.
-    Ah_bg_xy, &       ! The background biharmonic viscosity at q points, in units
+    Ah_bg_xy,        &! The background biharmonic viscosity at q points, in units
                       ! of m4 s-1. The actual viscosity may be the larger of this
                       ! viscosity and the Smagorinsky viscosity.
-    Kh_Max_xy, &      ! The maximum permitted Laplacian viscosity, m2 s-1.
-    Ah_Max_xy, &      ! The maximum permitted biharmonic viscosity, m4 s-1.
+    Kh_Max_xy,       &! The maximum permitted Laplacian viscosity, m2 s-1.
+    Ah_Max_xy,       &! The maximum permitted biharmonic viscosity, m4 s-1.
     Biharm_Const2_xy,&! A constant relating the biharmonic viscosity to the
                       ! square of the velocity shear, in m4 s.  This value is
                       ! set to be the magnitude of the Coriolis terms once the
@@ -162,29 +163,33 @@ type, public :: hor_visc_CS ; private
 
 ! The following variables are precalculated combinations of metric terms.
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
-    dx2h, dy2h, &              ! dx^2 or dy^2 at h points, in m2.
-    dx_dyT, dy_dxT             ! dx/dy or dy/dx at h points, nondim.
+    dx2h, dy2h, &       ! dx^2  and dy^2  at h points, in m2
+    dx_dyT, dy_dxT      ! dx/dy and dy/dx at h points, nondim
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: &
-    dx2q, dy2q, &              ! dx^2 or dy^2 at q points, in m2.
-    dx_dyBu, dy_dxBu             ! dx/dy or dy/dx at q points, nondim.
+    dx2q, dy2q, &       ! dx^2  and dy^2  at q points, in m2
+    dx_dyBu, dy_dxBu    ! dx/dy and dy/dx at q points, nondim
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_) :: &
-    Idx2dyCu, Idxdy2u           ! 1/(dx^2 dy) and 1/(dx dy^2) at u points, in m-3.
+    Idx2dyCu, Idxdy2u   ! 1/(dx^2 dy) and 1/(dx dy^2) at u points, in m-3
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_) :: &
-    Idx2dyCv, Idxdy2v           ! 1/(dx^2 dy) and 1/(dx dy^2) at v points, in m-3.
+    Idx2dyCv, Idxdy2v   ! 1/(dx^2 dy) and 1/(dx dy^2) at v points, in m-3
 
-!   The following variables are precalculated time-invariant combinations of
+! The following variables are precalculated time-invariant combinations of
 ! parameters and metric terms.
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
-    Laplac_Const_xx, & ! The Laplacian and biharmonic metric-dependent
-    Biharm_Const_xx    ! constants, nondim.
+    Laplac_Const_xx, & ! Laplacian  metric-dependent constants (nondim)
+    Biharm_Const_xx    ! Biharmonic metric-dependent constants (nondim)
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: &
-    Laplac_Const_xy, & ! The Laplacian and biharmonic metric-dependent
-    Biharm_Const_xy    ! constants, nondim.
+    Laplac_Const_xy, & ! Laplacian  metric-dependent constants (nondim)
+    Biharm_Const_xy    ! Biharmonic metric-dependent constants (nondim)
 
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
-                             ! timing of diagnostic output.
-  integer :: id_diffu = -1, id_diffv = -1, id_Ah_h = -1, id_Ah_q = -1
-  integer :: id_Kh_h = -1, id_Kh_q = -1, id_FrictWork = -1
+  type(diag_ctrl), pointer :: diag ! structure to regulate diagnostic timing 
+
+  ! diagnostic ids 
+  integer :: id_diffu     = -1, id_diffv         = -1
+  integer :: id_Ah_h      = -1, id_Ah_q          = -1
+  integer :: id_Kh_h      = -1, id_Kh_q          = -1
+  integer :: id_FrictWork = -1, id_FrictWorkIntz = -1
+
 end type hor_visc_CS
 
 contains
@@ -201,22 +206,22 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
   type(hor_visc_CS),                      pointer     :: CS
   type(ocean_OBC_type),           pointer, optional   :: OBC
 
-! Arguments: u - Zonal velocity, in m s-1.
-!  (in)      v - Meridional velocity, in m s-1.
-!  (in)      h - Layer thickness, in m or kg m-2.  The units of h are
-!                referred to below as H.
-!  (out)     diffu - Zonal acceleration due to convergence of the
-!                    along-isopycnal stress tensor, in m s-2.
-!  (out)     diffv - Meridional acceleration due to convergence of
-!                    the along-isopycnal stress tensor, in m s-2.
-!  (inout)   MEKE - A pointer to a structure containing fields related to
-!                   the Mesoscale Eddy Kinetic Energy.
-!  (in)      VarMix - A pointer to a structure with fields that specify the
-!                     spatially variable viscosities.
-!  (in)      G - The ocean's grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 hor_visc_init.
-!  (in)      OBC - A pointer to an open boundary condition type.
+! Arguments: 
+!  (in)      u      - zonal velocity (m/s)
+!  (in)      v      - meridional velocity (m/s)
+!  (in)      h      - layer thickness (m or kg m-2); h units are referred to as H.
+!  (out)     diffu  - zonal acceleration due to convergence of 
+!                     along-coordinate stress tensor (m/s2)
+!  (out)     diffv  - meridional acceleration due to convergence of
+!                     along-coordinate stress tensor (m/s2)
+!  (inout)   MEKE   - pointer to a structure containing fields related to
+!                     Mesoscale Eddy Kinetic Energy
+!  (in)      VarMix - pointer to a structure with fields that specify the
+!                     spatially variable viscosities
+!  (in)      G      - ocean grid structure
+!  (in)      CS     - control structure returned by a previous call to
+!                     hor_visc_init
+!  (in)      OBC    - pointer to an open boundary condition type
 
 !  By R. Hallberg, August 1998 - November 1998.
 !    This subroutine determines the acceleration due to the
@@ -230,49 +235,56 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
 !   v[is-2,is-1,ie+1,ie+2], u[is-2,is-1,ie+1,ie+2], and h[is-1,ie+1],
 !  with a similarly sized halo in the y-direction.
 
-  real, dimension(SZIB_(G),SZJ_(G)) :: u0
-  real, dimension(SZI_(G),SZJB_(G)) :: v0
-                ! u0 and v0 are the Laplacian of the velocities, in m-1 s-1.
+  real, dimension(SZIB_(G),SZJ_(G)) :: u0 ! Laplacian of u (m-1 s-1)
+  real, dimension(SZI_(G),SZJB_(G)) :: v0 ! Laplacian of v (m-1 s-1)
+
   real, dimension(SZI_(G),SZJ_(G)) :: &
-    sh_xx, &    ! sh_xx is the horizontal tension (du/dx - dv/dy) including
-                ! all metric terms, in s-1.
-    str_xx      ! str_xx is the diagonal term in the stress tensor, in H m2 s-2.
+    sh_xx, & ! horizontal tension (du/dx - dv/dy) (1/sec) including metric terms
+    str_xx   ! str_xx is the diagonal term in the stress tensor (H m2 s-2)
+
   real, dimension(SZIB_(G),SZJB_(G)) :: &
-    sh_xy, &    ! sh_xy is the horizontal shearing strain (du/dy + dv/dx)
-                ! including all metric terms, in s-1.
-    str_xy      ! str_xy is the cross term in the stress tensor, in H m2 s-2.
+    sh_xy,  &     ! horizontal shearing strain (du/dy + dv/dx) (1/sec) including metric terms
+    str_xy, &     ! str_xy is the cross term in the stress tensor (H m2 s-2)
+    FrictWorkIntz ! depth integrated energy dissipated by lateral friction (W/m2)
+
   real, dimension(SZIB_(G),SZJB_(G),SZK_(G)) :: &
-    Ah_q, &     ! The biharmonic viscosity at corner points, in m4 s-1.
-    Kh_q, &     ! The Laplacian viscosity at corner points, in m2 s-1.
-    FrictWork   ! Work released by lateral friction terms in W m-2.
+    Ah_q, &   ! biharmonic viscosity at corner points (m4/s)
+    Kh_q, &   ! Laplacian viscosity at corner points (m2/s)
+    FrictWork ! energy dissipated by lateral friction (W/m2)
+
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
-    Ah_h, &     ! The biharmonic viscosity at thickness points, in m4 s-1.
-    Kh_h        ! The Laplacian viscosity at thickness points, in m2 s-1.
-  real :: Ah        ! Biharmonic viscosity in m4 s-1.
-  real :: Kh        ! Laplacian viscosity in m2 s-1.
-  real :: AhSm      ! Smagorinsky biharmonic viscosity in m4 s-1.
-  real :: KhSm      ! Smagorinsky Laplacian viscosity in m2 s-1.
-  real :: Shear_mag ! The magnitude of the shear, in s-1.
-  real :: huq, hvq  ! Temporary variables in units of H (i.e. m2 or kg2 m-4).
-  real :: hq        ! The harmonic mean of the harmonic means of the u- & v-
-                    ! point thicknesses, in H.  This guarantees that hq/hu < 4.
-  real :: h_neglect ! A thickness that is so small it is usually lost
-                    ! in roundoff and can be neglected, in H.
-  real :: h_neglect3 ! h_neglect^3, in H3.
-  real :: hrat_min  ! The minimum of the thicknesses at the 4 neighboring
-                    ! velocity points divided by the thickness at the stress
-                    ! point (h or q point), nondimensional.
-  real :: visc_bound_rem ! The fraction of the overall viscous bounds that
-                    ! remain to be applied.  Nondim.
+    Ah_h, &          ! biharmonic viscosity at thickness points (m4/s)
+    Kh_h             ! Laplacian viscosity at thickness points (m2/s)
+
+  real :: Ah         ! biharmonic viscosity (m4/s)
+  real :: Kh         ! Laplacian  viscosity (m2/s)
+  real :: AhSm       ! Smagorinsky biharmonic viscosity (m4/s)
+  real :: KhSm       ! Smagorinsky Laplacian viscosity  (m2/s)
+  real :: Shear_mag  ! magnitude of the shear (1/s)
+  real :: huq, hvq   ! temporary variables in units of H (i.e. m2 or kg2 m-4).
+  real :: hq         ! harmonic mean of the harmonic means of the u- & v-
+                     ! point thicknesses, in H; guarantees that hq/hu < 4.
+  real :: h_neglect  ! thickness so small it can be lost in roundoff and so neglected (H)
+  real :: h_neglect3 ! h_neglect^3, in H3
+  real :: hrat_min   ! minimum thicknesses at the 4 neighboring
+                     ! velocity points divided by the thickness at the stress
+                     ! point (h or q point) (nondimensional)
+  real :: visc_bound_rem ! fraction of overall viscous bounds that
+                         ! remain to be applied (nondim)
   real :: Kh_scale  ! A factor between 0 and 1 by which the horizontal
-                    ! Laplacian viscosity is rescaled.
-  logical :: rescale_Kh, find_FrictWork, apply_OBC = .false.
+                    ! Laplacian viscosity is rescaled
+
+  logical :: rescale_Kh
+  logical :: find_FrictWork
+  logical :: apply_OBC = .false.
   logical :: use_MEKE_Ku
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   integer :: i, j, k
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+
+  is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = G%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
-  h_neglect = G%H_subroundoff
+
+  h_neglect  = G%H_subroundoff
   h_neglect3 = h_neglect**3
   
   if (present(OBC)) then ; if (associated(OBC)) then
@@ -284,6 +296,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
          "MOM_hor_visc: Module must be initialized before it is used.")
 
   find_FrictWork = (CS%id_FrictWork > 0)
+  if (CS%id_FrictWorkIntz > 0)    find_FrictWork = .true.
   if (associated(MEKE)) then
     if (associated(MEKE%mom_src)) find_FrictWork = .true.
   endif
@@ -572,80 +585,91 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
     enddo
   endif ; endif
 
-! Offer fields for averaging.
-  if (CS%id_diffu>0) call post_data(CS%id_diffu, diffu, CS%diag)
-  if (CS%id_diffv>0) call post_data(CS%id_diffv, diffv, CS%diag)
+! Offer fields for diagnostic averaging.
+  if (CS%id_diffu>0)     call post_data(CS%id_diffu, diffu, CS%diag)
+  if (CS%id_diffv>0)     call post_data(CS%id_diffv, diffv, CS%diag)
   if (CS%id_FrictWork>0) call post_data(CS%id_FrictWork, FrictWork, CS%diag)
-  if (CS%id_Ah_h>0) call post_data(CS%id_Ah_h, Ah_h, CS%diag)
-  if (CS%id_Ah_q>0) call post_data(CS%id_Ah_q, Ah_q, CS%diag)
-  if (CS%id_Kh_h>0) call post_data(CS%id_Kh_h, Kh_h, CS%diag)
-  if (CS%id_Kh_q>0) call post_data(CS%id_Kh_q, Kh_q, CS%diag)
+  if (CS%id_Ah_h>0)      call post_data(CS%id_Ah_h, Ah_h, CS%diag)
+  if (CS%id_Ah_q>0)      call post_data(CS%id_Ah_q, Ah_q, CS%diag)
+  if (CS%id_Kh_h>0)      call post_data(CS%id_Kh_h, Kh_h, CS%diag)
+  if (CS%id_Kh_q>0)      call post_data(CS%id_Kh_q, Kh_q, CS%diag)
+
+  if (CS%id_FrictWorkIntz > 0) then 
+    do j=js,je
+      do i=is,ie ; FrictWorkIntz(i,j) = FrictWork(i,j,1) ; enddo
+      do k=2,nz ; do i=is,ie
+        FrictWorkIntz(i,j) = FrictWorkIntz(i,j) + FrictWork(i,j,k)
+      enddo ; enddo
+    enddo
+    call post_data(CS%id_FrictWorkIntz, FrictWorkIntz, CS%diag)
+  endif
+
 
 end subroutine horizontal_viscosity
 
 
 subroutine hor_visc_init(Time, G, param_file, diag, CS)
-  type(time_type),       intent(in) :: Time
-  type(ocean_grid_type), intent(in) :: G
-  type(param_file_type), intent(in) :: param_file
+  type(time_type),         intent(in)    :: Time
+  type(ocean_grid_type),   intent(in)    :: G
+  type(param_file_type),   intent(in)    :: param_file
   type(diag_ctrl), target, intent(inout) :: diag
-  type(hor_visc_CS), pointer        :: CS
-!   This subroutine allocates space for and claculates the static variables used
-! by this module.  The metrics may be effectively 0, 1, or 2-D arrays,
+  type(hor_visc_CS), pointer             :: CS
+
+! This subroutine allocates space for and calculates static variables
+! used by this module. The metrics may be 0, 1, or 2-D arrays,
 ! while fields like the background viscosities are 2-D arrays.
-! ALLOC is a macro defined in MOM_memory.h for allocate or nothing with
-! static memory.
+! ALLOC is a macro defined in MOM_memory.h to either allocate 
+! for dynamic memory, or do nothing when using static memory.
 !
-! Arguments: Time - The current model time.
-!  (in)      G - The ocean's grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (in)      diag - A structure that is used to regulate diagnostic output.
-!  (in/out)  CS - A pointer that is set to point to the control structure
-!                 for this module
+! Arguments: 
+!  (in)      Time       - current model time
+!  (in)      G          - ocean grid structure
+!  (in)      param_file - structure to parse for model parameter values
+!  (in)      diag       - structure to regulate diagnostic output
+!  (in/out)  CS         - pointer to the control structure for this module
 
   real, dimension(SZIB_(G),SZJ_(G)) :: u0u, u0v
   real, dimension(SZI_(G),SZJB_(G)) :: v0u, v0v
-                ! u0v is are the Laplacian sensitivities to the v velocities
+                ! u0v is the Laplacian sensitivities to the v velocities
                 ! at u points, in m-2, with u0u, v0u, and v0v defined similarly.
-  real :: grid_sp_h2      ! Harmonic mean of the squares of the grid
-  real :: grid_sp_q2      ! spacings at h and q points, in m2.
-  real :: Kh_Limit        ! A coefficient in s-1 which is used, along with the
-                          ! grid spacing to limit the Laplacian viscosity.
-  real :: fmax            ! The maximum absolute value of f at the four
-                          ! vorticity points around a thickness point, in s-1.
-  real :: BoundCorConst   ! A constant, with units of s2 m-2.
-  real :: Ah_Limit        ! A coefficient in s-1 which is used, along with the
-                          ! grid spacing to limit the biharmonic viscosity.
-  real :: Kh              ! The Lapacian horizontal viscosity in m2 s-1.
-  real :: Ah              ! The biharmonic horizontal viscosity in m4 s-1.
-  real :: Kh_vel_scale    ! This velocity times the grid spacing gives the
-                          ! Laplacian viscosity, in m s-1.
-  real :: Ah_vel_scale    ! This velocity times the grid spacing cubed gives
-                          ! the biharmonic viscosity, in m s-1.
-  real :: Smag_Lap_const  ! The nondimensional Laplacian Smagorinsky constant.
-  real :: Smag_bi_const   ! The nondimensional biharmonic Smagorinsky constant.
-  real :: dt              ! The dynamics time step in seconds.
-  real :: Idt             ! The inverse of dt in s-1.
-  real :: denom           ! A work variable, the denominator of a fraction.
-  real :: maxvel          ! The largest permitted velocity components in m s-1.
-  real :: bound_Cor_vel   ! The grid-scale velocity variations at which value
-                          ! the quadratically varying biharmonic viscosity
-                          ! balances Coriolis acceleration in m s-1.
-  logical :: bound_Cor_def ! The parameter setting of BOUND_CORIOLIS.
-  logical :: get_all      ! If true, read and log all parameters, regardless of
-                          ! whether they are used, to enable spell-checking of
-                          ! valid parameters.
+  real :: grid_sp_h2       ! Harmonic mean of the squares of the grid
+  real :: grid_sp_q2       ! spacings at h and q points (m2)
+  real :: Kh_Limit         ! A coefficient (1/s) used, along with the
+                           ! grid spacing, to limit Laplacian viscosity.
+  real :: fmax             ! maximum absolute value of f at the four
+                           ! vorticity points around a thickness point (1/s)
+  real :: BoundCorConst    ! constant (s2/m2)
+  real :: Ah_Limit         ! coefficient (1/s) used, along with the
+                           ! grid spacing, to limit biharmonic viscosity
+  real :: Kh               ! Lapacian horizontal viscosity (m2/s)
+  real :: Ah               ! biharmonic horizontal viscosity (m4/s)
+  real :: Kh_vel_scale     ! this speed (m/s) times grid spacing gives Lap visc
+  real :: Ah_vel_scale     ! this speed (m/s) times grid spacing cubed gives bih visc
+  real :: Smag_Lap_const   ! nondimensional Laplacian Smagorinsky constant
+  real :: Smag_bi_const    ! nondimensional biharmonic Smagorinsky constant
+  real :: dt               ! dynamics time step (sec)
+  real :: Idt              ! inverse of dt (1/s)
+  real :: denom            ! work variable; the denominator of a fraction
+  real :: maxvel           ! largest permitted velocity components (m/s)
+  real :: bound_Cor_vel    ! grid-scale velocity variations at which value
+                           ! the quadratically varying biharmonic viscosity
+                           ! balances Coriolis acceleration (m/s)
+  logical :: bound_Cor_def ! parameter setting of BOUND_CORIOLIS
+  logical :: get_all       ! If true, read and log all parameters, regardless of
+                           ! whether they are used, to enable spell-checking of
+                           ! valid parameters.
+
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   integer :: i, j
+
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = "MOM_hor_visc"  ! This module's name.
+  character(len=40)  :: mod = "MOM_hor_visc"  ! module name
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
+  is   = G%isc  ; ie   = G%iec  ; js   = G%jsc  ; je   = G%jec ; nz = G%ke
+  Isq  = G%IscB ; Ieq  = G%IecB ; Jsq  = G%JscB ; Jeq  = G%JecB
+  isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   if (associated(CS)) then
@@ -657,7 +681,7 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
 
   CS%diag => diag
 
-  ! Read all relevant parameters and write them to the model log.
+  ! Read parameters and write them to the model log.
   call log_version(param_file, mod, version, "")
 
   !   It is not clear whether these initialization lines are needed for the
@@ -665,6 +689,7 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
   CS%bound_Kh = .false. ; CS%better_bound_Kh = .false. ; CS%Smagorinsky_Kh = .false.
   CS%bound_Ah = .false. ; CS%better_bound_Ah = .false. ; CS%Smagorinsky_Ah = .false.
   CS%bound_Coriolis = .false.
+
   Kh = 0.0 ; Ah = 0.0
 
   !   If GET_ALL_PARAMS is true, all parameters are read in all cases to enable
@@ -675,7 +700,7 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
                  "If true, use a Laplacian horizontal viscosity.", &
                  default=.false.)
   if (CS%Laplacian .or. get_all) then
-    call get_param(param_file, mod, "KH", Kh, &
+    call get_param(param_file, mod, "KH", Kh,                      &
                  "The background Laplacian horizontal viscosity.", &
                  units = "m2 s-1", default=0.0)
     call get_param(param_file, mod, "KH_VEL_SCALE", Kh_vel_scale, &
@@ -783,12 +808,12 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
     "hor_visc_init:  It is usually a very bad idea not to use either "//&
     "LAPLACIAN or BIHARMONIC viscosity.")
 
-  ALLOC_(CS%dx2h(isd:ied,jsd:jed))     ; CS%dx2h(:,:) = 0.0
-  ALLOC_(CS%dy2h(isd:ied,jsd:jed))     ; CS%dy2h(:,:) = 0.0
-  ALLOC_(CS%dx2q(IsdB:IedB,JsdB:JedB))   ; CS%dx2q(:,:) = 0.0
-  ALLOC_(CS%dy2q(IsdB:IedB,JsdB:JedB))   ; CS%dy2q(:,:) = 0.0
-  ALLOC_(CS%dx_dyT(isd:ied,jsd:jed))   ; CS%dx_dyT(:,:) = 0.0
-  ALLOC_(CS%dy_dxT(isd:ied,jsd:jed))   ; CS%dy_dxT(:,:) = 0.0
+  ALLOC_(CS%dx2h(isd:ied,jsd:jed))        ; CS%dx2h(:,:)    = 0.0
+  ALLOC_(CS%dy2h(isd:ied,jsd:jed))        ; CS%dy2h(:,:)    = 0.0
+  ALLOC_(CS%dx2q(IsdB:IedB,JsdB:JedB))    ; CS%dx2q(:,:)    = 0.0
+  ALLOC_(CS%dy2q(IsdB:IedB,JsdB:JedB))    ; CS%dy2q(:,:)    = 0.0
+  ALLOC_(CS%dx_dyT(isd:ied,jsd:jed))      ; CS%dx_dyT(:,:)  = 0.0
+  ALLOC_(CS%dy_dxT(isd:ied,jsd:jed))      ; CS%dy_dxT(:,:)  = 0.0
   ALLOC_(CS%dx_dyBu(IsdB:IedB,JsdB:JedB)) ; CS%dx_dyBu(:,:) = 0.0
   ALLOC_(CS%dy_dxBu(IsdB:IedB,JsdB:JedB)) ; CS%dy_dxBu(:,:) = 0.0
 
@@ -796,11 +821,11 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
     ALLOC_(CS%Kh_bg_xx(isd:ied,jsd:jed))     ; CS%Kh_bg_xx(:,:) = 0.0
     ALLOC_(CS%Kh_bg_xy(IsdB:IedB,JsdB:JedB)) ; CS%Kh_bg_xy(:,:) = 0.0
     if (CS%bound_Kh .or. CS%better_bound_Kh) then
-      ALLOC_(CS%Kh_Max_xx(IsdB:IedB,JsdB:JedB))   ; CS%Kh_Max_xx(:,:) = 0.0
+      ALLOC_(CS%Kh_Max_xx(IsdB:IedB,JsdB:JedB)) ; CS%Kh_Max_xx(:,:) = 0.0
       ALLOC_(CS%Kh_Max_xy(IsdB:IedB,JsdB:JedB)) ; CS%Kh_Max_xy(:,:) = 0.0
     endif
     if (CS%Smagorinsky_Kh) then
-      ALLOC_(CS%Laplac_Const_xx(isd:ied,jsd:jed))   ; CS%Laplac_Const_xx(:,:) = 0.0
+      ALLOC_(CS%Laplac_Const_xx(isd:ied,jsd:jed))     ; CS%Laplac_Const_xx(:,:) = 0.0
       ALLOC_(CS%Laplac_Const_xy(IsdB:IedB,JsdB:JedB)) ; CS%Laplac_Const_xy(:,:) = 0.0
     endif
   endif
@@ -810,20 +835,20 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
   if (CS%biharmonic) then
     ALLOC_(CS%Idx2dyCu(IsdB:IedB,jsd:jed)) ; CS%Idx2dyCu(:,:) = 0.0
     ALLOC_(CS%Idx2dyCv(isd:ied,JsdB:JedB)) ; CS%Idx2dyCv(:,:) = 0.0
-    ALLOC_(CS%Idxdy2u(IsdB:IedB,jsd:jed)) ; CS%Idxdy2u(:,:) = 0.0
-    ALLOC_(CS%Idxdy2v(isd:ied,JsdB:JedB)) ; CS%Idxdy2v(:,:) = 0.0
+    ALLOC_(CS%Idxdy2u(IsdB:IedB,jsd:jed))  ; CS%Idxdy2u(:,:)  = 0.0
+    ALLOC_(CS%Idxdy2v(isd:ied,JsdB:JedB))  ; CS%Idxdy2v(:,:)  = 0.0
 
-    ALLOC_(CS%Ah_bg_xx(isd:ied,jsd:jed)) ; CS%Ah_bg_xx(:,:) = 0.0
+    ALLOC_(CS%Ah_bg_xx(isd:ied,jsd:jed))     ; CS%Ah_bg_xx(:,:) = 0.0
     ALLOC_(CS%Ah_bg_xy(IsdB:IedB,JsdB:JedB)) ; CS%Ah_bg_xy(:,:) = 0.0
     if (CS%bound_Ah .or. CS%better_bound_Ah) then
-      ALLOC_(CS%Ah_Max_xx(isd:ied,jsd:jed))   ; CS%Ah_Max_xx(:,:) = 0.0
+      ALLOC_(CS%Ah_Max_xx(isd:ied,jsd:jed))     ; CS%Ah_Max_xx(:,:) = 0.0
       ALLOC_(CS%Ah_Max_xy(IsdB:IedB,JsdB:JedB)) ; CS%Ah_Max_xy(:,:) = 0.0
     endif
     if (CS%Smagorinsky_Ah) then
-      ALLOC_(CS%Biharm_Const_xx(isd:ied,jsd:jed)) ; CS%Biharm_Const_xx(:,:) = 0.0
+      ALLOC_(CS%Biharm_Const_xx(isd:ied,jsd:jed))     ; CS%Biharm_Const_xx(:,:) = 0.0
       ALLOC_(CS%Biharm_Const_xy(IsdB:IedB,JsdB:JedB)) ; CS%Biharm_Const_xy(:,:) = 0.0
       if (CS%bound_Coriolis) then
-        ALLOC_(CS%Biharm_Const2_xx(isd:ied,jsd:jed)) ; CS%Biharm_Const2_xx(:,:) = 0.0
+        ALLOC_(CS%Biharm_Const2_xx(isd:ied,jsd:jed))     ; CS%Biharm_Const2_xx(:,:) = 0.0
         ALLOC_(CS%Biharm_Const2_xy(IsdB:IedB,JsdB:JedB)) ; CS%Biharm_Const2_xy(:,:) = 0.0
       endif
     endif
@@ -978,36 +1003,36 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
   if (CS%biharmonic .and. CS%better_bound_Ah) then
     Idt = 1.0 / dt
     do j=js-1,Jeq+1 ; do I=Isq-1,Ieq+1
-      u0u(I,j) = CS%IDXDY2u(I,j)*(CS%DY2h(i+1,j)*CS%DY_dxT(i+1,j)*(G%IdyCu(i+1,j) + G%IdyCu(i,j)) + &
+      u0u(I,j) = CS%IDXDY2u(I,j)*(CS%DY2h(i+1,j)*CS%DY_dxT(i+1,j)*(G%IdyCu(i+1,j) + G%IdyCu(i,j))   + &
                                   CS%DY2h(i,j) * CS%DY_dxT(i,j) * (G%IdyCu(I,j) + G%IdyCu(I-1,j)) ) + &
                  CS%IDX2dyCu(I,j)*(CS%DX2q(I,J) * CS%DX_dyBu(I,J) * (G%IdxCu(I,j+1) + G%IdxCu(I,j)) + &
                                   CS%DX2q(I,J-1)*CS%DX_dyBu(I,J-1)*(G%IdxCu(I,j) + G%IdxCu(I,j-1)) )
 
       u0v(I,j) = CS%IDXDY2u(I,j)*(CS%DY2h(i+1,j)*CS%DX_dyT(i+1,j)*(G%IdxCv(i+1,J) + G%IdxCv(i+1,J-1)) + &
-                                  CS%DY2h(i,j) * CS%DX_dyT(i,j) * (G%IdxCv(i,J) + G%IdxCv(i,J-1)) ) + &
-                 CS%IDX2dyCu(I,j)*(CS%DX2q(I,J) * CS%DY_dxBu(I,J) * (G%IdyCv(i+1,J) + G%IdyCv(i,J)) + &
+                                  CS%DY2h(i,j) * CS%DX_dyT(i,j) * (G%IdxCv(i,J) + G%IdxCv(i,J-1)) )   + &
+                 CS%IDX2dyCu(I,j)*(CS%DX2q(I,J) * CS%DY_dxBu(I,J) * (G%IdyCv(i+1,J) + G%IdyCv(i,J))   + &
                                   CS%DX2q(I,J-1)*CS%DY_dxBu(I,J-1)*(G%IdyCv(i+1,J-1) + G%IdyCv(i,J-1)) )
     enddo ; enddo
     do J=Jsq-1,Jeq+1 ; do i=is-1,Ieq+1
-      v0u(i,J) = CS%IDXDY2v(i,J)*(CS%DY2q(I,J) * CS%DX_dyBu(I,J) * (G%IdxCu(I,j+1) + G%IdxCu(I,j)) + &
+      v0u(i,J) = CS%IDXDY2v(i,J)*(CS%DY2q(I,J) * CS%DX_dyBu(I,J) * (G%IdxCu(I,j+1) + G%IdxCu(I,j))       + &
                                   CS%DY2q(I-1,J)*CS%DX_dyBu(I-1,J)*(G%IdxCu(I-1,j+1) + G%IdxCu(I-1,j)) ) + &
-                 CS%IDX2dyCv(i,J)*(CS%DX2h(i,j+1)*CS%DY_dxT(i,j+1)*(G%IdyCu(I,j+1) + G%IdyCu(I-1,j+1)) + &
+                 CS%IDX2dyCv(i,J)*(CS%DX2h(i,j+1)*CS%DY_dxT(i,j+1)*(G%IdyCu(I,j+1) + G%IdyCu(I-1,j+1))   + &
                                   CS%DX2h(i,j) * CS%DY_dxT(i,j) * (G%IdyCu(I,j) + G%IdyCu(I-1,j)) )
 
-      v0v(i,J) = CS%IDXDY2v(i,J)*(CS%DY2q(I,J) * CS%DY_dxBu(I,J) * (G%IdyCv(i+1,J) + G%IdyCv(i,J)) + &
+      v0v(i,J) = CS%IDXDY2v(i,J)*(CS%DY2q(I,J) * CS%DY_dxBu(I,J) * (G%IdyCv(i+1,J) + G%IdyCv(i,J))   + &
                                   CS%DY2q(I-1,J)*CS%DY_dxBu(I-1,J)*(G%IdyCv(i,J) + G%IdyCv(i-1,J)) ) + &
-                 CS%IDX2dyCv(i,J)*(CS%DX2h(i,j+1)*CS%DX_dyT(i,j+1)*(G%IdxCv(i,J+1) + G%IdxCv(i,J)) + &
+                 CS%IDX2dyCv(i,J)*(CS%DX2h(i,j+1)*CS%DX_dyT(i,j+1)*(G%IdxCv(i,J+1) + G%IdxCv(i,J))   + &
                                   CS%DX2h(i,j) * CS%DX_dyT(i,j) * (G%IdxCv(i,J) + G%IdxCv(i,J-1)) )
     enddo ; enddo
 
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       denom = max( &
          (CS%DY2h(i,j) * &
-          (CS%DY_dxT(i,j)*(G%IdyCu(I,j)*u0u(I,j) + G%IdyCu(I-1,j)*u0u(I-1,j)) + &
+          (CS%DY_dxT(i,j)*(G%IdyCu(I,j)*u0u(I,j) + G%IdyCu(I-1,j)*u0u(I-1,j))  + &
            CS%DX_dyT(i,j)*(G%IdxCv(i,J)*v0u(i,J) + G%IdxCv(i,J-1)*v0u(i,J-1))) * &
-          max(G%IdyCu(I,j)*G%IareaCu(I,j), G%IdyCu(I-1,j)*G%IareaCu(I-1,j)) ), &
+          max(G%IdyCu(I,j)*G%IareaCu(I,j), G%IdyCu(I-1,j)*G%IareaCu(I-1,j)) ),   &
          (CS%DX2h(i,j) * &
-          (CS%DY_dxT(i,j)*(G%IdyCu(I,j)*u0v(I,j) + G%IdyCu(I-1,j)*u0v(I-1,j)) + &
+          (CS%DY_dxT(i,j)*(G%IdyCu(I,j)*u0v(I,j) + G%IdyCu(I-1,j)*u0v(I-1,j))  + &
            CS%DX_dyT(i,j)*(G%IdxCv(i,J)*v0v(i,J) + G%IdxCv(i,J-1)*v0v(i,J-1))) * &
           max(G%IdxCv(i,J)*G%IareaCv(i,J), G%IdxCv(i,J-1)*G%IareaCv(i,J-1)) ) )
       CS%Ah_Max_xx(I,J) = 0.0
@@ -1018,11 +1043,11 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
     do J=js-1,Jeq ; do I=is-1,Ieq
       denom = max( &
          (CS%DX2q(I,J) * &
-          (CS%DX_dyBu(I,J)*(u0u(I,j+1)*G%IdxCu(I,j+1) + u0u(I,j)*G%IdxCu(I,j)) + &
+          (CS%DX_dyBu(I,J)*(u0u(I,j+1)*G%IdxCu(I,j+1) + u0u(I,j)*G%IdxCu(I,j))  + &
            CS%DY_dxBu(I,J)*(v0u(i+1,J)*G%IdyCv(i+1,J) + v0u(i,J)*G%IdyCv(i,J))) * &
-          max(G%IdxCu(I,j)*G%IareaCu(I,j), G%IdxCu(I,j+1)*G%IareaCu(I,j+1)) ), &
+          max(G%IdxCu(I,j)*G%IareaCu(I,j), G%IdxCu(I,j+1)*G%IareaCu(I,j+1)) ),    &
          (CS%DY2q(I,J) * &
-          (CS%DX_dyBu(I,J)*(u0v(I,j+1)*G%IdxCu(I,j+1) + u0v(I,j)*G%IdxCu(I,j)) + &
+          (CS%DX_dyBu(I,J)*(u0v(I,j+1)*G%IdxCu(I,j+1) + u0v(I,j)*G%IdxCu(I,j))  + &
            CS%DY_dxBu(I,J)*(v0v(i+1,J)*G%IdyCv(i+1,J) + v0v(i,J)*G%IdyCv(i,J))) * &
           max(G%IdyCv(i,J)*G%IareaCv(i,J), G%IdyCv(i+1,J)*G%IareaCv(i+1,J)) ) )
       CS%Ah_Max_xy(I,J) = 0.0
@@ -1039,24 +1064,34 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
   CS%id_diffv = register_diag_field('ocean_model', 'diffv', diag%axesCvL, Time, &
       'Meridional Acceleration from Horizontal Viscosity', 'meter second-2')
 
-  CS%id_Ah_h = register_diag_field('ocean_model', 'Ahh', diag%axesTL, Time, &
-      'Biharmonic Horizontal Viscosity at h Points', 'meter4 second-1',     &
-      available=CS%biharmonic)
+  CS%id_Ah_h = register_diag_field('ocean_model', 'Ahh', diag%axesTL, Time,    &
+      'Biharmonic Horizontal Viscosity at h Points', 'meter4 second-1',        &
+      available=CS%biharmonic, cmor_field_name='difmxybo',                     &
+      cmor_units='m4 s-1', cmor_long_name='Ocean lateral biharmonic viscosity',&
+      cmor_standard_name='ocean_momentum_xy_biharmonic_diffusivity')
 
   CS%id_Ah_q = register_diag_field('ocean_model', 'Ahq', diag%axesBL, Time, &
       'Biharmonic Horizontal Viscosity at q Points', 'meter4 second-1',     &
       available=CS%biharmonic)
 
-  CS%id_Kh_h = register_diag_field('ocean_model', 'Khh', diag%axesTL, Time, &
-      'Laplacian Horizontal Viscosity at h Points', 'meter2 second-1',      &
-      available=CS%Laplacian)
+  CS%id_Kh_h = register_diag_field('ocean_model', 'Khh', diag%axesTL, Time,   &
+      'Laplacian Horizontal Viscosity at h Points', 'meter2 second-1',        &
+      available=CS%Laplacian, cmor_field_name='difmxylo',                     &
+      cmor_units='m2 s-1', cmor_long_name='Ocean lateral Laplacian viscosity',&
+      cmor_standard_name='ocean_momentum_xy_laplacian_diffusivity')
 
   CS%id_Kh_q = register_diag_field('ocean_model', 'Khq', diag%axesBL, Time, &
       'Laplacian Horizontal Viscosity at q Points', 'meter2 second-1',      &
       available=CS%Laplacian)
 
-  CS%id_FrictWork =register_diag_field('ocean_model','FrictWork',diag%axesTL,Time,&
+  CS%id_FrictWork = register_diag_field('ocean_model','FrictWork',diag%axesTL,Time,&
       'Integral work done by lateral friction terms', 'Watt meter-2')
+
+  CS%id_FrictWorkIntz = register_diag_field('ocean_model','FrictWorkIntz',diag%axesT1,Time,      &
+      'Depth integrated work done by lateral friction', 'Watt meter-2',                          &
+      cmor_field_name='dispkexyfo', cmor_units='W m-2',                                          &  
+      cmor_long_name='Depth integrated ocean kinetic energy dissipation due to lateral friction',&
+      cmor_standard_name='ocean_kinetic_energy_dissipation_per_unit_area_due_to_xy_friction')
 
   if (CS%Laplacian .or. get_all) then
   endif
