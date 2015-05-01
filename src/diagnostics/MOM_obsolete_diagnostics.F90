@@ -46,7 +46,6 @@ subroutine register_obsolete_diagnostics(param_file, diag)
   if (found_in_diagtable(diag, 'precip_heat_content', 'heat_content_lprec')) foundEntry = .true.
   if (found_in_diagtable(diag, 'evap_heat_content', 'heat_content_massout')) foundEntry = .true.
   if (found_in_diagtable(diag, 'runoff_heat_content', 'heat_content_lrunoff')) foundEntry = .true.
-  if (found_in_diagtable(diag, 'latent_evap')) foundEntry = .true.
   if (found_in_diagtable(diag, 'latent_fprec')) foundEntry = .true.
   if (found_in_diagtable(diag, 'latent_calve')) foundEntry = .true.
   if (found_in_diagtable(diag, 'heat_rest', 'heat_restore')) foundEntry = .true.
