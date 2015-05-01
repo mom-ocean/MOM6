@@ -72,7 +72,7 @@ subroutine diapyc_energy_req_test(h_3d, dt, tv, G)
   logical :: surface_BL, bottom_BL
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
-!$OMP do 
+!$OMP do
   do j=js,je ; do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
     htot = 0.0 ; h_top(1) = 0.0
     do k=1,nz
@@ -93,7 +93,7 @@ subroutine diapyc_energy_req_test(h_3d, dt, tv, G)
     do K=2,nz
       tmp1 = h_top(K) * h_bot(K) * G%H_to_m
       Kd(k) = ustar * 0.41 * (tmp1*ustar) / (absf*tmp1 + htot*ustar)
-    enddo    
+    enddo
     call diapyc_energy_req_calc(h_col, T0, S0, Kd, energy_Kd, dt, tv, G)
   endif ; enddo ; enddo
 
@@ -123,7 +123,7 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, G)
 ! 4 different ways, all of which should be equivalent, but reports only one.
 ! The various estimates are taken because they will later be used as templates
 ! for other bits of code.
- 
+
   real, dimension(SZK_(G)) :: &
     p_lay, &    ! Average pressure of a layer, in Pa.
     dSV_dT, &   ! Partial derivative of specific volume with temperature, in m3 kg-1 K-1.
@@ -181,8 +181,6 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, G)
 
   I_G_Earth = 1.0 / G%G_earth
   surface_BL = .true. ; bottom_BL = .true. ; debug = .true.
-
-  max_itt = 1 ; if (debug) max_itt = 6
 
   dPEa_dKd(:) = 0.0 ; dPEa_dKd_est(:) = 0.0 ; dPEa_dKd_err(:) = 0.0 ; dPEa_dKd_err_norm(:) = 0.0 ; dPEa_dKd_trunc(:) = 0.0
   dPEb_dKd(:) = 0.0 ; dPEb_dKd_est(:) = 0.0 ; dPEb_dKd_err(:) = 0.0 ; dPEb_dKd_err_norm(:) = 0.0 ; dPEb_dKd_trunc(:) = 0.0
@@ -245,65 +243,22 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, G)
 
 
       ! Find the energy change due to a guess at the strength of diffusion at interface K.
-      do itt=1,max_itt
-        if (debug .and. (itt<6)) then
-          Kddt_h_guess = (1.0+0.01*(itt-3))*Kddt_h(K)
-        else
-          Kddt_h_guess = Kddt_h(K)
-        endif
 
-        b1 = 1.0 / (b_denom_1(k-1) + Kddt_h_guess)
-        b1Kd = Kddt_h_guess*b1
-
-        ! Start with the temperature change in layer k-1 due to the diffusivity at
-        ! interface K without considering the effects of changes in layer k.
-        dTe(k-1)  = b1Kd * (T0(k)-T0(k-1)) + b1 * dTe_t2
-        dSe(k-1)  = b1Kd * (S0(k)-S0(k-1)) + b1 * dSe_t2
-
-        ! Calculate the change in PE due to the diffusion at interface K
-        ! if Kddt_h(K+1) = 0.
-        Kdr_denom = h_tr(k) + b_denom_1(k-1) * b1Kd
-        I_Kdr_denom = 1.0 / Kdr_denom
-        Kd_rat = Kddt_h_guess * I_Kdr_denom
-
-        dT_k = Kd_rat * ((T0(k-1)-T0(k)) + dTe(k-1))
-        dS_k = Kd_rat * ((S0(k-1)-S0(k)) + dSe(k-1))
-
-        ! Increment the temperature changes in layer k-1 due the changes in layer k.
-        dT_km1 = b1Kd * ( dT_k + dT_km1_t2 )
-        dS_km1 = b1Kd * ( dS_k + dS_km1_t2 )
-
-        PE_chg(itt) = (dT_to_dPE(k) * dT_k + dT_to_dPE_a(k-1) * dT_km1) + &
-                      (dS_to_dPE(k) * dS_k + dS_to_dPE_a(k-1) * dS_km1)
-        dT_k_itt(itt) = dT_k ; dS_k_itt(itt) = dS_k
-        dT_km1_itt(itt) = dT_km1 ; dS_km1_itt(itt) = dS_km1
-      enddo
-      PE_chg_k(K) = (dT_to_dPE(k) * dT_k + dT_to_dPE_a(k-1) * dT_km1) + &
-                    (dS_to_dPE(k) * dS_k + dS_to_dPE_a(k-1) * dS_km1)
-
-      ! Find the derivatives of the temperature and salinity changes with Kddt_h_guess.
-        ! db1_dKd = -b1**2
-        ! db1Kd_dKd = b1**2 * b_denom_1(k-1)
-
-      dKd_rat_dKd = (Kdr_denom - Kddt_h_guess*(b_denom_1(k-1) * b1)**2) * I_Kdr_denom**2
-
-      ddT_k_dKd = dKd_rat_dKd * ((T0(k-1)-T0(k)) + dTe(k-1)) + &
-                  Kd_rat * b1**2 * (b_denom_1(k-1) * (T0(k)-T0(k-1)) - dTe_t2)
-      ddS_k_dKd = dKd_rat_dKd * ((S0(k-1)-S0(k)) + dSe(k-1)) + &
-                  Kd_rat * b1**2 * (b_denom_1(k-1) * (S0(k)-S0(k-1)) - dSe_t2)
-      ddT_km1_dKd = (b1**2 * b_denom_1(k-1)) * ( dT_k + dT_km1_t2 ) + b1Kd * ddT_k_dKd
-      ddS_km1_dKd = (b1**2 * b_denom_1(k-1)) * ( dS_k + dS_km1_t2 ) + b1Kd * ddS_k_dKd
-
-      ! Calculate the partial derivative of Pe_chg_k with Kddt_h.
-      dPEa_dKd(k) = (dT_to_dPE(k) * ddT_k_dKd + dT_to_dPE_a(k-1) * ddT_km1_dKd) + &
-                    (dS_to_dPE(k) * ddS_k_dKd + dS_to_dPE_a(k-1) * ddS_km1_dKd)
-
+      Kddt_h_guess = Kddt_h(K)
       call find_PE_chg(Kddt_h_guess, h_tr(k), b_denom_1(k-1), &
                        dTe_term, dSe_term, dT_km1_t2, dS_km1_t2, &
                        dT_to_dPE(k), dS_to_dPE(k), dT_to_dPE_a(k-1), dS_to_dPE_a(k-1), &
-                       PEchg(k), dPEchg_dKd(k))
+                       PE_chg_k(k), dPEa_dKd(k))
 
       if (debug) then
+        do itt=1,5
+          Kddt_h_guess = (1.0+0.01*(itt-3))*Kddt_h(K)
+
+          call find_PE_chg(Kddt_h_guess, h_tr(k), b_denom_1(k-1), &
+                           dTe_term, dSe_term, dT_km1_t2, dS_km1_t2, &
+                           dT_to_dPE(k), dS_to_dPE(k), dT_to_dPE_a(k-1), dS_to_dPE_a(k-1), &
+                           PE_chg=PE_chg(itt))
+        enddo
         ! Compare with a 4th-order finite difference estimate.
         dPEa_dKd_est(k) = (4.0*(PE_chg(4)-Pe_chg(2))/(0.02*Kddt_h(K)) - &
                                (PE_chg(5)-Pe_chg(1))/(0.04*Kddt_h(K))) / 3.0
@@ -387,67 +342,25 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, G)
       dSe_term = dSe_t2 + b_denom_1(k) * (S0(k)-S0(k-1))
 
       ! Find the energy change due to a guess at the strength of diffusion at interface K.
-      do itt=1,max_itt
-        if (debug .and. (itt<6)) then
-          Kddt_h_guess = (1.0+0.01*(itt-3))*Kddt_h(K)
-        else
-          Kddt_h_guess = Kddt_h(K)
-        endif
 
-        b1 = 1.0 / (b_denom_1(k) + Kddt_h_guess)
-        b1Kd = Kddt_h_guess*b1
-
-        ! Start with the temperature change in layer k due to the diffusivity at
-        ! interface K without considering the effects of changes in layer k-1.
-        dTe(k)  = b1Kd * (T0(k-1)-T0(k)) + b1 * dTe_t2
-        dSe(k)  = b1Kd * (S0(k-1)-S0(k)) + b1 * dSe_t2
-
-        ! Calculate the change in PE due to the diffusion at interface K
-        ! if Kddt_h(K-1) = 0.
-        Kdr_denom = h_tr(k-1) + b_denom_1(k) * b1Kd
-        I_Kdr_denom = 1.0 / Kdr_denom
-        Kd_rat = Kddt_h_guess * I_Kdr_denom
-
-        dT_km1 = Kd_rat * ((T0(k)-T0(k-1)) + dTe(k))
-        dS_km1 = Kd_rat * ((S0(k)-S0(k-1)) + dSe(k))
-
-        ! Increment the temperature changes in layer k, including the changes in layer k-1.
-        dT_k = b1Kd * ( dT_km1 + dT_k_t2 )
-        dS_k = b1Kd * ( dS_km1 + dS_k_t2 )
-
-        PE_chg(itt) = (dT_to_dPE_b(k) * dT_k + dT_to_dPE(k-1) * dT_km1) + &
-                      (dS_to_dPE_b(k) * dS_k + dS_to_dPE(k-1) * dS_km1)
-        dT_k_itt(itt) = dT_k ; dS_k_itt(itt) = dS_k
-        dT_km1_itt(itt) = dT_km1 ; dS_km1_itt(itt) = dS_km1
-      enddo
-      PE_chg_k(K) = (dT_to_dPE_b(k) * dT_k + dT_to_dPE(k-1) * dT_km1) + &
-                    (dS_to_dPE_b(k) * dS_k + dS_to_dPE(k-1) * dS_km1)
-
-      ! Find the derivatives of the temperature and salinity changes with Kddt_h_guess.
-        ! db1_dKd = -b1**2
-        ! db1Kd_dKd = b1**2 * b_denom_1(k)
-
-      dKd_rat_dKd = (Kdr_denom - Kddt_h_guess*(b_denom_1(k) * b1)**2) * I_Kdr_denom**2
-
-      ddT_km1_dKd = dKd_rat_dKd * ((T0(k)-T0(k-1)) + dTe(k)) + &
-                    Kd_rat * b1**2 * (b_denom_1(k) * (T0(k-1)-T0(k)) - dTe_t2)
-      ddS_km1_dKd = dKd_rat_dKd * ((S0(k)-S0(k-1)) + dSe(k)) + &
-                    Kd_rat * b1**2 * (b_denom_1(k) * (S0(k-1)-S0(k)) - dSe_t2)
-      ddT_k_dKd = (b1**2 * b_denom_1(k)) * ( dT_km1 + dT_k_t2 ) + b1Kd * ddT_km1_dKd
-      ddS_k_dKd = (b1**2 * b_denom_1(k)) * ( dS_km1 + dS_k_t2 ) + b1Kd * ddS_km1_dKd
-
-      ! Calculate the partial derivative of Pe_chg_k with Kddt_h.
-      dPEb_dKd(k) = (dT_to_dPE_b(k) * ddT_k_dKd + dT_to_dPE(k-1) * ddT_km1_dKd) + &
-                    (dS_to_dPE_b(k) * ddS_k_dKd + dS_to_dPE(k-1) * ddS_km1_dKd)
-
+      Kddt_h_guess = Kddt_h(K)
       call find_PE_chg(Kddt_h_guess, h_tr(k-1), b_denom_1(k), &
                        dTe_term, dSe_term, dT_k_t2, dS_k_t2, &
                        dT_to_dPE(k-1), dS_to_dPE(k-1), dT_to_dPE_b(k), dS_to_dPE_b(k), &
-                       PEchg(K), dPEchg_dKd(K))
+                       PE_chg_k(K), dPEb_dKd(K))
 
 
       if (debug) then
         ! Compare with a 4th-order finite difference estimate.
+        do itt=1,5
+          Kddt_h_guess = (1.0+0.01*(itt-3))*Kddt_h(K)
+
+          call find_PE_chg(Kddt_h_guess, h_tr(k-1), b_denom_1(k), &
+                           dTe_term, dSe_term, dT_k_t2, dS_k_t2, &
+                           dT_to_dPE(k-1), dS_to_dPE(k-1), dT_to_dPE_b(k), dS_to_dPE_b(k), &
+                           PE_chg=PE_chg(itt))
+        enddo
+
         dPEb_dKd_est(k) = (4.0*(PE_chg(4)-Pe_chg(2))/(0.02*Kddt_h(K)) - &
                                (PE_chg(5)-Pe_chg(1))/(0.04*Kddt_h(K))) / 3.0
         dPEb_dKd_trunc(k) = (PE_chg(4)-Pe_chg(2))/(0.02*Kddt_h(K)) - &
@@ -558,7 +471,7 @@ subroutine find_PE_chg(Kddt_h, h_k, b_den_1, dTe_term, dSe_term, &
 !                  in the salinities of all the layers above, in J m-2 ppt-1.
 !  (out,opt) PE_chg - The change in column potential energy from applying
 !                  Kddt_h at the present interface, in J m-2.
-!  (out,opt) dPE_chg_dKd - The partial derivative of PE_chg with Kddt_h, 
+!  (out,opt) dPE_chg_dKd - The partial derivative of PE_chg with Kddt_h,
 !                  in units of J m-2 H-1.
 
   ! b_den_1 - The first term in the denominator of b1, in m or kg m-2.
