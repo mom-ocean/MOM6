@@ -305,7 +305,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, PF, dirs, &
          " \t\t by (VELOCITY_FILE). \n"//&
          " \t zero - the fluid is initially at rest. \n"//&
          " \t uniform - the flow is uniform (determined by\n"//&
-         " \t\t parameters TORUS_U and TORUS_V).\n"//&
+         " \t\t parameters INITIAL_U_CONST and INITIAL_V_CONST).\n"//&
          " \t rossby_front - a mixed layer front in thermal wind balance.\n"//&
          " \t USER - call a user modified routine.", default="zero")
     select case (trim(config))
