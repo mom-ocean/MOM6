@@ -38,7 +38,7 @@ use MOM, only : initialize_MOM, step_MOM, MOM_control_struct, MOM_end
 use MOM, only : calculate_surface_state
 use MOM_constants, only : CELSIUS_KELVIN_OFFSET
 use MOM_diag_mediator, only : enable_averaging, disable_averaging
-use MOM_diag_mediator, only : diag_mediator_close_registration
+use MOM_diag_mediator, only : diag_mediator_close_registration, diag_mediator_end
 use MOM_domains, only : pass_vector, AGRID, BGRID_NE, CGRID_NE
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe
 use MOM_error_handler, only : callTree_enter, callTree_leave
@@ -504,6 +504,7 @@ subroutine ocean_model_end(Ocean_sfc, Ocean_state, Time)
 !  (in)      Time - The model time, used for writing restarts.
 
   call ocean_model_save_restart(Ocean_state, Time)
+  call diag_mediator_end(Time)
   call MOM_end(Ocean_state%MOM_CSp)
   if (Ocean_state%use_ice_shelf) call ice_shelf_end(Ocean_state%Ice_shelf_CSp)
 end subroutine ocean_model_end
