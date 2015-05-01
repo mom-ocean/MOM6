@@ -145,12 +145,14 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, G)
     dS_to_dPE_b, &
     PE_chg_k, & ! The integrated potential energy change within a timestep due
                 ! to the diffusivity at interface K, in J m-2.
+    PEchg, &
     Kddt_h      ! The diapycnal diffusivity times a timestep divided by the
                 ! average thicknesses around a layer, in m or kg m-2.
   real :: &
     b1              ! b1 is used by the tridiagonal solver, in m-1 or m2 kg-1.
   real :: h_neglect ! A thickness that is so small it is usually lost
                     ! in roundoff and can be neglected, in m.
+  real :: dTe_term, dSe_term
   real :: Kddt_h_guess
   real :: htot
   real :: dT_k, dT_km1, dS_k, dS_km1  ! Temporary arrays
@@ -166,6 +168,7 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, G)
     dPEb_dKd, dPEb_dKd_est, dPEb_dKd_err, dPEb_dKd_trunc, dPEb_dKd_err_norm
   real :: PE_chg_tot1A, PE_chg_tot2A, T_chg_totA
   real :: PE_chg_tot1B, PE_chg_tot2B, T_chg_totB
+  real, dimension(SZK_(G)+1)  :: dPEchg_dKd
   real :: PE_chg(6)
   real, dimension(6) :: dT_k_itt, dS_k_itt, dT_km1_itt, dS_km1_itt
 
@@ -213,6 +216,7 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, G)
   enddo
 
   PE_chg_k(1) = 0.0 ; PE_chg_k(nz+1) = 0.0
+  PEchg(:) = 0.0 ; dPEchg_dKd(:) = 0.0
 
   if (surface_BL) then  ! This version is appropriate for a surface boundary layer.
 
@@ -236,6 +240,8 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, G)
         dS_km1_t2 = (S0(k)-S0(k-1)) - &
               (Kddt_h(K-1) / b_denom_1(k-1)) * ((S0(k-2) - S0(k-1)) + dSe(k-2))
       endif
+      dTe_term = dTe_t2 + b_denom_1(k-1) * (T0(k-1)-T0(k))
+      dSe_term = dSe_t2 + b_denom_1(k-1) * (S0(k-1)-S0(k))
 
 
       ! Find the energy change due to a guess at the strength of diffusion at interface K.
@@ -291,6 +297,11 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, G)
       ! Calculate the partial derivative of Pe_chg_k with Kddt_h.
       dPEa_dKd(k) = (dT_to_dPE(k) * ddT_k_dKd + dT_to_dPE_a(k-1) * ddT_km1_dKd) + &
                     (dS_to_dPE(k) * ddS_k_dKd + dS_to_dPE_a(k-1) * ddS_km1_dKd)
+
+      call find_PE_chg(Kddt_h_guess, h_tr(k), b_denom_1(k-1), &
+                       dTe_term, dSe_term, dT_km1_t2, dS_km1_t2, &
+                       dT_to_dPE(k), dS_to_dPE(k), dT_to_dPE_a(k-1), dS_to_dPE_a(k-1), &
+                       PEchg(k), dPEchg_dKd(k))
 
       if (debug) then
         ! Compare with a 4th-order finite difference estimate.
@@ -372,6 +383,8 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, G)
         dS_k_t2 = (S0(k-1)-S0(k)) - &
                 (Kddt_h(k+1)/ b_denom_1(k)) * ((S0(k+1) - S0(k)) + dSe(k+1))
       endif
+      dTe_term = dTe_t2 + b_denom_1(k) * (T0(k)-T0(k-1))
+      dSe_term = dSe_t2 + b_denom_1(k) * (S0(k)-S0(k-1))
 
       ! Find the energy change due to a guess at the strength of diffusion at interface K.
       do itt=1,max_itt
@@ -426,6 +439,12 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, G)
       ! Calculate the partial derivative of Pe_chg_k with Kddt_h.
       dPEb_dKd(k) = (dT_to_dPE_b(k) * ddT_k_dKd + dT_to_dPE(k-1) * ddT_km1_dKd) + &
                     (dS_to_dPE_b(k) * ddS_k_dKd + dS_to_dPE(k-1) * ddS_km1_dKd)
+
+      call find_PE_chg(Kddt_h_guess, h_tr(k-1), b_denom_1(k), &
+                       dTe_term, dSe_term, dT_k_t2, dS_k_t2, &
+                       dT_to_dPE(k-1), dS_to_dPE(k-1), dT_to_dPE_b(k), dS_to_dPE_b(k), &
+                       PEchg(K), dPEchg_dKd(K))
+
 
       if (debug) then
         ! Compare with a 4th-order finite difference estimate.
@@ -490,6 +509,105 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, G)
 
 end subroutine diapyc_energy_req_calc
 
+subroutine find_PE_chg(Kddt_h, h_k, b_den_1, dTe_term, dSe_term, &
+                       dT_km1_t2, dS_km1_t2, dT_to_dPE_k, dS_to_dPE_k, &
+                       dT_to_dPEa, dS_to_dPEa, PE_chg, dPE_chg_dKd)
+  real, intent(in)  :: Kddt_h, h_k, b_den_1, dTe_term, dSe_term
+  real, intent(in)  :: dT_km1_t2, dS_km1_t2, dT_to_dPE_k, dS_to_dPE_k
+  real, intent(in)  :: dT_to_dPEa, dS_to_dPEa
+  real, optional, intent(out) :: PE_chg
+  real, optional, intent(out) :: dPE_chg_dKd
+
+!   This subroutine determines the total potential energy change due to mixing
+! at an interface, including all of the implicit effects of the prescribed
+! mixing at interfaces above.  Everything here is derived by careful manipulation
+! of the robust tridiagonal solvers used for tracers by MOM6.
+!   The comments describing these arguments are for a downward mixing pass, but
+! this routine can also be used for an upward pass with the sense of direction
+! reversed.
+!
+! Arguments: Kddt_h - The diffusivity at an interface times the time step and
+!                     divided by the average of the thicknesses around the
+!                     interface, in units of H (m or kg-2).
+!  (in)      h_k - The thickness of the layer below the interface, in H.
+!  (in)      b_den_1 - The first first term in the denominator of the pivot
+!                  for the tridiagonal solver, given by h_k plus a term that
+!                  is a fraction (determined from the tridiagonal solver) of
+!                  Kddt_h for the interface above, in H.
+!  (in)      dTe_term - A diffusivity-independent term related to the
+!                  temperature change in the layer below the interface, in K H.
+!  (in)      dSe_term - A diffusivity-independent term related to the
+!                  salinity change in the layer below the interface, in ppt H.
+!  (in)      dT_km1_t2 - A diffusivity-independent term related to the
+!                  temperature change in the layer above the interface, in K.
+!  (in)      dS_km1_t2 - A diffusivity-independent term related to the
+!                  salinity change in the layer above the interface, in ppt.
+!  (in)      dT_to_dPE_k - A factor (1/2*pres*mass_lay*dSpec_vol/dT) relating
+!                  a layer's temperature change to the change in column
+!                  potential energy, in J m-2 K-1.
+!  (in)      dS_to_dPE_k - A factor (1/2*pres*mass_lay*dSpec_vol/dS) relating
+!                  a layer's salinity change to the change in column
+!                  potential energy, in J m-2 ppt-1.
+!  (in)      dT_to_dPEa - A factor (1/2*pres*mass_lay*dSpec_vol/dT) relating
+!                  a layer's temperature change to the change in column
+!                  potential energy, including all implicit diffusive changes
+!                  in the temperatures of all the layers above, in J m-2 K-1.
+!  (in)      dS_to_dPEa - A factor (1/2*pres*mass_lay*dSpec_vol/dS) relating
+!                  a layer's salinity change to the change in column
+!                  potential energy, including all implicit diffusive changes
+!                  in the salinities of all the layers above, in J m-2 ppt-1.
+!  (out,opt) PE_chg - The change in column potential energy from applying
+!                  Kddt_h at the present interface, in J m-2.
+!  (out,opt) dPE_chg_dKd - The partial derivative of PE_chg with Kddt_h, 
+!                  in units of J m-2 H-1.
+
+  ! b_den_1 - The first term in the denominator of b1, in m or kg m-2.
+  real :: b1            ! b1 is used by the tridiagonal solver, in H-1.
+  real :: b1Kd          ! Temporary array (nondim.)
+  real :: dT_k, dT_km1  ! Temporary arrays in K.
+  real :: dS_k, dS_km1  ! Temporary arrays in ppt.
+  real :: I_Kr_denom, dKr_dKd   ! Temporary arrays in H-2 and nondim.
+  real :: ddT_k_dKd, ddT_km1_dKd ! Temporary arrays in K H-1.
+  real :: ddS_k_dKd, ddS_km1_dKd ! Temporary arrays in ppt H-1.
+
+  b1 = 1.0 / (b_den_1 + Kddt_h)
+  b1Kd = Kddt_h*b1
+
+  ! Start with the temperature change in layer k-1 due to the diffusivity at
+  ! interface K without considering the effects of changes in layer k.
+
+  ! Calculate the change in PE due to the diffusion at interface K
+  ! if Kddt_h(K+1) = 0.
+  I_Kr_denom = 1.0 / (h_k*b_den_1 + (b_den_1 + h_k)*Kddt_h)
+
+  dT_k = (Kddt_h*I_Kr_denom) * dTe_term
+  dS_k = (Kddt_h*I_Kr_denom) * dSe_term
+
+  if (present(PE_chg)) then
+    ! Find the change in energy due to diffusion with strength Kddt_h at this interface.
+    ! Increment the temperature changes in layer k-1 due the changes in layer k.
+    dT_km1 = b1Kd * ( dT_k + dT_km1_t2 )
+    dS_km1 = b1Kd * ( dS_k + dS_km1_t2 )
+
+    PE_chg = (dT_to_dPE_k * dT_k + dT_to_dPEa * dT_km1) + &
+             (dS_to_dPE_k * dS_k + dS_to_dPEa * dS_km1)
+  endif
+
+  if (present(dPE_chg_dKd)) then
+    ! Find the derivatives of the temperature and salinity changes with Kddt_h.
+    dKr_dKd = (h_k*b_den_1) * I_Kr_denom**2
+
+    ddT_k_dKd = dKr_dKd * dTe_term
+    ddS_k_dKd = dKr_dKd * dSe_term
+    ddT_km1_dKd = (b1**2 * b_den_1) * ( dT_k + dT_km1_t2 ) + b1Kd * ddT_k_dKd
+    ddS_km1_dKd = (b1**2 * b_den_1) * ( dS_k + dS_km1_t2 ) + b1Kd * ddS_k_dKd
+
+    ! Calculate the partial derivative of Pe_chg with Kddt_h.
+    dPE_chg_dKd = (dT_to_dPE_k * ddT_k_dKd + dT_to_dPEa * ddT_km1_dKd) + &
+                  (dS_to_dPE_k * ddS_k_dKd + dS_to_dPEa * ddS_km1_dKd)
+  endif
+
+end subroutine find_PE_chg
 
 subroutine diapyc_energy_req_init(G, param_file, CS)
   type(ocean_grid_type),        intent(in) :: G
