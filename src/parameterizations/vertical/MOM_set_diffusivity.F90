@@ -459,7 +459,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, G, C
     allocate(dd%Kd_itidal(isd:ied,jsd:jed,nz+1)) ; dd%Kd_itidal(:,:,:) = 0.0
   endif
   if ( (CS%id_Fl_itidal > 0) ) then
-    allocate(dd%Fl_itidal(isd:ied,jsd:jed,nz)) ; dd%Fl_itidal(:,:,:) = 0.0
+    allocate(dd%Fl_itidal(isd:ied,jsd:jed,nz+1)) ; dd%Fl_itidal(:,:,:) = 0.0
   endif
   if ( (CS%id_Polzin_decay_scale > 0) ) then
     allocate(dd%Polzin_decay_scale(isd:ied,jsd:jed))

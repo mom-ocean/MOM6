@@ -1147,7 +1147,7 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
         cmor_standard_name='surface_downward_latent_heat_flux',                                         &
         cmor_long_name='Surface Downward Latent Heat Flux')
 
-  handles%id_lat_evap = register_diag_field('ocean_model', 'latent_evap', diag%axesT1, Time, &
+  handles%id_lat_evap = register_diag_field('ocean_model', 'latent_evap_diag', diag%axesT1, Time, &
         'Latent heat flux into ocean due to evaporation/condensation', 'Watt/m^2')
 
   handles%id_lat_fprec = register_diag_field('ocean_model', 'latent_fprec_diag', diag%axesT1, Time,&

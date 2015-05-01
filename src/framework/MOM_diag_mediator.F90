@@ -105,7 +105,7 @@ type, public :: diag_ctrl
   real, dimension(:,:,:), pointer :: mask3dCui => null()
   real, dimension(:,:,:), pointer :: mask3dCvi => null()
 
-#define MAX_NUM_DIAGNOSTICS 200
+#define MAX_NUM_DIAGNOSTICS 2000
   type(maskContainer), dimension(MAX_NUM_DIAGNOSTICS) :: maskList
   integer, dimension(MAX_NUM_DIAGNOSTICS) :: CMORid
 
