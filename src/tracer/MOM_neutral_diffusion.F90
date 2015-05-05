@@ -1,5 +1,5 @@
-!> A column-wise toolbox for implementing isoneutral mixing
-module MOM_isoneutral_mixing
+!> A column-wise toolbox for implementing neutral (horizontal) diffusion
+module MOM_neutral_diffusion
 
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock, only : CLOCK_MODULE, CLOCK_ROUTINE
@@ -13,21 +13,21 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public isoneutral_mixing, isoneutral_mixing_init, isoneutral_mixing_end
-public isoneutralMixingUnitTests
+public neutral_diffusion, neutral_diffusion_init, neutral_diffusion_end
+public neutralDiffusionUnitTests
 
-type, public :: isoneutral_mixing_CS ; private
+type, public :: neutral_diffusion_CS ; private
   integer :: nkp1   ! Number of interfaces for a column = nk + 1
   integer :: nkp1X2 ! Number of intersecting interfaces between columns = 2 * nkp1
-end type isoneutral_mixing_CS
+end type neutral_diffusion_CS
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-character(len=40)  :: mod = "MOM_isoneutral_mixing" ! This module's name.
+character(len=40)  :: mod = "MOM_neutral_diffusion" ! This module's name.
 
 contains
 
-subroutine isoneutral_mixing(nk, Dl, Dr, hl, hr, Tl, Tr, Sl, Sr, EOS, H_to_Pa)
+subroutine neutral_diffusion(nk, Dl, Dr, hl, hr, Tl, Tr, Sl, Sr, EOS, H_to_Pa)
   integer,             intent(in)    :: nk  !< Number of levels per column (assumed equal)
   real,                intent(in)    :: Dl  !< Bottom depth of left column (m)
   real,                intent(in)    :: Dr  !< Bottom depth of right column (m)
@@ -90,7 +90,7 @@ subroutine isoneutral_mixing(nk, Dl, Dr, hl, hr, Tl, Tr, Sl, Sr, EOS, H_to_Pa)
   ! each union layer
   call project_thicknesses(nk, Pir, PilR, dPr, Kr)
 
-end subroutine isoneutral_mixing
+end subroutine neutral_diffusion
 
 !> Returns interface T and S for a column
 subroutine interface_TS(nk, T, S, Ti, Si)
@@ -119,7 +119,7 @@ subroutine projected_positions(nk, rhoir, Pir, rhoil, Pil, drdpil, Po)
   real, dimension(nk+1), intent(in)    :: Pir    !< Interface pressure of right column (Pa)
   real, dimension(nk+1), intent(in)    :: rhoil  !< Interface in-situ density of left column (Pa)
   real, dimension(nk+1), intent(in)    :: Pil    !< Interface pressure of left column (Pa)
-  real, dimension(nk+1), intent(in)    :: drdpil !< Interface compresibility of left column (kg/m3/Pa)
+  real, dimension(nk+1), intent(in)    :: drdpil !< Interface compressibility of left column (kg/m3/Pa)
   real, dimension(nk+1), intent(inout) :: Po     !< Projection of right interface positions on left column (Pa)
   ! Local variables
   real :: sigma_kl, sigma_kl_p1 ! Densities of left column referenced to a pressure from right column (kg/m3)
@@ -327,16 +327,16 @@ subroutine project_thicknesses(nk, Pi, Pp, dP, Ks)
 
 end subroutine project_thicknesses
 
-subroutine isoneutral_mixing_init(Time, G, param_file, diag, CS)
+subroutine neutral_diffusion_init(Time, G, param_file, diag, CS)
   type(time_type), target,  intent(in)    :: Time
   type(ocean_grid_type),    intent(in)    :: G
   type(diag_ctrl), target,  intent(inout) :: diag
   type(param_file_type),    intent(in)    :: param_file
-  type(isoneutral_mixing_CS), pointer       :: CS
+  type(neutral_diffusion_CS), pointer       :: CS
   character(len=256) :: mesg    ! Message for error messages.
 
   if (associated(CS)) then
-    call MOM_error(WARNING, "isoneutral_mixing_init called with associated control structure.")
+    call MOM_error(WARNING, "neutral_diffusion_init called with associated control structure.")
     return
   endif
   allocate(CS)
@@ -346,17 +346,17 @@ subroutine isoneutral_mixing_init(Time, G, param_file, diag, CS)
 ! call get_param(param_file, mod, "KHTR", CS%KhTr, &
 !                "The background along-isopycnal tracer diffusivity.", &
 !                units="m2 s-1", default=0.0)
-end subroutine isoneutral_mixing_init
+end subroutine neutral_diffusion_init
 
-subroutine isoneutral_mixing_end(CS)
-  type(isoneutral_mixing_CS), pointer :: CS
+subroutine neutral_diffusion_end(CS)
+  type(neutral_diffusion_CS), pointer :: CS
 
   if (associated(CS)) deallocate(CS)
 
-end subroutine isoneutral_mixing_end
+end subroutine neutral_diffusion_end
 
-!> Returns true if unit tests of isoneutral_mixing functions fail. Otherwise returns false.
-logical function isoneutralMixingUnitTests()
+!> Returns true if unit tests of neutral_diffusion functions fail. Otherwise returns false.
+logical function neutralDiffusionUnitTests()
   integer, parameter :: nk = 4
   real, dimension(nk+1) :: zl, zr1, zr2, zr3 ! Test interface positions
   real, dimension(2*nk+1) :: dP, dP1, dP2 ! Test thicknesses
@@ -380,70 +380,70 @@ logical function isoneutralMixingUnitTests()
   data rhor3 / 1., 1.5, 2.5, 3.5, 4. /
   integer :: k
 
-  isoneutralMixingUnitTests = .false. ! Normally return false
-  write(*,*) '===== MOM_remapping: isoneutralMixingUnitTests =================='
+  neutralDiffusionUnitTests = .false. ! Normally return false
+  write(*,*) '===== MOM_remapping: neutralDiffusionUnitTests =================='
   write(*,*) 'Project left->right 1'
   call project_thicknesses(nk, zl, zr1, dP, Ko)
   do k = 1,2*nk+1
-    if (dP(k) /= dP1(k)) isoneutralMixingUnitTests = .true.
-    if (Ko(k) /= Kl1(k)) isoneutralMixingUnitTests = .true.
-    write(*,*) k, dP(k), Ko(k), .not.isoneutralMixingUnitTests
+    if (dP(k) /= dP1(k)) neutralDiffusionUnitTests = .true.
+    if (Ko(k) /= Kl1(k)) neutralDiffusionUnitTests = .true.
+    write(*,*) k, dP(k), Ko(k), .not.neutralDiffusionUnitTests
   enddo
   write(*,*) 'Project right->left 1'
   call project_thicknesses(nk, zr1, zl, dP, Ko)
   do k = 1,2*nk+1
-    if (dP(k) /= dP1(k)) isoneutralMixingUnitTests = .true.
-    if (Ko(k) /= Kr1(k)) isoneutralMixingUnitTests = .true.
-    write(*,*) k, dP(k), Ko(k), .not.isoneutralMixingUnitTests
+    if (dP(k) /= dP1(k)) neutralDiffusionUnitTests = .true.
+    if (Ko(k) /= Kr1(k)) neutralDiffusionUnitTests = .true.
+    write(*,*) k, dP(k), Ko(k), .not.neutralDiffusionUnitTests
   enddo
   write(*,*) 'Project left->right 2'
   call project_thicknesses(nk, zl, zr2, dP, Ko)
   do k = 1,2*nk+1
-    if (dP(k) /= dP2(k)) isoneutralMixingUnitTests = .true.
-    if (Ko(k) /= Kl2(k)) isoneutralMixingUnitTests = .true.
-    write(*,*) k, dP(k), Ko(k), .not.isoneutralMixingUnitTests
+    if (dP(k) /= dP2(k)) neutralDiffusionUnitTests = .true.
+    if (Ko(k) /= Kl2(k)) neutralDiffusionUnitTests = .true.
+    write(*,*) k, dP(k), Ko(k), .not.neutralDiffusionUnitTests
   enddo
   write(*,*) 'Project right->left 2'
   call project_thicknesses(nk, zr2, zl, dP, Ko)
   do k = 1,2*nk+1
-    if (dP(k) /= dP2(k)) isoneutralMixingUnitTests = .true.
-    if (Ko(k) /= Kr2(k)) isoneutralMixingUnitTests = .true.
-    write(*,*) k, dP(k), Ko(k), .not.isoneutralMixingUnitTests
+    if (dP(k) /= dP2(k)) neutralDiffusionUnitTests = .true.
+    if (Ko(k) /= Kr2(k)) neutralDiffusionUnitTests = .true.
+    write(*,*) k, dP(k), Ko(k), .not.neutralDiffusionUnitTests
   enddo
   write(*,*) 'Find positions right->left, 0.0 compressibility'
   call projected_positions(nk, rhor1, zr1, rhol, zl, 0.*drdpl, Po)
   do k = 1,nk+1
-    write(*,*) k, Po(k), .not.isoneutralMixingUnitTests
+    write(*,*) k, Po(k), .not.neutralDiffusionUnitTests
   enddo
   write(*,*) 'Find positions left->right, 0.0 compressibility 3'
   call projected_positions(nk, rhol, zl, rhor3, zr3, 0.*drdpl, Po)
   do k = 1,nk+1
-    write(*,*) k, Po(k), .not.isoneutralMixingUnitTests
+    write(*,*) k, Po(k), .not.neutralDiffusionUnitTests
   enddo
   write(*,*) 'Find positions right->left, 0.0 compressibility 3'
   call projected_positions(nk, rhor3, zr3, rhol, zl, 0.*drdpl, Po)
   do k = 1,nk+1
-    write(*,*) k, Po(k), .not.isoneutralMixingUnitTests
+    write(*,*) k, Po(k), .not.neutralDiffusionUnitTests
   enddo
   write(*,*) 'Find positions right->left, 0.25 compressibility'
   call projected_positions(nk, rhor1, zr1, rhol, zl, 0.25*drdpl, Po)
   do k = 1,nk+1
-    write(*,*) k, Po(k), .not.isoneutralMixingUnitTests
+    write(*,*) k, Po(k), .not.neutralDiffusionUnitTests
   enddo
   write(*,*) 'Find positions left->right, 0.25 compressibility 3'
   call projected_positions(nk, rhol, zl, rhor3, zr3, 0.25*drdpl, Po)
   do k = 1,nk+1
-    write(*,*) k, Po(k), .not.isoneutralMixingUnitTests
+    write(*,*) k, Po(k), .not.neutralDiffusionUnitTests
   enddo
   write(*,*) 'Find positions right->left, 0.25 compressibility 3'
   call projected_positions(nk, rhor3, zr3, rhol, zl, 0.25*drdpl, Po)
   do k = 1,nk+1
-    write(*,*) k, Po(k), .not.isoneutralMixingUnitTests
+    write(*,*) k, Po(k), .not.neutralDiffusionUnitTests
   enddo
 
   write(*,*) '=========================================================='
 
-end function isoneutralMixingUnitTests
+end function neutralDiffusionUnitTests
 
 
-end module MOM_isoneutral_mixing
+end module MOM_neutral_diffusion
