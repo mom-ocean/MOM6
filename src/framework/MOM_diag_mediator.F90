@@ -1286,13 +1286,16 @@ subroutine diag_mediator_close_registration( )
 
 end subroutine diag_mediator_close_registration
 
-subroutine diag_mediator_end(time)
-  type(time_type), intent(in) :: time
-
-  call diag_manager_end(time)
+subroutine diag_mediator_end(time, end_diag_manager)
+  type(time_type),   intent(in) :: time
+  logical, optional, intent(in) :: end_diag_manager !< If true, call diag_manager_end()
 
   if (doc_unit > -1) then
     close(doc_unit) ; doc_unit = -3
+  endif
+
+  if (present(end_diag_manager)) then
+    if (end_diag_manager) call diag_manager_end(time)
   endif
 
 end subroutine diag_mediator_end
