@@ -106,7 +106,7 @@ type, public :: bulkmixedlayer_CS ; private
                              ! combined with the derivatives of density with T & S
                              ! to determines what direction is orthogonal to
                              ! density contours.  It should be a typical value of
-                             ! (dR/dS) / (dR/dT) in oceanic profiles.  
+                             ! (dR/dS) / (dR/dT) in oceanic profiles.
                              ! 6 K psu-1 might be reasonable.
   real    :: BL_extrap_lim   ! A limit on the density range over which
                              ! extrapolation can occur when detraining from the
@@ -144,7 +144,7 @@ type, public :: bulkmixedlayer_CS ; private
                              ! layer) is allowed to change between grid points.
                              ! Nondimensional, 0.2 by default.
   logical :: use_river_heat_content ! If true, use the fluxes%runoff_Hflx field
-                             ! to set the heat carried by runoff, instead of 
+                             ! to set the heat carried by runoff, instead of
                              ! using SST for temperature of liq_runoff
   logical :: use_calving_heat_content ! Use SST for temperature of froz_runoff
   logical :: salt_reject_below_ML ! It true, add salt below mixed layer (layer mode only)
@@ -176,8 +176,8 @@ type, public :: bulkmixedlayer_CS ; private
     diag_PE_detrain2   ! The spurious source of potential
                        ! energy due to mixed layer only
                        ! detrainment, W m-2.
-  logical :: allow_clocks_in_omp_loops  ! If true, clocks can be called 
-                                        ! from inside loops that can be threaded. 
+  logical :: allow_clocks_in_omp_loops  ! If true, clocks can be called
+                                        ! from inside loops that can be threaded.
                                         ! To run with multiple threads, set to False.
   type(group_pass_type) :: pass_h_sum_hmbl_prev ! For group halo pass
   integer :: id_ML_depth = -1, id_TKE_wind = -1, id_TKE_mixing = -1
@@ -258,8 +258,8 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
 !  (in)      G - The ocean's grid structure.
 !  (in)      CS - The control structure returned by a previous call to
 !                 mixedlayer_init.
-!  (in)      optics - The structure containing the inverse of the vertical 
-!                     absorption decay scale for penetrating shortwave 
+!  (in)      optics - The structure containing the inverse of the vertical
+!                     absorption decay scale for penetrating shortwave
 !                     radiation, in m-1.
 !  (in,opt)  dt_diag - The diagnostic time step, which may be less than dt
 !                      if there are two callse to mixedlayer, in s.
@@ -310,7 +310,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
                 ! layers that are fully entrained, in H kg m-3.
     Ttot, &     !   The integrated temperature of layers which are fully
                 ! entrained, in H K.
-    Stot, &     !   The integrated salt of layers which are fully entrained, 
+    Stot, &     !   The integrated salt of layers which are fully entrained,
                 ! in H PSU.
     uhtot, &    !   The depth integrated zonal and meridional velocities in the
     vhtot, &    ! mixed layer, in H m s-1.
@@ -344,7 +344,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
                 ! over a time step in each band, in K H.
   real, dimension(max(CS%nsw,1),SZI_(G),SZK_(G)) :: &
     opacity_band ! The opacity in each band, in H-1. The indicies are band, i, k.
- 
+
   real :: cMKE(2,SZI_(G)) ! Coefficients of HpE and HpE^2 in calculating the
                           ! denominator of MKE_rate, in m-1 and m-2.
   real :: Irho0         ! 1.0 / rho_0
@@ -352,7 +352,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
   real :: Ih            !   The inverse of a thickness, in H-1.
   real :: Idt           !   The inverse of the timestep in s-1.
   real :: Idt_diag      !   The inverse of the timestep used for diagnostics in s-1.
-  real :: RmixConst 
+  real :: RmixConst
 
   real, dimension(SZI_(G)) :: &
     dKE_FC, &   !   The change in mean kinetic energy due to free convection,
@@ -365,7 +365,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
                 ! adjustment, m3 s-2.
   real, dimension(SZI_(G),SZJ_(G)) :: &
     Hsfc_max, & ! The thickness of the surface region (mixed and buffer layers)
-                ! after entrainment but before any buffer layer detrainment, m. 
+                ! after entrainment but before any buffer layer detrainment, m.
     Hsfc_used, & ! The thickness of the surface region after buffer layer
                 ! detrainment, in units of m.
     Hsfc_min, & ! The minimum thickness of the surface region based on the
@@ -413,7 +413,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
   write_diags = .true. ; if (present(last_call)) write_diags = last_call
 
   p_ref(:) = 0.0 ; p_ref_cv(:) = tv%P_Ref
- 
+
 
   nsw = CS%nsw
 
@@ -424,14 +424,14 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
       h_sum(i,j) = 0.0 ; hmbl_prev(i,j) = 0.0
     enddo ; enddo
 !$OMP do
-    do j=js-1,je+1 
+    do j=js-1,je+1
       do k=1,nkmb ; do i=is-1,ie+1
         h_sum(i,j) = h_sum(i,j) + h_3d(i,j,k)
         hmbl_prev(i,j) = hmbl_prev(i,j) + h_3d(i,j,k)
       enddo ; enddo
       do k=nkmb+1,nz ; do i=is-1,ie+1
         h_sum(i,j) = h_sum(i,j) + h_3d(i,j,k)
-      enddo ; enddo 
+      enddo ; enddo
     enddo
 !$OMP end parallel
 
@@ -449,26 +449,26 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
 
   if (reset_diags) then
 !$OMP parallel default(none) shared(is,ie,js,je,CS)
-    if (CS%TKE_diagnostics) then 
+    if (CS%TKE_diagnostics) then
 !$OMP do
       do j=js,je ; do i=is,ie
         CS%diag_TKE_wind(i,j) = 0.0 ; CS%diag_TKE_RiBulk(i,j) = 0.0
         CS%diag_TKE_conv(i,j) = 0.0 ; CS%diag_TKE_pen_SW(i,j) = 0.0
         CS%diag_TKE_mixing(i,j) = 0.0 ; CS%diag_TKE_mech_decay(i,j) = 0.0
         CS%diag_TKE_conv_decay(i,j) = 0.0 ; CS%diag_TKE_conv_s2(i,j) = 0.0
-      enddo ; enddo 
+      enddo ; enddo
     endif
-    if (ALLOCATED(CS%diag_PE_detrain)) then 
+    if (ALLOCATED(CS%diag_PE_detrain)) then
 !$OMP do
       do j=js,je ; do i=is,ie
         CS%diag_PE_detrain(i,j) = 0.0
-      enddo ; enddo 
+      enddo ; enddo
     endif
-    if (ALLOCATED(CS%diag_PE_detrain2)) then 
+    if (ALLOCATED(CS%diag_PE_detrain2)) then
 !$OMP do
       do j=js,je ; do i=is,ie
         CS%diag_PE_detrain2(i,j) = 0.0
-      enddo ; enddo 
+      enddo ; enddo
     endif
 !$OMP end parallel
   endif
@@ -560,7 +560,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
       !                       River*(Samb - Sriver) = CS%mstar*U_star^3
       ! where River is in units of m s-1.
       ! Samb = Ambient salinity at the mouth of the estuary
-      ! rivermix_depth =  The prescribed depth over which to mix river inflow       
+      ! rivermix_depth =  The prescribed depth over which to mix river inflow
       ! drho_ds = The gradient of density wrt salt at the ambient surface salinity.
       ! Sriver = 0 (i.e. rivers are assumed to be pure freshwater)
       RmixConst = 0.5*CS%rivermix_depth*G%g_Earth*Irho0**2
@@ -572,7 +572,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
       do i=is,ie ; TKE_river(i) = 0.0 ; enddo
     endif
 
-     
+
     if(id_clock_conv>0) call cpu_clock_begin(id_clock_conv)
 
     ! The surface forcing is contained in the fluxes type.
@@ -587,7 +587,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
                   h(:,1:), T(:,1:), netMassInOut, netMassOut, Net_heat, Net_salt, Pen_SW_bnd,&
                   tv, aggregate_FW_forcing)
 
-    ! This subroutine causes the mixed layer to entrain to depth of free convection.    
+    ! This subroutine causes the mixed layer to entrain to depth of free convection.
     call mixedlayer_convection(h(:,1:), d_eb, htot, Ttot, Stot, uhtot, vhtot, &
                                R0_tot, Rcv_tot, u, v, T(:,1:), S(:,1:),       &
                                R0(:,1:), Rcv(:,1:), eps,                      &
@@ -876,7 +876,7 @@ subroutine convective_adjustment(h, u, v, R0, Rcv, T, S, eps, d_eb, &
 !  (in)      ksort - The density-sorted k-indicies.
 !  (in)      G - The ocean's grid structure.
 !  (in)      CS - The control structure for this module.
-!  (in,opt)  nz_conv - If present, the number of layers over which to do 
+!  (in,opt)  nz_conv - If present, the number of layers over which to do
 !                      convective adjustment (perhaps CS%nkml).
   real, dimension(SZI_(G)) :: &
     htot, &     !   The total depth of the layers being considered for
@@ -887,7 +887,7 @@ subroutine convective_adjustment(h, u, v, R0, Rcv, T, S, eps, d_eb, &
                 ! layers that are fully entrained, in H kg m-3.
     Ttot, &     !   The integrated temperature of layers which are fully
                 ! entrained, in H K.
-    Stot, &     !   The integrated salt of layers which are fully entrained, 
+    Stot, &     !   The integrated salt of layers which are fully entrained,
                 ! in H PSU.
     uhtot, &    !   The depth integrated zonal and meridional velocities in
     vhtot, &    ! the mixed layer, in H m s-1.
@@ -1051,8 +1051,8 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,      &
   real :: sum_Pen_En   !   The potential energy change due to penetrating
                        ! shortwave radiation, integrated over a layer, in
                        ! H kg m-3.
-  real :: Idt          ! 1.0/dt 
-  real :: netHeatOut   ! accumulated heat content of mass leaving ocean 
+  real :: Idt          ! 1.0/dt
+  real :: netHeatOut   ! accumulated heat content of mass leaving ocean
   integer :: is, ie, nz, i, k, ks, itt, n
   real, dimension(max(nsw,1)) :: &
     C2, &              ! Temporary variable with units of kg m-3 H-1.
@@ -1105,11 +1105,11 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,      &
     uhtot(i)  = u(i,1)*netMassIn(i) + u(i,k)*h_ent
     vhtot(i)  = v(i,1)*netMassIn(i) + v(i,k)*h_ent
     R0_tot(i) = (h_ent*R0(i,k) + netMassIn(i)*R0(i,1)) + &
-!                   dR0_dT(i)*netMassIn(i)*(T_precip - T(i,1)) + &      
+!                   dR0_dT(i)*netMassIn(i)*(T_precip - T(i,1)) + &
                 (dR0_dT(i)*(Net_heat(i) + Pen_absorbed) - &
                  dR0_dS(i) * (netMassIn(i) * S(i,1) - Net_salt(i)))
     Rcv_tot(i) = (h_ent*Rcv(i,k) + netMassIn(i)*Rcv(i,1)) + &
-!                    dRcv_dT(i)*netMassIn(i)*(T_precip - T(i,1)) + &      
+!                    dRcv_dT(i)*netMassIn(i)*(T_precip - T(i,1)) + &
                  (dRcv_dT(i)*(Net_heat(i) + Pen_absorbed) - &
                   dRcv_dS(i) * (netMassIn(i) * S(i,1) - Net_salt(i)))
     Conv_En(i) = 0.0 ; dKE_FC(i) = 0.0
@@ -1131,7 +1131,7 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,      &
         ! any precipitation, add more fluid from this layer.
         h_ent = min(Angstrom-htot(i), h(i,k)-eps(i,k))
         htot(i) = htot(i) + h_ent
-        h(i,k) = h(i,k) - h_ent 
+        h(i,k) = h(i,k) - h_ent
         d_eb(i,k) = d_eb(i,k) - h_ent
 
         R0_tot(i) = R0_tot(i) + h_ent*R0(i,k)
@@ -1144,7 +1144,7 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,      &
       endif
 
       ! Water is removed from the topmost layers with any mass.
-      ! We may lose layers if they are thin enough.  
+      ! We may lose layers if they are thin enough.
       ! The salt that is left behind goes into Stot.
       if ((massOutRem(i) > 0.0) .and. (h(i,k) > eps(i,k))) then
         if (massOutRem(i) > (h(i,k) - eps(i,k))) then
@@ -1162,10 +1162,10 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,      &
         Rcv_tot(i) = Rcv_tot(i) + dRcv_dS(i)*h_evap*S(i,k)
         d_eb(i,k) = d_eb(i,k) - h_evap
 
-        ! smg: when resolve the A=B code, we will set 
+        ! smg: when resolve the A=B code, we will set
         ! heat_content_massout = heat_content_massout - T(i,k)*h_evap*G%H_to_kg_m2*fluxes%C_p*Idt
-        ! by uncommenting the lines here.  
-        ! we will also then completely remove TempXpme from the model. 
+        ! by uncommenting the lines here.
+        ! we will also then completely remove TempXpme from the model.
         if(ASSOCIATED(fluxes%heat_content_massout))                            &
            fluxes%heat_content_massout(i,j) = fluxes%heat_content_massout(i,j) &
                                     - T(i,k)*h_evap*G%H_to_kg_m2 * fluxes%C_p * Idt
@@ -1362,7 +1362,7 @@ subroutine find_starting_TKE(htot, h_CA, fluxes, Conv_En, cTKE, dKE_FC, dKE_CA, 
 
   if (CS%use_omega) absf = 2.0*CS%omega
   do i=is,ie
-    U_Star = fluxes%ustar(i,j) 
+    U_Star = fluxes%ustar(i,j)
     if (associated(fluxes%ustar_shelf) .and. associated(fluxes%frac_shelf_h)) then
       if (fluxes%frac_shelf_h(i,j) > 0.0) &
         U_Star = (1.0 - fluxes%frac_shelf_h(i,j)) * U_star + &
@@ -1654,91 +1654,90 @@ subroutine mechanical_entrainment(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
 ! entrained is determined iteratively.  No further layers will be
 ! entrained.
           h_min = 0.0 ; h_max = h_avail
-	  if (TKE(i) <= 0.0) then
+          if (TKE(i) <= 0.0) then
             h_ent = 0.0
           else
-             h_ent = h_avail * TKE(i) / (TKE(i) - TKE_full_ent)
+            h_ent = h_avail * TKE(i) / (TKE(i) - TKE_full_ent)
 
-             do itt=1,15
-	        ! Evaluate the TKE that would remain if h_ent were entrained.
+            do itt=1,15
+              ! Evaluate the TKE that would remain if h_ent were entrained.
 
-                kh = Idecay_len_TKE(i)*h_ent ; exp_kh = exp(-kh)
-             	if (kh >= 2.0e-5) then
-                   f1_kh = (1.0-exp_kh) / kh
-                else  
-                   f1_kh = (1.0 - kh*(0.5 - C1_6*kh))
-                endif
+              kh = Idecay_len_TKE(i)*h_ent ; exp_kh = exp(-kh)
+              if (kh >= 2.0e-5) then
+                f1_kh = (1.0-exp_kh) / kh
+              else
+                f1_kh = (1.0 - kh*(0.5 - C1_6*kh))
+              endif
 
 
-                Pen_En_Contrib = 0.0 ; Pen_dTKE_dh_Contrib = 0.0
-                do n=1,nsw ; if (Pen_SW_bnd(n,i) > 0.0) then
-	        ! Two different forms are used here to make sure that only negative
-	        ! values are taken into exponentials to avoid excessively large
-	        ! numbers.  They are, of course, mathematically identical.
-                   opacity = opacity_band(n,i,k)
-                   SW_trans = exp(-h_ent*opacity)
-                   if (Idecay_len_TKE(i) > opacity) then
-                      x1 = (Idecay_len_TKE(i) - opacity) * h_ent
-                      if (x1 >= 2.0e-5) then
-                         e_x1 = exp(-x1) ; f1_x1 = ((1.0-e_x1)/(x1))
-                         f3_x1 = ((e_x1-(1.0-x1))/(x1*x1))
-                      else
-                         f1_x1 = (1.0 - x1*(0.5 - C1_6*x1))
-                         f3_x1 = (0.5 - x1*(C1_6 - C1_24*x1))
-                      endif
-                      Pen_En1 = SW_trans * ((1.0+opacity*htot(i))*f1_x1 + &
-                                      opacity*h_ent*f3_x1)
-                   else
-                      x1 = (opacity - Idecay_len_TKE(i)) * h_ent
-                      if (x1 >= 2.0e-5) then
-                         e_x1 = exp(-x1) ; f1_x1 = ((1.0-e_x1)/(x1))
-                         f2_x1 = ((1.0-(1.0+x1)*e_x1)/(x1*x1))
-                      else
-                         f1_x1 = (1.0 - x1*(0.5 - C1_6*x1))
-                         f2_x1 = (0.5 - x1*(C1_3 - 0.125*x1))
-                      endif
-
-                      Pen_En1 = exp_kh * ((1.0+opacity*htot(i))*f1_x1 + &
-                                     opacity*h_ent*f2_x1)
-                   endif
-                   C1 = g_H_2Rho0*dR0_dT(i)*Pen_SW_bnd(n,i)
-                   Pen_En_Contrib = Pen_En_Contrib + C1*(Pen_En1 - f1_kh)
-                   Pen_dTKE_dh_Contrib = Pen_dTKE_dh_Contrib + &
-                        C1*((1.0-SW_trans) - opacity*(htot(i) + h_ent)*SW_trans)
-                endif ; enddo ! (Pen_SW_bnd(n,i) > 0.0)
-
-                TKE_ent1 = exp_kh*TKE(i) - (h_ent*G%H_to_m)*(dRL*f1_kh + Pen_En_Contrib)
-                EF4_val = EF4(htot(i)+h_neglect,h_ent,Idecay_len_TKE(i),dEF4_dh)
-                HpE = htot(i)+h_ent
-                MKE_rate = 1.0/(1.0 + (cMKE(1,i)*HpE + cMKE(2,i)*HpE**2))
-                TKE_ent = TKE_ent1 + dMKE*EF4_val*MKE_rate
-	        ! TKE_ent is the TKE that would remain if h_ent were entrained.
-
-                dTKE_dh = ((-Idecay_len_TKE(i)*TKE_ent1 - dRL*G%H_to_m) + &
-                       Pen_dTKE_dh_Contrib*G%H_to_m) + dMKE * MKE_rate* &
-                       (dEF4_dh - EF4_val*MKE_rate*(cMKE(1,i)+2.0*cMKE(2,i)*HpE))
-!               dh_Newt = -TKE_ent / dTKE_dh
-
-! Bisect if the Newton's method prediction is outside of the bounded range.
-                if (TKE_ent > 0.0) then
-                   if ((h_max-h_ent)*(-dTKE_dh) > TKE_ent) then
-                      dh_Newt = -TKE_ent / dTKE_dh
-                   else
-                      dh_Newt = 0.5*(h_max-h_ent)
-                   endif
-                   h_min = h_ent
-                else
-                  if ((h_min-h_ent)*(-dTKE_dh) < TKE_ent) then
-                     dh_Newt = -TKE_ent / dTKE_dh
+              Pen_En_Contrib = 0.0 ; Pen_dTKE_dh_Contrib = 0.0
+              do n=1,nsw ; if (Pen_SW_bnd(n,i) > 0.0) then
+                ! Two different forms are used here to make sure that only negative
+                ! values are taken into exponentials to avoid excessively large
+                ! numbers.  They are, of course, mathematically identical.
+                opacity = opacity_band(n,i,k)
+                SW_trans = exp(-h_ent*opacity)
+                if (Idecay_len_TKE(i) > opacity) then
+                  x1 = (Idecay_len_TKE(i) - opacity) * h_ent
+                  if (x1 >= 2.0e-5) then
+                    e_x1 = exp(-x1) ; f1_x1 = ((1.0-e_x1)/(x1))
+                    f3_x1 = ((e_x1-(1.0-x1))/(x1*x1))
                   else
-                     dh_Newt = 0.5*(h_min-h_ent)
+                    f1_x1 = (1.0 - x1*(0.5 - C1_6*x1))
+                    f3_x1 = (0.5 - x1*(C1_6 - C1_24*x1))
                   endif
-                  h_max = h_ent
-                endif
-                h_ent = h_ent + dh_Newt
+                  Pen_En1 = SW_trans * ((1.0+opacity*htot(i))*f1_x1 + &
+                                          opacity*h_ent*f3_x1)
+                else
+                  x1 = (opacity - Idecay_len_TKE(i)) * h_ent
+                  if (x1 >= 2.0e-5) then
+                    e_x1 = exp(-x1) ; f1_x1 = ((1.0-e_x1)/(x1))
+                    f2_x1 = ((1.0-(1.0+x1)*e_x1)/(x1*x1))
+                  else
+                    f1_x1 = (1.0 - x1*(0.5 - C1_6*x1))
+                    f2_x1 = (0.5 - x1*(C1_3 - 0.125*x1))
+                  endif
 
-                if (ABS(dh_Newt) < 0.2*G%Angstrom) exit
-             enddo
+                  Pen_En1 = exp_kh * ((1.0+opacity*htot(i))*f1_x1 + &
+                                        opacity*h_ent*f2_x1)
+                endif
+                C1 = g_H_2Rho0*dR0_dT(i)*Pen_SW_bnd(n,i)
+                Pen_En_Contrib = Pen_En_Contrib + C1*(Pen_En1 - f1_kh)
+                Pen_dTKE_dh_Contrib = Pen_dTKE_dh_Contrib + &
+                           C1*((1.0-SW_trans) - opacity*(htot(i) + h_ent)*SW_trans)
+              endif ; enddo ! (Pen_SW_bnd(n,i) > 0.0)
+
+              TKE_ent1 = exp_kh*TKE(i) - (h_ent*G%H_to_m)*(dRL*f1_kh + Pen_En_Contrib)
+              EF4_val = EF4(htot(i)+h_neglect,h_ent,Idecay_len_TKE(i),dEF4_dh)
+              HpE = htot(i)+h_ent
+              MKE_rate = 1.0/(1.0 + (cMKE(1,i)*HpE + cMKE(2,i)*HpE**2))
+              TKE_ent = TKE_ent1 + dMKE*EF4_val*MKE_rate
+              ! TKE_ent is the TKE that would remain if h_ent were entrained.
+
+              dTKE_dh = ((-Idecay_len_TKE(i)*TKE_ent1 - dRL*G%H_to_m) + &
+                         Pen_dTKE_dh_Contrib*G%H_to_m) + dMKE * MKE_rate* &
+                       (dEF4_dh - EF4_val*MKE_rate*(cMKE(1,i)+2.0*cMKE(2,i)*HpE))
+              !  dh_Newt = -TKE_ent / dTKE_dh
+              ! Bisect if the Newton's method prediction is outside of the bounded range.
+              if (TKE_ent > 0.0) then
+                if ((h_max-h_ent)*(-dTKE_dh) > TKE_ent) then
+                  dh_Newt = -TKE_ent / dTKE_dh
+                else
+                  dh_Newt = 0.5*(h_max-h_ent)
+                endif
+                h_min = h_ent
+              else
+                if ((h_min-h_ent)*(-dTKE_dh) < TKE_ent) then
+                  dh_Newt = -TKE_ent / dTKE_dh
+                else
+                  dh_Newt = 0.5*(h_min-h_ent)
+                endif
+                h_max = h_ent
+              endif
+              h_ent = h_ent + dh_Newt
+
+              if (ABS(dh_Newt) < 0.2*G%Angstrom) exit
+            enddo
           endif
 
           if (h_ent < Hmix_min-htot(i)) h_ent = Hmix_min - htot(i)
@@ -1821,7 +1820,7 @@ subroutine sort_ML(h, R0, eps, G, CS, ksort)
   ! Assume that the layers below nkmb are already stably stratified.
   ! Only layers that are thicker than eps are in the list.  Extra elements
   ! have an index of -1.
-  
+
   !   This is coded using straight insertion, on the assumption that the
   ! layers are usually in the right order (or massless) anyway.
 
@@ -1856,7 +1855,7 @@ subroutine resort_ML(h, T, S, R0, Rcv, eps, d_ea, d_eb, ksort, G, CS, &
 !   This subroutine actually moves properties between layers to achieve a
 ! resorted state, with all of the resorted water either moved into the correct
 ! interior layers or in the top nkmb layers.
-! 
+!
 ! Arguments: h - Layer thickness, in m or kg m-2. (Intent in/out)  The units of
 !                h are referred to as H below.  Layer 0 is the new mixed layer.
 !  (in/out)  T - Layer temperatures, in deg C.
@@ -1914,14 +1913,14 @@ subroutine resort_ML(h, T, S, R0, Rcv, eps, d_ea, d_eb, ksort, G, CS, &
   is = G%isc ; ie = G%iec ; nz = G%ke
   nkmb = CS%nkml+CS%nkbl
   target_match_tol = 0.1 ! ### MAKE THIS A PARAMETER.
-  
+
   dT_dS_wt2 = CS%dT_dS_wt**2
 
 ! Find out how many massive layers are above the deepest buffer or mixed layer.
   do i=is,ie ; ks_deep(i) = -1 ; k_count(i) = 0 ; enddo
   do ks=nz,1,-1 ; do i=is,ie ; if (ksort(i,ks) > 0) then
     k = ksort(i,ks)
-    
+
     if (h(i,k) > eps(i,k)) then
       if (ks_deep(i) == -1) then
         if (k <= nkmb) then
@@ -1946,7 +1945,7 @@ subroutine resort_ML(h, T, S, R0, Rcv, eps, d_ea, d_eb, ksort, G, CS, &
       ks2(ks) = ks2_reverse(i,1+nks-ks)
       if (ks2(ks) > ks2(ks+1)) sorted = .false.
     enddo
-    
+
     ! Go to the next column of no reshuffling is needed.
     if (sorted) cycle
 
@@ -1955,7 +1954,7 @@ subroutine resort_ML(h, T, S, R0, Rcv, eps, d_ea, d_eb, ksort, G, CS, &
     num_interior = 0 ; top_interior_ks = 0
     do ks=nks,1,-1 ; if (ks2(ks) > nkmb) then
       num_interior = num_interior+1 ; top_interior_ks = ks
-    endif ; enddo 
+    endif ; enddo
 
     if (num_interior >= 1) then
       ! Find the lightest interior layer with a target coordinate density
@@ -1981,7 +1980,7 @@ subroutine resort_ML(h, T, S, R0, Rcv, eps, d_ea, d_eb, ksort, G, CS, &
           if (Rcv(i,k)-G%Rlay(k) < target_match_tol*(G%Rlay(k+1) - G%Rlay(k))) &
             leave_in_layer = .true.
         endif
-        
+
         if (leave_in_layer) then
           ! Just drop this layer from the sorted list.
           nks = nks-1
@@ -1996,7 +1995,7 @@ subroutine resort_ML(h, T, S, R0, Rcv, eps, d_ea, d_eb, ksort, G, CS, &
           if (k2>nz) exit
 
           ! This layer is bracketed in density between layers k2-1 and k2.
-          
+
           dR1 = (G%Rlay(k2-1) - Rcv(i,k)) ; dR2 = (G%Rlay(k2) - Rcv(i,k))
           T_up = T(i,k) + dT_dR * dR1
           S_up = S(i,k) + dS_dR * dR1
@@ -2049,7 +2048,7 @@ subroutine resort_ML(h, T, S, R0, Rcv, eps, d_ea, d_eb, ksort, G, CS, &
         endif
       enddo
     endif
-    
+
     do while (nks > nkmb)
       ! Having already tried to move surface layers into the interior, there
       ! are still too many layers, and layers must be merged until nks=nkmb.
@@ -2086,7 +2085,7 @@ subroutine resort_ML(h, T, S, R0, Rcv, eps, d_ea, d_eb, ksort, G, CS, &
       S(i,k_tgt) = (S(i,k_tgt)*h_tgt_old + S(i,k_src)*h_move) * I_hnew
       Rcv(i,k_tgt) = (Rcv(i,k_tgt)*h_tgt_old + Rcv(i,k_src)*h_move) * I_hnew
 
-      d_eb(i,k_src) = d_eb(i,k_src) - h_move 
+      d_eb(i,k_src) = d_eb(i,k_src) - h_move
       d_eb(i,k_tgt) = d_eb(i,k_tgt) + h_move
 
       ! Remove the newly missing layer from the sorted list.
@@ -2111,7 +2110,7 @@ subroutine resort_ML(h, T, S, R0, Rcv, eps, d_ea, d_eb, ksort, G, CS, &
 
         h(i,k) = 0.0
       enddo
-      
+
       do ks=nks,1,-1
         k_tgt = nkmb - nks + ks ; k_src = ks2(ks)
         if (k_tgt == k_src) then
@@ -2129,7 +2128,7 @@ subroutine resort_ML(h, T, S, R0, Rcv, eps, d_ea, d_eb, ksort, G, CS, &
           T(i,k_tgt) = T(i,k_src) ; S(i,k_tgt) = S(i,k_src)
           Rcv(i,k_tgt) = Rcv(i,k_src)
 
-          d_eb(i,k_src) = d_eb(i,k_src) - h_move 
+          d_eb(i,k_src) = d_eb(i,k_src) - h_move
           d_eb(i,k_tgt) = d_eb(i,k_tgt) + h_move
         else
           h(i,k_tgt) = h_tmp(k_src)
@@ -2139,16 +2138,16 @@ subroutine resort_ML(h, T, S, R0, Rcv, eps, d_ea, d_eb, ksort, G, CS, &
           Rcv(i,k_tgt) = Rcv_tmp(k_src)
 
           if (k_src > k_tgt) then
-            d_eb(i,k_src) = d_eb(i,k_src) - h_tmp(k_src) 
+            d_eb(i,k_src) = d_eb(i,k_src) - h_tmp(k_src)
             d_eb(i,k_tgt) = d_eb(i,k_tgt) + h_tmp(k_src)
           else
-            d_ea(i,k_src) = d_ea(i,k_src) - h_tmp(k_src) 
+            d_ea(i,k_src) = d_ea(i,k_src) - h_tmp(k_src)
             d_ea(i,k_tgt) = d_ea(i,k_tgt) + h_tmp(k_src)
           endif
         endif
       enddo
     endif
-    
+
   endif ; enddo
 
 end subroutine resort_ML
@@ -2339,7 +2338,7 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, dt, dt_diag, d_ea, j, G, CS, &
       T_to_bl = T_to_bl + T(i,k)*h(i,k)
       S_to_bl = S_to_bl + S(i,k)*h(i,k)
 
-      d_ea(i,k) = d_ea(i,k) - h(i,k) 
+      d_ea(i,k) = d_ea(i,k) - h(i,k)
       h(i,k) = 0.0
     endif ; enddo
     if (h_to_bl > 0.0) then ; R0_det = R0_to_bl / h_to_bl
@@ -2481,7 +2480,7 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, dt, dt_diag, d_ea, j, G, CS, &
         ! The detrained values of R0 are based on changes in T and S.
         R0_det = R0(i,kb2) + (T_det-T(i,kb2)) * dR0_dT(i) + &
                              (S_det-S(i,kb2)) * dR0_dS(i)
- 
+
         if (CS%BL_extrap_lim >= 0.) then
           ! Only do this detrainment if the new layer's temperature and salinity
           ! are not too far outside of the range of previous values.
@@ -2504,7 +2503,7 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, dt, dt_diag, d_ea, j, G, CS, &
               (S_new < S_min) .or. (S_new > S_max)) &
             h2_to_k1 = 0.0
         endif
- 
+
         h1_to_h2 = b1*h2*h2_to_k1 / (h2 - (1.0+b1)*h2_to_k1)
 
         Ihk1 = 1.0 / (h(i,k1) + h_neglect + h2_to_k1)
@@ -2534,7 +2533,7 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, dt, dt_diag, d_ea, j, G, CS, &
         d_ea(i,kb1) = d_ea(i,kb1) - h1_to_h2
         d_ea(i,kb2) = (d_ea(i,kb2) - h2_to_k1) + h1_to_h2
         d_ea(i,k1) = d_ea(i,k1) + h2_to_k1
-        h2_to_k1_rem = max(h2_to_k1_rem - h2_to_k1, 0.0) 
+        h2_to_k1_rem = max(h2_to_k1_rem - h2_to_k1, 0.0)
 
         !   The lower buffer layer has become lighter - it may be necessary to
         ! adjust k1 lighter.
@@ -2692,7 +2691,7 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, dt, dt_diag, d_ea, j, G, CS, &
 
           d_ea(i,kb2) = d_ea(i,kb2) - h2_to_k1
           d_ea(i,k1) = d_ea(i,k1) + h2_to_k1
-          h2_to_k1_rem = max(h2_to_k1_rem - h2_to_k1, 0.0) 
+          h2_to_k1_rem = max(h2_to_k1_rem - h2_to_k1, 0.0)
         endif
       endif ! Detrainment by extrapolation.
 
@@ -3337,7 +3336,7 @@ subroutine bulkmixedlayer_init(Time, G, param_file, diag, CS)
   integer :: isd, ied, jsd, jed
   logical :: use_temperature
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
- 
+
   if (associated(CS)) then
     call MOM_error(WARNING, "mixedlayer_init called with an associated"// &
                             "associated control structure.")
@@ -3478,7 +3477,7 @@ subroutine bulkmixedlayer_init(Time, G, param_file, diag, CS)
                  "If true, clocks can be called from inside loops that can \n"//&
                  "be threaded. To run with multiple threads, set to False.", &
                  default=.true.)
-   
+
   CS%id_ML_depth = register_diag_field('ocean_model', 'h_ML', diag%axesT1, &
       Time, 'Surface mixed layer depth', 'meter')
   CS%id_TKE_wind = register_diag_field('ocean_model', 'TKE_wind', diag%axesT1, &
