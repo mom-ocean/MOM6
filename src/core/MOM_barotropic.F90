@@ -197,7 +197,7 @@ type, public :: barotropic_CS ; private
   real ALLOCABLE_, dimension(NIMEMBW_,NJMEMBW_) :: &
     q_D             ! f / D at PV points, in m-1 s-1.
 
-  real, pointer, dimension(:,:,:) :: frhatu1, frhatv1 ! Predictor values.
+  real, pointer, dimension(:,:,:) :: frhatu1 => NULL(), frhatv1 => NULL() ! Predictor values.
 
   real    :: Rho0            !   The density used in the Boussinesq
                              ! approximation, in kg m-3.
