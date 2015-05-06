@@ -1578,11 +1578,9 @@ subroutine set_visc_init(Time, G, param_file, diag, visc, CS)
                  "actual velocity in the bottommost HBBL, depending on \n"//&
                  "LINEAR_DRAG.", default=.true.)
   call get_param(param_file, mod, "CHANNEL_DRAG", CS%Channel_drag, &
-                 "If true, the bottom stress is calculated with a drag \n"//&
-                 "law of the form c_drag*|u|*u. The velocity magnitude \n"//&
-                 "may be an assumed value or it may be based on the \n"//&
-                 "actual velocity in the bottommost HBBL, depending on \n"//&
-                 "LINEAR_DRAG.", default=.false.)
+                 "If true, the bottom drag is exerted directly on each \n"//&
+                 "layer proportional to the fraction of the bottom it \n"//&
+                 "overlies.", default=.false.)
   call get_param(param_file, mod, "LINEAR_DRAG", CS%linear_drag, &
                  "If LINEAR_DRAG and BOTTOMDRAGLAW are defined the drag \n"//&
                  "law is cdrag*DRAG_BG_VEL*u.", default=.false.)
