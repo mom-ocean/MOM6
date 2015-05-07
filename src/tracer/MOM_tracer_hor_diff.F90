@@ -91,6 +91,9 @@ type, public :: tracer_hor_diff_CS ; private
   logical :: debug          ! If true, write verbose checksums for debugging purposes.
   logical :: first_call = .true.
   integer :: id_KhTr_u = -1, id_KhTr_v = -1
+
+  type(group_pass_type) :: pass_t !For group halo pass, used in both
+                                  !tracer_hordiff and tracer_epipycnal_ML_diff
 end type tracer_hor_diff_CS
 
 type p2d
@@ -102,8 +105,6 @@ end type p2di
 
 integer :: id_clock_diffuse, id_clock_epimix, id_clock_pass, id_clock_sync
 
-type(group_pass_type) :: pass_t !For group halo pass, used in both 
-                                !tracer_hordiff and tracer_epipycnal_ML_diff
 contains
 
 subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, Reg, tv)
@@ -201,7 +202,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, Reg, tv)
 
   call cpu_clock_begin(id_clock_pass)
   do m=1,ntr
-    call create_group_pass(pass_t, Reg%Tr(m)%t(:,:,:), G%Domain)
+    call create_group_pass(CS%pass_t, Reg%Tr(m)%t(:,:,:), G%Domain)
   enddo
   call cpu_clock_end(id_clock_pass)
 
@@ -332,7 +333,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, Reg, tv)
 
   do itt=1,num_itts
     call cpu_clock_begin(id_clock_pass)
-    call do_group_pass(pass_t, G%Domain)
+    call do_group_pass(CS%pass_t, G%Domain)
     call cpu_clock_end(id_clock_pass)
 !$OMP parallel do default(none) shared(is,ie,js,je,nz,I_numitts,CS,G,khdt_y,h, &
 !$OMP                                  h_neglect,khdt_x,ntr,Idt,Reg)           &
@@ -431,7 +432,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
   real, dimension(NIMEMB_,NJMEM_),       intent(in)    :: khdt_epi_x
   real, dimension(NIMEM_,NJMEMB_),       intent(in)    :: khdt_epi_y
   type(ocean_grid_type),                 intent(inout) :: G
-  type(tracer_hor_diff_CS),              intent(in)    :: CS
+  type(tracer_hor_diff_CS),              intent(inout) :: CS
   type(thermo_var_ptrs),                 intent(in)    :: tv
   integer,                               intent(in)    :: num_itts
 !   This subroutine does epipycnal diffusion of all tracers between the mixed
@@ -555,7 +556,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
   do i=is-2,ie+2 ; p_ref_cv(i) = tv%P_Ref ; enddo
 
   call cpu_clock_begin(id_clock_pass)
-  call do_group_pass(pass_t, G%Domain)
+  call do_group_pass(CS%pass_t, G%Domain)
   call cpu_clock_end(id_clock_pass)
   ! Determine which layers the mixed- and buffer-layers map into...
 !$OMP parallel do default(none) shared(nkmb,is,ie,js,je,tv,p_ref_cv,rho_coord)
@@ -963,7 +964,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
 
     if (itt > 1) then ! The halos have already been filled if itt==1.
       call cpu_clock_begin(id_clock_pass)
-      call do_group_pass(pass_t, G%Domain)
+      call do_group_pass(CS%pass_t, G%Domain)
       call cpu_clock_end(id_clock_pass)
     endif
 
