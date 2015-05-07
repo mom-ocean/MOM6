@@ -49,12 +49,13 @@ type, public :: optics_type
 
 end type optics_type
 
+
 contains
 
 !> Apply shortwave heating below mixed layer. 
 subroutine absorbRemainingSW(G, h, opacity_band, nsw, j, dt, H_limit_fluxes, &
                              correctAbsorption, absorbAllSW, T, Pen_SW_bnd, &
-                             eps, ksort, htot, Ttot)
+                             eps, ksort, htot, Ttot, TKE, dSV_dT)
 
 ! This subroutine applies shortwave heating below the mixed layer (when running
 ! with the bulk mixed layer from GOLD) or throughout the water column.  In
@@ -79,6 +80,8 @@ subroutine absorbRemainingSW(G, h, opacity_band, nsw, j, dt, H_limit_fluxes, &
   integer, dimension(NIMEM_,NKMEM_), optional, intent(in)    :: ksort
   real, dimension(NIMEM_),           optional, intent(in)    :: htot
   real, dimension(NIMEM_),           optional, intent(inout) :: Ttot
+  real, dimension(NIMEM_,NKMEM_),    optional, intent(in)    :: dSV_dT
+  real, dimension(NIMEM_,NKMEM_),    optional, intent(inout) :: TKE
 
 ! Arguments:
 !  (in)      G            = ocean grid structure
@@ -100,6 +103,8 @@ subroutine absorbRemainingSW(G, h, opacity_band, nsw, j, dt, H_limit_fluxes, &
 !  (inout,opt) ksort      = density-sorted k-indicies
 !  (in,opt)    htot       = total mixed layer thickness, in H
 !  (inout,opt) Ttot       = depth integrated mixed layer temperature (units of K H)
+!  (in,opt)    dSV_dT     = the partial derivative of specific volume with temperature, in m3 kg-1 K-1.
+!  (inout,opt) TKE        = the TKE sink from mixing the heating throughout a layer, in J m-2.
 
   real :: h_heat(SZI_(G))              ! thickness of the water column that receives
                                        ! the remaining shortwave radiation (H units).
@@ -129,16 +134,24 @@ subroutine absorbRemainingSW(G, h, opacity_band, nsw, j, dt, H_limit_fluxes, &
                                        ! is moved upward (K H units)
   real :: SWa                          ! fraction of the absorbed shortwave that is
                                        ! moved to layers above with correctAbsorption (non-dim)
+  real :: coSWa_frac                   ! The fraction of SWa that is actually moved upward.
   logical :: SW_Remains                ! If true, some column has shortwave radiation that
                                        ! was not entirely absorbed
   real :: epsilon                      ! A small thickness that must remain in each
                                        ! layer, and which will not be subject to heating (units of H)
-
+  real :: I_G_Earth, g_Hconv2
+  logical :: TKE_calc                  ! If true, calculate the implications to the
+                                       ! TKE budget of the shortwave heating.
+  real :: C1_6, C1_60
   integer :: is, ie, nz, i, k, ks, n
   SW_Remains = .false.
 
   h_min_heat = 2.0*G%Angstrom + G%H_subroundoff
   is = G%isc ; ie = G%iec ; nz = G%ke
+  C1_6 = 1.0 / 6.0 ; C1_60 = 1.0 / 60.0
+
+  TKE_calc = (present(TKE) .and. present(dSV_dT))
+  g_Hconv2 = G%G_earth * G%H_to_kg_m2**2
 
   h_heat(:) = 0.0
   if (present(htot)) then ; do i=is,ie ; h_heat(i) = htot(i) ; enddo ; endif
@@ -164,10 +177,12 @@ subroutine absorbRemainingSW(G, h, opacity_band, nsw, j, dt, H_limit_fluxes, &
         ! Heating at a rate of less than 10-4 W m-2 = 10-3 K m / Century,
         ! and of the layer in question less than 1 K / Century, can be
         ! absorbed without further penetration.
-        if ((nsw*Pen_SW_bnd(n,i)*SW_trans < G%m_to_H*2.5e-11*dt) .and. &
+        ! ###Make these numbers into parameters!
+        if ((nsw*Pen_SW_bnd(n,i)*SW_trans < 1.e-3*G%m_to_H*dt*2.5e-8) .and. &
             (nsw*Pen_SW_bnd(n,i)*SW_trans < h(i,k)*dt*2.5e-8)) &
           SW_trans = 0.0
 
+        Heat_bnd = Pen_SW_bnd(n,i) * (1.0 - SW_trans)
         if (correctAbsorption .and. (h_heat(i) > 0.0)) then
           !   In this case, a fraction of the heating is applied to the
           ! overlying water so that the mean pressure at which the shortwave
@@ -189,11 +204,31 @@ subroutine absorbRemainingSW(G, h, opacity_band, nsw, j, dt, H_limit_fluxes, &
             SWa = h(i,k) * (opt_depth * (1.0 - opt_depth)) / &
               ((h_heat(i) + h(i,k)) * (6.0 - 3.0*opt_depth))
           endif
-          Heat_bnd = Pen_SW_bnd(n,i) * (1.0 - SW_trans)
+          coSWa_frac = 0.0
+          ! if (SWa*(h_heat(i) + h(i,k)) > h_heat(i)) then
+          !   coSWa_frac = (SWa*(h_heat(i) + h(i,k)) - h_heat(i) ) / 
+          !                (SWa*(h_heat(i) + h(i,k)))
+          !   SWa = h_heat(i) / (h_heat(i) + h(i,k))
+          ! endif
+
           T_chg_above(i,k) = T_chg_above(i,k) + (SWa * Heat_bnd) / h_heat(i)
           T(i,k) = T(i,k) + ((1.0 - SWa) * Heat_bnd) / h(i,k)
         else
+          coSWa_frac = 1.0
           T(i,k) = T(i,k) + Pen_SW_bnd(n,i) * (1.0 - SW_trans) / h(i,k)
+        endif
+        if (TKE_calc) then
+          if (opt_depth > 1e-2) then
+            TKE(i,k) = TKE(i,k) - coSWa_frac*Heat_bnd*dSV_dT(i,k)* &
+               (0.5*h(i,k)*g_Hconv2) * &
+               (opt_depth*(1.0+exp_OD) - 2.0*(1.0-exp_OD)) / (opt_depth*(1.0-exp_OD))
+          else
+            ! Use a Taylor series-derived approximation to the above expression
+            ! that is well behaved and more accurate when opt_depth is small.
+            TKE(i,k) = TKE(i,k) - coSWa_frac*Heat_bnd*dSV_dT(i,k)* &
+               (0.5*h(i,k)*g_Hconv2) * &
+               (C1_6*opt_depth * (1.0 - C1_60*opt_depth**2))
+          endif
         endif
 
         Pen_SW_bnd(n,i) = Pen_SW_bnd(n,i) * SW_trans

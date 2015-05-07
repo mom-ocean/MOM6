@@ -78,6 +78,8 @@ use MOM_diffConvection,      only : diffConvection_CS, diffConvection_init
 use MOM_diffConvection,      only : diffConvection_calculate, diffConvection_end
 use MOM_domains,             only : pass_var, To_West, To_South
 use MOM_domains,             only : create_group_pass, do_group_pass, group_pass_type
+use MOM_energetic_PBL,       only : energetic_PBL, energetic_PBL_init
+use MOM_energetic_PBL,       only : energetic_PBL_end, energetic_PBL_CS
 use MOM_entrain_diffusive,   only : entrainment_diffusive, entrain_diffusive_init
 use MOM_entrain_diffusive,   only : entrain_diffusive_end, entrain_diffusive_CS
 use MOM_EOS,                 only : calculate_density, calculate_2_densities, calculate_TFreeze
@@ -120,6 +122,9 @@ public adiabatic, adiabatic_driver_init
 type, public :: diabatic_CS ; private
   logical :: bulkmixedlayer  ! If true, a refined bulk mixed layer is used with
                              ! nkml sublayers (and additional buffer layers).
+  logical :: use_energetic_PBL ! If true, use the implicit energetics planetary
+                             ! boundary layer scheme to determine the diffusivity
+                             ! in the surface boundary layer.
   logical :: use_kappa_shear ! If true, use the kappa_shear module to find the
                              ! shear-driven diapycnal diffusivity.
   logical :: use_sponge      ! If true, sponges may be applied anywhere in the
@@ -127,7 +132,8 @@ type, public :: diabatic_CS ; private
                              ! those sponges are set by calls to
                              ! initialize_sponge and set_up_sponge_field.
   logical :: use_geothermal  ! If true, apply geothermal heating.
-  logical :: use_int_tides
+  logical :: use_int_tides   ! If true, use the code that advances a separate set
+                             ! of equations for the internal tide energy density.
   logical :: useALEalgorithm ! If true, use the ALE algorithm rather than layered
                              ! isopycnal/stacked shallow water mode. This logical
                              ! passed by argument to diabatic_driver_init.
@@ -189,6 +195,7 @@ type, public :: diabatic_CS ; private
 
   type(entrain_diffusive_CS),   pointer :: entrain_diffusive_CSp => NULL()
   type(bulkmixedlayer_CS),      pointer :: bulkmixedlayer_CSp    => NULL()
+  type(energetic_PBL_CS),       pointer :: energetic_PBL_CSp     => NULL()
   type(regularize_layers_CS),   pointer :: regularize_layers_CSp => NULL()
   type(geothermal_CS),          pointer :: geothermal_CSp        => NULL()
   type(int_tide_CS),            pointer :: int_tide_CSp          => NULL()
@@ -269,6 +276,9 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     hold,   &    ! layer thickness before diapycnal entrainment, and later
                  ! the initial layer thicknesses (if a mixed layer is used),
                  ! (m for Bouss, kg/m^2 for non-Bouss)
+    dSV_dT, &    ! The partial derivatives of specific volume with temperature
+    dSV_dS, &    ! and salinity in m^3/(kg K) and m^3/(kg ppt).
+    cTKE, &      ! convective TKE requirements for each layer in J/m^2.
     u_h,   &     ! zonal and meridional velocities at thickness points after 
     v_h          ! entrainment (m/s)
 
@@ -286,10 +296,11 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     Kd_int,   & ! diapycnal diffusivity of interfaces (m^2/s)
     Kd_heat,  & ! diapycnal diffusivity of heat (m^2/s)
     Kd_salt,  & ! diapycnal diffusivity of salt and passive tracers (m^2/s)
-    Tdif_flx, & ! diffusive diapycnal heat flux across interfaces (K * m/s)
-    Tadv_flx, & ! advective diapycnal heat flux across interfaces (K * m/s)
-    Sdif_flx, & ! diffusive diapycnal salt flux across interfaces (ppt * m/s)
-    Sadv_flx    ! advective diapycnal salt flux across interfaces (ppt * m/s)
+    Kd_ePBL,  & ! A test array of diapycnal diffisivities at interfaces, in m2 s-1.
+    Tdif_flx, & ! diffusive diapycnal heat flux across interfaces (K m/s)
+    Tadv_flx, & ! advective diapycnal heat flux across interfaces (K m/s)
+    Sdif_flx, & ! diffusive diapycnal salt flux across interfaces (ppt m/s)
+    Sadv_flx    ! advective diapycnal salt flux across interfaces (ppt m/s)
 
   ! The following 5 variables are only used with a bulk mixed layer.
   real, pointer, dimension(:,:,:) :: &
@@ -329,6 +340,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   real :: b1(SZIB_(G)), d1(SZIB_(G)) ! b1, c1, and d1 are variables used by the
   real :: c1(SZIB_(G),SZK_(G))       ! tridiagonal solver.
 
+  real :: Ent_int      ! The diffusive entrainment rate at an interface, in H.
   real :: dt_mix       ! amount of time over which to apply mixing (seconds)
   real :: Idt          ! inverse time step (1/s)
 
@@ -460,8 +472,10 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     if (showCallTree) call callTree_waypoint("done with find_uv_at_h (diabatic)")
   endif
 
-  ! Why is this block here? -AJA  ?????
   if (CS%use_int_tides) then
+    !   This block provides an interface for the unresolved low-mode internal
+    ! tide module. It will eventually be used to provide an energy input to
+    ! set_diffusivity.
     call set_int_tide_input(u, v, h, tv, fluxes, CS%int_tide_input, dt, G, &
                             CS%int_tide_input_CSp)
     cg1(:,:) = 0.0
@@ -657,7 +671,24 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     call cpu_clock_begin(id_clock_remap)
     ! Changes: ea(:,:,1), h, tv%T and tv%S.
 
-    call applyBoundaryFluxesInOut(CS, G, dt, fluxes, CS%optics, ea, h, tv, CS%aggregate_FW_forcing)
+    if (CS%use_energetic_PBL) then
+      call applyBoundaryFluxesInOut(CS, G, dt, fluxes, CS%optics, ea, h, tv, &
+                                    CS%aggregate_FW_forcing, cTKE, dSV_dT, dSV_dS)
+      call find_uv_at_h(u, v, h, u_h, v_h, G)
+      call energetic_PBL(h, u_h, v_h, tv, fluxes, dt, Kd_ePBL, G, &
+                         CS%energetic_PBL_CSp, dSV_dT, dSV_dS, cTKE)
+      ! Augment the diffusivities due to those diagnosed in energetic_PBL.
+      do K=2,nz ; do j=js,je ; do i=is,ie
+        Ent_int = Kd_ePBL(i,j,K) * (G%m_to_H**2 * dt) / &
+                  (0.5*(h(i,j,k-1) + h(i,j,k)) + h_neglect)
+        eb(i,j,k-1) = eB(i,j,k-1) + Ent_int
+        ea(i,j,k) = ea(i,j,k) + Ent_int
+        visc%Kv_turb(i,j,K) = visc%Kv_turb(i,j,K) + Kd_ePBL(i,j,k)
+      enddo ; enddo ; enddo
+    else
+      call applyBoundaryFluxesInOut(CS, G, dt, fluxes, CS%optics, ea, h, tv, &
+                                    CS%aggregate_FW_forcing)
+    endif
 
     call cpu_clock_end(id_clock_remap)
     if (CS%debug) then
@@ -1491,7 +1522,7 @@ subroutine adjust_salt(h, tv, G, CS)
     do i=is,ie
       tv%salt_deficit(i,j) = tv%salt_deficit(i,j) + salt_add_col(i,j)
     enddo 
-   enddo
+  enddo
 !  call cpu_clock_end(id_clock_adjust_salt)
 
 end subroutine adjust_salt
@@ -1783,6 +1814,10 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
   call get_param(param_file, mod, "ENABLE_THERMODYNAMICS", use_temperature, &
                  "If true, temperature and salinity are used as state \n"//&
                  "variables.", default=.true.)
+  call get_param(param_file, mod, "ENERGETICS_SFC_PBL", CS%use_energetic_PBL, &
+                 "If true, use an implied energetics planetary boundary \n"//&
+                 "layer scheme to determine the diffusivity and viscosity \n"//&
+                 "in the surface boundary layer.", default=.false.)
   call get_param(param_file, mod, "DOUBLE_DIFFUSION", differentialDiffusion, &
                  "If true, apply parameterization of double-diffusion.", &
                  default=.false. )
@@ -1803,7 +1838,7 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
     CS%use_geothermal = .false.
   endif
   call get_param(param_file, mod, "INTERNAL_TIDES", CS%use_int_tides, &
-                 "If true, use the code that advances as separate set of \n"//&
+                 "If true, use the code that advances a separate set of \n"//&
                  "equations for the internal tide energy density.", default=.false.)
   call get_param(param_file, mod, "MASSLESS_MATCH_TARGETS", &
                                 CS%massless_match_targets, &
@@ -2000,6 +2035,8 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
 
   if (CS%bulkmixedlayer) &
     call bulkmixedlayer_init(Time, G, param_file, diag, CS%bulkmixedlayer_CSp)
+  if (CS%use_energetic_PBL) &
+    call energetic_PBL_init(Time, G, param_file, diag, CS%energetic_PBL_CSp)
 
   call regularize_layers_init(Time, G, param_file, diag, CS%regularize_layers_CSp)
 
@@ -2020,6 +2057,8 @@ end subroutine diabatic_driver_init
 subroutine diabatic_driver_end(CS)
   type(diabatic_CS), pointer :: CS
 
+  if (.not.associated(CS)) return
+
   call entrain_diffusive_end(CS%entrain_diffusive_CSp)
   call set_diffusivity_end(CS%set_diff_CSp)
   if (CS%useKPP) then
@@ -2031,6 +2070,8 @@ subroutine diabatic_driver_end(CS)
     call KPP_end(CS%KPP_CSp)
   endif
   if (CS%useConvection) call diffConvection_end(CS%Conv_CSp)
+  if (CS%use_energetic_PBL) &
+    call energetic_PBL_end(CS%energetic_PBL_CSp)
 
   if (associated(CS%optics)) then
     call opacity_end(CS%opacity_CSp, CS%optics)
@@ -2237,7 +2278,7 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, diagPtr
 end subroutine diagnoseMLDbyDensityDifference
 
 subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
-                                    aggregate_FW_forcing)
+                                    aggregate_FW_forcing, cTKE, dSV_dT, dSV_dS)
   type(diabatic_CS),                     pointer       :: CS
   type(ocean_grid_type),                 intent(in)    :: G
   real,                                  intent(in)    :: dt
@@ -2247,9 +2288,11 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: h
   type(thermo_var_ptrs),                 intent(inout) :: tv
   logical, intent(in) :: aggregate_FW_forcing
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), optional, intent(out) :: cTKE, dSV_dT, dSV_dS
 
-!   Update the thickness, temperature, and salinity due to thermodynamic
-! boundary forcing (contained in fluxes type) applied to h, tv%T and tv%S.
+!   Update the thickness, temperature, and salinity due to  thermodynamic
+! boundary forcing (contained in fluxes type) applied to h, tv%T and tv%S, 
+! and calculate the TKE implications of this heating. 
 !
 ! This routine is only used if CS%useALEalgorithm == .true. 
 !
@@ -2270,6 +2313,12 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
 !  (inout)   h      = Layer thickness (m for Bouss and kg/m^2 for non-Bouss)
 !  (inout)   tv     = A structure containing pointers to any available
 !                     thermodynamic fields; unused fields have NULL ptrs.
+!  (out,opt) cTKE   = The turbulent kinetic energy requirement to mix forcing
+!                     through each layer, in W m-2
+!  (out,opt) dSV_dT = The partial derivative of specific volume with potential
+!                     temperature, in m3 kg-1 K-1.
+!  (out,opt) dSV_dS = The partial derivative of specific volume with potential
+!                     salinity, in m3 kg-1 / (g kg-1).
 
   integer, parameter :: maxGroundings = 5
   integer :: numberOfGroundings, iGround(maxGroundings), jGround(maxGroundings)
@@ -2279,12 +2328,20 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
   real :: fractionOfForcing, hOld, Ithickness
 
   real, dimension(SZI_(G)) :: &
+    d_pres, &  ! The pressure change across a layer, in Pa.
+    p_lay, &   ! The average pressure in a layer, in Pa.
+    pres, &    ! The pressure at an interface, in Pa.
     netMassInOut, netMassIn, netMassOut, &
     netHeat, netSalt
   real, dimension(SZI_(G), SZK_(G))              :: h2d, T2d
+  real, dimension(SZI_(G), SZK_(G))              :: pen_TKE_2d, dSV_dT_2d
   real, dimension(max(CS%nsw,1),SZI_(G))         :: Pen_SW_bnd
   real, dimension(max(CS%nsw,1),SZI_(G),SZK_(G)) :: opacityBand
   real                                           :: hGrounding(maxGroundings)
+
+  real :: Temp_in, Salin_in
+  real :: I_G_Earth, g_Hconv2
+  logical :: calculate_energetics
 
   ! smg: obsolete logicals
   logical :: use_riverHeatContent, useCalvingHeatContent
@@ -2308,6 +2365,12 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
 #else
 !new alg needs settings???
 #endif
+
+  calculate_energetics = (present(cTKE) .and. present(dSV_dT) .and. present(dSV_dS))
+  I_G_Earth = 1.0 / G%G_earth
+  g_Hconv2 = G%G_earth * G%H_to_kg_m2**2
+
+  if (present(cTKE)) cTKE(:,:,:) = 0.0
 
   ! H_limit_fluxes is used by extractFluxes1d to scale down fluxes if the total
   ! depth of the ocean is vanishing. It does not (yet) handle a value of zero.
@@ -2348,6 +2411,28 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
         opacityBand(n,i,k) = G%H_to_m*optics%opacity_band(n,i,j,k)
       enddo
     enddo ; enddo
+
+    if (calculate_energetics) then
+      ! The partial derivatives of specific volume with temperature and
+      ! salinity need to be precalculated to avoid having heating of
+      ! tiny layers give nonsensical values.
+      do i=is,ie ; pres(i) = 0.0 ; enddo ! Add surface pressure?
+      do k=1,nz
+        do i=is,ie
+          d_pres(i) = G%g_Earth * G%H_to_kg_m2 * h2d(i,k)
+          p_lay(i) = pres(i) + 0.5*d_pres(i)
+          pres(i) = pres(i) + d_pres(i)
+        enddo
+        call calculate_specific_vol_derivs(T2d(:,k), tv%S(:,j,k), p_lay(:),&
+                 dSV_dT(:,j,k), dSV_dS(:,j,k), is, ie-is+1, tv%eqn_of_state)
+        do i=is,ie ; dSV_dT_2d(i,k) = dSV_dT(i,j,k) ; enddo
+!        do i=is,ie
+!          dT_to_dPE(i,k) = I_G_Earth * d_pres(i) * p_lay(i) * dSV_dT(i,j,k)
+!          dS_to_dPE(i,k) = I_G_Earth * d_pres(i) * p_lay(i) * dSV_dS(i,j,k)
+!        enddo
+      enddo
+      pen_TKE_2d(:,:) = 0.0 
+    endif
 
     ! The surface forcing is contained in the fluxes type.
     ! We aggregate the thermodynamic forcing for a time step into the following:
@@ -2409,6 +2494,8 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
          !netSalt(i) = netSalt(i)   - dSalt
 
           ! This line accounts for the temperature of the mass exchange
+          Temp_in = T2d(i,k)
+          Salin_in = 0.0
           dTemp = dTemp + dThickness*T2d(i,k)
 
           ! Diagnostics of heat content associated with mass fluxes
@@ -2426,10 +2513,17 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
           hOld     = h2d(i,k)               ! Keep original thickness in hand
           h2d(i,k) = h2d(i,k) + dThickness  ! New thickness 
           if (h2d(i,k) > 0.0) then
+            if (calculate_energetics .and. (dThickness > 0.)) then
+              ! Calculate the energy required to mix the newly added water over
+              ! the topmost grid cell.  ###CHECK THE SIGNS!!!
+              cTKE(i,j,k) = cTKE(i,j,k) + 0.5*g_Hconv2*(hOld*dThickness) * &
+                 ((T2d(i,k) - Temp_in) * dSV_dT(i,j,k) + (tv%S(i,j,k) - Salin_in) * dSV_dS(i,j,k))
+            endif
             Ithickness  = 1.0/h2d(i,k)      ! Inverse new thickness
             ! The "if"s below avoid changing T/S by roundoff unnecessarily
             if (dThickness /= 0. .or. dTemp /= 0.) T2d(i,k)    = (hOld*T2d(i,k)    + dTemp)*Ithickness
             if (dThickness /= 0. .or. dSalt /= 0.) tv%S(i,j,k) = (hOld*tv%S(i,j,k) + dSalt)*Ithickness
+            
           endif
 
         enddo ! k=1,1
@@ -2444,7 +2538,8 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
           fractionOfForcing = min(1.0, h2d(i,k)*IforcingDepthScale)
 
           ! In the case with (-1)*netMassOut greater than 0.8*h, then we limit 
-          ! applied to the top cell, and distribute the fluxes downwards. 
+          ! applied to the top cell, and distribute the fluxes downwards.
+          !   ### The 0.8 here should become a run-time parameter?
           if (-netMassOut(i) > 0.8*h2d(i,k)) then 
             fractionOfForcing = -0.8*h2d(i,k)/netMassOut(i) 
           endif 
@@ -2452,6 +2547,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
           ! Change in state due to forcing
           dThickness = max( fractionOfForcing*netMassOut(i), -h2d(i,k) )
           dTemp      = fractionOfForcing*netHeat(i)
+          !   ### The 0.9999 here should become a run-time parameter?
           dSalt = max( fractionOfForcing*netSalt(i), -0.9999*h2d(i,k)*tv%S(i,j,k))
 
           ! Update the forcing by the part to be consumed within the present k-layer.  
@@ -2478,6 +2574,16 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
           hOld     = h2d(i,k)               ! Keep original thickness in hand
           h2d(i,k) = h2d(i,k) + dThickness  ! New thickness
           if (h2d(i,k) > 0.) then
+            if (calculate_energetics) then
+              ! Calculate the energy required to mix the newly added water over
+              ! the topmost grid cell, assuming that the fluxes of heat and salt
+              ! and rejected brine are initially applied in vanishingly thin
+              ! layers at the top of the layer before being mixed throughout
+              ! the layer.  Note that dThickness is always <= 0. ###CHECK THE SIGNS!!!
+              cTKE(i,j,k) = cTKE(i,j,k) - (0.5*h2d(i,k)*g_Hconv2) * &
+                 ((dTemp - dthickness*T2d(i,k)) * dSV_dT(i,j,k) + &
+                  (dSalt - dthickness*tv%S(i,j,k)) * dSV_dS(i,j,k))
+            endif
             Ithickness  = 1.0/h2d(i,k) ! Inverse of new thickness
             T2d(i,k)    = (hOld*T2d(i,k) + dTemp)*Ithickness
             tv%S(i,j,k) = (hOld*tv%S(i,j,k) + dSalt)*Ithickness
@@ -2491,7 +2597,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
                            "Complete mass loss in column!")
           endif
 
-          ! Efficiency?
+          ! For efficiency?
 !         if (abs(netMassOut(i))+abs(netHeat(i))+abs(netSalt(i)) == 0.0) exit 
         
         enddo ! k
@@ -2523,16 +2629,24 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
 
     ! step C/ in the application of fluxes 
     ! Heat by the divergence of penetrating SW (this uses the updated thicknesses)
-    call absorbRemainingSW(G, h2d, opacityBand, nsw, j, dt, H_limit_fluxes, &
-                           .true., .true., T2d, Pen_SW_bnd)
+    if (calculate_energetics) then
+      call absorbRemainingSW(G, h2d, opacityBand, nsw, j, dt, H_limit_fluxes, &
+                             .false., .true., T2d, Pen_SW_bnd, TKE=pen_TKE_2d, dSV_dT=dSV_dT_2d)
+      k = 1 ! For setting break-points.
+      do k=1,nz ; do i=is,ie
+        cTKE(i,j,k) = cTKE(i,j,k) + pen_TKE_2d(i,k)
+      enddo ; enddo
+    else
+      call absorbRemainingSW(G, h2d, opacityBand, nsw, j, dt, H_limit_fluxes, &
+                             .true., .true., T2d, Pen_SW_bnd)
+         !### CHANGE THIS TO .false., .true., T2d, Pen_SW_bnd)
+    endif
  
     ! Copy slice back into model state
-    do k=1,nz
-      do i=is,ie
-        h(i,j,k)    = h2d(i,k)
-        tv%T(i,j,k) = T2d(i,k)
-      enddo
-    enddo
+    do k=1,nz ; do i=is,ie
+      h(i,j,k)    = h2d(i,k)
+      tv%T(i,j,k) = T2d(i,k)
+    enddo ; enddo
 
 
   enddo ! j-loop finish 
