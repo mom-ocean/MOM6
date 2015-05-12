@@ -59,7 +59,7 @@ use MOM_interface_heights, only : find_eta
 use MOM_spatial_means,     only : global_area_mean, global_layer_mean, global_volume_mean
 use MOM_variables,         only : thermo_var_ptrs, ocean_internal_state, p3d
 use MOM_variables,         only : accel_diag_ptrs, cont_diag_ptrs
-use MOM_wave_speed,        only : wave_speed, wave_speed_init, wave_speed_CS
+use MOM_wave_speed,        only : wave_speed, wave_speed_CS
 
 implicit none ; private
 
@@ -1003,7 +1003,8 @@ subroutine calculate_derivs(dt, G, CS)
 
 end subroutine calculate_derivs
 
-subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, param_file, diag, CS)
+subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, param_file, diag, CS, &
+                                wave_speed_CSp)
   type(ocean_internal_state), intent(in)    :: MIS
   type(accel_diag_ptrs),      intent(inout) :: ADp
   type(cont_diag_ptrs),       intent(inout) :: CDp
@@ -1012,6 +1013,7 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, param_file, diag, CS)
   type(param_file_type),      intent(in)    :: param_file
   type(diag_ctrl), target,    intent(inout) :: diag
   type(diagnostics_CS),       pointer       :: CS
+  type(wave_speed_CS),        pointer       :: wave_speed_CSp
 
 ! Arguments
 !  (in)        MIS  - For "MOM Internal State" a set of pointers to the fields and
@@ -1207,10 +1209,11 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, param_file, diag, CS)
       'i-component of CFL of first baroclinic gravity wave = dt*cg1*/dx', 'nondim')
   CS%id_cfl_cg1_y = register_diag_field('ocean_model', 'CFL_cg1_y', diag%axesT1, Time, &
       'j-component of CFL of first baroclinic gravity wave = dt*cg1*/dy', 'nondim')
+
+  CS%wave_speed_CSp => wave_speed_CSp
   if ((CS%id_cg1>0) .or. (CS%id_Rd1>0) .or. (CS%id_cfl_cg1>0) .or. &
       (CS%id_cfl_cg1_x>0) .or. (CS%id_cfl_cg1_y>0)) then
     call safe_alloc_ptr(CS%cg1,isd,ied,jsd,jed)
-    call wave_speed_init(Time, G, param_file, diag, CS%wave_speed_CSp)
     if (CS%id_Rd1>0)       call safe_alloc_ptr(CS%Rd1,isd,ied,jsd,jed)
     if (CS%id_cfl_cg1>0)   call safe_alloc_ptr(CS%cfl_cg1,isd,ied,jsd,jed)
     if (CS%id_cfl_cg1_x>0) call safe_alloc_ptr(CS%cfl_cg1_x,isd,ied,jsd,jed)

@@ -89,12 +89,10 @@ type, public :: energetic_PBL_CS ; private
                              ! available to drive entrainment, nondim.
   real    :: TKE_decay       ! The ratio of the natural Ekman depth to the TKE
                              ! decay scale, nondimensional.
-  real    :: conv_decay      ! The ratio of the natural Ekman depth to the decay
-                             ! scale for convectively generated TKE, ND.
   real    :: MKE_to_TKE_effic ! The efficiency with which mean kinetic energy
                              ! released by mechanically forced entrainment of
                              ! the mixed layer is converted to TKE, nondim.
-  real    :: Hmix_min        ! The minimum mixed layer thickness in m.
+!  real    :: Hmix_min        ! The minimum mixed layer thickness in m.
   real    :: ustar_min       ! A minimum value of ustar to avoid numerical
                              ! problems, in m s-1.  If the value is small enough,
                              ! this should not affect the solution.
@@ -388,6 +386,8 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, CS, &
     endif
 
     if (associated(fluxes%lrunoff) .and. CS%do_rivermix) then
+      ! ### THIS SHOULD BE MOVED INTO THE CODE THAT APPLIES THE RIVER FLUXES
+      ! ### SO THAT THE SALINITY IS PRE-RIVER.
 
       ! Here we add an additional source of TKE to the mixed layer where river
       ! is present to simulate unresolved estuaries. The TKE input is diagnosed
@@ -401,7 +401,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, CS, &
       ! Sriver = 0 (i.e. rivers are assumed to be pure freshwater)
       RivermixConst = -0.5*CS%rivermix_depth*G%m_to_H*G%H_to_Pa
       do i=is,ie
-        TKE_river(i) = max(0.0, RivermixConst*dSv_dS(i,j,1)* &
+        TKE_river(i) = max(0.0, RivermixConst*dSV_dS(i,j,1)* &
             (fluxes%lrunoff(i,j) + fluxes%frunoff(i,j)) * S(i,1))
       enddo
     else
@@ -1050,14 +1050,9 @@ subroutine energetic_PBL_init(Time, G, param_file, diag, CS)
                  "TKE_DECAY relates the vertical rate of decay of the \n"//&
                  "TKE available for mechanical entrainment to the natural \n"//&
                  "Ekman depth.", units="nondim", default=2.5)
-  call get_param(param_file, mod, "CONV_DECAY", CS%conv_decay, &
-                 "CONV_DECAY relates the vertical rate of decay of the \n"//&
-                 "convectively released TKE available for penetrating \n"//&
-                 "entrainment to the natural Ekman length.", units="nondim", &
-                 default=0.5)
-  call get_param(param_file, mod, "HMIX_MIN", CS%Hmix_min, &
-                 "The minimum mixed layer depth if the mixed layer depth \n"//&
-                 "is determined dynamically.", units="m", default=0.0)
+!  call get_param(param_file, mod, "HMIX_MIN", CS%Hmix_min, &
+!                 "The minimum mixed layer depth if the mixed layer depth \n"//&
+!                 "is determined dynamically.", units="m", default=0.0)
 
   call get_param(param_file, mod, "OMEGA",CS%omega, &
                  "The rotation rate of the earth.", units="s-1", &
@@ -1071,6 +1066,7 @@ subroutine energetic_PBL_init(Time, G, param_file, diag, CS)
   CS%ustar_min = 2e-4*CS%omega*(G%Angstrom_z + G%H_to_m*G%H_subroundoff)
   ! NOTE from AJA: The above parameter is not logged?
 
+! ### MOVE THIS INTO THE CODE WHERE THE FORCING IS APPLIED.
   call get_param(param_file, mod, "DO_RIVERMIX", CS%do_rivermix, &
                  "If true, apply additional mixing whereever there is \n"//&
                  "runoff, so that it is mixed down to RIVERMIX_DEPTH, \n"//&

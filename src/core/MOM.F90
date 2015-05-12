@@ -420,6 +420,7 @@ use MOM_tracer_flow_control,   only : call_tracer_register, tracer_flow_control_
 use MOM_tracer_flow_control,   only : tracer_flow_control_init, call_tracer_surface_state
 use MOM_vert_friction,         only : vertvisc, vertvisc_remnant
 use MOM_vert_friction,         only : vertvisc_limit_vel, vertvisc_init
+use MOM_wave_speed,            only : wave_speed_init, wave_speed_CS
 
 implicit none ; private
 
@@ -594,7 +595,7 @@ type, public :: MOM_control_struct
   integer :: id_S_predia = -1
   integer :: id_e_predia = -1
 
-  ! remainder provides pointers to child subroutines control strings.
+  ! The remainder provides pointers to child modules' control structures.
   type(MOM_dyn_unsplit_CS),      pointer :: dyn_unsplit_CSp      => NULL()
   type(MOM_dyn_unsplit_RK2_CS),  pointer :: dyn_unsplit_RK2_CSp  => NULL()
   type(MOM_dyn_split_RK2_CS),    pointer :: dyn_split_RK2_CSp    => NULL()
@@ -606,6 +607,7 @@ type, public :: MOM_control_struct
   type(mixedlayer_restrat_CS),   pointer :: mixedlayer_restrat_CSp => NULL()
   type(MEKE_CS),                 pointer :: MEKE_CSp               => NULL()
   type(VarMix_CS),               pointer :: VarMix                 => NULL()
+  type(wave_speed_CS),           pointer :: wave_speed_CSp         => NULL()
   type(tracer_registry_type),    pointer :: tracer_Reg             => NULL()
   type(tracer_advect_CS),        pointer :: tracer_adv_CSp         => NULL()
   type(tracer_hor_diff_CS),      pointer :: tracer_diff_CSp        => NULL()
@@ -616,7 +618,7 @@ type, public :: MOM_control_struct
   type(ocean_OBC_type),          pointer :: OBC                    => NULL()
   type(ALE_CS),                  pointer :: ALE_CSp                => NULL()
 
-  ! for group halo pass
+  ! These are used for group halo updates.
   type(group_pass_type) :: pass_tau_ustar_psurf
   type(group_pass_type) :: pass_h
   type(group_pass_type) :: pass_ray
@@ -1994,7 +1996,9 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call callTree_waypoint("ALE initialized (initialize_MOM)")
 
   CS%useMEKE = MEKE_init(Time, G, param_file, diag, CS%MEKE_CSp, CS%MEKE, CS%restart_CSp)
-  call VarMix_init(Time, G, param_file, diag, CS%VarMix)
+
+  call wave_speed_init(Time, G, param_file, diag, CS%wave_speed_CSp)
+  call VarMix_init(Time, G, param_file, diag, CS%VarMix, CS%wave_speed_CSp)
   call set_visc_init(Time, G, param_file, diag, CS%visc, CS%set_visc_CSp)
 
   if (associated(init_CS%tracer_Reg)) &
@@ -2038,7 +2042,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   if (associated(init_CS%OBC)) CS%OBC => init_CS%OBC
 
   call MOM_diagnostics_init(MOM_internal_state, CS%ADp, CS%CDp, Time, G, &
-                            param_file, diag, CS%diagnostics_CSp)
+              param_file, diag, CS%diagnostics_CSp, CS%wave_speed_CSp)
 
 
   CS%Z_diag_interval = set_time(int((CS%dt_therm) * &
