@@ -86,8 +86,6 @@ type, public :: bulkmixedlayer_CS ; private
                              ! ocean, instead of passing through to the bottom mud.
   real    :: TKE_decay       ! The ratio of the natural Ekman depth to the TKE
                              ! decay scale, nondimensional.
-  real    :: conv_decay      ! The ratio of the natural Ekman depth to the decay
-                             ! scale for convectively generated TKE, ND.
   real    :: bulk_Ri_ML      ! The efficiency with which mean kinetic energy
                              ! released by mechanically forced entrainment of
                              ! the mixed layer is converted to TKE, nondim.
@@ -229,13 +227,13 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
 ! stability limit on the time step.
 !
 !   The key parameters for the mixed layer are found in the control structure.
-! These include mstar, nstar, nstar2, pen_SW_frac, pen_SW_scale,
-! TKE_decay, and conv_decay.  For the Oberhuber (1993) mixed layer,
-! the values of these are:
+! These include mstar, nstar, nstar2, pen_SW_frac, pen_SW_scale, and TKE_decay.
+!   For the Oberhuber (1993) mixed layer, the values of these are:
 !      pen_SW_frac = 0.42, pen_SW_scale = 15.0 m, mstar = 1.25,
 !      nstar = 1, TKE_decay = 2.5, conv_decay = 0.5
-!  TKE_decay is 1/kappa in eq. 28 of Oberhuber (1993), while
-!  conv_decay is 1/mu.
+!  TKE_decay is 1/kappa in eq. 28 of Oberhuber (1993), while conv_decay is 1/mu.
+!  Conv_decay has been eliminated in favor of the well-calibrated form for the
+!  efficiency of penetrating convection from Wang (2003).
 !    For a traditional Kraus-Turner mixed layer, the values are:
 !      pen_SW_frac = 0.0, pen_SW_scale = 0.0 m, mstar = 1.25,
 !      nstar = 0.4, TKE_decay = 0.0, conv_decay = 0.0
@@ -3380,11 +3378,6 @@ subroutine bulkmixedlayer_init(Time, G, param_file, diag, CS)
                  "TKE_DECAY relates the vertical rate of decay of the \n"//&
                  "TKE available for mechanical entrainment to the natural \n"//&
                  "Ekman depth.", units="nondim", default=2.5)
-  call get_param(param_file, mod, "CONV_DECAY", CS%conv_decay, &
-                 "CONV_DECAY relates the vertical rate of decay of the \n"//&
-                 "convectively released TKE available for penetrating \n"//&
-                 "entrainment to the natural Ekman length.", units="nondim", &
-                 default=0.5)
   call get_param(param_file, mod, "NSTAR2", CS%nstar2, &
                  "The portion of any potential energy released by \n"//&
                  "convective adjustment that is available to drive \n"//&
@@ -3452,9 +3445,10 @@ subroutine bulkmixedlayer_init(Time, G, param_file, diag, CS)
                  "the sublayers are distributed uniformly through the \n"//&
                  "mixed layer.", default=.false.)
   call get_param(param_file, mod, "CORRECT_ABSORPTION_DEPTH", CS%correct_absorption, &
-                 "If true, the depth at which penetrating shortwave \n"//&
-                 "radiation is absorbed is corrected by moving some of \n"//&
-                 "the heating upward in the water column.", default=.false.)
+                 "If true, the average depth at which penetrating shortwave \n"//&
+                 "radiation is absorbed is adjusted to match the average \n"//&
+                 "heating depth of an exponential profile by moving some \n"//&
+                 "of the heating upward in the water column.", default=.false.)
   call get_param(param_file, mod, "DO_RIVERMIX", CS%do_rivermix, &
                  "If true, apply additional mixing whereever there is \n"//&
                  "runoff, so that it is mixed down to RIVERMIX_DEPTH, \n"//&

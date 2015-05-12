@@ -54,7 +54,7 @@ contains
 
 !> Apply shortwave heating below mixed layer. 
 subroutine absorbRemainingSW(G, h, opacity_band, nsw, j, dt, H_limit_fluxes, &
-                             correctAbsorption, absorbAllSW, T, Pen_SW_bnd, &
+                             adjustAbsorptionProfile, absorbAllSW, T, Pen_SW_bnd, &
                              eps, ksort, htot, Ttot, TKE, dSV_dT)
 
 ! This subroutine applies shortwave heating below the mixed layer (when running
@@ -72,7 +72,7 @@ subroutine absorbRemainingSW(G, h, opacity_band, nsw, j, dt, H_limit_fluxes, &
   integer,                           intent(in)    :: j
   real,                              intent(in)    :: dt
   real,                              intent(in)    :: H_limit_fluxes
-  logical,                           intent(in)    :: correctAbsorption
+  logical,                           intent(in)    :: adjustAbsorptionProfile
   logical,                           intent(in)    :: absorbAllSW
   real, dimension(NIMEM_,NKMEM_),    intent(inout) :: T
   real, dimension(:,:),              intent(inout) :: Pen_SW_bnd
@@ -84,67 +84,86 @@ subroutine absorbRemainingSW(G, h, opacity_band, nsw, j, dt, H_limit_fluxes, &
   real, dimension(NIMEM_,NKMEM_),    optional, intent(inout) :: TKE
 
 ! Arguments:
-!  (in)      G            = ocean grid structure
-!  (in)      h            = layer thickness, in m or kg m-2. 
-!                           units of h are referred to as "H" below.
-!  (in)      opacity_band = opacity in each band of penetrating shortwave
-!                           radiation (1/H). The indicies are band, i, k.
-!  (in)      nsw          = number of bands of penetrating shortwave radiation
-!  (in)      j            = j-index to work on
-!  (in)      dt           = time step (seconds)
-!  (inout)   T            = layer potential temperatures (deg C)
-!  (inout)   Pen_SW_bnd   = penetrating shortwave heating in each band that
-!                           hits the bottom and will be redistributed through
-!                           the water column (units of K H), size nsw x NIMEM_.
+!  (in)    G            = the ocean grid structure.
+!  (in)    h            = the layer thicknesses, in m or kg m-2. 
+!                         units of h are referred to as "H" below.
+!  (in)    opacity_band = opacity in each band of penetrating shortwave
+!                         radiation (1/H). The indicies are band, i, k.
+!  (in)    nsw          = number of bands of penetrating shortwave radiation
+!  (in)    j            = j-index to work on
+!  (in)    dt           = time step (seconds)
+!  (in)    H_limit_fluxes = if the total ocean depth is less than this, they
+!                         are scaled away to avoid numerical instabilities.
+!                         This would not be necessary if a finite heat
+!                         capacity mud-layer were added.
+!  (in)    adjustAbsorptionProfile = if true, apply heating above the layers
+!                         in which it should have occurred to get the correct
+!                         mean depth (and potential energy change) of the
+!                         shortwave that should be absorbed by each layer.
+!  (in)    absorbAllSW  = if true, any shortwave radiation that hits the
+!                         bottom is absorbed uniformly over the water column.
+!  (inout) T            = layer potential temperatures (deg C)
+!  (inout) Pen_SW_bnd   = penetrating shortwave heating in each band that
+!                         hits the bottom and will be redistributed through
+!                         the water column (units of K H), size nsw x NIMEM_.
 ! These 4 optional arguments apply when the bulk mixed layer is used
 ! but are unnecessary with other schemes.
-!  (in,opt)    eps        = small thickness that must remain in each layer, and
-!                           which will not be subject to heating (units of H)
-!  (inout,opt) ksort      = density-sorted k-indicies
-!  (in,opt)    htot       = total mixed layer thickness, in H
-!  (inout,opt) Ttot       = depth integrated mixed layer temperature (units of K H)
-!  (in,opt)    dSV_dT     = the partial derivative of specific volume with temperature, in m3 kg-1 K-1.
-!  (inout,opt) TKE        = the TKE sink from mixing the heating throughout a layer, in J m-2.
+!  (in,opt)    eps      = small thickness that must remain in each layer, and
+!                         which will not be subject to heating (units of H)
+!  (inout,opt) ksort    = density-sorted k-indicies
+!  (in,opt)    htot     = total mixed layer thickness, in H
+!  (inout,opt) Ttot     = depth integrated mixed layer temperature (units of K H)
+!  (in,opt)    dSV_dT   = the partial derivative of specific volume with temperature, in m3 kg-1 K-1.
+!  (inout,opt) TKE      = the TKE sink from mixing the heating throughout a layer, in J m-2.
 
-  real :: h_heat(SZI_(G))              ! thickness of the water column that receives
-                                       ! the remaining shortwave radiation (H units).
-  real :: T_chg_above(SZI_(G),SZK_(G)) ! temperature change of all the thick layers 
-                                       ! above a given layer (K). The net change in the 
-                                       ! of a layer is the sum of T_chg_above from all 
-                                       ! the layers below, plus any contribution from 
-                                       ! absorbing radiation that hits the bottom.
-  real :: T_chg(SZI_(G))               ! temperature change of thick layers due to
-                                       ! the remaining shortwave radiation (K)
-  real :: Pen_SW_rem(SZI_(G))          ! sum across all wavelength bands of the
-                                       ! penetrating shortwave heating that hits the bottom
-                                       ! and will be redistributed through the water column
-                                       ! (in units of K H)
-  real :: SW_trans                     ! fraction of shortwave radiation that is not
-                                       ! absorbed in a layer (nondimensional)
-  real :: unabsorbed                   ! fraction of the shortwave radiation that
-                                       ! is not absorbed because the layers are too thin
-  real :: Ih_limit                     ! inverse of the total depth at which the
-                                       ! surface fluxes start to be limited (1/H)
-  real :: h_min_heat                   ! minimum thickness layer that should get
-                                       ! heated (H)
-  real :: opt_depth                    ! optical depth of a layer (non-dim)
-  real :: exp_OD                       ! exp(-opt_depth) (non-dim)
-  real :: heat_bnd                     ! heating due to absorption in the current
-                                       ! layer by the current band, including any piece that
-                                       ! is moved upward (K H units)
-  real :: SWa                          ! fraction of the absorbed shortwave that is
-                                       ! moved to layers above with correctAbsorption (non-dim)
-  real :: coSWa_frac                   ! The fraction of SWa that is actually moved upward.
-  logical :: SW_Remains                ! If true, some column has shortwave radiation that
-                                       ! was not entirely absorbed
-  real :: epsilon                      ! A small thickness that must remain in each
-                                       ! layer, and which will not be subject to heating (units of H)
-  real :: I_G_Earth, g_Hconv2
-  logical :: TKE_calc                  ! If true, calculate the implications to the
-                                       ! TKE budget of the shortwave heating.
+  real, dimension(SZI_(G),SZK_(G)) :: &
+    T_chg_above    ! A temperature change that will be applied to all the thick
+                   ! layers above a given layer, in K.  This is only nonzero if
+                   ! adjustAbsorptionProfile is true, in which case the net
+                   ! change in the temperature of a layer is the sum of the
+                   ! direct heating of that layer plus T_chg_above from all of
+                   ! the layers below, plus any contribution from absorbing
+                   ! radiation that hits the bottom.
+  real, dimension(SZI_(G)) :: &
+    h_heat, &      ! The thickness of the water column that will be heated by
+                   ! any remaining shortwave radiation (H units).
+    T_chg, &       ! The temperature change of thick layers due to the remaining
+                   ! shortwave radiation and contributions from T_chg_above, in K.
+    Pen_SW_rem     ! The sum across all wavelength bands of the penetrating shortwave
+                   ! heating that hits the bottom and will be redistributed through
+                   ! the water column (in units of K H)
+  real :: SW_trans          ! fraction of shortwave radiation that is not
+                            ! absorbed in a layer (nondimensional)
+  real :: unabsorbed        ! fraction of the shortwave radiation that
+                            ! is not absorbed because the layers are too thin
+  real :: Ih_limit          ! inverse of the total depth at which the
+                            ! surface fluxes start to be limited (1/H)
+  real :: h_min_heat        ! minimum thickness layer that should get heated (H)
+  real :: opt_depth         ! optical depth of a layer (non-dim)
+  real :: exp_OD            ! exp(-opt_depth) (non-dim)
+  real :: heat_bnd          ! heating due to absorption in the current
+                            ! layer by the current band, including any piece that
+                            ! is moved upward (K H units)
+  real :: SWa               ! fraction of the absorbed shortwave that is
+                            ! moved to layers above with adjustAbsorptionProfile (non-dim)
+  real :: coSWa_frac        ! The fraction of SWa that is actually moved upward.
+  real :: min_SW_heating    ! A minimum remaining shortwave heating rate that will be
+                            ! simply absorbed in the next layer for computational
+                            ! efficiency, instead of continuing to penetrate, in units
+                            ! of K H s-1.  The default, 2.5e-11, is about 0.08 K m / century.
+  real :: epsilon           ! A small thickness that must remain in each
+                            ! layer, and which will not be subject to heating (units of H)
+  real :: I_G_Earth
+  real :: g_Hconv2
+  logical :: SW_Remains     ! If true, some column has shortwave radiation that
+                            ! was not entirely absorbed.
+  logical :: TKE_calc       ! If true, calculate the implications to the
+                            ! TKE budget of the shortwave heating.
   real :: C1_6, C1_60
   integer :: is, ie, nz, i, k, ks, n
   SW_Remains = .false.
+
+  min_SW_heating = 2.5e-11
 
   h_min_heat = 2.0*G%Angstrom + G%H_subroundoff
   is = G%isc ; ie = G%iec ; nz = G%ke
@@ -178,12 +197,11 @@ subroutine absorbRemainingSW(G, h, opacity_band, nsw, j, dt, H_limit_fluxes, &
         ! and of the layer in question less than 1 K / Century, can be
         ! absorbed without further penetration.
         ! ###Make these numbers into parameters!
-        if ((nsw*Pen_SW_bnd(n,i)*SW_trans < 1.e-3*G%m_to_H*dt*2.5e-8) .and. &
-            (nsw*Pen_SW_bnd(n,i)*SW_trans < h(i,k)*dt*2.5e-8)) &
-          SW_trans = 0.0
+        if (nsw*Pen_SW_bnd(n,i)*SW_trans < &
+            dt*min_SW_heating*min(G%m_to_H,1e3*h(i,k)) ) SW_trans = 0.0
 
         Heat_bnd = Pen_SW_bnd(n,i) * (1.0 - SW_trans)
-        if (correctAbsorption .and. (h_heat(i) > 0.0)) then
+        if (adjustAbsorptionProfile .and. (h_heat(i) > 0.0)) then
           !   In this case, a fraction of the heating is applied to the
           ! overlying water so that the mean pressure at which the shortwave
           ! heating occurs is exactly what it would have been with a careful
@@ -244,18 +262,13 @@ subroutine absorbRemainingSW(G, h, opacity_band, nsw, j, dt, H_limit_fluxes, &
     endif
   enddo ; enddo ! i & k loops
 
-  ! Apply heating above the layers in which it should have occurred to get the
-  ! correct mean depth of the shortwave that should be absorbed by each layer.
-!    if (correctAbsorption) then
-!    endif
 
-! if (.not.absorbAllSW .and. .not.correctAbsorption) return
+! if (.not.absorbAllSW .and. .not.adjustAbsorptionProfile) return
+
+  ! Unless modified, there is no temperature change due to fluxes from the bottom.
+  do i=is,ie ; T_chg(i) = 0.0 ; enddo
+
   if (absorbAllSW) then
-
-    ! Unless modified, there is no temperature change due to fluxes from the
-    ! bottom.
-    do i=is,ie ; T_chg(i) = 0.0 ; enddo
-
     ! If there is still shortwave radiation at this point, it could go into
     ! the bottom (with a bottom mud model), or it could be redistributed back
     ! through the water column.
@@ -275,7 +288,9 @@ subroutine absorbRemainingSW(G, h, opacity_band, nsw, j, dt, H_limit_fluxes, &
       endif
       do n=1,nsw ; Pen_SW_bnd(n,i) = unabsorbed * Pen_SW_bnd(n,i) ; enddo
     endif ; enddo
+  endif ! absorbAllSW
 
+  if (absorbAllSW .or. adjustAbsorptionProfile) then
     do ks=nz,1,-1 ; do i=is,ie
       k = ks
       if (present(ksort)) then
@@ -296,7 +311,7 @@ subroutine absorbRemainingSW(G, h, opacity_band, nsw, j, dt, H_limit_fluxes, &
     if (present(htot) .and. present(Ttot)) then
       do i=is,ie ; Ttot(i) = Ttot(i) + T_chg(i) * htot(i) ; enddo
     endif
-  endif ! absorbAllSW
+  endif ! absorbAllSW .or. adjustAbsorptionProfile
 
 end subroutine absorbRemainingSW
 
