@@ -207,10 +207,10 @@ subroutine absorbRemainingSW(G, h, opacity_band, nsw, j, dt, H_limit_fluxes, &
           ! heating occurs is exactly what it would have been with a careful
           ! pressure-weighted averaging of the exponential heating profile,
           ! hence there should be no TKE budget requirements due to this
-          ! layer.  Very clever, but perhaps this should be limited so that
-          ! the water above is not heated at a faster rate than the layer
+          ! layer.  Very clever, but this is also limited so that the
+          ! water above is not heated at a faster rate than the layer
           ! actually being heated, i.e., SWA <= h_heat / (h_heat + h(i,k))
-          ! and take the energetics of the rest into account.
+          ! and takes the energetics of the rest of the heating into account.
           ! (-RWH, ~7 years later.)
           if (opt_depth > 1e-5) then
             SWa = ((opt_depth + (opt_depth + 2.0)*exp_OD) - 2.0) / &
@@ -223,11 +223,11 @@ subroutine absorbRemainingSW(G, h, opacity_band, nsw, j, dt, H_limit_fluxes, &
               ((h_heat(i) + h(i,k)) * (6.0 - 3.0*opt_depth))
           endif
           coSWa_frac = 0.0
-          ! if (SWa*(h_heat(i) + h(i,k)) > h_heat(i)) then
-          !   coSWa_frac = (SWa*(h_heat(i) + h(i,k)) - h_heat(i) ) / 
-          !                (SWa*(h_heat(i) + h(i,k)))
-          !   SWa = h_heat(i) / (h_heat(i) + h(i,k))
-          ! endif
+          if (SWa*(h_heat(i) + h(i,k)) > h_heat(i)) then
+            coSWa_frac = (SWa*(h_heat(i) + h(i,k)) - h_heat(i) ) / &
+                         (SWa*(h_heat(i) + h(i,k)))
+            SWa = h_heat(i) / (h_heat(i) + h(i,k))
+          endif
 
           T_chg_above(i,k) = T_chg_above(i,k) + (SWa * Heat_bnd) / h_heat(i)
           T(i,k) = T(i,k) + ((1.0 - SWa) * Heat_bnd) / h(i,k)

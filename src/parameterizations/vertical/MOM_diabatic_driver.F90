@@ -2638,8 +2638,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
       enddo ; enddo
     else
       call absorbRemainingSW(G, h2d, opacityBand, nsw, j, dt, H_limit_fluxes, &
-                             .true., .true., T2d, Pen_SW_bnd)
-         !### CHANGE THIS TO .false., .true., T2d, Pen_SW_bnd)
+                             .false., .true., T2d, Pen_SW_bnd)
     endif
  
     ! Copy slice back into model state
