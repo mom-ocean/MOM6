@@ -160,6 +160,11 @@ type, public :: diabatic_CS ; private
   real    :: Kd_min_tr       !   A minimal diffusivity that should always be
                              ! applied to tracers, especially in massless layers
                              ! near the bottom, in m2 s-1.
+  logical :: do_rivermix = .false. ! Provide additional TKE to mix river runoff
+                                   ! at the river mouths to "rivermix_depth" meters
+  real    :: rivermix_depth = 0.0  ! The depth to which rivers are mixed if
+                                   ! do_rivermix = T, in m.
+
 
   logical :: reclaim_frazil  !   If true, try to use any frazil heat deficit to
                              ! to cool the topmost layer down to the freezing
@@ -1607,7 +1612,7 @@ subroutine insert_brine(h, tv, G, fluxes, CS, dt)
            call calculate_density(t0,s_new,tv%P_Ref,R_new,tv%eqn_of_state)
            if (R_new < 0.5*(Rcv(i,k)+Rcv(i,k+1)) .and. s_new<s_max) then
              dzbr(i)=dzbr(i)+h_2d(i,k)
-             inject_layer(i,j) = min(inject_layer(i,j),float(k))
+             inject_layer(i,j) = min(inject_layer(i,j),real(k))
            endif
          endif
        enddo
@@ -1619,7 +1624,7 @@ subroutine insert_brine(h, tv, G, fluxes, CS, dt)
          if ((G%mask2dT(i,j) > 0.0) .and. dzbr(i) < brine_dz .and. salt(i) > 0.) then
            mc = G%H_to_kg_m2 * h_2d(i,k)
            dzbr(i)=dzbr(i)+h_2d(i,k)
-           inject_layer(i,j) = min(inject_layer(i,j),float(k))
+           inject_layer(i,j) = min(inject_layer(i,j),real(k))
          endif
        enddo
      enddo
@@ -1631,7 +1636,7 @@ subroutine insert_brine(h, tv, G, fluxes, CS, dt)
            if ((G%mask2dT(i,j) > 0.0) .and. dzbr(i) < brine_dz .and. salt(i) > 0.) then
               mc = G%H_to_kg_m2 * h_2d(i,k)          
               dzbr(i)=dzbr(i)+h_2d(i,k)
-              inject_layer(i,j) = min(inject_layer(i,j),float(k))
+              inject_layer(i,j) = min(inject_layer(i,j),real(k))
            endif
         enddo
      enddo
@@ -1865,6 +1870,17 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
                  "thereafter the net outgoing is removed from the updated state."//&
                  "into the first non-vanished layer for which the column remains stable", &
                  default=.true.)
+  if (CS%use_energetic_PBL) then 
+    call get_param(param_file, mod, "DO_RIVERMIX", CS%do_rivermix, &
+                 "If true, apply additional mixing whereever there is \n"//&
+                 "runoff, so that it is mixed down to RIVERMIX_DEPTH \n"//&
+                 "if the ocean is that deep.", default=.false.)
+    if (CS%do_rivermix) &
+      call get_param(param_file, mod, "RIVERMIX_DEPTH", CS%rivermix_depth, &
+                 "The depth to which rivers are mixed if DO_RIVERMIX is \n"//&
+                 "defined.", units="m", default=0.0)
+  else ; CS%do_rivermix = .false. ; CS%rivermix_depth = 0.0 ; endif
+
   call get_param(param_file, mod, "DEBUG", CS%debug, &
                  "If true, write out verbose debugging data.", default=.false.)
   call get_param(param_file, mod, "DEBUG_CONSERVATION", CS%debugConservation, &
@@ -2326,6 +2342,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
   real :: H_limit_fluxes, IforcingDepthScale, Idt
   real :: dThickness, dTemp, dSalt
   real :: fractionOfForcing, hOld, Ithickness
+  real :: RivermixConst  ! A constant used in implementing river mixing, in Pa s.
 
   real, dimension(SZI_(G)) :: &
     d_pres, &  ! The pressure change across a layer, in Pa.
@@ -2508,10 +2525,27 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
           if (ASSOCIATED(tv%TempxPmE)) tv%TempxPmE(i,j) = tv%TempxPmE(i,j) + &
                          tv%T(i,j,k) * dThickness * G%H_to_kg_m2
 !NOTE tv%T should be T2d
+          ! Determine the energetics of river mixing before updating the state.
+          if (calculate_energetics .and. associated(fluxes%lrunoff) .and. CS%do_rivermix) then
+            ! Here we add an additional source of TKE to the mixed layer where river
+            ! is present to simulate unresolved estuaries. The TKE input is diagnosed
+            ! as follows:
+            !   TKE_river[m3 s-3] = 0.5*rivermix_depth*g*(1/rho)*drho_ds*
+            !                       River*(Samb - Sriver) = CS%mstar*U_star^3
+            ! where River is in units of m s-1.
+            ! Samb = Ambient salinity at the mouth of the estuary
+            ! rivermix_depth =  The prescribed depth over which to mix river inflow       
+            ! drho_ds = The gradient of density wrt salt at the ambient surface salinity.
+            ! Sriver = 0 (i.e. rivers are assumed to be pure freshwater)
+            RivermixConst = -0.5*(CS%rivermix_depth*dt)*G%m_to_H*G%H_to_Pa
+
+            cTKE(i,j,k) = cTKE(i,j,k) + max(0.0, RivermixConst*dSV_dS(i,j,1) * &
+                  (fluxes%lrunoff(i,j) + fluxes%frunoff(i,j)) * tv%S(i,j,1))
+          endif
 
           ! Update state 
           hOld     = h2d(i,k)               ! Keep original thickness in hand
-          h2d(i,k) = h2d(i,k) + dThickness  ! New thickness 
+          h2d(i,k) = h2d(i,k) + dThickness  ! New thickness
           if (h2d(i,k) > 0.0) then
             if (calculate_energetics .and. (dThickness > 0.)) then
               ! Calculate the energy required to mix the newly added water over

@@ -103,9 +103,6 @@ type, public :: energetic_PBL_CS ; private
   real    :: wstar_ustar_coef = 1.0
   type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
   logical :: TKE_diagnostics = .false.
-  logical :: do_rivermix = .false. ! Provide additional TKE to mix river runoff
-                                   ! at the river mouths to "rivermix_depth" meters
-  real    :: rivermix_depth = 0.0  ! Used if "do_rivermix" = T
 
   type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
                              ! timing of diagnostic output.
@@ -214,8 +211,6 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, CS, &
     vhtot, &        ! layers above, in H m s-1.
 
     Idecay_len_TKE, &  ! The inverse of a turbulence decay length scale, in H-1.
-    TKE_river, &    ! The turbulent kinetic energy available for mixing at
-                    ! rivermouths over a time step, in m3 s-2.
     h_bot, &        ! The distance from the bottom, in H.
     pres, &         ! Interface pressures in Pa.
     h_sum, &        ! The total thickness of the water column, in H.
@@ -260,7 +255,6 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, CS, &
   real :: h_tt_min  ! A surface roughness length, in H.
 
   real :: C1_3      ! = 1/3.
-  real :: RivermixConst  ! A constant used in implementing river mixing, in Pa.
   real :: I_G_Earth ! 1 / G%G_Earth, in s2 m-1.
   real :: vonKar    ! The vonKarman constant.
   real :: I_dtmrho  ! 1.0 / (dt*mstar * Rho0) in m3 kg-1 s-1.  This is
@@ -384,29 +378,6 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, CS, &
     if (debug) then
       mech_TKE_k(:,:) = 0.0 ; conv_PErel_k(:,:) = 0.0
     endif
-
-    if (associated(fluxes%lrunoff) .and. CS%do_rivermix) then
-      ! ### THIS SHOULD BE MOVED INTO THE CODE THAT APPLIES THE RIVER FLUXES
-      ! ### SO THAT THE SALINITY IS PRE-RIVER.
-
-      ! Here we add an additional source of TKE to the mixed layer where river
-      ! is present to simulate unresolved estuaries. The TKE input is diagnosed
-      ! as follows:
-      !   TKE_river[m3 s-3] = 0.5*rivermix_depth*g*(1/rho)*drho_ds*
-      !                       River*(Samb - Sriver) = CS%mstar*U_star^3
-      ! where River is in units of m s-1.
-      ! Samb = Ambient salinity at the mouth of the estuary
-      ! rivermix_depth =  The prescribed depth over which to mix river inflow       
-      ! drho_ds = The gradient of density wrt salt at the ambient surface salinity.
-      ! Sriver = 0 (i.e. rivers are assumed to be pure freshwater)
-      RivermixConst = -0.5*CS%rivermix_depth*G%m_to_H*G%H_to_Pa
-      do i=is,ie
-        TKE_river(i) = max(0.0, RivermixConst*dSV_dS(i,j,1)* &
-            (fluxes%lrunoff(i,j) + fluxes%frunoff(i,j)) * S(i,1))
-      enddo
-    else
-      do i=is,ie ; TKE_river(i) = 0.0 ; enddo
-    endif
      
     !   Determine the initial mech_TKE and conv_PErel, including the energy required
     ! to mix surface heating through the topmost cell, the energy released by mixing
@@ -431,9 +402,6 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, CS, &
 
       mech_TKE(i) = (dt*CS%mstar*G%Rho0)*((U_Star**3))
       conv_PErel(i) = 0.0
-      if (CS%do_rivermix) then
-        mech_TKE(i) = mech_TKE(i) + TKE_river(i)*dt
-      endif
 
       if (TKE_forced(i,j,1) <= 0.0) then
         mech_TKE(i) = mech_TKE(i) + TKE_forced(i,j,1)
@@ -1065,16 +1033,6 @@ subroutine energetic_PBL_init(Time, G, param_file, diag, CS)
   ! This gives a minimum decay scale that is typically much less than Angstrom.
   CS%ustar_min = 2e-4*CS%omega*(G%Angstrom_z + G%H_to_m*G%H_subroundoff)
   ! NOTE from AJA: The above parameter is not logged?
-
-! ### MOVE THIS INTO THE CODE WHERE THE FORCING IS APPLIED.
-  call get_param(param_file, mod, "DO_RIVERMIX", CS%do_rivermix, &
-                 "If true, apply additional mixing whereever there is \n"//&
-                 "runoff, so that it is mixed down to RIVERMIX_DEPTH, \n"//&
-                 "if the ocean is that deep.", default=.false.)
-  if (CS%do_rivermix) &
-    call get_param(param_file, mod, "RIVERMIX_DEPTH", CS%rivermix_depth, &
-                 "The depth to which rivers are mixed if DO_RIVERMIX is \n"//&
-                 "defined.", units="m", default=0.0)
    
   CS%id_ML_depth = register_diag_field('ocean_model', 'ePBL_h_ML', diag%axesT1, &
       Time, 'Surface mixed layer depth', 'meter')
