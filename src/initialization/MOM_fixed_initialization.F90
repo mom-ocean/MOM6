@@ -105,7 +105,8 @@ subroutine MOM_initialize_fixed(G, PF, dirs, tv)
                  "This specifies how layers are to be defined: \n"//&
                  " \t file - read coordinate information from the file \n"//&
                  " \t\t specified by (COORD_FILE).\n"//&
-                 " \t linear - linear based on interfaces not layesrs. \n"//&
+                 " \t linear - linear based on interfaces not layers \n"//&
+                 " \t layer_ref - linear based on layer densities \n"//&
                  " \t ts_ref - use reference temperature and salinity \n"//&
                  " \t ts_range - use range of temperature and salinity \n"//&
                  " \t\t (T_REF and S_REF) to determine surface density \n"//&
@@ -568,7 +569,8 @@ subroutine set_coord_linear(Rlay, g_prime, G, param_file)
 ! This subroutine sets the layer densities (Rlay) and the interface  
 ! reduced gravities (g) according to a linear profile starting at a
 ! reference surface layer density and spanning a range of densities 
-! defined by the parameter RLAY_RANGE (defaulted to 2 if not defined) 
+! to the bottom defined by the parameter RLAY_RANGE
+! (defaulting to 2.0 if not defined)
   character(len=40)  :: mod = "set_coord_linear" ! This subroutine
   real :: Rlay_ref, Rlay_range, g_fs
   integer :: k, nz
@@ -577,25 +579,22 @@ subroutine set_coord_linear(Rlay, g_prime, G, param_file)
   call callTree_enter(trim(mod)//"(), MOM_fixed_initialization.F90")
 
   call get_param(param_file, mod, "LIGHTEST_DENSITY", Rlay_Ref, &
-                 "The reference potential density used for layer 1.", &
-                 units="kg m-3", default=G%Rho0)
+                 "The reference potential density used for the surface \n"// &
+                 "interface.", units="kg m-3", default=G%Rho0)
   call get_param(param_file, mod, "DENSITY_RANGE", Rlay_range, &
-                 "The range of reference potential densities in the layers.", &
-                 units="kg m-3", default=2.0)
+                 "The range of reference potential densities across \n"// &
+                 "all interfaces.", units="kg m-3", default=2.0)
   call get_param(param_file, mod, "GFS", g_fs, &
                  "The reduced gravity at the free surface.", units="m s-2", &
                  default=G%g_Earth)
-! Rlay(1) = Rlay_Ref
-! do k=2,nz
-!    Rlay(k) = Rlay(k-1) + Rlay_range/(real(nz-1))
-! enddo
+
   ! This following sets the target layer densities such that a the
   ! surface interface has density Rlay_ref and the bottom
   ! is Rlay_range larger
   do k=1,nz
      Rlay(k) = Rlay_Ref + RLay_range*((real(k)-0.5)/real(nz))
   enddo
-!    These statements set the interface reduced gravities.           !
+  ! These statements set the interface reduced gravities.
   g_prime(1) = g_fs
   do k=2,nz 
      g_prime(k) = (G%g_Earth/G%Rho0) * (Rlay(k) - Rlay(k-1))
