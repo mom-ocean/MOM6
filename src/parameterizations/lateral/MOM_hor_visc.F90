@@ -1064,25 +1064,27 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
   CS%id_diffv = register_diag_field('ocean_model', 'diffv', diag%axesCvL, Time, &
       'Meridional Acceleration from Horizontal Viscosity', 'meter second-2')
 
-  CS%id_Ah_h = register_diag_field('ocean_model', 'Ahh', diag%axesTL, Time,    &
-      'Biharmonic Horizontal Viscosity at h Points', 'meter4 second-1',        &
-      available=CS%biharmonic, cmor_field_name='difmxybo',                     &
-      cmor_units='m4 s-1', cmor_long_name='Ocean lateral biharmonic viscosity',&
-      cmor_standard_name='ocean_momentum_xy_biharmonic_diffusivity')
+  if (CS%biharmonic) then
+    CS%id_Ah_h = register_diag_field('ocean_model', 'Ahh', diag%axesTL, Time,    &
+        'Biharmonic Horizontal Viscosity at h Points', 'meter4 second-1',        &
+        cmor_field_name='difmxybo', cmor_units='m4 s-1',                        &
+        cmor_long_name='Ocean lateral biharmonic viscosity',                     &
+        cmor_standard_name='ocean_momentum_xy_biharmonic_diffusivity')
 
-  CS%id_Ah_q = register_diag_field('ocean_model', 'Ahq', diag%axesBL, Time, &
-      'Biharmonic Horizontal Viscosity at q Points', 'meter4 second-1',     &
-      available=CS%biharmonic)
+    CS%id_Ah_q = register_diag_field('ocean_model', 'Ahq', diag%axesBL, Time, &
+        'Biharmonic Horizontal Viscosity at q Points', 'meter4 second-1')
+  endif
 
-  CS%id_Kh_h = register_diag_field('ocean_model', 'Khh', diag%axesTL, Time,   &
-      'Laplacian Horizontal Viscosity at h Points', 'meter2 second-1',        &
-      available=CS%Laplacian, cmor_field_name='difmxylo',                     &
-      cmor_units='m2 s-1', cmor_long_name='Ocean lateral Laplacian viscosity',&
-      cmor_standard_name='ocean_momentum_xy_laplacian_diffusivity')
+  if (CS%Laplacian) then
+    CS%id_Kh_h = register_diag_field('ocean_model', 'Khh', diag%axesTL, Time,   &
+        'Laplacian Horizontal Viscosity at h Points', 'meter2 second-1',        &
+        cmor_field_name='difmxylo', cmor_units='m2 s-1',                        &
+        cmor_long_name='Ocean lateral Laplacian viscosity',                     &
+        cmor_standard_name='ocean_momentum_xy_laplacian_diffusivity')
 
-  CS%id_Kh_q = register_diag_field('ocean_model', 'Khq', diag%axesBL, Time, &
-      'Laplacian Horizontal Viscosity at q Points', 'meter2 second-1',      &
-      available=CS%Laplacian)
+    CS%id_Kh_q = register_diag_field('ocean_model', 'Khq', diag%axesBL, Time, &
+        'Laplacian Horizontal Viscosity at q Points', 'meter2 second-1')
+  endif
 
   CS%id_FrictWork = register_diag_field('ocean_model','FrictWork',diag%axesTL,Time,&
       'Integral work done by lateral friction terms', 'Watt meter-2')

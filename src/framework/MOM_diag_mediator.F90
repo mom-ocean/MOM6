@@ -28,7 +28,7 @@ module MOM_diag_mediator
 !********+*********+*********+*********+*********+*********+*********+**
 
 use MOM_coms,             only : PE_here
-use MOM_error_handler,    only : MOM_error, FATAL, WARNING, is_root_pe
+use MOM_error_handler,    only : MOM_error, FATAL, is_root_pe
 use MOM_file_parser,      only : get_param, log_param, log_version, param_file_type
 use MOM_grid,             only : ocean_grid_type
 use MOM_io,               only : vardesc
@@ -40,6 +40,7 @@ use diag_manager_mod, only : diag_manager_init, diag_manager_end
 use diag_manager_mod, only : send_data, diag_axis_init
 use diag_manager_mod, only : register_diag_field_fms=>register_diag_field
 use diag_manager_mod, only : register_static_field_fms=>register_static_field
+use diag_manager_mod, only : DIAG_FIELD_NOT_FOUND
 
 implicit none ; private
 
@@ -62,18 +63,25 @@ type, public :: axesType
   character(len=15) :: id   ! the id string for this particular combination of handles
   integer           :: rank ! number of dimensions in the list of axes
   integer, dimension(:), allocatable :: handles ! Handles to 1D axes
-  type(diag_ctrl), pointer :: diag => null()
+  type(diag_ctrl), pointer :: diag_cs => null()
 end type axesType
 
-! Type for vector of pointers to masks for either 2D or 3D data
-type, private :: maskContainer
-  real,pointer, dimension(:,:)   :: mask2d => null()
-  real,pointer, dimension(:,:,:) :: mask3d => null()
-end type maskContainer
+! This type is used to represent a diagnostic at the diag_mediator level.
+! There can be both 'primary' and 'seconday' diagnostics. The primaries
+! reside in the diag_cs%diags array. They have an id which is an index
+! into this array. The secondaries are 'variations' on the primary diagnostic.
+! For example the CMOR diagnostics are secondary. The secondary diagnostics
+! are kept in a list with the primary diagnostic as the head.
+type, private :: diag_type
+  logical :: in_use
+  integer :: fms_diag_id         ! underlying FMS diag id
+  real, pointer, dimension(:,:)   :: mask2d => null()
+  real, pointer, dimension(:,:,:) :: mask3d => null()
+  type(diag_type), pointer :: next => null()  ! pointer to the next diag
+end type diag_type
 
-! The following data type contains pointers to diagnostic fields that might
-! be shared between modules, and to the variables that control the handling
-! of model output.
+! The following data type a list of diagnostic fields an their variants,
+! as well as variables that control the handling of model output.
 type, public :: diag_ctrl
 
 ! The following fields are used for the output of the data.
@@ -105,11 +113,13 @@ type, public :: diag_ctrl
   real, dimension(:,:,:), pointer :: mask3dCui => null()
   real, dimension(:,:,:), pointer :: mask3dCvi => null()
 
-#define MAX_NUM_DIAGNOSTICS 2000
-  type(maskContainer), dimension(MAX_NUM_DIAGNOSTICS) :: maskList
-  integer, dimension(MAX_NUM_DIAGNOSTICS) :: CMORid
+! Space for diagnostics is dynamically allocated as it is needed.
+! The chunk size is how much the array should grow on each new allocation.
+#define DIAG_ALLOC_CHUNK_SIZE 100
+  type(diag_type), dimension(:), allocatable :: diags
+  integer :: next_free_diag_id
 
-  !default missing value to be sent to ALL diagnostics registrations 
+  !default missing value to be sent to ALL diagnostics registrations
   real :: missing_value = 1.0e+20
 
 end type diag_ctrl
@@ -118,17 +128,17 @@ integer :: doc_unit = -1
 
 contains
 
-subroutine set_axes_info(G, param_file, diag, set_vertical)
+subroutine set_axes_info(G, param_file, diag_cs, set_vertical)
   type(ocean_grid_type),        intent(inout) :: G
   type(param_file_type),        intent(in)    :: param_file
-  type(diag_ctrl),              intent(inout) :: diag
+  type(diag_ctrl),         intent(inout) :: diag_cs
   logical, optional,            intent(in)    :: set_vertical
 
-! Arguments: 
+! Arguments:
 !  (inout)  G            - ocean grid structure.
 !  (in)     param_file   - structure indicating the open file to parse for
 !                          model parameter values.
-!  (inout)          diag - structure used to regulate diagnostic output.
+!  (inout)   diag_cs   - structure used to regulate diagnostic output.
 !  (in,opt) set_vertical - If true (or missing), set up the vertical axes.
 
   integer :: id_xq, id_yq, id_zl, id_zi, id_xh, id_yh, k, nz
@@ -210,32 +220,32 @@ subroutine set_axes_info(G, param_file, diag, set_vertical)
   endif
 
   ! Vertical axes for the interfaces and layers
-  call defineAxes(diag, (/ id_zi /), diag%axesZi)
-  call defineAxes(diag, (/ id_zL /), diag%axesZL)
+  call defineAxes(diag_cs, (/ id_zi /), diag_cs%axesZi)
+  call defineAxes(diag_cs, (/ id_zL /), diag_cs%axesZL)
 
   ! Axis groupings for the model layers
-  call defineAxes(diag, (/ id_xh, id_yh, id_zL /), diag%axesTL)
-  call defineAxes(diag, (/ id_xq, id_yq, id_zL /), diag%axesBL)
-  call defineAxes(diag, (/ id_xq, id_yh, id_zL /), diag%axesCuL)
-  call defineAxes(diag, (/ id_xh, id_yq, id_zL /), diag%axesCvL)
+  call defineAxes(diag_cs, (/ id_xh, id_yh, id_zL /), diag_cs%axesTL)
+  call defineAxes(diag_cs, (/ id_xq, id_yq, id_zL /), diag_cs%axesBL)
+  call defineAxes(diag_cs, (/ id_xq, id_yh, id_zL /), diag_cs%axesCuL)
+  call defineAxes(diag_cs, (/ id_xh, id_yq, id_zL /), diag_cs%axesCvL)
 
   ! Axis groupings for the model interfaces
-  call defineAxes(diag, (/ id_xh, id_yh, id_zi /), diag%axesTi)
-  call defineAxes(diag, (/ id_xq, id_yh, id_zi /), diag%axesCui)
-  call defineAxes(diag, (/ id_xh, id_yq, id_zi /), diag%axesCvi)
-  call defineAxes(diag, (/ id_xq, id_yq, id_zi /), diag%axesBi)
+  call defineAxes(diag_cs, (/ id_xh, id_yh, id_zi /), diag_cs%axesTi)
+  call defineAxes(diag_cs, (/ id_xq, id_yh, id_zi /), diag_cs%axesCui)
+  call defineAxes(diag_cs, (/ id_xh, id_yq, id_zi /), diag_cs%axesCvi)
+  call defineAxes(diag_cs, (/ id_xq, id_yq, id_zi /), diag_cs%axesBi)
 
   ! Axis groupings for 2-D arrays
-  call defineAxes(diag, (/ id_xh, id_yh /), diag%axesT1)
-  call defineAxes(diag, (/ id_xq, id_yq /), diag%axesB1)
-  call defineAxes(diag, (/ id_xq, id_yh /), diag%axesCu1)
-  call defineAxes(diag, (/ id_xh, id_yq /), diag%axesCv1)
+  call defineAxes(diag_cs, (/ id_xh, id_yh /), diag_cs%axesT1)
+  call defineAxes(diag_cs, (/ id_xq, id_yq /), diag_cs%axesB1)
+  call defineAxes(diag_cs, (/ id_xq, id_yh /), diag_cs%axesCu1)
+  call defineAxes(diag_cs, (/ id_xh, id_yq /), diag_cs%axesCv1)
  
 end subroutine set_axes_info
 
-subroutine defineAxes(diag, handles, axes)
+subroutine defineAxes(diag_cs, handles, axes)
   ! Defines "axes" from list of handle and associates mask
-  type(diag_ctrl), target, intent(in)  :: diag
+  type(diag_ctrl),    target, intent(in)  :: diag_cs
   integer, dimension(:),   intent(in)  :: handles
   type(axesType),          intent(out) :: axes
 
@@ -247,54 +257,29 @@ subroutine defineAxes(diag, handles, axes)
   axes%id = i2s(handles, n) ! Identifying string
   axes%rank = n
   axes%handles(:) = handles(:)
-  axes%diag => diag ! A [circular] link back to the diag_ctrl structure
+  axes%diag_cs => diag_cs ! A [circular] link back to the diag_cs structure
 
 end subroutine defineAxes
 
-
-subroutine set_diag_mediator_grid(G, diag)
+subroutine set_diag_mediator_grid(G, diag_cs)
   type(ocean_grid_type), intent(inout) :: G
-  type(diag_ctrl),       intent(inout) :: diag
+  type(diag_ctrl),  intent(inout) :: diag_cs
 
 ! Arguments: 
 !  (inout)    G   - ocean grid structure
 !  (inout)   diag - structure used to regulate diagnostic output
 
-  diag%is = G%isc - (G%isd-1) ; diag%ie = G%iec - (G%isd-1)
-  diag%js = G%jsc - (G%jsd-1) ; diag%je = G%jec - (G%jsd-1)
-  diag%isd = G%isd ; diag%ied = G%ied ; diag%jsd = G%jsd ; diag%jed = G%jed
+  diag_cs%is = G%isc - (G%isd-1) ; diag_cs%ie = G%iec - (G%isd-1)
+  diag_cs%js = G%jsc - (G%jsd-1) ; diag_cs%je = G%jec - (G%jsd-1)
+  diag_cs%isd = G%isd ; diag_cs%ied = G%ied
+  diag_cs%jsd = G%jsd ; diag_cs%jed = G%jed
 
 end subroutine set_diag_mediator_grid
 
-subroutine post_data_0d(diag_field_id, field, diag, is_static, mask)
+subroutine post_data_0d(diag_field_id, field, diag_cs, is_static, mask)
   integer,           intent(in) :: diag_field_id
   real,              intent(in) :: field
-  type(diag_ctrl),   intent(in) :: diag
-  logical, optional, intent(in) :: is_static
-  real,    optional, intent(in) :: mask(:,:)
-
-! Arguments: 
-!  (in)  diag_field_id - id for an output variable returned by a
-!                        previous call to register_diag_field
-!  (in)      field     - 0-d array being offered for output or averaging
-!  (inout)   diag      - structure used to regulate diagnostic output
-!  (in,opt)  is_static - If true, this is a static field that is always offered.
-!  (in,opt)  mask      - If present, use this real array as the data mask.
-
-  integer :: altId
-
-  call post_data_0d_low(diag_field_id, field, diag, is_static, mask)
-
-  ! for CMOR output 
-  altId = diag%CMORid(diag_field_id)
-  if (altid>0) call post_data_0d_low(altId, field, diag, is_static, mask)
-
-end subroutine post_data_0d
-
-subroutine post_data_0d_low(diag_field_id, field, diag, is_static, mask)
-  integer,           intent(in) :: diag_field_id
-  real,              intent(in) :: field
-  type(diag_ctrl),   intent(in) :: diag
+  type(diag_ctrl), target, intent(in) :: diag_cs
   logical, optional, intent(in) :: is_static
   real,    optional, intent(in) :: mask(:,:)
 
@@ -302,108 +287,106 @@ subroutine post_data_0d_low(diag_field_id, field, diag, is_static, mask)
 !  (in) diag_field_id  - the id for an output variable returned by a
 !                            previous call to register_diag_field.
 !  (in)      field     - 0-d array being offered for output or averaging.
-!  (inout)   diag      - structure used to regulate diagnostic output.
+!  (inout)   diag_cs - structure used to regulate diagnostic output.
 !  (in,opt)  is_static - If true, this is a static field that is always offered.
 !  (in,opt)  mask      - If present, use this real array as the data mask.
 
   logical :: used, is_stat
+  type(diag_type), pointer :: diag => null()
 
-  is_stat = .false. ; if (present(is_static)) is_stat = is_static 
+  is_stat = .false. ; if (present(is_static)) is_stat = is_static
 
-  if (is_stat) then
-    used = send_data(diag_field_id, field)
-  elseif (diag%ave_enabled) then
-    used = send_data(diag_field_id, field, diag%time_end)
-  endif
+  ! Iterate over list of diag 'variants', e.g. CMOR aliases, call send_data
+  ! for each one.
+  call assert(diag_field_id < diag_cs%next_free_diag_id, &
+              'post_data_0d: Unregistered diagnostic id')
+  diag => diag_cs%diags(diag_field_id)
+  do while (associated(diag))
+    if (is_stat) then
+      used = send_data(diag%fms_diag_id, field)
+    elseif (diag_cs%ave_enabled) then
+      used = send_data(diag%fms_diag_id, field, diag_cs%time_end)
+    endif
+    diag => diag%next
+  enddo
 
-end subroutine post_data_0d_low
+end subroutine post_data_0d
 
-subroutine post_data_1d_k(diag_field_id, field, diag, is_static)
+subroutine post_data_1d_k(diag_field_id, field, diag_cs, is_static)
   integer,           intent(in) :: diag_field_id
   real,              intent(in) :: field(:)
-  type(diag_ctrl),   intent(in) :: diag
+  type(diag_ctrl), target, intent(in) :: diag_cs
   logical, optional, intent(in) :: is_static
 
-! Arguments: 
-!  (in) diag_field_id - id for an output variable returned by a
-!                       previous call to register_diag_field.
-!  (in)         field - 3-d array being offered for output or averaging.
-!  (inout)       diag - structure used to regulate diagnostic output.
-!  (in)        static - If true, this is a static field that is always offered.
-
-  integer :: altId
-
-  call post_data_1d_k_low(diag_field_id, field, diag, is_static)
-  altId = diag%CMORid(diag_field_id)
-  if (altId>0) then
-    call post_data_1d_k_low(altId, field, diag, is_static)
-  endif
-
-end subroutine post_data_1d_k
-
-subroutine post_data_1d_k_low(diag_field_id, field, diag, is_static)
-  integer,           intent(in) :: diag_field_id
-  real,              intent(in) :: field(:)
-  type(diag_ctrl),   intent(in) :: diag
-  logical, optional, intent(in) :: is_static
-
-! Arguments: 
+! Arguments:
 !  (in) diag_field_id - id for an output variable returned by a
 !                       previous call to register_diag_field.
 !  (in)         field - 3-d array being offered for output or averaging
-!  (inout)       diag - structure used to regulate diagnostic output
+!  (inout)    diag_cs - structure used to regulate diagnostic output
 !  (in)        static - If true, this is a static field that is always offered.
 
   logical :: used  ! The return value of send_data is not used for anything.
   logical :: is_stat
   integer :: isv, iev, jsv, jev
+  type(diag_type), pointer :: diag => null()
+
   is_stat = .false. ; if (present(is_static)) is_stat = is_static 
-  
-  if (is_stat) then
-    used = send_data(diag_field_id, field)
-  elseif (diag%ave_enabled) then
-    used = send_data(diag_field_id, field, diag%time_end, weight=diag%time_int)
-  endif
 
-end subroutine post_data_1d_k_low
+  ! Iterate over list of diag 'variants', e.g. CMOR aliases.
+  call assert(diag_field_id < diag_cs%next_free_diag_id, &
+              'post_data_1d_k: Unregistered diagnostic id')
+  diag => diag_cs%diags(diag_field_id)
+  do while (associated(diag))
+    if (is_stat) then
+      used = send_data(diag%fms_diag_id, field)
+    elseif (diag_cs%ave_enabled) then
+      used = send_data(diag%fms_diag_id, field, diag_cs%time_end, weight=diag_cs%time_int)
+    endif
+    diag => diag%next
+  enddo
 
-subroutine post_data_2d(diag_field_id, field, diag, is_static, mask)
+end subroutine post_data_1d_k
+
+subroutine post_data_2d(diag_field_id, field, diag_cs, is_static, mask)
   integer,           intent(in) :: diag_field_id
   real,              intent(in) :: field(:,:)
-  type(diag_ctrl),   intent(in) :: diag
+  type(diag_ctrl), target, intent(in) :: diag_cs
   logical, optional, intent(in) :: is_static
   real,    optional, intent(in) :: mask(:,:)
 
-! Arguments: 
+! Arguments:
 !  (in) diag_field_id  - id for an output variable returned by a
 !                        previous call to register_diag_field.
 !  (in)         field  - 2-d array being offered for output or averaging.
-!  (inout)       diag  - structure used to regulate diagnostic output.
+!  (inout)    diag_cs  - structure used to regulate diagnostic output.
 !  (in,opt)  is_static - If true, this is a static field that is always offered.
-!  (in,opt)  mask     - If present, use this real array as the data mask.
+!  (in,opt)   mask     - If present, use this real array as the data mask.
 
   integer :: altId
+  type(diag_type), pointer :: diag => null()
 
-  call post_data_2d_low(diag_field_id, field, diag, is_static, mask)
-  altId = diag%CMORid(diag_field_id)
-  if (altId>0) then
-    call post_data_2d_low(altId, field, diag, is_static, mask)
-  endif
+  ! Iterate over list of diag 'variants' (e.g. CMOR aliases) and post each.
+  call assert(diag_field_id < diag_cs%next_free_diag_id, &
+              'post_data_2d: Unregistered diagnostic id')
+  diag => diag_cs%diags(diag_field_id)
+  do while (associated(diag))
+    call post_data_2d_low(diag, field, diag_cs, is_static, mask)
+    diag => diag%next
+  enddo
 
 end subroutine post_data_2d
 
-subroutine post_data_2d_low(diag_field_id, field, diag, is_static, mask)
-  integer,           intent(in) :: diag_field_id
+subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
+  type(diag_type),   intent(in) :: diag
   real,              intent(in) :: field(:,:)
-  type(diag_ctrl),   intent(in) :: diag
+  type(diag_ctrl), intent(in) :: diag_cs
   logical, optional, intent(in) :: is_static
   real,    optional, intent(in) :: mask(:,:)
 
-! Arguments: 
-! (in) diag_field_id  - id for an output variable returned by a
-!                       previous call to register_diag_field.
+! Arguments:
+!  (in) diag          - structure representing the diagnostic to post
 !  (in)        field  - 2-d array being offered for output or averaging
-!  (inout)      diag  - structure used to regulate diagnostic output
+!  (inout) diag_cs    - structure used to regulate diagnostic output
 !  (in,opt) is_static - If true, this is a static field that is always offered.
 !  (in,opt)  mask     - If present, use this real array as the data mask.
 
@@ -417,27 +400,27 @@ subroutine post_data_2d_low(diag_field_id, field, diag, is_static, mask)
   ! but non-symmetric arrays are using a NE-grid indexing.  Send_data
   ! actually only uses the difference between ie and is to determine
   ! the output data size and assumes that halos are symmetric.
-  isv = diag%is ; iev = diag%ie ; jsv = diag%js ; jev = diag%je
+  isv = diag_cs%is ; iev = diag_cs%ie ; jsv = diag_cs%js ; jev = diag_cs%je
 
-  if ( size(field,1) == diag%ied-diag%isd +1 ) then
-    isv = diag%is ; iev = diag%ie        ! Data domain
-  elseif ( size(field,1) == diag%ied-diag%isd +2 ) then
-    isv = diag%is ; iev = diag%ie+1      ! Symmetric data domain
-  elseif ( size(field,1) == diag%ie-diag%is +1 ) then
-    isv = 1 ; iev = diag%ie + 1-diag%is  ! Computational domain
-  elseif ( size(field,1) == diag%ie-diag%is +2 ) then
-    isv = 1 ; iev = diag%ie + 2-diag%is  ! Symmetric computational domain
+  if ( size(field,1) == diag_cs%ied-diag_cs%isd +1 ) then
+    isv = diag_cs%is ; iev = diag_cs%ie        ! Data domain
+  elseif ( size(field,1) == diag_cs%ied-diag_cs%isd +2 ) then
+    isv = diag_cs%is ; iev = diag_cs%ie+1      ! Symmetric data domain
+  elseif ( size(field,1) == diag_cs%ie-diag_cs%is +1 ) then
+    isv = 1 ; iev = diag_cs%ie + 1-diag_cs%is  ! Computational domain
+  elseif ( size(field,1) == diag_cs%ie-diag_cs%is +2 ) then
+    isv = 1 ; iev = diag_cs%ie + 2-diag_cs%is  ! Symmetric computational domain
   else
     call MOM_error(FATAL,"post_data_2d_low: peculiar size in i-direction")
   endif
-  if ( size(field,2) == diag%jed-diag%jsd +1 ) then
-    jsv = diag%js ; jev = diag%je        ! Data domain
-  elseif ( size(field,2) == diag%jed-diag%jsd +2 ) then
-    jsv = diag%js ; jev = diag%je+1      ! Symmetric data domain
-  elseif ( size(field,2) == diag%je-diag%js +1 ) then
-    jsv = 1 ; jev = diag%je + 1-diag%js  ! Computational domain
-  elseif ( size(field,1) == diag%je-diag%js +2 ) then
-    jsv = 1 ; jev = diag%je + 2-diag%js  ! Symmetric computational domain
+  if ( size(field,2) == diag_cs%jed-diag_cs%jsd +1 ) then
+    jsv = diag_cs%js ; jev = diag_cs%je        ! Data domain
+  elseif ( size(field,2) == diag_cs%jed-diag_cs%jsd +2 ) then
+    jsv = diag_cs%js ; jev = diag_cs%je+1      ! Symmetric data domain
+  elseif ( size(field,2) == diag_cs%je-diag_cs%js +1 ) then
+    jsv = 1 ; jev = diag_cs%je + 1-diag_cs%js  ! Computational domain
+  elseif ( size(field,1) == diag_cs%je-diag_cs%js +2 ) then
+    jsv = 1 ; jev = diag_cs%je + 2-diag_cs%js  ! Symmetric computational domain
   else
     call MOM_error(FATAL,"post_data_2d_low: peculiar size in j-direction")
   endif
@@ -452,41 +435,41 @@ subroutine post_data_2d_low(diag_field_id, field, diag, is_static, mask)
 
   if (is_stat) then
     if (present(mask)) then
-      used = send_data(diag_field_id, field, &
+      used = send_data(diag%fms_diag_id, field, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=mask)
-   !elseif(associated(diag%maskList(diag_field_id)%mask2d)) then       
-   !  used = send_data(diag_field_id, field, &
-   !                   is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=diag%maskList(diag_field_id)%mask2d)
+   !elseif(associated(diag%mask2d)) then
+   !  used = send_data(diag%fms_diag_id, field, &
+   !                   is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=diag%mask2d)
     else
-      used = send_data(diag_field_id, field, &
+      used = send_data(diag%fms_diag_id, field, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev)
     endif
-  elseif (diag%ave_enabled) then
+  elseif (diag_cs%ave_enabled) then
     if (present(mask)) then
-      used = send_data(diag_field_id, field, diag%time_end, &
+      used = send_data(diag%fms_diag_id, field, diag_cs%time_end, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
-                       weight=diag%time_int, rmask=mask)
-    elseif(associated(diag%maskList(diag_field_id)%mask2d)) then       
-      used = send_data(diag_field_id, field, diag%time_end, &
+                       weight=diag_cs%time_int, rmask=mask)
+    elseif(associated(diag%mask2d)) then
+      used = send_data(diag%fms_diag_id, field, diag_cs%time_end, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
-                       weight=diag%time_int, rmask=diag%maskList(diag_field_id)%mask2d)
+                       weight=diag_cs%time_int, rmask=diag%mask2d)
     else
-      used = send_data(diag_field_id, field, diag%time_end, &
+      used = send_data(diag%fms_diag_id, field, diag_cs%time_end, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
-                       weight=diag%time_int)
+                       weight=diag_cs%time_int)
     endif
   endif
 
 end subroutine post_data_2d_low
 
-subroutine post_data_3d(diag_field_id, field, diag, is_static, mask)
+subroutine post_data_3d(diag_field_id, field, diag_cs, is_static, mask)
   integer,           intent(in) :: diag_field_id
   real,              intent(in) :: field(:,:,:)
-  type(diag_ctrl),   intent(in) :: diag
+  type(diag_ctrl), target, intent(in) :: diag_cs
   logical, optional, intent(in) :: is_static
   real,    optional, intent(in) :: mask(:,:,:)
 
-! Arguments: 
+! Arguments:
 !  (in) diag_field_id - id for an output variable returned by a
 !                       previous call to register_diag_field.
 !  (in)         field - 3-d array being offered for output or averaging
@@ -495,61 +478,64 @@ subroutine post_data_3d(diag_field_id, field, diag, is_static, mask)
 !  (in,opt)      mask - If present, use this real array as the data mask.
 
   integer :: altId
+  type(diag_type), pointer :: diag => null()
 
-  call post_data_3d_low(diag_field_id, field, diag, is_static, mask)
-  altId = diag%CMORid(diag_field_id)
-  if (altId>0) then
-    call post_data_3d_low(altId, field, diag, is_static, mask)
-  endif
+  ! Iterate over list of diag 'variants', e.g. CMOR aliases.
+  call assert(diag_field_id < diag_cs%next_free_diag_id, &
+              'post_data_3d: Unregistered diagnostic id')
+  diag => diag_cs%diags(diag_field_id)
+  do while (associated(diag))
+    call post_data_3d_low(diag, field, diag_cs, is_static, mask)
+    diag => diag%next
+  enddo
 
 end subroutine post_data_3d
 
-subroutine post_data_3d_low(diag_field_id, field, diag, is_static, mask)
-  integer,           intent(in) :: diag_field_id
+subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
+  type(diag_type),   intent(in) :: diag
   real,              intent(in) :: field(:,:,:)
-  type(diag_ctrl),   intent(in) :: diag
+  type(diag_ctrl),   intent(in) :: diag_cs
   logical, optional, intent(in) :: is_static
   real,    optional, intent(in) :: mask(:,:,:)
 
-! Arguments: 
-!  (in) diag_field_id - id for an output variable returned by a
-!                       previous call to register_diag_field.
+! Arguments:
+!  (in) diag          - the diagnostic to post.
 !  (in)         field - 3-d array being offered for output or averaging
-!  (inout)       diag - structure used to regulate diagnostic output
+!  (inout)    diag_cs - structure used to regulate diagnostic output
 !  (in)        static - If true, this is a static field that is always offered.
 !  (in,opt)      mask - If present, use this real array as the data mask.
 
   logical :: used  ! The return value of send_data is not used for anything.
   logical :: is_stat
   integer :: isv, iev, jsv, jev
-  is_stat = .false. ; if (present(is_static)) is_stat = is_static 
-  
+  is_stat = .false. ; if (present(is_static)) is_stat = is_static
+
   ! Determine the proper array indices, noting that because of the (:,:)
   ! declaration of field, symmetric arrays are using a SW-grid indexing,
   ! but non-symmetric arrays are using a NE-grid indexing.  Send_data
   ! actually only uses the difference between ie and is to determine
   ! the output data size and assumes that halos are symmetric.
-  isv = diag%is ; iev = diag%ie ; jsv = diag%js ; jev = diag%je
+  isv = diag_cs%is ; iev = diag_cs%ie ; jsv = diag_cs%js ; jev = diag_cs%je
 
-  if ( size(field,1) == diag%ied-diag%isd +1 ) then
-    isv = diag%is ; iev = diag%ie        ! Data domain
-  elseif ( size(field,1) == diag%ied-diag%isd +2 ) then
-    isv = diag%is ; iev = diag%ie+1      ! Symmetric data domain
-  elseif ( size(field,1) == diag%ie-diag%is +1 ) then
-    isv = 1 ; iev = diag%ie + 1-diag%is  ! Computational domain
-  elseif ( size(field,1) == diag%ie-diag%is +2 ) then
-    isv = 1 ; iev = diag%ie + 2-diag%is  ! Symmetric computational domain
+  if ( size(field,1) == diag_cs%ied-diag_cs%isd +1 ) then
+    isv = diag_cs%is ; iev = diag_cs%ie        ! Data domain
+  elseif ( size(field,1) == diag_cs%ied-diag_cs%isd +2 ) then
+    isv = diag_cs%is ; iev = diag_cs%ie+1      ! Symmetric data domain
+  elseif ( size(field,1) == diag_cs%ie-diag_cs%is +1 ) then
+    isv = 1 ; iev = diag_cs%ie + 1-diag_cs%is  ! Computational domain
+  elseif ( size(field,1) == diag_cs%ie-diag_cs%is +2 ) then
+    isv = 1 ; iev = diag_cs%ie + 2-diag_cs%is  ! Symmetric computational domain
   else
     call MOM_error(FATAL,"post_data_3d_low: peculiar size in i-direction")
   endif
-  if ( size(field,2) == diag%jed-diag%jsd +1 ) then
-    jsv = diag%js ; jev = diag%je        ! Data domain
-  elseif ( size(field,2) == diag%jed-diag%jsd +2 ) then
-    jsv = diag%js ; jev = diag%je+1      ! Symmetric data domain
-  elseif ( size(field,2) == diag%je-diag%js +1 ) then
-    jsv = 1 ; jev = diag%je + 1-diag%js  ! Computational domain
-  elseif ( size(field,1) == diag%je-diag%js +2 ) then
-    jsv = 1 ; jev = diag%je + 2-diag%js  ! Symmetric computational domain
+  if ( size(field,2) == diag_cs%jed-diag_cs%jsd +1 ) then
+    jsv = diag_cs%js ; jev = diag_cs%je        ! Data domain
+  elseif ( size(field,2) == diag_cs%jed-diag_cs%jsd +2 ) then
+    jsv = diag_cs%js ; jev = diag_cs%je+1      ! Symmetric data domain
+  elseif ( size(field,2) == diag_cs%je-diag_cs%js +1 ) then
+    jsv = 1 ; jev = diag_cs%je + 1-diag_cs%js  ! Computational domain
+  elseif ( size(field,1) == diag_cs%je-diag_cs%js +2 ) then
+    jsv = 1 ; jev = diag_cs%je + 2-diag_cs%js  ! Symmetric computational domain
   else
     call MOM_error(FATAL,"post_data_3d_low: peculiar size in j-direction")
   endif
@@ -565,37 +551,37 @@ subroutine post_data_3d_low(diag_field_id, field, diag, is_static, mask)
 
   if (is_stat) then
     if (present(mask)) then
-      used = send_data(diag_field_id, field, &
+      used = send_data(diag%fms_diag_id, field, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=mask)
-   !elseif(associated(diag%maskList(diag_field_id)%mask3d)) then       
+   !elseif(associated(diag%mask3d)) then
    !  used = send_data(diag_field_id, field, &
-   !                   is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=diag%maskList(diag_field_id)%mask3d)
+   !                   is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=diag%mask3d)
     else
-      used = send_data(diag_field_id, field, &
+      used = send_data(diag%fms_diag_id, field, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev)
     endif
-  elseif (diag%ave_enabled) then
+  elseif (diag_cs%ave_enabled) then
     if (present(mask)) then
-      used = send_data(diag_field_id, field, diag%time_end, &
+      used = send_data(diag%fms_diag_id, field, diag_cs%time_end, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
-                       weight=diag%time_int, rmask=mask)
-    elseif(associated(diag%maskList(diag_field_id)%mask3d)) then       
-      used = send_data(diag_field_id, field, diag%time_end, &
+                       weight=diag_cs%time_int, rmask=mask)
+    elseif(associated(diag%mask3d)) then
+      used = send_data(diag%fms_diag_id, field, diag_cs%time_end, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
-                       weight=diag%time_int, rmask=diag%maskList(diag_field_id)%mask3d)
+                       weight=diag_cs%time_int, rmask=diag%mask3d)
     else
-      used = send_data(diag_field_id, field, diag%time_end, &
+      used = send_data(diag%fms_diag_id, field, diag_cs%time_end, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
-                       weight=diag%time_int)
+                       weight=diag_cs%time_int)
     endif
   endif
 
 end subroutine post_data_3d_low
 
-subroutine enable_averaging(time_int_in, time_end_in, diag)
+subroutine enable_averaging(time_int_in, time_end_in, diag_cs)
   real, intent(in) :: time_int_in
   type(time_type), intent(in) :: time_end_in
-  type(diag_ctrl), intent(inout) :: diag
+  type(diag_ctrl), intent(inout) :: diag_cs
 
 ! This subroutine enables the accumulation of time averages over the
 ! specified time interval.
@@ -607,27 +593,27 @@ subroutine enable_averaging(time_int_in, time_end_in, diag)
 !  (inout)   diag        - structure used to regulate diagnostic output
 
 !  if (num_file==0) return
-  diag%time_int = time_int_in
-  diag%time_end = time_end_in
-  diag%ave_enabled = .true.
+  diag_cs%time_int = time_int_in
+  diag_cs%time_end = time_end_in
+  diag_cs%ave_enabled = .true.
 end subroutine enable_averaging
 
 ! Call this subroutine to avoid averaging any offered fields.
-subroutine disable_averaging(diag)
-  type(diag_ctrl), intent(inout) :: diag
+subroutine disable_averaging(diag_cs)
+  type(diag_ctrl), intent(inout) :: diag_cs
 
 ! Argument: 
 ! diag - structure used to regulate diagnostic output
 
-  diag%time_int = 0.0
-  diag%ave_enabled = .false.
+  diag_cs%time_int = 0.0
+  diag_cs%ave_enabled = .false.
 
 end subroutine disable_averaging
 
 ! Call this subroutine to determine whether the averaging is
 ! currently enabled.  .true. is returned if it is.
-function query_averaging_enabled(diag, time_int, time_end)
-  type(diag_ctrl),           intent(in)  :: diag
+function query_averaging_enabled(diag_cs, time_int, time_end)
+  type(diag_ctrl),           intent(in) :: diag_cs
   real,            optional, intent(out) :: time_int
   type(time_type), optional, intent(out) :: time_end
   logical :: query_averaging_enabled
@@ -637,13 +623,13 @@ function query_averaging_enabled(diag, time_int, time_end)
 !  (out,opt) time_int - current setting of diag%time_int, in s
 !  (out,opt) time_end - current setting of diag%time_end
 
-  if (present(time_int)) time_int = diag%time_int
-  if (present(time_end)) time_end = diag%time_end
-  query_averaging_enabled = diag%ave_enabled
+  if (present(time_int)) time_int = diag_cs%time_int
+  if (present(time_end)) time_end = diag_cs%time_end
+  query_averaging_enabled = diag_cs%ave_enabled
 end function query_averaging_enabled
 
-function get_diag_time_end(diag)
-  type(diag_ctrl),           intent(in)  :: diag
+function get_diag_time_end(diag_cs)
+  type(diag_ctrl), intent(in)  :: diag_cs
   type(time_type) :: get_diag_time_end
 
 ! Argument: 
@@ -652,13 +638,13 @@ function get_diag_time_end(diag)
 !   This function returns the valid end time for diagnostics that are handled
 ! outside of the MOM6 infrastructure, such as via the generic tracer code.
 
-  get_diag_time_end = diag%time_end
+  get_diag_time_end = diag_cs%time_end
 end function get_diag_time_end
 
 function register_diag_field(module_name, field_name, axes, init_time,         &
      long_name, units, missing_value, range, mask_variant, standard_name,      &
      verbose, do_not_log, err_msg, interp_method, tile_count, cmor_field_name, &
-     cmor_long_name, cmor_units, cmor_standard_name, available)
+     cmor_long_name, cmor_units, cmor_standard_name)
   integer :: register_diag_field
   character(len=*), intent(in) :: module_name, field_name
   type(axesType),   intent(in) :: axes
@@ -671,10 +657,9 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
   integer,          optional, intent(in) :: tile_count
   character(len=*), optional, intent(in) :: cmor_field_name, cmor_long_name
   character(len=*), optional, intent(in) :: cmor_units, cmor_standard_name
-  logical,          optional, intent(in) :: available
 
   ! Output:    An integer handle for a diagnostic array.
-  ! Arguments: 
+  ! Arguments:
   !  (in)      module_name   - name of this module, usually "ocean_model" or "ice_shelf_model"
   !  (in)      field_name    - name of the diagnostic field
   !  (in)      axes          - container w/ up to 3 integer handles that indicates axes for this field
@@ -698,185 +683,192 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
   !  (in,opt)  interp_method - no clue
   !  (in,opt)  tile_count    - no clue
 
-  type(diag_ctrl), pointer :: diag
-  integer :: CMORid
+  real :: MOM_missing_value
+  type(diag_ctrl), pointer :: diag_cs
+  type(diag_type), pointer :: diag => null(), cmor_diag => null()
+  integer :: primary_id, fms_id
   character(len=256) :: posted_cmor_units, posted_cmor_standard_name, posted_cmor_long_name
 
-  register_diag_field = register_diag_field_low(module_name, field_name, axes, init_time,        &
-     long_name=long_name, units=units, missing_value=missing_value, range=range,                 &
-     mask_variant=mask_variant, standard_name=standard_name, verbose=verbose,                    &
-     do_not_log=do_not_log, err_msg=err_msg, interp_method=interp_method, tile_count=tile_count, &
-     available=available)
+  MOM_missing_value = axes%diag_cs%missing_value
+  if(present(missing_value)) MOM_missing_value = missing_value
 
-  diag => axes%diag
-  CMORid = -1
+  diag_cs => axes%diag_cs
+  primary_id = -1
+  diag => null()
+  cmor_diag => null()
+
+  ! Set up the 'primary' diagnostic, first get an underlying FMS id
+  fms_id = register_diag_field_fms(module_name, field_name, axes%handles, &
+         init_time, long_name=long_name, units=units, missing_value=MOM_missing_value, &
+         range=range, mask_variant=mask_variant, standard_name=standard_name, &
+         verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
+         interp_method=interp_method, tile_count=tile_count)
+  if (fms_id /= DIAG_FIELD_NOT_FOUND) then
+    ! If the diagnostic is needed then allocate and id and space
+    primary_id = get_new_diag_id(diag_cs)
+    call alloc_diag_with_id(primary_id, diag_cs, diag)
+    call assert(associated(diag), 'register_diag_field: diag allocation failed')
+    diag%fms_diag_id = fms_id
+    call set_diag_mask(diag, diag_cs, axes)
+  endif
+
+  ! Set up the CMOR variation of the diagnostic
   if (present(cmor_field_name)) then
     ! Fallback values for strings set to "NULL"
     posted_cmor_units = "not provided"           !
     posted_cmor_standard_name = "not provided"   ! Values might be able to be replaced with a CS%missing field?
     posted_cmor_long_name = "not provided"       !
 
-    ! If attributes are present for MOM variable names, use them first for the register_diag_field 
+    ! If attributes are present for MOM variable names, use them first for the register_diag_field
     ! call for CMOR verison of the variable
     if (present(units)) posted_cmor_units = units
     if (present(standard_name)) posted_cmor_standard_name = standard_name
     if (present(long_name)) posted_cmor_long_name = long_name
 
-    ! If specified in the call to register_diag_field, override attributes with the CMOR versions 
+    ! If specified in the call to register_diag_field, override attributes with the CMOR versions
     if (present(cmor_units)) posted_cmor_units = cmor_units
     if (present(cmor_standard_name)) posted_cmor_standard_name = cmor_standard_name
     if (present(cmor_long_name)) posted_cmor_long_name = cmor_long_name
 
-    CMORid = register_diag_field_low(module_name, cmor_field_name, axes, init_time,            &
+    fms_id = register_diag_field_fms(module_name, cmor_field_name, axes%handles, init_time,    &
       long_name=trim(posted_cmor_long_name), units=trim(posted_cmor_units),                    &
-      missing_value=missing_value, range=range, mask_variant=mask_variant,                     &
+      missing_value=MOM_missing_value, range=range, mask_variant=mask_variant,                 &
       standard_name=trim(posted_cmor_standard_name), verbose=verbose, do_not_log=do_not_log,   &
-      err_msg=err_msg, interp_method=interp_method, tile_count=tile_count, available=available)
+      err_msg=err_msg, interp_method=interp_method, tile_count=tile_count)
+
+    if (fms_id /= DIAG_FIELD_NOT_FOUND) then
+      if (primary_id == -1) then
+        primary_id = get_new_diag_id(diag_cs)
+      endif
+      ! This will add the cmore variation to the 'primary' diagnostic.
+      ! In the case where there is no primary, it will become the primary.
+      call alloc_diag_with_id(primary_id, diag_cs, cmor_diag)
+      cmor_diag%fms_diag_id = fms_id
+      call set_diag_mask(cmor_diag, diag_cs, axes)
+    endif
   endif
 
-  ! If the diag_table contains both the normal field_name and CMOR name then we must
-  ! store both IDs
-  if (register_diag_field>0) then
-    diag%CMORid(register_diag_field) = CMORid
-  else ! but if only the CMOR name appears in the diag_table then just use that ID
-    register_diag_field = CMORid
-    if (CMORid>0) diag%CMORid(CMORid) = -1
+  ! Set up any other variations here, e.g. remapped vertical dimension,
+  ! or decimation.
+
+  ! Document diagnostics in list of available diagnostics
+  if (is_root_pe() .and. doc_unit > 0) then
+    call log_available_diag(associated(diag), module_name, field_name, &
+                            long_name, units, standard_name)
+    if (present(cmor_field_name)) then
+      call log_available_diag(associated(cmor_diag), module_name, cmor_field_name, &
+                              posted_cmor_long_name, posted_cmor_units, &
+                              posted_cmor_standard_name)
+    endif
   endif
+
+  register_diag_field = primary_id
 
 end function register_diag_field
 
-function register_diag_field_low(module_name, field_name, axes, init_time, &
+function register_scalar_field(module_name, field_name, init_time, diag_cs, &
      long_name, units, missing_value, range, mask_variant, standard_name, &
-     verbose, do_not_log, err_msg, interp_method, tile_count, available)
-  integer :: register_diag_field_low
+     verbose, do_not_log, err_msg, interp_method, tile_count, cmor_field_name, &
+     cmor_long_name, cmor_units, cmor_standard_name)
+  integer :: register_scalar_field
   character(len=*), intent(in) :: module_name, field_name
-  type(axesType),   intent(in) :: axes
   type(time_type),  intent(in) :: init_time
+  type(diag_ctrl),  intent(inout) :: diag_cs
   character(len=*), optional, intent(in) :: long_name, units, standard_name
   real,             optional, intent(in) :: missing_value, range(2)
   logical,          optional, intent(in) :: mask_variant, verbose, do_not_log
   character(len=*), optional, intent(out):: err_msg
   character(len=*), optional, intent(in) :: interp_method
   integer,          optional, intent(in) :: tile_count
-  logical,          optional, intent(in) :: available
+  character(len=*), optional, intent(in) :: cmor_field_name, cmor_long_name
+  character(len=*), optional, intent(in) :: cmor_units, cmor_standard_name
 
   ! Output:    An integer handle for a diagnostic array.
   ! Arguments: 
-  !  (in)      module_name   - name of this module, usually "ocean_model" or "ice_shelf_model"
-  !  (in)      field_name    - name of the diagnostic field
-  !  (in)      axes          - container with up to 3 integer handles that indicates axes for this field.
+  !  (in)      module_name   - name of this module, usually "ocean_model" or "ice_shelf_model".
+  !  (in)      field_name    - name of the diagnostic field.
   !  (in)      init_time     - time at which a field is first available?
+  !  (inout)   diag_cs     - structure used to regulate diagnostic output
   !  (in,opt)  long_name     - long name of a field
   !  (in,opt)  units         - units of a field
-  !  (in,opt)  standard_name - standardized name associated with a field (not yet used in MOM).
-  !  (in,opt)  missing_value - A value that indicates missing values
+  !  (in,opt)  missing_value - indicates missing values
+  !  (in,opt)  standard_name - standardized name associated with a field
 
   ! Following params have yet to be used in MOM. 
   !  (in,opt)  range         - valid range of a variable
   !  (in,opt)  mask_variant  - If true a logical mask must be provided with post_data calls
-  !  (in,opt)  verbose       - If true, FMS is verbose
+  !  (in,opt)  verbose       - If true, FMS is verbosed
   !  (in,opt)  do_not_log    - If true, do not log something
   !  (out,opt) err_msg       - character string into which an error message might be placed
   !  (in,opt)  interp_method - no clue
   !  (in,opt)  tile_count    - no clue
 
-  character(len=240) :: mesg
   real :: MOM_missing_value
-  type(diag_ctrl), pointer :: diag
-  logical :: unavailable
+  integer :: primary_id, fms_id
+  type(diag_type), pointer :: diag => null(), cmor_diag => null()
+  character(len=256) :: posted_cmor_units, posted_cmor_standard_name, posted_cmor_long_name
 
-  unavailable = .false.
-  if (present(available)) unavailable = .not. available
-
-  MOM_missing_value = axes%diag%missing_value
+  MOM_missing_value = diag_cs%missing_value
   if(present(missing_value)) MOM_missing_value = missing_value
 
-  register_diag_field_low = register_diag_field_fms(module_name, field_name, axes%handles, &
-       init_time, long_name=long_name, units=units, missing_value=MOM_missing_value, &
-       range=range, mask_variant=mask_variant, standard_name=standard_name, &
-       verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
-       interp_method=interp_method, tile_count=tile_count)
+  primary_id = -1
+  diag => null()
+  cmor_diag => null()
 
-  ! Catch requests for diagnostics that are unavailable with this configuration
-  if (unavailable) then
-    if (register_diag_field_low>0) then
-      register_diag_field_low = -1
-      call MOM_error(WARNING,'register_diag_field: Variable "'//trim(field_name)// &
-                             '" is not available in this MOM6 configuration!')
-    endif
-    return ! Do nothing else in this function
+  fms_id = register_diag_field_fms(module_name, field_name, init_time, &
+      long_name=long_name, units=units, missing_value=MOM_missing_value, &
+      range=range, standard_name=standard_name, do_not_log=do_not_log, err_msg=err_msg)
+  if (fms_id /= DIAG_FIELD_NOT_FOUND) then
+    primary_id = get_new_diag_id(diag_cs)
+    call alloc_diag_with_id(primary_id, diag_cs, diag)
+    call assert(associated(diag), 'register_scalar_field: diag allocation failed')
+    diag%fms_diag_id = fms_id
   endif
 
-  ! Document in a list of available diagnostics
+  if (present(cmor_field_name)) then
+    ! Fallback values for strings set to "not provided"
+    posted_cmor_units = "not provided"
+    posted_cmor_standard_name = "not provided"
+    posted_cmor_long_name = "not provided"
+
+    ! If attributes are present for MOM variable names, use them first for the register_static_field
+    ! call for CMOR verison of the variable
+    if (present(units)) posted_cmor_units = units
+    if (present(standard_name)) posted_cmor_standard_name = standard_name
+    if (present(long_name)) posted_cmor_long_name = long_name
+
+    ! If specified in the call to register_static_field, override attributes with the CMOR versions
+    if (present(cmor_units)) posted_cmor_units = cmor_units
+    if (present(cmor_standard_name)) posted_cmor_standard_name = cmor_standard_name
+    if (present(cmor_long_name)) posted_cmor_long_name = cmor_long_name
+
+    fms_id = register_diag_field_fms(module_name, cmor_field_name, init_time, &
+       long_name=trim(posted_cmor_long_name), units=trim(posted_cmor_units), &
+       missing_value=MOM_missing_value, range=range, &
+       standard_name=trim(posted_cmor_standard_name), do_not_log=do_not_log, err_msg=err_msg)
+    if (fms_id /= DIAG_FIELD_NOT_FOUND) then
+      if (primary_id == -1) then
+        primary_id = get_new_diag_id(diag_cs)
+      endif
+      call alloc_diag_with_id(primary_id, diag_cs, cmor_diag)
+      cmor_diag%fms_diag_id = fms_id
+    endif
+  endif
+
+  ! Document diagnostics in list of available diagnostics
   if (is_root_pe() .and. doc_unit > 0) then
-     if (register_diag_field_low > 0) then
-        mesg = '"'//trim(module_name)//'", "'//trim(field_name)//'"  [Used]'
-     else
-        mesg = '"'//trim(module_name)//'", "'//trim(field_name)//'"  [Unused]'
-     endif
-     write(doc_unit, '(a)') trim(mesg)
-     if (present(long_name)) call describe_option("long_name", long_name)
-     if (present(units)) call describe_option("units", units)
-     if (present(standard_name)) call describe_option("standard_name", standard_name)
+    call log_available_diag(associated(diag), module_name, field_name, &
+                            long_name, units, standard_name)
+    if (present(cmor_field_name)) then
+      call log_available_diag(associated(cmor_diag), module_name, cmor_field_name, &
+                              posted_cmor_long_name, posted_cmor_units, &
+                              posted_cmor_standard_name)
+    endif
   endif
 
-  !Decide what mask to use based on the axes info
-  if (register_diag_field_low>-1) then
-  !3d masks
-  if(axes%rank .eq. 3) then
-    diag => axes%diag
-    diag%maskList(register_diag_field_low)%mask2d => null()
-    diag%maskList(register_diag_field_low)%mask3d => null()
-    if (register_diag_field_low>MAX_NUM_DIAGNOSTICS) call MOM_error(FATAL, &
-         "MOM_diag_mediator, register_diag_field_low: " // &
-         "Too many diagnostics. Make MAX_NUM_DIAGNOSTICS bigger! "//trim(field_name))     
-    if    (axes%id .eq. diag%axesTL%id) then
-        diag%maskList(register_diag_field_low)%mask3d =>  diag%mask3dTL
-    elseif(axes%id .eq. diag%axesBL%id) then
-        diag%maskList(register_diag_field_low)%mask3d =>  diag%mask3dBuL
-    elseif(axes%id .eq. diag%axesCuL%id ) then
-        diag%maskList(register_diag_field_low)%mask3d =>  diag%mask3dCuL
-    elseif(axes%id .eq. diag%axesCvL%id) then
-        diag%maskList(register_diag_field_low)%mask3d =>  diag%mask3dCvL
-    elseif(axes%id .eq. diag%axesTi%id) then
-        diag%maskList(register_diag_field_low)%mask3d =>  diag%mask3dTi
-    elseif(axes%id .eq. diag%axesBi%id) then
-        diag%maskList(register_diag_field_low)%mask3d =>  diag%mask3dBui
-    elseif(axes%id .eq. diag%axesCui%id ) then
-        diag%maskList(register_diag_field_low)%mask3d =>  diag%mask3dCui
-    elseif(axes%id .eq. diag%axesCvi%id) then
-        diag%maskList(register_diag_field_low)%mask3d =>  diag%mask3dCvi
-!    else
-!       call MOM_error(FATAL, "MOM_diag_mediator:register_diag_field_low: " // &
-!            "unknown axes for diagnostic variable "//trim(field_name))     
-    endif
-  !2d masks
-  elseif(axes%rank .eq. 2) then
-    diag => axes%diag
-    diag%maskList(register_diag_field_low)%mask2d => null()
-    diag%maskList(register_diag_field_low)%mask3d => null()
-    if (register_diag_field_low>MAX_NUM_DIAGNOSTICS) call MOM_error(FATAL, &
-         "MOM_diag_mediator, register_diag_field_low: " // &
-         "Too many diagnostics. Make MAX_NUM_DIAGNOSTICS bigger! "//trim(field_name))     
-    if    (axes%id .eq. diag%axesT1%id) then
-        diag%maskList(register_diag_field_low)%mask2d =>  diag%mask2dT
-    elseif(axes%id .eq. diag%axesB1%id) then
-        diag%maskList(register_diag_field_low)%mask2d =>  diag%mask2dBu
-    elseif(axes%id .eq. diag%axesCu1%id) then
-        diag%maskList(register_diag_field_low)%mask2d =>  diag%mask2dCu
-    elseif(axes%id .eq. diag%axesCv1%id) then
-        diag%maskList(register_diag_field_low)%mask2d =>  diag%mask2dCv
-!    else
-!       call MOM_error(FATAL, "MOM_diag_mediator:register_diag_field_low: " // &
-!            "unknown axes for diagnostic variable "//trim(field_name))     
-    endif
-  elseif(axes%rank .ne. 1) then
-        call MOM_error(FATAL, "MOM_diag_mediator:register_diag_field_low: " // &
-             "unknown axes for diagnostic variable "//trim(field_name))          
-  endif
-  endif ! if (register_diag_field_low>-1)
+  register_scalar_field = primary_id
 
-end function register_diag_field_low
+end function register_scalar_field
 
 function register_static_field(module_name, field_name, axes, &
      long_name, units, missing_value, range, mask_variant, standard_name, &
@@ -910,23 +902,32 @@ function register_static_field(module_name, field_name, axes, &
   !  (in,opt)  interp_method  - no clue
   !  (in,opt)  tile_count     - no clue
 
-  character(len=240) :: mesg
   real :: MOM_missing_value
-  type(diag_ctrl), pointer :: diag
-  integer :: CMORid
+  type(diag_ctrl), pointer :: diag_cs
+  type(diag_type), pointer :: diag => null(), cmor_diag => null()
+  integer :: primary_id, fms_id, cmor_id
   character(len=256) :: posted_cmor_units, posted_cmor_standard_name, posted_cmor_long_name
 
-  MOM_missing_value = axes%diag%missing_value
+  MOM_missing_value = axes%diag_cs%missing_value
   if(present(missing_value)) MOM_missing_value = missing_value
 
-  register_static_field = register_static_field_fms(module_name, field_name, axes%handles, &
-       long_name=long_name, units=units, missing_value=MOM_missing_value, &
-       range=range, mask_variant=mask_variant, standard_name=standard_name, &
-       do_not_log=do_not_log, &
-       interp_method=interp_method, tile_count=tile_count)
+  diag_cs => axes%diag_cs
+  primary_id = -1
+  diag => null()
+  cmor_diag => null()
 
-  diag => axes%diag
-  CMORid = -1
+  fms_id = register_static_field_fms(module_name, field_name, axes%handles, &
+         long_name=long_name, units=units, missing_value=MOM_missing_value, &
+         range=range, mask_variant=mask_variant, standard_name=standard_name, &
+         do_not_log=do_not_log, &
+         interp_method=interp_method, tile_count=tile_count)
+  if (fms_id /= DIAG_FIELD_NOT_FOUND) then
+    primary_id = get_new_diag_id(diag_cs)
+    call alloc_diag_with_id(primary_id, diag_cs, diag)
+    call assert(associated(diag), 'register_static_field: diag allocation failed')
+    diag%fms_diag_id = fms_id
+  endif
+
   if (present(cmor_field_name)) then
     ! Fallback values for strings set to "not provided"
     posted_cmor_units = "not provided"
@@ -944,136 +945,23 @@ function register_static_field(module_name, field_name, axes, &
     if (present(cmor_standard_name)) posted_cmor_standard_name = cmor_standard_name
     if (present(cmor_long_name)) posted_cmor_long_name = cmor_long_name
 
-    CMORid = register_static_field_fms(module_name, cmor_field_name, axes%handles,             &
-      long_name=trim(posted_cmor_long_name), units=trim(posted_cmor_units),                    &
-      missing_value=MOM_missing_value, range=range, mask_variant=mask_variant,                 &
-      standard_name=trim(posted_cmor_standard_name), do_not_log=do_not_log,                    &
+    fms_id = register_static_field_fms(module_name, cmor_field_name, &
+      axes%handles, long_name=trim(posted_cmor_long_name), units=trim(posted_cmor_units), &
+      missing_value=MOM_missing_value, range=range, mask_variant=mask_variant,            &
+      standard_name=trim(posted_cmor_standard_name), do_not_log=do_not_log,               &
       interp_method=interp_method, tile_count=tile_count)
-  endif
-
-  ! If the diag_table contains both the normal field_name and CMOR name then we must
-  ! store both IDs
-  if (register_static_field>0) then
-    diag%CMORid(register_static_field) = CMORid
-  else ! but if only the CMOR name appears in the diag_table then just use that ID
-    register_static_field = CMORid
-    if (CMORid>0) diag%CMORid(CMORid) = -1
-  endif
-
-end function register_static_field
-
-function register_scalar_field(module_name, field_name, init_time, diag, &
-     long_name, units, missing_value, range, mask_variant, standard_name, &
-     verbose, do_not_log, err_msg, interp_method, tile_count, cmor_field_name, &
-     cmor_long_name, cmor_units, cmor_standard_name)
-  integer :: register_scalar_field
-  character(len=*), intent(in) :: module_name, field_name
-  type(time_type),  intent(in) :: init_time
-  type(diag_ctrl),  intent(inout) :: diag
-  character(len=*), optional, intent(in) :: long_name, units, standard_name
-  real,             optional, intent(in) :: missing_value, range(2)
-  logical,          optional, intent(in) :: mask_variant, verbose, do_not_log
-  character(len=*), optional, intent(out):: err_msg
-  character(len=*), optional, intent(in) :: interp_method
-  integer,          optional, intent(in) :: tile_count
-  character(len=*), optional, intent(in) :: cmor_field_name, cmor_long_name
-  character(len=*), optional, intent(in) :: cmor_units, cmor_standard_name
-
-  ! Output:    An integer handle for a diagnostic array.
-  ! Arguments: 
-  !  (in)      module_name   - name of this module, usually "ocean_model" or "ice_shelf_model".
-  !  (in)      field_name    - name of the diagnostic field.
-  !  (in)      init_time     - time at which a field is first available?
-  !  (inout)   diag          - structure used to regulate diagnostic output
-  !  (in,opt)  long_name     - long name of a field
-  !  (in,opt)  units         - units of a field
-  !  (in,opt)  missing_value - indicates missing values
-  !  (in,opt)  standard_name - standardized name associated with a field
-
-  ! Following params have yet to be used in MOM. 
-  !  (in,opt)  range         - valid range of a variable
-  !  (in,opt)  mask_variant  - If true a logical mask must be provided with post_data calls
-  !  (in,opt)  verbose       - If true, FMS is verbosed
-  !  (in,opt)  do_not_log    - If true, do not log something
-  !  (out,opt) err_msg       - character string into which an error message might be placed
-  !  (in,opt)  interp_method - no clue
-  !  (in,opt)  tile_count    - no clue
-
-  character(len=240) :: mesg
-  real :: MOM_missing_value
-  integer :: CMORid
-  !type(diag_ctrl), pointer :: diag
-  character(len=256) :: posted_cmor_units, posted_cmor_standard_name, posted_cmor_long_name
-
-  MOM_missing_value = diag%missing_value
-  if(present(missing_value)) MOM_missing_value = missing_value
-
-  register_scalar_field = register_diag_field_fms(module_name, field_name, &
-       init_time, long_name=long_name, units=units, missing_value=MOM_missing_value, &
-       range=range, standard_name=standard_name, &
-       do_not_log=do_not_log, err_msg=err_msg)
-
-  CMORid = -1
-  if (present(cmor_field_name)) then
-    ! Fallback values for strings set to "not provided"
-    posted_cmor_units = "not provided"
-    posted_cmor_standard_name = "not provided"
-    posted_cmor_long_name = "not provided"
-
-    ! If attributes are present for MOM variable names, use them first for the register_static_field 
-    ! call for CMOR verison of the variable
-    if (present(units)) posted_cmor_units = units
-    if (present(standard_name)) posted_cmor_standard_name = standard_name
-    if (present(long_name)) posted_cmor_long_name = long_name
-
-    ! If specified in the call to register_static_field, override attributes with the CMOR versions 
-    if (present(cmor_units)) posted_cmor_units = cmor_units
-    if (present(cmor_standard_name)) posted_cmor_standard_name = cmor_standard_name
-    if (present(cmor_long_name)) posted_cmor_long_name = cmor_long_name
-
-    CMORid = register_diag_field_fms(module_name, cmor_field_name, init_time,                       &
-       long_name=trim(posted_cmor_long_name), units=trim(posted_cmor_units),                        &
-       missing_value=MOM_missing_value, range=range, standard_name=trim(posted_cmor_standard_name), &
-       do_not_log=do_not_log, err_msg=err_msg)
-  endif
-
-  ! If the diag_table contains both the normal field_name and CMOR name then we must
-  ! store both IDs
-  if (register_scalar_field>0) then
-    diag%CMORid(register_scalar_field) = CMORid
-  else ! but if only the CMOR name appears in the diag_table then just use that ID
-    register_scalar_field = CMORid
-    if (CMORid>0) diag%CMORid(CMORid) = -1
-  endif
-
-  if (is_root_pe() .and. doc_unit > 0) then
-     if (register_scalar_field > 0) then
-        mesg = '"'//trim(module_name)//'", "'//trim(field_name)//'"  [Used]'
-     else
-        mesg = '"'//trim(module_name)//'", "'//trim(field_name)//'"  [Unused]'
-     endif
-     write(doc_unit, '(a)') trim(mesg)
-     if (present(long_name)) call describe_option("long_name", long_name)
-     if (present(units)) call describe_option("units", units)
-     if (present(standard_name)) call describe_option("standard_name", standard_name)
-  endif
-
-  if (present(cmor_field_name)) then
-    if (is_root_pe() .and. doc_unit > 0) then
-       if (CMORid > 0) then
-          mesg = '"'//trim(module_name)//'", "'//trim(cmor_field_name)//'"  [Used]'
-       else
-          mesg = '"'//trim(module_name)//'", "'//trim(cmor_field_name)//'"  [Unused]'
-       endif
-       write(doc_unit, '(a)') trim(mesg)
-       call describe_option("long_name", posted_cmor_long_name)
-       call describe_option("units", posted_cmor_units)
-       call describe_option("standard_name", posted_cmor_standard_name)
+    if (fms_id /= DIAG_FIELD_NOT_FOUND) then
+      if (primary_id == -1) then
+        primary_id = get_new_diag_id(diag_cs)
+      endif
+      call alloc_diag_with_id(primary_id, diag_cs, cmor_diag)
+      cmor_diag%fms_diag_id = fms_id
     endif
   endif
 
-end function register_scalar_field
+  register_static_field = primary_id
 
+end function register_static_field
 
 subroutine describe_option(opt_name, value)
   character(len=*), intent(in) :: opt_name, value
@@ -1087,11 +975,11 @@ subroutine describe_option(opt_name, value)
   write(doc_unit, '(a)') trim(mesg)
 end subroutine describe_option
 
-function ocean_register_diag(var_desc, G, diag, day)
+function ocean_register_diag(var_desc, G, diag_cs, day)
   integer :: ocean_register_diag
   type(vardesc),         intent(in) :: var_desc
   type(ocean_grid_type), intent(in) :: G
-  type(diag_ctrl),       intent(in) :: diag
+  type(diag_ctrl),  intent(in) :: diag_cs
   type(time_type),       intent(in) :: day
 
   type(axesType) :: axes
@@ -1103,23 +991,23 @@ function ocean_register_diag(var_desc, G, diag, day)
     case ("L")
       select case (var_desc%hor_grid)
         case ("q")
-          axes = diag%axesBL
+          axes = diag_cs%axesBL
         case ("h")
-          axes = diag%axesTL
+          axes = diag_cs%axesTL
         case ("u")
-          axes = diag%axesCuL
+          axes = diag_cs%axesCuL
         case ("v")
-          axes = diag%axesCvL
+          axes = diag_cs%axesCvL
         case ("Bu")
-          axes = diag%axesBL
+          axes = diag_cs%axesBL
         case ("T")
-          axes = diag%axesTL
+          axes = diag_cs%axesTL
         case ("Cu")
-          axes = diag%axesCuL
+          axes = diag_cs%axesCuL
         case ("Cv")
-          axes = diag%axesCvL
+          axes = diag_cs%axesCvL
         case ("z")
-          axes = diag%axeszL
+          axes = diag_cs%axeszL
         case default
           call MOM_error(FATAL, "ocean_register_diag: " // &
               "unknown hor_grid component "//trim(var_desc%hor_grid))
@@ -1128,23 +1016,23 @@ function ocean_register_diag(var_desc, G, diag, day)
     case ("i")
       select case (var_desc%hor_grid)
         case ("q")
-          axes = diag%axesBi
+          axes = diag_cs%axesBi
         case ("h")
-          axes = diag%axesTi
+          axes = diag_cs%axesTi
         case ("u")
-          axes = diag%axesCui
+          axes = diag_cs%axesCui
         case ("v")
-          axes = diag%axesCvi
+          axes = diag_cs%axesCvi
         case ("Bu")
-          axes = diag%axesBi
+          axes = diag_cs%axesBi
         case ("T")
-          axes = diag%axesTi
+          axes = diag_cs%axesTi
         case ("Cu")
-          axes = diag%axesCui
+          axes = diag_cs%axesCui
         case ("Cv")
-          axes = diag%axesCvi
+          axes = diag_cs%axesCvi
         case ("z")
-          axes = diag%axeszi
+          axes = diag_cs%axeszi
         case default
           call MOM_error(FATAL, "ocean_register_diag: " // &
             "unknown hor_grid component "//trim(var_desc%hor_grid))
@@ -1153,21 +1041,21 @@ function ocean_register_diag(var_desc, G, diag, day)
     case ("1")
       select case (var_desc%hor_grid)
         case ("q")
-          axes = diag%axesB1
+          axes = diag_cs%axesB1
         case ("h")
-          axes = diag%axesT1
+          axes = diag_cs%axesT1
         case ("u")
-          axes = diag%axesCu1
+          axes = diag_cs%axesCu1
         case ("v")
-          axes = diag%axesCv1
+          axes = diag_cs%axesCv1
         case ("Bu")
-          axes = diag%axesB1
+          axes = diag_cs%axesB1
         case ("T")
-          axes = diag%axesT1
+          axes = diag_cs%axesT1
         case ("Cu")
-          axes = diag%axesCu1
+          axes = diag_cs%axesCu1
         case ("Cv")
-          axes = diag%axesCv1
+          axes = diag_cs%axesCv1
         case default
           call MOM_error(FATAL, "ocean_register_diag: " // &
             "unknown hor_grid component "//trim(var_desc%hor_grid))
@@ -1184,16 +1072,16 @@ function ocean_register_diag(var_desc, G, diag, day)
 
 end function ocean_register_diag
 
-subroutine diag_mediator_init(G, param_file, diag, err_msg)
+subroutine diag_mediator_init(G, param_file, diag_cs, err_msg)
   type(ocean_grid_type),      intent(inout) :: G
   type(param_file_type),      intent(in)    :: param_file
-  type(diag_ctrl),            intent(inout) :: diag
+  type(diag_ctrl),            intent(inout) :: diag_cs
   character(len=*), optional, intent(out)   :: err_msg
 
   ! This subroutine initializes the diag_mediator and the diag_manager.
   ! The grid type should have its dimensions set by this point, but it
   ! is not necessary that the metrics and axis labels be set up yet.
-  integer :: ios
+  integer :: ios, i
   logical :: opened, new_file
   character(len=8)   :: this_pe
   character(len=240) :: doc_file, doc_file_dflt
@@ -1201,11 +1089,18 @@ subroutine diag_mediator_init(G, param_file, diag, err_msg)
 
   call diag_manager_init(err_msg=err_msg)
 
-  diag%is = G%isc - (G%isd-1) ; diag%ie = G%iec - (G%isd-1)
-  diag%js = G%jsc - (G%jsd-1) ; diag%je = G%jec - (G%jsd-1)
-  diag%isd = G%isd ; diag%ied = G%ied ; diag%jsd = G%jsd ; diag%jed = G%jed
+  ! Allocate and initialise list of all diagnostics (and variants)
+  allocate(diag_cs%diags(DIAG_ALLOC_CHUNK_SIZE))
+  diag_cs%next_free_diag_id = 1
+  do i=1, DIAG_ALLOC_CHUNK_SIZE
+    diag_cs%diags(i)%in_use = .false.
+    diag_cs%diags(i)%next => null()
+  enddo
 
-  diag%CMORid(:) = -1
+  diag_cs%is = G%isc - (G%isd-1) ; diag_cs%ie = G%iec - (G%isd-1)
+  diag_cs%js = G%jsc - (G%jsd-1) ; diag_cs%je = G%jec - (G%jsd-1)
+  diag_cs%isd = G%isd ; diag_cs%ied = G%ied
+  diag_cs%jsd = G%jsd ; diag_cs%jed = G%jed
 
   if (is_root_pe()) then
     write(this_pe,'(i6.6)') PE_here()
@@ -1241,44 +1136,44 @@ subroutine diag_mediator_init(G, param_file, diag, err_msg)
 
 end subroutine diag_mediator_init
 
-subroutine diag_masks_set(G, missing_value, diag)
+subroutine diag_masks_set(G, missing_value, diag_cs)
 ! Setup the 2d masks for diagnostics
   type(ocean_grid_type), target, intent(in) :: G
   real,                          intent(in) :: missing_value
-  type(diag_ctrl),               pointer    :: diag
+  type(diag_ctrl),          pointer    :: diag_cs
   ! Local variables
   integer :: k
 
-  diag%mask2dT => G%mask2dT
-  diag%mask2dBu=> G%mask2dBu
-  diag%mask2dCu=> G%mask2dCu
-  diag%mask2dCv=> G%mask2dCv
-  allocate(diag%mask3dTL(G%isd:G%ied,G%jsd:G%jed,1:G%ke)) 
-  allocate(diag%mask3dBuL(G%IsdB:G%IedB,G%JsdB:G%JedB,1:G%ke)) 
-  allocate(diag%mask3dCuL(G%IsdB:G%IedB,G%jsd:G%jed,1:G%ke)) 
-  allocate(diag%mask3dCvL(G%isd:G%ied,G%JsdB:G%JedB,1:G%ke)) 
+  diag_cs%mask2dT => G%mask2dT
+  diag_cs%mask2dBu=> G%mask2dBu
+  diag_cs%mask2dCu=> G%mask2dCu
+  diag_cs%mask2dCv=> G%mask2dCv
+  allocate(diag_cs%mask3dTL(G%isd:G%ied,G%jsd:G%jed,1:G%ke))
+  allocate(diag_cs%mask3dBuL(G%IsdB:G%IedB,G%JsdB:G%JedB,1:G%ke))
+  allocate(diag_cs%mask3dCuL(G%IsdB:G%IedB,G%jsd:G%jed,1:G%ke))
+  allocate(diag_cs%mask3dCvL(G%isd:G%ied,G%JsdB:G%JedB,1:G%ke))
   do k = 1,G%ke
-    diag%mask3dTL(:,:,k)  = diag%mask2dT (:,:)
-    diag%mask3dBuL(:,:,k) = diag%mask2dBu(:,:)
-    diag%mask3dCuL(:,:,k) = diag%mask2dCu(:,:)
-    diag%mask3dCvL(:,:,k) = diag%mask2dCv(:,:)
+    diag_cs%mask3dTL(:,:,k)  = diag_cs%mask2dT (:,:)
+    diag_cs%mask3dBuL(:,:,k) = diag_cs%mask2dBu(:,:)
+    diag_cs%mask3dCuL(:,:,k) = diag_cs%mask2dCu(:,:)
+    diag_cs%mask3dCvL(:,:,k) = diag_cs%mask2dCv(:,:)
   enddo
-  allocate(diag%mask3dTi(G%isd:G%ied,G%jsd:G%jed,1:G%ke+1)) 
-  allocate(diag%mask3dBui(G%IsdB:G%IedB,G%JsdB:G%JedB,1:G%ke+1)) 
-  allocate(diag%mask3dCui(G%IsdB:G%IedB,G%jsd:G%jed,1:G%ke+1)) 
-  allocate(diag%mask3dCvi(G%isd:G%ied,G%JsdB:G%JedB,1:G%ke+1)) 
+  allocate(diag_cs%mask3dTi(G%isd:G%ied,G%jsd:G%jed,1:G%ke+1))
+  allocate(diag_cs%mask3dBui(G%IsdB:G%IedB,G%JsdB:G%JedB,1:G%ke+1))
+  allocate(diag_cs%mask3dCui(G%IsdB:G%IedB,G%jsd:G%jed,1:G%ke+1))
+  allocate(diag_cs%mask3dCvi(G%isd:G%ied,G%JsdB:G%JedB,1:G%ke+1))
   do k = 1,G%ke+1
-    diag%mask3dTi(:,:,k)  = diag%mask2dT (:,:)
-    diag%mask3dBui(:,:,k) = diag%mask2dBu(:,:)
-    diag%mask3dCui(:,:,k) = diag%mask2dCu(:,:)
-    diag%mask3dCvi(:,:,k) = diag%mask2dCv(:,:)
+    diag_cs%mask3dTi(:,:,k)  = diag_cs%mask2dT (:,:)
+    diag_cs%mask3dBui(:,:,k) = diag_cs%mask2dBu(:,:)
+    diag_cs%mask3dCui(:,:,k) = diag_cs%mask2dCu(:,:)
+    diag_cs%mask3dCvi(:,:,k) = diag_cs%mask2dCv(:,:)
   enddo
 
-  diag%missing_value = missing_value
- 
+  diag_cs%missing_value = missing_value
+
 end subroutine diag_masks_set
 
-subroutine diag_mediator_close_registration( )
+subroutine diag_mediator_close_registration()
 
   if (doc_unit > -1) then
     close(doc_unit) ; doc_unit = -2
@@ -1319,5 +1214,152 @@ function i2s(a,n_in)
     enddo
     i2s = adjustl(i2s)
 end function i2s
+
+subroutine set_diag_mask(diag, diag_cs, axes)
+  ! Associate a mask with the a diagnostic based on the axes info.
+
+  type(diag_ctrl), intent(inout) :: diag_cs
+  type(diag_type), pointer, intent(out) :: diag
+  type(axesType),   intent(in) :: axes
+
+  if (axes%rank .eq. 3) then
+    diag%mask2d => null()
+    diag%mask3d => null()
+    if    (axes%id .eq. diag_cs%axesTL%id) then
+        diag%mask3d =>  diag_cs%mask3dTL
+    elseif(axes%id .eq. diag_cs%axesBL%id) then
+        diag%mask3d =>  diag_cs%mask3dBuL
+    elseif(axes%id .eq. diag_cs%axesCuL%id ) then
+        diag%mask3d =>  diag_cs%mask3dCuL
+    elseif(axes%id .eq. diag_cs%axesCvL%id) then
+        diag%mask3d =>  diag_cs%mask3dCvL
+    elseif(axes%id .eq. diag_cs%axesTi%id) then
+        diag%mask3d =>  diag_cs%mask3dTi
+    elseif(axes%id .eq. diag_cs%axesBi%id) then
+        diag%mask3d =>  diag_cs%mask3dBui
+    elseif(axes%id .eq. diag_cs%axesCui%id ) then
+        diag%mask3d =>  diag_cs%mask3dCui
+    elseif(axes%id .eq. diag_cs%axesCvi%id) then
+        diag%mask3d =>  diag_cs%mask3dCvi
+    endif
+
+    !call assert(associated(diag%mask3d), "MOM_diag_mediator.F90: Invalid 3d axes id")
+  elseif(axes%rank .eq. 2) then
+    diag%mask2d => null()
+    diag%mask3d => null()
+    if (axes%id .eq. diag_cs%axesT1%id) then
+        diag%mask2d =>  diag_cs%mask2dT
+    elseif(axes%id .eq. diag_cs%axesB1%id) then
+        diag%mask2d =>  diag_cs%mask2dBu
+    elseif(axes%id .eq. diag_cs%axesCu1%id) then
+        diag%mask2d =>  diag_cs%mask2dCu
+    elseif(axes%id .eq. diag_cs%axesCv1%id) then
+        diag%mask2d =>  diag_cs%mask2dCv
+    endif
+
+    !call assert(associated(diag%mask2d), "MOM_diag_mediator.F90: Invalid 2d axes id")
+  endif
+
+end subroutine set_diag_mask
+
+! Allocate a new diagnostic id, it may be necessary to expand the diagnostics
+! array.
+function get_new_diag_id(diag_cs)
+
+  integer :: get_new_diag_id
+  type(diag_ctrl), intent(inout) :: diag_cs
+  ! Arguments:
+  !  (inout)   diag_cs  - diagnostics control structure
+
+  type(diag_type), dimension(:), allocatable :: tmp
+  integer :: i
+
+  if (diag_cs%next_free_diag_id > size(diag_cs%diags)) then
+    call assert(diag_cs%next_free_diag_id - size(diag_cs%diags) == 1, &
+                'get_new_diag_id: inconsistent diag id')
+
+    ! Increase the size of diag_cs%diags and copy data over.
+    allocate(tmp(size(diag_cs%diags) + DIAG_ALLOC_CHUNK_SIZE))
+    tmp(1:size(diag_cs%diags)) = diag_cs%diags
+    call move_alloc(tmp, diag_cs%diags)
+    call assert(size(diag_cs%diags) == size(tmp), &
+                'get_new_diag_id: move_alloc() returned bad array size')
+
+    ! Initialise new part of the diag array.
+    do i=diag_cs%next_free_diag_id, size(diag_cs%diags)
+      diag_cs%diags(i)%in_use = .false.
+      diag_cs%diags(i)%next => null()
+    enddo
+  endif
+
+  get_new_diag_id = diag_cs%next_free_diag_id
+  diag_cs%next_free_diag_id = diag_cs%next_free_diag_id + 1
+
+end function get_new_diag_id
+
+! Make a new diagnostic. Either use memory which is in the array of 'primary'
+! diagnostics, or if that is in use, insert it to the list of secondary diags.
+subroutine alloc_diag_with_id(diag_id, diag_cs, diag)
+  integer, intent(in) :: diag_id
+  type(diag_ctrl), target, intent(inout) :: diag_cs
+  type(diag_type), pointer, intent(out) :: diag
+
+  ! Arguments:
+  !  (in)      diag_id  - new id for the diag.
+  !  (inout)   diag_cs  - structure used to regulate diagnostic output
+  !  (inout)   diag     - structure representing a diagnostic
+
+  type(diag_type), pointer :: tmp
+
+  if (.not. diag_cs%diags(diag_id)%in_use) then
+    diag => diag_cs%diags(diag_id)
+  else
+    allocate(diag)
+    tmp => diag_cs%diags(diag_id)%next
+    diag_cs%diags(diag_id)%next => diag
+    diag%next => tmp
+  endif
+  diag%in_use = .true.
+
+end subroutine alloc_diag_with_id
+
+! Log a diagnostic to the available diagnostics file.
+subroutine log_available_diag(used, module_name, field_name, long_name, units, standard_name)
+
+  logical,          intent(in) :: used
+  character(len=*), intent(in) :: module_name, field_name
+  character(len=*), optional, intent(in) :: long_name, units, standard_name
+  character(len=240) :: mesg
+
+  ! Arguments:
+  !  (in)      used - whether or not this diagnostic is being used, i.e. appears in the diag_table
+  !  (in)      module_name   - name of this module, usually "ocean_model" or "ice_shelf_model".
+  !  (in)      field_name    - name of the diagnostic field
+  !  (in,opt)  long_name     - long name of a field
+  !  (in,opt)  units         - units of a field
+  !  (in,opt)  standard_name - standardized name associated with a field
+
+  if (used) then
+    mesg = '"'//trim(module_name)//'", "'//trim(field_name)//'"  [Used]'
+  else
+    mesg = '"'//trim(module_name)//'", "'//trim(field_name)//'"  [Unused]'
+  endif
+  write(doc_unit, '(a)') trim(mesg)
+  if (present(long_name)) call describe_option("long_name", long_name)
+  if (present(units)) call describe_option("units", units)
+  if (present(standard_name)) call describe_option("standard_name", standard_name)
+
+end subroutine log_available_diag
+
+subroutine assert(logical_arg, msg)
+
+  logical, intent(in) :: logical_arg
+  character(len=*), intent(in) :: msg
+
+  if (.not. logical_arg) then
+    call MOM_error(FATAL, msg)
+  endif
+
+end subroutine assert
 
 end module MOM_diag_mediator
