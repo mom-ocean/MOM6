@@ -4,7 +4,7 @@ module MOM_neutral_diffusion
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock, only : CLOCK_MODULE, CLOCK_ROUTINE
 use MOM_diag_mediator, only : diag_ctrl, time_type
-use MOM_EOS, only : calculate_compress, EOS_type
+use MOM_EOS, only : EOS_type, calculate_compress, calculate_density_derivs
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
@@ -14,6 +14,7 @@ implicit none ; private
 #include <MOM_memory.h>
 
 public neutral_diffusion, neutral_diffusion_init, neutral_diffusion_end
+public neutral_diffusion_calc_coeffs
 public neutralDiffusionUnitTests
 
 type, public :: neutral_diffusion_CS ; private
@@ -40,8 +41,8 @@ subroutine neutral_diffusion(nk, Dl, Dr, hl, hr, Tl, Tr, Sl, Sr, EOS, H_to_Pa)
   type(EOS_type),      pointer       :: EOS !< Equation of state structure
   real,                intent(in)    :: H_to_Pa !< Converts h units to Pascals
   ! Local variables
-  real, dimension(nk+1) :: Pil !< Interface pressures of left column (Pa)
-  real, dimension(nk+1) :: Pir !< Interface pressures of right column (Pa)
+  real, dimension(nk+1) :: Pil ! Interface pressures of left column (Pa)
+  real, dimension(nk+1) :: Pir ! Interface pressures of right column (Pa)
   real, dimension(nk+1) :: Til !< Interface potential temperature of left column (degC)
   real, dimension(nk+1) :: Tir !< Interface potential temperature of right column (degC)
   real, dimension(nk+1) :: Sil !< Interface salinity of left column (ppt)
@@ -56,6 +57,10 @@ subroutine neutral_diffusion(nk, Dl, Dr, hl, hr, Tl, Tr, Sl, Sr, EOS, H_to_Pa)
   real, dimension(2*nk+1) :: dPr !< Projected thickness of union layers in right column (Pa)
   integer, dimension(2*nk+1) :: Kl !< Left column indexes of projected union layers
   integer, dimension(2*nk+1) :: Kr !< Right column indexes of projected union layers
+  real, dimension(nk+1) :: dRdTl !< Interface thermal expansion coefficient of left column (kg/m3/degC)
+  real, dimension(nk+1) :: dRdSl !< Interface haline expandion coefficient of left column (kg/m3/ppt)
+  real, dimension(nk+1) :: dRdTr !< Interface thermal expansion coefficient of right column (kg/m3/degC)
+  real, dimension(nk+1) :: dRdSr !< Interface haline expandion coefficient of right column (kg/m3/ppt)
   integer :: k
 
   ! Find interface positions in meters for each column (ultimately needed for equation of state)
@@ -68,20 +73,29 @@ subroutine neutral_diffusion(nk, Dl, Dr, hl, hr, Tl, Tr, Sl, Sr, EOS, H_to_Pa)
   ! Create interface T and S for each column
   call interface_TS(nk, Tl, Sl, Til, Sil)
   call interface_TS(nk, Tr, Sr, Tir, Sir)
-  
+
   ! Calculate interface densities using the interface pressure for each column (in-situ)
   ! and the compressibility d/dp rho.
   call calculate_compress(Til, Sil, Pil, rhoil, drdpil, 1, nk+1, EOS)
   call calculate_compress(Tir, Sir, Pir, rhoir, drdpir, 1, nk+1, EOS)
 
-  ! For each interface of the right column, using the density of that interface referenced
-  ! to that local pressure (isoneutral), find the position within the left column where the
-  ! potential density referenced to the same pressure equals that of the right interface.
-  call projected_positions(nk, rhoir, Pir, rhoil, Pil, drdpil, PirL)
   ! For each interface of the left column, using the density of that interface referenced
   ! to that local pressure (isoneutral), find the position within the right column where the
   ! potential density referenced to the same pressure equals that of the left interface.
   call projected_positions(nk, rhoil, Pil, rhoir, Pir, drdpir, PilR)
+  ! For each interface of the right column, using the density of that interface referenced
+  ! to that local pressure (isoneutral), find the position within the left column where the
+  ! potential density referenced to the same pressure equals that of the right interface.
+  call projected_positions(nk, rhoir, Pir, rhoil, Pil, drdpil, PirL)
+
+  ! For each interface on the left column, calculate the expansion coefficients
+  ! that will be used to calculate potential density differences referenced to
+  ! the left column interfaces.
+  call calculate_density_derivs(Til, Sil, Pil, dRdTl, dRdSl, 1, nk+1, EOS)
+  ! For each interface on the right column, calculate the expansion coefficients
+  ! that will be used to calculate potential density differences referenced to
+  ! the right column interfaces.
+  call calculate_density_derivs(Tir, Sir, Pir, dRdTr, dRdSr, 1, nk+1, EOS)
 
   ! Find corresponding indexes and thickness in the position space of the left column for
   ! each union layer
@@ -111,6 +125,64 @@ subroutine interface_TS(nk, T, S, Ti, Si)
   Ti(nk+1) = T(nk) ; Si(nk+1) = S(nk)
 
 end subroutine interface_TS
+
+!> Returns position within right column of neutral surface corresponding to each left-column interface
+subroutine find_neutral_surface_position(nk, Tl, Sl, dRdT, dRdS, Tr, Sr, Pr, Po)
+  integer,               intent(in)    :: nk   !< Number of levels
+  real, dimension(nk+1), intent(in)    :: Tl   !< Left-column interface potential temperature (degC)
+  real, dimension(nk+1), intent(in)    :: Sl   !< Left-column interface salinity (ppt)
+  real, dimension(nk+1), intent(in)    :: dRdT !< Left-column dRho/dT (kg/m3/degC)
+  real, dimension(nk+1), intent(in)    :: dRdS !< Left-column dRho/dS (kg/m3/ppt)
+  real, dimension(nk+1), intent(in)    :: Tr   !< Right-column interface potential temperature (degC)
+  real, dimension(nk+1), intent(in)    :: Sr   !< Right-column interface salinity (ppt)
+  real, dimension(nk+1), intent(in)    :: Pr   !< Right-column interface pressure (Pa)
+  real, dimension(nk+1), intent(inout) :: Po   !< Position of neutral surface (Pa)
+  ! Local variables
+  integer kl, kr, krm1
+  real dRkr, dRkrm1, Prm1, wght1, wght2, Pint
+
+  ! Initialize variables for the search
+  kr = 1
+  Prm1 = Pr(1)
+
+  ! For each left-column interface
+  do kl = 1, nk+1
+    ! Search for the first interface that is denser than the target
+    krm1 = max(kr-1, 1)
+    dRkrm1 = dRdT(kl) * ( Tr(krm1) - Tl(kl) ) + dRdS(kl) * ( Sr(krm1) - Sl(kl) ) !  Potential density difference, (kr-1) - kl
+    dRkr = dRdT(kl) * ( Tr(kr) - Tl(kl) ) + dRdS(kl) * ( Sr(kr) - Sl(kl) ) !  Potential density difference, kr - kl
+    kr_search: do while ( dRkr<=0. .and. (kr <= nk+1) )
+      ! The potential density at kr is lighter than the target so the interface should be below Pr(kr) so we increment kr
+      Prm1 = Pr(kr)
+      dRkrm1 = dRkr
+      kr = kr + 1
+      dRkr = dRdT(kl) * ( Tr(kr) - Tl(kl) ) + dRdS(kl) * ( Sr(kr) - Sl(kl) ) !  Potential density difference, kr - kl
+    enddo kr_search
+    ! At this point:
+    !  1) If kr=1 we are at the surface and dRkr>0 but dRkrm1 could be either sign;
+    !  2) In the interior, dRkrm1<=0. and dRkr>0;
+    !  3) At the bottom,  dRkr<0.
+    ! Note that dRkrm1 + dRkr >0 unless this next test fails.
+    if ( dRkrm1 > dRkr ) stop 'Houston, we have a problem! dRkrm1 >= dRkr'
+    ! Linearly interpolate for the position between Pr(kr-1) and Pr(kr)
+    ! The following is an accurate way to do Pint = wght1 * Prm1 + wght2 * Pr(kr)
+    ! Ostensibly wght1 + wght2 = 1.
+    wght1 = -dRkrm1 / ( dRkrm1 + dRkr )
+    wght2 = dRkr / ( dRkrm1 + dRkr )
+    if ( wght1 < 0.5 ) then
+     Pint = Prm1 + max( wght1, 0. ) * ( Pr(kr) - Prm1 )
+    elseif ( wght2 < 0.5 ) then
+     Pint = Pr(kr) + max( wght2, 0. ) * ( Prm1 - Pr(kr) )
+    else
+     Pint = 0.5 * ( Prm1 + Pr(kr) )
+    endif
+
+    if ( Pint < Prm1 ) stop 'Houston, we have a problem! Pint < Pr(kr-1)'
+    if ( Pint > Pr(kr) ) stop 'Houston, we have a problem! Pint > Pr(kr)'
+    Po(kl) = Pint
+  enddo
+
+end subroutine find_neutral_surface_position
 
 !> Returns position within left column of right column in-situ densities
 subroutine projected_positions(nk, rhoir, Pir, rhoil, Pil, drdpil, Po)
@@ -220,7 +292,7 @@ subroutine projected_positions(nk, rhoir, Pir, rhoil, Pil, drdpil, Po)
     P = max(Po_last, P) ! Avoid possible tangles
     Po(kr) = P
     Po_last = P
- 
+
   enddo ! kr
 
 end subroutine projected_positions
@@ -347,6 +419,14 @@ subroutine neutral_diffusion_init(Time, G, param_file, diag, CS)
 !                "The background along-isopycnal tracer diffusivity.", &
 !                units="m2 s-1", default=0.0)
 end subroutine neutral_diffusion_init
+
+!> Calculates remapping factors for u/v columns used to map adjoining columns to
+!! shared coordinate space
+subroutine neutral_diffusion_calc_coeffs(G, CS)
+  type(ocean_grid_type),    intent(in)    :: G  !< Ocean grid structure
+  type(neutral_diffusion_CS), pointer     :: CS !< Neutral slopes structure
+
+end subroutine neutral_diffusion_calc_coeffs
 
 subroutine neutral_diffusion_end(CS)
   type(neutral_diffusion_CS), pointer :: CS
