@@ -952,7 +952,7 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, CS, TKE_to_Kd, maxT
   ! Simple but coordinate-independent estimate of Kd/TKE
   if (CS%simple_TKE_to_Kd) then
     do k=1,nz ; do i=is,ie
-      hN2pO2 = h(i,j,k) * ( N2_lay(i,k) + Omega2 ) ! Units of m s-2.
+      hN2pO2 = ( G%H_to_m * h(i,j,k) ) * ( N2_lay(i,k) + Omega2 ) ! Units of m s-2.
       if (hN2pO2>0.) then
         TKE_to_Kd(i,k) = 1./ hN2pO2 ! Units of s2 m-1.
       else; TKE_to_Kd(i,k) = 0.; endif
