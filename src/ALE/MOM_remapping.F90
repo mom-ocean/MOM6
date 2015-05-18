@@ -1166,21 +1166,28 @@ logical function remappingUnitTests()
   real, allocatable, dimension(:,:) :: ppoly0_E, ppoly0_S, ppoly0_coefficients
   integer :: i
   real :: err
+  logical :: thisTest
 
   write(*,*) '===== MOM_remapping: remappingUnitTests =================='
   remappingUnitTests = .false. ! Normally return false
 
+  thisTest = .false.
   call buildGridFromH(n0, h0, x0)
   do i=1,n0+1
     err=x0(i)-0.75*real(i-1)
-    if (abs(err)>real(i-1)*epsilon(err)) remappingUnitTests = .true.
+    if (abs(err)>real(i-1)*epsilon(err)) thisTest = .true.
   enddo
+  if (thisTest) write(*,*) 'remappingUnitTests: Failed buildGridFromH() 1'
+  remappingUnitTests = remappingUnitTests .or. thisTest
   call buildGridFromH(n1, h1, x1)
   do i=1,n1+1
     err=x1(i)-real(i-1)
-    if (abs(err)>real(i-1)*epsilon(err)) remappingUnitTests = .true.
+    if (abs(err)>real(i-1)*epsilon(err)) thisTest = .true.
   enddo
+  if (thisTest) write(*,*) 'remappingUnitTests: Failed buildGridFromH() 2'
+  remappingUnitTests = remappingUnitTests .or. thisTest
 
+  thisTest = .false.
   call initialize_remapping(n0, 'PPM_H4', CS)
   write(*,*) 'h0 (test data)'
   call dumpGrid(n0,h0,x0,u0)
@@ -1188,12 +1195,15 @@ logical function remappingUnitTests()
   call dzFromH1H2( n0, h0, n1, h1, dx1 )
   call remapping_core( CS, n0, h0, u0, n1, dx1, u1 )
   do i=1,n1
-    err=u1(i)-8./3.*(0.5*real(1+n1)-real(i))
-    if (abs(err)>epsilon(err)) remappingUnitTests = .true.
+    err=u1(i)-(8./3.)*(0.5*real(1+n1)-real(i))
+    if (abs(err)>real(n1-1)*epsilon(err)) thisTest = .true.
   enddo
   write(*,*) 'h1 (by projection)'
   call dumpGrid(n1,h1,x1,u1)
+  if (thisTest) write(*,*) 'remappingUnitTests: Failed remapping_core()'
+  remappingUnitTests = remappingUnitTests .or. thisTest
 
+  thisTest = .false.
   allocate(ppoly0_E(n0,2))
   allocate(ppoly0_S(n0,2))
   allocate(ppoly0_coefficients(n0,CS%degree+1))
@@ -1210,9 +1220,12 @@ logical function remappingUnitTests()
                           n1, h1, INTEGRATION_PPM, u1 )
   do i=1,n1
     err=u1(i)-8./3.*(0.5*real(1+n1)-real(i))
-    if (abs(err)>2.*epsilon(err)) remappingUnitTests = .true.
+    if (abs(err)>2.*epsilon(err)) thisTest = .true.
   enddo
+  if (thisTest) write(*,*) 'remappingUnitTests: Failed remapByProjection()'
+  remappingUnitTests = remappingUnitTests .or. thisTest
 
+  thisTest = .false.
   u1(:) = 0.
   call remapByDeltaZ( n0, h0, u0, ppoly0_E, ppoly0_coefficients, &
                       n1, x1-x0(1:n1+1), &
@@ -1222,9 +1235,12 @@ logical function remappingUnitTests()
   hn1=hn1-h1
   do i=1,n1
     err=u1(i)-8./3.*(0.5*real(1+n1)-real(i))
-    if (abs(err)>2.*epsilon(err)) remappingUnitTests = .true.
+    if (abs(err)>2.*epsilon(err)) thisTest = .true.
   enddo
+  if (thisTest) write(*,*) 'remappingUnitTests: Failed remapByDeltaZ() 1'
+  remappingUnitTests = remappingUnitTests .or. thisTest
 
+  thisTest = .false.
   call buildGridFromH(n2, h2, x2)
   dx2(1:n0+1) = x2(1:n0+1) - x0
   dx2(n0+2:n2+1) = x2(n0+2:n2+1) - x0(n0+1)
@@ -1238,8 +1254,10 @@ logical function remappingUnitTests()
 
   do i=1,n2
     err=u2(i)-8./6.*(0.5*real(1+n2)-real(i))
-    if (abs(err)>2.*epsilon(err)) remappingUnitTests = .true.
+    if (abs(err)>2.*epsilon(err)) thisTest = .true.
   enddo
+  if (thisTest) write(*,*) 'remappingUnitTests: Failed remapByDeltaZ() 2'
+  remappingUnitTests = remappingUnitTests .or. thisTest
 
   deallocate(ppoly0_E, ppoly0_S, ppoly0_coefficients)
 
