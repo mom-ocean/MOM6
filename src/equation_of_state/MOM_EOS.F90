@@ -43,7 +43,8 @@ implicit none ; private
 public calculate_compress, calculate_density, query_compressible
 public calculate_density_derivs, calculate_2_densities
 public calculate_specific_vol_derivs
-public EOS_init, EOS_end
+public EOS_init, EOS_end, EOS_allocate
+public EOS_use_linear
 public int_density_dz, int_specific_vol_dp
 public int_density_dz_generic_plm, int_density_dz_generic_ppm
 public int_density_dz_generic_plm_analytic
@@ -518,13 +519,9 @@ subroutine int_density_dz(T, S, z_t, z_b, rho_ref, rho_0, G_e, B, EOS, &
 
 end subroutine int_density_dz
 
-function query_compressible(EOS)
-  type(EOS_type),        pointer    :: EOS
-  logical :: query_compressible
-! Argument:  EOS - the equation of state type.
-!
-!  This function indicates whether an equation of state with nonzero
-! compressibility (i.e., drho/dp) is being used.
+!> Returns true if the equation of state is compressible (i.e. has pressure dependence)
+logical function query_compressible(EOS)
+  type(EOS_type), pointer :: EOS !< Equation of state structure
 
   if (.not.associated(EOS)) call MOM_error(FATAL, &
     "query_compressible called with an unassociated EOS_type EOS.")
@@ -532,25 +529,16 @@ function query_compressible(EOS)
   query_compressible = EOS%compressible
 end function query_compressible
 
+!> Initializes EOS_type by allocating and reading parameters
 subroutine EOS_init(param_file, EOS)
-  type(param_file_type), intent(in) :: param_file
-  type(EOS_type),        pointer    :: EOS
-! *====================================================================*
-! *  (in)      param_file  - parameter file                            *
-! *  (out)     EOS - equation of state type                            *
-! *====================================================================*
-! *  This subroutine reads the EQN_OF_STATE parameter from param_file  *
-! *  and sets EOS%form_of_EOS to the appropriate integer that selects  *
-! *  the equation of state in the other subroutines in this module.    *
-! *  in the case of a linear equation of state, it also sets the       *
-! *  run-time parseable parameters of the equation of state.           *
-! *====================================================================*
-! This include declares and sets the variable "version".
+  type(param_file_type), intent(in) :: param_file !< Parameter file structure
+  type(EOS_type),        pointer    :: EOS !< Equation of state structure
+  ! Local variables
 #include "version_variable.h"
   character(len=40)  :: mod = "MOM_EOS" ! This module's name.
   character(len=40)  :: tmpstr
 
-  if (.not.associated(EOS)) allocate(EOS)
+  if (.not.associated(EOS)) call EOS_allocate(EOS)
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mod, version)
@@ -627,17 +615,44 @@ subroutine EOS_init(param_file, EOS)
 
 end subroutine EOS_init
 
+!> Allocates EOS_type
+subroutine EOS_allocate(EOS)
+  type(EOS_type), pointer :: EOS !< Equation of state structure
+
+  if (.not.associated(EOS)) allocate(EOS)
+end subroutine EOS_allocate
+
+!> Deallocates EOS_type
 subroutine EOS_end(EOS)
-  type(EOS_type), pointer :: EOS
-! *====================================================================*
-! *  (in/out)     EOS - equation of state identifier                   *
-! *====================================================================*
-! *  This subroutine deallocates EOS.                                  *
-! *====================================================================*
+  type(EOS_type), pointer :: EOS !< Equation of state structure
   
   if (associated(EOS)) deallocate(EOS)
 end subroutine EOS_end
 
+!> Set equation of state structure (EOS) to linear with given coefficients
+!!
+!! \note This routine is primarily for testing and allows a local copy of the
+!! EOS_type (EOS argument) to be set to use the linear equation of state
+!! independent from the rest of the model.
+subroutine EOS_use_linear(Rho_T0_S0, dRho_dT, dRho_dS, EOS, use_quadrature)
+  real,              intent(in) :: Rho_T0_S0 !< Density at T=0 degC and S=0 ppt (kg m-3)
+  real,              intent(in) :: dRho_dT   !< Partial derivative of density with temperature (kg m-3 degC-1)
+  real,              intent(in) :: dRho_dS   !< Partial derivative of density with salinity (kg m-3 ppt-1)
+  logical, optional, intent(in) :: use_quadrature !< Partial derivative of density with salinity (kg m-3 ppt-1)
+  type(EOS_type),    pointer    :: EOS       !< Equation of state structure
+
+  if (.not.associated(EOS)) call MOM_error(FATAL, &
+    "MOM_EOS.F90: EOS_use_linear() called with an unassociated EOS_type EOS.")
+
+  EOS%form_of_EOS = EOS_LINEAR
+  EOS%Compressible = .false.
+  EOS%Rho_T0_S0 = Rho_T0_S0
+  EOS%dRho_dT = dRho_dT
+  EOS%dRho_dS = dRho_dS
+  EOS%EOS_quadrature = .false.
+  if (present(use_quadrature)) EOS%EOS_quadrature = use_quadrature
+
+end subroutine EOS_use_linear
 
 subroutine int_density_dz_generic(T, S, z_t, z_b, rho_ref, rho_0, G_e, B, &
                                   EOS, dpa, intz_dpa, intx_dpa, inty_dpa)
