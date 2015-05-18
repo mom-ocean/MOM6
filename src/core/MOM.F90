@@ -390,7 +390,7 @@ use MOM_dynamics_legacy_split, only : step_MOM_dyn_legacy_split, register_restar
 use MOM_dynamics_legacy_split, only : initialize_dyn_legacy_split, end_dyn_legacy_split
 use MOM_dynamics_legacy_split, only : adjustments_dyn_legacy_split, MOM_dyn_legacy_split_CS
 
-use MOM_EOS,                   only : select_eqn_of_state
+use MOM_EOS,                   only : EOS_init
 use MOM_error_checking,        only : check_redundant
 use MOM_grid,                  only : MOM_grid_init, ocean_grid_type, get_thickness_units
 use MOM_grid,                  only : get_flux_units, get_tr_flux_units
@@ -1899,7 +1899,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   ! Use the Wright equation of state by default, unless otherwise specified
   ! Note: this line and the following block ought to be in a separate
   ! initialization routine for tv.
-  if (use_EOS) call select_eqn_of_state(param_file,CS%tv%eqn_of_state)
+  if (use_EOS) call EOS_init(param_file,CS%tv%eqn_of_state)
   if (CS%use_temperature) then
     allocate(CS%tv%TempxPmE(isd:ied,jsd:jed))
     CS%tv%TempxPmE(:,:) = 0.0

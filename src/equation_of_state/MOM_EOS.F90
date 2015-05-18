@@ -43,7 +43,7 @@ implicit none ; private
 public calculate_compress, calculate_density, query_compressible
 public calculate_density_derivs, calculate_2_densities
 public calculate_specific_vol_derivs
-public select_eqn_of_state, deselect_eqn_of_state
+public EOS_init, EOS_end
 public int_density_dz, int_specific_vol_dp
 public int_density_dz_generic_plm, int_density_dz_generic_ppm
 public int_density_dz_generic_plm_analytic
@@ -68,7 +68,7 @@ type, public :: EOS_type ; private
 ! The following parameters are used with the linear equation of state only.
   real :: Rho_T0_S0   ! The density at T=0, S=0, in kg m-3.
   real :: dRho_dT     ! The partial derivatives of density with temperature
-  real :: dRho_dS     ! and salnity, in kg m-3 K-1 and kg m-3 psu-1.
+  real :: dRho_dS     ! and salinity, in kg m-3 K-1 and kg m-3 psu-1.
 ! The following parameters are use with the linear expression for the freezing
 ! point only.
   real :: TFr_S0_P0   ! The freezing potential temperature at S=0, P=0 in deg C.
@@ -532,7 +532,7 @@ function query_compressible(EOS)
   query_compressible = EOS%compressible
 end function query_compressible
 
-subroutine select_eqn_of_state(param_file, EOS)
+subroutine EOS_init(param_file, EOS)
   type(param_file_type), intent(in) :: param_file
   type(EOS_type),        pointer    :: EOS
 ! *====================================================================*
@@ -625,9 +625,9 @@ subroutine select_eqn_of_state(param_file, EOS)
                  units="deg C Pa-1", default=0.0)
   endif
 
-end subroutine select_eqn_of_state
+end subroutine EOS_init
 
-subroutine deselect_eqn_of_state(EOS)
+subroutine EOS_end(EOS)
   type(EOS_type), pointer :: EOS
 ! *====================================================================*
 ! *  (in/out)     EOS - equation of state identifier                   *
@@ -636,7 +636,7 @@ subroutine deselect_eqn_of_state(EOS)
 ! *====================================================================*
   
   if (associated(EOS)) deallocate(EOS)
-end subroutine deselect_eqn_of_state
+end subroutine EOS_end
 
 
 subroutine int_density_dz_generic(T, S, z_t, z_b, rho_ref, rho_0, G_e, B, &

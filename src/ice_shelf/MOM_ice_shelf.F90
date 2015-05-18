@@ -118,7 +118,7 @@ use MOM_variables, only : surface
 use MOM_forcing_type, only : forcing
 use MOM_get_input, only : directories, Get_MOM_input
 use MOM_EOS, only : calculate_density, calculate_density_derivs, calculate_TFreeze
-use MOM_EOS, only : EOS_type, select_eqn_of_state
+use MOM_EOS, only : EOS_type, EOS_init
 !MJHuse MOM_ice_shelf_initialize, only : initialize_ice_shelf_boundary, initialize_ice_thickness
 use MOM_ice_shelf_initialize, only : initialize_ice_thickness
 use user_shelf_init, only : USER_initialize_shelf_mass, USER_update_shelf_mass
@@ -1231,7 +1231,7 @@ subroutine initialize_ice_shelf(Time, CS, diag, fluxes, Time_in, solo_mode_in)
     CS%utide = utide
   endif
 
-  call select_eqn_of_state(param_file, CS%eqn_of_state)
+  call EOS_init(param_file, CS%eqn_of_state)
 
   !! new parameters that need to be in MOM_input
 

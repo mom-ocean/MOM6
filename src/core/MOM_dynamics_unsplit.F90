@@ -95,7 +95,6 @@ use MOM_time_manager, only : operator(-), operator(>), operator(*), operator(/)
 use MOM_ALE, only : ALE_CS
 use MOM_continuity, only : continuity, continuity_init, continuity_CS
 use MOM_CoriolisAdv, only : CorAdCalc, CoriolisAdv_init, CoriolisAdv_CS
-use MOM_EOS, only : select_eqn_of_state
 use MOM_error_checking, only : check_redundant
 use MOM_grid, only : MOM_grid_init, ocean_grid_type, get_thickness_units
 use MOM_grid, only : get_flux_units, get_tr_flux_units

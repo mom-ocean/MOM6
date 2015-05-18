@@ -4,7 +4,7 @@ use MOM_diag_mediator, only : diag_ctrl, time_type, enable_averaging, disable_av
 use MOM_grid, only :  ocean_grid_type
 use MOM_time_manager, only : time_type, set_time, time_type_to_real
 use MOM_restart, only : restart_init, restore_state, MOM_restart_CS
-use MOM_EOS, only : EOS_type, select_eqn_of_state
+use MOM_EOS, only : EOS_type
 use user_shelf_init, only : user_ice_shelf_CS
 
 implicit none ; private
