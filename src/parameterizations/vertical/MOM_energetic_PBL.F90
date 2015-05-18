@@ -198,6 +198,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, CS, &
     v               !   The meridional velocity, in m s-1.
   real, dimension(SZI_(G),SZK_(G)+1) :: &
     Kd, &           ! The diapycnal diffusivity, in m2 s-1.
+    pres, &         ! Interface pressures in Pa.
     hb_hs           ! The distance from the bottom over the thickness of the water,
                     ! times a conversion factor from H to m, in m H-1.
   real, dimension(SZI_(G)) :: &
@@ -212,14 +213,18 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, CS, &
 
     Idecay_len_TKE, &  ! The inverse of a turbulence decay length scale, in H-1.
     h_bot, &        ! The distance from the bottom, in H.
-    pres, &         ! Interface pressures in Pa.
     h_sum, &        ! The total thickness of the water column, in H.
     absf            ! The absolute value of f, in s-1.
 
 
   real, dimension(SZI_(G),SZK_(G)) :: &
+    dT_to_dColHt, & ! Partial derivatives of the total column height with the temperature
+    dS_to_dColHt, & ! and salinity changes within a layer, in m K-1 and m ppt-1.
     dT_to_dPE, &    ! Partial derivatives of column potential energy with the temperature
     dS_to_dPE, &    ! and salinity changes within a layer, in J m-2 K-1 and J m-2 ppt-1.
+    dT_to_dColHt_a, & ! Partial derivatives of the total column height with the temperature
+    dS_to_dColHt_a, & ! and salinity changes within a layer, including the implicit effects
+                    ! of mixing with layers higher in the water colun, in m K-1 and m ppt-1.
     dT_to_dPE_a, &  ! Partial derivatives of column potential energy with the temperature
     dS_to_dPE_a     ! and salinity changes within a layer, including the implicit effects
                     ! of mixing with layers higher in the water column, in
@@ -237,7 +242,8 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, CS, &
   real :: b1        ! b1 is inverse of the pivot used by the tridiagonal solver, in H-1.
   real :: h_neglect ! A thickness that is so small it is usually lost
                     ! in roundoff and can be neglected, in H.
-  real :: dPres     ! The pressure change across a layer, in Pa.
+  real :: dMass     ! The mass per unit area within a layer, in kg m-2.
+  real :: dPres     ! The hydrostatic pressure change across a layer, in Pa.
   real :: dMKE_max  ! The maximum amount of mean kinetic energy that could be
                     ! converted to turbulent kinetic energy if the velocity in
                     ! the layer below an interface were homogenized with all of
@@ -255,7 +261,6 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, CS, &
   real :: h_tt_min  ! A surface roughness length, in H.
 
   real :: C1_3      ! = 1/3.
-  real :: I_G_Earth ! 1 / G%G_Earth, in s2 m-1.
   real :: vonKar    ! The vonKarman constant.
   real :: I_dtmrho  ! 1.0 / (dt*mstar * Rho0) in m3 kg-1 s-1.  This is
                     ! used convert TKE back into ustar^3.
@@ -303,6 +308,8 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, CS, &
   logical :: sfc_disconnect ! If true, any turbulence has become disconnected
                     ! from the surface.
 
+  real :: CSE(10)
+
 ! The following is only used as a diagnostic.
   real :: dt__diag  ! A copy of dt_diag (if present) or dt, in s.
   real :: IdtdR0    !  = 1.0 / (dt__diag * Rho0), in m3 kg-1 s-1.
@@ -339,7 +346,6 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, CS, &
   dt__diag = dt ; if (present(dt_diag)) dt__diag = dt_diag
   IdtdR0 = 1.0 / (dt__diag * G%Rho0)
   write_diags = .true. ; if (present(last_call)) write_diags = last_call
-  I_G_Earth = 1.0 / G%G_earth
   max_itt = 20
 
   h_tt_min = 0.0
@@ -444,19 +450,24 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, CS, &
 
       num_itts(:) = -1
 
-      pres(i) = 0.0
+      pres(i,1) = 0.0
       do k=1,nz
-        dPres = G%H_to_Pa * h(i,k)
-        dT_to_dPE(i,k) = 0.5 * I_G_Earth * (dPres * (dPres + 2.0*pres(i))) * dSV_dT(i,j,k)
-        dS_to_dPE(i,k) = 0.5 * I_G_Earth * (dPres * (dPres + 2.0*pres(i))) * dSV_dS(i,j,k)
+        dMass = G%H_to_kg_m2 * h(i,k)
+        dPres = G%G_Earth * dMass
+        dT_to_dPE(i,k) = (dMass * (pres(i,K) + 0.5*dPres)) * dSV_dT(i,j,k)
+        dS_to_dPE(i,k) = (dMass * (pres(i,K) + 0.5*dPres)) * dSV_dS(i,j,k)
+        dT_to_dColHt(i,k) = dMass * dSV_dT(i,j,k)
+        dS_to_dColHt(i,k) = dMass * dSV_dS(i,j,k)
 
-        pres(i) = pres(i) + dPres
+        pres(i,K+1) = pres(i,K) + dPres
       enddo
 
       Kd(i,1) = 0.0 ; Kddt_h(1) = 0.0
       b_den_1(i) = h(i,1)
       dT_to_dPE_a(i,1) = dT_to_dPE(i,1)
       dS_to_dPE_a(i,1) = dS_to_dPE(i,1)
+      dT_to_dColHt_a(i,1) = dT_to_dColHt(i,1)
+      dS_to_dColHt_a(i,1) = dS_to_dColHt(i,1)
 
       htot(i) = h(i,1)
       uhtot(i) = u(i,1)*h(i,1)
@@ -539,15 +550,15 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, CS, &
         endif
         dt_h = (G%m_to_H**2*dt) / max(0.5*(h(i,k-1)+h(i,k)), 1e-15*h_sum(i))
 
-
         !   This tests whether the layers above and below this interface are in
         ! a convetively stable configuration, without considering any effects of
         ! mixing at higher interfaces.  It is an approximation to the more 
         ! complete test dPEc_dKd_Kd0 >= 0.0, that would include the effects of
-        ! mixing across interface K-1.
+        ! mixing across interface K-1.  The dT_to_dColHt here are effectively
+        ! mass-weigted estimates of dSV_dT.
         Convectively_stable = ( 0.0 <= &
-           ((dT_to_dPE(i,k)*h(i,k-1) - dT_to_dPE(i,k-1)*h(i,k)) * (T0(k-1)-T0(k)) + &
-            (dS_to_dPE(i,k)*h(i,k-1) - dS_to_dPE(i,k-1)*h(i,k)) * (S0(k-1)-S0(k))) )
+          ( (dT_to_dColHt(i,k) + dT_to_dColHt(i,k-1) ) * (T0(k-1)-T0(k)) + &
+            (dS_to_dColHt(i,k) + dS_to_dColHt(i,k-1) ) * (S0(k-1)-S0(k)) ) )
 
         if ((mech_TKE(i) + conv_PErel(i)) <= 0.0 .and. Convectively_stable) then
           ! Energy is already exhausted, so set Kd = 0 and cycle or exit?
@@ -569,6 +580,8 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, CS, &
           b_den_1(i) = h(i,k)
           dT_to_dPE_a(i,k) = dT_to_dPE(i,k)
           dS_to_dPE_a(i,k) = dS_to_dPE(i,k)
+          dT_to_dColHt_a(i,k) = dT_to_dColHt(i,k)
+          dS_to_dColHt_a(i,k) = dS_to_dColHt(i,k)
 
         else ! tot_TKE > 0.0 or this is potentially convectively unstable profile.
           sfc_disconnect = .false.
@@ -618,6 +631,8 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, CS, &
           call find_PE_chg(Kddt_h_g0, h(i,k), b_den_1(i), dTe_term, dSe_term, &
                      dT_km1_t2, dS_km1_t2, dT_to_dPE(i,k), dS_to_dPE(i,k), &
                      dT_to_dPE_a(i,k-1), dS_to_dPE_a(i,k-1), &
+                     pres(i,K), dT_to_dColHt(i,k), dS_to_dColHt(i,k), &
+                     dT_to_dColHt_a(i,k-1), dS_to_dColHt_a(i,k-1), &
                      PE_chg=PE_chg_g0, dPEc_dKd=dPEa_dKd_g0, dPE_max=PE_chg_max, &
                      dPEc_dKd_0=dPEc_dKd_Kd0 )
 
@@ -634,6 +649,8 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, CS, &
               call find_PE_chg(Kd(i,k)*dt_h, h(i,k), b_den_1(i), dTe_term, dSe_term, &
                          dT_km1_t2, dS_km1_t2, dT_to_dPE(i,k), dS_to_dPE(i,k), &
                          dT_to_dPE_a(i,k-1), dS_to_dPE_a(i,k-1), &
+                         pres(i,K), dT_to_dColHt(i,k), dS_to_dColHt(i,k), &
+                         dT_to_dColHt_a(i,k-1), dS_to_dColHt_a(i,k-1), &
                          PE_chg=dPE_conv)
               ! Should this be iterated to convergence for Kd?
               if (dPE_conv > 0.0) then
@@ -699,6 +716,8 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, CS, &
               call find_PE_chg(Kddt_h_guess, h(i,k), b_den_1(i), dTe_term, dSe_term, &
                          dT_km1_t2, dS_km1_t2, dT_to_dPE(i,k), dS_to_dPE(i,k), &
                          dT_to_dPE_a(i,k-1), dS_to_dPE_a(i,k-1), &
+                         pres(i,K), dT_to_dColHt(i,k), dS_to_dColHt(i,k), &
+                         dT_to_dColHt_a(i,k-1), dS_to_dColHt_a(i,k-1), &
                          PE_chg=PE_chg, dPEc_dKd=dPEc_dKd )
               MKE_src = dMKE_max * (1.0 - exp(-MKE2_Hharm * Kddt_h_guess))
               dMKE_src_dK = dMKE_max * MKE2_Hharm * exp(-MKE2_Hharm * Kddt_h_guess)
@@ -773,6 +792,8 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, CS, &
           b_den_1(i) = h(i,k) + (b_den_1(i) * b1) * Kddt_h(K)
           dT_to_dPE_a(i,k) = dT_to_dPE(i,k) + c1(K)*dT_to_dPE_a(i,k-1)
           dS_to_dPE_a(i,k) = dS_to_dPE(i,k) + c1(K)*dS_to_dPE_a(i,k-1)
+          dT_to_dColHt_a(i,k) = dT_to_dColHt(i,k) + c1(K)*dT_to_dColHt_a(i,k-1)
+          dS_to_dColHt_a(i,k) = dS_to_dColHt(i,k) + c1(K)*dS_to_dColHt_a(i,k-1)
 
         endif  ! tot_TKT > 0.0 branch.  Kddt_h(K) has been set.
 
@@ -854,10 +875,13 @@ end subroutine energetic_PBL
 
 subroutine find_PE_chg(Kddt_h, h_k, b_den_1, dTe_term, dSe_term, &
                        dT_km1_t2, dS_km1_t2, dT_to_dPE_k, dS_to_dPE_k, &
-                       dT_to_dPEa, dS_to_dPEa, PE_chg, dPEc_dKd, dPE_max, dPEc_dKd_0)
+                       dT_to_dPEa, dS_to_dPEa, pres, dT_to_dColHt_k, &
+                       dS_to_dColHt_k, dT_to_dColHta, dS_to_dColHta, &
+                       PE_chg, dPEc_dKd, dPE_max, dPEc_dKd_0)
   real, intent(in)  :: Kddt_h, h_k, b_den_1, dTe_term, dSe_term
-  real, intent(in)  :: dT_km1_t2, dS_km1_t2, dT_to_dPE_k, dS_to_dPE_k
-  real, intent(in)  :: dT_to_dPEa, dS_to_dPEa
+  real, intent(in)  :: dT_km1_t2, dS_km1_t2, pres
+  real, intent(in)  :: dT_to_dPE_k, dS_to_dPE_k, dT_to_dPEa, dS_to_dPEa
+  real, intent(in)  :: dT_to_dColHt_k, dS_to_dColHt_k, dT_to_dColHta, dS_to_dColHta
   real, optional, intent(out) :: PE_chg, dPEc_dKd, dPE_max, dPEc_dKd_0
 
 !   This subroutine determines the total potential energy change due to mixing
@@ -885,20 +909,37 @@ subroutine find_PE_chg(Kddt_h, h_k, b_den_1, dTe_term, dSe_term, &
 !                  temperature change in the layer above the interface, in K.
 !  (in)      dS_km1_t2 - A diffusivity-independent term related to the
 !                  salinity change in the layer above the interface, in ppt.
-!  (in)      dT_to_dPE_k - A factor (1/2*pres*mass_lay*dSpec_vol/dT) relating
+!  (in)      dT_to_dPE_k - A factor (pres_lay*mass_lay*dSpec_vol/dT) relating
 !                  a layer's temperature change to the change in column
 !                  potential energy, in J m-2 K-1.
-!  (in)      dS_to_dPE_k - A factor (1/2*pres*mass_lay*dSpec_vol/dS) relating
+!  (in)      dS_to_dPE_k - A factor (pres_lay*mass_lay*dSpec_vol/dS) relating
 !                  a layer's salinity change to the change in column
 !                  potential energy, in J m-2 ppt-1.
-!  (in)      dT_to_dPEa - A factor (1/2*pres*mass_lay*dSpec_vol/dT) relating
+!  (in)      dT_to_dPEa - A factor (pres_lay*mass_lay*dSpec_vol/dT) relating
 !                  a layer's temperature change to the change in column
 !                  potential energy, including all implicit diffusive changes
 !                  in the temperatures of all the layers above, in J m-2 K-1.
-!  (in)      dS_to_dPEa - A factor (1/2*pres*mass_lay*dSpec_vol/dS) relating
+!  (in)      dS_to_dPEa - A factor (pres_lay*mass_lay*dSpec_vol/dS) relating
 !                  a layer's salinity change to the change in column
 !                  potential energy, including all implicit diffusive changes
 !                  in the salinities of all the layers above, in J m-2 ppt-1.
+!  (in)      pres - The hydrostatic interface pressure, which is used to relate
+!                  the changes in column thickness to the energy that is radiated
+!                  as gravity waves and unavailable to drive mixing, in Pa. 
+!  (in)      dT_to_dColHt_k - A factor (mass_lay*dSColHtc_vol/dT) relating
+!                  a layer's temperature change to the change in column
+!                  height, in m K-1.
+!  (in)      dS_to_dColHt_k - A factor (mass_lay*dSColHtc_vol/dS) relating
+!                  a layer's salinity change to the change in column
+!                  height, in m ppt-1.
+!  (in)      dT_to_dColHta - A factor (mass_lay*dSColHtc_vol/dT) relating
+!                  a layer's temperature change to the change in column
+!                  height, including all implicit diffusive changes
+!                  in the temperatures of all the layers above, in m K-1.
+!  (in)      dS_to_dColHta - A factor (mass_lay*dSColHtc_vol/dS) relating
+!                  a layer's salinity change to the change in column
+!                  height, including all implicit diffusive changes
+!                  in the salinities of all the layers above, in m ppt-1.
 !  (out,opt) PE_chg - The change in column potential energy from applying
 !                     Kddt_h at the present interface, in J m-2.
 !  (out,opt) dPE_chg_dKd - The partial derivative of PE_chg with Kddt_h,
@@ -911,6 +952,9 @@ subroutine find_PE_chg(Kddt_h, h_k, b_den_1, dTe_term, dSe_term, &
   ! b_den_1 - The first term in the denominator of b1, in m or kg m-2.
   real :: b1            ! b1 is used by the tridiagonal solver, in H-1.
   real :: b1Kd          ! Temporary array (nondim.)
+  real :: ColHt_chg     ! The change in column thickness in m.
+  real :: dColHt_max    ! The change in column thickess for infinite diffusivity, in m.
+  real :: dColHt_dKd    ! The partial derivative of column thickess with diffusivity, in s m-1.
   real :: dT_k, dT_km1  ! Temporary arrays in K.
   real :: dS_k, dS_km1  ! Temporary arrays in ppt.
   real :: I_Kr_denom, dKr_dKd   ! Temporary arrays in H-2 and nondim.
@@ -935,9 +979,11 @@ subroutine find_PE_chg(Kddt_h, h_k, b_den_1, dTe_term, dSe_term, &
     ! Increment the temperature changes in layer k-1 due the changes in layer k.
     dT_km1 = b1Kd * ( dT_k + dT_km1_t2 )
     dS_km1 = b1Kd * ( dS_k + dS_km1_t2 )
-
     PE_chg = (dT_to_dPE_k * dT_k + dT_to_dPEa * dT_km1) + &
              (dS_to_dPE_k * dS_k + dS_to_dPEa * dS_km1)
+    ColHt_chg = (dT_to_dColHt_k * dT_k + dT_to_dColHta * dT_km1) + &
+                (dS_to_dColHt_k * dS_k + dS_to_dColHta * dS_km1)
+    if (ColHt_chg < 0.0) PE_chg = PE_chg - pres * ColHt_chg
   endif
 
   if (present(dPEc_dKd)) then
@@ -952,6 +998,9 @@ subroutine find_PE_chg(Kddt_h, h_k, b_den_1, dTe_term, dSe_term, &
     ! Calculate the partial derivative of Pe_chg with Kddt_h.
     dPEc_dKd = (dT_to_dPE_k * ddT_k_dKd + dT_to_dPEa * ddT_km1_dKd) + &
                (dS_to_dPE_k * ddS_k_dKd + dS_to_dPEa * ddS_km1_dKd)
+    dColHt_dKd = (dT_to_dColHt_k * ddT_k_dKd + dT_to_dColHta * ddT_km1_dKd) + &
+                 (dS_to_dColHt_k * ddS_k_dKd + dS_to_dColHta * ddS_km1_dKd)
+    if (dColHt_dKd < 0.0) dPEc_dKd = dPEc_dKd - pres * dColHt_dKd
   endif
 
   if (present(dPE_max)) then
@@ -959,12 +1008,19 @@ subroutine find_PE_chg(Kddt_h, h_k, b_den_1, dTe_term, dSe_term, &
     dPE_max = (dT_to_dPEa * dT_km1_t2 + dS_to_dPEa * dS_km1_t2) + &
               ((dT_to_dPE_k + dT_to_dPEa) * dTe_term + &
                (dS_to_dPE_k + dS_to_dPEa) * dSe_term) / (b_den_1 + h_k)
+    dColHt_max = (dT_to_dColHta * dT_km1_t2 + dS_to_dColHta * dS_km1_t2) + &
+              ((dT_to_dColHt_k + dT_to_dColHta) * dTe_term + &
+               (dS_to_dColHt_k + dS_to_dColHta) * dSe_term) / (b_den_1 + h_k)
+    if (dColHt_max < 0.0) dPE_max = dPE_max - pres*dColHt_max
   endif
 
   if (present(dPEc_dKd_0)) then
     ! This expression is the limit of dPEc_dKd for Kddt_h = 0.
     dPEc_dKd_0 = (dT_to_dPEa * dT_km1_t2 + dS_to_dPEa * dS_km1_t2) / (b_den_1) + &
                  (dT_to_dPE_k * dTe_term + dS_to_dPE_k * dSe_term) / (h_k*b_den_1)
+    dColHt_dKd = (dT_to_dColHta * dT_km1_t2 + dS_to_dColHta * dS_km1_t2) / (b_den_1) + &
+                 (dT_to_dColHt_k * dTe_term + dS_to_dColHt_k * dSe_term) / (h_k*b_den_1)
+    if (dColHt_dKd < 0.0) dPEc_dKd_0 = dPEc_dKd_0 - pres*dColHt_dKd
   endif
 
 end subroutine find_PE_chg

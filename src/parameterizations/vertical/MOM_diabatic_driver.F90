@@ -627,11 +627,6 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     if (CS%debugConservation) call MOM_state_stats('differential_diffuse_T_S', u, v, h, tv%T, tv%S, G)
   endif
   
-  ! diagnose the net diapycnal diffusivities
-  if (CS%id_Kd_interface > 0) call post_data(CS%id_Kd_interface, Kd_int, CS%diag)
-  if (CS%id_Kd_heat > 0)      call post_data(CS%id_Kd_heat,     Kd_heat, CS%diag)
-  if (CS%id_Kd_salt > 0)      call post_data(CS%id_Kd_salt,     Kd_salt, CS%diag)
-
   ! This block sets ea, eb from Kd or Kd_int.
   !   If using the ALE algorithm, set ea=eb=Kd_int on interfaces for
   ! use in the tri-diagonal solver.
@@ -688,7 +683,10 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
                   (0.5*(h(i,j,k-1) + h(i,j,k)) + h_neglect)
         eb(i,j,k-1) = eB(i,j,k-1) + Ent_int
         ea(i,j,k) = ea(i,j,k) + Ent_int
-        visc%Kv_turb(i,j,K) = visc%Kv_turb(i,j,K) + Kd_ePBL(i,j,k)
+        visc%Kv_turb(i,j,K) = visc%Kv_turb(i,j,K) + Kd_ePBL(i,j,K)
+        Kd_int(i,j,K) = Kd_int(i,j,K) + Kd_ePBL(i,j,K) 
+        Kd_heat(i,j,K) = Kd_heat(i,j,K) + Kd_ePBL(i,j,K) 
+        Kd_salt(i,j,K) = Kd_salt(i,j,K) + Kd_ePBL(i,j,K) 
       enddo ; enddo ; enddo
     else
       call applyBoundaryFluxesInOut(CS, G, dt, fluxes, CS%optics, ea, h, tv, &
@@ -1176,6 +1174,11 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     if (showCallTree) call callTree_waypoint("done with 2nd make_frazil (diabatic)")
     if (CS%debugConservation) call MOM_state_stats('2nd make_frazil', u, v, h, tv%T, tv%S, G)
   endif
+
+  ! Diagnose the diapycnal diffusivities and other quantities related to diapycnal mixing.
+  if (CS%id_Kd_interface > 0) call post_data(CS%id_Kd_interface, Kd_int, CS%diag)
+  if (CS%id_Kd_heat > 0)      call post_data(CS%id_Kd_heat,     Kd_heat, CS%diag)
+  if (CS%id_Kd_salt > 0)      call post_data(CS%id_Kd_salt,     Kd_salt, CS%diag)
 
   if (CS%id_ea > 0) call post_data(CS%id_ea, ea, CS%diag)
   if (CS%id_eb > 0) call post_data(CS%id_eb, eb, CS%diag)
