@@ -264,7 +264,6 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive)
                        lEkman=CS%computeEkman,             &
                        lMonOb=CS%computeMoninObukhov,      &
                        MatchTechnique=CS%MatchTechnique,   &
-                       lavg_N_or_Nsqr=.false.,             &
                        lenhanced_diff=.false.,             &
                        CVmix_kpp_params_user=CS%KPP_params )
 
