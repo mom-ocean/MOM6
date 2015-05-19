@@ -575,7 +575,13 @@ subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
         call get_param(param_file, mod, "INPUTDIR", inputdir, default=".")
         inputdir = slasher(inputdir)
 
-        fileName = trim(inputdir) // trim( extractWord(trim(string(6:80)), 1) )
+        if (string(6:6)=='.' .or. string(6:6)=='/') then
+          ! If we specified "FILE:./xyz" or "FILE:/xyz" then we have a relative or absolute path
+          fileName = trim( extractWord(trim(string(6:80)), 1) )
+        else
+          ! Otherwise assume we should look for the file in INPUTDIR
+          fileName = trim(inputdir) // trim( extractWord(trim(string(6:80)), 1) )
+        endif
         if (.not. file_exists(fileName)) call MOM_error(FATAL,"ALE_initRegridding: "// &
           "Specified file not found: Looking for '"//trim(fileName)//"' ("//trim(string)//")")
 
