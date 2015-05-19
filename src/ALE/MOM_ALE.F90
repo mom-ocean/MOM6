@@ -19,7 +19,7 @@ use MOM_variables,     only : ocean_grid_type, thermo_var_ptrs
 use MOM_file_parser,   only : get_param, param_file_type, log_param
 use MOM_io,            only : file_exists, field_exists, MOM_read_data
 use MOM_io,            only : vardesc, fieldtype, SINGLE_FILE
-use MOM_io,            only : create_file, write_field, close_file
+use MOM_io,            only : create_file, write_field, close_file, slasher
 use MOM_EOS,           only : calculate_density
 use MOM_string_functions, only : uppercase, extractWord
 use MOM_verticalGrid,  only : verticalGrid_type
@@ -517,8 +517,9 @@ subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
   type(regridding_CS),   intent(out) :: regridCS ! Regridding parameters and work arrays
   real, dimension(:),    intent(out) :: dz ! Resolution (thickness) in units of coordinate
   ! Local variables
-  character(len=80) :: string, fileName, varName ! Temporary strings
+  character(len=80) :: string, varName ! Temporary strings
   character(len=40) :: coordMode, interpScheme, coordUnits ! Temporary strings
+  character(len=200) :: inputdir, fileName
   character(len=320) :: message ! Temporary strings
   integer :: ke
   logical :: tmpLogical
@@ -571,9 +572,13 @@ subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
                    trim(message), units=trim(coordUnits), fail_if_missing=.true.)
     case default 
       if (index(trim(string),'FILE:')==1) then
-        fileName = trim( extractWord(trim(string(6:80)), 1) )
+        call get_param(param_file, mod, "INPUTDIR", inputdir, default=".")
+        inputdir = slasher(inputdir)
+
+        fileName = trim(inputdir) // trim( extractWord(trim(string(6:80)), 1) )
         if (.not. file_exists(fileName)) call MOM_error(FATAL,"ALE_initRegridding: "// &
           "Specified file not found: Looking for '"//trim(fileName)//"' ("//trim(string)//")")
+
         varName = trim( extractWord(trim(string(6:80)), 2) )
         if (.not. field_exists(fileName,varName)) call MOM_error(FATAL,"ALE_initRegridding: "// &
           "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(string)//")")
