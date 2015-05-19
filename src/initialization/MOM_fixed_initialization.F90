@@ -135,22 +135,22 @@ subroutine MOM_initialize_fixed(G, PF, dirs, tv)
     case ("USER")
       call user_set_coord(G%Rlay, G%g_prime, G, PF, eos)
     case ("none")
-    case default ; call MOM_error(FATAL,"MOM_initialize_state: "// &
+    case default ; call MOM_error(FATAL,"MOM_initialize_fixed: "// &
       "Unrecognized coordinate setup"//trim(config))
   end select
-  if (debug) call chksum(G%Rlay, "MOM_initialize_state: Rlay ", 1, nz)
-  if (debug) call chksum(G%g_prime, "MOM_initialize_state: g_prime ", 1, nz)
+  if (debug) call chksum(G%Rlay, "MOM_initialize_fixed: Rlay ", 1, nz)
+  if (debug) call chksum(G%g_prime, "MOM_initialize_fixed: g_prime ", 1, nz)
   call setVerticalGridAxes( G%Rlay, G%GV )
 
 !    This call sets seamasks that prohibit flow over any point with  !
 !  a bottom that is shallower than min_depth from PF.                !
   call initialize_masks(G, PF)
   if (debug) then
-    call hchksum(G%bathyT, 'MOM_initialize_state: depth ', G, haloshift=1)
-    call hchksum(G%mask2dT, 'MOM_initialize_state: mask2dT ', G)
-    call uchksum(G%mask2dCu, 'MOM_initialize_state: mask2dCu ', G)
-    call vchksum(G%mask2dCv, 'MOM_initialize_state: mask2dCv ', G)
-    call qchksum(G%mask2dBu, 'MOM_initialize_state: mask2dBu ', G)
+    call hchksum(G%bathyT, 'MOM_initialize_fixed: depth ', G, haloshift=1)
+    call hchksum(G%mask2dT, 'MOM_initialize_fixed: mask2dT ', G)
+    call uchksum(G%mask2dCu, 'MOM_initialize_fixed: mask2dCu ', G)
+    call vchksum(G%mask2dCv, 'MOM_initialize_fixed: mask2dCv ', G)
+    call qchksum(G%mask2dBu, 'MOM_initialize_fixed: mask2dBu ', G)
   endif
 
 ! Modulate geometric scales according to geography.
@@ -171,7 +171,7 @@ subroutine MOM_initialize_fixed(G, PF, dirs, tv)
     case ("list") ; call reset_face_lengths_list(G, PF)
     case ("file") ; call reset_face_lengths_file(G, PF)
     case ("global_1deg") ; call reset_face_lengths_named(G, PF, trim(config))
-    case default ; call MOM_error(FATAL, "MOM_initialize_state: "// &
+    case default ; call MOM_error(FATAL, "MOM_initialize_fixed: "// &
       "Unrecognized channel configuration "//trim(config))
   end select
 
@@ -184,7 +184,7 @@ subroutine MOM_initialize_fixed(G, PF, dirs, tv)
     select case ( trim(config) )
       case ("max") ; call set_velocity_depth_max(G)
       case ("min") ; call set_velocity_depth_min(G)
-      case default ; call MOM_error(FATAL, "MOM_initialize_state: "// &
+      case default ; call MOM_error(FATAL, "MOM_initialize_fixed: "// &
         "Unrecognized velocity depth configuration "//trim(config))
     end select
   endif
@@ -195,9 +195,9 @@ subroutine MOM_initialize_fixed(G, PF, dirs, tv)
 !   Calculate the components of grad f (beta)
   call MOM_calculate_grad_Coriolis(G%dF_dx, G%dF_dy, G)
   if (debug) then
-    call qchksum(G%CoriolisBu, "MOM_initialize_state: f ", G)
-    call hchksum(G%dF_dx, "MOM_initialize_state: dF_dx ", G)
-    call hchksum(G%dF_dy, "MOM_initialize_state: dF_dy ", G)
+    call qchksum(G%CoriolisBu, "MOM_initialize_fixed: f ", G)
+    call hchksum(G%dF_dx, "MOM_initialize_fixed: dF_dx ", G)
+    call hchksum(G%dF_dy, "MOM_initialize_fixed: dF_dy ", G)
   endif
 
 ! Compute global integrals of grid values for later use in scalar diagnostics !
@@ -209,7 +209,7 @@ subroutine MOM_initialize_fixed(G, PF, dirs, tv)
                  "If =1, write the geometry and vertical grid files only for\n"//&
                  "a new simulation. If =2, always write the geometry and\n"//&
                  "vertical grid files. Other values are invalid.", default=1)
-  if (write_geom<0 .or. write_geom>2) call MOM_error(FATAL,"MOM_initialize_state: "//&
+  if (write_geom<0 .or. write_geom>2) call MOM_error(FATAL,"MOM_initialize_fixed: "//&
          "WRITE_GEOM must be equal to 0, 1 or 2.")
   new_sim = .false.
   if ((dirs%input_filename(1:1)=='n') .and. (LEN_TRIM(dirs%input_filename)==1)) new_sim = .true.
