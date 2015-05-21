@@ -46,6 +46,7 @@ type, public :: KPP_CS ; private
   real    :: Ri_crit                   !< Critical bulk Richardson number (defines OBL depth)
   real    :: vonKarman                 !< von Karman constant (dimensionless)
   real    :: cs                        !< Parameter for computing velocity scale function (dimensionless)
+  logical :: enhance_diffusion         !< If True, add enhanced diffusivity at base of boundary layer.
   character(len=10) :: interpType      !< Type of interpolation in determining OBL depth 
   logical :: computeEkman              !< If True, compute Ekman depth limit for OBLdepth
   logical :: computeMoninObukhov       !< If True, compute Monin-Obukhov limit for OBLdepth
@@ -166,6 +167,9 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive)
   call get_param(paramFile, mod, 'VON_KARMAN', CS%vonKarman, &
                  'von Karman constant.',                     &
                  units='nondim', default=0.40)
+  call get_param(paramFile, mod, 'ENHANCE_DIFFUSION', CS%enhance_diffusion,              &
+                 'If True, adds enhanced diffusion at the based of the boundary layer.', &
+                 default=.False.)
   call get_param(paramFile, mod, 'INTERP_TYPE', CS%interpType,           &
                  'Type of interpolation to determine the OBL depth.\n'// &
                  'Allowed types are: linear, quadratic, cubic.',         &
@@ -264,7 +268,7 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive)
                        lEkman=CS%computeEkman,             &
                        lMonOb=CS%computeMoninObukhov,      &
                        MatchTechnique=CS%MatchTechnique,   &
-                       lenhanced_diff=.false.,             &
+                       lenhanced_diff=CS%enhance_diffusion,&
                        CVmix_kpp_params_user=CS%KPP_params )
 
   ! Register diagnostics
