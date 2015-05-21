@@ -2085,11 +2085,9 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
 
   missing_value_temp=0.0 ; missing_value_salt=0.0
   rcode = NF90_GET_ATT(ncid, varid_t, "_FillValue", missing_value_temp)
-  if (rcode .ne. 0) call MOM_error(FATAL,"error finding missing value for "//&
-       trim(potemp_var)//" in file "// trim(filename)//" in MOM_initialize_layers_from_Z")    
+  if (rcode .ne. 0) missing_value_temp = NF90_FILL_DOUBLE
   rcode = NF90_GET_ATT(ncid, varid_s, "_FillValue", missing_value_salt)
-  if (rcode .ne. 0) call MOM_error(FATAL,"error finding missing value for "//&
-       trim(salin_var)//" in file "// trim(filename)//" in MOM_initialize_layers_from_Z")    
+  if (rcode .ne. 0) missing_value_salt = NF90_FILL_DOUBLE
 
   allocate(lon_in(id),lat_in(jd),z_in(kd),z_edges_in(kd+1))
   allocate(temp_z(isd:ied,jsd:jed,kd), salt_z(isd:ied,jsd:jed,kd), rho_z(isd:ied,jsd:jed,kd),&
