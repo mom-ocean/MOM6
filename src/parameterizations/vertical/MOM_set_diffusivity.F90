@@ -1625,7 +1625,7 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, G, CS,
     TKE_column = CS%BBL_effic * TKE_column ! Only use a fraction of the mechanical dissipation for mixing.
 
     TKE_remaining = TKE_column
-    total_thickness = sum(h(i,j,:)) * G%H_to_m ! Total column thickness, in m.
+    total_thickness = ( sum(h(i,j,:)) + G%H_subroundoff )* G%H_to_m ! Total column thickness, in m.
     ustar_D = ustar * total_thickness
     z = 0.
     Kd_lower = 0. ! Diffusivity on bottom boundary.
