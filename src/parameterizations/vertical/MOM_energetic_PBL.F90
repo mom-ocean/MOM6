@@ -302,7 +302,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, CS, &
   real :: exp_kh    ! The nondimensional decay of TKE across a layer, ND.
   logical :: use_Newt  ! Use Newton's method for the next guess at Kddt_h(K).
   logical :: convectively_stable
-  logical, dimension(SZK_(G)) :: &
+  logical, dimension(SZI_(G)) :: &
     sfc_connected   ! If true the ocean is actively turbulent from the present
                     ! interface all the way up to the surface.
   logical :: sfc_disconnect ! If true, any turbulence has become disconnected
