@@ -594,6 +594,11 @@ type, public :: MOM_control_struct
   integer :: id_T_predia = -1
   integer :: id_S_predia = -1
   integer :: id_e_predia = -1
+  integer :: id_u_preale = -1
+  integer :: id_v_preale = -1
+  integer :: id_h_preale = -1
+  integer :: id_T_preale = -1
+  integer :: id_S_preale = -1
 
   ! The remainder provides pointers to child modules' control structures.
   type(MOM_dyn_unsplit_CS),      pointer :: dyn_unsplit_CSp      => NULL()
@@ -931,6 +936,12 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
                       dtdia, G, CS%diabatic_CSp)
         fluxes%fluxes_used = .true.
         call cpu_clock_end(id_clock_diabatic)
+
+        if (CS%id_u_preale > 0) call post_data(CS%id_u_preale, u, CS%diag)
+        if (CS%id_v_preale > 0) call post_data(CS%id_v_preale, v, CS%diag)
+        if (CS%id_h_preale > 0) call post_data(CS%id_h_preale, h, CS%diag)
+        if (CS%id_T_preale > 0) call post_data(CS%id_T_preale, CS%tv%T, CS%diag)
+        if (CS%id_S_preale > 0) call post_data(CS%id_S_preale, CS%tv%S, CS%diag)
 
         ! Regridding/remapping is done here, at end of thermodynamics time step
         ! (that may comprise several dynamical time steps)
@@ -2348,13 +2359,23 @@ subroutine register_diags(Time, G, CS, ADp)
   endif
 
   CS%id_u_predia = register_diag_field('ocean_model', 'u_predia', diag%axesCuL, Time, &
-      'Zonal velocity', 'meter second-1')
+      'Zonal velocity before diabatic forcing', 'meter second-1')
   CS%id_v_predia = register_diag_field('ocean_model', 'v_predia', diag%axesCvL, Time, &
-      'Meridional velocity', 'meter second-1')
+      'Meridional velocity before diabatic forcing', 'meter second-1')
   CS%id_h_predia = register_diag_field('ocean_model', 'h_predia', diag%axesTL, Time, &
-      'Layer Thickness', thickness_units)
+      'Layer Thickness before diabatic forcing', thickness_units)
   CS%id_e_predia = register_diag_field('ocean_model', 'e_predia', diag%axesTi, Time, &
-      'Interface Heights', 'meter')
+      'Interface Heights before diabatic forcing', 'meter')
+  CS%id_u_preale = register_diag_field('ocean_model', 'u_preale', diag%axesCuL, Time, &
+      'Zonal velocity before remapping', 'meter second-1')
+  CS%id_v_preale = register_diag_field('ocean_model', 'v_preale', diag%axesCvL, Time, &
+      'Meridional velocity before remapping', 'meter second-1')
+  CS%id_h_preale = register_diag_field('ocean_model', 'h_preale', diag%axesTL, Time, &
+      'Layer Thickness before remapping', thickness_units)
+  CS%id_T_preale = register_diag_field('ocean_model', 'T_preale', diag%axesTL, Time, &
+      'Temperature before remapping', 'degC')
+  CS%id_S_preale = register_diag_field('ocean_model', 'S_preale', diag%axesTL, Time, &
+      'Salinity before remapping', 'ppt')
   if (CS%use_temperature) then
     CS%id_T_predia = register_diag_field('ocean_model', 'temp_predia', diag%axesTL, Time, &
         'Potential Temperature', 'Celsius')
