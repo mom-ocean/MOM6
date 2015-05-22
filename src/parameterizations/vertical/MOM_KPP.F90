@@ -169,7 +169,7 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive)
                  units='nondim', default=0.40)
   call get_param(paramFile, mod, 'ENHANCE_DIFFUSION', CS%enhance_diffusion,              &
                  'If True, adds enhanced diffusion at the based of the boundary layer.', &
-                 default=.False.)
+                 default=.true.)
   call get_param(paramFile, mod, 'INTERP_TYPE', CS%interpType,           &
                  'Type of interpolation to determine the OBL depth.\n'// &
                  'Allowed types are: linear, quadratic, cubic.',         &
