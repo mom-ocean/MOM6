@@ -2690,13 +2690,19 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
   if (CS%id_createdH > 0) call post_data(CS%id_createdH, CS%createdH, CS%diag)
 
   if (numberOfGroundings>0) then
-    do i = 1, numberOfGroundings
+    do i = 1, min(numberOfGroundings, maxGroundings)
       call forcing_SinglePointPrint(fluxes,G,iGround(i),jGround(i),'applyBoundaryFluxesInOut (grounding)')
       write(mesg(1:45),'(3es15.3)') G%geoLonT( iGround(i), jGround(i) ), &
                              G%geoLatT( iGround(i), jGround(i)) , hGrounding(i)
       call MOM_error(WARNING, "MOM_diabatic_driver.F90, applyBoundaryFluxesInOut(): "//&
                               "Mass created. x,y,dh= "//trim(mesg), all_print=.true.)
     enddo
+
+    if (numberOfGroundings - maxGroundings > 0) then
+      write(mesg, '(i4)') numberOfGroundings - maxGroundings
+      call MOM_error(WARNING, "MOM_diabatic_driver:F90, applyBoundaryFluxesInOut(): "//&
+                              trim(mesg) // " groundings remaining")
+    endif
   endif
 
 end subroutine applyBoundaryFluxesInOut
