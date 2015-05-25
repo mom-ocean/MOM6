@@ -1550,7 +1550,7 @@ subroutine thickness_diffuse_init(Time, G, param_file, diag, CDp, CS)
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mod, version, "")
   call get_param(param_file, mod, "THICKNESSDIFFUSE", CS%thickness_diffuse, &
-                 "If true, interfaces heights are diffused with a \n"//&
+                 "If true, interface heights are diffused with a \n"//&
                  "coefficient of KHTH.", default=.false.)
   call get_param(param_file, mod, "KHTH", CS%Khth, &
                  "The background horizontal thickness diffusivity.", &
@@ -1577,8 +1577,7 @@ subroutine thickness_diffuse_init(Time, G, param_file, diag, CDp, CS)
                  "longer than DT, or 0 to use DT.", units = "s", default=0.0) 
   call get_param(param_file, mod, "KHTH_SLOPE_MAX", CS%slope_max, &
                  "A slope beyond which the calculated isopycnal slope is \n"//&
-                 "not reliable and is scaled away. This is used with \n"//&
-                 "FULL_THICKNESSDIFFUSE.", units="nondim", default=0.01)
+                 "not reliable and is scaled away.", units="nondim", default=0.01)
   call get_param(param_file, mod, "KD_SMOOTH", CS%kappa_smooth, &
                  "A diapycnal diffusivity that is used to interpolate \n"//&
                  "more sensible values of T & S into thin layers.", &
