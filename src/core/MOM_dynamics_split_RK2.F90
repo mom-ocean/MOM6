@@ -625,6 +625,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   call cpu_clock_begin(id_clock_btstep)
   if (calc_dtbt) call set_dtbt(G, CS%barotropic_CSp, eta, CS%pbce)
   if (showCallTree) call callTree_enter("btstep(), MOM_barotropic.F90")
+  ! This is the predictor step call to btstep.
   call btstep(u, v, eta, dt, u_bc_accel, v_bc_accel, &
               fluxes, CS%pbce, CS%eta_PF, u_av, v_av, CS%u_accel_bt, &
               CS%v_accel_bt, eta_pred, CS%uhbt, CS%vhbt, G, CS%barotropic_CSp,&
@@ -821,6 +822,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   endif
 
   if (showCallTree) call callTree_enter("btstep(), MOM_barotropic.F90")
+  ! This is the corrector step call to btstep.
   call btstep(u, v, eta, dt, u_bc_accel, v_bc_accel, &
               fluxes, CS%pbce, CS%eta_PF, u_av, v_av, CS%u_accel_bt, &
               CS%v_accel_bt, eta_pred, CS%uhbt, CS%vhbt, G, &

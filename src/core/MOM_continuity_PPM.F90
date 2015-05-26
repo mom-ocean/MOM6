@@ -91,6 +91,10 @@ type, public :: continuity_PPM_CS ; private
                              ! iteration is better than all predecessors.
   logical :: use_visc_rem_max ! If true, use more appropriate limiting bounds
                              ! for corrections in strongly viscous columns.
+  logical :: marginal_faces  ! If true, use the marginal face areas from the
+                             ! continuity solver for use as the weights in the
+                             ! barotropic solver.  Otherwise use the transport
+                             ! averaged areas.
 end type continuity_PPM_CS
 
 type :: loop_bounds_type ; private
@@ -186,7 +190,7 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, CS, uhbt, vhbt, OBC, &
     apply_OBC_u_flather_west = OBC%apply_OBC_u_flather_west
     apply_OBC_v_flather_north = OBC%apply_OBC_v_flather_north
     apply_OBC_v_flather_south = OBC%apply_OBC_v_flather_south
-    !   If an OBC is being applied, copy the input thicknesses so that the 
+    !   If an OBC is being applied, copy the input thicknesses so that the
     ! OBC code works even if hin == h.
     if (apply_OBC_u_flather_east .or. apply_OBC_u_flather_west .or. &
         apply_OBC_v_flather_north .or. apply_OBC_v_flather_south) &
@@ -219,23 +223,23 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, CS, uhbt, vhbt, OBC, &
       do k=1,nz ; do j=LB%jsh,LB%jeh
         do I=LB%ish,LB%ieh+1
           if (OBC%OBC_mask_u(I-1,j) .and. (OBC%OBC_kind_u(I-1,j) == OBC_FLATHER_E)) &
-            h(i,j,k) = h_input(i-1,j,k) 
+            h(i,j,k) = h_input(i-1,j,k)
         enddo
         do i=LB%ish-1,LB%ieh
           if (OBC%OBC_mask_u(I,j) .and. (OBC%OBC_kind_u(I,j) == OBC_FLATHER_W)) &
             h(i,j,k) = h_input(i+1,j,k)
         enddo
-      enddo ; enddo       
+      enddo ; enddo
     endif
     LB%ish = G%isc ; LB%ieh = G%iec ; LB%jsh = G%jsc ; LB%jeh = G%jec
-  
+
   !    Now advect meridionally, using the updated thicknesses to determine
   !  the fluxes.
     call meridional_mass_flux(v, h, vh, dt, G, CS, LB, vhbt, OBC, visc_rem_v, &
                               v_cor, vhbt_aux, v_cor_aux, BT_cont)
 
     call cpu_clock_begin(id_clock_update)
-!$OMP parallel do default(none) shared(nz,LB,h,dt,G,vh) 
+!$OMP parallel do default(none) shared(nz,LB,h,dt,G,vh)
     do k=1,nz ; do j=LB%jsh,LB%jeh ; do i=LB%ish,LB%ieh
       h(i,j,k) = h(i,j,k) - dt*G%IareaT(i,j) * (vh(i,J,k) - vh(i,J-1,k))
   !   This line prevents underflow.
@@ -253,7 +257,7 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, CS, uhbt, vhbt, OBC, &
           if (OBC%OBC_mask_v(i,J) .and. (OBC%OBC_kind_v(i,J) == OBC_FLATHER_S)) &
             h(i,j,k) = h_input(i,j+1,k)
         enddo ; enddo
-      enddo       
+      enddo
     endif
   else  ! .not. x_first
   !    First, advect meridionally, so set the loop bounds accordingly.
@@ -280,7 +284,7 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, CS, uhbt, vhbt, OBC, &
           if (OBC%OBC_mask_v(i,J) .and. (OBC%OBC_kind_v(i,J) == OBC_FLATHER_S)) &
             h(i,j,k) = h_input(i,j+1,k)
         enddo ; enddo
-      enddo       
+      enddo
     endif
 
   !    Now advect zonally, using the updated thicknesses to determine
@@ -302,13 +306,13 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, CS, uhbt, vhbt, OBC, &
       do k=1,nz ; do j=LB%jsh,LB%jeh
         do I=LB%ish,LB%ieh+1
           if (OBC%OBC_mask_u(I-1,j) .and. (OBC%OBC_kind_u(I-1,j) == OBC_FLATHER_E)) &
-            h(i,j,k) = h_input(i-1,j,k) 
+            h(i,j,k) = h_input(i-1,j,k)
         enddo
         do i=LB%ish-1,LB%ieh
           if (OBC%OBC_mask_u(I,j) .and. (OBC%OBC_kind_u(I,j) == OBC_FLATHER_W)) &
             h(i,j,k) = h_input(i+1,j,k)
         enddo
-      enddo ; enddo       
+      enddo ; enddo
     endif
   endif
 
@@ -414,7 +418,7 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, CS, LB, uhbt, OBC, &
 !$OMP                                  uh,dt,G,CS,apply_OBC_u,OBC,uhbt,do_aux,set_BT_cont,       &
 !$OMP                                  CFL_dt,I_dt,u_cor,uhbt_aux,u_cor_aux,BT_cont) &
 !$OMP                          private(do_i,duhdu,du,du_max_CFL,du_min_CFL,uh_tot_0,duhdu_tot_0, &
-!$OMP                                  visc_rem_max, I_vrm, du_lim, dx_E, dx_W, any_simple_OBC ) &   
+!$OMP                                  visc_rem_max, I_vrm, du_lim, dx_E, dx_W, any_simple_OBC ) &
 !$OMP      firstprivate(visc_rem)
   do j=jsh,jeh
     do I=ish-1,ieh ; do_i(I) = .true. ; visc_rem_max(I) = 0.0 ; enddo
@@ -526,7 +530,7 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, CS, LB, uhbt, OBC, &
           if (.not.do_i(I)) any_simple_OBC = .true.
         enddo ; endif
       endif
-        
+
       if (present(uhbt)) then
         call zonal_flux_adjust(u, h_in, hL, hR, uhbt(:,j), uh_tot_0, &
                                duhdu_tot_0, du, du_max_CFL, du_min_CFL, dt, G, &
@@ -539,7 +543,7 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, CS, LB, uhbt, OBC, &
               u_cor(I,j,k) = OBC%u(I,j,k)
           enddo ; endif
         enddo ; endif ! u-corrected
-        
+
       endif
 
       if (do_aux) then
@@ -586,10 +590,10 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, CS, LB, uhbt, OBC, &
   if  (set_BT_cont) then ; if (associated(BT_cont%h_u)) then
     if (present(u_cor)) then
       call zonal_face_thickness(u_cor, h_in, hL, hR, BT_cont%h_u, dt, G, LB, &
-                                CS%vol_CFL, visc_rem_u)
+                                CS%vol_CFL, CS%marginal_faces, visc_rem_u)
     else
       call zonal_face_thickness(u, h_in, hL, hR, BT_cont%h_u, dt, G, LB, &
-                                CS%vol_CFL, visc_rem_u)
+                                CS%vol_CFL, CS%marginal_faces, visc_rem_u)
     endif
   endif ; endif
 
@@ -655,7 +659,8 @@ subroutine zonal_flux_layer(u, h, hL, hR, uh, duhdu, visc_rem, dt, G, j, &
 
 end subroutine zonal_flux_layer
 
-subroutine zonal_face_thickness(u, h, hL, hR, h_u, dt, G, LB, vol_CFL, visc_rem_u)
+subroutine zonal_face_thickness(u, h, hL, hR, h_u, dt, G, LB, vol_CFL, &
+                                marginal, visc_rem_u)
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)    :: u
   real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h, hL, hR
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(inout) :: h_u
@@ -663,6 +668,7 @@ subroutine zonal_face_thickness(u, h, hL, hR, h_u, dt, G, LB, vol_CFL, visc_rem_
   type(ocean_grid_type),                  intent(inout) :: G
   type(loop_bounds_type),                 intent(in)    :: LB
   logical,                                intent(in)    :: vol_CFL
+  logical,                                intent(in)    :: marginal
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in),  optional :: visc_rem_u
 !   This subroutines sets the effective interface thickness at each zonal
 ! velocity point.
@@ -676,6 +682,8 @@ subroutine zonal_face_thickness(u, h, hL, hR, h_u, dt, G, LB, vol_CFL, visc_rem_
 !  (in)      LB - A structure with the active thickness loop bounds.
 !  (in)      vol_CFL - If true, rescale the ratio of face areas to the cell
 !                      areas when estimating the CFL number.
+!  (in)      marginal - If true, report the marginal face thicknesses; otherwise
+!                       report transport-averaged thicknesses.
 !  (in, opt) visc_rem_u - Both the fraction of the momentum originally in a
 !                         layer that remains after a time-step of viscosity,
 !                         and the fraction of a time-step's worth of a
@@ -685,7 +693,7 @@ subroutine zonal_face_thickness(u, h, hL, hR, h_u, dt, G, LB, vol_CFL, visc_rem_
   real :: CFL  ! The CFL number based on the local velocity and grid spacing, ND.
   real :: curv_3 ! A measure of the thickness curvature over a grid length,
                  ! with the same units as h_in.
-! real :: h_avg  ! The average thickness of a flux, in H.
+  real :: h_avg  ! The average thickness of a flux, in H.
   real :: h_marg ! The marginal thickness of a flux, in H.
   integer :: i, j, k, ish, ieh, jsh, jeh, nz
   ish = LB%ish ; ieh = LB%ieh ; jsh = LB%jsh ; jeh = LB%jeh ; nz = G%ke
@@ -699,30 +707,31 @@ subroutine zonal_face_thickness(u, h, hL, hR, h_u, dt, G, LB, vol_CFL, visc_rem_
       if (vol_CFL) then ; CFL = (u(I,j,k) * dt) * (G%dy_Cu(I,j) * G%IareaT(i,j))
       else ; CFL = u(I,j,k) * dt * G%IdxT(i,j) ; endif
       curv_3 = hL(i,j,k) + hR(i,j,k) - 2.0*h(i,j,k)
-!     h_avg = hR(i,j,k) + CFL * (0.5*(hL(i,j,k) - hR(i,j,k)) + curv_3*(CFL - 1.5))
+      h_avg = hR(i,j,k) + CFL * (0.5*(hL(i,j,k) - hR(i,j,k)) + curv_3*(CFL - 1.5))
       h_marg = hR(i,j,k) + CFL * ((hL(i,j,k) - hR(i,j,k)) + 3.0*curv_3*(CFL - 1.0))
     elseif (u(I,j,k) < 0.0) then
       if (vol_CFL) then ; CFL = (-u(I,j,k)*dt) * (G%dy_Cu(I,j) * G%IareaT(i+1,j))
       else ; CFL = -u(I,j,k) * dt * G%IdxT(i+1,j) ; endif
       curv_3 = hL(i+1,j,k) + hR(i+1,j,k) - 2.0*h(i+1,j,k)
-!     h_avg = hL(i+1,j,k) + CFL * (0.5*(hR(i+1,j,k)-hL(i+1,j,k)) + curv_3*(CFL - 1.5))
+      h_avg = hL(i+1,j,k) + CFL * (0.5*(hR(i+1,j,k)-hL(i+1,j,k)) + curv_3*(CFL - 1.5))
       h_marg = hL(i+1,j,k) + CFL * ((hR(i+1,j,k)-hL(i+1,j,k)) + &
                                     3.0*curv_3*(CFL - 1.0))
     else
-!     h_avg = 0.5 * (hl(i+1,j,k) + hr(i,j,k))
+      h_avg = 0.5 * (hl(i+1,j,k) + hr(i,j,k))
       !   The choice to use the arithmetic mean here is somewhat arbitrariy, but
       ! it should be noted that hl(i+1,j,k) and hr(i,j,k) are usually the same.
       h_marg = 0.5 * (hl(i+1,j,k) + hr(i,j,k))
  !    h_marg = (2.0 * hl(i+1,j,k) * hr(i,j,k)) / &
  !             (hl(i+1,j,k) + hr(i,j,k) + G%H_subroundoff)
     endif
-    !   This could perhaps be replaced by h_avg.
-    h_u(I,j,k) = h_marg
+
+    if (marginal) then ; h_u(I,j,k) = h_marg
+    else ; h_u(I,j,k) = h_avg ; endif
   enddo; enddo ; enddo
   if (present(visc_rem_u)) then
 !$OMP do
     do k=1,nz ; do j=jsh,jeh ; do I=ish-1,ieh
-      h_u(I,j,k) = h_u(I,j,k) * visc_rem_u(I,j,k) 
+      h_u(I,j,k) = h_u(I,j,k) * visc_rem_u(I,j,k)
     enddo ; enddo ; enddo
   endif
 !$OMP end parallel
@@ -731,7 +740,7 @@ end subroutine zonal_face_thickness
 
 subroutine zonal_flux_adjust(u, h_in, hL, hR, uhbt, uh_tot_0, duhdu_tot_0, &
                              du, du_max_CFL, du_min_CFL, dt, G, CS, visc_rem, &
-                             j, ish, ieh, do_i_in, full_precision, uh_3d) 
+                             j, ish, ieh, do_i_in, full_precision, uh_3d)
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in) :: u
   real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in) :: h_in, hL, hR
   real, dimension(NIMEMB_,NKMEM_),        intent(in) :: visc_rem
@@ -791,7 +800,7 @@ subroutine zonal_flux_adjust(u, h_in, hL, hR, uhbt, uh_tot_0, duhdu_tot_0, &
   real :: tol_vel ! The tolerance for velocity in the current iteration, m s-1.
   integer :: i, k, nz, itt, max_itts = 20
   logical :: full_prec, domore, do_i(SZIB_(G))
-  
+
   nz = G%ke
   full_prec = .true. ; if (present(full_precision)) full_prec = full_precision
 
@@ -943,7 +952,7 @@ subroutine set_zonal_BT_cont(u, h_in, hL, hR, BT_cont, uh_tot_0, duhdu_tot_0, &
     u_L, u_R, &   ! The westerly (u_L), easterly (u_R), and zero-barotropic
     u_0, &        ! transport (u_0) layer test velocities, in m s-1.
     FA_marg_L, &  ! The effective layer marginal face areas with the westerly
-    FA_marg_R, &  ! (_L), easterly (_R), and zero-barotropic (_0) test 
+    FA_marg_R, &  ! (_L), easterly (_R), and zero-barotropic (_0) test
     FA_marg_0, &  ! velocities, in H m.
     uh_L, uh_R, & ! The layer transports with the westerly (_L), easterly (_R),
     uh_0, &       ! and zero-barotropic (_0) test velocities, in H m2 s-1.
@@ -951,7 +960,7 @@ subroutine set_zonal_BT_cont(u, h_in, hL, hR, BT_cont, uh_tot_0, duhdu_tot_0, &
     FAmt_0, &     ! test velocities, in H m.
     uhtot_L, &    ! The summed transport with the westerly (uhtot_L) and
     uhtot_R       ! and easterly (uhtot_R) test velocities, in H m2 s-1.
-  real :: FA_0    ! The effective face area with 0 barotropic transport, in m H. 
+  real :: FA_0    ! The effective face area with 0 barotropic transport, in m H.
   real :: FA_avg  ! The average effective face area, in m H, nominally given by
                   ! the realized transport divided by the barotropic velocity.
   real :: visc_rem_lim ! The larger of visc_rem and min_visc_rem, ND.  This
@@ -966,7 +975,7 @@ subroutine set_zonal_BT_cont(u, h_in, hL, hR, BT_cont, uh_tot_0, duhdu_tot_0, &
   real :: Idt     ! The inverse of the time step, in s-1.
   logical :: domore
   integer :: i, k, nz
-  
+
   nz = G%ke ; Idt = 1.0/dt
   min_visc_rem = 0.1 ; CFL_min = 1e-6
 
@@ -985,7 +994,7 @@ subroutine set_zonal_BT_cont(u, h_in, hL, hR, BT_cont, uh_tot_0, duhdu_tot_0, &
     du_CFL(I) = (CFL_min * Idt) * G%dxCu(I,j)
     duR(I) = min(0.0,du0(I) - du_CFL(I))
     duL(I) = max(0.0,du0(I) + du_CFL(I))
-    FAmt_L(I) = 0.0 ; FAmt_R(I) = 0.0 ; FAmt_0(I) = 0.0 
+    FAmt_L(I) = 0.0 ; FAmt_R(I) = 0.0 ; FAmt_0(I) = 0.0
     uhtot_L(I) = 0.0 ; uhtot_R(I) = 0.0
   enddo
 
@@ -1304,7 +1313,7 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, CS, LB, vhbt, OBC, &
       if (set_BT_cont) then
         call set_merid_BT_cont(v, h_in, hL, hR, BT_cont, vh_tot_0, dvhdv_tot_0,&
                                dv_max_CFL, dv_min_CFL, dt, G, CS, visc_rem, &
-                               visc_rem_max, J, ish, ieh, do_i) 
+                               visc_rem_max, J, ish, ieh, do_i)
         if (any_simple_OBC) then
           do i=ish,ieh
             do_i(i) = (OBC%OBC_mask_v(i,J) .and. &
@@ -1331,10 +1340,10 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, CS, LB, vhbt, OBC, &
   if (set_BT_cont) then ; if (associated(BT_cont%h_v)) then
     if (present(v_cor)) then
       call merid_face_thickness(v_cor, h_in, hL, hR, BT_cont%h_v, dt, G, LB, &
-                                CS%vol_CFL, visc_rem_v)
+                                CS%vol_CFL, CS%marginal_faces, visc_rem_v)
     else
       call merid_face_thickness(v, h_in, hL, hR, BT_cont%h_v, dt, G, LB, &
-                                CS%vol_CFL, visc_rem_v)
+                                CS%vol_CFL, CS%marginal_faces, visc_rem_v)
     endif
   endif ; endif
 
@@ -1401,7 +1410,8 @@ subroutine merid_flux_layer(v, h, hL, hR, vh, dvhdv, visc_rem, dt, G, J, &
 
 end subroutine merid_flux_layer
 
-subroutine merid_face_thickness(v, h, hL, hR, h_v, dt, G, LB, vol_CFL, visc_rem_v)
+subroutine merid_face_thickness(v, h, hL, hR, h_v, dt, G, LB, vol_CFL, &
+                                marginal, visc_rem_v)
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)    :: v
   real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h, hL, hR
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(inout) :: h_v
@@ -1409,6 +1419,7 @@ subroutine merid_face_thickness(v, h, hL, hR, h_v, dt, G, LB, vol_CFL, visc_rem_
   type(ocean_grid_type),                  intent(inout) :: G
   type(loop_bounds_type),                 intent(in)    :: LB
   logical,                                intent(in)    :: vol_CFL
+  logical,                                intent(in)    :: marginal
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in),  optional :: visc_rem_v
 !   This subroutines sets the effective interface thickness at each meridional
 ! velocity point.
@@ -1422,6 +1433,8 @@ subroutine merid_face_thickness(v, h, hL, hR, h_v, dt, G, LB, vol_CFL, visc_rem_
 !  (in)      LB - A structure with the active thickness loop bounds.
 !  (in)      vol_CFL - If true, rescale the ratio of face areas to the cell
 !                       areas when estimating the CFL number.
+!  (in)      marginal - If true, report the marginal face thicknesses; otherwise
+!                       report transport-averaged thicknesses.
 !  (in, opt) visc_rem_v - Both the fraction of the momentum originally in a
 !                         layer that remains after a time-step of viscosity,
 !                         and the fraction of a time-step's worth of a
@@ -1431,7 +1444,7 @@ subroutine merid_face_thickness(v, h, hL, hR, h_v, dt, G, LB, vol_CFL, visc_rem_
   real :: CFL ! The CFL number based on the local velocity and grid spacing, ND.
   real :: curv_3 ! A measure of the thickness curvature over a grid length,
                  ! with the same units as h_in.
-! real :: h_avg  ! The average thickness of a flux, in H.
+  real :: h_avg  ! The average thickness of a flux, in H.
   real :: h_marg ! The marginal thickness of a flux, in H.
   integer :: i, j, k, ish, ieh, jsh, jeh, nz
   ish = LB%ish ; ieh = LB%ieh ; jsh = LB%jsh ; jeh = LB%jeh ; nz = G%ke
@@ -1445,28 +1458,29 @@ subroutine merid_face_thickness(v, h, hL, hR, h_v, dt, G, LB, vol_CFL, visc_rem_
       if (vol_CFL) then ; CFL = (v(i,J,k) * dt) * (G%dx_Cv(i,J) * G%IareaT(i,j))
       else ; CFL = v(i,J,k) * dt * G%IdyT(i,j) ; endif
       curv_3 = hL(i,j,k) + hR(i,j,k) - 2.0*h(i,j,k)
-!     h_avg = hR(i,j,k) + CFL * (0.5*(hL(i,j,k) - hR(i,j,k)) + curv_3*(CFL - 1.5))
+      h_avg = hR(i,j,k) + CFL * (0.5*(hL(i,j,k) - hR(i,j,k)) + curv_3*(CFL - 1.5))
       h_marg = hR(i,j,k) + CFL * ((hL(i,j,k) - hR(i,j,k)) + &
                                 3.0*curv_3*(CFL - 1.0))
     elseif (v(i,J,k) < 0.0) then
       if (vol_CFL) then ; CFL = (-v(i,J,k)*dt) * (G%dx_Cv(i,J) * G%IareaT(i,j+1))
       else ; CFL = -v(i,J,k) * dt * G%IdyT(i,j+1) ; endif
       curv_3 = hL(i,j+1,k) + hR(i,j+1,k) - 2.0*h(i,j+1,k)
-!     h_avg = hL(i,j+1,k) + CFL * (0.5*(hR(i,j+1,k)-hL(i,j+1,k)) + curv_3*(CFL - 1.5))
+      h_avg = hL(i,j+1,k) + CFL * (0.5*(hR(i,j+1,k)-hL(i,j+1,k)) + curv_3*(CFL - 1.5))
       h_marg = hL(i,j+1,k) + CFL * ((hR(i,j+1,k)-hL(i,j+1,k)) + &
                                     3.0*curv_3*(CFL - 1.0))
     else
-!     h_avg = 0.5 * (hl(i,j+1,k) + hr(i,j,k))
+      h_avg = 0.5 * (hl(i,j+1,k) + hr(i,j,k))
       !   The choice to use the arithmetic mean here is somewhat arbitrariy, but
       ! it should be noted that hl(i+1,j,k) and hr(i,j,k) are usually the same.
       h_marg = 0.5 * (hl(i,j+1,k) + hr(i,j,k))
  !    h_marg = (2.0 * hl(i,j+1,k) * hr(i,j,k)) / &
  !             (hl(i,j+1,k) + hr(i,j,k) + G%H_subroundoff)
     endif
-    !   This could perhaps be replaced by h_avg.
-    h_v(i,J,k) = h_marg
+
+    if (marginal) then ; h_v(i,J,k) = h_marg
+    else ; h_v(i,J,k) = h_avg ; endif
   enddo ; enddo ; enddo
-    
+
   if (present(visc_rem_v)) then
 !$OMP do
     do k=1,nz ; do J=jsh-1,jeh ; do i=ish,ieh
@@ -1479,7 +1493,7 @@ end subroutine merid_face_thickness
 
 subroutine meridional_flux_adjust(v, h_in, hL, hR, vhbt, vh_tot_0, dvhdv_tot_0, &
                              dv, dv_max_CFL, dv_min_CFL, dt, G, CS, visc_rem, &
-                             j, ish, ieh, do_i_in, full_precision, vh_3d) 
+                             j, ish, ieh, do_i_in, full_precision, vh_3d)
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in) :: v
   real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in) :: h_in, hL, hR
   real, dimension(NIMEM_,NKMEM_),         intent(in) :: visc_rem
@@ -1537,7 +1551,7 @@ subroutine meridional_flux_adjust(v, h_in, hL, hR, vhbt, vh_tot_0, dvhdv_tot_0, 
   real :: tol_vel ! The tolerance for velocity in the current iteration, m s-1.
   integer :: i, k, nz, itt, max_itts = 20
   logical :: full_prec, domore, do_i(SZI_(G))
-  
+
   nz = G%ke
   full_prec = .true. ; if (present(full_precision)) full_prec = full_precision
 
@@ -1641,7 +1655,7 @@ end subroutine meridional_flux_adjust
 
 subroutine set_merid_BT_cont(v, h_in, hL, hR, BT_cont, vh_tot_0, dvhdv_tot_0, &
                              dv_max_CFL, dv_min_CFL, dt, G, CS, visc_rem, &
-                             visc_rem_max, j, ish, ieh, do_i) 
+                             visc_rem_max, j, ish, ieh, do_i)
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in) :: v
   real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in) :: h_in, hL, hR
   type(BT_cont_type),                  intent(inout) :: BT_cont
@@ -1689,7 +1703,7 @@ subroutine set_merid_BT_cont(v, h_in, hL, hR, BT_cont, vh_tot_0, dvhdv_tot_0, &
     v_L, v_R, &   ! The southerly (v_L), northerly (v_R), and zero-barotropic
     v_0, &        ! transport (v_0) layer test velocities, in m s-1.
     FA_marg_L, &  ! The effective layer marginal face areas with the southerly
-    FA_marg_R, &  ! (_L), northerly (_R), and zero-barotropic (_0) test 
+    FA_marg_R, &  ! (_L), northerly (_R), and zero-barotropic (_0) test
     FA_marg_0, &  ! velocities, in H m.
     vh_L, vh_R, & ! The layer transports with the southerly (_L), northerly (_R)
     vh_0, &       ! and zero-barotropic (_0) test velocities, in H m2 s-1.
@@ -1697,7 +1711,7 @@ subroutine set_merid_BT_cont(v, h_in, hL, hR, BT_cont, vh_tot_0, dvhdv_tot_0, &
     FAmt_0, &     ! test velocities, in H m.
     vhtot_L, &    ! The summed transport with the southerly (vhtot_L) and
     vhtot_R       ! and northerly (vhtot_R) test velocities, in H m2 s-1.
-  real :: FA_0    ! The effective face area with 0 barotropic transport, in m H. 
+  real :: FA_0    ! The effective face area with 0 barotropic transport, in m H.
   real :: FA_avg  ! The average effective face area, in m H, nominally given by
                   ! the realized transport divided by the barotropic velocity.
   real :: visc_rem_lim ! The larger of visc_rem and min_visc_rem, ND.  This
@@ -1731,10 +1745,10 @@ subroutine set_merid_BT_cont(v, h_in, hL, hR, BT_cont, vh_tot_0, dvhdv_tot_0, &
     dv_CFL(i) = (CFL_min * Idt) * G%dyCv(i,J)
     dvR(i) = min(0.0,dv0(i) - dv_CFL(i))
     dvL(i) = max(0.0,dv0(i) + dv_CFL(i))
-    FAmt_L(i) = 0.0 ; FAmt_R(i) = 0.0 ; FAmt_0(i) = 0.0 
+    FAmt_L(i) = 0.0 ; FAmt_R(i) = 0.0 ; FAmt_0(i) = 0.0
     vhtot_L(i) = 0.0 ; vhtot_R(i) = 0.0
   endif ; enddo
-  
+
   if (.not.domore) then
     do k=1,nz ; do i=ish,ieh
       BT_cont%FA_v_S0(i,J) = 0.0 ; BT_cont%FA_v_SS(i,J) = 0.0
@@ -2071,7 +2085,7 @@ end subroutine PPM_limit_CW84
 function ratio_max(a, b, maxrat) result(ratio)
   real, intent(in) :: a, b, maxrat
   real :: ratio
-  
+
   if (abs(a) > abs(maxrat*b)) then
     ratio = maxrat
   else
@@ -2141,7 +2155,7 @@ subroutine continuity_PPM_init(Time, G, param_file, diag, CS)
                  "The tolerance for barotropic velocity discrepancies \n"//&
                  "between the barotropic solution and  the sum of the \n"//&
                  "layer thicknesses.", units="m s-1", default=3.0e8) ! The speed of light is the default.
- 
+
   call get_param(param_file, mod, "CONT_PPM_AGGRESS_ADJUST", CS%aggress_adjust,&
                  "If true, allow the adjusted velocities to have a \n"//&
                  "relative CFL change up to 0.5.", default=.false.)
@@ -2162,6 +2176,10 @@ subroutine continuity_PPM_init(Time, G, param_file, diag, CS)
                                  CS%use_visc_rem_max, &
                  "If true, use more appropriate limiting bounds for \n"//&
                  "corrections in strongly viscous columns.", default=.true.)
+  call get_param(param_file, mod, "CONT_PPM_MARGINAL_FACE_AREAS", CS%marginal_faces, &
+                 "If true, use the marginal face areas from the continuity \n"//&
+                 "solver for use as the weights in the barotropic solver. \n"//&
+                 "Otherwise use the transport averaged areas.", default=.true.)
 
   CS%diag => diag
 

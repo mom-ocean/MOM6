@@ -95,7 +95,7 @@ use MOM_checksums, only : hchksum, uchksum, vchksum
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
 use MOM_diag_mediator, only : post_data, query_averaging_enabled, register_diag_field
 use MOM_diag_mediator, only : safe_alloc_ptr, diag_ctrl, enable_averaging
-use MOM_domains, only : min_across_PEs, clone_MOM_domain
+use MOM_domains, only : min_across_PEs, clone_MOM_domain, pass_vector
 use MOM_domains, only : To_All, Scalar_Pair, AGRID, CORNER, MOM_domain_type
 use MOM_domains, only : create_group_pass, do_group_pass, group_pass_type
 use MOM_domains, only : start_group_pass, complete_group_pass
@@ -294,6 +294,13 @@ type, public :: barotropic_CS ; private
   logical :: BT_cont_bounds  ! If true, use the BT_cont_type variables to set
                              ! limits on the magnitude of the corrective mass
                              ! fluxes.
+  logical :: visc_rem_u_uh0  ! If true, use the viscous remnants when estimating
+                             ! the barotropic velocities that were used to
+                             ! calculate uh0 and vh0.  False is probably the
+                             ! better choice.
+  logical :: adjust_BT_cont  ! If true, adjust the curve fit to the BT_cont type
+                             ! that is used by the barotropic solver to match the
+                             ! transport about which the flow is being linearized.
   type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
   type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
                              ! timing of diagnostic output.
@@ -321,6 +328,13 @@ type, public :: barotropic_CS ; private
   integer :: id_gtotn = -1, id_gtots = -1, id_gtote = -1, id_gtotw = -1
   integer :: id_uhbt = -1, id_frhatu = -1, id_vhbt = -1, id_frhatv = -1
   integer :: id_frhatu1 = -1, id_frhatv1 = -1
+
+  integer :: id_BTC_FA_u_EE = -1, id_BTC_FA_u_E0 = -1, id_BTC_FA_u_W0 = -1, id_BTC_FA_u_WW = -1
+  integer :: id_BTC_ubt_EE = -1, id_BTC_ubt_WW = -1
+  integer :: id_BTC_FA_v_NN = -1, id_BTC_FA_v_N0 = -1, id_BTC_FA_v_S0 = -1, id_BTC_FA_v_SS = -1
+  integer :: id_BTC_vbt_NN = -1, id_BTC_vbt_SS = -1
+  integer :: id_uhbt0 = -1, id_vhbt0 = -1
+  
 end type barotropic_CS
 
 type, private :: local_BT_cont_u_type
@@ -1046,21 +1060,36 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
     do j=js,je ; do I=is-1,ie ; uhbt(I,j) = 0.0 ; ubt(I,j) = 0.0 ; enddo ; enddo
 !$OMP do
     do J=js-1,je ; do i=is,ie ; vhbt(i,J) = 0.0 ; vbt(i,J) = 0.0 ; enddo ; enddo
+    if (CS%visc_rem_u_uh0) then
 !$OMP do
-    do j=js,je
-      do k=1,nz ; do I=is-1,ie
+      do j=js,je ; do k=1,nz ; do I=is-1,ie
         uhbt(I,j) = uhbt(I,j) + uh0(I,j,k)
         ubt(I,j) = ubt(I,j) + wt_u(I,j,k) * u_uh0(I,j,k)
-      enddo ; enddo
-    enddo
+      enddo ; enddo ; enddo
 !$OMP do
-    do J=js-1,je
-      do k=1,nz ; do i=is,ie
+      do J=js-1,je ; do k=1,nz ; do i=is,ie
         vhbt(i,J) = vhbt(i,J) + vh0(i,J,k)
         vbt(i,J) = vbt(i,J) + wt_v(i,J,k) * v_vh0(i,J,k)
-      enddo ; enddo
-    enddo
+      enddo ; enddo ; enddo
+    else
+!$OMP do
+      do j=js,je ; do k=1,nz ; do I=is-1,ie
+        uhbt(I,j) = uhbt(I,j) + uh0(I,j,k)
+        ubt(I,j) = ubt(I,j) + CS%frhatu(I,j,k) * u_uh0(I,j,k)
+      enddo ; enddo ; enddo
+!$OMP do
+      do J=js-1,je ; do k=1,nz ; do i=is,ie
+        vhbt(i,J) = vhbt(i,J) + vh0(i,J,k)
+        vbt(i,J) = vbt(i,J) + CS%frhatv(i,J,k) * v_vh0(i,J,k)
+      enddo ; enddo ; enddo
+    endif
     if (use_BT_cont) then
+      if (CS%adjust_BT_cont) then
+        ! Use the additional input transports to broaden the fits
+        ! over which the bt_cont_type applies.
+        call adjust_local_BT_cont_types(ubt, uhbt, vbt, vhbt, BTCL_u, BTCL_v, &
+                                        G, MS, CS%BT_Domain, 1+ievf-ie)
+      endif
 !$OMP do
       do j=js,je ; do I=is-1,ie
         uhbt0(I,j) = uhbt(I,j) - find_uhbt(ubt(I,j),BTCL_u(I,j))
@@ -2125,9 +2154,26 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
     if (CS%id_uhbt > 0) call post_data(CS%id_uhbt, uhbtav, CS%diag)
     if (CS%id_frhatv > 0) call post_data(CS%id_frhatv, CS%frhatv, CS%diag)
     if (CS%id_vhbt > 0) call post_data(CS%id_vhbt, vhbtav, CS%diag)
+    if (CS%id_uhbt0 > 0) call post_data(CS%id_uhbt0, uhbt0(IsdB:IedB,jsd:jed), CS%diag)
+    if (CS%id_vhbt0 > 0) call post_data(CS%id_vhbt0, vhbt0(isd:ied,JsdB:JedB), CS%diag)
 
     if (CS%id_frhatu1 > 0) call post_data(CS%id_frhatu1, CS%frhatu1, CS%diag)
     if (CS%id_frhatv1 > 0) call post_data(CS%id_frhatv1, CS%frhatv1, CS%diag)
+    
+    if (use_BT_cont) then
+      if (CS%id_BTC_FA_u_EE > 0) call post_data(CS%id_BTC_FA_u_EE, BT_cont%FA_u_EE, CS%diag)
+      if (CS%id_BTC_FA_u_E0 > 0) call post_data(CS%id_BTC_FA_u_E0, BT_cont%FA_u_E0, CS%diag)
+      if (CS%id_BTC_FA_u_W0 > 0) call post_data(CS%id_BTC_FA_u_W0, BT_cont%FA_u_W0, CS%diag)
+      if (CS%id_BTC_FA_u_WW > 0) call post_data(CS%id_BTC_FA_u_WW, BT_cont%FA_u_WW, CS%diag)
+      if (CS%id_BTC_uBT_EE > 0) call post_data(CS%id_BTC_uBT_EE, BT_cont%uBT_EE, CS%diag)
+      if (CS%id_BTC_uBT_WW > 0) call post_data(CS%id_BTC_uBT_WW, BT_cont%uBT_WW, CS%diag)
+      if (CS%id_BTC_FA_v_NN > 0) call post_data(CS%id_BTC_FA_v_NN, BT_cont%FA_v_NN, CS%diag)
+      if (CS%id_BTC_FA_v_N0 > 0) call post_data(CS%id_BTC_FA_v_N0, BT_cont%FA_v_N0, CS%diag)
+      if (CS%id_BTC_FA_v_S0 > 0) call post_data(CS%id_BTC_FA_v_S0, BT_cont%FA_v_S0, CS%diag)
+      if (CS%id_BTC_FA_v_SS > 0) call post_data(CS%id_BTC_FA_v_SS, BT_cont%FA_v_SS, CS%diag)
+      if (CS%id_BTC_vBT_NN > 0) call post_data(CS%id_BTC_vBT_NN, BT_cont%vBT_NN, CS%diag)
+      if (CS%id_BTC_vBT_SS > 0) call post_data(CS%id_BTC_vBT_SS, BT_cont%vBT_SS, CS%diag)
+    endif
   else
     if (CS%id_frhatu1 > 0) CS%frhatu1(:,:,:) = CS%frhatu(:,:,:)
     if (CS%id_frhatv1 > 0) CS%frhatv1(:,:,:) = CS%frhatv(:,:,:)
@@ -3257,6 +3303,111 @@ subroutine set_local_BT_cont_types(BT_cont, BTCL_u, BTCL_v, G, MS, BT_Domain, ha
 !$OMP end parallel
 end subroutine set_local_BT_cont_types
 
+
+subroutine adjust_local_BT_cont_types(ubt, uhbt, vbt, vhbt, BTCL_u, BTCL_v, &
+                                      G, MS, BT_Domain, halo)
+  type(memory_size_type),                                intent(in)    :: MS
+  real, dimension(SZIBW_(MS),SZJW_(MS)), intent(inout) :: ubt, uhbt
+  real, dimension(SZIW_(MS),SZJBW_(MS)), intent(inout) :: vbt, vhbt
+  type(local_BT_cont_u_type), dimension(SZIBW_(MS),SZJW_(MS)), intent(out) :: BTCL_u
+  type(local_BT_cont_v_type), dimension(SZIW_(MS),SZJBW_(MS)), intent(out) :: BTCL_v
+  type(ocean_grid_type),                                 intent(inout) :: G
+  type(MOM_domain_type),                                intent(inout) :: BT_Domain
+  integer,                                     optional, intent(in)    :: halo
+!   This subroutine sets up reordered versions of the BT_cont type in the
+! local_BT_cont types, which have wide halos properly filled in.
+! Arguments: ubt - The linearization zonal barotropic velocity in m s-1. (in+halo)
+!  (in+halo) uhbt - The linearization zonal barotropic transport in H m2 s-1.
+!  (in+halo) vbt - The linearization meridional barotropic velocity in m s-1.
+!  (in+halo) vhbt - The linearization meridional barotropic transport in H m2 s-1.
+!  (inout)   BTCL_u - A structure with the u information from BT_cont.
+!  (inout)   BTCL_v - A structure with the v information from BT_cont.
+!  (in)      G - The ocean's grid structure.
+!  (in)      MS - A type that describes the memory sizes of the argument arrays.
+!  (in)      BT_Domain - The domain to use for updating the halos of wide arrays.
+!  (in)      halo - The extra halo size to use here.
+  real, dimension(SZIBW_(MS),SZJW_(MS)) :: &
+    u_polarity, uBT_EE, uBT_WW, FA_u_EE, FA_u_E0, FA_u_W0, FA_u_WW
+  real, dimension(SZIW_(MS),SZJBW_(MS)) :: &
+    v_polarity, vBT_NN, vBT_SS, FA_v_NN, FA_v_N0, FA_v_S0, FA_v_SS
+  real, parameter :: C1_3 = 1.0/3.0
+  integer :: i, j, is, ie, js, je, hs
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+  hs = 1 ; if (present(halo)) hs = max(halo,0)
+
+  ! Fill in the halo data for ubt, vbt, uhbt, and vhbt.
+  if (id_clock_calc_pre > 0) call cpu_clock_end(id_clock_calc_pre)
+  if (id_clock_pass_pre > 0) call cpu_clock_begin(id_clock_pass_pre)
+  call pass_vector(ubt, vbt, BT_Domain, complete=.false.)
+  call pass_vector(uhbt, vhbt, BT_Domain, complete=.true.)
+  if (id_clock_pass_pre > 0) call cpu_clock_end(id_clock_pass_pre)
+  if (id_clock_calc_pre > 0) call cpu_clock_begin(id_clock_calc_pre)
+
+!$OMP parallel default(none) shared(is,ie,js,je,hs,BTCL_u,ubt,uhbt,BTCL_v,vbt,vhbt )
+!$OMP do
+  do j=js-hs,je+hs ; do I=is-hs-1,ie+hs
+    if ((ubt(I,j) > BTCL_u(I,j)%uBT_WW) .and. (uhbt(I,j) > BTCL_u(I,j)%uh_WW)) then
+      ! Expand the cubic fit to use this new point.  ubt is negative.
+      BTCL_u(I,j)%ubt_WW = ubt(I,j)
+      if (3.0*uhbt(I,j) < 2.0*ubt(I,j) * BTCL_u(I,j)%FA_u_W0) then
+        ! No further bounding is needed.
+        BTCL_u(I,j)%uh_crvW = (uhbt(I,j) - ubt(I,j) * BTCL_u(I,j)%FA_u_W0) / ubt(I,j)**3
+      else ! This should not happen often!
+        BTCL_u(I,j)%FA_u_W0 = 1.5*uhbt(I,j) / ubt(I,j)
+        BTCL_u(I,j)%uh_crvW = -0.5*uhbt(I,j) / ubt(I,j)**3
+      endif
+      BTCL_u(I,j)%uh_WW = uhbt(I,j)
+      ! I don't know whether this is helpful.
+!     BTCL_u(I,j)%FA_u_WW = min(BTCL_u(I,j)%FA_u_WW, uhbt(I,j) / ubt(I,j))
+    elseif ((ubt(I,j) < BTCL_u(I,j)%uBT_EE) .and. (uhbt(I,j) < BTCL_u(I,j)%uh_EE)) then
+      ! Expand the cubic fit to use this new point.  ubt is negative.
+      BTCL_u(I,j)%ubt_EE = ubt(I,j)
+      if (3.0*uhbt(I,j) < 2.0*ubt(I,j) * BTCL_u(I,j)%FA_u_E0) then
+        ! No further bounding is needed.
+        BTCL_u(I,j)%uh_crvE = (uhbt(I,j) - ubt(I,j) * BTCL_u(I,j)%FA_u_E0) / ubt(I,j)**3
+      else ! This should not happen often!
+        BTCL_u(I,j)%FA_u_E0 = 1.5*uhbt(I,j) / ubt(I,j)
+        BTCL_u(I,j)%uh_crvE = -0.5*uhbt(I,j) / ubt(I,j)**3
+      endif
+      BTCL_u(I,j)%uh_EE = uhbt(I,j)
+      ! I don't know whether this is helpful.
+!     BTCL_u(I,j)%FA_u_EE = min(BTCL_u(I,j)%FA_u_EE, uhbt(I,j) / ubt(I,j))
+    endif
+  enddo ; enddo
+!$OMP do
+  do J=js-hs-1,je+hs ; do i=is-hs,ie+hs
+    if ((vbt(i,J) > BTCL_v(i,J)%vBT_SS) .and. (vhbt(i,J) > BTCL_v(i,J)%vh_SS)) then
+      ! Nxpand the cubic fit to use this new point.  vbt is negative.
+      BTCL_v(i,J)%vbt_SS = vbt(i,J)
+      if (3.0*vhbt(i,J) < 2.0*vbt(i,J) * BTCL_v(i,J)%FA_v_S0) then
+        ! No fvrther bovnding is needed.
+        BTCL_v(i,J)%vh_crvS = (vhbt(i,J) - vbt(i,J) * BTCL_v(i,J)%FA_v_S0) / vbt(i,J)**3
+      else ! This shovld not happen often!
+        BTCL_v(i,J)%FA_v_S0 = 1.5*vhbt(i,J) / vbt(i,J)
+        BTCL_v(i,J)%vh_crvS = -0.5*vhbt(i,J) / vbt(i,J)**3
+      endif
+      BTCL_v(i,J)%vh_SS = vhbt(i,J)
+      ! I don't know whether this is helpful.
+!     BTCL_v(i,J)%FA_v_SS = min(BTCL_v(i,J)%FA_v_SS, vhbt(i,J) / vbt(i,J))
+    elseif ((vbt(i,J) < BTCL_v(i,J)%vBT_NN) .and. (vhbt(i,J) < BTCL_v(i,J)%vh_NN)) then
+      ! Nxpand the cubic fit to use this new point.  vbt is negative.
+      BTCL_v(i,J)%vbt_NN = vbt(i,J)
+      if (3.0*vhbt(i,J) < 2.0*vbt(i,J) * BTCL_v(i,J)%FA_v_N0) then
+        ! No fvrther bovnding is needed.
+        BTCL_v(i,J)%vh_crvN = (vhbt(i,J) - vbt(i,J) * BTCL_v(i,J)%FA_v_N0) / vbt(i,J)**3
+      else ! This shovld not happen often!
+        BTCL_v(i,J)%FA_v_N0 = 1.5*vhbt(i,J) / vbt(i,J)
+        BTCL_v(i,J)%vh_crvN = -0.5*vhbt(i,J) / vbt(i,J)**3
+      endif
+      BTCL_v(i,J)%vh_NN = vhbt(i,J)
+      ! I don't know whether this is helpful.
+!     BTCL_v(i,J)%FA_v_NN = min(BTCL_v(i,J)%FA_v_NN, vhbt(i,J) / vbt(i,J))
+    endif
+  enddo ; enddo
+!$OMP end parallel
+end subroutine adjust_local_BT_cont_types
+
+
 subroutine BT_cont_to_face_areas(BT_cont, Datu, Datv, G, MS, halo, maximize)
   type(BT_cont_type),                         intent(inout) :: BT_cont
   type(memory_size_type),                     intent(in)    :: MS
@@ -3586,6 +3737,10 @@ subroutine barotropic_init(u, v, h, eta, Time, G, param_file, diag, CS, &
                  "MAXCFL_BT_CONT on the CFL number of the velocites \n"//&
                  "that are likely to be driven by the corrective mass fluxes.", &
                  default=.true.) !, do_not_log=.not.CS%bound_BT_corr)
+  call get_param(param_file, mod, "ADJUST_BT_CONT", CS%adjust_BT_cont, &
+                 "If true, adjust the curve fit to the BT_cont type \n"//&
+                 "that is used by the barotropic solver to match the \n"//&
+                 "transport about which the flow is being linearized.", default=.false.)
   call get_param(param_file, mod, "GRADUAL_BT_ICS", CS%gradual_BT_ICs, &
                  "If true, adjust the initial conditions for the \n"//&
                  "barotropic solver to the values from the layered \n"//&
@@ -3593,6 +3748,10 @@ subroutine barotropic_init(u, v, h, eta, Time, G, param_file, diag, CS, &
                  "This is a decent approximation to the inclusion of \n"//&
                  "sum(u dh_dt) while also correcting for truncation errors.", &
                  default=.false.)
+  call get_param(param_file, mod, "BT_USE_VISC_REM_U_UH0", CS%visc_rem_u_uh0, &
+                 "If true, use the viscous remnants when estimating the \n"//&
+                 "barotropic velocities that were used to calculate uh0 \n"//&
+                 "and vh0.  False is probably the better choice.", default=.true.)
   call get_param(param_file, mod, "BT_USE_WIDE_HALOS", CS%use_wide_halos, &
                  "If true, use wide halos and march in during the \n"//&
                  "barotropic time stepping for efficiency.", default=.true., &
@@ -3978,6 +4137,37 @@ subroutine barotropic_init(u, v, h, eta, Time, G, param_file, diag, CS, &
       'Barotropic zonal transport averaged over a baroclinic step', 'meter3 second-1')
   CS%id_vhbt = register_diag_field('ocean_model', 'vhbt', diag%axesCv1, Time, &
       'Barotropic meridional transport averaged over a baroclinic step', 'meter3 second-1')
+
+  if (use_BT_cont_type) then
+    CS%id_BTC_FA_u_EE = register_diag_field('ocean_model', 'BTC_FA_u_EE', diag%axesCu1, Time, &
+        'BTCont type far east face area', 'meter2')
+    CS%id_BTC_FA_u_E0 = register_diag_field('ocean_model', 'BTC_FA_u_E0', diag%axesCu1, Time, &
+        'BTCont type near east face area', 'meter2')
+    CS%id_BTC_FA_u_WW = register_diag_field('ocean_model', 'BTC_FA_u_WW', diag%axesCu1, Time, &
+        'BTCont type far west face area', 'meter2')
+    CS%id_BTC_FA_u_W0 = register_diag_field('ocean_model', 'BTC_FA_u_W0', diag%axesCu1, Time, &
+        'BTCont type near west face area', 'meter2')
+    CS%id_BTC_ubt_EE = register_diag_field('ocean_model', 'BTC_ubt_EE', diag%axesCu1, Time, &
+        'BTCont type far east velocity', 'meter second-1')
+    CS%id_BTC_ubt_WW = register_diag_field('ocean_model', 'BTC_ubt_WW', diag%axesCu1, Time, &
+        'BTCont type far west velocity', 'meter second-1')
+    CS%id_BTC_FA_v_NN = register_diag_field('ocean_model', 'BTC_FA_v_NN', diag%axesCv1, Time, &
+        'BTCont type far north face area', 'meter2')
+    CS%id_BTC_FA_v_N0 = register_diag_field('ocean_model', 'BTC_FA_v_N0', diag%axesCv1, Time, &
+        'BTCont type near north face area', 'meter2')
+    CS%id_BTC_FA_v_SS = register_diag_field('ocean_model', 'BTC_FA_v_SS', diag%axesCv1, Time, &
+        'BTCont type far south face area', 'meter2')
+    CS%id_BTC_FA_v_S0 = register_diag_field('ocean_model', 'BTC_FA_v_S0', diag%axesCv1, Time, &
+        'BTCont type near south face area', 'meter2')
+    CS%id_BTC_vbt_NN = register_diag_field('ocean_model', 'BTC_vbt_NN', diag%axesCv1, Time, &
+        'BTCont type far north velocity', 'meter second-1')
+    CS%id_BTC_vbt_SS = register_diag_field('ocean_model', 'BTC_vbt_SS', diag%axesCv1, Time, &
+        'BTCont type far south velocity', 'meter second-1')
+  endif
+  CS%id_uhbt0 = register_diag_field('ocean_model', 'uhbt0', diag%axesCu1, Time, &
+      'Barotropic zonal transport difference', 'meter3 second-1')
+  CS%id_vhbt0 = register_diag_field('ocean_model', 'vhbt0', diag%axesCv1, Time, &
+      'Barotropic meridional transport difference', 'meter3 second-1')
 
   if (CS%id_frhatu1 > 0) call safe_alloc_ptr(CS%frhatu1, IsdB,IedB,jsd,jed,nz)
   if (CS%id_frhatv1 > 0) call safe_alloc_ptr(CS%frhatv1, isd,ied,JsdB,JedB,nz)
