@@ -1059,7 +1059,7 @@ subroutine energetic_PBL_init(Time, G, param_file, diag, CS)
 
   call get_param(param_file, mod, "MSTAR", CS%mstar, &
                  "The ratio of the friction velocity cubed to the TKE \n"//&
-                 "input to the mixed layer.", "units=nondim", default=0.3)
+                 "input to the mixed layer.", "units=nondim", default=1.2)
   call get_param(param_file, mod, "NSTAR", CS%nstar, &
                  "The portion of the buoyant potential energy imparted by \n"//&
                  "surface fluxes that is available to drive entrainment \n"//&
