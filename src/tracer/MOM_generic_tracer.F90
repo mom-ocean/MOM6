@@ -44,6 +44,7 @@ module MOM_generic_tracer
   use generic_tracer, only: generic_tracer_coupler_get, generic_tracer_coupler_set
   use generic_tracer, only: generic_tracer_end, generic_tracer_get_list, do_generic_tracer
   use generic_tracer, only: generic_tracer_update_from_bottom,generic_tracer_vertdiff_G
+  use generic_tracer, only: generic_tracer_coupler_accumulate
 
   use g_tracer_utils,   only: g_tracer_get_name,g_tracer_set_values,g_tracer_set_common,g_tracer_get_common
   use g_tracer_utils,   only: g_tracer_get_next,g_tracer_type,g_tracer_is_prog,g_tracer_flux_init
@@ -77,6 +78,7 @@ module MOM_generic_tracer
   public MOM_generic_tracer_stock
   public MOM_generic_flux_init
   public MOM_generic_tracer_min_max
+  public MOM_generic_tracer_fluxes_accumulate
 
   type, public :: MOM_generic_tracer_CS ; private
      character(len = 200) :: IC_file ! The file in which the generic tracer initial values can
@@ -846,6 +848,13 @@ contains
 
   end subroutine MOM_generic_flux_init
 
+  subroutine MOM_generic_tracer_fluxes_accumulate(weight, flux_tmp)
+    real,                  intent(in)    :: weight
+    type(forcing),         intent(in)    :: flux_tmp
+
+   call generic_tracer_coupler_accumulate(weight, flux_tmp%tr_fluxes)
+
+  end subroutine MOM_generic_tracer_fluxes_accumulate
 
   subroutine MOM_generic_tracer_get(name,member,array, CS)
     character(len=*),         intent(in)  :: name

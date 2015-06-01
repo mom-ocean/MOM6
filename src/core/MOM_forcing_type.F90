@@ -32,6 +32,9 @@ use MOM_spatial_means, only : global_area_integral
 use MOM_variables,     only : surface, thermo_var_ptrs
 
 use coupler_types_mod, only : coupler_2d_bc_type
+#ifdef _USE_GENERIC_TRACER
+  use generic_tracer, only: generic_tracer_coupler_accumulate
+#endif
 
 implicit none ; private
 
@@ -1475,6 +1478,13 @@ subroutine forcing_accumulate(flux_tmp, fluxes, dt, G)
 
   !### This needs to be replaced with an appropriate copy and average.
    fluxes%tr_fluxes => flux_tmp%tr_fluxes
+  
+#ifdef _USE_GENERIC_TRACER
+   !Cannot call MOM_generic_tracer_fluxes_accumulate(wt1, flux_tmp%tr_fluxes) since that model "use"s this one
+   !So, call the geneirc_tracer interface directly.
+   !if (CS%use_MOM_generic_tracer)  !CS is not defined here. 
+   call generic_tracer_coupler_accumulate(wt1, flux_tmp%tr_fluxes)
+#endif
 
 end subroutine forcing_accumulate
 
