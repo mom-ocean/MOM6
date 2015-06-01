@@ -1700,9 +1700,8 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
                  "the gravity wave adjustment to h. This is a fragile feature and\n"//&
                  "thus undocumented.", default=.true., do_not_log=.true. )
   call get_param(param_file, "MOM", "THICKNESSDIFFUSE", CS%thickness_diffuse, &
-                 "If true, interfaces or isopycnal surfaces are diffused, \n"//&
-                 "depending on the value of FULL_THICKNESSDIFFUSE.", &
-                 default=.false.)
+                 "If true, interface heights are diffused with a \n"//&
+                 "coefficient of KHTH.", default=.false.)
   call get_param(param_file, "MOM", "THICKNESSDIFFUSE_FIRST", &
                                      CS%thickness_diffuse_first, &
                  "If true, do thickness diffusion before dynamics.\n"//&
