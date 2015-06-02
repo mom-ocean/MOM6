@@ -1638,8 +1638,6 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   isd  = G%isd   ; ied = G%ied  ; jsd  = G%jsd  ; jed  = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
-  call diag_mediator_init(G, param_file, diag)
-
   ! Read relevant parameters and write them to the model log.
   call log_version(param_file, "MOM", version, "")
   call get_param(param_file, "MOM", "VERBOSITY", verbosity,  &
@@ -1919,6 +1917,10 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     endif
   endif
   call callTree_waypoint("state variables allocated (initialize_MOM)")
+
+  ! Initialise the diag mediator, this needs to occur _after_ CS%h has been
+  ! allocated.
+  call diag_mediator_init(G, CS%h, param_file, diag)
 
   ! Set the fields that are needed for bitwise identical restarting
   ! the time stepping scheme.
@@ -2379,7 +2381,7 @@ subroutine register_diags(Time, G, CS, ADp)
   endif
   if (CS%use_temperature) then
     CS%id_T_predia = register_diag_field('ocean_model', 'temp_predia', diag%axesTL, Time, &
-        'Potential Temperature', 'Celsius')
+          long_name='Potential Temperature', units='Celsius')
     CS%id_S_predia = register_diag_field('ocean_model', 'salt_predia', diag%axesTL, Time, &
         'Salinity', 'PPT')
   endif
