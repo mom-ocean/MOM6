@@ -31,18 +31,32 @@ use MOM_coms,             only : PE_here
 use MOM_error_handler,    only : MOM_error, FATAL, is_root_pe
 use MOM_file_parser,      only : get_param, log_param, log_version, param_file_type
 use MOM_grid,             only : ocean_grid_type
-use MOM_io,               only : vardesc
+use MOM_io,               only : slasher, vardesc
 use MOM_safe_alloc,       only : safe_alloc_ptr, safe_alloc_alloc
 use MOM_string_functions, only : lowercase
 use MOM_time_manager,     only : time_type
+use MOM_remapping,        only : remapping_CS, remapping_core, initialize_remapping, dzFromH1H2
+use MOM_regridding,       only : regridding_CS, initialize_regridding, setCoordinateResolution, buildGridZStarColumn
 
 use diag_manager_mod, only : diag_manager_init, diag_manager_end
 use diag_manager_mod, only : send_data, diag_axis_init
 use diag_manager_mod, only : register_diag_field_fms=>register_diag_field
 use diag_manager_mod, only : register_static_field_fms=>register_static_field
+use diag_manager_mod, only : get_diag_field_id_fms=>get_diag_field_id
 use diag_manager_mod, only : DIAG_FIELD_NOT_FOUND
 
+use netcdf
+
 implicit none ; private
+
+#include <MOM_memory.h>
+
+#define RANGE_I(a) lbound(a, 1),ubound(a, 1)
+#define RANGE_J(a) lbound(a, 2),ubound(a, 2)
+#define RANGE_K(a) lbound(a, 3),ubound(a, 3)
+#define DIM_I(a) lbound(a, 1):ubound(a, 1)
+#define DIM_J(a) lbound(a, 2):ubound(a, 2)
+#define DIM_K(a) lbound(a, 3):ubound(a, 3)
 
 public set_axes_info, post_data, register_diag_field, time_type
 public post_data_1d_k
@@ -75,6 +89,7 @@ end type axesType
 type, private :: diag_type
   logical :: in_use
   integer :: fms_diag_id         ! underlying FMS diag id
+  type(axesType), pointer :: remap_axes => null()
   real, pointer, dimension(:,:)   :: mask2d => null()
   real, pointer, dimension(:,:,:) :: mask3d => null()
   type(diag_type), pointer :: next => null()  ! pointer to the next diag
@@ -98,6 +113,7 @@ type, public :: diag_ctrl
   type(axesType) :: axesBi, axesTi, axesCui, axesCvi
   type(axesType) :: axesB1, axesT1, axesCu1, axesCv1
   type(axesType) :: axesZi, axesZL
+  type(axesType) :: axesTzi, axesTZL
 
   ! Mask arrays for diagnostics
   real, dimension(:,:),   pointer :: mask2dT   => null()
@@ -122,6 +138,18 @@ type, public :: diag_ctrl
   !default missing value to be sent to ALL diagnostics registrations
   real :: missing_value = 1.0e+20
 
+  ! Interface locations for Z remapping
+  real, dimension(:), pointer :: z_remap_int  => null()
+  ! Difference between model interfaces and remap interfaces, this only needs to
+  ! be calculated when thicknesses change.
+  real, dimension(:,:,:), allocatable :: dz_remap_int
+  ! Number of z levels used for remapping
+  integer :: nz_remap
+
+  ! Pointer to H and G for Z remapping
+  real, dimension(:,:,:), pointer :: h => null()
+  type(ocean_grid_type), pointer :: G => null()
+
 end type diag_ctrl
 
 integer :: doc_unit = -1
@@ -141,16 +169,16 @@ subroutine set_axes_info(G, param_file, diag_cs, set_vertical)
 !  (inout)   diag_cs   - structure used to regulate diagnostic output.
 !  (in,opt) set_vertical - If true (or missing), set up the vertical axes.
 
-  integer :: id_xq, id_yq, id_zl, id_zi, id_xh, id_yh, k, nz
+  integer :: id_xq, id_yq, id_zl, id_zi, id_xh, id_yh, id_zzl, id_zzi
+  integer :: k, nz
   real :: zlev(G%ks:G%ke), zinter(G%ks:G%ke+1)
   logical :: set_vert, Cartesian_grid
   character(len=80) :: grid_config, units_temp
+  character(len=200) :: in_dir, zgrid_file    ! strings for directory/file
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mod  = "MOM_diag_mediator" ! This module's name.
-
-  nz = G%ke
 
   set_vert = .true. ; if (present(set_vertical)) set_vert = set_vertical
 
@@ -185,12 +213,6 @@ subroutine set_axes_info(G, param_file, diag_cs, set_vertical)
   else
     Cartesian_grid = .false.
   endif
-  
-  zInter(1:nz+1) = G%GV%sInterface(1:nz+1)
-  zLev(1:nz) = G%GV%sLayer(1:nz)
-
-!  do i=1,nz ; zlev(i) = real(i) ; enddo
-!  do i=1,nz+1 ; zinter(i) = real(i) - 0.5 ; enddo
 
   if(G%symmetric) then 
     id_xq = diag_axis_init('xq', G%gridLonB(G%isgB:G%iegB), G%x_axis_units, 'x', &
@@ -202,13 +224,16 @@ subroutine set_axes_info(G, param_file, diag_cs, set_vertical)
               'q point nominal longitude', Domain2=G%Domain%mpp_domain)
     id_yq = diag_axis_init('yq', G%gridLatB(G%jsg:G%jeg), G%y_axis_units, 'y', &
               'q point nominal latitude', Domain2=G%Domain%mpp_domain)
-  endif           
+  endif
   id_xh = diag_axis_init('xh', G%gridLonT(G%isg:G%ieg), G%x_axis_units, 'x', &
               'h point nominal longitude', Domain2=G%Domain%mpp_domain)
   id_yh = diag_axis_init('yh', G%gridLatT(G%jsg:G%jeg), G%y_axis_units, 'y', &
               'h point nominal latitude', Domain2=G%Domain%mpp_domain)
 
   if (set_vert) then
+    nz = G%ke
+    zinter(1:nz+1) = G%GV%sInterface(1:nz+1)
+    zlev(1:nz) = G%GV%sLayer(1:nz)
     id_zl = diag_axis_init('zl', zlev, trim(G%GV%zAxisUnits), 'z', &
                            'Layer '//trim(G%GV%zAxisLongName),     &
                            direction=G%GV%direction)
@@ -217,6 +242,25 @@ subroutine set_axes_info(G, param_file, diag_cs, set_vertical)
                            direction=G%GV%direction)
   else
     id_zl = -1 ; id_zi = -1
+  endif
+
+  ! Read info needed for z-space remapping
+  call get_param(param_file, mod, "Z_OUTPUT_GRID_FILE", zgrid_file, &
+                 "The file that specifies the vertical grid for \n"//&
+                 "depth-space diagnostics, or blank to disable \n"//&
+                 "depth-space output.", default="")
+  if (len_trim(zgrid_file) > 0) then
+    call get_param(param_file, mod, "INPUTDIR", in_dir, &
+                 "The directory in which input files are found.", default=".")
+    in_dir = slasher(in_dir)
+    call get_Z_output_grid(trim(in_dir)//trim(zgrid_file), "zw", diag_cs%z_remap_int, &
+                           "zt", id_zzl, id_zzi, diag_cs%nz_remap)
+    call log_param(param_file, mod, "!INPUTDIR/Z_OUTPUT_GRID_FILE", &
+                   trim(in_dir)//trim(zgrid_file))
+    call log_param(param_file, mod, "!NK_ZSPACE (from file)", diag_cs%nz_remap, &
+                 "The number of depth-space levels.  This is determined \n"//&
+                 "from the size of the variable zw in the output grid file.", &
+                 units="nondim")
   endif
 
   ! Vertical axes for the interfaces and layers
@@ -240,7 +284,10 @@ subroutine set_axes_info(G, param_file, diag_cs, set_vertical)
   call defineAxes(diag_cs, (/ id_xq, id_yq /), diag_cs%axesB1)
   call defineAxes(diag_cs, (/ id_xq, id_yh /), diag_cs%axesCu1)
   call defineAxes(diag_cs, (/ id_xh, id_yq /), diag_cs%axesCv1)
- 
+
+  ! Axis for z remapping
+  call defineAxes(diag_cs, (/ id_xh, id_yh, id_zzl /), diag_cs%axesTZL)
+
 end subroutine set_axes_info
 
 subroutine defineAxes(diag_cs, handles, axes)
@@ -260,6 +307,131 @@ subroutine defineAxes(diag_cs, handles, axes)
   axes%diag_cs => diag_cs ! A [circular] link back to the diag_cs structure
 
 end subroutine defineAxes
+
+subroutine get_Z_output_grid(depth_file, int_depth_name, int_depth, cell_depth_name, &
+                             z_axis_index, z_int_axis_index, nz)
+  character(len=*),   intent(in)  :: depth_file
+  character(len=*),   intent(in)  :: int_depth_name
+  real, dimension(:), pointer     :: int_depth
+  character(len=*),   intent(in)  :: cell_depth_name
+  integer,            intent(out) :: z_axis_index
+  integer,            intent(out) :: z_int_axis_index
+  integer,            intent(out) :: nz
+
+!   This subroutine reads the depths of the interfaces bounding the intended
+! layers from a NetCDF file.  If no appropriate file is found, -1 is returned
+! as the number of layers in the output file.  Also, a diag_manager axis is set
+! up with the same information as this axis.
+
+  real, allocatable   :: cell_depth(:)
+  character (len=200) :: units, long_name
+  integer :: ncid, status, intid, intvid, layid, layvid, k, ni
+
+  nz = -1
+
+  status = NF90_OPEN(depth_file, NF90_NOWRITE, ncid);
+  if (status /= NF90_NOERR) then
+    call MOM_error(FATAL,"MOM_diag_to_Z get_Z_depths: "//&
+        " Difficulties opening "//trim(depth_file)//" - "//&
+        trim(NF90_STRERROR(status)))
+    nz = -1 ; return
+  endif
+
+  status = NF90_INQ_DIMID(ncid, int_depth_name, intid)
+  if (status /= NF90_NOERR) then
+    call MOM_error(FATAL,"MOM_diag_to_Z get_Z_depths: "//&
+      trim(NF90_STRERROR(status))//" Getting ID of dimension "//&
+      trim(int_depth_name)//" in "//trim(depth_file))
+  endif
+
+  status = nf90_Inquire_Dimension(ncid, intid, len=ni)
+  if (status /= NF90_NOERR) then
+    call MOM_error(FATAL,"MOM_diag_to_Z get_Z_depths: "//&
+      trim(NF90_STRERROR(status))//" Getting number of interfaces of "//&
+      trim(int_depth_name)//" in "//trim(depth_file))
+  endif
+
+  if (ni < 2) then
+    call MOM_error(FATAL,"MOM_diag_to_Z get_Z_depths: "//&
+        "At least two interface depths must be specified in "//trim(depth_file))
+  endif
+
+  status = NF90_INQ_DIMID(ncid, cell_depth_name, layid)
+  if (status /= NF90_NOERR) then
+    call MOM_error(FATAL,"MOM_diag_to_Z get_Z_depths: "//&
+      trim(NF90_STRERROR(status))//" Getting ID of dimension "//&
+      trim(cell_depth_name)//" in "//trim(depth_file))
+  endif
+  status = nf90_Inquire_Dimension(ncid, layid, len=nz)
+  if (status /= NF90_NOERR) then
+    call MOM_error(FATAL,"MOM_diag_to_Z get_Z_depths: "//&
+      trim(NF90_STRERROR(status))//" Getting number of interfaces of "//&
+      trim(cell_depth_name)//" in "//trim(depth_file))
+  endif
+  if (ni /= nz+1) then
+    call MOM_error(FATAL,"MOM_diag_to_Z get_Z_depths: "//&
+        "The interface depths must have one more point than cell centers in "//&
+        trim(depth_file))
+  endif
+
+  allocate(int_depth(nz+1))
+  allocate(cell_depth(nz))
+
+  status = NF90_INQ_VARID(ncid, int_depth_name, intvid)
+  if (status /= NF90_NOERR) then
+    call MOM_error(FATAL,"MOM_diag_to_Z get_Z_depths: "//&
+      trim(NF90_STRERROR(status))//" Getting ID of variable "//&
+      trim(int_depth_name)//" in "//trim(depth_file))
+  endif
+  status = NF90_GET_VAR(ncid, intvid, int_depth)
+  if (status /= NF90_NOERR) then
+    call MOM_error(FATAL,"MOM_diag_to_Z get_Z_depths: "//&
+      trim(NF90_STRERROR(status))//" Reading variable "//&
+      trim(int_depth_name)//" in "//trim(depth_file))
+  endif
+  status = NF90_GET_ATT(ncid, intvid, "units", units)
+  if (status /= NF90_NOERR) units = "meters"
+  status = NF90_GET_ATT(ncid, intvid, "long_name", long_name)
+  if (status /= NF90_NOERR) long_name = "Depth of edges"
+  z_int_axis_index = diag_axis_init(int_depth_name, int_depth, units, 'z', &
+                              long_name, direction=-1)
+
+  ! Create an fms axis with the same data as the cell_depth array in the
+  ! input file.
+  status = NF90_INQ_VARID(ncid, cell_depth_name, layvid)
+  if (status /= NF90_NOERR) then
+    call MOM_error(FATAL,"MOM_diag_to_Z get_Z_depths: "//&
+      trim(NF90_STRERROR(status))//" Getting ID of variable "//&
+      trim(cell_depth_name)//" in "//trim(depth_file))
+  endif
+  status = NF90_GET_VAR(ncid, layvid, cell_depth)
+  if (status /= NF90_NOERR) then
+    call MOM_error(FATAL,"MOM_diag_to_Z get_Z_depths: "//&
+      trim(NF90_STRERROR(status))//" Reading variable "//&
+      trim(cell_depth_name)//" in "//trim(depth_file))
+  endif
+  status = NF90_GET_ATT(ncid, layvid, "units", units)
+  if (status /= NF90_NOERR) units = "meters"
+  status = NF90_GET_ATT(ncid, layvid, "long_name", long_name)
+  if (status /= NF90_NOERR) long_name = "Depth of cell center"
+
+  z_axis_index = diag_axis_init(cell_depth_name, cell_depth, units, 'z',&
+                                long_name, edges = z_int_axis_index, direction=-1)
+  deallocate(cell_depth)
+  status = nf90_close(ncid)
+
+  ! Check the sign convention and change to the MOM "height" convention.
+  !if (int_depth(1) < int_depth(2)) then
+  !  do k=1,nz+1 ; int_depth(k) = -1*int_depth(k) ; enddo
+  !endif
+
+  ! Check for inversions in grid.
+  do k=1,nz ; if (int_depth(k) > int_depth(k+1)) then
+    call MOM_error(FATAL,"MOM_diag_to_Z get_Z_depths: "//&
+        "Inverted interface depths in output grid in "//depth_file)
+  endif ; enddo
+
+end subroutine get_Z_output_grid
 
 subroutine set_diag_mediator_grid(G, diag_cs)
   type(ocean_grid_type), intent(inout) :: G
@@ -362,7 +534,6 @@ subroutine post_data_2d(diag_field_id, field, diag_cs, is_static, mask)
 !  (in,opt)  is_static - If true, this is a static field that is always offered.
 !  (in,opt)   mask     - If present, use this real array as the data mask.
 
-  integer :: altId
   type(diag_type), pointer :: diag => null()
 
   ! Iterate over list of diag 'variants' (e.g. CMOR aliases) and post each.
@@ -370,7 +541,7 @@ subroutine post_data_2d(diag_field_id, field, diag_cs, is_static, mask)
               'post_data_2d: Unregistered diagnostic id')
   diag => diag_cs%diags(diag_field_id)
   do while (associated(diag))
-    call post_data_2d_low(diag, field, diag_cs, is_static, mask)
+     call post_data_2d_low(diag, field, diag_cs, is_static, mask)
     diag => diag%next
   enddo
 
@@ -463,6 +634,7 @@ subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
 end subroutine post_data_2d_low
 
 subroutine post_data_3d(diag_field_id, field, diag_cs, is_static, mask)
+
   integer,           intent(in) :: diag_field_id
   real,              intent(in) :: field(:,:,:)
   type(diag_ctrl), target, intent(in) :: diag_cs
@@ -477,19 +649,104 @@ subroutine post_data_3d(diag_field_id, field, diag_cs, is_static, mask)
 !  (in)        static - If true, this is a static field that is always offered.
 !  (in,opt)      mask - If present, use this real array as the data mask.
 
-  integer :: altId
   type(diag_type), pointer :: diag => null()
+  real, allocatable :: remapped_field(:,:,:)
 
-  ! Iterate over list of diag 'variants', e.g. CMOR aliases.
+  ! Iterate over list of diag 'variants', e.g. CMOR aliases, different vertical
+  ! grids, and post each.
   call assert(diag_field_id < diag_cs%next_free_diag_id, &
               'post_data_3d: Unregistered diagnostic id')
   diag => diag_cs%diags(diag_field_id)
   do while (associated(diag))
-    call post_data_3d_low(diag, field, diag_cs, is_static, mask)
+
+    if (associated(diag%remap_axes)) then
+      ! Remap this field to another vertical coordinate.
+
+      if (present(mask)) then
+        call MOM_error(FATAL,"post_data_3d: no mask for regridded field.")
+      endif
+
+      allocate(remapped_field(DIM_I(field),DIM_J(field), diag_cs%nz_remap))
+      call remap_diag_to_z(field, diag, diag_cs, remapped_field)
+      if (associated(diag%mask3d)) then
+        ! Since 3d masks do not vary in the vertical, just use as much as is
+        ! needed.
+        call post_data_3d_low(diag, remapped_field, diag_cs, is_static, &
+                              mask=diag%mask3d(:,:,:diag_cs%nz_remap))
+      else
+        call post_data_3d_low(diag, remapped_field, diag_cs, is_static)
+      endif
+      deallocate(remapped_field)
+    else
+      call post_data_3d_low(diag, field, diag_cs, is_static, mask)
+    endif
     diag => diag%next
   enddo
 
 end subroutine post_data_3d
+
+subroutine remap_diag_to_z(field, diag, diag_cs, remapped_field)
+
+  real, dimension(:,:,:), intent(in) :: field
+  type(diag_type), intent(in) :: diag
+  type(diag_ctrl), intent(in) :: diag_cs
+  real, dimension(:,:,:), intent(inout) :: remapped_field
+
+! Arguments:
+!  (in) field  - The diagnostic field to be remapped
+!  (in) diag   - structure used to regulate diagnostic output
+!  (out) remapped_field - the field argument remapped to z star coordinate
+
+  type(remapping_CS) :: remap_cs
+  type(regridding_CS) :: regrid_cs
+  integer :: nz_src, i, j, k
+  real, dimension(diag_cs%nz_remap) :: h_new, h_remap
+  real, dimension(diag_cs%nz_remap+1) :: dz, z_int_tmp
+
+  call assert(size(field, 3) == size(diag_cs%h, 3), &
+              'Remap field and thickness z-axes do not match.')
+  call assert(associated(diag_cs%z_remap_int), 'Remapping axis not initialized')
+
+  remapped_field = diag_cs%missing_value
+  nz_src = size(field, 3)
+
+  ! Nominal thicknesses to remap to
+  h_remap(:) = diag_cs%z_remap_int(2:) - diag_cs%z_remap_int(:diag_cs%nz_remap)
+  call initialize_regridding(diag_cs%nz_remap, 'Z*', 'PPM_IH4', regrid_cs)
+  call setCoordinateResolution(h_remap, regrid_cs)
+  call initialize_remapping(nz_src, 'PPM_IH4', remap_cs) 
+  do j=RANGE_J(field)
+    do i=RANGE_I(field)
+      if (associated(diag%mask3d)) then
+        if (diag%mask3d(i,j, 1) == 0.) cycle
+      endif
+
+      ! Calculate thicknesses for new Z* using nominal thicknesses from
+      ! h_remap, current bathymetry and total thickness.
+      call buildGridZstarColumn(regrid_cs, diag_cs%nz_remap, diag_cs%G%bathyT(i, j), &
+                                sum(diag_cs%h(i, j, :)), z_int_tmp)
+
+      ! Calculate how much thicknesses change between source and dest grids, do
+      ! remapping
+      z_int_tmp = -z_int_tmp
+      h_new(:) = z_int_tmp(2:) - z_int_tmp(:size(z_int_tmp)-1)
+      call dzFromH1H2(nz_src, diag_cs%h(i, j, :), diag_cs%nz_remap, h_new, dz)
+      call remapping_core(remap_cs, nz_src, diag_cs%h(i, j, :), field(i,j,:), &
+                          diag_cs%nz_remap, dz, remapped_field(i, j, :))
+
+      ! Lower levels of the remapped data get squashed to follow bathymetry,
+      ! their depth does not corrospond to the nominal depth at that level
+      ! (and the nominal depth is below the bathymetry), so remove
+      do k=1, diag_cs%nz_remap
+        if (diag_cs%z_remap_int(k) >= diag_cs%G%bathyT(i, j)) then
+          remapped_field(i, j, k:diag_cs%nz_remap) = diag_cs%missing_value
+          exit
+        endif
+      enddo
+    enddo
+  enddo
+
+end subroutine remap_diag_to_z
 
 subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
   type(diag_type),   intent(in) :: diag
@@ -647,7 +904,7 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
      cmor_long_name, cmor_units, cmor_standard_name)
   integer :: register_diag_field
   character(len=*), intent(in) :: module_name, field_name
-  type(axesType),   intent(in) :: axes
+  type(axesType), target, intent(in) :: axes
   type(time_type),  intent(in) :: init_time
   character(len=*), optional, intent(in) :: long_name, units, standard_name
   real,             optional, intent(in) :: missing_value, range(2)
@@ -685,8 +942,8 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
 
   real :: MOM_missing_value
   type(diag_ctrl), pointer :: diag_cs
-  type(diag_type), pointer :: diag => null(), cmor_diag => null()
-  integer :: primary_id, fms_id
+  type(diag_type), pointer :: diag => null(), cmor_diag => null(), z_remap_diag => null()
+  integer :: primary_id, fms_id, remap_id
   character(len=256) :: posted_cmor_units, posted_cmor_standard_name, posted_cmor_long_name
 
   MOM_missing_value = axes%diag_cs%missing_value
@@ -696,6 +953,7 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
   primary_id = -1
   diag => null()
   cmor_diag => null()
+  z_remap_diag => null()
 
   ! Set up the 'primary' diagnostic, first get an underlying FMS id
   fms_id = register_diag_field_fms(module_name, field_name, axes%handles, &
@@ -748,8 +1006,31 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
     endif
   endif
 
-  ! Set up any other variations here, e.g. remapped vertical dimension,
-  ! or decimation.
+  ! Remap to z vertical coordinate, note that only
+  ! diagnostics on T points and layers (not interfaces) are supported,
+  ! for other diagnostics the old remapping approach can still be used
+  if (axes%id == diag_cs%axesTL%id) then
+    fms_id = register_diag_field_fms(module_name//'_z', field_name, diag_cs%axesTZL%handles, &
+           init_time, long_name=long_name, units=units, missing_value=MOM_missing_value, &
+           range=range, mask_variant=mask_variant, standard_name=standard_name, &
+           verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
+           interp_method=interp_method, tile_count=tile_count)
+    if (fms_id /= DIAG_FIELD_NOT_FOUND) then
+      ! Check that we have read in necessary remapping information from file
+      if (diag_cs%nz_remap == -1) then
+        call MOM_error(FATAL, 'register_diag_field: Request to regrid but no '// &
+                       'destination grid spec provided, see param Z_OUTPUT_GRID_FILE')
+      endif
+
+      if (primary_id == -1) then
+        primary_id = get_new_diag_id(diag_cs)
+      endif
+      call alloc_diag_with_id(primary_id, diag_cs, z_remap_diag)
+      z_remap_diag%fms_diag_id = fms_id
+      z_remap_diag%remap_axes => diag_cs%axesTZL
+      call set_diag_mask(z_remap_diag, diag_cs, diag_cs%axesTZL)
+    endif
+  endif
 
   ! Document diagnostics in list of available diagnostics
   if (is_root_pe() .and. doc_unit > 0) then
@@ -759,6 +1040,10 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
       call log_available_diag(associated(cmor_diag), module_name, cmor_field_name, &
                               posted_cmor_long_name, posted_cmor_units, &
                               posted_cmor_standard_name)
+    endif
+    if (axes%id == diag_cs%axesTL%id) then
+      call log_available_diag(associated(z_remap_diag), module_name//'_z', field_name, &
+                              long_name, units, standard_name)
     endif
   endif
 
@@ -1072,8 +1357,9 @@ function ocean_register_diag(var_desc, G, diag_cs, day)
 
 end function ocean_register_diag
 
-subroutine diag_mediator_init(G, param_file, diag_cs, err_msg)
-  type(ocean_grid_type),      intent(inout) :: G
+subroutine diag_mediator_init(G, h, param_file, diag_cs, err_msg)
+  type(ocean_grid_type), target, intent(inout) :: G
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), target, intent(in) :: h
   type(param_file_type),      intent(in)    :: param_file
   type(diag_ctrl),            intent(inout) :: diag_cs
   character(len=*), optional, intent(out)   :: err_msg
@@ -1095,7 +1381,15 @@ subroutine diag_mediator_init(G, param_file, diag_cs, err_msg)
   do i=1, DIAG_ALLOC_CHUNK_SIZE
     diag_cs%diags(i)%in_use = .false.
     diag_cs%diags(i)%next => null()
+    diag_cs%diags(i)%remap_axes => null()
+    diag_cs%diags(i)%mask2d => null()
+    diag_cs%diags(i)%mask3d => null()
   enddo
+
+  ! Keep pointers to these, needed for the z axis remapping
+  diag_cs%h => h
+  diag_cs%G => G
+  diag_cs%nz_remap = -1
 
   diag_cs%is = G%isc - (G%isd-1) ; diag_cs%ie = G%iec - (G%isd-1)
   diag_cs%js = G%jsc - (G%jsd-1) ; diag_cs%je = G%jec - (G%jsd-1)
@@ -1225,7 +1519,8 @@ subroutine set_diag_mask(diag, diag_cs, axes)
   if (axes%rank .eq. 3) then
     diag%mask2d => null()
     diag%mask3d => null()
-    if    (axes%id .eq. diag_cs%axesTL%id) then
+    if ((axes%id .eq. diag_cs%axesTL%id) .or. &
+        (axes%id .eq. diag_cs%axesTZL%id)) then
         diag%mask3d =>  diag_cs%mask3dTL
     elseif(axes%id .eq. diag_cs%axesBL%id) then
         diag%mask3d =>  diag_cs%mask3dBuL
@@ -1289,6 +1584,8 @@ function get_new_diag_id(diag_cs)
     do i=diag_cs%next_free_diag_id, size(diag_cs%diags)
       diag_cs%diags(i)%in_use = .false.
       diag_cs%diags(i)%next => null()
+      diag_cs%diags(i)%mask2d => null()
+      diag_cs%diags(i)%mask3d => null()
     enddo
   endif
 
