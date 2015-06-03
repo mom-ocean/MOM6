@@ -2365,16 +2365,18 @@ subroutine register_diags(Time, G, CS, ADp)
       'Layer Thickness before diabatic forcing', thickness_units)
   CS%id_e_predia = register_diag_field('ocean_model', 'e_predia', diag%axesTi, Time, &
       'Interface Heights before diabatic forcing', 'meter')
-  CS%id_u_preale = register_diag_field('ocean_model', 'u_preale', diag%axesCuL, Time, &
-      'Zonal velocity before remapping', 'meter second-1')
-  CS%id_v_preale = register_diag_field('ocean_model', 'v_preale', diag%axesCvL, Time, &
-      'Meridional velocity before remapping', 'meter second-1')
-  CS%id_h_preale = register_diag_field('ocean_model', 'h_preale', diag%axesTL, Time, &
-      'Layer Thickness before remapping', thickness_units)
-  CS%id_T_preale = register_diag_field('ocean_model', 'T_preale', diag%axesTL, Time, &
-      'Temperature before remapping', 'degC')
-  CS%id_S_preale = register_diag_field('ocean_model', 'S_preale', diag%axesTL, Time, &
-      'Salinity before remapping', 'ppt')
+  if (CS%diabatic_first .and. (.not. CS%adiabatic)) then
+    CS%id_u_preale = register_diag_field('ocean_model', 'u_preale', diag%axesCuL, Time, &
+        'Zonal velocity before remapping', 'meter second-1')
+    CS%id_v_preale = register_diag_field('ocean_model', 'v_preale', diag%axesCvL, Time, &
+        'Meridional velocity before remapping', 'meter second-1')
+    CS%id_h_preale = register_diag_field('ocean_model', 'h_preale', diag%axesTL, Time, &
+        'Layer Thickness before remapping', thickness_units)
+    CS%id_T_preale = register_diag_field('ocean_model', 'T_preale', diag%axesTL, Time, &
+        'Temperature before remapping', 'degC')
+    CS%id_S_preale = register_diag_field('ocean_model', 'S_preale', diag%axesTL, Time, &
+        'Salinity before remapping', 'ppt')
+  endif
   if (CS%use_temperature) then
     CS%id_T_predia = register_diag_field('ocean_model', 'temp_predia', diag%axesTL, Time, &
         'Potential Temperature', 'Celsius')
