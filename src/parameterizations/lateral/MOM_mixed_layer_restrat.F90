@@ -82,6 +82,9 @@ type, public :: mixedlayer_restrat_CS ; private
                              ! of order 500.
   real    :: MLE_density_diff ! Density difference used in detecting mixed-layer
                              ! depth (kg/m3)
+  real    :: MLE_tail_dh     ! Fraction by which to extend the mixed-layer restratification
+                             ! depth used for a smoother stream function at the base of
+                             ! the mixed-layer.
   type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
                              ! timing of diagnostic output.
   integer :: id_urestrat_time , id_vrestrat_time 
@@ -199,10 +202,16 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
   real :: aFac, ddRho
   real :: hAtVel, zIHaboveVel, zIHbelowVel
 
-  real :: PSI, z ! For statement function
+  real :: PSI, PSI1, z ! For statement function
   ! Stream function as a function of non-dimensional position within mixed-layer (F77 statement function)
  !PSI(z) = max(0., (1. - (2.*z+1.)**2 ) )
-  PSI(z) = max(0., (1. - (2.*z+1.)**2 ) * (1. + (5./21.)*(2.*z+1.)**2) )
+  PSI1(z) = max(0., (1. - (2.*z+1.)**2 ) * (1. + (5./21.)*(2.*z+1.)**2) )
+  real :: BOTTOP, XP, PSIC, DD
+  BOTTOP(z) = 0.5*(1.-SIGN(1.,z+0.5)) ! =0 for z>-0.5, =1 for z<-0.5
+  XP(z) = max(0., min(1., (-z-0.5)*2./(1.+2.*CS%MLE_tail_dh) ) )
+  DD(z) = (1.-3.*(XP(z)**2)+2.*(XP(z)**3))**(1.+2.*CS%MLE_tail_dh)
+  PSIC(z) = max( PSI1(z), DD(z)*BOTTOP(z) )
+  PSI(z) = PSIC(z)
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
@@ -709,9 +718,14 @@ logical function mixedlayer_restrat_init(Time, G, param_file, diag, CS)
              "Density difference used to detect the mixed-layer\n"//&
              "depth used for the mixed-layer eddy parameterization\n"//&
              "by Fox-Kemper et al. (2010)", units="kg/m3", default=0.03)
+    call get_param(param_file, mod, "MLE_TAIL_DH", CS%MLE_tail_dh, &
+             "Fraction by which to extend the mixed-layer restratification\n"//&
+             "depth used for a smoother stream function at the base of\n"//&
+             "the mixed-layer.", units="nondim", default=0.0)
   else
     ! Nonsense values to cause problems when these parameters are not used
     CS%MLE_density_diff = -9.e9
+    CS%MLE_tail_dh = -9.e9
   endif
   CS%id_uhml = register_diag_field('ocean_model', 'uhml', diag%axesCuL, Time, &
       'Zonal Thickness Flux to Restratify Mixed Layer', flux_units)
