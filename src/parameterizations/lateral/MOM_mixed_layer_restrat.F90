@@ -80,6 +80,8 @@ type, public :: mixedlayer_restrat_CS ; private
                              ! predicted based on the resolved  gradients.  This
                              ! increases with grid spacing^2, up to something
                              ! of order 500.
+  real    :: MLE_density_diff ! Density difference used in detecting mixed-layer
+                             ! depth (kg/m3)
   type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
                              ! timing of diagnostic output.
   integer :: id_urestrat_time , id_vrestrat_time 
@@ -195,7 +197,6 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
   real, dimension(SZI_(G)) :: rhoSurf, deltaRhoAtKm1, deltaRhoAtK, dK, dKm1, pRef_MLD ! Used for MLD
   real, dimension(SZI_(G)) :: rhoAtK, rho1, d1, pRef_N2 ! Used for N2
   real :: aFac, ddRho
-  real, parameter :: densityDiff = 0.03
   real :: hAtVel, zIHaboveVel, zIHbelowVel
 
   real :: PSI, z ! For statement function
@@ -227,15 +228,15 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
       do i = is-1, ie+1
         ddRho = deltaRhoAtK(i) - deltaRhoAtKm1(i)
         if ((MLD(i,j)==0.) .and. (ddRho>0.) .and. &
-            (deltaRhoAtKm1(i)<densityDiff) .and. (deltaRhoAtK(i)>=densityDiff)) then
-          aFac = ( densityDiff - deltaRhoAtKm1(i) ) / ddRho
+            (deltaRhoAtKm1(i)<CS%MLE_density_diff) .and. (deltaRhoAtK(i)>=CS%MLE_density_diff)) then
+          aFac = ( CS%MLE_density_diff - deltaRhoAtKm1(i) ) / ddRho
           MLD(i,j) = dK(i) * aFac + dKm1(i) * (1. - aFac)
         endif
       enddo ! i-loop
 
     enddo ! k-loop
     do i = is-1, ie+1
-      if ((MLD(i,j)==0.) .and. (deltaRhoAtK(i)<densityDiff)) MLD(i,j) = dK(i) ! Assume mixing to the bottom
+      if ((MLD(i,j)==0.) .and. (deltaRhoAtK(i)<CS%MLE_density_diff)) MLD(i,j) = dK(i) ! Assume mixing to the bottom
     enddo
   enddo ! j-loop
 
@@ -703,7 +704,15 @@ logical function mixedlayer_restrat_init(Time, G, param_file, diag, CS)
              "geostrophic kinetic energy or 1 plus the square of the \n"//&
              "grid spacing over the deformation radius, as detailed \n"//&
              "by Fox-Kemper et al. (2010)", units="nondim", default=0.0)
-
+  if (G%nkml==0) then
+    call get_param(param_file, mod, "MLE_DENSITY_DIFF", CS%MLE_density_diff, &
+             "Density difference used to detect the mixed-layer\n"//&
+             "depth used for the mixed-layer eddy parameterization\n"//&
+             "by Fox-Kemper et al. (2010)", units="kg/m3", default=0.03)
+  else
+    ! Nonsense values to cause problems when these parameters are not used
+    CS%MLE_density_diff = -9.e9
+  endif
   CS%id_uhml = register_diag_field('ocean_model', 'uhml', diag%axesCuL, Time, &
       'Zonal Thickness Flux to Restratify Mixed Layer', flux_units)
   CS%id_vhml = register_diag_field('ocean_model', 'vhml', diag%axesCvL, Time, &
