@@ -119,7 +119,7 @@ character(len=338), parameter, public :: regriddingInterpSchemeDoc = &
                  " PQM_IH6IH5 (5th-order accurate)"
 character(len=6), parameter, public :: regriddingDefaultInterpScheme = "P1M_H2"
 logical, parameter, public :: regriddingDefaultBoundaryExtrapolation = .false.
-real, parameter, public :: regriddingDefaultMinThickness = 1.e-10
+real, parameter, public :: regriddingDefaultMinThickness = 1.e-3
 
 ! -----------------------------------------------------------------------------
 ! The following are private constants

@@ -36,7 +36,7 @@ use MOM_safe_alloc,       only : safe_alloc_ptr, safe_alloc_alloc
 use MOM_string_functions, only : lowercase
 use MOM_time_manager,     only : time_type
 use MOM_remapping,        only : remapping_CS, remapping_core, initialize_remapping, dzFromH1H2
-use MOM_regridding,       only : regridding_CS, initialize_regridding, setCoordinateResolution, buildGridZStarColumn
+use MOM_regridding,       only : regridding_CS, initialize_regridding, setCoordinateResolution, buildGridZStarColumn, setRegriddingMinimumThickness
 
 use diag_manager_mod, only : diag_manager_init, diag_manager_end
 use diag_manager_mod, only : send_data, diag_axis_init
@@ -713,8 +713,10 @@ subroutine remap_diag_to_z(field, diag, diag_cs, remapped_field)
   ! Nominal thicknesses to remap to
   h_remap(:) = diag_cs%z_remap_int(2:) - diag_cs%z_remap_int(:diag_cs%nz_remap)
   call initialize_regridding(diag_cs%nz_remap, 'Z*', 'PPM_IH4', regrid_cs)
+  call setRegriddingMinimumThickness(diag_cs%G%Angstrom, regrid_cs)
   call setCoordinateResolution(h_remap, regrid_cs)
   call initialize_remapping(nz_src, 'PPM_IH4', remap_cs) 
+
   do j=RANGE_J(field)
     do i=RANGE_I(field)
       if (associated(diag%mask3d)) then
@@ -725,7 +727,6 @@ subroutine remap_diag_to_z(field, diag, diag_cs, remapped_field)
       ! h_remap, current bathymetry and total thickness.
       call buildGridZstarColumn(regrid_cs, diag_cs%nz_remap, diag_cs%G%bathyT(i, j), &
                                 sum(diag_cs%h(i, j, :)), z_int_tmp)
-
       ! Calculate how much thicknesses change between source and dest grids, do
       ! remapping
       z_int_tmp = -z_int_tmp
