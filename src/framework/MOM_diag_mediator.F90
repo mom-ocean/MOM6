@@ -49,8 +49,6 @@ use netcdf
 
 implicit none ; private
 
-#include <MOM_memory.h>
-
 #define RANGE_I(a) lbound(a, 1),ubound(a, 1)
 #define RANGE_J(a) lbound(a, 2),ubound(a, 2)
 #define RANGE_K(a) lbound(a, 3),ubound(a, 3)
@@ -1432,7 +1430,7 @@ end subroutine diag_mediator_init
 
 subroutine diag_set_thickness_ptr(h, diag_cs)
 
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), target, intent(in) :: h
+  real, dimension(:,:,:), target, intent(in) :: h
   type(diag_ctrl), intent(inout) :: diag_cs
 
   !  (inout) diag_cs - diag mediator control structure
