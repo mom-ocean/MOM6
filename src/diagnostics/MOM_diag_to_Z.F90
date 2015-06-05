@@ -862,11 +862,11 @@ subroutine register_Z_tracer_low(tr_ptr, name, long_name, units, standard_name, 
 
   CS%missing_tr(m) = CS%missing_value ! This could be changed later, if desired.
   if (CS%nk_zspace > 0) then
-    CS%id_tr(m) = register_diag_field('ocean_model_old_z', name, CS%axesTz, Time,           &
+    CS%id_tr(m) = register_diag_field('ocean_model_z', name, CS%axesTz, Time,           &
                                       long_name, units, missing_value=CS%missing_tr(m), &
                                       standard_name=standard_name)
   else
-    id_test = register_diag_field('ocean_model_old_z', name, CS%diag%axesT1, Time,      &
+    id_test = register_diag_field('ocean_model_z', name, CS%diag%axesT1, Time,      &
                                   long_name, units, missing_value=CS%missing_tr(m), &
                                   standard_name=standard_name)
     if (id_test>0) call MOM_error(WARNING, &
@@ -1092,7 +1092,7 @@ subroutine get_Z_depths(depth_file, int_depth_name, int_depth, cell_depth_name, 
   if (status /= NF90_NOERR) units = "meters"
   status = NF90_GET_ATT(ncid, intvid, "long_name", long_name)
   if (status /= NF90_NOERR) long_name = "Depth of edges"
-  edge_index = diag_axis_init(int_depth_name//'_old', int_depth, units, 'z', &
+  edge_index = diag_axis_init(int_depth_name, int_depth, units, 'z', &
                               long_name, direction=-1)
 
 ! Create an fms axis with the same data as the cell_depth array in the input file.
@@ -1109,7 +1109,7 @@ subroutine get_Z_depths(depth_file, int_depth_name, int_depth, cell_depth_name, 
   status = NF90_GET_ATT(ncid, layvid, "long_name", long_name)
   if (status /= NF90_NOERR) long_name = "Depth of cell center"
 
-  z_axis_index = diag_axis_init(cell_depth_name//'_old', cell_depth, units, 'z',&
+  z_axis_index = diag_axis_init(cell_depth_name, cell_depth, units, 'z',&
                                 long_name, edges = edge_index, direction=-1)
   
   deallocate(cell_depth)

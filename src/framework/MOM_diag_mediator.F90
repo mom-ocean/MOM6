@@ -394,7 +394,7 @@ subroutine get_Z_output_grid(depth_file, int_depth_name, int_depth, cell_depth_n
   if (status /= NF90_NOERR) units = "meters"
   status = NF90_GET_ATT(ncid, intvid, "long_name", long_name)
   if (status /= NF90_NOERR) long_name = "Depth of edges"
-  z_int_axis_index = diag_axis_init(int_depth_name, int_depth, units, 'z', &
+  z_int_axis_index = diag_axis_init(int_depth_name//'_new', int_depth, units, 'z', &
                               long_name, direction=-1)
 
   ! Create an fms axis with the same data as the cell_depth array in the
@@ -416,7 +416,7 @@ subroutine get_Z_output_grid(depth_file, int_depth_name, int_depth, cell_depth_n
   status = NF90_GET_ATT(ncid, layvid, "long_name", long_name)
   if (status /= NF90_NOERR) long_name = "Depth of cell center"
 
-  z_axis_index = diag_axis_init(cell_depth_name, cell_depth, units, 'z',&
+  z_axis_index = diag_axis_init(cell_depth_name//'_new', cell_depth, units, 'z',&
                                 long_name, edges = z_int_axis_index, direction=-1)
   deallocate(cell_depth)
   status = nf90_close(ncid)
@@ -1012,7 +1012,7 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
   ! diagnostics on T points and layers (not interfaces) are supported,
   ! for other diagnostics the old remapping approach can still be used
   if (axes%id == diag_cs%axesTL%id) then
-    fms_id = register_diag_field_fms(module_name//'_z', field_name, diag_cs%axesTZL%handles, &
+    fms_id = register_diag_field_fms(module_name//'_z_new', field_name, diag_cs%axesTZL%handles, &
            init_time, long_name=long_name, units=units, missing_value=MOM_missing_value, &
            range=range, mask_variant=mask_variant, standard_name=standard_name, &
            verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
@@ -1044,7 +1044,7 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
                               posted_cmor_standard_name)
     endif
     if (axes%id == diag_cs%axesTL%id) then
-      call log_available_diag(associated(z_remap_diag), module_name//'_z', field_name, &
+      call log_available_diag(associated(z_remap_diag), module_name//'_z_new', field_name, &
                               long_name, units, standard_name)
     endif
   endif
