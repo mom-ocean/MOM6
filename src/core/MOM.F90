@@ -2383,7 +2383,7 @@ subroutine register_diags(Time, G, CS, ADp)
   endif
   if (CS%use_temperature) then
     CS%id_T_predia = register_diag_field('ocean_model', 'temp_predia', diag%axesTL, Time, &
-          long_name='Potential Temperature', units='Celsius')
+        'Potential Temperature', 'Celsius')
     CS%id_S_predia = register_diag_field('ocean_model', 'salt_predia', diag%axesTL, Time, &
         'Salinity', 'PPT')
   endif
