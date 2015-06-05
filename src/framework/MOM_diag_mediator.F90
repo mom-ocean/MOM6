@@ -31,7 +31,9 @@ use MOM_coms,             only : PE_here
 use MOM_error_handler,    only : MOM_error, FATAL, is_root_pe
 use MOM_file_parser,      only : get_param, log_param, log_version, param_file_type
 use MOM_grid,             only : ocean_grid_type
-use MOM_io,               only : slasher, vardesc
+use MOM_io,               only : file_exists, field_exists, field_size
+use MOM_io,               only : slasher, vardesc, mom_read_data
+use MOM_string_functions, only : extractWord
 use MOM_safe_alloc,       only : safe_alloc_ptr, safe_alloc_alloc
 use MOM_string_functions, only : lowercase
 use MOM_time_manager,     only : time_type
@@ -138,10 +140,9 @@ type, public :: diag_ctrl
   real :: missing_value = 1.0e+20
 
   ! Interface locations for Z remapping
-  real, dimension(:), pointer :: z_remap_int  => null()
-  ! Difference between model interfaces and remap interfaces, this only needs to
-  ! be calculated when thicknesses change.
-  real, dimension(:,:,:), allocatable :: dz_remap_int
+  real, dimension(:), allocatable :: zi_remap
+  ! Layer locations for Z remapping
+  real, dimension(:), allocatable :: zl_remap
   ! Number of z levels used for remapping
   integer :: nz_remap
 
@@ -170,10 +171,11 @@ subroutine set_axes_info(G, param_file, diag_cs, set_vertical)
 
   integer :: id_xq, id_yq, id_zl, id_zi, id_xh, id_yh, id_zzl, id_zzi
   integer :: k, nz
+  integer :: nzi(4)
   real :: zlev(G%ks:G%ke), zinter(G%ks:G%ke+1)
   logical :: set_vert, Cartesian_grid
   character(len=80) :: grid_config, units_temp
-  character(len=200) :: in_dir, zgrid_file    ! strings for directory/file
+  character(len=200) :: inputdir, string, filename, varname, dimname
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
@@ -244,23 +246,59 @@ subroutine set_axes_info(G, param_file, diag_cs, set_vertical)
   endif
 
   ! Read info needed for z-space remapping
-  call get_param(param_file, mod, "Z_OUTPUT_GRID_FILE", zgrid_file, &
-                 "The file that specifies the vertical grid for \n"//&
-                 "depth-space diagnostics, or blank to disable \n"//&
-                 "depth-space output.", default="")
-  if (len_trim(zgrid_file) > 0) then
-    call get_param(param_file, mod, "INPUTDIR", in_dir, &
-                 "The directory in which input files are found.", default=".")
-    in_dir = slasher(in_dir)
-    call get_Z_output_grid(trim(in_dir)//trim(zgrid_file), "zw", diag_cs%z_remap_int, &
-                           "zt", id_zzl, id_zzi, diag_cs%nz_remap)
-    call log_param(param_file, mod, "!INPUTDIR/Z_OUTPUT_GRID_FILE", &
-                   trim(in_dir)//trim(zgrid_file))
-    call log_param(param_file, mod, "!NK_ZSPACE (from file)", diag_cs%nz_remap, &
-                 "The number of depth-space levels.  This is determined \n"//&
-                 "from the size of the variable zw in the output grid file.", &
-                 units="nondim")
+  call get_param(param_file, mod, "DIAG_REMAP_Z_GRID_DEF", string, &
+                 "This sets the file and variable names that define the\n"//&
+                 "vertical grid used for diagnostic output remapping to\n"//&
+                 "Z space. It should look like:\n"//&
+                 " FILE:<file>,<variable> - where <file> is a file within\n"//&
+                 "                          the INPUTDIR, <variable> is\n"//&
+                 "                          the name of the variable that\n"//&
+                 "                          contains interface positions.\n",&
+                 default="")
+  if (len_trim(string) > 0) then
+    call get_param(param_file, mod, "INPUTDIR", inputdir, default=".")
+    inputdir = slasher(inputdir)
+    filename = trim(inputdir) // trim(extractWord(trim(string(6:200)), 1))
+    varname = trim(extractWord(trim(string(6:200)), 2))
+    dimname = trim(extractWord(trim(string(6:200)), 3))
+
+    if (.not. file_exists(trim(filename))) then
+      call MOM_error(FATAL,"set_axes_info: Specified file not found: "//&
+                           "Looking for '"//trim(filename)//"'")
+    endif
+    ! Check that the grid has expected format, units etc.
+    if (.not. check_grid_def(trim(filename), trim(varname))) then
+      call MOM_error(FATAL,"set_axes_info: Bad grid definition in "//&
+                           "'"//trim(filename)//"'")
+    endif
+    call log_param(param_file, mod, "DIAG_REMAP_Z_GRID_DEF", &
+                   trim(inputdir)//"/"//trim(filename)//","//trim(varname))
+
+    ! Get interface dimensions
+    call field_size(filename, varname, nzi)
+    call assert(nzi(1) /= 0, 'set_axes_info: bad z-axis dimension size')
+    allocate(diag_cs%zi_remap(nzi(1)))
+    allocate(diag_cs%zl_remap(nzi(1) - 1))
+    call MOM_read_data(filename, varname, diag_cs%zi_remap)
+    ! Calculate layer positions
+    diag_cs%zl_remap(:) = diag_cs%zi_remap(1:nzi(1)-1) + &
+                          (diag_cs%zi_remap(2:) - diag_cs%zi_remap(:nzi(1)-1)) / 2
+    diag_cs%nz_remap = nzi(1) - 1
+
+    ! Make axes objects
+    id_zzl = diag_axis_init('zl_remap', diag_cs%zl_remap, "meters", "z", &
+                            "Depth of cell center", direction=-1)
+    id_zzi = diag_axis_init('zi_remap', diag_cs%zi_remap, "meters", "z", &
+                            'Depth of interfaces', direction=-1)
+  else
+    ! In this case the axes associated with these will never be used, however
+    ! they need to be positive otherwise FMS complains.
+    id_zzl = 1
+    id_zzi = 1
   endif
+
+  ! Axis for z remapping
+  call defineAxes(diag_cs, (/ id_xh, id_yh, id_zzl /), diag_cs%axesTZL)
 
   ! Vertical axes for the interfaces and layers
   call defineAxes(diag_cs, (/ id_zi /), diag_cs%axesZi)
@@ -284,10 +322,37 @@ subroutine set_axes_info(G, param_file, diag_cs, set_vertical)
   call defineAxes(diag_cs, (/ id_xq, id_yh /), diag_cs%axesCu1)
   call defineAxes(diag_cs, (/ id_xh, id_yq /), diag_cs%axesCv1)
 
-  ! Axis for z remapping
-  call defineAxes(diag_cs, (/ id_xh, id_yh, id_zzl /), diag_cs%axesTZL)
-
 end subroutine set_axes_info
+
+function check_grid_def(filename, varname)
+  ! Do some basic checks on the vertical grid definition file, variable
+  character(len=*),   intent(in)  :: filename
+  character(len=*),   intent(in)  :: varname
+  logical :: check_grid_def
+
+  character (len=200) :: units, long_name
+  integer :: ncid, status, intid, vid
+
+  check_grid_def = .true.
+  status = NF90_OPEN(filename, NF90_NOWRITE, ncid);
+  if (status /= NF90_NOERR) then
+    check_grid_def = .false.
+  endif
+
+  status = NF90_INQ_VARID(ncid, varname, vid)
+  if (status /= NF90_NOERR) then
+    check_grid_def = .false.
+  endif
+
+  status = NF90_GET_ATT(ncid, vid, "units", units)
+  if (status /= NF90_NOERR) then
+    check_grid_def = .false.
+  endif
+  if (trim(units) /= "meters" .and. trim(units) /= "m") then
+    check_grid_def = .false.
+  endif
+
+end function check_grid_def
 
 subroutine defineAxes(diag_cs, handles, axes)
   ! Defines "axes" from list of handle and associates mask
@@ -306,131 +371,6 @@ subroutine defineAxes(diag_cs, handles, axes)
   axes%diag_cs => diag_cs ! A [circular] link back to the diag_cs structure
 
 end subroutine defineAxes
-
-subroutine get_Z_output_grid(depth_file, int_depth_name, int_depth, cell_depth_name, &
-                             z_axis_index, z_int_axis_index, nz)
-  character(len=*),   intent(in)  :: depth_file
-  character(len=*),   intent(in)  :: int_depth_name
-  real, dimension(:), pointer     :: int_depth
-  character(len=*),   intent(in)  :: cell_depth_name
-  integer,            intent(out) :: z_axis_index
-  integer,            intent(out) :: z_int_axis_index
-  integer,            intent(out) :: nz
-
-!   This subroutine reads the depths of the interfaces bounding the intended
-! layers from a NetCDF file.  If no appropriate file is found, -1 is returned
-! as the number of layers in the output file.  Also, a diag_manager axis is set
-! up with the same information as this axis.
-
-  real, allocatable   :: cell_depth(:)
-  character (len=200) :: units, long_name
-  integer :: ncid, status, intid, intvid, layid, layvid, k, ni
-
-  nz = -1
-
-  status = NF90_OPEN(depth_file, NF90_NOWRITE, ncid);
-  if (status /= NF90_NOERR) then
-    call MOM_error(FATAL,"MOM_diag_to_Z get_Z_depths: "//&
-        " Difficulties opening "//trim(depth_file)//" - "//&
-        trim(NF90_STRERROR(status)))
-    nz = -1 ; return
-  endif
-
-  status = NF90_INQ_DIMID(ncid, int_depth_name, intid)
-  if (status /= NF90_NOERR) then
-    call MOM_error(FATAL,"MOM_diag_to_Z get_Z_depths: "//&
-      trim(NF90_STRERROR(status))//" Getting ID of dimension "//&
-      trim(int_depth_name)//" in "//trim(depth_file))
-  endif
-
-  status = nf90_Inquire_Dimension(ncid, intid, len=ni)
-  if (status /= NF90_NOERR) then
-    call MOM_error(FATAL,"MOM_diag_to_Z get_Z_depths: "//&
-      trim(NF90_STRERROR(status))//" Getting number of interfaces of "//&
-      trim(int_depth_name)//" in "//trim(depth_file))
-  endif
-
-  if (ni < 2) then
-    call MOM_error(FATAL,"MOM_diag_to_Z get_Z_depths: "//&
-        "At least two interface depths must be specified in "//trim(depth_file))
-  endif
-
-  status = NF90_INQ_DIMID(ncid, cell_depth_name, layid)
-  if (status /= NF90_NOERR) then
-    call MOM_error(FATAL,"MOM_diag_to_Z get_Z_depths: "//&
-      trim(NF90_STRERROR(status))//" Getting ID of dimension "//&
-      trim(cell_depth_name)//" in "//trim(depth_file))
-  endif
-  status = nf90_Inquire_Dimension(ncid, layid, len=nz)
-  if (status /= NF90_NOERR) then
-    call MOM_error(FATAL,"MOM_diag_to_Z get_Z_depths: "//&
-      trim(NF90_STRERROR(status))//" Getting number of interfaces of "//&
-      trim(cell_depth_name)//" in "//trim(depth_file))
-  endif
-  if (ni /= nz+1) then
-    call MOM_error(FATAL,"MOM_diag_to_Z get_Z_depths: "//&
-        "The interface depths must have one more point than cell centers in "//&
-        trim(depth_file))
-  endif
-
-  allocate(int_depth(nz+1))
-  allocate(cell_depth(nz))
-
-  status = NF90_INQ_VARID(ncid, int_depth_name, intvid)
-  if (status /= NF90_NOERR) then
-    call MOM_error(FATAL,"MOM_diag_to_Z get_Z_depths: "//&
-      trim(NF90_STRERROR(status))//" Getting ID of variable "//&
-      trim(int_depth_name)//" in "//trim(depth_file))
-  endif
-  status = NF90_GET_VAR(ncid, intvid, int_depth)
-  if (status /= NF90_NOERR) then
-    call MOM_error(FATAL,"MOM_diag_to_Z get_Z_depths: "//&
-      trim(NF90_STRERROR(status))//" Reading variable "//&
-      trim(int_depth_name)//" in "//trim(depth_file))
-  endif
-  status = NF90_GET_ATT(ncid, intvid, "units", units)
-  if (status /= NF90_NOERR) units = "meters"
-  status = NF90_GET_ATT(ncid, intvid, "long_name", long_name)
-  if (status /= NF90_NOERR) long_name = "Depth of edges"
-  z_int_axis_index = diag_axis_init(int_depth_name//'_new', int_depth, units, 'z', &
-                              long_name, direction=-1)
-
-  ! Create an fms axis with the same data as the cell_depth array in the
-  ! input file.
-  status = NF90_INQ_VARID(ncid, cell_depth_name, layvid)
-  if (status /= NF90_NOERR) then
-    call MOM_error(FATAL,"MOM_diag_to_Z get_Z_depths: "//&
-      trim(NF90_STRERROR(status))//" Getting ID of variable "//&
-      trim(cell_depth_name)//" in "//trim(depth_file))
-  endif
-  status = NF90_GET_VAR(ncid, layvid, cell_depth)
-  if (status /= NF90_NOERR) then
-    call MOM_error(FATAL,"MOM_diag_to_Z get_Z_depths: "//&
-      trim(NF90_STRERROR(status))//" Reading variable "//&
-      trim(cell_depth_name)//" in "//trim(depth_file))
-  endif
-  status = NF90_GET_ATT(ncid, layvid, "units", units)
-  if (status /= NF90_NOERR) units = "meters"
-  status = NF90_GET_ATT(ncid, layvid, "long_name", long_name)
-  if (status /= NF90_NOERR) long_name = "Depth of cell center"
-
-  z_axis_index = diag_axis_init(cell_depth_name//'_new', cell_depth, units, 'z',&
-                                long_name, edges = z_int_axis_index, direction=-1)
-  deallocate(cell_depth)
-  status = nf90_close(ncid)
-
-  ! Check the sign convention and change to the MOM "height" convention.
-  !if (int_depth(1) < int_depth(2)) then
-  !  do k=1,nz+1 ; int_depth(k) = -1*int_depth(k) ; enddo
-  !endif
-
-  ! Check for inversions in grid.
-  do k=1,nz ; if (int_depth(k) > int_depth(k+1)) then
-    call MOM_error(FATAL,"MOM_diag_to_Z get_Z_depths: "//&
-        "Inverted interface depths in output grid in "//depth_file)
-  endif ; enddo
-
-end subroutine get_Z_output_grid
 
 subroutine set_diag_mediator_grid(G, diag_cs)
   type(ocean_grid_type), intent(inout) :: G
@@ -700,17 +640,17 @@ subroutine remap_diag_to_z(field, diag, diag_cs, remapped_field)
   type(regridding_CS) :: regrid_cs
   integer :: nz_src, i, j, k
   real, dimension(diag_cs%nz_remap) :: h_new, h_remap
-  real, dimension(diag_cs%nz_remap+1) :: dz, z_int_tmp
+  real, dimension(diag_cs%nz_remap+1) :: dz, zi_tmp
 
   call assert(size(field, 3) == size(diag_cs%h, 3), &
               'Remap field and thickness z-axes do not match.')
-  call assert(associated(diag_cs%z_remap_int), 'Remapping axis not initialized')
+  call assert(allocated(diag_cs%zi_remap), 'Remapping axis not initialized')
 
   remapped_field = diag_cs%missing_value
   nz_src = size(field, 3)
 
   ! Nominal thicknesses to remap to
-  h_remap(:) = diag_cs%z_remap_int(2:) - diag_cs%z_remap_int(:diag_cs%nz_remap)
+  h_remap(:) = diag_cs%zi_remap(2:) - diag_cs%zi_remap(:diag_cs%nz_remap)
   call initialize_regridding(diag_cs%nz_remap, 'Z*', 'PPM_IH4', regrid_cs)
   call setRegriddingMinimumThickness(diag_cs%G%Angstrom, regrid_cs)
   call setCoordinateResolution(h_remap, regrid_cs)
@@ -725,11 +665,11 @@ subroutine remap_diag_to_z(field, diag, diag_cs, remapped_field)
       ! Calculate thicknesses for new Z* using nominal thicknesses from
       ! h_remap, current bathymetry and total thickness.
       call buildGridZstarColumn(regrid_cs, diag_cs%nz_remap, diag_cs%G%bathyT(i, j), &
-                                sum(diag_cs%h(i, j, :)), z_int_tmp)
+                                sum(diag_cs%h(i, j, :)), zi_tmp)
       ! Calculate how much thicknesses change between source and dest grids, do
       ! remapping
-      z_int_tmp = -z_int_tmp
-      h_new(:) = z_int_tmp(2:) - z_int_tmp(:size(z_int_tmp)-1)
+      zi_tmp = -zi_tmp
+      h_new(:) = zi_tmp(2:) - zi_tmp(:size(zi_tmp)-1)
       call dzFromH1H2(nz_src, diag_cs%h(i, j, :), diag_cs%nz_remap, h_new, dz)
       call remapping_core(remap_cs, nz_src, diag_cs%h(i, j, :), field(i,j,:), &
                           diag_cs%nz_remap, dz, remapped_field(i, j, :))
@@ -738,7 +678,7 @@ subroutine remap_diag_to_z(field, diag, diag_cs, remapped_field)
       ! their depth does not corrospond to the nominal depth at that level
       ! (and the nominal depth is below the bathymetry), so remove
       do k=1, diag_cs%nz_remap
-        if (diag_cs%z_remap_int(k) >= diag_cs%G%bathyT(i, j)) then
+        if (diag_cs%zi_remap(k) >= diag_cs%G%bathyT(i, j)) then
           remapped_field(i, j, k:diag_cs%nz_remap) = diag_cs%missing_value
           exit
         endif
@@ -1017,9 +957,9 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
            interp_method=interp_method, tile_count=tile_count)
     if (fms_id /= DIAG_FIELD_NOT_FOUND) then
       ! Check that we have read in necessary remapping information from file
-      if (diag_cs%nz_remap == -1) then
+      if (.not. allocated(diag_cs%zi_remap)) then
         call MOM_error(FATAL, 'register_diag_field: Request to regrid but no '// &
-                       'destination grid spec provided, see param Z_OUTPUT_GRID_FILE')
+                       'destination grid spec provided, see param DIAG_REMAP_Z_GRID_DEF')
       endif
 
       if (primary_id == -1) then
