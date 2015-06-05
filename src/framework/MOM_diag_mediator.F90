@@ -67,6 +67,7 @@ public diag_mediator_close_registration, get_diag_time_end
 public diag_axis_init, ocean_register_diag, register_static_field
 public register_scalar_field
 public defineAxes, diag_masks_set
+public diag_set_thickness_ptr
 
 interface post_data
   module procedure post_data_3d, post_data_2d, post_data_0d
@@ -715,7 +716,7 @@ subroutine remap_diag_to_z(field, diag, diag_cs, remapped_field)
   call initialize_regridding(diag_cs%nz_remap, 'Z*', 'PPM_IH4', regrid_cs)
   call setRegriddingMinimumThickness(diag_cs%G%Angstrom, regrid_cs)
   call setCoordinateResolution(h_remap, regrid_cs)
-  call initialize_remapping(nz_src, 'PPM_IH4', remap_cs) 
+  call initialize_remapping(nz_src, 'PPM_IH4', remap_cs)
 
   do j=RANGE_J(field)
     do i=RANGE_I(field)
@@ -1358,9 +1359,8 @@ function ocean_register_diag(var_desc, G, diag_cs, day)
 
 end function ocean_register_diag
 
-subroutine diag_mediator_init(G, h, param_file, diag_cs, err_msg)
+subroutine diag_mediator_init(G, param_file, diag_cs, err_msg)
   type(ocean_grid_type), target, intent(inout) :: G
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), target, intent(in) :: h
   type(param_file_type),      intent(in)    :: param_file
   type(diag_ctrl),            intent(inout) :: diag_cs
   character(len=*), optional, intent(out)   :: err_msg
@@ -1387,8 +1387,7 @@ subroutine diag_mediator_init(G, h, param_file, diag_cs, err_msg)
     diag_cs%diags(i)%mask3d => null()
   enddo
 
-  ! Keep pointers to these, needed for the z axis remapping
-  diag_cs%h => h
+  ! Keep a pointer to the grid, this is needed for regridding
   diag_cs%G => G
   diag_cs%nz_remap = -1
 
@@ -1430,6 +1429,19 @@ subroutine diag_mediator_init(G, h, param_file, diag_cs, err_msg)
   endif
 
 end subroutine diag_mediator_init
+
+subroutine diag_set_thickness_ptr(h, diag_cs)
+
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), target, intent(in) :: h
+  type(diag_ctrl), intent(inout) :: diag_cs
+
+  !  (inout) diag_cs - diag mediator control structure
+  !  (in) h - a pointer to model thickness
+
+  ! Keep pointer to h, needed for the z axis remapping
+  diag_cs%h => h
+
+end subroutine
 
 subroutine diag_masks_set(G, missing_value, diag_cs)
 ! Setup the 2d masks for diagnostics

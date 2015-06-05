@@ -337,7 +337,7 @@ use MOM_cpu_clock,            only : cpu_clock_id, cpu_clock_begin, cpu_clock_en
 use MOM_cpu_clock,            only : CLOCK_COMPONENT, CLOCK_SUBCOMPONENT
 use MOM_cpu_clock,            only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
 use MOM_coms,                 only : reproducing_sum
-use MOM_diag_mediator,        only : diag_mediator_init, enable_averaging
+use MOM_diag_mediator,        only : diag_mediator_init, enable_averaging, diag_set_thickness_ptr
 use MOM_diag_mediator,        only : disable_averaging, post_data, safe_alloc_ptr
 use MOM_diag_mediator,        only : register_diag_field, register_static_field
 use MOM_diag_mediator,        only : register_scalar_field
@@ -1638,6 +1638,8 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   isd  = G%isd   ; ied = G%ied  ; jsd  = G%jsd  ; jed  = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
+  call diag_mediator_init(G, param_file, diag)
+
   ! Read relevant parameters and write them to the model log.
   call log_version(param_file, "MOM", version, "")
   call get_param(param_file, "MOM", "VERBOSITY", verbosity,  &
@@ -1918,9 +1920,9 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   endif
   call callTree_waypoint("state variables allocated (initialize_MOM)")
 
-  ! Initialise the diag mediator, this needs to occur _after_ CS%h has been
-  ! allocated.
-  call diag_mediator_init(G, CS%h, param_file, diag)
+  ! Set up a pointers h within diag mediator control structure,
+  ! this needs to occur _after_ CS%h has been allocated.
+  call diag_set_thickness_ptr(CS%h, diag)
 
   ! Set the fields that are needed for bitwise identical restarting
   ! the time stepping scheme.
