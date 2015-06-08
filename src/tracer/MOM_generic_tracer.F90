@@ -330,6 +330,12 @@ contains
     g_tracer=>CS%g_tracer_list
 
     do
+      if(INDEX(CS%IC_file, '_NULL_')) then
+         call MOM_error(WARNING,"The name of the IC_file "//trim(CS%IC_file)//&
+                              " indicates no MOM initialization was asked for the generic tracers."//&
+                              "Bypassing the MOM initialization of ALL generic tracers!")
+         exit
+      endif
       call g_tracer_get_alias(g_tracer,g_tracer_name)
       call g_tracer_get_pointer(g_tracer,g_tracer_name,'field',tr_field)
       tr_ptr => tr_field(:,:,:,1)
@@ -338,7 +344,7 @@ contains
           .not.query_initialized(tr_ptr, g_tracer_name, CS%restart_CSp))) then
 
         if (len_trim(CS%IC_file) > 0) then
-          !  Read the tracer concentrations from a netcdf file.
+        !  Read the tracer concentrations from a netcdf file.
           if (.not.file_exists(CS%IC_file)) call MOM_error(FATAL, &
                   "initialize_MOM_Generic_tracer: Unable to open "//CS%IC_file)
           if (CS%Z_IC_file) then
@@ -353,9 +359,10 @@ contains
                             "initialized generic tracer "//trim(g_tracer_name)//&
                             " using Generic Tracer File on Z: "//CS%IC_file)
           else
-            ! native grid
+            ! native grid 
             call MOM_error(NOTE,"initialize_MOM_generic_tracer: "//&
-                  "Using Generic Tracer IC file on native grid "//trim(CS%IC_file)//".")
+                  "Using Generic Tracer IC file on native grid "//trim(CS%IC_file)//&
+                  " for tracer "//trim(g_tracer_name))
             call read_data(CS%IC_file, trim(g_tracer_name), tr_ptr, domain=G%Domain%mpp_domain)
           endif
         else
