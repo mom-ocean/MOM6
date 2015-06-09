@@ -114,7 +114,7 @@ type, public :: diag_ctrl
   type(axesType) :: axesBi, axesTi, axesCui, axesCvi
   type(axesType) :: axesB1, axesT1, axesCu1, axesCv1
   type(axesType) :: axesZi, axesZL
-  type(axesType) :: axesTzi, axesTZL
+  type(axesType) :: axesTzi, axesTZL, axesBZL, axesCuZL, axesCvZL
 
   ! Mask arrays for diagnostics
   real, dimension(:,:),   pointer :: mask2dT   => null()
@@ -297,8 +297,11 @@ subroutine set_axes_info(G, param_file, diag_cs, set_vertical)
     id_zzi = 1
   endif
 
-  ! Axis for z remapping
+  ! Axes for z remapping
   call defineAxes(diag_cs, (/ id_xh, id_yh, id_zzl /), diag_cs%axesTZL)
+  call defineAxes(diag_cs, (/ id_xq, id_yq, id_zzL /), diag_cs%axesBZL)
+  call defineAxes(diag_cs, (/ id_xq, id_yh, id_zzL /), diag_cs%axesCuZL)
+  call defineAxes(diag_cs, (/ id_xh, id_yq, id_zzL /), diag_cs%axesCvZL)
 
   ! Vertical axes for the interfaces and layers
   call defineAxes(diag_cs, (/ id_zi /), diag_cs%axesZi)
@@ -639,7 +642,8 @@ subroutine remap_diag_to_z(field, diag, diag_cs, remapped_field)
   type(remapping_CS) :: remap_cs
   type(regridding_CS) :: regrid_cs
   integer :: nz_src, i, j, k
-  real, dimension(diag_cs%nz_remap) :: h_new, h_remap
+  real, dimension(diag_cs%nz_remap) :: h_dest, h_remap
+  real, dimension(size(diag_cs%h, 3)) :: h_src
   real, dimension(diag_cs%nz_remap+1) :: dz, zi_tmp
 
   call assert(size(field, 3) == size(diag_cs%h, 3), &
@@ -662,16 +666,26 @@ subroutine remap_diag_to_z(field, diag, diag_cs, remapped_field)
         if (diag%mask3d(i,j, 1) == 0.) cycle
       endif
 
+      ! Calculate source h depending on grid
+      if (is_u_axes(diag%remap_axes, diag_cs)) then
+        h_src(:) = 0.5 * (diag_cs%h(i,j,:) + diag_cs%h(i+1,j,:))
+      elseif (is_v_axes(diag%remap_axes, diag_cs)) then
+        h_src(:) = 0.5 * (diag_cs%h(i,j,:) + diag_cs%h(i,j+1,:))
+      else
+        h_src(:) = diag_cs%h(i, j, :)
+      endif
+      print*, 'h: ', h_src
+
       ! Calculate thicknesses for new Z* using nominal thicknesses from
       ! h_remap, current bathymetry and total thickness.
       call buildGridZstarColumn(regrid_cs, diag_cs%nz_remap, diag_cs%G%bathyT(i, j), &
-                                sum(diag_cs%h(i, j, :)), zi_tmp)
+                                sum(h_src(:)), zi_tmp)
       ! Calculate how much thicknesses change between source and dest grids, do
       ! remapping
       zi_tmp = -zi_tmp
-      h_new(:) = zi_tmp(2:) - zi_tmp(:size(zi_tmp)-1)
-      call dzFromH1H2(nz_src, diag_cs%h(i, j, :), diag_cs%nz_remap, h_new, dz)
-      call remapping_core(remap_cs, nz_src, diag_cs%h(i, j, :), field(i,j,:), &
+      h_dest(:) = zi_tmp(2:) - zi_tmp(:size(zi_tmp)-1)
+      call dzFromH1H2(nz_src, h_src(:), diag_cs%nz_remap, h_dest, dz)
+      call remapping_core(remap_cs, nz_src, h_src(:), field(i,j,:), &
                           diag_cs%nz_remap, dz, remapped_field(i, j, :))
 
       ! Lower levels of the remapped data get squashed to follow bathymetry,
@@ -907,7 +921,7 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
     call alloc_diag_with_id(primary_id, diag_cs, diag)
     call assert(associated(diag), 'register_diag_field: diag allocation failed')
     diag%fms_diag_id = fms_id
-    call set_diag_mask(diag, diag_cs, axes)
+    call set_diag_mask_and_remap_axes(diag, diag_cs, axes)
   endif
 
   ! Set up the CMOR variation of the diagnostic
@@ -942,34 +956,30 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
       ! In the case where there is no primary, it will become the primary.
       call alloc_diag_with_id(primary_id, diag_cs, cmor_diag)
       cmor_diag%fms_diag_id = fms_id
-      call set_diag_mask(cmor_diag, diag_cs, axes)
+      call set_diag_mask_and_remap_axes(cmor_diag, diag_cs, axes)
     endif
   endif
 
-  ! Remap to z vertical coordinate, note that only
-  ! diagnostics on T points and layers (not interfaces) are supported,
-  ! for other diagnostics the old remapping approach can still be used
-  if (axes%id == diag_cs%axesTL%id) then
-    fms_id = register_diag_field_fms(module_name//'_z_new', field_name, diag_cs%axesTZL%handles, &
-           init_time, long_name=long_name, units=units, missing_value=MOM_missing_value, &
-           range=range, mask_variant=mask_variant, standard_name=standard_name, &
-           verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
-           interp_method=interp_method, tile_count=tile_count)
-    if (fms_id /= DIAG_FIELD_NOT_FOUND) then
-      ! Check that we have read in necessary remapping information from file
-      if (.not. allocated(diag_cs%zi_remap)) then
-        call MOM_error(FATAL, 'register_diag_field: Request to regrid but no '// &
-                       'destination grid spec provided, see param DIAG_REMAP_Z_GRID_DEF')
-      endif
-
-      if (primary_id == -1) then
-        primary_id = get_new_diag_id(diag_cs)
-      endif
-      call alloc_diag_with_id(primary_id, diag_cs, z_remap_diag)
-      z_remap_diag%fms_diag_id = fms_id
-      z_remap_diag%remap_axes => diag_cs%axesTZL
-      call set_diag_mask(z_remap_diag, diag_cs, diag_cs%axesTZL)
+  ! Remap to z vertical coordinate, note that only diagnostics on layers
+  ! (not interfaces) are supported,
+  if (get_diag_field_id_fms(module_name//'_z_new', field_name) /= DIAG_FIELD_NOT_FOUND &
+      .and. is_layer_axes(axes, diag_cs))  then
+    if (.not. allocated(diag_cs%zi_remap)) then
+      call MOM_error(FATAL, 'register_diag_field: Request to regrid but no '// &
+                     'destination grid spec provided, see param DIAG_REMAP_Z_GRID_DEF')
     endif
+    if (primary_id == -1) then
+      primary_id = get_new_diag_id(diag_cs)
+    endif
+    call alloc_diag_with_id(primary_id, diag_cs, z_remap_diag)
+    call set_diag_mask_and_remap_axes(z_remap_diag, diag_cs, axes)
+    fms_id = register_diag_field_fms(module_name//'_z_new', field_name, &
+         z_remap_diag%remap_axes%handles, &
+         init_time, long_name=long_name, units=units, missing_value=MOM_missing_value, &
+         range=range, mask_variant=mask_variant, standard_name=standard_name, &
+         verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
+         interp_method=interp_method, tile_count=tile_count)
+    z_remap_diag%fms_diag_id = fms_id
   endif
 
   ! Document diagnostics in list of available diagnostics
@@ -981,7 +991,7 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
                               posted_cmor_long_name, posted_cmor_units, &
                               posted_cmor_standard_name)
     endif
-    if (axes%id == diag_cs%axesTL%id) then
+    if (is_layer_axes(axes, diag_cs)) then
       call log_available_diag(associated(z_remap_diag), module_name//'_z_new', field_name, &
                               long_name, units, standard_name)
     endif
@@ -1460,25 +1470,30 @@ function i2s(a,n_in)
     i2s = adjustl(i2s)
 end function i2s
 
-subroutine set_diag_mask(diag, diag_cs, axes)
+subroutine set_diag_mask_and_remap_axes(diag, diag_cs, axes)
   ! Associate a mask with the a diagnostic based on the axes info.
 
-  type(diag_ctrl), intent(inout) :: diag_cs
+  type(diag_ctrl), target, intent(inout) :: diag_cs
   type(diag_type), pointer, intent(out) :: diag
   type(axesType),   intent(in) :: axes
 
+  diag%mask2d => null()
+  diag%mask3d => null()
+  diag%remap_axes => null()
+
   if (axes%rank .eq. 3) then
-    diag%mask2d => null()
-    diag%mask3d => null()
-    if ((axes%id .eq. diag_cs%axesTL%id) .or. &
-        (axes%id .eq. diag_cs%axesTZL%id)) then
+    if ((axes%id .eq. diag_cs%axesTL%id)) then
         diag%mask3d =>  diag_cs%mask3dTL
+        diag%remap_axes => diag_cs%axesTZL
     elseif(axes%id .eq. diag_cs%axesBL%id) then
         diag%mask3d =>  diag_cs%mask3dBuL
+        diag%remap_axes => diag_cs%axesBZL
     elseif(axes%id .eq. diag_cs%axesCuL%id ) then
         diag%mask3d =>  diag_cs%mask3dCuL
+        diag%remap_axes => diag_cs%axesCuZL
     elseif(axes%id .eq. diag_cs%axesCvL%id) then
         diag%mask3d =>  diag_cs%mask3dCvL
+        diag%remap_axes => diag_cs%axesCvZL
     elseif(axes%id .eq. diag_cs%axesTi%id) then
         diag%mask3d =>  diag_cs%mask3dTi
     elseif(axes%id .eq. diag_cs%axesBi%id) then
@@ -1491,8 +1506,6 @@ subroutine set_diag_mask(diag, diag_cs, axes)
 
     !call assert(associated(diag%mask3d), "MOM_diag_mediator.F90: Invalid 3d axes id")
   elseif(axes%rank .eq. 2) then
-    diag%mask2d => null()
-    diag%mask3d => null()
     if (axes%id .eq. diag_cs%axesT1%id) then
         diag%mask2d =>  diag_cs%mask2dT
     elseif(axes%id .eq. diag_cs%axesB1%id) then
@@ -1506,7 +1519,67 @@ subroutine set_diag_mask(diag, diag_cs, axes)
     !call assert(associated(diag%mask2d), "MOM_diag_mediator.F90: Invalid 2d axes id")
   endif
 
-end subroutine set_diag_mask
+end subroutine set_diag_mask_and_remap_axes
+
+function is_layer_axes(axes, diag_cs)
+
+  type(axesType),  intent(in) :: axes
+  type(diag_ctrl), intent(in) :: diag_cs
+
+  logical :: is_layer_axes
+
+  is_layer_axes = .false.
+
+  if (axes%id == diag_cs%axesTZL%id  .or. &
+      axes%id == diag_cs%axesBZL%id  .or. &
+      axes%id == diag_cs%axesCuZL%id .or. &
+      axes%id == diag_cs%axesCvZL%id .or. &
+      axes%id == diag_cs%axesZi%id   .or. &
+      axes%id == diag_cs%axesZL%id   .or. &
+      axes%id == diag_cs%axesTL%id   .or. &
+      axes%id == diag_cs%axesBL%id   .or. &
+      axes%id == diag_cs%axesCuL%id  .or. &
+      axes%id == diag_cs%axesCvL%id) then
+    is_layer_axes = .true.
+  endif
+
+end function is_layer_axes
+
+function is_u_axes(axes, diag_cs)
+
+  type(axesType),  intent(in) :: axes
+  type(diag_ctrl), intent(in) :: diag_cs
+
+  logical :: is_u_axes
+
+  is_u_axes = .false.
+
+  if (axes%id == diag_cs%axesCuZL%id .or. &
+      axes%id == diag_cs%axesCuL%id  .or. &
+      axes%id == diag_cs%axesCui%id  .or. &
+      axes%id == diag_cs%axesCu1%id) then
+    is_u_axes = .true.
+  endif
+
+end function is_u_axes
+
+function is_v_axes(axes, diag_cs)
+
+  type(axesType),  intent(in) :: axes
+  type(diag_ctrl), intent(in) :: diag_cs
+
+  logical :: is_v_axes
+
+  is_v_axes = .false.
+
+  if (axes%id == diag_cs%axesCuZL%id .or. &
+      axes%id == diag_cs%axesCuL%id  .or. &
+      axes%id == diag_cs%axesCui%id  .or. &
+      axes%id == diag_cs%axesCu1%id) then
+    is_v_axes = .true.
+  endif
+
+end function is_v_axes
 
 ! Allocate a new diagnostic id, it may be necessary to expand the diagnostics
 ! array.
