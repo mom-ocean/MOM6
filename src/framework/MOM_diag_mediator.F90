@@ -641,10 +641,9 @@ subroutine remap_diag_to_z(field, diag, diag_cs, remapped_field)
 
   type(remapping_CS) :: remap_cs
   type(regridding_CS) :: regrid_cs
-  integer :: nz_src, i, j, k
-  real, dimension(diag_cs%nz_remap) :: h_dest, h_remap
-  real, dimension(size(diag_cs%h, 3)) :: h_src
-  real, dimension(diag_cs%nz_remap+1) :: dz, zi_tmp
+  integer :: nz_src
+  integer :: i, j, k, ilow, ihigh, jlow, jhigh
+  real, dimension(diag_cs%nz_remap) :: h_dest
 
   call assert(size(field, 3) == size(diag_cs%h, 3), &
               'Remap field and thickness z-axes do not match.')
@@ -653,40 +652,44 @@ subroutine remap_diag_to_z(field, diag, diag_cs, remapped_field)
   remapped_field = diag_cs%missing_value
   nz_src = size(field, 3)
 
-  ! Nominal thicknesses to remap to
-  h_remap(:) = diag_cs%zi_remap(2:) - diag_cs%zi_remap(:diag_cs%nz_remap)
+  ! In itialise remapping and set nominal thicknesses to remap to
   call initialize_regridding(diag_cs%nz_remap, 'Z*', 'PPM_IH4', regrid_cs)
   call setRegriddingMinimumThickness(diag_cs%G%Angstrom, regrid_cs)
-  call setCoordinateResolution(h_remap, regrid_cs)
+  h_dest(:) = diag_cs%zi_remap(2:) - diag_cs%zi_remap(:diag_cs%nz_remap)
+  call setCoordinateResolution(h_dest, regrid_cs)
   call initialize_remapping(nz_src, 'PPM_IH4', remap_cs)
 
-  do j=RANGE_J(field)
-    do i=RANGE_I(field)
+  print*, 'field: ', size(field), lbound(field, 1), ubound(field, 1), lbound(field, 2), ubound(field, 2)
+  print*, 'h: ', size(field), lbound(field, 1), ubound(field, 1), lbound(field, 2), ubound(field, 2)
+  print*, 'G%jscB, G%jecB: ', diag_cs%G%jscB, diag_cs%G%jecB
+  print*, 'G%isc, G%iec: ', diag_cs%G%isc, diag_cs%G%iec
+
+  ilow = diag_cs%G%isc
+  ihigh = diag_cs%G%iec
+  jlow = diag_cs%G%jsc
+  jhigh = diag_cs%G%jec
+
+  if (is_u_axes(diag%remap_axes, diag_cs)) then
+    print*, 'u_axes'
+    ilow = diag_cs%G%iscB
+    ihigh = diag_cs%G%iecB
+  elseif (is_v_axes(diag%remap_axes, diag_cs)) then
+    print*, 'v_axes'
+    jlow = diag_cs%G%jscB
+    jhigh = diag_cs%G%jecB
+  else
+    print*, 'T_axes'
+  endif
+
+  do j=jlow, jhigh
+    do i=ilow, ihigh
       if (associated(diag%mask3d)) then
         if (diag%mask3d(i,j, 1) == 0.) cycle
       endif
 
-      ! Calculate source h depending on grid
-      if (is_u_axes(diag%remap_axes, diag_cs)) then
-        h_src(:) = 0.5 * (diag_cs%h(i,j,:) + diag_cs%h(i+1,j,:))
-      elseif (is_v_axes(diag%remap_axes, diag_cs)) then
-        h_src(:) = 0.5 * (diag_cs%h(i,j,:) + diag_cs%h(i,j+1,:))
-      else
-        h_src(:) = diag_cs%h(i, j, :)
-      endif
-      print*, 'h: ', h_src
-
-      ! Calculate thicknesses for new Z* using nominal thicknesses from
-      ! h_remap, current bathymetry and total thickness.
-      call buildGridZstarColumn(regrid_cs, diag_cs%nz_remap, diag_cs%G%bathyT(i, j), &
-                                sum(h_src(:)), zi_tmp)
-      ! Calculate how much thicknesses change between source and dest grids, do
-      ! remapping
-      zi_tmp = -zi_tmp
-      h_dest(:) = zi_tmp(2:) - zi_tmp(:size(zi_tmp)-1)
-      call dzFromH1H2(nz_src, h_src(:), diag_cs%nz_remap, h_dest, dz)
-      call remapping_core(remap_cs, nz_src, h_src(:), field(i,j,:), &
-                          diag_cs%nz_remap, dz, remapped_field(i, j, :))
+      call remap_column_to_z(regrid_cs, remap_cs, nz_src, diag_cs%nz_remap, &
+                             diag_cs%h(i, j, :), diag_cs%G%bathyT(i, j), &
+                             field(i, j, :), remapped_field(i, j, :))
 
       ! Lower levels of the remapped data get squashed to follow bathymetry,
       ! their depth does not corrospond to the nominal depth at that level
@@ -701,6 +704,32 @@ subroutine remap_diag_to_z(field, diag, diag_cs, remapped_field)
   enddo
 
 end subroutine remap_diag_to_z
+
+subroutine remap_column_to_z(regrid_cs, remap_cs, nz_src, nz_dest, h, depth, &
+                             field, remapped_field)
+
+  type(remapping_CS), intent(in) :: remap_cs
+  type(regridding_CS), intent(in) :: regrid_cs
+  integer, intent(in) :: nz_src, nz_dest
+  real, dimension(:), intent(in) :: h, field
+  real, intent(in) :: depth
+  real, dimension(:), intent(inout) :: remapped_field
+
+  real, dimension(nz_dest+1) :: dz, zi_tmp
+  real, dimension(nz_dest) :: h_dest
+
+  ! Calculate thicknesses for new Z* using nominal thicknesses from
+  ! h_remap, current bathymetry and total thickness.
+  call buildGridZstarColumn(regrid_cs, nz_dest, depth, sum(h(:)), zi_tmp)
+  ! Calculate how much thicknesses change between source and dest grids, do
+  ! remapping
+  zi_tmp = -zi_tmp
+  h_dest(:) = zi_tmp(2:) - zi_tmp(:size(zi_tmp)-1)
+  call dzFromH1H2(nz_src, h(:), nz_dest, h_dest, dz)
+  call remapping_core(remap_cs, nz_src, h(:), field(:), nz_dest, dz, &
+                      remapped_field(:))
+
+end subroutine remap_column_to_z
 
 subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
   type(diag_type),   intent(in) :: diag
