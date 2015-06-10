@@ -950,7 +950,7 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
     call alloc_diag_with_id(primary_id, diag_cs, diag)
     call assert(associated(diag), 'register_diag_field: diag allocation failed')
     diag%fms_diag_id = fms_id
-    call set_diag_mask_and_remap_axes(diag, diag_cs, axes)
+    call set_diag_mask(diag, diag_cs, axes)
   endif
 
   ! Set up the CMOR variation of the diagnostic
@@ -985,7 +985,7 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
       ! In the case where there is no primary, it will become the primary.
       call alloc_diag_with_id(primary_id, diag_cs, cmor_diag)
       cmor_diag%fms_diag_id = fms_id
-      call set_diag_mask_and_remap_axes(cmor_diag, diag_cs, axes)
+      call set_diag_mask(cmor_diag, diag_cs, axes)
     endif
   endif
 
@@ -1001,7 +1001,8 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
       primary_id = get_new_diag_id(diag_cs)
     endif
     call alloc_diag_with_id(primary_id, diag_cs, z_remap_diag)
-    call set_diag_mask_and_remap_axes(z_remap_diag, diag_cs, axes)
+    call set_diag_mask(z_remap_diag, diag_cs, axes)
+    call set_diag_remap_axes(z_remap_diag, diag_cs, axes)
     fms_id = register_diag_field_fms(module_name//'_z_new', field_name, &
          z_remap_diag%remap_axes%handles, &
          init_time, long_name=long_name, units=units, missing_value=MOM_missing_value, &
@@ -1499,7 +1500,29 @@ function i2s(a,n_in)
     i2s = adjustl(i2s)
 end function i2s
 
-subroutine set_diag_mask_and_remap_axes(diag, diag_cs, axes)
+subroutine set_diag_remap_axes(diag, diag_cs, axes)
+  ! Associate a remapping axes with the a diagnostic based on the axes info.
+  type(diag_ctrl), target, intent(inout) :: diag_cs
+  type(diag_type), pointer, intent(out) :: diag
+  type(axesType),   intent(in) :: axes
+
+  diag%remap_axes => null()
+
+  if (axes%rank .eq. 3) then
+    if ((axes%id .eq. diag_cs%axesTL%id)) then
+        diag%remap_axes => diag_cs%axesTZL
+    elseif(axes%id .eq. diag_cs%axesBL%id) then
+        diag%remap_axes => diag_cs%axesBZL
+    elseif(axes%id .eq. diag_cs%axesCuL%id ) then
+        diag%remap_axes => diag_cs%axesCuZL
+    elseif(axes%id .eq. diag_cs%axesCvL%id) then
+        diag%remap_axes => diag_cs%axesCvZL
+    endif
+  endif
+
+end subroutine set_diag_remap_axes
+
+subroutine set_diag_mask(diag, diag_cs, axes)
   ! Associate a mask with the a diagnostic based on the axes info.
 
   type(diag_ctrl), target, intent(inout) :: diag_cs
@@ -1508,21 +1531,16 @@ subroutine set_diag_mask_and_remap_axes(diag, diag_cs, axes)
 
   diag%mask2d => null()
   diag%mask3d => null()
-  diag%remap_axes => null()
 
   if (axes%rank .eq. 3) then
     if ((axes%id .eq. diag_cs%axesTL%id)) then
         diag%mask3d =>  diag_cs%mask3dTL
-        diag%remap_axes => diag_cs%axesTZL
     elseif(axes%id .eq. diag_cs%axesBL%id) then
         diag%mask3d =>  diag_cs%mask3dBuL
-        diag%remap_axes => diag_cs%axesBZL
     elseif(axes%id .eq. diag_cs%axesCuL%id ) then
         diag%mask3d =>  diag_cs%mask3dCuL
-        diag%remap_axes => diag_cs%axesCuZL
     elseif(axes%id .eq. diag_cs%axesCvL%id) then
         diag%mask3d =>  diag_cs%mask3dCvL
-        diag%remap_axes => diag_cs%axesCvZL
     elseif(axes%id .eq. diag_cs%axesTi%id) then
         diag%mask3d =>  diag_cs%mask3dTi
     elseif(axes%id .eq. diag_cs%axesBi%id) then
@@ -1548,7 +1566,7 @@ subroutine set_diag_mask_and_remap_axes(diag, diag_cs, axes)
     !call assert(associated(diag%mask2d), "MOM_diag_mediator.F90: Invalid 2d axes id")
   endif
 
-end subroutine set_diag_mask_and_remap_axes
+end subroutine set_diag_mask
 
 function is_layer_axes(axes, diag_cs)
 
