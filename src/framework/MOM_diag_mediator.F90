@@ -642,8 +642,10 @@ subroutine remap_diag_to_z(field, diag, diag_cs, remapped_field)
   type(remapping_CS) :: remap_cs
   type(regridding_CS) :: regrid_cs
   integer :: nz_src
-  integer :: i, j, k, ilow, ihigh, jlow, jhigh
+  integer :: i, j
   real, dimension(diag_cs%nz_remap) :: h_dest
+  real, dimension(size(field, 3)) :: h_src
+  real :: depth
 
   call assert(size(field, 3) == size(diag_cs%h, 3), &
               'Remap field and thickness z-axes do not match.')
@@ -659,64 +661,76 @@ subroutine remap_diag_to_z(field, diag, diag_cs, remapped_field)
   call setCoordinateResolution(h_dest, regrid_cs)
   call initialize_remapping(nz_src, 'PPM_IH4', remap_cs)
 
-  print*, 'field: ', size(field), lbound(field, 1), ubound(field, 1), lbound(field, 2), ubound(field, 2)
-  print*, 'h: ', size(field), lbound(field, 1), ubound(field, 1), lbound(field, 2), ubound(field, 2)
-  print*, 'G%jscB, G%jecB: ', diag_cs%G%jscB, diag_cs%G%jecB
-  print*, 'G%isc, G%iec: ', diag_cs%G%isc, diag_cs%G%iec
-
-  ilow = diag_cs%G%isc
-  ihigh = diag_cs%G%iec
-  jlow = diag_cs%G%jsc
-  jhigh = diag_cs%G%jec
-
   if (is_u_axes(diag%remap_axes, diag_cs)) then
-    print*, 'u_axes'
-    ilow = diag_cs%G%iscB
-    ihigh = diag_cs%G%iecB
-  elseif (is_v_axes(diag%remap_axes, diag_cs)) then
-    print*, 'v_axes'
-    jlow = diag_cs%G%jscB
-    jhigh = diag_cs%G%jecB
-  else
-    print*, 'T_axes'
-  endif
-
-  do j=jlow, jhigh
-    do i=ilow, ihigh
-      if (associated(diag%mask3d)) then
-        if (diag%mask3d(i,j, 1) == 0.) cycle
-      endif
-
-      call remap_column_to_z(regrid_cs, remap_cs, nz_src, diag_cs%nz_remap, &
-                             diag_cs%h(i, j, :), diag_cs%G%bathyT(i, j), &
-                             field(i, j, :), remapped_field(i, j, :))
-
-      ! Lower levels of the remapped data get squashed to follow bathymetry,
-      ! their depth does not corrospond to the nominal depth at that level
-      ! (and the nominal depth is below the bathymetry), so remove
-      do k=1, diag_cs%nz_remap
-        if (diag_cs%zi_remap(k) >= diag_cs%G%bathyT(i, j)) then
-          remapped_field(i, j, k:diag_cs%nz_remap) = diag_cs%missing_value
-          exit
+    do j=diag_cs%G%jsc, diag_cs%G%jec
+      do i=diag_cs%G%iscB, diag_cs%G%iecB
+        if (associated(diag%mask3d)) then
+          if (diag%mask3d(i,j, 1) == 0.) cycle
         endif
+        h_src(:) = 0.5 * (diag_cs%h(i,j,:) + diag_cs%h(i+1,j,:))
+        depth = 0.5 * (diag_cs%G%bathyT(i, j) + diag_cs%G%bathyT(i+1, j))
+        call remap_column_to_z(regrid_cs, remap_cs, nz_src, diag_cs%nz_remap, &
+                               h_src(:), depth, diag_cs%zi_remap(:), &
+                               field(i, j, :), remapped_field(i, j, :), diag_cs%missing_value)
       enddo
     enddo
-  enddo
+
+  elseif (is_v_axes(diag%remap_axes, diag_cs)) then
+    do j=diag_cs%G%jscB, diag_cs%G%jecB
+      do i=diag_cs%G%isc, diag_cs%G%iec
+        if (associated(diag%mask3d)) then
+          if (diag%mask3d(i,j, 1) == 0.) cycle
+        endif
+        h_src(:) = 0.5 * (diag_cs%h(i,j,:) + diag_cs%h(i,j+1,:))
+        depth = 0.5 * (diag_cs%G%bathyT(i, j) + diag_cs%G%bathyT(i, j+1))
+        call remap_column_to_z(regrid_cs, remap_cs, nz_src, diag_cs%nz_remap, &
+                               h_src(:), depth, diag_cs%zi_remap(:), &
+                               field(i, j, :), remapped_field(i, j, :), diag_cs%missing_value)
+      enddo
+    enddo
+
+  elseif (is_B_axes(diag%remap_axes, diag_cs)) then
+    do j=diag_cs%G%jscB, diag_cs%G%jecB
+      do i=diag_cs%G%iscB, diag_cs%G%iecB
+        if (associated(diag%mask3d)) then
+          if (diag%mask3d(i,j, 1) == 0.) cycle
+        endif
+        h_src(:) = 0.5 * (diag_cs%h(i,j,:) + diag_cs%h(i+1,j+1,:))
+        depth = 0.5 * (diag_cs%G%bathyT(i, j) + diag_cs%G%bathyT(i+1, j+1))
+        call remap_column_to_z(regrid_cs, remap_cs, nz_src, diag_cs%nz_remap, &
+                               h_src(:), depth, diag_cs%zi_remap(:), &
+                               field(i, j, :), remapped_field(i, j, :), diag_cs%missing_value)
+      enddo
+    enddo
+
+  else
+    do j=diag_cs%G%jsc, diag_cs%G%jec
+      do i=diag_cs%G%isc, diag_cs%G%iec
+        if (associated(diag%mask3d)) then
+          if (diag%mask3d(i,j, 1) == 0.) cycle
+        endif
+        call remap_column_to_z(regrid_cs, remap_cs, nz_src, diag_cs%nz_remap, &
+                               diag_cs%h(i, j, :), diag_cs%G%bathyT(i, j), diag_cs%zi_remap(:), &
+                               field(i, j, :), remapped_field(i, j, :), diag_cs%missing_value)
+      enddo
+    enddo
+  endif
 
 end subroutine remap_diag_to_z
 
 subroutine remap_column_to_z(regrid_cs, remap_cs, nz_src, nz_dest, h, depth, &
-                             field, remapped_field)
+                             zi_remap, field, remapped_field, missing_value)
 
   type(remapping_CS), intent(in) :: remap_cs
   type(regridding_CS), intent(in) :: regrid_cs
   integer, intent(in) :: nz_src, nz_dest
-  real, dimension(:), intent(in) :: h, field
-  real, intent(in) :: depth
+  real, dimension(:), intent(in) :: h, field, zi_remap
+  real, intent(in) :: depth, missing_value
   real, dimension(:), intent(inout) :: remapped_field
 
   real, dimension(nz_dest+1) :: dz, zi_tmp
   real, dimension(nz_dest) :: h_dest
+  integer :: k
 
   ! Calculate thicknesses for new Z* using nominal thicknesses from
   ! h_remap, current bathymetry and total thickness.
@@ -728,6 +742,16 @@ subroutine remap_column_to_z(regrid_cs, remap_cs, nz_src, nz_dest, h, depth, &
   call dzFromH1H2(nz_src, h(:), nz_dest, h_dest, dz)
   call remapping_core(remap_cs, nz_src, h(:), field(:), nz_dest, dz, &
                       remapped_field(:))
+
+  ! Lower levels of the remapped data get squashed to follow bathymetry,
+  ! their depth does not corrospond to the nominal depth at that level
+  ! (and the nominal depth is below the bathymetry), so remove
+  do k=1, nz_dest
+    if (zi_remap(k) >= depth) then
+      remapped_field(k:nz_dest) = missing_value
+      exit
+    endif
+  enddo
 
 end subroutine remap_column_to_z
 
@@ -992,7 +1016,7 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
   ! Remap to z vertical coordinate, note that only diagnostics on layers
   ! (not interfaces) are supported,
   if (get_diag_field_id_fms(module_name//'_z_new', field_name) /= DIAG_FIELD_NOT_FOUND &
-      .and. is_layer_axes(axes, diag_cs))  then
+      .and. is_layer_axes(axes, diag_cs) .and. axes%rank == 3) then
     if (.not. allocated(diag_cs%zi_remap)) then
       call MOM_error(FATAL, 'register_diag_field: Request to regrid but no '// &
                      'destination grid spec provided, see param DIAG_REMAP_Z_GRID_DEF')
@@ -1003,6 +1027,8 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
     call alloc_diag_with_id(primary_id, diag_cs, z_remap_diag)
     call set_diag_mask(z_remap_diag, diag_cs, axes)
     call set_diag_remap_axes(z_remap_diag, diag_cs, axes)
+    call assert(associated(z_remap_diag%remap_axes), &
+                'register_diag_field: remap axes not set')
     fms_id = register_diag_field_fms(module_name//'_z_new', field_name, &
          z_remap_diag%remap_axes%handles, &
          init_time, long_name=long_name, units=units, missing_value=MOM_missing_value, &
@@ -1021,7 +1047,7 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
                               posted_cmor_long_name, posted_cmor_units, &
                               posted_cmor_standard_name)
     endif
-    if (is_layer_axes(axes, diag_cs)) then
+    if (is_layer_axes(axes, diag_cs) .and. axes%rank == 3) then
       call log_available_diag(associated(z_remap_diag), module_name//'_z_new', field_name, &
                               long_name, units, standard_name)
     endif
@@ -1507,7 +1533,6 @@ subroutine set_diag_remap_axes(diag, diag_cs, axes)
   type(axesType),   intent(in) :: axes
 
   diag%remap_axes => null()
-
   if (axes%rank .eq. 3) then
     if ((axes%id .eq. diag_cs%axesTL%id)) then
         diag%remap_axes => diag_cs%axesTZL
@@ -1578,13 +1603,12 @@ function is_layer_axes(axes, diag_cs)
   is_layer_axes = .false.
 
   if (axes%id == diag_cs%axesTZL%id  .or. &
-      axes%id == diag_cs%axesBZL%id  .or. &
+      !axes%id == diag_cs%axesBZL%id  .or. &
       axes%id == diag_cs%axesCuZL%id .or. &
       axes%id == diag_cs%axesCvZL%id .or. &
-      axes%id == diag_cs%axesZi%id   .or. &
       axes%id == diag_cs%axesZL%id   .or. &
       axes%id == diag_cs%axesTL%id   .or. &
-      axes%id == diag_cs%axesBL%id   .or. &
+      !axes%id == diag_cs%axesBL%id   .or. &
       axes%id == diag_cs%axesCuL%id  .or. &
       axes%id == diag_cs%axesCvL%id) then
     is_layer_axes = .true.
@@ -1627,6 +1651,24 @@ function is_v_axes(axes, diag_cs)
   endif
 
 end function is_v_axes
+
+function is_B_axes(axes, diag_cs)
+
+  type(axesType),  intent(in) :: axes
+  type(diag_ctrl), intent(in) :: diag_cs
+
+  logical :: is_B_axes
+
+  is_B_axes = .false.
+
+  if (axes%id == diag_cs%axesBZL%id .or. &
+      axes%id == diag_cs%axesBL%id  .or. &
+      axes%id == diag_cs%axesBi%id  .or. &
+      axes%id == diag_cs%axesB1%id) then
+    is_B_axes = .true.
+  endif
+
+end function is_B_axes
 
 ! Allocate a new diagnostic id, it may be necessary to expand the diagnostics
 ! array.
