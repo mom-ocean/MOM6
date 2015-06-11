@@ -674,7 +674,6 @@ subroutine remap_diag_to_z(field, diag, diag_cs, remapped_field)
                                field(i, j, :), remapped_field(i, j, :), diag_cs%missing_value)
       enddo
     enddo
-
   elseif (is_v_axes(diag%remap_axes, diag_cs)) then
     do j=diag_cs%G%jscB, diag_cs%G%jecB
       do i=diag_cs%G%isc, diag_cs%G%iec
@@ -688,7 +687,6 @@ subroutine remap_diag_to_z(field, diag, diag_cs, remapped_field)
                                field(i, j, :), remapped_field(i, j, :), diag_cs%missing_value)
       enddo
     enddo
-
   elseif (is_B_axes(diag%remap_axes, diag_cs)) then
     do j=diag_cs%G%jscB, diag_cs%G%jecB
       do i=diag_cs%G%iscB, diag_cs%G%iecB
@@ -702,7 +700,6 @@ subroutine remap_diag_to_z(field, diag, diag_cs, remapped_field)
                                field(i, j, :), remapped_field(i, j, :), diag_cs%missing_value)
       enddo
     enddo
-
   else
     do j=diag_cs%G%jsc, diag_cs%G%jec
       do i=diag_cs%G%isc, diag_cs%G%iec
@@ -1014,9 +1011,10 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
   endif
 
   ! Remap to z vertical coordinate, note that only diagnostics on layers
-  ! (not interfaces) are supported,
+  ! (not interfaces) are supported, also B axes are not supported yet
   if (get_diag_field_id_fms(module_name//'_z_new', field_name) /= DIAG_FIELD_NOT_FOUND &
-      .and. is_layer_axes(axes, diag_cs) .and. axes%rank == 3) then
+      .and. is_layer_axes(axes, diag_cs) .and. (.not. is_B_axes(axes, diag_cs)) &
+      .and. axes%rank == 3) then
     if (.not. allocated(diag_cs%zi_remap)) then
       call MOM_error(FATAL, 'register_diag_field: Request to regrid but no '// &
                      'destination grid spec provided, see param DIAG_REMAP_Z_GRID_DEF')
@@ -1047,7 +1045,8 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
                               posted_cmor_long_name, posted_cmor_units, &
                               posted_cmor_standard_name)
     endif
-    if (is_layer_axes(axes, diag_cs) .and. axes%rank == 3) then
+    if (is_layer_axes(axes, diag_cs) .and. (.not. is_B_axes(axes, diag_cs)) &
+        .and. axes%rank == 3) then
       call log_available_diag(associated(z_remap_diag), module_name//'_z_new', field_name, &
                               long_name, units, standard_name)
     endif
@@ -1603,12 +1602,12 @@ function is_layer_axes(axes, diag_cs)
   is_layer_axes = .false.
 
   if (axes%id == diag_cs%axesTZL%id  .or. &
-      !axes%id == diag_cs%axesBZL%id  .or. &
+      axes%id == diag_cs%axesBZL%id  .or. &
       axes%id == diag_cs%axesCuZL%id .or. &
       axes%id == diag_cs%axesCvZL%id .or. &
       axes%id == diag_cs%axesZL%id   .or. &
       axes%id == diag_cs%axesTL%id   .or. &
-      !axes%id == diag_cs%axesBL%id   .or. &
+      axes%id == diag_cs%axesBL%id   .or. &
       axes%id == diag_cs%axesCuL%id  .or. &
       axes%id == diag_cs%axesCvL%id) then
     is_layer_axes = .true.
