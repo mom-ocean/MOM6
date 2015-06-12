@@ -44,6 +44,7 @@ module MOM_generic_tracer
   use generic_tracer, only: generic_tracer_coupler_get, generic_tracer_coupler_set
   use generic_tracer, only: generic_tracer_end, generic_tracer_get_list, do_generic_tracer
   use generic_tracer, only: generic_tracer_update_from_bottom,generic_tracer_vertdiff_G
+  use generic_tracer, only: generic_tracer_coupler_accumulate
 
   use g_tracer_utils,   only: g_tracer_get_name,g_tracer_set_values,g_tracer_set_common,g_tracer_get_common
   use g_tracer_utils,   only: g_tracer_get_next,g_tracer_type,g_tracer_is_prog,g_tracer_flux_init
@@ -77,6 +78,7 @@ module MOM_generic_tracer
   public MOM_generic_tracer_stock
   public MOM_generic_flux_init
   public MOM_generic_tracer_min_max
+  public MOM_generic_tracer_fluxes_accumulate
 
   type, public :: MOM_generic_tracer_CS ; private
      character(len = 200) :: IC_file ! The file in which the generic tracer initial values can
@@ -328,6 +330,12 @@ contains
     g_tracer=>CS%g_tracer_list
 
     do
+      if(INDEX(CS%IC_file, '_NULL_')) then
+         call MOM_error(WARNING,"The name of the IC_file "//trim(CS%IC_file)//&
+                              " indicates no MOM initialization was asked for the generic tracers."//&
+                              "Bypassing the MOM initialization of ALL generic tracers!")
+         exit
+      endif
       call g_tracer_get_alias(g_tracer,g_tracer_name)
       call g_tracer_get_pointer(g_tracer,g_tracer_name,'field',tr_field)
       tr_ptr => tr_field(:,:,:,1)
@@ -336,7 +344,7 @@ contains
           .not.query_initialized(tr_ptr, g_tracer_name, CS%restart_CSp))) then
 
         if (len_trim(CS%IC_file) > 0) then
-          !  Read the tracer concentrations from a netcdf file.
+        !  Read the tracer concentrations from a netcdf file.
           if (.not.file_exists(CS%IC_file)) call MOM_error(FATAL, &
                   "initialize_MOM_Generic_tracer: Unable to open "//CS%IC_file)
           if (CS%Z_IC_file) then
@@ -351,9 +359,10 @@ contains
                             "initialized generic tracer "//trim(g_tracer_name)//&
                             " using Generic Tracer File on Z: "//CS%IC_file)
           else
-            ! native grid
+            ! native grid 
             call MOM_error(NOTE,"initialize_MOM_generic_tracer: "//&
-                  "Using Generic Tracer IC file on native grid "//trim(CS%IC_file)//".")
+                  "Using Generic Tracer IC file on native grid "//trim(CS%IC_file)//&
+                  " for tracer "//trim(g_tracer_name))
             call read_data(CS%IC_file, trim(g_tracer_name), tr_ptr, domain=G%Domain%mpp_domain)
           endif
         else
@@ -846,6 +855,13 @@ contains
 
   end subroutine MOM_generic_flux_init
 
+  subroutine MOM_generic_tracer_fluxes_accumulate(weight, flux_tmp)
+    real,                  intent(in)    :: weight
+    type(forcing),         intent(in)    :: flux_tmp
+
+   call generic_tracer_coupler_accumulate(weight, flux_tmp%tr_fluxes)
+
+  end subroutine MOM_generic_tracer_fluxes_accumulate
 
   subroutine MOM_generic_tracer_get(name,member,array, CS)
     character(len=*),         intent(in)  :: name
