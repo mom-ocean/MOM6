@@ -73,6 +73,7 @@ use mpp_mod, only : mpp_chksum
 
 #ifdef _USE_GENERIC_TRACER
 use MOM_generic_tracer, only : MOM_generic_flux_init
+use generic_tracer, only: generic_tracer_coupler_get
 #endif
 
 implicit none ; private
@@ -374,6 +375,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   call mpp_get_compute_domain(Ocean_sfc%Domain, index_bnds(1), index_bnds(2), &
                               index_bnds(3), index_bnds(4))
 
+
   if (OS%fluxes%fluxes_used) then
     call enable_averaging(time_step, OS%Time + Ocean_coupling_time_step, OS%MOM_CSp%diag) ! Needed to allow diagnostics in convert_IOB
     call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%fluxes, index_bnds, OS%Time, &
@@ -384,6 +386,10 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
     if (OS%use_ice_shelf) then
       call shelf_calc_flux(OS%State, OS%fluxes, OS%Time, time_step, OS%Ice_shelf_CSp)
     endif
+
+#ifdef _USE_GENERIC_TRACER
+    call generic_tracer_coupler_get(OS%fluxes%tr_fluxes)
+#endif
 
     ! Indicate that there are new unused fluxes.
     OS%fluxes%fluxes_used = .false.

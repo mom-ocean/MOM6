@@ -518,7 +518,7 @@ contains
     !
     !Extract the tracer surface fields from coupler and update tracer fields from sources
     !
-    call generic_tracer_coupler_get(fluxes%tr_fluxes)
+    !call generic_tracer_coupler_get(fluxes%tr_fluxes) !This is moved out to ocean_model_MOM.F90
 
     !
     !Add contribution of river to surface flux
