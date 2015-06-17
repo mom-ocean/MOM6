@@ -72,8 +72,7 @@ use mpp_mod, only : mpp_chksum
 #include <MOM_memory.h>
 
 #ifdef _USE_GENERIC_TRACER
-use MOM_generic_tracer, only : MOM_generic_flux_init
-use generic_tracer, only: generic_tracer_coupler_get
+use MOM_generic_tracer, only : MOM_generic_flux_init,MOM_generic_tracer_fluxes_accumulate 
 #endif
 
 implicit none ; private
@@ -352,10 +351,10 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
                                  ! start of a call to step_MOM.
   integer :: index_bnds(4)       ! The computational domain index bounds in the
                                  ! ice-ocean boundary type.
-
+  real :: weight            ! Flux accumulation weight
   real :: time_step         ! The time step of a call to step_MOM in seconds.
   integer :: secs, days
-
+  
   call callTree_enter("update_ocean_model(), ocean_model_MOM.F90")
   call get_time(Ocean_coupling_time_step, secs, days)
   time_step = 86400.0*real(days) + real(secs)
@@ -375,21 +374,21 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   call mpp_get_compute_domain(Ocean_sfc%Domain, index_bnds(1), index_bnds(2), &
                               index_bnds(3), index_bnds(4))
 
+  weight = 1.0
 
   if (OS%fluxes%fluxes_used) then
     call enable_averaging(time_step, OS%Time + Ocean_coupling_time_step, OS%MOM_CSp%diag) ! Needed to allow diagnostics in convert_IOB
     call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%fluxes, index_bnds, OS%Time, &
                                OS%grid, OS%forcing_CSp, OS%state, OS%restore_salinity)
+#ifdef _USE_GENERIC_TRACER
+    call MOM_generic_tracer_fluxes_accumulate(OS%fluxes, weight) !here weight=1, just saving the current fluxes
+#endif
 
   ! Add ice shelf fluxes
 
     if (OS%use_ice_shelf) then
       call shelf_calc_flux(OS%State, OS%fluxes, OS%Time, time_step, OS%Ice_shelf_CSp)
     endif
-
-#ifdef _USE_GENERIC_TRACER
-    call generic_tracer_coupler_get(OS%fluxes%tr_fluxes)
-#endif
 
     ! Indicate that there are new unused fluxes.
     OS%fluxes%fluxes_used = .false.
@@ -403,7 +402,10 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
       call shelf_calc_flux(OS%State, OS%flux_tmp, OS%Time, time_step, OS%Ice_shelf_CSp)
     endif
   
-    call forcing_accumulate(OS%flux_tmp, OS%fluxes, time_step, OS%grid)
+    call forcing_accumulate(OS%flux_tmp, OS%fluxes, time_step, OS%grid, weight)
+#ifdef _USE_GENERIC_TRACER
+    call MOM_generic_tracer_fluxes_accumulate(OS%flux_tmp, weight) !weight of the current flux in the running average
+#endif
   endif
 
   call disable_averaging(OS%MOM_CSp%diag)

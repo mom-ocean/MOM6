@@ -503,22 +503,14 @@ contains
     !Get the tracer list
     if(.NOT. associated(CS%g_tracer_list)) call mpp_error(FATAL,&
          trim(sub_name)//": No tracer in the list.")
-    !
-    !Update the fields of the generic tracers from Tr(n)
-    !
-    !nnz: This step is not necessary in MOM code because the tracers
-    !are "registered" for restart and advection. I.e., the ocean model
-    !has the pointers to %field arrays and use them directly.
-    !I think this is a much better design than T_prog(n) of MOM which
-    !get updated by ocean model and have to be copied back and for
-    !to the tracers fields.
-    !The problem with MOM is T_prog%field is not a pointer but is an allocatable array.
-
 
     !
     !Extract the tracer surface fields from coupler and update tracer fields from sources
     !
-    !call generic_tracer_coupler_get(fluxes%tr_fluxes) !This is moved out to ocean_model_MOM.F90
+    !call generic_tracer_coupler_get(fluxes%tr_fluxes) 
+    !Niki: This is moved out to ocean_model_MOM.F90 because if dt_therm>dt_cpld we need to average
+    !      the fluxes without coming into this subroutine.
+    !      MOM5 has to modified to conform.
 
     !
     !Add contribution of river to surface flux
@@ -587,6 +579,9 @@ contains
     ! Update bottom fields after vertical processes
 
     call generic_tracer_update_from_bottom(dt, 1, get_diag_time_end(CS%diag)) !Second arg is tau which is always 1 for MOM
+
+    !Output diagnostics via diag_manager for all generic tracers and their fluxes
+    call g_tracer_send_diag(CS%g_tracer_list, get_diag_time_end(CS%diag), tau=1)
 
   end subroutine MOM_generic_tracer_column_physics
 
@@ -815,9 +810,13 @@ contains
          tau=1)
 
     !Output diagnostics via diag_manager for all tracers in this module
-    if(.NOT. associated(CS%g_tracer_list)) call mpp_error(FATAL, trim(sub_name)//&
-         "No tracer in the list.")
-    call g_tracer_send_diag(CS%g_tracer_list, get_diag_time_end(CS%diag), tau=1)
+!    if(.NOT. associated(CS%g_tracer_list)) call mpp_error(FATAL, trim(sub_name)//&
+!         "No tracer in the list.")
+!    call g_tracer_send_diag(CS%g_tracer_list, get_diag_time_end(CS%diag), tau=1)
+    !Niki: The problem with calling diagnostic outputs here is that this subroutine is called every dt_cpld
+    !      hence if dt_therm > dt_cpld we get output (and contribution to the mean) at times that tracers 
+    !      had not been updated.
+    !      Moving this to the end of column physics subrotuine fixes this issue.
 
   end subroutine MOM_generic_tracer_surface_state
 
@@ -855,11 +854,11 @@ contains
 
   end subroutine MOM_generic_flux_init
 
-  subroutine MOM_generic_tracer_fluxes_accumulate(weight, flux_tmp)
-    real,                  intent(in)    :: weight
+  subroutine MOM_generic_tracer_fluxes_accumulate(flux_tmp, weight)
     type(forcing),         intent(in)    :: flux_tmp
+    real,                  intent(in)    :: weight
 
-   call generic_tracer_coupler_accumulate(weight, flux_tmp%tr_fluxes)
+   call generic_tracer_coupler_accumulate(flux_tmp%tr_fluxes, weight)
 
   end subroutine MOM_generic_tracer_fluxes_accumulate
 

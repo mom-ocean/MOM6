@@ -32,9 +32,6 @@ use MOM_spatial_means, only : global_area_integral
 use MOM_variables,     only : surface, thermo_var_ptrs
 
 use coupler_types_mod, only : coupler_2d_bc_type
-#ifdef _USE_GENERIC_TRACER
-  use generic_tracer, only: generic_tracer_coupler_accumulate
-#endif
 
 implicit none ; private
 
@@ -1341,17 +1338,18 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
 end subroutine register_forcing_type_diags
 
 
-subroutine forcing_accumulate(flux_tmp, fluxes, dt, G)
+subroutine forcing_accumulate(flux_tmp, fluxes, dt, G, wt2)
   type(forcing),         intent(in)    :: flux_tmp
   type(forcing),         intent(inout) :: fluxes
   real,                  intent(in)    :: dt
   type(ocean_grid_type), intent(inout) :: G
+  real,                  intent(out)   :: wt2
   !   This subroutine copies mechancal forcing from flux_tmp to fluxes and
   ! stores the time-weighted averages of the various buoyancy fluxes in fluxes,
   ! and increments the amount of time over which the buoyancy forcing should be
   ! applied.
 
-  real :: wt1, wt2
+  real :: wt1
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq, i0, j0
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, isr, ier, jsr, jer
   is   = G%isc   ; ie   = G%iec    ; js   = G%jsc   ; je   = G%jec
@@ -1477,15 +1475,8 @@ subroutine forcing_accumulate(flux_tmp, fluxes, dt, G)
   endif
 
   !### This needs to be replaced with an appropriate copy and average.
-   fluxes%tr_fluxes => flux_tmp%tr_fluxes
+  fluxes%tr_fluxes => flux_tmp%tr_fluxes
   
-#ifdef _USE_GENERIC_TRACER
-   !Cannot call MOM_generic_tracer_fluxes_accumulate(wt1, flux_tmp%tr_fluxes) since that model "use"s this one
-   !So, call the geneirc_tracer interface directly.
-   !if (CS%use_MOM_generic_tracer)  !CS is not defined here. 
-   call generic_tracer_coupler_accumulate(wt1, flux_tmp%tr_fluxes)
-#endif
-
 end subroutine forcing_accumulate
 
 
