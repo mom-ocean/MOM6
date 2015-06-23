@@ -2414,11 +2414,13 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
 !$OMP                                  H_limit_fluxes,use_riverHeatContent,              &
 !$OMP                                  useCalvingHeatContent,ea,IforcingDepthScale,      &
 !$OMP                                  numberOfGroundings,iGround,jGround,               &
-!$OMP                                  hGrounding,CS,Idt,aggregate_FW_forcing)           &
+!$OMP                                  hGrounding,CS,Idt,aggregate_FW_forcing,           &
+!$OMP                                  calculate_energetics,dSV_dT,dSV_dS,cTKE,g_Hconv2) &
 !$OMP                          private(opacityBand,h2d,T2d,netMassInOut,netMassOut,      &
 !$OMP                                  netHeat,netSalt,Pen_SW_bnd,fractionOfForcing,     &
 !$OMP                                  dThickness,dTemp,dSalt,hOld,Ithickness,           &
-!$OMP                                  netMassIn)
+!$OMP                                  netMassIn,pres,d_pres,p_lay,dSV_dT_2d,            &
+!$OMP                                  pen_TKE_2d,Temp_in,Salin_in,RivermixConst)
 
   ! work in vertical slices for efficiency 
   do j=js,je 

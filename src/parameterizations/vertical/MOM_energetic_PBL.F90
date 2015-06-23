@@ -372,6 +372,33 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, CS, &
   endif
 
 
+!$OMP parallel do default(none) shared(js,je,nz,is,ie,h_3d,u_3d,v_3d,tv,dt,      &
+!$OMP                                  CS,G,sfc_connected,fluxes,IdtdR0,         &
+!$OMP                                  TKE_forced,debug,H_neglect,dSV_dT,        &
+!$OMP                                  dSV_dS,I_dtmrho,C1_3,h_tt_min,vonKar,     &
+!$OMP                                  max_itt,Kd_int)                           &
+!$OMP                           private(h,u,v,T,S,Kd,mech_TKE_k,conv_PErel_k,    &
+!$OMP                                   U_Star,absf,mech_TKE,conv_PErel,nstar_k, &
+!$OMP                                   h_sum,I_hs,h_bot,hb_hs,T0,S0,num_itts,   &
+!$OMP                                   pres,dMass,dPres,dT_to_dPE,dS_to_dPE,    &
+!$OMP                                   dT_to_dColHt,dS_to_dColHt,Kddt_h,        &
+!$OMP                                   b_den_1,dT_to_dPE_a,dT_to_dColHt_a,      &
+!$OMP                                   dS_to_dColHt_a,htot,uhtot,vhtot,         &
+!$OMP                                   Idecay_len_TKE,exp_kh,nstar_FC,tot_TKE,  &
+!$OMP                                   TKE_reduc,dTe_t2,dSe_t2,dTe,dSe,dt_h,    &
+!$OMP                                   Convectively_stable,sfc_disconnect,b1,   &
+!$OMP                                   c1,dT_km1_t2,dS_km1_t2,dTe_term,         &
+!$OMP                                   dSe_term,MKE2_Hharm,vstar,h_tt,          &
+!$OMP                                   Kd_guess0,Kddt_h_g0,dPEc_dKd_Kd0,        &
+!$OMP                                   PE_chg_max,dPEa_dKd_g0,PE_chg_g0,        &
+!$OMP                                   MKE_src,dPE_conv,Kddt_h_max,Kddt_h_min,  &
+!$OMP                                   TKE_left_max,TKE_left_min,Kddt_h_guess,  &
+!$OMP                                   TKE_left_itt,dPEa_dKd_itt,PE_chg_itt,    &
+!$OMP                                   MKE_src_itt,Kddt_h_itt,dPEc_dKd,PE_chg,  &
+!$OMP                                   dMKE_src_dK,TKE_left,use_Newt,           &
+!$OMP                                   dKddt_h_Newt,Kddt_h_Newt,Kddt_h_next,    &
+!$OMP                                   dKddt_h,Te,Se,Hsfc_used,dS_to_dPE_a,     &
+!$OMP                                   dMKE_max)
   do j=js,je
     ! Copy the thicknesses and other fields to 2-d arrays.
     do k=1,nz ; do i=is,ie
@@ -847,8 +874,6 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, CS, &
     enddo ; enddo
 
   enddo ! j-loop
-
-!$OMP end parallel
 
   if (write_diags) then
     if (CS%id_ML_depth > 0) &
