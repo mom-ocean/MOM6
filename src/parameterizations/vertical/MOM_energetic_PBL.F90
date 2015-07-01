@@ -100,7 +100,18 @@ type, public :: energetic_PBL_CS ; private
   logical :: use_omega       !   If true, use the absolute rotation rate instead
                              ! of the vertical component of rotation when
                              ! setting the decay scale for turbulence.
-  real    :: wstar_ustar_coef = 1.0
+  real    :: wstar_ustar_coef ! A ratio relating the efficiency with which
+                             ! convectively released energy is converted to a
+                             ! turbulent velocity, relative to mechanically
+                             ! forced turbulent kinetic energy, nondim. Making
+                             ! this larger increases the diffusivity.
+  real    :: vstar_scale_coef ! An overall nondimensional scaling factor
+                             ! for vstar.  Making this larger increases the
+                             ! diffusivity.
+  real    :: Ekman_scale_coef ! A nondimensional scaling factor controlling
+                             ! the inhibition of the diffusive length scale by
+                             ! rotation.  Making this larger decreases the
+                             ! diffusivity in the planetary boundary layer.
   type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
   logical :: TKE_diagnostics = .false.
 
@@ -621,10 +632,10 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, CS, &
 
           ! At this point, Kddt_h(K) will be unknown because its value may depend
           ! on how much energy is available.
-          vstar = (I_dtmrho*(mech_TKE(i) + CS%wstar_ustar_coef*conv_PErel(i)))**C1_3
+          vstar = CS%vstar_scale_coef * (I_dtmrho*(mech_TKE(i) + CS%wstar_ustar_coef*conv_PErel(i)))**C1_3
           h_tt = htot(i) + h_tt_min
           Kd_guess0 = vstar * vonKar * ((h_tt*hb_hs(i,K))*vstar) / &
-                                       (absf(i)*(h_tt*hb_hs(i,K)) + vstar)
+                                       ((CS%Ekman_scale_coef * absf(i)) * (h_tt*hb_hs(i,K)) + vstar)
 
           Kddt_h_g0 = Kd_guess0*dt_h
 
@@ -642,9 +653,10 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, CS, &
             ! This column is convectively unstable.
             if (PE_chg_max <= 0.0) then
               ! Does MKE_src need to be included in the calculation of vstar here?
-              vstar = (I_dtmrho*(mech_TKE(i) + CS%wstar_ustar_coef*(conv_PErel(i)-PE_chg_max)))**C1_3
+              vstar = CS%vstar_scale_coef * &
+                      (I_dtmrho*(mech_TKE(i) + CS%wstar_ustar_coef*(conv_PErel(i)-PE_chg_max)))**C1_3
               Kd(i,k) = vstar * vonKar * ((h_tt*hb_hs(i,K))*vstar) / &
-                                         (absf(i)*(h_tt*hb_hs(i,K)) + vstar)
+                                         ((CS%Ekman_scale_coef * absf(i)) * (h_tt*hb_hs(i,K)) + vstar)
 
               call find_PE_chg(Kd(i,k)*dt_h, h(i,k), b_den_1(i), dTe_term, dSe_term, &
                          dT_km1_t2, dS_km1_t2, dT_to_dPE(i,k), dS_to_dPE(i,k), &
@@ -1085,6 +1097,21 @@ subroutine energetic_PBL_init(Time, G, param_file, diag, CS)
                  "If true, use the absolute rotation rate instead of the \n"//&
                  "vertical component of rotation when setting the decay \n"//&
                  "scale for turbulence.", default=.false.)
+  call get_param(param_file, mod, "WSTAR_USTAR_COEF", CS%wstar_ustar_coef, &
+                 "A ratio relating the efficiency with which convectively\n"//&
+                 "released energy is converted to a turbulent velocity,\n"//&
+                 "relative to mechanically forced TKE. Making this larger\n"//&
+                 "increases the BL diffusivity", &
+                 "units=nondim", default=1.0)
+  call get_param(param_file, mod, "VSTAR_SCALE_COEF", CS%vstar_scale_coef, &
+                 "An overall nondimensional scaling factor for v*.\n"//&
+                 "Making this larger decreases the PBL diffusivity.", &
+                 "units=nondim", default=1.0)
+  call get_param(param_file, mod, "EKMAN_SCALE_COEF", CS%Ekman_scale_coef, &
+                 "A nondimensional scaling factor controlling the inhibition\n"//&
+                 "of the diffusive length scale by rotation. Making this larger\n"//&
+                 "increases the PBL diffusivity.", &
+                 "units=nondim", default=1.0)
 
   ! This gives a minimum decay scale that is typically much less than Angstrom.
   CS%ustar_min = 2e-4*CS%omega*(G%Angstrom_z + G%H_to_m*G%H_subroundoff)
