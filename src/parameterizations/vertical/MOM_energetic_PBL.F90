@@ -1110,7 +1110,7 @@ subroutine energetic_PBL_init(Time, G, param_file, diag, CS)
   call get_param(param_file, mod, "EKMAN_SCALE_COEF", CS%Ekman_scale_coef, &
                  "A nondimensional scaling factor controlling the inhibition\n"//&
                  "of the diffusive length scale by rotation. Making this larger\n"//&
-                 "increases the PBL diffusivity.", &
+                 "decreases the PBL diffusivity.", &
                  "units=nondim", default=1.0)
 
   ! This gives a minimum decay scale that is typically much less than Angstrom.
