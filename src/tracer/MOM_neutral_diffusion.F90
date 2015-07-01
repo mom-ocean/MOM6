@@ -49,8 +49,6 @@ subroutine neutral_diffusion(nk, Dl, Dr, hl, hr, Tl, Tr, Sl, Sr, EOS, H_to_Pa)
   real, dimension(nk+1) :: Sir !< Interface salinity of right column (ppt)
   real, dimension(nk+1) :: rhoil !< Interface densities of left column (kg/m3)
   real, dimension(nk+1) :: rhoir !< Interface densities of right column (kg/m3)
-  real, dimension(nk+1) :: drdpil !< Interface compressibility of left column (kg/m3/pa)
-  real, dimension(nk+1) :: drdpir !< Interface compressibility of right column (kg/m3/pa)
   real, dimension(nk+1) :: PirL !< Right column interface pressure projected on to left column (Pa)
   real, dimension(nk+1) :: PilR !< Right column interface pressure projected on to right column (Pa)
   real, dimension(2*nk+1) :: dPl !< Projected thickness of union layers in left column (Pa)
@@ -74,20 +72,6 @@ subroutine neutral_diffusion(nk, Dl, Dr, hl, hr, Tl, Tr, Sl, Sr, EOS, H_to_Pa)
   call interface_TS(nk, Tl, Sl, Til, Sil)
   call interface_TS(nk, Tr, Sr, Tir, Sir)
 
-  ! Calculate interface densities using the interface pressure for each column (in-situ)
-  ! and the compressibility d/dp rho.
-  call calculate_compress(Til, Sil, Pil, rhoil, drdpil, 1, nk+1, EOS)
-  call calculate_compress(Tir, Sir, Pir, rhoir, drdpir, 1, nk+1, EOS)
-
-  ! For each interface of the left column, using the density of that interface referenced
-  ! to that local pressure (isoneutral), find the position within the right column where the
-  ! potential density referenced to the same pressure equals that of the left interface.
-  call projected_positions(nk, rhoil, Pil, rhoir, Pir, drdpir, PilR)
-  ! For each interface of the right column, using the density of that interface referenced
-  ! to that local pressure (isoneutral), find the position within the left column where the
-  ! potential density referenced to the same pressure equals that of the right interface.
-  call projected_positions(nk, rhoir, Pir, rhoil, Pil, drdpil, PirL)
-
   ! For each interface on the left column, calculate the expansion coefficients
   ! that will be used to calculate potential density differences referenced to
   ! the left column interfaces.
@@ -97,12 +81,7 @@ subroutine neutral_diffusion(nk, Dl, Dr, hl, hr, Tl, Tr, Sl, Sr, EOS, H_to_Pa)
   ! the right column interfaces.
   call calculate_density_derivs(Tir, Sir, Pir, dRdTr, dRdSr, 1, nk+1, EOS)
 
-  ! Find corresponding indexes and thickness in the position space of the left column for
-  ! each union layer
-  call project_thicknesses(nk, Pil, PirL, dPl, Kl)
-  ! Find corresponding indexes and thickness in the position space of the right column for
-  ! each union layer
-  call project_thicknesses(nk, Pir, PilR, dPr, Kr)
+  call find_neutral_surface_position(nk, Til, Sil, dRdTl, dRdSl, Tir, Sir, Pir, PilR)
 
 end subroutine neutral_diffusion
 
@@ -139,20 +118,20 @@ subroutine find_neutral_surface_position(nk, Tl, Sl, dRdT, dRdS, Tr, Sr, Pr, Po)
   real, dimension(nk+1), intent(inout) :: Po   !< Position of neutral surface (Pa)
   ! Local variables
   integer kl, kr, krm1
-  real dRkr, dRkrm1, Prm1, wght1, wght2, Pint
+  real dRkr, dRkrm1, Prm1, wghtU, wghtD, Pint
 
   ! Initialize variables for the search
   kr = 1
   Prm1 = Pr(1)
 
-  ! For each left-column interface
+  ! For each left-column interface, search for the right layer whose interfaces (kr-1 and kr) bracket the left interface.
   do kl = 1, nk+1
-    ! Search for the first interface that is denser than the target
+    ! Search downward until the kr interface is denser than the kl interface
     krm1 = max(kr-1, 1)
     dRkrm1 = dRdT(kl) * ( Tr(krm1) - Tl(kl) ) + dRdS(kl) * ( Sr(krm1) - Sl(kl) ) !  Potential density difference, (kr-1) - kl
     dRkr = dRdT(kl) * ( Tr(kr) - Tl(kl) ) + dRdS(kl) * ( Sr(kr) - Sl(kl) ) !  Potential density difference, kr - kl
-    kr_search: do while ( dRkr<=0. .and. (kr <= nk+1) )
-      ! The potential density at kr is lighter than the target so the interface should be below Pr(kr) so we increment kr
+    kr_search: do while ( dRkr<=0. .and. (kr <= nk) )
+      ! The potential density at kr is lighter than the kl interface so we increment kr
       Prm1 = Pr(kr)
       dRkrm1 = dRkr
       kr = kr + 1
@@ -163,241 +142,30 @@ subroutine find_neutral_surface_position(nk, Tl, Sl, dRdT, dRdS, Tr, Sr, Pr, Po)
     !  2) In the interior, dRkrm1<=0. and dRkr>0;
     !  3) At the bottom,  dRkr<0.
     ! Note that dRkrm1 + dRkr >0 unless this next test fails.
-    if ( dRkrm1 > dRkr ) stop 'Houston, we have a problem! dRkrm1 >= dRkr'
-    ! Linearly interpolate for the position between Pr(kr-1) and Pr(kr)
-    ! The following is an accurate way to do Pint = wght1 * Prm1 + wght2 * Pr(kr)
-    ! Ostensibly wght1 + wght2 = 1.
-    wght1 = -dRkrm1 / ( dRkrm1 + dRkr )
-    wght2 = dRkr / ( dRkrm1 + dRkr )
-    if ( wght1 < 0.5 ) then
-     Pint = Prm1 + max( wght1, 0. ) * ( Pr(kr) - Prm1 )
-    elseif ( wght2 < 0.5 ) then
-     Pint = Pr(kr) + max( wght2, 0. ) * ( Prm1 - Pr(kr) )
-    else
-     Pint = 0.5 * ( Prm1 + Pr(kr) )
+    if ( dRkrm1 > dRkr ) stop 'find_neutral_surface_position: Houston, we have a problem! dRkrm1 >= dRkr'
+    ! Linearly interpolate for the position between Pr(kr-1) and Pr(kr) where the density difference between right and
+    ! left is zero; Pint = ( dRkr * Pr(kr) - dRkrm1 * Pr(kr-1) ) / ( dRdk - dRkrm1 ) .
+    if ( dRkr - dRkrm1 > 0. ) then
+      wghtU = -dRkrm1 / ( dRkr - dRkrm1 )
+      wghtD = dRkr / ( dRkr - dRkrm1 )
+      ! Ostensibly wghtU + wghtD = 1.
+      ! The following is an accurate way to do Pint = wghtD * Pr(kr) + wghtU * Pr(kr-1) 
+      if ( wghtU < 0.5 ) then
+        Pint = Prm1 + max( wghtU, 0. ) * ( Pr(kr) - Prm1 )
+      elseif ( wghtD < 0.5 ) then
+        Pint = Pr(kr) + max( wghtD, 0. ) * ( Prm1 - Pr(kr) )
+      else
+        Pint = 0.5 * ( Prm1 + Pr(kr) )
+      endif
+    else ! dRkr - dRkrm1 = 0
+      Pint = 0.5 * ( Prm1 + Pr(kr) )
     endif
-
-    if ( Pint < Prm1 ) stop 'Houston, we have a problem! Pint < Pr(kr-1)'
-    if ( Pint > Pr(kr) ) stop 'Houston, we have a problem! Pint > Pr(kr)'
+    if ( Pint < Prm1 ) stop 'find_neutral_surface_position: Houston, we have a problem! Pint < Pr(kr-1)'
+    if ( Pint > Pr(kr) ) stop 'find_neutral_surface_position: Houston, we have a problem! Pint > Pr(kr)'
     Po(kl) = Pint
   enddo
 
 end subroutine find_neutral_surface_position
-
-!> Returns position within left column of right column in-situ densities
-subroutine projected_positions(nk, rhoir, Pir, rhoil, Pil, drdpil, Po)
-  integer,               intent(in)    :: nk     !< Number of levels
-  real, dimension(nk+1), intent(in)    :: rhoir  !< Interface in-situ density of right column (Pa)
-  real, dimension(nk+1), intent(in)    :: Pir    !< Interface pressure of right column (Pa)
-  real, dimension(nk+1), intent(in)    :: rhoil  !< Interface in-situ density of left column (Pa)
-  real, dimension(nk+1), intent(in)    :: Pil    !< Interface pressure of left column (Pa)
-  real, dimension(nk+1), intent(in)    :: drdpil !< Interface compressibility of left column (kg/m3/Pa)
-  real, dimension(nk+1), intent(inout) :: Po     !< Projection of right interface positions on left column (Pa)
-  ! Local variables
-  real :: sigma_kl, sigma_kl_p1 ! Densities of left column referenced to a pressure from right column (kg/m3)
-  real :: Po_last ! The last projected pressure from right side, used to avoid tangling. (Pa)
-  real :: P_target, sigma_target, P, a, b
-  integer :: kl, kr
-  logical, parameter :: debug = .true.
-
-  kl = 1
-  Po_last = Pil(1)
-  do kr = 1, nk+1
-    ! We are looking for the position within the left column of a density referenced to a
-    ! pressure from the right column
-    P_target = Pir(kr)
-    sigma_target = rhoir(kr)
-
-    ! Search for a left column layer whose interface densities
-    ! span rhoir(kr) when referenced to Pir(kr).
-    search_for_kl: do while(.true.)
-      !kl = min(nk+1, kl)
-
-      ! Density of interface kl at reference pressure, pr(kr)
-      ! The use of compressibility avoids the call
-      !  call calculate_density( Til(kl), Sil(kl), Pir(kr), sigma_kl )
-      sigma_kl = rhoil(kl) + drdpil(kl) * ( P_target - Pil(kl) )
-
-      ! Density of interface kl+1 at reference pressure, pr(kr)
-      ! The use of compressibility avoids the call
-      !  call calculate_density( Til(kl), Sil(kl), Pir(kr), sigma_kl )
-      sigma_kl_p1 = rhoil(kl+1) + drdpil(kl+1) * ( P_target - Pil(kl+1) )
-                                               if (debug) write(*,'(2(x,a,i2),3(x,a,f10.3))') 'kr=',kr,'kl=',kl,'sigma_kl=',sigma_kl,'sigma_kl_p1=',sigma_kl_p1,'sigma_target=',sigma_target
-                                               if (debug) write(*,'(12x,3(x,a,f10.3))') 'Pil(kl)=',Pil(kl),'Pil(kl+1)=',Pil(kl+1),'P_target=',P_target
-
-      if (sigma_target <= sigma_kl) then
-        ! The density we are searching for is lighter that the left column pair
-        ! which should only happen at the surface when beginning the search
-        P = Pil(kl) ! Would match the surface
-                                               if (debug) write(*,'(4x,a)') 'lighter or match'
-        exit search_for_kl
-      else
-        if (sigma_kl_p1 > sigma_kl) then
-          ! The left column is stably stratified
-          if (sigma_target > sigma_kl_p1) then
-            ! The lower of the pair is lighter than the density we need so move kl down
-            if (kl < nk) then
-                                               if (debug) write(*,'(4x,a)') 'stable kl,kl+1 heavier than kl+1, increment'
-              kl = kl + 1
-              cycle search_for_kl
-            else ! kl = nk+1
-                                               if (debug) write(*,'(4x,a)') 'stable kl,kl+1 heavier than kl+1, at bottom'
-              ! We have reached the bottom and so sigma_target is outside of the range of left densities
-             !P = Pil(nk+1) ! Would match the bottom
-              P = Pil(kl+1) ! Effectively creates a new layer below bottom
-              exit search_for_kl
-            endif
-          elseif (sigma_target >= sigma_kl) then
-                                               if (debug) write(*,'(4x,a)') 'stable kl,kl+1 heavier than kl, interpolate'
-            ! The density we are searching for is bounded by sigma_kl < rho < sigma_kl_p1.
-            ! Interpolate for the position of the right density between the left pair.
-            ! a and b are weights such that a>=0, b>=0 and a + b = 1.
-            a = ( sigma_target - sigma_kl ) / ( sigma_kl_p1 - sigma_kl )
-            if (a<0.5) then ! To avoids overflows
-              b = 1. - a
-            else
-              b = ( sigma_kl_p1 - sigma_target ) / ( sigma_kl_p1 - sigma_kl )
-              a = 1. - b
-            endif
-            P = Pil(kl+1) * a + Pil(kl) * b
-            exit search_for_kl
-          else ! (sigma_target < sigma_kl)
-            ! This should not happen?
-            stop 'sigma_target < sigma_kl is impossible!'
-          endif
-        elseif (sigma_kl_p1 < sigma_kl) then
-                                               if (debug) write(*,'(4x,a)') 'unstable kl,kl+1'
-          ! The left column is unstably stratified
-          P = Po_last ! Not sure what to do here???
-          exit search_for_kl
-        else ! (sigma_kl_p1 == sigma_kl)
-          ! The left column is neutrally stratified
-          if (sigma_target > sigma_kl_p1) then
-                                               if (debug) write(*,'(4x,a)') 'neutral kl,kl+1, increment'
-            ! The lower of the pair is lighter than the density we need so move kl down
-            kl = kl + 1
-            cycle search_for_kl
-          elseif (sigma_target == sigma_kl) then
-                                               if (debug) write(*,'(4x,a)') 'neutral kl,kl+1, at bottom'
-            P = 0.5*( Pil(kl) + Pil(kl+1) ) ! No better choice but to split the layer?
-            exit search_for_kl
-          else ! (sigma_target < sigma_kl)
-            ! This should not happen?
-            stop 'sigma_target < sigma_kl and sigma_kl_p1 == sigma_kl is impossible!'
-          endif
-        endif
-      endif ! if (sigma_target > sigma_kl)
-
-    enddo search_for_kl
-    P = max(Po_last, P) ! Avoid possible tangles
-    Po(kr) = P
-    Po_last = P
-
-  enddo ! kr
-
-end subroutine projected_positions
-
-!> Returns the projected fractional thickness of union layers into the local column, along with indexes
-subroutine project_thicknesses(nk, Pi, Pp, dP, Ks)
-  integer,                    intent(in)    :: nk !< Number of levels
-  real,    dimension(nk+1),   intent(in)    :: Pi !< Interface pressures of local column (Pa)
-  real,    dimension(nk+1),   intent(in)    :: Pp !< Positions of another column interfaces projected onto this column (Pa)
-  real,    dimension(2*nk+1), intent(inout) :: dP !< Projected thickness of union layer (Pa)
-  integer, dimension(2*nk+1), intent(inout) :: Ks !< Local layer index in this column spanned union interfaces
-  ! Local variables
-  integer :: k ! Index of union of layers
-  integer :: ki ! Index of candidate local interface
-  integer :: kp ! Index of candidate projected position
-  integer :: kip1 ! Index of next candidate local interface
-  integer :: kpp1 ! Index of next candidate projected position
-  real :: Ptop, Pbot ! Top and bottom positions of union layer
-  real :: Ppkp, Piki, Ppkpp1, Pikip1
-  logical :: move_forward_P, move_forward_L
-  logical, parameter :: debug = .false.
-
-  ki = 1 ; kp = 1
-  Ptop = max(Pp(1), Pi(1)) ! Top of intersection of columns
-  Pbot = min(Pp(nk+1), Pi(nk+1)) ! Bottom of intersection of columns
-  do k=1, 2*nk+1 ! Loop over the union of layers
-    ! A union layer can be bounded by 4 possible pairs of interfaces:
-    !   P-P - Two projected interfaces that fall outside the range of the
-    !         local column
-    !   L-L - Two local interfaces that fall  outside the range of the
-    !         projected column
-    !   L-P - A local interface above and projected interface below
-    !   P-L - A projected interface above and local interface below
-
-    kpp1 = min(nk+1, kp+1) ! Next projected position index
-    kip1 = min(nk+1, ki+1) ! Next local interface index
-  ! dP(k) = max(0., Pbot - Ptop)   ! Non-overlapping layers have zero weight
-    Ppkp = max(Ptop, Pp(kp))
-    Piki = max(Ptop, Pi(ki))
-    Ppkpp1 = min(Pbot, Pp(kpp1))
-    Pikip1 = min(Pbot, Pi(kip1))
-                                               if (debug) write(*,'(3(x,a,i2))') 'k=',k,'ki=',ki,'kp=',kp
-                                               if (debug) write(*,'(4x,3(x,a,f10.3))') 'Pp(kp)=',Pp(kp),'Pi(ki)=',Pi(ki)
-                                               if (debug) write(*,'(4x,3(x,a,f10.3))') 'Pp(kp+1)=',Pp(kpp1),'Pi(ki+1)=',Pi(kip1)
-                                               if (debug) write(*,'(4x,3(x,a,f10.3))') 'Ppkp=',Ppkp,'Piki=',Piki
-                                               if (debug) write(*,'(4x,3(x,a,f10.3))') 'Ppkp1=',Ppkpp1,'Piki1=',Pikip1
-
-    move_forward_P = .false.
-    move_forward_L = .false.
-    if     (Pp(kpp1) < Pi(ki)) then ! case P-P
-                                               if (debug) write(*,'(4x,2(x,a,i3))') 'P-P kp=',kp,'ki=',ki
-      move_forward_P = .true.
-        dP(k) = Ppkpp1 - Ppkp
-        Ks(k) = ki-1
-    elseif (Pp(kp) > Pi(kip1)) then ! case L-L
-                                               if (debug) write(*,'(4x,2(x,a,i3))') 'L-L kp=',kp,'ki=',ki
-      move_forward_L = .true.
-        dP(k) = Pikip1 - Piki
-        Ks(k) = ki
-    elseif (Pp(kp) < Pi(ki)) then ! case P-L
-                                               if (debug) write(*,'(4x,2(x,a,i3))') 'P-L kp=',kp,'ki=',ki
-      move_forward_P = .true.
-        dP(k) = Piki - Ppkp
-        Ks(k) = ki-1
-    elseif (Pp(kp) > Pi(ki)) then ! case L-P
-                                               if (debug) write(*,'(4x,2(x,a,i3))') 'L-P kp=',kp,'ki=',ki
-      move_forward_L = .true.
-      dP(k) = Ppkp - Piki
-      Ks(k) = ki
-    elseif (Pp(kp) == Pi(ki)) then ! best choice depends on next interfaces
-      if (Pp(kpp1) <= Pi(kip1)) then ! case L-P
-                                               if (debug) write(*,'(4x,x,a,f10.3)') 'P==L L-P'
-        move_forward_L = .true.
-      else ! Pp(kpp1) >= Pi(kip1)  case P-L
-                                               if (debug) write(*,'(4x,x,a,f10.3)') 'P==L P-L'
-        move_forward_P = .true.
-      endif
-      dP(k) = 0.
-    else
-      stop 'I am thinking about how this might happen'
-    endif
-    dP(k) = max(0., dP(k))
-    Ks(k) = max(1, Ks(k))
-    Ks(k) = min(nk, Ks(k))
-                                               if (debug) write(*,'(4x,3(x,a,f10.3))') 'dP(k)=',dP(k)
-
-    if (move_forward_P) then
-      if (kp < nk+1) then
-        kp = kp + 1
-      else ! No choice but to move ki
-        ki = ki + 1
-      endif
-    elseif (move_forward_L) then
-      if (ki < nk+1) then
-        ki = ki + 1
-      else ! No choice but to move kp
-        kp = kp + 1
-      endif
-    else
-      stop 'Neither L or P moved forward'
-    endif
-
-  enddo
-
-end subroutine project_thicknesses
 
 subroutine neutral_diffusion_init(Time, G, param_file, diag, CS)
   type(time_type), target,  intent(in)    :: Time
@@ -438,92 +206,85 @@ end subroutine neutral_diffusion_end
 !> Returns true if unit tests of neutral_diffusion functions fail. Otherwise returns false.
 logical function neutralDiffusionUnitTests()
   integer, parameter :: nk = 4
-  real, dimension(nk+1) :: zl, zr1, zr2, zr3 ! Test interface positions
-  real, dimension(2*nk+1) :: dP, dP1, dP2 ! Test thicknesses
-  integer, dimension(2*nk+1) :: Ko, Kl1, Kr1, Kl2, Kr2 ! Test indexes
-  real, dimension(nk+1) :: rhol, rhor1, rhor3 ! Test interface densities
-  real, dimension(nk+1) :: drdpl ! Test interface compressibility
-  real, dimension(nk+1) :: Po ! Test positions
-  data zl / 0., 10., 20., 30., 40. /
-  data zr1 / -2., -1., 4., 42., 43. /
-  data zr2 / 0., 0., 20., 20., 25. /
-  data dP1 / 0., 0., 4., 6., 10., 10., 10., 0., 0. /
-  data Kl1 / 1, 1, 1, 1, 2, 3, 4, 4, 4 /
-  data Kr1 / 1, 2, 2, 3, 3, 3, 3, 3, 4 /
-  data dP2 / 0., 0., 10., 10., 0., 0., 5., 0., 0. /
-  data Kl2 / 1, 1, 1, 2, 3, 3, 3, 3, 4 /
-  data Kr2 / 1, 1, 2, 2, 3, 3, 4, 4, 4 /
-  data rhol / 1., 1.5, 2.5, 3.5, 4. /
-  data drdpl / 0.1, 0.1, 0.1, 0.1, 0.1 /
-  data rhor1 / 0.5, 1.25, 3.0, 3.5, 5.0 /
-  data zr3 / 0., 0., 40., 40., 40. /
-  data rhor3 / 1., 1.5, 2.5, 3.5, 4. /
+  real, dimension(nk+1) :: Til, Tir1, Tir2, Tir3, Tir4, Tir5, Tir6 ! Test interface temperatures
+  real, dimension(nk+1) :: Sil, Sir1 ! Test interface salinities
+  real, dimension(nk+1) :: Pil, Pir1 ! Test interface positions
+  real, dimension(nk+1) :: dRdT, dRdS ! Test interface expansion coefficients
+  real, dimension(nk+1) :: Po, Po1, Po2, Po3, Po4, Po5, Po6 ! Test positions
+  data Pil / 0., 10., 20., 30., 40. /
+  data Til / 10., 7.5, 5., 2.5, 0. /
+  data Sil / 0., 0., 0., 0., 0. /
+  data dRdT / -0.25, -0.25, -0.25, -0.25, -0.25 /
+  data dRdS / 0.5, 0.5, 0.5, 0.5, 0.5 /
+  ! Same grid, warmer values
+  data Pir1 / 0., 10., 20., 30., 40. /
+  data Tir1 / 12., 9.5, 7., 4.5, 2. /
+  data Sir1 / 0., 0., 0., 0., 0. /
+  data Sir1 / 0., 0., 0., 0., 0. /
+  data Po1 / 8., 18., 28., 38., 40. / ! Correct answer
+  ! Same grid, cooler values
+  data Tir2 / 8., 5.5, 3., 0.5, -2. /
+  data Po2 / 0., 2., 12., 22., 32. / ! Correct answer
+  ! Same grid, all warmer values
+  data Tir3 / 12., 12., 11., 11., 10.5 /
+  data Po3 / 40., 40., 40., 40., 40. / ! Correct answer
+  ! Same grid, all cooler values
+  data Tir4 / -2., -2., -3., -3., -4. /
+  data Po4 / 0., 0., 0., 0., 0. / ! Correct answer
+  ! Same grid, spanning values
+  data Tir5 / 15., 15., 15., -5., -5. /
+  data Po5 / 22.5, 23.75, 25., 26.25, 27.5 / ! Correct answer
+  ! Same grid, encompassed values
+  data Tir6 / 7., 6.5, 6., 5.5, 5. /
+  data Po6 / 0., 0., 40., 40., 40. / ! Correct answer
   integer :: k
 
   neutralDiffusionUnitTests = .false. ! Normally return false
-  write(*,*) '===== MOM_remapping: neutralDiffusionUnitTests =================='
-  write(*,*) 'Project left->right 1'
-  call project_thicknesses(nk, zl, zr1, dP, Ko)
-  do k = 1,2*nk+1
-    if (dP(k) /= dP1(k)) neutralDiffusionUnitTests = .true.
-    if (Ko(k) /= Kl1(k)) neutralDiffusionUnitTests = .true.
-    write(*,*) k, dP(k), Ko(k), .not.neutralDiffusionUnitTests
-  enddo
-  write(*,*) 'Project right->left 1'
-  call project_thicknesses(nk, zr1, zl, dP, Ko)
-  do k = 1,2*nk+1
-    if (dP(k) /= dP1(k)) neutralDiffusionUnitTests = .true.
-    if (Ko(k) /= Kr1(k)) neutralDiffusionUnitTests = .true.
-    write(*,*) k, dP(k), Ko(k), .not.neutralDiffusionUnitTests
-  enddo
-  write(*,*) 'Project left->right 2'
-  call project_thicknesses(nk, zl, zr2, dP, Ko)
-  do k = 1,2*nk+1
-    if (dP(k) /= dP2(k)) neutralDiffusionUnitTests = .true.
-    if (Ko(k) /= Kl2(k)) neutralDiffusionUnitTests = .true.
-    write(*,*) k, dP(k), Ko(k), .not.neutralDiffusionUnitTests
-  enddo
-  write(*,*) 'Project right->left 2'
-  call project_thicknesses(nk, zr2, zl, dP, Ko)
-  do k = 1,2*nk+1
-    if (dP(k) /= dP2(k)) neutralDiffusionUnitTests = .true.
-    if (Ko(k) /= Kr2(k)) neutralDiffusionUnitTests = .true.
-    write(*,*) k, dP(k), Ko(k), .not.neutralDiffusionUnitTests
-  enddo
-  write(*,*) 'Find positions right->left, 0.0 compressibility'
-  call projected_positions(nk, rhor1, zr1, rhol, zl, 0.*drdpl, Po)
-  do k = 1,nk+1
-    write(*,*) k, Po(k), .not.neutralDiffusionUnitTests
-  enddo
-  write(*,*) 'Find positions left->right, 0.0 compressibility 3'
-  call projected_positions(nk, rhol, zl, rhor3, zr3, 0.*drdpl, Po)
-  do k = 1,nk+1
-    write(*,*) k, Po(k), .not.neutralDiffusionUnitTests
-  enddo
-  write(*,*) 'Find positions right->left, 0.0 compressibility 3'
-  call projected_positions(nk, rhor3, zr3, rhol, zl, 0.*drdpl, Po)
-  do k = 1,nk+1
-    write(*,*) k, Po(k), .not.neutralDiffusionUnitTests
-  enddo
-  write(*,*) 'Find positions right->left, 0.25 compressibility'
-  call projected_positions(nk, rhor1, zr1, rhol, zl, 0.25*drdpl, Po)
-  do k = 1,nk+1
-    write(*,*) k, Po(k), .not.neutralDiffusionUnitTests
-  enddo
-  write(*,*) 'Find positions left->right, 0.25 compressibility 3'
-  call projected_positions(nk, rhol, zl, rhor3, zr3, 0.25*drdpl, Po)
-  do k = 1,nk+1
-    write(*,*) k, Po(k), .not.neutralDiffusionUnitTests
-  enddo
-  write(*,*) 'Find positions right->left, 0.25 compressibility 3'
-  call projected_positions(nk, rhor3, zr3, rhol, zl, 0.25*drdpl, Po)
-  do k = 1,nk+1
-    write(*,*) k, Po(k), .not.neutralDiffusionUnitTests
-  enddo
+  write(*,'(a)') '===== MOM_neutral_diffusion: neutralDiffusionUnitTests =================='
 
-  write(*,*) '=========================================================='
+  call find_neutral_surface_position(nk, Til, Sil, dRdT, dRdS, Til, Sir1, Pir1, Po)
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. simpleTest(nk, Po, Pil, 'Project left->right 0, identical values')
+
+  call find_neutral_surface_position(nk, Til, Sil, dRdT, dRdS, Tir1, Sir1, Pir1, Po)
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. simpleTest(nk, Po, Po1, 'Project left->right 1, slightly warmer values')
+
+  call find_neutral_surface_position(nk, Til, Sil, dRdT, dRdS, Tir2, Sir1, Pir1, Po)
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. simpleTest(nk, Po, Po2, 'Project left->right 2, slightly cooler values')
+
+  call find_neutral_surface_position(nk, Til, Sil, dRdT, dRdS, Tir3, Sir1, Pir1, Po)
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. simpleTest(nk, Po, Po3, 'Project left->right 3, all warmer values')
+
+  call find_neutral_surface_position(nk, Til, Sil, dRdT, dRdS, Tir4, Sir1, Pir1, Po)
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. simpleTest(nk, Po, Po4, 'Project left->right 4, all cooler values')
+
+  call find_neutral_surface_position(nk, Til, Sil, dRdT, dRdS, Tir5, Sir1, Pir1, Po)
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. simpleTest(nk, Po, Po5, 'Project left->right 5, spanning values')
+
+  call find_neutral_surface_position(nk, Til, Sil, dRdT, dRdS, Tir6, Sir1, Pir1, Po)
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. simpleTest(nk, Po, Po6, 'Project left->right 6, encompassed values')
+
+  write(*,'(a)') '=========================================================='
+
+  contains
+
+  !> Writes results to screen and return true is test fails
+  logical function simpleTest(nk, Po, Ptrue, title)
+    integer,          intent(in) :: nk !< Number of layers
+    real,             intent(in) :: Po(nk+1) !< Calculated answer
+    real,             intent(in) :: Ptrue(nk+1) !< True answer
+    character(len=*), intent(in) :: title !< Title for messages
+    ! Local variables
+    integer :: k
+
+    write(*,'(a)') title
+    simpleTest = .false.
+    do k = 1,nk+1
+      if (Po(k) /= Ptrue(k)) simpleTest = .true.
+      write(*,'(a,i2,2(x,a,f20.16),x,a,1pe22.15)') 'k=',k,'Po=',Po(k),'Ptrue=',Ptrue(k),'err=',Po(k)-Ptrue(k)
+    enddo
+
+  end function simpleTest
 
 end function neutralDiffusionUnitTests
-
 
 end module MOM_neutral_diffusion
