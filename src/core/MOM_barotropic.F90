@@ -3868,7 +3868,7 @@ subroutine barotropic_init(u, v, h, eta, Time, G, param_file, diag, CS, &
                  "effects of strong bottom drag, by making it implicit \n"//&
                  "with the barotropic time-step instead of implicit with \n"//&
                  "the baroclinic time-step and dividing by the number of \n"//&
-                 "barotropic steps.", default=.true.)
+                 "barotropic steps.", default=.false.)
 
   call get_param(param_file, mod, "CLIP_BT_VELOCITY", CS%clip_velocity, &
                  "If true, limit any velocity components that exceed \n"//&
