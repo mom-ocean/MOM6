@@ -961,7 +961,7 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
                  "If true, non-blocking halo updates may be used.", &
                  default=.false., layoutParam=.true.)
 
-  nihalo_dflt = 2 ; njhalo_dflt = 2
+  nihalo_dflt = 4 ; njhalo_dflt = 4
   if (present(NIHALO)) nihalo_dflt = NIHALO
   if (present(NJHALO)) njhalo_dflt = NJHALO
 
@@ -979,13 +979,13 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
                  "x-direction.  With STATIC_MEMORY_ this is set as NIHALO_ \n"//&
                  "in "//trim(inc_nm)//" at compile time; without STATIC_MEMORY_ \n"//&
                  "the default is NIHALO_ in "//trim(inc_nm)//" (if defined) or 2.", &
-                 default=2, static_value=nihalo_dflt, layoutParam=.true.)
+                 default=4, static_value=nihalo_dflt, layoutParam=.true.)
   call get_param(param_file, mod, "NJHALO", MOM_dom%njhalo, &
                  "The number of halo points on each side in the \n"//&
                  "y-direction.  With STATIC_MEMORY_ this is set as NJHALO_ \n"//&
                  "in "//trim(inc_nm)//" at compile time; without STATIC_MEMORY_ \n"//&
                  "the default is NJHALO_ in "//trim(inc_nm)//" (if defined) or 2.", &
-                 default=2, static_value=njhalo_dflt, layoutParam=.true.)
+                 default=4, static_value=njhalo_dflt, layoutParam=.true.)
   if (present(min_halo)) then
     MOM_dom%nihalo = max(MOM_dom%nihalo, min_halo(1))
     min_halo(1) = MOM_dom%nihalo
