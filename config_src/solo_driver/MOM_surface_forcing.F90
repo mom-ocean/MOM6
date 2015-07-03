@@ -1695,7 +1695,7 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, tracer_flow_CSp)
     call get_param(param_file, mod, "SENSIBLE_HEAT_FLUX", CS%constantHeatForcing, &
                  "A constant heat forcing (positive into ocean) applied \n"//&
                  "through the sensible heat flux field. ", &
-                 units='W/m2', default=0., fail_if_missing=.true.)
+                 units='W/m2', fail_if_missing=.true.)
   endif
   call get_param(param_file, mod, "WIND_CONFIG", CS%wind_config, &
                  "The character string that indicates how wind forcing \n"//&
