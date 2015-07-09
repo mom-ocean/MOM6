@@ -715,18 +715,19 @@ subroutine calculateBuoyancyFlux1d(G, fluxes, optics, h, Temp, Salt, tv, j, &
                                 dRhodT, dRhodS, start, npts, tv%eqn_of_state)
 
   ! Adjust netSalt to reflect dilution effect of FW flux
-  netSalt(:) = netSalt(:) - Salt(:,j,1) * netH * G%H_to_m
+  netSalt(G%isc:G%iec) = netSalt(G%isc:G%iec) - Salt(G%isc:G%iec,j,1) * netH(G%isc:G%iec) * G%H_to_m
 
-  ! Add in the SW heating for purposes of calculating the net 
-  ! surface buoyancy flux affecting the top layer. 
+  ! Add in the SW heating for purposes of calculating the net
+  ! surface buoyancy flux affecting the top layer.
   !netHeat(:) = netHeatMinusSW(:) + sum( penSWbnd(:,:), dim=1 )
-  netHeat(:) = netHeatMinusSW(:) + netPen(:,1)
+  netHeat(G%isc:G%iec) = netHeatMinusSW(G%isc:G%iec) + netPen(G%isc:G%iec,1)
 
   ! Convert to a buoyancy flux, excluding penetrating SW heating
-  buoyancyFlux(:,1) = - GoRho * ( dRhodS(:) * netSalt(:) + dRhodT(:) * netHeat(:) ) ! m^2/s^3
+  buoyancyFlux(G%isc:G%iec,1) = - GoRho * ( dRhodS(G%isc:G%iec) * netSalt(G%isc:G%iec) + &
+                                             dRhodT(G%isc:G%iec) * netHeat(G%isc:G%iec) ) ! m^2/s^3
   ! We also have a penetrative buoyancy flux associated with penetrative SW
   do k=2, G%ke+1
-    buoyancyFlux(:,k) = - GoRho * ( dRhodT(:) * netPen(:,k) ) ! m^2/s^3
+    buoyancyFlux(G%isc:G%iec,k) = - GoRho * ( dRhodT(G%isc:G%iec) * netPen(G%isc:G%iec,k) ) ! m^2/s^3
   enddo
 
 end subroutine calculateBuoyancyFlux1d
