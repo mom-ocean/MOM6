@@ -490,7 +490,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
 !  (in)      p_atm - the pressure at the ice-ocean or atmosphere-ocean
 !                    interface in Pa.
 !  (out)     pbce - the baroclinic pressure anomaly in each layer
-!                   due to free surface height anomalies, in m s-2.
+!                   due to free surface height anomalies, in m2 H-1 s-2.
 !  (out)     eta - the free surface height used to calculate PFu and PFv, in m,
 !                  with any tidal contributions or compressibility compensation.
 
@@ -510,7 +510,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
     dpa_bk, &    ! The change in pressure anomaly between the top and bottom
                  ! of a layer, in Pa.
     intz_dpa_bk  ! The vertical integral in depth of the pressure anomaly less
-                 ! the pressure anomaly at the top of the layer, in m Pa.
+                 ! the pressure anomaly at the top of the layer, in H Pa.
   real, dimension(SZIB_BK_(G),SZJ_BK_(G)) :: & ! on block indices
     intx_pa_bk, & ! The zonal integral of the pressure anomaly along the interface
                   ! atop a layer, divided by the grid spacing, in Pa.

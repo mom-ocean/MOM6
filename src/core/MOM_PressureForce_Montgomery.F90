@@ -62,6 +62,7 @@ use MOM_tidal_forcing, only : calc_tidal_forcing, tidal_forcing_CS
 use MOM_variables, only : thermo_var_ptrs
 use MOM_EOS, only : calculate_density, calculate_density_derivs
 use MOM_EOS, only : int_specific_vol_dp, query_compressible
+
 implicit none ; private
 
 #include <MOM_memory.h>
@@ -689,7 +690,7 @@ subroutine Set_pbce_Bouss(e, tv, G, g_Earth, Rho0, GFS_scale, pbce, rho_star)
   real, dimension(NIMEM_,NJMEM_,NKMEM_), optional, intent(in) :: rho_star
 !    This subroutine determines the partial derivative of the acceleration due 
 !  to pressure forces with the free surface height.
-! Arguments: e - Interface height, in m.
+! Arguments: e - Interface height, in H.
 !  (in)      tv - A structure containing pointers to any available
 !                 thermodynamic fields, including potential temperature and
 !                 salinity or mixed layer density. Absent fields have NULL ptrs.
@@ -703,7 +704,7 @@ subroutine Set_pbce_Bouss(e, tv, G, g_Earth, Rho0, GFS_scale, pbce, rho_star)
 !  (in)      CS - The control structure returned by a previous call to
 !                 PressureForce_init.
 !  (out)     pbce - the baroclinic pressure anomaly in each layer
-!                   due to free surface height anomalies, in m s-2.
+!                   due to free surface height anomalies, in m2 H-1 s-2.
 !  (in,opt)  rho_star - The layer densities (maybe compressibility compensated),
 !                       times g/rho_0, in m s-2.
    

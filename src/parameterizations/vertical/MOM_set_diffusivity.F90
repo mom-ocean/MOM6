@@ -737,6 +737,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, G, C
         Kd(i,j,k) = max( Kd(i,j,k) , &  ! Apply floor to Kd
            dissip * (CS%FluxRi_max / (G%Rho0 * (N2_lay(i,k) + Omega2))) )
       enddo ; enddo
+
       if (present(Kd_int)) then ; do K=2,nz ; do i=is,ie
       ! This calculates the dissipation ONLY from Kd calculated in this routine
       ! dissip has units of W/m3 (kg/m3 * m2/s * 1/s2 = J/s/m3)

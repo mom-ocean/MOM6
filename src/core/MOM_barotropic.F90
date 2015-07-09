@@ -435,7 +435,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
 ! Arguments: U_in - The initial (3-D) zonal velocity, in m s-1.
 !  (in)      V_in - The initial (3-D) meridional velocity, in m s-1.
 !  (in)      eta_in - The initial barotropic free surface height anomaly or
-!                     column mass anomaly, in m or kg m-2.
+!                     column mass anomaly, in H.
 !  (in)      dt - The time increment to integrate over.
 !  (in)      bc_accel_u - The zonal baroclinic accelerations, in m s-2.
 !  (in)      bc_accel_v - The meridional baroclinic accelerations, in m s-2.
@@ -572,11 +572,11 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
                   ! spacing, in H m.
   real, target, dimension(SZIW_(CS),SZJW_(CS)) :: &
     eta, &        ! The barotropic free surface height anomaly or column mass
-                  ! anomaly, in m or kg m-2.
-    eta_pred      ! A predictor value of eta, in m or kg m-2 like eta.
+                  ! anomaly, in H
+    eta_pred      ! A predictor value of eta, in H like eta.
   real, pointer, dimension(:,:) :: &
     eta_PF_BT     ! A pointer to the eta array (either eta or eta_pred) that
-                  ! determines the barotropic pressure force, in m or kg m-2.
+                  ! determines the barotropic pressure force, in H
   real, dimension(SZIW_(CS),SZJW_(CS)) :: &
     eta_sum, &    ! eta summed across the timesteps, in m or kg m-2.
     eta_wtd, &    ! A weighted estimate used to calculate eta_out, in m or kg m-2.
@@ -1764,6 +1764,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
                      (eta_PF_BT(i+1,j)-eta_PF(i+1,j))*gtot_W(i+1,j)) * &
                     dgeo_de * CS%IdxCu(I,j)
       enddo ; enddo
+
       if (CS%dynamic_psurf) then
 !$OMP do
         do j=jsv,jev ; do I=isv-1,iev
@@ -2200,7 +2201,7 @@ subroutine set_dtbt(G, CS, eta, pbce, BT_cont, gtot_est, SSH_add)
 !  (in)      CS - The control structure returned by a previous call to
 !                 barotropic_init.
 !  (in,opt)  eta - The barotropic free surface height anomaly or
-!                  column mass anomaly, in m or kg m-2.
+!                  column mass anomaly, in H
 !  (in,opt)  pbce - The baroclinic pressure anomaly in each layer
 !                   due to free surface height anomalies, in m2 H-1 s-2.
 !  (in,opt)  BT_cont - A structure with elements that describe the effective
@@ -3466,7 +3467,7 @@ subroutine find_face_areas(Datu, Datv, G, CS, MS, eta, halo, add_max)
 !                 barotropic_init.
 !  (in)      MS - A type that describes the memory sizes of the argument arrays.
 !  (in, opt) eta - The barotropic free surface height anomaly or
-!                  column mass anomaly, in m or kg m-2.
+!                  column mass anomaly, in H.
 !  (in, opt) halo - The halo size to use, default = 1.
 !  (in, opt) add_max - A value to add to the maximum depth (used to overestimate
 !                      the external wave speed) in m.

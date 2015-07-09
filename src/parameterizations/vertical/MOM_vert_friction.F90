@@ -569,7 +569,7 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
 
 ! Arguments: u - Zonal velocity, in m s-1.  Intent in.
 !  (in)      v - Meridional velocity, in m s-1.
-!  (in)      h - Layer thickness, in m.
+!  (in)      h - Layer thickness, in H.
 !  (in)      fluxes - A structure containing pointers to any possible
 !                     forcing fields.  Unused fields have NULL ptrs.
 !  (in)      visc - The vertical viscosity type, containing information about

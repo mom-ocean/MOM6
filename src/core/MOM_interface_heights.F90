@@ -199,10 +199,10 @@ subroutine find_eta_2d(h, tv, G_Earth, G, eta, eta_bt, halo_size)
 !  (in)      tv      - structure pointing to various thermodynamic variables
 !  (in)      G_Earth - Earth gravitational acceleration (m/s2)
 !  (in)      G       - ocean grid structure
-!  (out)     eta     - free surface height relative to mean sea level (z=0) (m or kg/m2)
+!  (out)     eta     - free surface height relative to mean sea level (z=0) (m)
 !  (in,opt)  eta_bt  - optional barotropic variable that gives the "correct"
 !                      free surface height (Boussinesq) or total water column
-!                      mass per unit aread (non-Boussinesq), in m or kg m-2.
+!                      mass per unit aread (non-Boussinesq), in m
 !  (in,opt)  halo_size - width of halo points on which to calculate eta
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: &

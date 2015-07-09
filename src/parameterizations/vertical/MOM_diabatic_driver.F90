@@ -385,11 +385,11 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   ! make_frazil is deliberately called at both the beginning and at
   ! the end of the diabatic processes.
   if (ASSOCIATED(tv%T) .AND. ASSOCIATED(tv%frazil)) then
-    if (ASSOCIATED(fluxes%p_surf_full)) then                                                                                                                                                       
-        call make_frazil(h,tv,G,CS,fluxes%p_surf_full)                                                                                                                                              
-    else                                                                                                                                                                                           
-        call make_frazil(h,tv,G,CS)                                                                                                                                                                 
-    endif   
+    if (ASSOCIATED(fluxes%p_surf_full)) then
+        call make_frazil(h,tv,G,CS,fluxes%p_surf_full)
+    else
+        call make_frazil(h,tv,G,CS)
+    endif
     if (showCallTree) call callTree_waypoint("done with 1st make_frazil (diabatic)")
   endif
   if (CS%debugConservation) call MOM_state_stats('1st make_frazil', u, v, h, tv%T, tv%S, G)
@@ -400,6 +400,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
       h_orig(i,j,k) = h(i,j,k) ; eaml(i,j,k) = 0.0 ; ebml(i,j,k) = 0.0
     enddo ; enddo ; enddo
   endif
+
   if (CS%use_geothermal) then
     call cpu_clock_begin(id_clock_geothermal)
     call geothermal(h, tv, dt, eaml, ebml, G, CS%geothermal_CSp)
@@ -512,6 +513,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     ! KPP needs the surface buoyancy flux but does not update state variables.
     ! We could make this call higher up to avoid a repeat unpacking of the surface fluxes.  ????
     ! Sets: CS%buoyancyFlux, CS%netHeatMinusSW, CS%netSalt
+
     call calculateBuoyancyFlux2d(G, fluxes, CS%optics, h, tv%T, tv%S, tv, &
                                  CS%buoyancyFlux, CS%netHeatMinusSW, CS%netSalt)
     ! The KPP scheme calculates the boundary layer diffusivities and non-local transport.
@@ -2470,7 +2472,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
     !                netMassOut < 0 means mass leaves ocean. 
     ! netHeat      = heat (degC * H) via surface fluxes, excluding the part 
     !                contained in Pen_SW_bnd; and excluding heat_content of netMassOut < 0. 
-    ! netSalt      = surface salt fluxes ( g(salt)/m2 for non-Bouss and ppt*m/s for Bouss )
+    ! netSalt      = surface salt fluxes ( g(salt)/m2 for non-Bouss and ppt*H for Bouss )
     ! Pen_SW_bnd   = components to penetrative shortwave radiation 
     call extractFluxes1d(G, fluxes, optics, nsw, j, dt,                        &
                   H_limit_fluxes, use_riverHeatContent, useCalvingHeatContent, &

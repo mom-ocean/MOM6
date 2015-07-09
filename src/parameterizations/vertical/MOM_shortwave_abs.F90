@@ -329,21 +329,21 @@ subroutine sumSWoverBands(G, h, opacity_band, nsw, j, dt, &
   real,                                  intent(in)    :: H_limit_fluxes
   logical,                               intent(in)    :: absorbAllSW
   real, dimension(:,:),                  intent(in)    :: iPen_SW_bnd
-  real, dimension(NIMEM_,NK_INTERFACE_), intent(inout) :: netPen ! Units of K m
+  real, dimension(NIMEM_,NK_INTERFACE_), intent(inout) :: netPen ! Units of K H
 
 ! Arguments:
 !  (in)      G             = ocean grid structure
 !  (in)      h             = layer thickness (m or kg/m^2)
 !                            units of h are referred to as H below.
 !  (in)      opacity_band  = opacity in each band of penetrating shortwave
-!                            radiation, in H-1. The indicies are band, i, k.
+!                            radiation, in m-1. The indicies are band, i, k.
 !  (in)      nsw           =  number of bands of penetrating shortwave radiation.
 !  (in)      j             = j-index to work on
 !  (in)      dt            = time step (seconds)
 !  (inout)   Pen_SW_bnd    = penetrating shortwave heating in each band that
 !                            hits the bottom and will be redistributed through
 !                            the water column (K H units) size nsw x NIMEM_.
-!  (out)     netPen        = attenuated flux at interfaces, summed over bands (K m units)
+!  (out)     netPen        = attenuated flux at interfaces, summed over bands (K H units)
 
   real :: h_heat(SZI_(G))     !  thickness of the water column that receives
                               !  remaining shortwave radiation, in H.

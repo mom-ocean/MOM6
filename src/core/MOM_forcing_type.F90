@@ -660,8 +660,8 @@ subroutine calculateBuoyancyFlux1d(G, fluxes, optics, h, Temp, Salt, tv, j, &
   type(thermo_var_ptrs),                 intent(inout) :: tv             ! thermodynamics type
   integer,                               intent(in)    :: j              ! j-row to work on 
   real, dimension(NIMEM_,NK_INTERFACE_), intent(inout) :: buoyancyFlux   ! buoyancy flux (m^2/s^3)
-  real, dimension(NIMEM_),               intent(inout) :: netHeatMinusSW ! surf Heat flux (K m/s)
-  real, dimension(NIMEM_),               intent(inout) :: netSalt        ! surf salt flux (ppt m/s)
+  real, dimension(NIMEM_),               intent(inout) :: netHeatMinusSW ! surf Heat flux (K H)
+  real, dimension(NIMEM_),               intent(inout) :: netSalt        ! surf salt flux (ppt H)
 
 
   ! Local variables
@@ -699,7 +699,7 @@ subroutine calculateBuoyancyFlux1d(G, fluxes, optics, h, Temp, Salt, tv, j, &
   ! We aggregate the thermodynamic forcing for a time step into the following:
   ! netH       = water (H units) added/removed via surface fluxes
   ! netHeat    = heat (degC * H) via surface fluxes
-  ! netSalt    = salt ( g(salt)/m2 for non-Bouss and ppt*m/s for Bouss ) via surface fluxes
+  ! netSalt    = salt ( g(salt)/m2 for non-Bouss and ppt*m for Bouss ) via surface fluxes
   call extractFluxes1d(G, fluxes, optics, nsw, j, dt,                                 &
                 depthBeforeScalingFluxes, useRiverHeatContent, useCalvingHeatContent, &
                 h(:,j,:), Temp(:,j,:), netH, netEvap, netHeatMinusSW,                 &
@@ -749,8 +749,8 @@ subroutine calculateBuoyancyFlux2d(G, fluxes, optics, h, Temp, Salt, tv, &
   real, dimension(NIMEM_,NJMEM_,NKMEM_),       intent(in)    :: Salt           ! salinity (ppt)
   type(thermo_var_ptrs),                       intent(inout) :: tv             ! Thermodynamics type
   real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_),intent(inout) :: buoyancyFlux   ! buoy flux (m^2/s^3)
-  real, dimension(NIMEM_,NJMEM_),optional,     intent(inout) :: netHeatMinusSW ! surf temp flux (K m/s)
-  real, dimension(NIMEM_,NJMEM_),optional,     intent(inout) :: netSalt        ! surf salt flux (ppt m/s)
+  real, dimension(NIMEM_,NJMEM_),optional,     intent(inout) :: netHeatMinusSW ! surf temp flux (K H)
+  real, dimension(NIMEM_,NJMEM_),optional,     intent(inout) :: netSalt        ! surf salt flux (ppt H)
 
   real, dimension( SZI_(G) ) :: netT ! net temperature flux (K m/s)
   real, dimension( SZI_(G) ) :: netS ! net saln flux (ppt m/s)
