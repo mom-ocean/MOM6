@@ -699,8 +699,8 @@ subroutine zonal_face_thickness(u, h, hL, hR, h_u, dt, G, LB, vol_CFL, &
   ish = LB%ish ; ieh = LB%ieh ; jsh = LB%jsh ; jeh = LB%jeh ; nz = G%ke
 
 !$OMP parallel default(none) shared(ish,ieh,jsh,jeh,nz,u,vol_CFL,dt,G, &
-!$OMP                               hL,hR,h,h_u,visc_rem_u) &
-!$OMP                       private(CFL,curv_3,h_marg)
+!$OMP                               hL,hR,h,h_u,visc_rem_u,marginal) &
+!$OMP                       private(CFL,curv_3,h_marg,h_avg)
 !$OMP do
   do k=1,nz ; do j=jsh,jeh ; do I=ish-1,ieh
     if (u(I,j,k) > 0.0) then
@@ -1450,8 +1450,8 @@ subroutine merid_face_thickness(v, h, hL, hR, h_v, dt, G, LB, vol_CFL, &
   ish = LB%ish ; ieh = LB%ieh ; jsh = LB%jsh ; jeh = LB%jeh ; nz = G%ke
 
 !$OMP parallel default(none) shared(ish,ieh,jsh,jeh,nz,v,vol_CFL,dt,G, &
-!$OMP                               hL,hR,h,h_v,visc_rem_v) &
-!$OMP                       private(CFL,curv_3,h_marg)
+!$OMP                               hL,hR,h,h_v,visc_rem_v,marginal) &
+!$OMP                       private(CFL,curv_3,h_marg,h_avg)
 !$OMP do
   do k=1,nz ; do J=jsh-1,jeh ; do i=ish,ieh
     if (v(i,J,k) > 0.0) then
