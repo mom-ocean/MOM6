@@ -406,9 +406,6 @@ subroutine calc_Visbeck_coeffs(h, e, slope_x, slope_y, N2_u, N2_v, G, CS)
   real :: E_x(SZIB_(G), SZJ_(G))  ! X-slope of interface at u points (for diagnostics)
   real :: E_y(SZI_(G), SZJB_(G))  ! Y-slope of interface at u points (for diagnostics)
   real :: Khth_Loc      ! Locally calculated thickness mixing coefficient (m2/s)
-  real :: H_cutoff      ! Local estimate of a minimum thickness for masking (m)
-  real :: h_neglect     ! A thickness that is so small it is usually lost
-                        ! in roundoff and can be neglected, in H.
   real :: S2            ! Interface slope squared (non-dim)
   real :: N2            ! Brunt-Vaisala frequency (1/s)
   real :: Hup, Hdn      ! Thickness from above, below (m or kg m-2)
@@ -433,10 +430,8 @@ subroutine calc_Visbeck_coeffs(h, e, slope_x, slope_y, N2_u, N2_v, G, CS)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   S2max = CS%Visbeck_S_max**2
-  h_neglect = G%H_subroundoff
-  H_cutoff = real(2*nz) * (G%Angstrom + h_neglect)
 
-!$OMP parallel default(none) shared(is,ie,js,je,CS,nz,e,G,h,H_cutoff,h_neglect, &
+!$OMP parallel default(none) shared(is,ie,js,je,CS,nz,e,G,h, &
 !$OMP                               H_u,H_v,S2_u,S2_v,slope_x,slope_y,   &
 !$OMP                               SN_u_local,SN_v_local,N2_u,N2_v        )   &
 !$OMP                       private(E_x,E_y,S2,Hdn,Hup,H_geom,N2, &
@@ -446,6 +441,7 @@ subroutine calc_Visbeck_coeffs(h, e, slope_x, slope_y, N2_u, N2_v, G, CS)
     CS%SN_u(i,j) = 0.0
     CS%SN_v(i,j) = 0.0
   enddo ; enddo
+
 
   ! To set the length scale based on the deformation radius, use wave_speed to
   ! calculate the first-mode gravity wave speed and then blend the equatorial
