@@ -52,7 +52,7 @@ program MOM_main
   use MOM_error_handler,   only : callTree_enter, callTree_leave, callTree_waypoint
   use MOM_file_parser,     only : read_param, get_param, log_param, log_version, param_file_type
   use MOM_file_parser,     only : close_param_file
-  use MOM_forcing_type,    only : forcing, forcing_diagnostics, mech_forcing_diags
+  use MOM_forcing_type,    only : forcing, forcing_diagnostics, mech_forcing_diags, MOM_forcing_chksum
   use MOM_get_input,       only : directories
   use MOM_grid,            only : ocean_grid_type
   use MOM_io,              only : file_exists, open_file, close_file
@@ -385,6 +385,10 @@ program MOM_main
     ! Set the forcing for the next steps.
     call set_forcing(state, fluxes, Time, Time_step_ocean, grid, &
                      surface_forcing_CSp)
+    if (MOM_CSp%debug) then
+      call MOM_forcing_chksum("After set forcing", fluxes, grid, haloshift=0)
+    endif
+
     if (use_ice_shelf) then
       call shelf_calc_flux(state, fluxes, Time, time_step, ice_shelf_CSp)
 !###IS     call add_shelf_flux_forcing(fluxes, ice_shelf_CSp)

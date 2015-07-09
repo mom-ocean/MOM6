@@ -519,13 +519,13 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, G, C
     if (CS%debug) then
       call hchksum(tv%T, "before vert_fill_TS tv%T",G)
       call hchksum(tv%S, "before vert_fill_TS tv%S",G)
-      call hchksum(h, "before vert_fill_TS h",G)
+      call hchksum(h*G%H_to_m, "before vert_fill_TS h",G)
     endif
     call vert_fill_TS(h, tv%T, tv%S, kappa_fill, dt_fill, T_f, S_f, G)
     if (CS%debug) then
       call hchksum(tv%T, "after vert_fill_TS tv%T",G)
       call hchksum(tv%S, "after vert_fill_TS tv%S",G)
-      call hchksum(h, "after vert_fill_TS h",G)
+      call hchksum(h*G%H_to_m, "after vert_fill_TS h",G)
     endif
   endif
 

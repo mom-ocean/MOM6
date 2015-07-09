@@ -1460,8 +1460,8 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   endif
 
   if (CS%debug) then
-    call uchksum(uhbt, "BT uhbt",CS%debug_BT_G,haloshift=0)
-    call vchksum(vhbt, "BT vhbt",CS%debug_BT_G,haloshift=0)
+    call uchksum(uhbt*G%H_to_m, "BT uhbt",CS%debug_BT_G,haloshift=0)
+    call vchksum(vhbt*G%H_to_m, "BT vhbt",CS%debug_BT_G,haloshift=0)
     call uchksum(ubt, "BT Initial ubt",CS%debug_BT_G,haloshift=0)
     call vchksum(vbt, "BT Initial vbt",CS%debug_BT_G,haloshift=0)
     call hchksum(G%H_to_kg_m2*eta, "BT Initial eta",CS%debug_BT_G,haloshift=0)
@@ -1476,8 +1476,8 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
     endif
     call uchksum(Cor_ref_u, "BT Cor_ref_u",CS%debug_BT_G,haloshift=0)
     call vchksum(Cor_ref_v, "BT Cor_ref_v",CS%debug_BT_G,haloshift=0)
-    call uchksum(uhbt0, "BT uhbt0",CS%debug_BT_G,haloshift=0)
-    call vchksum(vhbt0, "BT vhbt0",CS%debug_BT_G,haloshift=0)
+    call uchksum(uhbt0*G%H_to_m, "BT uhbt0",CS%debug_BT_G,haloshift=0)
+    call vchksum(vhbt0*G%H_to_m, "BT vhbt0",CS%debug_BT_G,haloshift=0)
     if (.not. use_BT_cont) then
       call uchksum(G%H_to_m*Datu, "BT Datu",CS%debug_BT_G,haloshift=1)
       call vchksum(G%H_to_m*Datv, "BT Datv",CS%debug_BT_G,haloshift=1)
@@ -1969,8 +1969,8 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
     endif
 
     if (CS%debug_bt) then
-      call uchksum(uhbt, "BT uhbt just after OBC",CS%debug_BT_G,haloshift=iev-ie)
-      call vchksum(vhbt, "BT vhbt just after OBC",CS%debug_BT_G,haloshift=iev-ie)
+      call uchksum(uhbt*G%H_to_m, "BT uhbt just after OBC",CS%debug_BT_G,haloshift=iev-ie)
+      call vchksum(vhbt*G%H_to_m, "BT vhbt just after OBC",CS%debug_BT_G,haloshift=iev-ie)
     endif
 
 !$OMP parallel do default(none) shared(isv,iev,jsv,jev,n,eta,eta_src,dtbt,CS,uhbt,vhbt,eta_wtd,wt_eta)

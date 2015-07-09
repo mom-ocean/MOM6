@@ -291,12 +291,6 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, PF, dirs, &
       endif
     endif  ! not from_Z_file.
 
-    if (debug) then
-      call hchksum(h, "MOM_initialize_state: h ", G, haloshift=1)
-      if ( use_temperature ) call hchksum(tv%T, "MOM_initialize_state: T ", G, haloshift=1)
-      if ( use_temperature ) call hchksum(tv%S, "MOM_initialize_state: S ", G, haloshift=1)
-    endif
-
 !   Initialize velocity components, u and v
     call get_param(PF, mod, "VELOCITY_CONFIG", config, &
          "A string that determines how the initial velocities \n"//&
@@ -323,7 +317,6 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, PF, dirs, &
     call pass_vector(u, v, G%Domain)
     if (debug) call uchksum(u, "MOM_initialize_state: u ", G, haloshift=1)
     if (debug) call vchksum(v, "MOM_initialize_state: v ", G, haloshift=1)
-
 
 !   Optionally convert the thicknesses from m to kg m-2.  This is particularly
 ! useful in a non-Boussinesq model.

@@ -374,6 +374,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
 
   if (CS%debug) then
     call MOM_state_chksum("Start of diabatic ", u(:,:,:), v(:,:,:), h(:,:,:), G)
+    call MOM_forcing_chksum("Start of diabatic", fluxes, G, haloshift=0)
   endif
   if (CS%debugConservation) call MOM_state_stats('Start of diabatic', u, v, h, tv%T, tv%S, G)
 
@@ -416,6 +417,10 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     call set_opacity(CS%optics, fluxes, G, CS%opacity_CSp)
 
   if (CS%bulkmixedlayer) then
+    if (CS%debug) then
+      call MOM_forcing_chksum("Before mixedlayer", fluxes, G, haloshift=0)
+    endif
+
     if (CS%ML_mix_first > 0.0) then
 !  This subroutine (1)  Cools the mixed layer.
 !    (2) Performs convective adjustment by mixed layer entrainment.
@@ -445,7 +450,10 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
       if (ASSOCIATED(tv%S) .and. ASSOCIATED(tv%salt_deficit)) &
         call adjust_salt(h, tv, G, CS)
       call cpu_clock_end(id_clock_mixedlayer)
-      if (CS%debug) call MOM_state_chksum("After mixedlayer ", u, v, h, G)
+      if (CS%debug) then
+        call MOM_state_chksum("After mixedlayer ", u, v, h, G)
+        call MOM_forcing_chksum("After mixedlayer", fluxes, G, haloshift=0)
+      endif
       if (showCallTree) call callTree_waypoint("done with 1st bulkmixedlayer (diabatic)")
       if (CS%debugConservation) call MOM_state_stats('1st bulkmixedlayer', u, v, h, tv%T, tv%S, G)
     endif
@@ -597,10 +605,10 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   if (CS%useKPP) then
     call cpu_clock_begin(id_clock_kpp)
     if (CS%debug) then
+      call hchksum(CS%netHeatMinusSW*G%H_to_m, "before KPP_applyNLT netHeat",G,haloshift=0)
+      call hchksum(CS%netSalt*G%H_to_m, "before KPP_applyNLT netSalt",G,haloshift=0)
       call hchksum(CS%KPP_NLTheat, "before KPP_applyNLT NLTheat",G,haloshift=0)
-      call hchksum(CS%netHeatMinusSW, "before KPP_applyNLT netHeat",G,haloshift=0)
       call hchksum(CS%KPP_NLTscalar, "before KPP_applyNLT NLTscalar",G,haloshift=0)
-      call hchksum(CS%netSalt, "before KPP_applyNLT netSalt",G,haloshift=0)
     endif
     ! Apply non-local transport of heat and salt
     ! Changes: tv%T, tv%S

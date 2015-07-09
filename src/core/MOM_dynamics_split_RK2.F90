@@ -568,11 +568,16 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
       vp(i,j,k) = G%mask2dCv(i,j) * (v(i,j,k) + dt * v_bc_accel(i,J,k))
     enddo ; enddo 
   enddo
+
   call enable_averaging(dt, Time_local, CS%diag)
   call set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, &
                       CS%set_visc_CSp)
   call disable_averaging(CS%diag)
 
+  if (CS%debug) then
+    call uchksum(up,"before vertvisc: up",G,haloshift=0)
+    call vchksum(vp,"before vertvisc: vp",G,haloshift=0)
+  endif
   call vertvisc_coef(up, vp, h, fluxes, visc, dt, G, CS%vertvisc_CSp)
   call vertvisc_remnant(visc, CS%visc_rem_u, CS%visc_rem_v, dt, G, CS%vertvisc_CSp)
   call cpu_clock_end(id_clock_vertvisc)
@@ -671,6 +676,10 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 ! up <- up + dt_pred d/dz visc d/dz up
 ! u_av  <- u_av  + dt_pred d/dz visc d/dz u_av
   call cpu_clock_begin(id_clock_vertvisc)
+  if (CS%debug) then
+    call uchksum(up,"0 before vertvisc: up",G,haloshift=0)
+    call vchksum(vp,"0 before vertvisc: vp",G,haloshift=0)
+  endif
   call vertvisc_coef(up, vp, h, fluxes, visc, dt_pred, G, CS%vertvisc_CSp)
   call vertvisc(up, vp, h, fluxes, visc, dt_pred, CS%OBC, CS%ADp, CS%CDp, G, &
                 CS%vertvisc_CSp, CS%taux_bot, CS%tauy_bot)

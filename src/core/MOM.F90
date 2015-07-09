@@ -352,6 +352,7 @@ use MOM_error_handler,        only : MOM_set_verbosity, callTree_showQuery
 use MOM_error_handler,        only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser,          only : read_param, get_param, log_version, param_file_type
 use MOM_fixed_initialization, only : MOM_initialize_fixed
+use MOM_forcing_type,         only : MOM_forcing_chksum
 use MOM_get_input,            only : Get_MOM_Input, directories
 use MOM_io,                   only : MOM_io_init, vardesc
 use MOM_obsolete_params,      only : find_obsolete_params
@@ -850,6 +851,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
   if (CS%debug) then
     call MOM_state_chksum("Before steps ", u, v, h, CS%uh, CS%vh, G)
+    call MOM_forcing_chksum("Before steps", fluxes, G, haloshift=0)
     call check_redundant("Before steps ", u, v, G)
   endif
 
@@ -1172,9 +1174,9 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       if (CS%debug) then
         call uchksum(u,"Pre-advection u", G, haloshift=2)
         call vchksum(v,"Pre-advection v", G, haloshift=2)
-        call hchksum(h,"Pre-advection h", G, haloshift=1)
-        call uchksum(CS%uhtr,"Pre-advection uhtr", G, haloshift=0)
-        call vchksum(CS%vhtr,"Pre-advection vhtr", G, haloshift=0)
+        call hchksum(h*G%H_to_m,"Pre-advection h", G, haloshift=1)
+        call uchksum(CS%uhtr*G%H_to_m,"Pre-advection uhtr", G, haloshift=0)
+        call vchksum(CS%vhtr*G%H_to_m,"Pre-advection vhtr", G, haloshift=0)
       ! call MOM_state_chksum("Pre-advection ", u, v, &
       !                       h, CS%uhtr, CS%vhtr, G, haloshift=1)
           if (associated(CS%tv%T)) call hchksum(CS%tv%T, "Pre-advection T", G, haloshift=1)
@@ -1224,12 +1226,13 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         if (CS%debug) then
           call uchksum(u,"Pre-diabatic u", G, haloshift=2)
           call vchksum(v,"Pre-diabatic v", G, haloshift=2)
-          call hchksum(h,"Pre-diabatic h", G, haloshift=1)
-          call uchksum(CS%uhtr,"Pre-diabatic uh", G, haloshift=0)
-          call vchksum(CS%vhtr,"Pre-diabatic vh", G, haloshift=0)
+          call hchksum(h*G%H_to_m,"Pre-diabatic h", G, haloshift=1)
+          call uchksum(CS%uhtr*G%H_to_m,"Pre-diabatic uh", G, haloshift=0)
+          call vchksum(CS%vhtr*G%H_to_m,"Pre-diabatic vh", G, haloshift=0)
         ! call MOM_state_chksum("Pre-diabatic ",u, v, h, CS%uhtr, CS%vhtr, G)
           call MOM_thermo_chksum("Pre-diabatic ", CS%tv, G,haloshift=0)
           call check_redundant("Pre-diabatic ", u, v, G)
+          call MOM_forcing_chksum("Pre-diabatic", fluxes, G, haloshift=0)
         endif
 
         if (CS%split .and. CS%legacy_split) then  ! The dt here is correct. -RWH
@@ -1271,9 +1274,9 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         if (CS%debug) then
           call uchksum(u,"Post-diabatic u", G, haloshift=2)
           call vchksum(v,"Post-diabatic v", G, haloshift=2)
-          call hchksum(h,"Post-diabatic h", G, haloshift=1)
-          call uchksum(CS%uhtr,"Post-diabatic uh", G, haloshift=0)
-          call vchksum(CS%vhtr,"Post-diabatic vh", G, haloshift=0)
+          call hchksum(h*G%H_to_m,"Post-diabatic h", G, haloshift=1)
+          call uchksum(CS%uhtr*G%H_to_m,"Post-diabatic uh", G, haloshift=0)
+          call vchksum(CS%vhtr*G%H_to_m,"Post-diabatic vh", G, haloshift=0)
         ! call MOM_state_chksum("Post-diabatic ", u, v, &
         !                       h, CS%uhtr, CS%vhtr, G, haloshift=1)
           if (associated(CS%tv%T)) call hchksum(CS%tv%T, "Post-diabatic T", G, haloshift=1)
