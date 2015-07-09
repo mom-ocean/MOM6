@@ -1926,7 +1926,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
 
   ! Set the fields that are needed for bitwise identical restarting
   ! the time stepping scheme.
-  call restart_init(param_file, CS%restart_CSp)
+  call restart_init(G, param_file, CS%restart_CSp)
   call set_restart_fields(G, param_file, CS)
   if (CS%split) then
     if (CS%legacy_split) then

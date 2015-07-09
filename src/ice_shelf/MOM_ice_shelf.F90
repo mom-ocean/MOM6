@@ -1,14 +1,14 @@
 module MOM_ice_shelf
 !***********************************************************************
 !*                   GNU General Public License                        *
-!* This file is a part of MOM.                                        *
+!* This file is a part of MOM.                                         *
 !*                                                                     *
-!* MOM is free software; you can redistribute it and/or modify it and *
+!* MOM is free software; you can redistribute it and/or modify it and  *
 !* are expected to follow the terms of the GNU General Public License  *
 !* as published by the Free Software Foundation; either version 2 of   *
 !* the License, or (at your option) any later version.                 *
 !*                                                                     *
-!* MOM is distributed in the hope that it will be useful, but WITHOUT *
+!* MOM is distributed in the hope that it will be useful, but WITHOUT  *
 !* ANY WARRANTY; without even the implied warranty of MERCHANTABILITY  *
 !* or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public    *
 !* License for more details.                                           *
@@ -1404,7 +1404,7 @@ subroutine initialize_ice_shelf(Time, CS, diag, fluxes, Time_in, solo_mode_in)
   call MOM_initialize_rotation(G%CoriolisBu, G, param_file)
 
   ! Set up the restarts.
-  call restart_init(param_file, CS%restart_CSp, "Shelf.res")
+  call restart_init(G, param_file, CS%restart_CSp, "Shelf.res")
   vd = vardesc("shelf_mass","Ice shelf mass",'h','1','s',"kg m-2")
   call register_restart_field(CS%mass_shelf, vd, .true., CS%restart_CSp)
   vd = vardesc("shelf_area","Ice shelf area in cell",'h','1','s',"m2")
