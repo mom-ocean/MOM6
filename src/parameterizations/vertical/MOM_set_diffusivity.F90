@@ -1654,7 +1654,7 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, G, CS,
       ! This is energy loss in addition to work done as mixing, apparently to Joule heating.
       TKE_remaining = exp(-Idecay*dh) * TKE_remaining
 
-      z = z + h(i,j,k) ! Distance between upper interface of layer and the bottom, in m.
+      z = z + h(i,j,k)*G%H_to_m ! Distance between upper interface of layer and the bottom, in m.
       D_minus_z = max(total_thickness - z, 0.) ! Thickness above layer, m.
 
       ! Diffusivity using law of the wall, limited by rotation, at height z, in m2/s.

@@ -687,7 +687,7 @@ subroutine calculateBuoyancyFlux1d(G, fluxes, optics, h, Temp, Salt, tv, j, &
   useRiverHeatContent   = .False.    
   useCalvingHeatContent = .False.  
 
-  depthBeforeScalingFluxes = max( G%Angstrom, 1.e-30 )
+  depthBeforeScalingFluxes = max( G%Angstrom_z, 1.e-30 )
   pressure(:) = 0. ! Ignore atmospheric pressure
   GoRho       = G%g_Earth / G%Rho0
   start       = 1 + G%isc - G%isd
@@ -724,10 +724,10 @@ subroutine calculateBuoyancyFlux1d(G, fluxes, optics, h, Temp, Salt, tv, j, &
 
   ! Convert to a buoyancy flux, excluding penetrating SW heating
   buoyancyFlux(G%isc:G%iec,1) = - GoRho * ( dRhodS(G%isc:G%iec) * netSalt(G%isc:G%iec) + &
-                                             dRhodT(G%isc:G%iec) * netHeat(G%isc:G%iec) ) ! m^2/s^3
+                                             dRhodT(G%isc:G%iec) * netHeat(G%isc:G%iec) ) * G%H_to_m ! m^2/s^3
   ! We also have a penetrative buoyancy flux associated with penetrative SW
   do k=2, G%ke+1
-    buoyancyFlux(G%isc:G%iec,k) = - GoRho * ( dRhodT(G%isc:G%iec) * netPen(G%isc:G%iec,k) ) ! m^2/s^3
+    buoyancyFlux(G%isc:G%iec,k) = - GoRho * ( dRhodT(G%isc:G%iec) * netPen(G%isc:G%iec,k) ) * G%H_to_m ! m^2/s^3
   enddo
 
 end subroutine calculateBuoyancyFlux1d

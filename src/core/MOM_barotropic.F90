@@ -1375,7 +1375,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
         ! Limit the sink (inward) correction to the amount of mass that is already
         ! inside the cell, plus any mass added by eta_source.
         Htot = eta(i,j)
-        if (G%Boussinesq) Htot = CS%bathyT(i,j) + eta(i,j)
+        if (G%Boussinesq) Htot = CS%bathyT(i,j)*G%m_to_H + eta(i,j)
 
         CS%eta_cor(i,j) = max(CS%eta_cor(i,j), -max(0.0,Htot + dt*CS%eta_source(i,j)))
       endif
@@ -2657,8 +2657,8 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, G, MS, halo, use_BT_cont, Datu, Datv,
         BT_OBC%Cg_u(I,j) = SQRT(G%g_prime(1)*(0.5* &
                                 (G%bathyT(i,j) + G%bathyT(i+1,j))))
         if (G%Boussinesq) then
-          BT_OBC%H_u(I,j) = 0.5*((G%bathyT(i,j) + eta(i,j)) + &
-                                 (G%bathyT(i+1,j) + eta(i+1,j)))
+          BT_OBC%H_u(I,j) = 0.5*((G%bathyT(i,j)*G%m_to_H + eta(i,j)) + &
+                                 (G%bathyT(i+1,j)*G%m_to_H + eta(i+1,j)))
         else
           BT_OBC%H_u(I,j) = 0.5*(eta(i,j) + eta(i+1,j))
         endif
@@ -2693,8 +2693,8 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, G, MS, halo, use_BT_cont, Datu, Datv,
         BT_OBC%Cg_v(i,J) = SQRT(G%g_prime(1)*(0.5* &
                                 (G%bathyT(i,j) + G%bathyT(i,j+1))))
         if (G%Boussinesq) then
-          BT_OBC%H_v(i,J) = 0.5*((G%bathyT(i,j) + eta(i,j)) + &
-                                 (G%bathyT(i,j+1) + eta(i,j+1)))
+          BT_OBC%H_v(i,J) = 0.5*((G%bathyT(i,j)*G%m_to_H + eta(i,j)) + &
+                                 (G%bathyT(i,j+1)*G%m_to_H + eta(i,j+1)))
         else
           BT_OBC%H_v(i,J) = 0.5*(eta(i,j) + eta(i,j+1))
         endif
@@ -3487,14 +3487,14 @@ subroutine find_face_areas(Datu, Datv, G, CS, MS, eta, halo, add_max)
     if (G%Boussinesq) then
 !$OMP do
       do j=js-hs,je+hs ; do I=is-1-hs,ie+hs
-        H1 = CS%bathyT(i,j) + eta(i,j) ; H2 = CS%bathyT(i+1,j) + eta(i+1,j)
+        H1 = CS%bathyT(i,j)*G%m_to_H + eta(i,j) ; H2 = CS%bathyT(i+1,j)*G%m_to_H + eta(i+1,j)
         Datu(I,j) = 0.0 ; if ((H1 > 0.0) .and. (H2 > 0.0)) &
         Datu(I,j) = CS%dy_Cu(I,j) * (2.0 * H1 * H2) / (H1 + H2)
 !       Datu(I,j) = CS%dy_Cu(I,j) * 0.5 * (H1 + H2)
       enddo ; enddo
 !$OMP do
       do J=js-1-hs,je+hs ; do i=is-hs,ie+hs
-        H1 = CS%bathyT(i,j) + eta(i,j) ; H2 = CS%bathyT(i,j+1) + eta(i,j+1)
+        H1 = CS%bathyT(i,j)*G%m_to_H + eta(i,j) ; H2 = CS%bathyT(i,j+1)*G%m_to_H + eta(i,j+1)
         Datv(i,J) = 0.0 ; if ((H1 > 0.0) .and. (H2 > 0.0)) &
         Datv(i,J) = CS%dx_Cv(i,J) * (2.0 * H1 * H2) / (H1 + H2)
 !       Datv(i,J) = CS%dy_v(i,J) * 0.5 * (H1 + H2)
@@ -3597,7 +3597,7 @@ subroutine bt_mass_source(h, eta, fluxes, set_cor, dt_therm, dt_since_therm, &
   do j=js,je
     do i=is,ie ; h_tot(i) = h(i,j,1) ; enddo
     if (G%Boussinesq) then
-      do i=is,ie ; eta_h(i) = h(i,j,1) - G%bathyT(i,j) ; enddo
+      do i=is,ie ; eta_h(i) = h(i,j,1) - G%bathyT(i,j)*G%m_to_H ; enddo
     else
       do i=is,ie ; eta_h(i) = h(i,j,1) ; enddo
     endif

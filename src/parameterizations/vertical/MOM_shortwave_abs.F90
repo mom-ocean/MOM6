@@ -385,7 +385,7 @@ subroutine sumSWoverBands(G, h, opacity_band, nsw, j, dt, &
       if (h(i,k) > 0.0) then
         do n=1,nsw ; if (Pen_SW_bnd(n,i) > 0.0) then
           ! SW_trans is the SW that is transmitted THROUGH the layer
-          opt_depth = h(i,k) * opacity_band(n,i,k)
+          opt_depth = h(i,k)*G%H_to_m * opacity_band(n,i,k)
           exp_OD = exp(-opt_depth)
           SW_trans = exp_OD
           ! Heating at a rate of less than 10-4 W m-2 = 10-3 K m / Century,

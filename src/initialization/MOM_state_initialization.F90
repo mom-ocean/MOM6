@@ -325,7 +325,19 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, PF, dirs, &
                  "units of m to kg m-2 or vice versa, depending on whether \n"//&
                  "BOUSSINESQ is defined. This does not apply if a restart \n"//&
                  "file is read.", default=.false.)
-    if (convert) call convert_thickness(h, G, PF, tv)
+    if (convert .and. .not. G%Boussinesq) then
+      ! Convert h from m to kg m-2 then to thickness units (H)
+      call convert_thickness(h, G, PF, tv)
+    elseif (G%Boussinesq) then
+      ! Convert h from m to thickness units (H)
+      h = h*G%m_to_H
+    endif
+
+    if (debug) then
+      call hchksum(h*G%H_to_m, "MOM_initialize_state: h ", G, haloshift=1)
+      if ( use_temperature ) call hchksum(tv%T, "MOM_initialize_state: T ", G, haloshift=1)
+      if ( use_temperature ) call hchksum(tv%S, "MOM_initialize_state: S ", G, haloshift=1)
+    endif
 
 !  Remove the mass that would be displaced by an ice shelf or inverse barometer.
     call get_param(PF, mod, "DEPRESS_INITIAL_SURFACE", depress_sfc, &

@@ -570,7 +570,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, &
         km1 = max(1, k-1)
         kk = 3*(k-1)
         deltaRho(k) = rho_1D(kk+2) - rho_1D(kk+1)
-        N2_1d(k)    = (GoRho * (rho_1D(kk+2) - rho_1D(kk+3)) ) / (0.5*(h(i,j,km1) + h(i,j,k))+G%H_subroundoff)
+        N2_1d(k)    = (GoRho * (rho_1D(kk+2) - rho_1D(kk+3)) ) / ((0.5*(h(i,j,km1) + h(i,j,k))+G%H_subroundoff)*G%H_to_m)
         N_1d(k)     = sqrt( max( N2_1d(k), 0.) )
       enddo
       N2_1d(G%ke+1 ) = 0.0

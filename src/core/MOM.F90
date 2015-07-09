@@ -958,7 +958,10 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
             call check_redundant("Pre-ALE 1 ", u, v, G)
           endif
           call cpu_clock_begin(id_clock_ALE)
+          ! Switch thickness units from H to m for remapping
+          h = h*G%H_to_m
           call ALE_main(G, h, u, v, CS%tv, CS%ALE_CSp)
+          h = h*G%m_to_H
           call cpu_clock_end(id_clock_ALE)
           if (CS%debug) then
             call MOM_state_chksum("Post-ALE 1 ", u, v, h, CS%uh, CS%vh, G)
@@ -1257,7 +1260,10 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
             call check_redundant("Pre-ALE ", u, v, G)
           endif
           call cpu_clock_begin(id_clock_ALE)
+          ! Switch thickness units from H to m for remapping
+          h = h*G%H_to_m
           call ALE_main(G, h, u, v, CS%tv, CS%ALE_CSp)
+          h = h*G%m_to_H
           call cpu_clock_end(id_clock_ALE)
           if (CS%debug) then
             call MOM_state_chksum("Post-ALE ", u, v, h, CS%uh, CS%vh, G)
@@ -1854,7 +1860,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   ! Allocate and initialize space for primary MOM variables.
   ALLOC_(CS%u(IsdB:IedB,jsd:jed,nz))   ; CS%u(:,:,:) = 0.0
   ALLOC_(CS%v(isd:ied,JsdB:JedB,nz))   ; CS%v(:,:,:) = 0.0
-  ALLOC_(CS%h(isd:ied,jsd:jed,nz))     ; CS%h(:,:,:) = G%Angstrom
+  ALLOC_(CS%h(isd:ied,jsd:jed,nz))     ; CS%h(:,:,:) = G%Angstrom_z
   ALLOC_(CS%uh(IsdB:IedB,jsd:jed,nz))  ; CS%uh(:,:,:) = 0.0
   ALLOC_(CS%vh(isd:ied,JsdB:JedB,nz))  ; CS%vh(:,:,:) = 0.0
   if (CS%use_temperature) then
@@ -1988,18 +1994,25 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     if (CS%debug) then
       call uchksum(CS%u,"Pre initialize_ALE u", G, haloshift=1)
       call vchksum(CS%v,"Pre initialize_ALE v", G, haloshift=1)
-      call hchksum(CS%h,"Pre initialize_ALE h", G, haloshift=1)
+      call hchksum(CS%h*G%H_to_m,"Pre initialize_ALE h", G, haloshift=1)
     endif
+    ! Switch thickness units from H to m for regridding
+    CS%h = CS%h*G%H_to_m
+
     if (.not. query_initialized(CS%h,"h",CS%restart_CSp)) then
       ! This is a not a restart so we do the following...
       call adjustGridForIntegrity(CS%ALE_CSp, G, CS%h )
       call ALE_main( G, CS%h, CS%u, CS%v, CS%tv, CS%ALE_CSp )
     endif
+
+    ! Switch thickness units back to H
+    CS%h = CS%h*G%m_to_H
+
     call ALE_updateVerticalGridType( CS%ALE_CSp, G%GV )
     if (CS%debug) then
       call uchksum(CS%u,"Post initialize_ALE u", G, haloshift=1)
       call vchksum(CS%v,"Post initialize_ALE v", G, haloshift=1)
-      call hchksum(CS%h, "Post initialize_ALE h", G, haloshift=1)
+      call hchksum(CS%h*G%H_to_m, "Post initialize_ALE h", G, haloshift=1)
     endif
   endif
 
@@ -2652,8 +2665,8 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, CS, p_atm)
       enddo
 
       do k=1,nz ; do i=is,ie
-        if (depth(i) + h(i,j,k) < depth_ml) then
-          dh = h(i,j,k)
+        if (depth(i) + h(i,j,k)*G%H_to_m < depth_ml) then
+          dh = h(i,j,k)*G%H_to_m
         elseif (depth(i) < depth_ml) then
           dh = depth_ml - depth(i)
         else
@@ -2669,7 +2682,7 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, CS, p_atm)
       enddo ; enddo
   ! Calculate the average properties of the mixed layer depth.
       do i=is,ie
-        if (depth(i) < G%H_subroundoff) depth(i) = G%H_subroundoff
+        if (depth(i) < G%H_subroundoff*G%H_to_m) depth(i) = G%H_subroundoff*G%H_to_m
         if (CS%use_temperature) then
           state%SST(i,j) = state%SST(i,j) / depth(i)
           state%SSS(i,j) = state%SSS(i,j) / depth(i)

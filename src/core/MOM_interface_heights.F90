@@ -114,12 +114,12 @@ subroutine find_eta_3d(h, tv, G_Earth, G, eta, eta_bt, halo_size)
 !$OMP                               G_Earth,dz_geo,halo,I_gEarth) &
 !$OMP                       private(dilate,htot)
 !$OMP do
-  do j=jsv,jev ; do i=isv,iev ; eta(i,j,nz+1) = -G%bathyT(i,j) ; enddo ; enddo
+  do j=jsv,jev ; do i=isv,iev ; eta(i,j,nz+1) = -G%bathyT(i,j); enddo ; enddo
 
   if (G%Boussinesq) then
 !$OMP do
     do j=jsv,jev ; do k=nz,1,-1; do i=isv,iev
-      eta(i,j,K) = eta(i,j,K+1) + h(i,j,k)
+      eta(i,j,K) = eta(i,j,K+1) + h(i,j,k)*G%H_to_m
     enddo ; enddo ; enddo
     if (present(eta_bt)) then
       ! Dilate the water column to agree with the free surface height
@@ -127,10 +127,10 @@ subroutine find_eta_3d(h, tv, G_Earth, G, eta, eta_bt, halo_size)
 !$OMP do
       do j=jsv,jev
         do i=isv,iev
-          dilate(i) = (eta_bt(i,j)+G%bathyT(i,j)) / (eta(i,j,1)+G%bathyT(i,j))
+          dilate(i) = (eta_bt(i,j)+G%bathyT(i,j)*G%m_to_H) / (eta(i,j,1)+G%bathyT(i,j))
         enddo
         do k=1,nz ; do i=isv,iev
-          eta(i,j,K) = dilate(i) * (eta(i,j,K) + G%bathyT(i,j)) - G%bathyT(i,j)
+          eta(i,j,K) = dilate(i) * (eta(i,j,K) + G%bathyT(i,j)*G%m_to_H) - G%bathyT(i,j)
         enddo ; enddo
       enddo
     endif
@@ -234,7 +234,7 @@ subroutine find_eta_2d(h, tv, G_Earth, G, eta, eta_bt, halo_size)
     else
 !$OMP do
       do j=js,je ; do k=1,nz ; do i=is,ie
-        eta(i,j) = eta(i,j) + h(i,j,k)
+        eta(i,j) = eta(i,j) + h(i,j,k)*G%H_to_m
       enddo ; enddo ; enddo
     endif
   else

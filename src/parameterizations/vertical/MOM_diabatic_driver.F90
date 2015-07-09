@@ -2412,7 +2412,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
   ! To accommodate vanishing upper layers, we need to allow for an instantaneous
   ! distribution of forcing over some finite vertical extent. The bulk mixed layer
   ! code handles this issue properly. 
-  H_limit_fluxes = max(G%Angstrom, 1.E-30) 
+  H_limit_fluxes = max(G%Angstrom_z, 1.E-30) 
 
   ! The inverse scale, IforcingDepthScale, is a hack which 
   ! should not be tickled in Eulerian mode. It stops all of the forcing from 
@@ -2445,7 +2445,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
       h2d(i,k) = h(i,j,k)
       T2d(i,k) = tv%T(i,j,k)
       do n=1,nsw
-        opacityBand(n,i,k) = G%H_to_m*optics%opacity_band(n,i,j,k)
+        opacityBand(n,i,k) = (1.0 / G%m_to_H)*optics%opacity_band(n,i,j,k)
       enddo
     enddo ; enddo
 
@@ -2589,7 +2589,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
           ! For layers thin relative to 1/IforcingDepthScale, then distribute 
           ! forcing into deeper layers. 
           ! fractionOfForcing = 1.0, unless h2d is less than IforcingDepthScale.
-          fractionOfForcing = min(1.0, h2d(i,k)*IforcingDepthScale)
+          fractionOfForcing = min(1.0, h2d(i,k)*G%H_to_m*IforcingDepthScale)
 
           ! In the case with (-1)*netMassOut greater than 0.8*h, then we limit 
           ! applied to the top cell, and distribute the fluxes downwards.

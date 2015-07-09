@@ -496,12 +496,13 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   call cpu_clock_begin(id_clock_pres)
   call PressureForce(h, tv, CS%PFu, CS%PFv, G, CS%PressureForce_CSp, &
                      CS%ALE_CSp, p_surf, CS%pbce, CS%eta_PF)
+  if (CS%debug) then
+    call uchksum(CS%PFu,"After PressureForce CS%PFu",G,haloshift=0)
+    call vchksum(CS%PFv,"After PressureForce CS%PFv",G,haloshift=0)
+  endif
+
   if (dyn_p_surf) then
-    if (G%Boussinesq) then
-      Pa_to_eta = 1.0 / (G%Rho0*G%g_Earth)
-    else
-      Pa_to_eta = 1.0 / G%H_to_Pa
-    endif
+    Pa_to_eta = 1.0 / G%H_to_Pa
 !$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,eta_PF_start,CS,Pa_to_eta,p_surf_begin,p_surf_end)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       eta_PF_start(i,j) = CS%eta_PF(i,j) - Pa_to_eta * &
@@ -1242,7 +1243,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, param_file, &
     ! dimensions as h, either m or kg m-3.  
     !   CS%eta(:,:) = 0.0 already from initialization.
     if (G%Boussinesq) then
-      do j=js,je ; do i=is,ie ; CS%eta(i,j) = -G%bathyT(i,j) ; enddo ; enddo
+      do j=js,je ; do i=is,ie ; CS%eta(i,j) = -G%bathyT(i,j) * G%m_to_H ; enddo ; enddo
     endif
     do k=1,nz ; do j=js,je ; do i=is,ie
        CS%eta(i,j) = CS%eta(i,j) + h(i,j,k)
