@@ -93,7 +93,7 @@ subroutine absorbRemainingSW(G, h, opacity_band, nsw, j, dt, H_limit_fluxes, &
 !  (in)    j            = j-index to work on
 !  (in)    dt           = time step (seconds)
 !  (in)    H_limit_fluxes = if the total ocean depth is less than this, they
-!                         are scaled away to avoid numerical instabilities.
+!                         are scaled away to avoid numerical instabilities. (H)
 !                         This would not be necessary if a finite heat
 !                         capacity mud-layer were added.
 !  (in)    adjustAbsorptionProfile = if true, apply heating above the layers
@@ -278,7 +278,7 @@ subroutine absorbRemainingSW(G, h, opacity_band, nsw, j, dt, H_limit_fluxes, &
     enddo
     do i=is,ie ; if (Pen_SW_rem(i) > 0.0) SW_Remains = .true. ; enddo
 
-    Ih_limit = 1.0 / (H_limit_fluxes * G%m_to_H)
+    Ih_limit = 1.0 / H_limit_fluxes
     do i=is,ie ; if ((Pen_SW_rem(i) > 0.0) .and. (h_heat(i) > 0.0)) then
       if (h_heat(i)*Ih_limit >= 1.0) then
         T_chg(i) = Pen_SW_rem(i) / h_heat(i) ; unabsorbed = 0.0
@@ -421,7 +421,7 @@ subroutine sumSWoverBands(G, h, opacity_band, nsw, j, dt, &
     enddo
     do i=is,ie ; if (Pen_SW_rem(i) > 0.0) SW_Remains = .true. ; enddo
 
-    Ih_limit = 1.0 / (H_limit_fluxes * G%m_to_H)
+    Ih_limit = 1.0 / H_limit_fluxes
     do i=is,ie ; if ((Pen_SW_rem(i) > 0.0) .and. (h_heat(i) > 0.0)) then
       if (h_heat(i)*Ih_limit < 1.0) then
         unabsorbed = 1.0 - h_heat(i)*Ih_limit

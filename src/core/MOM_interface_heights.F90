@@ -81,22 +81,23 @@ subroutine find_eta_3d(h, tv, G_Earth, G, eta, eta_bt, halo_size)
 ! calculation.
 
 ! Arguments:
-!  (in)       h      - layer thickness (meter or kg/m2)
+!  (in)      h       - layer thickness H (meter or kg/m2)
 !  (in)      tv      - structure pointing to thermodynamic variables
 !  (in)      G_Earth - Earth gravitational acceleration (m/s2)
 !  (in)      G       - ocean grid structure
-!  (out)     eta     - layer interface heights (meter or kg/m2) 
+!  (out)     eta     - layer interface heights (meter)
 !  (in,opt)  eta_bt  - optional barotropic variable that gives the "correct"
 !                      free surface height (Boussinesq) or total water column
 !                      mass per unit aread (non-Boussinesq).  This is used to
 !                      dilate the layer thicknesses when calculating interface
-!                      heights, in m or kg m-2.
+!                      heights, in H (m or kg m-2).
 ! (in,opt) halo_size - width of halo points on which to calculate eta
 
   real :: p(SZI_(G),SZJ_(G),SZK_(G)+1)
   real :: dz_geo(SZI_(G),SZJ_(G),SZK_(G)) ! The change in geopotential height
                                           ! across a layer, in m2 s-2.
-  real :: dilate(SZI_(G)), htot(SZI_(G))
+  real :: dilate(SZI_(G))                 ! non-dimensional dilation factor
+  real :: htot(SZI_(G))                   ! total thickness H
   real :: I_gEarth
   integer i, j, k, isv, iev, jsv, jev, nz, halo
 
@@ -114,7 +115,7 @@ subroutine find_eta_3d(h, tv, G_Earth, G, eta, eta_bt, halo_size)
 !$OMP                               G_Earth,dz_geo,halo,I_gEarth) &
 !$OMP                       private(dilate,htot)
 !$OMP do
-  do j=jsv,jev ; do i=isv,iev ; eta(i,j,nz+1) = -G%bathyT(i,j); enddo ; enddo
+  do j=jsv,jev ; do i=isv,iev ; eta(i,j,nz+1) = -G%bathyT(i,j) ; enddo ; enddo
 
   if (G%Boussinesq) then
 !$OMP do
@@ -127,10 +128,11 @@ subroutine find_eta_3d(h, tv, G_Earth, G, eta, eta_bt, halo_size)
 !$OMP do
       do j=jsv,jev
         do i=isv,iev
-          dilate(i) = (eta_bt(i,j)+G%bathyT(i,j)*G%m_to_H) / (eta(i,j,1)+G%bathyT(i,j))
+          dilate(i) = (eta_bt(i,j)*G%H_to_m + G%bathyT(i,j)) / &
+                      (eta(i,j,1) + G%bathyT(i,j))
         enddo
         do k=1,nz ; do i=isv,iev
-          eta(i,j,K) = dilate(i) * (eta(i,j,K) + G%bathyT(i,j)*G%m_to_H) - G%bathyT(i,j)
+          eta(i,j,K) = dilate(i) * (eta(i,j,K) + G%bathyT(i,j)) - G%bathyT(i,j)
         enddo ; enddo
       enddo
     endif
@@ -202,7 +204,7 @@ subroutine find_eta_2d(h, tv, G_Earth, G, eta, eta_bt, halo_size)
 !  (out)     eta     - free surface height relative to mean sea level (z=0) (m)
 !  (in,opt)  eta_bt  - optional barotropic variable that gives the "correct"
 !                      free surface height (Boussinesq) or total water column
-!                      mass per unit aread (non-Boussinesq), in m
+!                      mass per unit aread (non-Boussinesq), in H (m or kg m-2)
 !  (in,opt)  halo_size - width of halo points on which to calculate eta
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: &

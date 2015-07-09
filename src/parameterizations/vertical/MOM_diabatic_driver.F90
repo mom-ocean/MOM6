@@ -2412,7 +2412,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
   ! To accommodate vanishing upper layers, we need to allow for an instantaneous
   ! distribution of forcing over some finite vertical extent. The bulk mixed layer
   ! code handles this issue properly. 
-  H_limit_fluxes = max(G%Angstrom_z, 1.E-30) 
+  H_limit_fluxes = max(G%Angstrom, 1.E-30*G%m_to_H) 
 
   ! The inverse scale, IforcingDepthScale, is a hack which 
   ! should not be tickled in Eulerian mode. It stops all of the forcing from 

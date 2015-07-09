@@ -510,7 +510,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
     dpa_bk, &    ! The change in pressure anomaly between the top and bottom
                  ! of a layer, in Pa.
     intz_dpa_bk  ! The vertical integral in depth of the pressure anomaly less
-                 ! the pressure anomaly at the top of the layer, in H Pa.
+                 ! the pressure anomaly at the top of the layer, in H Pa (m Pa).
   real, dimension(SZIB_BK_(G),SZJ_BK_(G)) :: & ! on block indices
     intx_pa_bk, & ! The zonal integral of the pressure anomaly along the interface
                   ! atop a layer, divided by the grid spacing, in Pa.
@@ -677,9 +677,9 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
   ! of freedeom needed to know the linear profile).
   if ( use_ALE ) then
     if ( PRScheme == PRESSURE_RECONSTRUCTION_PLM ) then
-      call pressure_gradient_plm (ALE_CSp, S_t, S_b, T_t, T_b, G, tv, h*G%H_to_m );
+      call pressure_gradient_plm (ALE_CSp, S_t, S_b, T_t, T_b, G, tv, h);
     elseif ( PRScheme == PRESSURE_RECONSTRUCTION_PPM ) then
-      call pressure_gradient_ppm (ALE_CSp, S_t, S_b, T_t, T_b, G, tv, h*G%H_to_m );
+      call pressure_gradient_ppm (ALE_CSp, S_t, S_b, T_t, T_b, G, tv, h);
     endif
   endif
 
@@ -754,7 +754,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
                     rho_ref, CS%Rho0, G%g_Earth, G%Block(n), tv%eqn_of_state, &
                     dpa_bk, intz_dpa_bk, intx_dpa_bk, inty_dpa_bk )
         endif
-        intz_dpa_bk = intz_dpa_bk*G%m_to_H
+        intz_dpa_bk(:,:) = intz_dpa_bk(:,:)*G%m_to_H
       else
         do jb=Jsq_bk,Jeq_bk+1 ; do ib=Isq_bk,Ieq_bk+1
           i = ib+ioff_bk ; j = jb+joff_bk

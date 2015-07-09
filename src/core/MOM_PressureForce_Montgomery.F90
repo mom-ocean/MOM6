@@ -690,7 +690,7 @@ subroutine Set_pbce_Bouss(e, tv, G, g_Earth, Rho0, GFS_scale, pbce, rho_star)
   real, dimension(NIMEM_,NJMEM_,NKMEM_), optional, intent(in) :: rho_star
 !    This subroutine determines the partial derivative of the acceleration due 
 !  to pressure forces with the free surface height.
-! Arguments: e - Interface height, in H.
+! Arguments: e - Interface height, in H (m).
 !  (in)      tv - A structure containing pointers to any available
 !                 thermodynamic fields, including potential temperature and
 !                 salinity or mixed layer density. Absent fields have NULL ptrs.
@@ -738,7 +738,7 @@ subroutine Set_pbce_Bouss(e, tv, G, g_Earth, Rho0, GFS_scale, pbce, rho_star)
       do j=Jsq,Jeq+1
         do i=Isq,Ieq+1
           Ihtot(i) = 1.0 / (((e(i,j,1)-e(i,j,nz+1)) + h_neglect) * G%m_to_H)
-          pbce(i,j,1) = GFS_scale * rho_star(i,j,1) * (1.0 / G%m_to_H)
+          pbce(i,j,1) = GFS_scale * rho_star(i,j,1) * G%H_to_m
         enddo
         do k=2,nz ; do i=Isq,Ieq+1
           pbce(i,j,k) = pbce(i,j,k-1) + (rho_star(i,j,k)-rho_star(i,j,k-1)) * &
@@ -756,7 +756,7 @@ subroutine Set_pbce_Bouss(e, tv, G, g_Earth, Rho0, GFS_scale, pbce, rho_star)
         call calculate_density(tv%T(:,j,1), tv%S(:,j,1), press, rho_in_situ, &
                                Isq, Ieq-Isq+2, tv%eqn_of_state)
         do i=Isq,Ieq+1
-          pbce(i,j,1) = G_Rho0*(GFS_scale * rho_in_situ(i)) * (1.0 / G%m_to_H)
+          pbce(i,j,1) = G_Rho0*(GFS_scale * rho_in_situ(i)) * G%H_to_m
         enddo
         do k=2,nz
           do i=Isq,Ieq+1
@@ -780,7 +780,7 @@ subroutine Set_pbce_Bouss(e, tv, G, g_Earth, Rho0, GFS_scale, pbce, rho_star)
     do j=Jsq,Jeq+1
       do i=Isq,Ieq+1
         Ihtot(i) = 1.0 / (((e(i,j,1)-e(i,j,nz+1)) + h_neglect) * G%m_to_H)
-        pbce(i,j,1) = G%g_prime(1) * (1.0 / G%m_to_H)
+        pbce(i,j,1) = G%g_prime(1) * G%H_to_m
       enddo
       do k=2,nz ; do i=Isq,Ieq+1
         pbce(i,j,k) = pbce(i,j,k-1) + &

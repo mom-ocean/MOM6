@@ -188,6 +188,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, PF, dirs, &
                "If true, intialize the layer thicknesses, temperatures, \n"//&
                "and salnities from a Z-space file on a latitude- \n"//&
                "longitude grid.", default=.false.)
+    ! h will be converted from m to H below
+    h(:,:,:) = G%Angstrom_z
 
     if (from_Z_file) then
 !     Initialize thickness and T/S from z-coordinate data in a file.
@@ -330,7 +332,9 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, PF, dirs, &
       call convert_thickness(h, G, PF, tv)
     elseif (G%Boussinesq) then
       ! Convert h from m to thickness units (H)
-      h = h*G%m_to_H
+      h(:,:,:) = h(:,:,:)*G%m_to_H
+    else
+      h(:,:,:) = h(:,:,:)*G%kg_m2_to_H
     endif
 
     if (debug) then

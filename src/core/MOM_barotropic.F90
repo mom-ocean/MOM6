@@ -435,7 +435,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
 ! Arguments: U_in - The initial (3-D) zonal velocity, in m s-1.
 !  (in)      V_in - The initial (3-D) meridional velocity, in m s-1.
 !  (in)      eta_in - The initial barotropic free surface height anomaly or
-!                     column mass anomaly, in H.
+!                     column mass anomaly, in H (m or kg m-2).
 !  (in)      dt - The time increment to integrate over.
 !  (in)      bc_accel_u - The zonal baroclinic accelerations, in m s-2.
 !  (in)      bc_accel_v - The meridional baroclinic accelerations, in m s-2.
@@ -572,11 +572,11 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
                   ! spacing, in H m.
   real, target, dimension(SZIW_(CS),SZJW_(CS)) :: &
     eta, &        ! The barotropic free surface height anomaly or column mass
-                  ! anomaly, in H
-    eta_pred      ! A predictor value of eta, in H like eta.
+                  ! anomaly, in H (m or kg m-2)
+    eta_pred      ! A predictor value of eta, in H (m or kg m-2) like eta.
   real, pointer, dimension(:,:) :: &
     eta_PF_BT     ! A pointer to the eta array (either eta or eta_pred) that
-                  ! determines the barotropic pressure force, in H
+                  ! determines the barotropic pressure force, in H (m or kg m-2)
   real, dimension(SZIW_(CS),SZJW_(CS)) :: &
     eta_sum, &    ! eta summed across the timesteps, in m or kg m-2.
     eta_wtd, &    ! A weighted estimate used to calculate eta_out, in m or kg m-2.
@@ -3467,7 +3467,7 @@ subroutine find_face_areas(Datu, Datv, G, CS, MS, eta, halo, add_max)
 !                 barotropic_init.
 !  (in)      MS - A type that describes the memory sizes of the argument arrays.
 !  (in, opt) eta - The barotropic free surface height anomaly or
-!                  column mass anomaly, in H.
+!                  column mass anomaly, in H (m or kg m-2).
 !  (in, opt) halo - The halo size to use, default = 1.
 !  (in, opt) add_max - A value to add to the maximum depth (used to overestimate
 !                      the external wave speed) in m.

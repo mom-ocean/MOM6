@@ -271,7 +271,7 @@ subroutine extractFluxes1d(G, fluxes, optics, nsw, j, dt,                       
 !  (in)      nsw                      = number of bands of penetrating shortwave radiation
 !  (in)      j                        = j-index to work on
 !  (in)      dt                       = time step in seconds 
-!  (in)      DepthBeforeScalingFluxes =  minimum ocean thickness to allow before scaling away fluxes
+!  (in)      DepthBeforeScalingFluxes =  minimum ocean thickness to allow before scaling away fluxes in H
 !  (in)      h                        =  layer thickness, in m for Bouss or (kg/m^2) for non-Bouss
 !  (in)      T                        =  layer temperatures, in deg C
 
@@ -302,7 +302,7 @@ subroutine extractFluxes1d(G, fluxes, optics, nsw, j, dt,                       
 
   character(len=200) :: mesg
   integer            :: is, ie, nz, i, k, n
-  Ih_limit    = 1.0 / (DepthBeforeScalingFluxes * G%m_to_H)
+  Ih_limit    = 1.0 / DepthBeforeScalingFluxes
   Irho0       = 1.0 / G%Rho0 
   I_Cp        = 1.0 / fluxes%C_p
   J_m2_to_H   = 1.0 / (G%H_to_kg_m2 * fluxes%C_p)
@@ -611,7 +611,7 @@ subroutine extractFluxes2d(G, fluxes, optics, nsw, dt,                          
 !                                       forcing fields.  Unused fields have NULL ptrs.
 !  (in)      nsw                      = number of bands of penetrating shortwave radiation
 !  (in)      dt                       = time step in seconds
-!  (in)      DepthBeforeScalingFluxes =  minimum ocean thickness to allow before scaling away fluxes
+!  (in)      DepthBeforeScalingFluxes =  minimum ocean thickness to allow before scaling away fluxes in H
 !  (in)      h                        =  layer thickness, in m for Bouss or (kg/m^2) for non-Bouss
 !  (in)      T                        =  layer temperatures, in deg C
 
@@ -687,7 +687,7 @@ subroutine calculateBuoyancyFlux1d(G, fluxes, optics, h, Temp, Salt, tv, j, &
   useRiverHeatContent   = .False.    
   useCalvingHeatContent = .False.  
 
-  depthBeforeScalingFluxes = max( G%Angstrom_z, 1.e-30 )
+  depthBeforeScalingFluxes = max( G%Angstrom, 1.e-30*G%m_to_H )
   pressure(:) = 0. ! Ignore atmospheric pressure
   GoRho       = G%g_Earth / G%Rho0
   start       = 1 + G%isc - G%isd
