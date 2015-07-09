@@ -1010,7 +1010,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
 !$OMP                               ubt,vhbt,vbt,uh0,u_uh0,vh0,v_vh0,         &
 !$OMP                               use_BT_cont,uhbt0,BTCL_u,vhbt0,BTCL_v,    &
 !$OMP                               Datu,Datv,jsvf,jevf,isvf,ievf,u_accel_bt, &
-!$OMP                               v_accel_bt,U_in,V_in,Idt)
+!$OMP                               v_accel_bt,U_in,V_in,Idt,MS,G)
 !$OMP do
   do j=js,je ; do I=is-1,ie
     ! ### IDatu here should be replaced with 1/D+eta(Bous) or 1/eta(non-Bous).
