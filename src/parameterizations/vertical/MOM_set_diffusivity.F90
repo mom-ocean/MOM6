@@ -1632,7 +1632,7 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, G, CS,
 
     ! Work upwards from the bottom, accumulating work used until it exceeds the available TKE input
     ! at the bottom.
-    do k=G%ke,1,-1
+    do k=G%ke,2,-1
       dh = G%H_to_m * h(i,j,k) ! Thickness of this level in m.
       km1 = max(k-1, 1)
       dhm1 = G%H_to_m * h(i,j,km1) ! Thickness of level above in m.
@@ -1665,7 +1665,11 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, G, CS,
         Kd_wall = (TKE_consumed/TKE_Kd_wall) * Kd_wall ! Scale Kd so that only TKE_consumed is used.
       else
         ! Either N2=0 or dh = 0.
-        Kd_wall = CS%Kd_max
+        if (TKE_remaining>0.) then
+          Kd_wall = CS%Kd_max
+        else
+          Kd_wall = 0.
+        endif
         TKE_consumed = 0.
       endif
 
