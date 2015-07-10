@@ -129,6 +129,7 @@ type, public :: set_diffusivity_CS ; private
                              ! Otherwise, diffusivities from the BBL_mixing is
                              ! added.
   logical :: use_LOTW_BBL_diffusivity ! If true, use simpler/less precise, BBL diffusivity.
+  logical :: LOTW_BBL_use_omega ! If true, use simpler/less precise, BBL diffusivity.
   real    :: BBL_effic       ! efficiency with which the energy extracted
                              ! by bottom drag drives BBL diffusion (nondim)
   real    :: cdrag           ! quadratic drag coefficient (nondim)
@@ -1581,6 +1582,7 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, G, CS,
   real :: Kd_lower         ! diffusivity for lower interface (m2/sec)
   real :: ustar_D          ! u* x D  (m2/s)
   real :: I_Rho0           ! 1 / rho0
+  real :: N2_min           ! Minimum value of N2 to use in calculation of TKE_Kd_wall (1/s2)
   logical :: Rayleigh_drag ! Set to true if there are Rayleigh drag velocities defined in visc, on
                            ! the assumption that this extracted energy also drives diapycnal mixing.
   integer :: i, k, km1
@@ -1589,6 +1591,9 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, G, CS,
 
   if (.not.(CS%bottomdraglaw .and. (CS%BBL_effic>0.0))) return
   do_diag_Kd_BBL = associated(Kd_BBL)
+
+  N2_min = 0.
+  if (CS%LOTW_BBL_use_omega) N2_min = (CS%omega**2)
 
   ! Determine whether to add Rayleigh drag contribution to TKE
   Rayleigh_drag = .false.
@@ -1657,7 +1662,7 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, G, CS,
 
       ! TKE associated with Kd_wall, in m3 s-2.
       ! This calculation if for the volume spanning the interface.
-      TKE_Kd_wall = Kd_wall * 0.5 * (dh + dhm1) * max(N2_int(i,k), 0.)
+      TKE_Kd_wall = Kd_wall * 0.5 * (dh + dhm1) * max(N2_int(i,k), N2_min)
 
       ! Now bound Kd such that the associated TKE is no greater than available TKE for mixing.
       if (TKE_Kd_wall>0.) then
@@ -2465,6 +2470,11 @@ subroutine set_diffusivity_init(Time, G, param_file, diag, CS, diag_to_Z_CSp)
                  "If true, uses a simple, imprecise but non-coordinate dependent, model\n"//&
                  "of BBL mixing diffusivity based on Law of the Wall. Otherwise, uses\n"//&
                  "the original BBL scheme.", default=.false.)
+    if (CS%use_LOTW_BBL_diffusivity) then
+      call get_param(param_file, mod, "LOTW_BBL_USE_OMEGA", CS%LOTW_BBL_use_omega, &
+                 "If true, use the maximum of Omega and N for the TKE to diffusion\n"//&
+                 "calculation. Otherwise, N is N.", default=.true.)
+    endif
   else
     CS%use_LOTW_BBL_diffusivity = .false. ! This parameterization depends on a u* from viscous BBL
   endif
