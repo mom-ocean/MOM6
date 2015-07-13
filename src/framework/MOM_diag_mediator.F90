@@ -139,14 +139,26 @@ type, public :: diag_ctrl
   !default missing value to be sent to ALL diagnostics registrations
   real :: missing_value = 1.0e+20
 
-  ! Interface locations for Z remapping
+  ! Needed to diagnostic regridding using ALE
+  type(remapping_CS) :: remap_cs
+  type(regridding_CS) :: regrid_cs
+  ! Nominal interface locations for Z remapping
   real, dimension(:), allocatable :: zi_remap
-  ! Layer locations for Z remapping
+  ! Nominal layer locations for Z remapping
   real, dimension(:), allocatable :: zl_remap
   ! Number of z levels used for remapping
   integer :: nz_remap
 
-  ! Pointer to H and G for Z remapping
+  ! Define z star on u, v, T grids, these are the interface positions
+  real, dimension(:,:,:), allocatable :: zi_u
+  real, dimension(:,:,:), allocatable :: zi_v
+  real, dimension(:,:,:), allocatable :: zi_T
+
+  ! Keep track of which remapping is needed for diagnostic output
+  logical :: do_z_remapping_on_u, do_z_remapping_on_v, do_z_remapping_on_T
+  logical :: remapping_initialized
+
+  ! Pointer to H and G for remapping
   real, dimension(:,:,:), pointer :: h => null()
   type(ocean_grid_type), pointer :: G => null()
 
@@ -326,6 +338,83 @@ subroutine set_axes_info(G, param_file, diag_cs, set_vertical)
   call defineAxes(diag_cs, (/ id_xh, id_yq /), diag_cs%axesCv1)
 
 end subroutine set_axes_info
+
+subroutine update_diag_target_grids(G, diag_cs)
+  ! Build target grids for diagnostic remapping
+
+  type(ocean_grid_type),        intent(inout) :: G
+  type(diag_ctrl),         intent(inout) :: diag_cs
+
+  ! Arguments:
+  !  (inout)  G         - ocean grid structure.
+  !  (inout)  diag_cs   - structure used to regulate diagnostic output.
+
+  real, dimension(size(diag_cs%h, 3)) :: h_src
+  real :: depth
+  integer :: nz_src, nz_dest
+  integer :: i, j, k
+
+  nz_dest = diag_cs%nz_remap
+  nz_src = size(diag_cs%h, 3)
+
+  if ((diag_cs%do_z_remapping_on_u .or. diag_cs%do_z_remapping_on_v .or. &
+      diag_cs%do_z_remapping_on_T) .and. (.not. diag_cs%remapping_initialized)) then
+    call assert(allocated(diag_cs%zi_remap), 'Remapping axis not initialized')
+
+    ! Initialise remapping system
+    call initialize_regridding(nz_dest, 'Z*', 'PPM_IH4', diag_cs%regrid_cs)
+    call initialize_remapping(nz_src, 'PPM_IH4', diag_cs%remap_cs)
+    call setRegriddingMinimumThickness(G%Angstrom, diag_cs%regrid_cs)
+    call setCoordinateResolution(diag_cs%zi_remap(2:) - diag_cs%zi_remap(:nz_dest), diag_cs%regrid_cs)
+    diag_cs%remapping_initialized = .true.
+  endif
+
+  ! Build z-star grid on u points
+  if (diag_cs%do_z_remapping_on_u) then
+    if (.not. allocated(diag_cs%zi_u)) then
+      allocate(diag_cs%zi_u(G%iscB:G%iecB,G%jsc:G%jec,nz_dest+1))
+    endif
+    do j=G%jsc, G%jec
+      do i=G%iscB, G%iecB
+        h_src(:) = 0.5 * (diag_cs%h(i,j,:) + diag_cs%h(i+1,j,:))
+        depth = 0.5 * (G%bathyT(i,j) + G%bathyT(i+1,j))
+        call buildGridZstarColumn(diag_cs%regrid_cs, nz_dest, depth, sum(h_src(:)), diag_cs%zi_u(i, j, :))
+        diag_cs%zi_u(i, j, :) = -diag_cs%zi_u(i, j, :)
+      enddo
+    enddo
+  endif
+
+  ! Build z-star grid on u points
+  if (diag_cs%do_z_remapping_on_v) then
+    if (.not. allocated(diag_cs%zi_v)) then
+      allocate(diag_cs%zi_v(G%isc:G%iec,G%jscB:G%jecB,nz_dest+1))
+    endif
+
+    do j=G%jscB, G%jecB
+      do i=G%isc, G%iec
+        h_src(:) = 0.5 * (diag_cs%h(i,j,:) + diag_cs%h(i,j+1,:))
+        depth = 0.5 * (G%bathyT(i, j) + G%bathyT(i, j+1))
+        call buildGridZstarColumn(diag_cs%regrid_cs, nz_dest, depth, sum(h_src(:)), diag_cs%zi_v(i, j, :))
+        diag_cs%zi_v(i, j, :) = -diag_cs%zi_v(i, j, :)
+      enddo
+    enddo
+  endif
+
+  ! Build z-star grid on T points
+  if (diag_cs%do_z_remapping_on_T) then
+    if (.not. allocated(diag_cs%zi_T)) then
+      allocate(diag_cs%zi_T(G%isc:G%iec,G%jsc:G%jec,nz_dest+1))
+    endif
+
+    do j=G%jsc, G%jec
+      do i=G%isc, G%iec
+        call buildGridZstarColumn(diag_cs%regrid_cs, nz_dest, G%bathyT(i, j), sum(diag_cs%h(i, j, :)), diag_cs%zi_T(i, j, :))
+        diag_cs%zi_T(i, j, :) = -diag_cs%zi_T(i, j, :)
+      enddo
+    enddo
+  endif
+
+end subroutine update_diag_target_grids
 
 function check_grid_def(filename, varname)
   ! Do some basic checks on the vertical grid definition file, variable
@@ -639,118 +728,85 @@ subroutine remap_diag_to_z(field, diag, diag_cs, remapped_field)
 !  (in) diag   - structure used to regulate diagnostic output
 !  (out) remapped_field - the field argument remapped to z star coordinate
 
-  type(remapping_CS) :: remap_cs
-  type(regridding_CS) :: regrid_cs
-  integer :: nz_src
-  integer :: i, j
+  real, dimension(diag_cs%nz_remap+1) :: dz
   real, dimension(diag_cs%nz_remap) :: h_dest
-  real, dimension(size(field, 3)) :: h_src
-  real :: depth
+  integer :: nz_src, nz_dest
+  integer :: i, j, k
 
   call assert(size(field, 3) == size(diag_cs%h, 3), &
               'Remap field and thickness z-axes do not match.')
-  call assert(allocated(diag_cs%zi_remap), 'Remapping axis not initialized')
 
   remapped_field = diag_cs%missing_value
   nz_src = size(field, 3)
-
-  ! In itialise remapping and set nominal thicknesses to remap to
-  call initialize_regridding(diag_cs%nz_remap, 'Z*', 'PPM_IH4', regrid_cs)
-  call setRegriddingMinimumThickness(diag_cs%G%Angstrom, regrid_cs)
-  h_dest(:) = diag_cs%zi_remap(2:) - diag_cs%zi_remap(:diag_cs%nz_remap)
-  call setCoordinateResolution(h_dest, regrid_cs)
-  call initialize_remapping(nz_src, 'PPM_IH4', remap_cs)
+  nz_dest = diag_cs%nz_remap
 
   if (is_u_axes(diag%remap_axes, diag_cs)) then
+    call assert(allocated(diag_cs%zi_u), 'remap_diag_to_z: Z grid on u points not built.')
     do j=diag_cs%G%jsc, diag_cs%G%jec
       do i=diag_cs%G%iscB, diag_cs%G%iecB
         if (associated(diag%mask3d)) then
           if (diag%mask3d(i,j, 1) == 0.) cycle
         endif
-        h_src(:) = 0.5 * (diag_cs%h(i,j,:) + diag_cs%h(i+1,j,:))
-        depth = 0.5 * (diag_cs%G%bathyT(i, j) + diag_cs%G%bathyT(i+1, j))
-        call remap_column_to_z(regrid_cs, remap_cs, nz_src, diag_cs%nz_remap, &
-                               h_src(:), depth, diag_cs%zi_remap(:), &
-                               field(i, j, :), remapped_field(i, j, :), diag_cs%missing_value)
+
+        h_dest(:) = diag_cs%zi_u(i, j, 2:) - diag_cs%zi_u(i, j, :size(diag_cs%zi_u, 3)-1)
+        call dzFromH1H2(nz_src, diag_cs%h(i, j, :), nz_dest, h_dest(:), dz)
+        call remapping_core(diag_cs%remap_cs, nz_src, diag_cs%h(i, j, :), field(i, j, :), nz_dest, dz, &
+                      remapped_field(i, j, :))
+
+        ! Lower levels of the remapped data get squashed to follow bathymetry,
+        ! their depth does not corrospond to the nominal depth at that level
+        ! (and the nominal depth is below the bathymetry), so remove
+        do k=1, nz_dest
+          if (diag_cs%zi_u(i, j, k) >= diag_cs%G%bathyT(i, j)) then
+            remapped_field(i, j, k:nz_dest) = diag_cs%missing_value
+            exit
+          endif
+        enddo
       enddo
     enddo
+
   elseif (is_v_axes(diag%remap_axes, diag_cs)) then
+    call assert(allocated(diag_cs%zi_v), 'remap_diag_to_z: Z grid on v points not built.')
     do j=diag_cs%G%jscB, diag_cs%G%jecB
       do i=diag_cs%G%isc, diag_cs%G%iec
         if (associated(diag%mask3d)) then
           if (diag%mask3d(i,j, 1) == 0.) cycle
         endif
-        h_src(:) = 0.5 * (diag_cs%h(i,j,:) + diag_cs%h(i,j+1,:))
-        depth = 0.5 * (diag_cs%G%bathyT(i, j) + diag_cs%G%bathyT(i, j+1))
-        call remap_column_to_z(regrid_cs, remap_cs, nz_src, diag_cs%nz_remap, &
-                               h_src(:), depth, diag_cs%zi_remap(:), &
-                               field(i, j, :), remapped_field(i, j, :), diag_cs%missing_value)
-      enddo
-    enddo
-  elseif (is_B_axes(diag%remap_axes, diag_cs)) then
-    do j=diag_cs%G%jscB, diag_cs%G%jecB
-      do i=diag_cs%G%iscB, diag_cs%G%iecB
-        if (associated(diag%mask3d)) then
-          if (diag%mask3d(i,j, 1) == 0.) cycle
-        endif
-        h_src(:) = 0.5 * (diag_cs%h(i,j,:) + diag_cs%h(i+1,j+1,:))
-        depth = 0.5 * (diag_cs%G%bathyT(i, j) + diag_cs%G%bathyT(i+1, j+1))
-        call remap_column_to_z(regrid_cs, remap_cs, nz_src, diag_cs%nz_remap, &
-                               h_src(:), depth, diag_cs%zi_remap(:), &
-                               field(i, j, :), remapped_field(i, j, :), diag_cs%missing_value)
+
+        h_dest(:) = diag_cs%zi_v(i, j, 2:) - diag_cs%zi_v(i, j, :size(diag_cs%zi_v, 3)-1)
+        call dzFromH1H2(nz_src, diag_cs%h(i, j, :), nz_dest, h_dest(:), dz)
+        call remapping_core(diag_cs%remap_cs, nz_src, diag_cs%h(i, j, :), field(i, j, :), nz_dest, dz, &
+                      remapped_field(i, j, :))
+        do k=1, nz_dest
+          if (diag_cs%zi_v(i, j, k) >= diag_cs%G%bathyT(i, j)) then
+            remapped_field(i, j, k:nz_dest) = diag_cs%missing_value
+            exit
+          endif
+        enddo
       enddo
     enddo
   else
+    call assert(allocated(diag_cs%zi_v), 'remap_diag_to_z: Z grid on T points not built.')
     do j=diag_cs%G%jsc, diag_cs%G%jec
       do i=diag_cs%G%isc, diag_cs%G%iec
         if (associated(diag%mask3d)) then
           if (diag%mask3d(i,j, 1) == 0.) cycle
         endif
-        call remap_column_to_z(regrid_cs, remap_cs, nz_src, diag_cs%nz_remap, &
-                               diag_cs%h(i, j, :), diag_cs%G%bathyT(i, j), diag_cs%zi_remap(:), &
-                               field(i, j, :), remapped_field(i, j, :), diag_cs%missing_value)
+        h_dest(:) = diag_cs%zi_T(i, j, 2:) - diag_cs%zi_T(i, j, :size(diag_cs%zi_T, 3)-1)
+        call dzFromH1H2(nz_src, diag_cs%h(i, j, :), nz_dest, h_dest(:), dz)
+        call remapping_core(diag_cs%remap_cs, nz_src, diag_cs%h(i, j, :), field(i, j, :), nz_dest, dz, &
+                      remapped_field(i, j, :))
+        do k=1, nz_dest
+          if (diag_cs%zi_T(i, j, k) >= diag_cs%G%bathyT(i, j)) then
+            remapped_field(i, j, k:nz_dest) = diag_cs%missing_value
+            exit
+          endif
+        enddo
       enddo
     enddo
   endif
 
 end subroutine remap_diag_to_z
-
-subroutine remap_column_to_z(regrid_cs, remap_cs, nz_src, nz_dest, h, depth, &
-                             zi_remap, field, remapped_field, missing_value)
-
-  type(remapping_CS), intent(in) :: remap_cs
-  type(regridding_CS), intent(in) :: regrid_cs
-  integer, intent(in) :: nz_src, nz_dest
-  real, dimension(:), intent(in) :: h, field, zi_remap
-  real, intent(in) :: depth, missing_value
-  real, dimension(:), intent(inout) :: remapped_field
-
-  real, dimension(nz_dest+1) :: dz, zi_tmp
-  real, dimension(nz_dest) :: h_dest
-  integer :: k
-
-  ! Calculate thicknesses for new Z* using nominal thicknesses from
-  ! h_remap, current bathymetry and total thickness.
-  call buildGridZstarColumn(regrid_cs, nz_dest, depth, sum(h(:)), zi_tmp)
-  ! Calculate how much thicknesses change between source and dest grids, do
-  ! remapping
-  zi_tmp = -zi_tmp
-  h_dest(:) = zi_tmp(2:) - zi_tmp(:size(zi_tmp)-1)
-  call dzFromH1H2(nz_src, h(:), nz_dest, h_dest, dz)
-  call remapping_core(remap_cs, nz_src, h(:), field(:), nz_dest, dz, &
-                      remapped_field(:))
-
-  ! Lower levels of the remapped data get squashed to follow bathymetry,
-  ! their depth does not corrospond to the nominal depth at that level
-  ! (and the nominal depth is below the bathymetry), so remove
-  do k=1, nz_dest
-    if (zi_remap(k) >= depth) then
-      remapped_field(k:nz_dest) = missing_value
-      exit
-    endif
-  enddo
-
-end subroutine remap_column_to_z
 
 subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
   type(diag_type),   intent(in) :: diag
@@ -1034,6 +1090,15 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
          verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
          interp_method=interp_method, tile_count=tile_count)
     z_remap_diag%fms_diag_id = fms_id
+
+    if (is_u_axes(axes, diag_cs)) then
+      diag_cs%do_z_remapping_on_u = .true.
+    elseif (is_v_axes(axes, diag_cs)) then
+      diag_cs%do_z_remapping_on_v = .true.
+    else
+      diag_cs%do_z_remapping_on_T = .true.
+    endif
+
   endif
 
   ! Document diagnostics in list of available diagnostics
@@ -1393,6 +1458,9 @@ subroutine diag_mediator_init(G, param_file, diag_cs, err_msg)
   ! Keep a pointer to the grid, this is needed for regridding
   diag_cs%G => G
   diag_cs%nz_remap = -1
+  diag_cs%do_z_remapping_on_u = .false.
+  diag_cs%do_z_remapping_on_v = .false.
+  diag_cs%do_z_remapping_on_T = .false.
 
   diag_cs%is = G%isc - (G%isd-1) ; diag_cs%ie = G%iec - (G%isd-1)
   diag_cs%js = G%jsc - (G%jsd-1) ; diag_cs%je = G%jec - (G%jsd-1)
