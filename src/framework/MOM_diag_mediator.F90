@@ -68,6 +68,7 @@ public diag_axis_init, ocean_register_diag, register_static_field
 public register_scalar_field
 public defineAxes, diag_masks_set
 public diag_set_thickness_ptr
+public update_diag_target_grids
 
 interface post_data
   module procedure post_data_3d, post_data_2d, post_data_0d
@@ -656,6 +657,7 @@ subroutine remap_diag_to_z(field, diag, diag_cs, remapped_field)
 
   real, dimension(diag_cs%nz_remap+1) :: dz
   real, dimension(diag_cs%nz_remap) :: h_dest
+  real, dimension(size(diag_cs%h, 3)) :: h_src
   integer :: nz_src, nz_dest
   integer :: i, j, k
 
@@ -676,14 +678,16 @@ subroutine remap_diag_to_z(field, diag, diag_cs, remapped_field)
         endif
 
         h_dest(:) = diag_cs%zi_u(i, j, 2:) - diag_cs%zi_u(i, j, :size(diag_cs%zi_u, 3)-1)
-        call dzFromH1H2(nz_src, diag_cs%h(i, j, :), nz_dest, h_dest(:), dz)
-        call remapping_core(diag_cs%remap_cs, nz_src, diag_cs%h(i, j, :), &
+        h_src(:) = 0.5 * (diag_cs%h(i,j,:) + diag_cs%h(i+1,j,:))
+        call dzFromH1H2(nz_src, h_src(:), nz_dest, h_dest(:), dz)
+        call remapping_core(diag_cs%remap_cs, nz_src, h_src(:), &
                       field(i, j, :), nz_dest, dz, remapped_field(i, j, :))
 
         ! Lower levels of the remapped data get squashed to follow bathymetry,
         ! If their nominal depth is below the bathymetry remove.
         do k=1, nz_dest
-          if (diag_cs%zi_remap(k) >= diag_cs%G%bathyT(i, j)) then
+          !if (diag_cs%zi_remap(k) >= diag_cs%G%bathyT(i, j)) then
+          if (diag_cs%zi_u(i, j, k) >= diag_cs%G%bathyT(i, j)) then
             remapped_field(i, j, k:nz_dest) = diag_cs%missing_value
             exit
           endif
@@ -701,11 +705,13 @@ subroutine remap_diag_to_z(field, diag, diag_cs, remapped_field)
         endif
 
         h_dest(:) = diag_cs%zi_v(i, j, 2:) - diag_cs%zi_v(i, j, :size(diag_cs%zi_v, 3)-1)
-        call dzFromH1H2(nz_src, diag_cs%h(i, j, :), nz_dest, h_dest(:), dz)
-        call remapping_core(diag_cs%remap_cs, nz_src, diag_cs%h(i, j, :), &
+        h_src(:) = 0.5 * (diag_cs%h(i,j,:) + diag_cs%h(i,j+1,:))
+        call dzFromH1H2(nz_src, h_src(:), nz_dest, h_dest(:), dz)
+        call remapping_core(diag_cs%remap_cs, nz_src, h_src(:), &
                       field(i, j, :), nz_dest, dz, remapped_field(i, j, :))
         do k=1, nz_dest
-          if (diag_cs%zi_remap(k) >= diag_cs%G%bathyT(i, j)) then
+          !if (diag_cs%zi_remap(k) >= diag_cs%G%bathyT(i, j)) then
+          if (diag_cs%zi_v(i, j, k) >= diag_cs%G%bathyT(i, j)) then
             remapped_field(i, j, k:nz_dest) = diag_cs%missing_value
             exit
           endif
@@ -725,7 +731,8 @@ subroutine remap_diag_to_z(field, diag, diag_cs, remapped_field)
         call remapping_core(diag_cs%remap_cs, nz_src, diag_cs%h(i, j, :), &
                       field(i, j, :), nz_dest, dz, remapped_field(i, j, :))
         do k=1, nz_dest
-          if (diag_cs%zi_remap(k) >= diag_cs%G%bathyT(i, j)) then
+          !if (diag_cs%zi_remap(k) >= diag_cs%G%bathyT(i, j)) then
+          if (diag_cs%zi_T(i, j, k) >= diag_cs%G%bathyT(i, j)) then
             remapped_field(i, j, k:nz_dest) = diag_cs%missing_value
             exit
           endif
