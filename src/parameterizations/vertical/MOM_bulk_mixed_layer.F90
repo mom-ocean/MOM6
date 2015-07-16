@@ -55,7 +55,7 @@ module MOM_bulk_mixed_layer
 
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_alloc
-use MOM_diag_mediator, only : time_type, diag_ctrl
+use MOM_diag_mediator, only : time_type, diag_ctrl, diag_update_target_grids
 use MOM_domains,       only : create_group_pass, do_group_pass, group_pass_type
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
@@ -804,6 +804,10 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
     endif
 
   enddo ! j loop
+
+  ! The diag mediator may need to re-generate target grids for remmapping when
+  ! total thickness changes.
+  call diag_update_target_grids(G, h_3d, CS%diag)
 
 !$OMP end parallel
 

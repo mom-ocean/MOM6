@@ -61,6 +61,7 @@ module MOM_mixed_layer_restrat
 
 use MOM_diag_mediator, only : post_data, query_averaging_enabled, diag_ctrl
 use MOM_diag_mediator, only : register_diag_field, safe_alloc_ptr, time_type
+use MOM_diag_mediator, only : diag_update_target_grids
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
@@ -394,6 +395,10 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
   enddo ; enddo ; enddo
 !$OMP end parallel
 
+  ! The diag mediator may need to re-generate target grids for remmapping when
+  ! total thickness changes.
+  call diag_update_target_grids(G, h, CS%diag)
+
 ! Offer fields for averaging.
   if (query_averaging_enabled(CS%diag)) then
     if (CS%id_urestrat_time > 0) call post_data(CS%id_urestrat_time, utimescale_diag, CS%diag)
@@ -643,6 +648,10 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
         ((uhml(I,j,k) - uhml(I-1,j,k)) + (vhml(i,J,k) - vhml(i,J-1,k)))
   enddo ; enddo ; enddo
 !$OMP end parallel
+
+  ! The diag mediator may need to re-generate target grids for remmapping when
+  ! total thickness changes.
+  call diag_update_target_grids(G, h, CS%diag)
 
 ! Offer fields for averaging.
   if (query_averaging_enabled(CS%diag) .and. &

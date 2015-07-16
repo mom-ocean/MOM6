@@ -337,7 +337,8 @@ use MOM_cpu_clock,            only : cpu_clock_id, cpu_clock_begin, cpu_clock_en
 use MOM_cpu_clock,            only : CLOCK_COMPONENT, CLOCK_SUBCOMPONENT
 use MOM_cpu_clock,            only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
 use MOM_coms,                 only : reproducing_sum
-use MOM_diag_mediator,        only : diag_mediator_init, enable_averaging, diag_set_thickness_ptr
+use MOM_diag_mediator,        only : diag_mediator_init, enable_averaging
+use MOM_diag_mediator,        only : diag_set_thickness_ptr, diag_update_target_grids
 use MOM_diag_mediator,        only : disable_averaging, post_data, safe_alloc_ptr
 use MOM_diag_mediator,        only : register_diag_field, register_static_field
 use MOM_diag_mediator,        only : register_scalar_field
@@ -970,6 +971,10 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         call do_group_pass(CS%pass_uv_T_S_h, G%Domain)
         call cpu_clock_end(id_clock_pass)
 
+        ! The diag mediator may need to re-generate target grids for remmapping when
+        ! total thickness changes.
+        call diag_update_target_grids(G, h, CS%diag)
+
         if (CS%debug) then
           call uchksum(u,"Post-dia first u", G, haloshift=2)
           call vchksum(v,"Post-dia first v", G, haloshift=2)
@@ -1032,6 +1037,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         else
           dtth = dt*min(ntstep,n_max-n+1)
         endif
+
         call enable_averaging(dtth,Time_local+set_time(int(floor(dtth-dt+0.5))), CS%diag)
         call cpu_clock_begin(id_clock_thick_diff)
         if (associated(CS%VarMix)) call calc_slope_functions(h, CS%tv, dt, G, CS%VarMix)
@@ -1043,6 +1049,11 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         call cpu_clock_end(id_clock_pass)
         call disable_averaging(CS%diag)
         if (showCallTree) call callTree_waypoint("finished thickness_diffuse_first (step_MOM)")
+
+        ! The diag mediator may need to re-generate target grids for remmapping when
+        ! total thickness changes.
+        call diag_update_target_grids(G, h, CS%diag)
+
       endif
     endif
 
@@ -1152,10 +1163,8 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
     if (CS%useMEKE) call step_forward_MEKE(CS%MEKE, h, CS%VarMix%SN_u, CS%VarMix%SN_v, &
                                            CS%visc, dt, G, CS%MEKE_CSp)
-
     call disable_averaging(CS%diag)
     call cpu_clock_end(id_clock_dynamics)
-
 
     CS%dt_trans = CS%dt_trans + dt
     if (thermo_does_span_coupling) then
@@ -1262,7 +1271,11 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
             call hchksum(CS%tv%S,"Post-ALE S", G, haloshift=1)
             call check_redundant("Post-ALE ", u, v, G)
           endif
-        endif   
+        endif
+
+        ! The diag mediator may need to re-generate target grids for remmapping when
+        ! total thickness changes.
+        call diag_update_target_grids(G, h, CS%diag)
 
         call cpu_clock_begin(id_clock_pass)
         call do_group_pass(CS%pass_uv_T_S_h, G%Domain)
@@ -1920,10 +1933,6 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   endif
   call callTree_waypoint("state variables allocated (initialize_MOM)")
 
-  ! Set up a pointers h within diag mediator control structure,
-  ! this needs to occur _after_ CS%h has been allocated.
-  call diag_set_thickness_ptr(CS%h, diag)
-
   ! Set the fields that are needed for bitwise identical restarting
   ! the time stepping scheme.
   call restart_init(G, param_file, CS%restart_CSp)
@@ -1972,11 +1981,6 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call cpu_clock_end(id_clock_MOM_init)
   call callTree_waypoint("returned from MOM_initialize_state() (initialize_MOM)")
 
-  ! Initialize the diagnostics mask arrays. 
-  ! This step has to be done after call to MOM_initialize_state
-  ! and before MOM_diagnostics_init
-  call diag_masks_set(G, CS%missing, diag)
-
   if (CS%use_ALE_algorithm) then
     ! For now, this has to follow immediately after MOM_initialize_state because
     ! the call to initialize_ALE can change CS%h, etc.  initialize_ALE should
@@ -2000,9 +2004,24 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     endif
   endif
 
-  ! This call sets up the diagnostic axes.
-  call cpu_clock_begin(id_clock_MOM_init)
+  ! Initialize the diagnostics mask arrays.
+  ! This step has to be done after call to MOM_initialize_state
+  ! and before MOM_diagnostics_init
+  call diag_masks_set(G, CS%missing, diag)
+
+  ! Set up a pointers h within diag mediator control structure,
+  ! this needs to occur _after_ CS%h has been allocated.
+  call diag_set_thickness_ptr(CS%h, diag)
+
+  ! This call sets up the diagnostic axes. These are needed,
+  ! e.g. to generate the target grids below.
   call set_axes_info(G, param_file, diag)
+
+  ! The diag mediator may need to (re)generate target grids for remmapping when
+  ! total thickness changes.
+  call diag_update_target_grids(G, CS%h, diag)
+
+  call cpu_clock_begin(id_clock_MOM_init)
   if (CS%use_ALE_algorithm) then
     call ALE_writeCoordinateFile( CS%ALE_CSp, G, dirs%output_directory )
   endif

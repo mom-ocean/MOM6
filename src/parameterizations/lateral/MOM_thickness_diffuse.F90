@@ -48,6 +48,7 @@ module MOM_thickness_diffuse
 use MOM_checksums, only : hchksum, uchksum, vchksum
 use MOM_diag_mediator, only : post_data, query_averaging_enabled, diag_ctrl
 use MOM_diag_mediator, only : register_diag_field, safe_alloc_ptr, time_type
+use MOM_diag_mediator, only : diag_update_target_grids
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_EOS, only : calculate_density, calculate_density_derivs
 use MOM_file_parser, only : get_param, log_version, param_file_type
@@ -337,6 +338,10 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, MEKE, VarMix, CDp, CS)
       if (h(i,j,k) < G%Angstrom) h(i,j,k) = G%Angstrom
     enddo ; enddo
   enddo
+
+  ! The diag mediator may need to re-generate target grids for remmapping when
+  ! total thickness changes.
+  call diag_update_target_grids(G, h, CS%diag)
 
   if (MEKE_not_null .AND. ASSOCIATED(VarMix)) then
     if (ASSOCIATED(MEKE%Rd_dx_h) .and. ASSOCIATED(VarMix%Rd_dx_h)) then

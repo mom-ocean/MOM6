@@ -78,7 +78,7 @@ use MOM_cpu_clock, only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
 use MOM_diag_mediator, only : diag_mediator_init, enable_averaging
 use MOM_diag_mediator, only : disable_averaging, post_data, safe_alloc_ptr
 use MOM_diag_mediator, only : register_diag_field, register_static_field
-use MOM_diag_mediator, only : set_diag_mediator_grid, diag_ctrl
+use MOM_diag_mediator, only : set_diag_mediator_grid, diag_ctrl, diag_update_target_grids
 use MOM_domains, only : MOM_domains_init
 use MOM_domains, only : To_South, To_West, To_All, CGRID_NE, SCALAR_PAIR
 use MOM_domains, only : create_group_pass, do_group_pass, group_pass_type
@@ -701,6 +701,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   call cpu_clock_end(id_clock_continuity)
   if (showCallTree) call callTree_wayPoint("done with continuity (step_MOM_dyn_split_RK2)")
 
+  call diag_update_target_grids(G, h, CS%diag)
+
   call cpu_clock_begin(id_clock_pass)
   call do_group_pass(CS%pass_hp_uv, G%Domain)
   if (G%nonblocking_updates) then
@@ -908,6 +910,10 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   call do_group_pass(CS%pass_h, G%Domain)
   call cpu_clock_end(id_clock_pass)
   if (showCallTree) call callTree_wayPoint("done with continuity (step_MOM_dyn_split_RK2)")
+
+  ! The diag mediator may need to re-generate target grids for remmapping when
+  ! total thickness changes.
+  call diag_update_target_grids(G, h, CS%diag)
 
   call cpu_clock_begin(id_clock_pass)
   if (G%nonblocking_updates) then
@@ -1268,6 +1274,8 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, param_file, &
     if (.not. query_initialized(CS%h_av,"h2",restart_CS)) &
       CS%h_av(:,:,:) = h(:,:,:)
   endif
+
+  call diag_update_target_grids(G, h, CS%diag)
 
   call cpu_clock_begin(id_clock_pass_init)
   call create_group_pass(pass_av_h_uvh, CS%u_av,CS%v_av, G%Domain)
