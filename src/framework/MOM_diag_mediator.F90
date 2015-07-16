@@ -163,6 +163,10 @@ type, public :: diag_ctrl
   real, dimension(:,:,:), pointer :: h => null()
   type(ocean_grid_type), pointer :: G => null()
 
+  ! Keep a copy of h so that we know whether it has changed. If it has then
+  ! need to update the target grid for vertical remapping.
+  real, dimension(:,:,:), allocatable :: h_old
+
 end type diag_ctrl
 
 integer :: doc_unit = -1
@@ -622,7 +626,6 @@ subroutine post_data_3d(diag_field_id, field, diag_cs, is_static, mask)
       endif
 
       allocate(remapped_field(DIM_I(field),DIM_J(field), diag_cs%nz_remap))
-      !print*, 'post_data_3d: sum(diag_cs%h): ', sum(diag_cs%h)
       !call diag_update_target_grids(diag_cs%G, diag_cs%h, diag_cs)
       call remap_diag_to_z(field, diag, diag_cs, remapped_field)
       if (associated(diag%mask3d)) then
@@ -756,12 +759,10 @@ subroutine diag_update_target_grids(G, h, diag_cs)
   real :: depth
   integer :: nz_src, nz_dest
   integer :: i, j, k
-  logical :: force
+  logical :: force, h_changed
 
   nz_dest = diag_cs%nz_remap
   nz_src = size(h, 3)
-
-  !print*, 'diag_update_target_grids sum(h): ', sum(h)
 
   if (.not. diag_cs%remapping_initialized) then
     call assert(allocated(diag_cs%zi_remap), &
@@ -779,8 +780,23 @@ subroutine diag_update_target_grids(G, h, diag_cs)
     allocate(diag_cs%zi_T(G%isc:G%iec,G%jsc:G%jec,nz_dest+1))
   endif
 
+  ! See whether H has changed anywhere
+  h_changed = .true.
+  !do k=RANGE_K(h)
+  !  do j=RANGE_J(h)
+  !    do i=RANGE_I(h)
+  !      if (diag_cs%h_old(i, j, k) /= h(i, j, k)) then
+  !        h_changed = .true.
+  !        exit
+  !      endif
+  !    enddo
+  !    if (h_changed) exit
+  !  enddo
+  !  if (h_changed) exit
+  !enddo
+
   ! Build z-star grid on u points
-  if (diag_cs%do_z_remapping_on_u .or. (.not. diag_cs%remapping_initialized)) then
+  if (h_changed .and. (diag_cs%do_z_remapping_on_u .or. (.not. diag_cs%remapping_initialized))) then
     do j=G%jsc, G%jec
       do i=G%iscB, G%iecB
         h_src(:) = 0.5 * (h(i,j,:) + h(i+1,j,:))
@@ -793,7 +809,7 @@ subroutine diag_update_target_grids(G, h, diag_cs)
   endif
 
   ! Build z-star grid on u points
-  if (diag_cs%do_z_remapping_on_v .or. (.not. diag_cs%remapping_initialized)) then
+  if (h_changed .and. (diag_cs%do_z_remapping_on_v .or. (.not. diag_cs%remapping_initialized))) then
     do j=G%jscB, G%jecB
       do i=G%isc, G%iec
         h_src(:) = 0.5 * (h(i,j,:) + h(i,j+1,:))
@@ -806,7 +822,7 @@ subroutine diag_update_target_grids(G, h, diag_cs)
   endif
 
   ! Build z-star grid on T points
-  if (diag_cs%do_z_remapping_on_T .or. (.not. diag_cs%remapping_initialized)) then
+  if (h_changed .and. (diag_cs%do_z_remapping_on_T .or. (.not. diag_cs%remapping_initialized))) then
     do j=G%jsc, G%jec
       do i=G%isc, G%iec
         call buildGridZstarColumn(diag_cs%regrid_cs, nz_dest, G%bathyT(i, j), &
@@ -817,6 +833,7 @@ subroutine diag_update_target_grids(G, h, diag_cs)
   endif
 
   diag_cs%remapping_initialized = .true.
+  diag_cs%h_old(:,:,:) = h(:,:,:)
 
 end subroutine diag_update_target_grids
 
@@ -1475,6 +1492,8 @@ subroutine diag_mediator_init(G, param_file, diag_cs, err_msg)
   diag_cs%do_z_remapping_on_v = .false.
   diag_cs%do_z_remapping_on_T = .false.
   diag_cs%remapping_initialized = .false.
+  allocate(diag_cs%h_old(G%isd:G%ied,G%jsd:G%jed,G%ks:G%ke))
+  diag_cs%h_old(:,:,:) = 0.0
 
   diag_cs%is = G%isc - (G%isd-1) ; diag_cs%ie = G%iec - (G%isd-1)
   diag_cs%js = G%jsc - (G%jsd-1) ; diag_cs%je = G%jec - (G%jsd-1)
