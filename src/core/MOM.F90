@@ -973,7 +973,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
         ! The diag mediator may need to re-generate target grids for remmapping when
         ! total thickness changes.
-        call diag_update_target_grids(G, h, CS%diag)
+        call diag_update_target_grids(G, CS%diag)
 
         if (CS%debug) then
           call uchksum(u,"Post-dia first u", G, haloshift=2)
@@ -1052,7 +1052,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
         ! The diag mediator may need to re-generate target grids for remmapping when
         ! total thickness changes.
-        call diag_update_target_grids(G, h, CS%diag)
+        call diag_update_target_grids(G, CS%diag)
 
       endif
     endif
@@ -1275,7 +1275,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
         ! The diag mediator may need to re-generate target grids for remmapping when
         ! total thickness changes.
-        call diag_update_target_grids(G, h, CS%diag)
+        call diag_update_target_grids(G, CS%diag)
 
         call cpu_clock_begin(id_clock_pass)
         call do_group_pass(CS%pass_uv_T_S_h, G%Domain)
@@ -2019,7 +2019,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
 
   ! The diag mediator may need to (re)generate target grids for remmapping when
   ! total thickness changes.
-  call diag_update_target_grids(G, CS%h, diag)
+  call diag_update_target_grids(G, diag)
 
   call cpu_clock_begin(id_clock_MOM_init)
   if (CS%use_ALE_algorithm) then

@@ -397,7 +397,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
 
   ! The diag mediator may need to re-generate target grids for remmapping when
   ! total thickness changes.
-  call diag_update_target_grids(G, h, CS%diag)
+  call diag_update_target_grids(G, CS%diag)
 
 ! Offer fields for averaging.
   if (query_averaging_enabled(CS%diag)) then
@@ -651,7 +651,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
 
   ! The diag mediator may need to re-generate target grids for remmapping when
   ! total thickness changes.
-  call diag_update_target_grids(G, h, CS%diag)
+  call diag_update_target_grids(G, CS%diag)
 
 ! Offer fields for averaging.
   if (query_averaging_enabled(CS%diag) .and. &

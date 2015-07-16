@@ -807,7 +807,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
 
   ! The diag mediator may need to re-generate target grids for remmapping when
   ! total thickness changes.
-  call diag_update_target_grids(G, h_3d, CS%diag)
+  call diag_update_target_grids(G, CS%diag)
 
 !$OMP end parallel
 

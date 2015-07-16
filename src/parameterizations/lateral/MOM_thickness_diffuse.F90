@@ -341,7 +341,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, MEKE, VarMix, CDp, CS)
 
   ! The diag mediator may need to re-generate target grids for remmapping when
   ! total thickness changes.
-  call diag_update_target_grids(G, h, CS%diag)
+  call diag_update_target_grids(G, CS%diag)
 
   if (MEKE_not_null .AND. ASSOCIATED(VarMix)) then
     if (ASSOCIATED(MEKE%Rd_dx_h) .and. ASSOCIATED(VarMix%Rd_dx_h)) then

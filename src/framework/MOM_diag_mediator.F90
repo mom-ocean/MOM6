@@ -163,9 +163,11 @@ type, public :: diag_ctrl
   real, dimension(:,:,:), pointer :: h => null()
   type(ocean_grid_type), pointer :: G => null()
 
+#if defined(DEBUG) || defined(__DO_SAFETY_CHECKS__)
   ! Keep a copy of h so that we know whether it has changed. If it has then
-  ! need to update the target grid for vertical remapping.
+  ! need the target grid for vertical remapping needs to have been updated.
   real, dimension(:,:,:), allocatable :: h_old
+#endif
 
 end type diag_ctrl
 
@@ -626,7 +628,6 @@ subroutine post_data_3d(diag_field_id, field, diag_cs, is_static, mask)
       endif
 
       allocate(remapped_field(DIM_I(field),DIM_J(field), diag_cs%nz_remap))
-      !call diag_update_target_grids(diag_cs%G, diag_cs%h, diag_cs)
       call remap_diag_to_z(field, diag, diag_cs, remapped_field)
       if (associated(diag%mask3d)) then
         ! Since 3d masks do not vary in the vertical, just use as much as is
@@ -674,6 +675,20 @@ subroutine remap_diag_to_z(field, diag, diag_cs, remapped_field)
   nz_src = size(field, 3)
   nz_dest = diag_cs%nz_remap
 
+#if defined(DEBUG) || defined(__DO_SAFETY_CHECKS__)
+  ! Check that H is up-to-date.
+  do k=RANGE_K(diag_cs%h)
+    do j=RANGE_J(diag_cs%h)
+      do i=RANGE_I(diag_cs%h)
+        if (diag_cs%h_old(i, j, k) /= diag_cs%h(i, j, k)) then
+          call MOM_error(FATAL, "remap_diag_to_z: H has changed since "//&
+                                "remapping grids were updated")
+        endif
+      enddo
+    enddo
+  enddo
+#endif
+
   if (is_u_axes(diag%remap_axes, diag_cs)) then
     do j=diag_cs%G%jsc, diag_cs%G%jec
       do i=diag_cs%G%iscB, diag_cs%G%iecB
@@ -687,8 +702,8 @@ subroutine remap_diag_to_z(field, diag, diag_cs, remapped_field)
         call remapping_core(diag_cs%remap_cs, nz_src, h_src(:), &
                       field(i, j, :), nz_dest, dz, remapped_field(i, j, :))
 
-        ! Lower levels of the remapped data get squashed to follow bathymetry,
-        ! If their nominal depth is below the bathymetry remove.
+        ! Lower levels of the remapped data get squashed to follow bathymetry.
+        ! If their nominal depth is below the bathymetry remove them.
         do k=1, nz_dest
           if (diag_cs%zi_remap(k) >= diag_cs%G%bathyT(i, j)) then
             remapped_field(i, j, k:nz_dest) = diag_cs%missing_value
@@ -740,29 +755,27 @@ subroutine remap_diag_to_z(field, diag, diag_cs, remapped_field)
 
 end subroutine remap_diag_to_z
 
-subroutine diag_update_target_grids(G, h, diag_cs)
-! Build target grids for diagnostic remapping.
+subroutine diag_update_target_grids(G, diag_cs)
+! Build/update target vertical grids for diagnostic remapping.
 !
-! The target grids only need to be made when sea surface
-! height changes, not every time a diagnostic is posted/written.
+! The target grids need to be updated whenever sea surface
+! height changes.
 
   type(ocean_grid_type),  intent(in) :: G
-  real, dimension(:,:,:), intent(in) :: h
   type(diag_ctrl),        intent(inout) :: diag_cs
 
 ! Arguments:
 !  (in) G             - ocean grid structure.
-!  (in) h             - a pointer to model thickness
 !  (inout)  diag_cs   - structure used to regulate diagnostic output.
 
-  real, dimension(size(h, 3)) :: h_src
+  real, dimension(size(diag_cs%h, 3)) :: h_src
   real :: depth
   integer :: nz_src, nz_dest
   integer :: i, j, k
   logical :: force, h_changed
 
   nz_dest = diag_cs%nz_remap
-  nz_src = size(h, 3)
+  nz_src = size(diag_cs%h, 3)
 
   if (.not. diag_cs%remapping_initialized) then
     call assert(allocated(diag_cs%zi_remap), &
@@ -780,26 +793,11 @@ subroutine diag_update_target_grids(G, h, diag_cs)
     allocate(diag_cs%zi_T(G%isc:G%iec,G%jsc:G%jec,nz_dest+1))
   endif
 
-  ! See whether H has changed anywhere
-  h_changed = .true.
-  !do k=RANGE_K(h)
-  !  do j=RANGE_J(h)
-  !    do i=RANGE_I(h)
-  !      if (diag_cs%h_old(i, j, k) /= h(i, j, k)) then
-  !        h_changed = .true.
-  !        exit
-  !      endif
-  !    enddo
-  !    if (h_changed) exit
-  !  enddo
-  !  if (h_changed) exit
-  !enddo
-
   ! Build z-star grid on u points
-  if (h_changed .and. (diag_cs%do_z_remapping_on_u .or. (.not. diag_cs%remapping_initialized))) then
+  if (diag_cs%do_z_remapping_on_u .or. (.not. diag_cs%remapping_initialized)) then
     do j=G%jsc, G%jec
       do i=G%iscB, G%iecB
-        h_src(:) = 0.5 * (h(i,j,:) + h(i+1,j,:))
+        h_src(:) = 0.5 * (diag_cs%h(i,j,:) + diag_cs%h(i+1,j,:))
         depth = 0.5 * (G%bathyT(i,j) + G%bathyT(i+1,j))
         call buildGridZstarColumn(diag_cs%regrid_cs, nz_dest, depth, &
                                   sum(h_src(:)), diag_cs%zi_u(i, j, :))
@@ -809,10 +807,10 @@ subroutine diag_update_target_grids(G, h, diag_cs)
   endif
 
   ! Build z-star grid on u points
-  if (h_changed .and. (diag_cs%do_z_remapping_on_v .or. (.not. diag_cs%remapping_initialized))) then
+  if (diag_cs%do_z_remapping_on_v .or. (.not. diag_cs%remapping_initialized)) then
     do j=G%jscB, G%jecB
       do i=G%isc, G%iec
-        h_src(:) = 0.5 * (h(i,j,:) + h(i,j+1,:))
+        h_src(:) = 0.5 * (diag_cs%h(i,j,:) + diag_cs%h(i,j+1,:))
         depth = 0.5 * (G%bathyT(i, j) + G%bathyT(i, j+1))
         call buildGridZstarColumn(diag_cs%regrid_cs, nz_dest, depth, &
                                   sum(h_src(:)), diag_cs%zi_v(i, j, :))
@@ -822,18 +820,22 @@ subroutine diag_update_target_grids(G, h, diag_cs)
   endif
 
   ! Build z-star grid on T points
-  if (h_changed .and. (diag_cs%do_z_remapping_on_T .or. (.not. diag_cs%remapping_initialized))) then
+  if (diag_cs%do_z_remapping_on_T .or. (.not. diag_cs%remapping_initialized)) then
     do j=G%jsc, G%jec
       do i=G%isc, G%iec
         call buildGridZstarColumn(diag_cs%regrid_cs, nz_dest, G%bathyT(i, j), &
-                                  sum(h(i, j, :)), diag_cs%zi_T(i, j, :))
+                                  sum(diag_cs%h(i, j, :)), diag_cs%zi_T(i, j, :))
         diag_cs%zi_T(i, j, :) = -diag_cs%zi_T(i, j, :)
       enddo
     enddo
   endif
 
   diag_cs%remapping_initialized = .true.
-  diag_cs%h_old(:,:,:) = h(:,:,:)
+#if defined(DEBUG) || defined(__DO_SAFETY_CHECKS__)
+  ! Keep a copy of H - used to check whether grids are up-to-date
+  ! when doing remapping.
+  diag_cs%h_old(:,:,:) = diag_cs%h(:,:,:)
+#endif
 
 end subroutine diag_update_target_grids
 

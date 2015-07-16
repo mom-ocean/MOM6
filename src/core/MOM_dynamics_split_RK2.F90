@@ -701,7 +701,9 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   call cpu_clock_end(id_clock_continuity)
   if (showCallTree) call callTree_wayPoint("done with continuity (step_MOM_dyn_split_RK2)")
 
-  call diag_update_target_grids(G, h, CS%diag)
+  ! The diag mediator may need to re-generate target grids for remmapping when
+  ! total thickness changes.
+  call diag_update_target_grids(G, CS%diag)
 
   call cpu_clock_begin(id_clock_pass)
   call do_group_pass(CS%pass_hp_uv, G%Domain)
@@ -913,7 +915,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 
   ! The diag mediator may need to re-generate target grids for remmapping when
   ! total thickness changes.
-  call diag_update_target_grids(G, h, CS%diag)
+  call diag_update_target_grids(G, CS%diag)
 
   call cpu_clock_begin(id_clock_pass)
   if (G%nonblocking_updates) then
@@ -1275,7 +1277,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, param_file, &
       CS%h_av(:,:,:) = h(:,:,:)
   endif
 
-  call diag_update_target_grids(G, h, CS%diag)
+  call diag_update_target_grids(G, CS%diag)
 
   call cpu_clock_begin(id_clock_pass_init)
   call create_group_pass(pass_av_h_uvh, CS%u_av,CS%v_av, G%Domain)

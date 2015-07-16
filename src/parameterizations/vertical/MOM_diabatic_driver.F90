@@ -410,7 +410,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
 
   ! The diag mediator may need to re-generate target grids for remmapping when
   ! total thickness changes.
-  call diag_update_target_grids(G, h, CS%diag)
+  call diag_update_target_grids(G, CS%diag)
 
   ! Set_opacity estimates the optical properties of the water column.
   ! It will need to be modified later to include information about the
@@ -909,7 +909,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
 
   ! The diag mediator may need to re-generate target grids for remmapping when
   ! total thickness changes.
-  call diag_update_target_grids(G, h, CS%diag)
+  call diag_update_target_grids(G, CS%diag)
 
   if ((CS%id_Tdif > 0) .or. (CS%id_Tdif_z > 0) .or. &
       (CS%id_Tadv > 0) .or. (CS%id_Tadv_z > 0)) then
