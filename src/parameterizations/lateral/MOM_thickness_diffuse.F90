@@ -339,9 +339,10 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, MEKE, VarMix, CDp, CS)
     enddo ; enddo
   enddo
 
-  ! The diag mediator may need to re-generate target grids for remmapping when
-  ! total thickness changes.
-  call diag_update_target_grids(G, CS%diag)
+  ! Whenever thickness changes let the diag manager know, target grids
+  ! for vertical remapping may need to be regenerated.
+  ! This needs to happen after the H update and before the next post_data.
+  call diag_update_target_grids(CS%diag)
 
   if (MEKE_not_null .AND. ASSOCIATED(VarMix)) then
     if (ASSOCIATED(MEKE%Rd_dx_h) .and. ASSOCIATED(VarMix%Rd_dx_h)) then

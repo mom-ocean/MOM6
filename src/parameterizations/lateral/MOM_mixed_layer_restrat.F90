@@ -395,9 +395,10 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
   enddo ; enddo ; enddo
 !$OMP end parallel
 
-  ! The diag mediator may need to re-generate target grids for remmapping when
-  ! total thickness changes.
-  call diag_update_target_grids(G, CS%diag)
+  ! Whenever thickness changes let the diag manager know, target grids
+  ! for vertical remapping may need to be regenerated.
+  ! This needs to happen after the H update and before the next post_data.
+  call diag_update_target_grids(CS%diag)
 
 ! Offer fields for averaging.
   if (query_averaging_enabled(CS%diag)) then
@@ -649,9 +650,9 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
   enddo ; enddo ; enddo
 !$OMP end parallel
 
-  ! The diag mediator may need to re-generate target grids for remmapping when
-  ! total thickness changes.
-  call diag_update_target_grids(G, CS%diag)
+  ! Whenever thickness changes let the diag manager know, target grids
+  ! for vertical remapping may need to be regenerated.
+  call diag_update_target_grids(CS%diag)
 
 ! Offer fields for averaging.
   if (query_averaging_enabled(CS%diag) .and. &

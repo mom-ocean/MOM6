@@ -268,7 +268,8 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
 ! uh = u*h
 ! hp = h + dt/2 div . uh
   call cpu_clock_begin(id_clock_continuity)
-  call continuity(u, v, h, hp, uh, vh, dt*0.5, G, CS%continuity_CSp, OBC=CS%OBC)
+  call continuity(u, v, h, hp, uh, vh, dt*0.5, G, CS%continuity_CSp, CS%diag, &
+                  OBC=CS%OBC)
   call cpu_clock_end(id_clock_continuity)
   call cpu_clock_begin(id_clock_pass)
   call pass_var(hp, G%Domain)
@@ -377,7 +378,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
 ! h_av = hp + dt/2 div . uh
   call cpu_clock_begin(id_clock_continuity)
   call continuity(up, vp, hp, h_av, uh, vh, &
-                  (0.5*dt), G, CS%continuity_CSp, OBC=CS%OBC)
+                  (0.5*dt), G, CS%continuity_CSp, CS%diag, OBC=CS%OBC)
   call cpu_clock_end(id_clock_continuity)
   call cpu_clock_begin(id_clock_pass)
   call pass_var(h_av, G%Domain)
@@ -436,7 +437,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
 ! h = hp + dt/2 div . uh
   call cpu_clock_begin(id_clock_continuity)
   call continuity(upp, vpp, hp, h, uh, vh, &
-                  (dt*0.5), G, CS%continuity_CSp, OBC=CS%OBC)
+                  (dt*0.5), G, CS%continuity_CSp, CS%diag, OBC=CS%OBC)
   call cpu_clock_end(id_clock_continuity)
   call cpu_clock_begin(id_clock_pass)
   call pass_var(h, G%Domain)

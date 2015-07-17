@@ -72,7 +72,7 @@ character(len=20), parameter :: PPM_STRING = "PPM"
 
 contains
 
-subroutine continuity(u, v, hin, h, uh, vh, dt, G, CS, uhbt, vhbt, OBC, &
+subroutine continuity(u, v, hin, h, uh, vh, dt, G, CS, diag_cs, uhbt, vhbt, OBC, &
                       visc_rem_u, visc_rem_v, u_cor, v_cor, &
                       uhbt_aux, vhbt_aux, u_cor_aux, v_cor_aux, BT_cont)
   real, intent(in),  dimension(NIMEMB_,NJMEM_,NKMEM_) :: u
@@ -84,6 +84,7 @@ subroutine continuity(u, v, hin, h, uh, vh, dt, G, CS, uhbt, vhbt, OBC, &
   real, intent(in)                                    :: dt
   type(ocean_grid_type), intent(inout)                :: G
   type(continuity_CS), pointer                        :: CS
+  type(diag_ctrl), intent(inout)                      :: diag_cs
   real, intent(in), optional, dimension(NIMEMB_,NJMEM_) :: uhbt
   real, intent(in), optional, dimension(NIMEM_,NJMEMB_) :: vhbt
   type(ocean_OBC_type), pointer, optional             :: OBC
@@ -150,7 +151,7 @@ subroutine continuity(u, v, hin, h, uh, vh, dt, G, CS, uhbt, vhbt, OBC, &
       " or neither.")
 
   if (CS%continuity_scheme == PPM_SCHEME) then
-    call continuity_PPM(u, v, hin, h, uh, vh, dt, G, CS%PPM_CSp, uhbt, vhbt, OBC, &
+    call continuity_PPM(u, v, hin, h, uh, vh, dt, G, CS%PPM_CSp, diag_cs, uhbt, vhbt, OBC, &
                         visc_rem_u, visc_rem_v, u_cor, v_cor, &
                         uhbt_aux, vhbt_aux, u_cor_aux, v_cor_aux, BT_cont)
   else

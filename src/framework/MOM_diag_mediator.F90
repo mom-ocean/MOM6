@@ -58,6 +58,8 @@ implicit none ; private
 #define DIM_J(a) lbound(a, 2):ubound(a, 2)
 #define DIM_K(a) lbound(a, 3):ubound(a, 3)
 
+#define __DO_SAFETY_CHECKS__
+
 public set_axes_info, post_data, register_diag_field, time_type
 public post_data_1d_k
 public safe_alloc_ptr, safe_alloc_alloc
@@ -755,20 +757,19 @@ subroutine remap_diag_to_z(field, diag, diag_cs, remapped_field)
 
 end subroutine remap_diag_to_z
 
-subroutine diag_update_target_grids(G, diag_cs)
+subroutine diag_update_target_grids(diag_cs)
 ! Build/update target vertical grids for diagnostic remapping.
 !
 ! The target grids need to be updated whenever sea surface
 ! height changes.
 
-  type(ocean_grid_type),  intent(in) :: G
   type(diag_ctrl),        intent(inout) :: diag_cs
 
 ! Arguments:
-!  (in) G             - ocean grid structure.
 !  (inout)  diag_cs   - structure used to regulate diagnostic output.
 
   real, dimension(size(diag_cs%h, 3)) :: h_src
+  type(ocean_grid_type), pointer :: G
   real :: depth
   integer :: nz_src, nz_dest
   integer :: i, j, k
@@ -776,6 +777,7 @@ subroutine diag_update_target_grids(G, diag_cs)
 
   nz_dest = diag_cs%nz_remap
   nz_src = size(diag_cs%h, 3)
+  G => diag_cs%G
 
   if (.not. diag_cs%remapping_initialized) then
     call assert(allocated(diag_cs%zi_remap), &

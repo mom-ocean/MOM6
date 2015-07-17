@@ -588,7 +588,7 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
     if (CS%readjust_velocity) then
       ! Adjust the input velocites so that their transports match uhbt_out & vhbt_out.
       call continuity(u, v, h, hp, uh_in, vh_in, dt, G, &
-                      CS%continuity_CSp, uhbt_in, vhbt_in, CS%OBC, &
+                      CS%continuity_CSp, CS%diag, uhbt_in, vhbt_in, CS%OBC, &
                       CS%visc_rem_u, CS%visc_rem_v, u_adj, v_adj, &
                       BT_cont=CS%BT_cont)
       u_init => u_adj ; v_init => v_adj
@@ -601,7 +601,7 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
       CS%readjust_velocity = .false.
     else
       call continuity(u, v, h, hp, uh_in, vh_in, dt, G, &
-                      CS%continuity_CSp, OBC=CS%OBC, BT_cont=CS%BT_cont)
+                      CS%continuity_CSp, CS%diag, OBC=CS%OBC, BT_cont=CS%BT_cont)
 !###   call continuity(u, v, h, hp, uh_in, vh_in, dt, G, &
 !###                   CS%continuity_CSp, OBC=CS%OBC, visc_rem_u=CS%visc_rem_u, &
 !###                      visc_rem_v=CS%visc_rem_v, BT_cont=CS%BT_cont)
@@ -631,8 +631,9 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
     if (associated(CS%BT_cont) .or. CS%BT_use_layer_fluxes) then
       call cpu_clock_begin(id_clock_continuity)
       call continuity(u, v, h, hp, uh_in, vh_in, dt, G, &
-                      CS%continuity_CSp, OBC=CS%OBC, visc_rem_u=CS%visc_rem_u, &
-                      visc_rem_v=CS%visc_rem_v, BT_cont=CS%BT_cont)
+                      CS%continuity_CSp, CS%diag, OBC=CS%OBC, &
+                      visc_rem_u=CS%visc_rem_u, visc_rem_v=CS%visc_rem_v, &
+                      BT_cont=CS%BT_cont)
       call cpu_clock_end(id_clock_continuity)
       if (BT_cont_BT_thick) then
         call cpu_clock_begin(id_clock_pass)
@@ -716,8 +717,8 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
 ! hp = h + dt * div . uh
   call cpu_clock_begin(id_clock_continuity)
   call continuity(up, vp, h, hp, uh, vh, dt, G, CS%continuity_CSp, &
-                  CS%uhbt, CS%vhbt, CS%OBC, CS%visc_rem_u, CS%visc_rem_v, &
-                  u_av, v_av, BT_cont=CS%BT_cont)
+                  CS%diag, CS%uhbt, CS%vhbt, CS%OBC, CS%visc_rem_u, &
+                  CS%visc_rem_v, u_av, v_av, BT_cont=CS%BT_cont)
   call cpu_clock_end(id_clock_continuity)
 
   call cpu_clock_begin(id_clock_pass)
@@ -927,7 +928,7 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
     enddo ; enddo ; enddo ; endif
     call cpu_clock_begin(id_clock_continuity)
     call continuity(u, v, h, h, uh, vh, dt, G, &
-                    CS%continuity_CSp, CS%uhbt, CS%vhbt, CS%OBC, &
+                    CS%continuity_CSp, CS%diag, CS%uhbt, CS%vhbt, CS%OBC, &
                     CS%visc_rem_u, CS%visc_rem_v, u_av, v_av, &
                     uhbt_out, vhbt_out, u, v)
     call cpu_clock_end(id_clock_continuity)
@@ -966,7 +967,7 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
     ! u_av and v_av adjusted so their mass transports match uhbt and vhbt.
     call cpu_clock_begin(id_clock_continuity)
     call continuity(u, v, h, h, uh, vh, dt, G, &
-                    CS%continuity_CSp, CS%uhbt, CS%vhbt, CS%OBC, &
+                    CS%continuity_CSp, CS%diag, CS%uhbt, CS%vhbt, CS%OBC, &
                     CS%visc_rem_u, CS%visc_rem_v, u_av, v_av)
     call cpu_clock_end(id_clock_continuity)
     call cpu_clock_begin(id_clock_pass)
@@ -1066,7 +1067,7 @@ subroutine adjustments_dyn_legacy_split(u, v, h, dt, G, CS)
   if (CS%readjust_BT_trans) then
     call cpu_clock_begin(id_clock_continuity)
     call continuity(u, v, h, h_temp, uh_temp, vh_temp, dt, G, &
-                    CS%continuity_CSp, OBC=CS%OBC)
+                    CS%continuity_CSp, CS%diag, OBC=CS%OBC)
     call cpu_clock_end(id_clock_continuity)
 !$OMP parallel default(none) shared(is,ie,js,je,nz,CS,uh_temp,vh_temp)
 !$OMP do
@@ -1406,7 +1407,7 @@ subroutine initialize_dyn_legacy_split(u, v, h, uh, vh, eta, Time, G, param_file
   if (.not. query_initialized(uh,"uh",restart_CS) .or. &
       .not. query_initialized(vh,"vh",restart_CS)) then
     h_tmp(:,:,:) = h(:,:,:)
-    call continuity(u, v, h, h_tmp, uh, vh, dt, G, CS%continuity_CSp, OBC=CS%OBC)
+    call continuity(u, v, h, h_tmp, uh, vh, dt, G, CS%continuity_CSp, CS%diag, OBC=CS%OBC)
     call cpu_clock_begin(id_clock_pass_init)
     call pass_var(h_tmp, G%Domain)
     call cpu_clock_end(id_clock_pass_init)

@@ -971,9 +971,9 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         call do_group_pass(CS%pass_uv_T_S_h, G%Domain)
         call cpu_clock_end(id_clock_pass)
 
-        ! The diag mediator may need to re-generate target grids for remmapping when
-        ! total thickness changes.
-        call diag_update_target_grids(G, CS%diag)
+        ! Whenever thickness changes let the diag manager know, target grids
+        ! for vertical remapping may need to be regenerated.
+        call diag_update_target_grids(CS%diag)
 
         if (CS%debug) then
           call uchksum(u,"Post-dia first u", G, haloshift=2)
@@ -1050,9 +1050,9 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         call disable_averaging(CS%diag)
         if (showCallTree) call callTree_waypoint("finished thickness_diffuse_first (step_MOM)")
 
-        ! The diag mediator may need to re-generate target grids for remmapping when
-        ! total thickness changes.
-        call diag_update_target_grids(G, CS%diag)
+        ! Whenever thickness changes let the diag manager know, target grids
+        ! for vertical remapping may need to be regenerated.
+        call diag_update_target_grids(CS%diag)
 
       endif
     endif
@@ -1273,9 +1273,10 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
           endif
         endif
 
-        ! The diag mediator may need to re-generate target grids for remmapping when
-        ! total thickness changes.
-        call diag_update_target_grids(G, CS%diag)
+        ! Whenever thickness changes let the diag manager know, target grids
+        ! for vertical remapping may need to be regenerated. This needs to
+        ! happen after the H update and before the next post_data.
+        call diag_update_target_grids(CS%diag)
 
         call cpu_clock_begin(id_clock_pass)
         call do_group_pass(CS%pass_uv_T_S_h, G%Domain)
@@ -2017,9 +2018,9 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   ! e.g. to generate the target grids below.
   call set_axes_info(G, param_file, diag)
 
-  ! The diag mediator may need to (re)generate target grids for remmapping when
-  ! total thickness changes.
-  call diag_update_target_grids(G, diag)
+  ! Whenever thickness changes let the diag manager know, target grids
+  ! for vertical remapping may need to be regenerated. This needs to
+  call diag_update_target_grids(diag)
 
   call cpu_clock_begin(id_clock_MOM_init)
   if (CS%use_ALE_algorithm) then

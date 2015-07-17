@@ -408,9 +408,9 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     if (CS%debugConservation) call MOM_state_stats('geothermal', u, v, h, tv%T, tv%S, G)
   endif
 
-  ! The diag mediator may need to re-generate target grids for remmapping when
-  ! total thickness changes.
-  call diag_update_target_grids(G, CS%diag)
+  ! Whenever thickness changes let the diag manager know, target grids
+  ! for vertical remapping may need to be regenerated.
+  call diag_update_target_grids(CS%diag)
 
   ! Set_opacity estimates the optical properties of the water column.
   ! It will need to be modified later to include information about the
@@ -907,9 +907,9 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     if (CS%debugConservation) call MOM_state_stats('regularize_layers', u, v, h, tv%T, tv%S, G)
   endif
 
-  ! The diag mediator may need to re-generate target grids for remmapping when
-  ! total thickness changes.
-  call diag_update_target_grids(G, CS%diag)
+  ! Whenever thickness changes let the diag manager know, target grids
+  ! for vertical remapping may need to be regenerated.
+  call diag_update_target_grids(CS%diag)
 
   if ((CS%id_Tdif > 0) .or. (CS%id_Tdif_z > 0) .or. &
       (CS%id_Tadv > 0) .or. (CS%id_Tadv_z > 0)) then
