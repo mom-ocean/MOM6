@@ -513,7 +513,7 @@ program MOM_main
   endif
 
   call callTree_waypoint("End MOM_main")
-  call diag_mediator_end(Time, end_diag_manager=.true.)
+  call diag_mediator_end(Time, MOM_CSp%diag, end_diag_manager=.true.)
   call cpu_clock_end(termClock)
 
   call io_infra_end ; call MOM_infra_end

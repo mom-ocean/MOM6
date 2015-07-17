@@ -38,7 +38,8 @@ use MOM_safe_alloc,       only : safe_alloc_ptr, safe_alloc_alloc
 use MOM_string_functions, only : lowercase
 use MOM_time_manager,     only : time_type
 use MOM_remapping,        only : remapping_CS, remapping_core, initialize_remapping, dzFromH1H2
-use MOM_regridding,       only : regridding_CS, initialize_regridding, setCoordinateResolution, buildGridZStarColumn, setRegriddingMinimumThickness
+use MOM_regridding,       only : regridding_CS, initialize_regridding, setCoordinateResolution
+use MOM_regridding,       only : buildGridZStarColumn, setRegriddingMinimumThickness
 
 use diag_manager_mod, only : diag_manager_init, diag_manager_end
 use diag_manager_mod, only : send_data, diag_axis_init
@@ -1596,13 +1597,35 @@ subroutine diag_mediator_close_registration()
 
 end subroutine diag_mediator_close_registration
 
-subroutine diag_mediator_end(time, end_diag_manager)
-  type(time_type),   intent(in) :: time
-  logical, optional, intent(in) :: end_diag_manager !< If true, call diag_manager_end()
+subroutine diag_mediator_end(time, diag_cs, end_diag_manager)
+  type(time_type),   intent(in)  :: time
+  type(diag_ctrl), intent(inout) :: diag_cs
+  logical, optional, intent(in)  :: end_diag_manager !< If true, call diag_manager_end()
 
   if (doc_unit > -1) then
     close(doc_unit) ; doc_unit = -3
   endif
+
+  deallocate(diag_cs%diags)
+
+  if (allocated(diag_cs%zi_remap)) deallocate(diag_cs%zi_remap)
+  if (allocated(diag_cs%zl_remap)) deallocate(diag_cs%zl_remap)
+
+  if (allocated(diag_cs%zi_u)) deallocate(diag_cs%zi_u)
+  if (allocated(diag_cs%zi_v)) deallocate(diag_cs%zi_v)
+  if (allocated(diag_cs%zi_T)) deallocate(diag_cs%zi_T)
+  deallocate(diag_cs%mask3dTL)
+  deallocate(diag_cs%mask3dBuL)
+  deallocate(diag_cs%mask3dCuL)
+  deallocate(diag_cs%mask3dCvL)
+  deallocate(diag_cs%mask3dTi)
+  deallocate(diag_cs%mask3dBui)
+  deallocate(diag_cs%mask3dCui)
+  deallocate(diag_cs%mask3dCvi)
+
+#if defined(DEBUG) || defined(__DO_SAFETY_CHECKS__)
+  deallocate(diag_cs%h_old)
+#endif
 
   if (present(end_diag_manager)) then
     if (end_diag_manager) call diag_manager_end(time)
