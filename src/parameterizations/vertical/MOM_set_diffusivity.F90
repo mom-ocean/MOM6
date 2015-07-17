@@ -1658,7 +1658,11 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, G, CS,
 
       ! Diffusivity using law of the wall, limited by rotation, at height z, in m2/s.
       ! This calculation is at the upper interface of the layer
-      Kd_wall = ( ( von_karm * ustar2 ) * ( z * D_minus_z ) )/( ustar_D + absf * ( z * D_minus_z ) )
+      if ( ustar_D + absf * ( z * D_minus_z ) == 0.) then
+        Kd_wall = 0.
+      else
+        Kd_wall = ( ( von_karm * ustar2 ) * ( z * D_minus_z ) )/( ustar_D + absf * ( z * D_minus_z ) )
+      endif
 
       ! TKE associated with Kd_wall, in m3 s-2.
       ! This calculation if for the volume spanning the interface.
