@@ -66,7 +66,8 @@ use MOM_interface_heights, only : find_eta
 use MOM_io, only : create_file, fieldtype, flush_file, open_file, reopen_file
 use MOM_io, only : file_exists, slasher, vardesc, write_field
 use MOM_io, only : APPEND_FILE, ASCII_FILE, SINGLE_FILE, WRITEONLY_FILE
-use MOM_time_manager, only : time_type, get_time, set_time, operator(>), operator(-)
+use MOM_time_manager, only : time_type, get_time, get_date, set_time, operator(>), operator(-)
+use MOM_time_manager, only : get_calendar_type, NO_CALENDAR
 use MOM_tracer_flow_control, only : tracer_flow_control_CS, call_tracer_stocks
 use MOM_variables, only : surface, thermo_var_ptrs
 
@@ -395,6 +396,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
   integer :: nTr_stocks
   real, allocatable :: toten_PE(:)
   integer :: pe_num
+  integer :: iyear, imonth, iday, ihour, iminute, isecond, itick ! For call to get_date()
 
  ! A description for output of each of the fields.
   type(vardesc) :: vars(NUM_FIELDS+MAX_FIELDS_)
@@ -789,6 +791,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
   En_mass = toten / mass_tot
 
   call get_time(day, start_of_day, num_days)
+  call get_date(day, iyear, imonth, iday, ihour, iminute, isecond, itick)
   if (abs(CS%timeunit - 86400.0) < 1.0) then
     reday = REAL(num_days)+ (REAL(start_of_day)/86400.0)
     mesg_intro = "MOM Day "
@@ -808,15 +811,30 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
   
   if (is_root_pe()) then
     if (CS%use_temperature) then
-      write(*,'(A,A," ",A,": En ",ES12.6, ", MaxCFL ", F8.5, ", Mass ", &
-              & ES18.12, ", Salt ", F15.11,", Temp ", F15.11)') &
-        trim(mesg_intro), trim(day_str(1:3))//trim(day_str(4:)), trim(n_str), &
-        En_mass, max_CFL(1), mass_tot, salin, temp
+      if (get_calendar_type() == NO_CALENDAR) then
+        write(*,'(A,A," ",A,": En ",ES12.6, ", MaxCFL ", F8.5, ", Mass ", &
+                & ES18.12, ", Salt ", F15.11,", Temp ", F15.11)') &
+          trim(mesg_intro), trim(day_str(1:3))//trim(day_str(4:)), trim(n_str), &
+          En_mass, max_CFL(1), mass_tot, salin, temp
+      else
+        write(*,'("MOM Date",i7,2("/",i2.2)," ",i2.2,2(":",i2.2)," ", &
+                & A,": En ",ES12.6, ", MaxCFL ", F8.5, ", Mass ", &
+                & ES18.12, ", Salt ", F15.11,", Temp ", F15.11)') &
+          iyear, imonth, iday, ihour, iminute, isecond, &
+          trim(n_str), En_mass, max_CFL(1), mass_tot, salin, temp
+      endif
     else
-      write(*,'(A,A," ",A,": En ",ES12.6, ", MaxCFL ", F8.5, ", Mass ", &
-              & ES18.12)') &
-        trim(mesg_intro), trim(day_str(1:3))//trim(day_str(4:)), trim(n_str), &
-        En_mass, max_CFL(1), mass_tot
+      if (get_calendar_type() == NO_CALENDAR) then
+        write(*,'(A,A," ",A,": En ",ES12.6, ", MaxCFL ", F8.5, ", Mass ", &
+                & ES18.12)') &
+          trim(mesg_intro), trim(day_str(1:3))//trim(day_str(4:)), trim(n_str), &
+          En_mass, max_CFL(1), mass_tot
+      else
+        write(*,'("MOM Date",i7,2("/",i2.2)," ",i2.2,2(":",i2.2)," ", &
+                & A,": En ",ES12.6, ", MaxCFL ", F8.5, ", Mass ",ES18.12)') &
+          iyear, imonth, iday, ihour, iminute, isecond, &
+          trim(n_str), En_mass, max_CFL(1), mass_tot
+      endif
     endif
 
     if (CS%use_temperature) then
