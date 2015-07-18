@@ -756,15 +756,15 @@ subroutine calculateBuoyancyFlux2d(G, fluxes, optics, h, Temp, Salt, tv, &
   real, dimension( SZI_(G) ) :: netS ! net saln flux (ppt m/s)
   integer :: j
 
-  netT(:) = 0. ; netS(:) = 0.
+  netT(G%isc:G%iec) = 0. ; netS(G%isc:G%iec) = 0.
 
 !$OMP parallel do default(none) shared(G,fluxes,optics,h,Temp,Salt,tv,buoyancyFlux,&
 !$OMP                                  netHeatMinusSW,netSalt)                     &
 !$OMP                     firstprivate(netT,netS)
   do j = G%jsc, G%jec
     call calculateBuoyancyFlux1d(G, fluxes, optics, h, Temp, Salt, tv, j, buoyancyFlux(:,j,:), netT, netS )
-    if (present(netHeatMinusSW)) netHeatMinusSW(:,j) = netT(:)
-    if (present(netSalt)) netSalt(:,j) = netS(:)
+    if (present(netHeatMinusSW)) netHeatMinusSW(G%isc:G%iec,j) = netT(G%isc:G%iec)
+    if (present(netSalt)) netSalt(G%isc:G%iec,j) = netS(G%isc:G%iec)
   enddo ! j
 
 end subroutine calculateBuoyancyFlux2d
