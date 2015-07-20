@@ -599,6 +599,7 @@ type, public :: MOM_control_struct
   integer :: id_h_preale = -1
   integer :: id_T_preale = -1
   integer :: id_S_preale = -1
+  integer :: id_e_preale = -1
 
   ! The remainder provides pointers to child modules' control structures.
   type(MOM_dyn_unsplit_CS),      pointer :: dyn_unsplit_CSp      => NULL()
@@ -726,7 +727,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     v, &  ! v : meridional velocity component (m/s)
     h     ! h : layer thickness (meter (Bouss) or kg/m2 (non-Bouss))
 
-  real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)+1) :: eta_predia
+  real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)+1) :: eta_predia, eta_preale
 
   real :: tot_wt_ssh, Itot_wt_ssh, I_time_int
   real :: zos_area_mean, volo
@@ -942,6 +943,10 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         if (CS%id_h_preale > 0) call post_data(CS%id_h_preale, h, CS%diag)
         if (CS%id_T_preale > 0) call post_data(CS%id_T_preale, CS%tv%T, CS%diag)
         if (CS%id_S_preale > 0) call post_data(CS%id_S_preale, CS%tv%S, CS%diag)
+        if (CS%id_e_preale > 0) then
+            call find_eta(h, CS%tv, G%g_Earth, G, eta_preale)
+            call post_data(CS%id_e_preale, eta_preale, CS%diag)
+        endif
 
         ! Regridding/remapping is done here, at end of thermodynamics time step
         ! (that may comprise several dynamical time steps)
@@ -2380,6 +2385,8 @@ subroutine register_diags(Time, G, CS, ADp)
         'Temperature before remapping', 'degC')
     CS%id_S_preale = register_diag_field('ocean_model', 'S_preale', diag%axesTL, Time, &
         'Salinity before remapping', 'ppt')
+    CS%id_e_preale = register_diag_field('ocean_model', 'e_preale', diag%axesTi, Time, &
+        'Interface Heights before remapping', 'meter')
   endif
   if (CS%use_temperature) then
     CS%id_T_predia = register_diag_field('ocean_model', 'temp_predia', diag%axesTL, Time, &
