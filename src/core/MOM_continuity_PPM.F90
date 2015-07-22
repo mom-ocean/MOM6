@@ -44,7 +44,7 @@ module MOM_continuity_PPM
 !********+*********+*********+*********+*********+*********+*********+**
 
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
-use MOM_diag_mediator, only : time_type, diag_ctrl, diag_update_target_grids
+use MOM_diag_mediator, only : time_type, diag_ctrl
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
@@ -103,7 +103,7 @@ end type loop_bounds_type
 
 contains
 
-subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, CS, diag_cs, uhbt, vhbt, OBC, &
+subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, CS, uhbt, vhbt, OBC, &
                           visc_rem_u, visc_rem_v, u_cor, v_cor, &
                           uhbt_aux, vhbt_aux, u_cor_aux, v_cor_aux, BT_cont)
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)    :: u
@@ -115,7 +115,6 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, CS, diag_cs, uhbt, vhbt, 
   real,                                   intent(in)    :: dt
   type(ocean_grid_type),                  intent(inout) :: G
   type(continuity_PPM_CS),                pointer       :: CS
-  type(diag_ctrl),                        intent(inout) :: diag_cs
   real, dimension(NIMEMB_,NJMEM_),        intent(in),  optional :: uhbt
   real, dimension(NIMEM_,NJMEMB_),        intent(in),  optional :: vhbt
   type(ocean_OBC_type),                   pointer,     optional :: OBC
@@ -316,10 +315,6 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, CS, diag_cs, uhbt, vhbt, 
       enddo ; enddo
     endif
   endif
-
-  ! Whenever thickness changes let the diag manager know, target grids
-  ! for vertical remapping may need to be regenerated.
-  call diag_update_target_grids(diag_cs)
 
 end subroutine continuity_PPM
 

@@ -605,7 +605,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   if (associated(CS%BT_cont) .or. CS%BT_use_layer_fluxes) then
     call cpu_clock_begin(id_clock_continuity)
     call continuity(u, v, h, hp, uh_in, vh_in, dt, G, &
-                    CS%continuity_CSp, CS%diag, OBC=CS%OBC, visc_rem_u=CS%visc_rem_u, &
+                    CS%continuity_CSp, OBC=CS%OBC, visc_rem_u=CS%visc_rem_u, &
                     visc_rem_v=CS%visc_rem_v, BT_cont=CS%BT_cont)
     call cpu_clock_end(id_clock_continuity)
     if (BT_cont_BT_thick) then
@@ -695,7 +695,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 ! uh = u_av * h
 ! hp = h + dt * div . uh
   call cpu_clock_begin(id_clock_continuity)
-  call continuity(up, vp, h, hp, uh, vh, dt, G, CS%continuity_CSp, CS%diag, &
+  call continuity(up, vp, h, hp, uh, vh, dt, G, CS%continuity_CSp, &
                   CS%uhbt, CS%vhbt, CS%OBC, CS%visc_rem_u, CS%visc_rem_v, &
                   u_av, v_av, BT_cont=CS%BT_cont)
   call cpu_clock_end(id_clock_continuity)
@@ -901,9 +901,12 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   ! u_av and v_av adjusted so their mass transports match uhbt and vhbt.
   call cpu_clock_begin(id_clock_continuity)
   call continuity(u, v, h, h, uh, vh, dt, G, &
-                  CS%continuity_CSp, CS%diag, CS%uhbt, CS%vhbt, CS%OBC, &
+                  CS%continuity_CSp, CS%uhbt, CS%vhbt, CS%OBC, &
                   CS%visc_rem_u, CS%visc_rem_v, u_av, v_av)
   call cpu_clock_end(id_clock_continuity)
+  ! Whenever thickness changes let the diag manager know, target grids
+  ! for vertical remapping may need to be regenerated.
+  call diag_update_target_grids(CS%diag)
   call cpu_clock_begin(id_clock_pass)
   call do_group_pass(CS%pass_h, G%Domain)
   call cpu_clock_end(id_clock_pass)
@@ -1258,7 +1261,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, param_file, &
   if (.not. query_initialized(uh,"uh",restart_CS) .or. &
       .not. query_initialized(vh,"vh",restart_CS)) then
     h_tmp(:,:,:) = h(:,:,:)
-    call continuity(u, v, h, h_tmp, uh, vh, dt, G, CS%continuity_CSp, CS%diag, OBC=CS%OBC)
+    call continuity(u, v, h, h_tmp, uh, vh, dt, G, CS%continuity_CSp, OBC=CS%OBC)
     call cpu_clock_begin(id_clock_pass_init)
     call create_group_pass(pass_h_tmp, h_tmp, G%Domain)
     call do_group_pass(pass_h_tmp, G%Domain)
