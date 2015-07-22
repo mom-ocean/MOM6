@@ -398,7 +398,7 @@ subroutine buildGridZstar( CS, G, h, dzInterface )
       endif
 
       ! Local depth (G%bathyT is positive)
-      nominalDepth = G%bathyT(i,j)
+      nominalDepth = G%bathyT(i,j)*G%m_to_H
 
       ! Determine water column thickness
       totalThickness = 0.0
@@ -519,7 +519,7 @@ subroutine buildGridSigma( CS, G, h, dzInterface )
       end do
           
       ! The rest of the model defines grids integrating up from the bottom
-      nominalDepth = G%bathyT(i,j)
+      nominalDepth = G%bathyT(i,j)*G%m_to_H
       zOld(nz+1) = - nominalDepth
       zNew(nz+1) = - nominalDepth
       do k = nz,1,-1
@@ -730,7 +730,7 @@ subroutine buildGridRho( G, h, tv, dzInterface, remapCS, CS )
       end do ! end regridding iterations               
 
       ! Local depth (G%bathyT is positive)
-      nominalDepth = G%bathyT(i,j)
+      nominalDepth = G%bathyT(i,j)*G%m_to_H
 
       ! The rest of the model defines grids integrating up from the bottom
       totalThickness = 0.0
@@ -828,7 +828,7 @@ subroutine build_grid_arbitrary( G, h, dzInterface, h_new, CS )
     do i = G%isc-1,G%iec+1
 
       ! Local depth
-      local_depth = G%bathyT(i,j)
+      local_depth = G%bathyT(i,j)*G%m_to_H
       
       ! Determine water column height
       total_height = 0.0
