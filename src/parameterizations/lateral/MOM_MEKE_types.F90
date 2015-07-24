@@ -46,6 +46,8 @@ type, public :: MEKE_type
   ! Parameters
   real :: KhTh_fac = 1.0 ! Multiplier to map Kh(MEKE) to KhTh, nondim
   real :: KhTr_fac = 1.0 ! Multiplier to map Kh(MEKE) to KhTr, nondim.
+  real :: backscatter_Ro_pow = 0.0 ! Power in Rossby number function for backscatter.
+  real :: backscatter_Ro_c = 0.0 ! Coefficient in Rossby number function for backscatter.
 end type MEKE_type
 
 end module MOM_MEKE_types

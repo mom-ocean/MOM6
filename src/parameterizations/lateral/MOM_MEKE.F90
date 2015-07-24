@@ -861,6 +861,13 @@ logical function MEKE_init(Time, G, param_file, diag, CS, MEKE, restart_CS)
   call get_param(param_file, mod, "MEKE_COLD_START", coldStart, &
                  "If true, initialize EKE to zero. Otherwise a local equilibrium solution\n"//&
                  "is used as an initial condition for EKE.", default=.false.)
+  call get_param(param_file, mod, "MEKE_BACKSCAT_RO_C", MEKE%backscatter_Ro_c, &
+                 "The coefficient in the Rossby number function for scaling the buharmonic\n"//&
+                 "frictional energy source. Setting to non-zero enables the Rossby number function.", &
+                 units="nondim", default=0.0)
+  call get_param(param_file, mod, "MEKE_BACKSCAT_RO_POW", MEKE%backscatter_Ro_pow, &
+                 "The power in the Rossby number function for scaling the biharmomnic\n"//&
+                 "frictional energy source.", units="nondim", default=0.0)
 
   ! Nonlocal module parameters
   call get_param(param_file, mod, "CDRAG", CS%cdrag, &
