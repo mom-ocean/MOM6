@@ -519,13 +519,13 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, G, C
     if (CS%debug) then
       call hchksum(tv%T, "before vert_fill_TS tv%T",G)
       call hchksum(tv%S, "before vert_fill_TS tv%S",G)
-      call hchksum(h, "before vert_fill_TS h",G)
+      call hchksum(h*G%H_to_m, "before vert_fill_TS h",G)
     endif
     call vert_fill_TS(h, tv%T, tv%S, kappa_fill, dt_fill, T_f, S_f, G)
     if (CS%debug) then
       call hchksum(tv%T, "after vert_fill_TS tv%T",G)
       call hchksum(tv%S, "after vert_fill_TS tv%S",G)
-      call hchksum(h, "after vert_fill_TS h",G)
+      call hchksum(h*G%H_to_m, "after vert_fill_TS h",G)
     endif
   endif
 
@@ -737,6 +737,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, G, C
         Kd(i,j,k) = max( Kd(i,j,k) , &  ! Apply floor to Kd
            dissip * (CS%FluxRi_max / (G%Rho0 * (N2_lay(i,k) + Omega2))) )
       enddo ; enddo
+
       if (present(Kd_int)) then ; do K=2,nz ; do i=is,ie
       ! This calculates the dissipation ONLY from Kd calculated in this routine
       ! dissip has units of W/m3 (kg/m3 * m2/s * 1/s2 = J/s/m3)
@@ -1653,7 +1654,7 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, G, CS,
       ! This is energy loss in addition to work done as mixing, apparently to Joule heating.
       TKE_remaining = exp(-Idecay*dh) * TKE_remaining
 
-      z = z + h(i,j,k) ! Distance between upper interface of layer and the bottom, in m.
+      z = z + h(i,j,k)*G%H_to_m ! Distance between upper interface of layer and the bottom, in m.
       D_minus_z = max(total_thickness - z, 0.) ! Thickness above layer, m.
 
       ! Diffusivity using law of the wall, limited by rotation, at height z, in m2/s.

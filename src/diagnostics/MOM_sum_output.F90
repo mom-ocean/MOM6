@@ -638,7 +638,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
       do j=js,je ; do i=is,ie
         hbelow = 0.0
         do k=nz,1,-1
-          hbelow = hbelow + h(i,j,k)
+          hbelow = hbelow + h(i,j,k) * G%H_to_m
           hint = (H_0APE(K) + hbelow - G%bathyT(i,j))
           hbot = H_0APE(K) - G%bathyT(i,j)
           hbot = (hbot + ABS(hbot)) * 0.5
