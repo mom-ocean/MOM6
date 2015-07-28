@@ -336,7 +336,7 @@ subroutine pressure_gradient_plm( CS, S_t, S_b, T_t, T_b, G, tv, h )
   do j = G%jsc,G%jec+1
     do i = G%isc,G%iec+1
       ! Build current grid
-      hTmp(:) = h(i,j,:)
+      hTmp(:) = h(i,j,:)*G%H_to_m
       tmp(:) = tv%S(i,j,:)
       ! Reconstruct salinity profile    
       ppoly_linear_E = 0.0
@@ -412,7 +412,7 @@ subroutine pressure_gradient_ppm( CS, S_t, S_b, T_t, T_b, G, tv, h )
     do i = G%isc,G%iec+1
      
       ! Build current grid
-      hTmp(:) = h(i,j,:)
+      hTmp(:) = h(i,j,:) * G%H_to_m
       tmp(:) = tv%S(i,j,:)
       
       ! Reconstruct salinity profile    

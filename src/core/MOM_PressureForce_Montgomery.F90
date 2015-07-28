@@ -62,6 +62,7 @@ use MOM_tidal_forcing, only : calc_tidal_forcing, tidal_forcing_CS
 use MOM_variables, only : thermo_var_ptrs
 use MOM_EOS, only : calculate_density, calculate_density_derivs
 use MOM_EOS, only : int_specific_vol_dp, query_compressible
+
 implicit none ; private
 
 #include <MOM_memory.h>
@@ -515,7 +516,7 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
     do j=Jsq,Jeq+1 
       do i=Isq,Ieq+1 ; e(i,j,1) = -1.0*G%bathyT(i,j) ; enddo
       do k=1,nz ; do i=Isq,Ieq+1
-        e(i,j,1) = e(i,j,1) + h(i,j,k)
+        e(i,j,1) = e(i,j,1) + h(i,j,k)*G%H_to_m
       enddo ; enddo 
     enddo
     call calc_tidal_forcing(CS%Time, e(:,:,1), e_tidal, G, CS%tides_CSp)
@@ -536,7 +537,7 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
   endif
 !$OMP do
   do j=Jsq,Jeq+1 ; do k=nz,1,-1 ; do i=Isq,Ieq+1
-    e(i,j,K) = e(i,j,K+1) + h(i,j,k)
+    e(i,j,K) = e(i,j,K+1) + h(i,j,k)*G%H_to_m
   enddo ; enddo ; enddo
 !$OMP end parallel
   if (use_EOS) then
@@ -661,12 +662,12 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
     ! about 200 lines above.
 !$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,eta,e,e_tidal)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-        eta(i,j) = e(i,j,1) + e_tidal(i,j)
+        eta(i,j) = e(i,j,1)*G%m_to_H + e_tidal(i,j)*G%m_to_H
       enddo ; enddo
     else
 !$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,eta,e)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-        eta(i,j) = e(i,j,1)
+        eta(i,j) = e(i,j,1)*G%m_to_H
       enddo ; enddo
     endif
   endif
@@ -689,7 +690,7 @@ subroutine Set_pbce_Bouss(e, tv, G, g_Earth, Rho0, GFS_scale, pbce, rho_star)
   real, dimension(NIMEM_,NJMEM_,NKMEM_), optional, intent(in) :: rho_star
 !    This subroutine determines the partial derivative of the acceleration due 
 !  to pressure forces with the free surface height.
-! Arguments: e - Interface height, in m.
+! Arguments: e - Interface height, in H (m).
 !  (in)      tv - A structure containing pointers to any available
 !                 thermodynamic fields, including potential temperature and
 !                 salinity or mixed layer density. Absent fields have NULL ptrs.
@@ -703,7 +704,7 @@ subroutine Set_pbce_Bouss(e, tv, G, g_Earth, Rho0, GFS_scale, pbce, rho_star)
 !  (in)      CS - The control structure returned by a previous call to
 !                 PressureForce_init.
 !  (out)     pbce - the baroclinic pressure anomaly in each layer
-!                   due to free surface height anomalies, in m s-2.
+!                   due to free surface height anomalies, in m2 H-1 s-2.
 !  (in,opt)  rho_star - The layer densities (maybe compressibility compensated),
 !                       times g/rho_0, in m s-2.
    
@@ -728,7 +729,7 @@ subroutine Set_pbce_Bouss(e, tv, G, g_Earth, Rho0, GFS_scale, pbce, rho_star)
   Rho0xG = Rho0*g_Earth
   G_Rho0 = g_Earth/Rho0
   use_EOS = associated(tv%eqn_of_state)
-  h_neglect = G%H_subroundoff * G%H_to_m
+  h_neglect = G%H_subroundoff*G%H_to_m
 
   if (use_EOS) then
     if (present(rho_star)) then
@@ -736,8 +737,8 @@ subroutine Set_pbce_Bouss(e, tv, G, g_Earth, Rho0, GFS_scale, pbce, rho_star)
 !$OMP                          private(Ihtot)
       do j=Jsq,Jeq+1
         do i=Isq,Ieq+1
-          Ihtot(i) = 1.0 / ((e(i,j,1)-e(i,j,nz+1)) + h_neglect)
-          pbce(i,j,1) = GFS_scale * rho_star(i,j,1)
+          Ihtot(i) = 1.0 / (((e(i,j,1)-e(i,j,nz+1)) + h_neglect) * G%m_to_H)
+          pbce(i,j,1) = GFS_scale * rho_star(i,j,1) * G%H_to_m
         enddo
         do k=2,nz ; do i=Isq,Ieq+1
           pbce(i,j,k) = pbce(i,j,k-1) + (rho_star(i,j,k)-rho_star(i,j,k-1)) * &
@@ -749,13 +750,13 @@ subroutine Set_pbce_Bouss(e, tv, G, g_Earth, Rho0, GFS_scale, pbce, rho_star)
 !$OMP                          private(Ihtot,press,rho_in_situ,T_int,S_int,dR_dT,dR_dS)
       do j=Jsq,Jeq+1
         do i=Isq,Ieq+1
-          Ihtot(i) = 1.0 / ((e(i,j,1)-e(i,j,nz+1)) + h_neglect)
+          Ihtot(i) = 1.0 / (((e(i,j,1)-e(i,j,nz+1)) + h_neglect) * G%m_to_H)
           press(i) = -Rho0xG*e(i,j,1)
         enddo
         call calculate_density(tv%T(:,j,1), tv%S(:,j,1), press, rho_in_situ, &
                                Isq, Ieq-Isq+2, tv%eqn_of_state)
         do i=Isq,Ieq+1
-          pbce(i,j,1) = G_Rho0*(GFS_scale * rho_in_situ(i))
+          pbce(i,j,1) = G_Rho0*(GFS_scale * rho_in_situ(i)) * G%H_to_m
         enddo
         do k=2,nz
           do i=Isq,Ieq+1
@@ -778,8 +779,8 @@ subroutine Set_pbce_Bouss(e, tv, G, g_Earth, Rho0, GFS_scale, pbce, rho_star)
 !$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,e,G,h_neglect,pbce) private(Ihtot)
     do j=Jsq,Jeq+1
       do i=Isq,Ieq+1
-        Ihtot(i) = 1.0 / ((e(i,j,1)-e(i,j,nz+1)) + h_neglect)
-        pbce(i,j,1) = G%g_prime(1)
+        Ihtot(i) = 1.0 / (((e(i,j,1)-e(i,j,nz+1)) + h_neglect) * G%m_to_H)
+        pbce(i,j,1) = G%g_prime(1) * G%H_to_m
       enddo
       do k=2,nz ; do i=Isq,Ieq+1
         pbce(i,j,k) = pbce(i,j,k-1) + &

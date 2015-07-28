@@ -236,11 +236,16 @@ subroutine MOM_grid_init(G, param_file)
   call get_param(param_file, "MOM_grid", "ANGSTROM", G%Angstrom_z, &
                  "The minumum layer thickness, usually one-Angstrom.", &
                  units="m", default=1.0e-10)
-  if (.not.G%Boussinesq) &
+
+  if (.not.G%Boussinesq) then
     call get_param(param_file, "MOM_grid", "H_TO_KG_M2", G%H_to_kg_m2,&
                  "A constant that translates thicknesses from the model's \n"//&
                  "internal units of thickness to kg m-2.", units="kg m-2 H-1", &
                  default=1.0)
+  else
+    call get_param(param_file, "MOM_grid", "H_TO_M", G%H_to_m, default=1.0)
+  endif
+
   call get_param(param_file, "MOM_grid", "BATHYMETRY_AT_VEL", G%bathymetry_at_vel, &
                  "If true, there are separate values for the basin depths \n"//&
                  "at velocity points.  Otherwise the effects of of \n"//&
@@ -306,11 +311,10 @@ subroutine MOM_grid_init(G, param_file)
   endif
 
   if (G%Boussinesq) then
-    G%H_to_kg_m2 = G%Rho0
-    G%kg_m2_to_H = 1.0/G%Rho0
-    G%m_to_H = 1.0
-    G%H_to_m = 1.0
-    G%Angstrom = G%Angstrom_z
+    G%H_to_kg_m2 = G%Rho0 * G%H_to_m
+    G%kg_m2_to_H = 1.0 / G%H_to_kg_m2
+    G%m_to_H = 1.0 / G%H_to_m
+    G%Angstrom = G%Angstrom_z*G%m_to_H
   else
     G%kg_m2_to_H = 1.0 / G%H_to_kg_m2
     G%m_to_H = G%Rho0 * G%kg_m2_to_H

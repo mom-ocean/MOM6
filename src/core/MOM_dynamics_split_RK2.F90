@@ -496,12 +496,13 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   call cpu_clock_begin(id_clock_pres)
   call PressureForce(h, tv, CS%PFu, CS%PFv, G, CS%PressureForce_CSp, &
                      CS%ALE_CSp, p_surf, CS%pbce, CS%eta_PF)
+  if (CS%debug) then
+    call uchksum(CS%PFu,"After PressureForce CS%PFu",G,haloshift=0)
+    call vchksum(CS%PFv,"After PressureForce CS%PFv",G,haloshift=0)
+  endif
+
   if (dyn_p_surf) then
-    if (G%Boussinesq) then
-      Pa_to_eta = 1.0 / (G%Rho0*G%g_Earth)
-    else
-      Pa_to_eta = 1.0 / G%H_to_Pa
-    endif
+    Pa_to_eta = 1.0 / G%H_to_Pa
 !$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,eta_PF_start,CS,Pa_to_eta,p_surf_begin,p_surf_end)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       eta_PF_start(i,j) = CS%eta_PF(i,j) - Pa_to_eta * &
@@ -568,11 +569,16 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
       vp(i,j,k) = G%mask2dCv(i,j) * (v(i,j,k) + dt * v_bc_accel(i,J,k))
     enddo ; enddo 
   enddo
+
   call enable_averaging(dt, Time_local, CS%diag)
   call set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, &
                       CS%set_visc_CSp)
   call disable_averaging(CS%diag)
 
+  if (CS%debug) then
+    call uchksum(up,"before vertvisc: up",G,haloshift=0)
+    call vchksum(vp,"before vertvisc: vp",G,haloshift=0)
+  endif
   call vertvisc_coef(up, vp, h, fluxes, visc, dt, G, CS%vertvisc_CSp)
   call vertvisc_remnant(visc, CS%visc_rem_u, CS%visc_rem_v, dt, G, CS%vertvisc_CSp)
   call cpu_clock_end(id_clock_vertvisc)
@@ -671,6 +677,10 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 ! up <- up + dt_pred d/dz visc d/dz up
 ! u_av  <- u_av  + dt_pred d/dz visc d/dz u_av
   call cpu_clock_begin(id_clock_vertvisc)
+  if (CS%debug) then
+    call uchksum(up,"0 before vertvisc: up",G,haloshift=0)
+    call vchksum(vp,"0 before vertvisc: vp",G,haloshift=0)
+  endif
   call vertvisc_coef(up, vp, h, fluxes, visc, dt_pred, G, CS%vertvisc_CSp)
   call vertvisc(up, vp, h, fluxes, visc, dt_pred, CS%OBC, CS%ADp, CS%CDp, G, &
                 CS%vertvisc_CSp, CS%taux_bot, CS%tauy_bot)
@@ -1233,7 +1243,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, param_file, &
     ! dimensions as h, either m or kg m-3.  
     !   CS%eta(:,:) = 0.0 already from initialization.
     if (G%Boussinesq) then
-      do j=js,je ; do i=is,ie ; CS%eta(i,j) = -G%bathyT(i,j) ; enddo ; enddo
+      do j=js,je ; do i=is,ie ; CS%eta(i,j) = -G%bathyT(i,j) * G%m_to_H ; enddo ; enddo
     endif
     do k=1,nz ; do j=js,je ; do i=is,ie
        CS%eta(i,j) = CS%eta(i,j) + h(i,j,k)

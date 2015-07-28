@@ -76,7 +76,7 @@ module MOM_vert_friction
 
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator, only : diag_ctrl
-use MOM_checksums, only : uchksum, vchksum
+use MOM_checksums, only : uchksum, vchksum, hchksum
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, NOTE
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
@@ -569,7 +569,7 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
 
 ! Arguments: u - Zonal velocity, in m s-1.  Intent in.
 !  (in)      v - Meridional velocity, in m s-1.
-!  (in)      h - Layer thickness, in m.
+!  (in)      h - Layer thickness, in H.
 !  (in)      fluxes - A structure containing pointers to any possible
 !                     forcing fields.  Unused fields have NULL ptrs.
 !  (in)      visc - The vertical viscosity type, containing information about
@@ -893,12 +893,12 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
 
 
   if (CS%debug) then
-    call uchksum(CS%h_u,"vertvisc_coef h_u",G,haloshift=0)
-    call vchksum(CS%h_v,"vertvisc_coef h_v",G,haloshift=0)
+    call uchksum(CS%h_u*G%H_to_m,"vertvisc_coef h_u",G,haloshift=0)
+    call vchksum(CS%h_v*G%H_to_m,"vertvisc_coef h_v",G,haloshift=0)
     call uchksum(CS%a_u,"vertvisc_coef a_u",G,haloshift=0)
     call vchksum(CS%a_v,"vertvisc_coef a_v",G,haloshift=0)
-    if (allocated(hML_u)) call uchksum(hML_u,"vertvisc_coef hML_u",G,haloshift=0)
-    if (allocated(hML_v)) call vchksum(hML_v,"vertvisc_coef hML_v",G,haloshift=0)
+    if (allocated(hML_u)) call uchksum(hML_u*G%H_to_m,"vertvisc_coef hML_u",G,haloshift=0)
+    if (allocated(hML_v)) call vchksum(hML_v*G%H_to_m,"vertvisc_coef hML_v",G,haloshift=0)
   endif
 
 ! Offer diagnostic fields for averaging.

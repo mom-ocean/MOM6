@@ -435,7 +435,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
 ! Arguments: U_in - The initial (3-D) zonal velocity, in m s-1.
 !  (in)      V_in - The initial (3-D) meridional velocity, in m s-1.
 !  (in)      eta_in - The initial barotropic free surface height anomaly or
-!                     column mass anomaly, in m or kg m-2.
+!                     column mass anomaly, in H (m or kg m-2).
 !  (in)      dt - The time increment to integrate over.
 !  (in)      bc_accel_u - The zonal baroclinic accelerations, in m s-2.
 !  (in)      bc_accel_v - The meridional baroclinic accelerations, in m s-2.
@@ -572,11 +572,11 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
                   ! spacing, in H m.
   real, target, dimension(SZIW_(CS),SZJW_(CS)) :: &
     eta, &        ! The barotropic free surface height anomaly or column mass
-                  ! anomaly, in m or kg m-2.
-    eta_pred      ! A predictor value of eta, in m or kg m-2 like eta.
+                  ! anomaly, in H (m or kg m-2)
+    eta_pred      ! A predictor value of eta, in H (m or kg m-2) like eta.
   real, pointer, dimension(:,:) :: &
     eta_PF_BT     ! A pointer to the eta array (either eta or eta_pred) that
-                  ! determines the barotropic pressure force, in m or kg m-2.
+                  ! determines the barotropic pressure force, in H (m or kg m-2)
   real, dimension(SZIW_(CS),SZJW_(CS)) :: &
     eta_sum, &    ! eta summed across the timesteps, in m or kg m-2.
     eta_wtd, &    ! A weighted estimate used to calculate eta_out, in m or kg m-2.
@@ -1375,7 +1375,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
         ! Limit the sink (inward) correction to the amount of mass that is already
         ! inside the cell, plus any mass added by eta_source.
         Htot = eta(i,j)
-        if (G%Boussinesq) Htot = CS%bathyT(i,j) + eta(i,j)
+        if (G%Boussinesq) Htot = CS%bathyT(i,j)*G%m_to_H + eta(i,j)
 
         CS%eta_cor(i,j) = max(CS%eta_cor(i,j), -max(0.0,Htot + dt*CS%eta_source(i,j)))
       endif
@@ -1460,8 +1460,8 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   endif
 
   if (CS%debug) then
-    call uchksum(uhbt, "BT uhbt",CS%debug_BT_G,haloshift=0)
-    call vchksum(vhbt, "BT vhbt",CS%debug_BT_G,haloshift=0)
+    call uchksum(uhbt*G%H_to_m, "BT uhbt",CS%debug_BT_G,haloshift=0)
+    call vchksum(vhbt*G%H_to_m, "BT vhbt",CS%debug_BT_G,haloshift=0)
     call uchksum(ubt, "BT Initial ubt",CS%debug_BT_G,haloshift=0)
     call vchksum(vbt, "BT Initial vbt",CS%debug_BT_G,haloshift=0)
     call hchksum(G%H_to_kg_m2*eta, "BT Initial eta",CS%debug_BT_G,haloshift=0)
@@ -1476,8 +1476,8 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
     endif
     call uchksum(Cor_ref_u, "BT Cor_ref_u",CS%debug_BT_G,haloshift=0)
     call vchksum(Cor_ref_v, "BT Cor_ref_v",CS%debug_BT_G,haloshift=0)
-    call uchksum(uhbt0, "BT uhbt0",CS%debug_BT_G,haloshift=0)
-    call vchksum(vhbt0, "BT vhbt0",CS%debug_BT_G,haloshift=0)
+    call uchksum(uhbt0*G%H_to_m, "BT uhbt0",CS%debug_BT_G,haloshift=0)
+    call vchksum(vhbt0*G%H_to_m, "BT vhbt0",CS%debug_BT_G,haloshift=0)
     if (.not. use_BT_cont) then
       call uchksum(G%H_to_m*Datu, "BT Datu",CS%debug_BT_G,haloshift=1)
       call vchksum(G%H_to_m*Datv, "BT Datv",CS%debug_BT_G,haloshift=1)
@@ -1764,6 +1764,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
                      (eta_PF_BT(i+1,j)-eta_PF(i+1,j))*gtot_W(i+1,j)) * &
                     dgeo_de * CS%IdxCu(I,j)
       enddo ; enddo
+
       if (CS%dynamic_psurf) then
 !$OMP do
         do j=jsv,jev ; do I=isv-1,iev
@@ -1968,8 +1969,8 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
     endif
 
     if (CS%debug_bt) then
-      call uchksum(uhbt, "BT uhbt just after OBC",CS%debug_BT_G,haloshift=iev-ie)
-      call vchksum(vhbt, "BT vhbt just after OBC",CS%debug_BT_G,haloshift=iev-ie)
+      call uchksum(uhbt*G%H_to_m, "BT uhbt just after OBC",CS%debug_BT_G,haloshift=iev-ie)
+      call vchksum(vhbt*G%H_to_m, "BT vhbt just after OBC",CS%debug_BT_G,haloshift=iev-ie)
     endif
 
 !$OMP parallel do default(none) shared(isv,iev,jsv,jev,n,eta,eta_src,dtbt,CS,uhbt,vhbt,eta_wtd,wt_eta)
@@ -2200,7 +2201,7 @@ subroutine set_dtbt(G, CS, eta, pbce, BT_cont, gtot_est, SSH_add)
 !  (in)      CS - The control structure returned by a previous call to
 !                 barotropic_init.
 !  (in,opt)  eta - The barotropic free surface height anomaly or
-!                  column mass anomaly, in m or kg m-2.
+!                  column mass anomaly, in H
 !  (in,opt)  pbce - The baroclinic pressure anomaly in each layer
 !                   due to free surface height anomalies, in m2 H-1 s-2.
 !  (in,opt)  BT_cont - A structure with elements that describe the effective
@@ -2656,8 +2657,8 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, G, MS, halo, use_BT_cont, Datu, Datv,
         BT_OBC%Cg_u(I,j) = SQRT(G%g_prime(1)*(0.5* &
                                 (G%bathyT(i,j) + G%bathyT(i+1,j))))
         if (G%Boussinesq) then
-          BT_OBC%H_u(I,j) = 0.5*((G%bathyT(i,j) + eta(i,j)) + &
-                                 (G%bathyT(i+1,j) + eta(i+1,j)))
+          BT_OBC%H_u(I,j) = 0.5*((G%bathyT(i,j)*G%m_to_H + eta(i,j)) + &
+                                 (G%bathyT(i+1,j)*G%m_to_H + eta(i+1,j)))
         else
           BT_OBC%H_u(I,j) = 0.5*(eta(i,j) + eta(i+1,j))
         endif
@@ -2692,8 +2693,8 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, G, MS, halo, use_BT_cont, Datu, Datv,
         BT_OBC%Cg_v(i,J) = SQRT(G%g_prime(1)*(0.5* &
                                 (G%bathyT(i,j) + G%bathyT(i,j+1))))
         if (G%Boussinesq) then
-          BT_OBC%H_v(i,J) = 0.5*((G%bathyT(i,j) + eta(i,j)) + &
-                                 (G%bathyT(i,j+1) + eta(i,j+1)))
+          BT_OBC%H_v(i,J) = 0.5*((G%bathyT(i,j)*G%m_to_H + eta(i,j)) + &
+                                 (G%bathyT(i,j+1)*G%m_to_H + eta(i,j+1)))
         else
           BT_OBC%H_v(i,J) = 0.5*(eta(i,j) + eta(i,j+1))
         endif
@@ -3466,7 +3467,7 @@ subroutine find_face_areas(Datu, Datv, G, CS, MS, eta, halo, add_max)
 !                 barotropic_init.
 !  (in)      MS - A type that describes the memory sizes of the argument arrays.
 !  (in, opt) eta - The barotropic free surface height anomaly or
-!                  column mass anomaly, in m or kg m-2.
+!                  column mass anomaly, in H (m or kg m-2).
 !  (in, opt) halo - The halo size to use, default = 1.
 !  (in, opt) add_max - A value to add to the maximum depth (used to overestimate
 !                      the external wave speed) in m.
@@ -3486,14 +3487,14 @@ subroutine find_face_areas(Datu, Datv, G, CS, MS, eta, halo, add_max)
     if (G%Boussinesq) then
 !$OMP do
       do j=js-hs,je+hs ; do I=is-1-hs,ie+hs
-        H1 = CS%bathyT(i,j) + eta(i,j) ; H2 = CS%bathyT(i+1,j) + eta(i+1,j)
+        H1 = CS%bathyT(i,j)*G%m_to_H + eta(i,j) ; H2 = CS%bathyT(i+1,j)*G%m_to_H + eta(i+1,j)
         Datu(I,j) = 0.0 ; if ((H1 > 0.0) .and. (H2 > 0.0)) &
         Datu(I,j) = CS%dy_Cu(I,j) * (2.0 * H1 * H2) / (H1 + H2)
 !       Datu(I,j) = CS%dy_Cu(I,j) * 0.5 * (H1 + H2)
       enddo ; enddo
 !$OMP do
       do J=js-1-hs,je+hs ; do i=is-hs,ie+hs
-        H1 = CS%bathyT(i,j) + eta(i,j) ; H2 = CS%bathyT(i,j+1) + eta(i,j+1)
+        H1 = CS%bathyT(i,j)*G%m_to_H + eta(i,j) ; H2 = CS%bathyT(i,j+1)*G%m_to_H + eta(i,j+1)
         Datv(i,J) = 0.0 ; if ((H1 > 0.0) .and. (H2 > 0.0)) &
         Datv(i,J) = CS%dx_Cv(i,J) * (2.0 * H1 * H2) / (H1 + H2)
 !       Datv(i,J) = CS%dy_v(i,J) * 0.5 * (H1 + H2)
@@ -3596,7 +3597,7 @@ subroutine bt_mass_source(h, eta, fluxes, set_cor, dt_therm, dt_since_therm, &
   do j=js,je
     do i=is,ie ; h_tot(i) = h(i,j,1) ; enddo
     if (G%Boussinesq) then
-      do i=is,ie ; eta_h(i) = h(i,j,1) - G%bathyT(i,j) ; enddo
+      do i=is,ie ; eta_h(i) = h(i,j,1) - G%bathyT(i,j)*G%m_to_H ; enddo
     else
       do i=is,ie ; eta_h(i) = h(i,j,1) ; enddo
     endif
