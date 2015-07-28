@@ -601,7 +601,7 @@ subroutine post_data_3d(diag_field_id, field, diag_cs, is_static, mask)
 
   integer,           intent(in) :: diag_field_id
   real,              intent(in) :: field(:,:,:)
-  type(diag_ctrl), target, intent(inout) :: diag_cs
+  type(diag_ctrl), target, intent(in) :: diag_cs
   logical, optional, intent(in) :: is_static
   real,    optional, intent(in) :: mask(:,:,:)
 
