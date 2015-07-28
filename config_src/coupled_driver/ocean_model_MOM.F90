@@ -37,7 +37,7 @@ module ocean_model_mod
 use MOM, only : initialize_MOM, step_MOM, MOM_control_struct, MOM_end
 use MOM, only : calculate_surface_state
 use MOM_constants, only : CELSIUS_KELVIN_OFFSET
-use MOM_diag_mediator, only : enable_averaging, disable_averaging
+use MOM_diag_mediator, only : diag_ctrl, enable_averaging, disable_averaging
 use MOM_diag_mediator, only : diag_mediator_close_registration, diag_mediator_end
 use MOM_domains, only : pass_vector, AGRID, BGRID_NE, CGRID_NE
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe
@@ -502,6 +502,7 @@ subroutine ocean_model_end(Ocean_sfc, Ocean_state, Time)
   type(ocean_public_type),           intent(inout) :: Ocean_sfc
   type(ocean_state_type),            pointer       :: Ocean_state
   type(time_type),                   intent(in)    :: Time
+
 !   This subroutine terminates the model run, saving the ocean state in a
 ! restart file and deallocating any data associated with the ocean.
 
@@ -512,7 +513,7 @@ subroutine ocean_model_end(Ocean_sfc, Ocean_state, Time)
 !  (in)      Time - The model time, used for writing restarts.
 
   call ocean_model_save_restart(Ocean_state, Time)
-  call diag_mediator_end(Time)
+  call diag_mediator_end(Time, Ocean_state%MOM_CSp%diag)
   call MOM_end(Ocean_state%MOM_CSp)
   if (Ocean_state%use_ice_shelf) call ice_shelf_end(Ocean_state%Ice_shelf_CSp)
 end subroutine ocean_model_end

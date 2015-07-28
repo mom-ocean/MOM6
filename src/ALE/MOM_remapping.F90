@@ -534,15 +534,22 @@ subroutine remapping_core( CS, n0, h0, u0, n1, dx, u1 )
     if (k<=n0) then; hTmp = h0(k); else; hTmp = 0.; endif
     z0 = z0 + hTmp ; z1 = z1 + ( hTmp + ( dx(k+1) - dx(k) ) )
   enddo
+  ! Maximum error based on guess at maximum roundoff
   if (abs(totalHU2-totalHU0) > (err0+err2)*max(real(n0), real(n1)) .and. (err0+err2)/=0.) then
-    write(0,*) 'h0=',h0
-    write(0,*) 'hf=',h0(1:n1)+dx(2:n1+1)-dx(1:n1)
-    write(0,*) 'u0=',u0
-    write(0,*) 'u1=',u1
-    write(0,*) 'total HU0,HUf,f-0=',totalHU0,totalHU2,totalHU2-totalHU0
-    write(0,*) 'err0,errF=',err0,err2
-    call MOM_error( FATAL, 'MOM_remapping, remapping_core: '//&
-         'Total stuff on h0 and hF differ by more than roundoff' )
+    ! Maximum relative error
+    if (abs(totalHU2-totalHU0) / totalHU2 > 1e-09) then
+      ! Maximum absolute error
+      if (abs(totalHU2-totalHU0) > 1e-18) then
+        write(0,*) 'h0=',h0
+        write(0,*) 'hf=',h0(1:n1)+dx(2:n1+1)-dx(1:n1)
+        write(0,*) 'u0=',u0
+        write(0,*) 'u1=',u1
+        write(0,*) 'total HU0,HUf,f-0=',totalHU0,totalHU2,totalHU2-totalHU0
+        write(0,*) 'err0,errF=',err0,err2
+        call MOM_error( FATAL, 'MOM_remapping, remapping_core: '//&
+             'Total stuff on h0 and hF differ by more than maximum errors' )
+      endif
+    endif
   endif
 #endif
 

@@ -416,7 +416,7 @@ program SHELF_main
     close(unit)
   endif
 
-  call diag_mediator_end(Time, end_diag_manager=.true.)
+  call diag_mediator_end(Time, ice_shelf_CSp%diag, end_diag_manager=.true.)
   call cpu_clock_end(termClock)
 
   call io_infra_end ; call MOM_infra_end
