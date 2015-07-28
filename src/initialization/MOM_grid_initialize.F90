@@ -1041,10 +1041,10 @@ subroutine set_grid_metrics_spherical(G, param_file)
     latitude = G%south_lat + dLat*(REAL(j-G%jsg)+0.5)
     G%gridLatT(j) = MIN(MAX(latitude,-90.),90.)
   enddo
-  do i=G%IegB,G%IegB
+  do i=G%IsgB,G%IegB
     G%gridLonB(I) = G%west_lon + dLon*(REAL(I-(G%isg-1)))
   enddo
-  do i=G%ieg,G%ieg
+  do i=G%isg,G%ieg
     G%gridLonT(i) = G%west_lon + dLon*(REAL(i-G%isg)+0.5)
   enddo
 
