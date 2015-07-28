@@ -780,6 +780,13 @@ subroutine diag_update_target_grids(diag_cs)
   nz_src = size(diag_cs%h, 3)
   G => diag_cs%G
 
+  ! The interface positions for z remapping were not provided, so don't do
+  ! anything. If z remapping of diagnostics is requested then an error will
+  ! be triggered on post(). See param DIAG_REMAP_Z_GRID_DEF
+  if (.not. allocated(diag_cs%zi_remap)) then
+    return
+  endif
+
   if (.not. diag_cs%remapping_initialized) then
     call assert(allocated(diag_cs%zi_remap), &
                 'update_diag_target_grids: Remapping axis not initialized')
