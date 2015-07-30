@@ -1498,6 +1498,11 @@ subroutine compute_global_grid_integrals(G)
     G%areaT_global = G%areaT_global + ( G%areaT(i,j) * G%mask2dT(i,j) )
   enddo ; enddo
   call sum_across_PEs( G%areaT_global )
+
+  if (G%areaT_global == 0.0) &
+    call MOM_error(FATAL, "compute_global_grid_integrals: "//&
+                    "zero ocean area (check topography?)")
+
   G%IareaT_global = 1. / G%areaT_global 
 end subroutine compute_global_grid_integrals
 ! -----------------------------------------------------------------------------
