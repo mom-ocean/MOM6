@@ -603,12 +603,15 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
         do j=js,je ; do i=is,ie
           FatH = 0.25*( (abs(G%CoriolisBu(I-1,J-1)) + abs(G%CoriolisBu(I,J))) &
                        +(abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J-1))) )
-          FatH = FatH ** MEKE%backscatter_Ro_pow
           Shear_mag = sqrt(sh_xx(i,j)*sh_xx(i,j) + &
             0.25*((sh_xy(I-1,J-1)*sh_xy(I-1,J-1) + sh_xy(I,J)*sh_xy(I,J)) + &
                   (sh_xy(I-1,J)*sh_xy(I-1,J) + sh_xy(I,J-1)*sh_xy(I,J-1))))
-          Shear_mag = ( Shear_mag ** MEKE%backscatter_Ro_pow ) + 1.e-30
-          RoScl = Shear_mag / ( FatH + MEKE%backscatter_Ro_c * Shear_mag ) ! = 1 - f/(f+c.D)
+          FatH = FatH ** MEKE%backscatter_Ro_pow ! f^n
+          Shear_mag = ( ( Shear_mag ** MEKE%backscatter_Ro_pow ) + 1.e-30 ) &
+                      * MEKE%backscatter_Ro_c ! c * D^n
+          ! The Rossby number function is g(Ro) = 1/(1+c.Ro^n)
+          ! RoScl = 1 - g(Ro)
+          RoScl = Shear_mag / ( FatH + Shear_mag ) ! = 1 - f^n/(f^n+c*D^n)
           MEKE%mom_src(i,j) = MEKE%mom_src(i,j) +                                     &
                            G%H_to_kg_m2 * (                                           &
                 ((str_xx(i,j)-RoScl*bhstr_xx(i,j))*(u(i,j,k)-u(i-1,j,k))*G%IdxT(i,j)  &
