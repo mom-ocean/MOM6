@@ -31,7 +31,7 @@ module MOM_get_input
 
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_file_parser, only : open_param_file, param_file_type
-use MOM_io, only : file_exists, close_file, slasher
+use MOM_io, only : file_exists, close_file, slasher, ensembler
 use MOM_io, only : open_namelist_file, check_nml_error
 
 implicit none ; private
@@ -68,6 +68,7 @@ subroutine Get_MOM_Input(param_file, dirs, check_params)
     restart_output_dir = ' ', & ! Directory into which to write restart files.
     input_filename  = ' '       ! A string that indicates the input files or how
                                 ! the run segment should be started.
+  character(len=240) :: output_dir
   integer :: unit, io, ierr, valid_param_files
 
   namelist /MOM_input_nml/ output_directory, input_filename, parameter_filename, &
@@ -86,18 +87,19 @@ subroutine Get_MOM_Input(param_file, dirs, check_params)
 10 call close_file(unit)
 
   if (present(dirs)) then
-    dirs%output_directory = slasher(output_directory)
-    dirs%restart_output_dir = slasher(restart_output_dir)
-    dirs%restart_input_dir = slasher(restart_input_dir)
-    dirs%input_filename = input_filename
+    dirs%output_directory = slasher(ensembler(output_directory))
+    dirs%restart_output_dir = slasher(ensembler(restart_output_dir))
+    dirs%restart_input_dir = slasher(ensembler(restart_input_dir))
+    dirs%input_filename = ensembler(input_filename)
   endif
 
   if (present(param_file)) then
+    output_dir = slasher(ensembler(output_directory))
     valid_param_files = 0
     do io = 1, npf
       if (len_trim(trim(parameter_filename(io))) > 0) then
-        call open_param_file(trim(parameter_filename(io)), param_file, &
-                             check_params)
+        call open_param_file(ensembler(parameter_filename(io)), param_file, &
+                             check_params, doc_file_dir=output_dir)
         valid_param_files = valid_param_files + 1
       endif
     enddo
