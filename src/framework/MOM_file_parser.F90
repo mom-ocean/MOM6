@@ -51,7 +51,7 @@ use MOM_error_handler, only : is_root_pe, stdlog, stdout
 use MOM_time_manager, only : set_time, get_time, time_type, get_ticks_per_second
 use MOM_document, only : doc_param, doc_module, doc_init, doc_end, doc_type
 use MOM_document, only : doc_openBlock, doc_closeBlock
-use MOM_string_functions, only : left_int, left_ints
+use MOM_string_functions, only : left_int, left_ints, slasher
 use MOM_string_functions, only : left_real, left_reals
 
 implicit none ; private
@@ -139,14 +139,16 @@ end interface
 
 contains
 
-subroutine open_param_file(filename, CS, checkable, component)
+subroutine open_param_file(filename, CS, checkable, component, doc_file_dir)
   character(len=*),           intent(in) :: filename
   type(param_file_type),   intent(inout) :: CS
   logical,          optional, intent(in) :: checkable
   character(len=*), optional, intent(in) :: component
+  character(len=*), optional, intent(in) :: doc_file_dir
   
   logical :: file_exists, unit_in_use, Netcdf_file, may_check
   integer :: ios, iounit, strlen, i
+  character(len=240) :: doc_path
   type(parameter_block), pointer :: block
 
   may_check = .true. ; if (present(checkable)) may_check = checkable
@@ -237,16 +239,20 @@ subroutine open_param_file(filename, CS, checkable, component)
   CS%stdlog = stdlog() ; CS%stdout = stdout()
   CS%log_open = (stdlog() > 0)
 
+  doc_path = CS%doc_file
   if (len_trim(CS%doc_file) > 0) then
     CS%complete_doc = complete_doc_default
     call read_param(CS, "COMPLETE_DOCUMENTATION", CS%complete_doc)
     CS%minimal_doc = minimal_doc_default
     call read_param(CS, "MINIMAL_DOCUMENTATION", CS%minimal_doc)
+    if (present(doc_file_dir)) then ; if (len_trim(doc_file_dir) > 0) then
+      doc_path = trim(slasher(doc_file_dir))//trim(CS%doc_file)
+    endif ; endif
   else
     CS%complete_doc = .false.
     CS%minimal_doc = .false.
   endif
-  call doc_init(CS%doc_file, CS%doc, CS%minimal_doc, CS%complete_doc)
+  call doc_init(doc_path, CS%doc, CS%minimal_doc, CS%complete_doc)
 
 end subroutine open_param_file
 

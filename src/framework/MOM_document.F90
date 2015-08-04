@@ -669,7 +669,7 @@ subroutine open_doc_file(doc)
 
   logical :: opened, new_file
   integer :: ios 
-  character(len=120) :: fileName
+  character(len=240) :: fileName
 
   if (.not. (is_root_pe() .and. associated(doc))) return
 
@@ -677,7 +677,7 @@ subroutine open_doc_file(doc)
     new_file = .true. ; if (doc%unitAll /= -1) new_file = .false.
     doc%unitAll = find_unused_unit_number()
 
-    write(fileName(1:120),'(a)') trim(doc%docFileBase)//'.all'
+    write(fileName(1:240),'(a)') trim(doc%docFileBase)//'.all'
     if (new_file) then
       open(doc%unitAll, file=trim(fileName), access='SEQUENTIAL', form='FORMATTED', &
            action='WRITE', status='REPLACE', iostat=ios)
@@ -698,7 +698,7 @@ subroutine open_doc_file(doc)
     new_file = .true. ; if (doc%unitShort /= -1) new_file = .false.
     doc%unitShort = find_unused_unit_number()
 
-    write(fileName(1:120),'(a)') trim(doc%docFileBase)//'.short'
+    write(fileName(1:240),'(a)') trim(doc%docFileBase)//'.short'
     if (new_file) then
       open(doc%unitShort, file=trim(fileName), access='SEQUENTIAL', form='FORMATTED', &
            action='WRITE', status='REPLACE', iostat=ios)
@@ -719,7 +719,7 @@ subroutine open_doc_file(doc)
     new_file = .true. ; if (doc%unitLayout /= -1) new_file = .false.
     doc%unitLayout = find_unused_unit_number()
 
-    write(fileName(1:120),'(a)') trim(doc%docFileBase)//'.layout'
+    write(fileName(1:240),'(a)') trim(doc%docFileBase)//'.layout'
     if (new_file) then
       open(doc%unitLayout, file=trim(fileName), access='SEQUENTIAL', form='FORMATTED', &
            action='WRITE', status='REPLACE', iostat=ios)
