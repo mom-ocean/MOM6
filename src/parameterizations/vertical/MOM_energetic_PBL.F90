@@ -281,6 +281,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, CS, &
   real :: TKE_reduc ! The fraction by which TKE and other energy fields are
                     ! reduced to support mixing, nondim. between 0 and 1.
   real :: tot_TKE   ! The total TKE available to support mixing at interface K, in J m-2.
+  real :: TKE_here  ! The total TKE at this point in the algorithm, in J m-2.
   real :: dT_km1_t2 ! A diffusivity-independent term related to the temperature
                     ! change in the layer above the interface, in K.
   real :: dS_km1_t2 ! A diffusivity-independent term related to the salinity
@@ -409,7 +410,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, CS, &
 !$OMP                                   dMKE_src_dK,TKE_left,use_Newt,           &
 !$OMP                                   dKddt_h_Newt,Kddt_h_Newt,Kddt_h_next,    &
 !$OMP                                   dKddt_h,Te,Se,Hsfc_used,dS_to_dPE_a,     &
-!$OMP                                   dMKE_max)
+!$OMP                                   dMKE_max,TKE_here)
   do j=js,je
     ! Copy the thicknesses and other fields to 2-d arrays.
     do k=1,nz ; do i=is,ie
@@ -447,20 +448,21 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, CS, &
       mech_TKE(i) = (dt*CS%mstar*G%Rho0)*((U_Star**3))
       conv_PErel(i) = 0.0
 
-      if (TKE_forced(i,j,1) <= 0.0) then
-        mech_TKE(i) = mech_TKE(i) + TKE_forced(i,j,1)
-      else
-        conv_PErel(i) = conv_PErel(i) + TKE_forced(i,j,1)
-      endif
-
       if (CS%TKE_diagnostics) then
-        CS%diag_TKE_wind(i,j) = CS%diag_TKE_wind(i,j) + &
-            mech_TKE(i) * IdtdR0
+        CS%diag_TKE_wind(i,j) = CS%diag_TKE_wind(i,j) + mech_TKE(i) * IdtdR0
         if (TKE_forced(i,j,1) <= 0.0) then
-          CS%diag_TKE_forcing(i,j) = CS%diag_TKE_forcing(i,j) + TKE_forced(i,j,1) * IdtdR0
+          CS%diag_TKE_forcing(i,j) = CS%diag_TKE_forcing(i,j) + &
+                                     max(-mech_TKE(i), TKE_forced(i,j,1)) * IdtdR0
         else
           CS%diag_TKE_forcing(i,j) = CS%diag_TKE_forcing(i,j) + CS%nstar*TKE_forced(i,j,1) * IdtdR0
         endif
+      endif
+
+      if (TKE_forced(i,j,1) <= 0.0) then
+        mech_TKE(i) = mech_TKE(i) + TKE_forced(i,j,1)
+        if (mech_TKE(i) < 0.0) mech_TKE(i) = 0.0
+      else
+        conv_PErel(i) = conv_PErel(i) + TKE_forced(i,j,1)
       endif
 
 !    endif ; enddo
@@ -527,7 +529,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, CS, &
         mech_TKE(i) = mech_TKE(i) * exp_kh
 
 
-        !   Accumlate any convectively released potential energy to contribute
+        !   Accumulate any convectively released potential energy to contribute
         ! to wstar and to drive penetrating convection.
         if (TKE_forced(i,j,k) > 0.0) then
           conv_PErel(i) = conv_PErel(i) + TKE_forced(i,j,k)
@@ -543,7 +545,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, CS, &
         !  Determine the total energy
         nstar_FC = CS%nstar
         if (CS%nstar * conv_PErel(i) > 0.0) then
-          ! Here nstar is a function of the natural Rossby number  0.2/(1+0.2/Ro), based
+          ! Here nstar is a function of the natural Rossby number 0.2/(1+0.2/Ro), based
           ! on a curve fit from the data of Wang (GRL, 2003).
           ! Note:         Ro = 1.0 / sqrt(0.5 * dt * Rho0 * (absf*htot(i))**3 / conv_PErel(i))
           nstar_FC = CS%nstar * conv_PErel(i) / (conv_PErel(i) + 0.2 * &
@@ -621,7 +623,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, CS, &
           dT_to_dColHt_a(i,k) = dT_to_dColHt(i,k)
           dS_to_dColHt_a(i,k) = dS_to_dColHt(i,k)
 
-        else ! tot_TKE > 0.0 or this is potentially convectively unstable profile.
+        else ! tot_TKE > 0.0 or this is a potentially convectively unstable profile.
           sfc_disconnect = .false.
 
           ! Precalculate some more temporary expressions that are independent of
@@ -658,12 +660,17 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, CS, &
           endif
 
           ! At this point, Kddt_h(K) will be unknown because its value may depend
-          ! on how much energy is available.
-          vstar = CS%vstar_scale_coef * (I_dtmrho*(mech_TKE(i) + CS%wstar_ustar_coef*conv_PErel(i)))**C1_3
+          ! on how much energy is available.  mech_TKE might be negative due to
+          ! contributions from TKE_forced.
           h_tt = htot(i) + h_tt_min
-          Kd_guess0 = vstar * vonKar * ((h_tt*hb_hs(i,K))*vstar) / &
-                                       ((CS%Ekman_scale_coef * absf(i)) * (h_tt*hb_hs(i,K)) + vstar)
-
+          TKE_here = mech_TKE(i) + CS%wstar_ustar_coef*conv_PErel(i)
+          if (TKE_here > 0.0) then
+            vstar = CS%vstar_scale_coef * (I_dtmrho*TKE_here)**C1_3
+            Kd_guess0 = vstar * vonKar * ((h_tt*hb_hs(i,K))*vstar) / &
+                ((CS%Ekman_scale_coef * absf(i)) * (h_tt*hb_hs(i,K)) + vstar)
+          else
+            vstar = 0.0 ; Kd_guess0 = 0.0
+          endif
           Kddt_h_g0 = Kd_guess0*dt_h
 
           call find_PE_chg(Kddt_h_g0, h(i,k), b_den_1(i), dTe_term, dSe_term, &
@@ -680,10 +687,14 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, CS, &
             ! This column is convectively unstable.
             if (PE_chg_max <= 0.0) then
               ! Does MKE_src need to be included in the calculation of vstar here?
-              vstar = CS%vstar_scale_coef * &
-                      (I_dtmrho*(mech_TKE(i) + CS%wstar_ustar_coef*(conv_PErel(i)-PE_chg_max)))**C1_3
-              Kd(i,k) = vstar * vonKar * ((h_tt*hb_hs(i,K))*vstar) / &
-                                         ((CS%Ekman_scale_coef * absf(i)) * (h_tt*hb_hs(i,K)) + vstar)
+              TKE_here = mech_TKE(i) + CS%wstar_ustar_coef*(conv_PErel(i)-PE_chg_max)
+              if (TKE_here > 0.0) then
+                vstar = CS%vstar_scale_coef * (I_dtmrho*TKE_here)**C1_3
+                Kd(i,k) = vstar * vonKar * ((h_tt*hb_hs(i,K))*vstar) / &
+                    ((CS%Ekman_scale_coef * absf(i)) * (h_tt*hb_hs(i,K)) + vstar)
+              else
+                vstar = 0.0 ; Kd(i,k) = 0.0
+              endif
 
               call find_PE_chg(Kd(i,k)*dt_h, h(i,k), b_den_1(i), dTe_term, dSe_term, &
                          dT_km1_t2, dS_km1_t2, dT_to_dPE(i,k), dS_to_dPE(i,k), &
