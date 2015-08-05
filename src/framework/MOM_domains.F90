@@ -40,7 +40,7 @@ use mpp_domains_mod, only : group_pass_type => mpp_group_update_type
 use mpp_domains_mod, only : mpp_reset_group_update_field
 use mpp_domains_mod, only : mpp_group_update_initialized
 use mpp_domains_mod, only : mpp_start_group_update, mpp_complete_group_update
-use mpp_domains_mod, only : compute_block_extent => mpp_compute_block_extent 
+use mpp_domains_mod, only : compute_block_extent => mpp_compute_block_extent
 use mpp_parameter_mod, only : AGRID, BGRID_NE, CGRID_NE, SCALAR_PAIR, BITWISE_EXACT_SUM, CORNER
 use mpp_parameter_mod, only : To_East => WUPDATE, To_West => EUPDATE
 use mpp_parameter_mod, only : To_North => SUPDATE, To_South => NUPDATE
@@ -213,8 +213,8 @@ function pass_var_start_2d(array, MOM_dom, sideflag, position, complete)
 !  (in)      position - An optional argument indicating the position.  This is
 !                       may be CORNER, but is CENTER by default.
 !  (in)      complete - An optional argument indicating whether the halo updates
-!                       should be initiated immediately or wait for second 
-!                       pass_..._start call.  Omitting complete is the same as 
+!                       should be initiated immediately or wait for second
+!                       pass_..._start call.  Omitting complete is the same as
 !                       setting complete to .true.
 !  (return value) - The integer index for this update.
   integer :: dirflag
@@ -245,8 +245,8 @@ function pass_var_start_3d(array, MOM_dom, sideflag, position, complete)
 !  (in)      position - An optional argument indicating the position.  This is
 !                       may be CORNER, but is CENTER by default.
 !  (in)      complete - An optional argument indicating whether the halo updates
-!                       should be initiated immediately or wait for second 
-!                       pass_..._start call.  Omitting complete is the same as 
+!                       should be initiated immediately or wait for second
+!                       pass_..._start call.  Omitting complete is the same as
 !                       setting complete to .true.
 !  (return value) - The integer index for this update.
   integer :: dirflag
@@ -324,7 +324,7 @@ subroutine pass_vector_2d(u_cmpt, v_cmpt, MOM_dom, direction, stagger, complete)
 ! Arguments: u_cmpt - The nominal zonal (u) component of the vector pair which
 !                     is having its halos points exchanged.
 !  (inout)   v_cmpt - The nominal meridional (v) component of the vector pair
-!                     which is having its halos points exchanged. 
+!                     which is having its halos points exchanged.
 !  (in)      MOM_dom - The MOM_domain_type containing the mpp_domain needed to
 !                      determine where data should be sent.
 !  (in)      direction - An optional integer indicating which directions the
@@ -367,14 +367,14 @@ subroutine fill_vector_symmetric_edges_2d(u_cmpt, v_cmpt, MOM_dom, stagger, scal
 ! Arguments: u_cmpt - The nominal zonal (u) component of the vector pair which
 !                     is having its halos points exchanged.
 !  (inout)   v_cmpt - The nominal meridional (v) component of the vector pair
-!                     which is having its halos points exchanged. 
+!                     which is having its halos points exchanged.
 !  (in)      MOM_dom - The MOM_domain_type containing the mpp_domain needed to
 !                      determine where data should be sent.
 !  (in)      stagger - An optional flag, which may be one of A_GRID, BGRID_NE,
 !                      or CGRID_NE, indicating where the two components of the
 !                      vector are discretized.  Omitting stagger is the same as
 !                      setting it to CGRID_NE.
-!  (in)      scalar -  An optional argument indicating whether 
+!  (in)      scalar -  An optional argument indicating whether
 
   integer :: stagger_local
   integer :: dirflag
@@ -443,7 +443,7 @@ subroutine pass_vector_3d(u_cmpt, v_cmpt, MOM_dom, direction, stagger, complete)
 ! Arguments: u_cmpt - The nominal zonal (u) component of the vector pair which
 !                     is having its halos points exchanged.
 !  (inout)   v_cmpt - The nominal meridional (v) component of the vector pair
-!                     which is having its halos points exchanged. 
+!                     which is having its halos points exchanged.
 !  (in)      MOM_dom - The MOM_domain_type containing the mpp_domain needed to
 !                      determine where data should be sent.
 !  (in)      direction - An optional integer indicating which directions the
@@ -488,7 +488,7 @@ function pass_vector_start_2d(u_cmpt, v_cmpt, MOM_dom, direction, stagger, compl
 ! Arguments: u_cmpt - The nominal zonal (u) component of the vector pair which
 !                     is having its halos points exchanged.
 !  (inout)   v_cmpt - The nominal meridional (v) component of the vector pair
-!                     which is having its halos points exchanged. 
+!                     which is having its halos points exchanged.
 !  (in)      MOM_dom - The MOM_domain_type containing the mpp_domain needed to
 !                      determine where data should be sent.
 !  (in)      direction - An optional integer indicating which directions the
@@ -504,8 +504,8 @@ function pass_vector_start_2d(u_cmpt, v_cmpt, MOM_dom, direction, stagger, compl
 !                      vector are discretized.  Omitting stagger is the same as
 !                      setting it to CGRID_NE.
 !  (in)      complete - An optional argument indicating whether the halo updates
-!                       should be initiated immediately or wait for second 
-!                       pass_..._start call.  Omitting complete is the same as 
+!                       should be initiated immediately or wait for second
+!                       pass_..._start call.  Omitting complete is the same as
 !                       setting complete to .true.
 !  (return value) - The integer index for this update.
   integer :: stagger_local
@@ -532,7 +532,7 @@ function pass_vector_start_3d(u_cmpt, v_cmpt, MOM_dom, direction, stagger, compl
 ! Arguments: u_cmpt - The nominal zonal (u) component of the vector pair which
 !                     is having its halos points exchanged.
 !  (inout)   v_cmpt - The nominal meridional (v) component of the vector pair
-!                     which is having its halos points exchanged. 
+!                     which is having its halos points exchanged.
 !  (in)      MOM_dom - The MOM_domain_type containing the mpp_domain needed to
 !                      determine where data should be sent.
 !  (in)      direction - An optional integer indicating which directions the
@@ -548,8 +548,8 @@ function pass_vector_start_3d(u_cmpt, v_cmpt, MOM_dom, direction, stagger, compl
 !                      vector are discretized.  Omitting stagger is the same as
 !                      setting it to CGRID_NE.
 !  (in)      complete - An optional argument indicating whether the halo updates
-!                       should be initiated immediately or wait for second 
-!                       pass_..._start call.  Omitting complete is the same as 
+!                       should be initiated immediately or wait for second
+!                       pass_..._start call.  Omitting complete is the same as
 !                       setting complete to .true.
 !  (return value) - The integer index for this update.
   integer :: stagger_local
@@ -577,7 +577,7 @@ subroutine pass_vector_complete_2d(id_update, u_cmpt, v_cmpt, MOM_dom, direction
 !  (inout)   u_cmpt - The nominal zonal (u) component of the vector pair which
 !                     is having its halos points exchanged.
 !  (inout)   v_cmpt - The nominal meridional (v) component of the vector pair
-!                     which is having its halos points exchanged. 
+!                     which is having its halos points exchanged.
 !  (in)      MOM_dom - The MOM_domain_type containing the mpp_domain needed to
 !                      determine where data should be sent.
 !  (in)      direction - An optional integer indicating which directions the
@@ -618,7 +618,7 @@ subroutine pass_vector_complete_3d(id_update, u_cmpt, v_cmpt, MOM_dom, direction
 !  (inout)   u_cmpt - The nominal zonal (u) component of the vector pair which
 !                     is having its halos points exchanged.
 !  (inout)   v_cmpt - The nominal meridional (v) component of the vector pair
-!                     which is having its halos points exchanged. 
+!                     which is having its halos points exchanged.
 !  (in)      MOM_dom - The MOM_domain_type containing the mpp_domain needed to
 !                      determine where data should be sent.
 !  (in)      direction - An optional integer indicating which directions the
@@ -654,8 +654,8 @@ subroutine create_var_group_pass_2d(group, array, MOM_dom, sideflag, position)
   type(MOM_domain_type),  intent(inout) :: MOM_dom
   integer,      optional, intent(in)    :: sideflag
   integer,      optional, intent(in)    :: position
-! Arguments: 
-!  (inout)   group - The data type that store information for group update. 
+! Arguments:
+!  (inout)   group - The data type that store information for group update.
 !                    This data will be used in do_group_pass.
 !  (inout)   array - The array which is having its halos points exchanged.
 !  (in)      MOM_dom - The MOM_domain_type containing the mpp_domain needed to
@@ -677,7 +677,7 @@ subroutine create_var_group_pass_2d(group, array, MOM_dom, sideflag, position)
     call mpp_reset_group_update_field(group,array)
   else
     call mpp_create_group_update(group, array, MOM_dom%mpp_domain, flags=dirflag, &
-                                 position=position) 
+                                 position=position)
   endif
 
 end subroutine create_var_group_pass_2d
@@ -688,8 +688,8 @@ subroutine create_var_group_pass_3d(group, array, MOM_dom, sideflag, position)
   type(MOM_domain_type),  intent(inout) :: MOM_dom
   integer,      optional, intent(in)    :: sideflag
   integer,      optional, intent(in)    :: position
-! Arguments: 
-!  (inout)   group - The data type that store information for group update. 
+! Arguments:
+!  (inout)   group - The data type that store information for group update.
 !                    This data will be used in do_group_pass.
 !  (inout)   array - The array which is having its halos points exchanged.
 !  (in)      MOM_dom - The MOM_domain_type containing the mpp_domain needed to
@@ -723,13 +723,13 @@ subroutine create_vector_group_pass_2d(group, u_cmpt, v_cmpt, MOM_dom, direction
   type(MOM_domain_type),  intent(inout) :: MOM_dom
   integer,      optional, intent(in)    :: direction
   integer,      optional, intent(in)    :: stagger
-! Arguments: 
-!  (inout)   group - The data type that store information for group update. 
+! Arguments:
+!  (inout)   group - The data type that store information for group update.
 !                    This data will be used in do_group_pass.
 !  (inout)   u_cmpt - The nominal zonal (u) component of the vector pair which
 !                     is having its halos points exchanged.
 !  (inout)   v_cmpt - The nominal meridional (v) component of the vector pair
-!                     which is having its halos points exchanged. 
+!                     which is having its halos points exchanged.
 !  (in)      MOM_dom - The MOM_domain_type containing the mpp_domain needed to
 !                      determine where data should be sent.
 !  (in)      direction - An optional integer indicating which directions the
@@ -768,13 +768,13 @@ subroutine create_vector_group_pass_3d(group, u_cmpt, v_cmpt, MOM_dom, direction
   type(MOM_domain_type),  intent(inout) :: MOM_dom
   integer,      optional, intent(in)    :: direction
   integer,      optional, intent(in)    :: stagger
-! Arguments: 
-!  (inout)   group - The data type that store information for group update. 
+! Arguments:
+!  (inout)   group - The data type that store information for group update.
 !                    This data will be used in do_group_pass.
 !  (inout)   u_cmpt - The nominal zonal (u) component of the vector pair which
 !                     is having its halos points exchanged.
 !  (inout)   v_cmpt - The nominal meridional (v) component of the vector pair
-!                     which is having its halos points exchanged. 
+!                     which is having its halos points exchanged.
 !  (in)      MOM_dom - The MOM_domain_type containing the mpp_domain needed to
 !                      determine where data should be sent.
 !  (in)      direction - An optional integer indicating which directions the
@@ -813,8 +813,8 @@ subroutine do_group_pass(group, MOM_dom)
   type(MOM_domain_type), intent(inout) :: MOM_dom
   real                                 :: d_type
 
-! Arguments: 
-!  (inout)   group - The data type that store information for group update. 
+! Arguments:
+!  (inout)   group - The data type that store information for group update.
 !  (in)      MOM_dom - The MOM_domain_type containing the mpp_domain needed to
 !                      determine where data should be sent.
 
@@ -827,8 +827,8 @@ subroutine start_group_pass(group, MOM_dom)
   type(MOM_domain_type), intent(inout) :: MOM_dom
   real                                 :: d_type
 
-! Arguments: 
-!  (inout)   group - The data type that store information for group update. 
+! Arguments:
+!  (inout)   group - The data type that store information for group update.
 !  (in)      MOM_dom - The MOM_domain_type containing the mpp_domain needed to
 !                      determine where data should be sent.
 
@@ -841,8 +841,8 @@ subroutine complete_group_pass(group, MOM_dom)
   type(MOM_domain_type), intent(inout) :: MOM_dom
   real                                 :: d_type
 
-! Arguments: 
-!  (inout)   group - The data type that store information for group update. 
+! Arguments:
+!  (inout)   group - The data type that store information for group update.
 !  (in)      MOM_dom - The MOM_domain_type containing the mpp_domain needed to
 !                      determine where data should be sent.
 
@@ -864,7 +864,7 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
   integer, dimension(2), optional, intent(inout) :: min_halo
   character(len=*),      optional, intent(in)    :: domain_name
   character(len=*),      optional, intent(in)    :: include_name
-  
+
 ! Arguments: MOM_dom - A pointer to the MOM_domain_type being defined here.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
@@ -886,6 +886,9 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
   integer, dimension(2) :: layout = (/ 1, 1 /)
   integer, dimension(2) :: io_layout = (/ 0, 0 /)
   integer, dimension(4) :: global_indices
+!$ integer :: ocean_nthreads       ! Number of Openmp threads
+!$ integer :: get_cpu_affinity, base_cpu, omp_get_num_threads
+!$ integer :: omp_get_thread_num, default_threads
   integer :: nihalo_dflt, njhalo_dflt
   integer :: pe, proc_used
   integer :: X_FLAGS, Y_FLAGS
@@ -948,7 +951,30 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
                  "Use tripolar connectivity at the northern edge of the \n"//&
                  "domain.  With TRIPOLAR_N, NIGLOBAL must be even.", &
                  default=.false.)
-  
+
+#ifndef NOT_SET_AFFINITY
+!$  default_threads = 1
+!$OMP PARALLEL default(none) shared(default_threads)
+!$OMP SINGLE
+!$  default_threads = omp_get_num_threads()
+!$OMP END SINGLE
+!$OMP END PARALLEL
+!$  if (default_threads == 1) then
+!$    call get_param(param_file, mod, "OCEAN_OMP_THREADS", ocean_nthreads, &
+!$               "The number of OpenMP threads that MOM6 will use.", &
+!$               default = default_threads, layoutParam=.true.)
+!$    call omp_set_num_threads(ocean_nthreads)
+!$    base_cpu = get_cpu_affinity()
+!$OMP PARALLEL
+!$    call set_cpu_affinity( base_cpu + omp_get_thread_num() )
+!$OMP END PARALLEL
+!$  else
+!$    call log_param(param_file, mod, "OCEAN_OMP_THREADS", default_threads, &
+!$               "The number of OpenMP threads that MOM6 will use.", &
+!$               layoutParam=.true.)
+!$  endif
+#endif
+
   call log_param(param_file, mod, "!SYMMETRIC_MEMORY_", MOM_dom%symmetric, &
                  "If defined, the velocity point data domain includes \n"//&
                  "every face of the thickness points. In other words, \n"//&
@@ -1163,7 +1189,7 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
           io_layout(1),layout(1)
     call MOM_error(FATAL, mesg)
   endif ; endif
-  
+
   if (io_layout(2) < 0) then
     write(mesg,'("MOM_domains_init: NJPROC_IO = ",i4,".  Negative values of "//&
          &" of NJPROC_IO are not allowed.")') io_layout(2)
@@ -1174,7 +1200,7 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
           io_layout(2),layout(2)
     call MOM_error(FATAL, mesg)
   endif ; endif
-  
+
   if ((io_layout(1) > 0) .and. (io_layout(2) == 0)) io_layout(2) = layout(2)
   if ((io_layout(2) > 0) .and. (io_layout(1) == 0)) io_layout(1) = layout(1)
 
@@ -1258,10 +1284,10 @@ subroutine clone_MD_to_MD(MD_in, MOM_dom, min_halo, halo_size, symmetric, &
 ! Save the extra data for creating other domains of different resolution that overlay this domain
   MOM_dom%niglobal = MD_in%niglobal ; MOM_dom%njglobal = MD_in%njglobal
   MOM_dom%nihalo = MD_in%nihalo ; MOM_dom%njhalo = MD_in%njhalo
- 
+
   MOM_dom%symmetric = MD_in%symmetric
   MOM_dom%nonblocking_updates = MD_in%nonblocking_updates
-  
+
   MOM_dom%X_FLAGS = MD_in%X_FLAGS ; MOM_dom%Y_FLAGS = MD_in%Y_FLAGS
   MOM_dom%layout(:) = MD_in%layout(:) ; MOM_dom%io_layout(:) = MD_in%io_layout(:)
   MOM_dom%use_io_layout = (MOM_dom%io_layout(1) + MOM_dom%io_layout(2) > 0)
@@ -1283,7 +1309,7 @@ subroutine clone_MD_to_MD(MD_in, MOM_dom, min_halo, halo_size, symmetric, &
     MOM_dom%njhalo = max(MOM_dom%njhalo, min_halo(2))
     min_halo(2) = MOM_dom%njhalo
   endif
-  
+
   if (present(halo_size)) then
     MOM_dom%nihalo = halo_size ; MOM_dom%njhalo = halo_size
   endif
@@ -1313,9 +1339,7 @@ subroutine clone_MD_to_MD(MD_in, MOM_dom, min_halo, halo_size, symmetric, &
     call MOM_define_io_domain(MOM_dom%mpp_domain, MOM_dom%io_layout)
   endif
 
-
 end subroutine clone_MD_to_MD
-
 
 subroutine clone_MD_to_d2D(MD_in, mpp_domain, min_halo, halo_size, symmetric, &
                            domain_name)
@@ -1334,9 +1358,9 @@ subroutine clone_MD_to_d2D(MD_in, mpp_domain, min_halo, halo_size, symmetric, &
 ! Save the extra data for creating other domains of different resolution that overlay this domain
   niglobal = MD_in%niglobal ; njglobal = MD_in%njglobal
   nihalo = MD_in%nihalo ; njhalo = MD_in%njhalo
- 
+
   symmetric_dom = MD_in%symmetric
-  
+
   X_FLAGS = MD_in%X_FLAGS ; Y_FLAGS = MD_in%Y_FLAGS
   layout(:) = MD_in%layout(:) ; io_layout(:) = MD_in%io_layout(:)
 
@@ -1348,7 +1372,7 @@ subroutine clone_MD_to_d2D(MD_in, mpp_domain, min_halo, halo_size, symmetric, &
     njhalo = max(njhalo, min_halo(2))
     min_halo(1) = nihalo ; min_halo(2) = njhalo
   endif
-  
+
   if (present(halo_size)) then
     nihalo = halo_size ; njhalo = halo_size
   endif
