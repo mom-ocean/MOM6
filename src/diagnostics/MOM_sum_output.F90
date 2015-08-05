@@ -131,6 +131,7 @@ type, public :: sum_output_CS ; private
   real    :: dt                 ! The baroclinic dynamics time step, in s.
   real    :: timeunit           !   The length of the units for the time
                                 ! axis, in s.
+  logical :: date_stamped_output ! If true, use dates (not times) in messages to stdout.
   type(time_type) :: Start_time ! The start time of the simulation.
                                 ! Start_time is set in MOM_initialization.F90
   type(time_type) :: Huge_time  ! A large time, which is used to indicate
@@ -233,6 +234,9 @@ subroutine MOM_sum_output_init(G, param_file, directory, ntrnc, &
   CS%energyfile = trim(slasher(directory))//trim(energyfile)
   call log_param(param_file, mod, "output_path/ENERGYFILE", CS%energyfile)
 
+  call get_param(param_file, mod, "DATE_STAMPED_STDOUT", CS%date_stamped_output, &
+                 "If true, use dates (not times) in messages to stdout", &
+                 default=.true.)
   call get_param(param_file, mod, "TIMEUNIT", CS%Timeunit, &
                  "The time unit in seconds a number of input fields", &
                  units="s", default=86400.0)
@@ -791,7 +795,8 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
   En_mass = toten / mass_tot
 
   call get_time(day, start_of_day, num_days)
-  call get_date(day, iyear, imonth, iday, ihour, iminute, isecond, itick)
+  if (get_calendar_type() /= NO_CALENDAR) &
+    call get_date(day, iyear, imonth, iday, ihour, iminute, isecond, itick)
   if (abs(CS%timeunit - 86400.0) < 1.0) then
     reday = REAL(num_days)+ (REAL(start_of_day)/86400.0)
     mesg_intro = "MOM Day "
@@ -811,7 +816,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
   
   if (is_root_pe()) then
     if (CS%use_temperature) then
-      if (get_calendar_type() == NO_CALENDAR) then
+      if (.not.CS%date_stamped_output .or. (get_calendar_type() == NO_CALENDAR)) then
         write(*,'(A,A," ",A,": En ",ES12.6, ", MaxCFL ", F8.5, ", Mass ", &
                 & ES18.12, ", Salt ", F15.11,", Temp ", F15.11)') &
           trim(mesg_intro), trim(day_str(1:3))//trim(day_str(4:)), trim(n_str), &
