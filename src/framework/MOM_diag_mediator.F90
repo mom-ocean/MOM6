@@ -1821,11 +1821,13 @@ function get_new_diag_id(diag_cs)
                 'get_new_diag_id: inconsistent diag id')
 
     ! Increase the size of diag_cs%diags and copy data over.
-    allocate(tmp(size(diag_cs%diags) + DIAG_ALLOC_CHUNK_SIZE))
-    tmp(1:size(diag_cs%diags)) = diag_cs%diags
-    call move_alloc(tmp, diag_cs%diags)
-    call assert(size(diag_cs%diags) == size(tmp), &
-                'get_new_diag_id: move_alloc() returned bad array size')
+    ! Do not use move_alloc() because it is not supported by Fortran 90
+    allocate(tmp(size(diag_cs%diags)))
+    tmp(:) = diag_cs%diags(:)
+    deallocate(diag_cs%diags)
+    allocate(diag_cs%diags(size(tmp) + DIAG_ALLOC_CHUNK_SIZE))
+    diag_cs%diags(1:size(tmp)) = tmp(:)
+    deallocate(tmp)
 
     ! Initialise new part of the diag array.
     do i=diag_cs%next_free_diag_id, size(diag_cs%diags)
