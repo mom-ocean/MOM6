@@ -1,4 +1,7 @@
 module MOM_internal_tides
+
+! test line
+
 !***********************************************************************
 !*                   GNU General Public License                        *
 !* This file is a part of MOM.                                         *
