@@ -43,8 +43,8 @@ module MOM_restart
 !*  in the list, it is expanded to include all of the restart files    *
 !*  that are found in the directory.                                   *
 !*                                                                     *
-!*    query_initialized returns 1 if a field (or the entire restart    *
-!*  file) has been initialized from a restart file and 0 otherwise.    *
+!*    query_initialized returns true if a field (or the entire restart *
+!*  file) has been initialized from a restart file and false otherwise.*
 !*                                                                     *
 !*     A small fragment of the grid is shown below:                    *
 !*                                                                     *
@@ -111,13 +111,12 @@ type, public :: MOM_restart_CS ; private
                         ! from a full restart file.  Otherwise some fields must
                         ! be initialized approximately.
   integer :: novars = 0 ! The number of restart fields that have been registered.
-  integer :: nkmb       ! The total number of mixed and buffer layers.
-                        ! This should probably be eliminated!
   logical :: parallel_restartfiles  ! If true, each PE writes its own restart file,
                                     ! otherwise they are combined internally.
   logical :: large_file_support     ! If true, NetCDF 3.6 or later is being used
                                     ! and large-file-support is enabled.
   character(len=120) :: restartfile ! The name or name root for MOM restart files.
+  type(ocean_grid_type), pointer :: G => NULL()
 
   type(field_restart), pointer :: restart_field(:) => NULL()
   type(p0d), pointer :: var_ptr0d(:) => NULL()
@@ -184,7 +183,6 @@ subroutine register_restart_field_ptr3d(f_ptr, var_desc, mandatory, CS)
 end subroutine register_restart_field_ptr3d
 
 subroutine register_restart_field_ptr2d(f_ptr, var_desc, mandatory, CS)
-
   real, dimension(:,:), target :: f_ptr
   type(vardesc), intent(in) :: var_desc
   logical, intent(in)       :: mandatory
@@ -220,7 +218,6 @@ subroutine register_restart_field_ptr2d(f_ptr, var_desc, mandatory, CS)
 end subroutine register_restart_field_ptr2d
 
 subroutine register_restart_field_ptr1d(f_ptr, var_desc, mandatory, CS)
-
   real, dimension(:), target :: f_ptr
   type(vardesc), intent(in) :: var_desc
   logical, intent(in)       :: mandatory
@@ -256,7 +253,6 @@ subroutine register_restart_field_ptr1d(f_ptr, var_desc, mandatory, CS)
 end subroutine register_restart_field_ptr1d
 
 subroutine register_restart_field_ptr0d(f_ptr, var_desc, mandatory, CS)
-
   real, target :: f_ptr
   type(vardesc), intent(in) :: var_desc
   logical, intent(in)       :: mandatory
@@ -328,7 +324,7 @@ function query_initialized_name(name, CS) result(query_initialized)
 end function query_initialized_name
 
 function query_initialized_0d(f_ptr, CS) result(query_initialized)
-  real,                  target  :: f_ptr
+  real,                 target  :: f_ptr
   type(MOM_restart_CS), pointer :: CS
   logical :: query_initialized
 !   This subroutine tests whether the field pointed to by f_ptr has
@@ -357,7 +353,7 @@ function query_initialized_0d(f_ptr, CS) result(query_initialized)
 end function query_initialized_0d
 
 function query_initialized_1d(f_ptr, CS) result(query_initialized)
-  real, dimension(:),    target  :: f_ptr
+  real, dimension(:),   target  :: f_ptr
   type(MOM_restart_CS), pointer :: CS
   logical :: query_initialized
 !   This subroutine tests whether the field pointed to by f_ptr has
@@ -386,7 +382,7 @@ function query_initialized_1d(f_ptr, CS) result(query_initialized)
 end function query_initialized_1d
 
 function query_initialized_2d(f_ptr, CS) result(query_initialized)
-  real, dimension(:,:),  target  :: f_ptr
+  real, dimension(:,:), target  :: f_ptr
   type(MOM_restart_CS), pointer :: CS
   logical :: query_initialized
 !   This subroutine tests whether the field pointed to by f_ptr has
@@ -416,7 +412,7 @@ end function query_initialized_2d
 
 function query_initialized_3d(f_ptr, CS) result(query_initialized)
   real, dimension(:,:,:), target  :: f_ptr
-  type(MOM_restart_CS),  pointer :: CS
+  type(MOM_restart_CS),   pointer :: CS
   logical :: query_initialized
 !   This subroutine tests whether the field pointed to by f_ptr has
 ! been initialized from a restart file.
@@ -444,8 +440,8 @@ function query_initialized_3d(f_ptr, CS) result(query_initialized)
 end function query_initialized_3d
 
 function query_initialized_0d_name(f_ptr, name, CS) result(query_initialized)
-  real,                  target  :: f_ptr
-  character(len=*)               :: name
+  real,                 target  :: f_ptr
+  character(len=*)              :: name
   type(MOM_restart_CS), pointer :: CS
   logical :: query_initialized
 !   This subroutine tests whether the field pointed to by f_ptr or with the
@@ -481,8 +477,8 @@ function query_initialized_0d_name(f_ptr, name, CS) result(query_initialized)
 end function query_initialized_0d_name
 
 function query_initialized_1d_name(f_ptr, name, CS) result(query_initialized)
-  real, dimension(:),    target  :: f_ptr
-  character(len=*)               :: name
+  real, dimension(:),   target  :: f_ptr
+  character(len=*)              :: name
   type(MOM_restart_CS), pointer :: CS
   logical :: query_initialized
 !   This subroutine tests whether the field pointed to by f_ptr or with the
@@ -518,9 +514,9 @@ function query_initialized_1d_name(f_ptr, name, CS) result(query_initialized)
 end function query_initialized_1d_name
 
 function query_initialized_2d_name(f_ptr, name, CS) result(query_initialized)
-  real, dimension(:,:),  target  :: f_ptr
-  character(len=*)               :: name
-  type(MOM_restart_CS),  pointer :: CS
+  real, dimension(:,:), target  :: f_ptr
+  character(len=*)              :: name
+  type(MOM_restart_CS), pointer :: CS
   logical :: query_initialized
 !   This subroutine tests whether the field pointed to by f_ptr or with the
 ! specified variable name has been initialized from a restart file.
@@ -557,7 +553,7 @@ end function query_initialized_2d_name
 function query_initialized_3d_name(f_ptr, name, CS) result(query_initialized)
   real, dimension(:,:,:), target  :: f_ptr
   character(len=*)                :: name
-  type(MOM_restart_CS),  pointer :: CS
+  type(MOM_restart_CS),   pointer :: CS
   logical :: query_initialized
 !   This subroutine tests whether the field pointed to by f_ptr or with the
 ! specified variable name has been initialized from a restart file.
@@ -750,7 +746,7 @@ subroutine restore_state(filename, directory, day, G, CS)
   character(len=*),      intent(in)  :: directory
   type(time_type),       intent(out) :: day
   type(ocean_grid_type), intent(in)  :: G
-  type(MOM_restart_CS), pointer     :: CS
+  type(MOM_restart_CS),  pointer     :: CS
 !    This subroutine reads the model state from previously
 !  generated files.  All restart variables are read from the first
 !  file in the input filename list in which they are found.
@@ -1073,7 +1069,8 @@ subroutine restore_state(filename, directory, day, G, CS)
 
 end subroutine restore_state
 
-subroutine restart_init(param_file, CS, restart_root)
+subroutine restart_init(G, param_file, CS, restart_root)
+  type(ocean_grid_type), target     :: G
   type(param_file_type), intent(in) :: param_file
   type(MOM_restart_CS),  pointer    :: CS
   character(len=*), optional, intent(in) :: restart_root
@@ -1116,6 +1113,7 @@ subroutine restart_init(param_file, CS, restart_root)
   call get_param(param_file, mod, "MAX_FIELDS", CS%max_fields, &
                  "The maximum number of restart fields that can be used.", &
                  default=100)
+  CS%G => G
 
   allocate(CS%restart_field(CS%max_fields))
   allocate(CS%var_ptr0d(CS%max_fields))

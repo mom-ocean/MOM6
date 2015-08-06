@@ -52,7 +52,7 @@ program MOM_main
   use MOM_error_handler,   only : callTree_enter, callTree_leave, callTree_waypoint
   use MOM_file_parser,     only : read_param, get_param, log_param, log_version, param_file_type
   use MOM_file_parser,     only : close_param_file
-  use MOM_forcing_type,    only : forcing, forcing_diagnostics, mech_forcing_diags
+  use MOM_forcing_type,    only : forcing, forcing_diagnostics, mech_forcing_diags, MOM_forcing_chksum
   use MOM_get_input,       only : directories
   use MOM_grid,            only : ocean_grid_type
   use MOM_io,              only : file_exists, open_file, close_file
@@ -71,6 +71,10 @@ program MOM_main
   use MOM_variables,      only : surface
   use MOM_write_cputime,  only : write_cputime, MOM_write_cputime_init
   use MOM_write_cputime,  only : write_cputime_start_clock, write_cputime_CS
+
+  use ensemble_manager_mod, only : ensemble_manager_init, get_ensemble_size
+  use ensemble_manager_mod, only : ensemble_pelist_setup
+  use mpp_mod, only : set_current_pelist => mpp_set_current_pelist
 
   use MOM_ice_shelf, only : initialize_ice_shelf, ice_shelf_end, ice_shelf_CS
   use MOM_ice_shelf, only : shelf_calc_flux, ice_shelf_save_restart
@@ -144,7 +148,6 @@ program MOM_main
   type(time_type) :: energysavedays  ! The interval between writing the energies
                                      ! and other integral quantities of the run.
 
-  integer :: ocean_nthreads = 1            ! Number of Openmp threads
   integer :: date_init(6)=0                ! The start date of the whole simulation.
   integer :: date(6)=-1                    ! Possibly the start date of this run segment.
   integer :: years=0, months=0, days=0     ! These may determine the segment run
@@ -157,6 +160,10 @@ program MOM_main
   integer :: calendar_type=-1
 
   integer :: unit, io_status, ierr
+  integer :: ensemble_size, nPEs_per, ensemble_info(6)
+
+  integer, dimension(0) :: atm_PElist, land_PElist, ice_PElist
+  integer, dimension(:), allocatable :: ocean_PElist
   logical :: unit_in_use
   integer :: initClock, mainClock, termClock
 
@@ -167,20 +174,31 @@ program MOM_main
   type(ice_shelf_CS),        pointer :: ice_shelf_CSp => NULL()
   !-----------------------------------------------------------------------
 
-  integer :: get_cpu_affinity, base_cpu, omp_get_num_threads, omp_get_thread_num
-
   character(len=4), parameter :: vers_num = 'v2.0'
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mod = "MOM_main (MOM_driver)" ! This module's name.
 
-  namelist /ocean_solo_nml/ date_init, calendar, months, days, hours, minutes, seconds, ocean_nthreads
+  namelist /ocean_solo_nml/ date_init, calendar, months, days, hours, minutes, seconds
 
   !#######################################################################
 
   call write_cputime_start_clock(write_CPU_CSp)
 
   call MOM_infra_init() ; call io_infra_init()
+
+  ! Initialize the ensemble manager.  If there are no settings for ensemble_size
+  ! in input.nml(ensemble.nml), these should not do anything.  In coupled
+  ! configurations, this all occurs in the external driver.
+  call ensemble_manager_init() ; ensemble_info(:) =  get_ensemble_size()
+  ensemble_size=ensemble_info(1) ; nPEs_per=ensemble_info(3)
+  if (ensemble_size > 1) then ! There are multiple ensemble members.
+    allocate(ocean_pelist(nPEs_per))
+    call ensemble_pelist_setup(.true., 0, nPEs_per, 0, 0, atm_pelist, ocean_pelist, &
+                               land_pelist, ice_pelist)
+    call set_current_pelist(ocean_pelist)
+    deallocate(ocean_pelist)
+  endif
 
   ! These clocks are on the global pelist.
   initClock = cpu_clock_id( 'Initialization' )
@@ -196,10 +214,10 @@ program MOM_main
     call open_file(unit, 'input.nml', form=ASCII_FILE, action=READONLY_FILE)
     read(unit, ocean_solo_nml, iostat=io_status)
     call close_file(unit)
-!    if (years+months+days+hours+minutes+seconds > 0) then
-      ierr = check_nml_error(io_status,'ocean_solo_nml')
+    ierr = check_nml_error(io_status,'ocean_solo_nml')
+    if (years+months+days+hours+minutes+seconds > 0) then
       if (is_root_pe()) write(*,ocean_solo_nml)
-!    endif
+    endif
   endif
 
   ! Read ocean_solo restart, which can override settings from the namelist.
@@ -222,14 +240,6 @@ program MOM_main
     endif
   endif
   call set_calendar_type(calendar_type)
-
-#ifndef NOT_SET_AFFINITY
-!$      call omp_set_num_threads(ocean_nthreads)
-!$      base_cpu = get_cpu_affinity()
-!$OMP PARALLEL
-!$        call set_cpu_affinity( base_cpu + omp_get_thread_num() )
-!$OMP END PARALLEL
-#endif  
 
 
   if (sum(date_init) > 0) then
@@ -344,15 +354,17 @@ program MOM_main
   call diag_mediator_close_registration()
 
   ! Write out a time stamp file.
-  call open_file(unit, 'time_stamp.out', form=ASCII_FILE, action=APPEND_FILE, &
-                 threading=SINGLE_FILE)
-  call get_date(Time, date(1), date(2), date(3), date(4), date(5), date(6))
-  month = month_name(date(2))
-  if (is_root_pe()) write(unit,'(6i4,2x,a3)') date, month(1:3)
-  call get_date(Time_end, date(1), date(2), date(3), date(4), date(5), date(6))
-  month = month_name(date(2))
-  if (is_root_pe()) write(unit,'(6i4,2x,a3)') date, month(1:3)
-  call close_file(unit)
+  if (calendar_type /= NO_CALENDAR) then
+    call open_file(unit, 'time_stamp.out', form=ASCII_FILE, action=APPEND_FILE, &
+                   threading=SINGLE_FILE)
+    call get_date(Time, date(1), date(2), date(3), date(4), date(5), date(6))
+    month = month_name(date(2))
+    if (is_root_pe()) write(unit,'(6i4,2x,a3)') date, month(1:3)
+    call get_date(Time_end, date(1), date(2), date(3), date(4), date(5), date(6))
+    month = month_name(date(2))
+    if (is_root_pe()) write(unit,'(6i4,2x,a3)') date, month(1:3)
+    call close_file(unit)
+  endif
 
   call write_energy(MOM_CSp%u, MOM_CSp%v, MOM_CSp%h, &
                     MOM_CSp%tv, Time, 0, grid, sum_output_CSp, MOM_CSp%tracer_flow_CSp)
@@ -385,6 +397,10 @@ program MOM_main
     ! Set the forcing for the next steps.
     call set_forcing(state, fluxes, Time, Time_step_ocean, grid, &
                      surface_forcing_CSp)
+    if (MOM_CSp%debug) then
+      call MOM_forcing_chksum("After set forcing", fluxes, grid, haloshift=0)
+    endif
+
     if (use_ice_shelf) then
       call shelf_calc_flux(state, fluxes, Time, time_step, ice_shelf_CSp)
 !###IS     call add_shelf_flux_forcing(fluxes, ice_shelf_CSp)
@@ -513,7 +529,7 @@ program MOM_main
   endif
 
   call callTree_waypoint("End MOM_main")
-  call diag_mediator_end(Time, end_diag_manager=.true.)
+  call diag_mediator_end(Time, MOM_CSp%diag, end_diag_manager=.true.)
   call cpu_clock_end(termClock)
 
   call io_infra_end ; call MOM_infra_end

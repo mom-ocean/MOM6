@@ -433,7 +433,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, &
 
 #ifdef __DO_SAFETY_CHECKS__
   if (CS%debug) then
-    call hchksum(h, "KPP in: h",G,haloshift=0)
+    call hchksum(h*G%H_to_m, "KPP in: h",G,haloshift=0)
     call hchksum(Temp, "KPP in: T",G,haloshift=0)
     call hchksum(Salt, "KPP in: S",G,haloshift=0)
     call hchksum(u, "KPP in: u",G,haloshift=0)
@@ -570,7 +570,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, &
         km1 = max(1, k-1)
         kk = 3*(k-1)
         deltaRho(k) = rho_1D(kk+2) - rho_1D(kk+1)
-        N2_1d(k)    = (GoRho * (rho_1D(kk+2) - rho_1D(kk+3)) ) / (0.5*(h(i,j,km1) + h(i,j,k))+G%H_subroundoff)
+        N2_1d(k)    = (GoRho * (rho_1D(kk+2) - rho_1D(kk+3)) ) / ((0.5*(h(i,j,km1) + h(i,j,k))+G%H_subroundoff)*G%H_to_m)
         N_1d(k)     = sqrt( max( N2_1d(k), 0.) )
       enddo
       N2_1d(G%ke+1 ) = 0.0

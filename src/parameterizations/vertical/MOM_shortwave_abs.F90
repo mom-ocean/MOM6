@@ -93,7 +93,7 @@ subroutine absorbRemainingSW(G, h, opacity_band, nsw, j, dt, H_limit_fluxes, &
 !  (in)    j            = j-index to work on
 !  (in)    dt           = time step (seconds)
 !  (in)    H_limit_fluxes = if the total ocean depth is less than this, they
-!                         are scaled away to avoid numerical instabilities.
+!                         are scaled away to avoid numerical instabilities. (H)
 !                         This would not be necessary if a finite heat
 !                         capacity mud-layer were added.
 !  (in)    adjustAbsorptionProfile = if true, apply heating above the layers
@@ -278,7 +278,7 @@ subroutine absorbRemainingSW(G, h, opacity_band, nsw, j, dt, H_limit_fluxes, &
     enddo
     do i=is,ie ; if (Pen_SW_rem(i) > 0.0) SW_Remains = .true. ; enddo
 
-    Ih_limit = 1.0 / (H_limit_fluxes * G%m_to_H)
+    Ih_limit = 1.0 / H_limit_fluxes
     do i=is,ie ; if ((Pen_SW_rem(i) > 0.0) .and. (h_heat(i) > 0.0)) then
       if (h_heat(i)*Ih_limit >= 1.0) then
         T_chg(i) = Pen_SW_rem(i) / h_heat(i) ; unabsorbed = 0.0
@@ -329,21 +329,21 @@ subroutine sumSWoverBands(G, h, opacity_band, nsw, j, dt, &
   real,                                  intent(in)    :: H_limit_fluxes
   logical,                               intent(in)    :: absorbAllSW
   real, dimension(:,:),                  intent(in)    :: iPen_SW_bnd
-  real, dimension(NIMEM_,NK_INTERFACE_), intent(inout) :: netPen ! Units of K m
+  real, dimension(NIMEM_,NK_INTERFACE_), intent(inout) :: netPen ! Units of K H
 
 ! Arguments:
 !  (in)      G             = ocean grid structure
 !  (in)      h             = layer thickness (m or kg/m^2)
 !                            units of h are referred to as H below.
 !  (in)      opacity_band  = opacity in each band of penetrating shortwave
-!                            radiation, in H-1. The indicies are band, i, k.
+!                            radiation, in m-1. The indicies are band, i, k.
 !  (in)      nsw           =  number of bands of penetrating shortwave radiation.
 !  (in)      j             = j-index to work on
 !  (in)      dt            = time step (seconds)
 !  (inout)   Pen_SW_bnd    = penetrating shortwave heating in each band that
 !                            hits the bottom and will be redistributed through
 !                            the water column (K H units) size nsw x NIMEM_.
-!  (out)     netPen        = attenuated flux at interfaces, summed over bands (K m units)
+!  (out)     netPen        = attenuated flux at interfaces, summed over bands (K H units)
 
   real :: h_heat(SZI_(G))     !  thickness of the water column that receives
                               !  remaining shortwave radiation, in H.
@@ -385,7 +385,7 @@ subroutine sumSWoverBands(G, h, opacity_band, nsw, j, dt, &
       if (h(i,k) > 0.0) then
         do n=1,nsw ; if (Pen_SW_bnd(n,i) > 0.0) then
           ! SW_trans is the SW that is transmitted THROUGH the layer
-          opt_depth = h(i,k) * opacity_band(n,i,k)
+          opt_depth = h(i,k)*G%H_to_m * opacity_band(n,i,k)
           exp_OD = exp(-opt_depth)
           SW_trans = exp_OD
           ! Heating at a rate of less than 10-4 W m-2 = 10-3 K m / Century,
@@ -421,7 +421,7 @@ subroutine sumSWoverBands(G, h, opacity_band, nsw, j, dt, &
     enddo
     do i=is,ie ; if (Pen_SW_rem(i) > 0.0) SW_Remains = .true. ; enddo
 
-    Ih_limit = 1.0 / (H_limit_fluxes * G%m_to_H)
+    Ih_limit = 1.0 / H_limit_fluxes
     do i=is,ie ; if ((Pen_SW_rem(i) > 0.0) .and. (h_heat(i) > 0.0)) then
       if (h_heat(i)*Ih_limit < 1.0) then
         unabsorbed = 1.0 - h_heat(i)*Ih_limit

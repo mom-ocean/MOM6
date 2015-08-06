@@ -1307,7 +1307,7 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, tracer_flow_CSp)
   endif
 
   ! Set up any restart fields associated with the forcing.
-  call restart_init(param_file, CS%restart_CSp, "MOM_forcing.res")
+  call restart_init(G, param_file, CS%restart_CSp, "MOM_forcing.res")
 !###  call register_ctrl_forcing_restarts(G, param_file, CS%ctrl_forcing_CSp, &
 !###                                      CS%restart_CSp)
   call restart_init_end(CS%restart_CSp)

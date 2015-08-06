@@ -98,6 +98,7 @@ public getCoordinateInterfaces
 public getCoordinateUnits
 public getCoordinateShortName
 public getStaticThickness
+public buildGridZstarColumn
 
 public DEFAULT_COORDINATE_MODE
 character(len=158), parameter, public :: regriddingCoordinateModeDoc = &
@@ -143,7 +144,7 @@ integer, parameter :: NB_REGRIDDING_ITERATIONS = 1
 ! Deviation tolerance between succesive grids in regridding iterations
 real, parameter    :: DEVIATION_TOLERANCE = 1e-10
 ! Maximum number of Newton-Raphson iterations. Newton-Raphson iterations are
-! used to build the new grid by finding the coordinates associated with 
+! used to build the new grid by finding the coordinates associated with
 ! target densities and interpolations of degree larger than 1.
 integer, parameter :: NR_ITERATIONS = 8
 ! Tolerance for Newton-Raphson iterations (stop when increment falls below this)
@@ -355,9 +356,8 @@ subroutine checkGridsMatch( G, h, dzInterface )
           'Non-zero dzInterface at bottom!')
     enddo
   enddo
-          
-end subroutine checkGridsMatch
 
+end subroutine checkGridsMatch
 
 !------------------------------------------------------------------------------
 ! Build uniform z*-ccordinate grid with partial steps
@@ -398,38 +398,18 @@ subroutine buildGridZstar( CS, G, h, dzInterface )
       endif
 
       ! Local depth (G%bathyT is positive)
-      nominalDepth = G%bathyT(i,j)
+      nominalDepth = G%bathyT(i,j)*G%m_to_H
 
       ! Determine water column thickness
       totalThickness = 0.0
       do k = 1,nz
         totalThickness = totalThickness + h(i,j,k)
       end do
-      minThickness = min( CS%min_thickness, totalThickness/float(nz) )
 
-      ! Position of free-surface
-      eta = totalThickness - nominalDepth
-      
-      ! z* = (z-eta) / stretching   where stretching = (H+eta)/H
-      ! z = eta + stretching * z*
-      stretching = totalThickness / nominalDepth
-      
-      ! Integrate down from the top for a notional new grid, ignoring topography
-      zNew(1) = eta
-      do k = 1,nz
-        dh = stretching * CS%coordinateResolution(k) ! Notional grid spacing
-        zNew(k+1) = zNew(k) - dh
-      enddo
+      call buildGridZStarColumn(CS, nz, nominalDepth, totalThickness, zNew)
 
-      ! The rest of the model defines grids integrating up from the bottom
       zOld(nz+1) = - nominalDepth
-      zNew(nz+1) = - nominalDepth
       do k = nz,1,-1
-        ! Adjust interface position to accomodate inflating layers
-        ! without disturbing the interface above
-        if ( zNew(k) < (zNew(k+1) + minThickness) ) then
-          zNew(k) = zNew(k+1) + minThickness
-        endif
         zOld(k) = zOld(k+1) + h(i,j,k)
       enddo
 
@@ -462,6 +442,46 @@ subroutine buildGridZstar( CS, G, h, dzInterface )
   end do
 
 end subroutine buildGridZstar
+
+subroutine buildGridZstarColumn( CS, nz, depth, totalThickness, zInterface)
+
+  ! Arguments
+  type(regridding_CS), intent(in)    :: CS
+  integer, intent(in) :: nz
+  real, intent(in) :: depth
+  real, intent(in) :: totalThickness
+  real, dimension(nz+1), intent(inout) :: zInterface
+
+  real :: eta, stretching, dh
+  real :: minThickness
+  integer :: k
+
+  minThickness = min( CS%min_thickness, totalThickness/float(nz) )
+
+  ! Position of free-surface
+  eta = totalThickness - depth
+
+  ! z* = (z-eta) / stretching   where stretching = (H+eta)/H
+  ! z = eta + stretching * z*
+  stretching = totalThickness / depth
+
+  ! Integrate down from the top for a notional new grid, ignoring topography
+  zInterface(1) = eta
+  do k = 1,nz
+    dh = stretching * CS%coordinateResolution(k) ! Notional grid spacing
+    zInterface(k+1) = zInterface(k) - dh
+  enddo
+
+  ! Integrating up from the bottom adjusting interface position to accomodate
+  ! inflating layers without disturbing the interface above
+  zInterface(nz+1) = -depth
+  do k = nz,1,-1
+    if ( zInterface(k) < (zInterface(k+1) + minThickness) ) then
+      zInterface(k) = zInterface(k+1) + minThickness
+    endif
+  enddo
+
+end subroutine buildGridZstarColumn
 
 
 !------------------------------------------------------------------------------
@@ -499,7 +519,7 @@ subroutine buildGridSigma( CS, G, h, dzInterface )
       end do
           
       ! The rest of the model defines grids integrating up from the bottom
-      nominalDepth = G%bathyT(i,j)
+      nominalDepth = G%bathyT(i,j)*G%m_to_H
       zOld(nz+1) = - nominalDepth
       zNew(nz+1) = - nominalDepth
       do k = nz,1,-1
@@ -710,7 +730,7 @@ subroutine buildGridRho( G, h, tv, dzInterface, remapCS, CS )
       end do ! end regridding iterations               
 
       ! Local depth (G%bathyT is positive)
-      nominalDepth = G%bathyT(i,j)
+      nominalDepth = G%bathyT(i,j)*G%m_to_H
 
       ! The rest of the model defines grids integrating up from the bottom
       totalThickness = 0.0
@@ -808,7 +828,7 @@ subroutine build_grid_arbitrary( G, h, dzInterface, h_new, CS )
     do i = G%isc-1,G%iec+1
 
       ! Local depth
-      local_depth = G%bathyT(i,j)
+      local_depth = G%bathyT(i,j)*G%m_to_H
       
       ! Determine water column height
       total_height = 0.0

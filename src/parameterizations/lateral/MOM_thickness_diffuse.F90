@@ -48,6 +48,7 @@ module MOM_thickness_diffuse
 use MOM_checksums, only : hchksum, uchksum, vchksum
 use MOM_diag_mediator, only : post_data, query_averaging_enabled, diag_ctrl
 use MOM_diag_mediator, only : register_diag_field, safe_alloc_ptr, time_type
+use MOM_diag_mediator, only : diag_update_target_grids
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_EOS, only : calculate_density, calculate_density_derivs
 use MOM_file_parser, only : get_param, log_version, param_file_type
@@ -112,8 +113,8 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, MEKE, VarMix, CDp, CS)
 !  limited to guarantee stability.
 
 ! Arguments: h - Layer thickness, in m.
-!  (in/out)  uhtr - Accumulated zonal mass fluxes in m3.
-!  (in/out)  vhtr - Accumulated meridional mass fluxes in m3.
+!  (in/out)  uhtr - Accumulated zonal mass fluxes in m2 H.
+!  (in/out)  vhtr - Accumulated meridional mass fluxes in m2 H.
 !  (in)      tv - A structure containing pointers to any available
 !                 thermodynamic fields. Absent fields have NULL ptrs.
 !  (in)      dt - Time increment in s.
@@ -131,7 +132,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, MEKE, VarMix, CDp, CS)
   real :: e(SZI_(G), SZJ_(G), SZK_(G)+1) ! The heights of the interfaces, relative
                                     ! to mean sea level, in m, pos. upward.
   real :: uhD(SZIB_(G), SZJ_(G), SZK_(G)) ! uhD & vhD are the diffusive u*h &
-  real :: vhD(SZI_(G), SZJB_(G), SZK_(G)) ! v*h fluxes, in m3 s-1.
+  real :: vhD(SZI_(G), SZJB_(G), SZK_(G)) ! v*h fluxes, in m2 H s-1.
 
   real, dimension(SZIB_(G), SZJ_(G), SZK_(G)+1) :: &
     KH_u, &       ! The interface height diffusivities in u-columns, in m2 s-1.
@@ -266,14 +267,14 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, MEKE, VarMix, CDp, CS)
       enddo; enddo
     endif
   endif
-  
+
   if (Resoln_scaled) then
 !$OMP do
     do J=js-1,je ; do i=is,ie
       Khth_Loc(i,j) = Khth_Loc(i,j) * VarMix%Res_fn_v(i,J)
     enddo; enddo
   endif
-   
+
   if (CS%Khth_Max > 0) then
 !$OMP do
     do J=js-1,je ; do i=is,ie
@@ -285,6 +286,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, MEKE, VarMix, CDp, CS)
       Khth_Loc(i,j) = max(CS%Khth_min, Khth_Loc(i,j))
     enddo; enddo
   endif
+
 !$OMP do
   do J=js-1,je ; do i=is,ie
     KH_v(i,J,1) = min(KH_v_CFL(i,J), Khth_Loc(i,j))
@@ -309,7 +311,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, MEKE, VarMix, CDp, CS)
     call vchksum(Kh_v(:,:,:),"Kh_v",G,haloshift=0)
     call uchksum(int_slope_u(:,:,:),"int_slope_u",G,haloshift=0)
     call vchksum(int_slope_v(:,:,:),"int_slope_v",G,haloshift=0)
-    call hchksum(h(:,:,:),"thickness_diffuse_1 h",G,haloshift=0)
+    call hchksum(h(:,:,:)*G%H_to_m,"thickness_diffuse_1 h",G,haloshift=0)
     call hchksum(e(:,:,:),"thickness_diffuse_1 e",G,haloshift=0)
   endif
 
@@ -338,6 +340,11 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, MEKE, VarMix, CDp, CS)
     enddo ; enddo
   enddo
 
+  ! Whenever thickness changes let the diag manager know, target grids
+  ! for vertical remapping may need to be regenerated.
+  ! This needs to happen after the H update and before the next post_data.
+  call diag_update_target_grids(CS%diag)
+
   if (MEKE_not_null .AND. ASSOCIATED(VarMix)) then
     if (ASSOCIATED(MEKE%Rd_dx_h) .and. ASSOCIATED(VarMix%Rd_dx_h)) then
 !$OMP parallel do default(none) shared(is,ie,js,je,MEKE,VarMix)
@@ -348,11 +355,11 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, MEKE, VarMix, CDp, CS)
   endif
 
   if (CS%debug) then
-    call uchksum(uhD(:,:,:),"thickness_diffuse uhD",G,haloshift=0)
-    call vchksum(vhD(:,:,:),"thickness_diffuse vhD",G,haloshift=0)
-    call uchksum(uhtr(:,:,:),"thickness_diffuse uhtr",G,haloshift=0)
-    call vchksum(vhtr(:,:,:),"thickness_diffuse vhtr",G,haloshift=0)
-    call hchksum(h(:,:,:),"thickness_diffuse h",G,haloshift=0)
+    call uchksum(uhD(:,:,:)*G%H_to_m,"thickness_diffuse uhD",G,haloshift=0)
+    call vchksum(vhD(:,:,:)*G%H_to_m,"thickness_diffuse vhD",G,haloshift=0)
+    call uchksum(uhtr(:,:,:)*G%H_to_m,"thickness_diffuse uhtr",G,haloshift=0)
+    call vchksum(vhtr(:,:,:)*G%H_to_m,"thickness_diffuse vhtr",G,haloshift=0)
+    call hchksum(h(:,:,:)*G%H_to_m,"thickness_diffuse h",G,haloshift=0)
   endif
 
 ! Offer diagnostic fields for averaging.
@@ -1017,7 +1024,7 @@ subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, CS
   type(thickness_diffuse_CS),            pointer       :: CS
   real, dimension(NIMEMB_,NJMEM_,NK_INTERFACE_), intent(inout) :: int_slope_u
   real, dimension(NIMEM_,NJMEMB_,NK_INTERFACE_), intent(inout) :: int_slope_v
-! Arguments: h - Layer thickness, in m.
+! Arguments: h - Layer thickness, in H.
 !  (in)      e - Interface heights relative to mean sea level, in m.
 !  (inout)   Kh_u - Thickness diffusivity on interfaces at u points, in m2 s-1.
 !  (inout)   Kh_v - Thickness diffusivity on interfaces at v points, in m2 s-1.

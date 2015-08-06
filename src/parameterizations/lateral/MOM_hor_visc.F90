@@ -240,11 +240,13 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
 
   real, dimension(SZI_(G),SZJ_(G)) :: &
     sh_xx, & ! horizontal tension (du/dx - dv/dy) (1/sec) including metric terms
-    str_xx   ! str_xx is the diagonal term in the stress tensor (H m2 s-2)
+    str_xx,& ! str_xx is the diagonal term in the stress tensor (H m2 s-2)
+    bhstr_xx ! A copy of str_xx that only contains the biharmonic contribution (H m2 s-2)
 
   real, dimension(SZIB_(G),SZJB_(G)) :: &
     sh_xy,  &     ! horizontal shearing strain (du/dy + dv/dx) (1/sec) including metric terms
     str_xy, &     ! str_xy is the cross term in the stress tensor (H m2 s-2)
+    bhstr_xy,&    ! A copy of str_xy that only contains the biharmonic contribution (H m2 s-2)
     FrictWorkIntz ! depth integrated energy dissipated by lateral friction (W/m2)
 
   real, dimension(SZIB_(G),SZJB_(G),SZK_(G)) :: &
@@ -273,6 +275,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
                          ! remain to be applied (nondim)
   real :: Kh_scale  ! A factor between 0 and 1 by which the horizontal
                     ! Laplacian viscosity is rescaled
+  real :: RoScl     ! The scaling function for MEKE source term
+  real :: FatH      ! abs(f) at h-point for MEKE source term (s-1)
 
   logical :: rescale_Kh
   logical :: find_FrictWork
@@ -319,6 +323,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
 !$OMP                                  find_FrictWork,FrictWork,use_MEKE_Ku,MEKE)     &
 !$OMP                          private(u0, v0, sh_xx, str_xx, visc_bound_rem,         &
 !$OMP                                  sh_xy, str_xy, Ah, Kh, AhSm, KhSm,             &
+!$OMP                                  bhstr_xx, bhstr_xy,                            &
 !$OMP                                  Shear_mag, huq, hvq, hq, Kh_scale, hrat_min)
   do k=1,nz
 
@@ -439,6 +444,12 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
           (CS%DY_dxT(i,j)*(G%IdyCu(I,j)*u0(I,j) - G%IdyCu(I-1,j)*u0(I-1,j)) - &
            CS%DX_dyT(i,j) *(G%IdxCv(i,J)*v0(i,J) - G%IdxCv(i,J-1)*v0(i,J-1)))
 
+        ! Keep a copy of the biharmonic contribution for backscatter parameterization
+        bhstr_xx(i,j) =             Ah * &
+          (CS%DY_dxT(i,j)*(G%IdyCu(I,j)*u0(I,j) - G%IdyCu(I-1,j)*u0(I-1,j)) - &
+           CS%DX_dyT(i,j) *(G%IdxCv(i,J)*v0(i,J) - G%IdxCv(i,J-1)*v0(i,J-1)))
+        bhstr_xx(i,j) = bhstr_xx(i,j) * (h(i,j,k) * CS%reduction_xx(i,j))
+
       endif  ! biharmonic
 
       str_xx(i,j) = str_xx(i,j) * (h(i,j,k) * CS%reduction_xx(i,j))
@@ -522,6 +533,12 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
             (CS%DX_dyBu(I,J)*(u0(I,j+1)*G%IdxCu(I,j+1) - u0(I,j)*G%IdxCu(I,j)) + &
              CS%DY_dxBu(I,J)*(v0(i+1,J)*G%IdyCv(i+1,J) - v0(i,J)*G%IdyCv(i,J)))
 
+        ! Keep a copy of the biharmonic contribution for backscatter parameterization
+        bhstr_xy(I,J) =             Ah * &
+            (CS%DX_dyBu(I,J)*(u0(I,j+1)*G%IdxCu(I,j+1) - u0(I,j)*G%IdxCu(I,j)) + &
+             CS%DY_dxBu(I,J)*(v0(i+1,J)*G%IdyCv(i+1,J) - v0(i,J)*G%IdyCv(i,J)))
+        bhstr_xy(I,J) =   bhstr_xy(I,J) * (hq * G%mask2dBu(I,J) * CS%reduction_xy(I,J))
+
       endif  ! biharmonic
 
       str_xy(I,J) = str_xy(I,J) * (hq * G%mask2dBu(I,J) * CS%reduction_xy(I,J))
@@ -557,33 +574,69 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
     if (find_FrictWork) then ; do j=js,je ; do i=is,ie
     ! Diagnose   str_xx*d_x u - str_yy*d_y v + str_xy*(d_y u + d_x v)
       FrictWork(i,j,k) = G%H_to_kg_m2 * ( &
-              (str_xx(i,j)*(u(i,j,k)-u(i-1,j,k))*G%IdxT(i,j)    &
-              -str_xx(i,j)*(v(i,j,k)-v(i,j-1,k))*G%IdyT(i,j))   &
-       +0.25*((str_xy(i,j)*(                                    &
+              (str_xx(i,j)*(u(i,j,k)-u(i-1,j,k))*G%IdxT(i,j)     &
+              -str_xx(i,j)*(v(i,j,k)-v(i,j-1,k))*G%IdyT(i,j))    &
+       +0.25*((str_xy(i,j)*(                                     &
                    (u(i,j+1,k)-u(i,j,k))*G%IdyBu(i,j)            &
                   +(v(i+1,j,k)-v(i,j,k))*G%IdxBu(i,j) )          &
-              +str_xy(i-1,j-1)*(                                &
+              +str_xy(i-1,j-1)*(                                 &
                    (u(i-1,j,k)-u(i-1,j-1,k))*G%IdyBu(i-1,j-1)    &
                   +(v(i,j-1,k)-v(i-1,j-1,k))*G%IdxBu(i-1,j-1) )) &
-             +(str_xy(i-1,j)*(                                  &
+             +(str_xy(i-1,j)*(                                   &
                    (u(i-1,j+1,k)-u(i-1,j,k))*G%IdyBu(i-1,j)      &
                   +(v(i,j,k)-v(i-1,j,k))*G%IdxBu(i-1,j) )        &
-              +str_xy(i,j-1)*(                                  &
+              +str_xy(i,j-1)*(                                   &
                    (u(i,j,k)-u(i,j-1,k))*G%IdyBu(i,j-1)          &
                   +(v(i+1,j-1,k)-v(i,j-1,k))*G%IdxBu(i,j-1) )) ) )
     enddo ; enddo ; endif
 
-  enddo ! end of k loop
+    ! Make a similar calculation as for FrictWork above but accumulating into
+    ! the vertically integrated MEKE source term, and adjusting for any
+    ! energy loss seen as a reduction in the [biharmonic] frictional source term.
+    if (find_FrictWork .and. associated(MEKE)) then ; if (associated(MEKE%mom_src)) then
+      if (k==1) then
+        do j=js,je ; do i=is,ie
+          MEKE%mom_src(i,j) = 0.
+        enddo ; enddo
+      endif
+      if (MEKE%backscatter_Ro_c /= 0.) then
+        do j=js,je ; do i=is,ie
+          FatH = 0.25*( (abs(G%CoriolisBu(I-1,J-1)) + abs(G%CoriolisBu(I,J))) &
+                       +(abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J-1))) )
+          Shear_mag = sqrt(sh_xx(i,j)*sh_xx(i,j) + &
+            0.25*((sh_xy(I-1,J-1)*sh_xy(I-1,J-1) + sh_xy(I,J)*sh_xy(I,J)) + &
+                  (sh_xy(I-1,J)*sh_xy(I-1,J) + sh_xy(I,J-1)*sh_xy(I,J-1))))
+          FatH = FatH ** MEKE%backscatter_Ro_pow ! f^n
+          Shear_mag = ( ( Shear_mag ** MEKE%backscatter_Ro_pow ) + 1.e-30 ) &
+                      * MEKE%backscatter_Ro_c ! c * D^n
+          ! The Rossby number function is g(Ro) = 1/(1+c.Ro^n)
+          ! RoScl = 1 - g(Ro)
+          RoScl = Shear_mag / ( FatH + Shear_mag ) ! = 1 - f^n/(f^n+c*D^n)
+          MEKE%mom_src(i,j) = MEKE%mom_src(i,j) +                                     &
+                           G%H_to_kg_m2 * (                                           &
+                ((str_xx(i,j)-RoScl*bhstr_xx(i,j))*(u(i,j,k)-u(i-1,j,k))*G%IdxT(i,j)  &
+                -(str_xx(i,j)-RoScl*bhstr_xx(i,j))*(v(i,j,k)-v(i,j-1,k))*G%IdyT(i,j)) &
+         +0.25*(((str_xy(i,j)-RoScl*bhstr_xy(i,j))*(                                  &
+                     (u(i,j+1,k)-u(i,j,k))*G%IdyBu(i,j)                               &
+                    +(v(i+1,j,k)-v(i,j,k))*G%IdxBu(i,j) )                             &
+                +(str_xy(i-1,j-1)-RoScl*bhstr_xy(i-1,j-1))*(                          &
+                     (u(i-1,j,k)-u(i-1,j-1,k))*G%IdyBu(i-1,j-1)                       &
+                    +(v(i,j-1,k)-v(i-1,j-1,k))*G%IdxBu(i-1,j-1) ))                    &
+               +((str_xy(i-1,j)-RoScl*bhstr_xy(i-1,j))*(                              &
+                     (u(i-1,j+1,k)-u(i-1,j,k))*G%IdyBu(i-1,j)                         &
+                    +(v(i,j,k)-v(i-1,j,k))*G%IdxBu(i-1,j) )                           &
+                +(str_xy(i,j-1)-RoScl*bhstr_xy(i,j-1))*(                              &
+                     (u(i,j,k)-u(i,j-1,k))*G%IdyBu(i,j-1)                             &
+                    +(v(i+1,j-1,k)-v(i,j-1,k))*G%IdxBu(i,j-1) )) ) )
+        enddo ; enddo
+      else
+        do j=js,je ; do i=is,ie
+         MEKE%mom_src(i,j) = MEKE%mom_src(i,j) + FrictWork(i,j,1)
+        enddo ; enddo
+      endif
+    endif ; endif
 
-  if (associated(MEKE)) then ; if (associated(MEKE%mom_src)) then
-!$OMP parallel do default(none) shared(is,ie,js,je,nz,MEKE,FrictWork)
-    do j=js,je 
-      do i=is,ie ; MEKE%mom_src(i,j) = FrictWork(i,j,1) ; enddo
-      do k=2,nz ; do i=is,ie
-        MEKE%mom_src(i,j) = MEKE%mom_src(i,j) + FrictWork(i,j,k)
-      enddo ; enddo 
-    enddo
-  endif ; endif
+  enddo ! end of k loop
 
 ! Offer fields for diagnostic averaging.
   if (CS%id_diffu>0)     call post_data(CS%id_diffu, diffu, CS%diag)

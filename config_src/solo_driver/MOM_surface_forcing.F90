@@ -1695,7 +1695,7 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, tracer_flow_CSp)
     call get_param(param_file, mod, "SENSIBLE_HEAT_FLUX", CS%constantHeatForcing, &
                  "A constant heat forcing (positive into ocean) applied \n"//&
                  "through the sensible heat flux field. ", &
-                 units='W/m2', default=0., fail_if_missing=.true.)
+                 units='W/m2', fail_if_missing=.true.)
   endif
   call get_param(param_file, mod, "WIND_CONFIG", CS%wind_config, &
                  "The character string that indicates how wind forcing \n"//&
@@ -1834,7 +1834,7 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, tracer_flow_CSp)
   call register_forcing_type_diags(Time, diag, CS%use_temperature, CS%handles)
 
   ! Set up any restart fields associated with the forcing.
-  call restart_init(param_file, CS%restart_CSp, "MOM_forcing.res")
+  call restart_init(G, param_file, CS%restart_CSp, "MOM_forcing.res")
 !###  call register_ctrl_forcing_restarts(G, param_file, CS%ctrl_forcing_CSp, &
 !###                                      CS%restart_CSp)
   call restart_init_end(CS%restart_CSp)

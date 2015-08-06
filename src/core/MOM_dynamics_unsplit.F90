@@ -78,7 +78,7 @@ use MOM_cpu_clock, only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
 use MOM_diag_mediator, only : diag_mediator_init, enable_averaging
 use MOM_diag_mediator, only : disable_averaging, post_data, safe_alloc_ptr
 use MOM_diag_mediator, only : register_diag_field, register_static_field
-use MOM_diag_mediator, only : set_diag_mediator_grid, diag_ctrl
+use MOM_diag_mediator, only : set_diag_mediator_grid, diag_ctrl, diag_update_target_grids
 use MOM_domains, only : MOM_domains_init, pass_var, pass_vector
 use MOM_domains, only : pass_var_start, pass_var_complete
 use MOM_domains, only : pass_vector_start, pass_vector_complete
@@ -268,7 +268,8 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
 ! uh = u*h
 ! hp = h + dt/2 div . uh
   call cpu_clock_begin(id_clock_continuity)
-  call continuity(u, v, h, hp, uh, vh, dt*0.5, G, CS%continuity_CSp, OBC=CS%OBC)
+  call continuity(u, v, h, hp, uh, vh, dt*0.5, G, CS%continuity_CSp, &
+                  OBC=CS%OBC)
   call cpu_clock_end(id_clock_continuity)
   call cpu_clock_begin(id_clock_pass)
   call pass_var(hp, G%Domain)
@@ -438,6 +439,9 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
   call continuity(upp, vpp, hp, h, uh, vh, &
                   (dt*0.5), G, CS%continuity_CSp, OBC=CS%OBC)
   call cpu_clock_end(id_clock_continuity)
+  ! Whenever thickness changes let the diag manager know, target grids
+  ! for vertical remapping may need to be regenerated.
+  call diag_update_target_grids(CS%diag)
   call cpu_clock_begin(id_clock_pass)
   call pass_var(h, G%Domain)
   call pass_vector(uh, vh, G%Domain)

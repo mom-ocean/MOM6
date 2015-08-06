@@ -271,7 +271,7 @@ subroutine extractFluxes1d(G, fluxes, optics, nsw, j, dt,                       
 !  (in)      nsw                      = number of bands of penetrating shortwave radiation
 !  (in)      j                        = j-index to work on
 !  (in)      dt                       = time step in seconds 
-!  (in)      DepthBeforeScalingFluxes =  minimum ocean thickness to allow before scaling away fluxes
+!  (in)      DepthBeforeScalingFluxes =  minimum ocean thickness to allow before scaling away fluxes in H
 !  (in)      h                        =  layer thickness, in m for Bouss or (kg/m^2) for non-Bouss
 !  (in)      T                        =  layer temperatures, in deg C
 
@@ -302,7 +302,7 @@ subroutine extractFluxes1d(G, fluxes, optics, nsw, j, dt,                       
 
   character(len=200) :: mesg
   integer            :: is, ie, nz, i, k, n
-  Ih_limit    = 1.0 / (DepthBeforeScalingFluxes * G%m_to_H)
+  Ih_limit    = 1.0 / DepthBeforeScalingFluxes
   Irho0       = 1.0 / G%Rho0 
   I_Cp        = 1.0 / fluxes%C_p
   J_m2_to_H   = 1.0 / (G%H_to_kg_m2 * fluxes%C_p)
@@ -611,7 +611,7 @@ subroutine extractFluxes2d(G, fluxes, optics, nsw, dt,                          
 !                                       forcing fields.  Unused fields have NULL ptrs.
 !  (in)      nsw                      = number of bands of penetrating shortwave radiation
 !  (in)      dt                       = time step in seconds
-!  (in)      DepthBeforeScalingFluxes =  minimum ocean thickness to allow before scaling away fluxes
+!  (in)      DepthBeforeScalingFluxes =  minimum ocean thickness to allow before scaling away fluxes in H
 !  (in)      h                        =  layer thickness, in m for Bouss or (kg/m^2) for non-Bouss
 !  (in)      T                        =  layer temperatures, in deg C
 
@@ -660,8 +660,8 @@ subroutine calculateBuoyancyFlux1d(G, fluxes, optics, h, Temp, Salt, tv, j, &
   type(thermo_var_ptrs),                 intent(inout) :: tv             ! thermodynamics type
   integer,                               intent(in)    :: j              ! j-row to work on 
   real, dimension(NIMEM_,NK_INTERFACE_), intent(inout) :: buoyancyFlux   ! buoyancy flux (m^2/s^3)
-  real, dimension(NIMEM_),               intent(inout) :: netHeatMinusSW ! surf Heat flux (K m/s)
-  real, dimension(NIMEM_),               intent(inout) :: netSalt        ! surf salt flux (ppt m/s)
+  real, dimension(NIMEM_),               intent(inout) :: netHeatMinusSW ! surf Heat flux (K H)
+  real, dimension(NIMEM_),               intent(inout) :: netSalt        ! surf salt flux (ppt H)
 
 
   ! Local variables
@@ -687,7 +687,7 @@ subroutine calculateBuoyancyFlux1d(G, fluxes, optics, h, Temp, Salt, tv, j, &
   useRiverHeatContent   = .False.    
   useCalvingHeatContent = .False.  
 
-  depthBeforeScalingFluxes = max( G%Angstrom, 1.e-30 )
+  depthBeforeScalingFluxes = max( G%Angstrom, 1.e-30*G%m_to_H )
   pressure(:) = 0. ! Ignore atmospheric pressure
   GoRho       = G%g_Earth / G%Rho0
   start       = 1 + G%isc - G%isd
@@ -699,7 +699,7 @@ subroutine calculateBuoyancyFlux1d(G, fluxes, optics, h, Temp, Salt, tv, j, &
   ! We aggregate the thermodynamic forcing for a time step into the following:
   ! netH       = water (H units) added/removed via surface fluxes
   ! netHeat    = heat (degC * H) via surface fluxes
-  ! netSalt    = salt ( g(salt)/m2 for non-Bouss and ppt*m/s for Bouss ) via surface fluxes
+  ! netSalt    = salt ( g(salt)/m2 for non-Bouss and ppt*m for Bouss ) via surface fluxes
   call extractFluxes1d(G, fluxes, optics, nsw, j, dt,                                 &
                 depthBeforeScalingFluxes, useRiverHeatContent, useCalvingHeatContent, &
                 h(:,j,:), Temp(:,j,:), netH, netEvap, netHeatMinusSW,                 &
@@ -715,18 +715,19 @@ subroutine calculateBuoyancyFlux1d(G, fluxes, optics, h, Temp, Salt, tv, j, &
                                 dRhodT, dRhodS, start, npts, tv%eqn_of_state)
 
   ! Adjust netSalt to reflect dilution effect of FW flux
-  netSalt(:) = netSalt(:) - Salt(:,j,1) * netH * G%H_to_m
+  netSalt(G%isc:G%iec) = netSalt(G%isc:G%iec) - Salt(G%isc:G%iec,j,1) * netH(G%isc:G%iec) * G%H_to_m
 
-  ! Add in the SW heating for purposes of calculating the net 
-  ! surface buoyancy flux affecting the top layer. 
+  ! Add in the SW heating for purposes of calculating the net
+  ! surface buoyancy flux affecting the top layer.
   !netHeat(:) = netHeatMinusSW(:) + sum( penSWbnd(:,:), dim=1 )
-  netHeat(:) = netHeatMinusSW(:) + netPen(:,1)
+  netHeat(G%isc:G%iec) = netHeatMinusSW(G%isc:G%iec) + netPen(G%isc:G%iec,1)
 
   ! Convert to a buoyancy flux, excluding penetrating SW heating
-  buoyancyFlux(:,1) = - GoRho * ( dRhodS(:) * netSalt(:) + dRhodT(:) * netHeat(:) ) ! m^2/s^3
+  buoyancyFlux(G%isc:G%iec,1) = - GoRho * ( dRhodS(G%isc:G%iec) * netSalt(G%isc:G%iec) + &
+                                             dRhodT(G%isc:G%iec) * netHeat(G%isc:G%iec) ) * G%H_to_m ! m^2/s^3
   ! We also have a penetrative buoyancy flux associated with penetrative SW
   do k=2, G%ke+1
-    buoyancyFlux(:,k) = - GoRho * ( dRhodT(:) * netPen(:,k) ) ! m^2/s^3
+    buoyancyFlux(G%isc:G%iec,k) = - GoRho * ( dRhodT(G%isc:G%iec) * netPen(G%isc:G%iec,k) ) * G%H_to_m ! m^2/s^3
   enddo
 
 end subroutine calculateBuoyancyFlux1d
@@ -748,22 +749,22 @@ subroutine calculateBuoyancyFlux2d(G, fluxes, optics, h, Temp, Salt, tv, &
   real, dimension(NIMEM_,NJMEM_,NKMEM_),       intent(in)    :: Salt           ! salinity (ppt)
   type(thermo_var_ptrs),                       intent(inout) :: tv             ! Thermodynamics type
   real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_),intent(inout) :: buoyancyFlux   ! buoy flux (m^2/s^3)
-  real, dimension(NIMEM_,NJMEM_),optional,     intent(inout) :: netHeatMinusSW ! surf temp flux (K m/s)
-  real, dimension(NIMEM_,NJMEM_),optional,     intent(inout) :: netSalt        ! surf salt flux (ppt m/s)
+  real, dimension(NIMEM_,NJMEM_),optional,     intent(inout) :: netHeatMinusSW ! surf temp flux (K H)
+  real, dimension(NIMEM_,NJMEM_),optional,     intent(inout) :: netSalt        ! surf salt flux (ppt H)
 
   real, dimension( SZI_(G) ) :: netT ! net temperature flux (K m/s)
   real, dimension( SZI_(G) ) :: netS ! net saln flux (ppt m/s)
   integer :: j
 
-  netT(:) = 0. ; netS(:) = 0.
+  netT(G%isc:G%iec) = 0. ; netS(G%isc:G%iec) = 0.
 
 !$OMP parallel do default(none) shared(G,fluxes,optics,h,Temp,Salt,tv,buoyancyFlux,&
 !$OMP                                  netHeatMinusSW,netSalt)                     &
 !$OMP                     firstprivate(netT,netS)
   do j = G%jsc, G%jec
     call calculateBuoyancyFlux1d(G, fluxes, optics, h, Temp, Salt, tv, j, buoyancyFlux(:,j,:), netT, netS )
-    if (present(netHeatMinusSW)) netHeatMinusSW(:,j) = netT(:)
-    if (present(netSalt)) netSalt(:,j) = netS(:)
+    if (present(netHeatMinusSW)) netHeatMinusSW(G%isc:G%iec,j) = netT(G%isc:G%iec)
+    if (present(netSalt)) netSalt(G%isc:G%iec,j) = netS(G%isc:G%iec)
   enddo ! j
 
 end subroutine calculateBuoyancyFlux2d
@@ -1338,17 +1339,18 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
 end subroutine register_forcing_type_diags
 
 
-subroutine forcing_accumulate(flux_tmp, fluxes, dt, G)
+subroutine forcing_accumulate(flux_tmp, fluxes, dt, G, wt2)
   type(forcing),         intent(in)    :: flux_tmp
   type(forcing),         intent(inout) :: fluxes
   real,                  intent(in)    :: dt
   type(ocean_grid_type), intent(inout) :: G
+  real,                  intent(out)   :: wt2
   !   This subroutine copies mechancal forcing from flux_tmp to fluxes and
   ! stores the time-weighted averages of the various buoyancy fluxes in fluxes,
   ! and increments the amount of time over which the buoyancy forcing should be
   ! applied.
 
-  real :: wt1, wt2
+  real :: wt1
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq, i0, j0
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, isr, ier, jsr, jer
   is   = G%isc   ; ie   = G%iec    ; js   = G%jsc   ; je   = G%jec
@@ -1474,8 +1476,8 @@ subroutine forcing_accumulate(flux_tmp, fluxes, dt, G)
   endif
 
   !### This needs to be replaced with an appropriate copy and average.
-   fluxes%tr_fluxes => flux_tmp%tr_fluxes
-
+  fluxes%tr_fluxes => flux_tmp%tr_fluxes
+  
 end subroutine forcing_accumulate
 
 

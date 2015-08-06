@@ -72,7 +72,7 @@ use MOM_checksum_packages,   only : MOM_state_chksum, MOM_state_stats
 use MOM_cpu_clock,           only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock,           only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
 use MOM_diag_mediator,       only : post_data, register_diag_field, safe_alloc_ptr
-use MOM_diag_mediator,       only : diag_ctrl, time_type
+use MOM_diag_mediator,       only : diag_ctrl, time_type, diag_update_target_grids
 use MOM_diag_to_Z,           only : diag_to_Z_CS, register_Zint_diag, calc_Zint_diags
 use MOM_diffConvection,      only : diffConvection_CS, diffConvection_init
 use MOM_diffConvection,      only : diffConvection_calculate, diffConvection_end
@@ -212,11 +212,11 @@ type, public :: diabatic_CS ; private
   integer :: id_dudt_dia = -1, id_dvdt_dia = -1, id_wd           = -1
   integer :: id_cg1      = -1  !(BDM)
   integer :: id_ea       = -1, id_eb       = -1, id_Kd_z         = -1
-  integer :: id_Kd_heat  = -1, id_Kd_salt  = -1, id_Kd_interface = -1
-  integer :: id_Tdif_z   = -1, id_Tadv_z   = -1, id_Sdif_z       = -1, id_Sadv_z       = -1
-  integer :: id_Tdif     = -1, id_Tadv     = -1, id_Sdif         = -1, id_Sadv         = -1
+  integer :: id_Kd_heat  = -1, id_Kd_salt  = -1, id_Kd_interface = -1, id_Kd_ePBL  = -1
+  integer :: id_Tdif_z   = -1, id_Tadv_z   = -1, id_Sdif_z       = -1, id_Sadv_z   = -1
+  integer :: id_Tdif     = -1, id_Tadv     = -1, id_Sdif         = -1, id_Sadv     = -1
   integer :: id_createdH = -1, id_subMLN2  = -1, id_brine_lay    = -1
-  integer :: id_MLD_003  = -1, id_MLD_0125 = -1, id_MLD_user     = -1, id_mlotstsq     = -1
+  integer :: id_MLD_003  = -1, id_MLD_0125 = -1, id_MLD_user     = -1, id_mlotstsq = -1
 
   type(entrain_diffusive_CS),   pointer :: entrain_diffusive_CSp => NULL()
   type(bulkmixedlayer_CS),      pointer :: bulkmixedlayer_CSp    => NULL()
@@ -399,6 +399,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
 
   if (CS%debug) then
     call MOM_state_chksum("Start of diabatic ", u(:,:,:), v(:,:,:), h(:,:,:), G)
+    call MOM_forcing_chksum("Start of diabatic", fluxes, G, haloshift=0)
   endif
   if (CS%debugConservation) call MOM_state_stats('Start of diabatic', u, v, h, tv%T, tv%S, G)
 
@@ -410,11 +411,11 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   ! make_frazil is deliberately called at both the beginning and at
   ! the end of the diabatic processes.
   if (ASSOCIATED(tv%T) .AND. ASSOCIATED(tv%frazil)) then
-    if (ASSOCIATED(fluxes%p_surf_full)) then                                                                                                                                                       
-        call make_frazil(h,tv,G,CS,fluxes%p_surf_full)                                                                                                                                              
-    else                                                                                                                                                                                           
-        call make_frazil(h,tv,G,CS)                                                                                                                                                                 
-    endif   
+    if (ASSOCIATED(fluxes%p_surf_full)) then
+        call make_frazil(h,tv,G,CS,fluxes%p_surf_full)
+    else
+        call make_frazil(h,tv,G,CS)
+    endif
     if (showCallTree) call callTree_waypoint("done with 1st make_frazil (diabatic)")
   endif
   if (CS%debugConservation) call MOM_state_stats('1st make_frazil', u, v, h, tv%T, tv%S, G)
@@ -425,6 +426,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
       h_orig(i,j,k) = h(i,j,k) ; eaml(i,j,k) = 0.0 ; ebml(i,j,k) = 0.0
     enddo ; enddo ; enddo
   endif
+
   if (CS%use_geothermal) then
     call cpu_clock_begin(id_clock_geothermal)
     call geothermal(h, tv, dt, eaml, ebml, G, CS%geothermal_CSp)
@@ -433,6 +435,10 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     if (CS%debugConservation) call MOM_state_stats('geothermal', u, v, h, tv%T, tv%S, G)
   endif
 
+  ! Whenever thickness changes let the diag manager know, target grids
+  ! for vertical remapping may need to be regenerated.
+  call diag_update_target_grids(CS%diag)
+
   ! Set_opacity estimates the optical properties of the water column.
   ! It will need to be modified later to include information about the
   ! biological properties and layer thicknesses.
@@ -440,6 +446,10 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     call set_opacity(CS%optics, fluxes, G, CS%opacity_CSp)
 
   if (CS%bulkmixedlayer) then
+    if (CS%debug) then
+      call MOM_forcing_chksum("Before mixedlayer", fluxes, G, haloshift=0)
+    endif
+
     if (CS%ML_mix_first > 0.0) then
 !  This subroutine (1)  Cools the mixed layer.
 !    (2) Performs convective adjustment by mixed layer entrainment.
@@ -463,13 +473,17 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
                         G, CS%bulkmixedlayer_CSp, CS%optics, &
                         CS%aggregate_FW_forcing, dt, last_call=.true.)
       endif
+
 !  Keep salinity from falling below a small but positive threshold.
 !  This occurs when the ice model attempts to extract more salt than
 !  is actually present in the ocean.  
       if (ASSOCIATED(tv%S) .and. ASSOCIATED(tv%salt_deficit)) &
         call adjust_salt(h, tv, G, CS)
       call cpu_clock_end(id_clock_mixedlayer)
-      if (CS%debug) call MOM_state_chksum("After mixedlayer ", u, v, h, G)
+      if (CS%debug) then
+        call MOM_state_chksum("After mixedlayer ", u, v, h, G)
+        call MOM_forcing_chksum("After mixedlayer", fluxes, G, haloshift=0)
+      endif
       if (showCallTree) call callTree_waypoint("done with 1st bulkmixedlayer (diabatic)")
       if (CS%debugConservation) call MOM_state_stats('1st bulkmixedlayer', u, v, h, tv%T, tv%S, G)
     endif
@@ -569,6 +583,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     ! KPP needs the surface buoyancy flux but does not update state variables.
     ! We could make this call higher up to avoid a repeat unpacking of the surface fluxes.  ????
     ! Sets: CS%buoyancyFlux, CS%netHeatMinusSW, CS%netSalt
+
     call calculateBuoyancyFlux2d(G, fluxes, CS%optics, h, tv%T, tv%S, tv, &
                                  CS%buoyancyFlux, CS%netHeatMinusSW, CS%netSalt)
     ! The KPP scheme calculates the boundary layer diffusivities and non-local transport.
@@ -652,10 +667,10 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   if (CS%useKPP) then
     call cpu_clock_begin(id_clock_kpp)
     if (CS%debug) then
+      call hchksum(CS%netHeatMinusSW*G%H_to_m, "before KPP_applyNLT netHeat",G,haloshift=0)
+      call hchksum(CS%netSalt*G%H_to_m, "before KPP_applyNLT netSalt",G,haloshift=0)
       call hchksum(CS%KPP_NLTheat, "before KPP_applyNLT NLTheat",G,haloshift=0)
-      call hchksum(CS%netHeatMinusSW, "before KPP_applyNLT netHeat",G,haloshift=0)
       call hchksum(CS%KPP_NLTscalar, "before KPP_applyNLT NLTscalar",G,haloshift=0)
-      call hchksum(CS%netSalt, "before KPP_applyNLT netSalt",G,haloshift=0)
     endif
     ! Apply non-local transport of heat and salt
     ! Changes: tv%T, tv%S
@@ -722,6 +737,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     call hchksum(G%H_to_m*ea, "after calc_entrain ea",G,haloshift=0)
     call hchksum(G%H_to_m*eb, "after calc_entrain eb",G,haloshift=0)
   endif
+
+  if (CS%id_Kd_ePBL > -1) Kd_ePBL(:,:,:) = 0.0
 
   ! Apply forcing when using the ALE algorithm
   if (CS%useALEalgorithm) then
@@ -956,6 +973,10 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     if (showCallTree) call callTree_waypoint("done with regularize_layers (diabatic)")
     if (CS%debugConservation) call MOM_state_stats('regularize_layers', u, v, h, tv%T, tv%S, G)
   endif
+
+  ! Whenever thickness changes let the diag manager know, target grids
+  ! for vertical remapping may need to be regenerated.
+  call diag_update_target_grids(CS%diag)
 
   if ((CS%id_Tdif > 0) .or. (CS%id_Tdif_z > 0) .or. &
       (CS%id_Tadv > 0) .or. (CS%id_Tadv_z > 0)) then
@@ -1236,6 +1257,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   if (CS%id_Kd_interface > 0) call post_data(CS%id_Kd_interface, Kd_int, CS%diag)
   if (CS%id_Kd_heat > 0)      call post_data(CS%id_Kd_heat,     Kd_heat, CS%diag)
   if (CS%id_Kd_salt > 0)      call post_data(CS%id_Kd_salt,     Kd_salt, CS%diag)
+  if (CS%id_Kd_ePBL > 0)      call post_data(CS%id_Kd_ePBL,     Kd_ePBL, CS%diag)
 
   if (CS%id_ea > 0) call post_data(CS%id_ea, ea, CS%diag)
   if (CS%id_eb > 0) call post_data(CS%id_eb, eb, CS%diag)
@@ -2059,6 +2081,8 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
   call set_diffusivity_init(Time, G, param_file, diag, CS%set_diff_CSp, diag_to_Z_CSp)
   CS%id_Kd_interface = register_diag_field('ocean_model', 'Kd_interface', diag%axesTi, Time, &
       'Total diapycnal diffusivity at interfaces', 'meter2 second-1')
+  CS%id_Kd_ePBL = register_diag_field('ocean_model', 'Kd_ePBL', diag%axesTi, Time, &
+      'ePBL diapycnal diffusivity at interfaces', 'meter2 second-1')
 
   CS%id_Kd_heat = register_diag_field('ocean_model', 'Kd_heat', diag%axesTi, Time, &
       'Total diapycnal diffusivity for heat at interfaces', 'meter2 second-1',     &
@@ -2486,7 +2510,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
   ! To accommodate vanishing upper layers, we need to allow for an instantaneous
   ! distribution of forcing over some finite vertical extent. The bulk mixed layer
   ! code handles this issue properly. 
-  H_limit_fluxes = max(G%Angstrom, 1.E-30) 
+  H_limit_fluxes = max(G%Angstrom, 1.E-30*G%m_to_H) 
 
   ! The inverse scale, IforcingDepthScale, is a hack which 
   ! should not be tickled in Eulerian mode. It stops all of the forcing from 
@@ -2503,11 +2527,13 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
 !$OMP                                  H_limit_fluxes,use_riverHeatContent,              &
 !$OMP                                  useCalvingHeatContent,ea,IforcingDepthScale,      &
 !$OMP                                  numberOfGroundings,iGround,jGround,               &
-!$OMP                                  hGrounding,CS,Idt,aggregate_FW_forcing)           &
+!$OMP                                  hGrounding,CS,Idt,aggregate_FW_forcing,           &
+!$OMP                                  calculate_energetics,dSV_dT,dSV_dS,cTKE,g_Hconv2) &
 !$OMP                          private(opacityBand,h2d,T2d,netMassInOut,netMassOut,      &
 !$OMP                                  netHeat,netSalt,Pen_SW_bnd,fractionOfForcing,     &
 !$OMP                                  dThickness,dTemp,dSalt,hOld,Ithickness,           &
-!$OMP                                  netMassIn)
+!$OMP                                  netMassIn,pres,d_pres,p_lay,dSV_dT_2d,            &
+!$OMP                                  pen_TKE_2d,Temp_in,Salin_in,RivermixConst)
 
   ! work in vertical slices for efficiency 
   do j=js,je 
@@ -2517,7 +2543,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
       h2d(i,k) = h(i,j,k)
       T2d(i,k) = tv%T(i,j,k)
       do n=1,nsw
-        opacityBand(n,i,k) = G%H_to_m*optics%opacity_band(n,i,j,k)
+        opacityBand(n,i,k) = (1.0 / G%m_to_H)*optics%opacity_band(n,i,j,k)
       enddo
     enddo ; enddo
 
@@ -2552,7 +2578,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
     !                netMassOut < 0 means mass leaves ocean. 
     ! netHeat      = heat (degC * H) via surface fluxes, excluding the part 
     !                contained in Pen_SW_bnd; and excluding heat_content of netMassOut < 0. 
-    ! netSalt      = surface salt fluxes ( g(salt)/m2 for non-Bouss and ppt*m/s for Bouss )
+    ! netSalt      = surface salt fluxes ( g(salt)/m2 for non-Bouss and ppt*H for Bouss )
     ! Pen_SW_bnd   = components to penetrative shortwave radiation 
     call extractFluxes1d(G, fluxes, optics, nsw, j, dt,                        &
                   H_limit_fluxes, use_riverHeatContent, useCalvingHeatContent, &
@@ -2661,7 +2687,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
           ! For layers thin relative to 1/IforcingDepthScale, then distribute 
           ! forcing into deeper layers. 
           ! fractionOfForcing = 1.0, unless h2d is less than IforcingDepthScale.
-          fractionOfForcing = min(1.0, h2d(i,k)*IforcingDepthScale)
+          fractionOfForcing = min(1.0, h2d(i,k)*G%H_to_m*IforcingDepthScale)
 
           ! In the case with (-1)*netMassOut greater than 0.8*h, then we limit 
           ! applied to the top cell, and distribute the fluxes downwards.

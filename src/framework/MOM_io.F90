@@ -57,6 +57,7 @@ use MOM_file_parser, only : log_version, param_file_type
 use MOM_string_functions, only : lowercase
 use MOM_grid, only : ocean_grid_type
 
+use ensemble_manager_mod, only : get_ensemble_id
 use fms_mod, only : write_version_number, open_namelist_file, check_nml_error
 use fms_io_mod, only : file_exist, field_size, read_data
 use fms_io_mod, only : field_exists => field_exist, io_infra_end=>fms_io_exit
@@ -82,7 +83,7 @@ implicit none ; private
 public :: close_file, create_file, field_exists, field_size, fieldtype
 public :: file_exists, flush_file, get_file_info, get_file_atts, get_file_fields
 public :: get_file_times, open_file, read_axis_data, read_data, read_field
-public :: num_timelevels, MOM_read_data
+public :: num_timelevels, MOM_read_data, ensembler
 public :: reopen_file, slasher, write_field, write_version_number, MOM_io_init
 public :: open_namelist_file, check_nml_error, io_infra_init, io_infra_end
 public :: APPEND_FILE, ASCII_FILE, MULTIPLE, NETCDF_FILE, OVERWRITE_FILE
@@ -570,6 +571,8 @@ function slasher(dir)
   character(len=*), intent(in) :: dir
   character(len=len(dir)) :: slasher
 
+  ! This function makes sure that dir is terminated with a "/" or if dir is
+  ! empty, sets dir to "./" .
   if (len_trim(dir) == 0) then
     if (len(dir) < 2) call MOM_error(FATAL, &
         "Argument to MOM_io slasher must be at least two characters long.")
@@ -582,6 +585,63 @@ function slasher(dir)
     slasher = trim(dir)//"/"
   endif
 end function slasher
+
+function ensembler(name, ens_no_in) result(en_nm)
+  character(len=*),  intent(in) :: name
+  integer, optional, intent(in) :: ens_no_in
+  character(len=len(name)) :: en_nm
+
+  ! This function replaces "%#E" or "%E" with the ensemble number anywhere it
+  ! occurs in name, with %E using 4 or 6 digits (depending on the ensemble size)
+  ! and %#E using # digits, where # is a number from 1 to 9.
+
+  character(len=len(name)) :: tmp
+  character(10) :: ens_num_char
+  character(3)  :: code_str
+  integer :: ens_no
+  integer :: n, is, ie
+
+  en_nm = trim(name)
+  if (index(name,"%") == 0) return
+
+  if (present(ens_no_in)) then
+    ens_no = ens_no_in
+  else
+    ens_no = get_ensemble_id()
+  endif
+
+  write(ens_num_char, '(I10)') ens_no ; ens_num_char = adjustl(ens_num_char)
+  do
+    is = index(en_nm,"%E")
+    if (is == 0) exit
+    if (len(en_nm) < len(trim(en_nm)) + len(trim(ens_num_char)) - 2) &
+      call MOM_error(FATAL, "MOM_io ensembler: name "//trim(name)// &
+      " is not long enough for %E expansion for ens_no "//trim(ens_num_char))
+    tmp = en_nm(1:is-1)//trim(ens_num_char)//trim(en_nm(is+2:))
+    en_nm = tmp
+  enddo
+  
+  if (index(name,"%") == 0) return
+
+  write(ens_num_char, '(I10.10)') ens_no
+  do n=1,9 ; do
+    write(code_str, '("%",I1,"E")') n
+
+    is = index(en_nm,code_str)
+    if (is == 0) exit
+    if (ens_no < 10**n) then
+      if (len(en_nm) < len(trim(en_nm)) + n-3) call MOM_error(FATAL, &
+        "MOM_io ensembler: name "//trim(name)//" is not long enough for %E expansion.")
+      tmp = en_nm(1:is-1)//trim(ens_num_char(11-n:10))//trim(en_nm(is+3:))
+    else
+      call MOM_error(FATAL, "MOM_io ensembler: Ensemble number is too large "//&
+          "to be encoded with "//code_str//" in "//trim(name))
+    endif
+    en_nm = tmp
+  enddo ; enddo
+
+end function ensembler
+
 
 function MOM_file_exists(file_name, MOM_Domain)
   character(len=*),       intent(in) :: file_name

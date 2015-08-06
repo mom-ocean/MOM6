@@ -338,6 +338,7 @@ use MOM_cpu_clock,            only : CLOCK_COMPONENT, CLOCK_SUBCOMPONENT
 use MOM_cpu_clock,            only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
 use MOM_coms,                 only : reproducing_sum
 use MOM_diag_mediator,        only : diag_mediator_init, enable_averaging
+use MOM_diag_mediator,        only : diag_set_thickness_ptr, diag_update_target_grids
 use MOM_diag_mediator,        only : disable_averaging, post_data, safe_alloc_ptr
 use MOM_diag_mediator,        only : register_diag_field, register_static_field
 use MOM_diag_mediator,        only : register_scalar_field
@@ -352,6 +353,7 @@ use MOM_error_handler,        only : MOM_set_verbosity, callTree_showQuery
 use MOM_error_handler,        only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser,          only : read_param, get_param, log_version, param_file_type
 use MOM_fixed_initialization, only : MOM_initialize_fixed
+use MOM_forcing_type,         only : MOM_forcing_chksum
 use MOM_get_input,            only : Get_MOM_Input, directories
 use MOM_io,                   only : MOM_io_init, vardesc
 use MOM_obsolete_params,      only : find_obsolete_params
@@ -600,6 +602,7 @@ type, public :: MOM_control_struct
   integer :: id_h_preale = -1
   integer :: id_T_preale = -1
   integer :: id_S_preale = -1
+  integer :: id_e_preale = -1
 
   ! The remainder provides pointers to child modules' control structures.
   type(MOM_dyn_unsplit_CS),      pointer :: dyn_unsplit_CSp      => NULL()
@@ -728,7 +731,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     v, &  ! v : meridional velocity component (m/s)
     h     ! h : layer thickness (meter (Bouss) or kg/m2 (non-Bouss))
 
-  real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)+1) :: eta_predia
+  real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)+1) :: eta_predia, eta_preale
 
   real :: tot_wt_ssh, Itot_wt_ssh, I_time_int
   real :: zos_area_mean, volo
@@ -852,6 +855,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
   if (CS%debug) then
     call MOM_state_chksum("Before steps ", u, v, h, CS%uh, CS%vh, G)
+    call MOM_forcing_chksum("Before steps", fluxes, G, haloshift=0)
     call check_redundant("Before steps ", u, v, G)
   endif
 
@@ -944,6 +948,10 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         if (CS%id_h_preale > 0) call post_data(CS%id_h_preale, h, CS%diag)
         if (CS%id_T_preale > 0) call post_data(CS%id_T_preale, CS%tv%T, CS%diag)
         if (CS%id_S_preale > 0) call post_data(CS%id_S_preale, CS%tv%S, CS%diag)
+        if (CS%id_e_preale > 0) then
+            call find_eta(h, CS%tv, G%g_Earth, G, eta_preale)
+            call post_data(CS%id_e_preale, eta_preale, CS%diag)
+        endif
 
         ! Regridding/remapping is done here, at end of thermodynamics time step
         ! (that may comprise several dynamical time steps)
@@ -971,6 +979,10 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         call cpu_clock_begin(id_clock_pass)
         call do_group_pass(CS%pass_uv_T_S_h, G%Domain)
         call cpu_clock_end(id_clock_pass)
+
+        ! Whenever thickness changes let the diag manager know, target grids
+        ! for vertical remapping may need to be regenerated.
+        call diag_update_target_grids(CS%diag)
 
         if (CS%debug) then
           call uchksum(u,"Post-dia first u", G, haloshift=2)
@@ -1034,6 +1046,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         else
           dtth = dt*min(ntstep,n_max-n+1)
         endif
+
         call enable_averaging(dtth,Time_local+set_time(int(floor(dtth-dt+0.5))), CS%diag)
         call cpu_clock_begin(id_clock_thick_diff)
         if (associated(CS%VarMix)) call calc_slope_functions(h, CS%tv, dt, G, CS%VarMix)
@@ -1045,6 +1058,11 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         call cpu_clock_end(id_clock_pass)
         call disable_averaging(CS%diag)
         if (showCallTree) call callTree_waypoint("finished thickness_diffuse_first (step_MOM)")
+
+        ! Whenever thickness changes let the diag manager know, target grids
+        ! for vertical remapping may need to be regenerated.
+        call diag_update_target_grids(CS%diag)
+
       endif
     endif
 
@@ -1153,11 +1171,9 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     endif
 
     if (CS%useMEKE) call step_forward_MEKE(CS%MEKE, h, CS%VarMix%SN_u, CS%VarMix%SN_v, &
-                                           CS%visc, dt, G, CS%MEKE_CSp)
-
+                                           CS%visc, dt, G, CS%MEKE_CSp, CS%uhtr, CS%vhtr)
     call disable_averaging(CS%diag)
     call cpu_clock_end(id_clock_dynamics)
-
 
     CS%dt_trans = CS%dt_trans + dt
     if (thermo_does_span_coupling) then
@@ -1174,9 +1190,9 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       if (CS%debug) then
         call uchksum(u,"Pre-advection u", G, haloshift=2)
         call vchksum(v,"Pre-advection v", G, haloshift=2)
-        call hchksum(h,"Pre-advection h", G, haloshift=1)
-        call uchksum(CS%uhtr,"Pre-advection uhtr", G, haloshift=0)
-        call vchksum(CS%vhtr,"Pre-advection vhtr", G, haloshift=0)
+        call hchksum(h*G%H_to_m,"Pre-advection h", G, haloshift=1)
+        call uchksum(CS%uhtr*G%H_to_m,"Pre-advection uhtr", G, haloshift=0)
+        call vchksum(CS%vhtr*G%H_to_m,"Pre-advection vhtr", G, haloshift=0)
       ! call MOM_state_chksum("Pre-advection ", u, v, &
       !                       h, CS%uhtr, CS%vhtr, G, haloshift=1)
           if (associated(CS%tv%T)) call hchksum(CS%tv%T, "Pre-advection T", G, haloshift=1)
@@ -1226,12 +1242,13 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         if (CS%debug) then
           call uchksum(u,"Pre-diabatic u", G, haloshift=2)
           call vchksum(v,"Pre-diabatic v", G, haloshift=2)
-          call hchksum(h,"Pre-diabatic h", G, haloshift=1)
-          call uchksum(CS%uhtr,"Pre-diabatic uh", G, haloshift=0)
-          call vchksum(CS%vhtr,"Pre-diabatic vh", G, haloshift=0)
+          call hchksum(h*G%H_to_m,"Pre-diabatic h", G, haloshift=1)
+          call uchksum(CS%uhtr*G%H_to_m,"Pre-diabatic uh", G, haloshift=0)
+          call vchksum(CS%vhtr*G%H_to_m,"Pre-diabatic vh", G, haloshift=0)
         ! call MOM_state_chksum("Pre-diabatic ",u, v, h, CS%uhtr, CS%vhtr, G)
           call MOM_thermo_chksum("Pre-diabatic ", CS%tv, G,haloshift=0)
           call check_redundant("Pre-diabatic ", u, v, G)
+          call MOM_forcing_chksum("Pre-diabatic", fluxes, G, haloshift=0)
         endif
 
         if (CS%split .and. CS%legacy_split) then  ! The dt here is correct. -RWH
@@ -1264,7 +1281,12 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
             call hchksum(CS%tv%S,"Post-ALE S", G, haloshift=1)
             call check_redundant("Post-ALE ", u, v, G)
           endif
-        endif   
+        endif
+
+        ! Whenever thickness changes let the diag manager know, target grids
+        ! for vertical remapping may need to be regenerated. This needs to
+        ! happen after the H update and before the next post_data.
+        call diag_update_target_grids(CS%diag)
 
         call cpu_clock_begin(id_clock_pass)
         call do_group_pass(CS%pass_uv_T_S_h, G%Domain)
@@ -1273,9 +1295,9 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         if (CS%debug) then
           call uchksum(u,"Post-diabatic u", G, haloshift=2)
           call vchksum(v,"Post-diabatic v", G, haloshift=2)
-          call hchksum(h,"Post-diabatic h", G, haloshift=1)
-          call uchksum(CS%uhtr,"Post-diabatic uh", G, haloshift=0)
-          call vchksum(CS%vhtr,"Post-diabatic vh", G, haloshift=0)
+          call hchksum(h*G%H_to_m,"Post-diabatic h", G, haloshift=1)
+          call uchksum(CS%uhtr*G%H_to_m,"Post-diabatic uh", G, haloshift=0)
+          call vchksum(CS%vhtr*G%H_to_m,"Post-diabatic vh", G, haloshift=0)
         ! call MOM_state_chksum("Post-diabatic ", u, v, &
         !                       h, CS%uhtr, CS%vhtr, G, haloshift=1)
           if (associated(CS%tv%T)) call hchksum(CS%tv%T, "Post-diabatic T", G, haloshift=1)
@@ -1924,7 +1946,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
 
   ! Set the fields that are needed for bitwise identical restarting
   ! the time stepping scheme.
-  call restart_init(param_file, CS%restart_CSp)
+  call restart_init(G, param_file, CS%restart_CSp)
   call set_restart_fields(G, param_file, CS)
   if (CS%split) then
     if (CS%legacy_split) then
@@ -1972,11 +1994,6 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call cpu_clock_end(id_clock_MOM_init)
   call callTree_waypoint("returned from MOM_initialize_state() (initialize_MOM)")
 
-  ! Initialize the diagnostics mask arrays. 
-  ! This step has to be done after call to MOM_initialize_state
-  ! and before MOM_diagnostics_init
-  call diag_masks_set(G, CS%missing, diag)
-
   if (CS%use_ALE_algorithm) then
     ! For now, this has to follow immediately after MOM_initialize_state because
     ! the call to initialize_ALE can change CS%h, etc.  initialize_ALE should
@@ -1985,7 +2002,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     if (CS%debug) then
       call uchksum(CS%u,"Pre initialize_ALE u", G, haloshift=1)
       call vchksum(CS%v,"Pre initialize_ALE v", G, haloshift=1)
-      call hchksum(CS%h,"Pre initialize_ALE h", G, haloshift=1)
+      call hchksum(CS%h*G%H_to_m,"Pre initialize_ALE h", G, haloshift=1)
     endif
     if (.not. query_initialized(CS%h,"h",CS%restart_CSp)) then
       ! This is a not a restart so we do the following...
@@ -1996,13 +2013,28 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     if (CS%debug) then
       call uchksum(CS%u,"Post initialize_ALE u", G, haloshift=1)
       call vchksum(CS%v,"Post initialize_ALE v", G, haloshift=1)
-      call hchksum(CS%h, "Post initialize_ALE h", G, haloshift=1)
+      call hchksum(CS%h*G%H_to_m, "Post initialize_ALE h", G, haloshift=1)
     endif
   endif
 
-  ! This call sets up the diagnostic axes.
-  call cpu_clock_begin(id_clock_MOM_init)
+  ! Initialize the diagnostics mask arrays.
+  ! This step has to be done after call to MOM_initialize_state
+  ! and before MOM_diagnostics_init
+  call diag_masks_set(G, CS%missing, diag)
+
+  ! Set up a pointers h within diag mediator control structure,
+  ! this needs to occur _after_ CS%h has been allocated.
+  call diag_set_thickness_ptr(CS%h, diag)
+
+  ! This call sets up the diagnostic axes. These are needed,
+  ! e.g. to generate the target grids below.
   call set_axes_info(G, param_file, diag)
+
+  ! Whenever thickness changes let the diag manager know, target grids
+  ! for vertical remapping may need to be regenerated. This needs to
+  call diag_update_target_grids(diag)
+
+  call cpu_clock_begin(id_clock_MOM_init)
   if (CS%use_ALE_algorithm) then
     call ALE_writeCoordinateFile( CS%ALE_CSp, G, dirs%output_directory )
   endif
@@ -2374,16 +2406,20 @@ subroutine register_diags(Time, G, CS, ADp)
       'Layer Thickness before diabatic forcing', thickness_units)
   CS%id_e_predia = register_diag_field('ocean_model', 'e_predia', diag%axesTi, Time, &
       'Interface Heights before diabatic forcing', 'meter')
-  CS%id_u_preale = register_diag_field('ocean_model', 'u_preale', diag%axesCuL, Time, &
-      'Zonal velocity before remapping', 'meter second-1')
-  CS%id_v_preale = register_diag_field('ocean_model', 'v_preale', diag%axesCvL, Time, &
-      'Meridional velocity before remapping', 'meter second-1')
-  CS%id_h_preale = register_diag_field('ocean_model', 'h_preale', diag%axesTL, Time, &
-      'Layer Thickness before remapping', thickness_units)
-  CS%id_T_preale = register_diag_field('ocean_model', 'T_preale', diag%axesTL, Time, &
-      'Temperature before remapping', 'degC')
-  CS%id_S_preale = register_diag_field('ocean_model', 'S_preale', diag%axesTL, Time, &
-      'Salinity before remapping', 'ppt')
+  if (CS%diabatic_first .and. (.not. CS%adiabatic)) then
+    CS%id_u_preale = register_diag_field('ocean_model', 'u_preale', diag%axesCuL, Time, &
+        'Zonal velocity before remapping', 'meter second-1')
+    CS%id_v_preale = register_diag_field('ocean_model', 'v_preale', diag%axesCvL, Time, &
+        'Meridional velocity before remapping', 'meter second-1')
+    CS%id_h_preale = register_diag_field('ocean_model', 'h_preale', diag%axesTL, Time, &
+        'Layer Thickness before remapping', thickness_units)
+    CS%id_T_preale = register_diag_field('ocean_model', 'T_preale', diag%axesTL, Time, &
+        'Temperature before remapping', 'degC')
+    CS%id_S_preale = register_diag_field('ocean_model', 'S_preale', diag%axesTL, Time, &
+        'Salinity before remapping', 'ppt')
+    CS%id_e_preale = register_diag_field('ocean_model', 'e_preale', diag%axesTi, Time, &
+        'Interface Heights before remapping', 'meter')
+  endif
   if (CS%use_temperature) then
     CS%id_T_predia = register_diag_field('ocean_model', 'temp_predia', diag%axesTL, Time, &
         'Potential Temperature', 'Celsius')
@@ -2652,8 +2688,8 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, CS, p_atm)
       enddo
 
       do k=1,nz ; do i=is,ie
-        if (depth(i) + h(i,j,k) < depth_ml) then
-          dh = h(i,j,k)
+        if (depth(i) + h(i,j,k)*G%H_to_m < depth_ml) then
+          dh = h(i,j,k)*G%H_to_m
         elseif (depth(i) < depth_ml) then
           dh = depth_ml - depth(i)
         else
@@ -2669,7 +2705,7 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, CS, p_atm)
       enddo ; enddo
   ! Calculate the average properties of the mixed layer depth.
       do i=is,ie
-        if (depth(i) < G%H_subroundoff) depth(i) = G%H_subroundoff
+        if (depth(i) < G%H_subroundoff*G%H_to_m) depth(i) = G%H_subroundoff*G%H_to_m
         if (CS%use_temperature) then
           state%SST(i,j) = state%SST(i,j) / depth(i)
           state%SSS(i,j) = state%SSS(i,j) / depth(i)

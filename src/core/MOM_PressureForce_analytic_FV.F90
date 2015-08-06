@@ -490,7 +490,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
 !  (in)      p_atm - the pressure at the ice-ocean or atmosphere-ocean
 !                    interface in Pa.
 !  (out)     pbce - the baroclinic pressure anomaly in each layer
-!                   due to free surface height anomalies, in m s-2.
+!                   due to free surface height anomalies, in m2 H-1 s-2.
 !  (out)     eta - the free surface height used to calculate PFu and PFv, in m,
 !                  with any tidal contributions or compressibility compensation.
 
@@ -510,7 +510,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
     dpa_bk, &    ! The change in pressure anomaly between the top and bottom
                  ! of a layer, in Pa.
     intz_dpa_bk  ! The vertical integral in depth of the pressure anomaly less
-                 ! the pressure anomaly at the top of the layer, in m Pa.
+                 ! the pressure anomaly at the top of the layer, in H Pa (m Pa).
   real, dimension(SZIB_BK_(G),SZJ_BK_(G)) :: & ! on block indices
     intx_pa_bk, & ! The zonal integral of the pressure anomaly along the interface
                   ! atop a layer, divided by the grid spacing, in Pa.
@@ -576,13 +576,13 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
     ! but that is not yet implemented, and the current form is correct for
     ! barotropic tides.
 !$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,e,G,h)
-    do j=Jsq,Jeq+1 
+    do j=Jsq,Jeq+1
       do i=Isq,Ieq+1
         e(i,j,1) = -1.0*G%bathyT(i,j)
       enddo
       do k=1,nz ; do i=Isq,Ieq+1
-        e(i,j,1) = e(i,j,1) + G%H_to_m*h(i,j,k)
-      enddo ; enddo 
+        e(i,j,1) = e(i,j,1) + h(i,j,k)*G%H_to_m
+      enddo ; enddo
     enddo
     call calc_tidal_forcing(CS%Time, e(:,:,1), e_tidal, G, CS%tides_CSp)
   endif
@@ -602,7 +602,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
   endif
 !$OMP do 
   do j=Jsq,Jeq+1; do k=nz,1,-1 ; do i=Isq,Ieq+1
-    e(i,j,K) = e(i,j,K+1) + G%H_to_m*h(i,j,k)
+    e(i,j,K) = e(i,j,K+1) + h(i,j,k)*G%H_to_m
   enddo ; enddo ; enddo
 !$OMP end parallel
 
@@ -677,9 +677,9 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
   ! of freedeom needed to know the linear profile).
   if ( use_ALE ) then
     if ( PRScheme == PRESSURE_RECONSTRUCTION_PLM ) then
-      call pressure_gradient_plm (ALE_CSp, S_t, S_b, T_t, T_b, G, tv, h );
+      call pressure_gradient_plm (ALE_CSp, S_t, S_b, T_t, T_b, G, tv, h);
     elseif ( PRScheme == PRESSURE_RECONSTRUCTION_PPM ) then
-      call pressure_gradient_ppm (ALE_CSp, S_t, S_b, T_t, T_b, G, tv, h );
+      call pressure_gradient_ppm (ALE_CSp, S_t, S_b, T_t, T_b, G, tv, h);
     endif
   endif
 
@@ -754,6 +754,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
                     rho_ref, CS%Rho0, G%g_Earth, G%Block(n), tv%eqn_of_state, &
                     dpa_bk, intz_dpa_bk, intx_dpa_bk, inty_dpa_bk )
         endif
+        intz_dpa_bk(:,:) = intz_dpa_bk(:,:)*G%m_to_H
       else
         do jb=Jsq_bk,Jeq_bk+1 ; do ib=Isq_bk,Ieq_bk+1
           i = ib+ioff_bk ; j = jb+joff_bk
@@ -775,7 +776,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
         PFu(I,j,k) = (((pa_bk(ib,jb)*h(i,j,k) + intz_dpa_bk(ib,jb)) - &
                      (pa_bk(ib+1,jb)*h(i+1,j,k) + intz_dpa_bk(ib+1,jb))) + &
                      ((h(i+1,j,k) - h(i,j,k)) * intx_pa_bk(Ib,jb) - &
-                     (e(i+1,j,K+1) - e(i,j,K+1)) * intx_dpa_bk(Ib,jb))) * &
+                     (e(i+1,j,K+1) - e(i,j,K+1)) * intx_dpa_bk(Ib,jb) * G%m_to_H)) * &
                      ((2.0*I_Rho0*G%IdxCu(I,j)) / &
                      ((h(i,j,k) + h(i+1,j,k)) + h_neglect))
         intx_pa_bk(Ib,jb) = intx_pa_bk(Ib,jb) + intx_dpa_bk(Ib,jb)
@@ -786,7 +787,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
         PFv(i,J,k) = (((pa_bk(ib,jb)*h(i,j,k) + intz_dpa_bk(ib,jb)) - &
                      (pa_bk(ib,jb+1)*h(i,j+1,k) + intz_dpa_bk(ib,jb+1))) + &
                      ((h(i,j+1,k) - h(i,j,k)) * inty_pa_bk(ib,Jb) - &
-                     (e(i,j+1,K+1) - e(i,j,K+1)) * inty_dpa_bk(ib,Jb))) * &
+                     (e(i,j+1,K+1) - e(i,j,K+1)) * inty_dpa_bk(ib,Jb) * G%m_to_H)) * &
                      ((2.0*I_Rho0*G%IdyCv(i,J)) / &
                      ((h(i,j,k) + h(i,j+1,k)) + h_neglect))
         inty_pa_bk(ib,Jb) = inty_pa_bk(ib,Jb) + inty_dpa_bk(ib,Jb)
@@ -819,12 +820,12 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
     ! about 200 lines above.
 !$OM parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,eta,e,e_tidal)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-        eta(i,j) = e(i,j,1) + e_tidal(i,j)
+        eta(i,j) = e(i,j,1)*G%m_to_H + e_tidal(i,j)*G%m_to_H
       enddo ; enddo
     else
 !$OM parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,eta,e)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-        eta(i,j) = e(i,j,1)
+        eta(i,j) = e(i,j,1)*G%m_to_H
       enddo ; enddo
     endif
   endif

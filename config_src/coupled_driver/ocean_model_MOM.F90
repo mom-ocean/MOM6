@@ -37,7 +37,7 @@ module ocean_model_mod
 use MOM, only : initialize_MOM, step_MOM, MOM_control_struct, MOM_end
 use MOM, only : calculate_surface_state
 use MOM_constants, only : CELSIUS_KELVIN_OFFSET
-use MOM_diag_mediator, only : enable_averaging, disable_averaging
+use MOM_diag_mediator, only : diag_ctrl, enable_averaging, disable_averaging
 use MOM_diag_mediator, only : diag_mediator_close_registration, diag_mediator_end
 use MOM_domains, only : pass_vector, AGRID, BGRID_NE, CGRID_NE
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe
@@ -72,7 +72,7 @@ use mpp_mod, only : mpp_chksum
 #include <MOM_memory.h>
 
 #ifdef _USE_GENERIC_TRACER
-use MOM_generic_tracer, only : MOM_generic_flux_init
+use MOM_generic_tracer, only : MOM_generic_flux_init,MOM_generic_tracer_fluxes_accumulate 
 #endif
 
 implicit none ; private
@@ -351,10 +351,10 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
                                  ! start of a call to step_MOM.
   integer :: index_bnds(4)       ! The computational domain index bounds in the
                                  ! ice-ocean boundary type.
-
+  real :: weight            ! Flux accumulation weight
   real :: time_step         ! The time step of a call to step_MOM in seconds.
   integer :: secs, days
-
+  
   call callTree_enter("update_ocean_model(), ocean_model_MOM.F90")
   call get_time(Ocean_coupling_time_step, secs, days)
   time_step = 86400.0*real(days) + real(secs)
@@ -374,10 +374,15 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   call mpp_get_compute_domain(Ocean_sfc%Domain, index_bnds(1), index_bnds(2), &
                               index_bnds(3), index_bnds(4))
 
+  weight = 1.0
+
   if (OS%fluxes%fluxes_used) then
     call enable_averaging(time_step, OS%Time + Ocean_coupling_time_step, OS%MOM_CSp%diag) ! Needed to allow diagnostics in convert_IOB
     call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%fluxes, index_bnds, OS%Time, &
                                OS%grid, OS%forcing_CSp, OS%state, OS%restore_salinity)
+#ifdef _USE_GENERIC_TRACER
+    call MOM_generic_tracer_fluxes_accumulate(OS%fluxes, weight) !here weight=1, just saving the current fluxes
+#endif
 
   ! Add ice shelf fluxes
 
@@ -397,7 +402,10 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
       call shelf_calc_flux(OS%State, OS%flux_tmp, OS%Time, time_step, OS%Ice_shelf_CSp)
     endif
   
-    call forcing_accumulate(OS%flux_tmp, OS%fluxes, time_step, OS%grid)
+    call forcing_accumulate(OS%flux_tmp, OS%fluxes, time_step, OS%grid, weight)
+#ifdef _USE_GENERIC_TRACER
+    call MOM_generic_tracer_fluxes_accumulate(OS%flux_tmp, weight) !weight of the current flux in the running average
+#endif
   endif
 
   call disable_averaging(OS%MOM_CSp%diag)
@@ -494,6 +502,7 @@ subroutine ocean_model_end(Ocean_sfc, Ocean_state, Time)
   type(ocean_public_type),           intent(inout) :: Ocean_sfc
   type(ocean_state_type),            pointer       :: Ocean_state
   type(time_type),                   intent(in)    :: Time
+
 !   This subroutine terminates the model run, saving the ocean state in a
 ! restart file and deallocating any data associated with the ocean.
 
@@ -504,7 +513,7 @@ subroutine ocean_model_end(Ocean_sfc, Ocean_state, Time)
 !  (in)      Time - The model time, used for writing restarts.
 
   call ocean_model_save_restart(Ocean_state, Time)
-  call diag_mediator_end(Time)
+  call diag_mediator_end(Time, Ocean_state%MOM_CSp%diag)
   call MOM_end(Ocean_state%MOM_CSp)
   if (Ocean_state%use_ice_shelf) call ice_shelf_end(Ocean_state%Ice_shelf_CSp)
 end subroutine ocean_model_end

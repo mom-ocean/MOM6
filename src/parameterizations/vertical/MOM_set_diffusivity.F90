@@ -129,6 +129,7 @@ type, public :: set_diffusivity_CS ; private
                              ! Otherwise, diffusivities from the BBL_mixing is
                              ! added.
   logical :: use_LOTW_BBL_diffusivity ! If true, use simpler/less precise, BBL diffusivity.
+  logical :: LOTW_BBL_use_omega ! If true, use simpler/less precise, BBL diffusivity.
   real    :: BBL_effic       ! efficiency with which the energy extracted
                              ! by bottom drag drives BBL diffusion (nondim)
   real    :: cdrag           ! quadratic drag coefficient (nondim)
@@ -518,13 +519,13 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, G, C
     if (CS%debug) then
       call hchksum(tv%T, "before vert_fill_TS tv%T",G)
       call hchksum(tv%S, "before vert_fill_TS tv%S",G)
-      call hchksum(h, "before vert_fill_TS h",G)
+      call hchksum(h*G%H_to_m, "before vert_fill_TS h",G)
     endif
     call vert_fill_TS(h, tv%T, tv%S, kappa_fill, dt_fill, T_f, S_f, G)
     if (CS%debug) then
       call hchksum(tv%T, "after vert_fill_TS tv%T",G)
       call hchksum(tv%S, "after vert_fill_TS tv%S",G)
-      call hchksum(h, "after vert_fill_TS h",G)
+      call hchksum(h*G%H_to_m, "after vert_fill_TS h",G)
     endif
   endif
 
@@ -736,6 +737,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, G, C
         Kd(i,j,k) = max( Kd(i,j,k) , &  ! Apply floor to Kd
            dissip * (CS%FluxRi_max / (G%Rho0 * (N2_lay(i,k) + Omega2))) )
       enddo ; enddo
+
       if (present(Kd_int)) then ; do K=2,nz ; do i=is,ie
       ! This calculates the dissipation ONLY from Kd calculated in this routine
       ! dissip has units of W/m3 (kg/m3 * m2/s * 1/s2 = J/s/m3)
@@ -1581,6 +1583,7 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, G, CS,
   real :: Kd_lower         ! diffusivity for lower interface (m2/sec)
   real :: ustar_D          ! u* x D  (m2/s)
   real :: I_Rho0           ! 1 / rho0
+  real :: N2_min           ! Minimum value of N2 to use in calculation of TKE_Kd_wall (1/s2)
   logical :: Rayleigh_drag ! Set to true if there are Rayleigh drag velocities defined in visc, on
                            ! the assumption that this extracted energy also drives diapycnal mixing.
   integer :: i, k, km1
@@ -1589,6 +1592,9 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, G, CS,
 
   if (.not.(CS%bottomdraglaw .and. (CS%BBL_effic>0.0))) return
   do_diag_Kd_BBL = associated(Kd_BBL)
+
+  N2_min = 0.
+  if (CS%LOTW_BBL_use_omega) N2_min = (CS%omega**2)
 
   ! Determine whether to add Rayleigh drag contribution to TKE
   Rayleigh_drag = .false.
@@ -1632,7 +1638,7 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, G, CS,
 
     ! Work upwards from the bottom, accumulating work used until it exceeds the available TKE input
     ! at the bottom.
-    do k=G%ke,1,-1
+    do k=G%ke,2,-1
       dh = G%H_to_m * h(i,j,k) ! Thickness of this level in m.
       km1 = max(k-1, 1)
       dhm1 = G%H_to_m * h(i,j,km1) ! Thickness of level above in m.
@@ -1648,16 +1654,20 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, G, CS,
       ! This is energy loss in addition to work done as mixing, apparently to Joule heating.
       TKE_remaining = exp(-Idecay*dh) * TKE_remaining
 
-      z = z + h(i,j,k) ! Distance between upper interface of layer and the bottom, in m.
+      z = z + h(i,j,k)*G%H_to_m ! Distance between upper interface of layer and the bottom, in m.
       D_minus_z = max(total_thickness - z, 0.) ! Thickness above layer, m.
 
       ! Diffusivity using law of the wall, limited by rotation, at height z, in m2/s.
       ! This calculation is at the upper interface of the layer
-      Kd_wall = ( ( von_karm * ustar2 ) * ( z * D_minus_z ) )/( ustar_D + absf * ( z * D_minus_z ) )
+      if ( ustar_D + absf * ( z * D_minus_z ) == 0.) then
+        Kd_wall = 0.
+      else
+        Kd_wall = ( ( von_karm * ustar2 ) * ( z * D_minus_z ) )/( ustar_D + absf * ( z * D_minus_z ) )
+      endif
 
       ! TKE associated with Kd_wall, in m3 s-2.
       ! This calculation if for the volume spanning the interface.
-      TKE_Kd_wall = Kd_wall * 0.5 * (dh + dhm1) * max(N2_int(i,k), 0.)
+      TKE_Kd_wall = Kd_wall * 0.5 * (dh + dhm1) * max(N2_int(i,k), N2_min)
 
       ! Now bound Kd such that the associated TKE is no greater than available TKE for mixing.
       if (TKE_Kd_wall>0.) then
@@ -1665,7 +1675,11 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, G, CS,
         Kd_wall = (TKE_consumed/TKE_Kd_wall) * Kd_wall ! Scale Kd so that only TKE_consumed is used.
       else
         ! Either N2=0 or dh = 0.
-        Kd_wall = CS%Kd_max
+        if (TKE_remaining>0.) then
+          Kd_wall = CS%Kd_max
+        else
+          Kd_wall = 0.
+        endif
         TKE_consumed = 0.
       endif
 
@@ -2461,6 +2475,11 @@ subroutine set_diffusivity_init(Time, G, param_file, diag, CS, diag_to_Z_CSp)
                  "If true, uses a simple, imprecise but non-coordinate dependent, model\n"//&
                  "of BBL mixing diffusivity based on Law of the Wall. Otherwise, uses\n"//&
                  "the original BBL scheme.", default=.false.)
+    if (CS%use_LOTW_BBL_diffusivity) then
+      call get_param(param_file, mod, "LOTW_BBL_USE_OMEGA", CS%LOTW_BBL_use_omega, &
+                 "If true, use the maximum of Omega and N for the TKE to diffusion\n"//&
+                 "calculation. Otherwise, N is N.", default=.true.)
+    endif
   else
     CS%use_LOTW_BBL_diffusivity = .false. ! This parameterization depends on a u* from viscous BBL
   endif

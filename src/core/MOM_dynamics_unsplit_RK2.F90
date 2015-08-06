@@ -282,7 +282,8 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
   call cpu_clock_begin(id_clock_continuity)
   ! This is a duplicate caclulation of the last continuity from the previous step
   ! and could/should be optimized out. -AJA
-  call continuity(u_in, v_in, h_in, hp, uh, vh, dt_pred, G, CS%continuity_CSp, OBC=CS%OBC)
+  call continuity(u_in, v_in, h_in, hp, uh, vh, dt_pred, G, CS%continuity_CSp, &
+                  OBC=CS%OBC)
   call cpu_clock_end(id_clock_continuity)
   call cpu_clock_begin(id_clock_pass)
   call pass_var(hp, G%Domain)
