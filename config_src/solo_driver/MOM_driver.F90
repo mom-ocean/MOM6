@@ -191,7 +191,7 @@ program MOM_main
   ! in input.nml(ensemble.nml), these should not do anything.  In coupled
   ! configurations, this all occurs in the external driver.
   call ensemble_manager_init() ; ensemble_info(:) =  get_ensemble_size()
-  ensemble_size=ensemble_info(1) ; nPEs_per=ensemble_info(3)
+  ensemble_size=ensemble_info(1) ; nPEs_per=ensemble_info(2)
   if (ensemble_size > 1) then ! There are multiple ensemble members.
     allocate(ocean_pelist(nPEs_per))
     call ensemble_pelist_setup(.true., 0, nPEs_per, 0, 0, atm_pelist, ocean_pelist, &
