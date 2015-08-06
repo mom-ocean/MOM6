@@ -165,6 +165,7 @@ subroutine propagate_int_tide(cg1, En_in, vel_btTide, dt, G, CS)
   real, dimension(SZI_(G),SZJ_(G)) :: &
     tot_En, drag_scale
   real :: frac_per_sector, f2, I_rho0, I_D_here
+  real :: En_sum, tmpForSumming
 
   integer :: a, m, fr, i, j, is, ie, js, je, isd, ied, jsd, jed, nAngle
   integer :: isd_g, jsd_g         ! start indices on data domain but referenced 
@@ -285,9 +286,6 @@ subroutine propagate_int_tide(cg1, En_in, vel_btTide, dt, G, CS)
   do m=1,CS%nMode ; do fr=1,CS%nFreq ; do a=1,CS%nAngle ; do j=jsd,jed ; do i=isd,ied
     CS%En(i,j,a,fr,m) = CS%En(i,j,a,fr,m) / (1.0 + dt*drag_scale(i,j))
   enddo ; enddo ; enddo ; enddo ; enddo
-  
-  ! Check for energy conservation on computational domain (BDM)
-  call sum_En(G,CS,CS%En(:,:,:,1,1),'prop_int_tide')
 
   if (query_averaging_enabled(CS%diag)) then
     if (CS%id_tot_En > 0) call post_data(CS%id_tot_En, tot_En, CS%diag)
@@ -310,7 +308,10 @@ subroutine propagate_int_tide(cg1, En_in, vel_btTide, dt, G, CS)
       call post_data(CS%id_En_ang_mode(fr,m), CS%En(:,:,:,fr,m) , CS%diag)
     endif ; enddo ; enddo
   endif
-     
+  
+  ! Check for energy conservation on computational domain (BDM)
+  call sum_En(G,CS,CS%En(:,:,:,1,1),'prop_int_tide')
+  
 end subroutine propagate_int_tide
 
 subroutine sum_En(G, CS, En, label)
@@ -1689,7 +1690,8 @@ subroutine register_int_tide_restarts(G, param_file, CS, restart_CS)
   !  (in)      restart_CS - A pointer to the restart control structure.
   ! This subroutine is used to allocate and register any fields in this module
   ! that should be written to or read from the restart file.
-  logical :: use_int_tides
+  logical :: use_int_tides, use_temperature
+  character (len=8) :: period_str
   type(vardesc) :: vd
   integer :: num_freq, num_angle , num_mode, period_1
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, a
@@ -1706,24 +1708,70 @@ subroutine register_int_tide_restarts(G, param_file, CS, restart_CS)
   call read_param(param_file, "INTERNAL_TIDES", use_int_tides)
   if (.not.use_int_tides) return
   
+  !--------------------check----------------------------------------------
+  print *,'register_int_tide_restarts: use_int_tides is',use_int_tides
+  !-----------------------------------------------------------------------
+  
+!  use_temperature = .true.
+!  call read_param(param_file, "ENABLE_THERMODYNAMICS", use_temperature)
+!  if (.not.use_temperature) call MOM_error(FATAL, &
+!    "register_int_tide_restarts: internal_tides only works with "//&
+!    "ENABLE_THERMODYNAMICS defined.")
+!
+!  num_freq = 0 ; num_angle = 24 ; num_mode = 1
+!  call read_param(param_file, "INTERNAL_TIDE_FREQS", num_freq)
+!  call read_param(param_file, "INTERNAL_TIDE_ANGLES", num_angle)
+!  call read_param(param_file, "INTERNAL_TIDE_MODES", num_mode)
+!  
+!  !--------------------check----------------------------------------------
+!  print *,'num_freq=',num_freq,'num_angle=',num_angle,'num_mode=',num_mode
+!  !-----------------------------------------------------------------------
+!
+!  if (.not.((num_freq > 0) .and. (num_angle > 0) .and. (num_mode > 0))) return
+!  
+!  !--------------------check----------------------------------------------
+!  print *,'checkpoint'
+!  !-----------------------------------------------------------------------
+!  
+  ! The internal tide code will be used.
   allocate(CS)
+!  CS%do_int_tides = .true.
+!  CS%nFreq = num_freq ; CS%nAngle = num_angle ; CS%nMode = num_mode
+!
+!  allocate(CS%En(isd:ied, jsd:jed, num_angle, num_freq, num_mode))
+!  CS%En(:,:,:,:,:) = 0.0  
+  
   
   num_angle = 24
   call read_param(param_file, "INTERNAL_TIDE_ANGLES", num_angle)
   allocate(CS%En_restart(isd:ied, jsd:jed, num_angle))
   CS%En_restart(:,:,:) = 0.0
   
+!  !--------------------check----------------------------------------------
+!  print *,'in register_restart_field, allocated CS%En_restart', &
+!          size(CS%En_restart,1),'x',size(CS%En_restart,2),'x',size(CS%En_restart,3)
+!  !------------------------------------------------------------------
+!  
+!  allocate(CS%frequency(num_freq))
+!  call read_param(param_file, "FIRST_MODE_PERIOD", period_1); ! ADDED BDM
+!  do a=1,num_freq  
+!    !CS%frequency(a) = (8.0*atan(1.0) * (real(a)) / 86400.0) ! COMMENTED OUT BDM
+!    CS%frequency(a) = (8.0*atan(1.0) * (real(a)) / period_1) ! ADDED BDM - check this later
+!  enddo
+  
+  ! Register variables for restart (BDM) This right??
   vd = vardesc("En_restart", &
     "The internal wave energy density as a function of (i,j,angle,frequency,mode)", &
-    'h','1','1',"J m-2")
+    '','','',"J m-2")
   call register_restart_field(CS%En_restart, vd, .false., restart_CS)  
   
+  ! if (CS%do_integrated) then
+  !   vd = vardesc("Ctrl_heat","Control Integrative Heating",'h','1','s',"W m-2")
+  !   call register_restart_field(CS%heat_0, vd, .false., restart_CS)
+  ! endif  
+  
   !--------------------check----------------------------------------------
-  if (is_root_pe()) then
-    print *,'register_int_tide_restarts: CS and CS%En_restart allocated!'
-    print *,'register_int_tide_restarts: CS%En_restart registered!'
-    print *,'register_int_tide_restarts: done!'
-  endif
+  print *,'register_int_tide_restarts:done!'
   !-----------------------------------------------------------------------
   
 end subroutine register_int_tide_restarts
@@ -1761,42 +1809,74 @@ subroutine internal_tides_init(Time, G, param_file, diag, CS)
   character(len=200) :: refl_dbl_file ! (BDM)
   character(len=200) :: dy_Cu_file, dx_Cv_file ! (BDM)
   
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  use_int_tides = .false.
-  call read_param(param_file, "INTERNAL_TIDES", use_int_tides)
-  CS%do_int_tides = use_int_tides
-  if (.not.use_int_tides) return
-
-  use_temperature = .true.
-  call read_param(param_file, "ENABLE_THERMODYNAMICS", use_temperature)
-  if (.not.use_temperature) call MOM_error(FATAL, &
-    "register_int_tide_restarts: internal_tides only works with "//&
-    "ENABLE_THERMODYNAMICS defined.")
-
-  num_freq = 1 ; num_angle = 24 ; num_mode = 1
-  call read_param(param_file, "INTERNAL_TIDE_FREQS", num_freq)
-  call read_param(param_file, "INTERNAL_TIDE_ANGLES", num_angle)
-  call read_param(param_file, "INTERNAL_TIDE_MODES", num_mode)
-  if (.not.((num_freq > 0) .and. (num_angle > 0) .and. (num_mode > 0))) return
-  CS%nFreq = num_freq ; CS%nAngle = num_angle ; CS%nMode = num_mode
-
-  allocate(CS%En(isd:ied, jsd:jed, num_angle, num_freq, num_mode))
-  CS%En(:,:,:,:,:) = 0.0    
-  CS%En(:,:,:,1,1) = CS%En_restart(:,:,:) ! added here as work-around (BDM)
+!  if (associated(CS)) then
+!    print *, "internal_tides_init: CS is allocated"
+!    print *, "CS%do_int_tides=", CS%do_int_tides
+!  endif
   
-  !print *, 'register_int_tide_init: sum(En_restart)=', sum(CS%En_restart)
-      
-  !--------------------check----------------------------------------------
-  if (is_root_pe()) then
-    print *,'internal_tides_init: CS%En_restart added to CS%En!' !BDM
-  endif
-  !-----------------------------------------------------------------------
+  
+  ! These should have already been called.
+  ! call read_param(param_file, "INTERNAL_TIDES", controlled)
 
-  allocate(CS%frequency(num_freq))
-  call read_param(param_file, "FIRST_MODE_PERIOD", period_1); ! ADDED BDM
-  do a=1,num_freq  
-    CS%frequency(a) = (8.0*atan(1.0) * (real(a)) / period_1) ! ADDED BDM
-  enddo
+!  if (associated(CS)) then
+!    use_int_tides = CS%do_int_tides
+!  else
+!  !   use_int_tides = .false.
+!
+!  ! ###This is here just until the restart code is ready.
+      isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
+      use_int_tides = .false.
+      call read_param(param_file, "INTERNAL_TIDES", use_int_tides)
+      print *, "use_in_tides=", use_int_tides
+      CS%do_int_tides = use_int_tides
+      if (.not.use_int_tides) return
+
+      use_temperature = .true.
+      call read_param(param_file, "ENABLE_THERMODYNAMICS", use_temperature)
+      if (.not.use_temperature) call MOM_error(FATAL, &
+        "register_int_tide_restarts: internal_tides only works with "//&
+        "ENABLE_THERMODYNAMICS defined.")
+
+      num_freq = 1 ; num_angle = 24 ; num_mode = 1
+      call read_param(param_file, "INTERNAL_TIDE_FREQS", num_freq)
+      call read_param(param_file, "INTERNAL_TIDE_ANGLES", num_angle)
+      call read_param(param_file, "INTERNAL_TIDE_MODES", num_mode)
+
+      if (.not.((num_freq > 0) .and. (num_angle > 0) .and. (num_mode > 0))) return
+
+      ! The internal tide code will be used.
+!      allocate(CS)
+!      CS%do_int_tides = .true. ;  use_int_tides = .true.
+      CS%nFreq = num_freq ; CS%nAngle = num_angle ; CS%nMode = num_mode
+
+      allocate(CS%En(isd:ied, jsd:jed, num_angle, num_freq, num_mode))
+      CS%En(:,:,:,:,:) = 0.0
+ 
+      !if (.not. ASSOCIATED(CS%En_restart)) then
+      !   call MOM_error(FATAL, "internal_tides_init: En_restart not allocated ")
+      !endif
+      
+      !--------------------check----------------------------------------------
+      print *,'internal_tides_init:size(CS%En_restart)=',size(CS%En_restart) !BDM
+      !-----------------------------------------------------------------------
+           
+!      allocate(CS%En_restart(isd:ied, jsd:jed, num_angle)) !BDM
+!      CS%En_restart(:,:,:) = 0.0
+      
+      CS%En(:,:,:,1,1) = CS%En_restart(:,:,:) ! added here as work-around (BDM)
+      
+      !--------------------check----------------------------------------------
+      print *,'internal_tides_init:CS%En_restart added to CS%En' !BDM
+      !-----------------------------------------------------------------------
+
+      allocate(CS%frequency(num_freq))
+      call read_param(param_file, "FIRST_MODE_PERIOD", period_1); ! ADDED BDM
+      do a=1,num_freq  
+        !CS%frequency(a) = (8.0*atan(1.0) * (real(a)) / 86400.0)
+	      CS%frequency(a) = (8.0*atan(1.0) * (real(a)) / period_1) ! ADDED BDM
+      enddo
+     
+!  endif
 
   ! Read all relevant parameters and write them to the model log.
   CS%Time => Time ! direct a pointer to the current model time target (BDM)
@@ -2010,25 +2090,18 @@ subroutine internal_tides_init(Time, G, param_file, diag, CS)
                  axes_ang, Time, var_descript, 'J m-2 band-1')
     call MOM_mesg("Registering "//trim(var_name)//", Described as: "//var_descript, 5)
   enddo ; enddo
-  
-  !--------------------check----------------------------------------------
-  if (is_root_pe()) then
-    print *,'internal_tides_init: done!' !BDM
-  endif
-  !-----------------------------------------------------------------------
-  
 end subroutine internal_tides_init
 
 
-subroutine internal_tides_end(CS)
+subroutine internal_tides_end(CS,G)
   type(int_tide_CS),            pointer :: CS
+  type(ocean_grid_type),     intent(inout) :: G
   ! Arguments:  CS - A pointer to the control structure returned by a previous
   !                  call to internal_tides_init, it will be deallocated here.
+  !             G - grid structure added here by BDM.
   
-  print *, 'sum En(:,:,:,1,1) = ', sum(CS%En(:,:,:,1,1)) ! BDM
-  
-  CS%En_restart(:,:,:) = CS%En(:,:,:,1,1)  ! added here as work-around (BDM) 
-  !call save_restart(CS%restart_dir, CS%Time, G, CS%restart_CSp) !(BDM) 
+  CS%En_restart(:,:,:) = CS%En(:,:,:,1,1)  ! added hear as work-around (BDM)
+  call save_restart(CS%restart_dir, CS%Time, G, CS%restart_CSp) ! for restarts: not sure if this should be here (BDM) 
    
   if (associated(CS)) then
     if (associated(CS%En)) deallocate(CS%En)
@@ -2037,14 +2110,6 @@ subroutine internal_tides_end(CS)
     deallocate(CS)
   endif
   CS => NULL()
-  
-  !--------------------check----------------------------------------------
-  if (is_root_pe()) then
-    print *,'internal_tides_end: CS%En added to CS%En_restart' !BDM
-    print *,'internal_tides_end: done!' !BDM
-  endif
-  !-----------------------------------------------------------------------
-  
 end subroutine internal_tides_end
 
 

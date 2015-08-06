@@ -399,6 +399,7 @@ use MOM_interface_heights,     only : find_eta
 use MOM_lateral_mixing_coeffs, only : calc_slope_functions, VarMix_init
 use MOM_lateral_mixing_coeffs, only : calc_resoln_function, VarMix_CS
 use MOM_MEKE,                  only : MEKE_init, MEKE_alloc_register_restart, step_forward_MEKE, MEKE_CS
+!use MOM_internal_tides,        only : register_int_tide_restarts, internal_tides_init, int_tide_CS  !BDM 
 use MOM_MEKE_types,            only : MEKE_type
 use MOM_mixed_layer_restrat,   only : mixedlayer_restrat, mixedlayer_restrat_init, mixedlayer_restrat_CS
 use MOM_obsolete_diagnostics,  only : register_obsolete_diagnostics
@@ -611,6 +612,7 @@ type, public :: MOM_control_struct
   type(thickness_diffuse_CS),    pointer :: thickness_diffuse_CSp  => NULL()
   type(mixedlayer_restrat_CS),   pointer :: mixedlayer_restrat_CSp => NULL()
   type(MEKE_CS),                 pointer :: MEKE_CSp               => NULL()
+!  type(int_tide_CS),             pointer :: IntTide_CSp            => NULL() !BDM
   type(VarMix_CS),               pointer :: VarMix                 => NULL()
   type(wave_speed_CS),           pointer :: wave_speed_CSp         => NULL()
   type(tracer_registry_type),    pointer :: tracer_Reg             => NULL()
@@ -1949,6 +1951,8 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
 
   call MEKE_alloc_register_restart(G, param_file, CS%MEKE, CS%restart_CSp)
   call set_visc_register_restarts(G, param_file, CS%visc, CS%restart_CSp)
+  !print *,'Calling register_int_tide_restart'
+  !call register_int_tide_restarts(G, param_file, CS%IntTide_CSp, CS%restart_CSp) !BDM
 
   ! Initialize fields
   if (associated(CS%tracer_Reg)) init_CS%tracer_Reg => CS%tracer_Reg
@@ -2010,6 +2014,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call wave_speed_init(Time, G, param_file, diag, CS%wave_speed_CSp)
   call VarMix_init(Time, G, param_file, diag, CS%VarMix, CS%wave_speed_CSp)
   call set_visc_init(Time, G, param_file, diag, CS%visc, CS%set_visc_CSp)
+  !call internal_tides_init(Time, G, param_file, diag, CS%IntTide_CSp) !BDM
 
   if (associated(init_CS%tracer_Reg)) &
     CS%tracer_Reg => init_CS%tracer_Reg
@@ -2067,9 +2072,13 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     call adiabatic_driver_init(Time, G, param_file, diag, CS%diabatic_CSp, &
                                CS%tracer_flow_CSp, CS%diag_to_Z_CSp)
   else
+    !call diabatic_driver_init(Time, G, param_file, CS%use_ALE_algorithm, diag,     &
+    !                          CS%ADp, CS%CDp, CS%diabatic_CSp, CS%tracer_flow_CSp, &
+    !                          init_CS%sponge_CSp, CS%diag_to_Z_CSp)
     call diabatic_driver_init(Time, G, param_file, CS%use_ALE_algorithm, diag,     &
                               CS%ADp, CS%CDp, CS%diabatic_CSp, CS%tracer_flow_CSp, &
-                              init_CS%sponge_CSp, CS%diag_to_Z_CSp)
+                              init_CS%sponge_CSp, CS%diag_to_Z_CSp, CS%restart_CSp) !BDM
+    
   endif
 
   call tracer_advect_init(Time, G, param_file, diag, CS%tracer_adv_CSp)
@@ -2834,6 +2843,7 @@ subroutine MOM_end(CS)
   call tracer_advect_end(CS%tracer_adv_CSp)
   call tracer_hor_diff_end(CS%tracer_diff_CSp)
   call tracer_registry_end(CS%tracer_Reg)
+  call diabatic_driver_end(CS%diabatic_CSp) ! BDM
 
   DEALLOC_(CS%uhtr) ; DEALLOC_(CS%vhtr)
   if (CS%split) then ; if (CS%legacy_split) then
