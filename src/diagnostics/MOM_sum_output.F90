@@ -389,7 +389,8 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
   real    :: reday, var
   character(len=120) :: energypath_nc
   character(len=200) :: mesg
-  character(len=32)  :: mesg_intro, time_units, day_str, n_str
+  character(len=32)  :: mesg_intro, time_units, day_str, n_str, date_str
+  logical :: date_stamped
   real :: Tr_stocks(MAX_FIELDS_)
   real :: Tr_min(MAX_FIELDS_),Tr_max(MAX_FIELDS_)
   real :: Tr_min_x(MAX_FIELDS_), Tr_min_y(MAX_FIELDS_), Tr_min_z(MAX_FIELDS_)
@@ -795,7 +796,8 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
   En_mass = toten / mass_tot
 
   call get_time(day, start_of_day, num_days)
-  if (get_calendar_type() /= NO_CALENDAR) &
+  date_stamped = (CS%date_stamped_output .and. (get_calendar_type() /= NO_CALENDAR))
+  if (date_stamped) &
     call get_date(day, iyear, imonth, iday, ihour, iminute, isecond, itick)
   if (abs(CS%timeunit - 86400.0) < 1.0) then
     reday = REAL(num_days)+ (REAL(start_of_day)/86400.0)
@@ -813,33 +815,23 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
   elseif (n < 10000000)  then ; write(n_str, '(I7)')  n
   elseif (n < 100000000) then ; write(n_str, '(I8)')  n
   else                        ; write(n_str, '(I10)') n ; endif
-  
+
+  if (date_stamped) then
+    write(date_str,'("MOM Date",i7,2("/",i2.2)," ",i2.2,2(":",i2.2))') &
+       iyear, imonth, iday, ihour, iminute, isecond
+  else
+    date_str = trim(mesg_intro)//trim(day_str)
+  endif
+
   if (is_root_pe()) then
     if (CS%use_temperature) then
-      if (.not.CS%date_stamped_output .or. (get_calendar_type() == NO_CALENDAR)) then
-        write(*,'(A,A," ",A,": En ",ES12.6, ", MaxCFL ", F8.5, ", Mass ", &
+        write(*,'(A," ",A,": En ",ES12.6, ", MaxCFL ", F8.5, ", Mass ", &
                 & ES18.12, ", Salt ", F15.11,", Temp ", F15.11)') &
-          trim(mesg_intro), trim(day_str(1:3))//trim(day_str(4:)), trim(n_str), &
-          En_mass, max_CFL(1), mass_tot, salin, temp
-      else
-        write(*,'("MOM Date",i7,2("/",i2.2)," ",i2.2,2(":",i2.2)," ", &
-                & A,": En ",ES12.6, ", MaxCFL ", F8.5, ", Mass ", &
-                & ES18.12, ", Salt ", F15.11,", Temp ", F15.11)') &
-          iyear, imonth, iday, ihour, iminute, isecond, &
-          trim(n_str), En_mass, max_CFL(1), mass_tot, salin, temp
-      endif
+          trim(date_str), trim(n_str), En_mass, max_CFL(1), mass_tot, salin, temp
     else
-      if (get_calendar_type() == NO_CALENDAR) then
-        write(*,'(A,A," ",A,": En ",ES12.6, ", MaxCFL ", F8.5, ", Mass ", &
+        write(*,'(A," ",A,": En ",ES12.6, ", MaxCFL ", F8.5, ", Mass ", &
                 & ES18.12)') &
-          trim(mesg_intro), trim(day_str(1:3))//trim(day_str(4:)), trim(n_str), &
-          En_mass, max_CFL(1), mass_tot
-      else
-        write(*,'("MOM Date",i7,2("/",i2.2)," ",i2.2,2(":",i2.2)," ", &
-                & A,": En ",ES12.6, ", MaxCFL ", F8.5, ", Mass ",ES18.12)') &
-          iyear, imonth, iday, ihour, iminute, isecond, &
-          trim(n_str), En_mass, max_CFL(1), mass_tot
-      endif
+          trim(date_str), trim(n_str), En_mass, max_CFL(1), mass_tot
     endif
 
     if (CS%use_temperature) then
@@ -860,7 +852,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
 
     if (CS%ntrunc > 0) then
       write(*,'(A," Energy/Mass:",ES12.5," Truncations ",I0)') &
-        trim(mesg_intro)//trim(day_str), En_mass, CS%ntrunc
+        trim(date_str), En_mass, CS%ntrunc
     endif
 
     if (CS%write_stocks) then
