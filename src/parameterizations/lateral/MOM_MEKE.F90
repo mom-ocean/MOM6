@@ -480,20 +480,20 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, CS, hu, hv)
       if (CS%use_old_lscale) then
         if (CS%Rd_as_max_scale) then
 !$OMP parallel do default(none) shared(is,ie,js,je,MEKE,CS,G,barotrFac2)
-          do j=js-1,je+1 ; do i=is-1,ie+1
+          do j=js,je ; do i=is,ie
             MEKE%Kh(i,j) = (CS%MEKE_KhCoeff &
                          * sqrt(2.*max(0.,barotrFac2(i,j)*MEKE%MEKE(i,j))*G%areaT(i,j))) &
                          * min(MEKE%Rd_dx_h(i,j), 1.0)
           enddo ; enddo
         else
 !$OMP parallel do default(none) shared(is,ie,js,je,MEKE,CS,G,barotrFac2)
-          do j=js-1,je+1 ; do i=is-1,ie+1
+          do j=js,je ; do i=is,ie
             MEKE%Kh(i,j) = CS%MEKE_KhCoeff*sqrt(2.*max(0.,barotrFac2(i,j)*MEKE%MEKE(i,j))*G%areaT(i,j))
           enddo ; enddo
         endif
       else
 !$OMP parallel do default(none) shared(is,ie,js,je,MEKE,LmixScale,CS,G,barotrFac2)
-        do j=js-1,je+1 ; do i=is-1,ie+1
+        do j=js,je ; do i=is,ie
           MEKE%Kh(i,j) = (CS%MEKE_KhCoeff*sqrt(2.*max(0.,barotrFac2(i,j)*MEKE%MEKE(i,j)))*LmixScale(i,j))
         enddo ; enddo
       endif
