@@ -81,7 +81,7 @@ subroutine neutral_diffusion(nk, Dl, Dr, hl, hr, Tl, Tr, Sl, Sr, EOS, H_to_Pa)
   ! the right column interfaces.
   call calculate_density_derivs(Tir, Sir, Pir, dRdTr, dRdSr, 1, nk+1, EOS)
 
-  call find_neutral_surface_position(nk, Til, Sil, dRdTl, dRdSl, Tir, Sir, Pir, PilR)
+  !call find_neutral_surface_position(nk, Til, Sil, dRdTl, dRdSl, Tir, Sir, Pir, PilR)
 
 end subroutine neutral_diffusion
 
@@ -105,67 +105,176 @@ subroutine interface_TS(nk, T, S, Ti, Si)
 
 end subroutine interface_TS
 
-!> Returns position within right column of neutral surface corresponding to each left-column interface
-subroutine find_neutral_surface_position(nk, Tl, Sl, dRdT, dRdS, Tr, Sr, Pr, Po)
-  integer,               intent(in)    :: nk   !< Number of levels
-  real, dimension(nk+1), intent(in)    :: Tl   !< Left-column interface potential temperature (degC)
-  real, dimension(nk+1), intent(in)    :: Sl   !< Left-column interface salinity (ppt)
-  real, dimension(nk+1), intent(in)    :: dRdT !< Left-column dRho/dT (kg/m3/degC)
-  real, dimension(nk+1), intent(in)    :: dRdS !< Left-column dRho/dS (kg/m3/ppt)
-  real, dimension(nk+1), intent(in)    :: Tr   !< Right-column interface potential temperature (degC)
-  real, dimension(nk+1), intent(in)    :: Sr   !< Right-column interface salinity (ppt)
-  real, dimension(nk+1), intent(in)    :: Pr   !< Right-column interface pressure (Pa)
-  real, dimension(nk+1), intent(inout) :: Po   !< Position of neutral surface (Pa)
+!> Returns positions within left/right columns of combined interfaces
+subroutine find_neutral_surface_positions(nk, Pl, Tl, Sl, dRdTl, dRdSl, Pr, Tr, Sr, dRdTr, dRdSr, PoL, PoR, KoL, KoR, hEff)
+  integer,                    intent(in)    :: nk    !< Number of levels
+  real, dimension(nk+1),      intent(in)    :: Pl    !< Left-column interface pressure (Pa)
+  real, dimension(nk+1),      intent(in)    :: Tl    !< Left-column interface potential temperature (degC)
+  real, dimension(nk+1),      intent(in)    :: Sl    !< Left-column interface salinity (ppt)
+  real, dimension(nk+1),      intent(in)    :: dRdTl !< Left-column dRho/dT (kg/m3/degC)
+  real, dimension(nk+1),      intent(in)    :: dRdSl !< Left-column dRho/dS (kg/m3/ppt)
+  real, dimension(nk+1),      intent(in)    :: Pr    !< Right-column interface pressure (Pa)
+  real, dimension(nk+1),      intent(in)    :: Tr    !< Right-column interface potential temperature (degC)
+  real, dimension(nk+1),      intent(in)    :: Sr    !< Right-column interface salinity (ppt)
+  real, dimension(nk+1),      intent(in)    :: dRdTr !< Left-column dRho/dT (kg/m3/degC)
+  real, dimension(nk+1),      intent(in)    :: dRdSr !< Left-column dRho/dS (kg/m3/ppt)
+  real, dimension(2*nk+2),    intent(inout) :: PoL   !< Position of neutral surface in left column (Pa)
+  real, dimension(2*nk+2),    intent(inout) :: PoR   !< Position of neutral surface in right column (Pa)
+  integer, dimension(2*nk+2), intent(inout) :: KoL   !< Index of first left interface at or above neutral surface.
+  integer, dimension(2*nk+2), intent(inout) :: KoR   !< Index of first right interface at or above neutral surface.
+  real, dimension(2*nk+1),    intent(inout) :: hEff  !< Effective thickness between two neutral surfaces (Pa).
   ! Local variables
-  integer kl, kr, krm1
-  real dRkr, dRkrm1, Prm1, wghtU, wghtD, Pint
+  integer :: k_surface ! Index of neutral surface
+  integer :: kl ! Index of left interface
+  integer :: kr ! Index of right interface
+  real :: dRdT, dRdS ! dRho/dT and dRho/dS for the neutral surface
+  logical :: looking_left ! True if searching for the position of a right interface in the left column
+  logical :: looking_right ! True if searching for the position of a left interface in the right column
+  integer :: krm1, klm1
+  real :: dRho, dRhoM1, hL, hR
 
   ! Initialize variables for the search
   kr = 1
-  Prm1 = Pr(1)
+  kl = 1
 
-  ! For each left-column interface, search for the right layer whose interfaces (kr-1 and kr) bracket the left interface.
-  do kl = 1, nk+1
-    ! Search downward until the kr interface is denser than the kl interface
-    krm1 = max(kr-1, 1)
-    dRkrm1 = dRdT(kl) * ( Tr(krm1) - Tl(kl) ) + dRdS(kl) * ( Sr(krm1) - Sl(kl) ) !  Potential density difference, (kr-1) - kl
-    dRkr = dRdT(kl) * ( Tr(kr) - Tl(kl) ) + dRdS(kl) * ( Sr(kr) - Sl(kl) ) !  Potential density difference, kr - kl
-    kr_search: do while ( dRkr<=0. .and. (kr <= nk) )
-      ! The potential density at kr is lighter than the kl interface so we increment kr
-      Prm1 = Pr(kr)
-      dRkrm1 = dRkr
-      kr = kr + 1
-      dRkr = dRdT(kl) * ( Tr(kr) - Tl(kl) ) + dRdS(kl) * ( Sr(kr) - Sl(kl) ) !  Potential density difference, kr - kl
-    enddo kr_search
-    ! At this point:
-    !  1) If kr=1 we are at the surface and dRkr>0 but dRkrm1 could be either sign;
-    !  2) In the interior, dRkrm1<=0. and dRkr>0;
-    !  3) At the bottom,  dRkr<0.
-    ! Note that dRkrm1 + dRkr >0 unless this next test fails.
-    if ( dRkrm1 > dRkr ) stop 'find_neutral_surface_position: Houston, we have a problem! dRkrm1 >= dRkr'
-    ! Linearly interpolate for the position between Pr(kr-1) and Pr(kr) where the density difference between right and
-    ! left is zero; Pint = ( dRkr * Pr(kr) - dRkrm1 * Pr(kr-1) ) / ( dRdk - dRkrm1 ) .
-    if ( dRkr - dRkrm1 > 0. ) then
-      wghtU = -dRkrm1 / ( dRkr - dRkrm1 )
-      wghtD = dRkr / ( dRkr - dRkrm1 )
-      ! Ostensibly wghtU + wghtD = 1.
-      ! The following is an accurate way to do Pint = wghtD * Pr(kr) + wghtU * Pr(kr-1) 
-      if ( wghtU < 0.5 ) then
-        Pint = Prm1 + max( wghtU, 0. ) * ( Pr(kr) - Prm1 )
-      elseif ( wghtD < 0.5 ) then
-        Pint = Pr(kr) + max( wghtD, 0. ) * ( Prm1 - Pr(kr) )
-      else
-        Pint = 0.5 * ( Prm1 + Pr(kr) )
+  ! Loop over each neutral surface, working from top to bottom
+  neutral_surfaces: do k_surface = 1, 2*nk+2
+
+    ! Potential density difference, kr - kl 
+    dRho = 0.5 * ( ( dRdTr(kr) + dRdTl(kl) ) * ( Tr(kr) - Tl(kl) ) &
+                 + ( dRdSr(kr) + dRdSl(kl) ) * ( Sr(kr) - Sl(kl) ) )
+    ! Which column has the lighter surface for the current indexes, kr and kl
+    if (k_surface<2*nk+2) then
+      if (dRho < 0.) then
+        looking_left = .true.
+        looking_right = .false.
+      elseif (dRho >= 0.) then
+        looking_right = .true.
+        looking_left = .false.
       endif
-    else ! dRkr - dRkrm1 = 0
-      Pint = 0.5 * ( Prm1 + Pr(kr) )
+    else
+      ! Note from AJA: This handles the last neutral surface that always sees the same values of kr and kl as
+      ! the previous neutral surface. I do not like this kind of logic. Is there a better way to construct kr
+      ! and kl from k_surface?
+      looking_left = .not. looking_left
+      looking_right = .not. looking_right
     endif
-    if ( Pint < Prm1 ) stop 'find_neutral_surface_position: Houston, we have a problem! Pint < Pr(kr-1)'
-    if ( Pint > Pr(kr) ) stop 'find_neutral_surface_position: Houston, we have a problem! Pint > Pr(kr)'
-    Po(kl) = Pint
-  enddo
 
-end subroutine find_neutral_surface_position
+write(0,*) 'k,kr,kl=',k_surface,kr,kl
+ 
+    if (looking_left) then
+      ! Interpolate for the neutral surface position within the left column, layer kl
+write(0,*) 'looking_left=',looking_left
+      klm1 = max(kl-1, 1)
+      ! Potential density difference, rho(kl-1) - rho(kr) (should be negative)
+      dRhoM1 = 0.5 * ( ( dRdTl(klm1) + dRdTr(kr) ) * ( Tl(klm1) - Tr(kr) ) &
+                     + ( dRdSl(klm1) + dRdSr(kr) ) * ( Sl(klm1) - Sr(kr) ) )
+      ! Potential density difference, rho(kl) - rho(kr) (will be positive)
+      !dRho = 0.5 * ( ( dRdTl(kl) + dRdTr(kr) ) * ( Tl(kl) - Tr(kr) ) &
+      !             + ( dRdSl(kl) + dRdSr(kr) ) * ( Sl(kl) - Sr(kr) ) )
+      dRho = - dRho ! Re-use calculation above
+
+      ! Because we a looking left, the right surface, kr, is lighter than kl and should be denser than kl-1
+      ! unless we are still at the top of the left column (kl=1)
+      if (dRhoM1 > 0.) then
+       !if (kl>1) stop 'This should never happen: kl>1 and dRhoM1>=0.'
+        PoL(k_surface) = Pl(kl)
+      else
+        ! Linearly interpolate for the position between Pl(kl-1) and Pl(kl) where the density difference
+        ! between right and left is zero.
+        PoL(k_surface) = interpolate_for_position( dRhoM1, Pl(klm1), dRho, Pl(kl) )
+      endif
+      PoR(k_surface) = Pr(kr)
+      KoR(k_surface) = kr
+      KoL(k_surface) = kl
+write(0,*) '  dRhoM1=',dRhoM1,' dRho=',dRho
+      if (kr <= nk) then
+        kr = kr + 1
+      else
+        kl = min(kl + 1, nk+1)
+      endif
+write(0,*) '  kr=',kr,' kl=',kl
+    elseif (looking_right) then
+      ! Interpolate for the neutral surface position within the right column, layer kr
+write(0,*) 'looking_right=',looking_right
+      krm1 = max(kr-1, 1)
+      ! Potential density difference, rho(kr-1) - rho(kl) (should be negative)
+      dRhoM1 = 0.5 * ( ( dRdTr(krm1) + dRdTl(kl) ) * ( Tr(krm1) - Tl(kl) ) &
+                     + ( dRdSr(krm1) + dRdSl(kl) ) * ( Sr(krm1) - Sl(kl) ) )
+      ! Potential density difference, rho(kr) - rho(kl) (will be positive)
+      !dRho = 0.5 * ( ( dRdTr(kr) + dRdTl(kl) ) * ( Tr(kr) - Tl(kl) ) &
+      !             + ( dRdSr(kr) + dRdSl(kl) ) * ( Sr(kr) - Sl(kl) ) )
+      dRho = dRho ! Re-use calculation above
+
+      ! Because we a looking right, the left surface, kl, is lighter than kr and should be denser than kr-1
+      ! unless we are still at the top of the right column (kr=1)
+      if (dRhoM1 > 0.) then
+       !if (kr>1) stop 'This should never happen: kr>1 and dRhoM1>=0.'
+        PoR(k_surface) = Pr(kr)
+      else
+        ! Linearly interpolate for the position between Pr(kr-1) and Pr(kr) where the density difference
+        ! between right and left is zero.
+        PoR(k_surface) = interpolate_for_position( dRhoM1, Pr(krm1), dRho, Pr(kr) )
+      endif
+      PoL(k_surface) = Pl(kl)
+      KoL(k_surface) = kl
+      KoR(k_surface) = kr
+write(0,*) '  dRhoM1=',dRhoM1,' dRho=',dRho
+      if (kl <= nk) then
+        kl = kl + 1
+      else
+        kr = min(kr + 1, nk+1)
+      endif
+write(0,*) '  kl=',kl,' kr=',kr
+    else
+      stop 'Else what?'
+    endif
+
+    ! Effective thickness
+    if (k_surface>1) then
+      hL = PoL(k_surface) - PoL(k_surface-1)
+      hR = PoR(k_surface) - PoR(k_surface-1)
+      if ( hL + hR > 0.) then
+        hEff(k_surface-1) = 2. * hL * hR / ( hL + hR )
+      else
+        hEff(k_surface-1) = 0.
+      endif
+write(0,*) '  hEff=',hEff(k_surface-1)
+    endif
+
+  enddo neutral_surfaces
+
+end subroutine find_neutral_surface_positions
+
+!> Returns the position between Pneg and Ppos where the interpolated density difference equals
+!! zero: Pint = ( dRhoPos * Ppos - dRhoNeg * Pneg ) / ( dRhoPos - dRhoneg )
+real function interpolate_for_position(dRhoNeg, Pneg, dRhopos, Ppos)
+  real, intent(in) :: dRhoNeg !< Negative density difference
+  real, intent(in) :: Pneg    !< Position of negative density difference
+  real, intent(in) :: dRhoPos !< Positive density difference
+  real, intent(in) :: Ppos    !< Position of positive density difference
+  ! Local variables
+  real :: wghtU, wghtD, Pint
+
+  if (Ppos<Pneg) stop 'interpolate_for_position: Houston, we have a problem! Ppos<Pneg'
+  if (dRhoNeg>dRhoPos) stop 'interpolate_for_position: Houston, we have a problem! dRhoNeg>dRhoPos'
+  if ( dRhoPos - dRhoNeg > 0. ) then
+    wghtU = -dRhoNeg / ( dRhoPos - dRhoNeg )
+    wghtD = dRhoPos / ( dRhoPos - dRhoNeg )
+    if ( wghtU < 0.5 ) then
+      Pint = Pneg + max( wghtU, 0. ) * ( Ppos - Pneg )
+    elseif ( wghtD < 0.5 ) then
+      Pint = Ppos + max( wghtD, 0. ) * ( Pneg - Ppos )
+    else
+      Pint = 0.5 * ( Pneg + Ppos )
+    endif
+  else ! dRho - dRhoNeg = 0
+    Pint = 0.5 * ( Pneg + Ppos )
+  endif
+  if ( Pint < Pneg ) stop 'interpolate_for_position: Houston, we have a problem! Pint < Pneg'
+  if ( Pint > Ppos ) stop 'interpolate_for_position: Houston, we have a problem! Pint > Ppos'
+  interpolate_for_position = Pint
+end function interpolate_for_position
 
 subroutine neutral_diffusion_init(Time, G, param_file, diag, CS)
   type(time_type), target,  intent(in)    :: Time
@@ -206,81 +315,124 @@ end subroutine neutral_diffusion_end
 !> Returns true if unit tests of neutral_diffusion functions fail. Otherwise returns false.
 logical function neutralDiffusionUnitTests()
   integer, parameter :: nk = 4
-  real, dimension(nk+1) :: Til, Tir1, Tir2, Tir3, Tir4, Tir5, Tir6 ! Test interface temperatures
-  real, dimension(nk+1) :: Sil, Sir1 ! Test interface salinities
-  real, dimension(nk+1) :: Pil, Pir1 ! Test interface positions
-  real, dimension(nk+1) :: dRdT, dRdS ! Test interface expansion coefficients
-  real, dimension(nk+1) :: Po, Po1, Po2, Po3, Po4, Po5, Po6 ! Test positions
-  data Pil / 0., 10., 20., 30., 40. /
-  data Til / 10., 7.5, 5., 2.5, 0. /
-  data Sil / 0., 0., 0., 0., 0. /
+  real, dimension(nk+1)   :: TiL, TiR1 ! Test interface temperatures
+  real, dimension(nk+1)   :: SiL ! Test interface salinities
+  real, dimension(nk+1)   :: PiL ! Test interface positions
+  real, dimension(nk+1)   :: dRdT, dRdS ! Test interface expansion coefficients
+  real, dimension(2*nk+2) :: PiLRo, PiRLo ! Test positions
+  integer, dimension(2*nk+2) :: KoL, KoR ! Test indexes
+  real, dimension(2*nk+1) :: hEff ! Test positions
+  real, dimension(2*nk+2) :: pL0, pL1, pL2, pL3 ! Test positions
+  real, dimension(2*nk+2) :: pR0, pR1, pR2, pR3 ! Test positions
+  real, dimension(2*nk+1) :: hE0, hE1, hE2, hE3 ! Test positions
+  integer, dimension(2*nk+2) :: kL0, kL1, kL2 ! Test indexes
+  integer, dimension(2*nk+2) :: kR0, kR1, kR2 ! Test indexes
+  ! Fixed left column values
+  data PiL / 0., 10., 20., 30., 40. /
+  data TiL / 10., 7.5, 5., 2.5, 0. /
+  data SiL / 0., 0., 0., 0., 0. /
   data dRdT / -0.25, -0.25, -0.25, -0.25, -0.25 /
   data dRdS / 0.5, 0.5, 0.5, 0.5, 0.5 /
-  ! Same grid, warmer values
-  data Pir1 / 0., 10., 20., 30., 40. /
-  data Tir1 / 12., 9.5, 7., 4.5, 2. /
-  data Sir1 / 0., 0., 0., 0., 0. /
-  data Sir1 / 0., 0., 0., 0., 0. /
-  data Po1 / 8., 18., 28., 38., 40. / ! Correct answer
-  ! Same grid, cooler values
-  data Tir2 / 8., 5.5, 3., 0.5, -2. /
-  data Po2 / 0., 2., 12., 22., 32. / ! Correct answer
+  ! Identical columns, answers
+  data pL0 / 0., 0., 10., 10., 20., 20., 30., 30., 40., 40. /
+  data pR0 / 0., 0., 10., 10., 20., 20., 30., 30., 40., 40. /
+  data hE0 / 0., 10., 0., 10., 0., 10., 0., 10., 0. /
+  data kL0 / 1, 1, 1, 2, 2, 3, 3, 4, 4, 5 /
+  data kR0 / 1, 1, 2, 2, 3, 3, 4, 4, 5, 5 /
+  ! Slightly warmer on right, answers
+  data pL1 / 0., 0., 2., 10., 12., 20., 22., 30., 32., 40. /
+  data pR1 / 0., 8., 10., 18., 20., 28., 30., 38., 40., 40. /
+  data hE1 / 0., 2., 8., 2., 8., 2., 8., 2., 0. /
+  data kL1 / 1, 1, 1, 2, 2, 3, 3, 4, 4, 5 /
+  data kR1 / 1, 1, 2, 2, 3, 3, 4, 4, 5, 5 /
+  ! Warmer on right, answers
+  data pL2 / 0., 0., 0., 0., 0., 8., 20., 30., 40., 40. /
+  data pR2 / 0., 10., 20., 30., 32., 40., 40., 40., 40., 40. /
+  data hE2 / 0., 0., 0., 0., 8., 0., 0., 0., 0. /
+  ! Strong stratification on right, input
+  data TiR1 / 20., 10., 0., -7.5, -10. /
+  ! Strong stratification on right, answers
+  data pL3 / 0., 0., 0., 10., 20., 30., 40., 40., 40., 40. /
+  data pR3 / 0., 10., 10., 12.5, 15., 17.5, 20., 20., 40., 40. /
+  data hE3 / 0., 0., 4., 4., 4., 4., 0., 0., 0. /
+
+! data PiR1 / 0., 10., 20., 30., 40. /
+! data Po2 / 0., 2., 12., 22., 32. / ! Correct answer
   ! Same grid, all warmer values
-  data Tir3 / 12., 12., 11., 11., 10.5 /
-  data Po3 / 40., 40., 40., 40., 40. / ! Correct answer
+! data Tir3 / 12., 12., 11., 11., 10.5 /
+! data Po3 / 40., 40., 40., 40., 40. / ! Correct answer
   ! Same grid, all cooler values
-  data Tir4 / -2., -2., -3., -3., -4. /
-  data Po4 / 0., 0., 0., 0., 0. / ! Correct answer
+! data Tir4 / -2., -2., -3., -3., -4. /
+! data Po4 / 0., 0., 0., 0., 0. / ! Correct answer
   ! Same grid, spanning values
-  data Tir5 / 15., 15., 15., -5., -5. /
-  data Po5 / 22.5, 23.75, 25., 26.25, 27.5 / ! Correct answer
+! data Tir5 / 15., 15., 15., -5., -5. /
+! data Po5 / 22.5, 23.75, 25., 26.25, 27.5 / ! Correct answer
   ! Same grid, encompassed values
-  data Tir6 / 7., 6.5, 6., 5.5, 5. /
-  data Po6 / 0., 0., 40., 40., 40. / ! Correct answer
+! data Tir6 / 7., 6.5, 6., 5.5, 5. /
+! data Po6 / 0., 0., 40., 40., 40. / ! Correct answer
   integer :: k
 
   neutralDiffusionUnitTests = .false. ! Normally return false
   write(*,'(a)') '===== MOM_neutral_diffusion: neutralDiffusionUnitTests =================='
 
-  call find_neutral_surface_position(nk, Til, Sil, dRdT, dRdS, Til, Sir1, Pir1, Po)
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. simpleTest(nk, Po, Pil, 'Project left->right 0, identical values')
+  call find_neutral_surface_positions(nk, PiL, TiL, SiL, dRdt, dRdS, PiL, TiL, SiL, dRdT, dRdS, PiLRo, PiRLo, KoL, KoR, hEff)
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. simpleTest(2*nk+2, PiLRo, pL0, 'Identical columns, left positions')
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. simpleTest(2*nk+2, PiRLo, pR0, 'Identical columns, right positions')
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. simpleTest(2*nk+1, hEff, hE0, 'Identical columns, thicknesses')
 
-  call find_neutral_surface_position(nk, Til, Sil, dRdT, dRdS, Tir1, Sir1, Pir1, Po)
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. simpleTest(nk, Po, Po1, 'Project left->right 1, slightly warmer values')
+  call find_neutral_surface_positions(nk, PiL, TiL, SiL, dRdt, dRdS, PiL+2., TiL, SiL, dRdT, dRdS, PiLRo, PiRLo, KoL, KoR, hEff)
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. simpleTest(2*nk+2, PiLRo, pL0, 'Same values raised on right, left positions')
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. simpleTest(2*nk+2, PiRLo, pR0+2., 'Same values raised on right, right positions')
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. simpleTest(2*nk+1, hEff, hE0, 'Same values raised on right, thicknesses')
 
-  call find_neutral_surface_position(nk, Til, Sil, dRdT, dRdS, Tir2, Sir1, Pir1, Po)
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. simpleTest(nk, Po, Po2, 'Project left->right 2, slightly cooler values')
+  call find_neutral_surface_positions(nk, PiL, TiL, SiL, dRdt, dRdS, PiL-2., TiL, SiL, dRdT, dRdS, PiLRo, PiRLo, KoL, KoR, hEff)
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. simpleTest(2*nk+2, PiLRo, pL0, 'Same values lowered on right, left positions')
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. simpleTest(2*nk+2, PiRLo, pR0-2., 'Same values lowered on right, right positions')
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. simpleTest(2*nk+1, hEff, hE0, 'Same values lowered on right, thicknesses')
 
-  call find_neutral_surface_position(nk, Til, Sil, dRdT, dRdS, Tir3, Sir1, Pir1, Po)
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. simpleTest(nk, Po, Po3, 'Project left->right 3, all warmer values')
+  call find_neutral_surface_positions(nk, PiL, TiL, SiL, dRdt, dRdS, PiL, TiL+2., SiL, dRdT, dRdS, PiLRo, PiRLo, KoL, KoR, hEff)
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. simpleTest(2*nk+2, PiLRo, pL1, 'Slightly warmer on right, left positions')
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. simpleTest(2*nk+2, PiRLo, pR1, 'Slightly warmer on right, right positions')
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. simpleTest(2*nk+1, hEff, hE1, 'Slightly warmer on right, thicknesses')
 
-  call find_neutral_surface_position(nk, Til, Sil, dRdT, dRdS, Tir4, Sir1, Pir1, Po)
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. simpleTest(nk, Po, Po4, 'Project left->right 4, all cooler values')
+  call find_neutral_surface_positions(nk, PiL, TiL, SiL, dRdt, dRdS, PiL, TiL-2., SiL, dRdT, dRdS, PiLRo, PiRLo, KoL, KoR, hEff)
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. simpleTest(2*nk+2, PiLRo, pR1, 'Slightly cooler on right, left positions')
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. simpleTest(2*nk+2, PiRLo, pL1, 'Slightly cooler on right, right positions')
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. simpleTest(2*nk+1, hEff, hE1, 'Slightly cooler on right, thicknesses')
 
-  call find_neutral_surface_position(nk, Til, Sil, dRdT, dRdS, Tir5, Sir1, Pir1, Po)
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. simpleTest(nk, Po, Po5, 'Project left->right 5, spanning values')
+  call find_neutral_surface_positions(nk, PiL, TiL, SiL, dRdt, dRdS, PiL, TiL+8., SiL, dRdT, dRdS, PiLRo, PiRLo, KoL, KoR, hEff)
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. simpleTest(2*nk+2, PiLRo, pL2, 'Warmer on right, left positions')
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. simpleTest(2*nk+2, PiRLo, pR2, 'Warmer on right, right positions')
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. simpleTest(2*nk+1, hEff, hE2, 'Warmer on right, thicknesses')
 
-  call find_neutral_surface_position(nk, Til, Sil, dRdT, dRdS, Tir6, Sir1, Pir1, Po)
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. simpleTest(nk, Po, Po6, 'Project left->right 6, encompassed values')
+  call find_neutral_surface_positions(nk, PiL, TiL, SiL, dRdt, dRdS, PiL, TiR1, SiL, dRdT, dRdS, PiLRo, PiRLo, KoL, KoR, hEff)
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. simpleTest(2*nk+2, PiLRo, pL3, 'Strong stratification on right, left positions')
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. simpleTest(2*nk+2, PiRLo, pR3, 'Strong stratification on right, right positions')
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. simpleTest(2*nk+1, hEff, hE3, 'Strong stratification on right, thicknesses')
 
   write(*,'(a)') '=========================================================='
+stop
 
   contains
 
   !> Writes results to screen and return true is test fails
   logical function simpleTest(nk, Po, Ptrue, title)
     integer,          intent(in) :: nk !< Number of layers
-    real,             intent(in) :: Po(nk+1) !< Calculated answer
-    real,             intent(in) :: Ptrue(nk+1) !< True answer
+    real,             intent(in) :: Po(nk) !< Calculated answer
+    real,             intent(in) :: Ptrue(nk) !< True answer
     character(len=*), intent(in) :: title !< Title for messages
     ! Local variables
     integer :: k
 
-    write(*,'(a)') title
+    write(0,'(a)') title
     simpleTest = .false.
-    do k = 1,nk+1
-      if (Po(k) /= Ptrue(k)) simpleTest = .true.
-      write(*,'(a,i2,2(x,a,f20.16),x,a,1pe22.15)') 'k=',k,'Po=',Po(k),'Ptrue=',Ptrue(k),'err=',Po(k)-Ptrue(k)
+    do k = 1,nk
+      if (Po(k) /= Ptrue(k)) then
+        simpleTest = .true.
+        write(0,'(a,i2,2(x,a,f20.16),x,a,1pe22.15,x,a)') 'k=',k,'Po=',Po(k),'Ptrue=',Ptrue(k),'err=',Po(k)-Ptrue(k),'WRONG!'
+      else
+        write(0,'(a,i2,2(x,a,f20.16),x,a,1pe22.15)') 'k=',k,'Po=',Po(k),'Ptrue=',Ptrue(k),'err=',Po(k)-Ptrue(k)
+      endif
     enddo
 
   end function simpleTest
