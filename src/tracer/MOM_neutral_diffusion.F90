@@ -21,13 +21,25 @@ public neutralDiffusionUnitTests
 type, public :: neutral_diffusion_CS ; private
   integer :: nkp1   ! Number of interfaces for a column = nk + 1
   integer :: nkp1X2 ! Number of intersecting interfaces between columns = 2 * nkp1
+
+  real,    allocatable, dimension(:,:,:) :: uPoL ! Non-dimensional position with left layer uKoL-1, u-point
+  real,    allocatable, dimension(:,:,:) :: uPoR ! Non-dimensional position with right layer uKoR-1, u-point
+  integer, allocatable, dimension(:,:,:) :: uKoL ! Index of left interface corresponding to neutral surface, u-point
+  integer, allocatable, dimension(:,:,:) :: uKoR ! Index of right interface corresponding to neutral surface, u-point
+  real,    allocatable, dimension(:,:,:) :: uHeff ! Effective thickness at u-point (H units)
+  real,    allocatable, dimension(:,:,:) :: vPoL ! Non-dimensional position with left layer uKoL-1, v-point
+  real,    allocatable, dimension(:,:,:) :: vPoR ! Non-dimensional position with right layer uKoR-1, v-point
+  integer, allocatable, dimension(:,:,:) :: vKoL ! Index of left interface corresponding to neutral surface, v-point
+  integer, allocatable, dimension(:,:,:) :: vKoR ! Index of right interface corresponding to neutral surface, v-point
+  real,    allocatable, dimension(:,:,:) :: vHeff ! Effective thickness at v-point (H units)
+
 end type neutral_diffusion_CS
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
 character(len=40)  :: mod = "MOM_neutral_diffusion" ! This module's name.
 
-logical, parameter :: debug_this_module = .false.
+logical, parameter :: debug_this_module = .true.
 
 contains
 
@@ -55,9 +67,55 @@ end subroutine neutral_diffusion_init
 
 !> Calculates remapping factors for u/v columns used to map adjoining columns to
 !! a shared coordinate space.
-subroutine neutral_diffusion_calc_coeffs(G, CS)
-  type(ocean_grid_type),      intent(in) :: G  !< Ocean grid structure
-  type(neutral_diffusion_CS), pointer    :: CS !< Neutral diffusion constrol structure
+subroutine neutral_diffusion_calc_coeffs(G, h, T, S, EOS, CS)
+  type(ocean_grid_type),                 intent(in) :: G !< Ocean grid structure
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h !< Layer thickness (H units, m or Pa)
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: T !< Potential temperature (degC)
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: S !< Salinity (ppt)
+  type(EOS_type),                        pointer    :: EOS !< Equation of state structure
+  type(neutral_diffusion_CS),            pointer    :: CS !< Neutral diffusion constrol structure
+  ! Local variables
+  integer :: i, j, k
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: Tint ! Interface T (degC)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: Sint ! Interface S (ppt)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: Pint ! Interface pressure (Pa)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: dRdT ! Interface thermal expansion coefficient (kg/m3/degC)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: dRdS ! Interface haline expansion coefficient (kg/m3/ppt)
+
+  do j = G%jsc-1, G%jec+1
+    ! Interpolate state to interface
+    do i = G%isc-1, G%iec+1
+      call interface_TS(G%ke, T(i,j,:), S(i,j,:), Tint, Sint)
+    enddo
+
+    ! Caclulate interface properties
+    Pint(:,j,1) = 0. ! Assume P=0 (Pa) at surface - needs correcting for atmospheric and ice loading - AJA
+    do k = 1, G%ke+1
+      call calculate_density_derivs(Tint(:,j,k), Sint(:,j,k), Pint(:,j,k), &
+                                    dRdT(:,j,k), dRdS(:,j,k), G%isc-1, G%iec-G%isc+3, EOS)
+      if (k<=G%ke) Pint(:,j,k+1) = Pint(:,j,k) + h(:,j,k) * G%H_to_Pa ! Pressure at next interface, k+1 (Pa)
+    enddo
+  enddo
+
+  ! Neutral surface factors at U points
+  do j = G%jsc, G%jec
+    do I = G%isc-1, G%iec
+      call find_neutral_surface_positions(G%ke, &
+               Pint(i,j,k), Tint(i,j,k), Sint(i,j,k), dRdT(i,j,k), dRdS(i,j,k), &
+               Pint(i+1,j,k), Tint(i+1,j,k), Sint(i+1,j,k), dRdT(i+1,j,k), dRdS(i+1,j,k), &
+               CS%uPoL(I,j,k), CS%uPoR(I,j,k), CS%uKoL(I,j,k), CS%uKoR(I,j,k), CS%uhEff(I,j,k) )
+    enddo
+  enddo
+
+  ! Neutral surface factors at V points
+  do J = G%jsc-1, G%jec
+    do i = G%isc, G%iec
+      call find_neutral_surface_positions(G%ke, &
+               Pint(i,j,k), Tint(i,j,k), Sint(i,j,k), dRdT(i,j,k), dRdS(i,j,k), &
+               Pint(i,j+1,k), Tint(i,j+1,k), Sint(i,j+1,k), dRdT(i,j+1,k), dRdS(i,j+1,k), &
+               CS%vPoL(i,J,k), CS%vPoR(i,J,k), CS%vKoL(i,J,k), CS%vKoR(i,J,k), CS%vhEff(i,J,k) )
+    enddo
+  enddo
 
 end subroutine neutral_diffusion_calc_coeffs
 
@@ -475,6 +533,7 @@ logical function neutralDiffusionUnitTests()
   neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fnsp(2*nk+2, absolute_positions(nk, PiL, KoL, PiLRo), pL0, 'Identical columns, left positions')
   neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fnsp(2*nk+2, absolute_positions(nk, PiL, KoR, PiRLo), pR0, 'Identical columns, right positions')
   neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fnsp(2*nk+1, hEff, hE0, 'Identical columns, thicknesses')
+stop
 
   call find_neutral_surface_positions(nk, PiL, TiL, SiL, dRdt, dRdS, PiL+2., TiL, SiL, dRdT, dRdS, PiLRo, PiRLo, KoL, KoR, hEff)
   neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fnsp(2*nk+2, absolute_positions(nk, PiL, KoL, PiLRo), pL0, 'Same values raised on right, left positions')
