@@ -154,8 +154,8 @@ subroutine find_neutral_surface_positions(nk, Pl, Tl, Sl, dRdTl, dRdSl, Pr, Tr, 
   real, dimension(nk+1),      intent(in)    :: dRdSr !< Left-column dRho/dS (kg/m3/ppt)
   real, dimension(2*nk+2),    intent(inout) :: PoL   !< Position of neutral surface in left column (Pa)
   real, dimension(2*nk+2),    intent(inout) :: PoR   !< Position of neutral surface in right column (Pa)
-  integer, dimension(2*nk+2), intent(inout) :: KoL   !< Index of first left interface at or above neutral surface.
-  integer, dimension(2*nk+2), intent(inout) :: KoR   !< Index of first right interface at or above neutral surface.
+  integer, dimension(2*nk+2), intent(inout) :: KoL   !< Index of first left interface below neutral surface.
+  integer, dimension(2*nk+2), intent(inout) :: KoR   !< Index of first right interface below neutral surface.
   real, dimension(2*nk+1),    intent(inout) :: hEff  !< Effective thickness between two neutral surfaces (Pa).
   ! Local variables
   integer :: k_surface ! Index of neutral surface
@@ -173,6 +173,8 @@ subroutine find_neutral_surface_positions(nk, Pl, Tl, Sl, dRdTl, dRdSl, Pr, Tr, 
 
   ! Loop over each neutral surface, working from top to bottom
   neutral_surfaces: do k_surface = 1, 2*nk+2
+    klm1 = max(kl-1, 1)
+    krm1 = max(kr-1, 1)
 
     ! Potential density difference, kr - kl 
     dRho = 0.5 * ( ( dRdTr(kr) + dRdTl(kl) ) * ( Tr(kr) - Tl(kl) ) &
@@ -199,7 +201,6 @@ subroutine find_neutral_surface_positions(nk, Pl, Tl, Sl, dRdTl, dRdSl, Pr, Tr, 
     if (looking_left) then
       ! Interpolate for the neutral surface position within the left column, layer kl
                                                      if (debug_this_module) write(0,*) 'looking_left=',looking_left
-      klm1 = max(kl-1, 1)
       ! Potential density difference, rho(kl-1) - rho(kr) (should be negative)
       dRhoM1 = 0.5 * ( ( dRdTl(klm1) + dRdTr(kr) ) * ( Tl(klm1) - Tr(kr) ) &
                      + ( dRdSl(klm1) + dRdSr(kr) ) * ( Sl(klm1) - Sr(kr) ) )
@@ -231,7 +232,6 @@ subroutine find_neutral_surface_positions(nk, Pl, Tl, Sl, dRdTl, dRdSl, Pr, Tr, 
     elseif (looking_right) then
       ! Interpolate for the neutral surface position within the right column, layer kr
                                                      if (debug_this_module) write(0,*) 'looking_right=',looking_right
-      krm1 = max(kr-1, 1)
       ! Potential density difference, rho(kr-1) - rho(kl) (should be negative)
       dRhoM1 = 0.5 * ( ( dRdTr(krm1) + dRdTl(kl) ) * ( Tr(krm1) - Tl(kl) ) &
                      + ( dRdSr(krm1) + dRdSl(kl) ) * ( Sr(krm1) - Sl(kl) ) )
@@ -279,6 +279,24 @@ subroutine find_neutral_surface_positions(nk, Pl, Tl, Sl, dRdTl, dRdSl, Pr, Tr, 
   enddo neutral_surfaces
 
 end subroutine find_neutral_surface_positions
+
+!> Converts non-dimensional positions within a layer to absolute positions (for debugging)
+function absolute_positions(n,Pint,Karr,NParr)
+  integer, intent(in) :: n            !< Number of levels
+  real,    intent(in) :: Pint(n+1)    !< Position of interface (Pa)
+  real,    intent(in) :: Karr(2*n+2)  !< Index of deeper 
+  real,    intent(in) :: NParr(2*n+2) !< Non-dimensional position with layer Karr(:)-1
+  real,  dimension(2*n+2) :: absolute_positions ! Absolute positions (Pa)
+  ! Local variables
+  integer :: k_surface, k, km1
+
+  do k_surface = 1, 2*n+2
+    k = Karr(k_surface)
+    km1 = max(1, k-1)
+    absolute_positions(k_surface) = Pint(km1) + NParr(k_surface) * ( Pint(k) - Pint(km1) )
+  enddo
+
+end function absolute_positions
 
 !> Returns the position between Pneg and Ppos where the interpolated density difference equals
 !! zero: Pint = ( dRhoPos * Ppos - dRhoNeg * Pneg ) / ( dRhoPos - dRhoneg )
@@ -333,6 +351,35 @@ real function interpolate_for_position(dRhoNeg, Pneg, dRhoPos, Ppos)
   interpolate_for_position = Pint
 end function interpolate_for_position
 
+!> Returns the non-dimensnional position between Pneg and Ppos where the interpolated density difference equals zero.
+!! The result is always bounded to be between 0 and 1.
+real function interpolate_for_nondim_position(dRhoNeg, Pneg, dRhoPos, Ppos)
+  real, intent(in) :: dRhoNeg !< Negative density difference
+  real, intent(in) :: Pneg    !< Position of negative density difference
+  real, intent(in) :: dRhoPos !< Positive density difference
+  real, intent(in) :: Ppos    !< Position of positive density difference
+
+  if (Ppos<Pneg) stop 'interpolate_for_position: Houston, we have a problem! Ppos<Pneg'
+  if (dRhoNeg>dRhoPos) stop 'interpolate_for_position: Houston, we have a problem! dRhoNeg>dRhoPos'
+  if (Ppos<=Pneg) then ! Handle vanished or inverted layers
+    interpolate_for_nondim_position = 0.5
+  elseif ( dRhoPos - dRhoNeg > 0. ) then
+    interpolate_for_nondim_position = min( 1., max( 0., -dRhoNeg / ( dRhoPos - dRhoNeg ) ) )
+  elseif ( dRhoPos - dRhoNeg == 0) then
+    if (dRhoNeg>0.) then
+      interpolate_for_nondim_position = 0.
+    elseif (dRhoNeg<0.) then
+      interpolate_for_nondim_position = 1.
+    else ! dRhoPos = dRhoNeg = 0
+      interpolate_for_nondim_position = 0.5
+    endif
+  else ! dRho - dRhoNeg < 0
+    interpolate_for_nondim_position = 0.5
+  endif
+  if ( interpolate_for_nondim_position < 0. ) stop 'interpolate_for_position: Houston, we have a problem! Pint < Pneg'
+  if ( interpolate_for_nondim_position > 1. ) stop 'interpolate_for_position: Houston, we have a problem! Pint > Ppos'
+end function interpolate_for_nondim_position
+
 !> Returns true if unit tests of neutral_diffusion functions fail. Otherwise returns false.
 logical function neutralDiffusionUnitTests()
   integer, parameter :: nk = 4
@@ -378,22 +425,7 @@ logical function neutralDiffusionUnitTests()
   data hE3 / 0., 0., 4., 4., 4., 4., 0., 0., 0. /
   ! Weak stratification on right, input
   data TiR2 / 7.5, 6.875, 6.25, 5.625, 5.0 /
-  ! Weak stratification on right, answers
 
-! data PiR1 / 0., 10., 20., 30., 40. /
-! data Po2 / 0., 2., 12., 22., 32. / ! Correct answer
-  ! Same grid, all warmer values
-! data Tir3 / 12., 12., 11., 11., 10.5 /
-! data Po3 / 40., 40., 40., 40., 40. / ! Correct answer
-  ! Same grid, all cooler values
-! data Tir4 / -2., -2., -3., -3., -4. /
-! data Po4 / 0., 0., 0., 0., 0. / ! Correct answer
-  ! Same grid, spanning values
-! data Tir5 / 15., 15., 15., -5., -5. /
-! data Po5 / 22.5, 23.75, 25., 26.25, 27.5 / ! Correct answer
-  ! Same grid, encompassed values
-! data Tir6 / 7., 6.5, 6., 5.5, 5. /
-! data Po6 / 0., 0., 40., 40., 40. / ! Correct answer
   integer :: k
   logical :: verbosity
 
@@ -412,7 +444,7 @@ logical function neutralDiffusionUnitTests()
   neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_ifp( 1.0, 0.,  1.0, 1.0, 0.0, 'Check dRho=0 below')
   neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_ifp(-1.0, 0., -1.0, 1.0, 1.0, 'Check dRho=0 above')
   neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_ifp( 0.0, 0.,  0.0, 1.0, 0.5, 'Check dRho=0 mid')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_ifp(-2.0, 3.,  5.0, 3.0, 3.0, 'Check dP=0')
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_ifp(-2.0, .5,  5.0, 0.5, 0.5, 'Check dP=0')
 
   call find_neutral_surface_positions(nk, PiL, TiL, SiL, dRdt, dRdS, PiL, TiL, SiL, dRdT, dRdS, PiLRo, PiRLo, KoL, KoR, hEff)
   neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fnsp(2*nk+2, PiLRo, pL0, 'Identical columns, left positions')
@@ -453,9 +485,9 @@ logical function neutralDiffusionUnitTests()
   neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fnsp(2*nk+2, PiLRo, pR3, 'Weak stratification on right, left positions')
   neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fnsp(2*nk+2, PiRLo, pL3, 'Weak stratification on right, right positions')
   neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fnsp(2*nk+1, hEff, hE3, 'Weak stratification on right, thicknesses')
+stop
 
   write(*,'(a)') '=========================================================='
-stop
 
   contains
 
