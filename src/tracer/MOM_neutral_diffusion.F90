@@ -6,6 +6,7 @@ use MOM_cpu_clock, only : CLOCK_MODULE, CLOCK_ROUTINE
 use MOM_diag_mediator, only : diag_ctrl, time_type
 use MOM_EOS, only : EOS_type, calculate_compress, calculate_density_derivs
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
+use MOM_error_handler, only : MOM_get_verbosity
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
 
@@ -26,7 +27,31 @@ end type neutral_diffusion_CS
 #include "version_variable.h"
 character(len=40)  :: mod = "MOM_neutral_diffusion" ! This module's name.
 
+logical, parameter :: debug_this_module = .true.
+
 contains
+
+!> Read parameters and allocates control structure of neutral_diffusion module.
+subroutine neutral_diffusion_init(Time, G, param_file, diag, CS)
+  type(time_type), target,    intent(in)    :: Time       !< Time structure
+  type(ocean_grid_type),      intent(in)    :: G          !< Grid structure
+  type(diag_ctrl), target,    intent(inout) :: diag       !< Diagnostics control structure
+  type(param_file_type),      intent(in)    :: param_file !< Parameter file structure
+  type(neutral_diffusion_CS), pointer       :: CS         !< Neutral diffusion control structure
+  character(len=256) :: mesg    ! Message for error messages.
+
+  if (associated(CS)) then
+    call MOM_error(FATAL, "neutral_diffusion_init called with associated control structure.")
+    return
+  endif
+  allocate(CS)
+
+  ! Read all relevant parameters and write them to the model log.
+  call log_version(param_file, mod, version, "")
+! call get_param(param_file, mod, "KHTR", CS%KhTr, &
+!                "The background along-isopycnal tracer diffusivity.", &
+!                units="m2 s-1", default=0.0)
+end subroutine neutral_diffusion_init
 
 subroutine neutral_diffusion(nk, Dl, Dr, hl, hr, Tl, Tr, Sl, Sr, EOS, H_to_Pa)
   integer,             intent(in)    :: nk  !< Number of levels per column (assumed equal)
@@ -96,6 +121,7 @@ subroutine interface_TS(nk, T, S, Ti, Si)
   integer :: k
 
   ! We use simple averaging for internal interfaces and piecewise-constant at the top and bottom.
+  ! NOTE: THIS IS A PLACEHOLDER FOR HIGHER ORDER INTERPOLATION T.B.I.
   Ti(1) = T(1) ; Si(1) = S(1)
   do k = 2, nk
     Ti(k) = 0.5*( T(k-1) + T(k) )
@@ -160,11 +186,11 @@ subroutine find_neutral_surface_positions(nk, Pl, Tl, Sl, dRdTl, dRdSl, Pr, Tr, 
       looking_right = .not. looking_right
     endif
 
-write(0,*) 'k,kr,kl=',k_surface,kr,kl
+                                                     if (debug_this_module) write(0,*) 'k,kr,kl=',k_surface,kr,kl
  
     if (looking_left) then
       ! Interpolate for the neutral surface position within the left column, layer kl
-write(0,*) 'looking_left=',looking_left
+                                                     if (debug_this_module) write(0,*) 'looking_left=',looking_left
       klm1 = max(kl-1, 1)
       ! Potential density difference, rho(kl-1) - rho(kr) (should be negative)
       dRhoM1 = 0.5 * ( ( dRdTl(klm1) + dRdTr(kr) ) * ( Tl(klm1) - Tr(kr) ) &
@@ -187,16 +213,16 @@ write(0,*) 'looking_left=',looking_left
       PoR(k_surface) = Pr(kr)
       KoR(k_surface) = kr
       KoL(k_surface) = kl
-write(0,*) '  dRhoM1=',dRhoM1,' dRho=',dRho
+                                                     if (debug_this_module) write(0,*) '  dRhoM1=',dRhoM1,' dRho=',dRho
       if (kr <= nk) then
         kr = kr + 1
       else
         kl = min(kl + 1, nk+1)
       endif
-write(0,*) '  kr=',kr,' kl=',kl
+                                                     if (debug_this_module) write(0,*) '  kr=',kr,' kl=',kl
     elseif (looking_right) then
       ! Interpolate for the neutral surface position within the right column, layer kr
-write(0,*) 'looking_right=',looking_right
+                                                     if (debug_this_module) write(0,*) 'looking_right=',looking_right
       krm1 = max(kr-1, 1)
       ! Potential density difference, rho(kr-1) - rho(kl) (should be negative)
       dRhoM1 = 0.5 * ( ( dRdTr(krm1) + dRdTl(kl) ) * ( Tr(krm1) - Tl(kl) ) &
@@ -219,13 +245,13 @@ write(0,*) 'looking_right=',looking_right
       PoL(k_surface) = Pl(kl)
       KoL(k_surface) = kl
       KoR(k_surface) = kr
-write(0,*) '  dRhoM1=',dRhoM1,' dRho=',dRho
+                                                     if (debug_this_module) write(0,*) '  dRhoM1=',dRhoM1,' dRho=',dRho
       if (kl <= nk) then
         kl = kl + 1
       else
         kr = min(kr + 1, nk+1)
       endif
-write(0,*) '  kl=',kl,' kr=',kr
+                                                     if (debug_this_module) write(0,*) '  kl=',kl,' kr=',kr
     else
       stop 'Else what?'
     endif
@@ -239,7 +265,7 @@ write(0,*) '  kl=',kl,' kr=',kr
       else
         hEff(k_surface-1) = 0.
       endif
-write(0,*) '  hEff=',hEff(k_surface-1)
+                                                     if (debug_this_module) write(0,*) '  hEff=',hEff(k_surface-1)
     endif
 
   enddo neutral_surfaces
@@ -269,33 +295,16 @@ real function interpolate_for_position(dRhoNeg, Pneg, dRhopos, Ppos)
       Pint = 0.5 * ( Pneg + Ppos )
     endif
   else ! dRho - dRhoNeg = 0
+    wghtU = 0.5
+    wghtD = 0.5
     Pint = 0.5 * ( Pneg + Ppos )
   endif
+                                                     if (debug_this_module) write(0,*) '  wU=',wghtU,'wD=',wghtD
+                                                     if (debug_this_module) write(0,*) '  E(wU+wD)=',(wghtU+wghtD)-1.0
   if ( Pint < Pneg ) stop 'interpolate_for_position: Houston, we have a problem! Pint < Pneg'
   if ( Pint > Ppos ) stop 'interpolate_for_position: Houston, we have a problem! Pint > Ppos'
   interpolate_for_position = Pint
 end function interpolate_for_position
-
-subroutine neutral_diffusion_init(Time, G, param_file, diag, CS)
-  type(time_type), target,  intent(in)    :: Time
-  type(ocean_grid_type),    intent(in)    :: G
-  type(diag_ctrl), target,  intent(inout) :: diag
-  type(param_file_type),    intent(in)    :: param_file
-  type(neutral_diffusion_CS), pointer       :: CS
-  character(len=256) :: mesg    ! Message for error messages.
-
-  if (associated(CS)) then
-    call MOM_error(WARNING, "neutral_diffusion_init called with associated control structure.")
-    return
-  endif
-  allocate(CS)
-
-  ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, "")
-! call get_param(param_file, mod, "KHTR", CS%KhTr, &
-!                "The background along-isopycnal tracer diffusivity.", &
-!                units="m2 s-1", default=0.0)
-end subroutine neutral_diffusion_init
 
 !> Calculates remapping factors for u/v columns used to map adjoining columns to
 !! shared coordinate space
@@ -315,7 +324,7 @@ end subroutine neutral_diffusion_end
 !> Returns true if unit tests of neutral_diffusion functions fail. Otherwise returns false.
 logical function neutralDiffusionUnitTests()
   integer, parameter :: nk = 4
-  real, dimension(nk+1)   :: TiL, TiR1 ! Test interface temperatures
+  real, dimension(nk+1)   :: TiL, TiR1, TiR2 ! Test interface temperatures
   real, dimension(nk+1)   :: SiL ! Test interface salinities
   real, dimension(nk+1)   :: PiL ! Test interface positions
   real, dimension(nk+1)   :: dRdT, dRdS ! Test interface expansion coefficients
@@ -355,6 +364,9 @@ logical function neutralDiffusionUnitTests()
   data pL3 / 0., 0., 0., 10., 20., 30., 40., 40., 40., 40. /
   data pR3 / 0., 10., 10., 12.5, 15., 17.5, 20., 20., 40., 40. /
   data hE3 / 0., 0., 4., 4., 4., 4., 0., 0., 0. /
+  ! Weak stratification on right, input
+  data TiR2 / 7.5, 6.875, 6.25, 5.625, 5.0 /
+  ! Weak stratification on right, answers
 
 ! data PiR1 / 0., 10., 20., 30., 40. /
 ! data Po2 / 0., 2., 12., 22., 32. / ! Correct answer
@@ -371,6 +383,9 @@ logical function neutralDiffusionUnitTests()
 ! data Tir6 / 7., 6.5, 6., 5.5, 5. /
 ! data Po6 / 0., 0., 40., 40., 40. / ! Correct answer
   integer :: k
+  logical :: verbosity
+
+  verbosity = MOM_get_verbosity()
 
   neutralDiffusionUnitTests = .false. ! Normally return false
   write(*,'(a)') '===== MOM_neutral_diffusion: neutralDiffusionUnitTests =================='
@@ -410,30 +425,44 @@ logical function neutralDiffusionUnitTests()
   neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. simpleTest(2*nk+2, PiRLo, pR3, 'Strong stratification on right, right positions')
   neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. simpleTest(2*nk+1, hEff, hE3, 'Strong stratification on right, thicknesses')
 
+  call find_neutral_surface_positions(nk, PiL, TiL, SiL, dRdt, dRdS, PiL, TiR2, SiL, dRdT, dRdS, PiLRo, PiRLo, KoL, KoR, hEff)
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. simpleTest(2*nk+2, PiLRo, pR3, 'Weak stratification on right, left positions')
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. simpleTest(2*nk+2, PiRLo, pL3, 'Weak stratification on right, right positions')
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. simpleTest(2*nk+1, hEff, hE3, 'Weak stratification on right, thicknesses')
+
   write(*,'(a)') '=========================================================='
 stop
 
   contains
 
-  !> Writes results to screen and return true is test fails
+  !> Returns true if test fails, and conditionally writes results to stream
   logical function simpleTest(nk, Po, Ptrue, title)
     integer,          intent(in) :: nk !< Number of layers
     real,             intent(in) :: Po(nk) !< Calculated answer
     real,             intent(in) :: Ptrue(nk) !< True answer
     character(len=*), intent(in) :: title !< Title for messages
     ! Local variables
-    integer :: k
+    integer :: k, stdunit
 
-    write(0,'(a)') title
     simpleTest = .false.
     do k = 1,nk
-      if (Po(k) /= Ptrue(k)) then
-        simpleTest = .true.
-        write(0,'(a,i2,2(x,a,f20.16),x,a,1pe22.15,x,a)') 'k=',k,'Po=',Po(k),'Ptrue=',Ptrue(k),'err=',Po(k)-Ptrue(k),'WRONG!'
-      else
-        write(0,'(a,i2,2(x,a,f20.16),x,a,1pe22.15)') 'k=',k,'Po=',Po(k),'Ptrue=',Ptrue(k),'err=',Po(k)-Ptrue(k)
-      endif
+      if (Po(k) /= Ptrue(k)) simpleTest = .true.
     enddo
+
+    if (simpleTest .or. verbosity>5) then
+      stdunit = 6
+      if (simpleTest.or.debug_this_module) stdunit = 0 ! In case of wrong results, write to error stream
+      write(stdunit,'(a)') title
+      do k = 1,nk
+        if (Po(k) /= Ptrue(k)) then
+          simpleTest = .true.
+          write(stdunit,'(a,i2,2(x,a,f20.16),x,a,1pe22.15,x,a)') 'k=',k,'Po=',Po(k),'Ptrue=',Ptrue(k),'err=',Po(k)-Ptrue(k),'WRONG!'
+        else
+          if (verbosity>5) &
+            write(stdunit,'(a,i2,2(x,a,f20.16),x,a,1pe22.15)') 'k=',k,'Po=',Po(k),'Ptrue=',Ptrue(k),'err=',Po(k)-Ptrue(k)
+        endif
+      enddo
+    endif
 
   end function simpleTest
 
