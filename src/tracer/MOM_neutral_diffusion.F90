@@ -293,7 +293,11 @@ real function interpolate_for_position(dRhoNeg, Pneg, dRhoPos, Ppos)
 
   if (Ppos<Pneg) stop 'interpolate_for_position: Houston, we have a problem! Ppos<Pneg'
   if (dRhoNeg>dRhoPos) stop 'interpolate_for_position: Houston, we have a problem! dRhoNeg>dRhoPos'
-  if ( dRhoPos - dRhoNeg > 0. ) then
+  if (Ppos<=Pneg) then ! Handle vanished or inverted layers
+    wghtU = 0.5
+    wghtD = 0.5
+    Pint = 0.5 * ( Pneg + Ppos )
+  elseif ( dRhoPos - dRhoNeg > 0. ) then
     wghtU = -dRhoNeg / ( dRhoPos - dRhoNeg )
     wghtD = dRhoPos / ( dRhoPos - dRhoNeg )
     if ( wghtU < 0.5 ) then
