@@ -283,7 +283,7 @@ end subroutine find_neutral_surface_positions
 !> Returns the position between Pneg and Ppos where the interpolated density difference equals
 !! zero: Pint = ( dRhoPos * Ppos - dRhoNeg * Pneg ) / ( dRhoPos - dRhoneg )
 !! The result is always bounded to be between Pneg and Ppos.
-real function interpolate_for_position(dRhoNeg, Pneg, dRhopos, Ppos)
+real function interpolate_for_position(dRhoNeg, Pneg, dRhoPos, Ppos)
   real, intent(in) :: dRhoNeg !< Negative density difference
   real, intent(in) :: Pneg    !< Position of negative density difference
   real, intent(in) :: dRhoPos !< Positive density difference
@@ -303,7 +303,21 @@ real function interpolate_for_position(dRhoNeg, Pneg, dRhopos, Ppos)
     else
       Pint = 0.5 * ( Pneg + Ppos )
     endif
-  else ! dRho - dRhoNeg = 0
+  elseif ( dRhoPos - dRhoNeg == 0) then
+    if (dRhoNeg>0.) then
+      wghtU = 0.
+      wghtD = 1.
+      Pint = Pneg
+    elseif (dRhoNeg<0.) then
+      wghtU = 1.
+      wghtD = 0.
+      Pint = Ppos
+    else ! dRhoPos = dRhoNeg = 0
+      wghtU = 0.5
+      wghtD = 0.5
+      Pint = 0.5 * ( Pneg + Ppos )
+    endif
+  else ! dRho - dRhoNeg < 0
     wghtU = 0.5
     wghtD = 0.5
     Pint = 0.5 * ( Pneg + Ppos )
@@ -391,6 +405,10 @@ logical function neutralDiffusionUnitTests()
   neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_ifp(-1.0, 0., -0.1, 1.0, 1.0, 'Check above')
   neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_ifp(-1.0, 0.,  3.0, 1.0, 0.25, 'Check 1/4')
   neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_ifp(-3.0, 0.,  1.0, 1.0, 0.75, 'Check 3/4')
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_ifp( 1.0, 0.,  1.0, 1.0, 0.0, 'Check dRho=0 below')
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_ifp(-1.0, 0., -1.0, 1.0, 1.0, 'Check dRho=0 above')
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_ifp( 0.0, 0.,  0.0, 1.0, 0.5, 'Check dRho=0 mid')
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_ifp(-2.0, 3.,  5.0, 3.0, 3.0, 'Check dP=0')
 
   call find_neutral_surface_positions(nk, PiL, TiL, SiL, dRdt, dRdS, PiL, TiL, SiL, dRdT, dRdS, PiLRo, PiRLo, KoL, KoR, hEff)
   neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fnsp(2*nk+2, PiLRo, pL0, 'Identical columns, left positions')
