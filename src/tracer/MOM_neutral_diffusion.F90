@@ -40,7 +40,7 @@ end type neutral_diffusion_CS
 #include "version_variable.h"
 character(len=40)  :: mod = "MOM_neutral_diffusion" ! This module's name.
 
-logical, parameter :: debug_this_module = .true.
+logical, parameter :: debug_this_module = .false.
 
 contains
 
@@ -147,60 +147,8 @@ subroutine neutral_diffusion_calc_coeffs(G, h, T, S, EOS, CS)
 
 end subroutine neutral_diffusion_calc_coeffs
 
-subroutine neutral_diffusion(nk, Dl, Dr, hl, hr, Tl, Tr, Sl, Sr, EOS, H_to_Pa)
-  integer,             intent(in)    :: nk  !< Number of levels per column (assumed equal)
-  real,                intent(in)    :: Dl  !< Bottom depth of left column (m)
-  real,                intent(in)    :: Dr  !< Bottom depth of right column (m)
-  real, dimension(nk), intent(in)    :: hl  !< Level thickness of left column (m or kg/m2)
-  real, dimension(nk), intent(in)    :: hr  !< Level thickness of right column (m or kg/m2)
-  real, dimension(nk), intent(in)    :: Tl  !< Potential temperature of left column (degC)
-  real, dimension(nk), intent(in)    :: Tr  !< Potential temperature of right column (degC)
-  real, dimension(nk), intent(in)    :: Sl  !< Salinity of left column (ppt)
-  real, dimension(nk), intent(in)    :: Sr  !< Salinity of right column (ppt)
-  type(EOS_type),      pointer       :: EOS !< Equation of state structure
-  real,                intent(in)    :: H_to_Pa !< Converts h units to Pascals
+subroutine neutral_diffusion()
   ! Local variables
-  real, dimension(nk+1) :: Pil ! Interface pressures of left column (Pa)
-  real, dimension(nk+1) :: Pir ! Interface pressures of right column (Pa)
-  real, dimension(nk+1) :: Til !< Interface potential temperature of left column (degC)
-  real, dimension(nk+1) :: Tir !< Interface potential temperature of right column (degC)
-  real, dimension(nk+1) :: Sil !< Interface salinity of left column (ppt)
-  real, dimension(nk+1) :: Sir !< Interface salinity of right column (ppt)
-  real, dimension(nk+1) :: rhoil !< Interface densities of left column (kg/m3)
-  real, dimension(nk+1) :: rhoir !< Interface densities of right column (kg/m3)
-  real, dimension(nk+1) :: PirL !< Right column interface pressure projected on to left column (Pa)
-  real, dimension(nk+1) :: PilR !< Right column interface pressure projected on to right column (Pa)
-  real, dimension(2*nk+1) :: dPl !< Projected thickness of union layers in left column (Pa)
-  real, dimension(2*nk+1) :: dPr !< Projected thickness of union layers in right column (Pa)
-  integer, dimension(2*nk+1) :: Kl !< Left column indexes of projected union layers
-  integer, dimension(2*nk+1) :: Kr !< Right column indexes of projected union layers
-  real, dimension(nk+1) :: dRdTl !< Interface thermal expansion coefficient of left column (kg/m3/degC)
-  real, dimension(nk+1) :: dRdSl !< Interface haline expandion coefficient of left column (kg/m3/ppt)
-  real, dimension(nk+1) :: dRdTr !< Interface thermal expansion coefficient of right column (kg/m3/degC)
-  real, dimension(nk+1) :: dRdSr !< Interface haline expandion coefficient of right column (kg/m3/ppt)
-  integer :: k
-
-  ! Find interface positions in meters for each column (ultimately needed for equation of state)
-  Pil(1) = 0. ; Pir(1) = 0. ! Pressure loading from ice-shelves? -AJA
-  do k = 1, nk
-    Pil(k+1) = Pil(k) + H_to_Pa * hl(k)
-    Pir(k+1) = Pir(k) + H_to_Pa * hr(k)
-  enddo
-
-  ! Create interface T and S for each column
-  call interface_TS(nk, Tl, Sl, Til, Sil)
-  call interface_TS(nk, Tr, Sr, Tir, Sir)
-
-  ! For each interface on the left column, calculate the expansion coefficients
-  ! that will be used to calculate potential density differences referenced to
-  ! the left column interfaces.
-  call calculate_density_derivs(Til, Sil, Pil, dRdTl, dRdSl, 1, nk+1, EOS)
-  ! For each interface on the right column, calculate the expansion coefficients
-  ! that will be used to calculate potential density differences referenced to
-  ! the right column interfaces.
-  call calculate_density_derivs(Tir, Sir, Pir, dRdTr, dRdSr, 1, nk+1, EOS)
-
-  !call find_neutral_surface_position(nk, Til, Sil, dRdTl, dRdSl, Tir, Sir, Pir, PilR)
 
 end subroutine neutral_diffusion
 
@@ -240,9 +188,9 @@ subroutine find_neutral_surface_positions(nk, Pl, Tl, Sl, dRdTl, dRdSl, Pr, Tr, 
   real, dimension(nk+1),      intent(in)    :: dRdSr !< Left-column dRho/dS (kg/m3/ppt)
   real, dimension(2*nk+2),    intent(inout) :: PoL   !< Position of neutral surface in left column (Pa)
   real, dimension(2*nk+2),    intent(inout) :: PoR   !< Position of neutral surface in right column (Pa)
-  integer, dimension(2*nk+2), intent(inout) :: KoL   !< Index of first left interface below neutral surface.
-  integer, dimension(2*nk+2), intent(inout) :: KoR   !< Index of first right interface below neutral surface.
-  real, dimension(2*nk+1),    intent(inout) :: hEff  !< Effective thickness between two neutral surfaces (Pa).
+  integer, dimension(2*nk+2), intent(inout) :: KoL   !< Index of first left interface below neutral surface
+  integer, dimension(2*nk+2), intent(inout) :: KoR   !< Index of first right interface below neutral surface
+  real, dimension(2*nk+1),    intent(inout) :: hEff  !< Effective thickness between two neutral surfaces (Pa)
   ! Local variables
   integer :: k_surface ! Index of neutral surface
   integer :: kl ! Index of left interface
@@ -404,56 +352,56 @@ function absolute_positions(n,Pint,Karr,NParr)
 
 end function absolute_positions
 
-!> Returns the position between Pneg and Ppos where the interpolated density difference equals
-!! zero: Pint = ( dRhoPos * Ppos - dRhoNeg * Pneg ) / ( dRhoPos - dRhoneg )
-!! The result is always bounded to be between Pneg and Ppos.
-real function interpolate_for_position(dRhoNeg, Pneg, dRhoPos, Ppos)
-  real, intent(in) :: dRhoNeg !< Negative density difference
-  real, intent(in) :: Pneg    !< Position of negative density difference
-  real, intent(in) :: dRhoPos !< Positive density difference
-  real, intent(in) :: Ppos    !< Position of positive density difference
-  ! Local variables
-  real :: wghtU, wghtD, Pint
-
-  if (Ppos<Pneg) stop 'interpolate_for_position: Houston, we have a problem! Ppos<Pneg'
-  if (dRhoNeg>dRhoPos) stop 'interpolate_for_position: Houston, we have a problem! dRhoNeg>dRhoPos'
-  if (Ppos<=Pneg) then ! Handle vanished or inverted layers
-    wghtU = 0.5
-    wghtD = 0.5
-    Pint = 0.5 * ( Pneg + Ppos )
-  elseif ( dRhoPos - dRhoNeg > 0. ) then
-    wghtU = -dRhoNeg / ( dRhoPos - dRhoNeg )
-    wghtD = dRhoPos / ( dRhoPos - dRhoNeg )
-    if ( wghtU < 0.5 ) then
-      Pint = Pneg + max( wghtU, 0. ) * ( Ppos - Pneg )
-    elseif ( wghtD < 0.5 ) then
-      Pint = Ppos + max( wghtD, 0. ) * ( Pneg - Ppos )
-    else
-      Pint = 0.5 * ( Pneg + Ppos )
-    endif
-  elseif ( dRhoPos - dRhoNeg == 0) then
-    if (dRhoNeg>0.) then
-      wghtU = 0.
-      wghtD = 1.
-      Pint = Pneg
-    elseif (dRhoNeg<0.) then
-      wghtU = 1.
-      wghtD = 0.
-      Pint = Ppos
-    else ! dRhoPos = dRhoNeg = 0
-      wghtU = 0.5
-      wghtD = 0.5
-      Pint = 0.5 * ( Pneg + Ppos )
-    endif
-  else ! dRho - dRhoNeg < 0
-    wghtU = 0.5
-    wghtD = 0.5
-    Pint = 0.5 * ( Pneg + Ppos )
-  endif
-  if ( Pint < Pneg ) stop 'interpolate_for_position: Houston, we have a problem! Pint < Pneg'
-  if ( Pint > Ppos ) stop 'interpolate_for_position: Houston, we have a problem! Pint > Ppos'
-  interpolate_for_position = Pint
-end function interpolate_for_position
+!!! !> Returns the position between Pneg and Ppos where the interpolated density difference equals
+!!! !! zero: Pint = ( dRhoPos * Ppos - dRhoNeg * Pneg ) / ( dRhoPos - dRhoneg )
+!!! !! The result is always bounded to be between Pneg and Ppos.
+!!! real function interpolate_for_position(dRhoNeg, Pneg, dRhoPos, Ppos)
+!!!   real, intent(in) :: dRhoNeg !< Negative density difference
+!!!   real, intent(in) :: Pneg    !< Position of negative density difference
+!!!   real, intent(in) :: dRhoPos !< Positive density difference
+!!!   real, intent(in) :: Ppos    !< Position of positive density difference
+!!!   ! Local variables
+!!!   real :: wghtU, wghtD, Pint
+!!! 
+!!!   if (Ppos<Pneg) stop 'interpolate_for_position: Houston, we have a problem! Ppos<Pneg'
+!!!   if (dRhoNeg>dRhoPos) stop 'interpolate_for_position: Houston, we have a problem! dRhoNeg>dRhoPos'
+!!!   if (Ppos<=Pneg) then ! Handle vanished or inverted layers
+!!!     wghtU = 0.5
+!!!     wghtD = 0.5
+!!!     Pint = 0.5 * ( Pneg + Ppos )
+!!!   elseif ( dRhoPos - dRhoNeg > 0. ) then
+!!!     wghtU = -dRhoNeg / ( dRhoPos - dRhoNeg )
+!!!     wghtD = dRhoPos / ( dRhoPos - dRhoNeg )
+!!!     if ( wghtU < 0.5 ) then
+!!!       Pint = Pneg + max( wghtU, 0. ) * ( Ppos - Pneg )
+!!!     elseif ( wghtD < 0.5 ) then
+!!!       Pint = Ppos + max( wghtD, 0. ) * ( Pneg - Ppos )
+!!!     else
+!!!       Pint = 0.5 * ( Pneg + Ppos )
+!!!     endif
+!!!   elseif ( dRhoPos - dRhoNeg == 0) then
+!!!     if (dRhoNeg>0.) then
+!!!       wghtU = 0.
+!!!       wghtD = 1.
+!!!       Pint = Pneg
+!!!     elseif (dRhoNeg<0.) then
+!!!       wghtU = 1.
+!!!       wghtD = 0.
+!!!       Pint = Ppos
+!!!     else ! dRhoPos = dRhoNeg = 0
+!!!       wghtU = 0.5
+!!!       wghtD = 0.5
+!!!       Pint = 0.5 * ( Pneg + Ppos )
+!!!     endif
+!!!   else ! dRho - dRhoNeg < 0
+!!!     wghtU = 0.5
+!!!     wghtD = 0.5
+!!!     Pint = 0.5 * ( Pneg + Ppos )
+!!!   endif
+!!!   if ( Pint < Pneg ) stop 'interpolate_for_position: Houston, we have a problem! Pint < Pneg'
+!!!   if ( Pint > Ppos ) stop 'interpolate_for_position: Houston, we have a problem! Pint > Ppos'
+!!!   interpolate_for_position = Pint
+!!! end function interpolate_for_position
 
 !> Returns the non-dimensnional position between Pneg and Ppos where the interpolated density difference equals zero.
 !! The result is always bounded to be between 0 and 1.
@@ -463,8 +411,8 @@ real function interpolate_for_nondim_position(dRhoNeg, Pneg, dRhoPos, Ppos)
   real, intent(in) :: dRhoPos !< Positive density difference
   real, intent(in) :: Ppos    !< Position of positive density difference
 
-  if (Ppos<Pneg) stop 'interpolate_for_position: Houston, we have a problem! Ppos<Pneg'
-  if (dRhoNeg>dRhoPos) stop 'interpolate_for_position: Houston, we have a problem! dRhoNeg>dRhoPos'
+  if (Ppos<Pneg) stop 'interpolate_for_nondim_position: Houston, we have a problem! Ppos<Pneg'
+  if (dRhoNeg>dRhoPos) stop 'interpolate_for_nondim_position: Houston, we have a problem! dRhoNeg>dRhoPos'
   if (Ppos<=Pneg) then ! Handle vanished or inverted layers
     interpolate_for_nondim_position = 0.5
   elseif ( dRhoPos - dRhoNeg > 0. ) then
@@ -480,9 +428,58 @@ real function interpolate_for_nondim_position(dRhoNeg, Pneg, dRhoPos, Ppos)
   else ! dRho - dRhoNeg < 0
     interpolate_for_nondim_position = 0.5
   endif
-  if ( interpolate_for_nondim_position < 0. ) stop 'interpolate_for_position: Houston, we have a problem! Pint < Pneg'
-  if ( interpolate_for_nondim_position > 1. ) stop 'interpolate_for_position: Houston, we have a problem! Pint > Ppos'
+  if ( interpolate_for_nondim_position < 0. ) stop 'interpolate_for_nondim_position: Houston, we have a problem! Pint < Pneg'
+  if ( interpolate_for_nondim_position > 1. ) stop 'interpolate_for_nondim_position: Houston, we have a problem! Pint > Ppos'
 end function interpolate_for_nondim_position
+
+!> Returns a single column of neutral diffusion fluxes of a tracer.
+subroutine neutral_surface_flux(nk, Pl, Pr, Tl, Tr, PiL, PiR, KoL, KoR, hEff, Flx)
+  integer,                    intent(in)    :: nk    !< Number of levels
+  real, dimension(nk+1),      intent(in)    :: Pl    !< Left-column interface pressure (Pa)
+  real, dimension(nk+1),      intent(in)    :: Pr    !< Right-column interface pressure (Pa)
+  real, dimension(nk+1),      intent(in)    :: Tl    !< Left-column interface tracer (conc, e.g. degC)
+  real, dimension(nk+1),      intent(in)    :: Tr    !< Right-column interface tracer (conc, e.g. degC)
+  real, dimension(2*nk+2),    intent(in)    :: PiL   !< Position of neutral surface in left column (Pa)
+  real, dimension(2*nk+2),    intent(in)    :: PiR   !< Position of neutral surface in right column (Pa)
+  integer, dimension(2*nk+2), intent(in)    :: KoL   !< Index of first left interface below neutral surface
+  integer, dimension(2*nk+2), intent(in)    :: KoR   !< Index of first right interface below neutral surface
+  real, dimension(2*nk+1),    intent(in)    :: hEff  !< Effective thickness between two neutral surfaces (Pa)
+  real, dimension(2*nk+1),    intent(inout) :: Flx   !< Flux of tracer between pairs of neutral layers (conc H)
+  ! Local variables
+  integer :: k_sublayer, kl, klm1, kr, krm1
+  real :: T_right_top, T_right_bottom, T_left_top, T_left_bottom
+
+  do k_sublayer = 1, 2*nk+1
+ !  if (hEff(k_sublayer) == 0.) then
+ !    Flx(k_sublayer) = 0.
+ !  else
+
+      kl = KoL(k_sublayer)
+      klm1 = max(1, KoL(k_sublayer)-1)
+      T_left_top = ( 1. - PiL(k_sublayer) ) * Tl(klm1) + PiL(k_sublayer) * Tl(kl)
+!write(0,'(i3,2(i3,f8.2),2f8.2," left top")') k_sublayer,klm1,Tl(klm1),kl,Tl(kl),PiL(k_sublayer),T_left_top
+
+      kl = KoL(k_sublayer+1)
+      klm1 = max(1, KoL(k_sublayer+1)-1)
+      T_left_bottom = ( 1. - PiL(k_sublayer+1) ) * Tl(klm1) + PiL(k_sublayer+1) * Tl(kl)
+!write(0,'(i3,2(i3,f8.2),2f8.2," left bottom")') k_sublayer+1,klm1,Tl(klm1),kl,Tl(kl),PiL(k_sublayer+1),T_left_bottom
+
+      kr = KoR(k_sublayer)
+      krm1 = max(1, KoR(k_sublayer)-1)
+      T_right_top = ( 1. - PiR(k_sublayer) ) * Tr(krm1) + PiR(k_sublayer) * Tr(kr)
+!write(0,'(i3,2(i3,f8.2),2f8.2," right top")') k_sublayer,krm1,Tr(krm1),kr,Tr(kr),PiR(k_sublayer),T_right_top
+
+      kr = KoR(k_sublayer+1)
+      krm1 = max(1, KoR(k_sublayer+1)-1)
+      T_right_bottom = ( 1. - PiR(k_sublayer+1) ) * Tr(krm1) + PiR(k_sublayer+1) * Tr(kr)
+!write(0,'(i3,2(i3,f8.2),2f8.2," right bottom")') k_sublayer+1,krm1,Tr(krm1),kr,Tr(kr),PiR(k_sublayer+1),T_right_bottom
+
+      Flx(k_sublayer) = 0.5 * ( ( T_right_top - T_left_top ) + ( T_right_bottom - T_left_bottom ) )
+write(0,'(i3,f8.3)') k_sublayer, Flx(k_sublayer) * hEff(k_sublayer)
+ !  endif
+  enddo
+
+end subroutine neutral_surface_flux
 
 !> Returns true if unit tests of neutral_diffusion functions fail. Otherwise returns false.
 logical function neutralDiffusionUnitTests()
@@ -499,6 +496,7 @@ logical function neutralDiffusionUnitTests()
   real, dimension(2*nk+1) :: hE0, hE1, hE2, hE3, hE4 ! Test positions
   integer, dimension(2*nk+2) :: kL0, kL1, kL2 ! Test indexes
   integer, dimension(2*nk+2) :: kR0, kR1, kR2 ! Test indexes
+  real, dimension(2*nk+1) :: Flx ! Test flux
   ! Fixed left column values
   data PiL / 0., 10., 20., 30., 40. /
   data TiL / 10., 7.5, 5., 2.5, 0. /
@@ -509,7 +507,7 @@ logical function neutralDiffusionUnitTests()
   data pL0 / 0., 0., 10., 10., 20., 20., 30., 30., 40., 40. /
   data pR0 / 0., 0., 10., 10., 20., 20., 30., 30., 40., 40. /
   data hE0 / 0., 10., 0., 10., 0., 10., 0., 10., 0. /
-  data kL0 / 1, 1, 1, 2, 2, 3, 3, 4, 4, 5 /
+  data kL0 / 1, 2, 2, 3, 3, 4, 4, 5, 5, 5 /
   data kR0 / 1, 1, 2, 2, 3, 3, 4, 4, 5, 5 /
   ! Slightly warmer on right, answers
   data pL1 / 0., 0., 2., 10., 12., 20., 22., 30., 32., 40. /
@@ -545,23 +543,22 @@ logical function neutralDiffusionUnitTests()
   neutralDiffusionUnitTests = .false. ! Normally return false
   write(*,'(a)') '===== MOM_neutral_diffusion: neutralDiffusionUnitTests =================='
 
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_ifp(-1.0, 0.,  1.0, 1.0, 0.5, 'Check mid-point')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_ifp( 0.0, 0.,  1.0, 1.0, 0.0, 'Check bottom')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_ifp( 0.1, 0.,  1.1, 1.0, 0.0, 'Check below')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_ifp(-1.0, 0.,  0.0, 1.0, 1.0, 'Check top')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_ifp(-1.0, 0., -0.1, 1.0, 1.0, 'Check above')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_ifp(-1.0, 0.,  3.0, 1.0, 0.25, 'Check 1/4')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_ifp(-3.0, 0.,  1.0, 1.0, 0.75, 'Check 3/4')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_ifp( 1.0, 0.,  1.0, 1.0, 0.0, 'Check dRho=0 below')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_ifp(-1.0, 0., -1.0, 1.0, 1.0, 'Check dRho=0 above')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_ifp( 0.0, 0.,  0.0, 1.0, 0.5, 'Check dRho=0 mid')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_ifp(-2.0, .5,  5.0, 0.5, 0.5, 'Check dP=0')
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_ifndp(-1.0, 0.,  1.0, 1.0, 0.5, 'Check mid-point')
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_ifndp( 0.0, 0.,  1.0, 1.0, 0.0, 'Check bottom')
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_ifndp( 0.1, 0.,  1.1, 1.0, 0.0, 'Check below')
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_ifndp(-1.0, 0.,  0.0, 1.0, 1.0, 'Check top')
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_ifndp(-1.0, 0., -0.1, 1.0, 1.0, 'Check above')
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_ifndp(-1.0, 0.,  3.0, 1.0, 0.25, 'Check 1/4')
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_ifndp(-3.0, 0.,  1.0, 1.0, 0.75, 'Check 3/4')
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_ifndp( 1.0, 0.,  1.0, 1.0, 0.0, 'Check dRho=0 below')
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_ifndp(-1.0, 0., -1.0, 1.0, 1.0, 'Check dRho=0 above')
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_ifndp( 0.0, 0.,  0.0, 1.0, 0.5, 'Check dRho=0 mid')
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_ifndp(-2.0, .5,  5.0, 0.5, 0.5, 'Check dP=0')
 
   call find_neutral_surface_positions(nk, PiL, TiL, SiL, dRdt, dRdS, PiL, TiL, SiL, dRdT, dRdS, PiLRo, PiRLo, KoL, KoR, hEff)
   neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fnsp(2*nk+2, absolute_positions(nk, PiL, KoL, PiLRo), pL0, 'Identical columns, left positions')
   neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fnsp(2*nk+2, absolute_positions(nk, PiL, KoR, PiRLo), pR0, 'Identical columns, right positions')
   neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fnsp(2*nk+1, hEff, hE0, 'Identical columns, thicknesses')
-stop
 
   call find_neutral_surface_positions(nk, PiL, TiL, SiL, dRdt, dRdS, PiL+2., TiL, SiL, dRdT, dRdS, PiLRo, PiRLo, KoL, KoR, hEff)
   neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fnsp(2*nk+2, absolute_positions(nk, PiL, KoL, PiLRo), pL0, 'Same values raised on right, left positions')
@@ -577,6 +574,8 @@ stop
   neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fnsp(2*nk+2, absolute_positions(nk, PiL, KoL, PiLRo), pL1, 'Slightly warmer on right, left positions')
   neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fnsp(2*nk+2, absolute_positions(nk, PiL, KoR, PiRLo), pR1, 'Slightly warmer on right, right positions')
   neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fnsp(2*nk+1, hEff, hE1, 'Slightly warmer on right, thicknesses')
+do k = 1, 2*nk+2; write(0,*) KoL(k),KoR(k),PiRLo(k) ; enddo
+  call neutral_surface_flux(nk, PiL, PiL, TiL, TiL+2., PiLRo, PiRLo, KoL, KoR, hEff, Flx)
 
   call find_neutral_surface_positions(nk, PiL, TiL, SiL, dRdt, dRdS, PiL, TiL-2., SiL, dRdT, dRdS, PiLRo, PiRLo, KoL, KoR, hEff)
   neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fnsp(2*nk+2, absolute_positions(nk, PiL, KoL, PiLRo), pR1, 'Slightly cooler on right, left positions')
@@ -613,8 +612,8 @@ stop
 
   contains
 
-  !> Returns true if test of interpolate_for_position() fails, and conditionally writes results to stream
-  logical function test_ifp(rhoNeg, Pneg, rhoPos, Ppos, Ptrue, title)
+  !> Returns true if test of interpolate_for_nondim_position() fails, and conditionally writes results to stream
+  logical function test_ifndp(rhoNeg, Pneg, rhoPos, Ppos, Ptrue, title)
     real,             intent(in) :: rhoNeg !< Lighter density (kg/m3)
     real,             intent(in) :: Pneg   !< Interface position of lighter density (pa)
     real,             intent(in) :: rhoPos !< Heavier density (kg/m3)
@@ -625,21 +624,21 @@ stop
     integer :: stdunit
     real :: Pret
 
-    Pret = interpolate_for_position(rhoNeg, Pneg, rhoPos, Ppos)
-    test_ifp = (Pret /= Ptrue) 
+    Pret = interpolate_for_nondim_position(rhoNeg, Pneg, rhoPos, Ppos)
+    test_ifndp = (Pret /= Ptrue) 
 
-    if (test_ifp .or. verbosity>5) then
+    if (test_ifndp .or. verbosity>5) then
       stdunit = 6
-      if (test_ifp.or.debug_this_module) stdunit = 0 ! In case of wrong results, write to error stream
+      if (test_ifndp.or.debug_this_module) stdunit = 0 ! In case of wrong results, write to error stream
       write(stdunit,'(a)') title
-      if (test_ifp) then
+      if (test_ifndp) then
         write(stdunit,'(4(x,a,f20.16),2(x,a,1pe22.15),x,a)') 'r1=',rhoNeg,'p1=',Pneg,'r2=',rhoPos,'p2=',Ppos,'pRet=',Pret,'pTrue=',Ptrue,'WRONG!'
       else
         write(stdunit,'(4(x,a,f20.16),2(x,a,1pe22.15))') 'r1=',rhoNeg,'p1=',Pneg,'r2=',rhoPos,'p2=',Ppos,'pRet=',Pret,'pTrue=',Ptrue
       endif
     endif
 
-  end function test_ifp
+  end function test_ifndp
 
   !> Returns true if comparison of Po and Ptrue fails, and conditionally writes results to stream
   logical function test_fnsp(nk, Po, Ptrue, title)
