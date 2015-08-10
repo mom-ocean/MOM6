@@ -8,6 +8,7 @@ use MOM_EOS, only : EOS_type, calculate_compress, calculate_density_derivs
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
 use MOM_error_handler, only : MOM_get_verbosity
 use MOM_file_parser, only : get_param, log_version, param_file_type
+use MOM_file_parser, only : openParameterBlock, closeParameterBlock
 use MOM_grid, only : ocean_grid_type
 
 implicit none ; private
@@ -43,15 +44,17 @@ logical, parameter :: debug_this_module = .true.
 
 contains
 
-!> Read parameters and allocates control structure of neutral_diffusion module.
-subroutine neutral_diffusion_init(Time, G, param_file, diag, CS)
+!> Read parameters and allocates control structure for neutral_diffusion module.
+logical function neutral_diffusion_init(Time, G, param_file, diag, CS)
   type(time_type), target,    intent(in)    :: Time       !< Time structure
   type(ocean_grid_type),      intent(in)    :: G          !< Grid structure
   type(diag_ctrl), target,    intent(inout) :: diag       !< Diagnostics control structure
   type(param_file_type),      intent(in)    :: param_file !< Parameter file structure
   type(neutral_diffusion_CS), pointer       :: CS         !< Neutral diffusion control structure
+  ! Local variables
   character(len=256) :: mesg    ! Message for error messages.
 
+  neutral_diffusion_init = .false.
   if (associated(CS)) then
     call MOM_error(FATAL, "neutral_diffusion_init called with associated control structure.")
     return
@@ -59,11 +62,36 @@ subroutine neutral_diffusion_init(Time, G, param_file, diag, CS)
   allocate(CS)
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, "")
+  call log_version(param_file, mod, version, &
+       "This module implements neutral diffusion of tracers")
+  call get_param(param_file, mod, "USE_NEUTRAL_DIFFUSION", neutral_diffusion_init, &
+                 "If true, enables the neutral diffusion module.", &
+                 default=.false.)
+  call openParameterBlock(param_file,'NEUTRAL_DIFF')
 ! call get_param(param_file, mod, "KHTR", CS%KhTr, &
 !                "The background along-isopycnal tracer diffusivity.", &
 !                units="m2 s-1", default=0.0)
-end subroutine neutral_diffusion_init
+  call closeParameterBlock(param_file)
+
+  if (.not.neutral_diffusion_init) then
+    deallocate(CS)
+    return
+  endif
+  
+  ! U-points
+  allocate(CS%uPoL(G%isd:G%ied,G%jsd:G%jed,2*G%ke+2)); CS%uPoL(G%isc-1:G%iec,G%jsc:G%jec,:) = 0.
+  allocate(CS%uPoR(G%isd:G%ied,G%jsd:G%jed,2*G%ke+2)); CS%uPoR(G%isc-1:G%iec,G%jsc:G%jec,:) = 0.
+  allocate(CS%uKoL(G%isd:G%ied,G%jsd:G%jed,2*G%ke+2)); CS%uKoL(G%isc-1:G%iec,G%jsc:G%jec,:) = 0
+  allocate(CS%uKoR(G%isd:G%ied,G%jsd:G%jed,2*G%ke+2)); CS%uKoR(G%isc-1:G%iec,G%jsc:G%jec,:) = 0
+  allocate(CS%uHeff(G%isd:G%ied,G%jsd:G%jed,2*G%ke+1)); CS%uHeff(G%isc-1:G%iec,G%jsc:G%jec,:) = 0
+  ! V-points
+  allocate(CS%vPoL(G%isd:G%ied,G%jsd:G%jed,2*G%ke+2)); CS%vPoL(G%isc:G%iec,G%jsc-1:G%jec,:) = 0.
+  allocate(CS%vPoR(G%isd:G%ied,G%jsd:G%jed,2*G%ke+2)); CS%vPoR(G%isc:G%iec,G%jsc-1:G%jec,:) = 0.
+  allocate(CS%vKoL(G%isd:G%ied,G%jsd:G%jed,2*G%ke+2)); CS%vKoL(G%isc:G%iec,G%jsc-1:G%jec,:) = 0
+  allocate(CS%vKoR(G%isd:G%ied,G%jsd:G%jed,2*G%ke+2)); CS%vKoR(G%isc:G%iec,G%jsc-1:G%jec,:) = 0
+  allocate(CS%vHeff(G%isd:G%ied,G%jsd:G%jed,2*G%ke+1)); CS%vHeff(G%isc:G%iec,G%jsc-1:G%jec,:) = 0
+
+end function neutral_diffusion_init
 
 !> Calculates remapping factors for u/v columns used to map adjoining columns to
 !! a shared coordinate space.

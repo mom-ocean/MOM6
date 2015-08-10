@@ -330,7 +330,7 @@ use MOM_variables, only : surface
 ! temperature, salinity and mixed layer density.
 use MOM_variables, only: thermo_var_ptrs
 
-! infrastructure modules 
+! Infrastructure modules 
 use MOM_checksums,            only : MOM_checksums_init, hchksum, uchksum, vchksum
 use MOM_checksum_packages,    only : MOM_thermo_chksum, MOM_state_chksum, MOM_accel_chksum
 use MOM_cpu_clock,            only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
@@ -364,7 +364,7 @@ use MOM_state_initialization, only : MOM_initialize_state, MOM_initialization_st
 use MOM_time_manager,         only : time_type, set_time, time_type_to_real, operator(+)
 use MOM_time_manager,         only : operator(-), operator(>), operator(*), operator(/)
 
-
+! MOM core modules
 use MOM_ALE,                   only : initialize_ALE, end_ALE, ALE_main, ALE_CS, adjustGridForIntegrity
 use MOM_ALE,                   only : ALE_getCoordinate, ALE_getCoordinateUnits, ALE_writeCoordinateFile
 use MOM_ALE,                   only : ALE_updateVerticalGridType
@@ -372,13 +372,11 @@ use MOM_continuity,            only : continuity, continuity_init, continuity_CS
 use MOM_CoriolisAdv,           only : CorAdCalc, CoriolisAdv_init, CoriolisAdv_CS
 use MOM_diabatic_driver,       only : diabatic, diabatic_driver_init, diabatic_CS
 use MOM_diabatic_driver,       only : adiabatic, adiabatic_driver_init, diabatic_driver_end
-
 use MOM_diagnostics,           only : calculate_diagnostic_fields, MOM_diagnostics_init
 use MOM_diagnostics,           only : diagnostics_CS
 use MOM_diag_to_Z,             only : calculate_Z_diag_fields, calculate_Z_transport
 use MOM_diag_to_Z,             only : MOM_diag_to_Z_init, register_Z_tracer, diag_to_Z_CS
 use MOM_diag_to_Z,             only : MOM_diag_to_Z_end
-
 use MOM_dynamics_unsplit,      only : step_MOM_dyn_unsplit, register_restarts_dyn_unsplit
 use MOM_dynamics_unsplit,      only : initialize_dyn_unsplit, end_dyn_unsplit
 use MOM_dynamics_unsplit,      only : MOM_dyn_unsplit_CS
@@ -391,7 +389,6 @@ use MOM_dynamics_unsplit_RK2,  only : MOM_dyn_unsplit_RK2_CS
 use MOM_dynamics_legacy_split, only : step_MOM_dyn_legacy_split, register_restarts_dyn_legacy_split
 use MOM_dynamics_legacy_split, only : initialize_dyn_legacy_split, end_dyn_legacy_split
 use MOM_dynamics_legacy_split, only : adjustments_dyn_legacy_split, MOM_dyn_legacy_split_CS
-
 use MOM_EOS,                   only : EOS_init
 use MOM_error_checking,        only : check_redundant
 use MOM_grid,                  only : MOM_grid_init, ocean_grid_type, get_thickness_units
@@ -403,6 +400,7 @@ use MOM_lateral_mixing_coeffs, only : calc_resoln_function, VarMix_CS
 use MOM_MEKE,                  only : MEKE_init, MEKE_alloc_register_restart, step_forward_MEKE, MEKE_CS
 use MOM_MEKE_types,            only : MEKE_type
 use MOM_mixed_layer_restrat,   only : mixedlayer_restrat, mixedlayer_restrat_init, mixedlayer_restrat_CS
+use MOM_neutral_diffusion,     only : neutral_diffusion_init, neutral_diffusion_CS
 use MOM_obsolete_diagnostics,  only : register_obsolete_diagnostics
 use MOM_open_boundary,         only : Radiation_Open_Bdry_Conds, open_boundary_init
 use MOM_PressureForce,         only : PressureForce, PressureForce_init, PressureForce_CS
@@ -488,6 +486,7 @@ type, public :: MOM_control_struct
                                      ! isopycnal/stacked shallow water mode. This logical is
                                      ! set by calling the function useRegridding() from the
                                      ! MOM_regridding module.
+  logical :: use_neutral_diffusion   ! If true, enables the neutral diffusion module.
   logical :: do_dynamics             ! If false, does not call step_MOM_dyn_*. This is an
                                      ! undocumented run-time flag that is fragile.
 
@@ -625,6 +624,7 @@ type, public :: MOM_control_struct
   type(MOM_restart_CS),          pointer :: restart_CSp            => NULL()
   type(ocean_OBC_type),          pointer :: OBC                    => NULL()
   type(ALE_CS),                  pointer :: ALE_CSp                => NULL()
+  type(neutral_diffusion_CS),    pointer :: neutral_diffusion_CSp  => NULL()
 
   ! These are used for group halo updates.
   type(group_pass_type) :: pass_tau_ustar_psurf
@@ -2038,6 +2038,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call callTree_waypoint("ALE initialized (initialize_MOM)")
 
   CS%useMEKE = MEKE_init(Time, G, param_file, diag, CS%MEKE_CSp, CS%MEKE, CS%restart_CSp)
+  CS%use_neutral_diffusion = neutral_diffusion_init(Time, G, param_file, diag, CS%neutral_diffusion_CSp)
 
   call wave_speed_init(Time, G, param_file, diag, CS%wave_speed_CSp)
   call VarMix_init(Time, G, param_file, diag, CS%VarMix, CS%wave_speed_CSp)
@@ -2230,7 +2231,6 @@ subroutine unitTests
   endif
 
 end subroutine unitTests
-
 
 subroutine register_diags(Time, G, CS, ADp)
   type(time_type),           intent(in)    :: Time
