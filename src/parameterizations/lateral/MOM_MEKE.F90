@@ -380,8 +380,9 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, CS, hu, hv)
 !$OMP parallel default(none) shared(is,ie,js,je,MEKE,CS,sdt,G,Kh_u,MEKE_uflux, &
 !$OMP                               mass,mass_neglect,Kh_v,MEKE_vflux,I_mass, &
 !$OMP                               sdt_damp,drag_rate,Rho0,drag_rate_visc,   &
-!$OMP                               cdrag2,bottomFac2,MEKE_decay,barotrFac2,use_drag_rate) &
-!$OMP                       private(Kh_here,Inv_Kh_max,ldamping)
+!$OMP                               cdrag2,bottomFac2,MEKE_decay,barotrFac2,  &
+!$OMP                               use_drag_rate,dt,baroHu,baroHv) &
+!$OMP                       private(Kh_here,Inv_Kh_max,ldamping,advFac)
     if (CS%MEKE_KH >= 0.0 .or. CS%MEKE_advection_factor >0.) then
       ! Lateral diffusion of MEKE
       Kh_here = max(0.,CS%MEKE_Kh)

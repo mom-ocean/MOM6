@@ -323,7 +323,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
 !$OMP                                  find_FrictWork,FrictWork,use_MEKE_Ku,MEKE)     &
 !$OMP                          private(u0, v0, sh_xx, str_xx, visc_bound_rem,         &
 !$OMP                                  sh_xy, str_xy, Ah, Kh, AhSm, KhSm,             &
-!$OMP                                  bhstr_xx, bhstr_xy,                            &
+!$OMP                                  bhstr_xx, bhstr_xy,FatH,RoScl,                 &
 !$OMP                                  Shear_mag, huq, hvq, hq, Kh_scale, hrat_min)
   do k=1,nz
 
