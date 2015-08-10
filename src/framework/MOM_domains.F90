@@ -887,8 +887,8 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
   integer, dimension(2) :: io_layout = (/ 0, 0 /)
   integer, dimension(4) :: global_indices
 !$ integer :: ocean_nthreads       ! Number of Openmp threads
-!$ integer :: get_cpu_affinity, base_cpu, omp_get_num_threads
-!$ integer :: omp_get_thread_num, default_threads
+!$ integer :: get_cpu_affinity, base_cpu
+!$ integer :: omp_get_thread_num
   integer :: nihalo_dflt, njhalo_dflt
   integer :: pe, proc_used
   integer :: X_FLAGS, Y_FLAGS
@@ -953,26 +953,14 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
                  default=.false.)
 
 #ifndef NOT_SET_AFFINITY
-!$  default_threads = 1
-!$OMP PARALLEL default(none) shared(default_threads)
-!$OMP SINGLE
-!$  default_threads = omp_get_num_threads()
-!$OMP END SINGLE
-!$OMP END PARALLEL
-!$  if (default_threads == 1) then
 !$    call get_param(param_file, mod, "OCEAN_OMP_THREADS", ocean_nthreads, &
 !$               "The number of OpenMP threads that MOM6 will use.", &
-!$               default = default_threads, layoutParam=.true.)
+!$               default = 1, layoutParam=.true.)
 !$    call omp_set_num_threads(ocean_nthreads)
 !$    base_cpu = get_cpu_affinity()
 !$OMP PARALLEL
 !$    call set_cpu_affinity( base_cpu + omp_get_thread_num() )
 !$OMP END PARALLEL
-!$  else
-!$    call log_param(param_file, mod, "OCEAN_OMP_THREADS", default_threads, &
-!$               "The number of OpenMP threads that MOM6 will use.", &
-!$               layoutParam=.true.)
-!$  endif
 #endif
 
   call log_param(param_file, mod, "!SYMMETRIC_MEMORY_", MOM_dom%symmetric, &
