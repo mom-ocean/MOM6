@@ -269,22 +269,46 @@ subroutine propagate_int_tide(cg1, En_in, vel_btTide, dt, G, CS)
     enddo ; enddo ; enddo
   endif
 
-  ! Extract the energy for mixing.
+  !! Extract the energy for mixing (original).
+  !if (CS%apply_drag) then
+  !  do j=jsd,jed ; do i=isd,ied
+  !    I_D_here = 1.0 / max(G%bathyT(i,j), 1.0)
+  !    drag_scale(i,j) = CS%decay_rate + CS%cdrag * &
+  !      sqrt(max(0.0, vel_btTide(i,j)**2 + tot_En(i,j) * I_rho0 * I_D_here)) * I_D_here
+  !  enddo ; enddo
+  !else
+  !  do j=jsd,jed ; do i=isd,ied
+  !    drag_scale(i,j) = CS%decay_rate
+  !  enddo ; enddo
+  !endif  
+  !do m=1,CS%nMode ; do fr=1,CS%nFreq ; do a=1,CS%nAngle ; do j=jsd,jed ; do i=isd,ied
+  !  CS%En(i,j,a,fr,m) = CS%En(i,j,a,fr,m) / (1.0 + dt*drag_scale(i,j))
+  !enddo ; enddo ; enddo ; enddo ; enddo
+  
+  ! Extract the energy for mixing (due to bottom drag - BDM).
   if (CS%apply_drag) then
-    do j=jsd,jed ; do i=isd,ied
-      I_D_here = 1.0 / max(G%bathyT(i,j), 1.0)
-      drag_scale(i,j) = CS%decay_rate + CS%cdrag * &
-        sqrt(max(0.0, vel_btTide(i,j)**2 + tot_En(i,j) * I_rho0 * I_D_here)) * I_D_here
-    enddo ; enddo
-  else
-    do j=jsd,jed ; do i=isd,ied
-      drag_scale(i,j) = CS%decay_rate
-    enddo ; enddo
+    do m=1,CS%nMode ; do fr=1,CS%nFreq ; do a=1,CS%nAangle
+      do j=jsd,jed ; do i=isd,ied
+        modal_vel_bot = 0.5*sqrt(En(i,j,a,fr,m))) ! placeholder for bottom velocity
+        ! Calculate TKE loss rate; units of [J m-2 = kg s] here;
+        !CS%TKE_itidal(i,j,a,fr,m) = CS%TKE_itidal_coef(i,j) * modal_vel_bot**2
+        ! Calculate TKE loss rate; units of  [W m-2] here.
+        CS%TKE_itidal(i,j,a,fr,m) = CS%TKE_itidal_coef(i,j) * CS%Nb(i,j) * modal_vel_bot**2
+        ! Update energy remaining in original mode (this is an explicit calc for now)
+        CS%En(i,j,a,fr,m) = CS%En(i,j,a,fr,m) - CS%TKE_itidal(i,j,a,fr,m)*dt
+      enddo ; enddo
+    enddo ; enddo ; enddo
   endif
-
   do m=1,CS%nMode ; do fr=1,CS%nFreq ; do a=1,CS%nAngle ; do j=jsd,jed ; do i=isd,ied
     CS%En(i,j,a,fr,m) = CS%En(i,j,a,fr,m) / (1.0 + dt*drag_scale(i,j))
   enddo ; enddo ; enddo ; enddo ; enddo
+  
+        
+
+    
+  
+
+
   
   ! Check for energy conservation on computational domain (BDM)
   call sum_En(G,CS,CS%En(:,:,:,1,1),'prop_int_tide')
@@ -1844,6 +1868,9 @@ subroutine internal_tides_init(Time, G, param_file, diag, CS)
   call get_param(param_file, mod, "INTERNAL_TIDE_DECAY_RATE", CS%decay_rate, &
                  "The rate at which internal tide energy is lost to the \n"//&
                  "interior ocean internal wave field.", units="s-1", default=0.0)
+  call get_param(param_file, mod, "MIN_ZBOT_ITIDES", CS%min_zbot_itides, &
+                "Turn off internal tidal dissipation when the total \n"//&
+                "ocean depth is less than this value.", units="m", default=0.0) !BDM
   call get_param(param_file, mod, "INTERNAL_TIDE_VOLUME_BASED_CFL", CS%vol_CFL, &
                  "If true, use the ratio of the open face lengths to the \n"//&
                  "tracer cell areas when estimating CFL numbers in the \n"//&
@@ -1877,6 +1904,32 @@ subroutine internal_tides_init(Time, G, param_file, diag, CS)
   call get_param(param_file, mod, "USE_PPM_ANGULAR", CS%use_PPMang, &
                  "If true, use PPM for advection of energy in angular  \n"//&
                  "space.", default=.false.)
+                 
+  ! Compute the fixed part of the bottom drag loss from baroclinic modes (BDM)
+  call get_param(param_file, mod, "KAPPA_ITIDES", kappa_itides, &
+               "A topographic wavenumber used with INT_TIDE_DISSIPATION. \n"//&
+               "The default is 2pi/10 km, as in St.Laurent et al. 2002.", &
+               units="m-1", default=8.e-4*atan(1.0))
+  call get_param(param_file, mod, "KAPPA_H2_FACTOR", kappa_h2_factor, &
+               "A scaling factor for the roughness amplitude with n"//&
+               "INT_TIDE_DISSIPATION.",  units="nondim", default=1.0)
+  call get_param(param_file, mod, "H2_FILE", h2_file, &
+               "The path to the file containing the sub-grid-scale \n"//&
+               "topographic roughness amplitude with INT_TIDE_DISSIPATION.", &
+               fail_if_missing=.true.)
+  filename = trim(CS%inputdir) // trim(h2_file)
+  call log_param(param_file, mod, "INPUTDIR/H2_FILE", filename)
+  call read_data(filename, 'h2', h2, domain=G%domain%mpp_domain, &
+                 timelevel=1)               
+  do j=js,je ; do i=is,ie
+    mask_itidal = 1.0
+    ! Restrict rms topo to 10 percent of column depth.
+    h2(i,j) = min(0.01*G%bathyT(i,j)**2, h2(i,j))
+    ! Compute the fixed part; units are [kg m-2] here; 
+    ! will be multiplied by N and En to get into [W m-2]
+    CS%TKE_itidal_coef(i,j) = 0.5*kappa_h2_factor*G%Rho0*&
+         kappa_itides * h2(i,j)
+  enddo; enddo
   
   ! Read in prescribed coast/ridge/shelf angles from file (BDM)
   call get_param(param_file, mod, "REFL_ANGLE_FILE", refl_angle_file, &
