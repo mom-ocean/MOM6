@@ -113,7 +113,8 @@ subroutine neutral_diffusion_calc_coeffs(G, h, T, S, EOS, CS)
   do j = G%jsc-1, G%jec+1
     ! Interpolate state to interface
     do i = G%isc-1, G%iec+1
-      call interface_TS(G%ke, T(i,j,:), S(i,j,:), Tint, Sint)
+      call interface_scalar(G%ke, T(i,j,:), Tint)
+      call interface_scalar(G%ke, S(i,j,:), Sint)
     enddo
 
     ! Caclulate interface properties
@@ -152,26 +153,23 @@ subroutine neutral_diffusion()
 
 end subroutine neutral_diffusion
 
-!> Returns interface T and S for a column
-subroutine interface_TS(nk, T, S, Ti, Si)
+!> Returns interface scalar, Si, for a column of layer values, S.
+subroutine interface_scalar(nk, S, Si)
   integer,               intent(in)    :: nk !< Number of levels
-  real, dimension(nk),   intent(in)    :: T  !< Layer potential temperature (degC)
-  real, dimension(nk),   intent(in)    :: S  !< Layer salinity (ppt)
-  real, dimension(nk+1), intent(inout) :: Ti !< Interface potential temperature (degC)
-  real, dimension(nk+1), intent(inout) :: Si !< Interface salinity (ppt)
+  real, dimension(nk),   intent(in)    :: S  !< Layer salinity (conc, e.g. ppt)
+  real, dimension(nk+1), intent(inout) :: Si !< Interface salinity (conc, e.g. ppt)
   ! Local variables
   integer :: k
 
   ! We use simple averaging for internal interfaces and piecewise-constant at the top and bottom.
   ! NOTE: THIS IS A PLACEHOLDER FOR HIGHER ORDER INTERPOLATION T.B.I.
-  Ti(1) = T(1) ; Si(1) = S(1)
+  Si(1) = S(1)
   do k = 2, nk
-    Ti(k) = 0.5*( T(k-1) + T(k) )
     Si(k) = 0.5*( S(k-1) + S(k) )
   enddo
-  Ti(nk+1) = T(nk) ; Si(nk+1) = S(nk)
+  Si(nk+1) = S(nk)
 
-end subroutine interface_TS
+end subroutine interface_scalar
 
 !> Returns positions within left/right columns of combined interfaces
 subroutine find_neutral_surface_positions(nk, Pl, Tl, Sl, dRdTl, dRdSl, Pr, Tr, Sr, dRdTr, dRdSr, PoL, PoR, KoL, KoR, hEff)
