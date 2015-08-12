@@ -104,6 +104,14 @@ type, public :: int_tide_CS ; private
                         ! identifies reflection cells where double reflection 
                         ! is possible (i.e. ridge cells) (BDM)
                         ! (could be in G control structure)   
+  real, allocatable, dimension(:,:) :: TKE_itidal_coef  
+                        ! fixed part of the energy lost due to small-scale drag
+                        ! [kg m-2] here; will be multiplied by N and En to get 
+                        ! into [W m-2] (BDM)
+  real, allocatable, dimension(:,:,:,:,:) :: TKE_itidal_loss_coef  
+                        ! mode-velocity-dependent part of the energy lost due 
+                        ! to small-scale drag [kg s-2 = J m-2] here; will be 
+                        ! multiplied by N to get into [W m-2] (BDM)
   real :: En_sum        ! global sum of energy for use in debugging (BDM)    
   type(time_type),pointer    :: Time  
                         ! The current model time (BDM) 
@@ -141,8 +149,8 @@ end type loop_bounds_type
 contains
 
 
-subroutine propagate_int_tide(cg1, En_in, vel_btTide, Nb, dt, G, CS)
-  real, dimension(NIMEM_,NJMEM_), intent(in) :: cg1, En_in, vel_btTide, Nb
+subroutine propagate_int_tide(cg1, En_in, vel_btTide, N2_bot, dt, G, CS)
+  real, dimension(NIMEM_,NJMEM_), intent(in) :: cg1, En_in, vel_btTide, N2_bot
   real,                  intent(in)    :: dt
   type(ocean_grid_type), intent(inout) :: G
   type(int_tide_CS), pointer       :: CS
@@ -152,7 +160,7 @@ subroutine propagate_int_tide(cg1, En_in, vel_btTide, Nb, dt, G, CS)
   ! Arguments: cg1 - The first mode internal gravity wave speed, in m s-1.
   !  (in)      En_in - The energy input to the internal waves, in W m-2.
   !  (in)      vel_btTide - Barotropic velocity read from file, in m s-1
-  !  (in)      Nb - Near-bottom buoyancy frequency, in s-1
+  !  (in)      N2_bot - Squared near-bottom buoyancy frequency, in s-2
   !  (in)      dt - Length of time over which these fluxes will be applied, in s.
   !  (in)      G - The ocean's grid structure.
   !  (in)      CS - A pointer to the control structure returned by a previous
@@ -167,7 +175,9 @@ subroutine propagate_int_tide(cg1, En_in, vel_btTide, Nb, dt, G, CS)
   real, dimension(SZI_(G),SZJ_(G)) :: &
     tot_En, drag_scale
   real :: frac_per_sector, f2, I_rho0, I_D_here
-
+  real :: TKE_itidal_loss     ! TKE loss rate [W m-2] BDM
+  real :: modal_vel_bot, Nb   ! BDM
+  
   integer :: a, m, fr, i, j, is, ie, js, je, isd, ied, jsd, jed, nAngle
   integer :: isd_g, jsd_g         ! start indices on data domain but referenced 
                                   ! to global indexing (for debuggin-BDM)
@@ -289,28 +299,22 @@ subroutine propagate_int_tide(cg1, En_in, vel_btTide, Nb, dt, G, CS)
   
   ! Extract the energy for mixing (due to bottom drag - BDM).
   if (CS%apply_drag) then
-    do m=1,CS%nMode ; do fr=1,CS%nFreq ; do a=1,CS%nAangle
+    do m=1,CS%nMode ; do fr=1,CS%nFreq ; do a=1,CS%nAngle
       do j=jsd,jed ; do i=isd,ied
-        modal_vel_bot = 0.5*sqrt(En(i,j,a,fr,m))) ! placeholder for bottom velocity
-        ! Calculate TKE loss rate; units of [J m-2 = kg s] here;
-        !CS%TKE_itidal(i,j,a,fr,m) = CS%TKE_itidal_coef(i,j) * modal_vel_bot**2
-        ! Calculate TKE loss rate; units of  [W m-2] here.
-        CS%TKE_itidal(i,j,a,fr,m) = CS%TKE_itidal_coef(i,j) * Nb(i,j) * modal_vel_bot**2
+        Nb = G%mask2dT(i,j) * sqrt(N2_bot(i,j))
+        ! Calculate bottom velocity for mode; usign a placeholder here - could be
+        ! done in diabatic driver as is N2_bot.
+        modal_vel_bot = 0.5*sqrt(CS%En(i,j,a,fr,m))
+        ! Calculate TKE loss rate; units of [J m-2 = kg s-2] here; 
+        ! will be passed to set_diffusivity
+        CS%TKE_itidal_loss_coef(i,j,a,fr,m) = CS%TKE_itidal_coef(i,j) * modal_vel_bot**2
+        ! Calculate TKE loss rate; units of [W m-2] here.
+        TKE_itidal_loss = CS%TKE_itidal_loss_coef(i,j,a,fr,m) * Nb
         ! Update energy remaining in original mode (this is an explicit calc for now)
-        CS%En(i,j,a,fr,m) = CS%En(i,j,a,fr,m) - CS%TKE_itidal(i,j,a,fr,m)*dt
+        CS%En(i,j,a,fr,m) = CS%En(i,j,a,fr,m) - TKE_itidal_loss*dt
       enddo ; enddo
     enddo ; enddo ; enddo
   endif
-  do m=1,CS%nMode ; do fr=1,CS%nFreq ; do a=1,CS%nAngle ; do j=jsd,jed ; do i=isd,ied
-    CS%En(i,j,a,fr,m) = CS%En(i,j,a,fr,m) / (1.0 + dt*drag_scale(i,j))
-  enddo ; enddo ; enddo ; enddo ; enddo
-  
-        
-
-    
-  
-
-
   
   ! Check for energy conservation on computational domain (BDM)
   call sum_En(G,CS,CS%En(:,:,:,1,1),'prop_int_tide')
@@ -1771,9 +1775,11 @@ subroutine internal_tides_init(Time, G, param_file, diag, CS)
   !                 for this module
   real    :: angle_size
   real, allocatable :: angles(:)
+  real, allocatable :: h2(:,:)
   real, allocatable :: ridge_temp(:,:) ! intermediate array (BDM)
   logical :: use_int_tides, use_temperature
   integer :: num_angle, num_freq, num_mode, m, fr, period_1
+  real :: kappa_itides, kappa_h2_factor ! (BDM)
   integer :: isd, ied, jsd, jed, a, id_ang, i, j
   type(axesType) :: axes_ang 
   ! This include declares and sets the variable "version".
@@ -1786,6 +1792,7 @@ subroutine internal_tides_init(Time, G, param_file, diag, CS)
   character(len=200) :: refl_angle_file, land_mask_file, refl_pref_file ! (BDM)
   character(len=200) :: refl_dbl_file ! (BDM)
   character(len=200) :: dy_Cu_file, dx_Cv_file ! (BDM)
+  character(len=200) :: h2_file ! (BDM)
   
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   use_int_tides = .false.
@@ -1870,9 +1877,9 @@ subroutine internal_tides_init(Time, G, param_file, diag, CS)
   call get_param(param_file, mod, "INTERNAL_TIDE_DECAY_RATE", CS%decay_rate, &
                  "The rate at which internal tide energy is lost to the \n"//&
                  "interior ocean internal wave field.", units="s-1", default=0.0)
-  call get_param(param_file, mod, "MIN_ZBOT_ITIDES", CS%min_zbot_itides, &
-                "Turn off internal tidal dissipation when the total \n"//&
-                "ocean depth is less than this value.", units="m", default=0.0) !BDM
+  !call get_param(param_file, mod, "MIN_ZBOT_ITIDES", CS%min_zbot_itides, &
+  !              "Turn off internal tidal dissipation when the total \n"//&
+  !              "ocean depth is less than this value.", units="m", default=0.0) !BDM
   call get_param(param_file, mod, "INTERNAL_TIDE_VOLUME_BASED_CFL", CS%vol_CFL, &
                  "If true, use the ratio of the open face lengths to the \n"//&
                  "tracer cell areas when estimating CFL numbers in the \n"//&
@@ -1923,8 +1930,7 @@ subroutine internal_tides_init(Time, G, param_file, diag, CS)
   call log_param(param_file, mod, "INPUTDIR/H2_FILE", filename)
   call read_data(filename, 'h2', h2, domain=G%domain%mpp_domain, &
                  timelevel=1)               
-  do j=js,je ; do i=is,ie
-    mask_itidal = 1.0
+  do j=G%jsc,G%jec ; do i=G%isc,G%iec
     ! Restrict rms topo to 10 percent of column depth.
     h2(i,j) = min(0.01*G%bathyT(i,j)**2, h2(i,j))
     ! Compute the fixed part; units are [kg m-2] here; 

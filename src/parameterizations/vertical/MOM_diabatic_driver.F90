@@ -95,6 +95,7 @@ use MOM_grid,                only : ocean_grid_type
 use MOM_io,                  only : vardesc
 use MOM_int_tide_input,      only : set_int_tide_input, int_tide_input_init
 use MOM_int_tide_input,      only : int_tide_input_end, int_tide_input_CS, int_tide_input_type
+use MOM_int_tide_input,      only : find_N2_bottom ! BDM
 use MOM_internal_tides,      only : propagate_int_tide, register_int_tide_restarts
 use MOM_restart,             only : MOM_restart_CS ! BDM
 use MOM_internal_tides,      only : internal_tides_init, internal_tides_end, int_tide_CS
@@ -107,6 +108,7 @@ use MOM_set_diffusivity,     only : set_diffusivity_init, set_diffusivity_end
 use MOM_set_diffusivity,     only : set_diffusivity_CS
 use MOM_shortwave_abs,       only : absorbRemainingSW, optics_type
 use MOM_sponge,              only : apply_sponge, sponge_CS
+use MOM_thickness_diffuse,   only : vert_fill_TS ! BDM
 use MOM_tracer_flow_control, only : call_tracer_column_fns, tracer_flow_control_CS
 use MOM_variables,           only : thermo_var_ptrs, vertvisc_type, accel_diag_ptrs
 use MOM_variables,           only : cont_diag_ptrs, MOM_thermovar_chksum, p3d
@@ -379,6 +381,11 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   
   integer :: ig, jg      ! (BDM)
   logical :: avg_enabled ! (BDM)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: T_f, S_f      
+                         ! The temperature and salinity in C and PSU with the values in
+                         ! the massless layers filled vertically by diffusion. (BDM)
+  real, dimension(SZI_(G),SZJ_(G)) :: N2_bot        
+                         ! The bottom squared buoyancy frequency, in s-2. (BDM)
 
   is   = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = G%ke
   Isq  = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
@@ -537,6 +544,12 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
        !enddo
     endif
     
+    ! CALCULATE NEAR-BOTTOM STRATIFICATION (BDM)
+    !kappa_fill = 1.e-3 ! m2 s-1
+    !dt_fill = 7200.
+    call vert_fill_TS(h, tv%T, tv%S, 1.e-3, 7200., T_f, S_f, G)
+    call find_N2_bottom(h, tv, T_f, S_f, CS%int_tide_input%h2, fluxes, G, N2_bot)
+    
     ! BUILD 2D ARRAY WITH POINT SOURCE FOR TESTING (BDM)
     TKE_itidal_input_test(:,:) = 0.0
     avg_enabled = query_averaging_enabled(CS%diag,time_end=CS%time_end)
@@ -557,8 +570,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     !                        CS%int_tide_input%tideamp, dt, G, CS%int_tide_CSp)
     ! USING CALCULATED KE INPUT
     call propagate_int_tide(cg1, CS%int_tide_input%TKE_itidal_input, &
-                            CS%int_tide_input%tideamp, CS%int_tide_input%Nb, &
-                            dt, G, CS%int_tide_CSp)
+                            CS%int_tide_input%tideamp, N2_bot, dt, G, CS%int_tide_CSp)
     if (showCallTree) call callTree_waypoint("done with propagate_int_tide (diabatic)")
   endif
 

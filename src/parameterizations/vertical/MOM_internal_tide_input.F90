@@ -62,6 +62,7 @@ implicit none ; private
 #include <MOM_memory.h>
 
 public set_int_tide_input, int_tide_input_init, int_tide_input_end
+public find_N2_bottom !BDM
 
 type, public :: int_tide_input_CS ; private
   logical :: debug           ! If true, write verbose checksums for debugging.
