@@ -130,9 +130,9 @@ subroutine neutral_diffusion_calc_coeffs(G, h, T, S, EOS, CS)
   do j = G%jsc, G%jec
     do I = G%isc-1, G%iec
       call find_neutral_surface_positions(G%ke, &
-               Pint(i,j,k), Tint(i,j,k), Sint(i,j,k), dRdT(i,j,k), dRdS(i,j,k), &
-               Pint(i+1,j,k), Tint(i+1,j,k), Sint(i+1,j,k), dRdT(i+1,j,k), dRdS(i+1,j,k), &
-               CS%uPoL(I,j,k), CS%uPoR(I,j,k), CS%uKoL(I,j,k), CS%uKoR(I,j,k), CS%uhEff(I,j,k) )
+               Pint(i,j,:), Tint(i,j,:), Sint(i,j,:), dRdT(i,j,:), dRdS(i,j,:), &
+               Pint(i+1,j,:), Tint(i+1,j,:), Sint(i+1,j,:), dRdT(i+1,j,:), dRdS(i+1,j,:), &
+               CS%uPoL(I,j,:), CS%uPoR(I,j,:), CS%uKoL(I,j,:), CS%uKoR(I,j,:), CS%uhEff(I,j,:) )
     enddo
   enddo
 
@@ -140,9 +140,9 @@ subroutine neutral_diffusion_calc_coeffs(G, h, T, S, EOS, CS)
   do J = G%jsc-1, G%jec
     do i = G%isc, G%iec
       call find_neutral_surface_positions(G%ke, &
-               Pint(i,j,k), Tint(i,j,k), Sint(i,j,k), dRdT(i,j,k), dRdS(i,j,k), &
-               Pint(i,j+1,k), Tint(i,j+1,k), Sint(i,j+1,k), dRdT(i,j+1,k), dRdS(i,j+1,k), &
-               CS%vPoL(i,J,k), CS%vPoR(i,J,k), CS%vKoL(i,J,k), CS%vKoR(i,J,k), CS%vhEff(i,J,k) )
+               Pint(i,j,:), Tint(i,j,:), Sint(i,j,:), dRdT(i,j,:), dRdS(i,j,:), &
+               Pint(i,j+1,:), Tint(i,j+1,:), Sint(i,j+1,:), dRdT(i,j+1,:), dRdS(i,j+1,:), &
+               CS%vPoL(i,J,:), CS%vPoR(i,J,:), CS%vKoL(i,J,:), CS%vKoR(i,J,:), CS%vhEff(i,J,:) )
     enddo
   enddo
 
