@@ -475,7 +475,7 @@ subroutine neutral_surface_flux(nk, Pl, Pr, Tl, Tr, PiL, PiR, KoL, KoR, hEff, Fl
 !write(0,'(i3,2(i3,f8.2),2f8.2," right bottom")') k_sublayer+1,krm1,Tr(krm1),kr,Tr(kr),PiR(k_sublayer+1),T_right_bottom
 
       Flx(k_sublayer) = 0.5 * ( ( T_right_top - T_left_top ) + ( T_right_bottom - T_left_bottom ) )
-write(0,'(i3,f8.3)') k_sublayer, Flx(k_sublayer) * hEff(k_sublayer)
+!write(0,'(i3,f8.3)') k_sublayer, Flx(k_sublayer) * hEff(k_sublayer)
  !  endif
   enddo
 
@@ -574,7 +574,6 @@ logical function neutralDiffusionUnitTests()
   neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fnsp(2*nk+2, absolute_positions(nk, PiL, KoL, PiLRo), pL1, 'Slightly warmer on right, left positions')
   neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fnsp(2*nk+2, absolute_positions(nk, PiL, KoR, PiRLo), pR1, 'Slightly warmer on right, right positions')
   neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fnsp(2*nk+1, hEff, hE1, 'Slightly warmer on right, thicknesses')
-do k = 1, 2*nk+2; write(0,*) KoL(k),KoR(k),PiRLo(k) ; enddo
   call neutral_surface_flux(nk, PiL, PiL, TiL, TiL+2., PiLRo, PiRLo, KoL, KoR, hEff, Flx)
 
   call find_neutral_surface_positions(nk, PiL, TiL, SiL, dRdt, dRdS, PiL, TiL-2., SiL, dRdT, dRdS, PiLRo, PiRLo, KoL, KoR, hEff)
