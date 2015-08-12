@@ -171,6 +171,60 @@ subroutine interface_scalar(nk, S, Si)
 
 end subroutine interface_scalar
 
+!> Returns the cell-centered second-order finite volume (unlimited PLM) slope
+!! using three consecutive cell widths and average values. Slope is returned
+!! as a difference across the central cell (i.e. units of scalar S).
+real function fv_slope(hkm1, hk, hkp1, Skm1, Sk, Skp1)
+  real, intent(in) :: hkm1 !< Left cell width
+  real, intent(in) :: hk   !< Center cell width
+  real, intent(in) :: hkp1 !< Right cell width
+  real, intent(in) :: Skm1 !< Left cell average value
+  real, intent(in) :: Sk   !< Center cell average value
+  real, intent(in) :: Skp1 !< Right cell average value
+  ! Local variables
+  real :: h_sum, hp, hm
+
+  h_sum = ( hkm1 + hkp1 ) + hk
+  if (h_sum /= 0.) h_sum = 1./ h_sum
+  hm =  hkm1 + hk
+  if (hm /= 0.) hm = 1./ hm
+  hp =  hkp1 + hk
+  if (hp /= 0.) hp = 1./ hp
+  fv_slope = ( hk * h_sum ) * &
+             (   ( 2. * hkm1 + hk ) * hp * ( Skp1 - Sk ) &
+               + ( 2. * hkp1 + hk ) * hm * ( Sk - Skm1 ) )
+end function fv_slope
+
+!> Returns the cell-centered second-order weigthed least squares slope
+!! using three consecutive cell widths and average values. Slope is returned
+!! as a gradient (i.e. units of scalar S over width units).
+real function fvlsq_slope(hkm1, hk, hkp1, Skm1, Sk, Skp1)
+  real, intent(in) :: hkm1 !< Left cell width
+  real, intent(in) :: hk   !< Center cell width
+  real, intent(in) :: hkp1 !< Right cell width
+  real, intent(in) :: Skm1 !< Left cell average value
+  real, intent(in) :: Sk   !< Center cell average value
+  real, intent(in) :: Skp1 !< Right cell average value
+  ! Local variables
+  real :: xkm1, xkp1
+  real :: h_sum, hx_sum, hxsq_sum, hxy_sum, hy_sum, det
+
+  xkm1 = -0.5 * ( hk + hkm1 )
+  xkp1 = 0.5 * ( hk + hkp1 )
+  h_sum = ( hkm1 + hkp1 ) + hk
+  hx_sum = hkm1*xkm1 + hkp1*xkp1
+  hxsq_sum = hkm1*(xkm1**2) + hkp1*(xkp1**2)
+  hxy_sum = hkm1*xkm1*Skm1 + hkp1*xkp1*Skp1
+  hy_sum = ( hkm1*Skm1 + hkp1*Skp1 ) + hk*Sk
+  det = h_sum * hxsq_sum - hx_sum**2
+  if (det /= 0.) then
+    !a = ( hxsq_sum * hy_sum - hx_sum*hxy_sum ) / det ! a would be mean of straight line fit
+    fvlsq_slope = ( h_sum * hxy_sum - hx_sum*hy_sum ) / det ! Gradient of straight line fit
+  else
+    fvlsq_slope = 0. ! Adcroft's reciprocal rule
+  endif
+end function fvlsq_slope
+
 !> Returns positions within left/right columns of combined interfaces
 subroutine find_neutral_surface_positions(nk, Pl, Tl, Sl, dRdTl, dRdSl, Pr, Tr, Sr, dRdTr, dRdSr, PoL, PoR, KoL, KoR, hEff)
   integer,                    intent(in)    :: nk    !< Number of levels
@@ -541,6 +595,24 @@ logical function neutralDiffusionUnitTests()
   neutralDiffusionUnitTests = .false. ! Normally return false
   write(*,'(a)') '===== MOM_neutral_diffusion: neutralDiffusionUnitTests =================='
 
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fv_slope(1.,1.,1., 0.,1.,2., 1., 'FV: Straight line on uniform grid')
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fv_slope(1.,1.,0., 0.,4.,8., 7., 'FV: Vanished right cell')
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fv_slope(0.,1.,1., 0.,4.,8., 7., 'FV: Vanished left cell')
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fv_slope(1.,2.,4., 0.,3.,9., 4., 'FV: Stretched grid')
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fv_slope(2.,0.,2., 0.,1.,2., 0., 'FV: Vanished middle cell')
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fv_slope(0.,1.,0., 0.,1.,2., 2., 'FV: Vanished on both sides')
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fv_slope(1.,0.,0., 0.,1.,2., 0., 'FV: Two vanished cell sides')
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fv_slope(0.,0.,0., 0.,1.,2., 0., 'FV: All vanished cells')
+
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fvlsq_slope(1.,1.,1., 0.,1.,2., 1., 'LSQ: Straight line on uniform grid')
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fvlsq_slope(1.,1.,0., 0.,1.,2., 1., 'LSQ: Vanished right cell')
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fvlsq_slope(0.,1.,1., 0.,1.,2., 1., 'LSQ: Vanished left cell')
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fvlsq_slope(1.,2.,4., 0.,3.,9., 2., 'LSQ: Stretched grid')
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fvlsq_slope(1.,0.,1., 0.,1.,2., 2., 'LSQ: Vanished middle cell')
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fvlsq_slope(0.,1.,0., 0.,1.,2., 0., 'LSQ: Vanished on both sides')
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fvlsq_slope(1.,0.,0., 0.,1.,2., 0., 'LSQ: Two vanished cell sides')
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fvlsq_slope(0.,0.,0., 0.,1.,2., 0., 'LSQ: All vanished cells')
+
   neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_ifndp(-1.0, 0.,  1.0, 1.0, 0.5, 'Check mid-point')
   neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_ifndp( 0.0, 0.,  1.0, 1.0, 0.0, 'Check bottom')
   neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_ifndp( 0.1, 0.,  1.1, 1.0, 0.0, 'Check below')
@@ -609,7 +681,67 @@ stop
 
   contains
 
-  !> Returns true if test of interpolate_for_nondim_position() fails, and conditionally writes results to stream
+  !> Returns true if a test of fv_slope() fails, and conditionally writes results to stream
+  logical function test_fv_slope(hkm1, hk, hkp1, Skm1, Sk, Skp1, Ptrue, title)
+    real,             intent(in) :: hkm1 !< Left cell width
+    real,             intent(in) :: hk   !< Center cell width
+    real,             intent(in) :: hkp1 !< Right cell width
+    real,             intent(in) :: Skm1 !< Left cell average value
+    real,             intent(in) :: Sk   !< Center cell average value
+    real,             intent(in) :: Skp1 !< Right cell average value
+    real,             intent(in) :: Ptrue  !< True answer (Pa)
+    character(len=*), intent(in) :: title !< Title for messages
+    ! Local variables
+    integer :: stdunit
+    real :: Pret
+
+    Pret = fv_slope(hkm1, hk, hkp1, Skm1, Sk, Skp1)
+    test_fv_slope = (Pret /= Ptrue) 
+
+    if (test_fv_slope .or. verbosity>5) then
+      stdunit = 6
+      if (test_fv_slope.or.debug_this_module) stdunit = 0 ! In case of wrong results, write to error stream
+      write(stdunit,'(a)') title
+      if (test_fv_slope) then
+        write(stdunit,'(2(x,a,f20.16),x,a)') 'pRet=',Pret,'pTrue=',Ptrue,'WRONG!'
+      else
+        write(stdunit,'(2(x,a,f20.16))') 'pRet=',Pret,'pTrue=',Ptrue
+      endif
+    endif
+
+  end function test_fv_slope
+
+  !> Returns true if a test of fvlsq_slope() fails, and conditionally writes results to stream
+  logical function test_fvlsq_slope(hkm1, hk, hkp1, Skm1, Sk, Skp1, Ptrue, title)
+    real,             intent(in) :: hkm1 !< Left cell width
+    real,             intent(in) :: hk   !< Center cell width
+    real,             intent(in) :: hkp1 !< Right cell width
+    real,             intent(in) :: Skm1 !< Left cell average value
+    real,             intent(in) :: Sk   !< Center cell average value
+    real,             intent(in) :: Skp1 !< Right cell average value
+    real,             intent(in) :: Ptrue  !< True answer (Pa)
+    character(len=*), intent(in) :: title !< Title for messages
+    ! Local variables
+    integer :: stdunit
+    real :: Pret
+
+    Pret = fvlsq_slope(hkm1, hk, hkp1, Skm1, Sk, Skp1)
+    test_fvlsq_slope = (Pret /= Ptrue) 
+
+    if (test_fvlsq_slope .or. verbosity>5) then
+      stdunit = 6
+      if (test_fvlsq_slope.or.debug_this_module) stdunit = 0 ! In case of wrong results, write to error stream
+      write(stdunit,'(a)') title
+      if (test_fvlsq_slope) then
+        write(stdunit,'(2(x,a,f20.16),x,a)') 'pRet=',Pret,'pTrue=',Ptrue,'WRONG!'
+      else
+        write(stdunit,'(2(x,a,f20.16))') 'pRet=',Pret,'pTrue=',Ptrue
+      endif
+    endif
+
+  end function test_fvlsq_slope
+
+  !> Returns true if a test of interpolate_for_nondim_position() fails, and conditionally writes results to stream
   logical function test_ifndp(rhoNeg, Pneg, rhoPos, Ppos, Ptrue, title)
     real,             intent(in) :: rhoNeg !< Lighter density (kg/m3)
     real,             intent(in) :: Pneg   !< Interface position of lighter density (pa)
