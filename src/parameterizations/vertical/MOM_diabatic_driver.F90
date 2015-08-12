@@ -143,10 +143,15 @@ type, public :: diabatic_CS ; private
   logical :: use_geothermal  ! If true, apply geothermal heating.
   logical :: use_int_tides   ! If true, use the code that advances a separate set
                              ! of equations for the internal tide energy density.
+  logical :: int_tide_source_test
+                             ! If true, apply an arbitrary generation site 
+                             ! for internal tide testing (BDM) 
   real    :: int_tide_source_x 
-                             ! X Location of generation site for internal tide for testing (BDM)
+                             ! X Location of generation site 
+                             ! for internal tide for testing (BDM)
   real    :: int_tide_source_y 
-                             ! Y Location of generation site for internal tide for testing (BDM)
+                             ! Y Location of generation site 
+                             ! for internal tide for testing (BDM)
   integer :: tlen_days         
                              ! Time interval from start for adding wave source for testing (BDM)
   logical :: uniform_cg	     ! If true, set cg = cg_test everywhere for test case (BDM)
@@ -550,27 +555,28 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     call vert_fill_TS(h, tv%T, tv%S, 1.e-3, 7200., T_f, S_f, G)
     call find_N2_bottom(h, tv, T_f, S_f, CS%int_tide_input%h2, fluxes, G, N2_bot)
     
-    ! BUILD 2D ARRAY WITH POINT SOURCE FOR TESTING (BDM)
-    TKE_itidal_input_test(:,:) = 0.0
-    avg_enabled = query_averaging_enabled(CS%diag,time_end=CS%time_end)
-    if (CS%time_end <= CS%time_max_source) then
-      do j=G%jsc,G%jec; do i=G%isc,G%iec
-       ig = G%isd_global + i - 1.0
-       jg = G%jsd_global + j - 1.0
-       !INPUT ARBITRARY ENERGY POINT SOURCE (BDM)
-       if (ig .eq. CS%int_tide_source_x .and. jg .eq. CS%int_tide_source_y) then
-           TKE_itidal_input_test(i,j) = 1.0
-       endif
-      enddo; enddo
-    endif    
-    
-    ! CALL ROUTINE  
-    ! USING PRESCRIBED KE FOR TESTING (BDM)
-    !call propagate_int_tide(cg1, TKE_itidal_input_test, &
-    !                        CS%int_tide_input%tideamp, dt, G, CS%int_tide_CSp)
-    ! USING CALCULATED KE INPUT
-    call propagate_int_tide(cg1, CS%int_tide_input%TKE_itidal_input, &
+    if (CS%int_tide_source_test) then      
+      ! BUILD 2D ARRAY WITH POINT SOURCE FOR TESTING (BDM)
+      TKE_itidal_input_test(:,:) = 0.0
+      avg_enabled = query_averaging_enabled(CS%diag,time_end=CS%time_end)
+      if (CS%time_end <= CS%time_max_source) then
+        do j=G%jsc,G%jec; do i=G%isc,G%iec
+         ig = G%isd_global + i - 1.0
+         jg = G%jsd_global + j - 1.0
+         !INPUT ARBITRARY ENERGY POINT SOURCE (BDM)
+         if (ig .eq. CS%int_tide_source_x .and. jg .eq. CS%int_tide_source_y) then
+             TKE_itidal_input_test(i,j) = 1.0
+        endif
+        enddo; enddo
+      endif 
+      ! CALL ROUTINE USING PRESCRIBED KE FOR TESTING (BDM)
+      call propagate_int_tide(cg1, TKE_itidal_input_test, &
                             CS%int_tide_input%tideamp, N2_bot, dt, G, CS%int_tide_CSp)
+    else    
+      ! CALL ROUTINE USING CALCULATED KE INPUT
+      call propagate_int_tide(cg1, CS%int_tide_input%TKE_itidal_input, &
+                              CS%int_tide_input%tideamp, N2_bot, dt, G, CS%int_tide_CSp)    
+    endif
     if (showCallTree) call callTree_waypoint("done with propagate_int_tide (diabatic)")
   endif
 
@@ -1946,6 +1952,9 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
                  "equations for the internal tide energy density.", default=.false.)
   if (CS%use_int_tides) then
     ! GET LOCATION AND DURATION OF ENERGY POINT SOURCE FOR TESTING (BDM)
+    call get_param(param_file, mod, "INTERNAL_TIDE_SOURCE_TEST", CS%int_tide_source_test, &
+                 "If true, apply an arbitrary generation site for internal tide testing", &
+                 default=.false.)
     call get_param(param_file, mod, "INTERNAL_TIDE_SOURCE_X", CS%int_tide_source_x, &
                  "X Location of generation site for internal tide", default=1.)
     call get_param(param_file, mod, "INTERNAL_TIDE_SOURCE_Y", CS%int_tide_source_y, &

@@ -1775,7 +1775,7 @@ subroutine internal_tides_init(Time, G, param_file, diag, CS)
   !                 for this module
   real    :: angle_size
   real, allocatable :: angles(:)
-  real, allocatable :: h2(:,:)
+  real, allocatable, dimension(:,:) :: h2 ! (BDM)
   real, allocatable :: ridge_temp(:,:) ! intermediate array (BDM)
   logical :: use_int_tides, use_temperature
   integer :: num_angle, num_freq, num_mode, m, fr, period_1
@@ -1915,6 +1915,8 @@ subroutine internal_tides_init(Time, G, param_file, diag, CS)
                  "space.", default=.false.)
                  
   ! Compute the fixed part of the bottom drag loss from baroclinic modes (BDM)
+  allocate(h2(isd:ied,jsd:jed)) ; h2(:,:) = 0.0
+  allocate(CS%TKE_itidal_coef(isd:ied,jsd:jed)) ; CS%TKE_itidal_coef = 0.0
   call get_param(param_file, mod, "KAPPA_ITIDES", kappa_itides, &
                "A topographic wavenumber used with INT_TIDE_DISSIPATION. \n"//&
                "The default is 2pi/10 km, as in St.Laurent et al. 2002.", &
@@ -1928,8 +1930,7 @@ subroutine internal_tides_init(Time, G, param_file, diag, CS)
                fail_if_missing=.true.)
   filename = trim(CS%inputdir) // trim(h2_file)
   call log_param(param_file, mod, "INPUTDIR/H2_FILE", filename)
-  call read_data(filename, 'h2', h2, domain=G%domain%mpp_domain, &
-                 timelevel=1)               
+  call read_data(filename, 'h2', h2, domain=G%domain%mpp_domain, timelevel=1)               
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
     ! Restrict rms topo to 10 percent of column depth.
     h2(i,j) = min(0.01*G%bathyT(i,j)**2, h2(i,j))
