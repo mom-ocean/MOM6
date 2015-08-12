@@ -557,7 +557,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     !                        CS%int_tide_input%tideamp, dt, G, CS%int_tide_CSp)
     ! USING CALCULATED KE INPUT
     call propagate_int_tide(cg1, CS%int_tide_input%TKE_itidal_input, &
-                            CS%int_tide_input%tideamp, dt, G, CS%int_tide_CSp)
+                            CS%int_tide_input%tideamp, CS%int_tide_input%Nb, &
+                            dt, G, CS%int_tide_CSp)
     if (showCallTree) call callTree_waypoint("done with propagate_int_tide (diabatic)")
   endif
 

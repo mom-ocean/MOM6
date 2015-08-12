@@ -141,8 +141,8 @@ end type loop_bounds_type
 contains
 
 
-subroutine propagate_int_tide(cg1, En_in, vel_btTide, dt, G, CS)
-  real, dimension(NIMEM_,NJMEM_), intent(in) :: cg1, En_in, vel_btTide
+subroutine propagate_int_tide(cg1, En_in, vel_btTide, Nb, dt, G, CS)
+  real, dimension(NIMEM_,NJMEM_), intent(in) :: cg1, En_in, vel_btTide, Nb
   real,                  intent(in)    :: dt
   type(ocean_grid_type), intent(inout) :: G
   type(int_tide_CS), pointer       :: CS
@@ -151,6 +151,8 @@ subroutine propagate_int_tide(cg1, En_in, vel_btTide, dt, G, CS)
   !
   ! Arguments: cg1 - The first mode internal gravity wave speed, in m s-1.
   !  (in)      En_in - The energy input to the internal waves, in W m-2.
+  !  (in)      vel_btTide - Barotropic velocity read from file, in m s-1
+  !  (in)      Nb - Near-bottom buoyancy frequency, in s-1
   !  (in)      dt - Length of time over which these fluxes will be applied, in s.
   !  (in)      G - The ocean's grid structure.
   !  (in)      CS - A pointer to the control structure returned by a previous
@@ -293,7 +295,7 @@ subroutine propagate_int_tide(cg1, En_in, vel_btTide, dt, G, CS)
         ! Calculate TKE loss rate; units of [J m-2 = kg s] here;
         !CS%TKE_itidal(i,j,a,fr,m) = CS%TKE_itidal_coef(i,j) * modal_vel_bot**2
         ! Calculate TKE loss rate; units of  [W m-2] here.
-        CS%TKE_itidal(i,j,a,fr,m) = CS%TKE_itidal_coef(i,j) * CS%Nb(i,j) * modal_vel_bot**2
+        CS%TKE_itidal(i,j,a,fr,m) = CS%TKE_itidal_coef(i,j) * Nb(i,j) * modal_vel_bot**2
         ! Update energy remaining in original mode (this is an explicit calc for now)
         CS%En(i,j,a,fr,m) = CS%En(i,j,a,fr,m) - CS%TKE_itidal(i,j,a,fr,m)*dt
       enddo ; enddo
