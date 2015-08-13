@@ -140,6 +140,7 @@ type, public :: int_tide_CS ; private
   integer :: id_tot_En = -1, id_itide_drag = -1
   integer :: id_refl_pref = -1, id_refl_ang = -1, id_land_mask = -1 !(BDM)
   integer :: id_dx_Cv = -1, id_dy_Cu = -1 !(BDM)
+  integer :: id_En_in = -1 !(BDM)
   integer, allocatable, dimension(:,:) :: id_En_mode, id_En_ang_mode
 end type int_tide_CS
 
@@ -335,6 +336,7 @@ subroutine propagate_int_tide(cg1, En_in, vel_btTide, N2_bot, dt, G, CS)
     if (CS%id_refl_pref > 0) call post_data(CS%id_refl_pref, CS%refl_pref, CS%diag) !(BDM)
     if (CS%id_dx_Cv > 0) call post_data(CS%id_dx_Cv, G%dx_Cv, CS%diag) !(BDM)
     if (CS%id_dy_Cu > 0) call post_data(CS%id_dy_Cu, G%dy_Cu, CS%diag) !(BDM)
+    if (CS%id_En_in > 0) call post_data(CS%id_En_in, En_in, CS%diag) !(BDM)
     
     if (CS%id_land_mask > 0) call post_data(CS%id_land_mask, G%mask2dT, CS%diag) !(BDM)
 
@@ -2063,6 +2065,9 @@ subroutine internal_tides_init(Time, G, param_file, diag, CS)
                  Time, 'Internal tide total energy density', 'J m-2') ! (BDM)
   CS%id_itide_drag = register_diag_field('ocean_model', 'ITide_drag', diag%axesT1, &
                  Time, 'Interior and bottom drag internal tide decay timescale', 's-1')
+  CS%id_En_in = register_diag_field('ocean_model', 'En_in', diag%axesT1, &
+                 Time, 'Conversion from barotropic to baroclinic tide, \n'//&
+                 'a fraction of which goes into rays', 'W m-2') ! (BDM)
 
   allocate(CS%id_En_mode(CS%nFreq,CS%nMode)) ; CS%id_En_mode(:,:) = -1
   allocate(CS%id_En_ang_mode(CS%nFreq,CS%nMode)) ; CS%id_En_ang_mode(:,:) = -1
