@@ -301,10 +301,16 @@ subroutine propagate_int_tide(cg1, En_in, vel_btTide, N2_bot, dt, G, CS)
   if (CS%apply_drag) then
     do m=1,CS%nMode ; do fr=1,CS%nFreq ; do a=1,CS%nAngle
       do j=jsd,jed ; do i=isd,ied
-        Nb = G%mask2dT(i,j) * sqrt(N2_bot(i,j))
+        Nb = 0.0
+        if (N2_bot(i,j) > 1.0e-14) then
+          Nb = G%mask2dT(i,j)*sqrt(N2_bot(i,j))
+        endif
         ! Calculate bottom velocity for mode; usign a placeholder here - could be
         ! done in diabatic driver as is N2_bot.
-        modal_vel_bot = 0.5*sqrt(CS%En(i,j,a,fr,m))
+        modal_vel_bot = 0.0
+        if (CS%En(i,j,a,fr,m) > 1.0e-14) then
+          modal_vel_bot = 0.001*sqrt(CS%En(i,j,a,fr,m))
+        endif
         ! Calculate TKE loss rate; units of [J m-2 = kg s-2] here; 
         ! will be passed to set_diffusivity
         CS%TKE_itidal_loss_coef(i,j,a,fr,m) = CS%TKE_itidal_coef(i,j) * modal_vel_bot**2
@@ -1917,6 +1923,8 @@ subroutine internal_tides_init(Time, G, param_file, diag, CS)
   ! Compute the fixed part of the bottom drag loss from baroclinic modes (BDM)
   allocate(h2(isd:ied,jsd:jed)) ; h2(:,:) = 0.0
   allocate(CS%TKE_itidal_coef(isd:ied,jsd:jed)) ; CS%TKE_itidal_coef = 0.0
+  allocate(CS%TKE_itidal_loss_coef(isd:ied,jsd:jed,num_angle,num_freq,num_mode))
+  CS%TKE_itidal_loss_coef(:,:,:,:,:) = 0.0
   call get_param(param_file, mod, "KAPPA_ITIDES", kappa_itides, &
                "A topographic wavenumber used with INT_TIDE_DISSIPATION. \n"//&
                "The default is 2pi/10 km, as in St.Laurent et al. 2002.", &
