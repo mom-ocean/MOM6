@@ -380,8 +380,9 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, CS, hu, hv)
 !$OMP parallel default(none) shared(is,ie,js,je,MEKE,CS,sdt,G,Kh_u,MEKE_uflux, &
 !$OMP                               mass,mass_neglect,Kh_v,MEKE_vflux,I_mass, &
 !$OMP                               sdt_damp,drag_rate,Rho0,drag_rate_visc,   &
-!$OMP                               cdrag2,bottomFac2,MEKE_decay,barotrFac2,use_drag_rate) &
-!$OMP                       private(Kh_here,Inv_Kh_max,ldamping)
+!$OMP                               cdrag2,bottomFac2,MEKE_decay,barotrFac2,  &
+!$OMP                               use_drag_rate,dt,baroHu,baroHv) &
+!$OMP                       private(Kh_here,Inv_Kh_max,ldamping,advFac)
     if (CS%MEKE_KH >= 0.0 .or. CS%MEKE_advection_factor >0.) then
       ! Lateral diffusion of MEKE
       Kh_here = max(0.,CS%MEKE_Kh)
@@ -480,20 +481,20 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, CS, hu, hv)
       if (CS%use_old_lscale) then
         if (CS%Rd_as_max_scale) then
 !$OMP parallel do default(none) shared(is,ie,js,je,MEKE,CS,G,barotrFac2)
-          do j=js-1,je+1 ; do i=is-1,ie+1
+          do j=js,je ; do i=is,ie
             MEKE%Kh(i,j) = (CS%MEKE_KhCoeff &
                          * sqrt(2.*max(0.,barotrFac2(i,j)*MEKE%MEKE(i,j))*G%areaT(i,j))) &
                          * min(MEKE%Rd_dx_h(i,j), 1.0)
           enddo ; enddo
         else
 !$OMP parallel do default(none) shared(is,ie,js,je,MEKE,CS,G,barotrFac2)
-          do j=js-1,je+1 ; do i=is-1,ie+1
+          do j=js,je ; do i=is,ie
             MEKE%Kh(i,j) = CS%MEKE_KhCoeff*sqrt(2.*max(0.,barotrFac2(i,j)*MEKE%MEKE(i,j))*G%areaT(i,j))
           enddo ; enddo
         endif
       else
 !$OMP parallel do default(none) shared(is,ie,js,je,MEKE,LmixScale,CS,G,barotrFac2)
-        do j=js-1,je+1 ; do i=is-1,ie+1
+        do j=js,je ; do i=is,ie
           MEKE%Kh(i,j) = (CS%MEKE_KhCoeff*sqrt(2.*max(0.,barotrFac2(i,j)*MEKE%MEKE(i,j)))*LmixScale(i,j))
         enddo ; enddo
       endif
