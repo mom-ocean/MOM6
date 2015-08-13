@@ -113,8 +113,8 @@ subroutine neutral_diffusion_calc_coeffs(G, h, T, S, EOS, CS)
   do j = G%jsc-1, G%jec+1
     ! Interpolate state to interface
     do i = G%isc-1, G%iec+1
-      call interface_scalar(G%ke, T(i,j,:), Tint)
-      call interface_scalar(G%ke, S(i,j,:), Sint)
+      call interface_scalar(G%ke, h(i,j,:), T(i,j,:), Tint)
+      call interface_scalar(G%ke, h(i,j,:), S(i,j,:), Sint)
     enddo
 
     ! Caclulate interface properties
@@ -154,22 +154,86 @@ subroutine neutral_diffusion()
 end subroutine neutral_diffusion
 
 !> Returns interface scalar, Si, for a column of layer values, S.
-subroutine interface_scalar(nk, S, Si)
+subroutine interface_scalar(nk, h, S, Si)
   integer,               intent(in)    :: nk !< Number of levels
-  real, dimension(nk),   intent(in)    :: S  !< Layer salinity (conc, e.g. ppt)
-  real, dimension(nk+1), intent(inout) :: Si !< Interface salinity (conc, e.g. ppt)
+  real, dimension(nk),   intent(in)    :: h  !< Layer thickness (H, m or Pa)
+  real, dimension(nk),   intent(in)    :: S  !< Layer scalar (conc, e.g. ppt)
+  real, dimension(nk+1), intent(inout) :: Si !< Interface scalar (conc, e.g. ppt)
   ! Local variables
   integer :: k
+  real, dimension(nk) :: slope
+  real :: Sb, Sa
 
-  ! We use simple averaging for internal interfaces and piecewise-constant at the top and bottom.
-  ! NOTE: THIS IS A PLACEHOLDER FOR HIGHER ORDER INTERPOLATION T.B.I.
-  Si(1) = S(1)
+  call PLM_slope(nk, h, S, 2, slope)
+  Si(1) = S(1) - 0.5 * slope(1)
   do k = 2, nk
-    Si(k) = 0.5*( S(k-1) + S(k) )
+    ! Average of the two edge values (will be bounded and,
+    ! when slopes are unlimited, notionally second-order accurate)
+    Sa = S(k-1) + 0.5 * slope(k-1) ! Lower edge value of a PLM reconstruction for layer above
+    Sb = S(k) - 0.5 * slope(k) ! Upper edge value of a PLM reconstruction for layer below
+    Si(k) = 0.5 * ( Sa + Sb )
   enddo
-  Si(nk+1) = S(nk)
+  Si(nk+1) = S(nk) + 0.5 * slope(nk)
 
 end subroutine interface_scalar
+
+!> Returns PLM slopes for a column where the slopes are the difference in value across
+!! each cell. Slopes in the first and last cell (top/bottom) are always zero.
+subroutine PLM_slope(nk, h, S, c_method, slope)
+  integer,             intent(in)    :: nk    !< Number of levels
+  real, dimension(nk), intent(in)    :: h     !< Layer thickness (H, m or Pa)
+  real, dimension(nk), intent(in)    :: S     !< Layer salinity (conc, e.g. ppt)
+  integer,             intent(in)    :: c_method !< Method to use for the centered difference
+  real, dimension(nk), intent(inout) :: slope !< Interface salinity (conc/H, e.g. ppt/H)
+                                                 !! determined by the following values: 
+                                                 !!   1. Second order finite difference (not recommended)
+                                                 !!   2. Second order finite volume (used in original PPM)
+                                                 !!   3. Finite-volume weighted least squares linear fit
+                                                 !! \todo  The use of c_method to choose a scheme is inefficient
+                                                 !! and should eventually be moved up the call tree.
+  ! Local variables
+  integer :: k
+  real :: hkm1, hk, hkp1, Skm1, Sk, Skp1, slope_l, slope_r, slope_c
+
+  slope(1) = 0. ! PCM for top layer
+  do k = 2, nk-1
+    hkm1 = h(k-1)
+    hk = h(k)
+    hkp1 = h(k+1)
+
+    if ( ( hkp1 + hk ) * ( hkm1 + hk ) > 0.) then
+      Skm1 = S(k-1)
+      Sk = S(k)
+      Skp1 = S(k+1)
+      if (c_method==1) then
+        ! Simple centered slope (from White)
+        if ( hk + 0.5 * (hkm1 + hkp1) /= 0. ) then
+          slope_c = ( Skp1 - Skm1 ) * ( hk / ( hk + 0.5 * (hkm1 + hkp1) ) )
+        else
+          slope_c = 0.
+        endif
+      elseif (c_method==2) then
+        ! Second order accurate centered FV slope (from Colella and Woodward, JCP 1984)
+        slope_c = fv_slope(hkm1, hk, hkp1, Skm1, Sk, Skp1)
+      elseif (c_method==3) then
+        ! Second order accurate finite-volume least squares slope
+        slope_c = hk * fvlsq_slope(hkm1, hk, hkp1, Skm1, Sk, Skp1)
+      endif
+      ! Limit centered slope by twice the side differenced slopes
+      slope_l = 2. * ( Sk - Skm1 )
+      slope_r = 2. * ( Skp1 - Sk )
+      if (slope_l * slope_r > 0.) then
+        slope(k) = sign( min( abs(slope_l), abs(slope_c), abs(slope_r) ), slope_c )
+      else
+        slope(k) = 0. ! PCM for local extrema
+      endif
+    else
+      slope(k) = 0. ! PCM next to vanished layers
+    endif
+  enddo
+  slope(nk) = 0. ! PCM for bottom layer
+
+end subroutine PLM_slope
 
 !> Returns the cell-centered second-order finite volume (unlimited PLM) slope
 !! using three consecutive cell widths and average values. Slope is returned
