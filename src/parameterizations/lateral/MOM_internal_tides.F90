@@ -108,6 +108,7 @@ type, public :: int_tide_CS ; private
                         ! fixed part of the energy lost due to small-scale drag
                         ! [kg m-2] here; will be multiplied by N and En to get 
                         ! into [W m-2] (BDM)
+  real :: q_itides      ! fraction of local dissipation (nondimensional)
   real, allocatable, dimension(:,:,:,:,:) :: TKE_itidal_loss_coef  
                         ! mode-velocity-dependent part of the energy lost due 
                         ! to small-scale drag [kg s-2 = J m-2] here; will be 
@@ -205,7 +206,8 @@ subroutine propagate_int_tide(cg1, En_in, vel_btTide, N2_bot, dt, G, CS)
       f2 = 0.25*((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
                  (G%CoriolisBu(I,J-1)**2 + G%CoriolisBu(I-1,J)**2))
       if (CS%frequency(fr)**2 > f2) &
-        CS%En(i,j,a,fr,m) = CS%En(i,j,a,fr,m) + dt*frac_per_sector*En_in(i,j)
+        CS%En(i,j,a,fr,m) = CS%En(i,j,a,fr,m) + & 
+                            dt*frac_per_sector*(1-CS%q_itides)*En_in(i,j)
     enddo ; enddo ; enddo ; enddo ; enddo
   elseif (CS%energized_angle <= CS%nAngle) then
     frac_per_sector = 1.0 / real(CS%nMode * CS%nFreq)
@@ -214,7 +216,8 @@ subroutine propagate_int_tide(cg1, En_in, vel_btTide, N2_bot, dt, G, CS)
       f2 = 0.25*((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
                  (G%CoriolisBu(I,J-1)**2 + G%CoriolisBu(I-1,J)**2))
       if (CS%frequency(fr)**2 > f2) &
-        CS%En(i,j,a,fr,m) = CS%En(i,j,a,fr,m) + dt*frac_per_sector*En_in(i,j)
+        CS%En(i,j,a,fr,m) = CS%En(i,j,a,fr,m) + & 
+                            dt*frac_per_sector**(1-CS%q_itides)*En_in(i,j)
     enddo ; enddo ; enddo ; enddo
 
     !### Delete this later.
@@ -305,8 +308,8 @@ subroutine propagate_int_tide(cg1, En_in, vel_btTide, N2_bot, dt, G, CS)
         if (N2_bot(i,j) > 1.0e-14) then
           Nb = G%mask2dT(i,j)*sqrt(N2_bot(i,j))
         endif
-        ! Calculate bottom velocity for mode; usign a placeholder here - could be
-        ! done in diabatic driver as is N2_bot.
+        ! Calculate bottom velocity for mode; 
+        ! using a placeholder here - could be done in diabatic driver as is N2_bot.
         modal_vel_bot = 0.0
         if (CS%En(i,j,a,fr,m) > 1.0e-14) then
           modal_vel_bot = 0.001*sqrt(CS%En(i,j,a,fr,m))
@@ -1919,6 +1922,11 @@ subroutine internal_tides_init(Time, G, param_file, diag, CS)
   call get_param(param_file, mod, "USE_PPM_ANGULAR", CS%use_PPMang, &
                  "If true, use PPM for advection of energy in angular  \n"//&
                  "space.", default=.false.)
+  call get_param(param_file, mod, "GAMMA_ITIDES", CS%q_itides, &
+                 "The fraction of the internal tidal energy that is \n"//&
+                 "dissipated locally with INT_TIDE_DISSIPATION.  \n"//&
+                 "THIS NAME COULD BE BETTER.", &
+                 units="nondim", default=0.3333) !(BDM)
                  
   ! Compute the fixed part of the bottom drag loss from baroclinic modes (BDM)
   allocate(h2(isd:ied,jsd:jed)) ; h2(:,:) = 0.0
