@@ -104,15 +104,17 @@ type, public :: int_tide_CS ; private
                         ! identifies reflection cells where double reflection 
                         ! is possible (i.e. ridge cells) (BDM)
                         ! (could be in G control structure)   
-  real, allocatable, dimension(:,:) :: TKE_itidal_coef  
+  real, allocatable, dimension(:,:) :: TKE_itidal_loss_coef_1  
                         ! fixed part of the energy lost due to small-scale drag
                         ! [kg m-2] here; will be multiplied by N and En to get 
                         ! into [W m-2] (BDM)
-  real :: q_itides      ! fraction of local dissipation (nondimensional)
-  real, allocatable, dimension(:,:,:,:,:) :: TKE_itidal_loss_coef  
+  real, allocatable, dimension(:,:,:,:,:) :: TKE_itidal_loss_coef_2 
                         ! mode-velocity-dependent part of the energy lost due 
                         ! to small-scale drag [kg s-2 = J m-2] here; will be 
                         ! multiplied by N to get into [W m-2] (BDM)
+  real, allocatable, dimension(:,:,:,:,:) :: TKE_itidal_loss  
+                        ! energy lost due to small-scale drag [W m-2] (BDM)
+  real :: q_itides      ! fraction of local dissipation (nondimensional) (BDM)
   real :: En_sum        ! global sum of energy for use in debugging (BDM)    
   type(time_type),pointer    :: Time  
                         ! The current model time (BDM) 
@@ -140,7 +142,7 @@ type, public :: int_tide_CS ; private
   integer :: id_tot_En = -1, id_itide_drag = -1
   integer :: id_refl_pref = -1, id_refl_ang = -1, id_land_mask = -1 !(BDM)
   integer :: id_dx_Cv = -1, id_dy_Cu = -1 !(BDM)
-  integer :: id_En_in = -1 !(BDM)
+  integer :: id_TKE_itidal_input = -1 !(BDM)
   integer, allocatable, dimension(:,:) :: id_En_mode, id_En_ang_mode
 end type int_tide_CS
 
@@ -151,8 +153,9 @@ end type loop_bounds_type
 contains
 
 
-subroutine propagate_int_tide(cg1, En_in, vel_btTide, N2_bot, dt, G, CS)
-  real, dimension(NIMEM_,NJMEM_), intent(in) :: cg1, En_in, vel_btTide, N2_bot
+subroutine propagate_int_tide(cg1, TKE_itidal_input, vel_btTide, N2_bot, dt, G, CS)
+  real, dimension(NIMEM_,NJMEM_), intent(in) :: cg1, TKE_itidal_input
+  real, dimension(NIMEM_,NJMEM_), intent(in) :: vel_btTide, N2_bot
   real,                  intent(in)    :: dt
   type(ocean_grid_type), intent(inout) :: G
   type(int_tide_CS), pointer       :: CS
@@ -160,7 +163,7 @@ subroutine propagate_int_tide(cg1, En_in, vel_btTide, N2_bot, dt, G, CS)
   ! that are needed to specify the current surface forcing fields.
   !
   ! Arguments: cg1 - The first mode internal gravity wave speed, in m s-1.
-  !  (in)      En_in - The energy input to the internal waves, in W m-2.
+  !  (in)      TKE_itidal_input - The energy input to the internal waves, in W m-2.
   !  (in)      vel_btTide - Barotropic velocity read from file, in m s-1
   !  (in)      N2_bot - Squared near-bottom buoyancy frequency, in s-2
   !  (in)      dt - Length of time over which these fluxes will be applied, in s.
@@ -177,7 +180,6 @@ subroutine propagate_int_tide(cg1, En_in, vel_btTide, N2_bot, dt, G, CS)
   real, dimension(SZI_(G),SZJ_(G)) :: &
     tot_En, drag_scale
   real :: frac_per_sector, f2, I_rho0, I_D_here
-  real :: TKE_itidal_loss     ! TKE loss rate [W m-2] BDM
   real :: modal_vel_bot, Nb   ! BDM
   
   integer :: a, m, fr, i, j, is, ie, js, je, isd, ied, jsd, jed, nAngle
@@ -208,7 +210,7 @@ subroutine propagate_int_tide(cg1, En_in, vel_btTide, N2_bot, dt, G, CS)
                  (G%CoriolisBu(I,J-1)**2 + G%CoriolisBu(I-1,J)**2))
       if (CS%frequency(fr)**2 > f2) &
         CS%En(i,j,a,fr,m) = CS%En(i,j,a,fr,m) + & 
-                            dt*frac_per_sector*(1-CS%q_itides)*En_in(i,j)
+                            dt*frac_per_sector*(1-CS%q_itides)*TKE_itidal_input(i,j)
     enddo ; enddo ; enddo ; enddo ; enddo
   elseif (CS%energized_angle <= CS%nAngle) then
     frac_per_sector = 1.0 / real(CS%nMode * CS%nFreq)
@@ -218,7 +220,7 @@ subroutine propagate_int_tide(cg1, En_in, vel_btTide, N2_bot, dt, G, CS)
                  (G%CoriolisBu(I,J-1)**2 + G%CoriolisBu(I-1,J)**2))
       if (CS%frequency(fr)**2 > f2) &
         CS%En(i,j,a,fr,m) = CS%En(i,j,a,fr,m) + & 
-                            dt*frac_per_sector**(1-CS%q_itides)*En_in(i,j)
+                            dt*frac_per_sector**(1-CS%q_itides)*TKE_itidal_input(i,j)
     enddo ; enddo ; enddo ; enddo
 
     !### Delete this later.
@@ -317,11 +319,11 @@ subroutine propagate_int_tide(cg1, En_in, vel_btTide, N2_bot, dt, G, CS)
         endif
         ! Calculate TKE loss rate; units of [J m-2 = kg s-2] here; 
         ! will be passed to set_diffusivity
-        CS%TKE_itidal_loss_coef(i,j,a,fr,m) = CS%TKE_itidal_coef(i,j) * modal_vel_bot**2
+        CS%TKE_itidal_loss_coef_2(i,j,a,fr,m) = CS%TKE_itidal_loss_coef_1(i,j) * modal_vel_bot**2
         ! Calculate TKE loss rate; units of [W m-2] here.
-        TKE_itidal_loss = CS%TKE_itidal_loss_coef(i,j,a,fr,m) * Nb
+        CS%TKE_itidal_loss(i,j,a,fr,m) = CS%TKE_itidal_loss_coef_2(i,j,a,fr,m) * Nb
         ! Update energy remaining in original mode (this is an explicit calc for now)
-        CS%En(i,j,a,fr,m) = CS%En(i,j,a,fr,m) - TKE_itidal_loss*dt
+        CS%En(i,j,a,fr,m) = CS%En(i,j,a,fr,m) - CS%TKE_itidal_loss(i,j,a,fr,m)*dt
       enddo ; enddo
     enddo ; enddo ; enddo
   endif
@@ -336,7 +338,8 @@ subroutine propagate_int_tide(cg1, En_in, vel_btTide, N2_bot, dt, G, CS)
     if (CS%id_refl_pref > 0) call post_data(CS%id_refl_pref, CS%refl_pref, CS%diag) !(BDM)
     if (CS%id_dx_Cv > 0) call post_data(CS%id_dx_Cv, G%dx_Cv, CS%diag) !(BDM)
     if (CS%id_dy_Cu > 0) call post_data(CS%id_dy_Cu, G%dy_Cu, CS%diag) !(BDM)
-    if (CS%id_En_in > 0) call post_data(CS%id_En_in, En_in, CS%diag) !(BDM)
+    if (CS%id_TKE_itidal_input > 0) call post_data(CS%id_TKE_itidal_input, &
+      TKE_itidal_input, CS%diag) !(BDM)
     
     if (CS%id_land_mask > 0) call post_data(CS%id_land_mask, G%mask2dT, CS%diag) !(BDM)
 
@@ -1932,9 +1935,12 @@ subroutine internal_tides_init(Time, G, param_file, diag, CS)
                  
   ! Compute the fixed part of the bottom drag loss from baroclinic modes (BDM)
   allocate(h2(isd:ied,jsd:jed)) ; h2(:,:) = 0.0
-  allocate(CS%TKE_itidal_coef(isd:ied,jsd:jed)) ; CS%TKE_itidal_coef = 0.0
-  allocate(CS%TKE_itidal_loss_coef(isd:ied,jsd:jed,num_angle,num_freq,num_mode))
-  CS%TKE_itidal_loss_coef(:,:,:,:,:) = 0.0
+  allocate(CS%TKE_itidal_loss_coef_1(isd:ied,jsd:jed)) 
+  CS%TKE_itidal_loss_coef_1 = 0.0
+  allocate(CS%TKE_itidal_loss_coef_2(isd:ied,jsd:jed,num_angle,num_freq,num_mode))
+  CS%TKE_itidal_loss_coef_2(:,:,:,:,:) = 0.0
+  allocate(CS%TKE_itidal_loss(isd:ied,jsd:jed,num_angle,num_freq,num_mode))
+  CS%TKE_itidal_loss(:,:,:,:,:) = 0.0
   call get_param(param_file, mod, "KAPPA_ITIDES", kappa_itides, &
                "A topographic wavenumber used with INT_TIDE_DISSIPATION. \n"//&
                "The default is 2pi/10 km, as in St.Laurent et al. 2002.", &
@@ -1954,7 +1960,7 @@ subroutine internal_tides_init(Time, G, param_file, diag, CS)
     h2(i,j) = min(0.01*G%bathyT(i,j)**2, h2(i,j))
     ! Compute the fixed part; units are [kg m-2] here; 
     ! will be multiplied by N and En to get into [W m-2]
-    CS%TKE_itidal_coef(i,j) = 0.5*kappa_h2_factor*G%Rho0*&
+    CS%TKE_itidal_loss_coef_1(i,j) = 0.5*kappa_h2_factor*G%Rho0*&
          kappa_itides * h2(i,j)
   enddo; enddo
   
@@ -2065,7 +2071,7 @@ subroutine internal_tides_init(Time, G, param_file, diag, CS)
                  Time, 'Internal tide total energy density', 'J m-2') ! (BDM)
   CS%id_itide_drag = register_diag_field('ocean_model', 'ITide_drag', diag%axesT1, &
                  Time, 'Interior and bottom drag internal tide decay timescale', 's-1')
-  CS%id_En_in = register_diag_field('ocean_model', 'En_in', diag%axesT1, &
+  CS%id_TKE_itidal_input = register_diag_field('ocean_model', 'TKE_itidal_input', diag%axesT1, &
                  Time, 'Conversion from barotropic to baroclinic tide, \n'//&
                  'a fraction of which goes into rays', 'W m-2') ! (BDM)
 
