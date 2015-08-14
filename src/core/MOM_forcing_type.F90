@@ -652,13 +652,9 @@ subroutine extractFluxes2d(G, fluxes, optics, nsw, dt,                          
 end subroutine extractFluxes2d
 
 
-!> Compute surface buoyancy fluxes. 
+!> Calculates the surface buoyancy flux by adding up the heat, FW and salt fluxes.
 subroutine calculateBuoyancyFlux1d(G, fluxes, optics, h, Temp, Salt, tv, j, &
                                    buoyancyFlux, netHeatMinusSW, netSalt )
-
-  ! This subtourine calculates the surface buoyancy flux by adding up the heat, 
-  ! FW and salt fluxes and linearizing about the surface state.
-
   type(ocean_grid_type),                 intent(in)    :: G              ! ocean grid
   type(forcing),                         intent(inout) :: fluxes         ! surface fluxes
   type(optics_type),                     pointer       :: optics         ! penetrating SW optics 
@@ -668,10 +664,8 @@ subroutine calculateBuoyancyFlux1d(G, fluxes, optics, h, Temp, Salt, tv, j, &
   type(thermo_var_ptrs),                 intent(inout) :: tv             ! thermodynamics type
   integer,                               intent(in)    :: j              ! j-row to work on 
   real, dimension(NIMEM_,NK_INTERFACE_), intent(inout) :: buoyancyFlux   ! buoyancy flux (m^2/s^3)
-  real, dimension(NIMEM_),               intent(inout) :: netHeatMinusSW ! surf Heat flux (K H)
-  real, dimension(NIMEM_),               intent(inout) :: netSalt        ! surf salt flux (ppt H)
-
-
+  real, dimension(NIMEM_),               intent(inout) :: netHeatMinusSW ! surf Heat flux (K H/s)
+  real, dimension(NIMEM_),               intent(inout) :: netSalt        ! surf salt flux (ppt H/s)
   ! Local variables
   integer                                   :: nsw, start, npts, k
   real, parameter                           :: dt = 1.    ! to return a rate from extractFluxes1d
@@ -705,9 +699,11 @@ subroutine calculateBuoyancyFlux1d(G, fluxes, optics, h, Temp, Salt, tv, j, &
 
   ! The surface forcing is contained in the fluxes type.
   ! We aggregate the thermodynamic forcing for a time step into the following:
-  ! netH       = water (H units) added/removed via surface fluxes
-  ! netHeat    = heat (degC * H) via surface fluxes
-  ! netSalt    = salt ( g(salt)/m2 for non-Bouss and ppt*m for Bouss ) via surface fluxes
+  ! netH       = water (H units/s) added/removed via surface fluxes
+  ! netHeat    = heat (degC * H/s) via surface fluxes
+  ! netSalt    = salt ( g(salt)/m2 for non-Bouss and ppt*m for Bouss /s) via surface fluxes
+  ! Note that unlike other calls to extractFLuxes1d() that return the time-integrated flux
+  ! this call returns the rate because dt=1
   call extractFluxes1d(G, fluxes, optics, nsw, j, dt,                                 &
                 depthBeforeScalingFluxes, useRiverHeatContent, useCalvingHeatContent, &
                 h(:,j,:), Temp(:,j,:), netH, netEvap, netHeatMinusSW,                 &
@@ -723,12 +719,12 @@ subroutine calculateBuoyancyFlux1d(G, fluxes, optics, h, Temp, Salt, tv, j, &
                                 dRhodT, dRhodS, start, npts, tv%eqn_of_state)
 
   ! Adjust netSalt to reflect dilution effect of FW flux
-  netSalt(G%isc:G%iec) = netSalt(G%isc:G%iec) - Salt(G%isc:G%iec,j,1) * netH(G%isc:G%iec) * G%H_to_m
+  netSalt(G%isc:G%iec) = netSalt(G%isc:G%iec) - Salt(G%isc:G%iec,j,1) * netH(G%isc:G%iec) * G%H_to_m ! ppt H/s
 
   ! Add in the SW heating for purposes of calculating the net
   ! surface buoyancy flux affecting the top layer.
   !netHeat(:) = netHeatMinusSW(:) + sum( penSWbnd(:,:), dim=1 )
-  netHeat(G%isc:G%iec) = netHeatMinusSW(G%isc:G%iec) + netPen(G%isc:G%iec,1)
+  netHeat(G%isc:G%iec) = netHeatMinusSW(G%isc:G%iec) + netPen(G%isc:G%iec,1) ! K H/s
 
   ! Convert to a buoyancy flux, excluding penetrating SW heating
   buoyancyFlux(G%isc:G%iec,1) = - GoRho * ( dRhodS(G%isc:G%iec) * netSalt(G%isc:G%iec) + &
@@ -741,14 +737,10 @@ subroutine calculateBuoyancyFlux1d(G, fluxes, optics, h, Temp, Salt, tv, j, &
 end subroutine calculateBuoyancyFlux1d
 
 
-!> 2d wrapper to compute surface buoyancy fluxes. 
+!> Calculates the surface buoyancy flux by adding up the heat, FW and salt fluxes,
+!! for 2d arrays.
 subroutine calculateBuoyancyFlux2d(G, fluxes, optics, h, Temp, Salt, tv, &
                                    buoyancyFlux, netHeatMinusSW, netSalt)
-
-! This subtourine calculates the surface buoyancy flux by adding up the heat, 
-! FW and salt fluxes and linearizing about the surface state.
-! This routine is a wrapper for calculateBuoyancyFlux1d.
-
   type(ocean_grid_type),                       intent(in)    :: G              ! ocean grid
   type(forcing),                               intent(inout) :: fluxes         ! surface fluxes
   type(optics_type),                           pointer       :: optics         ! SW ocean optics
@@ -759,7 +751,7 @@ subroutine calculateBuoyancyFlux2d(G, fluxes, optics, h, Temp, Salt, tv, &
   real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_),intent(inout) :: buoyancyFlux   ! buoy flux (m^2/s^3)
   real, dimension(NIMEM_,NJMEM_),optional,     intent(inout) :: netHeatMinusSW ! surf temp flux (K H)
   real, dimension(NIMEM_,NJMEM_),optional,     intent(inout) :: netSalt        ! surf salt flux (ppt H)
-
+  ! Local variables
   real, dimension( SZI_(G) ) :: netT ! net temperature flux (K m/s)
   real, dimension( SZI_(G) ) :: netS ! net saln flux (ppt m/s)
   integer :: j
