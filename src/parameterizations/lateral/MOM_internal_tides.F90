@@ -144,6 +144,9 @@ type, public :: int_tide_CS ; private
   integer :: id_dx_Cv = -1, id_dy_Cu = -1 !(BDM)
   integer :: id_TKE_itidal_input = -1 !(BDM)
   integer, allocatable, dimension(:,:) :: id_En_mode, id_En_ang_mode
+  integer, allocatable, dimension(:,:) :: id_TKE_loss_mode !(BDM)
+  integer, allocatable, dimension(:,:) :: id_TKE_loss_ang_mode !(BDM)
+  
 end type int_tide_CS
 
 type :: loop_bounds_type ; private
@@ -332,6 +335,7 @@ subroutine propagate_int_tide(cg1, TKE_itidal_input, vel_btTide, N2_bot, dt, G, 
   call sum_En(G,CS,CS%En(:,:,:,1,1),'prop_int_tide')
 
   if (query_averaging_enabled(CS%diag)) then
+    ! Output two-dimensional diagnostistics
     if (CS%id_tot_En > 0) call post_data(CS%id_tot_En, tot_En, CS%diag)
     if (CS%id_itide_drag > 0) call post_data(CS%id_itide_drag, drag_scale, CS%diag)
     if (CS%id_refl_ang > 0) call post_data(CS%id_refl_ang, CS%refl_angle, CS%diag) !(BDM)
@@ -340,19 +344,34 @@ subroutine propagate_int_tide(cg1, TKE_itidal_input, vel_btTide, N2_bot, dt, G, 
     if (CS%id_dy_Cu > 0) call post_data(CS%id_dy_Cu, G%dy_Cu, CS%diag) !(BDM)
     if (CS%id_TKE_itidal_input > 0) call post_data(CS%id_TKE_itidal_input, &
       TKE_itidal_input, CS%diag) !(BDM)
-    
     if (CS%id_land_mask > 0) call post_data(CS%id_land_mask, G%mask2dT, CS%diag) !(BDM)
-
+    
+    ! Output 2-D energy density (summed over angles) for each freq and mode
     do m=1,CS%NMode ; do fr=1,CS%Nfreq ; if (CS%id_En_mode(fr,m) > 0) then
       tot_En(:,:) = 0.0
       do a=1,CS%nAngle ; do j=js,je ; do i=is,ie
         tot_En(i,j) = tot_En(i,j) + CS%En(i,j,a,fr,m)
       enddo ; enddo ; enddo
       call post_data(CS%id_En_mode(fr,m), tot_En, CS%diag)
-    endif ; enddo ; enddo
-    do m=1,CS%NMode ; do fr=1,CS%Nfreq ; if (CS%id_En_mode(fr,m) > 0) then
+    endif ; enddo ; enddo    
+    ! Output 3-D (i,j,a) energy density for each freq and mode
+    do m=1,CS%NMode ; do fr=1,CS%Nfreq ; if (CS%id_En_ang_mode(fr,m) > 0) then
       call post_data(CS%id_En_ang_mode(fr,m), CS%En(:,:,:,fr,m) , CS%diag)
     endif ; enddo ; enddo
+    
+    ! Output 2-D energy loss (summed over angles) for each freq and mode
+    do m=1,CS%NMode ; do fr=1,CS%Nfreq ; if (CS%id_TKE_loss_mode(fr,m) > 0) then
+      tot_En(:,:) = 0.0
+      do a=1,CS%nAngle ; do j=js,je ; do i=is,ie
+        tot_En(i,j) = tot_En(i,j) + CS%TKE_itidal_loss(i,j,a,fr,m)
+      enddo ; enddo ; enddo
+      call post_data(CS%id_TKE_loss_mode(fr,m), tot_En, CS%diag)
+    endif ; enddo ; enddo
+    ! Output 3-D (i,j,a) energy loss for each freq and mode
+    do m=1,CS%NMode ; do fr=1,CS%Nfreq ; if (CS%id_TKE_loss_ang_mode(fr,m) > 0) then
+      call post_data(CS%id_TKE_loss_ang_mode(fr,m), CS%TKE_itidal_loss(:,:,:,fr,m) , CS%diag)
+    endif ; enddo ; enddo
+    
   endif
      
 end subroutine propagate_int_tide
@@ -2077,6 +2096,8 @@ subroutine internal_tides_init(Time, G, param_file, diag, CS)
 
   allocate(CS%id_En_mode(CS%nFreq,CS%nMode)) ; CS%id_En_mode(:,:) = -1
   allocate(CS%id_En_ang_mode(CS%nFreq,CS%nMode)) ; CS%id_En_ang_mode(:,:) = -1
+  allocate(CS%id_TKE_loss_mode(CS%nFreq,CS%nMode)) ; CS%id_TKE_loss_mode(:,:) = -1
+  allocate(CS%id_TKE_loss_ang_mode(CS%nFreq,CS%nMode)) ; CS%id_TKE_loss_ang_mode(:,:) = -1
 
   allocate(angles(CS%NAngle)) ; angles(:) = 0.0
   Angle_size = (8.0*atan(1.0)) / (real(num_angle))
@@ -2085,19 +2106,36 @@ subroutine internal_tides_init(Time, G, param_file, diag, CS)
   id_ang = diag_axis_init("angle", angles, "Radians", "N", "Angular Orienation of Fluxes")
   call defineAxes(diag, (/ diag%axesT1%handles(1), diag%axesT1%handles(2), id_ang /), axes_ang)
 
-  do fr=1,CS%nFreq ; write(freq_name(fr), '("K",i1)') fr ; enddo
-  do m=1,CS%nMode ; do fr=1,CS%nFreq
-    write(var_name, '("Itide_en_K",i1,"_M",i1)') fr, m
-    write(var_descript, '("Internal tide energy density in frequency K",i1," mode ",i1)') fr, m
+  do fr=1,CS%nFreq ; write(freq_name(fr), '("freq",i1)') fr ; enddo
+  do m=1,CS%nMode ; do fr=1,CS%nFreq  
+    ! Register 2-D energy density (summed over angles) for each freq and mode
+    write(var_name, '("Itide_En_freq",i1,"_mode",i1)') fr, m
+    write(var_descript, '("Internal tide energy density in frequency ",i1," mode ",i1)') fr, m
     CS%id_En_mode(fr,m) = register_diag_field('ocean_model', var_name, &
                  diag%axesT1, Time, var_descript, 'J m-2')
     call MOM_mesg("Registering "//trim(var_name)//", Described as: "//var_descript, 5)
-
-    write(var_name, '("Itide_en_ang_K",i1,"_M",i1)') fr, m
-    write(var_descript, '("Internal tide angular energy density in frequency K",i1," mode ",i1)') fr, m
+    
+    ! Register 3-D (i,j,a) energy density for each freq and mode
+    write(var_name, '("Itide_En_ang_freq",i1,"_mode",i1)') fr, m
+    write(var_descript, '("Internal tide angular energy density in frequency ",i1," mode ",i1)') fr, m
     CS%id_En_ang_mode(fr,m) = register_diag_field('ocean_model', var_name, &
                  axes_ang, Time, var_descript, 'J m-2 band-1')
     call MOM_mesg("Registering "//trim(var_name)//", Described as: "//var_descript, 5)
+    
+    ! Register 2-D energy loss (summed over angles) for each freq and mode
+    write(var_name, '("Itide_TKE_loss_freq",i1,"_mode",i1)') fr, m
+    write(var_descript, '("Internal tide energy loss from frequency ",i1," mode ",i1)') fr, m
+    CS%id_TKE_loss_mode(fr,m) = register_diag_field('ocean_model', var_name, &
+                 diag%axesT1, Time, var_descript, 'W m-2')
+    call MOM_mesg("Registering "//trim(var_name)//", Described as: "//var_descript, 5)
+    
+    ! Register 3-D (i,j,a) energy loss for each freq and mode
+    write(var_name, '("Itide_TKE_loss_ang_freq",i1,"_mode",i1)') fr, m
+    write(var_descript, '("Internal tide energy loss from frequency ",i1," mode ",i1)') fr, m
+    CS%id_TKE_loss_ang_mode(fr,m) = register_diag_field('ocean_model', var_name, &
+                 axes_ang, Time, var_descript, 'W m-2 band-1')
+    call MOM_mesg("Registering "//trim(var_name)//", Described as: "//var_descript, 5)
+    
   enddo ; enddo
   
   !--------------------check----------------------------------------------
