@@ -72,6 +72,7 @@ implicit none ; private
 
 public propagate_int_tide, register_int_tide_restarts
 public internal_tides_init, internal_tides_end
+public sum_itidal_lowmode_loss
 
 type, public :: int_tide_CS ; private
   logical :: do_int_tides    ! If true, use the internal tide code.
@@ -104,14 +105,10 @@ type, public :: int_tide_CS ; private
                         ! identifies reflection cells where double reflection 
                         ! is possible (i.e. ridge cells) (BDM)
                         ! (could be in G control structure)   
-  real, allocatable, dimension(:,:) :: TKE_itidal_loss_coef_1  
+  real, allocatable, dimension(:,:) :: TKE_itidal_loss_fixed  
                         ! fixed part of the energy lost due to small-scale drag
                         ! [kg m-2] here; will be multiplied by N and En to get 
                         ! into [W m-2] (BDM)
-  real, allocatable, dimension(:,:,:,:,:) :: TKE_itidal_loss_coef_2 
-                        ! mode-velocity-dependent part of the energy lost due 
-                        ! to small-scale drag [kg s-2 = J m-2] here; will be 
-                        ! multiplied by N to get into [W m-2] (BDM)
   real, allocatable, dimension(:,:,:,:,:) :: TKE_itidal_loss  
                         ! energy lost due to small-scale drag [W m-2] (BDM)
   real :: q_itides      ! fraction of local dissipation (nondimensional) (BDM)
@@ -183,7 +180,6 @@ subroutine propagate_int_tide(cg1, TKE_itidal_input, vel_btTide, N2_bot, dt, G, 
   real, dimension(SZI_(G),SZJ_(G)) :: &
     tot_En, drag_scale
   real :: frac_per_sector, f2, I_rho0, I_D_here
-  real :: modal_vel_bot, Nb   ! BDM
   
   integer :: a, m, fr, i, j, is, ie, js, je, isd, ied, jsd, jed, nAngle
   integer :: isd_g, jsd_g         ! start indices on data domain but referenced 
@@ -290,7 +286,7 @@ subroutine propagate_int_tide(cg1, TKE_itidal_input, vel_btTide, N2_bot, dt, G, 
     enddo ; enddo ; enddo
   endif
 
-  !! Extract the energy for mixing (original).
+  ! Extract the energy for mixing (original).
   !if (CS%apply_drag) then
   !  do j=jsd,jed ; do i=isd,ied
   !    I_D_here = 1.0 / max(G%bathyT(i,j), 1.0)
@@ -306,29 +302,10 @@ subroutine propagate_int_tide(cg1, TKE_itidal_input, vel_btTide, N2_bot, dt, G, 
   !  CS%En(i,j,a,fr,m) = CS%En(i,j,a,fr,m) / (1.0 + dt*drag_scale(i,j))
   !enddo ; enddo ; enddo ; enddo ; enddo
   
-  ! Extract the energy for mixing (due to bottom drag - BDM).
+  ! Extract the energy for mixing due to scattering -BDM.
   if (CS%apply_drag) then
-    do m=1,CS%nMode ; do fr=1,CS%nFreq ; do a=1,CS%nAngle
-      do j=jsd,jed ; do i=isd,ied
-        Nb = 0.0
-        if (N2_bot(i,j) > 1.0e-14) then
-          Nb = G%mask2dT(i,j)*sqrt(N2_bot(i,j))
-        endif
-        ! Calculate bottom velocity for mode; 
-        ! using a placeholder here - could be done in diabatic driver as is N2_bot.
-        modal_vel_bot = 0.0
-        if (CS%En(i,j,a,fr,m) > 1.0e-14) then
-          modal_vel_bot = 0.001*sqrt(CS%En(i,j,a,fr,m))
-        endif
-        ! Calculate TKE loss rate; units of [J m-2 = kg s-2] here; 
-        ! will be passed to set_diffusivity
-        CS%TKE_itidal_loss_coef_2(i,j,a,fr,m) = CS%TKE_itidal_loss_coef_1(i,j) * modal_vel_bot**2
-        ! Calculate TKE loss rate; units of [W m-2] here.
-        CS%TKE_itidal_loss(i,j,a,fr,m) = CS%TKE_itidal_loss_coef_2(i,j,a,fr,m) * Nb
-        ! Update energy remaining in original mode (this is an explicit calc for now)
-        CS%En(i,j,a,fr,m) = CS%En(i,j,a,fr,m) - CS%TKE_itidal_loss(i,j,a,fr,m)*dt
-      enddo ; enddo
-    enddo ; enddo ; enddo
+    call itidal_lowmode_loss(G, CS, N2_bot, CS%En, CS%TKE_itidal_loss_fixed, &
+    CS%TKE_itidal_loss, dt)
   endif
   
   ! Check for energy conservation on computational domain (BDM)
@@ -420,6 +397,69 @@ subroutine sum_En(G, CS, En, label)
   !  enddo
   !enddo  
 end subroutine sum_En
+
+subroutine itidal_lowmode_loss(G, CS, Nb2, En, TKE_loss_fixed, TKE_loss, dt)
+  type(ocean_grid_type),  intent(in)    :: G
+  type(int_tide_CS), pointer            :: CS
+  real, dimension(G%isd:G%ied,G%jsd:G%jed), intent(in) :: Nb2
+  real, dimension(G%isd:G%ied,G%jsd:G%jed), intent(in) :: TKE_loss_fixed
+  real, dimension(G%isd:G%ied,G%jsd:G%jed,CS%NAngle,CS%nFreq,CS%nMode), intent(inout) :: En
+  real, dimension(G%isd:G%ied,G%jsd:G%jed,CS%NAngle,CS%nFreq,CS%nMode), intent(out)   :: TKE_loss
+  real :: dt
+     
+  ! This subroutine calculates the energy lost from the propagating internal tide due to
+  ! scattering over small-scale roughness along the lines of Jayne & St. Laurent (2001).
+  !
+  ! Arguments: 
+  !  (in)      Nb2 - near-bottom stratification, in s-2.
+  !  (inout)   En - energy density of the internal waves, in J m-2.
+  !  (in)      TKE_loss_fixed - fixed part of energy loss, in kg m-2 (formerly "coef_1")
+  !  (out)     TKE_loss - energy loss rate, in W m-2
+  !  (in)      dt - time increment, in s 
+    
+  integer :: j,i,m,fr,a
+  real :: Nb, modal_vel_bot, TKE_loss_coef
+  
+  do m=1,CS%nMode ; do fr=1,CS%nFreq ; do a=1,CS%nAngle
+    do j=G%jsd,G%jed ; do i=G%isd,G%ied
+      Nb = 0.0
+      if (Nb2(i,j) > 0.0) then
+        Nb = G%mask2dT(i,j)*sqrt(Nb2(i,j))
+      endif
+      ! Calculate bottom velocity for mode; 
+      ! using a placeholder here - could be done in diabatic driver as is N2_bot.
+      modal_vel_bot = 0.0
+      if (En(i,j,a,fr,m) > 0.0) then
+        modal_vel_bot = 0.001*sqrt(En(i,j,a,fr,m))
+      endif
+      ! Calculate TKE loss rate; units of [J m-2 = kg s-2] here
+      TKE_loss_coef = TKE_loss_fixed(i,j) * modal_vel_bot**2
+      ! Calculate TKE loss rate; units of [W m-2] here.
+      TKE_loss(i,j,a,fr,m) = TKE_loss_coef * Nb
+      ! Update energy remaining in original mode (this is an explicit calc for now)
+      En(i,j,a,fr,m) = En(i,j,a,fr,m) - TKE_loss(i,j,a,fr,m)*dt
+    enddo ; enddo
+  enddo ; enddo ; enddo
+end subroutine itidal_lowmode_loss
+
+
+subroutine sum_itidal_lowmode_loss(i,j,CS,G,TKE_loss_sum)
+  integer, intent(in)                :: i,j
+  type(ocean_grid_type),  intent(in) :: G
+  type(int_tide_CS), pointer         :: CS
+  real, intent(out)                  :: TKE_loss_sum  
+  ! This subroutine sums the energy lost from the propagating internal across all angles,
+  ! modes, and frequencies for a given location.
+  !
+  ! Arguments: 
+  !  (out)      TKE_loss_sum - total energy loss rate, in W m-2.  
+  integer :: m, fr, a
+  
+  do a = 1,CS%nAngle ; do fr = 1,CS%nFreq ; do m = 1,CS%nMode
+    TKE_loss_sum = TKE_loss_sum + CS%TKE_itidal_loss(i,j,a,fr,m)
+  enddo ; enddo ; enddo  
+  
+end subroutine sum_itidal_lowmode_loss
 
 
 subroutine refract(En, cg, freq, dt, G, NAngle, use_PPMang)
@@ -1954,10 +1994,8 @@ subroutine internal_tides_init(Time, G, param_file, diag, CS)
                  
   ! Compute the fixed part of the bottom drag loss from baroclinic modes (BDM)
   allocate(h2(isd:ied,jsd:jed)) ; h2(:,:) = 0.0
-  allocate(CS%TKE_itidal_loss_coef_1(isd:ied,jsd:jed)) 
-  CS%TKE_itidal_loss_coef_1 = 0.0
-  allocate(CS%TKE_itidal_loss_coef_2(isd:ied,jsd:jed,num_angle,num_freq,num_mode))
-  CS%TKE_itidal_loss_coef_2(:,:,:,:,:) = 0.0
+  allocate(CS%TKE_itidal_loss_fixed(isd:ied,jsd:jed)) 
+  CS%TKE_itidal_loss_fixed = 0.0
   allocate(CS%TKE_itidal_loss(isd:ied,jsd:jed,num_angle,num_freq,num_mode))
   CS%TKE_itidal_loss(:,:,:,:,:) = 0.0
   call get_param(param_file, mod, "KAPPA_ITIDES", kappa_itides, &
@@ -1979,7 +2017,7 @@ subroutine internal_tides_init(Time, G, param_file, diag, CS)
     h2(i,j) = min(0.01*G%bathyT(i,j)**2, h2(i,j))
     ! Compute the fixed part; units are [kg m-2] here; 
     ! will be multiplied by N and En to get into [W m-2]
-    CS%TKE_itidal_loss_coef_1(i,j) = 0.5*kappa_h2_factor*G%Rho0*&
+    CS%TKE_itidal_loss_fixed(i,j) = 0.5*kappa_h2_factor*G%Rho0*&
          kappa_itides * h2(i,j)
   enddo; enddo
   
