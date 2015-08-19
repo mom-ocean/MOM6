@@ -2099,8 +2099,15 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
   if (CS%id_dudt_dia > 0) call safe_alloc_ptr(ADp%du_dt_dia,IsdB,IedB,jsd,jed,nz)
   if (CS%id_dvdt_dia > 0) call safe_alloc_ptr(ADp%dv_dt_dia,isd,ied,JsdB,JedB,nz)
   if (CS%id_wd > 0)       call safe_alloc_ptr(CDp%diapyc_vel,isd,ied,jsd,jed,nz+1)
+  
+  if (CS%use_int_tides) then !BDM
+    call int_tide_input_init(Time, G, param_file, diag, CS%int_tide_input_CSp, &
+                             CS%int_tide_input)
+    call register_int_tide_restarts(G, param_file, CS%int_tide_CSp, CS%restart_CSp) !BDM
+    call internal_tides_init(Time, G, param_file, diag, CS%int_tide_CSp)
+  endif
 
-  call set_diffusivity_init(Time, G, param_file, diag, CS%set_diff_CSp, diag_to_Z_CSp)
+  call set_diffusivity_init(Time, G, param_file, diag, CS%set_diff_CSp, diag_to_Z_CSp, CS%int_tide_CSp)
   CS%id_Kd_interface = register_diag_field('ocean_model', 'Kd_interface', diag%axesTi, Time, &
       'Total diapycnal diffusivity at interfaces', 'meter2 second-1')
   CS%id_Kd_ePBL = register_diag_field('ocean_model', 'Kd_ePBL', diag%axesTi, Time, &
@@ -2151,13 +2158,6 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
   call entrain_diffusive_init(Time, G, param_file, diag, CS%entrain_diffusive_CSp)
   if (CS%use_geothermal) &
     call geothermal_init(Time, G, param_file, diag, CS%geothermal_CSp)
-
-  if (CS%use_int_tides) then
-    call int_tide_input_init(Time, G, param_file, diag, CS%int_tide_input_CSp, &
-                             CS%int_tide_input)
-    call register_int_tide_restarts(G, param_file, CS%int_tide_CSp, CS%restart_CSp) !BDM
-    call internal_tides_init(Time, G, param_file, diag, CS%int_tide_CSp)
-  endif
 
   id_clock_entrain = cpu_clock_id('(Ocean diabatic entrain)', grain=CLOCK_MODULE)
   if (CS%bulkmixedlayer) &

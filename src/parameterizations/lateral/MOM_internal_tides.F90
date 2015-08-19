@@ -455,6 +455,7 @@ subroutine sum_itidal_lowmode_loss(i,j,CS,G,TKE_loss_sum)
   !  (out)      TKE_loss_sum - total energy loss rate, in W m-2.  
   integer :: m, fr, a
   
+  TKE_loss_sum = 0.0
   do a = 1,CS%nAngle ; do fr = 1,CS%nFreq ; do m = 1,CS%nMode
     TKE_loss_sum = TKE_loss_sum + CS%TKE_itidal_loss(i,j,a,fr,m)
   enddo ; enddo ; enddo  

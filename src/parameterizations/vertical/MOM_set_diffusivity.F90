@@ -177,7 +177,7 @@ type, public :: set_diffusivity_CS ; private
   logical :: Int_tide_dissipation  ! Internal tide conversion (from barotropic) with 
                                    ! the schemes of St Laurent et al (2002)/
                                    ! Simmons et al (2004)
-  logical :: Remote_itidal_dissipation  ! Internal tide conversion (from low modes) with 
+  logical :: Lowmode_itidal_dissipation ! Internal tide conversion (from low modes) with 
                                         ! the schemes of St Laurent et al (2002)/ 
                                         ! Simmons et al (2004) !BDM
   integer :: Int_tide_profile ! A coded integer indicating the vertical profile
@@ -284,18 +284,22 @@ type, public :: set_diffusivity_CS ; private
 
   integer :: id_Kd_itidal      = -1
   integer :: id_Kd_Niku        = -1
+  integer :: id_Kd_lowmode     = -1 !BDM
   integer :: id_Kd_user        = -1
   integer :: id_Kd_layer       = -1
   integer :: id_Kd_BBL         = -1
   integer :: id_Kd_BBL_z       = -1
   integer :: id_Kd_itidal_z    = -1
   integer :: id_Kd_Niku_z      = -1
+  integer :: id_Kd_lowmode_z   = -1 !BDM
   integer :: id_Kd_user_z      = -1
   integer :: id_Kd_Work        = -1
   integer :: id_Kd_Itidal_Work = -1
   integer :: id_Kd_Niku_Work   = -1
+  integer :: id_Kd_Lowmode_Work= -1 !BDM
 
   integer :: id_Fl_itidal                 = -1
+  integer :: id_Fl_lowmode                = -1 !BDM
   integer :: id_Polzin_decay_scale        = -1
   integer :: id_Polzin_decay_scale_scaled = -1
 
@@ -327,7 +331,7 @@ type diffusivity_diags
     Kd_work        => NULL(),& ! layer integrated work by diapycnal mixing (W/m2)
     Kd_Niku_work   => NULL(),& ! layer integrated work by lee-wave driven mixing (W/m2)
     Kd_Itidal_Work => NULL(),& ! layer integrated work by int tide driven mixing (W/m2)
-    Kd_lowmode_work=> NULL(),& ! layer integrated work by low mode driven mixing (W/m2) !BDM
+    Kd_Lowmode_Work=> NULL(),& ! layer integrated work by low mode driven mixing (W/m2) !BDM
     maxTKE         => NULL(),& ! energy required to entrain to h_max (m3/s3)
     TKE_to_Kd      => NULL(),& ! conversion rate (~1.0 / (G_Earth + dRho_lay))
                                ! between TKE dissipated within a layer and Kd
@@ -472,8 +476,15 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, G, C
       (CS%id_Kd_Itidal_work > 0)) then
     allocate(dd%Kd_itidal(isd:ied,jsd:jed,nz+1)) ; dd%Kd_itidal(:,:,:) = 0.0
   endif
+  if ((CS%id_Kd_lowmode > 0) .or. (CS%id_Kd_lowmode_z > 0) .or. &
+      (CS%id_Kd_lowmode_work > 0)) then
+    allocate(dd%Kd_lowmode(isd:ied,jsd:jed,nz+1)) ; dd%Kd_lowmode(:,:,:) = 0.0 !BDM
+  endif
   if ( (CS%id_Fl_itidal > 0) ) then
     allocate(dd%Fl_itidal(isd:ied,jsd:jed,nz+1)) ; dd%Fl_itidal(:,:,:) = 0.0
+  endif
+  if ( (CS%id_Fl_lowmode > 0) ) then
+    allocate(dd%Fl_lowmode(isd:ied,jsd:jed,nz+1)) ; dd%Fl_lowmode(:,:,:) = 0.0 !BDM
   endif
   if ( (CS%id_Polzin_decay_scale > 0) ) then
     allocate(dd%Polzin_decay_scale(isd:ied,jsd:jed))
@@ -505,6 +516,10 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, G, C
   if (CS%id_Kd_Itidal_work > 0) then
     allocate(dd%Kd_Itidal_work(isd:ied,jsd:jed,nz))
     dd%Kd_Itidal_work(:,:,:) = 0.0
+  endif
+  if (CS%id_Kd_Lowmode_Work > 0) then
+    allocate(dd%Kd_Lowmode_Work(isd:ied,jsd:jed,nz))
+    dd%Kd_Lowmode_Work(:,:,:) = 0.0 !BDM
   endif
   if (CS%id_TKE_itidal > 0) then
     allocate(dd%TKE_Itidal_used(isd:ied,jsd:jed)) ; dd%TKE_Itidal_used(:,:) = 0.
@@ -811,7 +826,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, G, C
   if (CS%id_Kd_layer > 0) call post_data(CS%id_Kd_layer, Kd, CS%diag)
 
   num_z_diags = 0
-  if (CS%Int_tide_dissipation .or. CS%Lee_wave_dissipation) then
+  if (CS%Int_tide_dissipation .or. CS%Lee_wave_dissipation .or. CS%Lowmode_itidal_dissipation) then
     if (CS%id_TKE_itidal  > 0) call post_data(CS%id_TKE_itidal,  dd%TKE_itidal_used, CS%diag)
     if (CS%id_TKE_leewave > 0) call post_data(CS%id_TKE_leewave, CS%TKE_Niku,        CS%diag)
     if (CS%id_Nb          > 0) call post_data(CS%id_Nb,      CS%Nb,      CS%diag)
@@ -822,11 +837,14 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, G, C
     if (CS%id_Fl_itidal > 0) call post_data(CS%id_Fl_itidal, dd%Fl_itidal, CS%diag)
     if (CS%id_Kd_itidal > 0) call post_data(CS%id_Kd_itidal, dd%Kd_itidal, CS%diag)
     if (CS%id_Kd_Niku   > 0) call post_data(CS%id_Kd_Niku,   dd%Kd_Niku,   CS%diag)
+    if (CS%id_Kd_lowmode> 0) call post_data(CS%id_Kd_lowmode, dd%Kd_lowmode, CS%diag) !BDM
     if (CS%id_Kd_user   > 0) call post_data(CS%id_Kd_user,   dd%Kd_user,   CS%diag)
     if (CS%id_Kd_Work   > 0) call post_data(CS%id_Kd_Work,   dd%Kd_Work,   CS%diag)
     if (CS%id_Kd_Itidal_Work > 0) &
       call post_data(CS%id_Kd_Itidal_Work, dd%Kd_Itidal_Work, CS%diag)
     if (CS%id_Kd_Niku_Work > 0) call post_data(CS%id_Kd_Niku_Work, dd%Kd_Niku_Work, CS%diag)
+    if (CS%id_Kd_Lowmode_Work > 0) &
+      call post_data(CS%id_Kd_Lowmode_Work, dd%Kd_Lowmode_Work, CS%diag) !BDM
     if (CS%id_maxTKE > 0) call post_data(CS%id_maxTKE, dd%maxTKE, CS%diag)
     if (CS%id_TKE_to_Kd > 0) call post_data(CS%id_TKE_to_Kd, dd%TKE_to_Kd, CS%diag)
 
@@ -845,6 +863,12 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, G, C
       num_z_diags        = num_z_diags + 1
       z_ids(num_z_diags) = CS%id_Kd_Niku_z
       z_ptrs(num_z_diags)%p => dd%Kd_Niku
+    endif
+    
+    if (CS%id_Kd_lowmode_z > 0) then !BDM
+      num_z_diags        = num_z_diags + 1
+      z_ids(num_z_diags) = CS%id_Kd_lowmode_z
+      z_ptrs(num_z_diags)%p => dd%Kd_lowmode
     endif
 
     if (CS%id_N2_z > 0) then
@@ -888,7 +912,9 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, G, C
 
   if (associated(dd%N2_3d)) deallocate(dd%N2_3d)
   if (associated(dd%Kd_itidal)) deallocate(dd%Kd_itidal)
+  if (associated(dd%Kd_lowmode)) deallocate(dd%Kd_lowmode) !BDM
   if (associated(dd%Fl_itidal)) deallocate(dd%Fl_itidal)
+  if (associated(dd%Fl_lowmode)) deallocate(dd%Fl_lowmode) !BDM
   if (associated(dd%Polzin_decay_scale)) deallocate(dd%Polzin_decay_scale)
   if (associated(dd%Polzin_decay_scale_scaled)) deallocate(dd%Polzin_decay_scale_scaled)
   if (associated(dd%N2_bot)) deallocate(dd%N2_bot)
@@ -896,7 +922,8 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, G, C
   if (associated(dd%Kd_work)) deallocate(dd%Kd_work)
   if (associated(dd%Kd_Niku)) deallocate(dd%Kd_Niku)
   if (associated(dd%Kd_Niku_work)) deallocate(dd%Kd_Niku_work)
-  if (associated(dd%Kd_Itidal_Work)) deallocate(dd%Kd_Itidal_Work)
+  if (associated(dd%Kd_Itidal_Work))  deallocate(dd%Kd_Itidal_Work)
+  if (associated(dd%Kd_Lowmode_Work)) deallocate(dd%Kd_Lowmode_Work) !BDM
   if (associated(dd%TKE_itidal_used)) deallocate(dd%TKE_itidal_used)
   if (associated(dd%maxTKE)) deallocate(dd%maxTKE)
   if (associated(dd%TKE_to_Kd)) deallocate(dd%TKE_to_Kd)
@@ -1868,7 +1895,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, CS, &
   real :: Izeta         ! inverse of TKE decay scale (1/meter)
   real :: Izeta_lee     ! inverse of TKE decay scale for lee waves (1/meter)
   real :: z0_psl        ! temporary variable with units of meter
-  real :: TKE_lowmode_tot ! temporary variable for summing TKE from all low modes (BDM)
+  real :: TKE_lowmode_tot ! TKE from all low modes (W/m2) (BDM)
 
   logical :: use_Polzin, use_Simmons
   integer :: i, k, is, ie, nz
@@ -1885,9 +1912,11 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, CS, &
   I_Rho0 = 1.0/G%Rho0
 
   use_Polzin = ((CS%Int_tide_dissipation .and. (CS%int_tide_profile == POLZIN_09)) .or. &
-                (CS%lee_wave_dissipation .and. (CS%lee_wave_profile == POLZIN_09)))
+                (CS%lee_wave_dissipation .and. (CS%lee_wave_profile == POLZIN_09)) .or. &
+                (CS%Lowmode_itidal_dissipation .and. (CS%int_tide_profile == POLZIN_09))) !BDM
   use_Simmons = ((CS%Int_tide_dissipation .and. (CS%int_tide_profile == STLAURENT_02)) .or. &
-                 (CS%lee_wave_dissipation .and. (CS%lee_wave_profile == STLAURENT_02)))
+                 (CS%lee_wave_dissipation .and. (CS%lee_wave_profile == STLAURENT_02)) .or. &
+                 (CS%Lowmode_itidal_dissipation .and. (CS%int_tide_profile == STLAURENT_02))) !BDM
 
 ! Simmons
   if ( use_Simmons ) then
@@ -1897,7 +1926,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, CS, &
     do i=is,ie
       CS%Nb(i,j) = sqrt(N2_bot(i))
       if (associated(dd%N2_bot)) dd%N2_bot(i,j) = N2_bot(i)
-      if ( CS%Int_tide_dissipation ) then
+      if ( CS%Int_tide_dissipation .or. CS%Lowmode_itidal_dissipation) then !BDM
         if (Izeta*htot(i) > 1.0e-14) then ! L'Hospital's version of Adcroft's reciprocal rule.
           Inv_int(i) = 1.0 / (1.0 - exp(-Izeta*htot(i)))
         endif
@@ -1998,7 +2027,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, CS, &
     !Consider dissipation from propagating baroclinic low modes (rays) (BDM)
     TKE_lowmode_tot = 0.0
     TKE_lowmode_bot(i) = 0.0
-    if (CS%Remote_itidal_dissipation) then
+    if (CS%Lowmode_itidal_dissipation) then
       call sum_itidal_lowmode_loss(i,j,CS%int_tide_CSp,G,TKE_lowmode_tot)
       TKE_lowmode_bot(i) = (I_rho0 * CS%Mu_itides * CS%Gamma_itides) * TKE_lowmode_tot
     endif
@@ -2007,7 +2036,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, CS, &
     TKE_Niku_rem(i)    = Inv_int_lee(i) * TKE_Niku_bot(i)
     TKE_lowmode_rem(i) = Inv_int(i)     * TKE_lowmode_bot(i) !BDM
 
-    if (associated(dd%Fl_itidal)) dd%Fl_itidal(i,j,nz) = TKE_itidal_rem(i)
+    if (associated(dd%Fl_itidal)) dd%Fl_itidal(i,j,nz) = TKE_itidal_rem(i) !why is this here? BDM
   enddo
 
   ! Estimate the work that would be done by mixing in each layer.
@@ -2384,13 +2413,14 @@ subroutine set_density_ratios(h, tv, kb, G, CS, j, ds_dsp1, rho_0)
 
 end subroutine set_density_ratios
 
-subroutine set_diffusivity_init(Time, G, param_file, diag, CS, diag_to_Z_CSp)
+subroutine set_diffusivity_init(Time, G, param_file, diag, CS, diag_to_Z_CSp, int_tide_CSp)
   type(time_type),          intent(in)    :: Time
-  type(ocean_grid_type),    intent(in)    :: G
+  type(ocean_grid_type),    intent(inout)    :: G
   type(param_file_type),    intent(in)    :: param_file
   type(diag_ctrl), target,  intent(inout) :: diag
   type(set_diffusivity_CS), pointer       :: CS
   type(diag_to_Z_CS),       pointer       :: diag_to_Z_CSp
+  type(int_tide_CS),        pointer       :: int_tide_CSp !BDM
 
 ! Arguments:
 !  (in)      Time          - current model time
@@ -2399,6 +2429,7 @@ subroutine set_diffusivity_init(Time, G, param_file, diag, CS, diag_to_Z_CSp)
 !  (in)      diag          - structure used to regulate diagnostic output
 !  (in/out)  CS            - pointer set to point to the module control structure
 !  (in)      diag_to_Z_CSp - pointer to the Z-diagnostics control structure
+!  (in)      int_tide_CSp  - pointer to the internal tides control structure (BDM)
 
   real :: decay_length, utide, zbot, hamp
   type(vardesc) :: vd
@@ -2421,6 +2452,7 @@ subroutine set_diffusivity_init(Time, G, param_file, diag, CS, diag_to_Z_CSp)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
   CS%diag => diag
+  if (associated(int_tide_CSp))  CS%int_tide_CSp  => int_tide_CSp !BDM
   if (associated(diag_to_Z_CSp)) CS%diag_to_Z_CSp => diag_to_Z_CSp
 
   ! These default values always need to be set.
@@ -2700,7 +2732,7 @@ subroutine set_diffusivity_init(Time, G, param_file, diag, CS, diag_to_Z_CSp)
     end select
   endif
   
-  call get_param(param_file, mod, "REMOTE_ITIDAL_DISSIPATION", CS%Remote_itidal_dissipation, &
+  call get_param(param_file, mod, "INT_TIDE_LOWMODE_DISSIPATION", CS%Lowmode_itidal_dissipation, &
                  "If true, consider mixing due to breaking low modes that \n"//&
                  "have been remotely generated; as with itidal drag on the \n"//&
                  "barotropic tide, use an internal tidal dissipation scheme to \n"//&
@@ -2895,9 +2927,15 @@ subroutine set_diffusivity_init(Time, G, param_file, diag, CS, diag_to_Z_CSp)
 
   CS%id_Kd_itidal = register_diag_field('ocean_model','Kd_itides',diag%axesTi,Time, &
        'Internal Tide Driven Diffusivity', 'meter2 sec-1')
+       
+  CS%id_Kd_lowmode = register_diag_field('ocean_model','Kd_lowmode',diag%axesTi,Time, &
+       'Internal Tide Driven Diffusivity (from propagating low modes)', 'meter2 sec-1')
 
   CS%id_Fl_itidal = register_diag_field('ocean_model','Fl_itides',diag%axesTi,Time, &
        'Vertical flux of tidal turbulent dissipation', 'meter3 sec-3')
+       
+  CS%id_Fl_lowmode = register_diag_field('ocean_model','Fl_lowmode',diag%axesTi,Time, &
+       'Vertical flux of tidal turbulent dissipation (from propagating low modes)', 'meter3 sec-3')
 
   CS%id_Polzin_decay_scale = register_diag_field('ocean_model','Polzin_decay_scale',diag%axesT1,Time, &
        'Vertical decay scale for the tidal turbulent dissipation with Polzin scheme', 'meter')
@@ -2919,6 +2957,9 @@ subroutine set_diffusivity_init(Time, G, param_file, diag, CS, diag_to_Z_CSp)
 
   CS%id_Kd_Niku_Work = register_diag_field('ocean_model','Kd_Nikurashin_Work',diag%axesTL,Time, &
        'Work done by Nikurashin Lee Wave Drag Scheme', 'Watts m-2')
+       
+  CS%id_Kd_Lowmode_Work = register_diag_field('ocean_model','Kd_Lowmode_Work',diag%axesTL,Time, &
+       'Work done by Internal Tide Diapycnal Mixing (low modes)', 'Watts m-2')
 
   CS%id_N2 = register_diag_field('ocean_model','N2',diag%axesTi,Time,            &
        'Buoyancy frequency squared', 'sec-2', cmor_field_name='obvfsq',          &
@@ -2941,6 +2982,12 @@ subroutine set_diffusivity_init(Time, G, param_file, diag, CS, diag_to_Z_CSp)
                  'h','z','s',"meter2 second-1")
        CS%id_Kd_Niku_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
     endif
+    if (CS%Lowmode_itidal_dissipation) then
+      vd = vardesc("Kd_lowmodes", & 
+                "Internal Tide Driven Diffusivity (from low modes), interpolated to z",&
+                'h','z','s',"meter2 second-1")
+      CS%id_Kd_lowmode_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
+    endif    
     if (CS%user_change_diff) &
       CS%id_Kd_user_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
   endif
@@ -2992,7 +3039,9 @@ subroutine set_diffusivity_init(Time, G, param_file, diag, CS, diag_to_Z_CSp)
   CS%useKappaShear = kappa_shear_init(Time, G, param_file, CS%diag, CS%kappaShear_CSp)
   if (CS%useKappaShear) &
     id_clock_kappaShear = cpu_clock_id('(Ocean kappa_shear)', grain=CLOCK_MODULE)
-
+    
+  
+    
 end subroutine set_diffusivity_init
 
 subroutine set_diffusivity_end(CS)
