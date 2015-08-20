@@ -680,6 +680,13 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     if (CS%use_energetic_PBL) then
       call applyBoundaryFluxesInOut(CS%diabatic_aux_CSp, G, dt, fluxes, CS%optics, &
                           ea, h, tv, CS%aggregate_FW_forcing, cTKE, dSV_dT, dSV_dS)
+      if (CS%debug) then
+        call hchksum(ea, "after applyBoundaryFluxes ea",G,haloshift=0)
+        call hchksum(eb, "after applyBoundaryFluxes eb",G,haloshift=0)
+        call hchksum(cTKE, "after applyBoundaryFluxes cTKE",G,haloshift=0)
+        call hchksum(dSV_dT, "after applyBoundaryFluxes dSV_dT",G,haloshift=0)
+        call hchksum(dSV_dS, "after applyBoundaryFluxes dSV_dS",G,haloshift=0)
+      endif
       call find_uv_at_h(u, v, h, u_h, v_h, G)
       call energetic_PBL(h, u_h, v_h, tv, fluxes, dt, Kd_ePBL, G, &
                          CS%energetic_PBL_CSp, dSV_dT, dSV_dS, cTKE)
@@ -687,13 +694,18 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
       do K=2,nz ; do j=js,je ; do i=is,ie
         Ent_int = Kd_ePBL(i,j,K) * (G%m_to_H**2 * dt) / &
                   (0.5*(h(i,j,k-1) + h(i,j,k)) + h_neglect)
-        eb(i,j,k-1) = eB(i,j,k-1) + Ent_int
+        eb(i,j,k-1) = eb(i,j,k-1) + Ent_int
         ea(i,j,k) = ea(i,j,k) + Ent_int
         visc%Kv_turb(i,j,K) = visc%Kv_turb(i,j,K) + Kd_ePBL(i,j,K)
         Kd_int(i,j,K) = Kd_int(i,j,K) + Kd_ePBL(i,j,K)
         Kd_heat(i,j,K) = Kd_heat(i,j,K) + Kd_ePBL(i,j,K)
         Kd_salt(i,j,K) = Kd_salt(i,j,K) + Kd_ePBL(i,j,K)
       enddo ; enddo ; enddo
+    if (CS%debug) then
+      call hchksum(ea, "after ePBL ea",G,haloshift=0)
+      call hchksum(eb, "after ePBL eb",G,haloshift=0)
+      call hchksum(Kd_ePBL, "after ePBL Kd_ePBL",G,haloshift=0)
+    endif
     else
       call applyBoundaryFluxesInOut(CS%diabatic_aux_CSp, G, dt, fluxes, CS%optics, &
                                     ea, h, tv, CS%aggregate_FW_forcing)
@@ -704,7 +716,6 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
       call MOM_forcing_chksum("after applyBoundaryFluxes ", fluxes, G, haloshift=0)
       call MOM_thermovar_chksum("after applyBoundaryFluxes ", tv, G)
       call MOM_state_chksum("after applyBoundaryFluxes ", u(:,:,:), v(:,:,:), h(:,:,:), G)
-      call hchksum(G%H_to_m*ea, "after applyBoundaryFluxes ea",G,haloshift=0)
     endif
     if (showCallTree) call callTree_waypoint("done with applyBoundaryFluxes (diabatic)")
     if (CS%debugConservation)  call MOM_state_stats('applyBoundaryFluxes', u, v, h, tv%T, tv%S, G)
@@ -897,6 +908,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   if (CS%debug) then
     call MOM_state_chksum("after mixed layer ", u, v, h, G)
     call MOM_thermovar_chksum("after mixed layer ", tv, G)
+    call hchksum(ea, "after mixed layer ea",G)
+    call hchksum(eb, "after mixed layer eb",G)
   endif
 
   if (.not. CS%useALEalgorithm) then
@@ -1056,6 +1069,10 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
 !  the mixed layer.  Vertical viscosity that is proportional to the
 !  mixed layer turbulence is applied elsewhere.
   if (CS%bulkmixedlayer) then
+    if (CS%debug) then
+      call hchksum(ea, "before net flux rearrangement ea",G)
+      call hchksum(eb, "before net flux rearrangement eb",G)
+    endif
 !$OMP do
     do k=2,G%nkml ; do j=js,je ; do i=is,ie
       if (ea(i,j,k) >= eb(i,j,k-1)) then
@@ -1066,6 +1083,10 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
         ea(i,j,k) = 0.0
       endif
     enddo ; enddo ; enddo
+    if (CS%debug) then
+      call hchksum(ea, "after net flux rearrangement ea",G)
+      call hchksum(eb, "after net flux rearrangement eb",G)
+    endif
   endif
 
 
@@ -1102,6 +1123,9 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
 
   if (CS%debug) then
     call MOM_state_chksum("before u/v tridiag ", u, v, h, G)
+    call hchksum(ea, "before u/v tridiag ea",G)
+    call hchksum(eb, "before u/v tridiag eb",G)
+    call hchksum(hold, "before u/v tridiag hold",G)
   endif
   call cpu_clock_begin(id_clock_tridiag)
 !$OMP parallel do default(none) shared(js,je,Isq,Ieq,ADp,u,hold,ea,h_neglect,eb,nz,Idt) &
