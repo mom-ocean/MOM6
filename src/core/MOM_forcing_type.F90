@@ -1151,7 +1151,7 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
 
   handles%id_lw = register_diag_field('ocean_model', 'LW', diag%axesT1, Time,                            &
         'Longwave radiation flux into ocean', 'Watt meter-2',                                            &
-        standard_name='surface_net_downward_longwave_flux', cmor_field_name='rlds', cmor_units='W m-2',  &
+        standard_name='surface_net_downward_longwave_flux', cmor_field_name='rlntds', cmor_units='W m-2',&
         cmor_standard_name='surface_net_downward_longwave_flux',                                         &
         cmor_long_name='Surface Net Downward Longwave Radiation')
 
