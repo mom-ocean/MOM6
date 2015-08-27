@@ -161,30 +161,30 @@ subroutine interface_scalar(nk, h, S, Si)
   real, dimension(nk+1), intent(inout) :: Si !< Interface scalar (conc, e.g. ppt)
   ! Local variables
   integer :: k
-  real, dimension(nk) :: slope
+  real, dimension(nk) :: diff
   real :: Sb, Sa
 
-  call PLM_slope(nk, h, S, 2, slope)
-  Si(1) = S(1) - 0.5 * slope(1)
+  call PLM_diff(nk, h, S, 2, diff)
+  Si(1) = S(1) - 0.5 * diff(1)
   do k = 2, nk
     ! Average of the two edge values (will be bounded and,
     ! when slopes are unlimited, notionally second-order accurate)
-    Sa = S(k-1) + 0.5 * slope(k-1) ! Lower edge value of a PLM reconstruction for layer above
-    Sb = S(k) - 0.5 * slope(k) ! Upper edge value of a PLM reconstruction for layer below
+    Sa = S(k-1) + 0.5 * diff(k-1) ! Lower edge value of a PLM reconstruction for layer above
+    Sb = S(k) - 0.5 * diff(k) ! Upper edge value of a PLM reconstruction for layer below
     Si(k) = 0.5 * ( Sa + Sb )
   enddo
-  Si(nk+1) = S(nk) + 0.5 * slope(nk)
+  Si(nk+1) = S(nk) + 0.5 * diff(nk)
 
 end subroutine interface_scalar
 
 !> Returns PLM slopes for a column where the slopes are the difference in value across
 !! each cell. Slopes in the first and last cell (top/bottom) are always zero.
-subroutine PLM_slope(nk, h, S, c_method, slope)
-  integer,             intent(in)    :: nk    !< Number of levels
-  real, dimension(nk), intent(in)    :: h     !< Layer thickness (H, m or Pa)
-  real, dimension(nk), intent(in)    :: S     !< Layer salinity (conc, e.g. ppt)
+subroutine PLM_diff(nk, h, S, c_method, diff)
+  integer,             intent(in)    :: nk       !< Number of levels
+  real, dimension(nk), intent(in)    :: h        !< Layer thickness (H, m or Pa)
+  real, dimension(nk), intent(in)    :: S        !< Layer salinity (conc, e.g. ppt)
   integer,             intent(in)    :: c_method !< Method to use for the centered difference
-  real, dimension(nk), intent(inout) :: slope !< Interface salinity (conc/H, e.g. ppt/H)
+  real, dimension(nk), intent(inout) :: diff     !< Scalar difference across layer (conc, e.g. ppt)
                                                  !! determined by the following values: 
                                                  !!   1. Second order finite difference (not recommended)
                                                  !!   2. Second order finite volume (used in original PPM)
@@ -193,9 +193,8 @@ subroutine PLM_slope(nk, h, S, c_method, slope)
                                                  !! and should eventually be moved up the call tree.
   ! Local variables
   integer :: k
-  real :: hkm1, hk, hkp1, Skm1, Sk, Skp1, slope_l, slope_r, slope_c
+  real :: hkm1, hk, hkp1, Skm1, Sk, Skp1, diff_l, diff_r, diff_c
 
-  slope(1) = 0. ! PCM for top layer
   do k = 2, nk-1
     hkm1 = h(k-1)
     hk = h(k)
@@ -206,39 +205,44 @@ subroutine PLM_slope(nk, h, S, c_method, slope)
       Sk = S(k)
       Skp1 = S(k+1)
       if (c_method==1) then
-        ! Simple centered slope (from White)
+        ! Simple centered diff (from White)
         if ( hk + 0.5 * (hkm1 + hkp1) /= 0. ) then
-          slope_c = ( Skp1 - Skm1 ) * ( hk / ( hk + 0.5 * (hkm1 + hkp1) ) )
+          diff_c = ( Skp1 - Skm1 ) * ( hk / ( hk + 0.5 * (hkm1 + hkp1) ) )
         else
-          slope_c = 0.
+          diff_c = 0.
         endif
       elseif (c_method==2) then
         ! Second order accurate centered FV slope (from Colella and Woodward, JCP 1984)
-        slope_c = fv_slope(hkm1, hk, hkp1, Skm1, Sk, Skp1)
+        diff_c = fv_diff(hkm1, hk, hkp1, Skm1, Sk, Skp1)
       elseif (c_method==3) then
         ! Second order accurate finite-volume least squares slope
-        slope_c = hk * fvlsq_slope(hkm1, hk, hkp1, Skm1, Sk, Skp1)
+        diff_c = hk * fvlsq_slope(hkm1, hk, hkp1, Skm1, Sk, Skp1)
       endif
       ! Limit centered slope by twice the side differenced slopes
-      slope_l = 2. * ( Sk - Skm1 )
-      slope_r = 2. * ( Skp1 - Sk )
-      if (slope_l * slope_r > 0.) then
-        slope(k) = sign( min( abs(slope_l), abs(slope_c), abs(slope_r) ), slope_c )
+      diff_l = 2. * ( Sk - Skm1 )
+      diff_r = 2. * ( Skp1 - Sk )
+      if (diff_l * diff_r > 0.) then
+        diff(k) = sign( min( abs(diff_l), abs(diff_c), abs(diff_r) ), diff_c )
       else
-        slope(k) = 0. ! PCM for local extrema
+        diff(k) = 0. ! PCM for local extrema
       endif
     else
-      slope(k) = 0. ! PCM next to vanished layers
+      diff(k) = 0. ! PCM next to vanished layers
     endif
   enddo
-  slope(nk) = 0. ! PCM for bottom layer
+  ! PCM for top and bottom layer
+ !diff(1) = 0.
+ !diff(nk) = 0.
+  ! Linear extrapolation for top and bottom interfaces
+  diff(1) = ( S(2) - S(1) ) * 2. * ( h(1) / ( h(1) + h(2) ) )
+  diff(nk) = S(nk) - S(nk-1) * 2. * ( h(nk) / ( h(nk-1) + h(nk) ) )
 
-end subroutine PLM_slope
+end subroutine PLM_diff
 
 !> Returns the cell-centered second-order finite volume (unlimited PLM) slope
 !! using three consecutive cell widths and average values. Slope is returned
 !! as a difference across the central cell (i.e. units of scalar S).
-real function fv_slope(hkm1, hk, hkp1, Skm1, Sk, Skp1)
+real function fv_diff(hkm1, hk, hkp1, Skm1, Sk, Skp1)
   real, intent(in) :: hkm1 !< Left cell width
   real, intent(in) :: hk   !< Center cell width
   real, intent(in) :: hkp1 !< Right cell width
@@ -254,10 +258,10 @@ real function fv_slope(hkm1, hk, hkp1, Skm1, Sk, Skp1)
   if (hm /= 0.) hm = 1./ hm
   hp =  hkp1 + hk
   if (hp /= 0.) hp = 1./ hp
-  fv_slope = ( hk * h_sum ) * &
-             (   ( 2. * hkm1 + hk ) * hp * ( Skp1 - Sk ) &
-               + ( 2. * hkp1 + hk ) * hm * ( Sk - Skm1 ) )
-end function fv_slope
+  fv_diff = ( hk * h_sum ) * &
+            (   ( 2. * hkm1 + hk ) * hp * ( Skp1 - Sk ) &
+              + ( 2. * hkp1 + hk ) * hm * ( Sk - Skm1 ) )
+end function fv_diff
 
 !> Returns the cell-centered second-order weigthed least squares slope
 !! using three consecutive cell widths and average values. Slope is returned
@@ -659,14 +663,14 @@ logical function neutralDiffusionUnitTests()
   neutralDiffusionUnitTests = .false. ! Normally return false
   write(*,'(a)') '===== MOM_neutral_diffusion: neutralDiffusionUnitTests =================='
 
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fv_slope(1.,1.,1., 0.,1.,2., 1., 'FV: Straight line on uniform grid')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fv_slope(1.,1.,0., 0.,4.,8., 7., 'FV: Vanished right cell')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fv_slope(0.,1.,1., 0.,4.,8., 7., 'FV: Vanished left cell')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fv_slope(1.,2.,4., 0.,3.,9., 4., 'FV: Stretched grid')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fv_slope(2.,0.,2., 0.,1.,2., 0., 'FV: Vanished middle cell')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fv_slope(0.,1.,0., 0.,1.,2., 2., 'FV: Vanished on both sides')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fv_slope(1.,0.,0., 0.,1.,2., 0., 'FV: Two vanished cell sides')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fv_slope(0.,0.,0., 0.,1.,2., 0., 'FV: All vanished cells')
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fv_diff(1.,1.,1., 0.,1.,2., 1., 'FV: Straight line on uniform grid')
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fv_diff(1.,1.,0., 0.,4.,8., 7., 'FV: Vanished right cell')
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fv_diff(0.,1.,1., 0.,4.,8., 7., 'FV: Vanished left cell')
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fv_diff(1.,2.,4., 0.,3.,9., 4., 'FV: Stretched grid')
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fv_diff(2.,0.,2., 0.,1.,2., 0., 'FV: Vanished middle cell')
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fv_diff(0.,1.,0., 0.,1.,2., 2., 'FV: Vanished on both sides')
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fv_diff(1.,0.,0., 0.,1.,2., 0., 'FV: Two vanished cell sides')
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fv_diff(0.,0.,0., 0.,1.,2., 0., 'FV: All vanished cells')
 
   neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fvlsq_slope(1.,1.,1., 0.,1.,2., 1., 'LSQ: Straight line on uniform grid')
   neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fvlsq_slope(1.,1.,0., 0.,1.,2., 1., 'LSQ: Vanished right cell')
@@ -745,8 +749,8 @@ stop
 
   contains
 
-  !> Returns true if a test of fv_slope() fails, and conditionally writes results to stream
-  logical function test_fv_slope(hkm1, hk, hkp1, Skm1, Sk, Skp1, Ptrue, title)
+  !> Returns true if a test of fv_diff() fails, and conditionally writes results to stream
+  logical function test_fv_diff(hkm1, hk, hkp1, Skm1, Sk, Skp1, Ptrue, title)
     real,             intent(in) :: hkm1 !< Left cell width
     real,             intent(in) :: hk   !< Center cell width
     real,             intent(in) :: hkp1 !< Right cell width
@@ -759,21 +763,21 @@ stop
     integer :: stdunit
     real :: Pret
 
-    Pret = fv_slope(hkm1, hk, hkp1, Skm1, Sk, Skp1)
-    test_fv_slope = (Pret /= Ptrue) 
+    Pret = fv_diff(hkm1, hk, hkp1, Skm1, Sk, Skp1)
+    test_fv_diff = (Pret /= Ptrue) 
 
-    if (test_fv_slope .or. verbosity>5) then
+    if (test_fv_diff .or. verbosity>5) then
       stdunit = 6
-      if (test_fv_slope.or.debug_this_module) stdunit = 0 ! In case of wrong results, write to error stream
+      if (test_fv_diff.or.debug_this_module) stdunit = 0 ! In case of wrong results, write to error stream
       write(stdunit,'(a)') title
-      if (test_fv_slope) then
+      if (test_fv_diff) then
         write(stdunit,'(2(x,a,f20.16),x,a)') 'pRet=',Pret,'pTrue=',Ptrue,'WRONG!'
       else
         write(stdunit,'(2(x,a,f20.16))') 'pRet=',Pret,'pTrue=',Ptrue
       endif
     endif
 
-  end function test_fv_slope
+  end function test_fv_diff
 
   !> Returns true if a test of fvlsq_slope() fails, and conditionally writes results to stream
   logical function test_fvlsq_slope(hkm1, hk, hkp1, Skm1, Sk, Skp1, Ptrue, title)
