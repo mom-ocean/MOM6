@@ -21,8 +21,7 @@ module MOM_diabatic_driver
 
 !********+*********+*********+*********+*********+*********+*********+**
 !*                                                                     *
-!*  By Robert Hallberg, April 1994 - July 2000                         *
-!*     Alistair Adcroft, and Stephen Griffies                          *
+!*  By Robert Hallberg, Alistair Adcroft, and Stephen Griffies         *
 !*                                                                     *
 !*    This program contains the subroutine that, along with the        *
 !*  subroutines that it calls, implements diapycnal mass and momentum  *
@@ -288,7 +287,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     Kd_int,   & ! diapycnal diffusivity of interfaces (m^2/s)
     Kd_heat,  & ! diapycnal diffusivity of heat (m^2/s)
     Kd_salt,  & ! diapycnal diffusivity of salt and passive tracers (m^2/s)
-    Kd_ePBL,  & ! A test array of diapycnal diffisivities at interfaces, in m2 s-1.
+    Kd_ePBL,  & ! test array of diapycnal diffusivities at interfaces (m^2/s)
     Tdif_flx, & ! diffusive diapycnal heat flux across interfaces (K m/s)
     Tadv_flx, & ! advective diapycnal heat flux across interfaces (K m/s)
     Sdif_flx, & ! diffusive diapycnal salt flux across interfaces (ppt m/s)
@@ -346,6 +345,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   Isq  = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   nkmb = G%nk_rho_varies
   h_neglect = G%H_subroundoff ; h_neglect2 = h_neglect*h_neglect
+  Kd_heat(:,:,:) = 0.0 ; Kd_salt(:,:,:) = 0.0
+
 
   if (nz == 1) return
   showCallTree = callTree_showQuery()
@@ -551,9 +552,11 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
       enddo ; enddo ; enddo
     endif
 !$OMP end parallel
+
     call KPP_calculate(CS%KPP_CSp, G, h, tv%T, tv%S, u, v, tv%eqn_of_state, &
       fluxes%ustar, CS%KPP_buoy_flux, Kd_heat, Kd_salt, visc%Kv_turb, CS%KPP_NLTheat, CS%KPP_NLTscalar)
 !$OMP parallel default(none) shared(is,ie,js,je,nz,Kd_salt,Kd_int,visc,CS,Kd_heat)
+
     if (.not. CS%KPPisPassive) then
       if (associated(visc%Kd_turb) .and. CS%matchKPPwithoutKappaShear) then
 !$OMP do
@@ -697,7 +700,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
         eb(i,j,k-1) = eb(i,j,k-1) + Ent_int
         ea(i,j,k) = ea(i,j,k) + Ent_int
         visc%Kv_turb(i,j,K) = visc%Kv_turb(i,j,K) + Kd_ePBL(i,j,K)
-        Kd_int(i,j,K) = Kd_int(i,j,K) + Kd_ePBL(i,j,K)
+        Kd_int(i,j,K)  = Kd_int(i,j,K)  + Kd_ePBL(i,j,K)
         Kd_heat(i,j,K) = Kd_heat(i,j,K) + Kd_ePBL(i,j,K)
         Kd_salt(i,j,K) = Kd_salt(i,j,K) + Kd_ePBL(i,j,K)
       enddo ; enddo ; enddo
@@ -1494,7 +1497,7 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
       cmor_standard_name='ocean_mixed_layer_thickness_defined_by_sigma_t')
   CS%id_mlotstsq = register_diag_field('ocean_model','mlotstsq',diag%axesT1,Time,      &
       long_name='Square of Ocean Mixed Layer Thickness Defined by Sigma T',            &
-      standard_name='square_of_ocean_mixed_layer_thickness_defined_by_sigma_t',units='m')
+      standard_name='square_of_ocean_mixed_layer_thickness_defined_by_sigma_t',units='m2')
   CS%id_MLD_0125 = register_diag_field('ocean_model','MLD_0125',diag%axesT1,Time, &
       'Mixed layer depth (delta rho = 0.125)', 'meter')
   CS%id_subMLN2  = register_diag_field('ocean_model','subML_N2',diag%axesT1,Time, &
