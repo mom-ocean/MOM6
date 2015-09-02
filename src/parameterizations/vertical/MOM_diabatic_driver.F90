@@ -163,16 +163,11 @@ type, public :: diabatic_CS ; private
                              ! applied to tracers, especially in massless layers
                              ! near the bottom, in m2 s-1.
 
-  logical :: useKPP          ! If true, use [CVmix] KPP diffusivities and non-local
-                             ! transport.
-  logical :: salt_reject_below_ML ! It true, add salt below mixed layer (layer mode only)
+  logical :: useKPP          ! use CVmix/KPP diffusivities and non-local transport
+  logical :: salt_reject_below_ML ! If true, add salt below mixed layer (layer mode only)
   logical :: KPPisPassive    ! If true, KPP is in passive mode, not changing answers.
   logical :: useConvection   ! If true, calculate large diffusivities when column
                              ! is statically unstable.
-  logical :: matchKPPwithoutKappaShear ! If true, KPP is matched to interior diffusivities
-                                       ! that do NOT include kappa-shear diffusivity.
-                                       ! Generally run with this option false.
-
   logical :: debug                 ! If true, write verbose checksums for debugging purposes.
   logical :: debugConservation     ! If true, monitor conservation and extrema.
   type(diag_ctrl), pointer :: diag ! structure used to regulate timing of diagnostic output
@@ -513,32 +508,23 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   if (CS%useKPP) then
     call cpu_clock_begin(id_clock_kpp)
     ! KPP needs the surface buoyancy flux but does not update state variables.
-    ! We could make this call higher up to avoid a repeat unpacking of the surface fluxes.  ????
+    ! We could make this call higher up to avoid a repeat unpacking of the surface fluxes. 
     ! Sets: CS%KPP_buoy_flux, CS%KPP_temp_flux, CS%KPP_salt_flux
     ! NOTE: CS%KPP_buoy_flux, CS%KPP_temp_flux, CS%KPP_salt_flux are returned as rates (i.e. stuff per second)
     ! unlike other instances where the fluxes are integrated in time over a time-step.
     call calculateBuoyancyFlux2d(G, fluxes, CS%optics, h, tv%T, tv%S, tv, &
                                  CS%KPP_buoy_flux, CS%KPP_temp_flux, CS%KPP_salt_flux)
-    ! The KPP scheme calculates the boundary layer diffusivities and non-local transport.
-    ! If have KPP matching to interior, then KPP must be last contribution to Kd.
-    ! But generally MOM does not insist on matching KPP boundary layer diffusivities to
-    ! the interior, as that matching can be problematic.
+    ! The KPP scheme calculates boundary layer diffusivities and non-local transport.
+    ! MOM6 implementation of KPP matches the boundary layer to zero interior diffusivity,
+    ! since the matching to nonzero interior diffusivity can be problematic.
     ! Changes: Kd_int. Sets: KPP_NLTheat, KPP_NLTscalar
 
 !$OMP parallel default(none) shared(is,ie,js,je,nz,Kd_salt,Kd_int,visc,CS,Kd_heat)
-    if (associated(visc%Kd_turb) .and. CS%matchKPPwithoutKappaShear) then
-!$OMP do
-      do k=1,nz+1 ; do j=js,je ; do i=is,ie
-        Kd_salt(i,j,k) = Kd_int(i,j,k) - visc%Kd_turb(i,j,k) ! Temporarily remove part due to Kappa-shear   smg: clean this up!
-        Kd_heat(i,j,k) = Kd_int(i,j,k) - visc%Kd_turb(i,j,k) ! Temporarily remove part due to Kappa-shear   smg: clean thus up!
-      enddo ; enddo ; enddo
-    else
 !$OMP do
       do k=1,nz+1 ; do j=js,je ; do i=is,ie
         Kd_salt(i,j,k) = Kd_int(i,j,k)
         Kd_heat(i,j,k) = Kd_int(i,j,k)
       enddo ; enddo ; enddo
-    endif
     if (associated(visc%Kd_extra_S)) then
 !$OMP do
       do k=1,nz+1 ; do j=js,je ; do i=is,ie
@@ -558,13 +544,6 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
 !$OMP parallel default(none) shared(is,ie,js,je,nz,Kd_salt,Kd_int,visc,CS,Kd_heat)
 
     if (.not. CS%KPPisPassive) then
-      if (associated(visc%Kd_turb) .and. CS%matchKPPwithoutKappaShear) then
-!$OMP do
-        do k=1,nz+1 ; do j=js,je ; do i=is,ie
-          Kd_salt(i,j,k) = ( Kd_salt(i,j,k) + visc%Kd_turb(i,j,k) )  ! Put back part due to Kappa-shear  smg: clean this up!
-          Kd_heat(i,j,k) = ( Kd_heat(i,j,k) + visc%Kd_turb(i,j,k) )  ! Put back part due to Kappa-shear  smg: clean this up!
-        enddo ; enddo ; enddo
-      endif
 !$OMP do
       do k=1,nz+1 ; do j=js,je ; do i=is,ie
         Kd_int(i,j,k) = min( Kd_salt(i,j,k),  Kd_heat(i,j,k) )
@@ -1559,10 +1538,6 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
     allocate( CS%KPP_buoy_flux(isd:ied,jsd:jed,nz+1) ) ; CS%KPP_buoy_flux(:,:,:) = 0.
     allocate( CS%KPP_temp_flux(isd:ied,jsd:jed) ) ; CS%KPP_temp_flux(:,:) = 0.
     allocate( CS%KPP_salt_flux(isd:ied,jsd:jed) ) ; CS%KPP_salt_flux(:,:) = 0.
-    if (CS%use_kappa_shear) &
-      call get_param(param_file, mod, "KPP_BEFORE_KAPPA_SHEAR", CS%matchKPPwithoutKappaShear, &
-                 "If true, KPP matches interior diffusivity that EXCLUDES any\n"// &
-                 "diffusivity from kappa-shear.", default=.true.)
   endif
 
   call get_param(param_file, mod, "SALT_REJECT_BELOW_ML", CS%salt_reject_below_ML, &
