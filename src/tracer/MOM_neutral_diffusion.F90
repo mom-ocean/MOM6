@@ -306,8 +306,8 @@ subroutine find_neutral_surface_positions(nk, Pl, Tl, Sl, dRdTl, dRdSl, Pr, Tr, 
   real, dimension(nk+1),      intent(in)    :: Sr    !< Right-column interface salinity (ppt)
   real, dimension(nk+1),      intent(in)    :: dRdTr !< Left-column dRho/dT (kg/m3/degC)
   real, dimension(nk+1),      intent(in)    :: dRdSr !< Left-column dRho/dS (kg/m3/ppt)
-  real, dimension(2*nk+2),    intent(inout) :: PoL   !< Position of neutral surface in left column (Pa)
-  real, dimension(2*nk+2),    intent(inout) :: PoR   !< Position of neutral surface in right column (Pa)
+  real, dimension(2*nk+2),    intent(inout) :: PoL   !< Fractional position of neutral surface within layer KoL of left column
+  real, dimension(2*nk+2),    intent(inout) :: PoR   !< Fractional position of neutral surface within layer KoR of right column
   integer, dimension(2*nk+2), intent(inout) :: KoL   !< Index of first left interface below neutral surface
   integer, dimension(2*nk+2), intent(inout) :: KoR   !< Index of first right interface below neutral surface
   real, dimension(2*nk+1),    intent(inout) :: hEff  !< Effective thickness between two neutral surfaces (Pa)
@@ -553,21 +553,28 @@ real function interpolate_for_nondim_position(dRhoNeg, Pneg, dRhoPos, Ppos)
 end function interpolate_for_nondim_position
 
 !> Returns a single column of neutral diffusion fluxes of a tracer.
-subroutine neutral_surface_flux(nk, Pl, Pr, Tl, Tr, PiL, PiR, KoL, KoR, hEff, Flx)
+subroutine neutral_surface_flux(nk, hl, hr, Pl, Pr, Tl, Tr, PiL, PiR, KoL, KoR, hEff, Flx)
   integer,                    intent(in)    :: nk    !< Number of levels
+  real, dimension(nk),        intent(in)    :: hl    !< Left-column layer thickness (Pa)
+  real, dimension(nk),        intent(in)    :: hr    !< Right-column layer thickness (Pa)
   real, dimension(nk+1),      intent(in)    :: Pl    !< Left-column interface pressure (Pa)
   real, dimension(nk+1),      intent(in)    :: Pr    !< Right-column interface pressure (Pa)
-  real, dimension(nk+1),      intent(in)    :: Tl    !< Left-column interface tracer (conc, e.g. degC)
-  real, dimension(nk+1),      intent(in)    :: Tr    !< Right-column interface tracer (conc, e.g. degC)
-  real, dimension(2*nk+2),    intent(in)    :: PiL   !< Position of neutral surface in left column (Pa)
-  real, dimension(2*nk+2),    intent(in)    :: PiR   !< Position of neutral surface in right column (Pa)
+  real, dimension(nk),        intent(in)    :: Tl    !< Left-column layer tracer (conc, e.g. degC)
+  real, dimension(nk),        intent(in)    :: Tr    !< Right-column layer tracer (conc, e.g. degC)
+  real, dimension(2*nk+2),    intent(in)    :: PiL   !< Fractional position of neutral surface within layer KoL of left column
+  real, dimension(2*nk+2),    intent(in)    :: PiR   !< Fractional position of neutral surface within layer KoR of right column
   integer, dimension(2*nk+2), intent(in)    :: KoL   !< Index of first left interface below neutral surface
   integer, dimension(2*nk+2), intent(in)    :: KoR   !< Index of first right interface below neutral surface
   real, dimension(2*nk+1),    intent(in)    :: hEff  !< Effective thickness between two neutral surfaces (Pa)
   real, dimension(2*nk+1),    intent(inout) :: Flx   !< Flux of tracer between pairs of neutral layers (conc H)
   ! Local variables
   integer :: k_sublayer, kl, klm1, kr, krm1
-  real :: T_right_top, T_right_bottom, T_left_top, T_left_bottom
+  real :: T_right_top, T_right_bottom, T_left_top, T_left_bottom, dT_top, dT_bottom, dT_layer, dT_ave
+  real, dimension(nk+1) :: Til !< Left-column interface tracer (conc, e.g. degC)
+  real, dimension(nk+1) :: Tir !< Right-column interface tracer (conc, e.g. degC)
+
+  call interface_scalar(nk, hl, Tl, Til)
+  call interface_scalar(nk, hr, Tr, Tir)
 
   do k_sublayer = 1, 2*nk+1
  !  if (hEff(k_sublayer) == 0.) then
@@ -576,27 +583,45 @@ subroutine neutral_surface_flux(nk, Pl, Pr, Tl, Tr, PiL, PiR, KoL, KoR, hEff, Fl
 
       kl = KoL(k_sublayer)
       klm1 = max(1, KoL(k_sublayer)-1)
-      T_left_top = ( 1. - PiL(k_sublayer) ) * Tl(klm1) + PiL(k_sublayer) * Tl(kl)
-!write(0,'(i3,2(i3,f8.2),2f8.2," left top")') k_sublayer,klm1,Tl(klm1),kl,Tl(kl),PiL(k_sublayer),T_left_top
+      T_left_top = ( 1. - PiL(k_sublayer) ) * Til(klm1) + PiL(k_sublayer) * Til(kl)
+                                                     if (debug_this_module) write(0,'(i3,2(x,a,i3,x,a,f8.2),2(x,a,f8.2))') &
+                                                     k_sublayer,'klm1=',klm1,'Til(km1)=',Til(klm1),'kl=',kl,'Til(kl)=',Til(kl),'PiL(k)=',PiL(k_sublayer),'T_left_top=',T_left_top
 
       kl = KoL(k_sublayer+1)
       klm1 = max(1, KoL(k_sublayer+1)-1)
-      T_left_bottom = ( 1. - PiL(k_sublayer+1) ) * Tl(klm1) + PiL(k_sublayer+1) * Tl(kl)
-!write(0,'(i3,2(i3,f8.2),2f8.2," left bottom")') k_sublayer+1,klm1,Tl(klm1),kl,Tl(kl),PiL(k_sublayer+1),T_left_bottom
+      T_left_bottom = ( 1. - PiL(k_sublayer+1) ) * Til(klm1) + PiL(k_sublayer+1) * Til(kl)
+                                                     if (debug_this_module) write(0,'(i3,2(x,a,i3,x,a,f8.2),2(x,a,f8.2))') &
+                                                     k_sublayer+1,'klm1=',klm1,'Til(km1)=',Til(klm1),'kl=',kl,'Til(kl)=',Til(kl),'PiL(k+1)=',PiL(k_sublayer+1),'T_left_bottom=',T_left_bottom
 
       kr = KoR(k_sublayer)
       krm1 = max(1, KoR(k_sublayer)-1)
-      T_right_top = ( 1. - PiR(k_sublayer) ) * Tr(krm1) + PiR(k_sublayer) * Tr(kr)
-!write(0,'(i3,2(i3,f8.2),2f8.2," right top")') k_sublayer,krm1,Tr(krm1),kr,Tr(kr),PiR(k_sublayer),T_right_top
+      T_right_top = ( 1. - PiR(k_sublayer) ) * Tir(krm1) + PiR(k_sublayer) * Tir(kr)
+                                                     if (debug_this_module) write(0,'(i3,2(x,a,i3,x,a,f8.2),2(x,a,f8.2))') &
+                                                     k_sublayer,'krm1=',krm1,'Tir(km1)=',Tir(krm1),'kr=',kr,'Tir(kr)=',Tir(kr),'PiR(k)=',PiR(k_sublayer),'T_right_top=',T_right_top
 
       kr = KoR(k_sublayer+1)
       krm1 = max(1, KoR(k_sublayer+1)-1)
-      T_right_bottom = ( 1. - PiR(k_sublayer+1) ) * Tr(krm1) + PiR(k_sublayer+1) * Tr(kr)
-!write(0,'(i3,2(i3,f8.2),2f8.2," right bottom")') k_sublayer+1,krm1,Tr(krm1),kr,Tr(kr),PiR(k_sublayer+1),T_right_bottom
+      T_right_bottom = ( 1. - PiR(k_sublayer+1) ) * Tir(krm1) + PiR(k_sublayer+1) * Tir(kr)
+                                                     if (debug_this_module) write(0,'(i3,2(x,a,i3,x,a,f8.2),2(x,a,f8.2))') &
+                                                     k_sublayer+1,'krm1=',krm1,'Tir(km1)=',Tir(krm1),'kr=',kr,'Tir(kr)=',Tir(kr),'PiR(k+1)=',PiR(k_sublayer+1),'T_right_bottom=',T_right_bottom
 
-      Flx(k_sublayer) = 0.5 * ( ( T_right_top - T_left_top ) + ( T_right_bottom - T_left_bottom ) )
-!write(0,'(i3,f8.3)') k_sublayer, Flx(k_sublayer) * hEff(k_sublayer)
+      dT_top = T_right_top - T_left_top
+      dT_bottom = T_right_bottom - T_left_bottom
+      dT_ave = 0.5 * ( dT_top + dT_bottom )
+                                                     if (debug_this_module) write(0,'(i3,3(x,a,f8.3))') k_sublayer,'dT_top=',dT_top,'dT_bottom=',dT_bottom,'dT_ave=',dT_ave
+      dT_layer = Tr(krm1) - Tl(klm1)
+                                                     if (debug_this_module) write(0,'(i3,2(x,a,i3,x,a,f8.3),x,a,f8.3)') &
+                                                     k_sublayer,'klm1=',klm1,'Tl(klm1=',Tl(klm1),'krm1=',krm1,'Tr(krm1=',Tr(krm1),'dT_layer=',dT_layer
+      if (dT_top * dT_bottom < 0. .or. dT_ave * dT_layer < 0. ) then
+        dT_ave = 0.
+      else
+       !dT_ave = sign( min( abs(dT_top), abs(dT_bottom), abs(dT_ave) ) , dT_ave )
+        dT_ave = sign( min( abs(dT_layer), abs(dT_ave) ) , dT_ave )
+      endif
+                                                     if (debug_this_module) write(0,'(i3," dT_ave=",f8.3)') k_sublayer, dT_ave
  !  endif
+      Flx(k_sublayer) = dT_ave * hEff(k_sublayer)
+                                                     if (debug_this_module) write(0,'(i3," Flx=",f8.3)') k_sublayer, Flx(k_sublayer)
   enddo
 
 end subroutine neutral_surface_flux
@@ -604,7 +629,8 @@ end subroutine neutral_surface_flux
 !> Returns true if unit tests of neutral_diffusion functions fail. Otherwise returns false.
 logical function neutralDiffusionUnitTests()
   integer, parameter :: nk = 4
-  real, dimension(nk+1)   :: TiL, TiR1, TiR2, TiR4 ! Test interface temperatures
+  real, dimension(nk+1)   :: TiL, TiR1, TiR2, TiR4, Tio ! Test interface temperatures
+  real, dimension(nk)   :: TL ! Test layer temperatures
   real, dimension(nk+1)   :: SiL ! Test interface salinities
   real, dimension(nk+1)   :: PiL, PiR4 ! Test interface positions
   real, dimension(nk+1)   :: dRdT, dRdS ! Test interface expansion coefficients
@@ -620,6 +646,7 @@ logical function neutralDiffusionUnitTests()
   ! Fixed left column values
   data PiL / 0., 10., 20., 30., 40. /
   data TiL / 10., 7.5, 5., 2.5, 0. /
+  data TL / 8.75, 6.25, 3.75, 1.25 /
   data SiL / 0., 0., 0., 0., 0. /
   data dRdT / -0.25, -0.25, -0.25, -0.25, -0.25 /
   data dRdS / 0.5, 0.5, 0.5, 0.5, 0.5 /
@@ -680,6 +707,9 @@ logical function neutralDiffusionUnitTests()
   neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fvlsq_slope(0.,1.,0., 0.,1.,2., 0., 'LSQ: Vanished on both sides')
   neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fvlsq_slope(1.,0.,0., 0.,1.,2., 0., 'LSQ: Two vanished cell sides')
   neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fvlsq_slope(0.,0.,0., 0.,1.,2., 0., 'LSQ: All vanished cells')
+
+  call interface_scalar(nk, PiL(2:nk+1)-PiL(1:nk), Tl, Tio)
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(nk+1, Tio, TiL, 'Linear profile, interface temperatures')
 
   neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_ifndp(-1.0, 0.,  1.0, 1.0, 0.5, 'Check mid-point')
   neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_ifndp( 0.0, 0.,  1.0, 1.0, 0.0, 'Check bottom')
@@ -742,9 +772,16 @@ logical function neutralDiffusionUnitTests()
   neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+2, absolute_positions(nk, PiR4, KoL, PiLRo), pR4, 'Vanished layers on left, left positions')
   neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+2, absolute_positions(nk, PiL, KoR, PiRLo), pL4, 'Vanished layers on left, right positions')
   neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+1, hEff, hE4, 'Vanished layers on left, thicknesses')
-stop
+
+  call find_neutral_surface_positions(nk, PiL, TiL, SiL, dRdt, dRdS, PiL, TiL+2., SiL, dRdT, dRdS, PiLRo, PiRLo, KoL, KoR, hEff)
+  call neutral_surface_flux(nk, PiL(2:nk+1)-PiL(1:nk), PiL(2:nk+1)-PiL(1:nk), PiL, PiL, TL, TL+2., PiLRo, PiRLo, KoL, KoR, hEff, Flx)
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+1, Flx, 0.*Flx, 'Slightly warmer on right, rho flux (=0)')
+
+  call neutral_surface_flux(nk, PiL(2:nk+1)-PiL(1:nk), PiL(2:nk+1)-PiL(1:nk), PiL, PiL, 0.*TL+1., 0.*TL+2., PiLRo, PiRLo, KoL, KoR, hEff, Flx)
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+1, Flx, hE1, 'Slightly warmer on right, S flux')
 
   write(*,'(a)') '=========================================================='
+stop
 
   contains
 
