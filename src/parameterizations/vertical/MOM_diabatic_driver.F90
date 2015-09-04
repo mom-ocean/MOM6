@@ -1562,7 +1562,7 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
     if (CS%use_kappa_shear) &
       call get_param(param_file, mod, "KPP_BEFORE_KAPPA_SHEAR", CS%matchKPPwithoutKappaShear, &
                  "If true, KPP matches interior diffusivity that EXCLUDES any\n"// &
-                 "diffusivity from kappa-shear.", default=.true.)
+                 "diffusivity from kappa-shear.", default=.false.)
   endif
 
   call get_param(param_file, mod, "SALT_REJECT_BELOW_ML", CS%salt_reject_below_ML, &
