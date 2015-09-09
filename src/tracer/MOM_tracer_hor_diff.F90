@@ -58,6 +58,8 @@ use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
 use MOM_lateral_mixing_coeffs, only : VarMix_CS
 use MOM_MEKE_types, only : MEKE_type
+use MOM_neutral_diffusion, only : neutral_diffusion_init, neutral_diffusion_end
+use MOM_neutral_diffusion, only : neutral_diffusion_CS
 use MOM_tracer_registry, only : tracer_registry_type, tracer_type, MOM_tracer_chksum
 use MOM_variables, only : ocean_OBC_type, thermo_var_ptrs, OBC_FLATHER_E
 use MOM_variables, only : OBC_FLATHER_W, OBC_FLATHER_N, OBC_FLATHER_S
@@ -86,6 +88,10 @@ type, public :: tracer_hor_diff_CS ; private
   logical :: check_diffusive_CFL  ! If true, automatically iterate the diffusion
                             ! to ensure that the diffusive equivalent of the CFL
                             ! limit is not violated.
+  logical :: use_neutral_diffusion ! If true, use the neutral_diffusion module from within
+                            ! tracer_hor_diff.
+
+  type(neutral_diffusion_CS), pointer :: neutral_diffusion_CSp ! Control structure for neutral diffusion.
   type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
                             ! timing of diagnostic output.
   logical :: debug          ! If true, write verbose checksums for debugging purposes.
@@ -1354,6 +1360,10 @@ subroutine tracer_hor_diff_init(Time, G, param_file, diag, CS)
                  units="nondim", default=1.0)
   endif
 
+  CS%use_neutral_diffusion = neutral_diffusion_init(Time, G, param_file, diag, CS%neutral_diffusion_CSp)
+  if (CS%use_neutral_diffusion .and. CS%Diffuse_ML_interior) call MOM_error(FATAL, "MOM_tracer_hor_diff: "// &
+       "USE_NEUTRAL_DIFFUSION and DIFFUSE_ML_TO_INTERIOR are mutually exclusive!")
+
   call get_param(param_file, mod, "DEBUG", CS%debug, default=.false.)
 
   id_clock_diffuse = cpu_clock_id('(Ocean diffuse tracer)', grain=CLOCK_MODULE)
@@ -1373,6 +1383,7 @@ end subroutine tracer_hor_diff_init
 subroutine tracer_hor_diff_end(CS)
   type(tracer_hor_diff_CS), pointer :: CS
 
+  call neutral_diffusion_end(CS%neutral_diffusion_CSp)
   if (associated(CS)) deallocate(CS)
 
 end subroutine tracer_hor_diff_end
