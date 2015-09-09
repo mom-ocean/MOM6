@@ -346,6 +346,10 @@ contains
           .not.query_initialized(tr_ptr, g_tracer_name, CS%restart_CSp))) then
 
        if(g_tracer%requires_src_info ) then 
+         call MOM_error(NOTE,"initialize_MOM_generic_tracer: "//&
+                             "initializing generic tracer "//trim(g_tracer_name)//&
+                             " using MOM_initialize_tracer_from_Z ")
+
          call MOM_initialize_tracer_from_Z(h, tr_ptr, G, param_file,                       &
                                 src_file = g_tracer%src_file,                              &
                                 src_var_nam = g_tracer%src_var_name,                       &
