@@ -60,6 +60,7 @@ use MOM_lateral_mixing_coeffs, only : VarMix_CS
 use MOM_MEKE_types, only : MEKE_type
 use MOM_neutral_diffusion, only : neutral_diffusion_init, neutral_diffusion_end
 use MOM_neutral_diffusion, only : neutral_diffusion_CS
+use MOM_neutral_diffusion, only : neutral_diffusion_calc_coeffs, neutral_diffusion
 use MOM_tracer_registry, only : tracer_registry_type, tracer_type, MOM_tracer_chksum
 use MOM_variables, only : ocean_OBC_type, thermo_var_ptrs, OBC_FLATHER_E
 use MOM_variables, only : OBC_FLATHER_W, OBC_FLATHER_N, OBC_FLATHER_S
@@ -337,71 +338,99 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, Reg, tv)
     endif
   enddo
 
-  do itt=1,num_itts
+  if (CS%use_neutral_diffusion) then
     call cpu_clock_begin(id_clock_pass)
     call do_group_pass(CS%pass_t, G%Domain)
     call cpu_clock_end(id_clock_pass)
-!$OMP parallel do default(none) shared(is,ie,js,je,nz,I_numitts,CS,G,khdt_y,h, &
-!$OMP                                  h_neglect,khdt_x,ntr,Idt,Reg)           &
-!$OMP                          private(scale,Coef_y,Coef_x,Ihdxdy,dTr)
-    do k=1,nz
-      scale = I_numitts
-      if (CS%Diffuse_ML_interior) then
-        if (k<=G%nkml) then
-          if (CS%ML_KhTr_scale <= 0.0) cycle
-          scale = I_numitts * CS%ML_KhTr_scale
-        endif
-        if ((k>G%nkml) .and. (k<=G%nk_rho_varies)) cycle
+    ! We are assuming that neutral surfaces do not evolve (much) as a result of multiple
+    ! lateral diffusion iterations. Otherwise the call to neutral_diffusion_calc_coeffs()
+    ! would be inside the itt-loop. -AJA
+    call neutral_diffusion_calc_coeffs(G, h, tv%T, tv%S, tv%eqn_of_state, CS%neutral_diffusion_CSp)
+    do J=js-1,je ; do i=is,ie
+      Coef_y(i,J) = I_numitts * khdt_y(i,J)
+    enddo ; enddo
+    do j=js,je
+      do I=is-1,ie
+        Coef_x(I,j) = I_numitts * khdt_x(I,j)
+      enddo
+    enddo
+    do itt=1,num_itts
+      if (itt>1) then ! Update halos for subsequent iterations
+        call cpu_clock_begin(id_clock_pass)
+        call do_group_pass(CS%pass_t, G%Domain)
+        call cpu_clock_end(id_clock_pass)
       endif
+      do m=1,ntr ! For each tracer
+        call neutral_diffusion(G, h, Coef_x, Coef_y, Reg%Tr(m)%t, CS%neutral_diffusion_CSp)
+      enddo ! m
+    enddo ! itt
+  else
+    do itt=1,num_itts
+      call cpu_clock_begin(id_clock_pass)
+      call do_group_pass(CS%pass_t, G%Domain)
+      call cpu_clock_end(id_clock_pass)
+!$OMP parallel do default(none) shared(is,ie,js,je,nz,I_numitts,CS,G,khdt_y,h, &
+!$OMP                                    h_neglect,khdt_x,ntr,Idt,Reg)           &
+!$OMP                            private(scale,Coef_y,Coef_x,Ihdxdy,dTr)
+      do k=1,nz
+        scale = I_numitts
+        if (CS%Diffuse_ML_interior) then
+          if (k<=G%nkml) then
+            if (CS%ML_KhTr_scale <= 0.0) cycle
+            scale = I_numitts * CS%ML_KhTr_scale
+          endif
+          if ((k>G%nkml) .and. (k<=G%nk_rho_varies)) cycle
+        endif
 
-      do J=js-1,je ; do i=is,ie
-        Coef_y(i,J) = ((scale * khdt_y(i,J))*2.0*(h(i,j,k)*h(i,j+1,k))) / &
-                                                 (h(i,j,k)+h(i,j+1,k)+h_neglect)
-      enddo ; enddo
+        do J=js-1,je ; do i=is,ie
+          Coef_y(i,J) = ((scale * khdt_y(i,J))*2.0*(h(i,j,k)*h(i,j+1,k))) / &
+                                                   (h(i,j,k)+h(i,j+1,k)+h_neglect)
+        enddo ; enddo
 
-      do j=js,je
-        do I=is-1,ie
-          Coef_x(I,j) = ((scale * khdt_x(I,j))*2.0*(h(i,j,k)*h(i+1,j,k))) / &
-                                                   (h(i,j,k)+h(i+1,j,k)+h_neglect)
+        do j=js,je
+          do I=is-1,ie
+            Coef_x(I,j) = ((scale * khdt_x(I,j))*2.0*(h(i,j,k)*h(i+1,j,k))) / &
+                                                     (h(i,j,k)+h(i+1,j,k)+h_neglect)
+          enddo
+
+          do i=is,ie
+            Ihdxdy(i,j) = G%IareaT(i,j) / (h(i,j,k)+h_neglect)
+          enddo
         enddo
 
-        do i=is,ie
-          Ihdxdy(i,j) = G%IareaT(i,j) / (h(i,j,k)+h_neglect)
+        do m=1,ntr
+          do j=js,je ; do i=is,ie
+            dTr(i,j) = Ihdxdy(i,j) * &
+              ((Coef_x(I-1,j) * (Reg%Tr(m)%t(i-1,j,k) - Reg%Tr(m)%t(i,j,k)) - &
+                Coef_x(I,j) * (Reg%Tr(m)%t(i,j,k) - Reg%Tr(m)%t(i+1,j,k))) + &
+               (Coef_y(i,J-1) * (Reg%Tr(m)%t(i,j-1,k) - Reg%Tr(m)%t(i,j,k)) - &
+                Coef_y(i,J) * (Reg%Tr(m)%t(i,j,k) - Reg%Tr(m)%t(i,j+1,k))))
+          enddo ; enddo
+          if (associated(Reg%Tr(m)%df_x)) then ; do j=js,je ; do I=G%IscB,G%IecB
+            Reg%Tr(m)%df_x(I,j,k) = Reg%Tr(m)%df_x(I,j,k) + Coef_x(I,j) * &
+                                (Reg%Tr(m)%t(i,j,k) - Reg%Tr(m)%t(i+1,j,k))*Idt
+          enddo ; enddo ; endif
+          if (associated(Reg%Tr(m)%df_y)) then ; do J=G%JscB,G%JecB ; do i=is,ie
+            Reg%Tr(m)%df_y(i,J,k) = Reg%Tr(m)%df_y(i,J,k) + Coef_y(i,J) * &
+                                (Reg%Tr(m)%t(i,j,k) - Reg%Tr(m)%t(i,j+1,k))*Idt
+          enddo ; enddo ; endif
+          if (associated(Reg%Tr(m)%df2d_x)) then ; do j=js,je ; do I=G%IscB,G%IecB
+            Reg%Tr(m)%df2d_x(I,j) = Reg%Tr(m)%df2d_x(I,j) + Coef_x(I,j) * &
+                                (Reg%Tr(m)%t(i,j,k) - Reg%Tr(m)%t(i+1,j,k))*Idt
+          enddo ; enddo ; endif
+          if (associated(Reg%Tr(m)%df2d_y)) then ; do J=G%JscB,G%JecB ; do i=is,ie
+            Reg%Tr(m)%df2d_y(i,J) = Reg%Tr(m)%df2d_y(i,J) + Coef_y(i,J) * &
+                                (Reg%Tr(m)%t(i,j,k) - Reg%Tr(m)%t(i,j+1,k))*Idt
+          enddo ; enddo ; endif
+          do j=js,je ; do i=is,ie
+            Reg%Tr(m)%t(i,j,k) = Reg%Tr(m)%t(i,j,k) + dTr(i,j)
+          enddo ; enddo
         enddo
-      enddo
 
-      do m=1,ntr
-        do j=js,je ; do i=is,ie
-          dTr(i,j) = Ihdxdy(i,j) * &
-            ((Coef_x(I-1,j) * (Reg%Tr(m)%t(i-1,j,k) - Reg%Tr(m)%t(i,j,k)) - &
-              Coef_x(I,j) * (Reg%Tr(m)%t(i,j,k) - Reg%Tr(m)%t(i+1,j,k))) + &
-             (Coef_y(i,J-1) * (Reg%Tr(m)%t(i,j-1,k) - Reg%Tr(m)%t(i,j,k)) - &
-              Coef_y(i,J) * (Reg%Tr(m)%t(i,j,k) - Reg%Tr(m)%t(i,j+1,k))))
-        enddo ; enddo
-        if (associated(Reg%Tr(m)%df_x)) then ; do j=js,je ; do I=G%IscB,G%IecB
-          Reg%Tr(m)%df_x(I,j,k) = Reg%Tr(m)%df_x(I,j,k) + Coef_x(I,j) * &
-                              (Reg%Tr(m)%t(i,j,k) - Reg%Tr(m)%t(i+1,j,k))*Idt
-        enddo ; enddo ; endif
-        if (associated(Reg%Tr(m)%df_y)) then ; do J=G%JscB,G%JecB ; do i=is,ie
-          Reg%Tr(m)%df_y(i,J,k) = Reg%Tr(m)%df_y(i,J,k) + Coef_y(i,J) * &
-                              (Reg%Tr(m)%t(i,j,k) - Reg%Tr(m)%t(i,j+1,k))*Idt
-        enddo ; enddo ; endif
-        if (associated(Reg%Tr(m)%df2d_x)) then ; do j=js,je ; do I=G%IscB,G%IecB
-          Reg%Tr(m)%df2d_x(I,j) = Reg%Tr(m)%df2d_x(I,j) + Coef_x(I,j) * &
-                              (Reg%Tr(m)%t(i,j,k) - Reg%Tr(m)%t(i+1,j,k))*Idt
-        enddo ; enddo ; endif
-        if (associated(Reg%Tr(m)%df2d_y)) then ; do J=G%JscB,G%JecB ; do i=is,ie
-          Reg%Tr(m)%df2d_y(i,J) = Reg%Tr(m)%df2d_y(i,J) + Coef_y(i,J) * &
-                              (Reg%Tr(m)%t(i,j,k) - Reg%Tr(m)%t(i,j+1,k))*Idt
-        enddo ; enddo ; endif
-        do j=js,je ; do i=is,ie
-          Reg%Tr(m)%t(i,j,k) = Reg%Tr(m)%t(i,j,k) + dTr(i,j)
-        enddo ; enddo
-      enddo
+      enddo ! End of k loop.
 
-    enddo ! End of k loop.
-
-  enddo ! End of "while" loop.
+    enddo ! End of "while" loop.
+  endif
   call cpu_clock_end(id_clock_diffuse)
 
   if (CS%Diffuse_ML_interior) then

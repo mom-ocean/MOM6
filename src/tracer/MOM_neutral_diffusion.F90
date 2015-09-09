@@ -148,8 +148,47 @@ subroutine neutral_diffusion_calc_coeffs(G, h, T, S, EOS, CS)
 
 end subroutine neutral_diffusion_calc_coeffs
 
-subroutine neutral_diffusion()
+subroutine neutral_diffusion(G, h, Coef_x, Coef_y, Tracer, CS)
+  type(ocean_grid_type),                  intent(in)    :: G      !< Ocean grid structure
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h      !< Layer thickness (H units, m or Pa)
+  real, dimension(NIMEMB_,NJMEM_),        intent(in)    :: Coef_x !< dt * Kh * dy / dx at u-points (m^2)
+  real, dimension(NIMEM_,NJMEMB_),        intent(in)    :: Coef_y !< dt * Kh * dx / dy at u-points (m^2)
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(inout) :: Tracer !< Tracer concentration
+  type(neutral_diffusion_CS),             pointer       :: CS     !< Neutral diffusion constrol structure
   ! Local variables
+  real, dimension(SZIB_(G),SZJ_(G),2*G%ke+1) :: uFlx ! Zonal flux of tracer (conc Pa)
+  real, dimension(SZI_(G),SZJB_(G),2*G%ke+1) :: vFlx ! Meridional flux of tracer (conc Pa)
+  integer :: i, j, k, ks, nk
+  real :: Ihdxdy
+
+  nk = G%ke
+
+  do j = G%jsc,G%jec ; do I = G%isc-1,G%iec
+    call neutral_surface_flux(nk, h(i,j,:), h(i+1,j,:), &
+                              Tracer(i,j,:), Tracer(i+1,j,:), &
+                              CS%uPoL(I,j,:), CS%uPoR(I,j,:), &
+                              CS%uKoL(I,j,:), CS%uKoR(I,j,:), &
+                              CS%uhEff(I,j,:), uFlx(I,j,:))
+  enddo ; enddo
+
+  do J = G%jsc-1,G%jec ; do i = G%isc,G%iec
+    call neutral_surface_flux(nk, h(i,j,:), h(i,j+1,:), &
+                              Tracer(i,j,:), Tracer(i,j+1,:), &
+                              CS%vPoL(i,J,:), CS%vPoR(i,J,:), &
+                              CS%vKoL(i,J,:), CS%vKoR(i,J,:), &
+                              CS%vhEff(i,J,:), vFlx(i,J,:))
+  enddo ; enddo
+
+  do ks = 1,2*nk+1 ; do j = G%jsc,G%jec ; do i = G%isc,G%iec
+    k = max(1,CS%uKoL(I,j,ks)-1)
+    Tracer(i,j,k)  = Tracer(i,j,k) + ( G%IareaT(i,j) / ( h(i,j,k) + G%H_subroundoff ) ) * Coef_x(I,j) * uFlx(I,j,ks)
+    k = max(1,CS%uKoR(I-1,j,ks)-1)
+    Tracer(i,j,k)  = Tracer(i,j,k) - ( G%IareaT(i,j) / ( h(i,j,k) + G%H_subroundoff ) ) * Coef_x(I-1,j) * uFlx(I-1,j,ks)
+    k = max(1,CS%vKoL(i,J,ks)-1)
+    Tracer(i,j,k)  = Tracer(i,j,k) + ( G%IareaT(i,j) / ( h(i,j,k) + G%H_subroundoff ) ) * Coef_y(i,J) * vFlx(i,J,ks)
+    k = max(1,CS%vKoR(i,J-1,ks)-1)
+    Tracer(i,j,k)  = Tracer(i,j,k) - ( G%IareaT(i,j) / ( h(i,j,k) + G%H_subroundoff ) ) * Coef_y(i,J-1) * vFlx(i,J-1,ks)
+  enddo ; enddo ; enddo
 
 end subroutine neutral_diffusion
 
