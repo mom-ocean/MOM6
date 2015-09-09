@@ -532,6 +532,7 @@ real function interpolate_for_nondim_position(dRhoNeg, Pneg, dRhoPos, Ppos)
   real, intent(in) :: Ppos    !< Position of positive density difference
 
   if (Ppos<Pneg) stop 'interpolate_for_nondim_position: Houston, we have a problem! Ppos<Pneg'
+  if (dRhoNeg>dRhoPos) write(0,*) 'dRhoNeg, Pneg, dRhoPos, Ppos=',dRhoNeg, Pneg, dRhoPos, Ppos
   if (dRhoNeg>dRhoPos) stop 'interpolate_for_nondim_position: Houston, we have a problem! dRhoNeg>dRhoPos'
   if (Ppos<=Pneg) then ! Handle vanished or inverted layers
     interpolate_for_nondim_position = 0.5
@@ -553,12 +554,10 @@ real function interpolate_for_nondim_position(dRhoNeg, Pneg, dRhoPos, Ppos)
 end function interpolate_for_nondim_position
 
 !> Returns a single column of neutral diffusion fluxes of a tracer.
-subroutine neutral_surface_flux(nk, hl, hr, Pl, Pr, Tl, Tr, PiL, PiR, KoL, KoR, hEff, Flx)
+subroutine neutral_surface_flux(nk, hl, hr, Tl, Tr, PiL, PiR, KoL, KoR, hEff, Flx)
   integer,                    intent(in)    :: nk    !< Number of levels
   real, dimension(nk),        intent(in)    :: hl    !< Left-column layer thickness (Pa)
   real, dimension(nk),        intent(in)    :: hr    !< Right-column layer thickness (Pa)
-  real, dimension(nk+1),      intent(in)    :: Pl    !< Left-column interface pressure (Pa)
-  real, dimension(nk+1),      intent(in)    :: Pr    !< Right-column interface pressure (Pa)
   real, dimension(nk),        intent(in)    :: Tl    !< Left-column layer tracer (conc, e.g. degC)
   real, dimension(nk),        intent(in)    :: Tr    !< Right-column layer tracer (conc, e.g. degC)
   real, dimension(2*nk+2),    intent(in)    :: PiL   !< Fractional position of neutral surface within layer KoL of left column
@@ -774,14 +773,13 @@ logical function neutralDiffusionUnitTests()
   neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+1, hEff, hE4, 'Vanished layers on left, thicknesses')
 
   call find_neutral_surface_positions(nk, PiL, TiL, SiL, dRdt, dRdS, PiL, TiL+2., SiL, dRdT, dRdS, PiLRo, PiRLo, KoL, KoR, hEff)
-  call neutral_surface_flux(nk, PiL(2:nk+1)-PiL(1:nk), PiL(2:nk+1)-PiL(1:nk), PiL, PiL, TL, TL+2., PiLRo, PiRLo, KoL, KoR, hEff, Flx)
+  call neutral_surface_flux(nk, PiL(2:nk+1)-PiL(1:nk), PiL(2:nk+1)-PiL(1:nk), TL, TL+2., PiLRo, PiRLo, KoL, KoR, hEff, Flx)
   neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+1, Flx, 0.*Flx, 'Slightly warmer on right, rho flux (=0)')
 
-  call neutral_surface_flux(nk, PiL(2:nk+1)-PiL(1:nk), PiL(2:nk+1)-PiL(1:nk), PiL, PiL, 0.*TL+1., 0.*TL+2., PiLRo, PiRLo, KoL, KoR, hEff, Flx)
+  call neutral_surface_flux(nk, PiL(2:nk+1)-PiL(1:nk), PiL(2:nk+1)-PiL(1:nk), 0.*TL+1., 0.*TL+2., PiLRo, PiRLo, KoL, KoR, hEff, Flx)
   neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+1, Flx, hE1, 'Slightly warmer on right, S flux')
 
   write(*,'(a)') '=========================================================='
-stop
 
   contains
 
