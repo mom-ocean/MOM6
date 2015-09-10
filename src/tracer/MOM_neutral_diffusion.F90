@@ -113,8 +113,8 @@ subroutine neutral_diffusion_calc_coeffs(G, h, T, S, EOS, CS)
   do j = G%jsc-1, G%jec+1
     ! Interpolate state to interface
     do i = G%isc-1, G%iec+1
-      call interface_scalar(G%ke, h(i,j,:), T(i,j,:), Tint)
-      call interface_scalar(G%ke, h(i,j,:), S(i,j,:), Sint)
+      call interface_scalar(G%ke, h(i,j,:), T(i,j,:), Tint(i,j,:))
+      call interface_scalar(G%ke, h(i,j,:), S(i,j,:), Sint(i,j,:))
     enddo
 
     ! Caclulate interface properties
