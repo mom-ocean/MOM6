@@ -765,6 +765,8 @@ logical function neutralDiffusionUnitTests()
   neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+2, absolute_positions(nk, PiL, KoL, PiLRo), pL0, 'Identical columns, left positions')
   neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+2, absolute_positions(nk, PiL, KoR, PiRLo), pR0, 'Identical columns, right positions')
   neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+1, hEff, hE0, 'Identical columns, thicknesses')
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1di(2*nk+2, KoL, kL0, 'Identical columns, left indices')
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1di(2*nk+2, KoR, kR0, 'Identical columns, left indices')
 
   call find_neutral_surface_positions(nk, PiL, TiL, SiL, dRdt, dRdS, PiL+2., TiL, SiL, dRdT, dRdS, PiLRo, PiRLo, KoL, KoR, hEff)
   neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+2, absolute_positions(nk, PiL, KoL, PiLRo), pL0, 'Same values raised on right, left positions')
@@ -940,6 +942,37 @@ logical function neutralDiffusionUnitTests()
     endif
 
   end function test_data1d
+
+  !> Returns true if comparison of Po and Ptrue fails, and conditionally writes results to stream
+  logical function test_data1di(nk, Po, Ptrue, title)
+    integer,                intent(in) :: nk !< Number of layers
+    integer, dimension(nk), intent(in) :: Po !< Calculated answer
+    integer, dimension(nk), intent(in) :: Ptrue !< True answer
+    character(len=*),       intent(in) :: title !< Title for messages
+    ! Local variables
+    integer :: k, stdunit
+
+    test_data1di = .false.
+    do k = 1,nk
+      if (Po(k) /= Ptrue(k)) test_data1di = .true.
+    enddo
+
+    if (test_data1di .or. verbosity>5) then
+      stdunit = 6
+      if (test_data1di.or.debug_this_module) stdunit = 0 ! In case of wrong results, write to error stream
+      write(stdunit,'(a)') title
+      do k = 1,nk
+        if (Po(k) /= Ptrue(k)) then
+          test_data1di = .true.
+          write(stdunit,'(a,i2,2(x,a,i5),x,a)') 'k=',k,'Po=',Po(k),'Ptrue=',Ptrue(k),'WRONG!'
+        else
+          if (verbosity>5) &
+            write(stdunit,'(a,i2,2(x,a,i5))') 'k=',k,'Po=',Po(k),'Ptrue=',Ptrue(k)
+        endif
+      enddo
+    endif
+
+  end function test_data1di
 
 end function neutralDiffusionUnitTests
 
