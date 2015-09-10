@@ -54,6 +54,8 @@ use MOM_domains, only : create_group_pass, do_group_pass, group_pass_type
 use MOM_checksums, only : hchksum
 use MOM_EOS, only : calculate_density
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
+use MOM_error_handler, only : MOM_set_verbosity, callTree_showQuery
+use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
 use MOM_lateral_mixing_coeffs, only : VarMix_CS
@@ -96,6 +98,7 @@ type, public :: tracer_hor_diff_CS ; private
   type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
                             ! timing of diagnostic output.
   logical :: debug          ! If true, write verbose checksums for debugging purposes.
+  logical :: show_call_tree ! Display the call tree while running. Set by VERBOSITY level.
   logical :: first_call = .true.
   integer :: id_KhTr_u = -1, id_KhTr_v = -1
 
@@ -183,6 +186,8 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, Reg, tv)
        "register_tracer must be called before tracer_hordiff.")
   if ((Reg%ntr==0) .or. ((CS%KhTr <= 0.0) .and. .not.associated(VarMix)) ) return
 
+  if (CS%show_call_tree) call callTree_enter("tracer_hordiff(), MOM_tracer_hor_diff.F90")
+
   call cpu_clock_begin(id_clock_diffuse)
 
   ntr = Reg%ntr
@@ -213,6 +218,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, Reg, tv)
   enddo
   call cpu_clock_end(id_clock_pass)
 
+  if (CS%show_call_tree) call callTree_waypoint("Calculating diffusivity (tracer_hordiff)")
   if (use_VarMix) then
 !$OMP parallel default(none) shared(is,ie,js,je,CS,VarMix,MEKE,Resoln_scaled, &
 !$OMP                               Kh_u,Kh_v,khdt_x,dt,G,khdt_y)                        &
@@ -304,6 +310,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, Reg, tv)
   endif
 
   if (CS%check_diffusive_CFL) then
+    if (CS%show_call_tree) call callTree_waypoint("Checking diffusive CFL (tracer_hordiff)")
     max_CFL = 0.0
     do j=js,je ; do i=is,ie
       CFL(i,j) = 2.0*((khdt_x(I-1,j) + khdt_x(I,j)) + &
@@ -339,6 +346,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, Reg, tv)
   enddo
 
   if (CS%use_neutral_diffusion) then
+    if (CS%show_call_tree) call callTree_waypoint("Calling neutral diffusion coeffs (tracer_hordiff)")
     call cpu_clock_begin(id_clock_pass)
     call do_group_pass(CS%pass_t, G%Domain)
     call cpu_clock_end(id_clock_pass)
@@ -355,6 +363,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, Reg, tv)
       enddo
     enddo
     do itt=1,num_itts
+      if (CS%show_call_tree) call callTree_waypoint("Calling neutral diffusion (tracer_hordiff)",itt)
       if (itt>1) then ! Update halos for subsequent iterations
         call cpu_clock_begin(id_clock_pass)
         call do_group_pass(CS%pass_t, G%Domain)
@@ -365,6 +374,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, Reg, tv)
       enddo ! m
     enddo ! itt
   else
+    if (CS%show_call_tree) call callTree_waypoint("Calculating horizontal diffusion (tracer_hordiff)")
     do itt=1,num_itts
       call cpu_clock_begin(id_clock_pass)
       call do_group_pass(CS%pass_t, G%Domain)
@@ -434,6 +444,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, Reg, tv)
   call cpu_clock_end(id_clock_diffuse)
 
   if (CS%Diffuse_ML_interior) then
+    if (CS%show_call_tree) call callTree_waypoint("Calling epipycnal_ML_diff (tracer_hordiff)")
     if (CS%debug) call MOM_tracer_chksum("Before epipycnal diff ", Reg%Tr, ntr, G)
 
     call cpu_clock_begin(id_clock_epimix)
@@ -455,6 +466,8 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, Reg, tv)
     enddo ; enddo
     call post_data(CS%id_KhTr_v, Kh_v, CS%diag)
   endif
+
+  if (CS%show_call_tree) call callTree_leave("tracer_hordiff()")
 
 end subroutine tracer_hordiff
 
@@ -1342,6 +1355,7 @@ subroutine tracer_hor_diff_init(Time, G, param_file, diag, CS)
   allocate(CS)
 
   CS%diag => diag
+  CS%show_call_tree = callTree_showQuery()
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mod, version, "")

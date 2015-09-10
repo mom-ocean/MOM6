@@ -1211,6 +1211,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       call tracer_hordiff(h, CS%dt_trans, CS%MEKE, CS%VarMix, G, &
                           CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv)
       call cpu_clock_end(id_clock_tracer)
+      if (showCallTree) call callTree_waypoint("finished tracer advection/diffusion (step_MOM)")
 
       call cpu_clock_begin(id_clock_Z_diag)
       call calculate_Z_transport(CS%uhtr, CS%vhtr, h, CS%dt_trans, G, &
