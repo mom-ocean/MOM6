@@ -1504,8 +1504,10 @@ subroutine diag_mediator_init(G, param_file, diag_cs, err_msg)
   diag_cs%do_z_remapping_on_v = .false.
   diag_cs%do_z_remapping_on_T = .false.
   diag_cs%remapping_initialized = .false.
+#if defined(DEBUG) || defined(__DO_SAFETY_CHECKS__)
   allocate(diag_cs%h_old(G%isd:G%ied,G%jsd:G%jed,G%ks:G%ke))
   diag_cs%h_old(:,:,:) = 0.0
+#endif
 
   diag_cs%is = G%isc - (G%isd-1) ; diag_cs%ie = G%iec - (G%isd-1)
   diag_cs%js = G%jsc - (G%jsd-1) ; diag_cs%je = G%jec - (G%jsd-1)
