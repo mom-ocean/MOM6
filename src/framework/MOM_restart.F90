@@ -1079,10 +1079,8 @@ subroutine restore_state(filename, directory, day, G, CS)
                            no_domain=.true., timelevel=1)
           elseif ((pos == 0) .and. ASSOCIATED(CS%var_ptr4d(m)%p)) then  ! Read a non-decomposed 4d array.
             ! Probably should query the field type to make sure that the sizes are right.
-            call MOM_error(FATAL, "restore_state: read_data_4d_new has to be "//&
-              "written to read non-decomposed 4-d data from the restart file.")
-            ! call read_data(unit_path(n), varname, CS%var_ptr4d(m)%p, &
-            !                no_domain=.true., timelevel=1)
+            call read_data(unit_path(n), varname, CS%var_ptr4d(m)%p, &
+                           no_domain=.true., timelevel=1)
           elseif (unit_is_global(n) .or. G%Domain%use_io_layout) then
             if (ASSOCIATED(CS%var_ptr3d(m)%p)) then
               ! Read 3d array...  Time level 1 is always used.
@@ -1092,15 +1090,13 @@ subroutine restore_state(filename, directory, day, G, CS)
               call read_data(unit_path(n), varname, CS%var_ptr2d(m)%p, &
                              G%Domain%mpp_domain, 1, position=pos)
             elseif (ASSOCIATED(CS%var_ptr4d(m)%p)) then ! Read 4d array...
-              call MOM_error(FATAL, "restore_state: read_data_4d_new has to be "//&
-                "written to read 4-d data from the restart file with an io-layout or global file.")
-!              call read_data(unit_path(n), varname, CS%var_ptr4d(m)%p, &
-!                             G%Domain%mpp_domain, 1, position=pos)
+              call read_data(unit_path(n), varname, CS%var_ptr4d(m)%p, &
+                             G%Domain%mpp_domain, 1, position=pos)
             else
               call MOM_error(FATAL, "MOM_restart restore_state: "//&
                               "No pointers set for "//trim(varname))
             endif
-          else ! Do not use an io_layout.
+          else ! Do not use an io_layout.  !### GET RID OF THIS BRANCH ONCE read_data_4d_new IS AVAILABLE.
             ! This file is decomposed onto the current processors.  We need
             ! to check whether the sizes look right, and abort if not.
             call get_file_atts(fields(i),ndim=ndim,siz=sizes)
