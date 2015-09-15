@@ -1282,14 +1282,14 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
           endif
         endif
 
+        call cpu_clock_begin(id_clock_pass)
+        call do_group_pass(CS%pass_uv_T_S_h, G%Domain)
+        call cpu_clock_end(id_clock_pass)
+
         ! Whenever thickness changes let the diag manager know, target grids
         ! for vertical remapping may need to be regenerated. This needs to
         ! happen after the H update and before the next post_data.
         call diag_update_target_grids(CS%diag)
-
-        call cpu_clock_begin(id_clock_pass)
-        call do_group_pass(CS%pass_uv_T_S_h, G%Domain)
-        call cpu_clock_end(id_clock_pass)
 
         if (CS%debug) then
           call uchksum(u,"Post-diabatic u", G, haloshift=2)

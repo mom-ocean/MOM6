@@ -915,12 +915,12 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
                   CS%continuity_CSp, CS%uhbt, CS%vhbt, CS%OBC, &
                   CS%visc_rem_u, CS%visc_rem_v, u_av, v_av)
   call cpu_clock_end(id_clock_continuity)
-  ! Whenever thickness changes let the diag manager know, target grids
-  ! for vertical remapping may need to be regenerated.
-  call diag_update_target_grids(CS%diag)
   call cpu_clock_begin(id_clock_pass)
   call do_group_pass(CS%pass_h, G%Domain)
   call cpu_clock_end(id_clock_pass)
+  ! Whenever thickness changes let the diag manager know, target grids
+  ! for vertical remapping may need to be regenerated.
+  call diag_update_target_grids(CS%diag)
   if (showCallTree) call callTree_wayPoint("done with continuity (step_MOM_dyn_split_RK2)")
 
   call cpu_clock_begin(id_clock_pass)
