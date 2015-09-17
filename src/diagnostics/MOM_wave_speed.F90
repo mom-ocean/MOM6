@@ -58,22 +58,28 @@ public wave_speed, wave_speed_init
 
 type, public :: wave_speed_CS ; private
   type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
-                             ! timing of diagnostic output.
+                             ! timing of diagnostic output. 
 end type wave_speed_CS
 
 contains
 
-subroutine wave_speed(h, tv, G, cg1, CS, full_halos)
+subroutine wave_speed(h, tv, G, cg1, CS, full_halos, Igu_map, Igl_map)
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)  :: h
   type(thermo_var_ptrs),                 intent(in)  :: tv
   real, dimension(NIMEM_,NJMEM_),        intent(out) :: cg1
   type(ocean_grid_type),                 intent(in)  :: G
   type(wave_speed_CS), optional,         pointer     :: CS
   logical,             optional,         intent(in)  :: full_halos
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), optional, intent(out) :: Igl_map !BDM
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), optional, intent(out) :: Igu_map !BDM
 !    This subroutine determines the first mode internal wave speed.
 ! Arguments: h - Layer thickness, in m or kg m-2.
 !  (in)      tv - A structure containing the thermobaric variables.
 !  (out)     cg1 - The first mode internal gravity wave speed, in m s-1.
+!  (out)     Igu_map - The inverse of the reduced gravity across an interface times
+!                      the thickness above it for all columns, in  s2 m-2.
+!  (out)     Igl_map - The inverse of the reduced gravity across an interface times
+!                      the thickness below it for all columns, in  s2 m-2.
 !  (in)      G - The ocean's grid structure.
 !  (in)      CS - The control structure returned by a previous call to
 !                 wave_speed_init.
@@ -374,10 +380,14 @@ subroutine wave_speed(h, tv, G, cg1, CS, full_halos)
         else
           cg1(i,j) = 0.0
         endif
-       
+        Igu_map(i,j,:) = Igu !BDM
+        Igl_map(i,j,:) = Igl !BDM
+               
       endif ! cg1 /= 0.0
     else
       cg1(i,j) = 0.0 ! This is a land point.
+      Igu_map(i,j,:) = 0.0 !BDM
+      Igl_map(i,j,:) = 0.0 !BDM
     endif ; enddo ! i-loop
   enddo ! j-loop
 

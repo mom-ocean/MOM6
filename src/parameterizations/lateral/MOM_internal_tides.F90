@@ -1127,9 +1127,9 @@ subroutine propagate_x(En, speed_x, Cgx_av, dCgx, dt, G, Nangle, CS, LB)
   ! is not reflected and will eventually propagate out of cell (BDM)
   ! (only reflects if En > 0)  
   call reflect(Fdt_m(:,:,:), Nangle, CS, G, LB)
-  !call teleport(Fdt_m(:,:,:), Nangle, CS, G, LB)
+  call teleport(Fdt_m(:,:,:), Nangle, CS, G, LB)
   call reflect(Fdt_p(:,:,:), Nangle, CS, G, LB)
-  !call teleport(Fdt_p(:,:,:), Nangle, CS, G, LB)
+  call teleport(Fdt_p(:,:,:), Nangle, CS, G, LB)
  
   ! Update reflected energy (Jm-2)
   do j=jsh,jeh ; do i=ish,ieh
@@ -1204,9 +1204,9 @@ subroutine propagate_y(En, speed_y, Cgy_av, dCgy, dt, G, Nangle, CS, LB)
   ! is not reflected and will eventually propagate out of cell (BDM)
   ! (only reflects if En > 0)    
   call reflect(Fdt_m(:,:,:), Nangle, CS, G, LB)
-  !call teleport(Fdt_m(:,:,:), Nangle, CS, G, LB)
+  call teleport(Fdt_m(:,:,:), Nangle, CS, G, LB)
   call reflect(Fdt_p(:,:,:), Nangle, CS, G, LB)
-  !call teleport(Fdt_p(:,:,:), Nangle, CS, G, LB)
+  call teleport(Fdt_p(:,:,:), Nangle, CS, G, LB)
   
   ! Update reflected energy (Jm-2)
   do j=jsh,jeh ; do i=ish,ieh

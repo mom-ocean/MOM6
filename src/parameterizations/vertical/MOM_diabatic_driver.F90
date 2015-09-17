@@ -543,11 +543,15 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
        cg1(:,:) = CS%cg_test
     else
        ! CALCULATE cg1 OR OVERRIDE WITH HARD-CODED DISTRIBUTION (BDM)
-       call wave_speed(h, tv, G, cg1, full_halos=.true.)
+       call wave_speed(h, tv, G, cg1, full_halos=.true., Igu_map, Igl_map) !BDM
+       !call wave_speed(h, tv, G, cg1, full_halos=.true.)
        !do j=G%jsd,G%jed        
        !  cg1(:,j) = ((7.-1.)/14000000.)*G%geoLatBu(:,j) + (1.-((7.-1.)/14000000.)*-7000000.)
        !enddo
     endif
+    
+    ! CALCULATE MODAL STRUCTURE (BDM)
+    call wave_structure(cg1, Igu_map, Igl_map, wmode, umode)
     
     ! CALCULATE NEAR-BOTTOM STRATIFICATION (BDM)
     !kappa_fill = 1.e-3 ! m2 s-1
