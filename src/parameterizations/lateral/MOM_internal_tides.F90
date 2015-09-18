@@ -303,9 +303,14 @@ subroutine propagate_int_tide(cg1, TKE_itidal_input, vel_btTide, N2_bot, dt, G, 
   !enddo ; enddo ; enddo ; enddo ; enddo
   
   ! Extract the energy for mixing due to scattering -BDM.
-  if (CS%apply_drag) then
+  if (CS%apply_drag) then        
+    ! Calculate amplitude of modal structure from En (BDM)
+    call wave_structure_amp(En, wmode, umode, f2, fr, K)
+    ! Get near-bottom horizontal velocity magnitude
+    ! A = umode/K_h**2
+    ! U_mag = (A*K_h/sqrt(2))*sqrt(f2/fr**2+1); Ub_mag = U_mag(end)
     call itidal_lowmode_loss(G, CS, N2_bot, CS%En, CS%TKE_itidal_loss_fixed, &
-    CS%TKE_itidal_loss, dt)
+    CS%TKE_itidal_loss, dt) ! need to also feed Ub_mag
   endif
   
   ! Check for energy conservation on computational domain (BDM)

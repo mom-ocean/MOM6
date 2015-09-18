@@ -61,24 +61,24 @@ end type wave_structure_CS
 
 contains
 
-subroutine wave_structure(cg1, G, CS, full_halos, Igu_map, Igl_map, wmode, umode)
+subroutine wave_structure(h, tv, G, cg1, CS, full_halos, wmode, umode, z_depth, N2, numlay)
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)  :: h
+  type(thermo_var_ptrs),                 intent(in)  :: tv
   real, dimension(NIMEM_,NJMEM_),        intent(in)  :: cg1
   type(ocean_grid_type),                 intent(in)  :: G
-  type(wave_speed_CS), optional,         pointer     :: CS
-  logical,             optional,         intent(in)  :: full_halos
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)  :: Igl_map
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)  :: Igu_map
+  type(wave_structure_CS), optional,     pointer     :: CS
+  logical,                 optional,     intent(in)  :: full_halos
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(out) :: wmode, umode, depths
+  real, dimension(NIMEM_,NJMEM_),        intent(out) :: numlay
 !    This subroutine determines the first mode internal wave velocity structure.
 ! Arguments: 
 !  (in)      cg1 - The first mode internal gravity wave speed, in m s-1.
-!  (in)      Igu_map - The inverse of the reduced gravity across an interface times
-!                      the thickness above it for all columns, in  s2 m-2.
-!  (in)      Igl_map - The inverse of the reduced gravity across an interface times
-!                      the thickness below it for all columns, in  s2 m-2.
 !  (in)      G - The ocean's grid structure.
 !  (out)     wmode - Vertical structure of vertical velocity (normalized), in m s-1.
 !  (out)     umode - Vertical structure of horizontal velocity (normalized), in m s-1.
-
+!  (out)     depths - Depths of layer interfaces, in m.
+!  (out)     numlay - Number of layers in each column.
+!
 ! This subroutine solves for the eigen vector [vertical structure, e(k)] associated with 
 ! the first baroclinic mode speed [i.e., smallest eigen value (lam = 1/c^2)] of the 
 ! system d2e/dz2 = -(N2/cn2)e, or (A-lam*I)e = 0, where A = -(1/N2)(d2/dz2), lam = 1/c^2,
@@ -104,15 +104,40 @@ subroutine wave_structure(cg1, G, CS, full_halos, Igu_map, Igl_map, wmode, umode
 !     Solve (A-lam*I)e = e_guess for e
 !     Set e_guess=e/|e| and repeat, with each iteration refining the estimate of e
 
-  real, dimension(SZK_(G))   :: e_guess
-                  ! initial guess at eigen vector with unit magnitude
-  !integer, parameter :: max_itt = 10
-  !real :: lam_it(max_itt), det_it(max_itt), ddet_it(max_itt)
-  !integer :: kc
+  real, dimension(SZK_(G)+1) :: &
+    dRho_dT, dRho_dS, &
+    pres, T_int, S_int, &
+    gprime        ! The reduced gravity across each interface, in m s-2.
+  real, dimension(SZK_(G)) :: &
+    Igl, Igu      ! The inverse of the reduced gravity across an interface times
+                  ! the thickness of the layer below (Igl) or above (Igu) it,
+                  ! in units of s2 m-2.
+  real, dimension(SZK_(G),SZI_(G)) :: &
+    Hf, Tf, Sf, Rf
+  real, dimension(SZK_(G)) :: &
+    Hc, Tc, Sc, Rc, &
+    det, ddet
+  real :: lam, dlam, lam0
+  real :: min_h_frac
+  real :: H_to_pres
+  real, dimension(SZI_(G)) :: &
+    htot, hmin, &  ! Thicknesses in m.
+    H_here, HxT_here, HxS_here, HxR_here
+  real :: speed2_tot
+  real :: I_Hnew, drxh_sum
+  real, parameter :: tol1  = 0.0001, tol2 = 0.001
+  real, pointer, dimension(:,:,:) :: T, S
+  real :: g_Rho0  ! G_Earth/Rho0 in m4 s-2 kg-1.
+  real :: rescale, I_rescale
+  integer :: kf(SZI_(G))
+  integer, parameter :: max_itt = 10
+  logical :: use_EOS    ! If true, density is calculated from T & S using an
+                        ! equation of state.
+  integer :: kc
   integer :: i, j, k, k2, itt, is, ie, js, je, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-
+  
   if (present(CS)) then
     if (.not. associated(CS)) call MOM_error(FATAL, "MOM_wave_structure: "// &
            "Module must be initialized before it is used.")
@@ -120,20 +145,224 @@ subroutine wave_structure(cg1, G, CS, full_halos, Igu_map, Igl_map, wmode, umode
   if (present(full_halos)) then ; if (full_halos) then
     is = G%isd ; ie = G%ied ; js = G%jsd ; je = G%jed
   endif ; endif
+  
+  S => tv%S ; T => tv%T
+  g_Rho0 = G%g_Earth/G%Rho0
+  use_EOS = associated(tv%eqn_of_state)
+
+  H_to_pres = G%g_Earth * G%Rho0
+  rescale = 1024.0**4 ; I_rescale = 1.0/rescale
+
+  min_h_frac = tol1 / real(nz)
+!$OMP parallel do default(none) shared(is,ie,js,je,nz,h,G,min_h_frac,use_EOS,T,S,      &
+!$OMP                                  H_to_pres,tv,cg1,g_Rho0,rescale,I_rescale)      &
+!$OMP                          private(htot,hmin,kf,H_here,HxT_here,HxS_here,HxR_here, &
+!$OMP                                  Hf,Tf,Sf,Rf,pres,T_int,S_int,drho_dT,           &
+!$OMP                                  drho_dS,drxh_sum,kc,Hc,Tc,Sc,I_Hnew,gprime,     &
+!$OMP                                  Rc,speed2_tot,Igl,Igu,lam0,lam,lam_it,dlam,     &
+!$OMP                                  det,ddet,det_it,ddet_it)
 
   do j=js,je
-    do i=is,ie
-      lam = 1/cg1(i,j)**2
-      z = 
-      e_guess = cos()
-      e_guess = e_guess/sqrt(sum(e_guess**2))
-      do itt=1,max_itt
-                
-      
-    endif ; enddo ! i-loop
-  enddo ! j-loop
+    !   First merge very thin layers with the one above (or below if they are
+    ! at the top).  This also transposes the row order so that columns can
+    ! be worked upon one at a time.
+    do i=is,ie ; htot(i) = 0.0 ; enddo
+    do k=1,nz ; do i=is,ie ; htot(i) = htot(i) + h(i,j,k)*G%H_to_m ; enddo ; enddo
 
-end subroutine wave_speed
+    do i=is,ie
+      hmin(i) = htot(i)*min_h_frac ; kf(i) = 1 ; H_here(i) = 0.0
+      HxT_here(i) = 0.0 ; HxS_here(i) = 0.0 ; HxR_here(i) = 0.0
+    enddo
+    if (use_EOS) then
+      do k=1,nz ; do i=is,ie
+        if ((H_here(i) > hmin(i)) .and. (h(i,j,k)*G%H_to_m > hmin(i))) then
+          Hf(kf(i),i) = H_here(i)
+          Tf(kf(i),i) = HxT_here(i) / H_here(i)
+          Sf(kf(i),i) = HxS_here(i) / H_here(i)
+          kf(i) = kf(i) + 1
+
+          ! Start a new layer
+          H_here(i) = h(i,j,k)*G%H_to_m
+          HxT_here(i) = (h(i,j,k)*G%H_to_m)*T(i,j,k)
+          HxS_here(i) = (h(i,j,k)*G%H_to_m)*S(i,j,k)
+        else
+          H_here(i) = H_here(i) + h(i,j,k)*G%H_to_m
+          HxT_here(i) = HxT_here(i) + (h(i,j,k)*G%H_to_m)*T(i,j,k)
+          HxS_here(i) = HxS_here(i) + (h(i,j,k)*G%H_to_m)*S(i,j,k)
+        endif
+      enddo ; enddo
+      do i=is,ie ; if (H_here(i) > 0.0) then
+        Hf(kf(i),i) = H_here(i)
+        Tf(kf(i),i) = HxT_here(i) / H_here(i)
+        Sf(kf(i),i) = HxS_here(i) / H_here(i)
+      endif ; enddo
+    else
+      do k=1,nz ; do i=is,ie
+        if ((H_here(i) > hmin(i)) .and. (h(i,j,k)*G%H_to_m > hmin(i))) then
+          Hf(kf(i),i) = H_here(i) ; Rf(kf(i),i) = HxR_here(i) / H_here(i)
+          kf(i) = kf(i) + 1
+
+          ! Start a new layer
+          H_here(i) = h(i,j,k)*G%H_to_m
+          HxR_here(i) = (h(i,j,k)*G%H_to_m)*G%Rlay(k)
+        else
+          H_here(i) = H_here(i) + h(i,j,k)*G%H_to_m
+          HxR_here(i) = HxR_here(i) + (h(i,j,k)*G%H_to_m)*G%Rlay(k)
+        endif
+      enddo ; enddo
+      do i=is,ie ; if (H_here(i) > 0.0) then
+        Hf(kf(i),i) = H_here(i) ; Rf(kf(i),i) = HxR_here(i) / H_here(i)
+      endif ; enddo
+    endif ! use_EOS?
+
+    ! From this point, we can work on individual columns without causing memory
+    ! to have page faults.
+    do i=is,ie
+      if (G%mask2dT(i,j) > 0.5) then
+
+        lam = 1/(cg1(i,j)**2)
+        
+        ! Calculate drxh_sum
+        if (use_EOS) then
+          pres(1) = 0.0
+          do k=2,kf(i)
+            pres(k) = pres(k-1) + H_to_pres*Hf(k-1,i)
+            T_int(k) = 0.5*(Tf(k,i)+Tf(k-1,i))
+            S_int(k) = 0.5*(Sf(k,i)+Sf(k-1,i))
+          enddo
+          call calculate_density_derivs(T_int, S_int, pres, drho_dT, drho_dS, 2, &
+                                        kf(i)-1, tv%eqn_of_state)
+
+          ! Sum the reduced gravities to find out how small a density difference
+          ! is negligibly small.
+          drxh_sum = 0.0
+          do k=2,kf(i)
+            drxh_sum = drxh_sum + 0.5*(Hf(k-1,i)+Hf(k,i)) * &
+                max(0.0,drho_dT(k)*(Tf(k,i)-Tf(k-1,i)) + &
+                        drho_dS(k)*(Sf(k,i)-Sf(k-1,i)))
+          enddo
+        else
+          drxh_sum = 0.0
+          do k=2,kf(i)
+            drxh_sum = drxh_sum + 0.5*(Hf(k-1,i)+Hf(k,i)) * &
+                              max(0.0,Rf(k,i)-Rf(k-1,i))
+          enddo
+        endif ! use_EOS?
+        
+        !   Find gprime across each internal interface, taking care of convective
+        ! instabilities by merging layers.        
+        if (drxh_sum <= 0.0) then
+          wmode(i,j,:) = 0.0
+        else
+          ! Merge layers to eliminate convective instabilities or exceedingly
+          ! small reduced gravities.
+          if (use_EOS) then
+            kc = 1
+            Hc(1) = Hf(1,i) ; Tc(1) = Tf(1,i) ; Sc(1) = Sf(1,i)
+            do k=2,kf(i)
+              if ((drho_dT(k)*(Tf(k,i)-Tc(kc)) + drho_dS(k)*(Sf(k,i)-Sc(kc))) * &
+                  (Hc(kc) + Hf(k,i)) < 2.0 * tol2*drxh_sum) then
+                ! Merge this layer with the one above and backtrack.
+                I_Hnew = 1.0 / (Hc(kc) + Hf(k,i))
+                Tc(kc) = (Hc(kc)*Tc(kc) + Hf(k,i)*Tf(k,i)) * I_Hnew
+                Sc(kc) = (Hc(kc)*Sc(kc) + Hf(k,i)*Sf(k,i)) * I_Hnew
+                Hc(kc) = (Hc(kc) + Hf(k,i))
+                ! Backtrack to remove any convective instabilities above...  Note
+                ! that the tolerance is a factor of two larger, to avoid limit how
+                ! far back we go.
+                do k2=kc,2,-1
+                  if ((drho_dT(k2)*(Tc(k2)-Tc(k2-1)) + drho_dS(k2)*(Sc(k2)-Sc(k2-1))) * &
+                      (Hc(k2) + Hc(k2-1)) < tol2*drxh_sum) then
+                    ! Merge the two bottommost layers.  At this point kc = k2.
+                    I_Hnew = 1.0 / (Hc(kc) + Hc(kc-1))
+                    Tc(kc-1) = (Hc(kc)*Tc(kc) + Hc(kc-1)*Tc(kc-1)) * I_Hnew
+                    Sc(kc-1) = (Hc(kc)*Sc(kc) + Hc(kc-1)*Sc(kc-1)) * I_Hnew
+                    Hc(kc-1) = (Hc(kc) + Hc(kc-1))
+                    kc = kc - 1
+                  else ; exit ; endif
+                enddo
+              else
+                ! Add a new layer to the column.
+                kc = kc + 1
+                drho_dS(kc) = drho_dS(k) ; drho_dT(kc) = drho_dT(k)
+                Tc(kc) = Tf(k,i) ; Sc(kc) = Sf(k,i) ; Hc(kc) = Hf(k,i) 
+              endif
+            enddo
+            ! At this point there are kc layers and the gprimes should be positive.
+            do k=2,kc ! Revisit this if non-Boussinesq.
+              gprime(k) = g_Rho0 * (drho_dT(k)*(Tc(k)-Tc(k-1)) + &
+                                    drho_dS(k)*(Sc(k)-Sc(k-1)))
+            enddo
+          else  ! .not.use_EOS
+            ! Do the same with density directly...
+            kc = 1
+            Hc(1) = Hf(1,i) ; Rc(1) = Rf(1,i)
+            do k=2,kf(i)
+              if ((Rf(k,i) - Rc(kc)) * (Hc(kc) + Hf(k,i)) < 2.0*tol2*drxh_sum) then
+                ! Merge this layer with the one above and backtrack.
+                Rc(kc) = (Hc(kc)*Rc(kc) + Hf(k,i)*Rf(k,i)) / (Hc(kc) + Hf(k,i))
+                Hc(kc) = (Hc(kc) + Hf(k,i))
+                ! Backtrack to remove any convective instabilities above...  Note
+                ! that the tolerance is a factor of two larger, to avoid limit how
+                ! far back we go.
+                do k2=kc,2,-1
+                  if ((Rc(k2)-Rc(k2-1)) * (Hc(k2)+Hc(k2-1)) < tol2*drxh_sum) then
+                    ! Merge the two bottommost layers.  At this point kc = k2.
+                    Rc(kc-1) = (Hc(kc)*Rc(kc) + Hc(kc-1)*Rc(kc-1)) / (Hc(kc) + Hc(kc-1))
+                    Hc(kc-1) = (Hc(kc) + Hc(kc-1))
+                    kc = kc - 1
+                  else ; exit ; endif
+                enddo
+              else
+                ! Add a new layer to the column.
+                kc = kc + 1
+                Rc(kc) = Rf(k,i) ; Hc(kc) = Hf(k,i) 
+              endif
+            enddo
+            ! At this point there are kc layers and the gprimes should be positive.
+            do k=2,kc ! Revisit this if non-Boussinesq.
+              gprime(k) = g_Rho0 * (Rc(k)-Rc(k-1))
+            enddo
+          endif  ! use_EOS?
+          
+          ! Calculate Igu, Igl, depth, and N2 at each interface
+          numlay(i,j) = kc
+          if (kc >= 2) then
+            z_int(1) = 0.0
+            do k=2,kc
+              Igl(k) = 1.0/(gprime(k)*Hc(k)) ; Igu(k) = 1.0/(gprime(k)*Hc(k-1))
+              z_int(k) = z_int(k-1) + Hc(k)
+              N2(k) = gprime(k)/(0.5*(Hc(k)+Hc(k-1));
+            enddo
+            z_depth(i,j,1:kc) = z_int
+            ! Guess a vector shape to start with
+            e_guess = cos(z/htot(i)*Pi)
+            e_guess = e_guess/sqrt(sum(e_guess**2))
+            ! Perform inverse iteration
+            do itt=1,max_itt
+              !!!!!! insert tri-diag solver !!!!!
+              call tridiag_solver(a,b,c,lam,e_guess)
+              
+                           
+            enddo ! itt-loop
+            wmode(i,j,1:kc) = e_guess
+          else
+            wmode(i,j,1:kc) = 0.0
+          endif  ! kc> = 2?
+        endif ! drxh_sum <= 0?
+      else
+        cg1(i,j) = 0.0 ! This is a land point.
+      endif ! mask2dT > 0.5?
+    enddo ! i-loop
+  enddo ! j-loop
+  
+  do j=js,je
+    do j=is,ie
+      !!!calc umode!!!
+    enddo ! i-loop
+  enddo !j-loop
+  
+end subroutine wave_structure
 
 subroutine wave_structure_init(Time, G, param_file, diag, CS)
   type(time_type),             intent(in)    :: Time
