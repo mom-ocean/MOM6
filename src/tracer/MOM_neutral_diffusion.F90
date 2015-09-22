@@ -660,6 +660,8 @@ logical function neutralDiffusionUnitTests()
   real, dimension(2*nk+2) :: pL0, pL1, pL2, pL3, pL4 ! Test positions
   real, dimension(2*nk+2) :: pR0, pR1, pR2, pR3, pR4 ! Test positions
   real, dimension(2*nk+1) :: hE0, hE1, hE2, hE3, hE4 ! Test positions
+  real, dimension(2*nk+2) :: rL0 ! Test relative positions
+  real, dimension(2*nk+2) :: rR0 ! Test relative positions
   integer, dimension(2*nk+2) :: kL0, kL1, kL2 ! Test indexes
   integer, dimension(2*nk+2) :: kR0, kR1, kR2 ! Test indexes
   real, dimension(2*nk+1) :: Flx ! Test flux
@@ -674,8 +676,10 @@ logical function neutralDiffusionUnitTests()
   data pL0 / 0., 0., 10., 10., 20., 20., 30., 30., 40., 40. /
   data pR0 / 0., 0., 10., 10., 20., 20., 30., 30., 40., 40. /
   data hE0 / 0., 10., 0., 10., 0., 10., 0., 10., 0. /
-  data kL0 / 1, 2, 2, 3, 3, 4, 4, 5, 5, 5 /
-  data kR0 / 1, 1, 2, 2, 3, 3, 4, 4, 5, 5 /
+  data kL0 / 1, 1, 2, 2, 3, 3, 4, 4, 4, 4 /
+  data kR0 / 1, 1, 2, 2, 3, 3, 4, 4, 4, 4 /
+  data rL0 / 0., 0., 0., 0., 0., 0., 0., 0., 1., 1. /
+  data rR0 / 0., 0., 0., 0., 0., 0., 0., 0., 1., 1. /
   ! Slightly warmer on right, answers
   data pL1 / 0., 0., 2., 10., 12., 20., 22., 30., 32., 40. /
   data pR1 / 0., 8., 10., 18., 20., 28., 30., 38., 40., 40. /
@@ -743,64 +747,189 @@ logical function neutralDiffusionUnitTests()
   neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_ifndp( 0.0, 0.,  0.0, 1.0, 0.5, 'Check dRho=0 mid')
   neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_ifndp(-2.0, .5,  5.0, 0.5, 0.5, 'Check dP=0')
 
-  call find_neutral_surface_positions(nk, PiL, TiL, SiL, dRdt, dRdS, PiL, TiL, SiL, dRdT, dRdS, PiLRo, PiRLo, KoL, KoR, hEff)
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+2, absolute_positions(nk, PiL, KoL, PiLRo), pL0, 'Identical columns, left positions')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+2, absolute_positions(nk, PiL, KoR, PiRLo), pR0, 'Identical columns, right positions')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+1, hEff, hE0, 'Identical columns, thicknesses')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1di(2*nk+2, KoL, kL0, 'Identical columns, left indices')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1di(2*nk+2, KoR, kR0, 'Identical columns, left indices')
+  ! Identical columns
+  call find_neutral_surface_positions(3, &
+             (/0.,10.,20.,30./), (/22.,18.,14.,10./), (/0.,0.,0.,0./), & ! Left positions, T and S
+             (/-1.,-1.,-1.,-1./), (/1.,1.,1.,1./), &! Left dRdT and dRdS
+             (/0.,10.,20.,30./), (/22.,18.,14.,10./), (/0.,0.,0.,0./), & ! Right positions, T and S
+             (/-1.,-1.,-1.,-1./), (/1.,1.,1.,1./), &! Right dRdT and dRdS
+             PiLRo, PiRLo, KoL, KoR, hEff)
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or.  test_nsp(3, KoL, KoR, PiLRo, PiRLo, hEff, &
+                                   (/1,1,2,2,3,3,3,3/), & ! KoL
+                                   (/1,1,2,2,3,3,3,3/), & ! KoR
+                                   (/0.,0.,0.,0.,0.,0.,1.,1./), & ! pL
+                                   (/0.,0.,0.,0.,0.,0.,1.,1./), & ! pR
+                                   (/0.,10.,0.,10.,0.,10.,0./), & ! hEff
+                                   'Identical columns')
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(8, &
+                                   absolute_positions(3, (/0.,10.,20.,30./), KoL, PiLRo), &
+                                   (/0.,0.,10.,10.,20.,20.,30.,30./), '... left positions')
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(8, &
+                                   absolute_positions(3, (/0.,10.,20.,30./), KoR, PiRLo), &
+                                   (/0.,0.,10.,10.,20.,20.,30.,30./), '... right positions')
+  call neutral_surface_flux(3, (/10.,10.,10./), (/10.,10.,10./), & ! nk, hL, hR
+                               (/20.,16.,12./), (/20.,16.,12./), & ! Tl, Tr
+                               PiLRo, PiRLo, KoL, KoR, hEff, Flx)
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(7, Flx, &
+              (/0.,0.,0.,0.,0.,0.,0./), 'Identical columns, rho flux (=0)')
+  call neutral_surface_flux(3, (/10.,10.,10./), (/10.,10.,10./), & ! nk, hL, hR
+                               (/-1.,-1.,-1./), (/1.,1.,1./), & ! Sl, Sr
+                               PiLRo, PiRLo, KoL, KoR, hEff, Flx)
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(7, Flx, &
+              (/0.,20.,0.,20.,0.,20.,0./), 'Identical columns, S flux')
 
-  call find_neutral_surface_positions(nk, PiL, TiL, SiL, dRdt, dRdS, PiL+2., TiL, SiL, dRdT, dRdS, PiLRo, PiRLo, KoL, KoR, hEff)
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+2, absolute_positions(nk, PiL, KoL, PiLRo), pL0, 'Same values raised on right, left positions')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+2, absolute_positions(nk, PiL+2., KoR, PiRLo), pR0+2., 'Same values raised on right, right positions')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+1, hEff, hE0, 'Same values raised on right, thicknesses')
+  ! Right column slightly cooler than left
+  call find_neutral_surface_positions(3, &
+             (/0.,10.,20.,30./), (/22.,18.,14.,10./), (/0.,0.,0.,0./), & ! Left positions, T and S
+             (/-1.,-1.,-1.,-1./), (/1.,1.,1.,1./), &! Left dRdT and dRdS
+             (/0.,10.,20.,30./), (/20.,16.,12.,8./), (/0.,0.,0.,0./), & ! Right positions, T and S
+             (/-1.,-1.,-1.,-1./), (/1.,1.,1.,1./), &! Right dRdT and dRdS
+             PiLRo, PiRLo, KoL, KoR, hEff)
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or.  test_nsp(3, KoL, KoR, PiLRo, PiRLo, hEff, &
+                                   (/1,1,2,2,3,3,3,3/), & ! kL
+                                   (/1,1,1,2,2,3,3,3/), & ! kR
+                                   (/0.,0.5,0.,0.5,0.,0.5,1.,1./), & ! pL
+                                   (/0.,0.,0.5,0.,0.5,0.,0.5,1./), & ! pR
+                                   (/0.,5.,5.,5.,5.,5.,0./), & ! hEff
+                                   'Right column slightly cooler')
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(8, &
+                                   absolute_positions(3, (/0.,10.,20.,30./), KoL, PiLRo), &
+                                   (/0.,5.,10.,15.,20.,25.,30.,30./), '... left positions')
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(8, &
+                                   absolute_positions(3, (/0.,10.,20.,30./), KoR, PiRLo), &
+                                   (/0.,0.,5.,10.,15.,20.,25.,30./), '... right positions')
 
-  call find_neutral_surface_positions(nk, PiL, TiL, SiL, dRdt, dRdS, PiL-2., TiL, SiL, dRdT, dRdS, PiLRo, PiRLo, KoL, KoR, hEff)
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+2, absolute_positions(nk, PiL, KoL, PiLRo), pL0, 'Same values lowered on right, left positions')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+2, absolute_positions(nk, PiL-2., KoR, PiRLo), pR0-2., 'Same values lowered on right, right positions')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+1, hEff, hE0, 'Same values lowered on right, thicknesses')
+  ! Right column slightly warmer than left
+  call find_neutral_surface_positions(3, &
+             (/0.,10.,20.,30./), (/22.,18.,14.,10./), (/0.,0.,0.,0./), & ! Left positions, T and S
+             (/-1.,-1.,-1.,-1./), (/1.,1.,1.,1./), &! Left dRdT and dRdS
+             (/0.,10.,20.,30./), (/24.,20.,16.,12./), (/0.,0.,0.,0./), & ! Right positions, T and S
+             (/-1.,-1.,-1.,-1./), (/1.,1.,1.,1./), &! Right dRdT and dRdS
+             PiLRo, PiRLo, KoL, KoR, hEff)
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or.  test_nsp(3, KoL, KoR, PiLRo, PiRLo, hEff, &
+                                   (/1,1,1,2,2,3,3,3/), & ! kL
+                                   (/1,1,2,2,3,3,3,3/), & ! kR
+                                   (/0.,0.,0.5,0.,0.5,0.,0.5,1./), & ! pL
+                                   (/0.,0.5,0.,0.5,0.,0.5,1.,1./), & ! pR
+                                   (/0.,5.,5.,5.,5.,5.,0./), & ! hEff
+                                   'Right column slightly warmer')
 
-  call find_neutral_surface_positions(nk, PiL, TiL, SiL, dRdt, dRdS, PiL, TiL+2., SiL, dRdT, dRdS, PiLRo, PiRLo, KoL, KoR, hEff)
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+2, absolute_positions(nk, PiL, KoL, PiLRo), pL1, 'Slightly warmer on right, left positions')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+2, absolute_positions(nk, PiL, KoR, PiRLo), pR1, 'Slightly warmer on right, right positions')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+1, hEff, hE1, 'Slightly warmer on right, thicknesses')
+  ! Right column somewhat cooler than left
+  call find_neutral_surface_positions(3, &
+             (/0.,10.,20.,30./), (/22.,18.,14.,10./), (/0.,0.,0.,0./), & ! Left positions, T and S
+             (/-1.,-1.,-1.,-1./), (/1.,1.,1.,1./), &! Left dRdT and dRdS
+             (/0.,10.,20.,30./), (/16.,12.,8.,4./), (/0.,0.,0.,0./), & ! Right positions, T and S
+             (/-1.,-1.,-1.,-1./), (/1.,1.,1.,1./), &! Right dRdT and dRdS
+             PiLRo, PiRLo, KoL, KoR, hEff)
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or.  test_nsp(3, KoL, KoR, PiLRo, PiRLo, hEff, &
+                                   (/1,2,2,3,3,3,3,3/), & ! kL
+                                   (/1,1,1,1,2,2,3,3/), & ! kR
+                                   (/0.,0.,0.5,0.,0.5,1.,1.,1./), & ! pL
+                                   (/0.,0.,0.,0.5,0.,0.5,0.,1./), & ! pR
+                                   (/0.,0.,5.,5.,5.,0.,0./), & ! hEff
+                                   'Right column somewhat cooler')
 
-  call find_neutral_surface_positions(nk, PiL, TiL, SiL, dRdt, dRdS, PiL, TiL-2., SiL, dRdT, dRdS, PiLRo, PiRLo, KoL, KoR, hEff)
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+2, absolute_positions(nk, PiL, KoL, PiLRo), pR1, 'Slightly cooler on right, left positions')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+2, absolute_positions(nk, PiL, KoR, PiRLo), pL1, 'Slightly cooler on right, right positions')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+1, hEff, hE1, 'Slightly cooler on right, thicknesses')
+  ! Right column much colder than left with no overlap
+  call find_neutral_surface_positions(3, &
+             (/0.,10.,20.,30./), (/22.,18.,14.,10./), (/0.,0.,0.,0./), & ! Left positions, T and S
+             (/-1.,-1.,-1.,-1./), (/1.,1.,1.,1./), &! Left dRdT and dRdS
+             (/0.,10.,20.,30./), (/9.,7.,5.,3./), (/0.,0.,0.,0./), & ! Right positions, T and S
+             (/-1.,-1.,-1.,-1./), (/1.,1.,1.,1./), &! Right dRdT and dRdS
+             PiLRo, PiRLo, KoL, KoR, hEff)
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or.  test_nsp(3, KoL, KoR, PiLRo, PiRLo, hEff, &
+                                   (/1,2,3,3,3,3,3,3/), & ! kL
+                                   (/1,1,1,1,1,2,3,3/), & ! kR
+                                   (/0.,0.,0.,1.,1.,1.,1.,1./), & ! pL
+                                   (/0.,0.,0.,0.,0.,0.,0.,1./), & ! pR
+                                   (/0.,0.,0.,0.,0.,0.,0./), & ! hEff
+                                   'Right column much cooler')
 
-  call find_neutral_surface_positions(nk, PiL, TiL, SiL, dRdt, dRdS, PiL, TiL+8., SiL, dRdT, dRdS, PiLRo, PiRLo, KoL, KoR, hEff)
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+2, absolute_positions(nk, PiL, KoL, PiLRo), pL2, 'Warmer on right, left positions')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+2, absolute_positions(nk, PiL, KoR, PiRLo), pR2, 'Warmer on right, right positions')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+1, hEff, hE2, 'Warmer on right, thicknesses')
+  ! Right column with mixed layer
+  call find_neutral_surface_positions(3, &
+             (/0.,10.,20.,30./), (/22.,18.,14.,10./), (/0.,0.,0.,0./), & ! Left positions, T and S
+             (/-1.,-1.,-1.,-1./), (/1.,1.,1.,1./), &! Left dRdT and dRdS
+             (/0.,10.,20.,30./), (/14.,14.,10.,2./), (/0.,0.,0.,0./), & ! Right positions, T and S
+             (/-1.,-1.,-1.,-1./), (/1.,1.,1.,1./), &! Right dRdT and dRdS
+             PiLRo, PiRLo, KoL, KoR, hEff)
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or.  test_nsp(3, KoL, KoR, PiLRo, PiRLo, hEff, &
+                                   (/1,2,3,3,3,3,3,3/), & ! kL
+                                   (/1,1,1,1,2,3,3,3/), & ! kR
+                                   (/0.,0.,0.,0.,0.,1.,1.,1./), & ! pL
+                                   (/0.,0.,0.,0.,0.,0.,0.,1./), & ! pR
+                                   (/0.,0.,0.,0.,10.,0.,0./), & ! hEff
+                                   'Right column with mixed layer')
 
-  call find_neutral_surface_positions(nk, PiL, TiL, SiL, dRdt, dRdS, PiL, TiR1, SiL, dRdT, dRdS, PiLRo, PiRLo, KoL, KoR, hEff)
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+2, absolute_positions(nk, PiL, KoL, PiLRo), pL3, 'Strong stratification on right, left positions')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+2, absolute_positions(nk, PiL, KoR, PiRLo), pR3, 'Strong stratification on right, right positions')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+1, hEff, hE3, 'Strong stratification on right, thicknesses')
+  ! Identical columns with mixed layer
+  call find_neutral_surface_positions(3, &
+             (/0.,10.,20.,30./), (/14.,14.,10.,2./), (/0.,0.,0.,0./), & ! Left positions, T and S
+             (/-1.,-1.,-1.,-1./), (/1.,1.,1.,1./), &! Left dRdT and dRdS
+             (/0.,10.,20.,30./), (/14.,14.,10.,2./), (/0.,0.,0.,0./), & ! Right positions, T and S
+             (/-1.,-1.,-1.,-1./), (/1.,1.,1.,1./), &! Right dRdT and dRdS
+             PiLRo, PiRLo, KoL, KoR, hEff)
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or.  test_nsp(3, KoL, KoR, PiLRo, PiRLo, hEff, &
+                                   (/1,1,1,2,3,3,3,3/), & ! kL
+                                   (/1,1,2,2,3,3,3,3/), & ! kR
+                                   (/0.,0.,0.,0.,0.,0.,1.,1./), & ! pL
+                                   (/0.,0.,0.,0.,0.,0.,1.,1./), & ! pR
+                                   (/0.,0.,0.,10.,0.,10.,0./), & ! hEff
+                                   'Indentical columns with mixed layer')
 
-  call find_neutral_surface_positions(nk, PiL, TiL, SiL, dRdt, dRdS, PiL, TiR2, SiL, dRdT, dRdS, PiLRo, PiRLo, KoL, KoR, hEff)
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+2, absolute_positions(nk, PiL, KoL, PiLRo), pR3, 'Weak stratification on right, left positions')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+2, absolute_positions(nk, PiL, KoR, PiRLo), pL3, 'Weak stratification on right, right positions')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+1, hEff, hE3, 'Weak stratification on right, thicknesses')
+  !call find_neutral_surface_positions(nk, PiL, TiL, SiL, dRdt, dRdS, PiL+2., TiL, SiL, dRdT, dRdS, PiLRo, PiRLo, KoL, KoR, hEff)
+  !neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+2, absolute_positions(nk, PiL, KoL, PiLRo), pL0, 'Same values raised on right, left positions')
+  !neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+2, absolute_positions(nk, PiL+2., KoR, PiRLo), pR0+2., 'Same values raised on right, right positions')
+  !neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+1, hEff, hE0, 'Same values raised on right, thicknesses')
 
-  call find_neutral_surface_positions(nk, PiL, TiL, SiL, dRdt, dRdS, PiR4, TiR4, SiL, dRdT, dRdS, PiLRo, PiRLo, KoL, KoR, hEff)
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+2, absolute_positions(nk, PiL, KoL, PiLRo), pL4, 'Vanished layers on right, left positions')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+2, absolute_positions(nk, PiR4, KoR, PiRLo), pR4, 'Vanished layers on right, right positions')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+1, hEff, hE4, 'Vanished layers on right, thicknesses')
+  !call find_neutral_surface_positions(nk, PiL, TiL, SiL, dRdt, dRdS, PiL-2., TiL, SiL, dRdT, dRdS, PiLRo, PiRLo, KoL, KoR, hEff)
+  !neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+2, absolute_positions(nk, PiL, KoL, PiLRo), pL0, 'Same values lowered on right, left positions')
+  !neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+2, absolute_positions(nk, PiL-2., KoR, PiRLo), pR0-2., 'Same values lowered on right, right positions')
+  !neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+1, hEff, hE0, 'Same values lowered on right, thicknesses')
 
-  call find_neutral_surface_positions(nk, PiR4, TiR4, SiL, dRdt, dRdS, PiL, TiL, SiL, dRdT, dRdS, PiLRo, PiRLo, KoL, KoR, hEff)
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+2, absolute_positions(nk, PiR4, KoL, PiLRo), pR4, 'Vanished layers on left, left positions')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+2, absolute_positions(nk, PiL, KoR, PiRLo), pL4, 'Vanished layers on left, right positions')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+1, hEff, hE4, 'Vanished layers on left, thicknesses')
+  !call find_neutral_surface_positions(nk, PiL, TiL, SiL, dRdt, dRdS, PiL, TiL+2., SiL, dRdT, dRdS, PiLRo, PiRLo, KoL, KoR, hEff)
+  !neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+2, absolute_positions(nk, PiL, KoL, PiLRo), pL1, 'Slightly warmer on right, left positions')
+  !neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+2, absolute_positions(nk, PiL, KoR, PiRLo), pR1, 'Slightly warmer on right, right positions')
+  !neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+1, hEff, hE1, 'Slightly warmer on right, thicknesses')
 
-  call find_neutral_surface_positions(nk, PiL, TiL, SiL, dRdt, dRdS, PiL, TiL+2., SiL, dRdT, dRdS, PiLRo, PiRLo, KoL, KoR, hEff)
-  call neutral_surface_flux(nk, PiL(2:nk+1)-PiL(1:nk), PiL(2:nk+1)-PiL(1:nk), TL, TL+2., PiLRo, PiRLo, KoL, KoR, hEff, Flx)
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+1, Flx, 0.*Flx, 'Slightly warmer on right, rho flux (=0)')
+  !call find_neutral_surface_positions(nk, PiL, TiL, SiL, dRdt, dRdS, PiL, TiL-2., SiL, dRdT, dRdS, PiLRo, PiRLo, KoL, KoR, hEff)
+  !neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+2, absolute_positions(nk, PiL, KoL, PiLRo), pR1, 'Slightly cooler on right, left positions')
+  !neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+2, absolute_positions(nk, PiL, KoR, PiRLo), pL1, 'Slightly cooler on right, right positions')
+  !neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+1, hEff, hE1, 'Slightly cooler on right, thicknesses')
 
-  call neutral_surface_flux(nk, PiL(2:nk+1)-PiL(1:nk), PiL(2:nk+1)-PiL(1:nk), 0.*TL+1., 0.*TL+2., PiLRo, PiRLo, KoL, KoR, hEff, Flx)
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+1, Flx, hE1, 'Slightly warmer on right, S flux')
+  !call find_neutral_surface_positions(nk, PiL, TiL, SiL, dRdt, dRdS, PiL, TiL+8., SiL, dRdT, dRdS, PiLRo, PiRLo, KoL, KoR, hEff)
+  !neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+2, absolute_positions(nk, PiL, KoL, PiLRo), pL2, 'Warmer on right, left positions')
+  !neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+2, absolute_positions(nk, PiL, KoR, PiRLo), pR2, 'Warmer on right, right positions')
+  !neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+1, hEff, hE2, 'Warmer on right, thicknesses')
+
+  !call find_neutral_surface_positions(nk, PiL, TiL, SiL, dRdt, dRdS, PiL, TiR1, SiL, dRdT, dRdS, PiLRo, PiRLo, KoL, KoR, hEff)
+  !neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+2, absolute_positions(nk, PiL, KoL, PiLRo), pL3, 'Strong stratification on right, left positions')
+  !neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+2, absolute_positions(nk, PiL, KoR, PiRLo), pR3, 'Strong stratification on right, right positions')
+  !neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+1, hEff, hE3, 'Strong stratification on right, thicknesses')
+
+  !call find_neutral_surface_positions(nk, PiL, TiL, SiL, dRdt, dRdS, PiL, TiR2, SiL, dRdT, dRdS, PiLRo, PiRLo, KoL, KoR, hEff)
+  !neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+2, absolute_positions(nk, PiL, KoL, PiLRo), pR3, 'Weak stratification on right, left positions')
+  !neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+2, absolute_positions(nk, PiL, KoR, PiRLo), pL3, 'Weak stratification on right, right positions')
+  !neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+1, hEff, hE3, 'Weak stratification on right, thicknesses')
+
+  !call find_neutral_surface_positions(nk, PiL, TiL, SiL, dRdt, dRdS, PiR4, TiR4, SiL, dRdT, dRdS, PiLRo, PiRLo, KoL, KoR, hEff)
+  !neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+2, absolute_positions(nk, PiL, KoL, PiLRo), pL4, 'Vanished layers on right, left positions')
+  !neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+2, absolute_positions(nk, PiR4, KoR, PiRLo), pR4, 'Vanished layers on right, right positions')
+  !neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+1, hEff, hE4, 'Vanished layers on right, thicknesses')
+
+  !call find_neutral_surface_positions(nk, PiR4, TiR4, SiL, dRdt, dRdS, PiL, TiL, SiL, dRdT, dRdS, PiLRo, PiRLo, KoL, KoR, hEff)
+  !neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+2, absolute_positions(nk, PiR4, KoL, PiLRo), pR4, 'Vanished layers on left, left positions')
+  !neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+2, absolute_positions(nk, PiL, KoR, PiRLo), pL4, 'Vanished layers on left, right positions')
+  !neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+1, hEff, hE4, 'Vanished layers on left, thicknesses')
+
+  !call find_neutral_surface_positions(nk, PiL, TiL, SiL, dRdt, dRdS, PiL, TiL, SiL, dRdT, dRdS, PiLRo, PiRLo, KoL, KoR, hEff)
+  !call neutral_surface_flux(nk, PiL(2:nk+1)-PiL(1:nk), PiL(2:nk+1)-PiL(1:nk), TL, TL, PiLRo, PiRLo, KoL, KoR, hEff, Flx)
+  !neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+1, Flx, 0.*Flx, 'Identical columns, rho flux (=0)')
+  !call neutral_surface_flux(nk, PiL(2:nk+1)-PiL(1:nk), PiL(2:nk+1)-PiL(1:nk), 0.*TL+1., 0.*TL+2., PiLRo, PiRLo, KoL, KoR, hEff, Flx)
+  !neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+1, Flx, 0.*Flx, 'Identical columns, S flux')
+
+  !call find_neutral_surface_positions(nk, PiL, TiL, SiL, dRdt, dRdS, PiL, TiL+2., SiL, dRdT, dRdS, PiLRo, PiRLo, KoL, KoR, hEff)
+  !call neutral_surface_flux(nk, PiL(2:nk+1)-PiL(1:nk), PiL(2:nk+1)-PiL(1:nk), TL, TL+2., PiLRo, PiRLo, KoL, KoR, hEff, Flx)
+  !neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+1, Flx, 0.*Flx, 'Slightly warmer on right, rho flux (=0)')
+  !call neutral_surface_flux(nk, PiL(2:nk+1)-PiL(1:nk), PiL(2:nk+1)-PiL(1:nk), 0.*TL+1., 0.*TL+2., PiLRo, PiRLo, KoL, KoR, hEff, Flx)
+  !neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(2*nk+1, Flx, hE1, 'Slightly warmer on right, S flux')
 
   write(*,'(a)') '=========================================================='
 
@@ -946,15 +1075,84 @@ logical function neutralDiffusionUnitTests()
       do k = 1,nk
         if (Po(k) /= Ptrue(k)) then
           test_data1di = .true.
-          write(stdunit,'(a,i2,2(x,a,i5),x,a)') 'k=',k,'Po=',Po(k),'Ptrue=',Ptrue(k),'WRONG!'
+          write(stdunit,'(a,i2,2(x,a,i5),x,a)') 'k=',k,'Io=',Po(k),'Itrue=',Ptrue(k),'WRONG!'
         else
           if (verbosity>5) &
-            write(stdunit,'(a,i2,2(x,a,i5))') 'k=',k,'Po=',Po(k),'Ptrue=',Ptrue(k)
+            write(stdunit,'(a,i2,2(x,a,i5))') 'k=',k,'Io=',Po(k),'Itrue=',Ptrue(k)
         endif
       enddo
     endif
 
   end function test_data1di
+
+  !> Returns true if output of find_neutral_surface_positions() does not match correct values, and conditionally writes results to stream
+  logical function test_nsp(nk, KoL, KoR, pL, pR, hEff, KoL0, KoR0, pL0, pR0, hEff0, title)
+    integer,                intent(in) :: nk !< Number of layers
+    integer, dimension(2*nk+2), intent(in) :: KoL   !< Index of first left interface above neutral surface
+    integer, dimension(2*nk+2), intent(in) :: KoR   !< Index of first right interface above neutral surface
+    real, dimension(2*nk+2),    intent(in) :: pL    !< Fractional position of neutral surface within layer KoL of left column
+    real, dimension(2*nk+2),    intent(in) :: pR    !< Fractional position of neutral surface within layer KoR of right column
+    real, dimension(2*nk+1),    intent(in) :: hEff  !< Effective thickness between two neutral surfaces (Pa)
+    integer, dimension(2*nk+2), intent(in) :: KoL0  !< Correct value for KoL
+    integer, dimension(2*nk+2), intent(in) :: KoR0  !< Correct value for KoR
+    real, dimension(2*nk+2),    intent(in) :: pL0   !< Correct value for pL
+    real, dimension(2*nk+2),    intent(in) :: pR0   !< Correct value for pR
+    real, dimension(2*nk+1),    intent(in) :: hEff0 !< Correct value for hEff
+    character(len=*),       intent(in) :: title !< Title for messages
+    ! Local variables
+    integer :: k, stdunit
+    logical :: this_row_failed
+
+    test_nsp = .false.
+    do k = 1,2*nk+2
+      test_nsp = test_nsp .or. compare_nsp_row(KoL(k), KoR(k), pL(k), pR(k), KoL0(k), KoR0(k), pL0(k), pR0(k))
+      if (k < 2*nk+2) then
+        if (hEff(k) /= hEff0(k)) test_nsp = .true.
+      endif
+    enddo
+
+    if (test_nsp .or. verbosity>5) then
+      stdunit = 6
+      if (test_nsp.or.debug_this_module) stdunit = 0 ! In case of wrong results, write to error stream
+      write(stdunit,'(a)') title
+      do k = 1,2*nk+2
+        this_row_failed = compare_nsp_row(KoL(k), KoR(k), pL(k), pR(k), KoL0(k), KoR0(k), pL0(k), pR0(k))
+        if (this_row_failed) then
+          write(stdunit,10) k,KoL(k),pL(k),KoR(k),pR(k),' <-- WRONG!'
+          write(stdunit,10) k,KoL0(k),pL0(k),KoR0(k),pR0(k),' <-- should be this'
+        else
+          write(stdunit,10) k,KoL(k),pL(k),KoR(k),pR(k)
+        endif
+        if (k < 2*nk+2) then
+          if (hEff(k) /= hEff0(k)) then
+            write(stdunit,'(i3,8x,"layer hEff =",2(f20.16,a))') k,hEff(k)," .neq. ",hEff0(k),' <-- WRONG!'
+          else
+            write(stdunit,'(i3,8x,"layer hEff =",f20.16)') k,hEff(k)
+          endif
+        endif
+      enddo
+    endif
+
+10  format("ks=",i3," kL=",i3," pL=",f20.16," kR=",i3," pR=",f20.16,a)
+  end function test_nsp
+
+  !> Compares a single row, k, of output from find_neutral_surface_positions()
+  logical function compare_nsp_row(KoL, KoR, pL, pR, KoL0, KoR0, pL0, pR0)
+    integer,  intent(in) :: KoL   !< Index of first left interface above neutral surface
+    integer,  intent(in) :: KoR   !< Index of first right interface above neutral surface
+    real,     intent(in) :: pL    !< Fractional position of neutral surface within layer KoL of left column
+    real,     intent(in) :: pR    !< Fractional position of neutral surface within layer KoR of right column
+    integer,  intent(in) :: KoL0  !< Correct value for KoL
+    integer,  intent(in) :: KoR0  !< Correct value for KoR
+    real,     intent(in) :: pL0   !< Correct value for pL
+    real,     intent(in) :: pR0   !< Correct value for pR
+
+    compare_nsp_row = .false.
+    if (KoL /= KoL0) compare_nsp_row = .true.
+    if (KoR /= KoR0) compare_nsp_row = .true.
+    if (pL /= pL0) compare_nsp_row = .true.
+    if (pR /= pR0) compare_nsp_row = .true.
+  end function compare_nsp_row
 
 end function neutralDiffusionUnitTests
 
