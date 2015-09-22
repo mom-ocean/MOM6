@@ -117,7 +117,7 @@ subroutine neutral_diffusion_calc_coeffs(G, h, T, S, EOS, CS)
       call interface_scalar(G%ke, h(i,j,:), S(i,j,:), Sint(i,j,:))
     enddo
 
-    ! Caclulate interface properties
+    ! Calculate interface properties
     Pint(:,j,1) = 0. ! Assume P=0 (Pa) at surface - needs correcting for atmospheric and ice loading - AJA
     do k = 1, G%ke+1
       call calculate_density_derivs(Tint(:,j,k), Sint(:,j,k), Pint(:,j,k), &
@@ -146,6 +146,9 @@ subroutine neutral_diffusion_calc_coeffs(G, h, T, S, EOS, CS)
     enddo
   enddo
 
+  CS%uhEff(:,:,:) = CS%uhEff(:,:,:) / G%H_to_pa 
+  CS%vhEff(:,:,:) = CS%vhEff(:,:,:) / G%H_to_pa 
+
 end subroutine neutral_diffusion_calc_coeffs
 
 subroutine neutral_diffusion(G, h, Coef_x, Coef_y, Tracer, CS)
@@ -158,6 +161,7 @@ subroutine neutral_diffusion(G, h, Coef_x, Coef_y, Tracer, CS)
   ! Local variables
   real, dimension(SZIB_(G),SZJ_(G),2*G%ke+1) :: uFlx ! Zonal flux of tracer (conc Pa)
   real, dimension(SZI_(G),SZJB_(G),2*G%ke+1) :: vFlx ! Meridional flux of tracer (conc Pa)
+  real, dimension(G%ke) :: dTracer ! Change in tracer
   integer :: i, j, k, ks, nk
   real :: Ihdxdy
 
@@ -179,16 +183,22 @@ subroutine neutral_diffusion(G, h, Coef_x, Coef_y, Tracer, CS)
                               CS%vhEff(i,J,:), vFlx(i,J,:))
   enddo ; enddo
 
-  do ks = 1,2*nk+1 ; do j = G%jsc,G%jec ; do i = G%isc,G%iec
-    k = max(1,CS%uKoL(I,j,ks)-1)
-    Tracer(i,j,k)  = Tracer(i,j,k) + ( G%IareaT(i,j) / ( h(i,j,k) + G%H_subroundoff ) ) * Coef_x(I,j) * uFlx(I,j,ks)
-    k = max(1,CS%uKoR(I-1,j,ks)-1)
-    Tracer(i,j,k)  = Tracer(i,j,k) - ( G%IareaT(i,j) / ( h(i,j,k) + G%H_subroundoff ) ) * Coef_x(I-1,j) * uFlx(I-1,j,ks)
-    k = max(1,CS%vKoL(i,J,ks)-1)
-    Tracer(i,j,k)  = Tracer(i,j,k) + ( G%IareaT(i,j) / ( h(i,j,k) + G%H_subroundoff ) ) * Coef_y(i,J) * vFlx(i,J,ks)
-    k = max(1,CS%vKoR(i,J-1,ks)-1)
-    Tracer(i,j,k)  = Tracer(i,j,k) - ( G%IareaT(i,j) / ( h(i,j,k) + G%H_subroundoff ) ) * Coef_y(i,J-1) * vFlx(i,J-1,ks)
-  enddo ; enddo ; enddo
+  do j = G%jsc,G%jec ; do i = G%isc,G%iec
+    dTracer(:) = 0.
+    do ks = 1,2*nk+1 ;
+      k = CS%uKoL(I,j,ks)
+      dTracer(k) = dTracer(k) + Coef_x(I,j) * uFlx(I,j,ks)
+      k = CS%uKoR(I-1,j,ks)
+      dTracer(k) = dTracer(k) - Coef_x(I-1,j) * uFlx(I-1,j,ks)
+      k = CS%vKoL(i,J,ks)
+      dTracer(k) = dTracer(k) + Coef_y(i,J) * vFlx(i,J,ks)
+      k = CS%vKoR(i,J-1,ks)
+      dTracer(k) = dTracer(k) + Coef_y(i,J-1) * vFlx(i,J-1,ks)
+    enddo
+    do k = 1, G%ke
+      Tracer(i,j,k) = Tracer(i,j,k) + dTracer(k) * ( G%IareaT(i,j) / ( h(i,j,k) + G%H_subroundoff ) )
+    enddo
+  enddo ; enddo
 
 end subroutine neutral_diffusion
 
@@ -302,7 +312,7 @@ real function fv_diff(hkm1, hk, hkp1, Skm1, Sk, Skp1)
               + ( 2. * hkp1 + hk ) * hm * ( Sk - Skm1 ) )
 end function fv_diff
 
-!> Returns the cell-centered second-order weigthed least squares slope
+!> Returns the cell-centered second-order weighted least squares slope
 !! using three consecutive cell widths and average values. Slope is returned
 !! as a gradient (i.e. units of scalar S over width units).
 real function fvlsq_slope(hkm1, hk, hkp1, Skm1, Sk, Skp1)
@@ -347,8 +357,8 @@ subroutine find_neutral_surface_positions(nk, Pl, Tl, Sl, dRdTl, dRdSl, Pr, Tr, 
   real, dimension(nk+1),      intent(in)    :: dRdSr !< Left-column dRho/dS (kg/m3/ppt)
   real, dimension(2*nk+2),    intent(inout) :: PoL   !< Fractional position of neutral surface within layer KoL of left column
   real, dimension(2*nk+2),    intent(inout) :: PoR   !< Fractional position of neutral surface within layer KoR of right column
-  integer, dimension(2*nk+2), intent(inout) :: KoL   !< Index of first left interface below neutral surface
-  integer, dimension(2*nk+2), intent(inout) :: KoR   !< Index of first right interface below neutral surface
+  integer, dimension(2*nk+2), intent(inout) :: KoL   !< Index of first left interface above neutral surface
+  integer, dimension(2*nk+2), intent(inout) :: KoR   !< Index of first right interface above neutral surface
   real, dimension(2*nk+1),    intent(inout) :: hEff  !< Effective thickness between two neutral surfaces (Pa)
   ! Local variables
   integer :: k_surface ! Index of neutral surface
@@ -357,38 +367,44 @@ subroutine find_neutral_surface_positions(nk, Pl, Tl, Sl, dRdTl, dRdSl, Pr, Tr, 
   real :: dRdT, dRdS ! dRho/dT and dRho/dS for the neutral surface
   logical :: looking_left ! True if searching for the position of a right interface in the left column
   logical :: looking_right ! True if searching for the position of a left interface in the right column
+  logical :: reached_bottom ! True if one of the bottom-most interfaces has been used as the target
   integer :: krm1, klm1
   real :: dRho, dRhoM1, hL, hR
 
   ! Initialize variables for the search
   kr = 1
   kl = 1
+  reached_bottom = .false.
 
   ! Loop over each neutral surface, working from top to bottom
   neutral_surfaces: do k_surface = 1, 2*nk+2
     klm1 = max(kl-1, 1)
+    if (klm1>nk) stop 'find_neutral_surface_positions(): klm1 went out of bounds!'
     krm1 = max(kr-1, 1)
+    if (krm1>nk) stop 'find_neutral_surface_positions(): krm1 went out of bounds!'
 
     ! Potential density difference, kr - kl 
     dRho = 0.5 * ( ( dRdTr(kr) + dRdTl(kl) ) * ( Tr(kr) - Tl(kl) ) &
                  + ( dRdSr(kr) + dRdSl(kl) ) * ( Sr(kr) - Sl(kl) ) )
+                                                     if (debug_this_module) write(0,*) 'k,kl,kr,dRho=',k_surface,kl,kr,dRho
     ! Which column has the lighter surface for the current indexes, kr and kl
-    if (k_surface<2*nk+2) then
+    if (.not. reached_bottom) then
       if (dRho < 0.) then
         looking_left = .true.
         looking_right = .false.
-      elseif (dRho >= 0.) then
+      elseif (dRho > 0.) then
         looking_right = .true.
         looking_left = .false.
+      else ! dRho == 0.
+        if (kl + kr == 2) then
+          looking_left = .true.
+          looking_right = .false.
+        else
+          looking_left = .not.  looking_left 
+          looking_right = .not.  looking_right 
+        endif
       endif
-    else
-      ! Note from AJA: This handles the last neutral surface that always sees the same values of kr and kl as
-      ! the previous neutral surface. I do not like this kind of logic. Is there a better way to construct kr
-      ! and kl from k_surface?
-      looking_left = .not. looking_left
-      looking_right = .not. looking_right
     endif
-                                                     if (debug_this_module) write(0,*) 'k,kr,kl=',k_surface,kr,kl
  
     if (looking_left) then
       ! Interpolate for the neutral surface position within the left column, layer kl
@@ -397,31 +413,41 @@ subroutine find_neutral_surface_positions(nk, Pl, Tl, Sl, dRdTl, dRdSl, Pr, Tr, 
       dRhoM1 = 0.5 * ( ( dRdTl(klm1) + dRdTr(kr) ) * ( Tl(klm1) - Tr(kr) ) &
                      + ( dRdSl(klm1) + dRdSr(kr) ) * ( Sl(klm1) - Sr(kr) ) )
       ! Potential density difference, rho(kl) - rho(kr) (will be positive)
-      !dRho = 0.5 * ( ( dRdTl(kl) + dRdTr(kr) ) * ( Tl(kl) - Tr(kr) ) &
-      !             + ( dRdSl(kl) + dRdSr(kr) ) * ( Sl(kl) - Sr(kr) ) )
-      dRho = - dRho ! Re-use calculation above
+      dRho = 0.5 * ( ( dRdTl(klm1+1) + dRdTr(kr) ) * ( Tl(klm1+1) - Tr(kr) ) &
+                   + ( dRdSl(klm1+1) + dRdSr(kr) ) * ( Sl(klm1+1) - Sr(kr) ) )
+     !dRho = - dRho ! Re-use calculation above
+                                                     if (debug_this_module) write(0,*) '  dRhoM1=',dRhoM1,' dRho=',dRho
 
       ! Because we a looking left, the right surface, kr, is lighter than kl and should be denser than kl-1
       ! unless we are still at the top of the left column (kl=1)
-      if (dRhoM1 > 0.) then
-       !if (kl>1) stop 'This should never happen: kl>1 and dRhoM1>=0.'
-        PoL(k_surface) = 1.
+      if (dRhoM1 >= 0.) then
+        !if (kl>1) stop 'This should never happen: kl>1 and dRhoM1>=0.'
+        PoL(k_surface) = 0.
       else
         ! Linearly interpolate for the position between Pl(kl-1) and Pl(kl) where the density difference
         ! between right and left is zero.
-        PoL(k_surface) = interpolate_for_nondim_position( dRhoM1, Pl(klm1), dRho, Pl(kl) )
+        PoL(k_surface) = interpolate_for_nondim_position( dRhoM1, Pl(klm1), dRho, Pl(klm1+1) )
+        if (PoL(k_surface)>=1. .and. klm1<nk) then
+          klm1 = klm1 + 1
+          PoL(k_surface) = PoL(k_surface) - 1.
+        endif
       endif
-      PoR(k_surface) = 1.
-      KoR(k_surface) = kr
-      KoL(k_surface) = kl
-                                                     if (debug_this_module) write(0,*) '  dRhoM1=',dRhoM1,' dRho=',dRho
+      KoL(k_surface) = klm1
+      if (kr <= nk) then
+        PoR(k_surface) = 0.
+        KoR(k_surface) = kr
+      else
+        PoR(k_surface) = 1.
+        KoR(k_surface) = nk
+      endif
                                                      if (debug_this_module) write(0,*) '  PoL(k)=',PoL(k_surface)
       if (kr <= nk) then
         kr = kr + 1
       else
-        kl = min(kl + 1, nk+1)
+        reached_bottom = .true.
+        looking_right = .true.
+        looking_left = .false.
       endif
-                                                     if (debug_this_module) write(0,*) '  kr=',kr,' kl=',kl
     elseif (looking_right) then
       ! Interpolate for the neutral surface position within the right column, layer kr
                                                      if (debug_this_module) write(0,*) 'looking_right=',looking_right
@@ -429,34 +455,44 @@ subroutine find_neutral_surface_positions(nk, Pl, Tl, Sl, dRdTl, dRdSl, Pr, Tr, 
       dRhoM1 = 0.5 * ( ( dRdTr(krm1) + dRdTl(kl) ) * ( Tr(krm1) - Tl(kl) ) &
                      + ( dRdSr(krm1) + dRdSl(kl) ) * ( Sr(krm1) - Sl(kl) ) )
       ! Potential density difference, rho(kr) - rho(kl) (will be positive)
-      !dRho = 0.5 * ( ( dRdTr(kr) + dRdTl(kl) ) * ( Tr(kr) - Tl(kl) ) &
-      !             + ( dRdSr(kr) + dRdSl(kl) ) * ( Sr(kr) - Sl(kl) ) )
-      dRho = dRho ! Re-use calculation above
+      dRho = 0.5 * ( ( dRdTr(krm1+1) + dRdTl(kl) ) * ( Tr(krm1+1) - Tl(kl) ) &
+                   + ( dRdSr(krm1+1) + dRdSl(kl) ) * ( Sr(krm1+1) - Sl(kl) ) )
+                                                     if (debug_this_module) write(0,*) '  dRhoM1=',dRhoM1,' dRho=',dRho
 
       ! Because we a looking right, the left surface, kl, is lighter than kr and should be denser than kr-1
       ! unless we are still at the top of the right column (kr=1)
-      if (dRhoM1 > 0.) then
-       !if (kr>1) stop 'This should never happen: kr>1 and dRhoM1>=0.'
-        PoR(k_surface) = 1.
+      if (dRhoM1 >= 0.) then
+        !if (kr>1) stop 'This should never happen: kr>1 and dRhoM1>=0.'
+        PoR(k_surface) = 0.
       else
         ! Linearly interpolate for the position between Pr(kr-1) and Pr(kr) where the density difference
         ! between right and left is zero.
-        PoR(k_surface) = interpolate_for_nondim_position( dRhoM1, Pr(krm1), dRho, Pr(kr) )
+        PoR(k_surface) = interpolate_for_nondim_position( dRhoM1, Pr(krm1), dRho, Pr(krm1+1) )
+        if (PoR(k_surface)>=1. .and. krm1<nk) then
+          krm1 = krm1 + 1
+          PoR(k_surface) = PoR(k_surface) - 1.
+        endif
       endif
-      PoL(k_surface) = 1.
-      KoL(k_surface) = kl
-      KoR(k_surface) = kr
-                                                     if (debug_this_module) write(0,*) '  dRhoM1=',dRhoM1,' dRho=',dRho
+      KoR(k_surface) = krm1
+      if (kl <= nk) then
+        PoL(k_surface) = 0.
+        KoL(k_surface) = kl
+      else
+        PoL(k_surface) = 1.
+        KoL(k_surface) = nk
+      endif
                                                      if (debug_this_module) write(0,*) '  PoR(k)=',PoR(k_surface)
       if (kl <= nk) then
         kl = kl + 1
       else
-        kr = min(kr + 1, nk+1)
+        reached_bottom = .true.
+        looking_right = .false.
+        looking_left = .true.
       endif
-                                                     if (debug_this_module) write(0,*) '  kl=',kl,' kr=',kr
     else
       stop 'Else what?'
     endif
+                                                     if (debug_this_module) write(0,*) '  updated: kr=',kr,' kl=',kl
 
     ! Effective thickness
     ! NOTE: This would be better expressed in terms of the layers thicknesses rather
@@ -471,42 +507,39 @@ subroutine find_neutral_surface_positions(nk, Pl, Tl, Sl, dRdTl, dRdSl, Pr, Tr, 
       endif
                                                      if (debug_this_module) write(0,*) '  hEff=',hEff(k_surface-1)
     endif
+    if (debug_this_module) write(0,*) '  result: ks=',k_surface,' kl=',KoL(k_surface),' kr=',KoR(k_surface)
 
   enddo neutral_surfaces
 
-  contains
-
-  !> Converts non-dimensional positions within a layer to absolute positions (for debugging)
-  real function absolute_position(n,Pint,Karr,NParr,k_surface)
-    integer, intent(in) :: n            !< Number of levels
-    real,    intent(in) :: Pint(n+1)    !< Position of interface (Pa)
-    integer, intent(in) :: Karr(2*n+2)  !< Index of deeper 
-    real,    intent(in) :: NParr(2*n+2) !< Non-dimensional position with layer Karr(:)-1
-    ! Local variables
-    integer :: k_surface, k, km1
-  
-    k = Karr(k_surface)
-    km1 = max(1, k-1)
-    absolute_position = Pint(km1) + NParr(k_surface) * ( Pint(k) - Pint(km1) )
-
-  end function absolute_position
-
 end subroutine find_neutral_surface_positions
 
-!> Converts non-dimensional positions within a layer to absolute positions (for debugging)
+!> Converts non-dimensional position within a layer to absolute position (for debugging)
+real function absolute_position(n,Pint,Karr,NParr,k_surface)
+  integer, intent(in) :: n            !< Number of levels
+  real,    intent(in) :: Pint(n+1)    !< Position of interfaces (Pa)
+  integer, intent(in) :: Karr(2*n+2)  !< Index of interface above position 
+  real,    intent(in) :: NParr(2*n+2) !< Non-dimensional position within layer Karr(:)
+  ! Local variables
+  integer :: k_surface, k
+
+  k = Karr(k_surface)
+  if (k>n) stop 'absolute_position: k>nk is out of bounds!'
+  absolute_position = Pint(k) + NParr(k_surface) * ( Pint(k+1) - Pint(k) )
+
+end function absolute_position
+
+!> Converts non-dimensional positions within layers to absolute positions (for debugging)
 function absolute_positions(n,Pint,Karr,NParr)
   integer, intent(in) :: n            !< Number of levels
   real,    intent(in) :: Pint(n+1)    !< Position of interface (Pa)
-  integer, intent(in) :: Karr(2*n+2)  !< Index of deeper 
-  real,    intent(in) :: NParr(2*n+2) !< Non-dimensional position with layer Karr(:)-1
+  integer, intent(in) :: Karr(2*n+2)  !< Indexes of interfaces about positions
+  real,    intent(in) :: NParr(2*n+2) !< Non-dimensional positions within layers Karr(:)
   real,  dimension(2*n+2) :: absolute_positions ! Absolute positions (Pa)
   ! Local variables
-  integer :: k_surface, k, km1
+  integer :: k_surface, k
 
   do k_surface = 1, 2*n+2
-    k = Karr(k_surface)
-    km1 = max(1, k-1)
-    absolute_positions(k_surface) = Pint(km1) + NParr(k_surface) * ( Pint(k) - Pint(km1) )
+    absolute_positions(k_surface) = absolute_position(n,Pint,Karr,NParr,k_surface)
   enddo
 
 end function absolute_positions
@@ -619,29 +652,29 @@ subroutine neutral_surface_flux(nk, hl, hr, Tl, Tr, PiL, PiR, KoL, KoR, hEff, Fl
  !    Flx(k_sublayer) = 0.
  !  else
 
-      kl = KoL(k_sublayer)
-      klm1 = max(1, KoL(k_sublayer)-1)
-      T_left_top = ( 1. - PiL(k_sublayer) ) * Til(klm1) + PiL(k_sublayer) * Til(kl)
-                                                     if (debug_this_module) write(0,'(i3,2(x,a,i3,x,a,f8.2),2(x,a,f8.2))') &
-                                                     k_sublayer,'klm1=',klm1,'Til(km1)=',Til(klm1),'kl=',kl,'Til(kl)=',Til(kl),'PiL(k)=',PiL(k_sublayer),'T_left_top=',T_left_top
-
-      kl = KoL(k_sublayer+1)
-      klm1 = max(1, KoL(k_sublayer+1)-1)
+      klm1 = KoL(k_sublayer+1)
+      kl = klm1+1
       T_left_bottom = ( 1. - PiL(k_sublayer+1) ) * Til(klm1) + PiL(k_sublayer+1) * Til(kl)
                                                      if (debug_this_module) write(0,'(i3,2(x,a,i3,x,a,f8.2),2(x,a,f8.2))') &
                                                      k_sublayer+1,'klm1=',klm1,'Til(km1)=',Til(klm1),'kl=',kl,'Til(kl)=',Til(kl),'PiL(k+1)=',PiL(k_sublayer+1),'T_left_bottom=',T_left_bottom
 
-      kr = KoR(k_sublayer)
-      krm1 = max(1, KoR(k_sublayer)-1)
-      T_right_top = ( 1. - PiR(k_sublayer) ) * Tir(krm1) + PiR(k_sublayer) * Tir(kr)
+      klm1 = KoL(k_sublayer)
+      kl = klm1+1
+      T_left_top = ( 1. - PiL(k_sublayer) ) * Til(klm1) + PiL(k_sublayer) * Til(kl)
                                                      if (debug_this_module) write(0,'(i3,2(x,a,i3,x,a,f8.2),2(x,a,f8.2))') &
-                                                     k_sublayer,'krm1=',krm1,'Tir(km1)=',Tir(krm1),'kr=',kr,'Tir(kr)=',Tir(kr),'PiR(k)=',PiR(k_sublayer),'T_right_top=',T_right_top
+                                                     k_sublayer,'klm1=',klm1,'Til(km1)=',Til(klm1),'kl=',kl,'Til(kl)=',Til(kl),'PiL(k)=',PiL(k_sublayer),'T_left_top=',T_left_top
 
-      kr = KoR(k_sublayer+1)
-      krm1 = max(1, KoR(k_sublayer+1)-1)
+      krm1 = KoR(k_sublayer+1)
+      kr = krm1+1
       T_right_bottom = ( 1. - PiR(k_sublayer+1) ) * Tir(krm1) + PiR(k_sublayer+1) * Tir(kr)
                                                      if (debug_this_module) write(0,'(i3,2(x,a,i3,x,a,f8.2),2(x,a,f8.2))') &
                                                      k_sublayer+1,'krm1=',krm1,'Tir(km1)=',Tir(krm1),'kr=',kr,'Tir(kr)=',Tir(kr),'PiR(k+1)=',PiR(k_sublayer+1),'T_right_bottom=',T_right_bottom
+
+      krm1 = KoR(k_sublayer)
+      kr = krm1+1
+      T_right_top = ( 1. - PiR(k_sublayer) ) * Tir(krm1) + PiR(k_sublayer) * Tir(kr)
+                                                     if (debug_this_module) write(0,'(i3,2(x,a,i3,x,a,f8.2),2(x,a,f8.2))') &
+                                                     k_sublayer,'krm1=',krm1,'Tir(km1)=',Tir(krm1),'kr=',kr,'Tir(kr)=',Tir(kr),'PiR(k)=',PiR(k_sublayer),'T_right_top=',T_right_top
 
       dT_top = T_right_top - T_left_top
       dT_bottom = T_right_bottom - T_left_bottom
@@ -654,7 +687,7 @@ subroutine neutral_surface_flux(nk, hl, hr, Tl, Tr, PiL, PiR, KoL, KoR, hEff, Fl
         dT_ave = 0.
       else
        !dT_ave = sign( min( abs(dT_top), abs(dT_bottom), abs(dT_ave) ) , dT_ave )
-        dT_ave = sign( min( abs(dT_layer), abs(dT_ave) ) , dT_ave )
+        dT_ave = sign( min( abs(dT_layer), abs(dT_ave) ) , dT_layer )
       endif
                                                      if (debug_this_module) write(0,'(i3," dT_ave=",f8.3)') k_sublayer, dT_ave
  !  endif
