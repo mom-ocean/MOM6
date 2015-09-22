@@ -113,8 +113,8 @@ subroutine neutral_diffusion_calc_coeffs(G, h, T, S, EOS, CS)
   do j = G%jsc-1, G%jec+1
     ! Interpolate state to interface
     do i = G%isc-1, G%iec+1
-      call interface_scalar(G%ke, h(i,j,:), T(i,j,:), Tint(i,j,:))
-      call interface_scalar(G%ke, h(i,j,:), S(i,j,:), Sint(i,j,:))
+      call interface_scalar(G%ke, h(i,j,:), T(i,j,:), Tint(i,j,:), 2)
+      call interface_scalar(G%ke, h(i,j,:), S(i,j,:), Sint(i,j,:), 2)
     enddo
 
     ! Calculate interface properties
@@ -203,38 +203,90 @@ subroutine neutral_diffusion(G, h, Coef_x, Coef_y, Tracer, CS)
 end subroutine neutral_diffusion
 
 !> Returns interface scalar, Si, for a column of layer values, S.
-subroutine interface_scalar(nk, h, S, Si)
+subroutine interface_scalar(nk, h, S, Si, i_method)
   integer,               intent(in)    :: nk !< Number of levels
   real, dimension(nk),   intent(in)    :: h  !< Layer thickness (H, m or Pa)
   real, dimension(nk),   intent(in)    :: S  !< Layer scalar (conc, e.g. ppt)
   real, dimension(nk+1), intent(inout) :: Si !< Interface scalar (conc, e.g. ppt)
+  integer,               intent(in)    :: i_method !< =1 use average of PLM edges
+                                                   !! =2 use continuous PPM edge interpolation
   ! Local variables
-  integer :: k
+  integer :: k, km2, kp1
   real, dimension(nk) :: diff
   real :: Sb, Sa
 
-  call PLM_diff(nk, h, S, 2, diff)
+  call PLM_diff(nk, h, S, 2, 1, diff)
   Si(1) = S(1) - 0.5 * diff(1)
-  do k = 2, nk
-    ! Average of the two edge values (will be bounded and,
-    ! when slopes are unlimited, notionally second-order accurate)
-    Sa = S(k-1) + 0.5 * diff(k-1) ! Lower edge value of a PLM reconstruction for layer above
-    Sb = S(k) - 0.5 * diff(k) ! Upper edge value of a PLM reconstruction for layer below
-    Si(k) = 0.5 * ( Sa + Sb )
-  enddo
+  if (i_method==1) then
+    do k = 2, nk
+      ! Average of the two edge values (will be bounded and,
+      ! when slopes are unlimited, notionally second-order accurate)
+      Sa = S(k-1) + 0.5 * diff(k-1) ! Lower edge value of a PLM reconstruction for layer above
+      Sb = S(k) - 0.5 * diff(k) ! Upper edge value of a PLM reconstruction for layer below
+      Si(k) = 0.5 * ( Sa + Sb )
+    enddo
+  elseif (i_method==2) then
+    do k = 2, nk
+      ! PPM quasi-fourth order interpolation for edge values following
+      ! equation 1.6 in Colella & Woodward, 1984: JCP 54, 174-201.
+      km2 = max(1, k-2)
+      kp1 = min(nk, k+1)
+      Si(k) = ppm_edge(h(km2), h(k-1), h(k), h(kp1),  S(k-1), S(k), diff(k-1), diff(k))
+    enddo
+  endif
   Si(nk+1) = S(nk) + 0.5 * diff(nk)
 
 end subroutine interface_scalar
 
-!> Returns PLM slopes for a column where the slopes are the difference in value across
-!! each cell. Slopes in the first and last cell (top/bottom) are always zero.
-subroutine PLM_diff(nk, h, S, c_method, diff)
+!> Returns the PPM quasi-fourth order edge value at k+1/2 following
+!! equation 1.6 in Colella & Woodward, 1984: JCP 54, 174-201.
+real function ppm_edge(hkm1, hk, hkp1, hkp2,  Ak, Akp1, Pk, Pkp1)
+  real, intent(in) :: hkm1 !< Width of cell k-1
+  real, intent(in) :: hk   !< Width of cell k
+  real, intent(in) :: hkp1 !< Width of cell k+1
+  real, intent(in) :: hkp2 !< Width of cell k+2
+  real, intent(in) :: Ak   !< Average scalar value of cell k
+  real, intent(in) :: Akp1 !< Average scalar value of cell k+1
+  real, intent(in) :: Pk   !< PLM slope for cell k
+  real, intent(in) :: Pkp1 !< PLM slope for cell k+1
+  ! Local variables
+  real :: R_hk_hkp1, R_2hk_hkp1, R_hk_2hkp1, f1, f2, f3, f4
+  real, parameter :: h_neglect = 1.e-30
+
+  R_hk_hkp1 = hk + hkp1
+  if (R_hk_hkp1 <= 0.) then
+    ppm_edge = 0.5 * ( Ak + Akp1 )
+    return
+  endif
+  R_hk_hkp1 = 1. / R_hk_hkp1
+  if (hk<hkp1) then
+    ppm_edge = Ak + ( hk * R_hk_hkp1 ) * ( Akp1 - Ak )
+  else
+    ppm_edge = Akp1 + ( hkp1 * R_hk_hkp1 ) * ( Ak - Akp1 )
+  endif
+
+  R_2hk_hkp1 = 1. / ( ( 2. * hk + hkp1 ) + h_neglect )
+  R_hk_2hkp1 = 1. / ( ( hk + 2. * hkp1 ) + h_neglect )
+  f1 = 1./ ( ( hk + hkp1) + ( hkm1 + hkp2 ) )
+  f2 = 2. * ( hkp1 * hk ) * R_hk_hkp1 * &
+            ( ( hkm1 + hk ) * R_2hk_hkp1  - ( hkp2 + hkp1 ) * R_hk_2hkp1 )
+  f3 = hk * ( hkm1 + hk ) * R_2hk_hkp1
+  f4 = hkp1 * ( hkp1 + hkp2 ) * R_hk_2hkp1
+
+  ppm_edge = ppm_edge + f1 * ( f2 * ( Akp1 - Ak ) - ( f3 * Pkp1 - f4 * Pk ) )
+  
+end function ppm_edge
+
+!> Returns PLM slopes for a column where the slopes are the difference in value across each cell.
+!! The limiting follows equation 1.8 in Colella & Woodward, 1984: JCP 54, 174-201.
+subroutine PLM_diff(nk, h, S, c_method, b_method, diff)
   integer,             intent(in)    :: nk       !< Number of levels
   real, dimension(nk), intent(in)    :: h        !< Layer thickness (H, m or Pa)
   real, dimension(nk), intent(in)    :: S        !< Layer salinity (conc, e.g. ppt)
   integer,             intent(in)    :: c_method !< Method to use for the centered difference
+  integer,             intent(in)    :: b_method !< =1, use PCM in first/last cell, =2 uses linear extrapolation
   real, dimension(nk), intent(inout) :: diff     !< Scalar difference across layer (conc, e.g. ppt)
-                                                 !! determined by the following values: 
+                                                 !! determined by the following values for c_method: 
                                                  !!   1. Second order finite difference (not recommended)
                                                  !!   2. Second order finite volume (used in original PPM)
                                                  !!   3. Finite-volume weighted least squares linear fit
@@ -279,18 +331,20 @@ subroutine PLM_diff(nk, h, S, c_method, diff)
       diff(k) = 0. ! PCM next to vanished layers
     endif
   enddo
-  ! PCM for top and bottom layer
- !diff(1) = 0.
- !diff(nk) = 0.
-  ! Linear extrapolation for top and bottom interfaces
-  diff(1) = ( S(2) - S(1) ) * 2. * ( h(1) / ( h(1) + h(2) ) )
-  diff(nk) = S(nk) - S(nk-1) * 2. * ( h(nk) / ( h(nk-1) + h(nk) ) )
+  if (b_method==1) then ! PCM for top and bottom layer
+    diff(1) = 0.
+    diff(nk) = 0.
+  elseif (b_method==2) then ! Linear extrapolation for top and bottom interfaces
+    diff(1) = ( S(2) - S(1) ) * 2. * ( h(1) / ( h(1) + h(2) ) )
+    diff(nk) = S(nk) - S(nk-1) * 2. * ( h(nk) / ( h(nk-1) + h(nk) ) )
+  endif
 
 end subroutine PLM_diff
 
 !> Returns the cell-centered second-order finite volume (unlimited PLM) slope
 !! using three consecutive cell widths and average values. Slope is returned
 !! as a difference across the central cell (i.e. units of scalar S).
+!! Discretization follows equation 1.7 in Colella & Woodward, 1984: JCP 54, 174-201.
 real function fv_diff(hkm1, hk, hkp1, Skm1, Sk, Skp1)
   real, intent(in) :: hkm1 !< Left cell width
   real, intent(in) :: hk   !< Center cell width
@@ -593,8 +647,8 @@ subroutine neutral_surface_flux(nk, hl, hr, Tl, Tr, PiL, PiR, KoL, KoR, hEff, Fl
   real, dimension(nk+1) :: Til !< Left-column interface tracer (conc, e.g. degC)
   real, dimension(nk+1) :: Tir !< Right-column interface tracer (conc, e.g. degC)
 
-  call interface_scalar(nk, hl, Tl, Til)
-  call interface_scalar(nk, hr, Tr, Tir)
+  call interface_scalar(nk, hl, Tl, Til, 2)
+  call interface_scalar(nk, hr, Tr, Tir, 2)
 
   do k_sublayer = 1, 2*nk+1
  !  if (hEff(k_sublayer) == 0.) then
@@ -732,8 +786,11 @@ logical function neutralDiffusionUnitTests()
   neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fvlsq_slope(1.,0.,0., 0.,1.,2., 0., 'LSQ: Two vanished cell sides')
   neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fvlsq_slope(0.,0.,0., 0.,1.,2., 0., 'LSQ: All vanished cells')
 
-  call interface_scalar(nk, PiL(2:nk+1)-PiL(1:nk), Tl, Tio)
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(nk+1, Tio, TiL, 'Linear profile, interface temperatures')
+  call interface_scalar(4, (/10.,10.,10.,10./), (/24.,18.,12.,6./), Tio, 1)
+  !neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(5, Tio, (/27.,21.,15.,9.,3./), 'Linear profile, interface temperatures')
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(5, Tio, (/24.,22.5,15.,7.5,6./), 'Linear profile, linear interface temperatures')
+  call interface_scalar(4, (/10.,10.,10.,10./), (/24.,18.,12.,6./), Tio, 2)
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(5, Tio, (/24.,22.,15.,8.,6./), 'Linear profile, PPM interface temperatures')
 
   neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_ifndp(-1.0, 0.,  1.0, 1.0, 0.5, 'Check mid-point')
   neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_ifndp( 0.0, 0.,  1.0, 1.0, 0.0, 'Check bottom')
