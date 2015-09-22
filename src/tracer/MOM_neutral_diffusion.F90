@@ -77,7 +77,7 @@ logical function neutral_diffusion_init(Time, G, param_file, diag, CS)
     deallocate(CS)
     return
   endif
-  
+
   ! U-points
   allocate(CS%uPoL(G%isd:G%ied,G%jsd:G%jed,2*G%ke+2)); CS%uPoL(G%isc-1:G%iec,G%jsc:G%jec,:) = 0.
   allocate(CS%uPoR(G%isd:G%ied,G%jsd:G%jed,2*G%ke+2)); CS%uPoR(G%isc-1:G%iec,G%jsc:G%jec,:) = 0.
@@ -146,8 +146,8 @@ subroutine neutral_diffusion_calc_coeffs(G, h, T, S, EOS, CS)
     enddo
   enddo
 
-  CS%uhEff(:,:,:) = CS%uhEff(:,:,:) / G%H_to_pa 
-  CS%vhEff(:,:,:) = CS%vhEff(:,:,:) / G%H_to_pa 
+  CS%uhEff(:,:,:) = CS%uhEff(:,:,:) / G%H_to_pa
+  CS%vhEff(:,:,:) = CS%vhEff(:,:,:) / G%H_to_pa
 
 end subroutine neutral_diffusion_calc_coeffs
 
@@ -274,7 +274,7 @@ real function ppm_edge(hkm1, hk, hkp1, hkp2,  Ak, Akp1, Pk, Pkp1)
   f4 = hkp1 * ( hkp1 + hkp2 ) * R_hk_2hkp1
 
   ppm_edge = ppm_edge + f1 * ( f2 * ( Akp1 - Ak ) - ( f3 * Pkp1 - f4 * Pk ) )
-  
+
 end function ppm_edge
 
 !> Returns PLM slopes for a column where the slopes are the difference in value across each cell.
@@ -286,7 +286,7 @@ subroutine PLM_diff(nk, h, S, c_method, b_method, diff)
   integer,             intent(in)    :: c_method !< Method to use for the centered difference
   integer,             intent(in)    :: b_method !< =1, use PCM in first/last cell, =2 uses linear extrapolation
   real, dimension(nk), intent(inout) :: diff     !< Scalar difference across layer (conc, e.g. ppt)
-                                                 !! determined by the following values for c_method: 
+                                                 !! determined by the following values for c_method:
                                                  !!   1. Second order finite difference (not recommended)
                                                  !!   2. Second order finite volume (used in original PPM)
                                                  !!   3. Finite-volume weighted least squares linear fit
@@ -437,7 +437,7 @@ subroutine find_neutral_surface_positions(nk, Pl, Tl, Sl, dRdTl, dRdSl, Pr, Tr, 
     krm1 = max(kr-1, 1)
     if (krm1>nk) stop 'find_neutral_surface_positions(): krm1 went out of bounds!'
 
-    ! Potential density difference, kr - kl 
+    ! Potential density difference, kr - kl
     dRho = 0.5 * ( ( dRdTr(kr) + dRdTl(kl) ) * ( Tr(kr) - Tl(kl) ) &
                  + ( dRdSr(kr) + dRdSl(kl) ) * ( Sr(kr) - Sl(kl) ) )
                                                      if (debug_this_module) write(0,*) 'k,kl,kr,dRho=',k_surface,kl,kr,dRho
@@ -454,12 +454,12 @@ subroutine find_neutral_surface_positions(nk, Pl, Tl, Sl, dRdTl, dRdSl, Pr, Tr, 
           looking_left = .true.
           looking_right = .false.
         else
-          looking_left = .not.  looking_left 
-          looking_right = .not.  looking_right 
+          looking_left = .not.  looking_left
+          looking_right = .not.  looking_right
         endif
       endif
     endif
- 
+
     if (looking_left) then
       ! Interpolate for the neutral surface position within the left column, layer kl
                                                      if (debug_this_module) write(0,*) 'looking_left=',looking_left
@@ -571,7 +571,7 @@ end subroutine find_neutral_surface_positions
 real function absolute_position(n,Pint,Karr,NParr,k_surface)
   integer, intent(in) :: n            !< Number of levels
   real,    intent(in) :: Pint(n+1)    !< Position of interfaces (Pa)
-  integer, intent(in) :: Karr(2*n+2)  !< Index of interface above position 
+  integer, intent(in) :: Karr(2*n+2)  !< Index of interface above position
   real,    intent(in) :: NParr(2*n+2) !< Non-dimensional position within layer Karr(:)
   ! Local variables
   integer :: k_surface, k
@@ -1007,7 +1007,7 @@ logical function neutralDiffusionUnitTests()
     real :: Pret
 
     Pret = fv_diff(hkm1, hk, hkp1, Skm1, Sk, Skp1)
-    test_fv_diff = (Pret /= Ptrue) 
+    test_fv_diff = (Pret /= Ptrue)
 
     if (test_fv_diff .or. verbosity>5) then
       stdunit = 6
@@ -1037,7 +1037,7 @@ logical function neutralDiffusionUnitTests()
     real :: Pret
 
     Pret = fvlsq_slope(hkm1, hk, hkp1, Skm1, Sk, Skp1)
-    test_fvlsq_slope = (Pret /= Ptrue) 
+    test_fvlsq_slope = (Pret /= Ptrue)
 
     if (test_fvlsq_slope .or. verbosity>5) then
       stdunit = 6
@@ -1065,7 +1065,7 @@ logical function neutralDiffusionUnitTests()
     real :: Pret
 
     Pret = interpolate_for_nondim_position(rhoNeg, Pneg, rhoPos, Ppos)
-    test_ifndp = (Pret /= Ptrue) 
+    test_ifndp = (Pret /= Ptrue)
 
     if (test_ifndp .or. verbosity>5) then
       stdunit = 6
