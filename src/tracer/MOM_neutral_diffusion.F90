@@ -544,57 +544,6 @@ function absolute_positions(n,Pint,Karr,NParr)
 
 end function absolute_positions
 
-!!! !> Returns the position between Pneg and Ppos where the interpolated density difference equals
-!!! !! zero: Pint = ( dRhoPos * Ppos - dRhoNeg * Pneg ) / ( dRhoPos - dRhoneg )
-!!! !! The result is always bounded to be between Pneg and Ppos.
-!!! real function interpolate_for_position(dRhoNeg, Pneg, dRhoPos, Ppos)
-!!!   real, intent(in) :: dRhoNeg !< Negative density difference
-!!!   real, intent(in) :: Pneg    !< Position of negative density difference
-!!!   real, intent(in) :: dRhoPos !< Positive density difference
-!!!   real, intent(in) :: Ppos    !< Position of positive density difference
-!!!   ! Local variables
-!!!   real :: wghtU, wghtD, Pint
-!!! 
-!!!   if (Ppos<Pneg) stop 'interpolate_for_position: Houston, we have a problem! Ppos<Pneg'
-!!!   if (dRhoNeg>dRhoPos) stop 'interpolate_for_position: Houston, we have a problem! dRhoNeg>dRhoPos'
-!!!   if (Ppos<=Pneg) then ! Handle vanished or inverted layers
-!!!     wghtU = 0.5
-!!!     wghtD = 0.5
-!!!     Pint = 0.5 * ( Pneg + Ppos )
-!!!   elseif ( dRhoPos - dRhoNeg > 0. ) then
-!!!     wghtU = -dRhoNeg / ( dRhoPos - dRhoNeg )
-!!!     wghtD = dRhoPos / ( dRhoPos - dRhoNeg )
-!!!     if ( wghtU < 0.5 ) then
-!!!       Pint = Pneg + max( wghtU, 0. ) * ( Ppos - Pneg )
-!!!     elseif ( wghtD < 0.5 ) then
-!!!       Pint = Ppos + max( wghtD, 0. ) * ( Pneg - Ppos )
-!!!     else
-!!!       Pint = 0.5 * ( Pneg + Ppos )
-!!!     endif
-!!!   elseif ( dRhoPos - dRhoNeg == 0) then
-!!!     if (dRhoNeg>0.) then
-!!!       wghtU = 0.
-!!!       wghtD = 1.
-!!!       Pint = Pneg
-!!!     elseif (dRhoNeg<0.) then
-!!!       wghtU = 1.
-!!!       wghtD = 0.
-!!!       Pint = Ppos
-!!!     else ! dRhoPos = dRhoNeg = 0
-!!!       wghtU = 0.5
-!!!       wghtD = 0.5
-!!!       Pint = 0.5 * ( Pneg + Ppos )
-!!!     endif
-!!!   else ! dRho - dRhoNeg < 0
-!!!     wghtU = 0.5
-!!!     wghtD = 0.5
-!!!     Pint = 0.5 * ( Pneg + Ppos )
-!!!   endif
-!!!   if ( Pint < Pneg ) stop 'interpolate_for_position: Houston, we have a problem! Pint < Pneg'
-!!!   if ( Pint > Ppos ) stop 'interpolate_for_position: Houston, we have a problem! Pint > Ppos'
-!!!   interpolate_for_position = Pint
-!!! end function interpolate_for_position
-
 !> Returns the non-dimensnional position between Pneg and Ppos where the interpolated density difference equals zero.
 !! The result is always bounded to be between 0 and 1.
 real function interpolate_for_nondim_position(dRhoNeg, Pneg, dRhoPos, Ppos)
