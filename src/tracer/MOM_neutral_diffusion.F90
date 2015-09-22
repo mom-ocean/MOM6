@@ -277,6 +277,34 @@ real function ppm_edge(hkm1, hk, hkp1, hkp2,  Ak, Akp1, Pk, Pkp1)
 
 end function ppm_edge
 
+!> Returns the average of a PPM reconstruction between two
+!! fractional positions.
+real function ppm_ave(xL, xR, aL, aR, aMean)
+  real, intent(in) :: xL    !< Fraction position of left bound (0,1)
+  real, intent(in) :: xR    !< Fraction position of right bound (0,1)
+  real, intent(in) :: aL    !< Left edge scalar value, at x=0
+  real, intent(in) :: aR    !< Right edge scalar value, at x=1
+  real, intent(in) :: aMean !< Average scalar value of cell
+  ! Local variables
+  real :: dx, xave, a6, a6o3
+
+  dx = xR - xL
+  xave = 0.5 * ( xR + xL )
+  a6o3 = 2. * aMean - ( aL + aR ) ! a6 / 3.
+  a6 = 3. * a6o3
+
+  if (dx<0.) then
+    stop 'ppm_ave: dx<0 should not happend!'
+  elseif (dx>1.) then
+    stop 'ppm_ave: dx>1 should not happend!'
+  elseif (dx==0.) then
+    ppm_ave = aL + ( aR - aL ) * xR + a6 * xR * ( 1. - xR )
+  else
+    ppm_ave = ( aL + xave * ( ( aR - aL ) + a6 ) )  - a6o3 * ( xR**2 + xR * xL + xL**2 )
+  endif
+
+end function ppm_ave
+
 !> Returns PLM slopes for a column where the slopes are the difference in value across each cell.
 !! The limiting follows equation 1.8 in Colella & Woodward, 1984: JCP 54, 174-201.
 subroutine PLM_diff(nk, h, S, c_method, b_method, diff)
@@ -642,8 +670,10 @@ subroutine neutral_surface_flux(nk, hl, hr, Tl, Tr, PiL, PiR, KoL, KoR, hEff, Fl
   real, dimension(2*nk+1),    intent(in)    :: hEff  !< Effective thickness between two neutral surfaces (Pa)
   real, dimension(2*nk+1),    intent(inout) :: Flx   !< Flux of tracer between pairs of neutral layers (conc H)
   ! Local variables
-  integer :: k_sublayer, kl, klm1, kr, krm1
-  real :: T_right_top, T_right_bottom, T_left_top, T_left_bottom, dT_top, dT_bottom, dT_layer, dT_ave
+  integer :: k_sublayer, klb, klt, krb, krt
+  real :: T_right_top, T_right_bottom, T_right_layer
+  real :: T_left_top, T_left_bottom, T_left_layer
+  real :: dT_top, dT_bottom, dT_layer, dT_ave
   real, dimension(nk+1) :: Til !< Left-column interface tracer (conc, e.g. degC)
   real, dimension(nk+1) :: Tir !< Right-column interface tracer (conc, e.g. degC)
 
@@ -651,41 +681,45 @@ subroutine neutral_surface_flux(nk, hl, hr, Tl, Tr, PiL, PiR, KoL, KoR, hEff, Fl
   call interface_scalar(nk, hr, Tr, Tir, 2)
 
   do k_sublayer = 1, 2*nk+1
- !  if (hEff(k_sublayer) == 0.) then
- !    Flx(k_sublayer) = 0.
- !  else
+    if (hEff(k_sublayer) == 0.) then
+      Flx(k_sublayer) = 0.
+    else
 
-      klm1 = KoL(k_sublayer+1)
-      kl = klm1+1
-      T_left_bottom = ( 1. - PiL(k_sublayer+1) ) * Til(klm1) + PiL(k_sublayer+1) * Til(kl)
+      klb = KoL(k_sublayer+1)
+      T_left_bottom = ( 1. - PiL(k_sublayer+1) ) * Til(klb) + PiL(k_sublayer+1) * Til(klb+1)
                                                      if (debug_this_module) write(0,'(i3,2(x,a,i3,x,a,f8.2),2(x,a,f8.2))') &
-                                                     k_sublayer+1,'klm1=',klm1,'Til(km1)=',Til(klm1),'kl=',kl,'Til(kl)=',Til(kl),'PiL(k+1)=',PiL(k_sublayer+1),'T_left_bottom=',T_left_bottom
+                                                     k_sublayer+1,'klb=',klb,'Til(km1)=',Til(klb),'Til(klb+1)=',Til(klb+1),'PiL(k+1)=',PiL(k_sublayer+1),'T_left_bottom=',T_left_bottom
 
-      klm1 = KoL(k_sublayer)
-      kl = klm1+1
-      T_left_top = ( 1. - PiL(k_sublayer) ) * Til(klm1) + PiL(k_sublayer) * Til(kl)
+      klt = KoL(k_sublayer)
+      T_left_top = ( 1. - PiL(k_sublayer) ) * Til(klt) + PiL(k_sublayer) * Til(klt+1)
                                                      if (debug_this_module) write(0,'(i3,2(x,a,i3,x,a,f8.2),2(x,a,f8.2))') &
-                                                     k_sublayer,'klm1=',klm1,'Til(km1)=',Til(klm1),'kl=',kl,'Til(kl)=',Til(kl),'PiL(k)=',PiL(k_sublayer),'T_left_top=',T_left_top
+                                                     k_sublayer,'klt=',klt,'Til(km1)=',Til(klt),'Til(klt+1)=',Til(klt+1),'PiL(k)=',PiL(k_sublayer),'T_left_top=',T_left_top
 
-      krm1 = KoR(k_sublayer+1)
-      kr = krm1+1
-      T_right_bottom = ( 1. - PiR(k_sublayer+1) ) * Tir(krm1) + PiR(k_sublayer+1) * Tir(kr)
-                                                     if (debug_this_module) write(0,'(i3,2(x,a,i3,x,a,f8.2),2(x,a,f8.2))') &
-                                                     k_sublayer+1,'krm1=',krm1,'Tir(km1)=',Tir(krm1),'kr=',kr,'Tir(kr)=',Tir(kr),'PiR(k+1)=',PiR(k_sublayer+1),'T_right_bottom=',T_right_bottom
+      !T_left_layer = Tl(klt)
+      T_left_layer = ppm_ave(PiL(k_sublayer), PiL(k_sublayer+1) + real(klb-klt), &
+                             Til(klt), Til(klb), Tl(klt))
 
-      krm1 = KoR(k_sublayer)
-      kr = krm1+1
-      T_right_top = ( 1. - PiR(k_sublayer) ) * Tir(krm1) + PiR(k_sublayer) * Tir(kr)
+      krb = KoR(k_sublayer+1)
+      T_right_bottom = ( 1. - PiR(k_sublayer+1) ) * Tir(krb) + PiR(k_sublayer+1) * Tir(krb+1)
                                                      if (debug_this_module) write(0,'(i3,2(x,a,i3,x,a,f8.2),2(x,a,f8.2))') &
-                                                     k_sublayer,'krm1=',krm1,'Tir(km1)=',Tir(krm1),'kr=',kr,'Tir(kr)=',Tir(kr),'PiR(k)=',PiR(k_sublayer),'T_right_top=',T_right_top
+                                                     k_sublayer+1,'krb=',krb,'Tir(km1)=',Tir(krb),'Tir(krb+1)=',Tir(krb+1),'PiR(k+1)=',PiR(k_sublayer+1),'T_right_bottom=',T_right_bottom
+
+      krt = KoR(k_sublayer)
+      T_right_top = ( 1. - PiR(k_sublayer) ) * Tir(krt) + PiR(k_sublayer) * Tir(krt+1)
+                                                     if (debug_this_module) write(0,'(i3,2(x,a,i3,x,a,f8.2),2(x,a,f8.2))') &
+                                                     k_sublayer,'krt=',krt,'Tir(km1)=',Tir(krt),'Tir(krt+1)=',Tir(krt+1),'PiR(k)=',PiR(k_sublayer),'T_right_top=',T_right_top
+
+      !T_right_layer = Tr(krt)
+      T_right_layer = ppm_ave(PiR(k_sublayer), PiR(k_sublayer+1) + real(krb-krt), &
+                             Tir(krt), Tir(krb), Tr(krt))
 
       dT_top = T_right_top - T_left_top
       dT_bottom = T_right_bottom - T_left_bottom
       dT_ave = 0.5 * ( dT_top + dT_bottom )
                                                      if (debug_this_module) write(0,'(i3,3(x,a,f8.3))') k_sublayer,'dT_top=',dT_top,'dT_bottom=',dT_bottom,'dT_ave=',dT_ave
-      dT_layer = Tr(krm1) - Tl(klm1)
+      dT_layer = T_right_layer - T_left_layer
                                                      if (debug_this_module) write(0,'(i3,2(x,a,i3,x,a,f8.3),x,a,f8.3)') &
-                                                     k_sublayer,'klm1=',klm1,'Tl(klm1=',Tl(klm1),'krm1=',krm1,'Tr(krm1=',Tr(krm1),'dT_layer=',dT_layer
+                                                     k_sublayer,'klt=',klt,'Tl(klt=',Tl(klt),'krt=',krt,'Tr(krt=',Tr(krt),'dT_layer=',dT_layer
       if (dT_top * dT_bottom < 0. .or. dT_ave * dT_layer < 0. ) then
         dT_ave = 0.
       else
@@ -693,8 +727,8 @@ subroutine neutral_surface_flux(nk, hl, hr, Tl, Tr, PiL, PiR, KoL, KoR, hEff, Fl
         dT_ave = sign( min( abs(dT_layer), abs(dT_ave) ) , dT_layer )
       endif
                                                      if (debug_this_module) write(0,'(i3," dT_ave=",f8.3)') k_sublayer, dT_ave
- !  endif
       Flx(k_sublayer) = dT_ave * hEff(k_sublayer)
+    endif
                                                      if (debug_this_module) write(0,'(i3," Flx=",f8.3)') k_sublayer, Flx(k_sublayer)
   enddo
 
