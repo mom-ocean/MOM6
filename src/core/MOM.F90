@@ -552,6 +552,7 @@ type, public :: MOM_control_struct
   integer :: id_zossq    = -1
   integer :: id_volo     = -1
   integer :: id_ssh      = -1
+  integer :: id_ssh_ga   = -1
   integer :: id_sst      = -1 
   integer :: id_sst_sq   = -1
   integer :: id_sss      = -1
@@ -729,7 +730,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
   real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)+1) :: eta_predia, eta_preale
 
   real :: tot_wt_ssh, Itot_wt_ssh, I_time_int
-  real :: zos_area_mean, volo
+  real :: zos_area_mean, volo, ssh_ga
   type(time_type) :: Time_local
   logical :: showCallTree
   logical :: do_pass_kd_kv_turb ! This is used for a group halo pass.
@@ -1279,14 +1280,14 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
           endif
         endif
 
+        call cpu_clock_begin(id_clock_pass)
+        call do_group_pass(CS%pass_uv_T_S_h, G%Domain)
+        call cpu_clock_end(id_clock_pass)
+
         ! Whenever thickness changes let the diag manager know, target grids
         ! for vertical remapping may need to be regenerated. This needs to
         ! happen after the H update and before the next post_data.
         call diag_update_target_grids(CS%diag)
-
-        call cpu_clock_begin(id_clock_pass)
-        call do_group_pass(CS%pass_uv_T_S_h, G%Domain)
-        call cpu_clock_end(id_clock_pass)
 
         if (CS%debug) then
           call uchksum(u,"Post-diabatic u", G, haloshift=2)
@@ -1426,6 +1427,12 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
   do j=js,je ; do i=is,ie
     CS%ave_ssh(i,j) = CS%ave_ssh(i,j)*Itot_wt_ssh
   enddo ; enddo
+
+  ! area mean SSH
+  if (CS%id_ssh_ga > 0) then
+    ssh_ga = global_area_mean(CS%ave_ssh, G)
+    call post_data(CS%id_ssh_ga, ssh_ga, CS%diag)
+  endif
 
   call enable_averaging(dt*n_max,Time_local, CS%diag)
   I_time_int = 1.0/(dt*n_max)
@@ -2278,6 +2285,9 @@ subroutine register_diags(Time, G, CS, ADp)
       long_name='Square of sea surface height above geoid', units='m2', missing_value=CS%missing)
   CS%id_ssh = register_diag_field('ocean_model', 'SSH', diag%axesT1, Time, &
       'Sea Surface Height', 'meter', CS%missing)
+  CS%id_ssh_ga = register_scalar_field('ocean_model', 'ssh_ga', Time, diag,&
+      long_name='Area averaged sea surface height', units='m',            &
+      standard_name='area_averaged_sea_surface_height')
   CS%id_ssh_inst = register_diag_field('ocean_model', 'SSH_inst', diag%axesT1, Time, &
       'Instantaneous Sea Surface Height', 'meter', CS%missing)
   CS%id_ssu = register_diag_field('ocean_model', 'SSU', diag%axesCu1, Time, &
@@ -2502,7 +2512,7 @@ subroutine write_static_fields(G, diag)
         cmor_units='m2', cmor_long_name='Ocean Grid-Cell Area')
   if (id > 0) then
     do j=js,je ; do i=is,ie ; out_h(i,j) = G%areaT(i,j) ; enddo ; enddo
-    call post_data(id, out_h, diag, .true.)
+    call post_data(id, out_h, diag, .true., mask=G%mask2dT)
   endif
 
   id = register_static_field('ocean_model', 'depth_ocean', diag%axesT1,  &
@@ -2510,7 +2520,7 @@ subroutine write_static_fields(G, diag)
         standard_name='sea_floor_depth_below_geoid',                     &
         cmor_field_name='deptho', cmor_long_name='Sea Floor Depth',      &
         cmor_units='m', cmor_standard_name='sea_floor_depth_below_geoid')
-  if (id > 0) call post_data(id, G%bathyT, diag, .true.)
+  if (id > 0) call post_data(id, G%bathyT, diag, .true., mask=G%mask2dT)
 
   id = register_static_field('ocean_model', 'wet', diag%axesT1, &
         '0 if land, 1 if ocean at tracer points', 'none')

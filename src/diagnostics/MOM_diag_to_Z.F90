@@ -961,20 +961,17 @@ subroutine MOM_diag_to_Z_init(Time, G, param_file, diag, CS)
 
     CS%id_v_z = register_diag_field('ocean_model_z', 'v', CS%axesCvz, Time,    &
         'Meridional Velocity in Depth Space', 'meter second-1',                &
-        missing_value=CS%missing_vel, cmor_field_name='vo', cmor_units='m s-1',&
-        cmor_standard_name='sea_water_y_velocity', cmor_long_name='Sea Water Y Velocity')
+        missing_value=CS%missing_vel)
     if (CS%id_v_z>0) call safe_alloc_ptr(CS%v_z,isd,ied,JsdB,JedB,CS%nk_zspace)
 
     CS%id_uh_z = register_diag_field('ocean_model_z', 'uh', CS%axesCuz, Time,    &
         'Zonal Mass Transport (including SGS param) in Depth Space', flux_units, &
-        missing_value=CS%missing_trans, cmor_field_name='umo', cmor_units='kg/s',&
-        cmor_standard_name='ocean_mass_x_transport', cmor_long_name='Ocean Mass X Transport')
+        missing_value=CS%missing_trans)
     if (CS%id_uh_z>0) call safe_alloc_ptr(CS%uh_z,IsdB,IedB,jsd,jed,CS%nk_zspace)
 
     CS%id_vh_z = register_diag_field('ocean_model_z', 'vh', CS%axesCvz, Time,        &
         'Meridional Mass Transport (including SGS param) in Depth Space', flux_units,&
-        missing_value=CS%missing_trans, cmor_field_name='vmo', cmor_units='kg/s',    &
-        cmor_standard_name='ocean_mass_y_transport', cmor_long_name='Ocean Mass Y Transport')
+        missing_value=CS%missing_trans)
     if (CS%id_vh_z>0) call safe_alloc_ptr(CS%vh_z,isd,ied,JsdB,JedB,CS%nk_zspace)
 
   else

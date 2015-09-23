@@ -45,19 +45,18 @@ module MOM_thickness_diffuse
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 
-use MOM_checksums, only : hchksum, uchksum, vchksum
-use MOM_diag_mediator, only : post_data, query_averaging_enabled, diag_ctrl
-use MOM_diag_mediator, only : register_diag_field, safe_alloc_ptr, time_type
-use MOM_diag_mediator, only : diag_update_target_grids
-use MOM_error_handler, only : MOM_error, FATAL, WARNING
-use MOM_EOS, only : calculate_density, calculate_density_derivs
-use MOM_file_parser, only : get_param, log_version, param_file_type
-use MOM_grid, only : ocean_grid_type
-use MOM_interface_heights, only : find_eta
+use MOM_checksums,             only : hchksum, uchksum, vchksum
+use MOM_diag_mediator,         only : post_data, query_averaging_enabled, diag_ctrl
+use MOM_diag_mediator,         only : register_diag_field, safe_alloc_ptr, time_type
+use MOM_diag_mediator,         only : diag_update_target_grids
+use MOM_error_handler,         only : MOM_error, FATAL, WARNING
+use MOM_EOS,                   only : calculate_density, calculate_density_derivs
+use MOM_file_parser,           only : get_param, log_version, param_file_type
+use MOM_grid,                  only : ocean_grid_type
+use MOM_interface_heights,     only : find_eta
 use MOM_lateral_mixing_coeffs, only : VarMix_CS
-use MOM_variables, only : thermo_var_ptrs, cont_diag_ptrs
-use MOM_EOS, only : calculate_density
-use MOM_MEKE_types, only : MEKE_type
+use MOM_MEKE_types,            only : MEKE_type
+use MOM_variables,             only : thermo_var_ptrs, cont_diag_ptrs
 
 implicit none ; private
 
@@ -67,30 +66,29 @@ public vert_fill_TS
 #include <MOM_memory.h>
 
 type, public :: thickness_diffuse_CS ; private
-  real    :: Khth           ! The background interface depth diffusivity in m2 s-1.
-  real    :: Khth_Slope_Cff ! Slope dependence coefficient of Khth in m2 s-1.
-  real    :: Khth_Min       ! Minimum value of Khth in m2 s-1.
-  real    :: Khth_Max       ! Maximum value of Khth in m2 s-1, or 0 for no max.
-  real    :: slope_max      ! Slopes steeper than this are limited in some way.
-  real    :: kappa_smooth   ! A diffusivity that is used to interpolate more
-                            ! sensible values of T & S into thin layers.
-  logical :: thickness_diffuse ! If true, interfaces heights are diffused
-                             ! with a coefficient of Khth.
+  real    :: Khth                ! background interface depth diffusivity (m2 s-1)
+  real    :: Khth_Slope_Cff      ! slope dependence coefficient of Khth (m2 s-1)
+  real    :: Khth_Min            ! minimum Khth (m2 s-1)
+  real    :: Khth_Max            ! maximum Khth (m2 s-1), or 0 for no max
+  real    :: slope_max           ! slopes steeper than slope_max are limited in some way.
+  real    :: kappa_smooth        ! diffusivity used to interpolate more
+                                 ! sensible values of T & S into thin layers.
+  logical :: thickness_diffuse   ! if true, interfaces heights are diffused with Khth.
   logical :: detangle_interfaces ! If true, add 3-d structured interface height
-                            ! diffusivities to horizonally smooth jagged layers.
-  real    :: detangle_time  ! If detangle_interfaces is true, this is the
-                            ! timescale over which maximally jagged grid-scale
-                            ! thickness variations are suppressed.  This must be
-                            ! longer than DT, or 0 (the default) to use DT.
-  integer :: nkml           ! The number of layers within the mixed layer.
-  logical :: debug          ! If true, write verbose checksums for debugging purposes.
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
-                             ! timing of diagnostic output.
-  real, pointer :: GMwork(:,:) => NULL()  ! Work by thick. diff. in W m-2.
-  real, pointer :: diagSlopeX(:,:,:) => NULL()  ! diagnostic: zonal neutral slope (nondim).
-  real, pointer :: diagSlopeY(:,:,:) => NULL()  ! diagnostic: zonal neutral slope (nondim).
-  integer :: id_uhGM = -1, id_vhGM = -1, id_GMwork = -1, id_KH_u = -1, id_KH_v = -1
-  integer :: id_KH_u1 = -1, id_KH_v1 = -1
+                                 ! diffusivities to horizonally smooth jagged layers.
+  real    :: detangle_time       ! if detangle_interfaces is true, this is the
+                                 ! timescale over which maximally jagged grid-scale
+                                 ! thickness variations are suppressed.  This must be
+                                 ! longer than DT, or 0 (the default) to use DT.
+  integer :: nkml                ! number of layers within mixed layer
+  logical :: debug               ! write verbose checksums for debugging purposes
+  type(diag_ctrl), pointer :: diag ! structure used to regulate timing of diagnostics
+  real, pointer :: GMwork(:,:)       => NULL()  ! work by thickness diffusivity (W m-2)
+  real, pointer :: diagSlopeX(:,:,:) => NULL()  ! diagnostic: zonal neutral slope (nondim)
+  real, pointer :: diagSlopeY(:,:,:) => NULL()  ! diagnostic: zonal neutral slope (nondim)
+  integer :: id_uhGM    = -1, id_vhGM    = -1, id_GMwork = -1
+  integer :: id_KH_u    = -1, id_KH_v    = -1, id_KH_t   = -1
+  integer :: id_KH_u1   = -1, id_KH_v1   = -1, id_KH_t1  = -1
   integer :: id_slope_x = -1, id_slope_y = -1
  ! integer :: id_sfn_slope_x = -1, id_sfn_slope_y = -1, id_sfn_x = -1, id_sfn_y = -1
 end type thickness_diffuse_CS
@@ -108,53 +106,58 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, MEKE, VarMix, CDp, CS)
   type(VarMix_CS),                        pointer       :: VarMix
   type(cont_diag_ptrs),                   intent(inout) :: CDp
   type(thickness_diffuse_CS),             pointer       :: CS
-!    This subroutine does interface depth diffusion.  The fluxes are
+
+!  This subroutine does interface depth diffusion.  The fluxes are
 !  limited to give positive definiteness, and the diffusivities are
 !  limited to guarantee stability.
 
-! Arguments: h - Layer thickness, in m.
-!  (in/out)  uhtr - Accumulated zonal mass fluxes in m2 H.
-!  (in/out)  vhtr - Accumulated meridional mass fluxes in m2 H.
-!  (in)      tv - A structure containing pointers to any available
-!                 thermodynamic fields. Absent fields have NULL ptrs.
-!  (in)      dt - Time increment in s.
-!  (in)      G - The ocean's grid structure.
-!  (in)      VarMix - A structure containing a number of fields related to
+! Arguments: 
+!  (in/out)  h      - layer thickness (meter)
+!  (in/out)  uhtr   - accumulated zonal mass fluxes (m2 H)
+!  (in/out)  vhtr   - accumulated meridional mass fluxes (m2 H)
+!  (in)      tv     - A structure containing pointers to available
+!                    thermodynamic fields. Absent fields have NULL ptrs.
+!  (in)      dt     - time increment (seconds)
+!  (in)      G      - ocean grid structure
+!  (in)      VarMix - A structure containing fields related to
 !                     variable lateral mixing.
-!  (inout)   MEKE - A structure containing information about the Mesoscale Eddy
-!                   Kinetic Energy parameterization; this might be unassociated.
-!  (inout)   CDp - A structure with pointers to various terms in the continuity
-!                  equations.
-!  (in)      CS - The control structure returned by a previous call to
-!                 thickness_diffuse_init.
+!  (inout)   MEKE   - A structure containing information about the Mesoscale Eddy
+!                     Kinetic Energy parameterization; this might be unassociated.
+!  (inout)   CDp    - structure pointing to terms in continuity equations
+!  (in)      CS     - control structure from previous call to thickness_diffuse_init
 
-
-  real :: e(SZI_(G), SZJ_(G), SZK_(G)+1) ! The heights of the interfaces, relative
-                                    ! to mean sea level, in m, pos. upward.
+  real :: e(SZI_(G), SZJ_(G), SZK_(G)+1) ! heights of interfaces, relative to mean
+                                         ! sea level,in H units, positive up.
   real :: uhD(SZIB_(G), SZJ_(G), SZK_(G)) ! uhD & vhD are the diffusive u*h &
-  real :: vhD(SZI_(G), SZJB_(G), SZK_(G)) ! v*h fluxes, in m2 H s-1.
+  real :: vhD(SZI_(G), SZJB_(G), SZK_(G)) ! v*h fluxes (m2 H s-1)
 
   real, dimension(SZIB_(G), SZJ_(G), SZK_(G)+1) :: &
-    KH_u, &       ! The interface height diffusivities in u-columns, in m2 s-1.
+    KH_u, &       ! interface height diffusivities in u-columns (m2 s-1)
     int_slope_u   ! A nondimensional ratio from 0 to 1 that gives the relative
                   ! weighting of the interface slopes to that calculated also
                   ! using density gradients at u points.  The physically correct
                   ! slopes occur at 0, while 1 is used for numerical closures.
   real, dimension(SZI_(G), SZJB_(G), SZK_(G)+1) :: &
-    KH_v, &       ! The interface height diffusivities in v-columns, in m2 s-1.
+    KH_v, &       ! interface height diffusivities in v-columns (m2 s-1)
     int_slope_v   ! A nondimensional ratio from 0 to 1 that gives the relative
                   ! weighting of the interface slopes to that calculated also
                   ! using density gradients at v points.  The physically correct
                   ! slopes occur at 0, while 1 is used for numerical closures.
+  real, dimension(SZI_(G), SZJ_(G), SZK_(G)) :: &
+    KH_t          ! diagnosed diffusivity at tracer points (m^2/s)
+
   real, allocatable, save :: KH_u_CFL(:,:)   ! The maximum stable interface height
-  real, allocatable, save :: KH_v_CFL(:,:)   ! diffusivities at u & v grid points,
-                                             ! in m2 s-1.
+  real, allocatable, save :: KH_v_CFL(:,:)   ! diffusivity at u & v grid points (m2 s-1)
   logical, save :: first_call = .TRUE.
-  real :: Khth_Loc_u(SZIB_(G), SZJ_(G))
-  real :: Khth_Loc(SZIB_(G), SZJB_(G))     ! Locally calculated thickness mixing coefficient (m2/s)
+  real :: Khth_Loc_u(SZIB_(G), SZJ_(G)) 
+  real :: Khth_Loc(SZIB_(G), SZJB_(G))  ! locally calculated thickness diffusivity (m2/s)
   logical :: use_VarMix, Resoln_scaled, use_stored_slopes
   integer :: i, j, k, is, ie, js, je, nz
   logical :: MEKE_not_null
+  real :: hu(SZI_(G), SZJ_(G))       ! u-thickness (H)
+  real :: hv(SZI_(G), SZJ_(G))       ! v-thickness (H)
+  real :: KH_u_lay(SZI_(G), SZJ_(G)) ! layer ave thickness diffusivities (m2/sec)     
+  real :: KH_v_lay(SZI_(G), SZJ_(G)) ! layer ave thickness diffusivities (m2/sec)     
 
   if (.not. ASSOCIATED(CS)) call MOM_error(FATAL, "MOM_thickness_diffuse:"// &
          "Module must be initialized before it is used.")
@@ -362,15 +365,46 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, MEKE, VarMix, CDp, CS)
     call hchksum(h(:,:,:)*G%H_to_m,"thickness_diffuse h",G,haloshift=0)
   endif
 
-! Offer diagnostic fields for averaging.
+  ! offer diagnostic fields for averaging
   if (query_averaging_enabled(CS%diag)) then
-    if (CS%id_uhGM > 0) call post_data(CS%id_uhGM, CDp%uhGM, CS%diag)
-    if (CS%id_vhGM > 0) call post_data(CS%id_vhGM, CDp%vhGM, CS%diag)
+    if (CS%id_uhGM > 0)   call post_data(CS%id_uhGM, CDp%uhGM, CS%diag)
+    if (CS%id_vhGM > 0)   call post_data(CS%id_vhGM, CDp%vhGM, CS%diag)
     if (CS%id_GMwork > 0) call post_data(CS%id_GMwork, CS%GMwork, CS%diag)
-    if (CS%id_KH_u > 0) call post_data(CS%id_KH_u, KH_u, CS%diag)
-    if (CS%id_KH_v > 0) call post_data(CS%id_KH_v, KH_v, CS%diag)
-    if (CS%id_KH_u1 > 0) call post_data(CS%id_KH_u1, KH_u(:,:,1), CS%diag)
-    if (CS%id_KH_v1 > 0) call post_data(CS%id_KH_v1, KH_v(:,:,1), CS%diag)
+    if (CS%id_KH_u > 0)   call post_data(CS%id_KH_u, KH_u, CS%diag)
+    if (CS%id_KH_v > 0)   call post_data(CS%id_KH_v, KH_v, CS%diag)
+    if (CS%id_KH_u1 > 0)  call post_data(CS%id_KH_u1, KH_u(:,:,1), CS%diag)
+    if (CS%id_KH_v1 > 0)  call post_data(CS%id_KH_v1, KH_v(:,:,1), CS%diag)
+
+    ! Diagnose diffusivity at T-cell point.  Do simple average, rather than
+    ! thickness-weighted average, in order that KH_t is depth-independent 
+    ! in the case where KH_u and KH_v are depth independent.  Otherwise,
+    ! if use thickess weighted average, the variations of thickness with
+    ! depth will place a spurious depth dependence to the diagnosed KH_t.  
+    if (CS%id_KH_t > 0 .or. CS%id_KH_t1 > 0) then    
+      do k=1,nz 
+        ! thicknesses across u and v faces, converted to 0/1 mask; 
+        ! layer average of the interface diffusivities KH_u and KH_v 
+        do j=js,je ; do I=is-1,ie
+          hu(i,j)       = 2.0*h(i,j,k)*h(i+1,j,k)/(h(i,j,k)+h(i+1,j,k)+G%H_subroundoff)
+          if(hu(i,j) /= 0.0) hu(i,j) = 1.0
+          KH_u_lay(i,j) = 0.5*(KH_u(i,j,k)+KH_u(i,j,k+1)) 
+        enddo ; enddo 
+        do J=js-1,je ; do i=is,ie
+          hv(i,j)       = 2.0*h(i,j,k)*h(i,j+1,k)/(h(i,j,k)+h(i,j+1,k)+G%H_subroundoff)
+          if(hv(i,j) /= 0.0) hv(i,j) = 1.0
+          KH_v_lay(i,j) = 0.5*(KH_v(i,j,k)+KH_v(i,j,k+1)) 
+        enddo ; enddo 
+        ! diagnose diffusivity at T-point 
+        do j=js,je ; do i=is,ie
+          KH_t(i,j,k) = ((hu(i-1,j)*KH_u_lay(i-1,j)+hu(i,j)*KH_u_lay(i,j))  &
+                        +(hv(i,j-1)*KH_v_lay(i,j-1)+hv(i,j)*KH_v_lay(i,j))) &
+                       / (hu(i-1,j)+hu(i,j)+hv(i,j-1)+hv(i,j)+G%H_subroundoff)
+        enddo ; enddo 
+      enddo
+      if(CS%id_KH_t  > 0) call post_data(CS%id_KH_t,  KH_t,        CS%diag)
+      if(CS%id_KH_t1 > 0) call post_data(CS%id_KH_t1, KH_t(:,:,1), CS%diag)
+    endif 
+
   endif
 
 end subroutine thickness_diffuse
@@ -1602,17 +1636,32 @@ subroutine thickness_diffuse_init(Time, G, param_file, diag, CDp, CS)
   CS%id_vhGM = register_diag_field('ocean_model', 'vhGM', diag%axesCvL, Time, &
            'Time Mean Diffusive Meridional Thickness Flux', flux_units)
   if (CS%id_vhGM > 0) call safe_alloc_ptr(CDp%vhGM,G%isd,G%ied,G%JsdB,G%JedB,G%ke)
-  CS%id_GMwork = register_diag_field('ocean_model', 'GMwork', diag%axesT1, Time, &
-           'Time Mean Integral Work done by Diffusive Thickness Flux', 'Watt meter-2')
+
+  CS%id_GMwork = register_diag_field('ocean_model', 'GMwork', diag%axesT1, Time,                     &
+   'Integrated Tendency of Ocean Mesoscale Eddy KE from Parameterized Eddy Advection',               &
+   'Watt meter-2', cmor_field_name='tnkebto',                                                        &
+   cmor_long_name='Integrated Tendency of Ocean Mesoscale Eddy KE from Parameterized Eddy Advection',&
+   cmor_units='W m-2',                                                                               &
+   cmor_standard_name='tendency_of_ocean_eddy_kinetic_energy_content_due_to_parameterized_eddy_advection')
   if (CS%id_GMwork > 0) call safe_alloc_ptr(CS%GMwork,G%isd,G%ied,G%jsd,G%jed)
+
   CS%id_KH_u = register_diag_field('ocean_model', 'KHTH_u', diag%axesCui, Time, &
-           'Thickness Diffusivity at U-point', 'meter second-2')
+           'Parameterized mesoscale eddy advection diffusivity at U-point', 'meter second-2')
   CS%id_KH_v = register_diag_field('ocean_model', 'KHTH_v', diag%axesCvi, Time, &
-           'Thickness Diffusivity at V-point', 'meter second-2')
-  CS%id_KH_u1 = register_diag_field('ocean_model', 'KHTH_u1', diag%axesCu1, Time, &
-           'Thickness Diffusivity at U-points (2-D)', 'meter second-2')
-  CS%id_KH_v1 = register_diag_field('ocean_model', 'KHTH_v1', diag%axesCv1, Time, &
-           'Thickness Diffusivity at V-points (2-D)', 'meter second-2')
+           'Parameterized mesoscale eddy advection diffusivity at V-point', 'meter second-2')
+  CS%id_KH_t = register_diag_field('ocean_model', 'KHTH_t', diag%axesTL, Time,               &
+       'Ocean Tracer Diffusivity due to Parameterized Mesoscale Advection', 'meter second-2',&
+   cmor_field_name='diftrblo',                                                               &
+   cmor_long_name='Ocean Tracer Diffusivity due to Parameterized Mesoscale Advection',       &
+   cmor_units='m2 s-1',                                                                      &
+   cmor_standard_name='ocean_tracer_diffusivity_due_to_parameterized_mesoscale_advection')
+
+  CS%id_KH_u1 = register_diag_field('ocean_model', 'KHTH_u1', diag%axesCu1, Time,         &
+           'Parameterized mesoscale eddy advection diffusivity at U-points (2-D)', 'meter second-2')
+  CS%id_KH_v1 = register_diag_field('ocean_model', 'KHTH_v1', diag%axesCv1, Time,         &  
+           'Parameterized mesoscale eddy advection diffusivity at V-points (2-D)', 'meter second-2')
+  CS%id_KH_t1 = register_diag_field('ocean_model', 'KHTH_t1', diag%axesT1, Time,&
+           'Parameterized mesoscale eddy advection diffusivity at T-points (2-D)', 'meter second-2')
 
   CS%id_slope_x =  register_diag_field('ocean_model', 'neutral_slope_x', diag%axesCui, Time, &
            'Zonal slope of neutral surface', 'nondim')

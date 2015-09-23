@@ -78,6 +78,10 @@ implicit none ; private
 public restart_init, restart_end, restore_state, register_restart_field
 public save_restart, query_initialized, restart_init_end, vardesc
 
+type p4d
+  real, dimension(:,:,:,:), pointer :: p => NULL()
+end type p4d
+
 type p3d
   real, dimension(:,:,:), pointer :: p => NULL()
 end type p3d
@@ -123,10 +127,12 @@ type, public :: MOM_restart_CS ; private
   type(p1d), pointer :: var_ptr1d(:) => NULL()
   type(p2d), pointer :: var_ptr2d(:) => NULL()
   type(p3d), pointer :: var_ptr3d(:) => NULL()
+  type(p4d), pointer :: var_ptr4d(:) => NULL()
   integer :: max_fields
 end type MOM_restart_CS
 
 interface register_restart_field
+  module procedure register_restart_field_ptr4d
   module procedure register_restart_field_ptr3d
   module procedure register_restart_field_ptr2d
   module procedure register_restart_field_ptr1d
@@ -135,14 +141,11 @@ end interface
 
 interface query_initialized
   module procedure query_initialized_name
-  module procedure query_initialized_0d
-  module procedure query_initialized_1d
-  module procedure query_initialized_2d
-  module procedure query_initialized_3d
-  module procedure query_initialized_0d_name
-  module procedure query_initialized_1d_name
-  module procedure query_initialized_2d_name
-  module procedure query_initialized_3d_name
+  module procedure query_initialized_0d, query_initialized_0d_name
+  module procedure query_initialized_1d, query_initialized_1d_name
+  module procedure query_initialized_2d, query_initialized_2d_name
+  module procedure query_initialized_3d, query_initialized_3d_name
+  module procedure query_initialized_4d, query_initialized_4d_name
 end interface
 
 contains
@@ -176,11 +179,48 @@ subroutine register_restart_field_ptr3d(f_ptr, var_desc, mandatory, CS)
   CS%restart_field(CS%novars)%var_name = trim(CS%restart_field(CS%novars)%vars%name)
 
   CS%var_ptr3d(CS%novars)%p => f_ptr
+  CS%var_ptr4d(CS%novars)%p => NULL()
   CS%var_ptr2d(CS%novars)%p => NULL()
   CS%var_ptr1d(CS%novars)%p => NULL()
   CS%var_ptr0d(CS%novars)%p => NULL()
 
 end subroutine register_restart_field_ptr3d
+
+subroutine register_restart_field_ptr4d(f_ptr, var_desc, mandatory, CS)
+  real, dimension(:,:,:,:), target :: f_ptr
+  type(vardesc),      intent(in) :: var_desc
+  logical,            intent(in) :: mandatory
+  type(MOM_restart_CS),  pointer :: CS
+!  Set up a field that will be written to and read from restart
+!  files.
+!
+! Arguments: f_ptr - A pointer to the field to be read or written.
+!  (in)      var_desc - The descriptive structure for the field.
+!  (in)      mandatory - If .true. the run will abort if this field is not
+!                        successfully read from the restart file.  If .false.,
+!                        alternate techniques are provided to initialize this
+!                        field if it is cannot be read from the file.
+!  (in/out)  CS - The control structure returned by a previous call to
+!                 restart_init.
+  if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
+      "register_restart_field: Module must be initialized before it is used.")
+
+  CS%novars = CS%novars+1
+  if (CS%novars > CS%max_fields) return ! This is an error that will be reported
+                                     ! once the total number of fields is known.
+
+  CS%restart_field(CS%novars)%vars = var_desc
+  CS%restart_field(CS%novars)%mand_var = mandatory
+  CS%restart_field(CS%novars)%initialized = .false.
+  CS%restart_field(CS%novars)%var_name = trim(CS%restart_field(CS%novars)%vars%name)
+
+  CS%var_ptr4d(CS%novars)%p => f_ptr
+  CS%var_ptr3d(CS%novars)%p => NULL()
+  CS%var_ptr2d(CS%novars)%p => NULL()
+  CS%var_ptr1d(CS%novars)%p => NULL()
+  CS%var_ptr0d(CS%novars)%p => NULL()
+
+end subroutine register_restart_field_ptr4d
 
 subroutine register_restart_field_ptr2d(f_ptr, var_desc, mandatory, CS)
   real, dimension(:,:), target :: f_ptr
@@ -211,6 +251,7 @@ subroutine register_restart_field_ptr2d(f_ptr, var_desc, mandatory, CS)
   CS%restart_field(CS%novars)%var_name = trim(CS%restart_field(CS%novars)%vars%name)
 
   CS%var_ptr2d(CS%novars)%p => f_ptr
+  CS%var_ptr4d(CS%novars)%p => NULL()
   CS%var_ptr3d(CS%novars)%p => NULL()
   CS%var_ptr1d(CS%novars)%p => NULL()
   CS%var_ptr0d(CS%novars)%p => NULL()
@@ -246,6 +287,7 @@ subroutine register_restart_field_ptr1d(f_ptr, var_desc, mandatory, CS)
   CS%restart_field(CS%novars)%var_name = trim(CS%restart_field(CS%novars)%vars%name)
 
   CS%var_ptr1d(CS%novars)%p => f_ptr
+  CS%var_ptr4d(CS%novars)%p => NULL()
   CS%var_ptr3d(CS%novars)%p => NULL()
   CS%var_ptr2d(CS%novars)%p => NULL()
   CS%var_ptr0d(CS%novars)%p => NULL()
@@ -281,6 +323,7 @@ subroutine register_restart_field_ptr0d(f_ptr, var_desc, mandatory, CS)
   CS%restart_field(CS%novars)%var_name = trim(CS%restart_field(CS%novars)%vars%name)
 
   CS%var_ptr0d(CS%novars)%p => f_ptr
+  CS%var_ptr4d(CS%novars)%p => NULL()
   CS%var_ptr3d(CS%novars)%p => NULL()
   CS%var_ptr2d(CS%novars)%p => NULL()
   CS%var_ptr1d(CS%novars)%p => NULL()
@@ -439,6 +482,35 @@ function query_initialized_3d(f_ptr, CS) result(query_initialized)
 
 end function query_initialized_3d
 
+function query_initialized_4d(f_ptr, CS) result(query_initialized)
+  real, dimension(:,:,:,:), target  :: f_ptr
+  type(MOM_restart_CS),     pointer :: CS
+  logical :: query_initialized
+!   This subroutine tests whether the field pointed to by f_ptr has
+! been initialized from a restart file.
+!
+! Arguments: f_ptr - A pointer to the field that is being queried.
+!  (in)      CS - The control structure returned by a previous call to
+!                 restart_init.
+  integer :: m,n
+  if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
+      "query_initialized: Module must be initialized before it is used.")
+  if (CS%novars > CS%max_fields) call restart_error(CS)
+
+  query_initialized = .false.
+  n = CS%novars+1
+  do m=1,CS%novars
+    if (ASSOCIATED(CS%var_ptr4d(m)%p,f_ptr)) then
+      if (CS%restart_field(m)%initialized) query_initialized = .true.
+      n = m ; exit
+    endif
+  enddo
+! Assume that you are going to initialize it now, so set flag to initialized if
+! queried again.
+  if (n<=CS%novars) CS%restart_field(n)%initialized = .true.
+
+end function query_initialized_4d
+
 function query_initialized_0d_name(f_ptr, name, CS) result(query_initialized)
   real,                 target  :: f_ptr
   character(len=*)              :: name
@@ -587,6 +659,43 @@ function query_initialized_3d_name(f_ptr, name, CS) result(query_initialized)
 
 end function query_initialized_3d_name
 
+function query_initialized_4d_name(f_ptr, name, CS) result(query_initialized)
+  real, dimension(:,:,:,:), target  :: f_ptr
+  character(len=*)                  :: name
+  type(MOM_restart_CS),     pointer :: CS
+  logical :: query_initialized
+!   This subroutine tests whether the field pointed to by f_ptr or with the
+! specified variable name has been initialized from a restart file.
+!
+! Arguments: f_ptr - A pointer to the field that is being queried.
+!  (in)      name - The name of the field that is being queried.
+!  (in)      CS - The control structure returned by a previous call to
+!                 restart_init.
+  integer :: m, n
+  if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
+      "query_initialized: Module must be initialized before it is used.")
+  if (CS%novars > CS%max_fields) call restart_error(CS)
+
+  query_initialized = .false.
+  n = CS%novars+1
+  do m=1,CS%novars
+    if (ASSOCIATED(CS%var_ptr4d(m)%p,f_ptr)) then
+      if (CS%restart_field(m)%initialized) query_initialized = .true.
+      n = m ; exit
+    endif
+  enddo
+! Assume that you are going to initialize it now, so set flag to initialized if
+! queried again.
+  if (n<=CS%novars) CS%restart_field(n)%initialized = .true.
+  if (n==CS%novars+1) then
+    if (is_root_pe()) &
+      call MOM_error(NOTE, "MOM_restart: Unable to find "//name//" queried by pointer, "//&
+        "possibly because of the suspect comparison of pointers by ASSOCIATED.")
+    query_initialized = query_initialized_name(name, CS)
+  endif
+
+end function query_initialized_4d_name
+
 subroutine save_restart(directory, time, G, CS, time_stamped, filename)
 !  save_restart saves all registered variables to restart files.
   character(len=*),        intent(in)    :: directory
@@ -724,6 +833,9 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename)
       elseif (ASSOCIATED(CS%var_ptr2d(m)%p)) then
         call write_field(unit,fields(m-start_var+1), G%Domain%mpp_domain, &
                          CS%var_ptr2d(m)%p, restart_time)
+      elseif (ASSOCIATED(CS%var_ptr4d(m)%p)) then
+        call write_field(unit,fields(m-start_var+1), G%Domain%mpp_domain, &
+                         CS%var_ptr4d(m)%p, restart_time)
       elseif (ASSOCIATED(CS%var_ptr1d(m)%p)) then
         call write_field(unit, fields(m-start_var+1), CS%var_ptr1d(m)%p, &
                          restart_time)
@@ -841,11 +953,11 @@ subroutine restore_state(filename, directory, day, G, CS)
             inquire(file=filepath, exist=fexists)
             if (fexists) &
               call open_file(unit(n), trim(filepath), READONLY_FILE, NETCDF_FILE, &
-                             threading = MULTIPLE, fileset = SINGLE_FILE)            
+                             threading = MULTIPLE, fileset = SINGLE_FILE)
           endif
           if (fexists) unit_is_global(n) = .false.
         endif
-        
+
         if (fexists) then
           unit_path(n) = filepath
           n = n + 1
@@ -957,33 +1069,34 @@ subroutine restore_state(filename, directory, day, G, CS)
           elseif (ASSOCIATED(CS%var_ptr0d(m)%p)) then ! Read a scalar...
             call read_data(unit_path(n), varname, CS%var_ptr0d(m)%p, &
                            no_domain=.true., timelevel=1)
+          elseif ((pos == 0) .and. ASSOCIATED(CS%var_ptr2d(m)%p)) then  ! Read a non-decomposed 2d array.
+            ! Probably should query the field type to make sure that the sizes are right.
+            call read_data(unit_path(n), varname, CS%var_ptr2d(m)%p, &
+                           no_domain=.true., timelevel=1)
+          elseif ((pos == 0) .and. ASSOCIATED(CS%var_ptr3d(m)%p)) then  ! Read a non-decomposed 3d array.
+            ! Probably should query the field type to make sure that the sizes are right.
+            call read_data(unit_path(n), varname, CS%var_ptr3d(m)%p, &
+                           no_domain=.true., timelevel=1)
+          elseif ((pos == 0) .and. ASSOCIATED(CS%var_ptr4d(m)%p)) then  ! Read a non-decomposed 4d array.
+            ! Probably should query the field type to make sure that the sizes are right.
+            call read_data(unit_path(n), varname, CS%var_ptr4d(m)%p, &
+                           no_domain=.true., timelevel=1)
           elseif (unit_is_global(n) .or. G%Domain%use_io_layout) then
             if (ASSOCIATED(CS%var_ptr3d(m)%p)) then
               ! Read 3d array...  Time level 1 is always used.
-              ! Probably should query the field type to make sure that the sizes are right...
-              if (pos == 0) then
-                call read_data(unit_path(n), varname, CS%var_ptr3d(m)%p, &
-                               G%Domain%mpp_domain, 1)
-                    ! ### SHOULD BE no_domain=.true., timelevel=1) ?
-              else
-                call read_data(unit_path(n), varname, CS%var_ptr3d(m)%p, &
-                               G%Domain%mpp_domain, 1, position=pos)
-              endif
+              call read_data(unit_path(n), varname, CS%var_ptr3d(m)%p, &
+                             G%Domain%mpp_domain, 1, position=pos)
             elseif (ASSOCIATED(CS%var_ptr2d(m)%p)) then ! Read 2d array...
-              if (pos == 0) then
-                call read_data(unit_path(n), varname, CS%var_ptr2d(m)%p, &
-                               G%Domain%mpp_domain, 1)
-                    ! ### SHOULD BE no_domain=.true., timelevel=1) ?
-              else
-                call read_data(unit_path(n), varname, CS%var_ptr2d(m)%p, &
-                               G%Domain%mpp_domain, 1, position=pos)
-              endif
+              call read_data(unit_path(n), varname, CS%var_ptr2d(m)%p, &
+                             G%Domain%mpp_domain, 1, position=pos)
+            elseif (ASSOCIATED(CS%var_ptr4d(m)%p)) then ! Read 4d array...
+              call read_data(unit_path(n), varname, CS%var_ptr4d(m)%p, &
+                             G%Domain%mpp_domain, 1, position=pos)
             else
               call MOM_error(FATAL, "MOM_restart restore_state: "//&
                               "No pointers set for "//trim(varname))
-            
             endif
-          else ! Do not use an io_layout.
+          else ! Do not use an io_layout.  !### GET RID OF THIS BRANCH ONCE read_data_4d_new IS AVAILABLE.
             ! This file is decomposed onto the current processors.  We need
             ! to check whether the sizes look right, and abort if not.
             call get_file_atts(fields(i),ndim=ndim,siz=sizes)
@@ -1030,7 +1143,7 @@ subroutine restore_state(filename, directory, day, G, CS)
                 call read_field(unit(n), fields(i), &
                                 CS%var_ptr3d(m)%p(isL:ieL,jsL:jeL,:), 1)
               endif
-            else
+            elseif (ASSOCIATED(CS%var_ptr2d(m)%p)) then
               if (ntime == 0) then
                 call read_field(unit(n), fields(i), &
                                 CS%var_ptr2d(m)%p(isL:ieL,jsL:jeL))
@@ -1038,6 +1151,17 @@ subroutine restore_state(filename, directory, day, G, CS)
                 call read_field(unit(n), fields(i), &
                                 CS%var_ptr2d(m)%p(isL:ieL,jsL:jeL), 1)
               endif
+            elseif (ASSOCIATED(CS%var_ptr4d(m)%p)) then
+              if (ntime == 0) then
+                call read_field(unit(n), fields(i), &
+                                CS%var_ptr4d(m)%p(isL:ieL,jsL:jeL,:,:))
+              else
+                call read_field(unit(n), fields(i), &
+                                CS%var_ptr4d(m)%p(isL:ieL,jsL:jeL,:,:), 1)
+              endif
+            else
+              call MOM_error(FATAL, "MOM_restart restore_state: "//&
+                              "No pointers set for "//trim(varname))
             endif
           endif
           CS%restart_field(m)%initialized = .true.
@@ -1120,6 +1244,7 @@ subroutine restart_init(G, param_file, CS, restart_root)
   allocate(CS%var_ptr1d(CS%max_fields))
   allocate(CS%var_ptr2d(CS%max_fields))
   allocate(CS%var_ptr3d(CS%max_fields))
+  allocate(CS%var_ptr4d(CS%max_fields))
 
 end subroutine restart_init
 
@@ -1140,6 +1265,7 @@ subroutine restart_end(CS)
   if (associated(CS%var_ptr1d)) deallocate(CS%var_ptr1d)
   if (associated(CS%var_ptr2d)) deallocate(CS%var_ptr2d)
   if (associated(CS%var_ptr3d)) deallocate(CS%var_ptr3d)
+  if (associated(CS%var_ptr4d)) deallocate(CS%var_ptr4d)
   deallocate(CS)
 
 end subroutine restart_end

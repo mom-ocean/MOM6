@@ -439,13 +439,13 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
   call continuity(upp, vpp, hp, h, uh, vh, &
                   (dt*0.5), G, CS%continuity_CSp, OBC=CS%OBC)
   call cpu_clock_end(id_clock_continuity)
-  ! Whenever thickness changes let the diag manager know, target grids
-  ! for vertical remapping may need to be regenerated.
-  call diag_update_target_grids(CS%diag)
   call cpu_clock_begin(id_clock_pass)
   call pass_var(h, G%Domain)
   call pass_vector(uh, vh, G%Domain)
   call cpu_clock_end(id_clock_pass)
+  ! Whenever thickness changes let the diag manager know, target grids
+  ! for vertical remapping may need to be regenerated.
+  call diag_update_target_grids(CS%diag)
 
   call enable_averaging(0.5*dt, Time_local, CS%diag)
 !   Here the second half of the thickness fluxes are offered for averaging.

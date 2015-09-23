@@ -197,7 +197,8 @@ type, public :: MOM_dyn_split_RK2_CS ; private
 
   logical :: module_is_initialized = .false.
 
-  integer :: id_uh = -1, id_vh = -1
+  integer :: id_uh  = -1, id_vh  = -1
+  integer :: id_umo = -1, id_vmo = -1
   integer :: id_PFu = -1, id_PFv = -1, id_CAu = -1, id_CAv = -1
 
 ! Split scheme only.
@@ -914,12 +915,12 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
                   CS%continuity_CSp, CS%uhbt, CS%vhbt, CS%OBC, &
                   CS%visc_rem_u, CS%visc_rem_v, u_av, v_av)
   call cpu_clock_end(id_clock_continuity)
-  ! Whenever thickness changes let the diag manager know, target grids
-  ! for vertical remapping may need to be regenerated.
-  call diag_update_target_grids(CS%diag)
   call cpu_clock_begin(id_clock_pass)
   call do_group_pass(CS%pass_h, G%Domain)
   call cpu_clock_end(id_clock_pass)
+  ! Whenever thickness changes let the diag manager know, target grids
+  ! for vertical remapping may need to be regenerated.
+  call diag_update_target_grids(CS%diag)
   if (showCallTree) call callTree_wayPoint("done with continuity (step_MOM_dyn_split_RK2)")
 
   call cpu_clock_begin(id_clock_pass)
@@ -959,16 +960,18 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 !   The time-averaged free surface height has already been set by the last
 !  call to btstep.
 
-!   Here various terms used in to update the momentum equations are
-! offered for averaging.
+!  Here various terms used in to update the momentum equations are
+!  offered for time averaging.
   if (CS%id_PFu > 0) call post_data(CS%id_PFu, CS%PFu, CS%diag)
   if (CS%id_PFv > 0) call post_data(CS%id_PFv, CS%PFv, CS%diag)
   if (CS%id_CAu > 0) call post_data(CS%id_CAu, CS%CAu, CS%diag)
   if (CS%id_CAv > 0) call post_data(CS%id_CAv, CS%CAv, CS%diag)
 
-!   Here the thickness fluxes are offered for averaging.
-  if (CS%id_uh > 0) call post_data(CS%id_uh, uh, CS%diag)
-  if (CS%id_vh > 0) call post_data(CS%id_vh, vh, CS%diag)
+!   Here the thickness fluxes are offered for time averaging.
+  if (CS%id_uh  > 0) call post_data(CS%id_uh , uh, CS%diag)
+  if (CS%id_vh  > 0) call post_data(CS%id_vh , vh,   CS%diag)
+  if (CS%id_umo > 0) call post_data(CS%id_umo, uh*G%H_to_kg_m2, CS%diag)
+  if (CS%id_vmo > 0) call post_data(CS%id_vmo, vh*G%H_to_kg_m2, CS%diag)
   if (CS%id_uav > 0) call post_data(CS%id_uav, u_av, CS%diag)
   if (CS%id_vav > 0) call post_data(CS%id_vav, v_av, CS%diag)
   if (CS%id_u_BT_accel > 0) call post_data(CS%id_u_BT_accel, CS%u_accel_bt, CS%diag)
@@ -1294,6 +1297,12 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, param_file, &
       'Zonal Thickness Flux', flux_units)
   CS%id_vh = register_diag_field('ocean_model', 'vh', diag%axesCvL, Time, &
       'Meridional Thickness Flux', flux_units)
+  CS%id_umo = register_diag_field('ocean_model', 'umo',                       &
+      diag%axesCuL, Time,'Zonal Mass Transport (including SGS param)', 'kg/s',&
+      cmor_standard_name='ocean_mass_x_transport', cmor_long_name='Ocean Mass X Transport')
+  CS%id_vmo = register_diag_field('ocean_model', 'vmo',                            &
+      diag%axesCvL, Time,'Meridional Mass Transport (including SGS param)', 'kg/s',&
+      cmor_standard_name='ocean_mass_y_transport', cmor_long_name='Ocean Mass Y Transport')
   CS%id_CAu = register_diag_field('ocean_model', 'CAu', diag%axesCuL, Time, &
       'Zonal Coriolis and Advective Acceleration', 'meter second-2')
   CS%id_CAv = register_diag_field('ocean_model', 'CAv', diag%axesCvL, Time, &

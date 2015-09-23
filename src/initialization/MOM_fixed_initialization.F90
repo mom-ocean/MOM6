@@ -743,17 +743,12 @@ function diagnoseMaximumDepth(D,G)
 end function diagnoseMaximumDepth
 ! -----------------------------------------------------------------------------
 
-! -----------------------------------------------------------------------------
-subroutine initialize_topography_from_file(D, G, param_file )
-  real, dimension(NIMEM_,NJMEM_), intent(out) :: D
-  type(ocean_grid_type),          intent(in)  :: G
-  type(param_file_type),          intent(in)  :: param_file
-! Arguments: D          - the bottom depth in m. Intent out.
-!  (in)      G          - The ocean's grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-
-!  This subroutine reads depths from a file and puts it into D(:,:) in m.
+!> Read gridded depths from file
+subroutine initialize_topography_from_file(D, G, param_file)
+  real, dimension(NIMEM_,NJMEM_), intent(out) :: D !< Bottom depth (positive, in m)
+  type(ocean_grid_type),          intent(in)  :: G !< Grid structure
+  type(param_file_type),          intent(in)  :: param_file !< Parameter file structure
+  ! Local variables
   character(len=200) :: filename, topo_file, inputdir ! Strings for file/path
   character(len=200) :: topo_varname                  ! Variable name in file
   character(len=40)  :: mod = "initialize_topography_from_file" ! This subroutine's name.
@@ -777,9 +772,119 @@ subroutine initialize_topography_from_file(D, G, param_file )
 
   call read_data(filename,trim(topo_varname),D,domain=G%Domain%mpp_domain)
 
+  call apply_topography_edits_from_file(D, G, param_file)
+
   call callTree_leave(trim(mod)//'()')
 end subroutine initialize_topography_from_file
-! -----------------------------------------------------------------------------
+
+!> Applies a list of topography overrides read from a netcdf file
+subroutine apply_topography_edits_from_file(D, G, param_file)
+  real, dimension(NIMEM_,NJMEM_), intent(inout) :: D !< Bottom depth (positive, in m)
+  type(ocean_grid_type),          intent(in)    :: G !< Grid structure
+  type(param_file_type),          intent(in)    :: param_file !< Parameter file structure
+  ! Local variables
+  character(len=200) :: topo_edits_file, inputdir ! Strings for file/path
+  character(len=40)  :: mod = "apply_topography_edits_from_file" ! This subroutine's name.
+  integer :: n_edits, n, ashape(5), i, j, ncid, id, ncstatus, iid, jid, zid
+  integer, dimension(:), allocatable :: ig, jg
+  real, dimension(:), allocatable :: new_depth
+
+  call callTree_enter(trim(mod)//"(), MOM_fixed_initialization.F90")
+
+  call get_param(param_file, mod, "INPUTDIR", inputdir, default=".")
+  inputdir = slasher(inputdir)
+  call get_param(param_file, mod, "TOPO_EDITS_FILE", topo_edits_file, &
+                 "The file from which to read a list of i,j,z topography overrides.", &
+                 default="")
+
+  if (len_trim(topo_edits_file)==0) return
+
+  topo_edits_file = trim(inputdir)//trim(topo_edits_file)
+  if (.not.file_exists(topo_edits_file, G%Domain)) call MOM_error(FATAL, &
+     'initialize_topography_from_file: Unable to open '//trim(topo_edits_file))
+
+  ncstatus = nf90_open(trim(topo_edits_file), NF90_NOWRITE, ncid)
+  if (ncstatus /= NF90_NOERR) call MOM_error(FATAL, 'apply_topography_edits_from_file: '//&
+                                'Failed to open '//trim(topo_edits_file))
+
+  ! Get nEdits
+  ncstatus = nf90_inq_dimid(ncid, 'nEdits', id)
+  if (ncstatus /= NF90_NOERR) call MOM_error(FATAL, 'apply_topography_edits_from_file: '//&
+                                'Failed to inq_dimid nEdits for '//trim(topo_edits_file))
+  ncstatus = nf90_inquire_dimension(ncid, id, len=n_edits)
+  if (ncstatus /= NF90_NOERR) call MOM_error(FATAL, 'apply_topography_edits_from_file: '//&
+                                'Failed to inquire_dimension nEdits for '//trim(topo_edits_file))
+
+  ! Read ni
+  ncstatus = nf90_inq_varid(ncid, 'ni', id)
+  if (ncstatus /= NF90_NOERR) call MOM_error(FATAL, 'apply_topography_edits_from_file: '//&
+                                'Failed to inq_varid ni for '//trim(topo_edits_file))
+  ncstatus = nf90_get_var(ncid, id, i)
+  if (ncstatus /= NF90_NOERR) call MOM_error(FATAL, 'apply_topography_edits_from_file: '//&
+                              'Failed to get_var ni for '//trim(topo_edits_file))
+  if (i /= G%ieg) call MOM_error(FATAL, 'apply_topography_edits_from_file: '//&
+                              'Incompatible i-dimension of grid in '//trim(topo_edits_file))
+
+  ! Read nj
+  ncstatus = nf90_inq_varid(ncid, 'nj', id)
+  if (ncstatus /= NF90_NOERR) call MOM_error(FATAL, 'apply_topography_edits_from_file: '//&
+                                'Failed to inq_varid nj for '//trim(topo_edits_file))
+  ncstatus = nf90_get_var(ncid, id, j)
+  if (ncstatus /= NF90_NOERR) call MOM_error(FATAL, 'apply_topography_edits_from_file: '//&
+                              'Failed to get_var nj for '//trim(topo_edits_file))
+  if (j /= G%jeg) call MOM_error(FATAL, 'apply_topography_edits_from_file: '//&
+                              'Incompatible j-dimension of grid in '//trim(topo_edits_file))
+
+  ! Read iEdit
+  ncstatus = nf90_inq_varid(ncid, 'iEdit', id)
+  if (ncstatus /= NF90_NOERR) call MOM_error(FATAL, 'apply_topography_edits_from_file: '//&
+                                'Failed to inq_varid iEdit for '//trim(topo_edits_file))
+  allocate(ig(n_edits))
+  ncstatus = nf90_get_var(ncid, id, ig)
+  if (ncstatus /= NF90_NOERR) call MOM_error(FATAL, 'apply_topography_edits_from_file: '//&
+                              'Failed to get_var iEdit for '//trim(topo_edits_file))
+
+  ! Read jEdit
+  ncstatus = nf90_inq_varid(ncid, 'jEdit', id)
+  if (ncstatus /= NF90_NOERR) call MOM_error(FATAL, 'apply_topography_edits_from_file: '//&
+                                'Failed to inq_varid jEdit for '//trim(topo_edits_file))
+  allocate(jg(n_edits))
+  ncstatus = nf90_get_var(ncid, id, jg)
+  if (ncstatus /= NF90_NOERR) call MOM_error(FATAL, 'apply_topography_edits_from_file: '//&
+                              'Failed to get_var jEdit for '//trim(topo_edits_file))
+
+  ! Read zEdit
+  ncstatus = nf90_inq_varid(ncid, 'zEdit', id)
+  if (ncstatus /= NF90_NOERR) call MOM_error(FATAL, 'apply_topography_edits_from_file: '//&
+                                'Failed to inq_varid zEdit for '//trim(topo_edits_file))
+  allocate(new_depth(n_edits))
+  ncstatus = nf90_get_var(ncid, id, new_depth)
+  if (ncstatus /= NF90_NOERR) call MOM_error(FATAL, 'apply_topography_edits_from_file: '//&
+                              'Failed to get_var zEdit for '//trim(topo_edits_file))
+
+  ! Close file
+  ncstatus = nf90_close(ncid)
+  if (ncstatus /= NF90_NOERR) call MOM_error(FATAL, 'apply_topography_edits_from_file: '//&
+                                'Failed to close '//trim(topo_edits_file))
+
+  do n = 1, n_edits
+    i = ig(n) - G%isd_global + 2 ! +1 for python indexing and +1 for ig-isd_global+1
+    j = jg(n) - G%jsd_global + 2
+    if (i>=G%isc .and. i<=G%iec .and. j>=G%jsc .and. j<=G%jec) then
+      if (new_depth(n)/=0.) then
+        write(*,'(a,3i5,f7.2,a,f7.2,2i4)') 'Ocean topography edit: ',n,ig(n),jg(n),D(i,j),'->',new_depth(n),i,j
+        D(i,j) = abs(new_depth(n)) ! Allows for height-file edits (i.e. converts negatives)
+      else
+        call MOM_error(FATAL, ' apply_topography_edits_from_file: '//&
+          "A zero depth edit would change the land mask and is not allowed in"//trim(topo_edits_file))
+      endif
+    endif
+  enddo
+
+  deallocate( ig, jg, new_depth )
+
+  call callTree_leave(trim(mod)//'()')
+end subroutine apply_topography_edits_from_file
 
 ! -----------------------------------------------------------------------------
 subroutine initialize_topography_named(D, G, param_file, topog_config, max_depth)
