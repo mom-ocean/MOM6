@@ -220,7 +220,7 @@ real function dTdy( G, dT, lat )
 end function dTdy
 
 
-!> \class Rossby_front_2d_initialization
+!> \namespace Rossby_front_2d_initialization
 !!
 !! \section section_Rossby_front_2d Description of the 2d Rossby front initial conditions
 !!
@@ -230,13 +230,15 @@ end function dTdy
 !! form so that there are no mixed layer or temperature gradients at the side walls.
 !!
 !! Below the mixed layer the potential temperature, \f$\theta(z)\f$, is given by
-!! \f[ \theta(z) = \theta_0 - \Delta \theta \left( z + h_{ML} \right) \]
+!! \f[ \theta(z) = \theta_0 - \Delta \theta \left( z + h_{ML} \right) \f]
 !! where \f$ \theta_0 \f$ and \f$ \Delta \theta \f$ are external model parameters.
 !!
 !! The depth of the mixed layer, \f$H_{ML}\f$ is 
-!! \f[ h_{ML}(z) = h_{min} + \left( h_{max} - h_{min} \right) \cos{\pi y/L} \].
+!! \f[ h_{ML}(y) = h_{min} + \left( h_{max} - h_{min} \right) \cos{\pi y/L} \f].
 !! The temperature in mixed layer is given by the reference temperature at \f$z=h_{ML}\f$
 !! so that
-!! \f[ \theta(y,z) = \left\{ \right. \f]
+!! \f[ \theta(y,z) = 
+!!     \theta_0 - \Delta \theta \left( z + h_{ML} \right) & \forall & z < h_{ML}(y) T.B.D.
+!! \f]
 
 end module Rossby_front_2d_initialization

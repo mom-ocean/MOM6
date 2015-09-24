@@ -330,7 +330,7 @@ use MOM_variables, only : surface
 ! temperature, salinity and mixed layer density.
 use MOM_variables, only: thermo_var_ptrs
 
-! infrastructure modules 
+! Infrastructure modules 
 use MOM_checksums,            only : MOM_checksums_init, hchksum, uchksum, vchksum
 use MOM_checksum_packages,    only : MOM_thermo_chksum, MOM_state_chksum, MOM_accel_chksum
 use MOM_cpu_clock,            only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
@@ -364,7 +364,7 @@ use MOM_state_initialization, only : MOM_initialize_state, MOM_initialization_st
 use MOM_time_manager,         only : time_type, set_time, time_type_to_real, operator(+)
 use MOM_time_manager,         only : operator(-), operator(>), operator(*), operator(/)
 
-
+! MOM core modules
 use MOM_ALE,                   only : initialize_ALE, end_ALE, ALE_main, ALE_CS, adjustGridForIntegrity
 use MOM_ALE,                   only : ALE_getCoordinate, ALE_getCoordinateUnits, ALE_writeCoordinateFile
 use MOM_ALE,                   only : ALE_updateVerticalGridType
@@ -372,13 +372,11 @@ use MOM_continuity,            only : continuity, continuity_init, continuity_CS
 use MOM_CoriolisAdv,           only : CorAdCalc, CoriolisAdv_init, CoriolisAdv_CS
 use MOM_diabatic_driver,       only : diabatic, diabatic_driver_init, diabatic_CS
 use MOM_diabatic_driver,       only : adiabatic, adiabatic_driver_init, diabatic_driver_end
-
 use MOM_diagnostics,           only : calculate_diagnostic_fields, MOM_diagnostics_init
 use MOM_diagnostics,           only : diagnostics_CS
 use MOM_diag_to_Z,             only : calculate_Z_diag_fields, calculate_Z_transport
 use MOM_diag_to_Z,             only : MOM_diag_to_Z_init, register_Z_tracer, diag_to_Z_CS
 use MOM_diag_to_Z,             only : MOM_diag_to_Z_end
-
 use MOM_dynamics_unsplit,      only : step_MOM_dyn_unsplit, register_restarts_dyn_unsplit
 use MOM_dynamics_unsplit,      only : initialize_dyn_unsplit, end_dyn_unsplit
 use MOM_dynamics_unsplit,      only : MOM_dyn_unsplit_CS
@@ -391,7 +389,6 @@ use MOM_dynamics_unsplit_RK2,  only : MOM_dyn_unsplit_RK2_CS
 use MOM_dynamics_legacy_split, only : step_MOM_dyn_legacy_split, register_restarts_dyn_legacy_split
 use MOM_dynamics_legacy_split, only : initialize_dyn_legacy_split, end_dyn_legacy_split
 use MOM_dynamics_legacy_split, only : adjustments_dyn_legacy_split, MOM_dyn_legacy_split_CS
-
 use MOM_EOS,                   only : EOS_init
 use MOM_error_checking,        only : check_redundant
 use MOM_grid,                  only : MOM_grid_init, ocean_grid_type, get_thickness_units
@@ -1215,6 +1212,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       call tracer_hordiff(h, CS%dt_trans, CS%MEKE, CS%VarMix, G, &
                           CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv)
       call cpu_clock_end(id_clock_tracer)
+      if (showCallTree) call callTree_waypoint("finished tracer advection/diffusion (step_MOM)")
 
       call cpu_clock_begin(id_clock_Z_diag)
       call calculate_Z_transport(CS%uhtr, CS%vhtr, h, CS%dt_trans, G, &
@@ -2218,24 +2216,25 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
 
 end subroutine initialize_MOM
 
-
 ! This s/r calls unit tests for other modules. These are NOT normally invoked
 ! and so we provide the module use statments here rather than in the module
 ! header. This is an exception to our usual coding standards.
 ! Note that if a unit test returns true, a FATAL error is triggered.
 subroutine unitTests
-  use MOM_remapping,        only : remappingUnitTests
   use MOM_string_functions, only : stringFunctionsUnitTests
+  use MOM_remapping, only : remappingUnitTests
+  use MOM_neutral_diffusion, only : neutralDiffusionUnitTests
 
   if (is_root_pe()) then ! The following need only be tested on 1 PE
     if (stringFunctionsUnitTests()) call MOM_error(FATAL, &
        "MOM/initialize_MOM/unitTests: stringFunctionsUnitTests FAILED")
     if (remappingUnitTests()) call MOM_error(FATAL, &
        "MOM/initialize_MOM/unitTests: remappingUnitTests FAILED")
+    if (neutralDiffusionUnitTests()) call MOM_error(FATAL, &
+       "MOM/initialize_MOM/unitTests: neutralDiffusionUnitTests FAILED")
   endif
 
 end subroutine unitTests
-
 
 subroutine register_diags(Time, G, CS, ADp)
   type(time_type),           intent(in)    :: Time
