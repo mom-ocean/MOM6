@@ -631,7 +631,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
         enddo ; enddo
       else
         do j=js,je ; do i=is,ie
-         MEKE%mom_src(i,j) = MEKE%mom_src(i,j) + FrictWork(i,j,1)
+         MEKE%mom_src(i,j) = MEKE%mom_src(i,j) + FrictWork(i,j,k)
         enddo ; enddo
       endif
     endif ; endif
