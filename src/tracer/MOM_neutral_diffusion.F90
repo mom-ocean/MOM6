@@ -54,29 +54,26 @@ logical function neutral_diffusion_init(Time, G, param_file, diag, CS)
   ! Local variables
   character(len=256) :: mesg    ! Message for error messages.
 
-  neutral_diffusion_init = .false.
   if (associated(CS)) then
     call MOM_error(FATAL, "neutral_diffusion_init called with associated control structure.")
     return
   endif
-  allocate(CS)
 
-  ! Read all relevant parameters and write them to the model log.
+  ! Log this module and master switch for turning it on/off
   call log_version(param_file, mod, version, &
        "This module implements neutral diffusion of tracers")
   call get_param(param_file, mod, "USE_NEUTRAL_DIFFUSION", neutral_diffusion_init, &
                  "If true, enables the neutral diffusion module.", &
                  default=.false.)
-  call openParameterBlock(param_file,'NEUTRAL_DIFF')
+  if (.not.neutral_diffusion_init) return
+  allocate(CS)
+
+  ! Read all relevant parameters and write them to the model log.
+! call openParameterBlock(param_file,'NEUTRAL_DIFF')
 ! call get_param(param_file, mod, "KHTR", CS%KhTr, &
 !                "The background along-isopycnal tracer diffusivity.", &
 !                units="m2 s-1", default=0.0)
-  call closeParameterBlock(param_file)
-
-  if (.not.neutral_diffusion_init) then
-    deallocate(CS)
-    return
-  endif
+! call closeParameterBlock(param_file)
 
   ! U-points
   allocate(CS%uPoL(G%isd:G%ied,G%jsd:G%jed,2*G%ke+2)); CS%uPoL(G%isc-1:G%iec,G%jsc:G%jec,:) = 0.
@@ -794,8 +791,7 @@ logical function neutralDiffusionUnitTests()
   data pR4 / 0., 0., 10., 20., 20., 20., 20., 30., 40., 40. /
   data hE4 / 0., 10., 10., 0., 0., 0., 10., 10., 0. /
 
-  integer :: k
-  logical :: verbosity
+  integer :: k, verbosity
 
   verbosity = MOM_get_verbosity()
 
