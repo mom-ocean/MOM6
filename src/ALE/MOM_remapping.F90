@@ -11,7 +11,6 @@ module MOM_remapping
 !==============================================================================
 use MOM_error_handler, only : MOM_error, FATAL
 use MOM_string_functions, only : uppercase
-use MOM_variables,     only : ocean_grid_type, thermo_var_ptrs
 use polynomial_functions, only : evaluation_polynomial, integration_polynomial
 use regrid_edge_values, only : edge_values_explicit_h4, edge_values_implicit_h4
 use regrid_edge_values, only : edge_values_implicit_h4, edge_values_implicit_h6
@@ -40,7 +39,7 @@ end type
 ! -----------------------------------------------------------------------------
 ! The following routines are visible to the outside world
 ! -----------------------------------------------------------------------------
-public remapping_main, remapping_core
+public remapping_core
 public initialize_remapping, end_remapping
 public remapEnableBoundaryExtrapolation, remapDisableBoundaryExtrapolation
 public setReconstructionType
@@ -88,89 +87,6 @@ character(len=3), public :: remappingDefaultScheme = "PLM"
 ! This module contains the following routines
 ! -----------------------------------------------------------------------------
 contains
-
-!------------------------------------------------------------------------------
-! General remapping routine 
-!------------------------------------------------------------------------------
-subroutine remapping_main( CS, G, h, dxInterface, tv, u, v )
-!------------------------------------------------------------------------------
-! This routine takes care of remapping all variable between the old and the
-! new grids. When velocity components need to be remapped, thicknesses at
-! velocity points are taken to be arithmetic averages of tracer thicknesses.
-!------------------------------------------------------------------------------
-  
-  ! Arguments
-  type(remapping_CS),                               intent(in)    :: CS
-  type(ocean_grid_type),                            intent(in)    :: G
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),            intent(in)    :: h
-  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_),     intent(in)    :: dxInterface
-  type(thermo_var_ptrs),                            intent(inout) :: tv       
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), optional, intent(inout) :: u
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), optional, intent(inout) :: v
-  
-  ! Local variables
-  integer               :: i, j, k
-  integer               :: nz
-  real, dimension(G%ke+1) :: dx
-  real, dimension(G%ke) :: h1, u_column
-
-  nz = G%ke
-
-  ! Remap tracer
-!$OMP parallel default(none) shared(G,h,dxInterface,CS,nz,tv,u,v) &
-!$OMP                       private(h1,dx,u_column)
-  if (associated(tv%S)) then ! Assume T and S are either both associated or both not
-!$OMP do
-    do j = G%jsc,G%jec
-      do i = G%isc,G%iec
-        if (G%mask2dT(i,j)>0.) then
-          ! Build the start and final grids
-          h1(:) = h(i,j,:)
-          dx(:) = dxInterface(i,j,:)
-          call remapping_core(CS, nz, h1, tv%S(i,j,:), nz, dx, u_column)
-          tv%S(i,j,:) = u_column(:)
-          call remapping_core(CS, nz, h1, tv%T(i,j,:), nz, dx, u_column)
-          tv%T(i,j,:) = u_column(:)
-        endif
-      enddo
-    enddo
-  endif
-  
-  ! Remap u velocity component
-  if ( present(u) ) then
-!$OMP do
-    do j = G%jsc,G%jec
-      do i = G%iscB,G%iecB
-        if (G%mask2dCu(i,j)>0.) then
-          ! Build the start and final grids
-          h1(:) = 0.5 * ( h(i,j,:) + h(i+1,j,:) )
-          dx(:) = 0.5 * ( dxInterface(i,j,:) + dxInterface(i+1,j,:) )
-          call remapping_core(CS, nz, h1, u(i,j,:), nz, dx, u_column)
-          u(i,j,:) = u_column(:)
-        endif
-      enddo
-    enddo
-  endif
-  
-  ! Remap v velocity component
-  if ( present(v) ) then
-!$OMP do
-    do j = G%jscB,G%jecB
-      do i = G%isc,G%iec
-        if (G%mask2dCv(i,j)>0.) then
-          ! Build the start and final grids
-          h1(:) = 0.5 * ( h(i,j,:) + h(i,j+1,:) )
-          dx(:) = 0.5 * ( dxInterface(i,j,:) + dxInterface(i,j+1,:) )
-          call remapping_core(CS, nz, h1, v(i,j,:), nz, dx, u_column)
-          v(i,j,:) = u_column(:)
-        endif
-      enddo
-    enddo
-  endif
-!$OMP end parallel
-
-end subroutine remapping_main
-
 
 !------------------------------------------------------------------------------
 ! Build a grid from h

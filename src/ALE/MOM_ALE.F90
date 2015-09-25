@@ -41,7 +41,7 @@ use MOM_regridding, only : regridding_CS
 use MOM_regridding, only : getCoordinateInterfaces, getCoordinateResolution
 use MOM_regridding, only : getCoordinateUnits, getCoordinateShortName
 use MOM_regridding, only : getStaticThickness
-use MOM_remapping, only : initialize_remapping, remapping_main, end_remapping
+use MOM_remapping, only : initialize_remapping, remapping_core, end_remapping
 use MOM_remapping, only : remappingSchemesDoc, remappingDefaultScheme
 use MOM_remapping, only : remapDisableBoundaryExtrapolation, remapEnableBoundaryExtrapolation
 use MOM_remapping, only : remapping_CS
@@ -292,6 +292,81 @@ subroutine ALE_main( G, h, u, v, tv, CS )
   enddo
 
 end subroutine ALE_main
+
+!> This routine takes care of remapping all variable between the old and the
+!! new grids. When velocity components need to be remapped, thicknesses at
+!! velocity points are taken to be arithmetic averages of tracer thicknesses.
+subroutine remapping_main( CS, G, h, dxInterface, tv, u, v )
+  ! Arguments
+  type(remapping_CS),                               intent(in)    :: CS !< Remapping control structure
+  type(ocean_grid_type),                            intent(in)    :: G  !< Ocean grid structure
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),            intent(in)    :: h  !< Level thickness (m or Pa)
+  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_),     intent(in)    :: dxInterface !< Change in interface position (Hm or Pa)
+  type(thermo_var_ptrs),                            intent(inout) :: tv !< Thermodynamics structure
+  real, dimension(NIMEMB_,NJMEM_,NKMEM_), optional, intent(inout) :: u  !< Zonal velocity component (m/s)
+  real, dimension(NIMEM_,NJMEMB_,NKMEM_), optional, intent(inout) :: v  !< Meridional velocity component (m/s)
+  ! Local variables
+  integer               :: i, j, k
+  integer               :: nz
+  real, dimension(G%ke+1) :: dx
+  real, dimension(G%ke) :: h1, u_column
+
+  nz = G%ke
+
+  ! Remap tracer
+!$OMP parallel default(none) shared(G,h,dxInterface,CS,nz,tv,u,v) &
+!$OMP                       private(h1,dx,u_column)
+  if (associated(tv%S)) then ! Assume T and S are either both associated or both not
+!$OMP do
+    do j = G%jsc,G%jec
+      do i = G%isc,G%iec
+        if (G%mask2dT(i,j)>0.) then
+          ! Build the start and final grids
+          h1(:) = h(i,j,:)
+          dx(:) = dxInterface(i,j,:)
+          call remapping_core(CS, nz, h1, tv%S(i,j,:), nz, dx, u_column)
+          tv%S(i,j,:) = u_column(:)
+          call remapping_core(CS, nz, h1, tv%T(i,j,:), nz, dx, u_column)
+          tv%T(i,j,:) = u_column(:)
+        endif
+      enddo
+    enddo
+  endif
+
+  ! Remap u velocity component
+  if ( present(u) ) then
+!$OMP do
+    do j = G%jsc,G%jec
+      do i = G%iscB,G%iecB
+        if (G%mask2dCu(i,j)>0.) then
+          ! Build the start and final grids
+          h1(:) = 0.5 * ( h(i,j,:) + h(i+1,j,:) )
+          dx(:) = 0.5 * ( dxInterface(i,j,:) + dxInterface(i+1,j,:) )
+          call remapping_core(CS, nz, h1, u(i,j,:), nz, dx, u_column)
+          u(i,j,:) = u_column(:)
+        endif
+      enddo
+    enddo
+  endif
+
+  ! Remap v velocity component
+  if ( present(v) ) then
+!$OMP do
+    do j = G%jscB,G%jecB
+      do i = G%isc,G%iec
+        if (G%mask2dCv(i,j)>0.) then
+          ! Build the start and final grids
+          h1(:) = 0.5 * ( h(i,j,:) + h(i,j+1,:) )
+          dx(:) = 0.5 * ( dxInterface(i,j,:) + dxInterface(i,j+1,:) )
+          call remapping_core(CS, nz, h1, v(i,j,:), nz, dx, u_column)
+          v(i,j,:) = u_column(:)
+        endif
+      enddo
+    enddo
+  endif
+!$OMP end parallel
+
+end subroutine remapping_main
 
 
 !------------------------------------------------------------------------------
