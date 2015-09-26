@@ -498,16 +498,18 @@ subroutine find_neutral_surface_positions(nk, Pl, Tl, Sl, dRdTl, dRdSl, Pr, Tr, 
 
       ! Because we are looking left, the right surface, kr, is lighter than klm1+1 and should be denser than klm1
       ! unless we are still at the top of the left column (kl=1)
-      if (dRhoTop >= 0.) then
-        PoL(k_surface) = 0.
+      if (dRhoTop > 0. .or. kr+kl==2) then
+        PoL(k_surface) = 0. ! The right surface is lighter than anything in layer klm1
+      elseif (dRhoTop >= dRhoBot) then ! Left layer is unstratified
+        PoL(k_surface) = 1.
       else
         ! Linearly interpolate for the position between Pl(kl-1) and Pl(kl) where the density difference
         ! between right and left is zero.
         PoL(k_surface) = interpolate_for_nondim_position( dRhoTop, Pl(klm1), dRhoBot, Pl(klm1+1) )
-        if (PoL(k_surface)>=1. .and. klm1<nk) then ! >= is really ==, when PoL==1 we are point to the bottom of the cell
-          klm1 = klm1 + 1
-          PoL(k_surface) = PoL(k_surface) - 1.
-        endif
+      endif
+      if (PoL(k_surface)>=1. .and. klm1<nk) then ! >= is really ==, when PoL==1 we point to the bottom of the cell
+        klm1 = klm1 + 1
+        PoL(k_surface) = PoL(k_surface) - 1.
       endif
       KoL(k_surface) = klm1
       if (kr <= nk) then
@@ -538,16 +540,18 @@ subroutine find_neutral_surface_positions(nk, Pl, Tl, Sl, dRdTl, dRdSl, Pr, Tr, 
 
       ! Because we are looking right, the left surface, kl, is lighter than krm1+1 and should be denser than krm1
       ! unless we are still at the top of the right column (kr=1)
-      if (dRhoTop >= 0.) then
-        PoR(k_surface) = 0.
+      if (dRhoTop >= 0. .or. kr+kl==2) then
+        PoR(k_surface) = 0. ! The left surface is lighter than anything in layer krm1
+      elseif (dRhoTop >= dRhoBot) then ! Right layer is unstratified
+        PoR(k_surface) = 1.
       else
         ! Linearly interpolate for the position between Pr(kr-1) and Pr(kr) where the density difference
         ! between right and left is zero.
         PoR(k_surface) = interpolate_for_nondim_position( dRhoTop, Pr(krm1), dRhoBot, Pr(krm1+1) )
-        if (PoR(k_surface)>=1. .and. krm1<nk) then ! >= is really ==, when PoR==1 we are point to the bottom of the cell
-          krm1 = krm1 + 1
-          PoR(k_surface) = PoR(k_surface) - 1.
-        endif
+      endif
+      if (PoR(k_surface)>=1. .and. krm1<nk) then ! >= is really ==, when PoR==1 we point to the bottom of the cell
+        krm1 = krm1 + 1
+        PoR(k_surface) = PoR(k_surface) - 1.
       endif
       KoR(k_surface) = krm1
       if (kl <= nk) then
@@ -903,11 +907,11 @@ logical function neutralDiffusionUnitTests()
              (/-1.,-1.,-1.,-1./), (/1.,1.,1.,1./), &! Right dRdT and dRdS
              PiLRo, PiRLo, KoL, KoR, hEff)
   neutralDiffusionUnitTests = neutralDiffusionUnitTests .or.  test_nsp(3, KoL, KoR, PiLRo, PiRLo, hEff, &
-                                   (/1,1,1,2,3,3,3,3/), & ! kL
+                                   (/1,1,2,2,3,3,3,3/), & ! kL
                                    (/1,1,2,2,3,3,3,3/), & ! kR
                                    (/0.,0.,0.,0.,0.,0.,1.,1./), & ! pL
                                    (/0.,0.,0.,0.,0.,0.,1.,1./), & ! pR
-                                   (/0.,0.,0.,10.,0.,10.,0./), & ! hEff
+                                   (/0.,10.,0.,10.,0.,10.,0./), & ! hEff
                                    'Indentical columns with mixed layer')
 
   write(*,'(a)') '=========================================================='
