@@ -449,10 +449,12 @@ subroutine find_neutral_surface_positions(nk, Pl, Tl, Sl, dRdTl, dRdSl, Pr, Tr, 
   logical :: reached_bottom ! True if one of the bottom-most interfaces has been used as the target
   integer :: krm1, klm1
   real :: dRho, dRhoTop, dRhoBot, hL, hR
+  integer :: lastK_left, lastK_right
+  real :: lastP_left, lastP_right
 
   ! Initialize variables for the search
-  kr = 1
-  kl = 1
+  kr = 1 ; lastK_right = 1 ; lastP_right = 0.
+  kl = 1 ; lastK_left = 1 ; lastP_left = 0.
   reached_bottom = .false.
 
   ! Loop over each neutral surface, working from top to bottom
@@ -465,7 +467,8 @@ subroutine find_neutral_surface_positions(nk, Pl, Tl, Sl, dRdTl, dRdSl, Pr, Tr, 
     ! Potential density difference, rho(kr) - rho(kl)
     dRho = 0.5 * ( ( dRdTr(kr) + dRdTl(kl) ) * ( Tr(kr) - Tl(kl) ) &
                  + ( dRdSr(kr) + dRdSl(kl) ) * ( Sr(kr) - Sl(kl) ) )
-                                                     if (debug_this_module) write(0,*) 'k,kl,kr,dRho=',k_surface,kl,kr,dRho
+                                                     if (debug_this_module) write(0,*) k_surface,' ==== kl,kr,dRho=',kl,kr,dRho
+                                                     if (debug_this_module) write(0,*) '               klm1,krm1=',klm1,krm1
     ! Which column has the lighter surface for the current indexes, kr and kl
     if (.not. reached_bottom) then
       if (dRho < 0.) then
@@ -507,9 +510,15 @@ subroutine find_neutral_surface_positions(nk, Pl, Tl, Sl, dRdTl, dRdSl, Pr, Tr, 
         ! between right and left is zero.
         PoL(k_surface) = interpolate_for_nondim_position( dRhoTop, Pl(klm1), dRhoBot, Pl(klm1+1) )
       endif
+                                                     if (debug_this_module) write(0,*) ' *PoL(k)=',PoL(k_surface)
       if (PoL(k_surface)>=1. .and. klm1<nk) then ! >= is really ==, when PoL==1 we point to the bottom of the cell
         klm1 = klm1 + 1
         PoL(k_surface) = PoL(k_surface) - 1.
+      endif
+                                                     if (debug_this_module) write(0,*) '  PoL(k)=',PoL(k_surface)
+      if (real(klm1-lastK_left)+(PoL(k_surface)-lastP_left)<0.) then
+        PoL(k_surface) = lastP_left
+        klm1 = lastK_left
       endif
       KoL(k_surface) = klm1
       if (kr <= nk) then
@@ -519,9 +528,9 @@ subroutine find_neutral_surface_positions(nk, Pl, Tl, Sl, dRdTl, dRdSl, Pr, Tr, 
         PoR(k_surface) = 1.
         KoR(k_surface) = nk
       endif
-                                                     if (debug_this_module) write(0,*) '  PoL(k)=',PoL(k_surface)
       if (kr <= nk) then
         kr = kr + 1
+                                                     if (debug_this_module) write(0,*) '  updated: kr=',kr
       else
         reached_bottom = .true.
         searching_right_column = .true.
@@ -549,9 +558,15 @@ subroutine find_neutral_surface_positions(nk, Pl, Tl, Sl, dRdTl, dRdSl, Pr, Tr, 
         ! between right and left is zero.
         PoR(k_surface) = interpolate_for_nondim_position( dRhoTop, Pr(krm1), dRhoBot, Pr(krm1+1) )
       endif
+                                                     if (debug_this_module) write(0,*) ' *PoR(k)=',PoR(k_surface)
       if (PoR(k_surface)>=1. .and. krm1<nk) then ! >= is really ==, when PoR==1 we point to the bottom of the cell
         krm1 = krm1 + 1
         PoR(k_surface) = PoR(k_surface) - 1.
+      endif
+                                                     if (debug_this_module) write(0,*) '  PoR(k)=',PoR(k_surface)
+      if (real(krm1-lastK_right)+(PoR(k_surface)-lastP_right)<0.) then
+        PoR(k_surface) = lastP_right
+        krm1 = lastK_right
       endif
       KoR(k_surface) = krm1
       if (kl <= nk) then
@@ -561,9 +576,9 @@ subroutine find_neutral_surface_positions(nk, Pl, Tl, Sl, dRdTl, dRdSl, Pr, Tr, 
         PoL(k_surface) = 1.
         KoL(k_surface) = nk
       endif
-                                                     if (debug_this_module) write(0,*) '  PoR(k)=',PoR(k_surface)
       if (kl <= nk) then
         kl = kl + 1
+                                                     if (debug_this_module) write(0,*) '  updated: kl=',kl
       else
         reached_bottom = .true.
         searching_right_column = .false.
@@ -572,7 +587,9 @@ subroutine find_neutral_surface_positions(nk, Pl, Tl, Sl, dRdTl, dRdSl, Pr, Tr, 
     else
       stop 'Else what?'
     endif
-                                                     if (debug_this_module) write(0,*) '  updated: kr=',kr,' kl=',kl
+
+    lastK_left = KoL(k_surface) ; lastP_left = PoL(k_surface)
+    lastK_right = KoR(k_surface) ; lastP_right = PoR(k_surface)
 
     ! Effective thickness
     ! NOTE: This would be better expressed in terms of the layers thicknesses rather
@@ -747,6 +764,7 @@ logical function neutralDiffusionUnitTests()
   integer :: k, verbosity
 
   verbosity = MOM_get_verbosity()
+  if (debug_this_module) verbosity=9
 
   neutralDiffusionUnitTests = .false. ! Normally return false
   write(*,'(a)') '===== MOM_neutral_diffusion: neutralDiffusionUnitTests =================='
@@ -913,6 +931,51 @@ logical function neutralDiffusionUnitTests()
                                    (/0.,0.,0.,0.,0.,0.,1.,1./), & ! pR
                                    (/0.,10.,0.,10.,0.,10.,0./), & ! hEff
                                    'Indentical columns with mixed layer')
+
+  ! Right column with unstable mixed layer
+  call find_neutral_surface_positions(3, &
+             (/0.,10.,20.,30./), (/14.,14.,10.,2./), (/0.,0.,0.,0./), & ! Left positions, T and S
+             (/-1.,-1.,-1.,-1./), (/1.,1.,1.,1./), &! Left dRdT and dRdS
+             (/0.,10.,20.,30./), (/10.,14.,12.,4./), (/0.,0.,0.,0./), & ! Right positions, T and S
+             (/-1.,-1.,-1.,-1./), (/1.,1.,1.,1./), &! Right dRdT and dRdS
+             PiLRo, PiRLo, KoL, KoR, hEff)
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or.  test_nsp(3, KoL, KoR, PiLRo, PiRLo, hEff, &
+                                   (/1,2,3,3,3,3,3,3/), & ! kL
+                                   (/1,1,1,2,3,3,3,3/), & ! kR
+                                   (/0.,0.,0.,0.,0.,0.,.75,1./), & ! pL
+                                   (/0.,0.,0.,0.,0.,0.25,1.,1./), & ! pR
+                                   (/0.,0.,0.,0.,0.,7.5,0./), & ! hEff
+                                   'Right column with unstable mixed layer')
+
+  ! Left column with unstable mixed layer
+  call find_neutral_surface_positions(3, &
+             (/0.,10.,20.,30./), (/10.,14.,12.,4./), (/0.,0.,0.,0./), & ! Left positions, T and S
+             (/-1.,-1.,-1.,-1./), (/1.,1.,1.,1./), &! Left dRdT and dRdS
+             (/0.,10.,20.,30./), (/14.,14.,10.,2./), (/0.,0.,0.,0./), & ! Right positions, T and S
+             (/-1.,-1.,-1.,-1./), (/1.,1.,1.,1./), &! Right dRdT and dRdS
+             PiLRo, PiRLo, KoL, KoR, hEff)
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or.  test_nsp(3, KoL, KoR, PiLRo, PiRLo, hEff, &
+                                   (/1,1,1,2,3,3,3,3/), & ! kL
+                                   (/1,2,3,3,3,3,3,3/), & ! kR
+                                   (/0.,0.,0.,0.,0.,0.25,1.,1./), & ! pL
+                                   (/0.,0.,0.,0.,0.,0.,.75,1./), & ! pR
+                                   (/0.,0.,0.,0.,0.,7.5,0./), & ! hEff
+                                   'Left column with unstable mixed layer')
+
+  ! Two unstable mixed layers
+  call find_neutral_surface_positions(3, &
+             (/0.,10.,20.,30./), (/8.,12.,10.,2./), (/0.,0.,0.,0./), & ! Left positions, T and S
+             (/-1.,-1.,-1.,-1./), (/1.,1.,1.,1./), &! Left dRdT and dRdS
+             (/0.,10.,20.,30./), (/10.,14.,12.,4./), (/0.,0.,0.,0./), & ! Right positions, T and S
+             (/-1.,-1.,-1.,-1./), (/1.,1.,1.,1./), &! Right dRdT and dRdS
+             PiLRo, PiRLo, KoL, KoR, hEff)
+  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or.  test_nsp(3, KoL, KoR, PiLRo, PiRLo, hEff, &
+                                   (/1,1,1,1,2,3,3,3/), & ! kL
+                                   (/1,2,3,3,3,3,3,3/), & ! kR
+                                   (/0.,0.,0.,0.,0.,0.,0.75,1./), & ! pL
+                                   (/0.,0.,0.,0.5,0.5,0.5,1.,1./), & ! pR
+                                   (/0.,0.,0.,0.,0.,6.,0./), & ! hEff
+                                   'Two unstable mixed layers')
 
   write(*,'(a)') '=========================================================='
 
