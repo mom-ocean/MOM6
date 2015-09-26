@@ -444,11 +444,11 @@ subroutine find_neutral_surface_positions(nk, Pl, Tl, Sl, dRdTl, dRdSl, Pr, Tr, 
   integer :: kl ! Index of left interface
   integer :: kr ! Index of right interface
   real :: dRdT, dRdS ! dRho/dT and dRho/dS for the neutral surface
-  logical :: looking_left ! True if searching for the position of a right interface in the left column
-  logical :: looking_right ! True if searching for the position of a left interface in the right column
+  logical :: searching_left_column ! True if searching for the position of a right interface in the left column
+  logical :: searching_right_column ! True if searching for the position of a left interface in the right column
   logical :: reached_bottom ! True if one of the bottom-most interfaces has been used as the target
   integer :: krm1, klm1
-  real :: dRho, dRhoM1, hL, hR
+  real :: dRho, dRhoTop, dRhoBot, hL, hR
 
   ! Initialize variables for the search
   kr = 1
@@ -462,51 +462,49 @@ subroutine find_neutral_surface_positions(nk, Pl, Tl, Sl, dRdTl, dRdSl, Pr, Tr, 
     krm1 = max(kr-1, 1)
     if (krm1>nk) stop 'find_neutral_surface_positions(): krm1 went out of bounds!'
 
-    ! Potential density difference, kr - kl
+    ! Potential density difference, rho(kr) - rho(kl)
     dRho = 0.5 * ( ( dRdTr(kr) + dRdTl(kl) ) * ( Tr(kr) - Tl(kl) ) &
                  + ( dRdSr(kr) + dRdSl(kl) ) * ( Sr(kr) - Sl(kl) ) )
                                                      if (debug_this_module) write(0,*) 'k,kl,kr,dRho=',k_surface,kl,kr,dRho
     ! Which column has the lighter surface for the current indexes, kr and kl
     if (.not. reached_bottom) then
       if (dRho < 0.) then
-        looking_left = .true.
-        looking_right = .false.
+        searching_left_column = .true.
+        searching_right_column = .false.
       elseif (dRho > 0.) then
-        looking_right = .true.
-        looking_left = .false.
+        searching_right_column = .true.
+        searching_left_column = .false.
       else ! dRho == 0.
-        if (kl + kr == 2) then
-          looking_left = .true.
-          looking_right = .false.
-        else
-          looking_left = .not.  looking_left
-          looking_right = .not.  looking_right
+        if (kl + kr == 2) then ! Still at surface
+          searching_left_column = .true.
+          searching_right_column = .false.
+        else ! Not the surface so we simply change direction
+          searching_left_column = .not.  searching_left_column
+          searching_right_column = .not.  searching_right_column
         endif
       endif
     endif
 
-    if (looking_left) then
-      ! Interpolate for the neutral surface position within the left column, layer kl
-                                                     if (debug_this_module) write(0,*) 'looking_left=',looking_left
+    if (searching_left_column) then
+      ! Interpolate for the neutral surface position within the left column, layer klm1
+                                                     if (debug_this_module) write(0,*) 'searching_left_column=',searching_left_column
       ! Potential density difference, rho(kl-1) - rho(kr) (should be negative)
-      dRhoM1 = 0.5 * ( ( dRdTl(klm1) + dRdTr(kr) ) * ( Tl(klm1) - Tr(kr) ) &
+      dRhoTop = 0.5 * ( ( dRdTl(klm1) + dRdTr(kr) ) * ( Tl(klm1) - Tr(kr) ) &
                      + ( dRdSl(klm1) + dRdSr(kr) ) * ( Sl(klm1) - Sr(kr) ) )
       ! Potential density difference, rho(kl) - rho(kr) (will be positive)
-      dRho = 0.5 * ( ( dRdTl(klm1+1) + dRdTr(kr) ) * ( Tl(klm1+1) - Tr(kr) ) &
+      dRhoBot = 0.5 * ( ( dRdTl(klm1+1) + dRdTr(kr) ) * ( Tl(klm1+1) - Tr(kr) ) &
                    + ( dRdSl(klm1+1) + dRdSr(kr) ) * ( Sl(klm1+1) - Sr(kr) ) )
-     !dRho = - dRho ! Re-use calculation above
-                                                     if (debug_this_module) write(0,*) '  dRhoM1=',dRhoM1,' dRho=',dRho
+                                                     if (debug_this_module) write(0,*) '  dRhoTop=',dRhoTop,' dRhoBot=',dRhoBot
 
-      ! Because we a looking left, the right surface, kr, is lighter than kl and should be denser than kl-1
+      ! Because we are looking left, the right surface, kr, is lighter than klm1+1 and should be denser than klm1
       ! unless we are still at the top of the left column (kl=1)
-      if (dRhoM1 >= 0.) then
-        !if (kl>1) stop 'This should never happen: kl>1 and dRhoM1>=0.'
+      if (dRhoTop >= 0.) then
         PoL(k_surface) = 0.
       else
         ! Linearly interpolate for the position between Pl(kl-1) and Pl(kl) where the density difference
         ! between right and left is zero.
-        PoL(k_surface) = interpolate_for_nondim_position( dRhoM1, Pl(klm1), dRho, Pl(klm1+1) )
-        if (PoL(k_surface)>=1. .and. klm1<nk) then
+        PoL(k_surface) = interpolate_for_nondim_position( dRhoTop, Pl(klm1), dRhoBot, Pl(klm1+1) )
+        if (PoL(k_surface)>=1. .and. klm1<nk) then ! >= is really ==, when PoL==1 we are point to the bottom of the cell
           klm1 = klm1 + 1
           PoL(k_surface) = PoL(k_surface) - 1.
         endif
@@ -524,30 +522,29 @@ subroutine find_neutral_surface_positions(nk, Pl, Tl, Sl, dRdTl, dRdSl, Pr, Tr, 
         kr = kr + 1
       else
         reached_bottom = .true.
-        looking_right = .true.
-        looking_left = .false.
+        searching_right_column = .true.
+        searching_left_column = .false.
       endif
-    elseif (looking_right) then
-      ! Interpolate for the neutral surface position within the right column, layer kr
-                                                     if (debug_this_module) write(0,*) 'looking_right=',looking_right
+    elseif (searching_right_column) then
+      ! Interpolate for the neutral surface position within the right column, layer krm1
+                                                     if (debug_this_module) write(0,*) 'searching_right_column=',searching_right_column
       ! Potential density difference, rho(kr-1) - rho(kl) (should be negative)
-      dRhoM1 = 0.5 * ( ( dRdTr(krm1) + dRdTl(kl) ) * ( Tr(krm1) - Tl(kl) ) &
+      dRhoTop = 0.5 * ( ( dRdTr(krm1) + dRdTl(kl) ) * ( Tr(krm1) - Tl(kl) ) &
                      + ( dRdSr(krm1) + dRdSl(kl) ) * ( Sr(krm1) - Sl(kl) ) )
       ! Potential density difference, rho(kr) - rho(kl) (will be positive)
-      dRho = 0.5 * ( ( dRdTr(krm1+1) + dRdTl(kl) ) * ( Tr(krm1+1) - Tl(kl) ) &
+      dRhoBot = 0.5 * ( ( dRdTr(krm1+1) + dRdTl(kl) ) * ( Tr(krm1+1) - Tl(kl) ) &
                    + ( dRdSr(krm1+1) + dRdSl(kl) ) * ( Sr(krm1+1) - Sl(kl) ) )
-                                                     if (debug_this_module) write(0,*) '  dRhoM1=',dRhoM1,' dRho=',dRho
+                                                     if (debug_this_module) write(0,*) '  dRhoTop=',dRhoTop,' dRhoBot=',dRhoBot
 
-      ! Because we a looking right, the left surface, kl, is lighter than kr and should be denser than kr-1
+      ! Because we are looking right, the left surface, kl, is lighter than krm1+1 and should be denser than krm1
       ! unless we are still at the top of the right column (kr=1)
-      if (dRhoM1 >= 0.) then
-        !if (kr>1) stop 'This should never happen: kr>1 and dRhoM1>=0.'
+      if (dRhoTop >= 0.) then
         PoR(k_surface) = 0.
       else
         ! Linearly interpolate for the position between Pr(kr-1) and Pr(kr) where the density difference
         ! between right and left is zero.
-        PoR(k_surface) = interpolate_for_nondim_position( dRhoM1, Pr(krm1), dRho, Pr(krm1+1) )
-        if (PoR(k_surface)>=1. .and. krm1<nk) then
+        PoR(k_surface) = interpolate_for_nondim_position( dRhoTop, Pr(krm1), dRhoBot, Pr(krm1+1) )
+        if (PoR(k_surface)>=1. .and. krm1<nk) then ! >= is really ==, when PoR==1 we are point to the bottom of the cell
           krm1 = krm1 + 1
           PoR(k_surface) = PoR(k_surface) - 1.
         endif
@@ -565,8 +562,8 @@ subroutine find_neutral_surface_positions(nk, Pl, Tl, Sl, dRdTl, dRdSl, Pr, Tr, 
         kl = kl + 1
       else
         reached_bottom = .true.
-        looking_right = .false.
-        looking_left = .true.
+        searching_right_column = .false.
+        searching_left_column = .true.
       endif
     else
       stop 'Else what?'
@@ -646,7 +643,7 @@ real function interpolate_for_nondim_position(dRhoNeg, Pneg, dRhoPos, Ppos)
     else ! dRhoPos = dRhoNeg = 0
       interpolate_for_nondim_position = 0.5
     endif
-  else ! dRho - dRhoNeg < 0
+  else ! dRhoPos - dRhoNeg < 0
     interpolate_for_nondim_position = 0.5
   endif
   if ( interpolate_for_nondim_position < 0. ) stop 'interpolate_for_nondim_position: Houston, we have a problem! Pint < Pneg'
@@ -684,13 +681,13 @@ subroutine neutral_surface_flux(nk, hl, hr, Tl, Tr, PiL, PiR, KoL, KoR, hEff, Fl
 
       klb = KoL(k_sublayer+1)
       T_left_bottom = ( 1. - PiL(k_sublayer+1) ) * Til(klb) + PiL(k_sublayer+1) * Til(klb+1)
-                                                     if (debug_this_module) write(0,'(i3,2(x,a,i3,x,a,f8.2),2(x,a,f8.2))') &
-                                                     k_sublayer+1,'klb=',klb,'Til(km1)=',Til(klb),'Til(klb+1)=',Til(klb+1),'PiL(k+1)=',PiL(k_sublayer+1),'T_left_bottom=',T_left_bottom
+                                                     if (debug_this_module) write(0,'(i3,x,a,i3,4(x,a,f8.2))') &
+                                                     k_sublayer+1,'klb=',klb,'Til(klb)=',Til(klb),'Til(klb+1)=',Til(klb+1),'PiL(ks+1)=',PiL(k_sublayer+1),'T_left_bottom=',T_left_bottom
 
       klt = KoL(k_sublayer)
       T_left_top = ( 1. - PiL(k_sublayer) ) * Til(klt) + PiL(k_sublayer) * Til(klt+1)
-                                                     if (debug_this_module) write(0,'(i3,2(x,a,i3,x,a,f8.2),2(x,a,f8.2))') &
-                                                     k_sublayer,'klt=',klt,'Til(km1)=',Til(klt),'Til(klt+1)=',Til(klt+1),'PiL(k)=',PiL(k_sublayer),'T_left_top=',T_left_top
+                                                     if (debug_this_module) write(0,'(i3,x,a,i3,4(x,a,f8.2))') &
+                                                     k_sublayer,'klt=',klt,'Til(klt)=',Til(klt),'Til(klt+1)=',Til(klt+1),'PiL(ks)=',PiL(k_sublayer),'T_left_top=',T_left_top
 
       !T_left_layer = Tl(klt)
       T_left_layer = ppm_ave(PiL(k_sublayer), PiL(k_sublayer+1) + real(klb-klt), &
@@ -698,13 +695,13 @@ subroutine neutral_surface_flux(nk, hl, hr, Tl, Tr, PiL, PiR, KoL, KoR, hEff, Fl
 
       krb = KoR(k_sublayer+1)
       T_right_bottom = ( 1. - PiR(k_sublayer+1) ) * Tir(krb) + PiR(k_sublayer+1) * Tir(krb+1)
-                                                     if (debug_this_module) write(0,'(i3,2(x,a,i3,x,a,f8.2),2(x,a,f8.2))') &
-                                                     k_sublayer+1,'krb=',krb,'Tir(km1)=',Tir(krb),'Tir(krb+1)=',Tir(krb+1),'PiR(k+1)=',PiR(k_sublayer+1),'T_right_bottom=',T_right_bottom
+                                                     if (debug_this_module) write(0,'(i3,x,a,i3,4(x,a,f8.2))') &
+                                                     k_sublayer+1,'krb=',krb,'Tir(krb)=',Tir(krb),'Tir(krb+1)=',Tir(krb+1),'PiR(ks+1)=',PiR(k_sublayer+1),'T_right_bottom=',T_right_bottom
 
       krt = KoR(k_sublayer)
       T_right_top = ( 1. - PiR(k_sublayer) ) * Tir(krt) + PiR(k_sublayer) * Tir(krt+1)
-                                                     if (debug_this_module) write(0,'(i3,2(x,a,i3,x,a,f8.2),2(x,a,f8.2))') &
-                                                     k_sublayer,'krt=',krt,'Tir(km1)=',Tir(krt),'Tir(krt+1)=',Tir(krt+1),'PiR(k)=',PiR(k_sublayer),'T_right_top=',T_right_top
+                                                     if (debug_this_module) write(0,'(i3,x,a,i3,4(x,a,f8.2))') &
+                                                     k_sublayer,'krt=',krt,'Tir(krt)=',Tir(krt),'Tir(krt+1)=',Tir(krt+1),'PiR(ks)=',PiR(k_sublayer),'T_right_top=',T_right_top
 
       !T_right_layer = Tr(krt)
       T_right_layer = ppm_ave(PiR(k_sublayer), PiR(k_sublayer+1) + real(krb-krt), &
