@@ -165,36 +165,46 @@ subroutine neutral_diffusion(G, h, Coef_x, Coef_y, Tracer, CS)
   nk = G%ke
 
   do j = G%jsc,G%jec ; do I = G%isc-1,G%iec
-    call neutral_surface_flux(nk, h(i,j,:), h(i+1,j,:), &
-                              Tracer(i,j,:), Tracer(i+1,j,:), &
-                              CS%uPoL(I,j,:), CS%uPoR(I,j,:), &
-                              CS%uKoL(I,j,:), CS%uKoR(I,j,:), &
-                              CS%uhEff(I,j,:), uFlx(I,j,:))
+    if (G%mask2dCu(I,j)>0.) then
+      call neutral_surface_flux(nk, h(i,j,:), h(i+1,j,:), &
+                                Tracer(i,j,:), Tracer(i+1,j,:), &
+                                CS%uPoL(I,j,:), CS%uPoR(I,j,:), &
+                                CS%uKoL(I,j,:), CS%uKoR(I,j,:), &
+                                CS%uhEff(I,j,:), uFlx(I,j,:))
+    else
+      uFlx(I,j,:) = 0.
+    endif
   enddo ; enddo
 
   do J = G%jsc-1,G%jec ; do i = G%isc,G%iec
-    call neutral_surface_flux(nk, h(i,j,:), h(i,j+1,:), &
-                              Tracer(i,j,:), Tracer(i,j+1,:), &
-                              CS%vPoL(i,J,:), CS%vPoR(i,J,:), &
-                              CS%vKoL(i,J,:), CS%vKoR(i,J,:), &
-                              CS%vhEff(i,J,:), vFlx(i,J,:))
+    if (G%mask2dCv(i,J)>0.) then
+      call neutral_surface_flux(nk, h(i,j,:), h(i,j+1,:), &
+                                Tracer(i,j,:), Tracer(i,j+1,:), &
+                                CS%vPoL(i,J,:), CS%vPoR(i,J,:), &
+                                CS%vKoL(i,J,:), CS%vKoR(i,J,:), &
+                                CS%vhEff(i,J,:), vFlx(i,J,:))
+    else
+      vFlx(I,j,:) = 0.
+    endif
   enddo ; enddo
 
   do j = G%jsc,G%jec ; do i = G%isc,G%iec
-    dTracer(:) = 0.
-    do ks = 1,2*nk+1 ;
-      k = CS%uKoL(I,j,ks)
-      dTracer(k) = dTracer(k) + Coef_x(I,j) * uFlx(I,j,ks)
-      k = CS%uKoR(I-1,j,ks)
-      dTracer(k) = dTracer(k) - Coef_x(I-1,j) * uFlx(I-1,j,ks)
-      k = CS%vKoL(i,J,ks)
-      dTracer(k) = dTracer(k) + Coef_y(i,J) * vFlx(i,J,ks)
-      k = CS%vKoR(i,J-1,ks)
-      dTracer(k) = dTracer(k) + Coef_y(i,J-1) * vFlx(i,J-1,ks)
-    enddo
-    do k = 1, G%ke
-      Tracer(i,j,k) = Tracer(i,j,k) + dTracer(k) * ( G%IareaT(i,j) / ( h(i,j,k) + G%H_subroundoff ) )
-    enddo
+    if (G%mask2dT(i,j)>0.) then
+      dTracer(:) = 0.
+      do ks = 1,2*nk+1 ;
+        k = CS%uKoL(I,j,ks)
+        dTracer(k) = dTracer(k) + Coef_x(I,j) * uFlx(I,j,ks)
+        k = CS%uKoR(I-1,j,ks)
+        dTracer(k) = dTracer(k) - Coef_x(I-1,j) * uFlx(I-1,j,ks)
+        k = CS%vKoL(i,J,ks)
+        dTracer(k) = dTracer(k) + Coef_y(i,J) * vFlx(i,J,ks)
+        k = CS%vKoR(i,J-1,ks)
+        dTracer(k) = dTracer(k) - Coef_y(i,J-1) * vFlx(i,J-1,ks)
+      enddo
+      do k = 1, G%ke
+        Tracer(i,j,k) = Tracer(i,j,k) + dTracer(k) * ( G%IareaT(i,j) / ( h(i,j,k) + G%H_subroundoff ) )
+      enddo
+    endif
   enddo ; enddo
 
 end subroutine neutral_diffusion
