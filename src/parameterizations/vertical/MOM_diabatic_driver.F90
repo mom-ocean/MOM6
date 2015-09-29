@@ -75,6 +75,7 @@ use MOM_diabatic_aux,        only : make_frazil, adjust_salt, insert_brine, diff
 use MOM_diabatic_aux,        only : find_uv_at_h, diagnoseMLDbyDensityDifference, applyBoundaryFluxesInOut
 use MOM_diag_mediator,       only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator,       only : diag_ctrl, time_type, diag_update_target_grids
+use MOM_diag_mediator,       only : diag_ctrl, query_averaging_enabled !BDM: see src/framework/MOM_diag_mediator.F90
 use MOM_diag_to_Z,           only : diag_to_Z_CS, register_Zint_diag, calc_Zint_diags
 use MOM_diffConvection,      only : diffConvection_CS, diffConvection_init
 use MOM_diffConvection,      only : diffConvection_calculate, diffConvection_end
@@ -110,17 +111,13 @@ use MOM_set_diffusivity,     only : set_diffusivity_CS
 use MOM_shortwave_abs,       only : absorbRemainingSW, optics_type
 use MOM_sponge,              only : apply_sponge, sponge_CS
 use MOM_thickness_diffuse,   only : vert_fill_TS ! BDM
+use MOM_time_manager,        only : operator(<=), time_type !BDM: see src/framework/MOM_time_manager.F90
 use MOM_tracer_flow_control, only : call_tracer_column_fns, tracer_flow_control_CS
 use MOM_variables,           only : thermo_var_ptrs, vertvisc_type, accel_diag_ptrs
 use MOM_variables,           only : cont_diag_ptrs, MOM_thermovar_chksum, p3d
 use MOM_regularize_layers,   only : regularize_layers, regularize_layers_init, regularize_layers_CS
+use time_manager_mod,        only : increment_time !BDM: see shared/time_manager/time_manager.F90
 use MOM_wave_speed,          only : wave_speed
-use MOM_diag_mediator,       only : diag_ctrl, query_averaging_enabled 
-                                    !(BDM) see src/framework/MOM_diag_mediator.F90
-use MOM_time_manager,        only : operator(<=), time_type 
-                                    !(BDM) see src/framework/MOM_time_manager.F90
-use time_manager_mod,        only : increment_time 
-                                    !(BDM) see shared/time_manager/time_manager.F90
 
 implicit none ; private
 
@@ -1698,7 +1695,7 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
 
   CS%nsw = 0
   if (ASSOCIATED(CS%optics)) CS%nsw = CS%optics%nbands
-  
+
 end subroutine diabatic_driver_init
 
 
@@ -1723,21 +1720,21 @@ subroutine diabatic_driver_end(CS)
   if (CS%use_energetic_PBL) &
     call energetic_PBL_end(CS%energetic_PBL_CSp)
     
-  if (CS%use_int_tides) &
-    call internal_tides_end(CS%int_tide_CSp) !BDM  
-    
-  !--------------------check----------------------------------------------
-  if (is_root_pe()) then
-    print *,'diabatic_driver_end: internal_tides_end called!' !BDM
-  endif
-  !-----------------------------------------------------------------------
+  !if (CS%use_int_tides) &
+  !  call internal_tides_end(CS%int_tide_CSp) !BDM  
+  !  
+  !!--------------------check----------------------------------------------
+  !if (is_root_pe()) then
+  !  print *,'diabatic_driver_end: internal_tides_end called!' !BDM
+  !endif
+  !!-----------------------------------------------------------------------
 
   if (associated(CS%optics)) then
     call opacity_end(CS%opacity_CSp, CS%optics)
     deallocate(CS%optics)
   endif
   if (associated(CS)) deallocate(CS)
-  
+
 end subroutine diabatic_driver_end
 
 
