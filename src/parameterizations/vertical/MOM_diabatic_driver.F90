@@ -534,7 +534,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     endif
     
     ! CALCULATE MODAL STRUCTURE (BDM)
-    call wave_structure(h, tv, G, cg1, full_halos=.true., wmode, umode, z_depth, N2, numlay)
+    !call wave_structure(h, tv, G, cg1, full_halos=.true., wmode, umode, z_depth, N2, numlay)
     
     ! CALCULATE NEAR-BOTTOM STRATIFICATION (BDM)
     !kappa_fill = 1.e-3 ! m2 s-1
