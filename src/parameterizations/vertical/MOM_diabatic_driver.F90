@@ -99,7 +99,6 @@ use MOM_int_tide_input,      only : set_int_tide_input, int_tide_input_init
 use MOM_int_tide_input,      only : int_tide_input_end, int_tide_input_CS, int_tide_input_type
 use MOM_int_tide_input,      only : find_N2_bottom ! BDM
 use MOM_internal_tides,      only : propagate_int_tide, register_int_tide_restarts
-use MOM_restart,             only : MOM_restart_CS ! BDM
 use MOM_internal_tides,      only : internal_tides_init, internal_tides_end, int_tide_CS
 use MOM_kappa_shear,         only : kappa_shear_is_used
 use MOM_KPP,                 only : KPP_CS, KPP_init, KPP_calculate, KPP_end
@@ -160,8 +159,6 @@ type, public :: diabatic_CS ; private
   real    :: cg_test         ! Uniform group velocity of internal tide for test case (BDM)
   type(time_type) :: time_end, time_max_source 
                              ! For use in testing internal tides (BDM)
-  type(MOM_restart_CS), pointer :: restart_CSp => NULL() 
-                             ! Needed by register_int_tide_restarts (BDM)
   logical :: useALEalgorithm ! If true, use the ALE algorithm rather than layered
                              ! isopycnal/stacked shallow water mode. This logical
                              ! passed by argument to diabatic_driver_init.
@@ -1393,8 +1390,7 @@ end subroutine adiabatic_driver_init
 
 
 subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
-                                ADp, CDp, CS, tracer_flow_CSp, sponge_CSp, &
-                                diag_to_Z_CSp, restart_CSp)
+                                ADp, CDp, CS, tracer_flow_CSp, sponge_CSp, diag_to_Z_CSp)
   type(time_type),         intent(in)    :: Time
   type(ocean_grid_type),   intent(inout) :: G
   type(param_file_type),   intent(in)    :: param_file
@@ -1406,7 +1402,6 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
   type(tracer_flow_control_CS), pointer  :: tracer_flow_CSp
   type(sponge_CS),         pointer       :: sponge_CSp
   type(diag_to_Z_CS),      pointer       :: diag_to_Z_CSp
-  type(MOM_restart_CS),    pointer       :: restart_CSp ! BDM
 
 ! Arguments:
 !  (in)      Time            = current model time
@@ -1450,8 +1445,6 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
   CS%useALEalgorithm = useALEalgorithm
   CS%bulkmixedlayer = (G%nkml > 0)
 
-  CS%restart_CSp => restart_CSp ! BDM
-  
 ! Set default, read and log parameters
   call log_version(param_file, mod, version, &
                    "The following parameters are used for diabatic processes.")
@@ -1619,7 +1612,6 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
   if (CS%use_int_tides) then !BDM
     call int_tide_input_init(Time, G, param_file, diag, CS%int_tide_input_CSp, &
                              CS%int_tide_input)
-    call register_int_tide_restarts(G, param_file, CS%int_tide_CSp, CS%restart_CSp) !BDM
     call internal_tides_init(Time, G, param_file, diag, CS%int_tide_CSp)
   endif
 

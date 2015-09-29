@@ -1976,7 +1976,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
 
   call MEKE_alloc_register_restart(G, param_file, CS%MEKE, CS%restart_CSp)
   call set_visc_register_restarts(G, param_file, CS%visc, CS%restart_CSp)
-  
+
   ! Initialize fields
   if (associated(CS%tracer_Reg)) init_CS%tracer_Reg => CS%tracer_Reg
   call callTree_waypoint("restart registration complete (initialize_MOM)")
@@ -2106,8 +2106,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   else
     call diabatic_driver_init(Time, G, param_file, CS%use_ALE_algorithm, diag,     &
                               CS%ADp, CS%CDp, CS%diabatic_CSp, CS%tracer_flow_CSp, &
-                              init_CS%sponge_CSp, CS%diag_to_Z_CSp)
-    
+                              init_CS%sponge_CSp, CS%diag_to_Z_CSp)    
   endif
 
   call tracer_advect_init(Time, G, param_file, diag, CS%tracer_adv_CSp)
