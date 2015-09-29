@@ -50,10 +50,10 @@ use MOM_coms,             only : reproducing_sum
 use MOM_constants,        only : hlv, hlf
 use MOM_cpu_clock,        only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock,        only : CLOCK_SUBCOMPONENT
-use MOM_diag_mediator,    only : post_data, query_averaging_enabled, diag_ctrl
-use MOM_diag_mediator,    only : safe_alloc_ptr, time_type, register_scalar_field
+use MOM_diag_mediator,    only : diag_ctrl
+use MOM_diag_mediator,    only : safe_alloc_ptr, time_type
 use MOM_domains,          only : pass_vector, pass_var, global_field_sum, BITWISE_EXACT_SUM
-use MOM_domains,          only : AGRID, BGRID_NE, CGRID_NE
+use MOM_domains,          only : AGRID, BGRID_NE, CGRID_NE, To_All
 use MOM_error_handler,    only : MOM_error, WARNING, FATAL, is_root_pe, MOM_mesg
 use MOM_file_parser,      only : get_param, log_version, param_file_type
 use MOM_forcing_type,     only : forcing, forcing_diags, register_forcing_type_diags
@@ -69,6 +69,7 @@ use MOM_variables,        only : surface
 use user_revise_forcing,  only : user_alter_forcing, user_revise_forcing_init, user_revise_forcing_CS
 
 use coupler_types_mod,        only : coupler_2d_bc_type
+use data_override_mod,        only : data_override_init, data_override
 use fms_mod,                  only : read_data, stdout
 use mpp_mod,                  only : mpp_chksum
 use time_interp_external_mod, only : init_external_field, time_interp_external
@@ -138,6 +139,7 @@ type, public :: surface_forcing_CS ; private
   real    :: rigid_sea_ice_mass ! A mass per unit area of sea-ice beyond which
                                 ! sea-ice viscosity becomes effective, in kg m-2,
                                 ! typically of order 1000 kg m-2.
+  logical :: allow_flux_adjustments ! If true, use data_override to obtain flux adjustments
 
   real    :: Flux_const                     ! piston velocity for surface restoring (m/s)
   logical :: salt_restore_as_sflux          ! If true, SSS restore as salt flux instead of water flux
@@ -673,13 +675,77 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
   ! arrays that come in from the surface forcing.
   fluxes%tr_fluxes => IOB%fluxes
 
+  if (CS%allow_flux_adjustments) then
+    ! Apply adjustments to fluxes
+    call apply_flux_adjustments(G, CS, Time, fluxes)
+  endif
+
   ! Allow for user-written code to alter fluxes after all the above
   call user_alter_forcing(state, fluxes, Time, G, CS%urf_CS)
 
   call cpu_clock_end(id_clock_forcing)
 end subroutine convert_IOB_to_fluxes
 
+!> Adds flux adjustments obtained via data_override
+!! Component name is 'OCN'
+!! Available adjustments are:
+!! - taux_adj (Zonal wind stress delta, positive to the east, in Pa)
+!! - tauy_adj (Meridional wind stress delta, positive to the north, in Pa)
+subroutine apply_flux_adjustments(G, CS, Time, fluxes)
+  type(ocean_grid_type),    intent(inout) :: G !< Ocean grid structure
+  type(surface_forcing_CS), pointer       :: CS !< Surface forcing control structure
+  type(time_type),          intent(in)    :: Time !< Model time structure
+  type(forcing), optional,  intent(inout) :: fluxes !< Surface fluxes structure
+  ! Local variables
+  real, dimension(SZI_(G),SZJ_(G)) :: tempx_at_h ! Delta to zonal wind stress at h points (Pa)
+  real, dimension(SZI_(G),SZJ_(G)) :: tempy_at_h ! Delta to meridional wind stress at h points (Pa)
+  integer :: is_in, ie_in, js_in, je_in, i, j
+  real :: dLonDx, dLonDy, rDlon, cosA, sinA, zonal_tau, merid_tau
+  logical :: overrode_x, overrode_y
 
+  is_in = G%isc - G%isd + 1
+  ie_in = G%iec - G%isd + 1
+  js_in = G%jsc - G%jsd + 1
+  je_in = G%jec - G%jsd + 1
+
+  tempx_at_h(:,:) = 0.0 ; tempy_at_h(:,:) = 0.0
+  ! Either reads data or leaves contents unchanged
+  overrode_x = .false. ; overrode_y = .false.
+  call data_override('OCN', 'taux_adj', tempx_at_h, Time, override=overrode_x, &
+                     is_in=is_in, ie_in=ie_in, js_in=js_in, je_in=je_in)
+  call data_override('OCN', 'tauy_adj', tempy_at_h, Time, override=overrode_y, &
+                     is_in=is_in, ie_in=ie_in, js_in=js_in, je_in=je_in)
+
+  if (overrode_x .or. overrode_y) then
+    if (.not. (overrode_x .and. overrode_y)) call MOM_error(FATAL,"apply_flux_adjustments: "//&
+            "Both taux_adj and tauy_adj must be specified, or neither, in data_table")
+
+    ! Rotate winds
+    call pass_vector(tempx_at_h, tempy_at_h, G%Domain, To_All, AGRID)
+    do j=G%jsc-1,G%jec+1 ; do i=G%isc-1,G%iec+1
+      dLonDx = G%geoLonCu(I,j) - G%geoLonCu(I-1,j)
+      dLonDy = G%geoLonCv(i,J) - G%geoLonCv(i,J-1)
+      rDlon = sqrt( dLonDx * dLonDx + dLonDy * dLonDy )
+      if (rDlon > 0.) rDlon = 1. / rDlon
+      cosA = dLonDx * rDlon
+      sinA = dLonDy * rDlon
+      zonal_tau = tempx_at_h(i,j)
+      merid_tau = tempy_at_h(i,j)
+      tempx_at_h(i,j) = cosA * zonal_tau - sinA * merid_tau
+      tempy_at_h(i,j) = sinA * zonal_tau + cosA * merid_tau
+    enddo ; enddo
+  
+    ! Average to C-grid locations
+    do j=G%jsc,G%jec ; do I=G%isc-1,G%iec
+      fluxes%taux(I,j) = fluxes%taux(I,j) + 0.5 * ( tempx_at_h(i,j) + tempx_at_h(i+1,j) )
+    enddo ; enddo
+  
+    do J=G%jsc-1,G%jec ; do i=G%isc,G%iec
+      fluxes%tauy(i,J) = fluxes%tauy(i,J) + 0.5 * ( tempy_at_h(i,j) + tempy_at_h(i,j+1) )
+    enddo ; enddo
+  endif ! overrode_x .or. overrode_y
+
+end subroutine apply_flux_adjustments
 
 subroutine forcing_save_restart(CS, G, Time, directory, time_stamped, &
                                 filename_suffix)
@@ -950,6 +1016,13 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt)
 
   call register_forcing_type_diags(Time, diag, CS%use_temperature, CS%handles)
 
+  call get_param(param_file, mod, "ALLOW_FLUX_ADJUSTMENTS", CS%allow_flux_adjustments, &
+                 "If true, allows flux adjustments to specified via the \n"//&
+                 "data_table using the component name 'OCN'.", default=.false.)
+  if (CS%allow_flux_adjustments) then
+    call data_override_init(Ocean_domain_in=G%Domain%mpp_domain)
+  endif
+
   if (present(restore_salt)) then ; if (restore_salt) then
     salt_file = trim(CS%inputdir) // trim(CS%salt_restore_file)
     CS%id_srestore = init_external_field(salt_file, CS%salt_restore_var_name, domain=G%Domain%mpp_domain)
@@ -979,7 +1052,6 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt)
 
   call cpu_clock_end(id_clock_forcing)
 end subroutine surface_forcing_init
-
 
 subroutine surface_forcing_end(CS, fluxes)
   type(surface_forcing_CS), pointer       :: CS
