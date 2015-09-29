@@ -11,7 +11,6 @@ module MOM_remapping
 !==============================================================================
 use MOM_error_handler, only : MOM_error, FATAL
 use MOM_string_functions, only : uppercase
-use MOM_variables,     only : ocean_grid_type, thermo_var_ptrs
 use polynomial_functions, only : evaluation_polynomial, integration_polynomial
 use regrid_edge_values, only : edge_values_explicit_h4, edge_values_implicit_h4
 use regrid_edge_values, only : edge_values_implicit_h4, edge_values_implicit_h6
@@ -40,7 +39,7 @@ end type
 ! -----------------------------------------------------------------------------
 ! The following routines are visible to the outside world
 ! -----------------------------------------------------------------------------
-public remapping_main, remapping_core
+public remapping_core
 public initialize_remapping, end_remapping
 public remapEnableBoundaryExtrapolation, remapDisableBoundaryExtrapolation
 public setReconstructionType
@@ -88,89 +87,6 @@ character(len=3), public :: remappingDefaultScheme = "PLM"
 ! This module contains the following routines
 ! -----------------------------------------------------------------------------
 contains
-
-!------------------------------------------------------------------------------
-! General remapping routine 
-!------------------------------------------------------------------------------
-subroutine remapping_main( CS, G, h, dxInterface, tv, u, v )
-!------------------------------------------------------------------------------
-! This routine takes care of remapping all variable between the old and the
-! new grids. When velocity components need to be remapped, thicknesses at
-! velocity points are taken to be arithmetic averages of tracer thicknesses.
-!------------------------------------------------------------------------------
-  
-  ! Arguments
-  type(remapping_CS),                               intent(in)    :: CS
-  type(ocean_grid_type),                            intent(in)    :: G
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),            intent(in)    :: h
-  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_),     intent(in)    :: dxInterface
-  type(thermo_var_ptrs),                            intent(inout) :: tv       
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), optional, intent(inout) :: u
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), optional, intent(inout) :: v
-  
-  ! Local variables
-  integer               :: i, j, k
-  integer               :: nz
-  real, dimension(G%ke+1) :: dx
-  real, dimension(G%ke) :: h1, u_column
-
-  nz = G%ke
-
-  ! Remap tracer
-!$OMP parallel default(none) shared(G,h,dxInterface,CS,nz,tv,u,v) &
-!$OMP                       private(h1,dx,u_column)
-  if (associated(tv%S)) then ! Assume T and S are either both associated or both not
-!$OMP do
-    do j = G%jsc,G%jec
-      do i = G%isc,G%iec
-        if (G%mask2dT(i,j)>0.) then
-          ! Build the start and final grids
-          h1(:) = h(i,j,:)
-          dx(:) = dxInterface(i,j,:)
-          call remapping_core(CS, nz, h1, tv%S(i,j,:), nz, dx, u_column)
-          tv%S(i,j,:) = u_column(:)
-          call remapping_core(CS, nz, h1, tv%T(i,j,:), nz, dx, u_column)
-          tv%T(i,j,:) = u_column(:)
-        endif
-      enddo
-    enddo
-  endif
-  
-  ! Remap u velocity component
-  if ( present(u) ) then
-!$OMP do
-    do j = G%jsc,G%jec
-      do i = G%iscB,G%iecB
-        if (G%mask2dCu(i,j)>0.) then
-          ! Build the start and final grids
-          h1(:) = 0.5 * ( h(i,j,:) + h(i+1,j,:) )
-          dx(:) = 0.5 * ( dxInterface(i,j,:) + dxInterface(i+1,j,:) )
-          call remapping_core(CS, nz, h1, u(i,j,:), nz, dx, u_column)
-          u(i,j,:) = u_column(:)
-        endif
-      enddo
-    enddo
-  endif
-  
-  ! Remap v velocity component
-  if ( present(v) ) then
-!$OMP do
-    do j = G%jscB,G%jecB
-      do i = G%isc,G%iec
-        if (G%mask2dCv(i,j)>0.) then
-          ! Build the start and final grids
-          h1(:) = 0.5 * ( h(i,j,:) + h(i,j+1,:) )
-          dx(:) = 0.5 * ( dxInterface(i,j,:) + dxInterface(i,j+1,:) )
-          call remapping_core(CS, nz, h1, v(i,j,:), nz, dx, u_column)
-          v(i,j,:) = u_column(:)
-        endif
-      enddo
-    enddo
-  endif
-!$OMP end parallel
-
-end subroutine remapping_main
-
 
 !------------------------------------------------------------------------------
 ! Build a grid from h
@@ -1166,21 +1082,28 @@ logical function remappingUnitTests()
   real, allocatable, dimension(:,:) :: ppoly0_E, ppoly0_S, ppoly0_coefficients
   integer :: i
   real :: err
+  logical :: thisTest
 
   write(*,*) '===== MOM_remapping: remappingUnitTests =================='
   remappingUnitTests = .false. ! Normally return false
 
+  thisTest = .false.
   call buildGridFromH(n0, h0, x0)
   do i=1,n0+1
     err=x0(i)-0.75*real(i-1)
-    if (abs(err)>real(i-1)*epsilon(err)) remappingUnitTests = .true.
+    if (abs(err)>real(i-1)*epsilon(err)) thisTest = .true.
   enddo
+  if (thisTest) write(*,*) 'remappingUnitTests: Failed buildGridFromH() 1'
+  remappingUnitTests = remappingUnitTests .or. thisTest
   call buildGridFromH(n1, h1, x1)
   do i=1,n1+1
     err=x1(i)-real(i-1)
-    if (abs(err)>real(i-1)*epsilon(err)) remappingUnitTests = .true.
+    if (abs(err)>real(i-1)*epsilon(err)) thisTest = .true.
   enddo
+  if (thisTest) write(*,*) 'remappingUnitTests: Failed buildGridFromH() 2'
+  remappingUnitTests = remappingUnitTests .or. thisTest
 
+  thisTest = .false.
   call initialize_remapping(n0, 'PPM_H4', CS)
   write(*,*) 'h0 (test data)'
   call dumpGrid(n0,h0,x0,u0)
@@ -1188,12 +1111,15 @@ logical function remappingUnitTests()
   call dzFromH1H2( n0, h0, n1, h1, dx1 )
   call remapping_core( CS, n0, h0, u0, n1, dx1, u1 )
   do i=1,n1
-    err=u1(i)-8./3.*(0.5*real(1+n1)-real(i))
-    if (abs(err)>epsilon(err)) remappingUnitTests = .true.
+    err=u1(i)-(8./3.)*(0.5*real(1+n1)-real(i))
+    if (abs(err)>real(n1-1)*epsilon(err)) thisTest = .true.
   enddo
   write(*,*) 'h1 (by projection)'
   call dumpGrid(n1,h1,x1,u1)
+  if (thisTest) write(*,*) 'remappingUnitTests: Failed remapping_core()'
+  remappingUnitTests = remappingUnitTests .or. thisTest
 
+  thisTest = .false.
   allocate(ppoly0_E(n0,2))
   allocate(ppoly0_S(n0,2))
   allocate(ppoly0_coefficients(n0,CS%degree+1))
@@ -1210,9 +1136,12 @@ logical function remappingUnitTests()
                           n1, h1, INTEGRATION_PPM, u1 )
   do i=1,n1
     err=u1(i)-8./3.*(0.5*real(1+n1)-real(i))
-    if (abs(err)>2.*epsilon(err)) remappingUnitTests = .true.
+    if (abs(err)>2.*epsilon(err)) thisTest = .true.
   enddo
+  if (thisTest) write(*,*) 'remappingUnitTests: Failed remapByProjection()'
+  remappingUnitTests = remappingUnitTests .or. thisTest
 
+  thisTest = .false.
   u1(:) = 0.
   call remapByDeltaZ( n0, h0, u0, ppoly0_E, ppoly0_coefficients, &
                       n1, x1-x0(1:n1+1), &
@@ -1222,9 +1151,12 @@ logical function remappingUnitTests()
   hn1=hn1-h1
   do i=1,n1
     err=u1(i)-8./3.*(0.5*real(1+n1)-real(i))
-    if (abs(err)>2.*epsilon(err)) remappingUnitTests = .true.
+    if (abs(err)>2.*epsilon(err)) thisTest = .true.
   enddo
+  if (thisTest) write(*,*) 'remappingUnitTests: Failed remapByDeltaZ() 1'
+  remappingUnitTests = remappingUnitTests .or. thisTest
 
+  thisTest = .false.
   call buildGridFromH(n2, h2, x2)
   dx2(1:n0+1) = x2(1:n0+1) - x0
   dx2(n0+2:n2+1) = x2(n0+2:n2+1) - x0(n0+1)
@@ -1238,8 +1170,10 @@ logical function remappingUnitTests()
 
   do i=1,n2
     err=u2(i)-8./6.*(0.5*real(1+n2)-real(i))
-    if (abs(err)>2.*epsilon(err)) remappingUnitTests = .true.
+    if (abs(err)>2.*epsilon(err)) thisTest = .true.
   enddo
+  if (thisTest) write(*,*) 'remappingUnitTests: Failed remapByDeltaZ() 2'
+  remappingUnitTests = remappingUnitTests .or. thisTest
 
   deallocate(ppoly0_E, ppoly0_S, ppoly0_coefficients)
 

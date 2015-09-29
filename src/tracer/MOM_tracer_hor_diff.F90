@@ -54,10 +54,15 @@ use MOM_domains, only : create_group_pass, do_group_pass, group_pass_type
 use MOM_checksums, only : hchksum
 use MOM_EOS, only : calculate_density
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
+use MOM_error_handler, only : MOM_set_verbosity, callTree_showQuery
+use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
 use MOM_lateral_mixing_coeffs, only : VarMix_CS
 use MOM_MEKE_types, only : MEKE_type
+use MOM_neutral_diffusion, only : neutral_diffusion_init, neutral_diffusion_end
+use MOM_neutral_diffusion, only : neutral_diffusion_CS
+use MOM_neutral_diffusion, only : neutral_diffusion_calc_coeffs, neutral_diffusion
 use MOM_tracer_registry, only : tracer_registry_type, tracer_type, MOM_tracer_chksum
 use MOM_variables, only : ocean_OBC_type, thermo_var_ptrs, OBC_FLATHER_E
 use MOM_variables, only : OBC_FLATHER_W, OBC_FLATHER_N, OBC_FLATHER_S
@@ -86,13 +91,18 @@ type, public :: tracer_hor_diff_CS ; private
   logical :: check_diffusive_CFL  ! If true, automatically iterate the diffusion
                             ! to ensure that the diffusive equivalent of the CFL
                             ! limit is not violated.
+  logical :: use_neutral_diffusion ! If true, use the neutral_diffusion module from within
+                            ! tracer_hor_diff.
+
+  type(neutral_diffusion_CS), pointer :: neutral_diffusion_CSp => NULL() ! Control structure for neutral diffusion.
   type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
                             ! timing of diagnostic output.
   logical :: debug          ! If true, write verbose checksums for debugging purposes.
+  logical :: show_call_tree ! Display the call tree while running. Set by VERBOSITY level.
   logical :: first_call = .true.
   integer :: id_KhTr_u = -1, id_KhTr_v = -1
 
-  type(group_pass_type) :: pass_t !For group halo pass, used in both
+  type(group_pass_type) :: pass_t !For group halo pass, used in both 
                                   !tracer_hordiff and tracer_epipycnal_ML_diff
 end type tracer_hor_diff_CS
 
@@ -176,6 +186,8 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, Reg, tv)
        "register_tracer must be called before tracer_hordiff.")
   if ((Reg%ntr==0) .or. ((CS%KhTr <= 0.0) .and. .not.associated(VarMix)) ) return
 
+  if (CS%show_call_tree) call callTree_enter("tracer_hordiff(), MOM_tracer_hor_diff.F90")
+
   call cpu_clock_begin(id_clock_diffuse)
 
   ntr = Reg%ntr
@@ -206,6 +218,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, Reg, tv)
   enddo
   call cpu_clock_end(id_clock_pass)
 
+  if (CS%show_call_tree) call callTree_waypoint("Calculating diffusivity (tracer_hordiff)")
   if (use_VarMix) then
 !$OMP parallel default(none) shared(is,ie,js,je,CS,VarMix,MEKE,Resoln_scaled, &
 !$OMP                               Kh_u,Kh_v,khdt_x,dt,G,khdt_y)                        &
@@ -297,6 +310,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, Reg, tv)
   endif
 
   if (CS%check_diffusive_CFL) then
+    if (CS%show_call_tree) call callTree_waypoint("Checking diffusive CFL (tracer_hordiff)")
     max_CFL = 0.0
     do j=js,je ; do i=is,ie
       CFL(i,j) = 2.0*((khdt_x(I-1,j) + khdt_x(I,j)) + &
@@ -331,74 +345,106 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, Reg, tv)
     endif
   enddo
 
-  do itt=1,num_itts
+  if (CS%use_neutral_diffusion) then
+    if (CS%show_call_tree) call callTree_waypoint("Calling neutral diffusion coeffs (tracer_hordiff)")
     call cpu_clock_begin(id_clock_pass)
     call do_group_pass(CS%pass_t, G%Domain)
     call cpu_clock_end(id_clock_pass)
-!$OMP parallel do default(none) shared(is,ie,js,je,nz,I_numitts,CS,G,khdt_y,h, &
-!$OMP                                  h_neglect,khdt_x,ntr,Idt,Reg)           &
-!$OMP                          private(scale,Coef_y,Coef_x,Ihdxdy,dTr)
-    do k=1,nz
-      scale = I_numitts
-      if (CS%Diffuse_ML_interior) then
-        if (k<=G%nkml) then
-          if (CS%ML_KhTr_scale <= 0.0) cycle
-          scale = I_numitts * CS%ML_KhTr_scale
-        endif
-        if ((k>G%nkml) .and. (k<=G%nk_rho_varies)) cycle
+    ! We are assuming that neutral surfaces do not evolve (much) as a result of multiple
+    ! lateral diffusion iterations. Otherwise the call to neutral_diffusion_calc_coeffs()
+    ! would be inside the itt-loop. -AJA
+    call neutral_diffusion_calc_coeffs(G, h, tv%T, tv%S, tv%eqn_of_state, CS%neutral_diffusion_CSp)
+    do J=js-1,je ; do i=is,ie
+      Coef_y(i,J) = I_numitts * khdt_y(i,J)
+    enddo ; enddo
+    do j=js,je
+      do I=is-1,ie
+        Coef_x(I,j) = I_numitts * khdt_x(I,j)
+      enddo
+    enddo
+    do itt=1,num_itts
+      if (CS%show_call_tree) call callTree_waypoint("Calling neutral diffusion (tracer_hordiff)",itt)
+      if (itt>1) then ! Update halos for subsequent iterations
+        call cpu_clock_begin(id_clock_pass)
+        call do_group_pass(CS%pass_t, G%Domain)
+        call cpu_clock_end(id_clock_pass)
       endif
+      do m=1,ntr ! For each tracer
+        call neutral_diffusion(G, h, Coef_x, Coef_y, Reg%Tr(m)%t, CS%neutral_diffusion_CSp)
+      enddo ! m
+    enddo ! itt
+  else
+    if (CS%show_call_tree) call callTree_waypoint("Calculating horizontal diffusion (tracer_hordiff)")
+    do itt=1,num_itts
+      call cpu_clock_begin(id_clock_pass)
+      call do_group_pass(CS%pass_t, G%Domain)
+      call cpu_clock_end(id_clock_pass)
+!$OMP parallel do default(none) shared(is,ie,js,je,nz,I_numitts,CS,G,khdt_y,h, &
+!$OMP                                    h_neglect,khdt_x,ntr,Idt,Reg)           &
+!$OMP                            private(scale,Coef_y,Coef_x,Ihdxdy,dTr)
+      do k=1,nz
+        scale = I_numitts
+        if (CS%Diffuse_ML_interior) then
+          if (k<=G%nkml) then
+            if (CS%ML_KhTr_scale <= 0.0) cycle
+            scale = I_numitts * CS%ML_KhTr_scale
+          endif
+          if ((k>G%nkml) .and. (k<=G%nk_rho_varies)) cycle
+        endif
 
-      do J=js-1,je ; do i=is,ie
-        Coef_y(i,J) = ((scale * khdt_y(i,J))*2.0*(h(i,j,k)*h(i,j+1,k))) / &
-                                                 (h(i,j,k)+h(i,j+1,k)+h_neglect)
-      enddo ; enddo
+        do J=js-1,je ; do i=is,ie
+          Coef_y(i,J) = ((scale * khdt_y(i,J))*2.0*(h(i,j,k)*h(i,j+1,k))) / &
+                                                   (h(i,j,k)+h(i,j+1,k)+h_neglect)
+        enddo ; enddo
 
-      do j=js,je
-        do I=is-1,ie
-          Coef_x(I,j) = ((scale * khdt_x(I,j))*2.0*(h(i,j,k)*h(i+1,j,k))) / &
-                                                   (h(i,j,k)+h(i+1,j,k)+h_neglect)
+        do j=js,je
+          do I=is-1,ie
+            Coef_x(I,j) = ((scale * khdt_x(I,j))*2.0*(h(i,j,k)*h(i+1,j,k))) / &
+                                                     (h(i,j,k)+h(i+1,j,k)+h_neglect)
+          enddo
+
+          do i=is,ie
+            Ihdxdy(i,j) = G%IareaT(i,j) / (h(i,j,k)+h_neglect)
+          enddo
         enddo
 
-        do i=is,ie
-          Ihdxdy(i,j) = G%IareaT(i,j) / (h(i,j,k)+h_neglect)
+        do m=1,ntr
+          do j=js,je ; do i=is,ie
+            dTr(i,j) = Ihdxdy(i,j) * &
+              ((Coef_x(I-1,j) * (Reg%Tr(m)%t(i-1,j,k) - Reg%Tr(m)%t(i,j,k)) - &
+                Coef_x(I,j) * (Reg%Tr(m)%t(i,j,k) - Reg%Tr(m)%t(i+1,j,k))) + &
+               (Coef_y(i,J-1) * (Reg%Tr(m)%t(i,j-1,k) - Reg%Tr(m)%t(i,j,k)) - &
+                Coef_y(i,J) * (Reg%Tr(m)%t(i,j,k) - Reg%Tr(m)%t(i,j+1,k))))
+          enddo ; enddo
+          if (associated(Reg%Tr(m)%df_x)) then ; do j=js,je ; do I=G%IscB,G%IecB
+            Reg%Tr(m)%df_x(I,j,k) = Reg%Tr(m)%df_x(I,j,k) + Coef_x(I,j) * &
+                                (Reg%Tr(m)%t(i,j,k) - Reg%Tr(m)%t(i+1,j,k))*Idt
+          enddo ; enddo ; endif
+          if (associated(Reg%Tr(m)%df_y)) then ; do J=G%JscB,G%JecB ; do i=is,ie
+            Reg%Tr(m)%df_y(i,J,k) = Reg%Tr(m)%df_y(i,J,k) + Coef_y(i,J) * &
+                                (Reg%Tr(m)%t(i,j,k) - Reg%Tr(m)%t(i,j+1,k))*Idt
+          enddo ; enddo ; endif
+          if (associated(Reg%Tr(m)%df2d_x)) then ; do j=js,je ; do I=G%IscB,G%IecB
+            Reg%Tr(m)%df2d_x(I,j) = Reg%Tr(m)%df2d_x(I,j) + Coef_x(I,j) * &
+                                (Reg%Tr(m)%t(i,j,k) - Reg%Tr(m)%t(i+1,j,k))*Idt
+          enddo ; enddo ; endif
+          if (associated(Reg%Tr(m)%df2d_y)) then ; do J=G%JscB,G%JecB ; do i=is,ie
+            Reg%Tr(m)%df2d_y(i,J) = Reg%Tr(m)%df2d_y(i,J) + Coef_y(i,J) * &
+                                (Reg%Tr(m)%t(i,j,k) - Reg%Tr(m)%t(i,j+1,k))*Idt
+          enddo ; enddo ; endif
+          do j=js,je ; do i=is,ie
+            Reg%Tr(m)%t(i,j,k) = Reg%Tr(m)%t(i,j,k) + dTr(i,j)
+          enddo ; enddo
         enddo
-      enddo
 
-      do m=1,ntr
-        do j=js,je ; do i=is,ie
-          dTr(i,j) = Ihdxdy(i,j) * &
-            ((Coef_x(I-1,j) * (Reg%Tr(m)%t(i-1,j,k) - Reg%Tr(m)%t(i,j,k)) - &
-              Coef_x(I,j) * (Reg%Tr(m)%t(i,j,k) - Reg%Tr(m)%t(i+1,j,k))) + &
-             (Coef_y(i,J-1) * (Reg%Tr(m)%t(i,j-1,k) - Reg%Tr(m)%t(i,j,k)) - &
-              Coef_y(i,J) * (Reg%Tr(m)%t(i,j,k) - Reg%Tr(m)%t(i,j+1,k))))
-        enddo ; enddo
-        if (associated(Reg%Tr(m)%df_x)) then ; do j=js,je ; do I=G%IscB,G%IecB
-          Reg%Tr(m)%df_x(I,j,k) = Reg%Tr(m)%df_x(I,j,k) + Coef_x(I,j) * &
-                              (Reg%Tr(m)%t(i,j,k) - Reg%Tr(m)%t(i+1,j,k))*Idt
-        enddo ; enddo ; endif
-        if (associated(Reg%Tr(m)%df_y)) then ; do J=G%JscB,G%JecB ; do i=is,ie
-          Reg%Tr(m)%df_y(i,J,k) = Reg%Tr(m)%df_y(i,J,k) + Coef_y(i,J) * &
-                              (Reg%Tr(m)%t(i,j,k) - Reg%Tr(m)%t(i,j+1,k))*Idt
-        enddo ; enddo ; endif
-        if (associated(Reg%Tr(m)%df2d_x)) then ; do j=js,je ; do I=G%IscB,G%IecB
-          Reg%Tr(m)%df2d_x(I,j) = Reg%Tr(m)%df2d_x(I,j) + Coef_x(I,j) * &
-                              (Reg%Tr(m)%t(i,j,k) - Reg%Tr(m)%t(i+1,j,k))*Idt
-        enddo ; enddo ; endif
-        if (associated(Reg%Tr(m)%df2d_y)) then ; do J=G%JscB,G%JecB ; do i=is,ie
-          Reg%Tr(m)%df2d_y(i,J) = Reg%Tr(m)%df2d_y(i,J) + Coef_y(i,J) * &
-                              (Reg%Tr(m)%t(i,j,k) - Reg%Tr(m)%t(i,j+1,k))*Idt
-        enddo ; enddo ; endif
-        do j=js,je ; do i=is,ie
-          Reg%Tr(m)%t(i,j,k) = Reg%Tr(m)%t(i,j,k) + dTr(i,j)
-        enddo ; enddo
-      enddo
+      enddo ! End of k loop.
 
-    enddo ! End of k loop.
-
-  enddo ! End of "while" loop.
+    enddo ! End of "while" loop.
+  endif
   call cpu_clock_end(id_clock_diffuse)
 
   if (CS%Diffuse_ML_interior) then
+    if (CS%show_call_tree) call callTree_waypoint("Calling epipycnal_ML_diff (tracer_hordiff)")
     if (CS%debug) call MOM_tracer_chksum("Before epipycnal diff ", Reg%Tr, ntr, G)
 
     call cpu_clock_begin(id_clock_epimix)
@@ -420,6 +466,8 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, Reg, tv)
     enddo ; enddo
     call post_data(CS%id_KhTr_v, Kh_v, CS%diag)
   endif
+
+  if (CS%show_call_tree) call callTree_leave("tracer_hordiff()")
 
 end subroutine tracer_hordiff
 
@@ -1307,6 +1355,7 @@ subroutine tracer_hor_diff_init(Time, G, param_file, diag, CS)
   allocate(CS)
 
   CS%diag => diag
+  CS%show_call_tree = callTree_showQuery()
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mod, version, "")
@@ -1354,6 +1403,10 @@ subroutine tracer_hor_diff_init(Time, G, param_file, diag, CS)
                  units="nondim", default=1.0)
   endif
 
+  CS%use_neutral_diffusion = neutral_diffusion_init(Time, G, param_file, diag, CS%neutral_diffusion_CSp)
+  if (CS%use_neutral_diffusion .and. CS%Diffuse_ML_interior) call MOM_error(FATAL, "MOM_tracer_hor_diff: "// &
+       "USE_NEUTRAL_DIFFUSION and DIFFUSE_ML_TO_INTERIOR are mutually exclusive!")
+
   call get_param(param_file, mod, "DEBUG", CS%debug, default=.false.)
 
   id_clock_diffuse = cpu_clock_id('(Ocean diffuse tracer)', grain=CLOCK_MODULE)
@@ -1373,6 +1426,7 @@ end subroutine tracer_hor_diff_init
 subroutine tracer_hor_diff_end(CS)
   type(tracer_hor_diff_CS), pointer :: CS
 
+  call neutral_diffusion_end(CS%neutral_diffusion_CSp)
   if (associated(CS)) deallocate(CS)
 
 end subroutine tracer_hor_diff_end

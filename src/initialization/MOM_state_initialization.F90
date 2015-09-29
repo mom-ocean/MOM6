@@ -39,6 +39,7 @@ use user_initialization, only : user_set_Open_Bdry_Conds, user_initialize_sponge
 use DOME_initialization, only : DOME_initialize_thickness
 use DOME_initialization, only : DOME_set_Open_Bdry_Conds
 use DOME_initialization, only : DOME_initialize_sponges
+use baroclinic_zone_initialization, only : baroclinic_zone_init_temperature_salinity
 use benchmark_initialization, only : benchmark_initialize_thickness
 use benchmark_initialization, only : benchmark_init_temperature_salinity
 use circle_obcs_initialization, only : circle_obcs_initialize_thickness
@@ -267,6 +268,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, PF, dirs, &
                " \t SCM_ideal_hurr - used in the SCM idealized hurricane test.\n"//&
                " \t USER - call a user modified routine.", &
                fail_if_missing=.true.)
+!              " \t baroclinic_zone - an analytic baroclinic zone. \n"//&
         select case (trim(config))
           case ("fit"); call initialize_temp_salt_fit(tv%T, tv%S, G, PF, eos, tv%P_Ref)
           case ("file"); call initialize_temp_salt_from_file(tv%T, tv%S, G, PF)
@@ -278,6 +280,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, PF, dirs, &
                                 tv%S, h, G, PF, eos)
           case ("adjustment2d"); call adjustment_initialize_temperature_salinity ( tv%T, &
                                       tv%S, h, G, PF, eos)
+          case ("baroclinic_zone"); call baroclinic_zone_init_temperature_salinity( tv%T, &
+                                tv%S, h, G, PF)
           case ("sloshing"); call sloshing_initialize_temperature_salinity(tv%T, &
                                   tv%S, h, G, PF, eos)
           case ("seamount"); call seamount_initialize_temperature_salinity(tv%T, &

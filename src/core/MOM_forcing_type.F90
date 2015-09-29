@@ -28,7 +28,7 @@ use MOM_EOS,           only : calculate_density_derivs
 use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
 use MOM_grid,          only : ocean_grid_type
 use MOM_shortwave_abs, only : absorbRemainingSW, sumSWoverBands, optics_type
-use MOM_spatial_means, only : global_area_integral 
+use MOM_spatial_means, only : global_area_integral, global_area_mean 
 use MOM_variables,     only : surface, thermo_var_ptrs
 
 use coupler_types_mod, only : coupler_2d_bc_type
@@ -180,6 +180,9 @@ type, public :: forcing_diags
   integer :: id_total_net_massout  = -1, id_total_net_massin  = -1
   integer :: id_total_seaice_melt  = -1
 
+  ! global area averaged mass flux diagnostic handles
+  integer :: id_prcme_ga  = -1, id_evap_ga = -1, id_precip_ga = -1
+
   ! heat flux diagnostic handles 
   integer :: id_net_heat_coupler    = -1, id_net_heat_surface      = -1
   integer :: id_sens                = -1, id_LwLatSens             = -1
@@ -204,6 +207,11 @@ type, public :: forcing_diags
   integer :: id_total_heat_content_vprec  = -1, id_total_heat_content_massout  = -1
   integer :: id_total_heat_restore        = -1, id_total_heat_content_massin   = -1
 
+  ! global area averaged heat flux diagnostic handles
+  integer :: id_net_heat_coupler_ga = -1, id_net_heat_surface_ga = -1
+  integer :: id_sens_ga             = -1, id_LwLatSens_ga        = -1
+  integer :: id_sw_ga               = -1, id_lw_ga               = -1
+  integer :: id_lat_ga              = -1
 
   ! salt flux diagnostic handles 
   integer :: id_saltflux          = -1
@@ -644,13 +652,9 @@ subroutine extractFluxes2d(G, fluxes, optics, nsw, dt,                          
 end subroutine extractFluxes2d
 
 
-!> Compute surface buoyancy fluxes. 
+!> Calculates the surface buoyancy flux by adding up the heat, FW and salt fluxes.
 subroutine calculateBuoyancyFlux1d(G, fluxes, optics, h, Temp, Salt, tv, j, &
                                    buoyancyFlux, netHeatMinusSW, netSalt )
-
-  ! This subtourine calculates the surface buoyancy flux by adding up the heat, 
-  ! FW and salt fluxes and linearizing about the surface state.
-
   type(ocean_grid_type),                 intent(in)    :: G              ! ocean grid
   type(forcing),                         intent(inout) :: fluxes         ! surface fluxes
   type(optics_type),                     pointer       :: optics         ! penetrating SW optics 
@@ -660,10 +664,8 @@ subroutine calculateBuoyancyFlux1d(G, fluxes, optics, h, Temp, Salt, tv, j, &
   type(thermo_var_ptrs),                 intent(inout) :: tv             ! thermodynamics type
   integer,                               intent(in)    :: j              ! j-row to work on 
   real, dimension(NIMEM_,NK_INTERFACE_), intent(inout) :: buoyancyFlux   ! buoyancy flux (m^2/s^3)
-  real, dimension(NIMEM_),               intent(inout) :: netHeatMinusSW ! surf Heat flux (K H)
-  real, dimension(NIMEM_),               intent(inout) :: netSalt        ! surf salt flux (ppt H)
-
-
+  real, dimension(NIMEM_),               intent(inout) :: netHeatMinusSW ! surf Heat flux (K H/s)
+  real, dimension(NIMEM_),               intent(inout) :: netSalt        ! surf salt flux (ppt H/s)
   ! Local variables
   integer                                   :: nsw, start, npts, k
   real, parameter                           :: dt = 1.    ! to return a rate from extractFluxes1d
@@ -697,9 +699,11 @@ subroutine calculateBuoyancyFlux1d(G, fluxes, optics, h, Temp, Salt, tv, j, &
 
   ! The surface forcing is contained in the fluxes type.
   ! We aggregate the thermodynamic forcing for a time step into the following:
-  ! netH       = water (H units) added/removed via surface fluxes
-  ! netHeat    = heat (degC * H) via surface fluxes
-  ! netSalt    = salt ( g(salt)/m2 for non-Bouss and ppt*m for Bouss ) via surface fluxes
+  ! netH       = water (H units/s) added/removed via surface fluxes
+  ! netHeat    = heat (degC * H/s) via surface fluxes
+  ! netSalt    = salt ( g(salt)/m2 for non-Bouss and ppt*m for Bouss /s) via surface fluxes
+  ! Note that unlike other calls to extractFLuxes1d() that return the time-integrated flux
+  ! this call returns the rate because dt=1
   call extractFluxes1d(G, fluxes, optics, nsw, j, dt,                                 &
                 depthBeforeScalingFluxes, useRiverHeatContent, useCalvingHeatContent, &
                 h(:,j,:), Temp(:,j,:), netH, netEvap, netHeatMinusSW,                 &
@@ -715,12 +719,12 @@ subroutine calculateBuoyancyFlux1d(G, fluxes, optics, h, Temp, Salt, tv, j, &
                                 dRhodT, dRhodS, start, npts, tv%eqn_of_state)
 
   ! Adjust netSalt to reflect dilution effect of FW flux
-  netSalt(G%isc:G%iec) = netSalt(G%isc:G%iec) - Salt(G%isc:G%iec,j,1) * netH(G%isc:G%iec) * G%H_to_m
+  netSalt(G%isc:G%iec) = netSalt(G%isc:G%iec) - Salt(G%isc:G%iec,j,1) * netH(G%isc:G%iec) * G%H_to_m ! ppt H/s
 
   ! Add in the SW heating for purposes of calculating the net
   ! surface buoyancy flux affecting the top layer.
   !netHeat(:) = netHeatMinusSW(:) + sum( penSWbnd(:,:), dim=1 )
-  netHeat(G%isc:G%iec) = netHeatMinusSW(G%isc:G%iec) + netPen(G%isc:G%iec,1)
+  netHeat(G%isc:G%iec) = netHeatMinusSW(G%isc:G%iec) + netPen(G%isc:G%iec,1) ! K H/s
 
   ! Convert to a buoyancy flux, excluding penetrating SW heating
   buoyancyFlux(G%isc:G%iec,1) = - GoRho * ( dRhodS(G%isc:G%iec) * netSalt(G%isc:G%iec) + &
@@ -733,14 +737,10 @@ subroutine calculateBuoyancyFlux1d(G, fluxes, optics, h, Temp, Salt, tv, j, &
 end subroutine calculateBuoyancyFlux1d
 
 
-!> 2d wrapper to compute surface buoyancy fluxes. 
+!> Calculates the surface buoyancy flux by adding up the heat, FW and salt fluxes,
+!! for 2d arrays.
 subroutine calculateBuoyancyFlux2d(G, fluxes, optics, h, Temp, Salt, tv, &
                                    buoyancyFlux, netHeatMinusSW, netSalt)
-
-! This subtourine calculates the surface buoyancy flux by adding up the heat, 
-! FW and salt fluxes and linearizing about the surface state.
-! This routine is a wrapper for calculateBuoyancyFlux1d.
-
   type(ocean_grid_type),                       intent(in)    :: G              ! ocean grid
   type(forcing),                               intent(inout) :: fluxes         ! surface fluxes
   type(optics_type),                           pointer       :: optics         ! SW ocean optics
@@ -751,7 +751,7 @@ subroutine calculateBuoyancyFlux2d(G, fluxes, optics, h, Temp, Salt, tv, &
   real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_),intent(inout) :: buoyancyFlux   ! buoy flux (m^2/s^3)
   real, dimension(NIMEM_,NJMEM_),optional,     intent(inout) :: netHeatMinusSW ! surf temp flux (K H)
   real, dimension(NIMEM_,NJMEM_),optional,     intent(inout) :: netSalt        ! surf salt flux (ppt H)
-
+  ! Local variables
   real, dimension( SZI_(G) ) :: netT ! net temperature flux (K m/s)
   real, dimension( SZI_(G) ) :: netS ! net saln flux (ppt m/s)
   integer :: j
@@ -1063,6 +1063,19 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
   handles%id_total_net_massin = register_scalar_field('ocean_model', 'total_net_massin', Time, diag, &
       long_name='Area integrated mass entering ocean due to predip, runoff, ice melt', units='kg/s')
 
+  !=========================================================================
+  ! area averaged surface mass transport 
+
+  handles%id_prcme_ga = register_scalar_field('ocean_model', 'PRCmE_ga', Time, diag,         &
+      long_name='Area averaged net surface water flux (precip+melt+liq runoff+ice calving-evap)',&
+      units='kg m-2 s-1', standard_name='water_flux_into_sea_water_area_averaged')
+
+  handles%id_evap_ga = register_scalar_field('ocean_model', 'evap_ga', Time, diag,&
+      long_name='Area averaged evap/condense at ocean surface',                       &
+      units='kg m-2 s-1', standard_name='water_evaporation_flux_area_averaged')
+
+  handles%id_precip_ga = register_scalar_field('ocean_model', 'precip_ga', Time, diag, &
+      long_name='Area averaged liquid+frozen precip into ocean', units='kg m-2 s-1')
 
   !===============================================================
   ! surface heat flux maps 
@@ -1138,7 +1151,7 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
 
   handles%id_lw = register_diag_field('ocean_model', 'LW', diag%axesT1, Time,                            &
         'Longwave radiation flux into ocean', 'Watt meter-2',                                            &
-        standard_name='surface_net_downward_longwave_flux', cmor_field_name='rlds', cmor_units='W m-2',  &
+        standard_name='surface_net_downward_longwave_flux', cmor_field_name='rlntds', cmor_units='W m-2',&
         cmor_standard_name='surface_net_downward_longwave_flux',                                         &
         cmor_long_name='Surface Net Downward Longwave Radiation')
 
@@ -1277,6 +1290,43 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
       long_name='Area integrated surface heat flux from restoring',   &
       units='Watt')
 
+  !===============================================================
+  ! area averaged surface heat fluxes  
+
+  handles%id_net_heat_coupler_ga = register_scalar_field('ocean_model',                       &
+      'net_heat_coupler_ga', Time, diag,                                                      &
+      long_name='Area averaged surface heat flux from SW+LW+latent+sensible (via the coupler)',&
+      units='W m-2')
+
+  handles%id_net_heat_surface_ga = register_scalar_field('ocean_model',                  &
+      'net_heat_surface_ga', Time, diag,                                                 &
+      long_name='Area averaged surface heat flux from SW+LW+lat+sens+mass+frazil+restore',&
+      units='W m-2')
+
+  handles%id_sw_ga = register_scalar_field('ocean_model',                  &
+      'sw_ga', Time, diag,                                                 &
+      long_name='Area averaged net downward shortwave at sea water surface',&
+      units='W m-2')
+
+  handles%id_LwLatSens_ga = register_scalar_field('ocean_model',&
+      'LwLatSens_ga', Time, diag,                               &
+      long_name='Area averaged longwave+latent+sensible heating',&
+      units='W m-2')
+
+  handles%id_lw_ga = register_scalar_field('ocean_model',                 &
+      'lw_ga', Time, diag,                                                &
+      long_name='Area averaged net downward longwave at sea water surface',&
+      units='W m-2')
+
+  handles%id_lat_ga = register_scalar_field('ocean_model',       &
+      'lat_ga', Time, diag,                                      &
+      long_name='Area averaged surface downward latent heat flux',&
+      units='W m-2')
+
+  handles%id_sens_ga = register_scalar_field('ocean_model',&
+      'sens_ga', Time, diag,                               &
+      long_name='Area averaged downward sensible heat flux',&
+      units='W m-2')
 
   !===============================================================
   ! maps of surface salt fluxes, virtual precip fluxes, and adjustments  
@@ -1561,7 +1611,7 @@ subroutine forcing_diagnostics(fluxes, state, dt, G, diag, handles)
 
     ! post the diagnostics for surface mass fluxes ==================================
 
-    if (handles%id_prcme > 0 .or. handles%id_total_prcme > 0) then
+    if (handles%id_prcme > 0 .or. handles%id_total_prcme > 0 .or. handles%id_prcme_ga > 0) then
       sum(:,:) = 0.0
       if (ASSOCIATED(fluxes%lprec))       sum(:,:) = sum(:,:)+fluxes%lprec(:,:)
       if (ASSOCIATED(fluxes%fprec))       sum(:,:) = sum(:,:)+fluxes%fprec(:,:)
@@ -1574,6 +1624,10 @@ subroutine forcing_diagnostics(fluxes, state, dt, G, diag, handles)
       if(handles%id_total_prcme > 0) then 
         total_transport = global_area_integral(sum,G)   
         call post_data(handles%id_total_prcme, total_transport, diag)
+      endif 
+      if(handles%id_prcme_ga > 0) then 
+        total_transport = global_area_mean(sum,G)   
+        call post_data(handles%id_prcme_ga, total_transport, diag)
       endif 
     endif
 
@@ -1613,6 +1667,10 @@ subroutine forcing_diagnostics(fluxes, state, dt, G, diag, handles)
       total_transport = global_area_integral(fluxes%evap(:,:),G)   
       call post_data(handles%id_total_evap, total_transport, diag)
     endif 
+    if ((handles%id_evap_ga > 0) .and. ASSOCIATED(fluxes%evap)) then 
+      total_transport = global_area_mean(fluxes%evap(:,:),G)   
+      call post_data(handles%id_evap_ga, total_transport, diag)
+    endif 
 
     if ((handles%id_precip > 0) .and. ASSOCIATED(fluxes%lprec) .and. ASSOCIATED(fluxes%fprec)) then
       sum(:,:) = fluxes%lprec(:,:) + fluxes%fprec(:,:)
@@ -1622,6 +1680,11 @@ subroutine forcing_diagnostics(fluxes, state, dt, G, diag, handles)
       sum(:,:) = fluxes%lprec(:,:) + fluxes%fprec(:,:)
       total_transport = global_area_integral(sum,G)   
       call post_data(handles%id_total_precip, total_transport, diag)
+    endif
+    if ((handles%id_precip_ga > 0) .and. ASSOCIATED(fluxes%lprec) .and. ASSOCIATED(fluxes%fprec)) then
+      sum(:,:) = fluxes%lprec(:,:) + fluxes%fprec(:,:)
+      total_transport = global_area_mean(sum,G)   
+      call post_data(handles%id_precip_ga, total_transport, diag)
     endif
 
     if ((handles%id_lprec > 0) .and. ASSOCIATED(fluxes%lprec)) &
@@ -1719,7 +1782,7 @@ subroutine forcing_diagnostics(fluxes, state, dt, G, diag, handles)
     endif
 
 
-    if (handles%id_net_heat_coupler > 0 .or. handles%id_total_net_heat_coupler > 0) then
+    if (handles%id_net_heat_coupler > 0 .or. handles%id_total_net_heat_coupler > 0 .or. handles%id_net_heat_coupler_ga > 0. ) then
       sum(:,:) = 0.0
       if (ASSOCIATED(fluxes%LW))         sum(:,:) = sum(:,:) + fluxes%LW(:,:)
       if (ASSOCIATED(fluxes%latent))     sum(:,:) = sum(:,:) + fluxes%latent(:,:)
@@ -1730,9 +1793,13 @@ subroutine forcing_diagnostics(fluxes, state, dt, G, diag, handles)
         total_transport = global_area_integral(sum,G)   
         call post_data(handles%id_total_net_heat_coupler, total_transport, diag)
       endif 
+      if(handles%id_net_heat_coupler_ga > 0) then 
+        total_transport = global_area_mean(sum,G)   
+        call post_data(handles%id_net_heat_coupler_ga, total_transport, diag)
+      endif 
     endif
 
-    if (handles%id_net_heat_surface > 0 .or. handles%id_total_net_heat_surface > 0) then
+    if (handles%id_net_heat_surface > 0 .or. handles%id_total_net_heat_surface > 0 .or. handles%id_net_heat_surface_ga > 0. ) then
       sum(:,:) = 0.0
       if (ASSOCIATED(fluxes%LW))                   sum(:,:) = sum(:,:) + fluxes%LW(:,:)
       if (ASSOCIATED(fluxes%latent))               sum(:,:) = sum(:,:) + fluxes%latent(:,:)
@@ -1757,6 +1824,10 @@ subroutine forcing_diagnostics(fluxes, state, dt, G, diag, handles)
         total_transport = global_area_integral(sum,G)   
         call post_data(handles%id_total_net_heat_surface, total_transport, diag)
       endif
+      if(handles%id_net_heat_surface_ga > 0) then 
+        total_transport = global_area_mean(sum,G)   
+        call post_data(handles%id_net_heat_surface_ga, total_transport, diag)
+      endif 
     endif
 
     if (handles%id_heat_content_surfwater > 0 .or. handles%id_total_heat_content_surfwater > 0) then
@@ -1792,12 +1863,23 @@ subroutine forcing_diagnostics(fluxes, state, dt, G, diag, handles)
       call post_data(handles%id_total_LwLatSens, total_transport, diag)
     endif
 
+    if ((handles%id_LwLatSens_ga > 0) .and. ASSOCIATED(fluxes%lw) .and. &
+         ASSOCIATED(fluxes%latent) .and. ASSOCIATED(fluxes%sens)) then
+      sum(:,:) = (fluxes%lw(:,:) + fluxes%latent(:,:)) + fluxes%sens(:,:)
+      total_transport = global_area_mean(sum,G)   
+      call post_data(handles%id_LwLatSens_ga, total_transport, diag)
+    endif
+
     if ((handles%id_sw > 0) .and. ASSOCIATED(fluxes%sw)) then
       call post_data(handles%id_sw, fluxes%sw, diag)
     endif 
     if ((handles%id_total_sw > 0) .and. ASSOCIATED(fluxes%sw)) then
       total_transport = global_area_integral(fluxes%sw,G)   
       call post_data(handles%id_total_sw, total_transport, diag)
+    endif 
+    if ((handles%id_sw_ga > 0) .and. ASSOCIATED(fluxes%sw)) then
+      total_transport = global_area_mean(fluxes%sw,G)   
+      call post_data(handles%id_sw_ga, total_transport, diag)
     endif 
 
     if ((handles%id_lw > 0) .and. ASSOCIATED(fluxes%lw)) then
@@ -1807,6 +1889,10 @@ subroutine forcing_diagnostics(fluxes, state, dt, G, diag, handles)
       total_transport = global_area_integral(fluxes%lw,G)   
       call post_data(handles%id_total_lw, total_transport, diag)
     endif 
+    if ((handles%id_lw_ga > 0) .and. ASSOCIATED(fluxes%lw)) then
+      total_transport = global_area_mean(fluxes%lw,G)   
+      call post_data(handles%id_lw_ga, total_transport, diag)
+    endif 
 
     if ((handles%id_lat > 0) .and. ASSOCIATED(fluxes%latent)) then
       call post_data(handles%id_lat, fluxes%latent, diag)
@@ -1814,6 +1900,10 @@ subroutine forcing_diagnostics(fluxes, state, dt, G, diag, handles)
     if ((handles%id_total_lat > 0) .and. ASSOCIATED(fluxes%latent)) then
       total_transport = global_area_integral(fluxes%latent,G)   
       call post_data(handles%id_total_lat, total_transport, diag)
+    endif 
+    if ((handles%id_lat_ga > 0) .and. ASSOCIATED(fluxes%latent)) then
+      total_transport = global_area_mean(fluxes%latent,G)   
+      call post_data(handles%id_lat_ga, total_transport, diag)
     endif 
 
     if ((handles%id_lat_evap > 0) .and. ASSOCIATED(fluxes%latent_evap_diag)) then
@@ -1846,6 +1936,10 @@ subroutine forcing_diagnostics(fluxes, state, dt, G, diag, handles)
     if ((handles%id_total_sens > 0) .and. ASSOCIATED(fluxes%sens)) then
       total_transport = global_area_integral(fluxes%sens,G)   
       call post_data(handles%id_total_sens, total_transport, diag)
+    endif 
+    if ((handles%id_sens_ga > 0) .and. ASSOCIATED(fluxes%sens)) then
+      total_transport = global_area_mean(fluxes%sens,G)   
+      call post_data(handles%id_sens_ga, total_transport, diag)
     endif 
 
     if ((handles%id_heat_restore > 0) .and. ASSOCIATED(fluxes%heat_restore)) then

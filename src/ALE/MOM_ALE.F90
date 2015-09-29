@@ -41,10 +41,11 @@ use MOM_regridding, only : regridding_CS
 use MOM_regridding, only : getCoordinateInterfaces, getCoordinateResolution
 use MOM_regridding, only : getCoordinateUnits, getCoordinateShortName
 use MOM_regridding, only : getStaticThickness
-use MOM_remapping, only : initialize_remapping, remapping_main, end_remapping
+use MOM_remapping, only : initialize_remapping, remapping_core, end_remapping
 use MOM_remapping, only : remappingSchemesDoc, remappingDefaultScheme
 use MOM_remapping, only : remapDisableBoundaryExtrapolation, remapEnableBoundaryExtrapolation
 use MOM_remapping, only : remapping_CS
+use MOM_tracer_registry, only : tracer_registry_type
 use regrid_defs, only : PRESSURE_RECONSTRUCTION_PLM
 !use regrid_consts, only : coordinateMode, DEFAULT_COORDINATE_MODE
 use regrid_consts, only : coordinateUnits, coordinateMode
@@ -247,51 +248,119 @@ subroutine end_ALE(CS)
 end subroutine end_ALE
 
 
-!------------------------------------------------------------------------------
-! Dispatching regridding routine: regridding & remapping
-!------------------------------------------------------------------------------
-subroutine ALE_main( G, h, u, v, tv, CS )
-!------------------------------------------------------------------------------
-! This routine takes care of (1) building a new grid and (2) remapping between
-! the old grid and the new grid. The creation of the new grid can be based
-! on z coordinates, target interface densities, sigma coordinates or any
-! arbitrary coordinate system.
-!------------------------------------------------------------------------------
-  
-  ! Arguments
-  type(ocean_grid_type), intent(in)                    :: &
-  G      ! Ocean grid informations
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(inout)   :: &
-  h      ! Current 3D grid obtained after the last time step
-  real, dimension(NIMEMB_,NJMEM_, NKMEM_), intent(inout)  :: &
-  u      ! Zonal velocity field
-  real, dimension(NIMEM_,NJMEMB_, NKMEM_), intent(inout)  :: &
-  v      ! Meridional velocity field
-  type(thermo_var_ptrs), intent(inout)                 :: &
-  tv     ! Thermodynamical variables (T, S, ...)  
-  type(ALE_CS), intent(inout) :: CS ! Regridding parameters and options
-
+!> Takes care of (1) building a new grid and (2) remapping all variables between
+!! the old grid and the new grid. The creation of the new grid can be based
+!! on z coordinates, target interface densities, sigma coordinates or any
+!! arbitrary coordinate system.
+subroutine ALE_main( G, h, u, v, tv, Reg, CS )
+  type(ocean_grid_type),                   intent(in)    :: G !< Ocean grid informations
+  real, dimension(NIMEM_,NJMEM_, NKMEM_),  intent(inout) :: h !< Current 3D grid obtained after the last time step (m or Pa)
+  real, dimension(NIMEMB_,NJMEM_, NKMEM_), intent(inout) :: u !< Zonal velocity field (m/s)
+  real, dimension(NIMEM_,NJMEMB_, NKMEM_), intent(inout) :: v !< Meridional velocity field (m/s)
+  type(thermo_var_ptrs),                   intent(inout) :: tv !< Thermodynamical variable structure
+  type(tracer_registry_type),              pointer       :: Reg !< Tracer registry structure
+  type(ALE_CS),                            intent(inout) :: CS !< Regridding parameters and options
   ! Local variables
   integer :: nk, i, j, k, isd, ied, jsd, jed
-  
+
   ! Build new grid. The new grid is stored in h_new. The old grid is h.
   ! Both are needed for the subsequent remapping of variables.
   call regridding_main( CS%remapCS, CS%regridCS, G, h, tv, CS%dzRegrid )
-  
+
   ! Remap all variables from old grid h onto new grid h_new
-  call remapping_main( CS%remapCS, G, h, -CS%dzRegrid, tv, u, v )
-  
+  call remapping_main( CS%remapCS, G, h, -CS%dzRegrid, Reg, u, v )
+
   ! Override old grid with new one. The new grid 'h_new' is built in
   ! one of the 'build_...' routines above.
   nk = G%ke; isd = G%isd; ied = G%ied; jsd = G%jsd; jed = G%jed
 !$OMP parallel do default(none) shared(isd,ied,jsd,jed,nk,h,CS)
   do k = 1,nk
-    do j = jsd,jed ; do i = isd,ied   
+    do j = jsd,jed ; do i = isd,ied
       h(i,j,k) = h(i,j,k) + ( CS%dzRegrid(i,j,k) - CS%dzRegrid(i,j,k+1) )
     enddo ; enddo
   enddo
 
 end subroutine ALE_main
+
+!> This routine takes care of remapping all variable between the old and the
+!! new grids. When velocity components need to be remapped, thicknesses at
+!! velocity points are taken to be arithmetic averages of tracer thicknesses.
+subroutine remapping_main( CS, G, h, dxInterface, Reg, u, v )
+  ! Arguments
+  type(remapping_CS),                               intent(in)    :: CS !< Remapping control structure
+  type(ocean_grid_type),                            intent(in)    :: G  !< Ocean grid structure
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),            intent(in)    :: h  !< Level thickness (m or Pa)
+  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_),     intent(in)    :: dxInterface !< Change in interface position (Hm or Pa)
+  type(tracer_registry_type),                       pointer       :: Reg !< Tracer registry structure
+  real, dimension(NIMEMB_,NJMEM_,NKMEM_), optional, intent(inout) :: u  !< Zonal velocity component (m/s)
+  real, dimension(NIMEM_,NJMEMB_,NKMEM_), optional, intent(inout) :: v  !< Meridional velocity component (m/s)
+  ! Local variables
+  integer               :: i, j, k, m
+  integer               :: nz, ntr
+  real, dimension(G%ke+1) :: dx
+  real, dimension(G%ke) :: h1, u_column
+
+  nz = G%ke
+  if (associated(Reg)) then
+    ntr = Reg%ntr
+  else
+    ntr = 0
+  endif
+
+  ! Remap tracer
+!$OMP parallel default(none) shared(G,h,dxInterface,CS,nz,tv,u,v) &
+!$OMP                       private(h1,dx,u_column)
+  if (ntr>0) then
+!$OMP do
+    do j = G%jsc,G%jec
+      do i = G%isc,G%iec
+        if (G%mask2dT(i,j)>0.) then
+          ! Build the start and final grids
+          h1(:) = h(i,j,:)
+          dx(:) = dxInterface(i,j,:)
+          do m=1,ntr ! For each tracer ! NOTE THAT THIS LOOP SHOULD BE OUTSIDE -AJA
+            call remapping_core(CS, nz, h1, Reg%Tr(m)%t(i,j,:), nz, dx, u_column)
+            Reg%Tr(m)%t(i,j,:) = u_column(:)
+          enddo
+        endif
+      enddo
+    enddo
+  endif
+
+  ! Remap u velocity component
+  if ( present(u) ) then
+!$OMP do
+    do j = G%jsc,G%jec
+      do i = G%iscB,G%iecB
+        if (G%mask2dCu(i,j)>0.) then
+          ! Build the start and final grids
+          h1(:) = 0.5 * ( h(i,j,:) + h(i+1,j,:) )
+          dx(:) = 0.5 * ( dxInterface(i,j,:) + dxInterface(i+1,j,:) )
+          call remapping_core(CS, nz, h1, u(i,j,:), nz, dx, u_column)
+          u(i,j,:) = u_column(:)
+        endif
+      enddo
+    enddo
+  endif
+
+  ! Remap v velocity component
+  if ( present(v) ) then
+!$OMP do
+    do j = G%jscB,G%jecB
+      do i = G%isc,G%iec
+        if (G%mask2dCv(i,j)>0.) then
+          ! Build the start and final grids
+          h1(:) = 0.5 * ( h(i,j,:) + h(i,j+1,:) )
+          dx(:) = 0.5 * ( dxInterface(i,j,:) + dxInterface(i,j+1,:) )
+          call remapping_core(CS, nz, h1, v(i,j,:), nz, dx, u_column)
+          v(i,j,:) = u_column(:)
+        endif
+      enddo
+    enddo
+  endif
+!$OMP end parallel
+
+end subroutine remapping_main
 
 
 !------------------------------------------------------------------------------
