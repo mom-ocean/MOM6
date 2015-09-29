@@ -364,6 +364,10 @@ subroutine wave_structure(h, tv, G, cg1, CS, full_halos, wmode, umode, z_depth, 
   
 end subroutine wave_structure
 
+subroutine tridiag_solver()
+
+end subroutine tridiag_solver
+
 subroutine wave_structure_init(Time, G, param_file, diag, CS)
   type(time_type),             intent(in)    :: Time
   type(ocean_grid_type),       intent(in)    :: G
