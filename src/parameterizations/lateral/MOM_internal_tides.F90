@@ -153,9 +153,9 @@ end type loop_bounds_type
 contains
 
 
-subroutine propagate_int_tide(cg1, TKE_itidal_input, vel_btTide, N2_bot, dt, G, CS)
+subroutine propagate_int_tide(cg1, TKE_itidal_input, vel_btTide, Nb, dt, G, CS)
   real, dimension(NIMEM_,NJMEM_), intent(in) :: cg1, TKE_itidal_input
-  real, dimension(NIMEM_,NJMEM_), intent(in) :: vel_btTide, N2_bot
+  real, dimension(NIMEM_,NJMEM_), intent(in) :: vel_btTide, Nb
   real,                  intent(in)    :: dt
   type(ocean_grid_type), intent(inout) :: G
   type(int_tide_CS), pointer       :: CS
@@ -165,7 +165,7 @@ subroutine propagate_int_tide(cg1, TKE_itidal_input, vel_btTide, N2_bot, dt, G, 
   ! Arguments: cg1 - The first mode internal gravity wave speed, in m s-1.
   !  (in)      TKE_itidal_input - The energy input to the internal waves, in W m-2.
   !  (in)      vel_btTide - Barotropic velocity read from file, in m s-1
-  !  (in)      N2_bot - Squared near-bottom buoyancy frequency, in s-2
+  !  (in)      Nb - Near-bottom buoyancy frequency, in s-1
   !  (in)      dt - Length of time over which these fluxes will be applied, in s.
   !  (in)      G - The ocean's grid structure.
   !  (in)      CS - A pointer to the control structure returned by a previous
@@ -309,7 +309,7 @@ subroutine propagate_int_tide(cg1, TKE_itidal_input, vel_btTide, N2_bot, dt, G, 
     ! Get near-bottom horizontal velocity magnitude
     ! A = umode/K_h**2
     ! U_mag = (A*K_h/sqrt(2))*sqrt(f2/fr**2+1); Ub_mag = U_mag(end)
-    call itidal_lowmode_loss(G, CS, N2_bot, CS%En, CS%TKE_itidal_loss_fixed, &
+    call itidal_lowmode_loss(G, CS, Nb, CS%En, CS%TKE_itidal_loss_fixed, &
     CS%TKE_itidal_loss, dt) ! need to also feed Ub_mag
   endif
   
@@ -403,10 +403,10 @@ subroutine sum_En(G, CS, En, label)
   !enddo  
 end subroutine sum_En
 
-subroutine itidal_lowmode_loss(G, CS, Nb2, En, TKE_loss_fixed, TKE_loss, dt)
+subroutine itidal_lowmode_loss(G, CS, Nb, En, TKE_loss_fixed, TKE_loss, dt)
   type(ocean_grid_type),  intent(in)    :: G
   type(int_tide_CS), pointer            :: CS
-  real, dimension(G%isd:G%ied,G%jsd:G%jed), intent(in) :: Nb2
+  real, dimension(G%isd:G%ied,G%jsd:G%jed), intent(in) :: Nb
   real, dimension(G%isd:G%ied,G%jsd:G%jed), intent(in) :: TKE_loss_fixed
   real, dimension(G%isd:G%ied,G%jsd:G%jed,CS%NAngle,CS%nFreq,CS%nMode), intent(inout) :: En
   real, dimension(G%isd:G%ied,G%jsd:G%jed,CS%NAngle,CS%nFreq,CS%nMode), intent(out)   :: TKE_loss
@@ -416,21 +416,17 @@ subroutine itidal_lowmode_loss(G, CS, Nb2, En, TKE_loss_fixed, TKE_loss, dt)
   ! scattering over small-scale roughness along the lines of Jayne & St. Laurent (2001).
   !
   ! Arguments: 
-  !  (in)      Nb2 - near-bottom stratification, in s-2.
+  !  (in)      Nb - near-bottom stratification, in s-1.
   !  (inout)   En - energy density of the internal waves, in J m-2.
   !  (in)      TKE_loss_fixed - fixed part of energy loss, in kg m-2 (formerly "coef_1")
   !  (out)     TKE_loss - energy loss rate, in W m-2
   !  (in)      dt - time increment, in s 
     
   integer :: j,i,m,fr,a
-  real :: Nb, modal_vel_bot, TKE_loss_coef
+  real :: modal_vel_bot, TKE_loss_coef
   
   do m=1,CS%nMode ; do fr=1,CS%nFreq ; do a=1,CS%nAngle
     do j=G%jsd,G%jed ; do i=G%isd,G%ied
-      Nb = 0.0
-      if (Nb2(i,j) > 0.0) then
-        Nb = G%mask2dT(i,j)*sqrt(Nb2(i,j))
-      endif
       ! Calculate bottom velocity for mode; 
       ! using a placeholder here - could be done in diabatic driver as is N2_bot.
       modal_vel_bot = 0.0

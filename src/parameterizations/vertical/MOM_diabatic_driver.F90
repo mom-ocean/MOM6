@@ -549,7 +549,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
              TKE_itidal_input_test(i,j) = 1.0
         endif
         enddo; enddo
-      endif 
+      endif
       ! CALL ROUTINE USING PRESCRIBED KE FOR TESTING (BDM)
       call propagate_int_tide(cg1, TKE_itidal_input_test, &
                             CS%int_tide_input%tideamp, CS%int_tide_input%Nb, dt, G, CS%int_tide_CSp)
