@@ -622,7 +622,8 @@ subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
                  " UNIFORM     - uniformly distributed\n"//&
                  " FILE:string - read from a file. The string specifies\n"//&
                  "               the filename and variable name, separated\n"//&
-                 "               by a comma or space, e.g. FILE:lev.nc,Z",&
+                 "               by a comma or space, e.g. FILE:lev.nc,Z\n"//&
+                 " FNC1:string - FNC1:dz_min,H_total,power,precision",&
                  default='UNIFORM')
   message = "The distribution of vertical resolution for the target\n"//&
             "grid used for Eulerian-like coordinates. For example,\n"//&
@@ -668,6 +669,8 @@ subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
         call MOM_read_data(trim(fileName), trim(varName), dz)
         call log_param(param_file, mod, "!ALE_RESOLUTION", dz, &
                    trim(message), units=coordinateUnits(coordMode))
+      elseif (index(trim(string),'FNC1:')==1) then
+        call dz_function1( trim(string(7:)), dz )
       else
         call MOM_error(FATAL,"ALE_initRegridding: "// &
           "Unrecognized coordinate configuraiton"//trim(string))
@@ -684,7 +687,7 @@ subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
         dz(ke) = dz(ke) + ( G%max_depth - tmpReal )
       else
         call MOM_error(FATAL,"ALE_initRegridding: "// &
-          "MAaIMUMX_DEPTH was too shallow to adjust bottom layer of DZ!"//trim(string))
+          "MAXIMUM_DEPTH was too shallow to adjust bottom layer of DZ!"//trim(string))
       endif
     endif
   endif
@@ -706,6 +709,32 @@ subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
   call setRegriddingBoundaryExtrapolation( tmpLogical, regridCS )
 
 end subroutine ALE_initRegridding
+
+!> Parses a string and generates a dz(:) profile
+subroutine dz_function1( string, dz )
+  character(len=*),   intent(in)    :: string !< String with list of parameters
+  real, dimension(:), intent(inout) :: dz !< Profile of nominal thicknesses
+  ! Local variables
+  integer :: nk, k
+  real :: dz_min, power, prec, H_total
+
+  nk = size(dz) ! Number of cells
+  prec = -1024.
+  read( string, *) dz_min, H_total, power, prec
+  if (prec == -1024.) call MOM_error(FATAL,"dz_function1: "// &
+          "Problem reading FNC1: string  ="//trim(string))
+  ! Create profile of ( dz - dz_min )
+  do k = 1, nk
+    dz(k) = (real(k-1)/real(nk-1))**power
+  enddo
+  dz(:) = ( H_total - real(nk) * dz_min ) * ( dz(:) / sum(dz) ) ! Rescale to so total is H_total
+  dz(:) = anint( dz(:) / prec ) * prec ! Rounds to precision prec
+  dz(:) = ( H_total - real(nk) * dz_min ) * ( dz(:) / sum(dz) ) ! Rescale to so total is H_total
+  dz(:) = anint( dz(:) / prec ) * prec ! Rounds to precision prec
+  dz(nk) = dz(nk) + ( H_total - sum( dz(:) + dz_min ) ) ! Adjust bottom most layer
+  dz(:) = anint( dz(:) / prec ) * prec ! Rounds to precision prec
+  dz(:) = dz(:) + dz_min ! Finally add in the constant dz_min
+end subroutine dz_function1
 
 !------------------------------------------------------------------------------
 ! Query the target coordinate interfaces positions
