@@ -418,25 +418,23 @@ subroutine itidal_lowmode_loss(G, CS, Nb, En, TKE_loss_fixed, TKE_loss, dt)
   ! Arguments: 
   !  (in)      Nb - near-bottom stratification, in s-1.
   !  (inout)   En - energy density of the internal waves, in J m-2.
-  !  (in)      TKE_loss_fixed - fixed part of energy loss, in kg m-2 (formerly "coef_1")
-  !  (out)     TKE_loss - energy loss rate, in W m-2
+  !  (in)      TKE_loss_fixed - fixed part of energy loss, in kg m-2 (rho*kappa*h^2)
+  !  (out)     TKE_loss - energy loss rate, in W m-2 (rho*kappa*h^2*N^2*U^2)
   !  (in)      dt - time increment, in s 
     
   integer :: j,i,m,fr,a
-  real :: modal_vel_bot, TKE_loss_coef
+  real :: modal_vel_bot
   
   do m=1,CS%nMode ; do fr=1,CS%nFreq ; do a=1,CS%nAngle
     do j=G%jsd,G%jed ; do i=G%isd,G%ied
       ! Calculate bottom velocity for mode; 
-      ! using a placeholder here - could be done in diabatic driver as is N2_bot.
+      ! using a placeholder here - could be done elsewhere.
       modal_vel_bot = 0.0
       if (En(i,j,a,fr,m) > 0.0) then
         modal_vel_bot = 0.001*sqrt(En(i,j,a,fr,m))
       endif
-      ! Calculate TKE loss rate; units of [J m-2 = kg s-2] here
-      TKE_loss_coef = TKE_loss_fixed(i,j) * modal_vel_bot**2
       ! Calculate TKE loss rate; units of [W m-2] here.
-      TKE_loss(i,j,a,fr,m) = TKE_loss_coef * Nb(i,j)
+      TKE_loss(i,j,a,fr,m) = TKE_loss_fixed(i,j) * Nb(i,j) * modal_vel_bot**2
       ! Update energy remaining in original mode (this is an explicit calc for now)
       En(i,j,a,fr,m) = En(i,j,a,fr,m) - TKE_loss(i,j,a,fr,m)*dt
     enddo ; enddo
@@ -1879,15 +1877,10 @@ subroutine internal_tides_init(Time, G, param_file, diag, CS)
     allocate(CS)
   endif
   
-  print *, 'internal_tides_init has been called!'
   use_int_tides = .false.
-  print *, 'default value for use_int_tides is ',use_int_tides 
   call read_param(param_file, "INTERNAL_TIDES", use_int_tides)
-  print *, 'new value for use_int_tides is ',use_int_tides
   CS%do_int_tides = use_int_tides
-  print *, 'CS%do_int_tides is ',use_int_tides
   if (.not.use_int_tides) return
-  print *, 'Continuing with internal_tides_init!'
 
   use_temperature = .true.
   call read_param(param_file, "ENABLE_THERMODYNAMICS", use_temperature)

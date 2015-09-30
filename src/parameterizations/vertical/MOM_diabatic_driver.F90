@@ -544,8 +544,6 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
         enddo; enddo
       endif
       ! CALL ROUTINE USING PRESCRIBED KE FOR TESTING (BDM)
-      print *, 'Next, call propagate_int_tide'
-      print *, 'Size of Nb=', shape(CS%int_tide_input%Nb)
       call propagate_int_tide(cg1, TKE_itidal_input_test, &
                             CS%int_tide_input%tideamp, CS%int_tide_input%Nb, dt, G, CS%int_tide_CSp)
     else    
