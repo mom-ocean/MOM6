@@ -31,7 +31,7 @@ use P3M_functions, only : P3M_interpolation, P3M_boundary_extrapolation
 use MOM_regridding, only : initialize_regridding, regridding_main , end_regridding
 use MOM_regridding, only : uniformResolution
 use MOM_regridding, only : check_grid_integrity, setCoordinateResolution
-use MOM_regridding, only : setcoordinateinterfaces
+use MOM_regridding, only : set_target_densities_from_G
 use MOM_regridding, only : regriddingCoordinateModeDoc, DEFAULT_COORDINATE_MODE
 use MOM_regridding, only : regriddingInterpSchemeDoc, regriddingDefaultInterpScheme
 use MOM_regridding, only : setRegriddingBoundaryExtrapolation
@@ -655,7 +655,7 @@ subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
         if (.not. file_exists(fileName)) call MOM_error(FATAL,"ALE_initRegridding: "// &
           "Specified file not found: Looking for '"//trim(fileName)//"' ("//trim(string)//")")
 
-        varName = trim( extractWord(trim(string(6:80)), 2) )
+        varName = trim( extractWord(trim(string(6:)), 2) )
         if (.not. field_exists(fileName,varName)) call MOM_error(FATAL,"ALE_initRegridding: "// &
           "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(string)//")")
         if (len_trim(varName)==0) then
@@ -670,7 +670,7 @@ subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
         call log_param(param_file, mod, "!ALE_RESOLUTION", dz, &
                    trim(message), units=coordinateUnits(coordMode))
       elseif (index(trim(string),'FNC1:')==1) then
-        call dz_function1( trim(string(7:)), dz )
+        call dz_function1( trim(string(6:)), dz )
       else
         call MOM_error(FATAL,"ALE_initRegridding: "// &
           "Unrecognized coordinate configuraiton"//trim(string))
@@ -692,7 +692,7 @@ subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
     endif
   endif
   call setCoordinateResolution( dz, regridCS )
-  call setCoordinateInterfaces( G, regridCS )
+  call set_target_densities_from_G( G, regridCS )
 
   call get_param(param_file, mod, "MIN_THICKNESS", tmpReal, &
                  "When regridding, this is the minimum layer\n"//&

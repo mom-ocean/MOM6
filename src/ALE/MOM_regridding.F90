@@ -47,17 +47,18 @@ implicit none ; private
 type, public :: regridding_CS
   private
                                                     
-  ! This array is set by function setCoordinateResolution
-  ! It contains the "resolution" or delta coordinate of the target
-  ! coorindate. It has the units of the target coordiante, e.g.
-  ! meters for z*, non-dimensional for sigma, etc.
+  !> This array is set by function setCoordinateResolution()
+  !! It contains the "resolution" or delta coordinate of the target
+  !! coorindate. It has the units of the target coordiante, e.g.
+  !! meters for z*, non-dimensional for sigma, etc.
   real, dimension(:), allocatable :: coordinateResolution
-  ! This array is set by function setcoordinateInterfaces
-  ! This array is nominal coordinate of interfaces and is the
-  ! running sum of coordinateResolution. i.e.
-  !  coordinateInterfaces(k) = coordinateResolution(k+1)-coordinateResolution(k)
-  ! It is only used in "rho" mode.
-  real, dimension(:), allocatable :: coordinateInterfaces
+
+  !> This array is set by function set_target_densities()
+  !! This array is the nominal coordinate of interfaces and is the
+  !! running sum of coordinateResolution. i.e.
+  !!  target_density(k+1) = coordinateResolution(k) + coordinateResolution(k)
+  !! It is only used in "rho" mode.
+  real, dimension(:), allocatable :: target_density
 
   integer   :: nk ! Number of layers/levels
 
@@ -81,6 +82,7 @@ type, public :: regridding_CS
 
   ! Reference pressure for potential density calculations (Pa)
   real      :: ref_pressure = 2.e7
+
 end type
 
 ! -----------------------------------------------------------------------------
@@ -94,7 +96,8 @@ public setRegriddingBoundaryExtrapolation
 public setRegriddingMinimumThickness
 public uniformResolution
 public setCoordinateResolution
-public setCoordinateInterfaces
+public set_target_densities_from_G
+public set_target_densities
 public getCoordinateResolution
 public getCoordinateInterfaces
 public getCoordinateUnits
@@ -107,7 +110,8 @@ character(len=158), parameter, public :: regriddingCoordinateModeDoc = &
                  " LAYER - Isopycnal or stacked shallow water layers\n"//&
                  " Z*    - stetched geopotential z*\n"//&
                  " SIGMA - terrain following coordinates\n"//&
-                 " RHO   - continuous isopycnal\n"
+                 " RHO   - continuous isopycnal"
+
 character(len=338), parameter, public :: regriddingInterpSchemeDoc = &
                  " P1M_H2     (2nd-order accurate)\n"//&
                  " P1M_H4     (2nd-order accurate)\n"//&
@@ -695,7 +699,7 @@ subroutine buildGridRho( G, h, tv, dzInterface, remapCS, CS )
         end do
 
         ! One regridding iteration
-        call regridding_iteration( densities, CS%coordinateInterfaces, CS,&
+        call regridding_iteration( densities, CS%target_density, CS,&
                                    count_nonzero_layers, hTmp, xTmp, &
                                    ppoly_i_E, ppoly_i_S, ppoly_i_coefficients, &
                                    nz, h1, x1 )
@@ -1539,22 +1543,30 @@ subroutine setCoordinateResolution( dz, CS )
   
 end subroutine setCoordinateResolution
 
-!-----------------------------------------------------------------------------
-! Set the running sum of coordinateResolution
-!-----------------------------------------------------------------------------
-subroutine setCoordinateInterfaces( G, CS )
-  type(ocean_grid_type),  intent(in) :: G      ! Ocean grid informations
-  type(regridding_CS), intent(inout) :: CS
+!> Set target densities based on the old Rlay variable
+subroutine set_target_densities_from_G( G, CS )
+  type(ocean_grid_type),  intent(in)    :: G  !< Ocean grid structure
+  type(regridding_CS),    intent(inout) :: CS !< Regridding control structure
+  ! Local variables
   integer :: k, nz
 
   nz = CS%nk
-  CS%coordinateInterfaces(1)    = G%Rlay(1)+0.5*(G%Rlay(1)-G%Rlay(2))
-  CS%coordinateInterfaces(nz+1) = G%Rlay(nz)+0.5*(G%Rlay(nz)-G%Rlay(nz-1))
+  CS%target_density(1)    = G%Rlay(1)+0.5*(G%Rlay(1)-G%Rlay(2))
+  CS%target_density(nz+1) = G%Rlay(nz)+0.5*(G%Rlay(nz)-G%Rlay(nz-1))
   do k = 2,nz
-    CS%coordinateInterfaces(k) = CS%coordinateInterfaces(k-1) + CS%coordinateResolution(k)
+    CS%target_density(k) = CS%target_density(k-1) + CS%coordinateResolution(k)
   end do
 
-end subroutine setCoordinateInterfaces
+end subroutine set_target_densities_from_G
+
+!> Set target densities based on vector of interface values
+subroutine set_target_densities( CS, rho_int )
+  type(regridding_CS),      intent(inout) :: CS !< Regridding control structure
+  real, dimension(CS%nk+1), intent(in)    :: rho_int !< Interface densities
+
+  CS%target_density(:) = rho_int(:)
+
+end subroutine set_target_densities
 
 !------------------------------------------------------------------------------
 ! Query the fixed resolution data
@@ -1715,7 +1727,7 @@ subroutine allocate_regridding( CS )
   ! Local variables
 
   ! Target values
-  allocate( CS%coordinateInterfaces(CS%nk+1) )
+  allocate( CS%target_density(CS%nk+1) )
 
   ! Target resolution (for fixed coordinates)
   allocate( CS%coordinateResolution(CS%nk) ); CS%coordinateResolution(:) = -1.E30
@@ -1734,7 +1746,7 @@ subroutine regridding_memory_deallocation( CS )
   type(regridding_CS), intent(inout) :: CS
   
   ! Target values
-  deallocate( CS%coordinateInterfaces )
+  deallocate( CS%target_density )
   deallocate( CS%coordinateResolution )
 
 end subroutine regridding_memory_deallocation
