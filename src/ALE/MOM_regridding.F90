@@ -79,6 +79,8 @@ type, public :: regridding_CS
   ! Minimum thickness allowed when building the new grid through regridding
   real      :: min_thickness
 
+  ! Reference pressure for potential density calculations (Pa)
+  real      :: ref_pressure = 2.e7
 end type
 
 ! -----------------------------------------------------------------------------
@@ -615,7 +617,7 @@ subroutine buildGridRho( G, h, tv, dzInterface, remapCS, CS )
                                     
   nz = G%ke
   threshold = CS%min_thickness
-  p_column(:) = 0.
+  p_column(:) = CS%ref_pressure
 
   ! Build grid based on target interface densities
   do i = G%isc-1,G%iec+1
