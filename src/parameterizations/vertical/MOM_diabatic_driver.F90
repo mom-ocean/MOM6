@@ -98,7 +98,6 @@ use MOM_grid,                only : ocean_grid_type
 use MOM_io,                  only : vardesc
 use MOM_int_tide_input,      only : set_int_tide_input, int_tide_input_init
 use MOM_int_tide_input,      only : int_tide_input_end, int_tide_input_CS, int_tide_input_type
-use MOM_int_tide_input,      only : find_N2_bottom ! BDM
 use MOM_internal_tides,      only : propagate_int_tide, register_int_tide_restarts
 use MOM_internal_tides,      only : internal_tides_init, internal_tides_end, int_tide_CS
 use MOM_kappa_shear,         only : kappa_shear_is_used
@@ -529,13 +528,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     
     ! CALCULATE MODAL STRUCTURE (BDM)
     !call wave_structure(h, tv, G, cg1, full_halos=.true., wmode, umode, z_depth, N2, numlay)
-    
-    ! CALCULATE NEAR-BOTTOM STRATIFICATION (BDM)
-    !kappa_fill = 1.e-3 ! m2 s-1
-    !dt_fill = 7200.
-    !call vert_fill_TS(h, tv%T, tv%S, 1.e-3, 7200., T_f, S_f, G)
-    !call find_N2_bottom(h, tv, T_f, S_f, CS%int_tide_input%h2, fluxes, G, N2_bot)
-    
+
     if (CS%int_tide_source_test) then
       ! BUILD 2D ARRAY WITH POINT SOURCE FOR TESTING (BDM)
       TKE_itidal_input_test(:,:) = 0.0
@@ -551,6 +544,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
         enddo; enddo
       endif
       ! CALL ROUTINE USING PRESCRIBED KE FOR TESTING (BDM)
+      print *, 'Next, call propagate_int_tide'
+      print *, 'Size of Nb=', shape(CS%int_tide_input%Nb)
       call propagate_int_tide(cg1, TKE_itidal_input_test, &
                             CS%int_tide_input%tideamp, CS%int_tide_input%Nb, dt, G, CS%int_tide_CSp)
     else    
@@ -1432,7 +1427,7 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
     return
   else
     allocate(CS)
-   endif
+  endif
 
   CS%diag => diag
   if (associated(tracer_flow_CSp)) CS%tracer_flow_CSp => tracer_flow_CSp

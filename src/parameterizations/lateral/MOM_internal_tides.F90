@@ -436,7 +436,7 @@ subroutine itidal_lowmode_loss(G, CS, Nb, En, TKE_loss_fixed, TKE_loss, dt)
       ! Calculate TKE loss rate; units of [J m-2 = kg s-2] here
       TKE_loss_coef = TKE_loss_fixed(i,j) * modal_vel_bot**2
       ! Calculate TKE loss rate; units of [W m-2] here.
-      TKE_loss(i,j,a,fr,m) = TKE_loss_coef * Nb
+      TKE_loss(i,j,a,fr,m) = TKE_loss_coef * Nb(i,j)
       ! Update energy remaining in original mode (this is an explicit calc for now)
       En(i,j,a,fr,m) = En(i,j,a,fr,m) - TKE_loss(i,j,a,fr,m)*dt
     enddo ; enddo
@@ -1870,10 +1870,24 @@ subroutine internal_tides_init(Time, G, param_file, diag, CS)
   character(len=200) :: h2_file ! (BDM)
   
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
+  
+  if (associated(CS)) then
+    call MOM_error(WARNING, "internal_tides_init called "//&
+                             "with an associated control structure.")
+    return
+  else
+    allocate(CS)
+  endif
+  
+  print *, 'internal_tides_init has been called!'
   use_int_tides = .false.
+  print *, 'default value for use_int_tides is ',use_int_tides 
   call read_param(param_file, "INTERNAL_TIDES", use_int_tides)
+  print *, 'new value for use_int_tides is ',use_int_tides
   CS%do_int_tides = use_int_tides
+  print *, 'CS%do_int_tides is ',use_int_tides
   if (.not.use_int_tides) return
+  print *, 'Continuing with internal_tides_init!'
 
   use_temperature = .true.
   call read_param(param_file, "ENABLE_THERMODYNAMICS", use_temperature)
@@ -1890,7 +1904,7 @@ subroutine internal_tides_init(Time, G, param_file, diag, CS)
 
   allocate(CS%En(isd:ied, jsd:jed, num_angle, num_freq, num_mode))
   CS%En(:,:,:,:,:) = 0.0    
-  CS%En(:,:,:,1,1) = CS%En_restart(:,:,:) ! added here as work-around (BDM)
+  !CS%En(:,:,:,1,1) = CS%En_restart(:,:,:) ! added here as work-around (BDM)
   
   !print *, 'register_int_tide_init: sum(En_restart)=', sum(CS%En_restart)
       
