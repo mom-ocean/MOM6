@@ -511,7 +511,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     ! tide module. It will eventually be used to provide an energy input to
     ! set_diffusivity.
     
-    ! PROVIDE ENERGY DISTRIBUTION
+    ! PROVIDE ENERGY DISTRIBUTION (calculate time-varying energy source)
     call set_int_tide_input(u, v, h, tv, fluxes, CS%int_tide_input, dt, G, &
                             CS%int_tide_input_CSp)
     ! CALCULATE MODAL VELOCITY
@@ -533,10 +533,10 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     ! CALCULATE NEAR-BOTTOM STRATIFICATION (BDM)
     !kappa_fill = 1.e-3 ! m2 s-1
     !dt_fill = 7200.
-    call vert_fill_TS(h, tv%T, tv%S, 1.e-3, 7200., T_f, S_f, G)
-    call find_N2_bottom(h, tv, T_f, S_f, CS%int_tide_input%h2, fluxes, G, N2_bot)
+    !call vert_fill_TS(h, tv%T, tv%S, 1.e-3, 7200., T_f, S_f, G)
+    !call find_N2_bottom(h, tv, T_f, S_f, CS%int_tide_input%h2, fluxes, G, N2_bot)
     
-    if (CS%int_tide_source_test) then      
+    if (CS%int_tide_source_test) then
       ! BUILD 2D ARRAY WITH POINT SOURCE FOR TESTING (BDM)
       TKE_itidal_input_test(:,:) = 0.0
       avg_enabled = query_averaging_enabled(CS%diag,time_end=CS%time_end)
@@ -552,11 +552,11 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
       endif 
       ! CALL ROUTINE USING PRESCRIBED KE FOR TESTING (BDM)
       call propagate_int_tide(cg1, TKE_itidal_input_test, &
-                            CS%int_tide_input%tideamp, N2_bot, dt, G, CS%int_tide_CSp)
+                            CS%int_tide_input%tideamp, CS%int_tide_input%Nb, dt, G, CS%int_tide_CSp)
     else    
       ! CALL ROUTINE USING CALCULATED KE INPUT
       call propagate_int_tide(cg1, CS%int_tide_input%TKE_itidal_input, &
-                              CS%int_tide_input%tideamp, N2_bot, dt, G, CS%int_tide_CSp)    
+                              CS%int_tide_input%tideamp, CS%int_tide_input%Nb, dt, G, CS%int_tide_CSp)    
     endif
     if (showCallTree) call callTree_waypoint("done with propagate_int_tide (diabatic)")
   endif

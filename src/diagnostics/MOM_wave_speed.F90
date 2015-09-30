@@ -70,7 +70,6 @@ subroutine wave_speed(h, tv, G, cg1, CS, full_halos)
   type(ocean_grid_type),                 intent(in)  :: G
   type(wave_speed_CS), optional,         pointer     :: CS
   logical,             optional,         intent(in)  :: full_halos
-
 !    This subroutine determines the first mode internal wave speed.
 ! Arguments: h - Layer thickness, in m or kg m-2.
 !  (in)      tv - A structure containing the thermobaric variables.
@@ -375,7 +374,7 @@ subroutine wave_speed(h, tv, G, cg1, CS, full_halos)
         else
           cg1(i,j) = 0.0
         endif
-               
+
       endif ! cg1 /= 0.0
     else
       cg1(i,j) = 0.0 ! This is a land point.
