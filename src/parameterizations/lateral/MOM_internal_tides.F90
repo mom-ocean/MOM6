@@ -1904,15 +1904,6 @@ subroutine internal_tides_init(Time, G, param_file, diag, CS)
 
   allocate(CS%En(isd:ied, jsd:jed, num_angle, num_freq, num_mode))
   CS%En(:,:,:,:,:) = 0.0    
-  !CS%En(:,:,:,1,1) = CS%En_restart(:,:,:) ! added here as work-around (BDM)
-  
-  !print *, 'register_int_tide_init: sum(En_restart)=', sum(CS%En_restart)
-      
-  !--------------------check----------------------------------------------
-  if (is_root_pe()) then
-    print *,'internal_tides_init: CS%En_restart added to CS%En!' !BDM
-  endif
-  !-----------------------------------------------------------------------
 
   allocate(CS%frequency(num_freq))
   call read_param(param_file, "FIRST_MODE_PERIOD", period_1); ! ADDED BDM
@@ -2206,11 +2197,6 @@ subroutine internal_tides_end(CS)
   ! Arguments:  CS - A pointer to the control structure returned by a previous
   !                  call to internal_tides_init, it will be deallocated here.
   
-  print *, 'sum En(:,:,:,1,1) = ', sum(CS%En(:,:,:,1,1)) ! BDM
-  
-  CS%En_restart(:,:,:) = CS%En(:,:,:,1,1)  ! added here as work-around (BDM) 
-  !call save_restart(CS%restart_dir, CS%Time, G, CS%restart_CSp) !(BDM) 
-   
   if (associated(CS)) then
     if (associated(CS%En)) deallocate(CS%En)
     if (allocated(CS%frequency)) deallocate(CS%frequency)
@@ -2221,7 +2207,6 @@ subroutine internal_tides_end(CS)
   
   !--------------------check----------------------------------------------
   if (is_root_pe()) then
-    print *,'internal_tides_end: CS%En added to CS%En_restart' !BDM
     print *,'internal_tides_end: done!' !BDM
   endif
   !-----------------------------------------------------------------------
