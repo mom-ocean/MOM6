@@ -15,6 +15,8 @@ module MOM_ALE
 !
 !==============================================================================
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
+use MOM_error_handler, only : callTree_showQuery
+use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_variables,     only : ocean_grid_type, thermo_var_ptrs
 use MOM_file_parser,   only : get_param, param_file_type, log_param
 use MOM_io,            only : file_exists, field_exists, MOM_read_data
@@ -89,6 +91,8 @@ type, public :: ALE_CS
   ! Work space for communicating between regridding and remapping
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_,NK_INTERFACE_) :: dzRegrid
 
+  logical :: show_call_tree ! For debugging
+
 end type
 
 ! -----------------------------------------------------------------------------
@@ -158,6 +162,9 @@ subroutine initialize_ALE( param_file, G, CS )
   endif
   allocate(CS)
 
+  CS%show_call_tree = callTree_showQuery()
+  if (CS%show_call_tree) call callTree_enter("initialize_ALE(), MOM_ALE.F90")
+
   ! Memory allocation for regridding
   call ALE_memory_allocation( G, CS )
 
@@ -205,6 +212,7 @@ subroutine initialize_ALE( param_file, G, CS )
   ! Keep a record of values for subsequent queries
   CS%nk = G%ke
 
+  if (CS%show_call_tree) call callTree_leave("initialize_ALE()")
 end subroutine initialize_ALE
 
 
@@ -263,12 +271,18 @@ subroutine ALE_main( G, h, u, v, tv, Reg, CS )
   ! Local variables
   integer :: nk, i, j, k, isd, ied, jsd, jed
 
+  if (CS%show_call_tree) call callTree_enter("ALE_main(), MOM_ALE.F90")
+
   ! Build new grid. The new grid is stored in h_new. The old grid is h.
   ! Both are needed for the subsequent remapping of variables.
   call regridding_main( CS%remapCS, CS%regridCS, G, h, tv, CS%dzRegrid )
 
+  if (CS%show_call_tree) call callTree_waypoint("new grid generated (ALE_main)")
+
   ! Remap all variables from old grid h onto new grid h_new
-  call remapping_main( CS%remapCS, G, h, -CS%dzRegrid, Reg, u, v )
+  call remapping_main( CS%remapCS, G, h, -CS%dzRegrid, Reg, u, v, CS%show_call_tree )
+
+  if (CS%show_call_tree) call callTree_waypoint("state remapped (ALE_main)")
 
   ! Override old grid with new one. The new grid 'h_new' is built in
   ! one of the 'build_...' routines above.
@@ -280,12 +294,14 @@ subroutine ALE_main( G, h, u, v, tv, Reg, CS )
     enddo ; enddo
   enddo
 
+  if (CS%show_call_tree) call callTree_leave("ALE_main()")
 end subroutine ALE_main
 
 !> This routine takes care of remapping all variable between the old and the
 !! new grids. When velocity components need to be remapped, thicknesses at
 !! velocity points are taken to be arithmetic averages of tracer thicknesses.
-subroutine remapping_main( CS, G, h, dxInterface, Reg, u, v )
+subroutine remapping_main( CS, G, h, dxInterface, Reg, u, v, debug )
+  ! Arguments
   type(remapping_CS),                               intent(in)    :: CS !< Remapping control structure
   type(ocean_grid_type),                            intent(in)    :: G  !< Ocean grid structure
   real, dimension(NIMEM_,NJMEM_,NKMEM_),            intent(in)    :: h  !< Level thickness (m or Pa)
@@ -293,11 +309,17 @@ subroutine remapping_main( CS, G, h, dxInterface, Reg, u, v )
   type(tracer_registry_type),                       pointer       :: Reg !< Tracer registry structure
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), optional, intent(inout) :: u  !< Zonal velocity component (m/s)
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), optional, intent(inout) :: v  !< Meridional velocity component (m/s)
+  logical,                                optional, intent(in)    :: debug !< If true, show the call tree
   ! Local variables
   integer               :: i, j, k, m
   integer               :: nz, ntr
   real, dimension(G%ke+1) :: dx
   real, dimension(G%ke) :: h1, u_column
+  logical :: show_call_tree
+
+  show_call_tree = .false.
+  if (present(debug)) show_call_tree = debug
+  if (show_call_tree) call callTree_enter("remapping_main(), MOM_ALE.F90")
 
   nz = G%ke
   if (associated(Reg)) then
@@ -326,6 +348,8 @@ subroutine remapping_main( CS, G, h, dxInterface, Reg, u, v )
     enddo
   endif
 
+  if (show_call_tree) call callTree_waypoint("tracers remapped (remapping_main)")
+
   ! Remap u velocity component
   if ( present(u) ) then
 !$OMP do
@@ -341,6 +365,8 @@ subroutine remapping_main( CS, G, h, dxInterface, Reg, u, v )
       enddo
     enddo
   endif
+
+  if (show_call_tree) call callTree_waypoint("u remapped (remapping_main)")
 
   ! Remap v velocity component
   if ( present(v) ) then
@@ -358,6 +384,9 @@ subroutine remapping_main( CS, G, h, dxInterface, Reg, u, v )
     enddo
   endif
 !$OMP end parallel
+
+  if (show_call_tree) call callTree_waypoint("u remapped (remapping_main)")
+  if (show_call_tree) call callTree_leave("remapping_main()")
 
 end subroutine remapping_main
 

@@ -1687,7 +1687,9 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     endif
     if (.not. query_initialized(CS%h,"h",CS%restart_CSp)) then
       ! This is a not a restart so we do the following...
+      call callTree_waypoint("Calling adjustGridForIntegrity() to remap initial conditions (initialize_MOM)")
       call adjustGridForIntegrity(CS%ALE_CSp, G, CS%h )
+      call callTree_waypoint("Calling ALE_main() to remap initial conditions (initialize_MOM)")
       call ALE_main( G, CS%h, CS%u, CS%v, CS%tv, CS%tracer_Reg, CS%ALE_CSp ) ! Or init_CS%tracer_Reg ??? -AJA
     endif
     call ALE_updateVerticalGridType( CS%ALE_CSp, G%GV )
