@@ -275,7 +275,7 @@ type, public :: set_diffusivity_CS ; private
   type(user_change_diff_CS), pointer :: user_change_diff_CSp => NULL()
   type(diag_to_Z_CS),        pointer :: diag_to_Z_CSp        => NULL()
   type(Kappa_shear_CS),      pointer :: kappaShear_CSp       => NULL()
-  type(int_tide_CS),         pointer :: int_tide_CSp         => NULL()
+  type(int_tide_CS),         pointer :: int_tide_CSp         => NULL() !BDM
 
   integer :: id_TKE_itidal  = -1
   integer :: id_TKE_leewave = -1
@@ -331,7 +331,7 @@ type diffusivity_diags
     Kd_work        => NULL(),& ! layer integrated work by diapycnal mixing (W/m2)
     Kd_Niku_work   => NULL(),& ! layer integrated work by lee-wave driven mixing (W/m2)
     Kd_Itidal_Work => NULL(),& ! layer integrated work by int tide driven mixing (W/m2)
-    Kd_Lowmode_Work=> NULL(),& ! layer integrated work by low mode driven mixing (W/m2) !BDM
+    Kd_Lowmode_Work=> NULL(),& ! layer integrated work by low mode driven mixing (W/m2) BDM
     maxTKE         => NULL(),& ! energy required to entrain to h_max (m3/s3)
     TKE_to_Kd      => NULL(),& ! conversion rate (~1.0 / (G_Earth + dRho_lay))
                                ! between TKE dissipated within a layer and Kd
@@ -735,7 +735,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, G, C
       call add_MLrad_diffusivity(h, fluxes, j, G, CS, Kd, TKE_to_Kd, Kd_int)
 
     ! Add the Nikurashin and / or tidal bottom-driven mixing
-    if (CS%Int_tide_dissipation .or. CS%Lee_wave_dissipation) &
+    if (CS%Int_tide_dissipation .or. CS%Lee_wave_dissipation .or. CS%Lowmode_itidal_dissipation) &
       call add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, maxTKE, G, CS, &
                                     dd, N2_lay, Kd, Kd_int)
 
@@ -1867,9 +1867,10 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, CS, &
     htot_WKB,         & ! distance from top to bottom (meter) WKB scaled
     TKE_itidal_bot,   & ! internal tide TKE at ocean bottom (m3/s3)
     TKE_Niku_bot,     & ! lee-wave TKE at ocean bottom (m3/s3)
-    TKE_lowmode_bot,  & ! internal tide TKE at ocean bottom from remote low modes (m3/s3) (BDM)
+    TKE_lowmode_bot,  & ! internal tide TKE at ocean bottom lost from all remote low modes (m3/s3) (BDM)
     Inv_int,          & ! inverse of TKE decay for int tide over the depth of the ocean (nondim)
     Inv_int_lee,      & ! inverse of TKE decay for lee waves over the depth of the ocean (nondim)
+    Inv_int_low,      & ! inverse of TKE decay for low modes over the depth of the ocean (nondim) (BDM)
     z0_Polzin,        & ! TKE decay scale in Polzin formulation (meter)
     z0_Polzin_scaled, & ! TKE decay scale in Polzin formulation (meter)
                         ! multiplied by N2_bot/N2_meanz to be coherent with the WKB scaled z
@@ -1890,7 +1891,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, CS, &
   real :: Kd_add        ! diffusivity to add in a layer (m2/sec)
   real :: TKE_itide_lay ! internal tide TKE imparted to a layer (from barotropic) (m3/s3)
   real :: TKE_Niku_lay  ! lee-wave TKE imparted to a layer (m3/s3)
-  real :: TKE_lowmode_lay ! internal tide TKE imparted to a layer (from low mode) (m3/s3)
+  real :: TKE_lowmode_lay ! internal tide TKE imparted to a layer (from low mode) (m3/s3) (BDM)
   real :: frac_used     ! fraction of TKE that can be used in a layer (nondim)
   real :: Izeta         ! inverse of TKE decay scale (1/meter)
   real :: Izeta_lee     ! inverse of TKE decay scale for lee waves (1/meter)
@@ -1904,7 +1905,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, CS, &
 
   if (.not.(CS%Int_tide_dissipation .or. CS%Lee_wave_dissipation)) return
 
-  do i=is,ie ; htot(i) = 0.0 ; Inv_int(i) = 0.0 ; Inv_int_lee(i) = 0.0 ; enddo
+  do i=is,ie ; htot(i) = 0.0 ; Inv_int(i) = 0.0 ; Inv_int_lee(i) = 0.0 ; Inv_int_low(i) = 0.0 ;enddo
   do k=1,nz ; do i=is,ie
     htot(i) = htot(i) + G%H_to_m*h(i,j,k)
   enddo ; enddo
@@ -1926,7 +1927,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, CS, &
     do i=is,ie
       CS%Nb(i,j) = sqrt(N2_bot(i))
       if (associated(dd%N2_bot)) dd%N2_bot(i,j) = N2_bot(i)
-      if ( CS%Int_tide_dissipation .or. CS%Lowmode_itidal_dissipation) then !BDM
+      if ( CS%Int_tide_dissipation ) then
         if (Izeta*htot(i) > 1.0e-14) then ! L'Hospital's version of Adcroft's reciprocal rule.
           Inv_int(i) = 1.0 / (1.0 - exp(-Izeta*htot(i)))
         endif
@@ -1934,6 +1935,11 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, CS, &
       if ( CS%Lee_wave_dissipation ) then
         if (Izeta_lee*htot(i) > 1.0e-14) then  ! L'Hospital's version of Adcroft's reciprocal rule.
           Inv_int_lee(i) = 1.0 / (1.0 - exp(-Izeta_lee*htot(i)))
+        endif
+      endif
+      if ( CS%Lowmode_itidal_dissipation) then !BDM
+        if (Izeta*htot(i) > 1.0e-14) then ! L'Hospital's version of Adcroft's reciprocal rule.
+          Inv_int_low(i) = 1.0 / (1.0 - exp(-Izeta*htot(i)))
         endif
       endif
       z_from_bot(i) = G%H_to_m*h(i,j,nz)
@@ -2002,6 +2008,13 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, CS, &
           Inv_int_lee(i) = ( z0_polzin_scaled(i)*CS%Decay_scale_factor_lee / htot_WKB(i) ) + 1
         endif
       endif
+      if ( CS%Lowmode_itidal_dissipation .and. (CS%int_tide_profile == POLZIN_09) ) then
+        ! For the Polzin formulation, this if loop prevents the vertical
+        ! flux of energy dissipation from having NaN values
+        if (htot_WKB(i) > 1.0e-14) then
+          Inv_int_low(i) = ( z0_polzin_scaled(i) / htot_WKB(i) ) + 1
+        endif
+      endif
 
       z_from_bot(i) = G%H_to_m*h(i,j,nz)
       ! Use the new formulation for WKB scaling.  N2 is referenced to its
@@ -2014,27 +2027,27 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, CS, &
 
 ! Both Polzin and Simmons
   do i=is,ie
+    ! Dissipation of locally trapped internal tide (non-propagating high modes)
     TKE_itidal_bot(i) = min(CS%TKE_itidal(i,j)*CS%Nb(i,j),CS%TKE_itide_max)
     if (associated(dd%TKE_itidal_used)) &
       dd%TKE_itidal_used(i,j) = TKE_itidal_bot(i)
     TKE_itidal_bot(i) = (I_rho0 * CS%Mu_itides * CS%Gamma_itides) * TKE_itidal_bot(i)
-
+    ! Dissipation of locally trapped lee waves
     TKE_Niku_bot(i) = 0.0
     if (CS%Lee_wave_dissipation) then
       TKE_Niku_bot(i) = (I_rho0 * CS%Mu_itides * CS%Gamma_lee) * CS%TKE_Niku(i,j)
     endif
-    
-    !Consider dissipation from propagating baroclinic low modes (rays) (BDM)
+    ! Dissipation of propagating internal tide (baroclinic low modes; rays) (BDM)
     TKE_lowmode_tot = 0.0
     TKE_lowmode_bot(i) = 0.0
     if (CS%Lowmode_itidal_dissipation) then
       call sum_itidal_lowmode_loss(i,j,CS%int_tide_CSp,G,TKE_lowmode_tot)
       TKE_lowmode_bot(i) = (I_rho0 * CS%Mu_itides * CS%Gamma_itides) * TKE_lowmode_tot
     endif
-
+    ! Vertical energy flux at bottom
     TKE_itidal_rem(i)  = Inv_int(i)     * TKE_itidal_bot(i)
     TKE_Niku_rem(i)    = Inv_int_lee(i) * TKE_Niku_bot(i)
-    TKE_lowmode_rem(i) = Inv_int(i)     * TKE_lowmode_bot(i) !BDM
+    TKE_lowmode_rem(i) = Inv_int_low(i) * TKE_lowmode_bot(i) !BDM
 
     if (associated(dd%Fl_itidal)) dd%Fl_itidal(i,j,nz) = TKE_itidal_rem(i) !why is this here? BDM
   enddo
@@ -2045,15 +2058,19 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, CS, &
     do k=nz-1,2,-1 ; do i=is,ie
       if (max_TKE(i,k) <= 0.0) cycle
       z_from_bot(i) = z_from_bot(i) + G%H_to_m*h(i,j,k)
-
+      
+      ! Fraction of bottom flux predicted to reach top of this layer
       TKE_frac_top(i)         = Inv_int(i)     * exp(-Izeta * z_from_bot(i))
       TKE_frac_top_lee(i)     = Inv_int_lee(i) * exp(-Izeta_lee * z_from_bot(i))
-      TKE_frac_top_lowmode(i) = Inv_int(i)     * exp(-Izeta * z_from_bot(i)) !BDM
+      TKE_frac_top_lowmode(i) = Inv_int_low(i) * exp(-Izeta * z_from_bot(i)) !BDM
 
+      ! Actual influx at bottom of layer minus predicted outflux at top of layer to give 
+      ! predicted power expended
       TKE_itide_lay   = TKE_itidal_rem(i)  - TKE_itidal_bot(i) * TKE_frac_top(i)
       TKE_Niku_lay    = TKE_Niku_rem(i)    - TKE_Niku_bot(i)   * TKE_frac_top_lee(i)
       TKE_lowmode_lay = TKE_lowmode_rem(i) - TKE_lowmode_bot(i)* TKE_frac_top_lowmode(i) !BDM
 
+      ! Actual power expended may be less than predicted if stratification is weak; adjust
       if (TKE_itide_lay + TKE_Niku_lay + TKE_lowmode_lay > max_TKE(i,k)) then !BDM
          frac_used = max_TKE(i,k) / (TKE_itide_lay + TKE_Niku_lay + TKE_lowmode_lay) !BDM
          TKE_itide_lay   = frac_used * TKE_itide_lay
@@ -2061,10 +2078,12 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, CS, &
          TKE_lowmode_lay = frac_used * TKE_lowmode_lay !BDM
       endif
 
+      ! Calculate vertical flux available to bottom of layer above
       TKE_itidal_rem(i)  = TKE_itidal_rem(i)  - TKE_itide_lay
-      TKE_Niku_rem(i)    = TKE_Niku_rem(i) - TKE_Niku_lay
-      TKE_lowmode_rem(i) = TKE_lowmode_rem(i)  - TKE_lowmode_lay !BDM
+      TKE_Niku_rem(i)    = TKE_Niku_rem(i)    - TKE_Niku_lay
+      TKE_lowmode_rem(i) = TKE_lowmode_rem(i) - TKE_lowmode_lay !BDM
       
+      ! Convert power to diffusivity
       Kd_add  = TKE_to_Kd(i,k) * (TKE_itide_lay + TKE_Niku_lay + TKE_lowmode_lay) !BDM
 
       if (CS%Kd_max >= 0.0) Kd_add = min(Kd_add, CS%Kd_max)
@@ -2124,23 +2143,35 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, CS, &
         z_from_bot_WKB(i) = z_from_bot_WKB(i) + G%H_to_m*h(i,j,k)*N2_lay(i,k)/N2_meanz(i)
       else ; z_from_bot_WKB(i) = 0 ; endif
 
+      ! Fraction of bottom flux predicted to reach top of this layer
       TKE_frac_top(i)     = ( Inv_int(i) * z0_polzin_scaled(i) ) / &
                             ( z0_polzin_scaled(i) + z_from_bot_WKB(i) )
       z0_psl = z0_polzin_scaled(i)*CS%Decay_scale_factor_lee
       TKE_frac_top_lee(i) = (Inv_int_lee(i) * z0_psl) / (z0_psl + z_from_bot_WKB(i))
+      TKE_frac_top_lowmode(i) = ( Inv_int_low(i) * z0_polzin_scaled(i) ) / &
+                            ( z0_polzin_scaled(i) + z_from_bot_WKB(i) ) !BDM
 
-      TKE_itide_lay = TKE_itidal_rem(i) - TKE_itidal_bot(i)*TKE_frac_top(i)
-      TKE_Niku_lay  = TKE_Niku_rem(i)   - TKE_Niku_bot(i) * TKE_frac_top_lee(i)
-      if (TKE_itide_lay + TKE_Niku_lay > max_TKE(i,k)) then
-        frac_used = max_TKE(i,k) / (TKE_itide_lay + TKE_Niku_lay)
-        TKE_itide_lay = frac_used * TKE_itide_lay
-        TKE_Niku_lay  = frac_used * TKE_Niku_lay
+      ! Actual influx at bottom of layer minus predicted outflux at top of layer to give 
+      ! predicted power expended
+      TKE_itide_lay   = TKE_itidal_rem(i)  - TKE_itidal_bot(i) *TKE_frac_top(i)
+      TKE_Niku_lay    = TKE_Niku_rem(i)    - TKE_Niku_bot(i)   * TKE_frac_top_lee(i)
+      TKE_lowmode_lay = TKE_lowmode_rem(i) - TKE_lowmode_bot(i)*TKE_frac_top_lowmode(i) !BDM
+      
+      ! Actual power expended may be less than predicted if stratification is weak; adjust
+      if (TKE_itide_lay + TKE_Niku_lay + TKE_lowmode_lay > max_TKE(i,k)) then
+        frac_used = max_TKE(i,k) / (TKE_itide_lay + TKE_Niku_lay + TKE_lowmode_lay) !BDM
+        TKE_itide_lay   = frac_used * TKE_itide_lay
+        TKE_Niku_lay    = frac_used * TKE_Niku_lay
+        TKE_lowmode_lay = frac_used * TKE_lowmode_lay !BDM
       endif
 
+      ! Calculate vertical flux available to bottom of layer above
       TKE_itidal_rem(i)  = TKE_itidal_rem(i)  - TKE_itide_lay
-
-      TKE_Niku_rem(i) = TKE_Niku_rem(i) - TKE_Niku_lay
-      Kd_add  = TKE_to_Kd(i,k) * (TKE_itide_lay + TKE_Niku_lay)
+      TKE_Niku_rem(i)    = TKE_Niku_rem(i)    - TKE_Niku_lay
+      TKE_lowmode_rem(i) = TKE_lowmode_rem(i) - TKE_lowmode_lay !BDM
+      
+      ! Convert power to diffusivity
+      Kd_add  = TKE_to_Kd(i,k) * (TKE_itide_lay + TKE_Niku_lay + TKE_lowmode_lay) !BDM
 
       if (CS%Kd_max >= 0.0) Kd_add = min(Kd_add, CS%Kd_max)
       Kd(i,j,k) = Kd(i,j,k) + Kd_add
@@ -2173,6 +2204,19 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, CS, &
       endif
    !  if (associated(dd%Kd_Niku)) dd%Kd_Niku(i,j,K) = TKE_to_Kd(i,k) * TKE_Niku_lay
       if (associated(dd%Kd_Niku_work)) dd%Kd_Niku_work(i,j,k) = G%Rho0 * TKE_Niku_lay
+      
+      if (associated(dd%Kd_lowmode)) then !-------------BDM---------------
+        ! If at layers, dd%Kd_lowmode is just TKE_to_Kd(i,k) * TKE_lowmode_lay
+        ! The following sets the interface diagnostics.
+        Kd_add = TKE_to_Kd(i,k) * TKE_lowmode_lay
+        if (CS%Kd_max >= 0.0) Kd_add = min(Kd_add, CS%Kd_max)
+        if (k>1)  dd%Kd_lowmode(i,j,K)   = dd%Kd_lowmode(i,j,K)   + 0.5*Kd_add
+        if (k<nz) dd%Kd_lowmode(i,j,K+1) = dd%Kd_lowmode(i,j,K+1) + 0.5*Kd_add
+      endif
+      if (associated(dd%Kd_lowmode_work)) &
+        dd%Kd_lowmode_work(i,j,k) = G%Rho0 * TKE_lowmode_lay
+      if (associated(dd%Fl_lowmode)) dd%Fl_lowmode(i,j,k) = TKE_lowmode_rem(i)
+      
     enddo ; enddo; ! Polzin
   endif
 
