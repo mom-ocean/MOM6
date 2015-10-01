@@ -61,23 +61,23 @@ end type wave_structure_CS
 
 contains
 
-subroutine wave_structure(h, tv, G, cg1, CS, full_halos, wmode, umode, z_depth, N2, numlay)
+subroutine wave_structure(h, tv, G, cg1, full_halos=.true., w_strct, u_strct, z_depth, N2, num_intfaces)
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)  :: h
   type(thermo_var_ptrs),                 intent(in)  :: tv
   real, dimension(NIMEM_,NJMEM_),        intent(in)  :: cg1
   type(ocean_grid_type),                 intent(in)  :: G
   type(wave_structure_CS), optional,     pointer     :: CS
   logical,                 optional,     intent(in)  :: full_halos
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(out) :: wmode, umode, depths
-  real, dimension(NIMEM_,NJMEM_),        intent(out) :: numlay
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(out) :: w_strct, u_strct, depths
+  real, dimension(NIMEM_,NJMEM_),        intent(out) :: num_intfaces
 !    This subroutine determines the first mode internal wave velocity structure.
 ! Arguments: 
 !  (in)      cg1 - The first mode internal gravity wave speed, in m s-1.
 !  (in)      G - The ocean's grid structure.
-!  (out)     wmode - Vertical structure of vertical velocity (normalized), in m s-1.
-!  (out)     umode - Vertical structure of horizontal velocity (normalized), in m s-1.
+!  (out)     w_strct - Vertical structure of vertical velocity (normalized), in m s-1.
+!  (out)     u_strct - Vertical structure of horizontal velocity (normalized), in m s-1.
 !  (out)     depths - Depths of layer interfaces, in m.
-!  (out)     numlay - Number of layers in each column.
+!  (out)     num_intfaces - Number of layer interfaces (including surface and bottom)
 !
 ! This subroutine solves for the eigen vector [vertical structure, e(k)] associated with 
 ! the first baroclinic mode speed [i.e., smallest eigen value (lam = 1/c^2)] of the 
@@ -133,6 +133,8 @@ subroutine wave_structure(h, tv, G, cg1, CS, full_halos, wmode, umode, z_depth, 
   integer, parameter :: max_itt = 10
   logical :: use_EOS    ! If true, density is calculated from T & S using an
                         ! equation of state.
+                        
+  real, dimension(:) :: e_guess, e_itt ! temporary vectors for TDMA
   integer :: kc
   integer :: i, j, k, k2, itt, is, ie, js, je, nz
 
@@ -145,6 +147,8 @@ subroutine wave_structure(h, tv, G, cg1, CS, full_halos, wmode, umode, z_depth, 
   if (present(full_halos)) then ; if (full_halos) then
     is = G%isd ; ie = G%ied ; js = G%jsd ; je = G%jed
   endif ; endif
+  
+  w_strct(:,:,:) = 0.0
   
   S => tv%S ; T => tv%T
   g_Rho0 = G%g_Earth/G%Rho0
@@ -250,10 +254,8 @@ subroutine wave_structure(h, tv, G, cg1, CS, full_halos, wmode, umode, z_depth, 
         endif ! use_EOS?
         
         !   Find gprime across each internal interface, taking care of convective
-        ! instabilities by merging layers.        
-        if (drxh_sum <= 0.0) then
-          wmode(i,j,:) = 0.0
-        else
+        ! instabilities by merging layers.
+        if (drxh_sum >= 0.0) then
           ! Merge layers to eliminate convective instabilities or exceedingly
           ! small reduced gravities.
           if (use_EOS) then
@@ -325,47 +327,114 @@ subroutine wave_structure(h, tv, G, cg1, CS, full_halos, wmode, umode, z_depth, 
             enddo
           endif  ! use_EOS?
           
-          ! Calculate Igu, Igl, depth, and N2 at each interface
-          numlay(i,j) = kc
+          ! Construct and solve tridiagonal system
           if (kc >= 2) then
             z_int(1) = 0.0
+            ! Calculate Igu, Igl, depth, and N2 at each interior interface
             do k=2,kc
               Igl(k) = 1.0/(gprime(k)*Hc(k)) ; Igu(k) = 1.0/(gprime(k)*Hc(k-1))
-              z_int(k) = z_int(k-1) + Hc(k)
-              N2(k) = gprime(k)/(0.5*(Hc(k)+Hc(k-1));
+              z_int(k) = z_int(k-1) + Hc(k-1)
+              N2(k) = gprime(k)/(0.5*(Hc(k)+Hc(k-1))
+              lam_z(k) = lam*gprime(k)
             enddo
-            z_depth(i,j,1:kc) = z_int
+            z_int(kc+1) = z_int(kc)+Hc(kc)
+            if (abs(z_int(kc+1)-htot)>1e-30) then
+              call MOM_error(WARNING, "wave_structure: mismatch in total depths")
+            endif
+            z_depth(i,j,1:kc+1) = z_int(:)
+            num_intfaces(i,j) = kc+1
+
+            ! Populate interior rows of tridiagonal matrix; must multiply through by
+            ! gprime to get tridiagonal matrix to the symmetrical form:
+            ! [-1/H(k-1)]e(k-1) + [1/H(k-1)+1/H(k)-lam_z]e(k) + [-1/H(k)]e(k+1) = 0,
+            ! where lam_z = lam*gprime is now a function of depth
+            do k=3,kc-1
+              row = k-1
+              a_diag(row) = gprime(k)*(-Igu(k))
+              b_diag(row) = gprime(k)*(Igu(k)+Igl(k)) - lam_z(k)
+              c_diag(row) = gprime(k)*(-Igl(k))
+            enddo
+            ! Populate top row of tridiagonal matrix
+            k=2 ; row = k-1
+            a_diag(row) = 0.0
+            b_diag(row) = gprime(k)*(Igu(k)+Igl(k)) - lam_z(k)
+            c_diag(row) = gprime(k)*(-Igl(k))
+            ! Populate bottom row of tridiagonal matrix
+            k=kc ; row = k-1
+            a_diag(row) = gprime(k)*(-Igu(k))
+            b_diag(row) = gprime(k)*(Igu(k)+Igl(k)) - lam_z(k)
+            c_diag(row) = 0.0
+            
             ! Guess a vector shape to start with
-            e_guess = cos(z/htot(i)*Pi)
+            e_guess = cos(z_int(2:kc)/htot(i)*Pi)
             e_guess = e_guess/sqrt(sum(e_guess**2))
-            ! Perform inverse iteration
+            ! Perform inverse iteration with tri-diag solver
             do itt=1,max_itt
-              !!!!!! insert tri-diag solver !!!!!
-              call tridiag_solver(a,b,c,lam,e_guess)
-              
-                           
+              call tridiag_solver(a_diag,b_diag,c_diag,lam_z,e_guess,'TDMA_T',e_itt)
+              e_guess = e_itt/sqrt(sum(e_itt**2))                           
             enddo ! itt-loop
-            wmode(i,j,1:kc) = e_guess
-          else
-            wmode(i,j,1:kc) = 0.0
-          endif  ! kc> = 2?
-        endif ! drxh_sum <= 0?
-      else
-        cg1(i,j) = 0.0 ! This is a land point.
+            w_strct(i,j,2:kc) = e_guess
+            w_strct(i,j,1) = 0.0    ! rigid lid at surface
+            w_strct(i,j,kc+1) = 0.0 ! zero-flux at bottom
+          endif  ! kc >= 2?
+        endif ! drxh_sum >= 0?
       endif ! mask2dT > 0.5?
     enddo ! i-loop
   enddo ! j-loop
   
   do j=js,je
     do j=is,ie
-      !!!calc umode!!!
+      !!!calc u_strct!!!
     enddo ! i-loop
   enddo !j-loop
   
 end subroutine wave_structure
 
-subroutine tridiag_solver()
+subroutine tridiag_solver(a,b,c,h,y,method,x)
+  real, dimension(:), intent(in)  :: a, b, c, h, y
+  character(len=*), intent(in)    :: method
+  real, dimension(:), intent(out) :: x
 
+!    This subroutine solves a tri-diagonal system Ax=y using either the standard
+! Thomas algorithim (TDMA_T) or its more stable variant that invokes the
+! "Hallberg substitution" (TDMA_H).  
+!
+! Arguments: 
+!  (in)      a - lower diagonal with first entry equal to zero
+!  (in)      b - middle diagonal
+!  (in)      c - upper diagonal with last entry equal to zero
+!  (in)      h - vector of values that have already been added to b; used for 
+!                systems of the form (e.g. layer thickness in vertical diffusion case):
+!                [ -alpha(k-1/2) ]                       * e(k-1) +
+!                [  alpha(k-1/2) + alpha(k+1/2) + h(k) ] * e(k)   +
+!                [ -alpha(k+1/2) ]                       * e(k+1) = y(k)
+!  (in)      y - vector of known values on right hand side
+!  (out)     x - vector of unknown values to solve for
+
+  integer :: n  = size(y)                 ! number of rows index in A matrix
+  real, dimension(1:n) :: c_prime, yprime ! intermediate values for solver
+  integer :: k                            ! row (e.g. interface) index
+  
+  if (method = 'TDMA_T') then
+    ! Standard Thomas algoritim (4th variant)
+    c_prime(:) = 0.0       ; y_prime(:) = 0.0
+    c_prime(1) = c(1)/b(1) ; y_prime(1) = y(1)/b(1)
+    ! Forward sweep
+    do k=2,n-1
+      c_prime(k) = c(k)/(b(k)-a(k)*c_prime(k-1))
+    enddo
+    do k=2,n
+      y_prime(k) = (y(k)-a(k)*y_prime(k-1))/(b(k)-a(k)*c_prime(k-1))
+    enddo
+    x(n) = y_prime(n)
+    ! Backward sweep
+    do k=n-1,-1,1
+      x(k) = y_prime(k)-c_prime(k)*x(k+1)
+    enddo
+  elseif (method = 'TDMA_H') then
+    ! Standard Thomas algoritim (4th variant) w/ Hallberg substitution
+  endif
+  
 end subroutine tridiag_solver
 
 subroutine wave_structure_init(Time, G, param_file, diag, CS)

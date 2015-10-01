@@ -174,6 +174,8 @@ subroutine propagate_int_tide(cg1, TKE_itidal_input, vel_btTide, Nb, dt, G, CS)
     test
   real, dimension(SZI_(G),SZJ_(G),CS%nMode) :: &
     c1
+  real, dimension(SZI_(G),SZJ_(G),CS%nFreq,CS%nMode) :: &
+    Ub
   real, dimension(SZI_(G),SZJB_(G)) :: &
     flux_heat_y, &
     flux_prec_y
@@ -303,14 +305,19 @@ subroutine propagate_int_tide(cg1, TKE_itidal_input, vel_btTide, Nb, dt, G, CS)
   !enddo ; enddo ; enddo ; enddo ; enddo
   
   ! Extract the energy for mixing due to scattering -BDM.
-  if (CS%apply_drag) then        
-    ! Calculate amplitude of modal structure from En (BDM)
-    ! call wave_structure_amp(En, wmode, umode, f2, fr, K)
+  if (CS%apply_drag) then
+    ! CALCULATE MODAL STRUCTURE
+    do m=1,CS%NMode ; do fr=1,CS%Nfreq
+      call wave_structure(h, tv, G, cg1, full_halos=.true., w_strct, u_strct, z_depth, N2, numlay)
+      call wave_amplitude(w_strct, u_strct, K_h, f2, fr, W_amp, U_amp, Umag)
+      Ub(:,:,fr,m) = U_mag ! pick out bottom values
+    enddo ; enddo
     ! Get near-bottom horizontal velocity magnitude
     ! A = umode/K_h**2
-    ! U_mag = (A*K_h/sqrt(2))*sqrt(f2/fr**2+1); Ub_mag = U_mag(end)
-    call itidal_lowmode_loss(G, CS, Nb, CS%En, CS%TKE_itidal_loss_fixed, &
-    CS%TKE_itidal_loss, dt) ! need to also feed Ub_mag
+    ! U_mag = (A*K_h/sqrt(2))*sqrt(f2/fr**2+1); Ub = U_mag(end);
+    Ub(:,:,:,:) = 0.0 ! placeholder
+    call itidal_lowmode_loss(G, CS, Nb, Ub, CS%En, CS%TKE_itidal_loss_fixed, &
+    CS%TKE_itidal_loss, dt)
   endif
   
   ! Check for energy conservation on computational domain (BDM)
@@ -403,42 +410,56 @@ subroutine sum_En(G, CS, En, label)
   !enddo  
 end subroutine sum_En
 
-subroutine itidal_lowmode_loss(G, CS, Nb, En, TKE_loss_fixed, TKE_loss, dt)
+subroutine itidal_lowmode_loss(G, CS, Nb, Ub, En, TKE_loss_fixed, TKE_loss, dt)
   type(ocean_grid_type),  intent(in)    :: G
   type(int_tide_CS), pointer            :: CS
   real, dimension(G%isd:G%ied,G%jsd:G%jed), intent(in) :: Nb
+  real, dimension(G%isd:G%ied,G%jsd:G%jed,CS%nFreq,CS%nMode), intent(inout) :: Ub
   real, dimension(G%isd:G%ied,G%jsd:G%jed), intent(in) :: TKE_loss_fixed
   real, dimension(G%isd:G%ied,G%jsd:G%jed,CS%NAngle,CS%nFreq,CS%nMode), intent(inout) :: En
   real, dimension(G%isd:G%ied,G%jsd:G%jed,CS%NAngle,CS%nFreq,CS%nMode), intent(out)   :: TKE_loss
-  real :: dt
+  real, intent(in) :: dt
      
   ! This subroutine calculates the energy lost from the propagating internal tide due to
   ! scattering over small-scale roughness along the lines of Jayne & St. Laurent (2001).
   !
   ! Arguments: 
   !  (in)      Nb - near-bottom stratification, in s-1.
+  !  (in)      Ub - rms (over one period) near-bottom horizontal mode velocity , in m s-1.
   !  (inout)   En - energy density of the internal waves, in J m-2.
   !  (in)      TKE_loss_fixed - fixed part of energy loss, in kg m-2 (rho*kappa*h^2)
   !  (out)     TKE_loss - energy loss rate, in W m-2 (rho*kappa*h^2*N^2*U^2)
   !  (in)      dt - time increment, in s 
     
   integer :: j,i,m,fr,a
-  real :: modal_vel_bot
+  real    :: En_tot        ! energy for a given mode, frequency, and point summed over angles
+  real    :: TKE_loss_tot  ! dissipation for a given mode, frequency, and point summed over angles
+  real    :: TKE_sum_check ! temporary for check summing
+  real, dimension(CS%NAngle) :: frac_per_sector ! fraction of energy in each wedge
   
-  do m=1,CS%nMode ; do fr=1,CS%nFreq ; do a=1,CS%nAngle
-    do j=G%jsd,G%jed ; do i=G%isd,G%ied
-      ! Calculate bottom velocity for mode; 
-      ! using a placeholder here - could be done elsewhere.
-      modal_vel_bot = 0.0
-      if (En(i,j,a,fr,m) > 0.0) then
-        modal_vel_bot = 0.001*sqrt(En(i,j,a,fr,m))
-      endif
-      ! Calculate TKE loss rate; units of [W m-2] here.
-      TKE_loss(i,j,a,fr,m) = TKE_loss_fixed(i,j) * Nb(i,j) * modal_vel_bot**2
-      ! Update energy remaining in original mode (this is an explicit calc for now)
+  do j=G%jsd,G%jed ; do i=G%isd,G%ied ; do m=1,CS%nMode ; do fr=1,CS%nFreq
+    En_tot = sum(En(i,j,:,fr,m))
+    do a=1,CS%nAngle
+      frac_per_sector(a) = En(i,j,a,fr,m)/En_tot
+    enddo
+    ! using a placeholder here for Ub; delete later ----------------
+    Ub(:,:,:,:) = 0.0
+    if (En_tot > 0.0) then
+      Ub(i,j,fr,m) = 0.001*sqrt(En_tot)
+    endif !---------------------------------------------------------
+    ! Calculate TKE loss rate; units of [W m-2] here.
+    TKE_loss_tot = TKE_loss_fixed(i,j) * Nb(i,j) * Ub(i,j,fr,m)**2
+    TKE_sum_check = 0.0
+    do a=1,CS%nAngle
+      TKE_loss(i,j,a,fr,m) = frac_per_sector(a)*TKE_loss_tot
+      ! Update energy remaining (this is an explicit calc for now)
       En(i,j,a,fr,m) = En(i,j,a,fr,m) - TKE_loss(i,j,a,fr,m)*dt
-    enddo ; enddo
-  enddo ; enddo ; enddo
+      TKE_sum_check = TKE_sum_check + TKE_loss(i,j,a,fr,m)
+    enddo
+    if (abs(TKE_sum_check - TKE_loss_tot) > 1e-30) then
+      call MOM_error(WARNING, "itidal_lowmode_loss: TKE_loss .ne. total", .true.)
+    endif
+  enddo ; enddo ; enddo ; enddo
 end subroutine itidal_lowmode_loss
 
 
