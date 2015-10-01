@@ -114,8 +114,12 @@ type, public :: diabatic_aux_CS ; private
 
   integer :: id_createdH = -1, id_brine_lay = -1
 
-! ! Optional diagnostic arrays
-  real, allocatable, dimension(:,:) :: createdH ! The amount of volume added in order to avoid grounding (m/s)
+  ! penetrative shortwave heating diagnostic 
+  integer :: id_penSW_diag = -1 
+
+  ! Optional diagnostic arrays
+  real, allocatable, dimension(:,:)   :: createdH   ! The amount of volume added in order to avoid grounding (m/s)
+  real, allocatable, dimension(:,:,:) :: penSW_diag ! diagnosed grid cell heating (W/m2) from penetrative SW 
 
 end type diabatic_aux_CS
 
@@ -783,7 +787,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
   logical, intent(in) :: aggregate_FW_forcing
   real, dimension(NIMEM_,NJMEM_,NKMEM_), optional, intent(out) :: cTKE, dSV_dT, dSV_dS
 
-!   Update the thickness, temperature, and salinity due to  thermodynamic
+! Update the thickness, temperature, and salinity due to thermodynamic
 ! boundary forcing (contained in fluxes type) applied to h, tv%T and tv%S,
 ! and calculate the TKE implications of this heating.
 !
@@ -793,7 +797,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
 ! A/ update mass, temp, and salinity due to all terms except
 !    netMassOut, fluxes%heat_content_evap < 0, and penetrative SW
 ! B/ update mass, temp, and salinity from netMassOut and fluxes%heat_content_evap
-! C/ update temp due to penetrative SW
+! C/ update temp due to penetrative SW radiation
 !
 ! Arguments:
 !  (in)      CS     = Control structure returned by a previous diabatic_driver_init call
@@ -1141,7 +1145,15 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
     enddo ! i
 
     ! step C/ in the application of fluxes
-    ! Heat by the divergence of penetrating SW (this uses the updated thicknesses)
+    ! Heat by the convergence of penetrating SW (this uses the updated thicknesses)
+    
+    ! for diagnostics, save temperature before increment with SW heating 
+    if(CS%id_penSW_diag > 0) then 
+      do k=1,nz ; do i=is,ie
+        CS%penSW_diag(i,j,k) = tv%T(i,j,k)
+      enddo ; enddo
+    endif 
+
     if (calculate_energetics) then
       call absorbRemainingSW(G, h2d, opacityBand, nsw, j, dt, H_limit_fluxes, &
                              .false., .true., T2d, Pen_SW_bnd, TKE=pen_TKE_2d, dSV_dT=dSV_dT_2d)
@@ -1154,15 +1166,24 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
                              .false., .true., T2d, Pen_SW_bnd)
     endif
 
-    ! Copy slice back into model state
+    ! Copy incremented slice back into model state
     do k=1,nz ; do i=is,ie
       h(i,j,k)    = h2d(i,k)
       tv%T(i,j,k) = T2d(i,k)
     enddo ; enddo
 
+    ! diagnose heating (W/m2) applied to a grid cell from SW penetration 
+    if(CS%id_penSW_diag > 0) then 
+      do k=1,nz ; do i=is,ie
+        CS%penSW_diag(i,j,k) = (tv%T(i,j,k)-CS%penSW_diag(i,j,k))*h(i,j,k) * Idt * tv%C_p * G%H_to_kg_m2
+      enddo ; enddo
+    endif 
+
+
   enddo ! j-loop finish
 
-  if (CS%id_createdH > 0) call post_data(CS%id_createdH, CS%createdH, CS%diag)
+  if (CS%id_createdH   > 0) call post_data(CS%id_createdH  , CS%createdH  , CS%diag)
+  if (CS%id_penSW_diag > 0) call post_data(CS%id_penSW_diag, CS%penSW_diag, CS%diag)
 
   if (numberOfGroundings>0) then
     do i = 1, min(numberOfGroundings, maxGroundings)
@@ -1252,17 +1273,29 @@ subroutine diabatic_aux_init(Time, G, param_file, diag, CS, use_ePBL)
       "meter second-1")
   if (CS%id_createdH>0) allocate(CS%createdH(isd:ied,jsd:jed))
 
+  ! diagnose heating of a grid cell from convergence of SW heat into the cell.   
+  CS%id_penSW_diag = register_diag_field('ocean_model', 'rsdo',      &
+        diag%axesTL, Time, 'Downwelling Shortwave Flux in Sea Water',&
+        'Watt meter-2', standard_name='downwelling_shortwave_flux_in_sea_water')
+  if (CS%id_penSW_diag>0) then 
+     allocate(CS%penSW_diag(isd:ied,jsd:jed,nz))
+     CS%penSW_diag(:,:,:) = 0.0
+  endif 
+
   id_clock_uv_at_h = cpu_clock_id('(Ocean find_uv_at_h)', grain=CLOCK_ROUTINE)
-  id_clock_frazil = cpu_clock_id('(Ocean frazil)', grain=CLOCK_ROUTINE)
+  id_clock_frazil  = cpu_clock_id('(Ocean frazil)', grain=CLOCK_ROUTINE)
 
 end subroutine diabatic_aux_init
+
 
 subroutine diabatic_aux_end(CS)
   type(diabatic_aux_CS), pointer :: CS
 
   if (.not.associated(CS)) return
 
-  if (CS%id_createdH>0) deallocate(CS%createdH)
+  if (CS%id_createdH  >0) deallocate(CS%createdH)
+  if (CS%id_penSW_diag>0) deallocate(CS%penSW_diag)
+
   if (associated(CS)) deallocate(CS)
 
 end subroutine diabatic_aux_end
