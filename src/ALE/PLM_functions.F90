@@ -15,6 +15,8 @@ implicit none ; private
 
 public PLM_reconstruction, PLM_boundary_extrapolation
 
+real, parameter :: h_neglect = 1.E-30
+
 contains
 
 !------------------------------------------------------------------------------
@@ -63,9 +65,9 @@ subroutine PLM_reconstruction( N, h, u, ppoly_E, ppoly_coefficients )
     h_r = h(k+1)
 
     ! Compute limited slope
-    sigma_l = 2.0 * ( u_c - u_l ) / h_c
-    sigma_c = 2.0 * ( u_r - u_l ) / ( h_l + 2.0*h_c + h_r )
-    sigma_r = 2.0 * ( u_r - u_c ) / h_c
+    sigma_l = 2.0 * ( u_c - u_l ) / ( h_c + h_neglect)
+    sigma_c = 2.0 * ( u_r - u_l ) / ( h_l + 2.0*h_c + h_r + h_neglect)
+    sigma_r = 2.0 * ( u_r - u_c ) / ( h_c + h_neglect)
 
     if ( (sigma_l * sigma_r) .GT. 0.0 ) then
       slope = sign( min(abs(sigma_l),abs(sigma_c),abs(sigma_r)), sigma_c )
@@ -191,8 +193,8 @@ subroutine PLM_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coefficients )
   ! -----------------------------------------
   ! Left edge value in the left boundary cell
   ! -----------------------------------------
-  h0 = h(1)
-  h1 = h(2)
+  h0 = h(1) + h_neglect
+  h1 = h(2) + h_neglect
 
   u0 = u(1)
   u1 = u(2)
@@ -213,8 +215,8 @@ subroutine PLM_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coefficients )
   ! ------------------------------------------
   ! Right edge value in the left boundary cell
   ! ------------------------------------------
-  h0 = h(N-1)
-  h1 = h(N)
+  h0 = h(N-1) + h_neglect
+  h1 = h(N) + h_neglect
 
   u0 = u(N-1)
   u1 = u(N)
