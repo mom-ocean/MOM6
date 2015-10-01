@@ -2244,6 +2244,11 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
   endif
 
   deallocate(z_in,z_edges_in,temp_z,salt_z,mask_z)
+
+  call pass_var(h, G%Domain)
+  call pass_var(tv%T, G%Domain)
+  call pass_var(tv%S, G%Domain)
+
   call callTree_leave(trim(mod)//'()')
   call cpu_clock_end(id_clock_routine)
 
