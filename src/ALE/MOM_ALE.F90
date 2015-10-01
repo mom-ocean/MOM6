@@ -30,7 +30,7 @@ use P1M_functions, only : P1M_interpolation, P1M_boundary_extrapolation
 use P3M_functions, only : P3M_interpolation, P3M_boundary_extrapolation
 use MOM_regridding, only : initialize_regridding, regridding_main , end_regridding
 use MOM_regridding, only : uniformResolution
-use MOM_regridding, only : check_grid_integrity, setCoordinateResolution
+use MOM_regridding, only : inflate_vanished_layers_old, setCoordinateResolution
 use MOM_regridding, only : set_target_densities_from_G
 use MOM_regridding, only : regriddingCoordinateModeDoc, DEFAULT_COORDINATE_MODE
 use MOM_regridding, only : regriddingInterpSchemeDoc, regriddingDefaultInterpScheme
@@ -223,7 +223,7 @@ subroutine adjustGridForIntegrity( CS, G, h )
   type(ocean_grid_type), intent(in)                      :: G
   real, dimension(NIMEM_,NJMEM_, NKMEM_),  intent(inout) :: h
 
-  call check_grid_integrity( CS%regridCS, G, h(:,:,:) )
+  call inflate_vanished_layers_old( CS%regridCS, G, h(:,:,:) )
 
 end subroutine adjustGridForIntegrity
 
