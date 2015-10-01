@@ -27,7 +27,7 @@ use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_EOS,           only : calculate_density_derivs
 use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
 use MOM_grid,          only : ocean_grid_type
-use MOM_shortwave_abs, only : absorbRemainingSW, sumSWoverBands, optics_type
+use MOM_shortwave_abs, only : sumSWoverBands, optics_type
 use MOM_spatial_means, only : global_area_integral, global_area_mean 
 use MOM_variables,     only : surface, thermo_var_ptrs
 
@@ -254,7 +254,10 @@ subroutine extractFluxes1d(G, fluxes, optics, nsw, j, dt,                       
                   aggregate_FW_forcing)
 
 !  This subroutine extracts fluxes from the surface fluxes type. It works on a j-row
-!  for optimization purposes.  The 2d (i,j) wrapper is the next subroutine below. 
+!  for optimization purposes. The 2d (i,j) wrapper is the next subroutine below. 
+!
+!  This routine multiplies fluxes by dt, so that the result is an accumulation of fluxes 
+!  over a time step.
 
   type(ocean_grid_type),          intent(in)    :: G
   type(forcing),                  intent(inout) :: fluxes 
@@ -291,11 +294,11 @@ subroutine extractFluxes1d(G, fluxes, optics, nsw, j, dt,                       
 !                               of water leaving ocean surface over a time step (H units).
 !                               netMassOut < 0 means mass leaves ocean.  
 !  (out)     net_heat         = net heat at the surface over a time step associated with coupler
-!                               and restoring. We exclude two terms form net_heat: (1) heat that 
+!                               and restoring. We exclude two terms from net_heat: (1) heat that 
 !                               can leave bottom of surface cell via penetrative SW, (2) 
 !                               evaporation heat content, since do not yet know temp of evaporation. 
 !                               Units are (K * H).
-!  (out)     net_salt         = surface salt flux into the ocean over a time step (psu * H)
+!  (out)     net_salt         = surface salt flux into the ocean over a time step (ppt * H)
 !  (out)     pen_SW_bnd       = penetrating shortwave heating at the sea surface
 !                               in each penetrating band, in K H, size nsw x NIMEM_.
 !  (inout)   tv               = structure containing pointers to any available
@@ -594,8 +597,9 @@ subroutine extractFluxes2d(G, fluxes, optics, nsw, dt,                          
                   h, T, netMassInOut, netMassOut, net_heat, Net_salt, Pen_SW_bnd, tv,   &
                   aggregate_FW_forcing)
 
-  !  This subroutine extracts fluxes from the surface fluxes type. It is a 
-  !  wrapper for the 1d routine extractFluxes1d.
+  ! This subroutine extracts fluxes from the surface fluxes type. It multiplies the 
+  ! fluxes by dt, so that the result is an accumulation of the fluxes over a time step.
+  ! It is a wrapper for the 1d routine extractFluxes1d. 
 
   type(ocean_grid_type),                 intent(in)    :: G
   type(forcing),                         intent(inout) :: fluxes
@@ -654,9 +658,14 @@ subroutine extractFluxes2d(G, fluxes, optics, nsw, dt,                          
 end subroutine extractFluxes2d
 
 
-!> Calculates the surface buoyancy flux by adding up the heat, FW and salt fluxes.
 subroutine calculateBuoyancyFlux1d(G, fluxes, optics, h, Temp, Salt, tv, j, &
                                    buoyancyFlux, netHeatMinusSW, netSalt )
+
+!> Routine calculates the surface buoyancy flux by adding up the heat, FW & salt fluxes.
+!> These are actual fluxes, with units of stuff per time. Setting dt=1
+!> facilitates use of same extract routine that is otherwise used to get 
+!> fluxes accumulated over a time step.  
+
   type(ocean_grid_type),                 intent(in)    :: G              ! ocean grid
   type(forcing),                         intent(inout) :: fluxes         ! surface fluxes
   type(optics_type),                     pointer       :: optics         ! penetrating SW optics 
@@ -2144,9 +2153,10 @@ subroutine allocate_forcing_type(G, fluxes, stress, ustar, water, heat)
   type(ocean_grid_type), intent(in) :: G !< Ocean grid structure
   type(forcing),      intent(inout) :: fluxes !< Forcing fields structure
   logical, optional,     intent(in) :: stress !< If present and true, allocate taux, tauy
-  logical, optional,     intent(in) :: ustar !< If present and true, allocate ustar
-  logical, optional,     intent(in) :: water !< If present and true, allocate water fluxes
-  logical, optional,     intent(in) :: heat  !< If present and true, allocate heat fluxes
+  logical, optional,     intent(in) :: ustar  !< If present and true, allocate ustar
+  logical, optional,     intent(in) :: water  !< If present and true, allocate water fluxes
+  logical, optional,     intent(in) :: heat   !< If present and true, allocate heat fluxes
+
   ! Local variables
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   logical :: heat_water
@@ -2184,7 +2194,7 @@ subroutine allocate_forcing_type(G, fluxes, stress, ustar, water, heat)
     call myAlloc(fluxes%heat_content_massout,isd,ied,jsd,jed, .true.)
     call myAlloc(fluxes%heat_content_massin,isd,ied,jsd,jed, .true.)
   endif ; endif
- 
+
   contains
 
   subroutine myAlloc(array, is, ie, js, je, flag)
