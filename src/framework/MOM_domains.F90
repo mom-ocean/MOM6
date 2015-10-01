@@ -1189,8 +1189,8 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
     call MOM_error(FATAL, mesg)
   endif ; endif
 
-  if ((io_layout(1) > 0) .and. (io_layout(2) == 0)) io_layout(2) = layout(2)
-  if ((io_layout(2) > 0) .and. (io_layout(1) == 0)) io_layout(1) = layout(1)
+  if (io_layout(2) == 0) io_layout(2) = layout(2)
+  if (io_layout(1) == 0) io_layout(1) = layout(1)
 
   X_FLAGS = 0 ; Y_FLAGS = 0
   if (reentrant_x) X_FLAGS = CYCLIC_GLOBAL_DOMAIN
