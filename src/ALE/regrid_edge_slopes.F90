@@ -22,6 +22,8 @@ implicit none ; private
 public edge_slopes_implicit_h3
 public edge_slopes_implicit_h5
 
+real, parameter :: h_neglect = 1.E-30
+
 contains
 
 
@@ -96,9 +98,9 @@ subroutine edge_slopes_implicit_h3( N, h, u, edge_slopes )
     d = 4.0 * h0h1 * ( h0 + h1 ) + h1_3 + h0_3
 
     ! Coefficients
-    alpha = h1 * (h0_2 + h0h1 - h1_2) / d
-    beta  = h0 * (h1_2 + h0h1 - h0_2) / d
-    a = -12.0 * h0h1 / d
+    alpha = h1 * (h0_2 + h0h1 - h1_2) / ( d + h_neglect )
+    beta  = h0 * (h1_2 + h0h1 - h0_2) / ( d + h_neglect )
+    a = -12.0 * h0h1 / ( d + h_neglect )
     b = -a
     
     tri_l(i+1) = alpha
@@ -274,11 +276,11 @@ subroutine edge_slopes_implicit_h5( N, h, u, edge_slopes )
     g_5 = g_4 * g
     g_6 = g_3 * g_3
 
-    d2 = ( h1_2 - g_2 ) / h0
-    d3 = ( h1_3 - g_3 ) / h0
-    d4 = ( h1_4 - g_4 ) / h0
-    d5 = ( h1_5 - g_5 ) / h0
-    d6 = ( h1_6 - g_6 ) / h0
+    d2 = ( h1_2 - g_2 ) / ( h0 + h_neglect )
+    d3 = ( h1_3 - g_3 ) / ( h0 + h_neglect )
+    d4 = ( h1_4 - g_4 ) / ( h0 + h_neglect )
+    d5 = ( h1_5 - g_5 ) / ( h0 + h_neglect )
+    d6 = ( h1_6 - g_6 ) / ( h0 + h_neglect )
     
     g   = h2 + h3
     g_2 = g * g
@@ -287,11 +289,11 @@ subroutine edge_slopes_implicit_h5( N, h, u, edge_slopes )
     g_5 = g_4 * g
     g_6 = g_3 * g_3
     
-    n2 = ( g_2 - h2_2 ) / h3
-    n3 = ( g_3 - h2_3 ) / h3
-    n4 = ( g_4 - h2_4 ) / h3
-    n5 = ( g_5 - h2_5 ) / h3
-    n6 = ( g_6 - h2_6 ) / h3
+    n2 = ( g_2 - h2_2 ) / ( h3 + h_neglect )
+    n3 = ( g_3 - h2_3 ) / ( h3 + h_neglect )
+    n4 = ( g_4 - h2_4 ) / ( h3 + h_neglect )
+    n5 = ( g_5 - h2_5 ) / ( h3 + h_neglect )
+    n6 = ( g_6 - h2_6 ) / ( h3 + h_neglect )
 
     ! Compute matrix entries
     Asys(1,1) = 0.0
@@ -387,11 +389,11 @@ subroutine edge_slopes_implicit_h5( N, h, u, edge_slopes )
   h0ph1_3 = h0ph1_2 * h0ph1
   h0ph1_4 = h0ph1_2 * h0ph1_2
 
-  d2 = ( h1_2 - g_2 ) / h0
-  d3 = ( h1_3 - g_3 ) / h0
-  d4 = ( h1_4 - g_4 ) / h0
-  d5 = ( h1_5 - g_5 ) / h0
-  d6 = ( h1_6 - g_6 ) / h0
+  d2 = ( h1_2 - g_2 ) / ( h0 + h_neglect )
+  d3 = ( h1_3 - g_3 ) / ( h0 + h_neglect )
+  d4 = ( h1_4 - g_4 ) / ( h0 + h_neglect )
+  d5 = ( h1_5 - g_5 ) / ( h0 + h_neglect )
+  d6 = ( h1_6 - g_6 ) / ( h0 + h_neglect )
     
   g   = h2 + h3
   g_2 = g * g
@@ -400,11 +402,11 @@ subroutine edge_slopes_implicit_h5( N, h, u, edge_slopes )
   g_5 = g_4 * g
   g_6 = g_3 * g_3
     
-  n2 = ( g_2 - h2_2 ) / h3
-  n3 = ( g_3 - h2_3 ) / h3
-  n4 = ( g_4 - h2_4 ) / h3
-  n5 = ( g_5 - h2_5 ) / h3
-  n6 = ( g_6 - h2_6 ) / h3
+  n2 = ( g_2 - h2_2 ) / ( h3 + h_neglect )
+  n3 = ( g_3 - h2_3 ) / ( h3 + h_neglect )
+  n4 = ( g_4 - h2_4 ) / ( h3 + h_neglect )
+  n5 = ( g_5 - h2_5 ) / ( h3 + h_neglect )
+  n6 = ( g_6 - h2_6 ) / ( h3 + h_neglect )
 
   ! Compute matrix entries
   Asys(1,1) = 0.0
@@ -527,11 +529,11 @@ subroutine edge_slopes_implicit_h5( N, h, u, edge_slopes )
   h2ph3_3 = h2ph3_2 * h2ph3
   h2ph3_4 = h2ph3_2 * h2ph3_2
 
-  d2 = ( h1_2 - g_2 ) / h0
-  d3 = ( h1_3 - g_3 ) / h0
-  d4 = ( h1_4 - g_4 ) / h0
-  d5 = ( h1_5 - g_5 ) / h0
-  d6 = ( h1_6 - g_6 ) / h0
+  d2 = ( h1_2 - g_2 ) / ( h0 + h_neglect )
+  d3 = ( h1_3 - g_3 ) / ( h0 + h_neglect )
+  d4 = ( h1_4 - g_4 ) / ( h0 + h_neglect )
+  d5 = ( h1_5 - g_5 ) / ( h0 + h_neglect )
+  d6 = ( h1_6 - g_6 ) / ( h0 + h_neglect )
     
   g   = h2 + h3
   g_2 = g * g
@@ -540,11 +542,11 @@ subroutine edge_slopes_implicit_h5( N, h, u, edge_slopes )
   g_5 = g_4 * g
   g_6 = g_3 * g_3
     
-  n2 = ( g_2 - h2_2 ) / h3
-  n3 = ( g_3 - h2_3 ) / h3
-  n4 = ( g_4 - h2_4 ) / h3
-  n5 = ( g_5 - h2_5 ) / h3
-  n6 = ( g_6 - h2_6 ) / h3
+  n2 = ( g_2 - h2_2 ) / ( h3 + h_neglect )
+  n3 = ( g_3 - h2_3 ) / ( h3 + h_neglect )
+  n4 = ( g_4 - h2_4 ) / ( h3 + h_neglect )
+  n5 = ( g_5 - h2_5 ) / ( h3 + h_neglect )
+  n6 = ( g_6 - h2_6 ) / ( h3 + h_neglect )
 
   ! Compute matrix entries
   Asys(1,1) = 0.0
