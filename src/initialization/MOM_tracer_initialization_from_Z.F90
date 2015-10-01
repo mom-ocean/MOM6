@@ -471,7 +471,7 @@ subroutine horiz_interp_and_extrap_tracer(filename, varnam,  conversion, recnum,
   real :: PI_180
   integer :: rcode, ncid, varid, ndims, id, jd, kd, jdp
   integer :: i,j,k
-  integer, dimension(4) :: start, count, dims
+  integer, dimension(4) :: start, count, dims, dim_id
   real, dimension(:,:), allocatable :: x_in, y_in
   real, dimension(:), allocatable  :: lon_in, lat_in
   real, dimension(:), allocatable  :: lat_inp, last_row
@@ -485,7 +485,7 @@ subroutine horiz_interp_and_extrap_tracer(filename, varnam,  conversion, recnum,
   integer :: isd, ied, jsd, jed ! data domain indices
   integer :: ni, nj, nz         ! global grid size
   integer :: id_clock_read
-
+  character(len=12)  :: dim_name(4)
   logical :: debug=.true.
   real :: npoints,varAvg
   real, dimension(:,:), allocatable :: Depth
@@ -524,16 +524,27 @@ subroutine horiz_interp_and_extrap_tracer(filename, varnam,  conversion, recnum,
   rcode = NF90_INQUIRE_VARIABLE(ncid, varid, ndims=ndims, dimids=dims)
   if (rcode .ne. 0) call MOM_error(FATAL,'error inquiring dimensions hinterp_extrap')
   if (ndims < 3) call MOM_error(FATAL,"Variable "//trim(varnam)//" in file "// &
-              trim(filename)//" has too few dimensions.")            
-  rcode = NF90_INQUIRE_DIMENSION(ncid, dims(1), len=id)
+              trim(filename)//" has too few dimensions.")   
+         
+  rcode = NF90_INQUIRE_DIMENSION(ncid, dims(1), dim_name(1), len=id)
   if (rcode .ne. 0) call MOM_error(FATAL,"error reading dimension 1 data for "// &
                 trim(varnam)//" in file "// trim(filename)//" in hinterp_extrap")
-  rcode = NF90_INQUIRE_DIMENSION(ncid, dims(2), len=jd)
+  rcode = NF90_INQ_VARID(ncid, dim_name(1), dim_id(1))
+  if (rcode .ne. 0) call MOM_error(FATAL,"error finding variable "//trim(dim_name(1))//&
+                                 " in file "//trim(filename)//" in hinterp_extrap")
+  rcode = NF90_INQUIRE_DIMENSION(ncid, dims(2), dim_name(2), len=jd)
   if (rcode .ne. 0) call MOM_error(FATAL,"error reading dimension 2 data for "// &
                 trim(varnam)//" in file "// trim(filename)//" in hinterp_extrap")
-  rcode = NF90_INQUIRE_DIMENSION(ncid, dims(3), len=kd)
+  rcode = NF90_INQ_VARID(ncid, dim_name(2), dim_id(2))
+  if (rcode .ne. 0) call MOM_error(FATAL,"error finding variable "//trim(dim_name(2))//&
+                                 " in file "//trim(filename)//" in hinterp_extrap")
+  rcode = NF90_INQUIRE_DIMENSION(ncid, dims(3), dim_name(3), len=kd)
   if (rcode .ne. 0) call MOM_error(FATAL,"error reading dimension 3 data for "// &
                 trim(varnam)//" in file "// trim(filename)//" in hinterp_extrap")
+  rcode = NF90_INQ_VARID(ncid, dim_name(3), dim_id(3))
+  if (rcode .ne. 0) call MOM_error(FATAL,"error finding variable "//trim(dim_name(3))//&
+                                 " in file "//trim(filename)//" in hinterp_extrap")
+
 
   missing_value=0.0
   rcode = NF90_GET_ATT(ncid, varid, "_FillValue", missing_value)
@@ -551,17 +562,17 @@ subroutine horiz_interp_and_extrap_tracer(filename, varnam,  conversion, recnum,
   allocate(tr_z(isd:ied,jsd:jed,kd), mask_z(isd:ied,jsd:jed,kd))
 
   start = 1; count = 1; count(1) = id
-  rcode = NF90_GET_VAR(ncid, dims(1), lon_in, start, count)
-  if (rcode .ne. 0) call MOM_error(FATAL,"error reading dimension 1 values for "// &
-                trim(varnam)//" in file "// trim(filename)//" in hinterp_extrap")
+  rcode = NF90_GET_VAR(ncid, dim_id(1), lon_in, start, count)
+  if (rcode .ne. 0) call MOM_error(FATAL,"error reading dimension 1 values for var_name "// &
+                trim(varnam)//",dim_name "//trim(dim_name(1))//" in file "// trim(filename)//" in hinterp_extrap")
   start = 1; count = 1; count(1) = jd
-  rcode = NF90_GET_VAR(ncid, dims(2), lat_in, start, count)
-  if (rcode .ne. 0) call MOM_error(FATAL,"error reading dimension 2 values for "// &
-                trim(varnam)//" in file "// trim(filename)//" in  hinterp_extrap")
+  rcode = NF90_GET_VAR(ncid, dim_id(2), lat_in, start, count)
+  if (rcode .ne. 0) call MOM_error(FATAL,"error reading dimension 2 values for var_name "// &
+                trim(varnam)//",dim_name "//trim(dim_name(2))//" in file "// trim(filename)//" in  hinterp_extrap")
   start = 1; count = 1; count(1) = kd
-  rcode = NF90_GET_VAR(ncid, dims(3), z_in, start, count)
-  if (rcode .ne. 0) call MOM_error(FATAL,"error reading dimension 3 values for "// &
-                trim(varnam)//" in file "// trim(filename)//" in  hinterp_extrap")
+  rcode = NF90_GET_VAR(ncid, dim_id(3), z_in, start, count)
+  if (rcode .ne. 0) call MOM_error(FATAL,"error reading dimension 3 values for var_name "// &
+                trim(varnam//",dim_name "//trim(dim_name(3)))//" in file "// trim(filename)//" in  hinterp_extrap")
 
   call cpu_clock_end(id_clock_read)
 
@@ -651,7 +662,7 @@ subroutine horiz_interp_and_extrap_tracer(filename, varnam,  conversion, recnum,
       endif
       
     endif
-  
+
     call mpp_sync()
     call mpp_broadcast(tr_inp,id*jdp,root_PE())
     call mpp_sync_self ()
@@ -662,7 +673,8 @@ subroutine horiz_interp_and_extrap_tracer(filename, varnam,  conversion, recnum,
       do i=1,id
          if (abs(tr_inp(i,j)-missing_value) .gt. abs(G%Angstrom_Z*missing_value)) then
            mask_in(i,j)=1.0
-         else
+           tr_inp(i,j) = tr_inp(i,j) * conversion
+        else
            tr_inp(i,j)=missing_value
          endif
       enddo 
