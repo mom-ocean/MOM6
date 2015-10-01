@@ -2299,7 +2299,10 @@ subroutine register_diags(Time, G, CS, ADp)
 
   if (CS%use_temperature) then
     CS%id_T = register_diag_field('ocean_model', 'temp', diag%axesTL, Time, &
-        'Potential Temperature', 'Celsius')
+        'Potential Temperature', 'Celsius',                                 &
+         cmor_field_name="thetao", cmor_units="C",                          &
+         cmor_standard_name="sea_water_potential_temperature",              &
+         cmor_long_name ="Sea Water Potential Temperature")
     CS%id_S = register_diag_field('ocean_model', 'salt', diag%axesTL, Time, &
         long_name='Salinity', units='PPT', cmor_field_name='so',            &
         cmor_long_name='Sea Water Salinity', cmor_units='ppt',              &
