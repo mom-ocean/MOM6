@@ -18,6 +18,42 @@ module MOM_forcing_type
 !*           675 Mass Ave, Cambridge, MA 02139, USA.                   *
 !* or see:   http://www.gnu.org/licenses/gpl.html                      *
 !***********************************************************************
+!
+!********+*********+*********+*********+*********+*********+*********+**
+!*                                                                     *
+!*            Boundary flux related heating in the surface cell        *
+!*                                                                     *
+!*  There are many terms that contribute to boundary-related heating   *
+!*  of the k=1 grid cell.  We here outline the details.                *
+!*                                                                     *
+!*  net flux of heat crossing ocean surface                            *
+!*  hfds = SW+LW+lat+sens+mass transfer+frazil+restore                 *
+!*                                                                     *
+!*  Shortwave is split into two pieces:                                * 
+!*  SW        = pen_SW + nonpen_SW                                     *
+!*  pen_SW    = downwelling (penetrative)                              *
+!*  nonpen_SW = non-downwelling (non-penetrative)                      *
+!*                                                                     *
+!*  The nonpen_SW as that part of SW absorbed within a delta-function  *
+!*  surface layer. nonpen_SW is combined with LW+lat+sens in net_heat  *
+!*  inside routine extractFluxes1d. Notably, for many cases,           *
+!*  nonpen_SW=0, with details contained in the optics code.            *
+!*                                                                     * 
+!*  pen_SW is used for penetrative SW heating of k=1,nz cells, with    *
+!*  the amount of penetration dependent on optical properties.         *
+!*                                                                     *
+!* convergence of boundary-related heat into surface grid cell is      *
+!* heating(k=1) = hfds - pen_SW(leaving bottom of k=1)                 *
+!*              = nonpen_SW + (pen_SW(enter k=1)-pen_SW(leave k=1))    *
+!*                +LW+lat+sens+mass+fraz+restore                       *
+!*              = nonpen_SW+LW+lat+sens+mass+fraz+restore              *
+!*                + (pen_SW(enter k=1)-pen_SW(leave k=1))              *
+!*                                                                     *
+!* The term (pen_SW(enter k)-pen_SW(leave k)), for k=1,nz,             *
+!* is diagnosed as "rsdo" inside module                                *
+!* MOM6/src/parameterizations/vertical/MOM_diabatic_aux.F90            *
+!*                                                                     *
+!********+*********+*********+*********+*********+*********+*********+**
 
 use MOM_checksums,     only : hchksum, qchksum, uchksum, vchksum, is_NaN
 use MOM_cpu_clock,     only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
@@ -251,7 +287,7 @@ contains
 subroutine extractFluxes1d(G, fluxes, optics, nsw, j, dt,                               &
                   DepthBeforeScalingFluxes, useRiverHeatContent, useCalvingHeatContent, &
                   h, T, netMassInOut, netMassOut, net_heat, net_salt, pen_SW_bnd, tv,   &
-                  aggregate_FW_forcing)
+                  aggregate_FW_forcing, nonpenSW)
 
 !  This subroutine extracts fluxes from the surface fluxes type. It works on a j-row
 !  for optimization purposes. The 2d (i,j) wrapper is the next subroutine below. 
@@ -259,24 +295,25 @@ subroutine extractFluxes1d(G, fluxes, optics, nsw, j, dt,                       
 !  This routine multiplies fluxes by dt, so that the result is an accumulation of fluxes 
 !  over a time step.
 
-  type(ocean_grid_type),          intent(in)    :: G
-  type(forcing),                  intent(inout) :: fluxes 
-  type(optics_type),              pointer       :: optics
-  integer,                        intent(in)    :: nsw
-  integer,                        intent(in)    :: j
-  real,                           intent(in)    :: dt
-  real,                           intent(in)    :: DepthBeforeScalingFluxes
-  logical,                        intent(in)    :: useRiverHeatContent
-  logical,                        intent(in)    :: useCalvingHeatContent
-  real, dimension(NIMEM_,NKMEM_), intent(in)    :: h
-  real, dimension(NIMEM_,NKMEM_), intent(in)    :: T
-  real, dimension(NIMEM_),        intent(out)   :: netMassInOut
-  real, dimension(NIMEM_),        intent(out)   :: netMassOut 
-  real, dimension(NIMEM_),        intent(out)   :: net_heat
-  real, dimension(NIMEM_),        intent(out)   :: net_salt
-  real, dimension(:,:),           intent(out)   :: pen_SW_bnd
-  type(thermo_var_ptrs),          intent(inout) :: tv
-  logical,                        intent(in)    :: aggregate_FW_forcing
+  type(ocean_grid_type),             intent(in)    :: G
+  type(forcing),                     intent(inout) :: fluxes 
+  type(optics_type),                 pointer       :: optics
+  integer,                           intent(in)    :: nsw
+  integer,                           intent(in)    :: j
+  real,                              intent(in)    :: dt
+  real,                              intent(in)    :: DepthBeforeScalingFluxes
+  logical,                           intent(in)    :: useRiverHeatContent
+  logical,                           intent(in)    :: useCalvingHeatContent
+  real, dimension(NIMEM_,NKMEM_),    intent(in)    :: h
+  real, dimension(NIMEM_,NKMEM_),    intent(in)    :: T
+  real, dimension(NIMEM_),           intent(out)   :: netMassInOut
+  real, dimension(NIMEM_),           intent(out)   :: netMassOut 
+  real, dimension(NIMEM_),           intent(out)   :: net_heat
+  real, dimension(NIMEM_),           intent(out)   :: net_salt
+  real, dimension(:,:),              intent(out)   :: pen_SW_bnd
+  type(thermo_var_ptrs),             intent(inout) :: tv
+  logical,                           intent(in)    :: aggregate_FW_forcing
+  real, dimension(NIMEM_), optional, intent(out)   :: nonpenSW
 
 !  (in)      G                        = ocean grid structure
 !  (in)      fluxes                   = structure containing pointers to possible
@@ -293,17 +330,25 @@ subroutine extractFluxes1d(G, fluxes, optics, nsw, j, dt,                       
 !  (out)     netMassOut       = net mass flux (if non-Boussinesq) or volume flux (if Boussinesq)
 !                               of water leaving ocean surface over a time step (H units).
 !                               netMassOut < 0 means mass leaves ocean.  
-!  (out)     net_heat         = net heat at the surface over a time step associated with coupler
-!                               and restoring. We exclude two terms from net_heat: (1) heat that 
-!                               can leave bottom of surface cell via penetrative SW, (2) 
-!                               evaporation heat content, since do not yet know temp of evaporation. 
-!                               Units are (K * H).
+!  (out)     net_heat         = net heat at the surface accumulated over a time step associated
+!                               with coupler + restoring. We exclude two terms from net_heat: (1) SW 
+!                               that is not absorbed in top grid cell, (2) evaporation heat content, 
+!                               since do not yet know temperature of evaporation. 
+!                               Units of net_heat are (K * H).
 !  (out)     net_salt         = surface salt flux into the ocean over a time step (ppt * H)
 !  (out)     pen_SW_bnd       = penetrating shortwave heating at the sea surface
-!                               in each penetrating band, in K H, size nsw x NIMEM_.
+!                               in each penetrating band, in units (K H) and size nsw x NIMEM_,
+!                               where nsw=number of SW bands. pen_SW_bnd contains that portion  
+!                               the SW that penetrates through a tiny "skin-layer" at the top of 
+!                               the ocean. This heating is not part of net_heat.  
 !  (inout)   tv               = structure containing pointers to any available
 !                               thermodynamic fields. Here it is used to keep track of the
 !                               heat flux associated with net mass fluxes into the ocean.
+!  (out)     nonpenSW         = non-downwelling SW, which is that part of SW that is absorbed at 
+!                               the ocean surface, along with LW+SENS+LAT.  The nonpenSW heat flux 
+!                               is combined as part of net_heat. We sum over all SW bands when 
+!                               diagnosing nonpenSW. Units are (K * H). Note that there are cases 
+!                               when nonpenSW=0, in which case all SW radiation is penetrative SW.  
 
   real :: htot(SZI_(G))        ! total ocean depth (m for Bouss or kg/m^2 for non-Bouss)
   real :: Pen_sw_tot(SZI_(G))  ! sum across all bands of Pen_SW (K * H)
@@ -479,9 +524,14 @@ subroutine extractFluxes1d(G, fluxes, optics, nsw, j, dt,                       
       endif
     endif
 
-    ! remove penetrative portion of the SW that exits through bottom of the top cell
+    ! remove penetrative portion of the SW that is NOT absorbed within a 
+    ! tiny layer at the top of the ocean.  
     net_heat(i) = net_heat(i) - Pen_SW_tot(i)
 
+    ! diagnose non-downwelling SW 
+    if (present(nonPenSW)) then
+      nonPenSW(i) = scale * dt * J_m2_to_H * fluxes%sw(i,j) - Pen_SW_tot(i)
+    endif
 
     ! Salt fluxes
     Net_salt(i) = 0.0
