@@ -898,7 +898,7 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
   character(len=64)  :: dom_name, inc_nm
   character(len=200) :: mesg
 
-  integer :: xsiz, ysiz, nip_parsed, njp_parsed, nip_io_parsed, njp_io_parsed
+  integer :: xsiz, ysiz, nip_parsed, njp_parsed
   integer :: isc,iec,jsc,jec ! The bounding indices of the computational domain.
   character(len=8) :: char_xsiz, char_ysiz, char_niglobal, char_njglobal
 
@@ -1139,51 +1139,25 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
   call get_param(param_file, mod, "IO_LAYOUT", io_layout, &
                  "The processor layout to be used, or 0,0 to automatically \n"//&
                  "set the io_layout to be the same as the layout.", default=0, &
-                 do_not_log=.true.)
-  call get_param(param_file, mod, "NIPROC_IO", nip_io_parsed, &
-                 "The number of processors used for I/O in the \n"//&
-                 "x-direction, or 0 to equal NIPROC.", default=-1, &
-                 do_not_log=.true.)
-  call get_param(param_file, mod, "NJPROC_IO", njp_io_parsed, &
-                 "The number of processors used for I/O in the \n"//&
-                 "y-direction, or 0 to equal NJPROC.", default=-1, &
-                 do_not_log=.true.)
-  if (nip_io_parsed > -1) then
-    if ((io_layout(1) > 0) .and. (io_layout(1) /= nip_io_parsed)) &
-      call MOM_error(FATAL, "IO_LAYOUT and NIPROC_IO set inconsistently. "//&
-                     "Only IO_LAYOUT should be used.")
-    io_layout(1) = nip_io_parsed
-    call MOM_mesg("NIPROC_IO used to set IO_LAYOUT.  Shift to using IO_LAYOUT instead.")
-  endif
-  if (njp_io_parsed > -1) then
-    if ((io_layout(2) > 0) .and. (io_layout(2) /= njp_io_parsed)) &
-      call MOM_error(FATAL, "IO_LAYOUT and NJPROC_IO set inconsistently. "//&
-                     "Only IO_LAYOUT should be used.")
-    io_layout(2) = njp_io_parsed
-    call MOM_mesg("NJPROC_IO used to set IO_LAYOUT.  Shift to using IO_LAYOUT instead.")
-  endif
-  call log_param(param_file, mod, "IO_LAYOUT", io_layout, &
-                 "The processor layout to be used, or 0,0 to automatically \n"//&
-                 "set the io_layout to be the same as the layout.", default=0,&
                  layoutParam=.true.)
 
   if (io_layout(1) < 0) then
-    write(mesg,'("MOM_domains_init: NIPROC_IO = ",i4,".  Negative values of "//&
-         &" of NIPROC_IO are not allowed.")') io_layout(1)
+    write(mesg,'("MOM_domains_init: IO_LAYOUT(1) = ",i4,".  Negative values of "//&
+         &" of IO_LAYOUT(1) are not allowed.")') io_layout(1)
     call MOM_error(FATAL, mesg)
   elseif (io_layout(1) > 0) then ; if (modulo(layout(1), io_layout(1)) /= 0) then
-    write(mesg,'("MOM_domains_init: The x-direction I/O-layout, NIPROC_IO=",i4, &
+    write(mesg,'("MOM_domains_init: The x-direction I/O-layout, IO_LAYOUT(1)=",i4, &
          &", does not evenly divide the x-direction layout, NIPROC=,",i4,".")') &
           io_layout(1),layout(1)
     call MOM_error(FATAL, mesg)
   endif ; endif
 
   if (io_layout(2) < 0) then
-    write(mesg,'("MOM_domains_init: NJPROC_IO = ",i4,".  Negative values of "//&
-         &" of NJPROC_IO are not allowed.")') io_layout(2)
+    write(mesg,'("MOM_domains_init: IO_LAYOUT(2) = ",i4,".  Negative values of "//&
+         &" of IO_LAYOUT(2) are not allowed.")') io_layout(2)
     call MOM_error(FATAL, mesg)
   elseif (io_layout(2) /= 0) then ; if (modulo(layout(2), io_layout(2)) /= 0) then
-    write(mesg,'("MOM_domains_init: The y-direction I/O-layout, NJPROC_IO=",i4, &
+    write(mesg,'("MOM_domains_init: The y-direction I/O-layout, IO_LAYOUT(2)=",i4, &
          &", does not evenly divide the y-direction layout, NJPROC=,",i4,".")') &
           io_layout(2),layout(2)
     call MOM_error(FATAL, mesg)
