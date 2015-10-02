@@ -1101,9 +1101,9 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
   handles%id_prcme_ga = register_scalar_field('ocean_model', 'PRCmE_ga', Time, diag,             &
       long_name='Area averaged net surface water flux (precip+melt+liq runoff+ice calving-evap)',&
       units='kg m-2 s-1', standard_name='water_flux_into_sea_water_area_averaged',               &
-      cmor_field_name='ave_pr', cmor_units='kg m-2 s-1',                                         &
+      cmor_field_name='ave_wfo', cmor_units='kg m-2 s-1',                                        &
       cmor_standard_name='rainfall_flux_area_averaged',                                          & 
-      cmor_long_name='Rainfall Flux where Ice Free Ocean over Sea Area Averaged')
+      cmor_long_name='Water Transport Into Sea Water Area Averaged')
 
   handles%id_evap_ga = register_scalar_field('ocean_model', 'evap_ga', Time, diag,&
       long_name='Area averaged evap/condense at ocean surface',                   &
