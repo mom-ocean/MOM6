@@ -874,7 +874,6 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefficients, 
 
 end subroutine integrateReconOnInterval
 
-
 !> Calculates the change in interface positions based on h1 and h2
 subroutine dzFromH1H2( n1, h1, n2, h2, dx )
   integer,            intent(in)  :: n1 !< Number of cells on source grid
@@ -889,11 +888,11 @@ subroutine dzFromH1H2( n1, h1, n2, h2, dx )
   x1 = 0.
   x2 = 0.
   dx(1) = 0.
-  do k = 1, max(n1,n2)
+  do K = 1, max(n1,n2)
     if (k <= n1) x1 = x1 + h1(k) ! Interface k+1, right of source cell k
     if (k <= n2) then
       x2 = x2 + h2(k) ! Interface k+1, right of target cell k
-      dx(k+1) = x2 - x1 ! Change of interface k+1, target - source
+      dx(K+1) = x2 - x1 ! Change of interface k+1, target - source
     endif
   enddo
 #ifdef __DO_SAFETY_CHECKS__

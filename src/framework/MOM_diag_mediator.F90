@@ -39,7 +39,7 @@ use MOM_string_functions, only : lowercase
 use MOM_time_manager,     only : time_type
 use MOM_remapping,        only : remapping_CS, remapping_core, initialize_remapping, dzFromH1H2
 use MOM_regridding,       only : regridding_CS, initialize_regridding, setCoordinateResolution
-use MOM_regridding,       only : buildGridZStarColumn, setRegriddingMinimumThickness
+use MOM_regridding,       only : build_zstar_column, set_regrid_min_thickness
 
 use diag_manager_mod, only : diag_manager_init, diag_manager_end
 use diag_manager_mod, only : send_data, diag_axis_init
@@ -801,7 +801,7 @@ subroutine diag_update_target_grids(diag_cs)
     ! Initialise remapping system, on the first call
     call initialize_regridding(nz_dest, 'Z*', 'PPM_IH4', diag_cs%regrid_cs)
     call initialize_remapping(nz_src, 'PPM_IH4', diag_cs%remap_cs)
-    call setRegriddingMinimumThickness(G%Angstrom, diag_cs%regrid_cs)
+    call set_regrid_min_thickness(G%Angstrom, diag_cs%regrid_cs)
     call setCoordinateResolution(diag_cs%zi_remap(2:) - &
                                  diag_cs%zi_remap(:nz_dest), diag_cs%regrid_cs)
 
@@ -816,7 +816,7 @@ subroutine diag_update_target_grids(diag_cs)
       do i=G%iscB, G%iecB
         h_src(:) = 0.5 * (diag_cs%h(i,j,:) + diag_cs%h(i+1,j,:))
         depth = 0.5 * (G%bathyT(i,j) + G%bathyT(i+1,j))
-        call buildGridZstarColumn(diag_cs%regrid_cs, nz_dest, depth, &
+        call build_zstar_column(diag_cs%regrid_cs, nz_dest, depth, &
                                   sum(h_src(:)), diag_cs%zi_u(i, j, :))
         diag_cs%zi_u(i, j, :) = -diag_cs%zi_u(i, j, :)
       enddo
@@ -829,7 +829,7 @@ subroutine diag_update_target_grids(diag_cs)
       do i=G%isc, G%iec
         h_src(:) = 0.5 * (diag_cs%h(i,j,:) + diag_cs%h(i,j+1,:))
         depth = 0.5 * (G%bathyT(i, j) + G%bathyT(i, j+1))
-        call buildGridZstarColumn(diag_cs%regrid_cs, nz_dest, depth, &
+        call build_zstar_column(diag_cs%regrid_cs, nz_dest, depth, &
                                   sum(h_src(:)), diag_cs%zi_v(i, j, :))
         diag_cs%zi_v(i, j, :) = -diag_cs%zi_v(i, j, :)
       enddo
@@ -840,7 +840,7 @@ subroutine diag_update_target_grids(diag_cs)
   if (diag_cs%do_z_remapping_on_T .or. (.not. diag_cs%remapping_initialized)) then
     do j=G%jsc, G%jec
       do i=G%isc, G%iec
-        call buildGridZstarColumn(diag_cs%regrid_cs, nz_dest, G%bathyT(i, j), &
+        call build_zstar_column(diag_cs%regrid_cs, nz_dest, G%bathyT(i, j), &
                                   sum(diag_cs%h(i, j, :)), diag_cs%zi_T(i, j, :))
         diag_cs%zi_T(i, j, :) = -diag_cs%zi_T(i, j, :)
       enddo

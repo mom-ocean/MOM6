@@ -38,7 +38,8 @@ use MOM_regridding, only : regriddingCoordinateModeDoc, DEFAULT_COORDINATE_MODE
 use MOM_regridding, only : regriddingInterpSchemeDoc, regriddingDefaultInterpScheme
 use MOM_regridding, only : setRegriddingBoundaryExtrapolation
 use MOM_regridding, only : regriddingDefaultBoundaryExtrapolation
-use MOM_regridding, only : setRegriddingMinimumThickness, regriddingDefaultMinThickness
+use MOM_regridding, only : set_regrid_min_thickness, regriddingDefaultMinThickness
+use MOM_regridding, only : check_remapping_grid
 use MOM_regridding, only : regridding_CS
 use MOM_regridding, only : getCoordinateInterfaces, getCoordinateResolution
 use MOM_regridding, only : getCoordinateUnits, getCoordinateShortName
@@ -113,6 +114,7 @@ public ALE_getCoordinateUnits
 public ALE_writeCoordinateFile
 public ALE_updateVerticalGridType
 public ALE_initThicknessToCoord
+public check_remapping_grid
 
 ! -----------------------------------------------------------------------------
 ! The following are private constants
@@ -773,7 +775,7 @@ subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
                  "When regridding, this is the minimum layer\n"//&
                  "thickness allowed.", units="m",&
                  default=regriddingDefaultMinThickness )
-  call setRegriddingMinimumThickness( tmpReal, regridCS )
+  call set_regrid_min_thickness( tmpReal, regridCS )
 
   call get_param(param_file, mod, "BOUNDARY_EXTRAPOLATION", tmpLogical, &
                  "When defined, a proper high-order reconstruction\n"//&
