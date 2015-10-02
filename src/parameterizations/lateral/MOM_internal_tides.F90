@@ -54,11 +54,13 @@ use MOM_file_parser, only : read_param, get_param, log_param, log_version, param
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : slasher, vardesc
 use MOM_restart, only : register_restart_field, MOM_restart_CS, restart_init, save_restart
-use MOM_time_manager, only : time_type, operator(+), operator(/), operator(-)
-use MOM_time_manager, only : get_time, get_date, set_time, set_date 
-use MOM_time_manager, only : time_type_to_real
-use MOM_variables, only : surface
-use fms_mod, only : read_data
+use MOM_time_manager, only   : time_type, operator(+), operator(/), operator(-)
+use MOM_time_manager, only   : get_time, get_date, set_time, set_date 
+use MOM_time_manager, only   : time_type_to_real
+use MOM_variables, only      : surface
+use fms_mod, only            : read_data
+use MOM, only                : MOM_control_struct ! needed for tv and h (BDM)
+use MOM_wave_structure, only : wave_structure_CS
 !   Forcing is a structure containing pointers to the forcing fields
 ! which may be used to drive MOM.  All fluxes are positive downward.
 !   Surface is a structure containing pointers to various fields that
@@ -136,6 +138,9 @@ type, public :: int_tide_CS ; private
 
   type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
                         ! timing of diagnostic output.
+  type(MOM_control_struct), pointer :: MOM_CSp           => NULL()
+                        ! needed for tv and h (BDM)
+  type(wave_structure_CS),  pointer :: wavestructure_CSp => NULL()
   integer :: id_tot_En = -1, id_itide_drag = -1
   integer :: id_refl_pref = -1, id_refl_ang = -1, id_land_mask = -1 !(BDM)
   integer :: id_dx_Cv = -1, id_dy_Cu = -1 !(BDM)
@@ -307,10 +312,10 @@ subroutine propagate_int_tide(cg1, TKE_itidal_input, vel_btTide, Nb, dt, G, CS)
   ! Extract the energy for mixing due to scattering -BDM.
   if (CS%apply_drag) then
     ! CALCULATE MODAL STRUCTURE
-    do m=1,CS%NMode ; do fr=1,CS%Nfreq
-      call wave_structure(h, tv, G, cg1, full_halos=.true., w_strct, u_strct, z_depth, N2, numlay)
-      call wave_amplitude(w_strct, u_strct, K_h, f2, fr, W_amp, U_amp, Umag)
-      Ub(:,:,fr,m) = U_mag ! pick out bottom values
+    do m=1,CS%NMode ; do fr=1,CS%Nfreq    
+      call wave_structure(CS%MOM_CSp%h, CS%MOM_CSp%tv, G, cg1, CS%wavestructure_CSp, full_halos=.true.)
+      !call wave_amplitude(w_strct, u_strct, K_h, f2, fr, W_amp, U_amp, Umag)
+      !Ub(:,:,fr,m) = U_mag ! pick out bottom values
     enddo ; enddo
     ! Get near-bottom horizontal velocity magnitude
     ! A = umode/K_h**2

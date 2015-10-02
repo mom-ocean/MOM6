@@ -42,11 +42,12 @@ module MOM_wave_structure
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 
-!use MOM_diag_mediator, only : post_data, query_averaging_enabled, diag_ctrl
-!use MOM_diag_mediator, only : register_diag_field, safe_alloc_ptr, time_type
-!use MOM_error_handler, only : MOM_error, FATAL, WARNING
-!use MOM_file_parser, only : log_version, param_file_type
-use MOM_grid, only : ocean_grid_type
+use MOM_diag_mediator, only : post_data, query_averaging_enabled, diag_ctrl
+use MOM_diag_mediator, only : register_diag_field, safe_alloc_ptr, time_type
+use MOM_error_handler, only : MOM_error, FATAL, WARNING
+use MOM_file_parser, only : log_version, param_file_type
+use MOM_grid,       only : ocean_grid_type
+use MOM_variables,  only : thermo_var_ptrs
 
 implicit none ; private
 
@@ -56,28 +57,38 @@ public wave_structure, wave_structure_init
 
 type, public :: wave_structure_CS ; private
   type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
-                                   ! timing of diagnostic output. 
+                                   ! timing of diagnostic output.
+  real, allocatable, dimension(:,:,:) :: w_strct
+                                   ! Vertical structure of vertical velocity (normalized), in m s-1.
+  real, allocatable, dimension(:,:,:) :: u_strct
+                                   ! Vertical structure of horizontal velocity (normalized), in m s-1.
+  real, allocatable, dimension(:,:,:) :: z_depths
+                                   ! Depths of layer interfaces, in m.
+  real, allocatable, dimension(:,:,:) :: N2
+                                   ! Squared buoyancy frequency at each interface
+  real, allocatable, dimension(:,:)   :: num_intfaces
+                                   ! Number of layer interfaces (including surface and bottom)
+                                   
 end type wave_structure_CS
 
 contains
 
-subroutine wave_structure(h, tv, G, cg1, full_halos=.true., w_strct, u_strct, z_depth, N2, num_intfaces)
+subroutine wave_structure(h, tv, G, cg1, CS, full_halos)
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)  :: h
   type(thermo_var_ptrs),                 intent(in)  :: tv
   real, dimension(NIMEM_,NJMEM_),        intent(in)  :: cg1
   type(ocean_grid_type),                 intent(in)  :: G
-  type(wave_structure_CS), optional,     pointer     :: CS
-  logical,                 optional,     intent(in)  :: full_halos
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(out) :: w_strct, u_strct, depths
-  real, dimension(NIMEM_,NJMEM_),        intent(out) :: num_intfaces
+  type(wave_structure_CS),               pointer     :: CS
+  logical,optional,                      intent(in)  :: full_halos
 !    This subroutine determines the first mode internal wave velocity structure.
-! Arguments: 
-!  (in)      cg1 - The first mode internal gravity wave speed, in m s-1.
+! Arguments: h - Layer thickness, in m or kg m-2.
+!  (in)      tv - A structure containing the thermobaric variables.
 !  (in)      G - The ocean's grid structure.
-!  (out)     w_strct - Vertical structure of vertical velocity (normalized), in m s-1.
-!  (out)     u_strct - Vertical structure of horizontal velocity (normalized), in m s-1.
-!  (out)     depths - Depths of layer interfaces, in m.
-!  (out)     num_intfaces - Number of layer interfaces (including surface and bottom)
+!  (in)      cg1 - The first mode internal gravity wave speed, in m s-1.
+!  (in)      CS - The control structure returned by a previous call to
+!                 wave_structure_init.
+!  (in,opt)  full_halos - If true, do the calculation over the entire
+!                         computational domain.
 !
 ! This subroutine solves for the eigen vector [vertical structure, e(k)] associated with 
 ! the first baroclinic mode speed [i.e., smallest eigen value (lam = 1/c^2)] of the 
@@ -133,22 +144,28 @@ subroutine wave_structure(h, tv, G, cg1, full_halos=.true., w_strct, u_strct, z_
   integer, parameter :: max_itt = 10
   logical :: use_EOS    ! If true, density is calculated from T & S using an
                         ! equation of state.
-                        
-  real, dimension(:) :: e_guess, e_itt ! temporary vectors for TDMA
+  real, allocatable, dimension(:) :: w_strct, u_strct, z_int, N2 
+                        ! local names of variables in CS
+  real, allocatable, dimension(:) :: lam_z   ! product of eigen value and gprime(k)
+  real, allocatable, dimension(:) :: a_diag, b_diag, c_diag
+                                             ! diagonals of tridiagonal matrix
+  real, allocatable, dimension(:) :: e_guess ! guess at eigen vector with unit amplitde (for TDMA)
+  real, allocatable, dimension(:) :: e_itt   ! improved guess at eigen vector (from TDMA)
+  real    :: Pi
   integer :: kc
-  integer :: i, j, k, k2, itt, is, ie, js, je, nz
+  integer :: i, j, k, k2, itt, is, ie, js, je, nz, row
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   
-  if (present(CS)) then
+  !if (present(CS)) then
     if (.not. associated(CS)) call MOM_error(FATAL, "MOM_wave_structure: "// &
            "Module must be initialized before it is used.")
-  endif
+  !endif
   if (present(full_halos)) then ; if (full_halos) then
     is = G%isd ; ie = G%ied ; js = G%jsd ; je = G%jed
   endif ; endif
   
-  w_strct(:,:,:) = 0.0
+  Pi = (4.0*atan(1.0))
   
   S => tv%S ; T => tv%T
   g_Rho0 = G%g_Earth/G%Rho0
@@ -334,15 +351,13 @@ subroutine wave_structure(h, tv, G, cg1, full_halos=.true., w_strct, u_strct, z_
             do k=2,kc
               Igl(k) = 1.0/(gprime(k)*Hc(k)) ; Igu(k) = 1.0/(gprime(k)*Hc(k-1))
               z_int(k) = z_int(k-1) + Hc(k-1)
-              N2(k) = gprime(k)/(0.5*(Hc(k)+Hc(k-1))
+              N2(k) = gprime(k)/(0.5*(Hc(k)+Hc(k-1)))
               lam_z(k) = lam*gprime(k)
             enddo
             z_int(kc+1) = z_int(kc)+Hc(kc)
-            if (abs(z_int(kc+1)-htot)>1e-30) then
+            if (abs(z_int(kc+1)-htot(i)) > 1.e-30) then
               call MOM_error(WARNING, "wave_structure: mismatch in total depths")
             endif
-            z_depth(i,j,1:kc+1) = z_int(:)
-            num_intfaces(i,j) = kc+1
 
             ! Populate interior rows of tridiagonal matrix; must multiply through by
             ! gprime to get tridiagonal matrix to the symmetrical form:
@@ -373,20 +388,27 @@ subroutine wave_structure(h, tv, G, cg1, full_halos=.true., w_strct, u_strct, z_
               call tridiag_solver(a_diag,b_diag,c_diag,lam_z,e_guess,'TDMA_T',e_itt)
               e_guess = e_itt/sqrt(sum(e_itt**2))                           
             enddo ! itt-loop
-            w_strct(i,j,2:kc) = e_guess
-            w_strct(i,j,1) = 0.0    ! rigid lid at surface
-            w_strct(i,j,kc+1) = 0.0 ! zero-flux at bottom
+            w_strct(2:kc) = e_guess
+            w_strct(1)    = 0.0    ! rigid lid at surface
+            w_strct(kc+1) = 0.0 ! zero-flux at bottom
+            
+            ! Store values in control structure
+            CS%w_strct(i,j,1:kc+1)  = w_strct
+            CS%z_depths(i,j,1:kc+1) = z_int
+            CS%N2(i,j,1:kc+1)       = N2            
+            CS%num_intfaces(i,j)    = kc+1            
           endif  ! kc >= 2?
         endif ! drxh_sum >= 0?
       endif ! mask2dT > 0.5?
     enddo ! i-loop
   enddo ! j-loop
   
-  do j=js,je
-    do j=is,ie
-      !!!calc u_strct!!!
-    enddo ! i-loop
-  enddo !j-loop
+  !do j=js,je
+  !  do i=is,ie
+  !    !!!calc u_strct!!!
+  !    CS%u_strct(i,j,:)    = u_strct
+  !  enddo ! i-loop
+  !enddo !j-loop
   
 end subroutine wave_structure
 
@@ -404,35 +426,74 @@ subroutine tridiag_solver(a,b,c,h,y,method,x)
 !  (in)      b - middle diagonal
 !  (in)      c - upper diagonal with last entry equal to zero
 !  (in)      h - vector of values that have already been added to b; used for 
-!                systems of the form (e.g. layer thickness in vertical diffusion case):
+!                systems of the form (e.g. average layer thickness in vertical diffusion case):
 !                [ -alpha(k-1/2) ]                       * e(k-1) +
 !                [  alpha(k-1/2) + alpha(k+1/2) + h(k) ] * e(k)   +
 !                [ -alpha(k+1/2) ]                       * e(k+1) = y(k)
+!                where a(k)=[-alpha(k-1/2)], b(k)=[alpha(k-1/2)+alpha(k+1/2) + h(k)],
+!                and c(k)=[-alpha(k+1/2)].
 !  (in)      y - vector of known values on right hand side
 !  (out)     x - vector of unknown values to solve for
 
-  integer :: n  = size(y)                 ! number of rows index in A matrix
-  real, dimension(1:n) :: c_prime, yprime ! intermediate values for solver
+  integer :: nrow                         ! number of rows in A matrix
+  real, allocatable, dimension(:) :: c_prime, y_prime, q, alpha
+                                          ! intermediate values for solvers
+  real    :: Q_prime, beta                ! intermediate values for solver
   integer :: k                            ! row (e.g. interface) index
   
-  if (method = 'TDMA_T') then
+  nrow = size(y)
+  
+  if (method == 'TDMA_T') then
     ! Standard Thomas algoritim (4th variant)
     c_prime(:) = 0.0       ; y_prime(:) = 0.0
     c_prime(1) = c(1)/b(1) ; y_prime(1) = y(1)/b(1)
     ! Forward sweep
-    do k=2,n-1
+    do k=2,nrow-1
       c_prime(k) = c(k)/(b(k)-a(k)*c_prime(k-1))
     enddo
-    do k=2,n
+    do k=2,nrow
       y_prime(k) = (y(k)-a(k)*y_prime(k-1))/(b(k)-a(k)*c_prime(k-1))
     enddo
-    x(n) = y_prime(n)
+    x(nrow) = y_prime(nrow)
     ! Backward sweep
-    do k=n-1,-1,1
+    do k=nrow-1,-1,1
       x(k) = y_prime(k)-c_prime(k)*x(k+1)
     enddo
-  elseif (method = 'TDMA_H') then
-    ! Standard Thomas algoritim (4th variant) w/ Hallberg substitution
+  elseif (method == 'TDMA_H') then
+    ! Thomas algoritim (4th variant) w/ Hallberg substitution.
+    ! For a layered system where k is at interfaces, alpha{k+1/2} refers to
+    ! some property (e.g. inverse thickness for mode-structure problem) of the 
+    ! layer below and alpha{k-1/2} refers to the layer above. 
+    ! Here, alpha(k)=alpha{k+1/2} and alpha(k-1)=alpha{k-1/2}.
+    ! Formulation requires symmetry - check for it
+    do k=1,nrow-1
+      if (abs(a(k+1)-c(k)) > 1.e-30) then
+        call MOM_error(WARNING, "tridiag_solver: matrix not symmetric; need symmetry when invoking TDMA_H")
+      endif
+    enddo
+    alpha = -c
+    ! Alpha of the bottom-most layer is not necessarily zero. Therefore,
+    ! back out the value from the provided b(nrow and h(nrow) values
+    alpha(nrow)   = b(nrow)-h(nrow)-alpha(nrow-1)
+    ! Prime other variables
+    beta       = 1/b(1)
+    y_prime(:) = 0.0       ; q(:) = 0.0
+    y_prime(1) = beta*y(1) ; q(1) = beta*alpha(1)
+    Q_prime    = 1-q(1)
+    ! Forward sweep
+    do k=2,nrow-1
+      beta = 1/(h(k)+alpha(k-1)*Q_prime+alpha(k))
+      q(k) = beta*alpha(k)
+      y_prime(k) = beta*(y(k)+alpha(k-1)*y_prime(k-1))
+      Q_prime = beta*(h(k)+alpha(k-1)*Q_prime)
+    enddo
+    beta = 1/(h(nrow)+alpha(nrow-1)*Q_prime+alpha(nrow))
+    y_prime(nrow) = beta*(y(nrow)+alpha(nrow-1)*y_prime(nrow-1))
+    x(nrow) = y_prime(nrow)
+    ! Backward sweep
+    do k=nrow-1,-1,1
+      x(k) = y_prime(k)+q(k)*x(k+1)
+    enddo
   endif
   
 end subroutine tridiag_solver
