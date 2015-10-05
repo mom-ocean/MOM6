@@ -178,19 +178,14 @@ integer :: doc_unit = -1
 
 contains
 
+!> Sets up diagnostics axes
 subroutine set_axes_info(G, param_file, diag_cs, set_vertical)
-  type(ocean_grid_type),        intent(inout) :: G
-  type(param_file_type),        intent(in)    :: param_file
-  type(diag_ctrl),         intent(inout) :: diag_cs
-  logical, optional,            intent(in)    :: set_vertical
-
-! Arguments:
-!  (inout)  G            - ocean grid structure.
-!  (in)     param_file   - structure indicating the open file to parse for
-!                          model parameter values.
-!  (inout)   diag_cs   - structure used to regulate diagnostic output.
-!  (in,opt) set_vertical - If true (or missing), set up the vertical axes.
-
+  type(ocean_grid_type), intent(inout) :: G !< Ocean grid structure
+  type(param_file_type), intent(in)    :: param_file !< Parameter file structure
+  type(diag_ctrl),       intent(inout) :: diag_cs !< Diagnostics control structure
+  logical, optional,     intent(in)    :: set_vertical !< If true or missing, set up
+                                                       !! vertical axes
+  ! Local variables
   integer :: id_xq, id_yq, id_zl, id_zi, id_xh, id_yh, id_zzl, id_zzi
   integer :: k, nz
   integer :: nzi(4)
@@ -313,6 +308,7 @@ subroutine set_axes_info(G, param_file, diag_cs, set_vertical)
     allocate(diag_cs%zi_remap(nzi(1)))
     allocate(diag_cs%zl_remap(nzi(1) - 1))
     call MOM_read_data(filename, varname, diag_cs%zi_remap)
+    diag_cs%zi_remap(:) = abs( diag_cs%zi_remap(:) ) ! Always convert heights into depths
     ! Calculate layer positions
     diag_cs%zl_remap(:) = diag_cs%zi_remap(1:nzi(1)-1) + &
                           (diag_cs%zi_remap(2:) - diag_cs%zi_remap(:nzi(1)-1)) / 2
