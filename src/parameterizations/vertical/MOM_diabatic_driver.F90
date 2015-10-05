@@ -525,9 +525,6 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
        !  cg1(:,j) = ((7.-1.)/14000000.)*G%geoLatBu(:,j) + (1.-((7.-1.)/14000000.)*-7000000.)
        !enddo
     endif
-    
-    ! CALCULATE MODAL STRUCTURE (BDM)
-    !call wave_structure(h, tv, G, cg1, full_halos=.true., wmode, umode, z_depth, N2, numlay)
 
     if (CS%int_tide_source_test) then
       ! BUILD 2D ARRAY WITH POINT SOURCE FOR TESTING (BDM)

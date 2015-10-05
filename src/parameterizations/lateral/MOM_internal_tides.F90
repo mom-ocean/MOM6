@@ -60,7 +60,7 @@ use MOM_time_manager, only   : time_type_to_real
 use MOM_variables, only      : surface
 use fms_mod, only            : read_data
 use MOM, only                : MOM_control_struct ! needed for tv and h (BDM)
-use MOM_wave_structure, only : wave_structure_CS
+use MOM_wave_structure, only : wave_structure, wave_structure_CS
 !   Forcing is a structure containing pointers to the forcing fields
 ! which may be used to drive MOM.  All fluxes are positive downward.
 !   Surface is a structure containing pointers to various fields that
@@ -180,7 +180,7 @@ subroutine propagate_int_tide(cg1, TKE_itidal_input, vel_btTide, Nb, dt, G, CS)
   real, dimension(SZI_(G),SZJ_(G),CS%nMode) :: &
     c1
   real, dimension(SZI_(G),SZJ_(G),CS%nFreq,CS%nMode) :: &
-    Ub
+    tot_En_mode, Ub
   real, dimension(SZI_(G),SZJB_(G)) :: &
     flux_heat_y, &
     flux_prec_y
@@ -286,11 +286,13 @@ subroutine propagate_int_tide(cg1, TKE_itidal_input, vel_btTide, Nb, dt, G, CS)
 
   if (CS%apply_drag .or. (CS%id_tot_En > 0)) then
     tot_En(:,:) = 0.0
-    do m=1,CS%NMode ; do fr=1,CS%Nfreq ; do a=1,CS%nAngle
-      do j=js,je ; do i=is,ie
+    tot_En_mode(:,:,:,:) = 0.0
+    do m=1,CS%NMode ; do fr=1,CS%Nfreq
+      do j=js,je ; do i=is,ie ; do a=1,CS%nAngle
         tot_En(i,j) = tot_En(i,j) + CS%En(i,j,a,fr,m)
-      enddo ; enddo
-    enddo ; enddo ; enddo
+        tot_En_mode(i,j,fr,m) = tot_En_mode(i,j,fr,m) + CS%En(i,j,a,fr,m)
+      enddo ; enddo ; enddo
+    enddo ; enddo
   endif
 
   ! Extract the energy for mixing (original).
@@ -313,9 +315,10 @@ subroutine propagate_int_tide(cg1, TKE_itidal_input, vel_btTide, Nb, dt, G, CS)
   if (CS%apply_drag) then
     ! CALCULATE MODAL STRUCTURE
     do m=1,CS%NMode ; do fr=1,CS%Nfreq    
-      call wave_structure(CS%MOM_CSp%h, CS%MOM_CSp%tv, G, cg1, CS%wavestructure_CSp, full_halos=.true.)
-      !call wave_amplitude(w_strct, u_strct, K_h, f2, fr, W_amp, U_amp, Umag)
-      !Ub(:,:,fr,m) = U_mag ! pick out bottom values
+      call wave_structure(CS%MOM_CSp%h, CS%MOM_CSp%tv, G, c1(:,:,m), CS%frequency(fr), &
+                          CS%wavestructure_CSp, tot_En_mode(:,:,fr,m), full_halos=.true.)
+      !call wave_amplitude(tot_En_mode(:,:,fr,m), w_strct, u_strct, K_h, f2, fr, W_amp, U_amp, Umag)
+      !Ub(:,:,fr,m) = U_mag(end) ! pick out bottom values
     enddo ; enddo
     ! Get near-bottom horizontal velocity magnitude
     ! A = umode/K_h**2
