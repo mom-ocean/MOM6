@@ -278,23 +278,34 @@ subroutine set_axes_info(G, param_file, diag_cs, set_vertical)
                  "                          contains interface positions.\n",&
                  default="")
   if (len_trim(string) > 0) then
-    call get_param(param_file, mod, "INPUTDIR", inputdir, default=".")
-    inputdir = slasher(inputdir)
-    filename = trim(inputdir) // trim(extractWord(trim(string(6:200)), 1))
-    varname = trim(extractWord(trim(string(6:200)), 2))
-    dimname = trim(extractWord(trim(string(6:200)), 3))
+    if (index(trim(string),'FILE:')/=1) then
+      call MOM_error(FATAL,"set_axes_info: "//&
+         "Only the 'FILE:file,var' format has been implemented so far. "//&
+         "Found '"//trim(string)//"'")
+    else
+      if (string(6:6)=='.' .or. string(6:6)=='/') then
+        filename = trim(inputdir) // trim(extractWord(trim(string(1:200)), 1))
+      else
+        call get_param(param_file, mod, "INPUTDIR", inputdir, default=".")
+        inputdir = slasher(inputdir)
+        filename = trim(inputdir) // trim(extractWord(trim(string(6:200)), 1))
+      endif
+      varname = trim(extractWord(trim(string(1:200)), 2))
+      dimname = trim(extractWord(trim(string(1:200)), 3))
 
-    if (.not. file_exists(trim(filename))) then
-      call MOM_error(FATAL,"set_axes_info: Specified file not found: "//&
-                           "Looking for '"//trim(filename)//"'")
+      if (.not. file_exists(trim(filename))) then
+        call MOM_error(FATAL,"set_axes_info: Specified file not found: "//&
+                             "Looking for '"//trim(filename)//"'")
+      endif
+      ! Check that the grid has expected format, units etc.
+      if (.not. check_grid_def(trim(filename), trim(varname))) then
+        call MOM_error(FATAL,"set_axes_info: Bad grid definition in "//&
+                             "'"//trim(filename)//"'")
+      endif
+      ! Log the expanded result as a comment since it cannot be read back in
+      call log_param(param_file, mod, "! Remapping z diagnostics", &
+                     trim(inputdir)//"/"//trim(filename)//","//trim(varname))
     endif
-    ! Check that the grid has expected format, units etc.
-    if (.not. check_grid_def(trim(filename), trim(varname))) then
-      call MOM_error(FATAL,"set_axes_info: Bad grid definition in "//&
-                           "'"//trim(filename)//"'")
-    endif
-    call log_param(param_file, mod, "DIAG_REMAP_Z_GRID_DEF", &
-                   trim(inputdir)//"/"//trim(filename)//","//trim(varname))
 
     ! Get interface dimensions
     call field_size(filename, varname, nzi)
