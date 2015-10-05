@@ -73,7 +73,7 @@ type, public :: wave_structure_CS ; !private
                                    ! Depths of layer interfaces, in m.
   real, allocatable, dimension(:,:,:) :: N2
                                    ! Squared buoyancy frequency at each interface
-  real, allocatable, dimension(:,:)   :: num_intfaces
+  integer, allocatable, dimension(:,:):: num_intfaces
                                    ! Number of layer interfaces (including surface and bottom)
                                    
 end type wave_structure_CS

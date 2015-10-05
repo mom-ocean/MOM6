@@ -188,7 +188,7 @@ subroutine propagate_int_tide(cg1, TKE_itidal_input, vel_btTide, Nb, dt, G, CS)
     tot_En, drag_scale
   real :: frac_per_sector, f2, I_rho0, I_D_here
   
-  integer :: a, m, fr, i, j, is, ie, js, je, isd, ied, jsd, jed, nAngle
+  integer :: a, m, fr, i, j, is, ie, js, je, isd, ied, jsd, jed, nAngle, n_end
   integer :: isd_g, jsd_g         ! start indices on data domain but referenced 
                                   ! to global indexing (for debuggin-BDM)
   integer :: id_g, jd_g           ! global (decomp-invar) indices
@@ -317,12 +317,12 @@ subroutine propagate_int_tide(cg1, TKE_itidal_input, vel_btTide, Nb, dt, G, CS)
     do m=1,CS%NMode ; do fr=1,CS%Nfreq    
       call wave_structure(CS%MOM_CSp%h, CS%MOM_CSp%tv, G, c1(:,:,m), CS%frequency(fr), &
                           CS%wavestructure_CSp, tot_En_mode(:,:,fr,m), full_halos=.true.)
-      !call wave_amplitude(tot_En_mode(:,:,fr,m), w_strct, u_strct, K_h, f2, fr, W_amp, U_amp, Umag)
-      !Ub(:,:,fr,m) = U_mag(end) ! pick out bottom values
-    enddo ; enddo
-    ! Get near-bottom horizontal velocity magnitude
-    ! A = umode/K_h**2
-    ! U_mag = (A*K_h/sqrt(2))*sqrt(f2/fr**2+1); Ub = U_mag(end);
+      ! pick out near-bottom baroclinic velocity values
+      do j=js,je ; do i=is,ie
+        n_end = CS%wavestructure_CSp%num_intfaces(i,j)
+        Ub(i,j,fr,m) = CS%wavestructure_CSp%Uavg_profile(i,j,n_end)
+      enddo ; enddo 
+    enddo ; enddo    
     Ub(:,:,:,:) = 0.0 ! placeholder
     call itidal_lowmode_loss(G, CS, Nb, Ub, CS%En, CS%TKE_itidal_loss_fixed, &
     CS%TKE_itidal_loss, dt)
