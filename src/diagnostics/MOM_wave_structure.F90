@@ -408,8 +408,8 @@ subroutine wave_structure(h, tv, G, cn, freq, CS, En, full_halos)
             
             ! Perform inverse iteration with tri-diag solver
             do itt=1,max_itt
-              call tridiag_solver(a_diag,b_diag,c_diag,lam_z,e_guess,'TDMA_T',e_itt)
-              e_guess = e_itt/sqrt(sum(e_itt**2))                           
+              call tridiag_solver(a_diag,b_diag,c_diag,lam_z,e_guess,"TDMA_T",e_itt)
+              e_guess = e_itt/sqrt(sum(e_itt**2))
             enddo ! itt-loop
             w_strct(2:kc) = e_guess
             w_strct(1)    = 0.0    ! rigid lid at surface
@@ -510,6 +510,10 @@ subroutine tridiag_solver(a,b,c,h,y,method,x)
   integer :: k                            ! row (e.g. interface) index
   
   nrow = size(y)
+  allocate(c_prime(nrow))
+  allocate(y_prime(nrow))
+  allocate(q(nrow))
+  allocate(alpha(nrow))
   
   if (method == 'TDMA_T') then
     ! Standard Thomas algoritim (4th variant)
@@ -564,13 +568,15 @@ subroutine tridiag_solver(a,b,c,h,y,method,x)
     enddo
   endif
   
+  deallocate(c_prime,y_prime,q,alpha)
+
 end subroutine tridiag_solver
 
 subroutine wave_structure_init(Time, G, param_file, diag, CS)
   type(time_type),             intent(in)    :: Time
   type(ocean_grid_type),       intent(in)    :: G
   type(param_file_type),       intent(in)    :: param_file
-  type(diag_ctrl), target,     intent(inout) :: diag
+  type(diag_ctrl), target,     intent(in)    :: diag
   type(wave_structure_CS),     pointer       :: CS
 ! Arguments: Time - The current model time.
 !  (in)      G - The ocean's grid structure.

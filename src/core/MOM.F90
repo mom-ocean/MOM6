@@ -614,7 +614,6 @@ type, public :: MOM_control_struct
   type(MEKE_CS),                 pointer :: MEKE_CSp               => NULL()
   type(VarMix_CS),               pointer :: VarMix                 => NULL()
   type(wave_speed_CS),           pointer :: wave_speed_CSp         => NULL()
-  type(wave_speed_CS),           pointer :: wave_structure_CSp     => NULL() !BDM
   type(tracer_registry_type),    pointer :: tracer_Reg             => NULL()
   type(tracer_advect_CS),        pointer :: tracer_adv_CSp         => NULL()
   type(tracer_hor_diff_CS),      pointer :: tracer_diff_CSp        => NULL()
@@ -2046,7 +2045,6 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   CS%useMEKE = MEKE_init(Time, G, param_file, diag, CS%MEKE_CSp, CS%MEKE, CS%restart_CSp)
 
   call wave_speed_init(Time, G, param_file, diag, CS%wave_speed_CSp)
-  call wave_structure_init(Time, G, param_file, diag, CS%wave_structure_CSp) !BDM
   call VarMix_init(Time, G, param_file, diag, CS%VarMix, CS%wave_speed_CSp)
   call set_visc_init(Time, G, param_file, diag, CS%visc, CS%set_visc_CSp)
 

@@ -59,7 +59,7 @@ use MOM_time_manager, only   : get_time, get_date, set_time, set_date
 use MOM_time_manager, only   : time_type_to_real
 use MOM_variables, only      : surface, thermo_var_ptrs
 use fms_mod, only            : read_data
-use MOM_wave_structure, only : wave_structure, wave_structure_CS
+use MOM_wave_structure, only : wave_structure_init, wave_structure, wave_structure_CS
 !   Forcing is a structure containing pointers to the forcing fields
 ! which may be used to drive MOM.  All fluxes are positive downward.
 !   Surface is a structure containing pointers to various fields that
@@ -133,7 +133,7 @@ type, public :: int_tide_CS ; private
 
   type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
                         ! timing of diagnostic output.
-  type(wave_structure_CS),  pointer :: wavestructure_CSp => NULL()
+  type(wave_structure_CS),  pointer :: wave_structure_CSp => NULL()
   integer :: id_tot_En = -1, id_itide_drag = -1
   integer :: id_refl_pref = -1, id_refl_ang = -1, id_land_mask = -1 !(BDM)
   integer :: id_dx_Cv = -1, id_dy_Cu = -1 !(BDM)
@@ -183,7 +183,7 @@ subroutine propagate_int_tide(h, tv, cg1, TKE_itidal_input, vel_btTide, Nb, dt, 
     tot_En, drag_scale
   real :: frac_per_sector, f2, I_rho0, I_D_here
   
-  integer :: a, m, fr, i, j, is, ie, js, je, isd, ied, jsd, jed, nAngle, n_end
+  integer :: a, m, fr, i, j, is, ie, js, je, isd, ied, jsd, jed, nAngle, nzm
   integer :: isd_g, jsd_g         ! start indices on data domain but referenced 
                                   ! to global indexing (for debuggin-BDM)
   integer :: id_g, jd_g           ! global (decomp-invar) indices
@@ -223,11 +223,6 @@ subroutine propagate_int_tide(h, tv, cg1, TKE_itidal_input, vel_btTide, Nb, dt, 
         CS%En(i,j,a,fr,m) = CS%En(i,j,a,fr,m) + & 
                             dt*frac_per_sector**(1-CS%q_itides)*TKE_itidal_input(i,j)
     enddo ; enddo ; enddo ; enddo
-
-    !### Delete this later.
-    !do m=1,CS%nMode ; do j=jsd,jed ; do i=isd,ied
-    !  c1(i,j,m) = 1.0 / real(m)
-    !enddo ; enddo ; enddo
   else
     call MOM_error(WARNING, "Internal tide energy is being put into a angular "//&
                             "band that does not exist.")
@@ -283,7 +278,7 @@ subroutine propagate_int_tide(h, tv, cg1, TKE_itidal_input, vel_btTide, Nb, dt, 
     tot_En(:,:) = 0.0
     tot_En_mode(:,:,:,:) = 0.0
     do m=1,CS%NMode ; do fr=1,CS%Nfreq
-      do j=js,je ; do i=is,ie ; do a=1,CS%nAngle
+      do j=jsd,jed ; do i=isd,ied ; do a=1,CS%nAngle
         tot_En(i,j) = tot_En(i,j) + CS%En(i,j,a,fr,m)
         tot_En_mode(i,j,fr,m) = tot_En_mode(i,j,fr,m) + CS%En(i,j,a,fr,m)
       enddo ; enddo ; enddo
@@ -311,14 +306,14 @@ subroutine propagate_int_tide(h, tv, cg1, TKE_itidal_input, vel_btTide, Nb, dt, 
     ! CALCULATE MODAL STRUCTURE
     do m=1,CS%NMode ; do fr=1,CS%Nfreq    
       call wave_structure(h, tv, G, c1(:,:,m), CS%frequency(fr), &
-                          CS%wavestructure_CSp, tot_En_mode(:,:,fr,m), full_halos=.true.)
+                          CS%wave_structure_CSp, tot_En_mode(:,:,fr,m), full_halos=.true.)
       ! pick out near-bottom baroclinic velocity values
-      do j=js,je ; do i=is,ie
-        n_end = CS%wavestructure_CSp%num_intfaces(i,j)
-        Ub(i,j,fr,m) = CS%wavestructure_CSp%Uavg_profile(i,j,n_end)
+      do j=jsd,jed ; do i=isd,ied
+        nzm = CS%wave_structure_CSp%num_intfaces(i,j)
+        Ub(i,j,fr,m) = CS%wave_structure_CSp%Uavg_profile(i,j,nzm)
       enddo ; enddo 
     enddo ; enddo    
-    Ub(:,:,:,:) = 0.0 ! placeholder
+    !Ub(:,:,:,:) = 0.0 ! placeholder
     call itidal_lowmode_loss(G, CS, Nb, Ub, CS%En, CS%TKE_itidal_loss_fixed, &
     CS%TKE_itidal_loss, dt)
   endif
@@ -446,10 +441,10 @@ subroutine itidal_lowmode_loss(G, CS, Nb, Ub, En, TKE_loss_fixed, TKE_loss, dt)
       frac_per_sector(a) = En(i,j,a,fr,m)/En_tot
     enddo
     ! using a placeholder here for Ub; delete later ----------------
-    Ub(:,:,:,:) = 0.0
-    if (En_tot > 0.0) then
-      Ub(i,j,fr,m) = 0.001*sqrt(En_tot)
-    endif !---------------------------------------------------------
+    !Ub(:,:,:,:) = 0.0
+    !if (En_tot > 0.0) then
+    !  Ub(i,j,fr,m) = 0.001*sqrt(En_tot)
+    !endif !---------------------------------------------------------
     ! Calculate TKE loss rate; units of [W m-2] here.
     TKE_loss_tot = TKE_loss_fixed(i,j) * Nb(i,j) * Ub(i,j,fr,m)**2
     TKE_sum_check = 0.0
@@ -2156,6 +2151,8 @@ subroutine internal_tides_init(Time, G, param_file, diag, CS)
                  Time, 'Conversion from barotropic to baroclinic tide, \n'//&
                  'a fraction of which goes into rays', 'W m-2') ! (BDM)
 
+  call wave_structure_init(Time, G, param_file, diag, CS%wave_structure_CSp) !BDM
+  
   allocate(CS%id_En_mode(CS%nFreq,CS%nMode)) ; CS%id_En_mode(:,:) = -1
   allocate(CS%id_En_ang_mode(CS%nFreq,CS%nMode)) ; CS%id_En_ang_mode(:,:) = -1
   allocate(CS%id_TKE_loss_mode(CS%nFreq,CS%nMode)) ; CS%id_TKE_loss_mode(:,:) = -1
