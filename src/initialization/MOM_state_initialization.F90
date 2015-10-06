@@ -2058,7 +2058,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
   call get_param(PF, mod, "Z_INIT_OLD_ALGORITHM", use_old_algorithm, &
                  "If true, only uses as many source cells as there are data points.\n"//&
                  "If false, inserts vanished layers at bottom with bottom most values.", &
-                 default=.true.)
+                 default=.false.)
 
 !   Read input grid coordinates for temperature and salinity field
 !   in z-coordinate dataset. The file is REQUIRED to contain the
