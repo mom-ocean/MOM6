@@ -1994,7 +1994,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
   type(remapping_CS) :: remapCS ! Remapping parameters and work arrays
 
   real, dimension(:,:,:), allocatable :: tmp1
-  logical :: homogenize, useALEremapping
+  logical :: homogenize, useALEremapping, use_old_algorithm
   character(len=10) :: remappingScheme
   real :: tempAvg, saltAvg
   integer :: nPoints, ans
@@ -2055,6 +2055,10 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
   call get_param(PF, mod, "Z_INIT_REMAPPING_SCHEME", remappingScheme, &
                  "The remapping scheme to use if using Z_INIT_ALE_REMAPPING\n"//&
                  "is True.", default="PPM_IH4")
+  call get_param(PF, mod, "Z_INIT_OLD_ALGORITHM", use_old_algorithm, &
+                 "If true, only uses as many source cells as there are data points.\n"//&
+                 "If false, inserts vanished layers at bottom with bottom most values.", &
+                 default=.true.)
 
 !   Read input grid coordinates for temperature and salinity field
 !   in z-coordinate dataset. The file is REQUIRED to contain the
@@ -2103,8 +2107,9 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
   if (rcode .ne. 0) missing_value_salt = NF90_FILL_DOUBLE
 
   allocate(lon_in(id),lat_in(jd),z_in(kd),z_edges_in(kd+1))
-  allocate(temp_z(isd:ied,jsd:jed,kd), salt_z(isd:ied,jsd:jed,kd), rho_z(isd:ied,jsd:jed,kd),&
-       & mask_z(isd:ied,jsd:jed,kd))
+  allocate(temp_z(isd:ied,jsd:jed,max(kd,nz)), salt_z(isd:ied,jsd:jed,max(kd,nz)), &
+          rho_z(isd:ied,jsd:jed,max(kd,nz)), mask_z(isd:ied,jsd:jed,max(kd,nz)))
+  mask_z(:,:,:) = 0. ; temp_z(:,:,:) = 0. ; salt_z(:,:,:) = 0.
 
   start = 1; count = 1; count(1) = id
   rcode = NF90_GET_VAR(ncid, dims(1), lon_in, start, count)
@@ -2374,10 +2379,10 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
   if (useALEremapping) then
     call cpu_clock_begin(id_clock_ALE)
     ! First we reserve a work space for reconstructions of the source data
-    allocate( h1(kd) )
-    allocate( tmpT1dIn(kd) )
-    allocate( tmpS1dIn(kd) )
-    call initialize_remapping( kd, remappingScheme, remapCS ) ! Data for reconstructions
+    allocate( h1( max(kd,nz) ) )
+    allocate( tmpT1dIn( max(kd,nz) ) )
+    allocate( tmpS1dIn( max(kd,nz) ) )
+    call initialize_remapping(  max(kd,nz) , remappingScheme, remapCS ) ! Data for reconstructions
     call remapDisableBoundaryExtrapolation( remapCS )
     ! Next we initialize the regridding package so that it knows about the target grid
     allocate( hTarget(nz) )
@@ -2392,8 +2397,8 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
       if (G%mask2dT(i,j)>0.) then
         ! Build the source grid
         zTopOfCell = 0. ; zBottomOfCell = 0. ; nPoints = 0
-        do k = 1, kd
-          if (mask_z(i,j,k) > 0.) then
+        do k = 1,  max(kd,nz) 
+          if (mask_z(i,j,k) > 0. .and. k<= kd) then
             zBottomOfCell = -min( z_edges_in(k+1), G%bathyT(i,j) )
             tmpT1dIn(k) = temp_z(i,j,k)
             tmpS1dIn(k) = salt_z(i,j,k)
@@ -2418,6 +2423,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
           zTopOfCell = zBottomOfCell ! Bottom becomes top for next value of k
         enddo
         ! Calcaulate an effectiveadisplacement, deltaE
+        if (.not. use_old_algorithm) nPoints = kd ! New approach uses vanished layers below data
         call dzFromH1H2( nPoints, h1, nz, h2, deltaE ) ! sets deltaE
         ! Now remap from h1 to h2=h1+div.deltaE
         call remapping_core( remapCS, nPoints, h1, tmpT1dIn, nz, deltaE, tmpT1d ) ! sets tmpT1d
