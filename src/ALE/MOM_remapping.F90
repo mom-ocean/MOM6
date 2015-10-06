@@ -1,14 +1,10 @@
+!> Provides column-wise vertical remapping functions
 module MOM_remapping
-!==============================================================================
-!
-! This file is part of MOM.
-!
-! Date of creation: 2008.06.09
-! L. White
-!
-! This module contains the main remapping routines. 
-!
-!==============================================================================
+
+! This file is part of MOM6. See LICENSE.md for the license.
+
+! Original module written by Laurent hite, 2008.06.09
+
 use MOM_error_handler, only : MOM_error, FATAL
 use MOM_string_functions, only : uppercase
 use polynomial_functions, only : evaluation_polynomial, integration_polynomial
@@ -24,21 +20,16 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-! -----------------------------------------------------------------------------
-! Container for private (module-wise) variables and parameters
-! -----------------------------------------------------------------------------
+!> Container for remapping parameters
 type, public :: remapping_CS
   private
-  ! Parameters
-  integer :: nk = 0                    ! Number of layers/levels in vertical
-  integer :: remapping_scheme = -911   ! Determines which reconstruction to use
-  integer :: degree=0                  ! Degree of polynomial reconstruction
-  logical :: boundary_extrapolation = .true.  ! If true, extrapolate boundaries
+  integer :: nk = 0                    !< Number of layers/levels in vertical
+  integer :: remapping_scheme = -911   !< Determines which reconstruction to use
+  integer :: degree=0                  !< Degree of polynomial reconstruction
+  logical :: boundary_extrapolation = .true. !< If true, extrapolate boundaries
 end type
 
-! -----------------------------------------------------------------------------
 ! The following routines are visible to the outside world
-! -----------------------------------------------------------------------------
 public remapping_core
 public initialize_remapping, end_remapping
 public remapEnableBoundaryExtrapolation, remapDisableBoundaryExtrapolation
@@ -46,26 +37,22 @@ public setReconstructionType
 public remappingUnitTests
 public dzFromH1H2
 
-! -----------------------------------------------------------------------------
 ! The following are private parameter constants
-! -----------------------------------------------------------------------------
-! List of remapping schemes
-integer, parameter  :: REMAPPING_PCM        = 0 ! O(h^1)
-integer, parameter  :: REMAPPING_PLM        = 1 ! O(h^2)
-integer, parameter  :: REMAPPING_PPM_H4     = 2 ! O(h^3)
-integer, parameter  :: REMAPPING_PPM_IH4    = 3 ! O(h^3)
-integer, parameter  :: REMAPPING_PQM_IH4IH3 = 4 ! O(h^4)
-integer, parameter  :: REMAPPING_PQM_IH6IH5 = 5 ! O(h^5)
+integer, parameter  :: REMAPPING_PCM        = 0 !< O(h^1) remapping scheme
+integer, parameter  :: REMAPPING_PLM        = 1 !< O(h^2) remapping scheme
+integer, parameter  :: REMAPPING_PPM_H4     = 2 !< O(h^3) remapping scheme
+integer, parameter  :: REMAPPING_PPM_IH4    = 3 !< O(h^3) remapping scheme
+integer, parameter  :: REMAPPING_PQM_IH4IH3 = 4 !< O(h^4) remapping scheme
+integer, parameter  :: REMAPPING_PQM_IH6IH5 = 5 !< O(h^5) remapping scheme
 
-! These control what routine to use for the remapping integration
-integer, parameter  :: INTEGRATION_PCM = 0  ! scope: global
-integer, parameter  :: INTEGRATION_PLM = 1  ! scope: global
-integer, parameter  :: INTEGRATION_PPM = 3  ! scope: global
-integer, parameter  :: INTEGRATION_PQM = 5  ! scope: global
+integer, parameter  :: INTEGRATION_PCM = 0  !< Piecewise Constant Method
+integer, parameter  :: INTEGRATION_PLM = 1  !< Piecewise Linear Method
+integer, parameter  :: INTEGRATION_PPM = 3  !< Piecewise Parabolic Method
+integer, parameter  :: INTEGRATION_PQM = 5  !< Piecewise Quartic Method
 
-character(len=40)  :: mod = "MOM_remapping" ! This module's name.
+character(len=40)  :: mod = "MOM_remapping" !< This module's name.
 
-! Documentation for external callers
+!> Documentation for external callers
 character(len=256), public :: remappingSchemesDoc = &
                  "PCM         (1st-order accurate)\n"//&
                  "PLM         (2nd-order accurate)\n"//&
@@ -73,7 +60,7 @@ character(len=256), public :: remappingSchemesDoc = &
                  "PPM_IH4     (3rd-order accurate)\n"//&
                  "PQM_IH4IH3  (4th-order accurate)\n"//&
                  "PQM_IH6IH5  (5th-order accurate)\n"
-character(len=3), public :: remappingDefaultScheme = "PLM"
+character(len=3), public :: remappingDefaultScheme = "PLM" !< Default remapping method
 
 ! This CPP macro embeds some safety checks
 #define __DO_SAFETY_CHECKS__
@@ -88,27 +75,16 @@ real, parameter :: h_neglect = 1.E-30 !< A dimensional (H units) number that can
                                       !! changing the numerical result, except where
                                       !! a division by zero would otherwise occur.
 
-! -----------------------------------------------------------------------------
-! This module contains the following routines
-! -----------------------------------------------------------------------------
 contains
 
-!------------------------------------------------------------------------------
-! Build a grid from h
-!------------------------------------------------------------------------------
+!> Calculate edge coordinate x from cell width h
 subroutine buildGridFromH(nz, h, x)
-!------------------------------------------------------------------------------
-! This routine calculates the coordinates x by integrating h.
-!------------------------------------------------------------------------------
-
-  ! Arguments
-  integer,               intent(in)    :: nz
-  real, dimension(nz),   intent(in)    :: h
-  real, dimension(nz+1), intent(inout) :: x
-
+  integer,               intent(in)    :: nz !< Number of cells
+  real, dimension(nz),   intent(in)    :: h  !< Cell widths
+  real, dimension(nz+1), intent(inout) :: x  !< Edge coordiantes starting at x(1)=0
+  ! Local variables
   integer :: k
 
-  ! Build start grid
   x(1) = 0.0
   do k = 1,nz
     x(k+1) = x(k) + h(k)
@@ -117,23 +93,18 @@ subroutine buildGridFromH(nz, h, x)
 end subroutine buildGridFromH
 
 
-!------------------------------------------------------------------------------
-! Check that two grids are consistent
-!------------------------------------------------------------------------------
+!> Check that two grids, xs and xf, are consistent to within roundoff.
+!! If strict=False, the end points of xs and xf are allowed to differ by
+!! numerical roundoff due to the nature of summation to obtain xs, xf.
+!! If strict=True, the end points must be identical.
 subroutine checkConsistantCoords(ns, xs, nf, xf, strict, msg)
-!------------------------------------------------------------------------------
-! Checks that xs and xf are consistent to within roundoff.
-! If strict=False, the end points of xs and xf are allowed to differ by
-! numerical roundoff due to the nature of summation to obtain xs, xf.
-! If strict=True, the end points must be identical.
-!------------------------------------------------------------------------------
-
-  ! Arguments
-  integer, intent(in) :: ns, nf
-  real,    intent(in) :: xs(ns+1), xf(nf+1)
-  logical, intent(in) :: strict
-  character(len=*), intent(in) :: msg
-
+  integer,          intent(in) :: ns !< Number of cells in grid xs
+  integer,          intent(in) :: nf !< Number of cells in grid xf
+  real,             intent(in) :: xs(ns+1) !< Edge coordinates
+  real,             intent(in) :: xf(nf+1) !< Edge coordinates
+  logical,          intent(in) :: strict !< If False, allows total grid size
+                                         !! to differ by round-off
+  character(len=*), intent(in) :: msg !< Message to issue if test fails
   ! Local variables
   integer :: k
   real    :: sumHs, sumHf
@@ -167,23 +138,20 @@ subroutine checkConsistantCoords(ns, xs, nf, xf, strict, msg)
 end subroutine checkConsistantCoords
 
 
-!------------------------------------------------------------------------------
-! Compare two summation estimates of positive data and judge if due to more
-! than round-off
-!------------------------------------------------------------------------------
+!> Compare two summation estimates of positive data and judge if due to more
+!! than round-off.
+!! When two sums are calculated from different vectors that should add up to
+!! the same value, the results can differ by round off. The round off error
+!! can be bounded to be proportional to the number of operations.
+!! This function returns true if the difference between sum1 and sum2 is
+!! larger than than the estimated round off bound.
+!! \note This estimate/function is only valid for summation of positive data.
 function isPosSumErrSignificant(n1, sum1, n2, sum2)
-!------------------------------------------------------------------------------
-! When two sums are calculated from different vectors that should add up to
-! the same value, the results can differ by round off. The round off error
-! can be bounded to be proportional to the number of operations.
-! This function returns true if the difference between sum1 and sum2 is
-! larger than than the estimated round off bound.
-! NOTE: This estimate/function is only valid for summation of positive data.
-!------------------------------------------------------------------------------
-  ! Arguments
-  integer, intent(in) :: n1, n2
-  real,    intent(in) :: sum1, sum2
-  logical             :: isPosSumErrSignificant
+  integer, intent(in) :: n1   !< Number of values in sum1
+  integer, intent(in) :: n2   !< Number of values in sum2
+  real,    intent(in) :: sum1 !< Sum of n1 values
+  real,    intent(in) :: sum2 !< Sum of n2 values
+  logical             :: isPosSumErrSignificant !< True if difference in sums is large
   ! Local variables
   real :: sumErr, allowedErr, eps
 
@@ -203,27 +171,19 @@ function isPosSumErrSignificant(n1, sum1, n2, sum2)
   endif
 end function isPosSumErrSignificant
 
-
-!------------------------------------------------------------------------------
-! Sum the product of two arrays
-!------------------------------------------------------------------------------
+!> Calculates the sum of h(:)*q(:), and optionally returns a bound on the
+!! roundoff error in the sum.
 subroutine sumHtimesQ(nz, h, q, sumHQ, sumErr)
-!------------------------------------------------------------------------------
-! This routine calculates the sum of h(:)*q(:), and optionally returns a
-! bound on the roundoff error in the sum.
-!------------------------------------------------------------------------------
-
-  ! Arguments
-  integer,             intent(in)  :: nz
-  real, dimension(nz), intent(in)  :: h, q
-  real,                intent(out) :: sumHQ
-  real, optional,      intent(out) :: sumErr
-
+  integer,             intent(in)  :: nz !< Number of cells
+  real, dimension(nz), intent(in)  :: h  !< Cell width
+  real, dimension(nz), intent(in)  :: q  !< Scalar value in cell
+  real,                intent(out) :: sumHQ !< Sum of h*q
+  real, optional,      intent(out) :: sumErr !< Estimate of round-off error
+  ! Local variables
   integer :: k
   real :: hq, eps
 
-  if (present(sumErr)) then
-    ! Calculate the sum and estimate errors
+  if (present(sumErr)) then ! Calculate the sum and estimate errors
     eps = epsilon(q(1))
     sumErr=0.
     sumHQ = 0.
@@ -232,8 +192,7 @@ subroutine sumHtimesQ(nz, h, q, sumHQ, sumErr)
       sumHQ = sumHQ + hq
       if (k>1) sumErr = sumErr + eps*max(abs(sumHQ),abs(hq))
     end do
-  else
-    ! Calculate the sum
+  else ! Calculate the sum
     sumHQ = 0.
     do k = 1,nz
       sumHQ = sumHQ + h(k)*q(k)
@@ -243,22 +202,21 @@ subroutine sumHtimesQ(nz, h, q, sumHQ, sumErr)
 end subroutine sumHtimesQ
 
 
-!------------------------------------------------------------------------------
-! Compare two summation estimates of signed data and judge if due to more
-! than round-off
-!------------------------------------------------------------------------------
+!> Compare two summation estimates of signed data and judge if due to more
+!! than round-off.
+!! When two sums are calculated from different vectors that should add up to
+!! the same value, the results can differ by round off. The round off error
+!! can be bounded to be proportional to the number of operations.
+!! This function returns true if the difference between sum1 and sum2 is
+!! larger than than the estimated round off bound.
 function isSignedSumErrSignificant(n1, maxTerm1, sum1, n2, maxTerm2, sum2)
-!------------------------------------------------------------------------------
-! When two sums are calculated from different vectors that should add up to
-! the same value, the results can differ by round off. The round off error
-! can be bounded to be proportional to the number of operations.
-! This function returns true if the difference between sum1 and sum2 is
-! larger than than the estimated round off bound.
-!------------------------------------------------------------------------------
-  ! Arguments
-  integer, intent(in) :: n1, n2
-  real,    intent(in) :: maxTerm1, sum1, maxTerm2, sum2
-  logical             :: isSignedSumErrSignificant
+  integer, intent(in) :: n1 !< Number of terms in sum1
+  integer, intent(in) :: n2 !< Number of terms in sum2
+  real,    intent(in) :: maxTerm1 !< Largest term in sum1
+  real,    intent(in) :: sum1 !< Sum of n1 terms
+  real,    intent(in) :: maxTerm2 !< Largest term in sum2
+  real,    intent(in) :: sum2 !< Sum of n2 terms
+  logical             :: isSignedSumErrSignificant !< True is difference in sums is large
   ! Local variables
   real :: sumErr, allowedErr, eps
 
@@ -278,25 +236,16 @@ function isSignedSumErrSignificant(n1, maxTerm1, sum1, n2, maxTerm2, sum2)
 end function isSignedSumErrSignificant
 
 
-!------------------------------------------------------------------------------
-! Remapping core routine
-!------------------------------------------------------------------------------
+!> Remaps column of values u0 on grid h0 to implied grid h1
+!! where the interfaces of h1 differ from those of h0 by dx.
 subroutine remapping_core( CS, n0, h0, u0, n1, dx, u1 )
-!------------------------------------------------------------------------------
-! This routine is basic in that it simply takes two grids and remaps the
-! field known on the first grid onto the second grid, following the rules
-! stored in the structure CS.
-!------------------------------------------------------------------------------
-
-  ! Arguments
-  type(remapping_CS), intent(in)    :: CS
-  integer,            intent(in)    :: n0 ! Number of cells on source grid
-  real, dimension(:), intent(in)    :: h0 ! cell widths on source grid
-  real, dimension(:), intent(in)    :: u0 ! cell averages on source grid
-  integer,            intent(in)    :: n1 ! Number of cells on target grid
-  real, dimension(:), intent(in)    :: dx ! Change in interface positions
-  real, dimension(:), intent(out)   :: u1 ! cell averages on target grid
-
+  type(remapping_CS), intent(in)    :: CS !< Remapping control structure
+  integer,            intent(in)    :: n0 !< Number of cells on source grid
+  real, dimension(:), intent(in)    :: h0 !< Cell widths on source grid
+  real, dimension(:), intent(in)    :: u0 !< Cell averages on source grid
+  integer,            intent(in)    :: n1 !< Number of cells on target grid
+  real, dimension(:), intent(in)    :: dx !< Change in interface positions
+  real, dimension(:), intent(out)   :: u1 !< Cell averages on target grid
   ! Local variables
   integer :: iMethod
   real, dimension(CS%nk,2)           :: ppoly_r_E            !Edge value of polynomial
@@ -311,7 +260,7 @@ subroutine remapping_core( CS, n0, h0, u0, n1, dx, u1 )
   real :: z0, z1
 
   if (dx(1) /= 0.) call MOM_error( FATAL, 'MOM_remapping, remapping_core: '//&
-             'Non-zero surface flux!' ) ! This is technically allowed but in avoided practice 
+             'Non-zero surface flux!' ) ! This is technically allowed but is avoided in practice
   totalH0 = 0.
   do k=1, n0
     totalH0 = totalH0 + h0(k)
@@ -344,7 +293,7 @@ subroutine remapping_core( CS, n0, h0, u0, n1, dx, u1 )
 #endif
 
   iMethod = -999
-  
+
   ! Reset polynomial
   ppoly_r_E(:,:) = 0.0
   ppoly_r_S(:,:) = 0.0
@@ -366,7 +315,7 @@ subroutine remapping_core( CS, n0, h0, u0, n1, dx, u1 )
       call PLM_reconstruction( n0, h0, u0, ppoly_r_E, ppoly_r_coefficients )
       if ( CS%boundary_extrapolation) then
         call PLM_boundary_extrapolation( n0, h0, u0, ppoly_r_E, ppoly_r_coefficients)
-      end if    
+      end if
       iMethod = INTEGRATION_PLM
     case ( REMAPPING_PPM_H4 )
       call edge_values_explicit_h4( n0, h0, u0, ppoly_r_E )
@@ -380,7 +329,7 @@ subroutine remapping_core( CS, n0, h0, u0, n1, dx, u1 )
       call PPM_reconstruction( n0, h0, u0, ppoly_r_E, ppoly_r_coefficients )
       if ( CS%boundary_extrapolation) then
         call PPM_boundary_extrapolation( n0, h0, u0, ppoly_r_E, ppoly_r_coefficients )
-      end if    
+      end if
       iMethod = INTEGRATION_PPM
     case ( REMAPPING_PQM_IH4IH3 )
       call edge_values_implicit_h4( n0, h0, u0, ppoly_r_E )
@@ -388,7 +337,7 @@ subroutine remapping_core( CS, n0, h0, u0, n1, dx, u1 )
       call PQM_reconstruction( n0, h0, u0, ppoly_r_E, ppoly_r_S, ppoly_r_coefficients )
       if ( CS%boundary_extrapolation) then
         call PQM_boundary_extrapolation_v1( n0, h0, u0, ppoly_r_E, ppoly_r_S, ppoly_r_coefficients )
-      end if    
+      end if
       iMethod = INTEGRATION_PQM
     case ( REMAPPING_PQM_IH6IH5 )
       call edge_values_implicit_h6( n0, h0, u0, ppoly_r_E )
@@ -396,7 +345,7 @@ subroutine remapping_core( CS, n0, h0, u0, n1, dx, u1 )
       call PQM_reconstruction( n0, h0, u0, ppoly_r_E, ppoly_r_S, ppoly_r_coefficients )
       if ( CS%boundary_extrapolation) then
         call PQM_boundary_extrapolation_v1( n0, h0, u0, ppoly_r_E, ppoly_r_S, ppoly_r_coefficients )
-      end if    
+      end if
       iMethod = INTEGRATION_PQM
     case default
       call MOM_error( FATAL, 'MOM_remapping, remapping_core: '//&
@@ -477,27 +426,24 @@ subroutine remapping_core( CS, n0, h0, u0, n1, dx, u1 )
 end subroutine remapping_core
 
 
-! -----------------------------------------------------------------------------
-! remapByProjection (integration of reconstructed profile)
-! -----------------------------------------------------------------------------
+!> Remaps column of values u0 on grid h0 to grid h1 by integrating
+!! over the projection of each h1 cell onto the h0 grid.
 subroutine remapByProjection( n0, h0, u0, ppoly0_E, ppoly0_coefficients, n1, h1, method, u1 )
-  ! Arguments
-  integer,       intent(in)    :: n0     ! number of cells in source grid
-  real,          intent(in)    :: h0(:)  ! source grid widths (size n0)
-  real,          intent(in)    :: u0(:)  ! source cell averages (size n0)
-  real,          intent(in)    :: ppoly0_E(:,:)            !Edge value of polynomial
-  real,          intent(in)    :: ppoly0_coefficients(:,:) !Coefficients of polynomial 
-  integer,       intent(in)    :: n1     ! number of cells in target grid
-  real,          intent(in)    :: h1(:)  ! target grid widths (size n1)
-  integer,       intent(in)    :: method ! remapping scheme to use
-  real,          intent(out)   :: u1(:)  ! target cell averages (size n1)
-  
+  integer,       intent(in)    :: n0     !< Number of cells in source grid
+  real,          intent(in)    :: h0(:)  !< Source grid widths (size n0)
+  real,          intent(in)    :: u0(:)  !< Source cell averages (size n0)
+  real,          intent(in)    :: ppoly0_E(:,:)            !< Edge value of polynomial
+  real,          intent(in)    :: ppoly0_coefficients(:,:) !< Coefficients of polynomial
+  integer,       intent(in)    :: n1     !< Number of cells in target grid
+  real,          intent(in)    :: h1(:)  !< Target grid widths (size n1)
+  integer,       intent(in)    :: method !< Remapping scheme to use
+  real,          intent(out)   :: u1(:)  !< Target cell averages (size n1)
   ! Local variables
   integer       :: iTarget
-  real          :: xL, xR       ! coordinates of target cell edges  
+  real          :: xL, xR       ! coordinates of target cell edges
 
   ! Loop on cells in target grid (grid1). For each target cell, we need to find
-  ! in which source cells the target cell edges lie. The associated indexes are 
+  ! in which source cells the target cell edges lie. The associated indexes are
   ! noted j0 and j1.
   xR = 0. ! Left boundary is at x=0
   do iTarget = 1,n1
@@ -507,43 +453,40 @@ subroutine remapByProjection( n0, h0, u0, ppoly0_E, ppoly0_coefficients, n1, h1,
 
     call integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefficients, method, &
                                    xL, xR, h1(iTarget), u1(iTarget) )
-    
+
   end do ! end iTarget loop on target grid cells
 
 end subroutine remapByProjection
 
 
-! -----------------------------------------------------------------------------
-! Remap using change in interface positions
-! -----------------------------------------------------------------------------
+!> Remaps column of values u0 on grid h0 to implied grid h1
+!! where the interfaces of h1 differ from those of h0 by dx.
+!! The new grid is defined relative to the original grid by change
+!!  dx1(:) = xNew(:) - xOld(:)
+!! and the remapping calculated so that
+!!  hNew(k) qNew(k) = hOld(k) qOld(k) + F(k+1) - F(k)
+!! where
+!!  F(k) = dx1(k) qAverage
+!! and where qAverage is the average qOld in the region zOld(k) to zNew(k).
 subroutine remapByDeltaZ( n0, h0, u0, ppoly0_E, ppoly0_coefficients, n1, dx1, method, u1, h1 )
-! The new grid is defined relative to the original grid by change
-!  dx1(:) = xNew(:) - xOld(:)
-! and the remapping calculated so that
-!  hNew(k) qNew(k) = hOld(k) qOld(k) + F(k+1) - F(k)
-! where
-!  F(k) = dx1(k) qAverage
-! and where qAverage is the average qOld in the region zOld(k) to zNew(k).
-  ! Arguments
-  integer,        intent(in)  :: n0     ! number of cells in source grid
-  real,           intent(in)  :: h0(:)  ! source grid widths (size n0)
-  real,           intent(in)  :: u0(:)  ! source cell averages (size n0)
-  real,           intent(in)  :: ppoly0_E(:,:)            !Edge value of polynomial
-  real,           intent(in)  :: ppoly0_coefficients(:,:) !Coefficients of polynomial 
-  integer,        intent(in)  :: n1     ! number of cells in target grid
-  real,           intent(in)  :: dx1(:) ! target grid edge positions (size n1+1)
-  integer                     :: method ! remapping scheme to use
-  real,           intent(out) :: u1(:)  ! target cell averages (size n1)
-  real, optional, intent(out) :: h1(:)  ! target grid widths (size n1)
-  
+  integer,        intent(in)  :: n0     !< Number of cells in source grid
+  real,           intent(in)  :: h0(:)  !< Source grid widths (size n0)
+  real,           intent(in)  :: u0(:)  !< Source cell averages (size n0)
+  real,           intent(in)  :: ppoly0_E(:,:)            !< Edge value of polynomial
+  real,           intent(in)  :: ppoly0_coefficients(:,:) !< Coefficients of polynomial
+  integer,        intent(in)  :: n1     !< Number of cells in target grid
+  real,           intent(in)  :: dx1(:) !< Target grid edge positions (size n1+1)
+  integer                     :: method !< Remapping scheme to use
+  real,           intent(out) :: u1(:)  !< Target cell averages (size n1)
+  real, optional, intent(out) :: h1(:)  !< Target grid widths (size n1)
   ! Local variables
   integer :: iTarget
-  real    :: xL, xR    ! coordinates of target cell edges  
+  real    :: xL, xR    ! coordinates of target cell edges
   real    :: xOld, hOld, uOld
   real    :: xNew, hNew
   real    :: uhNew, hFlux, uAve, fluxL, fluxR
-integer :: k
 #ifdef __DO_SAFETY_CHECKS__
+  integer :: k
   real    :: h0Total
 
   h0Total = 0.
@@ -625,34 +568,30 @@ integer :: k
       endif
       if (present(h1)) h1(iTarget) = hNew
     endif
-    
+
   end do ! end iTarget loop on target grid cells
 
 end subroutine remapByDeltaZ
 
 
-! -----------------------------------------------------------------------------
-! integrate the reconstructed profile over a single cell
-! -----------------------------------------------------------------------------
+!> Integrate the reconstructed column profile over a single cell
 subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefficients, method, &
                                      xL, xR, hC, uAve )
-  ! Arguments
-  integer, intent(in)  :: n0       ! number of cells in source grid
-  real,    intent(in)  :: h0(:)    ! source grid sizes (size n0)
-  real,    intent(in)  :: u0(:)       ! source cell averages
-  real,    intent(in)  :: ppoly0_E(:,:)            !Edge value of polynomial
-  real,    intent(in)  :: ppoly0_coefficients(:,:) !Coefficients of polynomial 
-  integer, intent(in)  :: method   ! remapping scheme to use
-  real,    intent(in)  :: xL, xR   ! left/right edges of target cell
-  real,    intent(in)  :: hC       ! cell width hC = xR - xL
-  real,    intent(out) :: uAve     ! average value on target cell
-  
+  integer, intent(in)  :: n0       !< Number of cells in source grid
+  real,    intent(in)  :: h0(:)    !< Source grid sizes (size n0)
+  real,    intent(in)  :: u0(:)    !< Source cell averages
+  real,    intent(in)  :: ppoly0_E(:,:)            !< Edge value of polynomial
+  real,    intent(in)  :: ppoly0_coefficients(:,:) !< Coefficients of polynomial
+  integer, intent(in)  :: method   !< Remapping scheme to use
+  real,    intent(in)  :: xL, xR   !< Left/right edges of target cell
+  real,    intent(in)  :: hC       !< Cell width hC = xR - xL
+  real,    intent(out) :: uAve     !< Average value on target cell
   ! Local variables
   integer :: j, k
-  integer :: jL, jR       ! indexes of source cells containing target 
+  integer :: jL, jR       ! indexes of source cells containing target
                           ! cell edges
   real    :: q            ! complete integration
-  real    :: xi0, xi1     ! interval of integration (local -- normalized 
+  real    :: xi0, xi1     ! interval of integration (local -- normalized
                           ! -- coordinates)
   real    :: x0jLl, x0jLr ! Left/right position of cell jL
   real    :: x0jRl, x0jRr ! Left/right position of cell jR
@@ -698,7 +637,7 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefficients, 
   enddo
 
 ! ! HACK to handle round-off problems. Need only at  j=n0.
-! ! This moves the effective cell boundary outwards a smidgen.  
+! ! This moves the effective cell boundary outwards a smidgen.
 ! if (xL>x0jLr) x0jLr = xL
 
   ! If, at this point, jL is equal to -1, it means the vanished
@@ -719,9 +658,9 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefficients, 
   ! ============================================================
   ! 1. Cell is vanished
   if ( abs(xR - xL) == 0.0 ) then
-    
+
     ! We check whether the source cell (i.e. the cell in which the
-    ! vanished target cell lies) is vanished. If it is, the interpolated 
+    ! vanished target cell lies) is vanished. If it is, the interpolated
     ! value is set to be mean of the edge values (which should be the same).
     ! If it isn't, we simply interpolate.
     if ( h0(jL) == 0.0 ) then
@@ -729,11 +668,11 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefficients, 
     else
       ! WHY IS THIS NOT WRITTEN AS xi0 = ( xL - x0jLl ) / h0(jL) ---AJA
       xi0 = xL / ( h0(jL) + h_neglect ) - x0jLl / ( h0(jL) + h_neglect )
-  
+
       select case ( method )
-        case ( INTEGRATION_PCM )   
+        case ( INTEGRATION_PCM )
           uAve = ppoly0_coefficients(jL,1)
-        case ( INTEGRATION_PLM )  
+        case ( INTEGRATION_PLM )
           uAve = evaluation_polynomial( ppoly0_coefficients(jL,:), 2, xi0 )
         case ( INTEGRATION_PPM )
           uAve = evaluation_polynomial( ppoly0_coefficients(jL,:), 3, xi0 )
@@ -741,10 +680,10 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefficients, 
           uAve = evaluation_polynomial( ppoly0_coefficients(jL,:), 5, xi0 )
         case default
           call MOM_error( FATAL,'The selected integration method is invalid' )
-      end select   
-      
+      end select
+
     end if ! end checking whether source cell is vanished
-  
+
   ! 2. Cell is not vanished
   else
 
@@ -780,7 +719,7 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefficients, 
       ! The target cell is entirely contained within a cell of the source
       ! grid. This situation is represented by the following schematic, where
       ! the cell in which xL and xR are located has index jL=jR :
-      ! 
+      !
       ! ----|-----o--------o----------|-------------
       !           xL       xR
       !
@@ -799,9 +738,9 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefficients, 
       ! between xi0 and xi1. Integration is carried out in normalized
       ! coordinates, hence: \int_xL^xR p(x) dx = h \int_xi0^xi1 p(xi) dxi
       select case ( method )
-        case ( INTEGRATION_PCM )     
+        case ( INTEGRATION_PCM )
           q = ppoly0_coefficients(jL,1) * ( xR - xL )
-        case ( INTEGRATION_PLM )    
+        case ( INTEGRATION_PLM )
           q = h0(jL) * &
               integration_polynomial( xi0, xi1, ppoly0_coefficients(jL,:), 1 )
         case ( INTEGRATION_PPM )
@@ -812,7 +751,7 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefficients, 
               integration_polynomial( xi0, xi1, ppoly0_coefficients(jL,:), 4 )
         case default
           call MOM_error( FATAL,'The selected integration method is invalid' )
-      end select     
+      end select
 #ifdef __DO_SAFETY_CHECKS__
       if (q /= q) then
         write(0,*) 'Nan at jL==jR: jL=',jL,' jR=',jR
@@ -827,7 +766,7 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefficients, 
     ! This situation is represented by the following schematic, where
     ! the cells in which xL and xR are located have indexes jL and jR,
     ! respectively :
-    ! 
+    !
     ! ----|-----o---|--- ... --|---o----------|-------------
     !           xL                 xR
     !
@@ -848,9 +787,9 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefficients, 
       hAct = h0(jL) * ( xi1 - xi0 )
 
       select case ( method )
-        case ( INTEGRATION_PCM )     
+        case ( INTEGRATION_PCM )
           q = q + ppoly0_coefficients(jL,1) * ( x0jLr - xL )
-        case ( INTEGRATION_PLM )    
+        case ( INTEGRATION_PLM )
           q = q + h0(jL) * &
               integration_polynomial( xi0, xi1, ppoly0_coefficients(jL,:), 1 )
         case ( INTEGRATION_PPM )
@@ -861,7 +800,7 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefficients, 
               integration_polynomial( xi0, xi1, ppoly0_coefficients(jL,:), 4 )
         case default
           call MOM_error( FATAL, 'The selected integration method is invalid' )
-      end select     
+      end select
 #ifdef __DO_SAFETY_CHECKS__
       if (q /= q) then
         write(0,*) 'Nan on left segment: jL=',jL,' jR=',jR
@@ -870,7 +809,7 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefficients, 
         stop 'Nan during __DO_SAFETY_CHECKS__'
       endif
 #endif
-  
+
       ! Integrate contents within cells strictly comprised between jL and jR
       if ( jR > (jL+1) ) then
         do k = jL+1,jR-1
@@ -895,11 +834,11 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefficients, 
 #endif
 
       hAct = hAct + h0(jR) * ( xi1 - xi0 )
-    
+
       select case ( method )
-        case ( INTEGRATION_PCM )     
+        case ( INTEGRATION_PCM )
           q = q + ppoly0_coefficients(jR,1) * ( xR - x0jRl )
-        case ( INTEGRATION_PLM )    
+        case ( INTEGRATION_PLM )
           q = q + h0(jR) * &
               integration_polynomial( xi0, xi1, ppoly0_coefficients(jR,:), 1 )
         case ( INTEGRATION_PPM )
@@ -910,7 +849,7 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefficients, 
               integration_polynomial( xi0, xi1, ppoly0_coefficients(jR,:), 4 )
         case default
           call MOM_error( FATAL,'The selected integration method is invalid' )
-      end select     
+      end select
 #ifdef __DO_SAFETY_CHECKS__
       if (q /= q) then
         write(0,*) 'Nan on right segment: jL=',jL,' jR=',jR
@@ -922,7 +861,7 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefficients, 
       endif
 #endif
 
-    end if ! end integration for non-vanished cells 
+    end if ! end integration for non-vanished cells
 
     ! The cell average is the integrated value divided by the cell width
 #ifdef __USE_ROUNDOFF_SAFE_ADJUSTMENTS__
@@ -930,27 +869,19 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefficients, 
 #else
     uAve = q / hC
 #endif
-  
+
   end if ! end if clause to check if cell is vanished
-    
+
 end subroutine integrateReconOnInterval
 
 
-!------------------------------------------------------------------------------
-! dzFromH1H2
-!------------------------------------------------------------------------------
+!> Calculates the change in interface positions based on h1 and h2
 subroutine dzFromH1H2( n1, h1, n2, h2, dx )
-! ------------------------------------------------------------------------------
-! Calculates the change in interface positions based on h1 and h2
-! ------------------------------------------------------------------------------
-  
-  ! Arguments
-  integer,            intent(in)  :: n1 ! Number of cells on source grid
-  real, dimension(:), intent(in)  :: h1 ! cell widths of source grid (size n1)
-  integer,            intent(in)  :: n2 ! Number of cells on target grid
-  real, dimension(:), intent(in)  :: h2 ! cell widths of target grid (size n2)
-  real, dimension(:), intent(out) :: dx ! Change in interface position (size n2+1)
-    
+  integer,            intent(in)  :: n1 !< Number of cells on source grid
+  real, dimension(:), intent(in)  :: h1 !< Cell widths of source grid (size n1)
+  integer,            intent(in)  :: n2 !< Number of cells on target grid
+  real, dimension(:), intent(in)  :: h2 !< Cell widths of target grid (size n2)
+  real, dimension(:), intent(out) :: dx !< Change in interface position (size n2+1)
   ! Local variables
   integer :: k
   real :: x1, x2
@@ -986,15 +917,14 @@ subroutine dzFromH1H2( n1, h1, n2, h2, dx )
 end subroutine dzFromH1H2
 
 
-!------------------------------------------------------------------------------
-! Constructor for remapping
-!------------------------------------------------------------------------------
+!> Constructor for remapping control structure
 subroutine initialize_remapping( nk, remappingScheme, CS)
   ! Arguments
-  integer, intent(in)                  :: nk
-  character(len=*),      intent(in)    :: remappingScheme
-  type(remapping_CS),    intent(inout) :: CS
-  
+  integer,            intent(in)    :: nk !< Number of cells to assume for
+                                          !! polynomials storage
+  character(len=*),   intent(in)    :: remappingScheme !< Remapping scheme to use
+  type(remapping_CS), intent(inout) :: CS !< Remapping control structure
+
   CS%nk = nk
 
   call setReconstructionType( remappingScheme, CS )
@@ -1002,16 +932,13 @@ subroutine initialize_remapping( nk, remappingScheme, CS)
 end subroutine initialize_remapping
 
 
-!------------------------------------------------------------------------------
-! Set the type of reconstruction
-! Use this routine to parse a string parameter specifying the reconstruction 
-! and re-allocates work arrays appropriately. It is called from
-! initialize_remapping but can be called from an external module too.
-!------------------------------------------------------------------------------
+!> Changes the method of reconstruction
+!! Use this routine to parse a string parameter specifying the reconstruction
+!! and re-allocates work arrays appropriately. It is called from
+!! initialize_remapping but can be called from an external module too.
 subroutine setReconstructionType(string,CS)
-  ! Arguments
-  character(len=*),   intent(in)    :: string
-  type(remapping_CS), intent(inout) :: CS
+  character(len=*),   intent(in)    :: string !< String to parse for method
+  type(remapping_CS), intent(inout) :: CS !< Remapping control structure
   ! Local variables
   integer :: degree
   degree = -99
@@ -1040,42 +967,33 @@ subroutine setReconstructionType(string,CS)
   end select
 
   CS%degree = degree
-  
 
 end subroutine setReconstructionType
 
-!------------------------------------------------------------------------------
-! Function to enable extrapolation in boundary cells
-!------------------------------------------------------------------------------
+!> Enables extrapolation in boundary cells
 subroutine remapEnableBoundaryExtrapolation(CS)
-! Use this to enable extrapolation at boundaries
-  type(remapping_CS), intent(inout) :: CS
+  type(remapping_CS), intent(inout) :: CS !< Remapping control structure
   CS%boundary_extrapolation = .true.
 end subroutine remapEnableBoundaryExtrapolation
 
-!------------------------------------------------------------------------------
-! Function to disable extrapolation in boundary cells
-!------------------------------------------------------------------------------
+!> Disables extrapolation in boundary cells
 subroutine remapDisableBoundaryExtrapolation(CS)
-! Use this to disable extrapolation at boundaries
-  type(remapping_CS), intent(inout) :: CS
+  type(remapping_CS), intent(inout) :: CS !< Remapping control structure
   CS%boundary_extrapolation = .false.
 end subroutine remapDisableBoundaryExtrapolation
 
-!------------------------------------------------------------------------------
-! Memory deallocation for remapping
-!------------------------------------------------------------------------------
+!> Destrcutor for remapping control structure
 subroutine end_remapping(CS)
-  ! Arguments
-  type(remapping_CS), intent(inout) :: CS
+  type(remapping_CS), intent(inout) :: CS !< Remapping control structure
 
   CS%degree = 0
 
 end subroutine end_remapping
 
+!> Runs unit tests on remapping functions. 
+!! Should only be called from a single/root thread
+!! Returns True if a test fails, otherwise False
 logical function remappingUnitTests()
-  ! Should only be called from a single/root thread
-  ! Returns True if a test fails, otherwise False
   integer, parameter :: n0 = 4, n1 = 3, n2 = 6
   real :: h0(n0), x0(n0+1), u0(n0)
   real :: h1(n1), x1(n1+1), u1(n1), hn1(n1), dx1(n1+1)
@@ -1084,7 +1002,7 @@ logical function remappingUnitTests()
   data h0 /4*0.75/ ! 4 uniform layers with total depth of 3
   data h1 /3*1./   ! 3 uniform layers with total depth of 3
   data h2 /6*0.5/  ! 6 uniform layers with total depth of 3
-  type(remapping_CS) :: CS 
+  type(remapping_CS) :: CS !< Remapping control structure
   real, allocatable, dimension(:,:) :: ppoly0_E, ppoly0_S, ppoly0_coefficients
   integer :: i
   real :: err
@@ -1187,9 +1105,12 @@ logical function remappingUnitTests()
 
   contains
 
+  !> Convenience function for printing grid to screen
   subroutine dumpGrid(n,h,x,u)
-  integer, intent(in) :: n
-  real, dimension(:), intent(in) :: h,x,u
+  integer, intent(in) :: n !< Number of cells
+  real, dimension(:), intent(in) :: h !< Cell thickness
+  real, dimension(:), intent(in) :: x !< Interface delta
+  real, dimension(:), intent(in) :: u !< Cell average values
   integer :: i
   write(*,'("i=",20i10)') (i,i=1,n+1)
   write(*,'("x=",20es10.2)') (x(i),i=1,n+1)
