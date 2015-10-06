@@ -57,9 +57,8 @@ use MOM_restart, only : register_restart_field, MOM_restart_CS, restart_init, sa
 use MOM_time_manager, only   : time_type, operator(+), operator(/), operator(-)
 use MOM_time_manager, only   : get_time, get_date, set_time, set_date 
 use MOM_time_manager, only   : time_type_to_real
-use MOM_variables, only      : surface
+use MOM_variables, only      : surface, thermo_var_ptrs
 use fms_mod, only            : read_data
-use MOM, only                : MOM_control_struct ! needed for tv and h (BDM)
 use MOM_wave_structure, only : wave_structure, wave_structure_CS
 !   Forcing is a structure containing pointers to the forcing fields
 ! which may be used to drive MOM.  All fluxes are positive downward.
@@ -119,10 +118,6 @@ type, public :: int_tide_CS ; private
                         ! The current model time (BDM) 
   character(len=200) :: inputdir 
                         ! directory to look for coastline angle file (BDM)
-  type(MOM_restart_CS), pointer :: restart_CSp => NULL()
-                        ! for restart (BDM)
-  character(len=200) :: restart_dir 
-                        ! directory to write to for restart files (BDM)
   real :: decay_rate    ! A constant rate at which internal tide energy is
                         ! lost to the interior ocean internal wave field.
   real :: cdrag         ! The bottom drag coefficient for MEKE (non-dim).
@@ -138,8 +133,6 @@ type, public :: int_tide_CS ; private
 
   type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
                         ! timing of diagnostic output.
-  type(MOM_control_struct), pointer :: MOM_CSp           => NULL()
-                        ! needed for tv and h (BDM)
   type(wave_structure_CS),  pointer :: wavestructure_CSp => NULL()
   integer :: id_tot_En = -1, id_itide_drag = -1
   integer :: id_refl_pref = -1, id_refl_ang = -1, id_land_mask = -1 !(BDM)
@@ -158,12 +151,14 @@ end type loop_bounds_type
 contains
 
 
-subroutine propagate_int_tide(cg1, TKE_itidal_input, vel_btTide, Nb, dt, G, CS)
+subroutine propagate_int_tide(h, tv, cg1, TKE_itidal_input, vel_btTide, Nb, dt, G, CS)
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)  :: h
+  type(thermo_var_ptrs),                 intent(in)  :: tv
   real, dimension(NIMEM_,NJMEM_), intent(in) :: cg1, TKE_itidal_input
   real, dimension(NIMEM_,NJMEM_), intent(in) :: vel_btTide, Nb
-  real,                  intent(in)    :: dt
-  type(ocean_grid_type), intent(inout) :: G
-  type(int_tide_CS), pointer       :: CS
+  real,                  intent(in)          :: dt
+  type(ocean_grid_type), intent(inout)       :: G
+  type(int_tide_CS), pointer                 :: CS
   ! This subroutine calls any of the other subroutines in this file
   ! that are needed to specify the current surface forcing fields.
   !
@@ -315,7 +310,7 @@ subroutine propagate_int_tide(cg1, TKE_itidal_input, vel_btTide, Nb, dt, G, CS)
   if (CS%apply_drag) then
     ! CALCULATE MODAL STRUCTURE
     do m=1,CS%NMode ; do fr=1,CS%Nfreq    
-      call wave_structure(CS%MOM_CSp%h, CS%MOM_CSp%tv, G, c1(:,:,m), CS%frequency(fr), &
+      call wave_structure(h, tv, G, c1(:,:,m), CS%frequency(fr), &
                           CS%wavestructure_CSp, tot_En_mode(:,:,fr,m), full_halos=.true.)
       ! pick out near-bottom baroclinic velocity values
       do j=js,je ; do i=is,ie

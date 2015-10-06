@@ -541,11 +541,11 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
         enddo; enddo
       endif
       ! CALL ROUTINE USING PRESCRIBED KE FOR TESTING (BDM)
-      call propagate_int_tide(cg1, TKE_itidal_input_test, &
+      call propagate_int_tide(h, tv, cg1, TKE_itidal_input_test, &
                             CS%int_tide_input%tideamp, CS%int_tide_input%Nb, dt, G, CS%int_tide_CSp)
     else    
       ! CALL ROUTINE USING CALCULATED KE INPUT
-      call propagate_int_tide(cg1, CS%int_tide_input%TKE_itidal_input, &
+      call propagate_int_tide(h, tv, cg1, CS%int_tide_input%TKE_itidal_input, &
                               CS%int_tide_input%tideamp, CS%int_tide_input%Nb, dt, G, CS%int_tide_CSp)    
     endif
     if (showCallTree) call callTree_waypoint("done with propagate_int_tide (diabatic)")

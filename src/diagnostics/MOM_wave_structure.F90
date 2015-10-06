@@ -44,10 +44,11 @@ module MOM_wave_structure
 
 use MOM_diag_mediator, only : post_data, query_averaging_enabled, diag_ctrl
 use MOM_diag_mediator, only : register_diag_field, safe_alloc_ptr, time_type
+use MOM_EOS,           only : calculate_density_derivs
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
-use MOM_file_parser, only : log_version, param_file_type
-use MOM_grid,       only : ocean_grid_type
-use MOM_variables,  only : thermo_var_ptrs
+use MOM_file_parser,   only : log_version, param_file_type
+use MOM_grid,          only : ocean_grid_type
+use MOM_variables,     only : thermo_var_ptrs
 
 implicit none ; private
 
@@ -140,7 +141,7 @@ subroutine wave_structure(h, tv, G, cn, freq, CS, En, full_halos)
   real, dimension(SZK_(G)) :: &
     Hc, Tc, Sc, Rc, &
     det, ddet
-  real :: lam, dlam, lam0
+  real :: lam
   real :: min_h_frac
   real :: H_to_pres
   real, dimension(SZI_(G)) :: &
@@ -153,29 +154,34 @@ subroutine wave_structure(h, tv, G, cn, freq, CS, En, full_halos)
   real :: g_Rho0  ! G_Earth/Rho0 in m4 s-2 kg-1.
   real :: rescale, I_rescale
   integer :: kf(SZI_(G))
-  integer, parameter :: max_itt = 10
-  real, parameter :: cg_subRO = 1e-100
-  real, parameter :: a_int = 0.5 ! value of normalized integral: \int(w_strct^2)dz = a_int
-  real            :: I_a_int     ! inverse of a_int
-  real            :: f2          ! squared Coriolis frequency
-  real            :: Kmag2       ! magnitude of horizontal wave number squared
-  logical :: use_EOS    ! If true, density is calculated from T & S using an
-                        ! equation of state.
-  real, allocatable, dimension(:) :: w_strct, u_strct, W_profile, Uavg_profile, z_int, N2 
-  real, allocatable, dimension(:) :: w_strct2, u_strct2 ! squared values
-  real, allocatable, dimension(:) :: dz      ! thicknesses of merged layers (same as Hc I hope)
-  real, allocatable, dimension(:) :: dWdz_profile ! profile of dW/dz
-  real                            :: w2avg   ! average of squared vertical velocity structure funtion
-  real                            :: int_dwdz2, int_w2, int_N2w2, KE_term, PE_term, W0
-                                             ! terms in vertically averaged energy equation
-  real, allocatable, dimension(:) :: lam_z   ! product of eigen value and gprime(k)
-  real, allocatable, dimension(:) :: a_diag, b_diag, c_diag
-                                             ! diagonals of tridiagonal matrix
-  real, allocatable, dimension(:) :: e_guess ! guess at eigen vector with unit amplitde (for TDMA)
-  real, allocatable, dimension(:) :: e_itt   ! improved guess at eigen vector (from TDMA)
+  integer, parameter :: max_itt = 10 ! number of times to iterate in solving for eigenvector
+  real, parameter    :: cg_subRO = 1e-100 ! a very small number
+  real, parameter    :: a_int = 0.5 ! value of normalized integral: \int(w_strct^2)dz = a_int
+  real               :: I_a_int     ! inverse of a_int
+  real               :: f2          ! squared Coriolis frequency
+  real               :: Kmag2       ! magnitude of horizontal wave number squared
+  logical            :: use_EOS     ! If true, density is calculated from T & S using an
+                                    ! equation of state.
+  real, dimension(SZK_(G)+1) :: w_strct, u_strct, W_profile, Uavg_profile, z_int, N2
+                                        ! local representations of variables in CS; note,
+                                        ! not all rows will be filled if layers get merged!
+  real, dimension(SZK_(G)+1) :: w_strct2, u_strct2 
+                                        ! squared values
+  real, dimension(SZK_(G))   :: dz      ! thicknesses of merged layers (same as Hc I hope)
+  real, dimension(SZK_(G)+1) :: dWdz_profile ! profile of dW/dz
+  real                       :: w2avg   ! average of squared vertical velocity structure funtion
+  real                       :: int_dwdz2, int_w2, int_N2w2, KE_term, PE_term, W0
+                                        ! terms in vertically averaged energy equation
+  real, dimension(SZK_(G)-1) :: lam_z   ! product of eigen value and gprime(k); one value for each
+                                        ! interface (excluding surface and bottom)
+  real, dimension(SZK_(G)-1) :: a_diag, b_diag, c_diag
+                                        ! diagonals of tridiagonal matrix; one value for each
+                                        ! interface (excluding surface and bottom)
+  real, dimension(SZK_(G)-1) :: e_guess ! guess at eigen vector with unit amplitde (for TDMA)
+  real, dimension(SZK_(G)-1) :: e_itt   ! improved guess at eigen vector (from TDMA)
   real    :: Pi
   integer :: kc
-  integer :: i, j, k, k2, itt, is, ie, js, je, nz, row
+  integer :: i, j, k, k2, itt, is, ie, js, je, nz, nzm, row
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   I_a_int = 1/a_int
@@ -198,13 +204,6 @@ subroutine wave_structure(h, tv, G, cn, freq, CS, En, full_halos)
   rescale = 1024.0**4 ; I_rescale = 1.0/rescale
 
   min_h_frac = tol1 / real(nz)
-!$OMP parallel do default(none) shared(is,ie,js,je,nz,h,G,min_h_frac,use_EOS,T,S,      &
-!$OMP                                  H_to_pres,tv,cg1,g_Rho0,rescale,I_rescale)      &
-!$OMP                          private(htot,hmin,kf,H_here,HxT_here,HxS_here,HxR_here, &
-!$OMP                                  Hf,Tf,Sf,Rf,pres,T_int,S_int,drho_dT,           &
-!$OMP                                  drho_dS,drxh_sum,kc,Hc,Tc,Sc,I_Hnew,gprime,     &
-!$OMP                                  Rc,speed2_tot,Igl,Igu,lam0,lam,lam_it,dlam,     &
-!$OMP                                  det,ddet,det_it,ddet_it)
 
   do j=js,je
     !   First merge very thin layers with the one above (or below if they are
@@ -418,9 +417,10 @@ subroutine wave_structure(h, tv, G, cn, freq, CS, En, full_halos)
             
             ! Normalize vertical structure function of w such that
             ! \int(w_strct)^2dz = a_int (a_int could be any value, e.g., 0.5)
-            nz = kc+1 ! number of layer interfaces (including surface and bottom)
+            nzm = kc+1 ! number of layer interfaces after merging 
+                       !(including surface and bottom)
             w2avg = 0.0
-            do k=1,nz-1
+            do k=1,nzm-1
               dz(K) = Hc(K)
               w2avg = w2avg + 0.5*(w_strct(k)+w_strct(k+1))*dz(K)
             enddo
@@ -428,12 +428,12 @@ subroutine wave_structure(h, tv, G, cn, freq, CS, En, full_halos)
             w_strct = w_strct/sqrt(htot(i,j)*w2avg*I_a_int)
             
             ! Calculate vertical structure function of u (i.e. dw/dz)
-            do k=2,nz-1
+            do k=2,nzm-1
               u_strct(k) = (w_strct(k-1) - w_strct(k)  )/dz(K-1) + &
                            (w_strct(k)   - w_strct(k+1))/dz(K)
             enddo
             u_strct(1)   = (w_strct(1)   -  w_strct(2) )/dz(1)
-            u_strct(nz)  = (w_strct(nz-1)-  w_strct(nz))/dz(nz-1)
+            u_strct(nzm)  = (w_strct(nzm-1)-  w_strct(nzm))/dz(nzm-1)
             
             ! Calculate wavenumber magnitude
             f2 = 0.25*((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
@@ -442,10 +442,10 @@ subroutine wave_structure(h, tv, G, cn, freq, CS, En, full_halos)
             
             ! Calculate terms in vertically integrated energy equation
             int_dwdz2 = 0.0 ; int_w2 = 0.0 ; int_N2w2 = 0.0
-            u_strct2 = u_strct(1:nz)**2
-            w_strct2 = w_strct(1:nz)**2
+            u_strct2 = u_strct(1:nzm)**2
+            w_strct2 = w_strct(1:nzm)**2
             ! vertical integration with Trapezoidal rule
-            do k=1,nz-1
+            do k=1,nzm-1
               int_dwdz2 = int_dwdz2 + 0.5*(u_strct2(k)+u_strct2(k+1))*dz(K)
               int_w2    = int_w2    + 0.5*(w_strct2(k)+w_strct2(k+1))*dz(K)
               int_N2w2  = int_N2w2  + 0.5*(w_strct2(k)*N2(k)+w_strct2(k+1)*N2(k+1))*dz(K)
@@ -471,7 +471,7 @@ subroutine wave_structure(h, tv, G, cn, freq, CS, En, full_halos)
             CS%Uavg_profile(i,j,1:kc+1)= Uavg_profile
             CS%z_depths(i,j,1:kc+1)    = z_int
             CS%N2(i,j,1:kc+1)          = N2
-            CS%num_intfaces(i,j)       = nz
+            CS%num_intfaces(i,j)       = nzm
           endif  ! kc >= 2?
         endif ! drxh_sum >= 0?
       endif ! mask2dT > 0.5?
@@ -582,6 +582,9 @@ subroutine wave_structure_init(Time, G, param_file, diag, CS)
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mod = "MOM_wave_structure"  ! This module's name.
+  integer :: isd, ied, jsd, jed, nz
+  
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = G%ke
 
   if (associated(CS)) then
     call MOM_error(WARNING, "wave_structure_init called with an "// &
@@ -590,6 +593,17 @@ subroutine wave_structure_init(Time, G, param_file, diag, CS)
   else ; allocate(CS) ; endif
 
   CS%diag => diag
+  
+  ! Allocate memory for variable in control structure; note,
+  ! not all rows will be filled if layers get merged!
+  allocate(CS%w_strct(isd:ied,jsd:jed,nz+1))
+  allocate(CS%u_strct(isd:ied,jsd:jed,nz+1))
+  allocate(CS%W_profile(isd:ied,jsd:jed,nz+1))
+  allocate(CS%Uavg_profile(isd:ied,jsd:jed,nz+1))
+  allocate(CS%z_depths(isd:ied,jsd:jed,nz+1))
+  allocate(CS%N2(isd:ied,jsd:jed,nz+1))
+  allocate(CS%num_intfaces(isd:ied,jsd:jed))
+   
 
   ! Write all relevant parameters to the model log.
   call log_version(param_file, mod, version, "")
