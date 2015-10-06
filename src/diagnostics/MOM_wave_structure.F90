@@ -377,7 +377,10 @@ subroutine wave_structure(h, tv, G, cn, freq, CS, En, full_halos)
               lam_z(k) = lam*gprime(k)
             enddo
             z_int(kc+1) = z_int(kc)+Hc(kc)
-            if (abs(z_int(kc+1)-htot(i,j)) > 1.e-30) then
+            if (abs(z_int(kc+1)-htot(i,j)) > 1.e-10) then
+              print *, "kc=", kc
+              print *, "z_int(kc+1)=", z_int(kc+1)
+              print *, "htot(i,j)=", htot(i,j)
               call MOM_error(WARNING, "wave_structure: mismatch in total depths")
             endif
 
@@ -472,6 +475,8 @@ subroutine wave_structure(h, tv, G, cn, freq, CS, En, full_halos)
             CS%z_depths(i,j,1:kc+1)    = z_int
             CS%N2(i,j,1:kc+1)          = N2
             CS%num_intfaces(i,j)       = nzm
+            print *, "w_strct=",w_strct
+            print *, "z_int",z_int
           endif  ! kc >= 2?
         endif ! drxh_sum >= 0?
       endif ! mask2dT > 0.5?
@@ -539,7 +544,7 @@ subroutine tridiag_solver(a,b,c,h,y,method,x)
     ! Here, alpha(k)=alpha{k+1/2} and alpha(k-1)=alpha{k-1/2}.
     ! Formulation requires symmetry - check for it
     do k=1,nrow-1
-      if (abs(a(k+1)-c(k)) > 1.e-30) then
+      if (abs(a(k+1)-c(k)) > 1.e-10) then
         call MOM_error(WARNING, "tridiag_solver: matrix not symmetric; need symmetry when invoking TDMA_H")
       endif
     enddo
