@@ -83,6 +83,11 @@ character(len=3), public :: remappingDefaultScheme = "PLM"
 ! outside of the range 0 to 1.
 #define __USE_ROUNDOFF_SAFE_ADJUSTMENTS__
 
+real, parameter :: h_neglect = 1.E-30 !< A dimensional (H units) number that can be
+                                      !! added to thicknesses in a denominator without
+                                      !! changing the numerical result, except where
+                                      !! a division by zero would otherwise occur.
+
 ! -----------------------------------------------------------------------------
 ! This module contains the following routines
 ! -----------------------------------------------------------------------------
@@ -579,8 +584,9 @@ integer :: k
       write(0,*) 'xOld,xNew,xL,xR,i=',xOld,xNew,xL,xR,iTarget
       call MOM_error(FATAL,'MOM_remapping, remapByDeltaZ: xL too negative')
     endif
-    if (xR > h0Total) then
+    if (xR - h0Total > 2.*epsilon(h0Total)*max(xR,h0Total)) then
       write(0,*) 'h0=',h0
+      write(0,*) 'h0Total=',h0Total,'xR-h0Tot=',xR - h0Total,real(iTarget)*epsilon(h0Total)*h0Total
       write(0,*) 'dx1=',dx1
       write(0,*) 'xOld,xNew,xL,xR,i=',xOld,xNew,xL,xR,iTarget
       call MOM_error(FATAL,'MOM_remapping, remapByDeltaZ: xR too positive')
@@ -722,7 +728,7 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefficients, 
       uAve = 0.5 * ( ppoly0_E(jL,1) + ppoly0_E(jL,2) )
     else
       ! WHY IS THIS NOT WRITTEN AS xi0 = ( xL - x0jLl ) / h0(jL) ---AJA
-      xi0 = xL / h0(jL) - x0jLl / h0(jL)
+      xi0 = xL / ( h0(jL) + h_neglect ) - x0jLl / ( h0(jL) + h_neglect )
   
       select case ( method )
         case ( INTEGRATION_PCM )   
@@ -780,11 +786,11 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefficients, 
       !
       ! Determine normalized coordinates
 #ifdef __USE_ROUNDOFF_SAFE_ADJUSTMENTS__
-      xi0 = max( 0., min( 1., ( xL - x0jLl ) / h0(jL) ) )
-      xi1 = max( 0., min( 1., ( xR - x0jLl ) / h0(jL) ) )
+      xi0 = max( 0., min( 1., ( xL - x0jLl ) / ( h0(jL) + h_neglect ) ) )
+      xi1 = max( 0., min( 1., ( xR - x0jLl ) / ( h0(jL) + h_neglect ) ) )
 #else
-      xi0 = xL / h0(jL) - x0jLl / h0(jL)
-      xi1 = xR / h0(jL) - x0jLl / h0(jL)
+      xi0 = xL / h0(jL) - x0jLl / ( h0(jL) + h_neglect )
+      xi1 = xR / h0(jL) - x0jLl / ( h0(jL) + h_neglect )
 #endif
 
       hAct = h0(jL) * ( xi1 - xi0 )
@@ -833,9 +839,9 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefficients, 
 
       ! Integrate from xL up to right boundary of cell jL
 #ifdef __USE_ROUNDOFF_SAFE_ADJUSTMENTS__
-      xi0 = max( 0., min( 1., ( xL - x0jLl ) / h0(jL) ) )
+      xi0 = max( 0., min( 1., ( xL - x0jLl ) / ( h0(jL) + h_neglect ) ) )
 #else
-      xi0 = (xL - x0jLl) / h0(jL)
+      xi0 = (xL - x0jLl) / ( h0(jL) + h_neglect )
 #endif
       xi1 = 1.0
 
@@ -883,9 +889,9 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefficients, 
       ! Integrate from left boundary of cell jR up to xR
       xi0 = 0.0
 #ifdef __USE_ROUNDOFF_SAFE_ADJUSTMENTS__
-      xi1 = max( 0., min( 1., ( xR - x0jRl ) / h0(jR) ) )
+      xi1 = max( 0., min( 1., ( xR - x0jRl ) / ( h0(jR) + h_neglect ) ) )
 #else
-      xi1 = (xR - x0jRl) / h0(jR)
+      xi1 = (xR - x0jRl) / ( h0(jR) + h_neglect )
 #endif
 
       hAct = hAct + h0(jR) * ( xi1 - xi0 )
