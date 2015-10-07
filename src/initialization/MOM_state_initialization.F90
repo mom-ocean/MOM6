@@ -68,7 +68,7 @@ use MOM_ALE, only : ALE_initRegridding, ALE_CS, ALE_initThicknessToCoord
 use MOM_regridding, only : regridding_CS
 use MOM_remapping, only : remapping_CS, remapping_core, initialize_remapping
 use MOM_remapping, only : dzFromH1H2, remapDisableBoundaryExtrapolation
-
+use MOM_tracer_initialization_from_Z, only : horiz_interp_and_extrap_tracer, MOM_initialize_tracer_from_Z
 use mpp_domains_mod, only  : mpp_global_field, mpp_get_compute_domain
 use mpp_mod, only          : mpp_broadcast,mpp_root_pe,mpp_sync,mpp_sync_self
 
@@ -199,6 +199,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, PF, dirs, &
 
       call MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
       call pass_var(h, G%Domain)
+
     else
 !     Initialize thickness, h.
       call get_param(PF, mod, "THICKNESS_CONFIG", config, &
@@ -1930,19 +1931,14 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
   integer :: isg, ieg, jsg, jeg ! global extent
   integer :: isd, ied, jsd, jed ! data domain indices
 
-  integer :: rcode, no_fill
-  integer :: ndims                 
   integer :: i, j, k, ks, np, ni, nj
   integer :: idbg, jdbg
   integer :: nkml, nkbl         ! number of mixed and buffer layers
-  integer :: i_offset, j_offset ! Offsets between the global grid and the local
-                                ! 1-indexed version of the global grid.
-  integer :: ncid, varid_t, varid_s
-  integer :: id, jd, kd, jdp, inconsistent
-  integer :: im,jm
+
+  integer :: kd, inconsistent
   real    :: PI_180             ! for conversion from degrees to radians
-  real    :: npole, pole
-  real    :: max_lat, min_depth, max_depth
+
+  real    :: min_depth
   real    :: dilate
   real    :: missing_value_temp, missing_value_salt    
   logical :: new_sim
@@ -1955,36 +1951,19 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
   logical            :: adjust_temperature = .true.  ! fit t/s to target densities
   real, parameter    :: missing_value = -1.e20
   real, parameter    :: temp_land_fill = 0.0, salt_land_fill = 35.0
+  logical :: reentrant_x, tripolar_n,dbg
+  logical :: debug = .false.  ! manually set this to true for verbose output
+
 
   !data arrays
-  real, dimension(:,:), allocatable :: x_in, y_in
-  real, dimension(:), allocatable :: lon_in, lon_in_p, lat_in, lat_in_p, last_row
-  real, dimension(:), allocatable :: z_in, z_edges_in, Rb
+  real, dimension(:), allocatable :: z_edges_in, z_in, Rb
   real, dimension(:,:), allocatable :: temp_in, salt_in, mask_in
-
-
-  integer, dimension(4) :: start, count, dims    
-  
-  real, dimension(:,:), allocatable :: tmp_in ! A 2-d array for holding input data.  
-
-
-
-  real, dimension(:,:,:), allocatable :: temp_z, salt_z, mask_z, rho_z
-
-
+  real, dimension(:,:,:), allocatable, target :: temp_z, salt_z, mask_z
+  real, dimension(:,:,:), allocatable :: rho_z
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: zi
-
-  real, dimension(:,:), allocatable :: Depth
-
-  real, dimension(SZI_(G),SZJ_(G))  :: temp2,salt2,good2,fill2,temp_prev2, salt_prev2
-  real, dimension(SZI_(G),SZJ_(G))  :: temp_out, salt_out, rho_out, mask_out
-  real, dimension(SZI_(G),SZJ_(G)) :: lon_out, lat_out, good, fill
   real, dimension(SZI_(G),SZJ_(G))  :: nlevs
   real, dimension(SZI_(G))   :: press
 
-
-  logical :: reentrant_x, tripolar_n, add_np,dbg
-  logical :: debug = .false.  ! manually set this to true for verbose output
 
   ! Local variables for ALE remapping
   real, dimension(:), allocatable :: h1, h2, hTarget, deltaE, tmpT1d, tmpS1d
@@ -2001,9 +1980,6 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
   integer :: id_clock_routine, id_clock_read, id_clock_interp, id_clock_fill, id_clock_ALE
 
   id_clock_routine = cpu_clock_id('(Initialize from Z)', grain=CLOCK_ROUTINE)
-  id_clock_read = cpu_clock_id('(Initialize from Z) read', grain=CLOCK_LOOP)
-  id_clock_interp = cpu_clock_id('(Initialize from Z) interp', grain=CLOCK_LOOP)
-  id_clock_fill = cpu_clock_id('(Initialize from Z) fill', grain=CLOCK_LOOP)
   id_clock_ALE = cpu_clock_id('(Initialize from Z) ALE', grain=CLOCK_LOOP)
 
   call cpu_clock_begin(id_clock_routine)
@@ -2071,290 +2047,22 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
 !   to the North/South Pole past the limits of the input data, they are extrapolated using the average
 !   value at the northernmost/southernmost latitude.      
 
-  call cpu_clock_begin(id_clock_read)
 
-  rcode = NF90_OPEN(filename, NF90_NOWRITE, ncid)
-  if (rcode .ne. 0) call MOM_error(FATAL,"error opening file "//trim(filename)//&
-                           " in MOM_initialize_layers_from_Z")
-  rcode = NF90_INQ_VARID(ncid, potemp_var, varid_t)
-  if (rcode .ne. 0) call MOM_error(FATAL,"error finding variable "//trim(potemp_var)//&
-                                 " in file "//trim(filename)//" in MOM_initialize_layers_from_Z")        
-  rcode = NF90_INQ_VARID(ncid, salin_var, varid_s)
-  if (rcode .ne. 0) call MOM_error(FATAL,"error finding variable "//trim(salin_var)//&
-                                 " in file "//trim(filename)//" in MOM_initialize_layers_from_Z")        
-  rcode = NF90_INQUIRE_VARIABLE(ncid, varid_t, ndims=ndims, dimids=dims)
-  if (rcode .ne. 0) call MOM_error(FATAL,'error inquiring dimensions MOM_initialize_layers_from_Z')            
-  if (ndims < 3) call MOM_error(FATAL,"Variable "//trim(potemp_var)//" in file "// &
-              trim(filename)//" has too few dimensions.")            
-  rcode = NF90_INQUIRE_DIMENSION(ncid, dims(1), len=id)
-  if (rcode .ne. 0) call MOM_error(FATAL,"error reading dimension 1 data for "// &
-                trim(potemp_var)//" in file "// trim(filename)//" in MOM_initialize_layers_from_Z")               
-  rcode = NF90_INQUIRE_DIMENSION(ncid, dims(2), len=jd)
-  if (rcode .ne. 0) call MOM_error(FATAL,"error reading dimension 2 data for "// &
-                trim(potemp_var)//" in file "// trim(filename)//" in MOM_initialize_layers_from_Z")               
-  rcode = NF90_INQUIRE_DIMENSION(ncid, dims(3), len=kd)
-  if (rcode .ne. 0) call MOM_error(FATAL,"error reading dimension 3 data for "// &
-                trim(potemp_var)//" in file "// trim(filename)//" in MOM_initialize_layers_from_Z")               
+  call horiz_interp_and_extrap_tracer(filename, potemp_var,1.0,1, &
+       G, temp_z, mask_z, z_in, z_edges_in, missing_value_temp, reentrant_x, tripolar_n, homogenize)
 
-  missing_value_temp=0.0 ; missing_value_salt=0.0
-  rcode = NF90_GET_ATT(ncid, varid_t, "_FillValue", missing_value_temp)
-  if (rcode .ne. 0) missing_value_temp = NF90_FILL_DOUBLE
-  rcode = NF90_GET_ATT(ncid, varid_s, "_FillValue", missing_value_salt)
-  if (rcode .ne. 0) missing_value_salt = NF90_FILL_DOUBLE
+  call horiz_interp_and_extrap_tracer(filename, salin_var,1.0,1, &
+       G, salt_z, mask_z, z_in, z_edges_in, missing_value_salt, reentrant_x, tripolar_n, homogenize)
 
-  allocate(lon_in(id),lat_in(jd),z_in(kd),z_edges_in(kd+1))
-  allocate(temp_z(isd:ied,jsd:jed,kd), salt_z(isd:ied,jsd:jed,kd), rho_z(isd:ied,jsd:jed,kd),&
-       & mask_z(isd:ied,jsd:jed,kd))
+  kd = size(z_in,1)
 
-  start = 1; count = 1; count(1) = id
-  rcode = NF90_GET_VAR(ncid, dims(1), lon_in, start, count)
-  if (rcode .ne. 0) call MOM_error(FATAL,"error reading dimension 1 values for "// &
-                trim(potemp_var)//" in file "// trim(filename)//" in MOM_initialize_layers_from_Z")               
-  start = 1; count = 1; count(1) = jd
-  rcode = NF90_GET_VAR(ncid, dims(2), lat_in, start, count)
-  if (rcode .ne. 0) call MOM_error(FATAL,"error reading dimension 2 values for "// &
-                trim(potemp_var)//" in file "// trim(filename)//" in MOM_initialize_layers_from_Z")               
-  start = 1; count = 1; count(1) = kd
-  rcode = NF90_GET_VAR(ncid, dims(3), z_in, start, count)
-  if (rcode .ne. 0) call MOM_error(FATAL,"error reading dimension 3 values for "// &
-                trim(potemp_var)//" in file "// trim(filename)//" in MOM_initialize_layers_from_Z")               
+  allocate(rho_z(isd:ied,jsd:jed,kd))
 
-! extrapolate the input data to the north pole using the northerm-most latitude
-
-  max_lat = maxval(lat_in)
-  add_np=.false.
-  if (max_lat < 90.0) then
-    add_np=.true.
-    jdp=jd+1
-    allocate(lat_in_p(jdp))
-    lat_in_p(1:jd)=lat_in(:)
-    lat_in_p(jd+1)=90.0
-    deallocate(lat_in)
-    allocate(lat_in(1:jdp))
-    lat_in(:)=lat_in_p(:)
-  else
-    jdp=jd
-  endif
-
-! construct level cell boundaries as the mid-point between adjacent centers
-
-  z_edges_in(1) = 0.0
-  do k=2,kd
-   z_edges_in(k)=0.5*(z_in(k-1)+z_in(k))
-  enddo
-  z_edges_in(kd+1)=2.0*z_in(kd) - z_in(kd-1)
-
-  call horiz_interp_init()
-
-  lon_in = lon_in*PI_180
-  lat_in = lat_in*PI_180
-  allocate(x_in(id,jdp),y_in(id,jdp))        
-  call meshgrid(lon_in,lat_in, x_in, y_in)
-
-  temp_prev2 = 0.0; salt_prev2 = 0.0
-
-  lon_out(:,:) = G%geoLonT(:,:)*PI_180
-  lat_out(:,:) = G%geoLatT(:,:)*PI_180
-
-
-  allocate(tmp_in(id,jd)) ; tmp_in(:,:)=0.0
-  allocate(temp_in(id,jdp)) ; temp_in(:,:)=0.0
-  allocate(salt_in(id,jdp)) ; salt_in(:,:)=0.0
-  allocate(mask_in(id,jdp)) ; mask_in(:,:)=0.0
-  allocate(last_row(id))    ; last_row(:)=0.0
-
-  ni=ieg-isg+1 ; nj = jeg-jsg+1
-  allocate(Depth(ni,nj))
 
   press(:)=tv%p_ref
 
-! get the global depth array
 
-  call mpp_global_field(G%domain%mpp_domain, G%bathyT, Depth)    
-
-  max_depth = maxval(Depth)
-  if (z_edges_in(kd+1)<max_depth) z_edges_in(kd+1)=max_depth
-
-
-! loop through each data level and interpolate to model grid.
-! after interpolating, fill in points which will be needed
-! to define the layers
-
-  call cpu_clock_end(id_clock_read)
-  do k=1,kd
-    call cpu_clock_begin(id_clock_read)
-    write(laynum,'(I8)') k ; laynum = adjustl(laynum)
-
-    if (is_root_pe()) then
-      start = 1; start(3) = k; count = 1; count(1) = id; count(2) = jd
-      rcode = NF90_GET_VAR(ncid,varid_t, tmp_in, start, count)
-      if (rcode .ne. 0) call MOM_error(FATAL,"MOM_initialize_layers_from_Z: "//&
-           "error reading level "//trim(laynum)//" of variable "//&
-           trim(potemp_var)//" in file "// trim(filename))
-
-      if (add_np) then
-         last_row(:)=tmp_in(:,jd); pole=0.0;npole=0.0
-         do i=1,id
-            if (abs(tmp_in(i,jd)-missing_value_temp) .gt. abs(G%Angstrom_Z*missing_value_temp)) then
-               pole = pole+last_row(i)
-               npole = npole+1.0
-            endif
-         enddo
-         if (npole > 0) then
-            pole=pole/npole
-         else
-            pole=missing_value
-         endif
-         temp_in(:,1:jd) = tmp_in(:,:)
-         temp_in(:,jdp) = pole
-      else
-         temp_in(:,:) = tmp_in(:,:)
-      endif
-      
-      rcode = NF90_GET_VAR(ncid, varid_s, tmp_in, start, count)
-      if (rcode .ne. 0) call MOM_error(FATAL,"MOM_initialize_layers_from_Z: "//&
-           "error reading level "//trim(laynum)//" of variable "//&
-           trim(salin_var)//" in file "// trim(filename))
-      
-      if (add_np) then
-         last_row(:)=tmp_in(:,jd); pole=0.0;npole=0.0
-         do i=1,id
-            if (abs(tmp_in(i,jd)-missing_value_salt) .gt. abs(G%Angstrom_Z*missing_value_salt)) then              
-               pole = pole+last_row(i)
-               npole = npole+1.0
-            endif
-         enddo
-         if (npole > 0) then
-            pole = pole/npole
-         else
-            pole = missing_value
-         endif
-         salt_in(:,1:jd) = tmp_in(:,:)
-         salt_in(:,jdp) = pole
-      else
-         salt_in(:,:) = tmp_in(:,:)
-      endif
-    endif
-  
-    call mpp_sync()
-    call mpp_broadcast(temp_in,id*jdp,root_PE())
-    call mpp_broadcast(salt_in,id*jdp,root_PE())
-    call mpp_sync_self ()
-
-    mask_in=0.0
-
-    do j=1,jdp
-      do i=1,id
-         if (abs(temp_in(i,j)-missing_value_temp) .gt. abs(G%Angstrom_Z*missing_value_temp)) then                           
-           mask_in(i,j)=1.0
-         else
-           temp_in(i,j)=missing_value
-           salt_in(i,j)=missing_value
-         endif
-      enddo 
-    enddo
-
-
-    call cpu_clock_end(id_clock_read)
-    call cpu_clock_begin(id_clock_interp)
-    
-! call fms routine horiz_interp to interpolate input level data to model horizontal grid
-
-    if (k == 1) then
-      call horiz_interp_new(Interp,x_in,y_in,lon_out(is:ie,js:je),lat_out(is:ie,js:je), &
-               interp_method='bilinear',src_modulo=reentrant_x)
-    endif
-
-    if (debug) then
-       call myStats(temp_in,missing_value, k,'Temp from file')
-       call myStats(salt_in,missing_value, k,'Salt from file')
-    endif
-
-    temp_out(:,:) = 0.0
-    salt_out(:,:) = 0.0
-
-    call horiz_interp(Interp,temp_in,temp_out(is:ie,js:je), missing_value=missing_value, new_missing_handle=.true.)
-
-    mask_out=1.0
-    do j=js,je
-      do i=is,ie
-        if (abs(temp_out(i,j)-missing_value) .lt. abs(G%Angstrom_Z*missing_value)) mask_out(i,j)=0.
-      enddo
-    enddo
-
-    call horiz_interp(Interp,salt_in,salt_out(is:ie,js:je), missing_value=missing_value, new_missing_handle=.true.)
-
-    if (debug) then
-      call hchksum(temp_out,'temperature after hinterp ',G)
-      call hchksum(salt_out,'salinity after hinterp ',G)
-    endif
-
-
-    call cpu_clock_end(id_clock_interp)
-    call cpu_clock_begin(id_clock_fill)
-    fill = 0.0; good = 0.0
-
-    nPoints = 0 ; tempAvg = 0. ; saltAvg = 0.
-    do j=js,je
-      do i=is,ie
-        if (mask_out(i,j) .lt. 1.0) then
-          temp_out(i,j)=missing_value
-          salt_out(i,j)=missing_value
-        else
-          good(i,j)=1.0
-          nPoints = nPoints + 1
-          tempAvg = tempAvg + temp_out(i,j)
-          saltAvg = saltAvg + salt_out(i,j)
-        endif
-        if (G%mask2dT(i,j) == 1.0 .and. z_edges_in(k) <= G%bathyT(i,j) .and. mask_out(i,j) .lt. 1.0) fill(i,j)=1.0
-      enddo
-    enddo
-    call pass_var(fill,G%Domain)
-    call pass_var(good,G%Domain)
-
-    if (debug) then
-      call myStats(temp_out,missing_value, k,'Temp from horiz_interp()')
-      call myStats(salt_out,missing_value, k,'Salt from horiz_interp()')
-    endif
-
-    ! Horizontally homogenize data to produce perfectly "flat" initial conditions
-    if (homogenize) then
-      call sum_across_PEs(nPoints)
-      call sum_across_PEs(tempAvg)
-      call sum_across_PEs(saltAvg)
-      if (nPoints>0) then
-        tempAvg = tempAvg/real(nPoints)
-        saltAvg = saltAvg/real(nPoints)
-      endif
-      temp_out(:,:) = tempAvg
-      salt_out(:,:) = saltAvg
-    endif
-
-! temp_out,salt_out contain input z-space data on the model grid with missing values
-! now fill in missing values using "ICE-nine" algorithm. 
-
-    temp2(:,:)=temp_out(:,:);good2(:,:)=good(:,:); fill2(:,:)=fill(:,:)
-    salt2(:,:)=salt_out(:,:) 
-
-    call fill_miss_2d(temp2,good2,fill2,temp_prev2,G,smooth=.true.)
-    call myStats(temp2,missing_value,k,'Temp from fill_miss_2d()')
-    call fill_miss_2d(salt2,good2,fill2,salt_prev2,G,smooth=.true.)
-    call myStats(salt2,missing_value,k,'Salt from fill_miss_2d()')
-
-    temp_z(:,:,k) = temp2(:,:)*G%mask2dT(:,:)
-    salt_z(:,:,k) = salt2(:,:)*G%mask2dT(:,:)
-    mask_z(:,:,k) = good2(:,:)+fill2(:,:)
-
-    temp_prev2(:,:)=temp_z(:,:,k)
-    salt_prev2(:,:)=salt_z(:,:,k)
-    call cpu_clock_end(id_clock_fill)
-
-    if (debug) then
-      call hchksum(temp2,'temperature after fill ',G)
-      call hchksum(salt2,'salinity after fill ',G)
-    endif
-
-! next use the equation of state to create a potential density field using filled z-data
+  do k=1, kd
 
     do j=js,je
       call calculate_density(temp_z(:,j,k),salt_z(:,j,k), press, rho_z(:,j,k), is, ie, eos)
@@ -2367,7 +2075,6 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
   call pass_var(mask_z,G%Domain)
   call pass_var(rho_z,G%Domain)
 
-  call horiz_interp_del(Interp)    
 
 ! Done with horizontal interpolation.    
 ! Now remap to model coordinates
@@ -2440,9 +2147,9 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
     deallocate( tmpS1dIn )
     deallocate( deltaE )
 
-    do k=1,nz
-      call myStats(tv%T(:,:,k),missing_value,k,'Temp from ALE()')
-    enddo
+!    do k=1,nz
+!      call myStats(tv%T(:,:,k),missing_value,k,'Temp from ALE()')
+ !   enddo
     call cpu_clock_end(id_clock_ALE)
   else ! remap to isopycnal layer space
 ! next find interface positions using local arrays
@@ -2553,215 +2260,11 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
 
   endif
 
-  deallocate(lon_in,lat_in,x_in,y_in)
-  deallocate(z_in,z_edges_in)
-  deallocate(tmp_in,temp_in,salt_in,mask_in,last_row)
-  deallocate(Depth)
-
+  deallocate(z_in,z_edges_in,temp_z,salt_z,mask_z)
   call callTree_leave(trim(mod)//'()')
   call cpu_clock_end(id_clock_routine)
 
-  contains
-  subroutine myStats(array, missing, k, mesg)
-  real, dimension(:,:), intent(in) :: array
-  real, intent(in) :: missing
-  integer :: k
-  character(len=*) :: mesg
-  ! Local variables
-  real :: minA, maxA
-  integer :: i,j,is,ie,js,je
-  logical :: found
-  character(len=120) :: lMesg
-  minA = 9.E24 ; maxA = -9.E24 ; found = .false.
 
-  is = G%isc;ie=G%iec;js=G%jsc;je=G%jec
-
-  do j = js, je
-    do i = is, ie
-      if (array(i,j) /= array(i,j)) stop 'Nan!'
-      if (abs(array(i,j)-missing)>1.e-6*abs(missing)) then
-        if (found) then
-          minA = min(minA, array(i,j))
-          maxA = max(maxA, array(i,j))
-        else
-          found = .true.
-          minA = array(i,j)
-          maxA = array(i,j)
-        endif
-      endif
-    enddo
-  enddo
-  call min_across_PEs(minA)
-  call max_across_PEs(maxA)
-  if (is_root_pe()) then
-    write(lMesg(1:120),'(2(a,es12.4),a,i3,x,a)') &
-       'init_from_Z: min=',minA,' max=',maxA,' Level=',k,trim(mesg)
-    call MOM_mesg(lMesg,8)
-  endif
-  end subroutine myStats
-  
-  subroutine fill_miss_2d(aout,good,fill,prev,G,smooth,num_pass,relc,crit,keep_bug,debug)
-!
-!# Use ICE-9 algorithm to populate points (fill=1) with 
-!# valid data (good=1). If no information is available,
-!# Then use a previous guess (prev). Optionally (smooth) 
-!# blend the filled points to achieve a more desirable result.
-!
-!  (in)        a   : input 2-d array with missing values 
-!  (in)     good   : valid data mask for incoming array (1==good data; 0==missing data)
-!  (in)     fill   : same shape array of points which need filling (1==please fill;0==leave it alone)   
-!  (in)     prev   : first guess where isolated holes exist,
-!
-
-    use MOM_coms, only : sum_across_PEs
-
-    real, dimension(NIMEM_,NJMEM_), intent(inout) :: aout
-    real, dimension(NIMEM_,NJMEM_), intent(in) :: good,fill
-    real, dimension(NIMEM_,NJMEM_), optional, intent(in) :: prev
-    type(ocean_grid_type), intent(inout)  :: G
-    logical, intent(in), optional :: smooth
-    integer, intent(in), optional :: num_pass
-    real, intent(in), optional    :: relc,crit
-    logical, intent(in), optional :: keep_bug, debug
-    
-    
-    real, dimension(SZI_(G),SZJ_(G)) :: b,r
-    real, dimension(SZI_(G),SZJ_(G)) :: fill_pts,good_,good_new   
-    
-    integer :: i,j,k
-    real    :: east,west,north,south,sor
-    real    :: ge,gw,gn,gs,ngood
-    logical :: do_smooth,siena_bug
-    real    :: nfill, nfill_prev
-    integer, parameter :: num_pass_default = 10000
-    real, parameter :: relc_default = 0.25, crit_default = 1.e-3
-    
-    integer :: npass
-    integer :: is, ie, js, je, nz
-    real    :: relax_coeff, acrit, ares
-    logical :: debug_it
-
-    debug_it=.false.
-    if (PRESENT(debug)) debug_it=debug
-
-    is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-   
-    npass = num_pass_default
-    if (PRESENT(num_pass)) npass = num_pass
-
-    relax_coeff = relc_default
-    if (PRESENT(relc)) relax_coeff = relc
-
-    acrit = crit_default
-    if (PRESENT(crit)) acrit = crit
-
-    siena_bug=.false.
-    if (PRESENT(keep_bug)) siena_bug = keep_bug
-
-    do_smooth=.false.
-    if (PRESENT(smooth)) do_smooth=smooth
-   
-    fill_pts(:,:)=fill(:,:)
-
-    nfill = sum(fill(is:ie,js:je))
-    call sum_across_PEs(nfill)
-
-    nfill_prev = nfill
-    good_(:,:)=good(:,:)
-    r(:,:)=0.0
-
-    do while (nfill > 0.0)
-
-       call pass_var(good_,G%Domain)
-       call pass_var(aout,G%Domain)
-
-       b(:,:)=aout(:,:)
-       good_new(:,:)=good_(:,:)
-
-       do j=js,je
-          i_loop: do i=is,ie
-
-             if (good_(i,j) .eq. 1.0 .or. fill(i,j) .eq. 0.) cycle i_loop
-
-             ge=good_(i+1,j);gw=good_(i-1,j)
-             gn=good_(i,j+1);gs=good_(i,j-1)
-             east=0.0;west=0.0;north=0.0;south=0.0
-             if (ge.eq.1.0) east=aout(i+1,j)*ge
-             if (gw.eq.1.0) west=aout(i-1,j)*gw
-             if (gn.eq.1.0) north=aout(i,j+1)*gn
-             if (gs.eq.1.0) south=aout(i,j-1)*gs     
-
-             ngood = ge+gw+gn+gs
-             if (ngood > 0.) then
-                b(i,j)=(east+west+north+south)/ngood
-                fill_pts(i,j)=0.0
-                good_new(i,j)=1.0
-             endif
-          enddo i_loop
-       enddo
-
-       aout(is:ie,js:je)=b(is:ie,js:je)
-       good_(is:ie,js:je)=good_new(is:ie,js:je)
-       nfill_prev = nfill
-       nfill = sum(fill_pts(is:ie,js:je))
-       call sum_across_PEs(nfill)
-
-       if (nfill == nfill_prev .and. PRESENT(prev)) then
-          do j=js,je
-             do i=is,ie
-                if (fill_pts(i,j).eq.1.0) then
-                   aout(i,j)=prev(i,j)
-                   fill_pts(i,j)=0.0
-                endif
-             enddo
-          enddo
-       else if (nfill .eq. nfill_prev) then
-          print *,&
-               'Unable to fill missing points using either data at the same vertical level from a connected basin'//&
-               'or using a point from a previous vertical level.  Make sure that the original data has some valid'//&
-               'data in all basins.'
-          print *,'nfill=',nfill
-       endif
-
-       nfill = sum(fill_pts(is:ie,js:je))
-       call sum_across_PEs(nfill)
-       
-    end do
-
-    if (do_smooth) then
-       do k=1,npass
-          call pass_var(aout,G%Domain)
-          do j=js,je
-             do i=is,ie
-                if (fill(i,j) .eq. 1) then
-                east=max(good(i+1,j),fill(i+1,j));west=max(good(i-1,j),fill(i-1,j))
-                north=max(good(i,j+1),fill(i,j+1));south=max(good(i,j-1),fill(i,j-1))
-                r(i,j) = relax_coeff*(south*aout(i,j-1)+north*aout(i,j+1)+west*aout(i-1,j)+east*aout(i+1,j) - (south+north+west+east)*aout(i,j))
-               else
-                r(i,j) = 0.
-               endif
-             enddo
-          enddo
-          aout(is:ie,js:je)=r(is:ie,js:je)+aout(is:ie,js:je)
-          ares = maxval(abs(r))
-          call max_across_PEs(ares)
-          if (ares <= acrit) exit
-       enddo
-    endif
-
-    do j=js,je
-       do i=is,ie
-          if (good_(i,j).eq.0.0 .and. fill_pts(i,j) .eq. 1.0) then
-             print *,'in fill_miss, fill, good,i,j= ',fill_pts(i,j),good_(i,j),i,j
-             call MOM_error(FATAL,"MOM_initialize: "// &
-                  "fill is true and good is false after fill_miss, how did this happen? ")
-          endif
-       enddo
-    enddo
-    
-    return
-    
-  end subroutine fill_miss_2d
 
 end subroutine MOM_temp_salt_initialize_from_Z
 

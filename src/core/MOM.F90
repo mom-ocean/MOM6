@@ -2135,7 +2135,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   ! This subroutine initializes any tracer packages.
   new_sim = ((dirs%input_filename(1:1) == 'n') .and. &
              (LEN_TRIM(dirs%input_filename) == 1))
-  call tracer_flow_control_init(.not.new_sim, Time, G, CS%h, CS%OBC, &
+  call tracer_flow_control_init(.not.new_sim, Time, G, CS%h, param_file, CS%OBC, &
            CS%tracer_flow_CSp, init_CS%sponge_CSp, CS%diag_to_Z_CSp)
 
   call cpu_clock_begin(id_clock_pass_init)
