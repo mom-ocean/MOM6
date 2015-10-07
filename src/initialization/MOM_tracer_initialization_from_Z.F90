@@ -486,7 +486,7 @@ subroutine horiz_interp_and_extrap_tracer(filename, varnam,  conversion, recnum,
   integer :: ni, nj, nz         ! global grid size
   integer :: id_clock_read
   character(len=12)  :: dim_name(4)
-  logical :: debug=.true.
+  logical :: debug=.false.
   real :: npoints,varAvg
   real, dimension(:,:), allocatable :: Depth
   real, dimension(SZI_(G),SZJ_(G)) :: lon_out, lat_out, tr_out, mask_out

@@ -61,22 +61,15 @@ use Rossby_front_2d_initialization, only : Rossby_front_initialize_temperature_s
 use Rossby_front_2d_initialization, only : Rossby_front_initialize_velocity
 use SCM_idealized_hurricane, only : SCM_idealized_hurricane_TS_init
 
-use midas_vertmap, only : find_interfaces, tracer_Z_init, meshgrid
+use midas_vertmap, only : find_interfaces, tracer_Z_init
 use midas_vertmap, only : determine_temperature
 
 use MOM_ALE, only : ALE_initRegridding, ALE_CS, ALE_initThicknessToCoord
 use MOM_regridding, only : regridding_CS
 use MOM_remapping, only : remapping_CS, remapping_core, initialize_remapping
 use MOM_remapping, only : dzFromH1H2, remapDisableBoundaryExtrapolation
-use MOM_tracer_initialization_from_Z, only : horiz_interp_and_extrap_tracer, MOM_initialize_tracer_from_Z
-use mpp_domains_mod, only  : mpp_global_field, mpp_get_compute_domain
-use mpp_mod, only          : mpp_broadcast,mpp_root_pe,mpp_sync,mpp_sync_self
-
-
-use horiz_interp_mod, only : horiz_interp_new, horiz_interp,horiz_interp_type
-use horiz_interp_mod, only : horiz_interp_init, horiz_interp_del
-
-use netcdf
+use MOM_tracer_initialization_from_Z, only : horiz_interp_and_extrap_tracer
+!use mpp_domains_mod, only  : mpp_get_compute_domain
 
 implicit none ; private
 
@@ -1943,7 +1936,6 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
   real    :: missing_value_temp, missing_value_salt    
   logical :: new_sim
   logical :: correct_thickness
-  type(horiz_interp_type) :: Interp
   character(len=40) :: potemp_var, salin_var
   character(len=8)  :: laynum
 
@@ -2002,7 +1994,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
 
   eos => tv%eqn_of_state
 
-  call mpp_get_compute_domain(G%domain%mpp_domain,isc,iec,jsc,jec)
+! call mpp_get_compute_domain(G%domain%mpp_domain,isc,iec,jsc,jec)
 
   reentrant_x = .false. ;  call get_param(PF, mod, "REENTRANT_X", reentrant_x,default=.true.)
   tripolar_n = .false. ;  call get_param(PF, mod, "TRIPOLAR_N", tripolar_n, default=.false.)
