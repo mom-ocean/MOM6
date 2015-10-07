@@ -65,11 +65,11 @@ use midas_vertmap, only : find_interfaces, tracer_Z_init
 use midas_vertmap, only : determine_temperature
 
 use MOM_ALE, only : ALE_initRegridding, ALE_CS, ALE_initThicknessToCoord
+use MOM_ALE, only : remap_scalar_h_to_h
 use MOM_regridding, only : regridding_CS
 use MOM_remapping, only : remapping_CS, remapping_core, initialize_remapping
 use MOM_remapping, only : dzFromH1H2, remapDisableBoundaryExtrapolation
 use MOM_tracer_initialization_from_Z, only : horiz_interp_and_extrap_tracer
-!use mpp_domains_mod, only  : mpp_get_compute_domain
 
 implicit none ; private
 
@@ -1949,7 +1949,6 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
 
   !data arrays
   real, dimension(:), allocatable :: z_edges_in, z_in, Rb
-  real, dimension(:,:), allocatable :: temp_in, salt_in, mask_in
   real, dimension(:,:,:), allocatable, target :: temp_z, salt_z, mask_z
   real, dimension(:,:,:), allocatable :: rho_z
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: zi
@@ -1958,13 +1957,12 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
 
 
   ! Local variables for ALE remapping
-  real, dimension(:), allocatable :: h1, h2, hTarget, deltaE, tmpT1d, tmpS1d
-  real, dimension(:), allocatable :: tmpT1dIn, tmpS1dIn
+  real, dimension(:), allocatable :: hTarget
+  real, dimension(:,:,:), allocatable :: tmpT1dIn, tmpS1dIn, h1, tmp_mask_in
   real :: zTopOfCell, zBottomOfCell
   type(regridding_CS) :: regridCS ! Regridding parameters and work arrays
   type(remapping_CS) :: remapCS ! Remapping parameters and work arrays
 
-  real, dimension(:,:,:), allocatable :: tmp1
   logical :: homogenize, useALEremapping
   character(len=10) :: remappingScheme
   real :: tempAvg, saltAvg
@@ -2072,83 +2070,78 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
 ! Now remap to model coordinates
   if (useALEremapping) then
     call cpu_clock_begin(id_clock_ALE)
-    ! First we reserve a work space for reconstructions of the source data
-    allocate( h1(kd) )
-    allocate( tmpT1dIn(kd) )
-    allocate( tmpS1dIn(kd) )
-    call initialize_remapping( kd, remappingScheme, remapCS ) ! Data for reconstructions
-    call remapDisableBoundaryExtrapolation( remapCS )
-    ! Next we initialize the regridding package so that it knows about the target grid
-    allocate( hTarget(nz) )
-    allocate( h2(nz) )
-    allocate( tmpT1d(nz) )
-    allocate( tmpS1d(nz) )
-    allocate( deltaE(nz+1) )
-    ! This call can be more general but is hard-coded for z* coordinates...  ????
-    call ALE_initRegridding( G, PF, mod, regridCS, hTarget ) ! sets regridCS and hTarget(1:nz)
-    ! For each column ...
+    ! The regridding tools (grid generation) are coded to work on model arrays of the same
+    ! vertical shape. We need to re-write the regridding if the model has fewer layers
+    ! than the data. -AJA
+    if (kd>nz) call MOM_error(FATAL,"MOM_initialize_state, MOM_temp_salt_initialize_from_Z(): "//&
+         "Data has more levels than the model - this has not been coded yet!")
+    ! Build the source grid and copy data onto model-shaped arrays with vanished layers
+    allocate( tmp_mask_in(isd:ied,jsd:jed,nz) ) ; tmp_mask_in(is:ie,js:je,:) = 0.
+    allocate( h1(isd:ied,jsd:jed,nz) ) ; h1(is:ie,js:je,:) = 0.
+    allocate( tmpT1dIn(isd:ied,jsd:jed,nz) ) ; tmpT1dIn(is:ie,js:je,:) = 0.
+    allocate( tmpS1dIn(isd:ied,jsd:jed,nz) ) ; tmpS1dIn(is:ie,js:je,:) = 0.
     do j = js, je ; do i = is, ie
       if (G%mask2dT(i,j)>0.) then
-        ! Build the source grid
         zTopOfCell = 0. ; zBottomOfCell = 0. ; nPoints = 0
-        do k = 1, kd
-          if (mask_z(i,j,k) > 0.) then
+        tmp_mask_in(i,j,1:kd) = mask_z(i,j,:)
+        do k = 1, nz
+          if (tmp_mask_in(i,j,k)>0. .and. k<=kd) then
             zBottomOfCell = -min( z_edges_in(k+1), G%bathyT(i,j) )
-            tmpT1dIn(k) = temp_z(i,j,k)
-            tmpS1dIn(k) = salt_z(i,j,k)
+            tmpT1dIn(i,j,k) = temp_z(i,j,k)
+            tmpS1dIn(i,j,k) = salt_z(i,j,k)
           elseif (k>1) then
             zBottomOfCell = -G%bathyT(i,j) 
-            tmpT1dIn(k) = tmpT1dIn(k-1)
-            tmpS1dIn(k) = tmpS1dIn(k-1)
+            tmpT1dIn(i,j,k) = tmpT1dIn(i,j,k-1)
+            tmpS1dIn(i,j,k) = tmpS1dIn(i,j,k-1)
           else ! This next block should only ever be reached over land
-            tmpT1dIn(k) = -99.9
-            tmpS1dIn(k) = -99.9
+            tmpT1dIn(i,j,k) = -99.9
+            tmpS1dIn(i,j,k) = -99.9
           endif
-          h1(k) = zTopOfCell - zBottomOfCell
-          if (h1(k)>0.) nPoints = nPoints + 1
+          h1(i,j,k) = zTopOfCell - zBottomOfCell
+          if (h1(i,j,k)>0.) nPoints = nPoints + 1
           zTopOfCell = zBottomOfCell ! Bottom becomes top for next value of k
         enddo
-        h1(kd) = h1(kd) + ( zTopOfCell + G%bathyT(i,j) ) ! In case data is deeper than model
+        h1(i,j,kd) = h1(i,j,kd) + ( zTopOfCell + G%bathyT(i,j) ) ! In case data is deeper than model
+      endif ! mask2dT
+    enddo ; enddo
+    deallocate( tmp_mask_in )
+
+    ! Build the target grid (and set the model thickness to it)
+    allocate( hTarget(nz) )
+    ! This call can be more general but is hard-coded for z* coordinates...  ????
+    call ALE_initRegridding( G, PF, mod, regridCS, hTarget ) ! sets regridCS and hTarget(1:nz)
+    do j = js, je ; do i = is, ie
+      h(i,j,:) = 0.
+      if (G%mask2dT(i,j)>0.) then
         ! Build the target grid combining hTarget and topography
         zTopOfCell = 0. ; zBottomOfCell = 0.
         do k = 1, nz
           zBottomOfCell = max( zTopOfCell - hTarget(k), -G%bathyT(i,j) )
-          h2(k) = zTopOfCell - zBottomOfCell
+          h(i,j,k) = zTopOfCell - zBottomOfCell
           zTopOfCell = zBottomOfCell ! Bottom becomes top for next value of k
         enddo
-        ! Calcaulate an effectiveadisplacement, deltaE
-        call dzFromH1H2( nPoints, h1, nz, h2, deltaE ) ! sets deltaE
-        ! Now remap from h1 to h2=h1+div.deltaE
-        call remapping_core( remapCS, nPoints, h1, tmpT1dIn, nz, deltaE, tmpT1d ) ! sets tmpT1d
-        call remapping_core( remapCS, nPoints, h1, tmpS1dIn, nz, deltaE, tmpS1d ) ! sets tmpS1d
-        h(i,j,:) = h2(:)
-        tv%T(i,j,:) = tmpT1d(:)
-        tv%S(i,j,:) = tmpS1d(:)
       else
-        tv%T(i,j,:) = 0.
-        tv%S(i,j,:) = 0.
         h(i,j,:) = 0.
       endif ! mask2dT
     enddo ; enddo
-    deallocate( h1 )
-    deallocate( h2 )
     deallocate( hTarget )
-    deallocate( tmpT1d )
-    deallocate( tmpS1d )
+
+    ! Now remap from source grid to target grid
+    call initialize_remapping( nz, remappingScheme, remapCS ) ! Reconstruction parameters
+    call remapDisableBoundaryExtrapolation( remapCS )
+    call remap_scalar_h_to_h( remapCS, G, nz, h1, tmpT1dIn, h, tv%T, all_cells=.false. )
+    call remap_scalar_h_to_h( remapCS, G, nz, h1, tmpS1dIn, h, tv%S, all_cells=.false. )
+    deallocate( h1 )
     deallocate( tmpT1dIn )
     deallocate( tmpS1dIn )
-    deallocate( deltaE )
 
-!    do k=1,nz
-!      call myStats(tv%T(:,:,k),missing_value,k,'Temp from ALE()')
- !   enddo
     call cpu_clock_end(id_clock_ALE)
+
   else ! remap to isopycnal layer space
+
 ! next find interface positions using local arrays
 ! nlevs contains the number of valid data points in each column
-
     nlevs = sum(mask_z,dim=3)
-
 
 ! Rb contains the layer interface densities
     allocate(Rb(nz+1))
@@ -2160,8 +2153,6 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
 
     zi(is:ie,js:je,:) = find_interfaces(rho_z(is:ie,js:je,:), z_in, Rb, G%bathyT(is:ie,js:je), &
                          nlevs(is:ie,js:je), nkml, nkbl, min_depth)
-
-
 
     call get_param(PF, mod, "ADJUST_THICKNESS", correct_thickness, &
                  "If true, all mass below the bottom removed if the \n"//&
