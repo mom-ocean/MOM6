@@ -3,6 +3,7 @@ module MOM_tracer_initialization_from_Z
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
+use MOM_ALE, only : remap_scalar_h_to_h
 use MOM_checksums, only : hchksum, qchksum, uchksum, vchksum, chksum
 use MOM_coms, only : max_across_PEs, min_across_PEs
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
@@ -24,8 +25,6 @@ use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : setVerticalGridAxes
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
 use MOM_EOS, only : int_specific_vol_dp
-use MOM_ALE, only : ALE_initRegridding, ALE_CS, ALE_initThicknessToCoord
-use MOM_regridding, only : regridding_CS
 use MOM_remapping, only : remapping_CS, remapping_core, initialize_remapping
 use MOM_remapping, only : dzFromH1H2, remapDisableBoundaryExtrapolation
 use mpp_domains_mod, only  : mpp_global_field, mpp_get_compute_domain
@@ -100,7 +99,7 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, PF, src_file, src_var_nam, &
   integer :: isg, ieg, jsg, jeg ! global extent
   integer :: isd, ied, jsd, jed ! data domain indices
 
-  integer :: i, j, k, kd
+  integer :: i, j, k, kd, kt
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: zi
   real, dimension(:,:), allocatable :: Depth
@@ -108,13 +107,9 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, PF, src_file, src_var_nam, &
   real, allocatable, dimension(:), target :: z_edges_in, z_in
 
   ! Local variables for ALE remapping
-  real, dimension(:), allocatable :: h1, h2, hTarget, deltaE, tmpT1d
-  real, dimension(:), allocatable :: tmpT1dIn
+  real, dimension(:,:,:), allocatable :: h1
   real :: zTopOfCell, zBottomOfCell
-  type(regridding_CS) :: regridCS ! Regridding parameters and work arrays
   type(remapping_CS) :: remapCS ! Remapping parameters and work arrays
-
-  real, dimension(:,:,:), allocatable :: tmp1
 
   real :: tempAvg, missing_value
   integer :: nPoints, ans
@@ -170,63 +165,29 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, PF, src_file, src_var_nam, &
 ! Now remap to model coordinates
   if (useALE) then
     call cpu_clock_begin(id_clock_ALE)
-    ! First we reserve a work space for reconstructions of the source data
-    allocate( h1(kd) )
-    allocate( tmpT1dIn(kd) )
-    call initialize_remapping( kd, remapScheme, remapCS ) ! Data for reconstructions
-    call remapDisableBoundaryExtrapolation( remapCS )
-    ! Next we initialize the regridding package so that it knows about the target grid
-    allocate( hTarget(nz) )
-    allocate( h2(nz) )
-    allocate( tmpT1d(nz) )
-    allocate( deltaE(nz+1) )
-    ! This call can be more general but is hard-coded for z* coordinates...  ????
-    call ALE_initRegridding( G, PF, mod, regridCS, hTarget ) ! sets regridCS and hTarget(1:nz)
-    ! For each column ...
+
+    ! Build the source grid and copy data onto model-shaped arrays with vanished layers
+    allocate( h1(isd:ied,jsd:jed,nz) ) ; h1(is:ie,js:je,:) = 0.
     do j = js, je ; do i = is, ie
       if (G%mask2dT(i,j)>0.) then
-        ! Build the source grid
         zTopOfCell = 0. ; zBottomOfCell = 0. ; nPoints = 0
         do k = 1, kd
-          if (mask_z(i,j,k) > 0.) then
+          if (mask_z(i,j,k)>0.) then
             zBottomOfCell = -min( z_edges_in(k+1), G%bathyT(i,j) )
-            tmpT1dIn(k) = tr_z(i,j,k)
           elseif (k>1) then
             zBottomOfCell = -G%bathyT(i,j) 
-            tmpT1dIn(k) = tmpT1dIn(k-1)
-          else ! This next block should only ever be reached over land
-            tmpT1dIn(k) = -99.9
           endif
-          h1(k) = zTopOfCell - zBottomOfCell
-          if (h1(k)>0.) nPoints = nPoints + 1
+          h1(i,j,k) = zTopOfCell - zBottomOfCell
           zTopOfCell = zBottomOfCell ! Bottom becomes top for next value of k
         enddo
-        h1(kd) = h1(kd) + ( zTopOfCell + G%bathyT(i,j) ) ! In case data is deeper than model
-        ! Build the target grid combining hTarget and topography
-        zTopOfCell = 0. ; zBottomOfCell = 0.
-        do k = 1, nz
-          zBottomOfCell = max( zTopOfCell - hTarget(k), -G%bathyT(i,j) )
-          h2(k) = zTopOfCell - zBottomOfCell
-          zTopOfCell = zBottomOfCell ! Bottom becomes top for next value of k
-        enddo
-        ! Calcaulate an effectiveadisplacement, deltaE
-        call dzFromH1H2( nPoints, h1, nz, h2, deltaE ) ! sets deltaE
-        ! Now remap from h1 to h2=h1+div.deltaE
-        call remapping_core( remapCS, nPoints, h1, tmpT1dIn, nz, deltaE, tmpT1d ) ! sets tmpT1d
-!!!MJH        h(i,j,:) = h2(:)
-        tr(i,j,:) = tmpT1d(:)
-      else
-        tr(i,j,:) = 0.
-
-!!!MJH         h(i,j,:) = 0.
+        h1(i,j,kd) = h1(i,j,kd) + ( zTopOfCell + G%bathyT(i,j) ) ! In case data is deeper than model
       endif ! mask2dT
     enddo ; enddo
+
+    call initialize_remapping( nz, remappingScheme, remapCS ) ! Reconstruction parameters
+    call remapDisableBoundaryExtrapolation( remapCS )
+    call remap_scalar_h_to_h( remapCS, G, kd, h1, tr_z, h, tr, all_cells=.false. )
     deallocate( h1 )
-    deallocate( h2 )
-    deallocate( hTarget )
-    deallocate( tmpT1d )
-    deallocate( tmpT1dIn )
-    deallocate( deltaE )
 
     do k=1,nz
       call myStats(tr(:,:,k),missing_value,is,ie,js,je,k,'Tracer from ALE()')
@@ -241,6 +202,7 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, PF, src_file, src_var_nam, &
     endif
   enddo ; enddo ; enddo
 
+  deallocate( tr_z, mask_z, z_in, z_edges_in )
 
   call callTree_leave(trim(mod)//'()')
   call cpu_clock_end(id_clock_routine)
