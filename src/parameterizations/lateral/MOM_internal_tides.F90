@@ -311,13 +311,13 @@ subroutine propagate_int_tide(h, tv, cg1, TKE_itidal_input, vel_btTide, Nb, dt, 
       do j=jsd,jed ; do i=isd,ied
         nzm = CS%wave_structure_CSp%num_intfaces(i,j)
         Ub(i,j,fr,m) = CS%wave_structure_CSp%Uavg_profile(i,j,nzm)
-        print *, "nzm=", nzm
-        print *, "Ub=", Ub(i,j,fr,m)
+        !print *, "nzm=", nzm
+        !print *, "Ub=", Ub(i,j,fr,m)
       enddo ; enddo 
     enddo ; enddo    
-    Ub(:,:,:,:) = 0.0 ! placeholder
-    call itidal_lowmode_loss(G, CS, Nb, Ub, CS%En, CS%TKE_itidal_loss_fixed, &
-    CS%TKE_itidal_loss, dt)
+    !Ub(:,:,:,:) = 0.0 ! placeholder - delete later when wave_structure is working
+    !call itidal_lowmode_loss(G, CS, Nb, Ub, CS%En, CS%TKE_itidal_loss_fixed, &
+    !CS%TKE_itidal_loss, dt)
   endif
   
   ! Check for energy conservation on computational domain (BDM)

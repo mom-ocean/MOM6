@@ -46,7 +46,7 @@ use MOM_diag_mediator, only : post_data, query_averaging_enabled, diag_ctrl
 use MOM_diag_mediator, only : register_diag_field, safe_alloc_ptr, time_type
 use MOM_EOS,           only : calculate_density_derivs
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
-use MOM_file_parser,   only : log_version, param_file_type
+use MOM_file_parser,   only : log_version, param_file_type, get_param
 use MOM_grid,          only : ocean_grid_type
 use MOM_variables,     only : thermo_var_ptrs
 
@@ -76,6 +76,10 @@ type, public :: wave_structure_CS ; !private
                                    ! Squared buoyancy frequency at each interface
   integer, allocatable, dimension(:,:):: num_intfaces
                                    ! Number of layer interfaces (including surface and bottom)
+  real    :: int_tide_source_x     ! X Location of generation site 
+                                   ! for internal tide for testing (BDM)
+  real    :: int_tide_source_y     ! Y Location of generation site 
+                                   ! for internal tide for testing (BDM)
                                    
 end type wave_structure_CS
 
@@ -154,7 +158,7 @@ subroutine wave_structure(h, tv, G, cn, freq, CS, En, full_halos)
   real :: g_Rho0  ! G_Earth/Rho0 in m4 s-2 kg-1.
   real :: rescale, I_rescale
   integer :: kf(SZI_(G))
-  integer, parameter :: max_itt = 10 ! number of times to iterate in solving for eigenvector
+  integer, parameter :: max_itt = 1 ! number of times to iterate in solving for eigenvector
   real, parameter    :: cg_subRO = 1e-100 ! a very small number
   real, parameter    :: a_int = 0.5 ! value of normalized integral: \int(w_strct^2)dz = a_int
   real               :: I_a_int     ! inverse of a_int
@@ -181,7 +185,7 @@ subroutine wave_structure(h, tv, G, cn, freq, CS, En, full_halos)
   real, dimension(SZK_(G)-1) :: e_itt   ! improved guess at eigen vector (from TDMA)
   real    :: Pi
   integer :: kc
-  integer :: i, j, k, k2, itt, is, ie, js, je, nz, nzm, row
+  integer :: i, j, k, k2, itt, is, ie, js, je, nz, nzm, row, ig, jg
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   I_a_int = 1/a_int
@@ -261,6 +265,13 @@ subroutine wave_structure(h, tv, G, cn, freq, CS, En, full_halos)
     ! From this point, we can work on individual columns without causing memory
     ! to have page faults.
     do i=is,ie
+      !----for debugging, remove later----
+      ig = G%isd_global + i - 1.0
+      jg = G%jsd_global + j - 1.0
+      if(ig .eq. CS%int_tide_source_x .and. jg .eq. CS%int_tide_source_y) then
+      print *, 'Wave_structure: at ig=', ig, ' and jg=', jg, '; running code'
+      print *, 'Wave_structure: cn=', cn(i,j)
+      !-----------------------------------
       if (G%mask2dT(i,j) > 0.5) then
 
         lam = 1/(cn(i,j)**2)
@@ -366,17 +377,26 @@ subroutine wave_structure(h, tv, G, cn, freq, CS, En, full_halos)
             enddo
           endif  ! use_EOS?
           
-          ! Construct and solve tridiagonal system
+          ! Construct and solve tridiagonal system for the interior interfaces
+          ! Note that kc   = number of layers, 
+          !           kc+1 = nzm = number of interfaces, 
+          !           kc-1 = number of interior interfaces (excluding surface and bottom)
+          ! Also, note that "K" refers to an interface, while "k" refers to the layer below.
           if (kc >= 2) then
+            ! Set depth at surface
             z_int(1) = 0.0
-            ! Calculate Igu, Igl, depth, and N2 at each interior interface
-            do k=2,kc
-              Igl(k) = 1.0/(gprime(k)*Hc(k)) ; Igu(k) = 1.0/(gprime(k)*Hc(k-1))
-              z_int(k) = z_int(k-1) + Hc(k-1)
-              N2(k) = gprime(k)/(0.5*(Hc(k)+Hc(k-1)))
-              lam_z(k) = lam*gprime(k)
+            ! Calculate Igu, Igl, depth, and N2 at each interior interface 
+            ! [excludes surface (K=1) and bottom (K=kc+1)] 
+            do K=2,kc
+              Igl(K) = 1.0/(gprime(K)*Hc(k)) ; Igu(K) = 1.0/(gprime(K)*Hc(k-1))
+              z_int(K) = z_int(K-1) + Hc(k-1)
+              N2(K) = gprime(K)/(0.5*(Hc(k)+Hc(k-1)))
             enddo
+            ! Set stratification for surface and bottom (setting equal to nearest interface for now)
+            N2(1) = N2(2) ; N2(kc+1) = N2(kc) 
+            ! Calcualte depth at bottom
             z_int(kc+1) = z_int(kc)+Hc(kc)
+            ! check that thicknesses sum to total depth
             if (abs(z_int(kc+1)-htot(i,j)) > 1.e-10) then
               print *, "kc=", kc
               print *, "z_int(kc+1)=", z_int(kc+1)
@@ -387,36 +407,50 @@ subroutine wave_structure(h, tv, G, cn, freq, CS, En, full_halos)
             ! Populate interior rows of tridiagonal matrix; must multiply through by
             ! gprime to get tridiagonal matrix to the symmetrical form:
             ! [-1/H(k-1)]e(k-1) + [1/H(k-1)+1/H(k)-lam_z]e(k) + [-1/H(k)]e(k+1) = 0,
-            ! where lam_z = lam*gprime is now a function of depth
-            do k=3,kc-1
-              row = k-1
-              a_diag(row) = gprime(k)*(-Igu(k))
-              b_diag(row) = gprime(k)*(Igu(k)+Igl(k)) - lam_z(k)
-              c_diag(row) = gprime(k)*(-Igl(k))
+            ! where lam_z = lam*gprime is now a function of depth.
+            ! Frist, populate interior rows
+            do K=3,kc-1
+              row = K-1 ! indexing for TD matrix rows
+              lam_z(row) = lam*gprime(K)
+              a_diag(row) = gprime(K)*(-Igu(K))
+              b_diag(row) = gprime(K)*(Igu(K)+Igl(K)) - lam_z(row)
+              c_diag(row) = gprime(K)*(-Igl(K))
+              if(isnan(lam_z(row)))then  ; print *, "lam_z(row) is NAN" ; endif
+              if(isnan(a_diag(row)))then ; print *, "Wave_structure: a(k) is NAN" ; endif
+              if(isnan(b_diag(row)))then ; print *, "Wave_structure: b(k) is NAN" ; endif
+              if(isnan(c_diag(row)))then ; print *, "Wave_structure: c(k) is NAN" ; endif
             enddo
             ! Populate top row of tridiagonal matrix
-            k=2 ; row = k-1
+            K=2 ; row = K-1
+            lam_z(row) = lam*gprime(K)
             a_diag(row) = 0.0
-            b_diag(row) = gprime(k)*(Igu(k)+Igl(k)) - lam_z(k)
-            c_diag(row) = gprime(k)*(-Igl(k))
+            b_diag(row) = gprime(K)*(Igu(K)+Igl(K)) - lam_z(row)
+            c_diag(row) = gprime(K)*(-Igl(K))
             ! Populate bottom row of tridiagonal matrix
-            k=kc ; row = k-1
-            a_diag(row) = gprime(k)*(-Igu(k))
-            b_diag(row) = gprime(k)*(Igu(k)+Igl(k)) - lam_z(k)
+            K=kc ; row = K-1
+            lam_z(row) = lam*gprime(K)
+            a_diag(row) = gprime(K)*(-Igu(K))
+            b_diag(row) = gprime(K)*(Igu(K)+Igl(K)) - lam_z(row)
             c_diag(row) = 0.0
             
-            ! Guess a vector shape to start with
-            e_guess = cos(z_int(2:kc)/htot(i,j)*Pi)
-            e_guess = e_guess/sqrt(sum(e_guess**2))
+            ! Guess a vector shape to start with (excludes surface and bottom)
+            e_guess(1:kc-1) = sin(z_int(2:kc)/htot(i,j)*Pi)
+            e_guess(1:kc-1) = e_guess(1:kc-1)/sqrt(sum(e_guess(1:kc-1)**2))
+            !print *, "e_guess=", e_guess(1:kc-1)
+            !print *, "|e_guess|=", sqrt(sum(e_guess(1:kc-1)**2))
             
             ! Perform inverse iteration with tri-diag solver
             do itt=1,max_itt
-              call tridiag_solver(a_diag,b_diag,c_diag,lam_z,e_guess,"TDMA_T",e_itt)
-              e_guess = e_itt/sqrt(sum(e_itt**2))
+              call tridiag_solver(a_diag(1:kc-1),b_diag(1:kc-1),c_diag(1:kc-1), &
+                                  -lam_z(1:kc-1),e_guess(1:kc-1),"TDMA_T",e_itt)
+              e_guess(1:kc-1) = e_itt(1:kc-1)/sqrt(sum(e_itt(1:kc-1)**2))
             enddo ! itt-loop
-            w_strct(2:kc) = e_guess
-            w_strct(1)    = 0.0    ! rigid lid at surface
+            w_strct(2:kc) = e_guess(1:kc-1)
+            w_strct(1)    = 0.0 ! rigid lid at surface
             w_strct(kc+1) = 0.0 ! zero-flux at bottom
+            do K=1,kc+1
+              if(isnan(w_strct(K)))then ; print *, "Wave_structure: w_strct(K) is NAN" ; endif
+            enddo
             
             ! Normalize vertical structure function of w such that
             ! \int(w_strct)^2dz = a_int (a_int could be any value, e.g., 0.5)
@@ -424,16 +458,16 @@ subroutine wave_structure(h, tv, G, cn, freq, CS, En, full_halos)
                        !(including surface and bottom)
             w2avg = 0.0
             do k=1,nzm-1
-              dz(K) = Hc(K)
-              w2avg = w2avg + 0.5*(w_strct(k)+w_strct(k+1))*dz(K)
+              dz(k) = Hc(k)
+              w2avg = w2avg + 0.5*(w_strct(K)**2+w_strct(K+1)**2)*dz(k)
             enddo
             w2avg = w2avg/htot(i,j)
             w_strct = w_strct/sqrt(htot(i,j)*w2avg*I_a_int)
             
             ! Calculate vertical structure function of u (i.e. dw/dz)
-            do k=2,nzm-1
-              u_strct(k) = (w_strct(k-1) - w_strct(k)  )/dz(K-1) + &
-                           (w_strct(k)   - w_strct(k+1))/dz(K)
+            do K=2,nzm-1
+              u_strct(K) = (w_strct(K-1) - w_strct(K)  )/dz(k-1) + &
+                           (w_strct(K)   - w_strct(K+1))/dz(k)
             enddo
             u_strct(1)   = (w_strct(1)   -  w_strct(2) )/dz(1)
             u_strct(nzm)  = (w_strct(nzm-1)-  w_strct(nzm))/dz(nzm-1)
@@ -449,9 +483,9 @@ subroutine wave_structure(h, tv, G, cn, freq, CS, En, full_halos)
             w_strct2 = w_strct(1:nzm)**2
             ! vertical integration with Trapezoidal rule
             do k=1,nzm-1
-              int_dwdz2 = int_dwdz2 + 0.5*(u_strct2(k)+u_strct2(k+1))*dz(K)
-              int_w2    = int_w2    + 0.5*(w_strct2(k)+w_strct2(k+1))*dz(K)
-              int_N2w2  = int_N2w2  + 0.5*(w_strct2(k)*N2(k)+w_strct2(k+1)*N2(k+1))*dz(K)
+              int_dwdz2 = int_dwdz2 + 0.5*(u_strct2(K)+u_strct2(K+1))*dz(k)
+              int_w2    = int_w2    + 0.5*(w_strct2(K)+w_strct2(K+1))*dz(k)
+              int_N2w2  = int_N2w2  + 0.5*(w_strct2(K)*N2(K)+w_strct2(K+1)*N2(K+1))*dz(k)
             enddo
             
             KE_term = 0.25*G%Rho0*( (1+f2/freq**2)/Kmag2*int_dwdz2 + int_w2 )
@@ -468,17 +502,30 @@ subroutine wave_structure(h, tv, G, cn, freq, CS, En, full_halos)
             Uavg_profile = abs(dWdz_profile) * sqrt((1+f2/freq**2)/(2.0*Kmag2))
              
             ! Store values in control structure
-            CS%w_strct(i,j,1:kc+1)     = w_strct
-            CS%u_strct(i,j,1:kc+1)     = u_strct
-            CS%W_profile(i,j,1:kc+1)   = W_profile
-            CS%Uavg_profile(i,j,1:kc+1)= Uavg_profile
-            CS%z_depths(i,j,1:kc+1)    = z_int
-            CS%N2(i,j,1:kc+1)          = N2
+            CS%w_strct(i,j,1:nzm)     = w_strct
+            CS%u_strct(i,j,1:nzm)     = u_strct
+            CS%W_profile(i,j,1:nzm)   = W_profile
+            CS%Uavg_profile(i,j,1:nzm)= Uavg_profile
+            CS%z_depths(i,j,1:nzm)    = z_int
+            CS%N2(i,j,1:nzm)          = N2
             CS%num_intfaces(i,j)       = nzm
-            print *, "w_strct=",w_strct
-            print *, "z_int",z_int
+            !----for debugging; delete later----
+            !print *, 'Wave_structure: z_int(ig,jg)=',   z_int(1:nzm)
+            !print *, 'Wave_structure: N2(ig,jg)=',      N2(1:nzm)
+            !print *, 'Wave_structure: w_strct(ig,jg)=', w_strct(1:nzm)
+            print *, 'Wave_structure: a_diag(ig,jg)=',  a_diag(1:kc-1)
+            print *, 'Wave_structure: b_diag(ig,jg)=',  b_diag(1:kc-1)
+            print *, 'Wave_structure: c_diag(ig,jg)=',  c_diag(1:kc-1)
+            !print *, 'Wave_structure: lam_z(ig,jg)=',   lam_z(1:kc-1)
+            !open(unit=1,file='out_N2',form='formatted') ; write(1,*) N2 ; close(1)
+            !open(unit=2,file='out_z',form='formatted') ;  write(2,*) z_int ; close(2)
+            !-----------------------------------
+
           endif  ! kc >= 2?
         endif ! drxh_sum >= 0?
+      else     ! if at test point - delete later
+        return ! if at test point - delete later
+      endif    ! if at test point - delete later
       endif ! mask2dT > 0.5?
     enddo ! i-loop
   enddo ! j-loop
@@ -509,16 +556,21 @@ subroutine tridiag_solver(a,b,c,h,y,method,x)
 !  (out)     x - vector of unknown values to solve for
 
   integer :: nrow                         ! number of rows in A matrix
+  real, allocatable, dimension(:,:) :: A_check ! for solution checking
+  real, allocatable, dimension(:)   :: y_check ! for solution checking
   real, allocatable, dimension(:) :: c_prime, y_prime, q, alpha
                                           ! intermediate values for solvers
   real    :: Q_prime, beta                ! intermediate values for solver
   integer :: k                            ! row (e.g. interface) index
+  integer :: i,j
   
   nrow = size(y)
   allocate(c_prime(nrow))
   allocate(y_prime(nrow))
   allocate(q(nrow))
   allocate(alpha(nrow))
+  allocate(A_check(nrow,nrow))
+  allocate(y_check(nrow))
   
   if (method == 'TDMA_T') then
     ! Standard Thomas algoritim (4th variant)
@@ -536,6 +588,21 @@ subroutine tridiag_solver(a,b,c,h,y,method,x)
     do k=nrow-1,-1,1
       x(k) = y_prime(k)-c_prime(k)*x(k+1)
     enddo
+    ! Check results
+    do j=1,nrow ; do i=1,nrow
+      if(i==j)then ;       A_check(i,j) = b(i)
+      elseif(i==j+1)then ; A_check(i,j) = a(i)
+      elseif(i==j-1)then ; A_check(i,j) = c(i)
+      endif
+    enddo ; enddo
+    print *, 'size of x is', shape(x)
+    print *, 'A(2,1),A(2,2),A(1,2)=', A_check(2,1), A_check(2,2), A_check(1,2) 
+    y_check = matmul(A_check,x)
+    if(all(y_check .ne. y))then
+      print *, "tridiag_solver: Uh oh, something's not right!"
+      print *, "y=", y
+      print *, "y_check=", y_check 
+      endif
   elseif (method == 'TDMA_H') then
     ! Thomas algoritim (4th variant) w/ Hallberg substitution.
     ! For a layered system where k is at interfaces, alpha{k+1/2} refers to
@@ -560,6 +627,7 @@ subroutine tridiag_solver(a,b,c,h,y,method,x)
     ! Forward sweep
     do k=2,nrow-1
       beta = 1/(h(k)+alpha(k-1)*Q_prime+alpha(k))
+      if(isnan(beta))then ; print *, "Tridiag_solver: beta is NAN" ; endif
       q(k) = beta*alpha(k)
       y_prime(k) = beta*(y(k)+alpha(k-1)*y_prime(k-1))
       Q_prime = beta*(h(k)+alpha(k-1)*Q_prime)
@@ -573,7 +641,7 @@ subroutine tridiag_solver(a,b,c,h,y,method,x)
     enddo
   endif
   
-  deallocate(c_prime,y_prime,q,alpha)
+  deallocate(c_prime,y_prime,q,alpha,A_check,y_check)
 
 end subroutine tridiag_solver
 
@@ -602,6 +670,11 @@ subroutine wave_structure_init(Time, G, param_file, diag, CS)
                             "associated control structure.")
     return
   else ; allocate(CS) ; endif
+  
+  call get_param(param_file, mod, "INTERNAL_TIDE_SOURCE_X", CS%int_tide_source_x, &
+                 "X Location of generation site for internal tide", default=1.)
+  call get_param(param_file, mod, "INTERNAL_TIDE_SOURCE_Y", CS%int_tide_source_y, &
+                 "Y Location of generation site for internal tide", default=1.)
 
   CS%diag => diag
   
