@@ -44,7 +44,7 @@ use MOM_regridding, only : getStaticThickness
 use MOM_remapping, only : initialize_remapping, remapping_core, end_remapping
 use MOM_remapping, only : remappingSchemesDoc, remappingDefaultScheme
 use MOM_remapping, only : remapDisableBoundaryExtrapolation, remapEnableBoundaryExtrapolation
-use MOM_remapping, only : remapping_CS
+use MOM_remapping, only : remapping_CS, dzFromH1H2
 use MOM_tracer_registry, only : tracer_registry_type
 use regrid_defs, only : PRESSURE_RECONSTRUCTION_PLM
 !use regrid_consts, only : coordinateMode, DEFAULT_COORDINATE_MODE
@@ -97,6 +97,7 @@ end type
 public initialize_ALE
 public end_ALE
 public ALE_main 
+public remap_scalar_h_to_h
 public pressure_gradient_plm
 public pressure_gradient_ppm
 public usePressureReconstruction
@@ -247,7 +248,6 @@ subroutine end_ALE(CS)
 
 end subroutine end_ALE
 
-
 !> Takes care of (1) building a new grid and (2) remapping all variables between
 !! the old grid and the new grid. The creation of the new grid can be based
 !! on z coordinates, target interface densities, sigma coordinates or any
@@ -286,7 +286,6 @@ end subroutine ALE_main
 !! new grids. When velocity components need to be remapped, thicknesses at
 !! velocity points are taken to be arithmetic averages of tracer thicknesses.
 subroutine remapping_main( CS, G, h, dxInterface, Reg, u, v )
-  ! Arguments
   type(remapping_CS),                               intent(in)    :: CS !< Remapping control structure
   type(ocean_grid_type),                            intent(in)    :: G  !< Ocean grid structure
   real, dimension(NIMEM_,NJMEM_,NKMEM_),            intent(in)    :: h  !< Level thickness (m or Pa)
@@ -361,6 +360,53 @@ subroutine remapping_main( CS, G, h, dxInterface, Reg, u, v )
 !$OMP end parallel
 
 end subroutine remapping_main
+
+!> Remaps a single scalar between grids described by thicknesses h_src and h_dst.
+!! h_dst must be dimensioned as a model array with G%ke layers while h_src can
+!! have an arbitrary number of layers specified by nk_src.
+subroutine remap_scalar_h_to_h( CS, G, nk_src, h_src, s_src, h_dst, s_dst, all_cells )
+  type(remapping_CS),                      intent(in)    :: CS !< Remapping control structure
+  type(ocean_grid_type),                   intent(in)    :: G  !< Ocean grid structure
+  integer,                                 intent(in)    :: nk_src !< Number of levels on source grid
+  real, dimension(SZI_(G),SZJ_(G),nk_src), intent(in)    :: h_src !< Level thickness of source grid (m or Pa)
+  real, dimension(SZI_(G),SZJ_(G),nk_src), intent(in)    :: s_src !< Scalar on source grid
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),   intent(in)    :: h_dst !< Level thickness of destination grid (m or Pa)
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),   intent(inout) :: s_dst !< Scalar on destination grid
+  logical, optional,                       intent(in)    :: all_cells !< If false, only reconstruct for
+                                                                      !! non-vanished cells. Use all vanished
+                                                                      !! layers otherwise (default).
+  ! Local variables
+  integer :: i, j, k, n_points
+  real :: dx(G%ke+1)
+  logical :: ignore_vanished_layers
+
+  ignore_vanished_layers = .false.
+  if (present(all_cells)) ignore_vanished_layers = .not. all_cells
+  n_points = nk_src
+
+!$OMP parallel default(none) shared(CS,G,h_src,s_src,h_dst,s_dst) &
+!$OMP                        private(dx)
+!$OMP do
+  do j = G%jsc,G%jec
+    do i = G%isc,G%iec
+      if (G%mask2dT(i,j)>0.) then
+        if (ignore_vanished_layers) then
+          n_points = 0
+          do k = 1, nk_src
+            if (h_src(i,j,k)>0.) n_points = n_points + 1
+          enddo
+          s_dst(i,j,:) = 0.
+        endif
+        call dzFromH1H2( n_points, h_src(i,j,1:n_points), G%ke, h_dst(i,j,:), dx )
+        call remapping_core(CS, n_points, h_src(i,j,1:n_points), s_src(i,j,1:n_points), G%ke, dx, s_dst(i,j,:))
+      else
+        s_dst(i,j,:) = 0.
+      endif
+    enddo
+  enddo
+!$OMP end parallel
+
+end subroutine remap_scalar_h_to_h
 
 
 !------------------------------------------------------------------------------
