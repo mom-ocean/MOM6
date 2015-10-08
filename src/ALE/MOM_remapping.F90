@@ -255,7 +255,7 @@ subroutine remapping_core( CS, n0, h0, u0, n1, dx, u1 )
 
 #ifdef __DO_SAFETY_CHECKS__
   integer :: k
-  real :: hTmp, totalH0, totalHf, eps
+  real :: hTmp, totalH0, totalHf, eps, h_err
   real :: err0, totalHU0, err2, totalHU2
   real :: z0, z1
 
@@ -265,19 +265,21 @@ subroutine remapping_core( CS, n0, h0, u0, n1, dx, u1 )
   do k=1, n0
     totalH0 = totalH0 + h0(k)
   enddo
-  totalHf = 0.
+  totalHf = 0. ; h_err = 0.
   do k=1, n1
     if (k <= n0) then
       hTmp = h0(k) + ( dx(k+1) - dx(k) )
-      if (hTmp < 0.) then
-        write(0,*) 'k,h0(k),hTmp,dx(k+1),dx(k)=',k,h0(k),hTmp,dx(k+1),dx(k)
+      h_err = h_err + epsilon(totalH0) * max( abs(h0(k)), abs(dx(k+1)), abs(dx(k)) )
+      if (hTmp < -h_err) then
+        write(0,*) 'k,h0(k),hTmp,dx(k+1),dx(k),h_err=',k,h0(k),hTmp,dx(k+1),dx(k),h_err
         call MOM_error( FATAL, 'MOM_remapping, remapping_core: '//&
              'negative h implied by fluxes' )
       endif
     else
       hTmp = ( dx(k+1) - dx(k) )
-      if (hTmp < 0.) then
-        write(0,*) 'k,hNew,dx(+1),dx(0)=',k,dx(k+1),dx(k)
+      h_err = h_err + epsilon(totalH0) * max( abs(dx(k+1)), abs(dx(k)) )
+      if (hTmp < -h_err) then
+        write(0,*) 'k,hNew,dx(+1),dx(0),herr=',k,hTmp,dx(k+1),dx(k),h_err
         call MOM_error( FATAL, 'MOM_remapping, remapping_core: '//&
              'negative h implied by fluxes' )
       endif
@@ -483,15 +485,16 @@ subroutine remapByDeltaZ( n0, h0, u0, ppoly0_E, ppoly0_coefficients, n1, dx1, me
   integer :: iTarget
   real    :: xL, xR    ! coordinates of target cell edges
   real    :: xOld, hOld, uOld
-  real    :: xNew, hNew
+  real    :: xNew, hNew, h_err
   real    :: uhNew, hFlux, uAve, fluxL, fluxR
 #ifdef __DO_SAFETY_CHECKS__
   integer :: k
-  real    :: h0Total
+  real    :: h0Total, h_err2
 
-  h0Total = 0.
+  h0Total = 0. ; h_err2 = 0.
   do iTarget = 1, n0
     h0Total = h0Total + h0(iTarget)
+    h_err2 = h_err2 + epsilon(h0Total)*max( h0Total, h0(iTarget) )
   enddo
 #endif
 
@@ -501,6 +504,7 @@ subroutine remapByDeltaZ( n0, h0, u0, ppoly0_E, ppoly0_coefficients, n1, dx1, me
   ! right flux which can take into account the target left boundary being
   ! in the interior of the source domain.
   fluxR = 0.
+  h_err = 0. ! For measuring round-off error
   do iTarget = 0,n1
     fluxL = fluxR ! This does nothing for iTarget=0
 
@@ -512,6 +516,7 @@ subroutine remapByDeltaZ( n0, h0, u0, ppoly0_E, ppoly0_coefficients, n1, dx1, me
       xOld = xOld + h0(iTarget) ! Position of right edge of cell
       hOld = h0(iTarget)
       uOld = u0(iTarget)
+      h_err = h_err + epsilon(hOld) * max(hOld, xOld)
     else
       hOld = 0.       ! as if for layers>n0, they were vanished
       uOld = 1.E30    ! and the initial value should not matter
@@ -527,9 +532,10 @@ subroutine remapByDeltaZ( n0, h0, u0, ppoly0_E, ppoly0_coefficients, n1, dx1, me
       write(0,*) 'xOld,xNew,xL,xR,i=',xOld,xNew,xL,xR,iTarget
       call MOM_error(FATAL,'MOM_remapping, remapByDeltaZ: xL too negative')
     endif
-    if (xR - h0Total > 2.*epsilon(h0Total)*max(xR,h0Total)) then
+    if (xR - h0Total > max(h_err, h_err2)) then
       write(0,*) 'h0=',h0
-      write(0,*) 'h0Total=',h0Total,'xR-h0Tot=',xR - h0Total,real(iTarget)*epsilon(h0Total)*h0Total
+      write(0,*) 'h0Total=',h0Total,'xR-h0Tot=',xR - h0Total,real(iTarget)*epsilon(h0Total)*h0Total, &
+                 'h_err = ',h_err,h_err2
       write(0,*) 'dx1=',dx1
       write(0,*) 'xOld,xNew,xL,xR,i=',xOld,xNew,xL,xR,iTarget
       call MOM_error(FATAL,'MOM_remapping, remapByDeltaZ: xR too positive')
